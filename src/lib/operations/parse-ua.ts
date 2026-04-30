@@ -29,3 +29,17 @@ export function parseBrowser(ua: string | null | undefined): Browser {
   if (/Safari\//i.test(ua)) return 'Safari'
   return 'Other'
 }
+
+/**
+ * Platform enum → 운영 콘솔 표시용 한국어 라벨.
+ * null / 미식별은 "—" 로 fallback.
+ */
+export function formatPlatformKo(platform: Platform | null | undefined): string {
+  if (!platform) return '—'
+  switch (platform) {
+    case 'desktop': return 'PC'
+    case 'mobile': return '모바일'
+    case 'tablet': return '태블릿'
+    default: return '—'
+  }
+}
