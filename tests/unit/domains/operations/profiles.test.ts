@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatIpMask, formatTotalTime, parseQuestionNumberFromTitle } from '@/lib/operations/profiles'
+import { formatIpMask, formatTotalTime, parseQuestionNumberFromTitle, mapStatusPill } from '@/lib/operations/profiles'
 
 describe('formatIpMask', () => {
   it('IPv4 → 끝 옥텟 마스킹', () => {
@@ -88,5 +88,49 @@ describe('parseQuestionNumberFromTitle', () => {
 
   it('null → null', () => {
     expect(parseQuestionNumberFromTitle(null as unknown as string)).toBeNull()
+  })
+})
+
+describe('mapStatusPill', () => {
+  it("status='completed' → { label:'완료', tone:'green' }", () => {
+    expect(mapStatusPill({ status: 'completed' })).toEqual({ label: '완료', tone: 'green' })
+  })
+
+  it("status='drop' → { label:'이탈', tone:'gray' }", () => {
+    expect(mapStatusPill({ status: 'drop' })).toEqual({ label: '이탈', tone: 'gray' })
+  })
+
+  it("status='screened_out' → { label:'자격 미달', tone:'amber' }", () => {
+    expect(mapStatusPill({ status: 'screened_out' })).toEqual({ label: '자격 미달', tone: 'amber' })
+  })
+
+  it("status='quotaful_out' → { label:'쿼터마감', tone:'amber' }", () => {
+    expect(mapStatusPill({ status: 'quotaful_out' })).toEqual({ label: '쿼터마감', tone: 'amber' })
+  })
+
+  it("status='bad' → { label:'불량', tone:'red' }", () => {
+    expect(mapStatusPill({ status: 'bad' })).toEqual({ label: '불량', tone: 'red' })
+  })
+
+  it("알 수 없는 status → { label:'기타', tone:'gray' } (default fallback)", () => {
+    expect(mapStatusPill({ status: 'future_status' })).toEqual({ label: '기타', tone: 'gray' })
+  })
+
+  it("in_progress + currentStepOrder=5, totalSteps=50, qNumber='Q3' → 진행중 N/M·Qx", () => {
+    expect(
+      mapStatusPill({ status: 'in_progress', currentStepOrder: 5, totalSteps: 50, qNumber: 'Q3' }),
+    ).toEqual({ label: '진행중', tone: 'blue', sub: '5/50 · Q3' })
+  })
+
+  it('in_progress + currentStepOrder null → ?/M · ?', () => {
+    expect(
+      mapStatusPill({ status: 'in_progress', currentStepOrder: null, totalSteps: 50, qNumber: null }),
+    ).toEqual({ label: '진행중', tone: 'blue', sub: '?/50 · ?' })
+  })
+
+  it('in_progress + qNumber null → N/M · ?', () => {
+    expect(
+      mapStatusPill({ status: 'in_progress', currentStepOrder: 5, totalSteps: 50, qNumber: null }),
+    ).toEqual({ label: '진행중', tone: 'blue', sub: '5/50 · ?' })
   })
 })

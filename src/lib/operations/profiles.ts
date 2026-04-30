@@ -68,3 +68,55 @@ export function parseQuestionNumberFromTitle(title: string | null | undefined): 
   const m = Q_NUMBER_RE.exec(title)
   return m ? m[1] : null
 }
+
+export type StatusTone = 'green' | 'blue' | 'gray' | 'amber' | 'red'
+
+export interface StatusPillResult {
+  label: string
+  tone: StatusTone
+  /** in_progress 일 때만 채워진다: "5/50 · Q3" */
+  sub?: string
+}
+
+interface MapStatusPillArgs {
+  status: string
+  /** in_progress 일 때 question.order (1-based). 없으면 ?로 표기 */
+  currentStepOrder?: number | null
+  /** 해당 survey 의 총 question 수 (notice 포함). in_progress 일 때 사용 */
+  totalSteps?: number
+  /** "Q3" / "Q5-1" 같은 질문번호. parseQuestionNumberFromTitle 결과 */
+  qNumber?: string | null
+}
+
+/**
+ * 응답 status enum 6종 → 한국어 pill 메타데이터.
+ *
+ * 정의된 6종 외 값은 default fallback("기타", gray) — 향후 enum 확장 안전망.
+ * `in_progress` 만 진척률 부속(`sub`)을 추가해 운영자에게 위치 단서를 준다.
+ */
+export function mapStatusPill(args: MapStatusPillArgs): StatusPillResult {
+  const { status } = args
+  switch (status) {
+    case 'completed':
+      return { label: '완료', tone: 'green' }
+    case 'drop':
+      return { label: '이탈', tone: 'gray' }
+    case 'screened_out':
+      return { label: '자격 미달', tone: 'amber' }
+    case 'quotaful_out':
+      return { label: '쿼터마감', tone: 'amber' }
+    case 'bad':
+      return { label: '불량', tone: 'red' }
+    case 'in_progress': {
+      const n = args.currentStepOrder ?? null
+      const m = args.totalSteps ?? null
+      const q = args.qNumber ?? null
+      const nStr = n === null ? '?' : String(n)
+      const mStr = m === null ? '?' : String(m)
+      const qStr = q === null ? '?' : q
+      return { label: '진행중', tone: 'blue', sub: `${nStr}/${mStr} · ${qStr}` }
+    }
+    default:
+      return { label: '기타', tone: 'gray' }
+  }
+}
