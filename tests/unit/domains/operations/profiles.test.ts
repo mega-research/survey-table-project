@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatIpMask, formatTotalTime } from '@/lib/operations/profiles'
+import { formatIpMask, formatTotalTime, parseQuestionNumberFromTitle } from '@/lib/operations/profiles'
 
 describe('formatIpMask', () => {
   it('IPv4 → 끝 옥텟 마스킹', () => {
@@ -58,5 +58,35 @@ describe('formatTotalTime', () => {
 
   it('completed + 음수 (시계 역행) → "0분" 클램프', () => {
     expect(formatTotalTime(-5, 'completed')).toBe('0분')
+  })
+})
+
+describe('parseQuestionNumberFromTitle', () => {
+  it('"Q3. 인공지능 부문…" → "Q3"', () => {
+    expect(parseQuestionNumberFromTitle('Q3. 인공지능 부문 귀사의 주력 사업 분야는?')).toBe('Q3')
+  })
+
+  it('"Q5-1. 귀사가 사용 중이신…" → "Q5-1"', () => {
+    expect(parseQuestionNumberFromTitle('Q5-1. 귀사가 사용 중이신 인공지능 오픈소스')).toBe('Q5-1')
+  })
+
+  it('"Q33-1. 인공지능 사업운영…" → "Q33-1"', () => {
+    expect(parseQuestionNumberFromTitle('Q33-1. 인공지능 사업운영 애로사항 영역')).toBe('Q33-1')
+  })
+
+  it('"공지사항" (Q 없음) → null', () => {
+    expect(parseQuestionNumberFromTitle('공지사항')).toBeNull()
+  })
+
+  it('"기업 소개" (Q 없음) → null', () => {
+    expect(parseQuestionNumberFromTitle('기업 소개')).toBeNull()
+  })
+
+  it('빈 문자열 → null', () => {
+    expect(parseQuestionNumberFromTitle('')).toBeNull()
+  })
+
+  it('null → null', () => {
+    expect(parseQuestionNumberFromTitle(null as unknown as string)).toBeNull()
   })
 })

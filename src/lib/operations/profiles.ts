@@ -54,3 +54,17 @@ export function formatTotalTime(
   const minutes = Math.round(clamped / 60)
   return `${minutes}분`
 }
+
+const Q_NUMBER_RE = /^(Q\d+(?:-\d+)?)\b/
+
+/**
+ * question.title 의 prefix 에서 `Q3` / `Q5-1` / `Q33-1` 같은 질문번호를 추출한다.
+ *
+ * - 매치 실패 → null (notice 같은 비-Q 항목)
+ * - prefix 가 아닌 곳에 Q 가 들어 있어도 매치 안 됨 (의도)
+ */
+export function parseQuestionNumberFromTitle(title: string | null | undefined): string | null {
+  if (!title) return null
+  const m = Q_NUMBER_RE.exec(title)
+  return m ? m[1] : null
+}
