@@ -26,7 +26,7 @@ const CELLS: KpiCellSpec[] = [
   { label: '완료', field: 'completed', deltaTone: 'slate' },
   { label: '자격 미달', field: 'screenedOut', deltaTone: 'slate' },
   { label: '쿼터마감', field: 'quotafulOut', deltaTone: 'slate' },
-  { label: '불성실', field: 'bad', deltaTone: 'slate' },
+  { label: '불량', field: 'bad', deltaTone: 'slate' },
   { label: '이탈', field: 'drop', deltaTone: 'rose' },
 ];
 
@@ -82,10 +82,10 @@ function KpiCell({ label, value, delta, deltaTone }: KpiCellProps) {
 
 /**
  * 운영 현황 콘솔 — A1 KPI Row.
- * 7개 셀(전체 / 진행중 / 완료 / 자격 미달 / 쿼터마감 / 불성실 / 이탈)을 가로로 나열한다.
+ * 7개 셀(전체 / 진행중 / 완료 / 자격 미달 / 쿼터마감 / 불량 / 이탈)을 가로로 나열한다.
  *
  * total === 0 (종결 응답 없음)일 때:
- *   - 종결성 셀은 "—"로 표기 (전체/완료/자격미달/쿼터마감/불성실/이탈)
+ *   - 종결성 셀은 "—"로 표기 (전체/완료/자격미달/쿼터마감/불량/이탈)
  *   - 진행중 셀(deltaTone === 'live')은 in_progress 가시성이 존재 이유라 항상 실수 노출
  *   - 페이지 단위 EmptyState는 상위 컴포지션에서 처리한다 (plan §9).
  */
