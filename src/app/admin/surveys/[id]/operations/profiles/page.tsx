@@ -54,7 +54,7 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
 
   const args = normalizeListArgs(sp);
 
-  const [{ rows, total }, qs] = await Promise.all([
+  const [{ rows, total, page: clampedPage }, qs] = await Promise.all([
     listResponsesForProfiles({
       surveyId,
       pageSize: PROFILES_PAGE_SIZE,
@@ -120,7 +120,7 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
               <ProfilesTable
                 rows={rows}
                 total={total}
-                page={args.page}
+                page={clampedPage}
                 pageSize={PROFILES_PAGE_SIZE}
                 sort={args.sort}
                 dir={args.dir}
