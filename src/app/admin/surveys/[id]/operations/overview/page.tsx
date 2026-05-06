@@ -1,20 +1,12 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
-import { notFound } from 'next/navigation';
 
-import { Activity, ArrowLeft, Pencil } from 'lucide-react';
-
-import { Button } from '@/components/ui/button';
 import { DailyParticipationChart } from '@/components/operations/daily-participation-chart';
-import { OperationsTabStrip } from '@/components/operations/operations-tab-strip';
 import { DailyStatsTable } from '@/components/operations/daily-stats-table';
 import { DropFunnel } from '@/components/operations/drop-funnel';
 import { InquiriesEmptyCard } from '@/components/operations/inquiries-empty-card';
 import { KpiRow } from '@/components/operations/kpi-row';
 import { PageDwellDistribution } from '@/components/operations/page-dwell-distribution';
-import { RefreshButton } from '@/components/operations/refresh-button';
 import { ResponseTimeStats } from '@/components/operations/response-time-stats';
-import { getSurveyById } from '@/data/surveys';
 import {
   aggregateDaily,
   aggregateDailyAvailableDates,
@@ -89,23 +81,14 @@ export default async function OperationsOverviewPage({
   const weekOffset = Math.max(0, parseInt(weekOffsetStr ?? '0', 10) || 0);
   const dwellOffset = Math.max(0, parseInt(dwellOffsetStr ?? '0', 10) || 0);
 
-  // ── 설문 존재 확인 (soft-delete 포함) ──
-  const survey = await getSurveyById(surveyId);
-  if (!survey || survey.deletedAt) {
-    notFound();
-  }
-
-  // ── hour 모드 일자 결정 ──
-  // 1) 쿼리에 `date` 가 있으면 그 값 사용
-  // 2) 없으면 응답이 존재하는 가장 최근 일자
-  // 3) 응답 자체가 없으면 KST 오늘 (어댑터가 throw 하지 않도록)
+  // hour 모드 진입 시 date 미지정이면 응답이 있는 가장 최근 일자, 응답 자체가 없으면 KST 오늘로
+  // fallback. 어댑터가 effectiveDate 없는 hour 모드에서 throw 하지 않도록 보장.
   const availableDates = await aggregateDailyAvailableDates(surveyId);
   const latestAvailable =
     availableDates.length > 0 ? availableDates[availableDates.length - 1] : undefined;
   const effectiveDate =
     mode === 'hour' ? (date ?? latestAvailable ?? todayKst()) : undefined;
 
-  // ── 6개 어댑터 병렬 호출 ──
   const [statusCounts, dailyBuckets, dailyStats, responseTime, dropFunnel, pageDwell] =
     await Promise.all([
       aggregateStatus(surveyId),
@@ -117,77 +100,34 @@ export default async function OperationsOverviewPage({
     ]);
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* 헤더 — Admin 스타일 (편집·분석 페이지와 동일 패턴) */}
-      <nav className="border-b border-gray-200 bg-white px-6 py-4">
-        <div className="mx-auto flex max-w-7xl items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <Link href="/admin/surveys">
-              <Button variant="ghost" size="sm">
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                목록으로
-              </Button>
-            </Link>
-            <div className="h-6 w-px bg-gray-300" />
-            <div className="flex items-center gap-2">
-              <Activity className="h-5 w-5 text-blue-500" />
-              <h1 className="max-w-md truncate text-lg font-medium text-gray-900">
-                {survey.title}
-              </h1>
-            </div>
-          </div>
+    <main className="mx-auto max-w-7xl space-y-4 px-6 py-8">
+      <div>
+        <h2 className="text-xl font-bold text-gray-900">응답 현황</h2>
+        <p className="text-sm text-slate-500">
+          응답자 진행 현황 · 일자별 추이 · 응답시간 통계 · 이탈 위치 분석
+        </p>
+      </div>
 
-          <div className="flex items-center space-x-3">
-            <RefreshButton />
-            <Link href={`/admin/surveys/${surveyId}/edit`}>
-              <Button variant="outline" size="sm">
-                <Pencil className="mr-2 h-4 w-4" />
-                설문 편집
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </nav>
+      <KpiRow counts={statusCounts} />
 
-      {/* 응답 현황 / 보고서 / 컨택 탭 strip — nav 헤더 아래 */}
-      <OperationsTabStrip surveyId={surveyId} />
+      <DailyParticipationChart
+        data={dailyBuckets}
+        mode={mode}
+        hourModeDate={effectiveDate}
+        availableDates={availableDates}
+        weekOffset={weekOffset}
+      />
 
-      {/* 메인 콘텐츠 */}
-      <main className="mx-auto max-w-7xl space-y-4 px-6 py-8">
-        <div>
-          <h2 className="text-xl font-bold text-gray-900">응답 현황</h2>
-          <p className="text-sm text-slate-500">
-            응답자 진행 현황 · 일자별 추이 · 응답시간 통계 · 이탈 위치 분석
-          </p>
-        </div>
+      <DailyStatsTable data={dailyStats} />
 
-        {/* A1 — 응답 진행 현황 KPI */}
-        <KpiRow counts={statusCounts} />
+      <ResponseTimeStats data={responseTime} />
 
-        {/* A2 — 일자별/시간대별 참여자수 차트 */}
-        <DailyParticipationChart
-          data={dailyBuckets}
-          mode={mode}
-          hourModeDate={effectiveDate}
-          availableDates={availableDates}
-          weekOffset={weekOffset}
-        />
+      <DropFunnel data={dropFunnel} />
 
-        {/* A3 — 일자별 응답 통계 테이블 */}
-        <DailyStatsTable data={dailyStats} />
+      <PageDwellDistribution data={pageDwell} pageOffset={dwellOffset} />
 
-        {/* A4 — 응답시간 통계 (절사평균 ± SD) */}
-        <ResponseTimeStats data={responseTime} />
-
-        {/* A5 — Drop funnel (질문별 누적 진행률 + Top10 이탈) */}
-        <DropFunnel data={dropFunnel} />
-
-        {/* A6 — Page dwell distribution (RenderStep별 평균 ± SD) */}
-        <PageDwellDistribution data={pageDwell} pageOffset={dwellOffset} />
-
-        {/* 응답자 문의사항 (백엔드 미구현 — 슬라이스 1 범위 외) */}
-        <InquiriesEmptyCard />
-      </main>
-    </div>
+      {/* 응답자 문의사항 (백엔드 미구현 — 슬라이스 1 범위 외) */}
+      <InquiriesEmptyCard />
+    </main>
   );
 }

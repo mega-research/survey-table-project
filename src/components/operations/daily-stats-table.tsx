@@ -18,6 +18,7 @@ import type { DailyStatsRow } from '@/lib/operations/daily-stats';
 import { numberFormatter } from '@/lib/operations/format';
 
 import { EmptyState } from './empty-state';
+import { ALIGN_CLASS, SortIndicator, TablePagerFooter, type CellAlign } from './table-primitives';
 
 interface Props {
   data: DailyStatsRow[];
@@ -135,7 +136,7 @@ export function DailyStatsTable({ data }: Props) {
                   <tr key={headerGroup.id} className="bg-slate-50">
                     {headerGroup.headers.map((header) => {
                       const align =
-                        (header.column.columnDef.meta as { align?: 'left' | 'right' } | undefined)
+                        (header.column.columnDef.meta as { align?: CellAlign } | undefined)
                           ?.align ?? 'left';
                       const sortDir = header.column.getIsSorted();
                       const toggle = header.column.getToggleSortingHandler();
@@ -145,7 +146,7 @@ export function DailyStatsTable({ data }: Props) {
                           scope="col"
                           className={cn(
                             'px-3 py-2 text-xs font-medium uppercase tracking-wider text-slate-600',
-                            align === 'right' ? 'text-right' : 'text-left',
+                            ALIGN_CLASS[align],
                           )}
                           aria-sort={
                             sortDir === 'asc'
@@ -180,14 +181,14 @@ export function DailyStatsTable({ data }: Props) {
                   <tr key={row.id} className="border-b border-slate-100">
                     {row.getVisibleCells().map((cell) => {
                       const align =
-                        (cell.column.columnDef.meta as { align?: 'left' | 'right' } | undefined)
+                        (cell.column.columnDef.meta as { align?: CellAlign } | undefined)
                           ?.align ?? 'left';
                       return (
                         <td
                           key={cell.id}
                           className={cn(
                             'px-3 py-2 text-slate-700 tabular-nums',
-                            align === 'right' ? 'text-right' : 'text-left',
+                            ALIGN_CLASS[align],
                           )}
                         >
                           {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -199,54 +200,17 @@ export function DailyStatsTable({ data }: Props) {
               </tbody>
             </table>
             {table.getPageCount() > 1 && (
-              <div className="mt-3 flex items-center justify-between gap-2 px-1 text-xs text-slate-600">
-                <span>
-                  총 {numberFormatter.format(data.length)}건 ·{' '}
-                  {table.getState().pagination.pageIndex + 1} / {table.getPageCount()} 페이지
-                </span>
-                <div className="flex gap-1">
-                  <button
-                    type="button"
-                    onClick={() => table.previousPage()}
-                    disabled={!table.getCanPreviousPage()}
-                    className="rounded border border-slate-200 px-2 py-1 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    ‹ 이전
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => table.nextPage()}
-                    disabled={!table.getCanNextPage()}
-                    className="rounded border border-slate-200 px-2 py-1 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    다음 ›
-                  </button>
-                </div>
-              </div>
+              <TablePagerFooter
+                total={data.length}
+                page={table.getState().pagination.pageIndex + 1}
+                totalPages={table.getPageCount()}
+                onPrev={() => table.previousPage()}
+                onNext={() => table.nextPage()}
+              />
             )}
           </div>
         )}
       </CardContent>
     </Card>
-  );
-}
-
-interface SortIndicatorProps {
-  direction: false | 'asc' | 'desc';
-}
-
-/**
- * 활성 컬럼에만 화살표를 노출 (비활성 컬럼은 빈 공간 — 레이아웃 안정).
- * 단순 텍스트 화살표로 의존성 추가 없이 처리.
- */
-function SortIndicator({ direction }: SortIndicatorProps) {
-  if (direction === false) {
-    // 폭 안정용 빈 자리 (visible space 대신 inline-block + width)
-    return <span aria-hidden="true" className="inline-block w-2 text-transparent">▲</span>;
-  }
-  return (
-    <span aria-hidden="true" className="text-slate-400">
-      {direction === 'asc' ? '▲' : '▼'}
-    </span>
   );
 }

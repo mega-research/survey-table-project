@@ -1,5 +1,5 @@
 import { relations } from 'drizzle-orm';
-import { boolean, integer, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { boolean, integer, jsonb, pgTable, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
 
 import type {
   DynamicRowGroupConfig,
@@ -170,7 +170,14 @@ export const surveyResponses = pgTable('survey_responses', {
   totalSeconds: integer('total_seconds'),
 
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-});
+}, (table) => ({
+  // 동일 (surveyId, sessionId) 의 동시 INSERT race 차단용. session_id IS NULL 행은
+  // PG 의 UNIQUE-NULL 의미상 다중 허용 (의도).
+  surveySessionUnique: unique('survey_responses_survey_session_unique').on(
+    table.surveyId,
+    table.sessionId,
+  ),
+}));
 
 // 설문 버전 스냅샷 테이블
 export const surveyVersions = pgTable('survey_versions', {

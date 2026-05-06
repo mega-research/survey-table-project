@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseBrowser, parsePlatform } from '@/lib/operations/parse-ua'
+import { formatPlatformKo, parseBrowser, parsePlatform } from '@/lib/operations/parse-ua'
 
 describe('parsePlatform', () => {
   it('Mac + Chrome UA → desktop', () => {
@@ -130,5 +130,23 @@ describe('parseBrowser', () => {
 
   it('unknown UA (curl) → Other', () => {
     expect(parseBrowser('curl/8.4.0')).toBe('Other')
+  })
+})
+
+describe('formatPlatformKo', () => {
+  it("'desktop' → 'PC'", () => {
+    expect(formatPlatformKo('desktop')).toBe('PC')
+  })
+
+  it("'mobile' → '모바일'", () => {
+    expect(formatPlatformKo('mobile')).toBe('모바일')
+  })
+
+  it("'tablet' → '태블릿'", () => {
+    expect(formatPlatformKo('tablet')).toBe('태블릿')
+  })
+
+  it('null → —', () => {
+    expect(formatPlatformKo(null)).toBe('—')
   })
 })

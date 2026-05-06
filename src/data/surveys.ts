@@ -1,3 +1,5 @@
+import { cache } from 'react';
+
 import { and, desc, eq, gte, ilike, lte } from 'drizzle-orm';
 
 import { db } from '@/db';
@@ -18,13 +20,14 @@ export async function getSurveys() {
   return result;
 }
 
-// 설문 단일 조회
-export async function getSurveyById(surveyId: string) {
+// 설문 단일 조회. React `cache()` 로 동일 RSC pass 내 중복 호출을 dedupe
+// (예: layout 과 page 가 같은 surveyId 를 동시에 조회해도 DB 한 번).
+export const getSurveyById = cache(async (surveyId: string) => {
   const survey = await db.query.surveys.findFirst({
     where: eq(surveys.id, surveyId),
   });
   return survey;
-}
+});
 
 // 슬러그로 설문 조회
 export async function getSurveyBySlug(slug: string) {
