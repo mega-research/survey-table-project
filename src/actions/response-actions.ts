@@ -76,8 +76,8 @@ export async function updateQuestionResponse(
  *
  * - UA를 서버 헤더에서 읽어 platform/browser를 파싱
  * - 첫 답변(`questionResponses`)과 첫 페이지 방문 기록을 함께 기록
- * - 동일 (surveyId, sessionId) 조합이 이미 있으면 INSERT를 건너뛰고
- *   기존 행에 답변만 적용 (멱등성 보장 — 더블클릭 방어)
+ * - 동일 (surveyId, sessionId) 조합 동시 INSERT race 는 DB UNIQUE 제약 +
+ *   `ON CONFLICT DO NOTHING` 으로 차단. 충돌 시 기존 행에 답변만 적용.
  *
  * @returns 생성되거나 기존에 존재하던 응답 행의 id
  */
@@ -91,42 +91,23 @@ export async function createResponseWithFirstAnswer(input: {
 }): Promise<{ id: string }> {
   const { surveyId, sessionId, versionId, questionId, value, currentStepId } = input;
 
-  // 1. 멱등성 체크: 동일 (surveyId, sessionId) 행이 이미 존재하는가?
-  const existing = await db
-    .select({ id: surveyResponses.id })
-    .from(surveyResponses)
-    .where(
-      and(eq(surveyResponses.surveyId, surveyId), eq(surveyResponses.sessionId, sessionId)),
-    )
-    .limit(1);
-
-  if (existing.length > 0) {
-    // 이미 존재 → INSERT 건너뛰고 답변만 적용
-    await updateQuestionResponse(existing[0].id, questionId, value);
-    return { id: existing[0].id };
-  }
-
-  // 2. UA 파싱 (Next 15+ 비동기 headers API)
+  // UA + IP (Next 15+ 비동기 headers API)
   const headerStore = await headers();
   const userAgent = headerStore.get('user-agent') ?? null;
   const platform = parsePlatform(userAgent);
   const browser = parseBrowser(userAgent);
+  // x-forwarded-for 는 "client, proxy1, proxy2" 형태 → 첫 IP 사용. 없으면 x-real-ip fallback.
+  const ipAddress = extractClientIp(
+    headerStore.get('x-forwarded-for'),
+    headerStore.get('x-real-ip'),
+  );
 
-  // 2-1. 클라이언트 IP 추출 (Vercel/edge 환경 표준)
-  //   - x-forwarded-for 는 "client, proxy1, proxy2" 형태 → 첫 IP 사용
-  //   - 없으면 x-real-ip fallback
-  //   - 둘 다 없으면 null (DB 컬럼 nullable)
-  const ipAddress = extractClientIp(headerStore.get('x-forwarded-for'), headerStore.get('x-real-ip'));
-
-  // 3. 첫 페이지 방문 기록 (ISO 문자열 — JSONB 형태가 PageVisit 타입과 일치하도록)
-  const nowIso = new Date().toISOString();
   const firstVisit: PageVisit = {
     stepId: currentStepId,
-    enteredAt: nowIso,
+    enteredAt: new Date().toISOString(),
     leftAt: undefined,
   };
 
-  // 4. INSERT — startedAt/lastActivityAt은 DB의 defaultNow()에 위임
   const newResponse: NewSurveyResponse = {
     surveyId,
     sessionId,
@@ -142,12 +123,35 @@ export async function createResponseWithFirstAnswer(input: {
     pageVisits: [firstVisit],
   };
 
-  const [inserted] = await db
+  // ON CONFLICT DO NOTHING: 동시 INSERT 시 한 쪽만 행을 만들고 다른 쪽은 빈 결과 반환.
+  // returning 이 비어있으면 충돌 발생 — 기존 행을 조회해 답변만 적용한다.
+  const inserted = await db
     .insert(surveyResponses)
     .values(newResponse)
+    .onConflictDoNothing({
+      target: [surveyResponses.surveyId, surveyResponses.sessionId],
+    })
     .returning({ id: surveyResponses.id });
 
-  return { id: inserted.id };
+  if (inserted.length > 0) {
+    return { id: inserted[0].id };
+  }
+
+  // 충돌 → 기존 행에 답변 머지. UNIQUE 제약이 있으므로 존재가 보장된다.
+  const [existing] = await db
+    .select({ id: surveyResponses.id })
+    .from(surveyResponses)
+    .where(
+      and(eq(surveyResponses.surveyId, surveyId), eq(surveyResponses.sessionId, sessionId)),
+    )
+    .limit(1);
+
+  if (!existing) {
+    throw new Error('createResponseWithFirstAnswer: 충돌 후 기존 행 조회 실패');
+  }
+
+  await updateQuestionResponse(existing.id, questionId, value);
+  return { id: existing.id };
 }
 
 /**
