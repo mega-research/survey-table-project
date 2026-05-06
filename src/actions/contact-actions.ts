@@ -145,85 +145,85 @@ export async function ingestContactUpload(
 
     for (const row of allRows) {
       try {
-        const groupValue = row[groupKey] || null;
-        const email = emailKey ? row[emailKey] || null : null;
-        const biz = bizKey ? row[bizKey] || null : null;
+        await tx.transaction(async (sp) => {
+          const groupValue = row[groupKey] || null;
+          const email = emailKey ? row[emailKey] || null : null;
+          const biz = bizKey ? row[bizKey] || null : null;
 
-        // 머지키 정책 (spec #13)
-        const mergeFilters = [eq(contactTargets.surveyId, surveyId)];
-        if (groupValue) mergeFilters.push(eq(contactTargets.groupValue, groupValue));
+          // 머지키 정책 (spec #13)
+          const mergeFilters = [eq(contactTargets.surveyId, surveyId)];
+          if (groupValue) mergeFilters.push(eq(contactTargets.groupValue, groupValue));
 
-        let canMerge = false;
-        if (mapping.mergeKey === 'email+biz') {
-          if (mapping.mergeKeyPolicy === 'both' && email && biz) {
+          let canMerge = false;
+          if (mapping.mergeKey === 'email+biz') {
+            if (mapping.mergeKeyPolicy === 'both' && email && biz) {
+              mergeFilters.push(eq(contactTargets.email, email));
+              mergeFilters.push(eq(contactTargets.bizNumber, biz));
+              canMerge = true;
+            } else if (mapping.mergeKeyPolicy === 'either' && (email || biz)) {
+              if (email) mergeFilters.push(eq(contactTargets.email, email));
+              else if (biz) mergeFilters.push(eq(contactTargets.bizNumber, biz));
+              canMerge = true;
+            }
+          } else if (mapping.mergeKey === 'email' && email) {
             mergeFilters.push(eq(contactTargets.email, email));
+            canMerge = true;
+          } else if (mapping.mergeKey === 'biz' && biz) {
             mergeFilters.push(eq(contactTargets.bizNumber, biz));
             canMerge = true;
-          } else if (mapping.mergeKeyPolicy === 'either' && (email || biz)) {
-            if (email) mergeFilters.push(eq(contactTargets.email, email));
-            else if (biz) mergeFilters.push(eq(contactTargets.bizNumber, biz));
-            canMerge = true;
           }
-        } else if (mapping.mergeKey === 'email' && email) {
-          mergeFilters.push(eq(contactTargets.email, email));
-          canMerge = true;
-        } else if (mapping.mergeKey === 'biz' && biz) {
-          mergeFilters.push(eq(contactTargets.bizNumber, biz));
-          canMerge = true;
-        }
 
-        const existing = canMerge
-          ? await tx
-              .select({ id: contactTargets.id, attrs: contactTargets.attrs })
-              .from(contactTargets)
-              .where(and(...mergeFilters))
-              .limit(1)
-          : [];
+          const existing = canMerge
+            ? await sp
+                .select({
+                  id: contactTargets.id,
+                  attrs: contactTargets.attrs,
+                  email: contactTargets.email,
+                  bizNumber: contactTargets.bizNumber,
+                })
+                .from(contactTargets)
+                .where(and(...mergeFilters))
+                .limit(1)
+            : [];
 
-        if (existing.length > 0 && existing[0]) {
-          // shallow merge: 새 값이 비어있지 않은 키만 갱신
-          const oldAttrs = (existing[0].attrs as Record<string, string>) ?? {};
-          const newAttrs: Record<string, string> = { ...oldAttrs };
-          for (const [k, v] of Object.entries(row)) {
-            if (v != null && v !== '') newAttrs[k] = v;
-          }
-          await tx
-            .update(contactTargets)
-            .set({
-              attrs: newAttrs,
-              email: email ?? oldAttrs[emailKey ?? ''] ?? null,
-              bizNumber: biz ?? oldAttrs[bizKey ?? ''] ?? null,
+          if (existing.length > 0 && existing[0]) {
+            // shallow merge: 새 값이 비어있지 않은 키만 갱신
+            const old = existing[0];
+            const oldAttrs = old.attrs ?? {};
+            const newAttrs: Record<string, string> = { ...oldAttrs };
+            for (const [k, v] of Object.entries(row)) {
+              if (v != null && v !== '') newAttrs[k] = v;
+            }
+            await sp
+              .update(contactTargets)
+              .set({
+                attrs: newAttrs,
+                email: email ?? old.email,
+                bizNumber: biz ?? old.bizNumber,
+                uploadId: upload.id,
+                updatedAt: new Date(),
+              })
+              .where(eq(contactTargets.id, old.id));
+            mergedRows += 1;
+          } else {
+            // 신규 INSERT — resid 발번 (advisory lock)
+            const residRows = (await sp.execute(
+              sql`SELECT next_contact_resid(${surveyId}::uuid) AS resid`,
+            )) as unknown as Array<{ resid: number }>;
+            const resid = residRows[0]?.resid;
+            if (resid == null) throw new Error('next_contact_resid 호출 실패');
+            await sp.insert(contactTargets).values({
+              surveyId,
+              resid,
+              groupValue,
+              email,
+              bizNumber: biz,
+              attrs: row,
               uploadId: upload.id,
-              updatedAt: new Date(),
-            })
-            .where(eq(contactTargets.id, existing[0].id));
-          mergedRows += 1;
-        } else {
-          // 신규 INSERT — resid 발번 (advisory lock)
-          const residResult = (await tx.execute(
-            sql`SELECT next_contact_resid(${surveyId}::uuid) AS resid`,
-          )) as unknown as
-            | { rows?: Array<{ resid: number }> }
-            | Array<{ resid: number }>;
-          // pg-driver 마다 결과 형태가 다름 (postgres-js 는 array, node-postgres 는 .rows)
-          const rows = Array.isArray(residResult)
-            ? residResult
-            : (residResult.rows ?? []);
-          const residRow = rows[0];
-          if (!residRow || residRow.resid == null) {
-            throw new Error('next_contact_resid 호출 실패');
+            });
+            uploadedRows += 1;
           }
-          await tx.insert(contactTargets).values({
-            surveyId,
-            resid: residRow.resid,
-            groupValue,
-            email,
-            bizNumber: biz,
-            attrs: row,
-            uploadId: upload.id,
-          });
-          uploadedRows += 1;
-        }
+        });
       } catch (e) {
         errorRows += 1;
         console.error(`[ingestContactUpload] row error: ${(e as Error).message}`);
