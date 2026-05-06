@@ -4,8 +4,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
-import type { ContactColumnDef, ContactColumnScheme, ContactMethod } from '@/db/schema/schema-types';
-import { CONTACT_METHOD_LABEL } from '@/lib/operations/contacts.server';
+import {
+  CONTACT_METHOD_LABEL,
+  type ContactColumnDef,
+  type ContactColumnScheme,
+  type ContactMethod,
+} from '@/db/schema/schema-types';
 import { attrsKeyOf } from '@/lib/operations/contacts';
 
 interface ContactInfoCardProps {

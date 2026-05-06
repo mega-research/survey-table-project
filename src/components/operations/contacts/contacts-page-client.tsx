@@ -1,9 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
-import { ContactEditModal } from '@/components/operations/contacts/contact-edit-modal';
 import { ContactsTable } from '@/components/operations/contacts/contacts-table';
 import type { ContactColumnScheme } from '@/db/schema/schema-types';
 import type { ContactsRow } from '@/lib/operations/contacts.server';
@@ -15,15 +14,9 @@ interface ContactsPageClientProps {
   total: number;
   page: number;
   pageSize: number;
-  /** 컬럼 스킴에 매핑된 시스템 필드의 attrs key (그룹/이메일/사업자번호). 추가/편집 시 동기화용. */
-  systemFieldKeys?: {
-    group?: string;
-    email?: string;
-    biz?: string;
-  };
+  /** 호환성 prop — 본 컴포넌트는 사용 안 함. */
+  systemFieldKeys?: { group?: string; email?: string; biz?: string };
 }
-
-type ModalState = { mode: 'add' } | { mode: 'edit'; row: ContactsRow } | null;
 
 export function ContactsPageClient({
   surveyId,
@@ -32,18 +25,16 @@ export function ContactsPageClient({
   total,
   page,
   pageSize,
-  systemFieldKeys,
 }: ContactsPageClientProps) {
-  const [modal, setModal] = useState<ModalState>(null);
-
-  function close() {
-    setModal(null);
-  }
+  const router = useRouter();
 
   return (
     <>
       <div className="mb-3 flex items-center justify-end">
-        <Button size="sm" onClick={() => setModal({ mode: 'add' })}>
+        <Button
+          size="sm"
+          onClick={() => router.push(`/admin/surveys/${surveyId}/operations/contacts/new`)}
+        >
           + 컨택 추가
         </Button>
       </div>
@@ -55,26 +46,10 @@ export function ContactsPageClient({
         pageSize={pageSize}
         scheme={scheme}
         surveyId={surveyId}
-        onRowClick={(row) => setModal({ mode: 'edit', row })}
+        onRowClick={(row) =>
+          router.push(`/admin/surveys/${surveyId}/operations/contacts/${row.id}`)
+        }
       />
-
-      {modal?.mode === 'add' && (
-        <ContactEditModal
-          surveyId={surveyId}
-          scheme={scheme}
-          systemFieldKeys={systemFieldKeys}
-          onClose={close}
-        />
-      )}
-      {modal?.mode === 'edit' && (
-        <ContactEditModal
-          surveyId={surveyId}
-          scheme={scheme}
-          systemFieldKeys={systemFieldKeys}
-          initial={{ id: modal.row.id, attrs: modal.row.attrs }}
-          onClose={close}
-        />
-      )}
     </>
   );
 }

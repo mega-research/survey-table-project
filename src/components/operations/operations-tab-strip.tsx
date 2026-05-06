@@ -36,14 +36,21 @@ export function OperationsTabStrip({ surveyId }: OperationsTabStripProps) {
   const contactsHref = `${operationsBase}/contacts`;
   const contactsUploadHref = `${operationsBase}/contacts/upload`;
   const contactsColumnsHref = `${operationsBase}/contacts/columns`;
+  const contactsResultCodesHref = `${operationsBase}/contacts/result-codes`;
   const isContactsRootActive =
     pathname === contactsHref ||
     (pathname.startsWith(`${contactsHref}/`) &&
      !pathname.startsWith(contactsUploadHref) &&
-     !pathname.startsWith(contactsColumnsHref));
+     !pathname.startsWith(contactsColumnsHref) &&
+     !pathname.startsWith(contactsResultCodesHref));
   const isContactsUploadActive = pathname.startsWith(contactsUploadHref);
   const isContactsColumnsActive = pathname.startsWith(contactsColumnsHref);
-  const isContactsActive = isContactsRootActive || isContactsUploadActive || isContactsColumnsActive;
+  const isContactsResultCodesActive = pathname.startsWith(contactsResultCodesHref);
+  const isContactsActive =
+    isContactsRootActive ||
+    isContactsUploadActive ||
+    isContactsColumnsActive ||
+    isContactsResultCodesActive;
 
   return (
     <div className="border-b border-gray-200 bg-white">
@@ -95,6 +102,9 @@ export function OperationsTabStrip({ surveyId }: OperationsTabStripProps) {
               </SubLink>
               <SubLink href={contactsColumnsHref} active={isContactsColumnsActive}>
                 컬럼 설정
+              </SubLink>
+              <SubLink href={contactsResultCodesHref} active={isContactsResultCodesActive}>
+                결과코드 설정
               </SubLink>
             </NavigationMenuContent>
           </NavigationMenuItem>
