@@ -101,7 +101,7 @@ export function validateNoDuplicates(questions: Question[]): ValidationError[] {
 }
 
 /**
- * checkbox 질문의 하위 변수명(Q2M1, Q2M2...)과
+ * checkbox 질문의 하위 변수명(Q2_1, Q2_2...)과
  * 다른 질문의 변수명이 충돌하는지 검사한다.
  */
 export function validateNoSubVarConflicts(questions: Question[]): ValidationError[] {

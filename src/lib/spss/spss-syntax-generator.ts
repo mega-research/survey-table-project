@@ -62,7 +62,7 @@ function collectTableRankingCells(q: Question): TableRankingCellInfo[] {
 /**
  * VARIABLE LABELS 신택스를 생성한다.
  * - 단일선택/텍스트/다단계: 변수 1개
- * - 복수선택: 옵션별 하위 변수 (Q2M1, Q2M2...)
+ * - 복수선택: 옵션별 하위 변수 (Q2_1, Q2_2...)
  */
 export function generateVariableLabels(questions: Question[]): string {
   const lines: string[] = [];

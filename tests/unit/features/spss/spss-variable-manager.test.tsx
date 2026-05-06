@@ -76,7 +76,7 @@ describe('SpssVariableManager', () => {
 
   it('checkbox 질문의 하위 변수를 표시한다', () => {
     render(<SpssVariableManager {...defaultProps} />);
-    expect(screen.getByText('Q2M1~Q2M2')).toBeInTheDocument();
+    expect(screen.getByText('Q2_1~Q2_2')).toBeInTheDocument();
   });
 
   it('자동 재할당 버튼을 렌더링한다', () => {

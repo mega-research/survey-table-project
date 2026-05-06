@@ -182,8 +182,8 @@ describe('validateNoSubVarConflicts', () => {
   });
 
   it('checkbox 하위 변수명과 다른 질문 변수명의 충돌을 검출한다', () => {
-    // Q2는 checkbox이므로 Q2M1, Q2M2... 하위 변수를 생성
-    // 다른 질문이 Q2M1을 변수명으로 사용하면 충돌
+    // Q2는 checkbox이므로 Q2_1, Q2_2... 하위 변수를 생성
+    // 다른 질문이 Q2_1을 변수명으로 사용하면 충돌
     const questions = [
       makeQuestion({
         type: 'checkbox',
@@ -197,7 +197,7 @@ describe('validateNoSubVarConflicts', () => {
       makeQuestion({
         type: 'radio',
         order: 2,
-        questionCode: 'Q2M1',
+        questionCode: 'Q2_1',
         isCustomSpssVarName: true,
       }),
     ];
@@ -211,7 +211,7 @@ describe('validateNoSubVarConflicts', () => {
   it('checkbox가 아닌 질문은 하위 변수 충돌 검사를 하지 않는다', () => {
     const questions = [
       makeQuestion({ type: 'radio', order: 1, questionCode: 'Q1' }),
-      makeQuestion({ type: 'radio', order: 2, questionCode: 'Q1M1', isCustomSpssVarName: true }),
+      makeQuestion({ type: 'radio', order: 2, questionCode: 'Q1_1', isCustomSpssVarName: true }),
     ];
     const errors = validateNoSubVarConflicts(questions);
     expect(errors).toHaveLength(0);

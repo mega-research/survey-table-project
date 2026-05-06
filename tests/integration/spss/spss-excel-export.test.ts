@@ -80,9 +80,9 @@ describe('generateSPSSColumns', () => {
   it('복수선택 질문은 옵션 수만큼 열을 생성한다', () => {
     const columns = generateSPSSColumns([sampleQuestions[1]]);
     expect(columns).toHaveLength(3);
-    expect(columns[0].spssVarName).toBe('Q2M1');
-    expect(columns[1].spssVarName).toBe('Q2M2');
-    expect(columns[2].spssVarName).toBe('Q2M3');
+    expect(columns[0].spssVarName).toBe('Q2_1');
+    expect(columns[1].spssVarName).toBe('Q2_2');
+    expect(columns[2].spssVarName).toBe('Q2_3');
     expect(columns[0].type).toBe('checkbox-item');
   });
 
@@ -101,10 +101,10 @@ describe('generateSPSSColumns', () => {
 
   it('여러 질문을 순서대로 열 정의를 생성한다', () => {
     const columns = generateSPSSColumns(sampleQuestions);
-    // Q1(1) + Q2M1~Q2M3(3) + Q3(1) = 5열
+    // Q1(1) + Q2_1~Q2_3(3) + Q3(1) = 5열
     expect(columns).toHaveLength(5);
     expect(columns.map((c) => c.spssVarName)).toEqual([
-      'Q1', 'Q2M1', 'Q2M2', 'Q2M3', 'Q3',
+      'Q1', 'Q2_1', 'Q2_2', 'Q2_3', 'Q3',
     ]);
   });
 

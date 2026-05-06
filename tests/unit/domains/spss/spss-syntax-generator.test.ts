@@ -50,8 +50,8 @@ describe('generateVariableLabels', () => {
       }),
     ];
     const result = generateVariableLabels(questions);
-    expect(result).toContain("Q2M1 '생산품목을 선택하세요 - 1. 제제목'");
-    expect(result).toContain("Q2M2 '생산품목을 선택하세요 - 2. 합판'");
+    expect(result).toContain("Q2_1 '생산품목을 선택하세요 - 1. 제제목'");
+    expect(result).toContain("Q2_2 '생산품목을 선택하세요 - 2. 합판'");
   });
 
   it('notice 타입은 제외한다', () => {
@@ -103,8 +103,8 @@ describe('generateValueLabels', () => {
       }),
     ];
     const result = generateValueLabels(questions);
-    expect(result).toContain("Q2M1 1 '선택'");
-    expect(result).toContain("Q2M2 2 '선택'");
+    expect(result).toContain("Q2_1 1 '선택'");
+    expect(result).toContain("Q2_2 2 '선택'");
   });
 
   it('텍스트 질문은 값 라벨이 없다', () => {
@@ -149,7 +149,7 @@ describe('generateVariableLevel', () => {
     expect(result).toContain('VARIABLE LEVEL');
     expect(result).toContain('NOMINAL');
     expect(result).toContain('Q1');
-    expect(result).toContain('Q2M1');
+    expect(result).toContain('Q2_1');
   });
 
   it('텍스트는 SCALE로 설정한다', () => {
@@ -180,7 +180,7 @@ describe('generateMrsets', () => {
     const result = generateMrsets(questions);
     expect(result).toContain('MRSETS');
     expect(result).toContain("$Q2 LABEL='생산품목'");
-    expect(result).toContain('VARIABLES=Q2M1 Q2M2 Q2M3');
+    expect(result).toContain('VARIABLES=Q2_1 Q2_2 Q2_3');
   });
 
   it('복수선택이 없으면 빈 문자열을 반환한다', () => {

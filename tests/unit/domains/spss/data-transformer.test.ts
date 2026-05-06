@@ -89,30 +89,30 @@ describe('transformCheckbox', () => {
   it('선택된 옵션은 숫자코드, 미선택은 null로 분리한다', () => {
     const result = transformCheckbox(question, ['o1', 'o3', 'o4']);
     expect(result).toEqual([
-      { varName: 'Q2M1', value: 1 },
-      { varName: 'Q2M2', value: null },
-      { varName: 'Q2M3', value: 3 },
-      { varName: 'Q2M4', value: 4 },
+      { varName: 'Q2_1', value: 1 },
+      { varName: 'Q2_2', value: null },
+      { varName: 'Q2_3', value: 3 },
+      { varName: 'Q2_4', value: 4 },
     ]);
   });
 
   it('전체 미응답이면 모두 null을 반환한다', () => {
     const result = transformCheckbox(question, null);
     expect(result).toEqual([
-      { varName: 'Q2M1', value: null },
-      { varName: 'Q2M2', value: null },
-      { varName: 'Q2M3', value: null },
-      { varName: 'Q2M4', value: null },
+      { varName: 'Q2_1', value: null },
+      { varName: 'Q2_2', value: null },
+      { varName: 'Q2_3', value: null },
+      { varName: 'Q2_4', value: null },
     ]);
   });
 
   it('빈 배열이면 모두 null을 반환한다', () => {
     const result = transformCheckbox(question, []);
     expect(result).toEqual([
-      { varName: 'Q2M1', value: null },
-      { varName: 'Q2M2', value: null },
-      { varName: 'Q2M3', value: null },
-      { varName: 'Q2M4', value: null },
+      { varName: 'Q2_1', value: null },
+      { varName: 'Q2_2', value: null },
+      { varName: 'Q2_3', value: null },
+      { varName: 'Q2_4', value: null },
     ]);
   });
 
@@ -128,8 +128,8 @@ describe('transformCheckbox', () => {
     });
     const result = transformCheckbox(qNoCode, ['o2']);
     expect(result).toEqual([
-      { varName: 'Q2M1', value: null },
-      { varName: 'Q2M2', value: 2 },
+      { varName: 'Q2_1', value: null },
+      { varName: 'Q2_2', value: 2 },
     ]);
   });
 });
