@@ -35,6 +35,8 @@ CREATE INDEX idx_contact_attempts_target
 COMMIT;
 
 -- ROLLBACK SQL (수동 적용용 — 본 마이그레이션 실패 시):
+-- 주의: 0014 까지 같이 롤백 시 본 0015 롤백을 먼저 실행한 뒤 0014 롤백.
+-- 본 0015 롤백은 0014 가 적용된 상태를 가정 (idx_contact_attempts_target / next_contact_resid 존재).
 -- BEGIN;
 -- -- I2 롤백: INCLUDE 제거하고 0014 형태로 복원
 -- DROP INDEX IF EXISTS idx_contact_attempts_target;
