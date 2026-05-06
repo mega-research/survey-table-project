@@ -1,9 +1,11 @@
 import 'server-only';
+import { cache } from 'react';
 
-import { and, asc, eq, ilike, or, sql, type AnyColumn, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, or, sql, type AnyColumn, type SQL } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { contactTargets } from '@/db/schema';
+import { contactTargets, contactUploads, surveys } from '@/db/schema';
+import type { ContactColumnScheme } from '@/db/schema/schema-types';
 
 import {
   maskBizNumber,
@@ -175,3 +177,43 @@ export async function listContactsForSurvey(
 
   return { rows, total, page: clampedPage };
 }
+
+export interface ContactUploadRow {
+  id: string;
+  filename: string;
+  uploadedRows: number;
+  mergedRows: number;
+  errorRows: number;
+  createdAt: Date;
+}
+
+export async function listContactUploads(surveyId: string): Promise<ContactUploadRow[]> {
+  const rows = await db
+    .select({
+      id: contactUploads.id,
+      filename: contactUploads.filename,
+      uploadedRows: contactUploads.uploadedRows,
+      mergedRows: contactUploads.mergedRows,
+      errorRows: contactUploads.errorRows,
+      createdAt: contactUploads.createdAt,
+    })
+    .from(contactUploads)
+    .where(eq(contactUploads.surveyId, surveyId))
+    .orderBy(desc(contactUploads.createdAt));
+  return rows;
+}
+
+/**
+ * surveys.contact_columns 캐시 (RSC pass 내 dedupe).
+ * NULL 이면 null 반환 — 호출자가 디폴트 스킴 생성.
+ */
+export const getContactColumnScheme = cache(
+  async (surveyId: string): Promise<ContactColumnScheme | null> => {
+    const [row] = await db
+      .select({ contactColumns: surveys.contactColumns })
+      .from(surveys)
+      .where(eq(surveys.id, surveyId))
+      .limit(1);
+    return (row?.contactColumns as ContactColumnScheme | null) ?? null;
+  },
+);
