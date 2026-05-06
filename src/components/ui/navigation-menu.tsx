@@ -18,7 +18,6 @@ const NavigationMenu = React.forwardRef<
     {...props}
   >
     {children}
-    <NavigationMenuViewport />
   </NavigationMenuPrimitive.Root>
 ))
 NavigationMenu.displayName = NavigationMenuPrimitive.Root.displayName
@@ -38,7 +37,17 @@ const NavigationMenuList = React.forwardRef<
 ))
 NavigationMenuList.displayName = NavigationMenuPrimitive.List.displayName
 
-const NavigationMenuItem = NavigationMenuPrimitive.Item
+const NavigationMenuItem = React.forwardRef<
+  React.ElementRef<typeof NavigationMenuPrimitive.Item>,
+  React.ComponentPropsWithoutRef<typeof NavigationMenuPrimitive.Item>
+>(({ className, ...props }, ref) => (
+  <NavigationMenuPrimitive.Item
+    ref={ref}
+    className={cn("relative", className)}
+    {...props}
+  />
+))
+NavigationMenuItem.displayName = NavigationMenuPrimitive.Item.displayName
 
 const navigationMenuTriggerStyle = cva(
   "group inline-flex h-10 w-max items-center justify-center rounded-md bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground focus:outline-none disabled:pointer-events-none disabled:opacity-50 data-[state=open]:text-accent-foreground data-[state=open]:bg-accent/50 data-[state=open]:hover:bg-accent data-[state=open]:focus:bg-accent"
@@ -69,7 +78,9 @@ const NavigationMenuContent = React.forwardRef<
   <NavigationMenuPrimitive.Content
     ref={ref}
     className={cn(
-      "left-0 top-0 w-full data-[motion^=from-]:animate-in data-[motion^=to-]:animate-out data-[motion^=from-]:fade-in data-[motion^=to-]:fade-out data-[motion=from-end]:slide-in-from-right-52 data-[motion=from-start]:slide-in-from-left-52 data-[motion=to-end]:slide-out-to-right-52 data-[motion=to-start]:slide-out-to-left-52 md:absolute md:w-auto ",
+      // viewport 대신 각 Item 내부에서 자체 absolute positioning (trigger 바로 아래)
+      "absolute left-0 top-full z-50 mt-1.5 rounded-md border border-slate-200 bg-white text-slate-900 shadow-lg",
+      "data-[motion^=from-]:animate-in data-[motion^=to-]:animate-out data-[motion^=from-]:fade-in data-[motion^=to-]:fade-out",
       className
     )}
     {...props}
