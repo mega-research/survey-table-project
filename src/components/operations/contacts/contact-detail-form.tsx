@@ -168,8 +168,22 @@ export function ContactDetailForm({
     router.push(`/admin/surveys/${surveyId}/operations/contacts`);
   }
 
+  // I8: systemFieldKeys 자동 감지 실패 시 안내 banner
+  const systemFieldsMissing =
+    !systemFieldKeys ||
+    (!systemFieldKeys.group && !systemFieldKeys.email && !systemFieldKeys.biz);
+
   return (
     <div className="space-y-4">
+      {systemFieldsMissing && (
+        <div
+          role="status"
+          className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+        >
+          시스템 필드 (그룹/이메일/사업자번호) 가 자동 감지되지 않았습니다. 검색·마스킹·머지
+          기능이 제한될 수 있습니다.
+        </div>
+      )}
       {error && (
         <div role="alert" className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           {error}
@@ -179,6 +193,7 @@ export function ContactDetailForm({
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div>
           <ContactInfoCard
+            surveyId={surveyId}
             resid={initial?.resid ?? null}
             scheme={localScheme}
             attrs={attrs}

@@ -13,6 +13,7 @@ import {
 import { attrsKeyOf } from '@/lib/operations/contacts';
 
 interface ContactInfoCardProps {
+  surveyId: string;
   resid: number | null;
   scheme: ContactColumnScheme;
   attrs: Record<string, string>;
@@ -37,6 +38,7 @@ const dateFmt = new Intl.DateTimeFormat('ko-KR', {
 });
 
 export function ContactInfoCard({
+  surveyId,
   resid,
   scheme,
   attrs,
@@ -70,6 +72,18 @@ export function ContactInfoCard({
       </div>
 
       <div className="max-h-[60vh] space-y-2 overflow-y-auto px-5 py-4">
+        {inputDefs.length === 0 && (
+          <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            표시 가능한 attrs 컬럼이 없습니다.{' '}
+            <a
+              href={`/admin/surveys/${surveyId}/operations/contacts/columns`}
+              className="underline"
+            >
+              컬럼 설정
+            </a>
+            에서 헤더를 추가하세요.
+          </div>
+        )}
         {inputDefs.map(({ col, attrsKey }, idx) => (
           <div key={attrsKey} className="flex items-center gap-3">
             <div className="flex w-40 shrink-0 items-center gap-1 text-xs text-slate-600">
