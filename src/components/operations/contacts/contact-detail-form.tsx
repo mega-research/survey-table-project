@@ -3,7 +3,12 @@
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 
-import { addContactTarget, updateContactColumns, updateContactTarget } from '@/actions/contact-actions';
+import {
+  addContactTarget,
+  deleteContactTarget,
+  updateContactColumns,
+  updateContactTarget,
+} from '@/actions/contact-actions';
 import { Button } from '@/components/ui/button';
 import { ContactAttemptAddCard } from '@/components/operations/contacts/contact-attempt-add-card';
 import { ContactAttemptHistoryCard } from '@/components/operations/contacts/contact-attempt-history-card';
@@ -67,7 +72,21 @@ export function ContactDetailForm({
     });
   }
 
-  function save(redirectAfter: boolean) {
+  function remove() {
+    if (!isEdit || !initial) return;
+    if (!window.confirm('이 컨택을 삭제하시겠습니까? (응답이 있으면 응답은 보존, 매칭만 끊김)')) return;
+    setError(null);
+    startTransition(async () => {
+      try {
+        await deleteContactTarget(surveyId, initial.id);
+        router.push(`/admin/surveys/${surveyId}/operations/contacts`);
+      } catch (e) {
+        setError((e as Error).message);
+      }
+    });
+  }
+
+  function save() {
     setError(null);
     startTransition(async () => {
       try {
@@ -89,11 +108,7 @@ export function ContactDetailForm({
             systemFieldKeys,
           });
         }
-        if (redirectAfter) {
-          router.push(`/admin/surveys/${surveyId}/operations/contacts`);
-        } else {
-          router.refresh();
-        }
+        router.refresh();
       } catch (e) {
         setError((e as Error).message);
       }
@@ -130,16 +145,18 @@ export function ContactDetailForm({
             >
               목록
             </Button>
-            <Button
-              variant="outline"
-              onClick={() => save(true)}
-              disabled={isPending}
-              className="text-red-600"
-            >
-              저장 후 목록
-            </Button>
+            {isEdit && (
+              <Button
+                variant="outline"
+                onClick={remove}
+                disabled={isPending}
+                className="text-red-600 hover:text-red-700"
+              >
+                삭제
+              </Button>
+            )}
             <span className="flex-1" />
-            <Button onClick={() => save(false)} disabled={isPending}>
+            <Button onClick={save} disabled={isPending}>
               {isPending ? '저장 중…' : '💾 저장'}
             </Button>
           </div>
