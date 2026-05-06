@@ -256,3 +256,107 @@ export async function getExistingContactsCount(surveyId: string): Promise<number
     .where(eq(contactTargets.surveyId, surveyId));
   return row?.total ?? 0;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 행 단위 CRUD (시나리오 B — 한 번 업로드 후 명단 갱신)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface AddContactTargetInput {
+  surveyId: string;
+  attrs: Record<string, string>;
+  /** 시스템 필드는 attrs 의 어느 키에 있는지 — 컬럼 스킴의 systemFields 맵 활용 */
+  systemFieldKeys?: {
+    group?: string;
+    email?: string;
+    biz?: string;
+  };
+}
+
+export interface ContactTargetRow {
+  id: string;
+  resid: number;
+}
+
+/**
+ * 컨택리스트의 "+ 컨택 추가" 모달 저장 액션.
+ * resid 는 next_contact_resid() 로 자동 발번.
+ */
+export async function addContactTarget(
+  input: AddContactTargetInput,
+): Promise<ContactTargetRow> {
+  await requireAuth();
+  const { surveyId, attrs, systemFieldKeys } = input;
+
+  const groupValue = systemFieldKeys?.group ? (attrs[systemFieldKeys.group] || null) : null;
+  const email = systemFieldKeys?.email ? (attrs[systemFieldKeys.email] || null) : null;
+  const biz = systemFieldKeys?.biz ? (attrs[systemFieldKeys.biz] || null) : null;
+
+  const result = await db.transaction(async (tx) => {
+    const residRows = (await tx.execute(
+      sql`SELECT next_contact_resid(${surveyId}::uuid) AS resid`,
+    )) as unknown as Array<{ resid: number }>;
+    const resid = residRows[0]?.resid;
+    if (resid == null) throw new Error('next_contact_resid 호출 실패');
+
+    const [row] = await tx
+      .insert(contactTargets)
+      .values({
+        surveyId,
+        resid,
+        groupValue,
+        email,
+        bizNumber: biz,
+        attrs,
+      })
+      .returning({ id: contactTargets.id, resid: contactTargets.resid });
+    if (!row) throw new Error('contact_targets INSERT 실패');
+    return row;
+  });
+
+  revalidatePath(`/admin/surveys/${surveyId}/operations/contacts`);
+  return result;
+}
+
+export interface UpdateContactTargetInput {
+  id: string;
+  surveyId: string;
+  attrs: Record<string, string>;
+  systemFieldKeys?: {
+    group?: string;
+    email?: string;
+    biz?: string;
+  };
+}
+
+export async function updateContactTarget(
+  input: UpdateContactTargetInput,
+): Promise<void> {
+  await requireAuth();
+  const { id, surveyId, attrs, systemFieldKeys } = input;
+
+  const groupValue = systemFieldKeys?.group ? (attrs[systemFieldKeys.group] || null) : null;
+  const email = systemFieldKeys?.email ? (attrs[systemFieldKeys.email] || null) : null;
+  const biz = systemFieldKeys?.biz ? (attrs[systemFieldKeys.biz] || null) : null;
+
+  await db
+    .update(contactTargets)
+    .set({
+      attrs,
+      groupValue,
+      email,
+      bizNumber: biz,
+      updatedAt: new Date(),
+    })
+    .where(eq(contactTargets.id, id));
+
+  revalidatePath(`/admin/surveys/${surveyId}/operations/contacts`);
+}
+
+export async function deleteContactTarget(
+  surveyId: string,
+  id: string,
+): Promise<void> {
+  await requireAuth();
+  await db.delete(contactTargets).where(eq(contactTargets.id, id));
+  revalidatePath(`/admin/surveys/${surveyId}/operations/contacts`);
+}
