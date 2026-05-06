@@ -55,6 +55,27 @@ export function ContactsTable({
     .filter((c) => !c.hidden)
     .sort((a, b) => a.order - b.order);
 
+  /**
+   * 셀의 평문 값 — `<td title="...">` hover tooltip 용 (truncate 시 전체 값 노출).
+   * renderCell 의 React 노드 와 별도로 plain string 만 반환.
+   */
+  function cellPlainText(col: ContactColumnDef, row: ContactsRow): string | undefined {
+    const attrsKey = attrsKeyOf(col.source);
+    if (attrsKey) {
+      if (attrsKey === '이메일') return row.emailMasked;
+      if (attrsKey === '사업자번호') return row.bizMasked;
+      return row.attrs[attrsKey] || undefined;
+    }
+    if (col.source === 'system.resid') return String(row.resid);
+    if (col.source === 'system.contact_result' && row.latestResultCode) {
+      return `[${row.latestAttemptNo}] ${row.latestResultCode}`;
+    }
+    if (col.source === 'system.web' && row.respondedAt) {
+      return `응답 ${dateShort.format(row.respondedAt)}`;
+    }
+    return undefined;
+  }
+
   function renderCell(col: ContactColumnDef, row: ContactsRow): React.ReactNode {
     const attrsKey = attrsKeyOf(col.source);
     if (attrsKey) {
@@ -136,7 +157,8 @@ export function ContactsTable({
                   {visibleColumns.map((col) => (
                     <td
                       key={col.key}
-                      className={`px-3 py-2 ${responded ? 'border-t border-blue-100' : ''}`}
+                      className={`max-w-[240px] truncate px-3 py-2 whitespace-nowrap ${responded ? 'border-t border-blue-100' : ''}`}
+                      title={cellPlainText(col, row)}
                     >
                       {renderCell(col, row)}
                     </td>
