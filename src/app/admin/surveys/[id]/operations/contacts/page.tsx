@@ -5,8 +5,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/operations/empty-state';
 import { ContactsFilterBar } from '@/components/operations/contacts/contacts-filter-bar';
-import { ContactsTable } from '@/components/operations/contacts/contacts-table';
+import { ContactsPageClient } from '@/components/operations/contacts/contacts-page-client';
+import type { ContactColumnScheme } from '@/db/schema/schema-types';
 import {
+  attrsKeyOf,
   CONTACTS_PAGE_SIZE,
   hasActiveContactFilters,
   normalizeContactListArgs,
@@ -15,6 +17,28 @@ import {
   getContactColumnScheme,
   listContactsForSurvey,
 } from '@/lib/operations/contacts.server';
+
+/**
+ * 컬럼 스킴에서 시스템 필드 (group/email/biz) 의 attrs key 추출.
+ * 휴리스틱: key 가 한국어 표준 명칭이면 그것으로 매핑.
+ * 정확한 매핑은 contact_uploads.mapping 의 systemFields 인덱스 별도 조회 필요하지만
+ * 본 슬라이스는 단순 휴리스틱으로 충분.
+ */
+function extractSystemFieldKeys(scheme: ContactColumnScheme): {
+  group?: string;
+  email?: string;
+  biz?: string;
+} {
+  const result: { group?: string; email?: string; biz?: string } = {};
+  for (const c of scheme.columns) {
+    const k = attrsKeyOf(c.source);
+    if (!k) continue;
+    if (!result.group && (k.includes('전시회') || k.includes('캠페인'))) result.group = k;
+    if (!result.email && (k === '이메일' || k.includes('이메일') || k.toLowerCase().includes('email'))) result.email = k;
+    if (!result.biz && k.includes('사업자')) result.biz = k;
+  }
+  return result;
+}
 
 export const metadata: Metadata = {
   title: '현황 - 컨택리스트',
@@ -95,13 +119,14 @@ export default async function ContactsPage({ params, searchParams }: PageProps) 
               description={hasFilter ? '필터를 변경해 보세요.' : '엑셀로 명단을 업로드하세요.'}
             />
           ) : (
-            <ContactsTable
+            <ContactsPageClient
               rows={rows}
               total={total}
               page={clampedPage}
               pageSize={CONTACTS_PAGE_SIZE}
               scheme={scheme}
               surveyId={surveyId}
+              systemFieldKeys={extractSystemFieldKeys(scheme)}
             />
           )}
         </CardContent>
