@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 
-import { and, eq, sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { contactTargets, contactUploads, surveys } from '@/db/schema';
@@ -83,16 +83,17 @@ export interface IngestContactUploadResult {
 }
 
 /**
- * 엑셀 풀 파싱 + UPSERT.
+ * 엑셀 풀 파싱 + 통째 교체 (시나리오 B).
  *
- * 머지 정책 (spec 엣지케이스 #14, #16):
- * - 같은 그룹 + 머지키 일치 → shallow merge attrs (NULL/빈문자 새 값은 덮지 않음)
- * - responded_at/response_id/invite_token 은 머지에서 절대 덮지 않음
- * - 다른 그룹 → 신규 행
+ * 기존 contact_targets 를 모두 DELETE 한 뒤 신규 INSERT.
+ * - survey_responses.contact_target_id 는 SET NULL (응답 본체 보존, 매칭만 끊김)
+ * - contact_attempts 는 CASCADE 로 함께 삭제 (회차 기록 사라짐)
+ * - 기존 invite_token 도 함께 사라짐 (발송된 메일 링크 무효화)
  *
- * 트랜잭션: 단일 트랜잭션. 행 단위 에러는 errorRows 카운트 + 트랜잭션 자체는 살림.
+ * 클라이언트가 경고 카드로 사용자 confirm 후 호출 — 서버는 가드 없음.
  *
- * 첫 업로드 시 surveys.contact_columns 가 NULL 이면 자동 생성 (시스템 필드 + 매핑된 attrs 컬럼).
+ * 트랜잭션: 단일 트랜잭션. 행 단위 INSERT 에러는 SAVEPOINT 격리.
+ * 컬럼 스킴: 매핑된 selectedAttrsKeys 기준으로 매번 재생성.
  */
 export async function ingestContactUpload(
   input: IngestContactUploadInput,
@@ -129,6 +130,11 @@ export async function ingestContactUpload(
   let errorRows = 0;
 
   const result = await db.transaction(async (tx) => {
+    // 시나리오 B: 기존 컨택 통째 DELETE.
+    // FK 동작: survey_responses 는 SET NULL (응답 보존), contact_attempts 는 CASCADE.
+    // 클라이언트가 경고 confirm 후 호출 — 서버는 가드 없이 실행.
+    await tx.delete(contactTargets).where(eq(contactTargets.surveyId, surveyId));
+
     const [upload] = await tx
       .insert(contactUploads)
       .values({
@@ -150,79 +156,22 @@ export async function ingestContactUpload(
           const email = emailKey ? row[emailKey] || null : null;
           const biz = bizKey ? row[bizKey] || null : null;
 
-          // 머지키 정책 (spec #13)
-          const mergeFilters = [eq(contactTargets.surveyId, surveyId)];
-          if (groupValue) mergeFilters.push(eq(contactTargets.groupValue, groupValue));
+          const residRows = (await sp.execute(
+            sql`SELECT next_contact_resid(${surveyId}::uuid) AS resid`,
+          )) as unknown as Array<{ resid: number }>;
+          const resid = residRows[0]?.resid;
+          if (resid == null) throw new Error('next_contact_resid 호출 실패');
 
-          let canMerge = false;
-          if (mapping.mergeKey === 'email+biz') {
-            if (mapping.mergeKeyPolicy === 'both' && email && biz) {
-              mergeFilters.push(eq(contactTargets.email, email));
-              mergeFilters.push(eq(contactTargets.bizNumber, biz));
-              canMerge = true;
-            } else if (mapping.mergeKeyPolicy === 'either' && (email || biz)) {
-              if (email) mergeFilters.push(eq(contactTargets.email, email));
-              else if (biz) mergeFilters.push(eq(contactTargets.bizNumber, biz));
-              canMerge = true;
-            }
-          } else if (mapping.mergeKey === 'email' && email) {
-            mergeFilters.push(eq(contactTargets.email, email));
-            canMerge = true;
-          } else if (mapping.mergeKey === 'biz' && biz) {
-            mergeFilters.push(eq(contactTargets.bizNumber, biz));
-            canMerge = true;
-          }
-
-          const existing = canMerge
-            ? await sp
-                .select({
-                  id: contactTargets.id,
-                  attrs: contactTargets.attrs,
-                  email: contactTargets.email,
-                  bizNumber: contactTargets.bizNumber,
-                })
-                .from(contactTargets)
-                .where(and(...mergeFilters))
-                .limit(1)
-            : [];
-
-          if (existing.length > 0 && existing[0]) {
-            // shallow merge: 새 값이 비어있지 않은 키만 갱신
-            const old = existing[0];
-            const oldAttrs = old.attrs ?? {};
-            const newAttrs: Record<string, string> = { ...oldAttrs };
-            for (const [k, v] of Object.entries(row)) {
-              if (v != null && v !== '') newAttrs[k] = v;
-            }
-            await sp
-              .update(contactTargets)
-              .set({
-                attrs: newAttrs,
-                email: email ?? old.email,
-                bizNumber: biz ?? old.bizNumber,
-                uploadId: upload.id,
-                updatedAt: new Date(),
-              })
-              .where(eq(contactTargets.id, old.id));
-            mergedRows += 1;
-          } else {
-            // 신규 INSERT — resid 발번 (advisory lock)
-            const residRows = (await sp.execute(
-              sql`SELECT next_contact_resid(${surveyId}::uuid) AS resid`,
-            )) as unknown as Array<{ resid: number }>;
-            const resid = residRows[0]?.resid;
-            if (resid == null) throw new Error('next_contact_resid 호출 실패');
-            await sp.insert(contactTargets).values({
-              surveyId,
-              resid,
-              groupValue,
-              email,
-              bizNumber: biz,
-              attrs: row,
-              uploadId: upload.id,
-            });
-            uploadedRows += 1;
-          }
+          await sp.insert(contactTargets).values({
+            surveyId,
+            resid,
+            groupValue,
+            email,
+            bizNumber: biz,
+            attrs: row,
+            uploadId: upload.id,
+          });
+          uploadedRows += 1;
         });
       } catch (e) {
         errorRows += 1;
@@ -235,16 +184,9 @@ export async function ingestContactUpload(
       .set({ uploadedRows, mergedRows, errorRows })
       .where(eq(contactUploads.id, upload.id));
 
-    // 첫 업로드 → 컬럼 스킴 자동 생성
-    const [s] = await tx
-      .select({ contactColumns: surveys.contactColumns })
-      .from(surveys)
-      .where(eq(surveys.id, surveyId))
-      .limit(1);
-    if (!s?.contactColumns) {
-      const scheme = autoGenerateColumnScheme(headerKeys, mapping);
-      await tx.update(surveys).set({ contactColumns: scheme }).where(eq(surveys.id, surveyId));
-    }
+    // 통째 교체 후엔 컬럼 스킴도 새 매핑 기준으로 재생성.
+    const scheme = autoGenerateColumnScheme(headerKeys, mapping);
+    await tx.update(surveys).set({ contactColumns: scheme }).where(eq(surveys.id, surveyId));
 
     return { uploadId: upload.id, uploadedRows, mergedRows, errorRows };
   });
@@ -261,42 +203,27 @@ function autoGenerateColumnScheme(
   const columns: ContactColumnDef[] = [];
   let order = 1;
 
+  // 시스템 컬럼 (resid 항상 1번, 표시 필수)
   columns.push({ key: 'resid', label: '#', source: 'system.resid', order: order++ });
 
-  const sf = mapping.systemFields;
-  const addAttrs = (idx: number | undefined) => {
-    if (idx == null) return;
-    const k = headerKeys[idx];
-    if (!k) return;
-    columns.push({ key: k, label: k, source: `attrs.${k}`, order: order++ });
-  };
-
-  addAttrs(sf.group);
-  addAttrs(sf.company);
-  addAttrs(sf.email);
-  addAttrs(sf.biz);
-  addAttrs(sf.phone);
+  // 모든 attrs 헤더 키를 컬럼으로 등록.
+  // 사용자가 매핑 모달에서 토글한 키만 hidden:false, 나머지는 hidden:true.
+  const selected = new Set(mapping.selectedAttrsKeys);
+  for (const key of headerKeys) {
+    columns.push({
+      key,
+      label: key,
+      source: `attrs.${key}`,
+      order: order++,
+      hidden: !selected.has(key),
+    });
+  }
 
   // 운영 컬럼 (read 만, 본 슬라이스)
-  columns.push({
-    key: 'contact_result',
-    label: '컨택결과',
-    source: 'system.contact_result',
-    order: order++,
-  });
-  columns.push({
-    key: 'email_count',
-    label: '메일',
-    source: 'system.email_count',
-    order: order++,
-  });
+  columns.push({ key: 'contact_result', label: '컨택결과', source: 'system.contact_result', order: order++ });
+  columns.push({ key: 'email_count', label: '메일', source: 'system.email_count', order: order++ });
   columns.push({ key: 'web', label: 'web', source: 'system.web', order: order++ });
-  columns.push({
-    key: 'contact_owner',
-    label: '컨택원',
-    source: 'system.contact_owner',
-    order: order++,
-  });
+  columns.push({ key: 'contact_owner', label: '컨택원', source: 'system.contact_owner', order: order++ });
 
   return { version: 1, headerRow: mapping.headerRow, columns };
 }
@@ -315,4 +242,17 @@ export async function updateContactColumns(
   await db.update(surveys).set({ contactColumns: scheme }).where(eq(surveys.id, surveyId));
   revalidatePath(`/admin/surveys/${surveyId}/operations/contacts`);
   revalidatePath(`/admin/surveys/${surveyId}/operations/contacts/columns`);
+}
+
+/**
+ * 업로드 마법사 경고 카드용 — 기존 컨택 행 수.
+ * 0 이면 신규 업로드, > 0 이면 통째 교체 경고 필요.
+ */
+export async function getExistingContactsCount(surveyId: string): Promise<number> {
+  await requireAuth();
+  const [row] = await db
+    .select({ total: sql<number>`count(*)::int` })
+    .from(contactTargets)
+    .where(eq(contactTargets.surveyId, surveyId));
+  return row?.total ?? 0;
 }
