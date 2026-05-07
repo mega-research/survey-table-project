@@ -64,7 +64,10 @@ export default async function ReportProgressPage({ params, searchParams }: PageP
   const sp = await searchParams;
 
   const q = sp.q ?? '';
-  const page = Math.max(1, Number(sp.page ?? 1));
+  // page 파싱 NaN 가드 — `?page=abc` / 음수 / undefined 모두 1 로 fallback.
+  // 가드 없으면 SQL OFFSET NaN ERROR 발생.
+  const pageRaw = Number(sp.page);
+  const page = Number.isFinite(pageRaw) && pageRaw > 0 ? Math.floor(pageRaw) : 1;
   const size = 20;
   const dir: SortDir = sp.dir === 'asc' ? 'asc' : 'desc';
 
@@ -75,7 +78,8 @@ export default async function ReportProgressPage({ params, searchParams }: PageP
   const visibleColumns = scheme.columns
     .filter((c) => !c.hidden)
     .sort((a, b) => a.order - b.order);
-  const metaKeys = visibleColumns.map((c) => c.key);
+  // metaKeys 에서 빈 문자열 방어 — `attrs->>''` 는 SQL legal 이지만 의미 없음.
+  const metaKeys = visibleColumns.map((c) => c.key).filter((k) => k.length > 0);
   const sort = parseSort(sp.sort, metaKeys);
 
   // 컨택 0건 빠른 검출 — getProgressTotals 보다 훨씬 가벼움.
