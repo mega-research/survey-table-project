@@ -3,7 +3,6 @@
  *
  * - toneFromRate: 응답률 임계값 → pill 색상.
  * - sortGroupRows: 정렬 + NULLS LAST.
- * - paginate: 클라이언트 슬라이싱 (서버는 LIMIT/OFFSET).
  * - computeTotals: 푸터 합계 계산.
  *
  * 클로징 정의: W∪A — survey_responses.is_completed=true OR
@@ -87,13 +86,6 @@ function sortValue(row: ProgressRow, sort: ProgressSortKey): number | string | n
     return row.meta[key] ?? null;
   }
   return null;
-}
-
-/** 클라이언트 페이지네이션 (server 는 SQL LIMIT/OFFSET). 합계 카드 / fallback 용도. */
-export function paginate<T>(rows: T[], page: number, size: number): T[] {
-  if (size <= 0) return [];
-  const start = (Math.max(1, page) - 1) * size;
-  return rows.slice(start, start + size);
 }
 
 export interface ProgressTotals {
