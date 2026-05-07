@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache';
 import { db } from '@/db';
 import { surveys } from '@/db/schema/surveys';
 import type { ProgressColumnScheme } from '@/db/schema/schema-types';
+import { requireAuth } from '@/lib/auth';
 
 interface UpdateProgressColumnsResult {
   ok: boolean;
@@ -21,6 +22,7 @@ export async function updateProgressColumns(
   surveyId: string,
   scheme: ProgressColumnScheme,
 ): Promise<UpdateProgressColumnsResult> {
+  await requireAuth();
   // key 중복 검증
   const keys = scheme.columns.map((c) => c.key);
   if (new Set(keys).size !== keys.length) {
