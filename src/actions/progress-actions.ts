@@ -16,7 +16,8 @@ interface UpdateProgressColumnsResult {
 /**
  * 진척률 표 컬럼 픽커 갱신.
  * - scheme.columns 빈 배열 → NULL 로 set (4개 고정 컬럼만).
- * - 검증: key 중복·order 충돌 방지.
+ * - 검증: key 중복 + 라벨 빈 문자열 거부.
+ *   (order 는 UI 의 ↑↓ 버튼이 idx 로 재할당하므로 충돌 검증 불필요.)
  */
 export async function updateProgressColumns(
   surveyId: string,
