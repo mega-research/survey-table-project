@@ -12,6 +12,33 @@ import type { ProgressRow, ProgressSortKey, SortDir, ProgressTotals } from './re
 const EMPTY_SCHEME: ProgressColumnScheme = { version: 1, columns: [] };
 
 /**
+ * 클로징 정의 W∪A — 두 EXISTS 의 OR.
+ *
+ * survey_responses.is_completed=true (실제 응답 완료) OR
+ * contact_attempts.result_code='1.조사완료' (담당자 수동 마감).
+ *
+ * `getProgressRows` / `getProgressTotals` 의 `COUNT(*) FILTER (...)` 절에서
+ * 동일 정의를 사용하므로 모듈 private 헬퍼로 단일화. 클로징 정의 변경 시
+ * 한 곳만 수정 (Known Limitation: '1.조사완료' hardcoded → slice 6/7
+ * `ContactResultCode.isClosing` 토글 전환 시 함께 동적화).
+ */
+const closingFilter = sql`
+  EXISTS (SELECT 1 FROM survey_responses sr
+          WHERE sr.contact_target_id = ct.id AND sr.is_completed = true)
+     OR EXISTS (SELECT 1 FROM contact_attempts ca
+                WHERE ca.contact_target_id = ct.id AND ca.result_code = '1.조사완료')
+`;
+
+/**
+ * ILIKE wildcard escape — `%` `_` `\` 를 리터럴로 처리하기 위한 사전 escape.
+ * profiles.server.ts 와 동일 패턴. q 가 빈 문자열이면 호출자가 단축 평가
+ * (`q = ''`) 하므로 escape 적용 결과는 사용되지 않음.
+ */
+function escapeLikePattern(s: string): string {
+  return s.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+}
+
+/**
  * `surveys.progress_columns` 가져오기. NULL → 빈 스킴 (4개 고정 컬럼만).
  */
 export async function getProgressColumnScheme(surveyId: string): Promise<ProgressColumnScheme> {
@@ -106,10 +133,7 @@ export async function getProgressRows(args: GetProgressRowsArgs): Promise<Progre
 
   // ILIKE wildcard escape (profiles.server.ts 와 동일 패턴). `${q} = ''`
   // 단축 평가는 사용자 원본 비교라 escape 적용 X — ILIKE 패턴에만 적용.
-  const qLike = q
-    .replace(/\\/g, '\\\\')
-    .replace(/%/g, '\\%')
-    .replace(/_/g, '\\_');
+  const qLike = escapeLikePattern(q);
 
   // 메타 키 SELECT 절 동적 생성. attrs JSONB 키는 parameter binding (안전).
   const metaSelectSql = metaKeys
@@ -142,12 +166,7 @@ export async function getProgressRows(args: GetProgressRowsArgs): Promise<Progre
         COALESCE(ct.group_value, '(미분류)') AS group_label,
         ct.group_value AS group_value_raw,
         COUNT(*)::int AS list_count,
-        COUNT(*) FILTER (
-          WHERE EXISTS (SELECT 1 FROM survey_responses sr
-                        WHERE sr.contact_target_id = ct.id AND sr.is_completed = true)
-             OR EXISTS (SELECT 1 FROM contact_attempts ca
-                        WHERE ca.contact_target_id = ct.id AND ca.result_code = '1.조사완료')
-        )::int AS completed_count
+        COUNT(*) FILTER (WHERE ${closingFilter})::int AS completed_count
         ${metaKeys.length > 0 ? sql`, ${metaSelectSql}` : sql``}
       FROM contact_targets ct
       WHERE ct.survey_id = ${surveyId}
@@ -179,17 +198,12 @@ export async function getProgressRows(args: GetProgressRowsArgs): Promise<Progre
  * group_count 는 NULL 그룹도 1로 카운트.
  */
 export async function getProgressTotals(surveyId: string, q: string): Promise<ProgressTotals> {
-  const qLike = q.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+  const qLike = escapeLikePattern(q);
   const result = await db.execute(sql`
     SELECT
       COUNT(DISTINCT COALESCE(ct.group_value, '(미분류)'))::int AS group_count,
       COUNT(*)::int AS list_total,
-      COUNT(*) FILTER (
-        WHERE EXISTS (SELECT 1 FROM survey_responses sr
-                      WHERE sr.contact_target_id = ct.id AND sr.is_completed = true)
-           OR EXISTS (SELECT 1 FROM contact_attempts ca
-                      WHERE ca.contact_target_id = ct.id AND ca.result_code = '1.조사완료')
-      )::int AS completed_total
+      COUNT(*) FILTER (WHERE ${closingFilter})::int AS completed_total
     FROM contact_targets ct
     WHERE ct.survey_id = ${surveyId}
       AND (${q} = '' OR COALESCE(ct.group_value, '(미분류)') ILIKE '%' || ${qLike} || '%')
