@@ -133,11 +133,18 @@ export function ProgressTable({
             const rate = formatRate(r.completedCount, r.listCount);
             return (
               <tr key={r.groupValueRaw ?? '__null__'} className="hover:bg-slate-50">
-                {metaColumns.map((c) => (
-                  <td key={c.key} className="px-3 py-2 text-slate-700">
-                    {r.meta[c.key] ?? <span className="text-slate-300">—</span>}
-                  </td>
-                ))}
+                {metaColumns.map((c) => {
+                  const v = r.meta[c.key];
+                  return (
+                    <td
+                      key={c.key}
+                      className="max-w-[240px] truncate whitespace-nowrap px-3 py-2 text-slate-700"
+                      title={v ?? undefined}
+                    >
+                      {v ?? <span className="text-slate-300">—</span>}
+                    </td>
+                  );
+                })}
                 <td className={cn(ALIGN_CLASS.right, 'px-3 py-2 tabular-nums text-slate-700')}>
                   {numberFormatter.format(r.listCount)}
                 </td>
