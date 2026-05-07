@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { updateProgressColumns } from '@/actions/progress-actions';
 import type {
@@ -15,7 +16,7 @@ import type {
 interface Props {
   surveyId: string;
   initialScheme: ProgressColumnScheme;
-  /** contact_columns 의 attrs.<key> 풀 — "+ 컬럼 추가" 드롭다운 소스 */
+  /** contact_columns 의 attrs.<key> 풀 — 모든 attrs 키를 자동 노출하는 소스 */
   contactScheme: ContactColumnScheme | null;
 }
 
@@ -23,16 +24,37 @@ const ATTRS_PREFIX = 'attrs.';
 
 export function ProgressColumnEditor({ surveyId, initialScheme, contactScheme }: Props) {
   const router = useRouter();
-  const [columns, setColumns] = useState<ProgressColumnDef[]>(initialScheme.columns);
+
+  // 컨택리스트의 모든 attrs.<key> 를 풀로 추출 + initialScheme 의 기존 설정과 머지.
+  // 매칭됨 → 기존 값(label/order/hidden) 사용. 매칭 없음 → 디폴트 hidden=true, 라벨은 컨택리스트 라벨.
+  // contactScheme 에서 사라진 키(고아)는 표에 노출하지 않음 → save 후 자동 정리.
+  const hydratedColumns = useMemo<ProgressColumnDef[]>(() => {
+    const attrsPool = (contactScheme?.columns ?? [])
+      .filter((c) => c.source.startsWith(ATTRS_PREFIX))
+      .map((c) => ({
+        key: c.source.slice(ATTRS_PREFIX.length),
+        contactLabel: c.label,
+        contactOrder: c.order,
+      }));
+    const existingMap = new Map(initialScheme.columns.map((c) => [c.key, c]));
+
+    const merged = attrsPool.map((p, i): ProgressColumnDef => {
+      const existing = existingMap.get(p.key);
+      if (existing) return existing;
+      return {
+        key: p.key,
+        label: p.contactLabel,
+        order: i, // 컨택리스트 풀 순서를 디폴트로
+        hidden: true,
+      };
+    });
+
+    return merged.sort((a, b) => a.order - b.order);
+  }, [contactScheme, initialScheme]);
+
+  const [columns, setColumns] = useState<ProgressColumnDef[]>(hydratedColumns);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
-
-  // contact_columns 의 attrs.<key> 중 progress columns 에 미포함된 것
-  const attrsPool: { key: string; label: string }[] = (contactScheme?.columns ?? [])
-    .filter((c) => c.source.startsWith(ATTRS_PREFIX))
-    .map((c) => ({ key: c.source.slice(ATTRS_PREFIX.length), label: c.label }));
-  const usedKeys = new Set(columns.map((c) => c.key));
-  const available = attrsPool.filter((p) => !usedKeys.has(p.key));
 
   const move = (i: number, delta: -1 | 1) => {
     const j = i + delta;
@@ -43,23 +65,11 @@ export function ProgressColumnEditor({ surveyId, initialScheme, contactScheme }:
   };
 
   const updateLabel = (i: number, label: string) => {
-    const next = [...columns];
-    next[i] = { ...next[i], label };
-    setColumns(next);
+    setColumns((prev) => prev.map((c, idx) => (idx === i ? { ...c, label } : c)));
   };
 
-  const updateHidden = (i: number, hidden: boolean) => {
-    const next = [...columns];
-    next[i] = { ...next[i], hidden };
-    setColumns(next);
-  };
-
-  const remove = (i: number) => {
-    setColumns(columns.filter((_, idx) => idx !== i).map((c, idx) => ({ ...c, order: idx })));
-  };
-
-  const addColumn = (key: string, defaultLabel: string) => {
-    setColumns([...columns, { key, label: defaultLabel, order: columns.length }]);
+  const toggleHidden = (i: number) => {
+    setColumns((prev) => prev.map((c, idx) => (idx === i ? { ...c, hidden: !c.hidden } : c)));
   };
 
   const save = () => {
@@ -82,57 +92,62 @@ export function ProgressColumnEditor({ surveyId, initialScheme, contactScheme }:
         </div>
       )}
 
-      <div className="overflow-hidden rounded border border-slate-200 bg-white">
+      <div className="rounded border bg-white">
         <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-slate-700">
+          <thead className="bg-slate-50 text-xs uppercase text-slate-600">
             <tr>
-              <th className="w-24 px-3 py-2 text-left font-medium">순서</th>
-              <th className="px-3 py-2 text-left font-medium">라벨</th>
-              <th className="px-3 py-2 text-left font-medium">소스</th>
-              <th className="w-16 px-3 py-2 text-center font-medium">숨김</th>
-              <th className="w-20 px-3 py-2 text-center font-medium" aria-label="삭제" />
+              <th className="px-3 py-2 text-left">순서</th>
+              <th className="px-3 py-2 text-left">라벨</th>
+              <th className="px-3 py-2 text-left">소스</th>
+              <th className="px-3 py-2 text-center">숨김</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody>
             {columns.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-slate-400">
-                  진척률 표에 표시할 컬럼이 없습니다. 아래에서 추가하세요.
+                <td colSpan={4} className="px-4 py-6 text-center text-slate-400">
+                  컨택리스트에 attrs 컬럼이 없습니다. 먼저 엑셀을 업로드하거나 컨택리스트 컬럼 설정을 확인하세요.
                 </td>
               </tr>
             )}
             {columns.map((c, i) => (
-              <tr key={c.key} className="hover:bg-slate-50">
+              <tr key={c.key} className="border-t hover:bg-slate-50">
                 <td className="px-3 py-2">
-                  <Button variant="ghost" size="sm" onClick={() => move(i, -1)} disabled={i === 0} aria-label="위로">
-                    ↑
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => move(i, 1)}
-                    disabled={i === columns.length - 1}
-                    aria-label="아래로"
-                  >
-                    ↓
-                  </Button>
+                  <div className="flex gap-1">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={i === 0}
+                      onClick={() => move(i, -1)}
+                      aria-label="위로"
+                    >
+                      ↑
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={i === columns.length - 1}
+                      onClick={() => move(i, 1)}
+                      aria-label="아래로"
+                    >
+                      ↓
+                    </Button>
+                  </div>
                 </td>
                 <td className="px-3 py-2">
-                  <Input value={c.label} onChange={(e) => updateLabel(i, e.target.value)} />
+                  <Input
+                    value={c.label}
+                    onChange={(e) => updateLabel(i, e.target.value)}
+                    className="h-8 text-sm"
+                  />
                 </td>
                 <td className="px-3 py-2 font-mono text-xs text-slate-500">attrs.{c.key}</td>
                 <td className="px-3 py-2 text-center">
-                  <input
-                    type="checkbox"
-                    checked={c.hidden ?? false}
-                    onChange={(e) => updateHidden(i, e.target.checked)}
+                  <Checkbox
+                    checked={!!c.hidden}
+                    onCheckedChange={() => toggleHidden(i)}
                     aria-label={`${c.label} 숨김`}
                   />
-                </td>
-                <td className="px-3 py-2 text-center">
-                  <Button variant="ghost" size="sm" onClick={() => remove(i)}>
-                    삭제
-                  </Button>
                 </td>
               </tr>
             ))}
@@ -140,24 +155,12 @@ export function ProgressColumnEditor({ surveyId, initialScheme, contactScheme }:
         </table>
       </div>
 
-      <div className="flex items-center gap-2">
-        {available.length === 0 ? (
-          <span className="text-sm text-slate-400">
-            추가 가능한 attrs 컬럼이 없습니다 — 컨택리스트 컬럼 설정에서 먼저 등록하세요.
-          </span>
-        ) : (
-          <>
-            <span className="text-sm text-slate-600">+ 컬럼 추가:</span>
-            {available.map((p) => (
-              <Button key={p.key} variant="outline" size="sm" onClick={() => addColumn(p.key, p.label)}>
-                {p.label}
-              </Button>
-            ))}
-          </>
-        )}
-        <span className="ml-auto" />
-        <Button onClick={save} disabled={pending} variant="default">
-          {pending ? '저장 중…' : '💾 저장'}
+      <div className="flex gap-2">
+        <Button onClick={save} disabled={pending}>
+          {pending ? '저장 중…' : '저장'}
+        </Button>
+        <Button variant="outline" onClick={() => router.back()}>
+          취소
         </Button>
       </div>
     </div>
