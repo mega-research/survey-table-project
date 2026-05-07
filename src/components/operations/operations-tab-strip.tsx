@@ -20,7 +20,8 @@ interface OperationsTabStripProps {
  * 현황 콘솔 상단 탭 스트립.
  *
  * - "Field work" trigger hover/click → `응답 현황` / `응답자 목록` 드롭다운
- * - "보고서" / "컨택" 은 시각만 비활성 (`aria-disabled`)
+ * - "보고서" 는 단일 페이지 링크 (`/operations/report`)
+ * - "컨택" trigger hover/click → `컨택리스트` / `리스트 업로드` / `컬럼 설정` / `결과코드 설정` 드롭다운
  * - shadcn NavigationMenu primitive 가 hover/click/키보드 표준을 처리하며
  *   Trigger 의 ChevronDown 이 내장돼 있어 caret 마크업은 별도로 그리지 않는다.
  */
@@ -52,6 +53,9 @@ export function OperationsTabStrip({ surveyId }: OperationsTabStripProps) {
     isContactsColumnsActive ||
     isContactsResultCodesActive;
 
+  const reportHref = `${operationsBase}/report`;
+  const isReportActive = pathname.startsWith(reportHref);
+
   return (
     <div className="border-b border-gray-200 bg-white">
       <NavigationMenu className="mx-auto max-w-7xl justify-start px-6">
@@ -80,7 +84,20 @@ export function OperationsTabStrip({ surveyId }: OperationsTabStripProps) {
             </NavigationMenuContent>
           </NavigationMenuItem>
 
-          <TabDisabled>보고서</TabDisabled>
+          <NavigationMenuItem>
+            <Link
+              href={reportHref}
+              aria-current={isReportActive ? 'page' : undefined}
+              className={cn(
+                'flex h-auto items-center gap-1 rounded-none border-b-2 bg-transparent px-4 py-3 text-sm transition-colors',
+                isReportActive
+                  ? 'border-blue-600 font-semibold text-blue-600 hover:text-blue-600'
+                  : 'border-transparent text-slate-500 hover:text-slate-900',
+              )}
+            >
+              보고서
+            </Link>
+          </NavigationMenuItem>
 
           <NavigationMenuItem>
             <NavigationMenuTrigger
@@ -135,19 +152,3 @@ function SubLink({ href, active, children }: SubLinkProps) {
   );
 }
 
-interface TabDisabledProps {
-  children: React.ReactNode;
-  withCaret?: boolean;
-}
-
-function TabDisabled({ children, withCaret }: TabDisabledProps) {
-  return (
-    <span
-      aria-disabled="true"
-      className="flex cursor-not-allowed items-center gap-1 border-b-2 border-transparent px-4 py-3 text-sm text-slate-400"
-    >
-      {children}
-      {withCaret && <span aria-hidden="true">▼</span>}
-    </span>
-  );
-}
