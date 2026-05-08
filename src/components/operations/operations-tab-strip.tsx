@@ -38,6 +38,8 @@ export function OperationsTabStrip({ surveyId }: OperationsTabStripProps) {
   const contactsUploadHref = `${operationsBase}/contacts/upload`;
   const contactsColumnsHref = `${operationsBase}/contacts/columns`;
   const contactsResultCodesHref = `${operationsBase}/contacts/result-codes`;
+  const contactsMailTemplatesHref = `${operationsBase}/mail-templates`;
+  const isContactsMailTemplatesActive = pathname.startsWith(contactsMailTemplatesHref);
   const isContactsRootActive =
     pathname === contactsHref ||
     (pathname.startsWith(`${contactsHref}/`) &&
@@ -51,7 +53,8 @@ export function OperationsTabStrip({ surveyId }: OperationsTabStripProps) {
     isContactsRootActive ||
     isContactsUploadActive ||
     isContactsColumnsActive ||
-    isContactsResultCodesActive;
+    isContactsResultCodesActive ||
+    isContactsMailTemplatesActive;
 
   const reportHref = `${operationsBase}/report`;
   const isReportActive = pathname.startsWith(reportHref);
@@ -122,6 +125,9 @@ export function OperationsTabStrip({ surveyId }: OperationsTabStripProps) {
               </SubLink>
               <SubLink href={contactsResultCodesHref} active={isContactsResultCodesActive}>
                 결과코드 설정
+              </SubLink>
+              <SubLink href={contactsMailTemplatesHref} active={isContactsMailTemplatesActive}>
+                메일 템플릿
               </SubLink>
             </NavigationMenuContent>
           </NavigationMenuItem>
