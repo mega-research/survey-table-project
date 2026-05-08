@@ -371,3 +371,16 @@ export const DEFAULT_RESULT_CODES: ContactResultCode[] = [
   { code: '12.담당자퇴사',  label: '12.담당자퇴사',  order: 12, tone: 'rose' },
   { code: '수신거부',       label: '수신거부',       order: 13, tone: 'rose' },
 ];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 메일 (mail_templates) 관련 JSONB 타입
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** mail_templates.attachments 의 각 원소 */
+export interface MailAttachment {
+  /** R2 object key — 예: mail/<surveyId>/<uuid>.pdf */
+  key: string;
+  filename: string;
+  size: number;   // bytes
+  mime: string;
+}
