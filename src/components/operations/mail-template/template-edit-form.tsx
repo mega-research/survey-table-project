@@ -10,14 +10,16 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import type { MailTemplate } from '@/db/schema/mail';
 
+import { MailTemplateEditor } from './mail-template-editor';
 import { MetaFields, type MetaFieldValues } from './meta-fields';
+import type { VariableDef } from './variable-catalog';
 
 interface Props {
   surveyId: string;
   fromDomain: string;
+  catalog: VariableDef[];
   template?: MailTemplate;
 }
 
@@ -36,7 +38,7 @@ function buildInitialState(template?: MailTemplate): FormState {
   };
 }
 
-export function TemplateEditForm({ surveyId, fromDomain, template }: Props) {
+export function TemplateEditForm({ surveyId, fromDomain, catalog, template }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -114,11 +116,10 @@ export function TemplateEditForm({ surveyId, fromDomain, template }: Props) {
           <Label className="text-sm font-medium text-gray-900">
             본문<span className="ml-0.5 text-red-500">*</span>
           </Label>
-          <Textarea
-            value={state.bodyHtml}
-            onChange={(e) => setState((prev) => ({ ...prev, bodyHtml: e.target.value }))}
-            placeholder="안녕하세요, 담당자님."
-            className="min-h-[280px] text-sm"
+          <MailTemplateEditor
+            initialHtml={template?.bodyHtml ?? ''}
+            catalog={catalog}
+            onChange={(html) => setState((prev) => ({ ...prev, bodyHtml: html }))}
           />
         </div>
 

@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 
 import { TemplateEditForm } from '@/components/operations/mail-template/template-edit-form';
+import { getVariableCatalog } from '@/components/operations/mail-template/variable-catalog';
 import { getMailTemplate } from '@/data/mail-templates';
 
 interface Props {
@@ -13,6 +14,7 @@ export default async function EditMailTemplatePage({ params }: Props) {
   if (!template) notFound();
 
   const fromDomain = process.env.RESEND_FROM_DOMAIN ?? '';
+  const catalog = await getVariableCatalog(surveyId);
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-8">
@@ -20,7 +22,12 @@ export default async function EditMailTemplatePage({ params }: Props) {
         <h1 className="text-2xl font-semibold tracking-tight text-gray-900">메일 템플릿 편집</h1>
         <p className="mt-1 text-sm text-gray-500">{template.name}</p>
       </div>
-      <TemplateEditForm surveyId={surveyId} fromDomain={fromDomain} template={template} />
+      <TemplateEditForm
+        surveyId={surveyId}
+        fromDomain={fromDomain}
+        catalog={catalog}
+        template={template}
+      />
     </main>
   );
 }
