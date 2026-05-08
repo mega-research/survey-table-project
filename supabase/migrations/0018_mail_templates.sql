@@ -24,7 +24,7 @@ CREATE TABLE "mail_templates" (
   "updated_at" timestamp with time zone NOT NULL DEFAULT now()
 );
 
-CREATE INDEX "idx_mail_templates_survey"
+CREATE INDEX "mail_templates_survey_id_idx"
   ON "mail_templates" ("survey_id")
   WHERE "deleted_at" IS NULL;
 
@@ -32,6 +32,6 @@ COMMIT;
 
 -- ROLLBACK SQL (수동 적용용 — 본 마이그레이션 실패 시):
 -- BEGIN;
--- DROP INDEX IF EXISTS idx_mail_templates_survey;
+-- DROP INDEX IF EXISTS mail_templates_survey_id_idx;
 -- DROP TABLE IF EXISTS mail_templates;
 -- COMMIT;
