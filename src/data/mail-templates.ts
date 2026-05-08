@@ -20,12 +20,15 @@ export const getMailTemplatesBySurvey = cache(
   },
 );
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
  * 단건 조회. surveyId 가드 — 다른 설문의 템플릿 못 보게.
- * 없거나 다른 설문 소속이면 null.
+ * 잘못된 UUID 형식 / 없거나 다른 설문 소속이면 null (PG throw 방지).
  */
 export const getMailTemplate = cache(
   async (surveyId: string, templateId: string): Promise<MailTemplate | null> => {
+    if (!UUID_RE.test(surveyId) || !UUID_RE.test(templateId)) return null;
     const rows = await db
       .select()
       .from(mailTemplates)

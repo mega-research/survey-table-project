@@ -15,8 +15,11 @@ export default async function EditMailTemplatePage({ params }: Props) {
   const fromDomain = process.env.RESEND_FROM_DOMAIN ?? '';
 
   return (
-    <main className="mx-auto max-w-4xl p-6">
-      <h1 className="mb-6 text-xl font-semibold">메일 템플릿 편집</h1>
+    <main className="mx-auto max-w-5xl px-6 py-8">
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold tracking-tight text-gray-900">메일 템플릿 편집</h1>
+        <p className="mt-1 text-sm text-gray-500">{template.name}</p>
+      </div>
       <TemplateEditForm surveyId={surveyId} fromDomain={fromDomain} template={template} />
     </main>
   );

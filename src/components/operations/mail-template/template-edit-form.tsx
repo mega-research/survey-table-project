@@ -1,13 +1,14 @@
 'use client';
 
+import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { useState, useTransition } from 'react';
 
 import {
   createMailTemplateAction,
   updateMailTemplateAction,
 } from '@/actions/mail-template-actions';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import type { MailTemplate } from '@/db/schema/mail';
@@ -20,26 +21,65 @@ interface Props {
   template?: MailTemplate;
 }
 
-export function TemplateEditForm({ surveyId, fromDomain, template }: Props) {
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
+interface FormState extends MetaFieldValues {
+  bodyHtml: string;
+}
 
-  const [meta, setMeta] = useState<MetaFieldValues>({
+function buildInitialState(template?: MailTemplate): FormState {
+  return {
     name: template?.name ?? '',
     subject: template?.subject ?? '',
     fromLocal: template?.fromLocal ?? '',
     fromName: template?.fromName ?? '',
     replyTo: template?.replyTo ?? '',
-  });
-  const [bodyHtml, setBodyHtml] = useState(template?.bodyHtml ?? '');
+    bodyHtml: template?.bodyHtml ?? '',
+  };
+}
+
+export function TemplateEditForm({ surveyId, fromDomain, template }: Props) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  const initial = useMemo(() => buildInitialState(template), [template]);
+  const [state, setState] = useState<FormState>(initial);
+
+  const meta: MetaFieldValues = {
+    name: state.name,
+    subject: state.subject,
+    fromLocal: state.fromLocal,
+    fromName: state.fromName,
+    replyTo: state.replyTo,
+  };
+
+  const isDirty = useMemo(
+    () => JSON.stringify(state) !== JSON.stringify(initial),
+    [state, initial],
+  );
+
+  const canSave =
+    state.name.trim().length > 0 &&
+    state.subject.trim().length > 0 &&
+    state.fromLocal.trim().length > 0 &&
+    state.fromName.trim().length > 0 &&
+    state.replyTo.trim().length > 0;
+
+  useEffect(() => {
+    if (!isDirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [isDirty]);
 
   const onSave = () => {
     setError(null);
     startTransition(async () => {
       const input = {
         ...meta,
-        bodyHtml,
+        bodyHtml: state.bodyHtml,
         attachments: template?.attachments ?? [],
       };
 
@@ -56,34 +96,47 @@ export function TemplateEditForm({ surveyId, fromDomain, template }: Props) {
     });
   };
 
+  const onCancel = () => {
+    if (isDirty && !confirm('변경사항이 저장되지 않습니다. 나가시겠습니까?')) return;
+    router.back();
+  };
+
   return (
-    <div className="space-y-4">
-      <MetaFields values={meta} onChange={setMeta} fromDomain={fromDomain} />
-
-      <div className="space-y-2 rounded-lg border border-gray-200 bg-white p-4">
-        <Label className="text-sm">본문 (Phase B 에서 TipTap 으로 교체)</Label>
-        <Textarea
-          value={bodyHtml}
-          onChange={(e) => setBodyHtml(e.target.value)}
-          placeholder="안녕하세요, {{수행기관}} 담당자님."
-          className="min-h-[280px] font-mono text-sm"
+    <Card>
+      <CardContent className="space-y-8 p-8 pt-8">
+        <MetaFields
+          values={meta}
+          onChange={(next) => setState((prev) => ({ ...prev, ...next }))}
+          fromDomain={fromDomain}
         />
-      </div>
 
-      {error && (
-        <div className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-          {error}
+        <div className="space-y-2">
+          <Label className="text-sm font-medium text-gray-900">
+            본문<span className="ml-0.5 text-red-500">*</span>
+          </Label>
+          <Textarea
+            value={state.bodyHtml}
+            onChange={(e) => setState((prev) => ({ ...prev, bodyHtml: e.target.value }))}
+            placeholder="안녕하세요, 담당자님."
+            className="min-h-[280px] text-sm"
+          />
         </div>
-      )}
 
-      <div className="flex justify-end gap-2">
-        <Button type="button" variant="outline" onClick={() => router.back()} disabled={pending}>
-          취소
-        </Button>
-        <Button type="button" onClick={onSave} disabled={pending}>
-          {pending ? '저장 중...' : '저장'}
-        </Button>
-      </div>
-    </div>
+        {error && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
+        <div className="flex justify-end gap-2 border-t border-gray-100 pt-6">
+          <Button type="button" variant="outline" onClick={onCancel} disabled={pending}>
+            취소
+          </Button>
+          <Button type="button" onClick={onSave} disabled={pending || !canSave}>
+            {pending ? '저장 중...' : '저장'}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
