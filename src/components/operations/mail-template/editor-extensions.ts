@@ -15,20 +15,79 @@ import Paragraph from '@tiptap/extension-paragraph';
 import Strike from '@tiptap/extension-strike';
 import { Table } from '@tiptap/extension-table';
 import { TableCell } from '@tiptap/extension-table-cell';
-import { TableHeader } from '@tiptap/extension-table-header';
 import { TableRow } from '@tiptap/extension-table-row';
 import Text from '@tiptap/extension-text';
 import { TextStyle } from '@tiptap/extension-text-style';
 import Underline from '@tiptap/extension-underline';
 
 import { FontSize } from './font-size-mark';
-
 import { mailVarTokenPlugin } from './mail-var-token-plugin';
+import { TableCaption } from './table-caption';
+import {
+  parseTableAlign,
+  tableAlignStyle,
+  parseVerticalAlign,
+  verticalAlignStyle,
+  type HAlign,
+  type VAlign,
+} from './table-attrs-helpers';
 
 const MailVarTokenExtension = Extension.create({
   name: 'mailVarToken',
   addProseMirrorPlugins() {
     return [mailVarTokenPlugin];
+  },
+});
+
+const TableCellExtended = TableCell.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      verticalAlign: {
+        default: 'top' as VAlign,
+        parseHTML: (el) => parseVerticalAlign(el as HTMLElement),
+        renderHTML: (attrs) => ({
+          style: verticalAlignStyle(attrs.verticalAlign as VAlign),
+        }),
+      },
+      backgroundColor: {
+        default: null as string | null,
+        parseHTML: (el) => (el as HTMLElement).style.backgroundColor || null,
+        renderHTML: (attrs) =>
+          attrs.backgroundColor
+            ? { style: `background-color: ${attrs.backgroundColor}` }
+            : {},
+      },
+    };
+  },
+});
+
+// 옛 데이터의 <th> 를 <td> 로 마이그레이션하면서 TableCellExtended 의
+// attrs(verticalAlign, backgroundColor) 까지 그대로 상속
+const TableHeaderCompat = TableCellExtended.extend({
+  name: 'tableHeader',
+  parseHTML() {
+    return [{ tag: 'th' }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ['td', HTMLAttributes, 0];
+  },
+});
+
+const TableExtended = Table.extend({
+  // caption은 표의 첫 자식으로만 0~1개, 그 다음 row 1개 이상
+  content: 'tableCaption? tableRow+',
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      align: {
+        default: 'left' as HAlign,
+        parseHTML: (el) => parseTableAlign(el as HTMLElement),
+        renderHTML: (attrs) => ({
+          style: tableAlignStyle(attrs.align as HAlign),
+        }),
+      },
+    };
   },
 });
 
@@ -50,12 +109,20 @@ export function createMailEditorExtensions(): AnyExtension[] {
     HardBreak,
     HorizontalRule,
     History,
-    Link.configure({ openOnClick: false, HTMLAttributes: { rel: 'noopener noreferrer' } }),
+    Link.configure({
+      openOnClick: false,
+      HTMLAttributes: { rel: 'noopener noreferrer' },
+    }),
     Image,
-    Table.configure({ resizable: true }),
+    TableExtended.configure({
+      resizable: true,
+      cellMinWidth: 60,
+      lastColumnResizable: true,
+    }),
     TableRow,
-    TableHeader,
-    TableCell,
+    TableHeaderCompat,
+    TableCellExtended,
+    TableCaption,
     MailVarTokenExtension,
   ];
   return extensions;
