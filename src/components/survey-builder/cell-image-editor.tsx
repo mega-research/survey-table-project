@@ -6,7 +6,7 @@ import { AlertCircle, Loader2, Upload, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { optimizeImage, validateImageFile } from '@/lib/image-utils';
+import { deleteImagesFromR2, optimizeImage, validateImageFile } from '@/lib/image-utils';
 
 export interface CellImageEditorProps {
   imageUrl: string;
@@ -191,6 +191,11 @@ export function CellImageEditor({ imageUrl, onImageUrlChange }: CellImageEditorP
 
   // 이미지 삭제
   const handleRemoveImage = useCallback(() => {
+    if (imageUrl) {
+      deleteImagesFromR2([imageUrl]).catch((error) => {
+        console.error('셀 이미지 삭제 실패:', error);
+      });
+    }
     onImageUrlChange('');
     setPreviewUrl(null);
     setSelectedFile(null);
@@ -198,7 +203,7 @@ export function CellImageEditor({ imageUrl, onImageUrlChange }: CellImageEditorP
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
-  }, [onImageUrlChange]);
+  }, [imageUrl, onImageUrlChange]);
 
   /** 부모 모달이 열릴 때 내부 상태를 리셋할 수 있도록 노출 */
   // 부모에서 imageUrl prop 이 바뀌면 자동으로 동기화되므로 별도 reset 불필요

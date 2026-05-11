@@ -3,6 +3,7 @@
  * 서버 액션에서 R2에 직접 접근하여 이미지 및 파일을 삭제합니다.
  */
 import { CopyObjectCommand, DeleteObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import * as Sentry from '@sentry/nextjs';
 
 // Cloudflare R2는 S3 호환 API를 사용합니다
 const r2Client = new S3Client({
@@ -104,6 +105,11 @@ export async function moveR2Object(srcKey: string, dstKey: string): Promise<bool
     return true;
   } catch (error) {
     console.error(`R2 move 실패 ${srcKey} → ${dstKey}:`, error);
+    Sentry.captureException(error, {
+      tags: { operation: 'r2_move' },
+      extra: { srcKey, dstKey },
+      level: 'warning',
+    });
     return false;
   }
 }

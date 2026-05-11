@@ -90,6 +90,7 @@ export const MailTemplateEditor = forwardRef<MailTemplateEditorHandle, Props>(
   useEffect(() => {
     if (editor && initialHtml !== editor.getHTML()) {
       editor.commands.setContent(initialHtml, { emitUpdate: false });
+      previousContentRef.current = initialHtml; // stale diff 방지
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialHtml]);

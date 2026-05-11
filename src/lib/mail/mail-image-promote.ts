@@ -1,7 +1,8 @@
+import * as Sentry from '@sentry/nextjs';
+
 import { extractImageUrlsFromHtml } from '@/lib/image-extractor';
 import { moveR2Objects } from '@/lib/image-utils-server';
-
-const getPublicUrl = () => process.env.CLOUDFLARE_R2_PUBLIC_URL ?? '';
+import { getR2PublicUrl } from '@/lib/r2-env';
 
 /**
  * tmp/mail/ prefix를 가진 URL만 추출합니다.
@@ -10,7 +11,7 @@ const getPublicUrl = () => process.env.CLOUDFLARE_R2_PUBLIC_URL ?? '';
 export function extractTmpMailUrls(html: string): string[] {
   if (!html) return [];
   const allUrls = extractImageUrlsFromHtml(html);
-  const prefix = `${getPublicUrl()}/tmp/mail/`;
+  const prefix = `${getR2PublicUrl()}/tmp/mail/`;
   return [...new Set(allUrls.filter((url) => url.startsWith(prefix)))];
 }
 
@@ -18,7 +19,7 @@ export function extractTmpMailUrls(html: string): string[] {
  * tmp/mail/ URL을 영구 mail/ URL로 변환합니다 (단순 prefix 치환).
  */
 export function tmpToPermanentUrl(tmpUrl: string): string {
-  const publicUrl = getPublicUrl();
+  const publicUrl = getR2PublicUrl();
   return tmpUrl.replace(`${publicUrl}/tmp/mail/`, `${publicUrl}/mail/`);
 }
 
@@ -60,10 +61,21 @@ export async function promoteMailImages(bodyHtml: string): Promise<string> {
 
   if (pairs.length === 0) return bodyHtml;
 
-  const { movedKeys } = await moveR2Objects(pairs);
+  const { movedKeys, failed } = await moveR2Objects(pairs);
+
+  if (failed.length > 0) {
+    Sentry.captureMessage(
+      `메일 이미지 promote 부분 실패: ${failed.length}개 객체가 tmp 에 잔존`,
+      {
+        level: 'warning',
+        tags: { operation: 'image_promote', kind: 'mail' },
+        extra: { failedKeys: failed },
+      },
+    );
+  }
 
   // 성공한 URL만 치환 (실패한 건 tmp URL 그대로 — lifecycle 처리)
-  const publicUrl = getPublicUrl();
+  const publicUrl = getR2PublicUrl();
   let updated = bodyHtml;
   for (const { srcKey, dstKey } of movedKeys) {
     const srcUrl = `${publicUrl}/${srcKey}`;

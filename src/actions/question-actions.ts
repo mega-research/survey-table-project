@@ -98,8 +98,7 @@ export async function createQuestion(data: {
   };
 
   // tmp/survey/ 이미지를 영구 prefix로 promote (R2 move + URL 치환)
-  const [promoted] = await promoteSurveyImages([newQuestion as unknown as Question]);
-  const questionToInsert = promoted as unknown as NewQuestion;
+  const [questionToInsert] = await promoteSurveyImages([newQuestion]);
 
   const [question] = await db.insert(questions).values(questionToInsert).returning();
 
@@ -181,8 +180,7 @@ export async function updateQuestion(
   if (data.spssMeasure !== undefined) allowed.spssMeasure = data.spssMeasure;
 
   // tmp/survey/ 이미지를 영구 prefix로 promote (R2 move + URL 치환)
-  const [promotedAllowed] = await promoteSurveyImages([allowed as unknown as Question]);
-  const allowedToUpdate = promotedAllowed as unknown as Partial<NewQuestion>;
+  const [allowedToUpdate] = await promoteSurveyImages([allowed]);
 
   const [updated] = await db
     .update(questions)

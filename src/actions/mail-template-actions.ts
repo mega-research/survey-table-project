@@ -74,14 +74,14 @@ export async function updateMailTemplateAction(
 
   const { name, subject, bodyHtml: rawBodyHtml, fromLocal, fromName, replyTo, attachments } = parsed.data;
 
-  // R2 cleanup을 위해 기존 템플릿 에셋 먼저 fetch
+  // R2 cleanup을 위해 기존 템플릿 에셋 먼저 fetch (updatedAt은 optimistic lock에 사용)
   const oldRow = await db.query.mailTemplates.findFirst({
     where: and(
       eq(mailTemplates.id, templateId),
       eq(mailTemplates.surveyId, surveyId),
       isNull(mailTemplates.deletedAt),
     ),
-    columns: { bodyHtml: true, attachments: true },
+    columns: { bodyHtml: true, attachments: true, updatedAt: true },
   });
 
   if (!oldRow) {
@@ -109,13 +109,18 @@ export async function updateMailTemplateAction(
       and(
         eq(mailTemplates.id, templateId),
         eq(mailTemplates.surveyId, surveyId),
+        eq(mailTemplates.updatedAt, oldRow.updatedAt),  // optimistic lock
         isNull(mailTemplates.deletedAt),
       ),
     )
     .returning({ id: mailTemplates.id });
 
   if (result.length === 0) {
-    return { ok: false, error: '템플릿을 찾을 수 없습니다' };
+    // race 또는 row gone
+    return {
+      ok: false,
+      error: '다른 사용자가 이 템플릿을 수정했습니다. 새로고침 후 다시 시도하세요.',
+    };
   }
 
   // DB update 성공 후 orphan 에셋 R2 cleanup (실패해도 user에게 에러 노출 안 함)

@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { DeleteObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import * as Sentry from '@sentry/nextjs';
 
+import { requireAuth } from '@/lib/auth';
+
 // Cloudflare R2는 S3 호환 API를 사용합니다
 const r2Client = new S3Client({
   region: 'auto',
@@ -15,6 +17,8 @@ const r2Client = new S3Client({
 
 export async function POST(request: NextRequest) {
   try {
+    await requireAuth();
+
     const body = await request.json();
     const { urls } = body;
 
@@ -79,6 +83,9 @@ export async function POST(request: NextRequest) {
       failedUrls,
     });
   } catch (error) {
+    if (error instanceof Error && error.message === '인증이 필요합니다.') {
+      return NextResponse.json({ error: '권한 없음' }, { status: 401 });
+    }
     console.error('이미지 삭제 오류:', error);
     Sentry.captureException(error, {
       tags: { operation: 'image_batch_delete' },

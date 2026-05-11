@@ -194,9 +194,16 @@ export async function importLibrary(json: string) {
     const data = JSON.parse(json);
 
     if (data.savedQuestions) {
+      // tmp/survey/ URL 포함 가능성 (다른 환경 export) → promote 후 insert
+      const rawQuestions: Question[] = data.savedQuestions.map(
+        (sq: NewSavedQuestion) => sq.question as unknown as Question,
+      );
+      const promotedQuestions = await promoteSurveyImages(rawQuestions);
+
       const importedQuestions: NewSavedQuestion[] = data.savedQuestions.map(
-        (sq: NewSavedQuestion) => ({
+        (sq: NewSavedQuestion, i: number) => ({
           ...sq,
+          question: promotedQuestions[i] as unknown as NewSavedQuestion['question'],
           isPreset: false,
         }),
       );
