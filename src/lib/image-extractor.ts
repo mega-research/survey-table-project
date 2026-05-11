@@ -51,13 +51,7 @@ export function extractImageUrlsFromHtml(html: string): string[] {
     const url = match[1];
     // data URL은 제외 (base64 등)
     if (url && !url.startsWith('data:')) {
-      // 프록시 URL인 경우 원본 URL로 변환
-      const originalUrl = extractOriginalUrlFromProxy(url);
-      if (originalUrl) {
-        imageUrls.push(originalUrl);
-      } else {
-        imageUrls.push(url);
-      }
+      imageUrls.push(url);
     }
   }
 
@@ -79,37 +73,6 @@ export function extractImageUrlsFromQuestions(questions: Question[]): string[] {
 
   // 중복 제거
   return [...new Set(allImageUrls)];
-}
-
-/**
- * 프록시 URL에서 원본 이미지 URL을 추출합니다.
- * @param proxyUrl 프록시 URL (예: "/api/image/proxy?url=...")
- * @returns 원본 이미지 URL 또는 null
- */
-export function extractOriginalUrlFromProxy(proxyUrl: string): string | null {
-  try {
-    // 프록시 URL인지 확인
-    if (!proxyUrl.includes('/api/image/proxy')) {
-      return null;
-    }
-
-    // URL 파라미터에서 원본 URL 추출
-    const urlParts = proxyUrl.split('?');
-    if (urlParts.length < 2) {
-      return null;
-    }
-
-    const params = new URLSearchParams(urlParts[1]);
-    const originalUrl = params.get('url');
-
-    if (originalUrl) {
-      return decodeURIComponent(originalUrl);
-    }
-
-    return null;
-  } catch {
-    return null;
-  }
 }
 
 /**

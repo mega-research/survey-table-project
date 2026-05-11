@@ -4,7 +4,6 @@ import React, { useEffect, useState } from 'react';
 
 import { Image } from 'lucide-react';
 
-import { getProxiedImageUrl } from '@/lib/image-utils';
 
 import type { InteractiveCellProps, PreviewCellProps } from './types';
 
@@ -37,7 +36,7 @@ export const ImageCell = React.memo(function ImageCell({
           </div>
         ) : (
           <img
-            src={getProxiedImageUrl(cell.imageUrl)}
+            src={cell.imageUrl}
             alt="셀 이미지"
             className="h-auto max-h-full w-full rounded object-contain"
             style={{ maxWidth: '100%', maxHeight: '100%' }}

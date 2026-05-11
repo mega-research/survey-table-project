@@ -46,7 +46,7 @@ import {
   extractGroupId,
   findParentGroupId,
 } from '@/lib/group-ordering';
-import { convertHtmlImageUrlsToProxy, deleteImagesFromR2 } from '@/lib/image-utils';
+import { deleteImagesFromR2 } from '@/lib/image-utils';
 import { generateId, isEmptyHtml } from '@/lib/utils';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { useSurveyUIStore } from '@/stores/ui-store';
@@ -258,7 +258,7 @@ const SortableQuestion = React.memo(function SortableQuestion({
                 WebkitOverflowScrolling: 'touch',
               }}
               dangerouslySetInnerHTML={{
-                __html: convertHtmlImageUrlsToProxy(question.description!),
+                __html: question.description!,
               }}
             />
           )}

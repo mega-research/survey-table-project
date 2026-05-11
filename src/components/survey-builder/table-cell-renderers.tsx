@@ -4,7 +4,6 @@ import React, { useEffect, useState } from 'react';
 
 import { Image } from 'lucide-react';
 
-import { getProxiedImageUrl } from '@/lib/image-utils';
 
 /**
  * YouTube URL을 임베드 URL로 변환 (순수 함수)
@@ -38,7 +37,7 @@ export function ImageCell({ imageUrl, content }: { imageUrl: string; content?: s
           </div>
         ) : (
           <img
-            src={getProxiedImageUrl(imageUrl)}
+            src={imageUrl}
             alt="셀 이미지"
             className="h-auto max-h-full w-full rounded object-contain"
             style={{ maxWidth: '100%', maxHeight: '100%' }}
