@@ -1,7 +1,11 @@
 'use client';
 
-import type { Editor } from '@tiptap/react';
+import { useEditorState, type Editor } from '@tiptap/react';
 import {
+  AlignCenter,
+  AlignJustify,
+  AlignLeft,
+  AlignRight,
   Bold,
   Image as ImageIcon,
   Italic,
@@ -12,6 +16,8 @@ import {
   Underline,
   Undo,
 } from 'lucide-react';
+
+import { findTableAtSelection } from '@/lib/tiptap/find-table';
 
 import { PopoverVariableMenu } from './popover-variable-menu';
 import { TableContextToolbar } from './table-context-toolbar';
@@ -29,6 +35,42 @@ interface Props {
 const FONT_SIZES = [12, 14, 16, 18, 20, 24, 28, 32] as const;
 
 export function EditorToolbar({ editor, catalog, onPickImage, onPickLink }: Props) {
+  const s = useEditorState({
+    editor,
+    selector: ({ editor }) => {
+      if (!editor) {
+        return {
+          bold: false,
+          italic: false,
+          underline: false,
+          bulletList: false,
+          orderedList: false,
+          alignLeft: true,
+          alignCenter: false,
+          alignRight: false,
+          alignJustify: false,
+          canUndo: false,
+          canRedo: false,
+          tableActive: false,
+        };
+      }
+      return {
+        bold: editor.isActive('bold'),
+        italic: editor.isActive('italic'),
+        underline: editor.isActive('underline'),
+        bulletList: editor.isActive('bulletList'),
+        orderedList: editor.isActive('orderedList'),
+        alignLeft: editor.isActive({ textAlign: 'left' }),
+        alignCenter: editor.isActive({ textAlign: 'center' }),
+        alignRight: editor.isActive({ textAlign: 'right' }),
+        alignJustify: editor.isActive({ textAlign: 'justify' }),
+        canUndo: editor.can().undo(),
+        canRedo: editor.can().redo(),
+        tableActive: findTableAtSelection(editor.state) !== null,
+      };
+    },
+  });
+
   const insertVar = (key: string) => {
     editor.chain().focus().insertContent(`{{${key}}}`).run();
   };
@@ -37,27 +79,24 @@ export function EditorToolbar({ editor, catalog, onPickImage, onPickLink }: Prop
     editor.chain().focus().setFontSize(`${px}px`).run();
   };
 
-  // 표 안에 셀렉션이 있을 때만 표 컨텍스트 툴바 노출
-  const tableActive = editor.can().deleteTable();
-
   return (
     <div className="flex flex-wrap items-center gap-1 border-b border-gray-200 bg-gray-50/50 p-2">
       <ToolBtn
-        active={editor.isActive('bold')}
+        active={s.bold}
         onClick={() => editor.chain().focus().toggleBold().run()}
         title="굵게"
       >
         <Bold className="h-4 w-4" />
       </ToolBtn>
       <ToolBtn
-        active={editor.isActive('italic')}
+        active={s.italic}
         onClick={() => editor.chain().focus().toggleItalic().run()}
         title="기울임"
       >
         <Italic className="h-4 w-4" />
       </ToolBtn>
       <ToolBtn
-        active={editor.isActive('underline')}
+        active={s.underline}
         onClick={() => editor.chain().focus().toggleUnderline().run()}
         title="밑줄"
       >
@@ -70,9 +109,9 @@ export function EditorToolbar({ editor, catalog, onPickImage, onPickLink }: Prop
         defaultValue="14"
         aria-label="폰트 크기"
       >
-        {FONT_SIZES.map((s) => (
-          <option key={s} value={s}>
-            {s}px
+        {FONT_SIZES.map((sz) => (
+          <option key={sz} value={sz}>
+            {sz}px
           </option>
         ))}
       </select>
@@ -80,18 +119,49 @@ export function EditorToolbar({ editor, catalog, onPickImage, onPickLink }: Prop
       <Sep />
 
       <ToolBtn
-        active={editor.isActive('bulletList')}
+        active={s.bulletList}
         onClick={() => editor.chain().focus().toggleBulletList().run()}
         title="글머리 기호"
       >
         <List className="h-4 w-4" />
       </ToolBtn>
       <ToolBtn
-        active={editor.isActive('orderedList')}
+        active={s.orderedList}
         onClick={() => editor.chain().focus().toggleOrderedList().run()}
         title="번호 매기기"
       >
         <ListOrdered className="h-4 w-4" />
+      </ToolBtn>
+
+      <Sep />
+
+      <ToolBtn
+        active={s.alignLeft}
+        onClick={() => editor.chain().focus().setTextAlign('left').run()}
+        title="왼쪽 정렬"
+      >
+        <AlignLeft className="h-4 w-4" />
+      </ToolBtn>
+      <ToolBtn
+        active={s.alignCenter}
+        onClick={() => editor.chain().focus().setTextAlign('center').run()}
+        title="가운데 정렬"
+      >
+        <AlignCenter className="h-4 w-4" />
+      </ToolBtn>
+      <ToolBtn
+        active={s.alignRight}
+        onClick={() => editor.chain().focus().setTextAlign('right').run()}
+        title="오른쪽 정렬"
+      >
+        <AlignRight className="h-4 w-4" />
+      </ToolBtn>
+      <ToolBtn
+        active={s.alignJustify}
+        onClick={() => editor.chain().focus().setTextAlign('justify').run()}
+        title="양쪽 정렬"
+      >
+        <AlignJustify className="h-4 w-4" />
       </ToolBtn>
 
       <Sep />
@@ -112,21 +182,21 @@ export function EditorToolbar({ editor, catalog, onPickImage, onPickLink }: Prop
       <div className="ml-auto flex gap-1">
         <ToolBtn
           onClick={() => editor.chain().focus().undo().run()}
-          disabled={!editor.can().undo()}
+          disabled={!s.canUndo}
           title="실행 취소"
         >
           <Undo className="h-4 w-4" />
         </ToolBtn>
         <ToolBtn
           onClick={() => editor.chain().focus().redo().run()}
-          disabled={!editor.can().redo()}
+          disabled={!s.canRedo}
           title="다시 실행"
         >
           <Redo className="h-4 w-4" />
         </ToolBtn>
       </div>
 
-      {tableActive && <TableContextToolbar editor={editor} />}
+      {s.tableActive && <TableContextToolbar editor={editor} />}
     </div>
   );
 }

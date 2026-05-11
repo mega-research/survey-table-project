@@ -1,6 +1,8 @@
 import { Node } from '@tiptap/core';
 import type { Editor } from '@tiptap/core';
-import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
+import { TextSelection } from '@tiptap/pm/state';
+
+import { findTableAtSelection } from '@/lib/tiptap/find-table';
 
 import { parseCaptionAlign, captionAlignStyle, type HAlign } from './table-attrs-helpers';
 
@@ -39,47 +41,28 @@ export const TableCaption = Node.create({
  * - 셀렉션이 표 밖이면 no-op
  */
 export function toggleTableCaption(editor: Editor): boolean {
-  if (!editor.isActive('table')) return false;
+  const { state, view } = editor;
+  const found = findTableAtSelection(state);
+  if (!found) return false;
 
-  const { state } = editor;
-  const { selection, schema } = state;
-  const $pos = selection.$from;
-
-  // 커서 위치에서 부모 체인을 거슬러 올라가며 table 노드 찾기
-  let tablePos: number | null = null;
-  let tableNode: ProseMirrorNode | null = null;
-  for (let d = $pos.depth; d > 0; d--) {
-    const node = $pos.node(d);
-    if (node.type.name === 'table') {
-      tablePos = $pos.before(d);
-      tableNode = node;
-      break;
-    }
-  }
-
-  if (tablePos === null || !tableNode) return false;
-
+  const { node: tableNode, pos: tablePos } = found;
   const firstChild = tableNode.firstChild;
-  const insertPos = tablePos + 1; // 표 노드 안의 첫 위치
+  const insertPos = tablePos + 1;
 
   if (firstChild?.type.name === 'tableCaption') {
-    // 캡션 제거
-    return editor
-      .chain()
-      .focus()
-      .deleteRange({ from: insertPos, to: insertPos + firstChild.nodeSize })
-      .run();
+    view.dispatch(state.tr.delete(insertPos, insertPos + firstChild.nodeSize));
+    editor.commands.focus();
+    return true;
   }
 
-  // 캡션 신규 삽입 — 빈 inline content
-  const captionType = schema.nodes.tableCaption;
+  // TipTap의 insertContentAt은 schema 매칭 실패 시 inline으로 fallback돼
+  // 캡션 노드가 셀 안으로 빨려들어가는 문제가 있다. transaction으로 직접 삽입.
+  const captionType = state.schema.nodes.tableCaption;
   if (!captionType) return false;
-  const captionNode = captionType.create({ align: 'center' });
 
-  return editor
-    .chain()
-    .focus()
-    .insertContentAt(insertPos, captionNode, { updateSelection: false })
-    .setTextSelection(insertPos + 1) // 캡션 안으로 커서
-    .run();
+  const tr = state.tr.insert(insertPos, captionType.create({ align: 'center' }));
+  tr.setSelection(TextSelection.create(tr.doc, insertPos + 1));
+  view.dispatch(tr.scrollIntoView());
+  editor.commands.focus();
+  return true;
 }

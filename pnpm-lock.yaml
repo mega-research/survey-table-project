@@ -165,6 +165,9 @@ dependencies:
   '@tiptap/extension-text':
     specifier: ^3.15.3
     version: 3.15.3(@tiptap/core@3.15.3)
+  '@tiptap/extension-text-align':
+    specifier: 3.15.3
+    version: 3.15.3(@tiptap/core@3.15.3)
   '@tiptap/extension-text-style':
     specifier: ^3.15.3
     version: 3.15.3(@tiptap/core@3.15.3)
@@ -5893,6 +5896,14 @@ packages:
     dependencies:
       '@tiptap/core': 3.15.3(@tiptap/pm@3.15.3)
       '@tiptap/pm': 3.15.3
+    dev: false
+
+  /@tiptap/extension-text-align@3.15.3(@tiptap/core@3.15.3):
+    resolution: {integrity: sha512-hkLeEKm44aqimyjv+D8JUxzDG/iNjDrSCGvGrMOPcpaKn4f8C5z1EKnEufT61RitNPBAxQMXUhmGQUNrmlICmQ==}
+    peerDependencies:
+      '@tiptap/core': ^3.15.3
+    dependencies:
+      '@tiptap/core': 3.15.3(@tiptap/pm@3.15.3)
     dev: false
 
   /@tiptap/extension-text-style@3.15.3(@tiptap/core@3.15.3):

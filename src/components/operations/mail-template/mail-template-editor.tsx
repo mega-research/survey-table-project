@@ -1,6 +1,6 @@
 'use client';
 
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useMemo } from 'react';
 
 import { EditorContent, useEditor } from '@tiptap/react';
 
@@ -26,7 +26,6 @@ export interface MailTemplateEditorHandle {
 export const MailTemplateEditor = forwardRef<MailTemplateEditorHandle, Props>(
   function MailTemplateEditor({ initialHtml, catalog, onChange }, ref) {
     const extensions = useMemo(() => createMailEditorExtensions(), []);
-    const [, force] = useState({});
     const imageTracker = useEditorImageTracker(initialHtml);
 
     const editor = useEditor({
@@ -37,23 +36,24 @@ export const MailTemplateEditor = forwardRef<MailTemplateEditorHandle, Props>(
         attributes: {
           class:
             'prose prose-sm max-w-none focus:outline-none min-h-[320px] p-6 ' +
+            // typography 플러그인 미사용 환경에서 ul/ol 마커가 사라지므로 인라인으로 복원
+            '[&_ul]:list-disc [&_ul]:pl-6 [&_ul]:my-2 ' +
+            '[&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:my-2 ' +
+            '[&_li]:my-0.5 [&_li>p]:my-0 ' +
             '[&_table]:my-2 [&_table]:border [&_table]:border-gray-300 ' +
-            '[&_table_td]:border [&_table_td]:border-gray-300 [&_table_td]:px-2 [&_table_td]:py-1 ' +
-            '[&_table_caption]:py-2 [&_table_caption]:text-sm [&_table_caption]:text-gray-700',
+            '[&_table_td]:border [&_table_td]:border-gray-300 [&_table_td]:px-2 [&_table_td]:py-1 [&_table_td]:h-12 ' +
+            // td 세로 정렬이 시각적으로 보이려면 안쪽 paragraph가 셀 전체 높이를 차지하지 않아야 한다.
+            '[&_table_td_p]:m-0 ' +
+            '[&_table_caption]:py-2 [&_table_caption]:text-sm [&_table_caption]:text-gray-700 ' +
+            // prosemirror-tables 셀 드래그 selection 시각 피드백
+            '[&_td.selectedCell]:relative [&_td.selectedCell]:bg-blue-100/60 ' +
+            '[&_th.selectedCell]:relative [&_th.selectedCell]:bg-blue-100/60',
         },
       },
       onUpdate: ({ editor }) => {
-        force({});
         const currentHtml = stripTrailingEmptyParagraph(editor.getHTML());
         imageTracker.reconcileAfterUpdate(currentHtml);
         onChange(editor.isEmpty ? '' : currentHtml);
-      },
-      onSelectionUpdate: () => {
-        force({});
-      },
-      onTransaction: () => {
-        // mark 토글 등 셀렉션이 안 바뀌는 변경도 툴바 active 동기화
-        force({});
       },
     });
 

@@ -17,6 +17,7 @@ import { Table } from '@tiptap/extension-table';
 import { TableCell } from '@tiptap/extension-table-cell';
 import { TableRow } from '@tiptap/extension-table-row';
 import Text from '@tiptap/extension-text';
+import { TextAlign } from '@tiptap/extension-text-align';
 import { TextStyle } from '@tiptap/extension-text-style';
 import Underline from '@tiptap/extension-underline';
 
@@ -106,6 +107,11 @@ export function createMailEditorExtensions(): AnyExtension[] {
     TextStyle,
     FontSize,
     Heading.configure({ levels: [1, 2, 3] }),
+    TextAlign.configure({
+      types: ['paragraph', 'heading'],
+      alignments: ['left', 'center', 'right', 'justify'],
+      defaultAlignment: 'left',
+    }),
     BulletList,
     OrderedList,
     ListItem,

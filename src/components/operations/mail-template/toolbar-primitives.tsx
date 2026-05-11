@@ -2,8 +2,6 @@
 
 import type { ReactNode } from 'react';
 
-import { Button } from '@/components/ui/button';
-
 interface ToolBtnProps {
   children: ReactNode;
   onClick?: () => void;
@@ -12,6 +10,11 @@ interface ToolBtnProps {
   title?: string;
   className?: string;
 }
+
+const BASE =
+  'inline-flex h-9 items-center justify-center gap-1 rounded-md px-2 py-1 text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50';
+const INACTIVE = 'text-gray-700 hover:bg-gray-100';
+const ACTIVE = 'bg-gray-100 text-gray-900 ring-1 ring-inset ring-gray-300';
 
 export function ToolBtn({
   children,
@@ -22,17 +25,15 @@ export function ToolBtn({
   className,
 }: ToolBtnProps) {
   return (
-    <Button
+    <button
       type="button"
-      variant="ghost"
-      size="sm"
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className={`${active ? 'bg-gray-200' : ''} ${className ?? ''}`}
+      className={`${BASE} ${active ? ACTIVE : INACTIVE} ${className ?? ''}`}
     >
       {children}
-    </Button>
+    </button>
   );
 }
 
