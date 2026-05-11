@@ -1,8 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 
 import { EditorContent, useEditor } from '@tiptap/react';
+
+import { extractImageUrlsFromHtml } from '@/lib/image-extractor';
+import { deleteImagesFromR2 } from '@/lib/image-utils';
 
 import { createMailEditorExtensions } from './editor-extensions';
 import { EditorToolbar } from './editor-toolbar';
@@ -14,9 +17,21 @@ interface Props {
   onChange: (html: string) => void;
 }
 
-export function MailTemplateEditor({ initialHtml, catalog, onChange }: Props) {
+export interface MailTemplateEditorHandle {
+  /** 현재 에디터에 삽입됐지만 아직 저장되지 않은 이미지 URL 목록 반환 */
+  getUnsavedImages: () => string[];
+  /** 위 이미지들을 R2에서 일괄 삭제 */
+  cleanupOrphanImages: () => Promise<void>;
+}
+
+export const MailTemplateEditor = forwardRef<MailTemplateEditorHandle, Props>(
+  function MailTemplateEditor({ initialHtml, catalog, onChange }, ref) {
   const extensions = useMemo(() => createMailEditorExtensions(), []);
   const [, force] = useState({});
+
+  // 이미지 cleanup 추적
+  const uploadedImageUrlsRef = useRef<Set<string>>(new Set());
+  const previousContentRef = useRef<string>(initialHtml || '');
 
   const editor = useEditor({
     extensions,
@@ -34,7 +49,24 @@ export function MailTemplateEditor({ initialHtml, catalog, onChange }: Props) {
     },
     onUpdate: ({ editor }) => {
       force({});
-      onChange(editor.isEmpty ? '' : editor.getHTML());
+      const currentHtml = editor.getHTML();
+
+      // 이미지 삭제 감지 및 R2 cleanup
+      const previousImages = extractImageUrlsFromHtml(previousContentRef.current);
+      const currentImages = extractImageUrlsFromHtml(currentHtml);
+      const deletedImages = previousImages.filter(
+        (url) => !currentImages.includes(url) && uploadedImageUrlsRef.current.has(url),
+      );
+
+      if (deletedImages.length > 0) {
+        deleteImagesFromR2(deletedImages).catch((error) => {
+          console.error('이미지 삭제 실패:', error);
+        });
+        deletedImages.forEach((url) => uploadedImageUrlsRef.current.delete(url));
+      }
+
+      previousContentRef.current = currentHtml;
+      onChange(editor.isEmpty ? '' : currentHtml);
     },
     onSelectionUpdate: () => {
       force({});
@@ -45,12 +77,46 @@ export function MailTemplateEditor({ initialHtml, catalog, onChange }: Props) {
     },
   });
 
+  // 초기 마운트 시 기존 이미지 추적 (편집 모드에서 기존 이미지도 추적 대상에 포함)
+  useEffect(() => {
+    if (initialHtml) {
+      const initialImages = extractImageUrlsFromHtml(initialHtml);
+      initialImages.forEach((url) => uploadedImageUrlsRef.current.add(url));
+      previousContentRef.current = initialHtml;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // 초기 마운트 시에만 실행
+
   useEffect(() => {
     if (editor && initialHtml !== editor.getHTML()) {
       editor.commands.setContent(initialHtml, { emitUpdate: false });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialHtml]);
+
+  // 부모 컴포넌트에서 orphan 이미지 cleanup을 호출할 수 있도록 imperative handle 노출
+  useImperativeHandle(ref, () => ({
+    getUnsavedImages: () => {
+      if (!editor) return [];
+      const currentImages = extractImageUrlsFromHtml(editor.getHTML());
+      return Array.from(uploadedImageUrlsRef.current).filter(
+        (url) => !currentImages.includes(url),
+      );
+    },
+    cleanupOrphanImages: async () => {
+      if (!editor) return;
+      const currentImages = extractImageUrlsFromHtml(editor.getHTML());
+      const orphans = Array.from(uploadedImageUrlsRef.current).filter(
+        (url) => !currentImages.includes(url),
+      );
+      if (orphans.length > 0) {
+        await deleteImagesFromR2(orphans).catch((error) => {
+          console.error('orphan 이미지 삭제 실패:', error);
+        });
+        orphans.forEach((url) => uploadedImageUrlsRef.current.delete(url));
+      }
+    },
+  }), [editor]);
 
   if (!editor) return null;
 
@@ -67,6 +133,8 @@ export function MailTemplateEditor({ initialHtml, catalog, onChange }: Props) {
         const res = await fetch('/api/upload/image', { method: 'POST', body: fd });
         const json = (await res.json()) as { url?: string; error?: string };
         if (!res.ok || !json.url) throw new Error(json.error ?? '이미지 업로드 실패');
+        // 업로드된 URL 추적
+        uploadedImageUrlsRef.current.add(json.url);
         editor.chain().focus().setImage({ src: json.url }).run();
       } catch (err) {
         alert(err instanceof Error ? err.message : '이미지 업로드 실패');
@@ -91,4 +159,5 @@ export function MailTemplateEditor({ initialHtml, catalog, onChange }: Props) {
       <EditorContent editor={editor} />
     </div>
   );
-}
+});
+
