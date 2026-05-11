@@ -1,7 +1,6 @@
 'use client';
 
 import { Input } from '@/components/ui/input';
-import { convertHtmlImageUrlsToProxy } from '@/lib/image-utils';
 import { isEmptyHtml } from '@/lib/utils';
 import { Question } from '@/types/survey';
 import { getOptionsLayout } from '@/utils/options-layout';

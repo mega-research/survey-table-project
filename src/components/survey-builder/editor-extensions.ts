@@ -6,7 +6,6 @@ import { TableRow } from '@tiptap/extension-table-row';
 import StarterKit from '@tiptap/starter-kit';
 import ImageResize from 'tiptap-extension-resize-image';
 
-import { getProxiedImageUrl } from '@/lib/image-utils';
 
 // 배경색 속성 추가 함수
 const addBackgroundColorAttribute = () => ({
@@ -72,15 +71,10 @@ export function createEditorExtensions() {
     },
   });
 
-  // 이미지 프록시 URL을 사용하는 ImageResize 확장
+  // ImageResize 확장 (R2 public URL 직접 사용)
   // tiptap-extension-resize-image는 드래그 리사이즈와 정렬 기능을 제공
   const ImageResizeWithProxy = ImageResize.extend({
     renderHTML({ HTMLAttributes }) {
-      // src 속성이 있으면 프록시 URL로 변환
-      if (HTMLAttributes.src) {
-        HTMLAttributes.src = getProxiedImageUrl(HTMLAttributes.src);
-      }
-
       // 인라인 스타일에서 width가 있으면 max-width도 함께 설정
       if (HTMLAttributes.style) {
         const styleStr = HTMLAttributes.style as string;

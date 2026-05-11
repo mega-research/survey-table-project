@@ -39,11 +39,7 @@ export function EditorToolbar({ editor, catalog, onPickImage, onPickLink }: Prop
   };
 
   const setFontSize = (px: string) => {
-    // tiptap-extension-font-size 의 setFontSize chain command
-    // 타입은 any 캐스트 필요할 수 있음
-    (editor.chain().focus() as unknown as { setFontSize: (s: string) => { run: () => boolean } })
-      .setFontSize(`${px}px`)
-      .run();
+    editor.chain().focus().setFontSize(`${px}px`).run();
   };
 
   const tableActive = editor.can().deleteTable();

@@ -35,7 +35,6 @@ import { Button } from '@/components/ui/button';
 import { extractImageUrlsFromHtml } from '@/lib/image-extractor';
 import {
   deleteImagesFromR2,
-  getProxiedImageUrl,
   optimizeImage,
   validateImageFile,
 } from '@/lib/image-utils';
@@ -280,12 +279,11 @@ export function NoticeEditor({
       uploadedImageUrlsRef.current.add(imageUrl);
       previousContentRef.current = currentHtml;
 
-      // 에디터에 이미지 추가/교체 (프록시 URL 사용)
+      // 에디터에 이미지 추가/교체
       // tiptap 라이브러리 타입 호환성 문제로 인해 any 타입 사용
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ed = editor as any;
-      const proxiedUrl = getProxiedImageUrl(imageUrl);
-      ed.chain().focus().setImage({ src: proxiedUrl }).run();
+      ed.chain().focus().setImage({ src: imageUrl }).run();
 
       // 업데이트 후 현재 HTML 저장 (onUpdate에서 자동으로 처리됨)
 
@@ -963,7 +961,7 @@ export function NoticeEditor({
               <div className="overflow-hidden rounded-lg border bg-white">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={getProxiedImageUrl(previewUrl || '')}
+                  src={previewUrl || ''}
                   alt="미리보기"
                   className="max-h-48 w-full object-contain"
                 />
@@ -996,7 +994,7 @@ export function NoticeEditor({
                 <div className="overflow-hidden rounded-lg border bg-white">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={getProxiedImageUrl(previewUrl)}
+                    src={previewUrl}
                     alt="업로드 중"
                     className="max-h-32 w-full object-contain opacity-50"
                   />

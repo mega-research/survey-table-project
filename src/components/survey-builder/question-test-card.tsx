@@ -4,7 +4,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { convertHtmlImageUrlsToProxy } from '@/lib/image-utils';
 import { isEmptyHtml } from '@/lib/utils';
 import { useTestResponseStore } from '@/stores/test-response-store';
 import { Question } from '@/types/survey';
@@ -536,7 +535,7 @@ export function QuestionTestCard({ question, index }: { question: Question; inde
             style={{
               WebkitOverflowScrolling: 'touch',
             }}
-            dangerouslySetInnerHTML={{ __html: convertHtmlImageUrlsToProxy(question.description!) }}
+            dangerouslySetInnerHTML={{ __html: question.description! }}
           />
         )}
       </div>

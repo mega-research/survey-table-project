@@ -6,7 +6,7 @@ import { AlertCircle, Loader2, Upload, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { getProxiedImageUrl, optimizeImage, validateImageFile } from '@/lib/image-utils';
+import { optimizeImage, validateImageFile } from '@/lib/image-utils';
 
 export interface CellImageEditorProps {
   imageUrl: string;
@@ -259,7 +259,7 @@ export function CellImageEditor({ imageUrl, onImageUrlChange }: CellImageEditorP
           <div className="overflow-hidden rounded-lg border bg-white">
             <img
               key={previewUrl}
-              src={getProxiedImageUrl(previewUrl || '')}
+              src={previewUrl || ''}
               alt="미리보기"
               className="max-h-48 w-full object-contain"
             />
@@ -287,7 +287,7 @@ export function CellImageEditor({ imageUrl, onImageUrlChange }: CellImageEditorP
             <div className="overflow-hidden rounded-lg border bg-white">
               <img
                 key={previewUrl}
-                src={getProxiedImageUrl(previewUrl)}
+                src={previewUrl}
                 alt="업로드 중"
                 className="max-h-48 w-full object-contain opacity-50"
               />
@@ -331,7 +331,7 @@ export function CellImageEditor({ imageUrl, onImageUrlChange }: CellImageEditorP
                 </div>
               ) : (
                 <img
-                  src={getProxiedImageUrl(imageUrl)}
+                  src={imageUrl}
                   alt="셀 내용 이미지 미리보기"
                   className="max-h-48 w-full object-contain"
                   onError={() => setImageError(true)}
