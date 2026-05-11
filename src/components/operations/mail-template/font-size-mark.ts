@@ -10,14 +10,8 @@ declare module '@tiptap/core' {
 }
 
 const ALLOWED_SIZES = new Set([
-  '12px',
-  '14px',
-  '16px',
-  '18px',
-  '20px',
-  '24px',
-  '28px',
-  '32px',
+  '8px', '9px', '10px', '11px', '12px', '13px', '14px', '15px', '16px',
+  '18px', '20px', '22px', '24px', '26px', '28px', '32px', '36px', '40px', '48px',
 ]);
 
 export const FontSize = Mark.create({
