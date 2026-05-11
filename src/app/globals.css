@@ -753,3 +753,15 @@ html {
   }
 }
 
+/* ==========================================
+   메일 템플릿 — 변수 토큰 (ProseMirror Decoration)
+   ========================================== */
+.mail-var-token {
+  background-color: var(--color-amber-100);
+  color: var(--color-amber-800);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+}
+
