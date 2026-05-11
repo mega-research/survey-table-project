@@ -8,10 +8,8 @@ import { getQuestionGroupsBySurvey } from '@/data/surveys';
 import { db } from '@/db';
 import { NewQuestionGroup, questionGroups, questions } from '@/db/schema';
 import { requireAuth } from '@/lib/auth';
-import { extractImageUrlsFromQuestions } from '@/lib/image-extractor';
-import { deleteImagesFromR2Server } from '@/lib/image-utils-server';
 import { generateId, isValidUUID } from '@/lib/utils';
-import type { QuestionConditionGroup, Question } from '@/types/survey';
+import type { QuestionConditionGroup } from '@/types/survey';
 
 // ========================
 // 질문 그룹 변경 액션 (Mutations)
@@ -104,21 +102,7 @@ export async function deleteQuestionGroup(groupId: string) {
 
   const allGroupIdsToDelete = [groupId, ...findDescendantIds(groupId)];
 
-  const questionsInGroups = await db.query.questions.findMany({
-    where: inArray(questions.groupId, allGroupIdsToDelete),
-  });
-
-  if (questionsInGroups.length > 0) {
-    const allImages = extractImageUrlsFromQuestions(questionsInGroups as Question[]);
-    if (allImages.length > 0) {
-      try {
-        await deleteImagesFromR2Server(allImages);
-      } catch (error) {
-        console.error('그룹 삭제 시 이미지 삭제 실패:', error);
-      }
-    }
-  }
-
+  // 질문은 ungroup 후 살아남으므로 이미지를 삭제하지 않음 (삭제하면 404)
   if (allGroupIdsToDelete.length > 0) {
     await db
       .update(questions)
