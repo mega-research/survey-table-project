@@ -1,6 +1,6 @@
 /**
- * 서버 사이드 이미지 삭제 유틸리티
- * 서버 액션에서 R2에 직접 접근하여 이미지를 삭제합니다.
+ * 서버 사이드 이미지/파일 삭제 유틸리티
+ * 서버 액션에서 R2에 직접 접근하여 이미지 및 파일을 삭제합니다.
  */
 import { DeleteObjectCommand, S3Client } from '@aws-sdk/client-s3';
 
@@ -77,4 +77,43 @@ export async function deleteImagesFromR2Server(urls: string[]): Promise<boolean>
   }
 
   return false;
+}
+
+/**
+ * R2 object key 목록으로 파일을 삭제합니다.
+ * URL이 아닌 key(예: "mail/<surveyId>/<uuid>.pdf")를 직접 받습니다.
+ * @param keys 삭제할 R2 object key 배열
+ * @returns 삭제 성공 여부 (부분 실패 시 경고 로그 후 true)
+ */
+export async function deleteR2ObjectsByKey(keys: string[]): Promise<boolean> {
+  if (!keys || keys.length === 0) {
+    return true;
+  }
+
+  const bucketName = process.env.CLOUDFLARE_R2_BUCKET;
+  if (!bucketName) {
+    console.error('Cloudflare R2 환경 변수가 설정되지 않았습니다.');
+    return false;
+  }
+
+  const failedKeys: string[] = [];
+
+  for (const key of keys) {
+    try {
+      const command = new DeleteObjectCommand({
+        Bucket: bucketName,
+        Key: key,
+      });
+      await r2Client.send(command);
+    } catch (error) {
+      console.error(`R2 파일 삭제 실패 (key: ${key}):`, error);
+      failedKeys.push(key);
+    }
+  }
+
+  if (failedKeys.length > 0) {
+    console.warn(`일부 R2 파일 삭제 실패: ${failedKeys.length}개`);
+  }
+
+  return true; // partial failure는 허용 — caller는 어쨌든 success 처리
 }
