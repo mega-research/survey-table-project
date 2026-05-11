@@ -16,6 +16,7 @@ import {
   mailTemplateInputSchema,
   type MailTemplateInput,
 } from '@/lib/mail/schema';
+import { promoteMailImages } from '@/lib/mail/mail-image-promote';
 import { extractVariableKeys } from '@/lib/mail/variable-extractor';
 
 interface ActionResult<T = void> {
@@ -34,7 +35,11 @@ export async function createMailTemplateAction(
     return { ok: false, error: parsed.error.issues[0]?.message ?? '입력값이 올바르지 않습니다' };
   }
 
-  const { name, subject, bodyHtml, fromLocal, fromName, replyTo, attachments } = parsed.data;
+  const { name, subject, bodyHtml: rawBodyHtml, fromLocal, fromName, replyTo, attachments } = parsed.data;
+
+  // tmp/mail/ 이미지를 영구 prefix로 promote
+  const bodyHtml = await promoteMailImages(rawBodyHtml);
+
   const variablesUsed = extractVariableKeys(subject, bodyHtml, fromName);
 
   const [row] = await db
@@ -67,8 +72,7 @@ export async function updateMailTemplateAction(
     return { ok: false, error: parsed.error.issues[0]?.message ?? '입력값이 올바르지 않습니다' };
   }
 
-  const { name, subject, bodyHtml, fromLocal, fromName, replyTo, attachments } = parsed.data;
-  const variablesUsed = extractVariableKeys(subject, bodyHtml, fromName);
+  const { name, subject, bodyHtml: rawBodyHtml, fromLocal, fromName, replyTo, attachments } = parsed.data;
 
   // R2 cleanup을 위해 기존 템플릿 에셋 먼저 fetch
   const oldRow = await db.query.mailTemplates.findFirst({
@@ -83,6 +87,10 @@ export async function updateMailTemplateAction(
   if (!oldRow) {
     return { ok: false, error: '템플릿을 찾을 수 없습니다' };
   }
+
+  // tmp/mail/ 이미지를 영구 prefix로 promote (oldRow fetch 이후 실행)
+  const bodyHtml = await promoteMailImages(rawBodyHtml);
+  const variablesUsed = extractVariableKeys(subject, bodyHtml, fromName);
 
   const result = await db
     .update(mailTemplates)
