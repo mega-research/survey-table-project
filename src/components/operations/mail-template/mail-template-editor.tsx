@@ -41,10 +41,9 @@ export const MailTemplateEditor = forwardRef<MailTemplateEditorHandle, Props>(
       attributes: {
         class:
           'prose prose-sm max-w-none focus:outline-none min-h-[320px] p-6 ' +
-          '[&_table]:border-collapse [&_table]:w-full [&_table]:my-2 [&_table]:border [&_table]:border-gray-300 ' +
+          '[&_table]:my-2 [&_table]:border [&_table]:border-gray-300 ' +
           '[&_table_td]:border [&_table_td]:border-gray-300 [&_table_td]:px-2 [&_table_td]:py-1 ' +
-          '[&_table_th]:border [&_table_th]:border-gray-300 [&_table_th]:px-2 [&_table_th]:py-1 ' +
-          '[&_table_th]:bg-gray-50',
+          '[&_table_caption]:py-2 [&_table_caption]:text-sm [&_table_caption]:text-gray-700',
       },
     },
     onUpdate: ({ editor }) => {
