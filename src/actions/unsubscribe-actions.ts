@@ -1,0 +1,104 @@
+'use server';
+
+import { and, asc, eq } from 'drizzle-orm';
+import { redirect } from 'next/navigation';
+
+import * as Sentry from '@sentry/nextjs';
+
+import { db } from '@/db';
+import { contactPii, contactTargets } from '@/db/schema/contacts';
+import { decryptPii } from '@/lib/crypto/aes';
+import { UUID_RE } from '@/lib/mail/constants';
+
+export interface UnsubscribeResult {
+  ok: boolean;
+  email: string | null;
+  alreadyUnsubscribed: boolean;
+}
+
+/**
+ * 토큰으로 contact_targets 행을 찾아 unsubscribed_at 을 설정.
+ * idempotent — 이미 해지된 row 는 추가 변경 없이 통과.
+ * 페이지가 GET 시 호출하므로 link prefetch 가 사고를 일으켜도 영향 무해.
+ *
+ * DB 장애 등 예외는 swallow 하고 `ok: false` 로 응답 — 페이지가 친절한 fallback 표시.
+ */
+export async function unsubscribeByToken(token: string): Promise<UnsubscribeResult> {
+  if (!UUID_RE.test(token)) {
+    return { ok: false, email: null, alreadyUnsubscribed: false };
+  }
+
+  try {
+    // contact_targets + contact_pii(email) LEFT JOIN — 이메일은 마스킹/표시용으로만 사용.
+    // 한 컨택에 email 컬럼이 여러 개면 column_key 알파벳 순 첫 번째.
+    const rows = await db
+      .select({
+        id: contactTargets.id,
+        unsubscribedAt: contactTargets.unsubscribedAt,
+        cipher: contactPii.cipher,
+        columnKey: contactPii.columnKey,
+      })
+      .from(contactTargets)
+      .leftJoin(
+        contactPii,
+        and(
+          eq(contactPii.contactTargetId, contactTargets.id),
+          eq(contactPii.fieldType, 'email'),
+        ),
+      )
+      .where(eq(contactTargets.unsubscribeToken, token))
+      .orderBy(asc(contactPii.columnKey))
+      .limit(1);
+
+    const existing = rows[0];
+    if (!existing) {
+      return { ok: false, email: null, alreadyUnsubscribed: false };
+    }
+
+    let email: string | null = null;
+    if (existing.cipher) {
+      try {
+        email = decryptPii(existing.cipher);
+      } catch {
+        // 복호화 실패 시 email 노출 안 함 — 페이지가 이메일 없는 fallback 메시지 표시.
+      }
+    }
+
+    const alreadyUnsubscribed = existing.unsubscribedAt !== null;
+    if (!alreadyUnsubscribed) {
+      await db
+        .update(contactTargets)
+        .set({ unsubscribedAt: new Date() })
+        .where(eq(contactTargets.unsubscribeToken, token));
+    }
+    return { ok: true, email, alreadyUnsubscribed };
+  } catch (err) {
+    Sentry.captureException(err, {
+      tags: { operation: 'unsubscribe_by_token' },
+      level: 'error',
+    });
+    return { ok: false, email: null, alreadyUnsubscribed: false };
+  }
+}
+
+/**
+ * 되돌리기 — form action 으로 호출. token 은 .bind(null, token) 로 partial 적용.
+ * 처리 후 /unsubscribe/restored 로 redirect — 같은 페이지로 돌아가면 즉시 재해지되는
+ * 루프 방지. DB 장애 시에도 redirect 는 진행 (사용자에게 무한 로딩 노출 방지).
+ */
+export async function revertUnsubscribeAction(token: string): Promise<void> {
+  if (UUID_RE.test(token)) {
+    try {
+      await db
+        .update(contactTargets)
+        .set({ unsubscribedAt: null })
+        .where(eq(contactTargets.unsubscribeToken, token));
+    } catch (err) {
+      Sentry.captureException(err, {
+        tags: { operation: 'revert_unsubscribe' },
+        level: 'error',
+      });
+    }
+  }
+  redirect('/unsubscribe/restored');
+}

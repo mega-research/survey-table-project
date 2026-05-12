@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { TemplateEditForm } from '@/components/operations/mail-template/template-edit-form';
 import { getVariableCatalog } from '@/components/operations/mail-template/variable-catalog';
 import { getMailTemplate } from '@/data/mail-templates';
+import { requireAuth } from '@/lib/auth';
 
 interface Props {
   params: Promise<{ id: string; mid: string }>;
@@ -15,6 +16,7 @@ export default async function EditMailTemplatePage({ params }: Props) {
 
   const fromDomain = process.env.RESEND_FROM_DOMAIN ?? '';
   const catalog = await getVariableCatalog(surveyId);
+  const user = await requireAuth();
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-8">
@@ -27,6 +29,7 @@ export default async function EditMailTemplatePage({ params }: Props) {
         fromDomain={fromDomain}
         catalog={catalog}
         template={template}
+        currentUserEmail={user.email ?? ''}
       />
     </main>
   );

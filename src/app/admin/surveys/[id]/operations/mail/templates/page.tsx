@@ -24,7 +24,7 @@ export default async function MailTemplatesListPage({ params }: Props) {
           </p>
         </div>
         <Button asChild>
-          <Link href={`/admin/surveys/${surveyId}/operations/mail-templates/new`}>
+          <Link href={`/admin/surveys/${surveyId}/operations/mail/templates/new`}>
             <Plus className="mr-1.5 h-4 w-4" />
             새 템플릿
           </Link>

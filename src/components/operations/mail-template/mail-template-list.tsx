@@ -32,7 +32,7 @@ export function MailTemplateList({ surveyId, templates }: Props) {
           </div>
           <p className="text-sm text-gray-500">아직 등록된 메일 템플릿이 없습니다.</p>
           <Link
-            href={`/admin/surveys/${surveyId}/operations/mail-templates/new`}
+            href={`/admin/surveys/${surveyId}/operations/mail/templates/new`}
             className="mt-3 text-sm font-medium text-blue-500 hover:text-blue-600"
           >
             첫 템플릿 만들기 →
@@ -61,7 +61,7 @@ export function MailTemplateList({ surveyId, templates }: Props) {
             >
               <td className="px-6 py-4 font-medium text-gray-900">
                 <Link
-                  href={`/admin/surveys/${surveyId}/operations/mail-templates/${t.id}/edit`}
+                  href={`/admin/surveys/${surveyId}/operations/mail/templates/${t.id}/edit`}
                   className="hover:text-blue-500"
                 >
                   {t.name}

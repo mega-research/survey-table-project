@@ -22,6 +22,7 @@ interface OperationsTabStripProps {
  * - "Field work" trigger hover/click → `응답 현황` / `응답자 목록` 드롭다운
  * - "보고서" 는 단일 페이지 링크 (`/operations/report`)
  * - "컨택" trigger hover/click → `컨택리스트` / `리스트 업로드` / `컬럼 설정` / `결과코드 설정` 드롭다운
+ * - "메일" trigger → `캠페인` / `템플릿` 드롭다운 (수신거부자는 캠페인 페이지 하단 세그먼트)
  * - shadcn NavigationMenu primitive 가 hover/click/키보드 표준을 처리하며
  *   Trigger 의 ChevronDown 이 내장돼 있어 caret 마크업은 별도로 그리지 않는다.
  */
@@ -38,8 +39,6 @@ export function OperationsTabStrip({ surveyId }: OperationsTabStripProps) {
   const contactsUploadHref = `${operationsBase}/contacts/upload`;
   const contactsColumnsHref = `${operationsBase}/contacts/columns`;
   const contactsResultCodesHref = `${operationsBase}/contacts/result-codes`;
-  const contactsMailTemplatesHref = `${operationsBase}/mail-templates`;
-  const isContactsMailTemplatesActive = pathname.startsWith(contactsMailTemplatesHref);
   const isContactsRootActive =
     pathname === contactsHref ||
     (pathname.startsWith(`${contactsHref}/`) &&
@@ -53,8 +52,14 @@ export function OperationsTabStrip({ surveyId }: OperationsTabStripProps) {
     isContactsRootActive ||
     isContactsUploadActive ||
     isContactsColumnsActive ||
-    isContactsResultCodesActive ||
-    isContactsMailTemplatesActive;
+    isContactsResultCodesActive;
+
+  const mailBase = `${operationsBase}/mail`;
+  const mailCampaignsHref = `${mailBase}/campaigns`;
+  const mailTemplatesHref = `${mailBase}/templates`;
+  const isMailCampaignsActive = pathname.startsWith(mailCampaignsHref);
+  const isMailTemplatesActive = pathname.startsWith(mailTemplatesHref);
+  const isMailActive = isMailCampaignsActive || isMailTemplatesActive;
 
   const reportHref = `${operationsBase}/report`;
   const isReportActive = pathname.startsWith(reportHref);
@@ -126,8 +131,26 @@ export function OperationsTabStrip({ surveyId }: OperationsTabStripProps) {
               <SubLink href={contactsResultCodesHref} active={isContactsResultCodesActive}>
                 결과코드 설정
               </SubLink>
-              <SubLink href={contactsMailTemplatesHref} active={isContactsMailTemplatesActive}>
-                메일 템플릿
+            </NavigationMenuContent>
+          </NavigationMenuItem>
+
+          <NavigationMenuItem>
+            <NavigationMenuTrigger
+              className={cn(
+                'flex h-auto items-center gap-1 rounded-none border-b-2 bg-transparent px-4 py-3 text-sm transition-colors hover:bg-transparent data-[state=open]:bg-transparent',
+                isMailActive
+                  ? 'border-blue-600 font-semibold text-blue-600 hover:text-blue-600'
+                  : 'border-transparent text-slate-500 hover:text-slate-900',
+              )}
+            >
+              메일
+            </NavigationMenuTrigger>
+            <NavigationMenuContent className="min-w-[180px] p-1">
+              <SubLink href={mailCampaignsHref} active={isMailCampaignsActive}>
+                캠페인
+              </SubLink>
+              <SubLink href={mailTemplatesHref} active={isMailTemplatesActive}>
+                템플릿
               </SubLink>
             </NavigationMenuContent>
           </NavigationMenuItem>

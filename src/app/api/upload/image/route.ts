@@ -14,8 +14,18 @@ const r2Client = new S3Client({
   },
 });
 
-// WebP로 변환할 이미지 타입 (SVG, GIF 제외 - 애니메이션/벡터 유지)
-const CONVERTIBLE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/bmp'];
+// 설문(kind=survey): WebP 로 변환할 타입 (SVG/GIF 제외 - 애니메이션/벡터 유지)
+const SURVEY_CONVERTIBLE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/bmp'];
+
+// 메일(kind=mail): PNG 로 변환할 타입. Outlook 데스크톱이 WebP 미지원이라
+// 이미 업로드된 WebP 도 PNG 로 재변환. SVG/GIF 만 원본 유지.
+const MAIL_CONVERTIBLE_TYPES = [
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/bmp',
+  'image/webp',
+];
 
 export async function POST(request: NextRequest) {
   try {
@@ -63,33 +73,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '서버 설정 오류' }, { status: 500 });
     }
 
-    // 파일을 ArrayBuffer로 변환
-    const arrayBuffer = await file.arrayBuffer();
-    let buffer = Buffer.from(arrayBuffer);
-    let contentType = file.type;
-    let fileExtension: string;
-
-    // WebP로 변환 (JPEG, PNG, BMP만 - GIF/SVG는 원본 유지)
-    if (CONVERTIBLE_TYPES.includes(file.type)) {
-      try {
-        buffer = await sharp(buffer).webp({ quality: 85 }).toBuffer();
-        contentType = 'image/webp';
-        fileExtension = 'webp';
-      } catch (conversionError) {
-        console.error('WebP 변환 실패, 원본 저장:', conversionError);
-        Sentry.captureException(conversionError, {
-          tags: { operation: 'image_conversion' },
-          level: 'warning',
-        });
-        // 변환 실패 시 원본 저장
-        fileExtension = file.name.split('.').pop() || 'jpg';
-      }
-    } else {
-      // GIF, SVG, WebP는 원본 유지
-      fileExtension = file.name.split('.').pop() || 'jpg';
-    }
-
-    // kind 파라미터 검증 (mail | survey)
+    // kind 파라미터 검증 (mail | survey) — 변환 분기에 필요하므로 먼저 읽음
     const KIND_VALUES = new Set(['mail', 'survey']);
     const kindRaw = formData.get('kind');
     const kind = typeof kindRaw === 'string' && KIND_VALUES.has(kindRaw) ? kindRaw : null;
@@ -98,6 +82,44 @@ export async function POST(request: NextRequest) {
         { error: '잘못된 또는 누락된 kind 파라미터 (mail | survey)' },
         { status: 400 },
       );
+    }
+
+    // 파일을 ArrayBuffer로 변환
+    const arrayBuffer = await file.arrayBuffer();
+    let buffer = Buffer.from(arrayBuffer);
+    let contentType = file.type;
+    let fileExtension: string;
+
+    // 변환 분기: 메일은 PNG (Outlook 호환), 설문은 WebP (브라우저 최적화).
+    // GIF/SVG 는 양쪽 모두 원본 유지 (애니메이션/벡터).
+    const shouldConvert =
+      kind === 'mail'
+        ? MAIL_CONVERTIBLE_TYPES.includes(file.type)
+        : SURVEY_CONVERTIBLE_TYPES.includes(file.type);
+
+    if (shouldConvert) {
+      try {
+        if (kind === 'mail') {
+          buffer = await sharp(buffer).png({ compressionLevel: 9 }).toBuffer();
+          contentType = 'image/png';
+          fileExtension = 'png';
+        } else {
+          buffer = await sharp(buffer).webp({ quality: 85 }).toBuffer();
+          contentType = 'image/webp';
+          fileExtension = 'webp';
+        }
+      } catch (conversionError) {
+        console.error('이미지 변환 실패, 원본 저장:', conversionError);
+        Sentry.captureException(conversionError, {
+          tags: { operation: 'image_conversion', kind },
+          level: 'warning',
+        });
+        // 변환 실패 시 원본 저장
+        fileExtension = file.name.split('.').pop() || 'jpg';
+      }
+    } else {
+      // 변환 대상 아님 (mail: GIF/SVG / survey: GIF/SVG/WebP) — 원본 유지
+      fileExtension = file.name.split('.').pop() || 'jpg';
     }
 
     // 파일 이름 생성 (타임스탬프 + 랜덤 문자열)

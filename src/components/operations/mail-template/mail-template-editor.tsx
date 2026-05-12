@@ -111,14 +111,16 @@ export const MailTemplateEditor = forwardRef<MailTemplateEditorHandle, Props>(
     };
 
     return (
-      <div className="overflow-hidden rounded-lg border border-gray-200">
+      <div className="flex flex-col overflow-hidden rounded-lg border border-gray-200">
         <EditorToolbar
           editor={editor}
           catalog={catalog}
           onPickImage={onPickImage}
           onPickLink={onPickLink}
         />
-        <EditorContent editor={editor} />
+        <div className="min-h-[400px] max-h-[calc(100vh-260px)] overflow-y-auto">
+          <EditorContent editor={editor} />
+        </div>
       </div>
     );
   },

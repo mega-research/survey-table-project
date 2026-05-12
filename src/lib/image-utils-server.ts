@@ -2,7 +2,7 @@
  * 서버 사이드 이미지/파일 삭제 유틸리티
  * 서버 액션에서 R2에 직접 접근하여 이미지 및 파일을 삭제합니다.
  */
-import { CopyObjectCommand, DeleteObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { CopyObjectCommand, DeleteObjectCommand, GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import * as Sentry from '@sentry/nextjs';
 
 // Cloudflare R2는 S3 호환 API를 사용합니다
@@ -170,4 +170,23 @@ export async function deleteR2ObjectsByKey(keys: string[]): Promise<boolean> {
   }
 
   return true; // partial failure는 허용 — caller는 어쨌든 success 처리
+}
+
+/**
+ * R2 object key 로 파일 본체를 다운로드해 Buffer 로 반환.
+ * 메일 첨부 발송에서 Resend SDK 의 attachments[].content 로 그대로 전달하는 용도.
+ * @throws 파일이 없거나 다운로드 실패 시 throw — caller 가 일괄 abort.
+ */
+export async function downloadR2Object(key: string): Promise<Buffer> {
+  const bucketName = process.env.CLOUDFLARE_R2_BUCKET;
+  if (!bucketName) throw new Error('Cloudflare R2 환경 변수가 설정되지 않았습니다.');
+
+  const resp = await r2Client.send(
+    new GetObjectCommand({ Bucket: bucketName, Key: key }),
+  );
+  if (!resp.Body) throw new Error(`R2 객체 본체 없음: ${key}`);
+
+  // AWS SDK v3 의 transformToByteArray() — Node 환경에서 Body 가 SdkStream<Readable>.
+  const bytes = await resp.Body.transformToByteArray();
+  return Buffer.from(bytes);
 }

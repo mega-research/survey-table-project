@@ -385,3 +385,27 @@ export interface MailAttachment {
   size: number;   // bytes
   mime: string;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 메일 캠페인 (mail_campaigns) 관련 JSONB 타입
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * mail_campaigns.filter_snapshot — 마법사 ②단계 필터 조건 보존.
+ * 캠페인 사후 "이 캠페인 미응답자 재발송" 동선에서 prefill 용으로 활용.
+ */
+export interface CampaignFilterSnapshot {
+  /** 검색 필드 */
+  qfield?: 'all' | 'resid' | 'email' | 'group' | 'biz';
+  /** 검색어 */
+  q?: string;
+  /** 미응답자만 (responded_at IS NULL) */
+  unrespondedOnly?: boolean;
+  /** 결과코드 필터 — contact_attempts.result_code */
+  resultCodes?: string[];
+  /** 그룹값 필터 */
+  groupValues?: string[];
+  /** "발송 후 N일 경과 캠페인의 미오픈자 재발송" 동선 (?from=<cid>&unopenedAfterDays=7) */
+  unopenedFromCampaignId?: string;
+  unopenedAfterDays?: number;
+}
