@@ -5,7 +5,7 @@ import { useMemo } from 'react';
 import { SortIndicator, TablePagerFooter } from '@/components/operations/table-primitives';
 import type { ContactColumnDef, ContactColumnScheme } from '@/db/schema/schema-types';
 import { useSearchParamsMutator } from '@/hooks/use-search-params-mutator';
-import { attrsKeyOf, type ContactsSortDir, type ContactsSortKey } from '@/lib/operations/contacts';
+import { attrsKeyOf, piiKeyOf, type ContactsSortDir, type ContactsSortKey } from '@/lib/operations/contacts';
 import { SHORT_DATE_FMT } from '@/lib/operations/contacts-shared';
 import type { ContactsRow } from '@/lib/operations/contacts.server';
 
@@ -40,18 +40,30 @@ function sortKeyOf(source: string): ContactsSortKey | null {
  * 컬럼+행 → { display: ReactNode, plain: string | undefined } 한 번 계산.
  * `display` 는 셀 안에 렌더, `plain` 은 td title 에 truncate hover 용으로 사용.
  */
+const PII_DASH = '—';
+
 function computeCell(col: ContactColumnDef, row: ContactsRow): {
   display: React.ReactNode;
   plain: string | undefined;
 } {
   const attrsKey = attrsKeyOf(col.source);
   if (attrsKey) {
-    if (attrsKey === '이메일') return { display: row.emailMasked, plain: row.emailMasked };
-    if (attrsKey === '사업자번호') return { display: row.bizMasked, plain: row.bizMasked };
     const v = row.attrs[attrsKey];
     return v && v !== ''
       ? { display: v, plain: v }
-      : { display: '—', plain: undefined };
+      : { display: PII_DASH, plain: undefined };
+  }
+  const piiKey = piiKeyOf(col.source);
+  if (piiKey) {
+    const hint = row.piiMaskHints[piiKey];
+    if (hint?.maskHint) {
+      // 마스킹 힌트 (예: "naver.com", "5678", "김**")
+      return {
+        display: <span className="text-slate-600">{hint.maskHint}</span>,
+        plain: hint.maskHint,
+      };
+    }
+    return { display: PII_DASH, plain: undefined };
   }
   switch (col.source) {
     case 'system.resid':

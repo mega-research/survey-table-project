@@ -27,8 +27,6 @@ export const contactTargets = pgTable(
       .references(() => surveys.id, { onDelete: 'cascade' }),
     resid: integer('resid').notNull(),
     groupValue: text('group_value'),
-    email: text('email'),
-    bizNumber: text('biz_number'),
     inviteToken: uuid('invite_token').defaultRandom().notNull(),
     attrs: jsonb('attrs').$type<Record<string, string>>().notNull().default({}),
     uploadId: uuid('upload_id').references(() => contactUploads.id, { onDelete: 'set null' }),
@@ -42,6 +40,28 @@ export const contactTargets = pgTable(
   (table) => ({
     surveyResidUnique: unique('contact_targets_survey_resid_unique').on(table.surveyId, table.resid),
     inviteTokenUnique: unique('contact_targets_invite_token_unique').on(table.inviteToken),
+  }),
+);
+
+export const contactPii = pgTable(
+  'contact_pii',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    contactTargetId: uuid('contact_target_id')
+      .notNull()
+      .references(() => contactTargets.id, { onDelete: 'cascade' }),
+    fieldType: text('field_type').notNull(),
+    columnKey: text('column_key').notNull(),
+    cipher: text('cipher').notNull(),
+    blindIndex: text('blind_index').notNull(),
+    maskHint: text('mask_hint'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    targetColumnUnique: unique('contact_pii_target_column_unique').on(
+      table.contactTargetId,
+      table.columnKey,
+    ),
   }),
 );
 
@@ -87,6 +107,14 @@ export const contactTargetsRelations = relations(contactTargets, ({ one, many })
     references: [surveyResponses.id],
   }),
   attempts: many(contactAttempts),
+  pii: many(contactPii),
+}));
+
+export const contactPiiRelations = relations(contactPii, ({ one }) => ({
+  target: one(contactTargets, {
+    fields: [contactPii.contactTargetId],
+    references: [contactTargets.id],
+  }),
 }));
 
 export const contactAttemptsRelations = relations(contactAttempts, ({ one }) => ({
@@ -114,3 +142,5 @@ export type ContactTarget = typeof contactTargets.$inferSelect;
 export type NewContactTarget = typeof contactTargets.$inferInsert;
 export type ContactAttempt = typeof contactAttempts.$inferSelect;
 export type NewContactAttempt = typeof contactAttempts.$inferInsert;
+export type ContactPii = typeof contactPii.$inferSelect;
+export type NewContactPii = typeof contactPii.$inferInsert;

@@ -15,7 +15,6 @@ export const CONTACTS_SORT_KEYS = [
   'resid',
   'respondedAt',
   'createdAt',
-  'email',
   'group',
 ] as const;
 export type ContactsSystemSortKey = (typeof CONTACTS_SORT_KEYS)[number];
@@ -155,9 +154,18 @@ export function maskBizNumber(value: string | null | undefined): string {
 
 /**
  * ContactColumnDef.source 에서 attrs key 추출. 'attrs.전시회명' → '전시회명'.
- * system.* 는 null 반환.
+ * system.* / pii.* 는 null 반환.
  */
 export function attrsKeyOf(source: string): string | null {
   if (source.startsWith('attrs.')) return source.slice('attrs.'.length);
+  return null;
+}
+
+/**
+ * ContactColumnDef.source 에서 PII column_key 추출. 'pii.담당자이메일' → '담당자이메일'.
+ * 그 외는 null 반환.
+ */
+export function piiKeyOf(source: string): string | null {
+  if (source.startsWith('pii.')) return source.slice('pii.'.length);
   return null;
 }

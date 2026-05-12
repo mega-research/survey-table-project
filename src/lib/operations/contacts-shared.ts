@@ -17,16 +17,12 @@ import type { ContactColumnScheme, ContactResultCode } from '@/db/schema/schema-
 
 export interface SystemFieldKeys {
   group?: string;
-  email?: string;
-  biz?: string;
 }
 
 /**
- * 컬럼 스킴에서 시스템 필드 (group/email/biz) 의 attrs key 추출.
+ * 컬럼 스킴에서 시스템 필드 (분류 기준 = group) 의 attrs key 추출.
  * 휴리스틱: key 가 한국어 표준 명칭이면 그것으로 매핑.
- *
- * 정확한 매핑은 contact_uploads.mapping.systemFields 인덱스 별도 조회 필요하지만
- * 본 슬라이스는 단순 휴리스틱으로 충분 (한국어 헤더 자동 감지와 동일 룰).
+ * 이메일/사업자번호는 contact_pii 사이드 테이블로 이전되어 이 함수에서 더 이상 다루지 않음.
  */
 export function extractSystemFieldKeys(scheme: ContactColumnScheme): SystemFieldKeys {
   const result: SystemFieldKeys = {};
@@ -34,13 +30,6 @@ export function extractSystemFieldKeys(scheme: ContactColumnScheme): SystemField
     const k = attrsKeyOf(c.source);
     if (!k) continue;
     if (!result.group && (k.includes('전시회') || k.includes('캠페인'))) result.group = k;
-    if (
-      !result.email &&
-      (k === '이메일' || k.includes('이메일') || k.toLowerCase().includes('email'))
-    ) {
-      result.email = k;
-    }
-    if (!result.biz && k.includes('사업자')) result.biz = k;
   }
   return result;
 }

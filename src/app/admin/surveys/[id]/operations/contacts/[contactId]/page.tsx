@@ -56,6 +56,7 @@ export default async function ContactDetailPage({ params }: PageProps) {
           id: detail.contact.id,
           resid: detail.contact.resid,
           attrs: detail.contact.attrs,
+          piiDecrypted: detail.contact.piiDecrypted,
           memo: detail.contact.memo,
           contactMethod: detail.contact.contactMethod,
           respondedAt: detail.contact.respondedAt,

@@ -10,14 +10,19 @@ import {
   type ContactColumnScheme,
   type ContactMethod,
 } from '@/db/schema/schema-types';
-import { attrsKeyOf } from '@/lib/operations/contacts';
+import { attrsKeyOf, piiKeyOf } from '@/lib/operations/contacts';
 import { FULL_DATE_FMT } from '@/lib/operations/contacts-shared';
+import { piiFieldLabel, type PiiFieldType } from '@/lib/crypto/pii-fields';
 
 interface ContactInfoCardProps {
   surveyId: string;
   resid: number | null;
   scheme: ContactColumnScheme;
   attrs: Record<string, string>;
+  /** PII 컬럼 현재 값 (columnKey → plain). 편집 가능 — 저장 시 자동 재암호화. */
+  piiValues?: Record<string, string>;
+  /** 복호화 실패한 PII 컬럼 set — readonly 표시 + 편집 금지 (cipher 덮어쓰기 방지). */
+  failedPiiKeys?: ReadonlySet<string>;
   memo: string | null;
   contactMethod: ContactMethod | null;
   respondedAt: Date | null;
@@ -26,30 +31,44 @@ interface ContactInfoCardProps {
   onColumnToggle?: (key: string, hidden: boolean) => void;
   /** attrs 입력 변경 */
   onAttrsChange: (attrs: Record<string, string>) => void;
+  /** PII 컬럼 입력 변경 (columnKey → plain) */
+  onPiiChange?: (columnKey: string, value: string) => void;
   onMemoChange: (memo: string) => void;
   onContactMethodChange: (method: ContactMethod | null) => void;
 }
+
+type InputDef =
+  | { kind: 'attrs'; col: ContactColumnDef; key: string }
+  | { kind: 'pii'; col: ContactColumnDef; key: string; piiType: PiiFieldType };
 
 export function ContactInfoCard({
   surveyId,
   resid,
   scheme,
   attrs,
+  piiValues,
+  failedPiiKeys,
   memo,
   contactMethod,
   respondedAt,
   inviteToken,
   onColumnToggle,
   onAttrsChange,
+  onPiiChange,
   onMemoChange,
   onContactMethodChange,
 }: ContactInfoCardProps) {
-  const inputDefs = scheme.columns
-    .map((c) => ({ col: c, attrsKey: attrsKeyOf(c.source) }))
-    .filter((x): x is { col: ContactColumnDef; attrsKey: string } => x.attrsKey != null)
+  const inputDefs: InputDef[] = scheme.columns
+    .flatMap<InputDef>((c) => {
+      const ak = attrsKeyOf(c.source);
+      if (ak) return [{ kind: 'attrs', col: c, key: ak }];
+      const pk = piiKeyOf(c.source);
+      if (pk && c.piiType) return [{ kind: 'pii', col: c, key: pk, piiType: c.piiType }];
+      return [];
+    })
     .sort((a, b) => a.col.order - b.col.order);
 
-  function setField(attrsKey: string, value: string) {
+  function setAttrsField(attrsKey: string, value: string) {
     onAttrsChange({ ...attrs, [attrsKey]: value });
   }
 
@@ -67,7 +86,7 @@ export function ContactInfoCard({
       <div className="max-h-[60vh] space-y-2 overflow-y-auto px-5 py-4">
         {inputDefs.length === 0 && (
           <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-            표시 가능한 attrs 컬럼이 없습니다.{' '}
+            표시 가능한 컬럼이 없습니다.{' '}
             <a
               href={`/admin/surveys/${surveyId}/operations/contacts/columns`}
               className="underline"
@@ -77,29 +96,57 @@ export function ContactInfoCard({
             에서 헤더를 추가하세요.
           </div>
         )}
-        {inputDefs.map(({ col, attrsKey }, idx) => (
-          <div key={attrsKey} className="flex items-center gap-3">
-            <div className="flex w-40 shrink-0 items-center gap-1 text-xs text-slate-600">
-              <span className="inline-block w-6 rounded bg-slate-100 px-1 text-center text-[10px] text-slate-500 tabular-nums">
-                {idx + 1}
-              </span>
-              <span className="truncate" title={col.label}>{col.label}</span>
-            </div>
-            <Input
-              value={attrs[attrsKey] ?? ''}
-              onChange={(e) => setField(attrsKey, e.target.value)}
-              className="h-9 flex-1"
-            />
-            {onColumnToggle && (
-              <div className="flex shrink-0 items-center gap-1" title="컨택리스트 헤더로 표시">
-                <Switch
-                  checked={!col.hidden}
-                  onCheckedChange={(checked) => onColumnToggle(attrsKey, !checked)}
-                />
+        {inputDefs.map((def, idx) => {
+          const value =
+            def.kind === 'attrs' ? attrs[def.key] ?? '' : piiValues?.[def.key] ?? '';
+          const isFailedPii = def.kind === 'pii' && failedPiiKeys?.has(def.key);
+          const onChange = isFailedPii
+            ? undefined
+            : def.kind === 'attrs'
+              ? (e: React.ChangeEvent<HTMLInputElement>) => setAttrsField(def.key, e.target.value)
+              : (e: React.ChangeEvent<HTMLInputElement>) => onPiiChange?.(def.key, e.target.value);
+          return (
+            <div key={`${def.kind}:${def.key}`} className="flex items-center gap-3">
+              <div className="flex w-40 shrink-0 items-center gap-1 text-xs text-slate-600">
+                <span className="inline-block w-6 rounded bg-slate-100 px-1 text-center text-[10px] text-slate-500 tabular-nums">
+                  {idx + 1}
+                </span>
+                <span className="truncate" title={def.col.label}>
+                  {def.col.label}
+                </span>
               </div>
-            )}
-          </div>
-        ))}
+              <div className="relative flex-1">
+                <Input
+                  value={isFailedPii ? '복호화 실패 — 편집 불가' : value}
+                  onChange={onChange}
+                  readOnly={isFailedPii}
+                  className={`h-9 pr-16 ${isFailedPii ? 'cursor-not-allowed bg-rose-50 text-rose-700' : ''}`}
+                  title={
+                    isFailedPii
+                      ? '암호 키가 바뀌었거나 데이터가 손상되어 복호화할 수 없습니다. 재업로드로 복구 가능.'
+                      : undefined
+                  }
+                />
+                {def.kind === 'pii' && (
+                  <span
+                    className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400"
+                    title="암호화 저장됨"
+                  >
+                    {piiFieldLabel(def.piiType)}
+                  </span>
+                )}
+              </div>
+              {onColumnToggle && (
+                <div className="flex shrink-0 items-center gap-1" title="컨택리스트 헤더로 표시">
+                  <Switch
+                    checked={!def.col.hidden}
+                    onCheckedChange={(checked) => onColumnToggle(def.key, !checked)}
+                  />
+                </div>
+              )}
+            </div>
+          );
+        })}
 
         {/* 수신방법 + Web 응답 메타 */}
         <div className="mt-3 rounded bg-slate-50 px-3 py-2">

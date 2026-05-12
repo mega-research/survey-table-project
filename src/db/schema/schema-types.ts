@@ -269,10 +269,16 @@ export interface ContactColumnDef {
     | 'system.contact_result'
     | 'system.email_count'
     | 'system.web'
-    | 'system.contact_owner';
+    | 'system.contact_owner'
+    | `pii.${string}`;
   order: number;
   /** 숨김 (운영 컬럼 일부는 hide 불가 — UI 가드) */
   hidden?: boolean;
+  /**
+   * PII 매핑 타입. 지정되면 해당 엑셀 컬럼 값이 contact_pii 사이드 테이블에
+   * 암호화 저장되고, attrs 에는 저장되지 않는다. 사후 변경 불가 — 재업로드 필요.
+   */
+  piiType?: import('@/lib/crypto/pii-fields').PiiFieldType;
 }
 
 /** surveys.progress_columns — 진척률 표 (Report 탭) 그룹 메타 컬럼 픽커 */
@@ -292,24 +298,19 @@ export interface ProgressColumnDef {
 
 /** contact_uploads.mapping — 엑셀 업로드 매핑 결과 (시나리오 B 단순화) */
 export interface ContactUploadMapping {
-  /** 시스템 필드 → 엑셀 0-based 컬럼 인덱스. group 만 필수. */
+  /** 시스템 필드 → 엑셀 0-based 컬럼 인덱스. group 만 사용 (미지정 시 단일 명단 취급). */
   systemFields: {
-    group: number;
-    email?: number;
-    biz?: number;
-    name?: number;
-    company?: number;
-    phone?: number;
-  };
-  /** 사용자가 컨택리스트에 표시하기로 토글한 attrs 키 (헤더명) 목록. 나머지는 hidden 으로 자동 등록. */
-  selectedAttrsKeys: string[];
-  /** 자동 감지된 시스템 필드 (UI 표시용 — 사용자가 수동 조정 가능). */
-  autoDetected?: {
-    email?: number;
-    biz?: number;
-    phone?: number;
     group?: number;
   };
+  /**
+   * 엑셀 헤더 → PII 타입 매핑. 키는 엑셀 헤더(원본 컬럼명), 값은 PII 타입.
+   * 매핑된 컬럼은 contact_pii 사이드 테이블에 암호화 저장, attrs 에는 저장 안 함.
+   */
+  piiMapping?: Record<string, import('@/lib/crypto/pii-fields').PiiFieldType>;
+  /** 사용자가 컨택리스트에 표시하기로 토글한 attrs 키 (헤더명) 목록. 나머지는 hidden 으로 자동 등록. */
+  selectedAttrsKeys: string[];
+  /** 사용자가 편집한 표시 라벨 (헤더명 → 라벨). 미지정 헤더는 헤더명 그대로. */
+  labelOverrides?: Record<string, string>;
   /** 1-based, 디폴트 1 */
   headerRow: number;
   /** 사용자가 선택한 시트 이름 (디폴트 첫 시트) */

@@ -17,7 +17,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import type { ContactUploadMapping } from '@/db/schema/schema-types';
-import { autoDetectSystemFields } from '@/lib/contacts/auto-detect';
+import { autoDetectPiiMapping, autoDetectSystemFields } from '@/lib/contacts/auto-detect';
+import { type PiiFieldType } from '@/lib/crypto/pii-fields';
 
 type Step = 'file' | 'mapping' | 'result';
 
@@ -28,23 +29,25 @@ interface UploadWizardProps {
 }
 
 interface MappingState {
+  /** 분류 기준 컬럼 인덱스 (선택사항 — null 가능) */
   groupCol: number | null;
-  emailCol: number | null;
-  bizCol: number | null;
-  companyCol: number | null;
-  phoneCol: number | null;
-  /** 컨택리스트에 표시할 attrs 키 set (체크박스 토글 결과) */
+  /** 컨택리스트에 표시할 헤더 set */
   selectedAttrs: Set<string>;
+  /** 사용자 편집 라벨 (헤더명 → 라벨) */
+  labelOverrides: Record<string, string>;
+  /** 헤더명 → PII 타입 매핑 */
+  piiMapping: Record<string, PiiFieldType>;
 }
 
-const initialMapping: MappingState = {
-  groupCol: null,
-  emailCol: null,
-  bizCol: null,
-  companyCol: null,
-  phoneCol: null,
-  selectedAttrs: new Set(),
-};
+const PII_OPTIONS: Array<{ value: PiiFieldType | '_none'; label: string }> = [
+  { value: '_none', label: '없음' },
+  { value: 'email', label: '이메일' },
+  { value: 'mobile', label: '휴대폰' },
+  { value: 'phone', label: '전화' },
+  { value: 'name', label: '이름' },
+  { value: 'address', label: '주소' },
+  { value: 'biz_number', label: '사업자번호' },
+];
 
 export function UploadWizard({ surveyId, existingContactsCount }: UploadWizardProps) {
   const router = useRouter();
@@ -53,7 +56,12 @@ export function UploadWizard({ surveyId, existingContactsCount }: UploadWizardPr
   const [headerRow, setHeaderRow] = useState(2);
   const [sheetName, setSheetName] = useState<string>('');
   const [preview, setPreview] = useState<ParseExcelPreviewResult | null>(null);
-  const [mapping, setMapping] = useState<MappingState>(initialMapping);
+  const [mapping, setMapping] = useState<MappingState>({
+    groupCol: null,
+    selectedAttrs: new Set(),
+    labelOverrides: {},
+    piiMapping: {},
+  });
   const [result, setResult] = useState<{
     uploadedRows: number;
     mergedRows: number;
@@ -72,23 +80,28 @@ export function UploadWizard({ surveyId, existingContactsCount }: UploadWizardPr
         setPreview(r);
         if (!sheetName && r.sheetNames.length > 0) setSheetName(r.sheetNames[0]);
 
-        // 한국어 헤더 자동 감지로 시스템 필드 prefill
         const detected = autoDetectSystemFields(r.headers);
-        setMapping((m) => ({
-          ...m,
-          groupCol: detected.group ?? m.groupCol,
-          emailCol: detected.email ?? m.emailCol,
-          bizCol: detected.biz ?? m.bizCol,
-          phoneCol: detected.phone ?? m.phoneCol,
-          // 디폴트 표시 토글: 자동 감지된 시스템 필드 + 첫 5개 헤더
-          selectedAttrs: new Set([
-            ...r.headers.slice(0, 5),
-            ...(detected.email != null ? [r.headers[detected.email]] : []),
-            ...(detected.biz != null ? [r.headers[detected.biz]] : []),
-            ...(detected.phone != null ? [r.headers[detected.phone]] : []),
-          ]),
-        }));
-        setReplaceConfirmed(false); // 새 파일 업로드마다 reset
+        const piiAuto = autoDetectPiiMapping(r.headers);
+
+        // 디폴트 표시 토글:
+        // - 자동 감지된 PII 컬럼 전부
+        // - 분류 기준
+        // - 그 외 처음 3개 (헤더가 너무 많을 때 시각적 노이즈 방지)
+        const piiHeaders = new Set(Object.keys(piiAuto));
+        const groupHeader = detected.group != null ? r.headers[detected.group] : null;
+        const defaultShown = new Set<string>([
+          ...piiHeaders,
+          ...(groupHeader ? [groupHeader] : []),
+          ...r.headers.filter((h) => !piiHeaders.has(h) && h !== groupHeader).slice(0, 3),
+        ]);
+
+        setMapping({
+          groupCol: detected.group ?? null,
+          selectedAttrs: defaultShown,
+          labelOverrides: {}, // 사용자가 편집한 라벨만. 미편집은 헤더명 그대로 사용.
+          piiMapping: piiAuto,
+        });
+        setReplaceConfirmed(false);
         setStep('mapping');
       } catch (e) {
         setError((e as Error).message);
@@ -97,20 +110,21 @@ export function UploadWizard({ surveyId, existingContactsCount }: UploadWizardPr
   }
 
   async function handleIngest() {
-    if (!file || !preview || mapping.groupCol == null) return;
+    if (!file || !preview) return;
+    if (mapping.selectedAttrs.size === 0) {
+      setError('표시할 컬럼이 없습니다. 최소 한 개는 체크해주세요.');
+      return;
+    }
     setError(null);
     startTransition(async () => {
       try {
         const m: ContactUploadMapping = {
           systemFields: {
-            group: mapping.groupCol!,
-            email: mapping.emailCol ?? undefined,
-            biz: mapping.bizCol ?? undefined,
-            company: mapping.companyCol ?? undefined,
-            phone: mapping.phoneCol ?? undefined,
+            group: mapping.groupCol ?? undefined,
           },
+          piiMapping: mapping.piiMapping,
           selectedAttrsKeys: Array.from(mapping.selectedAttrs),
-          autoDetected: autoDetectSystemFields(preview.headers),
+          labelOverrides: mapping.labelOverrides,
           headerRow,
           sheetName,
         };
@@ -127,12 +141,43 @@ export function UploadWizard({ surveyId, existingContactsCount }: UploadWizardPr
     });
   }
 
+  function updatePii(header: string, value: PiiFieldType | '_none') {
+    setMapping((m) => {
+      const next = { ...m.piiMapping };
+      if (value === '_none') delete next[header];
+      else next[header] = value;
+      return { ...m, piiMapping: next };
+    });
+  }
+
+  function updateLabel(header: string, value: string) {
+    setMapping((m) => {
+      const next = { ...m.labelOverrides };
+      if (value === header || value === '') delete next[header];
+      else next[header] = value;
+      return { ...m, labelOverrides: next };
+    });
+  }
+
+  function toggleShown(header: string, checked: boolean) {
+    setMapping((m) => {
+      const next = new Set(m.selectedAttrs);
+      if (checked) next.add(header);
+      else next.delete(header);
+      return { ...m, selectedAttrs: next };
+    });
+  }
+
+  function setGroupCol(idx: number | null) {
+    setMapping((m) => ({ ...m, groupCol: idx }));
+  }
+
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-base">
           엑셀 컨택 업로드 —{' '}
-          {step === 'file' ? '1/3 파일' : step === 'mapping' ? '2/3 매핑' : '3/3 결과'}
+          {step === 'file' ? '1/3 파일' : step === 'mapping' ? '2/3 컬럼 설정' : '3/3 결과'}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -200,114 +245,170 @@ export function UploadWizard({ surveyId, existingContactsCount }: UploadWizardPr
               </div>
             )}
 
-            <div className="text-xs text-slate-500">
-              총 {preview.totalRows.toLocaleString('ko-KR')} 행 — 미리보기 5행:
-            </div>
-            <div className="overflow-x-auto rounded border">
-              <table className="w-full text-xs">
-                <thead className="bg-slate-50">
-                  <tr>
-                    {preview.headers.map((h, i) => (
-                      <th key={i} className="border-b px-2 py-1 text-left">
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {preview.rows.map((row, ri) => (
-                    <tr key={ri}>
-                      {preview.headers.map((h, ci) => (
-                        <td key={ci} className="border-b px-2 py-1">
-                          {row[h]}
-                        </td>
+            {/* 미리보기 (엑셀 첫 5행) */}
+            <div>
+              <div className="mb-1 text-xs text-slate-500">
+                미리보기: 총 {preview.totalRows.toLocaleString('ko-KR')} 행 · 첫 5행
+              </div>
+              <div className="overflow-x-auto rounded border">
+                <table className="w-full text-xs">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      {preview.headers.map((h, i) => (
+                        <th key={i} className="border-b px-2 py-1 text-left whitespace-nowrap">
+                          {h}
+                        </th>
                       ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {preview.rows.map((row, ri) => (
+                      <tr key={ri}>
+                        {preview.headers.map((h, ci) => (
+                          <td key={ci} className="border-b px-2 py-1 whitespace-nowrap">
+                            {row[h]}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
 
-            <div className="text-xs text-slate-500 mb-1">
-              시스템 필드 — 그룹은 머지/표시용, 나머지는 PII 마스킹용 (자동 감지됨, 필요 시 수정)
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              {(['groupCol', 'emailCol', 'bizCol', 'companyCol', 'phoneCol'] as const).map(
-                (field) => {
-                  const labelMap: Record<typeof field, string> = {
-                    groupCol: '그룹 *',
-                    emailCol: '이메일',
-                    bizCol: '사업자번호',
-                    companyCol: '기업명',
-                    phoneCol: '전화',
-                  };
-                  return (
-                    <div key={field} className="flex flex-col gap-1">
-                      <Label className="text-xs">{labelMap[field]}</Label>
-                      <Select
-                        value={mapping[field]?.toString() ?? '_none'}
-                        onValueChange={(v) =>
-                          setMapping((m) => ({
-                            ...m,
-                            [field]: v === '_none' ? null : parseInt(v, 10),
-                          }))
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="매핑 안 함" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="_none">매핑 안 함</SelectItem>
-                          {preview.headers.map((h, i) => (
-                            <SelectItem key={i} value={i.toString()}>
-                              {h}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  );
-                },
-              )}
-            </div>
-
+            {/* 컬럼별 설정 매트릭스 */}
             <div>
-              <div className="mb-2 text-xs font-medium text-slate-700">표시할 컬럼 — 컨택리스트에 표시할 헤더 선택</div>
-              <div className="max-h-60 overflow-y-auto rounded border bg-slate-50 p-2">
-                <div className="grid grid-cols-2 gap-1">
-                  {preview.headers.map((h) => (
-                    <label key={h} className="flex items-center gap-2 rounded px-2 py-1 hover:bg-slate-100 text-sm">
-                      <Checkbox
-                        checked={mapping.selectedAttrs.has(h)}
-                        onCheckedChange={(checked) => {
-                          setMapping((m) => {
-                            const next = new Set(m.selectedAttrs);
-                            if (checked) next.add(h);
-                            else next.delete(h);
-                            return { ...m, selectedAttrs: next };
-                          });
-                        }}
-                      />
-                      <span className="truncate" title={h}>{h}</span>
-                    </label>
-                  ))}
-                </div>
-                <div className="mt-2 flex gap-2 border-t pt-2 text-xs">
+              <div className="mb-2 flex items-center justify-between">
+                <div className="text-sm font-medium text-slate-700">엑셀 헤더별 설정</div>
+                <div className="flex gap-3 text-xs">
                   <button
                     type="button"
+                    onClick={() =>
+                      setMapping((m) => ({ ...m, selectedAttrs: new Set(preview.headers) }))
+                    }
                     className="text-blue-600 hover:underline"
-                    onClick={() => setMapping((m) => ({ ...m, selectedAttrs: new Set(preview.headers) }))}
                   >
-                    전체 선택
+                    전체 표시
                   </button>
                   <button
                     type="button"
-                    className="text-slate-500 hover:underline"
                     onClick={() => setMapping((m) => ({ ...m, selectedAttrs: new Set() }))}
+                    className="text-slate-500 hover:underline"
                   >
-                    전체 해제
+                    전체 숨김
                   </button>
-                  <span className="ml-auto text-slate-500">{mapping.selectedAttrs.size}/{preview.headers.length} 선택됨</span>
+                  <span className="text-slate-500">
+                    {mapping.selectedAttrs.size}/{preview.headers.length} 표시
+                  </span>
+                </div>
+              </div>
+              <div className="overflow-hidden rounded border">
+                <table className="w-full table-fixed text-sm">
+                  <colgroup>
+                    <col style={{ width: '28%' }} />
+                    <col />
+                    <col style={{ width: '170px' }} />
+                    <col style={{ width: '60px' }} />
+                    <col style={{ width: '80px' }} />
+                  </colgroup>
+                  <thead className="bg-slate-50 text-xs text-slate-600">
+                    <tr>
+                      <th className="border-b px-3 py-2 text-left font-medium whitespace-nowrap">
+                        엑셀 헤더
+                      </th>
+                      <th className="border-b px-3 py-2 text-left font-medium whitespace-nowrap">
+                        표시 라벨
+                      </th>
+                      <th className="border-b px-3 py-2 text-left font-medium whitespace-nowrap">
+                        개인정보 (암호화)
+                      </th>
+                      <th className="border-b px-3 py-2 text-center font-medium whitespace-nowrap">
+                        표시
+                      </th>
+                      <th className="border-b px-3 py-2 text-center font-medium whitespace-nowrap">
+                        분류 기준
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {preview.headers.map((h, i) => {
+                      const pii = mapping.piiMapping[h];
+                      const labelValue = mapping.labelOverrides[h] ?? h;
+                      const isGroup = mapping.groupCol === i;
+                      const isShown = mapping.selectedAttrs.has(h);
+                      return (
+                        <tr key={h} className="border-t hover:bg-slate-50/50">
+                          <td
+                            className="px-3 py-2 align-middle font-medium text-slate-700"
+                            title={h}
+                          >
+                            <div className="truncate">{h}</div>
+                          </td>
+                          <td className="px-3 py-2 align-middle">
+                            <input
+                              type="text"
+                              value={labelValue}
+                              onChange={(e) => updateLabel(h, e.target.value)}
+                              className="block w-full min-w-0 rounded border px-2 py-1 text-sm"
+                              maxLength={100}
+                              placeholder={h}
+                            />
+                          </td>
+                          <td className="px-3 py-2 align-middle">
+                            <Select
+                              value={pii ?? '_none'}
+                              onValueChange={(v) => updatePii(h, v as PiiFieldType | '_none')}
+                            >
+                              <SelectTrigger className="w-full">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {PII_OPTIONS.map((opt) => (
+                                  <SelectItem key={opt.value} value={opt.value}>
+                                    {opt.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </td>
+                          <td className="px-3 py-2 text-center align-middle">
+                            <Checkbox
+                              checked={isShown}
+                              onCheckedChange={(checked) => toggleShown(h, checked === true)}
+                            />
+                          </td>
+                          <td className="px-3 py-2 text-center align-middle">
+                            <input
+                              type="radio"
+                              name="group-col"
+                              checked={isGroup}
+                              onChange={() => setGroupCol(i)}
+                              className="h-4 w-4 cursor-pointer"
+                              aria-label={`${h}을(를) 분류 기준으로 사용`}
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div className="mt-2 space-y-1 text-xs text-slate-500">
+                <div>개인정보로 지정된 컬럼은 암호화되어 별도 테이블에 저장됩니다.</div>
+                <div>
+                  분류 기준: 같은 값을 가진 행끼리 그룹으로 묶입니다 (예: 전시회명·캠페인명).
+                  {mapping.groupCol != null && (
+                    <>
+                      {' '}
+                      <button
+                        type="button"
+                        onClick={() => setGroupCol(null)}
+                        className="text-blue-600 hover:underline"
+                      >
+                        선택 해제
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -320,6 +421,7 @@ export function UploadWizard({ surveyId, existingContactsCount }: UploadWizardPr
                 <ul className="ml-4 list-disc space-y-1 text-red-700">
                   <li>기존 컨택 행 모두 삭제 후 신규 명단으로 교체</li>
                   <li>각 컨택의 회차 기록 (contact_attempts) 도 함께 삭제됨</li>
+                  <li>각 컨택의 암호화된 개인정보도 함께 삭제됨</li>
                   <li>이미 발송된 초대 링크 모두 무효화</li>
                   <li>응답 본체는 보존되지만 컨택 매칭이 끊겨 익명 응답으로 표시됨</li>
                 </ul>
@@ -334,20 +436,13 @@ export function UploadWizard({ surveyId, existingContactsCount }: UploadWizardPr
             )}
 
             <Button
-              disabled={
-                mapping.groupCol == null ||
-                isPending ||
-                (existingContactsCount > 0 && !replaceConfirmed)
-              }
+              disabled={isPending || (existingContactsCount > 0 && !replaceConfirmed)}
               onClick={handleIngest}
             >
               {isPending
                 ? '적재 중…'
                 : `${preview.totalRows.toLocaleString('ko-KR')} 행 적재 시작`}
             </Button>
-            {mapping.groupCol == null && (
-              <div className="text-xs text-amber-700">그룹 컬럼은 필수입니다.</div>
-            )}
           </div>
         )}
 

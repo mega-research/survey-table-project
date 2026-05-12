@@ -8,6 +8,7 @@ import {
   deleteContactTarget,
   updateContactColumns,
   updateContactTarget,
+  type PiiUpdate,
 } from '@/actions/contact-actions';
 import { Button } from '@/components/ui/button';
 import { ContactAttemptAddCard } from '@/components/operations/contacts/contact-attempt-add-card';
@@ -20,17 +21,21 @@ import type {
 } from '@/db/schema/schema-types';
 import { useAutoFadeMessage } from '@/hooks/use-auto-fade-message';
 import type { ContactAttemptRow } from '@/lib/operations/contacts.server';
+import { piiKeyOf } from '@/lib/operations/contacts';
+import type { PiiFieldType } from '@/lib/crypto/pii-fields';
 
 interface ContactDetailFormProps {
   surveyId: string;
   scheme: ContactColumnScheme;
   resultCodes: ContactResultCode[];
-  systemFieldKeys?: { group?: string; email?: string; biz?: string };
+  systemFieldKeys?: { group?: string };
   /** 편집 모드: 기존 컨택 정보. 신규 모드: undefined. */
   initial?: {
     id: string;
     resid: number;
     attrs: Record<string, string>;
+    /** PII 컬럼별 복호화 결과 (columnKey → { fieldType, plain, failed }) — RLS 통과 사용자만 접근. */
+    piiDecrypted?: Record<string, { fieldType: string; plain: string; failed: boolean }>;
     memo: string | null;
     contactMethod: ContactMethod | null;
     respondedAt: Date | null;
@@ -50,6 +55,27 @@ export function ContactDetailForm({
   const isEdit = initial != null;
 
   const [attrs, setAttrs] = useState<Record<string, string>>(initial?.attrs ?? {});
+  // PII 값 — columnKey → 평문. 초기값은 piiDecrypted 에서 플랫화 (failed 항목 제외).
+  const initialPiiValues = useMemo<Record<string, string>>(() => {
+    const m: Record<string, string> = {};
+    if (initial?.piiDecrypted) {
+      for (const [k, v] of Object.entries(initial.piiDecrypted)) {
+        if (!v.failed) m[k] = v.plain;
+      }
+    }
+    return m;
+  }, [initial]);
+  // 복호화 실패한 컬럼 set — 편집 금지 + 저장 시 skip 으로 cipher 덮어쓰기 방지.
+  const failedPiiKeys = useMemo<Set<string>>(() => {
+    const s = new Set<string>();
+    if (initial?.piiDecrypted) {
+      for (const [k, v] of Object.entries(initial.piiDecrypted)) {
+        if (v.failed) s.add(k);
+      }
+    }
+    return s;
+  }, [initial]);
+  const [piiValues, setPiiValues] = useState<Record<string, string>>(initialPiiValues);
   const [memo, setMemo] = useState<string | null>(initial?.memo ?? null);
   const [contactMethod, setContactMethod] = useState<ContactMethod | null>(
     initial?.contactMethod ?? null,
@@ -65,14 +91,16 @@ export function ContactDetailForm({
 
   const isDirty = useMemo(() => {
     if (!isEdit) {
-      // 신규 모드: 사용자가 attrs/memo/contactMethod 중 하나라도 입력했으면 dirty.
+      // 신규 모드: 사용자가 attrs/pii/memo/contactMethod 중 하나라도 입력했으면 dirty.
       const hasAttr = Object.values(attrs).some((v) => v && v.trim().length > 0);
+      const hasPii = Object.values(piiValues).some((v) => v && v.trim().length > 0);
       const hasMemo = (memo ?? '').trim().length > 0;
       const hasMethod = contactMethod != null;
-      return hasAttr || hasMemo || hasMethod;
+      return hasAttr || hasPii || hasMemo || hasMethod;
     }
     // 편집 모드: initial 과 비교
     if (!shallowEqualRecord(attrs, initialAttrs)) return true;
+    if (!shallowEqualRecord(piiValues, initialPiiValues)) return true;
     if ((memo ?? '') !== (initialMemo ?? '')) return true;
     if (contactMethod !== initialContactMethod) return true;
     if (!schemeEqual(localScheme, scheme)) return true;
@@ -80,10 +108,12 @@ export function ContactDetailForm({
   }, [
     isEdit,
     attrs,
+    piiValues,
     memo,
     contactMethod,
     localScheme,
     initialAttrs,
+    initialPiiValues,
     initialMemo,
     initialContactMethod,
     scheme,
@@ -131,8 +161,50 @@ export function ContactDetailForm({
     });
   }
 
+  /**
+   * scheme.columns 에서 piiType + columnKey 를 추출. PII 값 변경분과 cross-reference 해
+   * 액션에 보낼 PiiUpdate[] 빌드.
+   */
+  function buildPiiUpdates(): PiiUpdate[] {
+    const updates: PiiUpdate[] = [];
+    for (const col of scheme.columns) {
+      if (!col.piiType) continue;
+      const key = piiKeyOf(col.source);
+      if (!key) continue;
+      // 복호화 실패한 컬럼은 사용자가 수정 못 하므로 저장 대상 아님 — cipher 보존.
+      if (failedPiiKeys.has(key)) continue;
+      const next = piiValues[key] ?? '';
+      const prev = initialPiiValues[key] ?? '';
+      if (next === prev) continue; // 변경 없음 → skip
+      updates.push({
+        columnKey: key,
+        fieldType: col.piiType as PiiFieldType,
+        plain: next,
+      });
+    }
+    return updates;
+  }
+
   function save() {
     setError(null);
+    const piiUpdates = buildPiiUpdates();
+    // 빈 값으로 비운 PII 컬럼은 contact_pii 행이 DELETE 됨 — 복구 불가. confirm 요구.
+    const willDeleteKeys: string[] = [];
+    for (const u of piiUpdates) {
+      if (!u.plain.trim()) {
+        const col = scheme.columns.find((c) => piiKeyOf(c.source) === u.columnKey);
+        willDeleteKeys.push(col?.label ?? u.columnKey);
+      }
+    }
+    if (willDeleteKeys.length > 0) {
+      const ok = window.confirm(
+        `다음 암호화 컬럼이 비어 있어 영구 삭제됩니다 (복구 불가):\n\n· ${willDeleteKeys.join(
+          '\n· ',
+        )}\n\n계속하시겠습니까?`,
+      );
+      if (!ok) return;
+    }
+    const updatesForAction = piiUpdates.length > 0 ? piiUpdates : undefined;
     startTransition(async () => {
       try {
         if (isEdit && initial) {
@@ -140,6 +212,7 @@ export function ContactDetailForm({
             id: initial.id,
             surveyId,
             attrs,
+            piiUpdates: updatesForAction,
             memo,
             contactMethod,
             systemFieldKeys,
@@ -148,6 +221,7 @@ export function ContactDetailForm({
           await addContactTarget({
             surveyId,
             attrs,
+            piiUpdates: updatesForAction,
             memo,
             contactMethod,
             systemFieldKeys,
@@ -172,9 +246,8 @@ export function ContactDetailForm({
   }
 
   // I8: systemFieldKeys 자동 감지 실패 시 안내 banner
-  const systemFieldsMissing =
-    !systemFieldKeys ||
-    (!systemFieldKeys.group && !systemFieldKeys.email && !systemFieldKeys.biz);
+  // (이메일/사업자번호는 contact_pii 사이드 테이블로 이전되어 분류 기준만 남음)
+  const systemFieldsMissing = !systemFieldKeys || !systemFieldKeys.group;
 
   return (
     <div className="space-y-4">
@@ -208,12 +281,15 @@ export function ContactDetailForm({
             resid={initial?.resid ?? null}
             scheme={localScheme}
             attrs={attrs}
+            piiValues={piiValues}
+            failedPiiKeys={failedPiiKeys}
             memo={memo}
             contactMethod={contactMethod}
             respondedAt={initial?.respondedAt ?? null}
             inviteToken={initial?.inviteToken ?? null}
             onColumnToggle={isEdit ? onColumnToggle : undefined}
             onAttrsChange={setAttrs}
+            onPiiChange={(k, v) => setPiiValues((prev) => ({ ...prev, [k]: v }))}
             onMemoChange={(m) => setMemo(m)}
             onContactMethodChange={setContactMethod}
           />

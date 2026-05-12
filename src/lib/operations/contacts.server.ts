@@ -1,16 +1,21 @@
 import 'server-only';
 import { cache } from 'react';
 
-import { and, asc, desc, eq, ilike, or, sql, type AnyColumn, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, inArray, or, sql, type AnyColumn, type SQL } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { contactTargets, contactUploads, surveys } from '@/db/schema';
 import type { ContactColumnScheme } from '@/db/schema/schema-types';
+import {
+  decryptForTarget,
+  findContactIdsByBlindIndex,
+  findContactIdsByPlainAcrossTypes,
+  getMaskHintsForTargets,
+} from '@/lib/crypto/contact-pii-repo';
+import type { PiiFieldType } from '@/lib/crypto/pii-fields';
 
 import {
   attrsSortKey,
-  maskBizNumber,
-  maskEmail,
   type ContactsSortDir,
   type ContactsSortKey,
   type NormalizedContactListArgs,
@@ -25,10 +30,10 @@ export interface ContactsRow {
   id: string;
   resid: number;
   groupValue: string | null;
-  emailMasked: string;
-  bizMasked: string;
-  /** attrs 통째 (마스킹 안 됨 — UI 에서 컬럼별로 마스킹 적용) */
+  /** attrs 통째 (비PII 만 포함됨 — PII 는 piiMaskHints 에) */
   attrs: Record<string, string>;
+  /** PII 컬럼별 마스킹 힌트 (columnKey → { fieldType, maskHint }) */
+  piiMaskHints: Record<string, { fieldType: PiiFieldType; maskHint: string | null }>;
   /** 최신 attempt result_code (없으면 null) */
   latestResultCode: string | null;
   latestAttemptNo: number | null;
@@ -90,6 +95,11 @@ export async function listContactsForSurvey(
     if (qfield === 'resid') {
       const n = parseInt(trimmed, 10);
       whereParts.push(Number.isFinite(n) && n > 0 ? eq(contactTargets.resid, n) : sql`false`);
+    } else if (qfield === 'email' || qfield === 'biz') {
+      // PII 검색: blind_index 정확 매치. 부분 일치 불가 — UI placeholder 로 안내.
+      const fieldType: PiiFieldType = qfield === 'email' ? 'email' : 'biz_number';
+      const matchedIds = await findContactIdsByBlindIndex(surveyId, fieldType, trimmed);
+      whereParts.push(matchedIds.length > 0 ? inArray(contactTargets.id, matchedIds) : sql`false`);
     } else {
       const escaped = trimmed
         .replace(/\\/g, '\\\\')
@@ -97,20 +107,24 @@ export async function listContactsForSurvey(
         .replace(/_/g, '\\_');
       const pattern = `%${escaped}%`;
 
-      if (qfield === 'email') {
-        whereParts.push(ilike(contactTargets.email, pattern));
-      } else if (qfield === 'biz') {
-        whereParts.push(ilike(contactTargets.bizNumber, pattern));
-      } else if (qfield === 'group') {
+      if (qfield === 'group') {
         whereParts.push(ilike(contactTargets.groupValue, pattern));
       } else {
-        // all
-        const orClause = or(
-          ilike(contactTargets.email, pattern),
-          ilike(contactTargets.bizNumber, pattern),
-          ilike(contactTargets.groupValue, pattern),
+        // all — group_value 부분 일치 + 모든 PII 타입 정확 매치 합집합.
+        // 단일 SQL 로 묶어 round-trip 1회 (이전 구현은 타입별 6번).
+        const piiMatchIds = await findContactIdsByPlainAcrossTypes(
+          surveyId,
+          ['email', 'mobile', 'phone', 'name', 'address', 'biz_number'],
+          trimmed,
         );
-        if (orClause) whereParts.push(orClause);
+        const groupClause = ilike(contactTargets.groupValue, pattern);
+        if (piiMatchIds.length > 0) {
+          const piiClause = inArray(contactTargets.id, piiMatchIds);
+          const combined = or(groupClause, piiClause);
+          if (combined) whereParts.push(combined);
+        } else {
+          whereParts.push(groupClause);
+        }
       }
     }
   }
@@ -132,27 +146,24 @@ export async function listContactsForSurvey(
   const clampedPage = Math.min(Math.max(1, page), totalPages);
   const offset = (clampedPage - 1) * pageSize;
 
-  // 정렬 컬럼 — 시스템 키는 fixed 매핑, attrs.<key> 는 JSONB 추출
+  // 정렬 컬럼 — 시스템 키는 fixed 매핑, attrs.<key> 는 JSONB 추출. PII 정렬 불가.
   const SYSTEM_SORT_MAP = {
     resid: contactTargets.resid,
     respondedAt: contactTargets.respondedAt,
     createdAt: contactTargets.createdAt,
-    email: contactTargets.email,
     group: contactTargets.groupValue,
   } as const;
 
   const attrsKey = attrsSortKey(sort);
   const orderCol: AnyColumn | SQL = attrsKey
     ? sql`${contactTargets.attrs} ->> ${attrsKey}`
-    : SYSTEM_SORT_MAP[sort as keyof typeof SYSTEM_SORT_MAP];
+    : SYSTEM_SORT_MAP[sort as keyof typeof SYSTEM_SORT_MAP] ?? contactTargets.resid;
 
   const dataRows = await db
     .select({
       id: contactTargets.id,
       resid: contactTargets.resid,
       groupValue: contactTargets.groupValue,
-      email: contactTargets.email,
-      bizNumber: contactTargets.bizNumber,
       attrs: contactTargets.attrs,
       respondedAt: contactTargets.respondedAt,
       inviteToken: contactTargets.inviteToken,
@@ -166,13 +177,15 @@ export async function listContactsForSurvey(
     .limit(pageSize)
     .offset(offset);
 
+  // PII 마스킹 힌트 일괄 조회 (cipher 미포함, 비용 낮음)
+  const maskHintsMap = await getMaskHintsForTargets(dataRows.map((r) => r.id));
+
   const rows: ContactsRow[] = dataRows.map((r) => ({
     id: r.id,
     resid: r.resid,
     groupValue: r.groupValue,
-    emailMasked: maskEmail(r.email),
-    bizMasked: maskBizNumber(r.bizNumber),
     attrs: (r.attrs ?? {}) as Record<string, string>,
+    piiMaskHints: maskHintsMap.get(r.id) ?? {},
     latestResultCode: r.latestResultCode,
     latestAttemptNo: r.latestAttemptNo,
     respondedAt: r.respondedAt,
@@ -240,9 +253,13 @@ export interface ContactDetailRow {
   surveyId: string;
   resid: number;
   groupValue: string | null;
-  email: string | null;
-  bizNumber: string | null;
   attrs: Record<string, string>;
+  /**
+   * PII 컬럼 복호화 결과 (columnKey → { fieldType, plain, failed }).
+   * 상세 페이지는 RLS owner check 를 통과한 사용자만 접근하므로 평문 노출 OK.
+   * failed=true 인 항목은 UI 가 readonly 처리해야 함 (cipher 덮어쓰기 방지).
+   */
+  piiDecrypted: Record<string, { fieldType: PiiFieldType; plain: string; failed: boolean }>;
   memo: string | null;
   contactMethod: ContactMethod | null;
   inviteToken: string;
@@ -278,8 +295,6 @@ export async function getContactDetailById(
       surveyId: contactTargets.surveyId,
       resid: contactTargets.resid,
       groupValue: contactTargets.groupValue,
-      email: contactTargets.email,
-      bizNumber: contactTargets.bizNumber,
       attrs: contactTargets.attrs,
       memo: contactTargets.memo,
       contactMethod: contactTargets.contactMethod,
@@ -295,22 +310,26 @@ export async function getContactDetailById(
 
   if (!contact) return null;
 
-  const attempts = await db
-    .select({
-      id: contactAttempts.id,
-      attemptNo: contactAttempts.attemptNo,
-      resultCode: contactAttempts.resultCode,
-      note: contactAttempts.note,
-      createdAt: contactAttempts.createdAt,
-    })
-    .from(contactAttempts)
-    .where(eq(contactAttempts.contactTargetId, id))
-    .orderBy(desc(contactAttempts.attemptNo));
+  const [piiDecrypted, attempts] = await Promise.all([
+    decryptForTarget(id),
+    db
+      .select({
+        id: contactAttempts.id,
+        attemptNo: contactAttempts.attemptNo,
+        resultCode: contactAttempts.resultCode,
+        note: contactAttempts.note,
+        createdAt: contactAttempts.createdAt,
+      })
+      .from(contactAttempts)
+      .where(eq(contactAttempts.contactTargetId, id))
+      .orderBy(desc(contactAttempts.attemptNo)),
+  ]);
 
   return {
     contact: {
       ...contact,
       attrs: (contact.attrs ?? {}) as Record<string, string>,
+      piiDecrypted,
       contactMethod: contact.contactMethod as ContactMethod | null,
     },
     attempts,
