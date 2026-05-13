@@ -160,7 +160,11 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
           <Counter label="미오픈" value={campaign.deliveredCount} />
           <Counter label="전송오류" value={errors} tone="rose" />
           <Counter label="발송중" value={inflight} tone="blue" />
-          <Counter label="수신거부" value={campaign.skippedUnsubscribedCount} />
+          <Counter
+            label="수신거부"
+            value={campaign.currentUnsubscribedCount}
+            hint="이 캠페인 발송 대상 중 현재 수신거부 상태인 인원 (발송 후 해지 포함)"
+          />
         </div>
       </Card>
 
@@ -191,10 +195,12 @@ function Counter({
   label,
   value,
   tone,
+  hint,
 }: {
   label: string;
   value: number;
   tone?: 'emerald' | 'rose' | 'blue';
+  hint?: string;
 }) {
   const toneClass =
     tone === 'emerald'
@@ -205,7 +211,7 @@ function Counter({
           ? 'text-blue-600'
           : 'text-slate-900';
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-3">
+    <div className="rounded-lg border border-slate-200 bg-white p-3" title={hint}>
       <div className="text-xs text-slate-500">{label}</div>
       <div className={`mt-1 text-xl font-semibold tabular-nums ${toneClass}`}>
         {value.toLocaleString('ko-KR')}

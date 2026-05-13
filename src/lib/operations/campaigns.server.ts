@@ -137,7 +137,16 @@ export interface CampaignDetail {
   bouncedCount: number;
   complainedCount: number;
   failedCount: number;
+  /**
+   * 발송 등록 시점에 자동 제외된 컨택 수 (atomic delta — 캠페인 목록 카드에서 사용).
+   * 캠페인 상세에는 currentUnsubscribedCount(live query)를 노출.
+   */
   skippedUnsubscribedCount: number;
+  /**
+   * 이 캠페인 발송 대상 중 *현재* 수신거부 상태인 인원.
+   * 발송 후 수신자가 footer 링크로 해지한 경우까지 포함 — 캠페인 결과 분석용.
+   */
+  currentUnsubscribedCount: number;
   startedAt: Date | null;
   completedAt: Date | null;
   createdAt: Date;
@@ -145,15 +154,28 @@ export interface CampaignDetail {
 }
 
 export async function getCampaignDetail(cid: string): Promise<CampaignDetail | null> {
-  const [row] = await db
-    .select({
-      campaign: mailCampaigns,
-      templateName: mailTemplates.name,
-    })
-    .from(mailCampaigns)
-    .leftJoin(mailTemplates, eq(mailCampaigns.mailTemplateId, mailTemplates.id))
-    .where(eq(mailCampaigns.id, cid))
-    .limit(1);
+  const [campaignRows, unsubRows] = await Promise.all([
+    db
+      .select({
+        campaign: mailCampaigns,
+        templateName: mailTemplates.name,
+      })
+      .from(mailCampaigns)
+      .leftJoin(mailTemplates, eq(mailCampaigns.mailTemplateId, mailTemplates.id))
+      .where(eq(mailCampaigns.id, cid))
+      .limit(1),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(mailRecipients)
+      .innerJoin(contactTargets, eq(contactTargets.id, mailRecipients.contactTargetId))
+      .where(
+        and(
+          eq(mailRecipients.campaignId, cid),
+          isNotNull(contactTargets.unsubscribedAt),
+        ),
+      ),
+  ]);
+  const row = campaignRows[0];
   if (!row) return null;
   const c = row.campaign;
   return {
@@ -180,6 +202,7 @@ export async function getCampaignDetail(cid: string): Promise<CampaignDetail | n
     complainedCount: c.complainedCount,
     failedCount: c.failedCount,
     skippedUnsubscribedCount: c.skippedUnsubscribedCount,
+    currentUnsubscribedCount: unsubRows[0]?.count ?? 0,
     startedAt: c.startedAt,
     completedAt: c.completedAt,
     createdAt: c.createdAt,
