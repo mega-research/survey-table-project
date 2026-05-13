@@ -1,12 +1,14 @@
 'use server';
 
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, type SQL } from 'drizzle-orm';
+import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 
 import * as Sentry from '@sentry/nextjs';
 
 import { db } from '@/db';
 import { contactPii, contactTargets } from '@/db/schema/contacts';
+import { requireAuth } from '@/lib/auth';
 import { decryptPii } from '@/lib/crypto/aes';
 import { UUID_RE } from '@/lib/mail/constants';
 
@@ -14,6 +16,34 @@ export interface UnsubscribeResult {
   ok: boolean;
   email: string | null;
   alreadyUnsubscribed: boolean;
+}
+
+/**
+ * 캠페인 페이지(목록 + 상세 [cid]) 캐시 즉시 무효화.
+ * admin 이 다른 탭에서 보고 있을 때 새로고침 없이 badge/카운터 반영.
+ */
+function revalidateCampaignsForSurvey(surveyId: string): void {
+  revalidatePath(
+    `/admin/surveys/${surveyId}/operations/mail/campaigns`,
+    'layout',
+  );
+}
+
+/**
+ * unsubscribed_at = NULL 로 되돌리고 캠페인 페이지 캐시 무효화.
+ * where 절로 admin(id+surveyId) / form action(token) 두 호출자 공유.
+ * 매칭 행이 없으면 null 반환 — 호출자가 에러 처리 또는 silent 통과 결정.
+ */
+async function clearUnsubscribed(where: SQL): Promise<{ surveyId: string } | null> {
+  const updated = await db
+    .update(contactTargets)
+    .set({ unsubscribedAt: null })
+    .where(where)
+    .returning({ surveyId: contactTargets.surveyId });
+  const row = updated[0];
+  if (!row) return null;
+  revalidateCampaignsForSurvey(row.surveyId);
+  return row;
 }
 
 /**
@@ -34,6 +64,7 @@ export async function unsubscribeByToken(token: string): Promise<UnsubscribeResu
     const rows = await db
       .select({
         id: contactTargets.id,
+        surveyId: contactTargets.surveyId,
         unsubscribedAt: contactTargets.unsubscribedAt,
         cipher: contactPii.cipher,
         columnKey: contactPii.columnKey,
@@ -70,6 +101,7 @@ export async function unsubscribeByToken(token: string): Promise<UnsubscribeResu
         .update(contactTargets)
         .set({ unsubscribedAt: new Date() })
         .where(eq(contactTargets.unsubscribeToken, token));
+      revalidateCampaignsForSurvey(existing.surveyId);
     }
     return { ok: true, email, alreadyUnsubscribed };
   } catch (err) {
@@ -81,6 +113,47 @@ export async function unsubscribeByToken(token: string): Promise<UnsubscribeResu
   }
 }
 
+export interface AdminRevertUnsubscribeResult {
+  ok: boolean;
+  error?: string;
+}
+
+/**
+ * 운영자(admin)가 캠페인 페이지에서 직접 수신거부를 해제.
+ *
+ * 보안:
+ *   - requireAuth 로 인증 게이트
+ *   - surveyId scope 일치 검증 — 다른 설문의 컨택을 임의로 건드리지 못하게 차단
+ *
+ * 멱등성: 이미 해제된 행이어도 ok 반환 (UI 가 stale 한 상태에서 두 번 눌러도 무해).
+ */
+export async function revertUnsubscribeByContactIdAction(
+  contactId: string,
+  surveyId: string,
+): Promise<AdminRevertUnsubscribeResult> {
+  await requireAuth();
+  if (!UUID_RE.test(contactId) || !UUID_RE.test(surveyId)) {
+    return { ok: false, error: '잘못된 요청입니다.' };
+  }
+
+  try {
+    const result = await clearUnsubscribed(
+      and(eq(contactTargets.id, contactId), eq(contactTargets.surveyId, surveyId))!,
+    );
+    if (!result) {
+      return { ok: false, error: '대상 컨택을 찾을 수 없습니다.' };
+    }
+    return { ok: true };
+  } catch (err) {
+    Sentry.captureException(err, {
+      tags: { operation: 'admin_revert_unsubscribe' },
+      extra: { contactId, surveyId },
+      level: 'error',
+    });
+    return { ok: false, error: '해제 처리 중 오류가 발생했습니다.' };
+  }
+}
+
 /**
  * 되돌리기 — form action 으로 호출. token 은 .bind(null, token) 로 partial 적용.
  * 처리 후 /unsubscribe/restored 로 redirect — 같은 페이지로 돌아가면 즉시 재해지되는
@@ -89,10 +162,7 @@ export async function unsubscribeByToken(token: string): Promise<UnsubscribeResu
 export async function revertUnsubscribeAction(token: string): Promise<void> {
   if (UUID_RE.test(token)) {
     try {
-      await db
-        .update(contactTargets)
-        .set({ unsubscribedAt: null })
-        .where(eq(contactTargets.unsubscribeToken, token));
+      await clearUnsubscribed(eq(contactTargets.unsubscribeToken, token));
     } catch (err) {
       Sentry.captureException(err, {
         tags: { operation: 'revert_unsubscribe' },

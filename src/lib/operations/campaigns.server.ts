@@ -195,6 +195,8 @@ export interface CampaignRecipientRow {
   contactGroupValue: string | null;
   emailMasked: string;
   status: MailRecipientStatus;
+  /** contact_targets.unsubscribed_at — 발송 status 와 별도. 수신거부 후 badge 표시용. */
+  unsubscribedAt: Date | null;
   resendMessageId: string | null;
   errorReason: string | null;
   sentAt: Date | null;
@@ -245,6 +247,7 @@ export async function listCampaignRecipients(args: {
       contactTargetId: mailRecipients.contactTargetId,
       contactResid: contactTargets.resid,
       contactGroupValue: contactTargets.groupValue,
+      contactUnsubscribedAt: contactTargets.unsubscribedAt,
       email: mailRecipients.emailSnapshot,
       status: mailRecipients.status,
       resendMessageId: mailRecipients.resendMessageId,
@@ -270,6 +273,7 @@ export async function listCampaignRecipients(args: {
       contactGroupValue: r.contactGroupValue,
       emailMasked: maskEmail(r.email),
       status: r.status as MailRecipientStatus,
+      unsubscribedAt: r.contactUnsubscribedAt,
       resendMessageId: r.resendMessageId,
       errorReason: r.errorReason,
       sentAt: r.sentAt,

@@ -156,11 +156,21 @@ export function CampaignRecipientsTable({
                     <td className="px-3 py-2 text-slate-900">{r.emailMasked}</td>
                     <td className="px-3 py-2 text-slate-600">{r.contactGroupValue ?? '—'}</td>
                     <td className="px-3 py-2">
-                      <span
-                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${tone.tone}`}
-                      >
-                        {tone.label}
-                      </span>
+                      <div className="flex flex-wrap items-center gap-1">
+                        <span
+                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${tone.tone}`}
+                        >
+                          {tone.label}
+                        </span>
+                        {r.unsubscribedAt && (
+                          <span
+                            className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600"
+                            title={`수신거부 ${formatDateTime(r.unsubscribedAt)}`}
+                          >
+                            수신거부
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-3 py-2 text-xs text-slate-500">{formatDateTime(r.sentAt)}</td>
                     <td className="px-3 py-2 text-xs text-slate-500">

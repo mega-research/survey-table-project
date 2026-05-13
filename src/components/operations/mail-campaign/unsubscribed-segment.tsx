@@ -3,6 +3,8 @@ import Link from 'next/link';
 import { Card } from '@/components/ui/card';
 import type { UnsubscribedContactRow } from '@/lib/operations/campaigns.server';
 
+import { UnsubscribedRevertButton } from './unsubscribed-revert-button';
+
 interface Props {
   surveyId: string;
   rows: UnsubscribedContactRow[];
@@ -51,6 +53,7 @@ export function UnsubscribedSegment({ surveyId, rows, total, page, pageSize }: P
                   <th className="px-4 py-3">이메일</th>
                   <th className="px-4 py-3">그룹</th>
                   <th className="px-4 py-3">해지 시각</th>
+                  <th className="px-4 py-3 text-center">관리</th>
                 </tr>
               </thead>
               <tbody>
@@ -64,6 +67,13 @@ export function UnsubscribedSegment({ surveyId, rows, total, page, pageSize }: P
                     <td className="px-4 py-3 text-slate-600">{r.groupValue ?? '—'}</td>
                     <td className="px-4 py-3 text-xs text-slate-500">
                       {formatDate(r.unsubscribedAt)}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <UnsubscribedRevertButton
+                        surveyId={surveyId}
+                        contactId={r.id}
+                        emailMasked={r.emailMasked}
+                      />
                     </td>
                   </tr>
                 ))}
