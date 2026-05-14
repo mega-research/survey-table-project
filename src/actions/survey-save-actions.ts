@@ -80,6 +80,7 @@ export async function saveSurveyDiff(payload: SurveyDiffPayload) {
           endDate: metadata.settings.endDate ? new Date(metadata.settings.endDate) : null,
           maxResponses: metadata.settings.maxResponses ?? null,
           thankYouMessage: metadata.settings.thankYouMessage,
+          requireInviteToken: metadata.settings.requireInviteToken ?? false,
           updatedAt: new Date(),
         })
         .where(eq(surveys.id, surveyId));
@@ -206,6 +207,7 @@ export async function saveSurveyDiff(payload: SurveyDiffPayload) {
           exportLabel: question.exportLabel,
           spssVarType: question.spssVarType,
           spssMeasure: question.spssMeasure,
+          defaultValueTemplate: question.defaultValueTemplate ?? null,
           updatedAt: new Date(),
         }));
 
@@ -246,6 +248,7 @@ export async function saveSurveyDiff(payload: SurveyDiffPayload) {
               exportLabel: sql`excluded.export_label`,
               spssVarType: sql`excluded.spss_var_type`,
               spssMeasure: sql`excluded.spss_measure`,
+              defaultValueTemplate: sql`excluded.default_value_template`,
               updatedAt: sql`excluded.updated_at`,
             },
           });
@@ -313,6 +316,7 @@ export async function saveSurveyWithDetails(surveyData: SurveyType) {
           endDate: surveyData.settings.endDate ? new Date(surveyData.settings.endDate) : null,
           maxResponses: surveyData.settings.maxResponses ?? null,
           thankYouMessage: surveyData.settings.thankYouMessage,
+          requireInviteToken: surveyData.settings.requireInviteToken ?? false,
           updatedAt: new Date(),
         })
         .where(eq(surveys.id, surveyData.id));
@@ -331,6 +335,7 @@ export async function saveSurveyWithDetails(surveyData: SurveyType) {
         endDate: surveyData.settings.endDate ? new Date(surveyData.settings.endDate) : null,
         maxResponses: surveyData.settings.maxResponses ?? null,
         thankYouMessage: surveyData.settings.thankYouMessage,
+        requireInviteToken: surveyData.settings.requireInviteToken ?? false,
       });
     }
 
@@ -475,6 +480,7 @@ export async function saveSurveyWithDetails(surveyData: SurveyType) {
           exportLabel: question.exportLabel,
           spssVarType: question.spssVarType,
           spssMeasure: question.spssMeasure,
+          defaultValueTemplate: question.defaultValueTemplate ?? null,
           updatedAt: new Date(),
         }));
 
@@ -515,6 +521,7 @@ export async function saveSurveyWithDetails(surveyData: SurveyType) {
               exportLabel: sql`excluded.export_label`,
               spssVarType: sql`excluded.spss_var_type`,
               spssMeasure: sql`excluded.spss_measure`,
+              defaultValueTemplate: sql`excluded.default_value_template`,
               updatedAt: sql`excluded.updated_at`,
             },
           });
