@@ -100,6 +100,7 @@ export function CellContentModal({
   const ensureSurvey = useEnsureSurveyInDb();
   const [isSaving, setIsSaving] = useState(false);
   const inputTemplateRef = useRef<HTMLInputElement>(null);
+  const textContentRef = useRef<HTMLTextAreaElement>(null);
   // ranking(Case 3) 은 8번째 탭, ranking_opt(Case 2 옵션 소스) 는 9번째 탭으로 편집.
   type ContentType =
     | 'text'
@@ -478,14 +479,24 @@ export function CellContentModal({
         <div className="space-y-4 py-4">
           <div className="space-y-2">
             <Label htmlFor="common-text-content">셀 텍스트 내용</Label>
-            <Textarea
-              id="common-text-content"
-              value={textContent}
-              onChange={(e) => setTextContent(e.target.value)}
-              placeholder="셀에 표시할 텍스트를 입력하세요 (모든 타입에서 표시됨)"
-              rows={3}
-              className="resize-none"
-            />
+            <div className="flex items-start gap-2">
+              <Textarea
+                id="common-text-content"
+                ref={textContentRef}
+                value={textContent}
+                onChange={(e) => setTextContent(e.target.value)}
+                placeholder="셀에 표시할 텍스트를 입력하세요 (모든 타입에서 표시됨)"
+                rows={3}
+                className="flex-1 resize-none"
+              />
+              {variableCatalog.length > 0 && (
+                <VariableButton
+                  catalog={variableCatalog}
+                  inputRef={textContentRef}
+                  onChange={(v) => setTextContent(v)}
+                />
+              )}
+            </div>
             {textContent && (
               <div className="rounded bg-gray-50 p-2 text-xs text-gray-500">
                 미리보기: {textContent}

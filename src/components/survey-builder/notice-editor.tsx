@@ -38,7 +38,9 @@ import {
   optimizeImage,
   validateImageFile,
 } from '@/lib/image-utils';
+import { useSurveyBuilderStore } from '@/stores/survey-store';
 
+import { PopoverVariableMenu } from '../operations/mail-template/popover-variable-menu';
 import { createEditorExtensions } from './editor-extensions';
 
 interface NoticeEditorProps {
@@ -67,6 +69,8 @@ export function NoticeEditor({
   const xhrRef = useRef<XMLHttpRequest | null>(null);
   const [, forceUpdate] = useState({});
   const rafRef = useRef<number | null>(null);
+
+  const variableCatalog = useSurveyBuilderStore((s) => s.variableCatalog);
 
   // 업로드된 이미지 URL 추적 (원본 URL로 저장)
   const uploadedImageUrlsRef = useRef<Set<string>>(new Set());
@@ -902,6 +906,19 @@ export function NoticeEditor({
                 <Equal className="h-4 w-4" />
               </Button>
             </div>
+          </>
+        )}
+
+        {/* 변수 메뉴 */}
+        {variableCatalog.length > 0 && (
+          <>
+            <div className="h-6 w-px bg-gray-300" />
+            <PopoverVariableMenu
+              catalog={variableCatalog}
+              onPick={(key) =>
+                ed.chain().focus().insertContent(`{{${key}}}`).run()
+              }
+            />
           </>
         )}
       </div>
