@@ -33,17 +33,17 @@ export const getVariableCatalog = cache(
           ]
         : [];
 
-  const survey = await getSurveyById(surveyId);
-  let attrsKeys: VariableDef[] = [];
-  if (survey?.contactColumns?.columns) {
-    attrsKeys = survey.contactColumns.columns
-      .filter((c) => c.source.startsWith('attrs.'))
-      .map((c) => ({
-        key: c.source.slice(6),
-        label: c.label,
-        category: 'attrs' as const,
-      }));
-  }
+    const survey = await getSurveyById(surveyId);
+    let attrsKeys: VariableDef[] = [];
+    if (survey?.contactColumns?.columns) {
+      attrsKeys = survey.contactColumns.columns
+        .filter((c) => c.source.startsWith('attrs.'))
+        .map((c) => ({
+          key: c.source.slice(6),
+          label: c.label,
+          category: 'attrs' as const,
+        }));
+    }
 
     if (attrsKeys.length === 0) {
       const [sample] = await db
