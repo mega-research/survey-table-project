@@ -159,6 +159,7 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
         noticeContent: (question as any).noticeContent || '',
         requiresAcknowledgment: (question as any).requiresAcknowledgment || false,
         placeholder: question.placeholder || '',
+        defaultValueTemplate: question.defaultValueTemplate ?? null,
         tableValidationRules: (question as any).tableValidationRules || [],
         dynamicRowConfigs: (question as any).dynamicRowConfigs || undefined,
         displayCondition: question.displayCondition,

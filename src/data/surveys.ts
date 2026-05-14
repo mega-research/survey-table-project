@@ -154,6 +154,7 @@ export async function getSurveyWithDetails(surveyId: string): Promise<SurveyType
         noticeContent: q.noticeContent ?? undefined,
         requiresAcknowledgment: q.requiresAcknowledgment ?? undefined,
         placeholder: q.placeholder ?? undefined,
+        defaultValueTemplate: q.defaultValueTemplate ?? undefined,
         tableValidationRules: q.tableValidationRules as QuestionType['tableValidationRules'],
         dynamicRowConfigs: q.dynamicRowConfigs as QuestionType['dynamicRowConfigs'],
         hideColumnLabels: q.hideColumnLabels ?? undefined,
@@ -185,6 +186,7 @@ export async function getSurveyWithDetails(surveyId: string): Promise<SurveyType
       endDate: survey.endDate ?? undefined,
       maxResponses: survey.maxResponses ?? undefined,
       thankYouMessage: survey.thankYouMessage,
+      requireInviteToken: survey.requireInviteToken,
     },
     createdAt: survey.createdAt,
     updatedAt: survey.updatedAt,
@@ -257,6 +259,7 @@ export async function getSurveyForResponse(
           endDate: snapshot.settings.endDate
             ? new Date(snapshot.settings.endDate)
             : undefined,
+          requireInviteToken: survey.requireInviteToken,
         },
         createdAt: survey.createdAt,
         updatedAt: survey.updatedAt,

@@ -1,8 +1,10 @@
 'use client';
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect } from 'react';
 
 import { Input } from '@/components/ui/input';
+import { useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { substituteTokens } from '@/lib/survey/substitute-tokens';
 
 import type { InteractiveCellProps } from './types';
 
@@ -12,7 +14,19 @@ export const InputCell = React.memo(function InputCell({
   cellResponse,
   onUpdateValue,
 }: InteractiveCellProps) {
-  const textValue = (cellResponse as string) || '';
+  const attrs = useContactAttrs();
+  const template = cell.defaultValueTemplate ?? '';
+  const isPrefilled = template.trim().length > 0;
+  const prefilledValue = isPrefilled ? substituteTokens(template, attrs) : '';
+  const currentValue = (cellResponse as string) || '';
+  const textValue = isPrefilled ? prefilledValue : currentValue;
+
+  useEffect(() => {
+    if (isPrefilled && currentValue !== prefilledValue) {
+      onUpdateValue(prefilledValue);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPrefilled, prefilledValue]);
 
   const handleChange = useCallback(
     (value: string) => onUpdateValue(value),
@@ -34,9 +48,11 @@ export const InputCell = React.memo(function InputCell({
         placeholder={cell.placeholder || '답변을 입력하세요...'}
         maxLength={cell.inputMaxLength}
         className="w-full text-base"
+        disabled={isPrefilled}
+        data-prefilled={isPrefilled || undefined}
       />
 
-      {cell.inputMaxLength && (
+      {cell.inputMaxLength && !isPrefilled && (
         <div className="flex justify-end">
           <p className="text-xs text-gray-500">
             <span

@@ -48,6 +48,7 @@ import {
   TableColumn,
   TableRow,
 } from '@/types/survey';
+import type { VariableDef } from '@/components/operations/mail-template/variable-catalog';
 
 // 질문 변경 추적을 위한 changeset
 export interface QuestionChangeset {
@@ -120,6 +121,10 @@ export interface SurveyBuilderState {
   setEditingQuestionId: (id: string | null) => void;
   // dirty/questionChanges를 건드리지 않는 질문 업데이트 (UI 전용 토글 등)
   silentUpdateQuestion: (questionId: string, updates: Partial<Question>) => void;
+
+  // 설문 변수 카탈로그 (prefill {{attrs_key}} 토큰용)
+  variableCatalog: VariableDef[];
+  setVariableCatalog: (catalog: VariableDef[]) => void;
 }
 
 const defaultSurveySettings: SurveySettings = {
@@ -157,6 +162,7 @@ export const useSurveyBuilderStore = create<SurveyBuilderState>()(
       questionChanges: emptyChangeset(),
       isMetadataDirty: false,
       editingQuestionId: null,
+      variableCatalog: [],
 
       // 서버에서 불러온 설문 데이터 설정
       setSurvey: (survey: Survey) =>
@@ -677,6 +683,13 @@ export const useSurveyBuilderStore = create<SurveyBuilderState>()(
         set((state) => {
           const question = state.currentSurvey.questions.find((q) => q.id === questionId);
           if (question) Object.assign(question, updates);
+        });
+      },
+
+      // 설문 변수 카탈로그 설정 (prefill 토큰용)
+      setVariableCatalog: (catalog: VariableDef[]) => {
+        set((state) => {
+          state.variableCatalog = catalog;
         });
       },
     })) as any,

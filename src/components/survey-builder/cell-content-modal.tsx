@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 
+
 import {
   AlignCenter,
   AlignLeft,
@@ -65,6 +66,7 @@ import { CellImageEditor } from './cell-image-editor';
 import { OptionsLayoutSelector } from './options-layout-selector';
 import { RankingCellTab } from './ranking-cell-tab';
 import { RankingOptCellTab } from './ranking-opt-cell-tab';
+import { VariableButton } from './variable-button';
 
 interface CellContentModalProps {
   isOpen: boolean;
@@ -94,8 +96,11 @@ export function CellContentModal({
   columnLabel,
 }: CellContentModalProps) {
   const questions = useSurveyBuilderStore(useShallow((s) => s.currentSurvey.questions));
+  const variableCatalog = useSurveyBuilderStore((s) => s.variableCatalog);
   const ensureSurvey = useEnsureSurveyInDb();
   const [isSaving, setIsSaving] = useState(false);
+  const inputTemplateRef = useRef<HTMLInputElement>(null);
+  const textContentRef = useRef<HTMLTextAreaElement>(null);
   // ranking(Case 3) 은 8번째 탭, ranking_opt(Case 2 옵션 소스) 는 9번째 탭으로 편집.
   type ContentType =
     | 'text'
@@ -126,6 +131,9 @@ export function CellContentModal({
   );
   const [inputPlaceholder, setInputPlaceholder] = useState(cell.placeholder || '');
   const [inputMaxLength, setInputMaxLength] = useState<number | ''>(cell.inputMaxLength || '');
+  const [inputDefaultValueTemplate, setInputDefaultValueTemplate] = useState(
+    cell.defaultValueTemplate ?? '',
+  );
   const [minSelections, setMinSelections] = useState<number | undefined>(cell.minSelections);
   const [maxSelections, setMaxSelections] = useState<number | undefined>(cell.maxSelections);
 
@@ -188,6 +196,7 @@ export function CellContentModal({
       setCellOptionsColumns(cell.optionsColumns);
       setInputPlaceholder(cell.placeholder || '');
       setInputMaxLength(cell.inputMaxLength || '');
+      setInputDefaultValueTemplate(cell.defaultValueTemplate ?? '');
       setMinSelections(cell.minSelections);
       setMaxSelections(cell.maxSelections);
       setRankingOptions(cell.rankingOptions || []);
@@ -282,6 +291,10 @@ export function CellContentModal({
         inputMaxLength:
           contentType === 'input' && typeof inputMaxLength === 'number'
             ? inputMaxLength
+            : undefined,
+        defaultValueTemplate:
+          contentType === 'input' && inputDefaultValueTemplate.trim().length > 0
+            ? inputDefaultValueTemplate.trim()
             : undefined,
         // 체크박스 선택 개수 제한 (체크박스 타입 전용)
         minSelections: contentType === 'checkbox' ? minSelections : undefined,
@@ -419,6 +432,7 @@ export function CellContentModal({
     setAllowOtherOption(cell.allowOtherOption || false);
     setInputPlaceholder(cell.placeholder || '');
     setInputMaxLength(cell.inputMaxLength || '');
+    setInputDefaultValueTemplate(cell.defaultValueTemplate ?? '');
     setMinSelections(cell.minSelections);
     setMaxSelections(cell.maxSelections);
     setRankingOptions(cell.rankingOptions || []);
@@ -465,14 +479,24 @@ export function CellContentModal({
         <div className="space-y-4 py-4">
           <div className="space-y-2">
             <Label htmlFor="common-text-content">셀 텍스트 내용</Label>
-            <Textarea
-              id="common-text-content"
-              value={textContent}
-              onChange={(e) => setTextContent(e.target.value)}
-              placeholder="셀에 표시할 텍스트를 입력하세요 (모든 타입에서 표시됨)"
-              rows={3}
-              className="resize-none"
-            />
+            <div className="flex items-start gap-2">
+              <Textarea
+                id="common-text-content"
+                ref={textContentRef}
+                value={textContent}
+                onChange={(e) => setTextContent(e.target.value)}
+                placeholder="셀에 표시할 텍스트를 입력하세요 (모든 타입에서 표시됨)"
+                rows={3}
+                className="flex-1 resize-none"
+              />
+              {variableCatalog.length > 0 && (
+                <VariableButton
+                  catalog={variableCatalog}
+                  inputRef={textContentRef}
+                  onChange={(v) => setTextContent(v)}
+                />
+              )}
+            </div>
             {textContent && (
               <div className="rounded bg-gray-50 p-2 text-xs text-gray-500">
                 미리보기: {textContent}
@@ -778,6 +802,33 @@ export function CellContentModal({
                 className="w-full"
               />
               <p className="text-xs text-gray-500">입력 필드에 표시될 안내 문구를 입력하세요</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="input-default-value-template" className="text-sm font-medium">
+                응답값 prefill{' '}
+                <span className="font-normal text-gray-500">(선택)</span>
+              </Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  id="input-default-value-template"
+                  ref={inputTemplateRef}
+                  value={inputDefaultValueTemplate}
+                  onChange={(e) => setInputDefaultValueTemplate(e.target.value)}
+                  placeholder="예: {{전시회명}}"
+                  className="flex-1"
+                />
+                {variableCatalog.length > 0 && (
+                  <VariableButton
+                    catalog={variableCatalog}
+                    inputRef={inputTemplateRef}
+                    onChange={(v) => setInputDefaultValueTemplate(v)}
+                  />
+                )}
+              </div>
+              <p className="text-xs text-gray-500">
+                변수 토큰 사용 시 응답자에게 readonly로 표시됩니다
+              </p>
             </div>
 
             <div className="space-y-2">

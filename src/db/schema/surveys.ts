@@ -47,6 +47,9 @@ export const surveys = pgTable('surveys', {
   // 진척률 표 표시 컬럼 픽커 (NULL = 4개 고정 컬럼만, slice 4 — 0017 마이그레이션)
   progressColumns: jsonb('progress_columns').$type<ProgressColumnScheme>(),
 
+  // 컨택 attrs 토큰 — invite token 강제 (0022 마이그레이션)
+  requireInviteToken: boolean('require_invite_token').default(false).notNull(),
+
   // 버전 관리
   status: text('status').notNull().default('draft'), // 'draft' | 'published' | 'closed'
   currentVersionId: uuid('current_version_id'), // 현재 활성 배포 버전
@@ -124,6 +127,9 @@ export const questions = pgTable('questions', {
 
   // 단답형(text) 타입용
   placeholder: text('placeholder'),
+
+  // 단답형 prefill 템플릿 — 0022 마이그레이션. {{attrs_key}} 포함 가능.
+  defaultValueTemplate: text('default_value_template'),
 
   // SPSS 변수명 관련
   questionCode: text('question_code'), // SPSS 변수명 (예: "Q1", "Q2M1")

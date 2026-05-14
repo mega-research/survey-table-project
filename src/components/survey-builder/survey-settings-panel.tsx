@@ -6,6 +6,7 @@ import { Globe, Lock } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
 import { GroupManager } from '@/components/survey-builder/group-manager';
+import { TokenWarningPanel } from '@/components/survey-builder/token-warning-panel';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 
 interface SurveySettingsPanelProps {
@@ -25,6 +26,8 @@ export const SurveySettingsPanel = React.memo(function SurveySettingsPanel({
   const surveySettings = useSurveyBuilderStore(
     useShallow((s) => s.currentSurvey.settings),
   );
+  const questions = useSurveyBuilderStore(useShallow((s) => s.currentSurvey.questions));
+  const variableCatalog = useSurveyBuilderStore((s) => s.variableCatalog);
 
   return (
     <div
@@ -68,8 +71,27 @@ export const SurveySettingsPanel = React.memo(function SurveySettingsPanel({
                 className="rounded"
               />
             </div>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <label className="text-sm text-gray-600">초대 링크 필수</label>
+                <p className="mt-1 text-xs text-gray-400">
+                  켜면 ?invite= 토큰 없이는 응답할 수 없습니다. 컨택리스트로 발송한 응답만 받고 싶을 때 사용하세요.
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                checked={surveySettings.requireInviteToken ?? false}
+                onChange={(e) => updateSurveySettings({ requireInviteToken: e.target.checked })}
+                className="mt-0.5 shrink-0 rounded"
+              />
+            </div>
           </div>
         </div>
+
+        {/* 토큰 경고 */}
+        {variableCatalog.length > 0 && (
+          <TokenWarningPanel questions={questions} catalog={variableCatalog} />
+        )}
 
         {/* 그룹 관리 */}
         <div className="border-t border-gray-200 pt-6">

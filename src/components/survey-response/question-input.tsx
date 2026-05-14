@@ -6,6 +6,8 @@ import { InteractiveTableResponse } from '@/components/survey-builder/interactiv
 import { NoticeRenderer } from '@/components/survey-builder/notice-renderer';
 import { UserDefinedMultiLevelSelect } from '@/components/survey-builder/user-defined-multi-level-select';
 import { Input } from '@/components/ui/input';
+import { useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { Question, QuestionOption, RankingAnswer } from '@/types/survey';
 import { getOptionsLayout } from '@/utils/options-layout';
 
@@ -47,6 +49,8 @@ export function QuestionInput({
   allResponses,
   allQuestions,
 }: QuestionInputProps) {
+  const attrs = useContactAttrs();
+
   switch (question.type) {
     case 'notice': {
       const noticeVal = value && typeof value === 'object' && 'agreed' in (value as Record<string, unknown>)
@@ -54,7 +58,7 @@ export function QuestionInput({
         : { agreed: typeof value === 'boolean' ? value : false };
       return (
         <NoticeRenderer
-          content={question.noticeContent || ''}
+          content={substituteTokens(question.noticeContent || '', attrs)}
           requiresAcknowledgment={question.requiresAcknowledgment}
           value={noticeVal.agreed}
           onChange={(v) =>
@@ -66,14 +70,7 @@ export function QuestionInput({
     }
 
     case 'text':
-      return (
-        <Input
-          placeholder={question.placeholder || '답변을 입력하세요...'}
-          value={typeof value === 'string' ? value : ''}
-          onChange={(e) => onChange(e.target.value)}
-          className="w-full text-base"
-        />
-      );
+      return <TextResponseInput question={question} value={value} onChange={onChange} attrs={attrs} />;
 
     case 'textarea':
       return (
@@ -507,5 +504,41 @@ function SelectQuestion({
         </div>
       )}
     </div>
+  );
+}
+
+// 단답형(text) prefill 지원 컴포넌트
+function TextResponseInput({
+  question,
+  value,
+  onChange,
+  attrs,
+}: {
+  question: Question;
+  value: unknown;
+  onChange: (v: unknown) => void;
+  attrs: Record<string, string>;
+}) {
+  const template = question.defaultValueTemplate ?? '';
+  const isPrefilled = template.trim().length > 0;
+  const prefilledValue = isPrefilled ? substituteTokens(template, attrs) : '';
+  const inputValue = isPrefilled ? prefilledValue : (typeof value === 'string' ? value : '');
+
+  useEffect(() => {
+    if (isPrefilled && value !== prefilledValue) {
+      onChange(prefilledValue);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPrefilled, prefilledValue]);
+
+  return (
+    <Input
+      placeholder={question.placeholder || '답변을 입력하세요...'}
+      value={inputValue}
+      onChange={(e) => onChange(e.target.value)}
+      className="w-full text-base"
+      disabled={isPrefilled}
+      data-prefilled={isPrefilled || undefined}
+    />
   );
 }

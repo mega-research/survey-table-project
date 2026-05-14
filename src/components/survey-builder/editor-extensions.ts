@@ -1,3 +1,4 @@
+import { Extension } from '@tiptap/core';
 import Link from '@tiptap/extension-link';
 import { Table } from '@tiptap/extension-table';
 import { TableCell } from '@tiptap/extension-table-cell';
@@ -8,6 +9,15 @@ import ImageResize from 'tiptap-extension-resize-image';
 
 import { TableSelectOnBackspace } from '@/lib/tiptap/table-select-on-backspace';
 import { TrailingNode } from '@/lib/tiptap/trailing-node';
+import { mailVarTokenPlugin } from '../operations/mail-template/mail-var-token-plugin';
+
+// {{변수}} 토큰에 amber 데코레이션을 입히는 ProseMirror Plugin을 TipTap Extension으로 래핑
+const VarTokenExtension = Extension.create({
+  name: 'varToken',
+  addProseMirrorPlugins() {
+    return [mailVarTokenPlugin];
+  },
+});
 
 
 // 배경색 속성 추가 함수
@@ -142,5 +152,6 @@ export function createEditorExtensions() {
     TableHeaderWithBackground,
     TrailingNode,
     TableSelectOnBackspace,
+    VarTokenExtension,
   ];
 }

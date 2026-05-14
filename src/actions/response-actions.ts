@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { headers } from 'next/headers';
 
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, isNotNull, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import {
@@ -17,6 +17,7 @@ import type { PageVisit } from '@/db/schema/schema-types';
 import { requireAuth } from '@/lib/auth';
 import { parseBrowser, parsePlatform } from '@/lib/operations/parse-ua';
 import { normalizeToAnswers } from '@/lib/response-normalizer';
+import { substituteTokens } from '@/lib/survey/substitute-tokens';
 
 // ========================
 // 컨택 매칭 helper
@@ -386,6 +387,50 @@ export async function completeResponse(
     exposedRowIds?: string[];
   },
 ) {
+  // prefill 재검증: defaultValueTemplate 이 있는 질문의 응답값은
+  // contact_targets.attrs 로 치환한 expected 와 일치해야 함.
+  // 클라이언트가 disabled 입력을 우회 조작해도 서버에서 expected 값으로 강제 복원.
+  let validatedResponses: Record<string, unknown> | undefined = data?.questionResponses;
+  if (data?.questionResponses) {
+    const responseRow = await db
+      .select({ contactTargetId: surveyResponses.contactTargetId, surveyId: surveyResponses.surveyId })
+      .from(surveyResponses)
+      .where(eq(surveyResponses.id, responseId))
+      .limit(1);
+
+    const contactTargetId = responseRow[0]?.contactTargetId;
+
+    if (contactTargetId) {
+      const [target] = await db
+        .select({ attrs: contactTargets.attrs })
+        .from(contactTargets)
+        .where(eq(contactTargets.id, contactTargetId))
+        .limit(1);
+      const attrs = (target?.attrs ?? {}) as Record<string, string>;
+
+      const prefillQuestions = await db
+        .select({ id: questions.id, template: questions.defaultValueTemplate })
+        .from(questions)
+        .where(
+          and(
+            eq(questions.surveyId, responseRow[0].surveyId),
+            isNotNull(questions.defaultValueTemplate),
+          ),
+        );
+
+      validatedResponses = { ...data.questionResponses };
+      for (const q of prefillQuestions) {
+        if (!q.template?.trim()) continue;
+        const expected = substituteTokens(q.template, attrs);
+        const submitted = validatedResponses[q.id];
+        if (typeof submitted === 'string' && submitted !== expected) {
+          // 조작 의심 — 서버에서 expected 값으로 강제 복원 (silent)
+          validatedResponses[q.id] = expected;
+        }
+      }
+    }
+  }
+
   const result = await db.transaction(async (tx) => {
     // 1. 기존 JSONB 방식 저장 + 운영 현황 추적 컬럼 갱신
     const [updated] = await tx
@@ -410,7 +455,7 @@ export async function completeResponse(
                )
           ELSE COALESCE(${surveyResponses.pageVisits}, '[]'::jsonb)
         END`,
-        ...(data?.questionResponses ? { questionResponses: data.questionResponses } : {}),
+        ...(validatedResponses ? { questionResponses: validatedResponses } : {}),
         ...((data?.exposedQuestionIds || data?.exposedRowIds)
           ? {
               metadata: {
@@ -426,7 +471,7 @@ export async function completeResponse(
       .returning();
 
     // 2. response_answers 정규화 저장 (이중 쓰기)
-    if (data?.questionResponses && Object.keys(data.questionResponses).length > 0) {
+    if (validatedResponses && Object.keys(validatedResponses).length > 0) {
       // 해당 응답의 설문 질문 목록 조회
       const questionList = await tx.query.questions.findMany({
         where: eq(questions.surveyId, updated.surveyId),
@@ -435,7 +480,7 @@ export async function completeResponse(
 
       const normalizedAnswers = normalizeToAnswers(
         responseId,
-        data.questionResponses,
+        validatedResponses,
         questionList,
       );
 

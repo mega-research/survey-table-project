@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { ContactAttemptAddCard } from '@/components/operations/contacts/contact-attempt-add-card';
 import { ContactAttemptHistoryCard } from '@/components/operations/contacts/contact-attempt-history-card';
 import { ContactInfoCard } from '@/components/operations/contacts/contact-info-card';
+import { CopyInviteUrlButton } from '@/components/operations/contacts/copy-invite-url-button';
 import type {
   ContactColumnScheme,
   ContactMethod,
@@ -307,9 +308,12 @@ export function ContactDetailForm({
                 삭제
               </Button>
             )}
+            {isEdit && initial?.inviteToken && (
+              <CopyInviteUrlButton surveyId={surveyId} inviteToken={initial.inviteToken} />
+            )}
             <span className="flex-1" />
             <Button onClick={save} disabled={isPending}>
-              {isPending ? '저장 중…' : '💾 저장'}
+              {isPending ? '저장 중…' : '저장'}
             </Button>
           </div>
         </div>

@@ -53,6 +53,7 @@ interface SnapshotQuestion {
   hideColumnLabels?: boolean;
   displayCondition?: Question['displayCondition'];
   questionCode?: string;
+  defaultValueTemplate?: string | null;
 }
 
 interface SnapshotGroup {
@@ -112,6 +113,7 @@ export function buildSurveySnapshot(survey: Survey): SurveySnapshot {
       hideColumnLabels: q.hideColumnLabels,
       displayCondition: q.displayCondition,
       questionCode: q.questionCode,
+      defaultValueTemplate: q.defaultValueTemplate,
     })),
     groups: sortedGroups.map((g) => ({
       id: g.id,
