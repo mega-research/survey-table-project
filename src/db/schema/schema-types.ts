@@ -16,6 +16,7 @@ export interface SurveyVersionSnapshot {
     endDate?: string;
     maxResponses?: number;
     thankYouMessage: string;
+    requireInviteToken?: boolean;
   };
 }
 
@@ -246,6 +247,7 @@ export interface QuestionData {
   hideColumnLabels?: boolean;
   displayCondition?: QuestionConditionGroup;
   rankingConfig?: RankingConfig;
+  defaultValueTemplate?: string | null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
