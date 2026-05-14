@@ -22,6 +22,7 @@ import { Label } from '@/components/ui/label';
 import type { MailAttachment } from '@/db/schema/schema-types';
 import { TMP_ATTACHMENT_PREFIX } from '@/lib/mail/constants';
 import { renderMailPreview, type PreviewSample } from '@/lib/mail/render-preview';
+import { sanitizeRichHtml } from '@/lib/sanitize';
 
 interface Props {
   open: boolean;
@@ -74,9 +75,10 @@ const IFRAME_RESET_CSS = `
 `;
 
 function buildIframeSrcDoc(bodyHtml: string): string {
-  const content = bodyHtml.trim() === ''
+  const safe = sanitizeRichHtml(bodyHtml);
+  const content = safe.trim() === ''
     ? '<div style="color:#9ca3af;font-style:italic;">(본문 없음)</div>'
-    : bodyHtml;
+    : safe;
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${IFRAME_RESET_CSS}</style></head><body>${content}</body></html>`;
 }
 
@@ -251,7 +253,7 @@ export function MailPreviewDialog({
               <dl className="grid grid-cols-[64px_1fr] gap-x-3 gap-y-1.5 border-b border-gray-200 bg-gray-50 px-6 py-4 text-sm">
                 <dt className="text-gray-500">From</dt>
                 <dd className="text-gray-900">
-                  <span dangerouslySetInnerHTML={{ __html: rendered.fromName || '<span style="color:#9ca3af;font-style:italic;">(이름 없음)</span>' }} />{' '}
+                  <span dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(rendered.fromName) || '<span style="color:#9ca3af;font-style:italic;">(이름 없음)</span>' }} />{' '}
                   <span className="text-gray-500">&lt;{fromEmail}&gt;</span>
                 </dd>
 
@@ -268,7 +270,7 @@ export function MailPreviewDialog({
                 <dd
                   className="font-medium text-gray-900"
                   dangerouslySetInnerHTML={{
-                    __html: rendered.subject || '<span style="color:#9ca3af;font-style:italic;">(제목 없음)</span>',
+                    __html: sanitizeRichHtml(rendered.subject) || '<span style="color:#9ca3af;font-style:italic;">(제목 없음)</span>',
                   }}
                 />
               </dl>

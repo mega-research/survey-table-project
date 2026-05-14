@@ -7,6 +7,8 @@ import {
   Section,
 } from '@react-email/components';
 
+import { sanitizeRichHtml } from '@/lib/sanitize';
+
 interface Props {
   bodyHtml: string;
   /** 받은편지함 프리뷰 텍스트 (subject 옆 회색 글자). 비우면 표시 안 함. */
@@ -73,8 +75,9 @@ export function MailWrapper({ bodyHtml, previewText, showTestFooter = true, unsu
         <Container style={container}>
           <Section style={content}>
             {/* TipTap 에디터의 HTML 을 그대로 삽입. react-email Section 은 children 기반이라
-                dangerouslySetInnerHTML 을 직접 못 받으므로 plain div 로 한 단계 감싼다. */}
-            <div dangerouslySetInnerHTML={{ __html: bodyHtml }} />
+                dangerouslySetInnerHTML 을 직접 못 받으므로 plain div 로 한 단계 감싼다.
+                admin 작성 HTML 이지만 발신 직전 sanitize 로 위험 태그를 한 번 더 정규화. */}
+            <div dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(bodyHtml) }} />
           </Section>
           {unsubscribeUrl ? (
             <Section style={unsubFooter}>
