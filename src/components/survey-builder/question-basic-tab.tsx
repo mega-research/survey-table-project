@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef } from 'react';
 
 import {
   DndContext,
@@ -33,6 +33,8 @@ import { Switch } from '@/components/ui/switch';
 import { generateOptionCode } from '@/utils/option-code-generator';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { Question, QuestionOption, SelectLevel } from '@/types/survey';
+
+import { VariableButton } from './variable-button';
 
 import { BranchRuleEditor } from './branch-rule-editor';
 import { DynamicTableEditor } from './dynamic-table-editor';
@@ -105,6 +107,10 @@ export function QuestionBasicTab({
   updateLevelOption,
   removeLevelOption,
 }: QuestionBasicTabProps) {
+  // 변수 카탈로그 (prefill 토큰용)
+  const variableCatalog = useSurveyBuilderStore((s) => s.variableCatalog);
+  const defaultTemplateRef = useRef<HTMLInputElement>(null);
+
   // ranking + optionsSource='table' (자체 테이블 내장) 이면 수동 옵션 UI 숨김
   const isRankingTableSource =
     question.type === 'ranking' && formData.rankingConfig?.optionsSource === 'table';
@@ -387,21 +393,59 @@ export function QuestionBasicTab({
 
         {/* 단답형 질문용 placeholder 설정 */}
         {question.type === 'text' && (
-          <div>
-            <Label htmlFor="placeholder">안내 문구 (Placeholder)</Label>
-            <Input
-              id="placeholder"
-              value={formData.placeholder || ''}
-              onChange={(e) =>
-                setFormData((prev) => ({ ...prev, placeholder: e.target.value }))
-              }
-              placeholder="예: 이름을 입력하세요"
-              className="mt-2"
-            />
-            <p className="mt-1 text-xs text-gray-500">
-              입력 필드에 표시될 안내 문구를 입력하세요
-            </p>
-          </div>
+          <>
+            <div>
+              <Label htmlFor="placeholder">안내 문구 (Placeholder)</Label>
+              <Input
+                id="placeholder"
+                value={formData.placeholder || ''}
+                onChange={(e) =>
+                  setFormData((prev) => ({ ...prev, placeholder: e.target.value }))
+                }
+                placeholder="예: 이름을 입력하세요"
+                className="mt-2"
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                입력 필드에 표시될 안내 문구를 입력하세요
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="defaultValueTemplate">
+                응답값 prefill
+                <span className="ml-1 text-xs font-normal text-gray-500">(선택)</span>
+              </Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  id="defaultValueTemplate"
+                  ref={defaultTemplateRef}
+                  value={formData.defaultValueTemplate ?? ''}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      defaultValueTemplate: e.target.value || null,
+                    }))
+                  }
+                  placeholder="예: {{전시회명}}"
+                  className="flex-1"
+                />
+                {variableCatalog.length > 0 && (
+                  <VariableButton
+                    catalog={variableCatalog}
+                    inputRef={defaultTemplateRef}
+                    onChange={(v) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        defaultValueTemplate: v || null,
+                      }))
+                    }
+                  />
+                )}
+              </div>
+              <p className="text-xs text-gray-500">
+                변수 토큰 사용 시 응답자에게 readonly로 표시됩니다
+              </p>
+            </div>
+          </>
         )}
       </div>
 

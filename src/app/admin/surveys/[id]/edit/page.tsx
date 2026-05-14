@@ -28,7 +28,7 @@ import {
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
-import { isSlugAvailable as checkSlugAvailable } from '@/actions/query-actions';
+import { isSlugAvailable as checkSlugAvailable, getVariableCatalogAction } from '@/actions/query-actions';
 import { publishSurvey } from '@/actions/survey-publish-actions';
 import { ImportExportLibraryModal } from '@/components/survey-builder/import-export-library-modal';
 import { QuestionLibraryPanel } from '@/components/survey-builder/question-library-panel';
@@ -120,7 +120,7 @@ interface EditSurveyPageProps {
 export default function EditSurveyPage({ params }: EditSurveyPageProps) {
   const { id } = use(params);
   // 액션 (안정적 참조)
-  const { updateSurveyTitle, addQuestion, addPreparedQuestion, updateSurveySlug, markPublished } =
+  const { updateSurveyTitle, addQuestion, addPreparedQuestion, updateSurveySlug, markPublished, setVariableCatalog } =
     useSurveyBuilderStore(
       useShallow((s) => ({
         updateSurveyTitle: s.updateSurveyTitle,
@@ -128,6 +128,7 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
         addPreparedQuestion: s.addPreparedQuestion,
         updateSurveySlug: s.updateSurveySlug,
         markPublished: s.markPublished,
+        setVariableCatalog: s.setVariableCatalog,
       })),
     );
 
@@ -181,6 +182,15 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
       setInitializedSurveyId(id);
     }
   }, [survey, initializedSurveyId, id]);
+
+  // 변수 카탈로그 fetch (prefill 토큰 빌더 UI용)
+  useEffect(() => {
+    getVariableCatalogAction(id).then((catalog) => {
+      setVariableCatalog(catalog);
+    }).catch(() => {
+      // 컨택 없는 설문이면 빈 배열 — 정상 케이스
+    });
+  }, [id, setVariableCatalog]);
 
   // 저장되지 않은 변경이 있을 때 페이지 이탈 경고
   useEffect(() => {

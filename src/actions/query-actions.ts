@@ -11,6 +11,8 @@ import * as libraryData from '@/data/library';
 import * as responseData from '@/data/responses';
 import * as surveyData from '@/data/surveys';
 import { requireAuth } from '@/lib/auth';
+import { getVariableCatalog } from '@/components/operations/mail-template/variable-catalog';
+import type { VariableDef } from '@/components/operations/mail-template/variable-catalog';
 
 // ========================
 // Survey 조회
@@ -110,6 +112,15 @@ export async function getResponseCountBySurvey(surveyId: string) {
 export async function getCompletedResponseCountBySurvey(surveyId: string) {
   await requireAuth();
   return responseData.getCompletedResponseCountBySurvey(surveyId);
+}
+
+// ========================
+// Variable Catalog (prefill)
+// ========================
+
+export async function getVariableCatalogAction(surveyId: string): Promise<VariableDef[]> {
+  await requireAuth();
+  return getVariableCatalog(surveyId, { purpose: 'survey' });
 }
 
 export async function calculateResponseSummary(surveyId: string) {
