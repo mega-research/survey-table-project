@@ -3,6 +3,7 @@
 import { useState } from 'react';
 
 import { Label } from '@/components/ui/label';
+import { sanitizeRichHtml } from '@/lib/sanitize';
 
 interface NoticeRendererProps {
   content: string;
@@ -31,7 +32,7 @@ export function NoticeRenderer({
       {/* Rich Text Content Display */}
       <div
         className="prose prose-sm max-w-none overflow-x-auto rounded-lg border border-blue-100 bg-blue-50/40 p-6 [&_img]:inline-block [&_img]:align-top [&_p]:min-h-[1.6em] [&_table]:my-4 [&_table]:w-full [&_table]:min-w-full [&_table]:table-auto [&_table]:border-collapse [&_table]:border [&_table]:border-gray-300 [&_table_p]:m-0 [&_table_td]:box-border [&_table_td]:overflow-hidden [&_table_td]:border [&_table_td]:border-gray-300 [&_table_td]:px-3 [&_table_td]:py-2 [&_table_td]:align-top [&_table_th]:box-border [&_table_th]:overflow-hidden [&_table_th]:border [&_table_th]:border-gray-300 [&_table_th]:bg-transparent [&_table_th]:px-3 [&_table_th]:py-2 [&_table_th]:align-top [&_table_th]:font-normal"
-        dangerouslySetInnerHTML={{ __html: content }}
+        dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(content) }}
         style={{
           // TipTap 스타일 재정의
           fontSize: '14px',

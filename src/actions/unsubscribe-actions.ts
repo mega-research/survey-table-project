@@ -113,6 +113,76 @@ export async function unsubscribeByToken(token: string): Promise<UnsubscribeResu
   }
 }
 
+export interface LookupContactResult {
+  ok: boolean;
+  email: string | null;
+  alreadyUnsubscribed: boolean;
+}
+
+/**
+ * 토큰으로 contact 정보만 조회 (mutation 없음).
+ * GET 페이지 (확인 화면) 에서 사용. POST 요청에서는 unsubscribeByToken 사용.
+ */
+export async function lookupContactByToken(token: string): Promise<LookupContactResult> {
+  if (!UUID_RE.test(token)) {
+    return { ok: false, email: null, alreadyUnsubscribed: false };
+  }
+  try {
+    const rows = await db
+      .select({
+        id: contactTargets.id,
+        unsubscribedAt: contactTargets.unsubscribedAt,
+        cipher: contactPii.cipher,
+        columnKey: contactPii.columnKey,
+      })
+      .from(contactTargets)
+      .leftJoin(
+        contactPii,
+        and(
+          eq(contactPii.contactTargetId, contactTargets.id),
+          eq(contactPii.fieldType, 'email'),
+        ),
+      )
+      .where(eq(contactTargets.unsubscribeToken, token))
+      .orderBy(asc(contactPii.columnKey))
+      .limit(1);
+
+    const existing = rows[0];
+    if (!existing) {
+      return { ok: false, email: null, alreadyUnsubscribed: false };
+    }
+
+    let email: string | null = null;
+    if (existing.cipher) {
+      try {
+        email = decryptPii(existing.cipher);
+      } catch {
+        // 복호화 실패 시 email 노출 안 함
+      }
+    }
+
+    return {
+      ok: true,
+      email,
+      alreadyUnsubscribed: existing.unsubscribedAt !== null,
+    };
+  } catch (err) {
+    Sentry.captureException(err, {
+      tags: { operation: 'unsubscribe_lookup_by_token' },
+      level: 'error',
+    });
+    return { ok: false, email: null, alreadyUnsubscribed: false };
+  }
+}
+
+/**
+ * POST 폼 액션 — 실제 unsubscribe 처리 후 ?done=1 로 리디렉트.
+ */
+export async function confirmUnsubscribeAction(token: string): Promise<never> {
+  await unsubscribeByToken(token);
+  redirect(`/unsubscribe/${encodeURIComponent(token)}?done=1`);
+}
+
 export interface AdminRevertUnsubscribeResult {
   ok: boolean;
   error?: string;

@@ -5,6 +5,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { isEmptyHtml } from '@/lib/utils';
+import { sanitizeRichHtml } from '@/lib/sanitize';
 import { useTestResponseStore } from '@/stores/test-response-store';
 import { Question } from '@/types/survey';
 import { getOptionsLayout } from '@/utils/options-layout';
@@ -535,7 +536,7 @@ export function QuestionTestCard({ question, index }: { question: Question; inde
             style={{
               WebkitOverflowScrolling: 'touch',
             }}
-            dangerouslySetInnerHTML={{ __html: question.description! }}
+            dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(question.description!) }}
           />
         )}
       </div>

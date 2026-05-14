@@ -1,23 +1,26 @@
 import type { Metadata } from 'next';
 
 import {
+  confirmUnsubscribeAction,
+  lookupContactByToken,
   revertUnsubscribeAction,
-  unsubscribeByToken,
 } from '@/actions/unsubscribe-actions';
 import { Button } from '@/components/ui/button';
 import { UNSUBSCRIBE_SANDBOX_TOKEN } from '@/lib/mail/constants';
 
 export const metadata: Metadata = {
   title: '수신거부',
-  robots: { index: false, follow: false },
+  robots: { index: false, follow: false, nocache: true },
 };
 
 interface PageProps {
   params: Promise<{ token: string }>;
+  searchParams: Promise<{ done?: string }>;
 }
 
-export default async function UnsubscribePage({ params }: PageProps) {
+export default async function UnsubscribePage({ params, searchParams }: PageProps) {
   const { token } = await params;
+  const sp = await searchParams;
 
   if (token === UNSUBSCRIBE_SANDBOX_TOKEN) {
     return (
@@ -32,9 +35,10 @@ export default async function UnsubscribePage({ params }: PageProps) {
     );
   }
 
-  const result = await unsubscribeByToken(token);
+  // GET: 컨택 lookup 만 (mutation 없음)
+  const contact = await lookupContactByToken(token);
 
-  if (!result.ok) {
+  if (!contact.ok) {
     return (
       <Layout>
         <h1 className="text-xl font-semibold text-gray-900">유효하지 않은 링크</h1>
@@ -46,26 +50,44 @@ export default async function UnsubscribePage({ params }: PageProps) {
     );
   }
 
-  const undo = revertUnsubscribeAction.bind(null, token);
+  // POST 처리 완료 후 done=1 리디렉트된 상태
+  if (sp.done === '1') {
+    const undo = revertUnsubscribeAction.bind(null, token);
+    return (
+      <Layout>
+        <h1 className="text-xl font-semibold text-gray-900">
+          {contact.alreadyUnsubscribed
+            ? '이미 수신거부 처리되었습니다'
+            : '수신거부가 완료되었습니다'}
+        </h1>
+        <p className="mt-3 text-sm text-gray-600">
+          {contact.email
+            ? `${contact.email} 로의 추가 발송이 중단됩니다.`
+            : '추가 발송이 중단됩니다.'}
+        </p>
+        <form action={undo} className="mt-6">
+          <Button type="submit" variant="outline">
+            실수로 누르셨나요? 되돌리기
+          </Button>
+        </form>
+      </Layout>
+    );
+  }
 
+  // GET 기본: 확인 화면
+  const confirm = confirmUnsubscribeAction.bind(null, token);
   return (
     <Layout>
-      <h1 className="text-xl font-semibold text-gray-900">
-        {result.alreadyUnsubscribed
-          ? '이미 수신거부 처리되었습니다'
-          : '수신거부가 완료되었습니다'}
-      </h1>
+      <h1 className="text-xl font-semibold text-gray-900">수신거부 확인</h1>
       <p className="mt-3 text-sm text-gray-600">
-        {result.email
-          ? `${result.email} 로의 추가 발송이 중단됩니다.`
-          : '추가 발송이 중단됩니다.'}
+        {contact.email
+          ? `${contact.email} 로의 메일 수신을 거부하시겠습니까?`
+          : '메일 수신을 거부하시겠습니까?'}
         <br />
-        앞으로 이 설문 관련 메일을 받지 않으시게 됩니다.
+        확인을 누르시면 추가 발송이 중단됩니다.
       </p>
-      <form action={undo} className="mt-6">
-        <Button type="submit" variant="outline">
-          실수로 누르셨나요? 되돌리기
-        </Button>
+      <form action={confirm} className="mt-6 flex gap-2">
+        <Button type="submit">수신거부 확인</Button>
       </form>
     </Layout>
   );

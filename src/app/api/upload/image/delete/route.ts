@@ -19,6 +19,20 @@ export async function POST(request: NextRequest) {
   try {
     await requireAuth();
 
+    // CSRF 보호: cross-origin POST 거부
+    const origin = request.headers.get('origin');
+    const host = request.headers.get('host');
+    if (origin && host) {
+      try {
+        const originHost = new URL(origin).host;
+        if (originHost !== host) {
+          return NextResponse.json({ error: 'Cross-origin 요청 거부' }, { status: 403 });
+        }
+      } catch {
+        return NextResponse.json({ error: '잘못된 origin' }, { status: 400 });
+      }
+    }
+
     const body = await request.json();
     const { urls } = body;
 

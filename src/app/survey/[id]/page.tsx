@@ -32,6 +32,7 @@ import {
 } from '@/lib/group-ordering';
 import { parsesurveyIdentifier } from '@/lib/survey-url';
 import { isEmptyHtml } from '@/lib/utils';
+import { sanitizeRichHtml } from '@/lib/sanitize';
 
 import { useSurveyResponseStore } from '@/stores/survey-response-store';
 import { useShallow } from 'zustand/react/shallow';
@@ -967,7 +968,7 @@ function TableStepView({
             <div
               className="prose prose-sm max-h-[40vh] max-w-none overflow-auto leading-relaxed text-[13px] text-gray-500 [&_p]:min-h-[1.5em] [&_p]:leading-relaxed [&_table]:my-2 [&_table]:min-w-full [&_table]:table-auto [&_table]:border-collapse [&_table]:border [&_table]:border-gray-200 [&_table_p]:m-0 [&_table_td]:border [&_table_td]:border-gray-200 [&_table_td]:px-3 [&_table_td]:py-1.5 [&_table_th]:border [&_table_th]:border-gray-200 [&_table_th]:bg-gray-50 [&_table_th]:px-3 [&_table_th]:py-1.5 [&_table_th]:font-semibold"
               style={{ WebkitOverflowScrolling: 'touch' }}
-              dangerouslySetInnerHTML={{ __html: q.description! }}
+              dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(q.description) }}
             />
           )}
         </div>
@@ -1013,7 +1014,7 @@ function TableStepView({
                   <div
                     className="prose prose-base mt-3 max-h-[60vh] max-w-none overflow-auto text-base text-gray-600 [&_p]:min-h-[1.6em] [&_table]:my-2 [&_table]:min-w-full [&_table]:table-auto [&_table]:border-collapse [&_table]:border [&_table]:border-gray-200 [&_table_p]:m-0 [&_table_td]:border [&_table_td]:border-gray-200 [&_table_td]:px-4 [&_table_td]:py-2 [&_table_th]:border [&_table_th]:border-gray-200 [&_table_th]:bg-gray-50 [&_table_th]:px-4 [&_table_th]:py-2 [&_table_th]:font-semibold"
                     style={{ WebkitOverflowScrolling: 'touch' }}
-                    dangerouslySetInnerHTML={{ __html: q.description! }}
+                    dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(q.description) }}
                   />
                 )}
               </div>
@@ -1153,7 +1154,7 @@ function GroupStepItem({
         {!isEmptyHtml(q.description) && (
           <div
             className="prose prose-sm ml-3 max-w-none text-xs text-gray-500 [&_p]:min-h-[1.3em] [&_table]:my-1.5 [&_table]:min-w-full [&_table]:table-auto [&_table]:border-collapse [&_table]:border [&_table]:border-gray-200 [&_table_p]:m-0 [&_table_td]:border [&_table_td]:border-gray-200 [&_table_td]:px-2.5 [&_table_td]:py-1 [&_table_th]:border [&_table_th]:border-gray-200 [&_table_th]:bg-gray-50 [&_table_th]:px-2.5 [&_table_th]:py-1 [&_table_th]:font-semibold"
-            dangerouslySetInnerHTML={{ __html: q.description! }}
+            dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(q.description) }}
           />
         )}
         <div id={`q-${q.id}`} className="mt-2 ml-3">

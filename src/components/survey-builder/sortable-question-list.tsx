@@ -48,6 +48,7 @@ import {
 } from '@/lib/group-ordering';
 import { deleteImagesFromR2 } from '@/lib/image-utils';
 import { generateId, isEmptyHtml } from '@/lib/utils';
+import { sanitizeRichHtml } from '@/lib/sanitize';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { useSurveyUIStore } from '@/stores/ui-store';
 import { computeTableEstimatedHeight } from '@/hooks/use-row-heights';
@@ -258,7 +259,7 @@ const SortableQuestion = React.memo(function SortableQuestion({
                 WebkitOverflowScrolling: 'touch',
               }}
               dangerouslySetInnerHTML={{
-                __html: question.description!,
+                __html: sanitizeRichHtml(question.description!),
               }}
             />
           )}
