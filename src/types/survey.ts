@@ -158,6 +158,8 @@ export interface TableCell {
   // input 관련 속성
   placeholder?: string; // 단문형 입력 필드 placeholder
   inputMaxLength?: number; // 단문형 입력 필드 최대 길이
+  // input 셀 prefill 템플릿 — {{attrs_key}} 포함 가능
+  defaultValueTemplate?: string;
   // 체크박스 선택 개수 제한 (체크박스 타입 셀 전용)
   minSelections?: number; // 최소 선택 개수
   maxSelections?: number; // 최대 선택 개수

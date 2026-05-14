@@ -70,14 +70,7 @@ export function QuestionInput({
     }
 
     case 'text':
-      return (
-        <Input
-          placeholder={question.placeholder || '답변을 입력하세요...'}
-          value={typeof value === 'string' ? value : ''}
-          onChange={(e) => onChange(e.target.value)}
-          className="w-full text-base"
-        />
-      );
+      return <TextResponseInput question={question} value={value} onChange={onChange} attrs={attrs} />;
 
     case 'textarea':
       return (
@@ -511,5 +504,41 @@ function SelectQuestion({
         </div>
       )}
     </div>
+  );
+}
+
+// 단답형(text) prefill 지원 컴포넌트
+function TextResponseInput({
+  question,
+  value,
+  onChange,
+  attrs,
+}: {
+  question: Question;
+  value: unknown;
+  onChange: (v: unknown) => void;
+  attrs: Record<string, string>;
+}) {
+  const template = question.defaultValueTemplate ?? '';
+  const isPrefilled = template.trim().length > 0;
+  const prefilledValue = isPrefilled ? substituteTokens(template, attrs) : '';
+  const inputValue = isPrefilled ? prefilledValue : (typeof value === 'string' ? value : '');
+
+  useEffect(() => {
+    if (isPrefilled && value !== prefilledValue) {
+      onChange(prefilledValue);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPrefilled, prefilledValue]);
+
+  return (
+    <Input
+      placeholder={question.placeholder || '답변을 입력하세요...'}
+      value={inputValue}
+      onChange={(e) => onChange(e.target.value)}
+      className="w-full text-base"
+      disabled={isPrefilled}
+      data-prefilled={isPrefilled || undefined}
+    />
   );
 }
