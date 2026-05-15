@@ -17,7 +17,8 @@ const PROSE_BASE =
   '[&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:my-2 ' +
   '[&_li]:my-0.5 [&_li>p]:my-0 ' +
   // 테이블은 컨테이너 폭 100% 로 펼친다. NoticeRenderer 미리보기와 동일하게.
-  '[&_table]:my-2 [&_table]:w-full [&_table]:table-auto [&_table]:border [&_table]:border-gray-300 ' +
+  // w-full 만으로는 table-auto 가 빈 셀을 0폭으로 계산해 table 전체가 줄어든다. min-w-full 로 강제.
+  '[&_table]:my-2 [&_table]:w-full [&_table]:min-w-full [&_table]:table-auto [&_table]:border [&_table]:border-gray-300 ' +
   '[&_table_td]:border [&_table_td]:border-gray-300 [&_table_td]:px-2 [&_table_td]:py-1 [&_table_td]:h-12 ' +
   '[&_table_th]:border [&_table_th]:border-gray-300 [&_table_th]:px-2 [&_table_th]:py-1 [&_table_th]:h-12 ' +
   '[&_table_td_p]:m-0 [&_table_th_p]:m-0 ' +
