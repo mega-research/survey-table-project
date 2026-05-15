@@ -11,8 +11,9 @@ describe('createUnifiedExtensions', () => {
       const html = '<table><tbody><tr><th>제목</th></tr><tr><td>값</td></tr></tbody></table>';
       const json = generateJSON(html, exts);
       const out = generateHTML(json, exts);
-      expect(out).toContain('<th');
-      expect(out).toContain('<td');
+      // <thead> 와 혼동되지 않도록 엄격한 매칭
+      expect(out).toMatch(/<th[\s>]/);
+      expect(out).toMatch(/<td[\s>]/);
     });
 
     it('셀 backgroundColor 의 두 가지 표기를 모두 파싱한다', () => {
@@ -43,8 +44,8 @@ describe('createUnifiedExtensions', () => {
       const html = '<table><tbody><tr><th>제목</th></tr></tbody></table>';
       const json = generateJSON(html, exts);
       const out = generateHTML(json, exts);
-      expect(out).not.toContain('<th');
-      expect(out).toContain('<td');
+      expect(out).not.toMatch(/<th[\s>]/);
+      expect(out).toMatch(/<td[\s>]/);
     });
 
     it('TableCaption 노드를 허용한다', () => {

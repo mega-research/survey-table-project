@@ -24,13 +24,13 @@ import {
 } from './table-attrs-helpers';
 import { TableCaption } from './table-caption';
 import { TrailingNode } from './trailing-node';
-import { mailVarTokenPlugin } from './var-token-plugin';
+import { createVarTokenPlugin } from './var-token-plugin';
 import type { RichTextEditorKind } from './types';
 
 const VarTokenExtension = Extension.create({
   name: 'varToken',
   addProseMirrorPlugins() {
-    return [mailVarTokenPlugin];
+    return [createVarTokenPlugin()];
   },
 });
 
@@ -96,11 +96,15 @@ function makeCellAttrs() {
   };
 }
 
-interface Options {
+export interface CreateUnifiedExtensionsOptions {
   kind?: RichTextEditorKind;
 }
 
-export function createUnifiedExtensions(options: Options = {}): AnyExtension[] {
+/**
+ * 통합 TipTap extensions 배열을 만든다.
+ * 호출하는 React 컴포넌트에서는 반드시 useMemo 로 감싸 매 렌더마다 에디터가 destroy/recreate 되지 않도록 한다.
+ */
+export function createUnifiedExtensions(options: CreateUnifiedExtensionsOptions = {}): AnyExtension[] {
   const kind = options.kind ?? 'survey';
 
   const TableCellExtended = TableCell.extend({
