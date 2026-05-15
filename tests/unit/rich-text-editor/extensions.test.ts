@@ -131,5 +131,49 @@ describe('createUnifiedExtensions', () => {
       expect(r.tableHeaderType).toBeDefined();
       expect(r.insertResult).toBe(true);
     });
+
+    it('image 노드는 ImageResize 의 wrapperStyle / containerStyle attr 를 노출한다', () => {
+      // ImageResize 의 node name 은 image 가 아닌 imageResize 임에 주의
+      const exts = createUnifiedExtensions({ kind: 'survey' });
+      const editor = new Editor({
+        extensions: exts,
+        content: '<p><img src="x.png" alt="t" /></p>',
+      });
+
+      interface PMNodeLite {
+        type: { name: string };
+        attrs: Record<string, unknown>;
+      }
+      let imageNode: PMNodeLite | null = null;
+      editor.state.doc.descendants((node) => {
+        if (node.type.name === 'imageResize' && imageNode === null) {
+          imageNode = node as unknown as PMNodeLite;
+        }
+        return true;
+      });
+      expect(imageNode).not.toBeNull();
+
+      // ImageResize 의 wrapperStyle default 는 inline 모드에서 float: left 포함 문자열
+      const initialWrapperStyle = (imageNode as unknown as PMNodeLite).attrs.wrapperStyle;
+      expect(typeof initialWrapperStyle).toBe('string');
+      expect(initialWrapperStyle as string).toMatch(/float:\s*left/);
+
+      // containerStyle attr 도 schema 에 등록되어 있는지
+      const imageSchemaSpec = editor.schema.nodes.imageResize.spec as {
+        attrs?: Record<string, unknown>;
+      };
+      expect(imageSchemaSpec.attrs).toHaveProperty('wrapperStyle');
+      expect(imageSchemaSpec.attrs).toHaveProperty('containerStyle');
+
+      editor.destroy();
+    });
+
+    it('ImageResize 의 node name 은 imageResize 로 schema 에 등록된다', () => {
+      const exts = createUnifiedExtensions({ kind: 'survey' });
+      const editor = new Editor({ extensions: exts, content: '<p>x</p>' });
+      expect(editor.schema.nodes.imageResize).toBeDefined();
+      expect(editor.schema.nodes.image).toBeUndefined();
+      editor.destroy();
+    });
   });
 });

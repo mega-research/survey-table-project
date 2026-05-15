@@ -69,7 +69,8 @@ export function Toolbar({ editor, variableCatalog, onPickImage, onPickLink }: Pr
         alignJustify: editor.isActive({ textAlign: 'justify' }),
         canUndo: editor.can().undo(),
         canRedo: editor.can().redo(),
-        imageActive: editor.isActive('image'),
+        // ImageResize NodeView 는 schema 에 imageResize 이름으로 등록된다
+        imageActive: editor.isActive('imageResize'),
         tableActive: findTableAtSelection(editor.state) !== null,
       };
     },

@@ -166,7 +166,9 @@ export function createUnifiedExtensions(options: CreateUnifiedExtensionsOptions 
     TextStyle,
     FontSize,
     TextAlign.configure({
-      types: ['paragraph', 'heading', 'image'],
+      // ImageResize 는 NodeView 모드로 paragraph text-align 을 무시하고
+      // 자체 wrapperStyle attr (float) 로 정렬을 제어한다. 이미지 정렬은 image-context-toolbar 가 담당.
+      types: ['paragraph', 'heading'],
       alignments: ['left', 'center', 'right', 'justify'],
       defaultAlignment: 'left',
     }),
