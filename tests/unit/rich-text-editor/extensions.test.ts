@@ -1,4 +1,4 @@
-import { generateHTML, generateJSON } from '@tiptap/core';
+import { Editor, generateHTML, generateJSON } from '@tiptap/core';
 import { describe, expect, it } from 'vitest';
 
 import { createUnifiedExtensions } from '@/components/ui/rich-text-editor/extensions';
@@ -86,6 +86,50 @@ describe('createUnifiedExtensions', () => {
       const json = generateJSON(html, exts);
       const out = generateHTML(json, exts);
       expect(out).toMatch(/text-align:\s*center/);
+    });
+  });
+
+  describe('schema 진단', () => {
+    function inspect(kind: 'mail' | 'survey') {
+      const exts = createUnifiedExtensions({ kind });
+      const editor = new Editor({ extensions: exts });
+      const nodes = Object.keys(editor.schema.nodes).sort();
+      const tableHeaderType = editor.schema.nodes.tableHeader;
+      const tableCellType = editor.schema.nodes.tableCell;
+      const tableRowType = editor.schema.nodes.tableRow;
+      const tableType = editor.schema.nodes.table;
+      const insertResult = editor
+        .chain()
+        .focus()
+        .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
+        .run();
+      editor.destroy();
+      return {
+        nodes,
+        tableHeaderType,
+        tableCellType,
+        tableRowType,
+        tableType,
+        insertResult,
+      };
+    }
+
+    it('mail kind: 모든 table 관련 node 가 schema 에 등록되고 insertTable 이 성공한다', () => {
+      const r = inspect('mail');
+      expect(r.tableType).toBeDefined();
+      expect(r.tableRowType).toBeDefined();
+      expect(r.tableCellType).toBeDefined();
+      expect(r.tableHeaderType).toBeDefined();
+      expect(r.insertResult).toBe(true);
+    });
+
+    it('survey kind: 모든 table 관련 node 가 schema 에 등록되고 insertTable 이 성공한다', () => {
+      const r = inspect('survey');
+      expect(r.tableType).toBeDefined();
+      expect(r.tableRowType).toBeDefined();
+      expect(r.tableCellType).toBeDefined();
+      expect(r.tableHeaderType).toBeDefined();
+      expect(r.insertResult).toBe(true);
     });
   });
 });

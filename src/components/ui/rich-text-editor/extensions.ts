@@ -114,13 +114,16 @@ export function createUnifiedExtensions(options: CreateUnifiedExtensionsOptions 
   });
 
   // mail: <th>를 <td>로 마이그레이션 (Outlook 호환), survey: <th> 유지
+  // 베이스는 양쪽 모두 TableHeader 로 통일 — prosemirror-tables 가 schema 에서
+  // tableRole='header_cell' 인 노드를 lookup 하므로, TableCell 기반으로 헤더를
+  // 만들면 header_cell role 이 누락되어 insertTable 이 createAndFill 단계에서 폭발한다.
   const TableHeaderExtended =
     kind === 'mail'
-      ? TableCellExtended.extend({
-          name: 'tableHeader',
-          parseHTML() {
-            return [{ tag: 'th' }];
+      ? TableHeader.extend({
+          addAttributes() {
+            return { ...this.parent?.(), ...makeCellAttrs() };
           },
+          // parseHTML 은 TableHeader 의 기본 <th> 매칭을 그대로 사용
           renderHTML({ HTMLAttributes }) {
             return ['td', HTMLAttributes, 0];
           },
