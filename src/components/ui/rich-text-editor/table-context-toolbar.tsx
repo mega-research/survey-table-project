@@ -91,7 +91,14 @@ export function TableContextToolbar({ editor }: Props) {
     }
     if (colCount === 0) return;
 
-    const equalWidth = Math.floor(600 / colCount);
+    // 현재 table 의 실제 폭을 DOM 에서 측정해 그 폭 기준으로 분배.
+    // 콘텐츠가 다르더라도 표 전체 폭을 유지한 채 컬럼만 균등화한다.
+    const wrapperDom = editor.view.nodeDOM(tablePos) as HTMLElement | null;
+    const tableDom = wrapperDom?.querySelector('table') as HTMLElement | null;
+    const measuredWidth = tableDom?.offsetWidth ?? 0;
+    // 측정 실패 시 cellMinWidth (60) * colCount 로 fallback
+    const totalWidth = measuredWidth > 0 ? measuredWidth : 60 * colCount;
+    const equalWidth = Math.floor(totalWidth / colCount);
     const { tr } = state;
     let modified = false;
 
