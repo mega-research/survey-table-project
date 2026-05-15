@@ -310,7 +310,7 @@ export function HeaderGridEditor({ headerGrid, columnCount, onChange }: HeaderGr
 
     // 각 병합 셀을 분할하여 새 그리드 재구성
     // 간단한 접근: occupiedMap 기반으로 전체 그리드를 재구성
-    let currentGrid = headerGrid.map((row) => row.map((cell) => ({ ...cell })));
+    const currentGrid = headerGrid.map((row) => row.map((cell) => ({ ...cell })));
 
     for (const { rowIdx, cellIdx } of cellsToSplit) {
       // 현재 그리드에서 해당 셀 찾기

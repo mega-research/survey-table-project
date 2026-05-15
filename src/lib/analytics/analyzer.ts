@@ -438,7 +438,7 @@ function analyzeTable(
       rowLabel: row.label,
       cells: row.cells.map((cell, colIndex) => {
         let currentAnalytics: any = null;
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+         
         let isInherited = false;
 
         // ---------------------------------------------------------

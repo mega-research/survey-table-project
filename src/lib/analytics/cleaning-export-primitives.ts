@@ -26,7 +26,7 @@ import {
  * XML 1.0에서 허용하지 않는 제어 문자를 제거한다.
  */
 export function stripInvalidXmlChars(value: string): string {
-  // eslint-disable-next-line no-control-regex
+   
   return value.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F\uFFFE\uFFFF]/g, '');
 }
 

@@ -564,20 +564,6 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     width: totalWidth ? `${totalWidth}px` : '100%',
   }), [gridTemplateCols, totalWidth]);
 
-  // ── 빈 테이블 ──
-  if (columns.length === 0 || rows.length === 0) {
-    return (
-      <Card className={className}>
-        <CardContent className="p-8">
-          <div className="text-center text-gray-500">
-            <FileText className="mx-auto mb-4 h-12 w-12 text-gray-400" />
-            <p>테이블 질문이 구성되지 않았습니다</p>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
   // 헤더 셀 렌더링 (다단계/단일 폴백 공용 — 파일 상단 HeaderCells 참고)
   const renderHeaderCells = useCallback(
     () => (
@@ -640,6 +626,20 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
      rowCompletionMap, questionId, isTestMode, value, onChange, hiddenGroupIds,
      stickyInfo, stickyLeftPadding],
   );
+
+  // ── 빈 테이블 ──
+  if (columns.length === 0 || rows.length === 0) {
+    return (
+      <Card className={className}>
+        <CardContent className="p-8">
+          <div className="text-center text-gray-500">
+            <FileText className="mx-auto mb-4 h-12 w-12 text-gray-400" />
+            <p>테이블 질문이 구성되지 않았습니다</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   // ── 가상화 여부 판단 ──
   const shouldVirtualize = displayRows.length >= VIRTUALIZATION_THRESHOLD;
