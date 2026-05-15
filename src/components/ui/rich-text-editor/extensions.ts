@@ -150,7 +150,9 @@ export function createUnifiedExtensions(options: CreateUnifiedExtensionsOptions 
 
   return [
     StarterKit.configure({
-      heading: { levels: [1, 2, 3] },
+      // heading 자체 비활성. 기존 콘텐츠에서 H1/H2/H3 사용 없음 — schema 에서 제거.
+      // 만약 누락된 데이터가 있더라도 TipTap 은 paragraph 로 fallback 한다.
+      heading: false,
       // StarterKit 기본 strike 끄고 별도 ext 로 통일
       strike: false,
       // StarterKit 3.x 에 bundled된 ext를 끄고 아래에서 별도 configure
@@ -166,7 +168,8 @@ export function createUnifiedExtensions(options: CreateUnifiedExtensionsOptions 
     TextAlign.configure({
       // ImageResize 는 NodeView 모드로 paragraph text-align 을 무시하고
       // 자체 wrapperStyle attr (float) 로 정렬을 제어한다. 이미지 정렬은 image-context-toolbar 가 담당.
-      types: ['paragraph', 'heading'],
+      // heading 노드 자체를 schema 에서 제거했으므로 types 에도 없음.
+      types: ['paragraph'],
       alignments: ['left', 'center', 'right', 'justify'],
       defaultAlignment: 'left',
     }),
