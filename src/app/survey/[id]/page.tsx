@@ -13,6 +13,7 @@ import {
 } from '@/actions/query-actions';
 import {
   completeResponse,
+  createBlankResponse,
   createResponseWithFirstAnswer,
   recordStepVisit,
   resumeOrCreateResponse,
@@ -577,7 +578,34 @@ export default function SurveyResponsePage() {
 
       setHighlightQuestionIds(new Set());
 
-      if (currentResponseId) {
+      // currentResponseId === null fallback —
+      // notice-only / optional-only / 분기로 visible 질문 0 인 설문은
+      // handleResponse 가 한 번도 트리거되지 않아 응답 row 가 만들어지지 않는다.
+      // 그 상태로 제출이 통과하면 silent data loss 가 되므로 여기서 빈 응답을 INSERT 한다.
+      let effectiveResponseId = currentResponseId;
+      if (!effectiveResponseId && loadedSurvey && currentStep) {
+        try {
+          const created = await createBlankResponse({
+            surveyId: loadedSurvey.id,
+            sessionId,
+            versionId: versionId ?? null,
+            currentStepId: stepIdOf(currentStep),
+            inviteToken: inviteToken ?? undefined,
+          });
+          effectiveResponseId = created.id;
+          setCurrentResponseId(created.id);
+          if (inviteToken && !created.contactTargetId) {
+            setInviteIsInvalid(true);
+          }
+          if (typeof window !== 'undefined') {
+            window.localStorage.setItem(sessionStorageKey(loadedSurvey.id), sessionId);
+          }
+        } catch (err) {
+          console.error('빈 응답 생성 오류:', err);
+        }
+      }
+
+      if (effectiveResponseId) {
         const exposedQuestionIds = visibleQuestions.map((q) => q.id);
 
         const exposedRowIds = visibleQuestions
@@ -628,7 +656,7 @@ export default function SurveyResponsePage() {
               .map((row) => row.id);
           });
 
-        await completeResponse(currentResponseId, {
+        await completeResponse(effectiveResponseId, {
           questionResponses: responses,
           exposedQuestionIds,
           exposedRowIds,
@@ -650,14 +678,19 @@ export default function SurveyResponsePage() {
     }
   }, [
     currentResponseId,
+    currentStep,
     currentStepIndex,
     groups,
+    inviteToken,
     isQuestionAnswered,
     loadedSurvey,
     questions,
     resetResponseState,
     responses,
+    sessionId,
+    setCurrentResponseId,
     steps,
+    versionId,
     visibleQuestions,
   ]);
 

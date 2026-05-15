@@ -195,6 +195,96 @@ export async function createResponseWithFirstAnswer(input: {
 }
 
 /**
+ * 답변 없이 응답 행을 INSERT.
+ *
+ * notice-only / optional-only / visible-question-0 인 설문은 첫 답변이 발생하지 않아
+ * createResponseWithFirstAnswer 가 트리거되지 않는다. 사용자가 그 상태로 제출을 누르면
+ * survey_responses 가 만들어지지 않은 채 화면만 완료로 바뀌어 silent data loss 가 됨.
+ * 호출자(handleSubmit)는 currentResponseId === null 일 때만 이 함수를 fallback 으로 호출한다.
+ *
+ * createResponseWithFirstAnswer 와 동일하게:
+ * - (surveyId, sessionId) UNIQUE 제약으로 멱등 (ON CONFLICT DO NOTHING)
+ * - inviteToken 으로 contactTargetId 매칭
+ * - UA/IP/platform/browser/firstVisit 캡처
+ *
+ * 충돌(=이미 답변이 있는 row 존재) 시 기존 row 의 id 를 그대로 반환.
+ */
+export async function createBlankResponse(input: {
+  surveyId: string;
+  sessionId: string;
+  versionId: string | null;
+  currentStepId: string;
+  inviteToken?: string;
+}): Promise<{ id: string; contactTargetId: string | null }> {
+  const { surveyId, sessionId, versionId, currentStepId, inviteToken } = input;
+
+  const headerStore = await headers();
+  const userAgent = headerStore.get('user-agent') ?? null;
+  const platform = parsePlatform(userAgent);
+  const browser = parseBrowser(userAgent);
+  const ipAddress = extractClientIp(
+    headerStore.get('x-forwarded-for'),
+    headerStore.get('x-real-ip'),
+  );
+
+  let contactTargetId: string | null = null;
+  if (inviteToken) {
+    const target = await findContactByInviteToken(surveyId, inviteToken);
+    contactTargetId = target?.id ?? null;
+  }
+
+  const firstVisit: PageVisit = {
+    stepId: currentStepId,
+    enteredAt: new Date().toISOString(),
+    leftAt: undefined,
+  };
+
+  const newResponse: NewSurveyResponse = {
+    surveyId,
+    sessionId,
+    versionId: versionId ?? null,
+    questionResponses: {},
+    isCompleted: false,
+    status: 'in_progress',
+    userAgent,
+    ipAddress,
+    platform,
+    browser,
+    currentStepId,
+    pageVisits: [firstVisit],
+    contactTargetId,
+  };
+
+  const inserted = await db
+    .insert(surveyResponses)
+    .values(newResponse)
+    .onConflictDoNothing({
+      target: [surveyResponses.surveyId, surveyResponses.sessionId],
+    })
+    .returning({ id: surveyResponses.id, contactTargetId: surveyResponses.contactTargetId });
+
+  if (inserted.length > 0) {
+    return { id: inserted[0].id, contactTargetId: inserted[0].contactTargetId };
+  }
+
+  const [existing] = await db
+    .select({ id: surveyResponses.id, contactTargetId: surveyResponses.contactTargetId })
+    .from(surveyResponses)
+    .where(
+      and(eq(surveyResponses.surveyId, surveyId), eq(surveyResponses.sessionId, sessionId)),
+    )
+    .limit(1);
+
+  if (!existing) {
+    throw new Error(
+      `createBlankResponse: 충돌 후 기존 행 조회 실패 (surveyId=${surveyId}, sessionId=${sessionId})`,
+    );
+  }
+
+  return { id: existing.id, contactTargetId: existing.contactTargetId };
+}
+
+/**
  * 페이지 이동(스텝 전환) 기록.
  *
  * - 동일 stepId면 no-op (React 더블 이펙트, 네비게이션 레이스 방어)
