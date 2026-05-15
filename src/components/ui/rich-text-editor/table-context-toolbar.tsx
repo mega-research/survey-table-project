@@ -2,6 +2,9 @@
 
 import { useEditorState, type Editor } from '@tiptap/react';
 import {
+  AlignCenter,
+  AlignLeft,
+  AlignRight,
   Columns,
   Equal,
   Merge,
@@ -30,13 +33,22 @@ export function TableContextToolbar({ editor }: Props) {
           canSplit: false,
           canDeleteColumn: false,
           canDeleteRow: false,
+          tableAlign: 'left' as 'left' | 'center' | 'right',
         };
       }
+      const tableAlign: 'left' | 'center' | 'right' = editor.isActive('table', {
+        align: 'center',
+      })
+        ? 'center'
+        : editor.isActive('table', { align: 'right' })
+          ? 'right'
+          : 'left';
       return {
         canMerge: editor.can().mergeCells(),
         canSplit: editor.can().splitCell(),
         canDeleteColumn: editor.can().deleteColumn(),
         canDeleteRow: editor.can().deleteRow(),
+        tableAlign,
       };
     },
   });
@@ -44,6 +56,10 @@ export function TableContextToolbar({ editor }: Props) {
   const setCellBg = (color: string | null) => {
     editor.chain().focus().updateAttributes('tableCell', { backgroundColor: color }).run();
     editor.chain().focus().updateAttributes('tableHeader', { backgroundColor: color }).run();
+  };
+
+  const setTableAlign = (align: 'left' | 'center' | 'right') => {
+    editor.chain().focus().updateAttributes('table', { align }).run();
   };
 
   const equalizeColumnWidths = () => {
@@ -137,6 +153,28 @@ export function TableContextToolbar({ editor }: Props) {
       <Sep />
       <ToolBtn onClick={equalizeColumnWidths} title="열 너비 균등 분배">
         <Equal className="h-4 w-4" />
+      </ToolBtn>
+      <Sep />
+      <ToolBtn
+        active={s.tableAlign === 'left'}
+        onClick={() => setTableAlign('left')}
+        title="표 왼쪽 정렬"
+      >
+        <AlignLeft className="h-4 w-4" />
+      </ToolBtn>
+      <ToolBtn
+        active={s.tableAlign === 'center'}
+        onClick={() => setTableAlign('center')}
+        title="표 가운데 정렬"
+      >
+        <AlignCenter className="h-4 w-4" />
+      </ToolBtn>
+      <ToolBtn
+        active={s.tableAlign === 'right'}
+        onClick={() => setTableAlign('right')}
+        title="표 오른쪽 정렬"
+      >
+        <AlignRight className="h-4 w-4" />
       </ToolBtn>
       <Sep />
       <ToolBtn
