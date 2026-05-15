@@ -7,7 +7,7 @@ import {
   verticalAlignStyle,
   parseCaptionAlign,
   captionAlignStyle,
-} from '@/components/operations/mail-template/table-attrs-helpers';
+} from '@/components/ui/rich-text-editor/table-attrs-helpers';
 
 function mockElement(style: Partial<CSSStyleDeclaration>): HTMLElement {
   const el = document.createElement('div');

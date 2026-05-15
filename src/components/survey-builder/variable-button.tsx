@@ -1,7 +1,7 @@
 'use client';
 
-import { PopoverVariableMenu } from '@/components/operations/mail-template/popover-variable-menu';
-import type { VariableDef } from '@/components/operations/mail-template/variable-catalog';
+import { PopoverVariableMenu } from '@/components/ui/rich-text-editor/popover-variable-menu';
+import type { VariableDef } from '@/components/ui/rich-text-editor/types';
 
 /**
  * 단일 라인 input 옆에 부착하는 변수 메뉴 트리거.

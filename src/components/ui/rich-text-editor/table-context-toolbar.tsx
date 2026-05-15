@@ -1,0 +1,198 @@
+'use client';
+
+import { useEditorState, type Editor } from '@tiptap/react';
+import {
+  AlignCenter,
+  AlignLeft,
+  AlignRight,
+  Columns,
+  Equal,
+  Merge,
+  Paintbrush,
+  Rows,
+  Split,
+  Trash2,
+  X,
+} from 'lucide-react';
+
+import { type HAlign } from './table-attrs-helpers';
+import { Sep, ToolBtn } from './toolbar-primitives';
+
+interface Props {
+  editor: Editor;
+}
+
+const CELL_BG = '#e5e7eb'; // gray-200
+
+export function TableContextToolbar({ editor }: Props) {
+  const s = useEditorState({
+    editor,
+    selector: ({ editor }) => {
+      if (!editor) {
+        return {
+          canMerge: false,
+          canSplit: false,
+          canDeleteColumn: false,
+          canDeleteRow: false,
+          tableAlign: 'left' as 'left' | 'center' | 'right',
+        };
+      }
+      const tableAlign: 'left' | 'center' | 'right' = editor.isActive('table', {
+        align: 'center',
+      })
+        ? 'center'
+        : editor.isActive('table', { align: 'right' })
+          ? 'right'
+          : 'left';
+      return {
+        canMerge: editor.can().mergeCells(),
+        canSplit: editor.can().splitCell(),
+        canDeleteColumn: editor.can().deleteColumn(),
+        canDeleteRow: editor.can().deleteRow(),
+        tableAlign,
+      };
+    },
+  });
+
+  const setCellBg = (color: string | null) => {
+    editor.chain().focus().updateAttributes('tableCell', { backgroundColor: color }).run();
+    editor.chain().focus().updateAttributes('tableHeader', { backgroundColor: color }).run();
+  };
+
+  const setTableAlign = (align: HAlign) => {
+    // 편집기 시각은 TableAlignDecoration plugin 이 wrapper 에 flex 로 적용.
+    // 미리보기 / 저장 HTML 은 align attr renderHTML 이 table inline style 로 직렬화.
+    editor.chain().focus().updateAttributes('table', { align }).run();
+  };
+
+  const equalizeColumnWidths = () => {
+    const { state } = editor;
+    const { $from } = state.selection;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let tableNode: any = null;
+    let tablePos = -1;
+    for (let depth = $from.depth; depth >= 0; depth--) {
+      const node = $from.node(depth);
+      if (node.type.name === 'table') {
+        tableNode = node;
+        tablePos = $from.before(depth);
+        break;
+      }
+    }
+    if (!tableNode || tablePos < 0) return;
+
+    let colCount = 0;
+    const firstRow = tableNode.firstChild;
+    if (firstRow && firstRow.content) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      firstRow.content.forEach((cell: any) => {
+        colCount += cell.attrs.colspan || 1;
+      });
+    }
+    if (colCount === 0) return;
+
+    // 현재 table 의 실제 폭을 DOM 에서 측정해 그 폭 기준으로 분배.
+    // 콘텐츠가 다르더라도 표 전체 폭을 유지한 채 컬럼만 균등화한다.
+    const wrapperDom = editor.view.nodeDOM(tablePos) as HTMLElement | null;
+    const tableDom = wrapperDom?.querySelector('table') as HTMLElement | null;
+    const measuredWidth = tableDom?.offsetWidth ?? 0;
+    // 측정 실패 시 cellMinWidth (60) * colCount 로 fallback
+    const totalWidth = measuredWidth > 0 ? measuredWidth : 60 * colCount;
+    const equalWidth = Math.floor(totalWidth / colCount);
+    const { tr } = state;
+    let modified = false;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    tableNode.descendants((node: any, pos: number) => {
+      if (node.type.name === 'tableCell' || node.type.name === 'tableHeader') {
+        const colspan = node.attrs.colspan || 1;
+        tr.setNodeMarkup(tablePos + 1 + pos, undefined, {
+          ...node.attrs,
+          colwidth: Array(colspan).fill(equalWidth),
+        });
+        modified = true;
+      }
+    });
+    if (modified) editor.view.dispatch(tr);
+  };
+
+  return (
+    <div className="flex w-full flex-wrap items-center gap-1 border-t border-gray-200 pt-2 mt-1">
+      <span className="mr-1 text-xs font-medium text-gray-500">표</span>
+      <ToolBtn onClick={() => editor.chain().focus().addColumnAfter().run()} title="열 추가">
+        <Columns className="h-4 w-4" />
+        <span className="text-xs">+</span>
+      </ToolBtn>
+      <ToolBtn onClick={() => editor.chain().focus().addRowAfter().run()} title="행 추가">
+        <Rows className="h-4 w-4" />
+        <span className="text-xs">+</span>
+      </ToolBtn>
+      <ToolBtn
+        onClick={() => editor.chain().focus().deleteColumn().run()}
+        disabled={!s.canDeleteColumn}
+        title="열 삭제"
+      >
+        <Columns className="h-4 w-4 text-red-600" />
+        <span className="text-xs text-red-600">-</span>
+      </ToolBtn>
+      <ToolBtn
+        onClick={() => editor.chain().focus().deleteRow().run()}
+        disabled={!s.canDeleteRow}
+        title="행 삭제"
+      >
+        <Rows className="h-4 w-4 text-red-600" />
+        <span className="text-xs text-red-600">-</span>
+      </ToolBtn>
+      <Sep />
+      <ToolBtn onClick={() => editor.chain().focus().mergeCells().run()} disabled={!s.canMerge} title="셀 병합">
+        <Merge className="h-4 w-4" />
+      </ToolBtn>
+      <ToolBtn onClick={() => editor.chain().focus().splitCell().run()} disabled={!s.canSplit} title="셀 분할">
+        <Split className="h-4 w-4" />
+      </ToolBtn>
+      <Sep />
+      <ToolBtn onClick={() => setCellBg(CELL_BG)} title="셀 배경색 적용">
+        <Paintbrush className="h-4 w-4" />
+      </ToolBtn>
+      <ToolBtn onClick={() => setCellBg(null)} title="셀 배경색 제거">
+        <div className="relative">
+          <Paintbrush className="h-4 w-4 text-red-600" />
+          <X className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 text-red-600" />
+        </div>
+      </ToolBtn>
+      <Sep />
+      <ToolBtn onClick={equalizeColumnWidths} title="열 너비 균등 분배">
+        <Equal className="h-4 w-4" />
+      </ToolBtn>
+      <Sep />
+      <ToolBtn
+        active={s.tableAlign === 'left'}
+        onClick={() => setTableAlign('left')}
+        title="표 왼쪽 정렬"
+      >
+        <AlignLeft className="h-4 w-4" />
+      </ToolBtn>
+      <ToolBtn
+        active={s.tableAlign === 'center'}
+        onClick={() => setTableAlign('center')}
+        title="표 가운데 정렬"
+      >
+        <AlignCenter className="h-4 w-4" />
+      </ToolBtn>
+      <ToolBtn
+        active={s.tableAlign === 'right'}
+        onClick={() => setTableAlign('right')}
+        title="표 오른쪽 정렬"
+      >
+        <AlignRight className="h-4 w-4" />
+      </ToolBtn>
+      <Sep />
+      <ToolBtn
+        onClick={() => editor.chain().focus().deleteTable().run()}
+        title="표 삭제"
+      >
+        <Trash2 className="h-4 w-4 text-red-600" />
+      </ToolBtn>
+    </div>
+  );
+}

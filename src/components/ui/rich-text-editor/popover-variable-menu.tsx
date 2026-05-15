@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
-import type { VariableDef } from './variable-catalog';
+import type { VariableDef } from './types';
 
 interface Props {
   catalog: VariableDef[];

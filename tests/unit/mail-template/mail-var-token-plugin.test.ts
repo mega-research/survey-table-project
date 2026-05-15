@@ -6,7 +6,7 @@ import { EditorState } from '@tiptap/pm/state';
 import {
   mailVarTokenPlugin,
   scanTokenRanges,
-} from '@/components/operations/mail-template/mail-var-token-plugin';
+} from '@/components/ui/rich-text-editor/var-token-plugin';
 
 const schema = new Schema({
   nodes: {

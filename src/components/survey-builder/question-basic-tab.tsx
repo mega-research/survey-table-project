@@ -38,7 +38,7 @@ import { VariableButton } from './variable-button';
 
 import { BranchRuleEditor } from './branch-rule-editor';
 import { DynamicTableEditor } from './dynamic-table-editor';
-import { NoticeEditor } from './notice-editor';
+import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import { NoticeRenderer } from './notice-renderer';
 import { OptionsLayoutSelector } from './options-layout-selector';
 import { RankingConfigEditorForQuestion } from './ranking-config-editor';
@@ -369,12 +369,15 @@ export function QuestionBasicTab({
         <div>
           <Label htmlFor="description">설명 (선택사항)</Label>
           <div className="mt-2">
-            <NoticeEditor
-              content={formData.description || ''}
-              onChange={(content) =>
-                setFormData((prev) => ({ ...prev, description: content }))
+            <RichTextEditor
+              kind="survey"
+              initialHtml={formData.description || ''}
+              onChange={(html) =>
+                setFormData((prev) => ({ ...prev, description: html }))
               }
-              compact={true}
+              variableCatalog={variableCatalog}
+              minHeight={80}
+              editorClassName="text-sm"
               placeholder="질문에 대한 추가 설명을 입력하세요..."
             />
           </div>
@@ -907,11 +910,14 @@ export function QuestionBasicTab({
         <div className="space-y-6">
           <div>
             <Label className="mb-3 block text-base font-medium">공지사항 내용 편집</Label>
-            <NoticeEditor
-              content={formData.noticeContent || ''}
-              onChange={(content) =>
-                setFormData((prev) => ({ ...prev, noticeContent: content }))
+            <RichTextEditor
+              kind="survey"
+              initialHtml={formData.noticeContent || ''}
+              onChange={(html) =>
+                setFormData((prev) => ({ ...prev, noticeContent: html }))
               }
+              variableCatalog={variableCatalog}
+              minHeight={300}
             />
           </div>
 

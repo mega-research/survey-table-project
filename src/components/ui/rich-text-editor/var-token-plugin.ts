@@ -50,3 +50,21 @@ export const mailVarTokenPlugin = new Plugin<DecorationSet>({
     },
   },
 });
+
+// 동시에 마운트된 여러 에디터가 같은 Plugin 객체를 공유하면 PluginKey lookup이 의도와 어긋날 수 있어
+// 매 에디터마다 새 인스턴스를 빌드할 수 있는 factory 도 함께 제공
+export function createVarTokenPlugin(): Plugin<DecorationSet> {
+  const key = new PluginKey<DecorationSet>('var-token');
+  return new Plugin<DecorationSet>({
+    key,
+    state: {
+      init: (_, { doc }) => buildDecorations(doc),
+      apply: (tr, old) => (tr.docChanged ? buildDecorations(tr.doc) : old),
+    },
+    props: {
+      decorations(state) {
+        return key.getState(state);
+      },
+    },
+  });
+}

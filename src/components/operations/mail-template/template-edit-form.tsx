@@ -18,7 +18,7 @@ import { TMP_ATTACHMENT_PREFIX } from '@/lib/mail/constants';
 import { deleteMailAttachmentTmpBatch } from '@/lib/mail/mail-attachment-client';
 
 import { AttachmentSection } from './attachment-section';
-import { MailTemplateEditor, type MailTemplateEditorHandle } from './mail-template-editor';
+import { RichTextEditor, type RichTextEditorHandle } from '@/components/ui/rich-text-editor';
 import { MetaFields, type MetaFieldValues } from './meta-fields';
 import { MailPreviewDialog } from './preview-dialog';
 import type { VariableDef } from './variable-catalog';
@@ -52,7 +52,7 @@ export function TemplateEditForm({ surveyId, fromDomain, catalog, template, curr
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const editorRef = useRef<MailTemplateEditorHandle>(null);
+  const editorRef = useRef<RichTextEditorHandle>(null);
 
   const initial = useMemo(() => buildInitialState(template), [template]);
   const [state, setState] = useState<FormState>(initial);
@@ -187,10 +187,11 @@ export function TemplateEditForm({ surveyId, fromDomain, catalog, template, curr
           <Label className="text-sm font-medium text-gray-900">
             본문<span className="ml-0.5 text-red-500">*</span>
           </Label>
-          <MailTemplateEditor
+          <RichTextEditor
             ref={editorRef}
+            kind="mail"
             initialHtml={template?.bodyHtml ?? ''}
-            catalog={catalog}
+            variableCatalog={catalog}
             onChange={(html) => setState((prev) => ({ ...prev, bodyHtml: html }))}
           />
         </div>
