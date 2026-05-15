@@ -27,6 +27,9 @@ import { EmptyState } from './empty-state';
 
 const DWELL_PAGE_SIZE = 10;
 
+/** 같은 label 이 여러 번 등장할 때 occurrence index 표기용 동그라미 숫자. */
+const OCCURRENCE_GLYPHS = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨'];
+
 interface Props {
   data: DwellOutput;
   /** 페이지 offset. 0 = 첫 10개, 1 = 다음 10개, ... */
@@ -104,13 +107,31 @@ interface ChartRow {
 export function PageDwellDistribution({ data, pageOffset }: Props) {
   const pushParams = useSearchParamsMutator();
 
-  // 현재 offset에 해당하는 step 슬라이스
+  // n=0 step (응답이 누적되지 않은 페이지) 은 빈 막대만 차지하므로 차트에서 제외.
+  // 같은 label 이 여러 번 등장하면 (그룹 step 이 인터리브로 분리된 경우) 두 번째부터 ①/②/… 인덱스 부여.
+  const filteredPages = useMemo<DwellPage[]>(() => {
+    const nonEmpty = data.pages.filter((p) => p.n > 0);
+    const labelCounts = new Map<string, number>();
+    for (const p of nonEmpty) {
+      labelCounts.set(p.label, (labelCounts.get(p.label) ?? 0) + 1);
+    }
+    const seen = new Map<string, number>();
+    return nonEmpty.map((p) => {
+      const total = labelCounts.get(p.label) ?? 1;
+      if (total <= 1) return p;
+      const nth = (seen.get(p.label) ?? 0) + 1;
+      seen.set(p.label, nth);
+      return { ...p, label: `${p.label} ${OCCURRENCE_GLYPHS[nth - 1] ?? `(${nth})`}` };
+    });
+  }, [data.pages]);
+
+  // 현재 offset 에 해당하는 step 슬라이스 (n=0 제외 후 기준).
   const visiblePages = useMemo(() => {
     const start = pageOffset * DWELL_PAGE_SIZE;
-    return data.pages.slice(start, start + DWELL_PAGE_SIZE);
-  }, [data.pages, pageOffset]);
+    return filteredPages.slice(start, start + DWELL_PAGE_SIZE);
+  }, [filteredPages, pageOffset]);
 
-  const totalPages = data.pages.length;
+  const totalPages = filteredPages.length;
   const canGoPrev = pageOffset > 0;
   const canGoNext = (pageOffset + 1) * DWELL_PAGE_SIZE < totalPages;
 
@@ -198,7 +219,7 @@ export function PageDwellDistribution({ data, pageOffset }: Props) {
           <ChartContainer config={CHART_CONFIG} className="aspect-auto h-72 w-full">
             <BarChart
               data={chartRows}
-              margin={{ top: 16, right: 8, bottom: 0, left: 0 }}
+              margin={{ top: 28, right: 8, bottom: 0, left: 0 }}
             >
               <CartesianGrid vertical={false} strokeDasharray="3 3" />
               <XAxis
@@ -260,15 +281,16 @@ export function PageDwellDistribution({ data, pageOffset }: Props) {
                 <ErrorBar
                   dataKey="errorBar"
                   width={6}
-                  stroke="currentColor"
-                  strokeWidth={1.5}
+                  stroke="#94a3b8"
+                  strokeWidth={1.25}
+                  strokeOpacity={0.7}
                 />
                 <LabelList
                   dataKey="meanSeconds"
                   position="top"
-                  className="fill-slate-700"
+                  className="fill-slate-600"
                   fontSize={11}
-                  offset={12}
+                  offset={20}
                   formatter={(v: number) => (v > 0 ? formatSeconds(v) : '')}
                 />
               </Bar>
