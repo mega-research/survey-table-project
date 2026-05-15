@@ -43,7 +43,7 @@ export function EmptyPeriodsNotice() {
       <div className="space-y-1">
         <p className="font-medium">요금제·결제일이 등록되지 않았습니다.</p>
         <p className="text-amber-800">
-          상단 "요금제·결제일 관리" 버튼에서 Pro 50K 요금제와 결제일을 등록해주세요. 등록 전에는 비용이
+          상단 &ldquo;요금제·결제일 관리&rdquo; 버튼에서 Pro 50K 요금제와 결제일을 등록해주세요. 등록 전에는 비용이
           모두 0원으로 표시됩니다.
         </p>
       </div>

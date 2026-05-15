@@ -98,7 +98,7 @@ export function ProfilesTable({ rows, total, page, pageSize, sort, dir, question
         });
         if (r.status === 'completed' && r.completedAt === null) {
           // DB 일관성 깨짐 방어 — 행은 '—' 로 노출하되 운영자가 파악할 수 있게 로깅
-          // eslint-disable-next-line no-console
+           
           console.warn('[profiles-table] completed status with null completed_at', {
             id: r.id,
           });

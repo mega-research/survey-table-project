@@ -59,17 +59,16 @@ export function useRowVisibility(
   scrollRootRef?: RefObject<HTMLElement | null>,
 ): RowVisibilityResult {
   const rowCount = displayRows.length;
-
-  if (typeof IntersectionObserver === 'undefined') {
-    return { isVisible: () => true, sentinelRef: () => () => {} };
-  }
+  const supportsIO = typeof IntersectionObserver !== 'undefined';
 
   const mergedRangesRef = useRef<MergedRange[]>([]);
   mergedRangesRef.current = extractMergedRanges(displayRows);
 
   const [visibleSet, setVisibleSet] = useState<Set<number>>(() => {
     const initial = new Set<number>();
-    for (let i = 0; i < Math.min(INITIAL_VISIBLE_COUNT, rowCount); i++) initial.add(i);
+    // IO 미지원 환경(SSR/구형 브라우저): 모든 행 마운트
+    const count = supportsIO ? Math.min(INITIAL_VISIBLE_COUNT, rowCount) : rowCount;
+    for (let i = 0; i < count; i++) initial.add(i);
     return initial;
   });
 
@@ -78,6 +77,7 @@ export function useRowVisibility(
   const sentinelsRef = useRef(new Map<number, HTMLElement>());
 
   useEffect(() => {
+    if (!supportsIO) return;
     // 스크롤 루트: 지정되면 해당 요소(내부 스크롤 컨테이너), 없으면 뷰포트
     const root = scrollRootRef?.current ?? null;
 
@@ -138,7 +138,7 @@ export function useRowVisibility(
       loadObserverRef.current?.disconnect();
       unloadObserverRef.current?.disconnect();
     };
-  }, [rowCount]);
+  }, [rowCount, supportsIO, scrollRootRef]);
 
   // ref 함수 캐시 — 매 렌더마다 새 함수 생성 방지 (React.memo 보호)
   const sentinelRefCache = useRef(new Map<number, (el: HTMLElement | null) => void>());
@@ -170,8 +170,8 @@ export function useRowVisibility(
   );
 
   const isVisible = useCallback(
-    (rowIdx: number) => visibleSet.has(rowIdx),
-    [visibleSet],
+    (rowIdx: number) => (supportsIO ? visibleSet.has(rowIdx) : true),
+    [visibleSet, supportsIO],
   );
 
   return { isVisible, sentinelRef };

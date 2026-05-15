@@ -286,7 +286,7 @@ export function NoticeEditor({
 
       // 에디터에 이미지 추가/교체
       // tiptap 라이브러리 타입 호환성 문제로 인해 any 타입 사용
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const ed = editor as any;
       ed.chain().focus().setImage({ src: imageUrl }).run();
 
@@ -382,7 +382,7 @@ export function NoticeEditor({
   }
 
   // tiptap 라이브러리 타입 호환성 문제로 인해 any 타입 사용
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const ed = editor as any;
 
   const addLink = () => {

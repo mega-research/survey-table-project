@@ -140,7 +140,7 @@ export async function ingestContactUpload(
   const piiKeySet = new Set(piiEntries.map((e) => e.columnKey));
 
   let uploadedRows = 0;
-  let mergedRows = 0;
+  const mergedRows = 0;
   let errorRows = 0;
 
   const result = await db.transaction(async (tx) => {
