@@ -1,7 +1,7 @@
 import Link from 'next/link';
 
 import { Card } from '@/components/ui/card';
-import { formatDateTimeKst } from '@/lib/date-formatters';
+import { LocalDateTime } from '@/components/ui/local-date-time';
 import type { UnsubscribedContactRow } from '@/lib/operations/campaigns.server';
 
 import { UnsubscribedRevertButton } from './unsubscribed-revert-button';
@@ -57,7 +57,7 @@ export function UnsubscribedSegment({ surveyId, rows, total, page, pageSize }: P
                     <td className="px-4 py-3 text-slate-900">{r.emailMasked}</td>
                     <td className="px-4 py-3 text-slate-600">{r.groupValue ?? '—'}</td>
                     <td className="px-4 py-3 text-xs text-slate-500">
-                      {formatDateTimeKst(r.unsubscribedAt)}
+                      <LocalDateTime value={r.unsubscribedAt} />
                     </td>
                     <td className="px-4 py-3 text-center">
                       <UnsubscribedRevertButton

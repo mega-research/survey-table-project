@@ -10,8 +10,8 @@ import {
   type ContactColumnScheme,
   type ContactMethod,
 } from '@/db/schema/schema-types';
+import { formatLocalDateTime } from '@/lib/date-formatters';
 import { attrsKeyOf, piiKeyOf } from '@/lib/operations/contacts';
-import { FULL_DATE_FMT } from '@/lib/operations/contacts-shared';
 import { piiFieldLabel, type PiiFieldType } from '@/lib/crypto/pii-fields';
 
 interface ContactInfoCardProps {
@@ -176,7 +176,7 @@ export function ContactInfoCard({
             <strong className="text-xs text-slate-600">Web</strong>
             {respondedAt ? (
               <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700">
-                응답 완료 {FULL_DATE_FMT.format(respondedAt)}
+                응답 완료 {formatLocalDateTime(respondedAt)}
               </span>
             ) : (
               <span className="text-xs text-slate-400">미응답</span>

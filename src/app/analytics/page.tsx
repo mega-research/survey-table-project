@@ -4,6 +4,7 @@ import { ArrowRight, BarChart3, Calendar, FileText, Plus, Users } from 'lucide-r
 
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { LocalDateTime } from '@/components/ui/local-date-time';
 import { getCompletedResponseCountBySurvey, getResponseCountBySurvey } from '@/data/responses';
 import { getSurveys } from '@/data/surveys';
 
@@ -88,11 +89,10 @@ export default async function AnalyticsListPage() {
                       <Calendar className="h-4 w-4 text-gray-400" />
                       <div>
                         <p className="text-sm font-medium text-gray-900">
-                          {new Date(survey.createdAt).toLocaleDateString('ko-KR', {
-                            timeZone: 'Asia/Seoul',
-                            month: 'short',
-                            day: 'numeric',
-                          })}
+                          <LocalDateTime
+                            value={survey.createdAt}
+                            format="short-month-day"
+                          />
                         </p>
                         <p className="text-xs text-gray-500">생성일</p>
                       </div>

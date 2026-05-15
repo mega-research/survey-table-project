@@ -51,27 +51,3 @@ export function resultCodeToneClass(tone: ContactResultCode['tone']): string {
   return RESULT_CODE_TONE_CLASS[tone ?? 'slate'] ?? RESULT_CODE_TONE_CLASS.slate;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 공유 DateTimeFormat 인스턴스 — 컴포넌트마다 new 하지 않음
-// ─────────────────────────────────────────────────────────────────────────────
-
-/** 'MM-DD HH:mm' (월일 + 시각). 컨택리스트 표 / 회차 이력 등 짧은 표시. KST 24h. */
-export const SHORT_DATE_FMT = new Intl.DateTimeFormat('ko-KR', {
-  timeZone: 'Asia/Seoul',
-  month: '2-digit',
-  day: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-  hour12: false,
-});
-
-/** 'YYYY-MM-DD HH:mm' (연도 포함). 업로드 이력 / 응답 시각 등. KST 24h. */
-export const FULL_DATE_FMT = new Intl.DateTimeFormat('ko-KR', {
-  timeZone: 'Asia/Seoul',
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-  hour12: false,
-});

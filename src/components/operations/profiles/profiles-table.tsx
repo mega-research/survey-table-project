@@ -9,6 +9,7 @@ import {
 import { useMemo } from 'react';
 
 import { useSearchParamsMutator } from '@/hooks/use-search-params-mutator';
+import { formatLocalDateTime } from '@/lib/date-formatters';
 import { cn } from '@/lib/utils';
 import { formatPlatformKo } from '@/lib/operations/parse-ua';
 import {
@@ -52,23 +53,8 @@ interface Props {
   questions: ReadonlyArray<QuestionMeta>;
 }
 
-const DATETIME_FORMATTER = new Intl.DateTimeFormat('ko-KR', {
-  timeZone: 'Asia/Seoul',
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-  hour12: false,
-});
-
-function formatDateTime(d: Date | null): string {
-  if (!d) return '—';
-  // ko-KR formatToParts → 'YYYY-MM-DD HH:mm'
-  const parts = DATETIME_FORMATTER.formatToParts(d);
-  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
-  return `${get('year')}-${get('month')}-${get('day')} ${get('hour')}:${get('minute')}`;
-}
+// formatDateTime — 브라우저 timezone 으로 표시. ko-KR 'YYYY. MM. DD. HH:mm'.
+const formatDateTime = formatLocalDateTime;
 
 interface DisplayRow {
   id: string;

@@ -97,8 +97,7 @@ export function SummaryCards({ summary }: SummaryCardsProps) {
             <p className="text-sm font-medium text-gray-500">마지막 응답</p>
             <p className="mt-1 text-lg font-bold text-gray-900">
               {summary.lastResponseAt
-                ? new Date(summary.lastResponseAt).toLocaleDateString('ko-KR', {
-                    timeZone: 'Asia/Seoul',
+                ? new Date(summary.lastResponseAt).toLocaleDateString(undefined, {
                     month: 'short',
                     day: 'numeric',
                     hour: '2-digit',

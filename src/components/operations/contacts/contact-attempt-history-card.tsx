@@ -7,7 +7,8 @@ import { deleteContactAttempt } from '@/actions/contact-actions';
 import { Button } from '@/components/ui/button';
 import type { ContactResultCode } from '@/db/schema/schema-types';
 import { useAutoFadeMessage } from '@/hooks/use-auto-fade-message';
-import { resultCodeToneClass, SHORT_DATE_FMT } from '@/lib/operations/contacts-shared';
+import { formatLocalMonthDayTime } from '@/lib/date-formatters';
+import { resultCodeToneClass } from '@/lib/operations/contacts-shared';
 import type { ContactAttemptRow } from '@/lib/operations/contacts.server';
 
 interface ContactAttemptHistoryCardProps {
@@ -68,7 +69,7 @@ export function ContactAttemptHistoryCard({
                 className="flex items-start gap-3 border-t px-5 py-3 text-sm first:border-t-0"
               >
                 <span className="w-24 shrink-0 text-xs text-slate-500 tabular-nums">
-                  {SHORT_DATE_FMT.format(a.createdAt)}
+                  {formatLocalMonthDayTime(a.createdAt)}
                 </span>
                 <div className="flex-1">
                   <div className="flex items-center gap-2">

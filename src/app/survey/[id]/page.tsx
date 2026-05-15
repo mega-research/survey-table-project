@@ -21,7 +21,7 @@ import { lookupContactAttrs } from '@/actions/contact-attrs-actions';
 import { InviteRequiredScreen } from '@/components/survey-response/invite-required-screen';
 import { MobileBottomNav } from '@/components/survey-response/mobile-bottom-nav';
 import { QuestionInput } from '@/components/survey-response/question-input';
-import { formatDateTimeKst } from '@/lib/date-formatters';
+import { formatLocalDateTime } from '@/lib/date-formatters';
 import { ContactAttrsProvider, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { Button } from '@/components/ui/button';
@@ -794,7 +794,7 @@ export default function SurveyResponsePage() {
             </p>
             <div className="space-y-2 text-sm text-gray-500">
               <p>총 {questions.length}개 질문</p>
-              <p>응답 완료 시간: {formatDateTimeKst(new Date())}</p>
+              <p>응답 완료 시간: {formatLocalDateTime(new Date())}</p>
             </div>
             <Button onClick={() => router.push('/')} className="mt-6">
               홈으로 돌아가기

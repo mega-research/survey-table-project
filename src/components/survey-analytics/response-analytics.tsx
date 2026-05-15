@@ -6,7 +6,7 @@ import { BarChart3, Clock, Download, FileText, PieChart, TrendingUp, Users } fro
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { formatDateTimeKst } from '@/lib/date-formatters';
+import { formatLocalDateTime } from '@/lib/date-formatters';
 import {
   useCompletedResponses,
   useExportResponsesCsv,
@@ -189,7 +189,7 @@ export function ResponseAnalytics({ surveyId, className }: ResponseAnalyticsProp
                           응답 #{response.id.slice(-8)}
                         </p>
                         <p className="text-xs text-gray-600">
-                          {formatDateTimeKst(response.completedAt)}
+                          {formatLocalDateTime(response.completedAt)}
                         </p>
                       </div>
                     </div>

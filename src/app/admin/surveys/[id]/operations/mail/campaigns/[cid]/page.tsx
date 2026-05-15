@@ -1,15 +1,17 @@
+import type { ReactNode } from 'react';
+
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { CancelCampaignButton } from '@/components/operations/mail-campaign/cancel-campaign-button';
 import { CampaignRecipientsTable } from '@/components/operations/mail-campaign/campaign-recipients-table';
 import { Card } from '@/components/ui/card';
+import { LocalDateTime } from '@/components/ui/local-date-time';
 import {
   mailRecipientStatusValues,
   type MailCampaignStatus,
   type MailRecipientStatus,
 } from '@/db/schema/mail';
-import { formatDateTimeKst } from '@/lib/date-formatters';
 import {
   getCampaignDetail,
   listCampaignRecipients,
@@ -134,9 +136,9 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
         </div>
 
         <dl className="grid grid-cols-2 gap-4 border-t border-slate-200 pt-4 text-sm sm:grid-cols-4">
-          <Meta label="등록일시" value={formatDateTimeKst(campaign.createdAt)} />
-          <Meta label="발송 시작" value={formatDateTimeKst(campaign.startedAt)} />
-          <Meta label="발송 완료" value={formatDateTimeKst(campaign.completedAt)} />
+          <Meta label="등록일시" value={<LocalDateTime value={campaign.createdAt} />} />
+          <Meta label="발송 시작" value={<LocalDateTime value={campaign.startedAt} />} />
+          <Meta label="발송 완료" value={<LocalDateTime value={campaign.completedAt} />} />
           <Meta label="제목 (메일)" value={campaign.subjectSnapshot} />
         </dl>
       </Card>
@@ -173,7 +175,7 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
   );
 }
 
-function Meta({ label, value }: { label: string; value: string }) {
+function Meta({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div>
       <dt className="text-xs text-slate-500">{label}</dt>

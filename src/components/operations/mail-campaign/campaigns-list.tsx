@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { Send } from 'lucide-react';
 
 import { Card } from '@/components/ui/card';
-import { formatDateTimeKst } from '@/lib/date-formatters';
+import { LocalDateTime } from '@/components/ui/local-date-time';
 import type { CampaignRow } from '@/lib/operations/campaigns.server';
 
 interface Props {
@@ -111,9 +111,11 @@ export function CampaignsList({ surveyId, rows, total, page, pageSize }: Props) 
                       {status.label}
                     </span>
                   </td>
-                  <td className="px-3 py-3 text-xs text-slate-500">{formatDateTimeKst(r.createdAt)}</td>
                   <td className="px-3 py-3 text-xs text-slate-500">
-                    {formatDateTimeKst(r.startedAt)}
+                    <LocalDateTime value={r.createdAt} />
+                  </td>
+                  <td className="px-3 py-3 text-xs text-slate-500">
+                    <LocalDateTime value={r.startedAt} />
                   </td>
                 </tr>
               );

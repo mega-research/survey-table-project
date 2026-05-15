@@ -7,7 +7,7 @@ import { FileText, MessageSquare, Search } from 'lucide-react';
 
 import { formatPercentage } from '@/lib/analytics/analyzer';
 import type { TextAnalytics } from '@/lib/analytics/types';
-import { formatDateTimeKst } from '@/lib/date-formatters';
+import { formatLocalDateTime } from '@/lib/date-formatters';
 
 interface TextResponsesProps {
   data: TextAnalytics;
@@ -91,7 +91,7 @@ export function TextResponses({ data }: TextResponsesProps) {
               <p className="text-sm whitespace-pre-wrap text-gray-700">{response.value}</p>
               {response.submittedAt && (
                 <p className="mt-2 text-xs text-gray-400">
-                  {formatDateTimeKst(response.submittedAt)}
+                  {formatLocalDateTime(response.submittedAt)}
                 </p>
               )}
             </div>

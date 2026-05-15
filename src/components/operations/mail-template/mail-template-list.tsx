@@ -3,8 +3,8 @@ import Link from 'next/link';
 import { Mail } from 'lucide-react';
 
 import { Card } from '@/components/ui/card';
+import { LocalDateTime } from '@/components/ui/local-date-time';
 import type { MailTemplate } from '@/db/schema/mail';
-import { formatDateTimeKst } from '@/lib/date-formatters';
 
 import { DeleteTemplateButton } from './delete-template-button';
 
@@ -59,7 +59,7 @@ export function MailTemplateList({ surveyId, templates }: Props) {
                 </Link>
               </td>
               <td className="max-w-md truncate px-6 py-4 text-gray-600">{t.subject || '—'}</td>
-              <td className="px-6 py-4 text-gray-500">{formatDateTimeKst(t.updatedAt)}</td>
+              <td className="px-6 py-4 text-gray-500"><LocalDateTime value={t.updatedAt} /></td>
               <td className="px-4 py-4 text-right">
                 <DeleteTemplateButton
                   surveyId={surveyId}

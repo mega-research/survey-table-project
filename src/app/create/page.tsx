@@ -32,7 +32,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { useDeleteSurvey, useSaveSurvey, useSurveys } from '@/hooks/queries/use-surveys';
-import { formatDateKst } from '@/lib/date-formatters';
+import { formatLocalDate } from '@/lib/date-formatters';
 import { generateId } from '@/lib/utils';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { useSurveyUIStore } from '@/stores/ui-store';
@@ -274,7 +274,7 @@ export default function CreateSurveyPage() {
                           <h5 className="text-sm font-medium text-gray-900">{survey.title}</h5>
                           <p className="mt-1 text-xs text-gray-500">
                             {survey.questionCount}개 질문 •{' '}
-                            {formatDateKst(survey.updatedAt)}
+                            {formatLocalDate(survey.updatedAt)}
                           </p>
                         </button>
                         <Button
@@ -361,7 +361,7 @@ export default function CreateSurveyPage() {
               <div className="space-y-1 text-xs text-gray-500">
                 <p>그룹 수: {(currentSurvey.groups || []).length}개</p>
                 <p>질문 수: {currentSurvey.questions.length}개</p>
-                <p>마지막 수정: {formatDateKst(currentSurvey.updatedAt)}</p>
+                <p>마지막 수정: {formatLocalDate(currentSurvey.updatedAt)}</p>
               </div>
             </div>
           </div>

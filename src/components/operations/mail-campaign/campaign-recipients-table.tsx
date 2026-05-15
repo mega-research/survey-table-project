@@ -1,8 +1,8 @@
 import Link from 'next/link';
 
 import { Card } from '@/components/ui/card';
+import { LocalDateTime } from '@/components/ui/local-date-time';
 import type { MailRecipientStatus } from '@/db/schema/mail';
-import { formatDateTimeKst } from '@/lib/date-formatters';
 import type { CampaignRecipientRow } from '@/lib/operations/campaigns.server';
 
 interface Props {
@@ -157,19 +157,21 @@ export function CampaignRecipientsTable({
                         {r.unsubscribedAt && r.status !== 'skipped_unsubscribed' && (
                           <span
                             className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600"
-                            title={`수신거부 ${formatDateTimeKst(r.unsubscribedAt)}`}
+                            title={`수신거부 ${r.unsubscribedAt.toISOString()}`}
                           >
                             수신거부
                           </span>
                         )}
                       </div>
                     </td>
-                    <td className="px-3 py-2 text-xs text-slate-500">{formatDateTimeKst(r.sentAt)}</td>
                     <td className="px-3 py-2 text-xs text-slate-500">
-                      {formatDateTimeKst(r.deliveredAt)}
+                      <LocalDateTime value={r.sentAt} />
                     </td>
                     <td className="px-3 py-2 text-xs text-slate-500">
-                      {formatDateTimeKst(r.openedAt)}
+                      <LocalDateTime value={r.deliveredAt} />
+                    </td>
+                    <td className="px-3 py-2 text-xs text-slate-500">
+                      <LocalDateTime value={r.openedAt} />
                     </td>
                     <td className="px-3 py-2 text-xs text-rose-600">{r.errorReason ?? ''}</td>
                   </tr>

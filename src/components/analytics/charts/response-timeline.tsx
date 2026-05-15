@@ -13,8 +13,7 @@ interface ResponseTimelineProps {
 export function ResponseTimeline({ data, title = '응답 추이' }: ResponseTimelineProps) {
   // 날짜 포맷팅
   const chartData = data.map((d) => ({
-    date: new Date(d.date).toLocaleDateString('ko-KR', {
-      timeZone: 'Asia/Seoul',
+    date: new Date(d.date).toLocaleDateString(undefined, {
       month: 'short',
       day: 'numeric',
     }),

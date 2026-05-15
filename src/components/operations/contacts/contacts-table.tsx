@@ -5,8 +5,8 @@ import { useMemo } from 'react';
 import { SortIndicator, TablePagerFooter } from '@/components/operations/table-primitives';
 import type { ContactColumnDef, ContactColumnScheme } from '@/db/schema/schema-types';
 import { useSearchParamsMutator } from '@/hooks/use-search-params-mutator';
+import { formatLocalMonthDayTime } from '@/lib/date-formatters';
 import { attrsKeyOf, piiKeyOf, type ContactsSortDir, type ContactsSortKey } from '@/lib/operations/contacts';
-import { SHORT_DATE_FMT } from '@/lib/operations/contacts-shared';
 import type { ContactsRow } from '@/lib/operations/contacts.server';
 
 interface ContactsTableProps {
@@ -86,7 +86,7 @@ function computeCell(col: ContactColumnDef, row: ContactsRow): {
       return { display: '—', plain: undefined }; // 후속 슬라이스 메일발송
     case 'system.web': {
       const t = row.respondedAt
-        ? `응답 ${SHORT_DATE_FMT.format(row.respondedAt)}`
+        ? `응답 ${formatLocalMonthDayTime(row.respondedAt)}`
         : undefined;
       return {
         display: row.respondedAt ? (

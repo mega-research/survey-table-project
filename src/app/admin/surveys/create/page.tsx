@@ -52,7 +52,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useSaveSurvey } from '@/hooks/queries/use-surveys';
-import { formatDateKst } from '@/lib/date-formatters';
+import { formatLocalDate } from '@/lib/date-formatters';
 import { generateSlugFromTitle, validateSlug } from '@/lib/survey-url';
 import { generateId } from '@/lib/utils';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
@@ -462,7 +462,7 @@ export default function CreateSurveyPage() {
                   <div className="space-y-1 text-xs text-gray-500">
                     <p>그룹 수: {(currentSurvey.groups || []).length}개</p>
                     <p>질문 수: {currentSurvey.questions.length}개</p>
-                    <p suppressHydrationWarning>마지막 수정: {formatDateKst(currentSurvey.updatedAt)}</p>
+                    <p suppressHydrationWarning>마지막 수정: {formatLocalDate(currentSurvey.updatedAt)}</p>
                   </div>
                 </div>
               </TabsContent>

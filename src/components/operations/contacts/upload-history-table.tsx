@@ -2,8 +2,8 @@ import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { LocalDateTime } from '@/components/ui/local-date-time';
 import { EmptyState } from '@/components/operations/empty-state';
-import { FULL_DATE_FMT } from '@/lib/operations/contacts-shared';
 import type { ContactUploadRow } from '@/lib/operations/contacts.server';
 
 interface UploadHistoryTableProps {
@@ -64,7 +64,7 @@ export function UploadHistoryTable({ surveyId, rows }: UploadHistoryTableProps) 
                     {r.errorRows.toLocaleString('ko-KR')}
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums text-slate-500">
-                    {FULL_DATE_FMT.format(r.createdAt)}
+                    <LocalDateTime value={r.createdAt} />
                   </td>
                 </tr>
               ))}

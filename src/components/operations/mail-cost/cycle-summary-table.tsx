@@ -1,10 +1,11 @@
 import Link from 'next/link';
 
 import { Card } from '@/components/ui/card';
+import { LocalDateTime } from '@/components/ui/local-date-time';
 import type { CycleSummary } from '@/lib/operations/mail-billing.server';
 import { cn } from '@/lib/utils';
 
-import { formatInt, formatKrw, formatMonthDayTime } from './_format';
+import { formatInt, formatKrw } from './_format';
 
 interface Props {
   cycle: CycleSummary;
@@ -83,7 +84,9 @@ export function CycleSummaryTable({ cycle }: Props) {
                     </Link>
                   </td>
                   <td className="max-w-[260px] truncate px-3 py-2.5 text-gray-700">{c.title}</td>
-                  <td className="px-3 py-2.5 text-gray-600">{formatMonthDayTime(c.startedAt)}</td>
+                  <td className="px-3 py-2.5 text-gray-600">
+                    <LocalDateTime value={c.startedAt} format="month-day-time" />
+                  </td>
                   <td className="px-3 py-2.5">
                     <span className={cn('rounded-full px-2 py-0.5 text-xs font-medium', status.tone)}>
                       {status.label}

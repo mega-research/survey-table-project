@@ -28,7 +28,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { useDeleteSurvey, useSurveys } from '@/hooks/queries';
-import { formatDateKst } from '@/lib/date-formatters';
+import { formatLocalDate } from '@/lib/date-formatters';
 
 export default function SurveyListPage() {
   const { data: surveys, isLoading, error } = useSurveys();
@@ -262,7 +262,7 @@ export default function SurveyListPage() {
                 <p className="mb-4 text-sm text-gray-500">{survey.questionCount}개 질문</p>
 
                 <div className="flex items-center justify-between text-xs text-gray-400">
-                  <span>수정일: {formatDateKst(survey.updatedAt)}</span>
+                  <span>수정일: {formatLocalDate(survey.updatedAt)}</span>
                   <span
                     className={`flex items-center gap-1 rounded-full px-2 py-1 ${
                       survey.isPublic
