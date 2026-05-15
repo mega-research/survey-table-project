@@ -359,6 +359,25 @@ export function SortableQuestionList({
     if (isTestMode && !testModeEverActivated) setTestModeEverActivated(true);
   }, [isTestMode, testModeEverActivated]);
 
+  // 테스트 모드 진입 시 첫 컨택의 attrs 를 fetch — 본문의 {{변수}} 토큰 치환에 사용.
+  // 컨택 0건이거나 인증 실패 시 빈 객체 → substituteTokens 가 미해결 토큰을 빈 값으로 치환.
+  const [testContactAttrs, setTestContactAttrs] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (!isTestMode || !surveyId) return;
+    let cancelled = false;
+    import('@/actions/survey-test-sample-actions').then(
+      ({ getSurveyTestSampleAction }) => {
+        getSurveyTestSampleAction(surveyId).then((res) => {
+          if (cancelled) return;
+          setTestContactAttrs(res.ok && res.data ? res.data.attrs : {});
+        });
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [isTestMode, surveyId]);
+
   // querySelector 스코프용 컨테이너 ref
   const editContainerRef = useRef<HTMLDivElement>(null);
   const testContainerRef = useRef<HTMLDivElement>(null);
@@ -675,7 +694,11 @@ export function SortableQuestionList({
       data-question-id={question.id}
       style={{ contentVisibility: 'auto', containIntrinsicSize: `auto ${testHeightMap.get(question.id) ?? estimateCardHeight(question, 'test')}px` }}
     >
-      <QuestionTestCard question={question} index={questions.indexOf(question)} />
+      <QuestionTestCard
+        question={question}
+        index={questions.indexOf(question)}
+        testContactAttrs={testContactAttrs}
+      />
     </div>
   );
 

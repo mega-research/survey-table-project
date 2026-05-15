@@ -14,6 +14,8 @@ import { RankingQuestion } from '@/components/survey-response/ranking-question';
 
 import { InteractiveTableResponse } from './interactive-table-response';
 import { LazyMount } from './sortable-question-list';
+import { substituteTokens } from '@/lib/survey/substitute-tokens';
+
 import { NoticeRenderer } from './notice-renderer';
 import { UserDefinedMultiLevelSelect } from './user-defined-multi-level-select';
 import { computeTableEstimatedHeight } from '@/hooks/use-row-heights';
@@ -398,10 +400,12 @@ function QuestionTestInput({
   question,
   value,
   onChange,
+  testContactAttrs,
 }: {
   question: Question;
   value: unknown;
   onChange: (value: unknown) => void;
+  testContactAttrs: Record<string, string>;
 }) {
   switch (question.type) {
     case 'text':
@@ -493,7 +497,7 @@ function QuestionTestInput({
     case 'notice':
       return (
         <NoticeRenderer
-          content={question.noticeContent || ''}
+          content={substituteTokens(question.noticeContent || '', testContactAttrs)}
           requiresAcknowledgment={question.requiresAcknowledgment}
           value={typeof value === 'boolean' ? value : false}
           onChange={onChange}
@@ -509,7 +513,16 @@ function QuestionTestInput({
 }
 
 // 테스트 모드용 인터랙티브 질문 카드 컴포넌트
-export function QuestionTestCard({ question, index }: { question: Question; index: number }) {
+export function QuestionTestCard({
+  question,
+  index,
+  testContactAttrs = {},
+}: {
+  question: Question;
+  index: number;
+  /** 빌더 테스트 모드 진입 시 fetch 한 첫 컨택의 attrs. 토큰 치환에 사용. */
+  testContactAttrs?: Record<string, string>;
+}) {
   const testResponse = useTestResponseStore((s) => s.testResponses[question.id]);
   const updateTestResponse = useTestResponseStore((s) => s.updateTestResponse);
 
@@ -536,7 +549,11 @@ export function QuestionTestCard({ question, index }: { question: Question; inde
             style={{
               WebkitOverflowScrolling: 'touch',
             }}
-            dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(question.description!) }}
+            dangerouslySetInnerHTML={{
+              __html: sanitizeRichHtml(
+                substituteTokens(question.description!, testContactAttrs),
+              ),
+            }}
           />
         )}
       </div>
@@ -547,10 +564,20 @@ export function QuestionTestCard({ question, index }: { question: Question; inde
             questionId={question.id}
             estimatedHeight={computeTableEstimatedHeight(question.tableColumns ?? [], question.tableRowsData ?? [], question.tableHeaderGrid)}
           >
-            <QuestionTestInput question={question} value={testResponse} onChange={handleResponse} />
+            <QuestionTestInput
+              question={question}
+              value={testResponse}
+              onChange={handleResponse}
+              testContactAttrs={testContactAttrs}
+            />
           </LazyMount>
         ) : (
-          <QuestionTestInput question={question} value={testResponse} onChange={handleResponse} />
+          <QuestionTestInput
+            question={question}
+            value={testResponse}
+            onChange={handleResponse}
+            testContactAttrs={testContactAttrs}
+          />
         )}
       </div>
     </Card>
