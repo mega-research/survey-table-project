@@ -139,6 +139,7 @@ export default async function ReportProgressPage({ params, searchParams }: PageP
         <>
           <ProgressFilterBar
             initialSource={condition?.source ?? null}
+            // idlist 모드는 FilterCondition 에 value 없음(ranges 만) — rawQ 로 원본 입력값 복원
             initialValue={condition && condition.mode !== 'idlist' ? condition.value : (rawQ ?? '')}
             columnCandidates={columnCandidates}
           />
