@@ -164,6 +164,7 @@ interface GetProgressRowsArgs {
 }
 
 const SORT_COL_MAP: Record<Exclude<ProgressSortKey, `meta:${string}`>, string> = {
+  firstResid: 'first_resid',
   groupLabel: 'group_label',
   listCount: 'list_count',
   completedCount: 'completed_count',

@@ -41,6 +41,7 @@ export interface ProgressRow {
 }
 
 export type ProgressSortKey =
+  | 'firstResid'
   | 'groupLabel'
   | 'listCount'
   | 'completedCount'
@@ -76,6 +77,7 @@ export function sortGroupRows(
 }
 
 function sortValue(row: ProgressRow, sort: ProgressSortKey): number | string | null {
+  if (sort === 'firstResid') return row.firstResid;
   if (sort === 'groupLabel') return row.groupLabel;
   if (sort === 'listCount') return row.listCount;
   if (sort === 'completedCount') return row.completedCount;

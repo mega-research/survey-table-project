@@ -39,6 +39,7 @@ interface PageProps {
 }
 
 const VALID_SORTS: ProgressSortKey[] = [
+  'firstResid',
   'groupLabel',
   'listCount',
   'completedCount',
@@ -46,7 +47,7 @@ const VALID_SORTS: ProgressSortKey[] = [
 ];
 
 /**
- * sort 검증 — 고정 4종 + meta:<key> (단, 현재 visible 메타 컬럼 키만 허용).
+ * sort 검증 — 고정 5종 + meta:<key> (단, 현재 visible 메타 컬럼 키만 허용).
  * 알 수 없는 값은 기본 'responseRate' 으로 폴백.
  */
 function parseSort(s: string | undefined, metaKeys: string[]): ProgressSortKey {

@@ -84,15 +84,9 @@ export function ProgressTable({
       <table className="w-full text-sm">
         <thead className="bg-slate-50 text-slate-700">
           <tr>
-            <th
-              scope="col"
-              className={cn(
-                'px-3 py-2 text-xs font-medium uppercase tracking-wider text-slate-600',
-                ALIGN_CLASS.right,
-              )}
-            >
+            <Th sort={sort} dir={dir} colKey="firstResid" align="right" onClick={handleSortClick}>
               #
-            </th>
+            </Th>
             {metaColumns.map((c) => (
               <Th
                 key={c.key}
