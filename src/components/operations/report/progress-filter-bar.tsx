@@ -49,15 +49,14 @@ export function ProgressFilterBar({ initialSource, initialValue, columnCandidate
   const pushParams = useSearchParamsMutator();
 
   // 브라우저 뒤로/앞으로 가기 시 URL 의 col/q 가 바뀌면 Server Component 가 새 initial 을
-  // 내려준다. 로컬 state 를 동기화 — JSON 비교로 무한 re-render 방지.
+  // 내려준다. 로컬 state 를 동기화. initialSource/initialValue 는 원시값이라 identity 비교로 충분.
   useEffect(() => {
     setSource(initialSource);
     setValue(initialValue);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify({ initialSource, initialValue })]);
+  }, [initialSource, initialValue]);
 
-  const handleSearch = (e?: React.FormEvent) => {
-    e?.preventDefault();
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
     const trimmed = value.trim();
     startTransition(() => {
       pushParams((p) => {
@@ -122,7 +121,13 @@ export function ProgressFilterBar({ initialSource, initialValue, columnCandidate
         className="max-w-xs"
       />
 
-      <Button type="submit" disabled={columnCandidates.length === 0}>
+      <Button
+        type="submit"
+        disabled={
+          columnCandidates.length === 0 ||
+          (!source && value.trim().length > 0)
+        }
+      >
         검색
       </Button>
       <Button type="button" variant="outline" onClick={handleReset}>
