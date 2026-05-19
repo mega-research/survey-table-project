@@ -85,7 +85,7 @@ export function ProgressTable({
         <thead className="bg-slate-50 text-slate-700">
           <tr>
             <Th sort={sort} dir={dir} colKey="firstResid" align="right" onClick={handleSortClick}>
-              #
+              ID
             </Th>
             {metaColumns.map((c) => (
               <Th
