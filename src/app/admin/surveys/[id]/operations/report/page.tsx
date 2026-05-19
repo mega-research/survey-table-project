@@ -1,14 +1,14 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 
 import { ProgressEmptyCard } from '@/components/operations/report/progress-empty-card';
 import { ProgressFilterBar } from '@/components/operations/report/progress-filter-bar';
 import { ProgressTable } from '@/components/operations/report/progress-table';
 import { Button } from '@/components/ui/button';
 import { db } from '@/db';
-import { contactTargets } from '@/db/schema';
+import { contactTargets, surveys } from '@/db/schema';
 import type { ProgressSortKey, SortDir } from '@/lib/operations/report-progress';
 import {
   getProgressColumnScheme,
@@ -16,6 +16,10 @@ import {
   getProgressRows,
   getProgressTotals,
 } from '@/lib/operations/report-progress.server';
+import {
+  parseConditionFromUrl,
+  type ColumnCandidate,
+} from '@/lib/operations/progress-filters.server';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,6 +30,7 @@ export const metadata: Metadata = {
 interface PageProps {
   params: Promise<{ id: string }>;
   searchParams: Promise<{
+    col?: string;
     q?: string;
     page?: string;
     size?: string;
@@ -63,7 +68,6 @@ export default async function ReportProgressPage({ params, searchParams }: PageP
   const { id: surveyId } = await params;
   const sp = await searchParams;
 
-  const q = sp.q ?? '';
   // page 파싱 NaN 가드 — `?page=abc` / 음수 / undefined 모두 1 로 fallback.
   // 가드 없으면 SQL OFFSET NaN ERROR 발생.
   const pageRaw = Number(sp.page);
@@ -82,6 +86,31 @@ export default async function ReportProgressPage({ params, searchParams }: PageP
   const metaKeys = visibleColumns.map((c) => c.key).filter((k) => k.length > 0);
   const sort = parseSort(sp.sort, metaKeys);
 
+  // contactColumns 로드 — pii 면 blindIndex 계산용 piiType 함께 가져옴.
+  const surveyRow = await db
+    .select({ contactColumns: surveys.contactColumns })
+    .from(surveys)
+    .where(eq(surveys.id, surveyId))
+    .limit(1);
+  const contactScheme = surveyRow[0]?.contactColumns ?? null;
+
+  // 후보: system.resid + attrs.* + pii.* 만. 그 외 system.* 은 이번 슬라이스 제외.
+  const columnCandidates: ColumnCandidate[] = (contactScheme?.columns ?? [])
+    .filter((c) =>
+      c.source === 'system.resid' ||
+      c.source.startsWith('attrs.') ||
+      c.source.startsWith('pii.'),
+    )
+    .map((c) => ({
+      source: c.source,
+      label: c.label,
+      piiType: c.piiType,
+    }));
+
+  const rawCol = typeof sp.col === 'string' ? sp.col : null;
+  const rawQ = typeof sp.q === 'string' ? sp.q : null;
+  const condition = parseConditionFromUrl(rawCol, rawQ, columnCandidates);
+
   // 조사 대상 0건 빠른 검출 — getProgressTotals 보다 훨씬 가벼움.
   const [{ ct }] = await db
     .select({ ct: sql<number>`count(*)::int` })
@@ -92,8 +121,8 @@ export default async function ReportProgressPage({ params, searchParams }: PageP
   const { rows, totals } = isEmpty
     ? { rows: [], totals: { groupCount: 0, listTotal: 0, completedTotal: 0 } }
     : await Promise.all([
-        getProgressRows({ surveyId, q, page, size, sort, dir, metaKeys }),
-        getProgressTotals(surveyId, q),
+        getProgressRows({ surveyId, condition, page, size, sort, dir, metaKeys }),
+        getProgressTotals(surveyId, condition),
       ]).then(([r, t]) => ({ rows: r, totals: t }));
 
   return (
@@ -112,7 +141,11 @@ export default async function ReportProgressPage({ params, searchParams }: PageP
         <ProgressEmptyCard surveyId={surveyId} />
       ) : (
         <>
-          <ProgressFilterBar initialQuery={q} groupLabel={groupLabel} />
+          <ProgressFilterBar
+            initialSource={condition?.source ?? null}
+            initialValue={condition && condition.mode !== 'idlist' ? condition.value : (rawQ ?? '')}
+            columnCandidates={columnCandidates}
+          />
           <ProgressTable
             rows={rows}
             totals={totals}
