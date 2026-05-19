@@ -106,6 +106,11 @@ export default async function ReportProgressPage({ params, searchParams }: PageP
   const rawQ = typeof sp.q === 'string' ? sp.q : null;
   const condition = parseConditionFromUrl(rawCol, rawQ, columnCandidates);
 
+  // ProgressTable 의 # 컬럼 헤더 — contactColumns 의 system.resid 라벨 사용.
+  // 스킴에 없거나 라벨이 비어있으면 '번호' 폴백.
+  const residLabel =
+    contactScheme?.columns.find((c) => c.source === 'system.resid')?.label?.trim() || '번호';
+
   // 조사 대상 0건 빠른 검출 — getProgressTotals 보다 훨씬 가벼움.
   const [{ ct }] = await db
     .select({ ct: sql<number>`count(*)::int` })
@@ -142,6 +147,7 @@ export default async function ReportProgressPage({ params, searchParams }: PageP
             rows={rows}
             totals={totals}
             metaColumns={visibleColumns}
+            residLabel={residLabel}
             page={page}
             size={size}
             sort={sort}

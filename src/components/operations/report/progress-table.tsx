@@ -21,6 +21,8 @@ interface Props {
   rows: ProgressRow[];
   totals: ProgressTotals;
   metaColumns: ProgressColumnDef[];
+  /** system.resid 컬럼 헤더 라벨 (contactColumns 에서 가져옴). 폴백 '번호'. */
+  residLabel: string;
   page: number;
   size: number;
   sort: ProgressSortKey;
@@ -52,6 +54,7 @@ export function ProgressTable({
   rows,
   totals,
   metaColumns,
+  residLabel,
   page,
   size,
   sort,
@@ -85,7 +88,7 @@ export function ProgressTable({
         <thead className="bg-slate-50 text-slate-700">
           <tr>
             <Th sort={sort} dir={dir} colKey="firstResid" align="right" onClick={handleSortClick}>
-              ID
+              {residLabel}
             </Th>
             {metaColumns.map((c) => (
               <Th
