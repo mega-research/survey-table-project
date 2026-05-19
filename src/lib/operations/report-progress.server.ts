@@ -9,6 +9,7 @@ import { surveys } from '@/db/schema/surveys';
 import type { ContactColumnScheme, ProgressColumnScheme } from '@/db/schema/schema-types';
 
 import type { ProgressRow, ProgressSortKey, SortDir, ProgressTotals } from './report-progress';
+import type { FilterCondition } from './progress-filters.server';
 
 const EMPTY_SCHEME: ProgressColumnScheme = { version: 1, columns: [] };
 
@@ -32,11 +33,56 @@ const closingFilter = sql`
 
 /**
  * ILIKE wildcard escape — `%` `_` `\` 를 리터럴로 처리하기 위한 사전 escape.
- * profiles.server.ts 와 동일 패턴. q 가 빈 문자열이면 호출자가 단축 평가
- * (`q = ''`) 하므로 escape 적용 결과는 사용되지 않음.
+ * profiles.server.ts 와 동일 패턴. attrs.* 텍스트 모드 조건의 value 에 적용된다.
  */
 function escapeLikePattern(s: string): string {
   return s.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+}
+
+/**
+ * 조건 → WHERE 절. null 이면 TRUE (전체 조회).
+ *
+ * SECURITY: condition.source 는 호출자에서 contactColumns 화이트리스트 검증 끝난 값만
+ * 전달된다고 가정. value/from/to/blindIndex/key 모두 parameter binding 으로 안전.
+ *
+ * pii.* 매칭: condition.value 평문은 SQL 에 들어가지 않고 사전 계산된 blindIndex 만 사용.
+ *
+ * NULL 동작: ct.attrs->>key 가 NULL 이면 NULL ILIKE → false (자동 제외). pii.* 도 EXISTS
+ * 가 false. system.resid 는 NOT NULL.
+ */
+function buildFilterSql(condition: FilterCondition | null) {
+  if (!condition) return sql`TRUE`;
+
+  if (condition.source === 'system.resid') {
+    if (condition.mode === 'idlist') {
+      if (condition.ranges.length === 0) return sql`FALSE`;
+      const conds = condition.ranges.map((r) =>
+        r.from === r.to
+          ? sql`ct.resid = ${r.from}`
+          : sql`ct.resid BETWEEN ${r.from} AND ${r.to}`,
+      );
+      return sql.join(conds, sql` OR `);
+    }
+    return sql`FALSE`; // text 폴백 — resid 가 정수 컬럼이라 비숫자 매칭 0건
+  }
+
+  if (condition.source.startsWith('attrs.')) {
+    const key = condition.source.slice('attrs.'.length);
+    const escaped = escapeLikePattern(condition.value);
+    return sql`ct.attrs->>${key} ILIKE '%' || ${escaped} || '%'`;
+  }
+
+  if (condition.source.startsWith('pii.') && condition.mode === 'exact') {
+    const columnKey = condition.source.slice('pii.'.length);
+    return sql`EXISTS (
+      SELECT 1 FROM contact_pii pp
+      WHERE pp.contact_target_id = ct.id
+        AND pp.column_key = ${columnKey}
+        AND pp.blind_index = ${condition.blindIndex}
+    )`;
+  }
+
+  return sql`TRUE`; // 알 수 없는 source — 페이지 깨짐 방지
 }
 
 /**
@@ -103,7 +149,7 @@ export const getProgressGroupLabel = cache(async (surveyId: string): Promise<str
 
 interface GetProgressRowsArgs {
   surveyId: string;
-  q: string;
+  condition: FilterCondition | null;
   page: number;
   size: number;
   sort: ProgressSortKey;
@@ -136,14 +182,9 @@ const SORT_COL_MAP: Record<Exclude<ProgressSortKey, `meta:${string}`>, string> =
  * 참조 (meta_0..meta_N) 만 raw 임베드 — 사용자 입력이 SQL 에 직접 박히지 않음.
  */
 export async function getProgressRows(args: GetProgressRowsArgs): Promise<ProgressRow[]> {
-  const { surveyId, q, page, size, sort, dir, metaKeys } = args;
+  const { surveyId, condition, page, size, sort, dir, metaKeys } = args;
   const offset = Math.max(0, (page - 1) * size);
 
-  // ILIKE wildcard escape (profiles.server.ts 와 동일 패턴). `${q} = ''`
-  // 단축 평가는 사용자 원본 비교라 escape 적용 X — ILIKE 패턴에만 적용.
-  const qLike = escapeLikePattern(q);
-
-  // 메타 키 SELECT 절 동적 생성. attrs JSONB 키는 parameter binding (안전).
   const metaSelectSql = metaKeys
     .map((k, i) => sql`MIN(ct.attrs->>${k}) AS ${sql.identifier(`meta_${i}`)}`)
     .reduce<ReturnType<typeof sql>>(
@@ -151,22 +192,19 @@ export async function getProgressRows(args: GetProgressRowsArgs): Promise<Progre
       sql``,
     );
 
-  // 정렬 표현식 — outer SELECT scope 에서 inner subquery alias 참조.
-  // meta:<key> 는 inner alias `meta_<idx>` 로 매핑. 매칭 실패 시 responseRate 폴백.
-  // SORT_COL_MAP 화이트리스트 외 값은 모두 responseRate 로 강제 (defense-in-depth).
   let sortExpr;
   if (sort.startsWith('meta:')) {
     const key = sort.slice(5);
     const idx = metaKeys.indexOf(key);
     sortExpr =
-      idx >= 0
-        ? sql.raw(`meta_${idx}`)
-        : sql.raw(SORT_COL_MAP.responseRate);
+      idx >= 0 ? sql.raw(`meta_${idx}`) : sql.raw(SORT_COL_MAP.responseRate);
   } else {
     const mapped = SORT_COL_MAP[sort as Exclude<ProgressSortKey, `meta:${string}`>];
     sortExpr = sql.raw(mapped ?? SORT_COL_MAP.responseRate);
   }
   const dirSql = dir === 'asc' ? sql.raw('ASC') : sql.raw('DESC');
+
+  const filterSql = buildFilterSql(condition);
 
   const result = await db.execute(sql`
     SELECT * FROM (
@@ -178,7 +216,7 @@ export async function getProgressRows(args: GetProgressRowsArgs): Promise<Progre
         ${metaKeys.length > 0 ? sql`, ${metaSelectSql}` : sql``}
       FROM contact_targets ct
       WHERE ct.survey_id = ${surveyId}
-        AND (${q} = '' OR COALESCE(ct.group_value, '(미분류)') ILIKE '%' || ${qLike} || '%')
+        AND ${filterSql}
       GROUP BY ct.group_value
     ) sub
     ORDER BY ${sortExpr} ${dirSql} NULLS LAST, group_value_raw NULLS LAST
@@ -205,8 +243,11 @@ export async function getProgressRows(args: GetProgressRowsArgs): Promise<Progre
  * 페이지네이션 무시 합계 — "총 N개 그룹 · 리스트 합계 X / 완료 Y".
  * group_count 는 NULL 그룹도 1로 카운트.
  */
-export async function getProgressTotals(surveyId: string, q: string): Promise<ProgressTotals> {
-  const qLike = escapeLikePattern(q);
+export async function getProgressTotals(
+  surveyId: string,
+  condition: FilterCondition | null,
+): Promise<ProgressTotals> {
+  const filterSql = buildFilterSql(condition);
   const result = await db.execute(sql`
     SELECT
       COUNT(DISTINCT COALESCE(ct.group_value, '(미분류)'))::int AS group_count,
@@ -214,7 +255,7 @@ export async function getProgressTotals(surveyId: string, q: string): Promise<Pr
       COUNT(*) FILTER (WHERE ${closingFilter})::int AS completed_total
     FROM contact_targets ct
     WHERE ct.survey_id = ${surveyId}
-      AND (${q} = '' OR COALESCE(ct.group_value, '(미분류)') ILIKE '%' || ${qLike} || '%')
+      AND ${filterSql}
   `);
   const r = (result as unknown as Array<Record<string, unknown>>)[0] ?? {};
   return {
