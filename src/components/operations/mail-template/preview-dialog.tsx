@@ -58,12 +58,12 @@ const IFRAME_RESET_CSS = `
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     font-size: 14px;
-    line-height: 1.6;
+    line-height: 1.5;
     color: #1f2937;
     padding: 20px;
     background: #ffffff;
   }
-  p { margin: 0 0 0.75em 0; }
+  p { margin: 0 0 0.5em 0; }
   p:last-child { margin-bottom: 0; }
   ul { list-style: disc; padding-left: 24px; margin: 0.5em 0; }
   ol { list-style: decimal; padding-left: 24px; margin: 0.5em 0; }
