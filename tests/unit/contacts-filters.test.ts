@@ -145,6 +145,21 @@ describe('parseClausesFromUrl - source 분기', () => {
     expect(parseClausesFromUrl(['pii.email'], ['abc'], [''], candidates, resultCodes)).toEqual([]);
   });
 
+  it('pii.* + candidate 에 piiType 누락 → drop', () => {
+    const candidatesNoPiiType: ColumnCandidate[] = [
+      { source: 'pii.email', label: '이메일' },
+    ];
+    expect(
+      parseClausesFromUrl(
+        ['pii.email'],
+        ['user@example.com'],
+        [''],
+        candidatesNoPiiType,
+        resultCodes,
+      ),
+    ).toEqual([]);
+  });
+
   it('whitelist 위반 → drop', () => {
     expect(parseClausesFromUrl(['attrs.unknown'], ['x'], [''], candidates, resultCodes)).toEqual(
       [],
