@@ -32,6 +32,8 @@ export interface ProgressRow {
   groupLabel: string;
   /** 원본 group_value (NULL 식별용) */
   groupValueRaw: string | null;
+  /** 그룹 내 MIN(resid) — 표 첫 컬럼 '#' 에 표시. */
+  firstResid: number | null;
   listCount: number;
   completedCount: number;
   /** key=ProgressColumnDef.key, value=MIN(attrs->>key) 또는 null */

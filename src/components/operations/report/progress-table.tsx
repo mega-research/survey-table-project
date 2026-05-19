@@ -76,14 +76,23 @@ export function ProgressTable({
     });
   };
 
-  // 3 fixed (리스트수/완료/응답률) + N meta
-  const colSpan = 3 + metaColumns.length;
+  // 1 # + N meta + 3 fixed (리스트수/완료/응답률)
+  const colSpan = 1 + metaColumns.length + 3;
 
   return (
     <div className="overflow-hidden rounded border border-slate-200 bg-white">
       <table className="w-full text-sm">
         <thead className="bg-slate-50 text-slate-700">
           <tr>
+            <th
+              scope="col"
+              className={cn(
+                'px-3 py-2 text-xs font-medium uppercase tracking-wider text-slate-600',
+                ALIGN_CLASS.right,
+              )}
+            >
+              #
+            </th>
             {metaColumns.map((c) => (
               <Th
                 key={c.key}
@@ -132,6 +141,9 @@ export function ProgressTable({
             const rate = formatRate(r.completedCount, r.listCount);
             return (
               <tr key={r.groupValueRaw ?? '__null__'} className="hover:bg-slate-50">
+                <td className={cn(ALIGN_CLASS.right, 'px-3 py-2 tabular-nums text-slate-500')}>
+                  {r.firstResid ?? <span className="text-slate-300">—</span>}
+                </td>
                 {metaColumns.map((c) => {
                   const v = r.meta[c.key];
                   return (

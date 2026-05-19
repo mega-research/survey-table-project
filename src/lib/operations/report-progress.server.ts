@@ -217,6 +217,7 @@ export async function getProgressRows(args: GetProgressRowsArgs): Promise<Progre
       SELECT
         COALESCE(ct.group_value, '(미분류)') AS group_label,
         ct.group_value AS group_value_raw,
+        MIN(ct.resid)::int AS first_resid,
         COUNT(*)::int AS list_count,
         COUNT(*) FILTER (WHERE ${closingFilter})::int AS completed_count
         ${metaKeys.length > 0 ? sql`, ${metaSelectSql}` : sql``}
@@ -238,6 +239,7 @@ export async function getProgressRows(args: GetProgressRowsArgs): Promise<Progre
     return {
       groupLabel: String(r.group_label),
       groupValueRaw: r.group_value_raw == null ? null : String(r.group_value_raw),
+      firstResid: r.first_resid == null ? null : Number(r.first_resid),
       listCount: Number(r.list_count),
       completedCount: Number(r.completed_count),
       meta,

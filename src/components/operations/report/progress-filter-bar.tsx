@@ -94,7 +94,7 @@ export function ProgressFilterBar({
         value={source ?? ''}
         onValueChange={(v) => setSource(v || null)}
       >
-        <SelectTrigger id="filter-column" className="min-w-[160px]">
+        <SelectTrigger id="filter-column" className="w-[180px] shrink-0">
           <SelectValue placeholder="컬럼 선택" />
         </SelectTrigger>
         <SelectContent>
@@ -115,7 +115,7 @@ export function ProgressFilterBar({
         value={value}
         onChange={(e) => setValue(e.target.value)}
         placeholder={placeholderFor(source)}
-        className="h-10 max-w-xs"
+        className="h-10 w-[260px] shrink-0"
       />
 
       <Button

@@ -28,10 +28,10 @@ describe('toneFromRate', () => {
 });
 
 const fixture: ProgressRow[] = [
-  { groupLabel: 'A 전시회', groupValueRaw: 'A 전시회', listCount: 10, completedCount: 5, meta: { '월': '03' } },
-  { groupLabel: 'B 전시회', groupValueRaw: 'B 전시회', listCount: 20, completedCount: 18, meta: { '월': '01' } },
-  { groupLabel: '(미분류)', groupValueRaw: null, listCount: 5, completedCount: 0, meta: { '월': null } },
-  { groupLabel: 'C 전시회', groupValueRaw: 'C 전시회', listCount: 0, completedCount: 0, meta: { '월': '04' } },
+  { groupLabel: 'A 전시회', groupValueRaw: 'A 전시회', firstResid: 1, listCount: 10, completedCount: 5, meta: { '월': '03' } },
+  { groupLabel: 'B 전시회', groupValueRaw: 'B 전시회', firstResid: 11, listCount: 20, completedCount: 18, meta: { '월': '01' } },
+  { groupLabel: '(미분류)', groupValueRaw: null, firstResid: null, listCount: 5, completedCount: 0, meta: { '월': null } },
+  { groupLabel: 'C 전시회', groupValueRaw: 'C 전시회', firstResid: 31, listCount: 0, completedCount: 0, meta: { '월': '04' } },
 ];
 
 describe('sortGroupRows', () => {
