@@ -5,8 +5,6 @@ import {
   tableAlignStyle,
   parseVerticalAlign,
   verticalAlignStyle,
-  parseCaptionAlign,
-  captionAlignStyle,
 } from '@/components/ui/rich-text-editor/table-attrs-helpers';
 
 function mockElement(style: Partial<CSSStyleDeclaration>): HTMLElement {
@@ -65,24 +63,5 @@ describe('parseVerticalAlign', () => {
 describe('verticalAlignStyle', () => {
   it.each(['top', 'middle', 'bottom'] as const)('%s → 명시', (v) => {
     expect(verticalAlignStyle(v)).toBe(`vertical-align: ${v}`);
-  });
-});
-
-describe('parseCaptionAlign', () => {
-  it('textAlign 명시 → 그 값', () => {
-    expect(parseCaptionAlign(mockElement({ textAlign: 'left' }))).toBe('left');
-    expect(parseCaptionAlign(mockElement({ textAlign: 'right' }))).toBe('right');
-  });
-  it('textAlign center 명시 → center', () => {
-    expect(parseCaptionAlign(mockElement({ textAlign: 'center' }))).toBe('center');
-  });
-  it('textAlign 없음 → center', () => {
-    expect(parseCaptionAlign(mockElement({}))).toBe('center');
-  });
-});
-
-describe('captionAlignStyle', () => {
-  it.each(['left', 'center', 'right'] as const)('%s 정렬 + caption-side top', (v) => {
-    expect(captionAlignStyle(v)).toBe(`text-align: ${v}; caption-side: top`);
   });
 });

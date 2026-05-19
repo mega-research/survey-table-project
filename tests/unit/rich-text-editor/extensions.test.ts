@@ -48,14 +48,6 @@ describe('createUnifiedExtensions', () => {
       expect(out).toMatch(/<td[\s>]/);
     });
 
-    it('TableCaption 노드를 허용한다', () => {
-      const html =
-        '<table><caption>표 제목</caption><tbody><tr><td>x</td></tr></tbody></table>';
-      const json = generateJSON(html, exts);
-      const captionNode = json.content[0].content[0];
-      expect(captionNode.type).toBe('tableCaption');
-    });
-
     it('FontSize mark 가 보존된다', () => {
       const html = '<p><span style="font-size: 20px">크게</span></p>';
       const json = generateJSON(html, exts);

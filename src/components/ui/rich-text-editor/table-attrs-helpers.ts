@@ -27,13 +27,3 @@ export function parseVerticalAlign(el: HTMLElement): VAlign {
 export function verticalAlignStyle(v: VAlign): string {
   return `vertical-align: ${v}`;
 }
-
-export function parseCaptionAlign(el: HTMLElement): HAlign {
-  const t = el.style.textAlign;
-  if (t === 'left' || t === 'right') return t;
-  return 'center';
-}
-
-export function captionAlignStyle(align: HAlign): string {
-  return `text-align: ${align}; caption-side: top`;
-}

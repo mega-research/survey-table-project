@@ -25,7 +25,6 @@ import {
   type HAlign,
   type VAlign,
 } from './table-attrs-helpers';
-import { TableCaption } from './table-caption';
 import { TrailingNode } from './trailing-node';
 import { createVarTokenPlugin } from './var-token-plugin';
 import type { RichTextEditorKind } from './types';
@@ -183,7 +182,6 @@ export function createUnifiedExtensions(options: CreateUnifiedExtensionsOptions 
         });
 
   const TableExtended = Table.extend({
-    content: 'tableCaption? tableRow+',
     addAttributes() {
       return {
         ...this.parent?.(),
@@ -239,7 +237,6 @@ export function createUnifiedExtensions(options: CreateUnifiedExtensionsOptions 
     TableRow,
     TableHeaderExtended,
     TableCellExtended,
-    TableCaption,
     TrailingNode,
     TableSelectOnBackspace,
     VarTokenExtension,

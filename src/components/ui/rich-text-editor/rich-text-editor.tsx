@@ -23,7 +23,6 @@ const PROSE_BASE =
   '[&_table_td]:border [&_table_td]:border-gray-300 [&_table_td]:px-2 [&_table_td]:py-1 [&_table_td]:h-12 ' +
   '[&_table_th]:border [&_table_th]:border-gray-300 [&_table_th]:px-2 [&_table_th]:py-1 [&_table_th]:h-12 ' +
   '[&_table_td_p]:m-0 [&_table_th_p]:m-0 ' +
-  '[&_table_caption]:py-2 [&_table_caption]:text-sm [&_table_caption]:text-gray-700 ' +
   '[&_td.selectedCell]:relative [&_td.selectedCell]:bg-blue-100/60 ' +
   '[&_th.selectedCell]:relative [&_th.selectedCell]:bg-blue-100/60 ' +
   '[&_img]:inline-block [&_img]:!m-0 [&_img]:align-top';
