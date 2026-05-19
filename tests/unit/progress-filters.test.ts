@@ -1,15 +1,13 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect } from 'vitest';
 
 import {
   parseIdListInput,
   placeholderFor,
   parseConditionFromUrl,
   type ColumnCandidate,
-} from '@/lib/operations/progress-filters';
+} from '@/lib/operations/progress-filters.server';
 
-beforeAll(() => {
-  process.env.CONTACT_PII_HMAC_KEY = Buffer.alloc(32, 7).toString('base64');
-});
+// CONTACT_PII_HMAC_KEY 는 tests/setup.ts 에서 ??= 로 이미 셋업됨.
 
 describe('parseIdListInput', () => {
   it('parses a single integer', () => {
@@ -55,6 +53,12 @@ describe('parseIdListInput', () => {
 
   it('rejects values larger than int32 max', () => {
     expect(parseIdListInput('2147483648')).toBeNull();
+  });
+
+  it('rejects zero (resid 는 1 부터 시작)', () => {
+    expect(parseIdListInput('0')).toBeNull();
+    expect(parseIdListInput('0-5')).toBeNull();
+    expect(parseIdListInput('5-0')).toBeNull();
   });
 
   it('rejects text', () => {
@@ -156,5 +160,10 @@ describe('parseConditionFromUrl', () => {
       { source: 'pii.email', label: '이메일' },
     ];
     expect(parseConditionFromUrl('pii.email', 'user@example.com', candidatesNoPiiType)).toBeNull();
+  });
+
+  it('returns null for pii.* when normalization fails (invalid email)', () => {
+    // normalizePii('email', 'abc') 가 빈 문자열 반환 → blindIndex 빈 문자열 → null.
+    expect(parseConditionFromUrl('pii.email', 'abc', candidates)).toBeNull();
   });
 });

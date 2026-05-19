@@ -1,3 +1,5 @@
+import 'server-only';
+
 import { blindIndex } from '@/lib/crypto/blind';
 import type { PiiFieldType } from '@/lib/crypto/pii-fields';
 
@@ -30,7 +32,7 @@ export function parseIdListInput(input: string): NumRange[] | null {
     const parts = token.split('-').map((p) => p.trim());
     if (parts.length === 1) {
       const n = Number(parts[0]);
-      if (!Number.isInteger(n) || n > INT32_MAX || n < 0) return null;
+      if (!Number.isInteger(n) || n > INT32_MAX || n < 1) return null;
       ranges.push({ from: n, to: n });
     } else if (parts.length === 2) {
       const a = Number(parts[0]);
@@ -40,8 +42,8 @@ export function parseIdListInput(input: string): NumRange[] | null {
         !Number.isInteger(b) ||
         a > INT32_MAX ||
         b > INT32_MAX ||
-        a < 0 ||
-        b < 0
+        a < 1 ||
+        b < 1
       ) {
         return null;
       }
@@ -87,6 +89,7 @@ export function parseConditionFromUrl(
   if (col.startsWith('pii.')) {
     if (!candidate.piiType) return null;
     const bi = blindIndex(candidate.piiType, trimmed);
+    if (!bi) return null;
     return {
       source: col as `pii.${string}`,
       mode: 'exact',
