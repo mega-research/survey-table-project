@@ -72,7 +72,7 @@ export default async function GlobalMailCostPage({ searchParams }: Props) {
           <Card className="border-dashed">
             <div className="px-6 py-16 text-center">
               <p className="text-sm text-gray-500">
-                아직 발송된 메일 캠페인이 없습니다. 첫 캠페인을 발송하면 이 페이지에 정산이 표시됩니다.
+                아직 발송된 메일이 없습니다. 첫 메일을 발송하면 이 페이지에 정산이 표시됩니다.
               </p>
             </div>
           </Card>

@@ -86,7 +86,7 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
           href={`/admin/surveys/${surveyId}/operations/mail/campaigns`}
           className="text-sm text-slate-500 hover:text-slate-700"
         >
-          ← 캠페인 목록
+          ← 단체 발송
         </Link>
       </div>
 
