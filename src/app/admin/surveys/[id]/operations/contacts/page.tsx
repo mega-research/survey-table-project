@@ -10,13 +10,16 @@ import {
   attrsKeyOf,
   CONTACTS_PAGE_SIZE,
   effectiveSortKey,
-  hasActiveContactFilters,
-  normalizeContactListArgs,
 } from '@/lib/operations/contacts';
 import {
   getContactColumnScheme,
+  getContactResultCodes,
   listContactsForSurvey,
 } from '@/lib/operations/contacts.server';
+import {
+  parseClausesFromUrl,
+  type ColumnCandidate,
+} from '@/lib/operations/contacts-filters.server';
 
 export const metadata: Metadata = {
   title: '현황 - 조사 대상 목록',
@@ -25,10 +28,11 @@ export const metadata: Metadata = {
 interface PageProps {
   params: Promise<{ id: string }>;
   searchParams: Promise<{
+    col?: string | string[];
+    q?: string | string[];
+    op?: string | string[];
     page?: string;
-    q?: string;
-    qfield?: string;
-    resultCode?: string;
+    size?: string;
     sort?: string;
     dir?: string;
   }>;
@@ -37,23 +41,60 @@ interface PageProps {
 export default async function ContactsPage({ params, searchParams }: PageProps) {
   const { id: surveyId } = await params;
   const sp = await searchParams;
-  const args = normalizeContactListArgs(sp);
 
-  // 스킴 먼저 — sort key 가 hidden 컬럼이면 'resid' 로 폴백 (URL 직접 조작 가드).
-  const scheme = await getContactColumnScheme(surveyId);
+  // page / sort / dir 파싱 (기존 normalizeContactListArgs 의 해당 로직 인라인)
+  const pageRaw = Number(sp.page);
+  const parsedPage = Number.isFinite(pageRaw) && pageRaw > 0 ? Math.floor(pageRaw) : 1;
+  const dir = sp.dir === 'desc' ? ('desc' as const) : ('asc' as const);
+
+  // 스킴 + resultCodes 병렬 로드
+  const [scheme, resultCodes] = await Promise.all([
+    getContactColumnScheme(surveyId),
+    getContactResultCodes(surveyId),
+  ]);
+
+  // sort key — hidden 컬럼이면 'resid' 폴백 (URL 직접 조작 가드)
   const visibleAttrsKeys = new Set(
     (scheme?.columns ?? [])
       .filter((c) => !c.hidden)
       .map((c) => attrsKeyOf(c.source))
       .filter((k): k is string => k != null),
   );
-  const safeSort = effectiveSortKey(args.sort, visibleAttrsKeys);
+
+  // sort key normalize: 시스템 키 whitelist OR attrs.* (길이 제한)
+  function normalizeSortKey(value: string | undefined): import('@/lib/operations/contacts').ContactsSortKey {
+    if (!value) return 'resid';
+    if (value.startsWith('attrs.') && value.length <= 200) return value as `attrs.${string}`;
+    const systemKeys = ['resid', 'respondedAt', 'createdAt', 'group'] as const;
+    return (systemKeys as readonly string[]).includes(value)
+      ? (value as (typeof systemKeys)[number])
+      : 'resid';
+  }
+
+  const safeSort = effectiveSortKey(normalizeSortKey(sp.sort), visibleAttrsKeys);
+
+  // 컬럼 후보: system.resid / system.contact_result / system.web + attrs.* + pii.*
+  // system.email_count / system.contact_owner 는 placeholder 라 제외
+  const columnCandidates: ColumnCandidate[] = (scheme?.columns ?? [])
+    .filter(
+      (c) =>
+        c.source === 'system.resid' ||
+        c.source === 'system.contact_result' ||
+        c.source === 'system.web' ||
+        c.source.startsWith('attrs.') ||
+        c.source.startsWith('pii.'),
+    )
+    .map((c) => ({ source: c.source, label: c.label, piiType: c.piiType }));
+
+  const clauses = parseClausesFromUrl(sp.col, sp.q, sp.op, columnCandidates, resultCodes);
 
   const { rows, total, page: clampedPage } = await listContactsForSurvey({
     surveyId,
     pageSize: CONTACTS_PAGE_SIZE,
-    ...args,
+    clauses,
+    page: parsedPage,
     sort: safeSort,
+    dir,
   });
 
   if (!scheme) {
@@ -81,7 +122,7 @@ export default async function ContactsPage({ params, searchParams }: PageProps) 
     );
   }
 
-  const hasFilter = hasActiveContactFilters(sp);
+  const hasFilter = clauses.length > 0;
 
   return (
     <main className="mx-auto max-w-7xl px-6 py-8">
@@ -98,10 +139,10 @@ export default async function ContactsPage({ params, searchParams }: PageProps) 
       <Card>
         <CardContent className="px-5 py-4 space-y-4">
           <ContactsFilterBar
-            initialQ={args.q}
-            initialQField={args.qfield}
-            initialResultCode={args.resultCode}
-            resultCodeOptions={[]}
+            surveyId={surveyId}
+            initialClauses={clauses}
+            columnCandidates={columnCandidates}
+            resultCodeOptions={resultCodes}
           />
           {rows.length === 0 ? (
             <EmptyState
@@ -117,7 +158,7 @@ export default async function ContactsPage({ params, searchParams }: PageProps) 
               scheme={scheme}
               surveyId={surveyId}
               sort={safeSort}
-              dir={args.dir}
+              dir={dir}
             />
           )}
         </CardContent>
