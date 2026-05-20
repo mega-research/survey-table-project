@@ -16,7 +16,7 @@ import type { RichTextEditorHandle, RichTextEditorProps } from './types';
 // 표 정렬(TableAlignDecoration) 이 wrapper flex 로 동작하려면 table 폭이 wrapper 보다
 // 작아야 시각 효과가 보인다.
 const COMMON_EDITOR_BASE =
-  'max-w-none focus:outline-none p-6 ' +
+  'max-w-none focus:outline-none p-6 flex-1 ' +
   '[&_table]:!w-auto [&_table]:table-auto ' +
   '[&_table_td_p]:m-0 [&_table_th_p]:m-0 ' +
   '[&_td.selectedCell]:relative [&_td.selectedCell]:bg-blue-100/60 ' +
@@ -154,7 +154,9 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
     };
 
     return (
-      <div className={`flex flex-col overflow-hidden rounded-lg border border-gray-200 ${className ?? ''}`}>
+      <div
+        className={`flex flex-col overflow-hidden rounded-lg border border-gray-200 transition-colors focus-within:border-blue-500 ${className ?? ''}`}
+      >
         <Toolbar
           editor={editor}
           variableCatalog={variableCatalog}
@@ -162,10 +164,10 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
           onPickLink={onPickLink}
         />
         <div
-          className="overflow-y-auto max-h-[calc(100vh-260px)]"
+          className="flex flex-col overflow-y-auto max-h-[calc(100vh-260px)]"
           style={{ minHeight: `${minHeight}px` }}
         >
-          <EditorContent editor={editor} />
+          <EditorContent editor={editor} className="flex flex-1 flex-col" />
         </div>
         <ImageUploadModal
           open={showModal}
