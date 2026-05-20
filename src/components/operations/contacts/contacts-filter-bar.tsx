@@ -183,12 +183,13 @@ export function ContactsFilterBar({
         <Button
           type="button"
           variant="outline"
+          size="sm"
           className="h-10"
           onClick={() => setAdvancedOpen(!advancedOpen)}
         >
           {advancedOpen ? '▲' : '▼'} 필터
           {extraClauses.length > 0 && (
-            <Badge variant="secondary" className="ml-2">
+            <Badge variant="secondary" className="ml-1.5 px-1.5">
               {extraClauses.length}
             </Badge>
           )}
