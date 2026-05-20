@@ -50,7 +50,7 @@ export function ClauseRow({
         value={clause.op}
         onValueChange={(v) => onChange({ ...clause, op: v as 'AND' | 'OR' })}
       >
-        <SelectTrigger className="h-9 w-[70px] font-bold text-blue-700">
+        <SelectTrigger className="h-10 w-[70px] font-bold text-blue-700">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
