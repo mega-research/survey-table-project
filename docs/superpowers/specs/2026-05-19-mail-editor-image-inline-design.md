@@ -25,7 +25,6 @@
 - 기존 float 기반으로 저장된 메일 템플릿 자동 마이그레이션 (운영자가 재작성)
 - "테이블+이미지" 또는 "테이블+텍스트" 한 줄 배치 — 표는 block + `clear: both` 로 이미 자연 차단
 - 같은 줄 안에서 이미지마다 다른 정렬 (예: 첫 장 좌, 두 번째 우) — paragraph 단위 정렬 그룹 한 축만
-- 설문 빌더(`kind === 'survey'`) 의 이미지 동작 변경 — 메일 에디터(`kind === 'mail'`) 만 대상
 
 ## 사용자 시나리오
 
@@ -89,7 +88,7 @@ export function imageTextSplitPlugin() {
 - B) **이미지를 새 paragraph 로 분리**: 텍스트 paragraph 에서 이미지를 떼어내 별도 paragraph 로
 - 선택: A — 일반적으로 사용자가 이미지를 먼저 두고 텍스트를 입력하는 패턴이 많음
 
-**extensions.ts 등록**: `createUnifiedExtensions({ kind: 'mail' })` 에서만 이 plugin 추가. 설문 빌더는 영향 없음.
+**extensions.ts 등록**: `createUnifiedExtensions` 전체에 plugin 추가 (mail/survey 모두). 설문 빌더의 notice 질문 에디터에서도 동일하게 이미지+텍스트 같은 paragraph 입력 시 자동 분리.
 
 ## §2: wrapper 인라인 스타일 단순화 + paragraph text-align 정렬
 
@@ -228,7 +227,7 @@ p > img + img {
 5. 이미지 옆에 텍스트 입력 시 자동 다음 줄
 6. 표 옆에 이미지/텍스트 못 옴 (회귀 검증)
 7. 미리보기 iframe / 실제 발송 메일 시각이 편집기와 일치
-8. 설문 빌더(`kind === 'survey'`) 이미지 동작 회귀 없음
+8. 설문 빌더(`kind === 'survey'`) notice 질문 에디터에서도 동일하게 이미지+텍스트 자동 분리 동작
 
 ### 검증 명령
 
@@ -241,7 +240,7 @@ ESLint 인프라 깨진 상태이므로 (`feedback_lint_infra_broken.md`):
 
 **수정 파일** (예상):
 - `src/components/ui/rich-text-editor/image-context-toolbar.tsx` — wrapperStyle 단순화, 정렬을 paragraph text-align 으로
-- `src/components/ui/rich-text-editor/extensions.ts` — 메일 모드에서 imageTextSplitPlugin 추가, TextAlign extension 검토
+- `src/components/ui/rich-text-editor/extensions.ts` — mail/survey 양쪽에 imageTextSplitPlugin 추가, TextAlign extension 검토
 - `src/components/ui/rich-text-editor/image-text-split-plugin.ts` — 신규
 - `src/components/ui/rich-text-editor/rich-text-editor.tsx` — MAIL_BASE 의 text-align 안전망 추가 (필요 시)
 - `src/app/globals.css` — float 룰 제거, 인접 wrapper margin 룰 추가
@@ -252,4 +251,5 @@ ESLint 인프라 깨진 상태이므로 (`feedback_lint_infra_broken.md`):
 **예상 비변경**:
 - `imageResize` 노드 schema 자체
 - 이미지 업로드 / 첨부 / 발송 파이프라인
-- 설문 빌더(`kind === 'survey'`) 동작
+- 설문 빌더의 wrapper float 정렬 / 사이즈 토글 등 본 작업 범위 외 동작
+  (단 이미지+텍스트 같은 paragraph 자동 분리는 mail/survey 양쪽 동일하게 적용)

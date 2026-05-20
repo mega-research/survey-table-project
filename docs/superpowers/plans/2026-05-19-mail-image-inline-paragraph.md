@@ -151,7 +151,7 @@ describe('imageTextSplitPlugin (mail kind)', () => {
     editor.destroy();
   });
 
-  it('survey kind 에서는 split plugin 이 적용되지 않는다', () => {
+  it('survey kind 에서도 동일하게 분리된다 (mail+survey 양쪽 적용)', () => {
     const html =
       '<p><img src="https://example.com/a.png" style="display: inline-block; width: 50%;"/>같이</p>';
     const editor = new Editor({
@@ -161,8 +161,8 @@ describe('imageTextSplitPlugin (mail kind)', () => {
 
     const json = editor.getJSON();
     const paragraphs = (json.content ?? []).filter((c) => c.type === 'paragraph');
-    // survey 모드는 plugin 미적용 — 한 paragraph 에 그대로 남음
-    expect(paragraphs.length).toBe(1);
+    // survey 모드도 plugin 적용 — paragraph 가 분리되어 2개 이상
+    expect(paragraphs.length).toBeGreaterThanOrEqual(2);
 
     editor.destroy();
   });
@@ -319,8 +319,8 @@ return [
   TableSelectOnBackspace,
   VarTokenExtension,
   TableAlignDecoration,
-  // 메일 모드에서만 이미지+텍스트 분리 가드
-  ...(kind === 'mail' ? [ImageTextSplitExtension] : []),
+  // 이미지+텍스트 같은 줄 자동 분리 (mail/survey 양쪽 모두 적용)
+  ImageTextSplitExtension,
 ];
 ```
 
@@ -934,7 +934,8 @@ pnpm dev
 - [ ] 표 옆에 이미지/텍스트 못 옴 (회귀 검증)
 - [ ] 미리보기 다이얼로그 iframe 시각이 편집기와 일치
 - [ ] 테스트 발송 → 실제 메일 시각이 편집기 + iframe 과 일치
-- [ ] 설문 빌더(`/admin/surveys/<surveyId>/edit`) 의 notice 질문 에디터 이미지 동작 회귀 없음 (kind === 'survey' 영향 없음)
+- [ ] 설문 빌더(`/admin/surveys/<surveyId>/edit`) 의 notice 질문 에디터 — 이미지+텍스트 자동 분리 동작 검증 (mail/survey 동일)
+- [ ] 설문 빌더 이미지의 wrapper float/사이즈 토글 등 본 작업 범위 외 동작 회귀 없음
 
 - [ ] **Step 3: 옛 데이터 안전망 검증 (있다면)**
 
