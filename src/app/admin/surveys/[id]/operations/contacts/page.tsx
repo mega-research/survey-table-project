@@ -144,7 +144,11 @@ export default async function ContactsPage({ params, searchParams }: PageProps) 
         <CardContent className="px-5 py-4 space-y-4">
           <ContactsFilterBar
             surveyId={surveyId}
-            initialClauses={clauses}
+            initialClauses={clauses.map((c) => ({
+              op: c.op,
+              source: c.condition.source,
+              value: c.condition.value,
+            }))}
             columnCandidates={columnCandidates}
             resultCodeOptions={resultCodes}
           />
