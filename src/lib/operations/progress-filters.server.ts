@@ -1,8 +1,14 @@
 import 'server-only';
 
 import { blindIndex } from '@/lib/crypto/blind';
-import type { PiiFieldType } from '@/lib/crypto/pii-fields';
+import {
+  FILTER_SOURCE,
+  placeholderFor as sharedPlaceholderFor,
+  type ColumnCandidateWithPii,
+} from './filter-shared';
 import { parseIdListInput, type NumRange } from './range-list';
+
+export type ColumnCandidate = ColumnCandidateWithPii;
 
 export type FilterCondition =
   | { source: 'system.resid'; mode: 'idlist'; ranges: NumRange[] }
@@ -10,17 +16,9 @@ export type FilterCondition =
   | { source: `attrs.${string}`; mode: 'text'; value: string }
   | { source: `pii.${string}`; mode: 'exact'; value: string; blindIndex: string };
 
-export interface ColumnCandidate {
-  source: string;
-  label: string;
-  piiType?: PiiFieldType;
-}
-
+/** 진척 보고용 — attrs.* fallback 은 '부분일치' (단일 검색바라 부분일치 의미가 분명). */
 export function placeholderFor(source: string | null): string {
-  if (!source) return '검색어';
-  if (source === 'system.resid') return '예: 1-30, 45';
-  if (source.startsWith('pii.')) return '정확한 값 입력 (부분 검색 불가)';
-  return '부분일치';
+  return sharedPlaceholderFor(source, '부분일치');
 }
 
 export function parseConditionFromUrl(
@@ -35,7 +33,7 @@ export function parseConditionFromUrl(
   const candidate = candidates.find((c) => c.source === col);
   if (!candidate) return null;
 
-  if (col === 'system.resid') {
+  if (col === FILTER_SOURCE.RESID) {
     const ranges = parseIdListInput(trimmed);
     if (ranges !== null) {
       return { source: 'system.resid', mode: 'idlist', ranges };
@@ -43,11 +41,11 @@ export function parseConditionFromUrl(
     return { source: 'system.resid', mode: 'text', value: trimmed };
   }
 
-  if (col.startsWith('attrs.')) {
+  if (col.startsWith(FILTER_SOURCE.ATTRS_PREFIX)) {
     return { source: col as `attrs.${string}`, mode: 'text', value: trimmed };
   }
 
-  if (col.startsWith('pii.')) {
+  if (col.startsWith(FILTER_SOURCE.PII_PREFIX)) {
     if (!candidate.piiType) return null;
     const bi = blindIndex(candidate.piiType, trimmed);
     if (!bi) return null;

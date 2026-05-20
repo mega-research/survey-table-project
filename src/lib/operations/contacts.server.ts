@@ -18,6 +18,7 @@ import {
   type ContactsSortKey,
 } from './contacts';
 import type { FilterClause, FilterCondition } from './contacts-filters.server';
+import { FILTER_SOURCE, escapeLikePattern } from './filter-shared';
 
 export interface ListContactsArgs {
   surveyId: string;
@@ -67,10 +68,6 @@ const latestAttemptNoExpr = sql<number | null>`(
   ORDER BY attempt_no DESC LIMIT 1
 )`;
 
-function escapeLikePattern(value: string): string {
-  return value.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
-}
-
 /**
  * 단일 절 SQL. cond.source 와 mode 별로 분기.
  *
@@ -80,7 +77,7 @@ function escapeLikePattern(value: string): string {
  * pii.* 평문 미노출 (사전 계산된 blindIndex 만 SQL 에 진입).
  */
 function buildClauseSql(cond: FilterCondition): SQL {
-  if (cond.source === 'system.resid') {
+  if (cond.source === FILTER_SOURCE.RESID) {
     if (cond.mode === 'idlist') {
       if (!cond.ranges || cond.ranges.length === 0) return sql`FALSE`;
       const conds = cond.ranges.map((r) =>
@@ -95,25 +92,25 @@ function buildClauseSql(cond: FilterCondition): SQL {
     return sql`FALSE`;
   }
 
-  if (cond.source === 'system.contact_result' && cond.mode === 'enum') {
+  if (cond.source === FILTER_SOURCE.CONTACT_RESULT && cond.mode === 'enum') {
     return sql`${latestResultCodeExpr} = ${cond.value}`;
   }
 
-  if (cond.source === 'system.web' && cond.mode === 'boolean') {
+  if (cond.source === FILTER_SOURCE.WEB && cond.mode === 'boolean') {
     return cond.value === 'true'
       ? sql`"contact_targets".responded_at IS NOT NULL`
       : sql`"contact_targets".responded_at IS NULL`;
   }
 
-  if (cond.source.startsWith('attrs.') && cond.mode === 'text') {
-    const key = cond.source.slice('attrs.'.length);
+  if (cond.source.startsWith(FILTER_SOURCE.ATTRS_PREFIX) && cond.mode === 'text') {
+    const key = cond.source.slice(FILTER_SOURCE.ATTRS_PREFIX.length);
     const escaped = escapeLikePattern(cond.value);
     return sql`"contact_targets".attrs->>${key} ILIKE '%' || ${escaped} || '%'`;
   }
 
-  if (cond.source.startsWith('pii.') && cond.mode === 'exact') {
+  if (cond.source.startsWith(FILTER_SOURCE.PII_PREFIX) && cond.mode === 'exact') {
     if (!cond.blindIndex) return sql`FALSE`;
-    const columnKey = cond.source.slice('pii.'.length);
+    const columnKey = cond.source.slice(FILTER_SOURCE.PII_PREFIX.length);
     // contact_pii 도 id 컬럼이 있어 unquoted id 는 pp.id 로 해석된다 — 반드시 큰따옴표 사용.
     return sql`EXISTS (
       SELECT 1 FROM contact_pii pp

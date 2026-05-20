@@ -1,9 +1,15 @@
 import 'server-only';
 
 import { blindIndex } from '@/lib/crypto/blind';
-import type { PiiFieldType } from '@/lib/crypto/pii-fields';
 import type { ContactResultCode } from '@/db/schema/schema-types';
+import {
+  FILTER_SOURCE,
+  placeholderFor as sharedPlaceholderFor,
+  type ColumnCandidateWithPii,
+} from './filter-shared';
 import { parseIdListInput, type NumRange } from './range-list';
+
+export type ColumnCandidate = ColumnCandidateWithPii;
 
 export type CombineOp = 'AND' | 'OR';
 export type ConditionMode = 'idlist' | 'text' | 'exact' | 'enum' | 'boolean';
@@ -22,16 +28,9 @@ export interface FilterClause {
   op: CombineOp | null;
 }
 
-export interface ColumnCandidate {
-  source: string;
-  label: string;
-  piiType?: PiiFieldType;
-}
-
+/** 조사 대상용 — attrs.* fallback 은 '검색어' (위젯 분기 있어 일반화). */
 export function placeholderFor(source: string): string {
-  if (source === 'system.resid') return '예: 1-30, 45';
-  if (source.startsWith('pii.')) return '정확한 값 입력 (부분 검색 불가)';
-  return '검색어';
+  return sharedPlaceholderFor(source);
 }
 
 function toArray(v: string[] | string | undefined): string[] {
@@ -75,36 +74,34 @@ function buildClause(
   if (trimmed.length === 0) return null;
   const candidate = candidates.find((c) => c.source === col);
   if (!candidate) return null;
-  // op 는 우선 AND/OR 만 결정. 출력 첫 절 → null 강제는 호출자가 담당
-  // (URL 인덱스가 아닌 통과한 절 순서 기준이라야 invariant 가 유지된다).
+  // op 는 AND/OR 만 결정 — 출력 첫 절 null 강제는 호출자가 담당 (통과 절 순서 기준).
   const op: CombineOp = opRaw === 'OR' ? 'OR' : 'AND';
 
-  if (col === 'system.resid') {
+  if (col === FILTER_SOURCE.RESID) {
     const ranges = parseIdListInput(trimmed);
     if (ranges !== null) {
       return { op, condition: { source: 'system.resid', mode: 'idlist', value: trimmed, ranges } };
     }
-    // 비숫자 입력 → text 폴백. resid 가 정수 컬럼이라 buildClauseSql 에서 FALSE 로 평가되어
-    // 0건 표시. placeholder 가 형식("예: 1-30, 45") 을 안내하므로 silent 0건은 의도된 동작.
+    // 비숫자 입력 → text 폴백. resid 가 정수 컬럼이라 buildClauseSql 에서 FALSE 로 평가.
     return { op, condition: { source: 'system.resid', mode: 'text', value: trimmed } };
   }
 
-  if (col === 'system.contact_result') {
+  if (col === FILTER_SOURCE.CONTACT_RESULT) {
     const code = resultCodes.find((rc) => rc.code === trimmed);
     if (!code) return null;
     return { op, condition: { source: 'system.contact_result', mode: 'enum', value: trimmed } };
   }
 
-  if (col === 'system.web') {
+  if (col === FILTER_SOURCE.WEB) {
     if (trimmed !== 'true' && trimmed !== 'false') return null;
     return { op, condition: { source: 'system.web', mode: 'boolean', value: trimmed } };
   }
 
-  if (col.startsWith('attrs.')) {
+  if (col.startsWith(FILTER_SOURCE.ATTRS_PREFIX)) {
     return { op, condition: { source: col, mode: 'text', value: trimmed } };
   }
 
-  if (col.startsWith('pii.')) {
+  if (col.startsWith(FILTER_SOURCE.PII_PREFIX)) {
     if (!candidate.piiType) return null;
     // blindIndex 내부에서 normalizePii 호출 — 정규화 실패는 빈 문자열 반환으로 감지.
     const bi = blindIndex(candidate.piiType, trimmed);

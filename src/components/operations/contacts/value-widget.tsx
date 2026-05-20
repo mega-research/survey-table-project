@@ -9,14 +9,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import type { ContactResultCode } from '@/db/schema/schema-types';
-
-// 서버 모듈 contacts-filters.server.ts 의 동명 함수와 동기화 유지 — 동일 케이스 추가/변경 시
-// 양쪽 함께 수정. 'use client' 컴포넌트라 서버 모듈 직접 import 불가하여 인라인 복제.
-function placeholderFor(source: string): string {
-  if (source === 'system.resid') return '예: 1-30, 45';
-  if (source.startsWith('pii.')) return '정확한 값 입력 (부분 검색 불가)';
-  return '검색어';
-}
+import { FILTER_SOURCE, placeholderFor } from '@/lib/operations/filter-shared';
 
 interface Props {
   source: string;
@@ -33,7 +26,7 @@ interface Props {
  * - 그 외 (system.resid / attrs.* / pii.*) -> text input
  */
 export function ValueWidget({ source, value, onChange, resultCodeOptions, inputId }: Props) {
-  if (source === 'system.contact_result') {
+  if (source === FILTER_SOURCE.CONTACT_RESULT) {
     return (
       <Select value={value} onValueChange={onChange}>
         <SelectTrigger id={inputId} className="w-[260px] h-10">
@@ -50,7 +43,7 @@ export function ValueWidget({ source, value, onChange, resultCodeOptions, inputI
     );
   }
 
-  if (source === 'system.web') {
+  if (source === FILTER_SOURCE.WEB) {
     return (
       <Select value={value || 'true'} onValueChange={onChange}>
         <SelectTrigger id={inputId} className="w-[260px] h-10">

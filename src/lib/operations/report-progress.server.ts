@@ -10,6 +10,7 @@ import type { ContactColumnScheme, ProgressColumnScheme } from '@/db/schema/sche
 
 import type { ProgressRow, ProgressSortKey, SortDir, ProgressTotals } from './report-progress';
 import type { FilterCondition } from './progress-filters.server';
+import { FILTER_SOURCE, escapeLikePattern } from './filter-shared';
 
 const EMPTY_SCHEME: ProgressColumnScheme = { version: 1, columns: [] };
 
@@ -32,14 +33,6 @@ const closingFilter = sql`
 `;
 
 /**
- * ILIKE wildcard escape — `%` `_` `\` 를 리터럴로 처리하기 위한 사전 escape.
- * profiles.server.ts 와 동일 패턴. attrs.* 텍스트 모드 조건의 value 에 적용된다.
- */
-function escapeLikePattern(s: string): string {
-  return s.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
-}
-
-/**
  * 조건 → WHERE 절. null 이면 TRUE (전체 조회).
  *
  * SECURITY: condition.source 는 호출자에서 contactColumns 화이트리스트 검증 끝난 값만
@@ -53,7 +46,7 @@ function escapeLikePattern(s: string): string {
 function buildFilterSql(condition: FilterCondition | null) {
   if (!condition) return sql`TRUE`;
 
-  if (condition.source === 'system.resid') {
+  if (condition.source === FILTER_SOURCE.RESID) {
     if (condition.mode === 'idlist') {
       if (condition.ranges.length === 0) return sql`FALSE`;
       const conds = condition.ranges.map((r) =>
@@ -61,23 +54,23 @@ function buildFilterSql(condition: FilterCondition | null) {
           ? sql`ct.resid = ${r.from}`
           : sql`ct.resid BETWEEN ${r.from} AND ${r.to}`,
       );
-      return sql.join(conds, sql` OR `);
+      // 자체 괄호 — 외부 AND 결합 (WHERE ct.survey_id = X AND ${filterSql}) 시 PG AND>OR
+      // 우선순위로 인한 cross-survey 누락/누출 차단.
+      return sql`(${sql.join(conds, sql` OR `)})`;
     }
     return sql`FALSE`; // text 폴백 — resid 가 정수 컬럼이라 비숫자 매칭 0건
   }
 
-  if (condition.source.startsWith('attrs.')) {
-    const key = condition.source.slice('attrs.'.length);
+  if (condition.source.startsWith(FILTER_SOURCE.ATTRS_PREFIX)) {
+    const key = condition.source.slice(FILTER_SOURCE.ATTRS_PREFIX.length);
     const escaped = escapeLikePattern(condition.value);
     // attrs key 도 parameter binding ($1) — PostgreSQL ->> 연산자는 텍스트 파라미터 수용.
     return sql`ct.attrs->>${key} ILIKE '%' || ${escaped} || '%'`;
   }
 
-  if (condition.source.startsWith('pii.') && condition.mode === 'exact') {
-    // pii.* 는 FilterCondition 타입상 항상 mode === 'exact' (Known Limitation §4-1).
-    // mode 가드는 TS narrowing 용도 — startsWith 만으로는 union 좁히기가 안 된다.
-    // 미래 pii 부분일치 모드 등이 추가되면 이 분기를 명시적으로 처리해야 한다.
-    const columnKey = condition.source.slice('pii.'.length);
+  if (condition.source.startsWith(FILTER_SOURCE.PII_PREFIX) && condition.mode === 'exact') {
+    // pii.* 는 FilterCondition 타입상 항상 mode === 'exact'. mode 가드는 TS narrowing 용.
+    const columnKey = condition.source.slice(FILTER_SOURCE.PII_PREFIX.length);
     return sql`EXISTS (
       SELECT 1 FROM contact_pii pp
       WHERE pp.contact_target_id = ct.id

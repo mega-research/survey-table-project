@@ -9,20 +9,16 @@ import { ContactsPageClient } from '@/components/operations/contacts/contacts-pa
 import {
   attrsKeyOf,
   CONTACTS_PAGE_SIZE,
-  CONTACTS_SORT_KEYS,
   effectiveSortKey,
-  isAttrsSortKey,
-  type ContactsSortKey,
+  normalizeSortKey,
 } from '@/lib/operations/contacts';
 import {
   getContactColumnScheme,
   getContactResultCodes,
   listContactsForSurvey,
 } from '@/lib/operations/contacts.server';
-import {
-  parseClausesFromUrl,
-  type ColumnCandidate,
-} from '@/lib/operations/contacts-filters.server';
+import { parseClausesFromUrl } from '@/lib/operations/contacts-filters.server';
+import { FILTER_SOURCE, type ColumnCandidateWithPii } from '@/lib/operations/filter-shared';
 
 export const metadata: Metadata = {
   title: '현황 - 조사 대상 목록',
@@ -63,28 +59,18 @@ export default async function ContactsPage({ params, searchParams }: PageProps) 
       .filter((k): k is string => k != null),
   );
 
-  // sort key normalize: 시스템 키 whitelist OR attrs.* (길이 제한)
-  // CONTACTS_SORT_KEYS / isAttrsSortKey 는 contacts.ts export 를 그대로 참조해 drift 방지.
-  function normalizeSortKey(value: string | undefined): ContactsSortKey {
-    if (!value) return 'resid';
-    if (isAttrsSortKey(value) && value.length <= 200) return value;
-    return (CONTACTS_SORT_KEYS as readonly string[]).includes(value)
-      ? (value as ContactsSortKey)
-      : 'resid';
-  }
-
   const safeSort = effectiveSortKey(normalizeSortKey(sp.sort), visibleAttrsKeys);
 
   // 컬럼 후보: system.resid / system.contact_result / system.web + attrs.* + pii.*
   // system.email_count / system.contact_owner 는 placeholder 라 제외
-  const columnCandidates: ColumnCandidate[] = (scheme?.columns ?? [])
+  const columnCandidates: ColumnCandidateWithPii[] = (scheme?.columns ?? [])
     .filter(
       (c) =>
-        c.source === 'system.resid' ||
-        c.source === 'system.contact_result' ||
-        c.source === 'system.web' ||
-        c.source.startsWith('attrs.') ||
-        c.source.startsWith('pii.'),
+        c.source === FILTER_SOURCE.RESID ||
+        c.source === FILTER_SOURCE.CONTACT_RESULT ||
+        c.source === FILTER_SOURCE.WEB ||
+        c.source.startsWith(FILTER_SOURCE.ATTRS_PREFIX) ||
+        c.source.startsWith(FILTER_SOURCE.PII_PREFIX),
     )
     .map((c) => ({ source: c.source, label: c.label, piiType: c.piiType }));
 

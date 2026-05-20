@@ -13,11 +13,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useSearchParamsMutator } from '@/hooks/use-search-params-mutator';
+import {
+  placeholderFor as sharedPlaceholderFor,
+  type ColumnCandidate,
+} from '@/lib/operations/filter-shared';
 
-interface ColumnCandidate {
-  source: string;
-  label: string;
-}
+import { PiiExactMarker } from '@/components/operations/filter-pii-marker';
 
 interface Props {
   surveyId: string;
@@ -26,12 +27,8 @@ interface Props {
   columnCandidates: ColumnCandidate[];
 }
 
-function placeholderFor(source: string | null): string {
-  if (!source) return '검색어';
-  if (source === 'system.resid') return '예: 1-30, 45';
-  if (source.startsWith('pii.')) return '정확한 값 입력 (부분 검색 불가)';
-  return '부분일치';
-}
+// 진척 보고는 attrs.* 도 부분일치 — fallback 라벨 명시.
+const placeholderFor = (source: string | null) => sharedPlaceholderFor(source, '부분일치');
 
 /**
  * 진척 보고 단일 검색바.
@@ -101,9 +98,7 @@ export function ProgressFilterBar({
           {columnCandidates.map((c) => (
             <SelectItem key={c.source} value={c.source}>
               {c.label}
-              {c.source.startsWith('pii.') && (
-                <span className="ml-1 text-xs text-muted-foreground">(정확 일치)</span>
-              )}
+              <PiiExactMarker source={c.source} />
             </SelectItem>
           ))}
         </SelectContent>

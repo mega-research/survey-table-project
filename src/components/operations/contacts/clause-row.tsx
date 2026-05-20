@@ -9,13 +9,11 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import type { ContactResultCode } from '@/db/schema/schema-types';
+import { FILTER_SOURCE, type ColumnCandidate } from '@/lib/operations/filter-shared';
+
+import { PiiExactMarker } from '@/components/operations/filter-pii-marker';
 
 import { ValueWidget } from './value-widget';
-
-interface ColumnCandidate {
-  source: string;
-  label: string;
-}
 
 export interface ClauseRowValue {
   /** 안정 key — 행 제거·재추가 시 React 가 다른 행과 state 를 혼동하지 않도록 id 부여. */
@@ -64,7 +62,7 @@ export function ClauseRow({
         value={clause.source}
         onValueChange={(s) =>
           // system.web 은 boolean dropdown 의 기본값 'true' 로 초기화 (빈 value 면 silent drop 함정).
-          onChange({ ...clause, source: s, value: s === 'system.web' ? 'true' : '' })
+          onChange({ ...clause, source: s, value: s === FILTER_SOURCE.WEB ? 'true' : '' })
         }
       >
         <SelectTrigger className="h-10 w-[180px]">
@@ -74,9 +72,7 @@ export function ClauseRow({
           {columnCandidates.map((c) => (
             <SelectItem key={c.source} value={c.source}>
               {c.label}
-              {c.source.startsWith('pii.') && (
-                <span className="ml-1 text-xs text-muted-foreground">(정확 일치)</span>
-              )}
+              <PiiExactMarker source={c.source} />
             </SelectItem>
           ))}
         </SelectContent>

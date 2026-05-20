@@ -15,10 +15,8 @@ import {
   getProgressRows,
   getProgressTotals,
 } from '@/lib/operations/report-progress.server';
-import {
-  parseConditionFromUrl,
-  type ColumnCandidate,
-} from '@/lib/operations/progress-filters.server';
+import { parseConditionFromUrl } from '@/lib/operations/progress-filters.server';
+import { FILTER_SOURCE, type ColumnCandidateWithPii } from '@/lib/operations/filter-shared';
 
 export const dynamic = 'force-dynamic';
 
@@ -90,11 +88,11 @@ export default async function ReportProgressPage({ params, searchParams }: PageP
   const sort = parseSort(sp.sort, metaKeys);
 
   // 후보: system.resid + attrs.* + pii.* 만. 그 외 system.* 은 이번 슬라이스 제외.
-  const columnCandidates: ColumnCandidate[] = (contactScheme?.columns ?? [])
+  const columnCandidates: ColumnCandidateWithPii[] = (contactScheme?.columns ?? [])
     .filter((c) =>
-      c.source === 'system.resid' ||
-      c.source.startsWith('attrs.') ||
-      c.source.startsWith('pii.'),
+      c.source === FILTER_SOURCE.RESID ||
+      c.source.startsWith(FILTER_SOURCE.ATTRS_PREFIX) ||
+      c.source.startsWith(FILTER_SOURCE.PII_PREFIX),
     )
     .map((c) => ({
       source: c.source,
@@ -109,7 +107,7 @@ export default async function ReportProgressPage({ params, searchParams }: PageP
   // ProgressTable 의 # 컬럼 헤더 — contactColumns 의 system.resid 라벨 사용.
   // 스킴에 없거나 라벨이 비어있으면 '번호' 폴백.
   const residLabel =
-    contactScheme?.columns.find((c) => c.source === 'system.resid')?.label?.trim() || '번호';
+    contactScheme?.columns.find((c) => c.source === FILTER_SOURCE.RESID)?.label?.trim() || '번호';
 
   // 조사 대상 0건 빠른 검출 — getProgressTotals 보다 훨씬 가벼움.
   const [{ ct }] = await db

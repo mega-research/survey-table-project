@@ -14,14 +14,12 @@ import {
 } from '@/components/ui/select';
 import { useSearchParamsMutator } from '@/hooks/use-search-params-mutator';
 import type { ContactResultCode } from '@/db/schema/schema-types';
+import { FILTER_SOURCE, type ColumnCandidate } from '@/lib/operations/filter-shared';
+
+import { PiiExactMarker } from '@/components/operations/filter-pii-marker';
 
 import { ClauseRow, type ClauseRowValue } from './clause-row';
 import { ValueWidget } from './value-widget';
-
-interface ColumnCandidate {
-  source: string;
-  label: string;
-}
 
 // page.tsx 의 FilterClause 와 형상 같지만 client 모듈이라 서버 import 못 함 - 인라인.
 interface ClientFilterClause {
@@ -114,7 +112,7 @@ export function ContactsFilterBar({
     if (columnCandidates.length === 0) return;
     const firstCandidate = columnCandidates[0].source;
     // system.web 은 boolean dropdown 의 기본값 'true' 로 초기화 (빈 value 면 silent drop 함정).
-    const initialValue = firstCandidate === 'system.web' ? 'true' : '';
+    const initialValue = firstCandidate === FILTER_SOURCE.WEB ? 'true' : '';
     const id = `new-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     setExtraClauses((cs) => [...cs, { id, op: 'AND', source: firstCandidate, value: initialValue }]);
     setAdvancedOpen(true);
@@ -144,7 +142,7 @@ export function ContactsFilterBar({
           onValueChange={(v) => {
             setFirstSource(v);
             // source 변경 시 이전 mode 의 value 는 의미 없음. system.web 은 boolean 기본값 'true'.
-            setFirstValue(v === 'system.web' ? 'true' : '');
+            setFirstValue(v === FILTER_SOURCE.WEB ? 'true' : '');
           }}
         >
           <SelectTrigger id="contacts-first-source" className="h-10 w-[180px] shrink-0">
@@ -154,9 +152,7 @@ export function ContactsFilterBar({
             {columnCandidates.map((c) => (
               <SelectItem key={c.source} value={c.source}>
                 {c.label}
-                {c.source.startsWith('pii.') && (
-                  <span className="ml-1 text-xs text-muted-foreground">(정확 일치)</span>
-                )}
+                <PiiExactMarker source={c.source} />
               </SelectItem>
             ))}
           </SelectContent>
