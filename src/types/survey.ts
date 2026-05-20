@@ -187,6 +187,9 @@ export interface TableCell {
   // 셀 컨텐츠 정렬 관련 속성
   horizontalAlign?: 'left' | 'center' | 'right'; // 가로 정렬 (기본값: left)
   verticalAlign?: 'top' | 'middle' | 'bottom'; // 세로 정렬 (기본값: top)
+  // 셀 텍스트(content) 위치 — input/checkbox/radio/select/ranking 셀에서 텍스트와 입력 영역의 상대 위치
+  // 기본값(undefined)은 'top' 과 동일 — 기존 동작 유지
+  textPosition?: 'top' | 'bottom' | 'left' | 'right';
   // 런타임 전용: 셀렉터 경계에서 분리된 continuation 셀 마커
   _isContinuation?: boolean;
 }

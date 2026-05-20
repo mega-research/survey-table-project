@@ -6,6 +6,7 @@ import { RankingDropdownStack } from '@/components/survey-response/ranking-dropd
 import type { RankingAnswer } from '@/types/survey';
 import { parseRankingAnswers } from '@/utils/ranking-shared';
 
+import { CellContentLayout } from './cell-content-layout';
 import type { InteractiveCellProps } from './types';
 
 /** 순위형 셀 (인터랙티브) — Case 3: 테이블 셀 내부 랭킹. RankingDropdownStack 재사용. */
@@ -35,27 +36,24 @@ export const RankingCell = React.memo(function RankingCell({
   }
 
   return (
-    <div className="flex w-full flex-col space-y-2">
-      {cell.content && cell.content.trim() && (
-        <div className="mb-1 text-sm font-medium whitespace-pre-wrap [overflow-wrap:anywhere] text-gray-700">
-          {cell.content}
-        </div>
-      )}
-      <RankingDropdownStack
-        answers={answers}
-        options={options}
-        positions={positions}
-        allowDuplicates={allowDuplicates}
-        allowOther={allowOther}
-        onChange={(next) => onUpdateValue(next)}
-        columns={cell.optionsColumns}
-        compact
-      />
-      {positions < requestedPositions && (
-        <p className="text-xs text-gray-500">
-          선택지 {options.length}개 → 최대 {positions}순위
-        </p>
-      )}
-    </div>
+    <CellContentLayout content={cell.content} position={cell.textPosition}>
+      <div className="flex w-full flex-col space-y-2">
+        <RankingDropdownStack
+          answers={answers}
+          options={options}
+          positions={positions}
+          allowDuplicates={allowDuplicates}
+          allowOther={allowOther}
+          onChange={(next) => onUpdateValue(next)}
+          columns={cell.optionsColumns}
+          compact
+        />
+        {positions < requestedPositions && (
+          <p className="text-xs text-gray-500">
+            선택지 {options.length}개 → 최대 {positions}순위
+          </p>
+        )}
+      </div>
+    </CellContentLayout>
   );
 });

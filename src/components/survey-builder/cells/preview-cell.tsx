@@ -7,6 +7,7 @@ import { Image, Video } from 'lucide-react';
 import type { TableCell } from '@/types/survey';
 
 import { getYouTubeEmbedUrl } from '../table-cell-renderers';
+import { CellContentLayout } from './cell-content-layout';
 import { CellOptionsContainer } from './cell-options-container';
 import { ImageCell } from './image-cell';
 
@@ -65,12 +66,7 @@ export const PreviewCell = React.memo(function PreviewCell({ cell }: { cell: Tab
 
     case 'select':
       return cell.selectOptions && cell.selectOptions.length > 0 ? (
-        <div className="flex flex-col space-y-2">
-          {cell.content && cell.content.trim() && (
-            <div className="text-sm font-medium whitespace-pre-wrap [overflow-wrap:anywhere] text-gray-700">
-              {cell.content}
-            </div>
-          )}
+        <CellContentLayout content={cell.content} position={cell.textPosition}>
           <select className="w-full rounded border border-gray-300 p-2 text-sm" disabled>
             <option value="">선택하세요...</option>
             {cell.selectOptions.map((option) => (
@@ -79,7 +75,7 @@ export const PreviewCell = React.memo(function PreviewCell({ cell }: { cell: Tab
               </option>
             ))}
           </select>
-        </div>
+        </CellContentLayout>
       ) : (
         <div className="flex items-center gap-2 text-gray-500">
           <span className="text-sm">선택 옵션 없음</span>
@@ -148,25 +144,22 @@ export const PreviewCell = React.memo(function PreviewCell({ cell }: { cell: Tab
 
     case 'input':
       return (
-        <div className="flex flex-col space-y-2">
-          {cell.content && cell.content.trim() && (
-            <div className="text-sm font-medium whitespace-pre-wrap [overflow-wrap:anywhere] text-gray-700">
-              {cell.content}
-            </div>
-          )}
-          <input
-            type="text"
-            placeholder={cell.placeholder || '답변을 입력하세요...'}
-            maxLength={cell.inputMaxLength}
-            disabled
-            className="w-full rounded border border-gray-300 bg-gray-50 p-2 text-sm"
-          />
-          {cell.inputMaxLength && (
-            <div className="mt-1 text-right text-xs text-gray-500">
-              최대 {cell.inputMaxLength}자
-            </div>
-          )}
-        </div>
+        <CellContentLayout content={cell.content} position={cell.textPosition}>
+          <div className="flex flex-col space-y-2">
+            <input
+              type="text"
+              placeholder={cell.placeholder || '답변을 입력하세요...'}
+              maxLength={cell.inputMaxLength}
+              disabled
+              className="w-full rounded border border-gray-300 bg-gray-50 p-2 text-sm"
+            />
+            {cell.inputMaxLength && (
+              <div className="mt-1 text-right text-xs text-gray-500">
+                최대 {cell.inputMaxLength}자
+              </div>
+            )}
+          </div>
+        </CellContentLayout>
       );
 
     case 'ranking_opt':

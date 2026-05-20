@@ -10,6 +10,10 @@ import {
   AlignVerticalJustifyCenter,
   AlignVerticalJustifyEnd,
   AlignVerticalJustifyStart,
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUp,
   CheckSquare,
   ChevronDown,
   Circle,
@@ -63,10 +67,25 @@ import { useShallow } from 'zustand/react/shallow';
 
 import { CellChoiceEditor } from './cell-choice-editor';
 import { CellImageEditor } from './cell-image-editor';
+import { CellContentLayout } from './cells/cell-content-layout';
 import { OptionsLayoutSelector } from './options-layout-selector';
 import { RankingCellTab } from './ranking-cell-tab';
 import { RankingOptCellTab } from './ranking-opt-cell-tab';
 import { VariableButton } from './variable-button';
+
+// textPosition 컨트롤을 표시할 셀 타입 — 텍스트 라벨과 입력/옵션 영역이 분리된 셀들만
+const TEXT_POSITION_CELL_TYPES = new Set(['input', 'checkbox', 'radio', 'select', 'ranking']);
+
+const TEXT_POSITION_OPTIONS: Array<{
+  value: NonNullable<TableCell['textPosition']>;
+  icon: typeof ArrowUp;
+  label: string;
+}> = [
+  { value: 'top', icon: ArrowUp, label: '위' },
+  { value: 'bottom', icon: ArrowDown, label: '아래' },
+  { value: 'left', icon: ArrowLeft, label: '왼쪽' },
+  { value: 'right', icon: ArrowRight, label: '오른쪽' },
+];
 
 interface CellContentModalProps {
   isOpen: boolean;
@@ -160,6 +179,10 @@ export function CellContentModal({
     cell.verticalAlign || 'top',
   );
 
+  const [textPosition, setTextPosition] = useState<NonNullable<TableCell['textPosition']>>(
+    cell.textPosition || 'top',
+  );
+
   // 셀 병합 관련 state
   const [isMergeEnabled, setIsMergeEnabled] = useState(
     (cell.rowspan && cell.rowspan > 1) || (cell.colspan && cell.colspan > 1) || false,
@@ -213,6 +236,7 @@ export function CellContentModal({
       setColspan(cell.colspan || 1);
       setHorizontalAlign(cell.horizontalAlign || 'left');
       setVerticalAlign(cell.verticalAlign || 'top');
+      setTextPosition(cell.textPosition || 'top');
       setCellCode(cell.cellCode || '');
       setIsCustomCellCode(cell.isCustomCellCode ?? !!cell.cellCode);
       setExportLabel(cell.exportLabel || '');
@@ -335,6 +359,11 @@ export function CellContentModal({
         // 정렬 속성 추가
         horizontalAlign: horizontalAlign !== 'left' ? horizontalAlign : undefined,
         verticalAlign: verticalAlign !== 'top' ? verticalAlign : undefined,
+        // 셀 텍스트 위치 — 적용 대상 타입이 아니거나 기본값('top') 이면 undefined 로 저장 (불필요한 데이터 회피)
+        textPosition:
+          TEXT_POSITION_CELL_TYPES.has(contentType) && textPosition !== 'top'
+            ? textPosition
+            : undefined,
         // 셀 코드 및 엑셀 라벨 추가
         cellCode: cellCode || undefined,
         isCustomCellCode: isCustomCellCode === false ? false : isCustomCellCode || undefined,
@@ -447,6 +476,7 @@ export function CellContentModal({
     setColspan(cell.colspan || 1);
     setHorizontalAlign(cell.horizontalAlign || 'left');
     setVerticalAlign(cell.verticalAlign || 'top');
+    setTextPosition(cell.textPosition || 'top');
     setCellCode(cell.cellCode || '');
     setIsCustomCellCode(cell.isCustomCellCode ?? !!cell.cellCode);
     setExportLabel(cell.exportLabel || '');
@@ -500,6 +530,30 @@ export function CellContentModal({
             {textContent && (
               <div className="rounded bg-gray-50 p-2 text-xs text-gray-500">
                 미리보기: {textContent}
+              </div>
+            )}
+
+            {TEXT_POSITION_CELL_TYPES.has(contentType) && (
+              <div className="space-y-2 pt-1">
+                <Label className="text-sm font-medium">텍스트 위치</Label>
+                <div className="flex gap-2">
+                  {TEXT_POSITION_OPTIONS.map(({ value, icon: Icon, label }) => (
+                    <Button
+                      key={value}
+                      type="button"
+                      variant={textPosition === value ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setTextPosition(value)}
+                      className="flex-1"
+                    >
+                      <Icon className="mr-2 h-4 w-4" />
+                      {label}
+                    </Button>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-500">
+                  왼쪽/오른쪽 선택 시 텍스트와 입력 영역이 한 줄에 배치되고 세로 가운데 정렬됩니다.
+                </p>
               </div>
             )}
           </div>
@@ -865,25 +919,21 @@ export function CellContentModal({
             <div className="space-y-2">
               <Label className="text-sm font-medium">미리보기</Label>
               <div className="rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 p-4">
-                {/* 셀 텍스트 설명 (있는 경우) */}
-                {textContent && textContent.trim() && (
-                  <div className="mb-3 border-b border-gray-200 pb-2 text-sm font-medium break-words whitespace-pre-wrap text-gray-700">
-                    {textContent}
+                <CellContentLayout content={textContent} position={textPosition}>
+                  <div className="space-y-2">
+                    <Input
+                      placeholder={inputPlaceholder || '답변을 입력하세요...'}
+                      maxLength={typeof inputMaxLength === 'number' ? inputMaxLength : undefined}
+                      disabled
+                      className="bg-white"
+                    />
+                    {typeof inputMaxLength === 'number' && inputMaxLength > 0 && (
+                      <div className="flex items-center justify-between text-xs text-gray-500">
+                        <span>0 / {inputMaxLength}자</span>
+                      </div>
+                    )}
                   </div>
-                )}
-                <div className="space-y-2">
-                  <Input
-                    placeholder={inputPlaceholder || '답변을 입력하세요...'}
-                    maxLength={typeof inputMaxLength === 'number' ? inputMaxLength : undefined}
-                    disabled
-                    className="bg-white"
-                  />
-                  {typeof inputMaxLength === 'number' && inputMaxLength > 0 && (
-                    <div className="flex items-center justify-between text-xs text-gray-500">
-                      <span>0 / {inputMaxLength}자</span>
-                    </div>
-                  )}
-                </div>
+                </CellContentLayout>
               </div>
             </div>
           </TabsContent>
