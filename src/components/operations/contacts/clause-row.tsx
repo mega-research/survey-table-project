@@ -18,6 +18,8 @@ interface ColumnCandidate {
 }
 
 export interface ClauseRowValue {
+  /** 안정 key — 행 제거·재추가 시 React 가 다른 행과 state 를 혼동하지 않도록 id 부여. */
+  id: string;
   op: 'AND' | 'OR';
   source: string;
   value: string;

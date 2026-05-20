@@ -52,16 +52,21 @@ export function ContactsFilterBar({
   columnCandidates,
   resultCodeOptions,
 }: Props) {
+  // ClauseRowValue.id 는 React key 안정성을 위한 식별자 — URL 의 인덱스가 아니라 행 자체의
+  // 생명주기를 따라간다. 매 mount/sync 시 새로 부여하므로 영속 ID 는 아님.
+  const toExtraRow = (c: ClientFilterClause, idx: number): ClauseRowValue => ({
+    id: `init-${idx}`,
+    op: (c.op ?? 'AND') as 'AND' | 'OR',
+    source: c.source,
+    value: c.value,
+  });
+
   const [firstSource, setFirstSource] = useState<string>(
     initialClauses[0]?.source ?? '',
   );
   const [firstValue, setFirstValue] = useState<string>(initialClauses[0]?.value ?? '');
   const [extraClauses, setExtraClauses] = useState<ClauseRowValue[]>(
-    initialClauses.slice(1).map((c) => ({
-      op: (c.op ?? 'AND') as 'AND' | 'OR',
-      source: c.source,
-      value: c.value,
-    })),
+    initialClauses.slice(1).map(toExtraRow),
   );
   const [advancedOpen, setAdvancedOpen] = useState(initialClauses.length >= 2);
   const [, startTransition] = useTransition();
@@ -71,13 +76,7 @@ export function ContactsFilterBar({
   useEffect(() => {
     setFirstSource(initialClauses[0]?.source ?? '');
     setFirstValue(initialClauses[0]?.value ?? '');
-    setExtraClauses(
-      initialClauses.slice(1).map((c) => ({
-        op: (c.op ?? 'AND') as 'AND' | 'OR',
-        source: c.source,
-        value: c.value,
-      })),
-    );
+    setExtraClauses(initialClauses.slice(1).map(toExtraRow));
     setAdvancedOpen(initialClauses.length >= 2);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(initialClauses)]);
@@ -116,7 +115,8 @@ export function ContactsFilterBar({
     const firstCandidate = columnCandidates[0].source;
     // system.web 은 boolean dropdown 의 기본값 'true' 로 초기화 (빈 value 면 silent drop 함정).
     const initialValue = firstCandidate === 'system.web' ? 'true' : '';
-    setExtraClauses((cs) => [...cs, { op: 'AND', source: firstCandidate, value: initialValue }]);
+    const id = `new-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    setExtraClauses((cs) => [...cs, { id, op: 'AND', source: firstCandidate, value: initialValue }]);
     setAdvancedOpen(true);
   };
 
@@ -204,7 +204,7 @@ export function ContactsFilterBar({
         <div className="mt-2 rounded border border-dashed border-slate-300 bg-white p-3">
           {extraClauses.map((c, i) => (
             <ClauseRow
-              key={i}
+              key={c.id}
               clause={c}
               columnCandidates={columnCandidates}
               resultCodeOptions={resultCodeOptions}

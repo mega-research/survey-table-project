@@ -44,7 +44,7 @@ export default async function ContactsPage({ params, searchParams }: PageProps) 
   const { id: surveyId } = await params;
   const sp = await searchParams;
 
-  // page / sort / dir 파싱 (기존 normalizeContactListArgs 의 해당 로직 인라인)
+  // page / sort / dir 파싱 — 다중 조건 필터 전환과 함께 normalizeContactListArgs 가 제거되어 인라인 처리.
   const pageRaw = Number(sp.page);
   const parsedPage = Number.isFinite(pageRaw) && pageRaw > 0 ? Math.floor(pageRaw) : 1;
   const dir = sp.dir === 'desc' ? ('desc' as const) : ('asc' as const);
@@ -64,9 +64,7 @@ export default async function ContactsPage({ params, searchParams }: PageProps) 
   );
 
   // sort key normalize: 시스템 키 whitelist OR attrs.* (길이 제한)
-  // contacts.ts 의 normalizeSortKey 와 동일 로직 — 그 모듈의 export 를 직접 사용하지 않는
-  // 이유는 normalizeContactListArgs 가 page/sort/dir 를 한 번에 묶은 형태라 분리 호출이
-  // 어색하기 때문. CONTACTS_SORT_KEYS / isAttrsSortKey 는 export 를 그대로 참조한다.
+  // CONTACTS_SORT_KEYS / isAttrsSortKey 는 contacts.ts export 를 그대로 참조해 drift 방지.
   function normalizeSortKey(value: string | undefined): ContactsSortKey {
     if (!value) return 'resid';
     if (isAttrsSortKey(value) && value.length <= 200) return value;

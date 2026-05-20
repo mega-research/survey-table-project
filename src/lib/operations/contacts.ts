@@ -81,34 +81,9 @@ function normalizeSortKey(value: string | undefined): ContactsSortKey {
   return (CONTACTS_SORT_KEYS as readonly string[]).includes(value) ? (value as ContactsSortKey) : 'resid';
 }
 
-export function normalizeContactListArgs(input: {
-  page?: string;
-  q?: string;
-  qfield?: string;
-  resultCode?: string;
-  sort?: string;
-  dir?: string;
-}): NormalizedContactListArgs {
-  return {
-    page: Math.max(1, parseInt(input.page ?? '1', 10) || 1),
-    q: (input.q ?? '').slice(0, 200),
-    qfield: pickFromWhitelist(input.qfield, CONTACTS_QFIELDS, 'all'),
-    resultCode: input.resultCode && input.resultCode !== '' ? input.resultCode : 'all',
-    sort: normalizeSortKey(input.sort),
-    // 컨택리스트는 resid 오름차순이 기본 (profiles 의 desc 와 의도적으로 다름)
-    dir: input.dir === 'desc' ? 'desc' : 'asc',
-  };
-}
-
-export function hasActiveContactFilters(input: {
-  q?: string;
-  qfield?: string;
-  resultCode?: string;
-}): boolean {
-  const q = (input.q ?? '').trim();
-  const rc = input.resultCode ?? 'all';
-  return q.length > 0 || (rc !== 'all' && rc !== '');
-}
+// normalizeContactListArgs / hasActiveContactFilters 는 qfield/q/resultCode 기반 단일 필터
+// 모델 전용이라 다중 조건(col[]/q[]/op[]) 전환과 함께 제거됨. page.tsx 가 인라인으로 page/sort/dir
+// 파싱하고 활성 여부는 `clauses.length > 0` 로 판정한다.
 
 // ─────────── 마스킹 (PII) ───────────
 

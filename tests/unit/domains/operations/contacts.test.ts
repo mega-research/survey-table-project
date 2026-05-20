@@ -3,53 +3,14 @@ import {
   CONTACTS_SORT_KEYS,
   CONTACTS_QFIELDS,
   CONTACTS_PAGE_SIZE,
-  normalizeContactListArgs,
   maskEmail,
   maskPhone,
   maskBizNumber,
-  hasActiveContactFilters,
   attrsKeyOf,
 } from '@/lib/operations/contacts';
 
-describe('normalizeContactListArgs', () => {
-  it('빈 입력 → 디폴트', () => {
-    const r = normalizeContactListArgs({});
-    expect(r).toEqual({
-      page: 1,
-      q: '',
-      qfield: 'all',
-      resultCode: 'all',
-      sort: 'resid',
-      dir: 'asc',
-    });
-  });
-
-  it('잘못된 sort → 디폴트로 폴백', () => {
-    const r = normalizeContactListArgs({ sort: 'malicious' });
-    expect(r.sort).toBe('resid');
-  });
-
-  it('잘못된 qfield → all', () => {
-    const r = normalizeContactListArgs({ qfield: 'xx' });
-    expect(r.qfield).toBe('all');
-  });
-
-  it('q 200자 초과 → 자름', () => {
-    const long = 'x'.repeat(300);
-    expect(normalizeContactListArgs({ q: long }).q.length).toBe(200);
-  });
-
-  it('page 음수/0 → 1 클램프', () => {
-    expect(normalizeContactListArgs({ page: '-3' }).page).toBe(1);
-    expect(normalizeContactListArgs({ page: '0' }).page).toBe(1);
-  });
-
-  it('dir asc 만 명시적 허용', () => {
-    expect(normalizeContactListArgs({ dir: 'asc' }).dir).toBe('asc');
-    expect(normalizeContactListArgs({ dir: 'desc' }).dir).toBe('desc');
-    expect(normalizeContactListArgs({ dir: 'XX' }).dir).toBe('asc');
-  });
-});
+// normalizeContactListArgs / hasActiveContactFilters 테스트는 함수 제거와 함께 삭제됨
+// (다중 조건 필터 모델로 전환 — page.tsx 가 인라인으로 page/sort/dir 파싱).
 
 describe('maskEmail', () => {
   it('일반 이메일', () => {
@@ -91,21 +52,6 @@ describe('maskBizNumber', () => {
   });
   it('자리수 부족 → "—"', () => {
     expect(maskBizNumber('123')).toBe('—');
-  });
-});
-
-describe('hasActiveContactFilters', () => {
-  it('빈 입력 → false', () => {
-    expect(hasActiveContactFilters({})).toBe(false);
-  });
-  it('q 만 있어도 true', () => {
-    expect(hasActiveContactFilters({ q: '인포플라' })).toBe(true);
-  });
-  it('resultCode 가 all 이면 false', () => {
-    expect(hasActiveContactFilters({ resultCode: 'all' })).toBe(false);
-  });
-  it('resultCode 가 1.조사완료 면 true', () => {
-    expect(hasActiveContactFilters({ resultCode: '1.조사완료' })).toBe(true);
   });
 });
 
