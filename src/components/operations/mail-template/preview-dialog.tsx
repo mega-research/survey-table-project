@@ -71,6 +71,10 @@ const IFRAME_RESET_CSS = `
   table { border-collapse: collapse; margin: 0.5em 0; }
   td, th { border: 1px solid #d1d5db; padding: 4px 8px; }
   img { max-width: 100%; height: auto; }
+  /* 옛 데이터 안전망 — wrapperStyle 이 img inline style 로 직렬화되므로
+     (extensions.ts 의 ImageResizeWithProxy.renderHTML 참조),
+     기존 템플릿의 잔존 float 을 미리보기에서도 무력화. */
+  p img { float: none !important; display: inline-block; vertical-align: top; }
   a { color: #2563eb; }
 `;
 

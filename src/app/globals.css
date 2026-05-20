@@ -588,13 +588,13 @@ html {
   vertical-align: top !important;
 }
 
-/* float 스타일이 적용된 이미지 래퍼 - 크기 제한 해제 */
-.ProseMirror div[style*="float: left"] {
-  margin-right: 8px !important;
-}
-
-.ProseMirror div[style*="float: right"] {
-  margin-left: 8px !important;
+/* 옛 데이터 안전망 — 기존 메일 템플릿의 이미지 wrapper 에 잔존한 float 무력화.
+   image-context-toolbar 가 더 이상 float 을 박지 않지만, 이미 저장된 템플릿의
+   wrapperStyle 에는 float 이 남아있을 수 있고 그대로 두면 다음 형제(표/문단)가
+   이미지 옆으로 흘러드는 회귀가 발생. 사용자가 사이즈 토글을 한 번 누르면
+   새 모델로 정규화되지만, 그 전까지의 안전망. */
+.ProseMirror div[style*="float:"] {
+  float: none !important;
 }
 
 /* 이미지 선택 시 하이라이트 */
@@ -638,24 +638,15 @@ html {
   object-fit: contain !important;
 }
 
-/* 문단 내 이미지 인라인 배치 - flexbox 사용 */
-.ProseMirror p {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 8px;
-}
-
-/* 텍스트만 있는 문단은 block으로 */
-.ProseMirror p:not(:has(img)):not(:has(div[style*="cursor: pointer"])) {
-  display: block;
-}
-
+/* paragraph 내 이미지 inline-block 배치 — 정렬은 paragraph text-align 으로 통일.
+   과거에는 .ProseMirror p 를 display: flex 로 만들어 이미지 wrapper 의 float 을
+   flex item 으로 무력화하는 워크어라운드를 썼는데, image-context-toolbar 가 wrapper 의
+   float 자체를 더 이상 박지 않으므로 flex container 도 불필요. flex container 가 되면
+   text-align 이 무시되어 paragraph 가운데 정렬이 안 먹는 회귀가 생긴다. */
 .ProseMirror p img,
 .ProseMirror p div[style*="cursor: pointer"] {
   display: inline-block;
   vertical-align: top;
-  flex-shrink: 0;
 }
 
 /* 이미지 정렬 컨트롤러가 에디터 밖으로 나가지 않도록 */
@@ -666,6 +657,17 @@ html {
 /* 리사이즈 핸들 스타일 개선 */
 .ProseMirror div[style*="border-radius: 50%"] {
   z-index: 20 !important;
+}
+
+/* tiptap-extension-resize-image 패키지가 이미지 클릭 시 박는 좌/중/우 정렬 컨트롤 숨김.
+   이 컨트롤은 wrapper 인라인 스타일에 float 을 직접 박아 미리보기/발송 HTML 에서
+   다음 형제 block (paragraph/table) 이 이미지 옆으로 흘러드는 회귀를 일으킴.
+   정렬은 paragraph toolbar 의 text-align 으로 통일.
+   패키지의 PositionController 가 박는 inline style 은 `z-index: 999` 를 가짐 —
+   이 한 조건만으로 식별 (resize dot 은 z-index 없음). */
+.ProseMirror div[style*="z-index: 999"],
+.ProseMirror div[style*="z-index:999"] {
+  display: none !important;
 }
 
 /* ==========================================
