@@ -133,9 +133,14 @@ export default async function ContactsPage({ params, searchParams }: PageProps) 
           <h2 className="text-xl font-bold text-gray-900">조사 대상 목록</h2>
           <p className="text-sm text-slate-500">총 {total.toLocaleString('ko-KR')}건</p>
         </div>
-        <Button asChild variant="outline" size="sm">
-          <Link href={`/admin/surveys/${surveyId}/operations/contacts/upload/new`}>+ 업로드</Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/admin/surveys/${surveyId}/operations/contacts/upload/new`}>+ 업로드</Link>
+          </Button>
+          <Button asChild size="sm">
+            <Link href={`/admin/surveys/${surveyId}/operations/contacts/new`}>+ 조사 대상 추가</Link>
+          </Button>
+        </div>
       </div>
 
       <Card>

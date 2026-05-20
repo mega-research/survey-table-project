@@ -2,7 +2,6 @@
 
 import { useRouter } from 'next/navigation';
 
-import { Button } from '@/components/ui/button';
 import { ContactsTable } from '@/components/operations/contacts/contacts-table';
 import type { ContactColumnScheme } from '@/db/schema/schema-types';
 import type { ContactsSortDir, ContactsSortKey } from '@/lib/operations/contacts';
@@ -19,6 +18,9 @@ interface ContactsPageClientProps {
   dir: ContactsSortDir;
 }
 
+/**
+ * 조사 대상 표 + 행 클릭 라우팅. + 업로드 / + 조사 대상 추가 액션은 page.tsx 헤더에 있음.
+ */
 export function ContactsPageClient({
   surveyId,
   scheme,
@@ -32,28 +34,17 @@ export function ContactsPageClient({
   const router = useRouter();
 
   return (
-    <>
-      <div className="mb-3 flex items-center justify-end">
-        <Button
-          size="sm"
-          onClick={() => router.push(`/admin/surveys/${surveyId}/operations/contacts/new`)}
-        >
-          + 조사 대상 추가
-        </Button>
-      </div>
-
-      <ContactsTable
-        rows={rows}
-        total={total}
-        page={page}
-        pageSize={pageSize}
-        scheme={scheme}
-        sort={sort}
-        dir={dir}
-        onRowClick={(row) =>
-          router.push(`/admin/surveys/${surveyId}/operations/contacts/${row.id}`)
-        }
-      />
-    </>
+    <ContactsTable
+      rows={rows}
+      total={total}
+      page={page}
+      pageSize={pageSize}
+      scheme={scheme}
+      sort={sort}
+      dir={dir}
+      onRowClick={(row) =>
+        router.push(`/admin/surveys/${surveyId}/operations/contacts/${row.id}`)
+      }
+    />
   );
 }
