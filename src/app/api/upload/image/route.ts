@@ -56,8 +56,10 @@ const r2Client = new S3Client({
   },
 });
 
-// 설문(kind=survey): WebP 로 변환할 타입 (SVG/GIF 제외 - 애니메이션/벡터 유지)
-const SURVEY_CONVERTIBLE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/bmp'];
+// 설문(kind=survey): WebP 로 변환할 타입.
+// SVG/GIF 는 애니메이션/벡터라 원본 유지, PNG 는 로고처럼 투명 배경/무손실이 필요한
+// 케이스가 많아 원본 유지.
+const SURVEY_CONVERTIBLE_TYPES = ['image/jpeg', 'image/jpg', 'image/bmp'];
 
 // 메일(kind=mail): PNG 로 변환할 타입. Outlook 데스크톱이 WebP 미지원이라
 // 이미 업로드된 WebP 도 PNG 로 재변환. SVG/GIF 만 원본 유지.
@@ -186,7 +188,7 @@ export async function POST(request: NextRequest) {
         fileExtension = file.name.split('.').pop() || 'jpg';
       }
     } else {
-      // 변환 대상 아님 (mail: GIF/SVG / survey: GIF/SVG/WebP) — 원본 유지
+      // 변환 대상 아님 (mail: GIF/SVG / survey: GIF/SVG/WebP/PNG) — 원본 유지
       fileExtension = file.name.split('.').pop() || 'jpg';
     }
 
