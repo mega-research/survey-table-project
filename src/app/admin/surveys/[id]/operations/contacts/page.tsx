@@ -9,7 +9,10 @@ import { ContactsPageClient } from '@/components/operations/contacts/contacts-pa
 import {
   attrsKeyOf,
   CONTACTS_PAGE_SIZE,
+  CONTACTS_SORT_KEYS,
   effectiveSortKey,
+  isAttrsSortKey,
+  type ContactsSortKey,
 } from '@/lib/operations/contacts';
 import {
   getContactColumnScheme,
@@ -32,7 +35,6 @@ interface PageProps {
     q?: string | string[];
     op?: string | string[];
     page?: string;
-    size?: string;
     sort?: string;
     dir?: string;
   }>;
@@ -62,12 +64,14 @@ export default async function ContactsPage({ params, searchParams }: PageProps) 
   );
 
   // sort key normalize: 시스템 키 whitelist OR attrs.* (길이 제한)
-  function normalizeSortKey(value: string | undefined): import('@/lib/operations/contacts').ContactsSortKey {
+  // contacts.ts 의 normalizeSortKey 와 동일 로직 — 그 모듈의 export 를 직접 사용하지 않는
+  // 이유는 normalizeContactListArgs 가 page/sort/dir 를 한 번에 묶은 형태라 분리 호출이
+  // 어색하기 때문. CONTACTS_SORT_KEYS / isAttrsSortKey 는 export 를 그대로 참조한다.
+  function normalizeSortKey(value: string | undefined): ContactsSortKey {
     if (!value) return 'resid';
-    if (value.startsWith('attrs.') && value.length <= 200) return value as `attrs.${string}`;
-    const systemKeys = ['resid', 'respondedAt', 'createdAt', 'group'] as const;
-    return (systemKeys as readonly string[]).includes(value)
-      ? (value as (typeof systemKeys)[number])
+    if (isAttrsSortKey(value) && value.length <= 200) return value;
+    return (CONTACTS_SORT_KEYS as readonly string[]).includes(value)
+      ? (value as ContactsSortKey)
       : 'resid';
   }
 
