@@ -663,11 +663,17 @@ html {
    이 컨트롤은 wrapper 인라인 스타일에 float 을 직접 박아 미리보기/발송 HTML 에서
    다음 형제 block (paragraph/table) 이 이미지 옆으로 흘러드는 회귀를 일으킴.
    정렬은 paragraph toolbar 의 text-align 으로 통일.
-   패키지의 PositionController 가 박는 inline style 은 `z-index: 999` 를 가짐 —
-   이 한 조건만으로 식별 (resize dot 은 z-index 없음). */
+   패키지의 PositionController 가 박는 inline style 식별자:
+   - `z-index: 999`
+   - `transform: translate(-50%, -50%)` (다른 인라인 스타일과 겹치지 않는 unique 패턴)
+   .prose 컨텍스트(설문 빌더)에서 cascade specificity 가 밀리는 경우를 대비해
+   selector 를 다중화하고 display+visibility+pointer-events 모두 차단. */
 .ProseMirror div[style*="z-index: 999"],
-.ProseMirror div[style*="z-index:999"] {
+.ProseMirror div[style*="z-index:999"],
+.ProseMirror div[style*="transform: translate(-50%, -50%)"] {
   display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
 }
 
 /* ==========================================

@@ -1,14 +1,9 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { forwardRef, type ButtonHTMLAttributes } from 'react';
 
-interface ToolBtnProps {
-  children: ReactNode;
-  onClick?: () => void;
+interface ToolBtnProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'type'> {
   active?: boolean;
-  disabled?: boolean;
-  title?: string;
-  className?: string;
 }
 
 const BASE =
@@ -16,26 +11,22 @@ const BASE =
 const INACTIVE = 'text-gray-700 hover:bg-gray-100';
 const ACTIVE = 'bg-gray-100 text-gray-900 ring-1 ring-inset ring-gray-300';
 
-export function ToolBtn({
-  children,
-  onClick,
-  active,
-  disabled,
-  title,
-  className,
-}: ToolBtnProps) {
+// forwardRef + button props spread — Radix PopoverTrigger asChild 등 데이터/aria/onClick 주입에 대응.
+export const ToolBtn = forwardRef<HTMLButtonElement, ToolBtnProps>(function ToolBtn(
+  { children, active, className, ...rest },
+  ref,
+) {
   return (
     <button
+      ref={ref}
       type="button"
-      onClick={onClick}
-      disabled={disabled}
-      title={title}
+      {...rest}
       className={`${BASE} ${active ? ACTIVE : INACTIVE} ${className ?? ''}`}
     >
       {children}
     </button>
   );
-}
+});
 
 export function Sep() {
   return <div className="h-6 w-px bg-gray-300" />;

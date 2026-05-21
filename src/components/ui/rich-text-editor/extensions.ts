@@ -14,6 +14,7 @@ import Underline from '@tiptap/extension-underline';
 import StarterKit from '@tiptap/starter-kit';
 import ImageResize from 'tiptap-extension-resize-image';
 
+import { ImageTextIsolation } from '@/lib/tiptap/image-text-isolation';
 import { TableSelectOnBackspace } from '@/lib/tiptap/table-select-on-backspace';
 
 import { FontSize } from './font-size-mark';
@@ -228,6 +229,7 @@ export function createUnifiedExtensions(options: CreateUnifiedExtensionsOptions 
       HTMLAttributes: { rel: 'noopener noreferrer', class: 'text-blue-600 underline' },
     }),
     ImageResizeWithProxy.configure({ inline: true, allowBase64: true }),
+    ImageTextIsolation,
     TableExtended.configure({
       resizable: true,
       cellMinWidth: 60,

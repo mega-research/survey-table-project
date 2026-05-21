@@ -2,9 +2,8 @@
 
 import { useState } from 'react';
 
-import { Variable } from 'lucide-react';
+import { Tag } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
 import {
   Command,
   CommandEmpty,
@@ -15,6 +14,7 @@ import {
 } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
+import { ToolBtn } from './toolbar-primitives';
 import type { VariableDef } from './types';
 
 interface Props {
@@ -36,10 +36,9 @@ export function PopoverVariableMenu({ catalog, onPick }: Props) {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button type="button" variant="ghost" size="sm" className="gap-1">
-          <Variable className="h-4 w-4" />
-          변수
-        </Button>
+        <ToolBtn title="변수">
+          <Tag className="h-4 w-4" />
+        </ToolBtn>
       </PopoverTrigger>
       <PopoverContent className="w-[280px] p-0" align="start">
         <Command>
