@@ -2,9 +2,7 @@ import * as XLSX from 'xlsx';
 
 import { isCellInputable } from '@/lib/analytics/excel-export-utils';
 import { Survey, SurveySubmission } from '@/types/survey';
-import { getOtherOptionCode } from '@/utils/option-code-generator';
 import {
-  hasOtherRankingCell,
   resolveRankingOptions,
   toSpssValueLabelPairs,
 } from '@/utils/ranking-source';
@@ -12,6 +10,27 @@ import {
   buildTableCellVarName,
   resolveRankVarName,
 } from '@/utils/table-cell-code-generator';
+
+/** 응답에서 옵션 텍스트 입력값을 읽어온다 (사이드카 + 레거시 경로 지원) */
+function getOptionText(
+  questionResponses: unknown,
+  questionId: string,
+  optionId: string,
+): string {
+  const responses = questionResponses as Record<string, unknown>;
+  const sidecar = responses?.__optTexts__;
+  if (sidecar && typeof sidecar === 'object') {
+    const byQuestion = (sidecar as Record<string, Record<string, string>>)[questionId];
+    const sidecarText = byQuestion?.[optionId];
+    if (sidecarText) return sidecarText;
+  }
+  const perQ = responses?.[questionId];
+  if (perQ && typeof perQ === 'object' && !Array.isArray(perQ)) {
+    const legacyText = ((perQ as Record<string, unknown>).optionTexts as Record<string, string> | undefined)?.[optionId];
+    if (legacyText) return legacyText;
+  }
+  return '';
+}
 
 /**
  * Summary 워크북 생성
@@ -209,16 +228,18 @@ function generateVariableMap(survey: Survey) {
             '질문 제목': `  ${opt.spssNumericCode ?? i + 1}. ${opt.label}`,
             '값 라벨': `Value: ${opt.value}`,
           });
+          // allowTextInput 옵션마다 _text 컬럼 추가
+          if (opt.allowTextInput) {
+            const varNumber = opt.optionCode ?? String(i + 1);
+            mapData.push({
+              '질문 ID': '',
+              '타입': 'Option Text',
+              'SPSS 변수명': `${q.questionCode}_${varNumber}_text`,
+              '질문 제목': `  ${opt.label} (텍스트 입력)`,
+              '값 라벨': '(텍스트)',
+            });
+          }
         });
-        if (q.allowOtherOption) {
-          mapData.push({
-            '질문 ID': '',
-            '타입': 'Other',
-            'SPSS 변수명': `${q.questionCode}_${getOtherOptionCode(q.options)}_etc`,
-            '질문 제목': '  기타 입력',
-            '값 라벨': '(기타 텍스트)',
-          });
-        }
       }
 
       if (q.type === 'ranking') {
@@ -229,7 +250,6 @@ function generateVariableMap(survey: Survey) {
         const rankingValueLabels = labelPairs.length > 0
           ? labelPairs.map((p) => `${p.code}=${p.label}`).join(', ')
           : '(옵션 없음)';
-        const needsOtherColumn = q.allowOtherOption || hasOtherRankingCell(q);
         const N = Math.max(1, q.rankingConfig?.positions ?? 3);
         for (let k = 1; k <= N; k++) {
           mapData.push({
@@ -239,15 +259,6 @@ function generateVariableMap(survey: Survey) {
             '질문 제목': `  ${k}순위`,
             '값 라벨': rankingValueLabels,
           });
-          if (needsOtherColumn) {
-            mapData.push({
-              '질문 ID': '',
-              '타입': 'Ranking Other',
-              'SPSS 변수명': `${q.questionCode}_rk${k}_etc`,
-              '질문 제목': `  ${k}순위 기타 입력`,
-              '값 라벨': '(기타 텍스트)',
-            });
-          }
         }
       }
 
@@ -282,15 +293,6 @@ function generateVariableMap(survey: Survey) {
                   '질문 제목': `  ${row.label} - ${col.label} (${k}순위)`,
                   '값 라벨': rankingValueLabels || '(순위형 옵션 없음)',
                 });
-                if (cell.allowOtherOption) {
-                  mapData.push({
-                    '질문 ID': '',
-                    '타입': `Table (ranking ${k}순위 기타)`,
-                    'SPSS 변수명': `${rankVar}_etc`,
-                    '질문 제목': `  ${row.label} - ${col.label} - ${k}순위 기타 입력`,
-                    '값 라벨': '(기타 텍스트)',
-                  });
-                }
               }
               return;
             }

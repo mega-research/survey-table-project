@@ -375,14 +375,14 @@ export function expandMeasurements(
       const cellCode = cell.cellCode ?? `c${colIndex}`;
 
       let maxOptCount = cell.checkboxOptions.length;
-      let anyHasOther = cell.checkboxOptions.some((o: CheckboxOption) => o.hasOther);
+      let anyHasTextInput = cell.checkboxOptions.some((o: CheckboxOption) => o.allowTextInput);
 
       if (varying && allRows) {
         for (const row of allRows) {
           const rowCell = row.cells[colIndex];
           if (rowCell?.type === 'checkbox' && rowCell.checkboxOptions) {
             maxOptCount = Math.max(maxOptCount, rowCell.checkboxOptions.length);
-            if (rowCell.checkboxOptions.some((o: CheckboxOption) => o.hasOther)) anyHasOther = true;
+            if (rowCell.checkboxOptions.some((o: CheckboxOption) => o.allowTextInput)) anyHasTextInput = true;
           }
         }
       }
@@ -425,16 +425,16 @@ export function expandMeasurements(
         });
       }
 
-      // 3) 숨김 기타 텍스트 열
-      if (anyHasOther) {
+      // 3) 숨김 텍스트 입력 열 (allowTextInput 옵션이 있는 경우)
+      if (anyHasTextInput) {
         result.push({
           cell,
           colIndex,
           columnKind: 'other-text',
           checkboxOptionIndex: null,
           h1Label: colLabel,
-          h2Label: '기타 입력',
-          h3Label: `${cellCode}_etc`,
+          h2Label: '텍스트 입력',
+          h3Label: `${cellCode}_text`,
           cellId: cell.id,
           visible: false,
           isVaryingOptions: varying,
@@ -497,16 +497,16 @@ export function expandGeneralCheckboxQuestion(
     visible: false,
   }));
 
-  const hasOther = question.allowOtherOption || opts.some((o) => o.hasOther);
-  const otherText: ExpandedColumn | undefined = hasOther
+  const hasTextInput = opts.some((o) => o.allowTextInput);
+  const otherText: ExpandedColumn | undefined = hasTextInput
     ? {
         cell: dummyCell as TableCell,
         colIndex: -1,
         columnKind: 'other-text',
         checkboxOptionIndex: null,
         h1Label: question.title,
-        h2Label: '기타 입력',
-        h3Label: `${qCode}_etc`,
+        h2Label: '텍스트 입력',
+        h3Label: `${qCode}_text`,
         cellId: question.id,
         visible: false,
       }
