@@ -77,7 +77,7 @@ export function NumericComparisonEditor({
   return (
     <div className="space-y-2 rounded-md border border-blue-200 bg-blue-50 p-3">
       <Label className="text-xs font-semibold tracking-wide text-blue-900">
-        숫자 입력 셀 — 비교 조건
+        숫자 비교 조건
       </Label>
       <div className="flex items-stretch gap-2">
         <select
@@ -99,7 +99,7 @@ export function NumericComparisonEditor({
           inputMode="decimal"
           value={rawInput}
           onChange={(e) => handleValueChange(e.target.value)}
-          placeholder="숫자 입력"
+          placeholder="비교할 숫자"
           className="flex-1"
         />
       </div>

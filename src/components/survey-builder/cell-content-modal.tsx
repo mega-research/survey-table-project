@@ -858,7 +858,7 @@ export function CellContentModal({
                   className="mt-0.5 h-4 w-4"
                 />
                 <label htmlFor="input-type-number" className="flex-1 cursor-pointer text-sm">
-                  <span className="font-medium">숫자 입력</span>
+                  <span className="font-medium">숫자만 입력</span>
                   <p className="mt-0.5 text-xs text-gray-500">
                     체크 시 응답자는 숫자만 입력할 수 있고, 분기 조건에서 비교 연산자 (=, ≠, ≥,
                     ≤, &gt;, &lt;) 를 사용할 수 있습니다.

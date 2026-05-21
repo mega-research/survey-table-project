@@ -53,7 +53,7 @@ export const InputCell = React.memo(function InputCell({
           inputMode={isNumberMode ? 'decimal' : undefined}
           value={textValue}
           onChange={(e) => handleChange(e.target.value)}
-          placeholder={cell.placeholder || (isNumberMode ? '숫자를 입력하세요...' : '답변을 입력하세요...')}
+          placeholder={cell.placeholder || (isNumberMode ? '숫자만 입력하세요...' : '답변을 입력하세요...')}
           maxLength={cell.inputMaxLength}
           className="w-full text-base"
           disabled={isPrefilled}
