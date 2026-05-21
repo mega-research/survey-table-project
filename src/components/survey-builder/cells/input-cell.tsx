@@ -33,6 +33,20 @@ export const InputCell = React.memo(function InputCell({
   // 숫자 모드 여부: inputType이 'number'일 때만 활성화
   const isNumberMode = cell.inputType === 'number';
 
+  // 숫자 모드 + emptyDefault 정의 + 응답값 아예 미존재(undefined) → 첫 진입 시 초기값 자동 채움.
+  // 응답자가 backspace 로 빈 문자열로 만들면 cellResponse 가 '' 가 되어 재채움 되지 않음 (의도 보존).
+  useEffect(() => {
+    if (
+      !isPrefilled &&
+      isNumberMode &&
+      typeof cell.emptyDefault === 'number' &&
+      cellResponse === undefined
+    ) {
+      onUpdateValue(String(cell.emptyDefault));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cellResponse, isPrefilled, isNumberMode, cell.emptyDefault]);
+
   const handleChange = useCallback(
     (value: string) => {
       if (isNumberMode && !isPartialNumericInput(value)) {

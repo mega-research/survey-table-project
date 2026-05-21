@@ -54,6 +54,7 @@ import {
 } from '@/utils/table-cell-code-generator';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { generateId } from '@/lib/utils';
+import { parseNumericInput } from '@/utils/numeric-input';
 import { getMaxSpssCode } from '@/utils/option-code-generator';
 import { hasExistingOtherRankingCell } from '@/utils/ranking-source';
 import {
@@ -154,6 +155,11 @@ export function CellContentModal({
     cell.defaultValueTemplate ?? '',
   );
   const [inputType, setInputType] = useState<'text' | 'number'>(cell.inputType ?? 'text');
+  // 숫자 모드 셀의 초기 prefill 값 — 체크박스 on/off + raw 문자열 두 state 분리
+  const [emptyDefaultEnabled, setEmptyDefaultEnabled] = useState(cell.emptyDefault !== undefined);
+  const [emptyDefaultRaw, setEmptyDefaultRaw] = useState(
+    cell.emptyDefault !== undefined ? String(cell.emptyDefault) : '0',
+  );
   const [minSelections, setMinSelections] = useState<number | undefined>(cell.minSelections);
   const [maxSelections, setMaxSelections] = useState<number | undefined>(cell.maxSelections);
 
@@ -222,6 +228,8 @@ export function CellContentModal({
       setInputMaxLength(cell.inputMaxLength || '');
       setInputDefaultValueTemplate(cell.defaultValueTemplate ?? '');
       setInputType(cell.inputType ?? 'text');
+      setEmptyDefaultEnabled(cell.emptyDefault !== undefined);
+      setEmptyDefaultRaw(cell.emptyDefault !== undefined ? String(cell.emptyDefault) : '0');
       setMinSelections(cell.minSelections);
       setMaxSelections(cell.maxSelections);
       setRankingOptions(cell.rankingOptions || []);
@@ -323,6 +331,10 @@ export function CellContentModal({
             ? inputDefaultValueTemplate.trim()
             : undefined,
         inputType: contentType === 'input' ? inputType : undefined,
+        emptyDefault:
+          contentType === 'input' && inputType === 'number' && emptyDefaultEnabled
+            ? (parseNumericInput(emptyDefaultRaw) ?? 0)
+            : undefined,
         // 체크박스 선택 개수 제한 (체크박스 타입 전용)
         minSelections: contentType === 'checkbox' ? minSelections : undefined,
         maxSelections: contentType === 'checkbox' ? maxSelections : undefined,
@@ -466,6 +478,8 @@ export function CellContentModal({
     setInputMaxLength(cell.inputMaxLength || '');
     setInputDefaultValueTemplate(cell.defaultValueTemplate ?? '');
     setInputType(cell.inputType ?? 'text');
+    setEmptyDefaultEnabled(cell.emptyDefault !== undefined);
+    setEmptyDefaultRaw(cell.emptyDefault !== undefined ? String(cell.emptyDefault) : '0');
     setMinSelections(cell.minSelections);
     setMaxSelections(cell.maxSelections);
     setRankingOptions(cell.rankingOptions || []);
@@ -849,21 +863,54 @@ export function CellContentModal({
             </div>
 
             <div className="space-y-2">
-              <div className="flex items-start gap-3 rounded-md border border-gray-200 bg-gray-50 p-3">
-                <input
-                  type="checkbox"
-                  id="input-type-number"
-                  checked={inputType === 'number'}
-                  onChange={(e) => setInputType(e.target.checked ? 'number' : 'text')}
-                  className="mt-0.5 h-4 w-4"
-                />
-                <label htmlFor="input-type-number" className="flex-1 cursor-pointer text-sm">
-                  <span className="font-medium">숫자만 입력</span>
-                  <p className="mt-0.5 text-xs text-gray-500">
-                    체크 시 응답자는 숫자만 입력할 수 있고, 분기 조건에서 비교 연산자 (=, ≠, ≥,
-                    ≤, &gt;, &lt;) 를 사용할 수 있습니다.
-                  </p>
-                </label>
+              <div className="flex flex-col gap-3 rounded-md border border-gray-200 bg-gray-50 p-3">
+                <div className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    id="input-type-number"
+                    checked={inputType === 'number'}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setInputType(checked ? 'number' : 'text');
+                      if (checked) {
+                        // 숫자 모드 처음 켤 때 emptyDefault 기본 ON (기본값 0)
+                        setEmptyDefaultEnabled(true);
+                      }
+                    }}
+                    className="mt-0.5 h-4 w-4"
+                  />
+                  <label htmlFor="input-type-number" className="flex-1 cursor-pointer text-sm">
+                    <span className="font-medium">숫자만 입력</span>
+                    <p className="mt-0.5 text-xs text-gray-500">
+                      체크 시 응답자는 숫자만 입력할 수 있고, 분기 조건에서 비교 연산자 (=, ≠, ≥,
+                      ≤, &gt;, &lt;) 를 사용할 수 있습니다.
+                    </p>
+                  </label>
+                </div>
+
+                {inputType === 'number' && (
+                  <div className="ml-7 flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      id="empty-default-enabled"
+                      checked={emptyDefaultEnabled}
+                      onChange={(e) => setEmptyDefaultEnabled(e.target.checked)}
+                      className="h-4 w-4"
+                    />
+                    <label htmlFor="empty-default-enabled" className="cursor-pointer">
+                      응답자 입력란 초기값
+                    </label>
+                    <Input
+                      type="text"
+                      inputMode="decimal"
+                      value={emptyDefaultRaw}
+                      onChange={(e) => setEmptyDefaultRaw(e.target.value)}
+                      disabled={!emptyDefaultEnabled}
+                      className="h-8 w-24"
+                      aria-label="초기값"
+                    />
+                  </div>
+                )}
               </div>
             </div>
 

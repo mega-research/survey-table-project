@@ -183,6 +183,9 @@ export interface TableCell {
   defaultValueTemplate?: string;
   // input 셀 입력 모드 — 'number' 면 응답자가 숫자만 입력 가능. 미지정/'text' 면 기존 자유 입력.
   inputType?: 'text' | 'number';
+  // 숫자 input 셀(inputType==='number')의 초기 prefill 값. 정의되어 있으면 응답자 첫 진입 시
+  // 자동으로 이 값이 입력란에 채워져 저장됨. 응답자가 backspace 로 지우면 빈 응답으로 저장 가능 (자동 재채움 X).
+  emptyDefault?: number;
   // 체크박스 선택 개수 제한 (체크박스 타입 셀 전용)
   minSelections?: number; // 최소 선택 개수
   maxSelections?: number; // 최대 선택 개수
