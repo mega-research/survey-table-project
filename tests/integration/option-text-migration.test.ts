@@ -25,14 +25,14 @@ describe('migrateQuestionOptions', () => {
 
     expect(result.allowOtherOption).toBeUndefined();
     expect(result.options).toHaveLength(6);
-    expect(result.options[5]).toMatchObject({
+    expect(result.options![5]).toMatchObject({
       label: '기타',
       allowTextInput: true,
       optionCode: '6',
       spssNumericCode: 6,
     });
-    expect(result.options[5].id).toMatch(/^[a-zA-Z0-9_-]+$/);
-    expect(result.migratedOtherOptionId).toBe(result.options[5].id);
+    expect(result.options![5].id).toMatch(/^[a-zA-Z0-9_-]+$/);
+    expect(result.migratedOtherOptionId).toBe(result.options![5].id);
   });
 
   it('zero-pads optionCode when total options >= 10', () => {
@@ -51,8 +51,8 @@ describe('migrateQuestionOptions', () => {
     const result = migrateQuestionOptions(question);
 
     expect(result.options).toHaveLength(11);
-    expect(result.options[10].optionCode).toBe('11');
-    expect(result.options[10].spssNumericCode).toBe(11);
+    expect(result.options![10].optionCode).toBe('11');
+    expect(result.options![10].spssNumericCode).toBe(11);
   });
 
   it('does not modify questions without allowOtherOption', () => {
@@ -80,8 +80,45 @@ describe('migrateQuestionOptions', () => {
     const first = migrateQuestionOptions(question);
     const second = migrateQuestionOptions({ ...first, allowOtherOption: undefined });
 
-    expect(second.options).toHaveLength(first.options.length);
+    expect(second.options).toHaveLength(first.options!.length);
     expect(second.migratedOtherOptionId).toBeNull();
+  });
+
+  it('handles empty options array with allowOtherOption=true', () => {
+    const question: LegacyQuestionShape = {
+      id: 'q_empty',
+      allowOtherOption: true,
+      options: [],
+    };
+
+    const result = migrateQuestionOptions(question);
+
+    expect(result.options).toHaveLength(1);
+    expect(result.options![0]).toMatchObject({
+      label: '기타',
+      allowTextInput: true,
+      optionCode: '1',
+      spssNumericCode: 1,
+    });
+    expect(result.migratedOtherOptionId).toBe(result.options![0].id);
+  });
+
+  it('preserves ID stability when called twice — does not re-append', () => {
+    const question: LegacyQuestionShape = {
+      id: 'q_idempotent',
+      allowOtherOption: true,
+      options: [{ id: 'o1', label: '선택1', value: '1', optionCode: '1', spssNumericCode: 1 }],
+    };
+
+    const first = migrateQuestionOptions(question);
+    const otherOptionId = first.options![1].id;
+
+    // 두 번째 호출 -- 이미 마이그레이션된 결과 (allowOtherOption 없음) 를 그대로 줌
+    const second = migrateQuestionOptions({ ...first, allowOtherOption: undefined });
+
+    expect(second.options).toHaveLength(2);
+    expect(second.options![1].id).toBe(otherOptionId);
+    expect(second.options![1].allowTextInput).toBe(true);
   });
 });
 
@@ -126,6 +163,34 @@ describe('migrateResponseValue', () => {
     const result = migrateResponseValue(legacyResponse, {});
 
     expect(result.value).toEqual(['o1', 'o2']);
+    expect(result.optionTexts).toBeUndefined();
+  });
+
+  it('preserves __other__ in value when mapping is empty (defensive)', () => {
+    const legacyResponse: LegacyResponseShape = {
+      questionId: 'q1',
+      value: ['o1', '__other__'],
+      otherInputs: [{ optionId: '__other__', inputValue: '소실 위험 데이터' }],
+    };
+
+    // mapping 이 비어있음 -- 마이그레이션 스크립트가 매핑을 찾지 못한 케이스
+    const result = migrateResponseValue(legacyResponse, {});
+
+    // value 의 __other__ 는 그대로 유지 (production 데이터 보존)
+    expect(result.value).toEqual(['o1', '__other__']);
+    // 텍스트도 보존 -- __other__ 키로 보관됨 (사람이 수동으로 확인 가능)
+    expect(result.optionTexts).toEqual({ '__other__': '소실 위험 데이터' });
+  });
+
+  it('returns no optionTexts when otherInputs is empty array', () => {
+    const legacyResponse: LegacyResponseShape = {
+      questionId: 'q1',
+      value: ['o1'],
+      otherInputs: [],
+    };
+
+    const result = migrateResponseValue(legacyResponse, {});
+
     expect(result.optionTexts).toBeUndefined();
   });
 });
