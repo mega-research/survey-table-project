@@ -11,27 +11,6 @@ import {
   resolveRankVarName,
 } from '@/utils/table-cell-code-generator';
 
-/** 응답에서 옵션 텍스트 입력값을 읽어온다 (사이드카 + 레거시 경로 지원) */
-function getOptionText(
-  questionResponses: unknown,
-  questionId: string,
-  optionId: string,
-): string {
-  const responses = questionResponses as Record<string, unknown>;
-  const sidecar = responses?.__optTexts__;
-  if (sidecar && typeof sidecar === 'object') {
-    const byQuestion = (sidecar as Record<string, Record<string, string>>)[questionId];
-    const sidecarText = byQuestion?.[optionId];
-    if (sidecarText) return sidecarText;
-  }
-  const perQ = responses?.[questionId];
-  if (perQ && typeof perQ === 'object' && !Array.isArray(perQ)) {
-    const legacyText = ((perQ as Record<string, unknown>).optionTexts as Record<string, string> | undefined)?.[optionId];
-    if (legacyText) return legacyText;
-  }
-  return '';
-}
-
 /**
  * Summary 워크북 생성
  */

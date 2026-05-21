@@ -57,33 +57,6 @@ function generateCellOptionTextVariables(
   return vars;
 }
 
-/**
- * 응답 데이터에서 옵션별 텍스트를 추출한다.
- * - Task 16 저장 구조: questionResponses.__optTexts__[questionId][optionId]
- * - 마이그레이션 호환(레거시): questionResponses[questionId].optionTexts[optionId]
- */
-export function getOptionText(
-  qResponses: Record<string, unknown>,
-  questionId: string,
-  optionId: string,
-): string | undefined {
-  const sidecar = qResponses?.__optTexts__;
-  if (sidecar && typeof sidecar === 'object') {
-    const byQuestion = (sidecar as Record<string, Record<string, string>>)[questionId];
-    const sidecarText = byQuestion?.[optionId];
-    if (sidecarText) return sidecarText;
-  }
-  const perQuestion = qResponses?.[questionId];
-  if (perQuestion && typeof perQuestion === 'object' && !Array.isArray(perQuestion)) {
-    const legacyTexts = (perQuestion as Record<string, unknown>).optionTexts;
-    if (legacyTexts && typeof legacyTexts === 'object') {
-      const legacyText = (legacyTexts as Record<string, string>)[optionId];
-      if (legacyText) return legacyText;
-    }
-  }
-  return undefined;
-}
-
 /** SPSS 문자열 리터럴에서 작은따옴표를 이스케이프한다. */
 function esc(str: string): string {
   return str.replace(/'/g, "''");
