@@ -150,6 +150,8 @@ export interface MigratedSnapshot {
   questions: SnapshotQuestion[];
   /** questionId -> __other__ ID -> 새 옵션 ID */
   otherIdMappings: Record<string, Record<string, string>>;
+  /** questionId -> cellId -> '__other__' -> 새 옵션 ID (테이블 셀 레벨) */
+  cellOtherIdMappings: Record<string, Record<string, Record<string, string>>>;
 }
 
 /**
@@ -160,6 +162,7 @@ export function migrateSnapshotQuestions(snapshot: {
   questions: SnapshotQuestion[];
 }): MigratedSnapshot {
   const otherIdMappings: Record<string, Record<string, string>> = {};
+  const cellOtherIdMappings: Record<string, Record<string, Record<string, string>>> = {};
 
   const migrated = snapshot.questions.map(question => {
     const updated: SnapshotQuestion = { ...question };
@@ -180,6 +183,12 @@ export function migrateSnapshotQuestions(snapshot: {
         ...row,
         cells: row.cells.map(cell => {
           if (!cell.allowOtherOption) return cell;
+
+          // 비옵션 셀 타입 (text, image 등) 은 방어적으로 skip
+          if (cell.type !== 'radio' && cell.type !== 'checkbox' && cell.type !== 'select') {
+            return cell;
+          }
+
           const optionsField =
             cell.type === 'checkbox' ? 'checkboxOptions' :
             cell.type === 'radio' ? 'radioOptions' :
@@ -194,6 +203,16 @@ export function migrateSnapshotQuestions(snapshot: {
             spssNumericCode: fields.spssNumericCode,
             allowTextInput: true,
           };
+
+          // cellOtherIdMappings 에 새 옵션 ID 기록
+          if (!cellOtherIdMappings[question.id]) {
+            cellOtherIdMappings[question.id] = {};
+          }
+          if (!cellOtherIdMappings[question.id][cell.id]) {
+            cellOtherIdMappings[question.id][cell.id] = {};
+          }
+          cellOtherIdMappings[question.id][cell.id]['__other__'] = newOption.id;
+
           return {
             ...cell,
             [optionsField]: [...existing, newOption],
@@ -206,7 +225,7 @@ export function migrateSnapshotQuestions(snapshot: {
     return updated;
   });
 
-  return { questions: migrated, otherIdMappings };
+  return { questions: migrated, otherIdMappings, cellOtherIdMappings };
 }
 
 /**

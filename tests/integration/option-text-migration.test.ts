@@ -220,6 +220,7 @@ describe('migrateSnapshotQuestions', () => {
     expect(result.questions[1].options).toHaveLength(1);
     expect(result.otherIdMappings['q1']).toBeDefined();
     expect(result.otherIdMappings['q2']).toBeUndefined();
+    expect(result.cellOtherIdMappings).toEqual({});
   });
 
   it('migrates table cell allowOtherOption', () => {
@@ -250,6 +251,112 @@ describe('migrateSnapshotQuestions', () => {
     const cell = result.questions[0].tableRowsData![0].cells[0];
     expect(cell.radioOptions).toHaveLength(2);
     expect(cell.allowOtherOption).toBeUndefined();
+    expect(result.cellOtherIdMappings['q1']['c1']['__other__']).toBeDefined();
+  });
+
+  it('records cell-level mapping when table cell has allowOtherOption', () => {
+    const snapshot = {
+      questions: [
+        {
+          id: 'q1',
+          type: 'table',
+          tableRowsData: [
+            {
+              id: 'r1',
+              cells: [
+                {
+                  id: 'c1',
+                  type: 'radio',
+                  allowOtherOption: true,
+                  radioOptions: [{ id: 'ro1', label: 'A', value: '1' }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = migrateSnapshotQuestions(snapshot);
+
+    expect(result.cellOtherIdMappings['q1']).toBeDefined();
+    expect(result.cellOtherIdMappings['q1']['c1']).toBeDefined();
+    expect(result.cellOtherIdMappings['q1']['c1']['__other__']).toBeDefined();
+    // 새로 생성된 기타 옵션 ID 와 mapping 의 ID 가 일치
+    const newOtherId = result.cellOtherIdMappings['q1']['c1']['__other__'];
+    const cell = result.questions[0].tableRowsData![0].cells[0];
+    const addedOption = cell.radioOptions!.find(o => o.id === newOtherId);
+    expect(addedOption).toBeDefined();
+    expect(addedOption!.label).toBe('기타');
+    expect(addedOption!.allowTextInput).toBe(true);
+  });
+
+  it('migrates checkbox and select cell types correctly', () => {
+    const snapshot = {
+      questions: [
+        {
+          id: 'q1',
+          type: 'table',
+          tableRowsData: [
+            {
+              id: 'r1',
+              cells: [
+                {
+                  id: 'cb1',
+                  type: 'checkbox',
+                  allowOtherOption: true,
+                  checkboxOptions: [{ id: 'cbo1', label: 'X', value: '1' }],
+                },
+                {
+                  id: 'sel1',
+                  type: 'select',
+                  allowOtherOption: true,
+                  selectOptions: [{ id: 'so1', label: 'Y', value: '1' }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = migrateSnapshotQuestions(snapshot);
+
+    const cells = result.questions[0].tableRowsData![0].cells;
+    expect(cells[0].checkboxOptions).toHaveLength(2);
+    expect(cells[1].selectOptions).toHaveLength(2);
+    expect(result.cellOtherIdMappings['q1']['cb1']).toBeDefined();
+    expect(result.cellOtherIdMappings['q1']['sel1']).toBeDefined();
+  });
+
+  it('skips non-option cell types with allowOtherOption=true (defensive)', () => {
+    const snapshot = {
+      questions: [
+        {
+          id: 'q1',
+          type: 'table',
+          tableRowsData: [
+            {
+              id: 'r1',
+              cells: [
+                {
+                  id: 'txt1',
+                  type: 'text',
+                  allowOtherOption: true,  // legacy garbage data
+                } as any,  // text 셀에 allowOtherOption 은 비정상이지만 방어
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = migrateSnapshotQuestions(snapshot);
+
+    // text 셀은 옵션이 없으므로 추가도 안 되고 mapping 도 없음
+    const cell = result.questions[0].tableRowsData![0].cells[0];
+    expect(cell.allowOtherOption).toBe(true);  // 그대로 유지 (skip)
+    expect(result.cellOtherIdMappings['q1']?.['txt1']).toBeUndefined();
   });
 });
 
