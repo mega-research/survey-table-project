@@ -957,8 +957,6 @@ export function CellContentModal({
               onRadioGroupNameChange={setRadioGroupName}
               selectOptions={selectOptions}
               onSelectOptionsChange={setSelectOptions}
-              allowOtherOption={allowOtherOption}
-              onAllowOtherOptionChange={setAllowOtherOption}
               minSelections={minSelections}
               onMinSelectionsChange={setMinSelections}
               maxSelections={maxSelections}
@@ -985,8 +983,6 @@ export function CellContentModal({
               onRadioGroupNameChange={setRadioGroupName}
               selectOptions={selectOptions}
               onSelectOptionsChange={setSelectOptions}
-              allowOtherOption={allowOtherOption}
-              onAllowOtherOptionChange={setAllowOtherOption}
               minSelections={minSelections}
               onMinSelectionsChange={setMinSelections}
               maxSelections={maxSelections}
@@ -1009,8 +1005,6 @@ export function CellContentModal({
               onRadioGroupNameChange={setRadioGroupName}
               selectOptions={selectOptions}
               onSelectOptionsChange={setSelectOptions}
-              allowOtherOption={allowOtherOption}
-              onAllowOtherOptionChange={setAllowOtherOption}
               minSelections={minSelections}
               onMinSelectionsChange={setMinSelections}
               maxSelections={maxSelections}

@@ -11,48 +11,10 @@ import { getMaxSpssCode } from '@/utils/option-code-generator';
 import { CheckboxOption, Question, QuestionOption, RadioOption } from '@/types/survey';
 
 import { BranchRuleEditor } from './branch-rule-editor';
+import { createTextInputOption } from './question-option-helpers';
 
-// 기타 옵션 관리 상수
+// OTHER_OPTION_ID: 미리보기에서 기존 기타 옵션 구별용 (읽기 전용, Phase 7 cleanup 대상)
 const OTHER_OPTION_ID = 'other-option';
-const OTHER_OPTION_LABEL = '기타';
-
-// --- 기타 옵션 헬퍼 함수 ---
-
-function addOtherCheckboxOption(options: CheckboxOption[]): CheckboxOption[] {
-  if (options.some((o) => o.id === OTHER_OPTION_ID)) return options;
-  return [
-    ...options,
-    { id: OTHER_OPTION_ID, label: OTHER_OPTION_LABEL, value: 'other', checked: false, hasOther: true, spssNumericCode: getMaxSpssCode(options) + 1 },
-  ];
-}
-
-function removeOtherCheckboxOption(options: CheckboxOption[]): CheckboxOption[] {
-  return options.filter((o) => o.id !== OTHER_OPTION_ID);
-}
-
-function addOtherRadioOption(options: RadioOption[]): RadioOption[] {
-  if (options.some((o) => o.id === OTHER_OPTION_ID)) return options;
-  return [
-    ...options,
-    { id: OTHER_OPTION_ID, label: OTHER_OPTION_LABEL, value: 'other', selected: false, hasOther: true, spssNumericCode: getMaxSpssCode(options) + 1 },
-  ];
-}
-
-function removeOtherRadioOption(options: RadioOption[]): RadioOption[] {
-  return options.filter((o) => o.id !== OTHER_OPTION_ID);
-}
-
-function addOtherSelectOption(options: QuestionOption[]): QuestionOption[] {
-  if (options.some((o) => o.id === OTHER_OPTION_ID)) return options;
-  return [
-    ...options,
-    { id: OTHER_OPTION_ID, label: OTHER_OPTION_LABEL, value: 'other', hasOther: true, spssNumericCode: getMaxSpssCode(options) + 1 },
-  ];
-}
-
-function removeOtherSelectOption(options: QuestionOption[]): QuestionOption[] {
-  return options.filter((o) => o.id !== OTHER_OPTION_ID);
-}
 
 // --- Props ---
 
@@ -79,10 +41,6 @@ export interface CellChoiceEditorProps {
   selectOptions: QuestionOption[];
   onSelectOptionsChange: (options: QuestionOption[]) => void;
 
-  // 공통
-  allowOtherOption: boolean;
-  onAllowOtherOptionChange: (enabled: boolean) => void;
-
   // checkbox 전용: 선택 개수 제한
   minSelections: number | undefined;
   onMinSelectionsChange: (v: number | undefined) => void;
@@ -103,8 +61,6 @@ export function CellChoiceEditor({
   onRadioGroupNameChange,
   selectOptions,
   onSelectOptionsChange,
-  allowOtherOption,
-  onAllowOtherOptionChange,
   minSelections,
   onMinSelectionsChange,
   maxSelections,
@@ -113,25 +69,6 @@ export function CellChoiceEditor({
   // 조건부 분기 토글 상태 (이 컴포넌트 내부에서만 사용)
   const [showBranchSettings, setShowBranchSettings] = useState(false);
 
-  // 기타 옵션 토글 핸들러
-  const handleOtherOptionToggle = (enabled: boolean) => {
-    onAllowOtherOptionChange(enabled);
-
-    if (cellType === 'checkbox') {
-      onCheckboxOptionsChange(
-        enabled ? addOtherCheckboxOption(checkboxOptions) : removeOtherCheckboxOption(checkboxOptions),
-      );
-    } else if (cellType === 'radio') {
-      onRadioOptionsChange(
-        enabled ? addOtherRadioOption(radioOptions) : removeOtherRadioOption(radioOptions),
-      );
-    } else if (cellType === 'select') {
-      onSelectOptionsChange(
-        enabled ? addOtherSelectOption(selectOptions) : removeOtherSelectOption(selectOptions),
-      );
-    }
-  };
-
   // --- checkbox ---
   if (cellType === 'checkbox') {
     return (
@@ -139,29 +76,16 @@ export function CellChoiceEditor({
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <Label>체크박스 옵션 관리</Label>
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="checkbox-allow-other"
-                  checked={allowOtherOption}
-                  onCheckedChange={handleOtherOptionToggle}
-                  className="scale-75"
-                />
-                <Label htmlFor="checkbox-allow-other" className="text-xs text-gray-600">
-                  기타 옵션 추가
-                </Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="checkbox-show-branch"
-                  checked={showBranchSettings}
-                  onCheckedChange={setShowBranchSettings}
-                  className="scale-75"
-                />
-                <Label htmlFor="checkbox-show-branch" className="text-xs text-gray-600">
-                  조건부 분기
-                </Label>
-              </div>
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="checkbox-show-branch"
+                checked={showBranchSettings}
+                onCheckedChange={setShowBranchSettings}
+                className="scale-75"
+              />
+              <Label htmlFor="checkbox-show-branch" className="text-xs text-gray-600">
+                조건부 분기
+              </Label>
             </div>
           </div>
 
@@ -254,34 +178,36 @@ export function CellChoiceEditor({
               </div>
             ))}
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => {
-              const newOption: CheckboxOption = {
-                id: generateId(),
-                label: '새 옵션',
-                value: `option-${checkboxOptions.length + 1}`,
-                checked: false,
-                spssNumericCode: getMaxSpssCode(checkboxOptions) + 1,
-              };
-              onCheckboxOptionsChange([...checkboxOptions, newOption]);
-            }}
-            className="w-full"
-          >
-            옵션 추가
-          </Button>
-
-          {allowOtherOption && (
-            <div className="rounded-lg bg-blue-50 p-3">
-              <p className="text-sm text-blue-700">
-                <strong>💡 기타 옵션이 활성화되었습니다.</strong>
-                <br />
-                마지막에 &quot;기타&quot; 체크박스가 자동으로 추가되어 사용자가 직접 텍스트를
-                입력할 수 있습니다.
-              </p>
-            </div>
-          )}
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                const newOption: CheckboxOption = {
+                  id: generateId(),
+                  label: '새 옵션',
+                  value: `option-${checkboxOptions.length + 1}`,
+                  checked: false,
+                  spssNumericCode: getMaxSpssCode(checkboxOptions) + 1,
+                };
+                onCheckboxOptionsChange([...checkboxOptions, newOption]);
+              }}
+              className="flex-1"
+            >
+              옵션 추가
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                const newOption = createTextInputOption(checkboxOptions) as CheckboxOption;
+                onCheckboxOptionsChange([...checkboxOptions, newOption]);
+              }}
+              className="flex-1"
+            >
+              + 텍스트 옵션 추가
+            </Button>
+          </div>
         </div>
 
         {/* 선택 개수 제한 */}
@@ -406,29 +332,16 @@ export function CellChoiceEditor({
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <Label>라디오 버튼 옵션 관리</Label>
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="radio-allow-other"
-                  checked={allowOtherOption}
-                  onCheckedChange={handleOtherOptionToggle}
-                  className="scale-75"
-                />
-                <Label htmlFor="radio-allow-other" className="text-xs text-gray-600">
-                  기타 옵션 추가
-                </Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="radio-show-branch"
-                  checked={showBranchSettings}
-                  onCheckedChange={setShowBranchSettings}
-                  className="scale-75"
-                />
-                <Label htmlFor="radio-show-branch" className="text-xs text-gray-600">
-                  조건부 분기
-                </Label>
-              </div>
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="radio-show-branch"
+                checked={showBranchSettings}
+                onCheckedChange={setShowBranchSettings}
+                className="scale-75"
+              />
+              <Label htmlFor="radio-show-branch" className="text-xs text-gray-600">
+                조건부 분기
+              </Label>
             </div>
           </div>
 
@@ -525,34 +438,36 @@ export function CellChoiceEditor({
               </div>
             ))}
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => {
-              const newOption: RadioOption = {
-                id: generateId(),
-                label: '새 옵션',
-                value: `option-${radioOptions.length + 1}`,
-                selected: false,
-                spssNumericCode: getMaxSpssCode(radioOptions) + 1,
-              };
-              onRadioOptionsChange([...radioOptions, newOption]);
-            }}
-            className="w-full"
-          >
-            옵션 추가
-          </Button>
-
-          {allowOtherOption && (
-            <div className="rounded-lg bg-blue-50 p-3">
-              <p className="text-sm text-blue-700">
-                <strong>💡 기타 옵션이 활성화되었습니다.</strong>
-                <br />
-                마지막에 &quot;기타&quot; 라디오 버튼이 자동으로 추가되어 사용자가 직접 텍스트를
-                입력할 수 있습니다.
-              </p>
-            </div>
-          )}
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                const newOption: RadioOption = {
+                  id: generateId(),
+                  label: '새 옵션',
+                  value: `option-${radioOptions.length + 1}`,
+                  selected: false,
+                  spssNumericCode: getMaxSpssCode(radioOptions) + 1,
+                };
+                onRadioOptionsChange([...radioOptions, newOption]);
+              }}
+              className="flex-1"
+            >
+              옵션 추가
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                const newOption = createTextInputOption(radioOptions) as RadioOption;
+                onRadioOptionsChange([...radioOptions, newOption]);
+              }}
+              className="flex-1"
+            >
+              + 텍스트 옵션 추가
+            </Button>
+          </div>
         </div>
         {radioOptions.length > 0 && (
           <div className="space-y-2">
@@ -592,29 +507,16 @@ export function CellChoiceEditor({
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <Label>Select 옵션 관리</Label>
-          <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="select-allow-other"
-                checked={allowOtherOption}
-                onCheckedChange={handleOtherOptionToggle}
-                className="scale-75"
-              />
-              <Label htmlFor="select-allow-other" className="text-xs text-gray-600">
-                기타 옵션 추가
-              </Label>
-            </div>
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="select-show-branch"
-                checked={showBranchSettings}
-                onCheckedChange={setShowBranchSettings}
-                className="scale-75"
-              />
-              <Label htmlFor="select-show-branch" className="text-xs text-gray-600">
-                조건부 분기
-              </Label>
-            </div>
+          <div className="flex items-center space-x-2">
+            <Switch
+              id="select-show-branch"
+              checked={showBranchSettings}
+              onCheckedChange={setShowBranchSettings}
+              className="scale-75"
+            />
+            <Label htmlFor="select-show-branch" className="text-xs text-gray-600">
+              조건부 분기
+            </Label>
           </div>
         </div>
 
@@ -697,33 +599,35 @@ export function CellChoiceEditor({
             </div>
           ))}
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => {
-            const newOption: QuestionOption = {
-              id: generateId(),
-              label: '새 옵션',
-              value: `option-${selectOptions.length + 1}`,
-              spssNumericCode: getMaxSpssCode(selectOptions) + 1,
-            };
-            onSelectOptionsChange([...selectOptions, newOption]);
-          }}
-          className="w-full"
-        >
-          옵션 추가
-        </Button>
-
-        {allowOtherOption && (
-          <div className="rounded-lg bg-blue-50 p-3">
-            <p className="text-sm text-blue-700">
-              <strong>💡 기타 옵션이 활성화되었습니다.</strong>
-              <br />
-              마지막에 &quot;기타&quot; 선택 옵션이 자동으로 추가되어 사용자가 직접 텍스트를
-              입력할 수 있습니다.
-            </p>
-          </div>
-        )}
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              const newOption: QuestionOption = {
+                id: generateId(),
+                label: '새 옵션',
+                value: `option-${selectOptions.length + 1}`,
+                spssNumericCode: getMaxSpssCode(selectOptions) + 1,
+              };
+              onSelectOptionsChange([...selectOptions, newOption]);
+            }}
+            className="flex-1"
+          >
+            옵션 추가
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              const newOption = createTextInputOption(selectOptions);
+              onSelectOptionsChange([...selectOptions, newOption]);
+            }}
+            className="flex-1"
+          >
+            + 텍스트 옵션 추가
+          </Button>
+        </div>
       </div>
       {selectOptions.length > 0 && (
         <div className="space-y-2">
