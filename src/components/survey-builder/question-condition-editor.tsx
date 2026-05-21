@@ -664,34 +664,66 @@ export const QuestionConditionEditor = forwardRef<
                                   </select>
                                 </div>
 
-                                {/* 추가 조건 확인할 옵션 선택 */}
-                                {condition.additionalConditions.checkType !== 'input' &&
-                                  condition.additionalConditions.cellColumnIndex !== undefined &&
-                                  sourceQuestion && (
-                                    <TableOptionSelector
-                                      question={sourceQuestion}
-                                      rowIds={
-                                        (condition.tableConditions?.rowIds?.length ?? 0) > 0
-                                          ? (condition.tableConditions?.rowIds ?? [])
-                                          : sourceQuestion.tableRowsData?.map((r) => r.id) || []
-                                      }
-                                      colIndex={condition.additionalConditions.cellColumnIndex}
-                                      expectedValues={condition.additionalConditions.expectedValues}
-                                      onChange={(values) => {
-                                        updateCondition(condition.id, {
-                                          additionalConditions: {
-                                            ...condition.additionalConditions!,
-                                            expectedValues: values,
-                                          },
-                                        });
-                                      }}
-                                      helpText="선택한 옵션들 중 하나가 선택되었는지 확인합니다. 비워두면 아무거나 선택되었는지만 확인합니다."
-                                      multipleRows={
-                                        (condition.tableConditions?.rowIds?.length ?? 0) > 1 ||
-                                        (condition.tableConditions?.rowIds?.length ?? 0) === 0
-                                      }
-                                    />
-                                  )}
+                                {/* 추가 조건 확인할 옵션 선택 (숫자 셀이면 NumericComparisonEditor, 아니면 TableOptionSelector) */}
+                                {condition.additionalConditions.cellColumnIndex !== undefined &&
+                                  sourceQuestion &&
+                                  (() => {
+                                    const effectiveRowIds =
+                                      (condition.tableConditions?.rowIds?.length ?? 0) > 0
+                                        ? (condition.tableConditions?.rowIds ?? [])
+                                        : sourceQuestion.tableRowsData?.map((r) => r.id) || [];
+                                    const isNumeric = isNumericInputCell(
+                                      sourceQuestion,
+                                      effectiveRowIds,
+                                      condition.additionalConditions.cellColumnIndex,
+                                    );
+
+                                    if (isNumeric) {
+                                      return (
+                                        <NumericComparisonEditor
+                                          idPrefix={`numeric-additional-${condition.id}`}
+                                          value={condition.additionalConditions.numericComparison}
+                                          onChange={(nc) => {
+                                            updateCondition(condition.id, {
+                                              additionalConditions: {
+                                                ...condition.additionalConditions!,
+                                                expectedValues: undefined,
+                                                numericComparison: nc,
+                                              },
+                                            });
+                                          }}
+                                        />
+                                      );
+                                    }
+
+                                    // input 셀(비수치) 은 옵션 셀렉터 없이 "값 있음" 으로만 처리
+                                    if (condition.additionalConditions.checkType === 'input') {
+                                      return null;
+                                    }
+
+                                    return (
+                                      <TableOptionSelector
+                                        question={sourceQuestion}
+                                        rowIds={effectiveRowIds}
+                                        colIndex={condition.additionalConditions.cellColumnIndex}
+                                        expectedValues={condition.additionalConditions.expectedValues}
+                                        onChange={(values) => {
+                                          updateCondition(condition.id, {
+                                            additionalConditions: {
+                                              ...condition.additionalConditions!,
+                                              expectedValues: values,
+                                              numericComparison: undefined,
+                                            },
+                                          });
+                                        }}
+                                        helpText="선택한 옵션들 중 하나가 선택되었는지 확인합니다. 비워두면 아무거나 선택되었는지만 확인합니다."
+                                        multipleRows={
+                                          (condition.tableConditions?.rowIds?.length ?? 0) > 1 ||
+                                          (condition.tableConditions?.rowIds?.length ?? 0) === 0
+                                        }
+                                      />
+                                    );
+                                  })()}
                               </div>
                             )}
                           </div>
