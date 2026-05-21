@@ -30,7 +30,10 @@ export interface RankingConfig {
 export interface RankingAnswer {
   rank: number; // 1-based
   optionValue: string; // Case 1: 옵션 value / Case 2: ranking_opt 셀의 cellId / 기타: '__other__'
-  otherText?: string; // optionValue='__other__' 일 때 자유입력 텍스트
+  /** @deprecated Phase 7. optionText 사용. '__other__' 매직값은 마이그레이션에서 실제 옵션 ID 로 변환됨. */
+  otherText?: string;
+  /** allowTextInput 옵션이 이 순위에 선택된 경우 사용자가 입력한 텍스트 */
+  optionText?: string;
 }
 
 // 분기 동작 타입
@@ -396,7 +399,14 @@ export interface OtherInputValue {
 export interface SurveyResponse {
   questionId: string;
   value: string | string[] | { [key: string]: string | string[] | object };
-  otherInputs?: OtherInputValue[]; // 기타 옵션 입력값들
+  /**
+   * 옵션 단위 사이드카 텍스트 입력.
+   * key = optionId, value = 사용자가 입력한 텍스트.
+   * 응답 제출 시점에 "선택된" 옵션의 텍스트만 남기고 나머지는 drop (filterOptionTextsForSubmission).
+   */
+  optionTexts?: Record<string, string>;
+  /** @deprecated Phase 7 cleanup. optionTexts 사용. 마이그레이션 호환용. */
+  otherInputs?: OtherInputValue[];
 }
 
 // 설문 제출 데이터 타입 (DB 레코드)
