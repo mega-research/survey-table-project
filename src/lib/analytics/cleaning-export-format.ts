@@ -20,10 +20,10 @@ import {
   shouldDisplayQuestion,
   shouldDisplayRow,
 } from '@/utils/branch-logic';
+import { getOptionText } from '@/lib/option-text-read';
 
 import { isCellInputable } from './excel-export-utils';
 import type { ResponseData } from './response-data';
-import { getOptionText } from '@/lib/option-text-read';
 
 import type {
   ClassifiedCells,
