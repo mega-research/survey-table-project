@@ -16,6 +16,7 @@ import {
   transformTableCell,
   transformText,
 } from '@/lib/spss/data-transformer';
+import { getOptionText } from '@/lib/option-text-read';
 import { getOtherOptionCode } from '@/utils/option-code-generator';
 import { hasOtherRankingCell, resolveRankingOptions } from '@/utils/ranking-source';
 import { buildTableCellVarName, resolveRankVarName } from '@/utils/table-cell-code-generator';
@@ -643,38 +644,23 @@ export function buildDataRows(
 
         case 'option-text': {
           // allowTextInput 옵션 선택 시 사용자가 입력한 텍스트.
-          // Task 16 저장 구조: questionResponses.__optTexts__[questionId][optionId]
-          // 마이그레이션 호환(레거시): questionResponses[questionId].optionTexts[optionId]
           if (!col.optionId) return null;
-          const sidecar = (sub.questionResponses as Record<string, unknown>).__optTexts__;
-          if (sidecar && typeof sidecar === 'object') {
-            const byQuestion = (sidecar as Record<string, Record<string, string>>)[col.questionId];
-            const sidecarText = byQuestion?.[col.optionId];
-            if (sidecarText) return sidecarText;
-          }
-          // 레거시 경로: questionResponses[questionId].optionTexts[optionId]
-          if (rawValue && typeof rawValue === 'object' && !Array.isArray(rawValue)) {
-            const perQ = rawValue as Record<string, unknown>;
-            if (perQ.optionTexts && typeof perQ.optionTexts === 'object') {
-              const legacyText = (perQ.optionTexts as Record<string, string>)[col.optionId];
-              if (legacyText) return legacyText;
-            }
-          }
-          return null;
+          return getOptionText(
+            sub.questionResponses as Record<string, unknown>,
+            col.questionId,
+            col.optionId,
+          ) ?? null;
         }
 
         case 'table-cell-option-text': {
           // 테이블 셀 옵션의 allowTextInput 사이드카 텍스트.
-          // 저장 구조: questionResponses.__optTexts__[questionId][optionId]
+          // 레거시 경로(optionTexts)는 테이블 셀에 대해 지원하지 않음 (신규 패턴만 사용).
           if (!col.optionId) return null;
-          const sidecar = (sub.questionResponses as Record<string, unknown>).__optTexts__;
-          if (sidecar && typeof sidecar === 'object') {
-            const byQuestion = (sidecar as Record<string, Record<string, string>>)[col.questionId];
-            const sidecarText = byQuestion?.[col.optionId];
-            if (sidecarText) return sidecarText;
-          }
-          // 레거시 경로: 테이블 응답 객체 내부 optionTexts는 지원하지 않음 (신규 패턴만 사용)
-          return null;
+          return getOptionText(
+            sub.questionResponses as Record<string, unknown>,
+            col.questionId,
+            col.optionId,
+          ) ?? null;
         }
 
         case 'text':

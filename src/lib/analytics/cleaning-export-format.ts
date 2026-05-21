@@ -23,6 +23,7 @@ import {
 
 import { isCellInputable } from './excel-export-utils';
 import type { ResponseData } from './response-data';
+import { getOptionText } from '@/lib/option-text-read';
 
 import type {
   ClassifiedCells,
@@ -37,34 +38,6 @@ import {
   SEMI_LONG_THRESHOLD_ROWS,
   UNEXPOSED_MARKER,
 } from './cleaning-export-types';
-
-// ============================================================
-// Value Parsing Helpers
-// ============================================================
-
-/**
- * __optTexts__ 사이드카(Task 16 저장 구조)와 레거시 optionTexts 경로에서
- * 특정 옵션의 텍스트 값을 읽는다.
- *
- * - Task 16 저장: questionResponses.__optTexts__[questionId][optionId]
- * - 레거시 저장:  questionResponses[questionId].optionTexts[optionId]
- */
-function getOptionText(
-  qResponses: Record<string, unknown> | null | undefined,
-  questionId: string,
-  optionId: string,
-): string | undefined {
-  if (!qResponses) return undefined;
-  const sidecar = (qResponses as { __optTexts__?: Record<string, Record<string, string>> }).__optTexts__;
-  const fromSidecar = sidecar?.[questionId]?.[optionId];
-  if (fromSidecar) return fromSidecar;
-  const perQuestion = qResponses[questionId];
-  if (typeof perQuestion === 'object' && perQuestion !== null && 'optionTexts' in perQuestion) {
-    const legacyText = (perQuestion as { optionTexts?: Record<string, string> }).optionTexts?.[optionId];
-    if (legacyText) return legacyText;
-  }
-  return undefined;
-}
 
 /** id/value 기반 O(1) 옵션 검색용 Map 생성 */
 function buildOptionMap(options: OptionLike[]): Map<string, string> {
