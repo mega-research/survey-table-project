@@ -48,6 +48,7 @@ export function RankingDropdownStack({
   const answerAt = (rank: number) => answers.find((a) => a.rank === rank);
   const selectedValueAt = (rank: number) => answerAt(rank)?.optionValue ?? '';
   const otherTextAt = (rank: number) => answerAt(rank)?.otherText ?? '';
+  const optionTextAt = (rank: number) => answerAt(rank)?.optionText ?? '';
 
   const commit = (next: RankingAnswer[]) => {
     onChange(next.sort((a, b) => a.rank - b.rank));
@@ -61,7 +62,12 @@ export function RankingDropdownStack({
     }
     const entry: RankingAnswer = { rank, optionValue: newValue };
     if (newValue === RANKING_OTHER_VALUE) {
+      // __other__ 매직값: otherText 유지 (호환)
       entry.otherText = otherTextAt(rank);
+    } else {
+      // allowTextInput 옵션: 이전 optionText 유지 (선택 해제 시에도 값 보존)
+      const prevOptionText = optionTextAt(rank);
+      if (prevOptionText) entry.optionText = prevOptionText;
     }
     commit([...filtered, entry]);
   };
@@ -71,6 +77,13 @@ export function RankingDropdownStack({
     if (!current) return;
     const filtered = answers.filter((a) => a.rank !== rank);
     commit([...filtered, { ...current, otherText: text }]);
+  };
+
+  const handleOptionText = (rank: number, text: string) => {
+    const current = answerAt(rank);
+    if (!current) return;
+    const filtered = answers.filter((a) => a.rank !== rank);
+    commit([...filtered, { ...current, optionText: text }]);
   };
 
   const isTakenElsewhere = (rank: number, optionValue: string) => {
@@ -113,6 +126,10 @@ export function RankingDropdownStack({
       {Array.from({ length: positions }, (_, i) => i + 1).map((rank) => {
         const currentValue = selectedValueAt(rank);
         const showOtherInput = currentValue === RANKING_OTHER_VALUE;
+        const selectedOpt = currentValue && currentValue !== RANKING_OTHER_VALUE
+          ? options.find((o) => o.value === currentValue)
+          : undefined;
+        const showOptionTextInput = !showOtherInput && selectedOpt?.allowTextInput === true;
 
         const selectEl = (
           <select
@@ -154,6 +171,17 @@ export function RankingDropdownStack({
                   />
                 </div>
               )}
+              {showOptionTextInput && (
+                <div className={isGrid ? 'w-full' : undefined}>
+                  <Input
+                    placeholder="상세 기재"
+                    value={optionTextAt(rank)}
+                    onChange={(e) => handleOptionText(rank, e.target.value)}
+                    className={`${otherInputBaseCls}${isGrid ? ' w-full' : ''}`}
+                    style={isHorizontal ? { width: RANKING_HORIZONTAL_ITEM_WIDTH } : undefined}
+                  />
+                </div>
+              )}
             </Fragment>
           );
         }
@@ -171,6 +199,16 @@ export function RankingDropdownStack({
                   placeholder="기타 내용 입력..."
                   value={otherTextAt(rank)}
                   onChange={(e) => handleOtherText(rank, e.target.value)}
+                  className={`${otherInputBaseCls}${compact ? '' : ' w-full'}`}
+                />
+              </div>
+            )}
+            {showOptionTextInput && (
+              <div className={otherWrapperCls}>
+                <Input
+                  placeholder="상세 기재"
+                  value={optionTextAt(rank)}
+                  onChange={(e) => handleOptionText(rank, e.target.value)}
                   className={`${otherInputBaseCls}${compact ? '' : ' w-full'}`}
                 />
               </div>

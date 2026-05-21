@@ -374,27 +374,38 @@ function SelectQuestion({
   value: SingleChoiceResponse;
   onChange: (value: SingleChoiceResponse) => void;
 }) {
-  const [otherInput, setOtherInput] = useState('');
+  const optionTexts = useSurveyResponseStore((s) => s.optionTexts[question.id] ?? {});
+  const setOptionText = useSurveyResponseStore((s) => s.setOptionText);
+
+  // OtherChoiceValue fallback: snapshot 호환 (Phase 7 cleanup 까지 유지)
+  const [legacyOtherInput, setLegacyOtherInput] = useState('');
   const [selectedValue, setSelectedValue] = useState<string>('');
 
   useEffect(() => {
     if (isOtherChoiceValue(value)) {
       setSelectedValue(value.selectedValue);
-      setOtherInput(value.otherValue || '');
+      setLegacyOtherInput(value.otherValue || '');
     } else {
-      setSelectedValue(value || '');
-      setOtherInput('');
+      setSelectedValue(typeof value === 'string' ? value : '');
+      setLegacyOtherInput('');
     }
   }, [value]);
 
+  const selectedOption = question.options?.find((opt) => opt.value === selectedValue);
+
   const handleSelectChange = (newValue: string) => {
     setSelectedValue(newValue);
-    const selectedOption = question.options?.find((opt) => opt.value === newValue);
-
-    if (selectedOption?.id === 'other-option') {
+    // 선택해제
+    if (!newValue) {
+      onChange('');
+      return;
+    }
+    const opt = question.options?.find((o) => o.value === newValue);
+    // other-option 매직 ID — OtherChoiceValue 호환 fallback (@deprecated)
+    if (opt?.id === 'other-option') {
       onChange({
         selectedValue: newValue,
-        otherValue: otherInput,
+        otherValue: legacyOtherInput,
         hasOther: true,
       });
     } else {
@@ -402,11 +413,12 @@ function SelectQuestion({
     }
   };
 
-  const handleOtherInputChange = (inputValue: string) => {
-    setOtherInput(inputValue);
+  // OtherChoiceValue 경로 (other-option 전용, deprecated)
+  const handleLegacyOtherInputChange = (inputValue: string) => {
+    setLegacyOtherInput(inputValue);
     if (selectedValue) {
-      const selectedOption = question.options?.find((opt) => opt.value === selectedValue);
-      if (selectedOption?.id === 'other-option') {
+      const opt = question.options?.find((o) => o.value === selectedValue);
+      if (opt?.id === 'other-option') {
         onChange({
           selectedValue,
           otherValue: inputValue,
@@ -416,11 +428,8 @@ function SelectQuestion({
     }
   };
 
-  const showOtherInput = () => {
-    if (!selectedValue) return false;
-    const selectedOption = question.options?.find((opt) => opt.value === selectedValue);
-    return selectedOption?.id === 'other-option';
-  };
+  const showLegacyOtherInput = selectedOption?.id === 'other-option';
+  const showAllowTextInput = !showLegacyOtherInput && (selectedOption?.allowTextInput === true);
 
   return (
     <div className="space-y-3">
@@ -437,15 +446,24 @@ function SelectQuestion({
         ))}
       </select>
 
-      {showOtherInput() && (
-        <div>
-          <Input
-            placeholder="기타 내용을 입력하세요..."
-            value={otherInput}
-            onChange={(e) => handleOtherInputChange(e.target.value)}
-            className="w-full"
-          />
-        </div>
+      {/* allowTextInput 옵션 선택 시 인라인 텍스트 입력 */}
+      {showAllowTextInput && selectedOption && (
+        <Input
+          placeholder="상세 기재"
+          value={optionTexts[selectedOption.id] ?? ''}
+          onChange={(e) => setOptionText(question.id, selectedOption.id, e.target.value)}
+          className="w-full"
+        />
+      )}
+
+      {/* other-option 매직 ID 호환 경로 (@deprecated) */}
+      {showLegacyOtherInput && (
+        <Input
+          placeholder="기타 내용을 입력하세요..."
+          value={legacyOtherInput}
+          onChange={(e) => handleLegacyOtherInputChange(e.target.value)}
+          className="w-full"
+        />
       )}
     </div>
   );
