@@ -14,6 +14,10 @@ interface SurveyResponseUIState {
   // 임시 응답 데이터 (아직 서버에 저장되지 않은 것)
   pendingResponses: Record<string, unknown>;
 
+  // 옵션별 텍스트 입력 상태 (questionId -> optionId -> text)
+  // 예: "기타" 입력, 순위형 텍스트 등 옵션 단위 텍스트 보관
+  optionTexts: Record<string, Record<string, string>>;
+
   // UI 상태
   isSubmitting: boolean;
   showValidationErrors: boolean;
@@ -28,6 +32,11 @@ interface SurveyResponseUIState {
   // 임시 응답 관리
   setPendingResponse: (questionId: string, value: unknown) => void;
   clearPendingResponses: () => void;
+
+  // 옵션 텍스트 관리
+  setOptionText: (questionId: string, optionId: string, text: string) => void;
+  getOptionText: (questionId: string, optionId: string) => string | undefined;
+  clearOptionTexts: (questionId: string) => void;
 
   // 유효성 검사
   setValidationError: (questionId: string, error: string) => void;
@@ -44,10 +53,11 @@ interface SurveyResponseUIState {
 
 export const useSurveyResponseStore = create<SurveyResponseUIState>()(
   devtools(
-    immer<SurveyResponseUIState>((set) => ({
+    immer<SurveyResponseUIState>((set, get) => ({
       currentResponseId: null,
       currentQuestionIndex: 0,
       pendingResponses: {},
+      optionTexts: {},
       isSubmitting: false,
       showValidationErrors: false,
       validationErrors: {},
@@ -82,6 +92,23 @@ export const useSurveyResponseStore = create<SurveyResponseUIState>()(
           state.pendingResponses = {};
         }),
 
+      setOptionText: (questionId, optionId, text) =>
+        set((state) => {
+          if (!state.optionTexts[questionId]) {
+            state.optionTexts[questionId] = {};
+          }
+          state.optionTexts[questionId][optionId] = text;
+        }),
+
+      getOptionText: (questionId, optionId) => {
+        return get().optionTexts[questionId]?.[optionId];
+      },
+
+      clearOptionTexts: (questionId) =>
+        set((state) => {
+          delete state.optionTexts[questionId];
+        }),
+
       setValidationError: (questionId, error) =>
         set((state) => {
           state.validationErrors[questionId] = error;
@@ -112,6 +139,7 @@ export const useSurveyResponseStore = create<SurveyResponseUIState>()(
           state.currentResponseId = null;
           state.currentQuestionIndex = 0;
           state.pendingResponses = {};
+          state.optionTexts = {};
           state.isSubmitting = false;
           state.showValidationErrors = false;
           state.validationErrors = {};
