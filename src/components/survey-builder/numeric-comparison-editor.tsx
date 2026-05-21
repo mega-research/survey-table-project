@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -21,44 +21,55 @@ const OPERATOR_OPTIONS: Array<{ value: NumericComparison['operator']; label: str
   { value: '<', label: '미만 (<)' },
 ];
 
+function comparandToRaw(value?: NumericComparison): string {
+  if (value?.comparand?.kind !== 'literal') return '';
+  return String(value.comparand.value);
+}
+
 export function NumericComparisonEditor({
   value,
   onChange,
   idPrefix,
 }: NumericComparisonEditorProps) {
   const operator = value?.operator ?? '==';
-  const literalValue =
-    value?.comparand?.kind === 'literal' ? String(value.comparand.value) : '';
 
-  const handleOperatorChange = useCallback(
+  // 사용자가 진행 중인 키 입력(예: '-', '.', '-.')을 그대로 보여주기 위해 내부 raw state 유지.
+  // value prop 이 외부에서 바뀌면 raw 도 동기화 (controlled-from-outside).
+  const [rawInput, setRawInput] = useState<string>(() => comparandToRaw(value));
+
+  useEffect(() => {
+    const synced = comparandToRaw(value);
+    // 부모가 emit 한 직후 자기 자신과 다시 sync 되는 잡음을 피하기 위해, 동일하면 skip.
+    if (synced !== rawInput) {
+      setRawInput(synced);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value?.comparand?.kind === 'literal' ? value.comparand.value : null]);
+
+  const emitOperator = useCallback(
     (newOp: NumericComparison['operator']) => {
-      const num = parseFloat(literalValue);
+      const num = parseFloat(rawInput);
       onChange({
         operator: newOp,
-        comparand: { kind: 'literal', value: Number.isNaN(num) ? 0 : num },
+        comparand: { kind: 'literal', value: Number.isFinite(num) ? num : 0 },
       });
     },
-    [literalValue, onChange],
+    [rawInput, onChange],
   );
 
   const handleValueChange = useCallback(
     (raw: string) => {
       // 빈/부호만/소수점만 진행 중 상태 허용 (응답자 입력과 동일한 정규식 패턴)
       if (!/^-?\d*\.?\d*$/.test(raw)) return;
-      if (raw === '' || raw === '-' || raw === '.' || raw === '-.') {
-        // 진행 중 상태 — 임시로 0 저장. UI 입력칸은 빈/부호 그대로 유지됨.
+      setRawInput(raw);
+      const num = parseFloat(raw);
+      // 유효한 finite number 일 때만 부모에게 emit. 부분 입력 상태('-', '.', '-.', '') 는 raw 만 보존.
+      if (Number.isFinite(num)) {
         onChange({
           operator,
-          comparand: { kind: 'literal', value: 0 },
+          comparand: { kind: 'literal', value: num },
         });
-        return;
       }
-      const num = parseFloat(raw);
-      if (Number.isNaN(num)) return;
-      onChange({
-        operator,
-        comparand: { kind: 'literal', value: num },
-      });
     },
     [operator, onChange],
   );
@@ -72,7 +83,7 @@ export function NumericComparisonEditor({
         <select
           id={`${idPrefix}-operator`}
           value={operator}
-          onChange={(e) => handleOperatorChange(e.target.value as NumericComparison['operator'])}
+          onChange={(e) => emitOperator(e.target.value as NumericComparison['operator'])}
           className="rounded-md border border-gray-300 bg-white p-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
           style={{ flex: '0 0 130px' }}
         >
@@ -86,7 +97,7 @@ export function NumericComparisonEditor({
           id={`${idPrefix}-value`}
           type="text"
           inputMode="decimal"
-          value={literalValue}
+          value={rawInput}
           onChange={(e) => handleValueChange(e.target.value)}
           placeholder="숫자 입력"
           className="flex-1"
