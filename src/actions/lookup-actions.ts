@@ -20,8 +20,7 @@ const SavedLookupInputSchema = z.object({
   description: z.string().max(1000).optional(),
   category: z.string().min(1).max(100),
   tags: z.array(z.string()).default([]),
-  keyColumns: z.array(z.string().min(1)).min(1),
-  valueColumns: z.array(z.string().min(1)).min(1),
+  columns: z.array(z.string().min(1)).min(1),
   rows: z.array(z.record(z.string(), z.union([z.string(), z.number()]))),
 });
 
@@ -73,8 +72,7 @@ export async function createSavedLookupAction(
       description: parsed.description,
       category: parsed.category,
       tags: parsed.tags,
-      keyColumns: parsed.keyColumns,
-      valueColumns: parsed.valueColumns,
+      columns: parsed.columns,
       rows: parsed.rows as LookupRow[],
     })
     .returning();
@@ -144,8 +142,7 @@ export async function copySavedLookupToSurveyAction(
     id: nanoid(),
     name: saved.name,
     sourceSavedLookupId: saved.id,
-    keyColumns: saved.keyColumns,
-    valueColumns: saved.valueColumns,
+    columns: saved.columns,
     rows: saved.rows,
   };
 
@@ -245,8 +242,7 @@ function toSavedLookup(row: typeof savedLookups.$inferSelect): SavedLookup {
     description: row.description ?? undefined,
     category: row.category,
     tags: row.tags,
-    keyColumns: row.keyColumns,
-    valueColumns: row.valueColumns,
+    columns: row.columns,
     rows: row.rows,
     usageCount: row.usageCount,
     isPreset: row.isPreset,

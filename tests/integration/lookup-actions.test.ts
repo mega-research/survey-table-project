@@ -18,8 +18,7 @@ type SavedLookupRow = {
   description: string | null;
   category: string;
   tags: string[];
-  keyColumns: string[];
-  valueColumns: string[];
+  columns: string[];
   rows: Array<Record<string, string | number>>;
   usageCount: number;
   isPreset: boolean;
@@ -31,8 +30,7 @@ type SurveyLookupRow = {
   id: string;
   name: string;
   sourceSavedLookupId?: string;
-  keyColumns: string[];
-  valueColumns: string[];
+  columns: string[];
   rows: Array<Record<string, string | number>>;
 };
 
@@ -104,8 +102,7 @@ vi.mock('@/db', () => {
           description: (vals.description as string | undefined) ?? null,
           category: vals.category as string,
           tags: (vals.tags as string[]) ?? [],
-          keyColumns: vals.keyColumns as string[],
-          valueColumns: vals.valueColumns as string[],
+          columns: vals.columns as string[],
           rows: vals.rows as Array<Record<string, string | number>>,
           usageCount: 0,
           isPreset: false,
@@ -259,8 +256,7 @@ describe('lookup-actions integration', () => {
       name: 'avg-airfare-2026',
       category: 'finance',
       tags: ['항공'],
-      keyColumns: ['대륙'],
-      valueColumns: ['2026년도_적용액'],
+      columns: ['대륙', '2026년도_적용액'],
       rows: [
         { 대륙: '유럽', '2026년도_적용액': 2470000 },
         { 대륙: '아시아', '2026년도_적용액': 800000 },
@@ -283,8 +279,7 @@ describe('lookup-actions integration', () => {
       name: 'lut-1',
       category: 'finance',
       tags: [],
-      keyColumns: ['대륙'],
-      valueColumns: ['value'],
+      columns: ['대륙', 'value'],
       rows: [{ 대륙: '유럽', value: 1 }],
     });
 
@@ -309,8 +304,7 @@ describe('lookup-actions integration', () => {
       name: 'lut-1',
       category: 'finance',
       tags: [],
-      keyColumns: ['대륙'],
-      valueColumns: ['value'],
+      columns: ['대륙', 'value'],
       rows: [{ 대륙: '유럽', value: 1 }],
     });
     await copySavedLookupToSurveyAction(TEST_SURVEY_ID, created.id);
@@ -334,8 +328,7 @@ describe('lookup-actions integration', () => {
       name: 'lut-1',
       category: 'finance',
       tags: [],
-      keyColumns: ['대륙'],
-      valueColumns: ['value'],
+      columns: ['대륙', 'value'],
       rows: [{ 대륙: '유럽', value: 1 }],
     });
     await copySavedLookupToSurveyAction(TEST_SURVEY_ID, created.id);
@@ -354,8 +347,7 @@ describe('lookup-actions integration', () => {
       name: 'lut-1',
       category: 'finance',
       tags: [],
-      keyColumns: ['대륙'],
-      valueColumns: ['value'],
+      columns: ['대륙', 'value'],
       rows: [{ 대륙: '유럽', value: 1 }],
     });
 
