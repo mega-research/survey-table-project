@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useCallback, useState } from 'react';
 
 import { ClipboardPaste, Plus, Trash2 } from 'lucide-react';
 
@@ -15,11 +15,10 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { SavedLookup } from '@/types/survey';
-import { parseNumericInput } from '@/utils/numeric-input';
 
 type LookupDraft = Pick<
   SavedLookup,
-  'name' | 'description' | 'category' | 'tags' | 'keyColumns' | 'valueColumns' | 'rows'
+  'name' | 'description' | 'category' | 'tags' | 'columns' | 'rows'
 >;
 
 interface Props {
@@ -29,24 +28,26 @@ interface Props {
   onSave: (draft: LookupDraft) => Promise<void> | void;
 }
 
+/**
+ * LUT 편집 모달.
+ * 컬럼 정의 + 행 데이터만 다룬다. 어떤 컬럼이 키이고 어떤 컬럼이 비교 값인지는
+ * 조건 에디터(RightOperand.lookup) 가 결정하므로 여기서는 구분하지 않는다.
+ */
 export function LookupEditModal({ isOpen, initialValue, onClose, onSave }: Props) {
   const [name, setName] = useState(initialValue?.name ?? '');
   const [description, setDescription] = useState(initialValue?.description ?? '');
-  const [category, setCategory] = useState(initialValue?.category ?? 'custom');
-  const [keyColumns, setKeyColumns] = useState<string[]>(initialValue?.keyColumns ?? ['키']);
-  const [valueColumns, setValueColumns] = useState<string[]>(
-    initialValue?.valueColumns ?? ['값'],
+  const [category] = useState(initialValue?.category ?? 'custom');
+  const [columns, setColumns] = useState<string[]>(
+    initialValue?.columns ?? ['컬럼1', '컬럼2'],
   );
   const [rows, setRows] = useState<Array<Record<string, string | number>>>(
     initialValue?.rows ?? [],
   );
   const [error, setError] = useState<string | null>(null);
 
-  const allColumns = [...keyColumns, ...valueColumns];
-
   const handleAddRow = () => {
     const empty: Record<string, string | number> = {};
-    allColumns.forEach((c) => (empty[c] = ''));
+    columns.forEach((c) => (empty[c] = ''));
     setRows([...rows, empty]);
   };
 
@@ -68,39 +69,28 @@ export function LookupEditModal({ isOpen, initialValue, onClose, onSave }: Props
       const parsed = lines.map((line) => {
         const cells = line.split('\t');
         const row: Record<string, string | number> = {};
-        allColumns.forEach((col, idx) => {
+        columns.forEach((col, idx) => {
           row[col] = cells[idx] ?? '';
         });
         return row;
       });
       setRows([...rows, ...parsed]);
     },
-    [rows, allColumns],
+    [rows, columns],
   );
 
   const validate = (): string | null => {
     if (!name.trim()) return '이름을 입력하세요';
-    if (keyColumns.length === 0 || keyColumns.some((k) => !k.trim()))
-      return '키 컬럼 이름을 모두 입력하세요';
-    if (valueColumns.length === 0 || valueColumns.some((v) => !v.trim()))
-      return '값 컬럼 이름을 모두 입력하세요';
-    // 중복 컬럼명 금지 (키/값 어느 쪽이든)
+    if (columns.length === 0 || columns.some((c) => !c.trim()))
+      return '컬럼 이름을 모두 입력하세요';
+    // 컬럼명 중복 금지
     const seen = new Set<string>();
-    for (const c of allColumns) {
+    for (const c of columns) {
       const t = c.trim();
       if (seen.has(t)) return `컬럼 이름 "${t}" 가 중복됩니다`;
       seen.add(t);
     }
     if (rows.length === 0) return '최소 한 개의 행이 필요합니다';
-    for (const [i, r] of rows.entries()) {
-      for (const k of keyColumns) {
-        if (!String(r[k] ?? '').trim()) return `${i + 1}행: ${k} 가 비어있습니다`;
-      }
-      for (const v of valueColumns) {
-        const parsed = parseNumericInput(String(r[v] ?? ''));
-        if (parsed === null) return `${i + 1}행: ${v} 가 숫자가 아닙니다`;
-      }
-    }
     return null;
   };
 
@@ -111,13 +101,11 @@ export function LookupEditModal({ isOpen, initialValue, onClose, onSave }: Props
       return;
     }
     setError(null);
-    // 직렬화: 키 컬럼 string, 값 컬럼 number (모든 값 컬럼)
+    // 직렬화: 각 셀은 입력한 문자열 그대로 저장 (숫자 파싱은 비교 시점에).
+    // 비교 시점에 evaluateRightOperand 에서 Number() 변환.
     const normalizedRows = rows.map((r) => {
       const out: Record<string, string | number> = {};
-      for (const k of keyColumns) out[k] = String(r[k] ?? '').trim();
-      for (const v of valueColumns) {
-        out[v] = parseNumericInput(String(r[v] ?? ''))!;
-      }
+      for (const c of columns) out[c] = String(r[c] ?? '').trim();
       return out;
     });
     await onSave({
@@ -125,8 +113,7 @@ export function LookupEditModal({ isOpen, initialValue, onClose, onSave }: Props
       description: description.trim() || undefined,
       category,
       tags: initialValue?.tags ?? [],
-      keyColumns: keyColumns.map((k) => k.trim()),
-      valueColumns: valueColumns.map((v) => v.trim()),
+      columns: columns.map((c) => c.trim()),
       rows: normalizedRows,
     });
   };
@@ -149,80 +136,42 @@ export function LookupEditModal({ isOpen, initialValue, onClose, onSave }: Props
             <Input value={description} onChange={(e) => setDescription(e.target.value)} />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label>키 컬럼</Label>
-              <div className="flex flex-wrap gap-2">
-                {keyColumns.map((k, i) => (
-                  <div key={i} className="flex items-center gap-1">
-                    <Input
-                      value={k}
-                      onChange={(e) => {
-                        const next = [...keyColumns];
-                        next[i] = e.target.value;
-                        setKeyColumns(next);
-                      }}
-                      className="w-32"
-                    />
-                    {keyColumns.length > 1 && (
-                      <button
-                        onClick={() => setKeyColumns(keyColumns.filter((_, idx) => idx !== i))}
-                        className="text-gray-400 hover:text-red-500"
-                        aria-label="키 컬럼 삭제"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    )}
-                  </div>
-                ))}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    setKeyColumns([...keyColumns, `키${keyColumns.length + 1}`])
-                  }
-                >
-                  키 컬럼 추가
-                </Button>
-              </div>
+          <div>
+            <Label>컬럼</Label>
+            <div className="text-muted-foreground mb-2 text-xs">
+              어떤 컬럼이 키(매칭용) 이고 어떤 컬럼이 값(비교 대상) 인지는
+              조건 표시 편집에서 정합니다. 여기서는 표 구조만 정의하세요.
             </div>
-            <div>
-              <Label>값 컬럼</Label>
-              <div className="flex flex-wrap gap-2">
-                {valueColumns.map((v, i) => (
-                  <div key={i} className="flex items-center gap-1">
-                    <Input
-                      value={v}
-                      onChange={(e) => {
-                        const next = [...valueColumns];
-                        next[i] = e.target.value;
-                        setValueColumns(next);
-                      }}
-                      className="w-32"
-                    />
-                    {valueColumns.length > 1 && (
-                      <button
-                        onClick={() =>
-                          setValueColumns(valueColumns.filter((_, idx) => idx !== i))
-                        }
-                        className="text-gray-400 hover:text-red-500"
-                        aria-label="값 컬럼 삭제"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    )}
-                  </div>
-                ))}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    setValueColumns([...valueColumns, `값${valueColumns.length + 1}`])
-                  }
-                >
-                  값 컬럼 추가
-                </Button>
-              </div>
+            <div className="flex flex-wrap gap-2">
+              {columns.map((c, i) => (
+                <div key={i} className="flex items-center gap-1">
+                  <Input
+                    value={c}
+                    onChange={(e) => {
+                      const next = [...columns];
+                      next[i] = e.target.value;
+                      setColumns(next);
+                    }}
+                    className="w-40"
+                  />
+                  {columns.length > 1 && (
+                    <button
+                      onClick={() => setColumns(columns.filter((_, idx) => idx !== i))}
+                      className="text-gray-400 hover:text-red-500"
+                      aria-label="컬럼 삭제"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
+                </div>
+              ))}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setColumns([...columns, `컬럼${columns.length + 1}`])}
+              >
+                <Plus size={14} className="mr-1" /> 컬럼 추가
+              </Button>
             </div>
           </div>
 
@@ -230,7 +179,7 @@ export function LookupEditModal({ isOpen, initialValue, onClose, onSave }: Props
             <table className="w-full border-collapse">
               <thead>
                 <tr>
-                  {allColumns.map((c) => (
+                  {columns.map((c) => (
                     <th key={c} className="border bg-gray-50 px-2 py-1 text-sm">
                       {c}
                     </th>
@@ -241,7 +190,7 @@ export function LookupEditModal({ isOpen, initialValue, onClose, onSave }: Props
               <tbody>
                 {rows.map((row, ri) => (
                   <tr key={ri}>
-                    {allColumns.map((c) => (
+                    {columns.map((c) => (
                       <td key={c} className="border p-0">
                         <Input
                           value={String(row[c] ?? '')}

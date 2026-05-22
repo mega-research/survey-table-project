@@ -18,12 +18,11 @@ import { LookupEditModal } from './lookup-edit-modal';
 
 type LookupDraft = Pick<
   SavedLookup,
-  'name' | 'description' | 'category' | 'tags' | 'keyColumns' | 'valueColumns' | 'rows'
+  'name' | 'description' | 'category' | 'tags' | 'columns' | 'rows'
 >;
 
 interface CsvImportResult {
-  keyColumns: string[];
-  valueColumns: string[];
+  columns: string[];
   rows: Array<Record<string, string | number>>;
 }
 
@@ -61,8 +60,7 @@ export function LookupLibrarySection() {
       name: '',
       category: 'custom',
       tags: [],
-      keyColumns: result.keyColumns,
-      valueColumns: result.valueColumns,
+      columns: result.columns,
       rows: result.rows,
     });
     setEditOpen(true);
