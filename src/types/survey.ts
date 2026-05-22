@@ -81,13 +81,62 @@ export interface TableValidationRule {
 // 질문 표시 조건 논리 타입
 export type ConditionLogicType = 'AND' | 'OR' | 'NOT';
 
-// 분기 조건 우변 (forward-compat union, 이번 구현은 'literal' 만 처리)
-export type ComparandRef = { kind: 'literal'; value: number };
+// 분기 조건 좌변 — 단일 셀 또는 1단계 binop (L5 폭증 방지)
+export type CellRef = { kind: 'cell'; questionId: string; cellId: string };
 
-// 분기 조건 숫자 비교 (input + inputType='number' 셀 전용)
+export type LeftOperand =
+  | CellRef
+  | {
+      kind: 'binop';
+      op: '+' | '-' | '*' | '/';
+      left: CellRef;
+      right: CellRef | { kind: 'literal'; value: number };
+    };
+
+// 분기 조건 우변 — literal (기존 L2) 또는 LUT 룩업 (신규 L4)
+export type RightOperand =
+  | { kind: 'literal'; value: number }
+  | {
+      kind: 'lookup';
+      surveyLookupId: string;
+      keyMapping: Array<{ lutKey: string; attrsKey: string }>;
+    };
+
+// 분기 조건 숫자 비교
 export interface NumericComparison {
   operator: '==' | '!=' | '>' | '<' | '>=' | '<=';
-  comparand: ComparandRef;
+  // 하위 호환: 기존 데이터는 left 가 없고 comparand 만 있음.
+  // 평가 시 left undefined 면 "현재 평가 중인 cellValue" 를 좌변으로 본다.
+  left?: LeftOperand;
+  // 하위 호환: 기존 데이터는 comparand 사용. 새 데이터는 right 사용.
+  comparand?: { kind: 'literal'; value: number };
+  right?: RightOperand;
+}
+
+// 설문에 복사된 LUT 사본 (snapshot 시점 freeze)
+export interface SurveyLookup {
+  id: string; // nanoid
+  name: string;
+  sourceSavedLookupId?: string;
+  keyColumns: string[];
+  valueColumn: string;
+  rows: Array<Record<string, string | number>>;
+}
+
+// 보관함 LUT
+export interface SavedLookup {
+  id: string;
+  name: string;
+  description?: string;
+  category: string;
+  tags: string[];
+  keyColumns: string[];
+  valueColumn: string;
+  rows: Array<Record<string, string | number>>;
+  usageCount: number;
+  isPreset: boolean;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 // 질문 표시 조건
@@ -388,6 +437,7 @@ export interface Survey {
   groups?: QuestionGroup[]; // 질문 그룹 목록
   questions: Question[];
   settings: SurveySettings;
+  lookups?: SurveyLookup[]; // 설문에 복사된 LUT 사본 목록
   createdAt: Date;
   updatedAt: Date;
 }

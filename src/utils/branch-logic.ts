@@ -23,7 +23,8 @@ function evaluateNumericComparison(
 ): boolean {
   const left = parseNumericInput(cellValue);
   if (left === null) return false;
-  if (numericComparison.comparand.kind !== 'literal') return false;
+  // comparand 가 undefined 거나 literal 이 아니면 false (T16 에서 right 변종 합류)
+  if (!numericComparison.comparand || numericComparison.comparand.kind !== 'literal') return false;
   const right = numericComparison.comparand.value;
   switch (numericComparison.operator) {
     case '==': return left === right;
