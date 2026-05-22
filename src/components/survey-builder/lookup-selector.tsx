@@ -20,7 +20,7 @@ import { LookupEditModal } from './lookup-edit-modal';
 
 type LookupDraft = Pick<
   SavedLookup,
-  'name' | 'description' | 'category' | 'tags' | 'keyColumns' | 'valueColumn' | 'rows'
+  'name' | 'description' | 'category' | 'tags' | 'keyColumns' | 'valueColumns' | 'rows'
 >;
 
 const NONE_SENTINEL = '__none__';
@@ -47,7 +47,7 @@ export function LookupSelector({ value, onChange }: Props) {
       id: nanoid(),
       name: draft.name,
       keyColumns: draft.keyColumns,
-      valueColumn: draft.valueColumn,
+      valueColumns: draft.valueColumns,
       rows: draft.rows,
     });
     setEditOpen(false);

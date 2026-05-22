@@ -7,7 +7,6 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { parseNumericInput } from '@/utils/numeric-input';
 
@@ -15,7 +14,7 @@ type Step = 'pick-file' | 'map-columns' | 'preview' | 'done';
 
 interface ImportResult {
   keyColumns: string[];
-  valueColumn: string;
+  valueColumns: string[];
   rows: Array<Record<string, string | number>>;
 }
 
@@ -30,13 +29,13 @@ export function LookupCsvImport({ isOpen, onClose, onImport }: Props) {
   const [headers, setHeaders] = useState<string[]>([]);
   const [rawRows, setRawRows] = useState<string[][]>([]);
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
-  const [selectedValue, setSelectedValue] = useState<string>('');
+  const [selectedValues, setSelectedValues] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const reset = () => {
     setStep('pick-file');
     setHeaders([]); setRawRows([]);
-    setSelectedKeys([]); setSelectedValue('');
+    setSelectedKeys([]); setSelectedValues([]);
     setError(null);
   };
 
@@ -73,8 +72,9 @@ export function LookupCsvImport({ isOpen, onClose, onImport }: Props) {
 
   const handleConfirmMapping = () => {
     if (selectedKeys.length === 0) { setError('키 컬럼을 1개 이상 선택하세요'); return; }
-    if (!selectedValue) { setError('값 컬럼을 선택하세요'); return; }
-    if (selectedKeys.includes(selectedValue)) { setError('값 컬럼은 키 컬럼과 다른 컬럼이어야 합니다'); return; }
+    if (selectedValues.length === 0) { setError('값 컬럼을 1개 이상 선택하세요'); return; }
+    const overlap = selectedValues.find((v) => selectedKeys.includes(v));
+    if (overlap) { setError(`"${overlap}" 는 키 컬럼이면서 값 컬럼이 될 수 없습니다`); return; }
     setError(null);
     setStep('preview');
   };
@@ -89,13 +89,15 @@ export function LookupCsvImport({ isOpen, onClose, onImport }: Props) {
         if (!v) { setError(`${i + 1}행: 키 ${k} 가 비어있습니다`); return null; }
         row[k] = v;
       }
-      const vIdx = headers.indexOf(selectedValue);
-      const numeric = parseNumericInput(String(raw[vIdx] ?? ''));
-      if (numeric === null) { setError(`${i + 1}행: ${selectedValue} 가 숫자가 아닙니다`); return null; }
-      row[selectedValue] = numeric;
+      for (const v of selectedValues) {
+        const vIdx = headers.indexOf(v);
+        const numeric = parseNumericInput(String(raw[vIdx] ?? ''));
+        if (numeric === null) { setError(`${i + 1}행: ${v} 가 숫자가 아닙니다`); return null; }
+        row[v] = numeric;
+      }
       rows.push(row);
     }
-    return { keyColumns: selectedKeys, valueColumn: selectedValue, rows };
+    return { keyColumns: selectedKeys, valueColumns: selectedValues, rows };
   };
 
   const handleConfirmPreview = () => {
@@ -144,15 +146,25 @@ export function LookupCsvImport({ isOpen, onClose, onImport }: Props) {
               </div>
             </div>
             <div>
-              <Label>값 컬럼</Label>
-              <Select value={selectedValue} onValueChange={setSelectedValue}>
-                <SelectTrigger><SelectValue placeholder="컬럼 선택" /></SelectTrigger>
-                <SelectContent>
-                  {headers.map((h) => (
-                    <SelectItem key={h} value={h}>{h}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>값 컬럼 (다중 선택)</Label>
+              <div className="flex flex-wrap gap-2 mt-1">
+                {headers.map((h) => (
+                  <label key={h} className="flex items-center gap-1 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={selectedValues.includes(h)}
+                      onChange={(e) => {
+                        setSelectedValues(
+                          e.target.checked
+                            ? [...selectedValues, h]
+                            : selectedValues.filter((v) => v !== h),
+                        );
+                      }}
+                    />
+                    {h}
+                  </label>
+                ))}
+              </div>
             </div>
           </div>
         )}
@@ -163,7 +175,7 @@ export function LookupCsvImport({ isOpen, onClose, onImport }: Props) {
             <table className="w-full text-sm border-collapse border">
               <thead>
                 <tr>
-                  {[...selectedKeys, selectedValue].map((c) => (
+                  {[...selectedKeys, ...selectedValues].map((c) => (
                     <th key={c} className="border px-2 py-1 bg-gray-50">{c}</th>
                   ))}
                 </tr>
@@ -171,7 +183,7 @@ export function LookupCsvImport({ isOpen, onClose, onImport }: Props) {
               <tbody>
                 {rawRows.slice(0, 10).map((r, i) => (
                   <tr key={i}>
-                    {[...selectedKeys, selectedValue].map((c) => (
+                    {[...selectedKeys, ...selectedValues].map((c) => (
                       <td key={c} className="border px-2 py-1">{r[headers.indexOf(c)] ?? ''}</td>
                     ))}
                   </tr>

@@ -98,7 +98,7 @@ export function NumericComparisonEditor({
       const parsed = parseNumericInput(rawInput);
       emit({ right: { kind: 'literal', value: parsed ?? 0 } });
     } else {
-      emit({ right: { kind: 'lookup', surveyLookupId: '', keyMapping: [] } });
+      emit({ right: { kind: 'lookup', surveyLookupId: '', keyMapping: [], valueColumn: '' } });
     }
   };
 
