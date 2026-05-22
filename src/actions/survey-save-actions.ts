@@ -317,6 +317,7 @@ export async function saveSurveyWithDetails(surveyData: SurveyType) {
           maxResponses: surveyData.settings.maxResponses ?? null,
           thankYouMessage: surveyData.settings.thankYouMessage,
           requireInviteToken: surveyData.settings.requireInviteToken ?? false,
+          lookups: surveyData.lookups ?? [],
           updatedAt: new Date(),
         })
         .where(eq(surveys.id, surveyData.id));
@@ -336,6 +337,7 @@ export async function saveSurveyWithDetails(surveyData: SurveyType) {
         maxResponses: surveyData.settings.maxResponses ?? null,
         thankYouMessage: surveyData.settings.thankYouMessage,
         requireInviteToken: surveyData.settings.requireInviteToken ?? false,
+        lookups: surveyData.lookups ?? [],
       });
     }
 

@@ -4,7 +4,7 @@
  * 설문 데이터를 불변 스냅샷 구조로 변환하는 순수 함수
  */
 
-import type { Question, QuestionGroup, Survey } from '@/types/survey';
+import type { Question, QuestionGroup, Survey, SurveyLookup } from '@/types/survey';
 import { stripTableRowsData } from '@/utils/table-cell-optimizer';
 
 export interface SurveySnapshot {
@@ -22,6 +22,8 @@ export interface SurveySnapshot {
     maxResponses?: number;
     thankYouMessage: string;
   };
+  // 외부 데이터 LUT 사본 — publish 시점 freeze. 응답 페이지가 분기 조건 우변 룩업을 평가할 때 사용.
+  lookups: SurveyLookup[];
 }
 
 interface SnapshotQuestion {
@@ -138,5 +140,6 @@ export function buildSurveySnapshot(survey: Survey): SurveySnapshot {
       maxResponses: survey.settings.maxResponses,
       thankYouMessage: survey.settings.thankYouMessage,
     },
+    lookups: survey.lookups ?? [],
   };
 }
