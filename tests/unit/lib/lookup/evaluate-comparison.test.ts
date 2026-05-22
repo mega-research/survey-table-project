@@ -6,8 +6,7 @@ import type { LookupEvalCtx } from '@/lib/lookup/types';
 const LUT: SurveyLookup = {
   id: 'lut-1',
   name: 'avg',
-  keyColumns: ['대륙'],
-  valueColumns: ['v'],
+  columns: ['대륙', 'v'],
   rows: [{ 대륙: '유럽', v: 1000 }],
 };
 

@@ -27,9 +27,9 @@ export function evaluateRightOperand(
   if (!row) return { ok: false, reason: 'lookup-row-not-matched' };
 
   // 비교 시점에 우변에서 선택한 값 컬럼을 사용. 선택 안 됐거나(빈 문자열),
-  // LUT 의 valueColumns 목록에 없는 키면 fail-safe SHOW.
+  // LUT 의 columns 목록에 없는 키면 fail-safe SHOW.
   const valueColumn = op.valueColumn;
-  if (!valueColumn || !lookup.valueColumns.includes(valueColumn)) {
+  if (!valueColumn || !lookup.columns.includes(valueColumn)) {
     return { ok: false, reason: 'lookup-value-missing' };
   }
 

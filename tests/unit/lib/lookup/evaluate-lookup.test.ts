@@ -6,8 +6,7 @@ import type { LookupEvalCtx } from '@/lib/lookup/types';
 const LUT: SurveyLookup = {
   id: 'lut-1',
   name: 'avg-airfare',
-  keyColumns: ['대륙'],
-  valueColumns: ['2026년도_적용액', '평균'],
+  columns: ['대륙', '2026년도_적용액', '평균'],
   rows: [
     { 대륙: '유럽', '2026년도_적용액': 2470000, 평균: 2243739 },
     { 대륙: '아시아', '2026년도_적용액': 800000, 평균: 774110 },
@@ -124,7 +123,7 @@ describe('evaluateRightOperand', () => {
     expect(r).toEqual({ ok: false, reason: 'lookup-value-missing' });
   });
 
-  it('lookup: valueColumn 이 LUT 의 valueColumns 목록에 없으면 lookup-value-missing', () => {
+  it('lookup: valueColumn 이 LUT 의 columns 목록에 없으면 lookup-value-missing', () => {
     const op: RightOperand = {
       kind: 'lookup',
       surveyLookupId: 'lut-1',
