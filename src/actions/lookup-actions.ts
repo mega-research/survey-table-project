@@ -159,15 +159,17 @@ export async function copySavedLookupToSurveyAction(
 
   const next: SurveyLookup[] = [...(survey.lookups ?? []), newLookup];
 
-  await db
-    .update(surveys)
-    .set({ lookups: next, updatedAt: new Date() })
-    .where(eq(surveys.id, surveyId));
+  await db.transaction(async (tx) => {
+    await tx
+      .update(surveys)
+      .set({ lookups: next, updatedAt: new Date() })
+      .where(eq(surveys.id, surveyId));
 
-  await db
-    .update(savedLookups)
-    .set({ usageCount: sql`${savedLookups.usageCount} + 1` })
-    .where(eq(savedLookups.id, savedLookupId));
+    await tx
+      .update(savedLookups)
+      .set({ usageCount: sql`${savedLookups.usageCount} + 1` })
+      .where(eq(savedLookups.id, savedLookupId));
+  });
 
   revalidatePath(`/admin/surveys/${surveyId}`);
   return newLookup;
