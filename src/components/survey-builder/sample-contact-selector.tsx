@@ -53,6 +53,10 @@ export function SampleContactSelector({ value, onChange }: Props) {
     };
   }, [surveyId]);
 
+  // 신규 설문 생성 직후 surveyId 가 빈 상태에서는 셀렉터를 노출하지 않음.
+  // (server action 호출이 의미 없고, 빈 옵션만 보이는 미세 깜빡임 방지)
+  if (!surveyId) return null;
+
   return (
     <Select
       value={value ?? NONE_SENTINEL}

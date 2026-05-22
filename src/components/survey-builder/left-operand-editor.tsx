@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -11,6 +13,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import type { CellRef, LeftOperand, Question } from '@/types/survey';
+import { isPartialNumericInput, parseNumericInput } from '@/utils/numeric-input';
 
 interface Props {
   value: LeftOperand;
@@ -49,6 +52,9 @@ function collectInputCells(questions: Question[]): CellOption[] {
 
 const emptyCellRef = (): CellRef => ({ kind: 'cell', questionId: '', cellId: '' });
 
+const isRealCellRef = (ref: CellRef): boolean =>
+  Boolean(ref.questionId && ref.cellId);
+
 export function LeftOperandEditor({ value, onChange }: Props) {
   const questions = useSurveyBuilderStore((s) => s.currentSurvey.questions);
   const cells = collectInputCells(questions);
@@ -56,15 +62,40 @@ export function LeftOperandEditor({ value, onChange }: Props) {
   const isBinop = value.kind === 'binop';
   const mode: 'cell' | 'binop' = isBinop ? 'binop' : 'cell';
 
+  // literal 우변은 raw string 으로 controlled — 부분 입력(`-`, `.`) 보존을 위해
+  // value.right.value 가 바뀌면 sync, 사용자 타이핑 중에는 raw 만 갱신.
+  const [literalRaw, setLiteralRaw] = useState<string>(() =>
+    isBinop && value.right.kind === 'literal' ? String(value.right.value) : '',
+  );
+
+  useEffect(() => {
+    if (isBinop && value.right.kind === 'literal') {
+      const next = String(value.right.value);
+      // raw 가 parsing 결과와 동일한 값이면 갱신하지 않아 부분 입력 보존.
+      if (parseNumericInput(literalRaw) !== value.right.value) {
+        setLiteralRaw(next);
+      }
+    }
+  }, [isBinop, value, literalRaw]);
+
   const onModeChange = (next: 'cell' | 'binop') => {
     if (next === mode) return;
     if (next === 'cell') {
-      onChange(emptyCellRef());
+      // binop → cell: binop.left 가 실제 셀이면 보존, 아니면 기존 left 슬롯도 비어있으니 그대로.
+      if (isBinop && isRealCellRef(value.left)) {
+        onChange(value.left);
+      } else {
+        onChange(emptyCellRef());
+      }
     } else {
+      // cell → binop: 현재 단일 셀을 left 로 보존, right 는 비어있는 셀로 초기화.
+      const preservedLeft: CellRef = isRealCellRef(value as CellRef)
+        ? (value as CellRef)
+        : emptyCellRef();
       onChange({
         kind: 'binop',
         op: '/',
-        left: emptyCellRef(),
+        left: preservedLeft,
         right: emptyCellRef(),
       });
     }
@@ -119,65 +150,77 @@ export function LeftOperandEditor({ value, onChange }: Props) {
       {!isBinop && renderCellSelect(value, (next) => onChange(next))}
 
       {isBinop && (
-        <div className="grid grid-cols-[1fr_80px_1fr] items-center gap-2">
-          {renderCellSelect(value.left, (next) =>
-            onChange({ ...value, left: next }),
-          )}
-          <Select
-            value={value.op}
-            onValueChange={(op) =>
-              onChange({ ...value, op: op as '+' | '-' | '*' | '/' })
-            }
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {(['+', '-', '*', '/'] as const).map((o) => (
-                <SelectItem key={o} value={o}>
-                  {o}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {value.right.kind === 'cell' ? (
-            renderCellSelect(value.right, (next) =>
-              onChange({ ...value, right: next }),
-            )
-          ) : (
-            <Input
-              type="number"
-              value={value.right.value}
-              onChange={(e) =>
+        <div className="space-y-2">
+          <div className="grid grid-cols-[1fr_80px_1fr] items-center gap-2">
+            {renderCellSelect(value.left, (next) =>
+              onChange({ ...value, left: next }),
+            )}
+            <Select
+              value={value.op}
+              onValueChange={(op) =>
+                onChange({ ...value, op: op as '+' | '-' | '*' | '/' })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(['+', '-', '*', '/'] as const).map((o) => (
+                  <SelectItem key={o} value={o}>
+                    {o}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {value.right.kind === 'cell' ? (
+              renderCellSelect(value.right, (next) =>
+                onChange({ ...value, right: next }),
+              )
+            ) : (
+              <Input
+                inputMode="decimal"
+                value={literalRaw}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  if (!isPartialNumericInput(raw)) return;
+                  setLiteralRaw(raw);
+                  const parsed = parseNumericInput(raw);
+                  // 빈 입력·부분 입력은 store 에 반영하지 않고 raw 만 유지 →
+                  // 다음 입력에서 완전한 숫자가 되면 그때 commit.
+                  if (parsed !== null) {
+                    onChange({
+                      ...value,
+                      right: { kind: 'literal', value: parsed },
+                    });
+                  }
+                }}
+              />
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-muted-foreground text-xs">우변 종류</span>
+            <Select
+              value={value.right.kind}
+              onValueChange={(k) =>
                 onChange({
                   ...value,
-                  right: { kind: 'literal', value: Number(e.target.value) },
+                  right:
+                    k === 'cell'
+                      ? emptyCellRef()
+                      : { kind: 'literal', value: 0 },
                 })
               }
-            />
-          )}
-          <span />
-          <span className="text-muted-foreground text-xs">우변 종류</span>
-          <Select
-            value={value.right.kind}
-            onValueChange={(k) =>
-              onChange({
-                ...value,
-                right:
-                  k === 'cell'
-                    ? emptyCellRef()
-                    : { kind: 'literal', value: 0 },
-              })
-            }
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="cell">셀</SelectItem>
-              <SelectItem value="literal">숫자</SelectItem>
-            </SelectContent>
-          </Select>
+            >
+              <SelectTrigger className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="cell">셀</SelectItem>
+                <SelectItem value="literal">숫자</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       )}
     </div>
