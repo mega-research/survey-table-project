@@ -280,7 +280,8 @@ export const savedLookups = pgTable('saved_lookups', {
 
   // LUT 데이터
   keyColumns: jsonb('key_columns').$type<string[]>().notNull(),
-  valueColumn: text('value_column').notNull(),
+  // 다중 값 컬럼 — 조건 우변에서 어느 값 컬럼을 비교에 쓸지 선택.
+  valueColumns: jsonb('value_columns').$type<string[]>().default([]).notNull(),
   rows: jsonb('rows').$type<Array<Record<string, string | number>>>().default([]).notNull(),
 
   usageCount: integer('usage_count').default(0).notNull(),

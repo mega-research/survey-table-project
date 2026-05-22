@@ -102,6 +102,9 @@ export type RightOperand =
       kind: 'lookup';
       surveyLookupId: string;
       keyMapping: Array<{ lutKey: string; attrsKey: string }>;
+      // LUT 가 다중 값 컬럼을 가질 수 있으므로 비교 시점에 어느 값 컬럼을 쓸지 명시.
+      // 빈 문자열이면 평가 시 lookup-value-missing 으로 fail-safe SHOW.
+      valueColumn: string;
     };
 
 // 분기 조건 숫자 비교
@@ -121,7 +124,8 @@ export interface SurveyLookup {
   name: string;
   sourceSavedLookupId?: string;
   keyColumns: string[];
-  valueColumn: string;
+  // 비교 결과로 노출 가능한 값 컬럼 후보 목록. 조건 우변에서 이 중 하나를 골라 비교.
+  valueColumns: string[];
   rows: Array<Record<string, string | number>>;
 }
 
@@ -133,7 +137,7 @@ export interface SavedLookup {
   category: string;
   tags: string[];
   keyColumns: string[];
-  valueColumn: string;
+  valueColumns: string[];
   rows: Array<Record<string, string | number>>;
   usageCount: number;
   isPreset: boolean;
