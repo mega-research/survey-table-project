@@ -19,7 +19,7 @@ type SavedLookupRow = {
   category: string;
   tags: string[];
   keyColumns: string[];
-  valueColumn: string;
+  valueColumns: string[];
   rows: Array<Record<string, string | number>>;
   usageCount: number;
   isPreset: boolean;
@@ -32,7 +32,7 @@ type SurveyLookupRow = {
   name: string;
   sourceSavedLookupId?: string;
   keyColumns: string[];
-  valueColumn: string;
+  valueColumns: string[];
   rows: Array<Record<string, string | number>>;
 };
 
@@ -105,7 +105,7 @@ vi.mock('@/db', () => {
           category: vals.category as string,
           tags: (vals.tags as string[]) ?? [],
           keyColumns: vals.keyColumns as string[],
-          valueColumn: vals.valueColumn as string,
+          valueColumns: vals.valueColumns as string[],
           rows: vals.rows as Array<Record<string, string | number>>,
           usageCount: 0,
           isPreset: false,
@@ -260,7 +260,7 @@ describe('lookup-actions integration', () => {
       category: 'finance',
       tags: ['항공'],
       keyColumns: ['대륙'],
-      valueColumn: '2026년도_적용액',
+      valueColumns: ['2026년도_적용액'],
       rows: [
         { 대륙: '유럽', '2026년도_적용액': 2470000 },
         { 대륙: '아시아', '2026년도_적용액': 800000 },
@@ -284,7 +284,7 @@ describe('lookup-actions integration', () => {
       category: 'finance',
       tags: [],
       keyColumns: ['대륙'],
-      valueColumn: 'value',
+      valueColumns: ['value'],
       rows: [{ 대륙: '유럽', value: 1 }],
     });
 
@@ -310,7 +310,7 @@ describe('lookup-actions integration', () => {
       category: 'finance',
       tags: [],
       keyColumns: ['대륙'],
-      valueColumn: 'value',
+      valueColumns: ['value'],
       rows: [{ 대륙: '유럽', value: 1 }],
     });
     await copySavedLookupToSurveyAction(TEST_SURVEY_ID, created.id);
@@ -335,7 +335,7 @@ describe('lookup-actions integration', () => {
       category: 'finance',
       tags: [],
       keyColumns: ['대륙'],
-      valueColumn: 'value',
+      valueColumns: ['value'],
       rows: [{ 대륙: '유럽', value: 1 }],
     });
     await copySavedLookupToSurveyAction(TEST_SURVEY_ID, created.id);
@@ -355,7 +355,7 @@ describe('lookup-actions integration', () => {
       category: 'finance',
       tags: [],
       keyColumns: ['대륙'],
-      valueColumn: 'value',
+      valueColumns: ['value'],
       rows: [{ 대륙: '유럽', value: 1 }],
     });
 

@@ -13,7 +13,7 @@ const LUT: SurveyLookup = {
   id: 'lut-airfare',
   name: '항공비 평균',
   keyColumns: ['대륙'],
-  valueColumn: '적용액',
+  valueColumns: ['적용액'],
   rows: [
     { 대륙: '유럽', 적용액: 2470000 },
     { 대륙: '아시아', 적용액: 800000 },
@@ -46,7 +46,7 @@ describe('displayCondition with lookup E2E', () => {
     const snap = buildSurveySnapshot(survey);
     expect(snap.lookups).toHaveLength(1);
     expect(snap.lookups[0].id).toBe('lut-airfare');
-    expect(snap.lookups[0].valueColumn).toBe('적용액');
+    expect(snap.lookups[0].valueColumns).toEqual(['적용액']);
   });
 
   it('binop / lookup 조건 평가: 1인당 출장비 ≤ 평균 항공비 → 만족 (SHOW)', () => {
@@ -62,6 +62,7 @@ describe('displayCondition with lookup E2E', () => {
         kind: 'lookup',
         surveyLookupId: 'lut-airfare',
         keyMapping: [{ lutKey: '대륙', attrsKey: '개최대륙' }],
+        valueColumn: '적용액',
       },
     };
     const result = evaluateNumericComparisonV2(cmp, '__unused__', {
@@ -89,6 +90,7 @@ describe('displayCondition with lookup E2E', () => {
         kind: 'lookup',
         surveyLookupId: 'lut-airfare',
         keyMapping: [{ lutKey: '대륙', attrsKey: '개최대륙' }],
+        valueColumn: '적용액',
       },
     };
     const result = evaluateNumericComparisonV2(cmp, '__unused__', {
@@ -109,6 +111,7 @@ describe('displayCondition with lookup E2E', () => {
         kind: 'lookup',
         surveyLookupId: 'lut-airfare',
         keyMapping: [{ lutKey: '대륙', attrsKey: '개최대륙' }],
+        valueColumn: '적용액',
       },
     };
     const result = evaluateNumericComparisonV2(cmp, '__unused__', {
@@ -129,6 +132,7 @@ describe('displayCondition with lookup E2E', () => {
         kind: 'lookup',
         surveyLookupId: 'lut-airfare',
         keyMapping: [{ lutKey: '대륙', attrsKey: '개최대륙' }],
+        valueColumn: '적용액',
       },
     };
     const result = evaluateNumericComparisonV2(cmp, '__unused__', {
@@ -154,6 +158,7 @@ describe('displayCondition with lookup E2E', () => {
         kind: 'lookup',
         surveyLookupId: 'lut-airfare',
         keyMapping: [{ lutKey: '대륙', attrsKey: '개최대륙' }],
+        valueColumn: '적용액',
       },
     };
     const result = evaluateNumericComparisonV2(cmp, '__unused__', {

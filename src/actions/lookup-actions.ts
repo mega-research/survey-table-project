@@ -21,7 +21,7 @@ const SavedLookupInputSchema = z.object({
   category: z.string().min(1).max(100),
   tags: z.array(z.string()).default([]),
   keyColumns: z.array(z.string().min(1)).min(1),
-  valueColumn: z.string().min(1),
+  valueColumns: z.array(z.string().min(1)).min(1),
   rows: z.array(z.record(z.string(), z.union([z.string(), z.number()]))),
 });
 
@@ -74,7 +74,7 @@ export async function createSavedLookupAction(
       category: parsed.category,
       tags: parsed.tags,
       keyColumns: parsed.keyColumns,
-      valueColumn: parsed.valueColumn,
+      valueColumns: parsed.valueColumns,
       rows: parsed.rows as LookupRow[],
     })
     .returning();
@@ -145,7 +145,7 @@ export async function copySavedLookupToSurveyAction(
     name: saved.name,
     sourceSavedLookupId: saved.id,
     keyColumns: saved.keyColumns,
-    valueColumn: saved.valueColumn,
+    valueColumns: saved.valueColumns,
     rows: saved.rows,
   };
 
@@ -246,7 +246,7 @@ function toSavedLookup(row: typeof savedLookups.$inferSelect): SavedLookup {
     category: row.category,
     tags: row.tags,
     keyColumns: row.keyColumns,
-    valueColumn: row.valueColumn,
+    valueColumns: row.valueColumns,
     rows: row.rows,
     usageCount: row.usageCount,
     isPreset: row.isPreset,
