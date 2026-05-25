@@ -181,7 +181,7 @@ export interface QuestionCondition {
   id: string;
   name?: string;
   sourceQuestionId: string;
-  conditionType: 'value-match' | 'table-cell-check' | 'custom';
+  conditionType: 'value-match' | 'table-cell-check' | 'expression' | 'custom';
   requiredValues?: string[];
   tableConditions?: {
     rowIds: string[];

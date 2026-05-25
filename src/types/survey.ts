@@ -149,7 +149,7 @@ export interface QuestionCondition {
   id: string;
   name?: string; // 조건 이름 (선택사항)
   sourceQuestionId: string; // 조건을 확인할 질문 ID
-  conditionType: 'value-match' | 'table-cell-check' | 'custom'; // 조건 타입
+  conditionType: 'value-match' | 'table-cell-check' | 'expression' | 'custom'; // 조건 타입
   // value-match: 특정 값과 일치하는지 확인 (radio, select 등)
   requiredValues?: string[]; // 필요한 값들
   // table-cell-check: 테이블의 특정 셀이 체크되었는지 확인
