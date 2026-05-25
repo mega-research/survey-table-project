@@ -61,6 +61,40 @@ export function LookupEditModal({ isOpen, initialValue, onClose, onSave }: Props
     setRows(rows.filter((_, i) => i !== rowIdx));
   };
 
+  // 컬럼명 변경 시 rows 안의 기존 키도 새 키로 옮겨서 데이터 손실 방지.
+  const handleColumnRename = (idx: number, newName: string) => {
+    const oldName = columns[idx];
+    const next = [...columns];
+    next[idx] = newName;
+    setColumns(next);
+    if (oldName === newName) return;
+    setRows(
+      rows.map((r) => {
+        if (!(oldName in r)) return r;
+        const { [oldName]: v, ...rest } = r;
+        return { ...rest, [newName]: v };
+      }),
+    );
+  };
+
+  // 컬럼 삭제 시 rows 안의 해당 키도 제거.
+  const handleColumnDelete = (idx: number) => {
+    const removed = columns[idx];
+    setColumns(columns.filter((_, i) => i !== idx));
+    setRows(
+      rows.map((r) => {
+        if (!(removed in r)) return r;
+        const next: Record<string, string | number> = { ...r };
+        delete next[removed];
+        return next;
+      }),
+    );
+  };
+
+  const handleAddColumn = () => {
+    setColumns([...columns, `컬럼${columns.length + 1}`]);
+  };
+
   const handlePaste = useCallback(
     (e: React.ClipboardEvent) => {
       e.preventDefault();
@@ -136,52 +170,33 @@ export function LookupEditModal({ isOpen, initialValue, onClose, onSave }: Props
             <Input value={description} onChange={(e) => setDescription(e.target.value)} />
           </div>
 
-          <div>
-            <Label>컬럼</Label>
+          <div onPaste={handlePaste}>
             <div className="text-muted-foreground mb-2 text-xs">
               어떤 컬럼이 키(매칭용) 이고 어떤 컬럼이 값(비교 대상) 인지는
               조건 표시 편집에서 정합니다. 여기서는 표 구조만 정의하세요.
             </div>
-            <div className="flex flex-wrap gap-2">
-              {columns.map((c, i) => (
-                <div key={i} className="flex items-center gap-1">
-                  <Input
-                    value={c}
-                    onChange={(e) => {
-                      const next = [...columns];
-                      next[i] = e.target.value;
-                      setColumns(next);
-                    }}
-                    className="w-40"
-                  />
-                  {columns.length > 1 && (
-                    <button
-                      onClick={() => setColumns(columns.filter((_, idx) => idx !== i))}
-                      className="text-gray-400 hover:text-red-500"
-                      aria-label="컬럼 삭제"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  )}
-                </div>
-              ))}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setColumns([...columns, `컬럼${columns.length + 1}`])}
-              >
-                <Plus size={14} className="mr-1" /> 컬럼 추가
-              </Button>
-            </div>
-          </div>
-
-          <div onPaste={handlePaste}>
             <table className="w-full border-collapse">
               <thead>
                 <tr>
-                  {columns.map((c) => (
-                    <th key={c} className="border bg-gray-50 px-2 py-1 text-sm">
-                      {c}
+                  {columns.map((c, ci) => (
+                    <th key={ci} className="border bg-gray-50 p-0">
+                      <div className="flex items-center gap-1 pr-1">
+                        <Input
+                          value={c}
+                          onChange={(e) => handleColumnRename(ci, e.target.value)}
+                          className="h-8 rounded-none border-0 bg-transparent text-sm font-semibold"
+                          aria-label={`컬럼 ${ci + 1} 이름`}
+                        />
+                        {columns.length > 1 && (
+                          <button
+                            onClick={() => handleColumnDelete(ci)}
+                            className="shrink-0 text-gray-400 hover:text-red-500"
+                            aria-label="열 삭제"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        )}
+                      </div>
                     </th>
                   ))}
                   <th className="w-10 border px-2 py-1"></th>
@@ -190,8 +205,8 @@ export function LookupEditModal({ isOpen, initialValue, onClose, onSave }: Props
               <tbody>
                 {rows.map((row, ri) => (
                   <tr key={ri}>
-                    {columns.map((c) => (
-                      <td key={c} className="border p-0">
+                    {columns.map((c, ci) => (
+                      <td key={ci} className="border p-0">
                         <Input
                           value={String(row[c] ?? '')}
                           onChange={(e) => handleCellChange(ri, c, e.target.value)}
@@ -212,11 +227,14 @@ export function LookupEditModal({ isOpen, initialValue, onClose, onSave }: Props
                 ))}
               </tbody>
             </table>
-            <div className="mt-2 flex gap-2">
+            <div className="mt-2 flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={handleAddColumn}>
+                <Plus size={14} className="mr-1" /> 열 추가
+              </Button>
               <Button variant="outline" size="sm" onClick={handleAddRow}>
                 <Plus size={14} className="mr-1" /> 행 추가
               </Button>
-              <span className="flex items-center gap-1 self-center text-xs text-gray-500">
+              <span className="ml-2 flex items-center gap-1 text-xs text-gray-500">
                 <ClipboardPaste size={12} />
                 엑셀 영역을 복사 후 표 위에 붙여넣으면 자동 채워집니다.
               </span>
