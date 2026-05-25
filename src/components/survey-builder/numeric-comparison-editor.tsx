@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -18,6 +19,7 @@ interface NumericComparisonEditorProps {
   value?: NumericComparison;
   onChange: (value: NumericComparison) => void;
   idPrefix: string;
+  onMigrate?: () => void;
 }
 
 const OPERATOR_OPTIONS: Array<{ value: NumericComparison['operator']; label: string }> = [
@@ -47,7 +49,13 @@ function formatCellRef(
   return '(삭제된 셀)';
 }
 
-function BinopReadonlyLabel({ left }: { left: NonNullable<NumericComparison['left']> }) {
+function BinopReadonlyLabel({
+  left,
+  onMigrate,
+}: {
+  left: NonNullable<NumericComparison['left']>;
+  onMigrate?: () => void;
+}) {
   const questions = useSurveyBuilderStore((s) => s.currentSurvey.questions);
 
   let summary: string;
@@ -63,7 +71,7 @@ function BinopReadonlyLabel({ left }: { left: NonNullable<NumericComparison['lef
   }
 
   return (
-    <div className="space-y-1 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs">
+    <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs">
       <p className="font-semibold text-amber-900">
         이전 버전 &lsquo;셀 산술&rsquo; 좌변 (편집 불가)
       </p>
@@ -71,6 +79,20 @@ function BinopReadonlyLabel({ left }: { left: NonNullable<NumericComparison['lef
       <p className="text-amber-700">
         다시 만들려면 위 [x] 버튼으로 비교 조건을 해제 후 다시 추가하세요. 깊은 산술이 필요하면 조건 타입을 &lsquo;장기 계산식&rsquo; 으로 바꾸세요.
       </p>
+      {onMigrate && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            if (confirm('이 비교 조건을 장기 계산식으로 변환합니다. 진행할까요?')) {
+              onMigrate();
+            }
+          }}
+        >
+          장기 계산식으로 변환
+        </Button>
+      )}
     </div>
   );
 }
@@ -89,6 +111,7 @@ export function NumericComparisonEditor({
   value,
   onChange,
   idPrefix,
+  onMigrate,
 }: NumericComparisonEditorProps) {
   const operator = value?.operator ?? '==';
   const left = value?.left;
@@ -148,7 +171,7 @@ export function NumericComparisonEditor({
         숫자 비교 조건
       </Label>
 
-      {left !== undefined && <BinopReadonlyLabel left={left} />}
+      {left !== undefined && <BinopReadonlyLabel left={left} onMigrate={onMigrate} />}
 
       <div className="flex items-center gap-2">
         <Label htmlFor={`${idPrefix}-operator`} className="text-xs text-slate-600">

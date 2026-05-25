@@ -22,6 +22,7 @@ import { getMergedRowIds, getRowMergeInfo } from '@/utils/table-merge-helpers';
 
 import { ExpressionConditionEditor } from './expression-condition-editor';
 import { ValueComparisonExpander } from './value-comparison-expander';
+import { migrateNumericComparisonToExpression } from '@/utils/expression-migration';
 
 interface QuestionConditionEditorProps {
   question: Question;
@@ -548,6 +549,27 @@ export const QuestionConditionEditor = forwardRef<
                                       },
                                     })
                                   }
+                                  onMigrateToExpression={(() => {
+                                    const tc = condition.tableConditions;
+                                    if (!tc?.numericComparison) return undefined;
+                                    const outerRow = tc.rowIds?.[0];
+                                    const outerCol = tc.cellColumnIndex;
+                                    if (!outerRow || outerCol === undefined || !sourceQuestion) return undefined;
+                                    const row = sourceQuestion.tableRowsData?.find((r) => r.id === outerRow);
+                                    const outerCellId = row?.cells[outerCol]?.id;
+                                    if (!outerCellId) return undefined;
+                                    return () => {
+                                      const expressionConfig = migrateNumericComparisonToExpression(
+                                        tc.numericComparison!,
+                                        { questionId: sourceQuestion.id, cellId: outerCellId },
+                                      );
+                                      updateCondition(condition.id, {
+                                        conditionType: 'expression',
+                                        expressionConfig,
+                                        tableConditions: undefined,
+                                      });
+                                    };
+                                  })()}
                                 />
                               )}
                           </>
@@ -676,6 +698,27 @@ export const QuestionConditionEditor = forwardRef<
                                             },
                                           })
                                         }
+                                        onMigrateToExpression={(() => {
+                                          if (!ac.numericComparison) return undefined;
+                                          const acOuterRow = effectiveRowIds[0];
+                                          const acOuterCol = ac.cellColumnIndex;
+                                          if (!acOuterRow || acOuterCol === undefined || !sourceQuestion) return undefined;
+                                          const acRow = sourceQuestion.tableRowsData?.find((r) => r.id === acOuterRow);
+                                          const acCellId = acRow?.cells[acOuterCol]?.id;
+                                          if (!acCellId) return undefined;
+                                          return () => {
+                                            const expressionConfig = migrateNumericComparisonToExpression(
+                                              ac.numericComparison!,
+                                              { questionId: sourceQuestion.id, cellId: acCellId },
+                                            );
+                                            updateCondition(condition.id, {
+                                              conditionType: 'expression',
+                                              expressionConfig,
+                                              tableConditions: undefined,
+                                              additionalConditions: undefined,
+                                            });
+                                          };
+                                        })()}
                                       />
                                     );
                                   })()}

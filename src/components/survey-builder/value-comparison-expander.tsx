@@ -37,6 +37,8 @@ interface ValueComparisonExpanderProps {
   multipleRows: boolean;
   /** option 케이스 helpText. */
   helpText?: string;
+  /** legacy binop 좌변이 있을 때 장기 계산식으로 변환 트리거. */
+  onMigrateToExpression?: () => void;
 }
 
 const EMPTY_NUMERIC: NumericComparison = {
@@ -54,6 +56,7 @@ export function ValueComparisonExpander({
   onChange,
   multipleRows,
   helpText,
+  onMigrateToExpression,
 }: ValueComparisonExpanderProps) {
   const hasComparison =
     comparison.expectedValues !== undefined || comparison.numericComparison !== undefined;
@@ -116,6 +119,7 @@ export function ValueComparisonExpander({
           onChange={(nc) =>
             onChange({ expectedValues: undefined, numericComparison: nc })
           }
+          onMigrate={onMigrateToExpression}
         />
       ) : kind === 'option' && sourceQuestion ? (
         <TableOptionSelector
