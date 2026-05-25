@@ -135,6 +135,81 @@ export function ExpressionConditionEditor({
   );
 }
 
+const ARITH_OPS = ['+', '-', '*', '/'] as const;
+const ARITH_OP_LABELS: Record<typeof ARITH_OPS[number], string> = {
+  '+': '+',
+  '-': '-',
+  '*': '×',
+  '/': '÷',
+};
+
+function InlineArithmeticOperand({
+  value, onChange, idPrefix,
+}: {
+  value: ExpressionOperand;
+  onChange: (next: ExpressionOperand) => void;
+  idPrefix: string;
+}) {
+  const isBinop = value.kind === 'binop';
+  const arithOp = isBinop ? value.op : 'none';
+
+  const handleArithChange = (next: string) => {
+    if (next === 'none') {
+      // unwrap: binop.left 를 새 value 로
+      if (isBinop) onChange(value.left);
+      return;
+    }
+    const newOp = next as typeof ARITH_OPS[number];
+    if (isBinop) {
+      onChange({ ...value, op: newOp });
+    } else {
+      // wrap: 현재 value 를 binop.left 로, right 는 empty literal
+      onChange({
+        kind: 'binop',
+        op: newOp,
+        left: value,
+        right: { kind: 'literal', value: 0 },
+      });
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <ExpressionOperandPicker
+        value={isBinop ? value.left : value}
+        onChange={(next) => {
+          if (isBinop) onChange({ ...value, left: next });
+          else onChange(next);
+        }}
+        currentDepth={isBinop ? 1 : 0}
+        idPrefix={`${idPrefix}-A`}
+      />
+      <div className="flex items-center gap-2">
+        <Label className="text-xs text-slate-600">산술</Label>
+        <Select value={arithOp} onValueChange={handleArithChange}>
+          <SelectTrigger className="w-24">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">없음</SelectItem>
+            {ARITH_OPS.map((op) => (
+              <SelectItem key={op} value={op}>{ARITH_OP_LABELS[op]}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      {isBinop && (
+        <ExpressionOperandPicker
+          value={value.right}
+          onChange={(next) => onChange({ ...value, right: next })}
+          currentDepth={1}
+          idPrefix={`${idPrefix}-B`}
+        />
+      )}
+    </div>
+  );
+}
+
 function ComparisonClauseEditor({
   comparison, onChange, onDelete, idPrefix,
 }: {
@@ -153,10 +228,9 @@ function ComparisonClauseEditor({
       </div>
       <div>
         <Label className="text-xs text-slate-600">좌변</Label>
-        <ExpressionOperandPicker
+        <InlineArithmeticOperand
           value={comparison.left}
           onChange={(left) => onChange({ ...comparison, left })}
-          currentDepth={0}
           idPrefix={`${idPrefix}-L`}
         />
       </div>
@@ -177,10 +251,9 @@ function ComparisonClauseEditor({
       </div>
       <div>
         <Label className="text-xs text-slate-600">우변</Label>
-        <ExpressionOperandPicker
+        <InlineArithmeticOperand
           value={comparison.right}
           onChange={(right) => onChange({ ...comparison, right })}
-          currentDepth={0}
           idPrefix={`${idPrefix}-R`}
         />
       </div>

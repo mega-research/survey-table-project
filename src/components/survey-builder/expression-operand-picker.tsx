@@ -86,7 +86,8 @@ export function ExpressionOperandPicker({
         </SelectTrigger>
         <SelectContent>
           {(Object.keys(KIND_LABELS) as Array<ExpressionOperand['kind']>)
-            .filter((k) => k !== 'binop' || canNestBinop)
+            // depth 0 의 산술은 ComparisonClauseEditor 의 inline 셀렉트가 담당. 2-deep 케이스는 depth >= 1 에서만 노출.
+            .filter((k) => k !== 'binop' || (canNestBinop && currentDepth >= 1))
             .map((k) => (
               <SelectItem key={k} value={k}>
                 {KIND_LABELS[k]}
@@ -152,26 +153,6 @@ export function ExpressionOperandPicker({
           currentDepth={currentDepth + 1}
           idPrefix={idPrefix}
         />
-      )}
-
-      {canNestBinop && value !== undefined && value.kind !== 'binop' && (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="w-full"
-          onClick={() =>
-            onChange({
-              kind: 'binop',
-              op: '+',
-              left: value,
-              right: { kind: 'literal', value: 0 },
-            })
-          }
-        >
-          <Plus className="mr-1 h-3 w-3" />
-          산술 계산으로 묶기 (+ − × ÷)
-        </Button>
       )}
     </div>
   );
