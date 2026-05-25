@@ -42,9 +42,20 @@ export function detectCellTypeKind(
   if (rowIds.length === 0) return 'unsupported';
   if (colIndex === undefined) return 'unsupported';
 
-  const kinds = rowIds.map((rid) => classifySingleCell(question, rid, colIndex));
-  if (kinds.some((k) => k === 'unsupported')) return 'unsupported';
+  let first: CellTypeKind | null = null;
+  for (const rid of rowIds) {
+    const k = classifySingleCell(question, rid, colIndex);
+    if (k === 'unsupported') return 'unsupported';
+    if (first === null) {
+      first = k;
+      continue;
+    }
+    if (k !== first) return 'mixed';
+  }
+  return first ?? 'unsupported';
+}
 
-  const first = kinds[0];
-  return kinds.every((k) => k === first) ? first : 'mixed';
+/** 값 비교 UI 를 켤 수 있는 셀 종류인지 판정. */
+export function isValueComparableKind(kind: CellTypeKind): boolean {
+  return kind === 'numeric-input' || kind === 'option';
 }
