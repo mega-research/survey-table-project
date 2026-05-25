@@ -7,6 +7,7 @@ import { Database, Pencil, Plus, Trash2, Upload } from 'lucide-react';
 import {
   copySavedLookupToSurveyAction,
   createSavedLookupAction,
+  dedupeSurveyLookupsAction,
   deleteSavedLookupAction,
   listSavedLookupsAction,
   updateSavedLookupAction,
@@ -26,6 +27,20 @@ interface CsvImportResult {
 
 export function LookupLibrarySection() {
   const surveyId = useSurveyBuilderStore((s) => s.currentSurvey.id);
+  const surveyLookups = useSurveyBuilderStore((s) => s.currentSurvey.lookups ?? []);
+  const refetchSurvey = useSurveyBuilderStore((s) => s.refetchSurvey);
+
+  // 사본 중복 수 — sourceSavedLookupId 별로 1개 초과면 dedupe 대상
+  const duplicateCount = (() => {
+    const seen = new Set<string>();
+    let dupes = 0;
+    for (const l of surveyLookups) {
+      if (!l.sourceSavedLookupId) continue;
+      if (seen.has(l.sourceSavedLookupId)) dupes++;
+      else seen.add(l.sourceSavedLookupId);
+    }
+    return dupes;
+  })();
 
   const [items, setItems] = useState<SavedLookup[]>([]);
   const [editOpen, setEditOpen] = useState(false);
@@ -107,6 +122,18 @@ export function LookupLibrarySection() {
     }
   };
 
+  const handleDedupe = async () => {
+    if (!surveyId) return;
+    if (!confirm(`이 설문의 LUT 사본 ${duplicateCount}개를 정리합니다. 참조하는 조건도 자동으로 재매핑됩니다. 진행할까요?`)) return;
+    try {
+      const result = await dedupeSurveyLookupsAction(surveyId);
+      await refetchSurvey();
+      alert(`사본 ${result.removedCount}개 제거, 조건 ${result.remappedQuestions}개 재매핑 완료`);
+    } catch (e) {
+      alert(`사본 정리에 실패했습니다: ${(e as Error).message ?? '알 수 없는 오류'}`);
+    }
+  };
+
   return (
     <div className="mt-3 border-t pt-3">
       <div className="flex items-center gap-2 px-3 py-2 text-sm font-semibold">
@@ -157,7 +184,7 @@ export function LookupLibrarySection() {
         )}
       </ul>
 
-      <div className="flex gap-2 px-3 pt-1">
+      <div className="flex flex-wrap gap-2 px-3 pt-1">
         <Button variant="outline" size="sm" onClick={handleNew}>
           <Plus size={12} className="mr-1" />새 LUT
         </Button>
@@ -165,6 +192,17 @@ export function LookupLibrarySection() {
           <Upload size={12} className="mr-1" />
           엑셀 가져오기
         </Button>
+        {duplicateCount > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void handleDedupe()}
+            className="text-amber-700 hover:bg-amber-50"
+          >
+            <Trash2 size={12} className="mr-1" />
+            사본 정리 ({duplicateCount})
+          </Button>
+        )}
       </div>
 
       {/* 모달은 매번 새로 마운트 — useState lazy init 이 stale 해지지 않도록 */}

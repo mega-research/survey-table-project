@@ -7,9 +7,17 @@ import { nanoid } from 'nanoid';
 import { z } from 'zod';
 
 import { db } from '@/db';
-import { savedLookups, surveys } from '@/db/schema';
+import { questions, savedLookups, surveys } from '@/db/schema';
 import { requireAuth } from '@/lib/auth';
-import type { SavedLookup, SurveyLookup } from '@/types/survey';
+import type {
+  ExpressionClause,
+  ExpressionConditionConfig,
+  ExpressionOperand,
+  QuestionCondition,
+  QuestionConditionGroup,
+  SavedLookup,
+  SurveyLookup,
+} from '@/types/survey';
 
 // ========================
 // 입력 검증 스키마
@@ -351,6 +359,192 @@ export async function deleteSurveyLookupAction(
     .where(eq(surveys.id, surveyId));
 
   revalidatePath(`/admin/surveys/${surveyId}`);
+}
+
+// ========================
+// 사본 정리 (중복 dedupe)
+// ========================
+//
+// 과거 dedupe 로직이 없던 시기에 같은 보관함 LUT 가 여러 번 추가되어 사본이 쌓인 경우를
+// 정리. 같은 sourceSavedLookupId 의 사본들 중 첫 번째를 canonical 로 남기고 나머지 삭제.
+// 조건 에디터의 displayCondition 안의 surveyLookupId 참조도 canonical 로 재매핑.
+//
+// sourceSavedLookupId 가 없는 수동 LUT 는 dedupe 대상이 아니라 그대로 보존.
+
+function remapLookupIdInOperand(
+  operand: ExpressionOperand,
+  remap: Map<string, string>,
+): ExpressionOperand {
+  switch (operand.kind) {
+    case 'lookup': {
+      const next = remap.get(operand.surveyLookupId);
+      return next ? { ...operand, surveyLookupId: next } : operand;
+    }
+    case 'binop':
+      return {
+        ...operand,
+        left: remapLookupIdInOperand(operand.left, remap),
+        right: remapLookupIdInOperand(operand.right, remap),
+      };
+    default:
+      return operand;
+  }
+}
+
+function remapLookupIdInClause(
+  clause: ExpressionClause,
+  remap: Map<string, string>,
+): ExpressionClause {
+  if (clause.kind === 'comparison') {
+    return {
+      kind: 'comparison',
+      comparison: {
+        ...clause.comparison,
+        left: remapLookupIdInOperand(clause.comparison.left, remap),
+        right: remapLookupIdInOperand(clause.comparison.right, remap),
+      },
+    };
+  }
+  return {
+    kind: 'group',
+    group: remapLookupIdInExpressionConfig(clause.group, remap),
+  };
+}
+
+function remapLookupIdInExpressionConfig(
+  config: ExpressionConditionConfig,
+  remap: Map<string, string>,
+): ExpressionConditionConfig {
+  return {
+    ...config,
+    clauses: config.clauses.map((c) => remapLookupIdInClause(c, remap)),
+  };
+}
+
+function remapLookupIdInCondition(
+  condition: QuestionCondition,
+  remap: Map<string, string>,
+): QuestionCondition {
+  let next = condition;
+  const tcRight = condition.tableConditions?.numericComparison?.right;
+  if (tcRight?.kind === 'lookup') {
+    const remapped = remap.get(tcRight.surveyLookupId);
+    if (remapped) {
+      next = {
+        ...next,
+        tableConditions: {
+          ...next.tableConditions!,
+          numericComparison: {
+            ...next.tableConditions!.numericComparison!,
+            right: { ...tcRight, surveyLookupId: remapped },
+          },
+        },
+      };
+    }
+  }
+  const acRight = condition.additionalConditions?.numericComparison?.right;
+  if (acRight?.kind === 'lookup') {
+    const remapped = remap.get(acRight.surveyLookupId);
+    if (remapped) {
+      next = {
+        ...next,
+        additionalConditions: {
+          ...next.additionalConditions!,
+          numericComparison: {
+            ...next.additionalConditions!.numericComparison!,
+            right: { ...acRight, surveyLookupId: remapped },
+          },
+        },
+      };
+    }
+  }
+  if (condition.expressionConfig) {
+    next = {
+      ...next,
+      expressionConfig: remapLookupIdInExpressionConfig(condition.expressionConfig, remap),
+    };
+  }
+  return next;
+}
+
+function remapLookupIdInConditionGroup(
+  group: QuestionConditionGroup,
+  remap: Map<string, string>,
+): QuestionConditionGroup {
+  return {
+    ...group,
+    conditions: group.conditions.map((c) => remapLookupIdInCondition(c, remap)),
+  };
+}
+
+export async function dedupeSurveyLookupsAction(surveyId: string): Promise<{
+  removedCount: number;
+  remappedQuestions: number;
+}> {
+  await requireAuth();
+
+  const survey = await db.query.surveys.findFirst({
+    where: eq(surveys.id, surveyId),
+    columns: { lookups: true },
+  });
+  if (!survey) {
+    throw new Error('설문을 찾을 수 없습니다.');
+  }
+
+  const list = survey.lookups ?? [];
+
+  // sourceSavedLookupId 별로 canonical(첫 번째) 선정. 수동 LUT(undefined) 는 dedupe 안 함.
+  const canonicalBySaved = new Map<string, string>(); // sourceSavedLookupId → canonical surveyLookup id
+  const remap = new Map<string, string>(); // deletedId → canonicalId
+  const keep: SurveyLookup[] = [];
+
+  for (const lut of list) {
+    if (!lut.sourceSavedLookupId) {
+      keep.push(lut);
+      continue;
+    }
+    const canonical = canonicalBySaved.get(lut.sourceSavedLookupId);
+    if (canonical) {
+      remap.set(lut.id, canonical);
+    } else {
+      canonicalBySaved.set(lut.sourceSavedLookupId, lut.id);
+      keep.push(lut);
+    }
+  }
+
+  if (remap.size === 0) {
+    return { removedCount: 0, remappedQuestions: 0 };
+  }
+
+  // 영향받는 질문들의 displayCondition 재매핑
+  const allQuestions = await db.query.questions.findMany({
+    where: eq(questions.surveyId, surveyId),
+    columns: { id: true, displayCondition: true },
+  });
+
+  let remappedQuestions = 0;
+  await db.transaction(async (tx) => {
+    await tx
+      .update(surveys)
+      .set({ lookups: keep, updatedAt: new Date() })
+      .where(eq(surveys.id, surveyId));
+
+    for (const q of allQuestions) {
+      if (!q.displayCondition) continue;
+      const remapped = remapLookupIdInConditionGroup(q.displayCondition, remap);
+      // 변경 없으면 skip
+      if (JSON.stringify(remapped) === JSON.stringify(q.displayCondition)) continue;
+      await tx
+        .update(questions)
+        .set({ displayCondition: remapped, updatedAt: new Date() })
+        .where(eq(questions.id, q.id));
+      remappedQuestions++;
+    }
+  });
+
+  revalidatePath(`/admin/surveys/${surveyId}`);
+  revalidatePath(`/admin/surveys/${surveyId}/edit`);
+  return { removedCount: remap.size, remappedQuestions };
 }
 
 // ========================
