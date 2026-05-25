@@ -128,6 +128,8 @@ export function LookupEditModal({ isOpen, initialValue, onClose, onSave }: Props
     return null;
   };
 
+  const [saving, setSaving] = useState(false);
+
   const handleSave = async () => {
     const err = validate();
     if (err) {
@@ -142,14 +144,21 @@ export function LookupEditModal({ isOpen, initialValue, onClose, onSave }: Props
       for (const c of columns) out[c] = String(r[c] ?? '').trim();
       return out;
     });
-    await onSave({
-      name: name.trim(),
-      description: description.trim() || undefined,
-      category,
-      tags: initialValue?.tags ?? [],
-      columns: columns.map((c) => c.trim()),
-      rows: normalizedRows,
-    });
+    setSaving(true);
+    try {
+      await onSave({
+        name: name.trim(),
+        description: description.trim() || undefined,
+        category,
+        tags: initialValue?.tags ?? [],
+        columns: columns.map((c) => c.trim()),
+        rows: normalizedRows,
+      });
+    } catch (e) {
+      setError((e as Error).message ?? '저장에 실패했습니다');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -245,10 +254,12 @@ export function LookupEditModal({ isOpen, initialValue, onClose, onSave }: Props
         </div>
 
         <DialogFooter>
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="ghost" onClick={onClose} disabled={saving}>
             취소
           </Button>
-          <Button onClick={handleSave}>저장</Button>
+          <Button onClick={handleSave} disabled={saving}>
+            {saving ? '저장 중…' : '저장'}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

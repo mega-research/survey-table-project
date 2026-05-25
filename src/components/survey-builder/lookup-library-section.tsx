@@ -166,17 +166,22 @@ export function LookupLibrarySection() {
         </Button>
       </div>
 
-      <LookupEditModal
-        isOpen={editOpen}
-        initialValue={editInitial}
-        onClose={closeEdit}
-        onSave={handleSave}
-      />
-      <LookupCsvImport
-        isOpen={csvOpen}
-        onClose={() => setCsvOpen(false)}
-        onImport={handleCsvImported}
-      />
+      {/* 모달은 매번 새로 마운트 — useState lazy init 이 stale 해지지 않도록 */}
+      {editOpen && (
+        <LookupEditModal
+          isOpen={editOpen}
+          initialValue={editInitial}
+          onClose={closeEdit}
+          onSave={handleSave}
+        />
+      )}
+      {csvOpen && (
+        <LookupCsvImport
+          isOpen={csvOpen}
+          onClose={() => setCsvOpen(false)}
+          onImport={handleCsvImported}
+        />
+      )}
     </div>
   );
 }

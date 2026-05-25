@@ -88,11 +88,13 @@ export function LookupSelector({ value, onChange }: Props) {
           이 설문에 등록된 LUT 이 없습니다. 보관함에서 불러오거나 직접 만드세요.
         </div>
       )}
-      <LookupEditModal
-        isOpen={editOpen}
-        onClose={() => setEditOpen(false)}
-        onSave={handleQuickCreate}
-      />
+      {editOpen && (
+        <LookupEditModal
+          isOpen={editOpen}
+          onClose={() => setEditOpen(false)}
+          onSave={handleQuickCreate}
+        />
+      )}
     </div>
   );
 }
