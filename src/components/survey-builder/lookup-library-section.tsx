@@ -112,9 +112,6 @@ export function LookupLibrarySection() {
         <Database size={14} />
         외부 데이터
       </div>
-      <div className="text-muted-foreground px-3 pb-2 text-xs">
-        모든 설문에서 재사용 가능한 LUT 보관함입니다. "이 설문에 추가" 를 눌러야 조건 편집에서 선택 가능합니다.
-      </div>
 
       <ul className="space-y-1 px-3 pb-2">
         {items.length === 0 ? (
@@ -146,10 +143,12 @@ export function LookupLibrarySection() {
                 </button>
                 <button
                   type="button"
-                  className="text-xs text-blue-600 hover:underline"
+                  className="text-blue-600 hover:text-blue-700"
                   onClick={() => void handleAddToSurvey(lut.id)}
+                  title="이 설문에 추가"
+                  aria-label="이 설문에 추가"
                 >
-                  이 설문에 추가
+                  <Plus size={14} />
                 </button>
               </div>
             </li>
