@@ -67,8 +67,18 @@ vi.mock('drizzle-orm', async (importOriginal) => {
       __table: (col as { __table?: string })?.__table,
       value,
     }),
+    // sql tagged template 을 strings + values 로 보존 → db.execute mock 이 패턴 식별 가능
     sql: (() => {
-      const fn = (..._args: unknown[]) => ({ __sql: true });
+      const fn = (strings: TemplateStringsArray | unknown, ...values: unknown[]) => {
+        if (Array.isArray(strings)) {
+          return {
+            __sql: true,
+            strings: Array.from(strings as readonly string[]),
+            values,
+          };
+        }
+        return { __sql: true, strings: [], values: [] };
+      };
       return fn as unknown as typeof actual.sql;
     })(),
   };
@@ -216,6 +226,43 @@ vi.mock('@/db', () => {
     transaction: vi.fn(
       async (fn: (tx: typeof dbObj) => Promise<unknown>) => fn(dbObj),
     ),
+    // execute(sql`...`) — SQL 문자열의 키워드로 update/delete propagation 식별 후 시뮬레이션
+    execute: vi.fn(async (sqlObj: { __sql: true; strings: string[]; values: unknown[] }) => {
+      if (!sqlObj?.__sql) return [];
+      const raw = sqlObj.strings.join(' ').toLowerCase();
+      // delete propagation: lookups 에서 entry 제거 (IS DISTINCT FROM 패턴)
+      if (raw.includes('is distinct from')) {
+        const savedLookupId = sqlObj.values[0] as string;
+        for (const [sid, survey] of h.surveyStore.entries()) {
+          const filtered = survey.lookups.filter(
+            (l) => l.sourceSavedLookupId !== savedLookupId,
+          );
+          h.surveyStore.set(sid, { ...survey, lookups: filtered });
+        }
+        return [];
+      }
+      // update propagation: values = [savedLookupId, name, columnsJson, rowsJson]
+      if (raw.includes('case') && raw.includes('jsonb_build_object')) {
+        const [savedLookupId, name, columnsJson, rowsJson] = sqlObj.values as [
+          string,
+          string,
+          string,
+          string,
+        ];
+        const newColumns = JSON.parse(columnsJson);
+        const newRows = JSON.parse(rowsJson);
+        for (const [sid, survey] of h.surveyStore.entries()) {
+          const updated = survey.lookups.map((l) =>
+            l.sourceSavedLookupId === savedLookupId
+              ? { ...l, name, columns: newColumns, rows: newRows }
+              : l,
+          );
+          h.surveyStore.set(sid, { ...survey, lookups: updated });
+        }
+        return [];
+      }
+      return [];
+    }),
   };
 
   return { db: dbObj };
@@ -356,5 +403,85 @@ describe('lookup-actions integration', () => {
     const remaining = await listSavedLookupsAction({ category: 'finance' });
     expect(remaining.find((l) => l.id === created.id)).toBeUndefined();
     expect(h.savedLookupStore.get(created.id)).toBeUndefined();
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // 보관함 → 설문 자동 동기화
+  // ─────────────────────────────────────────────────────────────
+
+  it('copySavedLookupToSurveyAction: 같은 sourceSavedLookupId 중복 추가 시 갱신만 (usageCount 증가 없음)', async () => {
+    const created = await createSavedLookupAction({
+      name: 'lut-1',
+      category: 'finance',
+      tags: [],
+      columns: ['대륙', 'value'],
+      rows: [{ 대륙: '유럽', value: 1 }],
+    });
+    await copySavedLookupToSurveyAction(TEST_SURVEY_ID, created.id);
+
+    // 보관함 갱신 후 두 번째 copy → 사본 갱신만, 신규 추가 안 됨
+    h.savedLookupStore.set(created.id, {
+      ...h.savedLookupStore.get(created.id)!,
+      rows: [
+        { 대륙: '유럽', value: 1 },
+        { 대륙: '북미', value: 2 },
+      ],
+    });
+    await copySavedLookupToSurveyAction(TEST_SURVEY_ID, created.id);
+
+    const survey = h.surveyStore.get(TEST_SURVEY_ID)!;
+    // 사본은 여전히 1건
+    expect(survey.lookups).toHaveLength(1);
+    // rows 는 최신 보관함 데이터로 갱신
+    expect(survey.lookups[0].rows).toHaveLength(2);
+    // usageCount 는 최초 1회만 증가
+    expect(h.savedLookupStore.get(created.id)!.usageCount).toBe(1);
+  });
+
+  it('updateSavedLookupAction: 보관함 갱신이 모든 설문 사본에 자동 전파', async () => {
+    const created = await createSavedLookupAction({
+      name: 'lut-1',
+      category: 'finance',
+      tags: [],
+      columns: ['대륙', 'value'],
+      rows: [{ 대륙: '유럽', value: 1 }],
+    });
+    await copySavedLookupToSurveyAction(TEST_SURVEY_ID, created.id);
+
+    // 보관함 수정 → 설문 사본도 갱신
+    await import('@/actions/lookup-actions').then((m) =>
+      m.updateSavedLookupAction(created.id, {
+        name: 'lut-1-renamed',
+        category: 'finance',
+        tags: [],
+        columns: ['대륙', 'value', 'extra'],
+        rows: [{ 대륙: '유럽', value: 100, extra: 'x' }],
+      }),
+    );
+
+    const survey = h.surveyStore.get(TEST_SURVEY_ID)!;
+    expect(survey.lookups).toHaveLength(1);
+    expect(survey.lookups[0].name).toBe('lut-1-renamed');
+    expect(survey.lookups[0].columns).toEqual(['대륙', 'value', 'extra']);
+    expect(survey.lookups[0].rows[0]).toEqual({ 대륙: '유럽', value: 100, extra: 'x' });
+  });
+
+  it('deleteSavedLookupAction: 보관함 삭제 시 모든 설문 사본도 자동 cleanup', async () => {
+    const created = await createSavedLookupAction({
+      name: 'lut-1',
+      category: 'finance',
+      tags: [],
+      columns: ['대륙', 'value'],
+      rows: [{ 대륙: '유럽', value: 1 }],
+    });
+    await copySavedLookupToSurveyAction(TEST_SURVEY_ID, created.id);
+
+    const before = h.surveyStore.get(TEST_SURVEY_ID)!;
+    expect(before.lookups).toHaveLength(1);
+
+    await deleteSavedLookupAction(created.id);
+
+    const after = h.surveyStore.get(TEST_SURVEY_ID)!;
+    expect(after.lookups).toHaveLength(0);
   });
 });

@@ -86,6 +86,10 @@ export async function createSavedLookupAction(
 }
 
 // 보관함 LUT 수정
+//
+// 보관함 마스터를 SoT 로 간주. 갱신 후 모든 설문의 lookups jsonb 에서 같은
+// sourceSavedLookupId 사본의 name/columns/rows 를 SQL 로 일괄 동기화.
+// (publish 된 설문의 snapshot 은 별도 freeze 되어 있어 응답자 화면에 영향 없음)
 export async function updateSavedLookupAction(
   id: string,
   input: Partial<SavedLookupInput>,
@@ -108,13 +112,48 @@ export async function updateSavedLookupAction(
     throw new Error('보관함 LUT 를 찾을 수 없습니다.');
   }
 
+  // 모든 설문의 lookups 사본 자동 동기화
+  await db.execute(sql`
+    UPDATE surveys
+    SET lookups = (
+      SELECT jsonb_agg(
+        CASE
+          WHEN entry->>'sourceSavedLookupId' = ${id}
+          THEN entry
+               || jsonb_build_object('name', ${row.name}::text)
+               || jsonb_build_object('columns', ${JSON.stringify(row.columns)}::jsonb)
+               || jsonb_build_object('rows', ${JSON.stringify(row.rows)}::jsonb)
+          ELSE entry
+        END
+      )
+      FROM jsonb_array_elements(lookups) entry
+    ),
+    updated_at = NOW()
+    WHERE lookups @> jsonb_build_array(jsonb_build_object('sourceSavedLookupId', ${id}))
+  `);
+
   revalidatePath('/admin/surveys');
   return toSavedLookup(row);
 }
 
 // 보관함 LUT 삭제
+//
+// 마스터 삭제 시 같은 sourceSavedLookupId 를 참조하는 모든 설문의 사본도 일괄 제거.
+// (publish 된 설문의 snapshot 은 별도 freeze 되어 있어 응답자 화면에 영향 없음)
 export async function deleteSavedLookupAction(id: string): Promise<void> {
   await requireAuth();
+
+  // 모든 설문의 lookups 에서 매칭되는 사본 제거 (삭제 전에 — FK 제약은 없지만 일관성 위해)
+  await db.execute(sql`
+    UPDATE surveys
+    SET lookups = (
+      SELECT COALESCE(jsonb_agg(entry), '[]'::jsonb)
+      FROM jsonb_array_elements(lookups) entry
+      WHERE entry->>'sourceSavedLookupId' IS DISTINCT FROM ${id}
+    ),
+    updated_at = NOW()
+    WHERE lookups @> jsonb_build_array(jsonb_build_object('sourceSavedLookupId', ${id}))
+  `);
 
   await db.delete(savedLookups).where(eq(savedLookups.id, id));
   revalidatePath('/admin/surveys');
@@ -124,7 +163,10 @@ export async function deleteSavedLookupAction(id: string): Promise<void> {
 // 설문 LUT (surveys.lookups jsonb)
 // ========================
 
-// 보관함 → 설문으로 LUT 복사 (snapshot freeze + usageCount 증가)
+// 보관함 → 설문으로 LUT 추가.
+//
+// 같은 sourceSavedLookupId 사본이 이미 있으면 중복 추가하지 않고 데이터만 최신 보관함 값으로 갱신.
+// (사용자가 같은 LUT 를 여러 번 "이 설문에 추가" 눌러도 사본이 쌓이지 않음)
 export async function copySavedLookupToSurveyAction(
   surveyId: string,
   savedLookupId: string,
@@ -138,14 +180,6 @@ export async function copySavedLookupToSurveyAction(
     throw new Error('보관함 LUT 를 찾을 수 없습니다.');
   }
 
-  const newLookup: SurveyLookup = {
-    id: nanoid(),
-    name: saved.name,
-    sourceSavedLookupId: saved.id,
-    columns: saved.columns,
-    rows: saved.rows,
-  };
-
   const survey = await db.query.surveys.findFirst({
     where: eq(surveys.id, surveyId),
     columns: { lookups: true },
@@ -154,7 +188,35 @@ export async function copySavedLookupToSurveyAction(
     throw new Error('설문을 찾을 수 없습니다.');
   }
 
-  const next: SurveyLookup[] = [...(survey.lookups ?? []), newLookup];
+  const list = survey.lookups ?? [];
+  const existing = list.find((l) => l.sourceSavedLookupId === savedLookupId);
+
+  if (existing) {
+    // 이미 등록된 사본 → 데이터만 최신 보관함 값으로 갱신 (id 보존, usageCount 증가 안 함)
+    const updated: SurveyLookup = {
+      ...existing,
+      name: saved.name,
+      columns: saved.columns,
+      rows: saved.rows,
+    };
+    const next = list.map((l) => (l.id === existing.id ? updated : l));
+    await db
+      .update(surveys)
+      .set({ lookups: next, updatedAt: new Date() })
+      .where(eq(surveys.id, surveyId));
+    revalidatePath(`/admin/surveys/${surveyId}`);
+    return updated;
+  }
+
+  // 신규 사본 추가 + usageCount 증가
+  const newLookup: SurveyLookup = {
+    id: nanoid(),
+    name: saved.name,
+    sourceSavedLookupId: saved.id,
+    columns: saved.columns,
+    rows: saved.rows,
+  };
+  const next = [...list, newLookup];
 
   await db.transaction(async (tx) => {
     await tx
