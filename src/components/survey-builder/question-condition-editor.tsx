@@ -2,7 +2,7 @@
 
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useState } from 'react';
 
-import { AlertCircle, ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react';
+import { AlertCircle, ChevronDown, ChevronRight, Plus, Trash2, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -18,24 +18,11 @@ import {
   QuestionConditionGroup,
 } from '@/types/survey';
 import { getMergedRowIds, getRowMergeInfo } from '@/utils/table-merge-helpers';
+import { detectCellTypeKind } from '@/utils/cell-type-detector';
 
 import { NumericComparisonEditor } from './numeric-comparison-editor';
 import { TableOptionSelector } from './table-option-selector';
 
-// 셀이 숫자 입력(input + inputType: 'number') 타입인지 판별하는 헬퍼
-// rowIds 의 첫 번째 행의 cellColumnIndex 번 셀을 기준으로 판단한다.
-function isNumericInputCell(
-  sourceQuestion: Question | undefined,
-  rowIds: string[],
-  cellColumnIndex: number | undefined,
-): boolean {
-  if (!sourceQuestion || cellColumnIndex === undefined) return false;
-  if (rowIds.length === 0) return false;
-  const row = sourceQuestion.tableRowsData?.find((r) => r.id === rowIds[0]);
-  if (!row) return false;
-  const cell = row.cells[cellColumnIndex];
-  return cell?.type === 'input' && cell.inputType === 'number';
-}
 
 interface QuestionConditionEditorProps {
   question: Question;
@@ -528,54 +515,135 @@ export const QuestionConditionEditor = forwardRef<
                               <p className="text-xs text-gray-500">0부터 시작 (0 = 첫 번째 열)</p>
                             </div>
 
-                            {/* 확인할 옵션 선택 (숫자 셀이면 NumericComparisonEditor, 아니면 TableOptionSelector) */}
+                            {/* 값 비교 조건 — 펼치기 패턴 */}
                             {condition.tableConditions?.rowIds &&
                               condition.tableConditions.rowIds.length > 0 &&
                               condition.tableConditions?.cellColumnIndex !== undefined &&
-                              sourceQuestion &&
-                              (isNumericInputCell(
-                                sourceQuestion,
-                                condition.tableConditions.rowIds,
-                                condition.tableConditions.cellColumnIndex,
-                              ) ? (
-                                <NumericComparisonEditor
-                                  idPrefix={`numeric-${condition.id}`}
-                                  sourceQuestionId={condition.sourceQuestionId}
-                                  value={condition.tableConditions.numericComparison}
-                                  onChange={(nc) => {
-                                    updateCondition(condition.id, {
-                                      tableConditions: {
-                                        ...condition.tableConditions,
-                                        rowIds: condition.tableConditions?.rowIds || [],
-                                        checkType: condition.tableConditions?.checkType || 'any',
-                                        cellColumnIndex: condition.tableConditions?.cellColumnIndex,
-                                        expectedValues: undefined,
-                                        numericComparison: nc,
-                                      },
-                                    });
-                                  }}
-                                />
-                              ) : (
-                                <TableOptionSelector
-                                  question={sourceQuestion}
-                                  rowIds={condition.tableConditions.rowIds}
-                                  colIndex={condition.tableConditions.cellColumnIndex}
-                                  expectedValues={condition.tableConditions.expectedValues}
-                                  onChange={(values) => {
-                                    updateCondition(condition.id, {
-                                      tableConditions: {
-                                        ...condition.tableConditions,
-                                        rowIds: condition.tableConditions?.rowIds || [],
-                                        checkType: condition.tableConditions?.checkType || 'any',
-                                        cellColumnIndex: condition.tableConditions?.cellColumnIndex,
-                                        expectedValues: values,
-                                        numericComparison: undefined,
-                                      },
-                                    });
-                                  }}
-                                  multipleRows={condition.tableConditions.rowIds.length > 1}
-                                />
-                              ))}
+                              (() => {
+                                const tc = condition.tableConditions!;
+                                const kind = detectCellTypeKind(
+                                  sourceQuestion,
+                                  tc.rowIds,
+                                  tc.cellColumnIndex,
+                                );
+                                const hasComparison =
+                                  !!tc.expectedValues || !!tc.numericComparison;
+                                const disabled = kind === 'mixed' || kind === 'unsupported' || kind === 'text-input';
+
+                                if (!hasComparison) {
+                                  return (
+                                    <div className="space-y-1">
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        disabled={disabled}
+                                        onClick={() => {
+                                          if (kind === 'option') {
+                                            updateCondition(condition.id, {
+                                              tableConditions: {
+                                                ...tc,
+                                                expectedValues: [],
+                                                numericComparison: undefined,
+                                              },
+                                            });
+                                          } else if (kind === 'numeric-input') {
+                                            updateCondition(condition.id, {
+                                              tableConditions: {
+                                                ...tc,
+                                                expectedValues: undefined,
+                                                numericComparison: {
+                                                  operator: '==',
+                                                  comparand: { kind: 'literal', value: 0 },
+                                                },
+                                              },
+                                            });
+                                          }
+                                        }}
+                                      >
+                                        <Plus className="mr-1 h-3 w-3" />
+                                        값 비교 조건 추가
+                                      </Button>
+                                      {kind === 'mixed' && (
+                                        <p className="text-xs text-amber-700">
+                                          선택한 행들의 셀 타입이 달라 값 비교를 적용할 수 없습니다. 행 그룹을 나눠 별도 조건으로 만드세요.
+                                        </p>
+                                      )}
+                                      {kind === 'text-input' && (
+                                        <p className="text-xs text-slate-500">
+                                          텍스트 일치 매칭은 다음 업데이트에서 제공됩니다. 지금은 응답 유무로만 검사합니다.
+                                        </p>
+                                      )}
+                                      {kind === 'unsupported' && (
+                                        <p className="text-xs text-slate-500">
+                                          선택한 셀 타입은 값 비교를 지원하지 않습니다.
+                                        </p>
+                                      )}
+                                    </div>
+                                  );
+                                }
+
+                                return (
+                                  <div className="space-y-2 rounded-md border border-slate-200 p-3">
+                                    <div className="flex items-center justify-between">
+                                      <Label className="text-sm font-medium">값 비교 조건</Label>
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => {
+                                          updateCondition(condition.id, {
+                                            tableConditions: {
+                                              ...tc,
+                                              expectedValues: undefined,
+                                              numericComparison: undefined,
+                                            },
+                                          });
+                                        }}
+                                        aria-label="값 비교 조건 해제"
+                                      >
+                                        <X className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+                                    {kind === 'numeric-input' ? (
+                                      <NumericComparisonEditor
+                                        idPrefix={`numeric-${condition.id}`}
+                                        value={tc.numericComparison}
+                                        onChange={(nc) => {
+                                          updateCondition(condition.id, {
+                                            tableConditions: {
+                                              ...tc,
+                                              expectedValues: undefined,
+                                              numericComparison: nc,
+                                            },
+                                          });
+                                        }}
+                                      />
+                                    ) : kind === 'option' && sourceQuestion ? (
+                                      <TableOptionSelector
+                                        question={sourceQuestion}
+                                        rowIds={tc.rowIds}
+                                        colIndex={tc.cellColumnIndex}
+                                        expectedValues={tc.expectedValues}
+                                        onChange={(values) => {
+                                          updateCondition(condition.id, {
+                                            tableConditions: {
+                                              ...tc,
+                                              expectedValues: values,
+                                              numericComparison: undefined,
+                                            },
+                                          });
+                                        }}
+                                        multipleRows={tc.rowIds.length > 1}
+                                      />
+                                    ) : (
+                                      <p className="text-xs text-amber-700">
+                                        이 비교 조건은 더 이상 셀 타입과 일치하지 않습니다. [x] 로 해제하고 다시 추가해주세요.
+                                      </p>
+                                    )}
+                                  </div>
+                                );
+                              })()}
                           </>
                         )}
 
@@ -675,11 +743,12 @@ export const QuestionConditionEditor = forwardRef<
                                       (condition.tableConditions?.rowIds?.length ?? 0) > 0
                                         ? (condition.tableConditions?.rowIds ?? [])
                                         : sourceQuestion.tableRowsData?.map((r) => r.id) || [];
-                                    return isNumericInputCell(
+                                    const acKind = detectCellTypeKind(
                                       sourceQuestion,
                                       effectiveRowIds,
                                       ac.cellColumnIndex,
-                                    ) ? (
+                                    );
+                                    return acKind === 'numeric-input' ? (
                                       <NumericComparisonEditor
                                         idPrefix={`numeric-additional-${condition.id}`}
                                         sourceQuestionId={condition.sourceQuestionId}
