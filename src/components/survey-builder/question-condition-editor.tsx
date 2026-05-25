@@ -23,7 +23,6 @@ import { detectCellTypeKind } from '@/utils/cell-type-detector';
 import { NumericComparisonEditor } from './numeric-comparison-editor';
 import { TableOptionSelector } from './table-option-selector';
 
-
 interface QuestionConditionEditorProps {
   question: Question;
   onUpdate: (conditionGroup: QuestionConditionGroup | undefined) => void;
@@ -796,7 +795,7 @@ export const QuestionConditionEditor = forwardRef<
                                           </Button>
                                           {acKind === 'mixed' && (
                                             <p className="text-xs text-amber-700">
-                                              선택한 행들의 셀 타입이 달라 값 비교를 적용할 수 없습니다.
+                                              선택한 행들의 셀 타입이 달라 값 비교를 적용할 수 없습니다. 행 그룹을 나눠 별도 조건으로 만드세요.
                                             </p>
                                           )}
                                           {acKind === 'text-input' && (
@@ -864,7 +863,7 @@ export const QuestionConditionEditor = forwardRef<
                                                 },
                                               });
                                             }}
-                                            helpText="선택한 옵션들 중 하나가 선택되었는지 확인합니다."
+                                            helpText="선택한 옵션들 중 하나가 선택되었는지 확인합니다. 비워두면 아무거나 선택되었는지만 확인합니다."
                                             multipleRows={
                                               (condition.tableConditions?.rowIds?.length ?? 0) > 1 ||
                                               (condition.tableConditions?.rowIds?.length ?? 0) === 0
