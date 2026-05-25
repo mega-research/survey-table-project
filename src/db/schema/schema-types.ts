@@ -176,12 +176,48 @@ export interface TableValidationRule {
   errorMessage?: string;
 }
 
+// expression 조건 모드 — operand 재귀 union
+export type ExpressionOperand =
+  | { kind: 'literal'; value: number | string }
+  | { kind: 'cell'; questionId: string; cellId: string }
+  | { kind: 'question'; questionId: string }
+  | {
+      kind: 'lookup';
+      surveyLookupId: string;
+      keyMapping: Array<{ lutKey: string; attrsKey: string }>;
+      valueColumn: string;
+    }
+  | { kind: 'attr'; attrsKey: string }
+  | {
+      kind: 'binop';
+      op: '+' | '-' | '*' | '/';
+      left: ExpressionOperand;
+      right: ExpressionOperand;
+    };
+
+export interface ExpressionComparison {
+  left: ExpressionOperand;
+  op: '==' | '!=' | '>' | '<' | '>=' | '<=';
+  right: ExpressionOperand;
+}
+
+export type ExpressionClause =
+  | { kind: 'comparison'; comparison: ExpressionComparison }
+  | { kind: 'group'; group: ExpressionConditionConfig };
+
+export interface ExpressionConditionConfig {
+  clauses: ExpressionClause[];
+  joinOps: Array<'AND' | 'OR'>;
+}
+
 // 질문 표시 조건
 export interface QuestionCondition {
   id: string;
   name?: string;
   sourceQuestionId: string;
   conditionType: 'value-match' | 'table-cell-check' | 'expression' | 'custom';
+  // conditionType === 'expression' 일 때만 사용
+  expressionConfig?: ExpressionConditionConfig;
   requiredValues?: string[];
   tableConditions?: {
     rowIds: string[];
