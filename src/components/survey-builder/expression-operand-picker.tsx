@@ -153,6 +153,26 @@ export function ExpressionOperandPicker({
           idPrefix={idPrefix}
         />
       )}
+
+      {canNestBinop && value !== undefined && value.kind !== 'binop' && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="w-full"
+          onClick={() =>
+            onChange({
+              kind: 'binop',
+              op: '+',
+              left: value,
+              right: { kind: 'literal', value: 0 },
+            })
+          }
+        >
+          <Plus className="mr-1 h-3 w-3" />
+          산술 계산으로 묶기 (+ − × ÷)
+        </Button>
+      )}
     </div>
   );
 }
