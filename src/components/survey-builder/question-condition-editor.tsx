@@ -20,6 +20,7 @@ import {
 import { detectCellTypeKind } from '@/utils/cell-type-detector';
 import { getMergedRowIds, getRowMergeInfo } from '@/utils/table-merge-helpers';
 
+import { ExpressionConditionEditor } from './expression-condition-editor';
 import { ValueComparisonExpander } from './value-comparison-expander';
 
 interface QuestionConditionEditorProps {
@@ -378,24 +379,24 @@ export const QuestionConditionEditor = forwardRef<
                           <select
                             id={`type-${condition.id}`}
                             value={condition.conditionType}
-                            onChange={(e) =>
+                            onChange={(e) => {
+                              const newType = e.target.value as
+                                | 'value-match'
+                                | 'table-cell-check'
+                                | 'expression'
+                                | 'custom';
                               updateCondition(condition.id, {
-                                conditionType: e.target.value as
-                                  | 'value-match'
-                                  | 'table-cell-check'
-                                  | 'expression'
-                                  | 'custom',
-                              })
-                            }
+                                conditionType: newType,
+                                ...(newType === 'expression' && !condition.expressionConfig
+                                  ? { expressionConfig: { clauses: [], joinOps: [] } }
+                                  : {}),
+                              });
+                            }}
                             className="w-full rounded-md border border-gray-300 p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                           >
                             <option value="value-match">값 일치 (radio, select, checkbox)</option>
                             <option value="table-cell-check">테이블 셀 체크 확인</option>
-                            <optgroup label="준비 중">
-                              <option value="expression" disabled>
-                                장기 계산식
-                              </option>
-                            </optgroup>
+                            <option value="expression">장기 계산식</option>
                           </select>
                         </div>
                       )}
@@ -684,9 +685,11 @@ export const QuestionConditionEditor = forwardRef<
                         )}
 
                       {condition.conditionType === 'expression' && (
-                        <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
-                          본 조건 타입은 다음 업데이트에서 제공됩니다.
-                        </div>
+                        <ExpressionConditionEditor
+                          config={condition.expressionConfig ?? { clauses: [], joinOps: [] }}
+                          onChange={(next) => updateCondition(condition.id, { expressionConfig: next })}
+                          idPrefix={`expr-${condition.id}`}
+                        />
                       )}
 
                       {/* 값 일치 조건 */}
