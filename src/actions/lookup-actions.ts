@@ -128,12 +128,13 @@ async function propagateSavedLookupUpdate(
   savedLookupId: string,
   next: { name: string; columns: string[]; rows: Array<Record<string, string | number>> },
 ): Promise<string[]> {
+  // PG 는 jsonb_build_object 의 value 인자 타입을 추론 못 함 → 명시적 ::text cast 필수
   const affected = await trx.execute<{ id: string }>(sql`
     UPDATE surveys
     SET lookups = (
       SELECT jsonb_agg(
         CASE
-          WHEN entry->>'sourceSavedLookupId' = ${savedLookupId}
+          WHEN entry->>'sourceSavedLookupId' = ${savedLookupId}::text
           THEN entry
                || jsonb_build_object('name', ${next.name}::text)
                || jsonb_build_object('columns', ${JSON.stringify(next.columns)}::jsonb)
@@ -144,7 +145,7 @@ async function propagateSavedLookupUpdate(
       FROM jsonb_array_elements(lookups) entry
     ),
     updated_at = NOW()
-    WHERE lookups @> jsonb_build_array(jsonb_build_object('sourceSavedLookupId', ${savedLookupId}))
+    WHERE lookups @> jsonb_build_array(jsonb_build_object('sourceSavedLookupId', ${savedLookupId}::text))
     RETURNING id
   `);
   return extractSurveyIds(affected);
@@ -160,10 +161,10 @@ async function propagateSavedLookupDelete(
     SET lookups = (
       SELECT COALESCE(jsonb_agg(entry), '[]'::jsonb)
       FROM jsonb_array_elements(lookups) entry
-      WHERE entry->>'sourceSavedLookupId' IS DISTINCT FROM ${savedLookupId}
+      WHERE entry->>'sourceSavedLookupId' IS DISTINCT FROM ${savedLookupId}::text
     ),
     updated_at = NOW()
-    WHERE lookups @> jsonb_build_array(jsonb_build_object('sourceSavedLookupId', ${savedLookupId}))
+    WHERE lookups @> jsonb_build_array(jsonb_build_object('sourceSavedLookupId', ${savedLookupId}::text))
     RETURNING id
   `);
   return extractSurveyIds(affected);
