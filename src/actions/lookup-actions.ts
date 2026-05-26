@@ -494,22 +494,30 @@ export async function dedupeSurveyLookupsAction(surveyId: string): Promise<{
 
   const list = survey.lookups ?? [];
 
-  // sourceSavedLookupId 별로 canonical(첫 번째) 선정. 수동 LUT(undefined) 는 dedupe 안 함.
-  const canonicalBySaved = new Map<string, string>(); // sourceSavedLookupId → canonical surveyLookup id
-  const remap = new Map<string, string>(); // deletedId → canonicalId
+  // sourceSavedLookupId 별 canonical 은 '가장 최근 사본'(배열 끝에 가까운 쪽).
+  // 사용자가 최근 추가/편집한 사본을 유지하는 직관과 일치. 수동 LUT(sourceSavedLookupId 없음) 는 dedupe 안 함.
+  // 1) 뒤에서부터 훑어서 sourceSavedLookupId 별 canonical id 결정
+  const canonicalBySaved = new Map<string, string>();
+  for (let i = list.length - 1; i >= 0; i--) {
+    const lut = list[i];
+    if (!lut.sourceSavedLookupId) continue;
+    if (!canonicalBySaved.has(lut.sourceSavedLookupId)) {
+      canonicalBySaved.set(lut.sourceSavedLookupId, lut.id);
+    }
+  }
+  // 2) 원래 순서를 유지하며 canonical 만 keep, 나머지는 remap
+  const remap = new Map<string, string>();
   const keep: SurveyLookup[] = [];
-
   for (const lut of list) {
     if (!lut.sourceSavedLookupId) {
       keep.push(lut);
       continue;
     }
-    const canonical = canonicalBySaved.get(lut.sourceSavedLookupId);
-    if (canonical) {
-      remap.set(lut.id, canonical);
-    } else {
-      canonicalBySaved.set(lut.sourceSavedLookupId, lut.id);
+    const canonicalId = canonicalBySaved.get(lut.sourceSavedLookupId)!;
+    if (lut.id === canonicalId) {
       keep.push(lut);
+    } else {
+      remap.set(lut.id, canonicalId);
     }
   }
 
