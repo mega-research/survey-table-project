@@ -23,3 +23,17 @@ export function ContactAttrsProvider({
 export function useContactAttrs(): Record<string, string> {
   return useContext(ContactAttrsContext);
 }
+
+/**
+ * 빌더 테스트 모드 전용 attrs Proxy.
+ * 키가 존재(빈 문자열 포함)하면 실제 값 — 응답 페이지와 동일하게 표시.
+ * 미정의 키는 `[key]` placeholder 로 가시화 — 어떤 토큰이 비어있는지 운영자가 인지 가능.
+ */
+export function createPlaceholderAttrs(actual: Record<string, string>): Record<string, string> {
+  return new Proxy(actual, {
+    get(target, key) {
+      if (typeof key !== 'string') return undefined;
+      return Object.prototype.hasOwnProperty.call(target, key) ? target[key] : `[${key}]`;
+    },
+  }) as Record<string, string>;
+}

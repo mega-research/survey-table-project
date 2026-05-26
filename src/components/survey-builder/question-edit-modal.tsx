@@ -183,7 +183,12 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
       const hasBranchRule = question.options?.some((option) => option.branchRule) || false;
       setShowBranchSettings(hasBranchRule);
     }
-  }, [question]);
+  // deps 를 question?.id 로 좁힘 — question 객체 reference 가 바뀐다고 formData 를 reset 하면
+  // 모달 안에서 편집한 열/라벨/옵션이 zustand store 의 옛 값으로 덮어씌워진다.
+  // (cell-content-modal 이 셀 저장 시 store 를 부분 갱신 → question reference 변경 → 이 effect 재발화 회귀)
+  // 모달을 닫았다 다시 같은 질문으로 열면 새로 hydrate 되도록 isOpen 도 deps 에 포함.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [question?.id, isOpen]);
 
   // 검증 로직 (formDataRef로 최신 값 참조 — deps에서 formData 제거)
   const validateForm = useCallback(() => {

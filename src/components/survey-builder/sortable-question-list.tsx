@@ -47,6 +47,10 @@ import {
   findParentGroupId,
 } from '@/lib/group-ordering';
 import { deleteImagesFromR2 } from '@/lib/image-utils';
+import {
+  ContactAttrsProvider,
+  createPlaceholderAttrs,
+} from '@/lib/survey/contact-attrs-context';
 import { generateId, isEmptyHtml } from '@/lib/utils';
 import { sanitizeRichHtml } from '@/lib/sanitize';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
@@ -57,7 +61,6 @@ import { Question, QuestionGroup } from '@/types/survey';
 import { noop, estimateCardHeight, getQuestionTypeLabel } from './question-list-utils';
 import { QuestionPreview } from './question-preview';
 import { QuestionTestCard } from './question-test-card';
-import { SampleContactSelector } from './sample-contact-selector';
 import { GroupHeader } from './group-header';
 import { QuestionEditModal } from './question-edit-modal';
 
@@ -361,13 +364,9 @@ export function SortableQuestionList({
     if (isTestMode && !testModeEverActivated) setTestModeEverActivated(true);
   }, [isTestMode, testModeEverActivated]);
 
-  // 테스트 모드 진입 시 첫 컨택의 attrs 를 fetch — 본문의 {{변수}} 토큰 치환 + 분기 조건 평가 디폴트.
-  // 컨택 0건이거나 인증 실패 시 빈 객체 → substituteTokens 가 미해결 토큰을 빈 값으로 치환.
+  // 테스트 모드 진입 시 첫 컨택의 attrs 를 fetch — 본문의 {{변수}} 토큰 치환 + 분기 조건 평가에 사용.
+  // 컨택 0건/인증 실패/키 부재 시 아래 Proxy 가 `[key]` placeholder 로 폴백.
   const [defaultContactAttrs, setDefaultContactAttrs] = useState<Record<string, string>>({});
-  // SampleContactSelector 가 선택한 컨택 id + attrs (사용자가 직접 고른 값).
-  // 선택되어 있으면 default 보다 우선해서 사용. null 이면 default 사용.
-  const [sampleContactId, setSampleContactId] = useState<string | null>(null);
-  const [sampleAttrs, setSampleAttrs] = useState<Record<string, string> | null>(null);
   useEffect(() => {
     if (!isTestMode || !surveyId) return;
     let cancelled = false;
@@ -384,8 +383,11 @@ export function SortableQuestionList({
     };
   }, [isTestMode, surveyId]);
 
-  // SampleContactSelector 선택 우선, 없으면 첫 컨택 attrs.
-  const testContactAttrs = sampleAttrs ?? defaultContactAttrs;
+  // 빌더 테스트 모드용 attrs — 미정의 키는 `[key]` placeholder 로 가시화.
+  const testContactAttrs = useMemo(
+    () => createPlaceholderAttrs(defaultContactAttrs),
+    [defaultContactAttrs],
+  );
 
   // querySelector 스코프용 컨테이너 ref
   const editContainerRef = useRef<HTMLDivElement>(null);
@@ -706,7 +708,6 @@ export function SortableQuestionList({
       <QuestionTestCard
         question={question}
         index={questions.indexOf(question)}
-        testContactAttrs={testContactAttrs}
         lookups={lookups}
       />
     </div>
@@ -897,25 +898,13 @@ export function SortableQuestionList({
 
       {/* 테스트 모드 (첫 토글 시에만 마운트) */}
       {testModeEverActivated && (
-        <div ref={testContainerRef} style={testStyle}>
-          {/* 테스트 컨택 셀렉터 — 분기 조건 우변 LUT 룩업 평가용 attrs 출처 변경 */}
-          <div className="mb-4 flex items-center gap-2 rounded border bg-gray-50 p-2">
-            <span className="text-xs text-gray-500">테스트 컨택:</span>
-            <SampleContactSelector
-              value={sampleContactId}
-              onChange={(id, attrs) => {
-                setSampleContactId(id);
-                setSampleAttrs(id ? attrs : null);
-              }}
-            />
-            <span className="text-xs text-gray-400">
-              ({sampleAttrs === null ? '첫 컨택 (기본) 사용 중' : sampleContactId ? '선택한 컨택 사용 중' : '익명'})
-            </span>
+        <ContactAttrsProvider attrs={testContactAttrs}>
+          <div ref={testContainerRef} style={testStyle}>
+            <div className="space-y-6">
+              {renderGroups(renderTestCard, false)}
+            </div>
           </div>
-          <div className="space-y-6">
-            {renderGroups(renderTestCard, false)}
-          </div>
-        </div>
+        </ContactAttrsProvider>
       )}
 
       {/* 모달 — 양 모드 밖 */}

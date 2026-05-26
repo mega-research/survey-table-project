@@ -97,7 +97,10 @@ export function SaveQuestionModal({
       setNewTag('');
       setErrors({});
     }
-  }, [question, open]);
+  // deps 를 question?.id 로 좁힘 — 외부에서 question reference 가 바뀌어도
+  // 사용자가 입력 중인 라이브러리 저장 폼이 reset 되지 않도록 한다.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [question?.id, open]);
 
   // 태그 추가
   const handleAddTag = () => {

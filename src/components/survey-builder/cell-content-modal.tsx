@@ -254,7 +254,11 @@ export function CellContentModal({
       setSpssVarType(cell.spssVarType);
       setSpssMeasure(cell.spssMeasure);
     }
-  }, [isOpen, cell]);
+  // deps 를 cell?.id 로 좁힘 — 모달 안에서 셀 저장 등으로 cell reference 가 바뀌어도
+  // 사용자가 편집 중인 20+ 로컬 state 가 store 의 옛 값으로 reset 되지 않도록 한다.
+  // (feedback_useeffect_reset_object_deps 참조)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, cell?.id]);
 
   // YouTube URL을 임베드 URL로 변환
   const getYouTubeEmbedUrl = (url: string) => {
@@ -410,6 +414,18 @@ export function CellContentModal({
               await updateQuestionAction(currentQuestionId, {
                 tableRowsData: updatedRowsData,
               });
+              // store 도 동일 데이터로 동기화. 표시 조건/장기 계산식 picker 가
+              // store 를 직접 구독하므로 누락 시 셀 라벨 변경이 stale 로 표시됨.
+              useSurveyBuilderStore.setState((state) => ({
+                currentSurvey: {
+                  ...state.currentSurvey,
+                  questions: state.currentSurvey.questions.map((q) =>
+                    q.id === currentQuestionId
+                      ? { ...q, tableRowsData: updatedRowsData }
+                      : q,
+                  ),
+                },
+              }));
             } else {
               // 임시 질문: 생성하고 반환된 UUID로 로컬 스토어의 질문 ID 업데이트
               const createdQuestion = await createQuestionAction({

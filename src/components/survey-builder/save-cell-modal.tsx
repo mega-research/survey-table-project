@@ -57,7 +57,10 @@ export function SaveCellModal({ open, onOpenChange, cell }: SaveCellModalProps) 
       const defaultName = preview.length > 0 ? preview.slice(0, 20) : CELL_TYPE_LABELS[cell.type];
       setName(defaultName);
     }
-  }, [open, cell]);
+  // deps 를 cell?.id 로 좁힘 — cell reference 가 바뀌어도 사용자가 수정 중인 이름이
+  // 자동 생성 값으로 reset 되지 않도록 한다.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, cell?.id]);
 
   const handleSave = async () => {
     if (!cell || !name.trim()) return;

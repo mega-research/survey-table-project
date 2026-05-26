@@ -315,9 +315,13 @@ export default function SurveyResponsePage() {
   // 테이블 step 단일 질문의 타이틀 줄 수 감지 (group step에선 사용 안 함)
   const currentTableQuestion =
     currentStep?.kind === 'table' ? currentStep.question : null;
+  const currentTableTitleResolved = useMemo(
+    () => substituteTokens(currentTableQuestion?.title ?? '', contactAttrs),
+    [currentTableQuestion?.title, contactAttrs],
+  );
   const titleHasMultipleLines = useMultiLineDetection(
     isMobile,
-    currentTableQuestion?.title,
+    currentTableTitleResolved,
   );
 
   // 진행도 — step 기반
@@ -1074,6 +1078,10 @@ function TableStepView({
   const isHighlighted = highlightQuestionIds.has(q.id);
   const onChange = useCallback((value: unknown) => onResponse(q.id, value), [onResponse, q.id]);
   const attrs = useContactAttrs();
+  const titleText = useMemo(
+    () => substituteTokens(q.title ?? '', attrs),
+    [q.title, attrs],
+  );
   const descriptionHtml = useMemo(
     () => sanitizeRichHtml(substituteTokens(q.description ?? '', attrs)),
     [q.description, attrs],
@@ -1103,7 +1111,7 @@ function TableStepView({
               titleHasMultipleLines ? 'text-base' : 'text-lg'
             } leading-[1.6] font-bold break-keep text-gray-900`}
           >
-            {q.title}
+            {titleText}
             {q.required && (
               <span className="ml-1 align-top text-sm text-red-500" aria-label="필수 질문">
                 *
@@ -1149,7 +1157,7 @@ function TableStepView({
               </span>
               <div className="min-w-0 flex-1">
                 <CardTitle className="text-2xl leading-relaxed font-semibold break-keep text-gray-900">
-                  {q.title}
+                  {titleText}
                   {q.required && (
                     <span className="ml-1.5 align-top text-sm text-red-500" aria-label="필수 질문">
                       *
@@ -1264,6 +1272,10 @@ function GroupStepItem({
     [onResponse, q.id],
   );
   const attrs = useContactAttrs();
+  const titleText = useMemo(
+    () => substituteTokens(q.title ?? '', attrs),
+    [q.title, attrs],
+  );
   const descriptionHtml = useMemo(
     () => sanitizeRichHtml(substituteTokens(q.description ?? '', attrs)),
     [q.description, attrs],
@@ -1296,7 +1308,7 @@ function GroupStepItem({
               isHighlighted ? 'text-red-700' : 'text-gray-900'
             }`}
           >
-            {q.title}
+            {titleText}
             {q.required && (
               <span className="ml-1 text-red-500" aria-label="필수 질문">
                 *

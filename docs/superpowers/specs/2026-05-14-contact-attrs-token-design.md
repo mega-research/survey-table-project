@@ -21,8 +21,8 @@ slice 3에서 컨택리스트 업로드 → contact_targets.attrs(Record<string,
 | 항목 | 결정 |
 |---|---|
 | 토큰 syntax | `{{attrs_key}}` (메일과 100% 동일) |
-| 적용 범위 | (1) `notice.noticeContent` (2) `questions.description` (3) `TableCell.content` (text 셀) (4) `TableCell.defaultValueTemplate` (input 셀, 신규) (5) `questions.defaultValueTemplate` (text 단답형, 신규) |
-| 적용 제외 | `questions.title`, radio/checkbox/select 옵션, 다단계 select, 분기 규칙, 검증 규칙 |
+| 적용 범위 | (1) `notice.noticeContent` (2) `questions.description` (3) `questions.title` (2026-05-26 확장) (4) `TableCell.content` (text 셀) (5) `TableCell.defaultValueTemplate` (input 셀, 신규) (6) `questions.defaultValueTemplate` (text 단답형, 신규) |
+| 적용 제외 | radio/checkbox/select 옵션, 다단계 select, 분기 규칙, 검증 규칙 |
 | 단답형/input 셀 prefill | **readonly disabled** 입력으로 표시. 응답자 수정 불가. 응답값에 그대로 저장 |
 | 익명 접근(`?invite=` 없음) | 설문 단위 `requireInviteToken` 토글. true → 차단 페이지, false → 빈 문자열 치환 후 진행 (메일과 동일) |
 | 변수 키 소스 | `surveys.contactColumns.columns` 중 `source.startsWith('attrs.')` 키. 폴백: 첫 컨택의 attrs Object.keys |
@@ -222,7 +222,7 @@ const isPrefilled = Boolean(question.defaultValueTemplate?.trim());
 ## 알려진 한계 / 후속 트래킹
 
 - **prefill 가능 입력 타입이 좁음**: text 단답형 + table input 셀만. radio/checkbox/select prefill은 본 디자인 범위 밖. 필요해지면 별도 디자인.
-- **`questions.title`에는 토큰 적용 안 함**: 의도적 결정. 안내성 콘텐츠는 description/notice로 처리하라는 컨벤션 강화. 필요해지면 단순 확장 가능.
+- **`questions.title` 토큰 적용 (2026-05-26 확장)**: 초기 설계는 description/notice 컨벤션 강화를 위해 제외했으나, 전시회명 등 핵심 메타데이터가 제목에 들어가는 운영 시나리오 요구로 확장. description과 동일하게 응답 페이지 3곳(모바일 h2 / 데스크탑 CardTitle / 그룹 라벨)에서 `substituteTokens(q.title, attrs)` 적용. 줄 수 감지(`useMultiLineDetection`)도 치환 후 텍스트 기준.
 - **변경 추적 없음**: 운영자가 컨택 attrs 수정 시 누가/언제 prefill 값이 바뀌었는지 별도 audit 로그 없음. 필요 시 후속 작업.
 - **다국어 토큰 키**: 한글 키(`{{전시회명}}`)도 정규식이 받아냄(`[^}]+`). 다만 영문/한글 혼용 시 빌더 자동완성 키 정렬 UX 추가 고려 가능.
 

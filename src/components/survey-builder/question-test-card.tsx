@@ -6,7 +6,7 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { isEmptyHtml } from '@/lib/utils';
 import { sanitizeRichHtml } from '@/lib/sanitize';
-import { useSurveyResponseStore } from '@/stores/survey-response-store';
+import { OptionTextInput } from '@/components/survey-response/option-text-input';
 import { useTestResponseStore } from '@/stores/test-response-store';
 import { Question, SurveyLookup } from '@/types/survey';
 import { getOptionsLayout } from '@/utils/options-layout';
@@ -17,6 +17,7 @@ import { RankingQuestion } from '@/components/survey-response/ranking-question';
 import { ConditionDebugPanel } from './condition-debug-panel';
 import { InteractiveTableResponse } from './interactive-table-response';
 import { LazyMount } from './sortable-question-list';
+import { useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 
 import { NoticeRenderer } from './notice-renderer';
@@ -43,9 +44,6 @@ export function isOtherChoiceValue(value: unknown): value is OtherChoiceValue {
 type SingleChoiceResponse = string | null | OtherChoiceValue;
 type MultiChoiceResponse = Array<string | OtherChoiceValue>;
 
-// useSyncExternalStore 안정 참조 — selector 내부 `?? {}` 사용 시 무한 루프 경고 회피
-const EMPTY_OPTION_TEXTS: Record<string, string> = {};
-
 // 테스트 모드용 Radio 질문 컴포넌트
 function RadioTestInput({
   question,
@@ -56,10 +54,6 @@ function RadioTestInput({
   value: SingleChoiceResponse;
   onChange: (value: SingleChoiceResponse) => void;
 }) {
-  const optionTexts =
-    useSurveyResponseStore((s) => s.optionTexts[question.id]) ?? EMPTY_OPTION_TEXTS;
-  const setOptionText = useSurveyResponseStore((s) => s.setOptionText);
-
   const [otherInput, setOtherInput] = useState('');
 
   useEffect(() => {
@@ -148,10 +142,9 @@ function RadioTestInput({
             </div>
           )}
           {option.id !== 'other-option' && option.allowTextInput && isSelected(option.value) && (
-            <Input
-              value={optionTexts[option.id] ?? ''}
-              onChange={(e) => setOptionText(question.id, option.id, e.target.value)}
-              placeholder={option.textInputPlaceholder || '상세 기재'}
+            <OptionTextInput
+              questionId={question.id}
+              option={option}
               className="ml-7"
             />
           )}
@@ -171,10 +164,6 @@ function CheckboxTestInput({
   value: MultiChoiceResponse;
   onChange: (value: MultiChoiceResponse) => void;
 }) {
-  const optionTexts =
-    useSurveyResponseStore((s) => s.optionTexts[question.id]) ?? EMPTY_OPTION_TEXTS;
-  const setOptionText = useSurveyResponseStore((s) => s.setOptionText);
-
   const [otherInputs, setOtherInputs] = useState<Record<string, string>>({});
 
   const currentValues = useMemo<MultiChoiceResponse>(
@@ -306,10 +295,9 @@ function CheckboxTestInput({
               </div>
             )}
             {option.id !== 'other-option' && option.allowTextInput && checked && (
-              <Input
-                value={optionTexts[option.id] ?? ''}
-                onChange={(e) => setOptionText(question.id, option.id, e.target.value)}
-                placeholder={option.textInputPlaceholder || '상세 기재'}
+              <OptionTextInput
+                questionId={question.id}
+                option={option}
                 className="ml-7"
               />
             )}
@@ -347,10 +335,6 @@ function SelectTestInput({
   value: SingleChoiceResponse;
   onChange: (value: SingleChoiceResponse) => void;
 }) {
-  const optionTexts =
-    useSurveyResponseStore((s) => s.optionTexts[question.id]) ?? EMPTY_OPTION_TEXTS;
-  const setOptionText = useSurveyResponseStore((s) => s.setOptionText);
-
   const [otherInput, setOtherInput] = useState('');
   const [selectedValue, setSelectedValue] = useState<string>('');
 
@@ -432,10 +416,9 @@ function SelectTestInput({
         if (!selectedOption || selectedOption.id === 'other-option') return null;
         if (!selectedOption.allowTextInput) return null;
         return (
-          <Input
-            value={optionTexts[selectedOption.id] ?? ''}
-            onChange={(e) => setOptionText(question.id, selectedOption.id, e.target.value)}
-            placeholder={selectedOption.textInputPlaceholder || '상세 기재'}
+          <OptionTextInput
+            questionId={question.id}
+            option={selectedOption}
             className="w-full"
           />
         );
@@ -449,13 +432,12 @@ function QuestionTestInput({
   question,
   value,
   onChange,
-  testContactAttrs,
 }: {
   question: Question;
   value: unknown;
   onChange: (value: unknown) => void;
-  testContactAttrs: Record<string, string>;
 }) {
+  const attrs = useContactAttrs();
   switch (question.type) {
     case 'text':
       return (
@@ -546,7 +528,7 @@ function QuestionTestInput({
     case 'notice':
       return (
         <NoticeRenderer
-          content={substituteTokens(question.noticeContent || '', testContactAttrs)}
+          content={substituteTokens(question.noticeContent || '', attrs)}
           requiresAcknowledgment={question.requiresAcknowledgment}
           value={typeof value === 'boolean' ? value : false}
           onChange={onChange}
@@ -565,13 +547,10 @@ function QuestionTestInput({
 export function QuestionTestCard({
   question,
   index,
-  testContactAttrs = {},
   lookups = [],
 }: {
   question: Question;
   index: number;
-  /** 빌더 테스트 모드 진입 시 fetch 한 첫 컨택의 attrs. 토큰 치환 + 분기 조건 평가에 사용. */
-  testContactAttrs?: Record<string, string>;
   /** 분기 조건 우변 LUT 룩업 평가에 사용. currentSurvey.lookups 를 전달. */
   lookups?: SurveyLookup[];
 }) {
@@ -579,6 +558,8 @@ export function QuestionTestCard({
   const updateTestResponse = useTestResponseStore((s) => s.updateTestResponse);
   // 디버그 패널 평가용 — 다른 질문 응답도 ctx 에 포함되도록 전체 testResponses 구독.
   const allTestResponses = useTestResponseStore((s) => s.testResponses);
+  // 토큰 치환 + 분기 조건 평가에 사용할 컨택 attrs (ContactAttrsProvider 가 주입).
+  const attrs = useContactAttrs();
 
   const handleResponse = (value: unknown) => {
     updateTestResponse(
@@ -602,7 +583,7 @@ export function QuestionTestCard({
         responsesShaped[qid] = cells;
       }
     }
-    const ctx = { responses: responsesShaped, contactAttrs: testContactAttrs, lookups };
+    const ctx = { responses: responsesShaped, contactAttrs: attrs, lookups };
 
     conds.forEach((c, idx) => {
       const mainCmp = c.tableConditions?.numericComparison;
@@ -621,7 +602,7 @@ export function QuestionTestCard({
       }
     });
     return out;
-  }, [question.displayCondition, allTestResponses, testContactAttrs, lookups]);
+  }, [question.displayCondition, allTestResponses, attrs, lookups]);
 
   return (
     <Card className="border-l-4 border-l-blue-500 p-6" data-question-index={index}>
@@ -632,7 +613,9 @@ export function QuestionTestCard({
           </span>
           {question.required && <span className="text-sm text-red-500">*</span>}
         </div>
-        <h3 className="mb-1 text-lg font-medium text-gray-900">{question.title}</h3>
+        <h3 className="mb-1 text-lg font-medium text-gray-900">
+          {substituteTokens(question.title, attrs)}
+        </h3>
         {!isEmptyHtml(question.description) && (
           <div
             className="prose prose-sm mb-4 max-w-none overflow-x-auto text-sm text-gray-600 [&_p]:min-h-[1.6em] [&_table]:my-2 [&_table]:w-full [&_table]:table-fixed [&_table]:border-collapse [&_table]:border-2 [&_table]:border-gray-300 [&_table_p]:m-0 [&_table_td]:border [&_table_td]:border-gray-300 [&_table_td]:px-3 [&_table_td]:py-2 [&_table_th]:border [&_table_th]:border-gray-300 [&_table_th]:bg-transparent [&_table_th]:px-3 [&_table_th]:py-2 [&_table_th]:font-normal"
@@ -641,7 +624,7 @@ export function QuestionTestCard({
             }}
             dangerouslySetInnerHTML={{
               __html: sanitizeRichHtml(
-                substituteTokens(question.description!, testContactAttrs),
+                substituteTokens(question.description!, attrs),
               ),
             }}
           />
@@ -658,7 +641,6 @@ export function QuestionTestCard({
               question={question}
               value={testResponse}
               onChange={handleResponse}
-              testContactAttrs={testContactAttrs}
             />
           </LazyMount>
         ) : (
@@ -666,7 +648,6 @@ export function QuestionTestCard({
             question={question}
             value={testResponse}
             onChange={handleResponse}
-            testContactAttrs={testContactAttrs}
           />
         )}
       </div>
