@@ -556,12 +556,14 @@ export const QuestionConditionEditor = forwardRef<
                                     const outerCol = tc.cellColumnIndex;
                                     if (!outerRow || outerCol === undefined || !sourceQuestion) return undefined;
                                     const row = sourceQuestion.tableRowsData?.find((r) => r.id === outerRow);
-                                    const outerCellId = row?.cells[outerCol]?.id;
-                                    if (!outerCellId) return undefined;
+                                    const outerCell = row?.cells[outerCol];
+                                    // 마이그레이션 결과 expression cell operand 가 실제 응답이 들어있는
+                                    // input 셀을 가리켜야 함. text/image/radio 등이면 비교 의미 없음.
+                                    if (!outerCell || outerCell.type !== 'input') return undefined;
                                     return () => {
                                       const expressionConfig = migrateNumericComparisonToExpression(
                                         tc.numericComparison!,
-                                        { questionId: sourceQuestion.id, cellId: outerCellId },
+                                        { questionId: sourceQuestion.id, cellId: outerCell.id },
                                       );
                                       updateCondition(condition.id, {
                                         conditionType: 'expression',
@@ -704,12 +706,13 @@ export const QuestionConditionEditor = forwardRef<
                                           const acOuterCol = ac.cellColumnIndex;
                                           if (!acOuterRow || acOuterCol === undefined || !sourceQuestion) return undefined;
                                           const acRow = sourceQuestion.tableRowsData?.find((r) => r.id === acOuterRow);
-                                          const acCellId = acRow?.cells[acOuterCol]?.id;
-                                          if (!acCellId) return undefined;
+                                          const acCell = acRow?.cells[acOuterCol];
+                                          // input 셀이 아니면 expression cell operand 가 무의미 → 버튼 미노출
+                                          if (!acCell || acCell.type !== 'input') return undefined;
                                           return () => {
                                             const expressionConfig = migrateNumericComparisonToExpression(
                                               ac.numericComparison!,
-                                              { questionId: sourceQuestion.id, cellId: acCellId },
+                                              { questionId: sourceQuestion.id, cellId: acCell.id },
                                             );
                                             updateCondition(condition.id, {
                                               conditionType: 'expression',

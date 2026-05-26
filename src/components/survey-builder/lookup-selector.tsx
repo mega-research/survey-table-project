@@ -14,9 +14,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
+import type { SurveyLookup } from '@/types/survey';
 
 import { LookupEditModal } from './lookup-edit-modal';
 import { type LookupDraft, NONE_SENTINEL } from './lookup-shared';
+
+const EMPTY_LOOKUPS: SurveyLookup[] = [];
 
 interface Props {
   value: string; // surveyLookupId — 빈 문자열이면 미선택
@@ -31,7 +34,7 @@ interface Props {
  */
 export function LookupSelector({ value, onChange }: Props) {
   const surveyId = useSurveyBuilderStore((s) => s.currentSurvey.id);
-  const lookups = useSurveyBuilderStore((s) => s.currentSurvey.lookups ?? []);
+  const lookups = useSurveyBuilderStore((s) => s.currentSurvey.lookups) ?? EMPTY_LOOKUPS;
   const refetchSurvey = useSurveyBuilderStore((s) => s.refetchSurvey);
   const [editOpen, setEditOpen] = useState(false);
 

@@ -1099,10 +1099,21 @@ function evaluateExpressionOperand(
       return typeof v === 'string' || typeof v === 'number' ? v : undefined;
     }
     case 'question': {
-      // 일반 질문: 응답이 string (text/textarea) 또는 string[]/string (radio/select) 평면 저장
+      // 일반 질문 응답 형태가 다양함 (checkValueMatch 와 동일 패턴):
+      //   text/textarea  → string
+      //   radio/select   → string | { selectedValue: string } | { optionId: string }
+      //   checkbox/multi → string[] | object[]   (expression 단일 operand 와 호환 안됨 → undefined)
       const qr = responses[operand.questionId];
       if (qr === undefined || qr === null || qr === '') return undefined;
       if (typeof qr === 'string' || typeof qr === 'number') return qr;
+      if (typeof qr === 'object' && !Array.isArray(qr)) {
+        const o = qr as { selectedValue?: unknown; optionId?: unknown };
+        if (typeof o.selectedValue === 'string' || typeof o.selectedValue === 'number') {
+          return o.selectedValue;
+        }
+        if (typeof o.optionId === 'string') return o.optionId;
+      }
+      // array (checkbox) 등은 expression 단일 값과 비교 불가 → undefined (fail-safe SHOW)
       return undefined;
     }
     case 'lookup': {

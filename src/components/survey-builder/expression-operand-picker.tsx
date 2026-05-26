@@ -17,6 +17,11 @@ import type { ExpressionOperand, Question, SurveyLookup } from '@/types/survey';
 
 export const MAX_OPERAND_DEPTH = 2;
 
+// selector 안에서 ?? [] 하면 매 렌더마다 새 배열 → useSyncExternalStore 무한 루프 경고.
+// 모듈 스코프 안정 참조 fallback.
+const EMPTY_LOOKUPS: SurveyLookup[] = [];
+const EMPTY_CONTACT_COLUMNS: { key: string }[] = [];
+
 interface OperandPickerProps {
   value: ExpressionOperand | undefined;
   onChange: (next: ExpressionOperand) => void;
@@ -40,10 +45,10 @@ export function ExpressionOperandPicker({
   idPrefix,
 }: OperandPickerProps) {
   const questions = useSurveyBuilderStore((s) => s.currentSurvey.questions);
-  const contactColumns = useSurveyBuilderStore(
-    (s) => s.currentSurvey.contactColumns?.columns ?? [],
-  );
-  const lookups = useSurveyBuilderStore((s) => s.currentSurvey.lookups ?? []);
+  const contactColumns =
+    useSurveyBuilderStore((s) => s.currentSurvey.contactColumns?.columns) ??
+    EMPTY_CONTACT_COLUMNS;
+  const lookups = useSurveyBuilderStore((s) => s.currentSurvey.lookups) ?? EMPTY_LOOKUPS;
 
   const canNestBinop = currentDepth < MAX_OPERAND_DEPTH;
 
