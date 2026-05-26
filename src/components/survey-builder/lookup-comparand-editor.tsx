@@ -8,17 +8,13 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
-import type { RightOperand, SurveyLookup } from '@/types/survey';
+import type { RightOperand } from '@/types/survey';
 
 import { LookupKeyMappingEditor } from './lookup-key-mapping-editor';
 import { LookupSelector } from './lookup-selector';
-import { NONE_SENTINEL } from './lookup-shared';
+import { EMPTY_LOOKUPS, NONE_SENTINEL } from './lookup-shared';
 
 type LookupOperand = Extract<RightOperand, { kind: 'lookup' }>;
-
-// selector 안에서 ?? [] 하면 매 렌더마다 새 빈 배열 → useSyncExternalStore 무한 루프 경고.
-// 모듈 스코프 안정 참조 fallback.
-const EMPTY_LOOKUPS: SurveyLookup[] = [];
 
 interface Props {
   value: LookupOperand;

@@ -14,12 +14,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
-import type { SurveyLookup } from '@/types/survey';
 
 import { LookupEditModal } from './lookup-edit-modal';
-import { type LookupDraft, NONE_SENTINEL } from './lookup-shared';
-
-const EMPTY_LOOKUPS: SurveyLookup[] = [];
+import { EMPTY_LOOKUPS, type LookupDraft, NONE_SENTINEL } from './lookup-shared';
 
 interface Props {
   value: string; // surveyLookupId — 빈 문자열이면 미선택

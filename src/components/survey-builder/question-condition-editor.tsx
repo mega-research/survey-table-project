@@ -13,6 +13,8 @@ import { Switch } from '@/components/ui/switch';
 import { generateId } from '@/lib/utils';
 import {
   ConditionLogicType,
+  ExpressionConditionConfig,
+  NumericComparison,
   Question,
   QuestionCondition,
   QuestionConditionGroup,
@@ -23,6 +25,37 @@ import { getMergedRowIds, getRowMergeInfo } from '@/utils/table-merge-helpers';
 import { ExpressionConditionEditor } from './expression-condition-editor';
 import { ValueComparisonExpander } from './value-comparison-expander';
 import { migrateNumericComparisonToExpression } from '@/utils/expression-migration';
+
+/**
+ * 메인/추가 조건 양쪽에서 numericComparison → expression 변환 버튼이 노출될 조건과
+ * 클릭 시 동작을 한 곳에서 결정. 변환 후 처리 (tableConditions/additionalConditions 정리) 는
+ * 호출자가 onMigrate 콜백 안에서 결정한다.
+ *
+ * 가드: numericComparison 존재 + rowIds[0] + cellColumnIndex + 그 셀이 input 타입.
+ * input 이 아닌 셀(text/image/radio 등) 을 outerCellRef 로 잡으면 마이그레이션 후
+ * expression cell operand 가 무의미한 셀을 가리키므로 버튼 자체를 미노출.
+ */
+function buildMigrateHandler(
+  nc: NumericComparison | undefined,
+  rowIds: string[] | undefined,
+  cellColumnIndex: number | undefined,
+  sourceQuestion: Question | undefined,
+  onMigrate: (config: ExpressionConditionConfig) => void,
+): (() => void) | undefined {
+  if (!nc || !sourceQuestion || cellColumnIndex === undefined) return undefined;
+  const outerRow = rowIds?.[0];
+  if (!outerRow) return undefined;
+  const row = sourceQuestion.tableRowsData?.find((r) => r.id === outerRow);
+  const cell = row?.cells[cellColumnIndex];
+  if (!cell || cell.type !== 'input') return undefined;
+  return () => {
+    const expressionConfig = migrateNumericComparisonToExpression(nc, {
+      questionId: sourceQuestion.id,
+      cellId: cell.id,
+    });
+    onMigrate(expressionConfig);
+  };
+}
 
 interface QuestionConditionEditorProps {
   question: Question;
@@ -549,29 +582,18 @@ export const QuestionConditionEditor = forwardRef<
                                       },
                                     })
                                   }
-                                  onMigrateToExpression={(() => {
-                                    const tc = condition.tableConditions;
-                                    if (!tc?.numericComparison) return undefined;
-                                    const outerRow = tc.rowIds?.[0];
-                                    const outerCol = tc.cellColumnIndex;
-                                    if (!outerRow || outerCol === undefined || !sourceQuestion) return undefined;
-                                    const row = sourceQuestion.tableRowsData?.find((r) => r.id === outerRow);
-                                    const outerCell = row?.cells[outerCol];
-                                    // 마이그레이션 결과 expression cell operand 가 실제 응답이 들어있는
-                                    // input 셀을 가리켜야 함. text/image/radio 등이면 비교 의미 없음.
-                                    if (!outerCell || outerCell.type !== 'input') return undefined;
-                                    return () => {
-                                      const expressionConfig = migrateNumericComparisonToExpression(
-                                        tc.numericComparison!,
-                                        { questionId: sourceQuestion.id, cellId: outerCell.id },
-                                      );
+                                  onMigrateToExpression={buildMigrateHandler(
+                                    condition.tableConditions?.numericComparison,
+                                    condition.tableConditions?.rowIds,
+                                    condition.tableConditions?.cellColumnIndex,
+                                    sourceQuestion,
+                                    (expressionConfig) =>
                                       updateCondition(condition.id, {
                                         conditionType: 'expression',
                                         expressionConfig,
                                         tableConditions: undefined,
-                                      });
-                                    };
-                                  })()}
+                                      }),
+                                  )}
                                 />
                               )}
                           </>
@@ -700,28 +722,19 @@ export const QuestionConditionEditor = forwardRef<
                                             },
                                           })
                                         }
-                                        onMigrateToExpression={(() => {
-                                          if (!ac.numericComparison) return undefined;
-                                          const acOuterRow = effectiveRowIds[0];
-                                          const acOuterCol = ac.cellColumnIndex;
-                                          if (!acOuterRow || acOuterCol === undefined || !sourceQuestion) return undefined;
-                                          const acRow = sourceQuestion.tableRowsData?.find((r) => r.id === acOuterRow);
-                                          const acCell = acRow?.cells[acOuterCol];
-                                          // input 셀이 아니면 expression cell operand 가 무의미 → 버튼 미노출
-                                          if (!acCell || acCell.type !== 'input') return undefined;
-                                          return () => {
-                                            const expressionConfig = migrateNumericComparisonToExpression(
-                                              ac.numericComparison!,
-                                              { questionId: sourceQuestion.id, cellId: acCell.id },
-                                            );
+                                        onMigrateToExpression={buildMigrateHandler(
+                                          ac.numericComparison,
+                                          effectiveRowIds,
+                                          ac.cellColumnIndex,
+                                          sourceQuestion,
+                                          (expressionConfig) =>
                                             updateCondition(condition.id, {
                                               conditionType: 'expression',
                                               expressionConfig,
                                               tableConditions: undefined,
                                               additionalConditions: undefined,
-                                            });
-                                          };
-                                        })()}
+                                            }),
+                                        )}
                                       />
                                     );
                                   })()}

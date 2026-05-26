@@ -1,6 +1,9 @@
 'use client';
 
+import { useMemo } from 'react';
+
 import { Plus, X } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,11 +18,14 @@ import {
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import type { ExpressionOperand, Question, SurveyLookup } from '@/types/survey';
 
+import { LookupKeyMappingEditor } from './lookup-key-mapping-editor';
+import { LookupSelector } from './lookup-selector';
+import { EMPTY_LOOKUPS } from './lookup-shared';
+
 export const MAX_OPERAND_DEPTH = 2;
 
-// selector 안에서 ?? [] 하면 매 렌더마다 새 배열 → useSyncExternalStore 무한 루프 경고.
-// 모듈 스코프 안정 참조 fallback.
-const EMPTY_LOOKUPS: SurveyLookup[] = [];
+// useShallow selector 결과가 undefined 일 때 모듈 스코프 안정 참조로 fallback.
+// (lookups 는 lookup-shared 의 EMPTY_LOOKUPS 사용)
 const EMPTY_CONTACT_COLUMNS: { key: string }[] = [];
 
 interface OperandPickerProps {
@@ -44,11 +50,18 @@ export function ExpressionOperandPicker({
   currentDepth,
   idPrefix,
 }: OperandPickerProps) {
-  const questions = useSurveyBuilderStore((s) => s.currentSurvey.questions);
-  const contactColumns =
-    useSurveyBuilderStore((s) => s.currentSurvey.contactColumns?.columns) ??
-    EMPTY_CONTACT_COLUMNS;
-  const lookups = useSurveyBuilderStore((s) => s.currentSurvey.lookups) ?? EMPTY_LOOKUPS;
+  // useShallow 로 3 selector 통합 — currentSurvey 의 다른 필드 변경 시 picker 가 re-render 되지 않게.
+  const { questions, contactColumnsRaw, lookupsRaw } = useSurveyBuilderStore(
+    useShallow((s) => ({
+      questions: s.currentSurvey.questions,
+      contactColumnsRaw: s.currentSurvey.contactColumns?.columns,
+      lookupsRaw: s.currentSurvey.lookups,
+    })),
+  );
+  const contactColumns = contactColumnsRaw ?? EMPTY_CONTACT_COLUMNS;
+  const lookups = lookupsRaw ?? EMPTY_LOOKUPS;
+  // attr operand picker 와 LookupKeyMappingEditor 가 같은 attrs 키 리스트를 쓰므로 1회만 파생.
+  const attrKeys = useMemo(() => contactColumns.map((c) => c.key), [contactColumns]);
 
   const canNestBinop = currentDepth < MAX_OPERAND_DEPTH;
 
@@ -136,7 +149,7 @@ export function ExpressionOperandPicker({
         <AttrPickerSub
           value={value}
           onChange={onChange}
-          attrColumns={contactColumns.map((c) => c.key)}
+          attrColumns={attrKeys}
           idPrefix={idPrefix}
         />
       )}
@@ -146,7 +159,6 @@ export function ExpressionOperandPicker({
           value={value}
           onChange={onChange}
           lookups={lookups}
-          attrColumns={contactColumns.map((c) => c.key)}
           idPrefix={idPrefix}
         />
       )}
@@ -178,15 +190,22 @@ function CellPickerSub({
   questions: Question[];
   idPrefix: string;
 }) {
-  const tableQuestions = questions.filter((q) => q.type === 'table');
+  const tableQuestions = useMemo(
+    () => questions.filter((q) => q.type === 'table'),
+    [questions],
+  );
   const selectedQuestion = tableQuestions.find((q) => q.id === value.questionId);
-  const inputCells = (selectedQuestion?.tableRowsData ?? []).flatMap((row) =>
-    (row.cells ?? [])
-      .filter((c) => c.type === 'input')
-      .map((c) => ({
-        cellId: c.id,
-        label: `${row.label?.trim() || row.id.slice(0, 6)} / ${c.exportLabel ?? c.cellCode ?? c.id.slice(0, 6)}`,
-      })),
+  const inputCells = useMemo(
+    () =>
+      (selectedQuestion?.tableRowsData ?? []).flatMap((row) =>
+        (row.cells ?? [])
+          .filter((c) => c.type === 'input')
+          .map((c) => ({
+            cellId: c.id,
+            label: `${row.label?.trim() || row.id.slice(0, 6)} / ${c.exportLabel ?? c.cellCode ?? c.id.slice(0, 6)}`,
+          })),
+      ),
+    [selectedQuestion],
   );
 
   return (
@@ -244,8 +263,12 @@ function QuestionPickerSub({
   questions: Question[];
   idPrefix: string;
 }) {
-  const eligible = questions.filter((q) =>
-    ['radio', 'select', 'text', 'textarea', 'checkbox'].includes(q.type),
+  const eligible = useMemo(
+    () =>
+      questions.filter((q) =>
+        ['radio', 'select', 'text', 'textarea', 'checkbox'].includes(q.type),
+      ),
+    [questions],
   );
   return (
     <Select
@@ -306,129 +329,61 @@ function LookupSub({
   value,
   onChange,
   lookups,
-  attrColumns,
   idPrefix,
 }: {
   value: ExpressionOperand & { kind: 'lookup' };
   onChange: (next: ExpressionOperand) => void;
   lookups: SurveyLookup[];
-  attrColumns: string[];
   idPrefix: string;
 }) {
   const selectedLut = lookups.find((l) => l.id === value.surveyLookupId);
-  const lutColumns = selectedLut?.columns ?? [];
-
-  const setLut = (lutId: string) =>
-    onChange({ kind: 'lookup', surveyLookupId: lutId, keyMapping: [], valueColumn: '' });
-
-  const setValueColumn = (col: string) => onChange({ ...value, valueColumn: col });
-
-  const addMapping = () =>
-    onChange({ ...value, keyMapping: [...value.keyMapping, { lutKey: '', attrsKey: '' }] });
-
-  const updateMapping = (
-    idx: number,
-    patch: Partial<{ lutKey: string; attrsKey: string }>,
-  ) => {
-    const next = [...value.keyMapping];
-    next[idx] = { ...next[idx], ...patch };
-    onChange({ ...value, keyMapping: next });
-  };
-
-  const removeMapping = (idx: number) =>
-    onChange({ ...value, keyMapping: value.keyMapping.filter((_, i) => i !== idx) });
+  const usedAsKey = new Set(value.keyMapping.map((m) => m.lutKey).filter(Boolean));
+  const valueCandidates = (selectedLut?.columns ?? []).filter((c) => !usedAsKey.has(c));
 
   return (
     <div className="space-y-2">
-      <Select value={value.surveyLookupId} onValueChange={setLut}>
-        <SelectTrigger id={`${idPrefix}-lut`}>
-          <SelectValue placeholder="외부 데이터 선택" />
-        </SelectTrigger>
-        <SelectContent className="max-h-64">
-          {lookups.length === 0 && (
-            <div className="p-2 text-xs text-slate-500">등록된 외부 데이터가 없습니다</div>
-          )}
-          {lookups.map((l) => (
-            <SelectItem key={l.id} value={l.id}>
-              {l.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <LookupSelector
+        value={value.surveyLookupId}
+        onChange={(id) =>
+          onChange({ kind: 'lookup', surveyLookupId: id, keyMapping: [], valueColumn: '' })
+        }
+      />
 
       {selectedLut && (
         <>
+          <LookupKeyMappingEditor
+            availableLutColumns={selectedLut.columns}
+            value={value.keyMapping}
+            onChange={(km) => {
+              // value 컬럼이 새로운 key 매핑에 포함되면 비움 (의미상 같은 컬럼을 키와 값으로 쓰면 안 됨)
+              const used = new Set(km.map((m) => m.lutKey).filter(Boolean));
+              const nextValueColumn = used.has(value.valueColumn) ? '' : value.valueColumn;
+              onChange({ ...value, keyMapping: km, valueColumn: nextValueColumn });
+            }}
+          />
+
           <div className="space-y-1">
             <Label className="text-xs text-slate-600">값 컬럼</Label>
-            <Select value={value.valueColumn} onValueChange={setValueColumn}>
+            <Select
+              value={value.valueColumn}
+              onValueChange={(col) => onChange({ ...value, valueColumn: col })}
+            >
               <SelectTrigger id={`${idPrefix}-vcol`}>
                 <SelectValue placeholder="컬럼 선택" />
               </SelectTrigger>
               <SelectContent className="max-h-64">
-                {lutColumns.length === 0 && (
-                  <div className="p-2 text-xs text-slate-500">LUT 에 컬럼이 없습니다</div>
+                {valueCandidates.length === 0 && (
+                  <div className="p-2 text-xs text-slate-500">
+                    값으로 쓸 컬럼이 없습니다 (키로 사용된 컬럼은 제외)
+                  </div>
                 )}
-                {lutColumns.map((c) => (
+                {valueCandidates.map((c) => (
                   <SelectItem key={c} value={c}>
                     {c}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-          </div>
-
-          <div className="space-y-1">
-            <Label className="text-xs text-slate-600">키 매핑 (LUT 컬럼 = 컨택 속성)</Label>
-            {value.keyMapping.map((m, idx) => (
-              <div key={idx} className="flex items-center gap-1">
-                <Select
-                  value={m.lutKey}
-                  onValueChange={(k) => updateMapping(idx, { lutKey: k })}
-                >
-                  <SelectTrigger className="flex-1">
-                    <SelectValue placeholder="LUT 컬럼" />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-64">
-                    {lutColumns.map((c) => (
-                      <SelectItem key={c} value={c}>
-                        {c}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <span className="text-xs text-slate-500">=</span>
-                <Select
-                  value={m.attrsKey}
-                  onValueChange={(k) => updateMapping(idx, { attrsKey: k })}
-                >
-                  <SelectTrigger className="flex-1">
-                    <SelectValue placeholder="컨택 속성" />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-64">
-                    {attrColumns.length === 0 && (
-                      <div className="p-2 text-xs text-slate-500">컨택 컬럼이 없습니다</div>
-                    )}
-                    {attrColumns.map((k) => (
-                      <SelectItem key={k} value={k}>
-                        {k}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => removeMapping(idx)}
-                  aria-label="매핑 삭제"
-                >
-                  <X className="h-3 w-3" />
-                </Button>
-              </div>
-            ))}
-            <Button type="button" variant="outline" size="sm" onClick={addMapping}>
-              <Plus className="mr-1 h-3 w-3" /> 매핑 추가
-            </Button>
           </div>
         </>
       )}
@@ -465,7 +420,7 @@ function BinopSub({
         <SelectContent className="max-h-64">
           <SelectItem value="+">+</SelectItem>
           <SelectItem value="-">-</SelectItem>
-          <SelectItem value="*">x</SelectItem>
+          <SelectItem value="*">×</SelectItem>
           <SelectItem value="/">÷</SelectItem>
         </SelectContent>
       </Select>

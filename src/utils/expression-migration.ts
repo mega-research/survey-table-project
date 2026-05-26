@@ -10,10 +10,7 @@ function convertLegacyLeftCell(c: { kind: 'cell'; questionId: string; cellId: st
   return { kind: 'cell', questionId: c.questionId, cellId: c.cellId };
 }
 
-function convertLegacyLeft(
-  left: LeftOperand,
-  _outerCellRef: { questionId: string; cellId: string },
-): ExpressionOperand {
+function convertLegacyLeft(left: LeftOperand): ExpressionOperand {
   if (left.kind === 'cell') {
     return { kind: 'cell', questionId: left.questionId, cellId: left.cellId };
   }
@@ -44,7 +41,7 @@ export function migrateNumericComparisonToExpression(
   outerCellRef: { questionId: string; cellId: string },
 ): ExpressionConditionConfig {
   const left: ExpressionOperand = nc.left
-    ? convertLegacyLeft(nc.left, outerCellRef)
+    ? convertLegacyLeft(nc.left)
     : { kind: 'cell', questionId: outerCellRef.questionId, cellId: outerCellRef.cellId };
 
   const right: ExpressionOperand = nc.right

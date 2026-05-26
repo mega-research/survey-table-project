@@ -8,7 +8,7 @@
  *   리뷰 시 헷갈리므로 단일 상수로 통일.
  */
 
-import type { SavedLookup } from '@/types/survey';
+import type { SavedLookup, SurveyLookup } from '@/types/survey';
 
 export type LookupDraft = Pick<
   SavedLookup,
@@ -17,3 +17,9 @@ export type LookupDraft = Pick<
 
 export const NONE_SENTINEL = '__none__';
 export const CUSTOM_SENTINEL = '__custom__';
+
+/**
+ * Zustand selector 안에서 `?? []` 하면 매 렌더마다 새 빈 배열을 반환해 useSyncExternalStore 가
+ * snapshot 변경으로 오인 → 무한 루프 경고. 모듈 스코프 안정 참조로 fallback.
+ */
+export const EMPTY_LOOKUPS: SurveyLookup[] = [];

@@ -1092,7 +1092,7 @@ function evaluateExpressionOperand(
     case 'cell': {
       // 실제 응답 구조: question_responses[questionId] = { cellId: value }
       // (다른 evaluator 들 — 예: checkTableCellCondition 의 tableResponse[cell.id] — 와 동일 패턴)
-      const qr = responses[operand.questionId] as Record<string, unknown> | undefined;
+      const qr = responses[operand.questionId];
       if (!qr || typeof qr !== 'object') return undefined;
       const v = (qr as Record<string, unknown>)[operand.cellId];
       if (v === undefined || v === null || v === '') return undefined;
@@ -1180,9 +1180,12 @@ function evaluateExpressionConfig(
   if (config.clauses.length === 0) return true;
   let acc = evaluateExpressionClause(config.clauses[0], responses, ctx);
   for (let i = 1; i < config.clauses.length; i++) {
-    const next = evaluateExpressionClause(config.clauses[i], responses, ctx);
     const op = config.joinOps[i - 1] ?? 'AND';
-    acc = op === 'AND' ? (acc && next) : (acc || next);
+    // 단락 평가 — lookup 평가까지 포함된 clause 의 비용을 무료로 절약
+    if (op === 'AND' && !acc) break;
+    if (op === 'OR' && acc) break;
+    const next = evaluateExpressionClause(config.clauses[i], responses, ctx);
+    acc = op === 'AND' ? acc && next : acc || next;
   }
   return acc;
 }

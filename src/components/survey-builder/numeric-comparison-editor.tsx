@@ -9,6 +9,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import type {
   NumericComparison,
+  Question,
   RightOperand,
 } from '@/types/survey';
 import { isPartialNumericInput, parseNumericInput } from '@/utils/numeric-input';
@@ -33,7 +34,7 @@ const OPERATOR_OPTIONS: Array<{ value: NumericComparison['operator']; label: str
 
 function formatCellRef(
   cellRef: { questionId: string; cellId: string },
-  questions: ReturnType<typeof useSurveyBuilderStore.getState>['currentSurvey']['questions'],
+  questions: Question[],
 ): string {
   const q = questions.find((x) => x.id === cellRef.questionId);
   if (!q) return '(삭제된 셀)';

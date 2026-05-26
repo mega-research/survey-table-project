@@ -370,7 +370,18 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
         onChange(next);
         return;
       }
-      const merged = { ...accumulatedResponseRef.current, ...next };
+      // 동일 값이면 부모 setState 트리거 안 함 — emptyDefault prefill 등에서 N개 cell 이 동시에
+      // 같은 값을 쓰는 케이스의 cascade re-render 회피.
+      const cur = accumulatedResponseRef.current;
+      let changed = false;
+      for (const k of Object.keys(next)) {
+        if (cur[k] !== next[k]) {
+          changed = true;
+          break;
+        }
+      }
+      if (!changed) return;
+      const merged = { ...cur, ...next };
       accumulatedResponseRef.current = merged;
       onChange(merged);
     },
