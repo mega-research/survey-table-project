@@ -162,12 +162,12 @@ export function LookupEditModal({ isOpen, initialValue, onClose, onSave }: Props
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="flex max-h-[85vh] max-w-3xl flex-col">
         <DialogHeader>
           <DialogTitle>외부 데이터 LUT 편집</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="flex-1 space-y-4 overflow-y-auto pr-1">
           <div>
             <Label>이름</Label>
             <Input value={name} onChange={(e) => setName(e.target.value)} />

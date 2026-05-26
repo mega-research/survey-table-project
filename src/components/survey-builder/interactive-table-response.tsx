@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 
 import { ChevronDown, ChevronRight, FileText, ListChecks } from 'lucide-react';
 
@@ -355,6 +355,39 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
   hideColumnLabels = false,
   enableSticky = true,
 }: InteractiveTableResponseProps) {
+  // 같은 render tick 안에 여러 cell 이 동시에 onChange 를 호출할 때 (예: emptyDefault prefill)
+  // 부모 prop 의 batch 지연으로 stale 한 객체가 덮어쓰는 race 를 방지하기 위해
+  // 누적 ref 에서 매번 머지해 부모에 전달한다. 응답자 모드 전용.
+  const accumulatedResponseRef = useRef<Record<string, unknown>>(value ?? {});
+  useEffect(() => {
+    if (!isTestMode) accumulatedResponseRef.current = value ?? {};
+  }, [value, isTestMode]);
+
+  const mergedOnChange = useCallback(
+    (next: Record<string, unknown>) => {
+      if (!onChange) return;
+      if (isTestMode) {
+        onChange(next);
+        return;
+      }
+      // 동일 값이면 부모 setState 트리거 안 함 — emptyDefault prefill 등에서 N개 cell 이 동시에
+      // 같은 값을 쓰는 케이스의 cascade re-render 회피.
+      const cur = accumulatedResponseRef.current;
+      let changed = false;
+      for (const k of Object.keys(next)) {
+        if (cur[k] !== next[k]) {
+          changed = true;
+          break;
+        }
+      }
+      if (!changed) return;
+      const merged = { ...cur, ...next };
+      accumulatedResponseRef.current = merged;
+      onChange(merged);
+    },
+    [onChange, isTestMode],
+  );
+
   // 1) 동적 행 상태 — store 구독, 상태, 핸들러
   const {
     currentResponse,
@@ -374,7 +407,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     dynamicRowConfigs,
     isTestMode,
     value,
-    onChange,
+    onChange: mergedOnChange,
   });
 
   const tableContainerRef = useRef<HTMLDivElement>(null);
@@ -611,7 +644,8 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
                   row,
                   gridRow: rowGridMap.get(row.id),
                   completed: rowCompletionMap.get(row.id) ?? false,
-                  questionId, isTestMode, value, onChange,
+                  questionId, isTestMode, value,
+                  onChange: mergedOnChange,
                   stickyInfo,
                 })}
               </React.Fragment>,
@@ -705,7 +739,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
               rowGridMap={rowGridMap}
               isTestMode={isTestMode}
               value={value}
-              onChange={onChange}
+              onChange={mergedOnChange}
               gridTemplateCols={gridTemplateCols}
               totalWidth={totalWidth}
               renderSelectorRows={renderSelectorRows}
@@ -728,7 +762,8 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
                     row,
                     gridRow: rowGridMap.get(row.id),
                     completed: rowCompletionMap.get(row.id) ?? false,
-                    questionId, isTestMode, value, onChange,
+                    questionId, isTestMode, value,
+                    onChange: mergedOnChange,
                     stickyInfo,
                   })}
                 </React.Fragment>
@@ -763,7 +798,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
                 hideColumnLabels={hideColumnLabels}
                 isTestMode={isTestMode}
                 value={value}
-                onChange={onChange}
+                onChange={mergedOnChange}
                 hasDynamicRows={hasDynamicRows}
                 selectedRowIds={selectedRowIds}
                 groupConfigMap={groupConfigMap}

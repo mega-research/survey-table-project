@@ -144,12 +144,48 @@ export interface SavedLookup {
   updatedAt: Date;
 }
 
+// expression 조건 모드 — operand 재귀 union
+export type ExpressionOperand =
+  | { kind: 'literal'; value: number | string }
+  | { kind: 'cell'; questionId: string; cellId: string }
+  | { kind: 'question'; questionId: string }
+  | {
+      kind: 'lookup';
+      surveyLookupId: string;
+      keyMapping: Array<{ lutKey: string; attrsKey: string }>;
+      valueColumn: string;
+    }
+  | { kind: 'attr'; attrsKey: string }
+  | {
+      kind: 'binop';
+      op: '+' | '-' | '*' | '/';
+      left: ExpressionOperand;
+      right: ExpressionOperand;
+    };
+
+export interface ExpressionComparison {
+  left: ExpressionOperand;
+  op: '==' | '!=' | '>' | '<' | '>=' | '<=';
+  right: ExpressionOperand;
+}
+
+export type ExpressionClause =
+  | { kind: 'comparison'; comparison: ExpressionComparison }
+  | { kind: 'group'; group: ExpressionConditionConfig };
+
+export interface ExpressionConditionConfig {
+  clauses: ExpressionClause[];
+  joinOps: Array<'AND' | 'OR'>;
+}
+
 // 질문 표시 조건
 export interface QuestionCondition {
   id: string;
   name?: string; // 조건 이름 (선택사항)
   sourceQuestionId: string; // 조건을 확인할 질문 ID
-  conditionType: 'value-match' | 'table-cell-check' | 'custom'; // 조건 타입
+  conditionType: 'value-match' | 'table-cell-check' | 'expression' | 'custom'; // 조건 타입
+  // conditionType === 'expression' 일 때만 사용
+  expressionConfig?: ExpressionConditionConfig;
   // value-match: 특정 값과 일치하는지 확인 (radio, select 등)
   requiredValues?: string[]; // 필요한 값들
   // table-cell-check: 테이블의 특정 셀이 체크되었는지 확인

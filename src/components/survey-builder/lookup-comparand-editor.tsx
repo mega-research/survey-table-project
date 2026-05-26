@@ -12,7 +12,7 @@ import type { RightOperand } from '@/types/survey';
 
 import { LookupKeyMappingEditor } from './lookup-key-mapping-editor';
 import { LookupSelector } from './lookup-selector';
-import { NONE_SENTINEL } from './lookup-shared';
+import { EMPTY_LOOKUPS, NONE_SENTINEL } from './lookup-shared';
 
 type LookupOperand = Extract<RightOperand, { kind: 'lookup' }>;
 
@@ -32,7 +32,7 @@ interface Props {
  * 이전 모델과 차이: LUT 가 keyColumns/valueColumns 를 미리 정의하지 않는다. 모든 의미는 여기서 결정.
  */
 export function LookupComparandEditor({ value, onChange }: Props) {
-  const lookups = useSurveyBuilderStore((s) => s.currentSurvey.lookups ?? []);
+  const lookups = useSurveyBuilderStore((s) => s.currentSurvey.lookups) ?? EMPTY_LOOKUPS;
   const selected = lookups.find((l) => l.id === value.surveyLookupId);
 
   // 키로 이미 사용된 LUT 컬럼은 값 컬럼 후보에서 제외 (의미상 같은 컬럼을 키와 값으로 쓰면 항상 일치)

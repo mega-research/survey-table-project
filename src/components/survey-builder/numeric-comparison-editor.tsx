@@ -2,25 +2,25 @@
 
 import { useCallback, useEffect, useState } from 'react';
 
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useSurveyBuilderStore } from '@/stores/survey-store';
 import type {
-  LeftOperand,
   NumericComparison,
+  Question,
   RightOperand,
 } from '@/types/survey';
 import { isPartialNumericInput, parseNumericInput } from '@/utils/numeric-input';
 
-import { LeftOperandEditor } from './left-operand-editor';
 import { LookupComparandEditor } from './lookup-comparand-editor';
 
 interface NumericComparisonEditorProps {
   value?: NumericComparison;
   onChange: (value: NumericComparison) => void;
-  idPrefix: string; // label htmlFor 충돌 방지 (외부에서 단일성 보장)
-  /** 부모 조건이 가리키는 source question id (좌변 산술 picker 의 옵션 정렬에 사용) */
-  sourceQuestionId?: string;
+  idPrefix: string;
+  onMigrate?: () => void;
 }
 
 const OPERATOR_OPTIONS: Array<{ value: NumericComparison['operator']; label: string }> = [
@@ -32,12 +32,72 @@ const OPERATOR_OPTIONS: Array<{ value: NumericComparison['operator']; label: str
   { value: '<', label: '미만 (<)' },
 ];
 
-/**
- * 기존 (comparand 기반) 데이터를 새 (right 기반) 모델로 마이그레이션해서 반환.
- * - right 있으면 그대로
- * - comparand 만 있으면 literal 로 변환
- * - 둘 다 없으면 literal 0
- */
+function formatCellRef(
+  cellRef: { questionId: string; cellId: string },
+  questions: Question[],
+): string {
+  const q = questions.find((x) => x.id === cellRef.questionId);
+  if (!q) return '(삭제된 셀)';
+  for (const row of q.tableRowsData ?? []) {
+    for (const cell of row.cells ?? []) {
+      if (cell.id === cellRef.cellId) {
+        const cellLabel = cell.exportLabel ?? cell.cellCode ?? cell.id.slice(0, 6);
+        const rowLabel = row.label?.trim() || row.id.slice(0, 6);
+        return `${q.title} > ${rowLabel} / ${cellLabel}`;
+      }
+    }
+  }
+  return '(삭제된 셀)';
+}
+
+function BinopReadonlyLabel({
+  left,
+  onMigrate,
+}: {
+  left: NonNullable<NumericComparison['left']>;
+  onMigrate?: () => void;
+}) {
+  const questions = useSurveyBuilderStore((s) => s.currentSurvey.questions);
+
+  let summary: string;
+  if (left.kind === 'cell') {
+    summary = formatCellRef(left, questions);
+  } else {
+    const leftLabel = formatCellRef(left.left, questions);
+    const rightLabel =
+      left.right.kind === 'literal'
+        ? String(left.right.value)
+        : formatCellRef(left.right, questions);
+    summary = `${leftLabel} ${left.op} ${rightLabel}`;
+  }
+
+  return (
+    <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs">
+      <p className="font-semibold text-amber-900">
+        이전 버전 &lsquo;셀 산술&rsquo; 좌변 (편집 불가)
+      </p>
+      <p className="font-mono text-amber-800">{summary}</p>
+      <p className="text-amber-700">
+        다시 만들려면 위 [x] 버튼으로 비교 조건을 해제 후 다시 추가하세요. 깊은 산술이 필요하면 조건 타입을 &lsquo;장기 계산식&rsquo; 으로 바꾸세요.
+      </p>
+      {onMigrate && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            if (confirm('이 비교 조건을 장기 계산식으로 변환합니다. 진행할까요?')) {
+              onMigrate();
+            }
+          }}
+        >
+          장기 계산식으로 변환
+        </Button>
+      )}
+    </div>
+  );
+}
+
 function getRightOperand(value?: NumericComparison): RightOperand {
   if (value?.right) return value.right;
   if (value?.comparand) return { kind: 'literal', value: value.comparand.value };
@@ -52,15 +112,12 @@ export function NumericComparisonEditor({
   value,
   onChange,
   idPrefix,
-  sourceQuestionId,
+  onMigrate,
 }: NumericComparisonEditorProps) {
   const operator = value?.operator ?? '==';
-  // undefined 면 LeftOperandEditor 가 "응답값 그대로" 모드로 표시.
-  const left: LeftOperand | undefined = value?.left;
+  const left = value?.left;
   const right: RightOperand = getRightOperand(value);
 
-  // literal 입력 raw state — 부분 입력(`-`, `.`, `-.`) 보존용.
-  // value prop 이 외부에서 바뀌면 raw 도 동기화.
   const [rawInput, setRawInput] = useState<string>(() => literalToRaw(right));
 
   useEffect(() => {
@@ -72,8 +129,6 @@ export function NumericComparisonEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [right.kind, right.kind === 'literal' ? right.value : null]);
 
-  // 새 모델로 emit 할 때는 항상 right 사용 + comparand 비움 (마이그레이션).
-  // left 는 undefined ("응답값 그대로") 일 수 있으므로 patch 가 left 명시하지 않으면 그대로 유지.
   const emit = useCallback(
     (patch: Partial<NumericComparison>) => {
       const next: NumericComparison = {
@@ -90,10 +145,6 @@ export function NumericComparisonEditor({
 
   const emitOperator = (newOp: NumericComparison['operator']) => {
     emit({ operator: newOp });
-  };
-
-  const emitLeft = (next: LeftOperand | undefined) => {
-    emit({ left: next });
   };
 
   const handleRightKindChange = (kind: 'literal' | 'lookup') => {
@@ -121,14 +172,7 @@ export function NumericComparisonEditor({
         숫자 비교 조건
       </Label>
 
-      <div className="space-y-1">
-        <Label className="text-xs text-slate-600">좌변 (응답값 또는 산술)</Label>
-        <LeftOperandEditor
-          value={left}
-          onChange={emitLeft}
-          sourceQuestionId={sourceQuestionId}
-        />
-      </div>
+      {left !== undefined && <BinopReadonlyLabel left={left} onMigrate={onMigrate} />}
 
       <div className="flex items-center gap-2">
         <Label htmlFor={`${idPrefix}-operator`} className="text-xs text-slate-600">
@@ -182,7 +226,7 @@ export function NumericComparisonEditor({
       </div>
 
       <p className="text-xs text-slate-600">
-        응답값(또는 셀 산술 결과)이 위 비교 대상과 비교됩니다.
+        선택된 셀의 응답값이 위 비교 대상과 비교됩니다.
       </p>
     </div>
   );

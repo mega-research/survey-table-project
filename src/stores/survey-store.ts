@@ -147,6 +147,7 @@ const createDefaultSurvey = (): Survey => ({
   privateToken: generatePrivateToken(),
   groups: [],
   questions: [],
+  lookups: [],
   settings: defaultSurveySettings,
   createdAt: new Date(),
   updatedAt: new Date(),
