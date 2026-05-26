@@ -15,6 +15,16 @@ import {
   MAX_ATTACHMENT_FILE_BYTES,
   TMP_ATTACHMENT_PREFIX,
 } from '@/lib/mail/constants';
+import {
+  ALLOWED_MIME,
+  EXT_TO_MIME,
+  getFileExt,
+  isAllowedMime,
+  MIN_FILE_BYTES,
+  resolveAttachmentType,
+  SAFE_FILENAME_RE,
+  validateFilename,
+} from '@/lib/upload/attachment-policy';
 
 const r2Client = new S3Client({
   region: 'auto',
@@ -24,105 +34,6 @@ const r2Client = new S3Client({
     secretAccessKey: process.env.CLOUDFLARE_R2_SECRET_KEY || '',
   },
 });
-
-const MIN_FILE_BYTES = 1;
-
-// 메일 첨부 허용 MIME 화이트리스트. 실행 가능 형식(.exe, .sh, .html, .js 등)은 거부.
-// Office 새포맷·구포맷 모두 허용, 한컴 hwp/hwpx 포함.
-const ALLOWED_MIME = new Set<string>([
-  'application/pdf',
-  'application/zip',
-  'application/x-zip-compressed',
-  'application/msword',
-  'application/vnd.ms-excel',
-  'application/vnd.ms-powerpoint',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-  'application/vnd.hancom.hwp',
-  'application/x-hwp',
-  'application/haansofthwp',
-  'application/hwp',
-  'application/vnd.hancom.hwpx',
-  'application/haansofthwpx',
-  'application/hwp+zip',
-  'text/plain',
-  'text/csv',
-]);
-const ALLOWED_IMAGE_PREFIX = 'image/';
-
-// 확장자 화이트리스트. 브라우저가 file.type 을 빈 문자열로 보내는 케이스 (특히 hwp/hwpx 같은
-// 한국 포맷) 를 위해 확장자도 같이 본다. 매칭되면 EXT_TO_MIME 으로 MIME 보강.
-const EXT_TO_MIME: Record<string, string> = {
-  hwp: 'application/vnd.hancom.hwp',
-  hwpx: 'application/vnd.hancom.hwpx',
-  doc: 'application/msword',
-  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  xls: 'application/vnd.ms-excel',
-  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  ppt: 'application/vnd.ms-powerpoint',
-  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-  pdf: 'application/pdf',
-  zip: 'application/zip',
-  txt: 'text/plain',
-  csv: 'text/csv',
-  jpg: 'image/jpeg',
-  jpeg: 'image/jpeg',
-  png: 'image/png',
-  gif: 'image/gif',
-  webp: 'image/webp',
-  svg: 'image/svg+xml',
-  bmp: 'image/bmp',
-};
-
-// 안전한 파일명 — mailAttachmentSchema 와 동일 정책 (윈도우 reserved 문자 제외).
-// 추가로 NUL/CR/LF 같은 제어문자, leading dot 만, ../ 류 path traversal 시도 차단.
-const SAFE_FILENAME_RE = /^[^\\/:*?"<>|\x00-\x1f]{1,200}$/;
-
-function isAllowedMime(mime: string): boolean {
-  if (ALLOWED_MIME.has(mime)) return true;
-  if (mime.startsWith(ALLOWED_IMAGE_PREFIX)) return true;
-  return false;
-}
-
-function getFileExt(filename: string): string {
-  const idx = filename.lastIndexOf('.');
-  if (idx < 0 || idx === filename.length - 1) return '';
-  return filename.slice(idx + 1).toLowerCase();
-}
-
-/**
- * 파일 형식 판정: 확장자 우선, MIME 보조.
- * - 확장자가 화이트리스트에 있으면 통과 (MIME 이 빈/이상해도 그 확장자의 표준 MIME 반환)
- * - 확장자가 없거나 비허용이면 MIME 으로 폴백
- * - 둘 다 실패하면 null
- */
-function resolveAttachmentType(filename: string, mime: string): { mime: string } | null {
-  const ext = getFileExt(filename);
-  if (ext && ext in EXT_TO_MIME) {
-    return { mime: mime && isAllowedMime(mime) ? mime : EXT_TO_MIME[ext] };
-  }
-  if (mime && isAllowedMime(mime)) {
-    return { mime };
-  }
-  return null;
-}
-
-function validateFilename(name: string): string | null {
-  const trimmed = name.trim();
-  if (trimmed.length === 0) return '파일명이 비어있습니다.';
-  if (trimmed.length > 200) return '파일명이 너무 깁니다 (최대 200자).';
-  if (!SAFE_FILENAME_RE.test(trimmed)) return '파일명에 사용할 수 없는 문자가 있습니다.';
-  // ".pdf" 처럼 확장자만 있는 파일은 거부 — name 부분이 비어있음.
-  if (trimmed.startsWith('.') && trimmed.lastIndexOf('.') === 0) {
-    return '파일명이 비어있습니다 (확장자만 있음).';
-  }
-  // ".." 또는 "." 단독 거부 (path traversal 시도)
-  if (trimmed === '.' || trimmed === '..') {
-    return '유효하지 않은 파일명입니다.';
-  }
-  return null;
-}
 
 export async function POST(request: NextRequest) {
   try {
