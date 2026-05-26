@@ -16,13 +16,9 @@ import {
   TMP_ATTACHMENT_PREFIX,
 } from '@/lib/mail/constants';
 import {
-  ALLOWED_MIME,
-  EXT_TO_MIME,
   getFileExt,
-  isAllowedMime,
   MIN_FILE_BYTES,
   resolveAttachmentType,
-  SAFE_FILENAME_RE,
   validateFilename,
 } from '@/lib/upload/attachment-policy';
 
