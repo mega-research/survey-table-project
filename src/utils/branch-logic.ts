@@ -1090,28 +1090,19 @@ function evaluateExpressionOperand(
     case 'literal':
       return operand.value;
     case 'cell': {
-      const qr = responses[operand.questionId] as
-        | { questionType?: string; tableResponse?: Record<string, Record<string, string | undefined>> }
-        | undefined;
-      if (!qr || qr.questionType !== 'table' || !qr.tableResponse) return undefined;
-      // tableResponse 구조: { rowId: { cellId: value } }
-      for (const rowResponse of Object.values(qr.tableResponse)) {
-        if (rowResponse && operand.cellId in rowResponse) {
-          const v = rowResponse[operand.cellId];
-          if (v === undefined || v === '') return undefined;
-          return typeof v === 'string' || typeof v === 'number' ? v : undefined;
-        }
-      }
-      return undefined;
+      // 실제 응답 구조: question_responses[questionId] = { cellId: value }
+      // (다른 evaluator 들 — 예: checkTableCellCondition 의 tableResponse[cell.id] — 와 동일 패턴)
+      const qr = responses[operand.questionId] as Record<string, unknown> | undefined;
+      if (!qr || typeof qr !== 'object') return undefined;
+      const v = (qr as Record<string, unknown>)[operand.cellId];
+      if (v === undefined || v === null || v === '') return undefined;
+      return typeof v === 'string' || typeof v === 'number' ? v : undefined;
     }
     case 'question': {
-      const qr = responses[operand.questionId] as
-        | { questionType?: string; textResponse?: string; selectedValue?: string }
-        | undefined;
-      if (!qr) return undefined;
-      if (qr.questionType === 'text' || qr.questionType === 'textarea') return qr.textResponse;
-      if (qr.questionType === 'radio' || qr.questionType === 'select') return qr.selectedValue;
-      // 기타 question type 은 expression 비교 대상 외 — undefined
+      // 일반 질문: 응답이 string (text/textarea) 또는 string[]/string (radio/select) 평면 저장
+      const qr = responses[operand.questionId];
+      if (qr === undefined || qr === null || qr === '') return undefined;
+      if (typeof qr === 'string' || typeof qr === 'number') return qr;
       return undefined;
     }
     case 'lookup': {

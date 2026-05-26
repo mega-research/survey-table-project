@@ -72,14 +72,12 @@ function makeTargetQuestion(expressionConfig: ExpressionConditionConfig): Questi
 }
 
 function makeResponses(amountValue: number, peopleValue: number) {
+  // 실제 응답 저장 구조: question_responses[questionId] = { cellId: value } (평면)
+  // checkTableCellCondition 등 다른 evaluator 가 사용하는 구조와 동일
   return {
     'q-table': {
-      questionId: 'q-table',
-      questionType: 'table',
-      tableResponse: {
-        'row-출장비': { 'cell-출장비': String(amountValue) },
-        'row-인원':   { 'cell-인원':   String(peopleValue) },
-      },
+      'cell-출장비': String(amountValue),
+      'cell-인원': String(peopleValue),
     },
   };
 }
