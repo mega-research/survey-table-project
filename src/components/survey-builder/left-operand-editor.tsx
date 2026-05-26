@@ -13,6 +13,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import type { CellRef, LeftOperand, Question } from '@/types/survey';
+import { formatCellLabel } from '@/utils/cell-label';
 import { isPartialNumericInput, parseNumericInput } from '@/utils/numeric-input';
 
 interface Props {
@@ -46,10 +47,10 @@ function collectInputCells(questions: Question[], preferredQuestionId?: string):
     for (const row of q.tableRowsData) {
       for (const c of row.cells ?? []) {
         if (c.type !== 'input') continue;
-        const rowLabel = row.label?.trim() || row.id.slice(0, 6);
-        const cellLabel = c.exportLabel ?? c.cellCode ?? c.id.slice(0, 6);
+        // 가로/세로 병합으로 가려진 후속 셀 제외 — 머지 영역의 첫 셀만 노출
+        if (c.isHidden) continue;
         out.push({
-          label: `${q.title} > ${rowLabel} / ${cellLabel}`,
+          label: `${q.title} > ${formatCellLabel(c)}`,
           cellRef: { kind: 'cell', questionId: q.id, cellId: c.id },
         });
       }

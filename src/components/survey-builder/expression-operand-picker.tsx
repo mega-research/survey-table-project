@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/select';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import type { ExpressionOperand, Question, SurveyLookup } from '@/types/survey';
+import { formatCellLabel } from '@/utils/cell-label';
 
 import { LookupKeyMappingEditor } from './lookup-key-mapping-editor';
 import { LookupSelector } from './lookup-selector';
@@ -199,10 +200,11 @@ function CellPickerSub({
     () =>
       (selectedQuestion?.tableRowsData ?? []).flatMap((row) =>
         (row.cells ?? [])
-          .filter((c) => c.type === 'input')
+          // 가로/세로 병합으로 가려진 후속 셀 제외 — 머지 영역의 첫 셀만 노출
+          .filter((c) => c.type === 'input' && !c.isHidden)
           .map((c) => ({
             cellId: c.id,
-            label: `${row.label?.trim() || row.id.slice(0, 6)} / ${c.exportLabel ?? c.cellCode ?? c.id.slice(0, 6)}`,
+            label: formatCellLabel(c),
           })),
       ),
     [selectedQuestion],

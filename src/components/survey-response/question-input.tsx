@@ -8,15 +8,11 @@ import { UserDefinedMultiLevelSelect } from '@/components/survey-builder/user-de
 import { Input } from '@/components/ui/input';
 import { useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
-import { useSurveyResponseStore } from '@/stores/survey-response-store';
 import { Question, QuestionOption, RankingAnswer } from '@/types/survey';
 import { getOptionsLayout } from '@/utils/options-layout';
 
+import { OptionTextInput } from './option-text-input';
 import { RankingQuestion } from './ranking-question';
-
-// useSyncExternalStore 가 매 렌더마다 새 {} 를 새로운 snapshot 으로 오인하지 않도록
-// 안정 참조 fallback. selector 내부에서 `?? {}` 하면 무한 루프 경고 발생.
-const EMPTY_OPTION_TEXTS: Record<string, string> = {};
 
 interface QuestionInputProps {
   question: Question;
@@ -181,10 +177,6 @@ function RadioQuestion({
   value: SingleChoiceResponse;
   onChange: (value: SingleChoiceResponse) => void;
 }) {
-  const optionTexts =
-    useSurveyResponseStore((s) => s.optionTexts[question.id]) ?? EMPTY_OPTION_TEXTS;
-  const setOptionText = useSurveyResponseStore((s) => s.setOptionText);
-
   const isSelected = (optionValue: string) => {
     if (isOtherChoiceValue(value)) {
       return value.selectedValue === optionValue;
@@ -229,10 +221,9 @@ function RadioQuestion({
             </label>
           </div>
           {option.allowTextInput && isSelected(option.value) && (
-            <Input
-              value={optionTexts[option.id] ?? ''}
-              onChange={(e) => setOptionText(question.id, option.id, e.target.value)}
-              placeholder={option.textInputPlaceholder || '상세 기재'}
+            <OptionTextInput
+              questionId={question.id}
+              option={option}
               className="ml-7 mr-2"
             />
           )}
@@ -252,10 +243,6 @@ function CheckboxQuestion({
   value: unknown;
   onChange: (value: MultiChoiceResponse) => void;
 }) {
-  const optionTexts =
-    useSurveyResponseStore((s) => s.optionTexts[question.id]) ?? EMPTY_OPTION_TEXTS;
-  const setOptionText = useSurveyResponseStore((s) => s.setOptionText);
-
   const currentValues = useMemo<MultiChoiceResponse>(
     () => (Array.isArray(value) ? (value as MultiChoiceResponse) : []),
     [value],
@@ -340,10 +327,9 @@ function CheckboxQuestion({
               </label>
             </div>
             {option.allowTextInput && checked && (
-              <Input
-                value={optionTexts[option.id] ?? ''}
-                onChange={(e) => setOptionText(question.id, option.id, e.target.value)}
-                placeholder={option.textInputPlaceholder || '상세 기재'}
+              <OptionTextInput
+                questionId={question.id}
+                option={option}
                 className="ml-7"
               />
             )}
@@ -380,10 +366,6 @@ function SelectQuestion({
   value: SingleChoiceResponse;
   onChange: (value: SingleChoiceResponse) => void;
 }) {
-  const optionTexts =
-    useSurveyResponseStore((s) => s.optionTexts[question.id]) ?? EMPTY_OPTION_TEXTS;
-  const setOptionText = useSurveyResponseStore((s) => s.setOptionText);
-
   // OtherChoiceValue fallback: snapshot 호환 (Phase 7 cleanup 까지 유지)
   const [legacyOtherInput, setLegacyOtherInput] = useState('');
   const [selectedValue, setSelectedValue] = useState<string>('');
@@ -455,10 +437,9 @@ function SelectQuestion({
 
       {/* allowTextInput 옵션 선택 시 인라인 텍스트 입력 */}
       {showAllowTextInput && selectedOption && (
-        <Input
-          placeholder={selectedOption.textInputPlaceholder || '상세 기재'}
-          value={optionTexts[selectedOption.id] ?? ''}
-          onChange={(e) => setOptionText(question.id, selectedOption.id, e.target.value)}
+        <OptionTextInput
+          questionId={question.id}
+          option={selectedOption}
           className="w-full"
         />
       )}

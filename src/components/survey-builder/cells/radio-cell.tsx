@@ -3,14 +3,10 @@
 import React, { useCallback } from 'react';
 import { flushSync } from 'react-dom';
 
-import { Input } from '@/components/ui/input';
-import { useSurveyResponseStore } from '@/stores/survey-response-store';
+import { OptionTextInput } from '@/components/survey-response/option-text-input';
 
 import { CellOptionsContainer } from './cell-options-container';
 import type { InteractiveCellProps } from './types';
-
-// useSyncExternalStore 안정 참조 — selector 내부 `?? {}` 사용 시 무한 루프 경고 회피
-const EMPTY_OPTION_TEXTS: Record<string, string> = {};
 
 /** 라디오 셀 (인터랙티브) */
 export const RadioCell = React.memo(function RadioCell({
@@ -20,10 +16,6 @@ export const RadioCell = React.memo(function RadioCell({
   questionId,
   groupName,
 }: InteractiveCellProps) {
-  const optionTexts =
-    useSurveyResponseStore((s) => s.optionTexts[questionId]) ?? EMPTY_OPTION_TEXTS;
-  const setOptionText = useSurveyResponseStore((s) => s.setOptionText);
-
   const handleRadioChange = useCallback(
     (optionId: string) => {
       const isCurrentlySelected = cellResponse === optionId;
@@ -72,10 +64,9 @@ export const RadioCell = React.memo(function RadioCell({
               </label>
             </div>
             {option.allowTextInput && isSelected && (
-              <Input
-                value={optionTexts[option.id] ?? ''}
-                onChange={(e) => setOptionText(questionId, option.id, e.target.value)}
-                placeholder={option.textInputPlaceholder || '상세 기재'}
+              <OptionTextInput
+                questionId={questionId}
+                option={option}
                 className="ml-6"
               />
             )}

@@ -2,14 +2,10 @@
 
 import React, { useCallback } from 'react';
 
-import { Input } from '@/components/ui/input';
-import { useSurveyResponseStore } from '@/stores/survey-response-store';
+import { OptionTextInput } from '@/components/survey-response/option-text-input';
 
 import { CellOptionsContainer } from './cell-options-container';
 import type { InteractiveCellProps } from './types';
-
-// useSyncExternalStore 안정 참조 — selector 내부 `?? {}` 사용 시 무한 루프 경고 회피
-const EMPTY_OPTION_TEXTS: Record<string, string> = {};
 
 /** 체크박스 셀 (인터랙티브) */
 export const CheckboxCell = React.memo(function CheckboxCell({
@@ -18,10 +14,6 @@ export const CheckboxCell = React.memo(function CheckboxCell({
   onUpdateValue,
   questionId,
 }: InteractiveCellProps) {
-  const optionTexts =
-    useSurveyResponseStore((s) => s.optionTexts[questionId]) ?? EMPTY_OPTION_TEXTS;
-  const setOptionText = useSurveyResponseStore((s) => s.setOptionText);
-
   const cellResponseArray = Array.isArray(cellResponse) ? cellResponse : [];
   const currentCount = cellResponseArray.length;
   const { maxSelections, minSelections } = cell;
@@ -107,10 +99,9 @@ export const CheckboxCell = React.memo(function CheckboxCell({
               </label>
             </div>
             {option.allowTextInput && isChecked && (
-              <Input
-                value={optionTexts[option.id] ?? ''}
-                onChange={(e) => setOptionText(questionId, option.id, e.target.value)}
-                placeholder={option.textInputPlaceholder || '상세 기재'}
+              <OptionTextInput
+                questionId={questionId}
+                option={option}
                 className="ml-6"
               />
             )}

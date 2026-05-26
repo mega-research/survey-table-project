@@ -12,6 +12,7 @@ import type {
   Question,
   RightOperand,
 } from '@/types/survey';
+import { formatCellLabel } from '@/utils/cell-label';
 import { isPartialNumericInput, parseNumericInput } from '@/utils/numeric-input';
 
 import { LookupComparandEditor } from './lookup-comparand-editor';
@@ -41,9 +42,7 @@ function formatCellRef(
   for (const row of q.tableRowsData ?? []) {
     for (const cell of row.cells ?? []) {
       if (cell.id === cellRef.cellId) {
-        const cellLabel = cell.exportLabel ?? cell.cellCode ?? cell.id.slice(0, 6);
-        const rowLabel = row.label?.trim() || row.id.slice(0, 6);
-        return `${q.title} > ${rowLabel} / ${cellLabel}`;
+        return `${q.title} > ${formatCellLabel(cell)}`;
       }
     }
   }

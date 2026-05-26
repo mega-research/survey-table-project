@@ -34,6 +34,7 @@ import { generateOptionCode } from '@/utils/option-code-generator';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { Question, QuestionOption, SelectLevel } from '@/types/survey';
 
+import { OptionPlaceholderEditor } from './option-placeholder-editor';
 import { VariableButton } from './variable-button';
 
 import { BranchRuleEditor } from './branch-rule-editor';
@@ -108,6 +109,7 @@ export function QuestionBasicTab({
   // 변수 카탈로그 (prefill 토큰용)
   const variableCatalog = useSurveyBuilderStore((s) => s.variableCatalog);
   const defaultTemplateRef = useRef<HTMLInputElement>(null);
+  const titleRef = useRef<HTMLInputElement>(null);
 
   // ranking + optionsSource='table' (자체 테이블 내장) 이면 수동 옵션 UI 숨김
   const isRankingTableSource =
@@ -147,27 +149,48 @@ export function QuestionBasicTab({
           <Label htmlFor="title">
             질문 제목 <span className="text-red-500">*</span>
           </Label>
-          <Input
-            id="title"
-            value={localTitle}
-            onChange={(e) => {
-              const value = e.target.value;
-              setLocalTitle(value);
-              if (validationErrors.title) {
-                setValidationErrors((prev) => ({ ...prev, title: '' }));
-              }
-              // 300ms debounce 후 formData에 반영
-              if (debouncedTitleRef.current) clearTimeout(debouncedTitleRef.current);
-              debouncedTitleRef.current = setTimeout(() => {
-                setFormData((prev) => ({ ...prev, title: value }));
-                debouncedTitleRef.current = null;
-              }, 300);
-            }}
-            placeholder="질문을 입력하세요"
-            className={`mt-2 ${
-              validationErrors.title ? 'border-red-500 focus:border-red-500' : ''
-            }`}
-          />
+          <div className="mt-2 flex items-start gap-2">
+            <Input
+              id="title"
+              ref={titleRef}
+              value={localTitle}
+              onChange={(e) => {
+                const value = e.target.value;
+                setLocalTitle(value);
+                if (validationErrors.title) {
+                  setValidationErrors((prev) => ({ ...prev, title: '' }));
+                }
+                // 300ms debounce 후 formData에 반영
+                if (debouncedTitleRef.current) clearTimeout(debouncedTitleRef.current);
+                debouncedTitleRef.current = setTimeout(() => {
+                  setFormData((prev) => ({ ...prev, title: value }));
+                  debouncedTitleRef.current = null;
+                }, 300);
+              }}
+              placeholder="질문을 입력하세요"
+              className={`flex-1 ${
+                validationErrors.title ? 'border-red-500 focus:border-red-500' : ''
+              }`}
+            />
+            {variableCatalog.length > 0 && (
+              <VariableButton
+                catalog={variableCatalog}
+                inputRef={titleRef}
+                onChange={(v) => {
+                  setLocalTitle(v);
+                  if (validationErrors.title) {
+                    setValidationErrors((prev) => ({ ...prev, title: '' }));
+                  }
+                  // 토큰 삽입은 명시적 액션이므로 debounce 우회 — 즉시 반영
+                  if (debouncedTitleRef.current) {
+                    clearTimeout(debouncedTitleRef.current);
+                    debouncedTitleRef.current = null;
+                  }
+                  setFormData((prev) => ({ ...prev, title: v }));
+                }}
+              />
+            )}
+          </div>
           {validationErrors.title && (
             <p className="mt-1 text-sm text-red-500">{validationErrors.title}</p>
           )}
@@ -1137,19 +1160,14 @@ function SortableOptionItem({
       </div>
 
       {option.allowTextInput && (
-        <div className="flex items-center gap-2 px-3 pt-0 pb-2 pl-9">
-          <span className="shrink-0 text-[10px] text-gray-400">placeholder</span>
-          <Input
-            value={option.textInputPlaceholder ?? ''}
-            onChange={(e) =>
-              updateOption(option.id, {
-                textInputPlaceholder: e.target.value,
-              } as Partial<QuestionOption>)
-            }
-            placeholder="상세 기재"
-            className="h-7 text-xs"
-          />
-        </div>
+        <OptionPlaceholderEditor
+          value={option.textInputPlaceholder}
+          onChange={(next) =>
+            updateOption(option.id, {
+              textInputPlaceholder: next,
+            } as Partial<QuestionOption>)
+          }
+        />
       )}
 
       {showBranchSettings && (

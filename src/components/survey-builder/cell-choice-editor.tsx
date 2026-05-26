@@ -11,6 +11,7 @@ import { getMaxSpssCode } from '@/utils/option-code-generator';
 import { CheckboxOption, Question, QuestionOption, RadioOption } from '@/types/survey';
 
 import { BranchRuleEditor } from './branch-rule-editor';
+import { OptionPlaceholderEditor } from './option-placeholder-editor';
 import { createTextInputOption } from './question-option-helpers';
 
 // OTHER_OPTION_ID: 미리보기에서 기존 기타 옵션 구별용 (읽기 전용, Phase 7 cleanup 대상)
@@ -162,19 +163,14 @@ export function CellChoiceEditor({
                 </div>
 
                 {option.allowTextInput && (
-                  <div className="flex items-center gap-2 px-3 pb-3 pl-9">
-                    <span className="shrink-0 text-[10px] text-gray-400">placeholder</span>
-                    <Input
-                      value={option.textInputPlaceholder ?? ''}
-                      onChange={(e) => {
-                        const updated = [...checkboxOptions];
-                        updated[index] = { ...option, textInputPlaceholder: e.target.value };
-                        onCheckboxOptionsChange(updated);
-                      }}
-                      placeholder="상세 기재"
-                      className="h-7 text-xs"
-                    />
-                  </div>
+                  <OptionPlaceholderEditor
+                    value={option.textInputPlaceholder}
+                    onChange={(next) => {
+                      const updated = [...checkboxOptions];
+                      updated[index] = { ...option, textInputPlaceholder: next };
+                      onCheckboxOptionsChange(updated);
+                    }}
+                  />
                 )}
 
                 {showBranchSettings && (
@@ -438,19 +434,14 @@ export function CellChoiceEditor({
                 </div>
 
                 {option.allowTextInput && (
-                  <div className="flex items-center gap-2 px-3 pb-3 pl-9">
-                    <span className="shrink-0 text-[10px] text-gray-400">placeholder</span>
-                    <Input
-                      value={option.textInputPlaceholder ?? ''}
-                      onChange={(e) => {
-                        const updated = [...radioOptions];
-                        updated[index] = { ...option, textInputPlaceholder: e.target.value };
-                        onRadioOptionsChange(updated);
-                      }}
-                      placeholder="상세 기재"
-                      className="h-7 text-xs"
-                    />
-                  </div>
+                  <OptionPlaceholderEditor
+                    value={option.textInputPlaceholder}
+                    onChange={(next) => {
+                      const updated = [...radioOptions];
+                      updated[index] = { ...option, textInputPlaceholder: next };
+                      onRadioOptionsChange(updated);
+                    }}
+                  />
                 )}
 
                 {showBranchSettings && (
@@ -615,19 +606,14 @@ export function CellChoiceEditor({
               </div>
 
               {option.allowTextInput && (
-                <div className="flex items-center gap-2 px-3 pb-3 pl-9">
-                  <span className="shrink-0 text-[10px] text-gray-400">placeholder</span>
-                  <Input
-                    value={option.textInputPlaceholder ?? ''}
-                    onChange={(e) => {
-                      const updated = [...selectOptions];
-                      updated[index] = { ...option, textInputPlaceholder: e.target.value };
-                      onSelectOptionsChange(updated);
-                    }}
-                    placeholder="상세 기재"
-                    className="h-7 text-xs"
-                  />
-                </div>
+                <OptionPlaceholderEditor
+                  value={option.textInputPlaceholder}
+                  onChange={(next) => {
+                    const updated = [...selectOptions];
+                    updated[index] = { ...option, textInputPlaceholder: next };
+                    onSelectOptionsChange(updated);
+                  }}
+                />
               )}
 
               {showBranchSettings && (

@@ -4,14 +4,10 @@ import React, { useCallback } from 'react';
 
 import { ChevronDown } from 'lucide-react';
 
-import { Input } from '@/components/ui/input';
-import { useSurveyResponseStore } from '@/stores/survey-response-store';
+import { OptionTextInput } from '@/components/survey-response/option-text-input';
 
 import { CellContentLayout } from './cell-content-layout';
 import type { InteractiveCellProps } from './types';
-
-// useSyncExternalStore 안정 참조 — selector 내부 `?? {}` 사용 시 무한 루프 경고 회피
-const EMPTY_OPTION_TEXTS: Record<string, string> = {};
 
 /** 드롭다운 셀 (인터랙티브) */
 export const SelectCell = React.memo(function SelectCell({
@@ -20,10 +16,6 @@ export const SelectCell = React.memo(function SelectCell({
   onUpdateValue,
   questionId,
 }: InteractiveCellProps) {
-  const optionTexts =
-    useSurveyResponseStore((s) => s.optionTexts[questionId]) ?? EMPTY_OPTION_TEXTS;
-  const setOptionText = useSurveyResponseStore((s) => s.setOptionText);
-
   const handleSelectChange = useCallback(
     (optionId: string) => {
       onUpdateValue(optionId);
@@ -64,10 +56,9 @@ export const SelectCell = React.memo(function SelectCell({
         </div>
 
         {selectedOption?.allowTextInput && (
-          <Input
-            value={optionTexts[selectedOption.id] ?? ''}
-            onChange={(e) => setOptionText(questionId, selectedOption.id, e.target.value)}
-            placeholder={selectedOption.textInputPlaceholder || '상세 기재'}
+          <OptionTextInput
+            questionId={questionId}
+            option={selectedOption}
             className="w-full"
           />
         )}
