@@ -12,6 +12,7 @@ import {
   Link as LinkIcon,
   List,
   ListOrdered,
+  Paperclip,
   Redo,
   Strikethrough,
   Underline,
@@ -20,6 +21,7 @@ import {
 
 import { findTableAtSelection } from '@/lib/tiptap/find-table';
 
+import { FileAttachmentContextToolbar } from './file-attachment-context-toolbar';
 import { ImageContextToolbar } from './image-context-toolbar';
 import { PopoverVariableMenu } from './popover-variable-menu';
 import { TableContextToolbar } from './table-context-toolbar';
@@ -34,9 +36,11 @@ interface Props {
   variableCatalog?: VariableDef[];
   onPickImage: () => void;
   onPickLink: () => void;
+  onPickFile?: () => void;
+  onReplaceFile?: () => void;
 }
 
-export function Toolbar({ editor, variableCatalog, onPickImage, onPickLink }: Props) {
+export function Toolbar({ editor, variableCatalog, onPickImage, onPickLink, onPickFile, onReplaceFile }: Props) {
   const s = useEditorState({
     editor,
     selector: ({ editor }) => {
@@ -46,7 +50,7 @@ export function Toolbar({ editor, variableCatalog, onPickImage, onPickLink }: Pr
           bulletList: false, orderedList: false,
           alignLeft: true, alignCenter: false, alignRight: false, alignJustify: false,
           canUndo: false, canRedo: false,
-          imageActive: false, tableActive: false,
+          imageActive: false, tableActive: false, fileAttachmentActive: false,
         };
       }
       return {
@@ -65,6 +69,7 @@ export function Toolbar({ editor, variableCatalog, onPickImage, onPickLink }: Pr
         // ImageResize NodeView 는 schema 에 imageResize 이름으로 등록된다
         imageActive: editor.isActive('imageResize'),
         tableActive: findTableAtSelection(editor.state) !== null,
+        fileAttachmentActive: editor.isActive('fileAttachment'),
       };
     },
   });
@@ -121,6 +126,11 @@ export function Toolbar({ editor, variableCatalog, onPickImage, onPickLink }: Pr
 
       <ToolBtn onClick={onPickImage} title="이미지"><ImageIcon className="h-4 w-4" /></ToolBtn>
       <ToolBtn onClick={onPickLink} title="링크"><LinkIcon className="h-4 w-4" /></ToolBtn>
+      {onPickFile && (
+        <ToolBtn onClick={onPickFile} title="파일 첨부">
+          <Paperclip className="h-4 w-4" />
+        </ToolBtn>
+      )}
       <TableInsertMenu editor={editor} />
 
       {variableCatalog && variableCatalog.length > 0 && (
@@ -163,6 +173,9 @@ export function Toolbar({ editor, variableCatalog, onPickImage, onPickLink }: Pr
 
       {s.imageActive && <ImageContextToolbar editor={editor} />}
       {s.tableActive && <TableContextToolbar editor={editor} />}
+      {s.fileAttachmentActive && onReplaceFile && (
+        <FileAttachmentContextToolbar editor={editor} onReplace={onReplaceFile} />
+      )}
     </div>
   );
 }
