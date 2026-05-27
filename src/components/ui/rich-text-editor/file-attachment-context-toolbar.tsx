@@ -5,7 +5,6 @@ import { useEffect, useState } from 'react';
 import { useEditorState, type Editor } from '@tiptap/react';
 import { RefreshCw, Trash2 } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { TMP_NOTICE_ATTACHMENT_PREFIX } from '@/lib/upload/attachment-policy';
