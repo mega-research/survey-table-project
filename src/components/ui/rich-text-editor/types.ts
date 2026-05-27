@@ -43,8 +43,12 @@ export interface RichTextEditorHandle {
   getUnsavedImages: () => string[];
   /** 위 이미지들을 R2에서 일괄 삭제 */
   cleanupOrphanImages: () => Promise<void>;
-  /** 외부에서 이미지 URL을 직접 삽입 (image-upload-modal 같은 케이스) */
+  /** 외부에서 이미지 URL을 직접 삽입 image-upload-modal 같은 케이스 */
   insertImage: (url: string) => void;
-  /** 내부 editor 인스턴스 (탈출구) */
+  /** 내부 editor 인스턴스 탈출구 */
   getEditor: () => Editor | null;
+  /** 에디터에 삽입됐지만 아직 저장되지 않은 첨부 R2 key 목록 tmp/notice-attachment/ 만 */
+  getUnsavedFileAttachments: () => string[];
+  /** 위 첨부들을 R2에서 일괄 삭제 */
+  cleanupOrphanFileAttachments: () => Promise<void>;
 }

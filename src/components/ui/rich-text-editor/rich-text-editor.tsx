@@ -11,6 +11,7 @@ import { FileAttachmentUploadModal } from './file-attachment-upload-modal';
 import { ImageUploadModal } from './image-upload-modal';
 import { stripTrailingEmptyParagraph } from './trailing-node';
 import { Toolbar } from './toolbar';
+import { useEditorFileAttachmentTracker } from './use-editor-file-attachment-tracker';
 import { useEditorImageTracker } from './use-editor-image-tracker';
 import type { RichTextEditorHandle, RichTextEditorProps } from './types';
 
@@ -72,6 +73,7 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
   ) {
     const extensions = useMemo(() => createUnifiedExtensions({ kind }), [kind]);
     const imageTracker = useEditorImageTracker(initialHtml);
+    const fileTracker = useEditorFileAttachmentTracker(initialHtml);
     const [showModal, setShowModal] = useState(false);
     const [showFileModal, setShowFileModal] = useState(false);
     const [replacingFile, setReplacingFile] = useState(false);
@@ -89,6 +91,7 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
       onUpdate: ({ editor }) => {
         const currentHtml = stripTrailingEmptyParagraph(editor.getHTML());
         imageTracker.reconcileAfterUpdate(currentHtml);
+        fileTracker.reconcileAfterUpdate(currentHtml);
         onChange(editor.isEmpty ? '' : currentHtml);
       },
     });
@@ -99,6 +102,7 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
       if (initialHtml !== currentNormalized) {
         editor.commands.setContent(initialHtml, { emitUpdate: false });
         imageTracker.resetPrevious(initialHtml);
+        fileTracker.resetPrevious(initialHtml);
       }
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [initialHtml]);
@@ -116,8 +120,13 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
           editor.chain().focus().setImage({ src: url }).run();
         },
         getEditor: () => editor,
+        getUnsavedFileAttachments: () =>
+          editor ? fileTracker.getOrphans(editor.getHTML()) : [],
+        cleanupOrphanFileAttachments: async () => {
+          if (editor) await fileTracker.cleanupOrphans(editor.getHTML());
+        },
       }),
-      [editor, imageTracker],
+      [editor, imageTracker, fileTracker],
     );
 
     if (!editor) return null;
@@ -174,6 +183,7 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
       if (replacingFile && editor.isActive('fileAttachment')) {
         const prev = editor.getAttributes('fileAttachment') as { key?: string | null };
         const prevKey = prev?.key ?? null;
+        fileTracker.trackUpload(result.key);
         editor
           .chain()
           .focus()
@@ -186,6 +196,9 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
             mime: result.mime,
           })
           .run();
+        // 트래커 reconcile 가 onUpdate 안에서 prevKey 사라짐을 detect 해 자동 DELETE.
+        // 기존 명시 fetch DELETE 는 안전망으로 유지 prevKey 가 추적 안 된 케이스 대비.
+        // 멱등적이므로 중복 DELETE 가 발생해도 두 번째는 404 또는 no-op.
         if (prevKey && prevKey.startsWith(TMP_NOTICE_ATTACHMENT_PREFIX)) {
           void fetch('/api/upload/notice-attachment', {
             method: 'DELETE',
@@ -194,6 +207,7 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
           }).catch(() => undefined);
         }
       } else {
+        fileTracker.trackUpload(result.key);
         editor
           .chain()
           .focus()
