@@ -62,6 +62,7 @@ export const surveys = pgTable('surveys', {
   // soft delete
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
 
+  contactEmail: text('contact_email'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });
@@ -173,6 +174,12 @@ export const surveyResponses = pgTable('survey_responses', {
   userAgent: text('user_agent'),
   ipAddress: text('ip_address'),
   sessionId: text('session_id'),
+  // 중복 감지 신호 (2026-05-27 추가)
+  ipHash: text('ip_hash'),
+  fpHash: text('fp_hash'),
+  deviceId: text('device_id'),
+  // 미래 soft delete hook
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
   metadata: jsonb('metadata').$type<{
     exposedQuestionIds?: string[];
     exposedRowIds?: string[]; // 테이블 질문의 노출된 행 ID들
