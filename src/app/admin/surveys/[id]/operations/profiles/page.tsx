@@ -66,9 +66,13 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
   return (
     <main className="mx-auto max-w-7xl px-6 py-8">
       <div className="mb-4">
-        <h2 className="text-xl font-bold text-gray-900">응답 내역</h2>
+        <h2 className="text-xl font-bold text-gray-900">
+          {args.view === 'deleted' ? '삭제된 응답' : '응답 내역'}
+        </h2>
         <p className="text-sm text-slate-500">
-          응답자별 세션 트래킹 — {total.toLocaleString('ko-KR')}건
+          {args.view === 'deleted'
+            ? `삭제된 응답 — ${total.toLocaleString('ko-KR')}건. 복원하면 통계에 다시 포함됩니다.`
+            : `응답자별 세션 트래킹 — ${total.toLocaleString('ko-KR')}건`}
         </p>
       </div>
 
@@ -84,8 +88,8 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
 
           {total === 0 && !hasFilter ? (
             <EmptyState
-              message="아직 응답이 없습니다"
-              description="응답이 들어오면 여기에 표시됩니다"
+              message={args.view === 'deleted' ? '삭제된 응답이 없습니다' : '아직 응답이 없습니다'}
+              description={args.view === 'deleted' ? '응답을 삭제하면 여기에 모입니다' : '응답이 들어오면 여기에 표시됩니다'}
             />
           ) : (
             <ProfilesTable
@@ -96,6 +100,8 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
               sort={args.sort}
               dir={args.dir}
               questions={qs}
+              surveyId={surveyId}
+              view={args.view}
             />
           )}
         </CardContent>
