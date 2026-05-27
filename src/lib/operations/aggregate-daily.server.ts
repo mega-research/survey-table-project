@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { surveyResponses } from '@/db/schema';
@@ -39,7 +39,7 @@ export async function aggregateDaily(input: {
         count: sql<number>`count(*)::int`,
       })
       .from(surveyResponses)
-      .where(eq(surveyResponses.surveyId, surveyId))
+      .where(and(eq(surveyResponses.surveyId, surveyId), isNull(surveyResponses.deletedAt)))
       .groupBy(sql`1`)
       .orderBy(sql`1`);
   } else {
@@ -53,7 +53,7 @@ export async function aggregateDaily(input: {
       })
       .from(surveyResponses)
       .where(
-        sql`${surveyResponses.surveyId} = ${surveyId} AND (${surveyResponses.startedAt} AT TIME ZONE 'Asia/Seoul')::date = ${hourModeDate}::date`,
+        sql`${surveyResponses.surveyId} = ${surveyId} AND (${surveyResponses.startedAt} AT TIME ZONE 'Asia/Seoul')::date = ${hourModeDate}::date AND ${surveyResponses.deletedAt} IS NULL`,
       )
       .groupBy(sql`1`)
       .orderBy(sql`1`);
@@ -72,7 +72,7 @@ export async function aggregateDailyAvailableDates(surveyId: string): Promise<st
       day: sql<string>`((${surveyResponses.startedAt} AT TIME ZONE 'Asia/Seoul')::date)::text`,
     })
     .from(surveyResponses)
-    .where(eq(surveyResponses.surveyId, surveyId))
+    .where(and(eq(surveyResponses.surveyId, surveyId), isNull(surveyResponses.deletedAt)))
     .groupBy(sql`1`)
     .orderBy(sql`1`);
 

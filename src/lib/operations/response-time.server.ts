@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { and, eq, isNotNull } from 'drizzle-orm';
+import { and, eq, isNotNull, isNull } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { surveyResponses } from '@/db/schema';
@@ -30,6 +30,7 @@ export async function getResponseTime(surveyId: string): Promise<ResponseTimeRow
       and(
         eq(surveyResponses.surveyId, surveyId),
         isNotNull(surveyResponses.totalSeconds),
+        isNull(surveyResponses.deletedAt),
       ),
     );
 

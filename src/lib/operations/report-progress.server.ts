@@ -27,7 +27,7 @@ const EMPTY_SCHEME: ProgressColumnScheme = { version: 1, columns: [] };
  */
 const closingFilter = sql`
   EXISTS (SELECT 1 FROM survey_responses sr
-          WHERE sr.contact_target_id = ct.id AND sr.is_completed = true)
+          WHERE sr.contact_target_id = ct.id AND sr.is_completed = true AND sr.deleted_at IS NULL)
      OR EXISTS (SELECT 1 FROM contact_attempts ca
                 WHERE ca.contact_target_id = ct.id AND ca.result_code = '1.조사완료')
 `;

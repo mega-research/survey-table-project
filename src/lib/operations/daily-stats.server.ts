@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { surveyResponses } from '@/db/schema';
@@ -30,7 +30,7 @@ export async function getDailyStats(surveyId: string): Promise<DailyStatsRow[]> 
       drop: sql<number>`count(*) FILTER (WHERE ${surveyResponses.status} = 'drop')::int`,
     })
     .from(surveyResponses)
-    .where(eq(surveyResponses.surveyId, surveyId))
+    .where(and(eq(surveyResponses.surveyId, surveyId), isNull(surveyResponses.deletedAt)))
     .groupBy(sql`1`)
     .orderBy(sql`1 DESC`);
 

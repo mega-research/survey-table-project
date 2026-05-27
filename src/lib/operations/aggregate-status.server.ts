@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { surveyResponses } from '@/db/schema';
@@ -21,7 +21,7 @@ export async function aggregateStatus(surveyId: string): Promise<StatusCounts> {
       count: sql<number>`count(*)::int`,
     })
     .from(surveyResponses)
-    .where(eq(surveyResponses.surveyId, surveyId))
+    .where(and(eq(surveyResponses.surveyId, surveyId), isNull(surveyResponses.deletedAt)))
     .groupBy(surveyResponses.status);
 
   return mapRowsToCounts(rows);
