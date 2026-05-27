@@ -5,6 +5,7 @@ import { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from 'r
 import { EditorContent, useEditor } from '@tiptap/react';
 
 import { createUnifiedExtensions } from './extensions';
+import { FileAttachmentUploadModal } from './file-attachment-upload-modal';
 import { ImageUploadModal } from './image-upload-modal';
 import { stripTrailingEmptyParagraph } from './trailing-node';
 import { Toolbar } from './toolbar';
@@ -70,6 +71,8 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
     const extensions = useMemo(() => createUnifiedExtensions({ kind }), [kind]);
     const imageTracker = useEditorImageTracker(initialHtml);
     const [showModal, setShowModal] = useState(false);
+    const [showFileModal, setShowFileModal] = useState(false);
+    const [replacingFile, setReplacingFile] = useState(false);
 
     const editor = useEditor({
       extensions,
@@ -153,6 +156,61 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
       if (url) editor.chain().focus().setLink({ href: url }).run();
     };
 
+    const onPickFile = () => setShowFileModal(true);
+    const onReplaceFile = () => {
+      if (!editor || !editor.isActive('fileAttachment')) return;
+      setReplacingFile(true);
+      setShowFileModal(true);
+    };
+
+    const handleFileUploaded = (
+      result: { key: string; url: string; filename: string; size: number; mime: string },
+      label: string,
+    ) => {
+      if (!editor || editor.isDestroyed) return;
+
+      if (replacingFile && editor.isActive('fileAttachment')) {
+        const prev = editor.getAttributes('fileAttachment') as { key?: string | null };
+        const prevKey = prev?.key ?? null;
+        editor
+          .chain()
+          .focus()
+          .updateAttributes('fileAttachment', {
+            key: result.key,
+            url: result.url,
+            filename: result.filename,
+            label: label || result.filename,
+            size: result.size,
+            mime: result.mime,
+          })
+          .run();
+        if (prevKey && prevKey.startsWith('tmp/notice-attachment/')) {
+          void fetch('/api/upload/notice-attachment', {
+            method: 'DELETE',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ key: prevKey }),
+          }).catch(() => undefined);
+        }
+      } else {
+        editor
+          .chain()
+          .focus()
+          .insertContent({
+            type: 'fileAttachment',
+            attrs: {
+              key: result.key,
+              url: result.url,
+              filename: result.filename,
+              label: label || result.filename,
+              size: result.size,
+              mime: result.mime,
+            },
+          })
+          .run();
+      }
+      setReplacingFile(false);
+    };
+
     return (
       <div
         className={`flex flex-col overflow-hidden rounded-lg border border-gray-200 transition-colors focus-within:border-blue-500 ${className ?? ''}`}
@@ -162,6 +220,8 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
           variableCatalog={variableCatalog}
           onPickImage={onPickImage}
           onPickLink={onPickLink}
+          onPickFile={kind === 'survey' ? onPickFile : undefined}
+          onReplaceFile={kind === 'survey' ? onReplaceFile : undefined}
         />
         <div
           className="flex flex-col overflow-y-auto max-h-[calc(100vh-260px)]"
@@ -178,6 +238,17 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
             editor.chain().focus().setImage({ src: url }).run();
           }}
           kind={kind}
+        />
+        <FileAttachmentUploadModal
+          open={showFileModal}
+          onClose={() => {
+            setShowFileModal(false);
+            setReplacingFile(false);
+          }}
+          onUploaded={(result, label) => {
+            setShowFileModal(false);
+            handleFileUploaded(result, label);
+          }}
         />
       </div>
     );
