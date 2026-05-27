@@ -4,6 +4,8 @@ import { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from 'r
 
 import { EditorContent, useEditor } from '@tiptap/react';
 
+import { TMP_NOTICE_ATTACHMENT_PREFIX } from '@/lib/upload/attachment-policy';
+
 import { createUnifiedExtensions } from './extensions';
 import { FileAttachmentUploadModal } from './file-attachment-upload-modal';
 import { ImageUploadModal } from './image-upload-modal';
@@ -184,7 +186,7 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
             mime: result.mime,
           })
           .run();
-        if (prevKey && prevKey.startsWith('tmp/notice-attachment/')) {
+        if (prevKey && prevKey.startsWith(TMP_NOTICE_ATTACHMENT_PREFIX)) {
           void fetch('/api/upload/notice-attachment', {
             method: 'DELETE',
             headers: { 'content-type': 'application/json' },
