@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 
 import {
   DndContext,
@@ -39,7 +39,7 @@ import { VariableButton } from './variable-button';
 
 import { BranchRuleEditor } from './branch-rule-editor';
 import { DynamicTableEditor } from './dynamic-table-editor';
-import { RichTextEditor } from '@/components/ui/rich-text-editor';
+import { RichTextEditor, type RichTextEditorHandle } from '@/components/ui/rich-text-editor';
 import { NoticeRenderer } from './notice-renderer';
 import { OptionsLayoutSelector } from './options-layout-selector';
 import { RankingConfigEditorForQuestion } from './ranking-config-editor';
@@ -110,6 +110,18 @@ export function QuestionBasicTab({
   const variableCatalog = useSurveyBuilderStore((s) => s.variableCatalog);
   const defaultTemplateRef = useRef<HTMLInputElement>(null);
   const titleRef = useRef<HTMLInputElement>(null);
+  // 공지사항 RichTextEditor ref — unmount 시 미사용 첨부·이미지 정리에 사용
+  const noticeEditorRef = useRef<RichTextEditorHandle>(null);
+
+  // 모달 close (취소·저장) 또는 다른 질문 선택으로 unmount 될 때
+  // tmp 위치에 남은 미사용 첨부·이미지를 폐기. 저장 흐름에서는 publish 단계의
+  // promote 가 영구 위치로 이미 옮겼으므로 멱등 (orphan 만 정리됨).
+  useEffect(() => {
+    return () => {
+      noticeEditorRef.current?.cleanupOrphanFileAttachments().catch(() => undefined);
+      noticeEditorRef.current?.cleanupOrphanImages().catch(() => undefined);
+    };
+  }, []);
 
   // ranking + optionsSource='table' (자체 테이블 내장) 이면 수동 옵션 UI 숨김
   const isRankingTableSource =
@@ -911,6 +923,7 @@ export function QuestionBasicTab({
           <div>
             <Label className="mb-3 block text-base font-medium">공지사항 내용 편집</Label>
             <RichTextEditor
+              ref={noticeEditorRef}
               kind="survey"
               initialHtml={formData.noticeContent || ''}
               onChange={(html) =>
