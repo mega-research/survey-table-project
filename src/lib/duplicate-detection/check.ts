@@ -11,7 +11,7 @@ export async function checkTrackA(
 ): Promise<CheckResult> {
   const contact = await findContactByInviteToken(surveyId, inviteToken);
   if (!contact) return { blocked: true, reason: 'invalid_token' };
-  if ((contact as { respondedAt?: Date | null }).respondedAt) {
+  if (contact.respondedAt) {
     return { blocked: true, reason: 'token_already_used' };
   }
   return { blocked: false, contactTargetId: contact.id };
