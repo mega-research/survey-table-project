@@ -1,4 +1,10 @@
 /**
+ * label·filename 양쪽 모두 비어있을 때 사용하는 fallback 라벨.
+ * NodeView 와 renderHTML 서버 직렬화 양쪽에서 동일 텍스트를 보장한다.
+ */
+export const FILE_ATTACHMENT_DEFAULT_LABEL = '첨부 파일';
+
+/**
  * 바이트 크기를 사람이 읽기 좋은 표시로 변환.
  * NodeView 와 renderHTML 서버 직렬화 양쪽에서 동일 결과를 보장한다.
  */

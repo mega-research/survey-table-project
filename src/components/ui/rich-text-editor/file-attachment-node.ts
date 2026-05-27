@@ -2,7 +2,10 @@ import { mergeAttributes, Node } from '@tiptap/core';
 import { ReactNodeViewRenderer } from '@tiptap/react';
 
 import { FileAttachmentNodeView } from './file-attachment-node-view';
-import { buildAttachmentMetaText } from './file-attachment-format';
+import {
+  buildAttachmentMetaText,
+  FILE_ATTACHMENT_DEFAULT_LABEL,
+} from './file-attachment-format';
 
 export interface FileAttachmentAttrs {
   key: string | null;
@@ -61,7 +64,7 @@ export const FileAttachment = Node.create({
 
   renderHTML({ HTMLAttributes, node }) {
     const attrs = node.attrs as FileAttachmentAttrs;
-    const label = attrs.label || attrs.filename || '첨부 파일';
+    const label = attrs.label || attrs.filename || FILE_ATTACHMENT_DEFAULT_LABEL;
     const meta = buildAttachmentMetaText(attrs.filename, attrs.size);
 
     const textChildren: Array<unknown> = [

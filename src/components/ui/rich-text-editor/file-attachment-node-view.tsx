@@ -8,7 +8,10 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
-import { formatFileSize } from './file-attachment-format';
+import {
+  FILE_ATTACHMENT_DEFAULT_LABEL,
+  formatFileSize,
+} from './file-attachment-format';
 
 interface IconConfig {
   Icon: LucideIcon;
@@ -80,7 +83,7 @@ export function FileAttachmentNodeView({ node, selected }: NodeViewProps) {
       <Icon className={`h-5 w-5 flex-shrink-0 ${color}`} aria-hidden />
       <span className="flex min-w-0 flex-col">
         <span className="truncate text-sm font-medium text-gray-800">
-          {label || filename || '첨부 파일'}
+          {label || filename || FILE_ATTACHMENT_DEFAULT_LABEL}
         </span>
         {(filename || sizeText) && (
           <span className="truncate text-xs text-gray-500">
