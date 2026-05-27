@@ -4,9 +4,8 @@ import { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from 'r
 
 import { EditorContent, useEditor } from '@tiptap/react';
 
-import { TMP_NOTICE_ATTACHMENT_PREFIX } from '@/lib/upload/attachment-policy';
-
 import { createUnifiedExtensions } from './extensions';
+import { deleteTmpNoticeAttachmentKey } from './file-attachment-r2-client';
 import { FileAttachmentUploadModal } from './file-attachment-upload-modal';
 import { ImageUploadModal } from './image-upload-modal';
 import { stripTrailingEmptyParagraph } from './trailing-node';
@@ -197,15 +196,9 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
           })
           .run();
         // 트래커 reconcile 가 onUpdate 안에서 prevKey 사라짐을 detect 해 자동 DELETE.
-        // 기존 명시 fetch DELETE 는 안전망으로 유지 prevKey 가 추적 안 된 케이스 대비.
+        // 기존 명시 DELETE 는 안전망으로 유지 prevKey 가 추적 안 된 케이스 대비.
         // 멱등적이므로 중복 DELETE 가 발생해도 두 번째는 404 또는 no-op.
-        if (prevKey && prevKey.startsWith(TMP_NOTICE_ATTACHMENT_PREFIX)) {
-          void fetch('/api/upload/notice-attachment', {
-            method: 'DELETE',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ key: prevKey }),
-          }).catch(() => undefined);
-        }
+        void deleteTmpNoticeAttachmentKey(prevKey);
       } else {
         fileTracker.trackUpload(result.key);
         editor

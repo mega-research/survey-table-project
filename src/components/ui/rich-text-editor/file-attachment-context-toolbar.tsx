@@ -7,8 +7,8 @@ import { RefreshCw, Trash2 } from 'lucide-react';
 
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { TMP_NOTICE_ATTACHMENT_PREFIX } from '@/lib/upload/attachment-policy';
 
+import { deleteTmpNoticeAttachmentKey } from './file-attachment-r2-client';
 import { ToolBtn } from './toolbar-primitives';
 
 interface Props {
@@ -17,20 +17,6 @@ interface Props {
 }
 
 const FILE_ATTACHMENT = 'fileAttachment';
-
-async function deleteTmpKey(key: string | null) {
-  if (!key) return;
-  if (!key.startsWith(TMP_NOTICE_ATTACHMENT_PREFIX)) return;
-  try {
-    await fetch('/api/upload/notice-attachment', {
-      method: 'DELETE',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ key }),
-    });
-  } catch {
-    // best-effort — R2 lifecycle 가 24h 안에 청소함
-  }
-}
 
 export function FileAttachmentContextToolbar({ editor, onReplace }: Props) {
   const s = useEditorState({
@@ -80,7 +66,7 @@ export function FileAttachmentContextToolbar({ editor, onReplace }: Props) {
         onClick={() => {
           const key = s.key;
           editor.chain().focus().deleteSelection().run();
-          void deleteTmpKey(key);
+          void deleteTmpNoticeAttachmentKey(key);
         }}
         title="첨부 삭제"
       >

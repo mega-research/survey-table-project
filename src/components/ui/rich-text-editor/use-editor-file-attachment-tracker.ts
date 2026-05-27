@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef } from 'react';
 
 import { TMP_NOTICE_ATTACHMENT_PREFIX } from '@/lib/upload/attachment-policy';
 
+import { deleteTmpNoticeAttachmentKeys } from './file-attachment-r2-client';
+
 /**
  * TipTap 에디터에서 업로드한 파일 첨부의 R2 lifecycle 을 추적.
  * 이미지 트래커 use-editor-image-tracker.ts 와 동일 패턴.
@@ -34,23 +36,6 @@ export function extractTmpAttachmentKeysFromHtml(html: string): string[] {
   return [...keys];
 }
 
-async function deleteTmpAttachmentKey(key: string): Promise<void> {
-  try {
-    await fetch('/api/upload/notice-attachment', {
-      method: 'DELETE',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ key }),
-    });
-  } catch {
-    // best-effort — R2 lifecycle 가 24h 안전망
-  }
-}
-
-async function deleteTmpAttachmentKeys(keys: string[]): Promise<void> {
-  if (keys.length === 0) return;
-  await Promise.all(keys.map((k) => deleteTmpAttachmentKey(k)));
-}
-
 export function useEditorFileAttachmentTracker(initialHtml: string) {
   const uploadedRef = useRef<Set<string>>(new Set());
   const previousContentRef = useRef<string>(initialHtml || '');
@@ -79,7 +64,7 @@ export function useEditorFileAttachmentTracker(initialHtml: string) {
     );
 
     if (deleted.length > 0) {
-      void deleteTmpAttachmentKeys(deleted);
+      void deleteTmpNoticeAttachmentKeys(deleted);
       deleted.forEach((k) => uploadedRef.current.delete(k));
     }
 
@@ -100,7 +85,7 @@ export function useEditorFileAttachmentTracker(initialHtml: string) {
     async (currentHtml: string) => {
       const orphans = getOrphans(currentHtml);
       if (orphans.length === 0) return;
-      await deleteTmpAttachmentKeys(orphans);
+      await deleteTmpNoticeAttachmentKeys(orphans);
       orphans.forEach((k) => uploadedRef.current.delete(k));
     },
     [getOrphans],
