@@ -19,6 +19,8 @@ import {
   resumeOrCreateResponse,
 } from '@/actions/response-actions';
 import { lookupContactAttrs } from '@/actions/contact-attrs-actions';
+import { checkDuplicateOnEntry } from '@/actions/duplicate-detection-actions';
+import { AlreadyRespondedView } from '@/components/survey/already-responded-view';
 import { InviteRequiredScreen } from '@/components/survey-response/invite-required-screen';
 import { MobileBottomNav } from '@/components/survey-response/mobile-bottom-nav';
 import { QuestionInput } from '@/components/survey-response/question-input';
@@ -28,6 +30,7 @@ import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
+import { useClientSignals } from '@/hooks/use-client-signals';
 import { useKeyboardOpen } from '@/hooks/use-keyboard-open';
 import { useMultiLineDetection } from '@/hooks/use-line-count-detection';
 import { useMediaQuery } from '@/hooks/use-media-query';
@@ -180,6 +183,15 @@ export default function SurveyResponsePage() {
 
   const keyboardOpen = useKeyboardOpen();
 
+  // 클라이언트 신호 (deviceId, screen 등) — 마운트 시 한 번 수집
+  const signalsRef = useClientSignals();
+
+  type DuplicateStatus =
+    | { kind: 'checking' }
+    | { kind: 'blocked'; reason: 'invalid_token' | 'token_already_used' | 'device_already_responded' }
+    | { kind: 'ok' };
+  const [duplicateStatus, setDuplicateStatus] = useState<DuplicateStatus>({ kind: 'checking' });
+
   // URL 식별자로 설문 조회
   useEffect(() => {
     const loadSurvey = async () => {
@@ -257,6 +269,44 @@ export default function SurveyResponsePage() {
 
     loadSurvey();
   }, [identifier]);
+
+  // 진입 시 중복 검사 — 설문 로드 완료 후 1회 실행
+  useEffect(() => {
+    if (!loadedSurvey?.id) return;
+    let cancelled = false;
+
+    // 마운트 직후 microtask로 한 번 yield — useClientSignals의 effect도 같은 사이클이라 ref 채워질 시간 필요
+    queueMicrotask(async () => {
+      const signals = signalsRef.current;
+      if (!signals) {
+        // storage 차단 + JS 비정상. 통과 (수용된 trade-off)
+        if (!cancelled) setDuplicateStatus({ kind: 'ok' });
+        return;
+      }
+
+      try {
+        const r = await checkDuplicateOnEntry({
+          surveyId: loadedSurvey.id,
+          inviteToken: inviteToken ?? undefined,
+          clientSignals: signals,
+        });
+        if (cancelled) return;
+        if (r.blocked) {
+          setDuplicateStatus({ kind: 'blocked', reason: r.reason });
+        } else {
+          setDuplicateStatus({ kind: 'ok' });
+        }
+      } catch (err) {
+        // 검사 실패 시 통과 가정 (best-effort) — 첫 답변에서 다시 검사됨
+        console.error('checkDuplicateOnEntry 실패', err);
+        if (!cancelled) setDuplicateStatus({ kind: 'ok' });
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loadedSurvey?.id, inviteToken, signalsRef]);
 
   // 운영 현황 콘솔(T5): 페이지 진입 시 DB INSERT를 더 이상 하지 않는다.
   // 첫 답변 시점에 createResponseWithFirstAnswer로 행을 생성한다 (handleResponse 참고).
@@ -547,7 +597,7 @@ export default function SurveyResponsePage() {
         currentStep
       ) {
         setIsCreatingResponse(true);
-        // TODO(Task 12): clientSignals를 useClientSignals 훅으로 교체
+        const signals = signalsRef.current ?? { deviceId: null, screen: '', dpr: 1, tz: '', lang: '', platform: '' };
         createResponseWithFirstAnswer({
           surveyId: loadedSurvey.id,
           sessionId,
@@ -556,11 +606,11 @@ export default function SurveyResponsePage() {
           value,
           currentStepId: stepIdOf(currentStep),
           inviteToken: inviteToken ?? undefined,
-          clientSignals: { deviceId: null, screen: '', dpr: 1, tz: '', lang: '', platform: '' },
+          clientSignals: signals,
         })
           .then((result) => {
             if (result.kind === 'blocked') {
-              console.warn('[createResponseWithFirstAnswer] 중복 감지로 차단됨:', result.reason);
+              setDuplicateStatus({ kind: 'blocked', reason: result.reason });
               return;
             }
             const { id, contactTargetId } = result;
@@ -639,17 +689,19 @@ export default function SurveyResponsePage() {
       let effectiveResponseId = currentResponseId;
       if (!effectiveResponseId && loadedSurvey && currentStep) {
         try {
-          // TODO(Task 12): clientSignals를 useClientSignals 훅으로 교체
+          const blankSignals = signalsRef.current ?? { deviceId: null, screen: '', dpr: 1, tz: '', lang: '', platform: '' };
           const created = await createBlankResponse({
             surveyId: loadedSurvey.id,
             sessionId,
             versionId: versionId ?? null,
             currentStepId: stepIdOf(currentStep),
             inviteToken: inviteToken ?? undefined,
-            clientSignals: { deviceId: null, screen: '', dpr: 1, tz: '', lang: '', platform: '' },
+            clientSignals: blankSignals,
           });
           if (created.kind === 'blocked') {
-            console.warn('[createBlankResponse] 중복 감지로 차단됨:', created.reason);
+            setDuplicateStatus({ kind: 'blocked', reason: created.reason });
+            setIsSubmitting(false);
+            return;
           } else {
             effectiveResponseId = created.id;
             setCurrentResponseId(created.id);
@@ -837,6 +889,26 @@ export default function SurveyResponsePage() {
   // 차단 화면 — requireInviteToken=true 인데 invite 없거나 무효
   if (showInviteRequired) {
     return <InviteRequiredScreen />;
+  }
+
+  // 중복 검사 진행 중
+  if (duplicateStatus.kind === 'checking') {
+    return (
+      <div className="mx-auto flex min-h-screen items-center justify-center text-sm text-muted-foreground">
+        확인 중...
+      </div>
+    );
+  }
+
+  // 중복 응답 차단 화면
+  if (duplicateStatus.kind === 'blocked') {
+    return (
+      <AlreadyRespondedView
+        reason={duplicateStatus.reason}
+        surveyTitle={loadedSurvey?.title ?? ''}
+        contactEmail={null}
+      />
+    );
   }
 
   // 로딩 중
