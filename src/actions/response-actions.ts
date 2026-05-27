@@ -30,15 +30,22 @@ import { substituteTokens } from '@/lib/survey/substitute-tokens';
  * SECURITY DEFINER PG 함수 사용 — connection role 이 anon/authenticated 라도
  * RLS 우회해서 contact_target_id 만 안전하게 조회 가능. 다른 attrs/PII 는 노출 안 됨.
  */
-async function findContactByInviteToken(
+export async function findContactByInviteToken(
   surveyId: string,
   inviteToken: string,
-): Promise<{ id: string } | null> {
+): Promise<{ id: string; respondedAt: Date | null } | null> {
   const result = (await db.execute(
     sql`SELECT public.lookup_contact_by_invite_token(${surveyId}::uuid, ${inviteToken}::uuid) AS id`,
   )) as unknown as Array<{ id: string | null }>;
   const id = result[0]?.id;
-  return id ? { id } : null;
+  if (!id) return null;
+
+  const row = await db.query.contactTargets.findFirst({
+    where: eq(contactTargets.id, id),
+    columns: { respondedAt: true },
+  });
+
+  return { id, respondedAt: row?.respondedAt ?? null };
 }
 
 // ========================
