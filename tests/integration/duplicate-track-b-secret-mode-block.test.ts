@@ -31,7 +31,6 @@ const SURVEY_ID = 'aaaaaaaa-0002-0002-0002-000000000002';
 const BASE_SIGNALS = {
   deviceId: 'device-uuid-A',
   screen: '1920x1080',
-  dpr: 2,
   tz: 'Asia/Seoul',
   lang: 'ko-KR',
   platform: 'MacIntel',

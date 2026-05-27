@@ -3,8 +3,6 @@ export interface ClientSignals {
   deviceId: string | null;
   /** "1920x1080" */
   screen: string;
-  /** window.devicePixelRatio */
-  dpr: number;
   /** "Asia/Seoul" */
   tz: string;
   /** "ko-KR" */
@@ -19,15 +17,22 @@ export interface ServerSignals {
   deviceId: string | null;
 }
 
-export type CheckResultBlocked = {
-  blocked: true;
-  reason: 'invalid_token' | 'token_already_used' | 'device_already_responded';
-};
+/**
+ * 응답 차단 사유. 응답 페이지·차단 화면·server action 결과 등에서 공통 사용.
+ *
+ * - invalid_token: 존재하지 않는 invite_token 으로 진입
+ * - token_already_used: 동일 invite_token 으로 이미 응답 완료
+ * - device_already_responded: 같은 device/fp+IP 로 이미 응답 완료
+ */
+export type BlockReason =
+  | 'invalid_token'
+  | 'token_already_used'
+  | 'device_already_responded';
 
-export type CheckResultPassed = {
-  blocked: false;
-  /** Track A 통과 시 매칭된 contact id */
-  contactTargetId?: string;
-};
-
-export type CheckResult = CheckResultBlocked | CheckResultPassed;
+export type CheckResult =
+  | { blocked: true; reason: BlockReason }
+  | {
+      blocked: false;
+      /** Track A 통과 시 매칭된 contact id */
+      contactTargetId?: string;
+    };

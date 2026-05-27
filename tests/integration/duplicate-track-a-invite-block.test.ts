@@ -50,7 +50,6 @@ const TEST_SURVEY_ID = 'aaaaaaaa-0001-0001-0001-000000000001';
 const BASE_CLIENT_SIGNALS = {
   deviceId: 'd1',
   screen: '1920x1080',
-  dpr: 1,
   tz: 'Asia/Seoul',
   lang: 'ko-KR',
   platform: 'MacIntel',

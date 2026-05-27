@@ -31,6 +31,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 import { useClientSignals } from '@/hooks/use-client-signals';
+import type { BlockReason } from '@/lib/duplicate-detection/types';
 import { useKeyboardOpen } from '@/hooks/use-keyboard-open';
 import { useMultiLineDetection } from '@/hooks/use-line-count-detection';
 import { useMediaQuery } from '@/hooks/use-media-query';
@@ -184,11 +185,12 @@ export default function SurveyResponsePage() {
   const keyboardOpen = useKeyboardOpen();
 
   // 클라이언트 신호 (deviceId, screen 등) — 마운트 시 한 번 수집
-  const signalsRef = useClientSignals();
+  // null 이면 아직 수집 전. 수집 완료 후 듀얼 effect (duplicate check, callsite) 재트리거
+  const signals = useClientSignals();
 
   type DuplicateStatus =
     | { kind: 'checking' }
-    | { kind: 'blocked'; reason: 'invalid_token' | 'token_already_used' | 'device_already_responded' }
+    | { kind: 'blocked'; reason: BlockReason }
     | { kind: 'ok' };
   const [duplicateStatus, setDuplicateStatus] = useState<DuplicateStatus>({ kind: 'checking' });
 
@@ -270,20 +272,13 @@ export default function SurveyResponsePage() {
     loadSurvey();
   }, [identifier]);
 
-  // 진입 시 중복 검사 — 설문 로드 완료 후 1회 실행
+  // 진입 시 중복 검사 — 설문 로드 + 신호 수집 완료 후 1회 실행
+  // signals 가 null 인 동안 effect skip → state 채워지면 자동 재실행
   useEffect(() => {
-    if (!loadedSurvey?.id) return;
+    if (!loadedSurvey?.id || !signals) return;
     let cancelled = false;
 
-    // 마운트 직후 microtask로 한 번 yield — useClientSignals의 effect도 같은 사이클이라 ref 채워질 시간 필요
-    queueMicrotask(async () => {
-      const signals = signalsRef.current;
-      if (!signals) {
-        // storage 차단 + JS 비정상. 통과 (수용된 trade-off)
-        if (!cancelled) setDuplicateStatus({ kind: 'ok' });
-        return;
-      }
-
+    (async () => {
       try {
         const r = await checkDuplicateOnEntry({
           surveyId: loadedSurvey.id,
@@ -301,12 +296,12 @@ export default function SurveyResponsePage() {
         console.error('checkDuplicateOnEntry 실패', err);
         if (!cancelled) setDuplicateStatus({ kind: 'ok' });
       }
-    });
+    })();
 
     return () => {
       cancelled = true;
     };
-  }, [loadedSurvey?.id, inviteToken, signalsRef]);
+  }, [loadedSurvey?.id, inviteToken, signals]);
 
   // 운영 현황 콘솔(T5): 페이지 진입 시 DB INSERT를 더 이상 하지 않는다.
   // 첫 답변 시점에 createResponseWithFirstAnswer로 행을 생성한다 (handleResponse 참고).
@@ -607,7 +602,7 @@ export default function SurveyResponsePage() {
           value,
           currentStepId: stepIdOf(currentStep),
           inviteToken: inviteToken ?? undefined,
-          clientSignals: signalsRef.current,
+          clientSignals: signals,
         })
           .then((result) => {
             if (result.kind === 'blocked') {
@@ -697,7 +692,7 @@ export default function SurveyResponsePage() {
             versionId: versionId ?? null,
             currentStepId: stepIdOf(currentStep),
             inviteToken: inviteToken ?? undefined,
-            clientSignals: signalsRef.current,
+            clientSignals: signals,
           });
           if (created.kind === 'blocked') {
             setDuplicateStatus({ kind: 'blocked', reason: created.reason });

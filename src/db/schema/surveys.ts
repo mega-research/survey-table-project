@@ -172,7 +172,6 @@ export const surveyResponses = pgTable('survey_responses', {
 
   // 메타데이터
   userAgent: text('user_agent'),
-  // ipAddress 컬럼 제거됨 — Task 10에서 ip_hash 기반으로 대체
   sessionId: text('session_id'),
   // 중복 감지 신호 (2026-05-27 추가)
   ipHash: text('ip_hash'),

@@ -94,35 +94,6 @@ export function hasActiveFilters(input: {
 // 표시용 pure helper (입력만으로 출력 결정)
 // ─────────────────────────────────────────────────────────────────────────────
 
-const IPV4_RE = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/
-const IPV6_FULL_RE = /^([0-9a-f]{1,4}:){7}[0-9a-f]{1,4}$/i
-
-/**
- * 응답자 IP 를 표시용으로 마스킹한다.
- *
- * - IPv4 → 끝 옥텟을 `xx` 로: `123.45.67.89` → `123.45.67.xx`
- * - IPv6 (전체 8그룹) → 마지막 4그룹을 `xxxx` 로: 처음 64bit (네트워크 prefix) 만 노출
- * - null / 빈 문자열 / 축약형(::1) / 비정상 입력 → `—`
- *
- * 운영자가 같은 회사·사무실에서 들어온 응답을 구분할 수 있을 정도로만 노출하고
- * 마지막 식별 단위는 가린다.
- */
-export function formatIpMask(ip: string | null | undefined): string {
-  if (!ip) return '—'
-
-  const v4 = IPV4_RE.exec(ip)
-  if (v4) {
-    return `${v4[1]}.${v4[2]}.${v4[3]}.xx`
-  }
-
-  if (IPV6_FULL_RE.test(ip)) {
-    const groups = ip.split(':')
-    return [...groups.slice(0, 4), 'xxxx', 'xxxx', 'xxxx', 'xxxx'].join(':')
-  }
-
-  return '—'
-}
-
 /**
  * 응답 소요시간을 운영자 시점 표시 문자열로 변환.
  *

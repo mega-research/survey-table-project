@@ -87,7 +87,6 @@ import type { ClientSignals } from '@/lib/duplicate-detection/types';
 const PLACEHOLDER_SIGNALS: ClientSignals = {
   deviceId: null,
   screen: '',
-  dpr: 1,
   tz: '',
   lang: '',
   platform: '',

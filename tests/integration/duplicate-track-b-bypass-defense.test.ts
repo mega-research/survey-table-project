@@ -55,7 +55,6 @@ const SURVEY_ID = 'aaaaaaaa-0003-0003-0003-000000000003';
 const SIGNALS: ClientSignals = {
   deviceId: 'DEV-BYPASS',
   screen: '1920x1080',
-  dpr: 2,
   tz: 'Asia/Seoul',
   lang: 'ko-KR',
   platform: 'MacIntel',

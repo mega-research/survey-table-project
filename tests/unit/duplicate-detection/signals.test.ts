@@ -34,7 +34,6 @@ describe('computeSignals', () => {
   const sampleClient: ClientSignals = {
     deviceId: 'dev-uuid-1',
     screen: '1920x1080',
-    dpr: 2,
     tz: 'Asia/Seoul',
     lang: 'ko-KR',
     platform: 'MacIntel',

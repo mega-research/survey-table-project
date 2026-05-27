@@ -536,7 +536,6 @@ export interface SurveySubmission {
   currentGroupOrder: number;
   questionResponses: Record<string, any>; // JSON 저장된 응답들 (questionId -> value)
   userAgent?: string | null;
-  // ipAddress 컬럼 제거됨 — Task 10에서 ip_hash 기반으로 대체
   updatedAt: Date;
 }
 

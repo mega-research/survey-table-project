@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import type { ClientSignals } from '@/lib/duplicate-detection/types';
 
 const STORAGE_KEY = '__sd_device_id';
@@ -22,7 +22,6 @@ function collectSignals(): ClientSignals {
   return {
     deviceId: readOrCreateDeviceId(),
     screen: `${window.screen.width}x${window.screen.height}`,
-    dpr: window.devicePixelRatio,
     tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
     lang: navigator.language,
     platform: navigator.platform,
@@ -30,14 +29,19 @@ function collectSignals(): ClientSignals {
 }
 
 /**
- * 마운트 시 한 번 신호를 수집해 ref에 보관한다.
- * 서버 측에서 hash 계산 → 첫 답변 시 같은 신호를 다시 전달.
+ * 마운트 시 한 번 신호를 수집해 state로 보관한다.
+ *
+ * 반환값:
+ * - `null`: 아직 수집 전 (mount 직후 첫 렌더)
+ * - `ClientSignals`: 수집 완료 (deviceId 는 storage 차단 시 null 가능)
+ *
+ * state 기반이라 신호가 채워지는 시점에 의존하는 useEffect 가 자동 재실행된다.
  */
-export function useClientSignals(): React.MutableRefObject<ClientSignals | null> {
-  const ref = useRef<ClientSignals | null>(null);
+export function useClientSignals(): ClientSignals | null {
+  const [signals, setSignals] = useState<ClientSignals | null>(null);
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    ref.current = collectSignals();
+    setSignals(collectSignals());
   }, []);
-  return ref;
+  return signals;
 }

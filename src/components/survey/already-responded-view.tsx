@@ -2,13 +2,15 @@
 
 import Link from 'next/link';
 
+import type { BlockReason } from '@/lib/duplicate-detection/types';
+
 interface Props {
-  reason: 'invalid_token' | 'token_already_used' | 'device_already_responded';
+  reason: BlockReason;
   surveyTitle: string;
   contactEmail: string | null;
 }
 
-const MESSAGES: Record<Props['reason'], { title: string; body: string }> = {
+const MESSAGES: Record<BlockReason, { title: string; body: string }> = {
   invalid_token: {
     title: '잘못된 초대 링크입니다',
     body: '이 링크는 유효하지 않거나 만료되었습니다. 운영자에게 문의해 주세요.',

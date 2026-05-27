@@ -13,6 +13,5 @@ export interface ResponseData {
   startedAt: Date;
   completedAt?: Date;
   userAgent?: string;
-  // ipAddress 컬럼 제거됨 — Task 10에서 ip_hash 기반으로 대체
   sessionId?: string;
 }

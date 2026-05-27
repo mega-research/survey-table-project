@@ -17,7 +17,7 @@ import type { PageVisit } from '@/db/schema/schema-types';
 import { requireAuth } from '@/lib/auth';
 import { checkTrackA, checkTrackB } from '@/lib/duplicate-detection/check';
 import { computeSignals } from '@/lib/duplicate-detection/signals';
-import type { ClientSignals } from '@/lib/duplicate-detection/types';
+import type { BlockReason, ClientSignals } from '@/lib/duplicate-detection/types';
 import { parseBrowser, parsePlatform } from '@/lib/operations/parse-ua';
 import { normalizeToAnswers } from '@/lib/response-normalizer';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
@@ -117,7 +117,7 @@ export async function updateQuestionResponse(
  */
 export type FirstAnswerResult =
   | { kind: 'created'; id: string; contactTargetId: string | null }
-  | { kind: 'blocked'; reason: 'invalid_token' | 'token_already_used' | 'device_already_responded' };
+  | { kind: 'blocked'; reason: BlockReason };
 
 /**
  * 첫 답변과 함께 survey_responses 행을 INSERT.
