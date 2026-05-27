@@ -23,10 +23,20 @@ type SurveyResponseRow = {
   questionResponses: Record<string, unknown>;
   isCompleted: boolean;
   startedAt: Date;
+  completedAt: Date | null;
   lastActivityAt: Date;
+  lastEditedAt: Date | null;
   status: string;
+  currentStepId: string | null;
+  totalSeconds: number | null;
   deletedAt: Date | null;
   contactTargetId: string | null;
+};
+
+type QuestionRow = {
+  id: string;
+  surveyId: string;
+  type: string;
 };
 
 type ContactTargetRow = {
@@ -52,9 +62,10 @@ const h = vi.hoisted(() => {
   const contactStore = new Map<string, ContactTargetRow>();
   const answerStore = new Map<string, ResponseAnswerRow>();
   const surveyStore = new Map<string, SurveyRow>();
+  const questionStore = new Map<string, QuestionRow>();
   let authed = true;
 
-  return { responseStore, contactStore, answerStore, surveyStore, authed };
+  return { responseStore, contactStore, answerStore, surveyStore, questionStore, authed };
 });
 
 vi.mock('next/cache', () => ({
@@ -80,6 +91,9 @@ vi.mock('@/lib/supabase/server', () => ({
 vi.mock('@/db/schema', () => ({
   surveyResponses: { __table: 'surveyResponses' },
   contactTargets: { __table: 'contactTargets' },
+  surveys: { __table: 'surveys' },
+  responseAnswers: { __table: 'responseAnswers' },
+  questions: { __table: 'questions' },
 }));
 
 vi.mock('@/db', () => {
@@ -143,6 +157,11 @@ vi.mock('@/db', () => {
           return undefined;
         }),
       },
+      questions: {
+        findMany: vi.fn(async ({ where }: { where: (row: QuestionRow) => boolean }) => {
+          return Array.from(h.questionStore.values()).filter(where);
+        }),
+      },
     },
     update: vi.fn((table: { __table: string }) => ({
       set: vi.fn((patch: Record<string, unknown>) => ({
@@ -165,16 +184,37 @@ vi.mock('@/db', () => {
       })),
     })),
     delete: vi.fn((table: { __table: string }) => ({
-      where: vi.fn(async (cond: (row: SurveyResponseRow) => boolean) => {
+      where: vi.fn(async (cond: (row: SurveyResponseRow | ResponseAnswerRow) => boolean) => {
         if (table.__table === 'surveyResponses') {
           for (const [id, row] of h.responseStore.entries()) {
-            if (cond(row)) {
+            if ((cond as (r: SurveyResponseRow) => boolean)(row)) {
               h.responseStore.delete(id);
               // cascade: response_answers
               for (const [aid, ans] of h.answerStore.entries()) {
                 if (ans.responseId === row.id) h.answerStore.delete(aid);
               }
             }
+          }
+        }
+        if (table.__table === 'responseAnswers') {
+          for (const [id, row] of h.answerStore.entries()) {
+            if ((cond as (r: ResponseAnswerRow) => boolean)(row)) {
+              h.answerStore.delete(id);
+            }
+          }
+        }
+      }),
+    })),
+    insert: vi.fn((table: { __table: string }) => ({
+      values: vi.fn(async (rows: Array<Record<string, unknown>>) => {
+        if (table.__table === 'responseAnswers') {
+          for (const row of rows) {
+            const aid = `${row.responseId}-${row.questionId}-${h.answerStore.size}`;
+            h.answerStore.set(aid, {
+              id: aid,
+              responseId: row.responseId as string,
+              questionId: row.questionId as string,
+            });
           }
         }
       }),
@@ -237,6 +277,7 @@ vi.mock('@/db/schema', () => {
     contactTargets: makeTableProxy('contactTargets'),
     surveys: makeTableProxy('surveys'),
     responseAnswers: makeTableProxy('responseAnswers'),
+    questions: makeTableProxy('questions'),
   };
 });
 
@@ -255,16 +296,30 @@ function createTestSurvey() {
   return surveyId;
 }
 
-function createTestResponse(surveyId: string, opts?: { withAnswers?: boolean }) {
+function createTestResponse(
+  surveyId: string,
+  opts?: {
+    withAnswers?: boolean;
+    questionResponses?: Record<string, unknown>;
+    completedAt?: Date | null;
+    startedAt?: Date;
+  },
+) {
   const responseId = genId('response');
+  const startedAt = opts?.startedAt ?? new Date();
+  const completedAt = opts?.completedAt === undefined ? new Date() : opts.completedAt;
   h.responseStore.set(responseId, {
     id: responseId,
     surveyId,
-    questionResponses: {},
+    questionResponses: opts?.questionResponses ?? {},
     isCompleted: true,
-    startedAt: new Date(),
+    startedAt,
+    completedAt,
     lastActivityAt: new Date(),
+    lastEditedAt: null,
     status: 'completed',
+    currentStepId: 'group:root',
+    totalSeconds: 60,
     deletedAt: null,
     contactTargetId: null,
   });
@@ -277,6 +332,12 @@ function createTestResponse(surveyId: string, opts?: { withAnswers?: boolean }) 
     });
   }
   return responseId;
+}
+
+function createTestQuestion(surveyId: string, type = 'text') {
+  const qid = genId('q');
+  h.questionStore.set(qid, { id: qid, surveyId, type });
+  return qid;
 }
 
 function linkContactToResponse(surveyId: string, responseId: string) {
@@ -295,6 +356,7 @@ function linkContactToResponse(surveyId: string, responseId: string) {
 // ========================
 
 import {
+  saveAdminEdit,
   softDeleteResponse,
   restoreResponse,
   hardResetResponse,
@@ -311,6 +373,7 @@ describe('profiles-row-actions', () => {
     h.contactStore.clear();
     h.answerStore.clear();
     h.surveyStore.clear();
+    h.questionStore.clear();
     h.authed = true;
     idCounter = 0;
     vi.clearAllMocks();
@@ -559,6 +622,82 @@ describe('profiles-row-actions', () => {
       expect(afterCounts.completed).toBe(1);
 
       vi.restoreAllMocks();
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // saveAdminEdit
+  // ─────────────────────────────────────────────────────────────
+
+  describe('saveAdminEdit', () => {
+    it('questionResponses 를 갱신하고 completedAt 은 보존한다', async () => {
+      const surveyId = createTestSurvey();
+      const qid = createTestQuestion(surveyId, 'text');
+      const responseId = createTestResponse(surveyId, {
+        questionResponses: { [qid]: 'old' },
+      });
+      const before = h.responseStore.get(responseId);
+      const beforeCompletedAt = before?.completedAt?.getTime();
+
+      await saveAdminEdit(surveyId, responseId, {
+        questionResponses: { [qid]: 'new' },
+      });
+
+      const after = h.responseStore.get(responseId);
+      expect((after?.questionResponses as { [k: string]: string })[qid]).toBe('new');
+      expect(after?.completedAt?.getTime()).toBe(beforeCompletedAt);
+      expect(after?.lastEditedAt).not.toBeNull();
+      expect(after?.currentStepId).toBeNull();
+      // status / startedAt 은 보존
+      expect(after?.status).toBe('completed');
+      expect(after?.startedAt.getTime()).toBe(before?.startedAt.getTime());
+    });
+
+    it('삭제된 응답은 수정 거부 — Cannot edit deleted response throw', async () => {
+      const surveyId = createTestSurvey();
+      const responseId = createTestResponse(surveyId);
+      await softDeleteResponse(surveyId, responseId);
+
+      await expect(
+        saveAdminEdit(surveyId, responseId, { questionResponses: {} }),
+      ).rejects.toThrow('Cannot edit deleted response');
+    });
+
+    it('response_answers 를 새 응답으로 재기록한다 (옛 답 제거 + 새 답 INSERT)', async () => {
+      const surveyId = createTestSurvey();
+      const oldQid = createTestQuestion(surveyId, 'text');
+      const newQid = createTestQuestion(surveyId, 'text');
+      const responseId = createTestResponse(surveyId, {
+        questionResponses: { [oldQid]: 'OLD_ANS' },
+      });
+      // 기존 답변 행 한 건 추가 (oldQid)
+      const seedAnswerId = genId('answer');
+      h.answerStore.set(seedAnswerId, {
+        id: seedAnswerId,
+        responseId,
+        questionId: oldQid,
+      });
+      expect(
+        Array.from(h.answerStore.values()).filter((a) => a.responseId === responseId),
+      ).toHaveLength(1);
+
+      await saveAdminEdit(surveyId, responseId, {
+        questionResponses: { [newQid]: 'NEW_ANS' },
+      });
+
+      const remaining = Array.from(h.answerStore.values()).filter(
+        (a) => a.responseId === responseId,
+      );
+      // 옛 행은 사라지고 새 행 한 건이 남는다
+      expect(remaining).toHaveLength(1);
+      expect(remaining[0].questionId).toBe(newQid);
+    });
+
+    it('존재하지 않는 응답은 Response not found throw', async () => {
+      const surveyId = createTestSurvey();
+      await expect(
+        saveAdminEdit(surveyId, 'nonexistent-id', { questionResponses: {} }),
+      ).rejects.toThrow('Response not found');
     });
   });
 

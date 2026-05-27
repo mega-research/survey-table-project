@@ -10,7 +10,6 @@ import {
   contactTargets,
   NewSurveyResponse,
   questions,
-  responseAnswers,
   surveyResponses,
 } from '@/db/schema';
 import type { PageVisit } from '@/db/schema/schema-types';
@@ -19,7 +18,7 @@ import { checkTrackA, checkTrackB } from '@/lib/duplicate-detection/check';
 import { computeSignals } from '@/lib/duplicate-detection/signals';
 import type { BlockReason, ClientSignals } from '@/lib/duplicate-detection/types';
 import { parseBrowser, parsePlatform } from '@/lib/operations/parse-ua';
-import { normalizeToAnswers } from '@/lib/response-normalizer';
+import { replaceResponseAnswers } from '@/actions/response-answers-replace';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 
 // ========================
@@ -599,23 +598,14 @@ export async function completeResponse(
       .where(eq(surveyResponses.id, responseId))
       .returning();
 
-    // 2. response_answers 정규화 저장 (이중 쓰기)
+    // 2. response_answers 정규화 저장 (replaceResponseAnswers — saveAdminEdit 과 공유)
     if (validatedResponses && Object.keys(validatedResponses).length > 0) {
-      // 해당 응답의 설문 질문 목록 조회
-      const questionList = await tx.query.questions.findMany({
-        where: eq(questions.surveyId, updated.surveyId),
-        columns: { id: true, type: true },
-      });
-
-      const normalizedAnswers = normalizeToAnswers(
+      await replaceResponseAnswers(
+        tx,
         responseId,
+        updated.surveyId,
         validatedResponses,
-        questionList,
       );
-
-      if (normalizedAnswers.length > 0) {
-        await tx.insert(responseAnswers).values(normalizedAnswers);
-      }
     }
 
     return updated;

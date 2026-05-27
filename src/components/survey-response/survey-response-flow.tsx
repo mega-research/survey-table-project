@@ -50,6 +50,7 @@ import {
 
 import { useSurveyResponseStore } from '@/stores/survey-response-store';
 import { useShallow } from 'zustand/react/shallow';
+import type { SurveyVersionSnapshot } from '@/db/schema';
 import { Question, QuestionGroup, Survey } from '@/types/survey';
 import {
   getBranchRuleForResponse,
@@ -62,24 +63,24 @@ import {
 export type ResponsesMap = Record<string, unknown>;
 
 /**
- * Task 15에서 본격 정의될 어드민 응답 수정 저장 payload.
- * 본 task에서는 시그니처 골격만 잡아둔다 (adminContext는 받기만 하고 사용 안 함).
+ * 어드민 응답 수정 저장 payload.
+ * saveAdminEdit 의 SaveAdminEditPayload 와 형태 일치 — 같은 shape 으로 직접 전달.
  */
 export type SaveAdminEditPayload = {
   questionResponses: Record<string, unknown>;
-  // 추가 필드는 Task 15에서 채운다.
 };
 
 export interface SurveyResponseFlowProps {
   mode?: 'public' | 'admin-edit';
   surveyIdentifier: string; // slug | uuid | privateToken (이미 decodeURIComponent 된 값)
   inviteToken?: string | null;
-  // admin-edit 모드 전용 — 본 task에서는 받기만 하고 사용 안 함
+  // admin-edit 모드 전용 — Task 15 에서 활성화.
   adminContext?: {
     responseId: string;
     surveyId: string; // UUID
     initialResponses: ResponsesMap;
-    versionId: string | null;
+    // 응답이 작성된 시점의 설문 스냅샷. 응답이 published 이전이면 null.
+    versionSnapshot: SurveyVersionSnapshot | null;
     onSubmit: (payload: SaveAdminEditPayload) => Promise<void>;
   };
 }
@@ -154,17 +155,16 @@ function responsesToLookupShape(
 export function SurveyResponseFlow({
   surveyIdentifier,
   inviteToken: inviteTokenProp = null,
-  // mode / adminContext 는 Task 15에서 사용. 현 task에서는 받기만 한다.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   mode = 'public',
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   adminContext,
 }: SurveyResponseFlowProps) {
   const router = useRouter();
   const identifier = surveyIdentifier;
+  const isAdminEdit = mode === 'admin-edit';
 
   // ?invite=<token> — contact 매칭용. 없으면 익명 응답 흐름 그대로.
-  const inviteToken = inviteTokenProp ?? null;
+  // admin-edit 모드에서는 invite 토큰 매칭/검증 자체를 건너뛴다.
+  const inviteToken = isAdminEdit ? null : inviteTokenProp ?? null;
   const [inviteIsInvalid, setInviteIsInvalid] = useState(false);
 
   // 응답 스토어 — 액션만 셀렉트 (전체 구독 → 불필요 리렌더 방지)
@@ -229,6 +229,54 @@ export function SurveyResponseFlow({
       setLoadError(null);
 
       try {
+        // admin-edit 분기 (1/8) — survey 로드: versionSnapshot 우선, fallback DB 조회.
+        // invite/requireInviteToken/attrs lookup 도 모두 건너뜀.
+        if (isAdminEdit && adminContext) {
+          const snapshot = adminContext.versionSnapshot;
+          if (snapshot) {
+            // snapshot 으로 직접 Survey 구성. lookups 는 snapshot 에 미포함 — 빈 배열로.
+            // (어드민 수정에서 LUT 기반 조건/분기는 prefill 이 아니라 표시 평가용으로만 의미)
+            const builtSurvey: Survey = {
+              id: adminContext.surveyId,
+              title: snapshot.title,
+              description: snapshot.description,
+              groups: snapshot.groups as QuestionGroup[],
+              questions: snapshot.questions as unknown as Question[],
+              settings: {
+                isPublic: snapshot.settings.isPublic,
+                allowMultipleResponses: snapshot.settings.allowMultipleResponses,
+                showProgressBar: snapshot.settings.showProgressBar,
+                shuffleQuestions: snapshot.settings.shuffleQuestions,
+                requireLogin: snapshot.settings.requireLogin,
+                endDate: snapshot.settings.endDate
+                  ? new Date(snapshot.settings.endDate)
+                  : undefined,
+                maxResponses: snapshot.settings.maxResponses,
+                thankYouMessage: snapshot.settings.thankYouMessage,
+                requireInviteToken: snapshot.settings.requireInviteToken,
+              },
+              lookups: [],
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            };
+            setLoadedSurvey(builtSurvey);
+            setVersionId(null);
+          } else {
+            // snapshot 미존재 (published 이전 응답) → 현재 surveys 행 직접 사용.
+            const result = await getSurveyForResponse(adminContext.surveyId);
+            if (!result) {
+              setLoadError('요청하신 설문을 찾을 수 없습니다.');
+              setLoadedSurvey(null);
+            } else {
+              setLoadedSurvey(result.survey);
+              setVersionId(result.versionId);
+            }
+          }
+          // 초기 응답값 prefill — DB INSERT 없이 state 만 세팅.
+          setResponses(adminContext.initialResponses);
+          return;
+        }
+
         const { type, value } = parsesurveyIdentifier(identifier);
 
         let surveyId: string | null = null;
@@ -298,11 +346,21 @@ export function SurveyResponseFlow({
     };
 
     loadSurvey();
-  }, [identifier]);
+    // adminContext 는 페이지 수명 동안 안정적 (부모에서 한 번만 생성) — deps 미포함
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [identifier, isAdminEdit]);
+
+  // admin-edit 분기 (2/8) — 중복 검사 자동 통과 (어드민 수정은 새 응답이 아님)
+  useEffect(() => {
+    if (!isAdminEdit) return;
+    setDuplicateStatus({ kind: 'ok' });
+  }, [isAdminEdit]);
 
   // 진입 시 중복 검사 — 설문 로드 + 신호 수집 완료 후 1회 실행
   // signals 가 null 인 동안 effect skip → state 채워지면 자동 재실행
+  // admin-edit 분기 (2/8) — 어드민 수정 모드에서는 검사 자체를 건너뜀 (위 effect 가 ok 로 set)
   useEffect(() => {
+    if (isAdminEdit) return;
     if (!loadedSurvey?.id || !signals) return;
     let cancelled = false;
 
@@ -329,7 +387,7 @@ export function SurveyResponseFlow({
     return () => {
       cancelled = true;
     };
-  }, [loadedSurvey?.id, inviteToken, signals]);
+  }, [isAdminEdit, loadedSurvey?.id, inviteToken, signals]);
 
   // 운영 현황 콘솔(T5): 페이지 진입 시 DB INSERT를 더 이상 하지 않는다.
   // 첫 답변 시점에 createResponseWithFirstAnswer로 행을 생성한다 (handleResponse 참고).
@@ -442,14 +500,17 @@ export function SurveyResponseFlow({
   // - currentResponseId가 set된 이후(첫 답변 후)에만 동작
   // - 동일 stepId면 서버에서 no-op (멱등)
   // - 실패는 사용자 흐름을 막지 않고 콘솔에만 남긴다 (best-effort)
+  // admin-edit 분기 (3/8) — 어드민 수정은 lastActivityAt 의미가 없고
+  // saveAdminEdit 이 currentStepId 를 null 로 재설정하므로 step 추적 자체를 끈다.
   useEffect(() => {
+    if (isAdminEdit) return;
     if (currentResponseId === null) return;
     if (!currentStep) return;
     const nextStepId = stepIdOf(currentStep);
     recordStepVisit({ responseId: currentResponseId, nextStepId }).catch((err) => {
       console.error('recordStepVisit 실패:', err);
     });
-  }, [currentResponseId, currentStep]);
+  }, [isAdminEdit, currentResponseId, currentStep]);
 
   // 운영 현황 콘솔(T6): localStorage 기반 응답 회복.
   // - 진입 시 1회 실행 (loadedSurvey 로드 완료 + currentResponseId 가 아직 null 일 때)
@@ -460,6 +521,8 @@ export function SurveyResponseFlow({
   const [resumeMessage, setResumeMessage] = useState<string | null>(null);
 
   useEffect(() => {
+    // admin-edit 분기 (4/8) — localStorage 회복은 응답자 세션 전용이므로 건너뜀.
+    if (isAdminEdit) return;
     if (!loadedSurvey || currentResponseId !== null) return;
 
     const key = sessionStorageKey(loadedSurvey.id);
@@ -497,7 +560,7 @@ export function SurveyResponseFlow({
       .finally(() => {
         setIsRecovering(false);
       });
-  }, [loadedSurvey, currentResponseId, setCurrentResponseId, inviteToken]);
+  }, [isAdminEdit, loadedSurvey, currentResponseId, setCurrentResponseId, inviteToken]);
 
   // 회복 토스트 자동 dismiss (4초)
   useEffect(() => {
@@ -612,7 +675,9 @@ export function SurveyResponseFlow({
       // - currentResponseId가 null & 진행 중 INSERT가 없을 때만 트리거
       // - createResponseWithFirstAnswer는 (surveyId, sessionId) 멱등 — 더블 클릭 방어
       // - 후속 답변은 별도 DB 쓰기 없음 (제출 시 completeResponse가 일괄 저장)
+      // admin-edit 분기 (5/8) — 어드민 수정은 자동 저장 없음. 마지막 submit 시점에 일괄 갱신.
       if (
+        !isAdminEdit &&
         currentResponseId === null &&
         !isCreatingResponse &&
         !isRecovering &&    // I-1 fix: 회복 진행 중에는 INSERT 발사 안 함
@@ -661,6 +726,7 @@ export function SurveyResponseFlow({
       currentResponseId,
       isCreatingResponse,
       isRecovering,
+      isAdminEdit,
       loadedSurvey,
       currentStep,
       sessionId,
@@ -705,6 +771,36 @@ export function SurveyResponseFlow({
       }
 
       setHighlightQuestionIds(new Set());
+
+      // admin-edit 분기 (6/8) — 새 응답 INSERT 없이 onSubmit 으로 위임.
+      if (isAdminEdit && adminContext) {
+        // 옵션 텍스트(__optTexts__) 사이드카 — 응답자 흐름과 동일하게 합쳐서 보낸다.
+        const storeOptTexts = useSurveyResponseStore.getState().optionTexts;
+        const filteredOptTexts: Record<string, Record<string, string>> = {};
+        for (const q of visibleQuestions) {
+          const qOptTexts = storeOptTexts[q.id];
+          if (!qOptTexts || Object.keys(qOptTexts).length === 0) continue;
+          const qValue = responses[q.id];
+          const optionsForFilter = q.type === 'table'
+            ? collectTableQuestionOptions(q)
+            : q.options;
+          const filtered = filterOptionTextsForSubmission(qValue, qOptTexts, optionsForFilter);
+          if (filtered) {
+            filteredOptTexts[q.id] = filtered;
+          }
+        }
+        const questionResponses: Record<string, unknown> = {
+          ...responses,
+          ...(Object.keys(filteredOptTexts).length > 0
+            ? { __optTexts__: filteredOptTexts }
+            : {}),
+        };
+
+        // onSubmit 안에서 router.push 처리 — 본 컴포넌트는 thank-you 화면을 띄우지 않는다.
+        await adminContext.onSubmit({ questionResponses });
+        resetResponseState();
+        return;
+      }
 
       // currentResponseId === null fallback —
       // notice-only / optional-only / 분기로 visible 질문 0 인 설문은
@@ -840,11 +936,14 @@ export function SurveyResponseFlow({
       setIsSubmitting(false);
     }
   }, [
+    adminContext,
     currentResponseId,
     currentStep,
     currentStepIndex,
+    evalCtx,
     groups,
     inviteToken,
+    isAdminEdit,
     isQuestionAnswered,
     loadedSurvey,
     questions,
@@ -852,6 +951,7 @@ export function SurveyResponseFlow({
     responses,
     sessionId,
     setCurrentResponseId,
+    signals,
     steps,
     versionId,
     visibleQuestions,
