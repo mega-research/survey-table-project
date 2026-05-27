@@ -11,7 +11,7 @@ import { answersToQuestionResponses } from '@/lib/analytics/response-adapter';
 // 설문별 응답 조회
 export async function getResponsesBySurvey(surveyId: string) {
   const responses = await db.query.surveyResponses.findMany({
-    where: eq(surveyResponses.surveyId, surveyId),
+    where: and(eq(surveyResponses.surveyId, surveyId), isNull(surveyResponses.deletedAt)),
     orderBy: [desc(surveyResponses.startedAt)],
   });
   return responses;
@@ -20,17 +20,25 @@ export async function getResponsesBySurvey(surveyId: string) {
 // 완료된 응답만 조회
 export async function getCompletedResponses(surveyId: string) {
   const responses = await db.query.surveyResponses.findMany({
-    where: and(eq(surveyResponses.surveyId, surveyId), eq(surveyResponses.isCompleted, true)),
+    where: and(
+      eq(surveyResponses.surveyId, surveyId),
+      eq(surveyResponses.isCompleted, true),
+      isNull(surveyResponses.deletedAt),
+    ),
     orderBy: [desc(surveyResponses.completedAt)],
   });
   return responses;
 }
 
 // 응답 단일 조회
-export async function getResponseById(responseId: string) {
-  const response = await db.query.surveyResponses.findFirst({
-    where: eq(surveyResponses.id, responseId),
-  });
+export async function getResponseById(
+  responseId: string,
+  options: { includeDeleted?: boolean } = {},
+) {
+  const where = options.includeDeleted
+    ? eq(surveyResponses.id, responseId)
+    : and(eq(surveyResponses.id, responseId), isNull(surveyResponses.deletedAt));
+  const response = await db.query.surveyResponses.findFirst({ where });
   return response;
 }
 
@@ -39,7 +47,7 @@ export async function getResponseCountBySurvey(surveyId: string) {
   const result = await db
     .select({ count: count() })
     .from(surveyResponses)
-    .where(eq(surveyResponses.surveyId, surveyId));
+    .where(and(eq(surveyResponses.surveyId, surveyId), isNull(surveyResponses.deletedAt)));
 
   return result[0]?.count || 0;
 }
@@ -49,7 +57,13 @@ export async function getCompletedResponseCountBySurvey(surveyId: string) {
   const result = await db
     .select({ count: count() })
     .from(surveyResponses)
-    .where(and(eq(surveyResponses.surveyId, surveyId), eq(surveyResponses.isCompleted, true)));
+    .where(
+      and(
+        eq(surveyResponses.surveyId, surveyId),
+        eq(surveyResponses.isCompleted, true),
+        isNull(surveyResponses.deletedAt),
+      ),
+    );
 
   return result[0]?.count || 0;
 }
@@ -63,6 +77,7 @@ export async function getResponsesWithAnswers(
   const conditions = [
     eq(surveyResponses.surveyId, surveyId),
     eq(surveyResponses.isCompleted, true),
+    isNull(surveyResponses.deletedAt),
   ];
 
   if (versionId) {
