@@ -9,9 +9,12 @@ import { deleteImagesFromR2 } from '@/lib/image-utils';
  * TipTap 에디터에서 업로드한 이미지의 R2 lifecycle 을 추적한다.
  *
  * - 마운트 시 initialHtml 의 이미지 URL을 추적 대상으로 등록
- * - editor onUpdate 시 reconcileAfterUpdate() 를 호출하면, 직전 콘텐츠와 비교해
- *   사라진 이미지를 R2에서 삭제
- * - 폼 취소 시 cleanupOrphans() 로 미사용 업로드 일괄 삭제
+ * - editor onUpdate 시 reconcileAfterUpdate 가 직전 콘텐츠 ref 만 갱신.
+ *   R2 DELETE 는 호출하지 않는다 — 사용자가 undo/redo 로 노드를 복원할 수
+ *   있고, 그 사이 R2 객체가 사라지면 publish 시 NoSuchKey 로 promote 가
+ *   실패하기 때문.
+ * - 폼 취소·unmount 시 cleanupOrphans 가 추적 대상 중 현재 HTML 에 없는
+ *   것만 일괄 R2 DELETE. 비정상 종료는 R2 24h lifecycle 안전망.
  */
 export function useEditorImageTracker(initialHtml: string) {
   const uploadedRef = useRef<Set<string>>(new Set());
@@ -30,21 +33,12 @@ export function useEditorImageTracker(initialHtml: string) {
     uploadedRef.current.add(url);
   }, []);
 
-  /** onUpdate 시점에 호출 — diff 후 사라진 이미지 R2 삭제 + previous 갱신 */
+  /**
+   * onUpdate 시점에 호출 — 사라진 URL 은 추적에서만 갱신.
+   * R2 DELETE 는 의도적으로 호출하지 않는다(undo 시점 보존). 실제 R2 cleanup 은
+   * unmount/폼 취소 시 cleanupOrphans 가 일괄 수행하거나 24h lifecycle 이 처리.
+   */
   const reconcileAfterUpdate = useCallback((currentHtml: string) => {
-    const previousImages = extractImageUrlsFromHtml(previousContentRef.current);
-    const currentImages = extractImageUrlsFromHtml(currentHtml);
-    const deletedImages = previousImages.filter(
-      (url) => !currentImages.includes(url) && uploadedRef.current.has(url),
-    );
-
-    if (deletedImages.length > 0) {
-      deleteImagesFromR2(deletedImages).catch((error) => {
-        console.error('이미지 삭제 실패:', error);
-      });
-      deletedImages.forEach((url) => uploadedRef.current.delete(url));
-    }
-
     previousContentRef.current = currentHtml;
   }, []);
 
