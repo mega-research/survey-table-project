@@ -646,36 +646,4 @@ export async function completeResponse(
   return result;
 }
 
-// 응답 삭제 (관리자 전용)
-export async function deleteResponse(responseId: string) {
-  await requireAuth();
-
-  await db.delete(surveyResponses).where(eq(surveyResponses.id, responseId));
-  revalidatePath('/analytics');
-}
-
-// 응답 데이터 가져오기 (관리자 전용)
-export async function importResponses(data: NewSurveyResponse[]) {
-  await requireAuth();
-
-  const inserted = await db.insert(surveyResponses).values(data).returning();
-  revalidatePath('/analytics');
-  return inserted;
-}
-
-// 설문별 응답 전체 삭제 (관리자 전용)
-export async function clearSurveyResponses(surveyId: string) {
-  await requireAuth();
-
-  await db.delete(surveyResponses).where(eq(surveyResponses.surveyId, surveyId));
-  revalidatePath('/analytics');
-}
-
-// 전체 응답 삭제 (관리자 전용)
-export async function clearAllResponses() {
-  await requireAuth();
-
-  await db.delete(surveyResponses);
-  revalidatePath('/analytics');
-}
 

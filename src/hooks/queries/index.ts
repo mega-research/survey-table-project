@@ -23,8 +23,6 @@ export {
   useStartResponse,
   useUpdateQuestionResponse,
   useCompleteResponse,
-  useDeleteResponse,
-  useClearSurveyResponses,
   useExportResponsesJson,
   useExportResponsesCsv,
 } from './use-responses';

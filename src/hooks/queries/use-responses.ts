@@ -12,9 +12,7 @@ import {
   getResponsesBySurvey,
 } from '@/actions/query-actions';
 import {
-  clearSurveyResponses as clearSurveyResponsesAction,
   completeResponse as completeResponseAction,
-  deleteResponse as deleteResponseAction,
   startResponse as startResponseAction,
   updateQuestionResponse as updateQuestionResponseAction,
 } from '@/actions/response-actions';
@@ -152,39 +150,6 @@ export function useCompleteResponse() {
       });
       queryClient.invalidateQueries({
         queryKey: responseKeys.summary(data.surveyId),
-      });
-    },
-  });
-}
-
-/**
- * 응답 삭제
- */
-export function useDeleteResponse() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (responseId: string) => deleteResponseAction(responseId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: responseKeys.lists() });
-    },
-  });
-}
-
-/**
- * 설문별 응답 전체 삭제
- */
-export function useClearSurveyResponses() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (surveyId: string) => clearSurveyResponsesAction(surveyId),
-    onSuccess: (_, surveyId) => {
-      queryClient.invalidateQueries({
-        queryKey: responseKeys.listBySurvey(surveyId),
-      });
-      queryClient.invalidateQueries({
-        queryKey: responseKeys.summary(surveyId),
       });
     },
   });
