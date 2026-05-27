@@ -11,7 +11,6 @@ import {
   extractPermanentAttachmentKeysFromHtml,
   extractTmpNoticeAttachmentUrlsFromHtml,
   isTmpNoticeAttachmentUrl,
-  noticeAttachmentTmpToPermanentUrl,
   promoteNoticeAttachments,
   replaceNoticeAttachmentUrlsInQuestion,
 } from '@/lib/survey/notice-attachment-promote';
@@ -35,21 +34,6 @@ describe('isTmpNoticeAttachmentUrl', () => {
   });
   it('tmp/survey 는 false', () => {
     expect(isTmpNoticeAttachmentUrl('https://cdn.test/tmp/survey/x.webp')).toBe(false);
-  });
-});
-
-describe('noticeAttachmentTmpToPermanentUrl', () => {
-  beforeEach(() => {
-    process.env.CLOUDFLARE_R2_PUBLIC_URL = 'https://cdn.test';
-  });
-  afterEach(() => {
-    delete process.env.CLOUDFLARE_R2_PUBLIC_URL;
-  });
-
-  it('tmp/notice-attachment/ → notice-attachment/', () => {
-    expect(
-      noticeAttachmentTmpToPermanentUrl('https://cdn.test/tmp/notice-attachment/x.pdf'),
-    ).toBe('https://cdn.test/notice-attachment/x.pdf');
   });
 });
 

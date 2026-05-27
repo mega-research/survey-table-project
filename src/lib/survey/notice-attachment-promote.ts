@@ -33,14 +33,6 @@ export function isTmpNoticeAttachmentUrl(url: string): boolean {
   return url.startsWith(`${getR2PublicUrl()}/${TMP_NOTICE_ATTACHMENT_PREFIX}`);
 }
 
-export function noticeAttachmentTmpToPermanentUrl(url: string): string {
-  const publicUrl = getR2PublicUrl();
-  return url.replace(
-    `${publicUrl}/${TMP_NOTICE_ATTACHMENT_PREFIX}`,
-    `${publicUrl}/${NOTICE_ATTACHMENT_PREFIX}`,
-  );
-}
-
 export function urlToR2Key(url: string): string | null {
   try {
     const u = new URL(url);
