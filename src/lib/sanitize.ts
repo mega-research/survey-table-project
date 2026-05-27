@@ -16,6 +16,13 @@ const RICH_CONFIG: Config = {
     'style',
     'class',
     'colspan', 'rowspan', 'colwidth',
+    // notice file attachment node
+    'data-file-attachment',
+    'data-key',
+    'data-filename',
+    'data-size',
+    'data-mime',
+    'download',
   ],
   ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
 };

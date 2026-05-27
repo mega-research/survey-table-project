@@ -42,3 +42,33 @@ describe('sanitizeRichHtml', () => {
     expect(sanitizeRichHtml(undefined)).toBe('');
   });
 });
+
+describe('파일 첨부 노드 — sanitize allowlist', () => {
+  it('a[data-file-attachment] 의 6개 attribute 모두 통과', () => {
+    const input =
+      '<p><a data-file-attachment="true" data-key="tmp/notice-attachment/abc.pdf" ' +
+      'data-filename="협조공문.pdf" data-size="240000" data-mime="application/pdf" ' +
+      'href="https://cdn.test/tmp/notice-attachment/abc.pdf" download="협조공문.pdf" ' +
+      'target="_blank" rel="noopener noreferrer" class="notice-file-attachment">협조 공문</a></p>';
+    const out = sanitizeRichHtml(input);
+    expect(out).toContain('data-file-attachment="true"');
+    expect(out).toContain('data-key="tmp/notice-attachment/abc.pdf"');
+    expect(out).toContain('data-filename="협조공문.pdf"');
+    expect(out).toContain('data-size="240000"');
+    expect(out).toContain('data-mime="application/pdf"');
+    expect(out).toContain('download="협조공문.pdf"');
+    expect(out).toContain('class="notice-file-attachment"');
+  });
+
+  it('href javascript: 스킴 차단', () => {
+    const input = '<a data-file-attachment="true" href="javascript:alert(1)">x</a>';
+    const out = sanitizeRichHtml(input);
+    expect(out).not.toContain('javascript:');
+  });
+
+  it('onclick 같은 이벤트 핸들러 차단', () => {
+    const input = '<a data-file-attachment="true" onclick="alert(1)" href="#">x</a>';
+    const out = sanitizeRichHtml(input);
+    expect(out).not.toContain('onclick');
+  });
+});
