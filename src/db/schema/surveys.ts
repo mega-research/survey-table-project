@@ -179,6 +179,8 @@ export const surveyResponses = pgTable('survey_responses', {
   deviceId: text('device_id'),
   // 미래 soft delete hook
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  // 어드민 수정 시각 (응답자 본인 흐름과 구분). NULL = 미수정.
+  lastEditedAt: timestamp('last_edited_at', { withTimezone: true }),
   metadata: jsonb('metadata').$type<{
     exposedQuestionIds?: string[];
     exposedRowIds?: string[]; // 테이블 질문의 노출된 행 ID들
