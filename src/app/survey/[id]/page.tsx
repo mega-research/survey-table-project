@@ -597,7 +597,8 @@ export default function SurveyResponsePage() {
         currentStep
       ) {
         setIsCreatingResponse(true);
-        const signals = signalsRef.current ?? { deviceId: null, screen: '', dpr: 1, tz: '', lang: '', platform: '' };
+        // signalsRef.current 가 null 이면 그대로 전달 — server action 이 신호 기반 검사 skip
+        // (placeholder 신호로 hash 충돌 발생을 방지하기 위함)
         createResponseWithFirstAnswer({
           surveyId: loadedSurvey.id,
           sessionId,
@@ -606,7 +607,7 @@ export default function SurveyResponsePage() {
           value,
           currentStepId: stepIdOf(currentStep),
           inviteToken: inviteToken ?? undefined,
-          clientSignals: signals,
+          clientSignals: signalsRef.current,
         })
           .then((result) => {
             if (result.kind === 'blocked') {
@@ -689,14 +690,14 @@ export default function SurveyResponsePage() {
       let effectiveResponseId = currentResponseId;
       if (!effectiveResponseId && loadedSurvey && currentStep) {
         try {
-          const blankSignals = signalsRef.current ?? { deviceId: null, screen: '', dpr: 1, tz: '', lang: '', platform: '' };
+          // signalsRef.current 가 null 이면 그대로 전달 — server action 이 신호 기반 검사 skip
           const created = await createBlankResponse({
             surveyId: loadedSurvey.id,
             sessionId,
             versionId: versionId ?? null,
             currentStepId: stepIdOf(currentStep),
             inviteToken: inviteToken ?? undefined,
-            clientSignals: blankSignals,
+            clientSignals: signalsRef.current,
           });
           if (created.kind === 'blocked') {
             setDuplicateStatus({ kind: 'blocked', reason: created.reason });

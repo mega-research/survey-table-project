@@ -11,11 +11,11 @@ interface Props {
 const MESSAGES: Record<Props['reason'], { title: string; body: string }> = {
   invalid_token: {
     title: '잘못된 초대 링크입니다',
-    body: '이 링크는 유효하지 않거나 만료되었습니다. 운영자에게 새 링크를 요청해 주세요.',
+    body: '이 링크는 유효하지 않거나 만료되었습니다. 운영자에게 문의해 주세요.',
   },
   token_already_used: {
-    title: '이미 응답이 완료된 초대입니다',
-    body: '이 초대 링크로는 이미 응답이 제출되었습니다. 중복 응답은 허용되지 않습니다.',
+    title: '이미 응답하신 설문입니다',
+    body: '이미 응답이 제출되었습니다. 운영자에게 문의해 주세요.',
   },
   device_already_responded: {
     title: '이미 응답하신 설문입니다',

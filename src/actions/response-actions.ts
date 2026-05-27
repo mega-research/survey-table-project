@@ -138,7 +138,9 @@ export async function createResponseWithFirstAnswer(input: {
   value: unknown;
   currentStepId: string;
   inviteToken?: string;
-  clientSignals: ClientSignals;
+  // null 이면 신호 기반 검사 skip — 클라이언트 신호 수집 실패(LocalStorage 차단 등) 시
+  // placeholder 신호로 hash 충돌 발생을 방지하기 위해 null 그대로 받는다
+  clientSignals: ClientSignals | null;
 }): Promise<FirstAnswerResult> {
   const { surveyId, sessionId, versionId, questionId, value, currentStepId, inviteToken, clientSignals } = input;
 
@@ -148,17 +150,18 @@ export async function createResponseWithFirstAnswer(input: {
   const platform = parsePlatform(userAgent);
   const browser = parseBrowser(userAgent);
 
-  // 신호 계산: ipHash, fpHash, deviceId
-  const signals = computeSignals(headerStore, clientSignals);
+  // 신호 계산: ipHash, fpHash, deviceId (clientSignals null 이면 모두 null)
+  const signals = clientSignals ? computeSignals(headerStore, clientSignals) : null;
 
   // 중복 감지 재검증 (bypass defense — checkDuplicateOnEntry 우회 시 server action에서 2차 차단)
   // checkTrackA 가 통과 시 contactTargetId 를 반환하므로 그대로 사용 (중복 DB 호출 회피)
+  // clientSignals null 시 Track B 검사 skip (수용된 trade-off — fallback 신호로 거짓 차단 회피)
   let contactTargetId: string | null = null;
   if (inviteToken) {
     const trackA = await checkTrackA(surveyId, inviteToken);
     if (trackA.blocked) return { kind: 'blocked', reason: trackA.reason };
     contactTargetId = trackA.contactTargetId ?? null;
-  } else {
+  } else if (signals) {
     const trackB = await checkTrackB({ surveyId, signals });
     if (trackB.blocked) return { kind: 'blocked', reason: trackB.reason };
   }
@@ -177,9 +180,9 @@ export async function createResponseWithFirstAnswer(input: {
     isCompleted: false,
     status: 'in_progress',
     userAgent,
-    ipHash: signals.ipHash,
-    fpHash: signals.fpHash,
-    deviceId: signals.deviceId,
+    ipHash: signals?.ipHash ?? null,
+    fpHash: signals?.fpHash ?? null,
+    deviceId: signals?.deviceId ?? null,
     platform,
     browser,
     currentStepId,
@@ -242,7 +245,8 @@ export async function createBlankResponse(input: {
   versionId: string | null;
   currentStepId: string;
   inviteToken?: string;
-  clientSignals: ClientSignals;
+  // null 이면 신호 기반 검사 skip (createResponseWithFirstAnswer 와 동일 정책)
+  clientSignals: ClientSignals | null;
 }): Promise<FirstAnswerResult> {
   const { surveyId, sessionId, versionId, currentStepId, inviteToken, clientSignals } = input;
 
@@ -251,16 +255,17 @@ export async function createBlankResponse(input: {
   const platform = parsePlatform(userAgent);
   const browser = parseBrowser(userAgent);
 
-  // 신호 계산: ipHash, fpHash, deviceId
-  const signals = computeSignals(headerStore, clientSignals);
+  // 신호 계산: ipHash, fpHash, deviceId (clientSignals null 이면 모두 null)
+  const signals = clientSignals ? computeSignals(headerStore, clientSignals) : null;
 
   // 중복 감지 재검증 (bypass defense). checkTrackA 반환의 contactTargetId 를 재사용해 중복 DB 호출 회피
+  // clientSignals null 시 Track B 검사 skip
   let contactTargetId: string | null = null;
   if (inviteToken) {
     const trackA = await checkTrackA(surveyId, inviteToken);
     if (trackA.blocked) return { kind: 'blocked', reason: trackA.reason };
     contactTargetId = trackA.contactTargetId ?? null;
-  } else {
+  } else if (signals) {
     const trackB = await checkTrackB({ surveyId, signals });
     if (trackB.blocked) return { kind: 'blocked', reason: trackB.reason };
   }
@@ -279,9 +284,9 @@ export async function createBlankResponse(input: {
     isCompleted: false,
     status: 'in_progress',
     userAgent,
-    ipHash: signals.ipHash,
-    fpHash: signals.fpHash,
-    deviceId: signals.deviceId,
+    ipHash: signals?.ipHash ?? null,
+    fpHash: signals?.fpHash ?? null,
+    deviceId: signals?.deviceId ?? null,
     platform,
     browser,
     currentStepId,
