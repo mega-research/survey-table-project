@@ -149,12 +149,13 @@ const RowCard = React.memo(function RowCard({
             }
           }
 
-          // 열 라벨에서 섹션 접두사 제거
-          const shortLabel = sectionHeader
-            ? columnLabel // 섹션 헤더가 방금 바뀌었으면 원본 사용 (첫 항목)
+          // 셀 라벨(cell.exportLabel) 우선, 없으면 열 라벨에서 섹션 접두사 제거한 값으로 폴백
+          const cellLabel = cell.exportLabel?.trim();
+          const shortLabel = cellLabel || (sectionHeader
+            ? columnLabel
             : lastSection && columnLabel.startsWith(lastSection)
               ? columnLabel.slice(lastSection.length).replace(/^[_\s·]+/, '') || columnLabel
-              : columnLabel;
+              : columnLabel);
 
           // 수량+단위 쌍 감지: 다음 셀이 "_단위" 또는 "단위"로 끝나면 한 줄로 묶기
           const nextEntry = inputCells[arrIdx + 1];
