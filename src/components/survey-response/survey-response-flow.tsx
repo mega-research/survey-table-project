@@ -231,8 +231,8 @@ export function SurveyResponseFlow({
         if (isAdminEdit && adminContext) {
           const snapshot = adminContext.versionSnapshot;
           if (snapshot) {
-            // snapshot 으로 직접 Survey 구성. lookups 는 snapshot 에 미포함 — 빈 배열로.
-            // (어드민 수정에서 LUT 기반 조건/분기는 prefill 이 아니라 표시 평가용으로만 의미)
+            // snapshot 으로 직접 Survey 구성. lookups 는 T17 이후 snapshot 에 포함되므로 복원한다.
+            // T17 이전 publish 본은 snapshot.lookups 가 undefined → 빈 배열 (해당 시점 lookups 복원 불가, known limitation).
             const builtSurvey: Survey = {
               id: adminContext.surveyId,
               title: snapshot.title,
