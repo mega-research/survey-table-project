@@ -11,9 +11,12 @@ export async function checkTrackA(
   inviteToken: string,
 ): Promise<CheckResult> {
   const lookup = await findContactByInviteToken(surveyId, inviteToken);
-  // Task 7 까지는 valid 외 (excluded/invalid) 를 동일하게 invalid_token 으로 처리
-  // [기존 동작 유지 — excluded 의 별도 차단 분기는 Task 7]
-  if (lookup.kind !== 'valid') {
+  // excluded = 부정 결과코드 OR unsubscribed → 응답 모수 제외 카드로 안내
+  // invalid = 토큰 자체가 없거나 형식 오류 → 무효 토큰 카드
+  if (lookup.kind === 'excluded') {
+    return { blocked: true, reason: 'excluded_from_population' };
+  }
+  if (lookup.kind === 'invalid') {
     return { blocked: true, reason: 'invalid_token' };
   }
   if (lookup.respondedAt) {

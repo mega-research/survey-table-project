@@ -48,11 +48,11 @@ describe('checkTrackA (invite_token)', () => {
     expect(r).toEqual({ blocked: false, contactTargetId: 'c1' });
   });
 
-  it('excluded (부정 결과코드 OR unsubscribed) → invalid_token (Task 7 까지 호환)', async () => {
+  it('excluded 부정 결과코드 OR unsubscribed → excluded_from_population', async () => {
     mockFindContact.mockResolvedValue({ kind: 'excluded' });
     const { checkTrackA } = await import('@/lib/duplicate-detection/check');
     const r = await checkTrackA('survey-1', 'excluded-token');
-    expect(r).toEqual({ blocked: true, reason: 'invalid_token' });
+    expect(r).toEqual({ blocked: true, reason: 'excluded_from_population' });
   });
 });
 
