@@ -8,7 +8,7 @@ import { surveys } from '@/db/schema';
 import { requireAuth } from '@/lib/auth';
 
 export class SurveyOwnershipError extends Error {
-  constructor(public readonly reason: 'not_found' | 'forbidden') {
+  constructor(public readonly reason: 'not_found') {
     super(reason);
     this.name = 'SurveyOwnershipError';
   }
@@ -21,7 +21,7 @@ export class SurveyOwnershipError extends Error {
  *
  * 현재 시스템은 단일 어드민 구조이므로 surveys 테이블에 userId 컬럼이 없다.
  * 인증된 사용자라면 모든 설문에 접근 가능하다. 다중 사용자 전환 시
- * surveys.userId 컬럼을 추가하고 forbidden 분기를 활성화한다.
+ * surveys.userId 컬럼을 추가하고 reason에 'forbidden' 값을 추가한다.
  *
  * 호출 후 surveys 행을 그대로 반환해 후속 SELECT 1회를 절약한다.
  */

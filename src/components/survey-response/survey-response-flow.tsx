@@ -61,9 +61,7 @@ import {
 } from '@/utils/branch-logic';
 import type { SaveAdminEditPayload } from '@/actions/profiles-row-actions';
 
-export type ResponsesMap = Record<string, unknown>;
-
-export type { SaveAdminEditPayload };
+type ResponsesMap = Record<string, unknown>;
 
 export interface SurveyResponseFlowProps {
   mode?: 'public' | 'admin-edit';
