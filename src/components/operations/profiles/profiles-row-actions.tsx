@@ -47,8 +47,13 @@ export function ProfilesRowActions({ surveyId, responseId, idx, view }: Props) {
     fn: (s: string, r: string) => Promise<unknown>,
   ) => {
     startTransition(async () => {
-      await fn(surveyId, responseId);
-      setDialog(null);
+      try {
+        await fn(surveyId, responseId);
+        setDialog(null);
+      } catch {
+        window.alert('응답 처리에 실패했습니다. 다시 시도해 주세요.');
+        // dialog 유지 — 사용자 재시도 가능
+      }
     });
   };
 
