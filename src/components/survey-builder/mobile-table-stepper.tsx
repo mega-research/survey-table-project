@@ -2,22 +2,17 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { Check, CheckCircle2, ChevronLeft, ChevronRight, ListChecks } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, ListChecks } from 'lucide-react';
 
-import { Card, CardContent } from '@/components/ui/card';
 import { useColumnSectionMap, useRowGroups } from '@/hooks/use-row-groups';
-import { useContactAttrs } from '@/lib/survey/contact-attrs-context';
-import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import type { HeaderCell, TableColumn, TableRow } from '@/types/survey';
-import { getAlignmentClasses } from '@/utils/table-grid-utils';
 
-import { InteractiveCell } from './cells';
+import { MobileRowCard } from './mobile-row-card';
 
 // ── 상수 ──
 
 const SMALL_TABLE_THRESHOLD = 15;
-const PRE_SELECT_MIN_ROWS = 15;
 
 // ── 타입: 사전선택 Phase ──
 type StepperPhase = 'group-select' | 'row-select' | 'detail';
@@ -57,186 +52,6 @@ function getRowShortLabel(row: TableRow, idx: number): string {
   }
   return `${idx + 1}`;
 }
-
-/** 라디오 옵션 1개짜리 셀은 입력이 아닌 라벨 */
-function isLabelOnlyRadio(cell: TableRow['cells'][number]): boolean {
-  return cell.type === 'radio' && (cell.radioOptions?.length ?? 0) === 1;
-}
-
-// ── 카드 렌더러 ──
-
-const RowCard = React.memo(function RowCard({
-  row,
-  visibleColumns,
-  columnSectionMap,
-  completed,
-  hideColumnLabels,
-  questionId,
-  isTestMode,
-  value,
-  onChange,
-}: {
-  row: TableRow;
-  visibleColumns: TableColumn[];
-  columnSectionMap: ReturnType<typeof useColumnSectionMap>;
-  completed: boolean;
-  hideColumnLabels: boolean;
-  questionId: string;
-  isTestMode: boolean;
-  value?: Record<string, unknown>;
-  onChange?: (value: Record<string, unknown>) => void;
-}) {
-  const attrs = useContactAttrs();
-
-  const inputCells = useMemo(
-    () =>
-      row.cells
-        .map((cell, idx) => ({ cell, colIdx: idx }))
-        .filter(
-          ({ cell }) =>
-            !cell.isHidden &&
-            !cell._isContinuation &&
-            cell.type !== 'text' &&
-            cell.type !== 'image' &&
-            cell.type !== 'video' &&
-            !isLabelOnlyRadio(cell),
-        )
-        .map((entry) => {
-          // 카드 안 옵션 그리드 강제: 짧은 라벨은 2열, 10자 초과는 1열
-          const opts =
-            entry.cell.radioOptions ??
-            entry.cell.checkboxOptions ??
-            entry.cell.selectOptions ??
-            [];
-          if (opts.length === 0) return entry;
-          const longest = opts.reduce(
-            (max, o) => Math.max(max, o.label?.length ?? 0),
-            0,
-          );
-          const effectiveColumns = longest > 10 ? 1 : 2;
-          return entry.cell.optionsColumns === effectiveColumns
-            ? entry
-            : { ...entry, cell: { ...entry.cell, optionsColumns: effectiveColumns } };
-        }),
-    [row.cells],
-  );
-
-  const rowDesc = useMemo(() => {
-    const descCell = row.cells.find(
-      (c) => c.type === 'radio' && !c.isHidden && c.radioOptions?.length === 1,
-    );
-    return descCell?.radioOptions?.[0]?.label || row.label;
-  }, [row.cells, row.label]);
-
-  if (inputCells.length === 0) return null;
-
-  let lastSection = '';
-
-  return (
-    <Card
-      className={cn(
-        'mobile-row-card overflow-hidden transition-all duration-200',
-        completed
-          ? 'border-green-400 bg-green-50/30 ring-1 ring-green-400'
-          : 'border-gray-200',
-      )}
-    >
-      <div className={cn('border-b px-4 py-3', completed ? 'bg-green-50' : 'bg-gray-50/80')}>
-        <div className="flex items-center justify-between">
-          <div className="min-w-0 flex-1">
-            {rowDesc && (
-              <p className="text-sm font-semibold leading-snug text-gray-900">{substituteTokens(rowDesc, attrs)}</p>
-            )}
-          </div>
-          {completed && (
-            <div className="ml-2 flex shrink-0 items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-600">
-              <CheckCircle2 className="h-3.5 w-3.5" />
-              완료
-            </div>
-          )}
-        </div>
-      </div>
-
-      <CardContent className="space-y-3 p-4">
-        {inputCells.map(({ cell, colIdx }, arrIdx) => {
-          const columnLabel = visibleColumns[colIdx]?.label || `항목 ${colIdx + 1}`;
-
-          let sectionHeader: string | null = null;
-          if (columnSectionMap) {
-            const section = columnSectionMap.get(colIdx);
-            if (section && section !== lastSection) {
-              lastSection = section;
-              sectionHeader = section;
-            }
-          }
-
-          // 셀 라벨(cell.exportLabel) 우선, 없으면 열 라벨에서 섹션 접두사 제거한 값으로 폴백
-          const cellLabel = cell.exportLabel?.trim();
-          const shortLabel = cellLabel || (sectionHeader
-            ? columnLabel
-            : lastSection && columnLabel.startsWith(lastSection)
-              ? columnLabel.slice(lastSection.length).replace(/^[_\s·]+/, '') || columnLabel
-              : columnLabel);
-
-          // 수량+단위 쌍 감지: 다음 셀이 "_단위" 또는 "단위"로 끝나면 한 줄로 묶기
-          const nextEntry = inputCells[arrIdx + 1];
-          const nextLabel = nextEntry ? (visibleColumns[nextEntry.colIdx]?.label || '') : '';
-          const isUnitPairStart = nextLabel.endsWith('_단위') || nextLabel.endsWith('단위');
-          // 현재 셀이 단위 셀이면 이전 셀과 묶여서 이미 렌더링됨 → 스킵
-          const isUnitCell = columnLabel.endsWith('_단위') || columnLabel === '단위';
-          const prevEntry = arrIdx > 0 ? inputCells[arrIdx - 1] : null;
-          const prevLabel = prevEntry ? (visibleColumns[prevEntry.colIdx]?.label || '') : '';
-          const wasAlreadyPaired = isUnitCell && (
-            prevLabel + '_단위' === columnLabel ||
-            columnLabel === '단위'
-          );
-
-          if (wasAlreadyPaired) return null; // 이전 셀과 한 줄로 묶임
-
-          return (
-            <React.Fragment key={cell.id}>
-              {sectionHeader && (
-                <div className="flex items-center gap-2 pt-1 first:pt-0">
-                  <div className="h-px flex-1 bg-gray-200" />
-                  <span className="text-xs font-semibold text-gray-500">{substituteTokens(sectionHeader, attrs)}</span>
-                  <div className="h-px flex-1 bg-gray-200" />
-                </div>
-              )}
-              <div className="space-y-1">
-                {!hideColumnLabels && (
-                  <div className="flex items-start gap-1.5">
-                    <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
-                    <span className="line-clamp-2 text-sm font-medium text-gray-900">{substituteTokens(shortLabel, attrs)}</span>
-                  </div>
-                )}
-                {isUnitPairStart && nextEntry ? (
-                  // 수량 + 단위를 한 줄에 배치
-                  <div className="flex items-end gap-2 pl-3">
-                    <div className="flex-1">
-                      <InteractiveCell cell={cell} questionId={questionId} isTestMode={isTestMode} value={value} onChange={onChange} />
-                    </div>
-                    <div className="w-28 shrink-0">
-                      <InteractiveCell cell={nextEntry.cell} questionId={questionId} isTestMode={isTestMode} value={value} onChange={onChange} />
-                    </div>
-                  </div>
-                ) : (
-                  <div
-                    className={cn(
-                      'pl-3',
-                      getAlignmentClasses(cell.horizontalAlign, cell.verticalAlign),
-                    )}
-                  >
-                    <InteractiveCell cell={cell} questionId={questionId} isTestMode={isTestMode} value={value} onChange={onChange} />
-                  </div>
-                )}
-              </div>
-            </React.Fragment>
-          );
-        })}
-      </CardContent>
-    </Card>
-  );
-});
 
 // ── 메인 컴포넌트 ──
 
@@ -337,8 +152,9 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
 
   // ── 사전선택 Phase 상태 ──
   // displayCondition이 없는 테이블 → 사전선택 적용 (이미 필터링된 테이블은 스킵)
+  // 이 시점 displayRows.length 는 항상 SMALL_TABLE_THRESHOLD 초과 (작은 케이스는 위에서 단순 카드로 반환됨)
   const hasRowFiltering = displayRows.some((r) => r.displayCondition != null);
-  const needsPreSelect = !hasDynamicRows && !hasRowFiltering && displayRows.length > PRE_SELECT_MIN_ROWS;
+  const needsPreSelect = !hasDynamicRows && !hasRowFiltering;
   const skipGroupSelect = rowGroups.length <= 1;
   const initialPhase: StepperPhase = needsPreSelect
     ? skipGroupSelect ? 'row-select' : 'group-select'
@@ -385,7 +201,7 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
     return (
       <div className="space-y-4">
         {displayRows.map((row) => (
-          <RowCard
+          <MobileRowCard
             key={row.id}
             row={row}
             visibleColumns={visibleColumns}
@@ -523,7 +339,7 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
           <span>{detailCompletedCount} / {filteredRows.length} 완료</span>
         </div>
 
-        <RowCard
+        <MobileRowCard
           row={detailRow}
           visibleColumns={visibleColumns}
           columnSectionMap={columnSectionMap}
@@ -660,7 +476,7 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
         </span>
       </div>
 
-      <RowCard
+      <MobileRowCard
         row={currentRow}
         visibleColumns={visibleColumns}
         columnSectionMap={columnSectionMap}

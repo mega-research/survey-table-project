@@ -50,6 +50,74 @@ async function findActiveResponseByContact(
 }
 
 /**
+ * survey_responses 행 INSERT 의 공통 흐름.
+ *
+ * 처리 분기:
+ * 1. 동일 컨택 활성 응답 존재 → 재사용 (재진입 케이스)
+ * 2. (surveyId, sessionId) ON CONFLICT DO NOTHING — 동시 INSERT race 차단
+ * 3. partial unique (idx_active_response_per_contact) race → catch + 활성 응답 재조회
+ * 4. sessionId 충돌 → 기존 행 lookup
+ *
+ * `onReuse` 콜백이 있으면 1·3·4 의 재사용/충돌 경로에서 호출되어 첫 답변 머지 등을 수행.
+ */
+async function insertResponseWithContactReuse(params: {
+  surveyId: string;
+  sessionId: string;
+  contactTargetId: string | null;
+  newResponse: NewSurveyResponse;
+  onReuse?: (id: string) => Promise<void>;
+}): Promise<{ id: string; contactTargetId: string | null }> {
+  const { surveyId, sessionId, contactTargetId, newResponse, onReuse } = params;
+
+  if (contactTargetId) {
+    const active = await findActiveResponseByContact(surveyId, contactTargetId);
+    if (active) {
+      if (onReuse) await onReuse(active.id);
+      return active;
+    }
+  }
+
+  let inserted: Array<{ id: string; contactTargetId: string | null }>;
+  try {
+    inserted = await db
+      .insert(surveyResponses)
+      .values(newResponse)
+      .onConflictDoNothing({
+        target: [surveyResponses.surveyId, surveyResponses.sessionId],
+      })
+      .returning({ id: surveyResponses.id, contactTargetId: surveyResponses.contactTargetId });
+  } catch (e) {
+    if (contactTargetId) {
+      const active = await findActiveResponseByContact(surveyId, contactTargetId);
+      if (active) {
+        if (onReuse) await onReuse(active.id);
+        return active;
+      }
+    }
+    throw e;
+  }
+
+  if (inserted.length > 0) return inserted[0];
+
+  const [existing] = await db
+    .select({ id: surveyResponses.id, contactTargetId: surveyResponses.contactTargetId })
+    .from(surveyResponses)
+    .where(
+      and(eq(surveyResponses.surveyId, surveyId), eq(surveyResponses.sessionId, sessionId)),
+    )
+    .limit(1);
+
+  if (!existing) {
+    throw new Error(
+      `insertResponseWithContactReuse: 충돌 후 기존 행 조회 실패 (surveyId=${surveyId}, sessionId=${sessionId})`,
+    );
+  }
+
+  if (onReuse) await onReuse(existing.id);
+  return existing;
+}
+
+/**
  * inviteToken 으로 컨택 lookup. 무효 토큰이면 null 반환 (silent fallback).
  * 액션은 mutation 흐름이라 dedupe 가 의미 없어 cache 적용 안 함.
  *
@@ -195,15 +263,6 @@ export async function createResponseWithFirstAnswer(input: {
     leftAt: undefined,
   };
 
-  // 동일 컨택의 활성 응답이 이미 있으면 재사용 (새 sessionId로 재진입 케이스)
-  if (contactTargetId) {
-    const active = await findActiveResponseByContact(surveyId, contactTargetId);
-    if (active) {
-      await updateQuestionResponse(active.id, questionId, value);
-      return { kind: 'created', id: active.id, contactTargetId: active.contactTargetId };
-    }
-  }
-
   const newResponse: NewSurveyResponse = {
     surveyId,
     sessionId,
@@ -222,50 +281,16 @@ export async function createResponseWithFirstAnswer(input: {
     contactTargetId,
   };
 
-  // ON CONFLICT DO NOTHING: 동시 INSERT 시 한 쪽만 행을 만들고 다른 쪽은 빈 결과 반환.
-  // returning 이 비어있으면 충돌 발생 — 기존 행을 조회해 답변만 적용한다.
-  // contact_target_id partial unique 충돌은 ON CONFLICT target 밖이므로 catch + lookup 으로 처리.
-  let inserted: Array<{ id: string; contactTargetId: string | null }>;
-  try {
-    inserted = await db
-      .insert(surveyResponses)
-      .values(newResponse)
-      .onConflictDoNothing({
-        target: [surveyResponses.surveyId, surveyResponses.sessionId],
-      })
-      .returning({ id: surveyResponses.id, contactTargetId: surveyResponses.contactTargetId });
-  } catch (e) {
-    if (contactTargetId) {
-      const active = await findActiveResponseByContact(surveyId, contactTargetId);
-      if (active) {
-        await updateQuestionResponse(active.id, questionId, value);
-        return { kind: 'created', id: active.id, contactTargetId: active.contactTargetId };
-      }
-    }
-    throw e;
-  }
-
-  if (inserted.length > 0) {
-    return { kind: 'created', id: inserted[0].id, contactTargetId: inserted[0].contactTargetId };
-  }
-
-  // 충돌 → 기존 행에 답변 머지. UNIQUE 제약이 있으므로 존재가 보장된다.
-  const [existing] = await db
-    .select({ id: surveyResponses.id, contactTargetId: surveyResponses.contactTargetId })
-    .from(surveyResponses)
-    .where(
-      and(eq(surveyResponses.surveyId, surveyId), eq(surveyResponses.sessionId, sessionId)),
-    )
-    .limit(1);
-
-  if (!existing) {
-    throw new Error(
-      `createResponseWithFirstAnswer: 충돌 후 기존 행 조회 실패 (surveyId=${surveyId}, sessionId=${sessionId})`,
-    );
-  }
-
-  await updateQuestionResponse(existing.id, questionId, value);
-  return { kind: 'created', id: existing.id, contactTargetId: existing.contactTargetId };
+  const result = await insertResponseWithContactReuse({
+    surveyId,
+    sessionId,
+    contactTargetId,
+    newResponse,
+    onReuse: async (id) => {
+      await updateQuestionResponse(id, questionId, value);
+    },
+  });
+  return { kind: 'created', id: result.id, contactTargetId: result.contactTargetId };
 }
 
 /**
@@ -321,14 +346,6 @@ export async function createBlankResponse(input: {
     leftAt: undefined,
   };
 
-  // 동일 컨택의 활성 응답이 이미 있으면 재사용 (새 sessionId로 재진입 케이스)
-  if (contactTargetId) {
-    const active = await findActiveResponseByContact(surveyId, contactTargetId);
-    if (active) {
-      return { kind: 'created', id: active.id, contactTargetId: active.contactTargetId };
-    }
-  }
-
   const newResponse: NewSurveyResponse = {
     surveyId,
     sessionId,
@@ -347,44 +364,13 @@ export async function createBlankResponse(input: {
     contactTargetId,
   };
 
-  let inserted: Array<{ id: string; contactTargetId: string | null }>;
-  try {
-    inserted = await db
-      .insert(surveyResponses)
-      .values(newResponse)
-      .onConflictDoNothing({
-        target: [surveyResponses.surveyId, surveyResponses.sessionId],
-      })
-      .returning({ id: surveyResponses.id, contactTargetId: surveyResponses.contactTargetId });
-  } catch (e) {
-    if (contactTargetId) {
-      const active = await findActiveResponseByContact(surveyId, contactTargetId);
-      if (active) {
-        return { kind: 'created', id: active.id, contactTargetId: active.contactTargetId };
-      }
-    }
-    throw e;
-  }
-
-  if (inserted.length > 0) {
-    return { kind: 'created', id: inserted[0].id, contactTargetId: inserted[0].contactTargetId };
-  }
-
-  const [existing] = await db
-    .select({ id: surveyResponses.id, contactTargetId: surveyResponses.contactTargetId })
-    .from(surveyResponses)
-    .where(
-      and(eq(surveyResponses.surveyId, surveyId), eq(surveyResponses.sessionId, sessionId)),
-    )
-    .limit(1);
-
-  if (!existing) {
-    throw new Error(
-      `createBlankResponse: 충돌 후 기존 행 조회 실패 (surveyId=${surveyId}, sessionId=${sessionId})`,
-    );
-  }
-
-  return { kind: 'created', id: existing.id, contactTargetId: existing.contactTargetId };
+  const result = await insertResponseWithContactReuse({
+    surveyId,
+    sessionId,
+    contactTargetId,
+    newResponse,
+  });
+  return { kind: 'created', id: result.id, contactTargetId: result.contactTargetId };
 }
 
 /**

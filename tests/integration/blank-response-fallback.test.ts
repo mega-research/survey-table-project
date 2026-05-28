@@ -104,10 +104,11 @@ describe('createBlankResponse', () => {
   it('happy path: 빈 응답을 INSERT 하고 invite 매칭된 contactTargetId 와 함께 id 반환', async () => {
     // checkTrackA: contact lookup 성공 (respondedAt = null)
     dbExecuteMock.mockResolvedValueOnce([{ id: 'contact-1' }]);
-    // contactTargets.findFirst (respondedAt 조회)
-    vi.mocked(selectLimitMock).mockResolvedValueOnce([{ respondedAt: null }]);
+    // contactTargets.findFirst (respondedAt 조회) — db.query.contactTargets.findFirst 는 모킹 default undefined 로 처리
     // findContactByInviteToken 2차 호출 (contactTargetId 세팅)
     dbExecuteMock.mockResolvedValueOnce([{ id: 'contact-1' }]);
+    // findActiveResponseByContact: 활성 응답 없음 (insert 진행)
+    selectLimitMock.mockResolvedValueOnce([]);
     insertReturningMock.mockResolvedValueOnce([
       { id: 'response-1', contactTargetId: 'contact-1' },
     ]);
@@ -148,9 +149,11 @@ describe('createBlankResponse', () => {
     // checkTrackA: db.query.contactTargets.findFirst (respondedAt 조회) — undefined 반환으로 null 처리됨
     // findContactByInviteToken 2차 (contactTargetId 세팅용)
     dbExecuteMock.mockResolvedValueOnce([{ id: 'contact-1' }]);
+    // findActiveResponseByContact: 활성 응답 없음 (insert 진행)
+    selectLimitMock.mockResolvedValueOnce([]);
     // INSERT returning 비어있음 (conflict)
     insertReturningMock.mockResolvedValueOnce([]);
-    // SELECT 기존 행 조회
+    // SELECT 기존 행 조회 (sessionId 충돌 lookup)
     selectLimitMock.mockResolvedValueOnce([
       { id: 'response-existing', contactTargetId: 'contact-1' },
     ]);
