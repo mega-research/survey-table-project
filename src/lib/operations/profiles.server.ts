@@ -12,6 +12,7 @@ import {
   type SortDir,
   type SortKey,
 } from './profiles';
+import { getResultCodeStatuses } from './result-code-statuses.server';
 
 export type ListProfilesArgs = NormalizedListArgs & {
   surveyId: string;
@@ -63,6 +64,19 @@ export async function listResponsesForProfiles(
 ): Promise<ListProfilesResult> {
   const { surveyId, page, pageSize, q, qfield, status, sort, dir, view } = args;
 
+  // negative result codes — base subquery WHERE 의 NOT EXISTS 분기에 사용.
+  // 빈 배열이면 unsubscribed_at 만 검사 (negative code 분기는 SQL 차원에서 생략).
+  const { negative: negativeCodes } = await getResultCodeStatuses(surveyId);
+
+  const negativeCodeBranch =
+    negativeCodes.length > 0
+      ? sql`OR EXISTS (
+          SELECT 1 FROM contact_attempts ca
+          WHERE ca.contact_target_id = ct.id
+            AND ca.result_code = ANY(${negativeCodes})
+        )`
+      : sql``;
+
   const numbered = db
     .select({
       id: surveyResponses.id,
@@ -82,6 +96,17 @@ export async function listResponsesForProfiles(
       and(
         eq(surveyResponses.surveyId, surveyId),
         view === 'deleted' ? deletedResponse : notDeletedResponse,
+        // negative ct 의 응답 가림. 익명 (contact_target_id IS NULL) 은
+        // NOT EXISTS 가 자동 true → 통과. excluded 가 빠진 후 row_number 가
+        // 다시 매겨지므로 idx 가 자동 보정된다.
+        sql`NOT EXISTS (
+          SELECT 1 FROM contact_targets ct
+          WHERE ct.id = ${surveyResponses.contactTargetId}
+            AND (
+              ct.unsubscribed_at IS NOT NULL
+              ${negativeCodeBranch}
+            )
+        )`,
       ),
     )
     .as('numbered');
