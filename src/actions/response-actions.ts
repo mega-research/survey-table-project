@@ -120,6 +120,8 @@ export async function updateQuestionResponse(
   // (position / totalQuestions) × 100 으로 계산. GREATEST 로 단조 증가 보장 (앞 질문 수정
   // 시 % 후퇴 방지). snapshot 깨졌거나 questionId 가 snapshot 에 없으면 inner subquery
   // 가 NULL → COALESCE(0) → GREATEST 가 기존값 유지.
+  // 방어: non-array snapshot 은 CASE 로 빈 배열 fallback (ERROR 방지). 최종 0 은 NULLIF
+  // 로 NULL 로 변환해 "0%" 오표시 회피 (UI 가 NULL → '—' 표시).
   const [updated] = await db
     .update(surveyResponses)
     .set({
@@ -129,18 +131,28 @@ export async function updateQuestionResponse(
         ${JSON.stringify(value)}::jsonb,
         true
       )`,
-      progressPct: sql`LEAST(100, GREATEST(
+      progressPct: sql`NULLIF(LEAST(100, GREATEST(
         COALESCE(${surveyResponses.progressPct}, 0),
         COALESCE((
           SELECT ROUND((t.idx::numeric
-                        / NULLIF(jsonb_array_length(sv.snapshot->'questions'), 0)) * 100)::int
+                        / NULLIF(jsonb_array_length(
+                            CASE WHEN jsonb_typeof(sv.snapshot->'questions') = 'array'
+                                 THEN sv.snapshot->'questions'
+                                 ELSE '[]'::jsonb
+                            END
+                          ), 0)) * 100)::int
           FROM survey_versions sv,
-               jsonb_array_elements(sv.snapshot->'questions') WITH ORDINALITY AS t(elem, idx)
+               jsonb_array_elements(
+                 CASE WHEN jsonb_typeof(sv.snapshot->'questions') = 'array'
+                      THEN sv.snapshot->'questions'
+                      ELSE '[]'::jsonb
+                 END
+               ) WITH ORDINALITY AS t(elem, idx)
           WHERE sv.id = ${surveyResponses.versionId}
             AND elem->>'id' = ${questionId}
           LIMIT 1
         ), 0)
-      ))::smallint`,
+      ))::smallint, 0)`,
     })
     .where(eq(surveyResponses.id, responseId))
     .returning();

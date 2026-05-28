@@ -20,11 +20,20 @@ WITH response_max AS (
   SELECT
     sr.id AS response_id,
     MAX(t.idx)::int AS max_pos,
-    jsonb_array_length(sv.snapshot->'questions') AS total_q
+    jsonb_array_length(
+      CASE WHEN jsonb_typeof(sv.snapshot->'questions') = 'array'
+           THEN sv.snapshot->'questions'
+           ELSE '[]'::jsonb
+      END
+    ) AS total_q
   FROM survey_responses sr
   JOIN survey_versions sv ON sv.id = sr.version_id
-  CROSS JOIN LATERAL jsonb_array_elements(sv.snapshot->'questions')
-    WITH ORDINALITY AS t(elem, idx)
+  CROSS JOIN LATERAL jsonb_array_elements(
+    CASE WHEN jsonb_typeof(sv.snapshot->'questions') = 'array'
+         THEN sv.snapshot->'questions'
+         ELSE '[]'::jsonb
+    END
+  ) WITH ORDINALITY AS t(elem, idx)
   WHERE sr.progress_pct IS NULL
     AND sr.status <> 'completed'
     AND sr.deleted_at IS NULL
