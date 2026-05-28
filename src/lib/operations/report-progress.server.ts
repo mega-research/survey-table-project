@@ -25,6 +25,7 @@ const EMPTY_SCHEME: ProgressColumnScheme = { version: 1, columns: [] };
  * 한 곳만 수정 (Known Limitation: '1.조사완료' hardcoded → slice 6/7
  * `ContactResultCode.isClosing` 토글 전환 시 함께 동적화).
  */
+// notDeletedResponse 와 동일 의미 (서브쿼리 내부 raw SQL 컨텍스트라 인라인 유지)
 const closingFilter = sql`
   EXISTS (SELECT 1 FROM survey_responses sr
           WHERE sr.contact_target_id = ct.id AND sr.is_completed = true AND sr.deleted_at IS NULL)

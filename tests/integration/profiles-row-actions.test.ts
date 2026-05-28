@@ -356,11 +356,11 @@ function linkContactToResponse(surveyId: string, responseId: string) {
 // ========================
 
 import {
-  saveAdminEdit,
   softDeleteResponse,
   restoreResponse,
   hardResetResponse,
 } from '@/actions/profiles-row-actions';
+import { saveAdminEdit } from '@/actions/response-edit-actions';
 
 import * as aggregateStatusServer from '@/lib/operations/aggregate-status.server';
 import * as profilesServer from '@/lib/operations/profiles.server';

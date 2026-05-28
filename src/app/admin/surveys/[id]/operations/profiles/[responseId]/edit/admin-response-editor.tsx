@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 
-import { saveAdminEdit } from '@/actions/profiles-row-actions';
+import { saveAdminEdit } from '@/actions/response-edit-actions';
 import { SurveyResponseFlow } from '@/components/survey-response/survey-response-flow';
 import type { SurveyVersionSnapshot } from '@/db/schema';
 

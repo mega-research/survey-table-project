@@ -59,7 +59,7 @@ import {
   shouldDisplayRow,
   type BranchEvalCtx,
 } from '@/utils/branch-logic';
-import type { SaveAdminEditPayload } from '@/actions/profiles-row-actions';
+import type { SaveAdminEditPayload } from '@/actions/response-edit-actions';
 
 type ResponsesMap = Record<string, unknown>;
 
@@ -194,7 +194,7 @@ export function SurveyResponseFlow({
   const isAdminEdit = mode === 'admin-edit';
 
   // ?invite=<token> — contact 매칭용. 없으면 익명 응답 흐름 그대로.
-  // admin-edit 모드에서는 invite 토큰 매칭/검증 자체를 건너뛴다.
+  // admin-edit 분기 (7/8) — admin-edit 모드에서는 invite 토큰 매칭/검증 자체를 건너뛴다.
   const inviteToken = isAdminEdit ? null : inviteTokenProp ?? null;
   const [inviteIsInvalid, setInviteIsInvalid] = useState(false);
 
@@ -251,6 +251,7 @@ export function SurveyResponseFlow({
     | { kind: 'checking' }
     | { kind: 'blocked'; reason: BlockReason }
     | { kind: 'ok' };
+  // admin-edit 분기 (8/8) — 어드민 수정은 중복검사 대상이 아니므로 초기값부터 ok.
   const [duplicateStatus, setDuplicateStatus] = useState<DuplicateStatus>(() =>
     isAdminEdit ? { kind: 'ok' } : { kind: 'checking' },
   );

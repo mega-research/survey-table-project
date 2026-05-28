@@ -3,6 +3,7 @@ import { and, count, desc, eq, isNull } from 'drizzle-orm';
 import { db } from '@/db';
 import { responseAnswers, surveyResponses, surveyVersions } from '@/db/schema';
 import { answersToQuestionResponses } from '@/lib/analytics/response-adapter';
+import { notDeletedResponse } from '@/data/response-filters';
 
 // ========================
 // 응답 조회 함수
@@ -11,7 +12,7 @@ import { answersToQuestionResponses } from '@/lib/analytics/response-adapter';
 // 설문별 응답 조회
 export async function getResponsesBySurvey(surveyId: string) {
   const responses = await db.query.surveyResponses.findMany({
-    where: and(eq(surveyResponses.surveyId, surveyId), isNull(surveyResponses.deletedAt)),
+    where: and(eq(surveyResponses.surveyId, surveyId), notDeletedResponse),
     orderBy: [desc(surveyResponses.startedAt)],
   });
   return responses;
@@ -23,7 +24,7 @@ export async function getCompletedResponses(surveyId: string) {
     where: and(
       eq(surveyResponses.surveyId, surveyId),
       eq(surveyResponses.isCompleted, true),
-      isNull(surveyResponses.deletedAt),
+      notDeletedResponse,
     ),
     orderBy: [desc(surveyResponses.completedAt)],
   });
@@ -37,7 +38,7 @@ export async function getResponseById(
 ) {
   const where = options.includeDeleted
     ? eq(surveyResponses.id, responseId)
-    : and(eq(surveyResponses.id, responseId), isNull(surveyResponses.deletedAt));
+    : and(eq(surveyResponses.id, responseId), notDeletedResponse);
   const response = await db.query.surveyResponses.findFirst({ where });
   return response;
 }
@@ -47,7 +48,7 @@ export async function getResponseCountBySurvey(surveyId: string) {
   const result = await db
     .select({ count: count() })
     .from(surveyResponses)
-    .where(and(eq(surveyResponses.surveyId, surveyId), isNull(surveyResponses.deletedAt)));
+    .where(and(eq(surveyResponses.surveyId, surveyId), notDeletedResponse));
 
   return result[0]?.count || 0;
 }
@@ -61,7 +62,7 @@ export async function getCompletedResponseCountBySurvey(surveyId: string) {
       and(
         eq(surveyResponses.surveyId, surveyId),
         eq(surveyResponses.isCompleted, true),
-        isNull(surveyResponses.deletedAt),
+        notDeletedResponse,
       ),
     );
 
@@ -77,7 +78,7 @@ export async function getResponsesWithAnswers(
   const conditions = [
     eq(surveyResponses.surveyId, surveyId),
     eq(surveyResponses.isCompleted, true),
-    isNull(surveyResponses.deletedAt),
+    notDeletedResponse,
   ];
 
   if (versionId) {
