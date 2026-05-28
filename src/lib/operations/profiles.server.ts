@@ -197,3 +197,44 @@ export async function listResponsesForProfiles(
 
   return { rows, total, page: clampedPage };
 }
+
+/**
+ * 응답이 negative 모집단 제외 상태인지 server-side 평가.
+ *
+ * 상세 페이지 헤더 배지용 — 목록에서는 가려졌지만 link 직접 접근으로 진입한
+ * 응답을 운영자에게 명시한다. 익명 응답 (contact_target_id IS NULL) 은
+ * 항상 false (제외 대상 아님).
+ *
+ * `listResponsesForProfiles` 의 NOT EXISTS 와 동일 조건 — unsubscribed_at
+ * 또는 negative result_code attempt.
+ */
+export async function isResponseExcluded(
+  surveyId: string,
+  responseId: string,
+): Promise<boolean> {
+  const { negative: negativeCodes } = await getResultCodeStatuses(surveyId);
+
+  const negativeCodeBranch =
+    negativeCodes.length > 0
+      ? sql`OR EXISTS (
+          SELECT 1 FROM contact_attempts ca
+          WHERE ca.contact_target_id = ct.id
+            AND ca.result_code = ANY(${negativeCodes})
+        )`
+      : sql``;
+
+  const rows = await db.execute(sql`
+    SELECT 1
+    FROM survey_responses sr
+    JOIN contact_targets ct ON ct.id = sr.contact_target_id
+    WHERE sr.id = ${responseId}::uuid
+      AND sr.survey_id = ${surveyId}::uuid
+      AND (
+        ct.unsubscribed_at IS NOT NULL
+        ${negativeCodeBranch}
+      )
+    LIMIT 1
+  `);
+
+  return (rows as unknown as unknown[]).length > 0;
+}
