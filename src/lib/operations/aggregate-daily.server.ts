@@ -1,9 +1,10 @@
 import 'server-only';
 
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { surveyResponses } from '@/db/schema';
+import { notDeletedResponse } from '@/data/response-filters';
 
 import {
   shapeDailyBuckets,
@@ -39,7 +40,7 @@ export async function aggregateDaily(input: {
         count: sql<number>`count(*)::int`,
       })
       .from(surveyResponses)
-      .where(and(eq(surveyResponses.surveyId, surveyId), isNull(surveyResponses.deletedAt)))
+      .where(and(eq(surveyResponses.surveyId, surveyId), notDeletedResponse))
       .groupBy(sql`1`)
       .orderBy(sql`1`);
   } else {
@@ -53,6 +54,7 @@ export async function aggregateDaily(input: {
       })
       .from(surveyResponses)
       .where(
+        // notDeletedResponse 와 동일 의미 (AT TIME ZONE 절이 포함된 raw SQL 컨텍스트라 인라인 유지)
         sql`${surveyResponses.surveyId} = ${surveyId} AND (${surveyResponses.startedAt} AT TIME ZONE 'Asia/Seoul')::date = ${hourModeDate}::date AND ${surveyResponses.deletedAt} IS NULL`,
       )
       .groupBy(sql`1`)
@@ -72,7 +74,7 @@ export async function aggregateDailyAvailableDates(surveyId: string): Promise<st
       day: sql<string>`((${surveyResponses.startedAt} AT TIME ZONE 'Asia/Seoul')::date)::text`,
     })
     .from(surveyResponses)
-    .where(and(eq(surveyResponses.surveyId, surveyId), isNull(surveyResponses.deletedAt)))
+    .where(and(eq(surveyResponses.surveyId, surveyId), notDeletedResponse))
     .groupBy(sql`1`)
     .orderBy(sql`1`);
 

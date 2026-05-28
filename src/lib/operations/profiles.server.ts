@@ -1,9 +1,10 @@
 import 'server-only';
 
-import { and, asc, eq, ilike, isNotNull, isNull, or, sql, type AnyColumn, type SQL } from 'drizzle-orm';
+import { and, asc, eq, ilike, or, sql, type AnyColumn, type SQL } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { surveyResponses } from '@/db/schema';
+import { deletedResponse, notDeletedResponse } from '@/data/response-filters';
 
 import type { Platform } from './parse-ua';
 import {
@@ -80,9 +81,7 @@ export async function listResponsesForProfiles(
     .where(
       and(
         eq(surveyResponses.surveyId, surveyId),
-        view === 'deleted'
-          ? isNotNull(surveyResponses.deletedAt)
-          : isNull(surveyResponses.deletedAt),
+        view === 'deleted' ? deletedResponse : notDeletedResponse,
       ),
     )
     .as('numbered');
