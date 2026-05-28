@@ -94,6 +94,16 @@ export function ResultCodesEditor({ surveyId, initialCodes }: ResultCodesEditorP
       setError('최소 1개의 결과코드가 필요합니다.');
       return;
     }
+    const target = codes[index];
+    if (resolveStatus(target) === 'positive') {
+      const otherPositiveExists = codes.some(
+        (c, i) => i !== index && resolveStatus(c) === 'positive',
+      );
+      if (!otherPositiveExists) {
+        setError('마지막 긍정 상태 코드는 삭제할 수 없습니다. 다른 코드를 긍정으로 먼저 지정해 주세요.');
+        return;
+      }
+    }
     ensureCustomMode();
     setCodes((prev) =>
       prev.filter((_, i) => i !== index).map((c, i) => ({ ...c, order: i + 1 })),
@@ -128,6 +138,9 @@ export function ResultCodesEditor({ surveyId, initialCodes }: ResultCodesEditorP
     for (const c of trimmed) {
       if (seen.has(c)) return `중복된 코드: ${c}`;
       seen.add(c);
+    }
+    if (!codes.some((c) => resolveStatus(c) === 'positive')) {
+      return '긍정 상태(응답 완료로 인정) 코드가 최소 1개 필요합니다.';
     }
     return null;
   }
