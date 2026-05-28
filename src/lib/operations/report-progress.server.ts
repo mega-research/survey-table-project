@@ -44,6 +44,23 @@ function buildClosingFilter(positiveCodes: string[]): SQL {
 }
 
 /**
+ * 모집단 제외 정의 — negative codes OR unsubscribed_at.
+ *
+ * EXISTS 의 any-time 의미 — 한 회차라도 negative 코드 받으면 제외.
+ * `unsubscribed_at IS NOT NULL` 도 자동 negative 효과 (메일 푸터 unsubscribe 흐름).
+ *
+ * negative codes 빈 배열이면 unsubscribed_at 만 평가.
+ */
+function buildExcludeFilter(negativeCodes: string[]): SQL {
+  const codeBranch =
+    negativeCodes.length === 0
+      ? sql`FALSE`
+      : sql`EXISTS (SELECT 1 FROM contact_attempts ca
+                    WHERE ca.contact_target_id = ct.id AND ca.result_code = ANY(${negativeCodes}))`;
+  return sql`${codeBranch} OR ct.unsubscribed_at IS NOT NULL`;
+}
+
+/**
  * 조건 → WHERE 절. null 이면 TRUE (전체 조회).
  *
  * SECURITY: condition.source 는 호출자에서 contactColumns 화이트리스트 검증 끝난 값만
@@ -196,8 +213,10 @@ export async function getProgressRows(args: GetProgressRowsArgs): Promise<Progre
   const { surveyId, condition, page, size, sort, dir, metaKeys } = args;
   const offset = Math.max(0, (page - 1) * size);
 
-  const { positive: positiveCodes } = await getResultCodeStatuses(surveyId);
+  const { positive: positiveCodes, negative: negativeCodes } =
+    await getResultCodeStatuses(surveyId);
   const closingFilter = buildClosingFilter(positiveCodes);
+  const excludeFilter = buildExcludeFilter(negativeCodes);
 
   const metaSelectSql = metaKeys
     .map((k, i) => sql`MIN(ct.attrs->>${k}) AS ${sql.identifier(`meta_${i}`)}`)
@@ -226,8 +245,9 @@ export async function getProgressRows(args: GetProgressRowsArgs): Promise<Progre
         COALESCE(ct.group_value, '(미분류)') AS group_label,
         ct.group_value AS group_value_raw,
         MIN(ct.resid)::int AS first_resid,
-        COUNT(*)::int AS list_count,
-        COUNT(*) FILTER (WHERE ${closingFilter})::int AS completed_count
+        COUNT(*) FILTER (WHERE ${excludeFilter})::int AS excluded_count,
+        COUNT(*) FILTER (WHERE NOT (${excludeFilter}))::int AS list_count,
+        COUNT(*) FILTER (WHERE (${closingFilter}) AND NOT (${excludeFilter}))::int AS completed_count
         ${metaKeys.length > 0 ? sql`, ${metaSelectSql}` : sql``}
       FROM contact_targets ct
       WHERE ct.survey_id = ${surveyId}
@@ -250,6 +270,7 @@ export async function getProgressRows(args: GetProgressRowsArgs): Promise<Progre
       firstResid: r.first_resid == null ? null : Number(r.first_resid),
       listCount: Number(r.list_count),
       completedCount: Number(r.completed_count),
+      excludedCount: Number(r.excluded_count),
       meta,
     };
   });
@@ -263,14 +284,17 @@ export async function getProgressTotals(
   surveyId: string,
   condition: FilterCondition | null,
 ): Promise<ProgressTotals> {
-  const { positive: positiveCodes } = await getResultCodeStatuses(surveyId);
+  const { positive: positiveCodes, negative: negativeCodes } =
+    await getResultCodeStatuses(surveyId);
   const closingFilter = buildClosingFilter(positiveCodes);
+  const excludeFilter = buildExcludeFilter(negativeCodes);
   const filterSql = buildFilterSql(condition);
   const result = await db.execute(sql`
     SELECT
       COUNT(DISTINCT COALESCE(ct.group_value, '(미분류)'))::int AS group_count,
-      COUNT(*)::int AS list_total,
-      COUNT(*) FILTER (WHERE ${closingFilter})::int AS completed_total
+      COUNT(*) FILTER (WHERE NOT (${excludeFilter}))::int AS list_total,
+      COUNT(*) FILTER (WHERE (${closingFilter}) AND NOT (${excludeFilter}))::int AS completed_total,
+      COUNT(*) FILTER (WHERE ${excludeFilter})::int AS excluded_total
     FROM contact_targets ct
     WHERE ct.survey_id = ${surveyId}
       AND ${filterSql}
@@ -280,5 +304,6 @@ export async function getProgressTotals(
     groupCount: Number(r.group_count ?? 0),
     listTotal: Number(r.list_total ?? 0),
     completedTotal: Number(r.completed_total ?? 0),
+    excludedTotal: Number(r.excluded_total ?? 0),
   };
 }
