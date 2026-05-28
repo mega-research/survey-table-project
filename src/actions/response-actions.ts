@@ -247,6 +247,10 @@ export async function createResponseWithFirstAnswer(input: {
     .returning({ id: surveyResponses.id, contactTargetId: surveyResponses.contactTargetId });
 
   if (inserted.length > 0) {
+    // INSERT 의 questionResponses 는 JSONB literal 로 들어가 progress_pct 계산이 안 됐다.
+    // updateQuestionResponse 를 한 번 더 호출해 progress_pct 를 set 한다. jsonb_set 은
+    // 동일 값 덮어쓰기라 멱등.
+    await updateQuestionResponse(inserted[0].id, questionId, value);
     return { kind: 'created', id: inserted[0].id, contactTargetId: inserted[0].contactTargetId };
   }
 
