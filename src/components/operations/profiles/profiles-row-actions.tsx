@@ -36,15 +36,13 @@ interface Props {
   view: ProfilesView;
 }
 
-type Dialog = null | 'delete' | 'reset';
+type Dialog = null | 'edit' | 'delete' | 'reset';
 
 export function ProfilesRowActions({ surveyId, responseId, idx, view }: Props) {
   const [dialog, setDialog] = useState<Dialog>(null);
   const [isPending, startTransition] = useTransition();
 
-  const runConfirmed = (
-    fn: (s: string, r: string) => Promise<unknown>,
-  ) => {
+  const runConfirmed = (fn: (s: string, r: string) => Promise<unknown>) => {
     startTransition(async () => {
       try {
         await fn(surveyId, responseId);
@@ -58,6 +56,11 @@ export function ProfilesRowActions({ surveyId, responseId, idx, view }: Props) {
 
   const editHref = `/admin/surveys/${surveyId}/operations/profiles/${responseId}/edit?idx=${idx}`;
 
+  const openEditor = () => {
+    window.open(editHref, '_blank', 'noopener,noreferrer');
+    setDialog(null);
+  };
+
   return (
     <>
       <DropdownMenu>
@@ -69,20 +72,14 @@ export function ProfilesRowActions({ surveyId, responseId, idx, view }: Props) {
         <DropdownMenuContent align="end">
           {view === 'active' ? (
             <>
-              <DropdownMenuItem
-                onSelect={() => window.open(editHref, '_blank')}
-              >
-                수정
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setDialog('reset')}>
-                초기화
-              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setDialog('edit')}>수정</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setDialog('delete')}>삭제</DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
-                onSelect={() => setDialog('delete')}
+                onSelect={() => setDialog('reset')}
                 className="text-red-600 focus:text-red-700"
               >
-                삭제
+                초기화
               </DropdownMenuItem>
             </>
           ) : (
@@ -96,15 +93,31 @@ export function ProfilesRowActions({ surveyId, responseId, idx, view }: Props) {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <AlertDialog
-        open={dialog === 'delete'}
-        onOpenChange={(open) => !open && setDialog(null)}
-      >
+      {/* 수정 — 규칙 안내 후 새 탭으로 수정 화면 진입 */}
+      <AlertDialog open={dialog === 'edit'} onOpenChange={(open) => !open && setDialog(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>응답 #{idx}를 수정합니다</AlertDialogTitle>
+            <AlertDialogDescription>
+              새 탭의 수정 화면에서 응답 내용을 바꿔 저장하면 기존 응답이 갱신됩니다. 시작·종료일시는
+              그대로 유지되고 수정 시각이 따로 기록되며, 통계와 기록에도 수정된 내용이 반영됩니다.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>취소</AlertDialogCancel>
+            <AlertDialogAction onClick={openEditor}>수정 화면 열기</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* 삭제 — 통계/기록에서 제외하되 복원 가능 (soft delete) */}
+      <AlertDialog open={dialog === 'delete'} onOpenChange={(open) => !open && setDialog(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>응답 #{idx}를 삭제합니다</AlertDialogTitle>
             <AlertDialogDescription>
-              통계에서 제외되며 휴지통에서 복원 가능합니다.
+              통계와 기록(현황·진척률·내보내기)에서 제외됩니다. 휴지통에 보관되며 언제든 다시 복원할
+              수 있습니다.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -112,7 +125,6 @@ export function ProfilesRowActions({ surveyId, responseId, idx, view }: Props) {
             <AlertDialogAction
               disabled={isPending}
               onClick={() => runConfirmed(softDeleteResponse)}
-              className="bg-red-600 hover:bg-red-700"
             >
               삭제
             </AlertDialogAction>
@@ -120,15 +132,14 @@ export function ProfilesRowActions({ surveyId, responseId, idx, view }: Props) {
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog
-        open={dialog === 'reset'}
-        onOpenChange={(open) => !open && setDialog(null)}
-      >
+      {/* 초기화 — 응답을 완전 제거, 복구 불가 (hard reset) */}
+      <AlertDialog open={dialog === 'reset'} onOpenChange={(open) => !open && setDialog(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>응답 #{idx}를 완전히 제거합니다</AlertDialogTitle>
+            <AlertDialogTitle>응답 #{idx}를 초기화합니다</AlertDialogTitle>
             <AlertDialogDescription>
-              응답 데이터는 복구할 수 없습니다. 컨택 명단의 진척 상태도 함께 되돌아갑니다.
+              응답이 통계와 기록에서 완전히 사라지며 복구할 수 없습니다. 컨택 명단의 진척 상태도 함께
+              되돌아갑니다.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
