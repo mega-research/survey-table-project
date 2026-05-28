@@ -16,6 +16,7 @@ import {
   formatTotalTime,
   mapStatusPill,
   parseQuestionNumberFromTitle,
+  type ProfilesView,
   type SortDir,
   type SortKey,
   type StatusPillResult,
@@ -53,7 +54,7 @@ interface Props {
   /** 진척률 N/M·Qx 표기에 사용. surveyId 의 questions 메타 (id → order, title) */
   questions: ReadonlyArray<QuestionMeta>;
   surveyId: string;
-  view: 'active' | 'deleted';
+  view: ProfilesView;
 }
 
 interface DisplayRow {

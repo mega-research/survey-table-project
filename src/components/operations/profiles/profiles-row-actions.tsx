@@ -9,6 +9,7 @@ import {
   restoreResponse,
   softDeleteResponse,
 } from '@/actions/profiles-row-actions';
+import type { ProfilesView } from '@/lib/operations/profiles';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,13 +29,11 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-type View = 'active' | 'deleted';
-
 interface Props {
   surveyId: string;
   responseId: string;
   idx: number;
-  view: View;
+  view: ProfilesView;
 }
 
 type Dialog = null | 'delete' | 'reset';

@@ -27,6 +27,8 @@ export type SortDir = 'asc' | 'desc';
 export const QFIELDS = ['all', 'idx', 'browser'] as const;
 export type QField = (typeof QFIELDS)[number];
 
+export type ProfilesView = 'active' | 'deleted';
+
 export const STATUS_FILTERS = [
   'all',
   'completed',
@@ -58,7 +60,7 @@ export interface NormalizedListArgs {
   sort: SortKey;
   dir: SortDir;
   /** status='deleted' 이면 'deleted', 그 외 전부 'active'. */
-  view: 'active' | 'deleted';
+  view: ProfilesView;
 }
 
 /** `searchParams` 의 가공되지 않은 string 입력을 화이트리스트 + 기본값으로 normalize. */
@@ -71,7 +73,7 @@ export function normalizeListArgs(input: {
   dir?: string;
 }): NormalizedListArgs {
   const status = pickFromWhitelist(input.status, STATUS_FILTERS, 'all');
-  const view: 'active' | 'deleted' = status === 'deleted' ? 'deleted' : 'active';
+  const view: ProfilesView = status === 'deleted' ? 'deleted' : 'active';
   return {
     page: Math.max(1, parseInt(input.page ?? '1', 10) || 1),
     q: (input.q ?? '').slice(0, 200),
