@@ -41,6 +41,8 @@ export interface ContactsRow {
   latestResultCode: string | null;
   latestAttemptNo: number | null;
   respondedAt: Date | null;
+  /** 응답 진행률 0~100. 응답 없거나 첫 답변 전 / soft-delete 면 null */
+  progressPct: number | null;
   inviteToken: string;
   createdAt: Date;
 }
@@ -66,6 +68,12 @@ const latestAttemptNoExpr = sql<number | null>`(
   SELECT attempt_no FROM contact_attempts
   WHERE contact_target_id = "contact_targets"."id"
   ORDER BY attempt_no DESC LIMIT 1
+)`;
+
+const progressPctExpr = sql<number | null>`(
+  SELECT progress_pct FROM survey_responses
+  WHERE id = "contact_targets"."response_id"
+    AND deleted_at IS NULL
 )`;
 
 /**
@@ -204,6 +212,7 @@ export async function listContactsForSurvey(
       createdAt: contactTargets.createdAt,
       latestResultCode: latestResultCodeExpr.as('latest_result_code'),
       latestAttemptNo: latestAttemptNoExpr.as('latest_attempt_no'),
+      progressPct: progressPctExpr.as('progress_pct'),
     })
     .from(contactTargets)
     .where(whereClause)
@@ -223,6 +232,7 @@ export async function listContactsForSurvey(
     latestResultCode: r.latestResultCode,
     latestAttemptNo: r.latestAttemptNo,
     respondedAt: r.respondedAt,
+    progressPct: r.progressPct,
     inviteToken: r.inviteToken,
     createdAt: r.createdAt,
   }));
