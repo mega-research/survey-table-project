@@ -1,7 +1,7 @@
 import 'server-only';
 
 import { cache } from 'react';
-import { eq, sql } from 'drizzle-orm';
+import { eq, sql, type SQL } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { contactTargets } from '@/db/schema/contacts';
@@ -11,6 +11,7 @@ import type { ContactColumnScheme, ProgressColumnScheme } from '@/db/schema/sche
 import type { ProgressRow, ProgressSortKey, SortDir, ProgressTotals } from './report-progress';
 import type { FilterCondition } from './progress-filters.server';
 import { FILTER_SOURCE, escapeLikePattern } from './filter-shared';
+import { buildNegativeCodeExists, getResultCodeStatuses } from './result-code-statuses.server';
 
 const EMPTY_SCHEME: ProgressColumnScheme = { version: 1, columns: [] };
 
@@ -18,20 +19,49 @@ const EMPTY_SCHEME: ProgressColumnScheme = { version: 1, columns: [] };
  * 클로징 정의 W∪A — 두 EXISTS 의 OR.
  *
  * survey_responses.is_completed=true (실제 응답 완료) OR
- * contact_attempts.result_code='1.조사완료' (담당자 수동 마감).
+ * contact_attempts.result_code = ANY(positive codes) (담당자 수동 마감).
+ *
+ * positive codes 는 `getResultCodeStatuses(surveyId).positive` 동적 추출.
+ * DEFAULT 13개에서는 ['1.조사완료'] (기존 하드코딩과 일치).
  *
  * `getProgressRows` / `getProgressTotals` 의 `COUNT(*) FILTER (...)` 절에서
  * 동일 정의를 사용하므로 모듈 private 헬퍼로 단일화. 클로징 정의 변경 시
- * 한 곳만 수정 (Known Limitation: '1.조사완료' hardcoded → slice 6/7
- * `ContactResultCode.isClosing` 토글 전환 시 함께 동적화).
+ * 한 곳만 수정.
+ *
+ * notDeletedResponse 와 동일 의미 (서브쿼리 내부 raw SQL 컨텍스트라 인라인 유지).
  */
-// notDeletedResponse 와 동일 의미 (서브쿼리 내부 raw SQL 컨텍스트라 인라인 유지)
-const closingFilter = sql`
-  EXISTS (SELECT 1 FROM survey_responses sr
-          WHERE sr.contact_target_id = ct.id AND sr.is_completed = true AND sr.deleted_at IS NULL)
-     OR EXISTS (SELECT 1 FROM contact_attempts ca
-                WHERE ca.contact_target_id = ct.id AND ca.result_code = '1.조사완료')
-`;
+function buildClosingFilter(positiveCodes: string[]): SQL {
+  let positiveBranch: SQL;
+  if (positiveCodes.length === 0) {
+    positiveBranch = sql`FALSE`;
+  } else {
+    // sql.join — length=1 array scalar unwrap 으로 ANY 가 22P02 (malformed array literal)
+    // 던지는 케이스 회피. buildNegativeCodeExists 와 동일 패턴.
+    const codeList = sql.join(
+      positiveCodes.map((c) => sql`${c}`),
+      sql`, `,
+    );
+    positiveBranch = sql`EXISTS (SELECT 1 FROM contact_attempts ca
+                                 WHERE ca.contact_target_id = ct.id AND ca.result_code IN (${codeList}))`;
+  }
+  return sql`
+    EXISTS (SELECT 1 FROM survey_responses sr
+            WHERE sr.contact_target_id = ct.id AND sr.is_completed = true AND sr.deleted_at IS NULL)
+       OR ${positiveBranch}
+  `;
+}
+
+/**
+ * 모집단 제외 정의 — negative codes OR unsubscribed_at.
+ *
+ * EXISTS 의 any-time 의미 — 한 회차라도 negative 코드 받으면 제외.
+ * `unsubscribed_at IS NOT NULL` 도 자동 negative 효과 (메일 푸터 unsubscribe 흐름).
+ *
+ * negative codes 빈 배열이면 unsubscribed_at 만 평가.
+ */
+function buildExcludeFilter(negativeCodes: string[]): SQL {
+  return sql`${buildNegativeCodeExists(negativeCodes, sql`ct.id`)} OR ct.unsubscribed_at IS NOT NULL`;
+}
 
 /**
  * 조건 → WHERE 절. null 이면 TRUE (전체 조회).
@@ -186,6 +216,11 @@ export async function getProgressRows(args: GetProgressRowsArgs): Promise<Progre
   const { surveyId, condition, page, size, sort, dir, metaKeys } = args;
   const offset = Math.max(0, (page - 1) * size);
 
+  const { positive: positiveCodes, negative: negativeCodes } =
+    await getResultCodeStatuses(surveyId);
+  const closingFilter = buildClosingFilter(positiveCodes);
+  const excludeFilter = buildExcludeFilter(negativeCodes);
+
   const metaSelectSql = metaKeys
     .map((k, i) => sql`MIN(ct.attrs->>${k}) AS ${sql.identifier(`meta_${i}`)}`)
     .reduce<ReturnType<typeof sql>>(
@@ -213,8 +248,9 @@ export async function getProgressRows(args: GetProgressRowsArgs): Promise<Progre
         COALESCE(ct.group_value, '(미분류)') AS group_label,
         ct.group_value AS group_value_raw,
         MIN(ct.resid)::int AS first_resid,
-        COUNT(*)::int AS list_count,
-        COUNT(*) FILTER (WHERE ${closingFilter})::int AS completed_count
+        COUNT(*) FILTER (WHERE ${excludeFilter})::int AS excluded_count,
+        COUNT(*) FILTER (WHERE NOT (${excludeFilter}))::int AS list_count,
+        COUNT(*) FILTER (WHERE (${closingFilter}) AND NOT (${excludeFilter}))::int AS completed_count
         ${metaKeys.length > 0 ? sql`, ${metaSelectSql}` : sql``}
       FROM contact_targets ct
       WHERE ct.survey_id = ${surveyId}
@@ -237,6 +273,7 @@ export async function getProgressRows(args: GetProgressRowsArgs): Promise<Progre
       firstResid: r.first_resid == null ? null : Number(r.first_resid),
       listCount: Number(r.list_count),
       completedCount: Number(r.completed_count),
+      excludedCount: Number(r.excluded_count),
       meta,
     };
   });
@@ -250,12 +287,17 @@ export async function getProgressTotals(
   surveyId: string,
   condition: FilterCondition | null,
 ): Promise<ProgressTotals> {
+  const { positive: positiveCodes, negative: negativeCodes } =
+    await getResultCodeStatuses(surveyId);
+  const closingFilter = buildClosingFilter(positiveCodes);
+  const excludeFilter = buildExcludeFilter(negativeCodes);
   const filterSql = buildFilterSql(condition);
   const result = await db.execute(sql`
     SELECT
       COUNT(DISTINCT COALESCE(ct.group_value, '(미분류)'))::int AS group_count,
-      COUNT(*)::int AS list_total,
-      COUNT(*) FILTER (WHERE ${closingFilter})::int AS completed_total
+      COUNT(*) FILTER (WHERE NOT (${excludeFilter}))::int AS list_total,
+      COUNT(*) FILTER (WHERE (${closingFilter}) AND NOT (${excludeFilter}))::int AS completed_total,
+      COUNT(*) FILTER (WHERE ${excludeFilter})::int AS excluded_total
     FROM contact_targets ct
     WHERE ct.survey_id = ${surveyId}
       AND ${filterSql}
@@ -265,5 +307,6 @@ export async function getProgressTotals(
     groupCount: Number(r.group_count ?? 0),
     listTotal: Number(r.list_total ?? 0),
     completedTotal: Number(r.completed_total ?? 0),
+    excludedTotal: Number(r.excluded_total ?? 0),
   };
 }

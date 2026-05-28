@@ -379,6 +379,9 @@ export const CONTACT_METHOD_LABEL: Record<ContactMethod, string> = {
   mail: '우편',
 };
 
+/** 결과코드 상태 — 응답률·모집단 처리 분류. */
+export type ResultCodeStatus = 'positive' | 'negative' | 'neutral';
+
 /** 결과코드 1개 정의 — surveys.contact_result_codes JSONB 안의 항목 */
 export interface ContactResultCode {
   /** UI 표시 코드 (예: '1.조사완료'). 사용자 자유 텍스트. */
@@ -391,14 +394,31 @@ export interface ContactResultCode {
    * pill 색상 톤. mockup 의 컨택결과 이력 표 색상 매칭용.
    */
   tone?: 'green' | 'amber' | 'rose' | 'blue' | 'slate';
+  /**
+   * 응답률·모집단 처리.
+   * - 'positive': 응답 완료로 인정 (응답률 분자)
+   * - 'neutral': 응답률 분모에만 포함
+   * - 'negative': 모집단 완전 제외 — 응답률·단체메일·응답 페이지 모두 제거
+   *
+   * 누락 (undefined) 시 fallback:
+   * - code === '1.조사완료' → 'positive' (backward compat)
+   * - 그 외 → 'neutral'
+   * 사용자가 빌더에서 한 번 저장하면 명시 status 박힘 → fallback 우회.
+   */
+  status?: ResultCodeStatus;
 }
 
 /**
  * surveys.contact_result_codes 가 NULL 일 때 사용되는 디폴트 13개.
  * mockup §6 의 결과코드 라디오 그대로.
+ *
+ * status 매핑:
+ * - '1.조사완료' → 'positive' (응답 완료 인정)
+ * - '수신거부' → 'negative' (모집단 제외)
+ * - 나머지 11개 → 필드 생략 (= 'neutral')
  */
 export const DEFAULT_RESULT_CODES: ContactResultCode[] = [
-  { code: '1.조사완료', label: '1.조사완료', order: 1, tone: 'green' },
+  { code: '1.조사완료', label: '1.조사완료', order: 1, tone: 'green', status: 'positive' },
   { code: '2.재통화예약', label: '2.재통화예약', order: 2, tone: 'blue' },
   { code: '3.비수신', label: '3.비수신', order: 3, tone: 'slate' },
   { code: '4.부재', label: '4.부재', order: 4, tone: 'slate' },
@@ -410,7 +430,7 @@ export const DEFAULT_RESULT_CODES: ContactResultCode[] = [
   { code: '10.메일발송', label: '10.메일발송', order: 10, tone: 'blue' },
   { code: '11.기타', label: '11.기타', order: 11, tone: 'amber' },
   { code: '12.담당자퇴사', label: '12.담당자퇴사', order: 12, tone: 'rose' },
-  { code: '수신거부', label: '수신거부', order: 13, tone: 'rose' },
+  { code: '수신거부', label: '수신거부', order: 13, tone: 'rose', status: 'negative' },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────

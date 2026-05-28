@@ -28,10 +28,10 @@ describe('toneFromRate', () => {
 });
 
 const fixture: ProgressRow[] = [
-  { groupLabel: 'A 전시회', groupValueRaw: 'A 전시회', firstResid: 1, listCount: 10, completedCount: 5, meta: { '월': '03' } },
-  { groupLabel: 'B 전시회', groupValueRaw: 'B 전시회', firstResid: 11, listCount: 20, completedCount: 18, meta: { '월': '01' } },
-  { groupLabel: '(미분류)', groupValueRaw: null, firstResid: null, listCount: 5, completedCount: 0, meta: { '월': null } },
-  { groupLabel: 'C 전시회', groupValueRaw: 'C 전시회', firstResid: 31, listCount: 0, completedCount: 0, meta: { '월': '04' } },
+  { groupLabel: 'A 전시회', groupValueRaw: 'A 전시회', firstResid: 1, listCount: 10, completedCount: 5, excludedCount: 0, meta: { '월': '03' } },
+  { groupLabel: 'B 전시회', groupValueRaw: 'B 전시회', firstResid: 11, listCount: 20, completedCount: 18, excludedCount: 0, meta: { '월': '01' } },
+  { groupLabel: '(미분류)', groupValueRaw: null, firstResid: null, listCount: 5, completedCount: 0, excludedCount: 0, meta: { '월': null } },
+  { groupLabel: 'C 전시회', groupValueRaw: 'C 전시회', firstResid: 31, listCount: 0, completedCount: 0, excludedCount: 0, meta: { '월': '04' } },
 ];
 
 describe('sortGroupRows', () => {
@@ -59,13 +59,14 @@ describe('sortGroupRows', () => {
 
 describe('computeTotals', () => {
   it('빈 배열은 0 합계', () => {
-    expect(computeTotals([])).toEqual({ groupCount: 0, listTotal: 0, completedTotal: 0 });
+    expect(computeTotals([])).toEqual({ groupCount: 0, listTotal: 0, completedTotal: 0, excludedTotal: 0 });
   });
   it('fixture 합계 검증', () => {
     expect(computeTotals(fixture)).toEqual({
       groupCount: 4,
       listTotal: 10 + 20 + 5 + 0,
       completedTotal: 5 + 18 + 0 + 0,
+      excludedTotal: 0,
     });
   });
 });

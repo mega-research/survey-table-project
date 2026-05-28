@@ -66,6 +66,7 @@ export function CampaignWizard({
   const [preflightSummary, setPreflightSummary] = useState<{
     valid: number;
     unsubscribed: number;
+    excludedByCode: number;
     emailMissing: number;
     notFound: number;
   } | null>(null);
@@ -197,6 +198,7 @@ export function CampaignWizard({
       setPreflightSummary({
         valid: result.data.validCount,
         unsubscribed: result.data.unsubscribedCount,
+        excludedByCode: result.data.excludedByCodeCount,
         emailMissing: result.data.emailMissingCount,
         notFound: result.data.notFoundCount,
       });
@@ -289,7 +291,8 @@ export function CampaignWizard({
         </div>
 
         <p className="text-xs text-slate-500">
-          수신거부자(unsubscribed_at IS NOT NULL) 및 이메일 누락 조사 대상은 자동으로 제외됩니다.
+          수신거부자(unsubscribed_at IS NOT NULL), 부정 결과코드(예: 수신거부) 마킹된 조사 대상,
+          이메일 누락 조사 대상은 자동으로 제외됩니다.
         </p>
       </Card>
 
@@ -442,6 +445,11 @@ export function CampaignWizard({
               {preflightSummary.unsubscribed > 0 ? (
                 <div className="text-rose-600">
                   수신거부로 제외: {preflightSummary.unsubscribed.toLocaleString('ko-KR')}명
+                </div>
+              ) : null}
+              {preflightSummary.excludedByCode > 0 ? (
+                <div className="text-rose-600">
+                  조사 대상 제외: {preflightSummary.excludedByCode.toLocaleString('ko-KR')}명
                 </div>
               ) : null}
               {preflightSummary.emailMissing > 0 ? (

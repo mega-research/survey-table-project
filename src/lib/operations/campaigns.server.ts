@@ -22,6 +22,10 @@ import {
 } from '@/lib/crypto/contact-pii-repo';
 import type { PiiFieldType } from '@/lib/crypto/pii-fields';
 import { maskEmail } from '@/lib/operations/contacts';
+import {
+  buildNegativeCodeExists,
+  getResultCodeStatuses,
+} from '@/lib/operations/result-code-statuses.server';
 
 const DEFAULT_PAGE_SIZE = 20;
 
@@ -348,14 +352,29 @@ const HAS_EMAIL_PII = sql`EXISTS (
     AND cp.field_type = 'email'
 )`;
 
+/**
+ * 발송 가능 명단·preflight 양쪽에서 사용하는 negative 결과코드 제외 SQL.
+ *
+ * EXISTS 의 any-time 의미 — 한 회차라도 negative 코드 받으면 제외.
+ * negative codes 빈 배열이면 TRUE [제외 안 함].
+ *
+ * unsubscribed_at 제외는 별도 isNull 조건으로 결합되므로 여기선 코드만 본다.
+ */
+function buildNotExcludedByNegativeCode(negativeCodes: string[]): SQL {
+  // negative codes 가 비어 있을 때 EXISTS = FALSE → NOT(FALSE) = TRUE 로 자연 평가됨
+  return sql`NOT ${buildNegativeCodeExists(negativeCodes, sql`"contact_targets"."id"`)}`;
+}
+
 async function buildCandidateWhere(
   surveyId: string,
   filter: CampaignFilterSnapshot,
+  negativeCodes: string[],
 ): Promise<SQL> {
   const parts: SQL[] = [
     eq(contactTargets.surveyId, surveyId),
     isNull(contactTargets.unsubscribedAt),
     HAS_EMAIL_PII,
+    buildNotExcludedByNegativeCode(negativeCodes),
   ];
 
   if (filter.unrespondedOnly) {
@@ -451,7 +470,8 @@ export async function previewCampaignCandidates(args: {
   pageSize?: number;
 }): Promise<CampaignCandidatesResult> {
   const pageSize = args.pageSize ?? DEFAULT_PAGE_SIZE;
-  const where = await buildCandidateWhere(args.surveyId, args.filter);
+  const { negative: negativeCodes } = await getResultCodeStatuses(args.surveyId);
+  const where = await buildCandidateWhere(args.surveyId, args.filter, negativeCodes);
 
   const [countRow] = await db
     .select({ total: sql<number>`count(*)::int` })
@@ -505,7 +525,8 @@ export async function countCampaignCandidates(args: {
   surveyId: string;
   filter: CampaignFilterSnapshot;
 }): Promise<number> {
-  const where = await buildCandidateWhere(args.surveyId, args.filter);
+  const { negative: negativeCodes } = await getResultCodeStatuses(args.surveyId);
+  const where = await buildCandidateWhere(args.surveyId, args.filter, negativeCodes);
   const [countRow] = await db
     .select({ total: sql<number>`count(*)::int` })
     .from(contactTargets)
@@ -580,8 +601,9 @@ export async function listUnsubscribedContacts(args: {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface RecipientPreflightResult {
-  validIds: string[]; // 발송 가능 (unsubscribed=null, email!=null)
+  validIds: string[]; // 발송 가능 (unsubscribed=null, negative code 없음, email!=null)
   unsubscribedIds: string[]; // 사용자 선택 후 unsubscribed 로 전이됨
+  excludedByCodeIds: string[]; // negative result_code 마킹으로 제외
   emailMissingIds: string[]; // email 비어있음
   notFoundIds: string[]; // 컨택 삭제됨
 }
@@ -591,10 +613,19 @@ export async function preflightRecipients(args: {
   selectedContactIds: string[];
 }): Promise<RecipientPreflightResult> {
   if (args.selectedContactIds.length === 0) {
-    return { validIds: [], unsubscribedIds: [], emailMissingIds: [], notFoundIds: [] };
+    return {
+      validIds: [],
+      unsubscribedIds: [],
+      excludedByCodeIds: [],
+      emailMissingIds: [],
+      notFoundIds: [],
+    };
   }
-  // contact_targets + email PII 존재 여부를 한 쿼리로 — LEFT JOIN 후 cipher NULL 여부 판단.
-  // 한 컨택에 email 컬럼이 여러 개 있어도 EXISTS 만 보므로 dedupe 불필요 (한 행이라도 있으면 valid).
+
+  const { negative: negativeCodes } = await getResultCodeStatuses(args.surveyId);
+
+  // contact_targets + email PII 존재 여부 + negative code EXISTS 를 한 쿼리로.
+  // 우선순위: unsubscribed → excludedByCode → !hasEmail → valid
   const rows = await db
     .select({
       id: contactTargets.id,
@@ -604,6 +635,10 @@ export async function preflightRecipients(args: {
         WHERE cp.contact_target_id = "contact_targets"."id"
           AND cp.field_type = 'email'
       )`.as('has_email'),
+      excludedByCode: sql<boolean>`${buildNegativeCodeExists(
+        negativeCodes,
+        sql`"contact_targets"."id"`,
+      )}`.as('excluded_by_code'),
     })
     .from(contactTargets)
     .where(
@@ -615,13 +650,17 @@ export async function preflightRecipients(args: {
 
   const validIds: string[] = [];
   const unsubscribedIds: string[] = [];
+  const excludedByCodeIds: string[] = [];
   const emailMissingIds: string[] = [];
   const found = new Set<string>();
 
   for (const r of rows) {
     found.add(r.id);
+    // 우선순위: unsubscribed → excludedByCode → !hasEmail → valid
     if (r.unsubscribedAt !== null) {
       unsubscribedIds.push(r.id);
+    } else if (r.excludedByCode) {
+      excludedByCodeIds.push(r.id);
     } else if (!r.hasEmail) {
       emailMissingIds.push(r.id);
     } else {
@@ -630,7 +669,7 @@ export async function preflightRecipients(args: {
   }
   const notFoundIds = args.selectedContactIds.filter((id) => !found.has(id));
 
-  return { validIds, unsubscribedIds, emailMissingIds, notFoundIds };
+  return { validIds, unsubscribedIds, excludedByCodeIds, emailMissingIds, notFoundIds };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

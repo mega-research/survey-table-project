@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState, useTransition } from 'react';
+import { forwardRef, useImperativeHandle, useState, useTransition } from 'react';
 
 import { addContactAttempt } from '@/actions/contact-actions';
 import { Button } from '@/components/ui/button';
@@ -14,11 +14,23 @@ interface ContactAttemptAddCardProps {
   resultCodes: ContactResultCode[];
 }
 
-export function ContactAttemptAddCard({
-  contactTargetId,
-  surveyId,
-  resultCodes,
-}: ContactAttemptAddCardProps) {
+/**
+ * 부모 컴포넌트 ContactDetailForm 의 메인 저장 동작에서 호출 가능한 imperative handle.
+ *
+ * - flushIfSelected: 라디오 선택돼 있으면 회차 추가, 아니면 no-op.
+ *   부모 save 흐름 안에서 await 가능 자체 startTransition 안 씀, 부모 transition 안에서 직렬.
+ */
+export interface ContactAttemptAddCardHandle {
+  flushIfSelected: () => Promise<void>;
+}
+
+export const ContactAttemptAddCard = forwardRef<
+  ContactAttemptAddCardHandle,
+  ContactAttemptAddCardProps
+>(function ContactAttemptAddCard(
+  { contactTargetId, surveyId, resultCodes },
+  ref,
+) {
   const router = useRouter();
   const [resultCode, setResultCode] = useState<string | null>(null);
   const [note, setNote] = useState('');
@@ -26,29 +38,49 @@ export function ContactAttemptAddCard({
   const [successMessage, setSuccessMessage] = useAutoFadeMessage();
   const [isPending, startTransition] = useTransition();
 
+  // 실제 server action 호출 + state reset. 자체 add() 와 flushIfSelected 양쪽에서 호출.
+  async function performAdd(): Promise<void> {
+    if (!resultCode) return; // imperative 호출 시 라디오 없으면 silent no-op
+    setError(null);
+    try {
+      await addContactAttempt({
+        contactTargetId,
+        surveyId,
+        resultCode,
+        note: note || undefined,
+      });
+      router.refresh();
+      setResultCode(null);
+      setNote('');
+      setSuccessMessage('회차 추가 완료');
+    } catch (e) {
+      setError((e as Error).message);
+      throw e; // 부모 save 의 try/catch 에서도 잡히게
+    }
+  }
+
+  // 자체 "+ 회차 결과 추가" 버튼 — 라디오 선택 안 됐으면 명시 에러 표시
   function add() {
     if (!resultCode) {
       setError('결과코드를 선택하세요.');
       return;
     }
-    setError(null);
     startTransition(async () => {
       try {
-        await addContactAttempt({
-          contactTargetId,
-          surveyId,
-          resultCode,
-          note: note || undefined,
-        });
-        router.refresh();
-        setResultCode(null);
-        setNote('');
-        setSuccessMessage('회차 추가 완료');
-      } catch (e) {
-        setError((e as Error).message);
+        await performAdd();
+      } catch {
+        // performAdd 가 이미 setError 처리. 부모 호출이 아니므로 rethrow 무시.
       }
     });
   }
+
+  // 부모 메인 저장이 호출. closure 가 최신 resultCode/note 참조하도록 deps 명시.
+  useImperativeHandle(
+    ref,
+    () => ({ flushIfSelected: performAdd }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [resultCode, note, contactTargetId, surveyId],
+  );
 
   return (
     <div className="rounded-lg border bg-white">
@@ -106,4 +138,4 @@ export function ContactAttemptAddCard({
       </div>
     </div>
   );
-}
+});

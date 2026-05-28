@@ -10,9 +10,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // Track A 경로는 inviteToken 이 있으면 headers() 를 호출하지 않으므로
 // next/headers 모킹이 필요 없다.
 
+type InviteTokenLookupResult =
+  | { kind: 'valid'; contactTargetId: string; respondedAt: Date | null }
+  | { kind: 'excluded' }
+  | { kind: 'invalid' };
+
 const h = vi.hoisted(() => {
   const findContactMock = vi.fn<
-    (surveyId: string, inviteToken: string) => Promise<{ id: string; respondedAt: Date | null } | null>
+    (surveyId: string, inviteToken: string) => Promise<InviteTokenLookupResult>
   >();
   return { findContactMock };
 });
@@ -63,7 +68,8 @@ describe('Track A: invite_token 차단', () => {
   it('이미 응답 완료된 토큰으로 진입 시 token_already_used', async () => {
     // 컨택이 존재하고 respondedAt 이 설정된 상태 (이미 응답 완료)
     h.findContactMock.mockResolvedValueOnce({
-      id: 'contact-id-001',
+      kind: 'valid',
+      contactTargetId: 'contact-id-001',
       respondedAt: new Date('2026-01-01T00:00:00Z'),
     });
 
@@ -77,8 +83,8 @@ describe('Track A: invite_token 차단', () => {
   });
 
   it('잘못된 토큰 -> invalid_token', async () => {
-    // findContactByInviteToken 이 null 반환 (토큰 미존재)
-    h.findContactMock.mockResolvedValueOnce(null);
+    // findContactByInviteToken 이 invalid 반환 (토큰 미존재)
+    h.findContactMock.mockResolvedValueOnce({ kind: 'invalid' });
 
     const result = await checkDuplicateOnEntry({
       surveyId: TEST_SURVEY_ID,
@@ -95,7 +101,8 @@ describe('Track A: invite_token 차단', () => {
   it('미응답 유효 토큰은 통과 (blocked: false)', async () => {
     // 컨택 존재하지만 respondedAt 이 null (아직 응답 안 함)
     h.findContactMock.mockResolvedValueOnce({
-      id: 'contact-id-002',
+      kind: 'valid',
+      contactTargetId: 'contact-id-002',
       respondedAt: null,
     });
 

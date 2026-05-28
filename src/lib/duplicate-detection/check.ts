@@ -10,12 +10,19 @@ export async function checkTrackA(
   surveyId: string,
   inviteToken: string,
 ): Promise<CheckResult> {
-  const contact = await findContactByInviteToken(surveyId, inviteToken);
-  if (!contact) return { blocked: true, reason: 'invalid_token' };
-  if (contact.respondedAt) {
+  const lookup = await findContactByInviteToken(surveyId, inviteToken);
+  // excluded = 부정 결과코드 OR unsubscribed → 응답 모수 제외 카드로 안내
+  // invalid = 토큰 자체가 없거나 형식 오류 → 무효 토큰 카드
+  if (lookup.kind === 'excluded') {
+    return { blocked: true, reason: 'excluded_from_population' };
+  }
+  if (lookup.kind === 'invalid') {
+    return { blocked: true, reason: 'invalid_token' };
+  }
+  if (lookup.respondedAt) {
     return { blocked: true, reason: 'token_already_used' };
   }
-  return { blocked: false, contactTargetId: contact.id };
+  return { blocked: false, contactTargetId: lookup.contactTargetId };
 }
 
 export async function checkTrackB(params: {

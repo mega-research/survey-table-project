@@ -5,6 +5,7 @@ import { db } from '@/db';
 import { contactTargets, surveyVersions } from '@/db/schema';
 import { requireSurveyOwnership } from '@/lib/auth/require-survey-ownership';
 import { getResponseById } from '@/data/responses';
+import { isResponseExcluded } from '@/lib/operations/profiles.server';
 
 import { AdminResponseEditor } from './admin-response-editor';
 
@@ -48,8 +49,8 @@ export default async function AdminResponseEditPage({ params, searchParams }: Pa
     );
   }
 
-  // 응답 작성 당시의 스냅샷과 contact attrs 를 병렬로 조회.
-  const [version, contactRow] = await Promise.all([
+  // 응답 작성 당시의 스냅샷과 contact attrs, negative 제외 여부를 병렬로 조회.
+  const [version, contactRow, excluded] = await Promise.all([
     response.versionId
       ? db.query.surveyVersions.findFirst({
           where: eq(surveyVersions.id, response.versionId),
@@ -61,18 +62,29 @@ export default async function AdminResponseEditPage({ params, searchParams }: Pa
           columns: { attrs: true },
         })
       : Promise.resolve(null),
+    isResponseExcluded(surveyId, responseId),
   ]);
   // contactTargetId 가 없으면 익명 응답이므로 빈 객체.
   const contactAttrs = contactRow?.attrs ?? {};
 
   return (
-    <AdminResponseEditor
-      surveyId={surveyId}
-      responseId={responseId}
-      initialResponses={response.questionResponses as Record<string, unknown>}
-      versionSnapshot={version?.snapshot ?? null}
-      initialContactAttrs={contactAttrs}
-      idx={idx}
-    />
+    <>
+      {excluded && (
+        <div
+          role="status"
+          className="border-b border-amber-300 bg-amber-50 px-6 py-3 text-sm text-amber-900"
+        >
+          이 응답자는 부정 결과코드로 모집단에서 제외된 상태입니다. 응답률·메일·응답 페이지에서 가려져 있습니다.
+        </div>
+      )}
+      <AdminResponseEditor
+        surveyId={surveyId}
+        responseId={responseId}
+        initialResponses={response.questionResponses as Record<string, unknown>}
+        versionSnapshot={version?.snapshot ?? null}
+        initialContactAttrs={contactAttrs}
+        idx={idx}
+      />
+    </>
   );
 }

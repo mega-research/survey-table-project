@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 
 import {
   addContactTarget,
@@ -11,7 +11,10 @@ import {
   type PiiUpdate,
 } from '@/actions/contact-actions';
 import { Button } from '@/components/ui/button';
-import { ContactAttemptAddCard } from '@/components/operations/contacts/contact-attempt-add-card';
+import {
+  ContactAttemptAddCard,
+  type ContactAttemptAddCardHandle,
+} from '@/components/operations/contacts/contact-attempt-add-card';
 import { ContactAttemptHistoryCard } from '@/components/operations/contacts/contact-attempt-history-card';
 import { ContactInfoCard } from '@/components/operations/contacts/contact-info-card';
 import { CopyInviteUrlButton } from '@/components/operations/contacts/copy-invite-url-button';
@@ -85,6 +88,8 @@ export function ContactDetailForm({
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useAutoFadeMessage();
   const [isPending, startTransition] = useTransition();
+  // 회차 추가 카드에 imperative 접근 — 메인 저장 시 라디오 선택돼 있으면 같이 flush.
+  const attemptCardRef = useRef<ContactAttemptAddCardHandle>(null);
 
   const initialAttrs = useMemo(() => initial?.attrs ?? {}, [initial]);
   const initialMemo = initial?.memo ?? null;
@@ -232,6 +237,8 @@ export function ContactDetailForm({
         if (isEdit && !schemeEqual(localScheme, scheme)) {
           await updateContactColumns(surveyId, localScheme);
         }
+        // 회차 라디오 선택돼 있으면 함께 추가 선택 안 됐으면 silent no-op.
+        await attemptCardRef.current?.flushIfSelected();
         // 저장 성공 → dirty reset (initial 동기화 효과를 위해 router.refresh)
         router.refresh();
         setSuccessMessage('저장 완료');
@@ -322,6 +329,7 @@ export function ContactDetailForm({
           {isEdit && initial ? (
             <>
               <ContactAttemptAddCard
+                ref={attemptCardRef}
                 contactTargetId={initial.id}
                 surveyId={surveyId}
                 resultCodes={resultCodes}

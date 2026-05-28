@@ -23,11 +23,13 @@ export interface ServerSignals {
  * - invalid_token: 존재하지 않는 invite_token 으로 진입
  * - token_already_used: 동일 invite_token 으로 이미 응답 완료
  * - device_already_responded: 같은 device/fp+IP 로 이미 응답 완료
+ * - excluded_from_population: 부정 결과코드 마킹 / unsubscribed_at 으로 모집단 제외됨
  */
 export type BlockReason =
   | 'invalid_token'
   | 'token_already_used'
-  | 'device_already_responded';
+  | 'device_already_responded'
+  | 'excluded_from_population';
 
 export type CheckResult =
   | { blocked: true; reason: BlockReason }

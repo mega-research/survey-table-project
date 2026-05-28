@@ -23,6 +23,15 @@ vi.mock('@/db', () => ({
         }),
       }),
     }),
+    // createResponseWithFirstAnswer 가 INSERT 후 updateQuestionResponse 를 호출하므로
+    // db.update 체인도 모킹 (progress_pct sync 흐름).
+    update: vi.fn().mockReturnValue({
+      set: vi.fn().mockReturnValue({
+        where: vi.fn().mockReturnValue({
+          returning: vi.fn().mockResolvedValue([{ id: 'new-response-id' }]),
+        }),
+      }),
+    }),
   },
 }));
 

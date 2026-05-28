@@ -12,6 +12,7 @@ import {
   type SortDir,
   type SortKey,
 } from './profiles';
+import { buildNegativeCodeExists, getResultCodeStatuses } from './result-code-statuses.server';
 
 export type ListProfilesArgs = NormalizedListArgs & {
   surveyId: string;
@@ -63,6 +64,15 @@ export async function listResponsesForProfiles(
 ): Promise<ListProfilesResult> {
   const { surveyId, page, pageSize, q, qfield, status, sort, dir, view } = args;
 
+  // negative result codes — base subquery WHERE 의 NOT EXISTS 분기에 사용.
+  // 빈 배열이면 unsubscribed_at 만 검사 (negative code 분기는 SQL 차원에서 생략).
+  const { negative: negativeCodes } = await getResultCodeStatuses(surveyId);
+
+  const negativeCodeBranch =
+    negativeCodes.length > 0
+      ? sql`OR ${buildNegativeCodeExists(negativeCodes, sql`ct.id`)}`
+      : sql``;
+
   const numbered = db
     .select({
       id: surveyResponses.id,
@@ -82,6 +92,17 @@ export async function listResponsesForProfiles(
       and(
         eq(surveyResponses.surveyId, surveyId),
         view === 'deleted' ? deletedResponse : notDeletedResponse,
+        // negative ct 의 응답 가림. 익명 (contact_target_id IS NULL) 은
+        // NOT EXISTS 가 자동 true → 통과. excluded 가 빠진 후 row_number 가
+        // 다시 매겨지므로 idx 가 자동 보정된다.
+        sql`NOT EXISTS (
+          SELECT 1 FROM contact_targets ct
+          WHERE ct.id = ${surveyResponses.contactTargetId}
+            AND (
+              ct.unsubscribed_at IS NOT NULL
+              ${negativeCodeBranch}
+            )
+        )`,
       ),
     )
     .as('numbered');
@@ -171,4 +192,41 @@ export async function listResponsesForProfiles(
   }));
 
   return { rows, total, page: clampedPage };
+}
+
+/**
+ * 응답이 negative 모집단 제외 상태인지 server-side 평가.
+ *
+ * 상세 페이지 헤더 배지용 — 목록에서는 가려졌지만 link 직접 접근으로 진입한
+ * 응답을 운영자에게 명시한다. 익명 응답 (contact_target_id IS NULL) 은
+ * 항상 false (제외 대상 아님).
+ *
+ * `listResponsesForProfiles` 의 NOT EXISTS 와 동일 조건 — unsubscribed_at
+ * 또는 negative result_code attempt.
+ */
+export async function isResponseExcluded(
+  surveyId: string,
+  responseId: string,
+): Promise<boolean> {
+  const { negative: negativeCodes } = await getResultCodeStatuses(surveyId);
+
+  const negativeCodeBranch =
+    negativeCodes.length > 0
+      ? sql`OR ${buildNegativeCodeExists(negativeCodes, sql`ct.id`)}`
+      : sql``;
+
+  const rows = await db.execute(sql`
+    SELECT 1
+    FROM survey_responses sr
+    JOIN contact_targets ct ON ct.id = sr.contact_target_id
+    WHERE sr.id = ${responseId}::uuid
+      AND sr.survey_id = ${surveyId}::uuid
+      AND (
+        ct.unsubscribed_at IS NOT NULL
+        ${negativeCodeBranch}
+      )
+    LIMIT 1
+  `);
+
+  return (rows as unknown as unknown[]).length > 0;
 }

@@ -20,24 +20,39 @@ describe('checkTrackA (invite_token)', () => {
   });
 
   it('토큰 없음 → invalid_token', async () => {
-    mockFindContact.mockResolvedValue(null);
+    mockFindContact.mockResolvedValue({ kind: 'invalid' });
     const { checkTrackA } = await import('@/lib/duplicate-detection/check');
     const r = await checkTrackA('survey-1', 'bad-token');
     expect(r).toEqual({ blocked: true, reason: 'invalid_token' });
   });
 
   it('토큰 + respondedAt 있음 → token_already_used', async () => {
-    mockFindContact.mockResolvedValue({ id: 'c1', respondedAt: new Date() });
+    mockFindContact.mockResolvedValue({
+      kind: 'valid',
+      contactTargetId: 'c1',
+      respondedAt: new Date(),
+    });
     const { checkTrackA } = await import('@/lib/duplicate-detection/check');
     const r = await checkTrackA('survey-1', 'used-token');
     expect(r).toEqual({ blocked: true, reason: 'token_already_used' });
   });
 
   it('토큰 미사용 → 통과 + contactTargetId', async () => {
-    mockFindContact.mockResolvedValue({ id: 'c1', respondedAt: null });
+    mockFindContact.mockResolvedValue({
+      kind: 'valid',
+      contactTargetId: 'c1',
+      respondedAt: null,
+    });
     const { checkTrackA } = await import('@/lib/duplicate-detection/check');
     const r = await checkTrackA('survey-1', 'fresh-token');
     expect(r).toEqual({ blocked: false, contactTargetId: 'c1' });
+  });
+
+  it('excluded 부정 결과코드 OR unsubscribed → excluded_from_population', async () => {
+    mockFindContact.mockResolvedValue({ kind: 'excluded' });
+    const { checkTrackA } = await import('@/lib/duplicate-detection/check');
+    const r = await checkTrackA('survey-1', 'excluded-token');
+    expect(r).toEqual({ blocked: true, reason: 'excluded_from_population' });
   });
 });
 

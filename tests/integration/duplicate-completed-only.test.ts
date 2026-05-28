@@ -22,7 +22,7 @@ vi.mock('next/headers', () => ({
 }));
 
 vi.mock('@/actions/response-actions', () => ({
-  findContactByInviteToken: vi.fn(async () => null),
+  findContactByInviteToken: vi.fn(async () => ({ kind: 'invalid' as const })),
 }));
 
 import { checkDuplicateOnEntry } from '@/actions/duplicate-detection-actions';

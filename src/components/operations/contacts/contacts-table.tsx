@@ -85,22 +85,25 @@ function computeCell(col: ContactColumnDef, row: ContactsRow): {
     case 'system.email_count':
       return { display: '—', plain: undefined }; // 후속 슬라이스 메일발송
     case 'system.web': {
-      const t = row.respondedAt
+      if (row.progressPct == null) {
+        return {
+          display: <span className="text-slate-400">—</span>,
+          plain: undefined,
+        };
+      }
+      const text = `${row.progressPct}%`;
+      const title = row.respondedAt
         ? `응답 ${formatLocalMonthDayTime(row.respondedAt)}`
-        : undefined;
+        : '진행 중';
       return {
-        display: row.respondedAt ? (
-          // formatLocalMonthDayTime 은 브라우저 locale/tz 의존(Client 전용)이라
-          // SSR HTML 의 title 과 hydration 결과가 어긋난다. LocalDateTime 과 동일하게 허용.
-          <span
-            className="inline-block h-2 w-2 rounded-full bg-blue-500"
-            title={t}
-            suppressHydrationWarning
-          />
-        ) : (
-          <span className="inline-block h-2 w-2 rounded-full bg-slate-200" />
+        // formatLocalMonthDayTime 은 브라우저 locale/tz 의존(Client 전용)이라
+        // SSR HTML 의 title 과 hydration 결과가 어긋난다. suppressHydrationWarning.
+        display: (
+          <span className="tabular-nums" suppressHydrationWarning>
+            {text}
+          </span>
         ),
-        plain: t,
+        plain: title,
       };
     }
     case 'system.contact_owner':

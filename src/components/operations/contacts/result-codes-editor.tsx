@@ -13,7 +13,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { DEFAULT_RESULT_CODES, type ContactResultCode } from '@/db/schema/schema-types';
+import {
+  DEFAULT_RESULT_CODES,
+  type ContactResultCode,
+  type ResultCodeStatus,
+} from '@/db/schema/schema-types';
+import { resolveCodeStatus } from '@/lib/operations/result-code-statuses';
 
 interface ResultCodesEditorProps {
   surveyId: string;
@@ -27,6 +32,27 @@ const TONE_OPTIONS: Array<NonNullable<ContactResultCode['tone']>> = [
   'blue',
   'slate',
 ];
+
+const STATUS_DOT_BG: Record<ResultCodeStatus, string> = {
+  positive: 'bg-green-500',
+  neutral: 'bg-slate-400',
+  negative: 'bg-rose-500',
+};
+
+const STATUS_LABEL: Record<ResultCodeStatus, string> = {
+  positive: '긍정',
+  neutral: '중립',
+  negative: '부정',
+};
+
+function StatusDot({ status }: { status: ResultCodeStatus }) {
+  return (
+    <span
+      aria-hidden
+      className={`inline-block h-2 w-2 rounded-full ${STATUS_DOT_BG[status]}`}
+    />
+  );
+}
 
 type SaveMode = 'custom' | 'use-default';
 
@@ -64,6 +90,16 @@ export function ResultCodesEditor({ surveyId, initialCodes }: ResultCodesEditorP
       setError('최소 1개의 결과코드가 필요합니다.');
       return;
     }
+    const target = codes[index];
+    if (resolveCodeStatus(target) === 'positive') {
+      const otherPositiveExists = codes.some(
+        (c, i) => i !== index && resolveCodeStatus(c) === 'positive',
+      );
+      if (!otherPositiveExists) {
+        setError('마지막 긍정 상태 코드는 삭제할 수 없습니다. 다른 코드를 긍정으로 먼저 지정해 주세요.');
+        return;
+      }
+    }
     ensureCustomMode();
     setCodes((prev) =>
       prev.filter((_, i) => i !== index).map((c, i) => ({ ...c, order: i + 1 })),
@@ -98,6 +134,9 @@ export function ResultCodesEditor({ surveyId, initialCodes }: ResultCodesEditorP
     for (const c of trimmed) {
       if (seen.has(c)) return `중복된 코드: ${c}`;
       seen.add(c);
+    }
+    if (!codes.some((c) => resolveCodeStatus(c) === 'positive')) {
+      return '긍정 상태(응답 완료로 인정) 코드가 최소 1개 필요합니다.';
     }
     return null;
   }
@@ -150,6 +189,7 @@ export function ResultCodesEditor({ surveyId, initialCodes }: ResultCodesEditorP
               <th className="px-3 py-2 text-left">코드</th>
               <th className="px-3 py-2 text-left">라벨</th>
               <th className="px-3 py-2 text-left">색상</th>
+              <th className="px-3 py-2 text-left">상태</th>
               <th className="px-3 py-2 text-center">액션</th>
             </tr>
           </thead>
@@ -202,6 +242,31 @@ export function ResultCodesEditor({ surveyId, initialCodes }: ResultCodesEditorP
                       {TONE_OPTIONS.map((t) => (
                         <SelectItem key={t} value={t}>
                           {t}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </td>
+                <td className="px-3 py-2">
+                  <Select
+                    value={resolveCodeStatus(c)}
+                    onValueChange={(v) => update(i, { status: v as ResultCodeStatus })}
+                  >
+                    <SelectTrigger className="h-8 w-24">
+                      <SelectValue>
+                        <span className="inline-flex items-center gap-2">
+                          <StatusDot status={resolveCodeStatus(c)} />
+                          {STATUS_LABEL[resolveCodeStatus(c)]}
+                        </span>
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(['positive', 'neutral', 'negative'] as ResultCodeStatus[]).map((s) => (
+                        <SelectItem key={s} value={s}>
+                          <span className="inline-flex items-center gap-2">
+                            <StatusDot status={s} />
+                            {STATUS_LABEL[s]}
+                          </span>
                         </SelectItem>
                       ))}
                     </SelectContent>

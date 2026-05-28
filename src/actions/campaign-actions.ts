@@ -345,6 +345,7 @@ export async function previewCampaignPreflightAction(
   ActionResult<{
     validCount: number;
     unsubscribedCount: number;
+    excludedByCodeCount: number;
     emailMissingCount: number;
     notFoundCount: number;
   }>
@@ -368,6 +369,7 @@ export async function previewCampaignPreflightAction(
     data: {
       validCount: result.validIds.length,
       unsubscribedCount: result.unsubscribedIds.length,
+      excludedByCodeCount: result.excludedByCodeIds.length,
       emailMissingCount: result.emailMissingIds.length,
       notFoundCount: result.notFoundIds.length,
     },

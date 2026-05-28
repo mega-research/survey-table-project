@@ -18,6 +18,10 @@ import { checkTrackA, checkTrackB } from '@/lib/duplicate-detection/check';
 import { computeSignals } from '@/lib/duplicate-detection/signals';
 import type { BlockReason, ClientSignals } from '@/lib/duplicate-detection/types';
 import { parseBrowser, parsePlatform } from '@/lib/operations/parse-ua';
+import {
+  buildNegativeCodeExists,
+  getResultCodeStatuses,
+} from '@/lib/operations/result-code-statuses.server';
 import { replaceResponseAnswers } from '@/actions/response-answers-replace';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 
@@ -118,28 +122,56 @@ async function insertResponseWithContactReuse(params: {
 }
 
 /**
- * inviteToken 으로 컨택 lookup. 무효 토큰이면 null 반환 (silent fallback).
+ * inviteToken 으로 컨택 lookup. 반환 케이스 3가지:
+ * - valid: 정상 ct, contactTargetId 매칭됨 (+ respondedAt 동봉 — token_already_used 판정용)
+ * - excluded: 부정 결과코드 OR unsubscribed_at IS NOT NULL [응답 차단]
+ * - invalid: 토큰 자체가 무효 [익명 폴백]
+ *
  * 액션은 mutation 흐름이라 dedupe 가 의미 없어 cache 적용 안 함.
  *
  * SECURITY DEFINER PG 함수 사용 — connection role 이 anon/authenticated 라도
  * RLS 우회해서 contact_target_id 만 안전하게 조회 가능. 다른 attrs/PII 는 노출 안 됨.
+ *
+ * SECURITY: 차단 사유는 호출자에게 구분 노출하지 않음 [UI 는 동일 카피 — PII].
  */
+export type InviteTokenLookupResult =
+  | { kind: 'valid'; contactTargetId: string; respondedAt: Date | null }
+  | { kind: 'excluded' }
+  | { kind: 'invalid' };
+
 export async function findContactByInviteToken(
   surveyId: string,
   inviteToken: string,
-): Promise<{ id: string; respondedAt: Date | null } | null> {
-  const result = (await db.execute(
+): Promise<InviteTokenLookupResult> {
+  const lookup = (await db.execute(
     sql`SELECT public.lookup_contact_by_invite_token(${surveyId}::uuid, ${inviteToken}::uuid) AS id`,
   )) as unknown as Array<{ id: string | null }>;
-  const id = result[0]?.id;
-  if (!id) return null;
+  const contactTargetId = lookup[0]?.id ?? null;
+  if (!contactTargetId) return { kind: 'invalid' };
+
+  const { negative: negativeCodes } = await getResultCodeStatuses(surveyId);
+  const excludedRows = (await db.execute(sql`
+    SELECT 1
+    FROM contact_targets ct
+    WHERE ct.id = ${contactTargetId}::uuid
+      AND (
+        ct.unsubscribed_at IS NOT NULL
+        ${negativeCodes.length > 0
+          ? sql`OR ${buildNegativeCodeExists(negativeCodes, sql`ct.id`)}`
+          : sql``}
+      )
+    LIMIT 1
+  `)) as unknown as unknown[];
+  if (excludedRows.length > 0) {
+    return { kind: 'excluded' };
+  }
 
   const row = await db.query.contactTargets.findFirst({
-    where: eq(contactTargets.id, id),
+    where: eq(contactTargets.id, contactTargetId),
     columns: { respondedAt: true },
   });
 
-  return { id, respondedAt: row?.respondedAt ?? null };
+  return { kind: 'valid', contactTargetId, respondedAt: row?.respondedAt ?? null };
 }
 
 // ========================
@@ -175,8 +207,13 @@ export async function updateQuestionResponse(
   questionId: string,
   value: unknown,
 ) {
-  // 🚀 SQL 레벨에서 JSON의 특정 경로만 원자적으로 업데이트
-  // PostgreSQL의 jsonb_set 함수 사용 (읽기-수정-쓰기 과정 없음)
+  // jsonb_set 으로 답변 저장 + progress_pct 동기 갱신.
+  // progress_pct 는 versionId 의 snapshot 에서 questionId 의 1-based position 을 찾아
+  // (position / totalQuestions) × 100 으로 계산. GREATEST 로 단조 증가 보장 (앞 질문 수정
+  // 시 % 후퇴 방지). snapshot 깨졌거나 questionId 가 snapshot 에 없으면 inner subquery
+  // 가 NULL → COALESCE(0) → GREATEST 가 기존값 유지.
+  // 방어: non-array snapshot 은 CASE 로 빈 배열 fallback (ERROR 방지). 최종 0 은 NULLIF
+  // 로 NULL 로 변환해 "0%" 오표시 회피 (UI 가 NULL → '—' 표시).
   const [updated] = await db
     .update(surveyResponses)
     .set({
@@ -186,6 +223,28 @@ export async function updateQuestionResponse(
         ${JSON.stringify(value)}::jsonb,
         true
       )`,
+      progressPct: sql`NULLIF(LEAST(100, GREATEST(
+        COALESCE(${surveyResponses.progressPct}, 0),
+        COALESCE((
+          SELECT ROUND((t.idx::numeric
+                        / NULLIF(jsonb_array_length(
+                            CASE WHEN jsonb_typeof(sv.snapshot->'questions') = 'array'
+                                 THEN sv.snapshot->'questions'
+                                 ELSE '[]'::jsonb
+                            END
+                          ), 0)) * 100)::int
+          FROM survey_versions sv,
+               jsonb_array_elements(
+                 CASE WHEN jsonb_typeof(sv.snapshot->'questions') = 'array'
+                      THEN sv.snapshot->'questions'
+                      ELSE '[]'::jsonb
+                 END
+               ) WITH ORDINALITY AS t(elem, idx)
+          WHERE sv.id = ${surveyResponses.versionId}
+            AND elem->>'id' = ${questionId}
+          LIMIT 1
+        ), 0)
+      ))::smallint, 0)`,
     })
     .where(eq(surveyResponses.id, responseId))
     .returning();
@@ -286,10 +345,11 @@ export async function createResponseWithFirstAnswer(input: {
     sessionId,
     contactTargetId,
     newResponse,
-    onReuse: async (id) => {
-      await updateQuestionResponse(id, questionId, value);
-    },
   });
+  // 신규 INSERT 든 reuse 든 모두 updateQuestionResponse 로 첫 답변 머지 + progress_pct
+  // 갱신을 단일화. jsonb_set 은 동일 값 덮어쓰기라 멱등이라 신규 INSERT path 의 중복 set
+  // 도 안전. onReuse 콜백을 사용하지 않는 이유: progress_pct 가 신규 INSERT 에서도 필요.
+  await updateQuestionResponse(result.id, questionId, value);
   return { kind: 'created', id: result.id, contactTargetId: result.contactTargetId };
 }
 
@@ -465,7 +525,12 @@ export async function resumeOrCreateResponse(input: {
   // - 유효 토큰 + in_progress 행 없음 → null (호출자가 새 응답 생성)
   // - 무효 토큰 → silent fallback, 일반 sessionId 흐름 진행
   if (inviteToken) {
-    const target = await findContactByInviteToken(surveyId, inviteToken);
+    const lookup = await findContactByInviteToken(surveyId, inviteToken);
+    // excluded 도 valid 외 = null 로 fallback (anonymous sessionId 흐름으로 자연 처리).
+    // excluded race 차단은 saveResponse 시점의 checkTrackA 가 별도로 책임.
+    const target = lookup.kind === 'valid'
+      ? { id: lookup.contactTargetId }
+      : null;
     if (target) {
       const [existingByContact] = await db
         .select({
@@ -619,6 +684,7 @@ export async function completeResponse(
         completedAt: new Date(),
         // 운영 현황 콘솔용 추적 컬럼
         status: 'completed',
+        progressPct: 100,
         lastActivityAt: new Date(),
         // 서버 클럭 기준 경과 초 (started_at부터 now()까지)
         totalSeconds: sql`EXTRACT(EPOCH FROM (now() - ${surveyResponses.startedAt}))::int`,

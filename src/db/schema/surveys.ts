@@ -1,5 +1,5 @@
 import { relations } from 'drizzle-orm';
-import { boolean, integer, jsonb, pgTable, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
+import { boolean, integer, jsonb, pgTable, smallint, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
 
 import type { SurveyLookup } from '@/types/survey';
 
@@ -204,6 +204,9 @@ export const surveyResponses = pgTable('survey_responses', {
   // FK 는 0014 마이그레이션의 ALTER TABLE 로 생성됨 (순환 참조 회피).
   // drizzle 에서 .references() 추가하지 말 것 — contacts.ts 와 순환 import 발생.
   contactTargetId: uuid('contact_target_id'),
+
+  // 응답 진행률 0~100. completed=100, 그 외=계산값, 첫 답변 전=NULL
+  progressPct: smallint('progress_pct'),
 
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({

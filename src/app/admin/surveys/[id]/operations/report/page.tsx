@@ -117,7 +117,7 @@ export default async function ReportProgressPage({ params, searchParams }: PageP
   const isEmpty = Number(ct) === 0;
 
   const { rows, totals } = isEmpty
-    ? { rows: [], totals: { groupCount: 0, listTotal: 0, completedTotal: 0 } }
+    ? { rows: [], totals: { groupCount: 0, listTotal: 0, completedTotal: 0, excludedTotal: 0 } }
     : await Promise.all([
         getProgressRows({ surveyId, condition, page, size, sort, dir, metaKeys }),
         getProgressTotals(surveyId, condition),

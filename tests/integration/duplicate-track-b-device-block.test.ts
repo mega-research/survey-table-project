@@ -26,7 +26,7 @@ vi.mock('next/headers', () => ({
 // Track A 경로 내부에서 사용하는 response-actions 를 stub — Track B 에서는 호출되지 않지만
 // check.ts 가 import 하므로 resolve 오류 방지를 위해 모킹.
 vi.mock('@/actions/response-actions', () => ({
-  findContactByInviteToken: vi.fn(async () => null),
+  findContactByInviteToken: vi.fn(async () => ({ kind: 'invalid' as const })),
 }));
 
 import { checkDuplicateOnEntry } from '@/actions/duplicate-detection-actions';
