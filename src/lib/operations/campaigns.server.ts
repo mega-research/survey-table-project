@@ -602,8 +602,9 @@ export async function listUnsubscribedContacts(args: {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface RecipientPreflightResult {
-  validIds: string[]; // 발송 가능 (unsubscribed=null, email!=null)
+  validIds: string[]; // 발송 가능 (unsubscribed=null, negative code 없음, email!=null)
   unsubscribedIds: string[]; // 사용자 선택 후 unsubscribed 로 전이됨
+  excludedByCodeIds: string[]; // negative result_code 마킹으로 제외
   emailMissingIds: string[]; // email 비어있음
   notFoundIds: string[]; // 컨택 삭제됨
 }
@@ -613,10 +614,19 @@ export async function preflightRecipients(args: {
   selectedContactIds: string[];
 }): Promise<RecipientPreflightResult> {
   if (args.selectedContactIds.length === 0) {
-    return { validIds: [], unsubscribedIds: [], emailMissingIds: [], notFoundIds: [] };
+    return {
+      validIds: [],
+      unsubscribedIds: [],
+      excludedByCodeIds: [],
+      emailMissingIds: [],
+      notFoundIds: [],
+    };
   }
-  // contact_targets + email PII 존재 여부를 한 쿼리로 — LEFT JOIN 후 cipher NULL 여부 판단.
-  // 한 컨택에 email 컬럼이 여러 개 있어도 EXISTS 만 보므로 dedupe 불필요 (한 행이라도 있으면 valid).
+
+  const { negative: negativeCodes } = await getResultCodeStatuses(args.surveyId);
+
+  // contact_targets + email PII 존재 여부 + negative code EXISTS 를 한 쿼리로.
+  // 우선순위: unsubscribed → excludedByCode → !hasEmail → valid
   const rows = await db
     .select({
       id: contactTargets.id,
@@ -626,6 +636,15 @@ export async function preflightRecipients(args: {
         WHERE cp.contact_target_id = "contact_targets"."id"
           AND cp.field_type = 'email'
       )`.as('has_email'),
+      excludedByCode: sql<boolean>`${
+        negativeCodes.length === 0
+          ? sql`FALSE`
+          : sql`EXISTS (
+              SELECT 1 FROM contact_attempts ca
+              WHERE ca.contact_target_id = "contact_targets"."id"
+                AND ca.result_code = ANY(${negativeCodes})
+            )`
+      }`.as('excluded_by_code'),
     })
     .from(contactTargets)
     .where(
@@ -637,13 +656,17 @@ export async function preflightRecipients(args: {
 
   const validIds: string[] = [];
   const unsubscribedIds: string[] = [];
+  const excludedByCodeIds: string[] = [];
   const emailMissingIds: string[] = [];
   const found = new Set<string>();
 
   for (const r of rows) {
     found.add(r.id);
+    // 우선순위: unsubscribed → excludedByCode → !hasEmail → valid
     if (r.unsubscribedAt !== null) {
       unsubscribedIds.push(r.id);
+    } else if (r.excludedByCode) {
+      excludedByCodeIds.push(r.id);
     } else if (!r.hasEmail) {
       emailMissingIds.push(r.id);
     } else {
@@ -652,7 +675,7 @@ export async function preflightRecipients(args: {
   }
   const notFoundIds = args.selectedContactIds.filter((id) => !found.has(id));
 
-  return { validIds, unsubscribedIds, emailMissingIds, notFoundIds };
+  return { validIds, unsubscribedIds, excludedByCodeIds, emailMissingIds, notFoundIds };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
