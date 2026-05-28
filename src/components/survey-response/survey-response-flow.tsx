@@ -59,7 +59,7 @@ import {
   shouldDisplayRow,
   type BranchEvalCtx,
 } from '@/utils/branch-logic';
-import type { SaveAdminEditPayload } from '@/actions/profiles-row-actions';
+import type { SaveAdminEditPayload } from '@/actions/response-edit-actions';
 
 type ResponsesMap = Record<string, unknown>;
 
