@@ -1,4 +1,5 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
+import { extractRawSql } from './_helpers/result-code-mock';
 
 // ========================
 // 모듈 모킹
@@ -48,22 +49,9 @@ function isExcluded(c: SeedContact): boolean {
   return codeBranch || c.unsubscribed;
 }
 
-// Drizzle SQL 객체 → raw 텍스트 (StringChunk.value 재귀 추출)
-function extractRaw(node: unknown): string {
-  if (node == null) return '';
-  if (typeof node === 'string') return node;
-  if (typeof node === 'number' || typeof node === 'boolean') return String(node);
-  if (Array.isArray(node)) return node.map(extractRaw).join(' ');
-  const obj = node as Record<string, unknown>;
-  if (Array.isArray(obj.value)) return obj.value.map(extractRaw).join(' ');
-  if (typeof obj.value === 'string') return obj.value;
-  if (Array.isArray(obj.queryChunks)) return obj.queryChunks.map(extractRaw).join(' ');
-  return '';
-}
-
 // SQL 패턴 식별 후 in-memory 결과 직조
 function executeMock(sqlObj: unknown): unknown[] {
-  const raw = extractRaw(sqlObj).toLowerCase();
+  const raw = extractRawSql(sqlObj).toLowerCase();
 
   // getProgressTotals SQL — group_count + list_total + completed_total + excluded_total
   if (raw.includes('group_count') && raw.includes('excluded_total')) {
@@ -127,20 +115,13 @@ vi.mock('@/db', () => ({
 }));
 
 vi.mock('@/lib/operations/result-code-statuses.server', async () => {
-  const { sql } = await import('drizzle-orm');
+  const { mockBuildNegativeCodeExists } = await import('./_helpers/result-code-mock');
   return {
     getResultCodeStatuses: vi.fn(async () => ({
       positive: state.positiveCodes,
       negative: state.negativeCodes,
     })),
-    buildNegativeCodeExists: (negativeCodes: string[], idExpr: ReturnType<typeof sql>) => {
-      if (negativeCodes.length === 0) return sql`FALSE`;
-      return sql`EXISTS (
-        SELECT 1 FROM contact_attempts ca
-        WHERE ca.contact_target_id = ${idExpr}
-          AND ca.result_code = ANY(${negativeCodes})
-      )`;
-    },
+    buildNegativeCodeExists: mockBuildNegativeCodeExists,
   };
 });
 

@@ -1,4 +1,5 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
+import { extractRawSql } from './_helpers/result-code-mock';
 
 // ========================
 // 모듈 모킹
@@ -12,6 +13,7 @@ import { describe, expect, it, beforeEach, vi } from 'vitest';
 // 한 행은 { id, unsubscribedAt, hasEmail, excludedByCode } 형태로,
 // selectedContactIds 와 매칭되는 컨택만 반환한다.
 //
+// extractRawSql / mockBuildNegativeCodeExists 는 _helpers/result-code-mock 공통화.
 // Task 4 (report-progress-exclusion) / Task 6 (invite-token-excluded) 과 동일
 // 패턴 (mock + in-memory state) 을 따른다. 다만 preflightRecipients 는
 // db.execute 가 아니라 query builder 체인을 쓰므로 select-체인 mock 으로 대응.
@@ -40,23 +42,6 @@ const state: FakeState = {
   lastSurveyId: null,
 };
 
-// where 절에서 surveyId / inArray(selectedContactIds) 인자를 뽑아내기 위한 helper.
-// vitest 환경의 drizzle 은 param 을 inline 하므로 raw 텍스트 regex 로 추출한다.
-function extractRaw(node: unknown): string {
-  if (node == null) return '';
-  if (typeof node === 'string') return node;
-  if (typeof node === 'number' || typeof node === 'boolean') return String(node);
-  if (Array.isArray(node)) return node.map(extractRaw).join(' ');
-  const obj = node as Record<string, unknown>;
-  if (Array.isArray(obj.value)) return obj.value.map(extractRaw).join(' ');
-  if (typeof obj.value === 'string') return obj.value;
-  if (Array.isArray(obj.queryChunks)) return obj.queryChunks.map(extractRaw).join(' ');
-  if ('encoder' in obj && 'value' in obj) {
-    return String((obj as { value: unknown }).value);
-  }
-  return '';
-}
-
 const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 
 function isExcludedByCode(c: SeedContact): boolean {
@@ -71,7 +56,7 @@ function buildSelectChain() {
       return chain;
     },
     where(whereExpr: unknown) {
-      const raw = extractRaw(whereExpr);
+      const raw = extractRawSql(whereExpr);
       const uuids = raw.match(UUID_RE) ?? [];
       // 첫번째 UUID = surveyId, 나머지 = selectedContactIds
       const surveyId = uuids[0] ?? null;
@@ -104,20 +89,13 @@ vi.mock('@/db', () => ({
 }));
 
 vi.mock('@/lib/operations/result-code-statuses.server', async () => {
-  const { sql } = await import('drizzle-orm');
+  const { mockBuildNegativeCodeExists } = await import('./_helpers/result-code-mock');
   return {
     getResultCodeStatuses: vi.fn(async () => ({
       positive: [] as string[],
       negative: state.negativeCodes,
     })),
-    buildNegativeCodeExists: (negativeCodes: string[], idExpr: ReturnType<typeof sql>) => {
-      if (negativeCodes.length === 0) return sql`FALSE`;
-      return sql`EXISTS (
-        SELECT 1 FROM contact_attempts ca
-        WHERE ca.contact_target_id = ${idExpr}
-          AND ca.result_code = ANY(${negativeCodes})
-      )`;
-    },
+    buildNegativeCodeExists: mockBuildNegativeCodeExists,
   };
 });
 

@@ -1,4 +1,5 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
+import { extractRawSql } from './_helpers/result-code-mock';
 
 // ========================
 // 모듈 모킹
@@ -62,22 +63,6 @@ const state: FakeState = {
   negativeCodes: [],
   numberedRows: [],
 };
-
-// where 절 raw 텍스트 추출 (Task 9 와 동일 helper)
-function extractRaw(node: unknown): string {
-  if (node == null) return '';
-  if (typeof node === 'string') return node;
-  if (typeof node === 'number' || typeof node === 'boolean') return String(node);
-  if (Array.isArray(node)) return node.map(extractRaw).join(' ');
-  const obj = node as Record<string, unknown>;
-  if (Array.isArray(obj.value)) return obj.value.map(extractRaw).join(' ');
-  if (typeof obj.value === 'string') return obj.value;
-  if (Array.isArray(obj.queryChunks)) return obj.queryChunks.map(extractRaw).join(' ');
-  if ('encoder' in obj && 'value' in obj) {
-    return String((obj as { value: unknown }).value);
-  }
-  return '';
-}
 
 const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 
@@ -167,7 +152,7 @@ function buildSelectChain(selection: Record<string, unknown>) {
     where(whereExpr: unknown) {
       if (!isBaseSubquery) return chain;
       // base subquery WHERE 평가
-      const raw = extractRaw(whereExpr);
+      const raw = extractRawSql(whereExpr);
       const uuids = raw.match(UUID_RE) ?? [];
       const surveyId = uuids[0] ?? '';
       const lowered = raw.toLowerCase();
@@ -242,20 +227,13 @@ vi.mock('@/db', () => ({
 }));
 
 vi.mock('@/lib/operations/result-code-statuses.server', async () => {
-  const { sql } = await import('drizzle-orm');
+  const { mockBuildNegativeCodeExists } = await import('./_helpers/result-code-mock');
   return {
     getResultCodeStatuses: vi.fn(async () => ({
       positive: [] as string[],
       negative: state.negativeCodes,
     })),
-    buildNegativeCodeExists: (negativeCodes: string[], idExpr: ReturnType<typeof sql>) => {
-      if (negativeCodes.length === 0) return sql`FALSE`;
-      return sql`EXISTS (
-        SELECT 1 FROM contact_attempts ca
-        WHERE ca.contact_target_id = ${idExpr}
-          AND ca.result_code = ANY(${negativeCodes})
-      )`;
-    },
+    buildNegativeCodeExists: mockBuildNegativeCodeExists,
   };
 });
 
