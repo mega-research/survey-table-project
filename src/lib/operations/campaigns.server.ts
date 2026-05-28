@@ -22,6 +22,7 @@ import {
 } from '@/lib/crypto/contact-pii-repo';
 import type { PiiFieldType } from '@/lib/crypto/pii-fields';
 import { maskEmail } from '@/lib/operations/contacts';
+import { getResultCodeStatuses } from '@/lib/operations/result-code-statuses.server';
 
 const DEFAULT_PAGE_SIZE = 20;
 
@@ -348,14 +349,33 @@ const HAS_EMAIL_PII = sql`EXISTS (
     AND cp.field_type = 'email'
 )`;
 
+/**
+ * 발송 가능 명단·preflight 양쪽에서 사용하는 negative 결과코드 제외 SQL.
+ *
+ * EXISTS 의 any-time 의미 — 한 회차라도 negative 코드 받으면 제외.
+ * negative codes 빈 배열이면 TRUE [제외 안 함].
+ *
+ * unsubscribed_at 제외는 별도 isNull 조건으로 결합되므로 여기선 코드만 본다.
+ */
+function buildNotExcludedByNegativeCode(negativeCodes: string[]): SQL {
+  if (negativeCodes.length === 0) return sql`TRUE`;
+  return sql`NOT EXISTS (
+    SELECT 1 FROM contact_attempts ca
+    WHERE ca.contact_target_id = "contact_targets"."id"
+      AND ca.result_code = ANY(${negativeCodes})
+  )`;
+}
+
 async function buildCandidateWhere(
   surveyId: string,
   filter: CampaignFilterSnapshot,
+  negativeCodes: string[],
 ): Promise<SQL> {
   const parts: SQL[] = [
     eq(contactTargets.surveyId, surveyId),
     isNull(contactTargets.unsubscribedAt),
     HAS_EMAIL_PII,
+    buildNotExcludedByNegativeCode(negativeCodes),
   ];
 
   if (filter.unrespondedOnly) {
@@ -451,7 +471,8 @@ export async function previewCampaignCandidates(args: {
   pageSize?: number;
 }): Promise<CampaignCandidatesResult> {
   const pageSize = args.pageSize ?? DEFAULT_PAGE_SIZE;
-  const where = await buildCandidateWhere(args.surveyId, args.filter);
+  const { negative: negativeCodes } = await getResultCodeStatuses(args.surveyId);
+  const where = await buildCandidateWhere(args.surveyId, args.filter, negativeCodes);
 
   const [countRow] = await db
     .select({ total: sql<number>`count(*)::int` })
@@ -505,7 +526,8 @@ export async function countCampaignCandidates(args: {
   surveyId: string;
   filter: CampaignFilterSnapshot;
 }): Promise<number> {
-  const where = await buildCandidateWhere(args.surveyId, args.filter);
+  const { negative: negativeCodes } = await getResultCodeStatuses(args.surveyId);
+  const where = await buildCandidateWhere(args.surveyId, args.filter, negativeCodes);
   const [countRow] = await db
     .select({ total: sql<number>`count(*)::int` })
     .from(contactTargets)
