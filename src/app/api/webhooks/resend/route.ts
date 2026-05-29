@@ -1,13 +1,14 @@
 import 'server-only';
 
 import * as Sentry from '@sentry/nextjs';
-import { eq, sql } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { NextResponse, type NextRequest } from 'next/server';
 import { Webhook } from 'svix';
 
 import { db } from '@/db';
-import { mailCampaigns, mailRecipients, webhookEvents } from '@/db/schema/mail';
+import { mailRecipients, webhookEvents } from '@/db/schema/mail';
 import type { MailRecipientStatus } from '@/db/schema/mail';
+import { applyRecipientTransition, mapResendWebhookType } from '@/lib/mail/recipient-status-transition';
 
 /**
  * Resend webhook handler.
@@ -92,43 +93,18 @@ const POST_HANDLER = async (req: NextRequest): Promise<NextResponse> => {
 
 export { POST_HANDLER as POST };
 
-interface TransitionConfig {
-  newStatus: MailRecipientStatus;
-  allowedPrev: MailRecipientStatus[];
-}
-
-const TRANSITION_MAP: Record<string, TransitionConfig> = {
-  'email.sent': { newStatus: 'sent', allowedPrev: ['queued'] },
-  'email.delivered': { newStatus: 'delivered', allowedPrev: ['queued', 'sent'] },
-  'email.opened': { newStatus: 'opened', allowedPrev: ['queued', 'sent', 'delivered'] },
-  'email.bounced': {
-    newStatus: 'bounced',
-    allowedPrev: ['queued', 'sent', 'delivered', 'opened'],
-  },
-  'email.complained': {
-    newStatus: 'complained',
-    allowedPrev: ['queued', 'sent', 'delivered', 'opened'],
-  },
-  // email.delivery_delayed 는 status 변동 없음 — TRANSITION_MAP 에 없으면 skip.
-};
-
 async function processResendEvent(
   resendMessageId: string,
   eventType: string,
   createdAtRaw: string,
 ): Promise<void> {
-  const config = TRANSITION_MAP[eventType];
-  if (!config) return; // 무시 (delivery_delayed 등)
+  const newStatus = mapResendWebhookType(eventType);
+  if (!newStatus) return; // delivery_delayed 등 무시
 
   const eventAt = new Date(createdAtRaw);
-  if (Number.isNaN(eventAt.getTime())) {
-    // payload 의 created_at 이 비정상 — 현재 시각 fallback
-    eventAt.setTime(Date.now());
-  }
+  if (Number.isNaN(eventAt.getTime())) eventAt.setTime(Date.now());
 
   await db.transaction(async (tx) => {
-    // FOR UPDATE 로 row 잠금 — 같은 svix-id 가 한 번만 처리되더라도, 다른 이벤트가
-    // 같은 recipient 에 동시에 들어올 때 status 전이 race 방지.
     const rows = await tx
       .select({
         id: mailRecipients.id,
@@ -139,72 +115,14 @@ async function processResendEvent(
       .where(eq(mailRecipients.resendMessageId, resendMessageId))
       .for('update');
     const row = rows[0];
-    if (!row) return; // 외부 발송 또는 매칭 누락 — skip
+    if (!row) return; // 외부 발송 또는 race window(아직 message_id 미커밋) — reconcile 이 보강
 
-    const prevStatus = row.status as MailRecipientStatus;
-    if (!config.allowedPrev.includes(prevStatus)) return; // 역행/이미 처리됨
-
-    const timestampUpdate = buildTimestampUpdate(config.newStatus, eventAt);
-    await tx
-      .update(mailRecipients)
-      .set({
-        status: config.newStatus,
-        ...timestampUpdate,
-        updatedAt: new Date(),
-      })
-      .where(eq(mailRecipients.id, row.id));
-
-    // 카운터 atomic delta — 한 번의 UPDATE 로 prev/new 컬럼 동시 처리.
-    // CASE WHEN 안의 ${} 는 drizzle sql 템플릿이 자동 parameterize.
-    await tx.execute(sql`
-      UPDATE mail_campaigns
-      SET
-        queued_count    = queued_count    - CASE WHEN ${prevStatus} = 'queued'    THEN 1 ELSE 0 END,
-        sent_count      = sent_count      - CASE WHEN ${prevStatus} = 'sent'      THEN 1 ELSE 0 END
-                                          + CASE WHEN ${config.newStatus} = 'sent'      THEN 1 ELSE 0 END,
-        delivered_count = delivered_count - CASE WHEN ${prevStatus} = 'delivered' THEN 1 ELSE 0 END
-                                          + CASE WHEN ${config.newStatus} = 'delivered' THEN 1 ELSE 0 END,
-        opened_count    = opened_count    + CASE WHEN ${config.newStatus} = 'opened'    THEN 1 ELSE 0 END,
-        bounced_count   = bounced_count   + CASE WHEN ${config.newStatus} = 'bounced'   THEN 1 ELSE 0 END,
-        complained_count = complained_count + CASE WHEN ${config.newStatus} = 'complained' THEN 1 ELSE 0 END,
-        updated_at = now()
-      WHERE id = ${row.campaignId}
-    `);
-
-    // 즉시 finalize 마킹 — queued + sent 모두 0 도달 시.
-    // delivered/opened/bounced/complained 는 terminal 또는 사후 누증 OK.
-    await tx.execute(sql`
-      UPDATE mail_campaigns
-      SET status = CASE
-              WHEN bounced_count + failed_count + complained_count > 0 THEN 'partial'
-              ELSE 'completed'
-            END,
-          completed_at = COALESCE(completed_at, now()),
-          updated_at = now()
-      WHERE id = ${row.campaignId}
-        AND status = 'sending'
-        AND queued_count = 0
-        AND sent_count = 0
-    `);
+    await applyRecipientTransition(tx, {
+      recipientId: row.id,
+      campaignId: row.campaignId,
+      prevStatus: row.status as MailRecipientStatus,
+      newStatus,
+      eventAt,
+    });
   });
-}
-
-function buildTimestampUpdate(
-  status: MailRecipientStatus,
-  at: Date,
-): Partial<typeof mailRecipients.$inferInsert> {
-  switch (status) {
-    case 'sent':
-      return { sentAt: at };
-    case 'delivered':
-      return { deliveredAt: at };
-    case 'opened':
-      return { openedAt: at };
-    case 'bounced':
-      return { bouncedAt: at };
-    case 'complained':
-      return { complainedAt: at };
-    default:
-      return {};
-  }
 }
