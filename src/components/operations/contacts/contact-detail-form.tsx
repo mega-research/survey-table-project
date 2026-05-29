@@ -223,8 +223,17 @@ export function ContactDetailForm({
             contactMethod,
             systemFieldKeys,
           });
+          // I2: localScheme 이 prop scheme 과 다르면 컬럼 스킴도 함께 저장
+          if (!schemeEqual(localScheme, scheme)) {
+            await updateContactColumns(surveyId, localScheme);
+          }
+          // 회차 라디오 선택돼 있으면 함께 추가 선택 안 됐으면 silent no-op.
+          await attemptCardRef.current?.flushIfSelected();
+          // 저장 성공 → dirty reset (initial 동기화 효과를 위해 router.refresh)
+          router.refresh();
+          setSuccessMessage('저장 완료');
         } else {
-          await addContactTarget({
+          const created = await addContactTarget({
             surveyId,
             attrs,
             piiUpdates: updatesForAction,
@@ -232,16 +241,13 @@ export function ContactDetailForm({
             contactMethod,
             systemFieldKeys,
           });
+          // 신규 저장 성공 → 방금 만든 대상의 상세 페이지로 이동.
+          // new 페이지에 머물면 폼 입력이 남아 isDirty 가 계속 true → 목록 이동 시
+          // confirm alert 오발생 + 재저장 시 중복 생성. push 로 떠나 둘 다 해소.
+          router.push(
+            `/admin/surveys/${surveyId}/operations/contacts/${created.id}`,
+          );
         }
-        // I2: localScheme 이 prop scheme 과 다르면 컬럼 스킴도 함께 저장
-        if (isEdit && !schemeEqual(localScheme, scheme)) {
-          await updateContactColumns(surveyId, localScheme);
-        }
-        // 회차 라디오 선택돼 있으면 함께 추가 선택 안 됐으면 silent no-op.
-        await attemptCardRef.current?.flushIfSelected();
-        // 저장 성공 → dirty reset (initial 동기화 효과를 위해 router.refresh)
-        router.refresh();
-        setSuccessMessage('저장 완료');
       } catch (e) {
         setError((e as Error).message);
       }
