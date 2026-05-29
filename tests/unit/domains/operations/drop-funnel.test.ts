@@ -337,6 +337,7 @@ describe('formatDropFunnel — stepId 키 귀속', () => {
     const bar = out.bars.find((b) => b.questionId === 'table:abc');
     expect(bar?.dropCount).toBe(3);
     expect(out.bars.some((b) => b.questionId === 'legacy')).toBe(true);
+    expect(out.bars.find((b) => b.questionId === 'group:root')).toBeUndefined();
     expect(out.totalDrops).toBe(4);
   });
 });

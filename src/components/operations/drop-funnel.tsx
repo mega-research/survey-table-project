@@ -95,7 +95,7 @@ function FunnelTick({ x = 0, y = 0, payload, bars }: FunnelTickProps) {
 /**
  * 운영 현황 콘솔 — A5 Drop funnel.
  *
- * x축: 질문 위치 (멀티라인 라벨: Q16 / page 6 / 32.0%).
+ * x축: 이탈 위치 (멀티라인 라벨: Q16 / page 6 / 32.0%).
  * y축: 이탈자 수.
  * 정렬: 질문 위치 ASC (snapshot 순서대로 funnel 형태).
  *
@@ -132,7 +132,7 @@ export function DropFunnel({ data }: Props) {
             이탈 응답 위치별 사례
           </h3>
           <p className="mt-0.5 text-xs text-slate-400">
-            x: 이탈 위치 (질문/페이지 · 진행률) · y: 이탈자 수
+            x: 이탈 위치 (질문·페이지 · 진행률) · y: 이탈자 수
           </p>
         </div>
 

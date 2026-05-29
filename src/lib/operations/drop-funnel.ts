@@ -42,7 +42,10 @@
 
 /** 현재 published snapshot의 질문 — 깔때기 라벨 매핑에 사용. */
 export interface FunnelQuestion {
-  /** question UUID. */
+  /**
+   * question UUID, 또는 server 경로(getDropFunnel)에서 귀속되는 stepId
+   * (`table:<uuid>` / `group:<rootId>` 형식).
+   */
   id: string;
   /** snapshot.questions 배열 내 1-based 인덱스. */
   position: number;
@@ -58,7 +61,7 @@ export interface FunnelQuestion {
 
 /** 깔때기 한 막대의 결과. */
 export interface DropFunnelBar {
-  /** 위치 식별자 — 정상이면 question UUID, 아니면 sentinel. */
+  /** 위치 식별자 — question UUID 또는 stepId (`table:…` / `group:…`), 아니면 sentinel. */
   questionId: string | 'others' | 'legacy';
   /** 표시용 라벨. */
   label: string;
