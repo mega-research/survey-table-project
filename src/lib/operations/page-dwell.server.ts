@@ -24,8 +24,10 @@ const TRIM = 0.025;
  * 처리 단계:
  *   A) surveys.currentVersionId → surveyVersions.snapshot 로드 + 캐노니컬 step 빌드.
  *   B) SQL window function 으로 stepId 별 trimmed 통계 직접 산출.
- *      - LATERAL jsonb_array_elements 로 pageVisits 펼침 → 각 visit 1행.
+ *      - LATERAL jsonb_array_elements 로 pageVisits 펼침.
  *      - leftAt > enteredAt 필터로 미완료/잘못된 visit 제외.
+ *      - (response_id, step_id) 로 SUM 집계 → 한 응답이 같은 step 을 여러 visit
+ *        으로 가지면 합산해 1표본으로. 세그먼트 재방문으로 인한 표본 과다 방지.
  *      - PARTITION BY step_id 의 ROW_NUMBER + COUNT 로 trim 범위 결정.
  *      - AVG/STDDEV_SAMP FILTER 로 trimmed 평균 + 표본 SD 산출.
  *   C) JS 측에서 캐노니컬 순서 보존 + n=0 step fallback (formatPageDwell).
@@ -63,8 +65,9 @@ export async function getPageDwell(surveyId: string): Promise<DwellOutput> {
   const rows = await db.execute(sql`
     WITH dwell AS (
       SELECT
+        sr.id AS response_id,
         visit->>'stepId' AS step_id,
-        EXTRACT(EPOCH FROM ((visit->>'leftAt')::timestamptz - (visit->>'enteredAt')::timestamptz)) AS seconds
+        SUM(EXTRACT(EPOCH FROM ((visit->>'leftAt')::timestamptz - (visit->>'enteredAt')::timestamptz))) AS seconds
       FROM survey_responses sr,
       LATERAL jsonb_array_elements(sr.page_visits) AS visit
       WHERE sr.survey_id = ${surveyId}::uuid
@@ -75,6 +78,7 @@ export async function getPageDwell(surveyId: string): Promise<DwellOutput> {
         AND visit->>'leftAt' <> ''
         AND visit->>'enteredAt' IS NOT NULL
         AND (visit->>'leftAt')::timestamptz > (visit->>'enteredAt')::timestamptz
+      GROUP BY sr.id, visit->>'stepId'
     ),
     ranked AS (
       SELECT
