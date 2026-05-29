@@ -20,6 +20,7 @@ export async function POST(req: NextRequest) {
 
   if (
     typeof responseId !== 'string' ||
+    responseId.trim() === '' ||
     (action !== 'hide' && action !== 'show')
   ) {
     return NextResponse.json({ error: 'invalid payload' }, { status: 400 });
