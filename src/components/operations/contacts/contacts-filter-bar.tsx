@@ -33,6 +33,10 @@ interface Props {
   initialClauses: ClientFilterClause[];
   columnCandidates: ColumnCandidate[];
   resultCodeOptions: ContactResultCode[];
+  /** 있을 때만 "컬럼 설정" 버튼 노출 (조사대상목록 전용). 메일 마법사는 미전달. */
+  columnsSettingsHref?: string;
+  /** form aria-label. 기본 "조사 대상 필터". */
+  ariaLabel?: string;
 }
 
 /**
@@ -49,6 +53,8 @@ export function ContactsFilterBar({
   initialClauses,
   columnCandidates,
   resultCodeOptions,
+  columnsSettingsHref,
+  ariaLabel = '조사 대상 필터',
 }: Props) {
   // ClauseRowValue.id 는 React key 안정성을 위한 식별자 — URL 의 인덱스가 아니라 행 자체의
   // 생명주기를 따라간다. 매 mount/sync 시 새로 부여하므로 영속 ID 는 아님.
@@ -131,7 +137,7 @@ export function ContactsFilterBar({
       onSubmit={handleSearch}
       className="mb-3"
       role="search"
-      aria-label="조사 대상 필터"
+      aria-label={ariaLabel}
     >
       <div className="flex items-center gap-2">
         <label htmlFor="contacts-first-source" className="sr-only">
@@ -190,11 +196,11 @@ export function ContactsFilterBar({
             </Badge>
           )}
         </Button>
-        <Button asChild variant="outline" className="ml-auto h-10">
-          <Link href={`/admin/surveys/${surveyId}/operations/contacts/columns`}>
-            컬럼 설정
-          </Link>
-        </Button>
+        {columnsSettingsHref && (
+          <Button asChild variant="outline" className="ml-auto h-10">
+            <Link href={columnsSettingsHref}>컬럼 설정</Link>
+          </Button>
+        )}
       </div>
 
       {advancedOpen && (
