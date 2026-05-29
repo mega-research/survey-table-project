@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, sql, type SQL } from 'drizzle-orm';
 
 import { db } from '@/db';
 import {
@@ -16,16 +16,13 @@ import type {
   MailAttachment,
 } from '@/db/schema/schema-types';
 import type { MailCampaignStatus, MailRecipientStatus } from '@/db/schema/mail';
-import {
-  findContactIdsByBlindIndex,
-  findContactIdsByPlainAcrossTypes,
-} from '@/lib/crypto/contact-pii-repo';
-import type { PiiFieldType } from '@/lib/crypto/pii-fields';
 import { maskEmail } from '@/lib/operations/contacts';
 import {
   buildNegativeCodeExists,
   getResultCodeStatuses,
 } from '@/lib/operations/result-code-statuses.server';
+import { buildContactsFilterSql } from '@/lib/operations/contacts.server';
+import type { FilterClause } from '@/lib/operations/contacts-filters.server';
 
 const DEFAULT_PAGE_SIZE = 20;
 
@@ -365,67 +362,34 @@ function buildNotExcludedByNegativeCode(negativeCodes: string[]): SQL {
   return sql`NOT ${buildNegativeCodeExists(negativeCodes, sql`"contact_targets"."id"`)}`;
 }
 
-async function buildCandidateWhere(
+/**
+ * 발송 후보 WHERE — 다중 절 필터(조사대상목록과 동일) + 메일 발송 자동 제외 정책 결합.
+ *
+ * 항상 적용되는 자동 제외:
+ *   - unsubscribed_at IS NULL (수신거부)
+ *   - email PII 존재 (이메일 누락 제외)
+ *   - 부정 결과코드 마킹 제외
+ * + clauses (buildContactsFilterSql) + "미응답자만" 토글.
+ *
+ * clauses 의 PII blindIndex 는 호출자(page/action)의 parseClausesFromUrl 에서 이미
+ * 계산되어 들어오므로 여기서는 비동기 PII 조회를 하지 않는다 → 동기 함수.
+ */
+function buildCandidateWhere(
   surveyId: string,
-  filter: CampaignFilterSnapshot,
+  clauses: FilterClause[],
+  unrespondedOnly: boolean,
   negativeCodes: string[],
-): Promise<SQL> {
+): SQL {
   const parts: SQL[] = [
     eq(contactTargets.surveyId, surveyId),
     isNull(contactTargets.unsubscribedAt),
     HAS_EMAIL_PII,
     buildNotExcludedByNegativeCode(negativeCodes),
+    buildContactsFilterSql(clauses),
   ];
 
-  if (filter.unrespondedOnly) {
+  if (unrespondedOnly) {
     parts.push(isNull(contactTargets.respondedAt));
-  }
-
-  const q = (filter.q ?? '').trim();
-  if (q) {
-    const escaped = q.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
-    const pattern = `%${escaped}%`;
-    const field = filter.qfield ?? 'all';
-    if (field === 'resid') {
-      const n = parseInt(q, 10);
-      parts.push(Number.isFinite(n) && n > 0 ? eq(contactTargets.resid, n) : sql`false`);
-    } else if (field === 'email' || field === 'biz') {
-      // blind_index 정확 매치 (부분 일치 불가).
-      const fieldType: PiiFieldType = field === 'email' ? 'email' : 'biz_number';
-      const matchedIds = await findContactIdsByBlindIndex(surveyId, fieldType, q);
-      parts.push(
-        matchedIds.length > 0 ? inArray(contactTargets.id, matchedIds) : sql`false`,
-      );
-    } else if (field === 'group') {
-      parts.push(sql`${contactTargets.groupValue} ILIKE ${pattern}`);
-    } else {
-      // all — group_value 부분 일치 + 모든 PII 타입 정확 매치 합집합 (단일 SQL).
-      const piiMatchIds = await findContactIdsByPlainAcrossTypes(
-        surveyId,
-        ['email', 'mobile', 'phone', 'name', 'address', 'biz_number'],
-        q,
-      );
-      const groupClause = sql`${contactTargets.groupValue} ILIKE ${pattern}`;
-      if (piiMatchIds.length > 0) {
-        const combined = or(groupClause, inArray(contactTargets.id, piiMatchIds));
-        if (combined) parts.push(combined);
-      } else {
-        parts.push(groupClause);
-      }
-    }
-  }
-
-  if (filter.groupValues && filter.groupValues.length > 0) {
-    parts.push(inArray(contactTargets.groupValue, filter.groupValues));
-  }
-
-  if (filter.resultCodes && filter.resultCodes.length > 0) {
-    const latestResultCodeExpr = sql<string | null>`(
-      SELECT result_code FROM contact_attempts
-      WHERE contact_target_id = "contact_targets"."id"
-      ORDER BY attempt_no DESC LIMIT 1
-    )`;
-    parts.push(sql`${latestResultCodeExpr} = ANY(${filter.resultCodes})`);
   }
 
   return and(...parts)!;
@@ -465,13 +429,14 @@ const EMAIL_DASH = '—';
 
 export async function previewCampaignCandidates(args: {
   surveyId: string;
-  filter: CampaignFilterSnapshot;
+  clauses: FilterClause[];
+  unrespondedOnly: boolean;
   page?: number;
   pageSize?: number;
 }): Promise<CampaignCandidatesResult> {
   const pageSize = args.pageSize ?? DEFAULT_PAGE_SIZE;
   const { negative: negativeCodes } = await getResultCodeStatuses(args.surveyId);
-  const where = await buildCandidateWhere(args.surveyId, args.filter, negativeCodes);
+  const where = buildCandidateWhere(args.surveyId, args.clauses, args.unrespondedOnly, negativeCodes);
 
   const [countRow] = await db
     .select({ total: sql<number>`count(*)::int` })
@@ -523,10 +488,11 @@ export async function previewCampaignCandidates(args: {
 
 export async function countCampaignCandidates(args: {
   surveyId: string;
-  filter: CampaignFilterSnapshot;
+  clauses: FilterClause[];
+  unrespondedOnly: boolean;
 }): Promise<number> {
   const { negative: negativeCodes } = await getResultCodeStatuses(args.surveyId);
-  const where = await buildCandidateWhere(args.surveyId, args.filter, negativeCodes);
+  const where = buildCandidateWhere(args.surveyId, args.clauses, args.unrespondedOnly, negativeCodes);
   const [countRow] = await db
     .select({ total: sql<number>`count(*)::int` })
     .from(contactTargets)
