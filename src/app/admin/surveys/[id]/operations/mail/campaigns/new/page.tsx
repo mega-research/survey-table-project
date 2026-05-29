@@ -5,6 +5,12 @@ import { CampaignWizard } from '@/components/operations/mail-campaign/campaign-w
 import type { CampaignFilterSnapshot } from '@/db/schema/schema-types';
 import { getMailTemplatesBySurvey } from '@/data/mail-templates';
 import { previewCampaignCandidates } from '@/lib/operations/campaigns.server';
+import {
+  buildColumnCandidates,
+  getContactColumnScheme,
+  getContactResultCodes,
+} from '@/lib/operations/contacts.server';
+import { parseClausesFromUrl } from '@/lib/operations/contacts-filters.server';
 
 const PAGE_SIZE = 20;
 
@@ -12,7 +18,9 @@ interface Props {
   params: Promise<{ id: string }>;
   searchParams: Promise<{
     templateId?: string;
-    q?: string;
+    col?: string | string[];
+    q?: string | string[];
+    op?: string | string[];
     unresponded?: string;
     page?: string;
   }>;
@@ -54,18 +62,35 @@ export default async function NewCampaignPage({ params, searchParams }: Props) {
     );
   }
 
-  const filter: CampaignFilterSnapshot = {
-    q: sp.q ?? '',
-    qfield: 'all',
-    unrespondedOnly: sp.unresponded === '1',
-  };
+  const [scheme, resultCodes] = await Promise.all([
+    getContactColumnScheme(surveyId),
+    getContactResultCodes(surveyId),
+  ]);
+  const columnCandidates = buildColumnCandidates(scheme);
+  const clauses = parseClausesFromUrl(sp.col, sp.q, sp.op, columnCandidates, resultCodes);
+  const unrespondedOnly = sp.unresponded === '1';
 
   const candidates = await previewCampaignCandidates({
     surveyId,
-    filter,
+    clauses,
+    unrespondedOnly,
     page: parsePage(sp.page),
     pageSize: PAGE_SIZE,
   });
+
+  const currentFilter: CampaignFilterSnapshot = {
+    clauses: clauses.map((c) => ({
+      source: c.condition.source,
+      value: c.condition.value,
+      op: c.op,
+    })),
+    unrespondedOnly,
+  };
+  const initialClauses = clauses.map((c) => ({
+    op: c.op,
+    source: c.condition.source,
+    value: c.condition.value,
+  }));
 
   return (
     <main className="mx-auto max-w-7xl px-6 py-8">
@@ -91,8 +116,11 @@ export default async function NewCampaignPage({ params, searchParams }: Props) {
           page: candidates.page,
           pageSize: PAGE_SIZE,
         }}
-        currentFilter={filter}
+        currentFilter={currentFilter}
         initialTemplateId={sp.templateId}
+        columnCandidates={columnCandidates}
+        resultCodeOptions={resultCodes}
+        initialClauses={initialClauses}
       />
     </main>
   );
