@@ -20,13 +20,24 @@ interface ActionResult<T = void> {
 
 const filterSnapshotSchema = z
   .object({
-    qfield: z.enum(['all', 'resid', 'email', 'group', 'biz']).optional(),
-    q: z.string().optional(),
+    clauses: z
+      .array(
+        z.object({
+          source: z.string().max(200),
+          value: z.string().max(500),
+          op: z.enum(['AND', 'OR']).nullable(),
+        }),
+      )
+      .max(20)
+      .optional(),
     unrespondedOnly: z.boolean().optional(),
-    resultCodes: z.array(z.string()).optional(),
-    groupValues: z.array(z.string()).optional(),
     unopenedFromCampaignId: z.string().uuid().optional(),
     unopenedAfterDays: z.number().int().min(0).max(365).optional(),
+    // legacy (기존 저장 캠페인 읽기 호환)
+    qfield: z.enum(['all', 'resid', 'email', 'group', 'biz']).optional(),
+    q: z.string().optional(),
+    resultCodes: z.array(z.string()).optional(),
+    groupValues: z.array(z.string()).optional(),
   })
   .strict();
 
@@ -312,8 +323,27 @@ export async function fetchCandidateIdsAction(
   const { previewCampaignCandidates, countCampaignCandidates } = await import(
     '@/lib/operations/campaigns.server'
   );
+  const { getContactColumnScheme, getContactResultCodes, buildColumnCandidates } = await import(
+    '@/lib/operations/contacts.server'
+  );
+  const { parseClausesFromUrl } = await import('@/lib/operations/contacts-filters.server');
 
-  const total = await countCampaignCandidates({ surveyId, filter });
+  const [scheme, resultCodes] = await Promise.all([
+    getContactColumnScheme(surveyId),
+    getContactResultCodes(surveyId),
+  ]);
+  const candidates = buildColumnCandidates(scheme);
+  const rawClauses = filter.clauses ?? [];
+  const clauses = parseClausesFromUrl(
+    rawClauses.map((c) => c.source),
+    rawClauses.map((c) => c.value),
+    rawClauses.map((c) => c.op ?? ''),
+    candidates,
+    resultCodes,
+  );
+  const unrespondedOnly = filter.unrespondedOnly ?? false;
+
+  const total = await countCampaignCandidates({ surveyId, clauses, unrespondedOnly });
   const MAX_IDS = 10_000;
   if (total > MAX_IDS) {
     return {
@@ -325,7 +355,8 @@ export async function fetchCandidateIdsAction(
   // page=1, pageSize=total 로 한 번에 전체 페치
   const result = await previewCampaignCandidates({
     surveyId,
-    filter,
+    clauses,
+    unrespondedOnly,
     page: 1,
     pageSize: Math.max(1, total),
   });
