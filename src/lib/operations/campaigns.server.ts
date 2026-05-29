@@ -436,14 +436,20 @@ async function fetchEmailMaskHints(contactIds: readonly string[]): Promise<Map<s
 
 const EMAIL_DASH = '—';
 
-/** 미리보기 정렬 컬럼 매핑 — NULLS LAST (응답·결과코드는 null 다수). id tiebreaker 는 호출부에서 추가. */
+/**
+ * 미리보기 정렬 컬럼 매핑. id tiebreaker 는 호출부에서 추가.
+ *
+ * 응답여부는 미응답(respondedAt NULL) ↔ 응답완료 그룹 토글이 목적이므로 방향에 따라
+ * NULL 위치를 바꾼다 — asc=미응답 먼저, desc=응답완료(최신) 먼저.
+ * resid·결과코드는 NULL 을 항상 뒤로(NULLS LAST).
+ */
 function buildCandidateOrderBy(sort: CampaignSortKey, dir: CampaignSortDir): SQL {
-  const col =
-    sort === 'responded'
-      ? sql`${contactTargets.respondedAt}`
-      : sort === 'resultCode'
-        ? latestResultCodeExpr
-        : sql`${contactTargets.resid}`;
+  if (sort === 'responded') {
+    return dir === 'asc'
+      ? sql`${contactTargets.respondedAt} ASC NULLS FIRST`
+      : sql`${contactTargets.respondedAt} DESC NULLS LAST`;
+  }
+  const col = sort === 'resultCode' ? latestResultCodeExpr : sql`${contactTargets.resid}`;
   return dir === 'asc' ? sql`${col} ASC NULLS LAST` : sql`${col} DESC NULLS LAST`;
 }
 
