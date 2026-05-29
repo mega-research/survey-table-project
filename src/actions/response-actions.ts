@@ -17,6 +17,7 @@ import { requireAuth } from '@/lib/auth';
 import { checkTrackA, checkTrackB } from '@/lib/duplicate-detection/check';
 import { computeSignals } from '@/lib/duplicate-detection/signals';
 import type { BlockReason, ClientSignals } from '@/lib/duplicate-detection/types';
+import { sumActiveSeconds } from '@/lib/operations/active-seconds';
 import { parseBrowser, parsePlatform } from '@/lib/operations/parse-ua';
 import {
   buildNegativeCodeExists,
@@ -714,6 +715,17 @@ export async function completeResponse(
       })
       .where(eq(surveyResponses.id, responseId))
       .returning();
+
+    // totalSeconds 정정: pageVisits 활성시간 합으로 덮어쓴다.
+    // (UPDATE 1의 벽시계 EXTRACT는 활성 segment가 없을 때의 폴백으로 남는다.)
+    // 백필된 updated.pageVisits 기준 — 마지막 leftAt이 now()로 채워진 상태.
+    const activeSeconds = sumActiveSeconds(updated.pageVisits as PageVisit[] | null);
+    if (activeSeconds !== null) {
+      await tx
+        .update(surveyResponses)
+        .set({ totalSeconds: activeSeconds })
+        .where(eq(surveyResponses.id, responseId));
+    }
 
     // 2. response_answers 정규화 저장 (replaceResponseAnswers — saveAdminEdit 과 공유)
     if (validatedResponses && Object.keys(validatedResponses).length > 0) {
