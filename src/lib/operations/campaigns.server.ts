@@ -21,7 +21,7 @@ import {
   buildNegativeCodeExists,
   getResultCodeStatuses,
 } from '@/lib/operations/result-code-statuses.server';
-import { buildContactsFilterSql } from '@/lib/operations/contacts.server';
+import { buildContactsFilterSql } from '@/lib/operations/contacts-filter-sql';
 import type { FilterClause } from '@/lib/operations/contacts-filters.server';
 
 const DEFAULT_PAGE_SIZE = 20;

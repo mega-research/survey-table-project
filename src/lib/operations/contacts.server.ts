@@ -17,12 +17,12 @@ import {
   type ContactsSortDir,
   type ContactsSortKey,
 } from './contacts';
-import type { FilterClause, FilterCondition } from './contacts-filters.server';
+import type { FilterClause } from './contacts-filters.server';
 import {
-  FILTER_SOURCE,
-  escapeLikePattern,
-  type ColumnCandidateWithPii,
-} from './filter-shared';
+  buildContactsFilterSql,
+  latestResultCodeExpr,
+} from './contacts-filter-sql';
+import { FILTER_SOURCE, type ColumnCandidateWithPii } from './filter-shared';
 
 export interface ListContactsArgs {
   surveyId: string;
@@ -57,17 +57,10 @@ export interface ListContactsResult {
   page: number;
 }
 
-// 최신 회차의 result_code / attempt_no — 같은 subquery 모양을 SELECT/WHERE 양쪽에서 사용.
-// PG planner 가 동일 correlated subquery 를 dedupe 하며, idx_contact_attempts_target
-// (contact_target_id, attempt_no DESC) INCLUDE (result_code) 가 index-only scan 보장.
+// 최신 회차 subquery — latestResultCodeExpr 는 contacts-filter-sql 로 이관(필터·SELECT 공유).
 // outer correlation 은 명시적 qualifier 필수 — Drizzle 의 sql template literal 안에서
 // ${contactTargets.id} 는 unqualified "id" 로 렌더되어 inner contact_attempts.id 와
 // 충돌 (둘 다 id 컬럼 보유) → 항상 NULL. "contact_targets"."id" 직접 박는다.
-const latestResultCodeExpr = sql<string | null>`(
-  SELECT result_code FROM contact_attempts
-  WHERE contact_target_id = "contact_targets"."id"
-  ORDER BY attempt_no DESC LIMIT 1
-)`;
 const latestAttemptNoExpr = sql<number | null>`(
   SELECT attempt_no FROM contact_attempts
   WHERE contact_target_id = "contact_targets"."id"
@@ -79,78 +72,6 @@ const progressPctExpr = sql<number | null>`(
   WHERE id = "contact_targets"."response_id"
     AND deleted_at IS NULL
 )`;
-
-/**
- * 단일 절 SQL. cond.source 와 mode 별로 분기.
- *
- * SECURITY: cond.source 는 호출자에서 contactColumns 화이트리스트 검증 끝난 값만
- * 전달된다고 가정. value/from/to/blindIndex/key 모두 parameter binding 으로 안전.
- *
- * pii.* 평문 미노출 (사전 계산된 blindIndex 만 SQL 에 진입).
- */
-export function buildClauseSql(cond: FilterCondition): SQL {
-  if (cond.source === FILTER_SOURCE.RESID) {
-    if (cond.mode === 'idlist') {
-      if (!cond.ranges || cond.ranges.length === 0) return sql`FALSE`;
-      const conds = cond.ranges.map((r) =>
-        r.from === r.to
-          ? sql`"contact_targets".resid = ${r.from}`
-          : sql`"contact_targets".resid BETWEEN ${r.from} AND ${r.to}`,
-      );
-      // 자체 괄호 — 외부 AND 결합 (eq(surveyId) 또는 다중 절) 시 PG AND>OR 우선순위로
-      // 인한 cross-survey 누락/누출 방지.
-      return sql`(${sql.join(conds, sql` OR `)})`;
-    }
-    return sql`FALSE`;
-  }
-
-  if (cond.source === FILTER_SOURCE.CONTACT_RESULT && cond.mode === 'enum') {
-    return sql`${latestResultCodeExpr} = ${cond.value}`;
-  }
-
-  if (cond.source === FILTER_SOURCE.WEB && cond.mode === 'boolean') {
-    return cond.value === 'true'
-      ? sql`"contact_targets".responded_at IS NOT NULL`
-      : sql`"contact_targets".responded_at IS NULL`;
-  }
-
-  if (cond.source.startsWith(FILTER_SOURCE.ATTRS_PREFIX) && cond.mode === 'text') {
-    const key = cond.source.slice(FILTER_SOURCE.ATTRS_PREFIX.length);
-    const escaped = escapeLikePattern(cond.value);
-    return sql`"contact_targets".attrs->>${key} ILIKE '%' || ${escaped} || '%'`;
-  }
-
-  if (cond.source.startsWith(FILTER_SOURCE.PII_PREFIX) && cond.mode === 'exact') {
-    if (!cond.blindIndex) return sql`FALSE`;
-    const columnKey = cond.source.slice(FILTER_SOURCE.PII_PREFIX.length);
-    // contact_pii 도 id 컬럼이 있어 unquoted id 는 pp.id 로 해석된다 — 반드시 큰따옴표 사용.
-    return sql`EXISTS (
-      SELECT 1 FROM contact_pii pp
-      WHERE pp.contact_target_id = "contact_targets"."id"
-        AND pp.column_key = ${columnKey}
-        AND pp.blind_index = ${cond.blindIndex}
-    )`;
-  }
-
-  return sql`FALSE`;
-}
-
-/**
- * 절 배열 → WHERE 절. 좌→우 평가, 각 절 (...) 괄호로 우선순위 모호함 제거.
- *
- * 빈 배열 → TRUE (전체 조회).
- */
-export function buildContactsFilterSql(clauses: FilterClause[]): SQL {
-  if (clauses.length === 0) return sql`TRUE`;
-  // 첫 절도 괄호로 감싸 buildClauseSql 의 결과가 내부 OR 체인이어도 외부 AND 와 안전하게 결합.
-  let expr: SQL = sql`(${buildClauseSql(clauses[0].condition)})`;
-  for (let i = 1; i < clauses.length; i++) {
-    const next = buildClauseSql(clauses[i].condition);
-    const op = clauses[i].op === 'OR' ? sql.raw('OR') : sql.raw('AND');
-    expr = sql`${expr} ${op} (${next})`;
-  }
-  return expr;
-}
 
 function orderExpr(col: AnyColumn | SQL, direction: ContactsSortDir): SQL {
   return direction === 'asc'
