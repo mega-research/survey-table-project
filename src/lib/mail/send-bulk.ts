@@ -3,21 +3,10 @@ import 'server-only';
 import { randomUUID } from 'node:crypto';
 
 import * as Sentry from '@sentry/nextjs';
-import { Resend } from 'resend';
-
 import type { MailAttachment } from '@/db/schema/schema-types';
 import { downloadR2Object } from '@/lib/image-utils-server';
 import { MAX_ATTACHMENT_TOTAL_BYTES } from '@/lib/mail/constants';
-
-let _resend: Resend | null = null;
-function getResend(): Resend {
-  if (!_resend) {
-    const apiKey = process.env.RESEND_API_KEY;
-    if (!apiKey) throw new Error('RESEND_API_KEY 환경변수가 설정되지 않았습니다.');
-    _resend = new Resend(apiKey);
-  }
-  return _resend;
-}
+import { getResend } from '@/lib/mail/resend-client';
 
 export interface ResolvedBulkAttachment {
   filename: string;
