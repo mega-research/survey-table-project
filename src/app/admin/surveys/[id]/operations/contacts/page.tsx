@@ -13,12 +13,12 @@ import {
   normalizeSortKey,
 } from '@/lib/operations/contacts';
 import {
+  buildColumnCandidates,
   getContactColumnScheme,
   getContactResultCodes,
   listContactsForSurvey,
 } from '@/lib/operations/contacts.server';
 import { parseClausesFromUrl } from '@/lib/operations/contacts-filters.server';
-import { FILTER_SOURCE, type ColumnCandidateWithPii } from '@/lib/operations/filter-shared';
 
 export const metadata: Metadata = {
   title: '현황 - 조사 대상 목록',
@@ -61,18 +61,7 @@ export default async function ContactsPage({ params, searchParams }: PageProps) 
 
   const safeSort = effectiveSortKey(normalizeSortKey(sp.sort), visibleAttrsKeys);
 
-  // 컬럼 후보: system.resid / system.contact_result / system.web + attrs.* + pii.*
-  // system.email_count / system.contact_owner 는 placeholder 라 제외
-  const columnCandidates: ColumnCandidateWithPii[] = (scheme?.columns ?? [])
-    .filter(
-      (c) =>
-        c.source === FILTER_SOURCE.RESID ||
-        c.source === FILTER_SOURCE.CONTACT_RESULT ||
-        c.source === FILTER_SOURCE.WEB ||
-        c.source.startsWith(FILTER_SOURCE.ATTRS_PREFIX) ||
-        c.source.startsWith(FILTER_SOURCE.PII_PREFIX),
-    )
-    .map((c) => ({ source: c.source, label: c.label, piiType: c.piiType }));
+  const columnCandidates = buildColumnCandidates(scheme);
 
   const clauses = parseClausesFromUrl(sp.col, sp.q, sp.op, columnCandidates, resultCodes);
 
@@ -140,6 +129,7 @@ export default async function ContactsPage({ params, searchParams }: PageProps) 
             }))}
             columnCandidates={columnCandidates}
             resultCodeOptions={resultCodes}
+            columnsSettingsHref={`/admin/surveys/${surveyId}/operations/contacts/columns`}
           />
           {rows.length === 0 ? (
             <EmptyState
