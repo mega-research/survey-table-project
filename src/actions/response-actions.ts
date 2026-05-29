@@ -502,6 +502,65 @@ export async function recordStepVisit(input: {
 }
 
 /**
+ * Page Visibility 세그먼트 기록 (sendBeacon 대상).
+ *
+ * - hide: 마지막 visit의 leftAt이 NULL이면 now()로 닫는다. lastActivityAt은 건드리지 않는다
+ *   (떠난 시점 기준으로 3h sweep 타이머가 돌도록).
+ * - show: 마지막 visit이 닫혀 있으면(또는 빈 배열) currentStepId로 새 visit을 append.
+ *   lastActivityAt을 갱신한다(복귀 = 활동).
+ * - 둘 다 단일 UPDATE문 — 동시 hide/show 경합 시 PG 행 잠금으로 직렬화(lost update 방지).
+ * - status='in_progress' 가드 — 공개 엔드포인트 IDOR 영향 제한 + 완료 후 늦은 beacon no-op.
+ */
+export async function recordVisibilitySegment(input: {
+  responseId: string;
+  action: 'hide' | 'show';
+}): Promise<void> {
+  const { responseId, action } = input;
+
+  if (action === 'hide') {
+    await db
+      .update(surveyResponses)
+      .set({
+        pageVisits: sql`jsonb_set(
+          ${surveyResponses.pageVisits},
+          ARRAY[(jsonb_array_length(${surveyResponses.pageVisits}) - 1)::text, 'leftAt'],
+          to_jsonb(now())
+        )`,
+      })
+      .where(
+        and(
+          eq(surveyResponses.id, responseId),
+          eq(surveyResponses.status, 'in_progress'),
+          sql`jsonb_array_length(COALESCE(${surveyResponses.pageVisits}, '[]'::jsonb)) > 0`,
+          sql`(${surveyResponses.pageVisits} -> -1 ->> 'leftAt') IS NULL`,
+        ),
+      );
+    return;
+  }
+
+  // action === 'show'
+  await db
+    .update(surveyResponses)
+    .set({
+      lastActivityAt: new Date(),
+      pageVisits: sql`COALESCE(${surveyResponses.pageVisits}, '[]'::jsonb) || jsonb_build_array(
+        jsonb_build_object('stepId', ${surveyResponses.currentStepId}, 'enteredAt', to_jsonb(now()))
+      )`,
+    })
+    .where(
+      and(
+        eq(surveyResponses.id, responseId),
+        eq(surveyResponses.status, 'in_progress'),
+        sql`${surveyResponses.currentStepId} IS NOT NULL`,
+        sql`(
+          jsonb_array_length(COALESCE(${surveyResponses.pageVisits}, '[]'::jsonb)) = 0
+          OR (${surveyResponses.pageVisits} -> -1 ->> 'leftAt') IS NOT NULL
+        )`,
+      ),
+    );
+}
+
+/**
  * 같은 (surveyId, sessionId) 조합으로 기존 응답이 있으면 회복, 없으면 null 반환.
  *
  * - drop 상태면 in_progress 로 UPDATE + lastActivityAt 갱신
