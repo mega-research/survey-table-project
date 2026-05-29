@@ -1,6 +1,11 @@
 import 'server-only';
 
-import { mapResendLastEvent, canTransition } from '@/lib/mail/recipient-status-transition';
+import { and, eq, inArray } from 'drizzle-orm';
+
+import { db } from '@/db';
+import { mailRecipients } from '@/db/schema/mail';
+import { getResend } from '@/lib/mail/resend-client';
+import { mapResendLastEvent, canTransition, applyRecipientTransition } from '@/lib/mail/recipient-status-transition';
 import type { MailRecipientStatus } from '@/db/schema/mail';
 
 export interface StuckRecipient {
@@ -42,4 +47,76 @@ export function planReconcileTransitions(
     actions.push({ recipientId: recipient.id, prevStatus: recipient.status, newStatus });
   }
   return actions;
+}
+
+const STUCK_STATUSES: MailRecipientStatus[] = ['queued', 'sending', 'sent'];
+
+/**
+ * 한 캠페인의 stuck recipient(message_id 보유)를 Resend 실제 상태와 동기화한다.
+ * race window로 유실된 webhook 보강용. 정상 캠페인은 stuck 0건 -> Resend 호출 0회.
+ */
+export async function reconcileCampaignRecipients(
+  campaignId: string,
+): Promise<{ checked: number; updated: number }> {
+  const stuck = await db
+    .select({
+      id: mailRecipients.id,
+      status: mailRecipients.status,
+      resendMessageId: mailRecipients.resendMessageId,
+    })
+    .from(mailRecipients)
+    .where(
+      and(
+        eq(mailRecipients.campaignId, campaignId),
+        inArray(mailRecipients.status, STUCK_STATUSES),
+      ),
+    );
+
+  const targets: StuckRecipient[] = stuck
+    .filter((r) => r.resendMessageId != null)
+    .map((r) => ({ id: r.id, status: r.status as MailRecipientStatus, resendMessageId: r.resendMessageId! }));
+
+  if (targets.length === 0) return { checked: 0, updated: 0 };
+
+  const resend = getResend();
+  const lookups: ResendLookup[] = await Promise.all(
+    targets.map(async (t): Promise<ResendLookup> => {
+      try {
+        const { data } = await resend.emails.get(t.resendMessageId);
+        return { recipientId: t.id, lastEvent: data?.last_event };
+      } catch {
+        return { recipientId: t.id, error: true };
+      }
+    }),
+  );
+
+  const actions = planReconcileTransitions(targets, lookups);
+  const eventAt = new Date();
+  let updated = 0;
+
+  for (const action of actions) {
+    await db.transaction(async (tx) => {
+      const rows = await tx
+        .select({
+          id: mailRecipients.id,
+          campaignId: mailRecipients.campaignId,
+          status: mailRecipients.status,
+        })
+        .from(mailRecipients)
+        .where(eq(mailRecipients.id, action.recipientId))
+        .for('update');
+      const row = rows[0];
+      if (!row) return;
+      const ok = await applyRecipientTransition(tx, {
+        recipientId: row.id,
+        campaignId: row.campaignId,
+        prevStatus: row.status as MailRecipientStatus,
+        newStatus: action.newStatus,
+        eventAt,
+      });
+      if (ok) updated += 1;
+    });
+  }
+
+  return { checked: targets.length, updated };
 }
