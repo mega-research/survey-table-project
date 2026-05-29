@@ -71,9 +71,14 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
   const statusBadge = STATUS_LABEL[campaign.status];
   const canCancel = campaign.status === 'queued' || campaign.status === 'draft';
 
-  // "이 단체 메일 미응답자 재발송" 동선 — 같은 필터에 미응답 강제 + 자동 전체 선택
+  // "이 단체 메일 미응답자 재발송" 동선 — 같은 다중 절 필터 재현 + 미응답 강제 + 자동 전체 선택.
+  // legacy 스냅샷(clauses 없음)은 필터 없이 미응답+전체선택만 적용(best-effort).
   const reuseFilter = new URLSearchParams();
-  if (campaign.filterSnapshot.q) reuseFilter.set('q', campaign.filterSnapshot.q);
+  for (const c of campaign.filterSnapshot.clauses ?? []) {
+    reuseFilter.append('col', c.source);
+    reuseFilter.append('q', c.value);
+    reuseFilter.append('op', c.op ?? '');
+  }
   reuseFilter.set('unresponded', '1');
   reuseFilter.set('templateId', campaign.mailTemplateId ?? '');
   reuseFilter.set('autoSelectAll', '1');
