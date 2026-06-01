@@ -5,6 +5,7 @@ import { BarChart3, Calendar, CheckCircle, Clock, TrendingUp, Users } from 'luci
 
 import { formatMinutes, formatNumber } from '@/lib/analytics/analyzer';
 import type { SurveySummary } from '@/lib/analytics/types';
+import { LocalDateTime } from '@/components/ui/local-date-time';
 
 interface SummaryCardsProps {
   summary: SurveySummary;
@@ -95,17 +96,12 @@ export function SummaryCards({ summary }: SummaryCardsProps) {
         <div className="flex items-start justify-between">
           <div>
             <p className="text-sm font-medium text-gray-500">마지막 응답</p>
-            <p className="mt-1 text-lg font-bold text-gray-900">
-              {summary.lastResponseAt
-                ? new Date(summary.lastResponseAt).toLocaleDateString(undefined, {
-                    month: 'short',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    hour12: false,
-                  })
-                : '-'}
-            </p>
+            <LocalDateTime
+              value={summary.lastResponseAt}
+              format="short-month-day-time"
+              fallback="-"
+              className="mt-1 block text-lg font-bold text-gray-900"
+            />
           </div>
           <div className="rounded-lg bg-rose-50 p-2">
             <TrendingUp className="h-5 w-5 text-rose-500" />
