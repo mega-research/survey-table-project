@@ -5,6 +5,8 @@ import { analyzeQuestion } from '@/lib/analytics/analyzer';
 import type { Question } from '@/types/survey';
 // dispatcher: branch-logic.ts 에서 callers 가 쓰는 공개 함수
 import { getBranchRuleForResponse } from '@/utils/branch-logic';
+import { transformSingleChoice } from '@/lib/spss/data-transformer';
+import { generateMrsets } from '@/lib/spss/spss-syntax-generator';
 
 function choiceTableQ(): Question {
   return {
@@ -96,5 +98,37 @@ describe('choice table-source checkbox 집계', () => {
 
     expect(a?.count).toBe(2);
     expect(b?.count).toBe(1);
+  });
+});
+
+describe('choice table-source SPSS 단일/복수 변수 계약', () => {
+  function radioTableQ(): Question {
+    return {
+      id: 'q1',
+      type: 'radio',
+      title: 'Q',
+      required: false,
+      order: 0,
+      questionCode: 'Q2',
+      options: [],
+      tableColumns: [{ id: 'c1', label: '선택' }],
+      tableRowsData: [
+        { id: 'r1', label: '', cells: [{ id: 'cellA', type: 'choice_opt', content: '', choiceLabel: 'A' }] },
+        { id: 'r2', label: '', cells: [{ id: 'cellB', type: 'choice_opt', content: '', choiceLabel: 'B' }] },
+        { id: 'r3', label: '', cells: [{ id: 'cellC', type: 'choice_opt', content: '', choiceLabel: 'C' }] },
+      ],
+    } as Question;
+  }
+
+  it('라디오는 단일 변수 Q2 에 선택한 보기 코드 하나, 미선택은 null', () => {
+    const q = radioTableQ();
+    // 선택값 = cell.id. 기본 코드 = 수집 순서 1-based.
+    expect(transformSingleChoice(q, 'cellA')).toBe(1);
+    expect(transformSingleChoice(q, 'cellC')).toBe(3);
+    expect(transformSingleChoice(q, null)).toBeNull();
+  });
+
+  it('라디오는 MCGROUP(복수응답 세트)에 등록되지 않는다', () => {
+    expect(generateMrsets([radioTableQ()])).toBe('');
   });
 });
