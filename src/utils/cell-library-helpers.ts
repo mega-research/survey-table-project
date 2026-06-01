@@ -203,7 +203,6 @@ export function isCellSaveable(cell: TableCell): boolean {
     );
   }
   if (cell.type === 'choice_opt') {
-    if (cell.isOtherChoiceCell === true) return true;
     return !!((cell.choiceLabel ?? '').trim() || (cell.content ?? '').trim() || cell.imageUrl || cell.videoUrl);
   }
 

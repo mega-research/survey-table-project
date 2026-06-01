@@ -129,7 +129,6 @@ export interface TableCell {
   isOtherRankingCell?: boolean;
   // choice_opt 셀 (type='choice_opt') — Case A radio/checkbox 옵션 소스
   choiceLabel?: string;
-  isOtherChoiceCell?: boolean;
   branchRule?: BranchRule;
   allowTextInput?: boolean;
   textInputPlaceholder?: string;

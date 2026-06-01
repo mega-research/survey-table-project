@@ -16,8 +16,6 @@ interface ChoiceOptCellTabProps {
   onChoiceLabelChange: (v: string) => void;
   spssNumericCode: number | '';
   onSpssNumericCodeChange: (v: number | '') => void;
-  isOtherChoiceCell: boolean;
-  onIsOtherChoiceCellChange: (v: boolean) => void;
   allowTextInput: boolean;
   onAllowTextInputChange: (v: boolean) => void;
   /** 이 보기 옵션 선택 시 적용할 조건부 분기 규칙 */
@@ -38,8 +36,6 @@ export function ChoiceOptCellTab({
   onChoiceLabelChange,
   spssNumericCode,
   onSpssNumericCodeChange,
-  isOtherChoiceCell,
-  onIsOtherChoiceCellChange,
   allowTextInput,
   onAllowTextInputChange,
   branchRule,
@@ -47,7 +43,6 @@ export function ChoiceOptCellTab({
   allQuestions,
   currentQuestionId,
 }: ChoiceOptCellTabProps) {
-  const isOther = isOtherChoiceCell === true;
   return (
     <div className="space-y-4">
       <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
@@ -64,17 +59,8 @@ export function ChoiceOptCellTab({
       </div>
 
       <div className="flex items-center justify-between gap-4">
-        <Label className="text-sm font-medium">이 셀을 &quot;기타 (직접 입력)&quot;로 사용</Label>
-        <Switch checked={isOther} onCheckedChange={onIsOtherChoiceCellChange} />
-      </div>
-
-      <div className="flex items-center justify-between gap-4">
         <Label className="text-sm font-medium">선택 시 텍스트 입력 받기</Label>
-        <Switch
-          checked={isOther ? true : allowTextInput}
-          disabled={isOther}
-          onCheckedChange={onAllowTextInputChange}
-        />
+        <Switch checked={allowTextInput} onCheckedChange={onAllowTextInputChange} />
       </div>
 
       <div className="space-y-2">

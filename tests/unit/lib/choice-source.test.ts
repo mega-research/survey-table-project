@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 import type { Question, TableCell, TableRow } from '@/types/survey';
 import {
   collectChoiceOptCells,
-  hasExistingOtherChoiceCell,
   isChoiceTableSource,
   resolveChoiceOptions,
 } from '@/utils/choice-source';
@@ -90,16 +89,6 @@ describe('choice-source', () => {
     expect(collectChoiceOptCells(question.tableRowsData)).toHaveLength(1);
   });
 
-  it('isOtherChoiceCell 셀은 allowTextInput=true + 기본 라벨로 해석', () => {
-    const question = q({
-      type: 'radio',
-      tableRowsData: [row([cell({ id: 'o', type: 'choice_opt', isOtherChoiceCell: true })])],
-    });
-    const opt = resolveChoiceOptions(question)[0];
-    expect(opt.allowTextInput).toBe(true);
-    expect(opt.label).toBe('기타 (직접 입력)');
-  });
-
   it('branchRule/allowTextInput/textInputPlaceholder 를 셀에서 옵션으로 전달', () => {
     const branch = { id: 'br', value: 's', action: 'end' as const };
     const question = q({
@@ -121,13 +110,5 @@ describe('choice-source', () => {
     expect(opt.branchRule).toEqual(branch);
     expect(opt.allowTextInput).toBe(true);
     expect(opt.textInputPlaceholder).toBe('상세');
-  });
-
-  it('hasExistingOtherChoiceCell 는 excludeCellId 를 제외하고 검사', () => {
-    const rows = [
-      row([cell({ id: 'o', type: 'choice_opt', isOtherChoiceCell: true })]),
-    ];
-    expect(hasExistingOtherChoiceCell(rows)).toBe(true);
-    expect(hasExistingOtherChoiceCell(rows, 'o')).toBe(false);
   });
 });

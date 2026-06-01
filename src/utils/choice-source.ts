@@ -41,43 +41,19 @@ export function isChoiceTableSource(question: Question): boolean {
  *   - optionCode: TableCell 에는 optionCode 필드가 없으므로 항상 undefined
  *   - spssNumericCode: cell.spssNumericCode 우선, 없으면 수집 순서 1-based 인덱스
  *   - branchRule / allowTextInput / textInputPlaceholder: 셀에서 전달
- *   - isOtherChoiceCell=true → allowTextInput=true + 기본 라벨 "기타 (직접 입력)"
  */
 export function resolveChoiceOptions(question: Question): QuestionOption[] {
   const cells = collectChoiceOptCells(question.tableRowsData);
   if (cells.length === 0) return question.options ?? [];
 
-  return cells.map((cell, idx) => {
-    const isOther = cell.isOtherChoiceCell === true;
-    return {
-      id: cell.id,
-      value: cell.id,
-      label: buildChoiceOptLabel(cell, isOther ? '기타 (직접 입력)' : '(라벨 없음)'),
-      optionCode: undefined,
-      spssNumericCode: cell.spssNumericCode ?? idx + 1,
-      branchRule: cell.branchRule,
-      allowTextInput: isOther ? true : cell.allowTextInput,
-      textInputPlaceholder: cell.textInputPlaceholder,
-    };
-  });
-}
-
-/**
- * 같은 tableRowsData 내에 isOtherChoiceCell=true 인 유효 choice_opt 셀이 있는지.
- * excludeCellId 가 있으면 해당 셀은 제외 (자기 자신 검사 제외용).
- */
-export function hasExistingOtherChoiceCell(
-  rows: TableRow[] | undefined,
-  excludeCellId?: string,
-): boolean {
-  if (!rows) return false;
-  return rows.some((row) =>
-    row.cells.some(
-      (c) =>
-        c.id !== excludeCellId
-        && c.type === 'choice_opt'
-        && !c.isHidden
-        && c.isOtherChoiceCell === true,
-    ),
-  );
+  return cells.map((cell, idx) => ({
+    id: cell.id,
+    value: cell.id,
+    label: buildChoiceOptLabel(cell, '(라벨 없음)'),
+    optionCode: undefined,
+    spssNumericCode: cell.spssNumericCode ?? idx + 1,
+    branchRule: cell.branchRule,
+    allowTextInput: cell.allowTextInput,
+    textInputPlaceholder: cell.textInputPlaceholder,
+  }));
 }

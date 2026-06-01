@@ -57,7 +57,6 @@ import { generateId } from '@/lib/utils';
 import { isPartialNumericInput, parseNumericInput } from '@/utils/numeric-input';
 import { getMaxSpssCode } from '@/utils/option-code-generator';
 import { hasExistingOtherRankingCell } from '@/utils/ranking-source';
-import { hasExistingOtherChoiceCell } from '@/utils/choice-source';
 import {
   BranchRule,
   CheckboxOption,
@@ -184,9 +183,6 @@ export function CellContentModal({
 
   // 보기 옵션 소스 셀(Case A, choice_opt) 전용 state — spss 코드는 cellSpssNumericCode 공유
   const [choiceLabel, setChoiceLabel] = useState<string>(cell.choiceLabel || '');
-  const [isOtherChoiceCell, setIsOtherChoiceCell] = useState<boolean>(
-    cell.isOtherChoiceCell === true,
-  );
   const [choiceAllowTextInput, setChoiceAllowTextInput] = useState<boolean>(
     cell.allowTextInput === true,
   );
@@ -254,7 +250,6 @@ export function CellContentModal({
       setCellSpssNumericCode(cell.spssNumericCode ?? '');
       setIsOtherRankingCell(cell.isOtherRankingCell === true);
       setChoiceLabel(cell.choiceLabel || '');
-      setIsOtherChoiceCell(cell.isOtherChoiceCell === true);
       setChoiceAllowTextInput(cell.allowTextInput === true);
       setChoiceBranchRule(cell.branchRule);
       setIsMergeEnabled(
@@ -319,16 +314,6 @@ export function CellContentModal({
       if (hasExistingOtherRankingCell(hostQuestion?.tableRowsData, cell.id)) {
         alert(
           '이 질문에는 이미 "기타"로 지정된 순위 옵션 셀이 있습니다. 질문당 최대 1개만 지정할 수 있습니다.',
-        );
-        return;
-      }
-    }
-    if (contentType === 'choice_opt' && isOtherChoiceCell) {
-      // 같은 질문 내 기타 choice_opt 셀이 이미 존재하면 차단 (자기 자신은 제외).
-      const hostQuestion = questions.find((q) => q.id === currentQuestionId);
-      if (hasExistingOtherChoiceCell(hostQuestion?.tableRowsData, cell.id)) {
-        alert(
-          '이 질문에는 이미 "기타"로 지정된 보기 옵션 셀이 있습니다. 질문당 최대 1개만 지정할 수 있습니다.',
         );
         return;
       }
@@ -405,12 +390,8 @@ export function CellContentModal({
           contentType === 'choice_opt' && choiceLabel.trim().length > 0
             ? choiceLabel.trim()
             : undefined,
-        isOtherChoiceCell:
-          contentType === 'choice_opt' && isOtherChoiceCell ? true : undefined,
         allowTextInput:
-          contentType === 'choice_opt' && choiceAllowTextInput && !isOtherChoiceCell
-            ? true
-            : undefined,
+          contentType === 'choice_opt' && choiceAllowTextInput ? true : undefined,
         // 보기 옵션 소스 셀의 조건부 분기 규칙 (Case A). value 는 셀 id(=resolveChoiceOptions
         // 가 부여하는 옵션 value)로 강제해 응답 매칭이 일치하도록 한다.
         branchRule:
@@ -550,7 +531,6 @@ export function CellContentModal({
     setCellSpssNumericCode(cell.spssNumericCode ?? '');
     setIsOtherRankingCell(cell.isOtherRankingCell === true);
     setChoiceLabel(cell.choiceLabel || '');
-    setIsOtherChoiceCell(cell.isOtherChoiceCell === true);
     setChoiceAllowTextInput(cell.allowTextInput === true);
     setChoiceBranchRule(cell.branchRule);
     setIsMergeEnabled(
@@ -1195,8 +1175,6 @@ export function CellContentModal({
               onChoiceLabelChange={setChoiceLabel}
               spssNumericCode={cellSpssNumericCode}
               onSpssNumericCodeChange={setCellSpssNumericCode}
-              isOtherChoiceCell={isOtherChoiceCell}
-              onIsOtherChoiceCellChange={setIsOtherChoiceCell}
               allowTextInput={choiceAllowTextInput}
               onAllowTextInputChange={setChoiceAllowTextInput}
               branchRule={choiceBranchRule}

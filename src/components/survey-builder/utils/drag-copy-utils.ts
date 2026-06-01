@@ -34,7 +34,7 @@ const TYPE_SPECIFIC_KEYS: Record<string, (keyof TableCell)[]> = {
   video: ['videoUrl'],
   ranking: ['rankingOptions', 'rankingConfig', 'rankSuffixPattern', 'rankVarNames'],
   ranking_opt: ['rankingLabel', 'isOtherRankingCell'],
-  choice_opt: ['choiceLabel', 'isOtherChoiceCell', 'branchRule', 'allowTextInput', 'textInputPlaceholder'],
+  choice_opt: ['choiceLabel', 'branchRule', 'allowTextInput', 'textInputPlaceholder'],
 };
 
 /**

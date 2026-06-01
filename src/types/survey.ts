@@ -302,8 +302,6 @@ export interface TableCell {
   // choice_opt 셀 (type='choice_opt') — Case A radio/checkbox 옵션 소스
   // 옵션 라벨. 선택 열 셀은 보통 content 가 비어 있어(라벨은 다른 열) 명시적으로 지정.
   choiceLabel?: string;
-  // 이 셀을 "기타 (직접 입력)" 옵션으로 사용 — 해석 시 allowTextInput=true 로 매핑.
-  isOtherChoiceCell?: boolean;
   // 이 옵션 선택 시 분기. (resolveChoiceOptions 가 QuestionOption.branchRule 로 전달)
   branchRule?: BranchRule;
   // 선택 시 사이드카 텍스트 입력 (radio/checkbox 옵션과 동일 의미). __optTexts__ 로 저장됨.
