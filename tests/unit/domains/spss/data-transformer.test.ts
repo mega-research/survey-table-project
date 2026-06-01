@@ -6,6 +6,7 @@ import {
   transformSingleChoice,
   transformCheckbox,
   transformText,
+  transformNumericText,
   transformMultiselect,
   transformTableCell,
   transformOtherOption,
@@ -176,6 +177,18 @@ describe('transformOtherOption', () => {
   it('기타이지만 텍스트가 없으면 빈 문자열을 반환한다', () => {
     const result = transformOtherOption({ hasOther: true, otherValue: '' });
     expect(result).toBe('');
+  });
+});
+
+describe('transformNumericText', () => {
+  it('빈값/공백/비숫자는 null, 실제 0 은 0 으로 변환', () => {
+    expect(transformNumericText('')).toBeNull();
+    expect(transformNumericText('   ')).toBeNull();
+    expect(transformNumericText('abc')).toBeNull();
+    expect(transformNumericText(null)).toBeNull();
+    expect(transformNumericText('0')).toBe(0);
+    expect(transformNumericText('12.5')).toBe(12.5);
+    expect(transformNumericText('-3')).toBe(-3);
   });
 });
 

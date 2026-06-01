@@ -71,6 +71,10 @@ function resolveVarType(col: SPSSExportColumn, question: Question | undefined): 
       return VariableType.Numeric;
 
     case 'text':
+      return col.numericText || question?.inputType === 'number'
+        ? VariableType.Numeric
+        : VariableType.String;
+
     case 'other-text':
     case 'ranking-other':
     case 'multiselect':
@@ -114,6 +118,11 @@ function resolveMeasure(col: SPSSExportColumn, question: Question | undefined): 
   // radio-group (Likert 등 매트릭스 단일선택) 디폴트 Ordinal — Continuous로 보고 싶으면 셀에서 명시
   if (col.type === 'radio-group') {
     return VariableMeasure.Ordinal;
+  }
+
+  // 숫자 단답형(inputType==='number') 은 척도(Continuous)
+  if (col.type === 'text' && (col.numericText || question?.inputType === 'number')) {
+    return VariableMeasure.Continuous;
   }
 
   return VariableMeasure.Nominal;

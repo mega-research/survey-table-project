@@ -1,4 +1,5 @@
 import type { Question, QuestionOption, RankingAnswer } from '@/types/survey';
+import { parseNumericInput } from '@/utils/numeric-input';
 import { RANKING_OTHER_VALUE } from '@/utils/ranking-shared';
 
 export interface SPSSColumn {
@@ -70,6 +71,15 @@ export function transformCheckbox(
 export function transformText(value: string | null | undefined): string | null {
   if (value == null || value === '') return null;
   return value;
+}
+
+/**
+ * 숫자 단답형(inputType==='number') 응답을 number|null 로 변환한다.
+ * 빈값/비숫자는 null(system-missing), 실제 0 은 0 으로 보존.
+ */
+export function transformNumericText(value: unknown): number | null {
+  if (value == null) return null;
+  return parseNumericInput(String(value));
 }
 
 /**
