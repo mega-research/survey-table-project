@@ -53,6 +53,25 @@ export function TextResponses({ data }: TextResponsesProps) {
         </div>
       </div>
 
+      {/* 숫자 단답형 통계 (inputType === 'number') */}
+      {data.numericStats && (
+        <div className="mb-6 grid grid-cols-3 gap-3 sm:grid-cols-6">
+          {[
+            { label: '응답 수', value: data.numericStats.count },
+            { label: '합계', value: data.numericStats.sum },
+            { label: '평균', value: Math.round(data.numericStats.mean * 100) / 100 },
+            { label: '최소', value: data.numericStats.min },
+            { label: '최대', value: data.numericStats.max },
+            { label: '중앙값', value: data.numericStats.median },
+          ].map((s) => (
+            <div key={s.label} className="rounded-lg bg-blue-50 p-3">
+              <span className="text-xs text-gray-500">{s.label}</span>
+              <p className="mt-1 text-lg font-semibold text-gray-900">{s.value}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* 자주 사용된 단어 */}
       {data.wordFrequency && data.wordFrequency.length > 0 && (
         <div className="mb-6">
