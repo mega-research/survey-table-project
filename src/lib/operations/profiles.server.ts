@@ -1,22 +1,26 @@
 import 'server-only';
 
-import { and, asc, eq, ilike, or, sql, type AnyColumn, type SQL } from 'drizzle-orm';
+import { and, asc, eq, sql, type AnyColumn, type SQL } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { surveyResponses } from '@/db/schema';
+import { surveyResponses, contactTargets } from '@/db/schema';
 import { deletedResponse, notDeletedResponse } from '@/data/response-filters';
 
+import { escapeLikePattern } from './filter-shared';
 import type { Platform } from './parse-ua';
 import {
   type NormalizedListArgs,
   type SortDir,
   type SortKey,
 } from './profiles';
+import { buildFilterSql } from './progress-filters.server';
+import type { ProfilesCondition } from './profiles-filters.server';
 import { buildNegativeCodeExists, getResultCodeStatuses } from './result-code-statuses.server';
 
-export type ListProfilesArgs = NormalizedListArgs & {
+export type ListProfilesArgs = Omit<NormalizedListArgs, 'q' | 'col'> & {
   surveyId: string;
   pageSize: number;
+  condition: ProfilesCondition | null;
 };
 
 export interface ProfilesRow {
@@ -30,6 +34,8 @@ export interface ProfilesRow {
   startedAt: Date;
   completedAt: Date | null;
   totalSeconds: number | null;
+  /** 매칭된 contact_targets.group_value (전시회명 국문 등). 익명/미매칭이면 null. */
+  groupValue: string | null;
 }
 
 export interface ListProfilesResult {
@@ -46,15 +52,54 @@ function orderExpr(col: AnyColumn | SQL, direction: SortDir): SQL {
     : sql`${col} DESC NULLS LAST`;
 }
 
+/** condition WHERE 절에 참조할 numbered subquery 컬럼들 (정확한 alias 타입 대신 SQL 조각으로 주입). */
+interface ProfilesConditionCols {
+  idx: SQL;
+  browser: SQL;
+  contactResid: SQL;
+  contactAttrs: SQL;
+  contactTargetId: SQL;
+}
+
+/**
+ * ProfilesCondition → outer WHERE SQL. null 이면 null (필터 없음).
+ *
+ * - idx: 정확 매치 (row_number = value)
+ * - browser: ilike 부분일치
+ * - resid / attrs / pii: buildFilterSql 위임 (numbered subquery alias 를 cols 로 주입)
+ */
+function profilesConditionToSql(
+  condition: ProfilesCondition | null,
+  cols: ProfilesConditionCols,
+): SQL | null {
+  if (!condition) return null;
+
+  if (condition.source === 'idx') {
+    return sql`${cols.idx} = ${condition.value}`;
+  }
+
+  if (condition.source === 'browser') {
+    const escaped = escapeLikePattern(condition.value);
+    return sql`${cols.browser} ILIKE '%' || ${escaped} || '%'`;
+  }
+
+  return buildFilterSql(condition, {
+    resid: cols.contactResid,
+    attrs: cols.contactAttrs,
+    contactId: cols.contactTargetId,
+  });
+}
+
 /**
  * 응답 내역 페이지의 메인 어댑터.
  *
  * 핵심 설계:
  * - **순번(idx)** 은 surveyId 단위의 절대 row_number (started_at desc 기준).
- *   status / q 필터와 독립 → 운영자에게 "최근 응답이 1번" 의미가 일관됨.
+ *   status / condition 필터와 독립 → 운영자에게 "최근 응답이 1번" 의미가 일관됨.
  *   이를 위해 base subquery 에서 row_number 를 먼저 매기고, 외부 select 에서 필터를 건다.
- * - **idx 검색** (qfield='idx'): subquery 위에서 정확 매치 (`= parseInt(q)`).
- *   숫자 변환 실패 시 결과 0건.
+ *   ct 는 base subquery 에 LEFT JOIN 하되 row_number 는 전체 기준 유지.
+ * - **condition 필터**: profilesConditionToSql 로 idx/browser/resid/attrs/pii 를
+ *   subquery 위에서 적용. idx 비숫자 입력은 파서가 value=0 으로 넘겨 0건.
  * - **page 클램프**: page > totalPages 면 totalPages 로 보정해 마지막 페이지 노출
  *   (검색 0건과 시각적 혼동 방지).
  * - **보안**: raw ip_address 컬럼 제거됨. 접속IP 정보는 수집하지 않음.
@@ -62,7 +107,7 @@ function orderExpr(col: AnyColumn | SQL, direction: SortDir): SQL {
 export async function listResponsesForProfiles(
   args: ListProfilesArgs,
 ): Promise<ListProfilesResult> {
-  const { surveyId, page, pageSize, q, qfield, status, sort, dir, view } = args;
+  const { surveyId, page, pageSize, status, sort, dir, view, condition } = args;
 
   // negative result codes — base subquery WHERE 의 NOT EXISTS 분기에 사용.
   // 빈 배열이면 unsubscribed_at 만 검사 (negative code 분기는 SQL 차원에서 생략).
@@ -86,8 +131,13 @@ export async function listResponsesForProfiles(
       startedAt: surveyResponses.startedAt,
       completedAt: surveyResponses.completedAt,
       totalSeconds: surveyResponses.totalSeconds,
+      groupValue: contactTargets.groupValue,
+      contactResid: contactTargets.resid,
+      contactAttrs: contactTargets.attrs,
+      contactTargetId: surveyResponses.contactTargetId,
     })
     .from(surveyResponses)
+    .leftJoin(contactTargets, eq(contactTargets.id, surveyResponses.contactTargetId))
     .where(
       and(
         eq(surveyResponses.surveyId, surveyId),
@@ -123,26 +173,14 @@ export async function listResponsesForProfiles(
     whereParts.push(eq(numbered.status, status));
   }
 
-  const trimmed = q.normalize('NFC').trim();
-  if (trimmed.length > 0) {
-    if (qfield === 'idx') {
-      const n = parseInt(trimmed, 10);
-      whereParts.push(Number.isFinite(n) && n > 0 ? sql`${numbered.idx} = ${n}` : sql`false`);
-    } else {
-      const escaped = trimmed
-        .replace(/\\/g, '\\\\')
-        .replace(/%/g, '\\%')
-        .replace(/_/g, '\\_');
-      const pattern = `%${escaped}%`;
-
-      if (qfield === 'browser') {
-        whereParts.push(ilike(numbered.browser, pattern));
-      } else if (qfield === 'all') {
-        const orClause = or(ilike(numbered.browser, pattern));
-        if (orClause) whereParts.push(orClause);
-      }
-    }
-  }
+  const conditionSql = profilesConditionToSql(condition, {
+    idx: sql`${numbered.idx}`,
+    browser: sql`${numbered.browser}`,
+    contactResid: sql`${numbered.contactResid}`,
+    contactAttrs: sql`${numbered.contactAttrs}`,
+    contactTargetId: sql`${numbered.contactTargetId}`,
+  });
+  if (conditionSql) whereParts.push(conditionSql);
 
   const whereClause = whereParts.length > 0 ? and(...whereParts) : undefined;
 
@@ -171,6 +209,7 @@ export async function listResponsesForProfiles(
       startedAt: numbered.startedAt,
       completedAt: numbered.completedAt,
       totalSeconds: numbered.totalSeconds,
+      groupValue: numbered.groupValue,
     })
     .from(numbered);
 
@@ -189,6 +228,7 @@ export async function listResponsesForProfiles(
     startedAt: r.startedAt,
     completedAt: r.completedAt,
     totalSeconds: r.totalSeconds,
+    groupValue: r.groupValue ?? null,
   }));
 
   return { rows, total, page: clampedPage };

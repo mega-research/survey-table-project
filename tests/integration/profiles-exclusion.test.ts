@@ -55,6 +55,11 @@ interface NumberedRow {
   startedAt: Date;
   completedAt: Date | null;
   totalSeconds: number | null;
+  /** ct LEFT JOIN 컬럼 — 테스트 시드는 group_value 를 다루지 않으므로 항상 null */
+  groupValue: string | null;
+  contactResid: number | null;
+  contactAttrs: Record<string, string> | null;
+  contactTargetId: string | null;
 }
 
 const state: FakeState = {
@@ -105,6 +110,10 @@ function evaluateBaseSubquery(
     startedAt: r.startedAt,
     completedAt: null,
     totalSeconds: null,
+    groupValue: null,
+    contactResid: null,
+    contactAttrs: null,
+    contactTargetId: r.contactTargetId,
   }));
 }
 
@@ -147,6 +156,10 @@ function buildSelectChain(selection: Record<string, unknown>) {
       }
       // 패턴 1 — surveyResponses 테이블 대상 base subquery
       isBaseSubquery = true;
+      return chain;
+    },
+    // ct LEFT JOIN — exclusion/idx 동작에 영향 없는 pass-through
+    leftJoin(_table: unknown, _on: unknown) {
       return chain;
     },
     where(whereExpr: unknown) {
@@ -289,8 +302,7 @@ describe('listResponsesForProfiles — negative exclusion', () => {
       surveyId: SURVEY_ID,
       page: 1,
       pageSize: 100,
-      q: '',
-      qfield: 'all',
+      condition: null,
       status: 'all',
       sort: 'startedAt',
       dir: 'desc',
@@ -306,8 +318,7 @@ describe('listResponsesForProfiles — negative exclusion', () => {
       surveyId: SURVEY_ID,
       page: 1,
       pageSize: 100,
-      q: '',
-      qfield: 'all',
+      condition: null,
       status: 'all',
       sort: 'startedAt',
       dir: 'desc',
@@ -323,8 +334,7 @@ describe('listResponsesForProfiles — negative exclusion', () => {
       surveyId: SURVEY_ID,
       page: 1,
       pageSize: 100,
-      q: '',
-      qfield: 'all',
+      condition: null,
       status: 'all',
       sort: 'startedAt',
       dir: 'desc',
@@ -341,8 +351,7 @@ describe('listResponsesForProfiles — negative exclusion', () => {
       surveyId: SURVEY_ID,
       page: 1,
       pageSize: 100,
-      q: '',
-      qfield: 'all',
+      condition: null,
       status: 'all',
       sort: 'startedAt',
       dir: 'desc',
