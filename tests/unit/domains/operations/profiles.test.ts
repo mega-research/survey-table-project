@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatTotalTime, parseQuestionNumberFromTitle, mapStatusPill } from '@/lib/operations/profiles'
+import { formatTotalTime, parseQuestionNumberFromTitle, mapStatusPill, normalizeListArgs, hasActiveFilters } from '@/lib/operations/profiles'
 
 describe('formatTotalTime', () => {
   it('completed + 300초 → "5분"', () => {
@@ -102,5 +102,44 @@ describe('mapStatusPill', () => {
     expect(
       mapStatusPill({ status: 'in_progress', currentStepOrder: 5, totalSteps: 50, qNumber: null }),
     ).toEqual({ label: '진행중', tone: 'blue', sub: '5/50 · ?' })
+  })
+})
+
+describe('normalizeListArgs', () => {
+  it('기본값 — col 빈 문자열, status all, sort idx, dir desc', () => {
+    const r = normalizeListArgs({})
+    expect(r.col).toBe('')
+    expect(r.q).toBe('')
+    expect(r.status).toBe('all')
+    expect(r.sort).toBe('idx')
+    expect(r.dir).toBe('desc')
+    expect(r.view).toBe('active')
+  })
+
+  it('col 원시 문자열 보존 (화이트리스트 검증 안 함)', () => {
+    expect(normalizeListArgs({ col: 'attrs.전시회명' }).col).toBe('attrs.전시회명')
+    expect(normalizeListArgs({ col: 'idx' }).col).toBe('idx')
+  })
+
+  it('status=deleted → view deleted', () => {
+    expect(normalizeListArgs({ status: 'deleted' }).view).toBe('deleted')
+  })
+})
+
+describe('hasActiveFilters', () => {
+  it('전부 기본값 → false', () => {
+    expect(hasActiveFilters({})).toBe(false)
+  })
+
+  it('col+q 둘 다 있으면 → true', () => {
+    expect(hasActiveFilters({ col: 'browser', q: 'Chrome' })).toBe(true)
+  })
+
+  it('col 만 있고 q 없으면 → false (검색 미발생)', () => {
+    expect(hasActiveFilters({ col: 'browser', q: '' })).toBe(false)
+  })
+
+  it('status != all → true', () => {
+    expect(hasActiveFilters({ status: 'completed' })).toBe(true)
   })
 })

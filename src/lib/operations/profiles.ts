@@ -24,9 +24,6 @@ export type SortKey = (typeof SORT_KEYS)[number];
 
 export type SortDir = 'asc' | 'desc';
 
-export const QFIELDS = ['all', 'idx', 'browser'] as const;
-export type QField = (typeof QFIELDS)[number];
-
 export type ProfilesView = 'active' | 'deleted';
 
 export const STATUS_FILTERS = [
@@ -55,7 +52,8 @@ export function pickFromWhitelist<T extends string>(
 export interface NormalizedListArgs {
   page: number;
   q: string;
-  qfield: QField;
+  /** 선택된 검색 컬럼 source (원시). 빈 문자열이면 미선택. 화이트리스트 검증은 server. */
+  col: string;
   status: StatusFilter;
   sort: SortKey;
   dir: SortDir;
@@ -67,7 +65,7 @@ export interface NormalizedListArgs {
 export function normalizeListArgs(input: {
   page?: string;
   q?: string;
-  qfield?: string;
+  col?: string;
   status?: string;
   sort?: string;
   dir?: string;
@@ -77,7 +75,7 @@ export function normalizeListArgs(input: {
   return {
     page: Math.max(1, parseInt(input.page ?? '1', 10) || 1),
     q: (input.q ?? '').slice(0, 200),
-    qfield: pickFromWhitelist(input.qfield, QFIELDS, 'all'),
+    col: (input.col ?? '').slice(0, 100),
     status,
     sort: pickFromWhitelist(input.sort, SORT_KEYS, 'idx'),
     dir: input.dir === 'asc' ? 'asc' : 'desc',
@@ -87,17 +85,15 @@ export function normalizeListArgs(input: {
 
 /** 현재 URL 의 검색 파라미터에 활성 필터가 걸려 있는지 판단.
  *  status='deleted' 도 활성 필터로 간주 (기본 뷰가 active 이므로).
+ *  검색은 col + q 둘 다 있어야 발생한 것으로 간주.
  */
 export function hasActiveFilters(input: {
   q?: string;
-  qfield?: string;
+  col?: string;
   status?: string;
 }): boolean {
-  return (
-    (input.q ?? '') !== '' ||
-    (input.qfield ?? 'all') !== 'all' ||
-    (input.status ?? 'all') !== 'all'
-  );
+  const hasSearch = (input.col ?? '') !== '' && (input.q ?? '') !== '';
+  return hasSearch || (input.status ?? 'all') !== 'all';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
