@@ -10,6 +10,7 @@ import {
   RANKING_SELECT_BASE_CLS,
 } from '@/utils/ranking-shared';
 import { resolveRankingOptions } from '@/utils/ranking-source';
+import { isChoiceTableSource } from '@/utils/choice-source';
 
 import { NoticeRenderer } from './notice-renderer';
 import { TablePreview } from './table-preview';
@@ -38,6 +39,18 @@ export function QuestionPreview({ question }: { question: Question }) {
 
     case 'radio':
     case 'checkbox': {
+      if (isChoiceTableSource(question)) {
+        return (
+          <TablePreview
+            tableTitle={question.tableTitle}
+            columns={question.tableColumns}
+            rows={question.tableRowsData}
+            tableHeaderGrid={question.tableHeaderGrid}
+            className="border-0 shadow-none"
+            hideColumnLabels={question.hideColumnLabels}
+          />
+        );
+      }
       const layout = getOptionsLayout(question.optionsColumns);
       return (
         <div className={layout.className} style={layout.style}>

@@ -13,6 +13,8 @@ import { getOptionsLayout } from '@/utils/options-layout';
 import { evaluateNumericComparisonV2 } from '@/utils/branch-logic';
 
 import { RankingQuestion } from '@/components/survey-response/ranking-question';
+import { ChoiceTableResponse } from '@/components/survey-response/choice-table-response';
+import { isChoiceTableSource } from '@/utils/choice-source';
 
 import { ConditionDebugPanel } from './condition-debug-panel';
 import { InteractiveTableResponse } from './interactive-table-response';
@@ -461,6 +463,15 @@ function QuestionTestInput({
       );
 
     case 'radio':
+      if (isChoiceTableSource(question)) {
+        return (
+          <ChoiceTableResponse
+            question={question}
+            value={value}
+            onChange={onChange as (v: string | string[] | null) => void}
+          />
+        );
+      }
       return (
         <RadioTestInput
           question={question}
@@ -470,6 +481,15 @@ function QuestionTestInput({
       );
 
     case 'checkbox':
+      if (isChoiceTableSource(question)) {
+        return (
+          <ChoiceTableResponse
+            question={question}
+            value={value}
+            onChange={onChange as (v: string | string[] | null) => void}
+          />
+        );
+      }
       return (
         <CheckboxTestInput
           question={question}
