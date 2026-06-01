@@ -60,6 +60,7 @@ interface Props {
 interface DisplayRow {
   id: string;
   idx: number;
+  groupValue: string | null;
   platformKo: string;
   browser: string;
   pill: StatusPillResult;
@@ -107,6 +108,7 @@ export function ProfilesTable({ rows, total, page, pageSize, sort, dir, question
         return {
           id: r.id,
           idx: r.idx,
+          groupValue: r.groupValue,
           platformKo: formatPlatformKo(r.platform),
           browser: r.browser ?? 'Other',
           pill,
@@ -124,7 +126,7 @@ export function ProfilesTable({ rows, total, page, pageSize, sort, dir, question
       { id: 'idx', accessorKey: 'idx', header: '순번', meta: meta('right', true) },
       {
         id: 'group',
-        accessorFn: () => '공개링크',
+        accessorFn: (r: DisplayRow) => r.groupValue ?? '공개링크',
         header: '조사 대상 그룹',
         meta: meta('left', false),
       },
