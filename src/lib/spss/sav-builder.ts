@@ -14,6 +14,7 @@ import {
 import type { Question, QuestionOption, SurveySubmission } from '@/types/survey';
 
 import { buildDataRows, generateSPSSColumns, SPSSExportColumn } from '@/lib/analytics/spss-excel-export';
+import { resolveChoiceOptions } from '@/utils/choice-source';
 import { toSpssValueLabelPairs } from '@/utils/ranking-source';
 import { sanitizeSpssVarName } from '@/utils/spss-var-name';
 
@@ -179,14 +180,15 @@ function buildValueLabels(
 ): Array<{ label: string; value: string | number }> | undefined {
   switch (col.type) {
     case 'single':
-      return optionsToValueLabels(question?.options);
+      return optionsToValueLabels(question ? resolveChoiceOptions(question) : undefined);
 
     case 'ranking-rank':
       // col.cellOptions 에 Case 1 (question.options) 또는 Case 2 (소스 테이블 ranking_opt) 주입됨
       return optionsToValueLabels(col.cellOptions ?? question?.options);
 
     case 'checkbox-item': {
-      const code = question?.options?.[col.optionIndex ?? 0]?.spssNumericCode
+      const opts = question ? resolveChoiceOptions(question) : [];
+      const code = opts[col.optionIndex ?? 0]?.spssNumericCode
         ?? (col.optionIndex ?? 0) + 1;
       return [{ value: code, label: '선택' }];
     }

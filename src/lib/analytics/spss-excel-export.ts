@@ -17,6 +17,7 @@ import {
   transformText,
 } from '@/lib/spss/data-transformer';
 import { getOptionText } from '@/lib/option-text-read';
+import { resolveChoiceOptions } from '@/utils/choice-source';
 import { getOtherOptionCode } from '@/utils/option-code-generator';
 import { hasOtherRankingCell, resolveRankingOptions } from '@/utils/ranking-source';
 import { buildTableCellVarName, resolveRankVarName } from '@/utils/table-cell-code-generator';
@@ -100,9 +101,10 @@ export function generateSPSSColumns(questions: Question[]): SPSSExportColumn[] {
     }
     if (!q.questionCode) continue;
 
-    if (q.type === 'checkbox' && q.options) {
-      for (let i = 0; i < q.options.length; i++) {
-        const opt = q.options[i];
+    if (q.type === 'checkbox') {
+      const opts = resolveChoiceOptions(q);
+      for (let i = 0; i < opts.length; i++) {
+        const opt = opts[i];
         columns.push({
           spssVarName: `${q.questionCode}_${opt.optionCode ?? String(i + 1)}`,
           questionText: q.title,
@@ -127,7 +129,7 @@ export function generateSPSSColumns(questions: Question[]): SPSSExportColumn[] {
       }
       // 기타 옵션이 있으면 기타 텍스트 컬럼 추가
       if (q.allowOtherOption) {
-        const otherCode = getOtherOptionCode(q.options);
+        const otherCode = getOtherOptionCode(opts);
         columns.push({
           spssVarName: `${q.questionCode}_${otherCode}_etc`,
           questionText: q.title,
@@ -137,8 +139,9 @@ export function generateSPSSColumns(questions: Question[]): SPSSExportColumn[] {
         });
       }
     } else if (q.type === 'radio' || q.type === 'select') {
-      const optionLabel = q.options
-        ? q.options.map((o) => o.label).join(' / ')
+      const opts = resolveChoiceOptions(q);
+      const optionLabel = opts.length > 0
+        ? opts.map((o) => o.label).join(' / ')
         : '';
       columns.push({
         spssVarName: q.questionCode,
@@ -148,25 +151,23 @@ export function generateSPSSColumns(questions: Question[]): SPSSExportColumn[] {
         type: 'single',
       });
       // allowTextInput 옵션마다 STRING 사이드카 텍스트 변수 생성
-      if (q.options) {
-        for (let i = 0; i < q.options.length; i++) {
-          const opt = q.options[i];
-          if (opt.allowTextInput) {
-            const varNumber = opt.optionCode ?? String(i + 1);
-            columns.push({
-              spssVarName: buildOptionTextVarName(q.questionCode, varNumber),
-              questionText: q.title,
-              optionLabel: `${opt.label} (텍스트)`,
-              questionId: q.id,
-              type: 'option-text',
-              optionId: opt.id,
-            });
-          }
+      for (let i = 0; i < opts.length; i++) {
+        const opt = opts[i];
+        if (opt.allowTextInput) {
+          const varNumber = opt.optionCode ?? String(i + 1);
+          columns.push({
+            spssVarName: buildOptionTextVarName(q.questionCode, varNumber),
+            questionText: q.title,
+            optionLabel: `${opt.label} (텍스트)`,
+            questionId: q.id,
+            type: 'option-text',
+            optionId: opt.id,
+          });
         }
       }
       // 기타 옵션이 있으면 기타 텍스트 컬럼 추가
       if (q.allowOtherOption) {
-        const otherCode = getOtherOptionCode(q.options);
+        const otherCode = getOtherOptionCode(opts);
         columns.push({
           spssVarName: `${q.questionCode}_${otherCode}_etc`,
           questionText: q.title,
@@ -550,8 +551,10 @@ export function buildDataRows(
 
         case 'checkbox-item': {
           const values = rawValue as Array<string | { selectedValue: string; otherValue?: string; hasOther: true }> | null;
-          if (!question.options || col.optionIndex == null) return null;
-          const opt = question.options[col.optionIndex];
+          const resolved = resolveChoiceOptions(question);
+          if (col.optionIndex == null) return null;
+          const opt = resolved[col.optionIndex];
+          if (!opt) return null;
           const isSelected =
             values != null &&
             values.some((v) => {
