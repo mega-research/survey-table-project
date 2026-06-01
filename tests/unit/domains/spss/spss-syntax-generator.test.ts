@@ -190,6 +190,26 @@ describe('generateMrsets', () => {
     const result = generateMrsets(questions);
     expect(result).toBe('');
   });
+
+  it('테이블 소스(choice_opt) checkbox 도 MCGROUP 에 셀 기반 변수로 등록한다', () => {
+    const questions = [
+      makeQuestion({
+        type: 'checkbox',
+        order: 2,
+        questionCode: 'Q2',
+        title: '보유 기술',
+        options: [], // 테이블 소스는 options 가 비어 있음
+        tableColumns: [{ id: 'c1', label: '선택' }],
+        tableRowsData: [
+          { id: 'r1', label: '', cells: [{ id: 'cellA', type: 'choice_opt', content: '', choiceLabel: 'A' }] },
+          { id: 'r2', label: '', cells: [{ id: 'cellB', type: 'choice_opt', content: '', choiceLabel: 'B' }] },
+        ],
+      }),
+    ];
+    const result = generateMrsets(questions);
+    expect(result).toContain("$Q2 LABEL='보유 기술'");
+    expect(result).toContain('VARIABLES=Q2_1 Q2_2');
+  });
 });
 
 describe('generateFullSyntax', () => {

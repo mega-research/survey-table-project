@@ -7,6 +7,7 @@ import {
 } from '@/utils/ranking-source';
 import { buildTableCellVarName, resolveRankVarName } from '@/utils/table-cell-code-generator';
 import { buildOptionTextVarName } from '@/utils/spss-var-name';
+import { resolveChoiceOptions } from '@/utils/choice-source';
 
 /**
  * allowTextInput 옵션마다 STRING 변수 메타데이터를 생성한다.
@@ -380,9 +381,13 @@ export function generateMrsets(questions: Question[]): string {
   const sets: string[] = [];
 
   for (const q of questions) {
-    if (q.type !== 'checkbox' || !q.questionCode || !q.options) continue;
+    if (q.type !== 'checkbox' || !q.questionCode) continue;
 
-    const vars = q.options.map((opt, i) => `${q.questionCode}_${opt.optionCode ?? String(i + 1)}`).join(' ');
+    // 테이블 소스(choice_opt 셀) checkbox 는 q.options 가 비어 있으므로 resolveChoiceOptions 로 통합 조회.
+    const options = resolveChoiceOptions(q);
+    if (options.length === 0) continue;
+
+    const vars = options.map((opt, i) => `${q.questionCode}_${opt.optionCode ?? String(i + 1)}`).join(' ');
     sets.push(`  /MCGROUP NAME=$${q.questionCode} LABEL='${esc(q.title)}' VARIABLES=${vars}`);
   }
 
