@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useHorizontalScrollIndicators } from '@/hooks/use-horizontal-scroll-indicators';
 import { useScrollLeftSync } from '@/hooks/use-scroll-left-sync';
 import { cn } from '@/lib/utils';
-import { HeaderCell, TableColumn, TableRow } from '@/types/survey';
+import { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
 import {
   buildGridTemplateCols,
   calcTotalWidth,
@@ -36,6 +36,8 @@ interface TablePreviewProps {
   tableHeaderGrid?: HeaderCell[][];
   className?: string;
   hideColumnLabels?: boolean;
+  /** 셀 콘텐츠 렌더 오버라이드. undefined/null 반환 시 기본 PreviewCell 로 폴백. */
+  renderCell?: (cell: TableCell) => React.ReactNode;
 }
 
 export const TablePreview = React.memo(function TablePreview({
@@ -45,6 +47,7 @@ export const TablePreview = React.memo(function TablePreview({
   tableHeaderGrid,
   className,
   hideColumnLabels = false,
+  renderCell,
 }: TablePreviewProps) {
   const totalWidth = useMemo(() => calcTotalWidth(columns), [columns]);
   const gridTemplateCols = useMemo(() => buildGridTemplateCols(columns), [columns]);
@@ -265,7 +268,10 @@ export const TablePreview = React.memo(function TablePreview({
                         data-row-id={row.id}
                         {...getGridCellAria('gridcell', cs, rs)}
                       >
-                        <PreviewCell cell={cell} />
+                        {(() => {
+                          const override = renderCell?.(cell);
+                          return override !== undefined && override !== null ? override : <PreviewCell cell={cell} />;
+                        })()}
                       </div>
                     );
                   }),
