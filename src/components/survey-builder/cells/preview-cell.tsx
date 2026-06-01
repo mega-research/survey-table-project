@@ -190,6 +190,19 @@ export const PreviewCell = React.memo(function PreviewCell({ cell }: { cell: Tab
         </div>
       );
 
+    case 'choice_opt':
+      // 보기 옵션 셀 — 프리뷰에서는 체크박스 표시 (실제 응답은 ChoiceTableResponse 가 렌더)
+      return (
+        <div className="flex items-center justify-center">
+          <input
+            type="checkbox"
+            disabled
+            className="h-4 w-4"
+            aria-label={cell.choiceLabel || '보기 선택'}
+          />
+        </div>
+      );
+
     default:
       return cell.content ? (
         <div className="text-sm leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]">

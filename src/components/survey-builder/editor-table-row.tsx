@@ -80,6 +80,9 @@ const EditorCellContent = React.memo(function EditorCellContent({ cell }: { cell
         ? (<div className="flex items-center gap-2"><span className="truncate text-sm text-gray-600">선택 ({cell.selectOptions.length}개)</span></div>)
         : (<span className="text-sm text-gray-400">선택 옵션 없음</span>);
       break;
+    case 'choice_opt':
+      typeContent = (<div className="flex items-center justify-center gap-2"><CheckSquare className="h-4 w-4 text-emerald-500" /><span className="truncate text-sm text-gray-600">보기 옵션{cell.choiceLabel ? `: ${cell.choiceLabel}` : ''}</span></div>);
+      break;
     case 'text':
     default:
       typeContent = null;
