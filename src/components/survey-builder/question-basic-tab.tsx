@@ -22,6 +22,7 @@ import {
   Image,
   Plus,
   Settings,
+  Table,
   Video,
   X,
 } from 'lucide-react';
@@ -30,6 +31,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { generateId } from '@/lib/utils';
 import { generateOptionCode } from '@/utils/option-code-generator';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { Question, QuestionOption, SelectLevel } from '@/types/survey';
@@ -126,10 +128,16 @@ export function QuestionBasicTab({
   // ranking + optionsSource='table' (자체 테이블 내장) 이면 수동 옵션 UI 숨김
   const isRankingTableSource =
     question.type === 'ranking' && formData.rankingConfig?.optionsSource === 'table';
+  // radio/checkbox: tableColumns 가 있으면 설명 테이블 모드 (choice_opt 옵션 소스)
+  const isChoiceTableMode =
+    (question.type === 'radio' || question.type === 'checkbox')
+    && (formData.tableColumns?.length ?? 0) > 0;
   const needsOptions =
-    ['radio', 'checkbox', 'select', 'ranking'].includes(question.type) && !isRankingTableSource;
-  // 자체 내장 테이블 편집기 노출 조건: table 타입 자체 OR ranking + optionsSource='table'
-  const showTableEditor = question.type === 'table' || isRankingTableSource;
+    ['radio', 'checkbox', 'select', 'ranking'].includes(question.type)
+    && !isRankingTableSource
+    && !isChoiceTableMode;
+  // 자체 내장 테이블 편집기 노출 조건: table 타입 자체 OR ranking 테이블 소스 OR radio/checkbox 설명 테이블 모드
+  const showTableEditor = question.type === 'table' || isRankingTableSource || isChoiceTableMode;
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -488,6 +496,62 @@ export function QuestionBasicTab({
       {/* 순위형(ranking) 설정 — 선택 옵션 블록 위로 배치해 항상 먼저 보이도록 */}
       {question.type === 'ranking' && (
         <RankingConfigEditorForQuestion formData={formData} setFormData={setFormData} />
+      )}
+
+      {/* 설명 테이블로 보기 구성 (radio/checkbox) — 옵션 블록 위로 배치 */}
+      {(question.type === 'radio' || question.type === 'checkbox') && (
+        <div className="space-y-2 rounded-md border border-gray-200 bg-white p-3">
+          <div className="flex items-center justify-between gap-4">
+            <Label className="flex items-center gap-2 text-sm font-medium">
+              <Table className="h-4 w-4" />
+              설명 테이블로 보기 구성
+            </Label>
+            <Switch
+              checked={isChoiceTableMode}
+              onCheckedChange={(on) => {
+                if (on) {
+                  setFormData((prev) => ({
+                    ...prev,
+                    options: [],
+                    tableColumns: prev.tableColumns?.length
+                      ? prev.tableColumns
+                      : [
+                          { id: generateId(), label: '항목' },
+                          { id: generateId(), label: '선택' },
+                        ],
+                    tableRowsData: prev.tableRowsData?.length
+                      ? prev.tableRowsData
+                      : [
+                          {
+                            id: generateId(),
+                            label: '',
+                            cells: [
+                              { id: generateId(), type: 'text', content: '' },
+                              {
+                                id: generateId(),
+                                type: 'choice_opt',
+                                content: '',
+                                choiceLabel: '',
+                              },
+                            ],
+                          },
+                        ],
+                  }));
+                } else {
+                  setFormData((prev) => ({
+                    ...prev,
+                    tableColumns: [],
+                    tableRowsData: [],
+                  }));
+                }
+              }}
+            />
+          </div>
+          <p className="text-xs text-gray-500">
+            켜면 행마다 설명을 넣고 &quot;선택&quot; 열 셀을 보기로 지정합니다. 셀을 클릭 →
+            &quot;보기 옵션&quot; 탭에서 라벨/코드를 설정하세요.
+          </p>
+        </div>
       )}
 
       {/* 옵션 설정 (radio, checkbox, select) */}

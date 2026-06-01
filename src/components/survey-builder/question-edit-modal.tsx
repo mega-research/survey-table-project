@@ -29,6 +29,7 @@ import { deleteImagesFromR2 } from '@/lib/image-utils';
 import { isValidUUID } from '@/lib/utils';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { Question } from '@/types/survey';
+import { collectChoiceOptCells } from '@/utils/choice-source';
 import { collectRankingOptCells } from '@/utils/ranking-source';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -198,8 +199,14 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
     // Case 2 (ranking + optionsSource='table') 는 manual options 검증 스킵
     const isRankingTableSource =
       question.type === 'ranking' && currentFormData.rankingConfig?.optionsSource === 'table';
+    // Case A (radio/checkbox 설명 테이블 모드) 도 manual options 검증 스킵
+    const isChoiceTableSource =
+      (question.type === 'radio' || question.type === 'checkbox')
+      && collectChoiceOptCells(currentFormData.tableRowsData).length > 0;
     const needsOptions =
-      ['radio', 'checkbox', 'select', 'ranking'].includes(question.type) && !isRankingTableSource;
+      ['radio', 'checkbox', 'select', 'ranking'].includes(question.type)
+      && !isRankingTableSource
+      && !isChoiceTableSource;
     const needsSelectLevels = question.type === 'multiselect';
     const errors: Record<string, string> = {};
 
@@ -222,6 +229,16 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
         errors.rankingOptions =
           '질문 내장 테이블에 "순위 옵션" 셀이 최소 1개는 있어야 합니다. 테이블 편집기에서 옵션으로 쓸 셀을 클릭 → 셀 편집 모달의 "순위 옵션" 탭으로 저장하세요.';
       }
+    }
+
+    // 설명 테이블 모드(radio/checkbox)인데 choice_opt 셀이 하나도 없으면 옵션 소스가 비어있음
+    const choiceTableModeButEmpty =
+      (question.type === 'radio' || question.type === 'checkbox')
+      && (currentFormData.tableColumns?.length ?? 0) > 0
+      && collectChoiceOptCells(currentFormData.tableRowsData).length === 0;
+    if (choiceTableModeButEmpty) {
+      errors.options =
+        '설명 테이블에 "보기 옵션" 셀이 최소 1개는 있어야 합니다. 선택 열 셀을 클릭 → "보기 옵션" 탭으로 저장하세요.';
     }
 
     setValidationErrors(errors);
