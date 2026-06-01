@@ -36,6 +36,16 @@ export interface MultipleChoiceAnalytics {
   distribution: OptionDistribution[];
 }
 
+// 숫자 단답형 통계 (빈값 제외, 실제 0 포함)
+export interface NumericStats {
+  count: number; // 유효 숫자 응답 수
+  sum: number;
+  mean: number;
+  min: number;
+  max: number;
+  median: number;
+}
+
 // 텍스트 (text, textarea)
 export interface TextAnalytics {
   type: 'text';
@@ -54,6 +64,8 @@ export interface TextAnalytics {
     word: string;
     count: number;
   }[];
+  // inputType==='number' 인 단답형에만 존재
+  numericStats?: NumericStats;
 }
 
 // 테이블
