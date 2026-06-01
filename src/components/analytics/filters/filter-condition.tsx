@@ -20,6 +20,7 @@ import {
   isFilterableQuestion,
 } from '@/lib/analytics/filter';
 import type { Question } from '@/types/survey';
+import { resolveChoiceOptions } from '@/utils/choice-source';
 
 interface FilterConditionRowProps {
   condition: FilterCondition;
@@ -48,7 +49,7 @@ export function FilterConditionRow({
     if (!selectedQuestion) return [];
 
     if (['radio', 'select', 'checkbox'].includes(selectedQuestion.type)) {
-      return selectedQuestion.options || [];
+      return resolveChoiceOptions(selectedQuestion);
     }
 
     if (selectedQuestion.type === 'multiselect' && selectedQuestion.selectLevels) {

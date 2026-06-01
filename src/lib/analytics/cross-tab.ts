@@ -1,5 +1,6 @@
 import type { SurveyResponse } from '@/db/schema';
 import type { Question } from '@/types/survey';
+import { resolveChoiceOptions } from '@/utils/choice-source';
 
 // ========================
 // 교차분석 타입
@@ -55,14 +56,14 @@ export type PercentageBase = 'row' | 'column' | 'total';
  */
 function getQuestionOptions(question: Question): { label: string; value: string }[] {
   if (question.type === 'radio' || question.type === 'select') {
-    return (question.options || []).map((opt) => ({
+    return resolveChoiceOptions(question).map((opt) => ({
       label: opt.label,
       value: opt.value,
     }));
   }
 
   if (question.type === 'checkbox') {
-    return (question.options || []).map((opt) => ({
+    return resolveChoiceOptions(question).map((opt) => ({
       label: opt.label,
       value: opt.value,
     }));

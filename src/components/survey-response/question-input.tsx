@@ -65,6 +65,17 @@ export function QuestionInput({
 }: QuestionInputProps) {
   const attrs = useContactAttrs();
 
+  // choice_opt 테이블 소스 라디오/체크박스는 hooks 진입 전에 디스패처에서 분기
+  if ((question.type === 'radio' || question.type === 'checkbox') && isChoiceTableSource(question)) {
+    return (
+      <ChoiceTableResponse
+        question={question}
+        value={value}
+        onChange={onChange as (v: string | string[] | null) => void}
+      />
+    );
+  }
+
   switch (question.type) {
     case 'notice': {
       const noticeVal = value && typeof value === 'object' && 'agreed' in (value as Record<string, unknown>)
@@ -185,16 +196,6 @@ function RadioQuestion({
   value: SingleChoiceResponse;
   onChange: (value: SingleChoiceResponse) => void;
 }) {
-  if (isChoiceTableSource(question)) {
-    return (
-      <ChoiceTableResponse
-        question={question}
-        value={value as string | null}
-        onChange={(v) => onChange((v as string | null) ?? null)}
-      />
-    );
-  }
-
   const isSelected = (optionValue: string) => {
     if (isOtherChoiceValue(value)) {
       return value.selectedValue === optionValue;
@@ -268,16 +269,6 @@ function CheckboxQuestion({
   value: unknown;
   onChange: (value: MultiChoiceResponse) => void;
 }) {
-  if (isChoiceTableSource(question)) {
-    return (
-      <ChoiceTableResponse
-        question={question}
-        value={value}
-        onChange={(v) => onChange((Array.isArray(v) ? v : []) as MultiChoiceResponse)}
-      />
-    );
-  }
-
   const currentValues = useMemo<MultiChoiceResponse>(
     () => (Array.isArray(value) ? (value as MultiChoiceResponse) : []),
     [value],
