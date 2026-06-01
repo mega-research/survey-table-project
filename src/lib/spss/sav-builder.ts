@@ -71,9 +71,8 @@ function resolveVarType(col: SPSSExportColumn, question: Question | undefined): 
       return VariableType.Numeric;
 
     case 'text':
-      return col.numericText || question?.inputType === 'number'
-        ? VariableType.Numeric
-        : VariableType.String;
+      // numericText 는 generateSPSSColumns 에서 question.inputType 기반으로 세팅된 SSOT
+      return col.numericText ? VariableType.Numeric : VariableType.String;
 
     case 'other-text':
     case 'ranking-other':
@@ -120,8 +119,8 @@ function resolveMeasure(col: SPSSExportColumn, question: Question | undefined): 
     return VariableMeasure.Ordinal;
   }
 
-  // 숫자 단답형(inputType==='number') 은 척도(Continuous)
-  if (col.type === 'text' && (col.numericText || question?.inputType === 'number')) {
+  // 숫자 단답형(numericText) 은 척도(Continuous)
+  if (col.type === 'text' && col.numericText) {
     return VariableMeasure.Continuous;
   }
 

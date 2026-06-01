@@ -11,25 +11,29 @@ export function computeNumericStats(
   rawValues: Array<string | null | undefined>,
 ): NumericStats | null {
   const nums: number[] = [];
+  let sum = 0;
   for (const raw of rawValues) {
     if (raw == null) continue;
     const n = parseNumericInput(String(raw));
-    if (n !== null) nums.push(n);
+    if (n !== null) {
+      nums.push(n);
+      sum += n;
+    }
   }
   if (nums.length === 0) return null;
 
-  const sorted = [...nums].sort((a, b) => a - b);
-  const count = sorted.length;
-  const sum = sorted.reduce((s, n) => s + n, 0);
+  // 중앙값을 위해 정렬은 필요. 로컬 배열이므로 in-place 정렬(복사 불필요).
+  nums.sort((a, b) => a - b);
+  const count = nums.length;
   const mid = Math.floor(count / 2);
-  const median = count % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+  const median = count % 2 === 0 ? (nums[mid - 1] + nums[mid]) / 2 : nums[mid];
 
   return {
     count,
     sum,
     mean: sum / count,
-    min: sorted[0],
-    max: sorted[count - 1],
+    min: nums[0],
+    max: nums[count - 1],
     median,
   };
 }

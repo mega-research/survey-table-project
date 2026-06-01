@@ -132,6 +132,9 @@ export function QuestionBasicTab({
   // 자체 내장 테이블 편집기 노출 조건: table 타입 자체 OR ranking + optionsSource='table'
   const showTableEditor = question.type === 'table' || isRankingTableSource;
 
+  // 토큰 prefill(defaultValueTemplate)이 설정되면 숫자 초기값(emptyDefault)은 비활성 — prefill 우선
+  const hasTokenPrefill = (formData.defaultValueTemplate ?? '').trim().length > 0;
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
   );
@@ -517,7 +520,7 @@ export function QuestionBasicTab({
                       type="checkbox"
                       id="text-empty-default-enabled"
                       checked={formData.emptyDefault !== undefined}
-                      disabled={(formData.defaultValueTemplate ?? '').trim().length > 0}
+                      disabled={hasTokenPrefill}
                       onChange={(e) =>
                         setFormData((prev) => ({
                           ...prev,
@@ -545,14 +548,11 @@ export function QuestionBasicTab({
                           }));
                         }
                       }}
-                      disabled={
-                        formData.emptyDefault === undefined ||
-                        (formData.defaultValueTemplate ?? '').trim().length > 0
-                      }
+                      disabled={formData.emptyDefault === undefined || hasTokenPrefill}
                       className="h-8 w-24"
                       aria-label="초기값"
                     />
-                    {(formData.defaultValueTemplate ?? '').trim().length > 0 && (
+                    {hasTokenPrefill && (
                       <span className="text-xs text-gray-400">토큰 prefill 사용 중 (우선)</span>
                     )}
                   </div>
