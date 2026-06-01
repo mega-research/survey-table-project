@@ -140,7 +140,9 @@ export async function listResponsesForProfiles(
       groupValue: contactTargets.groupValue,
       contactResid: contactTargets.resid,
       contactAttrs: contactTargets.attrs,
-      contactTargetId: contactTargets.id,
+      // contact_targets.id 를 명시적 alias 로 — survey_responses.id 와 SQL 컬럼명("id")
+      // 충돌 방지(subquery 내 중복 컬럼 → outer "id" ambiguous).
+      contactTargetId: sql<string | null>`${contactTargets.id}`.as('contact_target_id'),
     })
     .from(surveyResponses)
     .leftJoin(
