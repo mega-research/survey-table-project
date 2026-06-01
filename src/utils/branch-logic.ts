@@ -19,6 +19,7 @@ import {
 import { evaluateComparisonWithFailSafe, type ComparisonResult } from '@/lib/lookup/evaluate-comparison';
 import { evaluateRightOperand } from '@/lib/lookup/evaluate-lookup';
 import type { LookupEvalCtx } from '@/lib/lookup/types';
+import { resolveChoiceOptions } from '@/utils/choice-source';
 
 // numeric-input 의 parseNumericInput 는 evaluateComparisonWithFailSafe 내부 (evaluate-arith) 에서 사용.
 
@@ -132,7 +133,9 @@ function getBranchRuleForRanking(question: Question, response: unknown): BranchR
  * 라디오 버튼 응답의 분기 규칙 찾기
  */
 function getBranchRuleForRadio(question: Question, response: unknown): BranchRule | null {
-  if (!question.options) return null;
+  // manual: question.options 그대로 / table-source: choice_opt 셀에서 변환된 옵션
+  const options = resolveChoiceOptions(question);
+  if (!options.length) return null;
 
   // 응답이 객체인 경우 (기타 옵션)
   const selectedValue =
@@ -141,7 +144,7 @@ function getBranchRuleForRadio(question: Question, response: unknown): BranchRul
       : response;
 
   // 선택된 값과 일치하는 옵션의 branchRule 찾기
-  const selectedOption = question.options.find((opt) => opt.value === selectedValue);
+  const selectedOption = options.find((opt) => opt.value === selectedValue);
   return selectedOption?.branchRule || null;
 }
 
@@ -150,7 +153,9 @@ function getBranchRuleForRadio(question: Question, response: unknown): BranchRul
  * 여러 옵션이 선택된 경우 첫 번째 branchRule을 우선 적용
  */
 function getBranchRuleForCheckbox(question: Question, response: unknown): BranchRule | null {
-  if (!question.options || !Array.isArray(response)) return null;
+  // manual: question.options 그대로 / table-source: choice_opt 셀에서 변환된 옵션
+  const options = resolveChoiceOptions(question);
+  if (!options.length || !Array.isArray(response)) return null;
 
   // 체크된 값들 추출
   const checkedValues = response.map((val: unknown) =>
@@ -160,7 +165,7 @@ function getBranchRuleForCheckbox(question: Question, response: unknown): Branch
   );
 
   // 체크된 옵션 중 branchRule이 있는 첫 번째 옵션 찾기
-  for (const option of question.options) {
+  for (const option of options) {
     if (checkedValues.includes(option.value) && option.branchRule) {
       return option.branchRule;
     }
