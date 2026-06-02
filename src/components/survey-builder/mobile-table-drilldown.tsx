@@ -120,9 +120,19 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
     </div>
   );
 
-  // ── 진행률 바 ──
+  // ── 진행률 바 (+ 섹션 진입 시 목차로 돌아가기) ──
   const ProgressBar = () => (
     <div className="mt-4">
+      {nav.sec !== null && (
+        <button
+          type="button"
+          onClick={() => setNav({ sec: null, leaf: null })}
+          className="mb-3 flex w-full items-center justify-center gap-1 rounded-xl border border-gray-200 bg-white py-3 text-sm font-semibold text-gray-600 active:bg-gray-50"
+        >
+          <ChevronLeft className="h-4 w-4" />
+          목차로 돌아가기
+        </button>
+      )}
       <div className="h-1.5 overflow-hidden rounded-full bg-gray-100">
         <div
           className="h-full rounded-full bg-blue-500 transition-all"
