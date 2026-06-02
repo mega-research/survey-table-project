@@ -257,7 +257,11 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
   return (
     <div>
       <Crumb
-        label={`${leaf.subGroup ? leaf.subGroup + ' › ' : ''}${leaf.label}`}
+        label={
+          leaf.subGroup && leaf.subGroup !== leaf.label
+            ? `${leaf.subGroup} › ${leaf.label}`
+            : leaf.label
+        }
         onBack={backToLeaves}
       />
       <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
@@ -273,7 +277,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
                   {g.label}
                 </div>
               )}
-              <div className="grid grid-cols-2 gap-2.5">
+              <div className="space-y-3">
                 {g.cols.map((c) => {
                   const cellId = leaf.inputCellIds[k++];
                   if (!cellById.has(cellId)) return null;
