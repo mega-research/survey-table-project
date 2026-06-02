@@ -39,14 +39,14 @@ function DisplayCellContent({ cell }: { cell: TableCell }) {
 }
 
 /** mobileDisplay 에 따라 inline 은 바로, collapsed 는 "자세히" 접기 안에 렌더 */
-export function MobileDisplayCells({ cells }: { cells: TableCell[] }) {
+export function MobileDisplayCells({ cells, className }: { cells: TableCell[]; className?: string }) {
   const { inline, collapsed } = splitMobileDisplayCells(cells);
   const [open, setOpen] = useState(false);
 
   if (inline.length === 0 && collapsed.length === 0) return null;
 
   return (
-    <div className="space-y-2">
+    <div className={cn('space-y-2', className)}>
       {inline.map((c) => (
         <DisplayCellContent key={c.id} cell={c} />
       ))}
@@ -54,6 +54,7 @@ export function MobileDisplayCells({ cells }: { cells: TableCell[] }) {
         <div>
           <button
             type="button"
+            aria-expanded={open}
             onClick={() => setOpen((v) => !v)}
             className="inline-flex items-center gap-1 text-sm font-medium text-gray-500 transition-colors hover:text-gray-700"
           >
@@ -119,9 +120,7 @@ export function MobileOptionCard({
           {label}
         </div>
       </div>
-      <div className="mt-2">
-        <MobileDisplayCells cells={cells} />
-      </div>
+      <MobileDisplayCells cells={cells} className="mt-2" />
       {footer != null && <div className="mt-2">{footer}</div>}
     </div>
   );
