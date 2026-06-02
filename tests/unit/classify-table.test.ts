@@ -102,6 +102,19 @@ function flatSimple(): ClassifyInput {
   };
 }
 
+// ── 표 5: 큰 list (입력 16개 → 드릴다운 임계 초과) ──
+function bigList(): ClassifyInput {
+  const n = 16;
+  return {
+    tableColumns: [C('그룹'), C('항목'), C('값')],
+    tableRowsData: Array.from({ length: n }, (_, i) => ({
+      id: `bl${i}`,
+      label: '',
+      cells: [i === 0 ? T('그룹', { rs: n }) : H(), T(`항목${i}`), I(`bl${i}-v`)],
+    })),
+  };
+}
+
 beforeEach(() => {
   _id = 0;
 });
@@ -166,8 +179,11 @@ describe('classifyTable — 평면 단순', () => {
 });
 
 describe('decideDrilldown', () => {
-  it('GPU: 묶인 list 섹션 → 드릴다운', () => {
-    expect(decideDrilldown(gpu()).useDrilldown).toBe(true);
+  it('GPU(입력 5개): 15 이하 → 기존 카드 유지', () => {
+    expect(decideDrilldown(gpu()).useDrilldown).toBe(false);
+  });
+  it('큰 list(입력 16개): 임계 초과 → 드릴다운', () => {
+    expect(decideDrilldown(bigList()).useDrilldown).toBe(true);
   });
   it('종사자: matrix → 드릴다운', () => {
     expect(decideDrilldown(workers()).useDrilldown).toBe(true);

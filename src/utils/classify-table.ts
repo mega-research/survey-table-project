@@ -170,13 +170,18 @@ export interface DrilldownDecision {
  * 다단계 행 계층(라벨 열 2개+) · 매트릭스 섹션 · rowspan 으로 묶인 그룹/반복(리프 2개+ 섹션)이
  * 하나라도 있으면 드릴다운. 완전 평면(단일 라벨 열 · 단일행 섹션 · 비매트릭스)은 기존 스테퍼.
  */
+/** 인터랙티브(입력) 셀이 이 개수 이하면 드릴다운 없이 기존 카드/스테퍼를 쓴다. */
+export const DRILLDOWN_MIN_INPUTS = 15;
+
 export function decideDrilldown(q: ClassifyInput): DrilldownDecision {
   const vcols = valueColumns(q);
   const labelColCount = q.tableColumns.length - vcols.length;
   const sections = classifyTable(q);
+  const totalInputs = sections.reduce((a, s) => a + s.totalInputs, 0);
   const useDrilldown =
-    labelColCount >= 2 ||
-    sections.some((s) => s.kind === 'matrix') ||
-    sections.some((s) => s.leaves.length >= 2);
+    totalInputs > DRILLDOWN_MIN_INPUTS &&
+    (labelColCount >= 2 ||
+      sections.some((s) => s.kind === 'matrix') ||
+      sections.some((s) => s.leaves.length >= 2));
   return { useDrilldown, sections, labelColCount };
 }
