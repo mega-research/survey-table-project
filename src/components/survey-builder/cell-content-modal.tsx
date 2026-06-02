@@ -1320,6 +1320,17 @@ export function CellContentModal({
               >
                 숨기기
               </Button>
+              {contentType === 'text' && (
+                <Button
+                  type="button"
+                  variant={mobileDisplay === 'header' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setMobileDisplay('header')}
+                  className="flex-1"
+                >
+                  헤더
+                </Button>
+              )}
               <Button
                 type="button"
                 variant={mobileDisplay === 'inline' ? 'default' : 'outline'}

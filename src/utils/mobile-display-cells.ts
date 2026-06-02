@@ -40,3 +40,18 @@ export function splitMobileDisplayCells(cells: TableCell[]): SplitDisplayCells {
 export function hasMobileDisplayCells(cells: TableCell[]): boolean {
   return cells.some(isMobileDisplayCell);
 }
+
+/**
+ * 모바일 카드의 제목으로 사용할 셀을 찾는다.
+ * mobileDisplay 'header' 로 명시 지정된 첫 text 셀(비숨김/비continuation)을 반환.
+ * 없으면 undefined — 호출부가 자체 폴백(옵션 라벨, 행 라벨 등)을 사용한다.
+ */
+export function findMobileHeaderCell(cells: TableCell[]): TableCell | undefined {
+  return cells.find(
+    (cell) =>
+      !cell.isHidden &&
+      !cell._isContinuation &&
+      cell.type === 'text' &&
+      cell.mobileDisplay === 'header',
+  );
+}

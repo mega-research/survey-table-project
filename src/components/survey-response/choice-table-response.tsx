@@ -4,8 +4,11 @@ import { useMemo, type ReactNode } from 'react';
 
 import { TablePreview } from '@/components/survey-builder/table-preview';
 import { useMobileView } from '@/hooks/use-media-query';
+import { useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import type { Question, TableCell } from '@/types/survey';
 import { resolveChoiceOptions } from '@/utils/choice-source';
+import { findMobileHeaderCell } from '@/utils/mobile-display-cells';
 
 import { MobileOptionCard } from './mobile-card-shared';
 import { OptionTextInput } from './option-text-input';
@@ -26,6 +29,7 @@ interface ChoiceTableResponseProps {
 export function ChoiceTableResponse({ question, value, onChange }: ChoiceTableResponseProps) {
   const isCheckbox = question.type === 'checkbox';
   const isMobile = useMobileView();
+  const attrs = useContactAttrs();
   const options = useMemo(() => resolveChoiceOptions(question), [question]);
   const optionByValue = useMemo(
     () => new Map(options.map((option) => [option.value, option])),
@@ -111,13 +115,13 @@ export function ChoiceTableResponse({ question, value, onChange }: ChoiceTableRe
             .filter((c) => c.type === 'choice_opt' && !c.isHidden)
             .map((choiceCell) => {
               const { checked, disabled, option } = getChoiceCellState(choiceCell);
-              // 카드 제목: choiceLabel > content > exportLabel 순. 선택 라벨이 비어도
-              // (라벨이 다른 열 셀에 있는 경우) 셀 exportLabel 로 제목을 식별할 수 있게 한다.
-              const cardLabel =
-                choiceCell.choiceLabel?.trim() ||
-                (choiceCell.content ?? '').trim() ||
-                choiceCell.exportLabel?.trim() ||
-                '(라벨 없음)';
+              // 카드 제목: 행에 'header' 로 지정된 text 셀이 있으면 그 내용을 제목으로 사용하고,
+              // 없으면 선택지 라벨(choiceLabel > content)로 폴백한다. exportLabel 은 제목으로 쓰지 않는다.
+              const headerCell = findMobileHeaderCell(row.cells);
+              const headerText = headerCell ? (headerCell.content ?? '').trim() : '';
+              const cardLabel = headerText
+                ? substituteTokens(headerText, attrs)
+                : (option?.label ?? '(라벨 없음)');
               return (
                 <MobileOptionCard
                   key={choiceCell.id}

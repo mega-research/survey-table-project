@@ -15,7 +15,7 @@ import {
   detectUnitPair,
   overrideCellOptionsColumnsForCard,
 } from '@/utils/mobile-card-options';
-import { hasMobileDisplayCells } from '@/utils/mobile-display-cells';
+import { findMobileHeaderCell, hasMobileDisplayCells } from '@/utils/mobile-display-cells';
 import { getAlignmentClasses } from '@/utils/table-grid-utils';
 
 import { InteractiveCell } from './cells';
@@ -71,6 +71,10 @@ export const MobileRowCard = React.memo(function MobileRowCard({
   );
 
   const rowDesc = useMemo(() => {
+    // 'header' 로 지정된 text 셀이 있으면 카드 제목으로 우선 사용
+    const headerCell = findMobileHeaderCell(row.cells);
+    const headerText = headerCell ? (headerCell.content ?? '').trim() : '';
+    if (headerText) return headerText;
     const descCell = row.cells.find(
       (c) => c.type === 'radio' && !c.isHidden && c.radioOptions?.length === 1,
     );

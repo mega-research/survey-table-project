@@ -94,10 +94,9 @@ describe('ChoiceTableResponse (mobile)', () => {
     expect(onChange).toHaveBeenCalledWith(['r1cB']);
   });
 
-  it('choiceLabel/content 가 비어도 choice_opt 셀 exportLabel 로 카드 제목을 표기한다', () => {
-    // 실데이터 패턴: 기술명이 별도 text 셀에 있고 choice_opt 는 비어있으나
-    // exportLabel 에 깨끗한 옵션명이 들어있는 경우
-    const exportLabelQuestion: Question = {
+  it("'header' 로 지정한 text 셀의 내용을 카드 제목으로 사용한다", () => {
+    // 옵션명이 별도 text 셀에 있고 choice_opt 는 비어있는 패턴: 저작자가 그 셀을 'header' 로 지정
+    const headerQuestion: Question = {
       id: 'q3',
       type: 'checkbox',
       title: '보유 기술',
@@ -111,16 +110,17 @@ describe('ChoiceTableResponse (mobile)', () => {
         {
           id: 'r1',
           cells: [
-            { id: 'r1c0', type: 'text', content: '① 컴퓨터 비전', mobileDisplay: 'hidden' },
-            { id: 'r1c1', type: 'choice_opt', content: '', exportLabel: '① 컴퓨터 비전' },
+            { id: 'r1c0', type: 'text', content: '① 컴퓨터 비전', mobileDisplay: 'header' },
+            { id: 'r1c1', type: 'choice_opt', content: '', exportLabel: '쓰이면 안 되는_엑셀라벨' },
           ],
         },
       ],
     } as unknown as Question;
 
-    render(<ChoiceTableResponse question={exportLabelQuestion} value={[]} onChange={vi.fn()} />);
-    // text 셀(hidden)과 별개로 카드 제목이 exportLabel 로 표기되어 '(라벨 없음)' 이 아니어야 한다
-    expect(screen.getByLabelText('① 컴퓨터 비전')).toBeInTheDocument();
+    render(<ChoiceTableResponse question={headerQuestion} value={[]} onChange={vi.fn()} />);
+    // 제목은 header 셀 내용. exportLabel 은 제목으로 쓰이지 않는다.
+    expect(screen.getByText('① 컴퓨터 비전')).toBeInTheDocument();
+    expect(screen.queryByText('쓰이면 안 되는_엑셀라벨')).not.toBeInTheDocument();
     expect(screen.queryByText('(라벨 없음)')).not.toBeInTheDocument();
   });
 });

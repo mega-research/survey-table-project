@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import type { TableCell } from '@/types/survey';
-import { hasMobileDisplayCells, splitMobileDisplayCells } from '@/utils/mobile-display-cells';
+import {
+  findMobileHeaderCell,
+  hasMobileDisplayCells,
+  splitMobileDisplayCells,
+} from '@/utils/mobile-display-cells';
 
 function cell(partial: Partial<TableCell>): TableCell {
   return {
@@ -63,5 +67,43 @@ describe('splitMobileDisplayCells', () => {
     expect(
       hasMobileDisplayCells([cell({ id: 'b', type: 'text', mobileDisplay: 'inline' })]),
     ).toBe(true);
+  });
+
+  it("'header' 셀은 inline/collapsed 어디에도 포함되지 않는다", () => {
+    const { inline, collapsed } = splitMobileDisplayCells([
+      cell({ id: 'h', type: 'text', mobileDisplay: 'header', content: '제목' }),
+    ]);
+    expect(inline).toEqual([]);
+    expect(collapsed).toEqual([]);
+    expect(hasMobileDisplayCells([cell({ type: 'text', mobileDisplay: 'header' })])).toBe(false);
+  });
+});
+
+describe('findMobileHeaderCell', () => {
+  it("mobileDisplay 'header' 인 첫 text 셀을 반환", () => {
+    const found = findMobileHeaderCell([
+      cell({ id: 'a', type: 'text', mobileDisplay: 'inline', content: '본문' }),
+      cell({ id: 'h', type: 'text', mobileDisplay: 'header', content: '제목' }),
+    ]);
+    expect(found?.id).toBe('h');
+  });
+
+  it("'header' 지정 셀이 없으면 undefined", () => {
+    expect(findMobileHeaderCell([cell({ type: 'text', mobileDisplay: 'inline' })])).toBeUndefined();
+  });
+
+  it('isHidden/continuation header 셀은 무시', () => {
+    expect(
+      findMobileHeaderCell([
+        cell({ type: 'text', mobileDisplay: 'header', isHidden: true }),
+        cell({ type: 'text', mobileDisplay: 'header', _isContinuation: true }),
+      ]),
+    ).toBeUndefined();
+  });
+
+  it('text 가 아닌 셀의 header 지정은 무시', () => {
+    expect(
+      findMobileHeaderCell([cell({ type: 'image', mobileDisplay: 'header', imageUrl: 'x' })]),
+    ).toBeUndefined();
   });
 });
