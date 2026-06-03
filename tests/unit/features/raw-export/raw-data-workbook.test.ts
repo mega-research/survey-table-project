@@ -21,6 +21,21 @@ const checkboxQ = {
   ],
 } as unknown as Question;
 
+// 옵션을 테이블 choice_opt 셀로 정의하는 체크박스(테이블-소스). content는 비고 exportLabel만 있음.
+const tableSourceCheckboxQ = {
+  id: 'q3', type: 'checkbox', title: 'Q3. 보유 분야', order: 3, required: false,
+  questionCode: 'Q3', options: [],
+  tableColumns: [{ id: 'tc', label: '', columnCode: 'c1' }],
+  tableRowsData: [
+    { id: 'tr1', label: '', rowCode: 'r1', cells: [
+      { id: 'cellOpt1', type: 'choice_opt', content: '', exportLabel: 'ⓐ 머신러닝', spssNumericCode: 1 },
+    ] },
+    { id: 'tr2', label: '', rowCode: 'r2', cells: [
+      { id: 'cellOpt2', type: 'choice_opt', content: '', exportLabel: 'ⓖ 에이전트', spssNumericCode: 2 },
+    ] },
+  ],
+} as unknown as Question;
+
 const baseRow = (over: Partial<RawExportResponseRow>): RawExportResponseRow => ({
   id: 'r1', questionResponses: {}, groupValue: null, resid: null,
   platform: 'desktop', browser: 'Chrome', status: 'completed',
@@ -81,6 +96,15 @@ describe('generateRawDataWorkbook', () => {
     expect(merges).toContain('C1:D1');   // 같은 질문(Q2) 변수 열 가로 병합
     // 단일 변수 질문(Q1, B열)은 가로 병합 대상 아님
     expect(merges.some((m) => m.startsWith('B1:'))).toBe(false);
+  });
+
+  it('테이블-소스 체크박스는 옵션 셀의 exportLabel을 행2에 쓴다', () => {
+    const wb = generateRawDataWorkbook([tableSourceCheckboxQ], [baseRow({})], 'sequence');
+    const ws = wb.getWorksheet('Raw Data')!;
+    // 열 A=식별자, B=Q3_1, C=Q3_2
+    expect(ws.getCell('B3').value).toBe('Q3_1');     // 행3: 변수명
+    expect(ws.getCell('B2').value).toBe('ⓐ 머신러닝');  // 행2: content 비어도 exportLabel 사용
+    expect(ws.getCell('C2').value).toBe('ⓖ 에이전트');
   });
 
   it('시트2 헤더 1~3행에 색상(fill)과 열 너비가 적용된다', () => {

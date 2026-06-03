@@ -220,6 +220,8 @@ export interface QuestionOption {
   optionCode?: string; // 엑셀 내보내기용 옵션 코드 (예: "1", "01")
   spssNumericCode?: number; // SPSS 숫자코드 (옵션 생성 시 할당, 순서 변경해도 유지)
   isCustomOptionCode?: boolean; // 사용자가 수동 편집한 옵션코드인지 여부
+  // 테이블-소스 choice 옵션(choice_opt 셀)에서 전달되는 셀 엑셀라벨. raw export 헤더 행2에 우선 사용.
+  exportLabel?: string;
   /**
    * 선택 시 사이드카 텍스트 입력 받기.
    * 빌더의 "+ 텍스트 옵션 추가" 버튼으로 생성된 옵션은 true.

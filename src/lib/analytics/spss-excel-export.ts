@@ -118,6 +118,8 @@ export function generateSPSSColumns(questions: Question[]): SPSSExportColumn[] {
           type: 'checkbox-item',
           optionIndex: i,
           optionValue: opt.value,
+          // 테이블-소스 옵션 셀의 exportLabel이 있으면 헤더 행2/코딩북 셀라벨에 우선 사용.
+          cellExportLabel: opt.exportLabel,
         });
         // allowTextInput 옵션마다 STRING 사이드카 텍스트 변수 생성
         if (opt.allowTextInput) {
