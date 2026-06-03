@@ -14,6 +14,7 @@ import { useTablePerf } from '@/hooks/use-table-perf';
 import { cn } from '@/lib/utils';
 import { DynamicRowGroupConfig, HeaderCell, Question, TableCell, TableColumn, TableRow } from '@/types/survey';
 import { shouldDisplayColumn, shouldDisplayDynamicGroup, shouldDisplayRow } from '@/utils/branch-logic';
+import { decideDrilldown } from '@/utils/classify-table';
 import {
   buildGridTemplateCols,
   calcTotalWidth,
@@ -32,6 +33,7 @@ import {
 
 import { InteractiveCell } from './cells';
 import { DynamicRowSelectorModal } from './dynamic-row-selector-modal';
+import { MobileTableDrilldown } from './mobile-table-drilldown';
 import { MobileTableStepper } from './mobile-table-stepper';
 import { HEADER_SCROLL_CLASS, TableScrollControls } from './table-scroll-controls';
 import { VirtualizedTableGrid } from './virtualized-table-grid';
@@ -778,6 +780,33 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     </div>
   );
 
+  // 모바일: 계층/매트릭스 감지 시 드릴다운, 평면 단순 표는 기존 스테퍼
+  const { useDrilldown } = useMemo(
+    () =>
+      decideDrilldown({
+        tableColumns: visibleColumns,
+        tableRowsData: displayRows,
+        tableHeaderGrid: visibleHeaderGrid,
+      }),
+    [visibleColumns, displayRows, visibleHeaderGrid],
+  );
+
+  const mobileTableProps = {
+    questionId,
+    displayRows,
+    visibleColumns,
+    visibleHeaderGrid,
+    currentResponse,
+    hideColumnLabels,
+    isTestMode,
+    value,
+    onChange: mergedOnChange,
+    hasDynamicRows,
+    selectedRowIds,
+    groupConfigMap,
+    onSelectGroup: handleSelectGroup,
+  };
+
   return (
     <>
       <Card className={className}>
@@ -789,21 +818,11 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
         <CardContent className={cn(isMobileView ? 'p-3 sm:p-4' : 'p-0 sm:px-6 sm:pb-6')}>
           <div className="w-full">
             {isMobileView ? (
-              <MobileTableStepper
-                questionId={questionId}
-                displayRows={displayRows}
-                visibleColumns={visibleColumns}
-                visibleHeaderGrid={visibleHeaderGrid}
-                currentResponse={currentResponse}
-                hideColumnLabels={hideColumnLabels}
-                isTestMode={isTestMode}
-                value={value}
-                onChange={mergedOnChange}
-                hasDynamicRows={hasDynamicRows}
-                selectedRowIds={selectedRowIds}
-                groupConfigMap={groupConfigMap}
-                onSelectGroup={handleSelectGroup}
-              />
+              useDrilldown ? (
+                <MobileTableDrilldown {...mobileTableProps} />
+              ) : (
+                <MobileTableStepper {...mobileTableProps} />
+              )
             ) : (
               renderTableView()
             )}

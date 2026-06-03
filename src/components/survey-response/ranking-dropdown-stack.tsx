@@ -3,6 +3,15 @@
 import { Fragment } from 'react';
 
 import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { useMobileView } from '@/hooks/use-media-query';
+import { cn } from '@/lib/utils';
 import type { QuestionOption, RankingAnswer } from '@/types/survey';
 import { getOptionsLayout } from '@/utils/options-layout';
 import {
@@ -45,6 +54,8 @@ export function RankingDropdownStack({
   compact = false,
   columns,
 }: RankingDropdownStackProps) {
+  const isMobile = useMobileView();
+
   const answerAt = (rank: number) => answers.find((a) => a.rank === rank);
   const selectedValueAt = (rank: number) => answerAt(rank)?.optionValue ?? '';
   const otherTextAt = (rank: number) => answerAt(rank)?.otherText ?? '';
@@ -131,7 +142,9 @@ export function RankingDropdownStack({
           : undefined;
         const showOptionTextInput = !showOtherInput && selectedOpt?.allowTextInput === true;
 
-        const selectEl = (
+        // compact(셀 컨텍스트)는 네이티브 select 유지. full(질문 레벨)은 Radix Select 로
+        // 교체해 모바일에서 트리거를 키우고, 열린 목록에 max-height + 스크롤을 적용한다.
+        const nativeSelectEl = (
           <select
             value={currentValue}
             onChange={(e) => handleSelect(rank, e.target.value)}
@@ -152,11 +165,56 @@ export function RankingDropdownStack({
           </select>
         );
 
+        // 옵션은 트리거 고정 너비 안에서 줄바꿈(긴 라벨이 화면 밖으로 넘치지 않게).
+        const itemCls = cn('whitespace-normal [overflow-wrap:anywhere]', isMobile && 'py-3 text-base');
+        const radixSelectEl = (
+          <Select
+            value={currentValue || undefined}
+            onValueChange={(v) => handleSelect(rank, v)}
+          >
+            <SelectTrigger
+              aria-label={`${rank}순위 선택`}
+              className={cn(
+                // 모바일은 행 가득(균일 고정). 데스크톱 가로 레이아웃은 고정 px(아래 style).
+                isHorizontal && !isMobile ? '' : 'w-full',
+                'min-w-0',
+                // 모바일 트리거 크게(iOS 확대 방지 위해 16px 이상), 높이는 h-12.
+                isMobile ? 'h-12 text-base' : 'h-11 text-sm',
+              )}
+              style={isHorizontal && !isMobile ? { width: RANKING_HORIZONTAL_ITEM_WIDTH } : undefined}
+            >
+              <SelectValue placeholder="선택하세요..." />
+            </SelectTrigger>
+            {/* Radix SelectContent 는 max-h(가용 높이) + overflow-y-auto + 스크롤 버튼 내장.
+                높이는 320px(max-h-80)로 캡해 컴팩트하게, 너비는 트리거 너비에 고정해
+                옵션이 화면 밖으로 넘치지 않게 한다. */}
+            <SelectContent className="max-h-80 w-[var(--radix-select-trigger-width)]">
+              {options.map((opt) => (
+                <SelectItem
+                  key={opt.id}
+                  value={opt.value}
+                  disabled={isTakenElsewhere(rank, opt.value)}
+                  className={itemCls}
+                >
+                  {opt.label}
+                </SelectItem>
+              ))}
+              {allowOther && (
+                <SelectItem value={RANKING_OTHER_VALUE} className={itemCls}>
+                  기타 (직접 입력)
+                </SelectItem>
+              )}
+            </SelectContent>
+          </Select>
+        );
+
+        const selectEl = compact ? nativeSelectEl : radixSelectEl;
+
         // 가로/그리드: select-block 과 input-block 을 컨테이너 직계 sibling 으로 emit.
         if (isInlineOther) {
           return (
             <Fragment key={rank}>
-              <div className="flex items-center gap-1.5">
+              <div className={cn('flex items-center gap-1.5', isMobile && 'w-full min-w-0')}>
                 <span className={rankLabelCls}>{rank}순위</span>
                 {selectEl}
               </div>
