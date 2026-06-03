@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 import { CheckCircle2, ChevronLeft, ChevronRight } from 'lucide-react';
 
@@ -64,12 +64,17 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
     leaf: null,
   });
 
-  // 섹션/리프 이동 시(다음 섹션·목차로·뒤로·진입) 화면을 맨 위로 올린다.
-  // 응답자가 하단 버튼에서 이동해도 새 섹션을 처음부터 보게 한다.
+  // 섹션/리프 이동 시(다음 섹션·목차로·뒤로·진입) 본문 컨테이너 상단으로 올린다.
+  // window 최상단(설문 헤더)까지 올리지 않고, 드릴다운 root 만 화면 상단에 맞춘다.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const isFirstNav = useRef(true);
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+    // 최초 마운트(섹션 진입 직후)에는 스크롤하지 않는다 — step 전환 시 이미 상단 정렬됨.
+    if (isFirstNav.current) {
+      isFirstNav.current = false;
+      return;
     }
+    rootRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, [nav.sec, nav.leaf]);
 
   // ── 응답 채움 계산 ──
@@ -174,7 +179,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
   // ── 루트: 섹션 목차 ──
   if (nav.sec === null) {
     return (
-      <div>
+      <div ref={rootRef}>
         <p className="mb-3 px-1 text-sm font-medium text-gray-500">작성할 항목을 선택하세요</p>
         <div className="space-y-2.5">
           {sections.map((s, si) => {
@@ -217,7 +222,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
   // ── scalar / list 섹션 ──
   if (s.kind === 'scalar' || s.kind === 'list') {
     return (
-      <div>
+      <div ref={rootRef}>
         <Crumb label={s.label || '항목'} onBack={backToRoot} />
         <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
           <div className="border-b bg-gray-50/80 px-4 py-3 text-sm font-semibold text-gray-700">
@@ -255,7 +260,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
     // 리프 목록 (하위 그룹 구분선)
     let lastSub: string | null = null;
     return (
-      <div>
+      <div ref={rootRef}>
         <Crumb label={s.label || '항목'} onBack={backToRoot} />
         <div className="space-y-2.5">
           {s.leaves.map((l, li) => {
@@ -300,7 +305,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
   const backToLeaves = () => setNav({ sec: nav.sec, leaf: null });
   let k = 0; // colGroups flat 순서 = leaf.inputCellIds 순서
   return (
-    <div>
+    <div ref={rootRef}>
       <Crumb
         label={
           leaf.subGroup && leaf.subGroup !== leaf.label
