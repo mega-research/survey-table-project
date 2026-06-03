@@ -11,8 +11,10 @@ export const RANKING_OTHER_VALUE = '__other__';
 export const RANKING_HORIZONTAL_ITEM_WIDTH = 200;
 
 /** select 공통 기본 클래스 (disabled/interactive 모두에 공통). */
+// 네이티브 select 의 펼침 옵션 글자 크기는 select 자체 font-size 를 따른다.
+// text-base(16px) 로 키워 옵션 목록 가독성을 높임.
 export const RANKING_SELECT_BASE_CLS =
-  'truncate rounded-md border border-gray-200 bg-white p-2 text-sm';
+  'truncate rounded-md border border-gray-200 bg-white px-3 py-2.5 text-base';
 
 /** 인터랙티브 select 의 focus ring 추가 클래스. disabled 에는 사용하지 않음. */
 export const RANKING_SELECT_FOCUS_CLS =
