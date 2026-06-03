@@ -10,15 +10,15 @@ import { useScrollLeftSync } from '@/hooks/use-scroll-left-sync';
 import { cn } from '@/lib/utils';
 import { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
 import {
+  HEADER_ROW_MIN_HEIGHT,
+  STICKY_BODY_Z,
+  type StickyLeftInfo,
   buildGridTemplateCols,
   calcTotalWidth,
   computeStickyLeftColumns,
   getAlignmentClasses,
   getGridCellAria,
   getHeaderCellStickyStyle,
-  HEADER_ROW_MIN_HEIGHT,
-  STICKY_BODY_Z,
-  type StickyLeftInfo,
 } from '@/utils/table-grid-utils';
 
 import { PreviewCell } from './cells';
@@ -56,10 +56,9 @@ export const TablePreview = React.memo(function TablePreview({
   const tableContainerRef = useRef<HTMLDivElement>(null);
   const headerScrollRef = useRef<HTMLDivElement>(null);
 
-  const { canScrollLeft, canScrollRight } = useHorizontalScrollIndicators(
-    tableContainerRef,
-    { deps: [columns.length, rows.length] },
-  );
+  const { canScrollLeft, canScrollRight } = useHorizontalScrollIndicators(tableContainerRef, {
+    deps: [columns.length, rows.length],
+  });
 
   // 헤더가 null일 때는 동기화 불필요 (null ref 접근 방지)
   useScrollLeftSync(headerScrollRef, tableContainerRef, hideColumnLabels);
@@ -170,7 +169,9 @@ export const TablePreview = React.memo(function TablePreview({
 
   const headerRowCount = hideColumnLabels
     ? 0
-    : (tableHeaderGrid && tableHeaderGrid.length > 0 ? tableHeaderGrid.length : 1);
+    : tableHeaderGrid && tableHeaderGrid.length > 0
+      ? tableHeaderGrid.length
+      : 1;
 
   return (
     <Card className={className}>
@@ -198,7 +199,7 @@ export const TablePreview = React.memo(function TablePreview({
                   <div ref={headerScrollRef} className={HEADER_SCROLL_CLASS}>
                     <div
                       role="rowgroup"
-                      className="mx-auto rounded-t-md border-t border-l border-r border-gray-300 bg-gray-50 text-sm"
+                      className="mx-auto rounded-t-md border-t border-r border-l border-gray-300 bg-gray-50 text-sm"
                       style={gridContainerStyle}
                     >
                       {renderHeaderCells()}
@@ -221,62 +222,83 @@ export const TablePreview = React.memo(function TablePreview({
               </div>
             )}
 
-            {/* 바디: 가로 스크롤 전용 */}
-            <div
-              ref={tableContainerRef}
-              className="overflow-x-auto print:overflow-visible"
-              style={{ WebkitOverflowScrolling: 'touch' }}
-            >
+            {/* 바디: 가로 스크롤 + 우측/좌측 페이드. relative 래퍼로 페이드를 우측에
+                고정한다(스크롤 컨테이너 안에 두면 콘텐츠와 함께 밀려 힌트 효과가 사라진다).
+                잘린 셀 텍스트가 있는 바디는 bg-white 이므로 from-white 로 페이드아웃시킨다. */}
+            <div className="relative">
               <div
-                role="rowgroup"
-                className={cn(
-                  'mx-auto rounded-b-md border-l border-r border-gray-300 bg-white text-sm',
-                  hideColumnLabels && 'rounded-t-md border-t',
-                )}
-                style={gridContainerStyle}
+                ref={tableContainerRef}
+                className="overflow-x-auto print:overflow-visible"
+                style={{ WebkitOverflowScrolling: 'touch' }}
               >
-                {rows.map((row) =>
-                  row.cells.map((cell, cellIndex) => {
-                    if (cell.isHidden) return null;
-                    const col = cellIndex + 1;
-                    const cs = cell.colspan || 1;
-                    const rs = cell.rowspan || 1;
-                    const isSticky = cellIndex < stickyCount;
-                    const isLastSticky = isSticky && cellIndex === stickyCount - 1;
+                <div
+                  role="rowgroup"
+                  className={cn(
+                    'mx-auto rounded-b-md border-r border-l border-gray-300 bg-white text-sm',
+                    hideColumnLabels && 'rounded-t-md border-t',
+                  )}
+                  style={gridContainerStyle}
+                >
+                  {rows.map((row) =>
+                    row.cells.map((cell, cellIndex) => {
+                      if (cell.isHidden) return null;
+                      const col = cellIndex + 1;
+                      const cs = cell.colspan || 1;
+                      const rs = cell.rowspan || 1;
+                      const isSticky = cellIndex < stickyCount;
+                      const isLastSticky = isSticky && cellIndex === stickyCount - 1;
 
-                    const style: React.CSSProperties = {
-                      gridColumn: cs > 1 ? `${col} / span ${cs}` : col,
-                      ...(rs > 1 ? { gridRow: `span ${rs}` } : {}),
-                    };
-                    if (isSticky && stickyInfo) {
-                      style.position = 'sticky';
-                      style.left = stickyInfo.leftOffsets[cellIndex];
-                      style.zIndex = STICKY_BODY_Z;
-                      if (isLastSticky) {
-                        style.boxShadow = '2px 0 4px rgba(0,0,0,0.06)';
+                      const style: React.CSSProperties = {
+                        gridColumn: cs > 1 ? `${col} / span ${cs}` : col,
+                        ...(rs > 1 ? { gridRow: `span ${rs}` } : {}),
+                      };
+                      if (isSticky && stickyInfo) {
+                        style.position = 'sticky';
+                        style.left = stickyInfo.leftOffsets[cellIndex];
+                        style.zIndex = STICKY_BODY_Z;
+                        if (isLastSticky) {
+                          style.boxShadow = '2px 0 4px rgba(0,0,0,0.06)';
+                        }
                       }
-                    }
 
-                    return (
-                      <div
-                        key={cell.id}
-                        className={cn(
-                          'min-w-0 border-r border-b border-gray-300 bg-white p-3',
-                          getAlignmentClasses(cell.horizontalAlign, cell.verticalAlign),
-                        )}
-                        style={style}
-                        data-row-id={row.id}
-                        {...getGridCellAria('gridcell', cs, rs)}
-                      >
-                        {(() => {
-                          const override = renderCell?.(cell);
-                          return override !== undefined && override !== null ? override : <PreviewCell cell={cell} />;
-                        })()}
-                      </div>
-                    );
-                  }),
-                )}
+                      return (
+                        <div
+                          key={cell.id}
+                          className={cn(
+                            'min-w-0 border-r border-b border-gray-300 bg-white p-3',
+                            getAlignmentClasses(cell.horizontalAlign, cell.verticalAlign),
+                          )}
+                          style={style}
+                          data-row-id={row.id}
+                          {...getGridCellAria('gridcell', cs, rs)}
+                        >
+                          {(() => {
+                            const override = renderCell?.(cell);
+                            return override !== undefined && override !== null ? (
+                              override
+                            ) : (
+                              <PreviewCell cell={cell} />
+                            );
+                          })()}
+                        </div>
+                      );
+                    }),
+                  )}
+                </div>
               </div>
+              {/* 우측 페이드 — 잘린 셀 내용 위로 깔려 "오른쪽에 더 있다"를 알린다 */}
+              {canScrollRight && (
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-black/10 to-transparent print:hidden"
+                />
+              )}
+              {canScrollLeft && (
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-y-0 left-0 w-6 bg-gradient-to-r from-black/10 to-transparent print:hidden"
+                />
+              )}
             </div>
           </div>
         </div>

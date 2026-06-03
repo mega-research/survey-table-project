@@ -76,9 +76,19 @@ export function TableScrollControls({
     update();
     el.addEventListener('scroll', update, { passive: true });
     window.addEventListener('resize', update);
+
+    // 첫 페인트 시점엔 scrollWidth/clientWidth가 아직 확정되지 않아 update() 1회로는
+    // needsScroll을 false로 잘못 굳힐 수 있다 → 컨트롤이 클릭(scroll 이벤트) 전까지
+    // 렌더되지 않는다. ResizeObserver는 관찰 시작 시 1회 + 레이아웃 변동마다 발화하므로
+    // 확정 시점에 자동 재측정한다. (use-horizontal-scroll-indicators 훅과 동일 패턴)
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    if (el.firstElementChild) ro.observe(el.firstElementChild);
+
     return () => {
       el.removeEventListener('scroll', update);
       window.removeEventListener('resize', update);
+      ro.disconnect();
     };
   }, [scrollRef, needsScroll]);
 

@@ -12,19 +12,30 @@ import { useMobileView } from '@/hooks/use-media-query';
 import { useScrollLeftSync } from '@/hooks/use-scroll-left-sync';
 import { useTablePerf } from '@/hooks/use-table-perf';
 import { cn } from '@/lib/utils';
-import { DynamicRowGroupConfig, HeaderCell, Question, TableCell, TableColumn, TableRow } from '@/types/survey';
-import { shouldDisplayColumn, shouldDisplayDynamicGroup, shouldDisplayRow } from '@/utils/branch-logic';
+import {
+  DynamicRowGroupConfig,
+  HeaderCell,
+  Question,
+  TableCell,
+  TableColumn,
+  TableRow,
+} from '@/types/survey';
+import {
+  shouldDisplayColumn,
+  shouldDisplayDynamicGroup,
+  shouldDisplayRow,
+} from '@/utils/branch-logic';
 import { decideDrilldown } from '@/utils/classify-table';
 import {
+  HEADER_ROW_MIN_HEIGHT,
+  STICKY_BODY_Z,
+  type StickyLeftInfo,
   buildGridTemplateCols,
   calcTotalWidth,
   computeStickyLeftColumns,
   getAlignmentClasses,
   getGridCellAria,
   getHeaderCellStickyStyle,
-  HEADER_ROW_MIN_HEIGHT,
-  STICKY_BODY_Z,
-  type StickyLeftInfo,
 } from '@/utils/table-grid-utils';
 import {
   recalculateColspansForVisibleColumns,
@@ -78,13 +89,15 @@ const SelectorRow = React.memo(function SelectorRow({
         {selectedCount > 0 && (
           <button
             className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
-            onClick={(e) => { e.stopPropagation(); onToggleExpand(groupId); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleExpand(groupId);
+            }}
             aria-label={isExpanded ? '접기' : '펼치기'}
           >
-            <ChevronDown className={cn(
-              'h-4 w-4 transition-transform',
-              isExpanded ? '' : '-rotate-90',
-            )} />
+            <ChevronDown
+              className={cn('h-4 w-4 transition-transform', isExpanded ? '' : '-rotate-90')}
+            />
           </button>
         )}
 
@@ -94,9 +107,7 @@ const SelectorRow = React.memo(function SelectorRow({
           onClick={() => onSelect(groupId)}
         >
           <ListChecks className="h-3.5 w-3.5 shrink-0 text-gray-500" />
-          <span className="text-sm font-medium text-gray-700">
-            {label || '항목 선택'}
-          </span>
+          <span className="text-sm font-medium text-gray-700">{label || '항목 선택'}</span>
           {selectedCount > 0 && (
             <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-gray-200 px-1.5 text-xs font-semibold text-gray-700">
               {selectedCount}
@@ -278,11 +289,15 @@ function renderRowCells({
       <div
         key={cell.id}
         className={cn(
-          'min-w-0 border-r border-b border-gray-300 p-2 transition-colors duration-200 [overflow-wrap:anywhere]',
+          'min-w-0 border-r border-b border-gray-300 p-2 [overflow-wrap:anywhere] transition-colors duration-200',
           // sticky 셀은 뒤가 비치면 안 되므로 불투명 배경 고정
           isSticky
-            ? (completed ? 'bg-green-50' : 'bg-white')
-            : (completed ? 'bg-green-50/40' : 'bg-white'),
+            ? completed
+              ? 'bg-green-50'
+              : 'bg-white'
+            : completed
+              ? 'bg-green-50/40'
+              : 'bg-white',
           getAlignmentClasses(cell.horizontalAlign, cell.verticalAlign),
         )}
         style={style}
@@ -447,11 +462,19 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
   // displayCondition 기반 가시 열 필터링 + colspan 재계산
   const { visibleColumns, columnFilteredRows, visibleHeaderGrid } = useMemo(() => {
     if (!allResponses || !allQuestions || columns.length === 0) {
-      return { visibleColumns: columns, columnFilteredRows: rows, visibleHeaderGrid: tableHeaderGrid };
+      return {
+        visibleColumns: columns,
+        columnFilteredRows: rows,
+        visibleHeaderGrid: tableHeaderGrid,
+      };
     }
     const hasColumnConditions = columns.some((col) => col.displayCondition);
     if (!hasColumnConditions) {
-      return { visibleColumns: columns, columnFilteredRows: rows, visibleHeaderGrid: tableHeaderGrid };
+      return {
+        visibleColumns: columns,
+        columnFilteredRows: rows,
+        visibleHeaderGrid: tableHeaderGrid,
+      };
     }
     const visibleColumnIds = new Set<string>();
     for (const col of columns) {
@@ -459,7 +482,12 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
         visibleColumnIds.add(col.id);
       }
     }
-    const result = recalculateColspansForVisibleColumns(columns, rows, visibleColumnIds, tableHeaderGrid);
+    const result = recalculateColspansForVisibleColumns(
+      columns,
+      rows,
+      visibleColumnIds,
+      tableHeaderGrid,
+    );
     return {
       visibleColumns: result.columns,
       columnFilteredRows: result.rows,
@@ -502,16 +530,20 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     const visibleRowIds = new Set(filtered.map((r) => r.id));
     return recalculateRowspansForVisibleRows(columnFilteredRows, visibleRowIds);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [columnFilteredRows, relevantResponsesJson, allQuestions, hasDynamicRows, selectedRowIds, groupConfigMap]);
+  }, [
+    columnFilteredRows,
+    relevantResponsesJson,
+    allQuestions,
+    hasDynamicRows,
+    selectedRowIds,
+    groupConfigMap,
+  ]);
 
   // 가로 스크롤 인디케이터 (좌/우 섀도우·버튼 표시 여부)
-  const { canScrollLeft, canScrollRight } = useHorizontalScrollIndicators(
-    tableContainerRef,
-    {
-      disabled: isMobileView,
-      deps: [visibleColumns.length, visibleRows.length],
-    },
-  );
+  const { canScrollLeft, canScrollRight } = useHorizontalScrollIndicators(tableContainerRef, {
+    disabled: isMobileView,
+    deps: [visibleColumns.length, visibleRows.length],
+  });
 
   // 헤더-바디 scrollLeft 상호 동기화 (각각 별도 가로 스크롤 컨테이너)
   useScrollLeftSync(headerScrollRef, tableContainerRef, isMobileView);
@@ -532,7 +564,11 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     if (!allResponses || !allQuestions || !dynamicRowConfigs) return undefined;
     const hidden = new Set<string>();
     for (const g of dynamicRowConfigs) {
-      if (g.enabled && g.displayCondition && !shouldDisplayDynamicGroup(g, allResponses, allQuestions)) {
+      if (
+        g.enabled &&
+        g.displayCondition &&
+        !shouldDisplayDynamicGroup(g, allResponses, allQuestions)
+      ) {
         hidden.add(g.groupId);
       }
     }
@@ -540,23 +576,18 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
   }, [dynamicRowConfigs, allResponses, allQuestions]);
 
   // 3) 동적 행 레이아웃 — displayRows, gridMap
-  const {
-    displayRows,
-    rowGridMap,
-    selectorGridMap,
-    groupSelectedCountMap,
-    expandedGroupRows,
-  } = useDynamicRowLayout({
-    rows,
-    columnFilteredRows,
-    visibleRows,
-    groupConfigMap,
-    selectedRowIds,
-    hasDynamicRows,
-    headerRowCount,
-    expandedGroupIds,
-    hiddenGroupIds,
-  });
+  const { displayRows, rowGridMap, selectorGridMap, groupSelectedCountMap, expandedGroupRows } =
+    useDynamicRowLayout({
+      rows,
+      columnFilteredRows,
+      visibleRows,
+      groupConfigMap,
+      selectedRowIds,
+      hasDynamicRows,
+      headerRowCount,
+      expandedGroupIds,
+      hiddenGroupIds,
+    });
 
   // 행별 완료 상태 맵 (displayRows + 펼친 그룹 행 포함)
   const rowCompletionMap = useMemo(() => {
@@ -592,12 +623,15 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
   }, [stickyInfo, visibleColumns]);
 
   // 헤더/바디 grid 컨테이너 공용 스타일 (가로 폭·템플릿 동일하게 정렬)
-  const gridContainerStyle = useMemo<React.CSSProperties>(() => ({
-    display: 'grid',
-    gridTemplateColumns: gridTemplateCols,
-    minWidth: totalWidth ? `${totalWidth}px` : '100%',
-    width: totalWidth ? `${totalWidth}px` : '100%',
-  }), [gridTemplateCols, totalWidth]);
+  const gridContainerStyle = useMemo<React.CSSProperties>(
+    () => ({
+      display: 'grid',
+      gridTemplateColumns: gridTemplateCols,
+      minWidth: totalWidth ? `${totalWidth}px` : '100%',
+      width: totalWidth ? `${totalWidth}px` : '100%',
+    }),
+    [gridTemplateCols, totalWidth],
+  );
 
   // 헤더 셀 렌더링 (다단계/단일 폴백 공용 — 파일 상단 HeaderCells 참고)
   const renderHeaderCells = useCallback(
@@ -646,7 +680,9 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
                   row,
                   gridRow: rowGridMap.get(row.id),
                   completed: rowCompletionMap.get(row.id) ?? false,
-                  questionId, isTestMode, value,
+                  questionId,
+                  isTestMode,
+                  value,
                   onChange: mergedOnChange,
                   stickyInfo,
                 })}
@@ -657,10 +693,24 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
 
         return elements;
       }),
-    [selectorGridMap, groupConfigMap, groupSelectedCountMap, handleSelectGroup,
-     expandedGroupIds, toggleGroupExpanded, expandedGroupRows, rowGridMap,
-     rowCompletionMap, questionId, isTestMode, value, onChange, hiddenGroupIds,
-     stickyInfo, stickyLeftPadding],
+    [
+      selectorGridMap,
+      groupConfigMap,
+      groupSelectedCountMap,
+      handleSelectGroup,
+      expandedGroupIds,
+      toggleGroupExpanded,
+      expandedGroupRows,
+      rowGridMap,
+      rowCompletionMap,
+      questionId,
+      isTestMode,
+      value,
+      onChange,
+      hiddenGroupIds,
+      stickyInfo,
+      stickyLeftPadding,
+    ],
   );
 
   // ── 빈 테이블 ──
@@ -702,7 +752,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
               <div ref={headerScrollRef} className={HEADER_SCROLL_CLASS}>
                 <div
                   role="rowgroup"
-                  className="mx-auto rounded-t-md border-t border-l border-r border-gray-300 bg-gray-50 text-sm"
+                  className="mx-auto rounded-t-md border-t border-r border-l border-gray-300 bg-gray-50 text-sm"
                   style={gridContainerStyle}
                 >
                   {renderHeaderCells()}
@@ -725,55 +775,74 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
           </div>
         )}
 
-        {/* 바디: 가로 스크롤 전용, 세로는 페이지 자연 흐름 */}
-        <div
-          ref={tableContainerRef}
-          className="-mx-4 overflow-x-auto px-4 pb-4 md:mx-0 md:px-0 print:overflow-visible"
-          style={{ WebkitOverflowScrolling: 'touch' }}
-        >
-          {shouldVirtualize ? (
-            /* 가상화: 바디만 렌더 */
-            <VirtualizedTableGrid
-              questionId={questionId}
-              displayRows={displayRows}
-              visibleColumns={visibleColumns}
-              rowCompletionMap={rowCompletionMap}
-              rowGridMap={rowGridMap}
-              isTestMode={isTestMode}
-              value={value}
-              onChange={mergedOnChange}
-              gridTemplateCols={gridTemplateCols}
-              totalWidth={totalWidth}
-              renderSelectorRows={renderSelectorRows}
-              stickyInfo={stickyInfo}
-            />
-          ) : (
-            /* 바디 전용 grid */
-            <div
-              role="rowgroup"
-              className={cn(
-                'mx-auto rounded-b-md border-l border-r border-gray-300 bg-white text-sm',
-                hideColumnLabels && 'rounded-t-md border-t',
-              )}
-              style={gridContainerStyle}
-            >
-              {/* 바디 — 명시적 grid-row 배치 */}
-              {displayRows.map((row) => (
-                <React.Fragment key={row.id}>
-                  {renderRowCells({
-                    row,
-                    gridRow: rowGridMap.get(row.id),
-                    completed: rowCompletionMap.get(row.id) ?? false,
-                    questionId, isTestMode, value,
-                    onChange: mergedOnChange,
-                    stickyInfo,
-                  })}
-                </React.Fragment>
-              ))}
+        {/* 바디: 가로 스크롤 + 우측/좌측 페이드. relative 래퍼로 페이드를 우측에
+            고정한다(스크롤 컨테이너 안에 두면 콘텐츠와 함께 밀려 힌트 효과가 사라진다).
+            잘린 셀 텍스트가 있는 바디는 bg-white 이므로 from-white 로 페이드아웃시킨다. */}
+        <div className="relative -mx-4 md:mx-0">
+          <div
+            ref={tableContainerRef}
+            className="overflow-x-auto px-4 pb-4 md:px-0 print:overflow-visible"
+            style={{ WebkitOverflowScrolling: 'touch' }}
+          >
+            {shouldVirtualize ? (
+              /* 가상화: 바디만 렌더 */
+              <VirtualizedTableGrid
+                questionId={questionId}
+                displayRows={displayRows}
+                visibleColumns={visibleColumns}
+                rowCompletionMap={rowCompletionMap}
+                rowGridMap={rowGridMap}
+                isTestMode={isTestMode}
+                value={value}
+                onChange={mergedOnChange}
+                gridTemplateCols={gridTemplateCols}
+                totalWidth={totalWidth}
+                renderSelectorRows={renderSelectorRows}
+                stickyInfo={stickyInfo}
+              />
+            ) : (
+              /* 바디 전용 grid */
+              <div
+                role="rowgroup"
+                className={cn(
+                  'mx-auto rounded-b-md border-r border-l border-gray-300 bg-white text-sm',
+                  hideColumnLabels && 'rounded-t-md border-t',
+                )}
+                style={gridContainerStyle}
+              >
+                {/* 바디 — 명시적 grid-row 배치 */}
+                {displayRows.map((row) => (
+                  <React.Fragment key={row.id}>
+                    {renderRowCells({
+                      row,
+                      gridRow: rowGridMap.get(row.id),
+                      completed: rowCompletionMap.get(row.id) ?? false,
+                      questionId,
+                      isTestMode,
+                      value,
+                      onChange: mergedOnChange,
+                      stickyInfo,
+                    })}
+                  </React.Fragment>
+                ))}
 
-              {/* 셀렉터 행들 — 명시적 grid-row 배치 */}
-              {renderSelectorRows()}
-            </div>
+                {/* 셀렉터 행들 — 명시적 grid-row 배치 */}
+                {renderSelectorRows()}
+              </div>
+            )}
+          </div>
+          {/* 우측 페이드 — 잘린 셀 내용 위로 깔려 "오른쪽에 더 있다"를 알린다 */}
+          {canScrollRight && (
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-black/10 to-transparent print:hidden"
+            />
+          )}
+          {canScrollLeft && (
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-y-0 left-0 w-6 bg-gradient-to-r from-black/10 to-transparent print:hidden"
+            />
           )}
         </div>
       </div>
@@ -842,10 +911,12 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
       {activeGroupId && (
         <DynamicRowSelectorModal
           open={!!activeGroupId}
-          onOpenChange={(open) => { if (!open) closeModal(); }}
+          onOpenChange={(open) => {
+            if (!open) closeModal();
+          }}
           dynamicRows={dynamicRows.filter((r) => r.dynamicGroupId === activeGroupId)}
           selectedRowIds={selectedRowIds.filter((id) =>
-            dynamicRows.some((r) => r.id === id && r.dynamicGroupId === activeGroupId)
+            dynamicRows.some((r) => r.id === id && r.dynamicGroupId === activeGroupId),
           )}
           label={groupConfigMap.get(activeGroupId)?.label}
           onConfirm={handleDynamicRowSelect}
