@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 
 import { CheckCircle2, ChevronLeft, ChevronRight } from 'lucide-react';
 
@@ -63,6 +63,14 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
     sec: null,
     leaf: null,
   });
+
+  // 섹션/리프 이동 시(다음 섹션·목차로·뒤로·진입) 화면을 맨 위로 올린다.
+  // 응답자가 하단 버튼에서 이동해도 새 섹션을 처음부터 보게 한다.
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [nav.sec, nav.leaf]);
 
   // ── 응답 채움 계산 ──
   // emptyDefault(숫자 셀 첫 진입 시 자동 채워지는 초기값)와 동일한 값은 사용자가
