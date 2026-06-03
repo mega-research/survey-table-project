@@ -20,6 +20,7 @@ import {
   QuestionConditionGroup,
 } from '@/types/survey';
 import { detectCellTypeKind } from '@/utils/cell-type-detector';
+import { resolveChoiceOptions } from '@/utils/choice-source';
 import { getMergedRowIds, getRowMergeInfo } from '@/utils/table-merge-helpers';
 
 import { ExpressionConditionEditor } from './expression-condition-editor';
@@ -283,6 +284,20 @@ export const QuestionConditionEditor = forwardRef<
         {/* 조건 목록 */}
         {conditionGroup?.conditions.map((condition, index) => {
           const sourceQuestion = previousQuestions.find((q) => q.id === condition.sourceQuestionId);
+          // 값-일치 조건의 옵션 소스. 테이블-소스 choice radio/checkbox 는 question.options 가 비어
+          // 있고 choice_opt 셀에서 옵션을 가져오므로 resolveChoiceOptions 로 통합 해석한다.
+          // (manual 옵션 질문은 그대로 question.options 반환 → 동작 동일)
+          // value 가 cell.id 인 table-source 응답과 매칭되도록 체크박스 picker 의 저장값을 일치시킨다.
+          // value-match 조건일 때만 계산 — 다른 타입(table-cell-check/expression)에선 미사용이라
+          // resolveChoiceOptions 의 tableRowsData 전체 스캔을 건너뛴다.
+          const valueMatchOptions =
+            condition.conditionType === 'value-match' &&
+            sourceQuestion &&
+            (sourceQuestion.type === 'radio' ||
+              sourceQuestion.type === 'checkbox' ||
+              sourceQuestion.type === 'select')
+              ? resolveChoiceOptions(sourceQuestion)
+              : [];
           const isExpanded = expandedConditions.has(condition.id);
           // 로컬 상태가 있으면 사용, 없으면 condition.name 사용, 둘 다 없으면 빈 문자열
           const conditionName =
@@ -756,16 +771,11 @@ export const QuestionConditionEditor = forwardRef<
                         <div className="space-y-2">
                           <Label htmlFor={`values-${condition.id}`}>필요한 값들</Label>
 
-                          {/* 참조 질문의 옵션이 있으면 체크박스로 표시 */}
-                          {sourceQuestion &&
-                          (sourceQuestion.type === 'radio' ||
-                            sourceQuestion.type === 'checkbox' ||
-                            sourceQuestion.type === 'select') &&
-                          sourceQuestion.options &&
-                          sourceQuestion.options.length > 0 ? (
+                          {/* 참조 질문의 옵션이 있으면 체크박스로 표시 (테이블-소스 choice 포함) */}
+                          {valueMatchOptions.length > 0 ? (
                             <div className="space-y-2">
                               <div className="max-h-48 space-y-2 overflow-y-auto rounded-md border border-gray-200 p-3">
-                                {sourceQuestion.options.map((option) => {
+                                {valueMatchOptions.map((option) => {
                                   const isSelected = (condition.requiredValues || []).includes(
                                     option.value,
                                   );
