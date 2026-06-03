@@ -1,5 +1,7 @@
+import ExcelJS from 'exceljs';
 import * as XLSX from 'xlsx';
 
+import { HEADER_BORDER, HEADER_FILL, HEADER_FONT } from '@/lib/analytics/cleaning-export-types';
 import { isCellInputable } from '@/lib/analytics/excel-export-utils';
 import { generateSPSSColumns, buildDataRows, type SPSSExportColumn } from '@/lib/analytics/spss-excel-export';
 import { formatExcelDateTime, buildCodebookValueLabel } from '@/lib/analytics/raw-export-helpers';
@@ -350,7 +352,7 @@ export function generateRawDataWorkbook(
   questions: Question[],
   rows: RawExportResponseRow[],
   identifierMode: RawIdentifierMode,
-): XLSX.WorkBook {
+): ExcelJS.Workbook {
   const idHeader = identifierMode === 'systemId' ? 'systemID' : '순번';
   // systemId 모드에서 컨택 미매칭(익명) 응답은 resid가 없어 식별자 칸을 공백으로 둔다.
   const idValue = (row: RawExportResponseRow, idx: number): string | number =>
@@ -363,14 +365,13 @@ export function generateRawDataWorkbook(
   const dataMatrix = buildDataRows(columns, sortedQuestions, rows as unknown as SurveySubmission[]);
   const questionMap = new Map(sortedQuestions.map((q) => [q.id, q]));
 
-  const workbook = XLSX.utils.book_new();
+  const workbook = new ExcelJS.Workbook();
 
   // 시트 1: 응답 내역
-  const sheet1: (string | number)[][] = [[
-    idHeader, '조사 대상 그룹', '접속 단말', '브라우저', '상태', '시작일시', '종료일시', '소요시간',
-  ]];
+  const ws1 = workbook.addWorksheet('응답 내역');
+  ws1.addRow([idHeader, '조사 대상 그룹', '접속 단말', '브라우저', '상태', '시작일시', '종료일시', '소요시간']);
   rows.forEach((row, i) => {
-    sheet1.push([
+    ws1.addRow([
       idValue(row, i),
       row.groupValue ?? '공개링크',
       formatPlatformKo(row.platform as Platform | null),
@@ -382,22 +383,44 @@ export function generateRawDataWorkbook(
       formatTotalTime(row.totalSeconds, row.status),
     ]);
   });
-  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(sheet1), '응답 내역');
+  styleHeaderRows(ws1, [1], 8);
+  autoFitRawColumns(ws1, 8);
 
-  // 시트 2: Raw Data (헤더 3행)
-  const headerRow1: (string | number)[] = [idHeader, ...columns.map((c) => c.questionText)];
-  const headerRow2: (string | number)[] = ['', ...columns.map((c) => row2Label(c))];
-  const headerRow3: (string | number)[] = ['', ...columns.map((c) => c.spssVarName)];
-  const sheet2: (string | number | null)[][] = [headerRow1, headerRow2, headerRow3];
+  // 시트 2: Raw Data (헤더 3행 = 질문제목 / 셀라벨 / SPSS 변수명)
+  const ws2 = workbook.addWorksheet('Raw Data');
+  const colCount = columns.length + 1; // 식별자 1열 + 변수 열
+  ws2.addRow([idHeader, ...columns.map((c) => c.questionText)]);
+  ws2.addRow(['', ...columns.map((c) => row2Label(c))]);
+  ws2.addRow(['', ...columns.map((c) => c.spssVarName)]);
   rows.forEach((row, i) => {
-    sheet2.push([idValue(row, i), ...dataMatrix[i]]);
+    ws2.addRow([idValue(row, i), ...dataMatrix[i]]);
   });
-  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(sheet2), 'Raw Data');
+
+  // 1~3행 헤더 스타일
+  styleHeaderRows(ws2, [1, 2, 3], colCount);
+  // 식별자 열은 1~3행 세로 병합
+  ws2.mergeCells(1, 1, 3, 1);
+  // 1행: 같은 질문(questionId)에 속한 연속 변수 열을 가로 병합
+  let start = 0;
+  while (start < columns.length) {
+    let end = start;
+    while (end + 1 < columns.length && columns[end + 1].questionId === columns[start].questionId) {
+      end++;
+    }
+    if (end > start) ws2.mergeCells(1, start + 2, 1, end + 2);
+    start = end + 1;
+  }
+  // 열 너비: 변수 열은 2행(셀라벨) 컨텐츠 기준
+  ws2.getColumn(1).width = clampRawWidth(estimateTextWidth(idHeader));
+  columns.forEach((c, i) => {
+    ws2.getColumn(i + 2).width = clampRawWidth(estimateTextWidth(row2Label(c)));
+  });
 
   // 시트 3: 코딩북
-  const sheet3: (string | number)[][] = [['변수번호', 'SPSS 변수명', '질문 제목', '셀라벨', '값 라벨']];
+  const ws3 = workbook.addWorksheet('코딩북');
+  ws3.addRow(['변수번호', 'SPSS 변수명', '질문 제목', '셀라벨', '값 라벨']);
   columns.forEach((c, i) => {
-    sheet3.push([
+    ws3.addRow([
       i + 1,
       c.spssVarName,
       c.questionText,
@@ -405,9 +428,64 @@ export function generateRawDataWorkbook(
       buildCodebookValueLabel(c, questionMap),
     ]);
   });
-  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(sheet3), '코딩북');
+  styleHeaderRows(ws3, [1], 5);
+  autoFitRawColumns(ws3, 5);
 
   return workbook;
+}
+
+// ── Raw 워크북 스타일/레이아웃 헬퍼 ──
+
+const RAW_MIN_WIDTH = 8;
+const RAW_MAX_WIDTH = 60;
+const RAW_WIDTH_PADDING = 2;
+
+/** 텍스트 표시 너비 추정 (CJK 문자 1.8배). */
+function estimateTextWidth(value: unknown): number {
+  if (value === null || value === undefined) return 0;
+  let width = 0;
+  for (const ch of String(value)) {
+    const code = ch.codePointAt(0) ?? 0;
+    const isCjk =
+      (code >= 0x1100 && code <= 0x11ff) ||
+      (code >= 0x3000 && code <= 0x9fff) ||
+      (code >= 0xac00 && code <= 0xd7af) ||
+      (code >= 0xf900 && code <= 0xfaff) ||
+      (code >= 0xff00 && code <= 0xffef);
+    width += isCjk ? 1.8 : 1;
+  }
+  return width;
+}
+
+function clampRawWidth(width: number): number {
+  return Math.min(RAW_MAX_WIDTH, Math.max(RAW_MIN_WIDTH, width + RAW_WIDTH_PADDING));
+}
+
+/** 지정한 행들을 헤더 스타일(파란 배경 + 흰 굵은 글씨 + 테두리 + 가운데 정렬)로 칠한다. */
+function styleHeaderRows(ws: ExcelJS.Worksheet, rowNums: number[], colCount: number): void {
+  for (const rowNum of rowNums) {
+    const row = ws.getRow(rowNum);
+    for (let c = 1; c <= colCount; c++) {
+      const cell = row.getCell(c);
+      cell.fill = HEADER_FILL;
+      cell.font = HEADER_FONT;
+      cell.border = HEADER_BORDER;
+      cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+    }
+    row.height = 22;
+  }
+}
+
+/** 헤더 + 데이터 일부를 표본으로 열 너비를 자동 맞춤 (시트1/코딩북용). */
+function autoFitRawColumns(ws: ExcelJS.Worksheet, colCount: number): void {
+  const sampleEnd = Math.min(ws.rowCount, 200);
+  for (let c = 1; c <= colCount; c++) {
+    let max = 0;
+    for (let r = 1; r <= sampleEnd; r++) {
+      max = Math.max(max, estimateTextWidth(ws.getRow(r).getCell(c).value));
+    }
+    ws.getColumn(c).width = clampRawWidth(max);
+  }
 }
 
 /** Raw Data 헤더 행2: 테이블 셀라벨 > 옵션 분리 열 라벨 > 공백 */

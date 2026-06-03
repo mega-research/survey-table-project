@@ -143,9 +143,10 @@ export async function GET(
         rows,
         identifierMode,
       );
-      const buffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'buffer' });
+      // exceljs 워크북 — 셀 스타일(헤더 색상/병합) 지원을 위해 XLSX 대신 사용.
+      const buffer = await workbook.xlsx.writeBuffer();
       const filename = `${safeTitle}_RawData_${dateSlice}.xlsx`;
-      return new NextResponse(buffer, {
+      return new NextResponse(buffer as ArrayBuffer, {
         headers: {
           'Content-Disposition': `attachment; filename="${filename}"`,
           'Content-Type': XLSX_MIME,

@@ -1,4 +1,3 @@
-import * as XLSX from 'xlsx';
 import { describe, expect, it } from 'vitest';
 
 import { generateRawDataWorkbook, type RawExportResponseRow } from '@/lib/excel-transformer';
@@ -13,6 +12,15 @@ const radioQ = {
   ],
 } as unknown as Question;
 
+const checkboxQ = {
+  id: 'q2', type: 'checkbox', title: 'Q2. 관심분야', order: 2, required: false,
+  questionCode: 'Q2',
+  options: [
+    { id: 'x', label: 'AI', value: 'optA', spssNumericCode: 1 },
+    { id: 'y', label: 'ML', value: 'optB', spssNumericCode: 2 },
+  ],
+} as unknown as Question;
+
 const baseRow = (over: Partial<RawExportResponseRow>): RawExportResponseRow => ({
   id: 'r1', questionResponses: {}, groupValue: null, resid: null,
   platform: 'desktop', browser: 'Chrome', status: 'completed',
@@ -20,49 +28,69 @@ const baseRow = (over: Partial<RawExportResponseRow>): RawExportResponseRow => (
   totalSeconds: 600, ...over,
 });
 
-function sheetAOA(wb: XLSX.WorkBook, name: string): unknown[][] {
-  return XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, blankrows: true }) as unknown[][];
-}
-
 describe('generateRawDataWorkbook', () => {
   it('3개 시트를 생성한다', () => {
     const wb = generateRawDataWorkbook([radioQ], [baseRow({})], 'sequence');
-    expect(wb.SheetNames).toEqual(['응답 내역', 'Raw Data', '코딩북']);
+    expect(wb.worksheets.map((w) => w.name)).toEqual(['응답 내역', 'Raw Data', '코딩북']);
   });
 
   it('공공(sequence)은 첫 컬럼 헤더가 순번이고 1부터 매긴다', () => {
     const rows = [baseRow({ id: 'a' }), baseRow({ id: 'b' })];
     const wb = generateRawDataWorkbook([radioQ], rows, 'sequence');
-    const aoa = sheetAOA(wb, '응답 내역');
-    expect(aoa[0][0]).toBe('순번');
-    expect(aoa[1][0]).toBe(1);
-    expect(aoa[2][0]).toBe(2);
+    const ws = wb.getWorksheet('응답 내역')!;
+    expect(ws.getCell('A1').value).toBe('순번');
+    expect(ws.getCell('A2').value).toBe(1);
+    expect(ws.getCell('A3').value).toBe(2);
   });
 
   it('토큰(systemId)은 첫 컬럼 헤더가 systemID이고 resid 값을 쓴다', () => {
     const wb = generateRawDataWorkbook([radioQ], [baseRow({ resid: 77 })], 'systemId');
-    const aoa = sheetAOA(wb, '응답 내역');
-    expect(aoa[0][0]).toBe('systemID');
-    expect(aoa[1][0]).toBe(77);
+    const ws = wb.getWorksheet('응답 내역')!;
+    expect(ws.getCell('A1').value).toBe('systemID');
+    expect(ws.getCell('A2').value).toBe(77);
   });
 
   it('Raw Data 시트는 헤더 3행(질문제목/셀라벨/변수명) 후 코드값', () => {
-    const row = baseRow({ questionResponses: { q1: 'opt2' } });
-    const wb = generateRawDataWorkbook([radioQ], [row], 'sequence');
-    const aoa = sheetAOA(wb, 'Raw Data');
-    expect(aoa[0][0]).toBe('순번');
-    expect(aoa[0][1]).toBe('Q1. 성별');
-    expect(aoa[1][1]).toBe('');
-    expect(aoa[2][1]).toBe('Q1');
-    expect(aoa[3][0]).toBe(1);
-    expect(aoa[3][1]).toBe(2);
+    const wb = generateRawDataWorkbook([radioQ], [baseRow({ questionResponses: { q1: 'opt2' } })], 'sequence');
+    const ws = wb.getWorksheet('Raw Data')!;
+    expect(ws.getCell('A1').value).toBe('순번');         // 식별자 헤더 (세로 병합 master)
+    expect(ws.getCell('B1').value).toBe('Q1. 성별');      // 행1: 질문 제목
+    expect(ws.getCell('B2').value ?? '').toBe('');        // 행2: 셀라벨 (단일질문 → 공백)
+    expect(ws.getCell('B3').value).toBe('Q1');            // 행3: SPSS 변수명
+    expect(ws.getCell('A4').value).toBe(1);               // 데이터 행 식별자
+    expect(ws.getCell('B4').value).toBe(2);               // 코드값 (여성=2)
   });
 
-  it('코딩북 시트는 변수명/값라벨을 담는다', () => {
+  it('코딩북 시트는 변수번호/변수명/값라벨을 담는다', () => {
     const wb = generateRawDataWorkbook([radioQ], [baseRow({})], 'sequence');
-    const aoa = sheetAOA(wb, '코딩북');
-    expect(aoa[0]).toEqual(['변수번호', 'SPSS 변수명', '질문 제목', '셀라벨', '값 라벨']);
-    const q1 = aoa.find((r) => r[1] === 'Q1');
-    expect(q1?.[4]).toBe('1=남성, 2=여성');
+    const ws = wb.getWorksheet('코딩북')!;
+    expect([1, 2, 3, 4, 5].map((c) => ws.getRow(1).getCell(c).value)).toEqual([
+      '변수번호', 'SPSS 변수명', '질문 제목', '셀라벨', '값 라벨',
+    ]);
+    let valueLabel: unknown;
+    ws.eachRow((row) => { if (row.getCell(2).value === 'Q1') valueLabel = row.getCell(5).value; });
+    expect(valueLabel).toBe('1=남성, 2=여성');
+  });
+
+  it('시트2 1행은 같은 질문 변수 열끼리 가로 병합되고 식별자는 세로 병합된다', () => {
+    // radio(변수1) + checkbox(변수2: Q2_1, Q2_2) → 열 A(식별자) B(Q1) C(Q2_1) D(Q2_2)
+    const wb = generateRawDataWorkbook([radioQ, checkboxQ], [baseRow({})], 'sequence');
+    const ws = wb.getWorksheet('Raw Data')!;
+    const merges = ws.model.merges as string[];
+    expect(merges).toContain('A1:A3');   // 식별자 세로 병합
+    expect(merges).toContain('C1:D1');   // 같은 질문(Q2) 변수 열 가로 병합
+    // 단일 변수 질문(Q1, B열)은 가로 병합 대상 아님
+    expect(merges.some((m) => m.startsWith('B1:'))).toBe(false);
+  });
+
+  it('시트2 헤더 1~3행에 색상(fill)과 열 너비가 적용된다', () => {
+    const wb = generateRawDataWorkbook([radioQ], [baseRow({})], 'sequence');
+    const ws = wb.getWorksheet('Raw Data')!;
+    for (const ref of ['A1', 'B1', 'B2', 'B3']) {
+      const fill = ws.getCell(ref).fill as { type?: string };
+      expect(fill?.type).toBe('pattern');
+    }
+    expect(ws.getColumn(1).width).toBeGreaterThan(0);
+    expect(ws.getColumn(2).width).toBeGreaterThan(0);
   });
 });
