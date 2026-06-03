@@ -54,6 +54,7 @@ scripts
 .serena
 .superpowers
 .worktrees
+.claude/worktrees/
 docs
 
 # local agent metadata

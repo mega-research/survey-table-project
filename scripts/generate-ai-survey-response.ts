@@ -564,7 +564,9 @@ function pickOptionValues(q: Question, n: number): string[] {
 }
 
 function nonOtherOptions(q: Question): QOption[] {
-  return (q.options || []).filter(o => !o.hasOther);
+  // 기타(hasOther)·주관식(allowTextInput) 옵션은 일반 선택 풀에서 제외 —
+  // 기타는 applyOtherInputs 가 __optTexts__ 사이드카와 함께 별도 처리.
+  return (q.options || []).filter(o => !o.hasOther && !o.allowTextInput);
 }
 
 /** 프로필 기반 결정적 시드 */
@@ -657,7 +659,10 @@ function pickRanking(
   seed: number,
 ): Array<{ rank: number; optionValue: string; optionText?: string }> {
   const cellIds = collectRankingCellIds(q);
-  const candidates = cellIds.length > 0 ? cellIds : nonOtherOptions(q).map((o) => o.value);
+  // ranking 은 applyOtherInputs 대상이 아니므로 allowTextInput 기타도 후보에 포함(뽑히면 optionText 채움).
+  // synthetic 기타(hasOther → __other__)만 제외.
+  const manualValues = (q.options || []).filter((o) => !o.hasOther).map((o) => o.value);
+  const candidates = cellIds.length > 0 ? cellIds : manualValues;
   if (candidates.length === 0) return [];
   const positions = q.rankingConfig?.positions ?? 3;
   const take = Math.min(positions, candidates.length);
@@ -862,12 +867,10 @@ const SCENARIOS: Record<string, ScenarioFn> = {
     const idx = (P.employees + P.foundedYear) % combos.length;
     return combos[idx];
   },
-  [QID.Q5_1]: (q) => {
-    // 도메인별 오픈소스 활용 패턴이 달라지도록 domainSeed 합성
-    const vals = pickOptionSubset(q, profileSeed() + domainSeed() + 11, 1, 3);
-    if (P.useOtherRare) vals.push('other');
-    return vals;
-  },
+  [QID.Q5_1]: (q) =>
+    // 도메인별 오픈소스 활용 패턴이 달라지도록 domainSeed 합성.
+    // 기타 입력은 applyOtherInputs 가 __optTexts__ 와 함께 처리(잘못된 'other' push 제거).
+    pickOptionSubset(q, profileSeed() + domainSeed() + 11, 1, 3),
   [QID.Q6]: (q) => pickOptionSubset(q, profileSeed() + domainSeed() + 23, 1, 3), // 모델 규모 1~3개
   [QID.Q6_1]: (q) => pickOptionSubset(q, profileSeed() + domainSeed() + 31, 1, 2), // 연산량 1~2개
   [QID.Q7]: () => P.infraChoice,
@@ -1588,6 +1591,74 @@ function runSurvey(questions: Question[], groups: QGroup[]): RunResult {
 }
 
 // ========================================
+// 기타/주관식(__optTexts__) 후처리
+// ========================================
+/** 질문 맥락에 맞는 기타 상세 텍스트 선택 */
+function pickOtherText(q: Question, seed: number): string {
+  const t = q.title || '';
+  let pool: string[];
+  if (/수출\s*지역|희망\s*수출/.test(t)) pool = ['중동 지역', '동남아시아', '중남미', '아프리카'];
+  else if (/수출.*않|수출.*계획.*없/.test(t)) pool = ['내수 시장 우선 집중', '수출 인력·예산 부족', '현지 인증 대응 어려움'];
+  else if (/데이터/.test(t)) pool = ['자체 수집·생성 데이터', '제휴 기관 제공 데이터', '크롤링 기반 자체 구축'];
+  else if (/오픈소스/.test(t)) pool = ['자체 파인튜닝 모델', '상용 폐쇄형 모델 병행', '사내 자체 구축 모델'];
+  else if (/제품|서비스|도구|개발/.test(t)) pool = ['자체 개발 프레임워크', '상용 MLOps 플랫폼', '클라우드 매니지드 서비스'];
+  else if (/가이드라인|프레임워크/.test(t)) pool = ['도입 검토 중', '내부 정책 수립 예정'];
+  else pool = ['기타 내부 검토 사항', '자체 방식으로 대응'];
+  return pool[Math.abs(seed) % pool.length];
+}
+
+/**
+ * 응답의 기타(allowTextInput/hasOther) 옵션에 __optTexts__ 사이드카 텍스트를 채운다.
+ * - checkbox/multiselect: 기타 미선택이면 결정적 ~30% 확률로 추가
+ * - radio/select: 이미 기타가 선택된 경우만 정규화(분기 영향 회피) + 레거시 otherValue 흡수
+ * 반환: { [questionId]: { [optionId]: text } } (앱 __optTexts__ 형식, 키는 option.id)
+ * ranking 은 RankingAnswer.optionText 로 별도 처리되므로 여기서 제외.
+ */
+function applyOtherInputs(
+  responses: Record<string, unknown>,
+  questions: Question[],
+): Record<string, Record<string, string>> {
+  const optTexts: Record<string, Record<string, string>> = {};
+  for (const q of questions) {
+    if (!(q.id in responses)) continue;
+    const otherOpts = (q.options || []).filter(o => o.allowTextInput || o.hasOther);
+    if (otherOpts.length === 0) continue;
+    const seed = profileSeed() + q.order;
+
+    if (q.type === 'checkbox' || q.type === 'multiselect') {
+      const arr = Array.isArray(responses[q.id])
+        ? (responses[q.id] as unknown[]).filter((v): v is string => typeof v === 'string')
+        : [];
+      let chosen = otherOpts.find(o => arr.includes(o.value));
+      if (!chosen && seed % 10 < 3) {
+        chosen = otherOpts[seed % otherOpts.length];
+        arr.push(chosen.value);
+        responses[q.id] = arr;
+      }
+      if (chosen) optTexts[q.id] = { [chosen.id]: pickOtherText(q, seed) };
+    } else if (q.type === 'radio' || q.type === 'select') {
+      const val = responses[q.id];
+      let selVal: string | null = null;
+      let legacyText: string | null = null;
+      if (typeof val === 'string') {
+        selVal = val;
+      } else if (val && typeof val === 'object') {
+        const o = val as { selectedValue?: string; otherValue?: string };
+        selVal = o.selectedValue ?? null;
+        legacyText = o.otherValue ?? null;
+      }
+      const chosen = otherOpts.find(o => o.value === selVal);
+      if (chosen) {
+        // 신규 형식으로 정규화: 응답값 = 옵션 value, 텍스트는 __optTexts__
+        responses[q.id] = chosen.value;
+        optTexts[q.id] = { [chosen.id]: legacyText || pickOtherText(q, seed) };
+      }
+    }
+  }
+  return optTexts;
+}
+
+// ========================================
 // 디바이스/페이지 visit 헬퍼 (운영 콘솔 응답시간 통계용)
 // ========================================
 function derivePlatform(ua: string): 'desktop' | 'mobile' | 'tablet' {
@@ -1862,10 +1933,15 @@ async function main() {
       ? 100
       : calcProgressPct(exposedIds, positionMap, questions.length);
 
+    // 기타/주관식 입력 사이드카(__optTexts__). responses 에 기타 옵션도 in-place 반영됨.
+    const optTexts = applyOtherInputs(responses, questions);
+    const qResponses =
+      Object.keys(optTexts).length > 0 ? { ...responses, __optTexts__: optTexts } : responses;
+
     responsePayloads.push({
       id: responseId,
       survey_id: SURVEY_ID,
-      question_responses: responses,
+      question_responses: qResponses,
       is_completed: isCompleted,
       status, // 운영 콘솔 상태 분류 (completed/in_progress/drop)
       started_at: startedAt.toISOString(),
