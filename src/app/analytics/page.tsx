@@ -8,6 +8,11 @@ import { LocalDateTime } from '@/components/ui/local-date-time';
 import { getCompletedResponseCountBySurvey, getResponseCountBySurvey } from '@/data/responses';
 import { getSurveys } from '@/data/surveys';
 
+// 라이브 응답 수를 보여주는 대시보드. 빌드 타임 prerender(static) 대상이 되면
+// 프로덕션 DB에 카운트 쿼리를 실행하다 statement_timeout 으로 빌드가 실패한다.
+// 항상 요청 시점에 렌더링한다.
+export const dynamic = 'force-dynamic';
+
 export default async function AnalyticsListPage() {
   const surveys = await getSurveys();
 
