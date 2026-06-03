@@ -82,66 +82,81 @@ export function ExportDataModal({ surveyId, surveyTitle, onExportCleaningExcel }
         </DialogHeader>
 
         <div className="grid grid-cols-1 gap-4 py-4">
-          {/* 1. 통계분석용 (Semi-Long / Cleaning) */}
-          {onExportCleaningExcel && (
-            <div className="space-y-2">
+          {/* Raw Data 추출 (주 내보내기) */}
+          <ExportCard
+            title="Raw Data 엑셀"
+            description="응답 내역 + 변수별 코드값 + 코딩북 (3시트)"
+            icon={<FileSpreadsheet className="h-5 w-5 text-blue-600" />}
+            isLoading={exportingType === 'raw'}
+            disabled={!!exportingType}
+            onClick={() => handleExport('raw')}
+          />
+
+          {/* 기존 내보내기 카드 — 추후 복원 대비 코드 보존 */}
+          {false && (
+            <>
+              {/* 1. 통계분석용 (Semi-Long / Cleaning) */}
+              {onExportCleaningExcel && (
+                <div className="space-y-2">
+                  <ExportCard
+                    title="통계분석용"
+                    description="테이블 문항을 클리닝하기 쉬운 형태로 변환합니다. 시트 간 필터 연동 활성화 시 .xlsm(매크로 포함) — 어느 시트에서 filter를 걸어도 VBA가 response_id를 모든 시트에 전파합니다. 수식이 없어 대용량에서도 빠름."
+                    icon={<ClipboardCheck className="h-5 w-5 text-teal-600" />}
+                    isLoading={exportingType === 'cleaning'}
+                    disabled={!!exportingType}
+                    onClick={() => handleExport('cleaning')}
+                  />
+                  <label className="flex items-start gap-2 rounded-md border border-dashed bg-slate-50 px-4 py-2 pl-16 text-xs text-slate-600">
+                    <input
+                      type="checkbox"
+                      checked={includeMacroSync}
+                      onChange={(e) => setIncludeMacroSync(e.target.checked)}
+                      disabled={!!exportingType}
+                      className="mt-0.5 h-3.5 w-3.5 cursor-pointer"
+                    />
+                    <span>
+                      <span className="font-semibold">시트 간 필터 연동 (VBA 매크로)</span>
+                      <span className="ml-1 text-slate-500">
+                        — 한 시트에서 autofilter를 걸면 VBA가 보이는 <code className="rounded bg-slate-200 px-1">response_id</code> 집합을 모든 시트에 전파합니다.
+                        체크 시 <code className="mx-1 rounded bg-slate-200 px-1">.xlsm</code>로 내보냄 (Excel에서 매크로 허용 필요).
+                        무거운 수식을 사용하지 않아 대용량에서도 빠르게 열립니다.
+                      </span>
+                    </span>
+                  </label>
+                </div>
+              )}
+
+              {/* 2. SPSS .sav 네이티브 파일 */}
               <ExportCard
-                title="통계분석용"
-                description="테이블 문항을 클리닝하기 쉬운 형태로 변환합니다. 시트 간 필터 연동 활성화 시 .xlsm(매크로 포함) — 어느 시트에서 filter를 걸어도 VBA가 response_id를 모든 시트에 전파합니다. 수식이 없어 대용량에서도 빠름."
-                icon={<ClipboardCheck className="h-5 w-5 text-teal-600" />}
-                isLoading={exportingType === 'cleaning'}
+                title="SPSS .sav 파일"
+                description="SPSS에서 바로 열 수 있는 네이티브 파일입니다. 변수 라벨, 값 라벨, 측정 수준이 포함됩니다."
+                icon={<FileDown className="h-5 w-5 text-red-600" />}
+                isLoading={exportingType === 'sav'}
                 disabled={!!exportingType}
-                onClick={() => handleExport('cleaning')}
+                onClick={() => handleExport('sav')}
               />
-              <label className="flex items-start gap-2 rounded-md border border-dashed bg-slate-50 px-4 py-2 pl-16 text-xs text-slate-600">
-                <input
-                  type="checkbox"
-                  checked={includeMacroSync}
-                  onChange={(e) => setIncludeMacroSync(e.target.checked)}
-                  disabled={!!exportingType}
-                  className="mt-0.5 h-3.5 w-3.5 cursor-pointer"
-                />
-                <span>
-                  <span className="font-semibold">시트 간 필터 연동 (VBA 매크로)</span>
-                  <span className="ml-1 text-slate-500">
-                    — 한 시트에서 autofilter를 걸면 VBA가 보이는 <code className="rounded bg-slate-200 px-1">response_id</code> 집합을 모든 시트에 전파합니다.
-                    체크 시 <code className="mx-1 rounded bg-slate-200 px-1">.xlsm</code>로 내보냄 (Excel에서 매크로 허용 필요).
-                    무거운 수식을 사용하지 않아 대용량에서도 빠르게 열립니다.
-                  </span>
-                </span>
-              </label>
-            </div>
+
+              {/* 3. 요약 리포트 (Summary) */}
+              <ExportCard
+                title="요약 리포트 (Summary)"
+                description="문항별 응답 빈도와 비율(%)이 계산된 요약 리포트입니다."
+                icon={<BarChart3 className="h-5 w-5 text-orange-600" />}
+                isLoading={exportingType === 'summary'}
+                disabled={!!exportingType}
+                onClick={() => handleExport('summary')}
+              />
+
+              {/* 4. 코딩북 (Variable Map) */}
+              <ExportCard
+                title="코딩북 (Variable Map)"
+                description="설문 문항 ID, 라벨, 보기 값 등에 대한 변수 정의서입니다."
+                icon={<FileText className="h-5 w-5 text-gray-600" />}
+                isLoading={exportingType === 'map'}
+                disabled={!!exportingType}
+                onClick={() => handleExport('map')}
+              />
+            </>
           )}
-
-          {/* 2. SPSS .sav 네이티브 파일 */}
-          <ExportCard
-            title="SPSS .sav 파일"
-            description="SPSS에서 바로 열 수 있는 네이티브 파일입니다. 변수 라벨, 값 라벨, 측정 수준이 포함됩니다."
-            icon={<FileDown className="h-5 w-5 text-red-600" />}
-            isLoading={exportingType === 'sav'}
-            disabled={!!exportingType}
-            onClick={() => handleExport('sav')}
-          />
-
-          {/* 3. 요약 리포트 (Summary) */}
-          <ExportCard
-            title="요약 리포트 (Summary)"
-            description="문항별 응답 빈도와 비율(%)이 계산된 요약 리포트입니다."
-            icon={<BarChart3 className="h-5 w-5 text-orange-600" />}
-            isLoading={exportingType === 'summary'}
-            disabled={!!exportingType}
-            onClick={() => handleExport('summary')}
-          />
-
-          {/* 4. 코딩북 (Variable Map) */}
-          <ExportCard
-            title="코딩북 (Variable Map)"
-            description="설문 문항 ID, 라벨, 보기 값 등에 대한 변수 정의서입니다."
-            icon={<FileText className="h-5 w-5 text-gray-600" />}
-            isLoading={exportingType === 'map'}
-            disabled={!!exportingType}
-            onClick={() => handleExport('map')}
-          />
         </div>
 
         <DialogFooter>

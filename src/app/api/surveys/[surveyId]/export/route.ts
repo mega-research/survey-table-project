@@ -1,15 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { and, count, eq } from 'drizzle-orm';
+import { and, count, eq, inArray, isNull, ne } from 'drizzle-orm';
 import * as XLSX from 'xlsx';
 
 import { db } from '@/db';
-import { surveyResponses, surveys } from '@/db/schema';
+import { contactTargets, surveyResponses, surveys } from '@/db/schema';
 import { notDeletedResponse } from '@/data/response-filters';
 import { requireAuth } from '@/lib/auth';
 import {
+  generateRawDataWorkbook,
   generateSummaryWorkbook,
   generateVariableMapWorkbook,
+  type RawExportResponseRow,
 } from '@/lib/excel-transformer';
 import { Question, Survey, SurveySubmission } from '@/types/survey';
 import { generateAllOptionCodes } from '@/utils/option-code-generator';
@@ -18,7 +20,7 @@ import { generateAllCellCodes } from '@/utils/table-cell-code-generator';
 // Vercel serverless 최대 실행시간 30초 (기본 10초)
 export const maxDuration = 30;
 
-const ALLOWED_EXPORT_TYPES = ['summary', 'map', 'sav'] as const;
+const ALLOWED_EXPORT_TYPES = ['summary', 'map', 'sav', 'raw'] as const;
 type ExportType = (typeof ALLOWED_EXPORT_TYPES)[number];
 
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -61,9 +63,10 @@ export async function GET(
     }
 
     // 2. 응답 데이터 조회 (Variable Map은 응답 불필요 → 스킵)
+    // raw는 자체 모수(in_progress 제외)와 가드를 별도로 가지므로 이 공용 블록을 건너뛴다.
     let responses: typeof surveyResponses.$inferSelect[] = [];
 
-    if (type !== 'map') {
+    if (type !== 'map' && type !== 'raw') {
       const [{ total }] = await db
         .select({ total: count() })
         .from(surveyResponses)
@@ -85,7 +88,72 @@ export async function GET(
     const dateSlice = new Date().toISOString().slice(0, 10);
     const safeTitle = encodeURIComponent(surveyData.title);
 
-    // 3. SPSS .sav는 별도 바이너리 응답
+    // 3. Raw Data xlsx
+    if (type === 'raw') {
+      // raw 전용 모수: deleted 제외 + in_progress 제외, started_at ASC
+      const rawResponses = await db.query.surveyResponses.findMany({
+        where: and(
+          eq(surveyResponses.surveyId, surveyId),
+          isNull(surveyResponses.deletedAt),
+          ne(surveyResponses.status, 'in_progress'),
+        ),
+        orderBy: (r, { asc }) => [asc(r.startedAt)],
+      });
+
+      if (rawResponses.length > MAX_EXPORT_RESPONSES) {
+        return NextResponse.json(
+          { error: `응답이 ${MAX_EXPORT_RESPONSES.toLocaleString()}건을 초과하여 내보내기할 수 없습니다.` },
+          { status: 413 },
+        );
+      }
+
+      // resid / groupValue 매핑 (컨택 매칭 응답만)
+      const contactIds = rawResponses
+        .map((r) => r.contactTargetId)
+        .filter((v): v is string => !!v);
+      const contactMap = new Map<string, { resid: number; groupValue: string | null }>();
+      if (contactIds.length > 0) {
+        const targets = await db
+          .select({ id: contactTargets.id, resid: contactTargets.resid, groupValue: contactTargets.groupValue })
+          .from(contactTargets)
+          .where(inArray(contactTargets.id, contactIds));
+        for (const t of targets) contactMap.set(t.id, { resid: t.resid, groupValue: t.groupValue });
+      }
+
+      const identifierMode = surveyData.requireInviteToken ? 'systemId' : 'sequence';
+
+      const rows: RawExportResponseRow[] = rawResponses.map((r) => {
+        const c = r.contactTargetId ? contactMap.get(r.contactTargetId) : undefined;
+        return {
+          id: r.id,
+          questionResponses: (r.questionResponses ?? {}) as Record<string, unknown>,
+          groupValue: c?.groupValue ?? null,
+          resid: c?.resid ?? null,
+          platform: r.platform,
+          browser: r.browser,
+          status: r.status,
+          startedAt: r.startedAt,
+          completedAt: r.completedAt,
+          totalSeconds: r.totalSeconds,
+        };
+      });
+
+      const workbook = generateRawDataWorkbook(
+        surveyData.questions as unknown as Question[],
+        rows,
+        identifierMode,
+      );
+      const buffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'buffer' });
+      const filename = `${safeTitle}_RawData_${dateSlice}.xlsx`;
+      return new NextResponse(buffer, {
+        headers: {
+          'Content-Disposition': `attachment; filename="${filename}"`,
+          'Content-Type': XLSX_MIME,
+        },
+      });
+    }
+
+    // 4. SPSS .sav는 별도 바이너리 응답
     if (type === 'sav') {
       const { generateSavBuffer } = await import('@/lib/spss/sav-builder');
       const savBuffer = await generateSavBuffer(
@@ -100,7 +168,7 @@ export async function GET(
       });
     }
 
-    // 4. xlsx 계열 분기
+    // 5. xlsx 계열 분기
     let workbook: XLSX.WorkBook;
     let filenamePrefix: string;
 

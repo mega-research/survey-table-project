@@ -149,6 +149,25 @@ export function transformRankingOtherText(
 }
 
 /**
+ * 테이블 radio/select 셀 응답을 셀 옵션의 spssNumericCode로 변환한다.
+ * 옵션이 없으면(자유 입력 등) 기존 transformTableCell 동작으로 폴백.
+ */
+export function transformTableChoiceCell(
+  cellType: string,
+  value: unknown,
+  options: QuestionOption[] | undefined,
+): string | number | null {
+  if (value == null) return null;
+  if ((cellType === 'radio' || cellType === 'select') && options && options.length > 0) {
+    // 정상 응답은 옵션 id/value 문자열. 비문자열(레거시 number/object)은 매핑 불가 →
+    // 기존 transformTableCell 동작으로 폴백. 옵션에 없는 값이면 getNumericCode가 null(system-missing).
+    if (typeof value !== 'string') return transformTableCell(cellType, value);
+    return getNumericCode(options, value);
+  }
+  return transformTableCell(cellType, value);
+}
+
+/**
  * 테이블 셀 값을 변환한다.
  */
 export function transformTableCell(

@@ -1,7 +1,11 @@
 import * as XLSX from 'xlsx';
 
 import { isCellInputable } from '@/lib/analytics/excel-export-utils';
-import { Survey, SurveySubmission } from '@/types/survey';
+import { generateSPSSColumns, buildDataRows, type SPSSExportColumn } from '@/lib/analytics/spss-excel-export';
+import { formatExcelDateTime, buildCodebookValueLabel } from '@/lib/analytics/raw-export-helpers';
+import { formatTotalTime, mapStatusPill } from '@/lib/operations/profiles';
+import { formatPlatformKo, type Platform } from '@/lib/operations/parse-ua';
+import { Question, Survey, SurveySubmission } from '@/types/survey';
 import {
   resolveRankingOptions,
   toSpssValueLabelPairs,
@@ -314,4 +318,101 @@ function generateVariableMap(survey: Survey) {
     });
 
   return mapData;
+}
+
+// ============================================================
+// Raw Data 워크북
+// ============================================================
+
+export interface RawExportResponseRow {
+  id: string;
+  questionResponses: Record<string, unknown>;
+  groupValue: string | null;
+  resid: number | null;
+  platform: string | null;
+  browser: string | null;
+  status: string;
+  startedAt: Date;
+  completedAt: Date | null;
+  totalSeconds: number | null;
+}
+
+export type RawIdentifierMode = 'sequence' | 'systemId';
+
+/**
+ * 시트 분리 없는 3시트 Raw Data 워크북.
+ * - 응답 내역: 응답자 메타 (응답 내역 페이지 재현)
+ * - Raw Data: 응답 × 변수 wide table (SPSS 코드값), 헤더 3행
+ * - 코딩북: 변수 정의 + 값 라벨
+ * rows 는 started_at ASC 정렬된 동일 모수.
+ */
+export function generateRawDataWorkbook(
+  questions: Question[],
+  rows: RawExportResponseRow[],
+  identifierMode: RawIdentifierMode,
+): XLSX.WorkBook {
+  const idHeader = identifierMode === 'systemId' ? 'systemID' : '순번';
+  // systemId 모드에서 컨택 미매칭(익명) 응답은 resid가 없어 식별자 칸을 공백으로 둔다.
+  const idValue = (row: RawExportResponseRow, idx: number): string | number =>
+    identifierMode === 'systemId' ? (row.resid ?? '') : idx + 1;
+
+  // 질문은 order 순으로 정렬해 컬럼/코딩북 순서를 설문 표시 순서와 일치시킨다.
+  // (Summary/VariableMap 워크북도 동일하게 order 정렬을 적용한다.)
+  const sortedQuestions = [...questions].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const columns = generateSPSSColumns(sortedQuestions);
+  const dataMatrix = buildDataRows(columns, sortedQuestions, rows as unknown as SurveySubmission[]);
+  const questionMap = new Map(sortedQuestions.map((q) => [q.id, q]));
+
+  const workbook = XLSX.utils.book_new();
+
+  // 시트 1: 응답 내역
+  const sheet1: (string | number)[][] = [[
+    idHeader, '조사 대상 그룹', '접속 단말', '브라우저', '상태', '시작일시', '종료일시', '소요시간',
+  ]];
+  rows.forEach((row, i) => {
+    sheet1.push([
+      idValue(row, i),
+      row.groupValue ?? '공개링크',
+      formatPlatformKo(row.platform as Platform | null),
+      row.browser ?? 'Other',
+      mapStatusPill({ status: row.status }).label,
+      formatExcelDateTime(row.startedAt),
+      // 상태는 별도 컬럼이 표시하므로 종료일시는 순수 시각만(미완료/이탈은 null → 공백).
+      formatExcelDateTime(row.completedAt),
+      formatTotalTime(row.totalSeconds, row.status),
+    ]);
+  });
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(sheet1), '응답 내역');
+
+  // 시트 2: Raw Data (헤더 3행)
+  const headerRow1: (string | number)[] = [idHeader, ...columns.map((c) => c.questionText)];
+  const headerRow2: (string | number)[] = ['', ...columns.map((c) => row2Label(c))];
+  const headerRow3: (string | number)[] = ['', ...columns.map((c) => c.spssVarName)];
+  const sheet2: (string | number | null)[][] = [headerRow1, headerRow2, headerRow3];
+  rows.forEach((row, i) => {
+    sheet2.push([idValue(row, i), ...dataMatrix[i]]);
+  });
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(sheet2), 'Raw Data');
+
+  // 시트 3: 코딩북
+  const sheet3: (string | number)[][] = [['변수번호', 'SPSS 변수명', '질문 제목', '셀라벨', '값 라벨']];
+  columns.forEach((c, i) => {
+    sheet3.push([
+      i + 1,
+      c.spssVarName,
+      c.questionText,
+      c.cellExportLabel ?? '',
+      buildCodebookValueLabel(c, questionMap),
+    ]);
+  });
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(sheet3), '코딩북');
+
+  return workbook;
+}
+
+/** Raw Data 헤더 행2: 테이블 셀라벨 > 옵션 분리 열 라벨 > 공백 */
+function row2Label(c: SPSSExportColumn): string {
+  if (c.cellExportLabel) return c.cellExportLabel;
+  if (c.type === 'checkbox-item' || c.type === 'ranking-rank') return c.optionLabel ?? '';
+  return '';
 }

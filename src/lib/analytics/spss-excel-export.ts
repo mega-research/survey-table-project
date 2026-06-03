@@ -13,7 +13,7 @@ import {
   transformRankingOtherText,
   transformRankingWithOptions,
   transformSingleChoice,
-  transformTableCell,
+  transformTableChoiceCell,
   transformText,
   transformNumericText,
 } from '@/lib/spss/data-transformer';
@@ -68,6 +68,8 @@ export interface SPSSExportColumn {
   radioGroupValueLabels?: Record<number, string>;
   // option-text / table-cell-option-text 전용: 옵션 id (응답 데이터 조회용)
   optionId?: string;
+  // 테이블 셀 계열 및 radio-group 전용: 코딩북/헤더 행2에 쓰는 셀 엑셀라벨
+  cellExportLabel?: string;
   // 'text' 컬럼 전용: 숫자 단답형(question.inputType==='number') 이면 Numeric 변수로 처리
   numericText?: boolean;
 }
@@ -218,6 +220,8 @@ export function generateSPSSColumns(questions: Question[]): SPSSExportColumn[] {
         for (let colIdx = 0; colIdx < q.tableColumns.length; colIdx++) {
           const cell = tRow.cells[colIdx];
           if (!cell) continue;
+          // 병합(colspan/rowspan)으로 가려진 셀은 변수에서 제외 (변수명 중복 방지)
+          if (cell.isHidden) continue;
           // radioGroup 그룹에 속한 셀은 스킵 (그룹 변수로 이미 emit됨)
           if (groupedCellIds.has(cell.id)) continue;
           // 입력 불가능한 셀(text, image, video, ranking_opt)은 건너뛰기
@@ -256,6 +260,7 @@ export function generateSPSSColumns(questions: Question[]): SPSSExportColumn[] {
                 rowLabel,
                 colLabel,
                 cellOptions,
+                cellExportLabel: cell.exportLabel,
               });
               if (cell.allowOtherOption) {
                 columns.push({
@@ -269,6 +274,7 @@ export function generateSPSSColumns(questions: Question[]): SPSSExportColumn[] {
                   rankIndex: k,
                   rowLabel,
                   colLabel,
+                  cellExportLabel: cell.exportLabel,
                 });
               }
             }
@@ -291,6 +297,7 @@ export function generateSPSSColumns(questions: Question[]): SPSSExportColumn[] {
                 optionValue: opt.value,
                 cellSpssVarType: cell.spssVarType,
                 cellSpssMeasure: cell.spssMeasure,
+                cellExportLabel: cell.exportLabel,
               });
               // allowTextInput 옵션마다 STRING 사이드카 텍스트 변수 생성
               if (opt.allowTextInput) {
@@ -303,6 +310,7 @@ export function generateSPSSColumns(questions: Question[]): SPSSExportColumn[] {
                   type: 'table-cell-option-text',
                   tableCellId: cell.id,
                   optionId: opt.id,
+                  cellExportLabel: cell.exportLabel,
                 });
               }
             }
@@ -324,6 +332,10 @@ export function generateSPSSColumns(questions: Question[]): SPSSExportColumn[] {
               tableCellType: cell.type,
               cellSpssVarType: cell.spssVarType,
               cellSpssMeasure: cell.spssMeasure,
+              cellExportLabel: cell.exportLabel,
+              // radio/select 셀의 응답값을 spssNumericCode로 매핑하기 위한 옵션.
+              // RadioOption은 QuestionOption과 구조적으로 호환되어 그대로 widening.
+              cellOptions: cell.radioOptions || cell.selectOptions,
             });
 
             // radio/select 셀의 allowTextInput 옵션마다 STRING 사이드카 텍스트 변수 생성
@@ -340,6 +352,7 @@ export function generateSPSSColumns(questions: Question[]): SPSSExportColumn[] {
                     type: 'table-cell-option-text',
                     tableCellId: cell.id,
                     optionId: opt.id,
+                    cellExportLabel: cell.exportLabel,
                   });
                 }
               }
@@ -356,6 +369,7 @@ export function generateSPSSColumns(questions: Question[]): SPSSExportColumn[] {
                     type: 'table-cell-option-text',
                     tableCellId: cell.id,
                     optionId: opt.id,
+                    cellExportLabel: cell.exportLabel,
                   });
                 }
               }
@@ -485,6 +499,7 @@ function collectAndEmitRadioGroupColumns(
       // 멤버들이 서로 다른 값을 가질 가능성은 낮으므로 첫 멤버의 값을 채택.
       cellSpssVarType: members[0].cell.spssVarType,
       cellSpssMeasure: members[0].cell.spssMeasure,
+      cellExportLabel: members[0].cell.exportLabel,
     });
 
     members.forEach((m) => groupedCellIds.add(m.cell.id));
@@ -604,7 +619,11 @@ export function buildDataRows(
             return isSelected ? code : null;
           }
 
-          return transformTableCell(col.tableCellType || 'input', cellVal);
+          return transformTableChoiceCell(
+            col.tableCellType || 'input',
+            cellVal,
+            col.cellOptions,
+          );
         }
 
         case 'radio-group': {
