@@ -248,11 +248,9 @@ function RadioQuestion({
             </label>
           </div>
           {option.allowTextInput && isSelected(option.value) && (
-            <OptionTextInput
-              questionId={question.id}
-              option={option}
-              className="ml-7 mr-2"
-            />
+            <div className="pl-7">
+              <OptionTextInput questionId={question.id} option={option} className="w-full" />
+            </div>
           )}
         </div>
       ))}
@@ -361,11 +359,9 @@ function CheckboxQuestion({
               </label>
             </div>
             {option.allowTextInput && checked && (
-              <OptionTextInput
-                questionId={question.id}
-                option={option}
-                className="ml-7"
-              />
+              <div className="pl-7">
+                <OptionTextInput questionId={question.id} option={option} className="w-full" />
+              </div>
             )}
           </div>
         );
