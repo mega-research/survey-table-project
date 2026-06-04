@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 
 import { ChevronDown } from 'lucide-react';
 
-import { RegionData, getRegionById, getRegionsByParent } from '@/data/regions';
+import { RegionData, getRegionsByParent } from '@/data/regions';
 import { SelectLevel } from '@/types/survey';
 
 interface MultiLevelSelectProps {
@@ -106,7 +106,7 @@ interface MultiLevelSelectPreviewProps {
 export function MultiLevelSelectPreview({ levels, className = '' }: MultiLevelSelectPreviewProps) {
   return (
     <div className={`space-y-3 ${className}`}>
-      {levels.map((level, index) => (
+      {levels.map((level) => (
         <div key={level.id} className="space-y-1">
           <label className="block text-sm font-medium text-gray-700">{level.label}</label>
           <div className="relative">

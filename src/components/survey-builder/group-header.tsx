@@ -1,7 +1,5 @@
 'use client';
 
-import React from 'react';
-
 import type { DraggableAttributes } from '@dnd-kit/core';
 import type { SyntheticListenerMap } from '@dnd-kit/core/dist/hooks/utilities';
 import { ChevronDown, ChevronRight, FolderOpen, GripVertical } from 'lucide-react';

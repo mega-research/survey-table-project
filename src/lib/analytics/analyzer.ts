@@ -1,6 +1,6 @@
 // src/lib/analytics/analyzer.ts
 import type { SurveyResponse } from '@/db/schema';
-import type { Question, QuestionOption, QuestionType, RankingAnswer } from '@/types/survey';
+import type { Question, QuestionOption, RankingAnswer } from '@/types/survey';
 import { resolveChoiceOptions } from '@/utils/choice-source';
 import { resolveRankingOptions } from '@/utils/ranking-source';
 import { computeNumericStats } from './numeric-stats';
@@ -448,8 +448,6 @@ function analyzeTable(
       rowLabel: row.label,
       cells: row.cells.map((cell, colIndex) => {
         let currentAnalytics: any = null;
-         
-        let isInherited = false;
 
         // ---------------------------------------------------------
         // CASE A: 가로 병합(Colspan) 중인가?
@@ -462,7 +460,6 @@ function analyzeTable(
             columnLabel: columns[colIndex]?.label || `열 ${colIndex + 1}`,
             cellType: 'merged-horizontal',
           };
-          isInherited = true;
         }
         // ---------------------------------------------------------
         // CASE B: 세로 병합(Rowspan) 중인가?
@@ -475,7 +472,6 @@ function analyzeTable(
             columnLabel: columns[colIndex]?.label || `열 ${colIndex + 1}`,
             cellType: 'merged-vertical',
           };
-          isInherited = true;
         }
         // ---------------------------------------------------------
         // CASE C: 일반 셀 (데이터 원본)

@@ -64,7 +64,7 @@ export function LookupKeyMappingEditor({ availableLutColumns, value, onChange }:
 
       {value.length === 0 && (
         <div className="text-xs text-amber-600">
-          키가 1개 이상 필요합니다. 아래 "키 추가" 로 등록하세요.
+          키가 1개 이상 필요합니다. 아래 {'"키 추가"'} 로 등록하세요.
         </div>
       )}
 

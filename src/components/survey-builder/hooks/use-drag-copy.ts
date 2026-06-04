@@ -196,8 +196,8 @@ export function useDragCopy({
               // hidden 위치 → 내용 초기화 (recalculateHiddenCells가 isHidden 설정)
               targetCell.type = 'text';
               targetCell.content = '';
-              targetCell.rowspan = undefined;
-              targetCell.colspan = undefined;
+              delete targetCell.rowspan;
+              delete targetCell.colspan;
               // 타입별 잔여 속성 정리
               clearStaleTypeProperties(
                 targetCell as unknown as Record<string, unknown>,
@@ -225,30 +225,46 @@ export function useDragCopy({
             // cellCode/exportLabel 재생성
             const targetRowData = draft[absRow];
             const targetColumn = columns[absCol];
-            targetCell.cellCode = generateCellCode(
+            const newCellCode = generateCellCode(
               questionCodeRef.current,
               targetRowData.rowCode,
               targetColumn?.columnCode,
             );
+            if (newCellCode !== undefined) {
+              targetCell.cellCode = newCellCode;
+            } else {
+              delete targetCell.cellCode;
+            }
             targetCell.isCustomCellCode = false;
-            targetCell.exportLabel = generateExportLabel(
+            const newExportLabel = generateExportLabel(
               questionCodeRef.current,
               targetColumn?.label,
               targetRowData.label,
             );
+            if (newExportLabel !== undefined) {
+              targetCell.exportLabel = newExportLabel;
+            } else {
+              delete targetCell.exportLabel;
+            }
             targetCell.isCustomExportLabel = false;
 
             // SPSS 변수 타입 갱신 (소스 셀의 커스텀 값 보존, 없을 때만 추론)
             if (INTERACTIVE_CELL_TYPES.has(targetCell.type)) {
               if (!targetCell.spssVarType) {
-                targetCell.spssVarType = inferSpssVarType(targetCell.type);
+                const inferred = inferSpssVarType(targetCell.type);
+                if (inferred !== undefined) {
+                  targetCell.spssVarType = inferred;
+                }
               }
               if (!targetCell.spssMeasure) {
-                targetCell.spssMeasure = inferSpssMeasure(targetCell.type);
+                const inferred = inferSpssMeasure(targetCell.type);
+                if (inferred !== undefined) {
+                  targetCell.spssMeasure = inferred;
+                }
               }
             } else {
-              targetCell.spssVarType = undefined;
-              targetCell.spssMeasure = undefined;
+              delete targetCell.spssVarType;
+              delete targetCell.spssMeasure;
             }
           }
         }
@@ -263,7 +279,7 @@ export function useDragCopy({
             if (!foundFirst) {
               foundFirst = true;
             } else {
-              cell.isOtherRankingCell = undefined;
+              delete cell.isOtherRankingCell;
             }
           }
         }

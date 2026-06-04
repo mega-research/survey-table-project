@@ -111,7 +111,6 @@ export function CellContentModal({
   onSave,
   currentQuestionId = '',
   questionCode,
-  questionTitle,
   rowCode,
   rowLabel,
   columnCode,

@@ -33,7 +33,6 @@ import {
 } from '@/hooks/queries/use-cell-library';
 import type { SavedCell, TableCell, TableRow } from '@/types/survey';
 import {
-  CELL_TYPE_LABELS,
   getCellPreviewText,
   restoreCellFromLibrary,
 } from '@/utils/cell-library-helpers';

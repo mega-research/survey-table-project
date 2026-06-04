@@ -11,13 +11,11 @@
 import React, { useMemo } from 'react';
 
 import { cn } from '@/lib/utils';
-import type { CellHeightCache } from '@/hooks/use-cell-height-cache';
 import { useCellHeightCache } from '@/hooks/use-cell-height-cache';
 import { useRowHeights } from '@/hooks/use-row-heights';
-import type { RowVisibilityResult } from '@/hooks/use-row-visibility';
 import { useRowVisibility } from '@/hooks/use-row-visibility';
 import { useTablePerf } from '@/hooks/use-table-perf';
-import type { TableCell, TableColumn, TableRow } from '@/types/survey';
+import type { TableColumn, TableRow } from '@/types/survey';
 import {
   getAlignmentClasses,
   getGridCellAria,

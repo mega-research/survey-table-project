@@ -49,7 +49,6 @@ interface Props {
  * - 빈 value 절은 [검색] 시 silent drop
  */
 export function ContactsFilterBar({
-  surveyId,
   initialClauses,
   columnCandidates,
   resultCodeOptions,

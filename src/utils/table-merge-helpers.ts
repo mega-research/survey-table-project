@@ -1,4 +1,4 @@
-import { HeaderCell, Question, TableColumn, TableRow } from '@/types/survey';
+import { HeaderCell, TableColumn, TableRow } from '@/types/survey';
 
 /**
  * 병합된 행 ID들을 가져오는 헬퍼 함수

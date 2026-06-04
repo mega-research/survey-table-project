@@ -102,7 +102,7 @@ export function TextResponses({ data }: TextResponsesProps) {
       {/* 응답 목록 */}
       <div className="max-h-96 space-y-3 overflow-y-auto">
         {displayResponses.length > 0 ? (
-          displayResponses.map((response, idx) => (
+          displayResponses.map((response) => (
             <div
               key={response.id}
               className="rounded-lg border border-gray-200 p-3 transition-colors hover:bg-gray-50"

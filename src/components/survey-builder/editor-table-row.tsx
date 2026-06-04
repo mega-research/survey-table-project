@@ -125,7 +125,6 @@ export interface EditorTableRowProps {
 export const EditorTableRow = React.memo(function EditorTableRow({
   row,
   rowIndex,
-  columnWidths,
   columnCount,
   totalRowCount,
   hasQuestions,

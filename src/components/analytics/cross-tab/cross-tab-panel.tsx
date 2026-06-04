@@ -21,7 +21,6 @@ import type { SurveyResponse } from '@/db/schema';
 import type { PercentageBase } from '@/lib/analytics/cross-tab';
 import {
   calculateCrossTab,
-  getPercentageBaseLabel,
   isCrossTabableQuestion,
 } from '@/lib/analytics/cross-tab';
 import type { Question } from '@/types/survey';

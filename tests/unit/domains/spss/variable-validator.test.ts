@@ -6,7 +6,6 @@ import {
   validateSpssVarName,
   validateNoDuplicates,
   validateNoSubVarConflicts,
-  type ValidationError,
 } from '@/lib/spss/variable-validator';
 
 // 테스트 헬퍼

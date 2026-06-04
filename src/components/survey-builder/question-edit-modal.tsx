@@ -40,7 +40,6 @@ import {
   createAddOption,
   createUpdateOption,
   createRemoveOption,
-  createHandleOtherOptionToggle,
   createAddSelectLevel,
   createUpdateSelectLevel,
   createRemoveSelectLevel,
@@ -57,11 +56,10 @@ interface QuestionEditModalProps {
 }
 
 export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditModalProps) {
-  const { updateQuestion, setEditingQuestionId, silentUpdateQuestion } = useSurveyBuilderStore(
+  const { updateQuestion, setEditingQuestionId } = useSurveyBuilderStore(
     useShallow((s) => ({
       updateQuestion: s.updateQuestion,
       setEditingQuestionId: s.setEditingQuestionId,
-      silentUpdateQuestion: s.silentUpdateQuestion,
     })),
   );
   const questions = useSurveyBuilderStore(useShallow((s) => s.currentSurvey.questions));
@@ -407,7 +405,6 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
   const addOption = useMemo(() => createAddOption(setFormData), []);
   const updateOption = useMemo(() => createUpdateOption(setFormData), []);
   const removeOption = useMemo(() => createRemoveOption(setFormData), []);
-  const handleOtherOptionToggle = useMemo(() => createHandleOtherOptionToggle(setFormData), []);
   const addSelectLevel = useMemo(() => createAddSelectLevel(setFormData), []);
   const updateSelectLevel = useMemo(() => createUpdateSelectLevel(setFormData), []);
   const removeSelectLevel = useMemo(() => createRemoveSelectLevel(setFormData), []);

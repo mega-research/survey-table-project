@@ -60,16 +60,15 @@ export function GroupManager({ className }: GroupManagerProps) {
   const [parentGroupIdForNew, setParentGroupIdForNew] = useState<string | undefined>(undefined);
   const [parentGroupIdForEdit, setParentGroupIdForEdit] = useState<string | undefined>(undefined);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
-  const [activeId, setActiveId] = useState<string | null>(null);
-  const [overId, setOverId] = useState<string | null>(null);
+  const [, setActiveId] = useState<string | null>(null);
+  const [, setOverId] = useState<string | null>(null);
 
   const groupsOrEmpty = useMemo(() => groups || [], [groups]);
 
   // Store의 collapsed 상태와 expandedGroups 동기화
   useEffect(() => {
     if (groupsOrEmpty.length === 0) return;
-    setExpandedGroups((prev) => {
-      const groupIds = new Set(groupsOrEmpty.map((g) => g.id));
+    setExpandedGroups(() => {
       const next = new Set<string>();
       for (const g of groupsOrEmpty) {
         if (!g.collapsed) next.add(g.id);

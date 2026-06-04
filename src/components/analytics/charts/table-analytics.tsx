@@ -193,7 +193,7 @@ export function TableAnalyticsChart({ data }: TableAnalyticsChartProps) {
                   </tr>
                 </thead>
                 <tbody>
-                  {data.rowSummary.map((row, idx) => {
+                  {data.rowSummary.map((row) => {
                     // 히트맵 배경색 농도 계산 (최대 100% 기준)
                     const intensity = Math.min(row.interactionRate, 100) / 100;
                     // Amber 색상 기반 (R=245, G=158, B=11)

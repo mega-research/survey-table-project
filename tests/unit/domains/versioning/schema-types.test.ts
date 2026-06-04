@@ -82,19 +82,12 @@ describe('survey_responses 테이블 확장', () => {
 describe('타입 정의', () => {
   it('SurveyVersion 타입이 export 되어야 함', async () => {
     const types = await import('@/db/schema/surveys');
-    // Drizzle infer 타입이 존재하는지 확인 (컴파일 타임 체크)
-    type SurveyVersion = typeof types.surveyVersions.$inferSelect;
-    type NewSurveyVersion = typeof types.surveyVersions.$inferInsert;
-
     // 런타임에서는 테이블 객체가 존재하면 타입도 추론 가능
     expect(types.surveyVersions).toBeDefined();
   });
 
   it('ResponseAnswer 타입이 export 되어야 함', async () => {
     const types = await import('@/db/schema/surveys');
-    type ResponseAnswer = typeof types.responseAnswers.$inferSelect;
-    type NewResponseAnswer = typeof types.responseAnswers.$inferInsert;
-
     expect(types.responseAnswers).toBeDefined();
   });
 });

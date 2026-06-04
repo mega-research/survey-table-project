@@ -1,9 +1,7 @@
 'use client';
 
-import React from 'react';
-
 import { Label } from '@/components/ui/label';
-import { Question, TableRow } from '@/types/survey';
+import { Question } from '@/types/survey';
 
 interface TableOptionSelectorProps {
   question: Question;

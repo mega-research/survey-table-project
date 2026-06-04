@@ -5,13 +5,11 @@ beforeAll(() => {
   process.env.DUPLICATE_DETECTION_SALT = 'integration-test-salt';
 });
 
-const { mockFindFirst, mockHeaders, mockInsert, mockFindContact, mockResumeOrCreate } = vi.hoisted(
+const { mockFindFirst, mockHeaders, mockInsert } = vi.hoisted(
   () => ({
     mockFindFirst: vi.fn(),
     mockHeaders: vi.fn(),
     mockInsert: vi.fn(),
-    mockFindContact: vi.fn(),
-    mockResumeOrCreate: vi.fn(),
   }),
 );
 

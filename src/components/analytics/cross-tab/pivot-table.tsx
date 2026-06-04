@@ -2,7 +2,6 @@
 
 import { AlertTriangle } from 'lucide-react';
 
-import { Badge } from '@/components/ui/badge';
 import type { CrossTabResult, PercentageBase } from '@/lib/analytics/cross-tab';
 
 interface PivotTableProps {

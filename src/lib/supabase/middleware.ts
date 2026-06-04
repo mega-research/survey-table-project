@@ -30,7 +30,6 @@ export async function updateSession(request: NextRequest) {
 
   const {
     data: { user },
-    error: userError,
   } = await supabase.auth.getUser();
 
   const isAdminRoute = request.nextUrl.pathname.startsWith('/admin');

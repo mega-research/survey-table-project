@@ -56,7 +56,7 @@ interface AnswerInsert {
   question_type: string;
 }
 
-function normalizeValue(value: unknown, questionType: string): Omit<AnswerInsert, 'response_id' | 'question_id' | 'question_type'> {
+function normalizeValue(value: unknown, _questionType: string): Omit<AnswerInsert, 'response_id' | 'question_id' | 'question_type'> {
   if (typeof value === 'string') {
     return { text_value: value, array_value: null, object_value: null };
   }

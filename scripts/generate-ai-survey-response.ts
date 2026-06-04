@@ -755,9 +755,9 @@ function parseCellIntent(cell: TableCell, rowLabel: string): CellIntent {
 /** intent에 따라 프로필/현실값 생성. 시드로 행마다 편차. */
 function valueFromIntent(
   intent: CellIntent,
-  cell: TableCell,
+  _cell: TableCell,
   rowLabel: string,
-  qTitle: string,
+  _qTitle: string,
   seed: number,
 ): string {
   const row = (rowLabel || '').toLowerCase();
@@ -855,7 +855,7 @@ function renderTemplate(templates: string[], seed: number): string {
 type ScenarioFn = (q: Question, responses: Record<string, unknown>, questions: Question[]) => unknown;
 const SCENARIOS: Record<string, ScenarioFn> = {
   // --------- radio/checkbox (플랜 분기 결정표) ---------
-  [QID.Q5]: (q) => {
+  [QID.Q5]: (_q) => {
     // 프로필별로 1~3개 도구 조합
     const combos = [
       ['옵션1', '옵션2', '옵션3'], // 자체+오픈소스+AI솔루션
@@ -971,42 +971,6 @@ function fillTableDefault(q: Question, responses: Record<string, unknown>, quest
   return out;
 }
 
-/** 라벨에 특정 키워드가 포함된 인풋 셀 찾아 값 주입 */
-function fillInputByRowHint(
-  out: Record<string, unknown>,
-  rows: TableRow[],
-  hints: string[],
-  value: string | number,
-) {
-  for (const row of rows) {
-    const lbl = (row.label || '').toLowerCase();
-    if (!hints.every(h => lbl.includes(h.toLowerCase()))) continue;
-    for (const cell of row.cells) {
-      if (cell.type === 'input') {
-        out[cell.id] = String(value);
-        return;
-      }
-    }
-  }
-}
-
-/** 테이블에서 열 인덱스별로 input 셀을 찾아 값 주입 (연도별 컬럼) */
-function fillInputByRowAndCol(
-  out: Record<string, unknown>,
-  rows: TableRow[],
-  rowHints: string[],
-  colIdx: number,
-  value: string | number,
-) {
-  for (const row of rows) {
-    const lbl = (row.label || '').toLowerCase();
-    if (!rowHints.every(h => lbl.includes(h.toLowerCase()))) continue;
-    const inputCells = row.cells.filter(c => c.type === 'input');
-    if (inputCells[colIdx]) {
-      out[inputCells[colIdx].id] = String(value);
-    }
-  }
-}
 
 /**
  * 기업 소개/일반현황 테이블 공통 필러.

@@ -151,7 +151,7 @@ export default function CreateSurveyPage() {
 
   const { selectedQuestionId, isTestMode, selectQuestion, toggleTestMode } = useSurveyUIStore();
 
-  const { mutateAsync: saveSurvey, isPending: isSaving } = useSaveSurvey();
+  const { mutateAsync: saveSurvey } = useSaveSurvey();
 
   const [titleInput, setTitleInput] = useState(currentSurvey.title);
   const [questionNumberInput, setQuestionNumberInput] = useState('');
