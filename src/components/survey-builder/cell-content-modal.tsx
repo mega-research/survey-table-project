@@ -224,7 +224,7 @@ export function CellContentModal({
 
   // 자동생성 셀코드/라벨 계산
   const autoCellCode = generateCellCode(questionCode, rowCode, columnCode);
-  const autoExportLabel = generateExportLabel(questionTitle, columnLabel, rowLabel);
+  const autoExportLabel = generateExportLabel(questionCode, columnLabel, rowLabel);
 
   // 셀이 변경될 때 상태 동기화 (모달이 열릴 때마다 최신 셀 데이터 반영)
   useEffect(() => {

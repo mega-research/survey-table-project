@@ -21,7 +21,7 @@ import { getOptionText } from '@/lib/option-text-read';
 import { resolveChoiceOptions } from '@/utils/choice-source';
 import { getOtherOptionCode } from '@/utils/option-code-generator';
 import { hasOtherRankingCell, resolveRankingOptions } from '@/utils/ranking-source';
-import { buildTableCellVarName, resolveRankVarName } from '@/utils/table-cell-code-generator';
+import { buildTableCellVarName, generateExportLabel, resolveRankVarName } from '@/utils/table-cell-code-generator';
 import { buildCheckboxItemVarName, buildOptionTextVarName } from '@/utils/spss-var-name';
 
 export interface SPSSExportColumn {
@@ -236,6 +236,11 @@ export function generateSPSSColumns(questions: Question[]): SPSSExportColumn[] {
           const varName = cell.cellCode
             || buildTableCellVarName(q, tRow, colIdx, q.tableColumns, q.tableRowsData!);
 
+          // exportLabel 미저장 셀은 questionCode_열라벨_행라벨 자동 라벨로 폴백.
+          // (빌더는 placeholder로 같은 자동값을 표시하므로 export도 동일하게 맞춘다.)
+          const autoExportLabel = cell.exportLabel
+            || generateExportLabel(q.questionCode, q.tableColumns[colIdx].label, tRow.label);
+
           // ranking 셀 (Case 3): positions 만큼 {baseVarName}{접미사} 변수 생성.
           // 접미사는 셀의 rankSuffixPattern (기본 '_rk{k}') 으로 결정. rankVarNames 오버라이드 우선.
           if (cell.type === 'ranking') {
@@ -262,7 +267,7 @@ export function generateSPSSColumns(questions: Question[]): SPSSExportColumn[] {
                 rowLabel,
                 colLabel,
                 cellOptions,
-                cellExportLabel: cell.exportLabel,
+                cellExportLabel: autoExportLabel,
               });
               if (cell.allowOtherOption) {
                 columns.push({
@@ -276,7 +281,7 @@ export function generateSPSSColumns(questions: Question[]): SPSSExportColumn[] {
                   rankIndex: k,
                   rowLabel,
                   colLabel,
-                  cellExportLabel: cell.exportLabel,
+                  cellExportLabel: autoExportLabel,
                 });
               }
             }
@@ -299,7 +304,7 @@ export function generateSPSSColumns(questions: Question[]): SPSSExportColumn[] {
                 optionValue: opt.value,
                 cellSpssVarType: cell.spssVarType,
                 cellSpssMeasure: cell.spssMeasure,
-                cellExportLabel: cell.exportLabel,
+                cellExportLabel: autoExportLabel,
               });
               // allowTextInput 옵션마다 STRING 사이드카 텍스트 변수 생성
               if (opt.allowTextInput) {
@@ -312,7 +317,7 @@ export function generateSPSSColumns(questions: Question[]): SPSSExportColumn[] {
                   type: 'table-cell-option-text',
                   tableCellId: cell.id,
                   optionId: opt.id,
-                  cellExportLabel: cell.exportLabel,
+                  cellExportLabel: autoExportLabel,
                 });
               }
             }
@@ -334,7 +339,7 @@ export function generateSPSSColumns(questions: Question[]): SPSSExportColumn[] {
               tableCellType: cell.type,
               cellSpssVarType: cell.spssVarType,
               cellSpssMeasure: cell.spssMeasure,
-              cellExportLabel: cell.exportLabel,
+              cellExportLabel: autoExportLabel,
               // radio/select 셀의 응답값을 spssNumericCode로 매핑하기 위한 옵션.
               // RadioOption은 QuestionOption과 구조적으로 호환되어 그대로 widening.
               cellOptions: cell.radioOptions || cell.selectOptions,
@@ -354,7 +359,7 @@ export function generateSPSSColumns(questions: Question[]): SPSSExportColumn[] {
                     type: 'table-cell-option-text',
                     tableCellId: cell.id,
                     optionId: opt.id,
-                    cellExportLabel: cell.exportLabel,
+                    cellExportLabel: autoExportLabel,
                   });
                 }
               }
@@ -371,7 +376,7 @@ export function generateSPSSColumns(questions: Question[]): SPSSExportColumn[] {
                     type: 'table-cell-option-text',
                     tableCellId: cell.id,
                     optionId: opt.id,
-                    cellExportLabel: cell.exportLabel,
+                    cellExportLabel: autoExportLabel,
                   });
                 }
               }

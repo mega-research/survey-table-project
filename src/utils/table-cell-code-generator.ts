@@ -116,14 +116,14 @@ export function generateCellCode(
   return `${questionCode}_${rowCode}_${columnCode}`;
 }
 
-/** exportLabel 자동생성: questionTitle_columnLabel_rowLabel */
+/** exportLabel 자동생성: questionCode(질문 SPSS 변수명)_columnLabel_rowLabel */
 export function generateExportLabel(
-  questionTitle: string | undefined,
+  questionCode: string | undefined,
   columnLabel: string | undefined,
   rowLabel: string | undefined,
 ): string | undefined {
-  if (!questionTitle || !columnLabel || !rowLabel) return undefined;
-  return `${questionTitle}_${columnLabel}_${rowLabel}`;
+  if (!questionCode || !columnLabel || !rowLabel) return undefined;
+  return `${questionCode}_${columnLabel}_${rowLabel}`;
 }
 
 // ── SPSS 변수 타입 / 측정 수준 자동 판단 ──
@@ -188,7 +188,7 @@ function applyAutoCodeToCell(
   }
 
   if (!isEffectivelyCustomLabel(cell)) {
-    const newExportLabel = generateExportLabel(questionTitle, columnLabel, rowLabel);
+    const newExportLabel = generateExportLabel(questionCode, columnLabel, rowLabel);
     if (cell.exportLabel !== newExportLabel || cell.isCustomExportLabel !== false) {
       updates.exportLabel = newExportLabel;
       updates.isCustomExportLabel = false;
@@ -325,7 +325,7 @@ export function regenerateCellCodeForPaste(
     ...cell,
     cellCode: generateCellCode(questionCode, rowCode, columnCode),
     isCustomCellCode: false,
-    exportLabel: generateExportLabel(questionTitle, columnLabel, rowLabel),
+    exportLabel: generateExportLabel(questionCode, columnLabel, rowLabel),
     isCustomExportLabel: false,
     // ranking 셀: 순위별 수동 변수명은 원본 셀 전용이므로 새 셀에서 제거 → 자동 생성 폴백
     rankVarNames: undefined,

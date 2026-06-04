@@ -232,7 +232,7 @@ export function useDragCopy({
             );
             targetCell.isCustomCellCode = false;
             targetCell.exportLabel = generateExportLabel(
-              questionTitleRef.current,
+              questionCodeRef.current,
               targetColumn?.label,
               targetRowData.label,
             );

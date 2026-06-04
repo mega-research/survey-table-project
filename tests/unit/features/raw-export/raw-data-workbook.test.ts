@@ -36,6 +36,18 @@ const tableSourceCheckboxQ = {
   ],
 } as unknown as Question;
 
+// 테이블 input 셀, exportLabel 미저장(null) → export 시 자동 라벨(질문코드_열_행) 폴백 대상
+const tableInputQ = {
+  id: 'qt', type: 'table', title: '문3. 매출액', order: 1, required: false,
+  questionCode: 'Q3',
+  tableColumns: [{ id: 'tc', label: '2020년 매출액', columnCode: '2020' }],
+  tableRowsData: [
+    { id: 'tr', label: '기업 전체', rowCode: 'u00', cells: [
+      { id: 'cellInput', type: 'input', content: '' },
+    ] },
+  ],
+} as unknown as Question;
+
 const baseRow = (over: Partial<RawExportResponseRow>): RawExportResponseRow => ({
   id: 'r1', questionResponses: {}, groupValue: null, resid: null,
   platform: 'desktop', browser: 'Chrome', status: 'completed',
@@ -96,6 +108,27 @@ describe('generateRawDataWorkbook', () => {
     expect(merges).toContain('C1:D1');   // 같은 질문(Q2) 변수 열 가로 병합
     // 단일 변수 질문(Q1, B열)은 가로 병합 대상 아님
     expect(merges.some((m) => m.startsWith('B1:'))).toBe(false);
+  });
+
+  it('테이블 input 셀에 exportLabel 없으면 행2를 질문코드_열_행 자동 라벨로 채운다', () => {
+    const wb = generateRawDataWorkbook([tableInputQ], [baseRow({})], 'sequence');
+    const ws = wb.getWorksheet('Raw Data')!;
+    expect(ws.getCell('B3').value).toBe('Q3_u00_2020');                  // 행3: 변수명
+    expect(ws.getCell('B2').value).toBe('Q3_2020년 매출액_기업 전체');      // 행2: 자동 셀라벨
+  });
+
+  it('테이블 셀에 커스텀 exportLabel 있으면 자동값 대신 그대로 쓴다', () => {
+    const custom = {
+      ...tableInputQ,
+      tableRowsData: [
+        { id: 'tr', label: '기업 전체', rowCode: 'u00', cells: [
+          { id: 'cellInput', type: 'input', content: '', exportLabel: '내수매출_2020' },
+        ] },
+      ],
+    } as unknown as Question;
+    const wb = generateRawDataWorkbook([custom], [baseRow({})], 'sequence');
+    const ws = wb.getWorksheet('Raw Data')!;
+    expect(ws.getCell('B2').value).toBe('내수매출_2020');
   });
 
   it('테이블-소스 체크박스는 옵션 셀의 exportLabel을 행2에 쓴다', () => {
