@@ -467,6 +467,12 @@ export function ExportDataModal({ surveyId, surveyTitle, onExportCleaningExcel }
                         변수
                       </span>
                     </div>
+                    {plan.exceedsExcelLimit && (
+                      <div className="mt-3 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-700">
+                        <AlertTriangle className="h-4 w-4 shrink-0" />
+                        일부 시트가 Excel 열 한계(16,384)를 초과합니다. 다른 기준을 선택하세요.
+                      </div>
+                    )}
                   </>
                 );
               })()}
@@ -519,7 +525,10 @@ export function ExportDataModal({ surveyId, surveyTitle, onExportCleaningExcel }
                 <ArrowLeft className="mr-1 h-4 w-4" />
                 기준 변경
               </Button>
-              <Button onClick={handleSplitDownload} disabled={!planQuery.data}>
+              <Button
+                onClick={handleSplitDownload}
+                disabled={!planQuery.data || !!planQuery.data?.plan.exceedsExcelLimit}
+              >
                 <FileDown className="mr-1 h-4 w-4" />
                 분할 다운로드
               </Button>

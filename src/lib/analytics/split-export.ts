@@ -1,21 +1,26 @@
 import type { Question, QuestionConditionGroup } from '@/types/survey';
+
 import { generateSPSSColumns } from './spss-excel-export';
 
 export const SPLIT_SOFT_LIMIT = 10000;
 export const SPLIT_EXCEL_LIMIT = 16384;
 export const SPLIT_RESERVED_SHEET_NAMES = ['응답 내역', '공통', '코딩북'];
 
-
-/** displayCondition 중 basisId를 value-match 하는 조건의 requiredValues 합집합. 없으면 null. */
+/** displayCondition 중 basisId를 value-match 하는 조건의 requiredValues 합집합. 없으면 null.
+ * 부정 그룹(dc.logicType === 'NOT'), 비활성 조건(enabled === false),
+ * 부정 단위 조건(c.logicType === 'NOT')은 양성 매치로 보지 않아 null 반환. */
 export function valueMatchSet(
   dc: QuestionConditionGroup | undefined,
   basisId: string,
 ): Set<string> | null {
   if (!dc || !Array.isArray(dc.conditions)) return null;
+  if (dc.logicType === 'NOT') return null; // 부정 그룹 → 양성 매치 아님
   let s: Set<string> | null = null;
   for (const c of dc.conditions) {
     if (
+      c.enabled !== false &&
       c.conditionType === 'value-match' &&
+      c.logicType !== 'NOT' &&
       c.sourceQuestionId === basisId &&
       Array.isArray(c.requiredValues) &&
       c.requiredValues.length > 0
@@ -39,7 +44,9 @@ export function bucketQuestions(
     if (bucket === 'common') {
       if (qset !== null) continue; // 옵션 전용 질문
       if (q.type === 'table' && Array.isArray(q.tableRowsData)) {
-        const rows = q.tableRowsData.filter((r) => valueMatchSet(r.displayCondition, basisId) === null);
+        const rows = q.tableRowsData.filter(
+          (r) => valueMatchSet(r.displayCondition, basisId) === null,
+        );
         if (rows.length === 0) continue;
         out.push({ ...q, tableRowsData: rows });
       } else {
@@ -104,6 +111,11 @@ export interface SplitPlan {
   exceedsExcelLimit: boolean;
 }
 
+/** 식별자 열 1개를 더한 실제 열 수가 Excel 한계를 넘는지 */
+export function splitPlanExceedsExcelLimit(maxVars: number): boolean {
+  return maxVars + 1 > SPLIT_EXCEL_LIMIT;
+}
+
 export function planSplit(
   questions: Question[],
   basisQuestionId: string,
@@ -124,7 +136,10 @@ export function planSplit(
     rawSheets.push({ token: t, rawName: labelMap.get(t) ?? t, vars, resp: respCounts[t] ?? 0 });
   }
 
-  const finalNames = assignSplitSheetNames(rawSheets.map((s) => s.rawName), SPLIT_RESERVED_SHEET_NAMES);
+  const finalNames = assignSplitSheetNames(
+    rawSheets.map((s) => s.rawName),
+    SPLIT_RESERVED_SHEET_NAMES,
+  );
   const sheets: SplitSheetPlan[] = rawSheets.map((s, i) => ({
     token: s.token,
     name: finalNames[i],
@@ -141,7 +156,7 @@ export function planSplit(
     sheets,
     maxVars,
     exceedsSoftLimit: maxVars > SPLIT_SOFT_LIMIT,
-    exceedsExcelLimit: maxVars > SPLIT_EXCEL_LIMIT,
+    exceedsExcelLimit: splitPlanExceedsExcelLimit(maxVars),
   };
 }
 
@@ -150,7 +165,11 @@ export function planSplit(
 export function assignSplitSheetNames(rawNames: string[], reserved: string[] = []): string[] {
   const used = new Set<string>(reserved);
   return rawNames.map((raw) => {
-    let base = (raw || '').replace(/[[\]:*?/\\]/g, ' ').trim().slice(0, 31) || '시트';
+    const base =
+      (raw || '')
+        .replace(/[[\]:*?/\\]/g, ' ')
+        .trim()
+        .slice(0, 31) || '시트';
     let candidate = base;
     let n = 2;
     while (used.has(candidate)) {
@@ -181,9 +200,16 @@ export function detectSplitCandidates(questions: Question[]): SplitCandidate[] {
   const refCount = new Map<string, number>();
   const bump = (dc: QuestionConditionGroup | undefined) => {
     if (!dc || !Array.isArray(dc.conditions)) return;
+    if (dc.logicType === 'NOT') return; // 부정 그룹은 양성 value-match 로 집계 안 함
     for (const c of dc.conditions) {
-      if (c.conditionType === 'value-match' && c.sourceQuestionId &&
-        Array.isArray(c.requiredValues) && c.requiredValues.length > 0) {
+      if (
+        c.enabled !== false &&
+        c.conditionType === 'value-match' &&
+        c.logicType !== 'NOT' &&
+        c.sourceQuestionId &&
+        Array.isArray(c.requiredValues) &&
+        c.requiredValues.length > 0
+      ) {
         refCount.set(c.sourceQuestionId, (refCount.get(c.sourceQuestionId) ?? 0) + 1);
       }
     }
@@ -204,9 +230,15 @@ export function detectSplitCandidates(questions: Question[]): SplitCandidate[] {
     const plan = planSplit(questions, qid);
     if (plan.sheets.length < 2) continue; // 분할 효과 없음
     candidates.push({
-      questionId: qid, code: basis.questionCode ?? '', label: basis.title, type: basis.type,
-      refCount: refs, buckets: plan.sheets.length, maxVars: plan.maxVars,
-      recommended: false, note: '',
+      questionId: qid,
+      code: basis.questionCode ?? '',
+      label: basis.title,
+      type: basis.type,
+      refCount: refs,
+      buckets: plan.sheets.length,
+      maxVars: plan.maxVars,
+      recommended: false,
+      note: '',
     });
   }
 
@@ -217,9 +249,10 @@ export function detectSplitCandidates(questions: Question[]): SplitCandidate[] {
   for (const c of candidates) {
     c.recommended = c.maxVars <= SPLIT_SOFT_LIMIT;
     if (c.maxVars <= SPLIT_SOFT_LIMIT) {
-      c.note = c.buckets >= 10
-        ? `시트가 ${c.buckets}개로 많지만 시트당 변수는 가장 적음`
-        : '분기 경계가 깔끔해 시트 변수가 고르게 작아짐';
+      c.note =
+        c.buckets >= 10
+          ? `시트가 ${c.buckets}개로 많지만 시트당 변수는 가장 적음`
+          : '분기 경계가 깔끔해 시트 변수가 고르게 작아짐';
     } else if (c.maxVars <= SPLIT_EXCEL_LIMIT) {
       c.note = '일부 시트가 한계에 근접';
     } else {

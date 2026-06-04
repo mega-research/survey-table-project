@@ -14,6 +14,7 @@ import {
   generateVariableMapWorkbook,
   type RawExportResponseRow,
 } from '@/lib/excel-transformer';
+import { planSplit } from '@/lib/analytics/split-export';
 import { Question, Survey, SurveySubmission } from '@/types/survey';
 import { generateAllOptionCodes } from '@/utils/option-code-generator';
 import { generateAllCellCodes } from '@/utils/table-cell-code-generator';
@@ -212,6 +213,14 @@ export async function GET(
           totalSeconds: r.totalSeconds,
         };
       });
+
+      const plan = planSplit(surveyData.questions as unknown as Question[], basis);
+      if (plan.exceedsExcelLimit) {
+        return NextResponse.json(
+          { error: '선택한 기준으로는 일부 시트가 Excel 열 한계를 초과합니다. 다른 기준을 선택해 주세요.' },
+          { status: 413 },
+        );
+      }
 
       const workbook = buildSplitWorkbook(
         surveyData.questions as unknown as Question[],

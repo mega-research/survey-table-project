@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { valueMatchSet, bucketQuestions, optionTokensForBasis, planSplit, detectSplitCandidates, assignSplitSheetNames, SPLIT_RESERVED_SHEET_NAMES } from '@/lib/analytics/split-export';
+import { valueMatchSet, bucketQuestions, optionTokensForBasis, planSplit, detectSplitCandidates, assignSplitSheetNames, SPLIT_RESERVED_SHEET_NAMES, splitPlanExceedsExcelLimit, SPLIT_EXCEL_LIMIT } from '@/lib/analytics/split-export';
 import { buildSplitWorkbook } from '@/lib/excel-transformer';
 import type { RawExportResponseRow } from '@/lib/excel-transformer';
 import type { Question, QuestionConditionGroup } from '@/types/survey';
@@ -381,5 +381,92 @@ describe('buildSplitWorkbook 예약 시트명 충돌 방지', () => {
     for (const reserved of SPLIT_RESERVED_SHEET_NAMES) {
       expect(wb!.getWorksheet(reserved)).toBeDefined();
     }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+// FIX 1: enabled:false / NOT logicType 가드
+// ─────────────────────────────────────────────────────────────
+
+/** enabled·logicType 커스텀 헬퍼 */
+const vmCustom = (
+  sourceQuestionId: string,
+  requiredValues: string[],
+  opts: { enabled?: boolean; conditionLogicType?: 'AND' | 'OR' | 'NOT'; groupLogicType?: 'AND' | 'OR' | 'NOT' } = {},
+): QuestionConditionGroup => ({
+  logicType: opts.groupLogicType ?? 'AND',
+  conditions: [
+    {
+      id: 'cx',
+      sourceQuestionId,
+      conditionType: 'value-match',
+      requiredValues,
+      logicType: opts.conditionLogicType ?? 'AND',
+      ...(opts.enabled !== undefined ? { enabled: opts.enabled } : {}),
+    },
+  ],
+});
+
+describe('valueMatchSet — enabled/NOT 가드 (FIX 1)', () => {
+  it('enabled:false 인 조건은 무시 → null 반환', () => {
+    const dc = vmCustom('Q2', ['opt1'], { enabled: false });
+    expect(valueMatchSet(dc, 'Q2')).toBeNull();
+  });
+
+  it('per-condition logicType:"NOT" 은 무시 → null 반환', () => {
+    const dc = vmCustom('Q2', ['opt1'], { conditionLogicType: 'NOT' });
+    expect(valueMatchSet(dc, 'Q2')).toBeNull();
+  });
+
+  it('그룹 logicType:"NOT" 이면 내부 조건이 positive value-match라도 null 반환', () => {
+    const dc = vmCustom('Q2', ['opt1'], { groupLogicType: 'NOT' });
+    expect(valueMatchSet(dc, 'Q2')).toBeNull();
+  });
+
+  it('enabled 필드가 없으면(undefined) 활성으로 간주 → Set 반환 (하위 호환)', () => {
+    const dc = vmCustom('Q2', ['opt1']); // enabled 없음
+    const s = valueMatchSet(dc, 'Q2');
+    expect(s).not.toBeNull();
+    expect([...s!]).toEqual(['opt1']);
+  });
+
+  it('enabled:true 이면 활성 → Set 반환', () => {
+    const dc = vmCustom('Q2', ['opt2'], { enabled: true });
+    const s = valueMatchSet(dc, 'Q2');
+    expect(s).not.toBeNull();
+    expect([...s!]).toEqual(['opt2']);
+  });
+});
+
+describe('bucketQuestions — enabled:false 가드 (FIX 1)', () => {
+  it('displayCondition이 enabled:false value-match 인 비테이블 질문은 common 버킷에 남는다', () => {
+    const basis = q({ id: 'Q2', type: 'radio', questionCode: 'Q2' });
+    // 이 질문은 Q2 opt1 value-match 이지만 disabled → common 취급
+    const disabledQ = q({
+      id: 'D',
+      type: 'text',
+      displayCondition: vmCustom('Q2', ['opt1'], { enabled: false }),
+    });
+    const questions = [basis, disabledQ];
+
+    const common = bucketQuestions(questions, 'Q2', 'common');
+    expect(common.map((x) => x.id)).toContain('D');
+
+    const opt1 = bucketQuestions(questions, 'Q2', 'opt1');
+    expect(opt1.map((x) => x.id)).not.toContain('D');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+// FIX 2: splitPlanExceedsExcelLimit 경계 테스트
+// ─────────────────────────────────────────────────────────────
+
+describe('splitPlanExceedsExcelLimit (FIX 2)', () => {
+  it('maxVars = SPLIT_EXCEL_LIMIT - 1 이면 false (식별자 열 포함해도 한계 이내)', () => {
+    expect(splitPlanExceedsExcelLimit(SPLIT_EXCEL_LIMIT - 1)).toBe(false);
+  });
+
+  it('maxVars = SPLIT_EXCEL_LIMIT 이면 true (식별자 열 1개 추가 시 16385 > 16384)', () => {
+    expect(splitPlanExceedsExcelLimit(SPLIT_EXCEL_LIMIT)).toBe(true);
   });
 });
