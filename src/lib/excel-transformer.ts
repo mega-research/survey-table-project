@@ -455,14 +455,10 @@ export function buildSplitWorkbook(
   const workbook = new ExcelJS.Workbook();
 
   // 변수 시트(공통/옵션) — bucketQuestions 결과로 헤더 3행 + 전체 응답자 데이터
+  // 옵션 시트명 유일성은 assignSplitSheetNames(reserved 시드 포함)가 보장하므로 중복 방어 불필요.
   const addVariableSheet = (name: string, bucketQs: Question[]) => {
-    // 예약 이름(응답 내역/공통/코딩북)과 충돌하는 극단적 엣지케이스 방어
-    let nm = name;
-    let k = 2;
-    while (workbook.getWorksheet(nm)) nm = `${name.slice(0, 28)} ${k++}`;
-
     const columns = generateSPSSColumns(bucketQs);
-    const ws = workbook.addWorksheet(nm);
+    const ws = workbook.addWorksheet(name);
     const colCount = columns.length + 1;
     ws.addRow([idHeader, ...columns.map((c) => c.questionText)]);
     ws.addRow(['', ...columns.map((c) => row2Label(c))]);

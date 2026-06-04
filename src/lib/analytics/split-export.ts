@@ -3,6 +3,7 @@ import { generateSPSSColumns } from './spss-excel-export';
 
 export const SPLIT_SOFT_LIMIT = 10000;
 export const SPLIT_EXCEL_LIMIT = 16384;
+export const SPLIT_RESERVED_SHEET_NAMES = ['응답 내역', '공통', '코딩북'];
 
 
 /** displayCondition 중 basisId를 value-match 하는 조건의 requiredValues 합집합. 없으면 null. */
@@ -123,7 +124,7 @@ export function planSplit(
     rawSheets.push({ token: t, rawName: labelMap.get(t) ?? t, vars, resp: respCounts[t] ?? 0 });
   }
 
-  const finalNames = assignSplitSheetNames(rawSheets.map((s) => s.rawName));
+  const finalNames = assignSplitSheetNames(rawSheets.map((s) => s.rawName), SPLIT_RESERVED_SHEET_NAMES);
   const sheets: SplitSheetPlan[] = rawSheets.map((s, i) => ({
     token: s.token,
     name: finalNames[i],
@@ -144,9 +145,10 @@ export function planSplit(
   };
 }
 
-/** Excel 시트명 제약(31자, []:*?/\ 제거)을 적용하고, 중복은 ~N 접미사로 유일화한다. 입력 순서 보존. */
-export function assignSplitSheetNames(rawNames: string[]): string[] {
-  const used = new Set<string>();
+/** Excel 시트명 제약(31자, []:*?/\ 제거)을 적용하고, 중복은 ~N 접미사로 유일화한다. 입력 순서 보존.
+ * reserved 목록은 사전 예약 시트명으로, 해당 이름은 이미 사용된 것으로 간주하되 출력에 포함되지 않는다. */
+export function assignSplitSheetNames(rawNames: string[], reserved: string[] = []): string[] {
+  const used = new Set<string>(reserved);
   return rawNames.map((raw) => {
     let base = (raw || '').replace(/[[\]:*?/\\]/g, ' ').trim().slice(0, 31) || '시트';
     let candidate = base;

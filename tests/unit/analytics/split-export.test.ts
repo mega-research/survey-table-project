@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { valueMatchSet, bucketQuestions, optionTokensForBasis, planSplit, detectSplitCandidates, assignSplitSheetNames } from '@/lib/analytics/split-export';
+import { valueMatchSet, bucketQuestions, optionTokensForBasis, planSplit, detectSplitCandidates, assignSplitSheetNames, SPLIT_RESERVED_SHEET_NAMES } from '@/lib/analytics/split-export';
 import { buildSplitWorkbook } from '@/lib/excel-transformer';
 import type { RawExportResponseRow } from '@/lib/excel-transformer';
 import type { Question, QuestionConditionGroup } from '@/types/survey';
@@ -322,6 +322,64 @@ describe('buildSplitWorkbook ↔ planSplit 일관성 (금지문자/장이름/중
     // 금지 문자가 시트명에 없음
     for (const nm of allNames) {
       expect(nm).not.toMatch(/[[\]:*?/\\]/);
+    }
+  });
+});
+
+describe('assignSplitSheetNames reserved 시드', () => {
+  it('reserved 목록에 있는 이름은 사전 점유로 처리되어 출력에 포함되지 않고, 충돌 시 접미사를 붙인다', () => {
+    const result = assignSplitSheetNames(['공통', '코딩북', '합판'], ['공통', '코딩북']);
+    expect(result).toEqual(['공통~2', '코딩북~2', '합판']);
+  });
+});
+
+describe('buildSplitWorkbook 예약 시트명 충돌 방지', () => {
+  // 옵션 라벨이 예약 시트명('공통', '코딩북')과 동일한 경우
+  const basisCollide = q({
+    id: 'QC', type: 'radio', questionCode: 'QC', title: '충돌테스트', order: 0,
+    options: [
+      { id: 'c1', value: 'val1', label: '공통' },
+      { id: 'c2', value: 'val2', label: '코딩북' },
+      { id: 'c3', value: 'val3', label: '정상옵션' },
+    ],
+  } as Partial<Question>);
+  const cOnly1 = q({ id: 'C1', type: 'text', title: 'val1전용', order: 1, questionCode: 'C1',
+    displayCondition: vm('QC', ['val1']) });
+  const cOnly2 = q({ id: 'C2', type: 'text', title: 'val2전용', order: 2, questionCode: 'C2',
+    displayCondition: vm('QC', ['val2']) });
+  const cOnly3 = q({ id: 'C3', type: 'text', title: 'val3전용', order: 3, questionCode: 'C3',
+    displayCondition: vm('QC', ['val3']) });
+  const collideQuestions = [basisCollide, cOnly1, cOnly2, cOnly3];
+  const collideRows: RawExportResponseRow[] = [
+    { id: 'r1', questionResponses: { QC: 'val1', C1: 'v' }, groupValue: null, resid: null,
+      platform: null, browser: null, status: 'completed', startedAt: new Date('2026-06-04T03:00:00Z'),
+      completedAt: new Date('2026-06-04T03:05:00Z'), totalSeconds: 300 },
+  ];
+
+  it('예약 시트명과 충돌하는 옵션 라벨이 있어도 워크북 생성이 throw하지 않고, 시트명 중복이 없다', () => {
+    const plan = planSplit(collideQuestions, 'QC');
+    let wb: ReturnType<typeof buildSplitWorkbook>;
+    expect(() => {
+      wb = buildSplitWorkbook(collideQuestions, collideRows, 'QC', 'sequence');
+    }).not.toThrow();
+
+    const names = wb!.worksheets.map((w) => w.name);
+
+    // 중복 없음
+    expect(new Set(names).size).toBe(names.length);
+
+    // 옵션 시트명이 plan.sheets 순서·내용과 일치
+    const optionNames = names.slice(2, names.length - 1);
+    expect(optionNames).toEqual(plan.sheets.map((s) => s.name));
+
+    // plan.sheets[].name으로 각 워크시트 조회 가능
+    for (const s of plan.sheets) {
+      expect(wb!.getWorksheet(s.name)).toBeDefined();
+    }
+
+    // 예약 시트 3개가 모두 존재
+    for (const reserved of SPLIT_RESERVED_SHEET_NAMES) {
+      expect(wb!.getWorksheet(reserved)).toBeDefined();
     }
   });
 });
