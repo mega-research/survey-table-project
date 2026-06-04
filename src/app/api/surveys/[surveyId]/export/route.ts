@@ -221,7 +221,9 @@ export async function GET(
       );
       const buffer = await workbook.xlsx.writeBuffer();
       const basisCode = basisQuestion.questionCode ?? 'split';
-      const filename = `${safeTitle}_분할_${basisCode}_${dateSlice}.xlsx`;
+      // Content-Disposition 헤더는 ByteString만 허용 → 한글 리터럴/코드는 퍼센트 인코딩.
+      // (모달이 파일명을 decodeURIComponent로 복원하므로 다운로드 시 한글로 표시됨)
+      const filename = `${safeTitle}_${encodeURIComponent('분할')}_${encodeURIComponent(basisCode)}_${dateSlice}.xlsx`;
       return new NextResponse(buffer as ArrayBuffer, {
         headers: {
           'Content-Disposition': `attachment; filename="${filename}"`,
