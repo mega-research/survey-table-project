@@ -360,9 +360,10 @@ export function ExportDataModal({ surveyId, surveyTitle, onExportCleaningExcel }
                         <span className="text-[13px] font-bold text-slate-700">{c.buckets}개 시트</span>
                       </span>
                       <span
-                        className={`whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-semibold ${safe ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}
+                        className={`inline-flex items-center gap-1 whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-semibold ${safe ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}
                       >
-                        최대 {fmtNum(c.maxVars)}변수 {safe ? '✓' : '⚠'}
+                        최대 {fmtNum(c.maxVars)}변수
+                        {safe ? <Check className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
                       </span>
                     </span>
                   </button>
