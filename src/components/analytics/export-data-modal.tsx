@@ -315,6 +315,11 @@ export function ExportDataModal({ surveyId, surveyTitle, onExportCleaningExcel }
               응답자 분기를 가르는 문항을 분석했습니다. 기준 문항의 값마다 시트가 하나씩 생성됩니다.
             </p>
             {summary.isLoading && <p className="text-sm text-slate-400">분석 중…</p>}
+            {summary.isError && (
+              <p className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">
+                {summary.error instanceof Error ? summary.error.message : '미리보기 정보를 불러오지 못했습니다.'}
+              </p>
+            )}
             {summary.data && summary.data.candidates.length === 0 && (
               <p className="rounded-lg border bg-slate-50 p-4 text-sm text-slate-500">
                 분할 기준이 될 value-match 조건 문항이 없어 분할할 수 없습니다.
@@ -370,6 +375,11 @@ export function ExportDataModal({ surveyId, surveyTitle, onExportCleaningExcel }
         {step === 'preview' && (
           <div className="py-4">
             {planQuery.isLoading && <p className="text-sm text-slate-400">시트 구성 계산 중…</p>}
+            {planQuery.isError && (
+              <p className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">
+                {planQuery.error instanceof Error ? planQuery.error.message : '시트 미리보기를 불러오지 못했습니다.'}
+              </p>
+            )}
             {planQuery.data &&
               (() => {
                 const plan = planQuery.data.plan;
