@@ -97,10 +97,10 @@ function executeMock(sqlObj: unknown): unknown[] {
     }
     // ORDER BY group_value_raw NULLS LAST (간이) — 테스트 안정성 위해 라벨 asc
     rows.sort((a, b) => {
-      if (a.group_value_raw == null && b.group_value_raw == null) return 0;
-      if (a.group_value_raw == null) return 1;
-      if (b.group_value_raw == null) return -1;
-      return String(a.group_value_raw).localeCompare(String(b.group_value_raw));
+      if (a['group_value_raw'] == null && b['group_value_raw'] == null) return 0;
+      if (a['group_value_raw'] == null) return 1;
+      if (b['group_value_raw'] == null) return -1;
+      return String(a['group_value_raw']).localeCompare(String(b['group_value_raw']));
     });
     return rows;
   }

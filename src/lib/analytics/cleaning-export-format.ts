@@ -61,8 +61,8 @@ export function parseCheckboxRawValue(rawValue: unknown): { selectedIds: string[
   if (typeof rawValue === 'object' && rawValue !== null) {
     const obj = rawValue as Record<string, unknown>;
     return {
-      selectedIds: Array.isArray(obj.selectedValues) ? (obj.selectedValues as string[]) : [],
-      otherText: obj.otherValue ? String(obj.otherValue) : undefined,
+      selectedIds: Array.isArray(obj['selectedValues']) ? (obj['selectedValues'] as string[]) : [],
+      otherText: obj['otherValue'] ? String(obj['otherValue']) : undefined,
     };
   }
   return { selectedIds: [] };
@@ -76,8 +76,8 @@ function parseSingleChoiceRawValue(rawValue: unknown): { optionId: string; other
   if (typeof rawValue === 'object' && rawValue !== null) {
     const obj = rawValue as Record<string, unknown>;
     return {
-      optionId: String(obj.selectedValue ?? obj.optionId ?? ''),
-      otherText: obj.otherValue ? String(obj.otherValue) : undefined,
+      optionId: String(obj['selectedValue'] ?? obj['optionId'] ?? ''),
+      otherText: obj['otherValue'] ? String(obj['otherValue']) : undefined,
     };
   }
   return { optionId: String(rawValue) };
@@ -188,7 +188,7 @@ export function formatGeneralQuestionValue(
 
     case 'notice': {
       if (typeof rawValue === 'object' && rawValue !== null) {
-        return (rawValue as Record<string, unknown>).acknowledged ? '동의' : '미동의';
+        return (rawValue as Record<string, unknown>)['acknowledged'] ? '동의' : '미동의';
       }
       return String(rawValue);
     }
@@ -618,7 +618,7 @@ function getVisibleRows(
     dynamicRowConfigs.filter((g) => g.enabled).map((g) => g.groupId),
   );
   const selectedRowIds = new Set(
-    (tableResponse.__selectedRowIds as string[] | undefined) ?? [],
+    (tableResponse['__selectedRowIds'] as string[] | undefined) ?? [],
   );
 
   return rows.filter((row) => {

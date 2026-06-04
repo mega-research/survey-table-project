@@ -76,7 +76,7 @@ export function useDynamicRowState({
   const hasDynamicRows = dynamicRows.length > 0;
 
   const selectedRowIds = useMemo(
-    () => [...new Set((currentResponse?.__selectedRowIds as string[]) || [])],
+    () => [...new Set((currentResponse?.['__selectedRowIds'] as string[]) || [])],
     [currentResponse],
   );
 

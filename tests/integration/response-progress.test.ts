@@ -23,24 +23,24 @@ const {
 vi.mock('@/db', () => {
   const chainable: Record<string, unknown> = {};
   // update().set(setArg).where(...).returning() → returning resolves
-  chainable.update = vi.fn(() => chainable);
-  chainable.set = vi.fn((arg: unknown) => {
+  chainable['update'] = vi.fn(() => chainable);
+  chainable['set'] = vi.fn((arg: unknown) => {
     updateSetMock(arg);
     return chainable;
   });
-  chainable.where = vi.fn(() => chainable);
-  chainable.returning = vi.fn(() => updateReturningMock());
+  chainable['where'] = vi.fn(() => chainable);
+  chainable['returning'] = vi.fn(() => updateReturningMock());
   // select().from().where().limit()
-  chainable.select = vi.fn(() => chainable);
-  chainable.from = vi.fn(() => chainable);
-  chainable.limit = vi.fn(() => selectLimitMock());
+  chainable['select'] = vi.fn(() => chainable);
+  chainable['from'] = vi.fn(() => chainable);
+  chainable['limit'] = vi.fn(() => selectLimitMock());
   // transaction(cb) → cb(tx) where tx has same chain + delete + insert
-  chainable.transaction = vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => {
+  chainable['transaction'] = vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => {
     const tx = { ...chainable, delete: vi.fn(() => chainable), insert: vi.fn(() => chainable) };
     txMock(cb);
     return cb(tx);
   });
-  chainable.query = {
+  chainable['query'] = {
     surveyResponses: {
       findFirst: (...args: unknown[]) => findFirstMock(...args),
     },
@@ -112,7 +112,7 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
     await saveAdminEdit('s1', 'r1', { questionResponses: { q1: 'v' } });
 
     const setArg = updateSetMock.mock.calls[0][0] as Record<string, unknown>;
-    expect(setArg.progressPct).toBe(100);
+    expect(setArg['progressPct']).toBe(100);
   });
 
   it('status=drop + questionResponses 비어있음 → progressPct=null', async () => {
@@ -128,7 +128,7 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
     await saveAdminEdit('s1', 'r1', { questionResponses: {} });
 
     const setArg = updateSetMock.mock.calls[0][0] as Record<string, unknown>;
-    expect(setArg.progressPct).toBeNull();
+    expect(setArg['progressPct']).toBeNull();
   });
 
   it('status=drop + 답변 있음 → snapshot position 기반 % 계산', async () => {
@@ -152,7 +152,7 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
 
     const setArg = updateSetMock.mock.calls[0][0] as Record<string, unknown>;
     // max position q3 = 3, total = 4, → 75
-    expect(setArg.progressPct).toBe(75);
+    expect(setArg['progressPct']).toBe(75);
   });
 
   it('versionId=null → progressPct=null', async () => {
@@ -168,6 +168,6 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
     });
 
     const setArg = updateSetMock.mock.calls[0][0] as Record<string, unknown>;
-    expect(setArg.progressPct).toBeNull();
+    expect(setArg['progressPct']).toBeNull();
   });
 });

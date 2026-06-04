@@ -63,14 +63,6 @@ export interface NormalizedContactListArgs {
   dir: ContactsSortDir;
 }
 
-function pickFromWhitelist<T extends string>(
-  value: string | undefined,
-  whitelist: readonly T[],
-  fallback: T,
-): T {
-  return (whitelist as readonly string[]).includes(value ?? '') ? (value as T) : fallback;
-}
-
 /**
  * sort 파라미터 normalize — 시스템 키 화이트리스트 OR 'attrs.<key>' 형식.
  * attrs 키는 길이 200 이내 + DB 안전성은 server adapter 가 책임 (drizzle SQL placeholder).

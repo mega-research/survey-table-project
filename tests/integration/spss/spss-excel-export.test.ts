@@ -5,7 +5,6 @@ import type { Question, SurveySubmission } from '@/types/survey';
 import {
   generateSPSSColumns,
   buildDataRows,
-  type SPSSExportColumn,
 } from '@/lib/analytics/spss-excel-export';
 
 function makeQuestion(

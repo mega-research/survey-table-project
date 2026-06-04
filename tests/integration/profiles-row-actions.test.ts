@@ -97,31 +97,6 @@ vi.mock('@/db/schema', () => ({
 }));
 
 vi.mock('@/db', () => {
-  // condition 평가 헬퍼: drizzle eq/and 의 SQL 조건을 in-memory 로 시뮬레이션
-  // eq(col, val) 은 { __eq: true, col, val } 형태 (drizzle-orm 실제 객체가 아닌 mock schema 기반)
-  // 여기서는 두 가지 조건 패턴만 처리: id match, surveyId match, responseId match
-  function matchesResponse(
-    row: SurveyResponseRow,
-    cond: { col?: string; val?: string; conditions?: { col?: string; val?: string }[] } | null,
-  ): boolean {
-    if (!cond) return true;
-    if (cond.conditions) {
-      return cond.conditions.every((c) => matchesResponse(row, c));
-    }
-    if (cond.col === 'id') return row.id === cond.val;
-    if (cond.col === 'surveyId') return row.surveyId === cond.val;
-    return true;
-  }
-
-  function matchesContact(
-    row: ContactTargetRow,
-    cond: { col?: string; val?: string } | null,
-  ): boolean {
-    if (!cond) return true;
-    if (cond.col === 'responseId') return row.responseId === cond.val;
-    return true;
-  }
-
   // drizzle where 조건 파싱용 — 실제 drizzle-orm eq/and 는 SQL 빌더이므로
   // 여기서는 mock schema 의 __table 식별자로만 라우팅하고,
   // 직접 INSERT 헬퍼 함수로 fixture 를 만드므로 update/delete 는
@@ -209,11 +184,11 @@ vi.mock('@/db', () => {
       values: vi.fn(async (rows: Array<Record<string, unknown>>) => {
         if (table.__table === 'responseAnswers') {
           for (const row of rows) {
-            const aid = `${row.responseId}-${row.questionId}-${h.answerStore.size}`;
+            const aid = `${row['responseId']}-${row['questionId']}-${h.answerStore.size}`;
             h.answerStore.set(aid, {
               id: aid,
-              responseId: row.responseId as string,
-              questionId: row.questionId as string,
+              responseId: row['responseId'] as string,
+              questionId: row['questionId'] as string,
             });
           }
         }
@@ -264,7 +239,7 @@ vi.mock('@/db/schema', () => {
     return new Proxy(
       { __table: tableName },
       {
-        get(target, prop: string) {
+        get(_target, prop: string) {
           if (prop === '__table') return tableName;
           // 컬럼 접근 시 { __table, __col } 반환
           return { __table: tableName, __col: prop };
@@ -514,7 +489,7 @@ describe('profiles-row-actions', () => {
     function stubListResponsesForProfiles(
       args: Parameters<typeof profilesServer.listResponsesForProfiles>[0],
     ): Promise<ListProfilesResult> {
-      const { surveyId, view, page = 1, pageSize = 20 } = args;
+      const { surveyId, view, page = 1 } = args;
       const rows = Array.from(h.responseStore.values()).filter((row) => {
         if (row.surveyId !== surveyId) return false;
         if (view === 'deleted') return row.deletedAt !== null;

@@ -156,7 +156,7 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
   );
   // TanStack Query 훅 사용
   const { data: survey, isLoading: isSurveyLoading, isError } = useSurvey(id);
-  const { saveSurvey, isSaving: isSavingSurvey } = useSurveySync();
+  const { saveSurvey } = useSurveySync();
 
   const [titleInput, setTitleInput] = useState('');
   const [questionNumberInput, setQuestionNumberInput] = useState('');

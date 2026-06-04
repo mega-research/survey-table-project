@@ -166,7 +166,7 @@ export function inferSpssMeasure(
 function applyAutoCodeToCell(
   cell: TableCell,
   questionCode: string | undefined,
-  questionTitle: string | undefined,
+  _questionTitle: string | undefined,
   rowCode: string | undefined,
   rowLabel: string | undefined,
   columnCode: string | undefined,
@@ -313,7 +313,7 @@ export function generateCellCodesForColumn(
 export function regenerateCellCodeForPaste(
   cell: TableCell,
   questionCode: string | undefined,
-  questionTitle: string | undefined,
+  _questionTitle: string | undefined,
   rowCode: string | undefined,
   rowLabel: string | undefined,
   columnCode: string | undefined,

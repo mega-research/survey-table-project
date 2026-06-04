@@ -54,7 +54,7 @@ function withStyle(
     tagName,
     attribs: {
       ...attribs,
-      style: mergeStyle(attribs.style, injected),
+      style: mergeStyle(attribs['style'], injected),
     },
   };
 }
@@ -96,7 +96,7 @@ const RICH_CONFIG: sanitizeHtml.IOptions = {
       return { tagName, attribs };
     },
     span: (tagName, attribs) => {
-      const cls = attribs.class ?? '';
+      const cls = attribs['class'] ?? '';
       if (cls.includes('notice-file-attachment-text')) {
         return withStyle(tagName, attribs, FILE_TEXT_STYLE);
       }

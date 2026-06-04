@@ -3,7 +3,6 @@ import type {
   ExpressionConditionConfig,
   Question,
   QuestionCondition,
-  SurveyLookup,
 } from '@/types/survey';
 import { shouldDisplayQuestion } from '@/utils/branch-logic';
 

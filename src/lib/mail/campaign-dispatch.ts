@@ -68,9 +68,9 @@ export async function dispatchCampaignChunk(
   const [campaign] = await db.select().from(mailCampaigns).where(eq(mailCampaigns.id, campaignId));
   if (!campaign) throw new Error(`campaign not found: ${campaignId}`);
 
-  const baseUrl = (process.env.NEXT_PUBLIC_APP_URL ?? '').replace(/\/+$/, '');
+  const baseUrl = (process.env['NEXT_PUBLIC_APP_URL'] ?? '').replace(/\/+$/, '');
   if (!baseUrl) throw new Error('NEXT_PUBLIC_APP_URL 환경변수가 설정되지 않았습니다.');
-  const fromDomain = process.env.RESEND_FROM_DOMAIN;
+  const fromDomain = process.env['RESEND_FROM_DOMAIN'];
   if (!fromDomain) throw new Error('RESEND_FROM_DOMAIN 환경변수가 설정되지 않았습니다.');
 
   // recipients + contact_targets join — queued 상태만 처리 (재실행/retry 시 이미 처리된 row 건너뜀).

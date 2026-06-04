@@ -37,7 +37,7 @@ interface ResendEventPayload {
 }
 
 const POST_HANDLER = async (req: NextRequest): Promise<NextResponse> => {
-  const secret = process.env.RESEND_WEBHOOK_SECRET;
+  const secret = process.env['RESEND_WEBHOOK_SECRET'];
   if (!secret) {
     Sentry.captureMessage('RESEND_WEBHOOK_SECRET 환경변수 미설정', 'error');
     return NextResponse.json({ error: 'webhook misconfigured' }, { status: 500 });

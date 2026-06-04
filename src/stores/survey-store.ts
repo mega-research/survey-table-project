@@ -387,7 +387,7 @@ export const useSurveyBuilderStore = create<SurveyBuilderState>()(
           }
         }),
 
-      reorderGroupChildren: (parentGroupId: string, items: Array<{ kind: 'question' | 'subgroup'; id: string }>) =>
+      reorderGroupChildren: (_parentGroupId: string, items: Array<{ kind: 'question' | 'subgroup'; id: string }>) =>
         set((state) => {
           const oldCodes = new Map(state.currentSurvey.questions.map((q) => [q.id, q.questionCode]));
           const groups = state.currentSurvey.groups || [];

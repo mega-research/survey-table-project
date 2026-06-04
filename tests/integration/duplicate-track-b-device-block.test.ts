@@ -42,7 +42,7 @@ const BASE_SIGNALS = {
 };
 
 beforeAll(() => {
-  process.env.DUPLICATE_DETECTION_SALT = 'integration-test-salt';
+  process.env['DUPLICATE_DETECTION_SALT'] = 'integration-test-salt';
 });
 
 beforeEach(() => {

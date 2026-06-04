@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 
 import { BarChart3, Clock, Download, FileText, PieChart, TrendingUp, Users } from 'lucide-react';
 
@@ -277,14 +277,14 @@ function QuestionStatItem({
 
       {isSelected && (
         <div className="mt-4 border-t border-gray-200 pt-4">
-          <QuestionResponseDetail question={question} stats={stats} />
+          <QuestionResponseDetail stats={stats} />
         </div>
       )}
     </div>
   );
 }
 
-function QuestionResponseDetail({ question, stats }: { question: any; stats: any }) {
+function QuestionResponseDetail({ stats }: { stats: any }) {
   if (stats.totalResponses === 0) {
     return (
       <div className="py-4 text-center text-gray-500">

@@ -118,7 +118,7 @@ export function UserDefinedMultiSelectPreview({
 }: UserDefinedMultiSelectPreviewProps) {
   return (
     <div className={`space-y-3 ${className}`}>
-      {levels.map((level, index) => (
+      {levels.map((level) => (
         <div key={level.id} className="space-y-1">
           <label className="block text-sm font-medium text-gray-700">{level.label}</label>
           <div className="relative">

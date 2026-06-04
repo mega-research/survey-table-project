@@ -354,7 +354,7 @@ export async function saveSurveyWithDetails(surveyData: SurveyType) {
         updatedAt: new Date(),
       };
       if (surveyData.lookups !== undefined) {
-        updateSet.lookups = surveyData.lookups;
+        updateSet['lookups'] = surveyData.lookups;
       }
       await tx
         .update(surveys)

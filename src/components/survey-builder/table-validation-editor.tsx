@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 
 import { AlertCircle, ChevronDown, ChevronUp, Plus, Trash2, X } from 'lucide-react';
 

@@ -62,9 +62,9 @@ export function extractRawSql(node: unknown): string {
   if (typeof node === 'number' || typeof node === 'boolean') return String(node);
   if (Array.isArray(node)) return node.map(extractRawSql).join(' ');
   const obj = node as Record<string, unknown>;
-  if (Array.isArray(obj.value)) return obj.value.map(extractRawSql).join(' ');
-  if (typeof obj.value === 'string') return obj.value;
-  if (Array.isArray(obj.queryChunks)) return obj.queryChunks.map(extractRawSql).join(' ');
+  if (Array.isArray(obj['value'])) return obj['value'].map(extractRawSql).join(' ');
+  if (typeof obj['value'] === 'string') return obj['value'];
+  if (Array.isArray(obj['queryChunks'])) return obj['queryChunks'].map(extractRawSql).join(' ');
   if ('encoder' in obj && 'value' in obj) {
     return String((obj as { value: unknown }).value);
   }

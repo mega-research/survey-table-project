@@ -40,8 +40,8 @@ export function ImageContextToolbar({ editor }: Props) {
         return { active: false, widthPct: null as number | null };
       }
       const attrs = editor.getAttributes(IMAGE_NODE);
-      const wrapperStyle = (attrs.wrapperStyle ?? '') as string;
-      const containerStyle = (attrs.containerStyle ?? '') as string;
+      const wrapperStyle = (attrs['wrapperStyle'] ?? '') as string;
+      const containerStyle = (attrs['containerStyle'] ?? '') as string;
       return {
         active: editor.isActive(IMAGE_NODE),
         widthPct: readWidthPct(wrapperStyle, containerStyle),

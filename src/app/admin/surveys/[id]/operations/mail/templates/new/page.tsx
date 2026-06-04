@@ -8,7 +8,7 @@ interface Props {
 
 export default async function NewMailTemplatePage({ params }: Props) {
   const { id: surveyId } = await params;
-  const fromDomain = process.env.RESEND_FROM_DOMAIN ?? '';
+  const fromDomain = process.env['RESEND_FROM_DOMAIN'] ?? '';
   const catalog = await getVariableCatalog(surveyId);
   const user = await requireAuth();
 

@@ -8,10 +8,10 @@ import { requireAuth } from '@/lib/auth';
 // Cloudflare R2는 S3 호환 API를 사용합니다
 const r2Client = new S3Client({
   region: 'auto',
-  endpoint: `https://${process.env.CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+  endpoint: `https://${process.env['CLOUDFLARE_ACCOUNT_ID']}.r2.cloudflarestorage.com`,
   credentials: {
-    accessKeyId: process.env.CLOUDFLARE_R2_ACCESS_KEY || '',
-    secretAccessKey: process.env.CLOUDFLARE_R2_SECRET_KEY || '',
+    accessKeyId: process.env['CLOUDFLARE_R2_ACCESS_KEY'] || '',
+    secretAccessKey: process.env['CLOUDFLARE_R2_SECRET_KEY'] || '',
   },
 });
 
@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 환경 변수 확인
-    const bucketName = process.env.CLOUDFLARE_R2_BUCKET;
+    const bucketName = process.env['CLOUDFLARE_R2_BUCKET'];
     if (!bucketName) {
       const error = new Error('Cloudflare R2 환경 변수가 설정되지 않았습니다.');
       console.error(error.message);
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '서버 설정 오류' }, { status: 500 });
     }
 
-    const publicUrl = process.env.CLOUDFLARE_R2_PUBLIC_URL;
+    const publicUrl = process.env['CLOUDFLARE_R2_PUBLIC_URL'];
     if (!publicUrl) {
       return NextResponse.json({ error: '서버 설정 오류' }, { status: 500 });
     }

@@ -28,8 +28,8 @@ export function FileAttachmentContextToolbar({ editor, onReplace }: Props) {
       const attrs = editor.getAttributes(FILE_ATTACHMENT);
       return {
         active: true,
-        label: (attrs.label as string) ?? '',
-        key: (attrs.key as string | null) ?? null,
+        label: (attrs['label'] as string) ?? '',
+        key: (attrs['key'] as string | null) ?? null,
       };
     },
   });

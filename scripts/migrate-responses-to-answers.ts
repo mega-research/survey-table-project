@@ -24,8 +24,8 @@ if (fs.existsSync(envPath)) {
   console.warn('⚠️ .env.local 파일을 찾을 수 없습니다.');
 }
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabaseUrl = process.env['NEXT_PUBLIC_SUPABASE_URL'];
+const supabaseServiceKey = process.env['SUPABASE_SERVICE_ROLE_KEY'];
 
 if (!supabaseUrl || !supabaseServiceKey) {
   console.error('❌ NEXT_PUBLIC_SUPABASE_URL과 SUPABASE_SERVICE_ROLE_KEY가 필요합니다.');
@@ -33,7 +33,7 @@ if (!supabaseUrl || !supabaseServiceKey) {
 }
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
-const DRY_RUN = process.env.DRY_RUN !== 'false';
+const DRY_RUN = process.env['DRY_RUN'] !== 'false';
 
 interface QuestionRow {
   id: string;
@@ -56,7 +56,7 @@ interface AnswerInsert {
   question_type: string;
 }
 
-function normalizeValue(value: unknown, questionType: string): Omit<AnswerInsert, 'response_id' | 'question_id' | 'question_type'> {
+function normalizeValue(value: unknown, _questionType: string): Omit<AnswerInsert, 'response_id' | 'question_id' | 'question_type'> {
   if (typeof value === 'string') {
     return { text_value: value, array_value: null, object_value: null };
   }

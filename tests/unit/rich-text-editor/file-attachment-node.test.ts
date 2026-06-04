@@ -22,12 +22,12 @@ describe('FileAttachment node', () => {
     const para = json.content?.[0] as { content?: Array<{ type?: string; attrs?: Record<string, unknown> }> } | undefined;
     const node = para?.content?.[0];
     expect(node?.type).toBe('fileAttachment');
-    expect(node?.attrs?.key).toBe('tmp/notice-attachment/abc.pdf');
-    expect(node?.attrs?.filename).toBe('협조공문.pdf');
-    expect(node?.attrs?.size).toBe('240000');
-    expect(node?.attrs?.mime).toBe('application/pdf');
-    expect(node?.attrs?.url).toBe('https://cdn.test/tmp/notice-attachment/abc.pdf');
-    expect(node?.attrs?.label).toBe('협조 공문');
+    expect(node?.attrs?.['key']).toBe('tmp/notice-attachment/abc.pdf');
+    expect(node?.attrs?.['filename']).toBe('협조공문.pdf');
+    expect(node?.attrs?.['size']).toBe('240000');
+    expect(node?.attrs?.['mime']).toBe('application/pdf');
+    expect(node?.attrs?.['url']).toBe('https://cdn.test/tmp/notice-attachment/abc.pdf');
+    expect(node?.attrs?.['label']).toBe('협조 공문');
     editor.destroy();
   });
 
@@ -98,7 +98,7 @@ describe('FileAttachment node', () => {
     const json = editor.getJSON();
     const para = json.content?.[0] as { content?: Array<{ type?: string; attrs?: Record<string, unknown> }> } | undefined;
     const parsed = para?.content?.[0];
-    expect(parsed?.attrs?.label).toBe('협조 공문');
+    expect(parsed?.attrs?.['label']).toBe('협조 공문');
 
     const out = editor.getHTML();
     for (const fragment of [

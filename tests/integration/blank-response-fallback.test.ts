@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 // DUPLICATE_DETECTION_SALT 는 signals.ts 에서 필요
-process.env.DUPLICATE_DETECTION_SALT = 'test-salt-blank-response';
+process.env['DUPLICATE_DETECTION_SALT'] = 'test-salt-blank-response';
 
 // ========================
 // 모듈 모킹

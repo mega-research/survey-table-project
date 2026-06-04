@@ -40,7 +40,6 @@ import {
   createAddOption,
   createUpdateOption,
   createRemoveOption,
-  createHandleOtherOptionToggle,
   createAddSelectLevel,
   createUpdateSelectLevel,
   createRemoveSelectLevel,
@@ -57,11 +56,10 @@ interface QuestionEditModalProps {
 }
 
 export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditModalProps) {
-  const { updateQuestion, setEditingQuestionId, silentUpdateQuestion } = useSurveyBuilderStore(
+  const { updateQuestion, setEditingQuestionId } = useSurveyBuilderStore(
     useShallow((s) => ({
       updateQuestion: s.updateQuestion,
       setEditingQuestionId: s.setEditingQuestionId,
-      silentUpdateQuestion: s.silentUpdateQuestion,
     })),
   );
   const questions = useSurveyBuilderStore(useShallow((s) => s.currentSurvey.questions));
@@ -215,22 +213,22 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
     const errors: Record<string, string> = {};
 
     if (!currentFormData.title?.trim()) {
-      errors.title = '질문 제목은 필수입니다.';
+      errors['title'] = '질문 제목은 필수입니다.';
     }
 
     if (needsOptions && (!currentFormData.options || currentFormData.options.length === 0)) {
-      errors.options = '최소 하나의 선택 옵션이 필요합니다.';
+      errors['options'] = '최소 하나의 선택 옵션이 필요합니다.';
     }
 
     if (needsSelectLevels && (!currentFormData.selectLevels || currentFormData.selectLevels.length === 0)) {
-      errors.selectLevels = '최소 하나의 선택 레벨이 필요합니다.';
+      errors['selectLevels'] = '최소 하나의 선택 레벨이 필요합니다.';
     }
 
     // 질문 내장 테이블 옵션: tableRowsData 에 ranking_opt 셀이 최소 1개는 있어야 함
     if (isRankingTableSource) {
       const hasRankingOpt = collectRankingOptCells(currentFormData.tableRowsData).length > 0;
       if (!hasRankingOpt) {
-        errors.rankingOptions =
+        errors['rankingOptions'] =
           '질문 내장 테이블에 "순위 옵션" 셀이 최소 1개는 있어야 합니다. 테이블 편집기에서 옵션으로 쓸 셀을 클릭 → 셀 편집 모달의 "순위 옵션" 탭으로 저장하세요.';
       }
     }
@@ -241,7 +239,7 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
       && (currentFormData.tableColumns?.length ?? 0) > 0
       && collectChoiceOptCells(currentFormData.tableRowsData).length === 0;
     if (choiceTableModeButEmpty) {
-      errors.options =
+      errors['options'] =
         '설명 테이블에 "보기 옵션" 셀이 최소 1개는 있어야 합니다. 선택 열 셀을 클릭 → "보기 옵션" 탭으로 저장하세요.';
     }
 
@@ -407,7 +405,6 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
   const addOption = useMemo(() => createAddOption(setFormData), []);
   const updateOption = useMemo(() => createUpdateOption(setFormData), []);
   const removeOption = useMemo(() => createRemoveOption(setFormData), []);
-  const handleOtherOptionToggle = useMemo(() => createHandleOtherOptionToggle(setFormData), []);
   const addSelectLevel = useMemo(() => createAddSelectLevel(setFormData), []);
   const updateSelectLevel = useMemo(() => createUpdateSelectLevel(setFormData), []);
   const removeSelectLevel = useMemo(() => createRemoveSelectLevel(setFormData), []);

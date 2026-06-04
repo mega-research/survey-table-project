@@ -153,10 +153,10 @@ function buildPageVisits(
 // === production DB 가드 ===
 const _isProd =
   process.env.NODE_ENV === 'production' ||
-  !!process.env.SUPABASE_URL?.includes('prod') ||
-  !!process.env.DATABASE_URL?.includes('prod');
+  !!process.env['SUPABASE_URL']?.includes('prod') ||
+  !!process.env['DATABASE_URL']?.includes('prod');
 
-if (_isProd && process.env.SEED_ALLOW_PROD !== 'true') {
+if (_isProd && process.env['SEED_ALLOW_PROD'] !== 'true') {
   throw new Error(
     '[seed-fieldwork-mock] production DB 로 인식되는 환경에서는 실행 거부. ' +
       '명시적 opt-in 이 필요하면 SEED_ALLOW_PROD=true 환경변수 사용.',

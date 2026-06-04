@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 
-import { ChevronDown, ChevronUp, Filter, Plus, RotateCcw, Save, Users } from 'lucide-react';
+import { ChevronDown, ChevronUp, Filter, Plus, RotateCcw, Users } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';

@@ -181,7 +181,7 @@ export function QuestionBasicTab({
               onChange={(e) => {
                 const value = e.target.value;
                 setLocalTitle(value);
-                if (validationErrors.title) {
+                if (validationErrors['title']) {
                   setValidationErrors((prev) => ({ ...prev, title: '' }));
                 }
                 // 300ms debounce 후 formData에 반영
@@ -193,7 +193,7 @@ export function QuestionBasicTab({
               }}
               placeholder="질문을 입력하세요"
               className={`flex-1 ${
-                validationErrors.title ? 'border-red-500 focus:border-red-500' : ''
+                validationErrors['title'] ? 'border-red-500 focus:border-red-500' : ''
               }`}
             />
             {variableCatalog.length > 0 && (
@@ -202,7 +202,7 @@ export function QuestionBasicTab({
                 inputRef={titleRef}
                 onChange={(v) => {
                   setLocalTitle(v);
-                  if (validationErrors.title) {
+                  if (validationErrors['title']) {
                     setValidationErrors((prev) => ({ ...prev, title: '' }));
                   }
                   // 토큰 삽입은 명시적 액션이므로 debounce 우회 — 즉시 반영
@@ -215,8 +215,8 @@ export function QuestionBasicTab({
               />
             )}
           </div>
-          {validationErrors.title && (
-            <p className="mt-1 text-sm text-red-500">{validationErrors.title}</p>
+          {validationErrors['title'] && (
+            <p className="mt-1 text-sm text-red-500">{validationErrors['title']}</p>
           )}
         </div>
 
@@ -658,7 +658,7 @@ export function QuestionBasicTab({
                 size="sm"
                 onClick={() => {
                   addOption();
-                  if (validationErrors.options) {
+                  if (validationErrors['options']) {
                     setValidationErrors((prev) => ({ ...prev, options: '' }));
                   }
                 }}
@@ -677,7 +677,7 @@ export function QuestionBasicTab({
                     ...prev,
                     options: [...(prev.options ?? []), newOption],
                   }));
-                  if (validationErrors.options) {
+                  if (validationErrors['options']) {
                     setValidationErrors((prev) => ({ ...prev, options: '' }));
                   }
                 }}
@@ -688,8 +688,8 @@ export function QuestionBasicTab({
               </Button>
             </div>
           </div>
-          {validationErrors.options && (
-            <p className="text-sm text-red-500">{validationErrors.options}</p>
+          {validationErrors['options'] && (
+            <p className="text-sm text-red-500">{validationErrors['options']}</p>
           )}
 
           {/* 응답 페이지에서 옵션 배치 방식 (select 는 드롭다운이라 의미 없어 숨김) */}
@@ -838,7 +838,7 @@ export function QuestionBasicTab({
               size="sm"
               onClick={() => {
                 addSelectLevel();
-                if (validationErrors.selectLevels) {
+                if (validationErrors['selectLevels']) {
                   setValidationErrors((prev) => ({ ...prev, selectLevels: '' }));
                 }
               }}
@@ -848,8 +848,8 @@ export function QuestionBasicTab({
               <span>레벨 추가</span>
             </Button>
           </div>
-          {validationErrors.selectLevels && (
-            <p className="text-sm text-red-500">{validationErrors.selectLevels}</p>
+          {validationErrors['selectLevels'] && (
+            <p className="text-sm text-red-500">{validationErrors['selectLevels']}</p>
           )}
 
           {formData.selectLevels && formData.selectLevels.length > 0 ? (

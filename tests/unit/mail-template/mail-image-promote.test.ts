@@ -8,11 +8,11 @@ import {
 
 describe('extractTmpMailUrls', () => {
   beforeEach(() => {
-    process.env.CLOUDFLARE_R2_PUBLIC_URL = 'https://cdn.test';
+    process.env['CLOUDFLARE_R2_PUBLIC_URL'] = 'https://cdn.test';
   });
 
   afterEach(() => {
-    delete process.env.CLOUDFLARE_R2_PUBLIC_URL;
+    delete process.env['CLOUDFLARE_R2_PUBLIC_URL'];
   });
 
   it('tmp/mail/ URL만 반환', () => {
@@ -71,11 +71,11 @@ describe('extractTmpMailUrls', () => {
 
 describe('tmpToPermanentUrl', () => {
   beforeEach(() => {
-    process.env.CLOUDFLARE_R2_PUBLIC_URL = 'https://cdn.test';
+    process.env['CLOUDFLARE_R2_PUBLIC_URL'] = 'https://cdn.test';
   });
 
   afterEach(() => {
-    delete process.env.CLOUDFLARE_R2_PUBLIC_URL;
+    delete process.env['CLOUDFLARE_R2_PUBLIC_URL'];
   });
 
   it('tmp/mail/ prefix를 mail/로 치환', () => {

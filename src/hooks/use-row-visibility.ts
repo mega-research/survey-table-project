@@ -87,7 +87,7 @@ export function useRowVisibility(
         const toAdd: number[] = [];
         for (const entry of entries) {
           if (!entry.isIntersecting) continue;
-          const idx = Number((entry.target as HTMLElement).dataset.rowIdx);
+          const idx = Number((entry.target as HTMLElement).dataset['rowIdx']);
           if (!isNaN(idx)) toAdd.push(idx);
         }
         if (toAdd.length === 0) return;
@@ -112,7 +112,7 @@ export function useRowVisibility(
             if (entry.isIntersecting) continue;
             const el = entry.target as HTMLElement;
             if (el.contains(document.activeElement)) continue;
-            const idx = Number(el.dataset.rowIdx);
+            const idx = Number(el.dataset['rowIdx']);
             if (!isNaN(idx)) toRemove.push(idx);
           }
           if (toRemove.length === 0) return;
@@ -149,7 +149,7 @@ export function useRowVisibility(
       if (!cached) {
         cached = (el: HTMLElement | null) => {
           if (el) {
-            el.dataset.rowIdx = String(rowIdx);
+            el.dataset['rowIdx'] = String(rowIdx);
             sentinelsRef.current.set(rowIdx, el);
             loadObserverRef.current?.observe(el);
             if (unloadObserverRef.current) unloadObserverRef.current.observe(el);

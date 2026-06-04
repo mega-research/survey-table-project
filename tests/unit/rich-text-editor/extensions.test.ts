@@ -86,10 +86,10 @@ describe('createUnifiedExtensions', () => {
       const exts = createUnifiedExtensions({ kind });
       const editor = new Editor({ extensions: exts });
       const nodes = Object.keys(editor.schema.nodes).sort();
-      const tableHeaderType = editor.schema.nodes.tableHeader;
-      const tableCellType = editor.schema.nodes.tableCell;
-      const tableRowType = editor.schema.nodes.tableRow;
-      const tableType = editor.schema.nodes.table;
+      const tableHeaderType = editor.schema.nodes['tableHeader'];
+      const tableCellType = editor.schema.nodes['tableCell'];
+      const tableRowType = editor.schema.nodes['tableRow'];
+      const tableType = editor.schema.nodes['table'];
       const insertResult = editor
         .chain()
         .focus()
@@ -146,12 +146,12 @@ describe('createUnifiedExtensions', () => {
       expect(imageNode).not.toBeNull();
 
       // ImageResize 의 wrapperStyle default 는 inline 모드에서 float: left 포함 문자열
-      const initialWrapperStyle = (imageNode as unknown as PMNodeLite).attrs.wrapperStyle;
+      const initialWrapperStyle = (imageNode as unknown as PMNodeLite).attrs['wrapperStyle'];
       expect(typeof initialWrapperStyle).toBe('string');
       expect(initialWrapperStyle as string).toMatch(/float:\s*left/);
 
       // containerStyle attr 도 schema 에 등록되어 있는지
-      const imageSchemaSpec = editor.schema.nodes.imageResize.spec as {
+      const imageSchemaSpec = editor.schema.nodes['imageResize'].spec as {
         attrs?: Record<string, unknown>;
       };
       expect(imageSchemaSpec.attrs).toHaveProperty('wrapperStyle');
@@ -163,8 +163,8 @@ describe('createUnifiedExtensions', () => {
     it('ImageResize 의 node name 은 imageResize 로 schema 에 등록된다', () => {
       const exts = createUnifiedExtensions({ kind: 'survey' });
       const editor = new Editor({ extensions: exts, content: '<p>x</p>' });
-      expect(editor.schema.nodes.imageResize).toBeDefined();
-      expect(editor.schema.nodes.image).toBeUndefined();
+      expect(editor.schema.nodes['imageResize']).toBeDefined();
+      expect(editor.schema.nodes['image']).toBeUndefined();
       editor.destroy();
     });
 

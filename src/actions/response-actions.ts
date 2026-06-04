@@ -13,7 +13,6 @@ import {
   surveyResponses,
 } from '@/db/schema';
 import type { PageVisit } from '@/db/schema/schema-types';
-import { requireAuth } from '@/lib/auth';
 import { checkTrackA, checkTrackB } from '@/lib/duplicate-detection/check';
 import { computeSignals } from '@/lib/duplicate-detection/signals';
 import type { BlockReason, ClientSignals } from '@/lib/duplicate-detection/types';

@@ -41,7 +41,7 @@ describe('findLookupRow', () => {
 
   it('복합 키 모두 일치해야 매칭', () => {
     const row = findLookupRow(COMPOSITE_KEY_LUT, { 대륙: '유럽', 클래스: '비즈' });
-    expect(row?.평균).toBe(3200000);
+    expect(row?.['평균']).toBe(3200000);
   });
 
   it('복합 키 중 하나만 일치하면 매칭 실패', () => {

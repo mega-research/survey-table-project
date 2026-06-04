@@ -2,7 +2,7 @@ import { createHmac, createSecretKey, type KeyObject } from 'node:crypto';
 import { normalizePii, type PiiFieldType } from './pii-fields';
 
 function getKey(): KeyObject {
-  const raw = process.env.CONTACT_PII_HMAC_KEY;
+  const raw = process.env['CONTACT_PII_HMAC_KEY'];
   if (!raw) {
     throw new Error('CONTACT_PII_HMAC_KEY env required (base64 32 bytes)');
   }

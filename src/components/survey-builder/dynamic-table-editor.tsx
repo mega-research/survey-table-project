@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { generateId } from '@/lib/utils';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
-import { DynamicRowGroupConfig, HeaderCell, Question, QuestionConditionGroup, TableCell, TableColumn, TableRow } from '@/types/survey';
+import { DynamicRowGroupConfig, HeaderCell, QuestionConditionGroup, TableCell, TableColumn, TableRow } from '@/types/survey';
 
 import { BulkGeneratorModal, BulkColumnDef } from './bulk-generator';
 import { CellContentModal } from './cell-content-modal';
@@ -134,7 +134,6 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
   } = actions;
 
   // ── 동적 행 감지 ──
-  const hasDynamicRows = currentRows.some((r) => r.dynamicGroupId);
   const nonDynamicRows = currentRows.filter((r) => !r.dynamicGroupId && !r.showWhenDynamicGroupId);
 
   // ── 행 일괄 생성 상태 ──
@@ -612,7 +611,7 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
             <p className="text-xs text-gray-400">그룹을 추가하면 행을 동적으로 선택/표시할 수 있습니다.</p>
           )}
 
-          {dynamicRowConfigs.map((group, idx) => {
+          {dynamicRowConfigs.map((group) => {
             const groupRowCount = currentRows.filter((r) => r.dynamicGroupId === group.groupId).length;
             return (
               <div key={group.groupId} className="space-y-2 rounded-md border border-purple-200 bg-purple-50/30 p-3">

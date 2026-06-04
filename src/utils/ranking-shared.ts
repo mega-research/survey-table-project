@@ -24,7 +24,7 @@ export const RANKING_SELECT_FOCUS_CLS =
 export function isRankingAnswer(v: unknown): v is RankingAnswer {
   if (!v || typeof v !== 'object') return false;
   const rec = v as Record<string, unknown>;
-  return typeof rec.rank === 'number' && typeof rec.optionValue === 'string';
+  return typeof rec['rank'] === 'number' && typeof rec['optionValue'] === 'string';
 }
 
 /** 임의 값(unknown) → RankingAnswer[] 로 안전하게 정규화. 배열이 아니거나 shape 불일치는 제거. */

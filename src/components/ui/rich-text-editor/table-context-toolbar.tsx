@@ -49,8 +49,8 @@ export function TableContextToolbar({ editor }: Props) {
           ? 'right'
           : 'left';
       // td / th 어느 쪽에 있든 같은 verticalAlign attr 를 본다.
-      const cellVAlign = (editor.getAttributes('tableCell').verticalAlign
-        ?? editor.getAttributes('tableHeader').verticalAlign
+      const cellVAlign = (editor.getAttributes('tableCell')['verticalAlign']
+        ?? editor.getAttributes('tableHeader')['verticalAlign']
         ?? 'top') as VAlign;
       return {
         canMerge: editor.can().mergeCells(),

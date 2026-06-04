@@ -2,7 +2,7 @@ import 'server-only';
 
 import { eq, type ExtractTablesWithRelations } from 'drizzle-orm';
 import type { PgTransaction } from 'drizzle-orm/pg-core';
-import type { PostgresJsDatabase, PostgresJsQueryResultHKT } from 'drizzle-orm/postgres-js';
+import type { PostgresJsQueryResultHKT } from 'drizzle-orm/postgres-js';
 
 import { db } from '@/db';
 import * as schema from '@/db/schema';

@@ -2,16 +2,14 @@ import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
 import type { ClientSignals } from '@/lib/duplicate-detection/types';
 
 beforeAll(() => {
-  process.env.DUPLICATE_DETECTION_SALT = 'integration-test-salt';
+  process.env['DUPLICATE_DETECTION_SALT'] = 'integration-test-salt';
 });
 
-const { mockFindFirst, mockHeaders, mockInsert, mockFindContact, mockResumeOrCreate } = vi.hoisted(
+const { mockFindFirst, mockHeaders, mockInsert } = vi.hoisted(
   () => ({
     mockFindFirst: vi.fn(),
     mockHeaders: vi.fn(),
     mockInsert: vi.fn(),
-    mockFindContact: vi.fn(),
-    mockResumeOrCreate: vi.fn(),
   }),
 );
 

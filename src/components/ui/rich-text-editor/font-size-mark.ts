@@ -26,8 +26,8 @@ export const FontSize = Mark.create({
       size: {
         default: null as string | null,
         renderHTML: (attrs) => {
-          if (!attrs.size) return {};
-          return { style: `font-size: ${attrs.size}` };
+          if (!attrs['size']) return {};
+          return { style: `font-size: ${attrs['size']}` };
         },
       },
     };

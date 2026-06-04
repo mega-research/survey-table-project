@@ -103,12 +103,11 @@ interface QuestionLibraryPanelProps {
 
 export function QuestionLibraryPanel({
   onAddQuestion,
-  targetGroupId,
   className,
 }: QuestionLibraryPanelProps) {
   // TanStack Query 훅들
-  const { data: savedQuestions = [], isLoading: isLoadingQuestions } = useSavedQuestions();
-  const { data: categories = [], isLoading: isLoadingCategories } = useCategories();
+  const { data: savedQuestions = [] } = useSavedQuestions();
+  const { data: categories = [] } = useCategories();
   const { data: recentlyUsed = [] } = useRecentlyUsedQuestions(5);
   const { data: mostUsed = [] } = useMostUsedQuestions(5);
 

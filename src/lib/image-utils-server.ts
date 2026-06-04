@@ -8,10 +8,10 @@ import * as Sentry from '@sentry/nextjs';
 // Cloudflare R2는 S3 호환 API를 사용합니다
 const r2Client = new S3Client({
   region: 'auto',
-  endpoint: `https://${process.env.CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+  endpoint: `https://${process.env['CLOUDFLARE_ACCOUNT_ID']}.r2.cloudflarestorage.com`,
   credentials: {
-    accessKeyId: process.env.CLOUDFLARE_R2_ACCESS_KEY || '',
-    secretAccessKey: process.env.CLOUDFLARE_R2_SECRET_KEY || '',
+    accessKeyId: process.env['CLOUDFLARE_R2_ACCESS_KEY'] || '',
+    secretAccessKey: process.env['CLOUDFLARE_R2_SECRET_KEY'] || '',
   },
 });
 
@@ -26,13 +26,13 @@ export async function deleteImagesFromR2Server(urls: string[]): Promise<boolean>
   }
 
   // 환경 변수 확인
-  const bucketName = process.env.CLOUDFLARE_R2_BUCKET;
+  const bucketName = process.env['CLOUDFLARE_R2_BUCKET'];
   if (!bucketName) {
     console.error('Cloudflare R2 환경 변수가 설정되지 않았습니다.');
     return false;
   }
 
-  const publicUrl = process.env.CLOUDFLARE_R2_PUBLIC_URL;
+  const publicUrl = process.env['CLOUDFLARE_R2_PUBLIC_URL'];
   if (!publicUrl) {
     console.error('Cloudflare R2 공개 URL이 설정되지 않았습니다.');
     return false;
@@ -86,7 +86,7 @@ export async function deleteImagesFromR2Server(urls: string[]): Promise<boolean>
  * @returns 성공 시 true, 실패 시 false
  */
 export async function moveR2Object(srcKey: string, dstKey: string): Promise<boolean> {
-  const bucketName = process.env.CLOUDFLARE_R2_BUCKET;
+  const bucketName = process.env['CLOUDFLARE_R2_BUCKET'];
   if (!bucketName) return false;
 
   try {
@@ -144,7 +144,7 @@ export async function deleteR2ObjectsByKey(keys: string[]): Promise<boolean> {
     return true;
   }
 
-  const bucketName = process.env.CLOUDFLARE_R2_BUCKET;
+  const bucketName = process.env['CLOUDFLARE_R2_BUCKET'];
   if (!bucketName) {
     console.error('Cloudflare R2 환경 변수가 설정되지 않았습니다.');
     return false;
@@ -178,7 +178,7 @@ export async function deleteR2ObjectsByKey(keys: string[]): Promise<boolean> {
  * @throws 파일이 없거나 다운로드 실패 시 throw — caller 가 일괄 abort.
  */
 export async function downloadR2Object(key: string): Promise<Buffer> {
-  const bucketName = process.env.CLOUDFLARE_R2_BUCKET;
+  const bucketName = process.env['CLOUDFLARE_R2_BUCKET'];
   if (!bucketName) throw new Error('Cloudflare R2 환경 변수가 설정되지 않았습니다.');
 
   const resp = await r2Client.send(

@@ -8,7 +8,7 @@ export default function SurveyResponsePage() {
   const params = useParams();
   const searchParams = useSearchParams();
   // URL 인코딩된 한글 slug를 디코딩 (원본 page.tsx 동작 보존)
-  const identifier = decodeURIComponent(params.id as string);
+  const identifier = decodeURIComponent(params['id'] as string);
   const inviteToken = searchParams?.get('invite') ?? null;
 
   return (

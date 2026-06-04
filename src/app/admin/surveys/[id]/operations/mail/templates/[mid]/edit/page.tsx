@@ -14,7 +14,7 @@ export default async function EditMailTemplatePage({ params }: Props) {
   const template = await getMailTemplate(surveyId, templateId);
   if (!template) notFound();
 
-  const fromDomain = process.env.RESEND_FROM_DOMAIN ?? '';
+  const fromDomain = process.env['RESEND_FROM_DOMAIN'] ?? '';
   const catalog = await getVariableCatalog(surveyId);
   const user = await requireAuth();
 

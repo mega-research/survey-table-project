@@ -28,7 +28,6 @@ import { surveyKeys } from '@/hooks/queries/use-surveys';
 import {
   useSurveyBuilderStore,
   useSurveyListStore,
-  useSurveyResponseStore,
   useSurveyUIStore,
   useTestResponseStore,
 } from '@/stores';
@@ -331,7 +330,7 @@ export function useResponseSync() {
 /**
  * 자동 저장 훅 (디바운스 적용)
  */
-export function useAutoSave(delay: number = 3000) {
+export function useAutoSave(_delay: number = 3000) {
   const currentSurveyId = useSurveyBuilderStore((s) => s.currentSurvey.id);
   const { saveSurvey } = useSurveySync();
 

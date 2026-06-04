@@ -215,12 +215,12 @@ export async function getProgressRows(args: GetProgressRowsArgs): Promise<Progre
       meta[k] = typeof v === 'string' && v.length > 0 ? v : null;
     });
     return {
-      groupLabel: String(r.group_label),
-      groupValueRaw: r.group_value_raw == null ? null : String(r.group_value_raw),
-      firstResid: r.first_resid == null ? null : Number(r.first_resid),
-      listCount: Number(r.list_count),
-      completedCount: Number(r.completed_count),
-      excludedCount: Number(r.excluded_count),
+      groupLabel: String(r['group_label']),
+      groupValueRaw: r['group_value_raw'] == null ? null : String(r['group_value_raw']),
+      firstResid: r['first_resid'] == null ? null : Number(r['first_resid']),
+      listCount: Number(r['list_count']),
+      completedCount: Number(r['completed_count']),
+      excludedCount: Number(r['excluded_count']),
       meta,
     };
   });
@@ -251,9 +251,9 @@ export async function getProgressTotals(
   `);
   const r = (result as unknown as Array<Record<string, unknown>>)[0] ?? {};
   return {
-    groupCount: Number(r.group_count ?? 0),
-    listTotal: Number(r.list_total ?? 0),
-    completedTotal: Number(r.completed_total ?? 0),
-    excludedTotal: Number(r.excluded_total ?? 0),
+    groupCount: Number(r['group_count'] ?? 0),
+    listTotal: Number(r['list_total'] ?? 0),
+    completedTotal: Number(r['completed_total'] ?? 0),
+    excludedTotal: Number(r['excluded_total'] ?? 0),
   };
 }

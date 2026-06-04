@@ -60,8 +60,8 @@ describe('상수', () => {
   it('MIN_FILE_BYTES === 1', () => expect(MIN_FILE_BYTES).toBe(1));
   it('SAFE_FILENAME_RE 한글 통과', () => expect(SAFE_FILENAME_RE.test('한글 파일.pdf')).toBe(true));
   it('EXT_TO_MIME 에 hwp/hwpx 포함', () => {
-    expect(EXT_TO_MIME.hwp).toBe('application/vnd.hancom.hwp');
-    expect(EXT_TO_MIME.hwpx).toBe('application/vnd.hancom.hwpx');
+    expect(EXT_TO_MIME['hwp']).toBe('application/vnd.hancom.hwp');
+    expect(EXT_TO_MIME['hwpx']).toBe('application/vnd.hancom.hwpx');
   });
 });
 

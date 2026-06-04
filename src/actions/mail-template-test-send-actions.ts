@@ -47,14 +47,14 @@ export async function sendTestTemplateMailAction(
   }
   const input = parsed.data;
 
-  const fromDomain = process.env.RESEND_FROM_DOMAIN;
+  const fromDomain = process.env['RESEND_FROM_DOMAIN'];
   if (!fromDomain) {
     return { ok: false, error: 'RESEND_FROM_DOMAIN 환경변수가 설정되지 않았습니다.' };
   }
 
   // 수신거부 링크 빌드 — NEXT_PUBLIC_APP_URL 가 없으면 절대 URL 이 되지 않아
   // 메일 클라이언트에서 클릭이 어디로 갈지 정의되지 않음. 명시적 에러로 차단.
-  const baseUrl = (process.env.NEXT_PUBLIC_APP_URL ?? '').replace(/\/+$/, '');
+  const baseUrl = (process.env['NEXT_PUBLIC_APP_URL'] ?? '').replace(/\/+$/, '');
   if (!baseUrl) {
     return {
       ok: false,

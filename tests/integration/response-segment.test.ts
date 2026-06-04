@@ -8,12 +8,12 @@ const { setMock, whereMock } = vi.hoisted(() => ({
 
 vi.mock('@/db', () => {
   const chainable: Record<string, unknown> = {};
-  chainable.update = vi.fn(() => chainable);
-  chainable.set = vi.fn((arg: unknown) => {
+  chainable['update'] = vi.fn(() => chainable);
+  chainable['set'] = vi.fn((arg: unknown) => {
     setMock(arg);
     return chainable;
   });
-  chainable.where = vi.fn((arg: unknown) => {
+  chainable['where'] = vi.fn((arg: unknown) => {
     whereMock(arg);
     return chainable; // await 시 chainable 자신으로 resolve (no-op)
   });
@@ -31,7 +31,7 @@ describe('recordVisibilitySegment — SQL 분기', () => {
     await recordVisibilitySegment({ responseId: 'r1', action: 'hide' });
 
     const setArg = setMock.mock.calls[0][0] as Record<string, unknown>;
-    const pvSql = extractRawSql(setArg.pageVisits);
+    const pvSql = extractRawSql(setArg['pageVisits']);
     expect(pvSql).toContain('jsonb_set');
     expect(pvSql).toContain("'leftAt'");
     expect('lastActivityAt' in setArg).toBe(false); // hide는 떠남 → 미갱신
@@ -42,7 +42,7 @@ describe('recordVisibilitySegment — SQL 분기', () => {
     await recordVisibilitySegment({ responseId: 'r1', action: 'show' });
 
     const setArg = setMock.mock.calls[0][0] as Record<string, unknown>;
-    const pvSql = extractRawSql(setArg.pageVisits);
+    const pvSql = extractRawSql(setArg['pageVisits']);
     expect(pvSql).toContain('jsonb_build_array');
     expect(pvSql).toContain('||');
     expect('lastActivityAt' in setArg).toBe(true); // show는 복귀 → 갱신

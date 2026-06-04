@@ -50,7 +50,7 @@ function buildTableAlignDecorations(doc: PMNode): DecorationSet {
   const decorations: Decoration[] = [];
   doc.descendants((node, pos) => {
     if (node.type.name !== 'table') return;
-    const align = (node.attrs.align ?? 'left') as 'left' | 'center' | 'right';
+    const align = (node.attrs['align'] ?? 'left') as 'left' | 'center' | 'right';
     const justify =
       align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start';
     decorations.push(
@@ -95,15 +95,15 @@ const ImageResizeWithProxy = ImageResize.extend({
   // wrapper 의 width 는 img 의 시각 크기를 결정하므로, container width 는 redundant 가 되어 drop.
   // height 와 max-width 안전망만 보강.
   renderHTML({ HTMLAttributes }) {
-    const wrapperStyle = (HTMLAttributes.wrapperStyle ?? '') as string;
+    const wrapperStyle = (HTMLAttributes['wrapperStyle'] ?? '') as string;
     const next: Record<string, unknown> = { ...HTMLAttributes };
-    delete next.wrapperStyle;
-    delete next.containerStyle;
+    delete next['wrapperStyle'];
+    delete next['containerStyle'];
     const base = wrapperStyle.trim().replace(/;+$/, '');
     const finalStyle = base
       ? `${base}; height: auto; max-width: 100%;`
       : 'height: auto; max-width: 100%;';
-    next.style = finalStyle;
+    next['style'] = finalStyle;
     return ['img', next];
   },
 });

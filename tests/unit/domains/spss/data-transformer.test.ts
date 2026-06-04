@@ -8,9 +8,7 @@ import {
   transformText,
   transformNumericText,
   transformMultiselect,
-  transformTableCell,
   transformOtherOption,
-  type SPSSColumn,
 } from '@/lib/spss/data-transformer';
 
 // 옵션 헬퍼

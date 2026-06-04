@@ -18,7 +18,7 @@ interface Input {
  *      ?invite=__test__ 는 유효 token 이 아니므로 응답 페이지가 익명 폴백으로 처리.
  */
 export function renderForTestSend(input: Input): PreviewResult {
-  const baseUrl = (process.env.NEXT_PUBLIC_APP_URL ?? '').replace(/\/+$/, '');
+  const baseUrl = (process.env['NEXT_PUBLIC_APP_URL'] ?? '').replace(/\/+$/, '');
   const sandboxInvite = `${baseUrl}/survey/${input.surveyId}?invite=__test__`;
 
   const sandboxSample: PreviewSample = input.sample

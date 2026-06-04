@@ -17,10 +17,10 @@ import {
 
 describe('isTmpNoticeAttachmentUrl', () => {
   beforeEach(() => {
-    process.env.CLOUDFLARE_R2_PUBLIC_URL = 'https://cdn.test';
+    process.env['CLOUDFLARE_R2_PUBLIC_URL'] = 'https://cdn.test';
   });
   afterEach(() => {
-    delete process.env.CLOUDFLARE_R2_PUBLIC_URL;
+    delete process.env['CLOUDFLARE_R2_PUBLIC_URL'];
   });
 
   it('tmp/notice-attachment/ prefix 는 true', () => {
@@ -39,10 +39,10 @@ describe('isTmpNoticeAttachmentUrl', () => {
 
 describe('extractTmpNoticeAttachmentUrlsFromHtml', () => {
   beforeEach(() => {
-    process.env.CLOUDFLARE_R2_PUBLIC_URL = 'https://cdn.test';
+    process.env['CLOUDFLARE_R2_PUBLIC_URL'] = 'https://cdn.test';
   });
   afterEach(() => {
-    delete process.env.CLOUDFLARE_R2_PUBLIC_URL;
+    delete process.env['CLOUDFLARE_R2_PUBLIC_URL'];
   });
 
   it('a[data-file-attachment] 의 href 만 추출', () => {
@@ -109,12 +109,12 @@ describe('replaceNoticeAttachmentUrlsInQuestion', () => {
 
 describe('promoteNoticeAttachments', () => {
   beforeEach(() => {
-    process.env.CLOUDFLARE_R2_PUBLIC_URL = 'https://cdn.test';
+    process.env['CLOUDFLARE_R2_PUBLIC_URL'] = 'https://cdn.test';
     vi.mocked(moveR2Objects).mockReset();
     vi.mocked(deleteR2ObjectsByKey).mockReset();
   });
   afterEach(() => {
-    delete process.env.CLOUDFLARE_R2_PUBLIC_URL;
+    delete process.env['CLOUDFLARE_R2_PUBLIC_URL'];
   });
 
   it('R2 move 성공 시 모든 tmp URL 영구 URL 치환', async () => {

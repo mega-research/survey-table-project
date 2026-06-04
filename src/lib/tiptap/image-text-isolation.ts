@@ -74,7 +74,7 @@ export const ImageTextIsolation = Extension.create({
               }
             }
 
-            const paragraphType = newState.schema.nodes.paragraph;
+            const paragraphType = newState.schema.nodes['paragraph'];
             // paragraph attrs (text-align 등) 는 모든 split 결과에 그대로 전파
             const newParagraphs = groups.map((g) => paragraphType.create(node.attrs, g));
 

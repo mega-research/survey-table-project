@@ -108,12 +108,12 @@ vi.mock('@/db', () => {
         const now = new Date();
         const row: SavedLookupRow = {
           id,
-          name: vals.name as string,
-          description: (vals.description as string | undefined) ?? null,
-          category: vals.category as string,
-          tags: (vals.tags as string[]) ?? [],
-          columns: vals.columns as string[],
-          rows: vals.rows as Array<Record<string, string | number>>,
+          name: vals['name'] as string,
+          description: (vals['description'] as string | undefined) ?? null,
+          category: vals['category'] as string,
+          tags: (vals['tags'] as string[]) ?? [],
+          columns: vals['columns'] as string[],
+          rows: vals['rows'] as Array<Record<string, string | number>>,
           usageCount: 0,
           isPreset: false,
           createdAt: now,
@@ -142,9 +142,9 @@ vi.mock('@/db', () => {
               } as SavedLookupRow;
               // usageCount sql increment 처리
               if (
-                patch.usageCount &&
-                typeof patch.usageCount === 'object' &&
-                (patch.usageCount as { __sql?: boolean }).__sql
+                patch['usageCount'] &&
+                typeof patch['usageCount'] === 'object' &&
+                (patch['usageCount'] as { __sql?: boolean }).__sql
               ) {
                 updated.usageCount = existing.usageCount + 1;
               }

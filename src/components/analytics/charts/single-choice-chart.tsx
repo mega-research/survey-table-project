@@ -70,7 +70,7 @@ export function SingleChoiceChart({ data }: SingleChoiceChartProps) {
                 />
                 {/* 상세 목록 */}
                 <div className="mt-4 max-h-48 space-y-2 overflow-y-auto">
-                  {data.distribution.map((item, idx) => (
+                  {data.distribution.map((item) => (
                     <div key={item.value} className="flex items-center justify-between text-sm">
                       <span className="flex-1 truncate text-gray-600">{item.label}</span>
                       <span className="ml-4 font-medium text-gray-900">

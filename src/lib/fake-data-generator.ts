@@ -2,13 +2,10 @@ import {
   Question,
   QuestionOption,
   Survey,
-  SurveyResponse,
-  TableValidationRule,
 } from '@/types/survey';
 import {
   shouldDisplayQuestion,
   getNextQuestionIndex,
-  checkTableValidationRule,
 } from '@/utils/branch-logic';
 
 /**
@@ -125,7 +122,7 @@ function pickRandomMultipleOptionValues(options?: QuestionOption[]): string[] {
  */
 function generateRandomTableResponse(
   question: Question,
-  allResponses: Record<string, any>
+  _allResponses: Record<string, any>
 ): Record<string, any> {
   if (!question.tableRowsData) return {};
 

@@ -7,10 +7,10 @@ import { getR2PublicUrl } from '@/lib/r2-env';
 
 const r2Client = new S3Client({
   region: 'auto',
-  endpoint: `https://${process.env.CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+  endpoint: `https://${process.env['CLOUDFLARE_ACCOUNT_ID']}.r2.cloudflarestorage.com`,
   credentials: {
-    accessKeyId: process.env.CLOUDFLARE_R2_ACCESS_KEY || '',
-    secretAccessKey: process.env.CLOUDFLARE_R2_SECRET_KEY || '',
+    accessKeyId: process.env['CLOUDFLARE_R2_ACCESS_KEY'] || '',
+    secretAccessKey: process.env['CLOUDFLARE_R2_SECRET_KEY'] || '',
   },
 });
 
@@ -20,7 +20,7 @@ const r2Client = new S3Client({
  * 첫 publish 가 이미 옮겨놓은 객체를 재인식하는 데 사용한다.
  */
 async function permanentObjectExists(dstKey: string): Promise<boolean> {
-  const bucketName = process.env.CLOUDFLARE_R2_BUCKET;
+  const bucketName = process.env['CLOUDFLARE_R2_BUCKET'];
   if (!bucketName) return false;
   try {
     await r2Client.send(new HeadObjectCommand({ Bucket: bucketName, Key: dstKey }));

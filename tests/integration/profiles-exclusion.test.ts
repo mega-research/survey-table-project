@@ -177,7 +177,7 @@ function isNumberedMarker(table: unknown): table is NumberedSubqueryMarker {
     table != null &&
     typeof table === 'object' &&
     '__isNumbered' in (table as Record<string, unknown>) &&
-    (table as Record<string, unknown>).__isNumbered === true
+    (table as Record<string, unknown>)['__isNumbered'] === true
   );
 }
 

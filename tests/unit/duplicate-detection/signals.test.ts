@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import type { ClientSignals } from '@/lib/duplicate-detection/types';
 
 beforeAll(() => {
-  process.env.DUPLICATE_DETECTION_SALT = 'test-salt-do-not-use-in-prod';
+  process.env['DUPLICATE_DETECTION_SALT'] = 'test-salt-do-not-use-in-prod';
 });
 
 describe('extractIp', () => {

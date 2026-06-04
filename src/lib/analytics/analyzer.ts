@@ -1,6 +1,6 @@
 // src/lib/analytics/analyzer.ts
 import type { SurveyResponse } from '@/db/schema';
-import type { Question, QuestionOption, QuestionType, RankingAnswer } from '@/types/survey';
+import type { Question, QuestionOption, RankingAnswer } from '@/types/survey';
 import { resolveChoiceOptions } from '@/utils/choice-source';
 import { resolveRankingOptions } from '@/utils/ranking-source';
 import { computeNumericStats } from './numeric-stats';
@@ -51,19 +51,19 @@ function formatValue(value: unknown): string {
     const v = value as Record<string, unknown>;
 
     // ✨ 핵심: '기타' 응답 객체 감지 및 포맷팅
-    if (v.hasOther === true) {
-      const selected = String(v.selectedValue || '');
-      const input = String(v.otherValue || '').trim();
+    if (v['hasOther'] === true) {
+      const selected = String(v['selectedValue'] || '');
+      const input = String(v['otherValue'] || '').trim();
       // 입력값이 있으면 "값 (입력내용)", 없으면 그냥 "값" 반환
       return input ? `${selected} (${input})` : selected;
     }
 
     // 기존 로직 유지
-    if (v.inputValue && typeof v.inputValue === 'string') return v.inputValue;
-    if (v.text && typeof v.text === 'string') return v.text;
-    if (v.label && typeof v.label === 'string') return v.label;
-    if (v.value && (typeof v.value === 'string' || typeof v.value === 'number'))
-      return String(v.value);
+    if (v['inputValue'] && typeof v['inputValue'] === 'string') return v['inputValue'];
+    if (v['text'] && typeof v['text'] === 'string') return v['text'];
+    if (v['label'] && typeof v['label'] === 'string') return v['label'];
+    if (v['value'] && (typeof v['value'] === 'string' || typeof v['value'] === 'number'))
+      return String(v['value']);
 
     // 최후의 수단
     const firstVal = Object.values(v)[0];
@@ -448,8 +448,6 @@ function analyzeTable(
       rowLabel: row.label,
       cells: row.cells.map((cell, colIndex) => {
         let currentAnalytics: any = null;
-         
-        let isInherited = false;
 
         // ---------------------------------------------------------
         // CASE A: 가로 병합(Colspan) 중인가?
@@ -462,7 +460,6 @@ function analyzeTable(
             columnLabel: columns[colIndex]?.label || `열 ${colIndex + 1}`,
             cellType: 'merged-horizontal',
           };
-          isInherited = true;
         }
         // ---------------------------------------------------------
         // CASE B: 세로 병합(Rowspan) 중인가?
@@ -475,7 +472,6 @@ function analyzeTable(
             columnLabel: columns[colIndex]?.label || `열 ${colIndex + 1}`,
             cellType: 'merged-vertical',
           };
-          isInherited = true;
         }
         // ---------------------------------------------------------
         // CASE C: 일반 셀 (데이터 원본)

@@ -10,7 +10,7 @@
  * env 미설정 또는 protocol 누락 시 즉시 throw합니다.
  */
 export function getR2PublicUrl(): string {
-  const url = process.env.CLOUDFLARE_R2_PUBLIC_URL;
+  const url = process.env['CLOUDFLARE_R2_PUBLIC_URL'];
   if (!url) {
     throw new Error('CLOUDFLARE_R2_PUBLIC_URL 환경변수가 설정되지 않았습니다');
   }

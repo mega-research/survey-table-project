@@ -28,7 +28,7 @@ export async function getMailPreviewSampleAction(
   const sample = await getFirstContactSample(surveyId);
   if (!sample) return { ok: true, data: null };
 
-  const baseUrl = (process.env.NEXT_PUBLIC_APP_URL ?? '').replace(/\/+$/, '');
+  const baseUrl = (process.env['NEXT_PUBLIC_APP_URL'] ?? '').replace(/\/+$/, '');
   const inviteUrl = `${baseUrl}/survey/${surveyId}?invite=${sample.inviteToken}`;
 
   return {

@@ -15,11 +15,11 @@ import type { Question } from '@/types/survey';
 
 describe('isTmpSurveyUrl', () => {
   beforeEach(() => {
-    process.env.CLOUDFLARE_R2_PUBLIC_URL = 'https://cdn.test';
+    process.env['CLOUDFLARE_R2_PUBLIC_URL'] = 'https://cdn.test';
   });
 
   afterEach(() => {
-    delete process.env.CLOUDFLARE_R2_PUBLIC_URL;
+    delete process.env['CLOUDFLARE_R2_PUBLIC_URL'];
   });
 
   it('tmp/survey/ prefix URL은 true', () => {
@@ -49,11 +49,11 @@ describe('isTmpSurveyUrl', () => {
 
 describe('tmpToPermanentUrl', () => {
   beforeEach(() => {
-    process.env.CLOUDFLARE_R2_PUBLIC_URL = 'https://cdn.test';
+    process.env['CLOUDFLARE_R2_PUBLIC_URL'] = 'https://cdn.test';
   });
 
   afterEach(() => {
-    delete process.env.CLOUDFLARE_R2_PUBLIC_URL;
+    delete process.env['CLOUDFLARE_R2_PUBLIC_URL'];
   });
 
   it('tmp/survey/ → survey/ 변환', () => {
@@ -102,11 +102,11 @@ describe('urlToR2Key', () => {
 
 describe('extractTmpSurveyUrlsFromQuestion', () => {
   beforeEach(() => {
-    process.env.CLOUDFLARE_R2_PUBLIC_URL = 'https://cdn.test';
+    process.env['CLOUDFLARE_R2_PUBLIC_URL'] = 'https://cdn.test';
   });
 
   afterEach(() => {
-    delete process.env.CLOUDFLARE_R2_PUBLIC_URL;
+    delete process.env['CLOUDFLARE_R2_PUBLIC_URL'];
   });
 
   const baseQuestion: Question = {
