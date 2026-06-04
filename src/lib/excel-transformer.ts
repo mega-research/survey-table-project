@@ -3,19 +3,18 @@ import * as XLSX from 'xlsx';
 
 import { HEADER_BORDER, HEADER_FILL, HEADER_FONT } from '@/lib/analytics/cleaning-export-types';
 import { isCellInputable } from '@/lib/analytics/excel-export-utils';
-import { generateSPSSColumns, buildDataRows, type SPSSExportColumn } from '@/lib/analytics/spss-excel-export';
-import { formatExcelDateTime, buildCodebookValueLabel } from '@/lib/analytics/raw-export-helpers';
+import { buildCodebookValueLabel, formatExcelDateTime } from '@/lib/analytics/raw-export-helpers';
+import { bucketQuestions, planSplit } from '@/lib/analytics/split-export';
+import {
+  type SPSSExportColumn,
+  buildDataRow,
+  generateSPSSColumns,
+} from '@/lib/analytics/spss-excel-export';
+import { type Platform, formatPlatformKo } from '@/lib/operations/parse-ua';
 import { formatTotalTime, mapStatusPill } from '@/lib/operations/profiles';
-import { formatPlatformKo, type Platform } from '@/lib/operations/parse-ua';
 import { Question, Survey, SurveySubmission } from '@/types/survey';
-import {
-  resolveRankingOptions,
-  toSpssValueLabelPairs,
-} from '@/utils/ranking-source';
-import {
-  buildTableCellVarName,
-  resolveRankVarName,
-} from '@/utils/table-cell-code-generator';
+import { resolveRankingOptions, toSpssValueLabelPairs } from '@/utils/ranking-source';
+import { buildTableCellVarName, resolveRankVarName } from '@/utils/table-cell-code-generator';
 
 /**
  * Summary 워크북 생성
@@ -95,7 +94,12 @@ function generateSummaryData(survey: Survey, responses: SurveySubmission[]) {
                   const cellVal = ans && ans[cell.id];
                   if (!Array.isArray(cellVal)) return;
                   const entry = cellVal.find((a: any) => a?.optionValue === opt.value);
-                  if (entry && typeof entry.rank === 'number' && entry.rank >= 1 && entry.rank <= N) {
+                  if (
+                    entry &&
+                    typeof entry.rank === 'number' &&
+                    entry.rank >= 1 &&
+                    entry.rank <= N
+                  ) {
                     totalScore += N - entry.rank + 1;
                     optCount++;
                   }
@@ -190,7 +194,13 @@ function generateVariableMap(survey: Survey) {
       let valueLabels = '';
       if (q.type === 'notice' && q.requiresAcknowledgment) {
         valueLabels = '동의=확인함, 빈값=미확인';
-      } else if ((q.type === 'radio' || q.type === 'select' || q.type === 'checkbox' || q.type === 'ranking') && q.options) {
+      } else if (
+        (q.type === 'radio' ||
+          q.type === 'select' ||
+          q.type === 'checkbox' ||
+          q.type === 'ranking') &&
+        q.options
+      ) {
         valueLabels = q.options
           .map((o, i) => `${o.spssNumericCode ?? i + 1}=${o.label}`)
           .join(', ');
@@ -198,7 +208,7 @@ function generateVariableMap(survey: Survey) {
 
       mapData.push({
         '질문 ID': q.id,
-        '타입': q.type,
+        타입: q.type,
         'SPSS 변수명': q.questionCode || '',
         '질문 제목': q.title,
         '값 라벨': valueLabels,
@@ -208,8 +218,9 @@ function generateVariableMap(survey: Survey) {
         q.options.forEach((opt, i) => {
           mapData.push({
             '질문 ID': '',
-            '타입': 'Option',
-            'SPSS 변수명': q.type === 'checkbox' ? `${q.questionCode}_${opt.optionCode ?? String(i + 1)}` : '',
+            타입: 'Option',
+            'SPSS 변수명':
+              q.type === 'checkbox' ? `${q.questionCode}_${opt.optionCode ?? String(i + 1)}` : '',
             '질문 제목': `  ${opt.spssNumericCode ?? i + 1}. ${opt.label}`,
             '값 라벨': `Value: ${opt.value}`,
           });
@@ -218,7 +229,7 @@ function generateVariableMap(survey: Survey) {
             const varNumber = opt.optionCode ?? String(i + 1);
             mapData.push({
               '질문 ID': '',
-              '타입': 'Option Text',
+              타입: 'Option Text',
               'SPSS 변수명': `${q.questionCode}_${varNumber}_text`,
               '질문 제목': `  ${opt.label} (텍스트 입력)`,
               '값 라벨': '(텍스트)',
@@ -232,14 +243,15 @@ function generateVariableMap(survey: Survey) {
         // 기타(sentinel) 엔트리는 numeric 변수에서 system-missing 이라 라벨에서 자동 제외됨.
         const resolved = resolveRankingOptions(q);
         const labelPairs = toSpssValueLabelPairs(resolved);
-        const rankingValueLabels = labelPairs.length > 0
-          ? labelPairs.map((p) => `${p.code}=${p.label}`).join(', ')
-          : '(옵션 없음)';
+        const rankingValueLabels =
+          labelPairs.length > 0
+            ? labelPairs.map((p) => `${p.code}=${p.label}`).join(', ')
+            : '(옵션 없음)';
         const N = Math.max(1, q.rankingConfig?.positions ?? 3);
         for (let k = 1; k <= N; k++) {
           mapData.push({
             '질문 ID': '',
-            '타입': `Ranking (${k}순위)`,
+            타입: `Ranking (${k}순위)`,
             'SPSS 변수명': `${q.questionCode}_rk${k}`,
             '질문 제목': `  ${k}순위`,
             '값 라벨': rankingValueLabels,
@@ -257,12 +269,14 @@ function generateVariableMap(survey: Survey) {
 
             // ranking 셀(Case 3): positions 만큼 _rk{k} / _rk{k}_etc 변수 행을 따로 생성
             if (cell.type === 'ranking') {
-              const baseVarName = cell.cellCode
-                || buildTableCellVarName(q, row, colIndex, q.tableColumns!, q.tableRowsData!);
+              const baseVarName =
+                cell.cellCode ||
+                buildTableCellVarName(q, row, colIndex, q.tableColumns!, q.tableRowsData!);
               const opts = cell.rankingOptions ?? [];
-              const rankingValueLabels = opts.length > 0
-                ? opts.map((o, i) => `${o.spssNumericCode ?? i + 1}=${o.label}`).join(', ')
-                : '';
+              const rankingValueLabels =
+                opts.length > 0
+                  ? opts.map((o, i) => `${o.spssNumericCode ?? i + 1}=${o.label}`).join(', ')
+                  : '';
               const positions = Math.max(1, cell.rankingConfig?.positions ?? 3);
               for (let k = 1; k <= positions; k++) {
                 const rankVar = resolveRankVarName(
@@ -273,7 +287,7 @@ function generateVariableMap(survey: Survey) {
                 );
                 mapData.push({
                   '질문 ID': '',
-                  '타입': `Table (ranking ${k}순위)`,
+                  타입: `Table (ranking ${k}순위)`,
                   'SPSS 변수명': rankVar,
                   '질문 제목': `  ${row.label} - ${col.label} (${k}순위)`,
                   '값 라벨': rankingValueLabels || '(순위형 옵션 없음)',
@@ -282,8 +296,10 @@ function generateVariableMap(survey: Survey) {
               return;
             }
 
-            const varName = cell.cellCode || cell.exportLabel
-              || `${q.questionCode}_${row.rowCode || row.label}_${col.columnCode || col.label}`;
+            const varName =
+              cell.cellCode ||
+              cell.exportLabel ||
+              `${q.questionCode}_${row.rowCode || row.label}_${col.columnCode || col.label}`;
 
             let cellValueLabels = '';
             if (cell.type === 'checkbox') {
@@ -291,13 +307,15 @@ function generateVariableMap(survey: Survey) {
             } else {
               const opts = cell.radioOptions || cell.selectOptions;
               if (opts && opts.length > 0) {
-                cellValueLabels = opts.map((o, i) => `${o.spssNumericCode ?? i + 1}=${o.label}`).join(', ');
+                cellValueLabels = opts
+                  .map((o, i) => `${o.spssNumericCode ?? i + 1}=${o.label}`)
+                  .join(', ');
               }
             }
 
             mapData.push({
               '질문 ID': '',
-              '타입': `Table (${cell.type})`,
+              타입: `Table (${cell.type})`,
               'SPSS 변수명': varName,
               '질문 제목': `  ${row.label} - ${col.label}`,
               '값 라벨': cellValueLabels || `(${cell.type})`,
@@ -310,7 +328,7 @@ function generateVariableMap(survey: Survey) {
         q.selectLevels.forEach((level) => {
           mapData.push({
             '질문 ID': '',
-            '타입': 'Select Level',
+            타입: 'Select Level',
             'SPSS 변수명': '',
             '질문 제목': `  [Level] ${level.label}`,
             '값 라벨': level.options.map((o) => o.label).join(', '),
@@ -362,14 +380,22 @@ export function generateRawDataWorkbook(
   // (Summary/VariableMap 워크북도 동일하게 order 정렬을 적용한다.)
   const sortedQuestions = [...questions].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   const columns = generateSPSSColumns(sortedQuestions);
-  const dataMatrix = buildDataRows(columns, sortedQuestions, rows as unknown as SurveySubmission[]);
   const questionMap = new Map(sortedQuestions.map((q) => [q.id, q]));
 
   const workbook = new ExcelJS.Workbook();
 
   // 시트 1: 응답 내역
   const ws1 = workbook.addWorksheet('응답 내역');
-  ws1.addRow([idHeader, '조사 대상 그룹', '접속 단말', '브라우저', '상태', '시작일시', '종료일시', '소요시간']);
+  ws1.addRow([
+    idHeader,
+    '조사 대상 그룹',
+    '접속 단말',
+    '브라우저',
+    '상태',
+    '시작일시',
+    '종료일시',
+    '소요시간',
+  ]);
   rows.forEach((row, i) => {
     ws1.addRow([
       idValue(row, i),
@@ -393,7 +419,10 @@ export function generateRawDataWorkbook(
   ws2.addRow(['', ...columns.map((c) => row2Label(c))]);
   ws2.addRow(['', ...columns.map((c) => c.spssVarName)]);
   rows.forEach((row, i) => {
-    ws2.addRow([idValue(row, i), ...(dataMatrix[i] ?? [])]);
+    ws2.addRow([
+      idValue(row, i),
+      ...buildDataRow(columns, questionMap, row as unknown as SurveySubmission),
+    ]);
   });
 
   // 1~3행 헤더 스타일
@@ -430,6 +459,113 @@ export function generateRawDataWorkbook(
   });
   styleHeaderRows(ws3, [1], 5);
   autoFitRawColumns(ws3, 5);
+
+  return workbook;
+}
+
+/** 분할 내보내기 워크북: 응답내역 + 공통 + 옵션별 + 코딩북 (열만 분할, 행 전체 공통) */
+export function buildSplitWorkbook(
+  questions: Question[],
+  rows: RawExportResponseRow[],
+  basisQuestionId: string,
+  identifierMode: RawIdentifierMode,
+): ExcelJS.Workbook {
+  const idHeader = identifierMode === 'systemId' ? 'systemID' : '순번';
+  const idValue = (row: RawExportResponseRow, idx: number): string | number =>
+    identifierMode === 'systemId' ? (row.resid ?? '') : idx + 1;
+
+  const sortedQuestions = [...questions].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const questionMap = new Map(sortedQuestions.map((q) => [q.id, q]));
+
+  // planSplit이 assignSplitSheetNames 적용 후 최종 시트명을 s.name에 보관한다.
+  // buildSplitWorkbook은 plan.sheets를 그대로 따라 옵션 시트를 생성해 이름 일관성을 보장한다.
+  const plan = planSplit(sortedQuestions, basisQuestionId);
+
+  const workbook = new ExcelJS.Workbook();
+
+  // 변수 시트(공통/옵션) — bucketQuestions 결과로 헤더 3행 + 전체 응답자 데이터
+  // 옵션 시트명 유일성은 assignSplitSheetNames(reserved 시드 포함)가 보장하므로 중복 방어 불필요.
+  const addVariableSheet = (name: string, bucketQs: Question[]) => {
+    const columns = generateSPSSColumns(bucketQs);
+    const ws = workbook.addWorksheet(name);
+    const colCount = columns.length + 1;
+    ws.addRow([idHeader, ...columns.map((c) => c.questionText)]);
+    ws.addRow(['', ...columns.map((c) => row2Label(c))]);
+    ws.addRow(['', ...columns.map((c) => c.spssVarName)]);
+    // 데이터는 전체 응답자 + 이 버킷 컬럼만 (열만 분할)
+    rows.forEach((row, i) => {
+      ws.addRow([
+        idValue(row, i),
+        ...buildDataRow(columns, questionMap, row as unknown as SurveySubmission),
+      ]);
+    });
+
+    styleHeaderRows(ws, [1, 2, 3], colCount);
+    ws.mergeCells(1, 1, 3, 1);
+    let start = 0;
+    while (start < columns.length) {
+      let end = start;
+      while (end + 1 < columns.length && columns[end + 1]?.questionId === columns[start]?.questionId)
+        end++;
+      if (end > start) ws.mergeCells(1, start + 2, 1, end + 2);
+      start = end + 1;
+    }
+    ws.getColumn(1).width = clampRawWidth(estimateTextWidth(idHeader));
+    columns.forEach((c, i) => {
+      ws.getColumn(i + 2).width = clampRawWidth(estimateTextWidth(row2Label(c)));
+    });
+  };
+
+  // 시트 1: 응답 내역 (전체 응답자) — 고정 이름
+  const ws1 = workbook.addWorksheet('응답 내역');
+  ws1.addRow([
+    idHeader,
+    '조사 대상 그룹',
+    '접속 단말',
+    '브라우저',
+    '상태',
+    '시작일시',
+    '종료일시',
+    '소요시간',
+  ]);
+  rows.forEach((row, i) => {
+    ws1.addRow([
+      idValue(row, i),
+      row.groupValue ?? '공개링크',
+      formatPlatformKo(row.platform as Platform | null),
+      row.browser ?? 'Other',
+      mapStatusPill({ status: row.status }).label,
+      formatExcelDateTime(row.startedAt),
+      formatExcelDateTime(row.completedAt),
+      formatTotalTime(row.totalSeconds, row.status),
+    ]);
+  });
+  styleHeaderRows(ws1, [1], 8);
+  autoFitRawColumns(ws1, 8);
+
+  // 시트 2: 공통 — 고정 이름
+  addVariableSheet('공통', bucketQuestions(sortedQuestions, basisQuestionId, 'common'));
+
+  // 시트 3..N: 옵션별 — plan.sheets 순서와 이름을 그대로 사용 (BY CONSTRUCTION 일치)
+  for (const s of plan.sheets) {
+    addVariableSheet(s.name, bucketQuestions(sortedQuestions, basisQuestionId, s.token));
+  }
+
+  // 마지막 시트: 코딩북 (전체 변수) — 고정 이름
+  const allColumns = generateSPSSColumns(sortedQuestions);
+  const wsCb = workbook.addWorksheet('코딩북');
+  wsCb.addRow(['변수번호', 'SPSS 변수명', '질문 제목', '셀라벨', '값 라벨']);
+  allColumns.forEach((c, i) => {
+    wsCb.addRow([
+      i + 1,
+      c.spssVarName,
+      c.questionText,
+      c.cellExportLabel ?? '',
+      buildCodebookValueLabel(c, questionMap),
+    ]);
+  });
+  styleHeaderRows(wsCb, [1], 5);
+  autoFitRawColumns(wsCb, 5);
 
   return workbook;
 }
@@ -491,6 +627,16 @@ function autoFitRawColumns(ws: ExcelJS.Worksheet, colCount: number): void {
 /** Raw Data 헤더 행2: 테이블 셀라벨 > 옵션 분리 열 라벨 > 공백 */
 function row2Label(c: SPSSExportColumn): string {
   if (c.cellExportLabel) return c.cellExportLabel;
-  if (c.type === 'checkbox-item' || c.type === 'ranking-rank') return c.optionLabel ?? '';
+  if (
+    c.type === 'checkbox-item' ||
+    c.type === 'ranking-rank' ||
+    c.type === 'ranking-other' ||
+    c.type === 'option-text' ||
+    c.type === 'other-text' ||
+    c.type === 'table-cell-option-text' ||
+    c.type === 'table-cell-ranking-other'
+  ) {
+    return c.optionLabel ?? '';
+  }
   return '';
 }

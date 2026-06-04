@@ -14,10 +14,11 @@ import { getSurveys } from '@/data/surveys';
 export const dynamic = 'force-dynamic';
 
 export default async function AnalyticsListPage() {
-  const surveys = await getSurveys();
-
   // 모든 설문의 응답 수를 단일 GROUP BY 로 집계 (설문별 count fan-out 제거)
-  const countsMap = await getResponseCountsGroupedBySurvey();
+  const [surveys, countsMap] = await Promise.all([
+    getSurveys(),
+    getResponseCountsGroupedBySurvey(),
+  ]);
   const surveysWithResponses = surveys.map((survey) => {
     const counts = countsMap.get(survey.id) ?? { total: 0, completed: 0 };
     return {
@@ -90,10 +91,7 @@ export default async function AnalyticsListPage() {
                       <Calendar className="h-4 w-4 text-gray-400" />
                       <div>
                         <p className="text-sm font-medium text-gray-900">
-                          <LocalDateTime
-                            value={survey.createdAt}
-                            format="short-month-day"
-                          />
+                          <LocalDateTime value={survey.createdAt} format="short-month-day" />
                         </p>
                         <p className="text-xs text-gray-500">생성일</p>
                       </div>

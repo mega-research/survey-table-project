@@ -7,22 +7,31 @@
  *
  * 과거 엑셀 Blob/워크북/코딩북 헬퍼는 UI에서 제거됨에 따라 함께 삭제되었다.
  */
-import type { Question, QuestionOption, SurveySubmission, TableCell, TableRow } from '@/types/survey';
-
+import { getOptionText } from '@/lib/option-text-read';
 import {
+  transformNumericText,
   transformRankingOtherText,
   transformRankingWithOptions,
   transformSingleChoice,
   transformTableChoiceCell,
   transformText,
-  transformNumericText,
 } from '@/lib/spss/data-transformer';
-import { getOptionText } from '@/lib/option-text-read';
+import type {
+  Question,
+  QuestionOption,
+  SurveySubmission,
+  TableCell,
+  TableRow,
+} from '@/types/survey';
 import { resolveChoiceOptions } from '@/utils/choice-source';
 import { getOtherOptionCode } from '@/utils/option-code-generator';
 import { hasOtherRankingCell, resolveRankingOptions } from '@/utils/ranking-source';
-import { buildTableCellVarName, generateExportLabel, resolveRankVarName } from '@/utils/table-cell-code-generator';
 import { buildCheckboxItemVarName, buildOptionTextVarName } from '@/utils/spss-var-name';
+import {
+  buildTableCellVarName,
+  generateExportLabel,
+  resolveRankVarName,
+} from '@/utils/table-cell-code-generator';
 
 export interface SPSSExportColumn {
   spssVarName: string;
@@ -132,6 +141,7 @@ export function generateSPSSColumns(questions: Question[]): SPSSExportColumn[] {
             questionId: q.id,
             type: 'option-text',
             optionId: opt.id,
+            ...(opt.exportLabel !== undefined ? { cellExportLabel: opt.exportLabel } : {}),
           });
         }
       }
@@ -148,9 +158,7 @@ export function generateSPSSColumns(questions: Question[]): SPSSExportColumn[] {
       }
     } else if (q.type === 'radio' || q.type === 'select') {
       const opts = resolveChoiceOptions(q);
-      const optionLabel = opts.length > 0
-        ? opts.map((o) => o.label).join(' / ')
-        : '';
+      const optionLabel = opts.length > 0 ? opts.map((o) => o.label).join(' / ') : '';
       columns.push({
         spssVarName: q.questionCode,
         questionText: q.title,
@@ -171,6 +179,7 @@ export function generateSPSSColumns(questions: Question[]): SPSSExportColumn[] {
             questionId: q.id,
             type: 'option-text',
             optionId: opt.id,
+            ...(opt.exportLabel !== undefined ? { cellExportLabel: opt.exportLabel } : {}),
           });
         }
       }
@@ -235,13 +244,13 @@ export function generateSPSSColumns(questions: Question[]): SPSSExportColumn[] {
 
           // 변수명: cellCode > questionCode_rowCode_colCode (폴백)
           // exportLabel은 한국어가 포함될 수 있어 SPSS 변수명으로 부적합
-          const varName = cell.cellCode
-            || buildTableCellVarName(q, tRow, colIdx, q.tableColumns, q.tableRowsData!);
+          const varName =
+            cell.cellCode ||
+            buildTableCellVarName(q, tRow, colIdx, q.tableColumns, q.tableRowsData!);
 
           // exportLabel 미저장 셀은 questionCode_열라벨_행라벨 자동 라벨로 폴백.
           // (빌더는 placeholder로 같은 자동값을 표시하므로 export도 동일하게 맞춘다.)
-          const autoExportLabel = cell.exportLabel
-            || generateExportLabel(q.questionCode, q.tableColumns[colIdx]?.label ?? '', tRow.label);
+          const autoExportLabel = buildAutoTableCellExportLabel(q, tRow, colIdx, cell);
 
           // ranking 셀 (Case 3): positions 만큼 {baseVarName}{접미사} 변수 생성.
           // 접미사는 셀의 rankSuffixPattern (기본 '_rk{k}') 으로 결정. rankVarNames 오버라이드 우선.
@@ -414,10 +423,7 @@ export function generateSPSSColumns(questions: Question[]): SPSSExportColumn[] {
  *
  * 반환: 그룹에 emit된 셀 id의 Set (호출자가 본 순회에서 스킵)
  */
-function collectAndEmitRadioGroupColumns(
-  q: Question,
-  columns: SPSSExportColumn[],
-): Set<string> {
+function collectAndEmitRadioGroupColumns(q: Question, columns: SPSSExportColumn[]): Set<string> {
   const groupedCellIds = new Set<string>();
   if (!q.tableRowsData || !q.tableColumns || !q.questionCode) return groupedCellIds;
 
@@ -448,8 +454,10 @@ function collectAndEmitRadioGroupColumns(
     const rowSet = new Set(members.map((m) => m.rowIdx));
     const colSet = new Set(members.map((m) => m.colIdx));
     const orientation: 'row' | 'column' | 'mixed' =
-      rowSet.size === 1 && colSet.size > 1 ? 'row'
-        : colSet.size === 1 && rowSet.size > 1 ? 'column'
+      rowSet.size === 1 && colSet.size > 1
+        ? 'row'
+        : colSet.size === 1 && rowSet.size > 1
+          ? 'column'
           : 'mixed';
 
     const cellValueMap: Record<string, number> = {};
@@ -518,13 +526,35 @@ function collectAndEmitRadioGroupColumns(
       // 멤버들이 서로 다른 값을 가질 가능성은 낮으므로 첫 멤버의 값을 채택.
       ...(firstMember.cell.spssVarType !== undefined ? { cellSpssVarType: firstMember.cell.spssVarType } : {}),
       ...(firstMember.cell.spssMeasure !== undefined ? { cellSpssMeasure: firstMember.cell.spssMeasure } : {}),
-      ...(firstMember.cell.exportLabel !== undefined ? { cellExportLabel: firstMember.cell.exportLabel } : {}),
+      // radio-group cellExportLabel: 저장값 우선, 없으면 questionCode_열_행 자동 라벨로 폴백 (split/raw export 일관성)
+      ...(() => {
+        const cellExportLabel = buildAutoTableCellExportLabel(
+          q,
+          firstMember.row,
+          firstMember.colIdx,
+          firstMember.cell,
+        );
+        return cellExportLabel !== undefined ? { cellExportLabel } : {};
+      })(),
     });
 
     members.forEach((m) => groupedCellIds.add(m.cell.id));
   }
 
   return groupedCellIds;
+}
+
+function buildAutoTableCellExportLabel(
+  q: Question,
+  row: TableRow,
+  colIdx: number,
+  cell?: TableCell,
+): string | undefined {
+  const col = q.tableColumns?.[colIdx];
+  return (
+    cell?.exportLabel ||
+    generateExportLabel(q.questionCode, col?.label || col?.columnCode, row.label || row.rowCode)
+  );
 }
 
 /**
@@ -552,171 +582,198 @@ export function buildDataRows(
 ): (string | number | null)[][] {
   const questionMap = new Map(questions.map((q) => [q.id, q]));
 
-  return submissions.map((sub) => {
-    return columns.map((col) => {
-      const question = questionMap.get(col.questionId);
-      if (!question) return null;
+  return submissions.map((sub) => buildDataRow(columns, questionMap, sub));
+}
 
-      const rawValue = sub.questionResponses[col.questionId];
+export function buildDataRow(
+  columns: SPSSExportColumn[],
+  questionMap: ReadonlyMap<string, Question>,
+  sub: SurveySubmission,
+): (string | number | null)[] {
+  return columns.map((col) => {
+    const question = questionMap.get(col.questionId);
+    if (!question) return null;
 
-      switch (col.type) {
-        case 'notice-agree': {
-          // { agreed: true, agreedAt: "..." } 또는 boolean(하위 호환)
-          if (rawValue && typeof rawValue === 'object' && 'agreed' in rawValue) {
-            return (rawValue as { agreed: boolean }).agreed ? '동의' : null;
-          }
-          return rawValue === true ? '동의' : null;
+    const rawValue = sub.questionResponses[col.questionId];
+
+    switch (col.type) {
+      case 'notice-agree': {
+        // { agreed: true, agreedAt: "..." } 또는 boolean(하위 호환)
+        if (rawValue && typeof rawValue === 'object' && 'agreed' in rawValue) {
+          return (rawValue as { agreed: boolean }).agreed ? '동의' : null;
         }
-
-        case 'notice-date': {
-          // agreedAt ISO 문자열 → 한국시 MM DD YYYY 형식
-          if (rawValue && typeof rawValue === 'object' && 'agreedAt' in rawValue) {
-            const agreedAt = (rawValue as { agreedAt?: string }).agreedAt;
-            if (agreedAt) {
-              const d = new Date(agreedAt);
-              const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
-              const mm = String(kst.getUTCMonth() + 1).padStart(2, '0');
-              const dd = String(kst.getUTCDate()).padStart(2, '0');
-              const yyyy = String(kst.getUTCFullYear());
-              return `${mm} ${dd} ${yyyy}`;
-            }
-          }
-          return null;
-        }
-
-        case 'single':
-          return transformSingleChoice(question, rawValue as string | { selectedValue: string; otherValue?: string; hasOther: true } | null);
-
-        case 'checkbox-item': {
-          const values = rawValue as Array<string | { selectedValue: string; otherValue?: string; hasOther: true }> | null;
-          const resolved = resolveChoiceOptions(question);
-          if (col.optionIndex == null) return null;
-          const opt = resolved[col.optionIndex];
-          if (!opt) return null;
-          const isSelected =
-            values != null &&
-            values.some((v) => {
-              if (typeof v === 'object' && v !== null && 'hasOther' in v) {
-                return v.selectedValue === opt.id || v.selectedValue === opt.value;
-              }
-              return v === opt.id || v === opt.value;
-            });
-          return isSelected ? (opt.spssNumericCode ?? col.optionIndex + 1) : null;
-        }
-
-        case 'other-text': {
-          // radio/select: { hasOther: true, otherValue: "..." }
-          if (rawValue && typeof rawValue === 'object' && !Array.isArray(rawValue) && 'hasOther' in rawValue) {
-            return (rawValue as { otherValue?: string }).otherValue || null;
-          }
-          // checkbox: 배열 내 hasOther 객체에서 otherValue 추출
-          if (Array.isArray(rawValue)) {
-            const otherItem = rawValue.find(
-              (v) => typeof v === 'object' && v !== null && 'hasOther' in v && (v as { hasOther: boolean }).hasOther,
-            ) as { otherValue?: string } | undefined;
-            return otherItem?.otherValue || null;
-          }
-          return null;
-        }
-
-        case 'table-cell': {
-          // rawValue는 테이블 응답 객체: { cellId: value, ... }
-          if (!rawValue || typeof rawValue !== 'object') return null;
-          const tableAnswer = rawValue as Record<string, unknown>;
-          const cellId = col.tableCellId;
-          if (!cellId) return null;
-          const cellVal = tableAnswer[cellId];
-          if (cellVal == null) return null;
-
-          // checkbox 옵션별 분리 변수: 해당 옵션 선택 여부만 반환
-          if (col.tableCellType === 'checkbox' && col.optionIndex != null && col.optionValue != null) {
-            const selectedValues = Array.isArray(cellVal) ? cellVal : [cellVal];
-            const isSelected = selectedValues.some((v: unknown) => v === col.optionValue);
-            // 셀의 checkboxOptions에서 spssNumericCode 조회
-            const cellOptions = findTableCellCheckboxOptions(question, cellId);
-            const code = cellOptions?.[col.optionIndex]?.spssNumericCode ?? col.optionIndex + 1;
-            return isSelected ? code : null;
-          }
-
-          return transformTableChoiceCell(
-            col.tableCellType || 'input',
-            cellVal,
-            col.cellOptions,
-          );
-        }
-
-        case 'radio-group': {
-          // rawValue는 테이블 응답 객체: { cellId: value, ... }
-          // 그룹 멤버 셀 중 응답이 있는 셀을 찾고, 그 셀의 매핑된 숫자값 반환.
-          // 정책 P1: 다중체크 발생 시 마지막으로 발견된 셀의 값 채택 (Object.keys 순회 순서).
-          if (!rawValue || typeof rawValue !== 'object') return null;
-          if (!col.radioGroupCellValueMap) return null;
-          const tableAnswer = rawValue as Record<string, unknown>;
-          let chosen: number | null = null;
-          for (const [cellId, expectedValue] of Object.entries(col.radioGroupCellValueMap)) {
-            const cellResponse = tableAnswer[cellId];
-            if (cellResponse == null || cellResponse === '') continue;
-            // radio 셀 응답: optionId 문자열 또는 { optionId, otherValue, hasOther }
-            // 옵션 1개짜리 셀이므로 응답이 truthy하면 선택된 것으로 간주.
-            chosen = expectedValue;
-          }
-          return chosen;
-        }
-
-        case 'ranking-rank':
-          if (col.rankIndex == null) return null;
-          // col.cellOptions 에 Case 1/2 해결된 옵션 리스트가 있음 (generateSPSSColumns에서 주입)
-          return transformRankingWithOptions(col.cellOptions, rawValue, col.rankIndex);
-
-        case 'ranking-other':
-          if (col.rankIndex == null) return null;
-          return transformRankingOtherText(rawValue, col.rankIndex);
-
-        case 'table-cell-ranking': {
-          if (col.rankIndex == null || !col.tableCellId) return null;
-          if (!rawValue || typeof rawValue !== 'object') return null;
-          const tableAnswer = rawValue as Record<string, unknown>;
-          const cellVal = tableAnswer[col.tableCellId];
-          return transformRankingWithOptions(col.cellOptions, cellVal, col.rankIndex);
-        }
-
-        case 'table-cell-ranking-other': {
-          if (col.rankIndex == null || !col.tableCellId) return null;
-          if (!rawValue || typeof rawValue !== 'object') return null;
-          const tableAnswer = rawValue as Record<string, unknown>;
-          const cellVal = tableAnswer[col.tableCellId];
-          return transformRankingOtherText(cellVal, col.rankIndex);
-        }
-
-        case 'option-text': {
-          // allowTextInput 옵션 선택 시 사용자가 입력한 텍스트.
-          if (!col.optionId) return null;
-          return getOptionText(
-            sub.questionResponses as Record<string, unknown>,
-            col.questionId,
-            col.optionId,
-          ) ?? null;
-        }
-
-        case 'table-cell-option-text': {
-          // 테이블 셀 옵션의 allowTextInput 사이드카 텍스트.
-          // 레거시 경로(optionTexts)는 테이블 셀에 대해 지원하지 않음 (신규 패턴만 사용).
-          if (!col.optionId) return null;
-          return getOptionText(
-            sub.questionResponses as Record<string, unknown>,
-            col.questionId,
-            col.optionId,
-          ) ?? null;
-        }
-
-        case 'text':
-          return col.numericText
-            ? transformNumericText(rawValue)
-            : transformText(rawValue as string | null);
-
-        default:
-          return rawValue != null ? String(rawValue) : null;
+        return rawValue === true ? '동의' : null;
       }
-    });
+
+      case 'notice-date': {
+        // agreedAt ISO 문자열 → 한국시 MM DD YYYY 형식
+        if (rawValue && typeof rawValue === 'object' && 'agreedAt' in rawValue) {
+          const agreedAt = (rawValue as { agreedAt?: string }).agreedAt;
+          if (agreedAt) {
+            const d = new Date(agreedAt);
+            const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+            const mm = String(kst.getUTCMonth() + 1).padStart(2, '0');
+            const dd = String(kst.getUTCDate()).padStart(2, '0');
+            const yyyy = String(kst.getUTCFullYear());
+            return `${mm} ${dd} ${yyyy}`;
+          }
+        }
+        return null;
+      }
+
+      case 'single':
+        return transformSingleChoice(
+          question,
+          rawValue as
+            | string
+            | { selectedValue: string; otherValue?: string; hasOther: true }
+            | null,
+        );
+
+      case 'checkbox-item': {
+        const values = rawValue as Array<
+          string | { selectedValue: string; otherValue?: string; hasOther: true }
+        > | null;
+        const resolved = resolveChoiceOptions(question);
+        if (col.optionIndex == null) return null;
+        const opt = resolved[col.optionIndex];
+        if (!opt) return null;
+        const isSelected =
+          values != null &&
+          values.some((v) => {
+            if (typeof v === 'object' && v !== null && 'hasOther' in v) {
+              return v.selectedValue === opt.id || v.selectedValue === opt.value;
+            }
+            return v === opt.id || v === opt.value;
+          });
+        return isSelected ? (opt.spssNumericCode ?? col.optionIndex + 1) : null;
+      }
+
+      case 'other-text': {
+        // radio/select: { hasOther: true, otherValue: "..." }
+        if (
+          rawValue &&
+          typeof rawValue === 'object' &&
+          !Array.isArray(rawValue) &&
+          'hasOther' in rawValue
+        ) {
+          return (rawValue as { otherValue?: string }).otherValue || null;
+        }
+        // checkbox: 배열 내 hasOther 객체에서 otherValue 추출
+        if (Array.isArray(rawValue)) {
+          const otherItem = rawValue.find(
+            (v) =>
+              typeof v === 'object' &&
+              v !== null &&
+              'hasOther' in v &&
+              (v as { hasOther: boolean }).hasOther,
+          ) as { otherValue?: string } | undefined;
+          return otherItem?.otherValue || null;
+        }
+        return null;
+      }
+
+      case 'table-cell': {
+        // rawValue는 테이블 응답 객체: { cellId: value, ... }
+        if (!rawValue || typeof rawValue !== 'object') return null;
+        const tableAnswer = rawValue as Record<string, unknown>;
+        const cellId = col.tableCellId;
+        if (!cellId) return null;
+        const cellVal = tableAnswer[cellId];
+        if (cellVal == null) return null;
+
+        // checkbox 옵션별 분리 변수: 해당 옵션 선택 여부만 반환
+        if (
+          col.tableCellType === 'checkbox' &&
+          col.optionIndex != null &&
+          col.optionValue != null
+        ) {
+          const selectedValues = Array.isArray(cellVal) ? cellVal : [cellVal];
+          const isSelected = selectedValues.some((v: unknown) => v === col.optionValue);
+          // 셀의 checkboxOptions에서 spssNumericCode 조회
+          const cellOptions = findTableCellCheckboxOptions(question, cellId);
+          const code = cellOptions?.[col.optionIndex]?.spssNumericCode ?? col.optionIndex + 1;
+          return isSelected ? code : null;
+        }
+
+        return transformTableChoiceCell(col.tableCellType || 'input', cellVal, col.cellOptions);
+      }
+
+      case 'radio-group': {
+        // rawValue는 테이블 응답 객체: { cellId: value, ... }
+        // 그룹 멤버 셀 중 응답이 있는 셀을 찾고, 그 셀의 매핑된 숫자값 반환.
+        // 정책 P1: 다중체크 발생 시 마지막으로 발견된 셀의 값 채택 (Object.keys 순회 순서).
+        if (!rawValue || typeof rawValue !== 'object') return null;
+        if (!col.radioGroupCellValueMap) return null;
+        const tableAnswer = rawValue as Record<string, unknown>;
+        let chosen: number | null = null;
+        for (const [cellId, expectedValue] of Object.entries(col.radioGroupCellValueMap)) {
+          const cellResponse = tableAnswer[cellId];
+          if (cellResponse == null || cellResponse === '') continue;
+          // radio 셀 응답: optionId 문자열 또는 { optionId, otherValue, hasOther }
+          // 옵션 1개짜리 셀이므로 응답이 truthy하면 선택된 것으로 간주.
+          chosen = expectedValue;
+        }
+        return chosen;
+      }
+
+      case 'ranking-rank':
+        if (col.rankIndex == null) return null;
+        // col.cellOptions 에 Case 1/2 해결된 옵션 리스트가 있음 (generateSPSSColumns에서 주입)
+        return transformRankingWithOptions(col.cellOptions, rawValue, col.rankIndex);
+
+      case 'ranking-other':
+        if (col.rankIndex == null) return null;
+        return transformRankingOtherText(rawValue, col.rankIndex);
+
+      case 'table-cell-ranking': {
+        if (col.rankIndex == null || !col.tableCellId) return null;
+        if (!rawValue || typeof rawValue !== 'object') return null;
+        const tableAnswer = rawValue as Record<string, unknown>;
+        const cellVal = tableAnswer[col.tableCellId];
+        return transformRankingWithOptions(col.cellOptions, cellVal, col.rankIndex);
+      }
+
+      case 'table-cell-ranking-other': {
+        if (col.rankIndex == null || !col.tableCellId) return null;
+        if (!rawValue || typeof rawValue !== 'object') return null;
+        const tableAnswer = rawValue as Record<string, unknown>;
+        const cellVal = tableAnswer[col.tableCellId];
+        return transformRankingOtherText(cellVal, col.rankIndex);
+      }
+
+      case 'option-text': {
+        // allowTextInput 옵션 선택 시 사용자가 입력한 텍스트.
+        if (!col.optionId) return null;
+        return (
+          getOptionText(
+            sub.questionResponses as Record<string, unknown>,
+            col.questionId,
+            col.optionId,
+          ) ?? null
+        );
+      }
+
+      case 'table-cell-option-text': {
+        // 테이블 셀 옵션의 allowTextInput 사이드카 텍스트.
+        // 레거시 경로(optionTexts)는 테이블 셀에 대해 지원하지 않음 (신규 패턴만 사용).
+        if (!col.optionId) return null;
+        return (
+          getOptionText(
+            sub.questionResponses as Record<string, unknown>,
+            col.questionId,
+            col.optionId,
+          ) ?? null
+        );
+      }
+
+      case 'text':
+        return col.numericText
+          ? transformNumericText(rawValue)
+          : transformText(rawValue as string | null);
+
+      default:
+        return rawValue != null ? String(rawValue) : null;
+    }
   });
 }

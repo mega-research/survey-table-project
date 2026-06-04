@@ -1,25 +1,25 @@
 import { useCallback, useRef, useState } from 'react';
 
-import { enablePatches, produceWithPatches, applyPatches, type Patch } from 'immer';
+import { type Patch, applyPatches, enablePatches, produceWithPatches } from 'immer';
 
 import { generateId } from '@/lib/utils';
 import type { TableColumn, TableRow } from '@/types/survey';
 import {
+  INTERACTIVE_CELL_TYPES,
   generateCellCode,
   generateExportLabel,
-  INTERACTIVE_CELL_TYPES,
   inferSpssMeasure,
   inferSpssVarType,
 } from '@/utils/table-cell-code-generator';
 
 import {
+  type CopiedRegion,
+  type PasteConflictResult,
   calculateDragRange,
   checkPasteConflict,
   clearStaleTypeProperties,
   expandSelectionForMerges,
   extractRegionFromRows,
-  type CopiedRegion,
-  type PasteConflictResult,
 } from '../utils/drag-copy-utils';
 
 enablePatches();
@@ -41,9 +41,7 @@ export interface PasteUndoInfo {
   cellCount: number;
 }
 
-export type PasteResult =
-  | { success: true; count: number }
-  | { blocked: true; message: string };
+export type PasteResult = { success: true; count: number } | { blocked: true; message: string };
 
 interface UseDragCopyParams {
   currentRowsRef: React.RefObject<TableRow[]>;
@@ -112,9 +110,7 @@ export function useDragCopy({
         currentRowsRef.current,
       );
 
-      setDragCopyState((prev) =>
-        prev ? { ...prev, selectedCells: cells } : null,
-      );
+      setDragCopyState((prev) => (prev ? { ...prev, selectedCells: cells } : null));
     },
     [currentRowsRef],
   );
@@ -150,7 +146,11 @@ export function useDragCopy({
 
     // 영역 추출 및 저장
     const region = extractRegionFromRows(
-      expanded.minRow, expanded.maxRow, expanded.minCol, expanded.maxCol, rows,
+      expanded.minRow,
+      expanded.maxRow,
+      expanded.minCol,
+      expanded.maxCol,
+      rows,
     );
 
     setCopiedRegion(region);
@@ -164,25 +164,24 @@ export function useDragCopy({
 
   // ── 영역 붙여넣기 ──
 
-  const pasteRegion = useCallback((targetRow: number, targetCol: number): PasteResult => {
-    const region = copiedRegionRef.current;
-    if (!region) {
-      return { blocked: true, message: '복사된 영역이 없습니다.' };
-    }
+  const pasteRegion = useCallback(
+    (targetRow: number, targetCol: number): PasteResult => {
+      const region = copiedRegionRef.current;
+      if (!region) {
+        return { blocked: true, message: '복사된 영역이 없습니다.' };
+      }
 
-    const rows = currentRowsRef.current;
-    const columns = currentColumnsRef.current;
+      const rows = currentRowsRef.current;
+      const columns = currentColumnsRef.current;
 
-    // 충돌 검사
-    const conflict: PasteConflictResult = checkPasteConflict(region, targetRow, targetCol, rows);
-    if (conflict.blocked) {
-      return { blocked: true, message: conflict.message! };
-    }
+      // 충돌 검사
+      const conflict: PasteConflictResult = checkPasteConflict(region, targetRow, targetCol, rows);
+      if (conflict.blocked) {
+        return { blocked: true, message: conflict.message! };
+      }
 
-    // immer로 붙여넣기 적용
-    const [nextRows, , inversePatches] = produceWithPatches(
-      rows,
-      (draft) => {
+      // immer로 붙여넣기 적용
+      const [nextRows, , inversePatches] = produceWithPatches(rows, (draft) => {
         for (let rr = 0; rr < region.height; rr++) {
           for (let cc = 0; cc < region.width; cc++) {
             const absRow = targetRow + rr;
@@ -242,8 +241,8 @@ export function useDragCopy({
             targetCell.isCustomCellCode = false;
             const newExportLabel = generateExportLabel(
               questionCodeRef.current,
-              targetColumn?.label,
-              targetRowData.label,
+              targetColumn?.label || targetColumn?.columnCode,
+              targetRowData.label || targetRowData.rowCode,
             );
             if (newExportLabel !== undefined) {
               targetCell.exportLabel = newExportLabel;
@@ -287,28 +286,29 @@ export function useDragCopy({
             }
           }
         }
-      },
-    );
+      });
 
-    // isHidden 재계산
-    const finalRows = recalculateHiddenCells(nextRows);
-    const cellCount = region.width * region.height;
+      // isHidden 재계산
+      const finalRows = recalculateHiddenCells(nextRows);
+      const cellCount = region.width * region.height;
 
-    setCurrentRows(finalRows);
-    notifyChange(currentTitleRef.current, columns, finalRows);
-    setUndoInfo({ inversePatches, cellCount });
+      setCurrentRows(finalRows);
+      notifyChange(currentTitleRef.current, columns, finalRows);
+      setUndoInfo({ inversePatches, cellCount });
 
-    return { success: true, count: cellCount };
-  }, [
-    currentRowsRef,
-    currentColumnsRef,
-    questionCodeRef,
-    questionTitleRef,
-    setCurrentRows,
-    notifyChange,
-    currentTitleRef,
-    recalculateHiddenCells,
-  ]);
+      return { success: true, count: cellCount };
+    },
+    [
+      currentRowsRef,
+      currentColumnsRef,
+      questionCodeRef,
+      questionTitleRef,
+      setCurrentRows,
+      notifyChange,
+      currentTitleRef,
+      recalculateHiddenCells,
+    ],
+  );
 
   // ── 기타 액션 ──
 

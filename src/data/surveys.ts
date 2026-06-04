@@ -3,7 +3,7 @@ import { cache } from 'react';
 import { and, count, desc, eq, gte, ilike, lte } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { questionGroups, questions, surveys, surveyVersions } from '@/db/schema';
+import { questionGroups, questions, surveyVersions, surveys } from '@/db/schema';
 import type { QuestionGroup, Question as QuestionType, Survey as SurveyType } from '@/types/survey';
 import { generateAllOptionCodes } from '@/utils/option-code-generator';
 import { generateAllCellCodes } from '@/utils/table-cell-code-generator';
@@ -170,7 +170,10 @@ export async function getSurveyWithDetails(surveyId: string): Promise<SurveyType
       // strip된 셀 데이터를 hydrate (cellCode, exportLabel, spssVarType 등 복원)
       if (mapped.type === 'table' && mapped.tableRowsData && mapped.tableColumns) {
         mapped.tableRowsData = generateAllCellCodes(
-          mapped.questionCode, mapped.title, mapped.tableColumns, mapped.tableRowsData,
+          mapped.questionCode,
+          mapped.title,
+          mapped.tableColumns,
+          mapped.tableRowsData,
         );
       }
       // 일반 질문 옵션 코드 복원
@@ -248,7 +251,10 @@ export async function getSurveyForResponse(
             return {
               ...q,
               tableRowsData: generateAllCellCodes(
-                q.questionCode, q.title, q.tableColumns, q.tableRowsData,
+                q.questionCode,
+                q.title,
+                q.tableColumns,
+                q.tableRowsData,
               ),
             };
           }
@@ -279,16 +285,15 @@ export async function getSurveyForResponse(
 
 // 전체 설문 목록 조회 (요약 정보)
 export async function getSurveyListWithCounts() {
-  const surveyList = await getSurveys();
-
   // 모든 설문의 질문 수를 단일 GROUP BY 로 집계 (설문별 findMany N+1 제거)
-  const questionCounts = await db
-    .select({ surveyId: questions.surveyId, count: count() })
-    .from(questions)
-    .groupBy(questions.surveyId);
-  const questionCountMap = new Map(
-    questionCounts.map((q) => [q.surveyId, Number(q.count)]),
-  );
+  const [surveyList, questionCounts] = await Promise.all([
+    getSurveys(),
+    db
+      .select({ surveyId: questions.surveyId, count: count() })
+      .from(questions)
+      .groupBy(questions.surveyId),
+  ]);
+  const questionCountMap = new Map(questionCounts.map((q) => [q.surveyId, Number(q.count)]));
 
   return surveyList.map((survey) => ({
     id: survey.id,

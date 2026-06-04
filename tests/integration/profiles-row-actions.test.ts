@@ -1,4 +1,19 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+// ========================
+// 테스트
+// ========================
+
+import {
+  hardResetResponse,
+  restoreResponse,
+  softDeleteResponse,
+} from '@/actions/profiles-row-actions';
+import { saveAdminEdit } from '@/actions/response-edit-actions';
+import type { StatusCounts } from '@/lib/operations/aggregate-status';
+import * as aggregateStatusServer from '@/lib/operations/aggregate-status.server';
+import * as profilesServer from '@/lib/operations/profiles.server';
+import type { ListProfilesResult } from '@/lib/operations/profiles.server';
 
 // ========================
 // 모듈 모킹
@@ -326,22 +341,6 @@ function linkContactToResponse(surveyId: string, responseId: string) {
   return contactId;
 }
 
-// ========================
-// 테스트
-// ========================
-
-import {
-  softDeleteResponse,
-  restoreResponse,
-  hardResetResponse,
-} from '@/actions/profiles-row-actions';
-import { saveAdminEdit } from '@/actions/response-edit-actions';
-
-import * as aggregateStatusServer from '@/lib/operations/aggregate-status.server';
-import * as profilesServer from '@/lib/operations/profiles.server';
-import type { StatusCounts } from '@/lib/operations/aggregate-status';
-import type { ListProfilesResult } from '@/lib/operations/profiles.server';
-
 describe('profiles-row-actions', () => {
   beforeEach(() => {
     h.responseStore.clear();
@@ -473,15 +472,28 @@ describe('profiles-row-actions', () => {
         if (row.surveyId !== surveyId) continue;
         if (row.deletedAt !== null) continue; // isNull(deletedAt) 조건
         switch (row.status) {
-          case 'completed': counts.completed += 1; break;
-          case 'screened_out': counts.screenedOut += 1; break;
-          case 'quotaful_out': counts.quotafulOut += 1; break;
-          case 'bad': counts.bad += 1; break;
-          case 'drop': counts.drop += 1; break;
-          case 'in_progress': counts.inProgress += 1; break;
+          case 'completed':
+            counts.completed += 1;
+            break;
+          case 'screened_out':
+            counts.screenedOut += 1;
+            break;
+          case 'quotaful_out':
+            counts.quotafulOut += 1;
+            break;
+          case 'bad':
+            counts.bad += 1;
+            break;
+          case 'drop':
+            counts.drop += 1;
+            break;
+          case 'in_progress':
+            counts.inProgress += 1;
+            break;
         }
       }
-      counts.total = counts.completed + counts.screenedOut + counts.quotafulOut + counts.bad + counts.drop;
+      counts.total =
+        counts.completed + counts.screenedOut + counts.quotafulOut + counts.bad + counts.drop;
       return Promise.resolve(counts);
     }
 
@@ -577,8 +589,14 @@ describe('profiles-row-actions', () => {
       // 1단계: softDelete
       await softDeleteResponse(surveyId, responseId);
 
-      const midActive = await profilesServer.listResponsesForProfiles({ ...normalizedArgs, view: 'active' });
-      const midDeleted = await profilesServer.listResponsesForProfiles({ ...normalizedArgs, view: 'deleted' });
+      const midActive = await profilesServer.listResponsesForProfiles({
+        ...normalizedArgs,
+        view: 'active',
+      });
+      const midDeleted = await profilesServer.listResponsesForProfiles({
+        ...normalizedArgs,
+        view: 'deleted',
+      });
       const midCounts = await aggregateStatusServer.aggregateStatus(surveyId);
       expect(midActive.total).toBe(0);
       expect(midDeleted.total).toBe(1);
@@ -587,8 +605,14 @@ describe('profiles-row-actions', () => {
       // 2단계: restore
       await restoreResponse(surveyId, responseId);
 
-      const afterActive = await profilesServer.listResponsesForProfiles({ ...normalizedArgs, view: 'active' });
-      const afterDeleted = await profilesServer.listResponsesForProfiles({ ...normalizedArgs, view: 'deleted' });
+      const afterActive = await profilesServer.listResponsesForProfiles({
+        ...normalizedArgs,
+        view: 'active',
+      });
+      const afterDeleted = await profilesServer.listResponsesForProfiles({
+        ...normalizedArgs,
+        view: 'deleted',
+      });
       const afterCounts = await aggregateStatusServer.aggregateStatus(surveyId);
       expect(afterActive.total).toBe(1);
       expect(afterDeleted.total).toBe(0);
@@ -631,9 +655,9 @@ describe('profiles-row-actions', () => {
       const responseId = createTestResponse(surveyId);
       await softDeleteResponse(surveyId, responseId);
 
-      await expect(
-        saveAdminEdit(surveyId, responseId, { questionResponses: {} }),
-      ).rejects.toThrow('Cannot edit deleted response');
+      await expect(saveAdminEdit(surveyId, responseId, { questionResponses: {} })).rejects.toThrow(
+        'Cannot edit deleted response',
+      );
     });
 
     it('response_answers 를 새 응답으로 재기록한다 (옛 답 제거 + 새 답 INSERT)', async () => {

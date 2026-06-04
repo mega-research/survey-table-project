@@ -1,11 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import type { Question, SurveySubmission } from '@/types/survey';
-
 import {
   generateSPSSColumns,
   buildDataRows,
 } from '@/lib/analytics/spss-excel-export';
+import type { Question, SurveySubmission } from '@/types/survey';
 
 function makeQuestion(
   overrides: Partial<Question> & { type: Question['type']; order: number },
@@ -113,9 +112,7 @@ describe('generateSPSSColumns', () => {
     const columns = generateSPSSColumns(sampleQuestions);
     // Q1(1) + Q2_1~Q2_3(3) + Q3(1) = 5열
     expect(columns).toHaveLength(5);
-    expect(columns.map((c) => c.spssVarName)).toEqual([
-      'Q1', 'Q2_1', 'Q2_2', 'Q2_3', 'Q3',
-    ]);
+    expect(columns.map((c) => c.spssVarName)).toEqual(['Q1', 'Q2_1', 'Q2_2', 'Q2_3', 'Q3']);
   });
 
   it('옵션 라벨을 포함한다', () => {
@@ -131,7 +128,11 @@ describe('generateSPSSColumns', () => {
 
   it('isHidden 테이블 셀은 변수 열에서 제외한다', () => {
     const q: Question = {
-      id: 'q1', type: 'table', title: 'Q1', order: 1, required: false,
+      id: 'q1',
+      type: 'table',
+      title: 'Q1',
+      order: 1,
+      required: false,
       questionCode: 'Q1',
       tableColumns: [
         { id: 'c1', label: '항목', columnCode: 'c1' },
@@ -139,14 +140,30 @@ describe('generateSPSSColumns', () => {
         { id: 'c3', label: '값2', columnCode: 'c3' },
       ],
       tableRowsData: [
-        { id: 'row1', label: '행1', rowCode: 'r1', cells: [
-          { id: 'cellA', type: 'text', content: '항목', cellCode: 'Q1_r1_c1' },
-          { id: 'cellB', type: 'radio', content: '', cellCode: 'Q1_r1_c2',
-            radioOptions: [{ id: 'o1', label: '예', value: 'opt1', spssNumericCode: 1 }] },
-          // 병합으로 가려진 셀 (컬럼 범위 안 index 2) — 변수에서 제외되어야 함
-          { id: 'cellC', type: 'radio', content: '', cellCode: 'Q1_r1_c3', isHidden: true,
-            radioOptions: [{ id: 'o1', label: '예', value: 'opt1', spssNumericCode: 1 }] },
-        ] },
+        {
+          id: 'row1',
+          label: '행1',
+          rowCode: 'r1',
+          cells: [
+            { id: 'cellA', type: 'text', content: '항목', cellCode: 'Q1_r1_c1' },
+            {
+              id: 'cellB',
+              type: 'radio',
+              content: '',
+              cellCode: 'Q1_r1_c2',
+              radioOptions: [{ id: 'o1', label: '예', value: 'opt1', spssNumericCode: 1 }],
+            },
+            // 병합으로 가려진 셀 (컬럼 범위 안 index 2) — 변수에서 제외되어야 함
+            {
+              id: 'cellC',
+              type: 'radio',
+              content: '',
+              cellCode: 'Q1_r1_c3',
+              isHidden: true,
+              radioOptions: [{ id: 'o1', label: '예', value: 'opt1', spssNumericCode: 1 }],
+            },
+          ],
+        },
       ],
     } as unknown as Question;
 
@@ -160,14 +177,29 @@ describe('generateSPSSColumns', () => {
 
   it('테이블 셀 컬럼에 cellExportLabel을 실어 준다', () => {
     const q: Question = {
-      id: 'q1', type: 'table', title: 'Q1', order: 1, required: false,
+      id: 'q1',
+      type: 'table',
+      title: 'Q1',
+      order: 1,
+      required: false,
       questionCode: 'Q1',
       tableColumns: [{ id: 'c2', label: '값', columnCode: 'c2' }],
       tableRowsData: [
-        { id: 'row1', label: '행1', rowCode: 'r1', cells: [
-          { id: 'cellB', type: 'radio', content: '', cellCode: 'Q1_r1_c2', exportLabel: '영향평가_유무',
-            radioOptions: [{ id: 'o1', label: '예', value: 'opt1', spssNumericCode: 1 }] },
-        ] },
+        {
+          id: 'row1',
+          label: '행1',
+          rowCode: 'r1',
+          cells: [
+            {
+              id: 'cellB',
+              type: 'radio',
+              content: '',
+              cellCode: 'Q1_r1_c2',
+              exportLabel: '영향평가_유무',
+              radioOptions: [{ id: 'o1', label: '예', value: 'opt1', spssNumericCode: 1 }],
+            },
+          ],
+        },
       ],
     } as unknown as Question;
 
@@ -177,7 +209,11 @@ describe('generateSPSSColumns', () => {
 
   it('radio-group 컬럼에 첫 멤버 셀의 cellExportLabel을 실어 준다', () => {
     const q: Question = {
-      id: 'q1', type: 'table', title: 'Q1', order: 1, required: false,
+      id: 'q1',
+      type: 'table',
+      title: 'Q1',
+      order: 1,
+      required: false,
       questionCode: 'Q1',
       tableColumns: [
         { id: 'c1', label: '항목', columnCode: 'c1' },
@@ -185,19 +221,79 @@ describe('generateSPSSColumns', () => {
         { id: 'c3', label: '여성', columnCode: 'c3' },
       ],
       tableRowsData: [
-        { id: 'row1', label: '성별', rowCode: 'r1', cells: [
-          { id: 'cA', type: 'text', content: '성별', cellCode: 'Q1_r1_c1' },
-          { id: 'cB', type: 'radio', content: '', radioGroupName: 'g1', exportLabel: '대표자_성별',
-            radioOptions: [{ id: 'm', label: '남성', value: 'optM', spssNumericCode: 1 }] },
-          { id: 'cC', type: 'radio', content: '', radioGroupName: 'g1',
-            radioOptions: [{ id: 'f', label: '여성', value: 'optF', spssNumericCode: 2 }] },
-        ] },
+        {
+          id: 'row1',
+          label: '성별',
+          rowCode: 'r1',
+          cells: [
+            { id: 'cA', type: 'text', content: '성별', cellCode: 'Q1_r1_c1' },
+            {
+              id: 'cB',
+              type: 'radio',
+              content: '',
+              radioGroupName: 'g1',
+              exportLabel: '대표자_성별',
+              radioOptions: [{ id: 'm', label: '남성', value: 'optM', spssNumericCode: 1 }],
+            },
+            {
+              id: 'cC',
+              type: 'radio',
+              content: '',
+              radioGroupName: 'g1',
+              radioOptions: [{ id: 'f', label: '여성', value: 'optF', spssNumericCode: 2 }],
+            },
+          ],
+        },
       ],
     } as unknown as Question;
 
     const col = generateSPSSColumns([q]).find((c) => c.type === 'radio-group');
     expect(col).toBeDefined();
     expect(col?.cellExportLabel).toBe('대표자_성별');
+  });
+
+  it('radio-group 컬럼에 exportLabel이 없으면 첫 멤버 셀 기준 자동 라벨을 실어 준다', () => {
+    const q: Question = {
+      id: 'q1',
+      type: 'table',
+      title: 'Q1',
+      order: 1,
+      required: false,
+      questionCode: 'Q1',
+      tableColumns: [
+        { id: 'c1', label: '항목', columnCode: 'c1' },
+        { id: 'c2', label: '남성', columnCode: 'c2' },
+        { id: 'c3', label: '여성', columnCode: 'c3' },
+      ],
+      tableRowsData: [
+        {
+          id: 'row1',
+          label: '성별',
+          rowCode: 'r1',
+          cells: [
+            { id: 'cA', type: 'text', content: '성별', cellCode: 'Q1_r1_c1' },
+            {
+              id: 'cB',
+              type: 'radio',
+              content: '',
+              radioGroupName: 'g1',
+              radioOptions: [{ id: 'm', label: '남성', value: 'optM', spssNumericCode: 1 }],
+            },
+            {
+              id: 'cC',
+              type: 'radio',
+              content: '',
+              radioGroupName: 'g1',
+              radioOptions: [{ id: 'f', label: '여성', value: 'optF', spssNumericCode: 2 }],
+            },
+          ],
+        },
+      ],
+    } as unknown as Question;
+
+    const col = generateSPSSColumns([q]).find((c) => c.type === 'radio-group');
+    expect(col).toBeDefined();
+    expect(col?.cellExportLabel).toBe('Q1_남성_성별');
   });
 });
 
@@ -257,17 +353,31 @@ describe('buildDataRows', () => {
 
   it('테이블 radio 셀 응답을 옵션 spssNumericCode로 변환한다', () => {
     const q: Question = {
-      id: 'q1', type: 'table', title: 'Q1', order: 1, required: false,
+      id: 'q1',
+      type: 'table',
+      title: 'Q1',
+      order: 1,
+      required: false,
       questionCode: 'Q1',
       tableColumns: [{ id: 'c2', label: '값', columnCode: 'c2' }],
       tableRowsData: [
-        { id: 'row1', label: '행1', rowCode: 'r1', cells: [
-          { id: 'cellB', type: 'radio', content: '', cellCode: 'Q1_r1_c2',
-            radioOptions: [
-              { id: 'oA', label: '예', value: 'opt1', spssNumericCode: 1 },
-              { id: 'oB', label: '아니오', value: 'opt2', spssNumericCode: 2 },
-            ] },
-        ] },
+        {
+          id: 'row1',
+          label: '행1',
+          rowCode: 'r1',
+          cells: [
+            {
+              id: 'cellB',
+              type: 'radio',
+              content: '',
+              cellCode: 'Q1_r1_c2',
+              radioOptions: [
+                { id: 'oA', label: '예', value: 'opt1', spssNumericCode: 1 },
+                { id: 'oB', label: '아니오', value: 'opt2', spssNumericCode: 2 },
+              ],
+            },
+          ],
+        },
       ],
     } as unknown as Question;
 
@@ -286,4 +396,3 @@ describe('buildDataRows', () => {
     expect(tableRow1[colIdx]).toBe(1);
   });
 });
-
