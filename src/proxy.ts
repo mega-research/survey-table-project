@@ -9,9 +9,10 @@ export async function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     /*
-     * /admin 경로만 보호
+     * /admin 및 /analytics 경로 보호
      * 정적 파일과 이미지는 제외
      */
     '/admin/:path*',
+    '/analytics/:path*',
   ],
 };
