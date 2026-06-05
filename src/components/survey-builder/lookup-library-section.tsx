@@ -4,14 +4,9 @@ import { useEffect, useState } from 'react';
 
 import { Database, Pencil, Plus, Trash2, Upload } from 'lucide-react';
 
-import {
-  copySavedLookupToSurveyAction,
-  createSavedLookupAction,
-  deleteSavedLookupAction,
-  listSavedLookupsAction,
-  updateSavedLookupAction,
-} from '@/actions/lookup-actions';
+import { copySavedLookupToSurveyAction } from '@/actions/lookup-actions';
 import { Button } from '@/components/ui/button';
+import { client } from '@/shared/lib/rpc';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import type { SavedLookup } from '@/types/survey';
 
@@ -35,7 +30,7 @@ export function LookupLibrarySection() {
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const reload = async () => {
-    const list = await listSavedLookupsAction();
+    const list = await client.library.savedLookups.list();
     setItems(list);
   };
 
@@ -70,7 +65,7 @@ export function LookupLibrarySection() {
 
   const handleDelete = async (lut: SavedLookup) => {
     if (!confirm(`보관함에서 "${lut.name}" 을(를) 삭제할까요?`)) return;
-    await deleteSavedLookupAction(lut.id);
+    await client.library.savedLookups.remove({ id: lut.id });
     await reload();
   };
 
@@ -88,9 +83,9 @@ export function LookupLibrarySection() {
 
   const handleSave = async (draft: LookupDraft) => {
     if (editingId) {
-      await updateSavedLookupAction(editingId, draft);
+      await client.library.savedLookups.update({ id: editingId, updates: draft });
     } else {
-      await createSavedLookupAction(draft);
+      await client.library.savedLookups.create(draft);
     }
     closeEdit();
     await reload();
