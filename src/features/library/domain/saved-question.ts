@@ -9,11 +9,14 @@ export type { QuestionData };
 
 /** 복잡 JSONB는 z.custom으로 타입만 보장(런타임 통과). */
 export const QuestionDataSchema = z.custom<QuestionData>();
+// service 함수는 Question(빌더 타입)을 받으므로 별도 스키마 정의
+export const QuestionSchema = z.custom<Question>();
 export const SavedQuestionSchema = z.custom<SavedQuestion>();
 
 // 컴포넌트가 useSaveQuestion().mutateAsync({ question, metadata })로 호출하므로 nested로 정의.
+// question 필드는 promoteSurveyImages와 동일하게 Question 타입으로 받음
 export const CreateSavedQuestionInput = z.object({
-  question: QuestionDataSchema,
+  question: QuestionSchema,
   metadata: z.object({
     name: z.string().min(1),
     description: z.string().optional(),
@@ -31,7 +34,7 @@ export const UpdateSavedQuestionInput = z.object({
       description: z.string(),
       category: z.string(),
       tags: z.array(z.string()),
-      question: QuestionDataSchema,
+      question: QuestionSchema,
     })
     .partial(),
 });
