@@ -5,7 +5,6 @@ import { useState } from 'react';
 import { Button, Card } from '@tremor/react';
 import { Download, FileJson, FileSpreadsheet, Loader2 } from 'lucide-react';
 
-import type { CleaningExportOptions } from '@/lib/analytics/cleaning-export-types';
 import { buildSafeFilename, downloadText } from '@/lib/analytics/export-download';
 
 import { ExportDataModal } from './export-data-modal';
@@ -16,7 +15,6 @@ interface ExportPanelProps {
   surveyId: string;
   onExportJson: () => Promise<string>;
   onExportCsv: () => Promise<string>;
-  onExportCleaningExcel?: (options: CleaningExportOptions) => Promise<Blob | null>;
   surveyTitle?: string;
 }
 
@@ -29,7 +27,6 @@ export function ExportPanel({
   surveyId,
   onExportJson,
   onExportCsv,
-  onExportCleaningExcel,
   surveyTitle = 'survey',
 }: ExportPanelProps) {
   const [isExporting, setIsExporting] = useState<TextFormat | null>(null);
@@ -62,11 +59,7 @@ export function ExportPanel({
         </div>
         <div className="flex gap-2">
           {/* 통합 엑셀 다운로드 (모달 트리거) */}
-          <ExportDataModal
-            surveyId={surveyId}
-            surveyTitle={surveyTitle}
-            {...(onExportCleaningExcel !== undefined ? { onExportCleaningExcel } : {})}
-          />
+          <ExportDataModal surveyId={surveyId} surveyTitle={surveyTitle} />
 
           <Button
             size="sm"

@@ -1,7 +1,7 @@
 import ExcelJS from 'exceljs';
 import * as XLSX from 'xlsx';
 
-import { HEADER_BORDER, HEADER_FILL, HEADER_FONT } from '@/lib/analytics/cleaning-export-types';
+import { HEADER_BORDER, HEADER_FILL, HEADER_FONT } from '@/lib/analytics/export-styles';
 import { isCellInputable } from '@/lib/analytics/excel-export-utils';
 import { buildCodebookValueLabel, formatExcelDateTime } from '@/lib/analytics/raw-export-helpers';
 import { bucketQuestions, planSplit } from '@/lib/analytics/split-export';

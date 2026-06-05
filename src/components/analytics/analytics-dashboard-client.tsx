@@ -16,12 +16,9 @@ import { Button } from '@/components/ui/button';
 
 import type { SurveyResponse } from '@/db/schema';
 import { analyzeSurvey } from '@/lib/analytics/analyzer';
-import type { CleaningExportOptions } from '@/lib/analytics/cleaning-export-types';
-import { generateCleaningExcelBlob } from '@/lib/analytics/semi-long-excel-export';
 import { type FilterState, applyFilter, createEmptyFilter } from '@/lib/analytics/filter';
-import type { ResponseData } from '@/lib/analytics/response-data';
 import type { SurveyAnalytics } from '@/lib/analytics/types';
-import type { Question, Survey } from '@/types/survey';
+import type { Question } from '@/types/survey';
 
 import { SummaryCards } from './cards/summary-cards';
 import { ResponseTimeline } from './charts/response-timeline';
@@ -79,36 +76,6 @@ export function AnalyticsDashboardClient({
   const analytics: SurveyAnalytics = useMemo(() => {
     return analyzeSurvey(survey, filteredResponses);
   }, [survey, filteredResponses]);
-
-  // 공통 데이터 변환 함수
-  const prepareExportData = useCallback(() => {
-    if (filteredResponses.length === 0) return null;
-
-    const responseData: ResponseData[] = filteredResponses.map((r) => ({
-      id: r.id,
-      surveyId: r.surveyId,
-      questionResponses: (r.questionResponses as Record<string, unknown>) || {},
-      isCompleted: r.isCompleted ?? true,
-      startedAt: r.createdAt || new Date(),
-      ...(r.completedAt ? { completedAt: r.completedAt } : {}),
-      ...(r.userAgent ? { userAgent: r.userAgent } : {}),
-    }));
-
-    const surveyData = {
-      id: survey.id,
-      title: survey.title,
-      questions: survey.questions,
-    } as Survey;
-
-    return { surveyData, responseData };
-  }, [survey, filteredResponses]);
-
-  // 데이터 클리닝용 Excel 내보내기 핸들러
-  const handleExportCleaningExcel = useCallback(async (options: CleaningExportOptions): Promise<Blob | null> => {
-    const data = prepareExportData();
-    if (!data) return null;
-    return generateCleaningExcelBlob(data.surveyData, data.responseData, undefined, options);
-  }, [prepareExportData]);
 
   // 질문 검색 필터링
   const searchFilteredQuestions = useMemo(
@@ -179,7 +146,6 @@ export function AnalyticsDashboardClient({
           surveyTitle={analytics.surveyTitle}
           onExportJson={onExportJson}
           onExportCsv={onExportCsv}
-          onExportCleaningExcel={handleExportCleaningExcel}
         />
       </div>
 
