@@ -28,13 +28,7 @@ export {
 
 // Library 조회 함수
 export {
-  getAllSavedQuestions,
-  getQuestionsByCategory,
-  searchSavedQuestions,
-  getRecentlyUsedQuestions,
-  getMostUsedQuestions,
   getAllTags,
-  getQuestionsByTag,
   getAllCategories,
 } from './library';
 

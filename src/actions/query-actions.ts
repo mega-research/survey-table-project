@@ -147,39 +147,9 @@ export async function exportResponsesAsCsv(surveyId: string) {
 // Library 조회
 // ========================
 
-export async function getAllSavedQuestions() {
-  await requireAuth();
-  return libraryData.getAllSavedQuestions();
-}
-
-export async function getQuestionsByCategory(category: string) {
-  await requireAuth();
-  return libraryData.getQuestionsByCategory(category);
-}
-
-export async function searchSavedQuestions(query: string) {
-  await requireAuth();
-  return libraryData.searchSavedQuestions(query);
-}
-
-export async function getRecentlyUsedQuestions(limit?: number) {
-  await requireAuth();
-  return libraryData.getRecentlyUsedQuestions(limit);
-}
-
-export async function getMostUsedQuestions(limit?: number) {
-  await requireAuth();
-  return libraryData.getMostUsedQuestions(limit);
-}
-
 export async function getAllTags() {
   await requireAuth();
   return libraryData.getAllTags();
-}
-
-export async function getQuestionsByTag(tag: string) {
-  await requireAuth();
-  return libraryData.getQuestionsByTag(tag);
 }
 
 export async function getAllCategories() {

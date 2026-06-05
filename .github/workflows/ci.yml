@@ -35,6 +35,8 @@ jobs:
         with:
           version: latest
       - run: pnpm db:setup-test
+      - name: Run integration (real DB)
+        run: pnpm test:integration
       - run: pnpm exec playwright install --with-deps chromium
       - name: Run e2e
         env:

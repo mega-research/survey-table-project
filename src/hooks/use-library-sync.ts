@@ -3,33 +3,20 @@
 import { useCallback, useTransition } from 'react';
 
 import {
-  applyMultipleQuestions as applyMultipleQuestionsAction,
-  applyQuestion as applyQuestionAction,
   createCategory as createCategoryAction,
   deleteCategory as deleteCategoryAction,
-  deleteSavedQuestion as deleteSavedQuestionAction,
   exportLibrary as exportLibraryAction,
   importLibrary as importLibraryAction,
   initializeDefaultCategories,
   initializePresetQuestions,
-  saveQuestion as saveQuestionAction,
   updateCategory as updateCategoryAction,
-  updateSavedQuestion as updateSavedQuestionAction,
 } from '@/actions/library-actions';
-import {
-  getAllCategories,
-  getAllSavedQuestions,
-  getAllTags,
-  getMostUsedQuestions,
-  getQuestionsByCategory as getQuestionsByCategoryFn,
-  getQuestionsByTag as getQuestionsByTagFn,
-  getRecentlyUsedQuestions,
-  searchSavedQuestions,
-} from '@/actions/query-actions';
-import type { Question } from '@/types/survey';
+import { getAllCategories, getAllTags } from '@/actions/query-actions';
+import { client } from '@/shared/lib/rpc';
 
 /**
  * 질문 보관함과 DB를 동기화하는 훅
+ * 조회 및 변경 모두 oRPC client를 사용한다.
  */
 export function useLibrarySync() {
   const [isPending, startTransition] = useTransition();
@@ -37,16 +24,11 @@ export function useLibrarySync() {
   // 질문 저장
   const saveQuestion = useCallback(
     async (
-      question: Question,
-      metadata: {
-        name: string;
-        description?: string;
-        category: string;
-        tags?: string[];
-      },
+      question: Parameters<typeof client.library.savedQuestions.create>[0]['question'],
+      metadata: Parameters<typeof client.library.savedQuestions.create>[0]['metadata'],
     ) => {
       try {
-        const saved = await saveQuestionAction(question, metadata);
+        const saved = await client.library.savedQuestions.create({ question, metadata });
         return saved;
       } catch (error) {
         console.error('질문 저장 실패:', error);
@@ -60,16 +42,10 @@ export function useLibrarySync() {
   const updateSavedQuestion = useCallback(
     async (
       id: string,
-      updates: Partial<{
-        name: string;
-        description: string;
-        category: string;
-        tags: string[];
-        question: Question;
-      }>,
+      updates: Parameters<typeof client.library.savedQuestions.update>[0]['updates'],
     ) => {
       try {
-        const updated = await updateSavedQuestionAction(id, updates);
+        const updated = await client.library.savedQuestions.update({ id, updates });
         return updated;
       } catch (error) {
         console.error('질문 업데이트 실패:', error);
@@ -82,7 +58,7 @@ export function useLibrarySync() {
   // 저장된 질문 삭제
   const deleteSavedQuestion = useCallback(async (id: string) => {
     try {
-      await deleteSavedQuestionAction(id);
+      await client.library.savedQuestions.remove({ id });
     } catch (error) {
       console.error('질문 삭제 실패:', error);
       throw error;
@@ -92,7 +68,7 @@ export function useLibrarySync() {
   // 모든 저장된 질문 불러오기
   const loadAllQuestions = useCallback(async () => {
     try {
-      const questions = await getAllSavedQuestions();
+      const questions = await client.library.savedQuestions.list({});
       return questions;
     } catch (error) {
       console.error('질문 목록 불러오기 실패:', error);
@@ -103,7 +79,7 @@ export function useLibrarySync() {
   // 카테고리별 질문 불러오기
   const loadQuestionsByCategory = useCallback(async (category: string) => {
     try {
-      const questions = await getQuestionsByCategoryFn(category);
+      const questions = await client.library.savedQuestions.byCategory({ category });
       return questions;
     } catch (error) {
       console.error('카테고리별 질문 불러오기 실패:', error);
@@ -114,7 +90,7 @@ export function useLibrarySync() {
   // 질문 검색
   const searchQuestions = useCallback(async (query: string) => {
     try {
-      const questions = await searchSavedQuestions(query);
+      const questions = await client.library.savedQuestions.search({ query });
       return questions;
     } catch (error) {
       console.error('질문 검색 실패:', error);
@@ -125,7 +101,7 @@ export function useLibrarySync() {
   // 최근 사용 질문 불러오기
   const loadRecentlyUsed = useCallback(async (limit?: number) => {
     try {
-      const questions = await getRecentlyUsedQuestions(limit);
+      const questions = await client.library.savedQuestions.recentlyUsed({ limit });
       return questions;
     } catch (error) {
       console.error('최근 사용 질문 불러오기 실패:', error);
@@ -136,7 +112,7 @@ export function useLibrarySync() {
   // 가장 많이 사용된 질문 불러오기
   const loadMostUsed = useCallback(async (limit?: number) => {
     try {
-      const questions = await getMostUsedQuestions(limit);
+      const questions = await client.library.savedQuestions.mostUsed({ limit });
       return questions;
     } catch (error) {
       console.error('인기 질문 불러오기 실패:', error);
@@ -147,7 +123,7 @@ export function useLibrarySync() {
   // 질문 적용 (복제해서 반환)
   const applyQuestion = useCallback(async (id: string) => {
     try {
-      const question = await applyQuestionAction(id);
+      const question = await client.library.savedQuestions.apply({ id });
       return question;
     } catch (error) {
       console.error('질문 적용 실패:', error);
@@ -158,7 +134,7 @@ export function useLibrarySync() {
   // 여러 질문 적용
   const applyMultipleQuestions = useCallback(async (ids: string[]) => {
     try {
-      const questions = await applyMultipleQuestionsAction(ids);
+      const questions = await client.library.savedQuestions.applyMultiple({ ids });
       return questions;
     } catch (error) {
       console.error('여러 질문 적용 실패:', error);
@@ -180,7 +156,7 @@ export function useLibrarySync() {
   // 태그별 질문 불러오기
   const loadQuestionsByTag = useCallback(async (tag: string) => {
     try {
-      const questions = await getQuestionsByTagFn(tag);
+      const questions = await client.library.savedQuestions.byTag({ tag });
       return questions;
     } catch (error) {
       console.error('태그별 질문 불러오기 실패:', error);

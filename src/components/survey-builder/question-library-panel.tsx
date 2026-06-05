@@ -53,7 +53,7 @@ import {
   useSearchQuestions,
 } from '@/hooks/queries/use-library';
 import { cn, isEmptyHtml } from '@/lib/utils';
-import { hasBranchLogic, removeBranchLogic } from '@/stores/question-library-store';
+import { hasBranchLogic, removeBranchLogic } from '@/features/library/domain/saved-question';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { Question, SavedQuestion } from '@/types/survey';
 

@@ -3,30 +3,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
-  applyMultipleQuestions as applyMultipleQuestionsAction,
-  applyQuestion as applyQuestionAction,
   createCategory as createCategoryAction,
   deleteCategory as deleteCategoryAction,
-  deleteSavedQuestion as deleteSavedQuestionAction,
   exportLibrary as exportLibraryAction,
   importLibrary as importLibraryAction,
   initializeDefaultCategories,
   initializePresetQuestions,
-  saveQuestion as saveQuestionAction,
   updateCategory as updateCategoryAction,
-  updateSavedQuestion as updateSavedQuestionAction,
 } from '@/actions/library-actions';
-import {
-  getAllCategories,
-  getAllSavedQuestions,
-  getAllTags,
-  getMostUsedQuestions,
-  getQuestionsByCategory,
-  getQuestionsByTag,
-  getRecentlyUsedQuestions,
-  searchSavedQuestions,
-} from '@/actions/query-actions';
-import type { Question } from '@/types/survey';
+import { getAllCategories, getAllTags } from '@/actions/query-actions';
+import { orpc } from '@/shared/lib/rpc';
 
 // ========================
 // Query Keys
@@ -52,63 +38,57 @@ export const libraryKeys = {
  * 모든 저장된 질문 조회
  */
 export function useSavedQuestions() {
-  return useQuery({
-    queryKey: libraryKeys.questions(),
-    queryFn: () => getAllSavedQuestions(),
-  });
+  return useQuery(orpc.library.savedQuestions.list.queryOptions());
 }
 
 /**
  * 카테고리별 질문 조회
  */
 export function useQuestionsByCategory(category: string | undefined) {
-  return useQuery({
-    queryKey: libraryKeys.questionsByCategory(category!),
-    queryFn: () => getQuestionsByCategory(category!),
-    enabled: !!category,
-  });
+  return useQuery(
+    orpc.library.savedQuestions.byCategory.queryOptions({
+      input: { category: category! },
+      enabled: !!category,
+    }),
+  );
 }
 
 /**
  * 질문 검색
  */
 export function useSearchQuestions(query: string) {
-  return useQuery({
-    queryKey: libraryKeys.searchQuestions(query),
-    queryFn: () => searchSavedQuestions(query),
-    enabled: query.length > 0,
-  });
+  return useQuery(
+    orpc.library.savedQuestions.search.queryOptions({
+      input: { query },
+      enabled: query.length > 0,
+    }),
+  );
 }
 
 /**
  * 최근 사용 질문 조회
  */
 export function useRecentlyUsedQuestions(limit?: number) {
-  return useQuery({
-    queryKey: libraryKeys.recentlyUsed(limit),
-    queryFn: () => getRecentlyUsedQuestions(limit),
-  });
+  return useQuery(orpc.library.savedQuestions.recentlyUsed.queryOptions({ input: { limit } }));
 }
 
 /**
  * 가장 많이 사용된 질문 조회
  */
 export function useMostUsedQuestions(limit?: number) {
-  return useQuery({
-    queryKey: libraryKeys.mostUsed(limit),
-    queryFn: () => getMostUsedQuestions(limit),
-  });
+  return useQuery(orpc.library.savedQuestions.mostUsed.queryOptions({ input: { limit } }));
 }
 
 /**
  * 태그별 질문 조회
  */
 export function useQuestionsByTag(tag: string | undefined) {
-  return useQuery({
-    queryKey: libraryKeys.questionsByTag(tag!),
-    queryFn: () => getQuestionsByTag(tag!),
-    enabled: !!tag,
-  });
+  return useQuery(
+    orpc.library.savedQuestions.byTag.queryOptions({
+      input: { tag: tag! },
+      enabled: !!tag,
+    }),
+  );
 }
 
 /**
@@ -141,24 +121,14 @@ export function useCategories() {
 export function useSaveQuestion() {
   const queryClient = useQueryClient();
 
-  return useMutation({
-    mutationFn: ({
-      question,
-      metadata,
-    }: {
-      question: Question;
-      metadata: {
-        name: string;
-        description?: string;
-        category: string;
-        tags?: string[];
-      };
-    }) => saveQuestionAction(question, metadata),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: libraryKeys.questions() });
-      queryClient.invalidateQueries({ queryKey: libraryKeys.tags() });
-    },
-  });
+  return useMutation(
+    orpc.library.savedQuestions.create.mutationOptions({
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: orpc.library.savedQuestions.key() });
+        queryClient.invalidateQueries({ queryKey: libraryKeys.tags() });
+      },
+    }),
+  );
 }
 
 /**
@@ -167,66 +137,58 @@ export function useSaveQuestion() {
 export function useUpdateSavedQuestion() {
   const queryClient = useQueryClient();
 
-  return useMutation({
-    mutationFn: ({
-      id,
-      updates,
-    }: {
-      id: string;
-      updates: Partial<{
-        name: string;
-        description: string;
-        category: string;
-        tags: string[];
-        question: Question;
-      }>;
-    }) => updateSavedQuestionAction(id, updates),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: libraryKeys.questions() });
-      queryClient.invalidateQueries({ queryKey: libraryKeys.tags() });
-    },
-  });
+  return useMutation(
+    orpc.library.savedQuestions.update.mutationOptions({
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: orpc.library.savedQuestions.key() });
+        queryClient.invalidateQueries({ queryKey: libraryKeys.tags() });
+      },
+    }),
+  );
 }
 
 /**
  * 저장된 질문 삭제
+ * 컴포넌트 시그니처 유지: mutate(id: string)
  */
 export function useDeleteSavedQuestion() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (id: string) => deleteSavedQuestionAction(id),
+    mutationFn: (id: string) => orpc.library.savedQuestions.remove.call({ id }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: libraryKeys.questions() });
+      queryClient.invalidateQueries({ queryKey: orpc.library.savedQuestions.key() });
     },
   });
 }
 
 /**
  * 질문 적용 (복제해서 반환)
+ * 컴포넌트 시그니처 유지: mutateAsync(id: string)
  */
 export function useApplyQuestion() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (id: string) => applyQuestionAction(id),
+    mutationFn: (id: string) => orpc.library.savedQuestions.apply.call({ id }),
     onSuccess: () => {
       // usageCount 증가로 인한 캐시 무효화
-      queryClient.invalidateQueries({ queryKey: libraryKeys.questions() });
+      queryClient.invalidateQueries({ queryKey: orpc.library.savedQuestions.key() });
     },
   });
 }
 
 /**
  * 여러 질문 적용
+ * 컴포넌트 시그니처 유지: mutateAsync(ids: string[])
  */
 export function useApplyMultipleQuestions() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (ids: string[]) => applyMultipleQuestionsAction(ids),
+    mutationFn: (ids: string[]) => orpc.library.savedQuestions.applyMultiple.call({ ids }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: libraryKeys.questions() });
+      queryClient.invalidateQueries({ queryKey: orpc.library.savedQuestions.key() });
     },
   });
 }

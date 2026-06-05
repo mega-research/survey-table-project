@@ -37,11 +37,6 @@ export {
 
 // Library Mutations (Server Actions)
 export {
-  saveQuestion,
-  updateSavedQuestion,
-  deleteSavedQuestion,
-  applyQuestion,
-  applyMultipleQuestions,
   exportLibrary,
   importLibrary,
   createCategory,
@@ -76,12 +71,6 @@ export {
   getQuestionStatistics,
   exportResponsesAsJson,
   exportResponsesAsCsv,
-  getAllSavedQuestions,
-  getQuestionsByCategory,
-  searchSavedQuestions,
-  getRecentlyUsedQuestions,
-  getMostUsedQuestions,
   getAllTags,
-  getQuestionsByTag,
   getAllCategories,
 } from './query-actions';
