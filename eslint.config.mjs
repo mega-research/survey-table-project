@@ -35,6 +35,23 @@ const eslintConfig = [
       "react-hooks/immutability": "warn",
     },
   },
+  {
+    files: ["src/features/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@/features/*/**"],
+              message:
+                "feature 간 직접 import 금지. 공용은 @/shared로 승격하거나 RPC(@/shared/lib/rpc)를 경유하세요. (자기 feature 내부는 상대경로 사용)",
+            },
+          ],
+        },
+      ],
+    },
+  },
   eslintConfigPrettier,
 ];
 
