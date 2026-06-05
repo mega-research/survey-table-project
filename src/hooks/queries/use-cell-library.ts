@@ -2,22 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import {
-  applySavedCellAction,
-  deleteSavedCellAction,
-  saveCellAction,
-} from '@/actions/cell-library-actions';
-import { getAllSavedCells, searchSavedCells } from '@/actions/query-actions';
-import type { TableCell } from '@/types/survey';
-
-// ========================
-// Query Keys
-// ========================
-export const cellLibraryKeys = {
-  all: ['cellLibrary'] as const,
-  cells: () => [...cellLibraryKeys.all, 'cells'] as const,
-  search: (query: string) => [...cellLibraryKeys.cells(), 'search', query] as const,
-};
+import { orpc } from '@/shared/lib/rpc';
 
 // ========================
 // Queries
@@ -25,19 +10,17 @@ export const cellLibraryKeys = {
 
 /** 모든 저장된 셀 조회 */
 export function useSavedCells() {
-  return useQuery({
-    queryKey: cellLibraryKeys.cells(),
-    queryFn: () => getAllSavedCells(),
-  });
+  return useQuery(orpc.library.savedCells.list.queryOptions());
 }
 
 /** 셀 이름 검색 */
 export function useSearchSavedCells(query: string) {
-  return useQuery({
-    queryKey: cellLibraryKeys.search(query),
-    queryFn: () => searchSavedCells(query),
-    enabled: query.length > 0,
-  });
+  return useQuery(
+    orpc.library.savedCells.search.queryOptions({
+      input: { query },
+      enabled: query.length > 0,
+    }),
+  );
 }
 
 // ========================
@@ -48,34 +31,39 @@ export function useSearchSavedCells(query: string) {
 export function useSaveCell() {
   const queryClient = useQueryClient();
 
-  return useMutation({
-    mutationFn: ({ cell, name }: { cell: TableCell; name: string }) => saveCellAction(cell, name),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: cellLibraryKeys.cells() });
-    },
-  });
+  return useMutation(
+    orpc.library.savedCells.create.mutationOptions({
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: orpc.library.savedCells.key() });
+      },
+    }),
+  );
 }
 
-/** 저장된 셀 삭제 */
+/** 저장된 셀 삭제
+ * 컴포넌트 시그니처 유지: mutate(id: string)
+ */
 export function useDeleteSavedCell() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (id: string) => deleteSavedCellAction(id),
+    mutationFn: (id: string) => orpc.library.savedCells.remove.call({ id }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: cellLibraryKeys.cells() });
+      queryClient.invalidateQueries({ queryKey: orpc.library.savedCells.key() });
     },
   });
 }
 
-/** 셀 적용 (usageCount 증가 + cell 데이터 반환) */
+/** 셀 적용 (usageCount 증가 + cell 데이터 반환)
+ * 컴포넌트 시그니처 유지: mutateAsync(id: string)
+ */
 export function useApplySavedCell() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (id: string) => applySavedCellAction(id),
+    mutationFn: (id: string) => orpc.library.savedCells.apply.call({ id }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: cellLibraryKeys.cells() });
+      queryClient.invalidateQueries({ queryKey: orpc.library.savedCells.key() });
     },
   });
 }
