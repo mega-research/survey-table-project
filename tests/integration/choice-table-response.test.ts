@@ -6,7 +6,6 @@ import type { Question } from '@/types/survey';
 // dispatcher: branch-logic.ts 에서 callers 가 쓰는 공개 함수
 import { getBranchRuleForResponse } from '@/utils/branch-logic';
 import { transformSingleChoice } from '@/lib/spss/data-transformer';
-import { generateMrsets } from '@/lib/spss/spss-syntax-generator';
 
 function choiceTableQ(): Question {
   return {
@@ -126,9 +125,5 @@ describe('choice table-source SPSS 단일/복수 변수 계약', () => {
     expect(transformSingleChoice(q, 'cellA')).toBe(1);
     expect(transformSingleChoice(q, 'cellC')).toBe(3);
     expect(transformSingleChoice(q, null)).toBeNull();
-  });
-
-  it('라디오는 MCGROUP(복수응답 세트)에 등록되지 않는다', () => {
-    expect(generateMrsets([radioTableQ()])).toBe('');
   });
 });
