@@ -15,64 +15,85 @@ import type {
   UpdateSavedQuestionInput,
 } from '../../domain/saved-question';
 
+// drizzle $inferSelect row -> domain SavedQuestion 명시 변환
+// tags: string[] | null -> string[] (null -> 빈 배열)
+// description: string | null -> string | undefined (domain은 optional, exactOptionalPropertyTypes 대응)
+// question: QuestionData (JSONB) -> Question
+function toDomainSavedQuestion(
+  row: typeof savedQuestions.$inferSelect,
+): SavedQuestion {
+  const result: SavedQuestion = {
+    id: row.id,
+    question: row.question as unknown as Question,
+    name: row.name,
+    tags: row.tags ?? [],
+    category: row.category,
+    usageCount: row.usageCount,
+    isPreset: row.isPreset,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+  if (row.description != null) {
+    result.description = row.description;
+  }
+  return result;
+}
+
 // ========================
 // 쿼리
 // ========================
 
 /** 모든 저장된 질문 조회 (최근 수정순) */
 export async function listSavedQuestions(): Promise<SavedQuestion[]> {
-  const questions = await db.query.savedQuestions.findMany({
+  const rows = await db.query.savedQuestions.findMany({
     orderBy: [desc(savedQuestions.updatedAt)],
   });
-  return questions as unknown as SavedQuestion[];
+  return rows.map(toDomainSavedQuestion);
 }
 
 /** 이름/설명 검색 */
 export async function searchSavedQuestions(query: string): Promise<SavedQuestion[]> {
-  const questions = await db.query.savedQuestions.findMany({
+  const rows = await db.query.savedQuestions.findMany({
     where: or(
       ilike(savedQuestions.name, `%${query}%`),
       ilike(savedQuestions.description, `%${query}%`),
     ),
     orderBy: [desc(savedQuestions.updatedAt)],
   });
-  return questions as unknown as SavedQuestion[];
+  return rows.map(toDomainSavedQuestion);
 }
 
 /** 카테고리별 질문 조회 */
 export async function getSavedQuestionsByCategory(category: string): Promise<SavedQuestion[]> {
-  const questions = await db.query.savedQuestions.findMany({
+  const rows = await db.query.savedQuestions.findMany({
     where: eq(savedQuestions.category, category),
     orderBy: [desc(savedQuestions.updatedAt)],
   });
-  return questions as unknown as SavedQuestion[];
+  return rows.map(toDomainSavedQuestion);
 }
 
 /** 최근 사용된 질문 조회 (usageCount > 0, updatedAt 최신순) */
 export async function getRecentlyUsedQuestions(limit: number = 5): Promise<SavedQuestion[]> {
-  const questions = await db.query.savedQuestions.findMany({
+  const rows = await db.query.savedQuestions.findMany({
     orderBy: [desc(savedQuestions.updatedAt)],
     limit,
   });
-  return questions.filter((q) => q.usageCount > 0) as unknown as SavedQuestion[];
+  return rows.filter((q) => q.usageCount > 0).map(toDomainSavedQuestion);
 }
 
 /** 사용 횟수 많은 질문 조회 */
 export async function getMostUsedQuestions(limit: number = 5): Promise<SavedQuestion[]> {
-  const questions = await db.query.savedQuestions.findMany({
+  const rows = await db.query.savedQuestions.findMany({
     orderBy: [desc(savedQuestions.usageCount)],
     limit,
   });
-  return questions as unknown as SavedQuestion[];
+  return rows.map(toDomainSavedQuestion);
 }
 
 /** 태그로 질문 조회 */
 export async function getSavedQuestionsByTag(tag: string): Promise<SavedQuestion[]> {
-  const questions = await db.query.savedQuestions.findMany();
-  return questions.filter((q) => {
-    const tags = q.tags as string[] | null;
-    return tags?.includes(tag);
-  }) as unknown as SavedQuestion[];
+  const rows = await db.query.savedQuestions.findMany();
+  return rows.filter((q) => q.tags?.includes(tag)).map(toDomainSavedQuestion);
 }
 
 // ========================
@@ -95,7 +116,7 @@ export async function createSavedQuestion(input: CreateSavedQuestionInput): Prom
 
   const [saved] = await db.insert(savedQuestions).values(newSavedQuestion).returning();
   if (!saved) throw new Error('질문 저장에 실패했습니다.');
-  return saved as unknown as SavedQuestion;
+  return toDomainSavedQuestion(saved);
 }
 
 /** 저장된 질문 업데이트 — question 포함 시 이미지 promote */
@@ -120,7 +141,7 @@ export async function updateSavedQuestion(
     .returning();
 
   if (!updated) throw new Error('질문 수정에 실패했습니다.');
-  return updated as unknown as SavedQuestion;
+  return toDomainSavedQuestion(updated);
 }
 
 /** 저장된 질문 삭제 — 연결 이미지 R2에서도 삭제 시도 */
