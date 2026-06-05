@@ -21,6 +21,7 @@ jobs:
       - run: pnpm test
 
   e2e:
+    needs: verify
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

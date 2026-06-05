@@ -1,4 +1,4 @@
-import { onError } from '@orpc/server';
+import { isDefinedError, onError } from '@orpc/server';
 import { RPCHandler } from '@orpc/server/fetch';
 import * as Sentry from '@sentry/nextjs';
 
@@ -11,7 +11,11 @@ import { router } from './router';
 export const rpcHandler = new RPCHandler(router, {
   interceptors: [
     onError((error) => {
-      Sentry.captureException(error);
+      // typed domain error는 클라이언트가 isDefinedError로 처리하므로 캡처 제외.
+      // 예기치 못한 infrastructure 에러만 Sentry로 보낸다.
+      if (!isDefinedError(error)) {
+        Sentry.captureException(error);
+      }
     }),
   ],
 });
