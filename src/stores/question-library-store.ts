@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
 
-import { DEFAULT_CATEGORIES, Question, QuestionCategory } from '@/types/survey';
+import { DEFAULT_CATEGORIES, QuestionCategory } from '@/types/survey';
 
 /**
  * 질문 보관함 UI 상태 관리
@@ -108,81 +108,6 @@ export const useQuestionLibraryStore = create<QuestionLibraryUIState>()(
     },
   ),
 );
-
-// 유틸리티 함수들 (분기 로직 관련)
-export function hasBranchLogic(question: Question): boolean {
-  if (question.options?.some((opt) => opt.branchRule)) {
-    return true;
-  }
-
-  if (question.tableValidationRules?.length) {
-    return true;
-  }
-
-  if (question.tableRowsData) {
-    for (const row of question.tableRowsData) {
-      for (const cell of row.cells) {
-        if (cell.checkboxOptions?.some((opt) => opt.branchRule)) return true;
-        if (cell.radioOptions?.some((opt) => opt.branchRule)) return true;
-        if (cell.selectOptions?.some((opt) => opt.branchRule)) return true;
-      }
-    }
-  }
-
-  if (question.displayCondition?.conditions?.length) {
-    return true;
-  }
-
-  return false;
-}
-
-export function removeBranchLogic(question: Question): Question {
-  const { groupId: _gid, ...questionWithoutGroup } = question;
-  const cleanedQuestion: Question = {
-    ...questionWithoutGroup, // 라이브러리에서 가져온 질문은 그룹 ID를 제거
-  };
-
-  if (cleanedQuestion.options) {
-    cleanedQuestion.options = cleanedQuestion.options.map((opt) => {
-      const { branchRule: _br, ...rest } = opt;
-      return rest;
-    });
-  }
-
-  delete cleanedQuestion.tableValidationRules;
-
-  if (cleanedQuestion.tableRowsData) {
-    cleanedQuestion.tableRowsData = cleanedQuestion.tableRowsData.map((row) => ({
-      ...row,
-      cells: row.cells.map((cell) => {
-        const cleanedCell = { ...cell };
-        if (cleanedCell.checkboxOptions) {
-          cleanedCell.checkboxOptions = cleanedCell.checkboxOptions.map((opt) => {
-            const { branchRule: _br1, ...rest } = opt;
-            return rest;
-          });
-        }
-        if (cleanedCell.radioOptions) {
-          cleanedCell.radioOptions = cleanedCell.radioOptions.map((opt) => {
-            const { branchRule: _br2, ...rest } = opt;
-            return rest;
-          });
-        }
-        if (cleanedCell.selectOptions) {
-          cleanedCell.selectOptions = cleanedCell.selectOptions.map((opt) => {
-            const { branchRule: _br3, ...rest } = opt;
-            return rest;
-          });
-        }
-        return cleanedCell;
-      }),
-    }));
-  }
-
-  delete cleanedQuestion.displayCondition;
-
-  return cleanedQuestion;
-}
 
 // 기본 카테고리 export (하위 호환성)
 export { DEFAULT_CATEGORIES };

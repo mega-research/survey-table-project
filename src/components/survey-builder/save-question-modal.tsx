@@ -32,7 +32,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useCategories, useCreateCategory, useSaveQuestion } from '@/hooks/queries/use-library';
 import { cn } from '@/lib/utils';
-import { hasBranchLogic } from '@/stores/question-library-store';
+import { hasBranchLogic } from '@/features/library/domain/saved-question';
 import { Question } from '@/types/survey';
 
 // 질문 타입 아이콘 매핑

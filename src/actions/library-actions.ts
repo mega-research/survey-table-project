@@ -2,9 +2,10 @@
 
 import { revalidatePath } from 'next/cache';
 
-import { eq, inArray, sql } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 
-import { getAllCategories, getAllSavedQuestions } from '@/data/library';
+import { getAllCategories } from '@/data/library';
+import { listSavedQuestions } from '@/features/library/server/services/saved-questions.service';
 import { db } from '@/db';
 import {
   NewQuestionCategory,
@@ -13,177 +14,14 @@ import {
   savedQuestions,
 } from '@/db/schema';
 import { requireAuth } from '@/lib/auth';
-import { extractImageUrlsFromQuestion } from '@/lib/image-extractor';
-import { deleteImagesFromR2Server } from '@/lib/image-utils-server';
 import { promoteSurveyImages } from '@/lib/survey/survey-image-promote';
-import { generateId } from '@/lib/utils';
 import type { Question } from '@/types/survey';
-
-// ========================
-// 질문 보관함 변경 액션 (Mutations)
-// ========================
-
-// 질문 저장
-export async function saveQuestion(
-  question: Question,
-  metadata: {
-    name: string;
-    description?: string;
-    category: string;
-    tags?: string[];
-  },
-) {
-  await requireAuth();
-
-  // tmp/survey/ 이미지를 영구 prefix로 promote (R2 move + URL 치환)
-  const [promotedQuestion] = await promoteSurveyImages([question]);
-
-  const newSavedQuestion: NewSavedQuestion = {
-    question: promotedQuestion as unknown as NewSavedQuestion['question'],
-    name: metadata.name,
-    description: metadata.description,
-    category: metadata.category,
-    tags: metadata.tags || [],
-    usageCount: 0,
-    isPreset: false,
-  };
-
-  const [saved] = await db.insert(savedQuestions).values(newSavedQuestion).returning();
-  revalidatePath('/admin/surveys');
-  return saved;
-}
-
-// 저장된 질문 업데이트
-export async function updateSavedQuestion(
-  id: string,
-  updates: Partial<{
-    name: string;
-    description: string;
-    category: string;
-    tags: string[];
-    question: Question;
-  }>,
-) {
-  await requireAuth();
-
-  // question이 포함된 경우 tmp/survey/ 이미지 promote
-  let promotedQuestion = updates.question;
-  if (updates.question) {
-    const [promoted] = await promoteSurveyImages([updates.question]);
-    promotedQuestion = promoted;
-  }
-
-  const [updated] = await db
-    .update(savedQuestions)
-    .set({
-      ...updates,
-      question: promotedQuestion as unknown as NewSavedQuestion['question'],
-      updatedAt: new Date(),
-    })
-    .where(eq(savedQuestions.id, id))
-    .returning();
-
-  revalidatePath('/admin/surveys');
-  return updated;
-}
-
-// 저장된 질문 삭제
-export async function deleteSavedQuestion(id: string) {
-  await requireAuth();
-
-  // 삭제 전 저장된 질문 조회
-  const savedQuestion = await db.query.savedQuestions.findFirst({
-    where: eq(savedQuestions.id, id),
-  });
-
-  if (savedQuestion) {
-    // questionData에서 질문 객체 추출
-    const question = savedQuestion.question as unknown as Question;
-    const images = extractImageUrlsFromQuestion(question);
-
-    if (images.length > 0) {
-      try {
-        await deleteImagesFromR2Server(images);
-      } catch (error) {
-        console.error('라이브러리 질문 삭제 시 이미지 삭제 실패:', error);
-        // 이미지 삭제 실패해도 질문 삭제는 진행
-      }
-    }
-  }
-
-  await db.delete(savedQuestions).where(eq(savedQuestions.id, id));
-  revalidatePath('/admin/surveys');
-}
-
-// 질문 사용 (usageCount 원자적 증가)
-export async function applyQuestion(id: string) {
-  await requireAuth();
-
-  // 🚀 원자적 증가 (Atomic Increment) - DB가 직접 계산
-  // Race Condition 방지: 동시에 여러 명이 사용해도 정확히 카운트됨
-  const [updated] = await db
-    .update(savedQuestions)
-    .set({
-      usageCount: sql`${savedQuestions.usageCount} + 1`,
-      updatedAt: new Date(),
-    })
-    .where(eq(savedQuestions.id, id))
-    .returning();
-
-  if (!updated) return null;
-
-  // 새 ID로 복제된 질문 반환
-  const question = updated.question as unknown as Question;
-
-  // 보관함에서 추가할 때는 그룹 없이 추가
-  const { groupId: _g, ...questionWithoutGroup } = question;
-  return {
-    ...questionWithoutGroup,
-    id: generateId(),
-    order: 0,
-  } as Question;
-}
-
-// 여러 질문 사용 (일괄 처리 최적화)
-export async function applyMultipleQuestions(ids: string[]) {
-  await requireAuth();
-
-  if (!ids.length) return [];
-
-  // 1. 일괄 조회 (1번 요청)
-  const savedItems = await db.query.savedQuestions.findMany({
-    where: inArray(savedQuestions.id, ids),
-  });
-
-  if (!savedItems.length) return [];
-
-  // 2. 일괄 업데이트 (1번 요청) - usageCount를 SQL 레벨에서 1씩 증가
-  await db
-    .update(savedQuestions)
-    .set({
-      usageCount: sql`${savedQuestions.usageCount} + 1`,
-      updatedAt: new Date(),
-    })
-    .where(inArray(savedQuestions.id, ids));
-
-  // 3. 메모리에서 데이터 가공 (새 ID 부여)
-  return savedItems.map((saved) => {
-    const question = saved.question as unknown as Question;
-    // 보관함에서 추가할 때는 그룹 없이 추가
-    const { groupId: _g, ...questionWithoutGroup } = question;
-    return {
-      ...questionWithoutGroup,
-      id: generateId(),
-      order: 0,
-    } as Question;
-  });
-}
 
 // 라이브러리 내보내기
 export async function exportLibrary() {
   await requireAuth();
 
-  const questions = await getAllSavedQuestions();
+  const questions = await listSavedQuestions();
   const categories = await getAllCategories();
   return JSON.stringify({ savedQuestions: questions, categories }, null, 2);
 }

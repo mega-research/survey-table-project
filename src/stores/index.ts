@@ -4,11 +4,7 @@ export { useSurveyUIStore } from './ui-store';
 export { useTestResponseStore } from './test-response-store';
 export { useSurveyListStore } from './survey-list-store';
 export { useSurveyResponseStore } from './survey-response-store';
-export {
-  useQuestionLibraryStore,
-  hasBranchLogic,
-  removeBranchLogic,
-} from './question-library-store';
+export { useQuestionLibraryStore } from './question-library-store';
 
 // 타입 export
 export type { SurveyListItem } from './survey-list-store';
