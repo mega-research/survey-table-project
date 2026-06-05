@@ -50,6 +50,8 @@ backups
 scripts
 .serena*.png
 .playwright-mcp
+test-results
+playwright-report
 
 .serena
 .superpowers
