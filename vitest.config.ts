@@ -1,6 +1,6 @@
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 
 export default defineConfig({
   plugins: [react()],
@@ -15,7 +15,15 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     setupFiles: ['./tests/setup.ts'],
-    include: ['tests/**/*.test.{ts,tsx}', 'src/**/*.test.{ts,tsx}'],
+    // RUN_REALDB=1(pnpm test:integration) 이면 실 DB 왕복 테스트만, 아니면 일반 테스트(realdb 제외)
+    include:
+      process.env['RUN_REALDB'] === '1'
+        ? ['tests/integration/**/*.realdb.test.ts']
+        : ['tests/**/*.test.{ts,tsx}', 'src/**/*.test.{ts,tsx}'],
+    exclude:
+      process.env['RUN_REALDB'] === '1'
+        ? [...configDefaults.exclude]
+        : [...configDefaults.exclude, '**/*.realdb.test.ts'],
     coverage: {
       provider: 'v8',
       include: ['src/lib/spss/**', 'src/lib/analytics/spss-*'],

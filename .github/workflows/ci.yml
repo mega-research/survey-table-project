@@ -36,9 +36,7 @@ jobs:
           version: latest
       - run: pnpm db:setup-test
       - name: Run integration (real DB)
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
-        run: pnpm exec vitest run tests/integration/library-saved-questions-roundtrip.test.ts
+        run: pnpm test:integration
       - run: pnpm exec playwright install --with-deps chromium
       - name: Run e2e
         env:
