@@ -6,8 +6,9 @@ import Link from 'next/link';
 
 import { AlertCircle, ArrowLeft, CheckCircle, Lock, LogOut, User } from 'lucide-react';
 
-import { logout, updatePassword } from '@/actions/auth-actions';
+import { logout } from '@/actions/auth-actions';
 import { Button } from '@/components/ui/button';
+import { client } from '@/shared/lib/rpc';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -22,11 +23,15 @@ export default function AdminProfilePage() {
     setError(null);
     setSuccess(false);
 
-    const result = await updatePassword(formData);
+    const result = await client.auth.updatePassword({
+      currentPassword: formData.get('currentPassword') as string,
+      newPassword: formData.get('newPassword') as string,
+      confirmPassword: formData.get('confirmPassword') as string,
+    });
 
-    if (result?.error) {
+    if ('error' in result) {
       setError(result.error);
-    } else if (result?.success) {
+    } else {
       setSuccess(true);
       // 폼 초기화
       const form = document.getElementById('password-form') as HTMLFormElement;
