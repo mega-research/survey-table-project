@@ -4,6 +4,9 @@
  * - saved-cells: create -> list 왕복 + apply(usageCount 증가) 검증
  * - question-categories: create -> list 왕복 + 매퍼(icon nullable -> undefined) 검증
  * - saved-lookups: create -> list 왕복 + 매퍼(description nullable -> undefined, tags/columns/rows JSONB) 검증
+ * - saved-lookups propagation: 보관함=SoT 전파 불변식 검증
+ *   update → surveys.lookups 사본 name/columns/rows 갱신
+ *   remove → surveys.lookups 사본 항목 제거
  *
  * 실행 조건: DATABASE_URL이 127.0.0.1 또는 localhost를 포함할 때만 동작.
  * prod URL 환경에서는 describe.skipIf로 전체 스킵 -> 일반 pnpm test에서 데이터 오염 없음.
@@ -14,6 +17,7 @@
 import { createRouterClient } from '@orpc/server';
 import { eq } from 'drizzle-orm';
 import { afterAll, describe, expect, it } from 'vitest';
+import { nanoid } from 'nanoid';
 
 // saved-cells.service는 R2 관련 외부 호출이 없으므로 mock 불필요.
 // saved-lookups.service도 외부 호출 없음 (propagation은 DB-only).
@@ -26,7 +30,9 @@ import {
   questionCategories as questionCategoriesTable,
   savedCells as savedCellsTable,
   savedLookups as savedLookupsTable,
+  surveys as surveysTable,
 } from '@/db/schema/surveys';
+import type { SurveyLookup } from '@/types/survey';
 import type { ORPCContext } from '@/server/context';
 
 import { savedCells } from '@/features/library/server/procedures/saved-cells';
@@ -262,5 +268,160 @@ describe.skipIf(!isLocalDb)('saved-lookups procedure round-trip (real local DB)'
     expect(filtered.some((l) => l.id === created.id)).toBe(true);
     // 다른 카테고리 row는 포함되지 않아야 함
     expect(filtered.every((l) => l.category === '유니크-필터-카테고리-왕복')).toBe(true);
+  });
+});
+
+// ========================
+// saved-lookups propagation (보관함=SoT 전파 불변식)
+// ========================
+//
+// updateSavedLookup / deleteSavedLookup 이 surveys.lookups JSONB 사본을 올바르게
+// 동기화하는지 실 DB 왕복으로 검증한다.
+// propagateSavedLookupUpdate / propagateSavedLookupDelete 는 action→service 이전 후에도
+// SQL 이 byte-identical 로 보존됐으므로 이 테스트가 그 동작을 재확인한다.
+
+describe.skipIf(!isLocalDb)('saved-lookups propagation 불변식 (real local DB)', () => {
+  const client = createRouterClient({ savedLookups }, { context: adminContext() });
+
+  // cleanup 대상: 테스트에서 생성한 saved_lookup id 와 survey id 를 별도 추적
+  const createdLookupIds: string[] = [];
+  const createdSurveyIds: string[] = [];
+
+  afterAll(async () => {
+    // survey 먼저 삭제 (cascade 무관하게 명시적 정리)
+    for (const id of createdSurveyIds) {
+      await db.delete(surveysTable).where(eq(surveysTable.id, id));
+    }
+    // saved_lookup 은 deleteSavedLookup 이 이미 호출됐을 수 있으므로 조용히 무시
+    for (const id of createdLookupIds) {
+      await db.delete(savedLookupsTable).where(eq(savedLookupsTable.id, id));
+    }
+  });
+
+  it('update propagation: surveys.lookups 사본의 name/columns/rows 가 마스터와 동기화된다', async () => {
+    // 1. 마스터 LUT 생성
+    const master = await client.savedLookups.create({
+      name: '전파-원본-LUT',
+      category: '전파-테스트',
+      tags: [],
+      columns: ['지역', '코드'],
+      rows: [{ 지역: '서울', 코드: '01' }],
+    });
+    createdLookupIds.push(master.id);
+
+    // 2. 이 마스터의 사본을 lookups jsonb 에 포함하는 설문 1건 삽입
+    const copyEntry: SurveyLookup = {
+      id: nanoid(),
+      name: master.name,
+      sourceSavedLookupId: master.id,
+      columns: master.columns,
+      rows: master.rows,
+    };
+
+    const [insertedSurvey] = await db
+      .insert(surveysTable)
+      .values({
+        title: '전파-테스트-설문',
+        lookups: [copyEntry],
+      })
+      .returning();
+
+    if (!insertedSurvey) throw new Error('survey 삽입 실패');
+    createdSurveyIds.push(insertedSurvey.id);
+
+    // 3. 마스터 LUT 수정 (name + columns + rows 모두 변경)
+    const updated = await client.savedLookups.update({
+      id: master.id,
+      updates: {
+        name: '전파-변경된-LUT',
+        columns: ['지역', '코드', '인구'],
+        rows: [
+          { 지역: '서울', 코드: '01', 인구: 9500000 },
+          { 지역: '부산', 코드: '02', 인구: 3400000 },
+        ],
+      },
+    });
+    expect(updated.name).toBe('전파-변경된-LUT');
+
+    // 4. 설문 재조회 후 사본이 마스터와 동기화됐는지 검증
+    const [surveyAfterUpdate] = await db
+      .select({ lookups: surveysTable.lookups })
+      .from(surveysTable)
+      .where(eq(surveysTable.id, insertedSurvey.id));
+
+    const copiedEntry = (surveyAfterUpdate?.lookups ?? []).find(
+      (e) => e.sourceSavedLookupId === master.id,
+    );
+
+    expect(copiedEntry).toBeDefined();
+    expect(copiedEntry?.name).toBe('전파-변경된-LUT');
+    expect(copiedEntry?.columns).toEqual(['지역', '코드', '인구']);
+    expect(copiedEntry?.rows).toEqual([
+      { 지역: '서울', 코드: '01', 인구: 9500000 },
+      { 지역: '부산', 코드: '02', 인구: 3400000 },
+    ]);
+  });
+
+  it('remove propagation: surveys.lookups 에서 해당 사본 항목이 제거된다', async () => {
+    // 1. 마스터 LUT 생성
+    const master = await client.savedLookups.create({
+      name: '삭제-전파-원본-LUT',
+      category: '전파-테스트',
+      tags: [],
+      columns: ['항목'],
+      rows: [{ 항목: 'A' }],
+    });
+    createdLookupIds.push(master.id);
+
+    // 2. 이 마스터 사본 + 다른 사본(다른 sourceSavedLookupId) 두 개를 lookups 에 포함한 설문 삽입
+    const copyToDelete: SurveyLookup = {
+      id: nanoid(),
+      name: master.name,
+      sourceSavedLookupId: master.id,
+      columns: master.columns,
+      rows: master.rows,
+    };
+    const otherCopy: SurveyLookup = {
+      id: nanoid(),
+      name: '다른-LUT-사본',
+      sourceSavedLookupId: 'other-master-id-not-exists',
+      columns: ['기타'],
+      rows: [],
+    };
+
+    const [insertedSurvey] = await db
+      .insert(surveysTable)
+      .values({
+        title: '삭제-전파-테스트-설문',
+        lookups: [copyToDelete, otherCopy],
+      })
+      .returning();
+
+    if (!insertedSurvey) throw new Error('survey 삽입 실패');
+    createdSurveyIds.push(insertedSurvey.id);
+
+    // 3. 마스터 LUT 삭제 (remove procedure 호출)
+    await client.savedLookups.remove({ id: master.id });
+    // remove 후에는 savedLookups cleanup 불필요 (이미 삭제됨)
+    const idx = createdLookupIds.indexOf(master.id);
+    if (idx !== -1) createdLookupIds.splice(idx, 1);
+
+    // 4. 설문 재조회 후 삭제된 사본은 없고 나머지 사본은 유지됐는지 검증
+    const [surveyAfterDelete] = await db
+      .select({ lookups: surveysTable.lookups })
+      .from(surveysTable)
+      .where(eq(surveysTable.id, insertedSurvey.id));
+
+    const remainingLookups = surveyAfterDelete?.lookups ?? [];
+
+    // 삭제된 마스터의 사본은 제거됐어야 함
+    expect(
+      remainingLookups.some((e) => e.sourceSavedLookupId === master.id),
+    ).toBe(false);
+
+    // 다른 사본은 그대로 유지됐어야 함
+    expect(
+      remainingLookups.some((e) => e.sourceSavedLookupId === 'other-master-id-not-exists'),
+    ).toBe(true);
   });
 });

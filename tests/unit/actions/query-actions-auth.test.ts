@@ -48,11 +48,6 @@ vi.mock('@/data/library', () => ({
   getAllCategories: vi.fn(),
 }));
 
-vi.mock('@/data/cell-library', () => ({
-  getAllSavedCells: vi.fn(),
-  searchSavedCells: vi.fn(),
-}));
-
 import {
   getSurveys,
   getResponsesBySurvey,
