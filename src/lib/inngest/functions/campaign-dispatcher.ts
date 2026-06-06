@@ -7,7 +7,7 @@ const CHUNK_SIZE = 50;
 /**
  * 단체 메일 단체 메일 발송 dispatcher.
  *
- * 트리거: `mail/campaign.queued` (campaign-actions.ts 가 createCampaignAction 트랜잭션 끝에 emit)
+ * 트리거: `mail/campaign.queued` (mail-campaigns.service 의 createCampaign 트랜잭션 끝에 emit)
  * concurrency: 같은 surveyId 단체 메일은 직렬 처리.
  *   - Resend rate limit 안전 마진 (per-domain 10 req/s 기본)
  *   - 카운터 race condition 회피

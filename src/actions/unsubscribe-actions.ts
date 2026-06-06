@@ -8,7 +8,6 @@ import * as Sentry from '@sentry/nextjs';
 
 import { db } from '@/db';
 import { contactPii, contactTargets } from '@/db/schema/contacts';
-import { requireAuth } from '@/lib/auth';
 import { decryptPii } from '@/lib/crypto/aes';
 import { UUID_RE } from '@/lib/mail/constants';
 
@@ -115,115 +114,12 @@ export async function unsubscribeByToken(token: string): Promise<UnsubscribeResu
   }
 }
 
-export interface LookupContactResult {
-  ok: boolean;
-  email: string | null;
-  alreadyUnsubscribed: boolean;
-}
-
-/**
- * 토큰으로 contact 정보만 조회 (mutation 없음).
- * GET 페이지 (확인 화면) 에서 사용. POST 요청에서는 unsubscribeByToken 사용.
- */
-export async function lookupContactByToken(token: string): Promise<LookupContactResult> {
-  if (!UUID_RE.test(token)) {
-    return { ok: false, email: null, alreadyUnsubscribed: false };
-  }
-  try {
-    const rows = await db
-      .select({
-        id: contactTargets.id,
-        unsubscribedAt: contactTargets.unsubscribedAt,
-        cipher: contactPii.cipher,
-        columnKey: contactPii.columnKey,
-      })
-      .from(contactTargets)
-      .leftJoin(
-        contactPii,
-        and(
-          eq(contactPii.contactTargetId, contactTargets.id),
-          eq(contactPii.fieldType, 'email'),
-        ),
-      )
-      .where(eq(contactTargets.unsubscribeToken, token))
-      .orderBy(asc(contactPii.columnKey))
-      .limit(1);
-
-    const existing = rows[0];
-    if (!existing) {
-      return { ok: false, email: null, alreadyUnsubscribed: false };
-    }
-
-    let email: string | null = null;
-    if (existing.cipher) {
-      try {
-        email = decryptPii(existing.cipher);
-      } catch {
-        // 복호화 실패 시 email 노출 안 함
-      }
-    }
-
-    return {
-      ok: true,
-      email,
-      alreadyUnsubscribed: existing.unsubscribedAt !== null,
-    };
-  } catch (err) {
-    Sentry.captureException(err, {
-      tags: { operation: 'unsubscribe_lookup_by_token' },
-      level: 'error',
-    });
-    return { ok: false, email: null, alreadyUnsubscribed: false };
-  }
-}
-
 /**
  * POST 폼 액션 — 실제 unsubscribe 처리 후 ?done=1 로 리디렉트.
  */
 export async function confirmUnsubscribeAction(token: string): Promise<never> {
   await unsubscribeByToken(token);
   redirect(`/unsubscribe/${encodeURIComponent(token)}?done=1`);
-}
-
-export interface AdminRevertUnsubscribeResult {
-  ok: boolean;
-  error?: string;
-}
-
-/**
- * 운영자(admin)가 단체 메일 페이지에서 직접 수신거부를 해제.
- *
- * 보안:
- *   - requireAuth 로 인증 게이트
- *   - surveyId scope 일치 검증 — 다른 설문의 컨택을 임의로 건드리지 못하게 차단
- *
- * 멱등성: 이미 해제된 행이어도 ok 반환 (UI 가 stale 한 상태에서 두 번 눌러도 무해).
- */
-export async function revertUnsubscribeByContactIdAction(
-  contactId: string,
-  surveyId: string,
-): Promise<AdminRevertUnsubscribeResult> {
-  await requireAuth();
-  if (!UUID_RE.test(contactId) || !UUID_RE.test(surveyId)) {
-    return { ok: false, error: '잘못된 요청입니다.' };
-  }
-
-  try {
-    const result = await clearUnsubscribed(
-      and(eq(contactTargets.id, contactId), eq(contactTargets.surveyId, surveyId))!,
-    );
-    if (!result) {
-      return { ok: false, error: '대상 컨택을 찾을 수 없습니다.' };
-    }
-    return { ok: true };
-  } catch (err) {
-    Sentry.captureException(err, {
-      tags: { operation: 'admin_revert_unsubscribe' },
-      extra: { contactId, surveyId },
-      level: 'error',
-    });
-    return { ok: false, error: '해제 처리 중 오류가 발생했습니다.' };
-  }
 }
 
 /**
