@@ -9,15 +9,6 @@ import { notDeletedResponse } from '@/data/response-filters';
 // 응답 조회 함수
 // ========================
 
-// 설문별 응답 조회
-export async function getResponsesBySurvey(surveyId: string) {
-  const responses = await db.query.surveyResponses.findMany({
-    where: and(eq(surveyResponses.surveyId, surveyId), notDeletedResponse),
-    orderBy: [desc(surveyResponses.startedAt)],
-  });
-  return responses;
-}
-
 // 완료된 응답만 조회
 export async function getCompletedResponses(surveyId: string) {
   const responses = await db.query.surveyResponses.findMany({
@@ -41,32 +32,6 @@ export async function getResponseById(
     : and(eq(surveyResponses.id, responseId), notDeletedResponse);
   const response = await db.query.surveyResponses.findFirst({ where });
   return response;
-}
-
-// 설문별 응답 수 조회
-export async function getResponseCountBySurvey(surveyId: string) {
-  const result = await db
-    .select({ count: count() })
-    .from(surveyResponses)
-    .where(and(eq(surveyResponses.surveyId, surveyId), notDeletedResponse));
-
-  return result[0]?.count || 0;
-}
-
-// 설문별 완료된 응답 수 조회
-export async function getCompletedResponseCountBySurvey(surveyId: string) {
-  const result = await db
-    .select({ count: count() })
-    .from(surveyResponses)
-    .where(
-      and(
-        eq(surveyResponses.surveyId, surveyId),
-        eq(surveyResponses.isCompleted, true),
-        notDeletedResponse,
-      ),
-    );
-
-  return result[0]?.count || 0;
 }
 
 // 전체 설문의 응답 수를 한 번의 GROUP BY 로 집계 (설문별 fan-out N+1 제거).

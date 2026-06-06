@@ -105,23 +105,3 @@ export function getRegionsByParent(parentId?: string): RegionData[] {
   }
   return REGION_DATA.filter((region) => region.parentId === parentId);
 }
-
-export function getRegionById(id: string): RegionData | undefined {
-  return REGION_DATA.find((region) => region.id === id);
-}
-
-export function getRegionPath(id: string): RegionData[] {
-  const path: RegionData[] = [];
-  let currentRegion = getRegionById(id);
-
-  while (currentRegion) {
-    path.unshift(currentRegion);
-    if (currentRegion.parentId) {
-      currentRegion = getRegionById(currentRegion.parentId);
-    } else {
-      break;
-    }
-  }
-
-  return path;
-}

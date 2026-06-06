@@ -1,9 +1,9 @@
 import { cache } from 'react';
 
-import { and, count, desc, eq, gte, ilike, lte } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { questionGroups, questions, surveyVersions, surveys } from '@/db/schema';
+import { questionGroups, questions, surveys } from '@/db/schema';
 import type { QuestionGroup, Question as QuestionType, Survey as SurveyType } from '@/types/survey';
 import { generateAllOptionCodes } from '@/utils/option-code-generator';
 import { generateAllCellCodes } from '@/utils/table-cell-code-generator';
@@ -28,50 +28,6 @@ export const getSurveyById = cache(async (surveyId: string) => {
   });
   return survey;
 });
-
-// 슬러그로 설문 조회
-export async function getSurveyBySlug(slug: string) {
-  const survey = await db.query.surveys.findFirst({
-    where: eq(surveys.slug, slug),
-  });
-  return survey;
-}
-
-// 비공개 토큰으로 설문 조회
-export async function getSurveyByPrivateToken(token: string) {
-  const survey = await db.query.surveys.findFirst({
-    where: eq(surveys.privateToken, token),
-  });
-  return survey;
-}
-
-// 슬러그 사용 가능 여부 확인
-export async function isSlugAvailable(slug: string, excludeSurveyId?: string) {
-  const existing = await db.query.surveys.findFirst({
-    where: excludeSurveyId
-      ? and(eq(surveys.slug, slug), eq(surveys.id, excludeSurveyId))
-      : eq(surveys.slug, slug),
-  });
-  return !existing;
-}
-
-// 설문 검색
-export async function searchSurveys(query: string) {
-  const result = await db.query.surveys.findMany({
-    where: ilike(surveys.title, `%${query}%`),
-    orderBy: [desc(surveys.createdAt)],
-  });
-  return result;
-}
-
-// 날짜 범위로 설문 조회
-export async function getSurveysByDateRange(startDate: Date, endDate: Date) {
-  const result = await db.query.surveys.findMany({
-    where: and(gte(surveys.createdAt, startDate), lte(surveys.createdAt, endDate)),
-    orderBy: [desc(surveys.createdAt)],
-  });
-  return result;
-}
 
 // ========================
 // 질문 그룹 조회 함수
@@ -201,110 +157,4 @@ export async function getSurveyWithDetails(surveyId: string): Promise<SurveyType
   };
 
   return surveyData;
-}
-
-// 응답 페이지용 설문 조회 (배포 버전 스냅샷 우선, fallback 기존 방식)
-export async function getSurveyForResponse(
-  surveyId: string,
-): Promise<{ survey: SurveyType; versionId: string | null } | null> {
-  const survey = await getSurveyById(surveyId);
-  if (!survey) return null;
-
-  // 배포된 버전이 있으면 스냅샷 기반으로 반환
-  if (survey.currentVersionId) {
-    const version = await db.query.surveyVersions.findFirst({
-      where: eq(surveyVersions.id, survey.currentVersionId),
-    });
-
-    if (version && version.snapshot) {
-      const snapshot = version.snapshot as {
-        title: string;
-        description?: string;
-        questions: QuestionType[];
-        groups: QuestionGroup[];
-        settings: {
-          isPublic: boolean;
-          allowMultipleResponses: boolean;
-          showProgressBar: boolean;
-          shuffleQuestions: boolean;
-          requireLogin: boolean;
-          endDate?: string;
-          maxResponses?: number;
-          thankYouMessage: string;
-        };
-        // T17 이후 snapshot 에 포함. 이전 publish 본은 undefined → DB 의 현재 lookups 로 fallback.
-        lookups?: SurveyType['lookups'];
-      };
-
-      // endDate 는 snapshot 에서 string 으로 보관되므로 spread 전에 분리해 Date 로 재구성한다
-      // (base spread 가 string endDate 를 끌고오면 string | Date 로 충돌).
-      const { endDate: snapshotEndDate, ...snapshotSettingsRest } = snapshot.settings;
-      const surveyData: SurveyType = {
-        id: survey.id,
-        title: snapshot.title,
-        ...(snapshot.description != null ? { description: snapshot.description } : {}),
-        ...(survey.slug != null ? { slug: survey.slug } : {}),
-        ...(survey.privateToken != null ? { privateToken: survey.privateToken } : {}),
-        groups: snapshot.groups,
-        questions: snapshot.questions.map((q) => {
-          if (q.type === 'table' && q.tableRowsData && q.tableColumns) {
-            return {
-              ...q,
-              tableRowsData: generateAllCellCodes(
-                q.questionCode,
-                q.title,
-                q.tableColumns,
-                q.tableRowsData,
-              ),
-            };
-          }
-          return q;
-        }),
-        settings: {
-          ...snapshotSettingsRest,
-          ...(snapshotEndDate ? { endDate: new Date(snapshotEndDate) } : {}),
-          requireInviteToken: survey.requireInviteToken,
-        },
-        lookups: snapshot.lookups ?? survey.lookups ?? [],
-        ...(survey.contactColumns != null ? { contactColumns: survey.contactColumns } : {}),
-        contactEmail: survey.contactEmail ?? null,
-        createdAt: survey.createdAt,
-        updatedAt: survey.updatedAt,
-      };
-
-      return { survey: surveyData, versionId: version.id };
-    }
-  }
-
-  // 미배포 설문: 기존 방식 fallback
-  const surveyData = await getSurveyWithDetails(surveyId);
-  if (!surveyData) return null;
-
-  return { survey: surveyData, versionId: null };
-}
-
-// 전체 설문 목록 조회 (요약 정보)
-export async function getSurveyListWithCounts() {
-  // 모든 설문의 질문 수를 단일 GROUP BY 로 집계 (설문별 findMany N+1 제거)
-  const [surveyList, questionCounts] = await Promise.all([
-    getSurveys(),
-    db
-      .select({ surveyId: questions.surveyId, count: count() })
-      .from(questions)
-      .groupBy(questions.surveyId),
-  ]);
-  const questionCountMap = new Map(questionCounts.map((q) => [q.surveyId, Number(q.count)]));
-
-  return surveyList.map((survey) => ({
-    id: survey.id,
-    title: survey.title,
-    description: survey.description,
-    slug: survey.slug,
-    privateToken: survey.privateToken,
-    questionCount: questionCountMap.get(survey.id) ?? 0,
-    responseCount: 0,
-    createdAt: survey.createdAt,
-    updatedAt: survey.updatedAt,
-    isPublic: survey.isPublic,
-  }));
 }
