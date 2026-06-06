@@ -4,7 +4,7 @@
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-06-05 (의존성/파일구조 기준 재작성)
+> 최종 갱신: 2026-06-06 (oRPC 전면 마이그레이션 완료 반영 — features/ 9개 + server action 3파일 잔존)
 
 ---
 
@@ -68,22 +68,32 @@ src/
 │   ├── unsubscribe/            # 메일 수신거부
 │   └── sentry-example-page/    # Sentry 점검용
 │
-├── actions/                    # 서버 액션 ('use server') — 25개
-│   ├── survey-crud / survey-save / survey-publish-actions.ts
-│   ├── question / question-group-actions.ts
-│   ├── response / response-edit / response-answers-replace.ts
-│   ├── contact / contact-attrs-actions.ts
-│   ├── mail-template / mail-template-preview / mail-template-test-send-actions.ts
-│   ├── campaign / mail-billing-actions.ts
-│   ├── library / cell-library / lookup-actions.ts
-│   ├── profiles-row / progress / query-actions.ts
-│   ├── duplicate-detection / auth / unsubscribe-actions.ts
-│   └── ...
+├── features/                   # feature 단위 백엔드 (oRPC) — 9개 도메인
+│   └── <feature>/              # survey-builder · survey-response · operations · contacts
+│       │                       # · mail · analytics · library · auth · media
+│       ├── domain/             # 타입 re-export + zod 스키마 (런타임 import 0, JSONB는 z.custom)
+│       └── server/
+│           ├── procedures/     # oRPC procedure (authed/pub, 얇은 위임) + colocated *.test.ts
+│           └── services/       # 비즈 로직 + drizzle (server-only, requireAuth/revalidatePath 없음)
 │
-├── data/                       # 데이터 액세스 레이어 (DB 쿼리 함수)
-│   ├── surveys / responses / response-filters.ts
-│   ├── library / cell-library / mail-templates.ts
-│   └── regions.ts
+├── server/                     # oRPC 코어
+│   ├── context.ts              # createContext (supabase session + db — RSC·procedure 공용)
+│   ├── orpc.ts                 # base os + authed(admin) + pub(응답자)
+│   ├── router.ts               # 전체 feature router 합성 (AppRouter)
+│   └── handler.ts              # RPCHandler (+ Sentry onError)
+│
+├── shared/
+│   └── lib/rpc.ts              # 타입드 RPC client: client(plain 호출) + orpc(TanStack utils)
+│
+├── actions/                    # 잔존 서버 액션 — 3파일 (의도적 유지)
+│   ├── auth-actions.ts         # login/logout (redirect+쿠키 의미론이 server action 특화)
+│   ├── unsubscribe-actions.ts  # 수신거부 POST form (메일 클라 JS 비활성 환경 + redirect)
+│   └── index.ts                # 잔존 사유 주석 포함 배럴
+│
+├── data/                       # 잔존 데이터 액세스 (RSC·service 내부 직접 호출용)
+│   ├── surveys.ts / responses.ts  # analytics RSC 페이지 + 일부 service 가 공유하는 조회
+│   ├── response-filters.ts     # notDeletedResponse 등 (operations/duplicate-detection 공용)
+│   └── library.ts / regions.ts
 │
 ├── components/                 # React 컴포넌트 (~200개)
 │   ├── survey-builder/         # 설문 생성 컴포넌트 (85개)
@@ -397,34 +407,37 @@ mail_billing_periods / webhook_events (standalone)
 
 ---
 
-## 데이터 흐름 아키텍처
+## 데이터 흐름 아키텍처 (oRPC — 2026-06-06 전환 완료)
 
 ```
-컴포넌트
-  └─ hooks/queries (TanStack Query 래퍼)
-       └─ actions ('use server' 서버 액션)  ← 폼/뮤테이션
-            └─ data (DB 쿼리 함수)
-                 └─ db (drizzle + postgres-js)
-       └─ lib/* (도메인 로직: mail/spss/operations/contacts/...)
+클라이언트 컴포넌트/훅
+  └─ client.* (plain) 또는 orpc.*.call (TanStack queryFn)   # @/shared/lib/rpc
+       └─ POST /api/rpc  →  procedure (.input zod 검증, authed/pub)
+            └─ service (비즈 로직 + drizzle)  →  db
+
+RSC (서버 컴포넌트)
+  └─ service 직접 호출 (RPC 자기호출 금지)  # features/*/server/services 또는 data/·lib/operations/*.server.ts
 ```
 
-- 서버 상태는 TanStack Query, 클라이언트 상태는 Zustand로 분리.
-- 서버 액션은 `actions/`, DB 접근은 `data/`, 도메인 로직은 `lib/`.
-- `survey-save-actions.ts`는 spread 미사용, explicit field set. 신규 컬럼 추가 시 6-7곳 점검 필수 (tsc 미검출).
+- 서버 상태는 TanStack Query, 클라이언트 상태는 Zustand로 분리. mutation 후 RSC 데이터 갱신은 `router.refresh()` (revalidatePath는 procedure에서 불가).
+- 인증: `authed`(admin, supabase session) / `pub`(응답자 — 응답 mutation·공개 설문 조회·컨택 attrs·수신거부 lookup).
+- 잔존 서버 액션은 `actions/` 3파일뿐 (auth login/logout + unsubscribe form — 의도적 유지).
+- **feature 마이그레이션 패턴/함정**: domain zod는 `@/types/survey` 방향 통일 + null-coalescing(as unknown as 금지), service input은 zod infer, `.returning()` 후 non-null throw, 컴포넌트는 hook/helper 시그니처 유지로 무수정. `survey-save.service.ts`는 spread 미사용 explicit field set — 신규 컬럼 추가 시 values/onConflictDoUpdate 양쪽 점검 필수 (tsc 미검출).
+- feature 간 직접 import 금지 (ESLint 강제) — 공용은 `@/shared` 승격 또는 RPC 경유. 서버 내부의 타 도메인 테이블 직접 쿼리는 허용.
 
 ---
 
 ## API 엔드포인트
 
 ```
-POST   /api/upload/image                       # 이미지 업로드 (JPG/PNG/GIF/WebP/SVG, 10MB)
-POST   /api/upload/image/delete                # 이미지 삭제
-POST   /api/upload/mail-attachment             # 메일 첨부 업로드
-POST   /api/upload/notice-attachment           # 공지 첨부 업로드
-GET    /api/surveys/[surveyId]/export          # SPSS(.sav)/엑셀 export (인증 필요)
+POST   /api/rpc/[[...rest]]                    # oRPC 핸들러 — 전체 query/mutation (메인 경로)
+*      /api/v1/[[...rest]]                     # OpenAPI 핸들러 (ENABLE_PUBLIC_API 게이트, 기본 비활성)
+POST   /api/upload/image                       # 이미지 업로드 (multipart, 삭제는 media.deleteImages RPC)
+POST   /api/upload/mail-attachment             # 메일 첨부 업로드 (삭제는 media.* RPC)
+POST   /api/upload/notice-attachment           # 공지 첨부 업로드 (삭제는 media.* RPC)
+GET    /api/surveys/[surveyId]/export          # SPSS(.sav)/엑셀 export (인증 필요, 파일 스트림)
 GET    /api/surveys/[surveyId]/export/split-preview  # 분할 export 미리보기
-POST   /api/response                           # 응답 저장
-POST   /api/response/segment                   # 구간 응답 저장 (beacon)
+POST   /api/response/segment                   # 구간 응답 저장 (sendBeacon — REST 유지)
 *      /api/inngest                            # Inngest 핸들러
 POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
 ```
@@ -576,6 +589,6 @@ export function QuestionEditor({ questionId, onSave }: Props) {
 
 8. **서버 sanitize**: jsdom 의존 라이브러리 금지 (isomorphic-dompurify 크래시). `sanitize-html` 사용.
 
-9. **테스트**: Vitest는 `tests/` 디렉토리만 include. `src/` 옆 `*.test.ts`는 silent skip. server action 모킹은 `tests/integration` 패턴.
+9. **테스트**: Vitest include는 `tests/` + `src/features/**/*.test.ts`(colocated procedure 테스트). service 모킹은 `tests/integration` 패턴(top-level `vi.mock` + `vi.mocked`). 실DB 왕복은 `*.realdb.test.ts` — `pnpm test:integration`(로컬 supabase 54322 필요), 일반 `pnpm test`에서는 스킵. `tests/integration/profiles-row-actions.test.ts`는 전체 스위트에서 간헐 12 fail하는 알려진 flaky(격리 실행은 항상 통과) — 회귀로 오해 금지.
 
 10. **drizzle 함정**: timestamptz optimistic lock은 PG μs ↔ JS ms 정밀도 차로 거짓 충돌 (version int 또는 string mode 사용). `ANY(${arr})` 바인딩 금지 (length=1 silent unwrap) → `inArray`/`sql.join`.
