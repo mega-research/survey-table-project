@@ -4,7 +4,6 @@ import { useState, useTransition } from 'react';
 
 import { useRouter } from 'next/navigation';
 
-import { revertUnsubscribeByContactIdAction } from '@/actions/unsubscribe-actions';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -14,6 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { client } from '@/shared/lib/rpc';
 
 interface Props {
   surveyId: string;
@@ -28,9 +28,17 @@ export function UnsubscribedRevertButton({ surveyId, contactId, emailMasked }: P
 
   function onConfirm() {
     startTransition(async () => {
-      const result = await revertUnsubscribeByContactIdAction(contactId, surveyId);
-      if (!result.ok) {
-        alert(result.error ?? '해제 실패');
+      try {
+        const result = await client.mail.unsubscribe.revertByContactId({
+          contactId,
+          surveyId,
+        });
+        if (!result.ok) {
+          alert(result.error ?? '해제 실패');
+          return;
+        }
+      } catch (err) {
+        alert(err instanceof Error ? err.message : '해제 실패');
         return;
       }
       setOpen(false);

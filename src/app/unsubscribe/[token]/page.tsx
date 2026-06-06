@@ -2,10 +2,10 @@ import type { Metadata } from 'next';
 
 import {
   confirmUnsubscribeAction,
-  lookupContactByToken,
   revertUnsubscribeAction,
 } from '@/actions/unsubscribe-actions';
 import { Button } from '@/components/ui/button';
+import { lookupContactByToken } from '@/features/mail/server/services/mail-unsubscribe.service';
 import { UNSUBSCRIBE_SANDBOX_TOKEN } from '@/lib/mail/constants';
 
 export const metadata: Metadata = {
@@ -35,8 +35,8 @@ export default async function UnsubscribePage({ params, searchParams }: PageProp
     );
   }
 
-  // GET: 컨택 lookup 만 (mutation 없음)
-  const contact = await lookupContactByToken(token);
+  // GET: 컨택 lookup 만 (mutation 없음). service 직접 호출(RSC).
+  const contact = await lookupContactByToken({ token });
 
   if (!contact.ok) {
     return (
