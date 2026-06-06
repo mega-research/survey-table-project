@@ -4,11 +4,6 @@ import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 
 import { useRouter, useSearchParams } from 'next/navigation';
 
-import {
-  createCampaignAction,
-  fetchCandidateIdsAction,
-  previewCampaignPreflightAction,
-} from '@/actions/campaign-actions';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -38,6 +33,7 @@ import type {
   CampaignSortKey,
 } from '@/lib/operations/campaigns.server';
 import type { ColumnCandidate } from '@/lib/operations/filter-shared';
+import { client } from '@/shared/lib/rpc';
 
 interface Props {
   surveyId: string;
@@ -153,15 +149,15 @@ export function CampaignWizard({
 
   async function selectAllInFilter() {
     startTransition(async () => {
-      const result = await fetchCandidateIdsAction({
-        surveyId,
-        filter: buildFilterSnapshot(currentFilter),
-      });
-      if (!result.ok || !result.data) {
-        alert(result.error ?? '전체 선택 실패');
-        return;
+      try {
+        const result = await client.mail.campaigns.fetchCandidateIds({
+          surveyId,
+          filter: buildFilterSnapshot(currentFilter),
+        });
+        setSelectedIds(new Set(result.ids));
+      } catch (err) {
+        alert(err instanceof Error ? err.message : '전체 선택 실패');
       }
-      setSelectedIds(new Set(result.data.ids));
     });
   }
 
@@ -188,12 +184,14 @@ export function CampaignWizard({
     }
 
     startTransition(async () => {
-      const result = await fetchCandidateIdsAction({
-        surveyId,
-        filter: buildFilterSnapshot(currentFilter),
-      });
-      if (result.ok && result.data) {
-        setSelectedIds(new Set(result.data.ids));
+      try {
+        const result = await client.mail.campaigns.fetchCandidateIds({
+          surveyId,
+          filter: buildFilterSnapshot(currentFilter),
+        });
+        setSelectedIds(new Set(result.ids));
+      } catch {
+        // 자동 선택 실패는 조용히 무시 (사용자 수동 선택 가능)
       }
       stripFlag();
     });
@@ -213,41 +211,41 @@ export function CampaignWizard({
       return;
     }
     startTransition(async () => {
-      const result = await previewCampaignPreflightAction({
-        surveyId,
-        selectedContactIds: Array.from(selectedIds),
-      });
-      if (!result.ok || !result.data) {
-        alert(result.error ?? 'preflight 실패');
-        return;
+      try {
+        const result = await client.mail.campaigns.previewPreflight({
+          surveyId,
+          selectedContactIds: Array.from(selectedIds),
+        });
+        setPreflightSummary({
+          valid: result.validCount,
+          unsubscribed: result.unsubscribedCount,
+          excludedByCode: result.excludedByCodeCount,
+          emailMissing: result.emailMissingCount,
+          notFound: result.notFoundCount,
+        });
+        setConfirmOpen(true);
+      } catch (err) {
+        alert(err instanceof Error ? err.message : 'preflight 실패');
       }
-      setPreflightSummary({
-        valid: result.data.validCount,
-        unsubscribed: result.data.unsubscribedCount,
-        excludedByCode: result.data.excludedByCodeCount,
-        emailMissing: result.data.emailMissingCount,
-        notFound: result.data.notFoundCount,
-      });
-      setConfirmOpen(true);
     });
   }
 
   async function submitSend() {
     startTransition(async () => {
-      const result = await createCampaignAction({
-        surveyId,
-        mailTemplateId: templateId,
-        title: title.trim(),
-        contactTargetIds: Array.from(selectedIds),
-        filterSnapshot: buildFilterSnapshot(currentFilter),
-      });
-      if (!result.ok || !result.data) {
-        alert(result.error ?? '단체 메일 생성 실패');
-        return;
+      try {
+        const result = await client.mail.campaigns.create({
+          surveyId,
+          mailTemplateId: templateId,
+          title: title.trim(),
+          contactTargetIds: Array.from(selectedIds),
+          filterSnapshot: buildFilterSnapshot(currentFilter),
+        });
+        router.push(
+          `/admin/surveys/${surveyId}/operations/mail/campaigns/${result.campaignId}`,
+        );
+      } catch (err) {
+        alert(err instanceof Error ? err.message : '단체 메일 생성 실패');
       }
-      router.push(
-        `/admin/surveys/${surveyId}/operations/mail/campaigns/${result.data.campaignId}`,
-      );
     });
   }
 

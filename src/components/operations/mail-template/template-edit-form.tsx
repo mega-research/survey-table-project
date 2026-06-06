@@ -5,10 +5,6 @@ import { useRouter } from 'next/navigation';
 
 import { CheckCircle2, Loader2 } from 'lucide-react';
 
-import {
-  createMailTemplateAction,
-  updateMailTemplateAction,
-} from '@/actions/mail-template-actions';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -16,6 +12,7 @@ import type { MailTemplate } from '@/db/schema/mail';
 import type { MailAttachment } from '@/db/schema/schema-types';
 import { TMP_ATTACHMENT_PREFIX } from '@/lib/mail/constants';
 import { deleteMailAttachmentTmpBatch } from '@/lib/mail/mail-attachment-client';
+import { client } from '@/shared/lib/rpc';
 
 import { AttachmentSection } from './attachment-section';
 import { RichTextEditor, type RichTextEditorHandle } from '@/components/ui/rich-text-editor';
@@ -126,31 +123,31 @@ export function TemplateEditForm({ surveyId, fromDomain, catalog, template, curr
         attachments: state.attachments,
       };
 
-      const result = template
-        ? await updateMailTemplateAction(surveyId, template.id, input)
-        : await createMailTemplateAction(surveyId, input);
-
-      if (!result.ok) {
-        setError(result.error ?? '저장 실패');
-        return;
-      }
-      // promote 후 영구 prefix 로 교체된 attachments 를 state 에 반영 —
-      // 저장 직후 미리보기 발송에서 stale tmp key 다운로드 race 차단.
-      if (result.data?.attachments) {
-        setState((prev) => ({ ...prev, attachments: result.data!.attachments }));
-      }
-      setSavedAt(Date.now());
-
-      if (!template && result.data && 'id' in result.data) {
-        // 신규 생성 → 새 id 의 edit URL 로 자리 잡음 (full page reload 없이 URL 만 교체).
-        // 다음 저장은 update 경로로 가도록 함.
-        const newId = (result.data as { id: string }).id;
-        router.replace(
-          `/admin/surveys/${surveyId}/operations/mail/templates/${newId}/edit`,
-        );
-      } else {
-        // 기존 템플릿 수정 → server fetch 만 갱신, URL/페이지 그대로 유지.
-        router.refresh();
+      try {
+        if (template) {
+          const result = await client.mail.templates.update({
+            surveyId,
+            templateId: template.id,
+            input,
+          });
+          // promote 후 영구 prefix 로 교체된 attachments 를 state 에 반영 —
+          // 저장 직후 미리보기 발송에서 stale tmp key 다운로드 race 차단.
+          setState((prev) => ({ ...prev, attachments: result.attachments }));
+          setSavedAt(Date.now());
+          // 기존 템플릿 수정 → server fetch 만 갱신, URL/페이지 그대로 유지.
+          router.refresh();
+        } else {
+          const result = await client.mail.templates.create({ surveyId, input });
+          setState((prev) => ({ ...prev, attachments: result.attachments }));
+          setSavedAt(Date.now());
+          // 신규 생성 → 새 id 의 edit URL 로 자리 잡음 (full page reload 없이 URL 만 교체).
+          // 다음 저장은 update 경로로 가도록 함.
+          router.replace(
+            `/admin/surveys/${surveyId}/operations/mail/templates/${result.id}/edit`,
+          );
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : '저장 실패');
       }
     });
   };

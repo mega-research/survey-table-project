@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 
 import { Trash2 } from 'lucide-react';
 
-import { deleteMailTemplateAction } from '@/actions/mail-template-actions';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,6 +17,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import { client } from '@/shared/lib/rpc';
 
 interface Props {
   surveyId: string;
@@ -32,9 +32,10 @@ export function DeleteTemplateButton({ surveyId, templateId, templateName }: Pro
 
   const onConfirm = () => {
     startTransition(async () => {
-      const r = await deleteMailTemplateAction(surveyId, templateId);
-      if (!r.ok) {
-        alert(r.error ?? '삭제 실패');
+      try {
+        await client.mail.templates.remove({ surveyId, templateId });
+      } catch (err) {
+        alert(err instanceof Error ? err.message : '삭제 실패');
         return;
       }
       setOpen(false);

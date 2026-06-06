@@ -1,34 +1,77 @@
-'use server';
+import 'server-only';
 
-import { and, eq, isNull } from 'drizzle-orm';
-import { revalidatePath } from 'next/cache';
+import { and, desc, eq, isNull } from 'drizzle-orm';
+import { cache } from 'react';
 
 import { db } from '@/db';
-import { mailTemplates } from '@/db/schema/mail';
+import { mailTemplates, type MailTemplate } from '@/db/schema/mail';
 import type { MailAttachment } from '@/db/schema/schema-types';
-import { requireAuth } from '@/lib/auth';
 import { deleteImagesFromR2Server, deleteR2ObjectsByKey } from '@/lib/image-utils-server';
-import {
-  AttachmentPromoteError,
-  promoteMailAttachments,
-} from '@/lib/mail/mail-attachment-promote';
+import { promoteMailAttachments } from '@/lib/mail/mail-attachment-promote';
 import {
   diffOrphanAttachmentKeys,
   diffOrphanImages,
   extractMailTemplateAssets,
 } from '@/lib/mail/mail-image-extractor';
 import { promoteMailImages } from '@/lib/mail/mail-image-promote';
-import {
-  mailTemplateInputSchema,
-  type MailTemplateInput,
-} from '@/lib/mail/schema';
 import { extractVariableKeys } from '@/lib/mail/variable-extractor';
 
-interface ActionResult<T = void> {
-  ok: boolean;
-  error?: string;
-  data?: T;
+import type {
+  CreateMailTemplateInput,
+  CreateMailTemplateOutput,
+  DeleteMailTemplateInput,
+  UpdateMailTemplateInput,
+  UpdateMailTemplateOutput,
+} from '../../domain/mail-template';
+
+// AttachmentPromoteError 는 procedure 가 ORPCError 로 매핑하기 위해 재노출.
+export { AttachmentPromoteError } from '@/lib/mail/mail-attachment-promote';
+
+/** 템플릿을 찾지 못했을 때 — procedure 가 NOT_FOUND 로 매핑. */
+export class MailTemplateNotFoundError extends Error {
+  constructor() {
+    super('템플릿을 찾을 수 없습니다');
+    this.name = 'MailTemplateNotFoundError';
+  }
 }
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * 한 설문의 메일 템플릿 목록 (soft delete 제외, 최근 갱신순).
+ * React.cache 로 동일 요청 내 중복 호출 dedupe (RSC 페이지가 의존하므로 보존).
+ */
+export const getMailTemplatesBySurvey = cache(
+  async (surveyId: string): Promise<MailTemplate[]> => {
+    return await db
+      .select()
+      .from(mailTemplates)
+      .where(and(eq(mailTemplates.surveyId, surveyId), isNull(mailTemplates.deletedAt)))
+      .orderBy(desc(mailTemplates.updatedAt));
+  },
+);
+
+/**
+ * 단건 조회. surveyId 가드 — 다른 설문의 템플릿 못 보게.
+ * 잘못된 UUID 형식 / 없거나 다른 설문 소속이면 null (PG throw 방지).
+ */
+export const getMailTemplate = cache(
+  async (surveyId: string, templateId: string): Promise<MailTemplate | null> => {
+    if (!UUID_RE.test(surveyId) || !UUID_RE.test(templateId)) return null;
+    const rows = await db
+      .select()
+      .from(mailTemplates)
+      .where(
+        and(
+          eq(mailTemplates.id, templateId),
+          eq(mailTemplates.surveyId, surveyId),
+          isNull(mailTemplates.deletedAt),
+        ),
+      )
+      .limit(1);
+    return rows[0] ?? null;
+  },
+);
 
 /**
  * tmp/* R2 객체를 영구 prefix 로 promote — bodyHtml 이미지와 attachment 파일을 동시에.
@@ -44,16 +87,6 @@ async function promoteAssets(
     promoteMailAttachments(rawAttachments),
   ]);
   return { bodyHtml, attachments };
-}
-
-function promoteErrorResponse(err: unknown): ActionResult<never> | null {
-  if (err instanceof AttachmentPromoteError) {
-    return {
-      ok: false,
-      error: `첨부 파일을 저장하지 못했습니다 (${err.failedKeys.length}개). 잠시 후 다시 시도해 주세요.`,
-    };
-  }
-  return null;
 }
 
 /**
@@ -77,30 +110,26 @@ function cleanupOrphans(
   }
 }
 
-export async function createMailTemplateAction(
-  surveyId: string,
-  input: MailTemplateInput,
-): Promise<ActionResult<{ id: string; attachments: MailAttachment[] }>> {
-  await requireAuth();
-  const parsed = mailTemplateInputSchema.safeParse(input);
-  if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? '입력값이 올바르지 않습니다' };
-  }
-
+/**
+ * 메일 템플릿 생성.
+ * 인증은 authed 미들웨어가 담당. 캐시 갱신은 소비처 router.refresh/replace 로 대체.
+ * promote 실패는 AttachmentPromoteError throw — procedure 가 사용자 메시지로 변환.
+ */
+export async function createMailTemplate(
+  params: CreateMailTemplateInput,
+): Promise<CreateMailTemplateOutput> {
+  const { surveyId, input } = params;
   const {
-    name, subject, bodyHtml: rawBodyHtml, fromLocal, fromName, replyTo,
+    name,
+    subject,
+    bodyHtml: rawBodyHtml,
+    fromLocal,
+    fromName,
+    replyTo,
     attachments: rawAttachments,
-  } = parsed.data;
+  } = input;
 
-  let promoted: Awaited<ReturnType<typeof promoteAssets>>;
-  try {
-    promoted = await promoteAssets(rawBodyHtml, rawAttachments);
-  } catch (err) {
-    const errResp = promoteErrorResponse(err);
-    if (errResp) return errResp;
-    throw err;
-  }
-  const { bodyHtml, attachments } = promoted;
+  const { bodyHtml, attachments } = await promoteAssets(rawBodyHtml, rawAttachments);
   const variablesUsed = extractVariableKeys(subject, bodyHtml, fromName);
 
   const insertedRows = await db
@@ -118,33 +147,34 @@ export async function createMailTemplateAction(
     })
     .returning({ id: mailTemplates.id });
   const row = insertedRows[0];
-  if (!row) throw new Error('createMailTemplateAction: 템플릿 생성 실패');
+  if (!row) throw new Error('createMailTemplate: 템플릿 생성 실패');
 
-  revalidatePath(`/admin/surveys/${surveyId}/operations/mail/templates`);
   // promote 된 영구 key 를 클라이언트로 돌려줘 state 동기화 — 저장 직후 발송에서
   // stale tmp prefix 로 R2 download 시도하는 사고 차단.
-  return { ok: true, data: { id: row.id, attachments } };
+  return { id: row.id, attachments };
 }
 
-export async function updateMailTemplateAction(
-  surveyId: string,
-  templateId: string,
-  input: MailTemplateInput,
-): Promise<ActionResult<{ attachments: MailAttachment[] }>> {
-  await requireAuth();
-  const parsed = mailTemplateInputSchema.safeParse(input);
-  if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? '입력값이 올바르지 않습니다' };
-  }
-
+/**
+ * 메일 템플릿 수정.
+ * optimistic lock 은 의도적으로 제거 — PG timestamptz(μs) ↔ JS Date(ms) 정밀도
+ * mismatch 로 단일 사용자도 거짓 충돌을 일으켰음 (메모리 노트 참조).
+ * 템플릿 미존재 시 MailTemplateNotFoundError throw.
+ */
+export async function updateMailTemplate(
+  params: UpdateMailTemplateInput,
+): Promise<UpdateMailTemplateOutput> {
+  const { surveyId, templateId, input } = params;
   const {
-    name, subject, bodyHtml: rawBodyHtml, fromLocal, fromName, replyTo,
+    name,
+    subject,
+    bodyHtml: rawBodyHtml,
+    fromLocal,
+    fromName,
+    replyTo,
     attachments: rawAttachments,
-  } = parsed.data;
+  } = input;
 
   // R2 cleanup 을 위해 기존 템플릿 에셋 먼저 fetch.
-  // optimistic lock 은 의도적으로 제거 — PG timestamptz(μs) ↔ JS Date(ms) 정밀도
-  // mismatch 로 단일 사용자도 거짓 충돌을 일으켰음 (메모리 노트 참조).
   const oldRow = await db.query.mailTemplates.findFirst({
     where: and(
       eq(mailTemplates.id, templateId),
@@ -155,18 +185,10 @@ export async function updateMailTemplateAction(
   });
 
   if (!oldRow) {
-    return { ok: false, error: '템플릿을 찾을 수 없습니다' };
+    throw new MailTemplateNotFoundError();
   }
 
-  let promoted: Awaited<ReturnType<typeof promoteAssets>>;
-  try {
-    promoted = await promoteAssets(rawBodyHtml, rawAttachments);
-  } catch (err) {
-    const errResp = promoteErrorResponse(err);
-    if (errResp) return errResp;
-    throw err;
-  }
-  const { bodyHtml, attachments } = promoted;
+  const { bodyHtml, attachments } = await promoteAssets(rawBodyHtml, rawAttachments);
   const variablesUsed = extractVariableKeys(subject, bodyHtml, fromName);
 
   const result = await db
@@ -192,7 +214,7 @@ export async function updateMailTemplateAction(
     .returning({ id: mailTemplates.id });
 
   if (result.length === 0) {
-    return { ok: false, error: '템플릿을 찾을 수 없습니다' };
+    throw new MailTemplateNotFoundError();
   }
 
   cleanupOrphans(
@@ -200,16 +222,15 @@ export async function updateMailTemplateAction(
     extractMailTemplateAssets({ bodyHtml, attachments }),
   );
 
-  revalidatePath(`/admin/surveys/${surveyId}/operations/mail/templates`);
-  revalidatePath(`/admin/surveys/${surveyId}/operations/mail/templates/${templateId}/edit`);
-  return { ok: true, data: { attachments } };
+  return { attachments };
 }
 
-export async function deleteMailTemplateAction(
-  surveyId: string,
-  templateId: string,
-): Promise<ActionResult> {
-  await requireAuth();
+/**
+ * 메일 템플릿 soft delete.
+ * 성공 후 모든 에셋 R2 cleanup (best-effort). 미존재 시 MailTemplateNotFoundError throw.
+ */
+export async function deleteMailTemplate(params: DeleteMailTemplateInput): Promise<void> {
+  const { surveyId, templateId } = params;
 
   const oldRow = await db.query.mailTemplates.findFirst({
     where: and(
@@ -221,7 +242,7 @@ export async function deleteMailTemplateAction(
   });
 
   if (!oldRow) {
-    return { ok: false, error: '템플릿을 찾을 수 없습니다' };
+    throw new MailTemplateNotFoundError();
   }
 
   const result = await db
@@ -237,7 +258,7 @@ export async function deleteMailTemplateAction(
     .returning({ id: mailTemplates.id });
 
   if (result.length === 0) {
-    return { ok: false, error: '템플릿을 찾을 수 없습니다' };
+    throw new MailTemplateNotFoundError();
   }
 
   // soft delete 성공 후 모든 에셋 R2 cleanup (best-effort)
@@ -248,7 +269,4 @@ export async function deleteMailTemplateAction(
   if (assets.attachmentKeys.length > 0) {
     deleteR2ObjectsByKey(assets.attachmentKeys).catch(console.error);
   }
-
-  revalidatePath(`/admin/surveys/${surveyId}/operations/mail/templates`);
-  return { ok: true };
 }

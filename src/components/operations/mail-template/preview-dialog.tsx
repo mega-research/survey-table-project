@@ -4,11 +4,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { AlertTriangle, CheckCircle2, Loader2, Send } from 'lucide-react';
 
-import {
-  getMailPreviewSampleAction,
-  type MailPreviewSample,
-} from '@/actions/mail-template-preview-actions';
-import { sendTestTemplateMailAction } from '@/actions/mail-template-test-send-actions';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -20,9 +15,11 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { MailAttachment } from '@/db/schema/schema-types';
+import type { MailPreviewSample } from '@/features/mail/domain/mail-preview';
 import { TMP_ATTACHMENT_PREFIX } from '@/lib/mail/constants';
 import { renderMailPreview, type PreviewSample } from '@/lib/mail/render-preview';
 import { sanitizeRichHtml } from '@/lib/sanitize';
+import { client } from '@/shared/lib/rpc';
 
 interface Props {
   open: boolean;
@@ -124,14 +121,11 @@ export function MailPreviewDialog({
     if (!open) return;
     let cancelled = false;
     setFetchState({ status: 'loading' });
-    getMailPreviewSampleAction(surveyId)
-      .then((res) => {
+    client.mail.preview
+      .sample({ surveyId })
+      .then((sample) => {
         if (cancelled) return;
-        if (!res.ok) {
-          setFetchState({ status: 'error', error: res.error ?? '샘플 조사 대상을 불러오지 못했습니다' });
-          return;
-        }
-        setFetchState({ status: 'ready', sample: res.data ?? null });
+        setFetchState({ status: 'ready', sample });
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -201,20 +195,28 @@ export function MailPreviewDialog({
 
   const onSendTest = async () => {
     setSendState({ status: 'sending' });
-    const res = await sendTestTemplateMailAction({
-      surveyId,
-      to: testTo.trim(),
-      subject,
-      bodyHtml,
-      fromName,
-      fromLocal,
-      replyTo,
-      attachments,
-    });
-    if (res.ok) {
-      setSendState({ status: 'sent', to: testTo.trim(), ...(res.id !== undefined ? { id: res.id } : {}) });
-    } else {
-      setSendState({ status: 'error', message: res.error ?? '발송 실패' });
+    // orpc 호출은 인증 만료/입력 검증 실패 시 throw 하므로 try/catch 로 sending 고착을 방지한다
+    try {
+      const res = await client.mail.preview.testSend({
+        surveyId,
+        to: testTo.trim(),
+        subject,
+        bodyHtml,
+        fromName,
+        fromLocal,
+        replyTo,
+        attachments,
+      });
+      if (res.ok) {
+        setSendState({ status: 'sent', to: testTo.trim(), ...(res.id !== undefined ? { id: res.id } : {}) });
+      } else {
+        setSendState({ status: 'error', message: res.error ?? '발송 실패' });
+      }
+    } catch (err) {
+      setSendState({
+        status: 'error',
+        message: err instanceof Error ? err.message : '발송 실패',
+      });
     }
   };
 

@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 
 import { CampaignWizard } from '@/components/operations/mail-campaign/campaign-wizard';
 import type { CampaignFilterSnapshot } from '@/db/schema/schema-types';
-import { getMailTemplatesBySurvey } from '@/data/mail-templates';
+import { getMailTemplatesBySurvey } from '@/features/mail/server/services/mail-templates.service';
 import {
   CAMPAIGN_SORT_KEYS,
   previewCampaignCandidates,

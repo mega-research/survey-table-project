@@ -5,10 +5,6 @@ import { useRouter } from 'next/navigation';
 
 import { Plus, Trash2 } from 'lucide-react';
 
-import {
-  createBillingPeriodAction,
-  deleteLatestBillingPeriodAction,
-} from '@/actions/mail-billing-actions';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -20,6 +16,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import type { BillingPeriodRow } from '@/lib/operations/mail-billing.server';
+import { client } from '@/shared/lib/rpc';
 
 import { formatInt, formatKrw } from './_format';
 
@@ -55,9 +52,10 @@ export function BillingPeriodsDialog({ periods }: Props) {
         overagePer1kKrw: Number(formData.get('overagePer1kKrw') ?? 0),
         note: String(formData.get('note') ?? ''),
       };
-      const res = await createBillingPeriodAction(input);
-      if (!res.ok) {
-        setError(res.error ?? '등록 실패');
+      try {
+        await client.mail.billing.create(input);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : '등록 실패');
         return;
       }
       setShowForm(false);
@@ -69,9 +67,10 @@ export function BillingPeriodsDialog({ periods }: Props) {
     if (!window.confirm('이 요금제 행을 삭제하시겠어요? 가장 최근 행만 삭제 가능합니다.')) return;
     setError(null);
     startTransition(async () => {
-      const res = await deleteLatestBillingPeriodAction({ id });
-      if (!res.ok) {
-        setError(res.error ?? '삭제 실패');
+      try {
+        await client.mail.billing.deleteLatest({ id });
+      } catch (e) {
+        setError(e instanceof Error ? e.message : '삭제 실패');
         return;
       }
       router.refresh();

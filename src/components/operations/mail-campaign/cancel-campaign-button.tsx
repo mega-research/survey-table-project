@@ -4,7 +4,6 @@ import { useState, useTransition } from 'react';
 
 import { useRouter } from 'next/navigation';
 
-import { cancelCampaignAction } from '@/actions/campaign-actions';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -14,6 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { client } from '@/shared/lib/rpc';
 
 interface Props {
   surveyId: string;
@@ -27,9 +27,10 @@ export function CancelCampaignButton({ surveyId, campaignId }: Props) {
 
   function onConfirm() {
     startTransition(async () => {
-      const result = await cancelCampaignAction(surveyId, campaignId);
-      if (!result.ok) {
-        alert(result.error ?? '취소 실패');
+      try {
+        await client.mail.campaigns.cancel({ surveyId, campaignId });
+      } catch (err) {
+        alert(err instanceof Error ? err.message : '취소 실패');
         return;
       }
       setOpen(false);

@@ -10,6 +10,11 @@ import { questionCategories } from '@/features/library/server/procedures/questio
 import { savedCells } from '@/features/library/server/procedures/saved-cells';
 import { savedLookups } from '@/features/library/server/procedures/saved-lookups';
 import { savedQuestions } from '@/features/library/server/procedures/saved-questions';
+import { billing } from '@/features/mail/server/procedures/billing';
+import { campaigns } from '@/features/mail/server/procedures/campaigns';
+import { preview } from '@/features/mail/server/procedures/preview';
+import { templates } from '@/features/mail/server/procedures/templates';
+import { unsubscribe } from '@/features/mail/server/procedures/unsubscribe';
 import { media } from '@/features/media/server/procedures/media';
 
 import { health } from './procedures/health';
@@ -32,6 +37,13 @@ export const router = {
     attempts,
     resultCodes,
     attrs,
+  },
+  mail: {
+    templates,
+    preview,
+    campaigns,
+    billing,
+    unsubscribe,
   },
 };
 

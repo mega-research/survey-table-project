@@ -1,52 +1,54 @@
-'use server';
+import 'server-only';
 
 import { createElement } from 'react';
 
 import { render } from '@react-email/render';
-import { z } from 'zod';
 
-import { requireAuth } from '@/lib/auth';
 import { UNSUBSCRIBE_SANDBOX_TOKEN } from '@/lib/mail/constants';
 import { renderForTestSend } from '@/lib/mail/render-for-send';
-import { mailAttachmentSchema } from '@/lib/mail/schema';
 import { sendTestMail } from '@/lib/mail/send';
 import { MailWrapper } from '@/lib/mail/template-wrapper';
 import { getFirstContactSample } from '@/lib/operations/contact-sample.server';
 
-const InputSchema = z.object({
-  surveyId: z.string().uuid(),
-  to: z.string().email('수신자 이메일 형식이 올바르지 않습니다.'),
-  subject: z.string().min(1, '제목이 비어있습니다.').max(200),
-  bodyHtml: z.string(),
-  fromName: z.string().min(1, '발신자 이름이 비어있습니다.'),
-  fromLocal: z.string().min(1, '발신자 이메일 local 이 비어있습니다.'),
-  replyTo: z.string().email('Reply-To 이메일 형식이 올바르지 않습니다.'),
-  attachments: z.array(mailAttachmentSchema).default([]),
-});
+import type {
+  GetMailPreviewSampleInput,
+  GetMailPreviewSampleOutput,
+  SendTestTemplateMailInput,
+  SendTestTemplateMailOutput,
+} from '../../domain/mail-preview';
 
-export type SendTestTemplateMailInput = z.input<typeof InputSchema>;
+/**
+ * 메일 템플릿 미리보기용 — 해당 설문의 첫 컨택 1건 샘플.
+ * inviteUrl 은 NEXT_PUBLIC_APP_URL 기준으로 서버에서 빌드 (window.origin 사용 시
+ * localhost 미리보기 / 실제 발송 도메인 불일치 문제 발생).
+ * 컨택 0건이면 null.
+ */
+export async function getMailPreviewSample(
+  input: GetMailPreviewSampleInput,
+): Promise<GetMailPreviewSampleOutput> {
+  const sample = await getFirstContactSample(input.surveyId);
+  if (!sample) return null;
 
-export interface SendTestTemplateMailResult {
-  ok: boolean;
-  id?: string;
-  error?: string;
+  const baseUrl = (process.env['NEXT_PUBLIC_APP_URL'] ?? '').replace(/\/+$/, '');
+  const inviteUrl = `${baseUrl}/survey/${input.surveyId}?invite=${sample.inviteToken}`;
+
+  return {
+    attrs: sample.attrs,
+    inviteUrl,
+    email: sample.email,
+    resid: sample.resid,
+  };
 }
 
-export async function sendTestTemplateMailAction(
-  raw: SendTestTemplateMailInput,
-): Promise<SendTestTemplateMailResult> {
-  try {
-    await requireAuth();
-  } catch {
-    return { ok: false, error: '인증이 필요합니다.' };
-  }
-
-  const parsed = InputSchema.safeParse(raw);
-  if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? '입력 검증 실패' };
-  }
-  const input = parsed.data;
-
+/**
+ * 테스트 발송.
+ * env 가드(RESEND_FROM_DOMAIN / NEXT_PUBLIC_APP_URL) 실패와 발송 실패는 throw 하지 않고
+ * 결과객체({ok:false,error})로 흘려 UI 에 사용자 친화 메시지를 그대로 보존한다.
+ * 테스트 발송은 항상 sandbox 토큰 — 진짜 컨택의 unsubscribeToken 누출 방지.
+ */
+export async function sendTestTemplateMail(
+  input: SendTestTemplateMailInput,
+): Promise<SendTestTemplateMailOutput> {
   const fromDomain = process.env['RESEND_FROM_DOMAIN'];
   if (!fromDomain) {
     return { ok: false, error: 'RESEND_FROM_DOMAIN 환경변수가 설정되지 않았습니다.' };
