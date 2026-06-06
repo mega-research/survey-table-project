@@ -1,0 +1,120 @@
+import * as z from 'zod';
+
+import type { NewQuestion, Question } from '@/db/schema';
+import type { Question as QuestionType } from '@/types/survey';
+
+/**
+ * 질문 CRUD 도메인 스키마.
+ *
+ * 복잡 JSONB 필드(options/selectLevels/tableColumns/tableRowsData/tableHeaderGrid/
+ * tableValidationRules/dynamicRowConfigs/rankingConfig/displayCondition)는 질문 유형마다
+ * 형태가 제각각이라 z.custom 으로 타입만 보장한다(런타임 형태 변형 위험 방지).
+ *
+ * surveyId/questionId 는 기존 server action 과 동일하게 형식 검증 없이 받는다.
+ * 모든 optional 필드는 원본 createQuestion/updateQuestion 시그니처를 1:1 보존한다
+ * (불변식 A — 한 필드라도 누락하면 tsc 가 못 잡는 함정).
+ */
+
+// 타입 re-export (런타임 import 0)
+export type { NewQuestion, Question };
+
+/** 질문 생성 입력 — 원본 createQuestion(data) 시그니처와 동일. */
+export const CreateQuestionInput = z.object({
+  surveyId: z.string(),
+  id: z.string().optional(),
+  groupId: z.string().optional(),
+  type: z.string(),
+  title: z.string(),
+  description: z.string().optional(),
+  required: z.boolean().optional(),
+  order: z.number().optional(),
+  options: z.custom<QuestionType['options']>().optional(),
+  selectLevels: z.custom<QuestionType['selectLevels']>().optional(),
+  tableTitle: z.string().optional(),
+  tableColumns: z.custom<QuestionType['tableColumns']>().optional(),
+  tableRowsData: z.custom<QuestionType['tableRowsData']>().optional(),
+  tableHeaderGrid: z.custom<QuestionType['tableHeaderGrid']>().optional(),
+  imageUrl: z.string().optional(),
+  videoUrl: z.string().optional(),
+  allowOtherOption: z.boolean().optional(),
+  optionsColumns: z.number().optional(),
+  minSelections: z.number().optional(),
+  maxSelections: z.number().optional(),
+  noticeContent: z.string().optional(),
+  requiresAcknowledgment: z.boolean().optional(),
+  placeholder: z.string().optional(),
+  tableValidationRules: z.custom<QuestionType['tableValidationRules']>().optional(),
+  displayCondition: z.custom<QuestionType['displayCondition']>().optional(),
+  dynamicRowConfigs: z.custom<QuestionType['dynamicRowConfigs']>().optional(),
+  hideColumnLabels: z.boolean().optional(),
+  rankingConfig: z.custom<QuestionType['rankingConfig']>().optional(),
+  questionCode: z.string().optional(),
+  isCustomSpssVarName: z.boolean().optional(),
+  exportLabel: z.string().optional(),
+  spssVarType: z.string().optional(),
+  spssMeasure: z.string().optional(),
+});
+export type CreateQuestionInput = z.infer<typeof CreateQuestionInput>;
+
+/**
+ * 질문 업데이트 입력 — 원본 updateQuestion(questionId, data) 화이트리스트와 동일.
+ * groupId 는 명시적 null 로 ungroup 가능해야 하므로 nullable (undefined=미변경, null=해제).
+ */
+export const UpdateQuestionData = z.object({
+  groupId: z.string().nullable().optional(),
+  type: z.string().optional(),
+  title: z.string().optional(),
+  description: z.string().optional(),
+  required: z.boolean().optional(),
+  order: z.number().optional(),
+  options: z.custom<QuestionType['options']>().optional(),
+  selectLevels: z.custom<QuestionType['selectLevels']>().optional(),
+  tableTitle: z.string().optional(),
+  tableColumns: z.custom<QuestionType['tableColumns']>().optional(),
+  tableRowsData: z.custom<QuestionType['tableRowsData']>().optional(),
+  tableHeaderGrid: z.custom<QuestionType['tableHeaderGrid']>().optional(),
+  imageUrl: z.string().optional(),
+  videoUrl: z.string().optional(),
+  allowOtherOption: z.boolean().optional(),
+  optionsColumns: z.number().optional(),
+  minSelections: z.number().optional(),
+  maxSelections: z.number().optional(),
+  noticeContent: z.string().optional(),
+  requiresAcknowledgment: z.boolean().optional(),
+  placeholder: z.string().optional(),
+  tableValidationRules: z.custom<QuestionType['tableValidationRules']>().optional(),
+  dynamicRowConfigs: z.custom<QuestionType['dynamicRowConfigs']>().optional(),
+  hideColumnLabels: z.boolean().optional(),
+  rankingConfig: z.custom<QuestionType['rankingConfig']>().optional(),
+  displayCondition: z.custom<QuestionType['displayCondition']>().optional(),
+  questionCode: z.string().optional(),
+  isCustomSpssVarName: z.boolean().optional(),
+  exportLabel: z.string().optional(),
+  spssVarType: z.string().optional(),
+  spssMeasure: z.string().optional(),
+});
+export type UpdateQuestionData = z.infer<typeof UpdateQuestionData>;
+
+export const UpdateQuestionInput = z.object({
+  questionId: z.string(),
+  data: UpdateQuestionData,
+});
+export type UpdateQuestionInput = z.infer<typeof UpdateQuestionInput>;
+
+export const DeleteQuestionInput = z.object({
+  questionId: z.string(),
+});
+export type DeleteQuestionInput = z.infer<typeof DeleteQuestionInput>;
+
+export const ReorderQuestionsInput = z.object({
+  questionIds: z.array(z.string()),
+});
+export type ReorderQuestionsInput = z.infer<typeof ReorderQuestionsInput>;
+
+/** create/update 반환행 — db select 행(JSONB 포함)을 그대로 노출. */
+export const QuestionRow = z.custom<Question>();
+export type QuestionRow = z.infer<typeof QuestionRow>;
+
+/** delete/reorder 공통 출력 */
+export const QuestionMutationOutput = z.object({ ok: z.literal(true) });
+export type QuestionMutationOutput = z.infer<typeof QuestionMutationOutput>;
