@@ -3,13 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 
-import {
-  addContactTarget,
-  deleteContactTarget,
-  updateContactColumns,
-  updateContactTarget,
-  type PiiUpdate,
-} from '@/actions/contact-actions';
+import type { PiiUpdate } from '@/features/contacts/domain/contact-target';
 import { Button } from '@/components/ui/button';
 import {
   ContactAttemptAddCard,
@@ -27,6 +21,7 @@ import { useAutoFadeMessage } from '@/hooks/use-auto-fade-message';
 import type { ContactAttemptRow } from '@/lib/operations/contacts.server';
 import { piiKeyOf } from '@/lib/operations/contacts';
 import type { PiiFieldType } from '@/lib/crypto/pii-fields';
+import { client } from '@/shared/lib/rpc';
 
 interface ContactDetailFormProps {
   surveyId: string;
@@ -158,7 +153,7 @@ export function ContactDetailForm({
     setError(null);
     startTransition(async () => {
       try {
-        await deleteContactTarget(surveyId, initial.id);
+        await client.contacts.targets.remove({ surveyId, id: initial.id });
         // 삭제 후엔 dirty 무시 → router.push 직접
         router.push(`/admin/surveys/${surveyId}/operations/contacts`);
       } catch (e) {
@@ -214,7 +209,7 @@ export function ContactDetailForm({
     startTransition(async () => {
       try {
         if (isEdit && initial) {
-          await updateContactTarget({
+          await client.contacts.targets.update({
             id: initial.id,
             surveyId,
             attrs,
@@ -225,7 +220,7 @@ export function ContactDetailForm({
           });
           // I2: localScheme 이 prop scheme 과 다르면 컬럼 스킴도 함께 저장
           if (!schemeEqual(localScheme, scheme)) {
-            await updateContactColumns(surveyId, localScheme);
+            await client.contacts.columns.update({ surveyId, scheme: localScheme });
           }
           // 회차 라디오 선택돼 있으면 함께 추가 선택 안 됐으면 silent no-op.
           await attemptCardRef.current?.flushIfSelected();
@@ -233,7 +228,7 @@ export function ContactDetailForm({
           router.refresh();
           setSuccessMessage('저장 완료');
         } else {
-          const created = await addContactTarget({
+          const created = await client.contacts.targets.add({
             surveyId,
             attrs,
             ...(updatesForAction !== undefined ? { piiUpdates: updatesForAction } : {}),

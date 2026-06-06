@@ -5,8 +5,7 @@ import { useRef, useState, useTransition } from 'react';
 
 import { FileSpreadsheet, UploadCloud, X } from 'lucide-react';
 
-import { ingestContactUpload, parseExcelPreview } from '@/actions/contact-actions';
-import type { ParseExcelPreviewResult } from '@/actions/contact-actions';
+import type { ParseExcelPreviewResult } from '@/features/contacts/domain/contact-upload';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -28,6 +27,7 @@ import {
 } from '@/lib/contacts/upload-limits';
 import { type PiiFieldType } from '@/lib/crypto/pii-fields';
 import { formatBytes } from '@/lib/utils';
+import { client } from '@/shared/lib/rpc';
 
 type Step = 'file' | 'mapping' | 'result';
 
@@ -98,7 +98,7 @@ export function UploadWizard({ surveyId, existingContactsCount }: UploadWizardPr
     setError(null);
     startTransition(async () => {
       try {
-        const r = await parseExcelPreview({ file, sheetName, headerRow });
+        const r = await client.contacts.uploads.parsePreview({ file, sheetName, headerRow });
         setPreview(r);
         if (!sheetName && r.sheetNames.length > 0) {
           const firstSheet = r.sheetNames[0];
@@ -153,12 +153,15 @@ export function UploadWizard({ surveyId, existingContactsCount }: UploadWizardPr
           headerRow,
           sheetName,
         };
-        const r = await ingestContactUpload({ surveyId, file, mapping: m });
+        const r = await client.contacts.uploads.ingest({ surveyId, file, mapping: m });
         setResult({
           uploadedRows: r.uploadedRows,
           mergedRows: r.mergedRows,
           errorRows: r.errorRows,
         });
+        // oRPC 전환으로 revalidatePath가 사라졌으므로, 목록 페이지의 RSC 캐시를
+        // 명시적으로 무효화한다. result step에서 "목록 보기" push 시 fresh 로드 보장.
+        router.refresh();
         setStep('result');
       } catch (e) {
         setError((e as Error).message);

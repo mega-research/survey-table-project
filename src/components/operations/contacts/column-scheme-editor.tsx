@@ -4,12 +4,12 @@ import { useState, useTransition } from 'react';
 
 import { useRouter } from 'next/navigation';
 
-import { updateContactColumns } from '@/actions/contact-actions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import type { ContactColumnDef, ContactColumnScheme } from '@/db/schema/schema-types';
 import { piiFieldLabel } from '@/lib/crypto/pii-fields';
+import { client } from '@/shared/lib/rpc';
 
 interface ColumnSchemeEditorProps {
   surveyId: string;
@@ -47,7 +47,7 @@ export function ColumnSchemeEditor({ surveyId, scheme }: ColumnSchemeEditorProps
     setError(null);
     startTransition(async () => {
       try {
-        await updateContactColumns(surveyId, { ...scheme, columns });
+        await client.contacts.columns.update({ surveyId, scheme: { ...scheme, columns } });
         router.push(`/admin/surveys/${surveyId}/operations/contacts`);
         router.refresh();
       } catch (e) {
