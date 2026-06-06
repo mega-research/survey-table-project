@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation';
 
 import { TemplateEditForm } from '@/components/operations/mail-template/template-edit-form';
 import { getVariableCatalog } from '@/components/operations/mail-template/variable-catalog';
-import { getMailTemplate } from '@/data/mail-templates';
+import { getMailTemplate } from '@/features/mail/server/services/mail-templates.service';
 import { requireAuth } from '@/lib/auth';
 
 interface Props {
