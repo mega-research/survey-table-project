@@ -2,8 +2,8 @@
 
 import { useRouter } from 'next/navigation';
 
-import { saveAdminEdit } from '@/actions/response-edit-actions';
 import { SurveyResponseFlow } from '@/components/survey-response/survey-response-flow';
+import { client } from '@/shared/lib/rpc';
 import type { SurveyVersionSnapshot } from '@/db/schema';
 
 interface Props {
@@ -47,7 +47,11 @@ export function AdminResponseEditor({
           versionSnapshot,
           initialContactAttrs,
           onSubmit: async (payload) => {
-            await saveAdminEdit(surveyId, responseId, payload);
+            await client.surveyResponse.edit.saveAdminEdit({
+              surveyId,
+              responseId,
+              questionResponses: payload.questionResponses,
+            });
             router.push(`/admin/surveys/${surveyId}/operations/profiles`);
           },
         }}

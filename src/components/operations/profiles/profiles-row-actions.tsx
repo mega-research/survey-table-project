@@ -1,14 +1,11 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 
 import { MoreHorizontal } from 'lucide-react';
 
-import {
-  hardResetResponse,
-  restoreResponse,
-  softDeleteResponse,
-} from '@/actions/profiles-row-actions';
+import { client } from '@/shared/lib/rpc';
 import type { ProfilesView } from '@/lib/operations/profiles';
 import {
   AlertDialog,
@@ -39,14 +36,20 @@ interface Props {
 type Dialog = null | 'edit' | 'delete' | 'reset';
 
 export function ProfilesRowActions({ surveyId, responseId, idx, view }: Props) {
+  const router = useRouter();
   const [dialog, setDialog] = useState<Dialog>(null);
   const [isPending, startTransition] = useTransition();
 
-  const runConfirmed = (fn: (s: string, r: string) => Promise<unknown>) => {
+  // 옛 server action 의 revalidatePath('profiles') 가 사라졌으므로 성공 후 router.refresh 로
+  // 목록을 서버 재검증한다 — 안 하면 삭제/복원/초기화 후 목록이 stale.
+  const runConfirmed = (
+    fn: (input: { surveyId: string; responseId: string }) => Promise<unknown>,
+  ) => {
     startTransition(async () => {
       try {
-        await fn(surveyId, responseId);
+        await fn({ surveyId, responseId });
         setDialog(null);
+        router.refresh();
       } catch {
         window.alert('응답 처리에 실패했습니다. 다시 시도해 주세요.');
         // dialog 유지 — 사용자 재시도 가능
@@ -85,7 +88,7 @@ export function ProfilesRowActions({ surveyId, responseId, idx, view }: Props) {
           ) : (
             <DropdownMenuItem
               disabled={isPending}
-              onSelect={() => runConfirmed(restoreResponse)}
+              onSelect={() => runConfirmed(client.surveyResponse.manage.restore)}
             >
               복원
             </DropdownMenuItem>
@@ -124,7 +127,7 @@ export function ProfilesRowActions({ surveyId, responseId, idx, view }: Props) {
             <AlertDialogCancel>취소</AlertDialogCancel>
             <AlertDialogAction
               disabled={isPending}
-              onClick={() => runConfirmed(softDeleteResponse)}
+              onClick={() => runConfirmed(client.surveyResponse.manage.softDelete)}
             >
               삭제
             </AlertDialogAction>
@@ -146,7 +149,7 @@ export function ProfilesRowActions({ surveyId, responseId, idx, view }: Props) {
             <AlertDialogCancel>취소</AlertDialogCancel>
             <AlertDialogAction
               disabled={isPending}
-              onClick={() => runConfirmed(hardResetResponse)}
+              onClick={() => runConfirmed(client.surveyResponse.manage.hardReset)}
               className="bg-red-600 hover:bg-red-700"
             >
               초기화

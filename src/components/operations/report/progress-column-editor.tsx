@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
-import { updateProgressColumns } from '@/actions/progress-actions';
+import { client } from '@/shared/lib/rpc';
 import type {
   ContactColumnScheme,
   ProgressColumnDef,
@@ -93,7 +93,10 @@ export function ProgressColumnEditor({ surveyId, initialScheme, contactScheme }:
   const save = () => {
     setError(null);
     startTransition(async () => {
-      const result = await updateProgressColumns(surveyId, { version: 1, columns });
+      const result = await client.operations.progress.updateColumns({
+        surveyId,
+        scheme: { version: 1, columns },
+      });
       if (!result.ok) {
         setError(result.error ?? '저장에 실패했습니다.');
         return;
