@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { recordVisibilitySegment } from '@/actions/response-actions';
+import { recordVisibilitySegment } from '@/features/survey-response/server/services/lifecycle.service';
 
 /**
  * Page Visibility 세그먼트 수신 엔드포인트.
