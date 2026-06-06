@@ -5,7 +5,6 @@ import { useCallback, useState, useTransition } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 
 import {
-  calculateResponseSummary,
   getResponsesBySurvey,
   getSurveyListWithCounts,
   getSurveyWithDetails,
@@ -25,6 +24,7 @@ import {
 } from '@/actions/survey-save-actions';
 import type { SurveyDiffPayload } from '@/actions/survey-save-actions';
 import { surveyKeys } from '@/hooks/queries/use-surveys';
+import { orpc } from '@/shared/lib/rpc';
 import {
   useSurveyBuilderStore,
   useSurveyListStore,
@@ -310,7 +310,7 @@ export function useResponseSync() {
   // 응답 통계 불러오기
   const loadResponseSummary = useCallback(async (surveyId: string) => {
     try {
-      const summary = await calculateResponseSummary(surveyId);
+      const summary = await orpc.analytics.stats.survey.call({ surveyId });
       return summary;
     } catch (error) {
       console.error('응답 통계 불러오기 실패:', error);

@@ -63,8 +63,6 @@ export {
   getResponseById,
   getResponseCountBySurvey,
   getCompletedResponseCountBySurvey,
-  calculateResponseSummary,
-  getQuestionStatistics,
   exportResponsesAsJson,
   exportResponsesAsCsv,
   getAllTags,
