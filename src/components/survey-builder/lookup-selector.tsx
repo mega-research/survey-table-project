@@ -4,7 +4,7 @@ import { useState } from 'react';
 
 import { nanoid } from 'nanoid';
 
-import { upsertSurveyLookupAction } from '@/actions/lookup-actions';
+import { client } from '@/shared/lib/rpc';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -37,11 +37,14 @@ export function LookupSelector({ value, onChange }: Props) {
 
   const handleQuickCreate = async (draft: LookupDraft) => {
     if (!surveyId) return;
-    const saved = await upsertSurveyLookupAction(surveyId, {
-      id: nanoid(),
-      name: draft.name,
-      columns: draft.columns,
-      rows: draft.rows,
+    const saved = await client.surveyBuilder.lookups.upsert({
+      surveyId,
+      lookup: {
+        id: nanoid(),
+        name: draft.name,
+        columns: draft.columns,
+        rows: draft.rows,
+      },
     });
     setEditOpen(false);
     await refetchSurvey();

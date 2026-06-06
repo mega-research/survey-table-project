@@ -11,7 +11,7 @@ import {
   getResponsesWithAnswers,
   getSurveyVersions,
 } from '@/data/responses';
-import { getSurveyWithDetails } from '@/data/surveys';
+import { getSurveyWithDetails } from '@/features/survey-builder/server/services/survey-read.service';
 
 interface AnalyticsPageProps {
   params: Promise<{ surveyId: string }>;

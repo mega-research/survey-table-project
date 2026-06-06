@@ -4,20 +4,7 @@ import { useCallback, useState, useTransition } from 'react';
 
 import { useQueryClient } from '@tanstack/react-query';
 
-import {
-  getResponsesBySurvey,
-  getSurveyListWithCounts,
-  getSurveyWithDetails,
-} from '@/actions/query-actions';
-import {
-  deleteSurvey as deleteSurveyAction,
-  duplicateSurvey as duplicateSurveyAction,
-} from '@/actions/survey-crud-actions';
-import {
-  saveSurveyDiff,
-  saveSurveyWithDetails,
-} from '@/actions/survey-save-actions';
-import type { SurveyDiffPayload } from '@/actions/survey-save-actions';
+import type { SurveyDiffPayload } from '@/features/survey-builder/domain/survey-save';
 import { surveyKeys } from '@/hooks/queries/use-surveys';
 import { client, orpc } from '@/shared/lib/rpc';
 import {
@@ -114,7 +101,7 @@ export function useSurveySync() {
           };
         }
 
-        const result = await saveSurveyDiff(payload);
+        const result = await client.surveyBuilder.save.saveDiff(payload);
         markClean();
         // 저장 후 TanStack Query 캐시 무효화 → 다음 로드 시 DB에서 최신 데이터 사용
         queryClient.invalidateQueries({ queryKey: surveyKeys.detail(survey.id) });
@@ -137,7 +124,7 @@ export function useSurveySync() {
   // DB에서 설문 불러오기
   const loadSurvey = useCallback(async (surveyId: string) => {
     try {
-      const survey = await getSurveyWithDetails(surveyId);
+      const survey = await client.surveyBuilder.read.withDetails({ surveyId });
       if (survey) {
         // Zustand store 업데이트 (changeset도 함께 리셋)
         useSurveyBuilderStore.getState().setSurvey(survey);
@@ -170,7 +157,7 @@ export function useSurveySync() {
     const newSurvey = useSurveyBuilderStore.getState().currentSurvey;
 
     try {
-      const result = await saveSurveyWithDetails(newSurvey);
+      const result = await client.surveyBuilder.save.saveWithDetails(newSurvey);
       // 생성된 ID로 store 업데이트
       useSurveyBuilderStore.setState((state) => ({
         currentSurvey: {
@@ -205,7 +192,7 @@ export function useSurveyListSync() {
   // DB에서 설문 목록 불러오기
   const loadSurveyList = useCallback(async () => {
     try {
-      const surveys = await getSurveyListWithCounts();
+      const surveys = await client.surveyBuilder.read.list();
 
       // Zustand store 업데이트 (선택사항 - 캐싱용)
       // useSurveyListStore.setState({ surveys: ... });
@@ -220,7 +207,7 @@ export function useSurveyListSync() {
   // 설문 삭제
   const deleteSurvey = useCallback(async (surveyId: string) => {
     try {
-      await deleteSurveyAction(surveyId);
+      await client.surveyBuilder.surveys.delete({ surveyId });
       // 로컬 store에서 선택 해제 (목록에서 삭제는 쿼리 무효화로 처리됨)
       useSurveyListStore.getState().deselectSurvey(surveyId);
     } catch (error) {
@@ -232,7 +219,7 @@ export function useSurveyListSync() {
   // 설문 복제
   const duplicateSurvey = useCallback(async (surveyId: string) => {
     try {
-      const newSurvey = await duplicateSurveyAction(surveyId);
+      const newSurvey = await client.surveyBuilder.surveys.duplicate({ surveyId });
       return newSurvey;
     } catch (error) {
       console.error('설문 복제 실패:', error);
@@ -298,7 +285,7 @@ export function useResponseSync() {
   // 설문별 응답 목록 불러오기
   const loadResponses = useCallback(async (surveyId: string) => {
     try {
-      const responses = await getResponsesBySurvey(surveyId);
+      const responses = await client.surveyBuilder.read.responsesBySurvey({ surveyId });
       return responses;
     } catch (error) {
       console.error('응답 목록 불러오기 실패:', error);

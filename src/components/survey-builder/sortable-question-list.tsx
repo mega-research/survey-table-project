@@ -32,9 +32,7 @@ import {
   Trash2,
 } from 'lucide-react';
 
-import {
-  reorderQuestions as reorderQuestionsAction,
-} from '@/actions/question-actions';
+import { client } from '@/shared/lib/rpc';
 import { useEnsureSurveyInDb } from '@/hooks/use-ensure-survey-in-db';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -371,14 +369,10 @@ export function SortableQuestionList({
   useEffect(() => {
     if (!isTestMode || !surveyId) return;
     let cancelled = false;
-    import('@/actions/survey-test-sample-actions').then(
-      ({ getSurveyTestSampleAction }) => {
-        getSurveyTestSampleAction(surveyId).then((res) => {
-          if (cancelled) return;
-          setDefaultContactAttrs(res.ok && res.data ? res.data.attrs : {});
-        });
-      },
-    );
+    client.surveyBuilder.testSample.get({ surveyId }).then((sample) => {
+      if (cancelled) return;
+      setDefaultContactAttrs(sample ? sample.attrs : {});
+    });
     return () => {
       cancelled = true;
     };
@@ -509,7 +503,7 @@ export function SortableQuestionList({
     const savedIds = allQuestionIds.filter((id) => !state.questionChanges.added[id]);
     if (surveyId && savedIds.length > 0) {
       ensureSurvey().then(() =>
-        reorderQuestionsAction(savedIds).catch((error) => {
+        client.surveyBuilder.questions.reorder({ questionIds: savedIds }).catch((error) => {
           console.error('질문 순서 변경 실패:', error);
         }),
       );

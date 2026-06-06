@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation';
 
 import { OperationsPageHeader } from '@/components/operations/operations-page-header';
 import { OperationsTabStrip } from '@/components/operations/operations-tab-strip';
-import { getSurveyById } from '@/data/surveys';
+import { getSurveyById } from '@/features/survey-builder/server/services/survey-read.service';
 
 interface LayoutProps {
   children: React.ReactNode;

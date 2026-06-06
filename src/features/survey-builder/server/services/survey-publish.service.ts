@@ -1,21 +1,29 @@
-'use server';
-
-import { revalidatePath } from 'next/cache';
+import 'server-only';
 
 import { and, desc, eq } from 'drizzle-orm';
 
 import { getSurveyWithDetails } from '@/data/surveys';
 import { db } from '@/db';
 import { surveys, surveyVersions, type SurveyVersionSnapshot } from '@/db/schema';
-import { requireAuth } from '@/lib/auth';
 import { buildSurveySnapshot } from '@/lib/versioning/snapshot-builder';
+
+import type {
+  PublishSurveyInput,
+  SurveyVersion,
+} from '../../domain/survey-publish';
 
 // ========================
 // 설문 배포 (Publish)
 // ========================
+//
+// 인증은 authed 미들웨어가 담당(requireAuth 제거). 캐시 갱신(revalidatePath)은
+// 소비처 query invalidation/router refresh 로 대체한다.
+// 다인자(surveyId, changeNote?) -> 단일 input object 로 묶음.
 
-export async function publishSurvey(surveyId: string, changeNote?: string) {
-  await requireAuth();
+export async function publishSurvey(
+  input: PublishSurveyInput,
+): Promise<SurveyVersion> {
+  const { surveyId, changeNote } = input;
 
   const surveyData = await getSurveyWithDetails(surveyId);
   if (!surveyData) {
@@ -69,9 +77,6 @@ export async function publishSurvey(surveyId: string, changeNote?: string) {
         updatedAt: new Date(),
       })
       .where(eq(surveys.id, surveyId));
-
-    revalidatePath('/admin/surveys');
-    revalidatePath(`/admin/surveys/${surveyId}`);
 
     return newVersion;
   });

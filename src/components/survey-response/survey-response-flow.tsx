@@ -6,11 +6,6 @@ import { useRouter } from 'next/navigation';
 
 import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle, Loader2, Lock } from 'lucide-react';
 
-import {
-  getSurveyByPrivateToken,
-  getSurveyBySlug,
-  getSurveyForResponse,
-} from '@/actions/query-actions';
 import { client } from '@/shared/lib/rpc';
 import { AlreadyRespondedView } from '@/components/survey/already-responded-view';
 import { InviteRequiredScreen } from '@/components/survey-response/invite-required-screen';
@@ -317,7 +312,9 @@ export function SurveyResponseFlow({
             setVersionId(null);
           } else {
             // snapshot 미존재 (published 이전 응답) → 현재 surveys 행 직접 사용.
-            const result = await getSurveyForResponse(adminContext.surveyId);
+            const result = await client.surveyBuilder.publicRead.forResponse({
+              surveyId: adminContext.surveyId,
+            });
             if (!result) {
               setLoadError('요청하신 설문을 찾을 수 없습니다.');
               setLoadedSurvey(null);
@@ -339,12 +336,12 @@ export function SurveyResponseFlow({
 
         switch (type) {
           case 'slug': {
-            const dbSurvey = await getSurveyBySlug(value);
+            const dbSurvey = await client.surveyBuilder.publicRead.bySlug({ slug: value });
             if (dbSurvey) surveyId = dbSurvey.id;
             break;
           }
           case 'privateToken': {
-            const dbSurvey = await getSurveyByPrivateToken(value);
+            const dbSurvey = await client.surveyBuilder.publicRead.byPrivateToken({ token: value });
             if (dbSurvey) {
               surveyId = dbSurvey.id;
             } else {
@@ -365,7 +362,7 @@ export function SurveyResponseFlow({
           return;
         }
 
-        const result = await getSurveyForResponse(surveyId);
+        const result = await client.surveyBuilder.publicRead.forResponse({ surveyId });
 
         if (!result) {
           setLoadError('요청하신 설문을 찾을 수 없습니다.');

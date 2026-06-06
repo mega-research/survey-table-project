@@ -1,6 +1,4 @@
-'use server';
-
-import { revalidatePath } from 'next/cache';
+import 'server-only';
 
 import { eq } from 'drizzle-orm';
 
@@ -14,62 +12,56 @@ import {
   questions,
   surveys,
 } from '@/db/schema';
-import { requireAuth } from '@/lib/auth';
 import { extractImageUrlsFromQuestions } from '@/lib/image-extractor';
 import { deleteImagesFromR2Server } from '@/lib/image-utils-server';
 import { generateId } from '@/lib/utils';
-import type {
-  Question,
-  Survey as SurveyType,
-  SurveySettings,
-} from '@/types/survey';
+import type { Question } from '@/types/survey';
 import { stripOptionCodes } from '@/utils/option-code-generator';
 
+import type {
+  CreateSurveyInput,
+  EnsureSurveyInDbInput,
+  EnsureSurveyResult,
+  SurveyIdInput,
+  SurveyRow,
+  UpdateSurveyInput,
+} from '../../domain/survey';
+
 // ========================
-// 설문 CRUD 액션
+// 설문 CRUD 서비스
 // ========================
+//
+// 인증은 authed 미들웨어가 담당(requireAuth 제거). 캐시 갱신(revalidatePath)은
+// 소비처 query invalidation(use-survey-sync)으로 대체한다.
 
 // 설문이 DB에 존재하는지 확인하고, 없으면 최소한의 레코드를 생성 (idempotent)
-export async function ensureSurveyInDb(surveyData: {
-  id: string;
-  title: string;
-  privateToken?: string;
-  settings: SurveySettings;
-}) {
-  await requireAuth();
-
+export async function ensureSurveyInDb(
+  input: EnsureSurveyInDbInput,
+): Promise<EnsureSurveyResult> {
   const existing = await db.query.surveys.findFirst({
-    where: eq(surveys.id, surveyData.id),
+    where: eq(surveys.id, input.id),
     columns: { id: true },
   });
 
-  if (existing) return { surveyId: surveyData.id, created: false };
+  if (existing) return { surveyId: input.id, created: false };
 
   await db.insert(surveys).values({
-    id: surveyData.id,
-    title: surveyData.title,
-    privateToken: surveyData.privateToken,
-    isPublic: surveyData.settings.isPublic ?? true,
-    allowMultipleResponses: surveyData.settings.allowMultipleResponses ?? false,
-    showProgressBar: surveyData.settings.showProgressBar ?? true,
-    shuffleQuestions: surveyData.settings.shuffleQuestions ?? false,
-    requireLogin: surveyData.settings.requireLogin ?? false,
-    thankYouMessage: surveyData.settings.thankYouMessage ?? '응답해주셔서 감사합니다!',
+    id: input.id,
+    title: input.title,
+    privateToken: input.privateToken,
+    isPublic: input.settings.isPublic ?? true,
+    allowMultipleResponses: input.settings.allowMultipleResponses ?? false,
+    showProgressBar: input.settings.showProgressBar ?? true,
+    shuffleQuestions: input.settings.shuffleQuestions ?? false,
+    requireLogin: input.settings.requireLogin ?? false,
+    thankYouMessage: input.settings.thankYouMessage ?? '응답해주셔서 감사합니다!',
   });
 
-  return { surveyId: surveyData.id, created: true };
+  return { surveyId: input.id, created: true };
 }
 
 // 설문 생성
-export async function createSurvey(data: {
-  title: string;
-  description?: string;
-  slug?: string;
-  isPublic?: boolean;
-  settings?: Partial<SurveyType['settings']>;
-}) {
-  await requireAuth();
-
+export async function createSurvey(data: CreateSurveyInput): Promise<SurveyRow> {
   const newSurvey: NewSurvey = {
     title: data.title,
     description: data.description,
@@ -85,29 +77,14 @@ export async function createSurvey(data: {
   };
 
   const [survey] = await db.insert(surveys).values(newSurvey).returning();
+  if (!survey) throw new Error('createSurvey: 설문 생성 실패');
 
-  revalidatePath('/admin/surveys');
   return survey;
 }
 
 // 설문 업데이트
-export async function updateSurvey(
-  surveyId: string,
-  data: Partial<{
-    title: string;
-    description: string;
-    slug: string;
-    isPublic: boolean;
-    allowMultipleResponses: boolean;
-    showProgressBar: boolean;
-    shuffleQuestions: boolean;
-    requireLogin: boolean;
-    endDate: Date | null;
-    maxResponses: number | null;
-    thankYouMessage: string;
-  }>,
-) {
-  await requireAuth();
+export async function updateSurvey(input: UpdateSurveyInput): Promise<SurveyRow> {
+  const { surveyId, data } = input;
 
   const [updated] = await db
     .update(surveys)
@@ -117,15 +94,14 @@ export async function updateSurvey(
     })
     .where(eq(surveys.id, surveyId))
     .returning();
+  if (!updated) throw new Error('updateSurvey: 설문 업데이트 실패');
 
-  revalidatePath('/admin/surveys');
-  revalidatePath(`/admin/surveys/${surveyId}`);
   return updated;
 }
 
 // 설문 삭제
-export async function deleteSurvey(surveyId: string) {
-  await requireAuth();
+export async function deleteSurvey(input: SurveyIdInput): Promise<void> {
+  const { surveyId } = input;
 
   const surveyQuestions = await db.query.questions.findMany({
     where: eq(questions.surveyId, surveyId),
@@ -143,12 +119,13 @@ export async function deleteSurvey(surveyId: string) {
   }
 
   await db.delete(surveys).where(eq(surveys.id, surveyId));
-  revalidatePath('/admin/surveys');
 }
 
 // 설문 복제
-export async function duplicateSurvey(surveyId: string) {
-  await requireAuth();
+export async function duplicateSurvey(
+  input: SurveyIdInput,
+): Promise<SurveyRow | null> {
+  const { surveyId } = input;
 
   const original = await getSurveyById(surveyId);
   if (!original) return null;
@@ -270,8 +247,6 @@ export async function duplicateSurvey(surveyId: string) {
       await tx.insert(questions).values(newQuestionsData);
     }
 
-    revalidatePath('/admin/surveys');
     return newSurvey;
   });
 }
-

@@ -2,12 +2,6 @@
 
 import { useCallback, useTransition } from 'react';
 
-import {
-  exportLibrary as exportLibraryAction,
-  importLibrary as importLibraryAction,
-  initializePresetQuestions,
-} from '@/actions/library-actions';
-import { getAllTags } from '@/actions/query-actions';
 import { client } from '@/shared/lib/rpc';
 
 /**
@@ -141,7 +135,7 @@ export function useLibrarySync() {
   // 모든 태그 불러오기
   const loadAllTags = useCallback(async () => {
     try {
-      const tags = await getAllTags();
+      const tags = await client.surveyBuilder.read.allTags();
       return tags;
     } catch (error) {
       console.error('태그 불러오기 실패:', error);
@@ -163,7 +157,7 @@ export function useLibrarySync() {
   // 라이브러리 내보내기
   const exportLibrary = useCallback(async () => {
     try {
-      const json = await exportLibraryAction();
+      const json = await client.library.transfer.export();
       return json;
     } catch (error) {
       console.error('라이브러리 내보내기 실패:', error);
@@ -174,7 +168,7 @@ export function useLibrarySync() {
   // 라이브러리 가져오기
   const importLibrary = useCallback(async (json: string) => {
     try {
-      await importLibraryAction(json);
+      await client.library.transfer.import({ json });
     } catch (error) {
       console.error('라이브러리 가져오기 실패:', error);
       throw error;
@@ -275,7 +269,7 @@ export function useCategorySync() {
   // 프리셋 질문 초기화
   const initializePresets = useCallback(async () => {
     try {
-      const questions = await initializePresetQuestions();
+      const questions = await client.library.transfer.initializePresets();
       return questions;
     } catch (error) {
       console.error('프리셋 질문 초기화 실패:', error);

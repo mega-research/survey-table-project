@@ -1,61 +1,28 @@
-'use server';
-
-import { revalidatePath } from 'next/cache';
+import 'server-only';
 
 import { eq, inArray } from 'drizzle-orm';
 
 import { getQuestionsBySurvey } from '@/data/surveys';
 import { db } from '@/db';
 import { NewQuestion, questions } from '@/db/schema';
-import { requireAuth } from '@/lib/auth';
 import { extractImageUrlsFromQuestion } from '@/lib/image-extractor';
 import { deleteImagesFromR2Server } from '@/lib/image-utils-server';
 import { promoteSurveyImages, type PromotableQuestion } from '@/lib/survey/survey-image-promote';
 import { generateId, isValidUUID } from '@/lib/utils';
-import type { Question, Question as QuestionType } from '@/types/survey';
+import type { Question } from '@/types/survey';
 
-// ========================
-// 질문 변경 액션 (Mutations)
-// ========================
+import type {
+  CreateQuestionInput,
+  QuestionRow,
+  UpdateQuestionData,
+} from '../../domain/question';
 
-// 질문 생성
-export async function createQuestion(data: {
-  surveyId: string;
-  id?: string | undefined;
-  groupId?: string | undefined;
-  type: string;
-  title: string;
-  description?: string | undefined;
-  required?: boolean | undefined;
-  order?: number | undefined;
-  options?: QuestionType['options'] | undefined;
-  selectLevels?: QuestionType['selectLevels'] | undefined;
-  tableTitle?: string | undefined;
-  tableColumns?: QuestionType['tableColumns'] | undefined;
-  tableRowsData?: QuestionType['tableRowsData'] | undefined;
-  tableHeaderGrid?: QuestionType['tableHeaderGrid'] | undefined;
-  imageUrl?: string | undefined;
-  videoUrl?: string | undefined;
-  allowOtherOption?: boolean | undefined;
-  optionsColumns?: number | undefined;
-  minSelections?: number | undefined;
-  maxSelections?: number | undefined;
-  noticeContent?: string | undefined;
-  requiresAcknowledgment?: boolean | undefined;
-  placeholder?: string | undefined;
-  tableValidationRules?: QuestionType['tableValidationRules'] | undefined;
-  displayCondition?: QuestionType['displayCondition'] | undefined;
-  dynamicRowConfigs?: QuestionType['dynamicRowConfigs'] | undefined;
-  hideColumnLabels?: boolean | undefined;
-  rankingConfig?: QuestionType['rankingConfig'] | undefined;
-  questionCode?: string | undefined;
-  isCustomSpssVarName?: boolean | undefined;
-  exportLabel?: string | undefined;
-  spssVarType?: string | undefined;
-  spssMeasure?: string | undefined;
-}) {
-  await requireAuth();
+// 원본: src/actions/question-actions.ts
+// requireAuth/revalidatePath 는 procedure(authed) + 소비처 router.refresh 로 대체.
+// explicit field set(불변식 A) / promote 체인(불변식 B) / reorder 1-based 보존.
 
+/** 질문 생성 — 24필드 explicit whitelist set(spread 금지, 불변식 A). */
+export async function createQuestion(data: CreateQuestionInput): Promise<QuestionRow> {
   const existingQuestions = await getQuestionsBySurvey(data.surveyId);
 
   const maxOrder =
@@ -100,51 +67,20 @@ export async function createQuestion(data: {
   // tmp/survey/ 이미지를 영구 prefix로 promote (R2 move + URL 치환)
   const [questionToInsert] = await promoteSurveyImages([newQuestion as PromotableQuestion]);
 
-  const [question] = await db.insert(questions).values(questionToInsert as NewQuestion).returning();
+  const [question] = await db
+    .insert(questions)
+    .values(questionToInsert as NewQuestion)
+    .returning();
 
-  revalidatePath(`/admin/surveys/${data.surveyId}`);
-  return question;
+  if (!question) throw new Error('질문 생성에 실패했습니다.');
+  return question as QuestionRow;
 }
 
-// 질문 업데이트 (허용 필드만 화이트리스트로 추출)
+/** 질문 업데이트 — 허용 필드만 화이트리스트로 추출(불변식 A). */
 export async function updateQuestion(
   questionId: string,
-  data: {
-    groupId?: string | null | undefined;
-    type?: string | undefined;
-    title?: string | undefined;
-    description?: string | undefined;
-    required?: boolean | undefined;
-    order?: number | undefined;
-    options?: QuestionType['options'] | undefined;
-    selectLevels?: QuestionType['selectLevels'] | undefined;
-    tableTitle?: string | undefined;
-    tableColumns?: QuestionType['tableColumns'] | undefined;
-    tableRowsData?: QuestionType['tableRowsData'] | undefined;
-    tableHeaderGrid?: QuestionType['tableHeaderGrid'] | undefined;
-    imageUrl?: string | undefined;
-    videoUrl?: string | undefined;
-    allowOtherOption?: boolean | undefined;
-    optionsColumns?: number | undefined;
-    minSelections?: number | undefined;
-    maxSelections?: number | undefined;
-    noticeContent?: string | undefined;
-    requiresAcknowledgment?: boolean | undefined;
-    placeholder?: string | undefined;
-    tableValidationRules?: QuestionType['tableValidationRules'] | undefined;
-    dynamicRowConfigs?: QuestionType['dynamicRowConfigs'] | undefined;
-    hideColumnLabels?: boolean | undefined;
-    rankingConfig?: QuestionType['rankingConfig'] | undefined;
-    displayCondition?: QuestionType['displayCondition'] | undefined;
-    questionCode?: string | undefined;
-    isCustomSpssVarName?: boolean | undefined;
-    exportLabel?: string | undefined;
-    spssVarType?: string | undefined;
-    spssMeasure?: string | undefined;
-  },
-) {
-  await requireAuth();
-
+  data: UpdateQuestionData,
+): Promise<QuestionRow> {
   // 허용 필드만 추출 (id, surveyId, createdAt 등 변경 방지)
   const allowed: Partial<NewQuestion> = { updatedAt: new Date() };
   if (data.groupId !== undefined) allowed.groupId = data.groupId;
@@ -188,13 +124,12 @@ export async function updateQuestion(
     .where(eq(questions.id, questionId))
     .returning();
 
-  return updated;
+  if (!updated) throw new Error('질문 업데이트에 실패했습니다.');
+  return updated as QuestionRow;
 }
 
-// 질문 삭제
-export async function deleteQuestion(questionId: string) {
-  await requireAuth();
-
+/** 질문 삭제 — 이미지 R2 cleanup(best-effort) 후 행 삭제. */
+export async function deleteQuestion(questionId: string): Promise<{ ok: true }> {
   const question = await db.query.questions.findFirst({
     where: eq(questions.id, questionId),
   });
@@ -211,14 +146,13 @@ export async function deleteQuestion(questionId: string) {
   }
 
   await db.delete(questions).where(eq(questions.id, questionId));
+  return { ok: true as const };
 }
 
-// [최적화] 질문 순서 변경
-export async function reorderQuestions(questionIds: string[]) {
-  await requireAuth();
-
+/** [최적화] 질문 순서 변경 — order 는 1-based(index + 1). 변경된 행만 update. */
+export async function reorderQuestions(questionIds: string[]): Promise<{ ok: true }> {
   const validQuestionIds = questionIds.filter((id) => isValidUUID(id));
-  if (validQuestionIds.length === 0) return;
+  if (validQuestionIds.length === 0) return { ok: true as const };
 
   const currentQuestions = await db.query.questions.findMany({
     where: inArray(questions.id, validQuestionIds),
@@ -229,7 +163,7 @@ export async function reorderQuestions(questionIds: string[]) {
   });
 
   const currentOrderMap = new Map(currentQuestions.map((q) => [q.id, q.order]));
-  const updates: Promise<any>[] = [];
+  const updates: Promise<unknown>[] = [];
 
   validQuestionIds.forEach((id, index) => {
     const newOrder = index + 1;
@@ -248,4 +182,6 @@ export async function reorderQuestions(questionIds: string[]) {
   if (updates.length > 0) {
     await Promise.all(updates);
   }
+
+  return { ok: true as const };
 }

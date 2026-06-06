@@ -12,7 +12,7 @@ import {
   getResponsesWithAnswers,
   getSurveyVersions,
 } from '@/data/responses';
-import { getSurveyWithDetails } from '@/data/surveys';
+import { getSurveyWithDetails } from '@/features/survey-builder/server/services/survey-read.service';
 
 interface AdminAnalyticsPageProps {
   params: Promise<{ id: string }>;

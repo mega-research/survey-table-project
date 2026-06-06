@@ -26,10 +26,7 @@ import {
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
-import {
-  createQuestion as createQuestionAction,
-  updateQuestion as updateQuestionAction,
-} from '@/actions/question-actions';
+import { client } from '@/shared/lib/rpc';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -472,8 +469,9 @@ export function CellContentModal({
 
             if (isValidUUID(currentQuestionId)) {
               // 이미 DB에 저장된 질문: 업데이트
-              await updateQuestionAction(currentQuestionId, {
-                tableRowsData: updatedRowsData,
+              await client.surveyBuilder.questions.update({
+                questionId: currentQuestionId,
+                data: { tableRowsData: updatedRowsData },
               });
               // store 도 동일 데이터로 동기화. 표시 조건/장기 계산식 picker 가
               // store 를 직접 구독하므로 누락 시 셀 라벨 변경이 stale 로 표시됨.
@@ -487,7 +485,7 @@ export function CellContentModal({
               }));
             } else {
               // 임시 질문: 생성하고 반환된 UUID로 로컬 스토어의 질문 ID 업데이트
-              const createdQuestion = await createQuestionAction({
+              const createdQuestion = await client.surveyBuilder.questions.create({
                 surveyId: useSurveyBuilderStore.getState().currentSurvey.id,
                 ...(question.groupId !== undefined ? { groupId: question.groupId } : {}),
                 type: question.type,

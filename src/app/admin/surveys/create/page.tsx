@@ -33,7 +33,7 @@ import {
   Type,
 } from 'lucide-react';
 
-import { isSlugAvailable } from '@/actions/query-actions';
+import { client } from '@/shared/lib/rpc';
 import { GroupManager } from '@/components/survey-builder/group-manager';
 import { ImportExportLibraryModal } from '@/components/survey-builder/import-export-library-modal';
 import { QuestionLibraryPanel } from '@/components/survey-builder/question-library-panel';
@@ -216,7 +216,10 @@ export default function CreateSurveyPage() {
     // 500ms 후에 서버 검사 수행
     const timer = setTimeout(async () => {
       try {
-        const available = await isSlugAvailable(slugInput, currentSurvey.id);
+        const available = await client.surveyBuilder.read.slugAvailable({
+          slug: slugInput,
+          ...(currentSurvey.id ? { excludeSurveyId: currentSurvey.id } : {}),
+        });
         if (!available) {
           setSlugError('이미 사용 중인 URL입니다. 다른 URL을 입력해주세요.');
         } else {
@@ -239,11 +242,17 @@ export default function CreateSurveyPage() {
       // 중복 시 접미사 추가
       let finalSlug = autoSlug;
       let counter = 1;
-      let available = await isSlugAvailable(finalSlug, currentSurvey.id);
+      let available = await client.surveyBuilder.read.slugAvailable({
+        slug: finalSlug,
+        ...(currentSurvey.id ? { excludeSurveyId: currentSurvey.id } : {}),
+      });
       while (!available) {
         finalSlug = `${autoSlug}-${counter}`;
         counter++;
-        available = await isSlugAvailable(finalSlug, currentSurvey.id);
+        available = await client.surveyBuilder.read.slugAvailable({
+          slug: finalSlug,
+          ...(currentSurvey.id ? { excludeSurveyId: currentSurvey.id } : {}),
+        });
       }
       setSlugInput(finalSlug);
       updateSurveySlug(finalSlug);

@@ -16,10 +16,7 @@ import {
   Type,
 } from 'lucide-react';
 
-import {
-  createQuestion as createQuestionAction,
-  updateQuestion as updateQuestionAction,
-} from '@/actions/question-actions';
+import { client } from '@/shared/lib/rpc';
 import { Button } from '@/components/ui/button';
 import { useEnsureSurveyInDb } from '@/hooks/use-ensure-survey-in-db';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -310,10 +307,10 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
             if (resolvedPlaceholder !== undefined) {
               updateData.placeholder = resolvedPlaceholder;
             }
-            await updateQuestionAction(questionId, updateData);
+            await client.surveyBuilder.questions.update({ questionId, data: updateData });
           } else {
             // 새 질문: CREATE 경로
-            const createdQuestion = await createQuestionAction({
+            const createdQuestion = await client.surveyBuilder.questions.create({
               id: questionId,
               surveyId: store.currentSurvey.id,
               groupId: question?.groupId,
@@ -538,8 +535,9 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
                   const isNewQuestion = !!store.questionChanges.added[questionId || ''];
                   if (questionId && store.currentSurvey.id && isValidUUID(questionId) && !isNewQuestion) {
                     try {
-                      await updateQuestionAction(questionId, {
-                        displayCondition: conditionGroup,
+                      await client.surveyBuilder.questions.update({
+                        questionId,
+                        data: { displayCondition: conditionGroup },
                       });
                     } catch (error) {
                       console.error('조건 저장 실패:', error);

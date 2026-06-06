@@ -2,7 +2,7 @@
 
 import { useCallback, useRef } from 'react';
 
-import { ensureSurveyInDb } from '@/actions/survey-crud-actions';
+import { client } from '@/shared/lib/rpc';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 
 /**
@@ -22,7 +22,7 @@ export function useEnsureSurveyInDb() {
       return;
     }
 
-    const promise = ensureSurveyInDb({
+    const promise = client.surveyBuilder.surveys.ensure({
       id: store.currentSurvey.id,
       title: store.currentSurvey.title,
       ...(store.currentSurvey.privateToken !== undefined ? { privateToken: store.currentSurvey.privateToken } : {}),

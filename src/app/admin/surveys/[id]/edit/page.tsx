@@ -28,8 +28,7 @@ import {
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
-import { isSlugAvailable as checkSlugAvailable, getVariableCatalogAction } from '@/actions/query-actions';
-import { publishSurvey } from '@/actions/survey-publish-actions';
+import { client } from '@/shared/lib/rpc';
 import { ImportExportLibraryModal } from '@/components/survey-builder/import-export-library-modal';
 import { QuestionLibraryPanel } from '@/components/survey-builder/question-library-panel';
 import { SaveQuestionModal } from '@/components/survey-builder/save-question-modal';
@@ -185,7 +184,7 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
 
   // 변수 카탈로그 fetch (prefill 토큰 빌더 UI용)
   useEffect(() => {
-    getVariableCatalogAction(id).then((catalog) => {
+    client.surveyBuilder.read.variableCatalog({ surveyId: id }).then((catalog) => {
       setVariableCatalog(catalog);
     }).catch(() => {
       // 컨택 없는 설문이면 빈 배열 — 정상 케이스
@@ -243,7 +242,10 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
     // 500ms 후에 서버 검사 수행
     const timer = setTimeout(async () => {
       try {
-        const isAvailable = await checkSlugAvailable(slugInput, surveyId);
+        const isAvailable = await client.surveyBuilder.read.slugAvailable({
+          slug: slugInput,
+          ...(surveyId ? { excludeSurveyId: surveyId } : {}),
+        });
         if (cancelled) return;
         if (!isAvailable) {
           setSlugError('이미 사용 중인 URL입니다. 다른 URL을 입력해주세요.');
@@ -271,11 +273,17 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
       // 중복 시 접미사 추가 - 서버 액션으로 확인
       let finalSlug = autoSlug;
       let counter = 1;
-      let isAvailable = await checkSlugAvailable(finalSlug, surveyId);
+      let isAvailable = await client.surveyBuilder.read.slugAvailable({
+        slug: finalSlug,
+        ...(surveyId ? { excludeSurveyId: surveyId } : {}),
+      });
       while (!isAvailable) {
         finalSlug = `${autoSlug}-${counter}`;
         counter++;
-        isAvailable = await checkSlugAvailable(finalSlug, surveyId);
+        isAvailable = await client.surveyBuilder.read.slugAvailable({
+          slug: finalSlug,
+          ...(surveyId ? { excludeSurveyId: surveyId } : {}),
+        });
       }
       setSlugInput(finalSlug);
       updateSurveySlug(finalSlug);
@@ -336,7 +344,7 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
       // 배포 전 저장
       await saveSurvey();
 
-      const version = await publishSurvey(surveyId);
+      const version = await client.surveyBuilder.publish.publish({ surveyId });
       markPublished();
       alert(`설문이 배포되었습니다. (버전 ${version.versionNumber})`);
     } catch (error) {

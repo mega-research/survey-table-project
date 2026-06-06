@@ -2,13 +2,6 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import {
-  exportResponsesAsCsv,
-  exportResponsesAsJson,
-  getCompletedResponses,
-  getResponseById,
-  getResponsesBySurvey,
-} from '@/actions/query-actions';
 import { client, orpc } from '@/shared/lib/rpc';
 
 // ========================
@@ -37,7 +30,7 @@ export const responseKeys = {
 export function useResponses(surveyId: string | undefined) {
   return useQuery({
     queryKey: responseKeys.listBySurvey(surveyId!),
-    queryFn: () => getResponsesBySurvey(surveyId!),
+    queryFn: () => orpc.surveyBuilder.read.responsesBySurvey.call({ surveyId: surveyId! }),
     enabled: !!surveyId,
   });
 }
@@ -48,7 +41,7 @@ export function useResponses(surveyId: string | undefined) {
 export function useCompletedResponses(surveyId: string | undefined) {
   return useQuery({
     queryKey: responseKeys.completedBySurvey(surveyId!),
-    queryFn: () => getCompletedResponses(surveyId!),
+    queryFn: () => orpc.surveyBuilder.read.completedResponses.call({ surveyId: surveyId! }),
     enabled: !!surveyId,
   });
 }
@@ -59,7 +52,7 @@ export function useCompletedResponses(surveyId: string | undefined) {
 export function useResponse(responseId: string | undefined) {
   return useQuery({
     queryKey: responseKeys.detail(responseId!),
-    queryFn: () => getResponseById(responseId!),
+    queryFn: () => orpc.surveyBuilder.read.responseById.call({ responseId: responseId! }),
     enabled: !!responseId,
   });
 }
@@ -157,7 +150,7 @@ export function useCompleteResponse() {
  */
 export function useExportResponsesJson() {
   return useMutation({
-    mutationFn: (surveyId: string) => exportResponsesAsJson(surveyId),
+    mutationFn: (surveyId: string) => orpc.surveyBuilder.read.exportJson.call({ surveyId }),
   });
 }
 
@@ -166,6 +159,6 @@ export function useExportResponsesJson() {
  */
 export function useExportResponsesCsv() {
   return useMutation({
-    mutationFn: (surveyId: string) => exportResponsesAsCsv(surveyId),
+    mutationFn: (surveyId: string) => orpc.surveyBuilder.read.exportCsv.call({ surveyId }),
   });
 }

@@ -2,12 +2,6 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import {
-  exportLibrary as exportLibraryAction,
-  importLibrary as importLibraryAction,
-  initializePresetQuestions,
-} from '@/actions/library-actions';
-import { getAllTags } from '@/actions/query-actions';
 import { orpc } from '@/shared/lib/rpc';
 
 // ========================
@@ -93,7 +87,7 @@ export function useQuestionsByTag(tag: string | undefined) {
 export function useAllTags() {
   return useQuery({
     queryKey: libraryKeys.tags(),
-    queryFn: () => getAllTags(),
+    queryFn: () => orpc.surveyBuilder.read.allTags.call(),
   });
 }
 
@@ -239,7 +233,7 @@ export function useDeleteCategory() {
  */
 export function useExportLibrary() {
   return useMutation({
-    mutationFn: () => exportLibraryAction(),
+    mutationFn: () => orpc.library.transfer.export.call(),
   });
 }
 
@@ -250,7 +244,7 @@ export function useImportLibrary() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (json: string) => importLibraryAction(json),
+    mutationFn: (json: string) => orpc.library.transfer.import.call({ json }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: libraryKeys.all });
     },
@@ -278,7 +272,7 @@ export function useInitializePresets() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: () => initializePresetQuestions(),
+    mutationFn: () => orpc.library.transfer.initializePresets.call(),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: libraryKeys.questions() });
     },

@@ -1,11 +1,8 @@
-'use server';
-
-import { revalidatePath } from 'next/cache';
+import 'server-only';
 
 import { eq } from 'drizzle-orm';
 
 import { getAllCategories } from '@/data/library';
-import { listSavedQuestions } from '@/features/library/server/services/saved-questions.service';
 import { db } from '@/db';
 import {
   NewQuestionCategory,
@@ -13,23 +10,21 @@ import {
   questionCategories,
   savedQuestions,
 } from '@/db/schema';
-import { requireAuth } from '@/lib/auth';
 import { promoteSurveyImages } from '@/lib/survey/survey-image-promote';
 import type { Question } from '@/types/survey';
 
-// 라이브러리 내보내기
-export async function exportLibrary() {
-  await requireAuth();
+import { listSavedQuestions } from './saved-questions.service';
 
+// 라이브러리 내보내기 — { savedQuestions, categories } 직렬화 문자열 반환.
+export async function exportLibrary(): Promise<string> {
   const questions = await listSavedQuestions();
   const categories = await getAllCategories();
   return JSON.stringify({ savedQuestions: questions, categories }, null, 2);
 }
 
-// 라이브러리 가져오기
-export async function importLibrary(json: string) {
-  await requireAuth();
-
+// 라이브러리 가져오기 — raw JSON 문자열 입력.
+// tmp/survey/ 이미지를 promote 한 뒤 insert (promote -> insert 순서 보존).
+export async function importLibrary(json: string): Promise<void> {
   try {
     const data = JSON.parse(json);
 
@@ -63,18 +58,14 @@ export async function importLibrary(json: string) {
         await db.insert(questionCategories).values(newCategories);
       }
     }
-
-    revalidatePath('/admin/surveys');
   } catch (error) {
     console.error('Failed to import library:', error);
     throw error;
   }
 }
 
-// 프리셋 질문 초기화
+// 프리셋 질문 초기화 — isPreset 기존행 있으면 early return.
 export async function initializePresetQuestions() {
-  await requireAuth();
-
   const existingQuestions = await db.query.savedQuestions.findMany({
     where: eq(savedQuestions.isPreset, true),
   });

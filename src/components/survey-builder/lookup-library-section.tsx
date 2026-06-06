@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 
 import { Database, Pencil, Plus, Trash2, Upload } from 'lucide-react';
 
-import { copySavedLookupToSurveyAction } from '@/actions/lookup-actions';
 import { Button } from '@/components/ui/button';
 import { client } from '@/shared/lib/rpc';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
@@ -94,7 +93,7 @@ export function LookupLibrarySection() {
   const handleAddToSurvey = async (savedLookupId: string) => {
     if (!surveyId) return;
     try {
-      await copySavedLookupToSurveyAction(surveyId, savedLookupId);
+      await client.surveyBuilder.lookups.copy({ surveyId, savedLookupId });
       await reload();
     } catch (e) {
       // 사용자에게 최소한의 피드백 — toast 인프라가 없어 alert 사용

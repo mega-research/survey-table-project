@@ -5,7 +5,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 // ========================
 //
 // lookup-actions (survey 연관 함수만 남음):
-//   copySavedLookupToSurveyAction / upsertSurveyLookupAction / deleteSurveyLookupAction
+//   copySavedLookupToSurvey / upsertSurveyLookup / deleteSurveyLookup
 //
 // 보관함 CRUD 함수(listSavedLookupsAction, createSavedLookupAction, updateSavedLookupAction,
 // deleteSavedLookupAction)는 oRPC savedLookups procedure 로 이관됨.
@@ -238,10 +238,10 @@ vi.mock('@/db', () => {
 // =====================
 
 import {
-  copySavedLookupToSurveyAction,
-  upsertSurveyLookupAction,
-  deleteSurveyLookupAction,
-} from '@/actions/lookup-actions';
+  copySavedLookupToSurvey,
+  upsertSurveyLookup,
+  deleteSurveyLookup,
+} from '@/features/survey-builder/server/services/survey-lookups.service';
 
 const TEST_SURVEY_ID = '00000000-0000-4000-8000-000000000001';
 
@@ -279,7 +279,7 @@ describe('lookup-actions integration', () => {
     });
   });
 
-  it('copySavedLookupToSurveyAction → surveys.lookups 에 사본 추가 + usageCount 증가', async () => {
+  it('copySavedLookupToSurvey → surveys.lookups 에 사본 추가 + usageCount 증가', async () => {
     const saved = seedSavedLookup({
       id: 'sl-1',
       name: 'lut-1',
@@ -287,7 +287,7 @@ describe('lookup-actions integration', () => {
       rows: [{ 대륙: '유럽', value: 1 }],
     });
 
-    const copied = await copySavedLookupToSurveyAction(TEST_SURVEY_ID, saved.id);
+    const copied = await copySavedLookupToSurvey(TEST_SURVEY_ID, saved.id);
 
     expect(copied.sourceSavedLookupId).toBe(saved.id);
     expect(copied.id).not.toBe(saved.id);
@@ -305,20 +305,20 @@ describe('lookup-actions integration', () => {
     expect(savedAfter.usageCount).toBe(1);
   });
 
-  it('upsertSurveyLookupAction → 행 수정', async () => {
+  it('upsertSurveyLookup → 행 수정', async () => {
     const saved = seedSavedLookup({
       id: 'sl-1',
       name: 'lut-1',
       columns: ['대륙', 'value'],
       rows: [{ 대륙: '유럽', value: 1 }],
     });
-    await copySavedLookupToSurveyAction(TEST_SURVEY_ID, saved.id);
+    await copySavedLookupToSurvey(TEST_SURVEY_ID, saved.id);
 
     const survey = h.surveyStore.get(TEST_SURVEY_ID)!;
     const existing = survey.lookups[0];
     if (!existing) throw new Error('survey.lookups[0] 없음');
 
-    const updated = await upsertSurveyLookupAction(TEST_SURVEY_ID, {
+    const updated = await upsertSurveyLookup(TEST_SURVEY_ID, {
       id: existing.id,
       name: existing.name,
       ...(existing.sourceSavedLookupId !== undefined && { sourceSavedLookupId: existing.sourceSavedLookupId }),
@@ -334,34 +334,34 @@ describe('lookup-actions integration', () => {
     expect(afterLookup0.rows).toHaveLength(2);
   });
 
-  it('deleteSurveyLookupAction → 사본 제거', async () => {
+  it('deleteSurveyLookup → 사본 제거', async () => {
     const saved = seedSavedLookup({
       id: 'sl-1',
       name: 'lut-1',
       columns: ['대륙', 'value'],
       rows: [{ 대륙: '유럽', value: 1 }],
     });
-    await copySavedLookupToSurveyAction(TEST_SURVEY_ID, saved.id);
+    await copySavedLookupToSurvey(TEST_SURVEY_ID, saved.id);
 
     const survey = h.surveyStore.get(TEST_SURVEY_ID)!;
     const deleteLookup0 = survey.lookups[0];
     if (!deleteLookup0) throw new Error('survey.lookups[0] 없음');
     const surveyLookupId = deleteLookup0.id;
 
-    await deleteSurveyLookupAction(TEST_SURVEY_ID, surveyLookupId);
+    await deleteSurveyLookup(TEST_SURVEY_ID, surveyLookupId);
 
     const after = h.surveyStore.get(TEST_SURVEY_ID)!;
     expect(after.lookups).toHaveLength(0);
   });
 
-  it('copySavedLookupToSurveyAction: 같은 sourceSavedLookupId 중복 추가 시 갱신만 (usageCount 증가 없음)', async () => {
+  it('copySavedLookupToSurvey: 같은 sourceSavedLookupId 중복 추가 시 갱신만 (usageCount 증가 없음)', async () => {
     const saved = seedSavedLookup({
       id: 'sl-1',
       name: 'lut-1',
       columns: ['대륙', 'value'],
       rows: [{ 대륙: '유럽', value: 1 }],
     });
-    await copySavedLookupToSurveyAction(TEST_SURVEY_ID, saved.id);
+    await copySavedLookupToSurvey(TEST_SURVEY_ID, saved.id);
 
     // 보관함 데이터 직접 갱신 후 두 번째 copy → 사본 갱신만, 신규 추가 안 됨
     h.savedLookupStore.set(saved.id, {
@@ -371,7 +371,7 @@ describe('lookup-actions integration', () => {
         { 대륙: '북미', value: 2 },
       ],
     });
-    await copySavedLookupToSurveyAction(TEST_SURVEY_ID, saved.id);
+    await copySavedLookupToSurvey(TEST_SURVEY_ID, saved.id);
 
     const survey = h.surveyStore.get(TEST_SURVEY_ID)!;
     // 사본은 여전히 1건

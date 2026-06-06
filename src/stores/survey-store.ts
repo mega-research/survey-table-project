@@ -38,6 +38,7 @@ function recalculateGlobalOrder(questions: Question[], groups: QuestionGroup[]):
 }
 import { generatePrivateToken, generateSlugFromTitle } from '@/lib/survey-url';
 import { generateId } from '@/lib/utils';
+import { client } from '@/shared/lib/rpc';
 import {
   Question,
   QuestionGroup,
@@ -186,8 +187,7 @@ export const useSurveyBuilderStore = create<SurveyBuilderState>()(
       refetchSurvey: async () => {
         const surveyId = get().currentSurvey.id;
         if (!surveyId) return;
-        const { getSurveyWithDetails } = await import('@/actions/query-actions');
-        const fresh = await getSurveyWithDetails(surveyId);
+        const fresh = await client.surveyBuilder.read.withDetails({ surveyId });
         if (fresh) {
           set((state) => {
             // 빌더 dirty 상태와 changeset 은 보존 — refetch 는 단일 jsonb 갱신용이므로

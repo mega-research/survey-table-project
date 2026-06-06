@@ -2,23 +2,8 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import {
-  getSurveyBySlug,
-  getSurveyListWithCounts,
-  getSurveyWithDetails,
-  searchSurveys,
-} from '@/actions/query-actions';
-import {
-  createSurvey,
-  deleteSurvey as deleteSurveyAction,
-  duplicateSurvey as duplicateSurveyAction,
-  updateSurvey,
-} from '@/actions/survey-crud-actions';
-import {
-  saveSurveyDiff,
-  saveSurveyWithDetails,
-} from '@/actions/survey-save-actions';
-import type { SurveyDiffPayload } from '@/actions/survey-save-actions';
+import type { SurveyDiffPayload } from '@/features/survey-builder/domain/survey-save';
+import { client, orpc } from '@/shared/lib/rpc';
 import type { Survey } from '@/types/survey';
 
 // ========================
@@ -43,7 +28,7 @@ export const surveyKeys = {
 export function useSurveys() {
   return useQuery({
     queryKey: surveyKeys.lists(),
-    queryFn: () => getSurveyListWithCounts(),
+    queryFn: () => orpc.surveyBuilder.read.list.call(),
   });
 }
 
@@ -53,7 +38,7 @@ export function useSurveys() {
 export function useSurvey(surveyId: string | undefined) {
   return useQuery({
     queryKey: surveyKeys.detail(surveyId!),
-    queryFn: () => getSurveyWithDetails(surveyId!),
+    queryFn: () => orpc.surveyBuilder.read.withDetails.call({ surveyId: surveyId! }),
     enabled: !!surveyId,
   });
 }
@@ -64,7 +49,7 @@ export function useSurvey(surveyId: string | undefined) {
 export function useSurveyBySlug(slug: string | undefined) {
   return useQuery({
     queryKey: surveyKeys.bySlug(slug!),
-    queryFn: () => getSurveyBySlug(slug!),
+    queryFn: () => orpc.surveyBuilder.publicRead.bySlug.call({ slug: slug! }),
     enabled: !!slug,
   });
 }
@@ -75,7 +60,7 @@ export function useSurveyBySlug(slug: string | undefined) {
 export function useSearchSurveys(query: string) {
   return useQuery({
     queryKey: surveyKeys.list(query),
-    queryFn: () => searchSurveys(query),
+    queryFn: () => orpc.surveyBuilder.read.search.call({ query }),
     enabled: query.length > 0,
   });
 }
@@ -96,7 +81,7 @@ export function useCreateSurvey() {
       description?: string;
       slug?: string;
       isPublic?: boolean;
-    }) => createSurvey(data),
+    }) => client.surveyBuilder.surveys.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: surveyKeys.lists() });
     },
@@ -110,7 +95,7 @@ export function useSaveSurvey() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (survey: Survey) => saveSurveyWithDetails(survey),
+    mutationFn: (survey: Survey) => client.surveyBuilder.save.saveWithDetails(survey),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: surveyKeys.lists() });
       queryClient.invalidateQueries({ queryKey: surveyKeys.detail(data.surveyId) });
@@ -125,7 +110,7 @@ export function useSaveSurveyDiff() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (payload: SurveyDiffPayload) => saveSurveyDiff(payload),
+    mutationFn: (payload: SurveyDiffPayload) => client.surveyBuilder.save.saveDiff(payload),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: surveyKeys.lists() });
       queryClient.invalidateQueries({ queryKey: surveyKeys.detail(data.surveyId) });
@@ -145,8 +130,8 @@ export function useUpdateSurvey() {
       data,
     }: {
       surveyId: string;
-      data: Parameters<typeof updateSurvey>[1];
-    }) => updateSurvey(surveyId, data),
+      data: Parameters<typeof client.surveyBuilder.surveys.update>[0]['data'];
+    }) => client.surveyBuilder.surveys.update({ surveyId, data }),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: surveyKeys.lists() });
       queryClient.invalidateQueries({ queryKey: surveyKeys.detail(variables.surveyId) });
@@ -161,7 +146,7 @@ export function useDeleteSurvey() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (surveyId: string) => deleteSurveyAction(surveyId),
+    mutationFn: (surveyId: string) => client.surveyBuilder.surveys.delete({ surveyId }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: surveyKeys.lists() });
     },
@@ -175,7 +160,7 @@ export function useDuplicateSurvey() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (surveyId: string) => duplicateSurveyAction(surveyId),
+    mutationFn: (surveyId: string) => client.surveyBuilder.surveys.duplicate({ surveyId }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: surveyKeys.lists() });
     },

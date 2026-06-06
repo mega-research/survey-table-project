@@ -23,6 +23,7 @@ import {
 import { FolderPlus } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { client } from '@/shared/lib/rpc';
 import { useEnsureSurveyInDb } from '@/hooks/use-ensure-survey-in-db';
 import { isUUID } from '@/lib/survey-url';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
@@ -185,8 +186,7 @@ export function GroupManager({ className }: GroupManagerProps) {
       if (surveyId && isUUID(surveyId)) {
         try {
           await ensureSurvey();
-          const { createQuestionGroup } = await import('@/actions/question-group-actions');
-          const createdGroup = await createQuestionGroup({
+          const createdGroup = await client.surveyBuilder.groups.create({
             surveyId: surveyId,
             name: groupName.trim(),
             ...(groupDescription.trim() ? { description: groupDescription.trim() } : {}),
@@ -277,13 +277,16 @@ export function GroupManager({ className }: GroupManagerProps) {
       // DB에 저장 (그룹 ID가 UUID인 경우에만)
       if (surveyId && isUUID(surveyId) && isUUID(editingGroup.id)) {
         ensureSurvey().then(() =>
-          import('@/actions/question-group-actions').then(({ updateQuestionGroup }) => {
-            updateQuestionGroup(editingGroup.id, {
-              ...(conditionGroup !== undefined ? { displayCondition: conditionGroup } : {}),
-            }).catch((error) => {
+          client.surveyBuilder.groups
+            .update({
+              groupId: editingGroup.id,
+              data: {
+                ...(conditionGroup !== undefined ? { displayCondition: conditionGroup } : {}),
+              },
+            })
+            .catch((error) => {
               console.error('그룹 표시 조건 저장 실패:', error);
-            });
-          }),
+            }),
         );
       }
     }
@@ -338,13 +341,15 @@ export function GroupManager({ className }: GroupManagerProps) {
         ) {
           try {
             await ensureSurvey();
-            const { updateQuestionGroup } = await import('@/actions/question-group-actions');
-            await updateQuestionGroup(editingGroup.id, {
-              name: groupName.trim(),
-              ...(groupDescription.trim() ? { description: groupDescription.trim() } : {}),
-              parentGroupId: newParentGroupId ?? null,
-              order: newOrder,
-              ...(finalDisplayCondition !== undefined ? { displayCondition: finalDisplayCondition } : {}),
+            await client.surveyBuilder.groups.update({
+              groupId: editingGroup.id,
+              data: {
+                name: groupName.trim(),
+                ...(groupDescription.trim() ? { description: groupDescription.trim() } : {}),
+                parentGroupId: newParentGroupId ?? null,
+                order: newOrder,
+                ...(finalDisplayCondition !== undefined ? { displayCondition: finalDisplayCondition } : {}),
+              },
             });
           } catch (error) {
             console.error('그룹 업데이트 저장 실패:', error);
@@ -366,11 +371,13 @@ export function GroupManager({ className }: GroupManagerProps) {
         if (surveyId && isUUID(surveyId) && isUUID(editingGroup.id)) {
           try {
             await ensureSurvey();
-            const { updateQuestionGroup } = await import('@/actions/question-group-actions');
-            await updateQuestionGroup(editingGroup.id, {
-              name: groupName.trim(),
-              ...(groupDescription.trim() ? { description: groupDescription.trim() } : {}),
-              ...(finalDisplayCondition !== undefined ? { displayCondition: finalDisplayCondition } : {}),
+            await client.surveyBuilder.groups.update({
+              groupId: editingGroup.id,
+              data: {
+                name: groupName.trim(),
+                ...(groupDescription.trim() ? { description: groupDescription.trim() } : {}),
+                ...(finalDisplayCondition !== undefined ? { displayCondition: finalDisplayCondition } : {}),
+              },
             });
           } catch (error) {
             console.error('그룹 업데이트 저장 실패:', error);
@@ -443,10 +450,9 @@ export function GroupManager({ className }: GroupManagerProps) {
         if (surveyId && isUUID(surveyId)) {
           try {
             await ensureSurvey();
-            const { reorderGroups: reorderGroupsAction } = await import('@/actions/question-group-actions');
             const uuidGroupIds = newGroupIds.filter((id) => isUUID(id));
             if (uuidGroupIds.length > 0) {
-              await reorderGroupsAction(surveyId, uuidGroupIds);
+              await client.surveyBuilder.groups.reorder({ surveyId, groupIds: uuidGroupIds });
             }
           } catch (error) {
             console.error('그룹 순서 저장 실패:', error);

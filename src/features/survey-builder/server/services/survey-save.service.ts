@@ -1,6 +1,4 @@
-'use server';
-
-import { revalidatePath } from 'next/cache';
+import 'server-only';
 
 import { and, eq, inArray, sql } from 'drizzle-orm';
 
@@ -12,7 +10,6 @@ import {
   questions,
   surveys,
 } from '@/db/schema';
-import { requireAuth } from '@/lib/auth';
 import { extractImageUrlsFromQuestions } from '@/lib/image-extractor';
 import { deleteImagesFromR2Server, deleteR2ObjectsByKey } from '@/lib/image-utils-server';
 import { promoteSurveyImages } from '@/lib/survey/survey-image-promote';
@@ -22,39 +19,30 @@ import {
 } from '@/lib/survey/notice-attachment-promote';
 import type {
   Question,
-  QuestionGroup,
   Survey as SurveyType,
-  SurveySettings,
 } from '@/types/survey';
 import { stripOptionCodes } from '@/utils/option-code-generator';
 import { stripTableRowsData } from '@/utils/table-cell-optimizer';
 
+import type {
+  SaveResult,
+  SurveyDiffPayload,
+  SurveyDiffPayloadInput,
+} from '../../domain/survey-save';
+
+// 원본 interface SurveyDiffPayload 를 re-export(소비처 use-survey-sync 가 import type).
+export type { SurveyDiffPayload };
+
 // ========================
 // Diff 기반 설문 저장 (변경분만 전송)
 // ========================
+//
+// 인증은 authed 미들웨어가 담당(requireAuth 제거). 캐시 갱신(revalidatePath)은
+// 소비처 query invalidation(use-survey-sync)으로 대체한다.
 
-export interface SurveyDiffPayload {
-  surveyId: string;
-  metadata?: {
-    title: string;
-    description?: string;
-    slug?: string;
-    privateToken?: string;
-    contactEmail?: string | null;
-    settings: SurveySettings;
-    thankYouMessage?: string;
-  };
-  groups?: QuestionGroup[];
-  questionChanges?: {
-    upserted: Question[];     // 추가 + 수정된 질문 (전체 객체)
-    deleted: string[];        // 삭제된 질문 ID
-    reorderedIds?: string[];  // 전체 질문 ID 순서 (순서 변경 시에만)
-  };
-}
-
-export async function saveSurveyDiff(payload: SurveyDiffPayload) {
-  await requireAuth();
-
+export async function saveSurveyDiff(
+  payload: SurveyDiffPayloadInput,
+): Promise<SaveResult> {
   const { surveyId, metadata, groups: incomingGroups, questionChanges } = payload;
 
   // slug 중복 사전 검사
@@ -302,9 +290,6 @@ export async function saveSurveyDiff(payload: SurveyDiffPayload) {
       }
     }
 
-    revalidatePath('/admin/surveys');
-    revalidatePath(`/admin/surveys/${surveyId}`);
-
     return { surveyId };
   });
 }
@@ -313,9 +298,9 @@ export async function saveSurveyDiff(payload: SurveyDiffPayload) {
 // 전체 설문 저장 (설문 + 그룹 + 질문 일괄) — 신규 생성 전용
 // ========================
 
-export async function saveSurveyWithDetails(surveyData: SurveyType) {
-  await requireAuth();
-
+export async function saveSurveyWithDetails(
+  surveyData: SurveyType,
+): Promise<SaveResult> {
   // slug 중복 사전 검사
   if (surveyData.slug) {
     const duplicate = await db.query.surveys.findFirst({
@@ -592,9 +577,6 @@ export async function saveSurveyWithDetails(surveyData: SurveyType) {
           });
       }
     }
-
-    revalidatePath('/admin/surveys');
-    revalidatePath(`/admin/surveys/${surveyId}`);
 
     return { surveyId };
   });

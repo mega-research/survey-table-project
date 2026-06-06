@@ -1,13 +1,10 @@
-'use server';
-
-import { revalidatePath } from 'next/cache';
+import 'server-only';
 
 import { eq, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 
 import { db } from '@/db';
 import { savedLookups, surveys } from '@/db/schema';
-import { requireAuth } from '@/lib/auth';
 import type { SurveyLookup } from '@/types/survey';
 
 // ========================
@@ -18,12 +15,10 @@ import type { SurveyLookup } from '@/types/survey';
 //
 // 같은 sourceSavedLookupId 사본이 이미 있으면 중복 추가하지 않고 데이터만 최신 보관함 값으로 갱신.
 // (사용자가 같은 LUT 를 여러 번 "이 설문에 추가" 눌러도 사본이 쌓이지 않음)
-export async function copySavedLookupToSurveyAction(
+export async function copySavedLookupToSurvey(
   surveyId: string,
   savedLookupId: string,
 ): Promise<SurveyLookup> {
-  await requireAuth();
-
   const saved = await db.query.savedLookups.findFirst({
     where: eq(savedLookups.id, savedLookupId),
   });
@@ -55,7 +50,6 @@ export async function copySavedLookupToSurveyAction(
       .update(surveys)
       .set({ lookups: next, updatedAt: new Date() })
       .where(eq(surveys.id, surveyId));
-    revalidatePath(`/admin/surveys/${surveyId}`);
     return updated;
   }
 
@@ -81,17 +75,14 @@ export async function copySavedLookupToSurveyAction(
       .where(eq(savedLookups.id, savedLookupId));
   });
 
-  revalidatePath(`/admin/surveys/${surveyId}`);
   return newLookup;
 }
 
 // 설문 LUT upsert (신규 추가 또는 기존 id 갱신)
-export async function upsertSurveyLookupAction(
+export async function upsertSurveyLookup(
   surveyId: string,
   lookup: SurveyLookup,
 ): Promise<SurveyLookup> {
-  await requireAuth();
-
   const survey = await db.query.surveys.findFirst({
     where: eq(surveys.id, surveyId),
     columns: { lookups: true },
@@ -113,20 +104,17 @@ export async function upsertSurveyLookupAction(
     .set({ lookups: next, updatedAt: new Date() })
     .where(eq(surveys.id, surveyId));
 
-  revalidatePath(`/admin/surveys/${surveyId}`);
   const resultIndex = idx >= 0 ? idx : next.length - 1;
   const result = next[resultIndex];
-  if (!result) throw new Error('upsertSurveyLookupAction: 저장 결과 조회 실패');
+  if (!result) throw new Error('upsertSurveyLookup: 저장 결과 조회 실패');
   return result;
 }
 
 // 설문 LUT 삭제
-export async function deleteSurveyLookupAction(
+export async function deleteSurveyLookup(
   surveyId: string,
   surveyLookupId: string,
 ): Promise<void> {
-  await requireAuth();
-
   const survey = await db.query.surveys.findFirst({
     where: eq(surveys.id, surveyId),
     columns: { lookups: true },
@@ -143,6 +131,4 @@ export async function deleteSurveyLookupAction(
     .update(surveys)
     .set({ lookups: next, updatedAt: new Date() })
     .where(eq(surveys.id, surveyId));
-
-  revalidatePath(`/admin/surveys/${surveyId}`);
 }
