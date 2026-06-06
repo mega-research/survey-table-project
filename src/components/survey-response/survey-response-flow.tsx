@@ -11,14 +11,6 @@ import {
   getSurveyBySlug,
   getSurveyForResponse,
 } from '@/actions/query-actions';
-import {
-  completeResponse,
-  createBlankResponse,
-  createResponseWithFirstAnswer,
-  recordStepVisit,
-  resumeOrCreateResponse,
-} from '@/actions/response-actions';
-import { checkDuplicateOnEntry } from '@/actions/duplicate-detection-actions';
 import { client } from '@/shared/lib/rpc';
 import { AlreadyRespondedView } from '@/components/survey/already-responded-view';
 import { InviteRequiredScreen } from '@/components/survey-response/invite-required-screen';
@@ -60,7 +52,7 @@ import {
   shouldDisplayRow,
   type BranchEvalCtx,
 } from '@/utils/branch-logic';
-import type { SaveAdminEditPayload } from '@/actions/response-edit-actions';
+import type { SaveAdminEditPayload } from '@/features/survey-response/domain/response-edit';
 
 type ResponsesMap = Record<string, unknown>;
 
@@ -424,7 +416,7 @@ export function SurveyResponseFlow({
 
     (async () => {
       try {
-        const r = await checkDuplicateOnEntry({
+        const r = await client.surveyResponse.duplicate.checkOnEntry({
           surveyId: loadedSurvey.id,
           ...(inviteToken != null ? { inviteToken } : {}),
           clientSignals: signals,
@@ -565,7 +557,7 @@ export function SurveyResponseFlow({
     if (currentResponseId === null) return;
     if (!currentStep) return;
     const nextStepId = stepIdOf(currentStep);
-    recordStepVisit({ responseId: currentResponseId, nextStepId }).catch((err) => {
+    client.surveyResponse.lifecycle.stepVisit({ responseId: currentResponseId, nextStepId }).catch((err) => {
       console.error('recordStepVisit 실패:', err);
     });
   }, [isAdminEdit, currentResponseId, currentStep]);
@@ -612,7 +604,7 @@ export function SurveyResponseFlow({
     if (!savedSessionId) return;
 
     setIsRecovering(true);
-    resumeOrCreateResponse({
+    client.surveyResponse.lifecycle.resume({
       surveyId: loadedSurvey.id,
       sessionId: savedSessionId,
       ...(inviteToken != null ? { inviteToken } : {}),
@@ -767,7 +759,7 @@ export function SurveyResponseFlow({
         setIsCreatingResponse(true);
         // signalsRef.current 가 null 이면 그대로 전달 — server action 이 신호 기반 검사 skip
         // (placeholder 신호로 hash 충돌 발생을 방지하기 위함)
-        createResponseWithFirstAnswer({
+        client.surveyResponse.response.createWithFirstAnswer({
           surveyId: loadedSurvey.id,
           sessionId,
           versionId: versionId ?? null,
@@ -873,7 +865,7 @@ export function SurveyResponseFlow({
       if (!effectiveResponseId && loadedSurvey && currentStep) {
         try {
           // signalsRef.current 가 null 이면 그대로 전달 — server action 이 신호 기반 검사 skip
-          const created = await createBlankResponse({
+          const created = await client.surveyResponse.response.createBlank({
             surveyId: loadedSurvey.id,
             sessionId,
             versionId: versionId ?? null,
@@ -954,10 +946,13 @@ export function SurveyResponseFlow({
         // 제출 직전 — 미선택 옵션의 텍스트 drop 후 questionResponses에 병합.
         const questionResponsesWithTexts = buildOptTextsPayload(visibleQuestions, responses);
 
-        await completeResponse(effectiveResponseId, {
-          questionResponses: questionResponsesWithTexts,
-          exposedQuestionIds,
-          exposedRowIds,
+        await client.surveyResponse.response.complete({
+          responseId: effectiveResponseId,
+          data: {
+            questionResponses: questionResponsesWithTexts,
+            exposedQuestionIds,
+            exposedRowIds,
+          },
         });
 
         // 제출 성공 — 회복용 localStorage 키 정리 (재진입 시 새 응답 흐름)

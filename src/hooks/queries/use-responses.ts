@@ -9,12 +9,7 @@ import {
   getResponseById,
   getResponsesBySurvey,
 } from '@/actions/query-actions';
-import {
-  completeResponse as completeResponseAction,
-  startResponse as startResponseAction,
-  updateQuestionResponse as updateQuestionResponseAction,
-} from '@/actions/response-actions';
-import { orpc } from '@/shared/lib/rpc';
+import { client, orpc } from '@/shared/lib/rpc';
 
 // ========================
 // Query Keys
@@ -107,7 +102,7 @@ export function useStartResponse() {
 
   return useMutation({
     mutationFn: ({ surveyId, sessionId }: { surveyId: string; sessionId?: string }) =>
-      startResponseAction(surveyId, sessionId),
+      client.surveyResponse.response.start({ surveyId, sessionId }),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({
         queryKey: responseKeys.listBySurvey(variables.surveyId),
@@ -129,7 +124,7 @@ export function useUpdateQuestionResponse() {
       responseId: string;
       questionId: string;
       value: unknown;
-    }) => updateQuestionResponseAction(responseId, questionId, value),
+    }) => client.surveyResponse.response.updateAnswer({ responseId, questionId, value }),
   });
 }
 
@@ -140,7 +135,8 @@ export function useCompleteResponse() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (responseId: string) => completeResponseAction(responseId),
+    mutationFn: (responseId: string) =>
+      client.surveyResponse.response.complete({ responseId }),
     onSuccess: (data) => {
       if (!data) return;
       queryClient.invalidateQueries({

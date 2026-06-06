@@ -16,6 +16,12 @@ import { preview } from '@/features/mail/server/procedures/preview';
 import { templates } from '@/features/mail/server/procedures/templates';
 import { unsubscribe } from '@/features/mail/server/procedures/unsubscribe';
 import { media } from '@/features/media/server/procedures/media';
+import { progress } from '@/features/operations/server/procedures/progress';
+import { duplicate } from '@/features/survey-response/server/procedures/duplicate';
+import { edit } from '@/features/survey-response/server/procedures/edit';
+import { lifecycle } from '@/features/survey-response/server/procedures/lifecycle';
+import { manage } from '@/features/survey-response/server/procedures/manage';
+import { response } from '@/features/survey-response/server/procedures/response';
 
 import { health } from './procedures/health';
 
@@ -44,6 +50,16 @@ export const router = {
     campaigns,
     billing,
     unsubscribe,
+  },
+  surveyResponse: {
+    response,
+    lifecycle,
+    duplicate,
+    edit,
+    manage,
+  },
+  operations: {
+    progress,
   },
 };
 

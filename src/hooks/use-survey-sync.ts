@@ -10,11 +10,6 @@ import {
   getSurveyWithDetails,
 } from '@/actions/query-actions';
 import {
-  completeResponse as completeResponseAction,
-  startResponse as startResponseAction,
-  updateQuestionResponse as updateQuestionResponseAction,
-} from '@/actions/response-actions';
-import {
   deleteSurvey as deleteSurveyAction,
   duplicateSurvey as duplicateSurveyAction,
 } from '@/actions/survey-crud-actions';
@@ -24,7 +19,7 @@ import {
 } from '@/actions/survey-save-actions';
 import type { SurveyDiffPayload } from '@/actions/survey-save-actions';
 import { surveyKeys } from '@/hooks/queries/use-surveys';
-import { orpc } from '@/shared/lib/rpc';
+import { client, orpc } from '@/shared/lib/rpc';
 import {
   useSurveyBuilderStore,
   useSurveyListStore,
@@ -263,7 +258,7 @@ export function useResponseSync() {
   // 응답 시작
   const startResponse = useCallback(async (surveyId: string) => {
     try {
-      const response = await startResponseAction(surveyId);
+      const response = await client.surveyResponse.response.start({ surveyId });
       return response;
     } catch (error) {
       console.error('응답 시작 실패:', error);
@@ -275,7 +270,11 @@ export function useResponseSync() {
   const updateQuestionResponse = useCallback(
     async (responseId: string, questionId: string, value: unknown) => {
       try {
-        const updated = await updateQuestionResponseAction(responseId, questionId, value);
+        const updated = await client.surveyResponse.response.updateAnswer({
+          responseId,
+          questionId,
+          value,
+        });
         return updated;
       } catch (error) {
         console.error('응답 업데이트 실패:', error);
@@ -288,7 +287,7 @@ export function useResponseSync() {
   // 응답 완료
   const completeResponse = useCallback(async (responseId: string) => {
     try {
-      const completed = await completeResponseAction(responseId);
+      const completed = await client.surveyResponse.response.complete({ responseId });
       return completed;
     } catch (error) {
       console.error('응답 완료 실패:', error);
