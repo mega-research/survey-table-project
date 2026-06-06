@@ -3,11 +3,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
-  calculateResponseSummary,
   exportResponsesAsCsv,
   exportResponsesAsJson,
   getCompletedResponses,
-  getQuestionStatistics,
   getResponseById,
   getResponsesBySurvey,
 } from '@/actions/query-actions';
@@ -16,6 +14,7 @@ import {
   startResponse as startResponseAction,
   updateQuestionResponse as updateQuestionResponseAction,
 } from '@/actions/response-actions';
+import { orpc } from '@/shared/lib/rpc';
 
 // ========================
 // Query Keys
@@ -76,7 +75,7 @@ export function useResponse(responseId: string | undefined) {
 export function useResponseSummary(surveyId: string | undefined) {
   return useQuery({
     queryKey: responseKeys.summary(surveyId!),
-    queryFn: () => calculateResponseSummary(surveyId!),
+    queryFn: () => orpc.analytics.stats.survey.call({ surveyId: surveyId! }),
     enabled: !!surveyId,
   });
 }
@@ -90,7 +89,8 @@ export function useQuestionStatistics(
 ) {
   return useQuery({
     queryKey: responseKeys.statistics(surveyId!, questionId!),
-    queryFn: () => getQuestionStatistics(surveyId!, questionId!),
+    queryFn: () =>
+      orpc.analytics.stats.question.call({ surveyId: surveyId!, questionId: questionId! }),
     enabled: !!surveyId && !!questionId,
   });
 }

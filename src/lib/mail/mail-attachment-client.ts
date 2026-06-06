@@ -1,4 +1,5 @@
 import type { MailAttachment } from '@/db/schema/schema-types';
+import { client } from '@/shared/lib/rpc';
 
 import {
   MAX_ATTACHMENT_FILE_BYTES,
@@ -79,12 +80,9 @@ export async function uploadMailAttachment(file: File): Promise<UploadResult> {
  */
 export async function deleteMailAttachmentTmp(key: string): Promise<void> {
   if (!key.startsWith(TMP_ATTACHMENT_PREFIX)) return;
+  // orpc .call 은 실패 시 throw 하므로 try/catch 로 감싸 best-effort(void 반환) 계약을 보존한다.
   try {
-    await fetch(UPLOAD_ENDPOINT, {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key }),
-    });
+    await client.media.deleteMailAttachmentTmp({ key });
   } catch (err) {
     console.error('첨부 tmp 삭제 네트워크 실패:', err);
   }

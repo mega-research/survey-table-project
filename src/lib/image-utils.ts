@@ -3,6 +3,8 @@
  * 브라우저에서 이미지를 리사이징하고 압축합니다.
  */
 
+import { client } from '@/shared/lib/rpc';
+
 const MAX_WIDTH = 1920;
 const MAX_HEIGHT = 1920;
 const QUALITY = 0.85;
@@ -174,18 +176,9 @@ export async function deleteImagesFromR2(urls: string[]): Promise<boolean> {
     return true;
   }
 
+  // orpc .call 은 실패 시 throw 하므로 try/catch 로 감싸 기존 boolean 반환 계약을 보존한다.
   try {
-    const response = await fetch('/api/upload/image/delete', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ urls }),
-    });
-
-    if (!response.ok) {
-      console.error('이미지 삭제 실패:', await response.text());
-      return false;
-    }
-
+    await client.media.deleteImages({ urls });
     return true;
   } catch (error) {
     console.error('이미지 삭제 중 오류:', error);

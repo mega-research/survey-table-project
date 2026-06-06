@@ -122,16 +122,6 @@ export async function getVariableCatalogAction(surveyId: string): Promise<Variab
   return getVariableCatalog(surveyId, { purpose: 'survey' });
 }
 
-export async function calculateResponseSummary(surveyId: string) {
-  await requireAuth();
-  return responseData.calculateResponseSummary(surveyId);
-}
-
-export async function getQuestionStatistics(surveyId: string, questionId: string) {
-  await requireAuth();
-  return responseData.getQuestionStatistics(surveyId, questionId);
-}
-
 export async function exportResponsesAsJson(surveyId: string) {
   await requireAuth();
   return responseData.exportResponsesAsJson(surveyId);

@@ -1,6 +1,7 @@
 'use client';
 
 import { TMP_NOTICE_ATTACHMENT_PREFIX } from '@/lib/upload/attachment-policy';
+import { client } from '@/shared/lib/rpc';
 
 /**
  * 클라이언트 측 R2 tmp 키 best-effort DELETE.
@@ -9,12 +10,9 @@ import { TMP_NOTICE_ATTACHMENT_PREFIX } from '@/lib/upload/attachment-policy';
  */
 export async function deleteTmpNoticeAttachmentKey(key: string | null | undefined): Promise<void> {
   if (!key || !key.startsWith(TMP_NOTICE_ATTACHMENT_PREFIX)) return;
+  // orpc .call 은 실패 시 throw 하므로 try/catch 로 감싸 best-effort 계약을 보존한다.
   try {
-    await fetch('/api/upload/notice-attachment', {
-      method: 'DELETE',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ key }),
-    });
+    await client.media.deleteNoticeAttachmentTmp({ key });
   } catch {
     // best-effort
   }
