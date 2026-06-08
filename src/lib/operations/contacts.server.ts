@@ -6,6 +6,7 @@ import { and, asc, desc, eq, sql, type AnyColumn, type SQL } from 'drizzle-orm';
 import { db } from '@/db';
 import { contactTargets, contactUploads, surveys } from '@/db/schema';
 import type { ContactColumnScheme } from '@/db/schema/schema-types';
+import type { MailRecipientStatus } from '@/db/schema/mail';
 import {
   decryptForTarget,
   getMaskHintsForTargets,
@@ -47,6 +48,8 @@ export interface ContactsRow {
   respondedAt: Date | null;
   /** 응답 진행률 0~100. 응답 없거나 첫 답변 전 / soft-delete 면 null */
   progressPct: number | null;
+  /** 최신(created_at DESC) 메일 수신 상태. 발송 이력 없으면 null */
+  latestMailStatus: MailRecipientStatus | null;
   inviteToken: string;
   createdAt: Date;
 }
@@ -71,6 +74,15 @@ const progressPctExpr = sql<number | null>`(
   SELECT progress_pct FROM survey_responses
   WHERE id = "contact_targets"."response_id"
     AND deleted_at IS NULL
+)`;
+
+// 조사 대상별 최신(created_at DESC) 메일 수신 상태 1건.
+// outer correlation 은 명시적 qualifier 필수 (latestAttemptNoExpr 주석 참고).
+// 인덱스: idx_mail_recipients_target_created (contact_target_id, created_at DESC).
+const latestMailStatusExpr = sql<MailRecipientStatus | null>`(
+  SELECT status FROM mail_recipients
+  WHERE contact_target_id = "contact_targets"."id"
+  ORDER BY created_at DESC LIMIT 1
 )`;
 
 function orderExpr(col: AnyColumn | SQL, direction: ContactsSortDir): SQL {
@@ -138,6 +150,7 @@ export async function listContactsForSurvey(
       latestResultCode: latestResultCodeExpr.as('latest_result_code'),
       latestAttemptNo: latestAttemptNoExpr.as('latest_attempt_no'),
       progressPct: progressPctExpr.as('progress_pct'),
+      latestMailStatus: latestMailStatusExpr.as('latest_mail_status'),
     })
     .from(contactTargets)
     .where(whereClause)
@@ -158,6 +171,7 @@ export async function listContactsForSurvey(
     latestAttemptNo: r.latestAttemptNo,
     respondedAt: r.respondedAt,
     progressPct: r.progressPct,
+    latestMailStatus: r.latestMailStatus,
     inviteToken: r.inviteToken,
     createdAt: r.createdAt,
   }));

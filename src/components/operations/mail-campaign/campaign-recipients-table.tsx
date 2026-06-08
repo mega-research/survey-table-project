@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { Card } from '@/components/ui/card';
 import { LocalDateTime } from '@/components/ui/local-date-time';
 import type { MailRecipientStatus } from '@/db/schema/mail';
+import { RecipientStatusBadge } from './recipient-status-badge';
 import type { CampaignRecipientRow } from '@/lib/operations/campaigns.server';
 
 interface Props {
@@ -15,18 +16,6 @@ interface Props {
   currentStatus: MailRecipientStatus | 'all';
   currentQuery: string;
 }
-
-const STATUS_LABEL: Record<MailRecipientStatus, { label: string; tone: string }> = {
-  queued: { label: '대기', tone: 'bg-amber-100 text-amber-700' },
-  sending: { label: '전송중', tone: 'bg-blue-100 text-blue-700' },
-  sent: { label: '발송됨', tone: 'bg-blue-100 text-blue-700' },
-  delivered: { label: '전달 완료', tone: 'bg-emerald-100 text-emerald-700' },
-  opened: { label: '열람', tone: 'bg-emerald-200 text-emerald-800' },
-  bounced: { label: '반송', tone: 'bg-rose-100 text-rose-700' },
-  complained: { label: '신고', tone: 'bg-rose-200 text-rose-800' },
-  failed: { label: '실패', tone: 'bg-rose-100 text-rose-700' },
-  skipped_unsubscribed: { label: '수신거부', tone: 'bg-slate-100 text-slate-600' },
-};
 
 const STATUS_FILTER_CHIPS: Array<{
   value: MailRecipientStatus | 'all';
@@ -136,7 +125,6 @@ export function CampaignRecipientsTable({
             </thead>
             <tbody>
               {rows.map((r) => {
-                const tone = STATUS_LABEL[r.status];
                 return (
                   <tr
                     key={r.id}
@@ -147,11 +135,7 @@ export function CampaignRecipientsTable({
                     <td className="px-3 py-2 text-slate-600">{r.contactGroupValue ?? '—'}</td>
                     <td className="px-3 py-2">
                       <div className="flex flex-wrap items-center gap-1">
-                        <span
-                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${tone.tone}`}
-                        >
-                          {tone.label}
-                        </span>
+                        <RecipientStatusBadge status={r.status} />
                         {/* status='skipped_unsubscribed' 는 이미 status badge 가 "수신거부" 라 중복 노출 회피.
                             발송 후 본인이 footer 링크로 해지한 경우에만 별도 badge 노출. */}
                         {r.unsubscribedAt && r.status !== 'skipped_unsubscribed' && (

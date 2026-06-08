@@ -8,6 +8,10 @@ import { useSearchParamsMutator } from '@/hooks/use-search-params-mutator';
 import { formatLocalMonthDayTime } from '@/lib/date-formatters';
 import { attrsKeyOf, piiKeyOf, type ContactsSortDir, type ContactsSortKey } from '@/lib/operations/contacts';
 import type { ContactsRow } from '@/lib/operations/contacts.server';
+import {
+  RecipientStatusBadge,
+  STATUS_LABEL,
+} from '@/components/operations/mail-campaign/recipient-status-badge';
 
 interface ContactsTableProps {
   rows: ContactsRow[];
@@ -83,7 +87,12 @@ function computeCell(col: ContactColumnDef, row: ContactsRow): {
           }
         : { display: '—', plain: undefined };
     case 'system.email_count':
-      return { display: '—', plain: undefined }; // 후속 슬라이스 메일발송
+      return row.latestMailStatus
+        ? {
+            display: <RecipientStatusBadge status={row.latestMailStatus} />,
+            plain: STATUS_LABEL[row.latestMailStatus].label,
+          }
+        : { display: '—', plain: undefined };
     case 'system.web': {
       if (row.progressPct == null) {
         return {
@@ -119,7 +128,8 @@ function computeCell(col: ContactColumnDef, row: ContactsRow): {
  * 컬럼 스킴(ContactColumnScheme) 기반 동적 헤더/셀 렌더 + 응답 완료 행 강조.
  * - attrs.* source: row.attrs[키] 표시 (이메일/사업자번호는 마스킹)
  * - system.resid/contact_result/web: 시스템 필드
- * - system.email_count/contact_owner: 다음 슬라이스 (메일발송/면접원) 까지 placeholder
+ * - system.email_count: 최신 메일 수신 상태 badge (mail_recipients, 발송 이력 없으면 —)
+ * - system.contact_owner: 다음 슬라이스 (면접원) 까지 placeholder
  *
  * 페이지네이션은 TablePagerFooter (totalPages/onPrev/onNext) 패턴을 그대로 사용.
  */
