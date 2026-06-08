@@ -5,6 +5,7 @@ import React, { useMemo, useRef } from 'react';
 import { FileText } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useElementWidth } from '@/hooks/use-element-width';
 import { useHorizontalScrollIndicators } from '@/hooks/use-horizontal-scroll-indicators';
 import { useScrollLeftSync } from '@/hooks/use-scroll-left-sync';
 import { cn } from '@/lib/utils';
@@ -12,6 +13,7 @@ import { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
 import {
   HEADER_ROW_MIN_HEIGHT,
   STICKY_BODY_Z,
+  STICKY_MAX_VIEWPORT_RATIO,
   type StickyLeftInfo,
   buildGridTemplateCols,
   calcTotalWidth,
@@ -63,10 +65,16 @@ export const TablePreview = React.memo(function TablePreview({
   // 헤더가 null일 때는 동기화 불필요 (null ref 접근 방지)
   useScrollLeftSync(headerScrollRef, tableContainerRef, hideColumnLabels);
 
+  // 스크롤 뷰포트 실측 폭 — 좁은 화면에서 넓은 텍스트 열이 sticky로 화면을 다
+  // 덮지 않도록 누적 sticky 너비 상한 계산에 사용.
+  const scrollViewportWidth = useElementWidth(tableContainerRef, columns.length === 0);
+
   const stickyInfo = useMemo<StickyLeftInfo | undefined>(() => {
     if (columns.length === 0) return undefined;
-    return computeStickyLeftColumns(columns, rows);
-  }, [columns, rows]);
+    const maxStickyWidth =
+      scrollViewportWidth > 0 ? scrollViewportWidth * STICKY_MAX_VIEWPORT_RATIO : undefined;
+    return computeStickyLeftColumns(columns, rows, maxStickyWidth);
+  }, [columns, rows, scrollViewportWidth]);
 
   const gridContainerStyle = useMemo<React.CSSProperties>(
     () => ({
@@ -228,10 +236,13 @@ export const TablePreview = React.memo(function TablePreview({
                 고정한다(스크롤 컨테이너 안에 두면 콘텐츠와 함께 밀려 힌트 효과가 사라진다).
                 잘린 셀 텍스트가 있는 바디는 bg-white 이므로 from-white 로 페이드아웃시킨다. */}
             <div className="relative">
+              {/* iOS WebKit blank-tile 회피: -webkit-overflow-scrolling: touch +
+                  display:grid + position:sticky 조합이 오른쪽 셀 미페인트를 유발한다.
+                  iOS 13+ 모멘텀 스크롤은 기본이라 제거해도 무손실. 재추가 금지.
+                  (interactive-table-response.tsx 와 동일 조치) */}
               <div
                 ref={tableContainerRef}
                 className="overflow-x-auto print:overflow-visible"
-                style={{ WebkitOverflowScrolling: 'touch' }}
               >
                 <div
                   role="rowgroup"

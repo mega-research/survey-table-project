@@ -7,6 +7,7 @@ import { ChevronDown, ChevronRight, FileText, ListChecks } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useDynamicRowLayout } from '@/hooks/use-dynamic-row-layout';
 import { useDynamicRowState } from '@/hooks/use-dynamic-row-state';
+import { useElementWidth } from '@/hooks/use-element-width';
 import { useHorizontalScrollIndicators } from '@/hooks/use-horizontal-scroll-indicators';
 import { useMobileView } from '@/hooks/use-media-query';
 import { useScrollLeftSync } from '@/hooks/use-scroll-left-sync';
@@ -29,6 +30,7 @@ import { decideDrilldown } from '@/utils/classify-table';
 import {
   HEADER_ROW_MIN_HEIGHT,
   STICKY_BODY_Z,
+  STICKY_MAX_VIEWPORT_RATIO,
   type StickyLeftInfo,
   buildGridTemplateCols,
   calcTotalWidth,
@@ -610,11 +612,19 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     return map;
   }, [displayRows, expandedGroupRows, currentResponse]);
 
+  // 스크롤 뷰포트(가로 스크롤 컨테이너) 실측 폭 — sticky 열이 화면을 다 가리지 않도록
+  // 누적 sticky 너비 상한 계산에 사용. 모바일/비활성 시 측정 생략(0).
+  const scrollViewportWidth = useElementWidth(tableContainerRef, !enableSticky || isMobileView);
+
   // 좌측 sticky 열 판정 (모바일이거나 비활성화면 비적용)
   const stickyInfo = useMemo<StickyLeftInfo | undefined>(() => {
     if (!enableSticky || isMobileView) return undefined;
-    return computeStickyLeftColumns(visibleColumns, displayRows);
-  }, [enableSticky, isMobileView, visibleColumns, displayRows]);
+    // 좁은 뷰포트에서 넓은 텍스트 열이 sticky로 화면을 다 덮는 것을 방지.
+    // 측정 전(0)에는 제한 없음(undefined) — 측정 직후 ResizeObserver가 재계산한다.
+    const maxStickyWidth =
+      scrollViewportWidth > 0 ? scrollViewportWidth * STICKY_MAX_VIEWPORT_RATIO : undefined;
+    return computeStickyLeftColumns(visibleColumns, displayRows, maxStickyWidth);
+  }, [enableSticky, isMobileView, visibleColumns, displayRows, scrollViewportWidth]);
 
   const stickyLeftPadding = useMemo(() => {
     if (!stickyInfo || stickyInfo.stickyColCount === 0) return 0;
@@ -794,10 +804,14 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
             고정한다(스크롤 컨테이너 안에 두면 콘텐츠와 함께 밀려 힌트 효과가 사라진다).
             잘린 셀 텍스트가 있는 바디는 bg-white 이므로 from-white 로 페이드아웃시킨다. */}
         <div className="relative -mx-4 md:mx-0">
+          {/* iOS WebKit(아이패드/아이폰 크롬·사파리 공통 엔진)에서는
+              -webkit-overflow-scrolling: touch + display:grid + position:sticky 좌측 고정 열
+              조합이 별도 GPU 합성 레이어를 강제해, 초기 뷰포트 밖(오른쪽) 셀이 래스터되지
+              않는 blank-tile 버그를 일으킨다(스크롤해도 빈 칸). iOS 13+부터 모멘텀 스크롤은
+              기본 동작이라 이 속성은 사실상 no-op이므로 제거한다. 재추가 금지. */}
           <div
             ref={tableContainerRef}
             className="overflow-x-auto px-4 pb-4 md:px-0 print:overflow-visible"
-            style={{ WebkitOverflowScrolling: 'touch' }}
           >
             {shouldVirtualize ? (
               /* 가상화: 바디만 렌더 */

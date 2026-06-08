@@ -105,6 +105,15 @@ const MIN_COLUMNS_FOR_STICKY = 4;
 export const HEADER_ROW_MIN_HEIGHT = 40;
 /** 바디 sticky 셀의 z-index (페이지 sticky 헤더보다 낮게) */
 export const STICKY_BODY_Z = 10;
+/**
+ * 좌측 sticky 열이 차지할 수 있는 스크롤 뷰포트 너비의 최대 비율.
+ * 누적 sticky 너비가 (뷰포트 폭 × 이 비율)을 넘으면 뒤쪽 sticky 후보 열부터
+ * 일반 스크롤 열로 돌린다. 좁은 화면(태블릿 등)에서 넓은 텍스트 열이 sticky로
+ * 화면을 거의 다 덮어 가로 스크롤 영역이 사라지는 것을 방지한다. 최소 1열은 유지.
+ * 데스크톱처럼 넓은 뷰포트에서는 임계가 커져 기존 동작(다열 sticky)이 유지된다.
+ * 체감이 안 맞으면 이 값만 조정한다.
+ */
+export const STICKY_MAX_VIEWPORT_RATIO = 0.6;
 
 export interface StickyLeftInfo {
   stickyColCount: number;
@@ -118,10 +127,15 @@ export interface StickyLeftInfo {
  * 가드:
  * - 열이 MIN_COLUMNS_FOR_STICKY 미만이면 비활성 (가로 스크롤이 없거나 적음)
  * - 전체 열이 sticky 대상이 되어 가로 스크롤 의미가 없어지면 비활성
+ * - 누적 sticky 너비가 maxStickyWidth를 넘으면 뒤쪽 열부터 sticky 제외 (최소 1열 유지)
+ *
+ * @param maxStickyWidth sticky 열 누적 너비 상한(px). 좁은 뷰포트에서 넓은 텍스트 열이
+ *   화면을 다 가리는 것을 막는다. undefined면 너비 제한 없음(미측정 시점 fallback).
  */
 export function computeStickyLeftColumns(
   visibleColumns: TableColumn[],
   visibleRows: TableRow[],
+  maxStickyWidth?: number,
 ): StickyLeftInfo {
   const leftOffsets: number[] = [];
   let acc = 0;
@@ -135,6 +149,7 @@ export function computeStickyLeftColumns(
   }
 
   let stickyColCount = 0;
+  let stickyWidth = 0;
   for (let colIdx = 0; colIdx < visibleColumns.length; colIdx++) {
     let ok = true;
     for (const row of visibleRows) {
@@ -149,6 +164,19 @@ export function computeStickyLeftColumns(
       }
     }
     if (!ok) break;
+
+    // 너비 컷: 이미 1열 이상 확보했고 이 열을 더하면 상한을 넘으면 중단한다.
+    // 좁은 화면에서 넓은 텍스트 열(예: "직업 설명 및 예시")이 sticky로 뷰포트를
+    // 거의 다 덮어 가로 스크롤 공간이 사라지는 것을 방지. 최소 1열은 항상 sticky.
+    const colWidth = visibleColumns[colIdx]?.width || 150;
+    if (
+      maxStickyWidth !== undefined &&
+      stickyColCount >= 1 &&
+      stickyWidth + colWidth > maxStickyWidth
+    ) {
+      break;
+    }
+    stickyWidth += colWidth;
     stickyColCount++;
   }
 
