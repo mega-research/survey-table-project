@@ -68,9 +68,7 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [showBranchSettings, setShowBranchSettings] = useState(false);
 
-  // hideColumnLabels 롤백용 refs
-  const originalHideColumnLabelsRef = useRef(false);
-
+  // 저장 없이 모달이 닫히면 silentUpdateQuestion 으로 토글한 hideColumnLabels 를 롤백한다.
   const didSaveRef = useRef(false);
 
   // ── 로컬 state: 타이핑 성능을 위해 formData와 분리 ──
@@ -96,20 +94,23 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
   }, []);
 
   // editingQuestionId 라이프사이클 + hideColumnLabels 롤백
-  const questionIdRef = useRef(questionId);
-  questionIdRef.current = questionId;
   useEffect(() => {
+    // 이 effect 가 set up 한 질문 id 와 원래값을 렌더별 closure 로 캡처한다.
+    // cleanup 에서 ref(questionIdRef.current)를 읽으면 React 가 새 effect setup 직전
+    // 이미 "다음에 여는 질문 id" 로 갱신해둔 값을 읽게 되어, 직전 질문의 original 을
+    // 새 질문에 덮어써 hideColumnLabels(열 라벨 숨김)가 풀리는 회귀가 난다.
+    let originalHidden = false;
     if (isOpen && questionId) {
       setEditingQuestionId(questionId);
       const q = useSurveyBuilderStore.getState().currentSurvey.questions.find((q) => q.id === questionId);
-      originalHideColumnLabelsRef.current = q?.hideColumnLabels ?? false;
+      originalHidden = q?.hideColumnLabels ?? false;
       didSaveRef.current = false;
     }
     return () => {
-      const qId = questionIdRef.current;
-      if (qId) {
+      // setup 과 동일 조건일 때만 — 즉 이 effect 가 실제로 연 질문에 대해서만 롤백한다.
+      if (isOpen && questionId) {
         if (!didSaveRef.current) {
-          useSurveyBuilderStore.getState().silentUpdateQuestion(qId, { hideColumnLabels: originalHideColumnLabelsRef.current });
+          useSurveyBuilderStore.getState().silentUpdateQuestion(questionId, { hideColumnLabels: originalHidden });
         }
         useSurveyBuilderStore.getState().setEditingQuestionId(null);
       }
