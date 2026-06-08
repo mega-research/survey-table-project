@@ -10,7 +10,9 @@ import {
   type ContactAttemptAddCardHandle,
 } from '@/components/operations/contacts/contact-attempt-add-card';
 import { ContactAttemptHistoryCard } from '@/components/operations/contacts/contact-attempt-history-card';
+import { ContactEditHistoryCard } from '@/components/operations/contacts/contact-edit-history-card';
 import { ContactInfoCard } from '@/components/operations/contacts/contact-info-card';
+import { ContactMailHistoryCard } from '@/components/operations/contacts/contact-mail-history-card';
 import { CopyInviteUrlButton } from '@/components/operations/contacts/copy-invite-url-button';
 import type {
   ContactColumnScheme,
@@ -18,7 +20,11 @@ import type {
   ContactResultCode,
 } from '@/db/schema/schema-types';
 import { useAutoFadeMessage } from '@/hooks/use-auto-fade-message';
-import type { ContactAttemptRow } from '@/lib/operations/contacts.server';
+import type {
+  ContactAttemptRow,
+  MailHistoryRow,
+  ResponseEditLogRow,
+} from '@/lib/operations/contacts.server';
 import { piiKeyOf } from '@/lib/operations/contacts';
 import type { PiiFieldType } from '@/lib/crypto/pii-fields';
 import { client } from '@/shared/lib/rpc';
@@ -39,8 +45,13 @@ interface ContactDetailFormProps {
     contactMethod: ContactMethod | null;
     respondedAt: Date | null;
     inviteToken: string;
+    responseId: string | null;
     attempts: ContactAttemptRow[];
   };
+  /** 메일 발송 이력 (편집 모드에서만 의미, 신규 모드는 빈 배열). */
+  mailHistory?: MailHistoryRow[];
+  /** 응답 편집 audit 이력 (편집 모드에서만 의미). */
+  editLogs?: ResponseEditLogRow[];
 }
 
 export function ContactDetailForm({
@@ -49,6 +60,8 @@ export function ContactDetailForm({
   resultCodes,
   systemFieldKeys,
   initial,
+  mailHistory = [],
+  editLogs = [],
 }: ContactDetailFormProps) {
   const router = useRouter();
   const isEdit = initial != null;
@@ -341,26 +354,17 @@ export function ContactDetailForm({
                 attempts={initial.attempts}
                 resultCodes={resultCodes}
               />
+              <ContactMailHistoryCard rows={mailHistory} />
+              <ContactEditHistoryCard
+                rows={editLogs}
+                hasResponse={initial.responseId != null}
+              />
             </>
           ) : (
             <div className="rounded-lg border bg-slate-50 p-5 text-sm text-slate-500">
               조사 대상을 먼저 저장하면 회차 기록을 추가할 수 있습니다.
             </div>
           )}
-
-          {/* 후속 슬라이스 placeholders */}
-          <div className="rounded-lg border bg-white">
-            <div className="flex items-center justify-between px-5 py-3 text-sm text-slate-500">
-              <span>이메일 발송 현황 ▾</span>
-              <span className="text-xs">후속 슬라이스</span>
-            </div>
-          </div>
-          <div className="rounded-lg border bg-white">
-            <div className="flex items-center justify-between px-5 py-3 text-sm text-slate-500">
-              <span>수정 / 편집 현황 ▾</span>
-              <span className="text-xs">후속 슬라이스</span>
-            </div>
-          </div>
         </div>
       </div>
     </div>

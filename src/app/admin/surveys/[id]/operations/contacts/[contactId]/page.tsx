@@ -8,6 +8,8 @@ import {
   getContactColumnScheme,
   getContactDetailById,
   getContactResultCodes,
+  getMailRecipientsForTarget,
+  getResponseEditLogs,
 } from '@/lib/operations/contacts.server';
 
 export const metadata: Metadata = {
@@ -24,9 +26,11 @@ export default async function ContactDetailPage({ params }: PageProps) {
   const detail = await getContactDetailById(contactId);
   if (!detail || detail.contact.surveyId !== surveyId) notFound();
 
-  const [scheme, resultCodes] = await Promise.all([
+  const [scheme, resultCodes, mailHistory, editLogs] = await Promise.all([
     getContactColumnScheme(surveyId),
     getContactResultCodes(surveyId),
+    getMailRecipientsForTarget(detail.contact.id),
+    getResponseEditLogs(detail.contact.responseId),
   ]);
   if (!scheme) notFound();
 
@@ -52,6 +56,8 @@ export default async function ContactDetailPage({ params }: PageProps) {
         scheme={scheme}
         resultCodes={resultCodes}
         systemFieldKeys={extractSystemFieldKeys(scheme)}
+        mailHistory={mailHistory}
+        editLogs={editLogs}
         initial={{
           id: detail.contact.id,
           resid: detail.contact.resid,
@@ -61,6 +67,7 @@ export default async function ContactDetailPage({ params }: PageProps) {
           contactMethod: detail.contact.contactMethod,
           respondedAt: detail.contact.respondedAt,
           inviteToken: detail.contact.inviteToken,
+          responseId: detail.contact.responseId,
           attempts: detail.attempts,
         }}
       />
