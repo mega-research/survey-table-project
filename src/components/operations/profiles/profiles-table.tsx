@@ -15,11 +15,11 @@ import { formatPlatformKo } from '@/lib/operations/parse-ua';
 import {
   formatTotalTime,
   mapStatusPill,
-  parseQuestionNumberFromTitle,
   type ProfilesView,
   type SortDir,
   type SortKey,
   type StatusPillResult,
+  type StepLocation,
 } from '@/lib/operations/profiles';
 import type { ProfilesRow } from '@/lib/operations/profiles.server';
 
@@ -33,12 +33,6 @@ import {
 import { ProfilesRowActions } from './profiles-row-actions';
 import { StatusPill } from './status-pill';
 
-interface QuestionMeta {
-  id: string;
-  order: number;
-  title: string;
-}
-
 interface ColumnMeta {
   align: CellAlign;
   sortable: boolean;
@@ -51,8 +45,13 @@ interface Props {
   pageSize: number;
   sort: SortKey;
   dir: SortDir;
-  /** 진척률 N/M·Qx 표기에 사용. surveyId 의 questions 메타 (id → order, title) */
-  questions: ReadonlyArray<QuestionMeta>;
+  /**
+   * 진척 위치 N/M·Qx 표기용. currentStepId(=페이지 step ID, 'group:…'|'table:…') →
+   * 그 step 대표 질문의 order/질문번호 맵. profiles.ts 의 buildStepLocationMap 결과.
+   */
+  stepLocations: Record<string, StepLocation>;
+  /** 진척 분모 M — 전체 질문 수. */
+  totalSteps: number;
   surveyId: string;
   view: ProfilesView;
 }
@@ -75,28 +74,20 @@ const meta = (align: CellAlign, sortable: boolean): ColumnMeta => ({ align, sort
 /**
  * 응답 내역 테이블. 9 컬럼 + URL state sort/pagination + 검색 결과 EmptyState.
  */
-export function ProfilesTable({ rows, total, page, pageSize, sort, dir, questions, surveyId, view }: Props) {
+export function ProfilesTable({ rows, total, page, pageSize, sort, dir, stepLocations, totalSteps, surveyId, view }: Props) {
   const pushParams = useSearchParamsMutator();
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
-
-  const questionsById = useMemo(() => {
-    const map = new Map<string, QuestionMeta>();
-    for (const q of questions) map.set(q.id, q);
-    return map;
-  }, [questions]);
-
-  const totalSteps = questions.length;
 
   const display = useMemo<DisplayRow[]>(
     () =>
       rows.map((r) => {
-        const q = r.currentStepId ? questionsById.get(r.currentStepId) : undefined;
-        const qNumber = q ? parseQuestionNumberFromTitle(q.title) : null;
+        const loc = r.currentStepId ? stepLocations[r.currentStepId] : undefined;
         const pill = mapStatusPill({
           status: r.status,
-          currentStepOrder: q?.order ?? null,
-          totalSteps,
-          qNumber,
+          visibleStepIndex: r.visibleStepIndex,
+          visibleStepTotal: r.visibleStepTotal,
+          totalQuestions: totalSteps,
+          qNumber: loc?.qNumber ?? null,
         });
         if (r.status === 'completed' && r.completedAt === null) {
           // DB 일관성 깨짐 방어 — 행은 '—' 로 노출하되 운영자가 파악할 수 있게 로깅
@@ -118,7 +109,7 @@ export function ProfilesTable({ rows, total, page, pageSize, sort, dir, question
           totalTimeText: formatTotalTime(r.totalSeconds, r.status),
         };
       }),
-    [rows, questionsById, totalSteps],
+    [rows, stepLocations, totalSteps],
   );
 
   const columns = useMemo<ColumnDef<DisplayRow>[]>(

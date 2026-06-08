@@ -212,6 +212,11 @@ export const surveyResponses = pgTable('survey_responses', {
   // 응답 진행률 0~100. completed=100, 그 외=계산값, 첫 답변 전=NULL
   progressPct: smallint('progress_pct'),
 
+  // 응답자별 visible step 진척 (분기/표시조건 반영). 운영 콘솔 진행중 배지 "26/28" 표기용.
+  // 응답 페이지가 첫 답변/step 이동 시 저장 (클라 계산값). 첫 답변 전·구 데이터·admin-edit=NULL.
+  visibleStepIndex: smallint('visible_step_index'), // 현재 visible step 위치 (1-based)
+  visibleStepTotal: smallint('visible_step_total'), // 현재까지 입력 기준 총 visible step 수
+
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
   // 동일 (surveyId, sessionId) 의 동시 INSERT race 차단용. session_id IS NULL 행은

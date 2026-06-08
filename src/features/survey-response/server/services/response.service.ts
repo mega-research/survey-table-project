@@ -229,7 +229,7 @@ export async function updateQuestionResponse(
 export async function createResponseWithFirstAnswer(
   input: CreateResponseWithFirstAnswerInput,
 ): Promise<FirstAnswerResult> {
-  const { surveyId, sessionId, versionId, questionId, value, currentStepId, inviteToken, clientSignals } = input;
+  const { surveyId, sessionId, versionId, questionId, value, currentStepId, visibleStepIndex, visibleStepTotal, inviteToken, clientSignals } = input;
 
   // UA + IP (Next 15+ 비동기 headers API)
   const headerStore = await headers();
@@ -272,6 +272,8 @@ export async function createResponseWithFirstAnswer(
     platform,
     browser,
     currentStepId,
+    visibleStepIndex: visibleStepIndex ?? null,
+    visibleStepTotal: visibleStepTotal ?? null,
     pageVisits: [firstVisit],
     contactTargetId,
   };

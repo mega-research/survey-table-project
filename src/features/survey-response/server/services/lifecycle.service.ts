@@ -34,14 +34,17 @@ import type {
  * @throws 행이 없으면 에러 — 호출자(T5)는 catch & log하되 사용자 흐름은 막지 않는다
  */
 export async function recordStepVisit(input: RecordStepVisitInput): Promise<void> {
-  const { responseId, nextStepId } = input;
+  const { responseId, nextStepId, visibleStepIndex, visibleStepTotal } = input;
 
   // 단일 UPDATE: WHERE 절에서 currentStepId !== nextStepId 조건으로 멱등성 보장
   // jsonb_set은 마지막 항목의 leftAt이 NULL일 때만 갱신, 그 후 || 로 새 항목 append.
+  // visible step 진척은 step 이동과 함께 갱신 (동일 step no-op 시엔 미갱신 — 마지막 이동 시점 기준).
   const result = await db
     .update(surveyResponses)
     .set({
       currentStepId: nextStepId,
+      visibleStepIndex: visibleStepIndex ?? null,
+      visibleStepTotal: visibleStepTotal ?? null,
       lastActivityAt: new Date(),
       pageVisits: sql`(
         CASE

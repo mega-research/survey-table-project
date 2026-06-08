@@ -172,6 +172,22 @@ export type RenderStep =
     };
 
 /**
+ * 운영 현황 콘솔용 step 고유 식별자 (응답 페이지 진행 위치 = `survey_responses.current_step_id`).
+ * - table step: 'table:<questionId>'
+ * - group step: 'group:<rootGroupId | "root">' (ungrouped는 'root')
+ *
+ * 동일 RenderStep에 대해 항상 같은 문자열을 반환해야 recordStepVisit의
+ * 멱등성(no-op when currentStepId === nextStepId)이 유지되고, 운영 콘솔의
+ * 진행 위치 역매핑(buildStepLocationMap)이 정확히 맞물린다.
+ */
+export function stepIdOf(step: RenderStep): string {
+  if (step.kind === 'table') {
+    return `table:${step.question.id}`;
+  }
+  return `group:${step.rootGroupId ?? 'root'}`;
+}
+
+/**
  * 최상위 그룹(또는 ungrouped)의 질문들을 인터리브 순서로 flatten하고,
  * 각 질문에 "이 질문부터 시작되는 하위그룹 이름"을 부여한다.
  */

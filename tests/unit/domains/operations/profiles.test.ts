@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { formatTotalTime, parseQuestionNumberFromTitle, mapStatusPill, normalizeListArgs, hasActiveFilters } from '@/lib/operations/profiles'
+import { formatTotalTime, parseQuestionNumberFromTitle, mapStatusPill, normalizeListArgs, hasActiveFilters, buildStepLocationMap } from '@/lib/operations/profiles'
+import type { Question, QuestionGroup } from '@/types/survey'
+
+// buildStepLocationMap 테스트용 최소 fixture — buildRenderSteps 가 읽는 필드만 의미 있다.
+function q(partial: Partial<Question> & Pick<Question, 'id' | 'order' | 'title'>): Question {
+  return { type: 'radio', required: false, ...partial }
+}
+function g(partial: Partial<QuestionGroup> & Pick<QuestionGroup, 'id' | 'order' | 'name'>): QuestionGroup {
+  return { surveyId: 's', ...partial }
+}
 
 describe('formatTotalTime', () => {
   it('completed + 300초 → "5분"', () => {
@@ -86,22 +95,86 @@ describe('mapStatusPill', () => {
     expect(mapStatusPill({ status: 'future_status' })).toEqual({ label: '기타', tone: 'gray' })
   })
 
-  it("in_progress + currentStepOrder=5, totalSteps=50, qNumber='Q3' → 진행중 N/M·Qx", () => {
+  it("in_progress + visible 26/28, 전체 50, qNumber='Q33' → '26/28(50) · Q33'", () => {
     expect(
-      mapStatusPill({ status: 'in_progress', currentStepOrder: 5, totalSteps: 50, qNumber: 'Q3' }),
-    ).toEqual({ label: '진행중', tone: 'blue', sub: '5/50 · Q3' })
+      mapStatusPill({
+        status: 'in_progress',
+        visibleStepIndex: 26,
+        visibleStepTotal: 28,
+        totalQuestions: 50,
+        qNumber: 'Q33',
+      }),
+    ).toEqual({ label: '진행중', tone: 'blue', sub: '26/28(50) · Q33' })
   })
 
-  it('in_progress + currentStepOrder null → ?/M · ?', () => {
+  it('in_progress + visible null (구 데이터) → ?/?(50) · Q33 폴백 (Q번호는 유지)', () => {
     expect(
-      mapStatusPill({ status: 'in_progress', currentStepOrder: null, totalSteps: 50, qNumber: null }),
-    ).toEqual({ label: '진행중', tone: 'blue', sub: '?/50 · ?' })
+      mapStatusPill({
+        status: 'in_progress',
+        visibleStepIndex: null,
+        visibleStepTotal: null,
+        totalQuestions: 50,
+        qNumber: 'Q33',
+      }),
+    ).toEqual({ label: '진행중', tone: 'blue', sub: '?/?(50) · Q33' })
   })
 
-  it('in_progress + qNumber null → N/M · ?', () => {
+  it('in_progress + qNumber null → 26/28(50) · ?', () => {
     expect(
-      mapStatusPill({ status: 'in_progress', currentStepOrder: 5, totalSteps: 50, qNumber: null }),
-    ).toEqual({ label: '진행중', tone: 'blue', sub: '5/50 · ?' })
+      mapStatusPill({
+        status: 'in_progress',
+        visibleStepIndex: 26,
+        visibleStepTotal: 28,
+        totalQuestions: 50,
+        qNumber: null,
+      }),
+    ).toEqual({ label: '진행중', tone: 'blue', sub: '26/28(50) · ?' })
+  })
+
+  it('in_progress + 전부 누락 → ?/?(?) · ?', () => {
+    expect(mapStatusPill({ status: 'in_progress' })).toEqual({
+      label: '진행중',
+      tone: 'blue',
+      sub: '?/?(?) · ?',
+    })
+  })
+})
+
+describe('buildStepLocationMap', () => {
+  it('group step → 키 "group:<rootGroupId>", 첫 질문의 order/qNumber', () => {
+    const groups = [g({ id: 'g1', order: 0, name: 'A' })]
+    const questions = [
+      q({ id: 'q1', groupId: 'g1', order: 0, title: 'Q1. 첫번째' }),
+      q({ id: 'q2', groupId: 'g1', order: 1, title: 'Q2. 두번째' }),
+    ]
+    const map = buildStepLocationMap(questions, groups)
+    expect(map.get('group:g1')).toEqual({ order: 0, qNumber: 'Q1' })
+  })
+
+  it('table step → 키 "table:<questionId>", 해당 질문의 order/qNumber', () => {
+    const groups = [g({ id: 'g1', order: 0, name: 'A' })]
+    const questions = [
+      q({ id: 'q1', groupId: 'g1', order: 0, title: 'Q1. 첫번째' }),
+      q({ id: 't1', groupId: 'g1', order: 1, type: 'table', title: 'Q2. 표질문' }),
+    ]
+    const map = buildStepLocationMap(questions, groups)
+    expect(map.get('table:t1')).toEqual({ order: 1, qNumber: 'Q2' })
+  })
+
+  it('ungrouped 질문 → 키 "group:root", 첫 질문', () => {
+    const questions = [q({ id: 'u1', order: 0, title: 'Q1. 무그룹' })]
+    const map = buildStepLocationMap(questions, [])
+    expect(map.get('group:root')).toEqual({ order: 0, qNumber: 'Q1' })
+  })
+
+  it('Q번호 없는 title → qNumber null (order 는 그대로)', () => {
+    const questions = [q({ id: 'u1', order: 0, title: '안내문' })]
+    const map = buildStepLocationMap(questions, [])
+    expect(map.get('group:root')).toEqual({ order: 0, qNumber: null })
+  })
+
+  it('빈 입력 → 빈 맵', () => {
+    expect(buildStepLocationMap([], []).size).toBe(0)
   })
 })
 

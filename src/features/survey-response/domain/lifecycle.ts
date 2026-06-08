@@ -11,6 +11,9 @@ import * as z from 'zod';
 export const RecordStepVisitInput = z.object({
   responseId: z.string(),
   nextStepId: z.string(),
+  // 운영 콘솔 진척 표기용 visible step 진척 (클라 계산값). 미전송/구 클라 호환 위해 nullish.
+  visibleStepIndex: z.number().int().nullish(),
+  visibleStepTotal: z.number().int().nullish(),
 });
 export type RecordStepVisitInput = z.infer<typeof RecordStepVisitInput>;
 

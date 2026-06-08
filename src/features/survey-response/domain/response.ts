@@ -63,6 +63,9 @@ export const CreateResponseWithFirstAnswerInput = z.object({
   questionId: z.string(),
   value: z.unknown(),
   currentStepId: z.string(),
+  // 운영 콘솔 진척 표기용 visible step 진척 (클라 계산값). 미전송/구 클라 호환 위해 nullish.
+  visibleStepIndex: z.number().int().nullish(),
+  visibleStepTotal: z.number().int().nullish(),
   inviteToken: z.string().optional(),
   // null 이면 신호 기반 검사 skip — LocalStorage 차단 등 클라이언트 신호 수집 실패 시 null 그대로
   clientSignals: ClientSignalsSchema.nullable(),

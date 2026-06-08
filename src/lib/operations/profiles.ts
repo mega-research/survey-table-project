@@ -8,6 +8,9 @@
  * 단위 테스트: `tests/unit/domains/operations/profiles.test.ts`.
  */
 
+import { buildRenderSteps, stepIdOf } from '@/lib/group-ordering';
+import type { Question, QuestionGroup } from '@/types/survey';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 클라/서버 공용 타입 + 화이트리스트 (profiles.server.ts 와 client 양쪽이 사용)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -146,10 +149,12 @@ export interface StatusPillResult {
 
 interface MapStatusPillArgs {
   status: string
-  /** in_progress 일 때 question.order (1-based). 없으면 ?로 표기 */
-  currentStepOrder?: number | null
-  /** 해당 survey 의 총 question 수 (notice 포함). in_progress 일 때 사용 */
-  totalSteps?: number
+  /** in_progress: visible step 현재 위치 (1-based, 분기/표시조건 반영). 없으면 ? */
+  visibleStepIndex?: number | null
+  /** in_progress: 현재까지 입력 기준 총 visible step 수. 없으면 ? */
+  visibleStepTotal?: number | null
+  /** 해당 survey 의 총 question 수 (괄호 안 표기). 없으면 ? */
+  totalQuestions?: number | null
   /** "Q3" / "Q5-1" 같은 질문번호. parseQuestionNumberFromTitle 결과 */
   qNumber?: string | null
 }
@@ -174,15 +179,83 @@ export function mapStatusPill(args: MapStatusPillArgs): StatusPillResult {
     case 'bad':
       return { label: '불량', tone: 'red' }
     case 'in_progress': {
-      const n = args.currentStepOrder ?? null
-      const m = args.totalSteps ?? null
+      // "26/28(50) · Q33" — visible step 진척 / 총 visible step (전체 질문 수) · 현재 질문번호.
+      // visible 값은 응답 페이지가 저장 (구 데이터·첫 답변 전엔 NULL → '?' 폴백).
+      const idx = args.visibleStepIndex ?? null
+      const total = args.visibleStepTotal ?? null
+      const totalQ = args.totalQuestions ?? null
       const q = args.qNumber ?? null
-      const nStr = n === null ? '?' : String(n)
-      const mStr = m === null ? '?' : String(m)
+      const idxStr = idx === null ? '?' : String(idx)
+      const totalStr = total === null ? '?' : String(total)
+      const totalQStr = totalQ === null ? '?' : String(totalQ)
       const qStr = q === null ? '?' : q
-      return { label: '진행중', tone: 'blue', sub: `${nStr}/${mStr} · ${qStr}` }
+      return { label: '진행중', tone: 'blue', sub: `${idxStr}/${totalStr}(${totalQStr}) · ${qStr}` }
     }
     default:
       return { label: '기타', tone: 'gray' }
   }
+}
+
+/** 응답자의 진행 위치(step) 한 곳을 질문 단위 표시로 환산한 결과. */
+export interface StepLocation {
+  /** 대표 질문(group step=첫 질문, table step=해당 질문)의 order. */
+  order: number
+  /** 대표 질문 title 에서 파싱한 "Q3" / "Q5-1" 등. 없으면 null. */
+  qNumber: string | null
+}
+
+/**
+ * buildStepLocationMap 입력 — DB row(InferSelectModel)와 도메인 타입(@/types/survey)을
+ * 모두 수용하도록 buildRenderSteps 가 실제로 읽는 필드만 요구한다.
+ */
+export interface StepQuestionInput {
+  id: string
+  order: number
+  title: string
+  type: string
+  groupId?: string | null
+}
+export interface StepGroupInput {
+  id: string
+  order: number
+  name: string
+  parentGroupId?: string | null
+}
+
+/**
+ * 진행 위치(`survey_responses.current_step_id`) → 질문 단위 표시 환산 맵.
+ *
+ * currentStepId 는 "페이지(step) ID"(`stepIdOf` 컨벤션: 'group:<rootGroupId|root>'
+ * 또는 'table:<questionId>')로 저장되므로 순수 question.id 로는 매칭되지 않는다.
+ * 응답 페이지와 동일한 `buildRenderSteps` 로 step 목록을 만들고, 각 step 의 stepId 를
+ * 그 step 의 대표 질문 order/질문번호에 매핑한다. (group step 은 첫 질문이 대표)
+ */
+export function buildStepLocationMap(
+  questions: StepQuestionInput[],
+  groups: StepGroupInput[],
+): Map<string, StepLocation> {
+  // buildRenderSteps 는 @/types/survey 도메인 타입을 받으므로, 읽히는 필드만 정규화한다.
+  // (surveyId/required 등은 step 구성에서 미사용 — 더미로 채워 타입만 만족)
+  const qs: Question[] = questions.map((q) => ({
+    id: q.id,
+    order: q.order,
+    title: q.title,
+    type: q.type as Question['type'],
+    required: false,
+    ...(q.groupId != null ? { groupId: q.groupId } : {}),
+  }))
+  const gs: QuestionGroup[] = groups.map((g) => ({
+    id: g.id,
+    surveyId: '',
+    name: g.name,
+    order: g.order,
+    ...(g.parentGroupId != null ? { parentGroupId: g.parentGroupId } : {}),
+  }))
+  const map = new Map<string, StepLocation>()
+  for (const step of buildRenderSteps(qs, gs)) {
+    const rep = step.kind === 'table' ? step.question : step.items[0]?.question
+    if (!rep) continue
+    map.set(stepIdOf(step), { order: rep.order, qNumber: parseQuestionNumberFromTitle(rep.title) })
+  }
+  return map
 }

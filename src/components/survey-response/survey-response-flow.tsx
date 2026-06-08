@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useRouter } from 'next/navigation';
 
@@ -27,6 +27,7 @@ import {
   RenderStep,
   resolveStepBranch,
   StepItem,
+  stepIdOf,
 } from '@/lib/group-ordering';
 import { parsesurveyIdentifier } from '@/lib/survey-url';
 import { cn, isEmptyHtml } from '@/lib/utils';
@@ -66,21 +67,6 @@ export interface SurveyResponseFlowProps {
     initialContactAttrs: Record<string, string>;
     onSubmit: (payload: SaveAdminEditPayload) => Promise<void>;
   };
-}
-
-/**
- * 운영 현황 콘솔용 step 고유 식별자.
- * - table step: 'table:<questionId>'
- * - group step: 'group:<rootGroupId | "root">' (ungrouped는 'root')
- *
- * 동일 RenderStep에 대해 항상 같은 문자열을 반환해야 recordStepVisit의
- * 멱등성(no-op when currentStepId === nextStepId)이 유지된다.
- */
-function stepIdOf(step: RenderStep): string {
-  if (step.kind === 'table') {
-    return `table:${step.question.id}`;
-  }
-  return `group:${step.rootGroupId ?? 'root'}`;
 }
 
 /**
@@ -511,6 +497,11 @@ export function SurveyResponseFlow({
 
   const totalVisibleStepCount = visibleSteps.length;
 
+  // 운영 콘솔 진척 저장용 visible 진척 최신값. 콜백/effect 에서 stale 없이 참조하기 위해
+  // ref 로 미러링한다 (deps/exhaustive-deps 영향 없음). 응답 페이지 헤더 26/28 과 동일 값.
+  const visibleProgressRef = useRef({ index: 0, total: 0 });
+  visibleProgressRef.current = { index: currentVisibleStepNumber, total: totalVisibleStepCount };
+
   const findNextDisplayableStepIndex = useCallback(
     (startIndex: number): number => {
       if (steps.length === 0) return -1;
@@ -554,9 +545,16 @@ export function SurveyResponseFlow({
     if (currentResponseId === null) return;
     if (!currentStep) return;
     const nextStepId = stepIdOf(currentStep);
-    client.surveyResponse.lifecycle.stepVisit({ responseId: currentResponseId, nextStepId }).catch((err) => {
-      console.error('recordStepVisit 실패:', err);
-    });
+    client.surveyResponse.lifecycle
+      .stepVisit({
+        responseId: currentResponseId,
+        nextStepId,
+        visibleStepIndex: visibleProgressRef.current.index,
+        visibleStepTotal: visibleProgressRef.current.total,
+      })
+      .catch((err) => {
+        console.error('recordStepVisit 실패:', err);
+      });
   }, [isAdminEdit, currentResponseId, currentStep]);
 
   // 운영 현황 콘솔: Page Visibility 세그먼트.
@@ -763,6 +761,8 @@ export function SurveyResponseFlow({
           questionId,
           value,
           currentStepId: stepIdOf(currentStep),
+          visibleStepIndex: visibleProgressRef.current.index,
+          visibleStepTotal: visibleProgressRef.current.total,
           ...(inviteToken != null ? { inviteToken } : {}),
           clientSignals: signals,
         })

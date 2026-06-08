@@ -6,10 +6,12 @@ import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/operations/empty-state';
 import { ProfilesFilterBar } from '@/components/operations/profiles/profiles-filter-bar';
 import { ProfilesTable } from '@/components/operations/profiles/profiles-table';
+import { getQuestionGroupsBySurvey } from '@/data/surveys';
 import { db } from '@/db';
 import { questions as questionsTable } from '@/db/schema';
 import {
   PROFILES_PAGE_SIZE,
+  buildStepLocationMap,
   hasActiveFilters,
   normalizeListArgs,
 } from '@/lib/operations/profiles';
@@ -58,7 +60,7 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
   ];
   const condition = parseProfilesCondition(args.col, args.q, columnCandidates);
 
-  const [{ rows, total, page: clampedPage }, qs] = await Promise.all([
+  const [{ rows, total, page: clampedPage }, qs, groups] = await Promise.all([
     listResponsesForProfiles({
       surveyId,
       pageSize: PROFILES_PAGE_SIZE,
@@ -74,11 +76,18 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
         id: questionsTable.id,
         order: questionsTable.order,
         title: questionsTable.title,
+        type: questionsTable.type,
+        groupId: questionsTable.groupId,
       })
       .from(questionsTable)
       .where(eq(questionsTable.surveyId, surveyId))
       .orderBy(asc(questionsTable.order), asc(questionsTable.id)),
+    getQuestionGroupsBySurvey(surveyId),
   ]);
+
+  // currentStepId(페이지 step ID) → 대표 질문 order/번호 역매핑. 진행중 응답의 N/M·Qx 표기에 사용.
+  const stepLocations = Object.fromEntries(buildStepLocationMap(qs, groups));
+  const totalSteps = qs.length;
 
   const hasFilter = hasActiveFilters(sp);
 
@@ -119,7 +128,8 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
               pageSize={PROFILES_PAGE_SIZE}
               sort={args.sort}
               dir={args.dir}
-              questions={qs}
+              stepLocations={stepLocations}
+              totalSteps={totalSteps}
               surveyId={surveyId}
               view={args.view}
             />

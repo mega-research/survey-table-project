@@ -31,6 +31,9 @@ export interface ProfilesRow {
   browser: string | null;
   status: string;
   currentStepId: string | null;
+  /** visible step 진척 (분기/표시조건 반영). 응답 페이지 저장값. 구 데이터·첫 답변 전 null. */
+  visibleStepIndex: number | null;
+  visibleStepTotal: number | null;
   startedAt: Date;
   completedAt: Date | null;
   totalSeconds: number | null;
@@ -134,6 +137,8 @@ export async function listResponsesForProfiles(
       browser: surveyResponses.browser,
       status: surveyResponses.status,
       currentStepId: surveyResponses.currentStepId,
+      visibleStepIndex: surveyResponses.visibleStepIndex,
+      visibleStepTotal: surveyResponses.visibleStepTotal,
       startedAt: surveyResponses.startedAt,
       completedAt: surveyResponses.completedAt,
       totalSeconds: surveyResponses.totalSeconds,
@@ -220,6 +225,8 @@ export async function listResponsesForProfiles(
       browser: numbered.browser,
       status: numbered.status,
       currentStepId: numbered.currentStepId,
+      visibleStepIndex: numbered.visibleStepIndex,
+      visibleStepTotal: numbered.visibleStepTotal,
       startedAt: numbered.startedAt,
       completedAt: numbered.completedAt,
       totalSeconds: numbered.totalSeconds,
@@ -239,6 +246,8 @@ export async function listResponsesForProfiles(
     browser: r.browser,
     status: r.status,
     currentStepId: r.currentStepId,
+    visibleStepIndex: r.visibleStepIndex,
+    visibleStepTotal: r.visibleStepTotal,
     startedAt: r.startedAt,
     completedAt: r.completedAt,
     totalSeconds: r.totalSeconds,
