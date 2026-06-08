@@ -14,6 +14,7 @@ import type {
   QuestionData,
   QuestionOption,
   RankingConfig,
+  ResponseEditChange,
   SelectLevel,
   SurveyVersionSnapshot,
   TableCell,
@@ -250,6 +251,28 @@ export const surveyVersions = pgTable('survey_versions', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
+// 관리자 응답 수정 audit 이력 (단건 편집 수정/편집 현황 카드용).
+// survey_responses 1:N. 관리자 saveAdminEdit 1회당 행 1개.
+export const responseEditLogs = pgTable('response_edit_logs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  responseId: uuid('response_id')
+    .notNull()
+    .references(() => surveyResponses.id, { onDelete: 'cascade' }),
+  surveyId: uuid('survey_id')
+    .notNull()
+    .references(() => surveys.id, { onDelete: 'cascade' }),
+  // 수정한 관리자. authed 보장이나 방어적으로 nullable.
+  editedBy: text('edited_by'),
+  // 스냅샷 — 계정 삭제돼도 누구였는지 보존.
+  editorEmail: text('editor_email'),
+  changedQuestions: jsonb('changed_questions')
+    .$type<ResponseEditChange[]>()
+    .notNull()
+    .default([]),
+  changedCount: integer('changed_count').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
 // 정규화된 응답 테이블
 export const responseAnswers = pgTable('response_answers', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -433,3 +456,6 @@ export type NewSurveyVersion = typeof surveyVersions.$inferInsert;
 
 export type ResponseAnswer = typeof responseAnswers.$inferSelect;
 export type NewResponseAnswer = typeof responseAnswers.$inferInsert;
+
+export type ResponseEditLog = typeof responseEditLogs.$inferSelect;
+export type NewResponseEditLog = typeof responseEditLogs.$inferInsert;
