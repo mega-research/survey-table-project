@@ -1568,8 +1568,8 @@ function GroupStepItem({
           >
             {itemIndex}
           </span>
-          <label
-            htmlFor={`q-${q.id}`}
+          <div
+            id={`q-label-${q.id}`}
             className={`text-lg leading-snug font-semibold break-keep ${
               isHighlighted ? 'text-red-700' : 'text-gray-900'
             }`}
@@ -1580,7 +1580,7 @@ function GroupStepItem({
                 *
               </span>
             )}
-          </label>
+          </div>
         </div>
         {!isEmptyHtml(q.description) && (
           <RichDescription
@@ -1589,7 +1589,11 @@ function GroupStepItem({
             className="ml-3 md:overflow-x-auto text-sm text-gray-500 md:text-xs [&_p]:min-h-[1.3em] [&_table]:my-1.5 [&_table_td]:px-2.5 [&_table_td]:py-1 [&_table_th]:px-2.5 [&_table_th]:py-1"
           />
         )}
-        <div id={`q-${q.id}`} className="mt-2 ml-3">
+        <div
+          role="group"
+          aria-labelledby={`q-label-${q.id}`}
+          className="mt-2 ml-3"
+        >
           <QuestionInput
             question={q}
             value={responses[q.id]}
