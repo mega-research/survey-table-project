@@ -6,7 +6,7 @@ import { useTransition } from 'react';
 import { Button } from '@/components/ui/button';
 import type { ContactResultCode } from '@/db/schema/schema-types';
 import { useAutoFadeMessage } from '@/hooks/use-auto-fade-message';
-import { formatLocalMonthDayTime } from '@/lib/date-formatters';
+import { LocalDateTime } from '@/components/ui/local-date-time';
 import { resultCodeToneClass } from '@/lib/operations/contacts-shared';
 import type { ContactAttemptRow } from '@/lib/operations/contacts.server';
 import { client } from '@/shared/lib/rpc';
@@ -68,9 +68,11 @@ export function ContactAttemptHistoryCard({
                 key={a.id}
                 className="flex items-start gap-3 border-t px-5 py-3 text-sm first:border-t-0"
               >
-                <span className="w-24 shrink-0 text-xs text-slate-500 tabular-nums">
-                  {formatLocalMonthDayTime(a.createdAt)}
-                </span>
+                <LocalDateTime
+                  value={a.createdAt}
+                  format="month-day-time"
+                  className="w-24 shrink-0 text-xs text-slate-500 tabular-nums"
+                />
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
                     <span className={`rounded-full px-2 py-0.5 text-xs ${resultCodeToneClass(meta?.tone)}`}>
