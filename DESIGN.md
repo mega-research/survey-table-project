@@ -1,305 +1,302 @@
-# Design System - Survey Table Project
+# 설문조사 프로그램 — 디자인 시스템
 
-> 이 프로젝트의 디자인 언어 참조 문서. Apple 웹(apple.com) 디자인 시스템을 기반으로 하되,
-> **폰트는 SF Pro 대신 Wanted Sans Variable로 전 브라우저 통일**한다.
-
-## 이 문서를 읽는 법 (한국어 안내)
-
-- **폰트**: 원본 Apple 명세는 SF Pro Display/Text를 쓰지만, 이 프로젝트는 `Wanted Sans Variable` 단일 가변폰트로 통일한다. 코드상 source of truth는 [globals.css](src/app/globals.css)의 `--font-sans`이며, 폰트 로딩은 [layout.tsx](src/app/layout.tsx)의 CDN link다.
-- **적용 범위 주의 (중요)**: 이 명세는 Apple의 **마케팅/제품 쇼케이스 사이트** 기준이다 (hero 56px, body 17px, 섹션 패딩 80px, "1 viewport = 1 tile" 저밀도 레이아웃). 반면 이 프로젝트의 본체인 **설문 빌더·운영 콘솔은 데이터 밀도가 높은 도구(tool) UI**다.
-  - 도구 UI에는 **토큰(색·ink·parchment·radius 스케일·그림자 절제·weight ladder)만 참조**하고, 17px body·80px 섹션·저밀도 tile 레이아웃은 그대로 적용하지 않는다.
-  - Apple 정통 스케일이 어울리는 곳은 **랜딩 페이지·공개 설문 응답 페이지(`/survey`)** 쪽이다.
-- **현재 코드와의 갭 (아직 미반영)**: 이 문서는 목표 명세이고 코드는 아직 정렬되지 않았다. 알려진 갭 — primary 토큰 `#007aff`(명세는 `#0066cc`), 버튼이 토큰 대신 `bg-blue-500`(#3b82f6) 직접 사용, 버튼 radius `rounded-lg`(8px, 명세는 pill), `shadow-sm` 등 카드/버튼 그림자 사용(명세는 금지), `font-medium`(weight 500, 명세는 500 제외). 코드 정렬은 별도 작업으로 진행한다.
+> **시스템 출처 노트.** 이 시스템은 "모노크롬 코어 + 오버사이즈 파스텔 컬러블록"이라는
+> 에디토리얼 디자인 언어를 우리 프로젝트의 오리지널 디자인 시스템으로 채택한 것입니다.
+> 독점 서체(`figmaSans`/`figmaMono`)나 특정 브랜드의 워드마크·UI는 사용하지 않습니다.
+> 서체로 **Wanted Sans**(sans, 한글+라틴) + **JetBrains Mono**(mono)를 사용하며, 워드마크와
+> 브랜드 자산은 우리 자체 제작물을 씁니다. 숫자는 항상 `tabular-nums` + `slashed-zero`.
 
 ---
 
 ## Overview
 
-Apple's web presence is a masterclass in **reverent product photography framed by near-invisible UI**. Every page is a stack of edge-to-edge product "tiles" — alternating light and dark canvases, each centered on a hero headline, a one-line tagline, two tiny blue pill CTAs, and an impossibly crisp product render. Nothing competes with the product. Typography is confident but quiet; color is either pure white, an off-white parchment, or a near-black tile; interactive elements are a single, quiet blue.
+시스템의 뼈대는 **에디터처럼 깨끗한 흑백 프레임**입니다. 크롬(상단 내비, 본문 타입,
+푸터, primary CTA)은 모두 모노크롬입니다. 헤드라인은 가변 sans를 공격적인 음수 자간으로
+크게 세팅하고, 본문은 같은 가변 패밀리의 320–340 웨이트 부근, 작은 mono `{typography.eyebrow}` /
+`{typography.caption}` 라벨(대문자, 양수 자간)이 섹션 마커 역할을 합니다. 모든 CTA는
+pill(`{rounded.pill}`)이며, primary 액션은 어디서나 동일한 검정 `{components.button-primary}` +
+흰색 `{components.button-secondary}` 페어입니다.
 
-Density is unusually low even by contemporary SaaS standards. Each tile occupies roughly one viewport, and there is no decorative chrome — no borders, no gradients, no decorative frames, no shadows on headlines. Elevation appears only when a product image rests on a surface (a single soft `rgba(0, 0, 0, 0.22) 3px 5px 30px` drop for visual weight). The result is a catalog that feels more like a museum gallery: the wall disappears and the artifact takes over.
+이 시스템의 정체성은 그 흑백 북엔드 **사이**에서 나옵니다: 페이지가 반복적으로 오버사이즈
+파스텔 **컬러블록 섹션**(라임, 라벤더, 크림, 민트, 핑크, 코랄, 딥 네이비)으로 떨어집니다.
+콘텐츠 폭 전체를 `{rounded.lg}` 코너 + `{spacing.xxl}` 내부 패딩으로 채우며, 스토리텔링이
+여기서 일어납니다. 카드 안의 액센트가 아니라, 한 화면 분량의 세로 공간을 차지하는 거대한
+포스터입니다.
 
-Store and shop surfaces retain the same chassis but switch modes. The product configurator (iPhone 17 Pro, accessories grid) introduces a tight grid of white utility cards at `{rounded.lg}` (18px) radius with a thin border, paired with a persistent thin sub-nav strip. The environment page leans darker and more editorial. Across all five surfaces the typographic system, spacing rhythm, and the single blue accent are consistent — this is one design language expressed at different volumes.
+**핵심 특성**
+- 모노크롬 시스템 코어: `{colors.primary}`(검정) + `{colors.canvas}`(흰색)가 모든 CTA·본문·푸터 링크를 담당.
+- 오버사이즈 파스텔 **컬러블록 섹션**(`{colors.block-*}`)이 긴 페이지의 내러티브 리듬을 정의.
+- pill이 유일한 버튼 모양 — 텍스트 CTA는 `{rounded.pill}`, 아이콘 버튼은 `{rounded.full}`. 사각 버튼 없음.
+- 가변 sans를 미세 웨이트 증분(320, 330, 340, 450, 480, 540, 700)으로 사용 — 단일 보이스가 유연하게 변주.
+- 디스플레이 사이즈에 타이트한 음수 자간으로 자신감 있는 에디토리얼 운율.
+- mono는 카테고리 라벨/eyebrow/caption 전용 — 항상 대문자, 양수 자간.
 
-**Key Characteristics:**
-- Photography-first presentation; UI recedes so the product can speak.
-- Alternating full-bleed tile sections: white/parchment ↔ near-black, with the color change itself acting as the section divider.
-- Single blue accent (`{colors.primary}` — #0066cc) carries every interactive element. No second brand color exists.
-- Two button grammars: tiny blue pill CTAs (`{rounded.pill}`) and compact utility rects (`{rounded.sm}`).
-- Wanted Sans Variable (substituted for SF Pro Display/Text) — negative letter-spacing at display sizes for the signature "Apple tight" headline feel.
-- Whisper-soft elevation used only when a product image needs to breathe — exactly one drop-shadow in the entire system.
-- Tight two-row nav: slim `{component.global-nav}` + product-specific `{component.sub-nav-frosted}` with persistent right-aligned primary CTA.
-- Section rhythm across multiple pages: light hero → dark product tile → light utility tile → dark tile → parchment footer — a predictable pulse.
+> **밀도 구분(중요).** 공개 설문 응답 페이지·랜딩은 **저밀도**(파스텔 컬러블록 + 오버사이즈 타입 + `section`(96) 리듬)로, 빌더·운영 콘솔·결과 대시보드는 **고밀도 도구 UI**(좁은 간격·작은 타입·표 중심·웨이트 위계)로 간다 — 컬러블록과 디스플레이 스케일은 도구 화면에 그대로 적용하지 않는다.
+
+---
 
 ## Colors
 
-> **Source pages analyzed:** homepage, environment, store, iPhone 17 Pro buy page, accessories index. The color system is identical across all five surfaces; only the surface-mode mix differs.
-
 ### Brand & Accent
-- **Action Blue** (`{colors.primary}` — #0066cc): The single brand-level interactive color. All text links, all blue pill CTAs ("Learn more", "Buy"), and the focus ring root. This is Apple's quiet but universal "click me" signal. Press state shifts to a slightly darker variant via the active scale transform rather than a hex change.
-- **Focus Blue** (`{colors.primary-focus}` — #0071e3): A marginally brighter sibling of Action Blue, reserved for the keyboard focus ring on buttons (`outline: 2px solid`).
-- **Sky Link Blue** (`{colors.primary-on-dark}` — #2997ff): A brighter blue used on dark surfaces for in-copy links and inline callouts, where Action Blue would disappear against the tile background.
+- **Black** `{colors.primary}` — 시스템 primary. 모든 primary CTA, 헤드라인, 본문, 다크 섹션의 역상 캔버스.
+- **White** `{colors.on-primary}` — 검정 표면의 역상 텍스트, secondary pill 버튼의 전경.
+- **Magenta Promo** `{colors.accent-magenta}` — 프로모션 인라인 버튼 전용 채도 높은 핑크. 아주 드물게. 섹션 색이 아님.
 
 ### Surface
-- **Pure White** (`{colors.canvas}` — #ffffff): The dominant canvas. Content, utility cards, store tiles, configurator grids.
-- **Parchment** (`{colors.canvas-parchment}` — #f5f5f7): The signature Apple off-white. Used for alternating light tiles, footer region, and the default page canvas in store utility sections. Just different enough from white to create rhythm.
-- **Pearl Button** (`{colors.surface-pearl}` — #fafafc): A near-white used as the fill for secondary "ghost" buttons — lighter than the parchment canvas so the button still reads as a button against `{colors.canvas-parchment}`.
-- **Near-Black Tile 1** (`{colors.surface-tile-1}` — #272729): The primary dark-tile surface on the homepage product grid.
-- **Near-Black Tile 2** (`{colors.surface-tile-2}` — #2a2a2c): A micro-step lighter — used where a dark tile sits directly above or below Tile 1 to create the faintest separation.
-- **Near-Black Tile 3** (`{colors.surface-tile-3}` — #252527): A micro-step darker — used at the bottom of the stack and in embedded video/player frames.
-- **Pure Black** (`{colors.surface-black}` — #000000): Reserved for true void — video player backgrounds, edge-to-edge photographic overlays, the global nav bar background.
-- **Translucent Chip Gray** (`{colors.surface-chip-translucent}` — #d2d2d7): The base hex of the translucent gray chip used over photography for circular control buttons. In production, applied at ~64% alpha as `rgba(210, 210, 215, 0.64)`.
+- **Canvas** `{colors.canvas}` — 기본 배경, 모든 흰색 카드의 바탕.
+- **Inverse Canvas** `{colors.inverse-canvas}` — 푸터, 마퀴 스트립, 다크 스토리 섹션.
+- **Surface Soft** `{colors.surface-soft}` — 흰 캔버스 위 아이콘 버튼·템플릿 카드·일러스트 타일의 오프화이트 배경.
+- **Hairline** `{colors.hairline}` — 폼 인풋·카드·테이블 구분선 1px 보더.
+- **Hairline Soft** `{colors.hairline-soft}` — 더 옅은 구분선(테이블 행 구분, 푸터 컬럼 룰).
+- **Block 색상** — `{colors.block-lime}` · `{colors.block-lilac}` · `{colors.block-cream}` · `{colors.block-mint}` · `{colors.block-pink}` · `{colors.block-coral}` · `{colors.block-navy}`.
 
 ### Text
-- **Near-Black Ink** (`{colors.ink}` — #1d1d1f): The voice of every headline, every body paragraph, and the dark utility button's fill. Chosen instead of pure black to keep the page feeling photographic rather than printed.
-- **Body** (`{colors.body}` — #1d1d1f): Same hex as ink — Apple uses one near-black tone for all text on light surfaces.
-- **Body On Dark** (`{colors.body-on-dark}` — #ffffff): All text on dark tiles and on the global nav bar.
-- **Body Muted** (`{colors.body-muted}` — #cccccc): Secondary copy on dark tiles where pure white would be too loud.
-- **Ink Muted 80** (`{colors.ink-muted-80}` — #333333): Body text on the white Pearl Button surface — slightly softer than pure black.
-- **Ink Muted 48** (`{colors.ink-muted-48}` — #7a7a7a): Disabled button text and legal fine-print.
+- **Ink** `{colors.ink}` — 밝은 표면의 모든 헤드라인·본문·caption. 중간 회색 텍스트 역할 없음 — 위계는 **불투명도가 아니라 웨이트**로.
+- **Inverse Ink** `{colors.inverse-ink}` — 역상 표면(푸터, 마퀴, 네이비 블록)의 텍스트.
+- **On-Inverse Soft** `{colors.on-inverse-soft}` — 다크 섹션 위 원형 아이콘 버튼 표면용 ~16% 흰색.
 
-### Hairlines & Borders
-- **Divider Soft** (`{colors.divider-soft}` — #f0f0f0): The "border" tone on secondary buttons — functions as a ring shadow rather than a hard line. In production, often applied as `rgba(0, 0, 0, 0.04)`.
-- **Hairline** (`{colors.hairline}` — #e0e0e0): The 1px hairline border on store utility cards and configurator chips.
+### Semantic
+- **Success Green** `{colors.semantic-success}` — 비교 표 체크마크. 표면이 아니라 글리프 채움.
+- **Overlay Scrim** `{colors.overlay-scrim}` — 모달/오버레이 뒤 ~60% 검정.
 
-### Brand Gradient
-**No decorative gradients.** Atmospheric depth on product photography (the iPhone 17 Pro camera plate, the Apple Watch bands, AirPods reflections) is inherent to the imagery, not a CSS gradient overlay. The environment page's hero uses photographic atmosphere (mountain vista at dawn) but no gradient tokens are defined. Apple is the rare luxury-brand site with zero gradient-based design tokens.
+### 권장 hex (대체 팔레트 근사값)
+```
+--color-primary:        #0d0d0d;
+--color-canvas:         #ffffff;
+--color-on-primary:     #ffffff;
+--color-accent-magenta: #f24aa0;
+--color-inverse-canvas: #0d0d0d;
+--color-surface-soft:   #f5f5f4;
+--color-hairline:       #e5e5e3;
+--color-hairline-soft:  #efefed;
+--color-ink:            #0d0d0d;
+--color-inverse-ink:    #ffffff;
+--color-block-lime:     #d6f25a;
+--color-block-lilac:    #d9d2f5;
+--color-block-cream:    #f5ead6;
+--color-block-mint:     #c6efd9;
+--color-block-pink:     #f5d2e3;
+--color-block-coral:    #f5b8a0;
+--color-block-navy:     #1a1f4d;
+--color-success:        #2faa5b;
+```
+
+---
 
 ## Typography
 
 ### Font Family
-- **Display**: `"Wanted Sans Variable", "Wanted Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif` — single variable family used for every headline. (Original Apple spec: SF Pro Display. Substituted project-wide with Wanted Sans Variable for cross-browser consistency.)
-- **Body / UI**: same family as Display. Wanted Sans Variable is a single variable font with no separate Text/Display optical sizes — weight and size alone carry the hierarchy. (Original Apple spec: SF Pro Text.)
-- **OpenType features**: `font-variant-numeric: tabular-nums` is enabled globally in `body` (see globals.css) so figures align vertically in tables, response values, and spec sheets. Display sizes rely on tight tracking.
+- **Sans (본문/디스플레이)** — **Wanted Sans** 가변. 스택:
+  `"Wanted Sans Variable", "Wanted Sans", -apple-system, "SF Pro Display", system-ui, sans-serif`.
+  한글+라틴 모두 커버. 미세 웨이트 증분(320, 330, 340, 450, 480, 540, 700)으로 사용.
+  *Wanted Sans는 x-height가 다소 커서 디스플레이 사이즈 line-height를 ~0.02 낮춰 보정.*
+- **Mono (라벨/캡션)** — **JetBrains Mono**. 스택: `"JetBrains Mono", "SF Mono", menlo`.
+  eyebrow·caption 전용, 항상 대문자 + 양수 자간.
+
+OpenType `kern` 전 역할 활성화.
+
+### Numeric Features (필수)
+설문 프로그램은 숫자(응답 수, 비율 %, 점수, 페이지 번호, 날짜)가 표·스텝퍼·결과
+대시보드에서 정렬되어야 하므로 **숫자는 항상 다음 두 OpenType 기능을 켠다**:
+- **`tnum` (tabular-nums)** — 모든 자릿수가 동일 폭. 표/리스트/카운터에서 숫자가 세로로 정렬됨.
+- **`zero` (slashed-zero)** — 0을 사선으로. O/0 혼동 방지(설문 ID·코드·통계값에서 중요).
+
+```css
+/* 전역 유틸 — 숫자가 표/통계/스텝퍼에 들어가는 모든 곳에 적용 */
+.tnum,
+.stat, .data-table td, .pagination, .stepper, time, .survey-id {
+  font-variant-numeric: tabular-nums slashed-zero;
+  /* 폴백: */
+  font-feature-settings: "tnum" 1, "zero" 1;
+}
+```
+- 본문 산문(긴 문장 속 숫자)은 기본 proportional 유지 가능 — `tnum`은 **표·통계·정렬이 필요한 숫자 전용**.
+- `slashed-zero`는 전역으로 켜도 무방(브랜드 톤상 거슬리지 않음).
 
 ### Hierarchy
 
 | Token | Size | Weight | Line Height | Letter Spacing | Use |
 |---|---|---|---|---|---|
-| `{typography.hero-display}` | 56px | 600 | 1.07 | -0.28px | Hero headline; the signature "Apple tight" tracking |
-| `{typography.display-lg}` | 40px | 600 | 1.10 | 0 | Tile headlines atop every product tile |
-| `{typography.display-md}` | 34px | 600 | 1.47 | -0.374px | Section heads |
-| `{typography.lead}` | 28px | 400 | 1.14 | 0.196px | Product tile subcopy |
-| `{typography.lead-airy}` | 24px | 300 | 1.5 | 0 | Environment-page lead paragraphs (the rare weight 300) |
-| `{typography.tagline}` | 21px | 600 | 1.19 | 0.231px | Sub-tile tagline; sub-nav category name |
-| `{typography.body-strong}` | 17px | 600 | 1.24 | -0.374px | Inline strong emphasis |
-| `{typography.body}` | 17px | 400 | 1.47 | -0.374px | Default paragraph |
-| `{typography.dense-link}` | 17px | 400 | 2.41 | 0 | Footer / store utility link lists (relaxed leading) |
-| `{typography.caption}` | 14px | 400 | 1.43 | -0.224px | Secondary captions, button text |
-| `{typography.caption-strong}` | 14px | 600 | 1.29 | -0.224px | Emphasized captions |
-| `{typography.button-large}` | 18px | 300 | 1.0 | 0 | Store hero CTAs (the rare weight 300) |
-| `{typography.button-utility}` | 14px | 400 | 1.29 | -0.224px | Utility/nav button labels |
-| `{typography.fine-print}` | 12px | 400 | 1.0 | -0.12px | Fine-print, footer body |
-| `{typography.micro-legal}` | 10px | 400 | 1.3 | -0.08px | Micro legal disclaimers |
-| `{typography.nav-link}` | 12px | 400 | 1.0 | -0.12px | Global nav menu items |
+| `display-xl` | 86px | 340 | 1.00 | -1.72px | 히어로 헤드라인 |
+| `display-lg` | 64px | 340 | 1.10 | -0.96px | 섹션 오프너 헤드라인 |
+| `headline` | 26px | 540 | 1.35 | -0.26px | 컬러블록 내 스토리 타이틀 |
+| `subhead` | 26px | 340 | 1.35 | -0.26px | 헤드라인급 인트로 문단 |
+| `card-title` | 24px | 700 | 1.45 | 0 | 카드/티어 타이틀 |
+| `body-lg` | 20px | 330 | 1.40 | -0.14px | 리드 본문, 폼 라벨 |
+| `body` | 18px | 320 | 1.45 | -0.26px | 기본 본문 |
+| `body-sm` | 16px | 330 | 1.45 | -0.14px | 카드 본문, 푸터 링크 |
+| `link` | 20px | 480 | 1.40 | -0.10px | 인라인 링크 강조 |
+| `button` | 20px | 480 | 1.40 | -0.10px | 모든 pill 버튼 |
+| `eyebrow` | 18px | 400 | 1.30 | 0.54px | mono 대문자 eyebrow |
+| `caption` | 12px | 400 | 1.00 | 0.60px | mono 대문자 caption, 푸터 컬럼 헤드 |
 
 ### Principles
+- **본문 위계는 사이즈가 아니라 웨이트로.** 20px/330 문단 옆 20px/480 링크 — 스케일 변화 없이 강조.
+- **음수 자간은 사이즈에 비례.** display-xl -1.72px, subhead -0.26px, 본문은 0 근처.
+- **mono는 택소노미, 본문 아님.**
+- **디스플레이는 타이트(1.00–1.10), 본문은 여유(1.40–1.45) line-height.**
 
-- **Negative letter-spacing at display sizes.** Every headline at 17px and up carries a slight tracking tighten (`-0.12 → -0.374px`). This produces the iconic "Apple tight" headline cadence. Never used at 12px or below.
-- **Body copy at 17px, not 16px.** Apple breaks the SaaS convention and runs paragraph text at 17px. The extra pixel gives the page an unmistakable "reading, not scanning" pace. (도구 UI 예외는 위 적용 범위 주의 참조.)
-- **Weight 300 is real and rare.** Used deliberately on a handful of large-size reads (`{typography.button-large}` at 18px/300 and `{typography.lead-airy}` at 24px/300). It's a light-atmosphere cue reserved for moments where the content should feel airy.
-- **Weight 600, not 700, for headlines.** Apple's headlines sit at weight 600. Weight 700 is used sparingly for `{typography.tagline}` (21px) when a touch more assertion is needed.
-- **Line-height is context-specific.** Display sizes use 1.07–1.19 (tight). Body uses 1.47. Utility link stacks in the footer/store use an unusually relaxed 2.41 (`{typography.dense-link}`).
-- **Weight 500 is deliberately absent.** The ladder is 300 / 400 / 600 / 700. Mid-weight readings always use 600.
-
-### Note on the Wanted Sans Substitution
-
-SF Pro is Apple's proprietary system font; this project substitutes it project-wide with **Wanted Sans Variable** (loaded via CDN in `layout.tsx`, declared as `--font-sans` in globals.css). Wanted Sans Variable is a Korean-first variable typeface covering weights 100–900, so the 300 / 400 / 600 / 700 ladder above maps directly.
-
-Because the letter-spacing and line-height values in this spec were measured against **SF Pro metrics**, mind the following when applying them to Wanted Sans:
-
-- **Tracking**: Wanted Sans runs a touch wider than SF Pro and has a taller Hangul-aware x-height. The aggressive display tracking (`-0.28 → -0.374px`) may read as too tight on Wanted Sans — ease it toward `-0.1 → -0.2px` if headlines feel cramped, and validate visually rather than copying the px value blindly.
-- **Body leading**: keep body line-height at **1.47** (not tighter) — Hangul needs the leading even though Inter/SF Pro might take less. globals.css already pairs body with `letter-spacing: 0.01em` and `word-break: keep-all` for Korean wrapping.
-- **Numerals**: `tabular-nums` is on globally; keep it for table/response alignment.
-- **No optical-size split**: unlike SF Pro's Display/Text pair, Wanted Sans is one family — express the Display vs Text distinction purely through size + weight + tracking.
+---
 
 ## Layout
 
-### Spacing System
-- **Base unit:** 8px. Sub-base values (2, 4, 5, 6, 7) are used for tight typographic adjustments; structural layout snaps to 8/12/16/20/24.
-- **Tokens:** `{spacing.xxs}` 4px · `{spacing.xs}` 8px · `{spacing.sm}` 12px · `{spacing.md}` 17px · `{spacing.lg}` 24px · `{spacing.xl}` 32px · `{spacing.xxl}` 48px · `{spacing.section}` 80px.
-- **Section vertical padding:** `{spacing.section}` (80px) inside a product tile; tiles stack edge-to-edge with 0 gap (the color change provides the break).
-- **Card padding:** `{spacing.lg}` (24px) inside utility grid cards.
-- **Button padding:** 8–11px vertical, 15–22px horizontal.
-- **Universal rhythm constants:** the 17px body line-height multiplier (~25px line) and 21px tagline size show up on every analyzed page.
+### Spacing (base 8px)
+`hair` 1 · `xxs` 4 · `xs` 8 · `sm` 12 · `md` 16 · `lg` 24 · `xl` 32 · `xxl` 48 · `section` 96 (px)
+- 컬러블록 섹션 내부 패딩: `xxl`(48).
+- 카드 내부 패딩: `lg`(24).
+- 폼 인풋: 12 세로 · 14 가로.
+- pill 버튼: 8–10 세로 · 24 가로.
+- 주요 섹션 간 세로 리듬: `section`(96).
 
 ### Grid & Container
-- **Max content width:** ~980px on text-heavy sections (environment), ~1440px on product grids (store, accessories), full-bleed for product tiles (homepage).
-- **Column patterns:** 3 to 5 column utility card grid on store/accessories; 2-column side-by-side tiles on homepage occasional sections; single-column centered stack on product tile heroes.
-- **Gutters:** 20–24px between cards in a utility grid.
+- 최대 콘텐츠 폭 ~1280px, 사이드 거터는 데스크탑 `xxl` → 모바일 `lg`.
+- 데스크탑 3·4컬럼 그리드.
+- 컬러블록은 컬럼 그리드를 깨고 콘텐츠 폭 전체를 차지, 내부에 단일 에디토리얼 컬럼.
 
-### Whitespace Philosophy
-Apple's whitespace is the product's pedestal. Every tile begins with at least 64px of air above its headline and 48–64px below. Product renders are never crowded; the nearest content to a product image is at least 40px away. The footer is the only area that breaks this — there, Apple goes deliberately dense to make the full information architecture visible at a glance.
+### Whitespace
+- 모든 컬러 패널 사이에 흰 캔버스 + `section`(96) 여백을 둬서 블록이 의도적으로 읽히게.
+- 블록 내부 타입은 양옆 여백을 넉넉히(블록 폭의 1/4 이상) — 벽이 아니라 포스터처럼.
 
-## Elevation & Depth
+---
+
+## Elevation
 
 | Level | Treatment | Use |
 |---|---|---|
-| Flat | No shadow, no border | Full-bleed tiles, global nav, footer, body sections |
-| Soft hairline | 1px `rgba(0, 0, 0, 0.08)` border | Utility cards, sub-nav frosted-glass separator |
-| Backdrop blur | `backdrop-filter: blur(N)` on Parchment 80% | Sub-nav and the iPhone buy floating sticky bar |
-| Product shadow | `rgba(0, 0, 0, 0.22) 3px 5px 30px 0` | Product renders resting on a surface (the only true "shadow" in the system) |
+| 0 flat | 그림자·보더 없음 | 컬러블록, 역상 푸터, 히어로 |
+| 1 hairline | `{colors.hairline}` 1px 보더 | 카드, 폼 인풋, 테이블 셀 |
+| 2 soft | `0 4px 16px rgba(0,0,0,0.06)` | 플로팅 타일, 드롭다운 |
+| 3 modal | 강한 그림자 + `overlay-scrim` | 라이트박스 오버레이 |
 
-**Shadow philosophy.** Apple uses **exactly one** drop-shadow, and it is applied to photographic product imagery — never to cards, never to buttons, never to text. Elevation in the UI comes from (a) surface-color change (light tile ↔ dark tile) and (b) backdrop-blur on sticky bars. The single shadow is about giving the product weight, not about UI hierarchy.
+그림자는 최소화 — 컬러블록 자체가 깊이 장치. 흰 캔버스 → 라임/라벤더/크림 전환이 섹션 구분이다.
 
-### Decorative Depth
-- **Atmospheric imagery** on the environment page (photographic vista) supplies mood; no CSS gradient involved.
-- **Edge-to-edge tile alternation** creates rhythm without borders or shadows — the color change itself is the divider.
-- **Backdrop-filter blur** on `{component.sub-nav-frosted}` and `{component.floating-sticky-bar}` creates a "floating over content" effect that's functional, not decorative.
+---
 
-## Shapes
-
-### Border Radius Scale
+## Shapes — Border Radius
 
 | Token | Value | Use |
 |---|---|---|
-| `{rounded.none}` | 0px | Full-bleed product tiles (no corner rounding) |
-| `{rounded.xs}` | 5px | Inline links when styled as subtle chips (rare) |
-| `{rounded.sm}` | 8px | Dark utility buttons (Sign In, Bag), inline card imagery |
-| `{rounded.md}` | 11px | White Pearl Button capsules |
-| `{rounded.lg}` | 18px | Store utility cards, accessories grid cards |
-| `{rounded.pill}` | 9999px | Primary blue pill CTAs, sub-nav buy button, configurator option chips, search input — the signature Apple pill |
-| `{rounded.full}` | 9999px / 50% | Circular control chips floating over photography |
+| `xs` | 2px | 앵커/링크 장식 코너 |
+| `sm` | 6px | 작은 칩, 서브내비 탭 |
+| `md` | 8px | 폼 인풋, 리스트, 이미지 프레임 |
+| `lg` | 24px | 카드, 컬러블록 섹션, 큰 이미지 컨테이너 |
+| `xl` | 32px | 히어로 패널, 오버사이즈 콜아웃 |
+| `pill` | 50px | 모든 텍스트 CTA |
+| `full` | 9999px | 원형 아이콘 버튼, 체크마크 글리프 |
 
-### Photography Geometry
-- **Hero imagery**: full-bleed, 21:9 or taller on the homepage; 16:9 on environment and shop pages. Product renders are photographic-realistic, often shot on a tinted surface that becomes the tile background.
-- **Product renders**: PNG/WebP with transparency; rest on a surface tile and pick up the system shadow.
-- **Accessory grid**: square 1:1 crops at `{rounded.lg}` (18px) radius, light neutral backgrounds, product centered with 20–40px internal padding.
-- **No rounded imagery in hero tiles** — images are full-bleed rectangular. Rounding (`{rounded.sm}`, `{rounded.lg}`) appears only on inline card imagery.
-- Lazy-loading via responsive `srcset` and `sizes` across all breakpoints; CDN-optimized WebP.
+- 이미지 프레임은 `md`(8px). 아바타 원형은 마케팅 표면에 사용 안 함.
+
+---
 
 ## Components
 
-### Top Navigation
-
-**`global-nav`** — Persistent, ultra-thin black nav bar pinned to the top of every page. Background `{colors.surface-black}`, height 44px, text `{colors.on-dark}` in `{typography.nav-link}` (12px / 400 / -0.12px tracking). Links are quiet, spaced ~20px apart, running edge-to-edge across the top. Right-aligned cluster: Search, Bag icons — always visible. On mobile, collapses to hamburger at ~834px and the Apple logo centers.
-
-**`sub-nav-frosted`** — Surface-specific nav that sticks below the global nav. Background `{colors.canvas-parchment}` at 80% opacity with backdrop-filter blur, creating a frosted-glass effect. Height 52px. Content on left: product category name ("iPhone", "Store", "Accessories") in `{typography.tagline}` (21px / 600). Content right: inline nav links in `{typography.button-utility}` (14px), ending in a persistent `{component.button-primary}` ("Buy") or a utility link.
-
 ### Buttons
+- **button-primary** — 검정 pill. 배경 `primary`, 텍스트 `on-primary`, `typography.button`, 패딩 10/20, `rounded.pill`.
+- **button-secondary** — 흰 pill + 검정 텍스트. 배경 `canvas`, 텍스트 `ink`, 패딩 8/18/10(비대칭), `rounded.pill`, 보더 없음.
+- **button-tertiary-text** — 텍스트 링크형 히트타겟. `typography.link`, `rounded.full`, 패딩 xs/sm.
+- **button-icon-circular** — 40px 원형. 배경 `surface-soft`, 텍스트 `ink`, `rounded.full`.
+- **button-icon-circular-inverse** — 다크 표면용. 배경 `on-inverse-soft`(반투명 흰), 텍스트 `inverse-ink`.
+- **button-magenta-promo** — 프로모 전용 핑크 pill. 배경 `accent-magenta`, 텍스트 `on-primary`. 페이지당 1개.
 
-**`button-primary`** — The signature Apple action. Background `{colors.primary}` (Action Blue #0066cc), text `{colors.on-primary}` in `{typography.body}` (Wanted Sans 17px / 400), rounded `{rounded.pill}` (full pill — capsule-shaped), padding 11px × 22px. The full-pill radius IS the brand action signal.
-- Active state: `{component.button-primary-active}` — `transform: scale(0.95)` (the system-wide micro-interaction).
-- Focus state: `{component.button-primary-focus}` — 2px solid `{colors.primary-focus}` outline.
+### Tabs / Toggle
+- **tab-default** — 배경 `canvas`, 텍스트 `ink`, `rounded.pill`.
+- **tab-selected** — 배경 `primary`, 텍스트 `on-primary` (= button-primary 표면). "선택 = primary 표면".
 
-**`button-secondary-pill`** — Used as the second CTA when two blue pills appear together ("Learn more" / "Buy"). Background transparent, text `{colors.primary}`, 1px solid `{colors.primary}` border, rounded `{rounded.pill}`, padding 11px × 22px. Reads as a "ghost pill."
+### Inputs
+- **text-input** — 배경 `canvas`, 텍스트 `ink`, `typography.body`, `rounded.md`, 패딩 12/14.
+- **focus** — 표면 유지, fill 변경이 아니라 ring으로 표현.
 
-**`button-dark-utility`** — Global nav actions (Sign In, Bag, language selector). Background `{colors.ink}` (#1d1d1f), text `{colors.on-dark}` in `{typography.button-utility}` (14px / 400 / -0.224px tracking), rounded `{rounded.sm}` (8px), padding 8px × 15px. Active state shrinks via `transform: scale(0.95)`.
+### Cards
+- **card** — 배경 `canvas`, `rounded.lg`, 패딩 `lg`, `hairline` 보더(그림자 대신).
+- **template-card** — 배경 `surface-soft`, `typography.body-sm`, `rounded.md`, 패딩 `md`.
+- **feature-tile** — 배경 `surface-soft`, `typography.eyebrow`, `rounded.md`, 패딩 `lg`.
 
-**`button-pearl-capsule`** — Product-card secondary button. Background `{colors.surface-pearl}` (#fafafc), text `{colors.ink-muted-80}` in `{typography.caption}` (14px), 3px solid `{colors.divider-soft}` border (functions as a soft ring rather than a visible line), rounded `{rounded.md}` (11px), padding 8px × 14px.
+### Color-Block Section (시그니처)
+콘텐츠 폭 전체 패널, `rounded.lg` 코너, `xxl` 내부 패딩.
+- **default(lime)** — 배경 `block-lime`, 텍스트 `ink`, `typography.subhead`.
+- **lilac / cream / mint / pink / coral** — 동일 구조, 각 `block-*` 표면.
+- **navy** — 배경 `block-navy`, 텍스트 `inverse-ink`. 푸터 위 유일한 역상 블록.
 
-**`button-store-hero`** — A larger primary CTA used on store hero surfaces. Same Action Blue + Paper White as `{component.button-primary}`, but with `{typography.button-large}` (18px / 300 — note the rare weight 300) and slightly more padding (14px × 28px). Used sparingly on the store landing.
-
-**`button-icon-circular`** — Floats over photography. 44 × 44px, background `{colors.surface-chip-translucent}` at ~64% alpha, icon in `{colors.ink}`, rounded `{rounded.full}`. Used for carousel controls, close buttons, and in-image controls (product image thumbnails on the iPhone buy page).
-
-**`text-link`** — Inline body links in `{colors.primary}` (Action Blue). Underlined or non-underlined per context.
-
-**`text-link-on-dark`** — Inline body links on dark tiles in `{colors.primary-on-dark}` (Sky Link Blue #2997ff) — Action Blue would disappear against `{colors.surface-tile-1}`.
-
-### Cards & Containers
-
-**`product-tile-light`** — Full-bleed light tile. Background `{colors.canvas}` (white), text `{colors.ink}`, rounded `{rounded.none}` (0 — tiles touch edges), vertical padding `{spacing.section}` (80px). Centered stack: product name in `{typography.display-lg}` (40px / 600) → one-line tagline in `{typography.lead}` (28px / 400) → two `{component.button-primary}` CTAs ("Learn more" / "Buy") → product render resting on the surface with the system shadow.
-
-**`product-tile-parchment`** — Same as `{component.product-tile-light}` but on `{colors.canvas-parchment}` (#f5f5f7). Used to break two consecutive white tiles.
-
-**`product-tile-dark`** — Full-bleed dark tile. Background `{colors.surface-tile-1}` (#272729), text `{colors.on-dark}`, rounded `{rounded.none}`, vertical padding `{spacing.section}` (80px). Same content stack as the light tile but with `{component.text-link-on-dark}` for inline copy and `{component.button-primary}` (Action Blue still works on the dark surface). Used on the homepage product grid as the alternating dark band.
-
-**`product-tile-dark-2`** — Variant on `{colors.surface-tile-2}` (#2a2a2c). Used where a dark tile sits directly above or below `{component.product-tile-dark}` to create the faintest separation through micro-step lightness change.
-
-**`product-tile-dark-3`** — Variant on `{colors.surface-tile-3}` (#252527). Used at the bottom of the stack and in embedded video/player frames.
-
-**`store-utility-card`** — Used in store grid and accessories grid. Background `{colors.canvas}` (white), 1px solid `{colors.hairline}` border, rounded `{rounded.lg}` (18px), padding `{spacing.lg}` (24px). Top: product image (1:1 crop with `{rounded.sm}` (8px) inner image radius). Below: product name in `{typography.body-strong}` (17px / 600), price in `{typography.body}` (17px / 400), and a `{component.text-link}` ("Buy" or "Learn more"). No shadow by default; product render itself carries the system product-shadow.
-
-**`configurator-option-chip`** — Pill-shaped tappable cell used in the iPhone 17 Pro buy page. Background `{colors.canvas}`, text `{colors.ink}` in `{typography.caption}`, rounded `{rounded.pill}`, padding 12px × 16px. Contains a small product thumbnail + label + price delta. Arranged in a grid of 4–5 options per row.
-
-**`configurator-option-chip-selected`** — Selected state. Border upgrades to 2px solid `{colors.primary-focus}`. Same shape, same content.
-
-**`environment-quote-card`** — A photographic-canvas hero specific to the environment page. Dark photographic backdrop (mountain vista at dawn) with `{colors.surface-tile-1}` as the fallback color, centered white-text headline in `{typography.display-lg}` (40px), small green "Apple 2030" pictographic logo above the headline, single `{component.button-primary}` below. Padding `{spacing.section}` (80px).
-
-**`floating-sticky-bar`** — Floats at the bottom of the viewport on the iPhone 17 Pro buy page during scroll. Background `{colors.canvas-parchment}` at 80% opacity with `backdrop-filter: blur(N)`, height 64px, padding 12px × 32px. Left: running price total in `{typography.body}`. Right: `{component.button-primary}` ("Add to Bag").
-
-### Inputs & Forms
-
-**`search-input`** — The accessories search input. Background `{colors.canvas}`, text `{colors.ink}` in `{typography.body}` (17px), 1px solid `rgba(0, 0, 0, 0.08)` border, rounded `{rounded.pill}` (full pill — search is also pill-shaped, matching the CTA grammar), padding 12px × 20px, height 44px. Leading icon: search glyph at 14px, muted tint.
-
-Error and validation states were not surfaced in the analyzed pages.
+### Navigation
+- **top-nav** — 스티키 흰 바, 높이 56px. 좌측 워드마크, 우측 secondary+primary pill 페어. 960px 이하 햄버거.
+- **marquee-strip** — 내비 아래 얇은 검정 리본(높이 36px), 흰 텍스트.
 
 ### Footer
+- **footer** — 흰 캔버스 위 밀집 링크 그리드, 좌상단 워드마크. `typography.caption` 컬럼 헤드, 패딩 `section` 상하 · `xl` 좌우.
 
-**`footer`** — Background `{colors.canvas-parchment}` (#f5f5f7), text `{colors.ink-muted-80}`. Link columns in `{typography.dense-link}` (17px / 400 / 2.41 line-height — the relaxed leading is what makes the dense columns scannable). Column headings in `{typography.caption-strong}` (14px / 600). Legal row at the very bottom in `{typography.fine-print}` (12px / 400) with `{colors.ink-muted-48}` text. Vertical padding 64px.
+---
 
-## Do's and Don'ts
+## Do's & Don'ts
 
-### Do
-- Use `{colors.primary}` (Action Blue #0066cc) for every interactive element — links, pill CTAs, focus signals — and nothing else. The single accent is non-negotiable.
-- Set headlines in `{typography.hero-display}` or `{typography.display-lg}` with negative letter-spacing (eased for Wanted Sans per the substitution note) to get the signature "Apple tight" cadence.
-- Run body copy at `{typography.body}` (17px / 400 / 1.47 / tracking eased for Wanted Sans) on marketing/landing surfaces — not 16px. (도구 UI는 더 높은 밀도를 쓴다.)
-- Alternate `{component.product-tile-light}` (or parchment) and `{component.product-tile-dark}` for full-bleed section rhythm. The color change IS the divider.
-- Reserve `{rounded.pill}` for the primary blue CTA and any other element that should read as an "action" (configurator chips, search input, sticky bar CTA).
-- Apply the single product-shadow (`rgba(0, 0, 0, 0.22) 3px 5px 30px`) only to product renders resting on a surface — never on cards, buttons, or text.
-- Use `transform: scale(0.95)` as the active/press state on every button — it's the system-wide micro-interaction.
-- Keep the global nav `{colors.surface-black}` (true black) — it's the only place pure black appears on most pages.
+**Do**
+- `primary`(검정)는 진짜 primary CTA와 선택 상태에만. 장식 액센트로 쓰지 말 것.
+- 스토리 섹션엔 `block-*` 중 **하나**만 골라 콘텐츠 폭 전체 + `rounded.lg` + `xxl` 패딩.
+- 타입은 가변 sans 웨이트(320/330/340/480/540/700)에서만 골라 위계 표현.
+- mono는 eyebrow/caption만, 항상 대문자.
+- 모든 CTA는 pill, 아이콘 버튼은 원형.
+- 컬러블록 사이엔 항상 흰 캔버스로 복귀.
 
-### Don't
-- Don't introduce a second accent color; every "click me" signal is `{colors.primary}` (Action Blue).
-- Don't add shadows to cards, buttons, or text — shadow is reserved for product imagery.
-- Don't use gradients as decorative backgrounds; atmosphere comes from photography.
-- Don't set body copy at weight 500 — the ladder is 300 / 400 / 600 / 700, with 500 deliberately absent. Body is always 400; strong inline is 600; display is 600.
-- Don't round full-bleed tiles — tiles are rectangular and edge-to-edge; the color change is the divider.
-- Don't tighten body line-height below 1.47 — the editorial leading is part of the brand (and Hangul needs it).
-- Don't mix radii grammars — use `{rounded.sm}` for compact utility, `{rounded.lg}` for utility cards, `{rounded.pill}` for pills, and nothing in between (except the rare `{rounded.md}` Pearl Button).
-- Don't use `{colors.primary-on-dark}` (Sky Link Blue) on light surfaces — it's the dark-tile-only variant. Action Blue is for light surfaces.
+**Don't**
+- 중간 회색 텍스트 금지 — 위계는 웨이트로.
+- 컬러블록에 드롭섀도 금지 — 색이 깊이.
+- `block-*` + `accent-magenta` 외 새 액센트 색 금지.
+- 한 화면에 컬러블록 2개 이상 동시에 보이지 않게.
+- CTA를 사각으로 만들지 말 것.
+- mono를 본문에 쓰지 말 것.
 
-## Responsive Behavior
+---
 
-### Breakpoints
+## Responsive
+- **Breakpoints**: 1920 / 1440 / 1400 / 1280 / 960(태블릿, 햄버거) / 768(블록 풀블리드) / 560(display-xl 86→48px, pill 풀폭) / 559(푸터 1컬럼).
+- **Touch**: pill 최소 44px 높이, 원형 아이콘 40→44px, 폼 인풋 48px.
+- **Color-block**: 768px 이하에서 코너 제거 + 뷰포트 풀블리드(포스터 효과).
 
-| Name | Width | Key Changes |
-|---|---|---|
-| Small phone | ≤ 419px | Single-column tiles; sub-nav collapses to category name + primary CTA only; hero typography drops to 28px |
-| Phone | 420–640px | Single-column stack; product renders scale to 80% of tile width; hero h1 drops to 34px |
-| Large phone | 641–735px | Tiles transition to tighter padding (48px vertical vs 80px); fine-print wraps |
-| Tablet portrait | 736–833px | Global nav collapses to hamburger; sub-nav hides category chips, keeps primary CTA |
-| Tablet landscape | 834–1023px | Global nav returns fully expanded; 3-column utility grids become 2-column |
-| Small desktop | 1024–1068px | Product tiles use 2/3 width with margin gutters; hero h1 stays at 40px |
-| Desktop | 1069–1440px | Full layout; 4–5 column store grids; 1440px content max |
-| Wide desktop | ≥ 1441px | Content locks at 1440px, margins absorb extra width |
+---
 
-The structural breakpoints that matter for agents: 1440px (content lock), 1068px (small-desktop), 833px (tablet landscape switch), 734px (tablet portrait), 640px (phone), 480px (small phone).
+## Tailwind v4 매핑 (구현 노트)
 
-### Touch Targets
-- Minimum 44 × 44px. `{component.button-primary}` lands at ~44 × 100px (with the full-pill radius making the visible hit area more generous than the label suggests).
-- `{component.button-icon-circular}` is exactly 44 × 44px.
-- Global nav utility links are smaller (~32 × 80px) — they deliberately sit at a tighter target because they're precision desktop actions, and the mobile hamburger replaces them at ≤ 833px.
+> v4는 `tailwind.config.js`가 아니라 CSS의 `@theme`에 토큰을 선언하면 그대로 유틸리티가 된다.
+> 아래 토큰을 globals.css에 한 번 선언해두면 `bg-canvas`, `text-ink`, `rounded-pill`,
+> `font-weight-*` 등으로 바로 쓸 수 있다. **never inline hex — 토큰 유틸만 사용.**
 
-### Collapsing Strategy
-- **Global nav**: full horizontal link row on desktop → collapses to Apple logo + hamburger + bag icon at 834px and below.
-- **Sub-nav**: category name + inline links + primary CTA → category name + primary CTA only at mobile; inline links move into a hamburger tray.
-- **Product tiles**: stack from 2-column to 1-column at 834px; vertical padding tightens from 80px → 48px at small-phone.
-- **Utility grids** (store, accessories): 5-col → 4-col (1440px) → 3-col (1068px) → 2-col (834px) → 1-col (640px).
-- **Hero typography**: `{typography.hero-display}` (56px) → `{typography.display-lg}` (40px) at 1068px → 34px at 640px → 28px at 419px.
+```css
+@import "tailwindcss";
 
-### Image Behavior
-- All product imagery uses responsive `srcset` with breakpoint-matched crops.
-- Hero photography may switch art direction at mobile (e.g., the environment page's vista crops to a taller aspect ratio on mobile, framing the subject differently).
-- Product renders maintain their 1:1 or 4:3 aspect ratios across breakpoints; only scale changes.
-- Lazy-loading is default; the above-fold hero loads eagerly.
+@theme {
+  /* Fonts */
+  --font-sans: "Wanted Sans Variable", "Wanted Sans", -apple-system, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", menlo, monospace;
 
-## Iteration Guide
+  /* 미세 웨이트 래더 (Tailwind 기본엔 없음 → font-w320 … font-w700) */
+  --font-weight-w320: 320;  --font-weight-w330: 330;  --font-weight-w340: 340;
+  --font-weight-w450: 450;  --font-weight-w480: 480;  --font-weight-w540: 540;
+  --font-weight-w700: 700;
 
-1. Focus on ONE component at a time. Reference its YAML key directly (`{component.product-tile-dark}`, `{component.search-input}`).
-2. Variants of an existing component (`-active`, `-focus`, `-2`, `-3`) live as separate entries in `components:`.
-3. Use `{token.refs}` everywhere — never inline hex.
-4. Never document hover. Default and Active/Pressed states only.
-5. Display headlines stay Wanted Sans Variable 600 with negative letter-spacing (eased per the substitution note). Body stays Wanted Sans Variable 400 at 17px on marketing surfaces. The Display-vs-Body boundary is expressed by size + weight + tracking, not by a separate font.
-6. The single drop-shadow (`rgba(0, 0, 0, 0.22) 3px 5px 30px`) is reserved for product photography only.
-7. When in doubt about emphasis: alternate surface (light → dark tile) before adding chrome.
+  /* Colors */
+  --color-primary: #0d0d0d;          --color-canvas: #ffffff;
+  --color-on-primary: #ffffff;       --color-ink: #0d0d0d;
+  --color-inverse-canvas: #0d0d0d;   --color-inverse-ink: #ffffff;
+  --color-surface-soft: #f5f5f4;
+  --color-hairline: #e5e5e3;         --color-hairline-soft: #efefed;
+  --color-accent-magenta: #f24aa0;   --color-success: #2faa5b;
+  --color-block-lime: #d6f25a;  --color-block-lilac: #d9d2f5;  --color-block-cream: #f5ead6;
+  --color-block-mint: #c6efd9;  --color-block-pink: #f5d2e3;   --color-block-coral: #f5b8a0;
+  --color-block-navy: #1a1f4d;
 
-## Known Gaps
+  /* Radius — pill만 커스텀, rounded-full은 기본 제공 */
+  --radius-xs: 2px;  --radius-sm: 6px;  --radius-md: 8px;
+  --radius-lg: 24px; --radius-xl: 32px; --radius-pill: 50px;
+}
+```
 
-- Form validation and error states were not surfaced on the analyzed pages; only the neutral search input is documented.
-- The homepage's embedded video/player frame uses `{colors.surface-black}`; interior player controls are not documented (they're a platform widget, not a web-design token).
-- Some component imagery is dynamic (rotating product hero) and its specific copy varies per surface — component specs name the structure, not the rotating content.
-- Dark-mode counterparts for store and accessories utility cards were not surfaced on the analyzed pages; the system documented is the daytime/light-dominant variant Apple ships by default.
-- Atmospheric photography (environment page mountain vista) is a content asset, not a design token; the documented `{component.environment-quote-card}` describes the structural surface only.
-- The exact backdrop-filter blur radius on `{component.sub-nav-frosted}` and `{component.floating-sticky-bar}` is platform-dependent; production CSS uses `saturate(180%) blur(20px)` as a typical baseline but the value isn't formalized as a token.
+**기본 매핑으로 충분한 것 (선언 불필요)**
+- **Spacing**: 8px 스케일이 Tailwind 기본 `--spacing`(4px)에 그대로 떨어진다 — `xs`8=`p-2`, `sm`12=`p-3`, `md`16=`p-4`, `lg`24=`p-6`, `xl`32=`p-8`, `xxl`48=`p-12`, `section`96=`p-24`.
+- **숫자 기능**: `tabular-nums`, `slashed-zero` 유틸이 v4 내장 → 표·통계·스텝퍼에 `class="tabular-nums slashed-zero"`. 전역으로 깔려면 `@layer base`의 `body`에 두 유틸을 직접.
+
+**유틸로 안 떨어져서 arbitrary value를 쓰는 것**
+- **음수 자간**: 트래킹 토큰을 따로 안 만든다면 `tracking-[-1.72px]`(display-xl) … `tracking-[-0.26px]`(body)처럼 arbitrary value. mono eyebrow/caption은 양수 `tracking-[0.54px]`.
+- **타입 스케일**: `text-[86px]/[1.0]` 식으로 size/line-height를 arbitrary로 묶거나, 자주 쓰면 `--text-display-xl` 등 `@theme`에 추가해 `text-display-xl`로.
+
+**주의**
+- `font-medium`(500) 쓰지 말 것 — 래더는 320/330/340/450/480/540/700, **500은 의도적 부재**. 대신 `font-w480` 등.
+- pill 버튼은 `rounded-pill`, 아이콘 버튼은 `rounded-full`. `rounded-lg`(8px 기본값과 다름!) 같은 Tailwind 기본 radius 유틸은 우리 `--radius-lg`(24px)로 덮이니 토큰 의도대로 쓰면 된다.
