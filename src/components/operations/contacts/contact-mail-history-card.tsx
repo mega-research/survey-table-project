@@ -1,5 +1,5 @@
 import { RecipientStatusBadge } from '@/components/operations/mail-campaign/recipient-status-badge';
-import { formatLocalDateTime } from '@/lib/date-formatters';
+import { LocalDateTime } from '@/components/ui/local-date-time';
 import type { MailHistoryRow } from '@/lib/operations/contacts.server';
 
 /** 조사 대상 메일 발송 이력 — 기본 접힘 collapsible. */
@@ -29,15 +29,30 @@ export function ContactMailHistoryCard({ rows }: { rows: MailHistoryRow[] }) {
                   </span>
                   <RecipientStatusBadge status={r.status} />
                 </div>
-                <div className="text-xs text-slate-500">
-                  {[
-                    r.sentAt && `발송 ${formatLocalDateTime(r.sentAt)}`,
-                    r.deliveredAt && `전달 ${formatLocalDateTime(r.deliveredAt)}`,
-                    r.openedAt && `열람 ${formatLocalDateTime(r.openedAt)}`,
-                    r.bouncedAt && `반송 ${formatLocalDateTime(r.bouncedAt)}`,
-                  ]
-                    .filter(Boolean)
-                    .join(' · ') || '발송 대기'}
+                <div className="flex flex-wrap gap-x-2 text-xs text-slate-500">
+                  {r.sentAt ? (
+                    <span>
+                      발송 <LocalDateTime value={r.sentAt} />
+                    </span>
+                  ) : null}
+                  {r.deliveredAt ? (
+                    <span>
+                      전달 <LocalDateTime value={r.deliveredAt} />
+                    </span>
+                  ) : null}
+                  {r.openedAt ? (
+                    <span>
+                      열람 <LocalDateTime value={r.openedAt} />
+                    </span>
+                  ) : null}
+                  {r.bouncedAt ? (
+                    <span>
+                      반송 <LocalDateTime value={r.bouncedAt} />
+                    </span>
+                  ) : null}
+                  {!r.sentAt && !r.deliveredAt && !r.openedAt && !r.bouncedAt ? (
+                    <span>발송 대기</span>
+                  ) : null}
                 </div>
                 {r.errorReason ? (
                   <div className="text-xs text-rose-500">{r.errorReason}</div>

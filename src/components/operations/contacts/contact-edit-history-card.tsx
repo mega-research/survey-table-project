@@ -1,4 +1,4 @@
-import { formatLocalDateTime } from '@/lib/date-formatters';
+import { LocalDateTime } from '@/components/ui/local-date-time';
 import type { ResponseEditChange } from '@/db/schema/schema-types';
 import type { ResponseEditLogRow } from '@/lib/operations/contacts.server';
 
@@ -39,7 +39,7 @@ export function ContactEditHistoryCard({ rows, hasResponse }: Props) {
               >
                 <div className="text-sm text-slate-700">{r.editorEmail ?? '관리자'}</div>
                 <div className="text-xs text-slate-500">
-                  {formatLocalDateTime(r.createdAt)} ·{' '}
+                  <LocalDateTime value={r.createdAt} /> ·{' '}
                   {summarizeChanges(r.changedQuestions, r.changedCount)}
                 </div>
               </li>
