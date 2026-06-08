@@ -26,9 +26,12 @@ function mapServiceError(err: unknown): never {
 const saveAdminEdit = authed
   .input(SaveAdminEditInput)
   .output(SaveAdminEditOutput)
-  .handler(async ({ input }) => {
+  .handler(async ({ input, context }) => {
     try {
-      return await svc.saveAdminEdit(input);
+      return await svc.saveAdminEdit(input, {
+        id: context.user?.id ?? null,
+        email: context.user?.email ?? null,
+      });
     } catch (err) {
       mapServiceError(err);
     }

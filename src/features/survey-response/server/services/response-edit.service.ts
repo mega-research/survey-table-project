@@ -3,10 +3,15 @@ import 'server-only';
 import { and, eq } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { surveyResponses, surveys } from '@/db/schema';
+import { surveyResponses, surveys, surveyVersions, responseEditLogs } from '@/db/schema';
+import type { SurveyVersionSnapshot } from '@/db/schema/schema-types';
 import { replaceResponseAnswers } from './response-answers.service';
 import { calculateProgressPct } from '@/lib/operations/response-progress';
 import { getProgressSnapshot } from '@/lib/operations/response-progress.server';
+import {
+  buildChangedQuestions,
+  diffQuestionResponses,
+} from '@/lib/operations/response-edit-diff';
 import { SurveyOwnershipError } from '@/lib/auth/require-survey-ownership';
 
 import type { SaveAdminEditInput } from '../../domain/response-edit';
@@ -35,6 +40,7 @@ export { SurveyOwnershipError };
  */
 export async function saveAdminEdit(
   input: SaveAdminEditInput,
+  editor: { id: string | null; email: string | null },
 ): Promise<{ ok: true }> {
   const { surveyId, responseId, questionResponses } = input;
 
@@ -57,6 +63,22 @@ export async function saveAdminEdit(
   }
 
   const now = new Date();
+
+  // 바뀐 질문 추출 (audit 용). 변경 0개면 audit 행 미생성.
+  const prevResponses = (existing.questionResponses ?? {}) as Record<string, unknown>;
+  const changedIds = diffQuestionResponses(prevResponses, questionResponses);
+  let changedQuestions: ReturnType<typeof buildChangedQuestions> = [];
+  if (changedIds.length > 0) {
+    const [verRow] = existing.versionId
+      ? await db
+          .select({ snapshot: surveyVersions.snapshot })
+          .from(surveyVersions)
+          .where(eq(surveyVersions.id, existing.versionId))
+          .limit(1)
+      : [];
+    const snapshot = (verRow?.snapshot ?? null) as SurveyVersionSnapshot | null;
+    changedQuestions = buildChangedQuestions(changedIds, snapshot);
+  }
 
   // progress_pct 재계산: completed 는 100 유지, 그 외는 snapshot 기반 재계산.
   // status 기준 분기 (progressPct === 100 가 아님) — 99% drop 이 우연히 100 으로 반올림된 경우를
@@ -96,6 +118,17 @@ export async function saveAdminEdit(
       surveyId,
       questionResponses,
     );
+
+    if (changedQuestions.length > 0) {
+      await tx.insert(responseEditLogs).values({
+        responseId,
+        surveyId,
+        editedBy: editor.id,
+        editorEmail: editor.email,
+        changedQuestions,
+        changedCount: changedQuestions.length,
+      });
+    }
   });
 
   return { ok: true as const };

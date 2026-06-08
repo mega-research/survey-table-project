@@ -272,6 +272,8 @@ vi.mock('@/db/schema', () => {
     surveys: makeTableProxy('surveys'),
     responseAnswers: makeTableProxy('responseAnswers'),
     questions: makeTableProxy('questions'),
+    surveyVersions: makeTableProxy('surveyVersions'),
+    responseEditLogs: makeTableProxy('responseEditLogs'),
   };
 });
 
@@ -639,11 +641,14 @@ describe('profiles-row-actions', () => {
       const before = h.responseStore.get(responseId);
       const beforeCompletedAt = before?.completedAt?.getTime();
 
-      await saveAdminEdit({
-        surveyId,
-        responseId,
-        questionResponses: { [qid]: 'new' },
-      });
+      await saveAdminEdit(
+        {
+          surveyId,
+          responseId,
+          questionResponses: { [qid]: 'new' },
+        },
+        { id: 'admin-1', email: 'a@b.com' },
+      );
 
       const after = h.responseStore.get(responseId);
       expect((after?.questionResponses as { [k: string]: string })[qid]).toBe('new');
@@ -661,7 +666,10 @@ describe('profiles-row-actions', () => {
       await softDeleteResponse({ surveyId, responseId });
 
       await expect(
-        saveAdminEdit({ surveyId, responseId, questionResponses: {} }),
+        saveAdminEdit(
+          { surveyId, responseId, questionResponses: {} },
+          { id: 'admin-1', email: 'a@b.com' },
+        ),
       ).rejects.toThrow('Cannot edit deleted response');
     });
 
@@ -683,11 +691,14 @@ describe('profiles-row-actions', () => {
         Array.from(h.answerStore.values()).filter((a) => a.responseId === responseId),
       ).toHaveLength(1);
 
-      await saveAdminEdit({
-        surveyId,
-        responseId,
-        questionResponses: { [newQid]: 'NEW_ANS' },
-      });
+      await saveAdminEdit(
+        {
+          surveyId,
+          responseId,
+          questionResponses: { [newQid]: 'NEW_ANS' },
+        },
+        { id: 'admin-1', email: 'a@b.com' },
+      );
 
       const remaining = Array.from(h.answerStore.values()).filter(
         (a) => a.responseId === responseId,
@@ -702,7 +713,10 @@ describe('profiles-row-actions', () => {
     it('존재하지 않는 응답은 Response not found throw', async () => {
       const surveyId = createTestSurvey();
       await expect(
-        saveAdminEdit({ surveyId, responseId: 'nonexistent-id', questionResponses: {} }),
+        saveAdminEdit(
+          { surveyId, responseId: 'nonexistent-id', questionResponses: {} },
+          { id: 'admin-1', email: 'a@b.com' },
+        ),
       ).rejects.toThrow('Response not found');
     });
   });

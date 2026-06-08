@@ -34,6 +34,9 @@ vi.mock('@/db', () => {
   chainable['select'] = vi.fn(() => chainable);
   chainable['from'] = vi.fn(() => chainable);
   chainable['limit'] = vi.fn(() => selectLimitMock());
+  // insert().values() — saveAdminEdit 의 response_edit_logs audit insert glue
+  chainable['insert'] = vi.fn(() => chainable);
+  chainable['values'] = vi.fn(async () => undefined);
   // transaction(cb) → cb(tx) where tx has same chain + delete + insert
   chainable['transaction'] = vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => {
     const tx = { ...chainable, delete: vi.fn(() => chainable), insert: vi.fn(() => chainable) };
@@ -98,6 +101,9 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
     updateSetMock.mockReset();
     findFirstMock.mockReset();
     selectLimitMock.mockReset();
+    // 기본값: 빈 결과. audit diff 의 버전 스냅샷 조회와 progress snapshot 조회가
+    // 같은 limit mock 을 공유하므로, 스냅샷이 필요한 테스트만 개별 mockResolvedValue 로 덮는다.
+    selectLimitMock.mockResolvedValue([]);
     // transaction 내부에서 호출되는 update().set().where() 는 returning() 없이 끝남
     // chainable.where 는 chainable 을 반환하므로 별도 mock 불필요
     // transaction 바깥 select().from().where().limit() 는 selectLimitMock 으로 제어
@@ -111,7 +117,10 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
       deletedAt: null,
     });
     const { saveAdminEdit } = await import('@/features/survey-response/server/services/response-edit.service');
-    await saveAdminEdit({ surveyId: 's1', responseId: 'r1', questionResponses: { q1: 'v' } });
+    await saveAdminEdit(
+      { surveyId: 's1', responseId: 'r1', questionResponses: { q1: 'v' } },
+      { id: 'admin-1', email: 'a@b.com' },
+    );
 
     const completedCall = updateSetMock.mock.calls[0];
     if (!completedCall) throw new Error('updateSetMock 호출 없음');
@@ -129,7 +138,10 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
     // snapshot 로더가 호출되면 빈 questions 배열 반환
     selectLimitMock.mockResolvedValue([{ snapshot: { questions: [] } }]);
     const { saveAdminEdit } = await import('@/features/survey-response/server/services/response-edit.service');
-    await saveAdminEdit({ surveyId: 's1', responseId: 'r1', questionResponses: {} });
+    await saveAdminEdit(
+      { surveyId: 's1', responseId: 'r1', questionResponses: {} },
+      { id: 'admin-1', email: 'a@b.com' },
+    );
 
     const dropEmptyCall = updateSetMock.mock.calls[0];
     if (!dropEmptyCall) throw new Error('updateSetMock 호출 없음');
@@ -152,11 +164,14 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
       },
     ]);
     const { saveAdminEdit } = await import('@/features/survey-response/server/services/response-edit.service');
-    await saveAdminEdit({
-      surveyId: 's1',
-      responseId: 'r1',
-      questionResponses: { q1: 'a', q3: 'b' },
-    });
+    await saveAdminEdit(
+      {
+        surveyId: 's1',
+        responseId: 'r1',
+        questionResponses: { q1: 'a', q3: 'b' },
+      },
+      { id: 'admin-1', email: 'a@b.com' },
+    );
 
     const dropAnsweredCall = updateSetMock.mock.calls[0];
     if (!dropAnsweredCall) throw new Error('updateSetMock 호출 없음');
@@ -173,11 +188,14 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
       deletedAt: null,
     });
     const { saveAdminEdit } = await import('@/features/survey-response/server/services/response-edit.service');
-    await saveAdminEdit({
-      surveyId: 's1',
-      responseId: 'r1',
-      questionResponses: { q1: 'a' },
-    });
+    await saveAdminEdit(
+      {
+        surveyId: 's1',
+        responseId: 'r1',
+        questionResponses: { q1: 'a' },
+      },
+      { id: 'admin-1', email: 'a@b.com' },
+    );
 
     const nullVersionCall = updateSetMock.mock.calls[0];
     if (!nullVersionCall) throw new Error('updateSetMock 호출 없음');

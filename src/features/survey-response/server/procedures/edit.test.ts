@@ -36,7 +36,10 @@ describe('surveyResponse.edit procedures', () => {
       questionResponses: { q1: 'a' },
     };
     const res = await client.edit.saveAdminEdit(input);
-    expect(svc.saveAdminEdit).toHaveBeenCalledWith(input);
+    expect(svc.saveAdminEdit).toHaveBeenCalledWith(input, {
+      id: 'admin-1',
+      email: 'a@b.com',
+    });
     expect(res).toEqual({ ok: true });
   });
 
