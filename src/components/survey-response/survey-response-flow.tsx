@@ -4,17 +4,22 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useRouter } from 'next/navigation';
 
-import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle, Loader2, Lock } from 'lucide-react';
+import { AlertCircle, ArrowLeft, ArrowRight } from 'lucide-react';
 
 import { AlreadyRespondedView } from '@/components/survey/already-responded-view';
 import { InviteRequiredScreen } from '@/components/survey-response/invite-required-screen';
 import { MobileBottomNav } from '@/components/survey-response/mobile-bottom-nav';
-import { QuestionInput } from '@/components/survey-response/question-input';
-import { formatLocalDateTime } from '@/lib/date-formatters';
-import { ContactAttrsProvider, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import {
+  SurveyCompletedScreen,
+  SurveyEmptyScreen,
+  SurveyErrorScreen,
+  SurveyLoadingScreen,
+} from '@/components/survey-response/survey-response-screens';
+import { GroupStepView } from '@/components/survey-response/step-views/group-step-view';
+import { TableStepView } from '@/components/survey-response/step-views/table-step-view';
+import { ContactAttrsProvider } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 import { useClientSignals } from '@/hooks/use-client-signals';
 import { useKeyboardOpen } from '@/hooks/use-keyboard-open';
@@ -24,7 +29,6 @@ import {
   buildRenderSteps,
   RenderStep,
   resolveStepBranch,
-  StepItem,
 } from '@/lib/group-ordering';
 import { isQuestionAnswered as isQuestionAnsweredPure } from '@/lib/survey/answer-validation';
 import { useDuplicateGuard } from '@/components/survey-response/hooks/use-duplicate-guard';
@@ -33,8 +37,7 @@ import { useResponseTelemetry } from '@/components/survey-response/hooks/use-res
 import { useSessionRecovery } from '@/components/survey-response/hooks/use-session-recovery';
 import { useSurveyLoader } from '@/components/survey-response/hooks/use-survey-loader';
 import { ResumeToast } from '@/components/survey-response/resume-toast';
-import { cn, isEmptyHtml } from '@/lib/utils';
-import { sanitizeRichHtml } from '@/lib/sanitize';
+import { isEmptyHtml } from '@/lib/utils';
 import {
   collectTableQuestionOptions,
   filterOptionTextsForSubmission,
@@ -530,84 +533,25 @@ export function SurveyResponseFlow({
 
   // 로딩 중
   if (isLoading) {
-    return (
-      <div className="flex min-h-dvh items-center justify-center bg-gray-50">
-        <Card className="mx-auto max-w-md">
-          <CardContent className="p-8 text-center">
-            <Loader2 className="mx-auto mb-4 h-12 w-12 animate-spin text-blue-500" />
-            <h2 className="mb-2 text-xl font-semibold text-gray-900">설문을 불러오는 중...</h2>
-            <p className="text-gray-600">잠시만 기다려주세요.</p>
-          </CardContent>
-        </Card>
-      </div>
-    );
+    return <SurveyLoadingScreen />;
   }
 
   // 에러 발생
   if (loadError || !loadedSurvey) {
-    const isPrivateError = loadError?.includes('비공개');
-
-    return (
-      <div className="flex min-h-dvh items-center justify-center bg-gray-50">
-        <Card className="mx-auto max-w-md">
-          <CardContent className="p-8 text-center">
-            {isPrivateError ? (
-              <Lock className="mx-auto mb-4 h-12 w-12 text-yellow-500" />
-            ) : (
-              <AlertCircle className="mx-auto mb-4 h-12 w-12 text-red-500" />
-            )}
-            <h2 className="mb-2 text-xl font-semibold text-gray-900">
-              {isPrivateError ? '접근이 제한된 설문입니다' : '설문을 찾을 수 없습니다'}
-            </h2>
-            <p className="mb-4 text-gray-600">
-              {loadError || '요청하신 설문이 존재하지 않거나 삭제되었습니다.'}
-            </p>
-            <Button onClick={() => router.push('/')}>
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              홈으로 돌아가기
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
+    return <SurveyErrorScreen loadError={loadError} onGoHome={() => router.push('/')} />;
   }
 
   if (questions.length === 0 || steps.length === 0 || !currentStep) {
-    return (
-      <div className="flex min-h-dvh items-center justify-center bg-gray-50">
-        <Card className="mx-auto max-w-md">
-          <CardContent className="p-8 text-center">
-            <AlertCircle className="mx-auto mb-4 h-12 w-12 text-yellow-500" />
-            <h2 className="mb-2 text-xl font-semibold text-gray-900">아직 질문이 없습니다</h2>
-            <p className="mb-4 text-gray-600">이 설문에는 아직 질문이 등록되지 않았습니다.</p>
-            <Button onClick={() => router.push('/')}>
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              홈으로 돌아가기
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
+    return <SurveyEmptyScreen onGoHome={() => router.push('/')} />;
   }
 
   // 완료 화면
   if (isCompleted) {
     return (
-      <div className="flex min-h-dvh items-center justify-center bg-gray-50">
-        <Card className="mx-auto max-w-md">
-          <CardContent className="p-8 text-center">
-            <CheckCircle className="mx-auto mb-4 h-16 w-16 text-green-500" />
-            <h2 className="mb-2 text-2xl font-semibold text-gray-900">응답 완료!</h2>
-            <p className="mb-6 text-gray-600">
-              {loadedSurvey.settings.thankYouMessage || '설문에 참여해주셔서 감사합니다!'}
-            </p>
-            <div className="space-y-2 text-sm text-gray-500">
-              <p>총 {questions.length}개 질문</p>
-              <p>응답 완료 시간: {formatLocalDateTime(new Date())}</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      <SurveyCompletedScreen
+        thankYouMessage={loadedSurvey.settings.thankYouMessage}
+        questionCount={questions.length}
+      />
     );
   }
 
@@ -742,322 +686,5 @@ export function SurveyResponseFlow({
       )}
       </div>
     </ContactAttrsProvider>
-  );
-}
-
-// ── 서브 컴포넌트 ──
-
-/**
- * TipTap이 출력한 sanitized HTML을 prose 스타일로 렌더.
- * 모바일 표 길들이기는 globals.css의 `.tiptap-mobile-tame`이 담당하므로
- * 여기선 데스크탑용 prose + 표 외형만 정의한다.
- */
-function RichDescription({
-  html,
-  size = 'sm',
-  className,
-}: {
-  html: string;
-  size?: 'sm' | 'base';
-  className?: string;
-}) {
-  return (
-    <div
-      className={cn(
-        'tiptap-mobile-tame prose min-w-0 max-w-none [&_a]:break-all [&_p]:break-words',
-        '[&_table]:max-w-full [&_table]:table-auto [&_table]:border-collapse [&_table]:border [&_table]:border-gray-200 [&_table_p]:m-0',
-        '[&_table_td]:border [&_table_td]:border-gray-200 [&_table_td]:break-words',
-        '[&_table_th]:border [&_table_th]:border-gray-200 [&_table_th]:bg-gray-50 [&_table_th]:break-words [&_table_th]:font-semibold',
-        size === 'base' ? 'prose-base' : 'prose-sm',
-        className,
-      )}
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
-  );
-}
-
-function TableStepView({
-  step,
-  isMobile,
-  titleHasMultipleLines,
-  currentStepNumber,
-  responses,
-  questions,
-  onResponse,
-  highlightQuestionIds,
-}: {
-  step: Extract<RenderStep, { kind: 'table' }>;
-  isMobile: boolean;
-  titleHasMultipleLines: boolean;
-  currentStepNumber: number;
-  responses: ResponsesMap;
-  questions: Question[];
-  onResponse: (questionId: string, value: unknown) => void;
-  highlightQuestionIds: Set<string>;
-}) {
-  const q = step.question;
-  const isHighlighted = highlightQuestionIds.has(q.id);
-  const onChange = useCallback((value: unknown) => onResponse(q.id, value), [onResponse, q.id]);
-  const attrs = useContactAttrs();
-  const titleText = useMemo(
-    () => substituteTokens(q.title ?? '', attrs),
-    [q.title, attrs],
-  );
-  const descriptionHtml = useMemo(
-    () => sanitizeRichHtml(substituteTokens(q.description ?? '', attrs)),
-    [q.description, attrs],
-  );
-
-  return (
-    <>
-      {/* 모바일: 제목/설명을 카드 밖으로 분리 */}
-      {isMobile && (
-        <div className="mb-4 space-y-2.5" data-question-id={q.id}>
-          {(step.rootGroupName || step.subgroupName) && (
-            <div className="flex flex-wrap items-center gap-2">
-              {step.rootGroupName && (
-                <span className="inline-block rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
-                  {step.rootGroupName}
-                </span>
-              )}
-              {step.subgroupName && step.subgroupName !== step.rootGroupName && (
-                <span className="inline-block rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
-                  {step.subgroupName}
-                </span>
-              )}
-            </div>
-          )}
-          <h2
-            className={`${
-              titleHasMultipleLines ? 'text-lg' : 'text-xl'
-            } leading-[1.6] font-bold break-keep text-gray-900`}
-          >
-            {titleText}
-            {q.required && (
-              <span className="ml-1 align-top text-sm text-red-500" aria-label="필수 질문">
-                *
-              </span>
-            )}
-          </h2>
-          {!isEmptyHtml(q.description) && (
-            <RichDescription
-              html={descriptionHtml}
-              size="base"
-              className="max-h-[40vh] overflow-y-auto leading-relaxed text-base text-gray-500 [&_p]:min-h-[1.5em] [&_p]:leading-relaxed [&_table]:my-2 [&_table_td]:px-3 [&_table_td]:py-1.5 [&_table_th]:px-3 [&_table_th]:py-1.5"
-            />
-          )}
-        </div>
-      )}
-
-      <Card
-        key={q.id}
-        className={`animate-in fade-in duration-200 ${
-          isHighlighted ? 'border-red-300 ring-2 ring-red-100' : ''
-        }`}
-        data-question-id={q.id}
-      >
-        {!isMobile && (
-          <CardHeader className="pb-4">
-            {(step.rootGroupName || step.subgroupName) && (
-              <div className="mb-2 flex flex-wrap items-center gap-2">
-                {step.rootGroupName && (
-                  <span className="inline-block rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
-                    {step.rootGroupName}
-                  </span>
-                )}
-                {step.subgroupName && step.subgroupName !== step.rootGroupName && (
-                  <span className="inline-block rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
-                    {step.subgroupName}
-                  </span>
-                )}
-              </div>
-            )}
-            <div className="flex items-start gap-4">
-              <span className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-semibold text-blue-600 shadow-sm">
-                {currentStepNumber || 1}
-              </span>
-              <div className="min-w-0 flex-1">
-                <CardTitle className="text-2xl leading-relaxed font-semibold break-keep text-gray-900">
-                  {titleText}
-                  {q.required && (
-                    <span className="ml-1.5 align-top text-sm text-red-500" aria-label="필수 질문">
-                      *
-                    </span>
-                  )}
-                </CardTitle>
-                {!isEmptyHtml(q.description) && (
-                  <RichDescription
-                    html={descriptionHtml}
-                    size="base"
-                    className="mt-3 max-h-[60vh] overflow-y-auto text-base text-gray-600 [&_p]:min-h-[1.6em] [&_table]:my-2 [&_table_td]:px-4 [&_table_td]:py-2 [&_table_th]:px-4 [&_table_th]:py-2"
-                  />
-                )}
-              </div>
-            </div>
-          </CardHeader>
-        )}
-
-        <CardContent className={isMobile ? 'p-4' : ''}>
-          <div className="space-y-4">
-            <QuestionInput
-              question={q}
-              value={responses[q.id]}
-              onChange={onChange}
-              allResponses={responses as Record<string, unknown>}
-              allQuestions={questions}
-            />
-          </div>
-        </CardContent>
-      </Card>
-    </>
-  );
-}
-
-function GroupStepView({
-  step,
-  responses,
-  questions,
-  groups,
-  evalCtx,
-  onResponse,
-  highlightQuestionIds,
-}: {
-  step: Extract<RenderStep, { kind: 'group' }>;
-  responses: ResponsesMap;
-  questions: Question[];
-  groups: QuestionGroup[];
-  evalCtx: BranchEvalCtx;
-  onResponse: (questionId: string, value: unknown) => void;
-  highlightQuestionIds: Set<string>;
-}) {
-  // 표시 가능한 items만 필터 (원래 subgroupName 유지)
-  const visibleItems: StepItem[] = useMemo(
-    () =>
-      step.items.filter((it) =>
-        shouldDisplayQuestion(it.question, responses, questions, groups, evalCtx),
-      ),
-    [step.items, responses, questions, groups, evalCtx],
-  );
-
-  return (
-    <Card className="animate-in fade-in duration-200">
-      <CardHeader className="pb-6">
-        {step.rootGroupName && (
-          <span className="inline-block w-fit rounded-md bg-blue-50 px-3.5 py-2 text-base font-semibold tracking-wide text-blue-700">
-            {step.rootGroupName}
-          </span>
-        )}
-      </CardHeader>
-      <CardContent className="md:px-8">
-        <div className="divide-y divide-gray-100">
-          {visibleItems.map((item, idx) => (
-            <GroupStepItem
-              key={item.question.id}
-              item={item}
-              itemIndex={idx + 1}
-              showSubgroupHeading={
-                !!item.subgroupName && item.subgroupName !== step.rootGroupName
-              }
-              responses={responses}
-              questions={questions}
-              onResponse={onResponse}
-              isHighlighted={highlightQuestionIds.has(item.question.id)}
-            />
-          ))}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function GroupStepItem({
-  item,
-  itemIndex,
-  showSubgroupHeading,
-  responses,
-  questions,
-  onResponse,
-  isHighlighted,
-}: {
-  item: StepItem;
-  itemIndex: number;
-  showSubgroupHeading: boolean;
-  responses: ResponsesMap;
-  questions: Question[];
-  onResponse: (questionId: string, value: unknown) => void;
-  isHighlighted: boolean;
-}) {
-  const q = item.question;
-  const onChange = useCallback(
-    (value: unknown) => onResponse(q.id, value),
-    [onResponse, q.id],
-  );
-  const attrs = useContactAttrs();
-  const titleText = useMemo(
-    () => substituteTokens(q.title ?? '', attrs),
-    [q.title, attrs],
-  );
-  const descriptionHtml = useMemo(
-    () => sanitizeRichHtml(substituteTokens(q.description ?? '', attrs)),
-    [q.description, attrs],
-  );
-
-  return (
-    <div className="py-5 first:pt-0 last:pb-0">
-      {showSubgroupHeading && (
-        <h3 className="mb-3 text-sm font-semibold tracking-[0.12em] text-gray-500 uppercase md:text-xs">
-          {item.subgroupName}
-        </h3>
-      )}
-      <div
-        data-question-id={q.id}
-        className={`space-y-2 ${
-          isHighlighted ? '-mx-3 rounded-md bg-red-50/40 p-3 ring-1 ring-red-200' : ''
-        }`}
-      >
-        <div className="flex items-start gap-2.5">
-          <span
-            className={`mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-sm font-semibold tabular-nums md:h-6 md:w-6 md:text-xs ${
-              isHighlighted ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'
-            }`}
-          >
-            {itemIndex}
-          </span>
-          <div
-            id={`q-label-${q.id}`}
-            className={`text-lg leading-snug font-semibold break-keep ${
-              isHighlighted ? 'text-red-700' : 'text-gray-900'
-            }`}
-          >
-            {titleText}
-            {q.required && (
-              <span className="ml-1 text-red-500" aria-label="필수 질문">
-                *
-              </span>
-            )}
-          </div>
-        </div>
-        {!isEmptyHtml(q.description) && (
-          <RichDescription
-            html={descriptionHtml}
-            size="sm"
-            className="ml-3 md:overflow-x-auto text-sm text-gray-500 md:text-xs [&_p]:min-h-[1.3em] [&_table]:my-1.5 [&_table_td]:px-2.5 [&_table_td]:py-1 [&_table_th]:px-2.5 [&_table_th]:py-1"
-          />
-        )}
-        <div
-          role="group"
-          aria-labelledby={`q-label-${q.id}`}
-          className="mt-2 ml-3"
-        >
-          <QuestionInput
-            question={q}
-            value={responses[q.id]}
-            onChange={onChange}
-            allResponses={responses as Record<string, unknown>}
-            allQuestions={questions}
-          />
-        </div>
-      </div>
-    </div>
   );
 }
