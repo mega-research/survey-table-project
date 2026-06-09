@@ -27,6 +27,7 @@ import {
   shouldDisplayRow,
 } from '@/utils/branch-logic';
 import { decideDrilldown } from '@/utils/classify-table';
+import { expandHeaderGrid } from '@/utils/expand-header-grid';
 import {
   HEADER_ROW_MIN_HEIGHT,
   STICKY_BODY_Z,
@@ -142,34 +143,15 @@ function HeaderCells({
 
   const minHeight = stickyInfo ? HEADER_ROW_MIN_HEIGHT : undefined;
 
-  // 다단계 헤더 — occupied로 rowspan 점유 추적
+  // 다단계 헤더 — expandHeaderGrid로 occupied 점유 추적
   if (visibleHeaderGrid && visibleHeaderGrid.length > 0) {
-    const totalRows = visibleHeaderGrid.length;
-    const occupied = Array.from({ length: totalRows }, () => new Map<number, boolean>());
-
-    return visibleHeaderGrid.flatMap((headerRow, rowIdx) => {
-      let col = 1;
-      return headerRow.map((cell) => {
-        while (occupied[rowIdx]?.get(col)) col++;
-
-        const startCol = col;
-        const cs = cell.colspan || 1;
-        const rs = cell.rowspan || 1;
-
-        if (rs > 1) {
-          for (let r = rowIdx + 1; r < rowIdx + rs && r < totalRows; r++) {
-            for (let c = startCol; c < startCol + cs; c++) {
-              occupied[r]?.set(c, true);
-            }
-          }
-        }
-        col += cs;
-
+    return expandHeaderGrid(visibleHeaderGrid).map(
+      ({ cell, startCol, colSpan, rowSpan, gridColumn, gridRow }) => {
         const style: React.CSSProperties = {
-          gridRow: rs > 1 ? `${rowIdx + 1} / span ${rs}` : rowIdx + 1,
-          gridColumn: cs > 1 ? `${startCol} / span ${cs}` : startCol,
+          gridRow,
+          gridColumn,
           minHeight,
-          ...getHeaderCellStickyStyle(startCol, cs, stickyInfo),
+          ...getHeaderCellStickyStyle(startCol, colSpan, stickyInfo),
         };
 
         return (
@@ -177,13 +159,13 @@ function HeaderCells({
             key={cell.id}
             className={HEADER_CELL_BASE_CLASS}
             style={style}
-            {...getGridCellAria('columnheader', cs, rs)}
+            {...getGridCellAria('columnheader', colSpan, rowSpan)}
           >
             {cell.label || <span className="text-sm text-gray-400 italic" />}
           </div>
         );
-      });
-    });
+      },
+    );
   }
 
   // 단일 행 헤더 (폴백) — 명시적 grid-column으로 column 위치 보장

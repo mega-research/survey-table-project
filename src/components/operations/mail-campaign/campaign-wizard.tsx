@@ -33,7 +33,11 @@ import type {
   CampaignSortKey,
 } from '@/lib/operations/campaigns.server';
 import type { ColumnCandidate } from '@/lib/operations/filter-shared';
-import { client } from '@/shared/lib/rpc';
+import {
+  useCreateCampaign,
+  useFetchCandidateIds,
+  usePreviewPreflight,
+} from '@/hooks/queries';
 
 interface Props {
   surveyId: string;
@@ -68,6 +72,10 @@ export function CampaignWizard({
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
+
+  const fetchCandidateIds = useFetchCandidateIds();
+  const previewPreflight = usePreviewPreflight();
+  const createCampaign = useCreateCampaign();
 
   const [templateId, setTemplateId] = useState<string>(
     initialTemplateId ?? templates[0]?.id ?? '',
@@ -150,7 +158,7 @@ export function CampaignWizard({
   async function selectAllInFilter() {
     startTransition(async () => {
       try {
-        const result = await client.mail.campaigns.fetchCandidateIds({
+        const result = await fetchCandidateIds.mutateAsync({
           surveyId,
           filter: buildFilterSnapshot(currentFilter),
         });
@@ -185,7 +193,7 @@ export function CampaignWizard({
 
     startTransition(async () => {
       try {
-        const result = await client.mail.campaigns.fetchCandidateIds({
+        const result = await fetchCandidateIds.mutateAsync({
           surveyId,
           filter: buildFilterSnapshot(currentFilter),
         });
@@ -195,6 +203,8 @@ export function CampaignWizard({
       }
       stripFlag();
     });
+    // mutateAsync 는 안정 참조라 deps 에서 제외 (원래 의도된 1회 자동선택 트리거 유지)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, candidates.total, surveyId, currentFilter, router]);
 
   async function openConfirm() {
@@ -212,7 +222,7 @@ export function CampaignWizard({
     }
     startTransition(async () => {
       try {
-        const result = await client.mail.campaigns.previewPreflight({
+        const result = await previewPreflight.mutateAsync({
           surveyId,
           selectedContactIds: Array.from(selectedIds),
         });
@@ -233,7 +243,7 @@ export function CampaignWizard({
   async function submitSend() {
     startTransition(async () => {
       try {
-        const result = await client.mail.campaigns.create({
+        const result = await createCampaign.mutateAsync({
           surveyId,
           mailTemplateId: templateId,
           title: title.trim(),

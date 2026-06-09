@@ -10,6 +10,7 @@ import { useHorizontalScrollIndicators } from '@/hooks/use-horizontal-scroll-ind
 import { useScrollLeftSync } from '@/hooks/use-scroll-left-sync';
 import { cn } from '@/lib/utils';
 import { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
+import { expandHeaderGrid } from '@/utils/expand-header-grid';
 import {
   HEADER_ROW_MIN_HEIGHT,
   STICKY_BODY_Z,
@@ -108,32 +109,13 @@ export const TablePreview = React.memo(function TablePreview({
     if (hideColumnLabels) return null;
 
     if (tableHeaderGrid && tableHeaderGrid.length > 0) {
-      const totalRows = tableHeaderGrid.length;
-      const occupied = Array.from({ length: totalRows }, () => new Map<number, boolean>());
-
-      return tableHeaderGrid.flatMap((headerRow, rowIdx) => {
-        let col = 1;
-        return headerRow.map((cell) => {
-          while (occupied[rowIdx]?.get(col)) col++;
-
-          const startCol = col;
-          const cs = cell.colspan || 1;
-          const rs = cell.rowspan || 1;
-
-          if (rs > 1) {
-            for (let r = rowIdx + 1; r < rowIdx + rs && r < totalRows; r++) {
-              for (let c = startCol; c < startCol + cs; c++) {
-                occupied[r]?.set(c, true);
-              }
-            }
-          }
-          col += cs;
-
+      return expandHeaderGrid(tableHeaderGrid).map(
+        ({ cell, startCol, colSpan, rowSpan, gridColumn, gridRow }) => {
           const style: React.CSSProperties = {
-            gridRow: rs > 1 ? `${rowIdx + 1} / span ${rs}` : rowIdx + 1,
-            gridColumn: cs > 1 ? `${startCol} / span ${cs}` : startCol,
+            gridRow,
+            gridColumn,
             minHeight,
-            ...getHeaderCellStickyStyle(startCol, cs, stickyInfo),
+            ...getHeaderCellStickyStyle(startCol, colSpan, stickyInfo),
           };
 
           return (
@@ -141,13 +123,13 @@ export const TablePreview = React.memo(function TablePreview({
               key={cell.id}
               className={HEADER_CELL_CLASS}
               style={style}
-              {...getGridCellAria('columnheader', cs, rs)}
+              {...getGridCellAria('columnheader', colSpan, rowSpan)}
             >
               {cell.label || EMPTY_LABEL}
             </div>
           );
-        });
-      });
+        },
+      );
     }
 
     // 단일 행 헤더 (폴백) — 명시적 grid-column으로 sticky 좌표 보장

@@ -14,13 +14,11 @@ import { DynamicRowGroupConfig, HeaderCell, QuestionConditionGroup, TableCell, T
 
 import { BulkGeneratorModal, BulkColumnDef } from './bulk-generator';
 import { CellContentModal } from './cell-content-modal';
+import { ConditionModal } from './condition-modal';
 import { EditorTableRow } from './editor-table-row';
 import { HeaderGridEditor } from './header-grid-editor';
 import { useTableEditor } from './hooks/use-table-editor';
-import { ColumnConditionModal } from './column-condition-modal';
-import { GroupConditionModal } from './group-condition-modal';
 import { LoadCellModal } from './load-cell-modal';
-import { RowConditionModal } from './row-condition-modal';
 import { SaveCellModal } from './save-cell-modal';
 import { TableHeaderSection } from './table-header-section';
 import { TableSummaryCard } from './table-summary-card';
@@ -763,7 +761,8 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
       )}
 
       {/* 행 조건부 표시 설정 모달 */}
-      <RowConditionModal
+      <ConditionModal
+        kind="row"
         open={rowConditionModalOpen}
         onOpenChange={setRowConditionModalOpen}
         editingRowIndex={editingRowIndex}
@@ -772,7 +771,8 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
         onUpdateCondition={updateRowCondition}
       />
 
-      <ColumnConditionModal
+      <ConditionModal
+        kind="column"
         open={columnConditionModalOpen}
         onOpenChange={setColumnConditionModalOpen}
         editingColumnIndex={editingColumnIndex}
@@ -783,7 +783,8 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
 
       {/* 그룹 조건부 표시 설정 모달 */}
       {currentQuestion && (
-        <GroupConditionModal
+        <ConditionModal
+          kind="group"
           open={!!editingGroupCondition}
           onOpenChange={(open) => { if (!open) setEditingGroupCondition(null); }}
           group={editingGroupCondition}

@@ -44,17 +44,16 @@ import { useEnsureSurveyInDb } from '@/hooks/use-ensure-survey-in-db';
 import { isValidUUID } from '@/lib/utils';
 import { generateId } from '@/lib/utils';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
-import {
-  BranchRule,
-  CheckboxOption,
-  QuestionOption,
-  RadioOption,
-  RankingConfig,
-  TableCell,
-} from '@/types/survey';
-import { isPartialNumericInput, parseNumericInput } from '@/utils/numeric-input';
+import { TableCell } from '@/types/survey';
+import { isPartialNumericInput } from '@/utils/numeric-input';
 import { getMaxSpssCode } from '@/utils/option-code-generator';
 import { hasExistingOtherRankingCell } from '@/utils/ranking-source';
+import {
+  type ContentType,
+  MOBILE_DISPLAY_CELL_TYPES,
+  TEXT_POSITION_CELL_TYPES,
+  buildUpdatedCell,
+} from '@/utils/serialize-cell';
 import {
   INTERACTIVE_CELL_TYPES,
   generateCellCode,
@@ -63,6 +62,7 @@ import {
   inferSpssVarType,
 } from '@/utils/table-cell-code-generator';
 
+import { useCellForm } from './hooks/use-cell-form';
 import { CellChoiceEditor } from './cell-choice-editor';
 import { CellImageEditor } from './cell-image-editor';
 import { CellContentLayout } from './cells/cell-content-layout';
@@ -70,11 +70,8 @@ import { ChoiceOptCellTab } from './choice-opt-cell-tab';
 import { OptionsLayoutSelector } from './options-layout-selector';
 import { RankingCellTab } from './ranking-cell-tab';
 import { RankingOptCellTab } from './ranking-opt-cell-tab';
+import { getYouTubeEmbedUrl } from './table-cell-renderers';
 import { VariableButton } from './variable-button';
-
-// textPosition 컨트롤을 표시할 셀 타입 — 텍스트 라벨과 입력/옵션 영역이 분리된 셀들만
-const TEXT_POSITION_CELL_TYPES = new Set(['input', 'checkbox', 'radio', 'select', 'ranking']);
-const MOBILE_DISPLAY_CELL_TYPES = new Set<TableCell['type']>(['text', 'image', 'video']);
 
 const TEXT_POSITION_OPTIONS: Array<{
   value: NonNullable<TableCell['textPosition']>;
@@ -119,107 +116,97 @@ export function CellContentModal({
   const [isSaving, setIsSaving] = useState(false);
   const inputTemplateRef = useRef<HTMLInputElement>(null);
   const textContentRef = useRef<HTMLTextAreaElement>(null);
-  // ranking(Case 3) 은 8번째 탭, ranking_opt(Case 2 옵션 소스) 는 9번째 탭으로 편집.
-  type ContentType =
-    | 'text'
-    | 'image'
-    | 'video'
-    | 'checkbox'
-    | 'radio'
-    | 'select'
-    | 'input'
-    | 'ranking'
-    | 'ranking_opt'
-    | 'choice_opt';
-  const narrowCellType = (t: TableCell['type'] | undefined): ContentType => (!t ? 'text' : t);
-  const [contentType, setContentType] = useState<ContentType>(narrowCellType(cell.type));
-  const [textContent, setTextContent] = useState(cell.content || '');
-  const [imageUrl, setImageUrl] = useState(cell.imageUrl || '');
-  const [videoUrl, setVideoUrl] = useState(cell.videoUrl || '');
 
-  const [checkboxOptions, setCheckboxOptions] = useState<CheckboxOption[]>(
-    cell.checkboxOptions || [],
-  );
-  const [radioOptions, setRadioOptions] = useState<RadioOption[]>(cell.radioOptions || []);
-  const [radioGroupName, setRadioGroupName] = useState(cell.radioGroupName || '');
-  const [selectOptions, setSelectOptions] = useState<QuestionOption[]>(cell.selectOptions || []);
-  const [allowOtherOption, setAllowOtherOption] = useState(cell.allowOtherOption || false);
-  const [cellOptionsColumns, setCellOptionsColumns] = useState<number | undefined>(
-    cell.optionsColumns,
-  );
-  const [inputPlaceholder, setInputPlaceholder] = useState(cell.placeholder || '');
-  const [inputMaxLength, setInputMaxLength] = useState<number | ''>(cell.inputMaxLength || '');
-  const [inputDefaultValueTemplate, setInputDefaultValueTemplate] = useState(
-    cell.defaultValueTemplate ?? '',
-  );
-  const [inputType, setInputType] = useState<'text' | 'number'>(cell.inputType ?? 'text');
-  // 숫자 모드 셀의 초기 prefill 값 — 체크박스 on/off + raw 문자열 두 state 분리
-  const [emptyDefaultEnabled, setEmptyDefaultEnabled] = useState(cell.emptyDefault !== undefined);
-  const [emptyDefaultRaw, setEmptyDefaultRaw] = useState(
-    cell.emptyDefault !== undefined ? String(cell.emptyDefault) : '0',
-  );
-  const [minSelections, setMinSelections] = useState<number | undefined>(cell.minSelections);
-  const [maxSelections, setMaxSelections] = useState<number | undefined>(cell.maxSelections);
-
-  // 순위형 셀(Case 3) 전용 state
-  const [rankingOptions, setRankingOptions] = useState<QuestionOption[]>(cell.rankingOptions || []);
-  const [rankingConfig, setRankingConfig] = useState<RankingConfig | undefined>(cell.rankingConfig);
-  const [rankSuffixPattern, setRankSuffixPattern] = useState<string>(cell.rankSuffixPattern || '');
-  const [rankVarNames, setRankVarNames] = useState<string[]>(cell.rankVarNames || []);
-
-  // 순위형 옵션 소스 셀(Case 2, ranking_opt) 전용 state
-  const [rankingLabel, setRankingLabel] = useState<string>(cell.rankingLabel || '');
-  const [cellSpssNumericCode, setCellSpssNumericCode] = useState<number | ''>(
-    cell.spssNumericCode ?? '',
-  );
-  const [isOtherRankingCell, setIsOtherRankingCell] = useState<boolean>(
-    cell.isOtherRankingCell === true,
-  );
-
-  // 보기 옵션 소스 셀(Case A, choice_opt) 전용 state — spss 코드는 cellSpssNumericCode 공유
-  const [choiceLabel, setChoiceLabel] = useState<string>(cell.choiceLabel || '');
-  const [choiceAllowTextInput, setChoiceAllowTextInput] = useState<boolean>(
-    cell.allowTextInput === true,
-  );
-  const [choiceBranchRule, setChoiceBranchRule] = useState<BranchRule | undefined>(cell.branchRule);
-
-  // 정렬 관련 state
-  const [horizontalAlign, setHorizontalAlign] = useState<'left' | 'center' | 'right'>(
-    cell.horizontalAlign || 'left',
-  );
-
-  // 모바일 카드 표시 (text/image/video 셀 전용)
-  const [mobileDisplay, setMobileDisplay] = useState<NonNullable<TableCell['mobileDisplay']>>(
-    cell.mobileDisplay ?? 'hidden',
-  );
-  const [verticalAlign, setVerticalAlign] = useState<'top' | 'middle' | 'bottom'>(
-    cell.verticalAlign || 'top',
-  );
-
-  const [textPosition, setTextPosition] = useState<NonNullable<TableCell['textPosition']>>(
-    cell.textPosition || 'top',
-  );
-
-  // 셀 병합 관련 state
-  const [isMergeEnabled, setIsMergeEnabled] = useState(
-    (cell.rowspan && cell.rowspan > 1) || (cell.colspan && cell.colspan > 1) || false,
-  );
-  const [rowspan, setRowspan] = useState<number | ''>(cell.rowspan || 1);
-  const [colspan, setColspan] = useState<number | ''>(cell.colspan || 1);
-
-  // 셀 코드 및 엑셀 라벨
-  const [cellCode, setCellCode] = useState(cell.cellCode || '');
-  const [isCustomCellCode, setIsCustomCellCode] = useState(
-    cell.isCustomCellCode ?? !!cell.cellCode,
-  );
-  const [exportLabel, setExportLabel] = useState(cell.exportLabel || '');
-  const [isCustomExportLabel, setIsCustomExportLabel] = useState(
-    cell.isCustomExportLabel ?? !!cell.exportLabel,
-  );
-
-  // SPSS 변수 타입 / 측정 수준 (셀 단위)
-  const [spssVarType, setSpssVarType] = useState<TableCell['spssVarType']>(cell.spssVarType);
-  const [spssMeasure, setSpssMeasure] = useState<TableCell['spssMeasure']>(cell.spssMeasure);
+  // 35개 편집 필드를 단일 폼 상태로 통합. hydrate(모달 오픈/cell.id 변경)와
+  // reset(취소 롤백)이 한 소스(cellToFormState)를 공유해 필드 누락 drift 가 없다.
+  // (ranking 은 8번째 탭, ranking_opt 는 9번째 탭, choice_opt 는 10번째 탭)
+  const { form, setters, reset } = useCellForm(cell, isOpen);
+  const {
+    contentType,
+    textContent,
+    imageUrl,
+    videoUrl,
+    checkboxOptions,
+    radioOptions,
+    radioGroupName,
+    selectOptions,
+    allowOtherOption,
+    cellOptionsColumns,
+    inputPlaceholder,
+    inputMaxLength,
+    inputDefaultValueTemplate,
+    inputType,
+    emptyDefaultEnabled,
+    emptyDefaultRaw,
+    minSelections,
+    maxSelections,
+    rankingOptions,
+    rankingConfig,
+    rankSuffixPattern,
+    rankVarNames,
+    rankingLabel,
+    cellSpssNumericCode,
+    isOtherRankingCell,
+    choiceLabel,
+    choiceAllowTextInput,
+    choiceBranchRule,
+    horizontalAlign,
+    mobileDisplay,
+    verticalAlign,
+    textPosition,
+    isMergeEnabled,
+    rowspan,
+    colspan,
+    cellCode,
+    isCustomCellCode,
+    exportLabel,
+    isCustomExportLabel,
+    spssVarType,
+    spssMeasure,
+  } = form;
+  const {
+    setContentType,
+    setTextContent,
+    setImageUrl,
+    setVideoUrl,
+    setCheckboxOptions,
+    setRadioOptions,
+    setRadioGroupName,
+    setSelectOptions,
+    setAllowOtherOption,
+    setCellOptionsColumns,
+    setInputPlaceholder,
+    setInputMaxLength,
+    setInputDefaultValueTemplate,
+    setInputType,
+    setEmptyDefaultEnabled,
+    setEmptyDefaultRaw,
+    setMinSelections,
+    setMaxSelections,
+    setRankingOptions,
+    setRankingConfig,
+    setRankSuffixPattern,
+    setRankVarNames,
+    setRankingLabel,
+    setCellSpssNumericCode,
+    setIsOtherRankingCell,
+    setChoiceLabel,
+    setChoiceAllowTextInput,
+    setChoiceBranchRule,
+    setHorizontalAlign,
+    setMobileDisplay,
+    setVerticalAlign,
+    setTextPosition,
+    setIsMergeEnabled,
+    setRowspan,
+    setColspan,
+    setCellCode,
+    setIsCustomCellCode,
+    setExportLabel,
+    setIsCustomExportLabel,
+    setSpssVarType,
+    setSpssMeasure,
+  } = setters;
 
   // 자동생성 셀코드/라벨 계산
   const autoCellCode = generateCellCode(questionCode, rowCode, columnCode);
@@ -228,70 +215,6 @@ export function CellContentModal({
     columnLabel || columnCode,
     rowLabel || rowCode,
   );
-
-  // 셀이 변경될 때 상태 동기화 (모달이 열릴 때마다 최신 셀 데이터 반영)
-  useEffect(() => {
-    if (isOpen && cell) {
-      setContentType(narrowCellType(cell.type));
-      setTextContent(cell.content || '');
-      setImageUrl(cell.imageUrl || '');
-      setVideoUrl(cell.videoUrl || '');
-      setCheckboxOptions(cell.checkboxOptions || []);
-      setRadioOptions(cell.radioOptions || []);
-      setRadioGroupName(cell.radioGroupName || '');
-      setSelectOptions(cell.selectOptions || []);
-      setAllowOtherOption(cell.allowOtherOption || false);
-      setCellOptionsColumns(cell.optionsColumns);
-      setInputPlaceholder(cell.placeholder || '');
-      setInputMaxLength(cell.inputMaxLength || '');
-      setInputDefaultValueTemplate(cell.defaultValueTemplate ?? '');
-      setInputType(cell.inputType ?? 'text');
-      setEmptyDefaultEnabled(cell.emptyDefault !== undefined);
-      setEmptyDefaultRaw(cell.emptyDefault !== undefined ? String(cell.emptyDefault) : '0');
-      setMinSelections(cell.minSelections);
-      setMaxSelections(cell.maxSelections);
-      setRankingOptions(cell.rankingOptions || []);
-      setRankingConfig(cell.rankingConfig);
-      setRankSuffixPattern(cell.rankSuffixPattern || '');
-      setRankVarNames(cell.rankVarNames || []);
-      setRankingLabel(cell.rankingLabel || '');
-      setCellSpssNumericCode(cell.spssNumericCode ?? '');
-      setIsOtherRankingCell(cell.isOtherRankingCell === true);
-      setChoiceLabel(cell.choiceLabel || '');
-      setChoiceAllowTextInput(cell.allowTextInput === true);
-      setChoiceBranchRule(cell.branchRule);
-      setIsMergeEnabled(
-        (cell.rowspan && cell.rowspan > 1) || (cell.colspan && cell.colspan > 1) || false,
-      );
-      setRowspan(cell.rowspan || 1);
-      setColspan(cell.colspan || 1);
-      setHorizontalAlign(cell.horizontalAlign || 'left');
-      setVerticalAlign(cell.verticalAlign || 'top');
-      setTextPosition(cell.textPosition || 'top');
-      setCellCode(cell.cellCode || '');
-      setIsCustomCellCode(cell.isCustomCellCode ?? !!cell.cellCode);
-      setExportLabel(cell.exportLabel || '');
-      setIsCustomExportLabel(cell.isCustomExportLabel ?? !!cell.exportLabel);
-      setSpssVarType(cell.spssVarType);
-      setSpssMeasure(cell.spssMeasure);
-      setMobileDisplay(cell.mobileDisplay ?? 'hidden');
-    }
-    // deps 를 cell?.id 로 좁힘 — 모달 안에서 셀 저장 등으로 cell reference 가 바뀌어도
-    // 사용자가 편집 중인 20+ 로컬 state 가 store 의 옛 값으로 reset 되지 않도록 한다.
-    // (feedback_useeffect_reset_object_deps 참조)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, cell?.id]);
-
-  // YouTube URL을 임베드 URL로 변환
-  const getYouTubeEmbedUrl = (url: string) => {
-    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
-    const match = url.match(regExp);
-    const videoId = match?.[2];
-    if (videoId && videoId.length === 11) {
-      return `https://www.youtube.com/embed/${videoId}`;
-    }
-    return url;
-  };
 
   const mountedRef = useRef(true);
   useEffect(() => {
@@ -333,123 +256,8 @@ export function CellContentModal({
 
     setIsSaving(true);
     try {
-      // optional 필드를 조건부 spread로 처리 (exactOptionalPropertyTypes 준수)
-      const _rankVarNames = (() => {
-        if (contentType !== 'ranking') return undefined;
-        const positions = Math.max(1, rankingConfig?.positions ?? 3);
-        const trimmed = rankVarNames.slice(0, positions).map((n) => n.trim());
-        return trimmed.some((n) => n.length > 0) ? trimmed : undefined;
-      })();
-      // cell 에서 textInputPlaceholder 를 제거한 베이스 (choice_opt 타입 전환 시 클리어)
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { textInputPlaceholder: _ttp, ...cellBase } = cell;
-      const updatedCell: TableCell = {
-        ...cellBase,
-        type: contentType,
-        // 모든 타입에서 텍스트 내용 저장 (라디오/체크박스/셀렉트에서도 설명 텍스트 표시 가능)
-        content: textContent || '',
-        // optional 필드: 타입이 해당하지 않으면 키 자체를 제거(조건부 spread)
-        ...(contentType === 'image' && imageUrl ? { imageUrl } : {}),
-        ...(contentType === 'video' && videoUrl ? { videoUrl } : {}),
-        ...(contentType === 'checkbox' ? { checkboxOptions } : {}),
-        ...(contentType === 'radio' ? { radioOptions, radioGroupName } : {}),
-        ...(contentType === 'select' ? { selectOptions } : {}),
-        ...(['checkbox', 'radio', 'select', 'ranking'].includes(contentType)
-          ? {
-              allowOtherOption,
-              ...(cellOptionsColumns !== undefined
-                ? { optionsColumns: cellOptionsColumns }
-                : {}),
-            }
-          : {}),
-        ...(contentType === 'input'
-          ? {
-              ...(inputPlaceholder ? { placeholder: inputPlaceholder } : {}),
-              ...(typeof inputMaxLength === 'number' ? { inputMaxLength } : {}),
-              ...(inputDefaultValueTemplate.trim().length > 0
-                ? { defaultValueTemplate: inputDefaultValueTemplate.trim() }
-                : {}),
-              inputType,
-              ...(inputType === 'number' && emptyDefaultEnabled
-                ? { emptyDefault: parseNumericInput(emptyDefaultRaw) ?? 0 }
-                : {}),
-            }
-          : {}),
-        // 체크박스 선택 개수 제한 (체크박스 타입 전용)
-        ...(contentType === 'checkbox'
-          ? {
-              ...(minSelections !== undefined ? { minSelections } : {}),
-              ...(maxSelections !== undefined ? { maxSelections } : {}),
-            }
-          : {}),
-        // 순위형 셀 (Case 3)
-        ...(contentType === 'ranking'
-          ? {
-              rankingOptions,
-              ...(rankingConfig !== undefined ? { rankingConfig } : {}),
-              ...(rankSuffixPattern.trim().length > 0
-                ? { rankSuffixPattern: rankSuffixPattern.trim() }
-                : {}),
-              ...(_rankVarNames ? { rankVarNames: _rankVarNames } : {}),
-            }
-          : {}),
-        // 순위형 옵션 소스 셀 (Case 2)
-        ...(contentType === 'ranking_opt' && rankingLabel.trim().length > 0
-          ? { rankingLabel: rankingLabel.trim() }
-          : {}),
-        // ranking_opt / choice_opt 전용 spssNumericCode (Case 2/A SPSS 재-export 안정성)
-        // isOther 모드면 numeric 변수가 system-missing 이라 spssNumericCode 는 의미 없음 → 강제 undefined.
-        ...(((contentType === 'ranking_opt' && !isOtherRankingCell) || contentType === 'choice_opt') &&
-        typeof cellSpssNumericCode === 'number'
-          ? { spssNumericCode: cellSpssNumericCode }
-          : {}),
-        // ranking_opt 셀을 질문-레벨 "기타" 엔트리로 사용할지 (타입 전환 시 키 자체 제거).
-        ...(contentType === 'ranking_opt' && isOtherRankingCell ? { isOtherRankingCell: true } : {}),
-        // 보기 옵션 소스 셀 (Case A)
-        ...(contentType === 'choice_opt'
-          ? {
-              ...(choiceLabel.trim().length > 0 ? { choiceLabel: choiceLabel.trim() } : {}),
-              ...(choiceAllowTextInput ? { allowTextInput: true } : {}),
-              // 보기 옵션 소스 셀의 조건부 분기 규칙 (Case A). value 는 셀 id(=resolveChoiceOptions
-              // 가 부여하는 옵션 value)로 강제해 응답 매칭이 일치하도록 한다.
-              ...(choiceBranchRule ? { branchRule: { ...choiceBranchRule, value: cell.id } } : {}),
-            }
-          : {}),
-        // 셀 병합 속성 추가
-        ...(isMergeEnabled && typeof rowspan === 'number' && rowspan > 1 ? { rowspan } : {}),
-        ...(isMergeEnabled && typeof colspan === 'number' && colspan > 1 ? { colspan } : {}),
-        // 모바일 카드 표시 (text/image/video 셀만; 기본 'hidden' 은 저장 안 함)
-        ...(MOBILE_DISPLAY_CELL_TYPES.has(contentType) && mobileDisplay !== 'hidden'
-          ? { mobileDisplay }
-          : {}),
-        // 정렬 속성 추가
-        ...(horizontalAlign !== 'left' ? { horizontalAlign } : {}),
-        ...(verticalAlign !== 'top' ? { verticalAlign } : {}),
-        // 셀 텍스트 위치
-        ...(TEXT_POSITION_CELL_TYPES.has(contentType) && textPosition !== 'top'
-          ? { textPosition }
-          : {}),
-        // 셀 코드 및 엑셀 라벨 추가
-        ...(cellCode ? { cellCode } : {}),
-        ...(isCustomCellCode === false
-          ? { isCustomCellCode: false }
-          : isCustomCellCode
-            ? { isCustomCellCode }
-            : {}),
-        ...(exportLabel ? { exportLabel } : {}),
-        ...(isCustomExportLabel === false
-          ? { isCustomExportLabel: false }
-          : isCustomExportLabel
-            ? { isCustomExportLabel }
-            : {}),
-        // SPSS 변수 타입 / 측정 수준 (입력 셀만; 값이 있을 때만 키 추가)
-        ...(INTERACTIVE_CELL_TYPES.has(contentType)
-          ? {
-              ...(spssVarType !== undefined ? { spssVarType } : {}),
-              ...(spssMeasure !== undefined ? { spssMeasure } : {}),
-            }
-          : {}),
-      };
+      // 폼 상태를 저장될 TableCell 로 직렬화 (조건부 spread 로 optional 필드 처리).
+      const updatedCell: TableCell = buildUpdatedCell(form, cell);
 
       // 로컬 스토어 업데이트 (셀 저장)
       onSave(updatedCell);
@@ -537,47 +345,8 @@ export function CellContentModal({
   };
 
   const handleCancel = () => {
-    // 원래 값으로 되돌리기
-    setContentType(narrowCellType(cell.type));
-    setTextContent(cell.content || '');
-    setImageUrl(cell.imageUrl || '');
-    setVideoUrl(cell.videoUrl || '');
-    setCheckboxOptions(cell.checkboxOptions || []);
-    setRadioOptions(cell.radioOptions || []);
-    setRadioGroupName(cell.radioGroupName || '');
-    setSelectOptions(cell.selectOptions || []);
-    setAllowOtherOption(cell.allowOtherOption || false);
-    setInputPlaceholder(cell.placeholder || '');
-    setInputMaxLength(cell.inputMaxLength || '');
-    setInputDefaultValueTemplate(cell.defaultValueTemplate ?? '');
-    setInputType(cell.inputType ?? 'text');
-    setEmptyDefaultEnabled(cell.emptyDefault !== undefined);
-    setEmptyDefaultRaw(cell.emptyDefault !== undefined ? String(cell.emptyDefault) : '0');
-    setMinSelections(cell.minSelections);
-    setMaxSelections(cell.maxSelections);
-    setRankingOptions(cell.rankingOptions || []);
-    setRankingConfig(cell.rankingConfig);
-    setRankingLabel(cell.rankingLabel || '');
-    setCellSpssNumericCode(cell.spssNumericCode ?? '');
-    setIsOtherRankingCell(cell.isOtherRankingCell === true);
-    setChoiceLabel(cell.choiceLabel || '');
-    setChoiceAllowTextInput(cell.allowTextInput === true);
-    setChoiceBranchRule(cell.branchRule);
-    setIsMergeEnabled(
-      (cell.rowspan && cell.rowspan > 1) || (cell.colspan && cell.colspan > 1) || false,
-    );
-    setRowspan(cell.rowspan || 1);
-    setColspan(cell.colspan || 1);
-    setHorizontalAlign(cell.horizontalAlign || 'left');
-    setVerticalAlign(cell.verticalAlign || 'top');
-    setTextPosition(cell.textPosition || 'top');
-    setCellCode(cell.cellCode || '');
-    setIsCustomCellCode(cell.isCustomCellCode ?? !!cell.cellCode);
-    setExportLabel(cell.exportLabel || '');
-    setIsCustomExportLabel(cell.isCustomExportLabel ?? !!cell.exportLabel);
-    setSpssVarType(cell.spssVarType);
-    setSpssMeasure(cell.spssMeasure);
-    setMobileDisplay(cell.mobileDisplay ?? 'hidden');
+    // 원래 cell 값으로 폼 롤백 (hydrate 와 동일 소스 — 필드 누락 drift 없음).
+    reset();
     onClose();
   };
 
