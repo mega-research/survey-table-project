@@ -18,7 +18,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 import { useClientSignals } from '@/hooks/use-client-signals';
-import type { BlockReason } from '@/lib/duplicate-detection/types';
 import { useKeyboardOpen } from '@/hooks/use-keyboard-open';
 import { useMultiLineDetection } from '@/hooks/use-line-count-detection';
 import { useMediaQuery } from '@/hooks/use-media-query';
@@ -27,10 +26,12 @@ import {
   RenderStep,
   resolveStepBranch,
   StepItem,
-  stepIdOf,
 } from '@/lib/group-ordering';
 import { isQuestionAnswered as isQuestionAnsweredPure } from '@/lib/survey/answer-validation';
-import { sessionStorageKey } from '@/components/survey-response/hooks/session-helpers';
+import {
+  useResponseLifecycle,
+  type DuplicateStatus,
+} from '@/components/survey-response/hooks/use-response-lifecycle';
 import { useResponseTelemetry } from '@/components/survey-response/hooks/use-response-telemetry';
 import { useSessionRecovery } from '@/components/survey-response/hooks/use-session-recovery';
 import { useSurveyLoader } from '@/components/survey-response/hooks/use-survey-loader';
@@ -48,9 +49,7 @@ import type { SurveyVersionSnapshot } from '@/db/schema';
 import { Question, QuestionGroup } from '@/types/survey';
 import {
   getBranchRuleForResponse,
-  shouldDisplayDynamicGroup,
   shouldDisplayQuestion,
-  shouldDisplayRow,
   type BranchEvalCtx,
 } from '@/utils/branch-logic';
 import type { SaveAdminEditPayload } from '@/features/survey-response/domain/response-edit';
@@ -211,9 +210,7 @@ export function SurveyResponseFlow({
   // - 새 응답 행은 첫 답변 시점에만 INSERT (페이지 진입 시 X)
   const [sessionId, setSessionId] = useState<string>(() => `session-${Date.now()}`);
 
-  // INSERT 진행 중인지 추적 (첫 답변 동시 발사 시 중복 INSERT 방어).
-  // ref가 아닌 state라도 OK — `handleResponse` 클로저에서 캡처되는 시점이 한 번이면 충분.
-  const [isCreatingResponse, setIsCreatingResponse] = useState(false);
+  // 첫 답변 INSERT 진행 플래그(isCreatingResponse)는 useResponseLifecycle 이 소유한다.
   // 제출 시도 후 하이라이트할 질문 ID 집합
   const [highlightQuestionIds, setHighlightQuestionIds] = useState<Set<string>>(
     () => new Set(),
@@ -225,10 +222,7 @@ export function SurveyResponseFlow({
   // null 이면 아직 수집 전. 수집 완료 후 듀얼 effect (duplicate check, callsite) 재트리거
   const signals = useClientSignals();
 
-  type DuplicateStatus =
-    | { kind: 'checking' }
-    | { kind: 'blocked'; reason: BlockReason }
-    | { kind: 'ok' };
+  // DuplicateStatus 타입은 useResponseLifecycle 과 공유한다(handleResponse/handleSubmit 가 blocked 로 set).
   // admin-edit 분기 (8/8) — 어드민 수정은 중복검사 대상이 아니므로 초기값부터 ok.
   const [duplicateStatus, setDuplicateStatus] = useState<DuplicateStatus>(() =>
     isAdminEdit ? { kind: 'ok' } : { kind: 'checking' },
@@ -453,267 +447,39 @@ export function SurveyResponseFlow({
     );
   };
 
-  const handleResponse = useCallback(
-    (questionId: string, value: unknown) => {
-      // UI는 즉시 반영 (로컬 응답 맵 + 펜딩 스토어 + 하이라이트 제거)
-      setResponses((prev) => ({ ...prev, [questionId]: value }));
-      setPendingResponse(questionId, value);
-      setHighlightQuestionIds((prev) => {
-        if (!prev.has(questionId)) return prev;
-        const next = new Set(prev);
-        next.delete(questionId);
-        return next;
-      });
-
-      // 운영 현황 콘솔(T5): 첫 답변 시점에 응답 행을 INSERT.
-      // - currentResponseId가 null & 진행 중 INSERT가 없을 때만 트리거
-      // - createResponseWithFirstAnswer는 (surveyId, sessionId) 멱등 — 더블 클릭 방어
-      // - 후속 답변은 별도 DB 쓰기 없음 (제출 시 completeResponse가 일괄 저장)
-      // admin-edit 분기 (5/8) — 어드민 수정은 자동 저장 없음. 마지막 submit 시점에 일괄 갱신.
-      if (
-        !isAdminEdit &&
-        currentResponseId === null &&
-        !isCreatingResponse &&
-        !isRecovering &&    // I-1 fix: 회복 진행 중에는 INSERT 발사 안 함
-        loadedSurvey &&
-        currentStep
-      ) {
-        setIsCreatingResponse(true);
-        // signalsRef.current 가 null 이면 그대로 전달 — server action 이 신호 기반 검사 skip
-        // (placeholder 신호로 hash 충돌 발생을 방지하기 위함)
-        client.surveyResponse.response.createWithFirstAnswer({
-          surveyId: loadedSurvey.id,
-          sessionId,
-          versionId: versionId ?? null,
-          questionId,
-          value,
-          currentStepId: stepIdOf(currentStep),
-          visibleStepIndex: visibleProgressRef.current.index,
-          visibleStepTotal: visibleProgressRef.current.total,
-          ...(inviteToken != null ? { inviteToken } : {}),
-          clientSignals: signals,
-        })
-          .then((result) => {
-            if (result.kind === 'blocked') {
-              setDuplicateStatus({ kind: 'blocked', reason: result.reason });
-              return;
-            }
-            const { id, contactTargetId } = result;
-            setCurrentResponseId(id);
-            // invite 토큰이 있었는데 contactTargetId 매칭 실패 → 무효 토큰. 익명 응답으로 폴백 알림.
-            if (inviteToken && !contactTargetId) {
-              setInviteIsInvalid(true);
-            }
-            // 회복용 sessionId localStorage 저장 — 같은 브라우저에서 재진입 시 resumeOrCreate가 이 키로 row 조회
-            if (typeof window !== 'undefined' && loadedSurvey) {
-              window.localStorage.setItem(sessionStorageKey(loadedSurvey.id), sessionId);
-            }
-          })
-          .catch((err) => {
-            console.error('응답 시작 오류:', err);
-          })
-          .finally(() => {
-            setIsCreatingResponse(false);
-          });
-      }
-    },
-    [
-      setPendingResponse,
-      currentResponseId,
-      isCreatingResponse,
-      isRecovering,
-      isAdminEdit,
-      loadedSurvey,
-      currentStep,
-      sessionId,
-      versionId,
-      setCurrentResponseId,
-      inviteToken,
-    ],
-  );
-
-  const handleSubmit = useCallback(async () => {
-    setIsSubmitting(true);
-
-    try {
-      const unansweredRequired = questions.filter((q) => {
-        if (!shouldDisplayQuestion(q, responses, questions, groups, evalCtx)) return false;
-        return isQuestionRequired(q) && !isQuestionAnswered(q);
-      });
-
-      if (unansweredRequired.length > 0) {
-        // 미응답 필수 질문을 전부 하이라이트
-        const highlight = new Set(unansweredRequired.map((q) => q.id));
-        setHighlightQuestionIds(highlight);
-
-        // 첫 번째 미응답 필수 질문이 속한 step으로 이동
-        const firstRequired = unansweredRequired[0];
-        if (!firstRequired) return;
-        const firstId = firstRequired.id;
-        const targetIdx = steps.findIndex((s) => {
-          if (s.kind === 'table') return s.question.id === firstId;
-          return s.items.some((it) => it.question.id === firstId);
-        });
-        if (targetIdx !== -1 && targetIdx !== currentStepIndex) {
-          setCurrentStepIndex(targetIdx);
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        } else {
-          // 이미 해당 step이면 카드로 스크롤
-          const el = document.querySelector<HTMLElement>(
-            `[data-question-id="${firstId}"]`,
-          );
-          el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-        setIsSubmitting(false);
-        return;
-      }
-
-      setHighlightQuestionIds(new Set());
-
-      // admin-edit 분기 (6/8) — 새 응답 INSERT 없이 onSubmit 으로 위임.
-      if (isAdminEdit && adminContext) {
-        // 옵션 텍스트(__optTexts__) 사이드카 — 응답자 흐름과 동일하게 합쳐서 보낸다.
-        const questionResponses = buildOptTextsPayload(visibleQuestions, responses);
-
-        // onSubmit 안에서 router.push 처리 — 본 컴포넌트는 thank-you 화면을 띄우지 않는다.
-        await adminContext.onSubmit({ questionResponses });
-        resetResponseState();
-        return;
-      }
-
-      // currentResponseId === null fallback —
-      // notice-only / optional-only / 분기로 visible 질문 0 인 설문은
-      // handleResponse 가 한 번도 트리거되지 않아 응답 row 가 만들어지지 않는다.
-      // 그 상태로 제출이 통과하면 silent data loss 가 되므로 여기서 빈 응답을 INSERT 한다.
-      let effectiveResponseId = currentResponseId;
-      if (!effectiveResponseId && loadedSurvey && currentStep) {
-        try {
-          // signalsRef.current 가 null 이면 그대로 전달 — server action 이 신호 기반 검사 skip
-          const created = await client.surveyResponse.response.createBlank({
-            surveyId: loadedSurvey.id,
-            sessionId,
-            versionId: versionId ?? null,
-            currentStepId: stepIdOf(currentStep),
-            ...(inviteToken != null ? { inviteToken } : {}),
-            clientSignals: signals,
-          });
-          if (created.kind === 'blocked') {
-            setDuplicateStatus({ kind: 'blocked', reason: created.reason });
-            setIsSubmitting(false);
-            return;
-          } else {
-            effectiveResponseId = created.id;
-            setCurrentResponseId(created.id);
-            if (inviteToken && !created.contactTargetId) {
-              setInviteIsInvalid(true);
-            }
-            if (typeof window !== 'undefined') {
-              window.localStorage.setItem(sessionStorageKey(loadedSurvey.id), sessionId);
-            }
-          }
-        } catch (err) {
-          console.error('빈 응답 생성 오류:', err);
-        }
-      }
-
-      if (effectiveResponseId) {
-        const exposedQuestionIds = visibleQuestions.map((q) => q.id);
-
-        const exposedRowIds = visibleQuestions
-          .filter((q) => q.type === 'table' && q.tableRowsData)
-          .flatMap((q) => {
-            const qResponse = (responses as Record<string, any>)?.[q.id];
-            const selectedDynamicIds = new Set<string>(
-              (qResponse?.__selectedRowIds as string[]) ?? [],
-            );
-            const enabledGroupIds = new Set(
-              (q.dynamicRowConfigs ?? [])
-                .filter(
-                  (g) =>
-                    g.enabled &&
-                    shouldDisplayDynamicGroup(g, responses as Record<string, unknown>, questions, evalCtx),
-                )
-                .map((g) => g.groupId),
-            );
-            const hasDynamic =
-              enabledGroupIds.size > 0 && q.tableRowsData!.some((r) => r.dynamicGroupId);
-
-            const groupsWithSelections = new Set<string>();
-            if (hasDynamic) {
-              for (const row of q.tableRowsData!) {
-                if (row.dynamicGroupId && selectedDynamicIds.has(row.id)) {
-                  groupsWithSelections.add(row.dynamicGroupId);
-                }
-              }
-            }
-
-            return q.tableRowsData!
-              .filter((row) => {
-                if (!shouldDisplayRow(row, responses as Record<string, unknown>, questions, evalCtx))
-                  return false;
-                if (hasDynamic) {
-                  if (row.dynamicGroupId && enabledGroupIds.has(row.dynamicGroupId)) {
-                    return selectedDynamicIds.has(row.id);
-                  }
-                  if (
-                    row.showWhenDynamicGroupId &&
-                    enabledGroupIds.has(row.showWhenDynamicGroupId)
-                  ) {
-                    return groupsWithSelections.has(row.showWhenDynamicGroupId);
-                  }
-                }
-                return true;
-              })
-              .map((row) => row.id);
-          });
-
-        // 제출 직전 — 미선택 옵션의 텍스트 drop 후 questionResponses에 병합.
-        const questionResponsesWithTexts = buildOptTextsPayload(visibleQuestions, responses);
-
-        await client.surveyResponse.response.complete({
-          responseId: effectiveResponseId,
-          data: {
-            questionResponses: questionResponsesWithTexts,
-            exposedQuestionIds,
-            exposedRowIds,
-          },
-        });
-
-        // 제출 성공 — 회복용 localStorage 키 정리 (재진입 시 새 응답 흐름)
-        if (typeof window !== 'undefined' && loadedSurvey) {
-          window.localStorage.removeItem(sessionStorageKey(loadedSurvey.id));
-        }
-      }
-
-      resetResponseState();
-      setIsCompleted(true);
-    } catch (error) {
-      console.error('응답 제출 오류:', error);
-      alert('응답 제출 중 오류가 발생했습니다. 다시 시도해주세요.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  }, [
+  // isCreatingResponse 는 훅 내부 전용(첫 답변 INSERT 가드)이라 컴포넌트는 구조분해하지 않는다.
+  const { handleResponse, handleSubmit } = useResponseLifecycle({
+    isAdminEdit,
     adminContext,
-    currentResponseId,
+    inviteToken,
+    loadedSurvey,
     currentStep,
     currentStepIndex,
-    evalCtx,
-    groups,
-    inviteToken,
-    isAdminEdit,
-    isQuestionAnswered,
-    loadedSurvey,
-    questions,
-    resetResponseState,
-    responses,
-    sessionId,
-    setCurrentResponseId,
-    signals,
     steps,
-    versionId,
+    questions,
+    groups,
     visibleQuestions,
-  ]);
+    evalCtx,
+    responses,
+    setResponses,
+    sessionId,
+    versionId,
+    signals,
+    currentResponseId,
+    setCurrentResponseId,
+    setPendingResponse,
+    resetResponseState,
+    isRecovering,
+    isQuestionAnswered,
+    visibleProgressRef,
+    setHighlightQuestionIds,
+    setDuplicateStatus,
+    setInviteIsInvalid,
+    setIsSubmitting,
+    setCurrentStepIndex,
+    setIsCompleted,
+    buildOptTextsPayload,
+  });
 
   const handleNext = () => {
     const nextIndex = resolveNextStepIndex();
