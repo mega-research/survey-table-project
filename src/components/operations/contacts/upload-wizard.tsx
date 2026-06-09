@@ -27,7 +27,7 @@ import {
 } from '@/lib/contacts/upload-limits';
 import { type PiiFieldType } from '@/lib/crypto/pii-fields';
 import { formatBytes } from '@/lib/utils';
-import { client } from '@/shared/lib/rpc';
+import { useIngestContacts, useParseExcelPreview } from '@/hooks/queries';
 
 type Step = 'file' | 'mapping' | 'result';
 
@@ -82,6 +82,9 @@ export function UploadWizard({ surveyId, existingContactsCount }: UploadWizardPr
   const [replaceConfirmed, setReplaceConfirmed] = useState(false);
   const [isPending, startTransition] = useTransition();
 
+  const parseExcelPreview = useParseExcelPreview();
+  const ingestContacts = useIngestContacts();
+
   function selectFile(picked: File | null | undefined) {
     if (!picked) return;
     const err = validateXlsxFile(picked);
@@ -98,7 +101,7 @@ export function UploadWizard({ surveyId, existingContactsCount }: UploadWizardPr
     setError(null);
     startTransition(async () => {
       try {
-        const r = await client.contacts.uploads.parsePreview({ file, sheetName, headerRow });
+        const r = await parseExcelPreview.mutateAsync({ file, sheetName, headerRow });
         setPreview(r);
         if (!sheetName && r.sheetNames.length > 0) {
           const firstSheet = r.sheetNames[0];
@@ -153,7 +156,7 @@ export function UploadWizard({ surveyId, existingContactsCount }: UploadWizardPr
           headerRow,
           sheetName,
         };
-        const r = await client.contacts.uploads.ingest({ surveyId, file, mapping: m });
+        const r = await ingestContacts.mutateAsync({ surveyId, file, mapping: m });
         setResult({
           uploadedRows: r.uploadedRows,
           mergedRows: r.mergedRows,

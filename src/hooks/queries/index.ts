@@ -51,3 +51,16 @@ export {
   useInitializeCategories,
   useInitializePresets,
 } from './use-library';
+
+// Campaign Mutations
+export {
+  useFetchCandidateIds,
+  usePreviewPreflight,
+  useCreateCampaign,
+} from './use-campaigns';
+
+// Contact Upload Mutations
+export {
+  useParseExcelPreview,
+  useIngestContacts,
+} from './use-contacts';
