@@ -13,6 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { getErrorMessage } from '@/lib/get-error-message';
 import { client } from '@/shared/lib/rpc';
 
 interface Props {
@@ -38,7 +39,7 @@ export function UnsubscribedRevertButton({ surveyId, contactId, emailMasked }: P
           return;
         }
       } catch (err) {
-        alert(err instanceof Error ? err.message : '해제 실패');
+        alert(getErrorMessage(err, '해제 실패'));
         return;
       }
       setOpen(false);

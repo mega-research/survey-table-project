@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import type { ContactResultCode } from '@/db/schema/schema-types';
 import { useAutoFadeMessage } from '@/hooks/use-auto-fade-message';
 import { LocalDateTime } from '@/components/ui/local-date-time';
+import { getErrorMessage } from '@/lib/get-error-message';
 import { resultCodeToneClass } from '@/lib/operations/contacts-shared';
 import type { ContactAttemptRow } from '@/lib/operations/contacts.server';
 import { client } from '@/shared/lib/rpc';
@@ -38,7 +39,7 @@ export function ContactAttemptHistoryCard({
         router.refresh();
         setSuccessMessage('회차 삭제 완료');
       } catch (e) {
-        window.alert((e as Error).message);
+        window.alert(getErrorMessage(e, ''));
       }
     });
   }

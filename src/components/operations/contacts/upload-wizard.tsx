@@ -26,6 +26,7 @@ import {
   validateXlsxFile,
 } from '@/lib/contacts/upload-limits';
 import { type PiiFieldType } from '@/lib/crypto/pii-fields';
+import { getErrorMessage } from '@/lib/get-error-message';
 import { formatBytes } from '@/lib/utils';
 import { useIngestContacts, useParseExcelPreview } from '@/hooks/queries';
 
@@ -132,7 +133,7 @@ export function UploadWizard({ surveyId, existingContactsCount }: UploadWizardPr
         setReplaceConfirmed(false);
         setStep('mapping');
       } catch (e) {
-        setError((e as Error).message);
+        setError(getErrorMessage(e, ''));
       }
     });
   }
@@ -167,7 +168,7 @@ export function UploadWizard({ surveyId, existingContactsCount }: UploadWizardPr
         router.refresh();
         setStep('result');
       } catch (e) {
-        setError((e as Error).message);
+        setError(getErrorMessage(e, ''));
       }
     });
   }

@@ -13,6 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { getErrorMessage } from '@/lib/get-error-message';
 import { client } from '@/shared/lib/rpc';
 
 interface Props {
@@ -30,7 +31,7 @@ export function CancelCampaignButton({ surveyId, campaignId }: Props) {
       try {
         await client.mail.campaigns.cancel({ surveyId, campaignId });
       } catch (err) {
-        alert(err instanceof Error ? err.message : '취소 실패');
+        alert(getErrorMessage(err, '취소 실패'));
         return;
       }
       setOpen(false);

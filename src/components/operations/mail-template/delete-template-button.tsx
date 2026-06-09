@@ -17,6 +17,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import { getErrorMessage } from '@/lib/get-error-message';
 import { client } from '@/shared/lib/rpc';
 
 interface Props {
@@ -35,7 +36,7 @@ export function DeleteTemplateButton({ surveyId, templateId, templateName }: Pro
       try {
         await client.mail.templates.remove({ surveyId, templateId });
       } catch (err) {
-        alert(err instanceof Error ? err.message : '삭제 실패');
+        alert(getErrorMessage(err, '삭제 실패'));
         return;
       }
       setOpen(false);
