@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { client } from '@/shared/lib/rpc';
 import type { Survey } from '@/types/survey';
@@ -21,20 +21,22 @@ interface UseSessionRecoveryResult {
   isRecovering: boolean;
   /** 회복 토스트 메시지 (drop → in_progress 회복 시에만 set). */
   resumeMessage: string | null;
+  /** 토스트 dismiss. <ResumeToast> 가 자체 마운트 4초 타이머에서 호출한다. */
+  dismissResume: () => void;
 }
 
 /**
  * 운영 현황 콘솔(T6): localStorage 기반 응답 회복 훅.
  *
- * survey-response-flow.tsx 의 응답 회복 useEffect + 회복 토스트 자동 dismiss useEffect 와
- * isRecovering/resumeMessage state 를 그대로 이관했다.
+ * survey-response-flow.tsx 의 응답 회복 useEffect + isRecovering/resumeMessage state 를 이관했다.
  *
- * 동작 보존 핵심:
+ * 동작 핵심:
  * - 회복 effect 본문(localStorage 조회 → resume RPC → orphan/종결 정리 → sessionId/responseId 갱신 → show 세그먼트 → 토스트) 라인 단위 동일.
  * - 회복 effect deps = [isAdminEdit, loadedSurvey, currentResponseId, setCurrentResponseId, inviteToken] 그대로
  *   (sessionId 는 effect 내부에서 직접 set 하므로 deps 미포함 — 무한 루프 방지, 원본과 동일).
- * - dismiss effect deps = [resumeMessage] 그대로, 4초 timeout + cleanup.
- * - 두 effect 의 등록 순서(회복 → dismiss)도 원본과 동일하게 이 훅 내부에서 유지.
+ * - 토스트 자동 dismiss 는 이 훅이 아니라 <ResumeToast> 가 자체 마운트 4초 타이머로 처리한다.
+ *   (과거: 여기서 resumeMessage set 시점에 4초 타이머를 걸어, 로딩/중복확인 early-return 화면이
+ *    떠 있는 동안 4초가 소진돼 메인 콘텐츠가 보일 땐 토스트가 이미 사라져 있었다.)
  */
 export function useSessionRecovery({
   isAdminEdit,
@@ -104,12 +106,9 @@ export function useSessionRecovery({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdminEdit, loadedSurvey, currentResponseId, setCurrentResponseId, inviteToken]);
 
-  // 회복 토스트 자동 dismiss (4초)
-  useEffect(() => {
-    if (!resumeMessage) return;
-    const timer = setTimeout(() => setResumeMessage(null), 4000);
-    return () => clearTimeout(timer);
-  }, [resumeMessage]);
+  // 토스트 dismiss 는 <ResumeToast> 가 자체 마운트 시점부터 4초 타이머로 호출한다.
+  // 안정 참조라 ResumeToast 의 마운트 전용 effect deps 에서 안전하게 제외된다.
+  const dismissResume = useCallback(() => setResumeMessage(null), []);
 
-  return { isRecovering, resumeMessage };
+  return { isRecovering, resumeMessage, dismissResume };
 }

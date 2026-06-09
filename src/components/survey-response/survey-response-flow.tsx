@@ -34,6 +34,7 @@ import { sessionStorageKey } from '@/components/survey-response/hooks/session-he
 import { useResponseTelemetry } from '@/components/survey-response/hooks/use-response-telemetry';
 import { useSessionRecovery } from '@/components/survey-response/hooks/use-session-recovery';
 import { useSurveyLoader } from '@/components/survey-response/hooks/use-survey-loader';
+import { ResumeToast } from '@/components/survey-response/resume-toast';
 import { cn, isEmptyHtml } from '@/lib/utils';
 import { sanitizeRichHtml } from '@/lib/sanitize';
 import {
@@ -392,7 +393,7 @@ export function SurveyResponseFlow({
   // 회복 effect + dismiss effect 와 isRecovering/resumeMessage state 를
   // useSessionRecovery 로 추출 (두 effect 등록 순서·deps 동일, 세터 전용이라 훅이 소유).
   // isRecovering 은 handleResponse 의 INSERT 가드(I-1)에서 참조한다.
-  const { isRecovering, resumeMessage } = useSessionRecovery({
+  const { isRecovering, resumeMessage, dismissResume } = useSessionRecovery({
     isAdminEdit,
     loadedSurvey,
     currentResponseId,
@@ -932,14 +933,7 @@ export function SurveyResponseFlow({
           isMobile ? 'pb-28' : 'pb-16 md:pb-24'
         }`}
       >
-        {resumeMessage && (
-          <div
-            role="status"
-            className="mb-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-700"
-          >
-            {resumeMessage}
-          </div>
-        )}
+        {resumeMessage && <ResumeToast message={resumeMessage} onDismiss={dismissResume} />}
         {inviteIsInvalid && (
           <div
             role="alert"
