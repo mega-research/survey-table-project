@@ -10,54 +10,14 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import {
-  ExpressionConditionConfig,
-  NumericComparison,
-  Question,
-  QuestionCondition,
-} from '@/types/survey';
-import { detectCellTypeKind } from '@/utils/cell-type-detector';
+import { Question, QuestionCondition } from '@/types/survey';
 import { resolveChoiceOptions } from '@/utils/choice-source';
-import { getRowMergeInfo } from '@/utils/table-merge-helpers';
 
+import { AdditionalConditionsEditor } from './condition-card/additional-conditions-editor';
+import { TableCellCheckEditor } from './condition-card/table-cell-check-editor';
+import { ClearableConditionKey } from './condition-card/types';
+import { ValueMatchEditor } from './condition-card/value-match-editor';
 import { ExpressionConditionEditor } from './expression-condition-editor';
-import { ValueComparisonExpander } from './value-comparison-expander';
-import { migrateNumericComparisonToExpression } from '@/utils/expression-migration';
-
-/**
- * 메인/추가 조건 양쪽에서 numericComparison → expression 변환 버튼이 노출될 조건과
- * 클릭 시 동작을 한 곳에서 결정. 변환 후 처리 (tableConditions/additionalConditions 정리) 는
- * 호출자가 onMigrate 콜백 안에서 결정한다.
- *
- * 가드: numericComparison 존재 + rowIds[0] + cellColumnIndex + 그 셀이 input 타입.
- * input 이 아닌 셀(text/image/radio 등) 을 outerCellRef 로 잡으면 마이그레이션 후
- * expression cell operand 가 무의미한 셀을 가리키므로 버튼 자체를 미노출.
- */
-function buildMigrateHandler(
-  nc: NumericComparison | undefined,
-  rowIds: string[] | undefined,
-  cellColumnIndex: number | undefined,
-  sourceQuestion: Question | undefined,
-  onMigrate: (config: ExpressionConditionConfig) => void,
-): (() => void) | undefined {
-  if (!nc || !sourceQuestion || cellColumnIndex === undefined) return undefined;
-  const outerRow = rowIds?.[0];
-  if (!outerRow) return undefined;
-  const row = sourceQuestion.tableRowsData?.find((r) => r.id === outerRow);
-  const cell = row?.cells[cellColumnIndex];
-  if (!cell || cell.type !== 'input') return undefined;
-  return () => {
-    const expressionConfig = migrateNumericComparisonToExpression(nc, {
-      questionId: sourceQuestion.id,
-      cellId: cell.id,
-    });
-    onMigrate(expressionConfig);
-  };
-}
-
-// tableConditions/additionalConditions는 expression 전환·토글 해제 시 비워야 한다.
-// exactOptionalPropertyTypes 하에서 spread로는 키 제거가 불가하므로 clear 인자로 명시한다.
-type ClearableConditionKey = 'tableConditions' | 'additionalConditions';
 
 interface ConditionCardProps {
   condition: QuestionCondition;
@@ -80,8 +40,9 @@ interface ConditionCardProps {
 }
 
 /**
- * 한 조건 카드 본문 (헤더 + value-match / table-cell-check / expression / additionalConditions).
- * 부모(QuestionConditionEditor)의 map 콜백 인라인 JSX 를 그대로 추출한 것으로,
+ * 한 조건 카드 본문 (헤더 + 참조질문/조건타입 select + 조건타입별 하위 에디터).
+ * 조건타입별 블록은 TableCellCheckEditor / AdditionalConditionsEditor / ValueMatchEditor 로 분해했고,
+ * ConditionCard 는 헤더·Collapsible·select 를 가진 얇은 오케스트레이터다.
  * 핸들러·파생값 계산식·effect 의미론을 1:1 보존한다.
  */
 export function ConditionCard({
@@ -260,328 +221,22 @@ export function ConditionCard({
               {/* 테이블 셀 체크 조건 */}
               {condition.conditionType === 'table-cell-check' &&
                 sourceQuestion?.type === 'table' && (
-                  <>
-                    <div className="space-y-2">
-                      <Label>체크 확인할 행 선택</Label>
-                      <div className="max-h-48 space-y-2 overflow-y-auto rounded-md border border-gray-200 p-3">
-                        {sourceQuestion.tableRowsData?.map((row, rowIndex) => {
-                          const colIndex = condition.tableConditions?.cellColumnIndex;
-                          const mergeInfo = getRowMergeInfo(
-                            row.id,
-                            sourceQuestion?.tableRowsData,
-                            colIndex,
-                          );
-                          const isSelected =
-                            condition.tableConditions?.rowIds.includes(row.id) || false;
-                          const isMergeStart = mergeInfo.mergeStartRowId === row.id;
-
-                          return (
-                            <div
-                              key={row.id}
-                              className={`flex items-center gap-2 ${
-                                mergeInfo.isMerged && !isMergeStart ? 'opacity-60' : ''
-                              }`}
-                            >
-                              <input
-                                type="checkbox"
-                                id={`cond-row-${condition.id}-${row.id}`}
-                                checked={isSelected}
-                                onChange={() => toggleRowId(condition.id, row.id)}
-                                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                disabled={mergeInfo.isMerged && !isMergeStart}
-                              />
-                              <label
-                                htmlFor={`cond-row-${condition.id}-${row.id}`}
-                                className={`flex-1 cursor-pointer text-sm ${
-                                  mergeInfo.isMerged && !isMergeStart
-                                    ? 'cursor-not-allowed'
-                                    : ''
-                                }`}
-                              >
-                                {row.label}
-                                {mergeInfo.isMerged && (
-                                  <span className="ml-2 text-xs text-blue-600">
-                                    {isMergeStart
-                                      ? `(행${rowIndex + 1}-${
-                                          rowIndex + mergeInfo.mergedRowIds.length
-                                        } 병합)`
-                                      : `(병합됨)`}
-                                  </span>
-                                )}
-                              </label>
-                            </div>
-                          );
-                        })}
-                      </div>
-                      {(condition.tableConditions?.rowIds?.length ?? 0) === 0 && (
-                        <p className="text-xs text-red-600">
-                          최소 1개 이상의 행을 선택해주세요
-                        </p>
-                      )}
-                      {condition.tableConditions?.cellColumnIndex === undefined && (
-                        <p className="text-xs text-gray-500">
-                          💡 열을 먼저 선택하면 병합된 행 정보가 표시됩니다
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor={`check-type-${condition.id}`}>체크 조건</Label>
-                      <select
-                        id={`check-type-${condition.id}`}
-                        value={condition.tableConditions?.checkType || 'any'}
-                        onChange={(e) =>
-                          updateCondition(condition.id, {
-                            tableConditions: {
-                              rowIds: condition.tableConditions?.rowIds || [],
-                              checkType: e.target.value as 'any' | 'all' | 'none',
-                              ...(condition.tableConditions?.cellColumnIndex !== undefined
-                                ? { cellColumnIndex: condition.tableConditions.cellColumnIndex }
-                                : {}),
-                              ...(condition.tableConditions?.expectedValues !== undefined
-                                ? { expectedValues: condition.tableConditions.expectedValues }
-                                : {}),
-                            },
-                          })
-                        }
-                        className="w-full rounded-md border border-gray-300 p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                      >
-                        <option value="any">하나라도 체크됨</option>
-                        <option value="all">모두 체크됨</option>
-                        <option value="none">모두 체크 안됨</option>
-                      </select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor={`col-index-${condition.id}`}>
-                        특정 열만 확인 (선택)
-                      </Label>
-                      <Input
-                        id={`col-index-${condition.id}`}
-                        type="number"
-                        min="0"
-                        value={condition.tableConditions?.cellColumnIndex ?? ''}
-                        onChange={(e) => {
-                          const value =
-                            e.target.value === ''
-                              ? undefined
-                              : parseInt(e.target.value, 10);
-                          updateCondition(condition.id, {
-                            tableConditions: {
-                              rowIds: condition.tableConditions?.rowIds || [],
-                              checkType: condition.tableConditions?.checkType || 'any',
-                              ...(value !== undefined ? { cellColumnIndex: value } : {}),
-                              ...(condition.tableConditions?.expectedValues !== undefined
-                                ? { expectedValues: condition.tableConditions.expectedValues }
-                                : {}),
-                            },
-                          });
-                        }}
-                        placeholder="전체 열 확인 (비워두면 모든 열)"
-                      />
-                      <p className="text-xs text-gray-500">0부터 시작 (0 = 첫 번째 열)</p>
-                    </div>
-
-                    {/* 값 비교 조건 — 펼치기 패턴 */}
-                    {condition.tableConditions?.rowIds &&
-                      condition.tableConditions.rowIds.length > 0 &&
-                      condition.tableConditions?.cellColumnIndex !== undefined && (
-                        <ValueComparisonExpander
-                          kind={detectCellTypeKind(
-                            sourceQuestion,
-                            condition.tableConditions.rowIds,
-                            condition.tableConditions.cellColumnIndex,
-                          )}
-                          idPrefix={`numeric-${condition.id}`}
-                          sourceQuestion={sourceQuestion}
-                          rowIds={condition.tableConditions.rowIds}
-                          colIndex={condition.tableConditions.cellColumnIndex}
-                          comparison={{
-                            expectedValues: condition.tableConditions.expectedValues,
-                            numericComparison: condition.tableConditions.numericComparison,
-                          }}
-                          multipleRows={condition.tableConditions.rowIds.length > 1}
-                          onChange={(next) =>
-                            updateCondition(condition.id, {
-                              tableConditions: {
-                                ...condition.tableConditions!,
-                                ...(next.expectedValues !== undefined
-                                  ? { expectedValues: next.expectedValues }
-                                  : {}),
-                                ...(next.numericComparison !== undefined
-                                  ? { numericComparison: next.numericComparison }
-                                  : {}),
-                              },
-                            })
-                          }
-                          onMigrateToExpression={buildMigrateHandler(
-                            condition.tableConditions?.numericComparison,
-                            condition.tableConditions?.rowIds,
-                            condition.tableConditions?.cellColumnIndex,
-                            sourceQuestion,
-                            (expressionConfig) =>
-                              updateCondition(
-                                condition.id,
-                                {
-                                  conditionType: 'expression',
-                                  expressionConfig,
-                                },
-                                ['tableConditions'],
-                              ),
-                          )}
-                        />
-                      )}
-                  </>
+                  <TableCellCheckEditor
+                    condition={condition}
+                    sourceQuestion={sourceQuestion}
+                    updateCondition={updateCondition}
+                    toggleRowId={toggleRowId}
+                  />
                 )}
 
               {/* 추가 조건 설정 (테이블 셀 체크 조건일 때만) */}
               {condition.conditionType === 'table-cell-check' &&
                 sourceQuestion?.type === 'table' && (
-                  <div className="space-y-3 border-t border-gray-200 pt-3">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-sm font-medium">추가 조건 (선택)</Label>
-                      <Switch
-                        checked={!!condition.additionalConditions}
-                        onCheckedChange={(checked) => {
-                          if (checked) {
-                            updateCondition(condition.id, {
-                              additionalConditions: {
-                                cellColumnIndex: 0,
-                                checkType: 'radio',
-                              },
-                            });
-                          } else {
-                            updateCondition(condition.id, {}, [
-                              'additionalConditions',
-                            ]);
-                          }
-                        }}
-                      />
-                    </div>
-
-                    {condition.additionalConditions && (
-                      <div className="space-y-3 border-l-2 border-blue-200 pl-4">
-                        {/* 추가 조건 열 인덱스 */}
-                        <div className="space-y-2">
-                          <Label htmlFor={`additional-col-${condition.id}`}>
-                            확인할 열 인덱스
-                          </Label>
-                          <Input
-                            id={`additional-col-${condition.id}`}
-                            type="number"
-                            min="0"
-                            max={(sourceQuestion.tableColumns?.length || 1) - 1}
-                            value={condition.additionalConditions.cellColumnIndex ?? ''}
-                            onChange={(e) => {
-                              const value =
-                                e.target.value === ''
-                                  ? undefined
-                                  : parseInt(e.target.value, 10);
-                              updateCondition(condition.id, {
-                                additionalConditions: {
-                                  ...condition.additionalConditions!,
-                                  cellColumnIndex: value ?? 0,
-                                },
-                              });
-                            }}
-                            placeholder="0"
-                          />
-                          <p className="text-xs text-gray-500">
-                            0부터 시작 (0 = 첫 번째 열)
-                          </p>
-                        </div>
-
-                        {/* 추가 조건 체크 타입 */}
-                        <div className="space-y-2">
-                          <Label htmlFor={`additional-check-type-${condition.id}`}>
-                            체크 타입
-                          </Label>
-                          <select
-                            id={`additional-check-type-${condition.id}`}
-                            value={condition.additionalConditions.checkType}
-                            onChange={(e) =>
-                              updateCondition(condition.id, {
-                                additionalConditions: {
-                                  ...condition.additionalConditions!,
-                                  checkType: e.target.value as
-                                    | 'checkbox'
-                                    | 'radio'
-                                    | 'select'
-                                    | 'input',
-                                },
-                              })
-                            }
-                            className="w-full rounded-md border border-gray-300 p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                          >
-                            <option value="checkbox">체크박스</option>
-                            <option value="radio">라디오 버튼</option>
-                            <option value="select">드롭다운</option>
-                            <option value="input">입력 필드</option>
-                          </select>
-                        </div>
-
-                        {/* 추가 조건 — 값 비교 펼치기 패턴 */}
-                        {condition.additionalConditions &&
-                          condition.additionalConditions.cellColumnIndex !== undefined &&
-                          (() => {
-                            const ac = condition.additionalConditions!;
-                            const mainRowCount =
-                              condition.tableConditions?.rowIds?.length ?? 0;
-                            const effectiveRowIds =
-                              mainRowCount > 0
-                                ? (condition.tableConditions?.rowIds ?? [])
-                                : (sourceQuestion?.tableRowsData?.map((r) => r.id) ?? []);
-                            return (
-                              <ValueComparisonExpander
-                                kind={detectCellTypeKind(
-                                  sourceQuestion,
-                                  effectiveRowIds,
-                                  ac.cellColumnIndex,
-                                )}
-                                idPrefix={`numeric-additional-${condition.id}`}
-                                sourceQuestion={sourceQuestion}
-                                rowIds={effectiveRowIds}
-                                colIndex={ac.cellColumnIndex!}
-                                comparison={{
-                                  expectedValues: ac.expectedValues,
-                                  numericComparison: ac.numericComparison,
-                                }}
-                                multipleRows={mainRowCount !== 1}
-                                helpText="선택한 옵션들 중 하나가 선택되었는지 확인합니다. 비워두면 아무거나 선택되었는지만 확인합니다."
-                                onChange={(next) =>
-                                  updateCondition(condition.id, {
-                                    additionalConditions: {
-                                      ...ac,
-                                      ...(next.expectedValues !== undefined
-                                        ? { expectedValues: next.expectedValues }
-                                        : {}),
-                                      ...(next.numericComparison !== undefined
-                                        ? { numericComparison: next.numericComparison }
-                                        : {}),
-                                    },
-                                  })
-                                }
-                                onMigrateToExpression={buildMigrateHandler(
-                                  ac.numericComparison,
-                                  effectiveRowIds,
-                                  ac.cellColumnIndex,
-                                  sourceQuestion,
-                                  (expressionConfig) =>
-                                    updateCondition(
-                                      condition.id,
-                                      {
-                                        conditionType: 'expression',
-                                        expressionConfig,
-                                      },
-                                      ['tableConditions', 'additionalConditions'],
-                                    ),
-                                )}
-                              />
-                            );
-                          })()}
-                      </div>
-                    )}
-                  </div>
+                  <AdditionalConditionsEditor
+                    condition={condition}
+                    sourceQuestion={sourceQuestion}
+                    updateCondition={updateCondition}
+                  />
                 )}
 
               {condition.conditionType === 'expression' && (
@@ -594,78 +249,11 @@ export function ConditionCard({
 
               {/* 값 일치 조건 */}
               {condition.conditionType === 'value-match' && (
-                <div className="space-y-2">
-                  <Label htmlFor={`values-${condition.id}`}>필요한 값들</Label>
-
-                  {/* 참조 질문의 옵션이 있으면 체크박스로 표시 (테이블-소스 choice 포함) */}
-                  {valueMatchOptions.length > 0 ? (
-                    <div className="space-y-2">
-                      <div className="max-h-48 space-y-2 overflow-y-auto rounded-md border border-gray-200 p-3">
-                        {valueMatchOptions.map((option) => {
-                          const isSelected = (condition.requiredValues || []).includes(
-                            option.value,
-                          );
-                          return (
-                            <div key={option.id} className="flex items-center gap-2">
-                              <input
-                                type="checkbox"
-                                id={`cond-opt-${condition.id}-${option.id}`}
-                                checked={isSelected}
-                                onChange={(e) => {
-                                  const currentValues = condition.requiredValues || [];
-                                  const newValues = e.target.checked
-                                    ? [...currentValues, option.value]
-                                    : currentValues.filter((v) => v !== option.value);
-                                  updateCondition(condition.id, {
-                                    requiredValues: newValues.length > 0 ? newValues : [],
-                                  });
-                                }}
-                                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                              />
-                              <label
-                                htmlFor={`cond-opt-${condition.id}-${option.id}`}
-                                className="flex-1 cursor-pointer text-sm"
-                              >
-                                {option.label}
-                                <span className="ml-2 text-xs text-gray-400">
-                                  (값: {option.value})
-                                </span>
-                              </label>
-                            </div>
-                          );
-                        })}
-                      </div>
-                      {(condition.requiredValues || []).length === 0 && (
-                        <p className="text-xs text-red-600">
-                          최소 1개 이상의 옵션을 선택해주세요
-                        </p>
-                      )}
-                    </div>
-                  ) : (
-                    // 옵션이 없거나 텍스트 타입인 경우 직접 입력
-                    <>
-                      <Input
-                        id={`values-${condition.id}`}
-                        value={(condition.requiredValues || []).join(', ')}
-                        onChange={(e) => {
-                          const values = e.target.value
-                            .split(',')
-                            .map((v) => v.trim())
-                            .filter((v) => v);
-                          updateCondition(condition.id, { requiredValues: values });
-                        }}
-                        placeholder="예: ②, 2, 평상시에 끊기기도 한다"
-                      />
-                      <p className="text-xs text-gray-500">
-                        참조 질문의 응답 값과 일치하는 값들을 쉼표로 구분하여 입력하세요
-                      </p>
-                    </>
-                  )}
-
-                  <p className="text-xs text-blue-600">
-                    💡 참조 질문의 응답이 선택한 값들 중 하나와 일치하면 조건 만족
-                  </p>
-                </div>
+                <ValueMatchEditor
+                  condition={condition}
+                  updateCondition={updateCondition}
+                  valueMatchOptions={valueMatchOptions}
+                />
               )}
             </CardContent>
           </CollapsibleContent>
