@@ -112,6 +112,7 @@
     "sanitize-html": "^2.17.0",
     "sav-writer": "^1.0.0",
     "sharp": "^0.34.5",
+    "sonner": "^2.0.7",
     "svix": "^1.93.0",
     "tailwind-merge": "^3.3.1",
     "tailwindcss": "^4.0.0",
