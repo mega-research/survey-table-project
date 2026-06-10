@@ -105,3 +105,102 @@ describe('generateMrsetsSyntax - 질문 단위 MCGROUP', () => {
     expect(syntax).not.toContain('_etc');
   });
 });
+
+describe('generateMrsetsSyntax - 테이블 checkbox 셀 단위 MCGROUP', () => {
+  const tableQuestion = q({
+    id: 'q5',
+    questionCode: 'T1',
+    type: 'table',
+    tableColumns: [{ id: 'c1', label: '열1' }],
+    tableRowsData: [
+      {
+        id: 'r1',
+        label: '행1',
+        cells: [
+          {
+            id: 'cellCb',
+            content: '',
+            type: 'checkbox',
+            cellCode: 'T1_r1_c1',
+            exportLabel: 'T1_열1_행1',
+            checkboxOptions: [
+              { id: 'co1', label: '보기A', value: 'co1', spssNumericCode: 5 },
+              { id: 'co2', label: '보기B', value: 'co2', spssNumericCode: 7 },
+            ],
+          },
+        ],
+      },
+      {
+        id: 'r2',
+        label: '행2',
+        cells: [
+          {
+            id: 'cellRadio',
+            content: '',
+            type: 'radio',
+            cellCode: 'T1_r2_c1',
+            radioOptions: [{ id: 'ro1', label: 'R', value: 'ro1', spssNumericCode: 1 }],
+          },
+        ],
+      },
+    ],
+  });
+
+  it('checkbox 셀마다 cellCode 이름으로 MCGROUP을 만들고 변수명은 export와 일치한다', () => {
+    const questions = [tableQuestion];
+    const columns = generateSPSSColumns(questions);
+    const syntax = generateMrsetsSyntax(columns, questions);
+
+    const cellVars = columns
+      .filter((c) => c.tableCellId === 'cellCb' && c.tableCellType === 'checkbox')
+      .map((c) => c.spssVarName);
+    expect(cellVars.length).toBe(2);
+    expect(syntax).toContain(
+      `/MCGROUP NAME=$T1_r1_c1 LABEL='T1_열1_행1' VARIABLES=${cellVars.join(' ')}`,
+    );
+  });
+
+  it('radio 셀은 세트를 만들지 않는다', () => {
+    const questions = [tableQuestion];
+    const syntax = generateMrsetsSyntax(generateSPSSColumns(questions), questions);
+    expect(syntax).not.toContain('T1_r2_c1');
+  });
+
+  it('cellCode가 없는 checkbox 셀은 건너뛴다', () => {
+    const noCode = q({
+      id: 'q6',
+      questionCode: 'T2',
+      type: 'table',
+      tableColumns: [{ id: 'c1', label: '열1' }],
+      tableRowsData: [
+        {
+          id: 'r1',
+          label: '행1',
+          cells: [
+            {
+              id: 'cellX',
+              content: '',
+              type: 'checkbox',
+              checkboxOptions: [{ id: 'o1', label: 'A', value: 'o1', spssNumericCode: 1 }],
+            },
+          ],
+        },
+      ],
+    });
+    const questions = [noCode];
+    const syntax = generateMrsetsSyntax(generateSPSSColumns(questions), questions);
+    if (syntax !== null) {
+      expect(syntax).not.toContain('$undefined');
+    }
+  });
+
+  it('질문 세트와 셀 세트가 공존할 때 마지막 줄에만 마침표가 붙는다', () => {
+    const questions = [checkboxManual, tableQuestion];
+    const syntax = generateMrsetsSyntax(generateSPSSColumns(questions), questions);
+    expect(syntax).not.toBeNull();
+    const mcgroupLines = syntax!.split('\n').filter((l) => l.includes('/MCGROUP'));
+    expect(mcgroupLines.length).toBe(2);
+    expect(mcgroupLines[0]!.endsWith('.')).toBe(false);
+    expect(mcgroupLines[1]!.endsWith('.')).toBe(true);
+  });
+});

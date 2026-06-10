@@ -1,5 +1,16 @@
 import type { SPSSExportColumn } from '@/lib/analytics/spss-excel-export';
-import type { Question } from '@/types/survey';
+import type { Question, TableCell } from '@/types/survey';
+
+/** 질문의 tableRowsData에서 셀 id로 셀을 찾는다 */
+function findTableCellById(question: Question | undefined, cellId: string): TableCell | undefined {
+  if (!question?.tableRowsData) return undefined;
+  for (const row of question.tableRowsData) {
+    for (const cell of row.cells) {
+      if (cell.id === cellId) return cell;
+    }
+  }
+  return undefined;
+}
 
 /** SPSS 문법 문자열 리터럴 escape: 작은따옴표 이중화 */
 function escapeSpsLabel(label: string): string {
@@ -42,6 +53,28 @@ export function generateMrsetsSyntax(
     entries.push({
       name: question.questionCode,
       label: question.exportLabel || question.title,
+      variables: cols.map((c) => c.spssVarName),
+    });
+  }
+
+  // 테이블 checkbox 셀 단위: 셀 하나 = 복수응답 세트 하나
+  const byCell = new Map<string, SPSSExportColumn[]>();
+  for (const col of columns) {
+    if (col.type !== 'table-cell' || col.tableCellType !== 'checkbox') continue;
+    if (!col.tableCellId) continue;
+    const list = byCell.get(col.tableCellId) ?? [];
+    list.push(col);
+    byCell.set(col.tableCellId, list);
+  }
+  for (const [cellId, cols] of byCell) {
+    const first = cols[0];
+    if (!first) continue;
+    const question = questionMap.get(first.questionId);
+    const cell = findTableCellById(question, cellId);
+    if (!cell?.cellCode) continue;
+    entries.push({
+      name: cell.cellCode,
+      label: cell.exportLabel ?? cell.cellCode,
       variables: cols.map((c) => c.spssVarName),
     });
   }
