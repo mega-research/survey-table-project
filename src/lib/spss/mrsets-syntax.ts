@@ -74,7 +74,7 @@ export function generateMrsetsSyntax(
     if (!cell?.cellCode) continue;
     entries.push({
       name: cell.cellCode,
-      label: cell.exportLabel ?? cell.cellCode,
+      label: cell.exportLabel || cell.cellCode,
       variables: cols.map((c) => c.spssVarName),
     });
   }

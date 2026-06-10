@@ -189,9 +189,8 @@ describe('generateMrsetsSyntax - 테이블 checkbox 셀 단위 MCGROUP', () => {
     });
     const questions = [noCode];
     const syntax = generateMrsetsSyntax(generateSPSSColumns(questions), questions);
-    if (syntax !== null) {
-      expect(syntax).not.toContain('$undefined');
-    }
+    // cellCode 없는 셀이 스킵되고 다른 세트도 없으므로 null이어야 한다
+    expect(syntax).toBeNull();
   });
 
   it('질문 세트와 셀 세트가 공존할 때 마지막 줄에만 마침표가 붙는다', () => {
