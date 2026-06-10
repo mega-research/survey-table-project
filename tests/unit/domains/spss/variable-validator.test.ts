@@ -24,7 +24,6 @@ describe('validateSpssVarName', () => {
   it('유효한 변수명을 통과시킨다', () => {
     expect(validateSpssVarName('Q1')).toEqual({ valid: true, errors: [] });
     expect(validateSpssVarName('Q1_U1_R0_C0')).toEqual({ valid: true, errors: [] });
-    expect(validateSpssVarName('Q1-4')).toEqual({ valid: true, errors: [] });
     expect(validateSpssVarName('SQ_GENDER')).toEqual({ valid: true, errors: [] });
     expect(validateSpssVarName('abc123')).toEqual({ valid: true, errors: [] });
   });
@@ -111,10 +110,13 @@ describe('validateSpssVarName', () => {
     expect(validateSpssVarName('NOTIFY').valid).toBe(true);
   });
 
-  it('밑줄(_)과 대시(-)를 허용한다', () => {
-    expect(validateSpssVarName('Q1_U1').valid).toBe(true);
-    expect(validateSpssVarName('Q1-4').valid).toBe(true);
-    expect(validateSpssVarName('Q1_U1-R0_C0').valid).toBe(true);
+  it('밑줄은 허용하고 대시는 거부한다', () => {
+    expect(validateSpssVarName('Q1_SUB')).toEqual({ valid: true, errors: [] });
+    const result = validateSpssVarName('Q1-4');
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContainEqual(
+      expect.objectContaining({ code: 'INVALID_CHARS' }),
+    );
   });
 
   it('여러 오류를 동시에 반환한다', () => {

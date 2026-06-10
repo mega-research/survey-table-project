@@ -100,7 +100,7 @@ describe('generateSpssVarNames', () => {
       makeQuestion({
         type: 'radio',
         order: 1,
-        questionCode: 'Q1-4',
+        questionCode: 'Q1_CUSTOM',
         isCustomSpssVarName: true,
       }),
       makeQuestion({ type: 'radio', order: 2 }),
@@ -112,8 +112,8 @@ describe('generateSpssVarNames', () => {
     const r1 = result[1];
     if (!r0) throw new Error('result[0] undefined');
     if (!r1) throw new Error('result[1] undefined');
-    expect(r0.questionCode).toBe('Q1-4'); // 보존
-    expect(r1.questionCode).toBe('Q1'); // 자동 (커스텀이 Q1-4이므로 Q1 사용 가능)
+    expect(r0.questionCode).toBe('Q1_CUSTOM'); // 보존
+    expect(r1.questionCode).toBe('Q1'); // 자동 (커스텀이 Q1_CUSTOM이므로 Q1 사용 가능)
   });
 
   it('대문자로 변수명을 생성한다', () => {
@@ -192,7 +192,7 @@ describe('regenerateAfterReorder', () => {
       makeQuestion({
         type: 'radio',
         order: 1,
-        questionCode: 'SQ-GENDER',
+        questionCode: 'SQ_GENDER',
         isCustomSpssVarName: true,
       }),
       makeQuestion({ type: 'text', order: 2, questionCode: 'Q2' }),
@@ -208,7 +208,7 @@ describe('regenerateAfterReorder', () => {
     if (!s0) throw new Error('sorted[0] undefined');
     if (!s1) throw new Error('sorted[1] undefined');
     if (!s2) throw new Error('sorted[2] undefined');
-    expect(s0.questionCode).toBe('SQ-GENDER'); // 보존
+    expect(s0.questionCode).toBe('SQ_GENDER'); // 보존
     expect(s0.isCustomSpssVarName).toBe(true);
     expect(s1.questionCode).toBe('Q1'); // 자동 재할당
     expect(s2.questionCode).toBe('Q2'); // 자동 재할당
@@ -243,7 +243,7 @@ describe('regenerateAfterDelete', () => {
       makeQuestion({
         type: 'radio',
         order: 1,
-        questionCode: 'CUSTOM-1',
+        questionCode: 'CUSTOM_1',
         isCustomSpssVarName: true,
       }),
       makeQuestion({ type: 'text', order: 3, questionCode: 'Q3' }),
@@ -256,7 +256,7 @@ describe('regenerateAfterDelete', () => {
     const s1 = sorted[1];
     if (!s0) throw new Error('sorted[0] undefined');
     if (!s1) throw new Error('sorted[1] undefined');
-    expect(s0.questionCode).toBe('CUSTOM-1'); // 보존
+    expect(s0.questionCode).toBe('CUSTOM_1'); // 보존
     expect(s1.questionCode).toBe('Q1'); // 자동 재할당
   });
 });
