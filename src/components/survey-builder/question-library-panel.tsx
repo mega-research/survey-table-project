@@ -30,6 +30,8 @@ import {
   X,
 } from 'lucide-react';
 
+import { toast } from 'sonner';
+
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import {
@@ -278,7 +280,7 @@ export function QuestionLibraryPanel({
   // 질문 삭제 확인
   const handleDeleteQuestion = (savedQuestion: SavedQuestion) => {
     if (savedQuestion.isPreset) {
-      alert('프리셋 질문은 삭제할 수 없습니다.');
+      toast.error('프리셋 질문은 삭제할 수 없습니다.');
       return;
     }
     if (confirm(`"${savedQuestion.name}" 질문을 삭제하시겠습니까?`)) {

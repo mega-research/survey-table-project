@@ -33,6 +33,8 @@ import type {
   CampaignSortKey,
 } from '@/lib/operations/campaigns.server';
 import type { ColumnCandidate } from '@/lib/operations/filter-shared';
+import { toast } from 'sonner';
+
 import { getErrorMessage } from '@/lib/get-error-message';
 import {
   useCreateCampaign,
@@ -165,7 +167,7 @@ export function CampaignWizard({
         });
         setSelectedIds(new Set(result.ids));
       } catch (err) {
-        alert(getErrorMessage(err, '전체 선택 실패'));
+        toast.error(getErrorMessage(err, '전체 선택 실패'));
       }
     });
   }
@@ -210,15 +212,15 @@ export function CampaignWizard({
 
   async function openConfirm() {
     if (selectedCount === 0) {
-      alert('수신자를 선택하세요.');
+      toast.error('수신자를 선택하세요.');
       return;
     }
     if (!templateId) {
-      alert('템플릿을 선택하세요.');
+      toast.error('템플릿을 선택하세요.');
       return;
     }
     if (!title.trim()) {
-      alert('단체 메일 제목을 입력하세요.');
+      toast.error('단체 메일 제목을 입력하세요.');
       return;
     }
     startTransition(async () => {
@@ -236,7 +238,7 @@ export function CampaignWizard({
         });
         setConfirmOpen(true);
       } catch (err) {
-        alert(getErrorMessage(err, 'preflight 실패'));
+        toast.error(getErrorMessage(err, 'preflight 실패'));
       }
     });
   }
@@ -255,7 +257,7 @@ export function CampaignWizard({
           `/admin/surveys/${surveyId}/operations/mail/campaigns/${result.campaignId}`,
         );
       } catch (err) {
-        alert(getErrorMessage(err, '단체 메일 생성 실패'));
+        toast.error(getErrorMessage(err, '단체 메일 생성 실패'));
       }
     });
   }

@@ -13,6 +13,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { toast } from 'sonner';
+
 import { getErrorMessage } from '@/lib/get-error-message';
 import { client } from '@/shared/lib/rpc';
 
@@ -31,7 +33,7 @@ export function CancelCampaignButton({ surveyId, campaignId }: Props) {
       try {
         await client.mail.campaigns.cancel({ surveyId, campaignId });
       } catch (err) {
-        alert(getErrorMessage(err, '취소 실패'));
+        toast.error(getErrorMessage(err, '취소 실패'));
         return;
       }
       setOpen(false);

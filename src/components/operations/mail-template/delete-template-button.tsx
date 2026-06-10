@@ -17,6 +17,8 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import { toast } from 'sonner';
+
 import { getErrorMessage } from '@/lib/get-error-message';
 import { client } from '@/shared/lib/rpc';
 
@@ -36,7 +38,7 @@ export function DeleteTemplateButton({ surveyId, templateId, templateName }: Pro
       try {
         await client.mail.templates.remove({ surveyId, templateId });
       } catch (err) {
-        alert(getErrorMessage(err, '삭제 실패'));
+        toast.error(getErrorMessage(err, '삭제 실패'));
         return;
       }
       setOpen(false);

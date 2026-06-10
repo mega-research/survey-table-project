@@ -23,6 +23,8 @@ import {
   User,
 } from 'lucide-react';
 
+import { toast } from 'sonner';
+
 import { logout } from '@/actions/auth-actions';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -81,7 +83,7 @@ export default function SurveyListPage() {
     const link = getSurveyUrl(survey);
     const fullLink = `${window.location.origin}${link}`;
     navigator.clipboard.writeText(fullLink);
-    alert('링크가 복사되었습니다!');
+    toast.success('링크가 복사되었습니다');
     setOpenMenuId(null);
   };
 

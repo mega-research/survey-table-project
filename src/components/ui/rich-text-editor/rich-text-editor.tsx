@@ -3,6 +3,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from 'react';
 
 import { EditorContent, useEditor } from '@tiptap/react';
+import { toast } from 'sonner';
 
 import { createUnifiedExtensions } from './extensions';
 import { deleteTmpNoticeAttachmentKey } from './file-attachment-r2-client';
@@ -159,7 +160,7 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
           editor.chain().focus().setImage({ src: json.url }).run();
         } catch (err) {
           if (!editor.isDestroyed) {
-            alert(err instanceof Error ? err.message : '이미지 업로드 실패');
+            toast.error(err instanceof Error ? err.message : '이미지 업로드 실패');
           }
         }
       };

@@ -22,6 +22,8 @@ import {
 } from '@dnd-kit/sortable';
 import { FolderPlus } from 'lucide-react';
 
+import { toast } from 'sonner';
+
 import { Button } from '@/components/ui/button';
 import { client } from '@/shared/lib/rpc';
 import { useEnsureSurveyInDb } from '@/hooks/use-ensure-survey-in-db';
@@ -195,7 +197,7 @@ export function GroupManager({ className }: GroupManagerProps) {
           if (createdGroup) createdGroupId = createdGroup.id;
         } catch (error) {
           console.error('그룹 생성 실패:', error);
-          alert('그룹 생성에 실패했습니다. 다시 시도해주세요.');
+          toast.error('그룹 생성에 실패했습니다. 다시 시도해주세요.');
           return;
         }
       }
@@ -305,7 +307,7 @@ export function GroupManager({ className }: GroupManagerProps) {
       if (oldParentGroupId !== newParentGroupId) {
         // 순환 참조 체크: newParentGroupId가 editingGroup의 하위 그룹이 될 수 있는지 확인
         if (newParentGroupId && !canBeParentOf(newParentGroupId, editingGroup.id, groupsOrEmpty)) {
-          alert('순환 참조 방지: 선택한 그룹을 상위 그룹으로 설정할 수 없습니다.');
+          toast.error('순환 참조 방지: 선택한 그룹을 상위 그룹으로 설정할 수 없습니다.');
           return;
         }
 

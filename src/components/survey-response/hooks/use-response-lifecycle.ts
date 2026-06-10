@@ -1,6 +1,8 @@
 import { useCallback, useState } from 'react';
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 
+import { toast } from 'sonner';
+
 import { client } from '@/shared/lib/rpc';
 import { stepIdOf, type RenderStep } from '@/lib/group-ordering';
 import type { ClientSignals } from '@/lib/duplicate-detection/types';
@@ -385,7 +387,7 @@ export function useResponseLifecycle({
       setIsCompleted(true);
     } catch (error) {
       console.error('응답 제출 오류:', error);
-      alert('응답 제출 중 오류가 발생했습니다. 다시 시도해주세요.');
+      toast.error('응답 제출 중 오류가 발생했습니다. 다시 시도해주세요.');
     } finally {
       setIsSubmitting(false);
     }

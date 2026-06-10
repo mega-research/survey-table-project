@@ -13,6 +13,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { toast } from 'sonner';
+
 import { getErrorMessage } from '@/lib/get-error-message';
 import { client } from '@/shared/lib/rpc';
 
@@ -35,11 +37,11 @@ export function UnsubscribedRevertButton({ surveyId, contactId, emailMasked }: P
           surveyId,
         });
         if (!result.ok) {
-          alert(result.error ?? '해제 실패');
+          toast.error(result.error ?? '해제 실패');
           return;
         }
       } catch (err) {
-        alert(getErrorMessage(err, '해제 실패'));
+        toast.error(getErrorMessage(err, '해제 실패'));
         return;
       }
       setOpen(false);

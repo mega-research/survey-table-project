@@ -26,6 +26,8 @@ import {
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
+import { toast } from 'sonner';
+
 import { client } from '@/shared/lib/rpc';
 import { Button } from '@/components/ui/button';
 import {
@@ -227,7 +229,7 @@ export function CellContentModal({
   const handleSave = async () => {
     // 빌더 validator: ranking 셀은 옵션이 최소 1개 이상이어야 함.
     if (contentType === 'ranking' && rankingOptions.length === 0) {
-      alert('순위형 셀은 최소 1개 이상의 옵션이 필요합니다.');
+      toast.error('순위형 셀은 최소 1개 이상의 옵션이 필요합니다.');
       return;
     }
     // ranking_opt 셀은 content/rankingLabel/imageUrl/videoUrl 중 하나 이상 필요.
@@ -240,7 +242,7 @@ export function CellContentModal({
         videoUrl.trim()
       );
       if (!hasContent) {
-        alert('순위 옵션 소스 셀은 텍스트/라벨/이미지/비디오 중 하나 이상을 설정해야 합니다.');
+        toast.error('순위 옵션 소스 셀은 텍스트/라벨/이미지/비디오 중 하나 이상을 설정해야 합니다.');
         return;
       }
     }
@@ -248,7 +250,7 @@ export function CellContentModal({
       // 같은 질문 내 기타 ranking_opt 셀이 이미 존재하면 차단 (자기 자신은 제외).
       const hostQuestion = questions.find((q) => q.id === currentQuestionId);
       if (hasExistingOtherRankingCell(hostQuestion?.tableRowsData, cell.id)) {
-        alert(
+        toast.error(
           '이 질문에는 이미 "기타"로 지정된 순위 옵션 셀이 있습니다. 질문당 최대 1개만 지정할 수 있습니다.',
         );
         return;

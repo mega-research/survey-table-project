@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { toast } from 'sonner';
+
 import { generateId } from '@/lib/utils';
 import {
   HeaderCell,
@@ -1017,7 +1019,7 @@ export function useTableEditor({
       if (dragCopy.copiedRegion) {
         const result = dragCopy.pasteRegion(rowIndex, cellIndex);
         if ('blocked' in result) {
-          alert(result.message);
+          toast.error(result.message);
         }
         return;
       }

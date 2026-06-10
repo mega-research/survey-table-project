@@ -17,6 +17,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { toast } from 'sonner';
+
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -51,7 +53,7 @@ export function ProfilesRowActions({ surveyId, responseId, idx, view }: Props) {
         setDialog(null);
         router.refresh();
       } catch {
-        window.alert('응답 처리에 실패했습니다. 다시 시도해 주세요.');
+        toast.error('응답 처리에 실패했습니다. 다시 시도해 주세요.');
         // dialog 유지 — 사용자 재시도 가능
       }
     });

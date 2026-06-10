@@ -33,6 +33,8 @@ import {
   Type,
 } from 'lucide-react';
 
+import { toast } from 'sonner';
+
 import { client } from '@/shared/lib/rpc';
 import { GroupManager } from '@/components/survey-builder/group-manager';
 import { ImportExportLibraryModal } from '@/components/survey-builder/import-export-library-modal';
@@ -322,7 +324,7 @@ export default function CreateSurveyPage() {
       if (message.includes('이미 사용 중인 URL') || message.includes('slug_unique') || message.includes('23505')) {
         setSlugError('이미 사용 중인 URL입니다. 다른 URL을 입력해주세요.');
       } else {
-        alert('설문 저장에 실패했습니다. 다시 시도해주세요.');
+        toast.error('설문 저장에 실패했습니다. 다시 시도해주세요.');
       }
     }
   };

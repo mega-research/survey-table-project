@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 
 import { Database, Pencil, Plus, Trash2, Upload } from 'lucide-react';
 
+import { toast } from 'sonner';
+
 import { Button } from '@/components/ui/button';
 import { client } from '@/shared/lib/rpc';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
@@ -96,8 +98,7 @@ export function LookupLibrarySection() {
       await client.surveyBuilder.lookups.copy({ surveyId, savedLookupId });
       await reload();
     } catch (e) {
-      // 사용자에게 최소한의 피드백 — toast 인프라가 없어 alert 사용
-      alert(`설문에 추가하지 못했습니다: ${(e as Error).message ?? '알 수 없는 오류'}`);
+      toast.error(`설문에 추가하지 못했습니다: ${(e as Error).message ?? '알 수 없는 오류'}`);
     }
   };
 

@@ -3,6 +3,8 @@
 import { useRouter } from 'next/navigation';
 import { useTransition } from 'react';
 
+import { toast } from 'sonner';
+
 import { Button } from '@/components/ui/button';
 import type { ContactResultCode } from '@/db/schema/schema-types';
 import { useAutoFadeMessage } from '@/hooks/use-auto-fade-message';
@@ -39,7 +41,7 @@ export function ContactAttemptHistoryCard({
         router.refresh();
         setSuccessMessage('회차 삭제 완료');
       } catch (e) {
-        window.alert(getErrorMessage(e, ''));
+        toast.error(getErrorMessage(e, ''));
       }
     });
   }
