@@ -16,6 +16,8 @@ import {
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 
+import { toast } from 'sonner';
+
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -27,6 +29,8 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { buildSafeFilename, downloadBlob } from '@/lib/analytics/export-download';
+import { useErrorDialogStore } from '@/stores/error-dialog-store';
+import type { VarNameIssue } from '@/lib/spss/variable-name-guard';
 
 interface Props {
   surveyId: string;
@@ -122,6 +126,15 @@ export function ExportDataModal({ surveyId, surveyTitle }: Props) {
       const response = await fetch(`/api/surveys/${surveyId}/export?type=${type}`);
       if (!response.ok) {
         const errorData = await response.json().catch(() => null);
+        const issues = errorData?.issues as VarNameIssue[] | undefined;
+        if (issues && issues.length > 0) {
+          useErrorDialogStore.getState().show({
+            title: 'SPSS 변수명 오류로 내보내기가 중단되었습니다',
+            description: '빌더에서 해당 변수명을 수정한 뒤 다시 시도하세요.',
+            issues,
+          });
+          return;
+        }
         throw new Error(errorData?.error || '내보내기에 실패했습니다.');
       }
 
@@ -138,7 +151,7 @@ export function ExportDataModal({ surveyId, surveyTitle }: Props) {
       // 다운로드 후 모달 닫기 여부는 선택사항 (연속 다운로드를 위해 유지)
     } catch (error) {
       console.error('Export error:', error);
-      alert(error instanceof Error ? error.message : '데이터 내보내기 중 오류가 발생했습니다.');
+      toast.error(error instanceof Error ? error.message : '데이터 내보내기 중 오류가 발생했습니다.');
     } finally {
       setExportingType(null);
     }
@@ -163,7 +176,7 @@ export function ExportDataModal({ surveyId, surveyTitle }: Props) {
       downloadBlob(blob, filename);
       setStep('done');
     } catch (err) {
-      alert(err instanceof Error ? err.message : '분할 내보내기 중 오류가 발생했습니다.');
+      toast.error(err instanceof Error ? err.message : '분할 내보내기 중 오류가 발생했습니다.');
       setStep('preview');
     }
   };

@@ -4,6 +4,7 @@ import { useState } from 'react';
 
 import { Button, Card } from '@tremor/react';
 import { Download, FileJson, FileSpreadsheet, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 
 import { buildSafeFilename, downloadText } from '@/lib/analytics/export-download';
 
@@ -37,14 +38,14 @@ export function ExportPanel({
       const data = format === 'json' ? await onExportJson() : await onExportCsv();
 
       if (!data) {
-        alert('내보낼 데이터가 없습니다.');
+        toast.error('내보낼 데이터가 없습니다.');
         return;
       }
 
       downloadText(data, buildSafeFilename(surveyTitle, '응답', format), MIME_BY_FORMAT[format]);
     } catch (error) {
       console.error('Export error:', error);
-      alert('내보내기 중 오류가 발생했습니다.');
+      toast.error('내보내기 중 오류가 발생했습니다.');
     } finally {
       setIsExporting(null);
     }
