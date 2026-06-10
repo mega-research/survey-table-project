@@ -20,10 +20,11 @@ export function hydrateQuestionsForSpss(questions: Question[]): Question[] {
         ),
       };
     }
-    if (next.options && CHOICE_TYPES.has(next.type)) {
+    const opts = next.options;
+    if (opts && CHOICE_TYPES.has(next.type)) {
       // 테이블 분기에서 이미 새 객체가 만들어졌으면 spread 불필요
       if (next === q) next = { ...next };
-      next = { ...next, options: generateAllOptionCodes(next.options) };
+      next = { ...next, options: generateAllOptionCodes(opts) };
     }
     return next;
   });
