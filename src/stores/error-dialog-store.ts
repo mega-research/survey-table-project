@@ -11,8 +11,10 @@ interface ErrorDialogPayload {
 interface ErrorDialogState {
   open: boolean;
   title: string;
-  description?: string;
-  issues?: VarNameIssue[];
+  // zustand set은 부분 머지라 show()마다 반드시 덮어써야 이전 호출 값이 잔류하지 않는다.
+  // 그래서 optional(?)이 아니라 명시적 | undefined 유니온으로 선언한다.
+  description: string | undefined;
+  issues: VarNameIssue[] | undefined;
   show: (payload: ErrorDialogPayload) => void;
   close: () => void;
 }
@@ -24,12 +26,14 @@ interface ErrorDialogState {
 export const useErrorDialogStore = create<ErrorDialogState>((set) => ({
   open: false,
   title: '',
+  description: undefined,
+  issues: undefined,
   show: (payload) =>
     set({
       open: true,
       title: payload.title,
-      ...(payload.description !== undefined && { description: payload.description }),
-      ...(payload.issues !== undefined && { issues: payload.issues }),
+      description: payload.description,
+      issues: payload.issues,
     }),
   close: () => set({ open: false }),
 }));

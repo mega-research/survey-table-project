@@ -15,9 +15,7 @@ if (!Element.prototype.scrollIntoView) {
 
 beforeEach(() => {
   // 테스트 간 zustand 상태 격리
-  // exactOptionalPropertyTypes로 undefined 명시 불가 — close() 호출 후 title 초기화
-  useErrorDialogStore.getState().close();
-  useErrorDialogStore.setState({ title: '' });
+  useErrorDialogStore.setState({ open: false, title: '', description: undefined, issues: undefined });
 });
 
 describe('GlobalErrorDialog', () => {
@@ -59,5 +57,24 @@ describe('GlobalErrorDialog', () => {
       confirmButton.click();
     });
     expect(useErrorDialogStore.getState().open).toBe(false);
+  });
+});
+
+describe('GlobalErrorDialog - 연속 호출 상태 잔류 방지', () => {
+  it('issues 있는 에러 후 issues 없는 에러를 띄우면 이전 목록이 사라진다', async () => {
+    render(<GlobalErrorDialog />);
+    act(() => {
+      useErrorDialogStore.getState().show({
+        title: '변수명 오류',
+        issues: [{ varName: 'Q1-1', questionText: '질문', reason: '허용되지 않는 문자' }],
+      });
+    });
+    expect(await screen.findByText('Q1-1')).toBeInTheDocument();
+
+    act(() => {
+      useErrorDialogStore.getState().show({ title: '저장 실패' });
+    });
+    expect(await screen.findByText('저장 실패')).toBeInTheDocument();
+    expect(screen.queryByText('Q1-1')).not.toBeInTheDocument();
   });
 });
