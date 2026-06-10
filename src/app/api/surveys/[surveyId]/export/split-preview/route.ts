@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { and, eq, isNull, ne } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { surveyResponses, surveys } from '@/db/schema';
+import { completedResponse, notDeletedResponse } from '@/data/response-filters';
 import { requireAuth } from '@/lib/auth';
 import {
   detectSplitCandidates,
@@ -57,12 +58,12 @@ export async function GET(
       });
     }
 
-    // resp 집계: raw export와 동일 모수
+    // resp 집계: raw export와 동일 모수 (deleted 제외 + completed만)
     const responses = await db.query.surveyResponses.findMany({
       where: and(
         eq(surveyResponses.surveyId, surveyId),
-        isNull(surveyResponses.deletedAt),
-        ne(surveyResponses.status, 'in_progress'),
+        notDeletedResponse,
+        completedResponse,
       ),
       columns: { questionResponses: true },
     });

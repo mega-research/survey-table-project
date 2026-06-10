@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { and, count, eq, inArray, isNull } from 'drizzle-orm';
+import { and, count, eq, inArray } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { contactTargets, surveyResponses, surveys } from '@/db/schema';
@@ -91,7 +91,7 @@ export async function GET(
       const rawResponses = await db.query.surveyResponses.findMany({
         where: and(
           eq(surveyResponses.surveyId, surveyId),
-          isNull(surveyResponses.deletedAt),
+          notDeletedResponse,
           completedResponse,
         ),
         orderBy: (r, { asc }) => [asc(r.startedAt)],
@@ -166,7 +166,7 @@ export async function GET(
       const rawResponses = await db.query.surveyResponses.findMany({
         where: and(
           eq(surveyResponses.surveyId, surveyId),
-          isNull(surveyResponses.deletedAt),
+          notDeletedResponse,
           completedResponse,
         ),
         orderBy: (r, { asc }) => [asc(r.startedAt)],
