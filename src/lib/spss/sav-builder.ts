@@ -41,7 +41,7 @@ const MIN_STRING_WIDTH = 8;
 /**
  * 값 라벨 생성
  */
-function buildValueLabels(
+export function buildValueLabels(
   col: SPSSExportColumn,
   question: Question | undefined,
 ): Array<{ label: string; value: string | number }> | undefined {
