@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import type { SPSSExportColumn } from '@/lib/analytics/spss-excel-export';
+import { generateSavBuffer } from '@/lib/spss/sav-builder';
 import { assertValidSpssVarNames, SpssVarNameError } from '@/lib/spss/variable-name-guard';
+import { validateSpssVarName } from '@/lib/spss/variable-validator';
+import type { Question } from '@/types/survey';
+import { sanitizeSpssVarName } from '@/utils/spss-var-name';
 
 function makeCol(spssVarName: string, questionText = '질문'): SPSSExportColumn {
   return { spssVarName, questionText, optionLabel: '', questionId: 'q1', type: 'single' };
@@ -52,5 +56,36 @@ describe('assertValidSpssVarNames', () => {
       expect(err.issues).toHaveLength(7);
       expect(err.message).toContain('외 2건');
     }
+  });
+});
+
+describe('가드 불변식 - 검증 통과 = sanitize no-op', () => {
+  it('validateSpssVarName을 통과하는 이름은 sanitizeSpssVarName이 바꾸지 않는다', () => {
+    const candidates = [
+      'Q1', 'Q1_SUB', 'I1_r3_c2', 'Q2_opt4_text', 'a', 'Z9_x_1',
+      'Q1__a', 'Q1_', '_Q1', 'Q-1', '문항1', 'q'.padEnd(65, '1'),
+    ];
+    for (const name of candidates) {
+      const { valid } = validateSpssVarName(name);
+      if (valid) {
+        expect(sanitizeSpssVarName(name), `'${name}' 불변식 위반`).toBe(name);
+      }
+    }
+  });
+});
+
+describe('generateSavBuffer 가드 연결', () => {
+  it('invalid 변수명이 있으면 .sav 생성 전에 SpssVarNameError를 던진다', async () => {
+    const question = {
+      id: 'q1',
+      type: 'text',
+      title: '이름',
+      required: false,
+      order: 1,
+      questionCode: 'Q-1',
+      isCustomSpssVarName: true,
+    } as unknown as Question;
+
+    await expect(generateSavBuffer([question], [])).rejects.toThrow(SpssVarNameError);
   });
 });

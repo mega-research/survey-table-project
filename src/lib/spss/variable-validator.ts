@@ -31,6 +31,8 @@ const SPSS_RESERVED_WORDS = new Set([
  * - 영문자로 시작
  * - 영문자, 숫자, 밑줄만 허용 (대시는 SPSS 금지 문자 — sav-writer가 export 전체를
  *   거부하므로 입력 단계에서 차단한다)
+ * - 연속 밑줄·후행 밑줄 금지 (sanitizeSpssVarName이 변형하는 이름을 사전 차단해
+ *   "검증 통과 = sanitize no-op" 불변식을 보장한다)
  * - 최대 64자
  * - SPSS 예약어 불가
  */
@@ -53,6 +55,20 @@ export function validateSpssVarName(name: string): ValidationResult {
     errors.push({
       code: 'INVALID_CHARS',
       message: '변수명에 허용되지 않는 문자가 포함되어 있습니다. 영문자, 숫자, 밑줄만 허용됩니다.',
+    });
+  }
+
+  if (/__/.test(name)) {
+    errors.push({
+      code: 'INVALID_CHARS',
+      message: '연속 밑줄은 허용되지 않습니다.',
+    });
+  }
+
+  if (name.endsWith('_')) {
+    errors.push({
+      code: 'INVALID_CHARS',
+      message: '변수명은 밑줄로 끝날 수 없습니다.',
     });
   }
 

@@ -119,6 +119,22 @@ describe('validateSpssVarName', () => {
     );
   });
 
+  it('연속 밑줄을 거부한다 — sanitize가 축약해 변수 정의와 레코드 키가 어긋나는 케이스', () => {
+    const result = validateSpssVarName('Q1__a');
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContainEqual(
+      expect.objectContaining({ code: 'INVALID_CHARS' }),
+    );
+  });
+
+  it('후행 밑줄을 거부한다 — sanitize가 제거해 변수 정의와 레코드 키가 어긋나는 케이스', () => {
+    const result = validateSpssVarName('Q1_');
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContainEqual(
+      expect.objectContaining({ code: 'INVALID_CHARS' }),
+    );
+  });
+
   it('여러 오류를 동시에 반환한다', () => {
     // 숫자 시작 + 특수문자
     const result = validateSpssVarName('1Q@');
