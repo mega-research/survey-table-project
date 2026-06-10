@@ -7,7 +7,7 @@ import type { Question as QuestionType } from '@/types/survey';
  * 질문 CRUD 도메인 스키마.
  *
  * 복잡 JSONB 필드(options/selectLevels/tableColumns/tableRowsData/tableHeaderGrid/
- * tableValidationRules/dynamicRowConfigs/rankingConfig/displayCondition)는 질문 유형마다
+ * tableValidationRules/dynamicRowConfigs/rankingConfig/choiceGroups/displayCondition)는 질문 유형마다
  * 형태가 제각각이라 z.custom 으로 타입만 보장한다(런타임 형태 변형 위험 방지).
  *
  * surveyId/questionId 는 기존 server action 과 동일하게 형식 검증 없이 받는다.
@@ -48,6 +48,7 @@ export const CreateQuestionInput = z.object({
   dynamicRowConfigs: z.custom<QuestionType['dynamicRowConfigs']>().optional(),
   hideColumnLabels: z.boolean().optional(),
   rankingConfig: z.custom<QuestionType['rankingConfig']>().optional(),
+  choiceGroups: z.custom<QuestionType['choiceGroups']>().optional(),
   questionCode: z.string().optional(),
   isCustomSpssVarName: z.boolean().optional(),
   exportLabel: z.string().optional(),
@@ -86,6 +87,7 @@ export const UpdateQuestionData = z.object({
   dynamicRowConfigs: z.custom<QuestionType['dynamicRowConfigs']>().optional(),
   hideColumnLabels: z.boolean().optional(),
   rankingConfig: z.custom<QuestionType['rankingConfig']>().optional(),
+  choiceGroups: z.custom<QuestionType['choiceGroups']>().optional(),
   displayCondition: z.custom<QuestionType['displayCondition']>().optional(),
   questionCode: z.string().optional(),
   isCustomSpssVarName: z.boolean().optional(),

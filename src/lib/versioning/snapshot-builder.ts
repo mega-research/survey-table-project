@@ -45,6 +45,7 @@ interface SnapshotQuestion {
   allowOtherOption?: boolean | undefined;
   optionsColumns?: number | undefined;
   rankingConfig?: Question['rankingConfig'] | undefined;
+  choiceGroups?: Question['choiceGroups'] | undefined;
   minSelections?: number | undefined;
   maxSelections?: number | undefined;
   noticeContent?: string | undefined;
@@ -107,6 +108,7 @@ export function buildSurveySnapshot(survey: Survey): SurveySnapshot {
       allowOtherOption: q.allowOtherOption,
       optionsColumns: q.optionsColumns,
       rankingConfig: q.rankingConfig,
+      choiceGroups: q.choiceGroups,
       minSelections: q.minSelections,
       maxSelections: q.maxSelections,
       noticeContent: q.noticeContent,

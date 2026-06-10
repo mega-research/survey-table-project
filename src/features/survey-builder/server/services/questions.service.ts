@@ -57,6 +57,7 @@ export async function createQuestion(data: CreateQuestionInput): Promise<Questio
     dynamicRowConfigs: data.dynamicRowConfigs as NewQuestion['dynamicRowConfigs'],
     hideColumnLabels: data.hideColumnLabels,
     rankingConfig: data.rankingConfig as NewQuestion['rankingConfig'],
+    choiceGroups: data.choiceGroups as NewQuestion['choiceGroups'],
     questionCode: data.questionCode,
     isCustomSpssVarName: data.isCustomSpssVarName,
     exportLabel: data.exportLabel,
@@ -108,6 +109,7 @@ export async function updateQuestion(
   if (data.dynamicRowConfigs !== undefined) allowed.dynamicRowConfigs = data.dynamicRowConfigs as NewQuestion['dynamicRowConfigs'];
   if (data.hideColumnLabels !== undefined) allowed.hideColumnLabels = data.hideColumnLabels;
   if (data.rankingConfig !== undefined) allowed.rankingConfig = data.rankingConfig as NewQuestion['rankingConfig'];
+  if (data.choiceGroups !== undefined) allowed.choiceGroups = data.choiceGroups as NewQuestion['choiceGroups'];
   if (data.displayCondition !== undefined) allowed.displayCondition = data.displayCondition as NewQuestion['displayCondition'];
   if (data.questionCode !== undefined) allowed.questionCode = data.questionCode;
   if (data.isCustomSpssVarName !== undefined) allowed.isCustomSpssVarName = data.isCustomSpssVarName;

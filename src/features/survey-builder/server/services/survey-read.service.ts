@@ -144,6 +144,7 @@ export async function getSurveyWithDetails(surveyId: string): Promise<SurveyType
         ...(q.allowOtherOption != null ? { allowOtherOption: q.allowOtherOption } : {}),
         ...(q.optionsColumns != null ? { optionsColumns: q.optionsColumns } : {}),
         ...(q.rankingConfig != null ? { rankingConfig: q.rankingConfig } : {}),
+        ...(q.choiceGroups != null ? { choiceGroups: q.choiceGroups } : {}),
         ...(q.minSelections != null ? { minSelections: q.minSelections } : {}),
         ...(q.maxSelections != null ? { maxSelections: q.maxSelections } : {}),
         ...(q.noticeContent != null ? { noticeContent: q.noticeContent } : {}),

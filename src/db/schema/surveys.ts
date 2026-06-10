@@ -1,7 +1,7 @@
 import { relations } from 'drizzle-orm';
 import { boolean, doublePrecision, integer, jsonb, pgTable, smallint, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
 
-import type { SurveyLookup } from '@/types/survey';
+import type { ChoiceGroup, SurveyLookup } from '@/types/survey';
 
 import type {
   ContactColumnScheme,
@@ -127,6 +127,9 @@ export const questions = pgTable('questions', {
 
   // 순위형(ranking) 타입 전용 설정
   rankingConfig: jsonb('ranking_config').$type<RankingConfig>(),
+
+  // 테이블 레벨 옵션 그룹 정의 (보기 셀 묶음 - SPSS 그룹 변수/MRSET 단위)
+  choiceGroups: jsonb('choice_groups').$type<ChoiceGroup[]>(),
 
   // 공지사항용
   noticeContent: text('notice_content'),

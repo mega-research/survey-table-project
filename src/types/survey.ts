@@ -242,6 +242,8 @@ export interface TableCell {
   isCustomCellCode?: boolean; // 사용자가 수동 편집한 셀코드인지 여부
   exportLabel?: string; // ✨ 엑셀 열 이름 (예: "가구TV보유_TV종류_UHD")
   isCustomExportLabel?: boolean; // 사용자가 수동 편집한 라벨인지 여부
+  // 이 보기 셀이 속한 옵션 그룹 (ChoiceGroup.id). 없으면 그룹 미소속.
+  choiceGroupId?: string;
   // SPSS 변수 타입 / 측정 수준 (셀 단위)
   spssVarType?: 'Numeric' | 'String' | 'Date' | 'DateTime';
   spssMeasure?: 'Nominal' | 'Ordinal' | 'Continuous';
@@ -393,6 +395,20 @@ export interface DynamicRowGroupConfig {
   displayCondition?: QuestionConditionGroup; // 그룹 레벨 조건부 표시
 }
 
+/**
+ * 테이블 레벨 옵션 그룹: 여러 보기 셀이 모여 하나의 radio/checkbox/ranking 질문을 이룬다.
+ * 한 테이블에 N개 공존(rad1, rad2, cb1 ...). 그룹 정보는 이 registry 한 곳에만 저장하고
+ * 셀은 choiceGroupId로 참조만 한다. 지정 UI와 응답 렌더는 후속 plan.
+ */
+export interface ChoiceGroup {
+  id: string;
+  groupKey: string;                        // 변수명 식별자: rad1/cb1/rnk1. 자동 발번 + 수동 오버라이드.
+  type: 'radio' | 'checkbox' | 'ranking';
+  label: string;                           // 그룹 제목 - SPSS 변수 라벨 접두
+  minSelections?: number;
+  maxSelections?: number;
+}
+
 export interface TableColumn {
   id: string;
   columnCode?: string; // ✨ 엑셀 내보내기용 열 코드
@@ -468,6 +484,8 @@ export interface Question {
   maxSelections?: number; // 최대 선택 개수
   // 순위형(ranking) 타입 전용. optionsSource='table' 이면 Case 2 (tableRowsData 의 ranking_opt 셀을 옵션으로)
   rankingConfig?: RankingConfig;
+  // 테이블 레벨 옵션 그룹 정의 (보기 셀 묶음 - SPSS 그룹 변수/MRSET 단위)
+  choiceGroups?: ChoiceGroup[];
   // 공지사항(notice) 타입용
   noticeContent?: string; // TipTap HTML 콘텐츠
   requiresAcknowledgment?: boolean; // 이해했다는 체크 필요 여부

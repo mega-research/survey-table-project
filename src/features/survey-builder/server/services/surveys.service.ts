@@ -233,6 +233,7 @@ export async function duplicateSurvey(
         allowOtherOption: question.allowOtherOption,
         optionsColumns: question.optionsColumns,
         rankingConfig: question.rankingConfig as NewQuestion['rankingConfig'],
+        choiceGroups: question.choiceGroups as NewQuestion['choiceGroups'],
         noticeContent: question.noticeContent,
         requiresAcknowledgment: question.requiresAcknowledgment,
         placeholder: question.placeholder,
