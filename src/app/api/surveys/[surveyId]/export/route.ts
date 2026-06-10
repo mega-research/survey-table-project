@@ -9,10 +9,9 @@ import { requireAuth } from '@/lib/auth';
 import { generateRawDataWorkbook, type RawExportResponseRow } from '@/lib/analytics/raw-workbook';
 import { buildSplitWorkbook } from '@/lib/analytics/split-workbook';
 import { planSplit } from '@/lib/analytics/split-export';
+import { hydrateQuestionsForSpss } from '@/lib/spss/hydrate-questions';
 import { isSpssVarNameError } from '@/lib/spss/variable-name-guard';
 import { Question, SurveySubmission } from '@/types/survey';
-import { generateAllOptionCodes } from '@/utils/option-code-generator';
-import { generateAllCellCodes } from '@/utils/table-cell-code-generator';
 
 // Vercel serverless 최대 실행시간 30초 (기본 10초)
 export const maxDuration = 30;
@@ -47,17 +46,10 @@ export async function GET(
       return NextResponse.json({ error: 'Survey not found' }, { status: 404 });
     }
 
-    // strip된 셀 데이터 hydrate (cellCode, exportLabel 등 복원)
-    for (const q of surveyData.questions) {
-      if (q.type === 'table' && q.tableRowsData && q.tableColumns) {
-        (q as any).tableRowsData = generateAllCellCodes(
-          q.questionCode ?? undefined, q.title, q.tableColumns as any, q.tableRowsData as any,
-        );
-      }
-      if ((q as any).options && ['radio', 'checkbox', 'select', 'multiselect'].includes(q.type)) {
-        (q as any).options = generateAllOptionCodes((q as any).options);
-      }
-    }
+    // strip된 셀/옵션 파생 필드 hydrate (cellCode, exportLabel, optionCode 복원)
+    const hydratedQuestions = hydrateQuestionsForSpss(
+      surveyData.questions as unknown as Question[],
+    );
 
     // 2. 응답 데이터 조회 (sav 전용 공용 블록)
     // raw/raw-split는 자체 모수와 가드를 별도로 가지므로 이 블록을 건너뛴다.
@@ -90,8 +82,7 @@ export async function GET(
     if (type === 'sps') {
       const { generateSPSSColumns } = await import('@/lib/analytics/spss-excel-export');
       const { generateMrsetsSyntax } = await import('@/lib/spss/mrsets-syntax');
-      const questions = surveyData.questions as unknown as Question[];
-      const syntax = generateMrsetsSyntax(generateSPSSColumns(questions), questions);
+      const syntax = generateMrsetsSyntax(generateSPSSColumns(hydratedQuestions), hydratedQuestions);
       if (syntax === null) {
         return NextResponse.json(
           { error: '복수응답(checkbox) 변수가 없어 MRSETS 문법을 생성할 항목이 없습니다.' },
@@ -157,7 +148,7 @@ export async function GET(
       });
 
       const workbook = generateRawDataWorkbook(
-        surveyData.questions as unknown as Question[],
+        hydratedQuestions,
         rows,
         identifierMode,
       );
@@ -179,7 +170,7 @@ export async function GET(
         return NextResponse.json({ error: '분할 기준 문항이 필요합니다.' }, { status: 400 });
       }
 
-      const basisQuestion = (surveyData.questions as unknown as Question[]).find((q) => q.id === basis);
+      const basisQuestion = hydratedQuestions.find((q) => q.id === basis);
       if (!basisQuestion) {
         return NextResponse.json({ error: '유효하지 않은 분할 기준 문항입니다.' }, { status: 400 });
       }
@@ -230,7 +221,7 @@ export async function GET(
         };
       });
 
-      const plan = planSplit(surveyData.questions as unknown as Question[], basis);
+      const plan = planSplit(hydratedQuestions, basis);
       if (plan.exceedsExcelLimit) {
         return NextResponse.json(
           { error: '선택한 기준으로는 일부 시트가 Excel 열 한계를 초과합니다. 다른 기준을 선택해 주세요.' },
@@ -239,7 +230,7 @@ export async function GET(
       }
 
       const workbook = buildSplitWorkbook(
-        surveyData.questions as unknown as Question[],
+        hydratedQuestions,
         rows,
         basis,
         identifierMode,
@@ -261,7 +252,7 @@ export async function GET(
     if (type === 'sav') {
       const { generateSavBuffer } = await import('@/lib/spss/sav-builder');
       const savBuffer = await generateSavBuffer(
-        surveyData.questions as unknown as Question[],
+        hydratedQuestions,
         responses as unknown as SurveySubmission[],
       );
       return new NextResponse(new Uint8Array(savBuffer), {
