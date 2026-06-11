@@ -159,3 +159,47 @@ describe('ChoiceTableResponse — 그룹별 선택 radio', () => {
     expect(inputC.checked).toBe(false);
   });
 });
+
+describe('비그룹 radio 계약 - 재클릭 해제 불가 유지', () => {
+  function plainRadioQuestion(): Question {
+    return {
+      id: 'qp',
+      type: 'radio',
+      title: '비그룹 라디오',
+      required: true,
+      order: 0,
+      tableColumns: [{ id: 'col1', label: '보기' }],
+      tableRowsData: [
+        {
+          id: 'row1',
+          label: '',
+          cells: [
+            { id: 'cellA', type: 'choice_opt', content: '', choiceLabel: '보기A' },
+            { id: 'cellB', type: 'choice_opt', content: '', choiceLabel: '보기B' },
+          ],
+        },
+      ],
+    } as unknown as Question;
+  }
+
+  it('선택된 셀을 다시 클릭해도 onChange가 호출되지 않는다', () => {
+    const onChange = vi.fn();
+    render(
+      <ChoiceTableResponse question={plainRadioQuestion()} value="cellA" onChange={onChange} />,
+    );
+    const checkedInput = document.querySelector('input[type="radio"]:checked');
+    expect(checkedInput).not.toBeNull();
+    fireEvent.click(checkedInput!);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('다른 셀 클릭은 기존대로 교체 선택된다', () => {
+    const onChange = vi.fn();
+    render(
+      <ChoiceTableResponse question={plainRadioQuestion()} value="cellA" onChange={onChange} />,
+    );
+    const inputs = document.querySelectorAll('input[type="radio"]');
+    fireEvent.click(inputs[1]!);
+    expect(onChange).toHaveBeenCalledWith('cellB');
+  });
+});

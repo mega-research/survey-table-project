@@ -121,9 +121,10 @@ export function ChoiceTableResponse({ question, value, onChange }: ChoiceTableRe
           aria-label={option?.label ?? '선택'}
           checked={checked}
           disabled={disabled}
-          // radio 재클릭(이미 선택된 셀) 은 onChange 가 발화하지 않으므로 onClick 에서 토글 처리.
-          onClick={!isCheckbox ? () => toggle(cell.id, !checked) : undefined}
-          onChange={isCheckbox ? (e) => toggle(cell.id, e.target.checked) : undefined}
+          // 그룹 모드 radio 재클릭(이미 선택된 셀) 은 onChange 가 발화하지 않으므로
+          // onClick 에서 토글 해제 처리. 비그룹 radio 는 기존대로 해제 불가(onChange만).
+          onClick={isGrouped ? () => toggle(cell.id, !checked) : undefined}
+          onChange={!isGrouped || isCheckbox ? (e) => toggle(cell.id, e.target.checked) : undefined}
           className="h-4 w-4"
         />
         {option?.allowTextInput && checked && (
@@ -182,9 +183,9 @@ export function ChoiceTableResponse({ question, value, onChange }: ChoiceTableRe
                       aria-label={cardLabel}
                       checked={checked}
                       disabled={disabled}
-                      // radio 재클릭은 onChange 미발화 — onClick 에서 토글 처리
-                      onClick={!isCheckbox ? () => toggle(choiceCell.id, !checked) : undefined}
-                      onChange={isCheckbox ? (e) => toggle(choiceCell.id, e.target.checked) : undefined}
+                      // 그룹 모드 radio 만 onClick 토글 해제. 비그룹은 기존 onChange 경로 유지.
+                      onClick={isGrouped ? () => toggle(choiceCell.id, !checked) : undefined}
+                      onChange={!isGrouped || isCheckbox ? (e) => toggle(choiceCell.id, e.target.checked) : undefined}
                       className="h-5 w-5"
                     />
                   }
