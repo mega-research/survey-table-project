@@ -54,6 +54,7 @@ import { getMaxSpssCode } from '@/utils/option-code-generator';
 import { collectRankingOptCells, hasExistingOtherRankingCell } from '@/utils/ranking-source';
 import {
   type ContentType,
+  GROUPABLE_CELL_TYPES,
   MOBILE_DISPLAY_CELL_TYPES,
   TEXT_POSITION_CELL_TYPES,
   buildUpdatedCell,
@@ -241,7 +242,10 @@ export function CellContentModal({
   // 아직 저장되지 않은 이번 편집 셀은 카운트에 반영되지 않아도 무방하다.
   const groupMemberCounts = (() => {
     const storeQuestion = questions.find((q) => q.id === currentQuestionId);
-    const allCells = collectChoiceOptCells(storeQuestion?.tableRowsData);
+    const allCells = [
+      ...collectChoiceOptCells(storeQuestion?.tableRowsData),
+      ...collectRankingOptCells(storeQuestion?.tableRowsData),
+    ];
     const counts: Record<string, number> = {};
     for (const c of allCells) {
       if (c.choiceGroupId) {
@@ -310,7 +314,7 @@ export function CellContentModal({
       // prune 은 updatedCell(이 셀 반영 후)의 rowsData 기준으로 계산해야 하므로
       // onSave(셀 반영) 다음에 호출한다.
       // 실질적인 prune(빈 그룹 제거)은 dynamic-table-editor 의 onChoiceGroupsChange 핸들러에서 수행한다.
-      if (contentType === 'choice_opt' || contentType === 'ranking_opt') {
+      if (GROUPABLE_CELL_TYPES.has(contentType)) {
         onChoiceGroupsChange?.(editChoiceGroups);
       }
 
@@ -328,7 +332,7 @@ export function CellContentModal({
           // prune 은 updatedRowsData 기준으로 계산해 빈 그룹이 DB 에 남지 않도록 한다.
           // 마지막 멤버 해제로 전부 비면 빈 배열을 명시 저장해야 phantom 그룹이 남지 않는다.
           const prunedChoiceGroups = (() => {
-            if (contentType !== 'choice_opt' && contentType !== 'ranking_opt') return undefined;
+            if (!GROUPABLE_CELL_TYPES.has(contentType)) return undefined;
             const memberIds = new Set(
               [
                 ...collectChoiceOptCells(updatedRowsData),

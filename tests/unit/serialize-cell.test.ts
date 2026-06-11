@@ -4,6 +4,7 @@ import type { BranchRule, TableCell } from '@/types/survey';
 import {
   buildUpdatedCell,
   cellToFormState,
+  GROUPABLE_CELL_TYPES,
   type CellFormState,
   type ContentType,
 } from '@/utils/serialize-cell';
@@ -360,6 +361,18 @@ describe('buildUpdatedCell — 셀타입별 characterization', () => {
     // hidden 은 저장 안 함
     const hidden = buildUpdatedCell({ ...baseForm('text'), mobileDisplay: 'hidden' }, baseCell);
     expect(hidden).not.toHaveProperty('mobileDisplay');
+  });
+});
+
+describe('GROUPABLE_CELL_TYPES', () => {
+  it('choice_opt 와 ranking_opt 를 포함하고 다른 타입은 포함하지 않는다', () => {
+    expect(GROUPABLE_CELL_TYPES.has('choice_opt')).toBe(true);
+    expect(GROUPABLE_CELL_TYPES.has('ranking_opt')).toBe(true);
+
+    const notGroupable: TableCell['type'][] = ['text', 'image', 'video', 'input', 'checkbox', 'radio', 'select', 'ranking'];
+    for (const t of notGroupable) {
+      expect(GROUPABLE_CELL_TYPES.has(t)).toBe(false);
+    }
   });
 });
 
