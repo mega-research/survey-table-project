@@ -677,7 +677,7 @@ describe('ranking 그룹 export — generateSPSSColumns 변수명', () => {
     const cols = generateSPSSColumns([rankingGroupQuestion]);
     const rk1 = cols.find((c) => c.spssVarName === 'Q9_rnk1_rk1');
     // rnk1 멤버: cellA(5), cellB(그룹 내 2번째 → spssNumericCode 없으면 idx+1=2)
-    // isOtherRankingCell 아닌 셀만 value label에 포함
+    // cellOptions는 그룹 멤버 전체를 담고, value label 필터링은 toSpssValueLabelPairs에서 수행된다
     const opts = rk1?.cellOptions ?? [];
     const optIds = opts.map((o) => o.id);
     expect(optIds).toContain('cellA');
@@ -763,12 +763,44 @@ describe('ranking 그룹 export — buildLabel (variable-meta)', () => {
     expect(buildLabel(def)).toBe('보유 장비 (1순위)');
   });
 
-  it('ranking-other: 그룹 라벨 있으면 "질문제목 - 그룹라벨 - k순위 기타 입력"이다', () => {
+  it('ranking-other: 라벨 빈 그룹은 "질문제목 - k순위 기타 입력" 기본형이다', () => {
     const cols = generateSPSSColumns([rankingGroupQuestion]);
     const etc = cols.find((c) => c.spssVarName === 'Q9_rnk2_rk1_etc');
     if (!etc) throw new Error('컬럼 없음');
-    // rnk2 라벨 '' → optionLabel 기본형("1순위 기타 입력")과 같음 → 기존 형식
+    // rnk2 라벨 '' → optionLabel 기본형("1순위 기타 입력")과 같음 → 접두 미삽입
     expect(buildLabel(etc)).toBe('보유 장비 - 1순위 기타 입력');
+  });
+
+  it('ranking-other: 라벨 있는 그룹은 "질문제목 - 그룹라벨 - k순위 기타 입력" 형식이다', () => {
+    // rnk1(label='보유 장비')에 isOtherRankingCell 셀을 포함한 별도 픽스처
+    const rankingGroupWithEtc = {
+      id: 'qrnk_etc',
+      type: 'ranking',
+      title: '보유 장비',
+      required: false,
+      order: 1,
+      questionCode: 'QE',
+      rankingConfig: { positions: 2, optionsSource: 'table' },
+      choiceGroups: [
+        { id: 'rge1', groupKey: 'rnk1', type: 'ranking', label: '보유 장비' },
+      ],
+      tableRowsData: [
+        {
+          id: 'r1',
+          label: '행1',
+          cells: [
+            { id: 'cellA', content: '노트북', type: 'ranking_opt', choiceGroupId: 'rge1', spssNumericCode: 1 },
+            { id: 'cellB', content: '기타', type: 'ranking_opt', choiceGroupId: 'rge1', isOtherRankingCell: true },
+          ],
+        },
+      ],
+    } as unknown as Question;
+    const cols = generateSPSSColumns([rankingGroupWithEtc]);
+    // rnk1(라벨='보유 장비') 1순위 기타 변수: QE_rnk1_rk1_etc
+    const etc = cols.find((c) => c.spssVarName === 'QE_rnk1_rk1_etc');
+    if (!etc) throw new Error('컬럼 없음');
+    // 라벨 있음 → optionLabel = "보유 장비 - 1순위 기타 입력" → 접두 분기 실행
+    expect(buildLabel(etc)).toBe('보유 장비 - 보유 장비 - 1순위 기타 입력');
   });
 
   it('비그룹 ranking-rank buildLabel은 기존 형식(질문제목 (k순위))이다 — 하위호환', () => {
