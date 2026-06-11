@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 
 import { TablePreview } from '@/components/survey-builder/table-preview';
 import { useMobileView } from '@/hooks/use-media-query';
-import { Question, RankingAnswer } from '@/types/survey';
+import { Question, RankingAnswer, TableCell } from '@/types/survey';
 import {
   collectRankingGroups,
   GroupedRankingAnswer,
@@ -21,6 +21,55 @@ interface RankingQuestionProps {
   question: Question;
   value: unknown;
   onChange: (value: RankingAnswer[] | GroupedRankingAnswer) => void;
+}
+
+/**
+ * 순위형 테이블 소스에서 내장 테이블 참조 블록을 렌더하는 로컬 컴포넌트.
+ * - 모바일: MobileOptionCard 목록
+ * - 데스크탑: TablePreview (읽기 전용)
+ *
+ * resolveRankingOptions 는 항상 id=cell.id 를 부여(기타 셀 포함).
+ * value 는 기타 셀일 때 RANKING_OTHER_VALUE 로 바뀌므로 id 로 매칭한다.
+ *
+ * grouped 경로와 비그룹 경로 모두 동일한 블록을 공유한다.
+ */
+interface EmbeddedTableReferenceProps {
+  question: Question;
+  rawOptions: ReturnType<typeof resolveRankingOptions>;
+  isMobile: boolean;
+}
+
+function EmbeddedTableReference({ question, rawOptions, isMobile }: EmbeddedTableReferenceProps) {
+  if (isMobile) {
+    return (
+      <div className="space-y-2">
+        {(question.tableRowsData ?? []).map((row) => {
+          const optCell = row.cells.find(
+            (c: TableCell) => c.type === 'ranking_opt' && !c.isHidden,
+          );
+          if (!optCell) return null;
+          const opt = rawOptions.find((o) => o.id === optCell.id);
+          return (
+            <MobileOptionCard
+              key={row.id}
+              label={opt?.label ?? optCell.content ?? optCell.rankingLabel ?? '(라벨 없음)'}
+              cells={row.cells}
+            />
+          );
+        })}
+      </div>
+    );
+  }
+
+  return (
+    <TablePreview
+      {...(question.tableTitle !== undefined ? { tableTitle: question.tableTitle } : {})}
+      {...(question.tableColumns !== undefined ? { columns: question.tableColumns } : {})}
+      {...(question.tableRowsData !== undefined ? { rows: question.tableRowsData } : {})}
+      {...(question.tableHeaderGrid !== undefined ? { tableHeaderGrid: question.tableHeaderGrid } : {})}
+      {...(question.hideColumnLabels !== undefined ? { hideColumnLabels: question.hideColumnLabels } : {})}
+    />
+  );
 }
 
 /**
@@ -48,12 +97,17 @@ export function RankingQuestion({ question, value, onChange }: RankingQuestionPr
   const allowDuplicates = config?.allowDuplicateRanks === true;
   // 셀-레벨 기타가 있으면 질문-레벨 synthetic 엔트리는 중복 방지 차원에서 추가하지 않음.
   const hasOtherCell = rawOptions.some((o) => o.value === RANKING_OTHER_VALUE);
+  // grouped 경로에서는 allowOther 를 사용하지 않는다.
+  // 질문 레벨 allowOtherOption synthetic 기타는 grouped 에서 비활성:
+  // 어느 그룹에 붙일지 모호하기 때문. 기타는 셀 레벨(isOtherRankingCell)로만 처리되며,
+  // 해당 셀이 소속된 그룹 옵션에 포함된다.
   const allowOther = question.allowOtherOption === true && !hasOtherCell;
 
   // 비그룹 경로: flat RankingAnswer[] 로 정규화
   const answers = useMemo(() => parseRankingAnswers(value), [value]);
 
   // 그룹 경로: GroupedRankingAnswer 맵으로 추출
+  // legacy flat 배열(rnk1 이식 전 진행중 응답)은 맵이 아니므로 빈 상태에서 재입력 — 알려진 엣지
   const groupedMap = useMemo(
     () =>
       isGrouped && value && typeof value === 'object' && !Array.isArray(value)
@@ -115,6 +169,8 @@ export function RankingQuestion({ question, value, onChange }: RankingQuestionPr
                 options={groupOptions}
                 positions={groupPositions}
                 allowDuplicates={allowDuplicates}
+                // 질문 레벨 allowOtherOption synthetic 기타는 grouped 에서 비활성:
+                // 어느 그룹에 붙일지 모호. 기타는 셀 레벨(isOtherRankingCell)로만 — 소속 그룹 옵션에 포함됨.
                 allowOther={false}
                 onChange={(next) => handleGroupChange(g.groupKey, next)}
                 columns={config?.positionsColumns}
@@ -130,30 +186,11 @@ export function RankingQuestion({ question, value, onChange }: RankingQuestionPr
 
         {/* 내장 테이블이 있으면 전체 테이블을 옵션 시각화 참조로 표시 */}
         {hasEmbeddedTable && (
-          isMobile ? (
-            <div className="space-y-2">
-              {(question.tableRowsData ?? []).map((row) => {
-                const optCell = row.cells.find((c) => c.type === 'ranking_opt' && !c.isHidden);
-                if (!optCell) return null;
-                const opt = rawOptions.find((o) => o.id === optCell.id);
-                return (
-                  <MobileOptionCard
-                    key={row.id}
-                    label={opt?.label ?? optCell.content ?? optCell.rankingLabel ?? '(라벨 없음)'}
-                    cells={row.cells}
-                  />
-                );
-              })}
-            </div>
-          ) : (
-            <TablePreview
-              {...(question.tableTitle !== undefined ? { tableTitle: question.tableTitle } : {})}
-              {...(question.tableColumns !== undefined ? { columns: question.tableColumns } : {})}
-              {...(question.tableRowsData !== undefined ? { rows: question.tableRowsData } : {})}
-              {...(question.tableHeaderGrid !== undefined ? { tableHeaderGrid: question.tableHeaderGrid } : {})}
-              {...(question.hideColumnLabels !== undefined ? { hideColumnLabels: question.hideColumnLabels } : {})}
-            />
-          )
+          <EmbeddedTableReference
+            question={question}
+            rawOptions={rawOptions}
+            isMobile={isMobile}
+          />
         )}
       </div>
     );
@@ -168,7 +205,7 @@ export function RankingQuestion({ question, value, onChange }: RankingQuestionPr
         positions={positions}
         allowDuplicates={allowDuplicates}
         allowOther={allowOther}
-        onChange={onChange as (value: RankingAnswer[]) => void}
+        onChange={onChange}
         columns={config?.positionsColumns}
       />
 
@@ -180,32 +217,11 @@ export function RankingQuestion({ question, value, onChange }: RankingQuestionPr
 
       {/* 내장 테이블이 있으면 테이블이 옵션을 시각화 — 아니면 선택지 목록으로 표시 */}
       {hasEmbeddedTable ? (
-        isMobile ? (
-          <div className="space-y-2">
-            {(question.tableRowsData ?? []).map((row) => {
-              const optCell = row.cells.find((c) => c.type === 'ranking_opt' && !c.isHidden);
-              if (!optCell) return null;
-              // resolveRankingOptions 는 항상 id=cell.id 를 부여(기타 셀 포함).
-              // value 는 기타 셀일 때 RANKING_OTHER_VALUE 로 바뀌므로 id 로 매칭한다.
-              const opt = rawOptions.find((o) => o.id === optCell.id);
-              return (
-                <MobileOptionCard
-                  key={row.id}
-                  label={opt?.label ?? optCell.content ?? optCell.rankingLabel ?? '(라벨 없음)'}
-                  cells={row.cells}
-                />
-              );
-            })}
-          </div>
-        ) : (
-          <TablePreview
-            {...(question.tableTitle !== undefined ? { tableTitle: question.tableTitle } : {})}
-            {...(question.tableColumns !== undefined ? { columns: question.tableColumns } : {})}
-            {...(question.tableRowsData !== undefined ? { rows: question.tableRowsData } : {})}
-            {...(question.tableHeaderGrid !== undefined ? { tableHeaderGrid: question.tableHeaderGrid } : {})}
-            {...(question.hideColumnLabels !== undefined ? { hideColumnLabels: question.hideColumnLabels } : {})}
-          />
-        )
+        <EmbeddedTableReference
+          question={question}
+          rawOptions={rawOptions}
+          isMobile={isMobile}
+        />
       ) : (
         (() => {
           const layout = getOptionsLayout(question.optionsColumns);

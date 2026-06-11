@@ -87,7 +87,7 @@ vi.mock('@/components/survey-response/ranking-dropdown-stack', () => ({
 function groupedRankingFixture(): Question {
   return {
     id: 'qr1',
-    type: 'radio',
+    type: 'ranking',
     title: '순위형 그룹 질문',
     required: false,
     order: 0,
@@ -180,7 +180,7 @@ function groupedRankingFixture(): Question {
 function flatRankingFixture(): Question {
   return {
     id: 'qflat',
-    type: 'radio',
+    type: 'ranking',
     title: '비그룹 순위형',
     required: false,
     order: 0,
@@ -248,7 +248,7 @@ describe('RankingQuestion — 선택 조작 → onChange payload', () => {
 
     // rnk1 그룹 헤딩("그룹 하나")의 부모 컨테이너 안에서 1순위 select 를 찾는다
     const heading = screen.getByText('그룹 하나');
-    const container = heading.closest('div[class]')!;
+    const container = heading.closest<HTMLElement>('div[class]')!;
     const select = within(container).getByRole('combobox', { name: '1순위 선택' });
 
     fireEvent.change(select, { target: { value: 'cellA' } });
@@ -272,7 +272,7 @@ describe('RankingQuestion — 선택 조작 → onChange payload', () => {
 
     // rnk2 그룹 헤딩("rnk2") 컨테이너 안의 1순위 select
     const heading = screen.getByText('rnk2');
-    const container = heading.closest('div[class]')!;
+    const container = heading.closest<HTMLElement>('div[class]')!;
     const select = within(container).getByRole('combobox', { name: '1순위 선택' });
 
     fireEvent.change(select, { target: { value: 'cellC' } });
@@ -298,7 +298,7 @@ describe('RankingQuestion — 선택 조작 → onChange payload', () => {
 
     // rnk1 그룹 헤딩("그룹 하나") 컨테이너 안의 1순위 select
     const heading = screen.getByText('그룹 하나');
-    const container = heading.closest('div[class]')!;
+    const container = heading.closest<HTMLElement>('div[class]')!;
     const select = within(container).getByRole('combobox', { name: '1순위 선택' });
 
     // 빈 값으로 변경 = 선택 해제
@@ -328,7 +328,7 @@ describe('RankingQuestion — cap 안내문', () => {
     );
 
     const heading = screen.getByText('그룹 하나');
-    const container = heading.closest('div[class]')!;
+    const container = heading.closest<HTMLElement>('div[class]')!;
     const selects = within(container).getAllByRole('combobox');
     // 멤버 2개이므로 groupPositions=min(3,2)=2 → select 2개
     expect(selects).toHaveLength(2);
