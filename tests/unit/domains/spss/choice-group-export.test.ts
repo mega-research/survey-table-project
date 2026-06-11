@@ -776,7 +776,8 @@ describe('ranking 그룹 export — buildLabel (variable-meta)', () => {
     const rankingGroupWithEtc = {
       id: 'qrnk_etc',
       type: 'ranking',
-      title: '보유 장비',
+      // 질문 제목과 그룹 라벨을 다른 문자열로 둬야 라벨 순서(제목 - 그룹라벨)를 구분 검증할 수 있다
+      title: '장비 선호도',
       required: false,
       order: 1,
       questionCode: 'QE',
@@ -800,7 +801,7 @@ describe('ranking 그룹 export — buildLabel (variable-meta)', () => {
     const etc = cols.find((c) => c.spssVarName === 'QE_rnk1_rk1_etc');
     if (!etc) throw new Error('컬럼 없음');
     // 라벨 있음 → optionLabel = "보유 장비 - 1순위 기타 입력" → 접두 분기 실행
-    expect(buildLabel(etc)).toBe('보유 장비 - 보유 장비 - 1순위 기타 입력');
+    expect(buildLabel(etc)).toBe('장비 선호도 - 보유 장비 - 1순위 기타 입력');
   });
 
   it('비그룹 ranking-rank buildLabel은 기존 형식(질문제목 (k순위))이다 — 하위호환', () => {
