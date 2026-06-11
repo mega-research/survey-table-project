@@ -311,6 +311,38 @@ function groupedRankingQ(): Question {
   } as unknown as Question;
 }
 
+/**
+ * phantom-only ranking 픽스처:
+ * choiceGroups 에 ranking 그룹(rgrp1)이 정의되어 있지만,
+ * 어떤 ranking_opt 셀도 rgrp1 에 소속되지 않은 상태.
+ * (manual → table 소스 전환 후 잔존하거나 snapshot 에 박힌 경우 재현)
+ */
+function phantomOnlyRankingQ(): Question {
+  return {
+    id: 'qrnk_phantom',
+    type: 'ranking',
+    title: 'phantom ranking 그룹 테스트',
+    required: true,
+    order: 0,
+    rankingConfig: { optionsSource: 'table' },
+    tableColumns: [{ id: 'c1', label: '열' }],
+    tableRowsData: [
+      {
+        id: 'r1',
+        label: '',
+        cells: [
+          // ranking_opt 셀이 아예 없거나, 있어도 rgrp1 에 소속되지 않음
+          { id: 'cellText1', type: 'text', content: '안내' },
+        ],
+      },
+    ],
+    choiceGroups: [
+      // ranking 그룹이 정의되어 있지만 멤버 셀이 0개 → phantom
+      { id: 'rgrp1', type: 'ranking', groupKey: 'rnk1', label: '팬텀그룹' },
+    ],
+  } as unknown as Question;
+}
+
 describe('isQuestionAnswered — grouped 순위형 그룹당 1순위 검증', () => {
   it('두 그룹 모두 1개 이상 → 응답 충족', () => {
     const gq = groupedRankingQ();
@@ -366,6 +398,25 @@ describe('isQuestionAnswered — grouped 순위형 그룹당 1순위 검증', ()
     expect(
       isQuestionAnswered(q('ranking'), [{ rank: 1, optionValue: 'a' }]),
     ).toBe(true);
+  });
+
+  it('phantom-only ranking 그룹(멤버 셀 0): flat 배열 응답 → 응답 충족(비그룹과 동일 취급)', () => {
+    // collectRankingGroups 가 phantom 그룹을 skip 하여 groups.length === 0 이 됨.
+    // 이때 flat 배열 응답이 하드블록되지 않고 true 를 반환해야 한다.
+    const pq = phantomOnlyRankingQ();
+    expect(
+      isQuestionAnswered(pq, [{ rank: 1, optionValue: 'cellR1' }]),
+    ).toBe(true);
+  });
+
+  it('phantom-only ranking 그룹(멤버 셀 0): 빈 배열 응답 → 응답 충족(비그룹 동일)', () => {
+    const pq = phantomOnlyRankingQ();
+    expect(isQuestionAnswered(pq, [])).toBe(true);
+  });
+
+  it('phantom-only ranking 그룹(멤버 셀 0): undefined → 상단 가드로 미응답', () => {
+    const pq = phantomOnlyRankingQ();
+    expect(isQuestionAnswered(pq, undefined)).toBe(false);
   });
 });
 

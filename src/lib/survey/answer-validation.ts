@@ -21,7 +21,7 @@ import { parseRankingAnswers } from '@/utils/ranking-shared';
  * - checkbox: 배열이고 길이 > 0. minSelections 가 양수면 그 이상.
  * - multiselect: 배열이고 길이 > 0.
  * - table: 비어있지 않은 object.
- * - ranking: grouped면 모든 그룹에 1순위 이상 (Record<groupKey, RankingAnswer[]>). 비그룹은 true.
+ * - ranking: grouped면 모든 그룹에 1개 이상의 순위 응답 (Record<groupKey, RankingAnswer[]>). 비그룹 또는 live 그룹 0개(phantom-only)는 true.
  * - default: true.
  *
  * @param question 판정 대상 질문 (type/required/minSelections/requiresAcknowledgment 사용)
@@ -77,12 +77,15 @@ export function isQuestionAnswered(question: Question, response: unknown): boole
     case 'ranking': {
       // 비그룹 순위형: 기존 동작(상단 null 가드만 적용, 항상 true) 불변
       if (!isGroupedRankingQuestion(question)) return true;
-      // grouped: 모든 그룹에 1순위 이상. legacy flat 배열(이식 직후 진행중 응답)은 맵이 아니므로 미충족.
+      // phantom-only 그룹(멤버 셀 0인 ranking 그룹만 존재)은 응답 불가능한 요구이므로
+      // 비그룹과 동일하게 취급하여 상단 null 가드만 적용(항상 true).
+      const groups = collectRankingGroups(question);
+      if (groups.length === 0) return true;
+      // grouped: 모든 그룹에 1개 이상의 순위 응답.
+      // legacy flat 배열(이식 직후 진행중 응답)은 맵이 아니므로 미충족.
       if (typeof response !== 'object' || response === null || Array.isArray(response)) return false;
       const map = response as Record<string, unknown>;
-      return collectRankingGroups(question).every(
-        (g) => parseRankingAnswers(map[g.groupKey]).length >= 1,
-      );
+      return groups.every((g) => parseRankingAnswers(map[g.groupKey]).length >= 1);
     }
     case 'table':
       return (
