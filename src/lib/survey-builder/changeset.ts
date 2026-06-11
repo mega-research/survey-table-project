@@ -16,6 +16,16 @@ export const emptyChangeset = (): QuestionChangeset => ({
   reordered: false,
 });
 
+/** changeset 에 실제 변경분이 하나라도 있는지 여부 (순수 함수) */
+export function changesetHasChanges(changeset: QuestionChangeset): boolean {
+  return (
+    Object.keys(changeset.added).length > 0 ||
+    Object.keys(changeset.updated).length > 0 ||
+    Object.keys(changeset.deleted).length > 0 ||
+    changeset.reordered
+  );
+}
+
 /**
  * 저장 실패 시 보관해 둔 snapshot(pending)을 현재 changeset(current)에 merge back 한 결과를 반환.
  *

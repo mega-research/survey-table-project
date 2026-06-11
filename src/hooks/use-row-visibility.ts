@@ -127,6 +127,11 @@ export function useRowVisibility(
         },
         { root, rootMargin: UNLOAD_MARGIN },
       );
+    } else {
+      // UNLOAD_THRESHOLD 미만에서는 언로드 IO를 새로 만들지 않음.
+      // cleanup의 disconnect는 ref를 null화하지 않으므로, 직전 effect에서
+      // 만들어진 disconnected observer가 stale 상태로 남아 재관찰되는 것을 차단.
+      unloadObserverRef.current = null;
     }
 
     for (const [, el] of sentinelsRef.current) {

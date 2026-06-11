@@ -1231,12 +1231,12 @@ function evaluateExpressionConfig(
   if (config.clauses.length === 0) return true;
   const firstClause = config.clauses[0];
   if (!firstClause) return true;
+  // 좌결합 폴드 — 연산자 우선순위 없이 왼쪽부터 누적.
+  // 혼합 AND/OR 에서는 단락 평가로 break 하면 뒤 절이 결과를 뒤집을 수 있어
+  // (예: true OR true AND false = false) 폐기하지 않고 끝까지 폴드한다.
   let acc = evaluateExpressionClause(firstClause, responses, ctx);
   for (let i = 1; i < config.clauses.length; i++) {
     const op = config.joinOps[i - 1] ?? 'AND';
-    // 단락 평가 — lookup 평가까지 포함된 clause 의 비용을 무료로 절약
-    if (op === 'AND' && !acc) break;
-    if (op === 'OR' && acc) break;
     const clause = config.clauses[i];
     if (!clause) break;
     const next = evaluateExpressionClause(clause, responses, ctx);

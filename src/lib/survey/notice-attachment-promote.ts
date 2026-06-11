@@ -179,8 +179,14 @@ export async function promoteNoticeAttachments<T extends PromotableNoticeQuestio
     let allMoved = [] as Array<{ srcKey: string; dstKey: string }>;
     let stillFailed: string[] = [];
 
+    // 이번 호출이 실제로 tmp→영구로 옮긴 객체만 별도 추적.
+    // recovered(이전 publish 가 이미 옮겨둔) 객체는 여기에 포함하지 않아
+    // 롤백 시 라이브 첨부를 파괴하지 않도록 한다.
+    const newlyMoved = [] as Array<{ srcKey: string; dstKey: string }>;
+
     const first = await moveR2Objects(movePairs);
     allMoved = first.movedKeys;
+    newlyMoved.push(...first.movedKeys);
     stillFailed = first.failed;
 
     // R2 read-after-write 일시 불일치나 transient 네트워크 케이스 대비 1회 retry
@@ -189,12 +195,15 @@ export async function promoteNoticeAttachments<T extends PromotableNoticeQuestio
       await new Promise((resolve) => setTimeout(resolve, 500));
       const second = await moveR2Objects(retryPairs);
       allMoved = [...allMoved, ...second.movedKeys];
+      newlyMoved.push(...second.movedKeys);
       stillFailed = second.failed;
     }
 
     // 클라이언트 stale state 로 같은 publish 가 재시도된 케이스는 영구 위치에 객체가
     // 이미 존재. tmp 객체는 첫 publish 가 옮긴 뒤 사라졌지만, dst 가 살아있으면
     // 정상 promote 와 동등 — URL 만 영구로 치환해 idempotent 동작 유지.
+    // 단, 이 객체는 이번 호출이 옮긴 것이 아니라 이전 publish 소유이므로
+    // newlyMoved 에는 넣지 않는다(롤백 대상에서 제외).
     if (stillFailed.length > 0) {
       const recoveredFromExisting: string[] = [];
       for (const srcKey of stillFailed) {
@@ -210,9 +219,10 @@ export async function promoteNoticeAttachments<T extends PromotableNoticeQuestio
 
     if (stillFailed.length > 0) {
       // 이미 영구 위치로 옮긴 객체는 DB 갱신이 일어나지 않으면 cleanup orchestrator 도
-      // 못 잡아내는 orphan 이 됨. 같은 batch 의 부분 성공분을 즉시 폐기.
-      if (allMoved.length > 0) {
-        deleteR2ObjectsByKey(allMoved.map((p) => p.dstKey)).catch(() => undefined);
+      // 못 잡아내는 orphan 이 됨. 이번 호출이 새로 옮긴 부분 성공분만 즉시 폐기.
+      // recovered 객체(이전 publish 소유 라이브 첨부)는 롤백하지 않는다.
+      if (newlyMoved.length > 0) {
+        deleteR2ObjectsByKey(newlyMoved.map((p) => p.dstKey)).catch(() => undefined);
       }
       Sentry.captureMessage(
         `공지사항 첨부 promote 최종 실패: ${stillFailed.length}개`,
@@ -221,7 +231,7 @@ export async function promoteNoticeAttachments<T extends PromotableNoticeQuestio
           tags: { operation: 'notice_attachment_promote' },
           extra: {
             failedKeys: stillFailed,
-            rolledBackKeys: allMoved.map((p) => p.dstKey),
+            rolledBackKeys: newlyMoved.map((p) => p.dstKey),
           },
         },
       );

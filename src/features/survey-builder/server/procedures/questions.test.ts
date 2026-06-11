@@ -55,6 +55,39 @@ describe('surveyBuilder.questions procedures', () => {
     expect(res).toEqual(row);
   });
 
+  it('create는 단답형 inputType/emptyDefault/defaultValueTemplate를 strip 없이 전달한다', async () => {
+    // 회귀(H17): 이 3필드가 zod 스키마에서 누락되면 검증 단계에서 silent strip되어
+    // 리로드 시 손실된다. 스키마에 포함되어야 service까지 그대로 도달한다.
+    const row = { id: QUESTION_ID, surveyId: SURVEY_ID, type: 'text', title: 'Q1' };
+    vi.mocked(svc.createQuestion).mockResolvedValue(row as never);
+    const client = createRouterClient({ questions }, { context: authedContext() });
+    const input = {
+      surveyId: SURVEY_ID,
+      type: 'text',
+      title: 'Q1',
+      inputType: 'number' as const,
+      emptyDefault: 7,
+      defaultValueTemplate: '{{attrs_age}}',
+    };
+    await client.questions.create(input);
+    expect(svc.createQuestion).toHaveBeenCalledWith(input);
+  });
+
+  it('update는 단답형 inputType/emptyDefault/defaultValueTemplate를 strip 없이 전달한다', async () => {
+    // 회귀(H17): UpdateQuestionData 스키마에 3필드가 없으면 모달 직접 저장 payload가
+    // silent strip되어 리로드 시 손실된다.
+    const row = { id: QUESTION_ID, surveyId: SURVEY_ID, type: 'text', title: 'Q1' };
+    vi.mocked(svc.updateQuestion).mockResolvedValue(row as never);
+    const client = createRouterClient({ questions }, { context: authedContext() });
+    const data = {
+      inputType: 'number' as const,
+      emptyDefault: 3,
+      defaultValueTemplate: '{{attrs_score}}',
+    };
+    await client.questions.update({ questionId: QUESTION_ID, data });
+    expect(svc.updateQuestion).toHaveBeenCalledWith(QUESTION_ID, data);
+  });
+
   it('remove는 service.deleteQuestion에 위임하고 {ok:true}를 반환한다', async () => {
     vi.mocked(svc.deleteQuestion).mockResolvedValue({ ok: true } as never);
     const client = createRouterClient({ questions }, { context: authedContext() });

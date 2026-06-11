@@ -94,6 +94,17 @@ export async function createCampaign(
 
     // d. valid contact 재페치 — contact_pii 에서 email cipher 까지 같이 가져옴.
     //    한 컨택에 email 컬럼이 여러 개면 column_key 알파벳 순 첫 번째 사용 (앞에서 dedupe).
+    //    preflight(preflightRecipients) 와 동일 정책으로 부정 결과코드(연락금지) 컨택을 제외한다.
+    //    제외하지 않으면 preflight 는 제외했다고 보고하나 실제로는 발송되는 미스매치 발생.
+    const { buildNegativeCodeExists, getResultCodeStatuses } = await import(
+      '@/lib/operations/result-code-statuses.server'
+    );
+    const { negative: negativeCodes } = await getResultCodeStatuses(input.surveyId);
+    const notExcludedByCode = sql`NOT ${buildNegativeCodeExists(
+      negativeCodes,
+      sql`"contact_targets"."id"`,
+    )}`;
+
     const piiJoined = await tx
       .select({
         id: contactTargets.id,
@@ -114,6 +125,7 @@ export async function createCampaign(
           eq(contactTargets.surveyId, input.surveyId),
           inArray(contactTargets.id, input.contactTargetIds),
           isNull(contactTargets.unsubscribedAt),
+          notExcludedByCode,
         ),
       )
       .orderBy(asc(contactTargets.id), asc(contactPii.columnKey));

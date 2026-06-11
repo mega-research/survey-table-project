@@ -640,15 +640,11 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
                       // 그룹 삭제 + 고아 행 정리
                       const updated = dynamicRowConfigs.filter((g) => g.groupId !== group.groupId);
                       onDynamicRowConfigsChange?.(updated.length > 0 ? updated : undefined);
-                      // 해당 그룹에 배정된 행들의 groupId 정리
-                      const cleanedRows = currentRows.map((row) => {
-                        if (row.dynamicGroupId === group.groupId) return { ...row, dynamicGroupId: undefined };
-                        if (row.showWhenDynamicGroupId === group.groupId) return { ...row, showWhenDynamicGroupId: undefined };
-                        return row;
+                      // 해당 그룹에 배정된 행들의 groupId 정리 (각 액션이 commitRows + notifyChange 로 영속)
+                      currentRowsRef.current.forEach((row) => {
+                        if (row.dynamicGroupId === group.groupId) setDynamicGroupId(row.id, undefined);
+                        if (row.showWhenDynamicGroupId === group.groupId) setShowWhenDynamicGroupId(row.id, undefined);
                       });
-                      if (cleanedRows.some((r, i) => r !== currentRows[i])) {
-                        // rows가 변경되었으면 알림 (notifyChange는 직접 접근 불가하므로 onTableChange 활용)
-                      }
                     }}
                     className="text-xs text-red-400 hover:text-red-600"
                     title="그룹 삭제"

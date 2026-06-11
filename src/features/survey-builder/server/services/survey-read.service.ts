@@ -2,7 +2,7 @@ import 'server-only';
 
 import { cache } from 'react';
 
-import { and, count, desc, eq, ilike } from 'drizzle-orm';
+import { and, count, desc, eq, ilike, ne } from 'drizzle-orm';
 
 import * as libraryData from '@/data/library';
 import { db } from '@/db';
@@ -57,7 +57,7 @@ export async function isSlugAvailable(input: SlugAvailableInput): Promise<boolea
   const { slug, excludeSurveyId } = input;
   const existing = await db.query.surveys.findFirst({
     where: excludeSurveyId
-      ? and(eq(surveys.slug, slug), eq(surveys.id, excludeSurveyId))
+      ? and(eq(surveys.slug, slug), ne(surveys.id, excludeSurveyId))
       : eq(surveys.slug, slug),
   });
   return !existing;

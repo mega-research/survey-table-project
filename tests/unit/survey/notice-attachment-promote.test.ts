@@ -6,6 +6,25 @@ vi.mock('@/lib/image-utils-server', () => ({
   deleteR2ObjectsByKey: vi.fn(),
 }));
 
+// permanentObjectExists 가 사용하는 S3 client mock.
+// recovery 경로(이미 영구 위치에 존재) 테스트를 위해 HeadObject 응답을 제어한다.
+const headExistsKeys = new Set<string>();
+vi.mock('@aws-sdk/client-s3', () => ({
+  S3Client: class {
+    async send(cmd: { input?: { Key?: string } }) {
+      const key = cmd?.input?.Key;
+      if (key && headExistsKeys.has(key)) return {};
+      throw new Error('NotFound');
+    }
+  },
+  HeadObjectCommand: class {
+    input: { Bucket?: string; Key?: string };
+    constructor(input: { Bucket?: string; Key?: string }) {
+      this.input = input;
+    }
+  },
+}));
+
 import { deleteR2ObjectsByKey, moveR2Objects } from '@/lib/image-utils-server';
 import {
   extractPermanentAttachmentKeysFromHtml,
@@ -110,11 +129,15 @@ describe('replaceNoticeAttachmentUrlsInQuestion', () => {
 describe('promoteNoticeAttachments', () => {
   beforeEach(() => {
     process.env['CLOUDFLARE_R2_PUBLIC_URL'] = 'https://cdn.test';
+    process.env['CLOUDFLARE_R2_BUCKET'] = 'test-bucket';
+    headExistsKeys.clear();
     vi.mocked(moveR2Objects).mockReset();
     vi.mocked(deleteR2ObjectsByKey).mockReset();
   });
   afterEach(() => {
     delete process.env['CLOUDFLARE_R2_PUBLIC_URL'];
+    delete process.env['CLOUDFLARE_R2_BUCKET'];
+    headExistsKeys.clear();
   });
 
   it('R2 move 성공 시 모든 tmp URL 영구 URL 치환', async () => {
@@ -222,6 +245,54 @@ describe('promoteNoticeAttachments', () => {
     );
     // 부분 성공분 rollback DELETE 호출 확인
     expect(deleteR2ObjectsByKey).toHaveBeenCalledWith(['notice-attachment/a.pdf']);
+  });
+
+  it('최종 실패 롤백은 이번 호출이 옮긴 키만 삭제하고 recovered(이전 publish 라이브) 키는 보존', async () => {
+    // a: 이번 호출이 새로 옮김(롤백 대상)
+    // b: move 실패하지만 영구 위치에 이미 존재(이전 publish 소유 라이브 첨부 → 롤백 금지)
+    // c: 진짜 실패 → 전체 promote throw 유발
+    headExistsKeys.add('notice-attachment/b.pdf');
+
+    let callCount = 0;
+    vi.mocked(moveR2Objects).mockImplementation(async (pairs) => {
+      callCount += 1;
+      if (callCount === 1) {
+        // 1차: a 성공, b/c 실패
+        const movedA = pairs.find((p) => p.srcKey.endsWith('a.pdf'));
+        if (!movedA) throw new Error('a pair 없음');
+        return {
+          movedKeys: [{ srcKey: movedA.srcKey, dstKey: movedA.dstKey }],
+          failed: pairs
+            .filter((p) => !p.srcKey.endsWith('a.pdf'))
+            .map((p) => p.srcKey),
+        };
+      }
+      // retry: 나머지(b, c) 여전히 실패
+      return { movedKeys: [], failed: pairs.map((p) => p.srcKey) };
+    });
+    vi.mocked(deleteR2ObjectsByKey).mockResolvedValue(true);
+
+    const questions = [
+      {
+        type: 'notice',
+        noticeContent:
+          '<a data-file-attachment="true" href="https://cdn.test/tmp/notice-attachment/a.pdf">A</a>' +
+          '<a data-file-attachment="true" href="https://cdn.test/tmp/notice-attachment/b.pdf">B</a>' +
+          '<a data-file-attachment="true" href="https://cdn.test/tmp/notice-attachment/c.pdf">C</a>',
+      },
+    ];
+
+    await expect(promoteNoticeAttachments(questions)).rejects.toThrow(
+      /공지사항 첨부 promote 실패/,
+    );
+
+    // 롤백은 이번 호출이 옮긴 a 만 삭제. recovered b 는 절대 삭제하면 안 됨.
+    expect(deleteR2ObjectsByKey).toHaveBeenCalledTimes(1);
+    expect(deleteR2ObjectsByKey).toHaveBeenCalledWith(['notice-attachment/a.pdf']);
+    const deletedKeys = vi.mocked(deleteR2ObjectsByKey).mock.calls.flatMap(
+      (call) => call[0] as string[],
+    );
+    expect(deletedKeys).not.toContain('notice-attachment/b.pdf');
   });
 
   it('previousQuestions 의 영구 키 중 새 HTML 에 없는 것 → deleteR2ObjectsByKey 호출', async () => {

@@ -311,6 +311,11 @@ export function useResponseLifecycle({
           }
         } catch (err) {
           console.error('빈 응답 생성 오류:', err);
+          // 빈 응답 INSERT 실패를 삼키면 effectiveResponseId 가 없는 채로 흐름이 진행돼
+          // complete() 를 건너뛰고도 resetResponseState()+setIsCompleted(true) 가 실행되어
+          // 응답이 저장되지 않았는데 완료 화면이 뜨는 silent data loss 가 된다.
+          // 바깥 try/catch 로 전파해 에러 토스트만 띄우고 완료 처리를 막는다.
+          throw err;
         }
       }
 

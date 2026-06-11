@@ -79,6 +79,12 @@ export function buildClauseSql(cond: FilterCondition): SQL {
 /**
  * 절 배열 → WHERE 절. 좌→우 평가, 각 절 (...) 괄호로 우선순위 모호함 제거.
  *
+ * 혼합 AND/OR 는 누적마다 명시적 괄호로 그룹화해 좌→우 평가를 강제한다.
+ * PG 는 AND > OR 우선순위를 가지므로 `A OR B AND C` 를 평탄 연결하면
+ * `A OR (B AND C)` 로 재해석되어 의도한 `(A OR B) AND C` 와 어긋난다.
+ * 또한 호출자가 결과를 `and(eq(surveyId), ..., 결과)` 로 결합하므로
+ * 그룹화가 빠지면 OR 가지가 surveyId 제약을 탈출해 cross-survey 누출 위험이 있다.
+ *
  * 빈 배열 → TRUE (전체 조회).
  */
 export function buildContactsFilterSql(clauses: FilterClause[]): SQL {
@@ -92,7 +98,8 @@ export function buildContactsFilterSql(clauses: FilterClause[]): SQL {
     if (!clause) continue;
     const next = buildClauseSql(clause.condition);
     const op = clause.op === 'OR' ? sql.raw('OR') : sql.raw('AND');
-    expr = sql`${expr} ${op} (${next})`;
+    // 누적 결합마다 (...) 로 그룹화 — PG AND>OR 우선순위가 좌→우 평가를 뒤엎지 못하게 한다.
+    expr = sql`(${expr} ${op} (${next}))`;
   }
   return expr;
 }

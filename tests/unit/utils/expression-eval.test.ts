@@ -242,6 +242,47 @@ describe('expression conditionType — evaluator', () => {
     expect(shouldDisplayQuestion(target, responses, [makeTableQuestion(), target])).toBe(true);
   });
 
+  // 헬퍼: 항상 true/false 인 literal comparison clause (혼합 AND/OR 좌결합 검증용)
+  function boolClause(value: boolean) {
+    return {
+      kind: 'comparison' as const,
+      comparison: {
+        left: { kind: 'literal' as const, value: 1 },
+        op: '==' as const,
+        right: { kind: 'literal' as const, value: value ? 1 : 0 },
+      },
+    };
+  }
+
+  // 혼합 AND/OR 은 연산자 우선순위 없이 좌결합 폴드로 평가돼야 한다.
+  // 단락 평가 break 가 있으면 뒤 절을 폐기해 결과가 뒤집힌다.
+  it('혼합 AND/OR — true OR true AND false = ((T||T)&&F) = false', () => {
+    const config: ExpressionConditionConfig = {
+      clauses: [boolClause(true), boolClause(true), boolClause(false)],
+      joinOps: ['OR', 'AND'],
+    };
+    const target = makeTargetQuestion(config);
+    expect(shouldDisplayQuestion(target, {}, [makeTableQuestion(), target])).toBe(false);
+  });
+
+  it('혼합 AND/OR — false AND false OR true = ((F&&F)||T) = true', () => {
+    const config: ExpressionConditionConfig = {
+      clauses: [boolClause(false), boolClause(false), boolClause(true)],
+      joinOps: ['AND', 'OR'],
+    };
+    const target = makeTargetQuestion(config);
+    expect(shouldDisplayQuestion(target, {}, [makeTableQuestion(), target])).toBe(true);
+  });
+
+  it('혼합 AND/OR — true OR false AND true = ((T||F)&&T) = true', () => {
+    const config: ExpressionConditionConfig = {
+      clauses: [boolClause(true), boolClause(false), boolClause(true)],
+      joinOps: ['OR', 'AND'],
+    };
+    const target = makeTargetQuestion(config);
+    expect(shouldDisplayQuestion(target, {}, [makeTableQuestion(), target])).toBe(true);
+  });
+
   it('group 안의 clause 평가', () => {
     const config: ExpressionConditionConfig = {
       clauses: [{

@@ -72,6 +72,57 @@ export interface BulkSendResultItem {
 
 const BATCH_CHUNK_SIZE = 50;
 
+/** batch.send permissive 응답의 성공 row(id) — data.data 요소 형태 */
+export interface BatchSuccessItem {
+  id?: string;
+}
+
+/** batch.send permissive 응답의 실패 row — data.errors 요소 형태. index 는 원본 payload 위치. */
+export interface BatchErrorItem {
+  index: number;
+  message?: string;
+}
+
+/**
+ * batch.send permissive 응답을 recipient 단위 결과로 매핑한다.
+ *
+ * Resend 규약:
+ *   - data.errors[].index = 원본 payload 배열에서 실패한 위치
+ *   - data.data = 성공한 row(id) 만 순서대로 담긴 dense 배열(실패 위치는 빠짐)
+ *
+ * 따라서 실패 인덱스 집합을 만들고, 성공 인덱스만 data.data 를 순서대로 소비해 매핑한다.
+ * 실패 인덱스는 재시도 대상으로 분리해 반환 — 이미 성공한 수신자에게 중복 발송하지 않도록.
+ */
+export function mapBatchResults(
+  chunkRecipients: BulkRecipientInput[],
+  successItems: BatchSuccessItem[],
+  errorItems: BatchErrorItem[],
+): { resolved: BulkSendResultItem[]; retryIndices: number[] } {
+  const failedIndices = new Set(errorItems.map((e) => e.index));
+  const resolved: BulkSendResultItem[] = [];
+  const retryIndices: number[] = [];
+
+  let successCursor = 0;
+  for (let i = 0; i < chunkRecipients.length; i++) {
+    const recipient = chunkRecipients[i];
+    if (!recipient) continue;
+    if (failedIndices.has(i)) {
+      // 실패분 — 1건씩 재시도해야 하므로 결과를 확정하지 않고 인덱스만 모은다.
+      retryIndices.push(i);
+      continue;
+    }
+    const item = successItems[successCursor];
+    successCursor += 1;
+    if (item?.id) {
+      resolved.push({ recipientId: recipient.recipientId, resendMessageId: item.id });
+    } else {
+      resolved.push({ recipientId: recipient.recipientId, errorReason: 'Resend 응답 id 누락' });
+    }
+  }
+
+  return { resolved, retryIndices };
+}
+
 /**
  * Resend `batch.send` 는 SDK 타입(CreateBatchEmailOptions)이 attachments 를 제외 — 첨부 미지원.
  * 따라서 첨부 유무로 분기.
@@ -116,30 +167,20 @@ async function sendInBatches(input: BulkSendInput): Promise<BulkSendResultItem[]
         continue;
       }
 
-      // permissive 모드: data.data = 성공한 row(순서 유지, 실패는 빠짐) + data.errors = [{ index, ... }]
-      // 위치 매핑이 까다로움 — Resend 의 응답 형식이 SDK 버전마다 변동 가능성 → 보수적 매핑:
-      //   1) data.errors 의 index 로 실패 표시
-      //   2) 나머지 인덱스는 data.data 의 id 를 순서대로 매핑
-      // SDK 가 data 를 sparse 가 아닌 dense array 로 주면 인덱스가 안 맞을 수 있음.
-      // → 정밀 매핑이 어려우므로 strict 모드로 한 번 더 안전 시도: error 가 있으면 1건씩 retry.
+      // permissive 모드: data.data = 성공한 row(순서 유지, 실패는 빠진 dense 배열)
+      //                  data.errors = [{ index, message }] (index = 원본 payload 위치)
       const successItems = data.data ?? [];
       const errorItems = ('errors' in data ? data.errors : undefined) ?? [];
 
-      if (errorItems.length === 0) {
-        // 모두 성공 — 순서대로 매핑
-        for (let i = 0; i < c.length; i++) {
-          const item = successItems[i];
-          const recipient = c[i];
-          if (!recipient) continue;
-          if (item?.id) {
-            results.push({ recipientId: recipient.recipientId, resendMessageId: item.id });
-          } else {
-            results.push({ recipientId: recipient.recipientId, errorReason: 'Resend 응답 id 누락' });
-          }
-        }
-      } else {
-        // 부분 실패 — 1명씩 emails.send 로 재시도 (정밀 매핑 보장)
-        const fallback = await sendOneByOneInternal(c, input);
+      const { resolved, retryIndices } = mapBatchResults(c, successItems, errorItems);
+      results.push(...resolved);
+
+      // 실패분만 1건씩 emails.send 로 재시도 — 이미 성공한 수신자는 제외해 중복 발송/메시지 id 유실 방지.
+      if (retryIndices.length > 0) {
+        const retryRecipients = retryIndices
+          .map((i) => c[i])
+          .filter((r): r is BulkRecipientInput => r !== undefined);
+        const fallback = await sendOneByOneInternal(retryRecipients, input);
         results.push(...fallback);
       }
     } catch (err) {

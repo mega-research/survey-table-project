@@ -21,7 +21,7 @@ export function useSurveySync() {
   const [isPending, startTransition] = useTransition();
   const queryClient = useQueryClient();
   const resetSurvey = useSurveyBuilderStore((s) => s.resetSurvey);
-  const markClean = useSurveyBuilderStore((s) => s.markClean);
+  const markSavedSnapshotClean = useSurveyBuilderStore((s) => s.markSavedSnapshotClean);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<Error | null>(null);
 
@@ -63,7 +63,7 @@ export function useSurveySync() {
 
         // 변경분이 전혀 없으면 스킵
         if (!isMetadataDirty && !hasQuestionChanges) {
-          markClean();
+          markSavedSnapshotClean();
           return { surveyId: survey.id };
         }
 
@@ -102,7 +102,7 @@ export function useSurveySync() {
         }
 
         const result = await client.surveyBuilder.save.saveDiff(payload);
-        markClean();
+        markSavedSnapshotClean();
         // 저장 후 TanStack Query 캐시 무효화 → 다음 로드 시 DB에서 최신 데이터 사용
         queryClient.invalidateQueries({ queryKey: surveyKeys.detail(survey.id) });
         queryClient.invalidateQueries({ queryKey: surveyKeys.lists() });
@@ -118,7 +118,7 @@ export function useSurveySync() {
         setIsSaving(false);
       }
     },
-    [isSaving, markClean, queryClient],
+    [isSaving, markSavedSnapshotClean, queryClient],
   );
 
   // DB에서 설문 불러오기

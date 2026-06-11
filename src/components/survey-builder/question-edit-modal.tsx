@@ -334,6 +334,14 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
                 currentFormData.requiresAcknowledgment ?? question?.requiresAcknowledgment,
               placeholder:
                 currentFormData.placeholder !== undefined ? currentFormData.placeholder : question?.placeholder,
+              defaultValueTemplate:
+                currentFormData.defaultValueTemplate !== undefined
+                  ? currentFormData.defaultValueTemplate
+                  : question?.defaultValueTemplate,
+              inputType:
+                currentFormData.inputType !== undefined ? currentFormData.inputType : question?.inputType,
+              emptyDefault:
+                currentFormData.emptyDefault !== undefined ? currentFormData.emptyDefault : question?.emptyDefault,
               tableValidationRules: currentFormData.tableValidationRules || question?.tableValidationRules,
               displayCondition: currentFormData.displayCondition || question?.displayCondition,
               dynamicRowConfigs: currentFormData.dynamicRowConfigs || question?.dynamicRowConfigs,

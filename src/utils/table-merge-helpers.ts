@@ -320,8 +320,33 @@ export function recalculateColspansForVisibleColumns(
     filteredColumns.push(col);
   }
 
+  // 가시 병합 시작 셀이 점유하는 (row, col) 좌표 집합 계산
+  // 병합 시작 셀이 가시 열에 남아있을 때만 continuation 셀의 isHidden을 유지한다.
+  // 병합 시작 셀이 필터링되어 사라지면, 가시 열에 남은 continuation 셀은 선두 가시 셀로
+  // 승격하고 isHidden을 해제해야 한다 (미해제 시 렌더에서 if isHidden return null 로 사라짐).
+  const coveredCoords = new Set<string>();
+  for (let r = 0; r < originalRows.length; r++) {
+    const origRow = originalRows[r];
+    if (!origRow) continue;
+    for (let c = 0; c < origRow.cells.length; c++) {
+      // 병합 시작 셀의 열이 가시일 때만 점유 좌표로 인정
+      if (!visibleColIndices.has(c)) continue;
+      const startCell = origRow.cells[c];
+      if (!startCell || startCell.isHidden) continue;
+      const rowspan = startCell.rowspan && startCell.rowspan > 1 ? startCell.rowspan : 1;
+      const colspan = startCell.colspan && startCell.colspan > 1 ? startCell.colspan : 1;
+      if (rowspan <= 1 && colspan <= 1) continue;
+      for (let dr = 0; dr < rowspan; dr++) {
+        for (let dc = 0; dc < colspan; dc++) {
+          if (dr === 0 && dc === 0) continue;
+          coveredCoords.add(`${r + dr},${c + dc}`);
+        }
+      }
+    }
+  }
+
   // 행의 cells 필터링 + colspan 재계산
-  const filteredRows: TableRow[] = originalRows.map((row) => {
+  const filteredRows: TableRow[] = originalRows.map((row, rowIdx) => {
     const newCells: TableRow['cells'] = [];
     for (let i = 0; i < row.cells.length; i++) {
       if (!visibleColIndices.has(i)) continue;
@@ -337,10 +362,12 @@ export function recalculateColspansForVisibleColumns(
         }
         if (newColspan > 1) { cell.colspan = newColspan; } else { delete cell.colspan; }
         cell.isHidden = false;
+      } else if (cell.isHidden && !coveredCoords.has(`${rowIdx},${i}`)) {
+        // continuation 셀(자체 colspan 없음)인데 이를 덮던 가시 병합 시작 셀이 사라진 경우
+        // → 선두 가시 셀로 승격하고 isHidden 해제
+        cell.isHidden = false;
       }
 
-      // colspan에 의해 숨겨진 셀이면 건너뜀 (원본 기준 isHidden이고 해당 병합 시작 셀이 숨겨진 열에 있는 경우)
-      // → 필터링 후에는 보이는 열만 남으므로, 여전히 다른 가시 셀의 colspan에 포함되는지 확인
       newCells.push(cell);
     }
     return { ...row, cells: newCells };

@@ -29,6 +29,27 @@ import type {
 // 유틸리티 함수
 // ========================
 
+// KST(Asia/Seoul, UTC+9) 고정 오프셋. 타임라인 일자 버킷과 today/week 경계를 모두
+// KST 기준으로 통일해, 서버(UTC)/클라(KST) 런타임 timezone 에 무관하게 동일 결과를 보장한다.
+const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
+
+/** Date → KST 기준 "YYYY-MM-DD" 일자 문자열 */
+function kstDateKey(value: Date): string {
+  const kst = new Date(value.getTime() + KST_OFFSET_MS);
+  const yyyy = kst.getUTCFullYear();
+  const mm = String(kst.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(kst.getUTCDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+/** 주어진 시각이 속한 KST 자정의 UTC 인스턴트(ms) */
+function kstDayStartMs(value: Date): number {
+  const kst = new Date(value.getTime() + KST_OFFSET_MS);
+  const kstMidnightAsUtc = Date.UTC(kst.getUTCFullYear(), kst.getUTCMonth(), kst.getUTCDate());
+  // KST 자정을 다시 실제 UTC 인스턴트로 환산
+  return kstMidnightAsUtc - KST_OFFSET_MS;
+}
+
 /**
  * 값을 문자열로 변환 (객체인 경우 내부 텍스트 추출)
  */
@@ -777,7 +798,7 @@ export function analyzeSurvey(
   const timelineMap: Record<string, { responses: number; completed: number }> = {};
 
   responses.forEach((r) => {
-    const date = new Date(r.startedAt).toISOString().split('T')[0] ?? '';
+    const date = kstDateKey(new Date(r.startedAt));
     if (!timelineMap[date]) {
       timelineMap[date] = { responses: 0, completed: 0 };
     }
@@ -812,18 +833,17 @@ export function analyzeSurvey(
       ? completionTimes.reduce((a, b) => a + b, 0) / completionTimes.length
       : 0;
 
-  // 오늘/이번 주 응답 수
+  // 오늘/이번 주 응답 수 — 타임라인 버킷과 동일하게 KST 일자 경계로 통일
   const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const weekStart = new Date(todayStart);
-  weekStart.setDate(weekStart.getDate() - 7);
+  const todayStartMs = kstDayStartMs(now);
+  const weekStartMs = todayStartMs - 7 * 24 * 60 * 60 * 1000;
 
   const todayResponses = completedResponses.filter(
-    (r) => r.completedAt && new Date(r.completedAt) >= todayStart,
+    (r) => r.completedAt && new Date(r.completedAt).getTime() >= todayStartMs,
   ).length;
 
   const weekResponses = completedResponses.filter(
-    (r) => r.completedAt && new Date(r.completedAt) >= weekStart,
+    (r) => r.completedAt && new Date(r.completedAt).getTime() >= weekStartMs,
   ).length;
 
   // 요약

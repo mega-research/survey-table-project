@@ -237,8 +237,8 @@ export default function CreateSurveyPage() {
     return () => clearTimeout(timer);
   }, [slugInput, currentSurvey.id]);
 
-  // 제목에서 자동 슬러그 생성
-  const handleAutoGenerateSlug = useCallback(async () => {
+  // 제목에서 자동 슬러그 생성 (생성된 슬러그를 반환해 저장 페이로드에 즉시 반영 가능)
+  const handleAutoGenerateSlug = useCallback(async (): Promise<string | undefined> => {
     const autoSlug = generateSlugFromTitle(titleInput);
     if (autoSlug) {
       // 중복 시 접미사 추가
@@ -259,7 +259,9 @@ export default function CreateSurveyPage() {
       setSlugInput(finalSlug);
       updateSurveySlug(finalSlug);
       setSlugError('');
+      return finalSlug;
     }
+    return undefined;
   }, [titleInput, currentSurvey.id, updateSurveySlug]);
 
   // URL 복사
@@ -307,11 +309,15 @@ export default function CreateSurveyPage() {
   // 설문 저장
   const handleSaveSurvey = async () => {
     // ID가 없으면 새로 생성
-    const surveyToSave = currentSurvey.id ? currentSurvey : { ...currentSurvey, id: generateId() };
+    let surveyToSave = currentSurvey.id ? currentSurvey : { ...currentSurvey, id: generateId() };
 
     // 공개 설문인데 슬러그가 없으면 자동 생성
+    // handleAutoGenerateSlug는 store/state에만 기록되므로 반환값을 페이로드에 직접 반영해야 한다
     if (surveyToSave.settings.isPublic && !slugInput) {
-      await handleAutoGenerateSlug();
+      const generatedSlug = await handleAutoGenerateSlug();
+      if (generatedSlug) {
+        surveyToSave = { ...surveyToSave, slug: generatedSlug };
+      }
     }
 
     try {

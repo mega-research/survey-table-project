@@ -122,9 +122,9 @@ export function useDynamicRowLayout({
         const firstAnchor = intersecting[0];
         if (firstAnchor === undefined) continue;
         const seg1Span = firstAnchor - rowIdx + 1;
-        setOvr(rowIdx, colIdx, {
-          ...(seg1Span > 1 ? { rowspan: seg1Span } : {}),
-        });
+        // seg1Span === 1 인 경우에도 rowspan 을 명시적으로 1 로 정정해야 원래 병합이 풀린다.
+        // 빈 오버라이드를 쓰면 원래 rowspan 이 유지되어 후속 세그먼트와 겹친다.
+        setOvr(rowIdx, colIdx, { rowspan: seg1Span });
 
         // 후속 세그먼트들: 각 앵커 바로 다음 행에서 시작
         for (let i = 0; i < intersecting.length; i++) {

@@ -5,6 +5,7 @@ import { immer } from 'zustand/middleware/immer';
 import { buildFlatOrderedQuestions } from '@/lib/group-ordering';
 import { regenerateAfterDelete, regenerateAfterReorder } from '@/lib/spss/variable-generator';
 import {
+  changesetHasChanges,
   computeSpssChangedQuestions,
   emptyChangeset,
   mergeChangesets,
@@ -114,6 +115,8 @@ export interface SurveyBuilderState {
   // Diff 저장용 changeset 관리
   snapshotChanges: () => { questionChanges: QuestionChangeset; isMetadataDirty: boolean };
   mergeChangesBack: (snapshot: { questionChanges: QuestionChangeset; isMetadataDirty: boolean }) => void;
+  // 저장 성공 시 in-flight 편집을 보존한 채 isDirty 만 재계산 (snapshot 델타는 이미 snapshotChanges 에서 소거됨)
+  markSavedSnapshotClean: () => void;
 
   // dirty/questionChanges를 건드리지 않는 질문 업데이트 (UI 전용 토글 등)
   silentUpdateQuestion: (questionId: string, updates: Partial<Question>) => void;
@@ -661,6 +664,15 @@ export const useSurveyBuilderStore = create<SurveyBuilderState>()(
           state.isDirty = true;
         });
       },
+
+      // 저장 성공 시 호출. snapshotChanges 가 이미 저장 대상 델타를 changeset 에서 비웠으므로,
+      // 현재 changeset 에는 저장 중(in-flight) 발생한 편집만 남아 있다.
+      // 이를 보존하고 isDirty 만 남은 변경분 기준으로 재계산한다 (markClean 의 무조건 리셋 대체).
+      markSavedSnapshotClean: () =>
+        set((state) => {
+          state.isDirty =
+            state.isMetadataDirty || changesetHasChanges(state.questionChanges);
+        }),
 
       // dirty/questionChanges를 건드리지 않는 질문 업데이트 (UI 전용 토글 등)
       silentUpdateQuestion: (questionId: string, updates: Partial<Question>) => {

@@ -65,6 +65,9 @@ export async function saveSurveyDiff(
           title: metadata.title,
           description: metadata.description,
           slug: metadata.slug,
+          // 링크 재발급(revocation): privateToken 변경분이 metadata 에 실려 오면 DB 에 반영해야
+          // 옛 링크가 무효화된다. 누락 시 새 토큰이 영속되지 않아 기존 링크가 계속 유효한 버그.
+          ...(metadata.privateToken !== undefined ? { privateToken: metadata.privateToken } : {}),
           contactEmail: metadata.contactEmail ?? null,
           isPublic: metadata.settings.isPublic,
           allowMultipleResponses: metadata.settings.allowMultipleResponses,
@@ -342,6 +345,11 @@ export async function saveSurveyWithDetails(
       };
       if (surveyData.lookups !== undefined) {
         updateSet['lookups'] = surveyData.lookups;
+      }
+      // 링크 재발급(revocation): privateToken 변경분이 실려 오면 DB 에 반영해야 옛 링크가 무효화됨
+      // (saveSurveyDiff 의 metadata.set 과 동일한 누락 방지)
+      if (surveyData.privateToken !== undefined) {
+        updateSet['privateToken'] = surveyData.privateToken;
       }
       await tx
         .update(surveys)

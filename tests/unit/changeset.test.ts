@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 
 import {
+  changesetHasChanges,
   computeSpssChangedQuestions,
   emptyChangeset,
   mergeChangesets,
@@ -28,6 +29,29 @@ describe('emptyChangeset', () => {
     // 매번 새 객체여야 한다 (record 공유 금지)
     expect(a).not.toBe(b);
     expect(a.updated).not.toBe(b.updated);
+  });
+});
+
+describe('changesetHasChanges', () => {
+  it('빈 changeset 은 false', () => {
+    expect(changesetHasChanges(emptyChangeset())).toBe(false);
+  });
+
+  it('added/updated/deleted 중 하나라도 있으면 true', () => {
+    expect(changesetHasChanges(makeChangeset({ added: { q1: true } }))).toBe(true);
+    expect(changesetHasChanges(makeChangeset({ updated: { q1: true } }))).toBe(true);
+    expect(changesetHasChanges(makeChangeset({ deleted: { q1: true } }))).toBe(true);
+  });
+
+  it('reordered 만 true 여도 변경으로 본다', () => {
+    expect(changesetHasChanges(makeChangeset({ reordered: true }))).toBe(true);
+  });
+
+  it('저장 성공 후 in-flight 편집 보존 시나리오: 저장 대상 델타는 비워지고 in-flight 편집만 남으면 여전히 dirty', () => {
+    // snapshotChanges 가 저장 대상을 비운 뒤, 저장 중 q9 를 새로 수정한 상태를 모사
+    const inFlight = makeChangeset({ updated: { q9: true } });
+    // markSavedSnapshotClean 의 isDirty 재계산 로직(= isMetadataDirty || changesetHasChanges)과 동일
+    expect(changesetHasChanges(inFlight)).toBe(true);
   });
 });
 

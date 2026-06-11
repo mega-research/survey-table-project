@@ -52,6 +52,9 @@ export async function createQuestion(data: CreateQuestionInput): Promise<Questio
     noticeContent: data.noticeContent,
     requiresAcknowledgment: data.requiresAcknowledgment,
     placeholder: data.placeholder,
+    defaultValueTemplate: data.defaultValueTemplate,
+    inputType: data.inputType,
+    emptyDefault: data.emptyDefault,
     tableValidationRules: data.tableValidationRules as NewQuestion['tableValidationRules'],
     displayCondition: data.displayCondition as NewQuestion['displayCondition'],
     dynamicRowConfigs: data.dynamicRowConfigs as NewQuestion['dynamicRowConfigs'],
@@ -105,6 +108,9 @@ export async function updateQuestion(
   if (data.noticeContent !== undefined) allowed.noticeContent = data.noticeContent;
   if (data.requiresAcknowledgment !== undefined) allowed.requiresAcknowledgment = data.requiresAcknowledgment;
   if (data.placeholder !== undefined) allowed.placeholder = data.placeholder;
+  if (data.defaultValueTemplate !== undefined) allowed.defaultValueTemplate = data.defaultValueTemplate;
+  if (data.inputType !== undefined) allowed.inputType = data.inputType;
+  if (data.emptyDefault !== undefined) allowed.emptyDefault = data.emptyDefault;
   if (data.tableValidationRules !== undefined) allowed.tableValidationRules = data.tableValidationRules as NewQuestion['tableValidationRules'];
   if (data.dynamicRowConfigs !== undefined) allowed.dynamicRowConfigs = data.dynamicRowConfigs as NewQuestion['dynamicRowConfigs'];
   if (data.hideColumnLabels !== undefined) allowed.hideColumnLabels = data.hideColumnLabels;
