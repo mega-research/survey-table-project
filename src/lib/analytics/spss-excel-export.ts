@@ -34,7 +34,7 @@ import {
   resolveRankVarName,
 } from '@/utils/table-cell-code-generator';
 import {
-  collectRadioGroups,
+  collectChoiceGroups,
   DEFAULT_GROUP_KEY,
   isGroupedChoiceQuestion,
 } from '@/utils/choice-group-helpers';
@@ -172,7 +172,9 @@ export function generateSPSSColumns(questions: Question[]): SPSSExportColumn[] {
       }
     } else if (q.type === 'radio' && isGroupedChoiceQuestion(q)) {
       // choiceGroups 기반 radio — 그룹별 변수 1개씩 생성
-      for (const group of collectRadioGroups(q)) {
+      for (const group of collectChoiceGroups(q)) {
+        // checkbox 그룹은 Task 4에서 정식 구현 예정. 현재는 skip하여 radio 전제 로직 보호.
+        if (group.type !== 'radio') continue;
         const cellValueMap: Record<string, number> = {};
         const valueLabels: Array<{ value: number; label: string }> = [];
         group.cells.forEach((cell, idx) => {

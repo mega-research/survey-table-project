@@ -51,7 +51,11 @@ export function ChoiceTableResponse({ question, value, onChange }: ChoiceTableRe
     if (isCheckbox) return Array.isArray(value) ? (value as string[]) : [];
     if (isGrouped) {
       if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
-      return Object.values(value as GroupedChoiceAnswer).filter(Boolean);
+      // GroupedChoiceAnswer 값은 string | string[] — isGrouped 분기는 현재 radio 그룹
+      // 전제(string)이므로 string인 값만 추출한다. Task 4에서 checkbox 그룹 지원 시 확장.
+      return Object.values(value as GroupedChoiceAnswer).filter(
+        (v): v is string => typeof v === 'string' && v !== '',
+      );
     }
     return typeof value === 'string' && value ? [value] : [];
   }, [isCheckbox, isGrouped, value]);

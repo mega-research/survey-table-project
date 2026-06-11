@@ -1,7 +1,7 @@
 import type { Question } from '@/types/survey';
 import {
   isGroupedChoiceQuestion,
-  collectRadioGroups,
+  collectChoiceGroups,
 } from '@/utils/choice-group-helpers';
 
 /**
@@ -43,7 +43,9 @@ export function isQuestionAnswered(question: Question, response: unknown): boole
       // 그룹별 선택 radio: 모든 그룹(default 포함)에 선택이 있어야 충족
       if (isGroupedChoiceQuestion(question)) {
         const map = (response ?? {}) as Record<string, unknown>;
-        return collectRadioGroups(question).every(
+        // Task 3에서 그룹 type별로 검증 로직을 분리 예정.
+        // 현재는 radio 그룹 전제의 string 존재 여부만 확인한다(동작 무변화).
+        return collectChoiceGroups(question).every(
           (g) => typeof map[g.groupKey] === 'string' && map[g.groupKey] !== '',
         );
       }
