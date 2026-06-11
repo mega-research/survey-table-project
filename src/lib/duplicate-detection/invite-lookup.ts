@@ -8,6 +8,7 @@ import {
   buildNegativeCodeExists,
   getResultCodeStatuses,
 } from '@/lib/operations/result-code-statuses.server';
+import { isValidUUID } from '@/lib/utils';
 
 /**
  * inviteToken 으로 컨택 lookup. 반환 케이스 3가지:
@@ -34,6 +35,11 @@ export async function findContactByInviteToken(
   surveyId: string,
   inviteToken: string,
 ): Promise<InviteTokenLookupResult> {
+  // inviteToken 은 URL searchParams 에서 온 임의 문자열 (bot probe·잘린 링크 등).
+  // UUID 형식이 아니면 ${inviteToken}::uuid 캐스트가 PG 22P02 로 throw 하므로,
+  // 캐스트 전에 형식 검증해 invalid 로 폴백한다 (익명 amber-alert 흐름).
+  if (!isValidUUID(inviteToken)) return { kind: 'invalid' };
+
   const lookup = (await db.execute(
     sql`SELECT public.lookup_contact_by_invite_token(${surveyId}::uuid, ${inviteToken}::uuid) AS id`,
   )) as unknown as Array<{ id: string | null }>;

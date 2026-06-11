@@ -246,7 +246,13 @@ export function useImportLibrary() {
   return useMutation({
     mutationFn: (json: string) => orpc.library.transfer.import.call({ json }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: libraryKeys.all });
+      // import 는 savedQuestions + questionCategories 를 insert 한다.
+      // libraryKeys.all(=['library']) 은 oRPC 키 형태([['library',...], {...}])와
+      // partialMatchKey 가 string↔array 로 어긋나 무효화되지 않으므로,
+      // 다른 mutation 과 동일하게 oRPC key() + 파생 tags 키를 직접 무효화한다.
+      queryClient.invalidateQueries({ queryKey: orpc.library.savedQuestions.key() });
+      queryClient.invalidateQueries({ queryKey: orpc.library.questionCategories.key() });
+      queryClient.invalidateQueries({ queryKey: libraryKeys.tags() });
     },
   });
 }
@@ -274,7 +280,9 @@ export function useInitializePresets() {
   return useMutation({
     mutationFn: () => orpc.library.transfer.initializePresets.call(),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: libraryKeys.questions() });
+      // 저장 질문 쿼리는 oRPC 키([['library','savedQuestions',...], {...}])를 쓰므로
+      // 플랫 키 libraryKeys.questions()로는 prefix-match가 되지 않아 무효화가 누락된다.
+      queryClient.invalidateQueries({ queryKey: orpc.library.savedQuestions.key() });
     },
   });
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState, useTransition } from 'react';
+import { useCallback, useRef, useState, useTransition } from 'react';
 
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -24,6 +24,9 @@ export function useSurveySync() {
   const markSavedSnapshotClean = useSurveyBuilderStore((s) => s.markSavedSnapshotClean);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<Error | null>(null);
+  // 동기 중복-저장 가드: React state(isSaving)는 같은 렌더 틱 내 두 호출이 모두
+  // stale false 를 읽으므로 가드로 부적합. ref 는 동기 기록되어 같은 틱에서도 즉시 반영된다.
+  const savingRef = useRef(false);
 
   // Diff 기반 저장: 변경분만 서버에 전송
   const saveSurvey = useCallback(
@@ -35,7 +38,7 @@ export function useSurveySync() {
         return null;
       }
 
-      if (isSaving) {
+      if (savingRef.current) {
         console.log('이미 저장 중입니다. 중복 저장을 방지합니다.');
         return null;
       }
@@ -45,6 +48,7 @@ export function useSurveySync() {
         return { surveyId: store.currentSurvey.id };
       }
 
+      savingRef.current = true;
       setIsSaving(true);
       setSaveError(null);
 
@@ -115,10 +119,11 @@ export function useSurveySync() {
         setSaveError(err);
         throw err;
       } finally {
+        savingRef.current = false;
         setIsSaving(false);
       }
     },
-    [isSaving, markSavedSnapshotClean, queryClient],
+    [markSavedSnapshotClean, queryClient],
   );
 
   // DB에서 설문 불러오기

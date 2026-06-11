@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { surveyResponses } from '@/db/schema';
@@ -183,6 +183,9 @@ export async function resumeOrCreateResponse(
           and(
             eq(surveyResponses.contactTargetId, target.id),
             eq(surveyResponses.isCompleted, false),
+            // soft-delete 제외 — findActiveResponseByContact 와 동일 가드.
+            // 관리자가 진행중 응답을 soft-delete 한 뒤 컨택이 재진입해도 삭제 행을 되살리지 않음.
+            isNull(surveyResponses.deletedAt),
           ),
         )
         .limit(1);
@@ -218,7 +221,13 @@ export async function resumeOrCreateResponse(
     })
     .from(surveyResponses)
     .where(
-      and(eq(surveyResponses.surveyId, surveyId), eq(surveyResponses.sessionId, sessionId)),
+      and(
+        eq(surveyResponses.surveyId, surveyId),
+        eq(surveyResponses.sessionId, sessionId),
+        // soft-delete 제외 — 삭제된 응답을 sessionId 재진입으로 되살리지 않음.
+        // (completed 등 종결 상태는 그대로 통과시켜야 하므로 isCompleted 필터는 두지 않음.)
+        isNull(surveyResponses.deletedAt),
+      ),
     )
     .limit(1);
 

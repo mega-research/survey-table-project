@@ -7,7 +7,7 @@ import type { PiiFieldType } from './pii-fields';
  * - phone (일반): '02-345...' / '031-555...' (앞 6자리)
  * - biz_number: '123-45...' (앞 5자리, 표준 XXX-XX-XXXXX 형식 일부)
  * - name / representative: '김**' (첫 글자 + ** )
- * - address: '서울특별시' (첫 단어)
+ * - address: '서울특별시...' (앞 6자 + '...', 공백 없는 한글 주소도 전체 노출 방지)
  */
 export function maskHint(fieldType: PiiFieldType, value: string): string {
   const trimmed = value.trim();
@@ -58,8 +58,17 @@ export function maskHint(fieldType: PiiFieldType, value: string): string {
       return first ? `${first}**` : '';
     }
     case 'address': {
-      const first = trimmed.split(/\s+/)[0];
-      return first ?? '';
+      // 첫 단어만 노출하되, 공백 없는 한글 주소('서울특별시강남구...')는
+      // split 결과가 단일 토큰이라 전체가 그대로 노출된다. 코드포인트 기준
+      // 앞 6자만 보여주고 그보다 길거나 뒤에 다른 토큰이 있으면 '...' 으로 가린다.
+      const ADDRESS_PREFIX_LEN = 6;
+      const tokens = trimmed.split(/\s+/);
+      const first = tokens[0] ?? '';
+      if (!first) return '';
+      const firstChars = [...first];
+      const head = firstChars.slice(0, ADDRESS_PREFIX_LEN).join('');
+      const truncated = firstChars.length > ADDRESS_PREFIX_LEN || tokens.length > 1;
+      return truncated ? `${head}...` : head;
     }
   }
 }

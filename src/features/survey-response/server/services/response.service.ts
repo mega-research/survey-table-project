@@ -454,11 +454,33 @@ export async function completeResponse(
           }
           : {}),
       })
-      .where(eq(surveyResponses.id, responseId))
+      // soft-delete(deletedAt) 또는 종결 상태(completed/screened_out/quotaful_out/bad/drop)
+      // 행은 완료 처리에서 제외한다. pub 엔드포인트는 responseId 만 있으면 호출 가능하므로,
+      // 지연/리플레이된 complete 호출이 삭제된 행을 되살리거나 종결 status 를 덮어쓰지 못하게 막는다.
+      .where(
+        and(
+          eq(surveyResponses.id, responseId),
+          isNull(surveyResponses.deletedAt),
+          eq(surveyResponses.status, 'in_progress'),
+        ),
+      )
       .returning();
 
     if (!updated) {
-      throw new Error(`completeResponse: 응답 행 없음 (responseId=${responseId})`);
+      // 가드에 막혀 0행 — 이미 완료된 같은 응답이면 멱등 재시도로 보고 기존 행을 그대로 반환.
+      // (정상 제출 후 네트워크 응답 유실로 인한 사용자 수동 재시도 케이스 보존)
+      const [existing] = await tx
+        .select()
+        .from(surveyResponses)
+        .where(eq(surveyResponses.id, responseId))
+        .limit(1);
+      if (existing?.isCompleted && existing.deletedAt == null) {
+        return existing;
+      }
+      // 행이 없거나(삭제/존재 안 함) 종결 상태(screened_out 등)면 완료 처리를 거부한다.
+      throw new Error(
+        `completeResponse: 완료 처리 불가 행 (responseId=${responseId}, status=${existing?.status ?? 'not_found'}, deleted=${existing?.deletedAt != null})`,
+      );
     }
 
     // totalSeconds 정정: pageVisits 활성시간 합으로 덮어쓴다.

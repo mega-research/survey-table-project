@@ -1,7 +1,7 @@
 import * as z from 'zod';
 
 import type { ContactMethod } from '@/db/schema/schema-types';
-import type { PiiFieldType } from '@/lib/crypto/pii-fields';
+import { PII_FIELD_TYPES, type PiiFieldType } from '@/lib/crypto/pii-fields';
 
 export type { ContactMethod };
 export type { PiiFieldType };
@@ -13,7 +13,10 @@ export type { PiiFieldType };
 export const PiiUpdateSchema = z.object({
   /** ContactColumnDef.source 가 'pii.<columnKey>' 인 컬럼의 columnKey */
   columnKey: z.string(),
-  fieldType: z.custom<PiiFieldType>(),
+  // z.custom 은 런타임 검증이 없어 오탈자(예: 'e-mail') 가 통과 → normalizePii 의 switch 가
+  // default 없이 undefined 반환 → blindIndex 빈 문자열 → upsertPiiValue 가 기존 PII 행을
+  // 삭제하는 사고로 이어짐. PII_FIELD_TYPES enum 으로 경계에서 차단.
+  fieldType: z.enum(PII_FIELD_TYPES),
   /** 평문값. 빈 문자열이면 기존 PII row 삭제. */
   plain: z.string(),
 });

@@ -1314,9 +1314,14 @@ function SortableOptionItem({
             value={option.spssNumericCode ?? ''}
             onChange={(e) => {
               const v = e.target.value.replace(/\D/g, '');
-              updateOption(option.id, {
-                ...(v ? { spssNumericCode: parseInt(v, 10) } : {}),
-              } as Partial<QuestionOption>);
+              if (v) {
+                updateOption(option.id, {
+                  spssNumericCode: parseInt(v, 10),
+                } as Partial<QuestionOption>);
+              } else {
+                // 입력을 비우면 키 자체를 제거해야 stale 값으로 되돌아가지 않는다.
+                updateOption(option.id, {}, ['spssNumericCode']);
+              }
             }}
             className="h-8 w-14 text-center text-xs placeholder:text-gray-300"
             placeholder={String(index + 1)}

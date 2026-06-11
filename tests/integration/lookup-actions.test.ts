@@ -49,7 +49,9 @@ const h = vi.hoisted(() => {
     lastTable: null,
   };
   const counter = { nano: 0 };
-  return { savedLookupStore, surveyStore, queryState, counter };
+  // surveys row 를 FOR UPDATE 로 잠근 횟수 (lost update 방지 회귀 검증용)
+  const lock = { surveyForUpdateCount: 0 };
+  return { savedLookupStore, surveyStore, queryState, counter, lock };
 });
 
 // drizzle 의 schema reference 와 비교하기 위해 mock 모듈을 제공
@@ -184,6 +186,40 @@ vi.mock('@/db', () => {
     }),
   };
 
+  // select({...}).from(surveys).where(eq).for('update') 체인 mock.
+  // survey-lookups.service 가 FOR UPDATE row 잠금으로 read-modify-write 를 직렬화하도록 바뀌면서
+  // findFirst 대신 select 체인을 사용한다. lookups 컬럼만 projection 한다.
+  const selectChain = {
+    from: vi.fn((table: { __table: 'savedLookups' | 'surveys' }) => {
+      h.queryState.lastTable = table.__table;
+      return {
+        where: vi.fn((cond: { value: string }) => {
+          const resolve = () => {
+            if (h.queryState.lastTable === 'surveys') {
+              const row = h.surveyStore.get(cond.value);
+              return row ? [{ lookups: row.lookups }] : [];
+            }
+            return [];
+          };
+          // .for('update') 가 호출되면 row 잠금으로 간주 (회귀 검증 카운터 증가).
+          // thenable 도 제공해 .for() 없이 await 해도 동작하도록 한다.
+          const result = {
+            for: vi.fn(async (mode: string) => {
+              if (mode === 'update' && h.queryState.lastTable === 'surveys') {
+                h.lock.surveyForUpdateCount += 1;
+              }
+              return resolve();
+            }),
+            then: (
+              onFulfilled: (rows: Array<{ lookups: SurveyLookupRow[] }>) => unknown,
+            ) => Promise.resolve(resolve()).then(onFulfilled),
+          };
+          return result;
+        }),
+      };
+    }),
+  };
+
   const dbObj = {
     query: {
       savedLookups: {
@@ -212,6 +248,7 @@ vi.mock('@/db', () => {
         ),
       },
     },
+    select: vi.fn(() => selectChain),
     insert: vi.fn((table: { __table: 'savedLookups' | 'surveys' }) => {
       h.queryState.lastTable = table.__table;
       return insertChain;
@@ -270,6 +307,7 @@ describe('lookup-actions integration', () => {
     h.surveyStore.clear();
     h.counter.nano = 0;
     h.queryState.lastTable = null;
+    h.lock.surveyForUpdateCount = 0;
     // 시작 fixture: 빈 lookups 가진 survey 한 건
     h.surveyStore.set(TEST_SURVEY_ID, {
       id: TEST_SURVEY_ID,
@@ -382,5 +420,60 @@ describe('lookup-actions integration', () => {
     expect(dedupeCheck0.rows).toHaveLength(2);
     // usageCount 는 최초 1회만 증가
     expect(h.savedLookupStore.get(saved.id)!.usageCount).toBe(1);
+  });
+
+  // ========================
+  // 회귀: surveys.lookups read-modify-write 직렬화 (lost update 방지)
+  // ========================
+  //
+  // 세 함수 모두 surveys row 를 FOR UPDATE 로 잠근 뒤 읽고 써야 한다.
+  // 잠금 없이 findFirst → update 로 돌아가면 동시 호출 시 마지막 writer 가
+  // 다른 쪽 변경을 덮어써(lost update) 추가/삭제한 LUT 가 조용히 사라진다.
+  describe('FOR UPDATE row 잠금으로 동시성 lost update 방지', () => {
+    it('copySavedLookupToSurvey 는 surveys row 를 FOR UPDATE 로 잠근다', async () => {
+      const saved = seedSavedLookup({ id: 'sl-1', name: 'lut-1' });
+      await copySavedLookupToSurvey(TEST_SURVEY_ID, saved.id);
+      expect(h.lock.surveyForUpdateCount).toBe(1);
+    });
+
+    it('upsertSurveyLookup 는 surveys row 를 FOR UPDATE 로 잠근다', async () => {
+      await upsertSurveyLookup(TEST_SURVEY_ID, {
+        id: 'lk-1',
+        name: 'manual',
+        columns: ['col'],
+        rows: [{ col: 'v' }],
+      });
+      expect(h.lock.surveyForUpdateCount).toBe(1);
+    });
+
+    it('deleteSurveyLookup 는 surveys row 를 FOR UPDATE 로 잠근다', async () => {
+      await deleteSurveyLookup(TEST_SURVEY_ID, 'nonexistent');
+      expect(h.lock.surveyForUpdateCount).toBe(1);
+    });
+
+    it('순차 add A → delete B 가 서로 덮어쓰지 않는다 (잠금 직렬화 결과 일관성)', async () => {
+      // 시작 상태: lookup B 한 건이 이미 있는 survey
+      h.surveyStore.set(TEST_SURVEY_ID, {
+        id: TEST_SURVEY_ID,
+        title: 'lookup test survey',
+        slug: 'lookup-test',
+        lookups: [
+          { id: 'lk-B', name: 'B', columns: ['col'], rows: [{ col: 'b' }] },
+        ],
+      });
+      const savedA = seedSavedLookup({ id: 'sl-A', name: 'A' });
+
+      // A 추가 후 B 삭제 — 잠금 직렬화 시 두 변경이 모두 반영되어야 한다.
+      const copiedA = await copySavedLookupToSurvey(TEST_SURVEY_ID, savedA.id);
+      await deleteSurveyLookup(TEST_SURVEY_ID, 'lk-B');
+
+      const survey = h.surveyStore.get(TEST_SURVEY_ID)!;
+      // B 는 제거, A 만 남아야 한다 (lost update 가 있으면 둘 중 하나가 사라짐)
+      expect(survey.lookups).toHaveLength(1);
+      expect(survey.lookups[0]?.id).toBe(copiedA.id);
+      expect(survey.lookups.find((l) => l.id === 'lk-B')).toBeUndefined();
+      // copy(1) + delete(1) = 2 회 잠금
+      expect(h.lock.surveyForUpdateCount).toBe(2);
+    });
   });
 });

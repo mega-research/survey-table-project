@@ -115,6 +115,25 @@ describe('buildSurveySnapshot', () => {
     expect(snapshot.settings.thankYouMessage).toBe('감사합니다!');
   });
 
+  it('requireInviteToken=true 를 스냅샷 settings 에 보존', () => {
+    const surveyWithInviteToken: Survey = {
+      ...mockSurvey,
+      settings: {
+        ...mockSurvey.settings,
+        requireInviteToken: true,
+      },
+    };
+    const snapshot = buildSurveySnapshot(surveyWithInviteToken);
+
+    expect(snapshot.settings.requireInviteToken).toBe(true);
+  });
+
+  it('requireInviteToken 미설정 시 undefined', () => {
+    const snapshot = buildSurveySnapshot(mockSurvey);
+
+    expect(snapshot.settings.requireInviteToken).toBeUndefined();
+  });
+
   it('endDate가 없으면 undefined', () => {
     const { endDate: _ed, ...settingsWithoutEndDate } = mockSurvey.settings;
     const surveyNoEndDate: Survey = {

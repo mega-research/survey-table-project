@@ -39,4 +39,18 @@ describe('computeNumericStats', () => {
   it('유효 숫자가 없으면 null 을 반환한다', () => {
     expect(computeNumericStats(['', 'abc', '  '])).toBeNull();
   });
+
+  it('천단위 구분자/단위가 섞인 값은 절단하지 않고 제외한다', () => {
+    // '1,000'→1, '5kg'→5 로 silent 절단되어 평균/합계가 왜곡되던 회귀 방지
+    const stats = computeNumericStats(['1,000', '5kg', '10', '20']);
+    expect(stats!.count).toBe(2); // '10', '20' 만 유효
+    expect(stats!.sum).toBe(30);
+    expect(stats!.mean).toBe(15);
+    expect(stats!.min).toBe(10);
+    expect(stats!.max).toBe(20);
+  });
+
+  it('모든 값이 천단위 구분자 형태면 null 을 반환한다', () => {
+    expect(computeNumericStats(['1,000', '2,500'])).toBeNull();
+  });
 });

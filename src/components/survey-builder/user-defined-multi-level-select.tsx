@@ -23,9 +23,15 @@ export function UserDefinedMultiLevelSelect({
 }: UserDefinedMultiLevelSelectProps) {
   const [currentValues, setCurrentValues] = useState<string[]>(values);
 
+  // 부모가 매 렌더마다 새로운 [] 참조를 넘겨도(초기 빈 응답 상태) 진행 중 선택이
+  // 초기화되지 않도록 내용이 실제로 달라졌을 때만 동기화한다.
+  // [values] 참조 기반 비교는 [obj] vs [obj?.id] reset footgun을 그대로 재현하므로 직렬화 키로 비교.
+  const valuesKey = JSON.stringify(values);
   useEffect(() => {
-    setCurrentValues(values);
-  }, [values]);
+    setCurrentValues((prev) => (JSON.stringify(prev) === valuesKey ? prev : values));
+    // valuesKey 가 동일하면 동일 내용이므로 동기화 스킵
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [valuesKey]);
 
   const handleLevelChange = (levelIndex: number, selectedValue: string) => {
     const newValues = [...currentValues];

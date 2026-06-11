@@ -21,6 +21,8 @@ export interface SurveySnapshot {
     endDate?: string | undefined;
     maxResponses?: number | undefined;
     thankYouMessage: string;
+    // 컨택 attrs invite token 강제 — 스냅샷에 freeze (schema-types.ts SurveyVersionSnapshot.settings 와 정렬)
+    requireInviteToken?: boolean | undefined;
   };
   // 외부 데이터 LUT 사본 — publish 시점 freeze. 응답 페이지가 분기 조건 우변 룩업을 평가할 때 사용.
   lookups: SurveyLookup[];
@@ -145,6 +147,7 @@ export function buildSurveySnapshot(survey: Survey): SurveySnapshot {
         : undefined,
       maxResponses: survey.settings.maxResponses,
       thankYouMessage: survey.settings.thankYouMessage,
+      requireInviteToken: survey.settings.requireInviteToken,
     },
     lookups: survey.lookups ?? [],
   };

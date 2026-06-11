@@ -97,7 +97,13 @@ export function ConditionCard({
               onBlur={(e) => {
                 // 포커스를 잃을 때만 실제 업데이트
                 const value = e.target.value.trim() || undefined;
-                updateCondition(condition.id, value !== undefined ? { name: value } : {} as Partial<QuestionCondition>);
+                // 빈 값이면 spread no-op 대신 clear로 name 키를 제거해 영속 이름을 비운다.
+                // ({} 만 넘기면 merge가 기존 name을 보존해 이름을 지울 수 없다)
+                if (value !== undefined) {
+                  updateCondition(condition.id, { name: value });
+                } else {
+                  updateCondition(condition.id, {}, ['name']);
+                }
                 // 로컬 상태도 동기화
                 setConditionNames((prev) => {
                   const next = { ...prev };

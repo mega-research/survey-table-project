@@ -10,6 +10,7 @@
  */
 import { getOptionText } from '@/lib/option-text-read';
 import {
+  transformMultiselect,
   transformNumericText,
   transformRankingOtherText,
   transformRankingWithOptions,
@@ -632,6 +633,18 @@ function collectAndEmitRadioGroupColumns(q: Question, columns: SPSSExportColumn[
     // noUncheckedIndexedAccess를 위해 명시적 가드 추가
     if (!firstMember) continue;
 
+    // 멤버 셀별 숫자값 충돌 방지: radio 그룹은 멤버 셀마다 고유 코드여야
+    // value labels가 덮어쓰이지 않고 응답이 구분된다. 멤버 셀은 옵션 1개뿐이라
+    // 기본 spssNumericCode가 모두 1로 겹치기 쉬우므로(복붙/기본값) 이미 쓰인 값이면
+    // 다음 빈 정수로 재배정한다. 모든 코드가 distinct한 정상 케이스는 무영향.
+    const usedValues = new Set<number>();
+    const assignUniqueValue = (preferred: number): number => {
+      let value = preferred;
+      while (usedValues.has(value)) value += 1;
+      usedValues.add(value);
+      return value;
+    };
+
     if (orientation === 'row') {
       // 같은 행 → 열 단위 응답: rowCode 기반 변수명, 옵션 라벨(폴백: 열 라벨)을 값 라벨로
       const { row, rowIdx } = firstMember;
@@ -641,7 +654,7 @@ function collectAndEmitRadioGroupColumns(q: Question, columns: SPSSExportColumn[
 
       members.forEach((m, idx) => {
         const opt = m.cell.radioOptions?.[0];
-        const value = opt?.spssNumericCode ?? (idx + 1);
+        const value = assignUniqueValue(opt?.spssNumericCode ?? (idx + 1));
         cellValueMap[m.cell.id] = value;
         valueLabels[value] = opt?.label || q.tableColumns?.[m.colIdx]?.label || '';
       });
@@ -656,7 +669,7 @@ function collectAndEmitRadioGroupColumns(q: Question, columns: SPSSExportColumn[
 
       members.forEach((m, idx) => {
         const opt = m.cell.radioOptions?.[0];
-        const value = opt?.spssNumericCode ?? (idx + 1);
+        const value = assignUniqueValue(opt?.spssNumericCode ?? (idx + 1));
         cellValueMap[m.cell.id] = value;
         valueLabels[value] = opt?.label || m.row.label;
       });
@@ -668,7 +681,7 @@ function collectAndEmitRadioGroupColumns(q: Question, columns: SPSSExportColumn[
 
       members.forEach((m, idx) => {
         const opt = m.cell.radioOptions?.[0];
-        const value = opt?.spssNumericCode ?? (idx + 1);
+        const value = assignUniqueValue(opt?.spssNumericCode ?? (idx + 1));
         cellValueMap[m.cell.id] = value;
         valueLabels[value] = opt?.label || `${m.row.label} - ${q.tableColumns?.[m.colIdx]?.label ?? ''}`;
       });
@@ -964,6 +977,11 @@ export function buildDataRow(
           ) ?? null
         );
       }
+
+      case 'multiselect':
+        // 다단계 선택 응답(string[])을 밑줄로 합산한 텍스트(STRING 변수)로 변환.
+        // case 누락 시 default 의 String(['a','b']) → 'a,b'(콤마)로 의도와 다르게 export 됨.
+        return transformMultiselect(rawValue as string[] | null);
 
       case 'text':
         return col.numericText

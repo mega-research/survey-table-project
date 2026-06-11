@@ -93,6 +93,7 @@ export interface SurveyBuilderState {
   // 그룹 관리
   addGroup: (name: string, description?: string, parentGroupId?: string) => void;
   updateGroup: (groupId: string, updates: Partial<QuestionGroup>) => void;
+  clearGroupParent: (groupId: string) => void;
   deleteGroup: (groupId: string) => void;
   reorderGroups: (groupIds: string[]) => void;
   reorderGroupChildren: (parentGroupId: string, items: Array<{ kind: 'question' | 'subgroup'; id: string }>) => void;
@@ -180,7 +181,15 @@ export const useSurveyBuilderStore = create<SurveyBuilderState>()(
           set((state) => {
             // 빌더 dirty 상태와 changeset 은 보존 — refetch 는 단일 jsonb 갱신용이므로
             // setSurvey 의 전체 reset 동작을 의도적으로 피한다.
-            state.currentSurvey = fresh;
+            // 단, currentSurvey 전체를 서버 스냅샷으로 덮어쓰면 in-memory 미저장 질문/그룹
+            // 편집이 지워지는데 questionChanges dirty 플래그는 그대로 남아, 다음 저장에서
+            // 서버 버전 질문이 upsert 되어 사용자 편집이 영구 폐기된다(M42). 따라서 외부에서
+            // 변경된 JSONB 필드(lookups/contactColumns)만 덮어쓰고, 빌더 편집 대상
+            // (questions/groups/메타)은 로컬 값을 유지한다.
+            if (fresh.lookups !== undefined) state.currentSurvey.lookups = fresh.lookups;
+            if (fresh.contactColumns !== undefined) {
+              state.currentSurvey.contactColumns = fresh.contactColumns;
+            }
           });
         }
       },
@@ -266,9 +275,9 @@ export const useSurveyBuilderStore = create<SurveyBuilderState>()(
           ...siblingGroups.map((g) => g.order),
           ...siblingQuestions.map(() => 0), // 질문 수만큼 슬롯 차지
         ];
-        const maxOrder = allOrders.length > 0
-          ? siblingGroups.length + siblingQuestions.length - 1
-          : -1;
+        // 삭제로 생긴 order 공백 때문에 개수 기반 계산은 충돌을 일으킨다.
+        // 실제 order 값의 최댓값을 사용해 항상 마지막 슬롯 뒤에 배치한다.
+        const maxOrder = allOrders.length > 0 ? Math.max(...allOrders) : -1;
 
         const newGroup: QuestionGroup = {
           id: generateId(),
@@ -299,6 +308,23 @@ export const useSurveyBuilderStore = create<SurveyBuilderState>()(
           const group = state.currentSurvey.groups?.find((g) => g.id === groupId);
           if (group) {
             Object.assign(group, updates);
+            state.currentSurvey.updatedAt = new Date();
+            state.isDirty = true;
+            state.isMetadataDirty = true;
+            if (state.currentSurvey.status === 'published') {
+              state.isModifiedSincePublish = true;
+            }
+          }
+        }),
+
+      // 그룹을 최상위로 이동할 때 parentGroupId 를 해제한다.
+      // updateGroup 은 Object.assign 기반 부분 업데이트라 키 삭제를 표현할 수 없고,
+      // exactOptionalPropertyTypes 때문에 parentGroupId: undefined 를 전달할 수도 없다.
+      clearGroupParent: (groupId: string) =>
+        set((state) => {
+          const group = state.currentSurvey.groups?.find((g) => g.id === groupId);
+          if (group) {
+            delete group.parentGroupId;
             state.currentSurvey.updatedAt = new Date();
             state.isDirty = true;
             state.isMetadataDirty = true;

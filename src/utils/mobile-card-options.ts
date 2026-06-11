@@ -59,13 +59,11 @@ export function detectUnitPair(
   nextLabel: string | undefined,
   prevLabel: string | undefined,
 ): { isUnitPairStart: boolean; wasAlreadyPaired: boolean } {
-  const isUnitPairStart =
-    !!nextLabel && (nextLabel.endsWith('_단위') || nextLabel.endsWith('단위'));
-  const isUnitCell =
-    currentLabel.endsWith('_단위') || currentLabel === '단위';
-  const wasAlreadyPaired =
-    isUnitCell &&
-    ((prevLabel ? prevLabel + '_단위' === currentLabel : false) ||
-      currentLabel === '단위');
+  // 다음 셀 라벨이 "단위" 로 끝나면 현재 셀과 한 줄로 묶는다(시작 판정).
+  const isUnitPairStart = !!nextLabel && nextLabel.endsWith('단위');
+  // 위 시작 판정은 prevLabel 과 무관하게 "단위" 로 끝나는 셀이면 직전 셀이 항상 인라인한다.
+  // 따라서 이미 묶인 셀 판정도 동일한 broad 규칙으로 대칭을 맞춰야 중복 렌더를 막는다.
+  // (이전: isUnitCell 이 '_단위'/정확히 '단위' 만 보던 narrow 규칙이라 '원단위' 등이 두 번 렌더됨)
+  const wasAlreadyPaired = !!prevLabel && currentLabel.endsWith('단위');
   return { isUnitPairStart, wasAlreadyPaired };
 }

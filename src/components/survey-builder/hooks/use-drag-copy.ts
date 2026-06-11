@@ -18,6 +18,7 @@ import {
   calculateDragRange,
   checkPasteConflict,
   clearStaleTypeProperties,
+  createRadioGroupRemapper,
   expandSelectionForMerges,
   extractRegionFromRows,
 } from '../utils/drag-copy-utils';
@@ -180,6 +181,10 @@ export function useDragCopy({
         return { blocked: true, message: conflict.message! };
       }
 
+      // 원본 radioGroupName → 새 그룹명 매핑. 같은 그룹명을 공유하던 라디오 셀들은
+      // 붙여넣기 후에도 하나의 새 그룹명을 공유해 단일 선택/형제 클리어/ SPSS 그룹을 유지한다.
+      const remapRadioGroupName = createRadioGroupRemapper(generateId);
+
       // immer로 붙여넣기 적용
       const [nextRows, , inversePatches] = produceWithPatches(rows, (draft) => {
         for (let rr = 0; rr < region.height; rr++) {
@@ -219,9 +224,12 @@ export function useDragCopy({
             Object.assign(targetCell, structuredClone(sourceCell));
             targetCell.id = preservedId;
 
-            // radio 셀이면 새 groupName 생성
+            // radio 셀이면 새 groupName 발급 (원본 그룹 단위로 공유 유지),
+            // radio 가 아니면 소스에서 딸려온 잔여 radioGroupName 제거.
             if (targetCell.type === 'radio') {
-              targetCell.radioGroupName = generateId();
+              targetCell.radioGroupName = remapRadioGroupName(sourceCell.radioGroupName);
+            } else {
+              delete (targetCell as { radioGroupName?: string }).radioGroupName;
             }
 
             // cellCode/exportLabel 재생성

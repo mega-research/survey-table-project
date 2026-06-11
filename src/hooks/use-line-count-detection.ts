@@ -5,7 +5,9 @@ import { useMemo } from 'react';
 import { prepare, layout } from '@chenglou/pretext';
 
 // 모바일 title 폰트: text-xl = 20px, leading-relaxed = 1.625
-const TITLE_FONT = '600 20px Pretendard';
+// pretext canvas 엔진은 실제 로드된 폰트명과 일치해야 정확 (globals.css --font-sans = "Wanted Sans Variable").
+// 'Pretendard'는 미로드 폰트라 브라우저 폴백 대체 → 줄 수 측정이 어긋남.
+export const TITLE_FONT = '600 20px "Wanted Sans Variable"';
 const TITLE_LINE_HEIGHT = 20 * 1.625; // 32.5px
 
 // 모바일 카드 콘텐츠 영역 폭 추정

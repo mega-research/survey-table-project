@@ -20,7 +20,10 @@ const VIDEO_HEIGHT = 80; // 비디오 링크 높이
 const LINE_HEIGHT = 20; // 텍스트 라인 높이
 
 // 프로젝트 폰트 (globals.css --font-sans와 일치)
-const TABLE_FONT = '14px Pretendard';
+// pretext는 canvas font 엔진을 ground truth로 쓰므로 실제 로드된 폰트명과 정확히 일치해야 함.
+// layout.tsx에서 "Wanted Sans Variable" 웹폰트를 로드하고 globals.css --font-sans도 동일.
+// (이전 'Pretendard'는 미로드 폰트 → 브라우저 폴백 대체 → 측정값이 렌더 높이와 어긋남)
+const TABLE_FONT = '14px "Wanted Sans Variable"';
 
 /**
  * 셀 타입에 따른 높이 계산
@@ -73,7 +76,7 @@ export function computeCellHeight(
 interface UseRowHeightsOptions {
   displayRows: TableRow[];
   columnWidths: number[];
-  /** pretext font 문자열 (기본: "14px Pretendard") */
+  /** pretext font 문자열 (기본: '14px "Wanted Sans Variable"') */
   font?: string;
 }
 

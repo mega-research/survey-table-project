@@ -520,3 +520,100 @@ export function getHeaderGridColumnCount(grid: HeaderCell[][]): number {
   // 첫 번째 행의 colspan 합이 총 컬럼 수
   return grid[0]?.reduce((sum, cell) => sum + cell.colspan, 0) ?? 0;
 }
+
+/**
+ * 헤더 그리드의 한 행에서 각 셀이 차지하는 시작 그리드 열(0-based)을 계산한다.
+ * 위쪽 행의 rowspan으로 점유된 슬롯은 occupied로 추적해 건너뛴다.
+ *
+ * @returns 셀별 { startCol, colspan } 배열 (입력 셀 순서 보존)
+ */
+function computeHeaderRowSlots(
+  row: HeaderCell[],
+  rowIdx: number,
+  occupied: Set<number>[],
+): Array<{ startCol: number; colspan: number }> {
+  const slots: Array<{ startCol: number; colspan: number }> = [];
+  let col = 0;
+  for (const cell of row) {
+    while (occupied[rowIdx]?.has(col)) col++;
+    const colspan = cell.colspan || 1;
+    const rowspan = cell.rowspan || 1;
+    if (rowspan > 1) {
+      for (let r = rowIdx + 1; r < rowIdx + rowspan && r < occupied.length; r++) {
+        for (let c = col; c < col + colspan; c++) occupied[r]?.add(c);
+      }
+    }
+    slots.push({ startCol: col, colspan });
+    col += colspan;
+  }
+  return slots;
+}
+
+/**
+ * 다단계 헤더 그리드를 데이터 컬럼 변경에 맞춰 재동기화한다.
+ *
+ * 빌더에서 다단계 헤더가 켜진 상태로 열을 추가/삭제하면, 기존 headerGrid는
+ * 변경 전 컬럼 수 기준이라 그대로 두면 헤더 폭이 바디와 어긋난다
+ * (추가된 열에 헤더 셀이 없거나, 삭제된 열의 헤더가 남아 라벨이 밀림).
+ *
+ * 슬롯(그리드 열) 좌표로 각 행을 보정한다:
+ * - add: 삽입 슬롯이 기존 병합 셀 내부면 그 셀의 colspan을 +1, 경계/말단이면 1x1 리프 셀 삽입.
+ * - delete: 삭제 슬롯을 덮는 셀의 colspan을 -1, 1 미만이 되면 셀 제거.
+ *
+ * rowspan은 슬롯 점유로만 추적하므로 세로 병합은 보존된다.
+ *
+ * @param grid 기존 헤더 그리드
+ * @param change add(삽입될 슬롯) 또는 delete(제거될 슬롯). slot은 0-based 그리드 열.
+ * @returns 재동기화된 헤더 그리드 (빈 행은 발생하지 않도록 셀 1개 이상 유지)
+ */
+export function reconcileHeaderGridForColumnChange(
+  grid: HeaderCell[][],
+  change: { type: 'add'; slot: number } | { type: 'delete'; slot: number },
+): HeaderCell[][] {
+  if (!grid || grid.length === 0) return grid;
+
+  const totalRows = grid.length;
+  const occupied: Set<number>[] = Array.from({ length: totalRows }, () => new Set<number>());
+
+  return grid.map((row, rowIdx) => {
+    const slots = computeHeaderRowSlots(row, rowIdx, occupied);
+
+    if (change.type === 'add') {
+      // 삽입 슬롯을 내부에 포함하는 셀(startCol < slot < startCol+colspan)을 찾으면 colspan +1.
+      const containingIdx = slots.findIndex(
+        (s) => change.slot > s.startCol && change.slot < s.startCol + s.colspan,
+      );
+      if (containingIdx >= 0) {
+        return row.map((cell, i) =>
+          i === containingIdx ? { ...cell, colspan: (cell.colspan || 1) + 1 } : cell,
+        );
+      }
+      // 경계/말단: 삽입 슬롯 이후의 첫 셀 앞에 새 1x1 리프 셀 삽입(없으면 끝에 추가).
+      const insertIdx = slots.findIndex((s) => s.startCol >= change.slot);
+      const newCell: HeaderCell = { id: `hc-${generateInsertId()}`, label: '', colspan: 1, rowspan: 1 };
+      const newRow = [...row];
+      newRow.splice(insertIdx === -1 ? newRow.length : insertIdx, 0, newCell);
+      return newRow;
+    }
+
+    // delete: 삭제 슬롯을 덮는 셀을 찾아 colspan -1, 1 미만이면 제거.
+    const coverIdx = slots.findIndex(
+      (s) => change.slot >= s.startCol && change.slot < s.startCol + s.colspan,
+    );
+    if (coverIdx < 0) return row;
+    const target = row[coverIdx];
+    if (!target) return row;
+    const nextColspan = (target.colspan || 1) - 1;
+    if (nextColspan < 1) {
+      return row.filter((_, i) => i !== coverIdx);
+    }
+    return row.map((cell, i) => (i === coverIdx ? { ...cell, colspan: nextColspan } : cell));
+  });
+}
+
+let headerCellInsertCounter = 0;
+/** 재동기화로 삽입되는 헤더 셀의 고유 id 생성 (generateId 의존 없이 결정적) */
+function generateInsertId(): string {
+  headerCellInsertCounter += 1;
+  return `${Date.now().toString(36)}-${headerCellInsertCounter}`;
+}

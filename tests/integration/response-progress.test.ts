@@ -99,13 +99,15 @@ describe('updateQuestionResponse — progress_pct SET', () => {
 describe('saveAdminEdit — progress_pct 재계산', () => {
   beforeEach(() => {
     updateSetMock.mockReset();
+    updateReturningMock.mockReset();
     findFirstMock.mockReset();
     selectLimitMock.mockReset();
     // 기본값: 빈 결과. audit diff 의 버전 스냅샷 조회와 progress snapshot 조회가
     // 같은 limit mock 을 공유하므로, 스냅샷이 필요한 테스트만 개별 mockResolvedValue 로 덮는다.
     selectLimitMock.mockResolvedValue([]);
-    // transaction 내부에서 호출되는 update().set().where() 는 returning() 없이 끝남
-    // chainable.where 는 chainable 을 반환하므로 별도 mock 불필요
+    // 트랜잭션 안 UPDATE 가 isNull(deletedAt) 가드와 함께 .returning() 으로 영향 행을 검사한다.
+    // 기본값은 1행(정상 경합 없음) — 삭제 경합 케이스만 개별 테스트에서 []로 덮는다.
+    updateReturningMock.mockResolvedValue([{ id: 'r1' }]);
     // transaction 바깥 select().from().where().limit() 는 selectLimitMock 으로 제어
   });
 
@@ -201,5 +203,36 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
     if (!nullVersionCall) throw new Error('updateSetMock 호출 없음');
     const setArg = nullVersionCall[0] as Record<string, unknown>;
     expect(setArg['progressPct']).toBeNull();
+  });
+
+  // 회귀(M63): 사전 deletedAt 검사 이후 동시 softDeleteResponse 가 끼어드는 TOCTOU.
+  // 트랜잭션 안 UPDATE 가 isNull(deletedAt) 가드로 0행을 반환하면 throw 해
+  // answers 재작성/edit log 를 하지 않고 롤백해야 한다.
+  it('트랜잭션 안 UPDATE 가 0행이면(동시 soft delete) throw 하고 answers 재작성을 건너뛴다', async () => {
+    findFirstMock.mockResolvedValue({
+      id: 'r1',
+      status: 'drop',
+      versionId: null,
+      // 사전 검사 시점에는 아직 활성 — 검사를 통과시킨다.
+      deletedAt: null,
+    });
+    // 트랜잭션 진입 후 동시 삭제가 이겨 isNull(deletedAt) 가드에 걸려 0행.
+    updateReturningMock.mockResolvedValue([]);
+
+    const { replaceResponseAnswers } = await import(
+      '@/features/survey-response/server/services/response-answers.service'
+    );
+    vi.mocked(replaceResponseAnswers).mockClear();
+
+    const { saveAdminEdit } = await import('@/features/survey-response/server/services/response-edit.service');
+    await expect(
+      saveAdminEdit(
+        { surveyId: 's1', responseId: 'r1', questionResponses: { q1: 'a' } },
+        { id: 'admin-1', email: 'a@b.com' },
+      ),
+    ).rejects.toThrow('Cannot edit deleted response');
+
+    // 경합에서 졌으면 정규화 응답 재작성은 하지 않아야 한다 (롤백 의도).
+    expect(replaceResponseAnswers).not.toHaveBeenCalled();
   });
 });

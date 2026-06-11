@@ -295,6 +295,78 @@ describe('generateSPSSColumns', () => {
     expect(col).toBeDefined();
     expect(col?.cellExportLabel).toBe('Q1_남성_성별');
   });
+
+  it('radio-group 멤버 셀들의 spssNumericCode가 충돌해도 값 라벨이 덮어쓰이지 않고 응답이 구분된다', () => {
+    // 멤버 셀은 옵션 1개뿐이라 기본 spssNumericCode가 모두 1로 겹치기 쉽다(복붙/기본값).
+    // 충돌 시 두 셀이 같은 코드로 합쳐지고 한쪽 라벨이 사라지던 회귀를 막는다.
+    const q: Question = {
+      id: 'q1',
+      type: 'table',
+      title: 'Q1',
+      order: 1,
+      required: false,
+      questionCode: 'Q1',
+      tableColumns: [
+        { id: 'c1', label: '항목', columnCode: 'c1' },
+        { id: 'c2', label: '남성', columnCode: 'c2' },
+        { id: 'c3', label: '여성', columnCode: 'c3' },
+      ],
+      tableRowsData: [
+        {
+          id: 'row1',
+          label: '성별',
+          rowCode: 'r1',
+          cells: [
+            { id: 'cA', type: 'text', content: '성별', cellCode: 'Q1_r1_c1' },
+            {
+              id: 'cB',
+              type: 'radio',
+              content: '',
+              radioGroupName: 'g1',
+              radioOptions: [{ id: 'm', label: '남성', value: 'optM', spssNumericCode: 1 }],
+            },
+            {
+              id: 'cC',
+              type: 'radio',
+              content: '',
+              radioGroupName: 'g1',
+              // 충돌: 두 번째 멤버도 spssNumericCode 1
+              radioOptions: [{ id: 'f', label: '여성', value: 'optF', spssNumericCode: 1 }],
+            },
+          ],
+        },
+      ],
+    } as unknown as Question;
+
+    const col = generateSPSSColumns([q]).find((c) => c.type === 'radio-group');
+    expect(col).toBeDefined();
+
+    // 두 멤버 셀이 서로 다른 숫자값으로 매핑되어야 한다.
+    const valueByCell = col?.radioGroupCellValueMap ?? {};
+    const valueCB = valueByCell['cB'];
+    const valueCC = valueByCell['cC'];
+    expect(valueCB).toBeDefined();
+    expect(valueCC).toBeDefined();
+    expect(valueCB).not.toBe(valueCC);
+
+    // 두 라벨이 모두 보존되어야 한다(한쪽 덮어쓰기 금지).
+    const labels = Object.values(col?.radioGroupValueLabels ?? {});
+    expect(labels).toContain('남성');
+    expect(labels).toContain('여성');
+
+    // 응답도 셀별로 구분되어 출력되어야 한다.
+    const rows = buildDataRows(
+      [col!],
+      [q],
+      [
+        makeSubmission({ q1: { cB: 'optM' } }),
+        makeSubmission({ q1: { cC: 'optF' } }),
+      ],
+    );
+    expect(rows[0]?.[0]).toBe(valueCB);
+    expect(rows[1]?.[0]).toBe(valueCC);
+    expect(rows[0]?.[0]).not.toBe(rows[1]?.[0]);
+  });
 });
 
 describe('buildDataRows', () => {
@@ -394,5 +466,34 @@ describe('buildDataRows', () => {
     if (!tableRow0 || !tableRow1) throw new Error('rows 없음');
     expect(tableRow0[colIdx]).toBe(2);
     expect(tableRow1[colIdx]).toBe(1);
+  });
+
+  it('다단계 선택(multiselect) 응답을 밑줄로 합산한 STRING으로 변환한다', () => {
+    // 회귀 방지: multiselect 컬럼이 switch default(콤마)로 빠지면 'a,b'가 되어 의도(밑줄)와 다르다.
+    const q = makeQuestion({
+      type: 'multiselect',
+      order: 1,
+      id: 'q-region',
+      questionCode: 'Q1',
+      title: '거주 지역',
+    });
+
+    const columns = generateSPSSColumns([q]);
+    const msCol0 = columns[0];
+    if (!msCol0) throw new Error('columns[0] 없음');
+    expect(msCol0.type).toBe('multiselect');
+
+    const submissions = [
+      makeSubmission({ 'q-region': ['서울', '강남구', '역삼동'] }),
+      makeSubmission({ 'q-region': [] }, { id: 'sub-2' }),
+    ];
+    const rows = buildDataRows(columns, [q], submissions);
+    const msRow0 = rows[0];
+    const msRow1 = rows[1];
+    if (!msRow0 || !msRow1) throw new Error('rows 없음');
+    // 콤마가 아니라 밑줄로 합산되어야 한다.
+    expect(msRow0[0]).toBe('서울_강남구_역삼동');
+    // 빈 배열은 system-missing(null).
+    expect(msRow1[0]).toBeNull();
   });
 });

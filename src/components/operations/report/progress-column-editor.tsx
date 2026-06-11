@@ -93,15 +93,20 @@ export function ProgressColumnEditor({ surveyId, initialScheme, contactScheme }:
   const save = () => {
     setError(null);
     startTransition(async () => {
-      const result = await client.operations.progress.updateColumns({
-        surveyId,
-        scheme: { version: 1, columns },
-      });
-      if (!result.ok) {
-        setError(result.error ?? '저장에 실패했습니다.');
-        return;
+      try {
+        const result = await client.operations.progress.updateColumns({
+          surveyId,
+          scheme: { version: 1, columns },
+        });
+        if (!result.ok) {
+          setError(result.error ?? '저장에 실패했습니다.');
+          return;
+        }
+        router.refresh();
+      } catch (e) {
+        // 인증 만료/네트워크 장애/서버 500 등 RPC throw 경로를 배너로 노출
+        setError((e as Error).message);
       }
-      router.refresh();
     });
   };
 

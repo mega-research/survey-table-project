@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { surveyResponses, surveys, surveyVersions, responseEditLogs } from '@/db/schema';
@@ -26,7 +26,8 @@ export { SurveyOwnershipError };
  * - questionResponses (JSONB) 와 response_answers 정규화 행을 일괄 갱신.
  * - completedAt / status / startedAt / totalSeconds 는 명시적으로 set 하지 않아 보존됨.
  * - lastEditedAt / lastActivityAt 은 갱신, currentStepId 는 null 로 초기화.
- * - 삭제(soft delete)된 응답은 거부.
+ * - 삭제(soft delete)된 응답은 거부. 트랜잭션 안 UPDATE WHERE 에 isNull(deletedAt) 가드를
+ *   둬서 사전 검사 이후 동시 soft delete 가 끼어드는 TOCTOU 도 차단한다.
  * - progress_pct: status='completed' 면 100 유지, 그 외는 questionResponses 키 → snapshot
  *   position 매핑으로 재계산. 답변 0개면 NULL 로 reset.
  * - snapshot 은 트랜잭션 바깥에서 조회 — 동시 버전 publish 시 progress_pct 가 일시적으로
@@ -96,7 +97,11 @@ export async function saveAdminEdit(
   }
 
   await db.transaction(async (tx) => {
-    await tx
+    // deletedAt 검사(line 61)와 이 UPDATE 사이에 동시 softDeleteResponse 가 deletedAt 을
+    // 세팅하는 TOCTOU 를 차단한다. WHERE 에 isNull(deletedAt) 를 추가하고 .returning() 으로
+    // 영향 행 수를 확인 — 0행이면 경합에서 삭제가 이겼으므로 throw 해 트랜잭션 전체(answers
+    // 재작성·edit log)를 롤백한다 (BAD_REQUEST 로 매핑됨).
+    const updated = await tx
       .update(surveyResponses)
       .set({
         questionResponses: questionResponses,
@@ -109,8 +114,14 @@ export async function saveAdminEdit(
         and(
           eq(surveyResponses.id, responseId),
           eq(surveyResponses.surveyId, surveyId),
+          isNull(surveyResponses.deletedAt),
         ),
-      );
+      )
+      .returning({ id: surveyResponses.id });
+
+    if (updated.length === 0) {
+      throw new Error('Cannot edit deleted response');
+    }
 
     await replaceResponseAnswers(
       tx,

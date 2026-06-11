@@ -7,6 +7,7 @@ import { Check, ChevronLeft, ChevronRight, ListChecks } from 'lucide-react';
 import { useColumnSectionMap, useRowGroups } from '@/hooks/use-row-groups';
 import { cn } from '@/lib/utils';
 import type { HeaderCell, TableColumn, TableRow } from '@/types/survey';
+import { isTableRowCompleted } from '@/utils/table-row-completion';
 
 import { MobileRowCard } from './mobile-row-card';
 
@@ -77,15 +78,7 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
   const rowCompletionMap = useMemo(() => {
     const map = new Map<string, boolean>();
     for (const row of displayRows) {
-      const completed = row.cells.every((cell) => {
-        if (cell._isContinuation) return true;
-        if (['text', 'checkbox', 'radio', 'select', 'input'].includes(cell.type)) {
-          const val = currentResponse[cell.id];
-          return val !== undefined && val !== null && val !== '';
-        }
-        return true;
-      });
-      map.set(row.id, completed);
+      map.set(row.id, isTableRowCompleted(row, currentResponse));
     }
     return map;
   }, [displayRows, currentResponse]);
@@ -165,6 +158,45 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
   const [phase, setPhase] = useState<StepperPhase>(initialPhase);
   const [preSelectedGroupIndices, setPreSelectedGroupIndices] = useState<Set<number>>(new Set());
   const [preSelectedRowIds, setPreSelectedRowIds] = useState<Set<string>>(new Set());
+
+  // ── displayRows 변경에 따른 사전선택 상태 재동기화 ──
+  // phase/preSelected* 는 최초 마운트 시 한 번만 seed 되지만, 부모는 key 없이
+  // 이 컴포넌트를 리렌더(리마운트 아님)하므로 선행 질문 응답으로 displayRows 가
+  // 바뀌면 stale 상태가 남는다(예: 분류가 detail↔group-select 로 뒤집히거나,
+  // 사라진 행 id 가 preSelectedRowIds 에 남아 filteredRows 가 빈 집합이 됨).
+  useEffect(() => {
+    // 더 이상 존재하지 않는 행 id 를 사전선택 집합에서 제거
+    const rowIdSet = new Set(displayRows.map((r) => r.id));
+    setPreSelectedRowIds((prev) => {
+      let changed = false;
+      const next = new Set<string>();
+      for (const id of prev) {
+        if (rowIdSet.has(id)) next.add(id);
+        else changed = true;
+      }
+      return changed ? next : prev;
+    });
+    // 유효 범위를 벗어난 그룹 인덱스를 제거
+    setPreSelectedGroupIndices((prev) => {
+      let changed = false;
+      const next = new Set<number>();
+      for (const idx of prev) {
+        if (idx < rowGroups.length) next.add(idx);
+        else changed = true;
+      }
+      return changed ? next : prev;
+    });
+    // 현재 분류와 모순되는 phase 만 보정 (정상 phase 는 사용자 네비게이션 보존)
+    setPhase((prev) => {
+      if (!needsPreSelect) return prev === 'detail' ? prev : 'detail';
+      if (prev === 'group-select' && skipGroupSelect) return 'row-select';
+      // detail 진입 후 사전선택 행이 전부 사라지면 선택 단계로 복귀
+      if (prev === 'detail' && !displayRows.some((r) => preSelectedRowIds.has(r.id))) {
+        return skipGroupSelect ? 'row-select' : 'group-select';
+      }
+      return prev;
+    });
+  }, [displayRows, rowGroups, needsPreSelect, skipGroupSelect, preSelectedRowIds]);
 
   const toggleGroupIndex = useCallback((idx: number) => {
     setPreSelectedGroupIndices((prev) => {
@@ -266,7 +298,9 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
       <div className="space-y-3">
         <p className="text-sm font-medium text-gray-700">세부 항목을 선택하세요</p>
         {selectedGroups.map((group) => (
-          <div key={group.label}>
+          // key는 group.startIndex 사용 — group.label은 같은 선두 텍스트를 가진
+          // 두 rowspan 섹션 간 충돌 가능(중복 key → React reconciliation 오류)
+          <div key={group.startIndex}>
             {!skipGroupSelect && (
               <h3 className="mb-1.5 text-xs font-semibold text-gray-500">{group.label}</h3>
             )}

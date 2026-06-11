@@ -43,25 +43,27 @@ vi.mock('next/cache', () => ({
 // 테스트
 // ========================
 
-describe('completeResponse — 대상 행 없음 (빈 returning)', () => {
+describe('completeResponse — 대상 행 없음 / 가드 차단 (빈 returning)', () => {
   beforeEach(() => {
     updateReturningMock.mockReset();
     selectLimitMock.mockReset();
   });
 
-  it('UPDATE returning 이 빈 배열이면 명시적 에러로 throw 한다 (undefined 접근 크래시 아님)', async () => {
-    // 트랜잭션 내부 UPDATE 가 0행 매칭 → returning() = []
+  it('UPDATE 가 0행이고 행 자체가 없으면 명시적 에러로 throw 한다 (undefined 접근 크래시 아님)', async () => {
+    // 가드(deletedAt/status) 또는 존재하지 않는 responseId 로 UPDATE 가 0행 → returning() = []
     updateReturningMock.mockResolvedValue([]);
+    // 0행 이후 폴백 SELECT 도 행 없음
+    selectLimitMock.mockResolvedValue([]);
 
     const { completeResponse } = await import('@/features/survey-response/server/services/response.service');
 
     // data 없이 호출 → prefill SELECT 분기 skip, 곧장 트랜잭션 UPDATE 로 진입
     await expect(completeResponse({ responseId: 'does-not-exist' })).rejects.toThrow(
-      /응답 행 없음/,
+      /완료 처리 불가 행/,
     );
   });
 
-  it('정상 행이면 갱신된 행을 반환한다', async () => {
+  it('정상 in_progress 행이면 갱신된 행을 반환한다', async () => {
     updateReturningMock.mockResolvedValue([
       { id: 'r1', surveyId: 's1', contactTargetId: null, pageVisits: null },
     ]);
@@ -70,5 +72,43 @@ describe('completeResponse — 대상 행 없음 (빈 returning)', () => {
     const result = await completeResponse({ responseId: 'r1' });
 
     expect(result).toMatchObject({ id: 'r1', surveyId: 's1' });
+  });
+
+  it('가드에 막혀 0행이지만 이미 완료된 같은 행이면 멱등 재시도로 기존 행을 반환한다', async () => {
+    // 지연/리플레이 complete 호출: status=completed 라 UPDATE 가드가 0행으로 막음
+    updateReturningMock.mockResolvedValue([]);
+    // 폴백 SELECT 는 이미 완료(soft-delete 아님)된 행을 돌려줌
+    selectLimitMock.mockResolvedValue([
+      { id: 'r1', surveyId: 's1', isCompleted: true, status: 'completed', deletedAt: null, contactTargetId: null, pageVisits: null },
+    ]);
+
+    const { completeResponse } = await import('@/features/survey-response/server/services/response.service');
+    const result = await completeResponse({ responseId: 'r1' });
+
+    expect(result).toMatchObject({ id: 'r1', isCompleted: true });
+  });
+
+  it('가드에 막혀 0행이고 종결 status(screened_out)면 완료 처리를 거부한다 (덮어쓰기 방지)', async () => {
+    updateReturningMock.mockResolvedValue([]);
+    // 폴백 SELECT: 이미 자격미달 종결 — isCompleted=false
+    selectLimitMock.mockResolvedValue([
+      { id: 'r1', surveyId: 's1', isCompleted: false, status: 'screened_out', deletedAt: null, contactTargetId: null, pageVisits: null },
+    ]);
+
+    const { completeResponse } = await import('@/features/survey-response/server/services/response.service');
+
+    await expect(completeResponse({ responseId: 'r1' })).rejects.toThrow(/완료 처리 불가 행/);
+  });
+
+  it('가드에 막혀 0행이고 soft-delete 된 행이면 (완료여부 무관) 완료 처리를 거부한다 (부활 방지)', async () => {
+    updateReturningMock.mockResolvedValue([]);
+    // 폴백 SELECT: 완료였으나 이후 soft-delete 됨 → 멱등 반환 대상 아님
+    selectLimitMock.mockResolvedValue([
+      { id: 'r1', surveyId: 's1', isCompleted: true, status: 'completed', deletedAt: new Date(), contactTargetId: null, pageVisits: null },
+    ]);
+
+    const { completeResponse } = await import('@/features/survey-response/server/services/response.service');
+
+    await expect(completeResponse({ responseId: 'r1' })).rejects.toThrow(/완료 처리 불가 행/);
   });
 });

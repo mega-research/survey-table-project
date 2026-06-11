@@ -79,6 +79,47 @@ describe.skipIf(!isLocalDb)('saved-questions procedure round-trip (real local DB
     expect(list.some((q) => q.id === saved.id)).toBe(true);
   });
 
+  it('recentlyUsed: usageCount>0 필터를 LIMIT 이전에 적용해 사용된 질문이 더 최근 미사용 질문에 밀려나지 않는다', async () => {
+    // 회귀: 과거에는 LIMIT(상위 limit개) 적용 후 JS에서 usageCount>0 필터를 돌려서,
+    // 상위 limit개가 전부 usageCount===0이면 결과가 빈 배열이 되어 '최근 사용' 섹션이 사라졌다.
+
+    // 1) 사용된 질문 1개 생성 후 apply (usageCount=1, updatedAt이 now로 갱신됨)
+    const usedSaved = await client.savedQuestions.create({
+      question: {
+        id: 'rt-used',
+        type: 'text' as const,
+        title: '사용된 질문',
+        required: false,
+        order: 0,
+      } as never,
+      metadata: { name: 'recently-used-사용됨', category: '테스트' },
+    });
+    createdIds.push(usedSaved.id);
+    await client.savedQuestions.apply({ id: usedSaved.id });
+
+    // 2) apply 이후에 미사용 질문 limit개 생성 -> 이들이 updatedAt 최신 상위를 모두 차지함
+    const limit = 5;
+    for (let i = 0; i < limit; i += 1) {
+      const unused = await client.savedQuestions.create({
+        question: {
+          id: `rt-unused-${i}`,
+          type: 'text' as const,
+          title: `미사용 질문 ${i}`,
+          required: false,
+          order: 0,
+        } as never,
+        metadata: { name: `recently-used-미사용-${i}`, category: '테스트' },
+      });
+      createdIds.push(unused.id);
+    }
+
+    // 3) recentlyUsed는 usageCount>0인 사용된 질문을 여전히 포함해야 한다.
+    const recent = await client.savedQuestions.recentlyUsed({ limit });
+    expect(recent.some((q) => q.id === usedSaved.id)).toBe(true);
+    // 미사용(usageCount===0) 질문은 절대 포함되지 않는다.
+    expect(recent.every((q) => q.usageCount > 0)).toBe(true);
+  });
+
   it('apply: usageCount 증가 후 새 id를 부여한 question을 반환한다', async () => {
     const question = {
       id: 'rt-src2',

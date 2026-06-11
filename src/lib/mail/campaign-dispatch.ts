@@ -8,6 +8,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { contactTargets } from '@/db/schema/contacts';
 import { mailCampaigns, mailRecipients } from '@/db/schema/mail';
+import { finalizeCampaignIfDone } from '@/lib/mail/recipient-status-transition';
 import { renderForCampaignSend } from '@/lib/mail/render-for-send';
 import {
   resolveCampaignAttachments,
@@ -203,6 +204,11 @@ export async function dispatchCampaignChunk(
       failed += 1;
     }
   }
+
+  // 전건 failed(message_id 없음)로 끝나면 webhook이 도착하지 않아 finalize가 영영
+  // 실행되지 않는다. 청크 처리 후 종료 조건(queued_count=0 AND sent_count=0)을 직접 판정해
+  // 'sending'에 갇히는 것을 막는다. sent가 있으면 webhook이 finalize하므로 여기선 no-op.
+  await db.transaction((tx) => finalizeCampaignIfDone(tx, campaignId));
 
   return { sent, failed };
 }

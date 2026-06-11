@@ -128,7 +128,9 @@ export async function ingestContactUpload(
     for (const row of allRows) {
       try {
         await tx.transaction(async (sp) => {
-          const groupValue = groupKey ? (row[groupKey] || null) : null;
+          // 빈 셀('')만 NULL 처리. '0' 등 falsy 문자열 group 라벨은 보존 (|| 사용 금지).
+          const rawGroup = groupKey ? row[groupKey] : undefined;
+          const groupValue = rawGroup != null && rawGroup !== '' ? rawGroup : null;
 
           // attrs 에서 PII 키 제외 — PII 는 contact_pii 사이드 테이블에만 저장
           const cleanAttrs: Record<string, string> = {};

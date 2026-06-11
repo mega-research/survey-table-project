@@ -30,6 +30,18 @@ export function TableValidationEditor({
   const [rules, setRules] = useState<TableValidationRule[]>(question.tableValidationRules || []);
   const [expandedRules, setExpandedRules] = useState<Set<string>>(new Set());
 
+  // 다른 질문으로 in-place 전환 시 로컬 rules 를 새 질문 값으로 재동기화한다.
+  // (모달이 remount 없이 question 만 교체되면 이전 질문의 규칙이 그대로 남아
+  //  편집 시 onUpdate 가 이전 질문 규칙을 새 질문에 덮어쓰는 회귀를 막는다.)
+  // 의존 키는 question.id 로만 잡는다 — store 의 question reference 가 편집 중
+  // 흔들려도(셀 편집 등) rules 를 리셋하지 않아 진행 중 편집이 보존된다.
+  const [syncedQuestionId, setSyncedQuestionId] = useState(question.id);
+  if (syncedQuestionId !== question.id) {
+    setSyncedQuestionId(question.id);
+    setRules(question.tableValidationRules || []);
+    setExpandedRules(new Set());
+  }
+
   const validationTypes: { value: TableValidationType; label: string; description: string }[] = [
     {
       value: 'exclusive-check',

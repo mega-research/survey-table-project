@@ -328,7 +328,9 @@ export function SurveyResponseFlow({
 
       return -1;
     },
-    [steps, responses, questions, groups],
+    // evalCtx 누락 시 contactAttrs/lookups 가 비동기로 채워져도 콜백이 재생성되지 않아
+    // stale 컨텍스트로 step 표시 여부를 계산한다 (visibleSteps 등 다른 소비자와 deps 정합).
+    [steps, responses, questions, groups, evalCtx],
   );
 
   // 현재 step이 전부 숨겨지면 다음 표시 가능 step으로 자동 이동

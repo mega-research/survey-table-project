@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { desc, eq, ilike, inArray, or, sql } from 'drizzle-orm';
+import { desc, eq, gt, ilike, inArray, or, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { NewSavedQuestion, savedQuestions } from '@/db/schema/surveys';
@@ -74,11 +74,15 @@ export async function getSavedQuestionsByCategory(category: string): Promise<Sav
 
 /** 최근 사용된 질문 조회 (usageCount > 0, updatedAt 최신순) */
 export async function getRecentlyUsedQuestions(limit: number = 5): Promise<SavedQuestion[]> {
+  // usageCount > 0 필터를 LIMIT 이전(SQL WHERE)에서 적용해야 한다.
+  // 그렇지 않으면 최근 수정된 상위 limit개가 모두 usageCount===0일 때
+  // 결과가 빈 배열이 되어 '최근 사용' 섹션이 사라진다.
   const rows = await db.query.savedQuestions.findMany({
+    where: gt(savedQuestions.usageCount, 0),
     orderBy: [desc(savedQuestions.updatedAt)],
     limit,
   });
-  return rows.filter((q) => q.usageCount > 0).map(toDomainSavedQuestion);
+  return rows.map(toDomainSavedQuestion);
 }
 
 /** 사용 횟수 많은 질문 조회 */

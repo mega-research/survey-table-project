@@ -33,6 +33,21 @@ import type {
 // 원본 interface SurveyDiffPayload 를 re-export(소비처 use-survey-sync 가 import type).
 export type { SurveyDiffPayload };
 
+/**
+ * slug 정규화: 빈 문자열('')을 null 로 변환한다.
+ *
+ * 사용자가 커스텀 URL 입력을 비우면 store 는 slug:'' 를 그대로 보낸다(undefined 가 아니라
+ * payload 에 포함됨). slug 컬럼은 UNIQUE 이고 Postgres 는 여러 NULL 은 충돌로 보지 않지만
+ * 여러 '' 는 충돌로 본다. 따라서 '' 를 그대로 쓰면 두 번째 빈 slug 저장에서 친절한
+ * '이미 사용 중인 URL입니다' 대신 raw unique-constraint 에러가 난다. '' 를 null 로
+ * 정규화해 컬럼 의미(미설정 = NULL)에 맞춘다. 공백만 입력한 경우도 미설정으로 간주.
+ */
+export function normalizeSlug(slug: string | null | undefined): string | null {
+  if (slug == null) return null;
+  const trimmed = slug.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 // ========================
 // Diff 기반 설문 저장 (변경분만 전송)
 // ========================
@@ -45,10 +60,13 @@ export async function saveSurveyDiff(
 ): Promise<SaveResult> {
   const { surveyId, metadata, groups: incomingGroups, questionChanges } = payload;
 
+  // slug 정규화: '' -> null (UNIQUE 컬럼에 빈 문자열을 쓰면 두 번째부터 충돌)
+  const normalizedSlug = metadata ? normalizeSlug(metadata.slug) : undefined;
+
   // slug 중복 사전 검사
-  if (metadata?.slug) {
+  if (normalizedSlug) {
     const duplicate = await db.query.surveys.findFirst({
-      where: and(eq(surveys.slug, metadata.slug), sql`${surveys.id} != ${surveyId}`),
+      where: and(eq(surveys.slug, normalizedSlug), sql`${surveys.id} != ${surveyId}`),
       columns: { id: true },
     });
     if (duplicate) {
@@ -64,7 +82,9 @@ export async function saveSurveyDiff(
         .set({
           title: metadata.title,
           description: metadata.description,
-          slug: metadata.slug,
+          // slug 가 payload 에 실려 온 경우에만 set(diff 의미 보존). '' / 공백은 null 로 정규화해
+          // UNIQUE 컬럼 충돌을 막는다. slug 미포함(undefined) 시에는 손대지 않아 기존 값 보존.
+          ...(metadata.slug !== undefined ? { slug: normalizedSlug } : {}),
           // 링크 재발급(revocation): privateToken 변경분이 metadata 에 실려 오면 DB 에 반영해야
           // 옛 링크가 무효화된다. 누락 시 새 토큰이 영속되지 않아 기존 링크가 계속 유효한 버그.
           ...(metadata.privateToken !== undefined ? { privateToken: metadata.privateToken } : {}),
@@ -306,10 +326,13 @@ export async function saveSurveyDiff(
 export async function saveSurveyWithDetails(
   surveyData: SurveyType,
 ): Promise<SaveResult> {
+  // slug 정규화: '' -> null (UNIQUE 컬럼에 빈 문자열을 쓰면 두 번째부터 충돌)
+  const normalizedSlug = normalizeSlug(surveyData.slug);
+
   // slug 중복 사전 검사
-  if (surveyData.slug) {
+  if (normalizedSlug) {
     const duplicate = await db.query.surveys.findFirst({
-      where: and(eq(surveys.slug, surveyData.slug), sql`${surveys.id} != ${surveyData.id}`),
+      where: and(eq(surveys.slug, normalizedSlug), sql`${surveys.id} != ${surveyData.id}`),
       columns: { id: true },
     });
     if (duplicate) {
@@ -330,7 +353,6 @@ export async function saveSurveyWithDetails(
       const updateSet: Record<string, unknown> = {
         title: surveyData.title,
         description: surveyData.description,
-        slug: surveyData.slug,
         contactEmail: surveyData.contactEmail ?? null,
         isPublic: surveyData.settings.isPublic,
         allowMultipleResponses: surveyData.settings.allowMultipleResponses,
@@ -343,6 +365,11 @@ export async function saveSurveyWithDetails(
         requireInviteToken: surveyData.settings.requireInviteToken ?? false,
         updatedAt: new Date(),
       };
+      // slug 가 실려 온 경우에만 set(undefined 면 기존 값 보존). '' / 공백은 null 로 정규화해
+      // UNIQUE 컬럼 충돌을 막는다(여러 행이 '' 를 가지면 두 번째 저장부터 raw 제약 위반).
+      if (surveyData.slug !== undefined) {
+        updateSet['slug'] = normalizedSlug;
+      }
       if (surveyData.lookups !== undefined) {
         updateSet['lookups'] = surveyData.lookups;
       }
@@ -361,7 +388,7 @@ export async function saveSurveyWithDetails(
         id: surveyData.id,
         title: surveyData.title,
         description: surveyData.description,
-        slug: surveyData.slug,
+        slug: normalizedSlug,
         privateToken: surveyData.privateToken,
         contactEmail: surveyData.contactEmail ?? null,
         isPublic: surveyData.settings.isPublic,

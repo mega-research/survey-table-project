@@ -5,6 +5,7 @@ import { cache } from 'react';
 import { and, count, desc, eq, ilike, ne } from 'drizzle-orm';
 
 import * as libraryData from '@/data/library';
+import { getSurveyWithDetails as getSurveyWithDetailsData } from '@/data/surveys';
 import { db } from '@/db';
 import { questionGroups, questions, surveyVersions, surveys } from '@/db/schema';
 import {
@@ -12,7 +13,6 @@ import {
   type VariableDef,
 } from '@/components/operations/mail-template/variable-catalog';
 import type { QuestionGroup, Question as QuestionType, Survey as SurveyType } from '@/types/survey';
-import { generateAllOptionCodes } from '@/utils/option-code-generator';
 import { generateAllCellCodes } from '@/utils/table-cell-code-generator';
 
 import type {
@@ -28,8 +28,9 @@ import type {
 // 관리(빌더) 경로는 procedure 의 authed 미들웨어가 인증을 대체하고,
 // 공개(응답자) 경로는 pub 미들웨어로 남겨 인증 강도를 byte 보존한다.
 //
-// data/surveys.ts 의 코드 복원 로직(generateAllOptionCodes/generateAllCellCodes),
-// snapshot 우선+fallback 구조, React.cache 래핑을 그대로 흡수한다(불변식 E·G).
+// 코드 복원(generateAllOptionCodes/generateAllCellCodes)·snapshot 우선+fallback·React.cache
+// 불변식(E·G)은 유지한다. getSurveyWithDetails 본문은 publish/analytics 가 공유하는
+// data/surveys.ts 단일 구현에 위임해 매핑 로직 중복(신규 컬럼 누락 위험)을 제거한다.
 
 // ========================
 // 설문 조회 (authed)
@@ -99,104 +100,9 @@ export async function getQuestionsBySurvey(surveyId: string) {
 // ========================
 
 // 전체 설문 데이터 조회 (설문 + 그룹 + 질문)
+// publish/analytics 와 동일한 매핑을 보장하기 위해 data/surveys.ts 단일 구현에 위임한다.
 export async function getSurveyWithDetails(surveyId: string): Promise<SurveyType | null> {
-  const survey = await getSurveyById(surveyId);
-  if (!survey) return null;
-
-  const groups = await getQuestionGroupsBySurvey(surveyId);
-  const questionList = await getQuestionsBySurvey(surveyId);
-
-  // DB 데이터를 클라이언트 타입으로 변환
-  const surveyData: SurveyType = {
-    id: survey.id,
-    title: survey.title,
-    ...(survey.description != null ? { description: survey.description } : {}),
-    ...(survey.slug != null ? { slug: survey.slug } : {}),
-    ...(survey.privateToken != null ? { privateToken: survey.privateToken } : {}),
-    groups: groups.map((g) => ({
-      id: g.id,
-      surveyId: g.surveyId,
-      name: g.name,
-      ...(g.description != null ? { description: g.description } : {}),
-      order: g.order,
-      ...(g.parentGroupId != null ? { parentGroupId: g.parentGroupId } : {}),
-      ...(g.color != null ? { color: g.color } : {}),
-      ...(g.collapsed != null ? { collapsed: g.collapsed } : {}),
-      ...(g.displayCondition != null ? { displayCondition: g.displayCondition as NonNullable<QuestionGroup['displayCondition']> } : {}),
-    })),
-    questions: questionList.map((q) => {
-      const mapped: QuestionType = {
-        id: q.id,
-        type: q.type as QuestionType['type'],
-        title: q.title,
-        ...(q.description != null ? { description: q.description } : {}),
-        required: q.required,
-        ...(q.groupId != null ? { groupId: q.groupId } : {}),
-        ...(q.options != null ? { options: q.options as NonNullable<QuestionType['options']> } : {}),
-        ...(q.selectLevels != null ? { selectLevels: q.selectLevels as NonNullable<QuestionType['selectLevels']> } : {}),
-        ...(q.tableTitle != null ? { tableTitle: q.tableTitle } : {}),
-        ...(q.tableColumns != null ? { tableColumns: q.tableColumns as NonNullable<QuestionType['tableColumns']> } : {}),
-        ...(q.tableRowsData != null ? { tableRowsData: q.tableRowsData as NonNullable<QuestionType['tableRowsData']> } : {}),
-        ...(q.tableHeaderGrid != null ? { tableHeaderGrid: q.tableHeaderGrid as NonNullable<QuestionType['tableHeaderGrid']> } : {}),
-        ...(q.imageUrl != null ? { imageUrl: q.imageUrl } : {}),
-        ...(q.videoUrl != null ? { videoUrl: q.videoUrl } : {}),
-        order: q.order,
-        ...(q.allowOtherOption != null ? { allowOtherOption: q.allowOtherOption } : {}),
-        ...(q.optionsColumns != null ? { optionsColumns: q.optionsColumns } : {}),
-        ...(q.rankingConfig != null ? { rankingConfig: q.rankingConfig } : {}),
-        ...(q.choiceGroups != null ? { choiceGroups: q.choiceGroups } : {}),
-        ...(q.minSelections != null ? { minSelections: q.minSelections } : {}),
-        ...(q.maxSelections != null ? { maxSelections: q.maxSelections } : {}),
-        ...(q.noticeContent != null ? { noticeContent: q.noticeContent } : {}),
-        ...(q.requiresAcknowledgment != null ? { requiresAcknowledgment: q.requiresAcknowledgment } : {}),
-        ...(q.placeholder != null ? { placeholder: q.placeholder } : {}),
-        ...(q.defaultValueTemplate != null ? { defaultValueTemplate: q.defaultValueTemplate } : {}),
-        ...((q.inputType as 'text' | 'number' | null) != null ? { inputType: q.inputType as 'text' | 'number' } : {}),
-        ...(q.emptyDefault != null ? { emptyDefault: q.emptyDefault } : {}),
-        ...(q.tableValidationRules != null ? { tableValidationRules: q.tableValidationRules as NonNullable<QuestionType['tableValidationRules']> } : {}),
-        ...(q.dynamicRowConfigs != null ? { dynamicRowConfigs: q.dynamicRowConfigs as NonNullable<QuestionType['dynamicRowConfigs']> } : {}),
-        ...(q.hideColumnLabels != null ? { hideColumnLabels: q.hideColumnLabels } : {}),
-        ...(q.displayCondition != null ? { displayCondition: q.displayCondition as NonNullable<QuestionType['displayCondition']> } : {}),
-        ...(q.questionCode != null ? { questionCode: q.questionCode } : {}),
-        ...(q.isCustomSpssVarName != null ? { isCustomSpssVarName: q.isCustomSpssVarName } : {}),
-        ...(q.exportLabel != null ? { exportLabel: q.exportLabel } : {}),
-        ...(q.spssVarType != null ? { spssVarType: q.spssVarType as NonNullable<QuestionType['spssVarType']> } : {}),
-        ...(q.spssMeasure != null ? { spssMeasure: q.spssMeasure as NonNullable<QuestionType['spssMeasure']> } : {}),
-      };
-      // strip된 셀 데이터를 hydrate (cellCode, exportLabel, spssVarType 등 복원)
-      if (mapped.type === 'table' && mapped.tableRowsData && mapped.tableColumns) {
-        mapped.tableRowsData = generateAllCellCodes(
-          mapped.questionCode,
-          mapped.title,
-          mapped.tableColumns,
-          mapped.tableRowsData,
-        );
-      }
-      // 일반 질문 옵션 코드 복원
-      if (mapped.options && ['radio', 'checkbox', 'select', 'multiselect'].includes(mapped.type)) {
-        mapped.options = generateAllOptionCodes(mapped.options);
-      }
-      return mapped;
-    }),
-    settings: {
-      isPublic: survey.isPublic,
-      allowMultipleResponses: survey.allowMultipleResponses,
-      showProgressBar: survey.showProgressBar,
-      shuffleQuestions: survey.shuffleQuestions,
-      requireLogin: survey.requireLogin,
-      ...(survey.endDate != null ? { endDate: survey.endDate } : {}),
-      ...(survey.maxResponses != null ? { maxResponses: survey.maxResponses } : {}),
-      thankYouMessage: survey.thankYouMessage,
-      requireInviteToken: survey.requireInviteToken,
-    },
-    lookups: survey.lookups ?? [],
-    ...(survey.contactColumns != null ? { contactColumns: survey.contactColumns } : {}),
-    contactEmail: survey.contactEmail ?? null,
-    createdAt: survey.createdAt,
-    updatedAt: survey.updatedAt,
-  };
-
-  return surveyData;
+  return getSurveyWithDetailsData(surveyId);
 }
 
 // 전체 설문 목록 조회 (요약 정보)

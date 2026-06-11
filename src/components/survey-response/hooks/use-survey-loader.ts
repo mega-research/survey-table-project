@@ -180,7 +180,15 @@ export function useSurveyLoader({
           if (result.survey.settings.requireInviteToken && !inviteToken) {
             setShowInviteRequired(true);
           } else if (inviteToken) {
-            const attrs = await client.contacts.attrs.lookup({ surveyId, inviteToken });
+            // attrs lookup 은 fail-open. 일시적 RPC/네트워크/복호화 오류가 throw 돼도
+            // 이미 로드된 설문을 통째로 에러 화면으로 막지 않고, 빈 attrs 익명 응답으로 강등한다.
+            // (service 는 무효 토큰을 null 로 흡수하지만 DB/transport 예외는 여기서 throw 될 수 있다.)
+            let attrs: Record<string, string> | null = null;
+            try {
+              attrs = await client.contacts.attrs.lookup({ surveyId, inviteToken });
+            } catch (attrsError) {
+              console.error('contact attrs 조회 오류 (익명 폴백):', attrsError);
+            }
             if (attrs) {
               setContactAttrs(attrs);
             } else if (result.survey.settings.requireInviteToken) {

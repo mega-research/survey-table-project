@@ -17,7 +17,10 @@ import {
   generateCellCodesForRow,
   regenerateCellCodeForPaste,
 } from '@/utils/table-cell-code-generator';
-import { buildDefaultHeaderGrid } from '@/utils/table-merge-helpers';
+import {
+  buildDefaultHeaderGrid,
+  reconcileHeaderGridForColumnChange,
+} from '@/utils/table-merge-helpers';
 
 import { checkCanMerge, executeMerge, executeUnmerge } from '../utils/table-cell-merge';
 import { useDragCopy } from './use-drag-copy';
@@ -203,6 +206,19 @@ export function useTableEditor({
 
   const headerGridRef = useRef(currentHeaderGrid);
   headerGridRef.current = currentHeaderGrid;
+
+  // 다단계 헤더 그리드를 열 추가/삭제에 맞춰 재동기화.
+  // 다단계 헤더가 꺼져 있으면(undefined) no-op. 켜져 있을 때만 ref+state 갱신.
+  const syncHeaderGridForColumnChange = useCallback(
+    (change: { type: 'add'; slot: number } | { type: 'delete'; slot: number }) => {
+      const grid = headerGridRef.current;
+      if (!grid || grid.length === 0) return;
+      const nextGrid = reconcileHeaderGridForColumnChange(grid, change);
+      headerGridRef.current = nextGrid;
+      setCurrentHeaderGrid(nextGrid);
+    },
+    [],
+  );
 
   const questionCodeRef = useRef(questionCode);
   questionCodeRef.current = questionCode;
@@ -471,8 +487,10 @@ export function useTableEditor({
 
     commitColumns(updatedColumns);
     commitRows(updatedRows);
+    // 다단계 헤더가 켜져 있으면 말단(slot = 기존 열 수)에 헤더 셀 추가하여 폭 정합 유지
+    syncHeaderGridForColumnChange({ type: 'add', slot: newColIndex });
     notifyChange(currentTitleRef.current, updatedColumns, updatedRows);
-  }, [notifyChange, commitColumns, commitRows]);
+  }, [notifyChange, commitColumns, commitRows, syncHeaderGridForColumnChange]);
 
   const deleteColumn = useCallback(
     (columnIndex: number) => {
@@ -514,9 +532,11 @@ export function useTableEditor({
       const finalRows = recalculateHiddenCells(updatedRows);
       commitColumns(updatedColumns);
       commitRows(finalRows);
+      // 다단계 헤더가 켜져 있으면 삭제된 열(slot=columnIndex)의 헤더 폭을 보정
+      syncHeaderGridForColumnChange({ type: 'delete', slot: columnIndex });
       notifyChange(currentTitleRef.current, updatedColumns, finalRows);
     },
-    [notifyChange, commitColumns, commitRows],
+    [notifyChange, commitColumns, commitRows, syncHeaderGridForColumnChange],
   );
 
   const moveColumn = useCallback(
@@ -768,9 +788,14 @@ export function useTableEditor({
 
       commitColumns(updatedColumns);
       commitRows(finalRows);
+      // 다단계 헤더가 켜져 있으면 삽입 위치부터 새 열 수만큼 헤더 셀 추가.
+      // 각 add는 슬롯을 한 칸씩 밀어내므로 insertIdx, insertIdx+1, ... 순서로 누적.
+      for (let i = 0; i < newColumns.length; i++) {
+        syncHeaderGridForColumnChange({ type: 'add', slot: insertIdx + i });
+      }
       notifyChange(currentTitleRef.current, updatedColumns, finalRows);
     },
-    [notifyChange, commitColumns, commitRows],
+    [notifyChange, commitColumns, commitRows, syncHeaderGridForColumnChange],
   );
 
   const duplicateRow = useCallback(

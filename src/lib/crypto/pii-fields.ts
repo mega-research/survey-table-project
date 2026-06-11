@@ -50,5 +50,11 @@ export function normalizePii(fieldType: PiiFieldType, value: string): string {
     case 'representative':
     case 'address':
       return trimmed.replace(/\s+/g, ' ');
+    default:
+      // 경계 스키마가 z.custom 이라 런타임 검증이 없어 union 외 fieldType 이 들어올 수 있음.
+      // default 가 없으면 switch 를 빠져나가 undefined 를 반환(타입은 string)하고,
+      // blindIndex 가 빈 문자열을 만들어 PII 가 조용히 누락된다. 일반 공백 정규화로 폴백해
+      // 함수를 total 하게 만들어 값 유실을 방지한다.
+      return trimmed.replace(/\s+/g, ' ');
   }
 }

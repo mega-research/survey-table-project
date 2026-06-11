@@ -44,6 +44,7 @@ import {
   recalculateColspansForVisibleColumns,
   recalculateRowspansForVisibleRows,
 } from '@/utils/table-merge-helpers';
+import { isTableRowCompleted } from '@/utils/table-row-completion';
 
 import { InteractiveCell } from './cells';
 import { DynamicRowSelectorModal } from './dynamic-row-selector-modal';
@@ -530,7 +531,9 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
   });
 
   // 헤더-바디 scrollLeft 상호 동기화 (각각 별도 가로 스크롤 컨테이너)
-  useScrollLeftSync(headerScrollRef, tableContainerRef, isMobileView);
+  // 헤더는 hideColumnLabels=false 일 때만 마운트되므로, 토글 시 리스너 재부착이
+  // 필요하다(ref/disabled는 안 바뀌어 deps 없이는 effect가 재실행되지 않음).
+  useScrollLeftSync(headerScrollRef, tableContainerRef, isMobileView, [hideColumnLabels]);
 
   // Grid 관련 계산
   const totalWidth = useMemo(() => calcTotalWidth(visibleColumns), [visibleColumns]);
@@ -577,15 +580,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
   const rowCompletionMap = useMemo(() => {
     const map = new Map<string, boolean>();
     const checkRow = (row: TableRow) => {
-      const completed = row.cells.every((cell) => {
-        if (cell._isContinuation) return true;
-        if (['text', 'checkbox', 'radio', 'select', 'input'].includes(cell.type)) {
-          const val = currentResponse[cell.id];
-          return val !== undefined && val !== null && val !== '';
-        }
-        return true;
-      });
-      map.set(row.id, completed);
+      map.set(row.id, isTableRowCompleted(row, currentResponse));
     };
     for (const row of displayRows) checkRow(row);
     for (const groupRows of expandedGroupRows.values()) {

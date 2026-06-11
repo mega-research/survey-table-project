@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import type { TableCell, TableRow } from '@/types/survey';
-import { extractRegionFromRows } from '@/components/survey-builder/utils/drag-copy-utils';
+import {
+  createRadioGroupRemapper,
+  extractRegionFromRows,
+} from '@/components/survey-builder/utils/drag-copy-utils';
 
 /**
  * use-drag-copy 의심 검증: 영역 복사 데이터 누락 가능성.
@@ -144,6 +147,22 @@ describe('extractRegionFromRows 직사각형 불변식', () => {
     expect(region.cells[0]![0]!.content).toBe('solo');
   });
 
+  // 라디오 그룹 보존(M51): 같은 radioGroupName 을 공유하는 라디오 셀들을 영역 복사하면
+  // 스냅샷에 원본 그룹명이 남아 있어야 붙여넣기 시 상대 그룹 관계를 복원할 수 있다.
+  it('라디오 그룹명을 스냅샷에 보존한다(붙여넣기 재매핑 입력용)', () => {
+    const rows = [
+      row([
+        cell({ type: 'radio', radioGroupName: 'pay', content: '현금' }),
+        cell({ type: 'radio', radioGroupName: 'pay', content: '카드' }),
+      ]),
+    ];
+
+    const region = extractRegionFromRows(0, 0, 0, 1, rows);
+
+    expect(region.cells[0]![0]!.radioGroupName).toBe('pay');
+    expect(region.cells[0]![1]!.radioGroupName).toBe('pay');
+  });
+
   it('소비 측 순회 시뮬레이션: 모든 (rr,cc) 접근이 undefined 가 아님', () => {
     // 병합 + hidden + ragged 가 섞인 까다로운 영역
     const rows = [
@@ -166,5 +185,60 @@ describe('extractRegionFromRows 직사각형 불변식', () => {
 
     // undefined = silently dropped = 데이터 누락. 0 이어야 버그 아님 증명.
     expect(undefinedHits).toBe(0);
+  });
+});
+
+/**
+ * M51 회귀: 같은 radioGroupName 을 공유하는 라디오 셀들을 영역 복사·붙여넣기 할 때
+ * 셀마다 독립적인 새 그룹명이 발급되어 단일 선택 그룹이 깨지던 버그.
+ *
+ * 수정 전: 각 라디오 셀이 generateId() 로 distinct 그룹명을 받아, 응답 시
+ * radioGroupBuckets 가 singleton 두 개가 되고 resolveRadioGroupProps 가 {} 반환 →
+ * HTML name 미공유 + 형제 클리어 미적용 → 두 라디오 동시 선택 가능 / SPSS 그룹 변수 분리.
+ *
+ * createRadioGroupRemapper 는 원본 그룹명 단위로만 새 ID 를 공유해 이를 방지한다.
+ */
+describe('createRadioGroupRemapper 라디오 그룹 보존', () => {
+  it('같은 원본 그룹명은 하나의 새 그룹명을 공유한다', () => {
+    let counter = 0;
+    const remap = createRadioGroupRemapper(() => `new-${++counter}`);
+
+    const a = remap('pay');
+    const b = remap('pay');
+
+    expect(a).toBe(b); // 같은 원본 그룹 → 같은 새 그룹명
+    expect(a).toBe('new-1');
+  });
+
+  it('원본 그룹명은 항상 새 ID 로 교체되어 영역 밖 셀과 충돌하지 않는다', () => {
+    const remap = createRadioGroupRemapper(() => 'fresh');
+    expect(remap('pay')).toBe('fresh');
+    expect(remap('pay')).not.toBe('pay'); // 원본 ID 그대로 재사용 금지
+  });
+
+  it('서로 다른 원본 그룹명은 서로 다른 새 그룹명을 받는다', () => {
+    let counter = 0;
+    const remap = createRadioGroupRemapper(() => `new-${++counter}`);
+
+    const pay = remap('pay');
+    const ship = remap('ship');
+
+    expect(pay).not.toBe(ship);
+    expect(pay).toBe('new-1');
+    expect(ship).toBe('new-2');
+  });
+
+  it('원본 그룹명이 없으면(undefined/빈문자열) 매번 고유한 새 ID 를 발급한다', () => {
+    let counter = 0;
+    const remap = createRadioGroupRemapper(() => `new-${++counter}`);
+
+    const a = remap(undefined);
+    const b = remap(undefined);
+    const c = remap('');
+
+    expect(a).toBe('new-1');
+    expect(b).toBe('new-2');
+    expect(c).toBe('new-3');
+    expect(new Set([a, b, c]).size).toBe(3); // 모두 distinct
   });
 });

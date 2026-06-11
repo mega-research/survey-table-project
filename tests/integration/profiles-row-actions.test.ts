@@ -159,11 +159,15 @@ vi.mock('@/db', () => {
     },
     update: vi.fn((table: { __table: string }) => ({
       set: vi.fn((patch: Record<string, unknown>) => ({
-        where: vi.fn(async (cond: (row: SurveyResponseRow | ContactTargetRow) => boolean) => {
+        where: vi.fn((cond: (row: SurveyResponseRow | ContactTargetRow) => boolean) => {
+          // 매칭 행을 추적해 await 와 .returning() 양쪽을 지원한다(saveAdminEdit 가 영향 행수
+          // 확인용으로 .returning() 을 사용). 반환값은 thenable + returning 메서드를 가진다.
+          const matched: Array<{ id: string }> = [];
           if (table.__table === 'surveyResponses') {
             for (const [id, row] of h.responseStore.entries()) {
               if ((cond as (r: SurveyResponseRow) => boolean)(row)) {
                 h.responseStore.set(id, { ...row, ...patch } as SurveyResponseRow);
+                matched.push({ id: row.id });
               }
             }
           }
@@ -171,9 +175,15 @@ vi.mock('@/db', () => {
             for (const [id, row] of h.contactStore.entries()) {
               if ((cond as (r: ContactTargetRow) => boolean)(row)) {
                 h.contactStore.set(id, { ...row, ...patch } as ContactTargetRow);
+                matched.push({ id: row.id });
               }
             }
           }
+          const result = Promise.resolve(matched) as Promise<Array<{ id: string }>> & {
+            returning: () => Promise<Array<{ id: string }>>;
+          };
+          result.returning = () => Promise.resolve(matched);
+          return result;
         }),
       })),
     })),
@@ -242,6 +252,14 @@ vi.mock('drizzle-orm', async (importOriginal) => {
     },
     and: (...conds: Array<(row: Record<string, unknown>) => boolean>) => {
       return (row: Record<string, unknown>) => conds.every((c) => c(row));
+    },
+    isNull: (col: { __col?: string }) => {
+      // saveAdminEdit 의 isNull(deletedAt) 가드를 predicate 로 변환
+      return (row: Record<string, unknown>) => {
+        const colName = col?.__col;
+        if (!colName) return false;
+        return row[colName] === null || row[colName] === undefined;
+      };
     },
   };
 });

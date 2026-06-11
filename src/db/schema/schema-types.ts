@@ -45,227 +45,55 @@ export interface QuestionGroupData {
   displayCondition?: QuestionConditionGroup;
 }
 
-// 분기 규칙
-export interface BranchRule {
-  id: string;
-  value: string;
-  action: 'goto' | 'end';
-  targetQuestionId?: string;
-}
+// 설문 질문 관련 공용 타입은 @/types/survey 가 단일 출처(SoT).
+// 과거에는 schema-types 가 좁은 사본을 별도 선언해 $inferSelect 행에서
+// optionCode·spssNumericCode·exportLabel·cellCode·rankSuffixPattern 등 필드가
+// 누락되고, 읽기 경로마다 `as NonNullable<QuestionType[...]>` 캐스팅으로
+// 복구해야 했다. 이제 survey.ts 정의를 그대로 가져와 re-export 해 두 곳의
+// 수동 동기화를 제거한다 (런타임 영향 없음 — 모두 type-only import).
+// import 으로 로컬 스코프에 두어 아래 QuestionData/SurveyVersionSnapshot 등이
+// 참조할 수 있게 하고, 동시에 동일 이름을 re-export 한다.
+import type {
+  BranchRule,
+  CheckboxOption,
+  DynamicRowGroupConfig,
+  ExpressionClause,
+  ExpressionComparison,
+  ExpressionConditionConfig,
+  ExpressionOperand,
+  HeaderCell,
+  QuestionCondition,
+  QuestionConditionGroup,
+  QuestionOption,
+  RadioOption,
+  RankingConfig,
+  SelectLevel,
+  TableCell,
+  TableColumn,
+  TableRow,
+  TableValidationRule,
+} from '@/types/survey';
 
-// 질문 옵션
-export interface QuestionOption {
-  id: string;
-  label: string;
-  value: string;
-  hasOther?: boolean;
-  branchRule?: BranchRule;
-}
-
-// 다단계 select 레벨
-export interface SelectLevel {
-  id: string;
-  label: string;
-  placeholder?: string;
-  order: number;
-  options: QuestionOption[];
-}
-
-// 순위형 질문 설정
-export interface RankingConfig {
-  positions: number;
-  allowDuplicateRanks?: boolean;
-  requireAllPositions?: boolean;
-  optionsSource?: 'manual' | 'table';
-  positionsColumns?: number;
-}
-
-// 체크박스 옵션
-export interface CheckboxOption {
-  id: string;
-  label: string;
-  value: string;
-  checked?: boolean;
-  hasOther?: boolean;
-  branchRule?: BranchRule;
-}
-
-// 라디오 옵션
-export interface RadioOption {
-  id: string;
-  label: string;
-  value: string;
-  selected?: boolean;
-  hasOther?: boolean;
-  branchRule?: BranchRule;
-}
-
-// 테이블 셀
-export interface TableCell {
-  id: string;
-  content: string;
-  imageUrl?: string;
-  videoUrl?: string;
-  type:
-  | 'text'
-  | 'image'
-  | 'video'
-  | 'checkbox'
-  | 'radio'
-  | 'select'
-  | 'input'
-  | 'ranking'
-  | 'ranking_opt'
-  | 'choice_opt';
-  checkboxOptions?: CheckboxOption[];
-  radioOptions?: RadioOption[];
-  radioGroupName?: string;
-  selectOptions?: QuestionOption[];
-  allowOtherOption?: boolean;
-  optionsColumns?: number;
-  placeholder?: string;
-  inputMaxLength?: number;
-  // input 셀 prefill 템플릿 — {{attrs_key}} 포함 가능.
-  defaultValueTemplate?: string;
-  minSelections?: number;
-  maxSelections?: number;
-  rowspan?: number;
-  colspan?: number;
-  isHidden?: boolean;
-  horizontalAlign?: 'left' | 'center' | 'right';
-  verticalAlign?: 'top' | 'middle' | 'bottom';
-  // 순위형 셀 (type='ranking')
-  rankingConfig?: RankingConfig;
-  rankingOptions?: QuestionOption[];
-  // ranking_opt 셀 (type='ranking_opt') — Case 2 옵션 소스용 라벨
-  rankingLabel?: string;
-  isOtherRankingCell?: boolean;
-  // choice_opt 셀 (type='choice_opt') — Case A radio/checkbox 옵션 소스
-  choiceLabel?: string;
-  branchRule?: BranchRule;
-  allowTextInput?: boolean;
-  textInputPlaceholder?: string;
-}
-
-// 테이블 행
-export interface TableRow {
-  id: string;
-  label: string;
-  cells: TableCell[];
-  height?: number;
-  minHeight?: number;
-}
-
-// 테이블 열
-export interface TableColumn {
-  id: string;
-  label: string;
-  width?: number;
-  minWidth?: number;
-}
-
-// 다단계 헤더 셀
-export interface HeaderCell {
-  id: string;
-  label: string;
-  colspan: number;
-  rowspan: number;
-}
-
-// 테이블 검증 규칙
-export interface TableValidationRule {
-  id: string;
-  type: 'exclusive-check' | 'required-combination' | 'any-of' | 'all-of' | 'none-of';
-  description?: string;
-  conditions: {
-    checkType: 'checkbox' | 'radio' | 'select' | 'input';
-    rowIds: string[];
-    cellColumnIndex?: number;
-    expectedValues?: string[];
-  };
-  additionalConditions?: {
-    cellColumnIndex: number;
-    checkType: 'checkbox' | 'radio' | 'select' | 'input';
-    rowIds?: string[];
-    expectedValues?: string[];
-  };
-  action: 'goto' | 'end';
-  targetQuestionId?: string;
-  targetQuestionMap?: Record<string, string>;
-  errorMessage?: string;
-}
-
-// expression 조건 모드 — operand 재귀 union
-export type ExpressionOperand =
-  | { kind: 'literal'; value: number | string }
-  | { kind: 'cell'; questionId: string; cellId: string }
-  | { kind: 'question'; questionId: string }
-  | {
-      kind: 'lookup';
-      surveyLookupId: string;
-      keyMapping: Array<{ lutKey: string; attrsKey: string }>;
-      valueColumn: string;
-    }
-  | { kind: 'attr'; attrsKey: string }
-  | {
-      kind: 'binop';
-      op: '+' | '-' | '*' | '/';
-      left: ExpressionOperand;
-      right: ExpressionOperand;
-    };
-
-export interface ExpressionComparison {
-  left: ExpressionOperand;
-  op: '==' | '!=' | '>' | '<' | '>=' | '<=';
-  right: ExpressionOperand;
-}
-
-export type ExpressionClause =
-  | { kind: 'comparison'; comparison: ExpressionComparison }
-  | { kind: 'group'; group: ExpressionConditionConfig };
-
-export interface ExpressionConditionConfig {
-  clauses: ExpressionClause[];
-  joinOps: Array<'AND' | 'OR'>;
-}
-
-// 질문 표시 조건
-export interface QuestionCondition {
-  id: string;
-  name?: string;
-  sourceQuestionId: string;
-  conditionType: 'value-match' | 'table-cell-check' | 'expression' | 'custom';
-  // conditionType === 'expression' 일 때만 사용
-  expressionConfig?: ExpressionConditionConfig;
-  requiredValues?: string[];
-  tableConditions?: {
-    rowIds: string[];
-    cellColumnIndex?: number;
-    checkType: 'any' | 'all' | 'none';
-    expectedValues?: string[];
-  };
-  additionalConditions?: {
-    cellColumnIndex: number;
-    checkType: 'checkbox' | 'radio' | 'select' | 'input';
-    rowIds?: string[];
-    expectedValues?: string[];
-  };
-  logicType: 'AND' | 'OR' | 'NOT';
-  enabled?: boolean;
-}
-
-export interface DynamicRowGroupConfig {
-  groupId: string;
-  enabled: boolean;
-  label?: string;
-  insertAfterRowId?: string;
-  buttonAlign?: 'left' | 'center' | 'right';
-}
-
-export interface QuestionConditionGroup {
-  conditions: QuestionCondition[];
-  logicType: 'AND' | 'OR' | 'NOT';
-}
+export type {
+  BranchRule,
+  CheckboxOption,
+  DynamicRowGroupConfig,
+  ExpressionClause,
+  ExpressionComparison,
+  ExpressionConditionConfig,
+  ExpressionOperand,
+  HeaderCell,
+  QuestionCondition,
+  QuestionConditionGroup,
+  QuestionOption,
+  RadioOption,
+  RankingConfig,
+  SelectLevel,
+  TableCell,
+  TableColumn,
+  TableRow,
+  TableValidationRule,
+};
 
 // 운영 현황 콘솔 — 응답 페이지 방문 기록
 export interface PageVisit {

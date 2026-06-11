@@ -16,6 +16,7 @@ import type {
   MailAttachment,
 } from '@/db/schema/schema-types';
 import type { MailCampaignStatus, MailRecipientStatus } from '@/db/schema/mail';
+import { decryptPii } from '@/lib/crypto/aes';
 import { maskEmail } from '@/lib/operations/contacts';
 import {
   buildNegativeCodeExists,
@@ -642,9 +643,12 @@ export async function preflightRecipients(args: {
   const emailMissingIds: string[] = [];
   const found = new Set<string>();
 
+  // 1차 분류 — unsubscribed / excludedByCode / contact_pii row 부재(!hasEmail) 까지.
+  // hasEmail 통과분은 cipher 복호화로 2차 검증한다 (아래 참조).
+  const decryptCandidateIds: string[] = [];
   for (const r of rows) {
     found.add(r.id);
-    // 우선순위: unsubscribed → excludedByCode → !hasEmail → valid
+    // 우선순위: unsubscribed → excludedByCode → !hasEmail → (복호화 검증) → valid
     if (r.unsubscribedAt !== null) {
       unsubscribedIds.push(r.id);
     } else if (r.excludedByCode) {
@@ -652,12 +656,74 @@ export async function preflightRecipients(args: {
     } else if (!r.hasEmail) {
       emailMissingIds.push(r.id);
     } else {
-      validIds.push(r.id);
+      // contact_pii row 는 있으나 cipher 가 빈 문자열/공백으로 복호화되거나 복호화에
+      // 실패하는 컨택은 createCampaign 에서 발송 대상에서 빠진다(line 137~145). preflight
+      // 도 동일 기준으로 검증해야 "실제 발송" 카운트가 실제 큐잉 수와 일치한다 — 그렇지
+      // 않으면 valid 가 과대 보고되고 그 차이가 skippedUnsubscribedCount 로 흡수된다.
+      decryptCandidateIds.push(r.id);
     }
   }
+
+  if (decryptCandidateIds.length > 0) {
+    const usableIds = await fetchContactIdsWithUsableEmail(decryptCandidateIds);
+    for (const id of decryptCandidateIds) {
+      if (usableIds.has(id)) {
+        validIds.push(id);
+      } else {
+        emailMissingIds.push(id);
+      }
+    }
+  }
+
   const notFoundIds = args.selectedContactIds.filter((id) => !found.has(id));
 
   return { validIds, unsubscribedIds, excludedByCodeIds, emailMissingIds, notFoundIds };
+}
+
+/**
+ * 주어진 컨택 id 중 "발송 가능한 email cipher" 를 가진 id Set 반환.
+ *
+ * createCampaign(mail-campaigns.service.ts) 의 발송 명단 산출과 동일 기준:
+ *   - 한 컨택에 email 컬럼이 여러 개면 column_key 알파벳 순 첫 번째만 사용.
+ *   - cipher 복호화 결과가 빈 문자열/공백뿐이면 제외.
+ *   - 복호화 자체가 throw 하면(키 미스매치/cipher 손상) 제외.
+ *
+ * preflight 가 EXISTS(contact_pii) 만으로 valid 를 세면 위 케이스를 놓쳐 과대 보고하므로,
+ * 후보(EXISTS 통과)에 한해 실제 복호화로 재검증한다.
+ */
+async function fetchContactIdsWithUsableEmail(
+  contactIds: readonly string[],
+): Promise<Set<string>> {
+  const usable = new Set<string>();
+  if (contactIds.length === 0) return usable;
+
+  const rows = await db
+    .select({
+      contactTargetId: contactPii.contactTargetId,
+      columnKey: contactPii.columnKey,
+      cipher: contactPii.cipher,
+    })
+    .from(contactPii)
+    .where(
+      and(
+        eq(contactPii.fieldType, 'email'),
+        inArray(contactPii.contactTargetId, [...contactIds]),
+      ),
+    )
+    .orderBy(asc(contactPii.contactTargetId), asc(contactPii.columnKey));
+
+  const seen = new Set<string>();
+  for (const r of rows) {
+    if (seen.has(r.contactTargetId)) continue; // 첫 컬럼만
+    seen.add(r.contactTargetId);
+    try {
+      const email = decryptPii(r.cipher);
+      if (email && email.trim()) usable.add(r.contactTargetId);
+    } catch {
+      // 복호화 실패 행은 발송 불가 — usable 에 넣지 않음
+    }
+  }
+  return usable;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

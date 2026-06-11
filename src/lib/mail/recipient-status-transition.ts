@@ -92,6 +92,30 @@ export function buildTimestampUpdate(
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /**
+ * 캠페인이 종료 조건(미발송·발신중 0건)에 도달했으면 status를 finalize한다.
+ *   - status='sending' AND queued_count=0 AND sent_count=0 일 때만 동작
+ *   - bounced/failed/complained 가 하나라도 있으면 'partial', 아니면 'completed'
+ *
+ * webhook/reconcile(applyRecipientTransition)뿐 아니라 dispatch에서 전건 failed로
+ * 끝난 캠페인(webhook 미도착)도 직접 종결시키기 위한 공용 진입점이다.
+ */
+export async function finalizeCampaignIfDone(tx: Tx, campaignId: string): Promise<void> {
+  await tx.execute(sql`
+    UPDATE mail_campaigns
+    SET status = CASE
+            WHEN bounced_count + failed_count + complained_count > 0 THEN 'partial'
+            ELSE 'completed'
+          END,
+        completed_at = COALESCE(completed_at, now()),
+        updated_at = now()
+    WHERE id = ${campaignId}
+      AND status = 'sending'
+      AND queued_count = 0
+      AND sent_count = 0
+  `);
+}
+
+/**
  * 단일 트랜잭션 안에서 recipient status를 newStatus로 전이하고 campaign 카운터를
  * atomic delta로 갱신한 뒤 finalize를 판정한다. 호출자는 row를 FOR UPDATE로 잠근 뒤
  * prevStatus를 넘겨야 한다. 역행/중복(canTransition=false)이면 no-op하고 false 반환.
@@ -136,19 +160,7 @@ export async function applyRecipientTransition(
     WHERE id = ${campaignId}
   `);
 
-  await tx.execute(sql`
-    UPDATE mail_campaigns
-    SET status = CASE
-            WHEN bounced_count + failed_count + complained_count > 0 THEN 'partial'
-            ELSE 'completed'
-          END,
-        completed_at = COALESCE(completed_at, now()),
-        updated_at = now()
-    WHERE id = ${campaignId}
-      AND status = 'sending'
-      AND queued_count = 0
-      AND sent_count = 0
-  `);
+  await finalizeCampaignIfDone(tx, campaignId);
 
   return true;
 }

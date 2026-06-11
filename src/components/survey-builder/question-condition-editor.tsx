@@ -103,8 +103,9 @@ export const QuestionConditionEditor = forwardRef<
   };
 
   // tableConditions/additionalConditions는 expression 전환·토글 해제 시 비워야 한다.
+  // name은 조건 이름 입력을 비웠을 때 영속 키를 제거해야 한다.
   // exactOptionalPropertyTypes 하에서 spread로는 키 제거가 불가하므로 clear 인자로 명시한다.
-  type ClearableConditionKey = 'tableConditions' | 'additionalConditions';
+  type ClearableConditionKey = 'tableConditions' | 'additionalConditions' | 'name';
 
   const updateCondition = useCallback(
     (
@@ -133,10 +134,12 @@ export const QuestionConditionEditor = forwardRef<
 
       setConditionGroup(updatedGroup);
       // conditionNames도 동기화
-      if (updates.name !== undefined) {
+      // clear에 name이 포함되면 이름을 비운 것이므로 로컬 엔트리를 제거한다.
+      const clearsName = clear?.includes('name');
+      if (updates.name !== undefined || clearsName) {
         setConditionNames((prev) => {
           const next = { ...prev };
-          if (updates.name === undefined || updates.name === null) {
+          if (clearsName || updates.name === undefined || updates.name === null) {
             delete next[conditionId];
           } else {
             next[conditionId] = updates.name;

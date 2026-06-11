@@ -367,14 +367,7 @@ export function checkTableValidationRule(
   // 응답 데이터는 평면 구조: { "cell-id": value, ... }
   const tableResponse = response as Record<string, unknown>;
   const { conditions, type } = rule;
-  const { rowIds, cellColumnIndex, checkType, expectedValues } = conditions;
-
-  // 디버깅 로그
-  console.group(`🔍 테이블 검증 규칙 체크: ${rule.description || rule.id}`);
-  console.log('검증 타입:', type);
-  console.log('조건:', { rowIds, cellColumnIndex, checkType, expectedValues });
-  console.log('테이블 응답 데이터:', tableResponse);
-  console.log('질문 행 데이터:', question.tableRowsData);
+  const { rowIds, cellColumnIndex, expectedValues } = conditions;
 
   // 지정된 행(rowIds) 중에서 체크된 행들을 수집
   const checkedRowsInTarget: string[] = [];
@@ -518,12 +511,9 @@ export function checkTableValidationRule(
 
       if (isChecked && !checkedRowsInTarget.includes(row.id)) {
         checkedRowsInTarget.push(row.id);
-        console.log(`✅ 행 ${row.id} (${row.label}): 지정된 행 중 체크됨`);
       }
     }
   }
-
-  console.log('지정된 행 중 체크된 행:', checkedRowsInTarget);
 
   // 검증 타입에 따라 조건 확인
   let mainConditionResult: boolean;
@@ -568,77 +558,50 @@ export function checkTableValidationRule(
 
           if (isAnyChecked && !allCheckedRowsInTable.includes(row.id)) {
             allCheckedRowsInTable.push(row.id);
-            console.log(`✅ 행 ${row.id} (${row.label}): 테이블 전체에서 체크됨`);
             break;
           }
         }
       }
 
       // rowIds에 지정된 행들만 체크되고, 다른 행은 체크 안되어야 함
-      console.log('테이블 전체에서 체크된 행:', allCheckedRowsInTable);
-      console.log('지정된 행:', rowIds);
-
       // 독점 체크: 체크된 행이 있고, 모든 체크된 행이 지정된 행에 포함되어야 함
       // (다른 행이 체크되면 안됨)
       mainConditionResult =
         allCheckedRowsInTable.length > 0 &&
         allCheckedRowsInTable.every((id) => rowIds.includes(id));
-
-      console.log('독점 체크 결과:', mainConditionResult);
-      console.log('  - 체크된 행 수:', allCheckedRowsInTable.length);
-      console.log(
-        '  - 모든 체크된 행이 지정된 행에 포함됨:',
-        allCheckedRowsInTable.every((id) => rowIds.includes(id)),
-      );
       break;
 
     case 'any-of':
       // 여러 행 중 하나라도 체크된 경우
       mainConditionResult = checkedRowsInTarget.length > 0;
-      console.log('any-of 결과:', mainConditionResult);
-      console.log('  - 지정된 행 중 체크된 행 수:', checkedRowsInTarget.length);
       break;
 
     case 'all-of':
       // 특정 행들이 모두 체크된 경우
       mainConditionResult = rowIds.every((id) => checkedRowsInTarget.includes(id));
-      console.log('all-of 결과:', mainConditionResult);
-      console.log('  - 지정된 행:', rowIds);
-      console.log('  - 체크된 행:', checkedRowsInTarget);
-      console.log('  - 모든 지정된 행이 체크됨:', mainConditionResult);
       break;
 
     case 'none-of':
       // 특정 행들이 모두 체크 안된 경우
       mainConditionResult = checkedRowsInTarget.length === 0;
-      console.log('none-of 결과:', mainConditionResult);
-      console.log('  - 지정된 행 중 체크된 행 수:', checkedRowsInTarget.length, '(0이어야 함)');
       break;
 
     case 'required-combination':
       // 특정 조합이 체크된 경우 (모든 지정된 행이 체크되어야 함)
       mainConditionResult = rowIds.every((id) => checkedRowsInTarget.includes(id));
-      console.log('required-combination 결과:', mainConditionResult);
-      console.log('  - 지정된 행:', rowIds);
-      console.log('  - 체크된 행:', checkedRowsInTarget);
-      console.log('  - 모든 지정된 행이 체크됨:', mainConditionResult);
       break;
 
     default:
-      console.groupEnd();
       return false;
   }
 
   // 추가 조건이 없으면 메인 조건 결과만 반환
   if (!rule.additionalConditions) {
-    console.groupEnd();
     return mainConditionResult;
   }
 
   // 추가 조건 평가
   const additionalConditions = rule.additionalConditions;
-  console.log('📋 추가 조건 평가 시작');
-  console.log('추가 조건:', additionalConditions);
 
   // 추가 조건에서 확인할 행들 결정
   // rowIds가 지정되어 있으면 해당 행만, 없으면 메인 조건에서 체크된 행 사용
@@ -648,12 +611,8 @@ export function checkTableValidationRule(
       : checkedRowsInTarget;
 
   if (rowsToCheckForAdditional.length === 0) {
-    console.log('⚠️ 추가 조건을 확인할 행이 없습니다');
-    console.groupEnd();
     return false;
   }
-
-  console.log('추가 조건에서 확인할 행:', rowsToCheckForAdditional);
 
   // 추가 조건 평가: 같은 행에서 메인 조건과 추가 조건을 모두 만족하는지 확인
   // (메인 조건에서 체크된 행들 중에서, 같은 행에서 추가 조건도 만족하는 행이 있는지 확인)
@@ -782,16 +741,12 @@ export function checkTableValidationRule(
 
     if (isChecked) {
       additionalConditionResult = true;
-      console.log(`✅ 행 ${row.id} (${row.label}): 같은 행에서 메인 조건과 추가 조건 모두 만족`);
       break; // 하나라도 만족하면 됨 (any-of 타입이므로)
     }
   }
 
-  console.log('추가 조건 결과:', additionalConditionResult);
+  // 최종 결과: 메인 조건과 추가 조건을 같은 행에서 모두 만족해야 함
   const finalResult = mainConditionResult && additionalConditionResult;
-  console.log('최종 결과 (메인 조건 AND 추가 조건):', finalResult);
-  console.log('  - 같은 행에서 두 조건을 모두 만족하는 행이 있는지 확인');
-  console.groupEnd();
 
   return finalResult;
 }
@@ -910,7 +865,6 @@ export function getTableValidationBranchRule(
           // targetQuestionMap에서 해당 값으로 질문 ID 찾기
           if (selectedValue && rule.targetQuestionMap[selectedValue]) {
             targetQuestionId = rule.targetQuestionMap[selectedValue];
-            console.log(`🎯 동적 분기: "${selectedValue}" → 질문 ID: ${targetQuestionId}`);
             break;
           }
         }
@@ -1332,12 +1286,26 @@ function evaluateQuestionCondition(
     checkedRowsInTarget = result.checkedRows;
   }
 
-  // 추가 조건에서 확인할 행들 결정
-  // rowIds가 지정되어 있으면 해당 행만, 없으면 메인 조건에서 체크된 행 사용
+  // 'none' 메인 조건 특수 처리.
+  // 'none' 은 satisfied 일 때 정의상 메인 통과 행이 없어 checkedRowsInTarget 이 비어 있다.
+  // 이 경우 아래 같은-행 교집합 루프가 0회 반복 → 과거에는 mainConditionResult 가 true 여도
+  // 무조건 false 를 반환해 'none'+추가 조건이 절대 매칭되지 않는 버그가 있었다.
+  // 빌더(additional-conditions-editor)가 추가 조건의 행 범위를 tableConditions.rowIds 로
+  // 잡는 것과 동일하게, 'none' 일 때는 메인이 검사한 행들에 대해 추가 조건을 평가한다.
+  // (any/all 경로는 기존 동작 그대로 checkedRowsInTarget 을 사용한다.)
+  const isNoneMainCheck =
+    condition.conditionType === 'table-cell-check' &&
+    condition.tableConditions?.checkType === 'none';
+  const rowsForAdditionalEval = isNoneMainCheck
+    ? (condition.tableConditions?.rowIds ?? [])
+    : checkedRowsInTarget;
+
+  // 추가 조건에서 확인할 행들 결정 (빈 행 가드용)
+  // rowIds가 지정되어 있으면 해당 행만, 없으면 평가 행 집합 사용
   const rowsToCheckForAdditional =
     additionalConditions.rowIds && additionalConditions.rowIds.length > 0
       ? additionalConditions.rowIds
-      : checkedRowsInTarget;
+      : rowsForAdditionalEval;
 
   if (rowsToCheckForAdditional.length === 0) {
     return false;
@@ -1347,8 +1315,8 @@ function evaluateQuestionCondition(
   // (메인 조건에서 체크된 행들 중에서, 같은 행에서 추가 조건도 만족하는 행이 있는지 확인)
   let additionalConditionResult = false;
 
-  // 메인 조건에서 체크된 행들만 확인 (같은 행에서 두 조건을 모두 만족해야 함)
-  for (const rowId of checkedRowsInTarget) {
+  // 평가 행 집합을 순회 (any/all 은 메인 통과 행, 'none' 은 메인 검사 대상 행)
+  for (const rowId of rowsForAdditionalEval) {
     const row = sourceQuestion.tableRowsData.find((r) => r.id === rowId);
     if (!row) continue;
 

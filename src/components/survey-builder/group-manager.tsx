@@ -41,11 +41,12 @@ interface GroupManagerProps {
 }
 
 export function GroupManager({ className }: GroupManagerProps) {
-  const { addGroup, updateGroup, deleteGroup, reorderGroups, toggleGroupCollapse } =
+  const { addGroup, updateGroup, clearGroupParent, deleteGroup, reorderGroups, toggleGroupCollapse } =
     useSurveyBuilderStore(
       useShallow((s) => ({
         addGroup: s.addGroup,
         updateGroup: s.updateGroup,
+        clearGroupParent: s.clearGroupParent,
         deleteGroup: s.deleteGroup,
         reorderGroups: s.reorderGroups,
         toggleGroupCollapse: s.toggleGroupCollapse,
@@ -327,12 +328,25 @@ export function GroupManager({ className }: GroupManagerProps) {
             topLevelSiblings.length > 0 ? Math.max(...topLevelSiblings.map((g) => g.order)) + 1 : 0;
         }
 
-        updateGroup(editingGroup.id, {
-          name: groupName.trim(),
-          ...(groupDescription.trim() ? { description: groupDescription.trim() } : {}),
-          ...(newParentGroupId !== undefined ? { parentGroupId: newParentGroupId } : {}),
-          order: newOrder,
-        });
+        // 최상위로 이동(newParentGroupId === undefined) 시 parentGroupId 를 명시적으로 해제한다.
+        // 키를 누락하면 store 의 Object.assign 이 옛 parentGroupId 를 그대로 둬 로컬 트리만
+        // 중첩 상태로 남고 DB(top-level)와 desync 된다. exactOptionalPropertyTypes 때문에
+        // undefined 값을 직접 전달할 수 없어 별도 partial 로 분기한다.
+        if (newParentGroupId !== undefined) {
+          updateGroup(editingGroup.id, {
+            name: groupName.trim(),
+            ...(groupDescription.trim() ? { description: groupDescription.trim() } : {}),
+            parentGroupId: newParentGroupId,
+            order: newOrder,
+          });
+        } else {
+          updateGroup(editingGroup.id, {
+            name: groupName.trim(),
+            ...(groupDescription.trim() ? { description: groupDescription.trim() } : {}),
+            order: newOrder,
+          });
+          clearGroupParent(editingGroup.id);
+        }
 
         // DB에 저장 (그룹 ID가 UUID인 경우에만)
         if (

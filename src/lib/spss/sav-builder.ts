@@ -4,7 +4,7 @@ import { join } from 'path';
 import { randomUUID } from 'crypto';
 
 import {
-  createStream,
+  saveToFile,
   SavVariable,
   VariableAlignment,
   VariableType,
@@ -35,7 +35,6 @@ function optionsToValueLabels(
 
 // ── 상수 ──
 
-const BATCH_SIZE = 500;
 const DEFAULT_STRING_WIDTH = 256;
 const MIN_STRING_WIDTH = 8;
 
@@ -256,7 +255,7 @@ function buildSavRecords(
 
 /**
  * SPSS .sav 파일을 Buffer로 생성한다.
- * createStream을 사용하여 배치 단위로 쓰기 (메모리 절약)
+ * saveToFile 로 임시 파일에 동기 직렬화한 뒤 읽어 Buffer로 반환한다.
  */
 export async function generateSavBuffer(
   questions: Question[],
@@ -281,21 +280,15 @@ export async function generateSavBuffer(
   const tmpPath = join(tmpdir(), `sav_${randomUUID()}.sav`);
 
   try {
-    const stream = createStream({
-      variables,
-      length: dataRows.length,
-      path: tmpPath,
-    });
-
-    // 배치 단위로 나눠서 쓰기
-    for (let i = 0; i < dataRows.length; i += BATCH_SIZE) {
-      const batch = dataRows.slice(i, i + BATCH_SIZE);
-      const records = buildSavRecords(columns, batch);
-      stream.write(records);
-    }
-
-    // 데이터가 없어도 stream.end()는 호출해야 파일이 완성됨
-    await stream.end();
+    // sav-writer 의 createStream(WriteStream) 은 1.0.0 에서 두 가지 버그가 있다:
+    //  1) WriteStream 생성자가 this.options 를 세팅하지 않아 .write() 가 즉시 throw.
+    //  2) .end() 가 Promise.resolve((resolve)=>{...}) 를 반환 — executor 가 호출되지 않아
+    //     fs.WriteStream 을 flush/close 하지 않고 즉시 resolve. await 직후 readFile 가
+    //     truncated/partial .sav 를 읽을 수 있음(데이터 크기 의존 간헐 손상).
+    // saveToFile 은 동일 변수/레코드 직렬화를 fs.writeFileSync 로 동기 수행하므로
+    // 두 버그를 모두 피하고 파일이 완전히 flush 된 뒤 반환한다.
+    const records = buildSavRecords(columns, dataRows);
+    saveToFile(tmpPath, records, variables);
 
     return await readFile(tmpPath);
   } finally {
