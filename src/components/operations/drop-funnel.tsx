@@ -156,7 +156,7 @@ export function DropFunnel({ data }: Props) {
                 interval={0}
                 height={56}
                 tick={(tickProps) => (
-                  <FunnelTick {...tickProps} bars={data.bars} />
+                  <FunnelTick {...tickProps} bars={visibleBars} />
                 )}
               />
               <YAxis

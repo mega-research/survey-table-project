@@ -1,7 +1,7 @@
-import { and, eq, inArray, or } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { contactPii, contactTargets, type NewContactPii } from '@/db/schema';
+import { contactPii, type NewContactPii } from '@/db/schema';
 
 import { decryptPii, encryptPii } from './aes';
 import { blindIndex } from './blind';
@@ -190,64 +190,4 @@ export async function upsertPiiValue(
         maskHint: hint,
       },
     });
-}
-
-/**
- * 단일 (fieldType, plainValue) 정확 매치 검색. surveyId 범위로 한정.
- * 반환: 매칭된 contact_target_id 목록.
- */
-export async function findContactIdsByBlindIndex(
-  surveyId: string,
-  fieldType: PiiFieldType,
-  plainValue: string,
-): Promise<string[]> {
-  const blind = blindIndex(fieldType, plainValue);
-  if (!blind) return [];
-
-  const rows = await db
-    .select({ targetId: contactPii.contactTargetId })
-    .from(contactPii)
-    .innerJoin(contactTargets, eq(contactTargets.id, contactPii.contactTargetId))
-    .where(
-      and(
-        eq(contactTargets.surveyId, surveyId),
-        eq(contactPii.fieldType, fieldType),
-        eq(contactPii.blindIndex, blind),
-      ),
-    );
-  return rows.map((r) => r.targetId);
-}
-
-/**
- * 한 plain 값을 여러 fieldType 으로 동시에 검색 — 'all' 통합검색용.
- * 각 fieldType 별 blind_index 미리 계산 → 단일 SQL 로 OR 매치.
- * 6번의 round-trip 을 1번으로 줄이는 최적화.
- */
-export async function findContactIdsByPlainAcrossTypes(
-  surveyId: string,
-  fieldTypes: readonly PiiFieldType[],
-  plainValue: string,
-): Promise<string[]> {
-  if (fieldTypes.length === 0) return [];
-
-  // 각 타입별 blind_index 계산 — 정규화 후 빈 값인 케이스는 제외.
-  const pairs: Array<{ fieldType: PiiFieldType; blind: string }> = [];
-  for (const t of fieldTypes) {
-    const blind = blindIndex(t, plainValue);
-    if (blind) pairs.push({ fieldType: t, blind });
-  }
-  if (pairs.length === 0) return [];
-
-  // OR (field_type=? AND blind_index=?) 들의 합집합. (field_type, blind_index) 인덱스 활용.
-  const orClauses = pairs.map((p) =>
-    and(eq(contactPii.fieldType, p.fieldType), eq(contactPii.blindIndex, p.blind)),
-  );
-  const combinedOr = pairs.length === 1 ? orClauses[0] : or(...orClauses);
-
-  const rows = await db
-    .select({ targetId: contactPii.contactTargetId })
-    .from(contactPii)
-    .innerJoin(contactTargets, eq(contactTargets.id, contactPii.contactTargetId))
-    .where(and(eq(contactTargets.surveyId, surveyId), combinedOr));
-  return Array.from(new Set(rows.map((r) => r.targetId)));
 }

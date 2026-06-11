@@ -511,8 +511,12 @@ export function validateHeaderGrid(grid: HeaderCell[][], columnCount: number): b
 }
 
 /**
- * headerGrid의 최하위 행에서 실제 리프 셀 수를 계산
- * (최하위 행의 colspan 합 = 데이터 컬럼 수여야 함)
+ * headerGrid의 총 데이터 컬럼 수를 계산.
+ *
+ * 정합성이 보장된 그리드(validateHeaderGrid 통과)에서는 최상위 행이 모든 컬럼을
+ * 빠짐없이 덮으므로(rowspan 셀도 자기 컬럼을 점유), 첫 행 colspan 합이 곧 총 컬럼 수다.
+ * 반대로 최상위 행에 rowspan 셀이 있으면 하위 행은 그 컬럼을 빠뜨려 과소 집계되므로
+ * 첫 행을 기준으로 삼는다.
  */
 export function getHeaderGridColumnCount(grid: HeaderCell[][]): number {
   if (!grid || grid.length === 0) return 0;

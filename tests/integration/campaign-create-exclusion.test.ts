@@ -224,4 +224,27 @@ describe('createCampaign — 부정 결과코드 컨택 제외 (preflight 동기
     expect(result.queuedCount).toBe(1);
     expect(result.skippedCount).toBe(1);
   });
+
+  // 회귀(L71): 중복 선택 ID 가 들어와도 recipientCount/skippedCount 가 부풀려지지 않아야 한다.
+  // 실제 recipient 행은 SQL IN + seen Set 으로 dedupe 되므로, 카운터도 unique 기준이어야
+  // phantom skipped(존재하지 않는 컨택)나 inflated recipientCount 가 생기지 않는다.
+  it('중복 선택 ID 는 dedupe 되어 skippedCount/queuedCount 가 부풀려지지 않는다', async () => {
+    const idValid = seedContact();
+
+    const result = await createCampaign(
+      {
+        surveyId: SURVEY_ID,
+        mailTemplateId: '00000000-0000-4000-8000-000000000001',
+        title: '중복 선택 캠페인',
+        // 동일 UUID 2회 — 위저드 선택 상태 버그 등으로 중복 유입 시나리오
+        contactTargetIds: [idValid, idValid],
+      },
+      USER_ID,
+    );
+
+    // recipient 행은 1개만, skip 은 0 (phantom 없음)
+    expect(state.insertedRecipientContactIds).toEqual([idValid]);
+    expect(result.queuedCount).toBe(1);
+    expect(result.skippedCount).toBe(0);
+  });
 });

@@ -6,6 +6,7 @@ import { db } from '@/db';
 import { NewSavedQuestion, savedQuestions } from '@/db/schema/surveys';
 import { extractImageUrlsFromQuestion } from '@/lib/image-extractor';
 import { deleteImagesFromR2Server } from '@/lib/image-utils-server';
+import { escapeLikePattern } from '@/lib/operations/filter-shared';
 import { promoteSurveyImages } from '@/lib/survey/survey-image-promote';
 import { generateId } from '@/lib/utils';
 import type { Question, SavedQuestion } from '@/types/survey';
@@ -53,10 +54,13 @@ export async function listSavedQuestions(): Promise<SavedQuestion[]> {
 
 /** 이름/설명 검색 */
 export async function searchSavedQuestions(query: string): Promise<SavedQuestion[]> {
+  // 사용자 입력의 LIKE 메타문자(% _ \)를 리터럴로 escape — '50% 만족도' 같은
+  // 이름 검색이 과도하게 매칭되지 않도록 한다. ilike() 두 번째 인자는 파라미터 바인딩됨.
+  const pattern = `%${escapeLikePattern(query)}%`;
   const rows = await db.query.savedQuestions.findMany({
     where: or(
-      ilike(savedQuestions.name, `%${query}%`),
-      ilike(savedQuestions.description, `%${query}%`),
+      ilike(savedQuestions.name, pattern),
+      ilike(savedQuestions.description, pattern),
     ),
     orderBy: [desc(savedQuestions.updatedAt)],
   });
@@ -217,7 +221,13 @@ export async function applyMultipleSavedQuestions(ids: string[]): Promise<Questi
     })
     .where(inArray(savedQuestions.id, ids));
 
-  return savedItems.map((saved) => {
+  // findMany는 PG 저장 순서로 반환하므로, 사용자가 선택한 ids 순서대로 재정렬한다.
+  const savedById = new Map(savedItems.map((saved) => [saved.id, saved]));
+  const orderedItems = ids
+    .map((id) => savedById.get(id))
+    .filter((saved): saved is (typeof savedItems)[number] => saved !== undefined);
+
+  return orderedItems.map((saved) => {
     const question = saved.question as unknown as Question;
     const { groupId: _g, ...questionWithoutGroup } = question;
     return {

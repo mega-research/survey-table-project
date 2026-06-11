@@ -26,6 +26,7 @@ import {
   buildContactsFilterSql,
   latestResultCodeExpr,
 } from '@/lib/operations/contacts-filter-sql';
+import { escapeLikePattern } from '@/lib/operations/filter-shared';
 import type { FilterClause } from '@/lib/operations/contacts-filters.server';
 
 const DEFAULT_PAGE_SIZE = 20;
@@ -261,7 +262,7 @@ export async function listCampaignRecipients(args: {
   }
   const q = (args.q ?? '').trim();
   if (q) {
-    const escaped = q.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+    const escaped = escapeLikePattern(q);
     whereParts.push(sql`${mailRecipients.emailSnapshot} ILIKE ${'%' + escaped + '%'}`);
   }
   const where = and(...whereParts)!;

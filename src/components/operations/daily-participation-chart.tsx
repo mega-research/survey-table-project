@@ -7,7 +7,11 @@ import { Card, CardContent } from '@/components/ui/card';
 import { ChartContainer, type ChartConfig } from '@/components/ui/chart';
 import { useSearchParamsMutator } from '@/hooks/use-search-params-mutator';
 import { cn } from '@/lib/utils';
-import type { DailyBucket, DailyMode } from '@/lib/operations/aggregate-daily';
+import {
+  formatDayLabel,
+  type DailyBucket,
+  type DailyMode,
+} from '@/lib/operations/aggregate-daily';
 import { CHART_COLOR_BLUE_500 } from '@/lib/operations/chart-tokens';
 import { numberFormatter } from '@/lib/operations/format';
 
@@ -242,16 +246,6 @@ interface ToggleButtonProps {
 function formatRangeLabel(bucket: string): string {
   const m = bucket.match(/^(\d{4})-(\d{2}-\d{2})$/);
   return m ? (m[2] ?? bucket) : bucket;
-}
-
-const KOREAN_WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'] as const;
-
-/** 'YYYY-MM-DD' → 'MM-DD (요일)' — aggregate-daily.formatDayLabel 과 동일 로직. */
-function formatDayLabel(ymd: string): string {
-  const [, mm, dd] = ymd.split('-');
-  const date = new Date(`${ymd}T00:00:00Z`);
-  const weekday = KOREAN_WEEKDAYS[date.getUTCDay()] ?? '';
-  return `${mm}-${dd} (${weekday})`;
 }
 
 /** 'YYYY-MM-DD' 에서 n일 뺀 'YYYY-MM-DD' 반환 (UTC 기준 — KST와 시차 보정 불요). */

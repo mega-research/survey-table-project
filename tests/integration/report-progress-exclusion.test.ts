@@ -55,9 +55,13 @@ function executeMock(sqlObj: unknown): unknown[] {
 
   // getProgressTotals SQL — group_count + list_total + completed_total + excluded_total
   if (raw.includes('group_count') && raw.includes('excluded_total')) {
-    const distinctGroups = new Set(
-      state.contacts.map((c) => (c.groupValue == null ? '(미분류)' : c.groupValue)),
+    // group_count 는 getProgressRows 의 GROUP BY ct.group_value (raw) 와 일치해야 한다:
+    // COUNT(DISTINCT group_value) (NULL 제외) + NULL 그룹 존재 시 +1.
+    // null 과 리터럴 '(미분류)' 는 별개 그룹으로 카운트.
+    const distinctGroups = new Set<string>(
+      state.contacts.filter((c) => c.groupValue != null).map((c) => c.groupValue as string),
     );
+    const hasNullGroup = state.contacts.some((c) => c.groupValue == null);
     const listTotal = state.contacts.filter((c) => !isExcluded(c)).length;
     const completedTotal = state.contacts.filter(
       (c) => isClosing(c) && !isExcluded(c),
@@ -65,7 +69,7 @@ function executeMock(sqlObj: unknown): unknown[] {
     const excludedTotal = state.contacts.filter((c) => isExcluded(c)).length;
     return [
       {
-        group_count: distinctGroups.size,
+        group_count: distinctGroups.size + (hasNullGroup ? 1 : 0),
         list_total: listTotal,
         completed_total: completedTotal,
         excluded_total: excludedTotal,
@@ -232,6 +236,30 @@ describe('getProgressTotals — negative exclusion', () => {
     expect(totals.listTotal).toBe(2);
     expect(totals.completedTotal).toBe(1);
     expect(totals.excludedTotal).toBe(0);
+  });
+
+  it('group_count 는 NULL 그룹과 리터럴 (미분류) 그룹을 별개로 센다 (getProgressRows 와 일치)', async () => {
+    // NULL group_value 와 리터럴 '(미분류)' 가 공존하면 getProgressRows 는
+    // GROUP BY ct.group_value 로 2개 그룹을 내보낸다 (둘 다 '(미분류)' 라벨).
+    // getProgressTotals.groupCount 도 동일하게 2 여야 한다 (footer/페이지네이션 정합).
+    setup(['1.조사완료'], ['수신거부'], [
+      { groupValue: 'A' },
+      { groupValue: null },          // NULL 그룹
+      { groupValue: '(미분류)' },     // 리터럴 (미분류) 그룹 — NULL 과 별개
+    ]);
+    const totals = await getProgressTotals(SURVEY_ID, null);
+    const rows = await getProgressRows({
+      surveyId: SURVEY_ID,
+      condition: null,
+      page: 1,
+      size: 100,
+      sort: 'groupLabel',
+      dir: 'asc',
+      metaKeys: [],
+    });
+    // A + NULL + 리터럴 (미분류) = 3개 그룹
+    expect(rows).toHaveLength(3);
+    expect(totals.groupCount).toBe(rows.length);
   });
 });
 

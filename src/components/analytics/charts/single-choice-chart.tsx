@@ -27,8 +27,12 @@ export function SingleChoiceChart({ data }: SingleChoiceChartProps) {
     percentage: d.percentage,
   }));
 
-  // 색상 배열 (최대 10개)
-  const colors = CHART_COLORS.slice(0, Math.min(chartData.length, 10));
+  // 옵션 수만큼 색상 생성. CHART_COLORS(10개)보다 옵션이 많으면 순환 사용해
+  // 도넛 슬라이스와 범례 항목이 항상 1:1로 색상 대응되도록 한다.
+  const repeats = Math.ceil(chartData.length / CHART_COLORS.length);
+  const colors: string[] = Array.from({ length: repeats }, () => CHART_COLORS)
+    .flat()
+    .slice(0, chartData.length);
 
   return (
     <Card className="p-6">

@@ -16,6 +16,42 @@ import { Label } from '@/components/ui/label';
 
 type Step = 'pick-file' | 'map-columns' | 'preview';
 
+/**
+ * RFC 4180 스타일의 CSV 한 줄 파서.
+ * 따옴표로 감싼 필드 안의 콤마를 분리하지 않으며, 필드 내 이스케이프된 따옴표("")를 처리한다.
+ * 단순 split(',') 가 "Seoul, Korea" 같은 셀을 잘라 컬럼을 한 칸씩 밀던 문제를 막는다.
+ */
+export function parseCsvLine(line: string): string[] {
+  const fields: string[] = [];
+  let current = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (line[i + 1] === '"') {
+          // 이스케이프된 따옴표
+          current += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        current += ch;
+      }
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ',') {
+      fields.push(current);
+      current = '';
+    } else {
+      current += ch;
+    }
+  }
+  fields.push(current);
+  return fields.map((s) => s.trim());
+}
+
 interface ImportResult {
   columns: string[];
   rows: Array<Record<string, string | number>>;
@@ -56,8 +92,8 @@ export function LookupCsvImport({ isOpen, onClose, onImport }: Props) {
         const text = await f.text();
         const lines = text.split(/\r?\n/).filter((l) => l.trim());
         parsed = {
-          headers: (lines[0] ?? '').split(',').map((s) => s.trim()),
-          rows: lines.slice(1).map((l) => l.split(',').map((s) => s.trim())),
+          headers: parseCsvLine(lines[0] ?? ''),
+          rows: lines.slice(1).map((l) => parseCsvLine(l)),
         };
       } else {
         const buf = await f.arrayBuffer();

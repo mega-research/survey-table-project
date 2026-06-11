@@ -29,7 +29,12 @@ export async function getMailPreviewSample(
   const sample = await getFirstContactSample(input.surveyId);
   if (!sample) return null;
 
+  // inviteUrl 은 절대 URL 이어야 한다 — NEXT_PUBLIC_APP_URL 가 없으면 relative path 가 되어
+  // 미리보기에서 끊긴 초대 링크를 조용히 노출한다. sendTestTemplateMail 과 동일하게 명시적 차단.
   const baseUrl = (process.env['NEXT_PUBLIC_APP_URL'] ?? '').replace(/\/+$/, '');
+  if (!baseUrl) {
+    throw new Error('NEXT_PUBLIC_APP_URL 환경변수가 설정되지 않았습니다.');
+  }
   const inviteUrl = `${baseUrl}/survey/${input.surveyId}?invite=${sample.inviteToken}`;
 
   return {

@@ -141,6 +141,34 @@ describe('allocateCycleCosts', () => {
     expect(r.campaigns[0]?.costKrw).toBe(0);
   });
 
+  it('마지막 회차 초과분이 0이면 음수 drift 가 그 회차로 흡수되지 않는다', () => {
+    // 마지막 회차(startedAt 기준)의 billableCount=0 → 초과분 0.
+    // 라운딩 음수 drift 가 이 회차로 흡수되면 costKrw 가 음수가 되는 회귀.
+    const plan: AllocatorInputPlan = {
+      includedEmails: 6,
+      monthlyFeeKrw: 0,
+      overagePer1kKrw: 500,
+    };
+    const r = allocateCycleCosts({
+      plan,
+      campaigns: [
+        campaign('a', 9, '2026-04-20T10:00:00Z'), // 6 포함 + 3 초과
+        campaign('b', 3, '2026-04-21T10:00:00Z'), // 3 전부 초과
+        campaign('c', 0, '2026-04-22T10:00:00Z'), // 초과분 0 (마지막 회차)
+      ],
+    });
+
+    // 어떤 회차도 음수 cost 를 가지면 안 된다.
+    expect(r.campaigns.every((c) => c.costKrw >= 0)).toBe(true);
+    // 초과분 0인 마지막 회차는 정확히 0원.
+    expect(r.campaigns[2]?.overageCount).toBe(0);
+    expect(r.campaigns[2]?.costKrw).toBe(0);
+    expect(r.campaigns[2]?.averageUnitPriceKrw).toBe(0);
+    // 회차 cost 합 ≡ 사이클 총 초과비 (잔액 흡수 불변식 유지).
+    const sumCosts = r.campaigns.reduce((acc, c) => acc + c.costKrw, 0);
+    expect(sumCosts).toBe(r.overageCostKrw);
+  });
+
   it('같은 startedAt 이면 campaignId 사전순 정렬', () => {
     const r = allocateCycleCosts({
       plan: PRO_50K,

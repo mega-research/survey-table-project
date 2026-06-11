@@ -319,25 +319,3 @@ export function useResponseSync() {
     startTransition,
   };
 }
-
-/**
- * 자동 저장 훅 (디바운스 적용)
- */
-export function useAutoSave(_delay: number = 3000) {
-  const currentSurveyId = useSurveyBuilderStore((s) => s.currentSurvey.id);
-  const { saveSurvey } = useSurveySync();
-
-  // 디바운스된 자동 저장
-  const autoSave = useCallback(async () => {
-    if (!currentSurveyId) return;
-
-    try {
-      await saveSurvey();
-      console.log('자동 저장 완료');
-    } catch (error) {
-      console.error('자동 저장 실패:', error);
-    }
-  }, [currentSurveyId, saveSurvey]);
-
-  return { autoSave };
-}

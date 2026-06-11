@@ -145,6 +145,9 @@ export function useDeleteSavedQuestion() {
     mutationFn: (id: string) => orpc.library.savedQuestions.remove.call({ id }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: orpc.library.savedQuestions.key() });
+      // 마지막으로 해당 태그를 보유한 질문을 삭제하면 태그 목록도 갱신되어야 하므로
+      // create/update 와 동일하게 파생 tags 키를 함께 무효화한다.
+      queryClient.invalidateQueries({ queryKey: libraryKeys.tags() });
     },
   });
 }
@@ -223,7 +226,10 @@ export function useDeleteCategory() {
     mutationFn: (id: string) => orpc.library.questionCategories.remove.call({ id }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: orpc.library.questionCategories.key() });
-      queryClient.invalidateQueries({ queryKey: libraryKeys.questions() });
+      // 삭제된 카테고리의 질문들은 서버에서 'custom'으로 재배정되므로 질문 목록도 갱신해야 한다.
+      // 저장 질문 쿼리는 oRPC 키([['library','savedQuestions',...], {...}])를 쓰므로
+      // 플랫 키 libraryKeys.questions()로는 prefix-match가 되지 않아 무효화가 누락된다.
+      queryClient.invalidateQueries({ queryKey: orpc.library.savedQuestions.key() });
     },
   });
 }

@@ -369,10 +369,17 @@ export function SortableQuestionList({
   useEffect(() => {
     if (!isTestMode || !surveyId) return;
     let cancelled = false;
-    client.surveyBuilder.testSample.get({ surveyId }).then((sample) => {
-      if (cancelled) return;
-      setDefaultContactAttrs(sample ? sample.attrs : {});
-    });
+    client.surveyBuilder.testSample
+      .get({ surveyId })
+      .then((sample) => {
+        if (cancelled) return;
+        setDefaultContactAttrs(sample ? sample.attrs : {});
+      })
+      .catch((error) => {
+        // 인증 실패/네트워크 오류 시 attrs 는 {} 유지 — 위 Proxy 가 placeholder 로 폴백.
+        if (cancelled) return;
+        console.error('테스트 컨택 attrs 조회 실패:', error);
+      });
     return () => {
       cancelled = true;
     };

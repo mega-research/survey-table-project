@@ -74,4 +74,16 @@ describe('updateContactTarget groupValue 보존', () => {
     expect(capturedSets).toHaveLength(1);
     expect(capturedSets[0]).toHaveProperty('groupValue', null);
   });
+
+  it("group 라벨이 falsy 문자열 '0' 이어도 null 로 무너지지 않고 보존한다", async () => {
+    await updateContactTarget({
+      id: 'ct-4',
+      surveyId: 'sv-1',
+      attrs: { 전시회: '0', 회사명: '아크미' },
+      systemFieldKeys: { group: '전시회' },
+    });
+
+    expect(capturedSets).toHaveLength(1);
+    expect(capturedSets[0]).toMatchObject({ groupValue: '0' });
+  });
 });

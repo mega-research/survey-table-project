@@ -4,6 +4,7 @@ import { desc, eq, ilike, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { NewSavedCell, savedCells } from '@/db/schema/surveys';
+import { escapeLikePattern } from '@/lib/operations/filter-shared';
 import type { SavedCell, TableCell } from '@/types/survey';
 import { sanitizeCellForLibrary } from '@/utils/cell-library-helpers';
 
@@ -36,10 +37,11 @@ export async function listSavedCells(): Promise<SavedCell[]> {
   return rows.map(toDomainSavedCell);
 }
 
-/** 셀 이름 검색 */
+/** 셀 이름 검색 — ILIKE wildcard(% _ \)는 리터럴로 escape 처리 */
 export async function searchSavedCells(query: string): Promise<SavedCell[]> {
+  const escaped = escapeLikePattern(query);
   const rows = await db.query.savedCells.findMany({
-    where: ilike(savedCells.name, `%${query}%`),
+    where: ilike(savedCells.name, `%${escaped}%`),
     orderBy: [desc(savedCells.updatedAt)],
   });
   return rows.map(toDomainSavedCell);

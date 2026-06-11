@@ -38,13 +38,21 @@ interface CrossTabPanelProps {
 
 export function CrossTabPanel({ questions, responses }: CrossTabPanelProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [rowQuestionId, setRowQuestionId] = useState<string | null>(null);
-  const [colQuestionId, setColQuestionId] = useState<string | null>(null);
+  const [selectedRowQuestionId, setRowQuestionId] = useState<string | null>(null);
+  const [selectedColQuestionId, setColQuestionId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('table');
   const [percentageBase, setPercentageBase] = useState<PercentageBase>('row');
   const [showCounts, setShowCounts] = useState(true);
 
-  const crossTabableQuestions = questions.filter(isCrossTabableQuestion);
+  const crossTabableQuestions = useMemo(
+    () => questions.filter(isCrossTabableQuestion),
+    [questions],
+  );
+
+  // 자동 선택: 사용자가 직접 고르기 전(state null)에는 교차분석 가능 질문 첫 두 개를 기본값으로 사용.
+  // useState 초기화 함수에서 setState 부수효과를 일으키던 패턴을 렌더 중 파생값으로 대체.
+  const rowQuestionId = selectedRowQuestionId ?? crossTabableQuestions[0]?.id ?? null;
+  const colQuestionId = selectedColQuestionId ?? crossTabableQuestions[1]?.id ?? null;
 
   // 교차분석 결과 계산
   const crossTabResult = useMemo(() => {
@@ -57,18 +65,6 @@ export function CrossTabPanel({ questions, responses }: CrossTabPanelProps) {
 
     return calculateCrossTab(rowQuestion, colQuestion, responses);
   }, [rowQuestionId, colQuestionId, questions, responses]);
-
-  // 자동 선택 (첫 렌더링 시)
-  useState(() => {
-    if (crossTabableQuestions.length >= 2) {
-      const first = crossTabableQuestions[0];
-      const second = crossTabableQuestions[1];
-      if (first && second) {
-        setRowQuestionId(first.id);
-        setColQuestionId(second.id);
-      }
-    }
-  });
 
   const hasEnoughQuestions = crossTabableQuestions.length >= 2;
 

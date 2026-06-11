@@ -79,3 +79,85 @@ describe('useImportLibrary 무효화 키', () => {
     expect(client.getQueryState(categoriesKey)?.isInvalidated).toBe(false);
   });
 });
+
+/**
+ * 회귀 테스트: useDeleteSavedQuestion 의 onSuccess 무효화 키 검증.
+ *
+ * 저장 질문을 삭제하면 savedQuestions 목록뿐 아니라 파생 태그 목록(useAllTags,
+ * libraryKeys.tags())도 갱신되어야 한다. 마지막으로 특정 태그를 보유한 질문을
+ * 삭제하면 그 태그는 고아가 되어 사라져야 하기 때문이다.
+ * create/update 경로는 두 키를 모두 무효화하지만 과거 delete 경로는
+ * savedQuestions.key() 만 무효화해 태그 필터가 stale 하게 남는 비대칭이 있었다.
+ */
+describe('useDeleteSavedQuestion 무효화 키', () => {
+  function seedClient() {
+    const client = new QueryClient();
+    const savedQuestionsKey = orpc.library.savedQuestions.list.queryOptions().queryKey;
+    const tagsKey = libraryKeys.tags();
+    client.getQueryCache().build(client, { queryKey: savedQuestionsKey });
+    client.getQueryCache().build(client, { queryKey: tagsKey });
+    return { client, savedQuestionsKey, tagsKey };
+  }
+
+  it('savedQuestions.key() + libraryKeys.tags() 는 저장 질문/태그 쿼리를 모두 무효화한다', async () => {
+    const { client, savedQuestionsKey, tagsKey } = seedClient();
+
+    // useDeleteSavedQuestion.onSuccess 가 수행하는 무효화와 동일.
+    await client.invalidateQueries({ queryKey: orpc.library.savedQuestions.key() });
+    await client.invalidateQueries({ queryKey: libraryKeys.tags() });
+
+    expect(client.getQueryState(savedQuestionsKey)?.isInvalidated).toBe(true);
+    expect(client.getQueryState(tagsKey)?.isInvalidated).toBe(true);
+  });
+
+  it('savedQuestions.key() 만으로는 태그 쿼리를 무효화하지 못한다 (과거 누락)', async () => {
+    const { client, savedQuestionsKey, tagsKey } = seedClient();
+
+    await client.invalidateQueries({ queryKey: orpc.library.savedQuestions.key() });
+
+    expect(client.getQueryState(savedQuestionsKey)?.isInvalidated).toBe(true);
+    // tags 무효화를 누락하면 태그 필터가 stale 하게 남는다.
+    expect(client.getQueryState(tagsKey)?.isInvalidated).toBe(false);
+  });
+});
+
+/**
+ * 회귀 테스트: useDeleteCategory 의 onSuccess 무효화 키 검증.
+ *
+ * 카테고리를 삭제하면 서버(deleteCategory)가 해당 카테고리의 저장 질문들을
+ * 'custom'으로 재배정한다. 따라서 카테고리 목록뿐 아니라 저장 질문 목록도
+ * 갱신되어야 한다. 과거 useDeleteCategory 는 플랫 키 libraryKeys.questions()
+ * (['library','questions'])로 invalidate 했는데, 이 키는 oRPC 배열-인덱스-0 키
+ * ([['library','savedQuestions',...], {...}])를 prefix-match 할 수 없어
+ * 재배정된 질문이 삭제된 카테고리 아래 stale 하게 남았다.
+ */
+describe('useDeleteCategory 무효화 키', () => {
+  function seedClient() {
+    const client = new QueryClient();
+    const savedQuestionsKey = orpc.library.savedQuestions.list.queryOptions().queryKey;
+    const categoriesKey = orpc.library.questionCategories.list.queryOptions().queryKey;
+    client.getQueryCache().build(client, { queryKey: savedQuestionsKey });
+    client.getQueryCache().build(client, { queryKey: categoriesKey });
+    return { client, savedQuestionsKey, categoriesKey };
+  }
+
+  it('questionCategories.key() + savedQuestions.key() 는 카테고리/저장 질문 쿼리를 모두 무효화한다', async () => {
+    const { client, savedQuestionsKey, categoriesKey } = seedClient();
+
+    // useDeleteCategory.onSuccess 가 수행하는 무효화와 동일.
+    await client.invalidateQueries({ queryKey: orpc.library.questionCategories.key() });
+    await client.invalidateQueries({ queryKey: orpc.library.savedQuestions.key() });
+
+    expect(client.getQueryState(categoriesKey)?.isInvalidated).toBe(true);
+    expect(client.getQueryState(savedQuestionsKey)?.isInvalidated).toBe(true);
+  });
+
+  it('플랫 키 libraryKeys.questions() 는 저장 질문 쿼리를 무효화하지 못한다 (과거 버그)', async () => {
+    const { client, savedQuestionsKey } = seedClient();
+
+    await client.invalidateQueries({ queryKey: libraryKeys.questions() });
+
+    // prefix-match 실패가 버그의 본질. 재배정된 질문이 stale 하게 남는다.
+    expect(client.getQueryState(savedQuestionsKey)?.isInvalidated).toBe(false);
+  });
+});

@@ -24,10 +24,27 @@ export function normalizeHeaderKey(value: unknown): string {
 /** 셀 → 문자열. 숫자/null/undefined 모두 안전하게 string. */
 function cellToString(value: unknown): string {
   if (value == null) return '';
-  if (typeof value === 'object' && 'result' in value) {
-    return String((value as { result: unknown }).result ?? '');
-  }
   if (value instanceof Date) return value.toISOString();
+  if (typeof value === 'object') {
+    // 수식 셀 (CellFormulaValue / CellSharedFormulaValue): 계산 결과 사용
+    if ('result' in value) {
+      return cellToString((value as { result: unknown }).result);
+    }
+    // 하이퍼링크 셀 (CellHyperlinkValue): 표시 텍스트 사용
+    if ('hyperlink' in value && 'text' in value) {
+      return String((value as { text: unknown }).text ?? '');
+    }
+    // 리치 텍스트 셀 (CellRichTextValue): run 들의 text 를 이어붙임
+    if ('richText' in value && Array.isArray((value as { richText: unknown }).richText)) {
+      return (value as { richText: Array<{ text?: unknown }> }).richText
+        .map((run) => String(run?.text ?? ''))
+        .join('');
+    }
+    // 에러 셀 (CellErrorValue): 에러 코드 문자열 사용
+    if ('error' in value) {
+      return String((value as { error: unknown }).error ?? '');
+    }
+  }
   return String(value);
 }
 

@@ -230,7 +230,13 @@ export async function getProgressRows(args: GetProgressRowsArgs): Promise<Progre
 
 /**
  * 페이지네이션 무시 합계 — "총 N개 그룹 · 리스트 합계 X / 완료 Y".
- * group_count 는 NULL 그룹도 1로 카운트.
+ *
+ * group_count 는 `getProgressRows` 의 `GROUP BY ct.group_value` (raw 컬럼) 과
+ * 정확히 일치해야 한다 (footer "총 N개 그룹" + 페이지네이션 total 근거).
+ *
+ * 그래서 COUNT(DISTINCT ct.group_value) (NULL 제외) 에 NULL 그룹 존재 시 +1.
+ * COALESCE(...,'(미분류)') 를 DISTINCT 안에서 쓰면 group_value 가 리터럴
+ * '(미분류)' 인 행과 NULL 행이 한 그룹으로 합쳐져 GROUP BY 와 어긋난다.
  */
 export async function getProgressTotals(
   surveyId: string,
@@ -243,7 +249,8 @@ export async function getProgressTotals(
   const filterSql = buildFilterSql(condition);
   const result = await db.execute(sql`
     SELECT
-      COUNT(DISTINCT COALESCE(ct.group_value, '(미분류)'))::int AS group_count,
+      (COUNT(DISTINCT ct.group_value)
+        + (CASE WHEN COUNT(*) FILTER (WHERE ct.group_value IS NULL) > 0 THEN 1 ELSE 0 END))::int AS group_count,
       COUNT(*) FILTER (WHERE NOT (${excludeFilter}))::int AS list_total,
       COUNT(*) FILTER (WHERE (${closingFilter}) AND NOT (${excludeFilter}))::int AS completed_total,
       COUNT(*) FILTER (WHERE ${excludeFilter})::int AS excluded_total

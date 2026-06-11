@@ -126,6 +126,10 @@ export function CellContentModal({
   const [isSaving, setIsSaving] = useState(false);
   const inputTemplateRef = useRef<HTMLInputElement>(null);
   const textContentRef = useRef<HTMLTextAreaElement>(null);
+  // 숫자 모드 진입 시 emptyDefault 기본 ON 을 "이 편집 세션에서 한 번만" 적용하기 위한 가드.
+  // 사용자가 초기값 옵션을 끈 뒤 숫자 모드를 다시 토글해도 강제로 켜지지 않도록 한다.
+  // (모달 오픈/cell.id 변경 시 리셋)
+  const emptyDefaultAutoAppliedRef = useRef(false);
 
   // 35개 편집 필드를 단일 폼 상태로 통합. hydrate(모달 오픈/cell.id 변경)와
   // reset(취소 롤백)이 한 소스(cellToFormState)를 공유해 필드 누락 drift 가 없다.
@@ -240,6 +244,11 @@ export function CellContentModal({
       setEditChoiceGroups(choiceGroupsProp ?? storeQuestion?.choiceGroups ?? []);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, cell?.id]);
+
+  // 새 편집 세션(모달 오픈/cell.id 변경)마다 emptyDefault 자동 적용 가드를 리셋한다.
+  useEffect(() => {
+    emptyDefaultAutoAppliedRef.current = false;
   }, [isOpen, cell?.id]);
 
   // 현재 질문 tableRowsData 기반으로 그룹별 멤버 셀 수를 계산한다 (표시용).
@@ -838,8 +847,10 @@ export function CellContentModal({
                     onChange={(e) => {
                       const checked = e.target.checked;
                       setInputType(checked ? 'number' : 'text');
-                      if (checked) {
-                        // 숫자 모드 처음 켤 때 emptyDefault 기본 ON (기본값 0)
+                      if (checked && !emptyDefaultAutoAppliedRef.current) {
+                        // 숫자 모드를 이 세션에서 처음 켤 때만 emptyDefault 기본 ON (기본값 0).
+                        // 이후 사용자가 초기값 옵션을 끈 뒤 다시 토글해도 강제로 켜지지 않는다.
+                        emptyDefaultAutoAppliedRef.current = true;
                         setEmptyDefaultEnabled(true);
                       }
                     }}

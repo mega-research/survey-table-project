@@ -153,7 +153,7 @@ export function getCellPreviewText(cell: Partial<TableCell>): string {
     case 'ranking':
       if (cell.rankingOptions && cell.rankingOptions.length > 0) {
         const positions = cell.rankingConfig?.positions ?? 3;
-        return `🥇 ${positions}순위 · ${cell.rankingOptions.map((o) => o.label).join(', ')}`;
+        return `${positions}순위 · ${cell.rankingOptions.map((o) => o.label).join(', ')}`;
       }
       return '(빈 순위형)';
     case 'ranking_opt':

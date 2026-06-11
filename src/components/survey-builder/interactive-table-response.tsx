@@ -69,8 +69,6 @@ interface SelectorRowProps {
   gridRow?: number | undefined;
   isExpanded: boolean;
   onToggleExpand: (groupId: string) => void;
-  /** 좌측 sticky 열 영역이 덮는 폭만큼 padding-left 부여 */
-  stickyLeftPadding?: number | undefined;
 }
 
 const SelectorRow = React.memo(function SelectorRow({
@@ -603,12 +601,6 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     return computeStickyLeftColumns(visibleColumns, displayRows, maxStickyWidth);
   }, [enableSticky, isMobileView, visibleColumns, displayRows, scrollViewportWidth]);
 
-  const stickyLeftPadding = useMemo(() => {
-    if (!stickyInfo || stickyInfo.stickyColCount === 0) return 0;
-    const idx = stickyInfo.stickyColCount - 1;
-    return (stickyInfo.leftOffsets[idx] ?? 0) + (visibleColumns[idx]?.width || 150);
-  }, [stickyInfo, visibleColumns]);
-
   // 헤더/바디 grid 컨테이너 공용 스타일 (가로 폭·템플릿 동일하게 정렬)
   const gridContainerStyle = useMemo<React.CSSProperties>(
     () => ({
@@ -654,7 +646,6 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
             gridRow={selectorGridRow}
             isExpanded={isExpanded}
             onToggleExpand={toggleGroupExpanded}
-            stickyLeftPadding={stickyLeftPadding}
           />,
         ];
 
@@ -696,7 +687,6 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
       onChange,
       hiddenGroupIds,
       stickyInfo,
-      stickyLeftPadding,
     ],
   );
 

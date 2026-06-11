@@ -36,11 +36,11 @@ const KOREAN_WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'] as con
  * (Date 생성자에 'YYYY-MM-DD'만 주면 UTC midnight으로 해석되지만,
  *  요일 추출은 UTC 기준이어도 일관되므로 문제 없음.)
  */
-function formatDayLabel(ymd: string): string {
+export function formatDayLabel(ymd: string): string {
   const [, mm, dd] = ymd.split('-');
   // UTC 기준으로 요일을 뽑되, 모든 입력에 동일하게 적용되므로 일관성 보장.
   const date = new Date(`${ymd}T00:00:00Z`);
-  const weekday = KOREAN_WEEKDAYS[date.getUTCDay()];
+  const weekday = KOREAN_WEEKDAYS[date.getUTCDay()] ?? '';
   return `${mm}-${dd} (${weekday})`;
 }
 

@@ -503,6 +503,8 @@ export function SurveyResponseFlow({
     if (!hasResponses || isCompleted) return;
     const handler = (e: BeforeUnloadEvent) => {
       e.preventDefault();
+      // Chrome/Edge/Firefox 는 returnValue 를 요구
+      e.returnValue = '';
     };
     window.addEventListener('beforeunload', handler);
     return () => window.removeEventListener('beforeunload', handler);

@@ -44,7 +44,9 @@ export function evaluateRightOperand(
   }
 
   const raw = row[valueColumn];
-  if (raw === undefined || raw === null || raw === '') {
+  // 문자열 값은 공백만 있는 셀('   ')도 빈 값으로 간주해 fail-safe SHOW.
+  // (Number('   ') 는 0 으로 변환되어 phantom 0 으로 비교되는 것을 차단)
+  if (raw === undefined || raw === null || (typeof raw === 'string' && raw.trim() === '')) {
     return { ok: false, reason: 'lookup-value-missing' };
   }
   const n = typeof raw === 'number' ? raw : Number(raw);

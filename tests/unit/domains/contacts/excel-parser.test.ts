@@ -1,9 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import { readFile } from 'node:fs/promises';
+import ExcelJS from 'exceljs';
 import { previewExcel, parseExcelRows, normalizeHeaderKey } from '@/lib/contacts/excel-parser';
 
 async function loadFixture(name: string): Promise<Buffer> {
   return readFile(`tests/fixtures/contacts/${name}`);
+}
+
+/**
+ * exceljs 워크북을 메모리에서 만들어 buffer 로 직렬화.
+ * 하이퍼링크/리치텍스트/수식/에러 등 object 형태 셀 값을 회귀 테스트하기 위함.
+ */
+async function buildWorkbookBuffer(
+  fill: (ws: ExcelJS.Worksheet) => void,
+): Promise<Buffer> {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Sheet1');
+  fill(ws);
+  const ab = await wb.xlsx.writeBuffer();
+  return Buffer.from(ab as ArrayBuffer);
 }
 
 describe('normalizeHeaderKey', () => {
@@ -77,5 +92,46 @@ describe('parseExcelRows', () => {
     if (!row0) throw new Error('expected rows[0]');
     expect(row0['연 번']).toBe('1');
     expect(row0['사업자번호']).toBe('1234567890');
+  });
+});
+
+describe('parseExcelRows - object 형태 셀 값 처리 (L84 회귀)', () => {
+  it('하이퍼링크 셀 → text 추출 ([object Object] 아님)', async () => {
+    const buf = await buildWorkbookBuffer((ws) => {
+      ws.getCell('A1').value = '이메일';
+      // 브라우저/Outlook 에서 붙여넣으면 자동 하이퍼링크되는 케이스
+      ws.getCell('A2').value = { text: 'a@b.com', hyperlink: 'mailto:a@b.com' };
+    });
+    const rows = await parseExcelRows(buf, { sheetName: 'Sheet1', headerRow: 1 });
+    const row0 = rows[0];
+    if (!row0) throw new Error('expected rows[0]');
+    expect(row0['이메일']).toBe('a@b.com');
+  });
+
+  it('리치 텍스트 셀 → run text 이어붙임', async () => {
+    const buf = await buildWorkbookBuffer((ws) => {
+      ws.getCell('A1').value = '이름';
+      ws.getCell('A2').value = {
+        richText: [
+          { text: '홍', font: { bold: true } },
+          { text: '길동' },
+        ],
+      };
+    });
+    const rows = await parseExcelRows(buf, { sheetName: 'Sheet1', headerRow: 1 });
+    const row0 = rows[0];
+    if (!row0) throw new Error('expected rows[0]');
+    expect(row0['이름']).toBe('홍길동');
+  });
+
+  it('수식 셀 → result 값 사용', async () => {
+    const buf = await buildWorkbookBuffer((ws) => {
+      ws.getCell('A1').value = '합계';
+      ws.getCell('A2').value = { formula: '1+2', result: 3 };
+    });
+    const rows = await parseExcelRows(buf, { sheetName: 'Sheet1', headerRow: 1 });
+    const row0 = rows[0];
+    if (!row0) throw new Error('expected rows[0]');
+    expect(row0['합계']).toBe('3');
   });
 });

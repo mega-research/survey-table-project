@@ -31,8 +31,8 @@ export function ColumnSchemeEditor({ surveyId, scheme }: ColumnSchemeEditorProps
     if (!a || !b) return;
     newCols[index] = b;
     newCols[target] = a;
-    newCols.forEach((c, i) => { c.order = i + 1; });
-    setColumns(newCols);
+    // scheme.columns 의 객체 레퍼런스를 in-place 변경하지 않도록 새 객체로 매핑한다.
+    setColumns(newCols.map((c, i) => ({ ...c, order: i + 1 })));
   }
 
   function toggleHide(index: number) {

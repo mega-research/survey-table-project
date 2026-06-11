@@ -83,10 +83,7 @@ export function ResultCodesEditor({ surveyId, initialCodes }: ResultCodesEditorP
     if (!a || !b) return;
     newCodes[index] = b;
     newCodes[target] = a;
-    newCodes.forEach((c, i) => {
-      c.order = i + 1;
-    });
-    setCodes(newCodes);
+    setCodes(newCodes.map((c, i) => ({ ...c, order: i + 1 })));
   }
 
   function remove(index: number) {

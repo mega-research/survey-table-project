@@ -25,6 +25,11 @@ export async function updateProgressColumns(
   input: UpdateProgressColumnsInput,
 ): Promise<UpdateProgressColumnsResult> {
   const { surveyId, scheme } = input;
+  // columns 누락/형식 오류 방어 (domain scheme 은 z.custom 이라 런타임 미검증).
+  // 비-UI/API 호출이 columns 를 빠뜨려도 throw 가 아니라 { ok:false, error } 계약 유지.
+  if (!Array.isArray(scheme?.columns)) {
+    return { ok: false, error: '컬럼 정보가 올바르지 않습니다.' };
+  }
   // key 중복 검증
   const keys = scheme.columns.map((c) => c.key);
   if (new Set(keys).size !== keys.length) {

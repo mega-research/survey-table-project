@@ -32,7 +32,8 @@ function revalidateCampaignsForSurvey(surveyId: string): void {
 /**
  * unsubscribed_at = NULL 로 되돌리고 단체 메일
 단체 메일 페이지 캐시 무효화.
- * where 절로 admin(id+surveyId) / form action(token) 두 호출자 공유.
+ * 현재 호출자는 form action(token) 경로 1곳뿐 — where 절은 token 매칭을 받는다.
+ * (admin(id+surveyId) revert 는 features/mail 의 revertUnsubscribeByContactId 로 분리됨.)
  * 매칭 행이 없으면 null 반환 — 호출자가 에러 처리 또는 silent 통과 결정.
  */
 async function clearUnsubscribed(where: SQL): Promise<{ surveyId: string } | null> {

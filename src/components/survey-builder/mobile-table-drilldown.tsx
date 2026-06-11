@@ -155,7 +155,9 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
         : `입력 ${s.leaves.length}개`;
 
   // ── breadcrumb ──
-  const Crumb = ({ label, onBack }: { label: string; onBack: () => void }) => (
+  // 컴포넌트(<Crumb/>)가 아니라 렌더 함수로 호출한다. JSX 엘리먼트로 쓰면 부모 리렌더(셀 입력 등)
+  // 마다 함수 정체성이 새로 생겨 React가 서브트리를 remount 한다 — 직접 호출은 부모에 인라인된다.
+  const renderCrumb = ({ label, onBack }: { label: string; onBack: () => void }) => (
     <div className="mb-3 flex items-center gap-2">
       <button
         type="button"
@@ -170,7 +172,8 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
   );
 
   // ── 진행률 바 (+ 섹션 진입 시 목차로 / 다음 섹션 네비) ──
-  const ProgressBar = () => {
+  // Crumb 과 동일 이유로 컴포넌트가 아닌 렌더 함수로 호출한다(remount 회피).
+  const renderProgressBar = () => {
     const sec = nav.sec;
     return (
       <div className="mt-4">
@@ -247,7 +250,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
             );
           })}
         </div>
-        <ProgressBar />
+        {renderProgressBar()}
       </div>
     );
   }
@@ -261,7 +264,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
   if (s.kind === 'scalar' || s.kind === 'list') {
     return (
       <div ref={rootRef}>
-        <Crumb label={s.label || '항목'} onBack={backToRoot} />
+        {renderCrumb({ label: s.label || '항목', onBack: backToRoot })}
         <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
           <div className="border-b bg-gray-50/80 px-4 py-3 text-sm font-semibold text-gray-700">
             {s.label || '입력'}
@@ -288,7 +291,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
             })}
           </div>
         </div>
-        <ProgressBar />
+        {renderProgressBar()}
       </div>
     );
   }
@@ -299,7 +302,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
     let lastSub: string | null = null;
     return (
       <div ref={rootRef}>
-        <Crumb label={s.label || '항목'} onBack={backToRoot} />
+        {renderCrumb({ label: s.label || '항목', onBack: backToRoot })}
         <div className="space-y-2.5">
           {s.leaves.map((l, li) => {
             const showDivider = l.subGroup !== lastSub && !!l.subGroup;
@@ -333,7 +336,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
             );
           })}
         </div>
-        <ProgressBar />
+        {renderProgressBar()}
       </div>
     );
   }
@@ -360,16 +363,14 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
     'flex flex-1 items-center justify-center gap-1 rounded-xl border border-blue-200 bg-blue-50 py-3 text-sm font-semibold text-blue-600 active:bg-blue-100';
   return (
     <div ref={rootRef}>
-      <Crumb
-        label={
-          isSingleLeaf
-            ? s.label || '항목'
-            : leaf.subGroup && leaf.subGroup !== leaf.label
-              ? `${leaf.subGroup} › ${leaf.label}`
-              : leaf.label
-        }
-        onBack={backToLeaves}
-      />
+      {renderCrumb({
+        label: isSingleLeaf
+          ? s.label || '항목'
+          : leaf.subGroup && leaf.subGroup !== leaf.label
+            ? `${leaf.subGroup} › ${leaf.label}`
+            : leaf.label,
+        onBack: backToLeaves,
+      })}
       <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
         <div className="border-b bg-gray-50/80 px-4 py-3 text-sm font-semibold text-gray-700">
           {leaf.label}
@@ -466,7 +467,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
           )}
         </div>
       )}
-      <ProgressBar />
+      {renderProgressBar()}
     </div>
   );
 });

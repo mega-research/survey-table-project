@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { shapeDailyBuckets } from '@/lib/operations/aggregate-daily';
+import { formatDayLabel, shapeDailyBuckets } from '@/lib/operations/aggregate-daily';
 
 describe('shapeDailyBuckets — day 모드', () => {
   it('빈 입력 → 빈 배열', () => {
@@ -54,6 +54,32 @@ describe('shapeDailyBuckets — day 모드', () => {
       '2026-04-24',
       '2026-04-25',
     ]);
+  });
+});
+
+describe('formatDayLabel — 공유 헬퍼 (차트 빈 슬롯 패딩과 동일 라벨 보장)', () => {
+  it("'YYYY-MM-DD' → 'MM-DD (요일)' 형식", () => {
+    // 2026-04-22 = 수요일
+    expect(formatDayLabel('2026-04-22')).toBe('04-22 (수)');
+  });
+
+  it('요일별 한글 글자 매핑 (일~토)', () => {
+    // 2026-04-26(일) ~ 2026-05-02(토)
+    expect(formatDayLabel('2026-04-26')).toBe('04-26 (일)');
+    expect(formatDayLabel('2026-04-27')).toBe('04-27 (월)');
+    expect(formatDayLabel('2026-04-28')).toBe('04-28 (화)');
+    expect(formatDayLabel('2026-04-29')).toBe('04-29 (수)');
+    expect(formatDayLabel('2026-04-30')).toBe('04-30 (목)');
+    expect(formatDayLabel('2026-05-01')).toBe('05-01 (금)');
+    expect(formatDayLabel('2026-05-02')).toBe('05-02 (토)');
+  });
+
+  it('shapeDailyBuckets 가 만드는 라벨과 동일 (차트 패딩 byte-identity 보장)', () => {
+    const [bucket] = shapeDailyBuckets(
+      [{ bucket: '2026-04-22', count: 1 }],
+      'day',
+    );
+    expect(bucket?.label).toBe(formatDayLabel('2026-04-22'));
   });
 });
 

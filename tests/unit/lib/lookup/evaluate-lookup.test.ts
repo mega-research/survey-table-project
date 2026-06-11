@@ -145,6 +145,25 @@ describe('evaluateRightOperand', () => {
     expect(r).toEqual({ ok: false, reason: 'attrs-key-missing' });
   });
 
+  it('lookup: 값 컬럼이 공백만 있는 문자열이면 lookup-value-missing (phantom 0 방지)', () => {
+    const lutBlankValue: SurveyLookup = {
+      ...LUT,
+      rows: [{ 대륙: '유럽', '2026년도_적용액': '   ' }],
+    };
+    const op: RightOperand = {
+      kind: 'lookup',
+      surveyLookupId: 'lut-1',
+      keyMapping: [{ lutKey: '대륙', attrsKey: '개최대륙' }],
+      valueColumn: '2026년도_적용액',
+    };
+    const r = evaluateRightOperand(op, {
+      responses: {},
+      contactAttrs: { 개최대륙: '유럽' },
+      lookups: [lutBlankValue],
+    });
+    expect(r).toEqual({ ok: false, reason: 'lookup-value-missing' });
+  });
+
   it('lookup: valueColumn 이 LUT 의 columns 목록에 없으면 lookup-value-missing', () => {
     const op: RightOperand = {
       kind: 'lookup',

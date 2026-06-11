@@ -145,7 +145,10 @@ export async function exportResponsesAsCsv(surveyId: string) {
     const responseData = response.questionResponses as Record<string, unknown>;
     Array.from(questionIds).forEach((questionId) => {
       const value = responseData[questionId];
-      if (Array.isArray(value)) {
+      if (value === null || value === undefined) {
+        // typeof null === 'object' 함정: null 을 object 분기에 보내면 "null" 문자열이 셀에 들어간다.
+        row.push('');
+      } else if (Array.isArray(value)) {
         row.push(value.join('; '));
       } else if (typeof value === 'object') {
         row.push(JSON.stringify(value));

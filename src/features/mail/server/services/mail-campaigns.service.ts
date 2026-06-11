@@ -43,6 +43,11 @@ export async function createCampaign(
 ): Promise<CreateCampaignResult> {
   const filterSnapshot: CampaignFilterSnapshot = (input.filterSnapshot ?? {}) as CampaignFilterSnapshot;
 
+  // 중복 선택 ID 제거 — recipientCount/skippedCount 카운터가 중복으로 부풀려지는 것을 방지.
+  // 실제 mail_recipients 행은 inArray(SQL IN) + seen Set 으로 이미 dedupe 되므로,
+  // 카운터도 unique 기준으로 맞춰야 phantom skipped/recipient 가 발생하지 않는다.
+  const uniqueTargetIds = Array.from(new Set(input.contactTargetIds));
+
   const result = await db.transaction(async (tx) => {
     // a. 템플릿 fetch
     const [template] = await tx
@@ -123,7 +128,7 @@ export async function createCampaign(
       .where(
         and(
           eq(contactTargets.surveyId, input.surveyId),
-          inArray(contactTargets.id, input.contactTargetIds),
+          inArray(contactTargets.id, uniqueTargetIds),
           isNull(contactTargets.unsubscribedAt),
           notExcludedByCode,
         ),
@@ -145,7 +150,7 @@ export async function createCampaign(
     }
 
     const validCount = validContacts.length;
-    const skippedCount = input.contactTargetIds.length - validCount;
+    const skippedCount = uniqueTargetIds.length - validCount;
 
     if (validCount === 0) {
       throw new Error('발송 가능한 수신자가 없습니다. 수신거부 또는 이메일 누락 확인이 필요합니다.');
@@ -170,7 +175,7 @@ export async function createCampaign(
     await tx
       .update(mailCampaigns)
       .set({
-        recipientCount: input.contactTargetIds.length,
+        recipientCount: uniqueTargetIds.length,
         queuedCount: validCount,
         skippedUnsubscribedCount: skippedCount,
         updatedAt: new Date(),

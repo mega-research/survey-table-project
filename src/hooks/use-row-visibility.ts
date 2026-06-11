@@ -6,7 +6,7 @@
  * - 포커스된 행은 절대 언마운트 안 함
  * - rowspan 병합 범위 확장
  */
-import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 
 import type { TableRow } from '@/types/survey';
 
@@ -61,8 +61,11 @@ export function useRowVisibility(
   const rowCount = displayRows.length;
   const supportsIO = typeof IntersectionObserver !== 'undefined';
 
-  const mergedRangesRef = useRef<MergedRange[]>([]);
-  mergedRangesRef.current = extractMergedRanges(displayRows);
+  // displayRows 참조가 바뀔 때만 병합 범위 재계산 (스크롤 hot path 재스캔 방지).
+  // ref 로 보관해 effect 안에서 만들어진 IO 콜백이 항상 최신 값을 읽도록 유지.
+  const mergedRanges = useMemo(() => extractMergedRanges(displayRows), [displayRows]);
+  const mergedRangesRef = useRef<MergedRange[]>(mergedRanges);
+  mergedRangesRef.current = mergedRanges;
 
   const [visibleSet, setVisibleSet] = useState<Set<number>>(() => {
     const initial = new Set<number>();

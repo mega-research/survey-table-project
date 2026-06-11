@@ -364,7 +364,9 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
     return (
       <div className="space-y-3">
         <button
-          onClick={() => setPhase(skipGroupSelect ? 'row-select' : 'row-select')}
+          // 행 선택(row-select) 단계로 복귀. row-select 자체가 group-select 로 가는
+          // 그룹 back 버튼을 제공하므로 multi-group 케이스에서도 row-select 가 올바른 타깃이다.
+          onClick={() => setPhase('row-select')}
           className="flex items-center gap-1 text-sm font-medium text-blue-600 transition-colors hover:text-blue-800"
         >
           <ChevronLeft className="h-4 w-4" /> 항목 선택으로 돌아가기

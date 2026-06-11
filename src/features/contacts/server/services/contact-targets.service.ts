@@ -28,7 +28,9 @@ export async function addContactTarget(
   // UI 우회로 PII 키가 attrs 에 섞여 들어오는 경우 차단 — 평문 누적 방지.
   const attrs = await sanitizeAttrsAgainstPii(surveyId, rawAttrs);
 
-  const groupValue = systemFieldKeys?.group ? (attrs[systemFieldKeys.group] || null) : null;
+  // 빈 셀('')만 NULL 처리. '0' 등 falsy 문자열 group 라벨은 보존 (|| 사용 금지).
+  const rawGroup = systemFieldKeys?.group ? attrs[systemFieldKeys.group] : undefined;
+  const groupValue = rawGroup != null && rawGroup !== '' ? rawGroup : null;
 
   const result = await db.transaction(async (tx) => {
     const residRows = (await tx.execute(
@@ -74,8 +76,10 @@ export async function updateContactTarget(input: UpdateContactTargetInput): Prom
   // 분류 기준 키가 전달된 경우에만 group_value 재계산.
   // systemFieldKeys.group 이 없으면(예: 자동 감지 실패) 기존 group_value 를 보존해야 함 —
   // 무조건 set 하면 메모/PII 만 수정한 부분 업데이트에서 기존 분류값이 null 로 덮어써짐.
+  // 빈 셀('')만 NULL 처리. '0' 등 falsy 문자열 group 라벨은 보존 (|| 사용 금지).
   const hasGroupKey = systemFieldKeys?.group != null;
-  const groupValue = hasGroupKey ? (attrs[systemFieldKeys.group as string] || null) : null;
+  const rawGroup = hasGroupKey ? attrs[systemFieldKeys.group as string] : undefined;
+  const groupValue = rawGroup != null && rawGroup !== '' ? rawGroup : null;
 
   await db.transaction(async (tx) => {
     await tx

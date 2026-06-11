@@ -408,8 +408,14 @@ export async function completeResponse(
       for (const q of prefillQuestions) {
         if (!q.template?.trim()) continue;
         const expected = substituteTokens(q.template, attrs);
+        // 제출된 키만 검증 대상. 조건부로 숨겨져 응답에 포함되지 않은 prefill 질문은
+        // 건드리지 않아 미노출 질문에 허위 답변이 주입되지 않도록 한다.
+        if (!(q.id in validatedResponses)) continue;
         const submitted = validatedResponses[q.id];
-        if (typeof submitted === 'string' && submitted !== expected) {
+        // 타입 가드 없이 expected 와 다르면 무조건 강제 복원.
+        // 클라이언트가 문자열이 아닌 값(숫자/불리언/배열/객체/null)으로 우회 조작해도
+        // expected 문자열과 일치하지 않으므로 서버에서 복원된다.
+        if (submitted !== expected) {
           // 조작 의심 — 서버에서 expected 값으로 강제 복원 (silent)
           validatedResponses[q.id] = expected;
         }

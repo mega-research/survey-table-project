@@ -8,6 +8,7 @@ import {
   TablePagerFooter,
 } from '@/components/operations/table-primitives';
 import {
+  computeRate,
   toneFromRate,
   type ProgressRow,
   type ProgressSortKey,
@@ -38,7 +39,7 @@ const TONE_CLASS: Record<string, string> = {
 
 function formatRate(completed: number, list: number): string {
   if (list === 0) return '0.00';
-  return ((completed / list) * 100).toFixed(2);
+  return computeRate(completed, list).toFixed(2);
 }
 
 /**

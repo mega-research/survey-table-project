@@ -1,10 +1,24 @@
 import { describe, it, expect } from 'vitest';
 import {
+  computeRate,
   toneFromRate,
   sortGroupRows,
   computeTotals,
   type ProgressRow,
 } from '@/lib/operations/report-progress';
+
+describe('computeRate', () => {
+  it('completed/list * 100 백분율을 반환', () => {
+    expect(computeRate(5, 10)).toBe(50);
+    expect(computeRate(0, 100)).toBe(0);
+    expect(computeRate(100, 100)).toBe(100);
+  });
+  // 라벨(.toFixed(2))과 색상(toneFromRate)이 동일 산식을 공유함을 고정.
+  it('toneFromRate 의 임계값 분기는 computeRate 기준과 일치', () => {
+    expect(toneFromRate(24, 100)).toBe(computeRate(24, 100) < 25 ? 'rose' : 'amber');
+    expect(toneFromRate(25, 100)).toBe(computeRate(25, 100) < 50 ? 'amber' : 'green');
+  });
+});
 
 describe('toneFromRate', () => {
   it('listCount=0 일 때 gray', () => {

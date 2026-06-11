@@ -134,7 +134,14 @@ function makeCellAttrs() {
       default: null as number[] | null,
       parseHTML: (el: HTMLElement) => {
         const cw = el.getAttribute('colwidth');
-        return cw ? cw.split(',').map((n) => parseInt(n, 10)) : null;
+        if (!cw) return null;
+        // 손상된 colwidth (예: "100,,200" 또는 "abc") 의 NaN 토큰을 0 으로 정규화한다.
+        // 0 은 prosemirror-tables 가 "고정 너비 없음" 으로 처리하는 sentinel 이며,
+        // colspan 과 배열 길이를 맞추기 위해 토큰을 버리지 않는다.
+        return cw.split(',').map((n) => {
+          const parsed = parseInt(n, 10);
+          return Number.isFinite(parsed) ? parsed : 0;
+        });
       },
       renderHTML: (attrs: { colwidth?: number[] | null }) => {
         if (!attrs.colwidth || !attrs.colwidth.length) return {};

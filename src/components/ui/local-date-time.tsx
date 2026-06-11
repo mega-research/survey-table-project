@@ -68,6 +68,11 @@ export function LocalDateTime({
     return <span className={className}>{fallback}</span>;
   }
   const date = value instanceof Date ? value : new Date(value);
+  // 빈 문자열·파싱 불가 문자열 등으로 Invalid Date 가 되면 toISOString() 이
+  // RangeError 를 던져 렌더 트리가 통째로 죽는다. fallback 으로 안전하게 대체한다.
+  if (Number.isNaN(date.getTime())) {
+    return <span className={className}>{fallback}</span>;
+  }
   return (
     <time
       dateTime={date.toISOString()}

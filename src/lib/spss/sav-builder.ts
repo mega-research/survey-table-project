@@ -197,7 +197,14 @@ function computeMaxStringWidths(
 /**
  * SPSSExportColumn → SavVariable 변환
  */
-function toSavVariable(
+// 숫자 단답형(Continuous) 변수가 SPSS 변수보기에서 소수를 표시하도록 하는 소수 자릿수.
+// 응답자가 1.5 를 입력하면 float 레코드엔 1.5 가 그대로 저장되지만,
+// decimal:0 이면 F8.0 print format 이라 변수보기 표시값이 2 로 반올림돼 오해를 준다.
+// 그 외 변수는 모두 정수 코드(선택 코드/카운트/순위)라 decimal:0 이 맞다.
+const NUMERIC_TEXT_DECIMAL = 2;
+const DEFAULT_DECIMAL = 0;
+
+export function toSavVariable(
   col: SPSSExportColumn,
   question: Question | undefined,
   maxWidth: number,
@@ -208,6 +215,9 @@ function toSavVariable(
     || varType === VariableType.Date
     || varType === VariableType.DateTime;
 
+  // 숫자 단답형(numericText) 만 소수 자릿수를 부여한다 — 선택/카운트/순위 코드는 정수.
+  const isNumericText = col.type === 'text' && col.numericText === true;
+
   const valueLabels = buildValueLabels(col, question);
   return {
     name: sanitizeSpssVarName(col.spssVarName),
@@ -215,7 +225,7 @@ function toSavVariable(
     label: buildLabel(col),
     type: varType,
     width: isNumeric ? 0 : maxWidth,
-    decimal: 0,
+    decimal: isNumericText ? NUMERIC_TEXT_DECIMAL : DEFAULT_DECIMAL,
     alignment: VariableAlignment.Centre,
     measure: resolveMeasure(col, question),
     columns: isNumeric ? 8 : Math.min(maxWidth, 32),

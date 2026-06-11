@@ -35,6 +35,22 @@ describe('createUnifiedExtensions', () => {
       const out = generateHTML(json, exts);
       expect(out).toContain('colwidth="100,150"');
     });
+
+    it('손상된 colwidth (빈 토큰 / 비숫자) 는 NaNpx 를 만들지 않는다', () => {
+      // 붙여넣기 / 저장된 HTML 의 잘못된 colwidth 가 width: NaNpx 로 직렬화되면
+      // 브라우저가 width 규칙을 무시해 해당 열이 깨진다. 0 으로 정규화되어야 한다.
+      const emptyToken = '<table><tbody><tr><td colwidth="100,,200">x</td></tr></tbody></table>';
+      const garbage = '<table><tbody><tr><td colwidth="abc">x</td></tr></tbody></table>';
+
+      const out1 = generateHTML(generateJSON(emptyToken, exts), exts);
+      expect(out1).not.toContain('NaN');
+      // 빈 토큰은 0 으로 치환되고 배열 길이는 유지된다 (100 + 0 + 200 = 300)
+      expect(out1).toContain('colwidth="100,0,200"');
+      expect(out1).toMatch(/width:\s*300px/);
+
+      const out2 = generateHTML(generateJSON(garbage, exts), exts);
+      expect(out2).not.toContain('NaN');
+    });
   });
 
   describe('mail kind', () => {

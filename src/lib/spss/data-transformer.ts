@@ -128,9 +128,6 @@ export function transformRankingWithOptions(
   return getNumericCode(options, entry.optionValue);
 }
 
-/** Case 3 (테이블 셀 내부) 별칭 — transformRankingWithOptions 과 동일 로직. */
-export const transformCellRanking = transformRankingWithOptions;
-
 /**
  * 순위형(ranking) 응답에서 특정 rank 의 기타 텍스트를 반환한다.
  * Case 1(질문 레벨) / Case 3(셀 레벨) 공통.

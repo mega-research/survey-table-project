@@ -13,10 +13,18 @@
 
 export type ProgressTone = 'green' | 'amber' | 'rose' | 'gray';
 
+/**
+ * 응답률(%) 단일 산식. pill 라벨(formatRate)·색상(toneFromRate)·정렬(responseRate)이
+ * 동일한 계산을 공유하도록 여기서만 정의한다. listCount=0 처리는 호출부 책임.
+ */
+export function computeRate(completedCount: number, listCount: number): number {
+  return (completedCount / listCount) * 100;
+}
+
 /** 응답률 → pill 색상. spec §"임계값" 참조. */
 export function toneFromRate(completedCount: number, listCount: number): ProgressTone {
   if (listCount === 0) return 'gray';
-  const rate = (completedCount / listCount) * 100;
+  const rate = computeRate(completedCount, listCount);
   if (rate === 0) return 'gray';
   if (rate < 25) return 'rose';
   if (rate < 50) return 'amber';
@@ -84,7 +92,7 @@ function sortValue(row: ProgressRow, sort: ProgressSortKey): number | string | n
   if (sort === 'completedCount') return row.completedCount;
   if (sort === 'responseRate') {
     if (row.listCount === 0) return null; // gray 행 → NULLS LAST
-    return (row.completedCount / row.listCount) * 100;
+    return computeRate(row.completedCount, row.listCount);
   }
   if (sort.startsWith('meta:')) {
     const key = sort.slice(5);

@@ -98,15 +98,25 @@ export function allocateCycleCosts(args: {
   const cycleOverageMicros = totalOverage * per1k; // overageCount × per-1K
   const cycleOverageKrw = Math.round(cycleOverageMicros / 1000);
 
-  // 2차 패스: 회차별 round 후 마지막 회차가 잔액 흡수.
+  // 2차 패스: 회차별 round 후 잔액 흡수.
+  // 잔액은 "실제 초과분이 있는 마지막 회차"가 흡수한다. 초과분이 0인 회차에
+  // 음수 drift 를 넣으면 그 회차 costKrw 가 음수가 되어 청구 UI 에 노출되므로 금지.
   const preliminary = breakdown.map((b) => Math.round((b.overage * per1k) / 1000));
   if (preliminary.length > 0) {
     const sumPreliminary = preliminary.reduce((a, b) => a + b, 0);
     const drift = cycleOverageKrw - sumPreliminary;
-    const lastIdx = preliminary.length - 1;
-    const last = preliminary[lastIdx];
-    if (last !== undefined) {
-      preliminary[lastIdx] = last + drift;
+    if (drift !== 0) {
+      let absorbIdx = -1;
+      for (let i = breakdown.length - 1; i >= 0; i -= 1) {
+        if ((breakdown[i]?.overage ?? 0) > 0) {
+          absorbIdx = i;
+          break;
+        }
+      }
+      const target = absorbIdx >= 0 ? preliminary[absorbIdx] : undefined;
+      if (absorbIdx >= 0 && target !== undefined) {
+        preliminary[absorbIdx] = target + drift;
+      }
     }
   }
 
