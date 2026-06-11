@@ -1,5 +1,6 @@
-import type { ChoiceGroup, Question, TableCell } from '@/types/survey';
+import type { ChoiceGroup, Question, RankingAnswer, TableCell } from '@/types/survey';
 import { collectChoiceOptCells } from '@/utils/choice-source';
+import { collectRankingOptCells } from '@/utils/ranking-source';
 
 /** 그룹 미소속 choice_opt 셀의 예약 응답 키. export 변수명은 질문코드 그대로(하위호환). */
 export const DEFAULT_GROUP_KEY = 'default';
@@ -12,6 +13,12 @@ export const DEFAULT_GROUP_KEY = 'default';
 export type GroupedChoiceAnswer = Record<string, string | string[]>;
 
 /**
+ * ranking 그룹별 응답 맵 shape:
+ * - ranking 그룹 키 → 해당 그룹 내 순위 응답 배열
+ */
+export type GroupedRankingAnswer = Record<string, RankingAnswer[]>;
+
+/**
  * 이 질문의 응답이 그룹별 맵 shape인지 — 모든 경로(렌더/검증/분기/export)의
  * 하위호환 분기점. radio 또는 checkbox 그룹이 1개 이상 정의된 경우 true.
  * ranking 그룹은 제외한다 (4b-3 에서 별도 처리).
@@ -20,6 +27,14 @@ export function isGroupedChoiceQuestion(question: Question): boolean {
   return (question.choiceGroups ?? []).some(
     (g) => g.type === 'radio' || g.type === 'checkbox',
   );
+}
+
+/**
+ * ranking 그룹이 1개 이상 정의된 질문인지 — ranking 그룹 export 경로의 분기점.
+ * radio·checkbox 그룹은 제외한다.
+ */
+export function isGroupedRankingQuestion(question: Question): boolean {
+  return (question.choiceGroups ?? []).some((g) => g.type === 'ranking');
 }
 
 /** 셀이 속한 그룹의 groupKey. 미소속/깨진 참조는 default로 폴백. */
@@ -84,6 +99,36 @@ export function collectChoiceGroups(question: Question): ChoiceGroupWithCells[] 
   return groups;
 }
 
+export interface RankingGroupWithCells {
+  groupKey: string;
+  label: string;
+  cells: TableCell[];
+}
+
+/**
+ * ranking 그룹들을 멤버 셀과 함께 반환한다 (정의 순).
+ * - radio·checkbox 그룹은 skip.
+ * - 멤버 0 그룹은 skip (prune을 비껴간 phantom 그룹 무해화).
+ * - 미소속 ranking_opt 셀이 있으면 default 그룹을 마지막에 추가한다.
+ */
+export function collectRankingGroups(question: Question): RankingGroupWithCells[] {
+  const allCells = collectRankingOptCells(question.tableRowsData);
+  const groups: RankingGroupWithCells[] = [];
+  const claimed = new Set<string>();
+
+  for (const group of question.choiceGroups ?? []) {
+    if (group.type !== 'ranking') continue;
+    const cells = allCells.filter((c) => c.choiceGroupId === group.id);
+    if (cells.length === 0) continue;
+    for (const c of cells) claimed.add(c.id);
+    groups.push({ groupKey: group.groupKey, label: group.label, cells });
+  }
+
+  const orphans = allCells.filter((c) => !claimed.has(c.id));
+  if (orphans.length > 0) groups.push({ groupKey: DEFAULT_GROUP_KEY, label: '', cells: orphans });
+  return groups;
+}
+
 const KEY_PREFIX: Record<ChoiceGroup['type'], string> = {
   radio: 'rad',
   checkbox: 'cb',
@@ -109,7 +154,10 @@ export function pruneChoiceGroups(question: Question): ChoiceGroup[] | undefined
   const groups = question.choiceGroups;
   if (!groups) return undefined;
   const memberIds = new Set(
-    collectChoiceOptCells(question.tableRowsData)
+    [
+      ...collectChoiceOptCells(question.tableRowsData),
+      ...collectRankingOptCells(question.tableRowsData),
+    ]
       .map((c) => c.choiceGroupId)
       .filter((id): id is string => !!id),
   );

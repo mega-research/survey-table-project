@@ -3,9 +3,11 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_GROUP_KEY,
   collectChoiceGroups,
+  collectRankingGroups,
   getGroupKeyOfCell,
   getGroupTypeOfCell,
   isGroupedChoiceQuestion,
+  isGroupedRankingQuestion,
   nextGroupKey,
   pruneChoiceGroups,
 } from '@/utils/choice-group-helpers';
@@ -78,6 +80,58 @@ const rankingOnlyQ = makeQuestion({
     {
       id: 'r1', label: '행1',
       cells: [{ id: 'cellZ', content: '항목', type: 'choice_opt', choiceGroupId: 'g9' }],
+    },
+  ],
+});
+
+// ranking 그룹 픽스처 (4b-3 전용)
+const rnk1: ChoiceGroup = { id: 'rg1', groupKey: 'rnk1', type: 'ranking', label: '브랜드' };
+const rnk2: ChoiceGroup = { id: 'rg2', groupKey: 'rnk2', type: 'ranking', label: '디자인' };
+
+// rnk1(셀2) + rnk2(셀2) + 미소속(셀1) 구조
+const rnkGroupedQ = makeQuestion({
+  type: 'table',
+  choiceGroups: [rnk1, rnk2],
+  tableRowsData: [
+    {
+      id: 'r1', label: '행1',
+      cells: [
+        { id: 'rk1', content: '삼성', type: 'ranking_opt', choiceGroupId: 'rg1' },
+        { id: 'rk2', content: 'LG', type: 'ranking_opt', choiceGroupId: 'rg1' },
+        { id: 'rk3', content: '디자인A', type: 'ranking_opt', choiceGroupId: 'rg2' },
+        { id: 'rk4', content: '디자인B', type: 'ranking_opt', choiceGroupId: 'rg2' },
+        { id: 'rk5', content: '미소속', type: 'ranking_opt' },
+      ],
+    },
+  ],
+});
+
+// ranking 그룹이 있는 질문에 radio 그룹도 혼재
+const rnkWithRadioQ = makeQuestion({
+  type: 'table',
+  choiceGroups: [rnk1, rad1],
+  tableRowsData: [
+    {
+      id: 'r1', label: '행1',
+      cells: [
+        { id: 'rk1', content: '삼성', type: 'ranking_opt', choiceGroupId: 'rg1' },
+        { id: 'cellA', content: 'UHD', type: 'choice_opt', choiceGroupId: 'g1' },
+      ],
+    },
+  ],
+});
+
+// isHidden 셀이 포함된 픽스처
+const rnkWithHiddenQ = makeQuestion({
+  type: 'table',
+  choiceGroups: [rnk1],
+  tableRowsData: [
+    {
+      id: 'r1', label: '행1',
+      cells: [
+        { id: 'rk1', content: '삼성', type: 'ranking_opt', choiceGroupId: 'rg1' },
+        { id: 'rk_hidden', content: '숨김', type: 'ranking_opt', choiceGroupId: 'rg1', isHidden: true },
+      ],
     },
   ],
 });
@@ -253,5 +307,73 @@ describe('pruneChoiceGroups', () => {
 
   it('choiceGroups가 없으면 undefined', () => {
     expect(pruneChoiceGroups(makeQuestion({}))).toBeUndefined();
+  });
+
+  it('ranking_opt 셀만 멤버인 rnk 그룹은 prune되지 않고 생존한다', () => {
+    // 버그 픽스 검증: 기존 코드는 collectChoiceOptCells만 봐서 ranking_opt 멤버를 인식 못함
+    expect(pruneChoiceGroups(rnkGroupedQ)?.map((g) => g.groupKey)).toEqual(['rnk1', 'rnk2']);
+  });
+});
+
+describe('isGroupedRankingQuestion', () => {
+  it('ranking 그룹이 있으면 true', () => {
+    expect(isGroupedRankingQuestion(rnkGroupedQ)).toBe(true);
+  });
+
+  it('radio·checkbox 그룹만 있으면 false', () => {
+    expect(isGroupedRankingQuestion(grouped)).toBe(false);
+    expect(isGroupedRankingQuestion(cbOnlyQ)).toBe(false);
+  });
+
+  it('choiceGroups가 없으면 false', () => {
+    expect(isGroupedRankingQuestion(makeQuestion({}))).toBe(false);
+    expect(isGroupedRankingQuestion(makeQuestion({ choiceGroups: [] }))).toBe(false);
+  });
+});
+
+describe('isGroupedChoiceQuestion (ranking 불변 고정)', () => {
+  it('ranking 그룹만 있으면 false — ranking은 계속 제외', () => {
+    expect(isGroupedChoiceQuestion(rnkGroupedQ)).toBe(false);
+  });
+});
+
+describe('collectRankingGroups', () => {
+  it('rnk1(셀2)+rnk2(셀2)+미소속(셀1) → [rnk1, rnk2, default] 순서·멤버 반환', () => {
+    const groups = collectRankingGroups(rnkGroupedQ);
+    expect(groups.map((g) => g.groupKey)).toEqual(['rnk1', 'rnk2', DEFAULT_GROUP_KEY]);
+    expect(groups[0]!.cells.map((c) => c.id)).toEqual(['rk1', 'rk2']);
+    expect(groups[1]!.cells.map((c) => c.id)).toEqual(['rk3', 'rk4']);
+    expect(groups[2]!.cells.map((c) => c.id)).toEqual(['rk5']);
+  });
+
+  it('label 필드가 그룹 정의대로 설정된다', () => {
+    const groups = collectRankingGroups(rnkGroupedQ);
+    expect(groups[0]!.label).toBe('브랜드');
+    expect(groups[1]!.label).toBe('디자인');
+    expect(groups[2]!.label).toBe('');
+  });
+
+  it('멤버 0 rnk 그룹은 skip한다', () => {
+    const emptyRnkQ = makeQuestion({
+      type: 'table',
+      choiceGroups: [rnk1, rnk2],
+      tableRowsData: [{ id: 'r1', label: '행1', cells: [
+        { id: 'rk3', content: '디자인A', type: 'ranking_opt', choiceGroupId: 'rg2' },
+      ] }],
+    });
+    const groups = collectRankingGroups(emptyRnkQ);
+    // rnk1은 멤버 없으므로 skip, rnk2만 반환
+    expect(groups.map((g) => g.groupKey)).toEqual(['rnk2']);
+  });
+
+  it('radio 그룹은 수집에서 무시한다', () => {
+    const groups = collectRankingGroups(rnkWithRadioQ);
+    expect(groups.map((g) => g.groupKey)).toEqual(['rnk1']);
+    expect(groups[0]!.cells.map((c) => c.id)).toEqual(['rk1']);
+  });
+
+  it('isHidden 셀은 제외된다', () => {
+    const groups = collectRankingGroups(rnkWithHiddenQ);
+    expect(groups[0]!.cells.map((c) => c.id)).toEqual(['rk1']);
   });
 });
