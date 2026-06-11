@@ -79,6 +79,13 @@ export function buildValueLabels(
       return [...col.choiceGroupValueLabels].sort((a, b) => a.value - b.value);
     }
 
+    case 'choice-group-item': {
+      // choice-group-item: 이 보기의 counted 코드와 '선택' 라벨 1개만 — checkbox-item 과 동일 형태.
+      const code = col.choiceGroupMemberCode;
+      if (code == null) return undefined;
+      return [{ value: code, label: '선택' }];
+    }
+
     case 'table-cell': {
       if (col.tableCellType === 'input') return undefined;
 

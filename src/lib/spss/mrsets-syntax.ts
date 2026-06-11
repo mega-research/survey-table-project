@@ -1,5 +1,6 @@
 import type { SPSSExportColumn } from '@/lib/analytics/spss-excel-export';
 import type { Question, TableCell } from '@/types/survey';
+import { DEFAULT_GROUP_KEY } from '@/utils/choice-group-helpers';
 
 /** 질문의 tableRowsData에서 셀 id로 셀을 찾는다 */
 function findTableCellById(question: Question | undefined, cellId: string): TableCell | undefined {
@@ -75,6 +76,44 @@ export function generateMrsetsSyntax(
     entries.push({
       name: cell.cellCode,
       label: cell.exportLabel || cell.cellCode,
+      variables: cols.map((c) => c.spssVarName),
+    });
+  }
+
+  // choice-group-item: (questionId, choiceGroupKey) 로 묶어 MCGROUP 생성.
+  // 그룹 라벨은 컬럼의 optionLabel 에서 추출한다 — generateSPSSColumns 에서
+  // optionLabel = "그룹라벨 - 보기라벨" 형식으로 설정되어 있으므로,
+  // 첫 번째 멤버의 optionLabel 을 파싱하는 대신 question.choiceGroups 에서 직접 lookup 한다.
+  // 세트명: default 그룹이면 $질문코드_default, 명시 그룹이면 $질문코드_groupKey.
+  type CgiGroupKey = `${string}::${string}`; // questionId::groupKey
+  const byCgiGroup = new Map<CgiGroupKey, SPSSExportColumn[]>();
+  for (const col of columns) {
+    if (col.type !== 'choice-group-item') continue;
+    if (!col.choiceGroupKey) continue;
+    const key: CgiGroupKey = `${col.questionId}::${col.choiceGroupKey}`;
+    const list = byCgiGroup.get(key) ?? [];
+    list.push(col);
+    byCgiGroup.set(key, list);
+  }
+
+  for (const [key, cols] of byCgiGroup) {
+    const [questionId, groupKey] = key.split('::') as [string, string];
+    const question = questionMap.get(questionId);
+    if (!question?.questionCode) continue;
+    // MCGROUP 세트명: default 그룹은 questionCode_default, 명시 그룹은 questionCode_groupKey
+    const setName = `${question.questionCode}_${groupKey}`;
+    // LABEL: question.choiceGroups 에서 그룹 라벨 lookup;
+    // default 그룹이면 question.exportLabel || question.title 폴백
+    let groupLabel: string;
+    if (groupKey === DEFAULT_GROUP_KEY) {
+      groupLabel = question.exportLabel || question.title;
+    } else {
+      const groupDef = (question.choiceGroups ?? []).find((g) => g.groupKey === groupKey);
+      groupLabel = groupDef?.label || question.exportLabel || question.title;
+    }
+    entries.push({
+      name: setName,
+      label: groupLabel,
       variables: cols.map((c) => c.spssVarName),
     });
   }
