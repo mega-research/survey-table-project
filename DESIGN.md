@@ -9,7 +9,8 @@
 - **적용 범위 주의 (중요)**: 이 명세는 Apple의 **마케팅/제품 쇼케이스 사이트** 기준이다 (hero 56px, body 17px, 섹션 패딩 80px, "1 viewport = 1 tile" 저밀도 레이아웃). 반면 이 프로젝트의 본체인 **설문 빌더·운영 콘솔은 데이터 밀도가 높은 도구(tool) UI**다.
   - 도구 UI에는 **토큰(색·ink·parchment·radius 스케일·그림자 절제·weight ladder)만 참조**하고, 17px body·80px 섹션·저밀도 tile 레이아웃은 그대로 적용하지 않는다.
   - Apple 정통 스케일이 어울리는 곳은 **랜딩 페이지·공개 설문 응답 페이지(`/survey`)** 쪽이다.
-- **현재 코드와의 갭 (아직 미반영)**: 이 문서는 목표 명세이고 코드는 아직 정렬되지 않았다. 알려진 갭 — primary 토큰 `#007aff`(명세는 `#0066cc`), 버튼이 토큰 대신 `bg-blue-500`(#3b82f6) 직접 사용, 버튼 radius `rounded-lg`(8px, 명세는 pill), `shadow-sm` 등 카드/버튼 그림자 사용(명세는 금지), `font-medium`(weight 500, 명세는 500 제외). 코드 정렬은 별도 작업으로 진행한다.
+- **색상 명세는 코드 관행 기준 (2026-06-11 정렬)**: 블루 계열은 실제 버튼 관행을 SoT로 채택했다 — primary `#3b82f6`(Tailwind blue-500, `bg-blue-500`), hover/press `#2563eb`(blue-600), on-dark 링크 `#60a5fa`(blue-400). 원본 Apple 명세(#0066cc 계열)는 폐기. 단 [globals.css](src/app/globals.css)의 `--primary` 토큰은 아직 `#007aff`로 버튼과 불일치 — 추후 `#3b82f6`로 정렬하거나 버튼이 토큰을 쓰도록 전환(별도 작업).
+- **잔여 코드 갭 (색상 외)**: 버튼 radius `rounded-lg`(8px, 명세는 pill), `shadow-sm` 등 카드/버튼 그림자 사용(명세는 금지), `font-medium`(weight 500, 명세는 500 제외). 코드 정렬은 별도 작업으로 진행한다.
 
 ---
 
@@ -24,7 +25,7 @@ Store and shop surfaces retain the same chassis but switch modes. The product co
 **Key Characteristics:**
 - Photography-first presentation; UI recedes so the product can speak.
 - Alternating full-bleed tile sections: white/parchment ↔ near-black, with the color change itself acting as the section divider.
-- Single blue accent (`{colors.primary}` — #0066cc) carries every interactive element. No second brand color exists.
+- Single blue accent (`{colors.primary}` — #3b82f6) carries every interactive element. No second brand color exists.
 - Two button grammars: tiny blue pill CTAs (`{rounded.pill}`) and compact utility rects (`{rounded.sm}`).
 - Wanted Sans Variable (substituted for SF Pro Display/Text) — negative letter-spacing at display sizes for the signature "Apple tight" headline feel.
 - Whisper-soft elevation used only when a product image needs to breathe — exactly one drop-shadow in the entire system.
@@ -36,9 +37,9 @@ Store and shop surfaces retain the same chassis but switch modes. The product co
 > **Source pages analyzed:** homepage, environment, store, iPhone 17 Pro buy page, accessories index. The color system is identical across all five surfaces; only the surface-mode mix differs.
 
 ### Brand & Accent
-- **Action Blue** (`{colors.primary}` — #0066cc): The single brand-level interactive color. All text links, all blue pill CTAs ("Learn more", "Buy"), and the focus ring root. This is Apple's quiet but universal "click me" signal. Press state shifts to a slightly darker variant via the active scale transform rather than a hex change.
-- **Focus Blue** (`{colors.primary-focus}` — #0071e3): A marginally brighter sibling of Action Blue, reserved for the keyboard focus ring on buttons (`outline: 2px solid`).
-- **Sky Link Blue** (`{colors.primary-on-dark}` — #2997ff): A brighter blue used on dark surfaces for in-copy links and inline callouts, where Action Blue would disappear against the tile background.
+- **Action Blue** (`{colors.primary}` — #3b82f6): The single brand-level interactive color. All text links, all blue pill CTAs ("Learn more", "Buy"), and the focus ring root. This is the project's universal "click me" signal (Tailwind blue-500 — 코드 버튼 관행 `bg-blue-500`). Hover/press darkens one step to `{colors.primary-focus}` (#2563eb, blue-600) — `hover:bg-blue-600`.
+- **Hover/Press Blue** (`{colors.primary-focus}` — #2563eb): One step darker than Action Blue (Tailwind blue-600). Used for hover/pressed states and selected borders. Keyboard focus ring uses Action Blue itself (`focus-visible:ring-1 ring-blue-500` — 코드 관행).
+- **Sky Link Blue** (`{colors.primary-on-dark}` — #60a5fa): A brighter blue (Tailwind blue-400) used on dark surfaces for in-copy links and inline callouts, where Action Blue would disappear against the tile background.
 
 ### Surface
 - **Pure White** (`{colors.canvas}` — #ffffff): The dominant canvas. Content, utility cards, store tiles, configurator grids.
@@ -178,7 +179,7 @@ Apple's whitespace is the product's pedestal. Every tile begins with at least 64
 
 ### Buttons
 
-**`button-primary`** — The signature Apple action. Background `{colors.primary}` (Action Blue #0066cc), text `{colors.on-primary}` in `{typography.body}` (Wanted Sans 17px / 400), rounded `{rounded.pill}` (full pill — capsule-shaped), padding 11px × 22px. The full-pill radius IS the brand action signal.
+**`button-primary`** — The signature Apple action. Background `{colors.primary}` (Action Blue #3b82f6), text `{colors.on-primary}` in `{typography.body}` (Wanted Sans 17px / 400), rounded `{rounded.pill}` (full pill — capsule-shaped), padding 11px × 22px. The full-pill radius IS the brand action signal.
 - Active state: `{component.button-primary-active}` — `transform: scale(0.95)` (the system-wide micro-interaction).
 - Focus state: `{component.button-primary-focus}` — 2px solid `{colors.primary-focus}` outline.
 
@@ -194,7 +195,7 @@ Apple's whitespace is the product's pedestal. Every tile begins with at least 64
 
 **`text-link`** — Inline body links in `{colors.primary}` (Action Blue). Underlined or non-underlined per context.
 
-**`text-link-on-dark`** — Inline body links on dark tiles in `{colors.primary-on-dark}` (Sky Link Blue #2997ff) — Action Blue would disappear against `{colors.surface-tile-1}`.
+**`text-link-on-dark`** — Inline body links on dark tiles in `{colors.primary-on-dark}` (Sky Link Blue #60a5fa) — Action Blue would disappear against `{colors.surface-tile-1}`.
 
 ### Cards & Containers
 
@@ -231,7 +232,7 @@ Error and validation states were not surfaced in the analyzed pages.
 ## Do's and Don'ts
 
 ### Do
-- Use `{colors.primary}` (Action Blue #0066cc) for every interactive element — links, pill CTAs, focus signals — and nothing else. The single accent is non-negotiable.
+- Use `{colors.primary}` (Action Blue #3b82f6) for every interactive element — links, pill CTAs, focus signals — and nothing else. The single accent is non-negotiable.
 - Set headlines in `{typography.hero-display}` or `{typography.display-lg}` with negative letter-spacing (eased for Wanted Sans per the substitution note) to get the signature "Apple tight" cadence.
 - Run body copy at `{typography.body}` (17px / 400 / 1.47 / tracking eased for Wanted Sans) on marketing/landing surfaces — not 16px. (도구 UI는 더 높은 밀도를 쓴다.)
 - Alternate `{component.product-tile-light}` (or parchment) and `{component.product-tile-dark}` for full-bleed section rhythm. The color change IS the divider.
