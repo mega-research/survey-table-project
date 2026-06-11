@@ -325,15 +325,18 @@ export function CellContentModal({
 
           // choice_opt 저장 시 choiceGroups 도 함께 저장한다.
           // prune 은 updatedRowsData 기준으로 계산해 빈 그룹이 DB 에 남지 않도록 한다.
+          // 마지막 멤버 해제로 전부 비면 빈 배열을 명시 저장해야 phantom 그룹이 남지 않는다.
           const prunedChoiceGroups = (() => {
-            if (contentType !== 'choice_opt' || editChoiceGroups.length === 0) return undefined;
+            if (contentType !== 'choice_opt') return undefined;
             const memberIds = new Set(
               collectChoiceOptCells(updatedRowsData)
                 .map((c) => c.choiceGroupId)
                 .filter((id): id is string => !!id),
             );
             const pruned = editChoiceGroups.filter((g) => memberIds.has(g.id));
-            return pruned.length > 0 ? pruned : undefined;
+            // 원래도 그룹이 없던 질문이면 빈 배열을 굳이 쓰지 않는다 (NULL 유지)
+            if (pruned.length === 0 && (question.choiceGroups ?? []).length === 0) return undefined;
+            return pruned;
           })();
 
           try {

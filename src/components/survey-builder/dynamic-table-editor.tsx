@@ -757,8 +757,9 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
           choiceGroups={currentQuestion?.choiceGroups}
           onChoiceGroupsChange={(groups: ChoiceGroup[]) => {
             if (!currentQuestionId) return;
-            // 셀 저장 이후 호출되므로 currentRows 는 이미 최신 상태.
-            // prune 은 최신 행 데이터 기준으로 계산한다.
+            // 주의: 모달 handleSave 에서 onSave(셀 반영)보다 먼저 호출된다 —
+            // currentRowsRef 는 이번 셀 변경 이전 상태일 수 있다. DB prune 은
+            // 모달 쪽(updatedRowsData 기준)이 정확하고, 여기는 스토어 표시용 보정.
             const qAfter = {
               ...currentQuestion!,
               tableRowsData: currentRowsRef.current,
