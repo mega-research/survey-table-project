@@ -90,7 +90,8 @@ const rnk2: ChoiceGroup = { id: 'rg2', groupKey: 'rnk2', type: 'ranking', label:
 
 // rnk1(셀2) + rnk2(셀2) + 미소속(셀1) 구조
 const rnkGroupedQ = makeQuestion({
-  type: 'table',
+  type: 'ranking',
+  rankingConfig: { positions: 3, optionsSource: 'table' },
   choiceGroups: [rnk1, rnk2],
   tableRowsData: [
     {
@@ -316,8 +317,21 @@ describe('pruneChoiceGroups', () => {
 });
 
 describe('isGroupedRankingQuestion', () => {
-  it('ranking 그룹이 있으면 true', () => {
+  it('테이블 소스 + ranking 그룹이 있으면 true', () => {
     expect(isGroupedRankingQuestion(rnkGroupedQ)).toBe(true);
+  });
+
+  it('manual 소스면 ranking 그룹이 있어도 false — 소스 전환 시 잔존 그룹 무해화', () => {
+    // 테이블 소스에서 그룹을 만든 뒤 "질문 내장 테이블 사용"을 끄면
+    // tableRowsData·choiceGroups 가 보존된 채 렌더러는 flat 배열을 만든다.
+    // 게이트가 없으면 검증이 grouped 분기로 들어가 required 질문이 영구 미충족된다.
+    const manualQ = makeQuestion({
+      ...rnkGroupedQ,
+      rankingConfig: { positions: 3, optionsSource: 'manual' },
+    });
+    expect(isGroupedRankingQuestion(manualQ)).toBe(false);
+    const noConfigQ = makeQuestion({ ...rnkGroupedQ, rankingConfig: undefined });
+    expect(isGroupedRankingQuestion(noConfigQ)).toBe(false);
   });
 
   it('radio·checkbox 그룹만 있으면 false', () => {

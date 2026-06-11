@@ -30,11 +30,19 @@ export function isGroupedChoiceQuestion(question: Question): boolean {
 }
 
 /**
- * ranking 그룹이 1개 이상 정의된 질문인지 — ranking 그룹 export 경로의 분기점.
- * radio·checkbox 그룹은 제외한다.
+ * ranking 그룹이 1개 이상 정의된 테이블 소스 순위형인지 — 렌더/검증/export
+ * 모든 경로의 단일 분기점. radio·checkbox 그룹은 제외한다.
+ *
+ * 테이블 소스 게이트 필수: 그룹은 ranking_opt 셀에만 귀속되는데, 사용자가
+ * "질문 내장 테이블 사용"을 끄면(manual 전환) tableRowsData·choiceGroups 가
+ * 보존된 채 렌더러만 flat 배열을 만든다. 게이트 없이는 검증이 grouped 분기로
+ * 들어가 required 질문이 영구 미충족(응답자 하드블록)되고 export 도 어긋난다.
  */
 export function isGroupedRankingQuestion(question: Question): boolean {
-  return (question.choiceGroups ?? []).some((g) => g.type === 'ranking');
+  return (
+    question.rankingConfig?.optionsSource === 'table'
+    && (question.choiceGroups ?? []).some((g) => g.type === 'ranking')
+  );
 }
 
 /** 셀이 속한 그룹의 groupKey. 미소속/깨진 참조는 default로 폴백. */
