@@ -545,6 +545,264 @@ describe('checkbox 그룹 export — mrsets-syntax', () => {
 });
 
 // ────────────────────────────────────────────────────────────
+// Task 6 — ranking 그룹 export
+// ────────────────────────────────────────────────────────────
+
+// ranking 그룹이 있는 질문 픽스처:
+//   rnk1 그룹: cellA(spssNumericCode=5), cellB — _etc 없음
+//   rnk2 그룹: cellC, cellD(isOtherRankingCell=true) — _etc 있음
+//   미소속: cellE → default 그룹
+// 질문코드: Q9, positions: 3, optionsSource: 'table'
+const rankingGroupQuestion = {
+  id: 'qrnk',
+  type: 'ranking',
+  title: '보유 장비',
+  required: false,
+  order: 1,
+  questionCode: 'Q9',
+  rankingConfig: { positions: 3, optionsSource: 'table' },
+  choiceGroups: [
+    { id: 'rg1', groupKey: 'rnk1', type: 'ranking', label: '보유 장비' },
+    { id: 'rg2', groupKey: 'rnk2', type: 'ranking', label: '' },
+  ],
+  tableRowsData: [
+    {
+      id: 'r1',
+      label: '행1',
+      cells: [
+        { id: 'cellA', content: '노트북', type: 'ranking_opt', choiceGroupId: 'rg1', spssNumericCode: 5 },
+        { id: 'cellB', content: '데스크탑', type: 'ranking_opt', choiceGroupId: 'rg1' },
+        { id: 'cellC', content: '태블릿', type: 'ranking_opt', choiceGroupId: 'rg2' },
+        { id: 'cellD', content: '기타', type: 'ranking_opt', choiceGroupId: 'rg2', isOtherRankingCell: true },
+        { id: 'cellE', content: '스마트폰', type: 'ranking_opt' },
+      ],
+    },
+  ],
+} as unknown as Question;
+
+// 그룹 1개짜리 픽스처 (legacy flat 폴백 테스트용)
+const rankingSoleGroupQuestion = {
+  id: 'qsole',
+  type: 'ranking',
+  title: '기기',
+  required: false,
+  order: 1,
+  questionCode: 'Q',
+  rankingConfig: { positions: 3, optionsSource: 'table' },
+  choiceGroups: [
+    { id: 'rg1', groupKey: 'rnk1', type: 'ranking', label: '기기' },
+  ],
+  tableRowsData: [
+    {
+      id: 'r1',
+      label: '행1',
+      cells: [
+        { id: 'cellA', content: 'TV', type: 'ranking_opt', choiceGroupId: 'rg1', spssNumericCode: 5 },
+        { id: 'cellB', content: '라디오', type: 'ranking_opt', choiceGroupId: 'rg1', spssNumericCode: 3 },
+      ],
+    },
+  ],
+} as unknown as Question;
+
+// 그룹 2개짜리 픽스처 (legacy flat 폴백 차단 테스트용)
+const rankingTwoGroupQuestion = {
+  id: 'qtwo',
+  type: 'ranking',
+  title: '기기2',
+  required: false,
+  order: 1,
+  questionCode: 'QQ',
+  rankingConfig: { positions: 2, optionsSource: 'table' },
+  choiceGroups: [
+    { id: 'rg1', groupKey: 'rnk1', type: 'ranking', label: '그룹1' },
+    { id: 'rg2', groupKey: 'rnk2', type: 'ranking', label: '그룹2' },
+  ],
+  tableRowsData: [
+    {
+      id: 'r1',
+      label: '행1',
+      cells: [
+        { id: 'cellA', content: 'A', type: 'ranking_opt', choiceGroupId: 'rg1', spssNumericCode: 1 },
+        { id: 'cellB', content: 'B', type: 'ranking_opt', choiceGroupId: 'rg2', spssNumericCode: 2 },
+      ],
+    },
+  ],
+} as unknown as Question;
+
+describe('ranking 그룹 export — generateSPSSColumns 변수명', () => {
+  it('명시 그룹은 질문코드_groupKey_rk{k} 형식의 변수를 생성한다', () => {
+    const cols = generateSPSSColumns([rankingGroupQuestion]);
+    const names = cols.map((c) => c.spssVarName);
+    // rnk1 그룹: 멤버 2개 → cap 2 (positions=3이지만 멤버 2)
+    expect(names).toContain('Q9_rnk1_rk1');
+    expect(names).toContain('Q9_rnk1_rk2');
+    expect(names).not.toContain('Q9_rnk1_rk3');
+    // rnk2 그룹: 멤버 2개(기타 포함) → cap 2
+    expect(names).toContain('Q9_rnk2_rk1');
+    expect(names).toContain('Q9_rnk2_rk2');
+    // default 그룹(cellE): 멤버 1개 → cap 1 → 질문코드_rk{k} 형식
+    expect(names).toContain('Q9_rk1');
+    expect(names).not.toContain('Q9_rk2');
+  });
+
+  it('_etc 변수는 isOtherRankingCell 소속 그룹에만 생성된다', () => {
+    const cols = generateSPSSColumns([rankingGroupQuestion]);
+    const names = cols.map((c) => c.spssVarName);
+    // rnk2 그룹에 기타 셀 → _etc 있음
+    expect(names).toContain('Q9_rnk2_rk1_etc');
+    expect(names).toContain('Q9_rnk2_rk2_etc');
+    // rnk1 그룹에는 기타 셀 없음 → _etc 없음
+    expect(names).not.toContain('Q9_rnk1_rk1_etc');
+    expect(names).not.toContain('Q9_rnk1_rk2_etc');
+    // default 그룹에도 기타 셀 없음
+    expect(names).not.toContain('Q9_rk1_etc');
+  });
+
+  it('컬럼 타입은 ranking-rank, _etc는 ranking-other이다', () => {
+    const cols = generateSPSSColumns([rankingGroupQuestion]);
+    const rk1 = cols.find((c) => c.spssVarName === 'Q9_rnk1_rk1');
+    const etc1 = cols.find((c) => c.spssVarName === 'Q9_rnk2_rk1_etc');
+    expect(rk1?.type).toBe('ranking-rank');
+    expect(etc1?.type).toBe('ranking-other');
+  });
+
+  it('ranking-rank 컬럼에 choiceGroupKey와 rankIndex가 올바르게 설정된다', () => {
+    const cols = generateSPSSColumns([rankingGroupQuestion]);
+    const rk1 = cols.find((c) => c.spssVarName === 'Q9_rnk1_rk1');
+    expect(rk1?.choiceGroupKey).toBe('rnk1');
+    expect(rk1?.rankIndex).toBe(1);
+  });
+
+  it('value labels용 cellOptions가 그룹 멤버로만 한정된다', () => {
+    const cols = generateSPSSColumns([rankingGroupQuestion]);
+    const rk1 = cols.find((c) => c.spssVarName === 'Q9_rnk1_rk1');
+    // rnk1 멤버: cellA(5), cellB(그룹 내 2번째 → spssNumericCode 없으면 idx+1=2)
+    // isOtherRankingCell 아닌 셀만 value label에 포함
+    const opts = rk1?.cellOptions ?? [];
+    const optIds = opts.map((o) => o.id);
+    expect(optIds).toContain('cellA');
+    expect(optIds).toContain('cellB');
+    expect(optIds).not.toContain('cellC');
+    expect(optIds).not.toContain('cellE');
+  });
+
+  it('soleRankingGroup은 그룹이 1개일 때만 true이다', () => {
+    const cols = generateSPSSColumns([rankingGroupQuestion]);
+    const rk1 = cols.find((c) => c.spssVarName === 'Q9_rnk1_rk1');
+    // rankingGroupQuestion: 그룹 3개(rnk1+rnk2+default) → false
+    expect(rk1?.soleRankingGroup).toBe(false);
+
+    const soleCols = generateSPSSColumns([rankingSoleGroupQuestion]);
+    const soleRk1 = soleCols.find((c) => c.spssVarName === 'Q_rnk1_rk1');
+    // soleGroupQuestion: 그룹 1개(rnk1) → true
+    expect(soleRk1?.soleRankingGroup).toBe(true);
+  });
+});
+
+describe('ranking 그룹 export — buildDataRows 응답값 변환', () => {
+  it('그룹별 응답 맵에서 올바른 rank 값을 추출한다', () => {
+    const cols = generateSPSSColumns([rankingGroupQuestion]);
+    // rnk1 그룹에 cellA를 1순위로 선택
+    const sub = makeSubmission({ qrnk: { rnk1: [{ rank: 1, optionValue: 'cellA' }] } });
+    const rows = buildDataRows(cols, [rankingGroupQuestion], [sub]);
+    const row = rows[0];
+    if (row == null) throw new Error('row 없음');
+    const idx = (name: string) => cols.findIndex((c) => c.spssVarName === name);
+    // rnk1 그룹의 cellA는 spssNumericCode=5 → 1순위에 5
+    expect(row[idx('Q9_rnk1_rk1')]).toBe(5);
+    // rnk1 rk2는 미선택 → null
+    expect(row[idx('Q9_rnk1_rk2')]).toBeNull();
+    // rnk2 그룹은 응답 없음 → null
+    expect(row[idx('Q9_rnk2_rk1')]).toBeNull();
+  });
+
+  it('legacy flat 폴백: 그룹 1개 + 배열 응답 → 그룹 응답으로 해석한다', () => {
+    const cols = generateSPSSColumns([rankingSoleGroupQuestion]);
+    // 그룹 1개(rnk1) + flat 배열 응답
+    const sub = makeSubmission({ qsole: [{ rank: 1, optionValue: 'cellA' }] });
+    const rows = buildDataRows(cols, [rankingSoleGroupQuestion], [sub]);
+    const row = rows[0];
+    if (row == null) throw new Error('row 없음');
+    const idx = (name: string) => cols.findIndex((c) => c.spssVarName === name);
+    // cellA spssNumericCode=5 → 1순위에 5
+    expect(row[idx('Q_rnk1_rk1')]).toBe(5);
+    // 2순위 미선택 → null
+    expect(row[idx('Q_rnk1_rk2')]).toBeNull();
+  });
+
+  it('legacy flat 폴백: 그룹 2개 + 배열 응답 → 모두 null (모호하므로 차단)', () => {
+    const cols = generateSPSSColumns([rankingTwoGroupQuestion]);
+    const sub = makeSubmission({ qtwo: [{ rank: 1, optionValue: 'cellA' }] });
+    const rows = buildDataRows(cols, [rankingTwoGroupQuestion], [sub]);
+    const row = rows[0];
+    if (row == null) throw new Error('row 없음');
+    const idx = (name: string) => cols.findIndex((c) => c.spssVarName === name);
+    expect(row[idx('QQ_rnk1_rk1')]).toBeNull();
+    expect(row[idx('QQ_rnk2_rk1')]).toBeNull();
+  });
+});
+
+describe('ranking 그룹 export — buildLabel (variable-meta)', () => {
+  it('그룹 라벨 있으면 "질문제목 - 그룹라벨 - k순위" 형식이다', () => {
+    const cols = generateSPSSColumns([rankingGroupQuestion]);
+    const rk1 = cols.find((c) => c.spssVarName === 'Q9_rnk1_rk1');
+    if (!rk1) throw new Error('컬럼 없음');
+    // rnk1 라벨 '보유 장비' → "보유 장비 - 1순위"
+    expect(buildLabel(rk1)).toBe('보유 장비 - 보유 장비 - 1순위');
+  });
+
+  it('그룹 라벨 없는 경우(default 또는 라벨 빈 그룹) 기존 형식 "질문제목 (k순위)"이다', () => {
+    const cols = generateSPSSColumns([rankingGroupQuestion]);
+    // rnk2 그룹: label='' → optionLabel 기본형("1순위")과 같음 → 기존 형식
+    const rnk2rk1 = cols.find((c) => c.spssVarName === 'Q9_rnk2_rk1');
+    if (!rnk2rk1) throw new Error('컬럼 없음');
+    expect(buildLabel(rnk2rk1)).toBe('보유 장비 (1순위)');
+    // default 그룹(Q9_rk1)도 기존 형식
+    const def = cols.find((c) => c.spssVarName === 'Q9_rk1');
+    if (!def) throw new Error('컬럼 없음');
+    expect(buildLabel(def)).toBe('보유 장비 (1순위)');
+  });
+
+  it('ranking-other: 그룹 라벨 있으면 "질문제목 - 그룹라벨 - k순위 기타 입력"이다', () => {
+    const cols = generateSPSSColumns([rankingGroupQuestion]);
+    const etc = cols.find((c) => c.spssVarName === 'Q9_rnk2_rk1_etc');
+    if (!etc) throw new Error('컬럼 없음');
+    // rnk2 라벨 '' → optionLabel 기본형("1순위 기타 입력")과 같음 → 기존 형식
+    expect(buildLabel(etc)).toBe('보유 장비 - 1순위 기타 입력');
+  });
+
+  it('비그룹 ranking-rank buildLabel은 기존 형식(질문제목 (k순위))이다 — 하위호환', () => {
+    // choiceGroups 없는 순수 ranking 질문
+    const plain = {
+      id: 'qplain',
+      type: 'ranking',
+      title: '기존순위',
+      required: false,
+      order: 1,
+      questionCode: 'QP',
+      rankingConfig: { positions: 2, optionsSource: 'manual' },
+      options: [
+        { id: 'o1', label: '보기1', value: 'o1', spssNumericCode: 1 },
+      ],
+    } as unknown as Question;
+    const cols = generateSPSSColumns([plain]);
+    const rk1 = cols.find((c) => c.spssVarName === 'QP_rk1');
+    if (!rk1) throw new Error('컬럼 없음');
+    expect(buildLabel(rk1)).toBe('기존순위 (1순위)');
+  });
+});
+
+describe('ranking 그룹 export — mrsets-syntax MCGROUP 미생성', () => {
+  it('grouped ranking 질문에서 MCGROUP은 생성되지 않는다', () => {
+    const questions = [rankingGroupQuestion];
+    const cols = generateSPSSColumns(questions);
+    const syntax = generateMrsetsSyntax(cols, questions);
+    // ranking 질문 단독이므로 MCGROUP 없어야 함
+    expect(syntax).toBeNull();
+  });
+});
+
+// ────────────────────────────────────────────────────────────
 // Task 4 — value-labels-coverage: choice-group-item 포함
 // ────────────────────────────────────────────────────────────
 

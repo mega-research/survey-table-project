@@ -26,7 +26,7 @@ import type {
 } from '@/types/survey';
 import { resolveChoiceOptions } from '@/utils/choice-source';
 import { getOtherOptionCode } from '@/utils/option-code-generator';
-import { hasOtherRankingCell, resolveRankingOptions } from '@/utils/ranking-source';
+import { hasOtherRankingCell, resolveRankingOptions, resolveRankingOptionsFromCells } from '@/utils/ranking-source';
 import { buildCheckboxItemVarName, buildOptionTextVarName } from '@/utils/spss-var-name';
 import {
   buildTableCellVarName,
@@ -35,8 +35,10 @@ import {
 } from '@/utils/table-cell-code-generator';
 import {
   collectChoiceGroups,
+  collectRankingGroups,
   DEFAULT_GROUP_KEY,
   isGroupedChoiceQuestion,
+  isGroupedRankingQuestion,
 } from '@/utils/choice-group-helpers';
 
 export interface SPSSExportColumn {
@@ -91,6 +93,7 @@ export interface SPSSExportColumn {
   numericText?: boolean;
   // === 'choice-group' 전용: radio choiceGroups 기반 그룹별 단일선택 변수 ===
   // 이 변수가 담당하는 그룹의 groupKey
+  // (ranking-rank / ranking-other 에서도 재사용: ranking 그룹 키)
   choiceGroupKey?: string;
   // 멤버 셀 id → 응답 시 기록할 숫자값 (spssNumericCode 또는 그룹 내 1-based 순서 폴백)
   choiceGroupCellValueMap?: Record<string, number>;
@@ -103,6 +106,10 @@ export interface SPSSExportColumn {
   choiceGroupMemberCellId?: string;
   // 이 보기 선택 시 저장할 counted 숫자값 (spssNumericCode 또는 그룹 내 1-based 폴백)
   choiceGroupMemberCode?: number;
+  // === 'ranking-rank' / 'ranking-other' 전용 ===
+  // 질문의 ranking 그룹이 1개뿐일 때 true.
+  // legacy flat 응답(rnk1 이식 후 미마이그레이션 응답)을 그 그룹으로 해석하는 폴백 허용 판정용.
+  soleRankingGroup?: boolean;
 }
 
 /**
@@ -306,31 +313,72 @@ export function generateSPSSColumns(questions: Question[]): SPSSExportColumn[] {
         });
       }
     } else if (q.type === 'ranking') {
-      // Case 1 (standalone): question.options / Case 2 (table source): ranking_opt 셀
-      const resolvedOptions = resolveRankingOptions(q);
-      const positions = Math.max(1, q.rankingConfig?.positions ?? 3);
-      // 기타 응답값 저장용 _etc 컬럼은 질문-레벨 토글 OR 셀-레벨 isOtherRankingCell 둘 중 하나라도 있으면 emit
-      const needsOtherColumn = q.allowOtherOption || hasOtherRankingCell(q);
-      for (let k = 1; k <= positions; k++) {
-        columns.push({
-          spssVarName: `${q.questionCode}_rk${k}`,
-          questionText: q.title,
-          optionLabel: `${k}순위`,
-          questionId: q.id,
-          type: 'ranking-rank',
-          rankIndex: k,
-          // Case 2 value labels / 응답값 변환을 위해 해결된 옵션을 주입
-          cellOptions: resolvedOptions,
-        });
-        if (needsOtherColumn) {
+      if (isGroupedRankingQuestion(q)) {
+        // grouped: 그룹별 순위 슬롯 변수. 명시 그룹 = 질문코드_{groupKey}_rk{k}, default = 질문코드_rk{k} (기존 호환)
+        const groups = collectRankingGroups(q);
+        for (const g of groups) {
+          const groupOptions = resolveRankingOptionsFromCells(g.cells);
+          const requested = Math.max(1, q.rankingConfig?.positions ?? 3);
+          const positions = Math.min(requested, Math.max(groupOptions.length, 1));
+          const prefix = g.groupKey === DEFAULT_GROUP_KEY
+            ? q.questionCode
+            : `${q.questionCode}_${g.groupKey}`;
+          // _etc 는 기타 셀이 속한 그룹에만. 질문 레벨 allowOtherOption synthetic 은 grouped 에서 비활성(렌더러와 동일 규칙).
+          const needsOther = g.cells.some((c) => c.isOtherRankingCell === true);
+          for (let k = 1; k <= positions; k++) {
+            columns.push({
+              spssVarName: `${prefix}_rk${k}`,
+              questionText: q.title,
+              optionLabel: g.label ? `${g.label} - ${k}순위` : `${k}순위`,
+              questionId: q.id,
+              type: 'ranking-rank',
+              rankIndex: k,
+              cellOptions: groupOptions,
+              choiceGroupKey: g.groupKey,
+              soleRankingGroup: groups.length === 1,
+            });
+            if (needsOther) {
+              columns.push({
+                spssVarName: `${prefix}_rk${k}_etc`,
+                questionText: q.title,
+                optionLabel: g.label ? `${g.label} - ${k}순위 기타 입력` : `${k}순위 기타 입력`,
+                questionId: q.id,
+                type: 'ranking-other',
+                rankIndex: k,
+                choiceGroupKey: g.groupKey,
+                soleRankingGroup: groups.length === 1,
+              });
+            }
+          }
+        }
+      } else {
+        // 기존 비그룹 경로 그대로 이동 (무수정)
+        // Case 1 (standalone): question.options / Case 2 (table source): ranking_opt 셀
+        const resolvedOptions = resolveRankingOptions(q);
+        const positions = Math.max(1, q.rankingConfig?.positions ?? 3);
+        // 기타 응답값 저장용 _etc 컬럼은 질문-레벨 토글 OR 셀-레벨 isOtherRankingCell 둘 중 하나라도 있으면 emit
+        const needsOtherColumn = q.allowOtherOption || hasOtherRankingCell(q);
+        for (let k = 1; k <= positions; k++) {
           columns.push({
-            spssVarName: `${q.questionCode}_rk${k}_etc`,
+            spssVarName: `${q.questionCode}_rk${k}`,
             questionText: q.title,
-            optionLabel: `${k}순위 기타 입력`,
+            optionLabel: `${k}순위`,
             questionId: q.id,
-            type: 'ranking-other',
+            type: 'ranking-rank',
             rankIndex: k,
+            // Case 2 value labels / 응답값 변환을 위해 해결된 옵션을 주입
+            cellOptions: resolvedOptions,
           });
+          if (needsOtherColumn) {
+            columns.push({
+              spssVarName: `${q.questionCode}_rk${k}_etc`,
+              questionText: q.title,
+              optionLabel: `${k}순위 기타 입력`,
+              questionId: q.id,
+              type: 'ranking-other',
+              rankIndex: k,
+            });
+          }
         }
       }
     } else if (q.type === 'table' && q.tableRowsData && q.tableColumns) {
@@ -699,6 +747,20 @@ export function buildDataRows(
   return submissions.map((sub) => buildDataRow(columns, questionMap, sub));
 }
 
+/**
+ * grouped ranking 응답에서 이 컬럼 그룹의 RankingAnswer 배열 후보를 해석.
+ * legacy flat 폴백: flat 배열 + 질문의 그룹 1개 = 그 그룹의 응답으로 해석
+ * (rnk1 이식 후 미마이그레이션 기존 응답 호환). 그룹 2개 이상 + flat 은 모호하므로 null.
+ */
+function resolveGroupedRankingValue(col: SPSSExportColumn, rawValue: unknown): unknown {
+  if (!col.choiceGroupKey) return rawValue;          // 비그룹 컬럼: 기존 경로 그대로
+  if (Array.isArray(rawValue)) return col.soleRankingGroup ? rawValue : null;
+  if (rawValue && typeof rawValue === 'object') {
+    return (rawValue as Record<string, unknown>)[col.choiceGroupKey];
+  }
+  return null;
+}
+
 export function buildDataRow(
   columns: SPSSExportColumn[],
   questionMap: ReadonlyMap<string, Question>,
@@ -855,11 +917,12 @@ export function buildDataRow(
       case 'ranking-rank':
         if (col.rankIndex == null) return null;
         // col.cellOptions 에 Case 1/2 해결된 옵션 리스트가 있음 (generateSPSSColumns에서 주입)
-        return transformRankingWithOptions(col.cellOptions, rawValue, col.rankIndex);
+        return transformRankingWithOptions(
+          col.cellOptions, resolveGroupedRankingValue(col, rawValue), col.rankIndex);
 
       case 'ranking-other':
         if (col.rankIndex == null) return null;
-        return transformRankingOtherText(rawValue, col.rankIndex);
+        return transformRankingOtherText(resolveGroupedRankingValue(col, rawValue), col.rankIndex);
 
       case 'table-cell-ranking': {
         if (col.rankIndex == null || !col.tableCellId) return null;

@@ -123,9 +123,14 @@ export function buildLabel(col: SPSSExportColumn): string {
     case 'notice-date':
       return `${col.questionText} - 동의 일시`;
     case 'ranking-rank':
-      return `${col.questionText} (${col.rankIndex}순위)`;
+      // grouped 그룹 라벨 접두: optionLabel "그룹라벨 - 1순위" → "질문제목 - 그룹라벨 - 1순위"
+      return col.optionLabel && col.optionLabel !== `${col.rankIndex}순위`
+        ? `${col.questionText} - ${col.optionLabel}`
+        : `${col.questionText} (${col.rankIndex}순위)`;
     case 'ranking-other':
-      return `${col.questionText} - ${col.rankIndex}순위 기타 입력`;
+      return col.optionLabel && col.optionLabel !== `${col.rankIndex}순위 기타 입력`
+        ? `${col.questionText} - ${col.optionLabel}`
+        : `${col.questionText} - ${col.rankIndex}순위 기타 입력`;
     case 'table-cell-ranking': {
       const loc = col.rowLabel && col.colLabel
         ? `${col.rowLabel} > ${col.colLabel}`
