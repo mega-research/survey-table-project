@@ -4,8 +4,8 @@ import { useCallback, useRef, useState, useTransition } from 'react';
 
 import { useQueryClient } from '@tanstack/react-query';
 
-import type { SurveyDiffPayload } from '@/features/survey-builder/domain/survey-save';
 import { surveyKeys } from '@/hooks/queries/use-surveys';
+import { buildSurveyDiffPayload } from '@/lib/survey-builder/diff-payload';
 import { client, orpc } from '@/shared/lib/rpc';
 import {
   useSurveyBuilderStore,
@@ -57,52 +57,14 @@ export function useSurveySync() {
 
       try {
         const survey = useSurveyBuilderStore.getState().currentSurvey;
-        const { questionChanges: qc, isMetadataDirty } = snapshot;
 
-        const hasQuestionChanges =
-          Object.keys(qc.added).length > 0 ||
-          Object.keys(qc.updated).length > 0 ||
-          Object.keys(qc.deleted).length > 0 ||
-          qc.reordered;
+        // payload 조립 지식(store 상태 → payload 필드 규칙)은 diff-payload 모듈 소유
+        const payload = buildSurveyDiffPayload(survey, snapshot);
 
         // 변경분이 전혀 없으면 스킵
-        if (!isMetadataDirty && !hasQuestionChanges) {
+        if (!payload) {
           markSavedSnapshotClean();
           return { surveyId: survey.id };
-        }
-
-        // diff payload 구성
-        const payload: SurveyDiffPayload = { surveyId: survey.id };
-
-        if (isMetadataDirty) {
-          payload.metadata = {
-            title: survey.title,
-            ...(survey.description !== undefined ? { description: survey.description } : {}),
-            ...(survey.slug !== undefined ? { slug: survey.slug } : {}),
-            ...(survey.privateToken !== undefined ? { privateToken: survey.privateToken } : {}),
-            contactEmail: survey.contactEmail ?? null,
-            settings: survey.settings,
-            thankYouMessage: survey.settings.thankYouMessage,
-          };
-          if (survey.groups !== undefined) {
-            payload.groups = survey.groups;
-          }
-        }
-
-        if (hasQuestionChanges) {
-          const dirtyIds = new Set([
-            ...Object.keys(qc.added),
-            ...Object.keys(qc.updated),
-          ]);
-          const upserted = survey.questions.filter((q) => dirtyIds.has(q.id));
-
-          payload.questionChanges = {
-            upserted,
-            deleted: Object.keys(qc.deleted),
-            ...(qc.reordered
-              ? { reorderedIds: survey.questions.map((q) => q.id) }
-              : {}),
-          };
         }
 
         const result = await client.surveyBuilder.save.saveDiff(payload);
