@@ -185,6 +185,19 @@ export function GroupManager({ className }: GroupManagerProps) {
     if (groupName.trim()) {
       let createdGroupId: string | undefined;
 
+      // 새 그룹 order: 질문 + 형제그룹 통합 공간의 max+1 (append 보장).
+      // DB(create)와 로컬 양쪽에 같은 값을 써야 refresh 후에도 순서가 유지된다.
+      // (order 를 create 에 안 넘기면 서버 maxOrder 가 형제 질문을 무시해 interleave 된다.)
+      const orderSiblingGroups = groupsOrEmpty.filter((g) => g.parentGroupId === parentGroupIdForNew);
+      const orderSiblingQuestions = parentGroupIdForNew
+        ? questions.filter((q) => q.groupId === parentGroupIdForNew)
+        : [];
+      const orderPool = [
+        ...orderSiblingGroups.map((g) => g.order),
+        ...orderSiblingQuestions.map((q) => q.order),
+      ];
+      const newGroupOrder = (orderPool.length > 0 ? Math.max(...orderPool) : -1) + 1;
+
       // DB에 그룹 저장
       if (surveyId && isUUID(surveyId)) {
         try {
@@ -194,6 +207,7 @@ export function GroupManager({ className }: GroupManagerProps) {
             name: groupName.trim(),
             ...(groupDescription.trim() ? { description: groupDescription.trim() } : {}),
             ...(parentGroupIdForNew ? { parentGroupId: parentGroupIdForNew } : {}),
+            order: newGroupOrder,
           });
           if (createdGroup) createdGroupId = createdGroup.id;
         } catch (error) {
@@ -206,25 +220,13 @@ export function GroupManager({ className }: GroupManagerProps) {
       // 로컬 스토어 업데이트
       if (createdGroupId && isUUID(createdGroupId)) {
         // DB에서 생성된 그룹의 UUID를 사용하여 직접 추가
-        const currentGroups = groupsOrEmpty;
-        const siblingGroups = currentGroups.filter((g) => g.parentGroupId === parentGroupIdForNew);
-        // 질문 + 형제그룹 통합 order 공간에서 maxOrder 계산 (store.addGroup 과 동일).
-        // 형제 질문 order 를 무시하면 새 하위그룹이 질문 앞에 끼어든다(append 가 아니라 interleave).
-        const siblingQuestions = parentGroupIdForNew
-          ? questions.filter((q) => q.groupId === parentGroupIdForNew)
-          : [];
-        const allOrders = [
-          ...siblingGroups.map((g) => g.order),
-          ...siblingQuestions.map((q) => q.order),
-        ];
-        const maxOrder = allOrders.length > 0 ? Math.max(...allOrders) : -1;
-
+        // order 는 위에서 계산한 newGroupOrder 를 재사용(create 에 넘긴 값과 동일 → DB·로컬 일치).
         const newGroup: QuestionGroup = {
           id: createdGroupId,
           surveyId: surveyId!,
           name: groupName.trim(),
           ...(groupDescription.trim() ? { description: groupDescription.trim() } : {}),
-          order: maxOrder + 1,
+          order: newGroupOrder,
           ...(parentGroupIdForNew ? { parentGroupId: parentGroupIdForNew } : {}),
           collapsed: false,
         };

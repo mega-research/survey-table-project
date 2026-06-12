@@ -11,7 +11,6 @@ import type { ContactColumnScheme, ProgressColumnScheme } from '@/db/schema/sche
 import type { ProgressRow, ProgressSortKey, SortDir, ProgressTotals } from './report-progress';
 import { buildFilterSql, type FilterCondition } from './progress-filters.server';
 import { buildNegativeCodeExists, getResultCodeStatuses } from './result-code-statuses.server';
-import { extractSystemFieldKeys } from './contacts-shared';
 
 const EMPTY_SCHEME: ProgressColumnScheme = { version: 1, columns: [] };
 
@@ -84,61 +83,52 @@ export const getProgressColumnScheme = cache(
 /**
  * 그룹 매핑된 attrs 키의 라벨 추출 (컨택리스트 라벨 우선).
  *
- * 1차(권위 소스): contact_columns 스킴에서 `extractSystemFieldKeys` 로
- *   분류 기준(group) attrs key 를 결정적으로 도출. 이 함수는 컨택 단건 편집
- *   페이지가 group_value 를 쓸 때 쓰는 것과 동일한 소스라, 라벨/카운트가
- *   같은 정의를 공유한다.
- *
- * 2차(폴백): 스킴이 group key 를 식별하지 못하면(표준 명칭 미포함 등),
- *   첫 contact_target 의 attrs 에서 value === group_value 인 key 를 찾는다.
- *   동일 value 를 가진 attrs 키가 둘 이상이면 모호하므로, 키를 안정 정렬해
- *   결정적으로 첫 키를 고른다(이전엔 JSONB 순회 순서에 의존했음).
+ * group attrs key 는 실제 저장된 group_value 로 attrs 키를 역추론한다.
+ * (스킴 기반 표준명칭 휴리스틱은 쓰지 않는다: ContactColumnScheme 은 표시 컬럼만 담고
+ *  업로드 시 선택한 group 컬럼은 contact_uploads.mapping.systemFields.group 에만 있다.
+ *  '전시회' 같은 표준명칭 attrs 키가 실제 group 컬럼이 아닌데 스킴에 있으면 오인하므로 금지.)
+ * 실제 group_value 역추론은 업로드/단건 추가 경로를 모두 커버하며, 동일 value 가 여러
+ * attrs 키에 들어있는 모호성은 키를 안정 정렬해 결정적으로 첫 키를 고른다.
  *
  * 못 찾으면 '그룹' fallback. 컨택 0건 / group_value NULL only 케이스도 동일.
  *
  * `cache()` 로 RSC pass dedupe — header / 표 등 다중 RSC 동시 호출 가능성 대비.
  */
 export const getProgressGroupLabel = cache(async (surveyId: string): Promise<string> => {
-  // contact_columns 스킴 — 권위 소스(systemFields.group) + 라벨 lookup 양쪽에 사용
+  // 실제 저장된 group_value 로 attrs 키 역추론 (write-side 가 어떤 컬럼을 group 으로 썼든 일관)
+  const rows = await db
+    .select({
+      attrs: contactTargets.attrs,
+      groupValue: contactTargets.groupValue,
+    })
+    .from(contactTargets)
+    .where(
+      sql`${contactTargets.surveyId} = ${surveyId} AND ${contactTargets.groupValue} IS NOT NULL`,
+    )
+    .limit(1);
+
+  const firstRow = rows[0];
+  const attrs = firstRow?.attrs;
+  const groupValue = firstRow?.groupValue;
+  let groupAttrsKey: string | undefined;
+  if (attrs && groupValue != null) {
+    // 동일 value 가 여러 키에 들어있을 때의 모호성을 키 정렬로 결정적 처리
+    const matchedKeys = Object.entries(attrs)
+      .filter(([, v]) => v === groupValue)
+      .map(([k]) => k)
+      .sort();
+    groupAttrsKey = matchedKeys[0];
+  }
+
+  if (!groupAttrsKey) return '그룹';
+
+  // contact_columns 에서 사용자 편집 라벨 lookup (라벨 표기에만 사용)
   const surveyRow = await db
     .select({ contactColumns: surveys.contactColumns })
     .from(surveys)
     .where(eq(surveys.id, surveyId))
     .limit(1);
   const scheme = surveyRow[0]?.contactColumns as ContactColumnScheme | null | undefined;
-
-  // 1차: 스킴에서 group attrs key 를 결정적으로 도출 (write-side 와 동일 정의)
-  let groupAttrsKey = scheme ? extractSystemFieldKeys(scheme).group : undefined;
-
-  // 2차: 스킴이 group key 를 못 주면 첫 contact_target 의 value 매칭으로 폴백
-  if (!groupAttrsKey) {
-    const rows = await db
-      .select({
-        attrs: contactTargets.attrs,
-        groupValue: contactTargets.groupValue,
-      })
-      .from(contactTargets)
-      .where(
-        sql`${contactTargets.surveyId} = ${surveyId} AND ${contactTargets.groupValue} IS NOT NULL`,
-      )
-      .limit(1);
-
-    const firstRow = rows[0];
-    const attrs = firstRow?.attrs;
-    const groupValue = firstRow?.groupValue;
-    if (attrs && groupValue != null) {
-      // 동일 value 가 여러 키에 들어있을 때의 모호성을 키 정렬로 결정적 처리
-      const matchedKeys = Object.entries(attrs)
-        .filter(([, v]) => v === groupValue)
-        .map(([k]) => k)
-        .sort();
-      groupAttrsKey = matchedKeys[0];
-    }
-  }
-
-  if (!groupAttrsKey) return '그룹';
-
-  // contact_columns 에서 라벨 lookup
   const col = scheme?.columns.find((c) => c.source === `attrs.${groupAttrsKey}`);
   return col?.label ?? groupAttrsKey;
 });

@@ -77,25 +77,26 @@ describe('getProgressGroupLabel — 그룹 헤더 라벨 결정성', () => {
     // cache() 메모이제이션 우회 위해 매 케이스 다른 surveyId 사용
   });
 
-  it('동일 value 가 두 attrs 키에 있어도 스킴의 group key 라벨을 쓴다', async () => {
-    // 전시회 키(group)와 우연히 같은 value 를 가진 다른 키가 먼저 와도
-    // 스킴이 결정한 group key('전시회')의 라벨을 써야 한다.
+  it('전시회 같은 표준명칭 키가 있어도 실제 group_value 로 올바른 키를 고른다', async () => {
+    // group 은 개최월인데 스킴에 전시회 키도 있다. 스킴 기반 표준명칭 휴리스틱이면
+    // 전시회를 group 으로 오인하지만, 실제 저장된 group_value(개최월 값)로 역추론하면
+    // 개최월을 정확히 고른다(codex 지적: 업로드 group 선택은 스킴이 아닌 mapping 에 있음).
     state.contactColumns = scheme([
-      { key: '비고', label: '비고', source: 'attrs.비고', order: 1 },
-      { key: '전시회', label: '전시회명', source: 'attrs.전시회', order: 2 },
+      { key: '전시회', label: '전시회명', source: 'attrs.전시회', order: 1 },
+      { key: '개최월', label: '개최 월', source: 'attrs.개최월', order: 2 },
     ]);
     state.firstContact = {
-      attrs: { 비고: '서울국제박람회', 전시회: '서울국제박람회' },
-      groupValue: '서울국제박람회',
+      attrs: { 전시회: '서울국제박람회', 개최월: '3월' },
+      groupValue: '3월',
     };
 
     const label = await getProgressGroupLabel(`${SURVEY_ID}-1`);
-    expect(label).toBe('전시회명');
+    expect(label).toBe('개최 월');
   });
 
-  it('스킴이 group key 를 못 주면 value 매칭으로 폴백하되 정렬된 첫 키를 결정적으로 고른다', async () => {
-    // 표준 명칭(전시회/단체 메일)이 없어 extractSystemFieldKeys 가 group 미도출.
-    // 동일 value 키가 둘이면 정렬해 'aaa' 가 'zzz' 보다 먼저 선택돼야 한다.
+  it('동일 value 가 여러 attrs 키에 있으면 정렬된 첫 키를 결정적으로 고른다', async () => {
+    // group_value 역추론에서 동일 value 키가 둘이면 정렬해 'aaa' 가 'zzz' 보다
+    // 먼저 선택돼야 한다(JSONB 순회 순서 비의존).
     state.contactColumns = scheme([
       { key: 'zzz', label: 'ZZZ 라벨', source: 'attrs.zzz', order: 1 },
       { key: 'aaa', label: 'AAA 라벨', source: 'attrs.aaa', order: 2 },
@@ -109,7 +110,7 @@ describe('getProgressGroupLabel — 그룹 헤더 라벨 결정성', () => {
     expect(label).toBe('AAA 라벨');
   });
 
-  it('컨택 0건이고 스킴도 group key 없으면 그룹 fallback', async () => {
+  it('컨택 0건이면 그룹 fallback', async () => {
     state.contactColumns = scheme([
       { key: '메모', label: '메모', source: 'attrs.메모', order: 1 },
     ]);
@@ -119,9 +120,8 @@ describe('getProgressGroupLabel — 그룹 헤더 라벨 결정성', () => {
     expect(label).toBe('그룹');
   });
 
-  it('스킴이 group key 를 주지만 라벨 컬럼이 없으면 key 자체를 라벨로 쓴다', async () => {
-    // 스킴 컬럼 목록에는 group source 가 없지만 extractSystemFieldKeys 는
-    // attrsKeyOf 매칭으로 키를 도출. 라벨 lookup 실패 시 key fallback.
+  it('group key 의 source 가 스킴에 있으면 그 라벨을 쓴다', async () => {
+    // group_value 로 도출한 key 의 source 가 스킴 컬럼에 있으면 그 라벨을 쓴다.
     state.contactColumns = scheme([
       { key: '전시회', label: '전시회', source: 'attrs.전시회', order: 1 },
     ]);
