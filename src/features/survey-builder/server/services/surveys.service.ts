@@ -3,6 +3,7 @@ import 'server-only';
 import { eq } from 'drizzle-orm';
 
 import { getSurveyById } from '@/data/surveys';
+import type { CompleteQuestionWrite } from '@/db/schema/question-persisted-fields';
 import { db } from '@/db';
 import {
   NewQuestion,
@@ -249,7 +250,7 @@ export async function duplicateSurvey(
         dynamicRowConfigs: question.dynamicRowConfigs as NewQuestion['dynamicRowConfigs'],
         hideColumnLabels: question.hideColumnLabels,
         displayCondition: question.displayCondition as NewQuestion['displayCondition'],
-      };
+      } satisfies CompleteQuestionWrite;
     });
 
     if (newQuestionsData.length > 0) {

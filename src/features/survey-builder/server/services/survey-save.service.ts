@@ -10,6 +10,7 @@ import {
   questions,
   surveys,
 } from '@/db/schema';
+import type { CompleteQuestionWrite } from '@/db/schema/question-persisted-fields';
 import { extractImageUrlsFromQuestions } from '@/lib/image-extractor';
 import { deleteImagesFromR2Server, deleteR2ObjectsByKey } from '@/lib/image-utils-server';
 import { promoteSurveyImages } from '@/lib/survey/survey-image-promote';
@@ -249,7 +250,7 @@ export async function saveSurveyDiff(
           inputType: question.inputType ?? null,
           emptyDefault: question.emptyDefault ?? null,
           updatedAt: new Date(),
-        }));
+        }) satisfies CompleteQuestionWrite);
 
         await tx
           .insert(questions)
@@ -291,7 +292,7 @@ export async function saveSurveyDiff(
               inputType: sql`excluded.input_type`,
               emptyDefault: sql`excluded.empty_default`,
               updatedAt: sql`excluded.updated_at`,
-            },
+            } satisfies CompleteQuestionWrite,
           });
       }
 
@@ -562,7 +563,7 @@ export async function saveSurveyWithDetails(
           inputType: question.inputType ?? null,
           emptyDefault: question.emptyDefault ?? null,
           updatedAt: new Date(),
-        }));
+        }) satisfies CompleteQuestionWrite);
 
         await tx
           .insert(questions)
@@ -604,7 +605,7 @@ export async function saveSurveyWithDetails(
               inputType: sql`excluded.input_type`,
               emptyDefault: sql`excluded.empty_default`,
               updatedAt: sql`excluded.updated_at`,
-            },
+            } satisfies CompleteQuestionWrite,
           });
       }
     }

@@ -1,6 +1,7 @@
 import * as z from 'zod';
 
 import type { NewQuestion, Question } from '@/db/schema';
+import type { PersistedQuestionField } from '@/db/schema/question-persisted-fields';
 import { QUESTION_TYPES } from '@/types/question-types';
 import type { Question as QuestionType } from '@/types/survey';
 
@@ -106,6 +107,24 @@ export const UpdateQuestionInput = z.object({
   data: UpdateQuestionData,
 });
 export type UpdateQuestionInput = z.infer<typeof UpdateQuestionInput>;
+
+// ── 영속 필드 커버리지 컴파일 프로브 ──────────────────────────────
+// 신규 영속 컬럼이 PERSISTED_QUESTION_FIELDS 에 등재되면 아래 return 할당이
+// 컴파일 에러가 되어 create/update 스키마 누락(H17 류 silent strip 손실)을 차단한다.
+
+/** Create 스키마가 영속 필드 전부를 입력으로 받는지의 컴파일 검사. */
+export function assertCreateSchemaCoversPersistedFields(
+  field: PersistedQuestionField,
+): keyof CreateQuestionInput {
+  return field;
+}
+
+/** Update 스키마가 영속 필드(생성 후 불변인 type 제외)를 전부 받는지의 컴파일 검사. */
+export function assertUpdateSchemaCoversPersistedFields(
+  field: Exclude<PersistedQuestionField, 'type'>,
+): keyof UpdateQuestionData {
+  return field;
+}
 
 export const DeleteQuestionInput = z.object({
   questionId: z.string(),

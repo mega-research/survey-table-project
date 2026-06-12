@@ -5,6 +5,7 @@ import { eq, inArray } from 'drizzle-orm';
 import { getQuestionsBySurvey } from '@/data/surveys';
 import { db } from '@/db';
 import { NewQuestion, questions } from '@/db/schema';
+import type { CompleteQuestionWrite } from '@/db/schema/question-persisted-fields';
 import { extractImageUrlsFromQuestion } from '@/lib/image-extractor';
 import { deleteImagesFromR2Server } from '@/lib/image-utils-server';
 import { promoteSurveyImages, type PromotableQuestion } from '@/lib/survey/survey-image-promote';
@@ -28,7 +29,7 @@ export async function createQuestion(data: CreateQuestionInput): Promise<Questio
   const maxOrder =
     existingQuestions.length > 0 ? Math.max(...existingQuestions.map((q) => q.order)) : -1;
 
-  const newQuestion: NewQuestion = {
+  const newQuestion = {
     id: data.id || generateId(),
     surveyId: data.surveyId,
     groupId: data.groupId,
@@ -64,7 +65,7 @@ export async function createQuestion(data: CreateQuestionInput): Promise<Questio
     exportLabel: data.exportLabel,
     spssVarType: data.spssVarType,
     spssMeasure: data.spssMeasure,
-  };
+  } satisfies CompleteQuestionWrite & NewQuestion;
 
   // tmp/survey/ 이미지를 영구 prefix로 promote (R2 move + URL 치환)
   const [questionToInsert] = await promoteSurveyImages([newQuestion as PromotableQuestion]);
