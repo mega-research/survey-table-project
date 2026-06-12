@@ -34,7 +34,7 @@ describe('surveyBuilder.questions procedures', () => {
     const row = { id: QUESTION_ID, surveyId: SURVEY_ID, type: 'text', title: 'Q1' };
     vi.mocked(svc.createQuestion).mockResolvedValue(row as never);
     const client = createRouterClient({ questions }, { context: authedContext() });
-    const input = { surveyId: SURVEY_ID, type: 'text', title: 'Q1' };
+    const input = { surveyId: SURVEY_ID, type: 'text' as const, title: 'Q1' };
     const res = await client.questions.create(input);
     expect(svc.createQuestion).toHaveBeenCalledWith(input);
     expect(res).toEqual(row);
@@ -63,7 +63,7 @@ describe('surveyBuilder.questions procedures', () => {
     const client = createRouterClient({ questions }, { context: authedContext() });
     const input = {
       surveyId: SURVEY_ID,
-      type: 'text',
+      type: 'text' as const,
       title: 'Q1',
       inputType: 'number' as const,
       emptyDefault: 7,
@@ -86,6 +86,31 @@ describe('surveyBuilder.questions procedures', () => {
     };
     await client.questions.update({ questionId: QUESTION_ID, data });
     expect(svc.updateQuestion).toHaveBeenCalledWith(QUESTION_ID, data);
+  });
+
+  it('update payload의 type은 strip되어 service에 도달하지 않는다', async () => {
+    // 질문 type은 생성 후 불변 — UpdateQuestionData에 type이 없으므로
+    // 구버전 클라이언트가 type을 실어 보내도 zod strip으로 무시된다(reject 아님).
+    const row = { id: QUESTION_ID, surveyId: SURVEY_ID, type: 'text', title: 'Q1' };
+    vi.mocked(svc.updateQuestion).mockResolvedValue(row as never);
+    const client = createRouterClient({ questions }, { context: authedContext() });
+    await client.questions.update({
+      questionId: QUESTION_ID,
+      data: { title: 'Q1', type: 'table' } as { title: string },
+    });
+    expect(svc.updateQuestion).toHaveBeenCalledWith(QUESTION_ID, { title: 'Q1' });
+  });
+
+  it('create는 9종 외 type을 BAD_REQUEST로 거부한다', async () => {
+    const client = createRouterClient({ questions }, { context: authedContext() });
+    await expect(
+      client.questions.create({
+        surveyId: SURVEY_ID,
+        type: 'file-upload' as 'text',
+        title: 'Q1',
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(svc.createQuestion).not.toHaveBeenCalled();
   });
 
   it('remove는 service.deleteQuestion에 위임하고 {ok:true}를 반환한다', async () => {

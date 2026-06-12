@@ -1,6 +1,7 @@
 import * as z from 'zod';
 
 import type { NewQuestion, Question } from '@/db/schema';
+import { QUESTION_TYPES } from '@/types/question-types';
 import type { Question as QuestionType } from '@/types/survey';
 
 /**
@@ -23,7 +24,7 @@ export const CreateQuestionInput = z.object({
   surveyId: z.string(),
   id: z.string().optional(),
   groupId: z.string().optional(),
-  type: z.string(),
+  type: z.enum(QUESTION_TYPES),
   title: z.string(),
   description: z.string().optional(),
   required: z.boolean().optional(),
@@ -63,10 +64,11 @@ export type CreateQuestionInput = z.infer<typeof CreateQuestionInput>;
 /**
  * 질문 업데이트 입력 — 원본 updateQuestion(questionId, data) 화이트리스트와 동일.
  * groupId 는 명시적 null 로 ungroup 가능해야 하므로 nullable (undefined=미변경, null=해제).
+ * type 은 의도적으로 부재 — 질문 type 은 생성 후 불변이며(변경 UI 없음),
+ * 패치에 실려 와도 zod strip 으로 무시된다 (RPC 레벨 type 변경 구멍 봉인).
  */
 export const UpdateQuestionData = z.object({
   groupId: z.string().nullable().optional(),
-  type: z.string().optional(),
   title: z.string().optional(),
   description: z.string().optional(),
   required: z.boolean().optional(),

@@ -85,10 +85,10 @@ export async function updateQuestion(
   questionId: string,
   data: UpdateQuestionData,
 ): Promise<QuestionRow> {
-  // 허용 필드만 추출 (id, surveyId, createdAt 등 변경 방지)
+  // 허용 필드만 추출 (id, surveyId, createdAt 등 변경 방지).
+  // type 은 생성 후 불변 — 패치 대상이 아니다 (UpdateQuestionData 에도 부재).
   const allowed: Partial<NewQuestion> = { updatedAt: new Date() };
   if (data.groupId !== undefined) allowed.groupId = data.groupId;
-  if (data.type !== undefined) allowed.type = data.type;
   if (data.title !== undefined) allowed.title = data.title;
   if (data.description !== undefined) allowed.description = data.description;
   if (data.required !== undefined) allowed.required = data.required;
