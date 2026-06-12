@@ -1,6 +1,7 @@
 import {
   BranchRule,
   DynamicRowGroupConfig,
+  ConditionLogicType,
   ExpressionClause,
   ExpressionComparison,
   ExpressionConditionConfig,
@@ -9,67 +10,25 @@ import {
   Question,
   QuestionCondition,
   QuestionGroup,
-  SurveyLookup,
   TableColumn,
   TableRow,
   TableValidationRule,
 } from '@/types/survey';
-import { evaluateComparisonWithFailSafe, type ComparisonResult } from '@/lib/lookup/evaluate-comparison';
 import { evaluateRightOperand } from '@/lib/lookup/evaluate-lookup';
-import type { LookupEvalCtx } from '@/lib/lookup/types';
 import { resolveChoiceOptions } from '@/utils/choice-source';
 import { isGroupedChoiceQuestion } from '@/utils/choice-group-helpers';
+import { emptyBranchEvalCtx, type BranchEvalCtx } from '@/utils/branch-eval';
+import {
+  collectAnsweredRows,
+  collectMatchedRows,
+  collectSelectedValues,
+  quantifyRows,
+  someRowMatches,
+} from '@/utils/table-cell-semantics';
 
-// numeric-input 의 parseNumericInput 는 evaluateComparisonWithFailSafe 내부 (evaluate-arith) 에서 사용.
-
-/**
- * 분기 평가 컨텍스트. displayCondition / BranchRule 의 우변에 LUT 룩업이 등장할 때,
- * 응답 페이지나 빌더 미리보기 호출처에서 응답 전체 + 컨택 attrs + LUT 사본을 주입한다.
- *
- * - 응답 페이지: survey snapshot 의 lookups + ContactAttrsProvider 의 attrs + 누적 responses
- * - 빌더 미리보기: currentSurvey.lookups + sample 컨택 attrs + testResponses
- * - 미주입(undefined): lookup 우변이 평가 불가능 → fail-safe SHOW 동작 (의도된 안전 기본값)
- */
-export type BranchEvalCtx = {
-  responses: Record<string, Record<string, string | undefined>>;
-  contactAttrs: Record<string, string | undefined>;
-  lookups: SurveyLookup[];
-};
-
-const emptyBranchEvalCtx = (): BranchEvalCtx => ({
-  responses: {},
-  contactAttrs: {},
-  lookups: [],
-});
-
-/**
- * NumericComparison 평가 진입점 (T16~).
- * - `cmp.left` 미존재(legacy 데이터) 시 cellValue 를 "현재 평가 중인 셀" 로 wrap 하여 cell-impersonation.
- * - fail-safe 적용된 ComparisonResult 반환. 단순 boolean 이 필요한 곳은 `.satisfied` 사용.
- */
-export function evaluateNumericComparisonV2(
-  cmp: NumericComparison,
-  cellValue: string,
-  ctx: BranchEvalCtx,
-): ComparisonResult {
-  if (!cmp.left) {
-    const fakeQ = '__current__';
-    const fakeC = '__current__';
-    const wrapped: NumericComparison = {
-      ...cmp,
-      left: { kind: 'cell', questionId: fakeQ, cellId: fakeC },
-    };
-    const evalCtx: LookupEvalCtx = {
-      ...ctx,
-      responses: {
-        ...ctx.responses,
-        [fakeQ]: { ...(ctx.responses[fakeQ] ?? {}), [fakeC]: cellValue },
-      },
-    };
-    return evaluateComparisonWithFailSafe(wrapped, evalCtx);
-  }
-  return evaluateComparisonWithFailSafe(cmp, ctx);
-}
+// BranchEvalCtx / emptyBranchEvalCtx / evaluateNumericComparisonV2 는 branch-eval.ts 로 이동
+// (table-cell-semantics 와의 순환 import 차단). 기존 import 사이트 호환을 위해 re-export 한다.
+export { evaluateNumericComparisonV2, type BranchEvalCtx } from '@/utils/branch-eval';
 
 /**
  * 질문과 응답을 기반으로 적용할 분기 규칙을 찾습니다
@@ -369,226 +328,45 @@ export function checkTableValidationRule(
   const { conditions, type } = rule;
   const { rowIds, cellColumnIndex, expectedValues } = conditions;
 
-  // 지정된 행(rowIds) 중에서 체크된 행들을 수집
-  const checkedRowsInTarget: string[] = [];
-
-  for (const row of question.tableRowsData) {
-    if (!rowIds.includes(row.id)) continue;
-
-    // 특정 열만 확인하거나 모든 셀 확인
-    let cellsToCheck = cellColumnIndex !== undefined ? [row.cells[cellColumnIndex]] : row.cells;
-
-    // 만약 특정 열(예: 0번 열)을 선택했는데 해당 셀이 텍스트(라벨) 등 비인터랙티브 타입이라면,
-    // 사용자 의도를 파악하여 해당 행의 첫 번째 입력 필드(라디오, 체크박스 등)를 대신 확인합니다.
-    if (cellColumnIndex !== undefined && cellsToCheck.length === 1) {
-      const targetCell = cellsToCheck[0];
-      if (targetCell && ['text', 'image', 'video'].includes(targetCell.type)) {
-        const firstInteractive = row.cells.find((c) =>
-          ['checkbox', 'radio', 'select', 'input'].includes(c.type),
-        );
-        if (firstInteractive) {
-          cellsToCheck = [firstInteractive];
-        }
-      }
-    }
-
-    for (const cell of cellsToCheck) {
-      if (!cell) continue;
-
-      // 평면 구조에서 셀 값 가져오기
-      const cellValue = tableResponse[cell.id];
-      if (!cellValue) continue;
-
-      // 셀 타입에 따라 체크 여부 확인
-      let isChecked = false;
-
-      // 규칙의 checkType 대신 실제 셀의 타입을 기준으로 판단
-      // (사용자가 규칙 설정 시 checkType을 잘못 설정하는 경우를 방지하고, 실제 데이터 타입에 맞게 검증)
-      switch (cell.type) {
-        case 'checkbox':
-          // 체크박스: 배열에 값이 있으면 체크됨
-          if (Array.isArray(cellValue) && cellValue.length > 0) {
-            if (expectedValues && expectedValues.length > 0) {
-              // 응답은 optionId 배열을 저장하지만, expectedValues는 value 배열을 저장
-              // optionId를 value로 변환해야 함
-              const checkedOptionIds = cellValue
-                .map((v) =>
-                  typeof v === 'object' && v !== null && 'optionId' in v
-                    ? (v as { optionId: string }).optionId
-                    : typeof v === 'string'
-                      ? v
-                      : null,
-                )
-                .filter((id): id is string => id !== null);
-
-              if (cell.checkboxOptions) {
-                // optionId로 옵션들을 찾아서 value를 가져옴
-                const checkedValues = checkedOptionIds
-                  .map((optionId) => {
-                    const option = cell.checkboxOptions?.find((opt) => opt.id === optionId);
-                    return option?.value;
-                  })
-                  .filter((v): v is string => v !== undefined);
-
-                if (checkedValues.some((v) => expectedValues.includes(v))) {
-                  isChecked = true;
-                }
-              }
-            } else {
-              isChecked = true;
-            }
-          }
-          break;
-
-        case 'radio':
-          // 라디오: 값이 있으면 선택됨
-          if (cellValue) {
-            if (expectedValues && expectedValues.length > 0) {
-              // 응답은 optionId를 저장하지만, expectedValues는 value를 저장
-              // optionId를 value로 변환해야 함
-              const selectedOptionId =
-                typeof cellValue === 'object' && cellValue !== null && 'optionId' in cellValue
-                  ? (cellValue as { optionId: string }).optionId
-                  : typeof cellValue === 'string'
-                    ? cellValue
-                    : null;
-
-              if (selectedOptionId && cell.radioOptions) {
-                // optionId로 옵션을 찾아서 value를 가져옴
-                const selectedOption = cell.radioOptions.find((opt) => opt.id === selectedOptionId);
-                if (selectedOption && expectedValues.includes(selectedOption.value)) {
-                  isChecked = true;
-                }
-              }
-            } else {
-              isChecked = true;
-            }
-          }
-          break;
-
-        case 'select':
-          // 셀렉트: 값이 있고, expectedValues가 있으면 그 값과 일치하는지 확인
-          if (cellValue) {
-            if (expectedValues && expectedValues.length > 0) {
-              // 응답은 optionId를 저장하지만, expectedValues는 value를 저장
-              // optionId를 value로 변환해야 함
-              const selectedOptionId =
-                typeof cellValue === 'object' && cellValue !== null && 'optionId' in cellValue
-                  ? (cellValue as { optionId: string }).optionId
-                  : typeof cellValue === 'string'
-                    ? cellValue
-                    : null;
-
-              if (selectedOptionId && cell.selectOptions) {
-                // optionId로 옵션을 찾아서 value를 가져옴
-                const selectedOption = cell.selectOptions.find(
-                  (opt) => opt.id === selectedOptionId,
-                );
-                if (selectedOption) {
-                  isChecked = expectedValues.includes(selectedOption.value);
-                }
-              }
-            } else {
-              isChecked = true;
-            }
-          }
-          break;
-
-        case 'input':
-          // 입력: 값이 있고, expectedValues가 있으면 그 값과 일치하는지 확인
-          if (cellValue) {
-            const strValue = String(cellValue).trim();
-            if (strValue !== '') {
-              if (expectedValues && expectedValues.length > 0) {
-                isChecked = expectedValues.includes(strValue);
-              } else {
-                isChecked = true;
-              }
-            }
-          }
-          break;
-      }
-
-      if (isChecked && !checkedRowsInTarget.includes(row.id)) {
-        checkedRowsInTarget.push(row.id);
-      }
-    }
-  }
+  // 메인 조건: 지정된 행(rowIds)에서 기대값 매칭 행을 수집.
+  // 셀 값 해석(optionId 언랩·옵션 value 변환·input trim)은 table-cell-semantics 소유.
+  // 규칙의 checkType 대신 실제 셀 타입 기준으로 판단하는 기존 결정도 그 모듈이 보존한다.
+  const checkedRowsInTarget = collectMatchedRows(question.tableRowsData, tableResponse, {
+    rowIds,
+    columnIndex: cellColumnIndex,
+    fallbackToFirstInteractive: true,
+    criteria: { expectedValues },
+  });
 
   // 검증 타입에 따라 조건 확인
   let mainConditionResult: boolean;
   switch (type) {
-    case 'exclusive-check':
-      // 특정 행만 체크된 경우 (다른 행은 체크 안됨)
-      // 모든 행 중에서 rowIds에 지정된 행만 체크되어야 함
-      const allCheckedRowsInTable: string[] = [];
-      for (const row of question.tableRowsData) {
-        let cellsToCheck = cellColumnIndex !== undefined ? [row.cells[cellColumnIndex]] : row.cells;
-
-        // 만약 특정 열(예: 0번 열)을 선택했는데 해당 셀이 텍스트(라벨) 등 비인터랙티브 타입이라면,
-        // 사용자 의도를 파악하여 해당 행의 첫 번째 입력 필드(라디오, 체크박스 등)를 대신 확인합니다.
-        if (cellColumnIndex !== undefined && cellsToCheck.length === 1) {
-          const targetCell = cellsToCheck[0];
-          if (targetCell && ['text', 'image', 'video'].includes(targetCell.type)) {
-            const firstInteractive = row.cells.find((c) =>
-              ['checkbox', 'radio', 'select', 'input'].includes(c.type),
-            );
-            if (firstInteractive) {
-              cellsToCheck = [firstInteractive];
-            }
-          }
-        }
-
-        for (const cell of cellsToCheck) {
-          if (!cell) continue;
-          // 평면 구조에서 셀 값 가져오기
-          const cellValue = tableResponse[cell.id];
-
-          let isAnyChecked = false;
-
-          // 셀 타입이나 규칙의 checkType에 상관없이 실제 값이 존재하는지 확인
-          if (Array.isArray(cellValue)) {
-            if (cellValue.length > 0) isAnyChecked = true;
-          } else if (typeof cellValue === 'string') {
-            if (cellValue.trim() !== '') isAnyChecked = true;
-          } else if (cellValue) {
-            // 객체나 기타 Truthy 값
-            isAnyChecked = true;
-          }
-
-          if (isAnyChecked && !allCheckedRowsInTable.includes(row.id)) {
-            allCheckedRowsInTable.push(row.id);
-            break;
-          }
-        }
-      }
-
-      // rowIds에 지정된 행들만 체크되고, 다른 행은 체크 안되어야 함
-      // 독점 체크: 체크된 행이 있고, 모든 체크된 행이 지정된 행에 포함되어야 함
-      // (다른 행이 체크되면 안됨)
+    case 'exclusive-check': {
+      // 독점 체크: 전체 행에서 값 존재(셀 타입 불문) 행을 수집해, 지정 행만 체크됐는지 확인
+      const allCheckedRowsInTable = collectAnsweredRows(question.tableRowsData, tableResponse, {
+        columnIndex: cellColumnIndex,
+        fallbackToFirstInteractive: true,
+      });
       mainConditionResult =
         allCheckedRowsInTable.length > 0 &&
         allCheckedRowsInTable.every((id) => rowIds.includes(id));
       break;
+    }
 
     case 'any-of':
       // 여러 행 중 하나라도 체크된 경우
-      mainConditionResult = checkedRowsInTarget.length > 0;
+      mainConditionResult = quantifyRows(checkedRowsInTarget, rowIds, 'any');
       break;
 
     case 'all-of':
+    case 'required-combination':
       // 특정 행들이 모두 체크된 경우
-      mainConditionResult = rowIds.every((id) => checkedRowsInTarget.includes(id));
+      mainConditionResult = quantifyRows(checkedRowsInTarget, rowIds, 'all');
       break;
 
     case 'none-of':
       // 특정 행들이 모두 체크 안된 경우
-      mainConditionResult = checkedRowsInTarget.length === 0;
-      break;
-
-    case 'required-combination':
-      // 특정 조합이 체크된 경우 (모든 지정된 행이 체크되어야 함)
-      mainConditionResult = rowIds.every((id) => checkedRowsInTarget.includes(id));
+      mainConditionResult = quantifyRows(checkedRowsInTarget, rowIds, 'none');
       break;
 
     default:
@@ -600,11 +378,9 @@ export function checkTableValidationRule(
     return mainConditionResult;
   }
 
-  // 추가 조건 평가
+  // 추가 조건에서 확인할 행들 결정 — rowIds 지정 시 그 제한된 행만, 아니면 메인 통과 행.
+  // (같은-행 교집합 의미론은 검증 규칙 소유 — 셀 의미론으로 내리지 않는다.)
   const additionalConditions = rule.additionalConditions;
-
-  // 추가 조건에서 확인할 행들 결정
-  // rowIds가 지정되어 있으면 해당 행만, 없으면 메인 조건에서 체크된 행 사용
   const rowsToCheckForAdditional =
     additionalConditions.rowIds && additionalConditions.rowIds.length > 0
       ? additionalConditions.rowIds
@@ -614,143 +390,15 @@ export function checkTableValidationRule(
     return false;
   }
 
-  // 추가 조건 평가: 같은 행에서 메인 조건과 추가 조건을 모두 만족하는지 확인
-  // (메인 조건에서 체크된 행들 중에서, 같은 행에서 추가 조건도 만족하는 행이 있는지 확인)
-  let additionalConditionResult = false;
-  const additionalColIndex = additionalConditions.cellColumnIndex;
+  // 추가 조건 평가: 제한된 행의 지정 열에서 하나라도 매칭 (any-of 의미)
+  const additionalConditionResult = someRowMatches(question.tableRowsData, tableResponse, {
+    rowIds: rowsToCheckForAdditional,
+    columnIndex: additionalConditions.cellColumnIndex,
+    criteria: { expectedValues: additionalConditions.expectedValues },
+  });
 
-  // additionalConditions.rowIds 가 지정되면 그 제한된 행만, 아니면 메인 통과 행을 확인.
-  // (rowsToCheckForAdditional 가 제한을 반영 — evaluateQuestionCondition 과 동일하게 실제 평가에도 적용.
-  //  rowIds 미지정 시 checkedRowsInTarget 과 동일하므로 기존 동작 보존.)
-  for (const rowId of rowsToCheckForAdditional) {
-    const row = question.tableRowsData.find((r) => r.id === rowId);
-    if (!row) continue;
-
-    const cell = row.cells[additionalColIndex];
-    if (!cell) continue;
-
-    // 평면 구조에서 셀 값 가져오기
-    const cellValue = tableResponse[cell.id];
-    if (!cellValue) continue;
-
-    // 셀 타입에 따라 체크 여부 확인
-    let isChecked = false;
-
-    switch (cell.type) {
-      case 'checkbox':
-        if (Array.isArray(cellValue) && cellValue.length > 0) {
-          if (
-            additionalConditions.expectedValues &&
-            additionalConditions.expectedValues.length > 0
-          ) {
-            const checkedOptionIds = cellValue
-              .map((v) =>
-                typeof v === 'object' && v !== null && 'optionId' in v
-                  ? (v as { optionId: string }).optionId
-                  : typeof v === 'string'
-                    ? v
-                    : null,
-              )
-              .filter((id): id is string => id !== null);
-
-            if (cell.checkboxOptions) {
-              const checkedValues = checkedOptionIds
-                .map((optionId) => {
-                  const option = cell.checkboxOptions?.find((opt) => opt.id === optionId);
-                  return option?.value;
-                })
-                .filter((v): v is string => v !== undefined);
-
-              if (checkedValues.some((v) => additionalConditions.expectedValues!.includes(v))) {
-                isChecked = true;
-              }
-            }
-          } else {
-            isChecked = true;
-          }
-        }
-        break;
-
-      case 'radio':
-        if (cellValue) {
-          if (
-            additionalConditions.expectedValues &&
-            additionalConditions.expectedValues.length > 0
-          ) {
-            const selectedOptionId =
-              typeof cellValue === 'object' && cellValue !== null && 'optionId' in cellValue
-                ? (cellValue as { optionId: string }).optionId
-                : typeof cellValue === 'string'
-                  ? cellValue
-                  : null;
-
-            if (selectedOptionId && cell.radioOptions) {
-              const selectedOption = cell.radioOptions.find((opt) => opt.id === selectedOptionId);
-              if (
-                selectedOption &&
-                additionalConditions.expectedValues.includes(selectedOption.value)
-              ) {
-                isChecked = true;
-              }
-            }
-          } else {
-            isChecked = true;
-          }
-        }
-        break;
-
-      case 'select':
-        if (cellValue) {
-          if (
-            additionalConditions.expectedValues &&
-            additionalConditions.expectedValues.length > 0
-          ) {
-            const selectedOptionId =
-              typeof cellValue === 'object' && cellValue !== null && 'optionId' in cellValue
-                ? (cellValue as { optionId: string }).optionId
-                : typeof cellValue === 'string'
-                  ? cellValue
-                  : null;
-
-            if (selectedOptionId && cell.selectOptions) {
-              const selectedOption = cell.selectOptions.find((opt) => opt.id === selectedOptionId);
-              if (selectedOption) {
-                isChecked = additionalConditions.expectedValues.includes(selectedOption.value);
-              }
-            }
-          } else {
-            isChecked = true;
-          }
-        }
-        break;
-
-      case 'input':
-        if (cellValue) {
-          const strValue = String(cellValue).trim();
-          if (strValue !== '') {
-            if (
-              additionalConditions.expectedValues &&
-              additionalConditions.expectedValues.length > 0
-            ) {
-              isChecked = additionalConditions.expectedValues.includes(strValue);
-            } else {
-              isChecked = true;
-            }
-          }
-        }
-        break;
-    }
-
-    if (isChecked) {
-      additionalConditionResult = true;
-      break; // 하나라도 만족하면 됨 (any-of 타입이므로)
-    }
-  }
-
-  // 최종 결과: 메인 조건과 추가 조건을 같은 행에서 모두 만족해야 함
-  const finalResult = mainConditionResult && additionalConditionResult;
-
-  return finalResult;
+  // 최종 결과: 메인 조건과 추가 조건을 모두 만족해야 함
+  return mainConditionResult && additionalConditionResult;
 }
 
 /**
@@ -773,102 +421,20 @@ export function getTableValidationBranchRule(
       // 동적 분기: targetQuestionMap이 있고 추가 조건이 있으면 값에 따라 질문 선택
       if (rule.targetQuestionMap && rule.additionalConditions) {
         const tableResponse = response as Record<string, unknown>;
-        const additionalColIndex = rule.additionalConditions.cellColumnIndex;
         const rowsToCheck =
           rule.additionalConditions.rowIds && rule.additionalConditions.rowIds.length > 0
             ? rule.additionalConditions.rowIds
             : question.tableRowsData?.map((r) => r.id) || [];
 
-        // 추가 조건에서 선택된 값 찾기
-        for (const row of question.tableRowsData || []) {
-          if (!rowsToCheck.includes(row.id)) continue;
-
-          const cell = row.cells[additionalColIndex];
-          if (!cell) continue;
-
-          const cellValue = tableResponse[cell.id];
-          if (!cellValue) continue;
-
-          // 셀 타입에 따라 값 추출
-          let selectedValue: string | null = null;
-
-          switch (cell.type) {
-            case 'radio':
-              if (cellValue) {
-                const selectedOptionId =
-                  typeof cellValue === 'object' && cellValue !== null && 'optionId' in cellValue
-                    ? (cellValue as { optionId: string }).optionId
-                    : typeof cellValue === 'string'
-                      ? cellValue
-                      : null;
-
-                if (selectedOptionId && cell.radioOptions) {
-                  const selectedOption = cell.radioOptions.find(
-                    (opt) => opt.id === selectedOptionId,
-                  );
-                  if (selectedOption) {
-                    selectedValue = selectedOption.value;
-                  }
-                }
-              }
-              break;
-
-            case 'select':
-              if (cellValue) {
-                const selectedOptionId =
-                  typeof cellValue === 'object' && cellValue !== null && 'optionId' in cellValue
-                    ? (cellValue as { optionId: string }).optionId
-                    : typeof cellValue === 'string'
-                      ? cellValue
-                      : null;
-
-                if (selectedOptionId && cell.selectOptions) {
-                  const selectedOption = cell.selectOptions.find(
-                    (opt) => opt.id === selectedOptionId,
-                  );
-                  if (selectedOption) {
-                    selectedValue = selectedOption.value;
-                  }
-                }
-              }
-              break;
-
-            case 'checkbox':
-              // 체크박스는 첫 번째 체크된 옵션의 값 사용
-              if (Array.isArray(cellValue) && cellValue.length > 0) {
-                const checkedOptionIds = cellValue
-                  .map((v) =>
-                    typeof v === 'object' && v !== null && 'optionId' in v
-                      ? (v as { optionId: string }).optionId
-                      : typeof v === 'string'
-                        ? v
-                        : null,
-                  )
-                  .filter((id): id is string => id !== null);
-
-                if (checkedOptionIds.length > 0 && cell.checkboxOptions) {
-                  const firstOption = cell.checkboxOptions.find(
-                    (opt) => opt.id === checkedOptionIds[0],
-                  );
-                  if (firstOption) {
-                    selectedValue = firstOption.value;
-                  }
-                }
-              }
-              break;
-
-            case 'input':
-              if (cellValue) {
-                selectedValue = String(cellValue).trim();
-              }
-              break;
-          }
-
-          // targetQuestionMap에서 해당 값으로 질문 ID 찾기
-          if (selectedValue && rule.targetQuestionMap[selectedValue]) {
-            targetQuestionId = rule.targetQuestionMap[selectedValue];
-            break;
-          }
+        // 행 순서대로 대표 선택값을 추출해 첫 매핑 히트로 분기.
+        // 셀 값 해석(checkbox 는 첫 체크 optionId, input 은 trim)은 table-cell-semantics 소유.
+        const candidateValues = collectSelectedValues(question.tableRowsData ?? [], tableResponse, {
+          rowIds: rowsToCheck,
+          columnIndex: rule.additionalConditions.cellColumnIndex,
+        });
+        const mappedValue = candidateValues.find((value) => rule.targetQuestionMap?.[value]);
+        if (mappedValue) {
+          targetQuestionId = rule.targetQuestionMap[mappedValue];
         }
       }
 
@@ -911,24 +477,7 @@ export function shouldDisplayGroup(
     return true; // 조건이 없으면 표시
   }
 
-  const { conditions, logicType } = group.displayCondition;
-
-  // 조건들을 평가 (enabled가 false인 조건은 제외)
-  const results = conditions
-    .filter((condition) => condition.enabled !== false)
-    .map((condition) => evaluateQuestionCondition(condition, allResponses, allQuestions, evalCtx));
-
-  // 논리 타입에 따라 결과 결합
-  switch (logicType) {
-    case 'AND':
-      return results.every((result) => result);
-    case 'OR':
-      return results.some((result) => result);
-    case 'NOT':
-      return !results.some((result) => result);
-    default:
-      return true;
-  }
+  return evaluateConditionGroup(group.displayCondition, allResponses, allQuestions, evalCtx);
 }
 
 /**
@@ -945,24 +494,7 @@ export function shouldDisplayRow(
   }
   const evalCtx = ctx ?? emptyBranchEvalCtx();
 
-  const { conditions, logicType } = row.displayCondition;
-
-  // 조건들을 평가 (enabled가 false인 조건은 제외)
-  const results = conditions
-    .filter((condition) => condition.enabled !== false)
-    .map((condition) => evaluateQuestionCondition(condition, allResponses, allQuestions, evalCtx));
-
-  // 논리 타입에 따라 결과 결합
-  switch (logicType) {
-    case 'AND':
-      return results.every((result) => result);
-    case 'OR':
-      return results.some((result) => result);
-    case 'NOT':
-      return !results.some((result) => result);
-    default:
-      return true;
-  }
+  return evaluateConditionGroup(row.displayCondition, allResponses, allQuestions, evalCtx);
 }
 
 /**
@@ -979,22 +511,7 @@ export function shouldDisplayColumn(
   }
   const evalCtx = ctx ?? emptyBranchEvalCtx();
 
-  const { conditions, logicType } = column.displayCondition;
-
-  const results = conditions
-    .filter((condition) => condition.enabled !== false)
-    .map((condition) => evaluateQuestionCondition(condition, allResponses, allQuestions, evalCtx));
-
-  switch (logicType) {
-    case 'AND':
-      return results.every((result) => result);
-    case 'OR':
-      return results.some((result) => result);
-    case 'NOT':
-      return !results.some((result) => result);
-    default:
-      return true;
-  }
+  return evaluateConditionGroup(column.displayCondition, allResponses, allQuestions, evalCtx);
 }
 
 /**
@@ -1011,22 +528,7 @@ export function shouldDisplayDynamicGroup(
   }
   const evalCtx = ctx ?? emptyBranchEvalCtx();
 
-  const { conditions, logicType } = group.displayCondition;
-
-  const results = conditions
-    .filter((condition) => condition.enabled !== false)
-    .map((condition) => evaluateQuestionCondition(condition, allResponses, allQuestions, evalCtx));
-
-  switch (logicType) {
-    case 'AND':
-      return results.every((result) => result);
-    case 'OR':
-      return results.some((result) => result);
-    case 'NOT':
-      return !results.some((result) => result);
-    default:
-      return true;
-  }
+  return evaluateConditionGroup(group.displayCondition, allResponses, allQuestions, evalCtx);
 }
 
 /**
@@ -1057,15 +559,27 @@ export function shouldDisplayQuestion(
     return true; // 조건이 없으면 표시
   }
 
-  const { conditions, logicType } = question.displayCondition;
+  return evaluateConditionGroup(question.displayCondition, allResponses, allQuestions, evalCtx);
+}
 
+/**
+ * 조건 그룹 결합 — enabled !== false 인 조건들의 평가 결과를 logicType 으로 조합.
+ * shouldDisplay{Group,Row,Column,DynamicGroup,Question} 5곳에 복제돼 있던 조합 로직의 단일 거처.
+ * (조건 그룹은 표시조건 어휘 — 셀 의미론(table-cell-semantics) 범위 밖이라 이 파일에 둔다.)
+ */
+function evaluateConditionGroup(
+  displayCondition: { conditions: QuestionCondition[]; logicType: ConditionLogicType },
+  allResponses: Record<string, unknown>,
+  allQuestions: Question[],
+  ctx: BranchEvalCtx,
+): boolean {
   // 조건들을 평가 (enabled가 false인 조건은 제외)
-  const results = conditions
+  const results = displayCondition.conditions
     .filter((condition) => condition.enabled !== false)
-    .map((condition) => evaluateQuestionCondition(condition, allResponses, allQuestions, evalCtx));
+    .map((condition) => evaluateQuestionCondition(condition, allResponses, allQuestions, ctx));
 
   // 논리 타입에 따라 결과 결합
-  switch (logicType) {
+  switch (displayCondition.logicType) {
     case 'AND':
       return results.every((result) => result);
     case 'OR':
@@ -1076,6 +590,7 @@ export function shouldDisplayQuestion(
       return true;
   }
 }
+
 
 // ─── Expression conditionType evaluators ────────────────────────────────────
 
@@ -1313,142 +828,18 @@ function evaluateQuestionCondition(
     return false;
   }
 
-  // 추가 조건 평가: 같은 행에서 메인 조건과 추가 조건을 모두 만족하는지 확인
-  // (메인 조건에서 체크된 행들 중에서, 같은 행에서 추가 조건도 만족하는 행이 있는지 확인)
-  let additionalConditionResult = false;
-
-  // 평가 행 집합을 순회. additionalConditions.rowIds 가 지정되면 그 제한된 부분집합만 본다.
+  // 추가 조건 평가: 같은 행에서 메인 조건과 추가 조건을 모두 만족하는지 확인.
   // (rowsToCheckForAdditional = rowIds 지정 시 그것, 아니면 rowsForAdditionalEval:
-  //  any/all 은 메인 통과 행, 'none' 은 메인 검사 대상 행.)
-  for (const rowId of rowsToCheckForAdditional) {
-    const row = sourceQuestion.tableRowsData.find((r) => r.id === rowId);
-    if (!row) continue;
-
-    const cell = row.cells[additionalColIndex];
-    if (!cell) continue;
-
-    const cellValue = tableResponse[cell.id];
-    if (!cellValue) continue;
-
-    // 셀 타입에 따라 체크 여부 확인
-    let isChecked = false;
-
-    switch (cell.type) {
-      case 'checkbox':
-        if (Array.isArray(cellValue) && cellValue.length > 0) {
-          if (
-            additionalConditions.expectedValues &&
-            additionalConditions.expectedValues.length > 0
-          ) {
-            const checkedOptionIds = cellValue
-              .map((v) =>
-                typeof v === 'object' && v !== null && 'optionId' in v
-                  ? (v as { optionId: string }).optionId
-                  : typeof v === 'string'
-                    ? v
-                    : null,
-              )
-              .filter((id): id is string => id !== null);
-
-            if (cell.checkboxOptions) {
-              const checkedValues = checkedOptionIds
-                .map((optionId) => {
-                  const option = cell.checkboxOptions?.find((opt) => opt.id === optionId);
-                  return option?.value;
-                })
-                .filter((v): v is string => v !== undefined);
-
-              if (checkedValues.some((v) => additionalConditions.expectedValues!.includes(v))) {
-                isChecked = true;
-              }
-            }
-          } else {
-            isChecked = true;
-          }
-        }
-        break;
-
-      case 'radio':
-        if (cellValue) {
-          if (
-            additionalConditions.expectedValues &&
-            additionalConditions.expectedValues.length > 0
-          ) {
-            const selectedOptionId =
-              typeof cellValue === 'object' && cellValue !== null && 'optionId' in cellValue
-                ? (cellValue as { optionId: string }).optionId
-                : typeof cellValue === 'string'
-                  ? cellValue
-                  : null;
-
-            if (selectedOptionId && cell.radioOptions) {
-              const selectedOption = cell.radioOptions.find((opt) => opt.id === selectedOptionId);
-              if (
-                selectedOption &&
-                additionalConditions.expectedValues.includes(selectedOption.value)
-              ) {
-                isChecked = true;
-              }
-            }
-          } else {
-            isChecked = true;
-          }
-        }
-        break;
-
-      case 'select':
-        if (cellValue) {
-          if (
-            additionalConditions.expectedValues &&
-            additionalConditions.expectedValues.length > 0
-          ) {
-            const selectedOptionId =
-              typeof cellValue === 'object' && cellValue !== null && 'optionId' in cellValue
-                ? (cellValue as { optionId: string }).optionId
-                : typeof cellValue === 'string'
-                  ? cellValue
-                  : null;
-
-            if (selectedOptionId && cell.selectOptions) {
-              const selectedOption = cell.selectOptions.find((opt) => opt.id === selectedOptionId);
-              if (selectedOption) {
-                isChecked = additionalConditions.expectedValues.includes(selectedOption.value);
-              }
-            }
-          } else {
-            isChecked = true;
-          }
-        }
-        break;
-
-      case 'input':
-        if (cellValue) {
-          const strValue = String(cellValue).trim();
-          if (strValue !== '') {
-            if (additionalConditions.numericComparison) {
-              isChecked = evaluateNumericComparisonV2(
-                additionalConditions.numericComparison,
-                strValue,
-                ctx,
-              ).satisfied;
-            } else if (
-              additionalConditions.expectedValues &&
-              additionalConditions.expectedValues.length > 0
-            ) {
-              isChecked = additionalConditions.expectedValues.includes(strValue);
-            } else {
-              isChecked = true;
-            }
-          }
-        }
-        break;
-    }
-
-    if (isChecked) {
-      additionalConditionResult = true;
-      break; // 하나라도 만족하면 됨 (any-of 타입이므로)
-    }
-  }
+  //  any/all 은 메인 통과 행, 'none' 은 메인 검사 대상 행. 셀 값 해석은 table-cell-semantics 소유.)
+  const additionalConditionResult = someRowMatches(sourceQuestion.tableRowsData, tableResponse, {
+    rowIds: rowsToCheckForAdditional,
+    columnIndex: additionalColIndex,
+    criteria: {
+      expectedValues: additionalConditions.expectedValues,
+      numericComparison: additionalConditions.numericComparison,
+      ctx,
+    },
+  });
 
   // 메인 조건 AND 추가 조건 (같은 행에서 두 조건을 모두 만족하는 행이 있어야 함)
   return mainConditionResult && additionalConditionResult;
@@ -1529,123 +920,14 @@ function checkTableCellCondition(
   const tableResponse = response as Record<string, unknown>;
   const { rowIds, cellColumnIndex, checkType, expectedValues, numericComparison } = tableConditions;
 
-  // 체크된 행들 수집
-  const checkedRows: string[] = [];
-
-  for (const row of question.tableRowsData) {
-    if (!rowIds.includes(row.id)) continue;
-
-    const cellsToCheck = cellColumnIndex !== undefined ? [row.cells[cellColumnIndex]] : row.cells;
-
-    for (const cell of cellsToCheck) {
-      if (!cell) continue;
-
-      // 평면 구조에서 셀 값 가져오기
-      const cellValue = tableResponse[cell.id];
-      if (!cellValue) continue;
-
-      // 셀 타입에 따라 체크 여부 확인
-      let isChecked = false;
-
-      if (cell.type === 'checkbox' && Array.isArray(cellValue) && cellValue.length > 0) {
-        if (expectedValues && expectedValues.length > 0) {
-          const checkedOptionIds = cellValue
-            .map((v) =>
-              typeof v === 'object' && v !== null && 'optionId' in v
-                ? (v as { optionId: string }).optionId
-                : typeof v === 'string'
-                  ? v
-                  : null,
-            )
-            .filter((id): id is string => id !== null);
-
-          if (cell.checkboxOptions) {
-            const checkedValues = checkedOptionIds
-              .map((optionId) => {
-                const option = cell.checkboxOptions?.find((opt) => opt.id === optionId);
-                return option?.value;
-              })
-              .filter((v): v is string => v !== undefined);
-
-            if (checkedValues.some((v) => expectedValues.includes(v))) {
-              isChecked = true;
-            }
-          }
-        } else {
-          isChecked = true;
-        }
-      } else if (cell.type === 'radio' && cellValue) {
-        if (expectedValues && expectedValues.length > 0) {
-          const selectedOptionId =
-            typeof cellValue === 'object' && cellValue !== null && 'optionId' in cellValue
-              ? (cellValue as { optionId: string }).optionId
-              : typeof cellValue === 'string'
-                ? cellValue
-                : null;
-
-          if (selectedOptionId && cell.radioOptions) {
-            const selectedOption = cell.radioOptions.find((opt) => opt.id === selectedOptionId);
-            if (selectedOption && expectedValues.includes(selectedOption.value)) {
-              isChecked = true;
-            }
-          }
-        } else {
-          isChecked = true;
-        }
-      } else if (cell.type === 'select' && cellValue) {
-        if (expectedValues && expectedValues.length > 0) {
-          const selectedOptionId =
-            typeof cellValue === 'object' && cellValue !== null && 'optionId' in cellValue
-              ? (cellValue as { optionId: string }).optionId
-              : typeof cellValue === 'string'
-                ? cellValue
-                : null;
-
-          if (selectedOptionId && cell.selectOptions) {
-            const selectedOption = cell.selectOptions.find((opt) => opt.id === selectedOptionId);
-            if (selectedOption) {
-              isChecked = expectedValues.includes(selectedOption.value);
-            }
-          }
-        } else {
-          isChecked = true;
-        }
-      } else if (
-        cell.type === 'input' &&
-        typeof cellValue === 'string' &&
-        cellValue.trim() !== ''
-      ) {
-        if (numericComparison) {
-          isChecked = evaluateNumericComparisonV2(numericComparison, cellValue, ctx).satisfied;
-        } else if (expectedValues && expectedValues.length > 0) {
-          isChecked = expectedValues.includes(cellValue.trim());
-        } else {
-          isChecked = true;
-        }
-      }
-
-      if (isChecked && !checkedRows.includes(row.id)) {
-        checkedRows.push(row.id);
-        break;
-      }
-    }
-  }
+  // 체크된 행 수집 — 셀 값 해석은 table-cell-semantics 소유.
+  // (표시조건 경로는 비인터랙티브 폴백 없음 — 검증 규칙 경로와의 현행 비대칭 보존.)
+  const checkedRows = collectMatchedRows(question.tableRowsData, tableResponse, {
+    rowIds,
+    columnIndex: cellColumnIndex,
+    criteria: { expectedValues, numericComparison, ctx },
+  });
 
   // checkType에 따라 조건 확인
-  let satisfied: boolean;
-  switch (checkType) {
-    case 'any':
-      satisfied = checkedRows.length > 0;
-      break;
-    case 'all':
-      satisfied = rowIds.every((id) => checkedRows.includes(id));
-      break;
-    case 'none':
-      satisfied = checkedRows.length === 0;
-      break;
-    default:
-      satisfied = false;
-  }
-
-  return { satisfied, checkedRows };
+  return { satisfied: quantifyRows(checkedRows, rowIds, checkType), checkedRows };
 }
