@@ -9,7 +9,9 @@ import { useTestResponseStore } from '@/stores/test-response-store';
  * 현행 동작 고정.
  *
  * 두 모드의 쓰기 의식("최신 응답 읽기 → 패치 병합 → 커밋")이 이 훅과
- * use-dynamic-row-state 에 복제돼 있다. 추출 후에도 이 스위트는 무수정 green 이어야 한다.
+ * use-dynamic-row-state 에 복제돼 있던 것을 use-question-response-writer 로 추출했다.
+ * 런타임 단언 11건은 추출 전후 무수정 green (예외: 86행 initialProps 타입 캐스트 1줄 —
+ * 테스트 추가 커밋의 pre-existing tsc 에러 수정, 행위 무관).
  */
 
 beforeEach(() => {
