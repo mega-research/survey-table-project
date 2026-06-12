@@ -27,3 +27,16 @@ _Avoid_: 체크됨(checkbox 한정 어감), 입력됨
 
 **branch-eval**:
 분기 평가의 leaf 의존 — `BranchEvalCtx`, `emptyBranchEvalCtx`, `evaluateNumericComparisonV2`. 셀 의미론과 branch-logic이 모두 의존하는 순환 없는 최하층(`src/utils/branch-eval.ts`).
+
+### 동적 행과 응답 쓰기
+
+**동적 행 파이프라인 (dynamic-row pipeline)**:
+동적 행 기능의 단일 진입점 — 선택 상태 → 가시 행 필터링(동적 그룹 제외 + rowspan 재계산) → 셀렉터 배치·grid 좌표 → 행 완료 맵까지의 호출 순서와 배선. `src/hooks/use-dynamic-rows.ts`(facade)가 소유하고, 내부 두 훅(use-dynamic-row-state, use-dynamic-row-layout)은 implementation이다. displayCondition 평가는 호출자 소유로 결과만 주입받는다.
+_Avoid_: 레이아웃 훅 무리, 동적 행 로직
+
+**질문 응답 쓰기 채널 (question response writer)**:
+"최신 응답 읽기 → 패치 병합 → 커밋" 의식의 단일 거처(`src/hooks/use-question-response-writer.ts`). 테스트 모드(test-response-store)와 실응답 모드(value/onChange)라는 두 adapter가 이 seam을 만족한다. 새 응답 쓰기 지점은 isTestMode 분기를 만들지 말고 이 채널을 경유한다.
+_Avoid_: 모드 분기, isTestMode 스위치
+
+**SurveyDiffPayload 조립 (diff-payload)**:
+changeset snapshot + 현재 설문 상태 → 저장 payload 변환 규칙(`src/lib/survey-builder/diff-payload.ts`, 순수 함수). dirtyIds = added∪updated 필터, 메타데이터 조건부 필드, reordered 전체 id 순서를 소유한다. use-survey-sync는 저장 오케스트레이션만 담당한다.
