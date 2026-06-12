@@ -1,7 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 
-import { useShallow } from 'zustand/react/shallow';
-
+import { useQuestionResponseWriter } from '@/hooks/use-question-response-writer';
 import { useTestResponseStore } from '@/stores/test-response-store';
 import type { DynamicRowGroupConfig, TableRow } from '@/types/survey';
 
@@ -36,12 +35,7 @@ export function useDynamicRowState({
   value,
   onChange,
 }: UseDynamicRowStateParams): UseDynamicRowStateReturn {
-  const { testQuestionResponse, updateTestResponse } = useTestResponseStore(
-    useShallow((s) => ({
-      testQuestionResponse: s.testResponses[questionId],
-      updateTestResponse: s.updateTestResponse,
-    })),
-  );
+  const testQuestionResponse = useTestResponseStore((s) => s.testResponses[questionId]);
 
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
   const [expandedGroupIds, setExpandedGroupIds] = useState<Set<string>>(new Set());
@@ -85,8 +79,9 @@ export function useDynamicRowState({
   dynamicRowsRef.current = dynamicRows;
   const selectedRowIdsRef = useRef(selectedRowIds);
   selectedRowIdsRef.current = selectedRowIds;
-  const valueRef = useRef(value);
-  valueRef.current = value;
+
+  // 모드별 병합·커밋 의식은 질문 응답 쓰기 채널이 소유
+  const mergePatch = useQuestionResponseWriter({ questionId, isTestMode, value, onChange });
 
   const handleDynamicRowSelect = useCallback(
     (rowIdsFromModal: string[]) => {
@@ -99,22 +94,7 @@ export function useDynamicRowState({
       const otherSelections = currentSelectedRowIds.filter((id) => !thisGroupRowIds.has(id));
       const merged = [...new Set([...otherSelections, ...rowIdsFromModal])];
 
-      if (isTestMode) {
-        const currentState = useTestResponseStore.getState();
-        const latestResponse =
-          typeof currentState.testResponses[questionId] === 'object'
-            ? currentState.testResponses[questionId]
-            : {};
-        updateTestResponse(questionId, {
-          ...(latestResponse as Record<string, any>),
-          __selectedRowIds: merged,
-        });
-      } else if (onChange) {
-        onChange({
-          ...((valueRef.current || {}) as Record<string, any>),
-          __selectedRowIds: merged,
-        });
-      }
+      mergePatch({ __selectedRowIds: merged });
 
       // 모달에서 행을 선택했으면 해당 그룹 자동 펼침
       if (activeGroupId && rowIdsFromModal.length > 0) {
@@ -126,7 +106,7 @@ export function useDynamicRowState({
         });
       }
     },
-    [isTestMode, questionId, updateTestResponse, onChange, activeGroupId],
+    [mergePatch, activeGroupId],
   );
 
   const handleSelectGroup = useCallback((groupId: string) => {
