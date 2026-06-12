@@ -5,8 +5,7 @@ import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { ChevronDown, ChevronRight, FileText, ListChecks } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { useDynamicRowLayout } from '@/hooks/use-dynamic-row-layout';
-import { useDynamicRowState } from '@/hooks/use-dynamic-row-state';
+import { useDynamicRows } from '@/hooks/use-dynamic-rows';
 import { useElementWidth } from '@/hooks/use-element-width';
 import { useHorizontalScrollIndicators } from '@/hooks/use-horizontal-scroll-indicators';
 import { useMobileView } from '@/hooks/use-media-query';
@@ -40,11 +39,7 @@ import {
   getGridCellAria,
   getHeaderCellStickyStyle,
 } from '@/utils/table-grid-utils';
-import {
-  recalculateColspansForVisibleColumns,
-  recalculateRowspansForVisibleRows,
-} from '@/utils/table-merge-helpers';
-import { isTableRowCompleted } from '@/utils/table-row-completion';
+import { recalculateColspansForVisibleColumns } from '@/utils/table-merge-helpers';
 
 import { InteractiveCell } from './cells';
 import { DynamicRowSelectorModal } from './dynamic-row-selector-modal';
@@ -388,28 +383,6 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     [onChange, isTestMode],
   );
 
-  // 1) 동적 행 상태 — store 구독, 상태, 핸들러
-  const {
-    currentResponse,
-    groupConfigMap,
-    dynamicRows,
-    hasDynamicRows,
-    selectedRowIds,
-    activeGroupId,
-    handleSelectGroup,
-    handleDynamicRowSelect,
-    closeModal,
-    expandedGroupIds,
-    toggleGroupExpanded,
-  } = useDynamicRowState({
-    questionId,
-    rows,
-    dynamicRowConfigs,
-    isTestMode,
-    value,
-    onChange: mergedOnChange,
-  });
-
   const tableContainerRef = useRef<HTMLDivElement>(null);
   const headerScrollRef = useRef<HTMLDivElement>(null);
   useTablePerf(`InteractiveTable(${rows.length}×${columns.length})`);
@@ -479,54 +452,22 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [columns, rows, tableHeaderGrid, relevantResponsesJson, allQuestions]);
 
-  // displayCondition 기반 가시 행 필터링 + 동적 행 필터링 + rowspan 재계산
-  const visibleRows = useMemo(() => {
-    if (columnFilteredRows.length === 0) return columnFilteredRows;
-    let filtered = columnFilteredRows;
-
-    if (allResponses && allQuestions) {
-      const hasConditions = filtered.some((row) => row.displayCondition);
-      if (hasConditions) {
-        const conditionVisibleIds = new Set<string>();
-        for (const row of filtered) {
-          if (shouldDisplayRow(row, allResponses, allQuestions)) {
-            conditionVisibleIds.add(row.id);
-          }
-        }
-        filtered = filtered.filter((row) => conditionVisibleIds.has(row.id));
+  // 행 displayCondition 평가 결과 — null 이면 조건 필터 없음.
+  // 동적 행 필터링·rowspan 재계산은 useDynamicRows(동적 행 파이프라인)가 소유하고,
+  // branch-logic 의존인 조건 평가만 여기(호출자) 소유로 남긴다.
+  const conditionVisibleRowIds = useMemo(() => {
+    if (!allResponses || !allQuestions) return null;
+    const hasConditions = columnFilteredRows.some((row) => row.displayCondition);
+    if (!hasConditions) return null;
+    const ids = new Set<string>();
+    for (const row of columnFilteredRows) {
+      if (shouldDisplayRow(row, allResponses, allQuestions)) {
+        ids.add(row.id);
       }
     }
-
-    if (hasDynamicRows) {
-      // 동적 그룹 소속 행은 메인 그리드에서 제외 (아코디언에서 렌더)
-      filtered = filtered.filter((row) => {
-        if (row.dynamicGroupId && groupConfigMap.has(row.dynamicGroupId)) {
-          return false;
-        }
-        if (row.showWhenDynamicGroupId && groupConfigMap.has(row.showWhenDynamicGroupId)) {
-          return false;
-        }
-        return true;
-      });
-    }
-
-    const visibleRowIds = new Set(filtered.map((r) => r.id));
-    return recalculateRowspansForVisibleRows(columnFilteredRows, visibleRowIds);
+    return ids;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    columnFilteredRows,
-    relevantResponsesJson,
-    allQuestions,
-    hasDynamicRows,
-    selectedRowIds,
-    groupConfigMap,
-  ]);
-
-  // 가로 스크롤 인디케이터 (좌/우 섀도우·버튼 표시 여부)
-  const { canScrollLeft, canScrollRight } = useHorizontalScrollIndicators(tableContainerRef, {
-    disabled: isMobileView,
-    deps: [visibleColumns.length, visibleRows.length],
-  });
+  }, [columnFilteredRows, relevantResponsesJson, allQuestions]);
 
   // 헤더-바디 scrollLeft 상호 동기화 (각각 별도 가로 스크롤 컨테이너)
   // 헤더는 hideColumnLabels=false 일 때만 마운트되므로, 토글 시 리스너 재부착이
@@ -560,32 +501,43 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     return hidden.size > 0 ? hidden : undefined;
   }, [dynamicRowConfigs, allResponses, allQuestions]);
 
-  // 3) 동적 행 레이아웃 — displayRows, gridMap
-  const { displayRows, rowGridMap, selectorGridMap, groupSelectedCountMap, expandedGroupRows } =
-    useDynamicRowLayout({
-      rows,
-      columnFilteredRows,
-      visibleRows,
-      groupConfigMap,
-      selectedRowIds,
-      hasDynamicRows,
-      headerRowCount,
-      expandedGroupIds,
-      hiddenGroupIds,
-    });
+  // 동적 행 파이프라인 — 상태 → 가시 행 필터링 → 레이아웃 → 행 완료 맵을 한 seam 뒤로
+  const {
+    displayRows,
+    rowGridMap,
+    selectorGridMap,
+    groupSelectedCountMap,
+    expandedGroupRows,
+    rowCompletionMap,
+    currentResponse,
+    groupConfigMap,
+    dynamicRows,
+    hasDynamicRows,
+    selectedRowIds,
+    activeGroupId,
+    handleSelectGroup,
+    handleDynamicRowSelect,
+    closeModal,
+    expandedGroupIds,
+    toggleGroupExpanded,
+  } = useDynamicRows({
+    questionId,
+    rows,
+    columnFilteredRows,
+    conditionVisibleRowIds,
+    hiddenGroupIds,
+    dynamicRowConfigs,
+    isTestMode,
+    value,
+    onChange: mergedOnChange,
+    headerRowCount,
+  });
 
-  // 행별 완료 상태 맵 (displayRows + 펼친 그룹 행 포함)
-  const rowCompletionMap = useMemo(() => {
-    const map = new Map<string, boolean>();
-    const checkRow = (row: TableRow) => {
-      map.set(row.id, isTableRowCompleted(row, currentResponse));
-    };
-    for (const row of displayRows) checkRow(row);
-    for (const groupRows of expandedGroupRows.values()) {
-      for (const row of groupRows) checkRow(row);
-    }
-    return map;
-  }, [displayRows, expandedGroupRows, currentResponse]);
+  // 가로 스크롤 인디케이터 (좌/우 섀도우·버튼 표시 여부)
+  const { canScrollLeft, canScrollRight } = useHorizontalScrollIndicators(tableContainerRef, {
+    disabled: isMobileView,
+    deps: [visibleColumns.length, displayRows.length],
+  });
 
   // 스크롤 뷰포트(가로 스크롤 컨테이너) 실측 폭 — sticky 열이 화면을 다 가리지 않도록
   // 누적 sticky 너비 상한 계산에 사용. 모바일/비활성 시 측정 생략(0).
