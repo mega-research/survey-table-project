@@ -5,6 +5,12 @@ import * as Sentry from '@sentry/nextjs';
 import sharp from 'sharp';
 
 import { getCurrentUser } from '@/lib/auth';
+import {
+  imageKindToExt,
+  sanitizeImageExt,
+  svgBodyHasScript,
+} from '@/lib/upload/image-policy';
+import { getFileExt, validateFilename } from '@/lib/upload/attachment-policy';
 
 /**
  * 파일 첫 16바이트로 실제 이미지 형식을 감지 (defense in depth).
@@ -121,6 +127,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '파일 크기는 10MB 이하여야 합니다.' }, { status: 400 });
     }
 
+    // 파일명 위생 검증 — mail/notice 첨부 라우트와 대칭 (path traversal·특수문자 차단)
+    const filenameError = validateFilename(file.name);
+    if (filenameError) {
+      return NextResponse.json({ error: filenameError }, { status: 400 });
+    }
+
     // 환경 변수 확인
     const bucketName = process.env['CLOUDFLARE_R2_BUCKET'];
     const publicUrl = process.env['CLOUDFLARE_R2_PUBLIC_URL'];
@@ -149,10 +161,10 @@ export async function POST(request: NextRequest) {
     let contentType = file.type;
     let fileExtension: string;
 
-    // SVG 본문 가드: <script>, on*= 이벤트 핸들러, javascript: URL 등 차단
-    if (file.type === 'image/svg+xml') {
-      const svgText = buffer.toString('utf8', 0, Math.min(buffer.length, 256 * 1024));
-      if (/<script|on\w+\s*=|javascript:/i.test(svgText)) {
+    // SVG 본문 가드: <script>, on*= 이벤트 핸들러, javascript: URL 등 차단.
+    // 앞 256KB 만 검사하면 SVG 최대 10MB 의 뒷부분에 숨긴 스크립트를 놓치므로 전체 본문을 검사한다.
+    if (detectedKind === 'image/svg+xml') {
+      if (svgBodyHasScript(buffer)) {
         return NextResponse.json(
           { error: 'SVG 파일에 허용되지 않는 요소가 포함되어 있습니다.' },
           { status: 400 },
@@ -184,12 +196,13 @@ export async function POST(request: NextRequest) {
           tags: { operation: 'image_conversion', kind },
           level: 'warning',
         });
-        // 변환 실패 시 원본 저장
-        fileExtension = file.name.split('.').pop() || 'jpg';
+        // 변환 실패 시 원본 저장 — 감지된 형식 우선, 폴백은 파일명 확장자 sanitize
+        fileExtension = imageKindToExt(detectedKind) ?? sanitizeImageExt(getFileExt(file.name));
       }
     } else {
-      // 변환 대상 아님 (mail: GIF/SVG / survey: GIF/SVG/WebP/PNG) — 원본 유지
-      fileExtension = file.name.split('.').pop() || 'jpg';
+      // 변환 대상 아님 (mail: GIF/SVG / survey: GIF/SVG/WebP/PNG) — 원본 유지.
+      // 감지된 형식으로 확장자 결정 (파일명 의존 제거), 폴백은 파일명 확장자 sanitize
+      fileExtension = imageKindToExt(detectedKind) ?? sanitizeImageExt(getFileExt(file.name));
     }
 
     // 파일 이름 생성 (타임스탬프 + 랜덤 문자열)
@@ -197,12 +210,15 @@ export async function POST(request: NextRequest) {
     const randomString = Math.random().toString(36).substring(2, 15);
     const fileName = `tmp/${kind}/${timestamp}-${randomString}.${fileExtension}`;
 
-    // R2에 업로드
+    // R2에 업로드.
+    // SVG 는 본문 가드를 통과했더라도 인라인 렌더 시 스크립트 실행 위험이 남으므로
+    // attachment disposition 으로 강제 다운로드시켜 inline 실행을 차단한다 (defense in depth).
     const command = new PutObjectCommand({
       Bucket: bucketName,
       Key: fileName,
       Body: buffer,
       ContentType: contentType,
+      ...(contentType === 'image/svg+xml' ? { ContentDisposition: 'attachment' } : {}),
     });
 
     await r2Client.send(command);
