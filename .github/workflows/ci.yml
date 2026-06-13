@@ -22,6 +22,18 @@ jobs:
       # pnpm 8 의 audit 은 package.json auditConfig.ignoreGhsas 를 적용하지 않으므로
       # json 출력을 직접 필터링한다. allowlist 에 없는 high/critical 이 1건이라도
       # 남으면 게이트가 실패한다.
+      #
+      # audit 의 exit 1 은 두 가지를 모두 의미한다: (a) 취약점 발견(예상된 실패)과
+      # (b) 레지스트리 도달 실패(ECONNREFUSED/타임아웃/rate limit 등 비정상 실패).
+      # `|| true` 로 (a) 를 흡수하되, (b) 의 error JSON 을 정상 보고서로 오인해
+      # vacuous PASS 가 되지 않도록 평가는 .github/audit-gate.ts 로 위임한다. 이
+      # 평가기는 보고서에 error 키가 있거나 advisories·metadata.vulnerabilities 가
+      # 빠져 있으면 fail-closed(exit 1) 한다(tests/unit/ci/audit-gate.test.ts 로 검증).
+      #
+      # 참고(설계 부수효과): protobufjs 7.x 라인 보존(@grpc/proto-loader 경유)으로
+      # GHSA-jggg-4jg4-v7c6 moderate 1건이 7.5.7 에 잔존한다. moderate 라
+      # --audit-level=high 게이트에 걸리지 않으며, 상위가 protobufjs 7.5.8+/8.x 로
+      # 올라오면 해소된다.
       - name: 공급망 보안 감사 게이트
         env:
           # 잔존 unfixable transitive high 취약점 allowlist (패키지 / 경유 상위 의존성)
@@ -41,27 +53,7 @@ jobs:
             GHSA-v2wj-q39q-566r GHSA-v39h-62p7-jpjc
         run: |
           pnpm audit --audit-level=high --json > audit-report.json || true
-          node -e '
-            const fs = require("fs");
-            const allow = new Set((process.env.AUDIT_ALLOWLIST || "").split(/\s+/).filter(Boolean));
-            const data = JSON.parse(fs.readFileSync("audit-report.json", "utf8"));
-            const advs = Object.values(data.advisories || {});
-            const blocking = advs
-              .filter((a) => ["high", "critical"].includes(a.severity))
-              .map((a) => ({
-                id: a.github_advisory_id || (a.url || "").split("/").pop(),
-                pkg: a.module_name,
-                sev: a.severity,
-              }))
-              .filter((a) => !allow.has(a.id));
-            if (blocking.length > 0) {
-              console.error("Allowlist 에 없는 high/critical 취약점이 발견되었습니다:");
-              for (const b of blocking) console.error(`  ${b.sev} ${b.pkg} ${b.id}`);
-              console.error("의존성을 패치하거나, unfixable transitive 라면 사유와 함께 allowlist 에 추가하세요.");
-              process.exit(1);
-            }
-            console.log("감사 게이트 통과: allowlist 외 high/critical 취약점 없음.");
-          '
+          pnpm exec tsx .github/audit-gate.ts audit-report.json
       - run: pnpm lint
       - run: pnpm exec tsc --noEmit
       - run: pnpm test
