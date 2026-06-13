@@ -43,6 +43,214 @@ describe('sanitizeRichHtml', () => {
   });
 });
 
+describe('CSS 인젝션 차단 — RICH_CONFIG allowedStyles', () => {
+  it('position:fixed 제거', () => {
+    const input = '<p style="position:fixed;top:0;left:0">x</p>';
+    const out = sanitizeRichHtml(input);
+    expect(out).not.toContain('position');
+    expect(out).not.toContain('fixed');
+  });
+
+  it('position:absolute 제거', () => {
+    const input = '<p style="position:absolute">x</p>';
+    const out = sanitizeRichHtml(input);
+    expect(out).not.toContain('position');
+    expect(out).not.toContain('absolute');
+  });
+
+  it('background:url(http://evil) 제거', () => {
+    const input = '<p style="background:url(http://evil.test/x.png)">x</p>';
+    const out = sanitizeRichHtml(input);
+    expect(out).not.toContain('url(');
+    expect(out).not.toContain('evil');
+  });
+
+  it('background-image:url(...) 제거', () => {
+    const input = '<p style="background-image:url(http://evil.test/x.png)">x</p>';
+    const out = sanitizeRichHtml(input);
+    expect(out).not.toContain('url(');
+    expect(out).not.toContain('evil');
+  });
+
+  it('expression(...) 제거', () => {
+    const input = '<p style="width:expression(alert(1))">x</p>';
+    const out = sanitizeRichHtml(input);
+    expect(out).not.toContain('expression');
+  });
+
+  it('behavior 제거', () => {
+    const input = '<p style="behavior:url(#default#time2)">x</p>';
+    const out = sanitizeRichHtml(input);
+    expect(out).not.toContain('behavior');
+  });
+
+  it('-moz-binding 제거', () => {
+    const input = '<p style="-moz-binding:url(http://evil.test/xbl.xml#x)">x</p>';
+    const out = sanitizeRichHtml(input);
+    expect(out).not.toContain('binding');
+    expect(out).not.toContain('evil');
+  });
+});
+
+describe('CSS 인젝션 차단 — 안전 속성 보존', () => {
+  it('text-align:center 보존 (TipTap 정렬)', () => {
+    const input = '<p style="text-align:center">x</p>';
+    const out = sanitizeRichHtml(input);
+    expect(out).toContain('text-align');
+    expect(out).toContain('center');
+  });
+
+  it('color:#hex 보존 (TipTap 색상)', () => {
+    const input = '<span style="color:#ff0000">x</span>';
+    const out = sanitizeRichHtml(input);
+    expect(out).toContain('color');
+    expect(out).toContain('#ff0000');
+  });
+
+  it('background-color:#hex 보존', () => {
+    const input = '<span style="background-color:#fef08a">x</span>';
+    const out = sanitizeRichHtml(input);
+    expect(out).toContain('background-color');
+    expect(out).toContain('#fef08a');
+  });
+
+  it('color rgb() 보존', () => {
+    const input = '<span style="color:rgb(255, 0, 0)">x</span>';
+    const out = sanitizeRichHtml(input);
+    expect(out).toContain('color');
+    expect(out).toContain('rgb(255, 0, 0)');
+  });
+
+  it('font-size / font-weight / font-style / text-decoration 보존', () => {
+    const input =
+      '<span style="font-size:16px;font-weight:700;font-style:italic;text-decoration:underline">x</span>';
+    const out = sanitizeRichHtml(input);
+    expect(out).toContain('font-size');
+    expect(out).toContain('16px');
+    expect(out).toContain('font-weight');
+    expect(out).toContain('700');
+    expect(out).toContain('font-style');
+    expect(out).toContain('italic');
+    expect(out).toContain('text-decoration');
+    expect(out).toContain('underline');
+  });
+
+  it('padding / margin / width 보존', () => {
+    const input = '<td style="padding:8px;margin:4px;width:120px">x</td>';
+    const out = sanitizeRichHtml(`<table><tr>${input}</tr></table>`);
+    expect(out).toContain('padding');
+    expect(out).toContain('margin');
+    expect(out).toContain('width');
+  });
+});
+
+describe('CSS 인젝션 차단 — 우회 시도', () => {
+  it('대소문자 우회 (POSITION:FIXED) 차단', () => {
+    const input = '<p style="POSITION:FIXED">x</p>';
+    const out = sanitizeRichHtml(input);
+    expect(out.toLowerCase()).not.toContain('position');
+    expect(out.toLowerCase()).not.toContain('fixed');
+  });
+
+  it('여분 공백 우회 (position :  fixed) 차단', () => {
+    const input = '<p style="position  :   fixed">x</p>';
+    const out = sanitizeRichHtml(input);
+    expect(out.toLowerCase()).not.toContain('position');
+    expect(out.toLowerCase()).not.toContain('fixed');
+  });
+
+  it('!important 가 붙은 위험 속성 차단', () => {
+    const input = '<p style="position:fixed !important">x</p>';
+    const out = sanitizeRichHtml(input);
+    expect(out.toLowerCase()).not.toContain('position');
+  });
+
+  it('CSS 주석 우회 차단', () => {
+    const input = '<p style="width:expr/**/ession(alert(1))">x</p>';
+    const out = sanitizeRichHtml(input);
+    expect(out.toLowerCase()).not.toContain('expression');
+  });
+
+  it('url 대소문자 우회 (URL(...)) 차단', () => {
+    const input = '<p style="background:URL(http://evil.test/x.png)">x</p>';
+    const out = sanitizeRichHtml(input);
+    expect(out.toLowerCase()).not.toContain('url(');
+    expect(out.toLowerCase()).not.toContain('evil');
+  });
+
+  it('위험 속성만 제거하고 같은 style 내 안전 속성은 보존', () => {
+    const input = '<p style="text-align:center;position:fixed">x</p>';
+    const out = sanitizeRichHtml(input);
+    expect(out).toContain('text-align');
+    expect(out).toContain('center');
+    expect(out.toLowerCase()).not.toContain('position');
+    expect(out.toLowerCase()).not.toContain('fixed');
+  });
+
+  it('사용자 입력 background:url(http) 는 차단되지만 data:image/svg+xml 패턴은 아님', () => {
+    const input = '<p style="background:url(http://evil.test/x.png)">x</p>';
+    const out = sanitizeRichHtml(input);
+    expect(out.toLowerCase()).not.toContain('http://evil');
+  });
+});
+
+describe('CSS 인젝션 차단 — transformTags 주입 장식 스타일 보존(회귀 방지)', () => {
+  it('표 border-collapse / border 가 보존됨', () => {
+    const out = sanitizeRichHtml('<table><tbody><tr><td>a</td></tr></tbody></table>');
+    expect(out).toContain('border-collapse');
+    expect(out).toContain('border:1px solid #d1d5db');
+  });
+
+  it('메일 첨부 박스의 paperclip data:image/svg+xml 배경이 보존됨', () => {
+    const out = sanitizeRichHtml(
+      '<a data-file-attachment="true" href="https://cdn.test/x.pdf">file</a>',
+    );
+    expect(out).toContain('data:image/svg+xml');
+    expect(out).toContain('display:inline-block');
+    expect(out).toContain('border-radius');
+  });
+
+  it('첨부 라벨 span 의 display:block 이 보존됨', () => {
+    const out = sanitizeRichHtml(
+      '<span class="notice-file-attachment-label">label</span>',
+    );
+    expect(out).toContain('display:block');
+  });
+});
+
+describe('CSS 인젝션 차단 — TipTap 직렬화 스타일 보존(회귀 방지)', () => {
+  it('표 가운데 정렬 margin:0 auto 보존', () => {
+    const out = sanitizeRichHtml(
+      '<table style="margin: 0 auto"><tbody><tr><td>a</td></tr></tbody></table>',
+    );
+    expect(out).toContain('margin:0 auto');
+  });
+
+  it('표 오른쪽 정렬 margin:0 0 0 auto 보존', () => {
+    const out = sanitizeRichHtml(
+      '<table style="margin: 0 0 0 auto"><tbody><tr><td>a</td></tr></tbody></table>',
+    );
+    expect(out).toContain('margin:0 0 0 auto');
+  });
+
+  it('이미지 wrapper 스타일 box-sizing / max-width 보존', () => {
+    const out = sanitizeRichHtml(
+      '<img src="https://x.test/a.png" style="display: inline-block; vertical-align: top; box-sizing: border-box; width: 50%; height: auto; max-width: 100%;" alt="a">',
+    );
+    expect(out).toContain('box-sizing:border-box');
+    expect(out).toContain('max-width:100%');
+    expect(out).toContain('width:50%');
+  });
+
+  it('셀 세로정렬 vertical-align / 배경색 보존', () => {
+    const out = sanitizeRichHtml(
+      '<table><tbody><tr><td style="vertical-align: middle; background-color: #ff0000">a</td></tr></tbody></table>',
+    );
+    expect(out).toContain('vertical-align:middle');
+    expect(out).toContain('background-color:#ff0000');
+  });
+});
+
 describe('파일 첨부 노드 — sanitize allowlist', () => {
   it('a[data-file-attachment] 의 6개 attribute 모두 통과', () => {
     const input =

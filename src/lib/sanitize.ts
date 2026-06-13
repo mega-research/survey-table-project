@@ -82,9 +82,69 @@ const RICH_CONFIG: sanitizeHtml.IOptions = {
   },
   allowedSchemes: ['http', 'https', 'mailto', 'tel'],
   allowedSchemesAppliedToAttributes: ['href', 'src'],
-  // TipTap inline style (text-align, image wrapperStyle 의 width/height/float 등) 을 raw 보존.
-  // DOMPurify 기본 동작과 동등 — style 값을 파싱·필터링하지 않고 그대로 통과.
-  parseStyleAttributes: false,
+  // CSS 인젝션(WS-1 #14) 차단: style 값을 파싱해 화이트리스트 속성만 통과시킨다.
+  // sanitize-html 의 CSS 파서(node 전용)가 속성명을 소문자화·정규화하므로
+  // 대소문자/여분 공백/주석 우회는 파서 단에서 흡수되고, 화이트리스트에 없는
+  // position/behavior/-moz-binding 등 위험 속성은 매칭 실패로 제거된다.
+  // 각 속성 값은 정규식으로 제한해 url(/expression(/!important 같은 우회 토큰을 차단.
+  parseStyleAttributes: true,
+  allowedStyles: {
+    '*': {
+      // 텍스트 정렬 (TipTap TextAlign)
+      'text-align': [/^(left|right|center|justify|start|end)$/i],
+      // 색상 (TipTap Color/Highlight) — hex / rgb / rgba / 색상 키워드. url()·function 차단.
+      color: [/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i, /^rgba?\([\d.,\s%]+\)$/i, /^[a-z]+$/i],
+      'background-color': [
+        /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i,
+        /^rgba?\([\d.,\s%]+\)$/i,
+        /^[a-z]+$/i,
+      ],
+      // 폰트 — 키워드/숫자 단위만. expression() 등 function 차단.
+      'font-size': [/^\d+(?:\.\d+)?(?:px|pt|em|rem|%)$/i, /^(small|medium|large|smaller|larger)$/i],
+      'font-weight': [/^(normal|bold|bolder|lighter|\d{3})$/i],
+      'font-style': [/^(normal|italic|oblique)$/i],
+      'text-decoration': [/^(none|underline|overline|line-through)(?:\s+(none|underline|overline|line-through))*$/i],
+      'font-family': [/^[a-z0-9\s,'"_-]+$/i],
+      'line-height': [/^\d+(?:\.\d+)?(?:px|pt|em|rem|%)?$/i],
+      // 박스 모델 — 숫자 단위만 (음수 허용). url()/function 차단.
+      padding: [/^-?\d+(?:\.\d+)?(?:px|pt|em|rem|%)?(?:\s+-?\d+(?:\.\d+)?(?:px|pt|em|rem|%)?){0,3}$/i],
+      'padding-top': [/^-?\d+(?:\.\d+)?(?:px|pt|em|rem|%)?$/i],
+      'padding-right': [/^-?\d+(?:\.\d+)?(?:px|pt|em|rem|%)?$/i],
+      'padding-bottom': [/^-?\d+(?:\.\d+)?(?:px|pt|em|rem|%)?$/i],
+      'padding-left': [/^-?\d+(?:\.\d+)?(?:px|pt|em|rem|%)?$/i],
+      // margin 단축속성: 각 토큰은 길이 또는 auto (TipTap 표 정렬 "0 auto" 등). 1~4개.
+      margin: [/^(?:-?\d+(?:\.\d+)?(?:px|pt|em|rem|%)?|auto)(?:\s+(?:-?\d+(?:\.\d+)?(?:px|pt|em|rem|%)?|auto)){0,3}$/i],
+      'margin-top': [/^-?\d+(?:\.\d+)?(?:px|pt|em|rem|%)?$/i, /^auto$/i],
+      'margin-right': [/^-?\d+(?:\.\d+)?(?:px|pt|em|rem|%)?$/i, /^auto$/i],
+      'margin-bottom': [/^-?\d+(?:\.\d+)?(?:px|pt|em|rem|%)?$/i, /^auto$/i],
+      'margin-left': [/^-?\d+(?:\.\d+)?(?:px|pt|em|rem|%)?$/i, /^auto$/i],
+      // 박스 사이징 (TipTap image wrapper)
+      'box-sizing': [/^(border-box|content-box)$/i],
+      // 크기 (TipTap image wrapperStyle width/height + max-width 안전망)
+      width: [/^\d+(?:\.\d+)?(?:px|pt|em|rem|%)$/i, /^auto$/i],
+      height: [/^\d+(?:\.\d+)?(?:px|pt|em|rem|%)$/i, /^auto$/i],
+      'max-width': [/^\d+(?:\.\d+)?(?:px|pt|em|rem|%)$/i, /^(none|auto)$/i],
+      'max-height': [/^\d+(?:\.\d+)?(?:px|pt|em|rem|%)$/i, /^(none|auto)$/i],
+      'min-width': [/^\d+(?:\.\d+)?(?:px|pt|em|rem|%)$/i, /^auto$/i],
+      'min-height': [/^\d+(?:\.\d+)?(?:px|pt|em|rem|%)$/i, /^auto$/i],
+      // 이미지 정렬 (TipTap image float)
+      float: [/^(left|right|none)$/i],
+      // 표시 모드 (transformTags 가 주입하는 메일 첨부 박스 inline-block 등)
+      display: [/^(inline|block|inline-block|none)$/i],
+      'vertical-align': [/^(baseline|top|middle|bottom|sub|super|text-top|text-bottom)$/i],
+      // 테두리 (transformTags 가 주입하는 표/첨부 박스 border)
+      border: [/^\d+(?:\.\d+)?px\s+(solid|dashed|dotted)\s+#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i],
+      'border-collapse': [/^(collapse|separate)$/i],
+      'border-radius': [/^\d+(?:\.\d+)?(?:px|pt|em|rem|%)$/i],
+      // 배경 (transformTags 가 주입하는 첨부 박스 paperclip 아이콘) — data:image/svg+xml 만 허용.
+      // http/https/javascript 등 외부·스크립트 url 은 매칭 실패로 차단.
+      background: [
+        /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i,
+        /^#(?:[0-9a-f]{3}|[0-9a-f]{6})\s+url\(["']?data:image\/svg\+xml[^)]*["']?\)\s+no-repeat\s+[\w\s]+$/i,
+      ],
+      'background-size': [/^\d+(?:\.\d+)?(?:px|pt|em|rem|%)(?:\s+\d+(?:\.\d+)?(?:px|pt|em|rem|%))?$/i, /^(auto|cover|contain)$/i],
+    },
+  },
   transformTags: {
     table: (tagName, attribs) => withStyle(tagName, attribs, TABLE_STYLE),
     td: (tagName, attribs) => withStyle(tagName, attribs, CELL_STYLE),
