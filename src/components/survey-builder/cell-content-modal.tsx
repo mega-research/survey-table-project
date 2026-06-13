@@ -371,6 +371,7 @@ export function CellContentModal({
               // 이미 DB에 저장된 질문: 업데이트
               await client.surveyBuilder.questions.update({
                 questionId: currentQuestionId,
+                surveyId: useSurveyBuilderStore.getState().currentSurvey.id,
                 data: {
                   tableRowsData: updatedRowsData,
                   ...(prunedChoiceGroups !== undefined ? { choiceGroups: prunedChoiceGroups } : {}),

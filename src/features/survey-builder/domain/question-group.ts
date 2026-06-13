@@ -41,14 +41,17 @@ export const UpdateQuestionGroupData = z.object({
 });
 export type UpdateQuestionGroupData = z.infer<typeof UpdateQuestionGroupData>;
 
+// surveyId 는 WS-2 IDOR 봉인용 — service WHERE 스코프로 전달된다.
 export const UpdateQuestionGroupInput = z.object({
   groupId: z.string(),
+  surveyId: z.string(),
   data: UpdateQuestionGroupData,
 });
 export type UpdateQuestionGroupInput = z.infer<typeof UpdateQuestionGroupInput>;
 
 export const DeleteQuestionGroupInput = z.object({
   groupId: z.string(),
+  surveyId: z.string(),
 });
 export type DeleteQuestionGroupInput = z.infer<typeof DeleteQuestionGroupInput>;
 

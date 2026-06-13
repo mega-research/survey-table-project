@@ -293,6 +293,7 @@ export function GroupManager({ className }: GroupManagerProps) {
           client.surveyBuilder.groups
             .update({
               groupId: editingGroup.id,
+              surveyId,
               data: {
                 ...(conditionGroup !== undefined ? { displayCondition: conditionGroup } : {}),
               },
@@ -369,6 +370,7 @@ export function GroupManager({ className }: GroupManagerProps) {
             await ensureSurvey();
             await client.surveyBuilder.groups.update({
               groupId: editingGroup.id,
+              surveyId,
               data: {
                 name: groupName.trim(),
                 ...(groupDescription.trim() ? { description: groupDescription.trim() } : {}),
@@ -399,6 +401,7 @@ export function GroupManager({ className }: GroupManagerProps) {
             await ensureSurvey();
             await client.surveyBuilder.groups.update({
               groupId: editingGroup.id,
+              surveyId,
               data: {
                 name: groupName.trim(),
                 ...(groupDescription.trim() ? { description: groupDescription.trim() } : {}),

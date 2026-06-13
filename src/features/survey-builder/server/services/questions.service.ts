@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 
 import { getQuestionsBySurvey } from '@/data/surveys';
 import { db } from '@/db';
@@ -82,9 +82,15 @@ export async function createQuestion(data: CreateQuestionInput): Promise<Questio
   return question as QuestionRow;
 }
 
-/** 질문 업데이트 — 영속 필드 SSOT 순회로 허용 필드만 추출(불변식 A). */
+/**
+ * 질문 업데이트 — 영속 필드 SSOT 순회로 허용 필드만 추출(불변식 A).
+ *
+ * WS-2 IDOR 봉인: WHERE 에 surveyId 를 함께 걸어, 다른 설문 소속 질문은
+ * 영향 0행이 되어 update 가 실패한다(procedure 가 NOT_FOUND 로 매핑).
+ */
 export async function updateQuestion(
   questionId: string,
+  surveyId: string,
   data: UpdateQuestionData,
 ): Promise<QuestionRow> {
   // PERSISTED_QUESTION_FIELDS 순회가 화이트리스트다 (id, surveyId, createdAt 등 변경 방지).
@@ -107,17 +113,25 @@ export async function updateQuestion(
   const [updated] = await db
     .update(questions)
     .set(allowedToUpdate as Partial<NewQuestion>)
-    .where(eq(questions.id, questionId))
+    .where(and(eq(questions.id, questionId), eq(questions.surveyId, surveyId)))
     .returning();
 
   if (!updated) throw new Error('질문 업데이트에 실패했습니다.');
   return updated as QuestionRow;
 }
 
-/** 질문 삭제 — 이미지 R2 cleanup(best-effort) 후 행 삭제. */
-export async function deleteQuestion(questionId: string): Promise<{ ok: true }> {
+/**
+ * 질문 삭제 — 이미지 R2 cleanup(best-effort) 후 행 삭제.
+ *
+ * WS-2 IDOR 봉인: 조회/삭제 모두 surveyId 스코프로 한정한다. 다른 설문 소속이면
+ * 사전 조회가 0행이라 이미지 cleanup 도, 삭제도 일어나지 않는다.
+ */
+export async function deleteQuestion(
+  questionId: string,
+  surveyId: string,
+): Promise<{ ok: true }> {
   const question = await db.query.questions.findFirst({
-    where: eq(questions.id, questionId),
+    where: and(eq(questions.id, questionId), eq(questions.surveyId, surveyId)),
   });
 
   if (question) {
@@ -131,17 +145,28 @@ export async function deleteQuestion(questionId: string): Promise<{ ok: true }> 
     }
   }
 
-  await db.delete(questions).where(eq(questions.id, questionId));
+  await db
+    .delete(questions)
+    .where(and(eq(questions.id, questionId), eq(questions.surveyId, surveyId)));
   return { ok: true as const };
 }
 
-/** [최적화] 질문 순서 변경 — order 는 1-based(index + 1). 변경된 행만 update. */
-export async function reorderQuestions(questionIds: string[]): Promise<{ ok: true }> {
+/**
+ * [최적화] 질문 순서 변경 — order 는 1-based(index + 1). 변경된 행만 update.
+ *
+ * WS-2 IDOR 봉인: 조회를 surveyId 스코프로 한정하고, 유효한 questionId 가 전부
+ * 그 설문 소속인지 검증한다. 하나라도 타 설문(또는 미존재) id 가 섞이면 거부해
+ * 타 설문 질문 order 를 흔드는 경로를 차단한다. order 갱신 WHERE 에도 surveyId 를 건다.
+ */
+export async function reorderQuestions(
+  questionIds: string[],
+  surveyId: string,
+): Promise<{ ok: true }> {
   const validQuestionIds = questionIds.filter((id) => isValidUUID(id));
   if (validQuestionIds.length === 0) return { ok: true as const };
 
   const currentQuestions = await db.query.questions.findMany({
-    where: inArray(questions.id, validQuestionIds),
+    where: and(eq(questions.surveyId, surveyId), inArray(questions.id, validQuestionIds)),
     columns: {
       id: true,
       order: true,
@@ -149,6 +174,14 @@ export async function reorderQuestions(questionIds: string[]): Promise<{ ok: tru
   });
 
   const currentOrderMap = new Map(currentQuestions.map((q) => [q.id, q.order]));
+
+  // 소속 검증: 유효 id 전부가 해당 설문에서 조회되어야 한다. 누락분이 있으면
+  // 타 설문 소속(또는 미존재) id 가 섞인 것이므로 전체 reorder 를 거부한다.
+  const allBelong = validQuestionIds.every((id) => currentOrderMap.has(id));
+  if (!allBelong) {
+    throw new Error('다른 설문 소속 질문이 reorder 요청에 포함되어 거부되었습니다.');
+  }
+
   const updates: Promise<unknown>[] = [];
 
   validQuestionIds.forEach((id, index) => {
@@ -160,7 +193,7 @@ export async function reorderQuestions(questionIds: string[]): Promise<{ ok: tru
         db
           .update(questions)
           .set({ order: newOrder, updatedAt: new Date() })
-          .where(eq(questions.id, id)),
+          .where(and(eq(questions.id, id), eq(questions.surveyId, surveyId))),
       );
     }
   });

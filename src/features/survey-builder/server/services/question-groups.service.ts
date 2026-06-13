@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 
 import { getQuestionGroupsBySurvey } from '@/data/surveys';
 import { db } from '@/db';
@@ -43,9 +43,15 @@ export async function createQuestionGroup(data: CreateQuestionGroupInput): Promi
   return group as GroupRow;
 }
 
-/** 질문 그룹 업데이트 — 받은 partial 을 그대로 set(원본 spread 동작 보존). */
+/**
+ * 질문 그룹 업데이트 — 받은 partial 을 그대로 set(원본 spread 동작 보존).
+ *
+ * WS-2 IDOR 봉인: WHERE 에 surveyId 를 함께 걸어, 다른 설문 소속 그룹은
+ * 영향 0행이 되어 update 가 실패한다.
+ */
 export async function updateQuestionGroup(
   groupId: string,
+  surveyId: string,
   data: UpdateQuestionGroupData,
 ): Promise<GroupRow> {
   const [updated] = await db
@@ -54,23 +60,33 @@ export async function updateQuestionGroup(
       ...data,
       updatedAt: new Date(),
     })
-    .where(eq(questionGroups.id, groupId))
+    .where(and(eq(questionGroups.id, groupId), eq(questionGroups.surveyId, surveyId)))
     .returning();
 
   if (!updated) throw new Error('질문 그룹 업데이트에 실패했습니다.');
   return updated as GroupRow;
 }
 
-/** 질문 그룹 삭제 (메모리 기반 최적화) — 자손 재귀 수집 + 질문 ungroup. */
-export async function deleteQuestionGroup(groupId: string): Promise<{ ok: true }> {
+/**
+ * 질문 그룹 삭제 (메모리 기반 최적화) — 자손 재귀 수집 + 질문 ungroup.
+ *
+ * WS-2 IDOR 봉인: 타깃 그룹 조회를 surveyId 스코프로 한정해, 다른 설문 소속이면
+ * 0행으로 short-circuit 한다. 자손 재귀/하위질문 ungroup/그룹 삭제 모두 surveyId
+ * 스코프 안에서만 일어난다(allGroups 가 input surveyId 로 한정되고, 파괴적 쿼리
+ * WHERE 에도 surveyId 를 함께 건다).
+ */
+export async function deleteQuestionGroup(
+  groupId: string,
+  surveyId: string,
+): Promise<{ ok: true }> {
   const targetGroup = await db.query.questionGroups.findFirst({
-    where: eq(questionGroups.id, groupId),
+    where: and(eq(questionGroups.id, groupId), eq(questionGroups.surveyId, surveyId)),
   });
 
   if (!targetGroup) return { ok: true as const };
 
   const allGroups = await db.query.questionGroups.findMany({
-    where: eq(questionGroups.surveyId, targetGroup.surveyId),
+    where: eq(questionGroups.surveyId, surveyId),
   });
 
   const findDescendantIds = (parentId: string): string[] => {
@@ -89,11 +105,20 @@ export async function deleteQuestionGroup(groupId: string): Promise<{ ok: true }
     await db
       .update(questions)
       .set({ groupId: null, updatedAt: new Date() })
-      .where(inArray(questions.groupId, allGroupIdsToDelete));
+      .where(
+        and(eq(questions.surveyId, surveyId), inArray(questions.groupId, allGroupIdsToDelete)),
+      );
   }
 
   if (allGroupIdsToDelete.length > 0) {
-    await db.delete(questionGroups).where(inArray(questionGroups.id, allGroupIdsToDelete));
+    await db
+      .delete(questionGroups)
+      .where(
+        and(
+          eq(questionGroups.surveyId, surveyId),
+          inArray(questionGroups.id, allGroupIdsToDelete),
+        ),
+      );
   }
 
   return { ok: true as const };
@@ -116,6 +141,14 @@ export async function reorderGroups(
   });
 
   const currentOrderMap = new Map(currentGroups.map((g) => [g.id, g.order]));
+
+  // WS-2 IDOR 봉인: 유효 groupId 전부가 해당 설문 소속이어야 한다. 누락분이 있으면
+  // 타 설문 소속(또는 미존재) id 가 섞인 것이므로 전체 reorder 를 거부한다.
+  const allBelong = validGroupIds.every((id) => currentOrderMap.has(id));
+  if (!allBelong) {
+    throw new Error('다른 설문 소속 그룹이 reorder 요청에 포함되어 거부되었습니다.');
+  }
+
   const updates: Promise<unknown>[] = [];
 
   validGroupIds.forEach((id, index) => {
@@ -126,7 +159,7 @@ export async function reorderGroups(
         db
           .update(questionGroups)
           .set({ order: index, updatedAt: new Date() })
-          .where(eq(questionGroups.id, id)),
+          .where(and(eq(questionGroups.id, id), eq(questionGroups.surveyId, surveyId))),
       );
     }
   });

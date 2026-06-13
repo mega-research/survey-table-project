@@ -510,7 +510,7 @@ export function SortableQuestionList({
     const savedIds = allQuestionIds.filter((id) => !state.questionChanges.added[id]);
     if (surveyId && savedIds.length > 0) {
       ensureSurvey().then(() =>
-        client.surveyBuilder.questions.reorder({ questionIds: savedIds }).catch((error) => {
+        client.surveyBuilder.questions.reorder({ questionIds: savedIds, surveyId }).catch((error) => {
           console.error('질문 순서 변경 실패:', error);
         }),
       );

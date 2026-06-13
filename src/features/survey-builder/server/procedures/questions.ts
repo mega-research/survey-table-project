@@ -22,7 +22,7 @@ const update = authed
   .output(QuestionRow)
   .handler(async ({ input }) => {
     try {
-      return await svc.updateQuestion(input.questionId, input.data);
+      return await svc.updateQuestion(input.questionId, input.surveyId, input.data);
     } catch (err) {
       // 0행 매칭(존재하지 않는 질문) — generic Error는 oRPC가 Internal server error로
       // 마스킹해 원인 추적이 어려우므로 NOT_FOUND로 매핑한다.
@@ -39,12 +39,12 @@ const update = authed
 const remove = authed
   .input(DeleteQuestionInput)
   .output(QuestionMutationOutput)
-  .handler(({ input }) => svc.deleteQuestion(input.questionId));
+  .handler(({ input }) => svc.deleteQuestion(input.questionId, input.surveyId));
 
 const reorder = authed
   .input(ReorderQuestionsInput)
   .output(QuestionMutationOutput)
-  .handler(({ input }) => svc.reorderQuestions(input.questionIds));
+  .handler(({ input }) => svc.reorderQuestions(input.questionIds, input.surveyId));
 
 export const questions = {
   create,

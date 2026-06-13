@@ -18,13 +18,13 @@ const create = authed
 const update = authed
   .input(UpdateQuestionGroupInput)
   .output(GroupRow)
-  .handler(({ input }) => svc.updateQuestionGroup(input.groupId, input.data));
+  .handler(({ input }) => svc.updateQuestionGroup(input.groupId, input.surveyId, input.data));
 
 // delete 는 예약어라 export 키도 codebase 컨벤션(remove)을 따른다.
 const remove = authed
   .input(DeleteQuestionGroupInput)
   .output(GroupMutationOutput)
-  .handler(({ input }) => svc.deleteQuestionGroup(input.groupId));
+  .handler(({ input }) => svc.deleteQuestionGroup(input.groupId, input.surveyId));
 
 const reorder = authed
   .input(ReorderGroupsInput)

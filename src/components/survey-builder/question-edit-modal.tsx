@@ -304,7 +304,11 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
             if (resolvedPlaceholder !== undefined) {
               updateData.placeholder = resolvedPlaceholder;
             }
-            await client.surveyBuilder.questions.update({ questionId, data: updateData });
+            await client.surveyBuilder.questions.update({
+              questionId,
+              surveyId: store.currentSurvey.id,
+              data: updateData,
+            });
           } else {
             // 새 질문: CREATE 경로
             const createdQuestion = await client.surveyBuilder.questions.create({
@@ -540,6 +544,7 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
                     try {
                       await client.surveyBuilder.questions.update({
                         questionId,
+                        surveyId: store.currentSurvey.id,
                         data: { displayCondition: conditionGroup },
                       });
                     } catch (error) {

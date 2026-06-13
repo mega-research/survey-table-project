@@ -40,15 +40,16 @@ describe('surveyBuilder.questions procedures', () => {
     expect(res).toEqual(row);
   });
 
-  it('update는 service.updateQuestion에 (questionId, data)로 위임한다', async () => {
+  it('update는 service.updateQuestion에 (questionId, surveyId, data)로 위임한다', async () => {
     const row = { id: QUESTION_ID, surveyId: SURVEY_ID, type: 'text', title: 'Q1-edit' };
     vi.mocked(svc.updateQuestion).mockResolvedValue(row as never);
     const client = createRouterClient({ questions }, { context: authedContext() });
     const res = await client.questions.update({
       questionId: QUESTION_ID,
+      surveyId: SURVEY_ID,
       data: { title: 'Q1-edit', groupId: GROUP_ID },
     });
-    expect(svc.updateQuestion).toHaveBeenCalledWith(QUESTION_ID, {
+    expect(svc.updateQuestion).toHaveBeenCalledWith(QUESTION_ID, SURVEY_ID, {
       title: 'Q1-edit',
       groupId: GROUP_ID,
     });
@@ -84,8 +85,8 @@ describe('surveyBuilder.questions procedures', () => {
       emptyDefault: 3,
       defaultValueTemplate: '{{attrs_score}}',
     };
-    await client.questions.update({ questionId: QUESTION_ID, data });
-    expect(svc.updateQuestion).toHaveBeenCalledWith(QUESTION_ID, data);
+    await client.questions.update({ questionId: QUESTION_ID, surveyId: SURVEY_ID, data });
+    expect(svc.updateQuestion).toHaveBeenCalledWith(QUESTION_ID, SURVEY_ID, data);
   });
 
   it('update payload의 type은 strip되어 service에 도달하지 않는다', async () => {
@@ -96,9 +97,10 @@ describe('surveyBuilder.questions procedures', () => {
     const client = createRouterClient({ questions }, { context: authedContext() });
     await client.questions.update({
       questionId: QUESTION_ID,
+      surveyId: SURVEY_ID,
       data: { title: 'Q1', type: 'table' } as { title: string },
     });
-    expect(svc.updateQuestion).toHaveBeenCalledWith(QUESTION_ID, { title: 'Q1' });
+    expect(svc.updateQuestion).toHaveBeenCalledWith(QUESTION_ID, SURVEY_ID, { title: 'Q1' });
   });
 
   it('create는 9종 외 type을 BAD_REQUEST로 거부한다', async () => {
@@ -113,20 +115,20 @@ describe('surveyBuilder.questions procedures', () => {
     expect(svc.createQuestion).not.toHaveBeenCalled();
   });
 
-  it('remove는 service.deleteQuestion에 위임하고 {ok:true}를 반환한다', async () => {
+  it('remove는 service.deleteQuestion에 (questionId, surveyId)로 위임하고 {ok:true}를 반환한다', async () => {
     vi.mocked(svc.deleteQuestion).mockResolvedValue({ ok: true } as never);
     const client = createRouterClient({ questions }, { context: authedContext() });
-    const res = await client.questions.remove({ questionId: QUESTION_ID });
-    expect(svc.deleteQuestion).toHaveBeenCalledWith(QUESTION_ID);
+    const res = await client.questions.remove({ questionId: QUESTION_ID, surveyId: SURVEY_ID });
+    expect(svc.deleteQuestion).toHaveBeenCalledWith(QUESTION_ID, SURVEY_ID);
     expect(res).toEqual({ ok: true });
   });
 
-  it('reorder는 service.reorderQuestions에 questionIds로 위임한다', async () => {
+  it('reorder는 service.reorderQuestions에 (questionIds, surveyId)로 위임한다', async () => {
     vi.mocked(svc.reorderQuestions).mockResolvedValue({ ok: true } as never);
     const client = createRouterClient({ questions }, { context: authedContext() });
     const ids = [QUESTION_ID, GROUP_ID];
-    const res = await client.questions.reorder({ questionIds: ids });
-    expect(svc.reorderQuestions).toHaveBeenCalledWith(ids);
+    const res = await client.questions.reorder({ questionIds: ids, surveyId: SURVEY_ID });
+    expect(svc.reorderQuestions).toHaveBeenCalledWith(ids, SURVEY_ID);
     expect(res).toEqual({ ok: true });
   });
 
@@ -146,7 +148,7 @@ describe('surveyBuilder.questions procedures', () => {
     vi.mocked(svc.updateQuestion).mockRejectedValue(new Error('질문 업데이트에 실패했습니다.'));
     const client = createRouterClient({ questions }, { context: authedContext() });
     await expect(
-      client.questions.update({ questionId: QUESTION_ID, data: { title: 'Q1-edit' } }),
+      client.questions.update({ questionId: QUESTION_ID, surveyId: SURVEY_ID, data: { title: 'Q1-edit' } }),
     ).rejects.toMatchObject({
       code: 'NOT_FOUND',
       message: '질문을 찾을 수 없습니다. 설문을 먼저 저장한 뒤 다시 시도하세요.',
@@ -157,7 +159,7 @@ describe('surveyBuilder.questions procedures', () => {
     vi.mocked(svc.updateQuestion).mockRejectedValue(new Error('DB 연결 오류'));
     const client = createRouterClient({ questions }, { context: authedContext() });
     await expect(
-      client.questions.update({ questionId: QUESTION_ID, data: { title: 'Q1-edit' } }),
+      client.questions.update({ questionId: QUESTION_ID, surveyId: SURVEY_ID, data: { title: 'Q1-edit' } }),
     ).rejects.toMatchObject({ message: 'DB 연결 오류' });
   });
 });

@@ -102,8 +102,10 @@ export const UpdateQuestionData = z.object({
 });
 export type UpdateQuestionData = z.infer<typeof UpdateQuestionData>;
 
+// surveyId 는 WS-2 IDOR 봉인용 — service WHERE 스코프로 전달된다.
 export const UpdateQuestionInput = z.object({
   questionId: z.string(),
+  surveyId: z.string(),
   data: UpdateQuestionData,
 });
 export type UpdateQuestionInput = z.infer<typeof UpdateQuestionInput>;
@@ -128,11 +130,13 @@ export function assertUpdateSchemaCoversPersistedFields(
 
 export const DeleteQuestionInput = z.object({
   questionId: z.string(),
+  surveyId: z.string(),
 });
 export type DeleteQuestionInput = z.infer<typeof DeleteQuestionInput>;
 
 export const ReorderQuestionsInput = z.object({
   questionIds: z.array(z.string()),
+  surveyId: z.string(),
 });
 export type ReorderQuestionsInput = z.infer<typeof ReorderQuestionsInput>;
 

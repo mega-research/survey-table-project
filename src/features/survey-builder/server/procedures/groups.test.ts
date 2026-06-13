@@ -40,26 +40,27 @@ describe('surveyBuilder.groups procedures', () => {
     expect(res).toEqual(row);
   });
 
-  it('update는 service.updateQuestionGroup에 (groupId, data)로 위임한다', async () => {
+  it('update는 service.updateQuestionGroup에 (groupId, surveyId, data)로 위임한다', async () => {
     const row = { id: GROUP_ID, surveyId: SURVEY_ID, name: 'G1-edit', order: 0 };
     vi.mocked(svc.updateQuestionGroup).mockResolvedValue(row as never);
     const client = createRouterClient({ groups }, { context: authedContext() });
     const res = await client.groups.update({
       groupId: GROUP_ID,
+      surveyId: SURVEY_ID,
       data: { name: 'G1-edit', parentGroupId: null },
     });
-    expect(svc.updateQuestionGroup).toHaveBeenCalledWith(GROUP_ID, {
+    expect(svc.updateQuestionGroup).toHaveBeenCalledWith(GROUP_ID, SURVEY_ID, {
       name: 'G1-edit',
       parentGroupId: null,
     });
     expect(res).toEqual(row);
   });
 
-  it('remove는 service.deleteQuestionGroup에 위임하고 {ok:true}를 반환한다', async () => {
+  it('remove는 service.deleteQuestionGroup에 (groupId, surveyId)로 위임하고 {ok:true}를 반환한다', async () => {
     vi.mocked(svc.deleteQuestionGroup).mockResolvedValue({ ok: true } as never);
     const client = createRouterClient({ groups }, { context: authedContext() });
-    const res = await client.groups.remove({ groupId: GROUP_ID });
-    expect(svc.deleteQuestionGroup).toHaveBeenCalledWith(GROUP_ID);
+    const res = await client.groups.remove({ groupId: GROUP_ID, surveyId: SURVEY_ID });
+    expect(svc.deleteQuestionGroup).toHaveBeenCalledWith(GROUP_ID, SURVEY_ID);
     expect(res).toEqual({ ok: true });
   });
 
