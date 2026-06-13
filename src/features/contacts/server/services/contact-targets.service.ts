@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { contactTargets } from '@/db/schema';
@@ -10,6 +10,7 @@ import { upsertPiiValue } from '@/lib/crypto/contact-pii-repo';
 import type {
   AddContactTargetInput,
   ContactTargetRow,
+  DeleteContactTargetInput,
   UpdateContactTargetInput,
 } from '../../domain/contact-target';
 
@@ -82,7 +83,10 @@ export async function updateContactTarget(input: UpdateContactTargetInput): Prom
   const groupValue = rawGroup != null && rawGroup !== '' ? rawGroup : null;
 
   await db.transaction(async (tx) => {
-    await tx
+    // 설문 스코프 가드: 행이 input.surveyId 소속일 때만 UPDATE.
+    // .returning() 길이로 영향 행 수를 판정한다. PII 재암호화(upsertPiiValue)는
+    // 행 소속이 확정된 뒤에만 일어나야 하므로 이 검증을 PII 부수효과보다 앞에 둔다.
+    const updated = await tx
       .update(contactTargets)
       .set({
         attrs,
@@ -91,7 +95,9 @@ export async function updateContactTarget(input: UpdateContactTargetInput): Prom
         contactMethod: contactMethod ?? null,
         updatedAt: new Date(),
       })
-      .where(eq(contactTargets.id, id));
+      .where(and(eq(contactTargets.id, id), eq(contactTargets.surveyId, surveyId)))
+      .returning({ id: contactTargets.id });
+    if (updated.length === 0) throw new Error('NOT_FOUND');
 
     if (piiUpdates && piiUpdates.length > 0) {
       for (const p of piiUpdates) {
@@ -103,7 +109,15 @@ export async function updateContactTarget(input: UpdateContactTargetInput): Prom
 
 /**
  * 행 삭제. FK 동작: survey_responses 는 SET NULL(응답 보존), contact_attempts/contact_pii 는 CASCADE.
+ *
+ * 설문 스코프 가드: 행이 input.surveyId 소속일 때만 DELETE. CASCADE(attempts/pii 동반 삭제)는
+ * 비가역적이므로 .returning() 길이로 영향 0행이면 NOT_FOUND throw 하여 사전 차단한다.
  */
-export async function deleteContactTarget(id: string): Promise<void> {
-  await db.delete(contactTargets).where(eq(contactTargets.id, id));
+export async function deleteContactTarget(input: DeleteContactTargetInput): Promise<void> {
+  const { id, surveyId } = input;
+  const deleted = await db
+    .delete(contactTargets)
+    .where(and(eq(contactTargets.id, id), eq(contactTargets.surveyId, surveyId)))
+    .returning({ id: contactTargets.id });
+  if (deleted.length === 0) throw new Error('NOT_FOUND');
 }

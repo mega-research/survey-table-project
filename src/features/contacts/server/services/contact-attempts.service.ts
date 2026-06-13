@@ -1,15 +1,29 @@
 import 'server-only';
 
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { contactAttempts } from '@/db/schema';
+import { contactAttempts, contactTargets } from '@/db/schema';
 
 import type {
   AddContactAttemptInput,
   DeleteContactAttemptInput,
   UpdateContactAttemptInput,
 } from '../../domain/contact-attempt';
+
+/**
+ * 회차의 소속 사전 검증: contactTargetId 가 surveyId 설문 소속인지 확인.
+ * 없으면 NOT_FOUND throw — 다른 설문 소속 컨택의 회차를 건드리는 IDOR 를 봉인한다.
+ * update/delete WHERE 의 attempt.id + contactTargetId 스코프와 합쳐 2중 봉인.
+ */
+async function assertTargetInSurvey(contactTargetId: string, surveyId: string): Promise<void> {
+  const rows = await db
+    .select({ id: contactTargets.id })
+    .from(contactTargets)
+    .where(and(eq(contactTargets.id, contactTargetId), eq(contactTargets.surveyId, surveyId)))
+    .limit(1);
+  if (rows.length === 0) throw new Error('NOT_FOUND');
+}
 
 /**
  * Postgres UNIQUE 위반 (SQLSTATE 23505) 감지.
@@ -86,21 +100,31 @@ export async function addAttempt(
 
 /**
  * 회차 수정 — resultCode/note 갱신.
- * surveyId/contactTargetId 는 input 으로 받되 service 로직에서는 사용하지 않는다.
+ * 설문 스코프 가드: contactTargetId 가 surveyId 소속인지 선행 확인한 뒤,
+ * attempt.id + contactTargetId 스코프로 UPDATE 한다. 영향 0행이면 NOT_FOUND throw.
  */
 export async function updateAttempt(input: UpdateContactAttemptInput): Promise<void> {
-  const { id, resultCode, note } = input;
-  await db
+  const { id, contactTargetId, surveyId, resultCode, note } = input;
+  await assertTargetInSurvey(contactTargetId, surveyId);
+  const updated = await db
     .update(contactAttempts)
     .set({ resultCode, note: note ?? null })
-    .where(eq(contactAttempts.id, id));
+    .where(and(eq(contactAttempts.id, id), eq(contactAttempts.contactTargetId, contactTargetId)))
+    .returning({ id: contactAttempts.id });
+  if (updated.length === 0) throw new Error('NOT_FOUND');
 }
 
 /**
  * 회차 삭제.
- * surveyId/contactTargetId 는 input 으로 받되 service 로직에서는 사용하지 않는다.
+ * 설문 스코프 가드: contactTargetId 가 surveyId 소속인지 선행 확인한 뒤,
+ * attempt.id + contactTargetId 스코프로 DELETE 한다. 영향 0행이면 NOT_FOUND throw.
  */
 export async function deleteAttempt(input: DeleteContactAttemptInput): Promise<void> {
-  const { id } = input;
-  await db.delete(contactAttempts).where(eq(contactAttempts.id, id));
+  const { id, contactTargetId, surveyId } = input;
+  await assertTargetInSurvey(contactTargetId, surveyId);
+  const deleted = await db
+    .delete(contactAttempts)
+    .where(and(eq(contactAttempts.id, id), eq(contactAttempts.contactTargetId, contactTargetId)))
+    .returning({ id: contactAttempts.id });
+  if (deleted.length === 0) throw new Error('NOT_FOUND');
 }

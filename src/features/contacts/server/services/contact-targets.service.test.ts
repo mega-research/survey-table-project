@@ -17,7 +17,13 @@ vi.mock('@/db', () => {
     update: vi.fn(() => ({
       set: vi.fn((payload: Record<string, unknown>) => {
         capturedSets.push(payload);
-        return { where: vi.fn(async () => undefined) };
+        // 스코프 가드 구현은 .where(...).returning() 으로 영향 행 수를 판정한다.
+        // 기존 테스트는 정상 소속 1행을 가정하므로 비어있지 않은 배열을 돌려준다.
+        return {
+          where: vi.fn(() => ({
+            returning: vi.fn(async () => [{ id: 'ct-1' }]),
+          })),
+        };
       }),
     })),
   };

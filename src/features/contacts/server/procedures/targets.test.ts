@@ -37,11 +37,11 @@ describe('contacts.targets procedures', () => {
     expect(res).toEqual({ ok: true });
   });
 
-  it('remove는 id만 service.deleteContactTarget에 위임하고 {ok:true}를 반환한다', async () => {
+  it('remove는 surveyId/id 입력을 service.deleteContactTarget에 위임하고 {ok:true}를 반환한다', async () => {
     vi.mocked(svc.deleteContactTarget).mockResolvedValue(undefined as never);
     const client = createRouterClient({ targets }, { context: authedContext() });
     const res = await client.targets.remove({ surveyId: 'sv-1', id: 'ct-9' });
-    expect(svc.deleteContactTarget).toHaveBeenCalledWith('ct-9');
+    expect(svc.deleteContactTarget).toHaveBeenCalledWith({ surveyId: 'sv-1', id: 'ct-9' });
     expect(res).toEqual({ ok: true });
   });
 

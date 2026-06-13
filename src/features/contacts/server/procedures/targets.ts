@@ -27,7 +27,7 @@ const remove = authed
   .input(DeleteContactTargetInput)
   .output(z.object({ ok: z.literal(true) }))
   .handler(async ({ input }) => {
-    await svc.deleteContactTarget(input.id);
+    await svc.deleteContactTarget(input);
     return { ok: true as const };
   });
 
