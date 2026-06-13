@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { normalizeQuestion, normalizeQuestions } from '@/lib/question';
 
+import { makeOption, makeQuestion } from '../../helpers/question-factory';
+
 /**
  * 읽기 경계 정규화 characterization.
  *
@@ -131,7 +133,59 @@ const GEN_NOTICE = {
   tableValidationRules: [],
 };
 
-const GOLDEN_FIXTURES = [GEN_OLDEST_RADIO, GEN_MID_TEXT, GEN_NEW_CHECKBOX, GEN_NEW_TABLE, GEN_NOTICE];
+// drizzle 행 세대 — 스냅샷(undefined-세계)과 달리 nullable 컬럼이 null 값으로 실리고
+// 행 잉여 키(surveyId/createdAt/imageUrl 등)가 동승한다. export 2라우트가
+// db.query 행을 normalizeQuestions 에 직결하는 실제 입력 형태의 합성 복제.
+const GEN_DRIZZLE_ROW = {
+  id: 'q-drizzle-row',
+  surveyId: 'svy-1',
+  groupId: null,
+  type: 'radio',
+  title: '거주 지역',
+  description: null,
+  required: true,
+  order: 6,
+  options: [{ id: 'opt-1', label: '서울', value: '1' }],
+  selectLevels: null,
+  tableTitle: null,
+  tableColumns: null,
+  tableRowsData: null,
+  tableHeaderGrid: null,
+  tableValidationRules: null,
+  dynamicRowConfigs: null,
+  rankingConfig: null,
+  choiceGroups: null,
+  allowOtherOption: false,
+  optionsColumns: null,
+  minSelections: null,
+  maxSelections: null,
+  noticeContent: null,
+  requiresAcknowledgment: null,
+  placeholder: null,
+  defaultValueTemplate: null,
+  inputType: null,
+  emptyDefault: null,
+  hideColumnLabels: null,
+  displayCondition: null,
+  questionCode: null,
+  isCustomSpssVarName: null,
+  exportLabel: null,
+  spssVarType: null,
+  spssMeasure: null,
+  imageUrl: null,
+  videoUrl: null,
+  createdAt: new Date('2026-01-01T00:00:00Z'),
+  updatedAt: new Date('2026-01-01T00:00:00Z'),
+};
+
+const GOLDEN_FIXTURES = [
+  GEN_OLDEST_RADIO,
+  GEN_MID_TEXT,
+  GEN_NEW_CHECKBOX,
+  GEN_NEW_TABLE,
+  GEN_NOTICE,
+  GEN_DRIZZLE_ROW,
+];
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -217,9 +271,98 @@ describe('normalizeQuestion - strict 모드 (strip 활성화 목적지)', () => 
     expect(parsed['requiresAcknowledgment']).toBe(true);
   });
 
+  it('drizzle 행의 null 컬럼을 키 부재로 수렴하고 행 잉여 키를 소거한다', () => {
+    const parsed = normalizeQuestion(GEN_DRIZZLE_ROW, 'strict') as unknown as Record<string, unknown>;
+    // null 컬럼 → 키 부재 (undefined-세계 수렴) — variant 소유 키라도 null 이면 드랍
+    expect(parsed).not.toHaveProperty('description');
+    expect(parsed).not.toHaveProperty('groupId');
+    expect(parsed).not.toHaveProperty('tableColumns');
+    expect(parsed).not.toHaveProperty('choiceGroups');
+    expect(parsed).not.toHaveProperty('spssVarType');
+    expect(parsed).not.toHaveProperty('questionCode');
+    // 행 잉여 키 strip (variant 밖 컬럼)
+    expect(parsed).not.toHaveProperty('surveyId');
+    expect(parsed).not.toHaveProperty('createdAt');
+    expect(parsed).not.toHaveProperty('updatedAt');
+    expect(parsed).not.toHaveProperty('imageUrl');
+    // 실값 보존
+    expect(parsed['options']).toEqual(GEN_DRIZZLE_ROW.options);
+    expect(parsed['required']).toBe(true);
+    expect(parsed['allowOtherOption']).toBe(false);
+  });
+
+  it('preserve 모드는 drizzle 행의 null 을 건드리지 않는다 (무변형 계약)', () => {
+    const result = normalizeQuestion(GEN_DRIZZLE_ROW) as unknown as Record<string, unknown>;
+    expect(result).toBe(GEN_DRIZZLE_ROW);
+    expect(result['description']).toBeNull();
+    expect(result['surveyId']).toBe('svy-1');
+  });
+
   it('알 수 없는 type 은 거부한다 (preserve 와 의도적으로 다른 거동)', () => {
     expect(() =>
       normalizeQuestion({ id: 'q-x', type: 'file-upload', title: 't', required: false, order: 1 }, 'strict'),
     ).toThrow();
+  });
+});
+
+describe('normalizeQuestion - strict 모드 잔여 4유형 특성화 (select/multiselect/ranking/textarea)', () => {
+  it('select: 테이블/그룹/다단계 오염을 소거하고 options 만 보존한다 — optionsColumns 도 비소유', () => {
+    const polluted = {
+      ...makeQuestion.select(),
+      optionsColumns: 2,
+      selectLevels: [],
+      tableRowsData: [],
+      choiceGroups: [],
+    };
+    const parsed = normalizeQuestion(polluted, 'strict') as unknown as Record<string, unknown>;
+    expect(parsed).not.toHaveProperty('optionsColumns');
+    expect(parsed).not.toHaveProperty('selectLevels');
+    expect(parsed).not.toHaveProperty('tableRowsData');
+    expect(parsed).not.toHaveProperty('choiceGroups');
+    expect(parsed['options']).toEqual(polluted.options);
+  });
+
+  it('multiselect: options/allowOtherOption 오염을 소거하고 selectLevels 만 보존한다', () => {
+    const polluted = {
+      ...makeQuestion.multiselect(),
+      options: [makeOption('opt-x', '오염 옵션')],
+      allowOtherOption: true,
+    };
+    const parsed = normalizeQuestion(polluted, 'strict') as unknown as Record<string, unknown>;
+    // 코드드 옵션 리스트는 selectLevels 내부 소유 — question.options 는 variant 밖
+    expect(parsed).not.toHaveProperty('options');
+    expect(parsed).not.toHaveProperty('allowOtherOption');
+    expect(parsed['selectLevels']).toEqual(polluted.selectLevels);
+  });
+
+  it('ranking: 옵션 리스트 + 내장 테이블 + rankingConfig 를 보존하고 공지/단답 오염을 소거한다', () => {
+    const polluted = {
+      ...makeQuestion.ranking(),
+      tableRowsData: [{ id: 'row-1', label: '행', cells: [] }],
+      noticeContent: '',
+      placeholder: '',
+    };
+    const parsed = normalizeQuestion(polluted, 'strict') as unknown as Record<string, unknown>;
+    expect(parsed).not.toHaveProperty('noticeContent');
+    expect(parsed).not.toHaveProperty('placeholder');
+    expect(parsed['options']).toEqual(polluted.options);
+    expect(parsed['rankingConfig']).toEqual(polluted.rankingConfig);
+    expect(parsed['tableRowsData']).toEqual(polluted.tableRowsData);
+  });
+
+  it('textarea: base 외 전부 소거되는 가장 얇은 variant 다', () => {
+    const polluted = {
+      ...makeQuestion.textarea(),
+      placeholder: '장문 힌트',
+      options: [],
+      noticeContent: '',
+      tableColumns: [],
+    };
+    const parsed = normalizeQuestion(polluted, 'strict') as unknown as Record<string, unknown>;
+    expect(parsed).not.toHaveProperty('placeholder');
+    expect(parsed).not.toHaveProperty('options');
+    expect(parsed).not.toHaveProperty('noticeContent');
+    expect(parsed).not.toHaveProperty('tableColumns');
+    expect(parsed['title']).toBe(polluted.title);
   });
 });
