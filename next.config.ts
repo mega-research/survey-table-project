@@ -1,9 +1,40 @@
 import { withSentryConfig } from "@sentry/nextjs";
 import type { NextConfig } from "next";
 
+// 전역 보안 헤더 정의.
+// next.config 의 headers() 가 소비하는 순수 함수로 분리해 단위 테스트에서 직접 검증한다.
+// 전 라우트('/(.*)') 에 동일 헤더를 적용한다.
+// 주의: CSP(Content-Security-Policy) 는 nonce plumbing 이 필요하므로 WS 후속 사이클에서 도입한다.
+export function securityHeaders() {
+  return [
+    {
+      source: "/(.*)",
+      headers: [
+        { key: "X-Frame-Options", value: "SAMEORIGIN" },
+        { key: "X-Content-Type-Options", value: "nosniff" },
+        { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+        {
+          key: "Strict-Transport-Security",
+          value: "max-age=63072000; includeSubDomains; preload",
+        },
+        {
+          key: "Permissions-Policy",
+          value:
+            "camera=(), microphone=(), geolocation=(), interest-cohort=()",
+        },
+      ],
+    },
+  ];
+}
+
 const nextConfig: NextConfig = {
 
   reactCompiler: true,
+
+  // 전역 안전 보안 헤더 (전 라우트 적용). 정의는 securityHeaders() 참조.
+  async headers() {
+    return securityHeaders();
+  },
 
   // Server Actions body 크기 제한 (기본값 1MB → 30MB)
   // saveSurveyWithDetails에서 설문 전체 데이터를 전송하므로 제한 확대 필요
