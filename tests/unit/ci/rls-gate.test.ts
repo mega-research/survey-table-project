@@ -89,6 +89,184 @@ describe('evaluateMigrations', () => {
     ]);
     expect(result.kind).toBe('ok');
   });
+
+  // 결함 1: 스키마 한정(public.) PII GRANT 도 탐지해야 한다.
+  it('스키마 한정 GRANT(public.contact_pii)도 PII 위반으로 잡는다', () => {
+    const result = evaluateMigrations([
+      {
+        name: '0099_schema_qualified.sql',
+        sql: 'GRANT SELECT ON public.contact_pii TO anon;',
+      },
+    ]);
+    expect(result.kind).toBe('violations');
+    if (result.kind === 'violations') {
+      expect(result.piiGrants).toHaveLength(1);
+      expect(result.piiGrants[0]?.table).toBe('contact_pii');
+      expect(result.piiGrants[0]?.role).toBe('anon');
+    }
+  });
+
+  it('콤마 리스트 GRANT 에 PII 가 섞여 있어도 잡는다', () => {
+    const result = evaluateMigrations([
+      {
+        name: '0099_comma.sql',
+        sql: 'GRANT SELECT ON public.surveys, public.contact_pii TO anon;',
+      },
+    ]);
+    expect(result.kind).toBe('violations');
+    if (result.kind === 'violations') {
+      expect(result.piiGrants.some((g) => g.table === 'contact_pii')).toBe(true);
+    }
+  });
+
+  it('스키마 한정 + TABLE 키워드 GRANT(public.contact_targets)도 잡는다', () => {
+    const result = evaluateMigrations([
+      {
+        name: '0099_schema_table.sql',
+        sql: 'GRANT ALL ON TABLE public.contact_targets TO authenticated;',
+      },
+    ]);
+    expect(result.kind).toBe('violations');
+    if (result.kind === 'violations') {
+      expect(result.piiGrants.some((g) => g.table === 'contact_targets')).toBe(true);
+    }
+  });
+
+  // 결함 2: 블랭킷 GRANT(ALL TABLES IN SCHEMA public)가 PII 를 덮어도 탐지해야 한다.
+  it('블랭킷 GRANT(ALL TABLES IN SCHEMA public TO anon)를 위반으로 잡는다', () => {
+    const result = evaluateMigrations([
+      {
+        name: '0099_blanket.sql',
+        sql: 'GRANT ALL ON ALL TABLES IN SCHEMA public TO anon;',
+      },
+    ]);
+    expect(result.kind).toBe('violations');
+    if (result.kind === 'violations') {
+      expect(result.piiGrants.length).toBeGreaterThan(0);
+      expect(result.piiGrants.some((g) => g.role === 'anon')).toBe(true);
+    }
+  });
+
+  it('블랭킷 GRANT 가 anon, authenticated 둘 다면 둘 다 잡는다', () => {
+    const result = evaluateMigrations([
+      {
+        name: '0099_blanket2.sql',
+        sql: 'GRANT SELECT ON ALL TABLES IN SCHEMA public TO anon, authenticated;',
+      },
+    ]);
+    expect(result.kind).toBe('violations');
+    if (result.kind === 'violations') {
+      const roles = result.piiGrants.map((g) => g.role).sort();
+      expect(roles).toEqual(['anon', 'authenticated']);
+    }
+  });
+
+  it('블랭킷 GRANT 가 service_role 만 대상이면 위반이 아니다', () => {
+    const result = evaluateMigrations([
+      {
+        name: '0001.sql',
+        sql: 'GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role;',
+      },
+    ]);
+    expect(result.kind).toBe('ok');
+  });
+
+  it('0037 의 ALTER DEFAULT PRIVILEGES REVOKE 는 블랭킷 위반이 아니다', () => {
+    const result = evaluateMigrations([
+      {
+        name: '0037.sql',
+        sql:
+          'ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public\n' +
+          '  REVOKE ALL ON TABLES FROM anon, authenticated;',
+      },
+    ]);
+    expect(result.kind).toBe('ok');
+  });
+
+  // 결함 3: CREATE POLICY ... TO anon/authenticated 재도입을 탐지해야 한다.
+  it('PII 테이블에 anon permissive 정책 재도입을 위반으로 잡는다', () => {
+    const result = evaluateMigrations([
+      {
+        name: '0099_policy.sql',
+        sql: 'CREATE POLICY p ON contact_pii FOR SELECT TO anon USING (true);',
+      },
+    ]);
+    expect(result.kind).toBe('violations');
+    if (result.kind === 'violations') {
+      expect(result.piiPolicies).toHaveLength(1);
+      expect(result.piiPolicies[0]?.table).toBe('contact_pii');
+      expect(result.piiPolicies[0]?.role).toBe('anon');
+      expect(result.piiPolicies[0]?.policy).toBe('p');
+    }
+  });
+
+  it('스키마 한정 테이블의 authenticated 정책 재도입도 잡는다', () => {
+    const result = evaluateMigrations([
+      {
+        name: '0099_policy2.sql',
+        sql:
+          'CREATE POLICY "ct_read" ON public.contact_targets\n' +
+          '  FOR ALL TO authenticated USING (true);',
+      },
+    ]);
+    expect(result.kind).toBe('violations');
+    if (result.kind === 'violations') {
+      expect(result.piiPolicies.some((p) => p.table === 'contact_targets')).toBe(true);
+    }
+  });
+
+  it('CREATE POLICY 후 같은 정책을 DROP 하면 net-out 되어 위반이 아니다', () => {
+    const result = evaluateMigrations([
+      {
+        name: '0019_create.sql',
+        sql:
+          'CREATE POLICY "contact_pii_owner_all" ON "contact_pii"\n' +
+          '  FOR ALL TO authenticated USING (true);',
+      },
+      {
+        name: '0036_drop.sql',
+        sql: 'DROP POLICY IF EXISTS "contact_pii_owner_all" ON "contact_pii";',
+      },
+    ]);
+    expect(result.kind).toBe('ok');
+  });
+
+  it('DROP 후 재 CREATE 하면 다시 net-created 로 위반이다', () => {
+    const result = evaluateMigrations([
+      {
+        name: '0036_drop.sql',
+        sql: 'DROP POLICY IF EXISTS "p" ON "contact_pii";',
+      },
+      {
+        name: '0040_recreate.sql',
+        sql: 'CREATE POLICY "p" ON "contact_pii" FOR SELECT TO anon USING (true);',
+      },
+    ]);
+    expect(result.kind).toBe('violations');
+    if (result.kind === 'violations') {
+      expect(result.piiPolicies.some((p) => p.policy === 'p')).toBe(true);
+    }
+  });
+
+  it('service_role 대상 정책은 위반이 아니다', () => {
+    const result = evaluateMigrations([
+      {
+        name: '0001.sql',
+        sql: 'CREATE POLICY p ON contact_pii FOR SELECT TO service_role USING (true);',
+      },
+    ]);
+    expect(result.kind).toBe('ok');
+  });
+
+  it('PII 가 아닌 테이블의 anon 정책은 검사 범위 밖이다', () => {
+    const result = evaluateMigrations([
+      {
+        name: '0001.sql',
+        sql: 'CREATE POLICY p ON surveys FOR SELECT TO anon USING (true);',
+      },
+    ]);
+    expect(result.kind).toBe('ok');
+  });
 });
 
 // 회귀 방지: 실제 supabase/migrations 디렉토리가 게이트를 통과해야 한다.
