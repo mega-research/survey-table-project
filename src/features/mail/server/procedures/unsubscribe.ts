@@ -1,4 +1,4 @@
-import { authed, pub } from '@/server/orpc';
+import { authed, pub, withRateLimit } from '@/server/orpc';
 
 import {
   LookupContactByTokenInput,
@@ -11,8 +11,10 @@ import * as svc from '../services/mail-unsubscribe.service';
 /**
  * 토큰으로 컨택 조회(pub). 무효 토큰이면 service 가 ok=false 반환 — 호출부가 fallback 처리.
  * 읽기 전용이라 익명(공개 수신거부 페이지)도 호출 가능.
+ * 공개 토큰 조회이므로 lookup 그룹으로 IP 당 rate limit 한다.
  */
 const lookup = pub
+  .use(withRateLimit('lookup'))
   .input(LookupContactByTokenInput)
   .output(LookupContactByTokenOutput)
   .handler(({ input }) => svc.lookupContactByToken(input));

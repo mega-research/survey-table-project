@@ -7,7 +7,7 @@ async function handle(request: Request) {
   }
   const { response } = await openapiHandler.handle(request, {
     prefix: '/api/v1',
-    context: await createContext(),
+    context: await createContext(request.headers),
   });
   return response ?? new Response('Not found', { status: 404 });
 }

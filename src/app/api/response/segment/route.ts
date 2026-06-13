@@ -1,13 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { recordVisibilitySegment } from '@/features/survey-response/server/services/lifecycle.service';
+import { getTrustedClientIp } from '@/lib/rate-limit/client-ip';
+import { getRateLimiter } from '@/lib/rate-limit/rate-limiter';
 
 /**
  * Page Visibility 세그먼트 수신 엔드포인트.
  * 클라이언트가 navigator.sendBeacon / fetch(keepalive)로 호출한다.
  * body: { responseId: string, action: 'hide' | 'show' }
+ *
+ * REST 엔드포인트라 oRPC 미들웨어를 거치지 않으므로 진입부에서 직접 rate limit 한다.
  */
 export async function POST(req: NextRequest) {
+  const ip = getTrustedClientIp(req.headers);
+  const { success } = await getRateLimiter().limit(`response-segment:${ip}`);
+  if (!success) {
+    return NextResponse.json({ error: 'rate limited' }, { status: 429 });
+  }
+
   let body: unknown;
   try {
     body = await req.json();

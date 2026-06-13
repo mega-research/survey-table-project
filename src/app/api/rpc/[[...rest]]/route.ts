@@ -4,7 +4,7 @@ import { rpcHandler } from '@/server/handler';
 async function handle(request: Request) {
   const { response } = await rpcHandler.handle(request, {
     prefix: '/api/rpc',
-    context: await createContext(),
+    context: await createContext(request.headers),
   });
   return response ?? new Response('Not found', { status: 404 });
 }
