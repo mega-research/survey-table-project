@@ -16,6 +16,52 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # 공급망 위생 게이트: high/critical 신규 취약점이 들어오면 CI 를 막는다.
+      # 잔존 항목은 모두 우리가 직접 버전을 올릴 수 없는 상위 패키지의 transitive
+      # 의존성(상위 릴리스 대기 중)이라 GHSA id 단위로 allowlist 한다.
+      # pnpm 8 의 audit 은 package.json auditConfig.ignoreGhsas 를 적용하지 않으므로
+      # json 출력을 직접 필터링한다. allowlist 에 없는 high/critical 이 1건이라도
+      # 남으면 게이트가 실패한다.
+      - name: 공급망 보안 감사 게이트
+        env:
+          # 잔존 unfixable transitive high 취약점 allowlist (패키지 / 경유 상위 의존성)
+          # minimatch ReDoS: @sentry/nextjs · eslint toolchain · exceljs
+          # flatted DoS: eslint toolchain
+          # @grpc/grpc-js: inngest
+          # serialize-javascript RCE / rollup / fast-uri: @sentry/nextjs
+          # picomatch / vite / esbuild: vite·vitest·@tailwindcss/vite·@sentry/nextjs (dev toolchain)
+          # tmp: exceljs
+          # lodash: recharts · @tremor/react
+          AUDIT_ALLOWLIST: >-
+            GHSA-23c5-xmqv-rm74 GHSA-25h7-pfq9-p65f GHSA-3ppc-4f35-3m26
+            GHSA-5375-pq7m-f5r2 GHSA-5c6j-r48x-rmvq GHSA-7r86-cg39-jmmj
+            GHSA-99f4-grh7-6pcq GHSA-c2c7-rcm5-vvqj GHSA-gv7w-rqvm-qjhr
+            GHSA-mw96-cpmx-2vgc GHSA-p9ff-h696-f583 GHSA-ph9p-34f9-6g65
+            GHSA-q3j6-qgpj-74h6 GHSA-r5fr-rjxr-66jc GHSA-rf6f-7fwh-wjgh
+            GHSA-v2wj-q39q-566r GHSA-v39h-62p7-jpjc
+        run: |
+          pnpm audit --audit-level=high --json > audit-report.json || true
+          node -e '
+            const fs = require("fs");
+            const allow = new Set((process.env.AUDIT_ALLOWLIST || "").split(/\s+/).filter(Boolean));
+            const data = JSON.parse(fs.readFileSync("audit-report.json", "utf8"));
+            const advs = Object.values(data.advisories || {});
+            const blocking = advs
+              .filter((a) => ["high", "critical"].includes(a.severity))
+              .map((a) => ({
+                id: a.github_advisory_id || (a.url || "").split("/").pop(),
+                pkg: a.module_name,
+                sev: a.severity,
+              }))
+              .filter((a) => !allow.has(a.id));
+            if (blocking.length > 0) {
+              console.error("Allowlist 에 없는 high/critical 취약점이 발견되었습니다:");
+              for (const b of blocking) console.error(`  ${b.sev} ${b.pkg} ${b.id}`);
+              console.error("의존성을 패치하거나, unfixable transitive 라면 사유와 함께 allowlist 에 추가하세요.");
+              process.exit(1);
+            }
+            console.log("감사 게이트 통과: allowlist 외 high/critical 취약점 없음.");
+          '
       - run: pnpm lint
       - run: pnpm exec tsc --noEmit
       - run: pnpm test
