@@ -146,6 +146,8 @@ type SurveyGateRow = {
   maxResponses: number | null;
   isPublic: boolean;
   requireInviteToken: boolean;
+  // #24 버전 무결성: 클라 제공 versionId 의 "현재 활성" 판정에 사용.
+  currentVersionId: string | null;
 };
 
 /** 가용성 게이트 입력 — 응답 시점 활성 버전(없으면 null). */
@@ -214,6 +216,7 @@ async function loadSurveyGateRow(surveyId: string): Promise<SurveyGateRow> {
       maxResponses: true,
       isPublic: true,
       requireInviteToken: true,
+      currentVersionId: true,
     },
   });
   if (!row) {
@@ -230,6 +233,41 @@ async function loadVersionGateRow(versionId: string | null | undefined): Promise
     columns: { status: true },
   });
   return row ?? null;
+}
+
+/**
+ * #24 버전 무결성 가드 — 클라 제공 versionId 의 소속/유효성 검증.
+ *
+ * 응답 행 생성 시점(startResponse/create*)에 클라이언트가 보내는 versionId 는 신뢰할 수 없다.
+ * - versionId 가 null/undefined 면 레거시/버전 미연결 경로 — 검증 skip, null 반환(기존 동작 보존).
+ * - versionId 가 있으면 그 행이 (a) 동일 surveyId 에 속하고 (b) 유효(published 또는 surveys.
+ *   currentVersionId 와 일치하는 현재 활성 버전)해야 한다. 위반 시 throw 로 거부한다.
+ *   타 설문의 versionId / 미존재 / 비published 비활성 버전 주입으로 응답이 엉뚱한 스냅샷에
+ *   바인딩되는 것을 차단한다.
+ *
+ * 반환값은 downstream assertSurveyAcceptingResponses 의 VersionGateRow 입력으로 그대로 쓴다.
+ */
+async function loadValidatedVersionGateRow(
+  surveyId: string,
+  versionId: string | null | undefined,
+  currentVersionId: string | null,
+): Promise<VersionGateRow> {
+  if (!versionId) return null;
+  const row = await db.query.surveyVersions.findFirst({
+    where: and(eq(surveyVersions.id, versionId), isNull(surveyVersions.deletedAt)),
+    columns: { surveyId: true, status: true },
+  });
+  // 미존재 또는 타 설문 소속이면 거부.
+  if (!row || row.surveyId !== surveyId) {
+    throw new SurveyNotAcceptingResponsesError('version_mismatch');
+  }
+  // 유효성: published 이거나 설문의 현재 활성 버전(currentVersionId)이어야 한다.
+  const isPublished = row.status === 'published';
+  const isCurrent = currentVersionId != null && currentVersionId === versionId;
+  if (!isPublished && !isCurrent) {
+    throw new SurveyNotAcceptingResponsesError('version_not_active');
+  }
+  return { status: row.status };
 }
 
 /**
@@ -360,7 +398,8 @@ export async function startResponse(input: StartResponseInput): Promise<SurveyRe
   // 가용성 게이트: 마감/draft/closed/비공개 설문에 응답 행이 생성되지 않도록 진입부에서 차단.
   // startResponse 는 inviteToken 을 받지 않으므로 비공개/토큰강제 설문이면 contactTargetId=null 로 거부된다.
   const survey = await loadSurveyGateRow(surveyId);
-  const version = await loadVersionGateRow(versionId);
+  // #24 버전 무결성: 클라 제공 versionId 가 동일 surveyId 의 유효 버전인지 검증(불일치 거부).
+  const version = await loadValidatedVersionGateRow(surveyId, versionId, survey.currentVersionId);
   assertSurveyAcceptingResponses(survey, version, { contactTargetId: null });
 
   const newResponse: NewSurveyResponse = {
@@ -507,7 +546,8 @@ export async function createResponseWithFirstAnswer(
   // 가용성 게이트: contactTargetId 확정 후 검사(비공개/토큰강제는 유효 invite 매칭 필요).
   // create 시점은 정원 soft(completedCount 미전달) — 잔여 race window 는 complete 하드체크가 보강.
   const survey = await loadSurveyGateRow(surveyId);
-  const version = await loadVersionGateRow(versionId);
+  // #24 버전 무결성: 클라 제공 versionId 가 동일 surveyId 의 유효 버전인지 검증(불일치 거부).
+  const version = await loadValidatedVersionGateRow(surveyId, versionId, survey.currentVersionId);
   assertSurveyAcceptingResponses(survey, version, { contactTargetId });
 
   const firstVisit: PageVisit = {
@@ -591,7 +631,8 @@ export async function createBlankResponse(
 
   // 가용성 게이트: contactTargetId 확정 후 검사. create 시점 정원 soft.
   const survey = await loadSurveyGateRow(surveyId);
-  const version = await loadVersionGateRow(versionId);
+  // #24 버전 무결성: 클라 제공 versionId 가 동일 surveyId 의 유효 버전인지 검증(불일치 거부).
+  const version = await loadValidatedVersionGateRow(surveyId, versionId, survey.currentVersionId);
   assertSurveyAcceptingResponses(survey, version, { contactTargetId });
 
   const firstVisit: PageVisit = {
