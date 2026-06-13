@@ -54,6 +54,11 @@ jobs:
         run: |
           pnpm audit --audit-level=high --json > audit-report.json || true
           pnpm exec tsx .github/audit-gate.ts audit-report.json
+      # RLS 하드닝 게이트: 신규 public 테이블이 ENABLE ROW LEVEL SECURITY 없이 추가되거나
+      # PII 테이블(contact_targets·contact_pii)에 anon/authenticated GRANT 가 재도입되면 막는다.
+      # 운영 DB 라이브 쿼리는 자격증명이 없어 불가하므로 마이그레이션 SQL 을 정적 분석한다.
+      - name: RLS 하드닝 게이트
+        run: pnpm exec tsx .github/rls-gate.ts supabase/migrations
       - run: pnpm lint
       - run: pnpm exec tsc --noEmit
       - run: pnpm test

@@ -21,7 +21,11 @@ max_rows = 1000
 # without explicit GRANTs. Leave unset today to preserve local behaviour. The implicit default
 # flips to `false` on 2026-05-30 to match the new cloud default, and the field is removed in
 # 2026-10-30 once the always-revoked behaviour is permanent. Set to `false` to opt in early.
-# auto_expose_new_tables = false
+# WS-3 RLS 하드닝(#19): 신규 public 테이블 자동 노출을 비활성화한다. 이 앱은 anon/authenticated
+# 롤로 Data API 를 통해 테이블을 직접 조회하지 않고(접근은 전부 Drizzle/service_role BYPASSRLS),
+# 신규 테이블이 RLS 깜빡 + anon GRANT 로 공개되는 footgun 을 원천 차단한다(0037 ALTER DEFAULT
+# PRIVILEGES 와 대칭 — config 는 로컬, 0037 은 운영 DB 정합).
+auto_expose_new_tables = false
 
 [api.tls]
 # Enable HTTPS endpoints locally using a self-signed certificate.
