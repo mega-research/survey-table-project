@@ -20,9 +20,60 @@ import { TMP_NOTICE_ATTACHMENT_PREFIX } from '@/lib/upload/attachment-policy';
 // deleteImages
 // ========================
 
-/** 이미지 URL 일괄 삭제 입력. URL 은 단순 문자열이라 z.string(). */
+/**
+ * 삭제가 허용되는 R2 이미지 key namespace.
+ * - tmp/: 업로드 직후 임시 객체(tmp/<kind>/...).
+ * - survey/: promote 후 영구 이미지(tmp/survey/ → survey/).
+ * 그 외 namespace(mail/ 영구 첨부, 루트 키 등)는 deleteImages 의 대상이 아니다.
+ */
+export const ALLOWED_IMAGE_KEY_PREFIXES = ['tmp/', 'survey/'] as const;
+
+/**
+ * R2 object key 가 삭제 허용 namespace 안에 있고 traversal 이 없는지 판정.
+ * - publicUrl substring 포함만으로 임의 영구 키(survey/<known>.webp 등)가 지워지지
+ *   않도록, URL→key 추출 후 service 가 이 게이트로 재검증한다(형제 첨부 라우트와 대칭).
+ * - '..'/'//' traversal 거부.
+ */
+export function isAllowedImageDeletionKey(key: string): boolean {
+  if (key.includes('..') || key.includes('//')) return false;
+  return ALLOWED_IMAGE_KEY_PREFIXES.some((prefix) => key.startsWith(prefix));
+}
+
+/**
+ * 이미지 URL 일괄 삭제 입력.
+ * - 각 항목은 절대 URL(http/https) 이어야 한다. bare key 문자열(스킴 없는 상대 경로)은
+ *   거부 — 영구 키를 url 로 위장해 우회하는 것을 차단.
+ * - traversal('..'/'//') path 거부(형제 첨부 삭제와 대칭).
+ * - 외부(non-R2) URL 은 service 단계에서 skip 되므로 입력에서는 막지 않는다(정상
+ *   cleanup batch 가 외부/우리 URL 을 섞어 보낼 수 있음).
+ */
 export const DeleteImagesInput = z.object({
-  urls: z.array(z.string()),
+  urls: z.array(
+    z
+      .string()
+      .refine((u) => !u.includes('..'), {
+        message: '유효하지 않은 이미지 URL 입니다.',
+      })
+      .refine(
+        (u) => {
+          let parsed: URL;
+          try {
+            parsed = new URL(u);
+          } catch {
+            // 절대 URL 이 아니면 거부(스킴 없는 bare key 차단).
+            return false;
+          }
+          if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+            return false;
+          }
+          // path 단계 traversal('//') 거부 — scheme 의 '://' 와 구분하기 위해
+          // pathname 만 검사한다.
+          if (parsed.pathname.includes('//')) return false;
+          return true;
+        },
+        { message: '유효하지 않은 이미지 URL 입니다.' },
+      ),
+  ),
 });
 export type DeleteImagesInput = z.infer<typeof DeleteImagesInput>;
 

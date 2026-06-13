@@ -5,12 +5,13 @@ import {
   deleteR2ObjectsByKey,
 } from '@/lib/image-utils-server';
 
-import type {
-  DeleteAttachmentTmpResult,
-  DeleteImagesInput,
-  DeleteImagesResult,
-  DeleteMailAttachmentTmpInput,
-  DeleteNoticeAttachmentTmpInput,
+import {
+  isAllowedImageDeletionKey,
+  type DeleteAttachmentTmpResult,
+  type DeleteImagesInput,
+  type DeleteImagesResult,
+  type DeleteMailAttachmentTmpInput,
+  type DeleteNoticeAttachmentTmpInput,
 } from '../../domain/media';
 
 /**
@@ -29,7 +30,12 @@ function resolveR2KeyFromUrl(url: string, publicUrl: string): string | null {
   if (!url.includes(publicUrl)) return null;
   try {
     const pathname = new URL(url).pathname;
-    return pathname.startsWith('/') ? pathname.substring(1) : pathname;
+    const key = pathname.startsWith('/') ? pathname.substring(1) : pathname;
+    // prefix whitelist 재검증 — publicUrl substring 포함만으로 의도 namespace 밖의
+    // 임의 영구 키(survey/<known>.webp 가 아닌 mail/... 등)가 삭제 대상이 되지 않게 한다.
+    // (입력 refine 과 이중 게이트 — 형제 첨부 라우트와 대칭)
+    if (!isAllowedImageDeletionKey(key)) return null;
+    return key;
   } catch {
     return null;
   }
