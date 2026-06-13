@@ -10,6 +10,8 @@ import {
   NewSurveyResponse,
   questions,
   surveyResponses,
+  surveys,
+  surveyVersions,
 } from '@/db/schema';
 import type { PageVisit } from '@/db/schema/schema-types';
 import { checkTrackA, checkTrackB } from '@/lib/duplicate-detection/check';
@@ -127,6 +129,175 @@ async function insertResponseWithContactReuse(params: {
 }
 
 // ========================
+// 응답 가용성 게이트 (#3) — 변조 가드 상수 (#5)
+// ========================
+
+/**
+ * 단일 질문 응답값의 직렬화 바이트 상한.
+ * 정상 응답(랭킹/테이블 매트릭스 포함)은 수 KB 수준이므로 256KB 면 충분히 여유롭다.
+ * 미인증 응답자가 거대 JSONB 를 주입해 저장소/직렬화 비용을 폭증시키는 것을 차단한다.
+ */
+const MAX_ANSWER_VALUE_BYTES = 256 * 1024;
+
+/** 가용성 게이트 입력 — 이미 조회된 설문 행의 부분집합. */
+type SurveyGateRow = {
+  status: string;
+  endDate: Date | null;
+  maxResponses: number | null;
+  isPublic: boolean;
+  requireInviteToken: boolean;
+};
+
+/** 가용성 게이트 입력 — 응답 시점 활성 버전(없으면 null). */
+type VersionGateRow = { status: string } | null;
+
+/** 응답 가용성 게이트 위반 시 던지는 에러. pub 엔드포인트라 호출자에 사유를 세분 노출하지 않는다. */
+export class SurveyNotAcceptingResponsesError extends Error {
+  constructor(reason: string) {
+    super(`응답을 받을 수 없는 설문입니다. (${reason})`);
+    this.name = 'SurveyNotAcceptingResponsesError';
+  }
+}
+
+/**
+ * 설문이 현재 응답을 받을 수 있는 상태인지 검증한다. 위반 시 throw.
+ *
+ * 검사 항목:
+ * - 설문 status === 'published' (또는 활성 version 이 published) 가 아니면 거부.
+ * - endDate 가 null 또는 미래여야 함. 경과 시 거부.
+ * - maxResponses: completedCount 가 주어지면(=완료 시점 하드체크) 완료 카운트 < maxResponses 검사.
+ *   create 시점은 completedCount 를 넘기지 않아 soft(검사 생략) — 잔여 race window 는 수용.
+ *   complete 시점 count 쿼리와 실제 UPDATE 사이의 동시성 갭(여러 응답이 동시에 마지막 정원을
+ *   채우는 경우)도 DB 레벨 락 없이 허용하는 잔여 window 다(문서화된 trade-off).
+ * - isPublic === false 면 유효 invite(contactTargetId)가 필요. requireInviteToken 이면 토큰 강제
+ *   (기존 checkTrackA 가 inviteToken 유효성을 별도 검증하므로 여기서는 contactTargetId 매칭 유무만 본다).
+ */
+function assertSurveyAcceptingResponses(
+  survey: SurveyGateRow,
+  version: VersionGateRow,
+  opts: { contactTargetId: string | null; completedCount?: number | null },
+): void {
+  // status: 설문 자체가 published 이거나, 활성 version 이 published 여야 함.
+  const surveyPublished = survey.status === 'published';
+  const versionPublished = version?.status === 'published';
+  if (!surveyPublished && !versionPublished) {
+    throw new SurveyNotAcceptingResponsesError('status_not_published');
+  }
+
+  // endDate 경과
+  if (survey.endDate != null && survey.endDate.getTime() <= Date.now()) {
+    throw new SurveyNotAcceptingResponsesError('end_date_passed');
+  }
+
+  // maxResponses 하드체크 (complete 시점에만 completedCount 전달)
+  if (
+    survey.maxResponses != null &&
+    opts.completedCount != null &&
+    opts.completedCount >= survey.maxResponses
+  ) {
+    throw new SurveyNotAcceptingResponsesError('max_responses_reached');
+  }
+
+  // 비공개 설문 / invite 강제
+  if ((survey.isPublic === false || survey.requireInviteToken) && opts.contactTargetId == null) {
+    throw new SurveyNotAcceptingResponsesError('invite_required');
+  }
+}
+
+/** 가용성 게이트용 설문 행 조회. 없으면 throw. */
+async function loadSurveyGateRow(surveyId: string): Promise<SurveyGateRow> {
+  const row = await db.query.surveys.findFirst({
+    where: and(eq(surveys.id, surveyId), isNull(surveys.deletedAt)),
+    columns: {
+      status: true,
+      endDate: true,
+      maxResponses: true,
+      isPublic: true,
+      requireInviteToken: true,
+    },
+  });
+  if (!row) {
+    throw new SurveyNotAcceptingResponsesError('survey_not_found');
+  }
+  return row;
+}
+
+/** 활성 버전 행 조회. versionId 없으면 null. */
+async function loadVersionGateRow(versionId: string | null | undefined): Promise<VersionGateRow> {
+  if (!versionId) return null;
+  const row = await db.query.surveyVersions.findFirst({
+    where: and(eq(surveyVersions.id, versionId), isNull(surveyVersions.deletedAt)),
+    columns: { status: true },
+  });
+  return row ?? null;
+}
+
+/**
+ * questionId 가 응답이 가리키는 질문 집합에 존재하는지 검증한다. 미존재면 throw.
+ *
+ * - versionId 가 있으면 그 버전 스냅샷(snapshot->'questions')의 멤버십을 검사한다
+ *   (응답은 응답 시점 스냅샷을 기준으로 하므로 권위 소스). non-array 스냅샷은 빈 배열로 폴백.
+ * - versionId 가 없으면(레거시/버전 미연결) surveyId 의 라이브 questions 테이블로 폴백.
+ *
+ * 임의 키 JSONB 주입(설문에 없는 questionId 로 questionResponses 오염)을 차단한다.
+ */
+async function assertQuestionBelongsToResponse(
+  versionId: string | null,
+  surveyId: string,
+  questionId: string,
+): Promise<void> {
+  if (versionId) {
+    const [hit] = await db
+      .select({ id: surveyVersions.id })
+      .from(surveyVersions)
+      .where(
+        and(
+          eq(surveyVersions.id, versionId),
+          sql`EXISTS (
+            SELECT 1
+            FROM jsonb_array_elements(
+              CASE WHEN jsonb_typeof(${surveyVersions.snapshot}->'questions') = 'array'
+                   THEN ${surveyVersions.snapshot}->'questions'
+                   ELSE '[]'::jsonb
+              END
+            ) AS qe(elem)
+            WHERE qe.elem->>'id' = ${questionId}
+          )`,
+        ),
+      )
+      .limit(1);
+    if (!hit) {
+      throw new Error('해당 설문에 존재하지 않는 질문입니다.');
+    }
+    return;
+  }
+
+  const [hit] = await db
+    .select({ id: questions.id })
+    .from(questions)
+    .where(and(eq(questions.surveyId, surveyId), eq(questions.id, questionId)))
+    .limit(1);
+  if (!hit) {
+    throw new Error('해당 설문에 존재하지 않는 질문입니다.');
+  }
+}
+
+/** surveyId 의 완료 응답 수 (soft-delete 제외). complete 시점 정원 하드체크용. */
+async function countCompletedResponses(surveyId: string): Promise<number> {
+  const [row] = await db
+    .select({ total: sql<number>`count(*)::int` })
+    .from(surveyResponses)
+    .where(
+      and(
+        eq(surveyResponses.surveyId, surveyId),
+        eq(surveyResponses.status, 'completed'),
+        isNull(surveyResponses.deletedAt),
+      ),
+    );
+  return row?.total ?? 0;
+}
+
+// ========================
 // 응답 변경 service (Mutations)
 // ========================
 
@@ -140,6 +311,12 @@ async function insertResponseWithContactReuse(params: {
 // 응답 시작
 export async function startResponse(input: StartResponseInput): Promise<SurveyResponse> {
   const { surveyId, sessionId, versionId } = input;
+
+  // 가용성 게이트: 마감/draft/closed/비공개 설문에 응답 행이 생성되지 않도록 진입부에서 차단.
+  // startResponse 는 inviteToken 을 받지 않으므로 비공개/토큰강제 설문이면 contactTargetId=null 로 거부된다.
+  const survey = await loadSurveyGateRow(surveyId);
+  const version = await loadVersionGateRow(versionId);
+  assertSurveyAcceptingResponses(survey, version, { contactTargetId: null });
 
   const newResponse: NewSurveyResponse = {
     surveyId,
@@ -161,6 +338,25 @@ export async function updateQuestionResponse(
   input: UpdateQuestionResponseInput,
 ): Promise<SurveyResponse> {
   const { responseId, questionId, value } = input;
+
+  // #5 변조 가드 1: value 직렬화 바이트 상한. DB UPDATE 이전에 차단해 거대 JSONB 주입을 막는다.
+  const serializedBytes = Buffer.byteLength(JSON.stringify(value ?? null), 'utf8');
+  if (serializedBytes > MAX_ANSWER_VALUE_BYTES) {
+    throw new SurveyNotAcceptingResponsesError('answer_value_too_large');
+  }
+
+  // #5 변조 가드 2: 응답 행 조회 — versionId/surveyId 로 questionId 소속을 검증한다.
+  const responseRow = await db.query.surveyResponses.findFirst({
+    where: eq(surveyResponses.id, responseId),
+    columns: { id: true, surveyId: true, versionId: true },
+  });
+  if (!responseRow) {
+    throw new Error('응답을 찾을 수 없습니다.');
+  }
+
+  // #5 변조 가드 3: questionId 가 해당 응답의 versionId 스냅샷(또는 surveyId 의 questions)에
+  // 존재해야 한다. 미존재면 거부 — 임의 키 JSONB 주입 차단.
+  await assertQuestionBelongsToResponse(responseRow.versionId, responseRow.surveyId, questionId);
 
   // jsonb_set 으로 답변 저장 + progress_pct 동기 갱신.
   // progress_pct 는 versionId 의 snapshot 에서 questionId 의 1-based position 을 찾아
@@ -201,11 +397,21 @@ export async function updateQuestionResponse(
         ), 0)
       ))::smallint, 0)`,
     })
-    .where(eq(surveyResponses.id, responseId))
+    // #5 변조 가드 4: 완료/삭제/타상태(종결) 응답의 사후 변조 차단. soft-delete 됐거나
+    // status 가 in_progress 가 아니면 영향 0행 → throw. pub 엔드포인트는 responseId 만으로
+    // 호출 가능하므로, 지연/리플레이된 update 가 종결 응답을 되돌리지 못하게 막는다.
+    .where(
+      and(
+        eq(surveyResponses.id, responseId),
+        isNull(surveyResponses.deletedAt),
+        eq(surveyResponses.status, 'in_progress'),
+      ),
+    )
     .returning();
 
   if (!updated) {
-    throw new Error('응답을 찾을 수 없습니다.');
+    // 행이 없거나(삭제/존재 안 함) 종결 상태면 변조 시도로 보고 거부한다.
+    throw new Error('응답을 수정할 수 없습니다.');
   }
 
   return updated;
@@ -252,6 +458,12 @@ export async function createResponseWithFirstAnswer(
     const trackB = await checkTrackB({ surveyId, signals });
     if (trackB.blocked) return { kind: 'blocked', reason: trackB.reason };
   }
+
+  // 가용성 게이트: contactTargetId 확정 후 검사(비공개/토큰강제는 유효 invite 매칭 필요).
+  // create 시점은 정원 soft(completedCount 미전달) — 잔여 race window 는 complete 하드체크가 보강.
+  const survey = await loadSurveyGateRow(surveyId);
+  const version = await loadVersionGateRow(versionId);
+  assertSurveyAcceptingResponses(survey, version, { contactTargetId });
 
   const firstVisit: PageVisit = {
     stepId: currentStepId,
@@ -332,6 +544,11 @@ export async function createBlankResponse(
     if (trackB.blocked) return { kind: 'blocked', reason: trackB.reason };
   }
 
+  // 가용성 게이트: contactTargetId 확정 후 검사. create 시점 정원 soft.
+  const survey = await loadSurveyGateRow(surveyId);
+  const version = await loadVersionGateRow(versionId);
+  assertSurveyAcceptingResponses(survey, version, { contactTargetId });
+
   const firstVisit: PageVisit = {
     stepId: currentStepId,
     enteredAt: new Date().toISOString(),
@@ -371,6 +588,24 @@ export async function completeResponse(
   input: CompleteResponseInput,
 ): Promise<SurveyResponse> {
   const { responseId, data } = input;
+
+  // 가용성 게이트(완료 시점 하드체크): 마감/폐쇄/draft/비공개 설문 완료를 차단하고,
+  // maxResponses 정원을 완료 카운트로 하드 검사한다. 응답 행에서 surveyId/versionId/
+  // contactTargetId 를 읽어 게이트 입력으로 사용한다. count 쿼리와 실제 완료 UPDATE 사이의
+  // 동시성 갭(동시 완료가 마지막 정원을 함께 채우는 경우)은 DB 락 없이 허용하는 잔여 window 다.
+  const gateRow = await db.query.surveyResponses.findFirst({
+    where: eq(surveyResponses.id, responseId),
+    columns: { surveyId: true, versionId: true, contactTargetId: true },
+  });
+  if (gateRow) {
+    const survey = await loadSurveyGateRow(gateRow.surveyId);
+    const version = await loadVersionGateRow(gateRow.versionId);
+    const completedCount = await countCompletedResponses(gateRow.surveyId);
+    assertSurveyAcceptingResponses(survey, version, {
+      contactTargetId: gateRow.contactTargetId,
+      completedCount,
+    });
+  }
 
   // prefill 재검증: defaultValueTemplate 이 있는 질문의 응답값은
   // contact_targets.attrs 로 치환한 expected 와 일치해야 함.

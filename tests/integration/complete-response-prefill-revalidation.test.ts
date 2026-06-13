@@ -74,6 +74,26 @@ vi.mock('@/db', () => {
       };
       return cb(tx);
     }),
+    // 가용성 게이트(#3): 완료 진입부에서 응답 행 + 설문 행을 조회한다.
+    query: {
+      surveyResponses: {
+        findFirst: vi.fn(async () => ({
+          surveyId: SURVEY_ID,
+          versionId: null,
+          contactTargetId: CONTACT_TARGET_ID,
+        })),
+      },
+      surveys: {
+        // maxResponses=null 인 published 설문 — 정원/마감 게이트 통과.
+        findFirst: vi.fn(async () => ({
+          status: 'published',
+          endDate: null,
+          maxResponses: null,
+          isPublic: true,
+          requireInviteToken: false,
+        })),
+      },
+    },
   };
   return { db };
 });
@@ -99,9 +119,10 @@ function queueSelects(opts: {
   attrs: Record<string, string>;
   template: string;
 }) {
-  // 호출 순서: 1) responseRow  2) contactTargets  3) prefillQuestions
+  // 호출 순서: 0) 가용성 게이트 완료 카운트  1) responseRow  2) contactTargets  3) prefillQuestions
   selectTerminalQueue.length = 0;
   selectTerminalQueue.push(
+    [{ total: 0 }],
     [{ contactTargetId: CONTACT_TARGET_ID, surveyId: SURVEY_ID }],
     [{ attrs: opts.attrs }],
     [{ id: PREFILL_QID, template: opts.template }],

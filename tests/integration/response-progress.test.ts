@@ -71,7 +71,13 @@ describe('updateQuestionResponse — progress_pct SET', () => {
   beforeEach(() => {
     updateSetMock.mockReset();
     updateReturningMock.mockReset();
+    findFirstMock.mockReset();
+    selectLimitMock.mockReset();
     updateReturningMock.mockResolvedValue([{ id: 'r1' }]);
+    // 변조 가드(#5): 응답 행 조회 → questionId 소속 검증.
+    // versionId=null 이면 questions 테이블 폴백, select().limit() = selectLimitMock.
+    findFirstMock.mockResolvedValue({ id: 'r1', surveyId: 's1', versionId: null });
+    selectLimitMock.mockResolvedValue([{ id: 'q3' }]);
   });
 
   it('set() 인자에 progressPct SQL 이 포함된다', async () => {
@@ -87,8 +93,9 @@ describe('updateQuestionResponse — progress_pct SET', () => {
     expect(setArg).toHaveProperty('questionResponses');
   });
 
-  it('응답 없음 → throw', async () => {
-    updateReturningMock.mockResolvedValue([]);
+  it('응답 행 없음 → throw (응답을 찾을 수 없습니다.)', async () => {
+    // 변조 가드(#5): 응답 행 조회가 비면 곧장 거부.
+    findFirstMock.mockResolvedValue(undefined);
     const { updateQuestionResponse } = await import('@/features/survey-response/server/services/response.service');
     await expect(
       updateQuestionResponse({ responseId: 'missing', questionId: 'q1', value: 'v' }),

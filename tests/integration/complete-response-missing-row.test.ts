@@ -19,7 +19,16 @@ vi.mock('@/db', () => {
   const chainable: Record<string, unknown> = {};
   chainable['update'] = vi.fn(() => chainable);
   chainable['set'] = vi.fn(() => chainable);
-  chainable['where'] = vi.fn(() => chainable);
+  // .where() 는 chainable(.limit/.returning) 이면서 thenable. 직접 await 되는 쿼리
+  // (가용성 게이트 count, totalSeconds 정정 UPDATE)는 빈 배열로 resolve 한다.
+  chainable['where'] = vi.fn(() => {
+    const whereResult: Record<string, unknown> = {
+      limit: vi.fn(() => selectLimitMock()),
+      returning: vi.fn(() => updateReturningMock()),
+      then: (resolve: (v: unknown) => unknown) => resolve([]),
+    };
+    return whereResult;
+  });
   chainable['returning'] = vi.fn(() => updateReturningMock());
   chainable['select'] = vi.fn(() => chainable);
   chainable['from'] = vi.fn(() => chainable);
@@ -28,6 +37,22 @@ vi.mock('@/db', () => {
     const tx = { ...chainable, delete: vi.fn(() => chainable), insert: vi.fn(() => chainable) };
     return cb(tx);
   });
+  // 가용성 게이트(#3): 완료 진입부에서 응답 행 + 설문 행을 조회한다. 게이트 자체를 통과시켜
+  // 기존 회귀(빈 returning 후 폴백 SELECT) 검증을 그대로 유지한다.
+  chainable['query'] = {
+    surveyResponses: {
+      findFirst: vi.fn(async () => ({ surveyId: 's1', versionId: null, contactTargetId: null })),
+    },
+    surveys: {
+      findFirst: vi.fn(async () => ({
+        status: 'published',
+        endDate: null,
+        maxResponses: null,
+        isPublic: true,
+        requireInviteToken: false,
+      })),
+    },
+  };
   return { db: chainable };
 });
 

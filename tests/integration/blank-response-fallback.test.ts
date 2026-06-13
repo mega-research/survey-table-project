@@ -73,6 +73,17 @@ vi.mock('@/db', () => ({
     query: {
       surveyResponses: { findFirst: findFirstMock },
       contactTargets: { findFirst: vi.fn() },
+      // 가용성 게이트(#3): published 공개 설문으로 통과시킨다.
+      surveys: {
+        findFirst: vi.fn(async () => ({
+          status: 'published',
+          endDate: null,
+          maxResponses: null,
+          isPublic: true,
+          requireInviteToken: false,
+        })),
+      },
+      surveyVersions: { findFirst: vi.fn(async () => null) },
     },
   },
 }));

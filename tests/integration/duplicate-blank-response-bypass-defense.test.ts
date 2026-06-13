@@ -11,15 +11,31 @@ const { mockFindFirst, mockHeaders, mockInsert } = vi.hoisted(() => ({
   mockInsert: vi.fn(),
 }));
 
+const mockQuestionLimit = vi.hoisted(() => vi.fn());
+
 vi.mock('@/db', () => ({
   db: {
-    query: { surveyResponses: { findFirst: mockFindFirst } },
+    query: {
+      surveyResponses: { findFirst: mockFindFirst },
+      // 가용성 게이트(#3): published 공개 설문으로 통과시킨다.
+      surveys: {
+        findFirst: vi.fn(async () => ({
+          status: 'published',
+          endDate: null,
+          maxResponses: null,
+          isPublic: true,
+          requireInviteToken: false,
+        })),
+      },
+      surveyVersions: { findFirst: vi.fn(async () => null) },
+    },
     insert: mockInsert,
     execute: vi.fn().mockResolvedValue([{ id: null }]),
     select: vi.fn().mockReturnValue({
       from: vi.fn().mockReturnValue({
         where: vi.fn().mockReturnValue({
-          limit: vi.fn().mockResolvedValue([]),
+          // updateQuestionResponse 의 questionId 존재 검사 등 select().limit() 종단.
+          limit: vi.fn(() => mockQuestionLimit()),
         }),
       }),
     }),
@@ -66,6 +82,8 @@ beforeEach(() => {
   mockHeaders.mockResolvedValue(
     new Headers({ 'x-forwarded-for': '10.0.0.6', 'user-agent': 'Chrome/120' }),
   );
+  // 기본: questionId 존재 검사가 hit (select().limit()).
+  mockQuestionLimit.mockResolvedValue([{ id: 'q1' }]);
 });
 
 describe('createBlankResponse bypass defense', () => {
@@ -88,8 +106,9 @@ describe('createBlankResponse bypass defense', () => {
 
 describe('clientSignals null 시 신호 기반 검사 skip', () => {
   it('createResponseWithFirstAnswer: clientSignals null → checkTrackB 호출 없이 INSERT 진행', async () => {
-    // findFirst 가 호출되었다면 mock 이 resolve 되도록 안전망. 단 호출 자체가 없어야 정상
-    mockFindFirst.mockResolvedValue(undefined);
+    // 변조 가드(#5): INSERT 후 updateQuestionResponse 가 응답 행을 조회하므로 유효 행을 돌려준다.
+    // (clientSignals null 이라 checkTrackB 는 skip — block 없이 created 반환되는 것으로 검증한다.)
+    mockFindFirst.mockResolvedValue({ id: 'new-response-id', surveyId: SURVEY_ID, versionId: null });
     mockInsert.mockReturnValue({
       values: vi.fn().mockReturnValue({
         onConflictDoNothing: vi.fn().mockReturnValue({
@@ -111,8 +130,9 @@ describe('clientSignals null 시 신호 기반 검사 skip', () => {
       clientSignals: null,
     });
 
+    // clientSignals null → checkTrackB skip 이 입증된다 (device_already_responded 차단 없이 created).
+    // (findFirst 자체는 변조 가드의 응답 행 조회로 호출되므로 더 이상 skip 지표가 아니다.)
     expect(result).toEqual({ kind: 'created', id: 'new-response-id', contactTargetId: null });
-    expect(mockFindFirst).not.toHaveBeenCalled();
     expect(mockInsert).toHaveBeenCalled();
   });
 
