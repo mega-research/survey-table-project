@@ -282,6 +282,51 @@ async function assertQuestionBelongsToResponse(
   }
 }
 
+/**
+ * assertQuestionBelongsToResponse 의 "집합 반환" 버전.
+ *
+ * 응답이 가리키는 질문 전체의 id 집합을 단일 쿼리로 수집한다(N+1 금지).
+ * - versionId 가 있으면 그 버전 스냅샷(snapshot->'questions')의 모든 elem->>'id' 를 권위 소스로 사용.
+ *   non-array 스냅샷은 빈 배열로 폴백.
+ * - versionId 가 없으면(레거시/버전 미연결) surveyId 의 라이브 questions 테이블로 폴백.
+ *
+ * completeResponse 의 JSONB 오염 가드(멤버십 필터)에서 사용한다. updateQuestionResponse 는
+ * 단건 검증이라 assertQuestionBelongsToResponse 를 쓰지만, completeResponse 는 여러 키를
+ * 한 번에 검증하므로 집합을 1회 로드해 키별로 in-memory 멤버십 검사를 수행한다.
+ */
+async function loadValidQuestionIds(
+  versionId: string | null,
+  surveyId: string,
+): Promise<Set<string>> {
+  if (versionId) {
+    // 버전 스냅샷(snapshot->'questions')의 모든 elem->>'id' 를 단일 쿼리로 수집한다.
+    // non-array 스냅샷은 CASE 로 빈 배열 폴백(ERROR 방지). assertQuestionBelongsToResponse
+    // 의 EXISTS subquery 와 동일한 jsonb_array_elements 패턴을 집합 추출로 확장한 것.
+    const rows = await db.execute<{ id: string | null }>(sql`
+      SELECT qe.elem->>'id' AS id
+      FROM survey_versions sv,
+           jsonb_array_elements(
+             CASE WHEN jsonb_typeof(sv.snapshot->'questions') = 'array'
+                  THEN sv.snapshot->'questions'
+                  ELSE '[]'::jsonb
+             END
+           ) AS qe(elem)
+      WHERE sv.id = ${versionId}
+    `);
+    const ids = new Set<string>();
+    for (const r of rows) {
+      if (r.id != null) ids.add(r.id);
+    }
+    return ids;
+  }
+
+  const rows = await db
+    .select({ id: questions.id })
+    .from(questions)
+    .where(eq(questions.surveyId, surveyId));
+  return new Set(rows.map((r) => r.id));
+}
+
 /** surveyId 의 완료 응답 수 (soft-delete 제외). complete 시점 정원 하드체크용. */
 async function countCompletedResponses(surveyId: string): Promise<number> {
   const [row] = await db
@@ -607,21 +652,37 @@ export async function completeResponse(
     });
   }
 
+  // #5 변조 가드(JSONB 오염, updateQuestionResponse 와 대칭): completeResponse 는
+  // data.questionResponses 를 verbatim 저장하므로, 미인증 응답자가 (a) 설문에 없는 임의
+  // questionId 수천 개, 또는 (b) 단일 키에 수 MB 값을 주입해 JSONB SSOT 를 오염/팽창시킬 수
+  // 있다(response_answers 정규화는 미존재 키를 거르지만 원본 JSONB 컬럼은 무방비).
+  // gateRow(이미 surveyId/versionId 조회됨)로 유효 questionId 집합을 1회 로드한 뒤,
+  // 유효 집합에 없는 키와 256KB 초과 값을 silent drop 한다(가용성 우선 — throw 아님).
+  // 이 필터를 prefill 강제 복원보다 먼저 적용해, 통과한 키에 한해서만 복원이 일어나게 한다.
+  let validatedResponses: Record<string, unknown> | undefined = data?.questionResponses;
+  if (data?.questionResponses && gateRow) {
+    const validIds = await loadValidQuestionIds(gateRow.versionId, gateRow.surveyId);
+    const filtered: Record<string, unknown> = {};
+    for (const [qid, value] of Object.entries(data.questionResponses)) {
+      // 멤버십 필터: 설문(버전 스냅샷/라이브 questions)에 없는 키는 drop.
+      if (!validIds.has(qid)) continue;
+      // 바이트 필터: 단일 키 직렬화 256KB 초과면 그 키만 drop.
+      const serializedBytes = Buffer.byteLength(JSON.stringify(value ?? null), 'utf8');
+      if (serializedBytes > MAX_ANSWER_VALUE_BYTES) continue;
+      filtered[qid] = value;
+    }
+    validatedResponses = filtered;
+  }
+
   // prefill 재검증: defaultValueTemplate 이 있는 질문의 응답값은
   // contact_targets.attrs 로 치환한 expected 와 일치해야 함.
   // 클라이언트가 disabled 입력을 우회 조작해도 서버에서 expected 값으로 강제 복원.
-  let validatedResponses: Record<string, unknown> | undefined = data?.questionResponses;
-  if (data?.questionResponses) {
-    const responseRow = await db
-      .select({ contactTargetId: surveyResponses.contactTargetId, surveyId: surveyResponses.surveyId })
-      .from(surveyResponses)
-      .where(eq(surveyResponses.id, responseId))
-      .limit(1);
+  // 위 멤버십/바이트 필터를 통과한 validatedResponses 에 한해 적용한다.
+  if (validatedResponses && gateRow) {
+    // contactTargetId/surveyId 는 gateRow 에서 이미 조회됨 — 중복 select 제거(쿼리 최소화).
+    const contactTargetId = gateRow.contactTargetId;
 
-    const firstResponseRow = responseRow[0];
-    const contactTargetId = firstResponseRow?.contactTargetId;
-
-    if (contactTargetId && firstResponseRow) {
+    if (contactTargetId) {
       const [target] = await db
         .select({ attrs: contactTargets.attrs })
         .from(contactTargets)
@@ -634,17 +695,18 @@ export async function completeResponse(
         .from(questions)
         .where(
           and(
-            eq(questions.surveyId, firstResponseRow.surveyId),
+            eq(questions.surveyId, gateRow.surveyId),
             isNotNull(questions.defaultValueTemplate),
           ),
         );
 
-      validatedResponses = { ...data.questionResponses };
+      // 멤버십/바이트 필터를 통과한 validatedResponses 를 기반으로 prefill 복원을 적용한다.
+      // (필터 결과를 다시 원본 questionResponses 로 덮어쓰면 오염 가드가 무력화되므로 금지.)
       for (const q of prefillQuestions) {
         if (!q.template?.trim()) continue;
         const expected = substituteTokens(q.template, attrs);
-        // 제출된 키만 검증 대상. 조건부로 숨겨져 응답에 포함되지 않은 prefill 질문은
-        // 건드리지 않아 미노출 질문에 허위 답변이 주입되지 않도록 한다.
+        // 제출된(=필터 통과한) 키만 검증 대상. 조건부로 숨겨져 응답에 포함되지 않은 prefill
+        // 질문은 건드리지 않아 미노출 질문에 허위 답변이 주입되지 않도록 한다.
         if (!(q.id in validatedResponses)) continue;
         const submitted = validatedResponses[q.id];
         // 타입 가드 없이 expected 와 다르면 무조건 강제 복원.
