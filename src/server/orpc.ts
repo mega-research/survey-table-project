@@ -1,6 +1,6 @@
 import { ORPCError, os } from '@orpc/server';
 
-import { getTrustedClientIp } from '@/lib/rate-limit/client-ip';
+import { getTrustedClientIpOrNull } from '@/lib/rate-limit/client-ip';
 import { getRateLimiter, type RateLimitGroup } from '@/lib/rate-limit/rate-limiter';
 
 import type { ORPCContext } from './context';
@@ -16,10 +16,19 @@ export const pub = base;
  *
  * 키 = group + ':' + 신뢰 클라이언트 IP. 한도 초과 시 TOO_MANY_REQUESTS.
  * Upstash env 미설정이면 limiter 가 no-op(항상 통과)이라 가용성에 영향 없음.
+ *
+ * 신뢰 IP 추출 불가(헤더 부재)면 fail-closed 로 거부한다. 식별 불가한 익명 요청들이
+ * 단일 'unknown' 버킷을 공유하면 상호 한도 잠식/약 DoS 가 되므로, 공유 버킷 대신
+ * 차단한다(Vercel 표준 배포는 항상 신뢰 헤더가 채워져 이 경로에 도달하지 않음).
  */
 export function withRateLimit(group: RateLimitGroup) {
   return base.middleware(async ({ context, next }) => {
-    const ip = getTrustedClientIp(context.headers ?? new Headers());
+    const ip = getTrustedClientIpOrNull(context.headers ?? new Headers());
+    if (ip === null) {
+      throw new ORPCError('TOO_MANY_REQUESTS', {
+        message: '요청을 식별할 수 없습니다. 잠시 후 다시 시도해 주세요.',
+      });
+    }
     const { success } = await getRateLimiter().limit(`${group}:${ip}`);
     if (!success) {
       throw new ORPCError('TOO_MANY_REQUESTS', {

@@ -88,6 +88,10 @@ let warnedNoop = false;
  * UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN 가 모두 설정되면 Upstash
  * limiter 를, 하나라도 없으면 no-op limiter 를 반환한다(최초 1회 console.warn).
  * Redis 클라이언트와 limiter 인스턴스를 재사용한다.
+ *
+ * 동시성: 이 함수 본문은 await 가 없는 완전 동기 코드라 단일 스레드 JS 이벤트 루프에서
+ * cached 검사~할당 사이에 다른 요청이 끼어들 수 없다. 따라서 콜드스타트 동시 요청에도
+ * Redis 클라이언트가 중복 생성되지 않는다(첫 동기 호출이 cached 를 채운 뒤 반환).
  */
 export function getRateLimiter(): RateLimiter {
   if (cached) {

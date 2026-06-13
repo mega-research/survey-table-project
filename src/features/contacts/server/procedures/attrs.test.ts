@@ -15,6 +15,8 @@ function anonContext(): ORPCContext {
     db: {} as never,
     supabase: { tag: 'anon-supabase' } as never,
     user: null,
+    // rate limit 미들웨어가 신뢰 IP 를 추출하도록 정상 요청 헤더를 제공한다.
+    headers: new Headers({ 'x-real-ip': '203.0.113.7' }),
   };
 }
 

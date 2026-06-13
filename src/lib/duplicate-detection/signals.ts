@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import { getTrustedClientIp } from '@/lib/rate-limit/client-ip';
+import { getTrustedClientIpOrNull } from '@/lib/rate-limit/client-ip';
 
 import type { ClientSignals, ServerSignals } from './types';
 
@@ -19,12 +19,12 @@ function sha256(input: string): string {
 }
 
 /**
- * 헤더에서 IP 를 추출한다. rate limit 과 동일한 신뢰 추출 경로(getTrustedClientIp)를 공유한다.
- * 추출 불가('unknown')면 null 을 반환해 ipHash 를 만들지 않는다(IP 신호 부재).
+ * 헤더에서 IP 를 추출한다. rate limit 과 동일한 신뢰 추출 경로(getTrustedClientIpOrNull)를 공유한다.
+ * 추출 불가면 null 을 반환해 ipHash 를 만들지 않는다(IP 신호 부재). 위조 가능한 leftmost
+ * x-forwarded-for 보다 위조 불가한 단일 값 헤더(x-vercel-forwarded-for/x-real-ip)를 우선한다.
  */
 export function extractIp(h: Headers): string | null {
-  const ip = getTrustedClientIp(h);
-  return ip === 'unknown' ? null : ip;
+  return getTrustedClientIpOrNull(h);
 }
 
 export function computeSignals(h: Headers, client: ClientSignals): ServerSignals {
