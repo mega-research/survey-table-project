@@ -7,6 +7,7 @@ import * as Sentry from '@sentry/nextjs';
 import { db } from '@/db';
 import { contactPii, contactTargets } from '@/db/schema/contacts';
 import { decryptPii } from '@/lib/crypto/aes';
+import { maskHint } from '@/lib/crypto/mask-hint';
 import { UUID_RE } from '@/lib/mail/constants';
 
 import type {
@@ -58,12 +59,16 @@ export async function lookupContactByToken(
       return { ok: false, email: null, alreadyUnsubscribed: false };
     }
 
+    // 미인증(pub) 경로이므로 평문 이메일을 노출하지 않는다. 복호화 후 즉시 마스킹해
+    // 표시용 힌트(asd...@nav...)만 반환한다. 소비처(unsubscribe page)는 화면 표시
+    // 문자열로만 사용하므로 마스킹 값으로 충분하다.
     let email: string | null = null;
     if (existing.cipher) {
       try {
-        email = decryptPii(existing.cipher);
+        const plain = decryptPii(existing.cipher);
+        email = maskHint('email', plain) || null;
       } catch {
-        // 복호화 실패 시 email 노출 안 함
+        // 복호화 실패 시 email 노출 안 함 (null 유지)
       }
     }
 
