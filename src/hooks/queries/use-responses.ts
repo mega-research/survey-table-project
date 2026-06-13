@@ -47,13 +47,17 @@ export function useCompletedResponses(surveyId: string | undefined) {
 }
 
 /**
- * 응답 상세 조회
+ * 응답 상세 조회. WS-2 IDOR 봉인: 설문 스코프를 함께 전달한다.
  */
-export function useResponse(responseId: string | undefined) {
+export function useResponse(responseId: string | undefined, surveyId: string | undefined) {
   return useQuery({
     queryKey: responseKeys.detail(responseId!),
-    queryFn: () => orpc.surveyBuilder.read.responseById.call({ responseId: responseId! }),
-    enabled: !!responseId,
+    queryFn: () =>
+      orpc.surveyBuilder.read.responseById.call({
+        responseId: responseId!,
+        surveyId: surveyId!,
+      }),
+    enabled: !!responseId && !!surveyId,
   });
 }
 

@@ -39,10 +39,15 @@ export async function getCompletedResponses(surveyId: string) {
   return responses;
 }
 
-// 응답 단일 조회. query-actions 는 1-arg(소프트삭제 제외) 시그니처만 노출했으므로 동일하게 유지.
-// (data/responses 의 2-arg includeDeleted 경로는 다른 호출자 전용 — 본 service 미노출.)
-export async function getResponseById(responseId: string) {
-  const where = and(eq(surveyResponses.id, responseId), notDeletedResponse);
+// 응답 단일 조회(소프트삭제 제외). WS-2 IDOR 봉인: responseId 단독 조회는 다른 설문
+// 소속 응답까지 끄집어낼 수 있으므로 surveyId 를 WHERE 스코프에 추가해 봉인한다.
+// (data/responses 의 includeDeleted 경로는 다른 호출자 전용 — 본 service 미노출.)
+export async function getResponseById(responseId: string, surveyId: string) {
+  const where = and(
+    eq(surveyResponses.id, responseId),
+    eq(surveyResponses.surveyId, surveyId),
+    notDeletedResponse,
+  );
   const response = await db.query.surveyResponses.findFirst({ where });
   return response;
 }

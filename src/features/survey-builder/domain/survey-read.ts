@@ -24,8 +24,8 @@ export type { VariableDef };
 export const SurveyIdInput = z.object({ surveyId: z.string() });
 export type SurveyIdInput = z.infer<typeof SurveyIdInput>;
 
-/** responseId 단일 input. */
-export const ResponseIdInput = z.object({ responseId: z.string() });
+/** responseId + surveyId input. WS-2 IDOR 봉인: 응답 단건 조회는 설문 스코프를 함께 받는다. */
+export const ResponseIdInput = z.object({ responseId: z.string(), surveyId: z.string() });
 export type ResponseIdInput = z.infer<typeof ResponseIdInput>;
 
 // ─────────────────────────────────────────────────────────────────────────────

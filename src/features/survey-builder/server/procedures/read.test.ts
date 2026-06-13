@@ -112,11 +112,11 @@ describe('surveyBuilder.read procedures', () => {
     expect(responseSvc.getCompletedResponses).toHaveBeenCalledWith(SURVEY_ID);
   });
 
-  it('responseById는 responseId를 풀어 getResponseById에 위임한다(1-arg)', async () => {
+  it('responseById는 responseId+surveyId를 풀어 getResponseById에 위임한다(설문 스코프)', async () => {
     vi.mocked(responseSvc.getResponseById).mockResolvedValue({ id: RESPONSE_ID } as never);
     const client = createRouterClient({ read }, { context: authedContext() });
-    const res = await client.read.responseById({ responseId: RESPONSE_ID });
-    expect(responseSvc.getResponseById).toHaveBeenCalledWith(RESPONSE_ID);
+    const res = await client.read.responseById({ responseId: RESPONSE_ID, surveyId: SURVEY_ID });
+    expect(responseSvc.getResponseById).toHaveBeenCalledWith(RESPONSE_ID, SURVEY_ID);
     expect((res as { id: string }).id).toBe(RESPONSE_ID);
   });
 

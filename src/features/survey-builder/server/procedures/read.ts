@@ -84,11 +84,11 @@ const completedResponses = authed
   .output(SurveyResponseArrayOutput)
   .handler(({ input }) => responseSvc.getCompletedResponses(input.surveyId));
 
-/** 응답 단일 조회(soft-delete 제외, 1-arg). */
+/** 응답 단일 조회(soft-delete 제외, 설문 스코프 봉인). */
 const responseById = authed
   .input(ResponseIdInput)
   .output(SurveyResponseOutput)
-  .handler(({ input }) => responseSvc.getResponseById(input.responseId));
+  .handler(({ input }) => responseSvc.getResponseById(input.responseId, input.surveyId));
 
 /** 버전별 완료 응답 + response_answers 어댑터 변환. */
 const responsesWithAnswers = authed
