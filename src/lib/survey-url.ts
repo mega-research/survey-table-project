@@ -127,20 +127,19 @@ export function validateSlug(slug: string): {
 
 /**
  * UUID v4 생성 (비공개 설문용)
- * crypto.randomUUID() 사용 (브라우저/Node.js 18+ 지원)
+ * crypto.randomUUID() 사용 — Node.js 18+ 및 모던 브라우저 전부 지원.
+ * private_token 의 권위 소스는 surveys.private_token 의 DB 기본값(gen_random_uuid())이며,
+ * 이 함수는 클라이언트측 미리보기/재발급용 보조 생성기다.
+ * 미지원 환경은 약한 Math.random 폴백 대신 fail-fast(throw) 한다.
  */
 export function generatePrivateToken(): string {
-  // crypto.randomUUID()가 지원되면 사용
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return crypto.randomUUID();
+  if (typeof crypto === 'undefined' || typeof crypto.randomUUID !== 'function') {
+    throw new Error(
+      'crypto.randomUUID() 를 사용할 수 없습니다. private_token 을 생성하려면 Node.js 18+ 또는 모던 브라우저 환경이 필요합니다.',
+    );
   }
 
-  // 폴백: 수동 UUID v4 생성
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === 'x' ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
+  return crypto.randomUUID();
 }
 
 /**
