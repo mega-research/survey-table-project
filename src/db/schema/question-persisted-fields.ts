@@ -3,10 +3,12 @@ import type { NewQuestion } from '@/db/schema';
 /**
  * 질문 영속 쓰기 채널(explicit field set — spread 금지, 불변식 A)이 반드시 다뤄야 하는 컬럼 키.
  *
- * 신규 컬럼 추가 절차: 여기 등재하면 `satisfies CompleteQuestionWrite` 를 부착한
- * 모든 쓰기 지점(survey-save 의 values/onConflictDoUpdate, questions.create,
- * duplicateSurvey)이 누락을 컴파일 에러로 호명한다 — "신규 컬럼 시 양쪽 점검" 수동
- * 절차의 tsc 관할화.
+ * 신규 컬럼 추가 절차: 여기 등재하면 모든 쓰기 채널이 누락을 컴파일 에러로 호명한다 —
+ * - 완전 쓰기(insert/upsert): `satisfies CompleteQuestionWrite` 부착 지점
+ *   (survey-save 의 values/onConflictDoUpdate, questions.create, duplicateSurvey)
+ * - 부분 쓰기(patch): questions.service updateQuestion 의 SSOT 순회
+ *   (data[field] 인덱스 접근이 UpdateQuestionData 스키마 누락을 호명)
+ * "신규 컬럼 시 양쪽 점검" 수동 절차의 tsc 관할화.
  *
  * id/surveyId/createdAt/updatedAt 은 지점별 소유(생성·충돌 처리 방식이 다름)라 제외.
  * imageUrl/videoUrl 은 레거시 미영속 컬럼이라 제외.

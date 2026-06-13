@@ -5,7 +5,10 @@ import { eq, inArray } from 'drizzle-orm';
 import { getQuestionsBySurvey } from '@/data/surveys';
 import { db } from '@/db';
 import { NewQuestion, questions } from '@/db/schema';
-import type { CompleteQuestionWrite } from '@/db/schema/question-persisted-fields';
+import {
+  PERSISTED_QUESTION_FIELDS,
+  type CompleteQuestionWrite,
+} from '@/db/schema/question-persisted-fields';
 import { extractImageUrlsFromQuestion } from '@/lib/image-extractor';
 import { deleteImagesFromR2Server } from '@/lib/image-utils-server';
 import { promoteSurveyImages, type PromotableQuestion } from '@/lib/survey/survey-image-promote';
@@ -79,46 +82,24 @@ export async function createQuestion(data: CreateQuestionInput): Promise<Questio
   return question as QuestionRow;
 }
 
-/** 질문 업데이트 — 허용 필드만 화이트리스트로 추출(불변식 A). */
+/** 질문 업데이트 — 영속 필드 SSOT 순회로 허용 필드만 추출(불변식 A). */
 export async function updateQuestion(
   questionId: string,
   data: UpdateQuestionData,
 ): Promise<QuestionRow> {
-  // 허용 필드만 추출 (id, surveyId, createdAt 등 변경 방지).
-  // type 은 생성 후 불변 — 패치 대상이 아니다 (UpdateQuestionData 에도 부재).
+  // PERSISTED_QUESTION_FIELDS 순회가 화이트리스트다 (id, surveyId, createdAt 등 변경 방지).
+  // 신규 컬럼이 SSOT 에 등재되면 아래 data[field] 인덱스 접근이 UpdateQuestionData
+  // 누락을 컴파일 에러로 호명한다 — 수동 if-체인의 silent drop(H17 류) 벡터 봉인.
   const allowed: Partial<NewQuestion> = { updatedAt: new Date() };
-  if (data.groupId !== undefined) allowed.groupId = data.groupId;
-  if (data.title !== undefined) allowed.title = data.title;
-  if (data.description !== undefined) allowed.description = data.description;
-  if (data.required !== undefined) allowed.required = data.required;
-  if (data.order !== undefined) allowed.order = data.order;
-  if (data.options !== undefined) allowed.options = data.options as NewQuestion['options'];
-  if (data.selectLevels !== undefined) allowed.selectLevels = data.selectLevels as NewQuestion['selectLevels'];
-  if (data.tableTitle !== undefined) allowed.tableTitle = data.tableTitle;
-  if (data.tableColumns !== undefined) allowed.tableColumns = data.tableColumns as NewQuestion['tableColumns'];
-  if (data.tableRowsData !== undefined) allowed.tableRowsData = data.tableRowsData as NewQuestion['tableRowsData'];
-  if (data.tableHeaderGrid !== undefined) allowed.tableHeaderGrid = data.tableHeaderGrid as NewQuestion['tableHeaderGrid'];
-  if (data.allowOtherOption !== undefined) allowed.allowOtherOption = data.allowOtherOption;
-  if (data.optionsColumns !== undefined) allowed.optionsColumns = data.optionsColumns;
-  if (data.minSelections !== undefined) allowed.minSelections = data.minSelections;
-  if (data.maxSelections !== undefined) allowed.maxSelections = data.maxSelections;
-  if (data.noticeContent !== undefined) allowed.noticeContent = data.noticeContent;
-  if (data.requiresAcknowledgment !== undefined) allowed.requiresAcknowledgment = data.requiresAcknowledgment;
-  if (data.placeholder !== undefined) allowed.placeholder = data.placeholder;
-  if (data.defaultValueTemplate !== undefined) allowed.defaultValueTemplate = data.defaultValueTemplate;
-  if (data.inputType !== undefined) allowed.inputType = data.inputType;
-  if (data.emptyDefault !== undefined) allowed.emptyDefault = data.emptyDefault;
-  if (data.tableValidationRules !== undefined) allowed.tableValidationRules = data.tableValidationRules as NewQuestion['tableValidationRules'];
-  if (data.dynamicRowConfigs !== undefined) allowed.dynamicRowConfigs = data.dynamicRowConfigs as NewQuestion['dynamicRowConfigs'];
-  if (data.hideColumnLabels !== undefined) allowed.hideColumnLabels = data.hideColumnLabels;
-  if (data.rankingConfig !== undefined) allowed.rankingConfig = data.rankingConfig as NewQuestion['rankingConfig'];
-  if (data.choiceGroups !== undefined) allowed.choiceGroups = data.choiceGroups as NewQuestion['choiceGroups'];
-  if (data.displayCondition !== undefined) allowed.displayCondition = data.displayCondition as NewQuestion['displayCondition'];
-  if (data.questionCode !== undefined) allowed.questionCode = data.questionCode;
-  if (data.isCustomSpssVarName !== undefined) allowed.isCustomSpssVarName = data.isCustomSpssVarName;
-  if (data.exportLabel !== undefined) allowed.exportLabel = data.exportLabel;
-  if (data.spssVarType !== undefined) allowed.spssVarType = data.spssVarType;
-  if (data.spssMeasure !== undefined) allowed.spssMeasure = data.spssMeasure;
+  for (const field of PERSISTED_QUESTION_FIELDS) {
+    if (field === 'type') continue; // 생성 후 불변 — 패치 대상이 아니다 (UpdateQuestionData 에도 부재)
+    const value = data[field];
+    if (value !== undefined) {
+      // 키 상관 할당(field ↔ value 타입 짝)은 TS 가 추적하지 못한다 — 키 집합은
+      // 위 인덱스 접근이, 값 타입은 zod(UpdateQuestionData)가 보증하므로 여기만 좁힌다.
+      (allowed as Record<string, unknown>)[field] = value;
+    }
+  }
 
   // tmp/survey/ 이미지를 영구 prefix로 promote (R2 move + URL 치환)
   const [allowedToUpdate] = await promoteSurveyImages([allowed as PromotableQuestion]);
