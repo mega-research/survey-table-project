@@ -209,17 +209,6 @@ export function useSurveyListSync() {
 export function useResponseSync() {
   const [isPending, startTransition] = useTransition();
 
-  // 응답 시작
-  const startResponse = useCallback(async (surveyId: string) => {
-    try {
-      const response = await client.surveyResponse.response.start({ surveyId });
-      return response;
-    } catch (error) {
-      console.error('응답 시작 실패:', error);
-      throw error;
-    }
-  }, []);
-
   // 질문 응답 업데이트
   const updateQuestionResponse = useCallback(
     async (responseId: string, questionId: string, value: unknown) => {
@@ -273,7 +262,6 @@ export function useResponseSync() {
 
   return {
     isPending,
-    startResponse,
     updateQuestionResponse,
     completeResponse,
     loadResponses,

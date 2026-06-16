@@ -70,6 +70,7 @@ function baseArgs(over: Partial<Parameters<typeof useResponseLifecycle>[0]> = {}
     sessionId: 'session-abc',
     versionId: null as string | null,
     signals: null,
+    honeypotRef: { current: null },
     currentResponseId: null as string | null,
     setCurrentResponseId: vi.fn(),
     setPendingResponse: vi.fn(),

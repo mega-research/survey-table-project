@@ -92,23 +92,6 @@ export function useQuestionStatistics(
 // ========================
 
 /**
- * 응답 시작
- */
-export function useStartResponse() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: ({ surveyId, sessionId }: { surveyId: string; sessionId?: string }) =>
-      client.surveyResponse.response.start({ surveyId, sessionId }),
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({
-        queryKey: responseKeys.listBySurvey(variables.surveyId),
-      });
-    },
-  });
-}
-
-/**
  * 질문 응답 업데이트
  */
 export function useUpdateQuestionResponse() {

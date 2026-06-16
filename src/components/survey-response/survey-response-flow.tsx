@@ -22,6 +22,7 @@ import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { Button } from '@/components/ui/button';
 
 import { useClientSignals } from '@/hooks/use-client-signals';
+import { HoneypotField } from '@/components/survey-response/honeypot-field';
 import { useKeyboardOpen } from '@/hooks/use-keyboard-open';
 import { useMultiLineDetection } from '@/hooks/use-line-count-detection';
 import { useMediaQuery } from '@/hooks/use-media-query';
@@ -223,6 +224,8 @@ export function SurveyResponseFlow({
   // 클라이언트 신호 (deviceId, screen 등) — 마운트 시 한 번 수집
   // null 이면 아직 수집 전. 수집 완료 후 듀얼 effect (duplicate check, callsite) 재트리거
   const signals = useClientSignals();
+  // 봇 방어 허니팟 입력 ref — create 시점에 값을 읽어 서버로 전달.
+  const honeypotRef = useRef<HTMLInputElement>(null);
 
   // 진입 시 중복 감지 가드 — duplicateStatus state 초기화 + checkOnEntry effect 를
   // useDuplicateGuard 로 추출 (초기값 admin-edit 분기·effect 가드/페이로드/cleanup·deps 동일).
@@ -441,6 +444,7 @@ export function SurveyResponseFlow({
     sessionId,
     versionId,
     signals,
+    honeypotRef,
     currentResponseId,
     setCurrentResponseId,
     setPendingResponse,
@@ -568,6 +572,8 @@ export function SurveyResponseFlow({
   return (
     <ContactAttrsProvider attrs={contactAttrs}>
       <div className="min-h-dvh bg-gray-50">
+      {/* 봇 방어 허니팟 — 화면에 안 보이는 입력. 봇이 채우면 서버가 차단 */}
+      <HoneypotField ref={honeypotRef} />
       {/* 헤더 */}
       <div className="border-b border-gray-200 bg-white">
         <div className={`${containerMaxWidth} mx-auto px-4 py-4 transition-all duration-300 md:px-6`}>

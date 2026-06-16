@@ -69,6 +69,8 @@ export const CreateResponseWithFirstAnswerInput = z.object({
   inviteToken: z.string().optional(),
   // null 이면 신호 기반 검사 skip — LocalStorage 차단 등 클라이언트 신호 수집 실패 시 null 그대로
   clientSignals: ClientSignalsSchema.nullable(),
+  // 봇 방어 허니팟. 실제 클라이언트는 hidden 필드라 항상 빈 값. 봇이 채우면 차단.
+  honeypot: z.string().optional(),
 });
 export type CreateResponseWithFirstAnswerInput = z.infer<
   typeof CreateResponseWithFirstAnswerInput
@@ -81,6 +83,8 @@ export const CreateBlankResponseInput = z.object({
   currentStepId: z.string(),
   inviteToken: z.string().optional(),
   clientSignals: ClientSignalsSchema.nullable(),
+  // 봇 방어 허니팟. 실제 클라이언트는 hidden 필드라 항상 빈 값. 봇이 채우면 차단.
+  honeypot: z.string().optional(),
 });
 export type CreateBlankResponseInput = z.infer<typeof CreateBlankResponseInput>;
 

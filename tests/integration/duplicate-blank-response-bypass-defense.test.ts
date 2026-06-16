@@ -104,21 +104,11 @@ describe('createBlankResponse bypass defense', () => {
   });
 });
 
-describe('clientSignals null 시 신호 기반 검사 skip', () => {
-  it('createResponseWithFirstAnswer: clientSignals null → checkTrackB 호출 없이 INSERT 진행', async () => {
-    // 변조 가드(#5): INSERT 후 updateQuestionResponse 가 응답 행을 조회하므로 유효 행을 돌려준다.
-    // (clientSignals null 이라 checkTrackB 는 skip — block 없이 created 반환되는 것으로 검증한다.)
-    mockFindFirst.mockResolvedValue({ id: 'new-response-id', surveyId: SURVEY_ID, versionId: null });
-    mockInsert.mockReturnValue({
-      values: vi.fn().mockReturnValue({
-        onConflictDoNothing: vi.fn().mockReturnValue({
-          returning: vi.fn().mockResolvedValue([
-            { id: 'new-response-id', contactTargetId: null },
-          ]),
-        }),
-      }),
-    });
-
+describe('clientSignals null 익명 제출 — create 는 봇 차단, checkOnEntry 는 통과(advisory)', () => {
+  // 보안 변경(봇 방어): 익명(invite 없음) 제출에 clientSignals 가 없으면 봇으로 차단한다.
+  // 실제 클라이언트는 응답 페이지 렌더 게이트상 signals 수집 완료 후에만 답변이 가능하므로
+  // create 시점 clientSignals 는 항상 non-null. null 은 Track B 우회용 직접 RPC 호출 봇뿐이다.
+  it('createResponseWithFirstAnswer: 익명 + clientSignals null → 봇 차단(INSERT 없음)', async () => {
     const { createResponseWithFirstAnswer } = await import('@/features/survey-response/server/services/response.service');
     const result = await createResponseWithFirstAnswer({
       surveyId: SURVEY_ID,
@@ -130,24 +120,11 @@ describe('clientSignals null 시 신호 기반 검사 skip', () => {
       clientSignals: null,
     });
 
-    // clientSignals null → checkTrackB skip 이 입증된다 (device_already_responded 차단 없이 created).
-    // (findFirst 자체는 변조 가드의 응답 행 조회로 호출되므로 더 이상 skip 지표가 아니다.)
-    expect(result).toEqual({ kind: 'created', id: 'new-response-id', contactTargetId: null });
-    expect(mockInsert).toHaveBeenCalled();
+    expect(result).toEqual({ kind: 'blocked', reason: 'device_already_responded' });
+    expect(mockInsert).not.toHaveBeenCalled();
   });
 
-  it('createBlankResponse: clientSignals null → checkTrackB 호출 없이 INSERT 진행', async () => {
-    mockFindFirst.mockResolvedValue(undefined);
-    mockInsert.mockReturnValue({
-      values: vi.fn().mockReturnValue({
-        onConflictDoNothing: vi.fn().mockReturnValue({
-          returning: vi.fn().mockResolvedValue([
-            { id: 'new-blank-id', contactTargetId: null },
-          ]),
-        }),
-      }),
-    });
-
+  it('createBlankResponse: 익명 + clientSignals null → 봇 차단(INSERT 없음)', async () => {
     const { createBlankResponse } = await import('@/features/survey-response/server/services/response.service');
     const result = await createBlankResponse({
       surveyId: SURVEY_ID,
@@ -157,9 +134,8 @@ describe('clientSignals null 시 신호 기반 검사 skip', () => {
       clientSignals: null,
     });
 
-    expect(result).toEqual({ kind: 'created', id: 'new-blank-id', contactTargetId: null });
-    expect(mockFindFirst).not.toHaveBeenCalled();
-    expect(mockInsert).toHaveBeenCalled();
+    expect(result).toEqual({ kind: 'blocked', reason: 'device_already_responded' });
+    expect(mockInsert).not.toHaveBeenCalled();
   });
 
   it('checkDuplicateOnEntry: clientSignals null → blocked false 즉시 반환', async () => {

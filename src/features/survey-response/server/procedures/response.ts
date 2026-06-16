@@ -5,7 +5,6 @@ import {
   CreateBlankResponseInput,
   CreateResponseWithFirstAnswerInput,
   FirstAnswerResultSchema,
-  StartResponseInput,
   SurveyResponseRowSchema,
   UpdateQuestionResponseInput,
 } from '../../domain/response';
@@ -14,13 +13,9 @@ import * as svc from '../services/response.service';
 // 응답 쓰기 mutation 은 모두 response-mutation 그룹으로 IP 당 rate limit 한다.
 const rateLimited = pub.use(withRateLimit('response-mutation'));
 
-/**
- * 응답 시작(pub). 익명 응답자가 호출. 인증 미들웨어 불필요.
- */
-const start = rateLimited
-  .input(StartResponseInput)
-  .output(SurveyResponseRowSchema)
-  .handler(({ input }) => svc.startResponse(input));
+// 주의: response.start 는 제거됨(봇 방어). clientSignals/honeypot 을 받지 않는 무인증 빈 행
+// 생성 경로라 봇 우회 표면이었고, 정상 클라이언트는 createWithFirstAnswer/createBlank 만 쓴다.
+// 빈 응답 행이 필요한 notice-only 흐름은 createBlank 가 담당한다.
 
 /**
  * 질문 응답 업데이트(pub). jsonb_set 원자적 머지 + progress_pct 동기 갱신.
@@ -55,7 +50,6 @@ const complete = rateLimited
   .handler(({ input }) => svc.completeResponse(input));
 
 export const response = {
-  start,
   updateAnswer,
   createWithFirstAnswer,
   createBlank,

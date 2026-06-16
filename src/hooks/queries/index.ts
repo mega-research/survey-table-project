@@ -20,7 +20,6 @@ export {
   useResponse,
   useResponseSummary,
   useQuestionStatistics,
-  useStartResponse,
   useUpdateQuestionResponse,
   useCompleteResponse,
   useExportResponsesJson,

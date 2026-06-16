@@ -42,14 +42,6 @@ const CLIENT_SIGNALS = {
 describe('surveyResponse.response procedures', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('start(pub)는 익명 컨텍스트에서 응답 행을 반환한다', async () => {
-    vi.mocked(svc.startResponse).mockResolvedValue({ id: RESPONSE_ID } as never);
-    const client = createRouterClient({ response }, { context: anonContext() });
-    const res = await client.response.start({ surveyId: SURVEY_ID });
-    expect(svc.startResponse).toHaveBeenCalledWith({ surveyId: SURVEY_ID });
-    expect((res as { id: string }).id).toBe(RESPONSE_ID);
-  });
-
   it('updateAnswer(pub)는 객체 input 을 service 에 그대로 위임한다', async () => {
     vi.mocked(svc.updateQuestionResponse).mockResolvedValue({ id: RESPONSE_ID } as never);
     const client = createRouterClient({ response }, { context: anonContext() });

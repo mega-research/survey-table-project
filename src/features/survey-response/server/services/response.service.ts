@@ -23,6 +23,7 @@ import { parseBrowser, parsePlatform } from '@/lib/operations/parse-ua';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 
 import type {
+  ClientSignals,
   CompleteResponseInput,
   CreateBlankResponseInput,
   CreateResponseWithFirstAnswerInput,
@@ -393,7 +394,12 @@ async function countCompletedResponses(surveyId: string): Promise<number> {
 // - createBlankResponse
 // - completeResponse
 
-// 응답 시작
+// 응답 시작.
+//
+// ⚠️ 보안: pub procedure 로 다시 노출하지 말 것. clientSignals/honeypot 을 받지 않는
+// 무인증 빈 행 생성 경로라 봇 방어(isLikelyBot)를 우회하는 표면이 된다(2026-06 적대 리뷰).
+// response.start procedure 는 제거됐고, 정상 클라는 createWithFirstAnswer/createBlank 만 쓴다.
+// 이 함수는 가용성 게이트(assertSurveyAcceptingResponses) 단위 테스트용으로만 유지한다.
 export async function startResponse(input: StartResponseInput): Promise<SurveyResponse> {
   const { surveyId, sessionId, versionId } = input;
 
@@ -510,6 +516,23 @@ export async function updateQuestionResponse(
 // ========================
 
 /**
+ * 봇 방어 가드 (bypass defense). true 면 차단 대상.
+ * - honeypot 채워짐: 실제 클라이언트는 hidden 필드라 항상 빈 값, 봇이 자동 채움.
+ * - 익명(invite 없음) + clientSignals 부재: 실제 클라이언트는 응답 페이지 렌더 게이트상
+ *   signals 수집 완료(non-null) 전엔 답변이 불가하므로 create 시점 항상 non-null.
+ *   null 은 Track B 중복검사를 우회하려는 직접 RPC 호출 봇뿐이다.
+ */
+function isLikelyBot(args: {
+  honeypot: string | undefined;
+  inviteToken: string | undefined;
+  clientSignals: ClientSignals | null;
+}): boolean {
+  if (args.honeypot && args.honeypot.trim().length > 0) return true;
+  if (!args.inviteToken && !args.clientSignals) return true;
+  return false;
+}
+
+/**
  * 첫 답변과 함께 survey_responses 행을 INSERT.
  *
  * - UA를 서버 헤더에서 읽어 platform/browser를 파싱
@@ -523,7 +546,12 @@ export async function updateQuestionResponse(
 export async function createResponseWithFirstAnswer(
   input: CreateResponseWithFirstAnswerInput,
 ): Promise<FirstAnswerResult> {
-  const { surveyId, sessionId, versionId, questionId, value, currentStepId, visibleStepIndex, visibleStepTotal, inviteToken, clientSignals } = input;
+  const { surveyId, sessionId, versionId, questionId, value, currentStepId, visibleStepIndex, visibleStepTotal, inviteToken, clientSignals, honeypot } = input;
+
+  // 봇 방어: db/헤더 접근 전에 차단. 사유는 device_already_responded 로 통일(탐지 비노출).
+  if (isLikelyBot({ honeypot, inviteToken, clientSignals })) {
+    return { kind: 'blocked', reason: 'device_already_responded' };
+  }
 
   // UA + IP (Next 15+ 비동기 headers API)
   const headerStore = await headers();
@@ -611,7 +639,12 @@ export async function createResponseWithFirstAnswer(
 export async function createBlankResponse(
   input: CreateBlankResponseInput,
 ): Promise<FirstAnswerResult> {
-  const { surveyId, sessionId, versionId, currentStepId, inviteToken, clientSignals } = input;
+  const { surveyId, sessionId, versionId, currentStepId, inviteToken, clientSignals, honeypot } = input;
+
+  // 봇 방어: db/헤더 접근 전에 차단. 사유는 device_already_responded 로 통일(탐지 비노출).
+  if (isLikelyBot({ honeypot, inviteToken, clientSignals })) {
+    return { kind: 'blocked', reason: 'device_already_responded' };
+  }
 
   const headerStore = await headers();
   const userAgent = headerStore.get('user-agent') ?? null;

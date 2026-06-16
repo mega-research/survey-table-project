@@ -57,6 +57,8 @@ interface UseResponseLifecycleArgs {
   sessionId: string;
   versionId: string | null;
   signals: ClientSignals | null;
+  // 봇 방어 허니팟 입력 ref — create 시점에 .value 를 읽어 서버로 전달(봇이 채우면 차단).
+  honeypotRef: RefObject<HTMLInputElement | null>;
 
   // 응답 스토어 액션 (컴포넌트 소유)
   currentResponseId: string | null;
@@ -127,6 +129,7 @@ export function useResponseLifecycle({
   sessionId,
   versionId,
   signals,
+  honeypotRef,
   currentResponseId,
   setCurrentResponseId,
   setPendingResponse,
@@ -185,6 +188,7 @@ export function useResponseLifecycle({
           visibleStepTotal: visibleProgressRef.current.total,
           ...(inviteToken != null ? { inviteToken } : {}),
           clientSignals: signals,
+          ...(honeypotRef.current?.value ? { honeypot: honeypotRef.current.value } : {}),
         })
           .then((result) => {
             if (result.kind === 'blocked') {
@@ -294,6 +298,7 @@ export function useResponseLifecycle({
             currentStepId: stepIdOf(currentStep),
             ...(inviteToken != null ? { inviteToken } : {}),
             clientSignals: signals,
+            ...(honeypotRef.current?.value ? { honeypot: honeypotRef.current.value } : {}),
           });
           if (created.kind === 'blocked') {
             setDuplicateStatus({ kind: 'blocked', reason: created.reason });
