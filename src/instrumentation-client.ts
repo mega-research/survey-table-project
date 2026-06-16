@@ -14,9 +14,10 @@ Sentry.init({
   replaysOnErrorSampleRate: 1.0,
   integrations: [Sentry.replayIntegration()],
 
-  // Enable sending user PII (Personally Identifiable Information)
+  // PII 비전송: 사용자 IP·요청 컨텍스트가 Sentry 이벤트에 첨부되는 것을 차단.
+  // Session Replay 는 기본 마스킹(maskAllText/maskAllInputs)에 의존한다.
   // https://docs.sentry.io/platforms/javascript/guides/nextjs/configuration/options/#sendDefaultPii
-  sendDefaultPii: true,
+  sendDefaultPii: false,
 });
 
 export const onRouterTransitionStart = Sentry.captureRouterTransitionStart;

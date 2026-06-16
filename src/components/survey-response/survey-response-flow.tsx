@@ -37,7 +37,7 @@ import { useResponseTelemetry } from '@/components/survey-response/hooks/use-res
 import { useSessionRecovery } from '@/components/survey-response/hooks/use-session-recovery';
 import { useSurveyLoader } from '@/components/survey-response/hooks/use-survey-loader';
 import { ResumeToast } from '@/components/survey-response/resume-toast';
-import { isEmptyHtml } from '@/lib/utils';
+import { generateId, isEmptyHtml } from '@/lib/utils';
 import {
   collectTableQuestionOptions,
   filterOptionTextsForSubmission,
@@ -208,7 +208,9 @@ export function SurveyResponseFlow({
   // 페이지 진입 시 1회 생성된 세션 식별자. 컴포넌트 수명 동안 안정적.
   // - createResponseWithFirstAnswer의 멱등성 키 (surveyId, sessionId)
   // - 새 응답 행은 첫 답변 시점에만 INSERT (페이지 진입 시 X)
-  const [sessionId, setSessionId] = useState<string>(() => `session-${Date.now()}`);
+  // crypto.randomUUID 기반(generateId) — 예측 가능한 session-<Date.now()> 는
+  // resume→updateQuestionResponse 의 in_progress 응답 변조 윈도를 열어준다.
+  const [sessionId, setSessionId] = useState<string>(() => generateId());
 
   // 첫 답변 INSERT 진행 플래그(isCreatingResponse)는 useResponseLifecycle 이 소유한다.
   // 제출 시도 후 하이라이트할 질문 ID 집합

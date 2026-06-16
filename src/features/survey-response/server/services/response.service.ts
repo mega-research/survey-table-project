@@ -1,5 +1,7 @@
 import 'server-only';
 
+import { randomUUID } from 'node:crypto';
+
 import { headers } from 'next/headers';
 
 import { and, eq, isNotNull, isNull, sql } from 'drizzle-orm';
@@ -406,7 +408,9 @@ export async function startResponse(input: StartResponseInput): Promise<SurveyRe
     surveyId,
     questionResponses: {},
     isCompleted: false,
-    sessionId: sessionId || `session-${Date.now()}`,
+    // 예측 가능한 session-<밀리초> 폴백 금지 — pub(무인증) start 로 도달 가능해
+    // resume→updateQuestionResponse 응답 변조 윈도를 연다. crypto.randomUUID 로 생성.
+    sessionId: sessionId || randomUUID(),
     versionId: versionId || null,
   };
 

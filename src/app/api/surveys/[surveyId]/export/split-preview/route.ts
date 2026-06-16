@@ -7,6 +7,7 @@ import { surveyResponses, surveys } from '@/db/schema';
 import { completedResponse, notDeletedResponse } from '@/data/response-filters';
 import { normalizeQuestions } from '@/lib/question';
 import { requireAuth } from '@/lib/auth';
+import { isAdminUserAllowed } from '@/lib/auth/admin-allowlist';
 import {
   detectSplitCandidates,
   planSplit,
@@ -23,7 +24,12 @@ export async function GET(
   { params }: { params: Promise<{ surveyId: string }> },
 ) {
   try {
-    await requireAuth();
+    // 인증 + admin allowlist 가드(export/route.ts 와 동일 정책). 설문 구조·응답 집계를
+    // 노출하므로 임의 인증사용자의 형제 우회를 차단한다.
+    const user = await requireAuth();
+    if (!isAdminUserAllowed(user.id)) {
+      return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
+    }
     const { surveyId } = await params;
     const basis = request.nextUrl.searchParams.get('basis');
 

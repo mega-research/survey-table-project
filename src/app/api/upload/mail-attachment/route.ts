@@ -11,6 +11,7 @@ import {
 import * as Sentry from '@sentry/nextjs';
 
 import { requireAuth } from '@/lib/auth';
+import { isAdminUserAllowed } from '@/lib/auth/admin-allowlist';
 import {
   MAX_ATTACHMENT_FILE_BYTES,
   TMP_ATTACHMENT_PREFIX,
@@ -33,10 +34,17 @@ const r2Client = new S3Client({
 });
 
 export async function POST(request: NextRequest) {
+  let userId: string;
   try {
-    await requireAuth();
+    const user = await requireAuth();
+    userId = user.id;
   } catch {
     return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
+  }
+  // admin allowlist 가드 — oRPC authed 와 동일 정책. ADMIN_USER_IDS 로 어드민을
+  // 잠갔을 때 임의 인증사용자의 R2 첨부 업로드 남용을 차단.
+  if (!isAdminUserAllowed(userId)) {
+    return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
   }
 
   const bucketName = process.env['CLOUDFLARE_R2_BUCKET'];

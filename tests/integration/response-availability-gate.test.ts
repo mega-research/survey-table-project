@@ -124,6 +124,24 @@ describe('assertSurveyAcceptingResponses — startResponse 게이트', () => {
     expect(res).toMatchObject({ id: 'r1' });
   });
 
+  it('sessionId 미제공 시 예측 불가능한 UUID 세션 식별자를 생성한다', async () => {
+    // pub(무인증) start procedure 로 sessionId 없이 호출 가능 — 서버 폴백이 예측가능한
+    // session-<밀리초> 면 resume→updateQuestionResponse 변조 윈도가 열린다(클라 fix 우회 차단).
+    surveyFindFirstMock.mockResolvedValue(publishedSurvey());
+    insertChain.values.mockClear();
+    const { startResponse } = await import('@/features/survey-response/server/services/response.service');
+    await startResponse({ surveyId: SURVEY_ID });
+
+    const valuesCalls = insertChain.values.mock.calls as unknown as Array<
+      [{ sessionId: string }]
+    >;
+    const inserted = valuesCalls[0]![0];
+    expect(inserted.sessionId).not.toMatch(/^session-\d+$/);
+    expect(inserted.sessionId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    );
+  });
+
   it('status=draft 면 거부한다', async () => {
     surveyFindFirstMock.mockResolvedValue(publishedSurvey({ status: 'draft' }));
     const { startResponse } = await import('@/features/survey-response/server/services/response.service');

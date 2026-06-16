@@ -84,6 +84,7 @@ export async function dispatchCampaignChunk(
       inviteToken: contactTargets.inviteToken,
       unsubscribeToken: contactTargets.unsubscribeToken,
       attrs: contactTargets.attrs,
+      unsubscribedAt: contactTargets.unsubscribedAt,
     })
     .from(mailRecipients)
     .innerJoin(contactTargets, eq(mailRecipients.contactTargetId, contactTargets.id))
@@ -97,6 +98,40 @@ export async function dispatchCampaignChunk(
 
   if (rows.length === 0) return { sent: 0, failed: 0 };
 
+  // 큐잉 → dispatch 사이에 수신거부한 수신자는 발송 대상에서 제외하고 skipped_unsubscribed
+  // 로 마감한다(TOCTOU 차단, 정보통신망법 제50조 수신거부 즉시반영). queued_count 도 함께
+  // 감소시켜 finalize 판정(queued_count=0)이 막히지 않게 한다.
+  const activeRows = rows.filter((row) => row.unsubscribedAt == null);
+  const unsubscribedRows = rows.filter((row) => row.unsubscribedAt != null);
+
+  const skipNow = new Date();
+  for (const row of unsubscribedRows) {
+    await db.transaction(async (tx) => {
+      const updated = await tx
+        .update(mailRecipients)
+        .set({ status: 'skipped_unsubscribed', updatedAt: skipNow })
+        .where(
+          and(eq(mailRecipients.id, row.recipientId), eq(mailRecipients.status, 'queued')),
+        )
+        .returning({ id: mailRecipients.id });
+      if (updated.length === 0) return;
+      await tx
+        .update(mailCampaigns)
+        .set({
+          queuedCount: sql`${mailCampaigns.queuedCount} - 1`,
+          skippedUnsubscribedCount: sql`${mailCampaigns.skippedUnsubscribedCount} + 1`,
+          updatedAt: skipNow,
+        })
+        .where(eq(mailCampaigns.id, campaignId));
+    });
+  }
+
+  // 활성 수신자가 없으면(전건 수신거부) 발송 없이 종료 판정만 수행.
+  if (activeRows.length === 0) {
+    await db.transaction((tx) => finalizeCampaignIfDone(tx, campaignId));
+    return { sent: 0, failed: 0 };
+  }
+
   const attachments =
     campaign.attachmentsSnapshot.length > 0
       ? await resolveCampaignAttachments(campaign.attachmentsSnapshot)
@@ -107,7 +142,7 @@ export async function dispatchCampaignChunk(
     campaign.replyToSnapshot ?? `${campaign.fromLocalSnapshot}@${fromDomain}`;
 
   const bulkInputs: BulkRecipientInput[] = await Promise.all(
-    rows.map(async (row) => {
+    activeRows.map(async (row) => {
       const inviteUrl = `${baseUrl}/survey/${campaign.surveyId}?invite=${row.inviteToken}`;
       const unsubscribeUrl = `${baseUrl}/unsubscribe/${row.unsubscribeToken}`;
 
