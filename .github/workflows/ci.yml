@@ -59,6 +59,11 @@ jobs:
       # 운영 DB 라이브 쿼리는 자격증명이 없어 불가하므로 마이그레이션 SQL 을 정적 분석한다.
       - name: RLS 하드닝 게이트
         run: pnpm exec tsx .github/rls-gate.ts supabase/migrations
+      # 마이그레이션 추적 드리프트 게이트: 모든 .sql 파일이 _journal.json(db:migrate) 또는
+      # manual-migrations.json(MCP 수동 적용)으로 추적되는지 검사한다. 어디에도 없는 파일은
+      # 재해복구 시 누락되는 silent drift 이므로 막는다(docs/runbooks/disaster-recovery.md).
+      - name: 마이그레이션 추적 드리프트 게이트
+        run: pnpm exec tsx .github/migration-journal-gate.ts supabase/migrations
       - run: pnpm lint
       - run: pnpm exec tsc --noEmit
       - run: pnpm test

@@ -1,0 +1,28 @@
+{
+  "_comment": "MCP apply_migration 또는 직접 SQL 로 prod 에 적용한 수동 마이그레이션 목록. drizzle 의 _journal.json(db:migrate 가 따라감)은 이것들을 추적하지 않으므로(feedback_drizzle_migrate_journal) 여기에 명시한다. 신규 수동 마이그레이션을 supabase/migrations/ 에 추가하면 반드시 이 목록에 tag(파일명에서 .sql 제외)를 등재해야 .github/migration-journal-gate.ts 가 통과한다. 등재되지 않은 .sql 파일은 어디에도 추적되지 않는 silent drift 로 간주해 CI 가 차단한다. 복구 절차는 docs/runbooks/disaster-recovery.md 참조.",
+  "migrations": [
+    "0001_add_min_max_selections",
+    "0003_clever_dazzler",
+    "0009_add_hide_column_labels",
+    "0019_add_contact_unsubscribe",
+    "0020_mail_campaigns",
+    "0021_mail_billing_periods",
+    "0022_contact_attrs_token",
+    "0023_drop_allow_other_option",
+    "0025_lookups_unified_columns",
+    "0026_response_last_edited_at",
+    "0027_add_response_progress_pct",
+    "0028_backfill_response_progress_pct",
+    "0029_sweep_threshold_3h",
+    "0030_question_input_type",
+    "0031_response_visible_step_progress",
+    "0032_mail_recipients_target_index",
+    "0033_response_edit_logs",
+    "0034_question_choice_groups",
+    "0035_enable_rls_public_tables",
+    "0036_harden_contact_pii_rls",
+    "0037_revoke_default_table_grants",
+    "0038_add_dedup_partial_indexes",
+    "0039_revoke_lookup_invite_token_anon_execute"
+  ]
+}
