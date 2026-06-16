@@ -13,10 +13,32 @@ export const base = os.$context<ORPCContext>();
 export const pub = base;
 
 /**
+ * rate limiter 판정 — 한도 초과면 true.
+ *
+ * 외부 의존성(Upstash) 호출은 fail-open: 장애/자격증명 오류 등으로 .limit() 이 throw 해도
+ * false(통과)로 흡수해 응답 수집 전체가 죽지 않게 한다. env 미설정 시 noop 으로 fail-open
+ * 하는 정책(getRateLimiter)을 "설정됐으나 호출 실패" 케이스로 확장한 것. 한도 초과
+ * (success=false)는 정상 거부로 유지하고, throw 만 통과로 흡수한다.
+ */
+export async function isRateLimited(group: RateLimitGroup, ip: string): Promise<boolean> {
+  try {
+    const { success } = await getRateLimiter().limit(`${group}:${ip}`);
+    return !success;
+  } catch (err) {
+    console.error(
+      `[rate-limit] limiter 호출 실패 — fail-open 통과 (group=${group})`,
+      err,
+    );
+    return false;
+  }
+}
+
+/**
  * rate limit 미들웨어 팩토리. pub 프로시저에 .use(withRateLimit(group)) 로 부착한다.
  *
  * 키 = group + ':' + 신뢰 클라이언트 IP. 한도 초과 시 TOO_MANY_REQUESTS.
- * Upstash env 미설정이면 limiter 가 no-op(항상 통과)이라 가용성에 영향 없음.
+ * Upstash env 미설정이면 limiter 가 no-op(항상 통과)이라 가용성에 영향 없음. limiter 호출이
+ * 실패하면 isRateLimited 가 fail-open 으로 흡수한다.
  *
  * 신뢰 IP 추출 불가(헤더 부재)면 fail-closed 로 거부한다. 식별 불가한 익명 요청들이
  * 단일 'unknown' 버킷을 공유하면 상호 한도 잠식/약 DoS 가 되므로, 공유 버킷 대신
@@ -30,8 +52,7 @@ export function withRateLimit(group: RateLimitGroup) {
         message: '요청을 식별할 수 없습니다. 잠시 후 다시 시도해 주세요.',
       });
     }
-    const { success } = await getRateLimiter().limit(`${group}:${ip}`);
-    if (!success) {
+    if (await isRateLimited(group, ip)) {
       throw new ORPCError('TOO_MANY_REQUESTS', {
         message: '요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.',
       });
