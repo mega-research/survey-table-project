@@ -495,7 +495,7 @@ import { Button } from "@/components/ui/button";
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
-DATABASE_URL=                  # postgres-js 직접 연결
+DATABASE_URL=                  # postgres-js → Supabase Transaction pooler(pgBouncer, 6543). prepare:false 필수
 
 # Cloudflare R2
 R2_ACCOUNT_ID=
