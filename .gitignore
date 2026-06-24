@@ -62,3 +62,4 @@ docs
 # local agent metadata
 .gstack
 .claude/settings.json
+.scratch/

@@ -1,5 +1,6 @@
-import { withSentryConfig } from "@sentry/nextjs";
-import type { NextConfig } from "next";
+import type { NextConfig } from 'next';
+
+import { withSentryConfig } from '@sentry/nextjs';
 
 // 전역 보안 헤더 정의.
 // next.config 의 headers() 가 소비하는 순수 함수로 분리해 단위 테스트에서 직접 검증한다.
@@ -8,19 +9,18 @@ import type { NextConfig } from "next";
 export function securityHeaders() {
   return [
     {
-      source: "/(.*)",
+      source: '/(.*)',
       headers: [
-        { key: "X-Frame-Options", value: "SAMEORIGIN" },
-        { key: "X-Content-Type-Options", value: "nosniff" },
-        { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+        { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+        { key: 'X-Content-Type-Options', value: 'nosniff' },
+        { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
         {
-          key: "Strict-Transport-Security",
-          value: "max-age=63072000; includeSubDomains; preload",
+          key: 'Strict-Transport-Security',
+          value: 'max-age=63072000; includeSubDomains; preload',
         },
         {
-          key: "Permissions-Policy",
-          value:
-            "camera=(), microphone=(), geolocation=(), interest-cohort=()",
+          key: 'Permissions-Policy',
+          value: 'camera=(), microphone=(), geolocation=(), interest-cohort=()',
         },
       ],
     },
@@ -28,7 +28,6 @@ export function securityHeaders() {
 }
 
 const nextConfig: NextConfig = {
-
   reactCompiler: true,
 
   // 전역 안전 보안 헤더 (전 라우트 적용). 정의는 securityHeaders() 참조.
@@ -55,8 +54,13 @@ const nextConfig: NextConfig = {
 
 // 4. Sentry 설정 적용 (기본값 유지)
 export default withSentryConfig(nextConfig, {
-  ...(process.env['SENTRY_ORG'] !== undefined ? { org: process.env['SENTRY_ORG'] } : {}),
-  ...(process.env['SENTRY_PROJECT'] !== undefined ? { project: process.env['SENTRY_PROJECT'] } : {}),
+  // org/project 는 환경변수 기반 (하드코딩 금지 — 테스트 프로젝트로 소스맵 업로드 방지)
+  ...(process.env['SENTRY_ORG'] !== undefined
+    ? { org: process.env['SENTRY_ORG'] }
+    : {}),
+  ...(process.env['SENTRY_PROJECT'] !== undefined
+    ? { project: process.env['SENTRY_PROJECT'] }
+    : {}),
 
   // 배포 시 소스맵 업로드 로그 숨김 (CI/CD 로그 깔끔하게)
   silent: !process.env['CI'],
@@ -70,7 +74,7 @@ export default withSentryConfig(nextConfig, {
   },
 
   // Sentry 터널링 (광고 차단기 우회하여 에러 수집)
-  tunnelRoute: "/monitoring",
+  tunnelRoute: '/monitoring',
 
   // 불필요한 로그 끄기
   disableLogger: true,
