@@ -8,6 +8,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 
+import { useSyncLatestRef } from '@/hooks/use-latest-ref';
 import type { TableRow } from '@/types/survey';
 
 const LOAD_MARGIN = '1500px 0px';
@@ -65,7 +66,7 @@ export function useRowVisibility(
   // ref 로 보관해 effect 안에서 만들어진 IO 콜백이 항상 최신 값을 읽도록 유지.
   const mergedRanges = useMemo(() => extractMergedRanges(displayRows), [displayRows]);
   const mergedRangesRef = useRef<MergedRange[]>(mergedRanges);
-  mergedRangesRef.current = mergedRanges;
+  useSyncLatestRef(mergedRangesRef, mergedRanges);
 
   const [visibleSet, setVisibleSet] = useState<Set<number>>(() => {
     const initial = new Set<number>();

@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 
 import { type Patch, applyPatches, enablePatches, produceWithPatches } from 'immer';
 
+import { useSyncLatestRef } from '@/hooks/use-latest-ref';
 import { generateId } from '@/lib/utils';
 import type { TableColumn, TableRow } from '@/types/survey';
 import {
@@ -74,10 +75,10 @@ export function useDragCopy({
   const [undoInfo, setUndoInfo] = useState<PasteUndoInfo | null>(null);
 
   const dragCopyStateRef = useRef(dragCopyState);
-  dragCopyStateRef.current = dragCopyState;
+  useSyncLatestRef(dragCopyStateRef, dragCopyState);
 
   const copiedRegionRef = useRef(copiedRegion);
-  copiedRegionRef.current = copiedRegion;
+  useSyncLatestRef(copiedRegionRef, copiedRegion);
 
   // 마지막으로 처리한 마우스 위치 (중복 업데이트 방지)
   const lastDragPosRef = useRef<{ row: number; cell: number } | null>(null);

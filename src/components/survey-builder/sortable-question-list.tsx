@@ -34,6 +34,7 @@ import {
 
 import { client } from '@/shared/lib/rpc';
 import { useEnsureSurveyInDb } from '@/hooks/use-ensure-survey-in-db';
+import { useSyncLatestRef } from '@/hooks/use-latest-ref';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { extractImageUrlsFromQuestion } from '@/lib/image-extractor';
@@ -397,7 +398,7 @@ export function SortableQuestionList({
 
   // 콜백 안정화용 ref (questions 참조를 useCallback deps에서 제거)
   const questionsRef = useRef(questions);
-  questionsRef.current = questions;
+  useSyncLatestRef(questionsRef, questions);
 
   // content-visibility용 카드 높이 캐시 (모드별 분리)
   const editHeightMap = useMemo(() => {

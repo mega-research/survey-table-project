@@ -1,5 +1,6 @@
 import { useCallback, useRef } from 'react';
 
+import { useSyncLatestRef } from '@/hooks/use-latest-ref';
 import { useTestResponseStore } from '@/stores/test-response-store';
 
 /**
@@ -30,9 +31,9 @@ export function useQuestionResponseWriter(params: {
 
   // ref 패턴: stale closure 방지 (빠른 연속 업데이트 시 최신 값 보장)
   const valueRef = useRef(value);
-  valueRef.current = value;
+  useSyncLatestRef(valueRef, value);
   const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
+  useSyncLatestRef(onChangeRef, onChange);
 
   return useCallback(
     (patch: Record<string, unknown>) => {

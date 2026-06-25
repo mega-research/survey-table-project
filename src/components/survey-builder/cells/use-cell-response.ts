@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { useSyncLatestRef } from '@/hooks/use-latest-ref';
 import { useQuestionResponseWriter } from '@/hooks/use-question-response-writer';
 import { useTestResponseStore } from '@/stores/test-response-store';
 
@@ -55,7 +56,7 @@ export function useCellResponse(
 
   // Phase 5-D: sibling 셀 id 변경 시 stale closure 방지
   const siblingIdsRef = useRef(siblingCellIds);
-  siblingIdsRef.current = siblingCellIds;
+  useSyncLatestRef(siblingIdsRef, siblingCellIds);
 
   const updateValue = useCallback(
     (cellValue: string | string[] | object) => {

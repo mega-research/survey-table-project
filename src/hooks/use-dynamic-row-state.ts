@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 
+import { useSyncLatestRef } from '@/hooks/use-latest-ref';
 import { useQuestionResponseWriter } from '@/hooks/use-question-response-writer';
 import { useTestResponseStore } from '@/stores/test-response-store';
 import type { DynamicRowGroupConfig, TableRow } from '@/types/survey';
@@ -76,9 +77,9 @@ export function useDynamicRowState({
 
   // ref 패턴으로 안정적 참조 유지
   const dynamicRowsRef = useRef(dynamicRows);
-  dynamicRowsRef.current = dynamicRows;
+  useSyncLatestRef(dynamicRowsRef, dynamicRows);
   const selectedRowIdsRef = useRef(selectedRowIds);
-  selectedRowIdsRef.current = selectedRowIds;
+  useSyncLatestRef(selectedRowIdsRef, selectedRowIds);
 
   // 모드별 병합·커밋 의식은 질문 응답 쓰기 채널이 소유
   const mergePatch = useQuestionResponseWriter({ questionId, isTestMode, value, onChange });
