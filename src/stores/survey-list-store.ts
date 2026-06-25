@@ -114,8 +114,8 @@ export interface SurveyListItem {
   description?: string;
   slug?: string;
   privateToken?: string;
-  questionCount: number;
   responseCount: number;
+  completedResponseCount: number;
   createdAt: Date;
   updatedAt: Date;
   isPublic: boolean;

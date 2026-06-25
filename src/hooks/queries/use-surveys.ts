@@ -25,11 +25,17 @@ export const surveyKeys = {
 /**
  * 설문 목록 조회 (요약 정보 포함)
  */
-export function useSurveys() {
-  return useQuery({
+export function surveyListQueryOptions() {
+  return {
     queryKey: surveyKeys.lists(),
     queryFn: () => orpc.surveyBuilder.read.list.call(),
-  });
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  };
+}
+
+export function useSurveys() {
+  return useQuery(surveyListQueryOptions());
 }
 
 /**

@@ -9,7 +9,12 @@ vi.mock('@/data/surveys', () => ({
   getSurveyWithDetails: vi.fn(),
 }));
 
+vi.mock('@/data/responses', () => ({
+  getResponseCountsGroupedBySurvey: vi.fn(),
+}));
+
 const surveysFindFirst = vi.fn();
+const surveysFindMany = vi.fn();
 const surveyVersionsFindFirst = vi.fn();
 
 vi.mock('@/db', () => ({
@@ -17,6 +22,7 @@ vi.mock('@/db', () => ({
     query: {
       surveys: {
         findFirst: (...args: unknown[]) => surveysFindFirst(...args),
+        findMany: (...args: unknown[]) => surveysFindMany(...args),
       },
       surveyVersions: {
         findFirst: (...args: unknown[]) => surveyVersionsFindFirst(...args),
@@ -25,9 +31,14 @@ vi.mock('@/db', () => ({
   },
 }));
 
+import { getResponseCountsGroupedBySurvey } from '@/data/responses';
 import { getSurveyWithDetails as getSurveyWithDetailsData } from '@/data/surveys';
 
-import { getSurveyForResponse, getSurveyWithDetails } from './survey-read.service';
+import {
+  getSurveyForResponse,
+  getSurveyListWithCounts,
+  getSurveyWithDetails,
+} from './survey-read.service';
 
 const SURVEY_ID = 'survey-1';
 
@@ -52,6 +63,87 @@ describe('survey-read.service getSurveyWithDetails', () => {
     const result = await getSurveyWithDetails(SURVEY_ID);
 
     expect(result).toBeNull();
+  });
+});
+
+describe('survey-read.service getSurveyListWithCounts', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('목록에 필요한 survey 컬럼만 조회하고 전체/완료 응답 수를 병합한다', async () => {
+    const createdAt = new Date('2026-06-01T00:00:00.000Z');
+    const updatedAt = new Date('2026-06-02T00:00:00.000Z');
+    surveysFindMany.mockResolvedValue([
+      {
+        id: 'survey-1',
+        title: '첫 설문',
+        description: null,
+        slug: 'first',
+        privateToken: '11111111-1111-1111-1111-111111111111',
+        createdAt,
+        updatedAt,
+        isPublic: true,
+      },
+      {
+        id: 'survey-2',
+        title: '둘째 설문',
+        description: '설명',
+        slug: null,
+        privateToken: null,
+        createdAt,
+        updatedAt,
+        isPublic: false,
+      },
+    ]);
+    vi.mocked(getResponseCountsGroupedBySurvey).mockResolvedValue(
+      new Map([['survey-1', { total: 5, completed: 3 }]]),
+    );
+
+    const result = await getSurveyListWithCounts();
+
+    expect(surveysFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        columns: {
+          id: true,
+          title: true,
+          description: true,
+          slug: true,
+          privateToken: true,
+          createdAt: true,
+          updatedAt: true,
+          isPublic: true,
+        },
+      }),
+    );
+    expect(getResponseCountsGroupedBySurvey).toHaveBeenCalledWith(['survey-1', 'survey-2']);
+    expect(result).toEqual([
+      {
+        id: 'survey-1',
+        title: '첫 설문',
+        description: null,
+        slug: 'first',
+        privateToken: '11111111-1111-1111-1111-111111111111',
+        responseCount: 5,
+        completedResponseCount: 3,
+        createdAt,
+        updatedAt,
+        isPublic: true,
+      },
+      {
+        id: 'survey-2',
+        title: '둘째 설문',
+        description: '설명',
+        slug: null,
+        privateToken: null,
+        responseCount: 0,
+        completedResponseCount: 0,
+        createdAt,
+        updatedAt,
+        isPublic: false,
+      },
+    ]);
+    expect(result[0]).not.toHaveProperty('questionCount');
   });
 });
 

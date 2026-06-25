@@ -23,6 +23,7 @@
     "0036_harden_contact_pii_rls",
     "0037_revoke_default_table_grants",
     "0038_add_dedup_partial_indexes",
-    "0039_revoke_lookup_invite_token_anon_execute"
+    "0039_revoke_lookup_invite_token_anon_execute",
+    "0040_survey_list_indexes"
   ]
 }

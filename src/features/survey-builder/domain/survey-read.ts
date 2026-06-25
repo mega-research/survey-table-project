@@ -33,8 +33,7 @@ export type ResponseIdInput = z.infer<typeof ResponseIdInput>;
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * 설문 목록 요약 한 행. getSurveyListWithCounts 가 반환하는 인라인 객체 형태를
- * 그대로 타입화. responseCount 는 원본대로 항상 0(별도 집계 미수행)으로 고정.
+ * 설문 목록 요약 한 행. 목록 화면이 쓰는 survey projection 과 응답 집계만 포함한다.
  */
 export type SurveyListItem = {
   id: string;
@@ -42,8 +41,8 @@ export type SurveyListItem = {
   description: string | null;
   slug: string | null;
   privateToken: string | null;
-  questionCount: number;
   responseCount: number;
+  completedResponseCount: number;
   createdAt: Date;
   updatedAt: Date;
   isPublic: boolean;

@@ -261,7 +261,10 @@ export default function SurveyListPage() {
                 <h3 className="mb-2 truncate text-lg font-semibold text-gray-900">
                   {survey.title}
                 </h3>
-                <p className="mb-4 text-sm text-gray-500">{survey.questionCount}개 질문</p>
+                <p className="mb-4 text-sm text-gray-500">
+                  전체 응답 {survey.responseCount.toLocaleString('ko-KR')}건 · 완료{' '}
+                  {survey.completedResponseCount.toLocaleString('ko-KR')}건
+                </p>
 
                 <div className="flex items-center justify-between text-xs text-gray-400">
                   <span>수정일: {formatLocalDate(survey.updatedAt)}</span>

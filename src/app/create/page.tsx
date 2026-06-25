@@ -269,7 +269,8 @@ export default function CreateSurveyPage() {
                         >
                           <h5 className="text-sm font-medium text-gray-900">{survey.title}</h5>
                           <p className="mt-1 text-xs text-gray-500">
-                            {survey.questionCount}개 질문 •{' '}
+                            전체 {survey.responseCount.toLocaleString('ko-KR')}건 · 완료{' '}
+                            {survey.completedResponseCount.toLocaleString('ko-KR')}건 ·{' '}
                             {formatLocalDate(survey.updatedAt)}
                           </p>
                         </button>

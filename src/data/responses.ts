@@ -1,4 +1,4 @@
-import { and, count, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { responseAnswers, surveyResponses, surveyVersions } from '@/db/schema';
@@ -37,7 +37,15 @@ export async function getResponseById(
 // 전체 설문의 응답 수를 한 번의 GROUP BY 로 집계 (설문별 fan-out N+1 제거).
 // 설문 목록 대시보드처럼 여러 설문의 총/완료 응답 수가 동시에 필요할 때 사용.
 // 반환: surveyId -> { total, completed } Map. 응답이 0건인 설문은 키 없음.
-export async function getResponseCountsGroupedBySurvey() {
+export async function getResponseCountsGroupedBySurvey(surveyIds?: readonly string[]) {
+  if (surveyIds != null && surveyIds.length === 0) {
+    return new Map<string, { total: number; completed: number }>();
+  }
+
+  const where = surveyIds
+    ? and(notDeletedResponse, inArray(surveyResponses.surveyId, [...surveyIds]))
+    : notDeletedResponse;
+
   const rows = await db
     .select({
       surveyId: surveyResponses.surveyId,
@@ -45,7 +53,7 @@ export async function getResponseCountsGroupedBySurvey() {
       completed: sql<number>`count(*) filter (where ${surveyResponses.isCompleted} = true)`,
     })
     .from(surveyResponses)
-    .where(notDeletedResponse)
+    .where(where)
     .groupBy(surveyResponses.surveyId);
 
   const map = new Map<string, { total: number; completed: number }>();

@@ -2,8 +2,9 @@ import 'server-only';
 
 import { cache } from 'react';
 
-import { and, count, desc, eq, ilike, ne } from 'drizzle-orm';
+import { and, desc, eq, ilike, ne } from 'drizzle-orm';
 
+import { getResponseCountsGroupedBySurvey } from '@/data/responses';
 import * as libraryData from '@/data/library';
 import { getSurveyWithDetails as getSurveyWithDetailsData } from '@/data/surveys';
 import { db } from '@/db';
@@ -40,6 +41,16 @@ import type {
 // 설문 목록 조회
 export async function getSurveys() {
   const result = await db.query.surveys.findMany({
+    columns: {
+      id: true,
+      title: true,
+      description: true,
+      slug: true,
+      privateToken: true,
+      createdAt: true,
+      updatedAt: true,
+      isPublic: true,
+    },
     orderBy: [desc(surveys.createdAt)],
   });
   return result;
@@ -108,15 +119,10 @@ export async function getSurveyWithDetails(surveyId: string): Promise<SurveyType
 
 // 전체 설문 목록 조회 (요약 정보)
 export async function getSurveyListWithCounts(): Promise<SurveyListItem[]> {
-  // 모든 설문의 질문 수를 단일 GROUP BY 로 집계 (설문별 findMany N+1 제거)
-  const [surveyList, questionCounts] = await Promise.all([
-    getSurveys(),
-    db
-      .select({ surveyId: questions.surveyId, count: count() })
-      .from(questions)
-      .groupBy(questions.surveyId),
-  ]);
-  const questionCountMap = new Map(questionCounts.map((q) => [q.surveyId, Number(q.count)]));
+  const surveyList = await getSurveys();
+  const responseCounts = await getResponseCountsGroupedBySurvey(
+    surveyList.map((survey) => survey.id),
+  );
 
   return surveyList.map((survey) => ({
     id: survey.id,
@@ -124,8 +130,8 @@ export async function getSurveyListWithCounts(): Promise<SurveyListItem[]> {
     description: survey.description,
     slug: survey.slug,
     privateToken: survey.privateToken,
-    questionCount: questionCountMap.get(survey.id) ?? 0,
-    responseCount: 0,
+    responseCount: responseCounts.get(survey.id)?.total ?? 0,
+    completedResponseCount: responseCounts.get(survey.id)?.completed ?? 0,
     createdAt: survey.createdAt,
     updatedAt: survey.updatedAt,
     isPublic: survey.isPublic,
