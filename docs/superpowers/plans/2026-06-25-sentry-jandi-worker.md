@@ -10,6 +10,10 @@
 
 ---
 
+## Follow-up Auth Change
+
+2026-06-25 follow-up: the implementation was changed from `SENTRY_WEBHOOK_TOKEN` / bearer-or-query-token auth to Sentry Internal Integration signature verification. Current code and runbook use `SENTRY_CLIENT_SECRET` and verify the `Sentry-Hook-Signature` HMAC-SHA256 header against the raw request body before JSON parsing.
+
 ## File Structure
 
 - Create `workers/sentry-jandi/src/sentry.ts`: normalize unknown Sentry webhook payloads into a small `SentryAlertSummary`.

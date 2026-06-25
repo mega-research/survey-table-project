@@ -1,10 +1,11 @@
 import { describe, expect, test, vi } from 'vitest';
 
 import { handleRequest, type Fetcher, type WorkerEnv } from '../src';
+import { signSentryWebhookBody } from '../src/signature';
 
 const env: WorkerEnv = {
   JANDI_WEBHOOK_URL: 'https://wh.jandi.com/connect-api/webhook/example',
-  SENTRY_WEBHOOK_TOKEN: 'secret-token',
+  SENTRY_CLIENT_SECRET: 'client-secret',
 };
 
 describe('handleRequest', () => {
@@ -15,7 +16,7 @@ describe('handleRequest', () => {
     expect(response.status).toBe(200);
   });
 
-  test('rejects requests without token before forwarding to JANDI', async () => {
+  test('rejects requests without Sentry signature before forwarding to JANDI', async () => {
     const fetcher = vi.fn<Fetcher>();
 
     const response = await handleRequest(
@@ -31,14 +32,49 @@ describe('handleRequest', () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
 
-  test('rejects invalid JSON', async () => {
+  test('rejects mismatched Sentry signatures before forwarding to JANDI', async () => {
     const fetcher = vi.fn<Fetcher>();
 
     const response = await handleRequest(
       new Request('https://worker.example/sentry', {
         method: 'POST',
-        headers: { authorization: 'Bearer secret-token' },
-        body: '{',
+        headers: { 'Sentry-Hook-Signature': 'bad-signature' },
+        body: JSON.stringify({ action: 'created' }),
+      }),
+      env,
+      fetcher,
+    );
+
+    expect(response.status).toBe(401);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  test('does not accept the previous query token authentication path', async () => {
+    const fetcher = vi.fn<Fetcher>();
+
+    const response = await handleRequest(
+      new Request('https://worker.example/sentry?token=client-secret', {
+        method: 'POST',
+        body: JSON.stringify({ action: 'created' }),
+      }),
+      env,
+      fetcher,
+    );
+
+    expect(response.status).toBe(401);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  test('rejects invalid JSON', async () => {
+    const fetcher = vi.fn<Fetcher>();
+    const rawBody = '{';
+    const signature = await signSentryWebhookBody(rawBody, env.SENTRY_CLIENT_SECRET);
+
+    const response = await handleRequest(
+      new Request('https://worker.example/sentry', {
+        method: 'POST',
+        headers: { 'Sentry-Hook-Signature': signature },
+        body: rawBody,
       }),
       env,
       fetcher,
@@ -50,18 +86,20 @@ describe('handleRequest', () => {
 
   test('forwards valid Sentry payloads to JANDI', async () => {
     const fetcher = vi.fn<Fetcher>().mockResolvedValue(new Response('', { status: 200 }));
+    const rawBody = JSON.stringify({
+      data: {
+        level: 'error',
+        metadata: { type: 'ReferenceError', value: 'heck is not defined' },
+        project: 'survey-table-project',
+      },
+    });
+    const signature = await signSentryWebhookBody(rawBody, env.SENTRY_CLIENT_SECRET);
 
     const response = await handleRequest(
       new Request('https://worker.example/sentry', {
         method: 'POST',
-        headers: { authorization: 'Bearer secret-token' },
-        body: JSON.stringify({
-          data: {
-            level: 'error',
-            metadata: { type: 'ReferenceError', value: 'heck is not defined' },
-            project: 'survey-table-project',
-          },
-        }),
+        headers: { 'Sentry-Hook-Signature': signature },
+        body: rawBody,
       }),
       env,
       fetcher,
@@ -87,11 +125,14 @@ describe('handleRequest', () => {
 
   test('returns 502 when JANDI rejects the message', async () => {
     const fetcher = vi.fn<Fetcher>().mockResolvedValue(new Response('bad gateway', { status: 502 }));
+    const rawBody = JSON.stringify({ action: 'created' });
+    const signature = await signSentryWebhookBody(rawBody, env.SENTRY_CLIENT_SECRET);
 
     const response = await handleRequest(
-      new Request('https://worker.example/sentry?token=secret-token', {
+      new Request('https://worker.example/sentry', {
         method: 'POST',
-        body: JSON.stringify({ action: 'created' }),
+        headers: { 'Sentry-Hook-Signature': signature },
+        body: rawBody,
       }),
       env,
       fetcher,

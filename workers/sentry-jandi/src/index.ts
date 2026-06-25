@@ -1,9 +1,10 @@
 import { buildJandiMessage } from './jandi';
 import { extractSentryAlertSummary } from './sentry';
+import { verifySentryWebhookSignature } from './signature';
 
 export interface WorkerEnv {
   JANDI_WEBHOOK_URL: string;
-  SENTRY_WEBHOOK_TOKEN: string;
+  SENTRY_CLIENT_SECRET: string;
 }
 
 export type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -35,11 +36,18 @@ export async function handleRequest(
     return json({ ok: false, error: 'method_not_allowed' }, 405);
   }
 
-  if (!isAuthorized(request, url, env.SENTRY_WEBHOOK_TOKEN)) {
+  const rawBody = await request.text();
+  const isVerified = await verifySentryWebhookSignature(
+    rawBody,
+    request.headers.get('Sentry-Hook-Signature'),
+    env.SENTRY_CLIENT_SECRET,
+  );
+
+  if (!isVerified) {
     return json({ ok: false, error: 'unauthorized' }, 401);
   }
 
-  const payload = await readJson(request);
+  const payload = readJson(rawBody);
   if (!payload.ok) {
     return json({ ok: false, error: 'invalid_json' }, 400);
   }
@@ -62,14 +70,9 @@ export async function handleRequest(
   return json({ ok: true }, 202);
 }
 
-function isAuthorized(request: Request, url: URL, expectedToken: string): boolean {
-  const bearer = request.headers.get('authorization')?.match(/^Bearer\s+(.+)$/i)?.[1];
-  return bearer === expectedToken || url.searchParams.get('token') === expectedToken;
-}
-
-async function readJson(request: Request): Promise<{ ok: true; value: unknown } | { ok: false }> {
+function readJson(rawBody: string): { ok: true; value: unknown } | { ok: false } {
   try {
-    return { ok: true, value: await request.json() };
+    return { ok: true, value: JSON.parse(rawBody) };
   } catch {
     return { ok: false };
   }

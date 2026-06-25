@@ -5,13 +5,13 @@ Cloudflare Worker that receives Sentry Issue Alert webhooks and forwards concise
 ## Required Secrets
 
 - `JANDI_WEBHOOK_URL`: JANDI Incoming Webhook URL.
-- `SENTRY_WEBHOOK_TOKEN`: Shared secret checked by this Worker before forwarding alerts.
+- `SENTRY_CLIENT_SECRET`: Client Secret from the Sentry Internal Integration credentials.
 
 Set production secrets:
 
 ```bash
 pnpm dlx wrangler@4 secret put JANDI_WEBHOOK_URL --config workers/sentry-jandi/wrangler.jsonc
-pnpm dlx wrangler@4 secret put SENTRY_WEBHOOK_TOKEN --config workers/sentry-jandi/wrangler.jsonc
+pnpm dlx wrangler@4 secret put SENTRY_CLIENT_SECRET --config workers/sentry-jandi/wrangler.jsonc
 ```
 
 For local development, copy `workers/sentry-jandi/.dev.vars.example` to
@@ -19,7 +19,7 @@ For local development, copy `workers/sentry-jandi/.dev.vars.example` to
 
 ```env
 JANDI_WEBHOOK_URL="https://wh.jandi.com/connect-api/webhook/..."
-SENTRY_WEBHOOK_TOKEN="replace-with-random-token"
+SENTRY_CLIENT_SECRET="replace-with-sentry-internal-integration-client-secret"
 ```
 
 `workers/sentry-jandi/.dev.vars` is ignored by git.
@@ -33,10 +33,14 @@ pnpm worker:sentry-jandi:dev
 Test a local request:
 
 ```bash
+BODY='{"data":{"level":"error","metadata":{"type":"ReferenceError","value":"heck is not defined"},"project":"survey-table-project"}}'
+SENTRY_CLIENT_SECRET="replace-with-sentry-internal-integration-client-secret"
+SIGNATURE=$(BODY="$BODY" SENTRY_CLIENT_SECRET="$SENTRY_CLIENT_SECRET" node -e 'const crypto = require("node:crypto"); process.stdout.write(crypto.createHmac("sha256", process.env.SENTRY_CLIENT_SECRET).update(process.env.BODY, "utf8").digest("hex"));')
+
 curl -X POST "http://localhost:8787/sentry" \
-  -H "Authorization: Bearer replace-with-random-token" \
+  -H "Sentry-Hook-Signature: $SIGNATURE" \
   -H "Content-Type: application/json" \
-  --data '{"data":{"level":"error","metadata":{"type":"ReferenceError","value":"heck is not defined"},"project":"survey-table-project"}}'
+  --data "$BODY"
 ```
 
 ## Deploy
@@ -47,14 +51,12 @@ pnpm worker:sentry-jandi:deploy
 
 ## Sentry Alert Rule
 
-In Sentry, create an Issue Alert Rule and add a webhook action pointing to:
+In Sentry, create an Internal Integration, enable it as an Alert Rule Action, and set the Webhook URL to:
 
 ```text
 https://<worker-subdomain>.workers.dev/sentry
 ```
 
-Prefer sending `Authorization: Bearer <SENTRY_WEBHOOK_TOKEN>` if the Sentry webhook action supports custom headers. If headers are not available, use:
+After saving the integration, copy its Client Secret into the Worker `SENTRY_CLIENT_SECRET` secret. Then create an Issue Alert Rule and choose the internal integration as the notification action.
 
-```text
-https://<worker-subdomain>.workers.dev/sentry?token=<SENTRY_WEBHOOK_TOKEN>
-```
+The Worker verifies Sentry's `Sentry-Hook-Signature` header before parsing or forwarding the alert.
