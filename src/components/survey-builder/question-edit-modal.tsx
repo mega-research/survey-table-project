@@ -387,7 +387,7 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
     } finally {
       setIsSaving(false);
     }
-  }, [questionId, validateForm, updateQuestion, onClose, question]);
+  }, [ensureSurvey, questionId, validateForm, updateQuestion, onClose, question]);
 
   // 키보드 이벤트 핸들러
   const handleKeyDown = useCallback(

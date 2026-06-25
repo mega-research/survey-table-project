@@ -49,7 +49,6 @@ interface UseDragCopyParams {
   currentRowsRef: React.RefObject<TableRow[]>;
   currentColumnsRef: React.RefObject<TableColumn[]>;
   questionCodeRef: React.RefObject<string | undefined>;
-  questionTitleRef: React.RefObject<string | undefined>;
   setCurrentRows: (rows: TableRow[]) => void;
   notifyChange: (title: string, cols: TableColumn[], rows: TableRow[]) => void;
   currentTitleRef: React.RefObject<string>;
@@ -63,7 +62,6 @@ export function useDragCopy({
   currentRowsRef,
   currentColumnsRef,
   questionCodeRef,
-  questionTitleRef,
   setCurrentRows,
   notifyChange,
   currentTitleRef,
@@ -311,7 +309,6 @@ export function useDragCopy({
       currentRowsRef,
       currentColumnsRef,
       questionCodeRef,
-      questionTitleRef,
       setCurrentRows,
       notifyChange,
       currentTitleRef,

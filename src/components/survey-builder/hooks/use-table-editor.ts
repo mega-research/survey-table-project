@@ -383,7 +383,7 @@ export function useTableEditor({
       commitColumns(updatedCols);
       notifyChange(currentTitleRef.current, updatedCols, currentRowsRef.current);
     },
-    [notifyChange],
+    [notifyChange, commitColumns],
   );
 
   // ── 제목 ──
@@ -670,7 +670,7 @@ export function useTableEditor({
     const updatedRows = [...rows, newRowWithCodes];
     commitRows(updatedRows);
     notifyChange(currentTitleRef.current, columns, updatedRows);
-  }, [notifyChange]);
+  }, [notifyChange, commitRows]);
 
   const addBulkRows = useCallback(
     (
@@ -716,7 +716,7 @@ export function useTableEditor({
       commitRows(finalRows);
       notifyChange(currentTitleRef.current, columns, finalRows);
     },
-    [notifyChange],
+    [notifyChange, commitRows],
   );
 
   // ── 열 일괄 생성 ──
@@ -838,7 +838,7 @@ export function useTableEditor({
       commitRows(finalRows);
       notifyChange(currentTitleRef.current, columns, finalRows);
     },
-    [notifyChange],
+    [notifyChange, commitRows],
   );
 
   const deleteRow = useCallback(
@@ -882,7 +882,7 @@ export function useTableEditor({
       commitRows(finalRows);
       notifyChange(currentTitleRef.current, currentColumnsRef.current, finalRows);
     },
-    [notifyChange],
+    [notifyChange, commitRows],
   );
 
   const updateRowLabel = useCallback(
@@ -932,7 +932,7 @@ export function useTableEditor({
       commitRows(updatedRows);
       notifyChange(currentTitleRef.current, currentColumnsRef.current, updatedRows);
     },
-    [notifyChange],
+    [notifyChange, commitRows],
   );
 
   // ── 동적 행 설정 ──
@@ -951,7 +951,7 @@ export function useTableEditor({
       commitRows(updatedRows);
       notifyChange(currentTitleRef.current, currentColumnsRef.current, updatedRows);
     },
-    [notifyChange],
+    [notifyChange, commitRows],
   );
 
   const setShowWhenDynamicGroupId = useCallback(
@@ -968,7 +968,7 @@ export function useTableEditor({
       commitRows(updatedRows);
       notifyChange(currentTitleRef.current, currentColumnsRef.current, updatedRows);
     },
-    [notifyChange],
+    [notifyChange, commitRows],
   );
 
   // ── 열 조건부 표시 ──
@@ -991,7 +991,7 @@ export function useTableEditor({
       commitColumns(updatedColumns);
       notifyChange(currentTitleRef.current, updatedColumns, currentRowsRef.current);
     },
-    [notifyChange],
+    [notifyChange, commitColumns],
   );
 
   const currentQuestionAsQuestion: Question = useMemo(
@@ -1013,7 +1013,6 @@ export function useTableEditor({
     currentRowsRef,
     currentColumnsRef,
     questionCodeRef,
-    questionTitleRef,
     setCurrentRows: commitRows,
     notifyChange,
     currentTitleRef,
@@ -1023,6 +1022,12 @@ export function useTableEditor({
       setCopiedCellPosition(null);
     },
   });
+  const {
+    clearCopiedRegion,
+    copiedRegion,
+    dragCopyState,
+    pasteRegion,
+  } = dragCopy;
 
   // ── 셀 복사/붙여넣기 ──
 
@@ -1033,16 +1038,16 @@ export function useTableEditor({
       const cellToCopy: TableCell = { ...cell, id: '' };
       setCopiedCell(cellToCopy);
       setCopiedCellPosition({ rowIndex, cellIndex });
-      dragCopy.clearCopiedRegion(); // 상호 배타
+      clearCopiedRegion(); // 상호 배타
     },
-    [dragCopy.clearCopiedRegion],
+    [clearCopiedRegion],
   );
 
   const pasteCell = useCallback(
     (rowIndex: number, cellIndex: number) => {
       // 영역 복사가 있으면 영역 붙여넣기 우선
-      if (dragCopy.copiedRegion) {
-        const result = dragCopy.pasteRegion(rowIndex, cellIndex);
+      if (copiedRegion) {
+        const result = pasteRegion(rowIndex, cellIndex);
         if ('blocked' in result) {
           toast.error(result.message);
         }
@@ -1107,7 +1112,7 @@ export function useTableEditor({
       commitRows(finalRows);
       notifyChange(currentTitleRef.current, columns, finalRows);
     },
-    [notifyChange, dragCopy.copiedRegion, dragCopy.pasteRegion],
+    [commitRows, copiedRegion, notifyChange, pasteRegion],
   );
 
   // ── 셀 삭제/업데이트 ──
@@ -1144,7 +1149,7 @@ export function useTableEditor({
       notifyChange(currentTitleRef.current, currentColumnsRef.current, finalRows);
       setSelectedCell(null);
     },
-    [notifyChange],
+    [notifyChange, commitRows],
   );
 
   const deleteCell = useCallback(
@@ -1220,7 +1225,7 @@ export function useTableEditor({
       commitRows(finalRows);
       notifyChange(currentTitleRef.current, columns, finalRows);
     },
-    [notifyChange],
+    [notifyChange, commitRows],
   );
 
   const handleUnmerge = useCallback(() => {
@@ -1241,17 +1246,17 @@ export function useTableEditor({
     const finalRows = recalculateHiddenCells(newRows);
     commitRows(finalRows);
     notifyChange(currentTitleRef.current, currentColumnsRef.current, finalRows);
-  }, [notifyChange]);
+  }, [notifyChange, commitRows]);
 
   // ── 셀 선택 (안정된 콜백) ──
 
   const handleSelectCell = useCallback(
     (rowId: string, cellId: string) => {
       // 드래그 복사 중에는 셀 선택(모달 열림) 방지
-      if (dragCopy.dragCopyState?.isDragging) return;
+      if (dragCopyState?.isDragging) return;
       setSelectedCell({ rowId, cellId });
     },
-    [dragCopy.dragCopyState?.isDragging],
+    [dragCopyState?.isDragging],
   );
 
   // ── 다단계 헤더 토글 ──

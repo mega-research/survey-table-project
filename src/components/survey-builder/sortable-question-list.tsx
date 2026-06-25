@@ -704,7 +704,7 @@ export function SortableQuestionList({
       // 로컬 스토어에 추가 (DB 저장은 saveSurveyDiff에서 일괄 처리)
       useSurveyBuilderStore.getState().addPreparedQuestion(newQuestion);
     }
-  }, [surveyId]);
+  }, []);
 
   if (questions.length === 0) {
     return null;

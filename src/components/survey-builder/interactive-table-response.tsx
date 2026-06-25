@@ -636,7 +636,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
       questionId,
       isTestMode,
       value,
-      onChange,
+      mergedOnChange,
       hiddenGroupIds,
       stickyInfo,
     ],

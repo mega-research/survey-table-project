@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 
 import { OptionTextInput } from '@/components/survey-response/option-text-input';
 
@@ -14,7 +14,10 @@ export const CheckboxCell = React.memo(function CheckboxCell({
   onUpdateValue,
   questionId,
 }: InteractiveCellProps) {
-  const cellResponseArray = Array.isArray(cellResponse) ? cellResponse : [];
+  const cellResponseArray = useMemo(
+    () => (Array.isArray(cellResponse) ? cellResponse : []),
+    [cellResponse],
+  );
   const currentCount = cellResponseArray.length;
   const { maxSelections, minSelections } = cell;
   const isMaxReached =

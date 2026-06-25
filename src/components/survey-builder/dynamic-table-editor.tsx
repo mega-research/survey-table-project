@@ -25,6 +25,8 @@ import { SaveCellModal } from './save-cell-modal';
 import { TableHeaderSection } from './table-header-section';
 import { TableSummaryCard } from './table-summary-card';
 
+const EMPTY_DYNAMIC_ROW_CONFIGS: DynamicRowGroupConfig[] = [];
+
 // ── Props ──
 
 interface DynamicTableEditorProps {
@@ -50,7 +52,7 @@ interface DynamicTableEditorProps {
 export function DynamicTableEditor(props: DynamicTableEditorProps) {
   const { dynamicRowConfigs: rawConfigs, onDynamicRowConfigsChange } = props;
   // 기존 단일 객체 → 배열 마이그레이션 호환
-  const dynamicRowConfigs = Array.isArray(rawConfigs) ? rawConfigs : [];
+  const dynamicRowConfigs = Array.isArray(rawConfigs) ? rawConfigs : EMPTY_DYNAMIC_ROW_CONFIGS;
   const hasQuestions = useSurveyBuilderStore((s) => s.currentSurvey.questions.length > 0);
   const editingQuestionId = useSurveyUIStore((s) => s.editingQuestionId);
   const hideColumnLabels = useSurveyBuilderStore(
@@ -202,7 +204,7 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
       if (!cell) return;
       setSaveCellTarget({ rowIndex, cellIndex, cell });
     },
-    [],
+    [currentRowsRef, setSaveCellTarget],
   );
 
   const handleLoadCell = useCallback(
@@ -211,7 +213,7 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
       if (!cell) return;
       setLoadCellTarget({ rowIndex, cellIndex, targetCell: cell });
     },
-    [],
+    [currentRowsRef, setLoadCellTarget],
   );
 
   const handleCellApplied = useCallback(
@@ -220,7 +222,7 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
       updateCell(loadCellTarget.rowIndex, loadCellTarget.cellIndex, restoredCell);
       setLoadCellTarget(null);
     },
-    [loadCellTarget, updateCell],
+    [loadCellTarget, setLoadCellTarget, updateCell],
   );
 
   // ── 드래그 복사: 토스트 상태 ──
