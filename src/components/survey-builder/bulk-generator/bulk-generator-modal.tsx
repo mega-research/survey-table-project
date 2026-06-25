@@ -119,12 +119,14 @@ export function BulkGeneratorModal(props: BulkGeneratorModalProps) {
   // ── 모달 열릴 때 초기화 ──
   useEffect(() => {
     if (open) {
-      setBaseLabel('');
-      setBaseCode('');
-      setStartNumber(1);
-      setCount(config.defaultCount);
-      setCondition(undefined);
-      setDynamicGroupId(undefined);
+      queueMicrotask(() => {
+        setBaseLabel('');
+        setBaseCode('');
+        setStartNumber(1);
+        setCount(config.defaultCount);
+        setCondition(undefined);
+        setDynamicGroupId(undefined);
+      });
     }
   }, [open, config.defaultCount]);
 

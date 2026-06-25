@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 import { Image } from 'lucide-react';
 
@@ -22,16 +22,12 @@ export function getYouTubeEmbedUrl(url: string) {
 
 /** 이미지 셀 컴포넌트 (에러 상태 관리) */
 export function ImageCell({ imageUrl, content }: { imageUrl: string; content?: string }) {
-  const [error, setError] = useState(false);
-
-  useEffect(() => {
-    setError(false);
-  }, [imageUrl]);
+  const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
 
   return (
     <div className="flex h-full w-full flex-col items-center gap-2">
       <div key={imageUrl}>
-        {error ? (
+        {failedImageUrl === imageUrl ? (
           <div className="flex items-center gap-1 text-sm text-red-500">
             <Image className="h-4 w-4" />
             <span>이미지 오류</span>
@@ -42,7 +38,7 @@ export function ImageCell({ imageUrl, content }: { imageUrl: string; content?: s
             alt="셀 이미지"
             className="h-auto max-h-full w-full rounded object-contain"
             style={{ maxWidth: '100%', maxHeight: '100%' }}
-            onError={() => setError(true)}
+            onError={() => setFailedImageUrl(imageUrl)}
           />
         )}
       </div>

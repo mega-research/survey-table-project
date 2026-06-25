@@ -108,6 +108,8 @@ export function DailyStatsTable({ data }: Props) {
     [],
   );
 
+  // TanStack Table useReactTable은 React Compiler 비호환 API라 국소 예외로 둔다.
+  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data,
     columns,

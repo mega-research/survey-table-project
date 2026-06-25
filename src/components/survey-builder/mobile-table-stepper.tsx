@@ -89,6 +89,8 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
   const rowPillsRef = useRef<HTMLDivElement>(null);
 
   // ── 인덱스 clamp ──
+  // displayRows 리렌더 직후 stale 인덱스를 즉시 보정해야 모바일 스테퍼가 빈 상태를 거치지 않는다.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (rowGroups.length === 0) return;
     if (currentGroupIdx >= rowGroups.length) {
@@ -102,6 +104,7 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
       setCurrentRowInGroup(group.rows.length - 1);
     }
   }, [rowGroups, currentGroupIdx, currentRowInGroup]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // ── pill 자동 스크롤 ──
   useEffect(() => {
@@ -164,6 +167,7 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
   // 이 컴포넌트를 리렌더(리마운트 아님)하므로 선행 질문 응답으로 displayRows 가
   // 바뀌면 stale 상태가 남는다(예: 분류가 detail↔group-select 로 뒤집히거나,
   // 사라진 행 id 가 preSelectedRowIds 에 남아 filteredRows 가 빈 집합이 됨).
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     // 더 이상 존재하지 않는 행 id 를 사전선택 집합에서 제거
     const rowIdSet = new Set(displayRows.map((r) => r.id));
@@ -197,6 +201,7 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
       return prev;
     });
   }, [displayRows, rowGroups, needsPreSelect, skipGroupSelect, preSelectedRowIds]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const toggleGroupIndex = useCallback((idx: number) => {
     setPreSelectedGroupIndices((prev) => {

@@ -36,7 +36,9 @@ export function LookupLibrarySection() {
   };
 
   useEffect(() => {
-    void reload();
+    queueMicrotask(() => {
+      void reload();
+    });
   }, []);
 
   const closeEdit = () => {

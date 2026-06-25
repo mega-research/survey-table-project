@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -56,15 +56,7 @@ function RadioTestInput({
   value: SingleChoiceResponse;
   onChange: (value: SingleChoiceResponse) => void;
 }) {
-  const [otherInput, setOtherInput] = useState('');
-
-  useEffect(() => {
-    if (isOtherChoiceValue(value) && value.otherValue) {
-      setOtherInput(value.otherValue);
-    } else {
-      setOtherInput('');
-    }
-  }, [value]);
+  const otherInput = isOtherChoiceValue(value) ? value.otherValue ?? '' : '';
 
   const handleOptionChange = (optionValue: string, optionId: string) => {
     const isOtherOption = optionId === 'other-option';
@@ -89,7 +81,6 @@ function RadioTestInput({
   };
 
   const handleOtherInputChange = (inputValue: string) => {
-    setOtherInput(inputValue);
     if (isOtherChoiceValue(value)) {
       onChange({
         ...value,
@@ -164,21 +155,19 @@ function CheckboxTestInput({
   value: MultiChoiceResponse;
   onChange: (value: MultiChoiceResponse) => void;
 }) {
-  const [otherInputs, setOtherInputs] = useState<Record<string, string>>({});
-
   const currentValues = useMemo<MultiChoiceResponse>(
     () => (Array.isArray(value) ? (value as MultiChoiceResponse) : []),
     [value],
   );
 
-  useEffect(() => {
+  const otherInputs = useMemo(() => {
     const newOtherInputs: Record<string, string> = {};
     currentValues.forEach((val) => {
       if (isOtherChoiceValue(val)) {
         newOtherInputs[val.selectedValue] = val.otherValue || '';
       }
     });
-    setOtherInputs(newOtherInputs);
+    return newOtherInputs;
   }, [currentValues]);
 
   const handleOptionChange = (optionValue: string, optionId: string, isChecked: boolean) => {
@@ -218,9 +207,6 @@ function CheckboxTestInput({
   };
 
   const handleOtherInputChange = (optionValue: string, inputValue: string) => {
-    const newOtherInputs = { ...otherInputs, [optionValue]: inputValue };
-    setOtherInputs(newOtherInputs);
-
     const newValues = currentValues.map((val) => {
       if (isOtherChoiceValue(val) && val.selectedValue === optionValue) {
         return { ...val, otherValue: inputValue };
@@ -333,22 +319,10 @@ function SelectTestInput({
   value: SingleChoiceResponse;
   onChange: (value: SingleChoiceResponse) => void;
 }) {
-  const [otherInput, setOtherInput] = useState('');
-  const [selectedValue, setSelectedValue] = useState<string>('');
-
-  // value가 변경될 때 selectedValue와 otherInput 동기화
-  useEffect(() => {
-    if (isOtherChoiceValue(value)) {
-      setSelectedValue(value.selectedValue);
-      setOtherInput(value.otherValue || '');
-    } else {
-      setSelectedValue(value || '');
-      setOtherInput('');
-    }
-  }, [value]);
+  const selectedValue = isOtherChoiceValue(value) ? value.selectedValue : value || '';
+  const otherInput = isOtherChoiceValue(value) ? value.otherValue ?? '' : '';
 
   const handleSelectChange = (newValue: string) => {
-    setSelectedValue(newValue);
     const selectedOption = question.options?.find((opt) => opt.value === newValue);
 
     if (selectedOption?.id === 'other-option') {
@@ -363,7 +337,6 @@ function SelectTestInput({
   };
 
   const handleOtherInputChange = (inputValue: string) => {
-    setOtherInput(inputValue);
     if (selectedValue) {
       const selectedOption = question.options?.find((opt) => opt.value === selectedValue);
       if (selectedOption?.id === 'other-option') {

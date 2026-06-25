@@ -37,6 +37,19 @@ interface MobileRowCardProps {
   onChange?: ((value: Record<string, unknown>) => void) | undefined;
 }
 
+function findPreviousSection(
+  cells: Array<{ colIdx: number }>,
+  columnSectionMap: ReturnType<typeof useColumnSectionMap>,
+  arrIdx: number,
+): string {
+  if (!columnSectionMap) return '';
+  for (let index = arrIdx - 1; index >= 0; index--) {
+    const section = columnSectionMap.get(cells[index]?.colIdx ?? -1);
+    if (section) return section;
+  }
+  return '';
+}
+
 export const MobileRowCard = React.memo(function MobileRowCard({
   row,
   visibleColumns,
@@ -81,11 +94,35 @@ export const MobileRowCard = React.memo(function MobileRowCard({
     return descCell?.radioOptions?.[0]?.label || row.label;
   }, [row.cells, row.label]);
 
+  const mobileCells = useMemo(() => {
+    return inputCells.map((entry, arrIdx) => {
+      const columnLabel = visibleColumns[entry.colIdx]?.label || `항목 ${entry.colIdx + 1}`;
+      const section = columnSectionMap?.get(entry.colIdx);
+      const previousSection = findPreviousSection(inputCells, columnSectionMap, arrIdx);
+      const activeSection = section ?? previousSection;
+      const sectionHeader = section && section !== previousSection ? section : null;
+
+      const cellLabel = entry.cell.exportLabel?.trim();
+      const shortLabel = cellLabel || (sectionHeader
+        ? columnLabel
+        : activeSection && columnLabel.startsWith(activeSection)
+          ? columnLabel.slice(activeSection.length).replace(/^[_\s·]+/, '') || columnLabel
+          : columnLabel);
+
+      return {
+        ...entry,
+        arrIdx,
+        cellLabel,
+        columnLabel,
+        sectionHeader,
+        shortLabel,
+      };
+    });
+  }, [columnSectionMap, inputCells, visibleColumns]);
+
   // mobileDisplay 미지정/hidden 은 기존 동작처럼 카드에 표시하지 않는다.
   const hasDisplayCells = hasMobileDisplayCells(row.cells);
   if (inputCells.length === 0 && !hasDisplayCells) return null;
-
-  let lastSection = '';
 
   return (
     <Card
@@ -115,26 +152,7 @@ export const MobileRowCard = React.memo(function MobileRowCard({
       </div>
 
       <CardContent className="space-y-3 p-4">
-        {inputCells.map(({ cell, colIdx }, arrIdx) => {
-          const columnLabel = visibleColumns[colIdx]?.label || `항목 ${colIdx + 1}`;
-
-          let sectionHeader: string | null = null;
-          if (columnSectionMap) {
-            const section = columnSectionMap.get(colIdx);
-            if (section && section !== lastSection) {
-              lastSection = section;
-              sectionHeader = section;
-            }
-          }
-
-          // 셀 라벨(cell.exportLabel) 우선, 없으면 열 라벨에서 섹션 접두사 제거한 값으로 폴백
-          const cellLabel = cell.exportLabel?.trim();
-          const shortLabel = cellLabel || (sectionHeader
-            ? columnLabel
-            : lastSection && columnLabel.startsWith(lastSection)
-              ? columnLabel.slice(lastSection.length).replace(/^[_\s·]+/, '') || columnLabel
-              : columnLabel);
-
+        {mobileCells.map(({ cell, arrIdx, cellLabel, columnLabel, sectionHeader, shortLabel }) => {
           const nextEntry = inputCells[arrIdx + 1];
           const prevEntry = arrIdx > 0 ? inputCells[arrIdx - 1] : null;
           const nextLabel = nextEntry ? visibleColumns[nextEntry.colIdx]?.label : undefined;

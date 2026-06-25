@@ -47,12 +47,12 @@ export const QuestionConditionEditor = forwardRef<
 
   // displayCondition이 변경될 때 conditionGroup과 conditionNames 초기화
   useEffect(() => {
+    let cancelled = false;
     const source = initialCondition ?? question.displayCondition;
     const newConditionGroup = source || {
       conditions: [],
       logicType: 'AND',
     };
-    setConditionGroup(newConditionGroup);
 
     // conditionNames 초기화: 저장된 조건 이름들을 로컬 상태에 반영
     const initialNames: Record<string, string> = {};
@@ -63,7 +63,14 @@ export const QuestionConditionEditor = forwardRef<
         }
       });
     }
-    setConditionNames(initialNames);
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setConditionGroup(newConditionGroup);
+      setConditionNames(initialNames);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [initialCondition, question.displayCondition]);
 
   const addCondition = () => {

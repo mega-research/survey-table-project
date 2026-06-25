@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 
 import { InteractiveTableResponse } from '@/components/survey-builder/interactive-table-response';
 import { NoticeRenderer } from '@/components/survey-builder/notice-renderer';
@@ -393,23 +393,16 @@ function SelectQuestion({
   onChange: (value: SingleChoiceResponse) => void;
 }) {
   // OtherChoiceValue fallback: snapshot 호환 (Phase 7 cleanup 까지 유지)
-  const [legacyOtherInput, setLegacyOtherInput] = useState('');
-  const [selectedValue, setSelectedValue] = useState<string>('');
-
-  useEffect(() => {
-    if (isOtherChoiceValue(value)) {
-      setSelectedValue(value.selectedValue);
-      setLegacyOtherInput(value.otherValue || '');
-    } else {
-      setSelectedValue(typeof value === 'string' ? value : '');
-      setLegacyOtherInput('');
-    }
-  }, [value]);
+  const selectedValue = isOtherChoiceValue(value)
+    ? value.selectedValue
+    : typeof value === 'string'
+      ? value
+      : '';
+  const legacyOtherInput = isOtherChoiceValue(value) ? value.otherValue ?? '' : '';
 
   const selectedOption = question.options?.find((opt) => opt.value === selectedValue);
 
   const handleSelectChange = (newValue: string) => {
-    setSelectedValue(newValue);
     // 선택해제
     if (!newValue) {
       onChange('');
@@ -430,7 +423,6 @@ function SelectQuestion({
 
   // OtherChoiceValue 경로 (other-option 전용, deprecated)
   const handleLegacyOtherInputChange = (inputValue: string) => {
-    setLegacyOtherInput(inputValue);
     if (selectedValue) {
       const opt = question.options?.find((o) => o.value === selectedValue);
       if (opt?.id === 'other-option') {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 import { useEditorState, type Editor } from '@tiptap/react';
 import { RefreshCw, Trash2 } from 'lucide-react';
@@ -34,14 +34,32 @@ export function FileAttachmentContextToolbar({ editor, onReplace }: Props) {
     },
   });
 
-  // editor 측 label 변화를 input draft 로 동기화 (다른 첨부 클릭 시 input 초기화)
-  const [draft, setDraft] = useState(s.label);
-  useEffect(() => {
-    setDraft(s.label);
-    // 노드 선택이 바뀌면 draft 도 새 값으로
-  }, [s.key, s.label]);
-
   if (!s.active) return null;
+
+  return (
+    <FileAttachmentContextToolbarContent
+      key={s.key ?? 'inactive'}
+      editor={editor}
+      fileKey={s.key}
+      label={s.label}
+      onReplace={onReplace}
+    />
+  );
+}
+
+function FileAttachmentContextToolbarContent({
+  editor,
+  fileKey,
+  label,
+  onReplace,
+}: {
+  editor: Editor;
+  fileKey: string | null;
+  label: string;
+  onReplace: () => void;
+}) {
+  // editor 측 label 변화를 input draft 로 동기화 (다른 첨부 클릭 시 input 초기화)
+  const [draft, setDraft] = useState(label);
 
   return (
     <div className="flex w-full flex-wrap items-center gap-2 border-t border-gray-200 pt-2 mt-1">
@@ -54,7 +72,7 @@ export function FileAttachmentContextToolbar({ editor, onReplace }: Props) {
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={() => {
-          if (draft !== s.label) {
+          if (draft !== label) {
             editor.chain().focus().updateAttributes(FILE_ATTACHMENT, { label: draft }).run();
           }
         }}
@@ -64,9 +82,8 @@ export function FileAttachmentContextToolbar({ editor, onReplace }: Props) {
       </ToolBtn>
       <ToolBtn
         onClick={() => {
-          const key = s.key;
           editor.chain().focus().deleteSelection().run();
-          void deleteTmpNoticeAttachmentKey(key);
+          void deleteTmpNoticeAttachmentKey(fileKey);
         }}
         title="첨부 삭제"
       >

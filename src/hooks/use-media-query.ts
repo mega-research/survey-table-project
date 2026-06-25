@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
 
 /**
  * matchMedia 기반 반응형 감지 훅.
@@ -6,18 +6,16 @@ import { useEffect, useState } from 'react';
  * - SSR에서는 기본값(false) 반환, 클라이언트 mount 후 실제 값으로 전환
  */
 export function useMediaQuery(query: string): boolean {
-  const [matches, setMatches] = useState(false);
-
-  useEffect(() => {
-    const mql = window.matchMedia(query);
-    setMatches(mql.matches);
-
-    const handler = (e: MediaQueryListEvent) => setMatches(e.matches);
-    mql.addEventListener('change', handler);
-    return () => mql.removeEventListener('change', handler);
-  }, [query]);
-
-  return matches;
+  return useSyncExternalStore(
+    (onStoreChange) => {
+      if (typeof window === 'undefined') return () => undefined;
+      const mql = window.matchMedia(query);
+      mql.addEventListener('change', onStoreChange);
+      return () => mql.removeEventListener('change', onStoreChange);
+    },
+    () => (typeof window === 'undefined' ? false : window.matchMedia(query).matches),
+    () => false,
+  );
 }
 
 /** 768px 미만 = 모바일 (md 브레이크포인트). 태블릿은 데스크탑과 동일 취급 */

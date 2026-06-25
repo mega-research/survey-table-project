@@ -41,7 +41,7 @@ export function useClientSignals(): ClientSignals | null {
   const [signals, setSignals] = useState<ClientSignals | null>(null);
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    setSignals(collectSignals());
+    queueMicrotask(() => setSignals(collectSignals()));
   }, []);
   return signals;
 }

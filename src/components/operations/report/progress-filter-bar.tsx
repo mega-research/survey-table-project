@@ -57,8 +57,10 @@ export function ProgressFilterBar({
   // 브라우저 뒤로/앞으로 가기 시 URL 의 col/q 가 바뀌면 Server Component 가 새 initial 을
   // 내려준다. 로컬 state 를 동기화. initialSource/initialValue 는 원시값이라 identity 비교로 충분.
   useEffect(() => {
-    setSource(initialSource);
-    setValue(initialValue);
+    queueMicrotask(() => {
+      setSource(initialSource);
+      setValue(initialValue);
+    });
   }, [initialSource, initialValue]);
 
   const handleSearch = (e: React.FormEvent) => {

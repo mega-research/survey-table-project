@@ -111,8 +111,10 @@ export function MailPreviewDialog({
   // 다이얼로그 열릴 때마다 default 수신자를 본인 이메일로 리셋 + 발송 상태 초기화
   useEffect(() => {
     if (open) {
-      setTestTo(currentUserEmail);
-      setSendState({ status: 'idle' });
+      queueMicrotask(() => {
+        setTestTo(currentUserEmail);
+        setSendState({ status: 'idle' });
+      });
     }
   }, [open, currentUserEmail]);
 
@@ -120,7 +122,9 @@ export function MailPreviewDialog({
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    setFetchState({ status: 'loading' });
+    queueMicrotask(() => {
+      if (!cancelled) setFetchState({ status: 'loading' });
+    });
     client.mail.preview
       .sample({ surveyId })
       .then((sample) => {

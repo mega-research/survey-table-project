@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import { Input } from '@/components/ui/input';
 import {
@@ -73,19 +73,18 @@ export function LeftOperandEditor({ value, onChange, sourceQuestionId }: Props) 
   const isBinop = value?.kind === 'binop';
   const mode: 'current' | 'binop' = isBinop ? 'binop' : 'current';
 
+  const literalValue = isBinop && value.right.kind === 'literal' ? value.right.value : null;
   // binop.right 가 literal 일 때 raw string 보존 (부분 입력 `-`, `.` 허용)
-  const [literalRaw, setLiteralRaw] = useState<string>(() =>
-    isBinop && value.right.kind === 'literal' ? String(value.right.value) : '',
-  );
-
-  useEffect(() => {
-    if (isBinop && value.right.kind === 'literal') {
-      const next = String(value.right.value);
-      if (parseNumericInput(literalRaw) !== value.right.value) {
-        setLiteralRaw(next);
-      }
-    }
-  }, [isBinop, value, literalRaw]);
+  const [literalDraft, setLiteralDraft] = useState(() => ({
+    source: literalValue,
+    raw: literalValue !== null ? String(literalValue) : '',
+  }));
+  const literalRaw =
+    literalDraft.source === literalValue
+      ? literalDraft.raw
+      : literalValue !== null
+        ? String(literalValue)
+        : '';
 
   const onModeChange = (next: 'current' | 'binop') => {
     if (next === mode) return;
@@ -187,7 +186,7 @@ export function LeftOperandEditor({ value, onChange, sourceQuestionId }: Props) 
                 onChange={(e) => {
                   const raw = e.target.value;
                   if (!isPartialNumericInput(raw)) return;
-                  setLiteralRaw(raw);
+                  setLiteralDraft({ source: literalValue, raw });
                   const parsed = parseNumericInput(raw);
                   if (parsed !== null) {
                     onChange({

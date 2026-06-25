@@ -360,9 +360,7 @@ export function SortableQuestionList({
   const [overId, setOverId] = useState<string | null>(null);
   // 테스트 모드 lazy 첫 마운트: 첫 토글 전까지 테스트 트리를 렌더하지 않음
   const [testModeEverActivated, setTestModeEverActivated] = useState(isTestMode);
-  useEffect(() => {
-    if (isTestMode && !testModeEverActivated) setTestModeEverActivated(true);
-  }, [isTestMode, testModeEverActivated]);
+  if (isTestMode && !testModeEverActivated) setTestModeEverActivated(true);
 
   // 테스트 모드 진입 시 첫 컨택의 attrs 를 fetch — 본문의 {{변수}} 토큰 치환 + 분기 조건 평가에 사용.
   // 컨택 0건/인증 실패/키 부재 시 아래 Proxy 가 `[key]` placeholder 로 폴백.

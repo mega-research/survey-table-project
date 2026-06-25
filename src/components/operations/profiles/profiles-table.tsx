@@ -177,6 +177,8 @@ export function ProfilesTable({ rows, total, page, pageSize, sort, dir, stepLoca
     [surveyId, view],
   );
 
+  // TanStack Table useReactTable은 React Compiler 비호환 API라 국소 예외로 둔다.
+  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data: display,
     columns,

@@ -69,9 +69,11 @@ export function ProfilesFilterBar({
 
   // 뒤로/앞으로 가기 시 server 가 새 initial 을 내려주면 로컬 state 동기화.
   useEffect(() => {
-    setSource(initialSource);
-    setValue(initialValue);
-    setStatus(initialStatus);
+    queueMicrotask(() => {
+      setSource(initialSource);
+      setValue(initialValue);
+      setStatus(initialStatus);
+    });
   }, [initialSource, initialValue, initialStatus]);
 
   const handleSubmit = (e: React.FormEvent) => {

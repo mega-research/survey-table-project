@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 
 import { Image } from 'lucide-react';
 
@@ -11,11 +11,7 @@ import type { InteractiveCellProps, PreviewCellProps } from './types';
 export const ImageCell = React.memo(function ImageCell({
   cell,
 }: InteractiveCellProps | PreviewCellProps) {
-  const [error, setError] = useState(false);
-
-  useEffect(() => {
-    setError(false);
-  }, [cell.imageUrl]);
+  const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
 
   if (!cell.imageUrl) {
     return (
@@ -29,7 +25,7 @@ export const ImageCell = React.memo(function ImageCell({
   return (
     <div className="flex flex-col items-center gap-2">
       <div key={cell.imageUrl}>
-        {error ? (
+        {failedImageUrl === cell.imageUrl ? (
           <div className="flex items-center gap-1 text-sm text-red-500">
             <Image className="h-4 w-4" />
             <span>이미지 오류</span>
@@ -40,7 +36,7 @@ export const ImageCell = React.memo(function ImageCell({
             alt="셀 이미지"
             className="h-auto max-h-full w-full rounded object-contain"
             style={{ maxWidth: '100%', maxHeight: '100%' }}
-            onError={() => setError(true)}
+            onError={() => setFailedImageUrl(cell.imageUrl ?? null)}
           />
         )}
       </div>

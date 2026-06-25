@@ -155,7 +155,7 @@ export default function CreateSurveyPage() {
 
   const { mutateAsync: saveSurvey } = useSaveSurvey();
 
-  const [titleInput, setTitleInput] = useState(currentSurvey.title);
+  const [titleInput, setTitleInput] = useState('새 설문조사');
   const [questionNumberInput, setQuestionNumberInput] = useState('');
   const [showScrollButtons, setShowScrollButtons] = useState(false);
   const [slugInput, setSlugInput] = useState('');
@@ -173,8 +173,6 @@ export default function CreateSurveyPage() {
   // 새 설문 생성 시 초기화
   useEffect(() => {
     resetSurvey();
-    setTitleInput('새 설문조사');
-    setSlugInput('');
   }, [resetSurvey]);
 
   // 슬러그 입력 핸들러 (입력값만 업데이트, 서버 호출은 제거)
@@ -205,7 +203,6 @@ export default function CreateSurveyPage() {
   useEffect(() => {
     // 빈 값이거나 유효하지 않은 값이면 검사하지 않음
     if (!slugInput) {
-      setSlugError('');
       return;
     }
 
