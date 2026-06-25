@@ -148,7 +148,7 @@
     "prettier-plugin-tailwindcss": "^0.7.2",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
-    "vite": "^8.0.0",
+    "vite": "^8.0.16",
     "vitest": "^4.1.0"
   },
   "packageManager": "pnpm@8.6.6+sha512.6b9d5b209c829afb2d802bec59fe928199ec5df5a6c005b5a47584687da0377bea4060b9f322c52ffa0a070719587d268e9333056457752f5d2dd37a1802b647",
@@ -159,7 +159,9 @@
       "fast-xml-parser": ">=5.8.0",
       "ws": ">=8.21.0",
       "tar": ">=7.5.16",
+      "protobufjs@7": "7.6.1",
       "protobufjs@8": ">=8.6.3",
+      "undici@7": "7.28.0",
       "@chenglou/pretext": "^0.0.5"
     }
   }
