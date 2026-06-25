@@ -1,0 +1,2 @@
+JANDI_WEBHOOK_URL="https://wh.jandi.com/connect-api/webhook/..."
+SENTRY_WEBHOOK_TOKEN="replace-with-random-token"

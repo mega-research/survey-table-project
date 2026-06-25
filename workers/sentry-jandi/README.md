@@ -14,7 +14,8 @@ pnpm dlx wrangler@4 secret put JANDI_WEBHOOK_URL --config workers/sentry-jandi/w
 pnpm dlx wrangler@4 secret put SENTRY_WEBHOOK_TOKEN --config workers/sentry-jandi/wrangler.jsonc
 ```
 
-For local development, create `workers/sentry-jandi/.dev.vars`:
+For local development, copy `workers/sentry-jandi/.dev.vars.example` to
+`workers/sentry-jandi/.dev.vars` and replace the values:
 
 ```env
 JANDI_WEBHOOK_URL="https://wh.jandi.com/connect-api/webhook/..."
