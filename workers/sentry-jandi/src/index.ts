@@ -8,11 +8,13 @@ export interface WorkerEnv {
 
 export type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
-export default {
+const sentryJandiWorker = {
   fetch(request: Request, env: WorkerEnv): Promise<Response> {
     return handleRequest(request, env);
   },
 };
+
+export default sentryJandiWorker;
 
 export async function handleRequest(
   request: Request,
