@@ -18,7 +18,6 @@ export function TableStepView({
   step,
   isMobile,
   titleHasMultipleLines,
-  currentStepNumber,
   responses,
   questions,
   onResponse,
@@ -27,7 +26,6 @@ export function TableStepView({
   step: Extract<RenderStep, { kind: 'table' }>;
   isMobile: boolean;
   titleHasMultipleLines: boolean;
-  currentStepNumber: number;
   responses: ResponsesMap;
   questions: Question[];
   onResponse: (questionId: string, value: unknown) => void;
@@ -110,27 +108,22 @@ export function TableStepView({
                 )}
               </div>
             )}
-            <div className="flex items-start gap-4">
-              <span className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-semibold text-blue-600 shadow-sm">
-                {currentStepNumber || 1}
-              </span>
-              <div className="min-w-0 flex-1">
-                <CardTitle className="text-2xl leading-relaxed font-semibold break-keep text-gray-900">
-                  {titleText}
-                  {q.required && (
-                    <span className="ml-1.5 align-top text-sm text-red-500" aria-label="필수 질문">
-                      *
-                    </span>
-                  )}
-                </CardTitle>
-                {!isEmptyHtml(q.description) && (
-                  <RichDescription
-                    html={descriptionHtml}
-                    size="base"
-                    className="mt-3 max-h-[60vh] overflow-y-auto text-base text-gray-600 [&_p]:min-h-[1.6em] [&_table]:my-2 [&_table_td]:px-4 [&_table_td]:py-2 [&_table_th]:px-4 [&_table_th]:py-2"
-                  />
+            <div className="min-w-0">
+              <CardTitle className="text-2xl leading-relaxed font-semibold break-keep text-gray-900">
+                {titleText}
+                {q.required && (
+                  <span className="ml-1.5 align-top text-sm text-red-500" aria-label="필수 질문">
+                    *
+                  </span>
                 )}
-              </div>
+              </CardTitle>
+              {!isEmptyHtml(q.description) && (
+                <RichDescription
+                  html={descriptionHtml}
+                  size="base"
+                  className="mt-3 max-h-[60vh] overflow-y-auto text-base text-gray-600 [&_p]:min-h-[1.6em] [&_table]:my-2 [&_table_td]:px-4 [&_table_td]:py-2 [&_table_th]:px-4 [&_table_th]:py-2"
+                />
+              )}
             </div>
           </CardHeader>
         )}

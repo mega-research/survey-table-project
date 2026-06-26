@@ -54,6 +54,7 @@ import { collectRankingOptCells, hasExistingOtherRankingCell } from '@/utils/ran
 import {
   type ContentType,
   GROUPABLE_CELL_TYPES,
+  MOBILE_LABEL_CELL_TYPES,
   MOBILE_DISPLAY_CELL_TYPES,
   TEXT_POSITION_CELL_TYPES,
   buildUpdatedCell,
@@ -184,6 +185,8 @@ export function CellContentModal({
   // 단, 이미 ranking_opt 인 셀(과거 데이터)은 편집/다른 타입 전환이 가능하도록 노출 유지.
   const parentQuestionType = questions.find((q) => q.id === currentQuestionId)?.type;
   const showRankingOptTab = parentQuestionType === 'ranking' || contentType === 'ranking_opt';
+  const showContentMobileDisplay = MOBILE_DISPLAY_CELL_TYPES.has(contentType);
+  const showInteractiveMobileLabel = MOBILE_LABEL_CELL_TYPES.has(contentType);
   const {
     setContentType,
     setTextContent,
@@ -1216,13 +1219,14 @@ export function CellContentModal({
           )}
         </div>
 
-        {/* 모바일 카드 표시 설정 (text/image/video 셀 전용) */}
-        {MOBILE_DISPLAY_CELL_TYPES.has(contentType) && (
+        {/* 모바일 카드 표시 설정 */}
+        {(showContentMobileDisplay || showInteractiveMobileLabel) && (
           <div className="mt-6 border-t border-gray-200 pt-6">
             <h3 className="mb-2 text-sm font-medium text-gray-900">모바일 카드 표시</h3>
             <p className="mb-3 text-xs text-gray-500">
-              좁은 화면(모바일) 카드에서 이 셀을 어떻게 보여줄지 선택합니다. 의미는 지정하지 않으며
-              저작자가 결정합니다.
+              {showInteractiveMobileLabel
+                ? '좁은 화면(모바일) 카드에서 이 셀의 엑셀라벨을 보여줄지 선택합니다. 입력 컨트롤은 항상 표시됩니다.'
+                : '좁은 화면(모바일) 카드에서 이 셀을 어떻게 보여줄지 선택합니다. 의미는 지정하지 않으며 저작자가 결정합니다.'}
             </p>
             <div className="flex gap-2">
               <Button
@@ -1234,35 +1238,49 @@ export function CellContentModal({
               >
                 숨기기
               </Button>
-              {contentType === 'text' && (
+              {showContentMobileDisplay ? (
+                <>
+                  {contentType === 'text' && (
+                    <Button
+                      type="button"
+                      variant={mobileDisplay === 'header' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setMobileDisplay('header')}
+                      className="flex-1"
+                    >
+                      헤더
+                    </Button>
+                  )}
+                  <Button
+                    type="button"
+                    variant={mobileDisplay === 'inline' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setMobileDisplay('inline')}
+                    className="flex-1"
+                  >
+                    바로표시
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={mobileDisplay === 'collapsed' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setMobileDisplay('collapsed')}
+                    className="flex-1"
+                  >
+                    자세히
+                  </Button>
+                </>
+              ) : (
                 <Button
                   type="button"
-                  variant={mobileDisplay === 'header' ? 'default' : 'outline'}
+                  variant={mobileDisplay !== 'hidden' ? 'default' : 'outline'}
                   size="sm"
-                  onClick={() => setMobileDisplay('header')}
+                  onClick={() => setMobileDisplay('inline')}
                   className="flex-1"
                 >
-                  헤더
+                  표시
                 </Button>
               )}
-              <Button
-                type="button"
-                variant={mobileDisplay === 'inline' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setMobileDisplay('inline')}
-                className="flex-1"
-              >
-                바로표시
-              </Button>
-              <Button
-                type="button"
-                variant={mobileDisplay === 'collapsed' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setMobileDisplay('collapsed')}
-                className="flex-1"
-              >
-                자세히
-              </Button>
             </div>
           </div>
         )}

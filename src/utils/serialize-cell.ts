@@ -84,6 +84,15 @@ export const TEXT_POSITION_CELL_TYPES = new Set<ContentType>([
   'ranking',
 ]);
 export const MOBILE_DISPLAY_CELL_TYPES = new Set<TableCell['type']>(['text', 'image', 'video']);
+export const MOBILE_LABEL_CELL_TYPES = new Set<TableCell['type']>([
+  'checkbox',
+  'radio',
+  'select',
+  'input',
+  'ranking',
+  'ranking_opt',
+  'choice_opt',
+]);
 
 /** 옵션 그룹 귀속이 가능한 셀 타입 */
 export const GROUPABLE_CELL_TYPES = new Set<TableCell['type']>(['choice_opt', 'ranking_opt']);
@@ -95,8 +104,9 @@ export function narrowCellType(t: TableCell['type'] | undefined): ContentType {
 
 /** TableCell → 초기 폼 상태 생성 */
 export function cellToFormState(cell: TableCell): CellFormState {
+  const contentType = narrowCellType(cell.type);
   return {
-    contentType: narrowCellType(cell.type),
+    contentType,
     textContent: cell.content || '',
     imageUrl: cell.imageUrl || '',
     videoUrl: cell.videoUrl || '',
@@ -126,7 +136,7 @@ export function cellToFormState(cell: TableCell): CellFormState {
     choiceBranchRule: cell.branchRule,
     choiceGroupId: cell.choiceGroupId ?? '',
     horizontalAlign: cell.horizontalAlign || 'left',
-    mobileDisplay: cell.mobileDisplay ?? 'hidden',
+    mobileDisplay: cell.mobileDisplay ?? (MOBILE_LABEL_CELL_TYPES.has(contentType) ? 'inline' : 'hidden'),
     verticalAlign: cell.verticalAlign || 'top',
     textPosition: cell.textPosition || 'top',
     isMergeEnabled:
@@ -158,8 +168,51 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
     return trimmed.some((n) => n.length > 0) ? trimmed : undefined;
   })();
 
-  // cell 에서 textInputPlaceholder 를 제거한 베이스 (choice_opt 타입 전환 시 클리어)
-  const { textInputPlaceholder: _ttp, ...cellBase } = cell;
+  // 폼이 책임지는 필드는 기존 셀에서 베이스 복사하지 않는다.
+  // 값 비우기/기본값 복귀 시 cellBase 의 예전 값이 되살아나는 것을 막고,
+  // 아래 조건부 저장 블록을 단일 source of truth 로 둔다.
+  const {
+    cellCode: _cellCode,
+    isCustomCellCode: _isCustomCellCode,
+    exportLabel: _exportLabel,
+    isCustomExportLabel: _isCustomExportLabel,
+    choiceGroupId: _choiceGroupId,
+    spssVarType: _spssVarType,
+    spssMeasure: _spssMeasure,
+    spssNumericCode: _spssNumericCode,
+    imageUrl: _imageUrl,
+    videoUrl: _videoUrl,
+    checkboxOptions: _checkboxOptions,
+    radioOptions: _radioOptions,
+    radioGroupName: _radioGroupName,
+    selectOptions: _selectOptions,
+    allowOtherOption: _allowOtherOption,
+    optionsColumns: _optionsColumns,
+    placeholder: _placeholder,
+    inputMaxLength: _inputMaxLength,
+    defaultValueTemplate: _defaultValueTemplate,
+    inputType: _inputType,
+    emptyDefault: _emptyDefault,
+    minSelections: _minSelections,
+    maxSelections: _maxSelections,
+    rankingConfig: _rankingConfig,
+    rankingOptions: _rankingOptions,
+    rankSuffixPattern: _rankSuffixPattern,
+    rankVarNames: _rankVarNames,
+    rankingLabel: _rankingLabel,
+    isOtherRankingCell: _isOtherRankingCell,
+    choiceLabel: _choiceLabel,
+    branchRule: _branchRule,
+    allowTextInput: _allowTextInput,
+    textInputPlaceholder: _textInputPlaceholder,
+    rowspan: _rowspan,
+    colspan: _colspan,
+    horizontalAlign: _horizontalAlign,
+    verticalAlign: _verticalAlign,
+    textPosition: _textPosition,
+    mobileDisplay: _mobileDisplay,
+    ...cellBase
+  } = cell;
 
   const updatedCell: TableCell = {
     ...cellBase,
@@ -294,6 +347,40 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
   // exactOptionalPropertyTypes 상 undefined 할당은 금지이므로 delete 사용.
   if (GROUPABLE_CELL_TYPES.has(contentType) && !form.choiceGroupId) {
     delete (updatedCell as Partial<TableCell>).choiceGroupId;
+  }
+
+  // 표시 셀(text/image/video): 기본 hidden 은 새 셀에는 저장하지 않는다. 다만 기존에
+  // header/inline/collapsed/hidden 으로 명시 설정된 셀을 hidden 으로 바꾸는 경우는
+  // "자동 카드 헤더 폴백도 숨김" 의도를 보존해야 한다.
+  if (MOBILE_DISPLAY_CELL_TYPES.has(contentType) && form.mobileDisplay === 'hidden') {
+    if (cell.mobileDisplay !== undefined) {
+      updatedCell.mobileDisplay = 'hidden';
+    } else {
+      delete (updatedCell as Partial<TableCell>).mobileDisplay;
+    }
+  }
+  // 인터랙티브 셀: mobileDisplay 는 모바일 카드의 엑셀라벨 표시 여부로만 해석한다.
+  // 기본 표시(inline)는 저장하지 않고, 숨김만 명시 저장한다.
+  if (MOBILE_LABEL_CELL_TYPES.has(contentType)) {
+    if (form.mobileDisplay === 'hidden') {
+      updatedCell.mobileDisplay = 'hidden';
+    } else {
+      delete (updatedCell as Partial<TableCell>).mobileDisplay;
+    }
+  }
+  if (!MOBILE_DISPLAY_CELL_TYPES.has(contentType) && !MOBILE_LABEL_CELL_TYPES.has(contentType)) {
+    delete (updatedCell as Partial<TableCell>).mobileDisplay;
+  }
+
+  // 정렬도 기본값으로 되돌릴 때 cellBase 의 이전 값이 남지 않도록 제거한다.
+  if (form.horizontalAlign === 'left') {
+    delete (updatedCell as Partial<TableCell>).horizontalAlign;
+  }
+  if (form.verticalAlign === 'top') {
+    delete (updatedCell as Partial<TableCell>).verticalAlign;
+  }
+  if (!TEXT_POSITION_CELL_TYPES.has(contentType) || form.textPosition === 'top') {
+    delete (updatedCell as Partial<TableCell>).textPosition;
   }
 
   return updatedCell;

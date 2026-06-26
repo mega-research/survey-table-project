@@ -35,6 +35,10 @@ yarn-error.log*
 .env*
 !.env.example
 
+# cloudflare workers local secrets
+.dev.vars*
+!.dev.vars.example
+
 # vercel
 .vercel
 

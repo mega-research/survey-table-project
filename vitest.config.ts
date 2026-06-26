@@ -19,7 +19,7 @@ export default defineConfig({
     include:
       process.env['RUN_REALDB'] === '1'
         ? ['tests/integration/**/*.realdb.test.ts']
-        : ['tests/**/*.test.{ts,tsx}', 'src/**/*.test.{ts,tsx}'],
+        : ['tests/**/*.test.{ts,tsx}', 'src/**/*.test.{ts,tsx}', 'workers/**/*.test.{ts,tsx}'],
     exclude:
       process.env['RUN_REALDB'] === '1'
         ? [...configDefaults.exclude]

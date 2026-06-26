@@ -321,9 +321,10 @@ export interface TableCell {
   // 셀 텍스트(content) 위치 — input/checkbox/radio/select/ranking 셀에서 텍스트와 입력 영역의 상대 위치
   // 기본값(undefined)은 'top' 과 동일 — 기존 동작 유지
   textPosition?: 'top' | 'bottom' | 'left' | 'right';
-  // 모바일 카드에서 이 셀(text/image/video 표시 셀)을 어떻게 노출할지.
-  // 미지정 = 'hidden' (기존 동작: 카드 미노출). 입력 셀은 이 값을 무시하고 항상 컨트롤로 렌더된다.
-  // 'header' = 이 셀(text)을 카드 제목으로 사용.
+  // 모바일 카드 표시 설정.
+  // - text/image/video 표시 셀: 미지정 = hidden, header/inline/collapsed 로 콘텐츠 노출 방식 지정.
+  // - input/radio/checkbox/select/ranking 계열 인터랙티브 셀: hidden 이면 모바일 엑셀라벨만 숨김.
+  //   미지정 또는 inline/collapsed/header 는 라벨 표시로 취급하며, 입력 컨트롤은 항상 렌더된다.
   mobileDisplay?: 'hidden' | 'header' | 'inline' | 'collapsed';
   // 런타임 전용: 셀렉터 경계에서 분리된 continuation 셀 마커
   _isContinuation?: boolean;

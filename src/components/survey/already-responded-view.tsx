@@ -1,7 +1,6 @@
 'use client';
 
 import { AlertCircle, CheckCircle2 } from 'lucide-react';
-import Link from 'next/link';
 
 import { Card, CardContent } from '@/components/ui/card';
 
@@ -59,12 +58,10 @@ export function AlreadyRespondedView({ reason, surveyTitle, contactEmail }: Prop
           )}
           <p className="text-gray-600">{msg.body}</p>
           {contactEmail && (
-            <Link
-              href={`mailto:${contactEmail}?subject=${encodeURIComponent(surveyTitle + ' 문의')}`}
-              className="mt-6 inline-block text-sm text-blue-600 underline hover:text-blue-700"
-            >
-              관리자에게 문의하기
-            </Link>
+            <div className="mt-6 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm">
+              <p className="text-gray-500">문의 이메일</p>
+              <p className="mt-1 font-medium break-all text-gray-900">{contactEmail}</p>
+            </div>
           )}
         </CardContent>
       </Card>

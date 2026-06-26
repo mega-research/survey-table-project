@@ -1,0 +1,13 @@
+{
+  "$schema": "https://unpkg.com/wrangler@4/config-schema.json",
+  "name": "survey-table-sentry-jandi",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-06-25",
+  "workers_dev": true,
+  "observability": {
+    "enabled": true
+  },
+  "secrets": {
+    "required": ["JANDI_WEBHOOK_URL", "SENTRY_CLIENT_SECRET"]
+  }
+}

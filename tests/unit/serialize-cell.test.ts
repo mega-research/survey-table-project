@@ -103,6 +103,41 @@ describe('buildUpdatedCell — 셀타입별 characterization', () => {
     });
   });
 
+  it('input: 기존 숫자/초기값/prefill/placeholder/maxLength 를 비우거나 기본값으로 돌리면 제거한다', () => {
+    const existingInput: TableCell = {
+      id: 'input1',
+      type: 'input',
+      content: '',
+      placeholder: '기존 안내',
+      inputMaxLength: 20,
+      defaultValueTemplate: '{{기존}}',
+      inputType: 'number',
+      emptyDefault: 0,
+    };
+
+    const out = buildUpdatedCell(baseForm('input'), existingInput);
+
+    expect(out.inputType).toBe('text');
+    expect(out).not.toHaveProperty('placeholder');
+    expect(out).not.toHaveProperty('inputMaxLength');
+    expect(out).not.toHaveProperty('defaultValueTemplate');
+    expect(out).not.toHaveProperty('emptyDefault');
+  });
+
+  it('input: 기존 숫자 초기값을 수정하면 새 값으로 덮어쓴다', () => {
+    const out = buildUpdatedCell(
+      {
+        ...baseForm('input'),
+        inputType: 'number',
+        emptyDefaultEnabled: true,
+        emptyDefaultRaw: '7',
+      },
+      { id: 'input1', type: 'input', content: '', inputType: 'number', emptyDefault: 0 },
+    );
+
+    expect(out.emptyDefault).toBe(7);
+  });
+
   it('checkbox: checkboxOptions + allowOtherOption + optionsColumns + min/max', () => {
     const form: CellFormState = {
       ...baseForm('checkbox'),
@@ -200,6 +235,63 @@ describe('buildUpdatedCell — 셀타입별 characterization', () => {
     expect(out).not.toHaveProperty('rankVarNames');
   });
 
+  it('타입별 optional 값은 폼에서 비우면 기존 셀 값도 제거한다', () => {
+    const image = buildUpdatedCell(
+      baseForm('image'),
+      { id: 'img1', type: 'image', content: '', imageUrl: 'https://x/old.png' },
+    );
+    expect(image).not.toHaveProperty('imageUrl');
+
+    const checkbox = buildUpdatedCell(
+      {
+        ...baseForm('checkbox'),
+        checkboxOptions: [],
+        allowOtherOption: false,
+        cellOptionsColumns: undefined,
+        minSelections: undefined,
+        maxSelections: undefined,
+      },
+      {
+        id: 'cb1',
+        type: 'checkbox',
+        content: '',
+        checkboxOptions: [{ id: 'a', label: 'A', value: 'a' }],
+        allowOtherOption: true,
+        optionsColumns: 2,
+        minSelections: 1,
+        maxSelections: 2,
+      },
+    );
+    expect(checkbox.checkboxOptions).toEqual([]);
+    expect(checkbox.allowOtherOption).toBe(false);
+    expect(checkbox).not.toHaveProperty('optionsColumns');
+    expect(checkbox).not.toHaveProperty('minSelections');
+    expect(checkbox).not.toHaveProperty('maxSelections');
+
+    const ranking = buildUpdatedCell(
+      {
+        ...baseForm('ranking'),
+        rankingOptions: [],
+        rankingConfig: undefined,
+        rankSuffixPattern: '',
+        rankVarNames: ['', ''],
+      },
+      {
+        id: 'rk1',
+        type: 'ranking',
+        content: '',
+        rankingOptions: [{ id: 'a', label: 'A', value: 'a' }],
+        rankingConfig: { positions: 2 },
+        rankSuffixPattern: '_old{k}',
+        rankVarNames: ['old1', 'old2'],
+      },
+    );
+    expect(ranking.rankingOptions).toEqual([]);
+    expect(ranking).not.toHaveProperty('rankingConfig');
+    expect(ranking).not.toHaveProperty('rankSuffixPattern');
+    expect(ranking).not.toHaveProperty('rankVarNames');
+  });
+
   it('ranking_opt: rankingLabel + spssNumericCode (비-기타)', () => {
     const form: CellFormState = {
       ...baseForm('ranking_opt'),
@@ -291,6 +383,51 @@ describe('buildUpdatedCell — 셀타입별 characterization', () => {
     expect(out.branchRule).toEqual({ ...branch, value: 'c1' });
   });
 
+  it('옵션 소스 optional 값은 폼에서 비우면 기존 셀 값도 제거한다', () => {
+    const choice = buildUpdatedCell(
+      {
+        ...baseForm('choice_opt'),
+        choiceLabel: '',
+        choiceAllowTextInput: false,
+        choiceBranchRule: undefined,
+        cellSpssNumericCode: '',
+      },
+      {
+        id: 'choice1',
+        type: 'choice_opt',
+        content: '',
+        choiceLabel: '기존 라벨',
+        allowTextInput: true,
+        branchRule: { id: 'b1', value: 'choice1', action: 'goto', targetQuestionId: 'q2' },
+        spssNumericCode: 9,
+      },
+    );
+    expect(choice).not.toHaveProperty('choiceLabel');
+    expect(choice).not.toHaveProperty('allowTextInput');
+    expect(choice).not.toHaveProperty('branchRule');
+    expect(choice).not.toHaveProperty('spssNumericCode');
+
+    const rankingOpt = buildUpdatedCell(
+      {
+        ...baseForm('ranking_opt'),
+        rankingLabel: '',
+        isOtherRankingCell: false,
+        cellSpssNumericCode: '',
+      },
+      {
+        id: 'rankOpt1',
+        type: 'ranking_opt',
+        content: '',
+        rankingLabel: '기존 라벨',
+        isOtherRankingCell: true,
+        spssNumericCode: 3,
+      },
+    );
+    expect(rankingOpt).not.toHaveProperty('rankingLabel');
+    expect(rankingOpt).not.toHaveProperty('isOtherRankingCell');
+    expect(rankingOpt).not.toHaveProperty('spssNumericCode');
+  });
+
   it('choice_opt: choiceGroupId 설정 시 저장되고 해제(빈 문자열) 시 키가 제거된다', () => {
     const cellWithGroup: TableCell = { id: 'c1', type: 'choice_opt', content: '', choiceGroupId: 'g1' };
 
@@ -335,6 +472,47 @@ describe('buildUpdatedCell — 셀타입별 characterization', () => {
     expect(out.spssMeasure).toBe('Nominal');
   });
 
+  it('정렬/textPosition: 기존 비기본값을 기본값으로 되돌리면 저장값에서 제거한다', () => {
+    const cellWithAlignment: TableCell = {
+      id: 'c1',
+      type: 'input',
+      content: '',
+      horizontalAlign: 'right',
+      verticalAlign: 'bottom',
+      textPosition: 'left',
+    };
+
+    const out = buildUpdatedCell(baseForm('input'), cellWithAlignment);
+
+    expect(out).not.toHaveProperty('horizontalAlign');
+    expect(out).not.toHaveProperty('verticalAlign');
+    expect(out).not.toHaveProperty('textPosition');
+  });
+
+  it('코드/엑셀라벨/병합도 기본값으로 되돌리면 기존 값을 제거한다', () => {
+    const out = buildUpdatedCell(
+      baseForm('input'),
+      {
+        id: 'c1',
+        type: 'input',
+        content: '',
+        rowspan: 2,
+        colspan: 2,
+        cellCode: 'OLD_CODE',
+        isCustomCellCode: true,
+        exportLabel: 'OLD_LABEL',
+        isCustomExportLabel: true,
+      },
+    );
+
+    expect(out).not.toHaveProperty('rowspan');
+    expect(out).not.toHaveProperty('colspan');
+    expect(out).not.toHaveProperty('cellCode');
+    expect(out.isCustomCellCode).toBe(false);
+    expect(out).not.toHaveProperty('exportLabel');
+    expect(out.isCustomExportLabel).toBe(false);
+  });
+
   it('textInputPlaceholder 는 항상 베이스에서 제거된다 (choice_opt 전환 클리어)', () => {
     const cellWithPlaceholder: TableCell = {
       id: 'c1',
@@ -346,13 +524,13 @@ describe('buildUpdatedCell — 셀타입별 characterization', () => {
     expect(out).not.toHaveProperty('textInputPlaceholder');
   });
 
-  it('mobileDisplay: text/image/video 셀이고 hidden 이 아닐 때만 저장', () => {
+  it('mobileDisplay: text/image/video 셀이고 hidden 이 아닐 때만 새로 저장', () => {
     const shown = buildUpdatedCell(
       { ...baseForm('text'), mobileDisplay: 'header' },
       baseCell,
     );
     expect(shown.mobileDisplay).toBe('header');
-    // input 셀은 mobileDisplay 저장 대상 아님
+    // input 셀의 label visible 상태는 기본값이므로 저장 대상 아님
     const input = buildUpdatedCell(
       { ...baseForm('input'), mobileDisplay: 'inline' },
       baseCell,
@@ -361,6 +539,29 @@ describe('buildUpdatedCell — 셀타입별 characterization', () => {
     // hidden 은 저장 안 함
     const hidden = buildUpdatedCell({ ...baseForm('text'), mobileDisplay: 'hidden' }, baseCell);
     expect(hidden).not.toHaveProperty('mobileDisplay');
+  });
+
+  it('mobileDisplay: 기존 표시 셀을 hidden 으로 바꾸면 명시 hidden 으로 저장한다', () => {
+    const cellWithMobileDisplay: TableCell = {
+      ...baseCell,
+      mobileDisplay: 'header',
+    };
+
+    const out = buildUpdatedCell(
+      { ...baseForm('text'), mobileDisplay: 'hidden' },
+      cellWithMobileDisplay,
+    );
+
+    expect(out.mobileDisplay).toBe('hidden');
+  });
+
+  it('mobileDisplay: 인터랙티브 셀 라벨 숨김은 hidden 으로 저장한다', () => {
+    const out = buildUpdatedCell(
+      { ...baseForm('input'), mobileDisplay: 'hidden' },
+      { id: 'input1', type: 'input', content: '', exportLabel: '설립연도_년' },
+    );
+
+    expect(out.mobileDisplay).toBe('hidden');
   });
 });
 
@@ -377,6 +578,12 @@ describe('GROUPABLE_CELL_TYPES', () => {
 });
 
 describe('cellToFormState — 라운드트립', () => {
+  it('인터랙티브 셀의 모바일 라벨은 기본 표시 상태로 hydrate 된다', () => {
+    const form = cellToFormState({ id: 'input1', type: 'input', content: '' });
+
+    expect(form.mobileDisplay).toBe('inline');
+  });
+
   it('비어있지 않은 셀을 폼으로 변환 후 직렬화하면 핵심 필드가 보존된다', () => {
     const cell: TableCell = {
       id: 'c9',

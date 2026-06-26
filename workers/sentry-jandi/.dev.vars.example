@@ -1,0 +1,2 @@
+JANDI_WEBHOOK_URL="https://wh.jandi.com/connect-api/webhook/..."
+SENTRY_CLIENT_SECRET="replace-with-sentry-internal-integration-client-secret"

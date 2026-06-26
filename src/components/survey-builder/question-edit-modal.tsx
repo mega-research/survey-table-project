@@ -314,7 +314,7 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
             const createdQuestion = await client.surveyBuilder.questions.create({
               id: questionId,
               surveyId: store.currentSurvey.id,
-              groupId: question?.groupId,
+              groupId: currentFormData.groupId ?? question?.groupId,
               type: currentFormData.type || question?.type || 'text',
               title: currentFormData.title || question?.title || '',
               description: currentFormData.description || question?.description,

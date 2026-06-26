@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { TableCell } from '@/types/survey';
 import {
   findMobileHeaderCell,
+  hasExplicitHiddenMobileHeaderCell,
   hasMobileDisplayCells,
   splitMobileDisplayCells,
 } from '@/utils/mobile-display-cells';
@@ -105,5 +106,24 @@ describe('findMobileHeaderCell', () => {
     expect(
       findMobileHeaderCell([cell({ type: 'image', mobileDisplay: 'header', imageUrl: 'x' })]),
     ).toBeUndefined();
+  });
+});
+
+describe('hasExplicitHiddenMobileHeaderCell', () => {
+  it('명시 hidden text 셀이 있으면 true', () => {
+    expect(
+      hasExplicitHiddenMobileHeaderCell([
+        cell({ type: 'text', mobileDisplay: 'hidden', content: '숨김 제목' }),
+      ]),
+    ).toBe(true);
+  });
+
+  it('미지정 text 셀과 hidden image 셀은 헤더 숨김 신호로 보지 않는다', () => {
+    expect(
+      hasExplicitHiddenMobileHeaderCell([
+        cell({ type: 'text' }),
+        cell({ type: 'image', mobileDisplay: 'hidden', imageUrl: 'x' }),
+      ]),
+    ).toBe(false);
   });
 });

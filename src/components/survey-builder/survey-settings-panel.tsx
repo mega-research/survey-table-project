@@ -109,7 +109,7 @@ export const SurveySettingsPanel = React.memo(function SurveySettingsPanel({
             className="w-full rounded border border-input bg-background px-3 py-2 text-sm"
           />
           <p className="text-xs text-muted-foreground">
-            중복 응답 차단 화면에 표시되는 문의 링크입니다. 비워두면 링크 없이 메시지만 표시됩니다.
+            중복 응답 차단 화면에 표시되는 문의 이메일 주소입니다. 비워두면 메시지만 표시됩니다.
           </p>
         </div>
 

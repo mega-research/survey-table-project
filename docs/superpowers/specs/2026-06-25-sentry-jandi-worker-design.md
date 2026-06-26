@@ -34,8 +34,8 @@ Vercel 자체 Webhook은 배포 이벤트에는 맞지만, 운영 중 런타임 
 | 알림 소스 | Sentry Issue Alert Webhook |
 | 중계 서버 | Cloudflare Worker |
 | 저장소 위치 | 레포 내 `workers/sentry-jandi/` |
-| 수신 인증 | `Authorization: Bearer <token>` 우선, 필요 시 `?token=` fallback |
-| 비밀 관리 | Cloudflare secret: `JANDI_WEBHOOK_URL`, `SENTRY_WEBHOOK_TOKEN` |
+| 수신 인증 | Sentry Internal Integration `Sentry-Hook-Signature` HMAC-SHA256 검증 |
+| 비밀 관리 | Cloudflare secret: `JANDI_WEBHOOK_URL`, `SENTRY_CLIENT_SECRET` |
 | JANDI 메시지 | `body`, `connectColor`, `connectInfo` |
 | 테스트 | 변환 함수 + fetch handler 단위 테스트 |
 
@@ -78,12 +78,12 @@ Worker는 `POST /sentry`만 처리한다.
 - `GET /healthz`는 200과 짧은 JSON을 반환한다.
 - 지원하지 않는 path는 404를 반환한다.
 - `POST`가 아니면 405를 반환한다.
-- 인증 실패는 401을 반환한다.
+- `Sentry-Hook-Signature` 검증 실패는 401을 반환한다.
 - JSON 파싱 실패는 400을 반환한다.
 - JANDI 전송 실패는 502를 반환한다.
 - 성공 시 202를 반환한다.
 
-Sentry Alert Webhook에 bearer header를 설정하기 어렵거나 UI 제약이 있으면 URL에 `?token=<secret>`을 붙일 수 있게 한다. 기본 문서와 예시는 bearer header를 우선 안내한다.
+서명 검증은 JSON 파싱 전에 수행한다. Sentry는 raw request body를 Internal Integration의 Client Secret으로 HMAC-SHA256 서명해 `Sentry-Hook-Signature` 헤더로 보낸다. Worker도 같은 raw body로 hex digest를 계산해 비교한 뒤에만 payload를 파싱하고 JANDI로 전달한다.
 
 ### 3. Sentry payload 매핑
 
@@ -146,7 +146,7 @@ Sentry 문서 예시에는 `issue_id`, `issue_url`, `level`, `metadata.type`, `m
 ```jsonc
 {
   "secrets": {
-    "required": ["JANDI_WEBHOOK_URL", "SENTRY_WEBHOOK_TOKEN"]
+    "required": ["JANDI_WEBHOOK_URL", "SENTRY_CLIENT_SECRET"]
   }
 }
 ```
@@ -155,7 +155,7 @@ Sentry 문서 예시에는 `issue_id`, `issue_url`, `level`, `metadata.type`, `m
 
 1. Cloudflare Worker 배포
 2. `JANDI_WEBHOOK_URL` secret 등록
-3. `SENTRY_WEBHOOK_TOKEN` secret 등록
+3. Sentry Internal Integration의 Client Secret을 `SENTRY_CLIENT_SECRET` secret으로 등록
 4. Sentry Alert Rule에서 webhook URL 등록
 5. Sentry의 test notification으로 JANDI 수신 확인
 

@@ -639,7 +639,6 @@ export function SurveyResponseFlow({
             step={currentStep}
             isMobile={isMobile}
             titleHasMultipleLines={titleHasMultipleLines}
-            currentStepNumber={currentVisibleStepNumber}
             responses={responses}
             questions={questions}
             onResponse={handleResponse}
