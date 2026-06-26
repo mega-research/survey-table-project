@@ -47,11 +47,10 @@ export function GroupStepView({
       </CardHeader>
       <CardContent className="md:px-8">
         <div className="divide-y divide-gray-100">
-          {visibleItems.map((item, idx) => (
+          {visibleItems.map((item) => (
             <GroupStepItem
               key={item.question.id}
               item={item}
-              itemIndex={idx + 1}
               showSubgroupHeading={
                 !!item.subgroupName && item.subgroupName !== step.rootGroupName
               }

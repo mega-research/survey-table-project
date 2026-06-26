@@ -15,7 +15,11 @@ import {
   detectUnitPair,
   overrideCellOptionsColumnsForCard,
 } from '@/utils/mobile-card-options';
-import { findMobileHeaderCell, hasMobileDisplayCells } from '@/utils/mobile-display-cells';
+import {
+  findMobileHeaderCell,
+  hasExplicitHiddenMobileHeaderCell,
+  hasMobileDisplayCells,
+} from '@/utils/mobile-display-cells';
 import { getAlignmentClasses } from '@/utils/table-grid-utils';
 
 import { InteractiveCell } from './cells';
@@ -88,6 +92,7 @@ export const MobileRowCard = React.memo(function MobileRowCard({
     const headerCell = findMobileHeaderCell(row.cells);
     const headerText = headerCell ? (headerCell.content ?? '').trim() : '';
     if (headerText) return headerText;
+    if (hasExplicitHiddenMobileHeaderCell(row.cells)) return '';
     const descCell = row.cells.find(
       (c) => c.type === 'radio' && !c.isHidden && c.radioOptions?.length === 1,
     );
@@ -178,6 +183,7 @@ export const MobileRowCard = React.memo(function MobileRowCard({
               )}
               <div className="space-y-1">
                 {(() => {
+                  if (cell.mobileDisplay === 'hidden') return null;
                   // hideColumnLabels 여도 인터랙티브 셀은 exportLabel 을 표기해 입력 항목을 식별할 수 있게 한다.
                   const displayLabel = hideColumnLabels ? cellLabel : shortLabel;
                   if (!displayLabel) return null;

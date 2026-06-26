@@ -55,3 +55,17 @@ export function findMobileHeaderCell(cells: TableCell[]): TableCell | undefined 
       cell.mobileDisplay === 'header',
   );
 }
+
+/**
+ * 저작자가 모바일 카드 제목으로 쓰일 수 있는 text 셀을 명시적으로 숨겼는지 확인한다.
+ * 이 경우 호출부는 row.label/라디오 라벨 폴백 제목을 만들지 않아야 한다.
+ */
+export function hasExplicitHiddenMobileHeaderCell(cells: TableCell[]): boolean {
+  return cells.some(
+    (cell) =>
+      !cell.isHidden &&
+      !cell._isContinuation &&
+      cell.type === 'text' &&
+      cell.mobileDisplay === 'hidden',
+  );
+}

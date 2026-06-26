@@ -42,6 +42,24 @@ describe('MobileRowCard 표시 셀', () => {
     expect(screen.queryByText('가격 설명')).not.toBeInTheDocument();
   });
 
+  it('명시 hidden text 셀이 있으면 row.label 폴백 헤더를 렌더하지 않는다', () => {
+    renderCard({
+      id: 'r1',
+      label: '숨겨야 하는 카드 제목',
+      cells: [
+        {
+          id: 'r1c0',
+          type: 'text',
+          content: '숨겨야 하는 카드 제목',
+          mobileDisplay: 'hidden',
+        } as never,
+        { id: 'r1c2', type: 'input' } as never,
+      ],
+    } as TableRow);
+
+    expect(screen.queryByText('숨겨야 하는 카드 제목')).not.toBeInTheDocument();
+  });
+
   it('inline 지정 text 셀은 카드에 노출된다', () => {
     renderCard(row('inline'));
     expect(screen.getByText('가격 설명')).toBeInTheDocument();
@@ -89,5 +107,24 @@ describe('MobileRowCard 인터랙티브 셀 라벨', () => {
     renderWith(true);
     // placeholder 만 있는 m 셀은 exportLabel 이 없어 열 라벨('점수')로 폴백하지 않아야 한다
     expect(screen.queryByText('점수')).not.toBeInTheDocument();
+  });
+
+  it('mobileDisplay hidden 인 인터랙티브 셀은 라벨만 숨기고 입력 컨트롤은 유지한다', () => {
+    renderCard({
+      id: 'r1',
+      label: '설립연도',
+      cells: [
+        {
+          id: 'y',
+          type: 'input',
+          exportLabel: '숨길엑셀라벨',
+          placeholder: 'ex) 1994',
+          mobileDisplay: 'hidden',
+        } as never,
+      ],
+    } as TableRow);
+
+    expect(screen.queryByText('숨길엑셀라벨')).not.toBeInTheDocument();
+    expect(screen.getByPlaceholderText('ex) 1994')).toBeInTheDocument();
   });
 });
