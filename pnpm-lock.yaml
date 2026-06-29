@@ -14,6 +14,7 @@ overrides:
   protobufjs@8: '>=8.6.3'
   undici@7: 7.28.0
   '@chenglou/pretext': ^0.0.5
+  linkify-it: 5.0.1
 
 dependencies:
   '@aws-sdk/client-s3':
@@ -15185,10 +15186,10 @@ packages:
       lightningcss-win32-arm64-msvc: 1.32.0
       lightningcss-win32-x64-msvc: 1.32.0
 
-  /linkify-it@5.0.0:
+  /linkify-it@5.0.1:
     resolution:
       {
-        integrity: sha512-5aHCbzQRADcdP+ATqnDuhhJ/MRIqDkZX5pyjFHRRysS8vZ5AbqGEoFIb6pYHPZ+L/OC2Lc+xT8uHVVR5CAK/wQ==,
+        integrity: sha512-wVoTjP4Q6R0NW5hiZkVJaFZPWgtXfoGF+6LucL3/FtiNjmcHhYjEr5f1Kqjirc1nBW07J/ZuRFumqr2oqccEWg==,
       }
     dependencies:
       uc.micro: 2.1.0
@@ -15430,7 +15431,7 @@ packages:
     dependencies:
       argparse: 2.0.1
       entities: 4.5.0
-      linkify-it: 5.0.0
+      linkify-it: 5.0.1
       mdurl: 2.0.0
       punycode.js: 2.3.1
       uc.micro: 2.1.0
