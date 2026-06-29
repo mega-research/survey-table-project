@@ -43,11 +43,15 @@
 - `settings` / `title` / `description`: `useSurveyBuilderStore`의 `currentSurvey.settings`, `currentSurvey.title`, `currentSurvey.description`.
 - `updateSurveySettings`: store 액션. 설정 변경 시 `updateSurveySettings({ responseHeader })` 호출.
 
-**트리거 카드:** 질문-유형 카드(`Card` + 아이콘 + 라벨 + 설명)와 동일한 시각 언어를 쓰되, 전역 설정임을 나타내는 구분(질문 유형과 다른 accent 색 + 아이콘, 라벨 "설문 헤더", 설명 "응답 페이지 머리말 설정"). 클릭은 `setOpen(true)`만 한다 — `addQuestion`을 호출하지 않으며 `questionTypes.map()` 바깥의 별도 요소다(드래그/정렬 대상 아님).
+**트리거 카드:** 질문-유형 카드(`Card` + 아이콘 + 라벨 + 설명)와 **동일한 스타일**을 쓴다(일관성). 질문이 아님은 라벨 "설문 헤더" + 설명 "응답 페이지 머리말 설정" 텍스트로 전달한다. 아이콘은 헤더를 연상시키는 것(예: `PanelTop`/`Heading`)을 쓴다. 클릭은 `setOpen(true)`만 한다 — `addQuestion`을 호출하지 않으며 `questionTypes.map()` 바깥의 별도 요소다(드래그/정렬 대상 아님). 질문 카드들과 같은 `space-y-3` 컨테이너 안 최상단에 둔다.
+
+**Dialog 레이아웃:** 기존 `question-edit-modal`의 긴-모달 패턴을 차용한다 — `DialogContent`에 `max-h-[90vh] flex flex-col p-0`, 미리보기는 상단 **sticky 고정 영역**, 설정은 `flex-1 overflow-y-auto` 스크롤 영역. 세부조정을 만지는 동안에도 미리보기가 계속 보인다.
 
 **Dialog 내용:**
-- 상단: `<SurveyResponseHeader title={title} description={description} responseHeader={settings.responseHeader} />` — `sideMeta` 미전달, 진행률 없음, 순수 헤더만.
-- 하단: `<ResponseHeaderSettings settings={settings} onChange={(responseHeader) => updateSurveySettings({ responseHeader })} />`.
+- 상단(고정): `<SurveyResponseHeader title={title} description={description} responseHeader={settings.responseHeader} />` — `sideMeta` 미전달, 진행률 없음, 순수 헤더만. 응답 페이지와 동일 컴포넌트라 렌더가 정확히 일치한다(Tailwind `md:` 브레이크포인트는 뷰포트 기준이므로 데스크탑 폭에서 데스크탑 배치를 보여줌 — 의도된 동작).
+- 하단(스크롤): `<ResponseHeaderSettings settings={settings} onChange={(responseHeader) => updateSurveySettings({ responseHeader })} />`.
+
+**store 구독:** `currentSurvey.settings`/`title`/`description`를 개별 selector 또는 `useShallow`로 구독해 불필요한 리렌더를 피한다(우측 설정 패널과 동일한 패턴).
 
 **의존성:** `useSurveyBuilderStore`, `ResponseHeaderSettings`, `SurveyResponseHeader`, `Dialog` (`@/components/ui/dialog`).
 
@@ -76,7 +80,7 @@ Task 4에서 추가했던 `<ResponseHeaderSettings>` 섹션과 관련 import를 
 2. 모달 안에 미리보기(`SurveyResponseHeader`)와 설정 컨트롤이 함께 렌더된다.
 3. 설정에서 프리셋을 바꾸면 `updateSurveySettings`가 호출되고 미리보기가 갱신된다 (store mock으로 확인).
 
-기존 유지: `response-header-settings.test.tsx`(설정 단위), `survey-response-header.test.tsx`(렌더). 설정 패널 섹션 제거 후에도 패널이 정상 렌더되는지 기존 패널 테스트(있으면)로 커버.
+기존 유지: `response-header-settings.test.tsx`(설정 단위), `survey-response-header.test.tsx`(렌더). 우측 패널 섹션 제거는 깨질 테스트가 없음을 확인함(`survey-settings-panel`을 참조하는 테스트 없음, `ResponseHeaderSettings` 단위 테스트는 컴포넌트 자체라 위치 이동과 무관).
 
 ## 영향 / 호환성
 
