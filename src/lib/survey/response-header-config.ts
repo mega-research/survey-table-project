@@ -4,6 +4,7 @@ import type {
   ResponseHeaderTitleSize,
   SurveyResponseHeaderConfig,
 } from '@/db/schema/schema-types';
+import { cn } from '@/lib/utils';
 
 type StatisticNoticeConfig = Extract<
   SurveyResponseHeaderConfig,
@@ -63,8 +64,9 @@ function normalizeArrangement(value: unknown): OfficialBandArrangement {
 }
 
 function normalizeLogo(config: HeaderConfigRecord | null) {
+  // imageUrl 이 비어 있어도(로고 미업로드) 로고 스타일을 유지한다 — 빌더에서 스타일 선택 후
+  // 업로드하는 흐름을 막지 않기 위함. 빈 문자열을 그대로 보존한다.
   const imageUrl = typeof config?.['imageUrl'] === 'string' ? config['imageUrl'] : '';
-  if (!imageUrl) return null;
 
   return {
     imageUrl,
@@ -104,7 +106,6 @@ export function normalizeResponseHeaderConfig(
 
   if (raw['style'] === 'logo-title') {
     const logo = normalizeLogo(asRecord(raw['logo']));
-    if (!logo) return DEFAULT_RESPONSE_HEADER_CONFIG;
     const logoTitle = asRecord(raw['logoTitle']);
 
     return {
@@ -119,7 +120,6 @@ export function normalizeResponseHeaderConfig(
 
   if (raw['style'] === 'official-band') {
     const logo = normalizeLogo(asRecord(raw['logo']));
-    if (!logo) return DEFAULT_RESPONSE_HEADER_CONFIG;
     const officialBand = asRecord(raw['officialBand']);
 
     return {
@@ -167,4 +167,13 @@ export function getNoticeWidthClass(width: ResponseHeaderNoticeWidth): string {
     case 'md':
       return 'max-w-md';
   }
+}
+
+export function responseHeaderButtonClass(selected: boolean): string {
+  return cn(
+    'rounded-lg border px-3 py-2 text-sm transition-colors',
+    selected
+      ? 'border-blue-500 bg-blue-50 font-semibold text-blue-700'
+      : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50',
+  );
 }
