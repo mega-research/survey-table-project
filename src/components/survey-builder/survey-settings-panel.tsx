@@ -6,7 +6,6 @@ import { Globe, Lock } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
 import { GroupManager } from '@/components/survey-builder/group-manager';
-import { ResponseHeaderSettings } from '@/components/survey-builder/response-header-settings';
 import { TokenWarningPanel } from '@/components/survey-builder/token-warning-panel';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { useSurveyUIStore } from '@/stores/ui-store';
@@ -113,12 +112,6 @@ export const SurveySettingsPanel = React.memo(function SurveySettingsPanel({
             중복 응답 차단 화면에 표시되는 문의 이메일 주소입니다. 비워두면 메시지만 표시됩니다.
           </p>
         </div>
-
-        {/* 응답 페이지 헤더 */}
-        <ResponseHeaderSettings
-          settings={surveySettings}
-          onChange={(responseHeader) => updateSurveySettings({ responseHeader })}
-        />
 
         {/* 토큰 경고 */}
         {variableCatalog.length > 0 && (
