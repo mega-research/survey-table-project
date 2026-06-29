@@ -78,9 +78,20 @@ describe('response-header-config', () => {
     });
   });
 
-  it('크기별 클래스 헬퍼는 의미 있는 Tailwind 클래스를 반환한다', () => {
-    expect(getLogoSizeClass('sm')).toContain('max-h-16');
+  it('로고 크기는 고정 높이로 단계별 차이를 보장한다', () => {
+    // 회귀: 과거 max-h-*(최댓값)만 반환해 작은 로고는 sm/md/lg 가 동일하게 보였다.
+    expect(getLogoSizeClass('sm')).toBe('h-10 max-w-[180px]');
+    expect(getLogoSizeClass('md')).toBe('h-16 max-w-[240px]');
+    expect(getLogoSizeClass('lg')).toBe('h-24 max-w-[340px]');
+  });
+
+  it('통계법 박스 좁게는 충분히 좁은 폭을 사용한다', () => {
+    expect(getNoticeWidthClass('sm')).toBe('max-w-[240px]');
+    expect(getNoticeWidthClass('md')).toBe('max-w-md');
+    expect(getNoticeWidthClass('lg')).toBe('max-w-xl');
+  });
+
+  it('제목 크기 헬퍼는 의미 있는 Tailwind 클래스를 반환한다', () => {
     expect(getTitleSizeClass('lg')).toContain('text-3xl');
-    expect(getNoticeWidthClass('lg')).toContain('max-w-xl');
   });
 });

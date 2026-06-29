@@ -137,13 +137,15 @@ export function normalizeResponseHeaderConfig(
 }
 
 export function getLogoSizeClass(size: ResponseHeaderLogoSize): string {
+  // 고정 높이 + 폭 상한. max-h-*(최댓값)만 쓰면 원본보다 작은 로고는 크기 차이가 안 보이므로
+  // 고정 높이로 단계별 차이를 보장한다(가로가 긴 로고는 max-w 가 지배해 폭 차이로 드러난다).
   switch (size) {
     case 'sm':
-      return 'max-h-16 max-w-40';
+      return 'h-10 max-w-[180px]';
     case 'lg':
-      return 'max-h-28 max-w-72';
+      return 'h-24 max-w-[340px]';
     case 'md':
-      return 'max-h-20 max-w-56';
+      return 'h-16 max-w-[240px]';
   }
 }
 
@@ -161,7 +163,7 @@ export function getTitleSizeClass(size: ResponseHeaderTitleSize): string {
 export function getNoticeWidthClass(width: ResponseHeaderNoticeWidth): string {
   switch (width) {
     case 'sm':
-      return 'max-w-sm';
+      return 'max-w-[240px]';
     case 'lg':
       return 'max-w-xl';
     case 'md':

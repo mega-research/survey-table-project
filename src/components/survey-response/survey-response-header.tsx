@@ -133,7 +133,8 @@ function HeaderLogo({
     return (
       <div
         className={cn(
-          'rounded border border-dashed border-gray-300 bg-gray-50',
+          // 고정 높이만으로는 width 가 0 이 되므로 placeholder 에 명시 폭을 준다.
+          'w-40 rounded border border-dashed border-gray-300 bg-gray-50',
           getLogoSizeClass(config.size ?? 'md'),
         )}
       />
