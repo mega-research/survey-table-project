@@ -2,8 +2,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
   extractTmpSurveyUrlsFromQuestion,
+  extractTmpSurveyUrlsFromResponseHeader,
   isTmpSurveyUrl,
   replaceUrlsInQuestion,
+  replaceUrlsInResponseHeader,
   tmpToPermanentUrl,
   urlToR2Key,
 } from '@/lib/survey/survey-image-promote';
@@ -324,5 +326,85 @@ describe('replaceUrlsInQuestion', () => {
     expect(result.description).toBe(
       '<img src="https://cdn.test/survey/a.webp"><img src="https://cdn.test/survey/a.webp">',
     );
+  });
+});
+
+// ========================
+// extractTmpSurveyUrlsFromResponseHeader
+// ========================
+
+describe('extractTmpSurveyUrlsFromResponseHeader', () => {
+  beforeEach(() => {
+    process.env['CLOUDFLARE_R2_PUBLIC_URL'] = 'https://cdn.test';
+  });
+
+  afterEach(() => {
+    delete process.env['CLOUDFLARE_R2_PUBLIC_URL'];
+  });
+
+  it('헤더 로고의 tmp/survey/ URL을 추출한다', () => {
+    expect(
+      extractTmpSurveyUrlsFromResponseHeader({
+        style: 'logo-title',
+        titleSize: 'auto',
+        logo: {
+          imageUrl: 'https://cdn.test/tmp/survey/header-logo.webp',
+          size: 'md',
+        },
+      }),
+    ).toEqual(['https://cdn.test/tmp/survey/header-logo.webp']);
+  });
+
+  it('기본형 또는 영구 URL은 추출하지 않는다', () => {
+    expect(
+      extractTmpSurveyUrlsFromResponseHeader({
+        style: 'plain',
+        titleSize: 'auto',
+      }),
+    ).toEqual([]);
+
+    expect(
+      extractTmpSurveyUrlsFromResponseHeader({
+        style: 'official-band',
+        titleSize: 'auto',
+        logo: {
+          imageUrl: 'https://cdn.test/survey/header-logo.webp',
+          size: 'md',
+        },
+      }),
+    ).toEqual([]);
+  });
+});
+
+describe('replaceUrlsInResponseHeader', () => {
+  it('헤더 로고 URL만 mapping 값으로 치환한다', () => {
+    const config = {
+      style: 'official-band' as const,
+      titleSize: 'auto' as const,
+      logo: {
+        imageUrl: 'https://cdn.test/tmp/survey/header-logo.webp',
+        size: 'md' as const,
+      },
+      officialBand: {
+        arrangement: 'stat-left-logo-right' as const,
+        statisticNotice: {
+          title: '통계법 제33조(비밀의 보호)',
+          body: '비밀은 보호됩니다.',
+          width: 'md' as const,
+        },
+      },
+    };
+
+    expect(
+      replaceUrlsInResponseHeader(
+        config,
+        new Map([
+          [
+            'https://cdn.test/tmp/survey/header-logo.webp',
+            'https://cdn.test/survey/header-logo.webp',
+          ],
+        ]),
+      ).logo?.imageUrl,
+    ).toBe('https://cdn.test/survey/header-logo.webp');
   });
 });

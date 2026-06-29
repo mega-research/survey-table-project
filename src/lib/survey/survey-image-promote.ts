@@ -42,6 +42,19 @@ export type PromotableQuestion = {
 };
 
 /**
+ * promoteSurveyResponseHeader가 처리하는 데 필요한 최소 응답 헤더 형태.
+ * SurveyResponseHeaderConfig 의 모든 변형과 호환됩니다.
+ */
+export type PromotableResponseHeader =
+  | {
+      logo?: {
+        imageUrl?: string | null;
+      } | null;
+    }
+  | null
+  | undefined;
+
+/**
  * tmp/survey/ prefix를 가진 URL인지 확인합니다.
  */
 export function isTmpSurveyUrl(url: string): boolean {
@@ -134,31 +147,50 @@ export function replaceUrlsInQuestion<T extends PromotableQuestion>(
 }
 
 /**
- * 질문 배열 전체의 tmp/survey/ 이미지를 영구 prefix로 promote합니다.
- *
- * 1. 모든 질문에서 tmp/survey/ URL 수집
- * 2. R2 COPY tmp/survey/X → survey/X + DELETE tmp/survey/X
- * 3. 성공한 URL만 질문 배열 내 URL 치환 (description / noticeContent / cell.imageUrl)
- *
- * 실패한 move는 tmp URL 그대로 남음 → Cloudflare 24h lifecycle이 처리.
- * caller 타입 보존: Question / NewQuestion / Partial<Question> 무엇이든 그대로 반환.
- *
- * @returns URL이 치환된 questions 배열 (입력 타입 T 그대로)
+ * 단일 응답 헤더 설정에서 tmp/survey/ 로고 URL을 추출합니다.
  */
-export async function promoteSurveyImages<T extends PromotableQuestion>(
-  questions: T[],
-): Promise<T[]> {
-  // 1. 모든 tmp URL 수집
-  const allTmpUrls = new Set<string>();
-  for (const q of questions) {
-    for (const url of extractTmpSurveyUrlsFromQuestion(q)) {
-      allTmpUrls.add(url);
-    }
-  }
-  if (allTmpUrls.size === 0) return questions;
+export function extractTmpSurveyUrlsFromResponseHeader(
+  responseHeader: PromotableResponseHeader,
+): string[] {
+  const imageUrl = responseHeader?.logo?.imageUrl;
+  return imageUrl && isTmpSurveyUrl(imageUrl) ? [imageUrl] : [];
+}
 
-  // 2. R2 move pairs 구성
-  const pairs = [...allTmpUrls]
+/**
+ * 응답 헤더 설정의 로고 URL을 mapping 값으로 치환합니다.
+ * mapping에 없으면 원본을 그대로(동일 참조) 반환합니다.
+ */
+export function replaceUrlsInResponseHeader<T extends PromotableResponseHeader>(
+  responseHeader: T,
+  mapping: Map<string, string>,
+): T {
+  const imageUrl = responseHeader?.logo?.imageUrl;
+  if (!responseHeader || !imageUrl || !mapping.has(imageUrl)) return responseHeader;
+
+  return {
+    ...responseHeader,
+    logo: {
+      ...responseHeader.logo,
+      imageUrl: mapping.get(imageUrl)!,
+    },
+  } as T;
+}
+
+/**
+ * tmp/survey/ URL 집합을 영구 survey/ prefix로 R2 move 하고
+ * tmp URL → 영구 URL mapping을 반환합니다.
+ *
+ * 1. R2 COPY tmp/survey/X → survey/X + DELETE tmp/survey/X
+ * 2. 클라이언트 stale state 재시도 idempotency 복구 (영구 위치 객체 재인식)
+ * 3. 실패는 Sentry warning, tmp URL은 그대로 남아 Cloudflare 24h lifecycle이 처리
+ *
+ * 질문 이미지와 헤더 로고가 같은 idempotency/경고 동작을 공유하도록 분리되었습니다.
+ */
+async function promoteTmpSurveyUrls(urls: Iterable<string>): Promise<Map<string, string>> {
+  const mapping = new Map<string, string>();
+
+  // 1. R2 move pairs 구성
+  const pairs = [...new Set(urls)]
     .map((url) => {
       const srcKey = urlToR2Key(url);
       if (!srcKey || !srcKey.startsWith('tmp/survey/')) return null;
@@ -169,16 +201,16 @@ export async function promoteSurveyImages<T extends PromotableQuestion>(
       (p): p is { srcKey: string; dstKey: string; srcUrl: string } => p !== null,
     );
 
-  if (pairs.length === 0) return questions;
+  if (pairs.length === 0) return mapping;
 
-  // 3. R2 move 실행
+  // 2. R2 move 실행
   const moveResult = await moveR2Objects(
     pairs.map(({ srcKey, dstKey }) => ({ srcKey, dstKey })),
   );
   let movedKeys = moveResult.movedKeys;
   let failed = moveResult.failed;
 
-  // 3a. 클라이언트 stale state 로 같은 publish 가 재시도된 케이스는 영구 위치에
+  // 2a. 클라이언트 stale state 로 같은 publish 가 재시도된 케이스는 영구 위치에
   // 객체가 이미 존재. tmp 객체는 첫 publish 가 옮긴 뒤 사라졌지만, dst 가
   // 살아있으면 정상 promote 와 동등 — URL 만 영구로 치환해 idempotent 동작 유지.
   if (failed.length > 0) {
@@ -205,18 +237,50 @@ export async function promoteSurveyImages<T extends PromotableQuestion>(
     );
   }
 
-  // 4. 성공한 URL만 mapping 구성 (이미 idempotency 처리됨)
+  // 3. 성공한 URL만 mapping 구성 (이미 idempotency 처리됨)
   const movedSrcKeys = new Set(movedKeys.map((m) => m.srcKey));
   const publicUrl = getR2PublicUrl();
-  const mapping = new Map<string, string>();
   for (const { srcKey, srcUrl } of pairs) {
     if (movedSrcKeys.has(srcKey)) {
       const dstKey = srcKey.replace('tmp/survey/', 'survey/');
-      const dstUrl = `${publicUrl}/${dstKey}`;
-      mapping.set(srcUrl, dstUrl);
+      mapping.set(srcUrl, `${publicUrl}/${dstKey}`);
     }
   }
 
-  // 5. 질문 배열 전체에서 URL 치환
+  return mapping;
+}
+
+/**
+ * 질문 배열 전체의 tmp/survey/ 이미지를 영구 prefix로 promote합니다.
+ *
+ * caller 타입 보존: Question / NewQuestion / Partial<Question> 무엇이든 그대로 반환.
+ *
+ * @returns URL이 치환된 questions 배열 (입력 타입 T 그대로)
+ */
+export async function promoteSurveyImages<T extends PromotableQuestion>(
+  questions: T[],
+): Promise<T[]> {
+  const allTmpUrls = new Set<string>();
+  for (const q of questions) {
+    for (const url of extractTmpSurveyUrlsFromQuestion(q)) {
+      allTmpUrls.add(url);
+    }
+  }
+  if (allTmpUrls.size === 0) return questions;
+
+  const mapping = await promoteTmpSurveyUrls(allTmpUrls);
   return questions.map((q) => replaceUrlsInQuestion(q, mapping));
+}
+
+/**
+ * 응답 헤더 로고의 tmp/survey/ URL을 영구 prefix로 promote합니다.
+ * 질문 이미지와 같은 tmp-to-permanent 승격 흐름을 공유합니다.
+ */
+export async function promoteSurveyResponseHeader<T extends PromotableResponseHeader>(
+  responseHeader: T,
+): Promise<T> {
+  const mapping = await promoteTmpSurveyUrls(
+    extractTmpSurveyUrlsFromResponseHeader(responseHeader),
+  );
+  return replaceUrlsInResponseHeader(responseHeader, mapping);
 }
