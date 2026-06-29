@@ -37,7 +37,8 @@ export function ResponseHeaderSettingsModal() {
       </Card>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="flex max-h-[90vh] max-w-2xl flex-col p-0">
+        {/* 너비를 응답 페이지 콘텐츠 컨테이너(max-w-4xl)에 맞춰 미리보기가 실제 비율로 보이게 한다 */}
+        <DialogContent className="flex max-h-[90vh] w-[min(56rem,calc(100vw-2rem))] max-w-4xl flex-col p-0">
           <DialogHeader className="border-b border-gray-200 px-6 py-4">
             <DialogTitle>설문 헤더</DialogTitle>
           </DialogHeader>
