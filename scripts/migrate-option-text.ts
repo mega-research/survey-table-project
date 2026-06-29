@@ -19,6 +19,8 @@ import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
 
+import type { SurveyVersionSnapshot } from '../src/db/schema/schema-types';
+import type { LegacyResponseShape } from '../src/lib/option-text-migration';
 import {
   migrateQuestionOptions,
   migrateSnapshotQuestions,
@@ -39,6 +41,52 @@ if (!DATABASE_URL) {
 }
 
 const isDryRun = !process.argv.includes('--apply');
+
+type JsonRecord = Record<string, unknown>;
+type OtherInput = NonNullable<LegacyResponseShape['otherInputs']>[number];
+
+function isRecord(value: unknown): value is JsonRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function parseOtherInputs(value: unknown): OtherInput[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+
+  const entries = value.filter(
+    (entry): entry is OtherInput =>
+      isRecord(entry) &&
+      typeof entry['optionId'] === 'string' &&
+      typeof entry['inputValue'] === 'string',
+  );
+  return entries.length > 0 ? entries : undefined;
+}
+
+function parseStringRecord(value: unknown): Record<string, string> | undefined {
+  if (!isRecord(value)) return undefined;
+
+  const entries = Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === 'string');
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
+function isOtherTokenEntry(value: unknown): boolean {
+  return value === '__other__' || (isRecord(value) && value['optionValue'] === '__other__');
+}
+
+function toLegacyResponseShape(questionId: string, raw: unknown): LegacyResponseShape {
+  if (!isRecord(raw)) {
+    return { questionId, value: raw };
+  }
+
+  const otherInputs = parseOtherInputs(raw['otherInputs']);
+  const optionTexts = parseStringRecord(raw['optionTexts']);
+
+  return {
+    questionId,
+    value: raw['value'],
+    ...(otherInputs ? { otherInputs } : {}),
+    ...(optionTexts ? { optionTexts } : {}),
+  };
+}
 
 async function main() {
   const sqlClient = postgres(DATABASE_URL!);
@@ -66,14 +114,14 @@ async function main() {
         const migrated = migrateQuestionOptions({
           id: q.id,
           allowOtherOption: q.allowOtherOption ?? false,
-          options: (q.options as any) ?? [],
+          options: q.options ?? [],
         });
         if (!migrated.migratedOtherOptionId) continue;
         if (!isDryRun) {
           await tx
             .update(schema.questions)
             .set({
-              options: migrated.options as any,
+              options: migrated.options,
               allowOtherOption: false,
             })
             .where(eq(schema.questions.id, q.id));
@@ -100,14 +148,14 @@ async function main() {
       > = {};
 
       for (const version of versions) {
-        const snapshot = version.snapshot as any;
-        if (!snapshot || !snapshot.questions || !Array.isArray(snapshot.questions)) continue;
+        const snapshot = version.snapshot;
+        if (!Array.isArray(snapshot.questions)) continue;
 
         const hasOther = snapshot.questions.some(
-          (q: any) =>
+          q =>
             q.allowOtherOption ||
-            q.tableRowsData?.some((r: any) =>
-              r.cells?.some((c: any) => c.allowOtherOption),
+            q.tableRowsData?.some(row =>
+              row.cells?.some(cell => cell.allowOtherOption),
             ),
         );
         if (!hasOther) continue;
@@ -124,8 +172,8 @@ async function main() {
             .set({
               snapshot: {
                 ...snapshot,
-                questions: result.questions,
-              } as any,
+                questions: result.questions as SurveyVersionSnapshot['questions'],
+              },
             })
             .where(eq(schema.surveyVersions.id, version.id));
         }
@@ -144,7 +192,7 @@ async function main() {
       console.log(`스캔: survey_responses ${responses.length} 개`);
 
       for (const resp of responses) {
-        const qResponses = resp.questionResponses as Record<string, any> | null;
+        const qResponses = isRecord(resp.questionResponses) ? resp.questionResponses : null;
         if (!qResponses) continue;
 
         const versionId = resp.versionId;
@@ -154,30 +202,24 @@ async function main() {
         if (!mapping) continue;
 
         let changed = false;
-        const newQResponses: Record<string, any> = {};
+        const newQResponses: Record<string, unknown> = {};
 
         for (const [questionId, value] of Object.entries(qResponses)) {
           const questionMapping = mapping.questionMap[questionId] ?? {};
           const cellMapping = mapping.cellMap[questionId];
-          const oldShape = value as any;
+          const oldShape = value;
+          const oldShapeRecord = isRecord(oldShape) ? oldShape : null;
+          const oldValue = oldShapeRecord?.['value'];
 
           // 케이스 1: top-level 응답 (radio/checkbox/select)
           const hasOtherInputs =
-            oldShape?.otherInputs && Array.isArray(oldShape.otherInputs) && oldShape.otherInputs.length > 0;
+            Array.isArray(oldShapeRecord?.['otherInputs']) && oldShapeRecord['otherInputs'].length > 0;
           const hasOtherMagic =
-            oldShape?.value === '__other__' ||
-            (Array.isArray(oldShape?.value) &&
-              oldShape.value.some(
-                (v: any) =>
-                  v === '__other__' ||
-                  (typeof v === 'object' && v !== null && v?.optionValue === '__other__'),
-              ));
+            oldValue === '__other__' ||
+            (Array.isArray(oldValue) && oldValue.some(isOtherTokenEntry));
 
           if (hasOtherInputs || hasOtherMagic) {
-            const migrated = migrateResponseValue(
-              { questionId, ...oldShape },
-              questionMapping,
-            );
+            const migrated = migrateResponseValue(toLegacyResponseShape(questionId, oldShape), questionMapping);
             newQResponses[questionId] = migrated;
             changed = true;
 
@@ -208,7 +250,7 @@ async function main() {
           if (!isDryRun) {
             await tx
               .update(schema.surveyResponses)
-              .set({ questionResponses: newQResponses as any })
+              .set({ questionResponses: newQResponses })
               .where(eq(schema.surveyResponses.id, resp.id));
           }
           responsesMigrated++;
@@ -249,18 +291,18 @@ async function main() {
  * cellMapping: { cellId -> { '__other__' -> newOptionId } }
  */
 function migrateTableResponse(
-  resp: any,
+  resp: unknown,
   cellMap: Record<string, Record<string, string>>,
-): { changed: boolean; value: any; cellsTouched: number; unhandled: number } {
+): { changed: boolean; value: unknown; cellsTouched: number; unhandled: number } {
   let changed = false;
   let cellsTouched = 0;
   let unhandled = 0;
 
-  if (!resp || typeof resp !== 'object') {
+  if (!isRecord(resp)) {
     return { changed: false, value: resp, cellsTouched: 0, unhandled: 0 };
   }
 
-  function walk(node: any): any {
+  function walk(node: unknown): unknown {
     if (node === '__other__') {
       // 단독 등장 — 상위 컨텍스트 없이 나온 경우 unhandled
       unhandled++;
@@ -269,8 +311,8 @@ function migrateTableResponse(
     if (Array.isArray(node)) {
       return node.map(walk);
     }
-    if (node && typeof node === 'object') {
-      const out: any = {};
+    if (isRecord(node)) {
+      const out: Record<string, unknown> = {};
       for (const [key, val] of Object.entries(node)) {
         // cellId 가 cellMap 에 있는 경우 — 그 값에 대해 매핑 적용
         const cellOtherId = cellMap[key]?.['__other__'];
@@ -279,8 +321,8 @@ function migrateTableResponse(
             out[key] = cellOtherId;
             cellsTouched++;
             changed = true;
-          } else if (Array.isArray(val) && (val as any[]).includes('__other__')) {
-            out[key] = (val as any[]).map(v => (v === '__other__' ? cellOtherId : v));
+          } else if (Array.isArray(val) && val.includes('__other__')) {
+            out[key] = val.map(v => (v === '__other__' ? cellOtherId : v));
             cellsTouched++;
             changed = true;
           } else {

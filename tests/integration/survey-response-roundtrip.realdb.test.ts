@@ -44,6 +44,7 @@ function anonContext(): ORPCContext {
     db,
     supabase: {} as never,
     user: null,
+    headers: new Headers({ 'x-real-ip': '203.0.113.7' }),
   };
 }
 
