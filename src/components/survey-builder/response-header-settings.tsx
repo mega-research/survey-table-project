@@ -13,7 +13,11 @@ import {
   normalizeResponseHeaderConfig,
   responseHeaderButtonClass,
 } from '@/lib/survey/response-header-config';
-import type { SurveyResponseHeaderConfig } from '@/db/schema/schema-types';
+import type {
+  ResponseHeaderLogoAlign,
+  ResponseHeaderTitleAlign,
+  SurveyResponseHeaderConfig,
+} from '@/db/schema/schema-types';
 import type { SurveySettings } from '@/types/survey';
 
 interface ResponseHeaderSettingsProps {
@@ -24,11 +28,13 @@ interface ResponseHeaderSettingsProps {
 export function ResponseHeaderSettings({ settings, onChange }: ResponseHeaderSettingsProps) {
   const config = normalizeResponseHeaderConfig(settings.responseHeader);
 
-  const setPlain = () => onChange({ style: 'plain', titleSize: config.titleSize ?? 'auto' });
+  const setPlain = () =>
+    onChange({ style: 'plain', titleSize: config.titleSize ?? 'auto', titleAlign: config.titleAlign ?? 'left' });
   const setLogoTitle = () =>
     onChange({
       style: 'logo-title',
       titleSize: config.titleSize ?? 'auto',
+      titleAlign: config.titleAlign ?? 'center',
       logo: {
         imageUrl: config.style === 'plain' ? '' : config.logo.imageUrl,
         altText: config.style === 'plain' ? '' : config.logo.altText ?? '',
@@ -43,6 +49,7 @@ export function ResponseHeaderSettings({ settings, onChange }: ResponseHeaderSet
     onChange({
       style: 'official-band',
       titleSize: config.titleSize ?? 'auto',
+      titleAlign: config.titleAlign ?? 'center',
       logo: {
         imageUrl: config.style === 'plain' ? '' : config.logo.imageUrl,
         altText: config.style === 'plain' ? '' : config.logo.altText ?? '',
@@ -53,6 +60,8 @@ export function ResponseHeaderSettings({ settings, onChange }: ResponseHeaderSet
           config.style === 'official-band'
             ? config.officialBand?.arrangement ?? 'stat-left-logo-right'
             : 'stat-left-logo-right',
+        logoAlign:
+          config.style === 'official-band' ? config.officialBand?.logoAlign ?? 'top' : 'top',
         statisticNotice:
           config.style === 'official-band'
             ? {
@@ -134,6 +143,21 @@ export function ResponseHeaderSettings({ settings, onChange }: ResponseHeaderSet
     });
   };
 
+  const updateTitleAlign = (titleAlign: ResponseHeaderTitleAlign) => {
+    onChange({ ...config, titleAlign });
+  };
+
+  const updateLogoAlign = (logoAlign: ResponseHeaderLogoAlign) => {
+    if (config.style !== 'official-band') return;
+    onChange({
+      ...config,
+      officialBand: {
+        ...config.officialBand,
+        logoAlign,
+      },
+    });
+  };
+
   const updateNoticeWidth = (width: 'sm' | 'md' | 'lg') => {
     if (config.style !== 'official-band') return;
     onChange({
@@ -188,6 +212,17 @@ export function ResponseHeaderSettings({ settings, onChange }: ResponseHeaderSet
           양끝 정보형
         </Button>
       </div>
+
+      <PresetButtonGroup
+        label="제목 정렬"
+        value={config.titleAlign ?? 'center'}
+        options={[
+          ['left', '왼쪽'],
+          ['center', '중앙'],
+          ['right', '오른쪽'],
+        ]}
+        onChange={updateTitleAlign}
+      />
 
       {config.style !== 'plain' && (
         <div className="space-y-3">
@@ -255,6 +290,20 @@ export function ResponseHeaderSettings({ settings, onChange }: ResponseHeaderSet
                     onClick={() => updateArrangement('logo-left-stat-right')}
                   >
                     로고 왼쪽
+                  </Button>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs text-gray-600">로고 세로 정렬</Label>
+                <div className="grid grid-cols-3 gap-2">
+                  <Button type="button" variant="outline" size="sm" aria-pressed={config.officialBand?.logoAlign === 'top' || !config.officialBand?.logoAlign} className={responseHeaderButtonClass(config.officialBand?.logoAlign === 'top' || !config.officialBand?.logoAlign)} onClick={() => updateLogoAlign('top')}>
+                    위
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" aria-pressed={config.officialBand?.logoAlign === 'center'} className={responseHeaderButtonClass(config.officialBand?.logoAlign === 'center')} onClick={() => updateLogoAlign('center')}>
+                    중앙
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" aria-pressed={config.officialBand?.logoAlign === 'bottom'} className={responseHeaderButtonClass(config.officialBand?.logoAlign === 'bottom')} onClick={() => updateLogoAlign('bottom')}>
+                    아래
                   </Button>
                 </div>
               </div>

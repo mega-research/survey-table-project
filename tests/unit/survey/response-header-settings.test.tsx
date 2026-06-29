@@ -37,6 +37,7 @@ describe('ResponseHeaderSettings', () => {
     expect(onChange).toHaveBeenCalledWith({
       style: 'logo-title',
       titleSize: 'auto',
+      titleAlign: 'left',
       logo: {
         imageUrl: '',
         altText: '',
@@ -46,6 +47,40 @@ describe('ResponseHeaderSettings', () => {
         logoPosition: 'left',
       },
     });
+  });
+
+  it('제목 정렬 버튼은 모든 스타일에서 표시되고 onChange 로 titleAlign 을 갱신한다', async () => {
+    const onChange = vi.fn();
+    render(<ResponseHeaderSettings settings={settings()} onChange={onChange} />);
+
+    await userEvent.click(screen.getByRole('button', { name: '오른쪽' }));
+
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ titleAlign: 'right' }));
+  });
+
+  it('로고 세로 정렬은 양끝 정보형에서만 표시된다', () => {
+    const { rerender } = render(<ResponseHeaderSettings settings={settings()} onChange={vi.fn()} />);
+    expect(screen.queryByText('로고 세로 정렬')).not.toBeInTheDocument();
+
+    rerender(
+      <ResponseHeaderSettings
+        settings={settings({
+          responseHeader: {
+            style: 'official-band',
+            titleSize: 'auto',
+            titleAlign: 'center',
+            logo: { imageUrl: '', size: 'md' },
+            officialBand: {
+              arrangement: 'stat-left-logo-right',
+              logoAlign: 'top',
+              statisticNotice: { title: 't', body: 'b', width: 'md' },
+            },
+          },
+        })}
+        onChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByText('로고 세로 정렬')).toBeInTheDocument();
   });
 
   it('양끝 정보형 선택 시 통계법 문구 입력을 표시한다', () => {
