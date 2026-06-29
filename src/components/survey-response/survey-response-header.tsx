@@ -1,13 +1,18 @@
 import type { ReactNode } from 'react';
 
 import {
+  getLogoAlignClass,
   getLogoSizeClass,
   getNoticeWidthClass,
+  getTitleAlignClass,
   getTitleSizeClass,
   normalizeResponseHeaderConfig,
 } from '@/lib/survey/response-header-config';
 import { cn, isEmptyHtml } from '@/lib/utils';
-import type { SurveyResponseHeaderConfig } from '@/db/schema/schema-types';
+import type {
+  ResponseHeaderTitleAlign,
+  SurveyResponseHeaderConfig,
+} from '@/db/schema/schema-types';
 
 interface SurveyResponseHeaderProps {
   title: string;
@@ -27,7 +32,7 @@ export function SurveyResponseHeader({
   if (config.style === 'logo-title') {
     const logo = <HeaderLogo config={config.logo} />;
     const titleBlock = (
-      <TitleBlock title={title} description={description} titleSize={config.titleSize} centered />
+      <TitleBlock title={title} description={description} titleSize={config.titleSize} align={config.titleAlign ?? 'left'} />
     );
     const logoPosition = config.logoTitle?.logoPosition ?? 'left';
 
@@ -66,11 +71,18 @@ export function SurveyResponseHeader({
 
     return (
       <div data-testid="official-band-layout" data-arrangement={arrangement} className="space-y-6">
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div
+          data-testid="official-band-row"
+          data-logo-align={config.officialBand?.logoAlign ?? 'top'}
+          className={cn(
+            'flex flex-col gap-4 md:flex-row md:justify-between',
+            getLogoAlignClass(config.officialBand?.logoAlign ?? 'top'),
+          )}
+        >
           {arrangement === 'stat-left-logo-right' ? noticeBox : logo}
           {arrangement === 'stat-left-logo-right' ? logo : noticeBox}
         </div>
-        <TitleBlock title={title} description={description} titleSize={config.titleSize} centered />
+        <TitleBlock title={title} description={description} titleSize={config.titleSize} align={config.titleAlign ?? 'left'} />
         {sideMeta && (
           <div className="hidden text-right text-sm text-gray-500 md:block">{sideMeta}</div>
         )}
@@ -80,7 +92,7 @@ export function SurveyResponseHeader({
 
   return (
     <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-      <TitleBlock title={title} description={description} titleSize={config.titleSize} />
+      <TitleBlock title={title} description={description} titleSize={config.titleSize} align={config.titleAlign ?? 'left'} />
       {sideMeta && (
         <div className="hidden self-start text-sm text-gray-500 md:block md:self-auto">
           {sideMeta}
@@ -94,15 +106,15 @@ function TitleBlock({
   title,
   description,
   titleSize,
-  centered = false,
+  align = 'center',
 }: {
   title: string;
   description?: string | null | undefined;
   titleSize: SurveyResponseHeaderConfig['titleSize'];
-  centered?: boolean;
+  align?: ResponseHeaderTitleAlign;
 }) {
   return (
-    <div className={centered ? 'text-center' : ''}>
+    <div data-testid="title-block" data-title-align={align} className={getTitleAlignClass(align)}>
       <h1 className={cn('font-semibold leading-tight text-gray-900', getTitleSizeClass(titleSize ?? 'auto'))}>
         {title}
       </h1>
@@ -110,7 +122,7 @@ function TitleBlock({
         <p
           className={cn(
             'mt-1 text-base text-gray-600 md:text-sm',
-            centered ? 'mx-auto max-w-3xl' : '',
+            align === 'center' ? 'mx-auto max-w-3xl' : '',
           )}
         >
           {description}

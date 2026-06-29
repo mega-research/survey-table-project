@@ -79,4 +79,38 @@ describe('SurveyResponseHeader', () => {
       'logo-left-stat-right',
     );
   });
+
+  it('제목 정렬을 data-title-align 으로 반영한다', () => {
+    render(
+      <SurveyResponseHeader
+        title="정렬 설문"
+        description=""
+        responseHeader={{ style: 'plain', titleSize: 'auto', titleAlign: 'right' }}
+      />,
+    );
+
+    expect(screen.getByTestId('title-block')).toHaveAttribute('data-title-align', 'right');
+  });
+
+  it('양끝 정보형 로고 세로 정렬을 data-logo-align 으로 반영한다', () => {
+    render(
+      <SurveyResponseHeader
+        title="공문서 설문"
+        description=""
+        responseHeader={{
+          style: 'official-band',
+          titleSize: 'auto',
+          titleAlign: 'center',
+          logo: { imageUrl: 'https://example.com/logo.png', altText: '로고', size: 'md' },
+          officialBand: {
+            arrangement: 'stat-left-logo-right',
+            logoAlign: 'center',
+            statisticNotice: { title: 'a', body: 'b', width: 'md' },
+          },
+        }}
+      />,
+    );
+
+    expect(screen.getByTestId('official-band-row')).toHaveAttribute('data-logo-align', 'center');
+  });
 });
