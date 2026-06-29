@@ -10,17 +10,23 @@
  *
  * headers() 처리: createResponseWithFirstAnswer 가 next/headers 의 await headers() 로
  * UA를 읽는다. vitest node 환경에는 Next 요청 스코프가 없어 throw 하므로 next/headers 를
- * mock 해 빈 Headers 를 반환시킨다. clientSignals=null + inviteToken 미지정으로
- * 중복 감지(Track A/B) 경로는 타지 않는다(보수적 round-trip).
+ * mock 해 테스트 요청 헤더를 반환시킨다. 익명 응답은 clientSignals 가 없으면 봇 방어로
+ * 차단되므로, 정상 브라우저 제출처럼 최소 clientSignals 를 넣어 round-trip 을 검증한다.
  */
 
 import { createRouterClient } from '@orpc/server';
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// next/headers mock: createResponseWithFirstAnswer 의 await headers() 가 빈 Headers 를 받게 한다.
+// next/headers mock: createResponseWithFirstAnswer 의 await headers() 가 테스트 요청 헤더를 받게 한다.
 vi.mock('next/headers', () => ({
-  headers: () => Promise.resolve(new Headers()),
+  headers: () =>
+    Promise.resolve(
+      new Headers({
+        'x-real-ip': '203.0.113.7',
+        'user-agent': 'Vitest survey-response roundtrip',
+      }),
+    ),
 }));
 
 import { db } from '@/db';
@@ -38,6 +44,13 @@ import { response } from '@/features/survey-response/server/procedures/response'
 
 const dbUrl = process.env['DATABASE_URL'] ?? '';
 const isLocalDb = dbUrl.includes('127.0.0.1') || dbUrl.includes('localhost');
+const CLIENT_SIGNALS = {
+  deviceId: 'roundtrip-device-1',
+  screen: '1920x1080',
+  tz: 'Asia/Seoul',
+  lang: 'ko-KR',
+  platform: 'MacIntel',
+};
 
 function anonContext(): ORPCContext {
   return {
@@ -103,7 +116,7 @@ describe.skipIf(!isLocalDb)('surveyResponse.response procedure round-trip (real 
       .returning({ id: surveyVersionsTable.id });
     if (!version) throw new Error('survey_version 삽입 실패');
 
-    // 2. createWithFirstAnswer: 첫 답변과 함께 응답 행 생성 (clientSignals null + inviteToken 미지정)
+    // 2. createWithFirstAnswer: 첫 답변과 함께 응답 행 생성 (익명 정상 브라우저 제출)
     const created = await client.response.createWithFirstAnswer({
       surveyId: survey.id,
       sessionId: 'roundtrip-session-1',
@@ -111,7 +124,7 @@ describe.skipIf(!isLocalDb)('surveyResponse.response procedure round-trip (real 
       questionId: question.id,
       value: '홍길동',
       currentStepId: `group:${survey.id}`,
-      clientSignals: null,
+      clientSignals: CLIENT_SIGNALS,
     });
     expect(created.kind).toBe('created');
     if (created.kind !== 'created') throw new Error('created 분기 기대');
