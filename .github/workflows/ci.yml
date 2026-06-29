@@ -83,11 +83,52 @@ jobs:
         with:
           version: latest
       - run: pnpm db:setup-test
+      - name: Export local Supabase test env
+        shell: bash
+        run: |
+          set -euo pipefail
+          STATUS_ENV="$(supabase status -o env)"
+          SUPABASE_URL="$(printf '%s\n' "$STATUS_ENV" | awk -F= '/^(API_URL|SUPABASE_URL)=/{ print $2; exit }')"
+          SUPABASE_KEY="$(printf '%s\n' "$STATUS_ENV" | awk -F= '/^(ANON_KEY|SUPABASE_ANON_KEY|PUBLISHABLE_KEY|SUPABASE_PUBLISHABLE_KEY)=/{ print $2; exit }')"
+          if [ -z "$SUPABASE_URL" ]; then
+            SUPABASE_URL="http://127.0.0.1:54321"
+          fi
+          if [ -z "$SUPABASE_KEY" ]; then
+            echo "ERROR: Supabase local publishable/anon key not found in status output." >&2
+            exit 1
+          fi
+          echo "::add-mask::$SUPABASE_KEY"
+          {
+            echo "NEXT_PUBLIC_SUPABASE_URL=$SUPABASE_URL"
+            echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$SUPABASE_KEY"
+          } >> "$GITHUB_ENV"
       - name: Run integration (real DB)
         run: pnpm test:integration
       - run: pnpm exec playwright install --with-deps chromium
+      - name: Validate e2e secret env
+        env:
+          CONTACT_PII_AES_KEY: ${{ secrets.CONTACT_PII_AES_KEY }}
+          CONTACT_PII_HMAC_KEY: ${{ secrets.CONTACT_PII_HMAC_KEY }}
+          DUPLICATE_DETECTION_SALT: ${{ secrets.DUPLICATE_DETECTION_SALT }}
+        run: |
+          node <<'NODE'
+          const requiredBase64Keys = ['CONTACT_PII_AES_KEY', 'CONTACT_PII_HMAC_KEY'];
+          for (const name of requiredBase64Keys) {
+            const raw = process.env[name];
+            if (!raw) throw new Error(`${name} GitHub Secret is required`);
+            const decoded = Buffer.from(raw, 'base64');
+            if (decoded.length !== 32) {
+              throw new Error(`${name} must decode to 32 bytes`);
+            }
+          }
+          if (!process.env.DUPLICATE_DETECTION_SALT) {
+            throw new Error('DUPLICATE_DETECTION_SALT GitHub Secret is required');
+          }
+          NODE
       - name: Run e2e
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
-          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+          CONTACT_PII_AES_KEY: ${{ secrets.CONTACT_PII_AES_KEY }}
+          CONTACT_PII_HMAC_KEY: ${{ secrets.CONTACT_PII_HMAC_KEY }}
+          DUPLICATE_DETECTION_SALT: ${{ secrets.DUPLICATE_DETECTION_SALT }}
         run: pnpm test:e2e
