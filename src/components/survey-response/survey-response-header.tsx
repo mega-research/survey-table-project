@@ -32,7 +32,7 @@ export function SurveyResponseHeader({
   if (config.style === 'logo-title') {
     const logo = <HeaderLogo config={config.logo} />;
     const titleBlock = (
-      <TitleBlock title={title} description={description} titleSize={config.titleSize} align={config.titleAlign ?? 'left'} />
+      <TitleBlock title={title} description={description} titleSize={config.titleSize} align={config.titleAlign ?? 'center'} />
     );
     const logoPosition = config.logoTitle?.logoPosition ?? 'left';
 
@@ -82,7 +82,7 @@ export function SurveyResponseHeader({
           {arrangement === 'stat-left-logo-right' ? noticeBox : logo}
           {arrangement === 'stat-left-logo-right' ? logo : noticeBox}
         </div>
-        <TitleBlock title={title} description={description} titleSize={config.titleSize} align={config.titleAlign ?? 'left'} />
+        <TitleBlock title={title} description={description} titleSize={config.titleSize} align={config.titleAlign ?? 'center'} />
         {sideMeta && (
           <div className="hidden text-right text-sm text-gray-500 md:block">{sideMeta}</div>
         )}
