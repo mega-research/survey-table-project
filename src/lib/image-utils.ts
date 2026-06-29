@@ -18,6 +18,19 @@ export interface ImageOptimizationOptions {
 }
 
 /**
+ * 최적화 출력 MIME 타입을 결정한다.
+ * 알파 채널을 가질 수 있는 PNG/WebP 는 WebP 로 출력해 투명도를 보존하면서 품질 압축도 적용한다.
+ * 그 외(JPEG/BMP 등 알파 없는 형식)는 JPEG 로 출력한다.
+ * (과거에는 PNG 를 JPEG 로 강제 변환해 투명 영역이 검정 배경으로 합성되는 버그가 있었다.)
+ */
+export function pickOptimizedMimeType(inputType: string): string {
+  if (inputType === 'image/png' || inputType === 'image/webp') {
+    return 'image/webp';
+  }
+  return 'image/jpeg';
+}
+
+/**
  * 이미지 파일을 최적화합니다.
  * @param file 원본 이미지 파일
  * @param options 최적화 옵션
@@ -71,20 +84,11 @@ export async function optimizeImage(
 
         ctx.drawImage(img, 0, 0, width, height);
 
-        // WebP로 변환 시도, 실패하면 원본 형식 사용
-        let mimeType = 'image/jpeg';
-        if (file.type === 'image/png') {
-          mimeType = 'image/png';
-        } else if (file.type === 'image/webp') {
-          mimeType = 'image/webp';
-        }
+        // 출력 포맷 결정: PNG/WebP 는 WebP(투명도 보존 + 품질 압축), 그 외는 JPEG.
+        const mimeType = pickOptimizedMimeType(file.type);
 
-        // JPEG 품질 설정
+        // 품질 설정 (WebP/JPEG 모두 quality 파라미터를 적용)
         let outputQuality = quality;
-        if (mimeType === 'image/png') {
-          // PNG는 quality 파라미터를 지원하지 않으므로 JPEG로 변환
-          mimeType = 'image/jpeg';
-        }
 
         // Blob으로 변환
         canvas.toBlob(
