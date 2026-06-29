@@ -273,6 +273,7 @@ describe('survey-read.service getSurveyForResponse requireInviteToken', () => {
     expect(result?.survey.settings.responseHeader).toEqual({
       style: 'plain',
       titleSize: 'auto',
+      titleAlign: 'left',
     });
   });
 
@@ -311,6 +312,7 @@ describe('survey-read.service getSurveyForResponse requireInviteToken', () => {
     expect(result?.survey.settings.responseHeader).toEqual({
       style: 'plain',
       titleSize: 'auto',
+      titleAlign: 'left',
     });
   });
 

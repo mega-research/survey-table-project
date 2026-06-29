@@ -1,6 +1,8 @@
 import type {
+  ResponseHeaderLogoAlign,
   ResponseHeaderLogoSize,
   ResponseHeaderNoticeWidth,
+  ResponseHeaderTitleAlign,
   ResponseHeaderTitleSize,
   SurveyResponseHeaderConfig,
 } from '@/db/schema/schema-types';
@@ -28,6 +30,7 @@ export const DEFAULT_STATISTIC_NOTICE = {
 export const DEFAULT_RESPONSE_HEADER_CONFIG: SurveyResponseHeaderConfig = {
   style: 'plain',
   titleSize: 'auto',
+  titleAlign: 'left',
 };
 
 type HeaderConfigRecord = Record<string, unknown>;
@@ -35,6 +38,8 @@ type HeaderConfigRecord = Record<string, unknown>;
 const logoSizes = new Set<ResponseHeaderLogoSize>(['sm', 'md', 'lg']);
 const titleSizes = new Set<ResponseHeaderTitleSize>(['auto', 'md', 'lg']);
 const noticeWidths = new Set<ResponseHeaderNoticeWidth>(['sm', 'md', 'lg']);
+const titleAligns = new Set<ResponseHeaderTitleAlign>(['left', 'center', 'right']);
+const logoAligns = new Set<ResponseHeaderLogoAlign>(['top', 'center', 'bottom']);
 const logoPositions = new Set<LogoPosition>(['left', 'right']);
 const bandArrangements = new Set<OfficialBandArrangement>([
   'stat-left-logo-right',
@@ -61,6 +66,21 @@ function normalizeArrangement(value: unknown): OfficialBandArrangement {
   return typeof value === 'string' && bandArrangements.has(value as OfficialBandArrangement)
     ? (value as OfficialBandArrangement)
     : 'stat-left-logo-right';
+}
+
+function normalizeTitleAlign(
+  value: unknown,
+  fallback: ResponseHeaderTitleAlign,
+): ResponseHeaderTitleAlign {
+  return typeof value === 'string' && titleAligns.has(value as ResponseHeaderTitleAlign)
+    ? (value as ResponseHeaderTitleAlign)
+    : fallback;
+}
+
+function normalizeLogoAlign(value: unknown): ResponseHeaderLogoAlign {
+  return typeof value === 'string' && logoAligns.has(value as ResponseHeaderLogoAlign)
+    ? (value as ResponseHeaderLogoAlign)
+    : 'top';
 }
 
 function normalizeLogo(config: HeaderConfigRecord | null) {
@@ -101,6 +121,7 @@ export function normalizeResponseHeaderConfig(
     return {
       style: 'plain',
       titleSize: normalizeTitleSize(raw['titleSize']),
+      titleAlign: normalizeTitleAlign(raw['titleAlign'], 'left'),
     };
   }
 
@@ -111,6 +132,7 @@ export function normalizeResponseHeaderConfig(
     return {
       style: 'logo-title',
       titleSize: normalizeTitleSize(raw['titleSize']),
+      titleAlign: normalizeTitleAlign(raw['titleAlign'], 'center'),
       logo,
       logoTitle: {
         logoPosition: normalizeLogoPosition(logoTitle?.['logoPosition']),
@@ -125,9 +147,11 @@ export function normalizeResponseHeaderConfig(
     return {
       style: 'official-band',
       titleSize: normalizeTitleSize(raw['titleSize']),
+      titleAlign: normalizeTitleAlign(raw['titleAlign'], 'center'),
       logo,
       officialBand: {
         arrangement: normalizeArrangement(officialBand?.['arrangement']),
+        logoAlign: normalizeLogoAlign(officialBand?.['logoAlign']),
         statisticNotice: normalizeNotice(asRecord(officialBand?.['statisticNotice'])),
       },
     };
@@ -157,6 +181,28 @@ export function getTitleSizeClass(size: ResponseHeaderTitleSize): string {
       return 'text-2xl font-semibold';
     case 'auto':
       return 'text-2xl sm:text-3xl font-semibold';
+  }
+}
+
+export function getTitleAlignClass(align: ResponseHeaderTitleAlign): string {
+  switch (align) {
+    case 'left':
+      return 'text-left';
+    case 'right':
+      return 'text-right';
+    case 'center':
+      return 'text-center';
+  }
+}
+
+export function getLogoAlignClass(align: ResponseHeaderLogoAlign): string {
+  switch (align) {
+    case 'top':
+      return 'md:items-start';
+    case 'bottom':
+      return 'md:items-end';
+    case 'center':
+      return 'md:items-center';
   }
 }
 

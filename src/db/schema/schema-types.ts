@@ -38,15 +38,19 @@ export type ResponseHeaderStyle = 'plain' | 'logo-title' | 'official-band';
 export type ResponseHeaderLogoSize = 'sm' | 'md' | 'lg';
 export type ResponseHeaderTitleSize = 'auto' | 'md' | 'lg';
 export type ResponseHeaderNoticeWidth = 'sm' | 'md' | 'lg';
+export type ResponseHeaderTitleAlign = 'left' | 'center' | 'right';
+export type ResponseHeaderLogoAlign = 'top' | 'center' | 'bottom';
 
 export type SurveyResponseHeaderConfig =
   | {
       style: 'plain';
       titleSize: ResponseHeaderTitleSize;
+      titleAlign?: ResponseHeaderTitleAlign;
     }
   | {
       style: 'logo-title';
       titleSize: ResponseHeaderTitleSize;
+      titleAlign?: ResponseHeaderTitleAlign;
       logo: {
         imageUrl: string;
         altText?: string;
@@ -59,6 +63,7 @@ export type SurveyResponseHeaderConfig =
   | {
       style: 'official-band';
       titleSize: ResponseHeaderTitleSize;
+      titleAlign?: ResponseHeaderTitleAlign;
       logo: {
         imageUrl: string;
         altText?: string;
@@ -66,6 +71,7 @@ export type SurveyResponseHeaderConfig =
       };
       officialBand: {
         arrangement: 'stat-left-logo-right' | 'logo-left-stat-right';
+        logoAlign?: ResponseHeaderLogoAlign;
         statisticNotice: {
           title: string;
           body: string;

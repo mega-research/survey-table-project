@@ -3,8 +3,10 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_RESPONSE_HEADER_CONFIG,
   DEFAULT_STATISTIC_NOTICE,
+  getLogoAlignClass,
   getLogoSizeClass,
   getNoticeWidthClass,
+  getTitleAlignClass,
   getTitleSizeClass,
   normalizeResponseHeaderConfig,
 } from '@/lib/survey/response-header-config';
@@ -36,6 +38,7 @@ describe('response-header-config', () => {
     ).toEqual({
       style: 'logo-title',
       titleSize: 'lg',
+      titleAlign: 'center',
       logo: {
         imageUrl: 'https://example.com/logo.png',
         altText: '',
@@ -63,6 +66,7 @@ describe('response-header-config', () => {
     ).toEqual({
       style: 'official-band',
       titleSize: 'md',
+      titleAlign: 'center',
       logo: {
         imageUrl: 'https://example.com/logo.png',
         altText: '',
@@ -70,6 +74,7 @@ describe('response-header-config', () => {
       },
       officialBand: {
         arrangement: 'logo-left-stat-right',
+        logoAlign: 'top',
         statisticNotice: {
           ...DEFAULT_STATISTIC_NOTICE,
           width: 'md',
@@ -93,5 +98,39 @@ describe('response-header-config', () => {
 
   it('제목 크기 헬퍼는 의미 있는 Tailwind 클래스를 반환한다', () => {
     expect(getTitleSizeClass('lg')).toContain('text-3xl');
+  });
+
+  it('제목 정렬 클래스를 매핑한다', () => {
+    expect(getTitleAlignClass('left')).toBe('text-left');
+    expect(getTitleAlignClass('center')).toBe('text-center');
+    expect(getTitleAlignClass('right')).toBe('text-right');
+  });
+
+  it('로고 세로 정렬 클래스를 매핑한다', () => {
+    expect(getLogoAlignClass('top')).toBe('md:items-start');
+    expect(getLogoAlignClass('center')).toBe('md:items-center');
+    expect(getLogoAlignClass('bottom')).toBe('md:items-end');
+  });
+
+  it('정규화는 제목 정렬 기본값을 스타일별로 채운다', () => {
+    expect(normalizeResponseHeaderConfig({ style: 'plain', titleSize: 'auto' }).titleAlign).toBe(
+      'left',
+    );
+    expect(
+      normalizeResponseHeaderConfig({
+        style: 'logo-title',
+        titleSize: 'auto',
+        logo: { imageUrl: 'https://example.com/logo.png' },
+      } as never).titleAlign,
+    ).toBe('center');
+  });
+
+  it('정규화는 official-band 로고 세로 정렬 기본값을 top 으로 채운다', () => {
+    const config = normalizeResponseHeaderConfig({
+      style: 'official-band',
+      titleSize: 'auto',
+      logo: { imageUrl: 'https://example.com/logo.png' },
+    } as never);
+    expect(config.style === 'official-band' ? config.officialBand.logoAlign : null).toBe('top');
   });
 });
