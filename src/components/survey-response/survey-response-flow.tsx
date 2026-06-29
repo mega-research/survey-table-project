@@ -595,46 +595,47 @@ export function SurveyResponseFlow({
       <div className="min-h-dvh bg-gray-50">
       {/* 봇 방어 허니팟 — 화면에 안 보이는 입력. 봇이 채우면 서버가 차단 */}
       <HoneypotField ref={honeypotRef} />
-      {/* 헤더 */}
+      {/* 헤더 — 제목/로고/통계법만 (진행바·카운트는 아래 회색 영역으로 분리) */}
       <div className="border-b border-gray-200 bg-white">
         <div className={`${containerMaxWidth} mx-auto px-4 py-4 transition-all duration-300 md:px-6`}>
           <SurveyResponseHeader
             title={loadedSurvey.title}
             description={loadedSurvey.description}
             responseHeader={loadedSurvey.settings.responseHeader}
-            sideMeta={
-              <>
-                {currentVisibleStepNumber || 1} / {Math.max(totalVisibleStepCount, 1)}
-                <span className="ml-2 text-xs text-gray-400">(전체 {questions.length}개 질문)</span>
-              </>
-            }
           />
+        </div>
+      </div>
 
-          {/* 연속형 프로그레스바 */}
-          <div className="mt-3">
-            <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-gray-200">
-              <div
-                className="absolute inset-y-0 left-0 rounded-full bg-blue-500 transition-all duration-500"
-                style={{
-                  width: `${
-                    (currentVisibleStepNumber / Math.max(totalVisibleStepCount, 1)) * 100
-                  }%`,
-                }}
-              />
-            </div>
-            {isMobile && (
-              <div className="mt-1.5 flex items-center justify-between text-xs text-gray-400">
-                <span>
-                  {answeredCount}/{visibleQuestions.length} 응답 완료
-                </span>
-                {requiredRemaining > 0 && (
-                  <span className={showRequiredHighlight ? 'font-medium text-orange-500' : ''}>
-                    필수 {requiredRemaining}개 남음
-                  </span>
-                )}
-              </div>
-            )}
+      {/* 진행 현황 — 헤더 밖 회색 영역(콘텐츠 컨테이너 위) */}
+      <div className={`${containerMaxWidth} mx-auto px-4 pt-4 transition-all duration-300 md:px-6`}>
+        <div className="hidden justify-end text-sm text-gray-500 md:flex">
+          {currentVisibleStepNumber || 1} / {Math.max(totalVisibleStepCount, 1)}
+          <span className="ml-2 text-xs text-gray-400">(전체 {questions.length}개 질문)</span>
+        </div>
+        {/* 연속형 프로그레스바 */}
+        <div className="mt-2">
+          <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-gray-200">
+            <div
+              className="absolute inset-y-0 left-0 rounded-full bg-blue-500 transition-all duration-500"
+              style={{
+                width: `${
+                  (currentVisibleStepNumber / Math.max(totalVisibleStepCount, 1)) * 100
+                }%`,
+              }}
+            />
           </div>
+          {isMobile && (
+            <div className="mt-1.5 flex items-center justify-between text-xs text-gray-400">
+              <span>
+                {answeredCount}/{visibleQuestions.length} 응답 완료
+              </span>
+              {requiredRemaining > 0 && (
+                <span className={showRequiredHighlight ? 'font-medium text-orange-500' : ''}>
+                  필수 {requiredRemaining}개 남음
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
