@@ -4,7 +4,7 @@
 
 **Goal:** 설문 편집자가 `Survey.settings.responseHeader`로 응답 페이지 헤더 프리셋을 설정하고, 공개 응답 페이지가 배포 스냅샷 기준으로 헤더를 렌더링하게 한다.
 
-**Architecture:** 앱 내부 인터페이스는 `survey.settings.responseHeader` 하나로 고정한다. DB에는 `surveys.response_header` JSONB 컬럼으로 저장하지만, 읽기/쓰기 서비스 경계에서 기존 `Survey.settings` 흐름으로 조립해 빌더, diff 저장, 스냅샷, 응답 로더가 같은 위치를 보게 한다.
+**Architecture:** 앱 내부 인터페이스는 `survey.settings.responseHeader` 하나로 고정한다. DB에는 `surveys.response_header` JSONB 컬럼으로 저장하지만, 읽기/쓰기 서비스 경계에서 기존 `Survey.settings` 흐름으로 조립해 빌더, diff 저장, 스냅샷, 응답 로더가 같은 위치를 보게 한다. 헤더 로고 `imageUrl`은 설문 이미지 자산으로 다루며, `tmp/survey/` URL은 DB 저장과 배포 스냅샷 생성 전에 기존 질문 이미지와 같은 `survey/` 영구 URL로 승격한다.
 
 **Tech Stack:** Next.js 16, React 19, TypeScript strict, Drizzle ORM, PostgreSQL JSONB, Zustand, Vitest, Testing Library, TailwindCSS, shadcn/ui.
 
@@ -28,6 +28,8 @@
   - DB row의 `responseHeader`를 `Survey.settings.responseHeader`로 조립한다.
 - Modify `src/features/survey-builder/server/services/survey-save.service.ts`
   - diff 저장과 전체 저장 모두 `settings.responseHeader`를 `surveys.response_header`에 쓴다.
+- Modify `src/lib/survey/survey-image-promote.ts`
+  - 헤더 로고 `imageUrl`도 질문 이미지와 같은 tmp-to-permanent 승격 흐름을 사용하게 한다.
 - Modify `src/features/survey-builder/server/services/surveys.service.ts`
   - ensure/create/duplicate/update 경로가 `responseHeader`를 보존한다.
 - Modify `src/lib/versioning/snapshot-builder.ts`
@@ -50,6 +52,7 @@
   - `tests/unit/survey/survey-response-header.test.tsx`
   - `tests/unit/survey/response-header-settings.test.tsx`
 - Modify tests:
+  - `tests/unit/survey/survey-image-promote.test.ts`
   - `tests/unit/domains/versioning/snapshot-builder.test.ts`
   - `src/features/survey-builder/server/services/survey-read.service.test.ts`
 
@@ -368,6 +371,201 @@ git commit -m "feat: 응답 헤더 설정 기본값 추가"
 
 ---
 
+### Task 1A: Header Logo Image Promotion
+
+**Files:**
+- Modify: `src/lib/survey/survey-image-promote.ts`
+- Modify: `tests/unit/survey/survey-image-promote.test.ts`
+
+This task prevents header logo uploads from being persisted as temporary `tmp/survey/` URLs. Header logos must use the same survey image lifecycle as question description, notice, and table-cell images.
+
+- [ ] **Step 1: Write the failing header logo promotion tests**
+
+Modify `tests/unit/survey/survey-image-promote.test.ts`.
+
+Extend the import from `@/lib/survey/survey-image-promote`:
+
+```ts
+  extractTmpSurveyUrlsFromResponseHeader,
+  replaceUrlsInResponseHeader,
+```
+
+Add these tests near the existing extraction/replacement tests:
+
+```ts
+describe('extractTmpSurveyUrlsFromResponseHeader', () => {
+  beforeEach(() => {
+    process.env['CLOUDFLARE_R2_PUBLIC_URL'] = 'https://cdn.test';
+  });
+
+  afterEach(() => {
+    delete process.env['CLOUDFLARE_R2_PUBLIC_URL'];
+  });
+
+  it('헤더 로고의 tmp/survey/ URL을 추출한다', () => {
+    expect(
+      extractTmpSurveyUrlsFromResponseHeader({
+        style: 'logo-title',
+        titleSize: 'auto',
+        logo: {
+          imageUrl: 'https://cdn.test/tmp/survey/header-logo.webp',
+          size: 'md',
+        },
+      }),
+    ).toEqual(['https://cdn.test/tmp/survey/header-logo.webp']);
+  });
+
+  it('기본형 또는 영구 URL은 추출하지 않는다', () => {
+    expect(
+      extractTmpSurveyUrlsFromResponseHeader({
+        style: 'plain',
+        titleSize: 'auto',
+      }),
+    ).toEqual([]);
+
+    expect(
+      extractTmpSurveyUrlsFromResponseHeader({
+        style: 'official-band',
+        titleSize: 'auto',
+        logo: {
+          imageUrl: 'https://cdn.test/survey/header-logo.webp',
+          size: 'md',
+        },
+      }),
+    ).toEqual([]);
+  });
+});
+
+describe('replaceUrlsInResponseHeader', () => {
+  it('헤더 로고 URL만 mapping 값으로 치환한다', () => {
+    const config = {
+      style: 'official-band' as const,
+      titleSize: 'auto' as const,
+      logo: {
+        imageUrl: 'https://cdn.test/tmp/survey/header-logo.webp',
+        size: 'md' as const,
+      },
+      officialBand: {
+        arrangement: 'stat-left-logo-right' as const,
+        statisticNotice: {
+          title: '통계법 제33조(비밀의 보호)',
+          body: '비밀은 보호됩니다.',
+          width: 'md' as const,
+        },
+      },
+    };
+
+    expect(
+      replaceUrlsInResponseHeader(
+        config,
+        new Map([
+          [
+            'https://cdn.test/tmp/survey/header-logo.webp',
+            'https://cdn.test/survey/header-logo.webp',
+          ],
+        ]),
+      ).logo?.imageUrl,
+    ).toBe('https://cdn.test/survey/header-logo.webp');
+  });
+});
+```
+
+- [ ] **Step 2: Run the focused image promotion test**
+
+Run:
+
+```bash
+pnpm test tests/unit/survey/survey-image-promote.test.ts
+```
+
+Expected: FAIL because the response-header extraction/replacement helpers do not exist yet.
+
+- [ ] **Step 3: Add response-header helpers to survey-image-promote**
+
+Modify `src/lib/survey/survey-image-promote.ts`.
+
+Add a minimal shape for response headers:
+
+```ts
+export type PromotableResponseHeader = {
+  logo?: {
+    imageUrl?: string | null;
+  } | null;
+} | null | undefined;
+```
+
+Add extraction and replacement helpers:
+
+```ts
+export function extractTmpSurveyUrlsFromResponseHeader(
+  responseHeader: PromotableResponseHeader,
+): string[] {
+  const imageUrl = responseHeader?.logo?.imageUrl;
+  return imageUrl && isTmpSurveyUrl(imageUrl) ? [imageUrl] : [];
+}
+
+export function replaceUrlsInResponseHeader<T extends PromotableResponseHeader>(
+  responseHeader: T,
+  mapping: Map<string, string>,
+): T {
+  const imageUrl = responseHeader?.logo?.imageUrl;
+  if (!responseHeader || !imageUrl || !mapping.has(imageUrl)) return responseHeader;
+
+  return {
+    ...responseHeader,
+    logo: {
+      ...responseHeader.logo,
+      imageUrl: mapping.get(imageUrl)!,
+    },
+  } as T;
+}
+```
+
+Extract the existing R2 move body from `promoteSurveyImages` into a private helper so question images and header logos share idempotency and Sentry warning behavior:
+
+```ts
+async function promoteTmpSurveyUrls(urls: Iterable<string>): Promise<Map<string, string>> {
+  // Move current promoteSurveyImages steps 2-4 here.
+  // Return tmp URL -> permanent URL mapping for successfully moved or recovered objects.
+}
+```
+
+Then rewrite `promoteSurveyImages` to collect question URLs, call `promoteTmpSurveyUrls(allTmpUrls)`, and pass the returned mapping to `replaceUrlsInQuestion`.
+
+Add the header-specific async function:
+
+```ts
+export async function promoteSurveyResponseHeader<T extends PromotableResponseHeader>(
+  responseHeader: T,
+): Promise<T> {
+  const mapping = await promoteTmpSurveyUrls(
+    extractTmpSurveyUrlsFromResponseHeader(responseHeader),
+  );
+  return replaceUrlsInResponseHeader(responseHeader, mapping);
+}
+```
+
+- [ ] **Step 4: Run the image promotion tests**
+
+Run:
+
+```bash
+pnpm test tests/unit/survey/survey-image-promote.test.ts
+```
+
+Expected: PASS.
+
+- [ ] **Step 5: Commit Task 1A**
+
+Run:
+
+```bash
+git add src/lib/survey/survey-image-promote.ts tests/unit/survey/survey-image-promote.test.ts
+git commit -m "feat: 응답 헤더 로고 이미지 승격 추가"
+```
+
+---
+
 ### Task 2: DB Column And Survey Save/Read Compatibility
 
 **Files:**
@@ -487,38 +685,88 @@ In `getSurveyWithDetails`, add this field inside `settings`:
 
 Modify `src/features/survey-builder/server/services/survey-save.service.ts`.
 
-In the diff metadata update `.set({ ... })`, add:
+Extend the image promotion import:
 
 ```ts
-          responseHeader: metadata.settings.responseHeader ?? null,
+import {
+  promoteSurveyImages,
+  promoteSurveyResponseHeader,
+} from '@/lib/survey/survey-image-promote';
 ```
 
-In `saveSurveyWithDetails`, add to the existing survey `updateSet`:
+In the diff metadata branch, compute the promoted value before the update:
 
 ```ts
-        responseHeader: surveyData.settings.responseHeader ?? null,
+      const promotedResponseHeader = await promoteSurveyResponseHeader(
+        metadata.settings.responseHeader,
+      );
 ```
 
-In `saveSurveyWithDetails`, add to the insert values:
+Then add this field to `.set({ ... })`:
 
 ```ts
-        responseHeader: surveyData.settings.responseHeader ?? null,
+          responseHeader: promotedResponseHeader ?? null,
+```
+
+In `saveSurveyWithDetails`, compute once before constructing the existing-survey update or new-survey insert values:
+
+```ts
+  const promotedResponseHeader = await promoteSurveyResponseHeader(
+    surveyData.settings.responseHeader,
+  );
+```
+
+Add to the existing survey `updateSet`:
+
+```ts
+        responseHeader: promotedResponseHeader ?? null,
+```
+
+Add to the insert values:
+
+```ts
+        responseHeader: promotedResponseHeader ?? null,
 ```
 
 - [ ] **Step 6: Preserve responseHeader in create/ensure/duplicate/update services**
 
 Modify `src/features/survey-builder/server/services/surveys.service.ts`.
 
+Add import:
+
+```ts
+import { promoteSurveyResponseHeader } from '@/lib/survey/survey-image-promote';
+```
+
 In `ensureSurveyInDb` insert values, add:
 
 ```ts
-    responseHeader: input.settings.responseHeader ?? null,
+    responseHeader: (await promoteSurveyResponseHeader(input.settings.responseHeader)) ?? null,
 ```
 
 In `createSurvey`, add to `newSurvey`:
 
 ```ts
-    responseHeader: data.settings?.responseHeader ?? null,
+    responseHeader: (await promoteSurveyResponseHeader(data.settings?.responseHeader)) ?? null,
+```
+
+In `updateSurvey`, promote the optional field before `.set({ ... })`:
+
+```ts
+  const dataToUpdate =
+    data.responseHeader === undefined
+      ? data
+      : {
+          ...data,
+          responseHeader: await promoteSurveyResponseHeader(data.responseHeader),
+        };
+```
+
+Then use `dataToUpdate` in the update call:
+
+```ts
+      ...dataToUpdate,
+      updatedAt: new Date(),
 ```
 
 Extend `UpdateSurveyDataSchema` in `src/features/survey-builder/domain/survey.ts` by importing `SurveyResponseHeaderConfig` through `SurveyType['settings']['responseHeader']` shape already available:
@@ -530,7 +778,7 @@ Extend `UpdateSurveyDataSchema` in `src/features/survey-builder/domain/survey.ts
 In `duplicateSurvey`, add to the insert values:
 
 ```ts
-        responseHeader: original.responseHeader,
+        responseHeader: original.settings.responseHeader ?? null,
 ```
 
 - [ ] **Step 7: Run Task 2 tests**
