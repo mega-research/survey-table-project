@@ -9,6 +9,7 @@ import { AlertCircle, ArrowLeft, ArrowRight } from 'lucide-react';
 import { AlreadyRespondedView } from '@/components/survey/already-responded-view';
 import { InviteRequiredScreen } from '@/components/survey-response/invite-required-screen';
 import { MobileBottomNav } from '@/components/survey-response/mobile-bottom-nav';
+import { SurveyResponseHeader } from '@/components/survey-response/survey-response-header';
 import {
   SurveyCompletedScreen,
   SurveyEmptyScreen,
@@ -38,7 +39,7 @@ import { useResponseTelemetry } from '@/components/survey-response/hooks/use-res
 import { useSessionRecovery } from '@/components/survey-response/hooks/use-session-recovery';
 import { useSurveyLoader } from '@/components/survey-response/hooks/use-survey-loader';
 import { ResumeToast } from '@/components/survey-response/resume-toast';
-import { generateId, isEmptyHtml } from '@/lib/utils';
+import { generateId } from '@/lib/utils';
 import {
   collectTableQuestionOptions,
   filterOptionTextsForSubmission,
@@ -597,18 +598,17 @@ export function SurveyResponseFlow({
       {/* 헤더 */}
       <div className="border-b border-gray-200 bg-white">
         <div className={`${containerMaxWidth} mx-auto px-4 py-4 transition-all duration-300 md:px-6`}>
-          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h1 className="text-xl font-semibold text-gray-900 md:text-xl">{loadedSurvey.title}</h1>
-              {!isEmptyHtml(loadedSurvey.description) && (
-                <p className="mt-1 text-base text-gray-600 md:text-sm">{loadedSurvey.description}</p>
-              )}
-            </div>
-            <div className="hidden self-start text-sm text-gray-500 md:block md:self-auto">
-              {currentVisibleStepNumber || 1} / {Math.max(totalVisibleStepCount, 1)}
-              <span className="ml-2 text-xs text-gray-400">(전체 {questions.length}개 질문)</span>
-            </div>
-          </div>
+          <SurveyResponseHeader
+            title={loadedSurvey.title}
+            description={loadedSurvey.description}
+            responseHeader={loadedSurvey.settings.responseHeader}
+            sideMeta={
+              <>
+                {currentVisibleStepNumber || 1} / {Math.max(totalVisibleStepCount, 1)}
+                <span className="ml-2 text-xs text-gray-400">(전체 {questions.length}개 질문)</span>
+              </>
+            }
+          />
 
           {/* 연속형 프로그레스바 */}
           <div className="mt-3">
