@@ -38,6 +38,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { GroupManager } from '@/components/survey-builder/group-manager';
 import { ImportExportLibraryModal } from '@/components/survey-builder/import-export-library-modal';
 import { QuestionLibraryPanel } from '@/components/survey-builder/question-library-panel';
+import { ResponseHeaderSettingsModal } from '@/components/survey-builder/response-header-settings-modal';
 import { SaveQuestionModal } from '@/components/survey-builder/save-question-modal';
 import { SortableQuestionList } from '@/components/survey-builder/sortable-question-list';
 import { Button } from '@/components/ui/button';
@@ -455,6 +456,7 @@ export default function CreateSurveyPage() {
 
               <TabsContent value="types" className="m-0 flex-1 overflow-y-auto p-4 pt-2">
                 <div className="space-y-3">
+                  <ResponseHeaderSettingsModal />
                   {questionTypes.map((questionType) => {
                     const IconComponent = questionType.icon;
                     return (
