@@ -16,6 +16,7 @@ import type {
   RankingConfig,
   ResponseEditChange,
   SelectLevel,
+  SurveyResponseHeaderConfig,
   SurveyVersionSnapshot,
   TableCell,
   TableColumn,
@@ -40,6 +41,9 @@ export const surveys = pgTable('surveys', {
   endDate: timestamp('end_date', { withTimezone: true }),
   maxResponses: integer('max_responses'),
   thankYouMessage: text('thank_you_message').default('응답해주셔서 감사합니다!').notNull(),
+
+  // 응답 페이지 헤더 프리셋 (0041 마이그레이션) — NULL = 기본형 폴백
+  responseHeader: jsonb('response_header').$type<SurveyResponseHeaderConfig>(),
 
   // 컨택리스트 표시 컬럼 스킴 (slice 3 — 0014 마이그레이션)
   contactColumns: jsonb('contact_columns').$type<ContactColumnScheme>(),

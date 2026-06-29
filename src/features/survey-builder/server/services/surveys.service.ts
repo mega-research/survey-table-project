@@ -15,6 +15,7 @@ import {
 } from '@/db/schema';
 import { extractImageUrlsFromQuestions } from '@/lib/image-extractor';
 import { deleteImagesFromR2Server } from '@/lib/image-utils-server';
+import { promoteSurveyResponseHeader } from '@/lib/survey/survey-image-promote';
 import { generateId } from '@/lib/utils';
 import type { Question } from '@/types/survey';
 import { stripOptionCodes } from '@/utils/option-code-generator';
@@ -56,6 +57,7 @@ export async function ensureSurveyInDb(
     shuffleQuestions: input.settings.shuffleQuestions ?? false,
     requireLogin: input.settings.requireLogin ?? false,
     thankYouMessage: input.settings.thankYouMessage ?? '응답해주셔서 감사합니다!',
+    responseHeader: (await promoteSurveyResponseHeader(input.settings.responseHeader)) ?? null,
   });
 
   return { surveyId: input.id, created: true };
@@ -75,6 +77,7 @@ export async function createSurvey(data: CreateSurveyInput): Promise<SurveyRow> 
     endDate: data.settings?.endDate ? new Date(data.settings.endDate) : null,
     maxResponses: data.settings?.maxResponses ?? null,
     thankYouMessage: data.settings?.thankYouMessage ?? '응답해주셔서 감사합니다!',
+    responseHeader: (await promoteSurveyResponseHeader(data.settings?.responseHeader)) ?? null,
   };
 
   const [survey] = await db.insert(surveys).values(newSurvey).returning();
@@ -87,10 +90,19 @@ export async function createSurvey(data: CreateSurveyInput): Promise<SurveyRow> 
 export async function updateSurvey(input: UpdateSurveyInput): Promise<SurveyRow> {
   const { surveyId, data } = input;
 
+  // responseHeader 가 실려 온 경우에만 로고 tmp-to-permanent 승격 후 set(미포함 시 기존 값 보존)
+  const dataToUpdate =
+    data.responseHeader === undefined
+      ? data
+      : {
+          ...data,
+          responseHeader: await promoteSurveyResponseHeader(data.responseHeader),
+        };
+
   const [updated] = await db
     .update(surveys)
     .set({
-      ...data,
+      ...dataToUpdate,
       updatedAt: new Date(),
     })
     .where(eq(surveys.id, surveyId))
@@ -155,6 +167,7 @@ export async function duplicateSurvey(
         endDate: original.endDate,
         maxResponses: original.maxResponses,
         thankYouMessage: original.thankYouMessage,
+        responseHeader: original.responseHeader ?? null,
       })
       .returning();
     const newSurvey = newSurveyRows[0];

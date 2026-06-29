@@ -13,7 +13,10 @@ import {
 import type { CompleteQuestionWrite } from '@/db/schema/question-persisted-fields';
 import { extractImageUrlsFromQuestions } from '@/lib/image-extractor';
 import { deleteImagesFromR2Server, deleteR2ObjectsByKey } from '@/lib/image-utils-server';
-import { promoteSurveyImages } from '@/lib/survey/survey-image-promote';
+import {
+  promoteSurveyImages,
+  promoteSurveyResponseHeader,
+} from '@/lib/survey/survey-image-promote';
 import {
   extractPermanentAttachmentKeysFromQuestions,
   promoteNoticeAttachments,
@@ -78,6 +81,9 @@ export async function saveSurveyDiff(
   return await db.transaction(async (tx) => {
     // 1. 메타데이터 업데이트
     if (metadata) {
+      const promotedResponseHeader = await promoteSurveyResponseHeader(
+        metadata.settings.responseHeader,
+      );
       await tx
         .update(surveys)
         .set({
@@ -99,6 +105,7 @@ export async function saveSurveyDiff(
           maxResponses: metadata.settings.maxResponses ?? null,
           thankYouMessage: metadata.settings.thankYouMessage,
           requireInviteToken: metadata.settings.requireInviteToken ?? false,
+          responseHeader: promotedResponseHeader ?? null,
           updatedAt: new Date(),
         })
         .where(eq(surveys.id, surveyId));
@@ -342,6 +349,9 @@ export async function saveSurveyWithDetails(
       where: eq(surveys.id, surveyData.id),
     });
     const surveyId = surveyData.id;
+    const promotedResponseHeader = await promoteSurveyResponseHeader(
+      surveyData.settings.responseHeader,
+    );
 
     if (existingSurvey) {
       // lookups 는 별도 server action(보관함 자동 sync, upsertSurveyLookupAction 등)으로
@@ -360,6 +370,7 @@ export async function saveSurveyWithDetails(
         maxResponses: surveyData.settings.maxResponses ?? null,
         thankYouMessage: surveyData.settings.thankYouMessage,
         requireInviteToken: surveyData.settings.requireInviteToken ?? false,
+        responseHeader: promotedResponseHeader ?? null,
         updatedAt: new Date(),
       };
       // slug 가 실려 온 경우에만 set(undefined 면 기존 값 보존). '' / 공백은 null 로 정규화해
@@ -397,6 +408,7 @@ export async function saveSurveyWithDetails(
         maxResponses: surveyData.settings.maxResponses ?? null,
         thankYouMessage: surveyData.settings.thankYouMessage,
         requireInviteToken: surveyData.settings.requireInviteToken ?? false,
+        responseHeader: promotedResponseHeader ?? null,
         lookups: surveyData.lookups ?? [],
       });
     }

@@ -76,6 +76,7 @@ export const UpdateSurveyDataSchema = z.custom<
     endDate: Date | null;
     maxResponses: number | null;
     thankYouMessage: string;
+    responseHeader: SurveyType['settings']['responseHeader'];
   }>
 >();
 

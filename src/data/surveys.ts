@@ -4,6 +4,7 @@ import { desc, eq } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { questionGroups, questions, surveys } from '@/db/schema';
+import { normalizeResponseHeaderConfig } from '@/lib/survey/response-header-config';
 import { isCodedChoiceType } from '@/types/question-types';
 import type { QuestionGroup, Question as QuestionType, Survey as SurveyType } from '@/types/survey';
 import { generateAllOptionCodes } from '@/utils/option-code-generator';
@@ -148,6 +149,7 @@ export async function getSurveyWithDetails(surveyId: string): Promise<SurveyType
       ...(survey.maxResponses != null ? { maxResponses: survey.maxResponses } : {}),
       thankYouMessage: survey.thankYouMessage,
       requireInviteToken: survey.requireInviteToken,
+      responseHeader: normalizeResponseHeaderConfig(survey.responseHeader),
     },
     lookups: survey.lookups ?? [],
     ...(survey.contactColumns != null ? { contactColumns: survey.contactColumns } : {}),
