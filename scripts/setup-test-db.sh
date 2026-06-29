@@ -6,8 +6,22 @@ set -euo pipefail
 
 LOCAL_DB_URL="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
 
+redact_supabase_local_secrets() {
+  sed -E \
+    -e 's/sb_publishable_[A-Za-z0-9_-]+/sb_publishable_[redacted]/g' \
+    -e 's/sb_secret_[A-Za-z0-9_-]+/sb_secret_[redacted]/g' \
+    -e 's/(^|[^[:xdigit:]])[[:xdigit:]]{32,}([^[:xdigit:]]|$)/\1[redacted]\2/g'
+}
+
 echo "[1/4] supabase 로컬 스택 기동"
-supabase start
+START_LOG="$(mktemp)"
+if ! supabase start >"$START_LOG" 2>&1; then
+  echo "ERROR: supabase 로컬 스택 기동 실패. 마스킹된 로그:" >&2
+  redact_supabase_local_secrets <"$START_LOG" >&2
+  rm -f "$START_LOG"
+  exit 1
+fi
+rm -f "$START_LOG"
 
 echo "[2/4] 빈 public 스키마로 reset"
 supabase db reset
