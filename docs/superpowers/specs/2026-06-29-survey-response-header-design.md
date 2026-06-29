@@ -55,7 +55,16 @@
 
 ## 데이터 모델
 
-`SurveySettings`에 응답 헤더 설정을 추가한다. DB에는 `surveys.response_header` JSONB 컬럼으로 저장하고, 애플리케이션 경계에서는 `settings.responseHeader`로 다룬다. 배포 스냅샷에도 같은 값을 포함한다.
+기존 설문 JSONB 컬럼 관행에 맞춘다.
+
+- DB JSONB 타입 `SurveyResponseHeaderConfig`는 `src/db/schema/schema-types.ts`에 둔다.
+- `src/db/schema/surveys.ts`에는 top-level 컬럼 `responseHeader: jsonb('response_header').$type<SurveyResponseHeaderConfig>()`를 추가한다.
+- 앱 타입은 `src/types/survey.ts`에서 `SurveyResponseHeaderConfig`를 type-only import하고, `SurveySettings`에 `responseHeader?: SurveyResponseHeaderConfig`를 추가한다. 이는 현재 `ContactColumnScheme`을 가져오는 방식과 맞춘다.
+- 서비스 읽기 경계에서 `surveys.responseHeader`를 `survey.settings.responseHeader`로 조립한다.
+- 서비스 저장 경계에서 `surveyData.settings.responseHeader`를 `surveys.response_header`에 저장한다.
+- 배포 스냅샷은 `snapshot.settings.responseHeader`에 같은 구조를 포함한다.
+
+즉, DB에는 `settings` JSONB 덩어리를 새로 만들지 않는다. 현재 `contactColumns`, `contactResultCodes`, `progressColumns`처럼 설문 행의 명시적 JSONB 컬럼을 추가하고, 애플리케이션의 `Survey` 모델로 읽어올 때만 설정 객체 안에 넣는다.
 
 개념 타입은 다음과 같다.
 
@@ -84,6 +93,8 @@ type SurveyResponseHeaderConfig = {
 
 레거시 데이터 호환을 위해 `settings.responseHeader`가 없으면 `{ style: 'plain', titleSize: 'auto' }`로 취급한다.
 
+DB 컬럼은 nullable로 둔다. 기본값을 DB에 박지 않고 서비스/렌더링 경계에서 기본형 fallback을 적용해, 기존 배포 스냅샷과 새 설문 row가 같은 방식으로 동작하게 한다.
+
 ## 저장과 배포
 
 - 빌더 스토어의 기본 설문 설정에 `responseHeader` 기본값을 추가한다.
@@ -92,7 +103,7 @@ type SurveyResponseHeaderConfig = {
 - 공개 응답 조회는 스냅샷의 `responseHeader`를 우선 사용한다.
 - 스냅샷에 값이 없는 이전 배포본은 기본형 헤더로 처리한다.
 
-헤더 설정은 중첩 구조이고 앞으로도 프리셋별 하위 설정이 달라질 수 있으므로 개별 컬럼으로 분해하지 않는다.
+헤더 설정은 중첩 구조이고 프리셋별 하위 설정이 서로 다르므로 개별 컬럼으로 분해하지 않는다. 다만 JSONB 내부 값은 discriminated union에 가깝게 유지해서 `style`별 필수 하위 설정을 타입으로 강제한다.
 
 ## 렌더링
 
