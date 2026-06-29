@@ -11,6 +11,7 @@ import {
   mergeChangesets,
   type QuestionChangeset,
 } from '@/lib/survey-builder/changeset';
+import { DEFAULT_RESPONSE_HEADER_CONFIG } from '@/lib/survey/response-header-config';
 
 // ── 헬퍼 함수 ──
 
@@ -131,6 +132,7 @@ const defaultSurveySettings: SurveySettings = {
   shuffleQuestions: false,
   requireLogin: false,
   thankYouMessage: '응답해주셔서 감사합니다!',
+  responseHeader: DEFAULT_RESPONSE_HEADER_CONFIG,
 };
 
 const createDefaultSurvey = (): Survey => ({

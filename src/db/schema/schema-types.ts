@@ -30,8 +30,49 @@ export interface SurveyVersionSnapshot {
     maxResponses?: number;
     thankYouMessage: string;
     requireInviteToken?: boolean;
+    responseHeader?: SurveyResponseHeaderConfig;
   };
 }
+
+export type ResponseHeaderStyle = 'plain' | 'logo-title' | 'official-band';
+export type ResponseHeaderLogoSize = 'sm' | 'md' | 'lg';
+export type ResponseHeaderTitleSize = 'auto' | 'md' | 'lg';
+export type ResponseHeaderNoticeWidth = 'sm' | 'md' | 'lg';
+
+export type SurveyResponseHeaderConfig =
+  | {
+      style: 'plain';
+      titleSize: ResponseHeaderTitleSize;
+    }
+  | {
+      style: 'logo-title';
+      titleSize: ResponseHeaderTitleSize;
+      logo: {
+        imageUrl: string;
+        altText?: string;
+        size: ResponseHeaderLogoSize;
+      };
+      logoTitle: {
+        logoPosition: 'left' | 'right';
+      };
+    }
+  | {
+      style: 'official-band';
+      titleSize: ResponseHeaderTitleSize;
+      logo: {
+        imageUrl: string;
+        altText?: string;
+        size: ResponseHeaderLogoSize;
+      };
+      officialBand: {
+        arrangement: 'stat-left-logo-right' | 'logo-left-stat-right';
+        statisticNotice: {
+          title: string;
+          body: string;
+          width: ResponseHeaderNoticeWidth;
+        };
+      };
+    };
 
 export interface QuestionGroupData {
   id: string;

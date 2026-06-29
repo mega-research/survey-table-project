@@ -1,4 +1,6 @@
-import type { ContactColumnScheme } from '@/db/schema/schema-types';
+import type { ContactColumnScheme, SurveyResponseHeaderConfig } from '@/db/schema/schema-types';
+
+export type { SurveyResponseHeaderConfig };
 
 export type QuestionType =
   | 'text'
@@ -535,6 +537,7 @@ export interface SurveySettings {
   thankYouMessage: string;
   // 컨택 attrs 토큰 — invite token 강제 (0022 마이그레이션)
   requireInviteToken?: boolean;
+  responseHeader?: SurveyResponseHeaderConfig;
 }
 
 // 기타 옵션 입력값 처리를 위한 타입
