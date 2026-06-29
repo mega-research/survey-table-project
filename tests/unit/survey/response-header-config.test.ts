@@ -87,8 +87,8 @@ describe('response-header-config', () => {
 
   it('통계법 박스 좁게는 충분히 좁은 폭을 사용한다', () => {
     expect(getNoticeWidthClass('sm')).toBe('max-w-[200px]');
-    expect(getNoticeWidthClass('md')).toBe('max-w-md');
-    expect(getNoticeWidthClass('lg')).toBe('max-w-xl');
+    expect(getNoticeWidthClass('md')).toBe('max-w-[280px]');
+    expect(getNoticeWidthClass('lg')).toBe('max-w-[360px]');
   });
 
   it('제목 크기 헬퍼는 의미 있는 Tailwind 클래스를 반환한다', () => {

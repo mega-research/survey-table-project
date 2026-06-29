@@ -165,9 +165,9 @@ export function getNoticeWidthClass(width: ResponseHeaderNoticeWidth): string {
     case 'sm':
       return 'max-w-[200px]';
     case 'lg':
-      return 'max-w-xl';
+      return 'max-w-[360px]';
     case 'md':
-      return 'max-w-md';
+      return 'max-w-[280px]';
   }
 }
 
