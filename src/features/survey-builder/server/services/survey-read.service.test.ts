@@ -232,6 +232,88 @@ describe('survey-read.service getSurveyForResponse requireInviteToken', () => {
     expect(result?.survey.settings.requireInviteToken).toBe(true);
   });
 
+  it('responseHeader 는 published snapshot 값을 따르고 현재 surveys 행으로 덮어쓰지 않는다', async () => {
+    const surveyId = 'survey-header-published';
+    surveysFindFirst.mockResolvedValue({
+      id: surveyId,
+      currentVersionId: 'ver-header',
+      requireInviteToken: false,
+      responseHeader: {
+        style: 'logo-title',
+        titleSize: 'lg',
+        logo: { imageUrl: 'https://example.com/draft.png', size: 'lg' },
+        logoTitle: { logoPosition: 'right' },
+      },
+      slug: null,
+      privateToken: null,
+      contactColumns: null,
+      contactEmail: null,
+      lookups: [],
+      createdAt: new Date('2026-06-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-06-01T00:00:00.000Z'),
+    });
+    surveyVersionsFindFirst.mockResolvedValue({
+      id: 'ver-header',
+      snapshot: {
+        title: '설문',
+        questions: [],
+        groups: [],
+        settings: {
+          ...snapshotSettings(false),
+          responseHeader: {
+            style: 'plain',
+            titleSize: 'auto',
+          },
+        },
+      },
+    });
+
+    const result = await getSurveyForResponse({ surveyId });
+
+    expect(result?.survey.settings.responseHeader).toEqual({
+      style: 'plain',
+      titleSize: 'auto',
+    });
+  });
+
+  it('responseHeader 가 없는 기존 snapshot 은 현재 surveys 행이 아니라 새 기본형으로 fallback 한다', async () => {
+    const surveyId = 'survey-header-legacy';
+    surveysFindFirst.mockResolvedValue({
+      id: surveyId,
+      currentVersionId: 'ver-header-legacy',
+      requireInviteToken: false,
+      responseHeader: {
+        style: 'logo-title',
+        titleSize: 'lg',
+        logo: { imageUrl: 'https://example.com/draft.png', size: 'lg' },
+        logoTitle: { logoPosition: 'right' },
+      },
+      slug: null,
+      privateToken: null,
+      contactColumns: null,
+      contactEmail: null,
+      lookups: [],
+      createdAt: new Date('2026-06-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-06-01T00:00:00.000Z'),
+    });
+    surveyVersionsFindFirst.mockResolvedValue({
+      id: 'ver-header-legacy',
+      snapshot: {
+        title: '설문',
+        questions: [],
+        groups: [],
+        settings: snapshotSettings(false),
+      },
+    });
+
+    const result = await getSurveyForResponse({ surveyId });
+
+    expect(result?.survey.settings.responseHeader).toEqual({
+      style: 'plain',
+      titleSize: 'auto',
+    });
+  });
+
   it('requirePublished 옵션이면 배포 버전 없는 설문을 현재 draft 로 fallback 하지 않는다', async () => {
     const surveyId = 'survey-draft-only';
     surveysFindFirst.mockResolvedValue({

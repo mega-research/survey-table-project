@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { client } from '@/shared/lib/rpc';
 import { normalizeQuestions } from '@/lib/question';
+import { normalizeResponseHeaderConfig } from '@/lib/survey/response-header-config';
 import { parsesurveyIdentifier } from '@/lib/survey-url';
 import type { SurveyVersionSnapshot } from '@/db/schema';
 import type { QuestionGroup, Survey } from '@/types/survey';
@@ -117,6 +118,7 @@ export function useSurveyLoader({
                 ...(snapshot.settings.maxResponses !== undefined ? { maxResponses: snapshot.settings.maxResponses } : {}),
                 thankYouMessage: snapshot.settings.thankYouMessage,
                 ...(snapshot.settings.requireInviteToken !== undefined ? { requireInviteToken: snapshot.settings.requireInviteToken } : {}),
+                responseHeader: normalizeResponseHeaderConfig(snapshot.settings.responseHeader),
               },
               lookups: (snapshot as { lookups?: Survey['lookups'] }).lookups ?? [],
               createdAt: new Date(),
