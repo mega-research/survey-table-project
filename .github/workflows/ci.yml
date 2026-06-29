@@ -6,6 +6,48 @@ on:
   pull_request:
 
 jobs:
+  changes:
+    name: 변경 범위 판별
+    runs-on: ubuntu-latest
+    outputs:
+      integration_e2e: ${{ steps.filter.outputs.integration_e2e }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - id: filter
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="${{ github.event.pull_request.base.sha }}"
+            head="${{ github.event.pull_request.head.sha }}"
+            diff_mode="triple-dot"
+          else
+            base="${{ github.event.before }}"
+            head="${{ github.sha }}"
+            diff_mode="two-dot"
+          fi
+
+          if [ -z "$base" ] || [[ "$base" =~ ^0+$ ]]; then
+            git diff-tree --no-commit-id --name-only -r --root "$head" > changed-files.txt
+          elif [ "$diff_mode" = "triple-dot" ]; then
+            git diff --name-only "$base...$head" > changed-files.txt
+          else
+            git diff --name-only "$base" "$head" > changed-files.txt
+          fi
+
+          echo "Changed files:"
+          cat changed-files.txt
+
+          trigger_pattern='^(src/|tests/|supabase/|public/|workers/|package\.json$|pnpm-lock\.yaml$|tsconfig[^/]*\.json$|next\.config\.(js|mjs|ts)$|vitest\.config\.(js|mjs|ts)$|playwright\.config\.(js|mjs|ts)$|drizzle\.config\.(js|mjs|ts)$|postcss\.config\.(js|mjs|ts)$|tailwind\.config\.(js|mjs|ts)$|eslint\.config\.(js|mjs|ts)$|sentry\.(server|edge)\.config\.(js|ts)$|instrumentation\.(js|ts)$|scripts/setup-test-db\.sh$|\.github/workflows/ci\.yml$)'
+          if grep -Eq "$trigger_pattern" changed-files.txt; then
+            echo "integration_e2e=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "integration_e2e=false" >> "$GITHUB_OUTPUT"
+          fi
+
   verify:
     runs-on: ubuntu-latest
     steps:
@@ -69,7 +111,8 @@ jobs:
       - run: pnpm test
 
   e2e:
-    needs: verify
+    needs: [verify, changes]
+    if: needs.changes.outputs.integration_e2e == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
