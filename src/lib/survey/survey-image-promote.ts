@@ -47,9 +47,8 @@ export type PromotableQuestion = {
  */
 export type PromotableResponseHeader =
   | {
-      logo?: {
-        imageUrl?: string | null;
-      } | null;
+      logo?: { imageUrl?: string | null; [key: string]: unknown } | null;
+      [key: string]: unknown;
     }
   | null
   | undefined;
