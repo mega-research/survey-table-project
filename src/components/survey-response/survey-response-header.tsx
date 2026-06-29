@@ -59,8 +59,8 @@ export function SurveyResponseHeader({
           getNoticeWidthClass(notice?.width ?? 'md'),
         )}
       >
-        <div className="bg-black px-3 py-2 text-sm font-semibold text-white">{notice?.title}</div>
-        <div className="px-3 py-3 text-sm leading-relaxed text-gray-600">{notice?.body}</div>
+        <div className="bg-black px-2.5 py-1.5 text-xs font-semibold text-white">{notice?.title}</div>
+        <div className="px-2.5 py-2 text-xs leading-relaxed text-gray-600">{notice?.body}</div>
       </div>
     );
 

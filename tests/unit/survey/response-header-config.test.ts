@@ -86,7 +86,7 @@ describe('response-header-config', () => {
   });
 
   it('통계법 박스 좁게는 충분히 좁은 폭을 사용한다', () => {
-    expect(getNoticeWidthClass('sm')).toBe('max-w-[240px]');
+    expect(getNoticeWidthClass('sm')).toBe('max-w-[200px]');
     expect(getNoticeWidthClass('md')).toBe('max-w-md');
     expect(getNoticeWidthClass('lg')).toBe('max-w-xl');
   });

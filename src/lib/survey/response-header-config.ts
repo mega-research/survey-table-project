@@ -163,7 +163,7 @@ export function getTitleSizeClass(size: ResponseHeaderTitleSize): string {
 export function getNoticeWidthClass(width: ResponseHeaderNoticeWidth): string {
   switch (width) {
     case 'sm':
-      return 'max-w-[240px]';
+      return 'max-w-[200px]';
     case 'lg':
       return 'max-w-xl';
     case 'md':
