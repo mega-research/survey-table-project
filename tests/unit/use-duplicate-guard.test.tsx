@@ -55,6 +55,13 @@ describe('useDuplicateGuard - 초기값', () => {
     );
     expect(result.current.duplicateStatus).toEqual({ kind: 'ok' });
   });
+
+  it('preview 모드면 ok 로 시작한다', () => {
+    const { result } = renderHook(() =>
+      useDuplicateGuard(baseArgs({ isPreview: true })),
+    );
+    expect(result.current.duplicateStatus).toEqual({ kind: 'ok' });
+  });
 });
 
 describe('useDuplicateGuard - checkOnEntry effect', () => {
@@ -85,6 +92,14 @@ describe('useDuplicateGuard - checkOnEntry effect', () => {
   it('admin-edit 모드면 signals 가 있어도 effect 를 skip 한다 (분기 2/8)', () => {
     const { result } = renderHook(() =>
       useDuplicateGuard(baseArgs({ isAdminEdit: true, signals })),
+    );
+    expect(checkOnEntry).not.toHaveBeenCalled();
+    expect(result.current.duplicateStatus).toEqual({ kind: 'ok' });
+  });
+
+  it('preview 모드면 signals 가 있어도 effect 를 skip 한다', () => {
+    const { result } = renderHook(() =>
+      useDuplicateGuard(baseArgs({ isPreview: true, signals })),
     );
     expect(checkOnEntry).not.toHaveBeenCalled();
     expect(result.current.duplicateStatus).toEqual({ kind: 'ok' });

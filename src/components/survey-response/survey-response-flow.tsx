@@ -28,8 +28,8 @@ import { useMultiLineDetection } from '@/hooks/use-line-count-detection';
 import { useMediaQuery } from '@/hooks/use-media-query';
 import {
   buildRenderSteps,
-  RenderStep,
   resolveStepBranch,
+  type RenderStep,
 } from '@/lib/group-ordering';
 import { isQuestionAnswered as isQuestionAnsweredPure } from '@/lib/survey/answer-validation';
 import { useDuplicateGuard } from '@/components/survey-response/hooks/use-duplicate-guard';
@@ -47,7 +47,7 @@ import {
 import { useSurveyResponseStore } from '@/stores/survey-response-store';
 import { useShallow } from 'zustand/react/shallow';
 import type { SurveyVersionSnapshot } from '@/db/schema';
-import { Question, QuestionGroup } from '@/types/survey';
+import type { Question, QuestionGroup, Survey } from '@/types/survey';
 import {
   getBranchRuleForResponse,
   shouldDisplayQuestion,
@@ -58,7 +58,7 @@ import type { SaveAdminEditPayload } from '@/features/survey-response/domain/res
 type ResponsesMap = Record<string, unknown>;
 
 export interface SurveyResponseFlowProps {
-  mode?: 'public' | 'admin-edit';
+  mode?: 'public' | 'admin-edit' | 'preview';
   surveyIdentifier: string; // slug | uuid | privateToken (이미 decodeURIComponent 된 값)
   inviteToken?: string | null;
   // admin-edit 모드 전용 — Task 15 에서 활성화.
@@ -71,6 +71,10 @@ export interface SurveyResponseFlowProps {
     // 응답자가 사용한 contact_targets.attrs — 조건/토큰 복원용.
     initialContactAttrs: Record<string, string>;
     onSubmit: (payload: SaveAdminEditPayload) => Promise<void>;
+  };
+  previewContext?: {
+    survey: Survey;
+    versionId: string | null;
   };
 }
 
@@ -159,14 +163,16 @@ export function SurveyResponseFlow({
   inviteToken: inviteTokenProp = null,
   mode = 'public',
   adminContext,
+  previewContext,
 }: SurveyResponseFlowProps) {
   const router = useRouter();
   const identifier = surveyIdentifier;
   const isAdminEdit = mode === 'admin-edit';
+  const isPreview = mode === 'preview';
 
   // ?invite=<token> — contact 매칭용. 없으면 익명 응답 흐름 그대로.
   // admin-edit 분기 (7/8) — admin-edit 모드에서는 invite 토큰 매칭/검증 자체를 건너뛴다.
-  const inviteToken = isAdminEdit ? null : inviteTokenProp ?? null;
+  const inviteToken = isAdminEdit || isPreview ? null : inviteTokenProp ?? null;
   const [inviteIsInvalid, setInviteIsInvalid] = useState(false);
 
   // 응답 스토어 — 액션만 셀렉트 (전체 구독 → 불필요 리렌더 방지)
@@ -196,7 +202,9 @@ export function SurveyResponseFlow({
   } = useSurveyLoader({
     identifier,
     isAdminEdit,
+    isPreview,
     adminContext,
+    previewContext,
     inviteToken,
     setResponses,
   });
@@ -233,6 +241,7 @@ export function SurveyResponseFlow({
   // 반환 setDuplicateStatus 는 useResponseLifecycle 에도 그대로 넘겨 INSERT blocked 결과를 set 한다.
   const { duplicateStatus, setDuplicateStatus } = useDuplicateGuard({
     isAdminEdit,
+    isPreview,
     loadedSurvey,
     inviteToken,
     signals,
@@ -356,6 +365,7 @@ export function SurveyResponseFlow({
   // 두 effect 를 useResponseTelemetry 로 추출 (등록 순서·deps 동일, 상태 미소유).
   useResponseTelemetry({
     isAdminEdit,
+    isPreview,
     currentResponseId,
     currentStep,
     isCompleted,
@@ -368,6 +378,7 @@ export function SurveyResponseFlow({
   // isRecovering 은 handleResponse 의 INSERT 가드(I-1)에서 참조한다.
   const { isRecovering, resumeMessage, dismissResume } = useSessionRecovery({
     isAdminEdit,
+    isPreview,
     loadedSurvey,
     currentResponseId,
     inviteToken,
@@ -429,6 +440,7 @@ export function SurveyResponseFlow({
   // isCreatingResponse 는 훅 내부 전용(첫 답변 INSERT 가드)이라 컴포넌트는 구조분해하지 않는다.
   const { handleResponse, handleSubmit } = useResponseLifecycle({
     isAdminEdit,
+    isPreview,
     adminContext,
     inviteToken,
     loadedSurvey,
@@ -506,7 +518,7 @@ export function SurveyResponseFlow({
 
   // 페이지 이탈 시 경고
   useEffect(() => {
-    if (!hasResponses || isCompleted) return;
+    if (isPreview || !hasResponses || isCompleted) return;
     const handler = (e: BeforeUnloadEvent) => {
       e.preventDefault();
       // Chrome/Edge/Firefox 는 returnValue 를 요구
@@ -514,7 +526,7 @@ export function SurveyResponseFlow({
     };
     window.addEventListener('beforeunload', handler);
     return () => window.removeEventListener('beforeunload', handler);
-  }, [hasResponses, isCompleted]);
+  }, [isPreview, hasResponses, isCompleted]);
 
   // 차단 화면 — requireInviteToken=true 인데 invite 없거나 무효
   if (showInviteRequired) {
@@ -559,8 +571,14 @@ export function SurveyResponseFlow({
   if (isCompleted) {
     return (
       <SurveyCompletedScreen
-        thankYouMessage={loadedSurvey.settings.thankYouMessage}
+        {...(isPreview ? { title: '설문 확인 완료' } : {})}
+        thankYouMessage={
+          isPreview
+            ? '입력 내용은 저장되지 않았습니다.'
+            : loadedSurvey.settings.thankYouMessage
+        }
         questionCount={questions.length}
+        showCompletedTime={!isPreview}
       />
     );
   }
@@ -568,6 +586,8 @@ export function SurveyResponseFlow({
   const isTableStep = currentStep.kind === 'table';
   const containerMaxWidth = isTableStep ? 'max-w-7xl' : 'max-w-4xl';
   const showRequiredHighlight = highlightQuestionIds.size > 0;
+  const submitLabel = isPreview ? '확인 완료' : '제출';
+  const submittingLabel = isPreview ? '확인 중...' : '제출 중...';
 
   return (
     <ContactAttrsProvider attrs={contactAttrs}>
@@ -671,7 +691,7 @@ export function SurveyResponseFlow({
 
           {isLastVisibleStep ? (
             <Button onClick={handleNext} disabled={!canProceed() || isSubmitting}>
-              {isSubmitting ? '제출 중...' : '제출'}
+              {isSubmitting ? submittingLabel : submitLabel}
             </Button>
           ) : (
             <Button onClick={handleNext} disabled={!canProceed()}>
@@ -691,6 +711,8 @@ export function SurveyResponseFlow({
           hasPrevious={hasPreviousDisplayable}
           isLastStep={isLastVisibleStep}
           isSubmitting={isSubmitting}
+          submitLabel={submitLabel}
+          submittingLabel={submittingLabel}
           onPrevious={handlePrevious}
           onNext={handleNext}
         />

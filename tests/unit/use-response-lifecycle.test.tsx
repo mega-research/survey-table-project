@@ -144,6 +144,17 @@ describe('useResponseLifecycle - handleResponse INSERT 가드', () => {
     expect(createWithFirstAnswer).not.toHaveBeenCalled();
   });
 
+  it('preview 모드면 UI 상태만 반영하고 INSERT 를 발사하지 않는다', () => {
+    const args = baseArgs({ isPreview: true });
+    const { result } = renderHook(() => useResponseLifecycle(args));
+    act(() => {
+      result.current.handleResponse('q1', 'v1');
+    });
+    expect(args.setResponses).toHaveBeenCalledTimes(1);
+    expect(args.setPendingResponse).toHaveBeenCalledWith('q1', 'v1');
+    expect(createWithFirstAnswer).not.toHaveBeenCalled();
+  });
+
   it('currentResponseId 가 이미 있으면 INSERT 를 발사하지 않는다', () => {
     const args = baseArgs({ currentResponseId: 'existing' });
     const { result } = renderHook(() => useResponseLifecycle(args));
@@ -250,6 +261,20 @@ describe('useResponseLifecycle - handleSubmit', () => {
     });
     expect(complete).not.toHaveBeenCalled();
     expect(args.setIsCompleted).not.toHaveBeenCalled();
+  });
+
+  it('preview 모드 제출은 blank INSERT/complete 없이 완료 화면으로 전환한다', async () => {
+    const args = baseArgs({ isPreview: true, currentResponseId: null });
+    const { result } = renderHook(() => useResponseLifecycle(args));
+
+    await act(async () => {
+      await result.current.handleSubmit();
+    });
+
+    expect(createBlank).not.toHaveBeenCalled();
+    expect(complete).not.toHaveBeenCalled();
+    expect(args.resetResponseState).toHaveBeenCalledTimes(1);
+    expect(args.setIsCompleted).toHaveBeenCalledWith(true);
   });
 
   it('admin-edit 모드면 onSubmit 으로 위임하고 새 INSERT/complete 를 하지 않는다 (분기 6/8)', async () => {

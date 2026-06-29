@@ -17,6 +17,7 @@ export type DuplicateStatus =
 
 interface UseDuplicateGuardArgs {
   isAdminEdit: boolean;
+  isPreview?: boolean;
   loadedSurvey: Survey | null;
   inviteToken: string | null;
   signals: ClientSignals | null;
@@ -45,6 +46,7 @@ interface UseDuplicateGuardResult {
  */
 export function useDuplicateGuard({
   isAdminEdit,
+  isPreview = false,
   loadedSurvey,
   inviteToken,
   signals,
@@ -52,14 +54,14 @@ export function useDuplicateGuard({
   // DuplicateStatus 타입은 useResponseLifecycle 과 공유한다(handleResponse/handleSubmit 가 blocked 로 set).
   // admin-edit 분기 (8/8) — 어드민 수정은 중복검사 대상이 아니므로 초기값부터 ok.
   const [duplicateStatus, setDuplicateStatus] = useState<DuplicateStatus>(() =>
-    isAdminEdit ? { kind: 'ok' } : { kind: 'checking' },
+    isAdminEdit || isPreview ? { kind: 'ok' } : { kind: 'checking' },
   );
 
   // 진입 시 중복 검사 — 설문 로드 + 신호 수집 완료 후 1회 실행
   // signals 가 null 인 동안 effect skip → state 채워지면 자동 재실행
   // admin-edit 분기 (2/8) — 어드민 수정 모드에서는 검사 자체를 건너뜀 (초기값이 이미 ok)
   useEffect(() => {
-    if (isAdminEdit) return;
+    if (isAdminEdit || isPreview) return;
     if (!loadedSurvey?.id || !signals) return;
     let cancelled = false;
 
@@ -86,7 +88,7 @@ export function useDuplicateGuard({
     return () => {
       cancelled = true;
     };
-  }, [isAdminEdit, loadedSurvey?.id, inviteToken, signals]);
+  }, [isAdminEdit, isPreview, loadedSurvey?.id, inviteToken, signals]);
 
   return { duplicateStatus, setDuplicateStatus };
 }

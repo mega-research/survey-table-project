@@ -22,7 +22,6 @@ import {
   Trash2,
   User,
 } from 'lucide-react';
-
 import { toast } from 'sonner';
 
 import { logout } from '@/actions/auth-actions';
@@ -31,6 +30,7 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { useDeleteSurvey, useSurveys } from '@/hooks/queries';
 import { formatLocalDate } from '@/lib/date-formatters';
+import { getSurveyAccessUrl } from '@/lib/survey-url';
 
 export default function SurveyListPage() {
   const { data: surveys, isLoading, error } = useSurveys();
@@ -89,13 +89,15 @@ export default function SurveyListPage() {
 
   // 설문 접근 URL 가져오기
   const getSurveyUrl = (survey: (typeof surveyList)[0]) => {
-    if (survey.isPublic && survey.slug) {
-      return `/survey/${survey.slug}`;
-    }
-    if (survey.privateToken) {
-      return `/survey/${survey.privateToken}`;
-    }
-    return `/survey/${survey.id}`;
+    return getSurveyAccessUrl(
+      {
+        id: survey.id,
+        slug: survey.slug,
+        privateToken: survey.privateToken,
+        settings: { isPublic: survey.isPublic },
+      },
+      '',
+    );
   };
 
   return (

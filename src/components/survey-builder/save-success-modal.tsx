@@ -15,7 +15,11 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { generateSlugFromTitle } from '@/lib/survey-url';
+import {
+  encodeSurveyIdentifier,
+  generateSlugFromTitle,
+  getSurveyAccessUrl,
+} from '@/lib/survey-url';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 
 interface SaveSuccessModalProps {
@@ -37,8 +41,9 @@ export const SaveSuccessModal = React.memo(function SaveSuccessModal({
   onSlugChange,
   onAutoGenerateSlug,
 }: SaveSuccessModalProps) {
-  const { isPublic, privateToken } = useSurveyBuilderStore(
+  const { id, isPublic, privateToken } = useSurveyBuilderStore(
     useShallow((s) => ({
+      id: s.currentSurvey.id,
       isPublic: s.currentSurvey.settings.isPublic,
       privateToken: s.currentSurvey.privateToken,
     })),
@@ -70,14 +75,15 @@ export const SaveSuccessModal = React.memo(function SaveSuccessModal({
   // URL 복사
   const handleCopyUrl = () => {
     const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
-    let url: string;
-
-    if (isPublic) {
-      const slug = slugInput || generateSlugFromTitle(titleInput);
-      url = `${baseUrl}/survey/${slug}`;
-    } else {
-      url = `${baseUrl}/survey/${privateToken}`;
-    }
+    const url = getSurveyAccessUrl(
+      {
+        id,
+        slug: slugInput || generateSlugFromTitle(titleInput),
+        privateToken,
+        settings: { isPublic },
+      },
+      baseUrl,
+    );
 
     navigator.clipboard.writeText(url);
     setCopySuccess(true);
@@ -122,7 +128,7 @@ export const SaveSuccessModal = React.memo(function SaveSuccessModal({
                   <p className="text-sm break-all text-gray-700">
                     {typeof window !== 'undefined' ? window.location.origin : ''}/survey/
                     <span className="font-medium text-blue-600">
-                      {slugInput || generateSlugFromTitle(titleInput)}
+                      {encodeSurveyIdentifier(slugInput || generateSlugFromTitle(titleInput) || id)}
                     </span>
                   </p>
                 </div>
@@ -175,10 +181,7 @@ export const SaveSuccessModal = React.memo(function SaveSuccessModal({
                     </>
                   )}
                 </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => setIsEditingSlug(!isEditingSlug)}
-                >
+                <Button variant="outline" onClick={() => setIsEditingSlug(!isEditingSlug)}>
                   <Pencil className="mr-2 h-4 w-4" />
                   {isEditingSlug ? '완료' : 'URL 변경'}
                 </Button>
@@ -195,12 +198,11 @@ export const SaveSuccessModal = React.memo(function SaveSuccessModal({
                 <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
                   <p className="font-mono text-sm break-all text-gray-700">
                     {typeof window !== 'undefined' ? window.location.origin : ''}/survey/
-                    {privateToken}
+                    {encodeSurveyIdentifier(privateToken || id)}
                   </p>
                 </div>
                 <p className="mt-2 flex items-center gap-1 text-xs text-amber-600">
-                  <AlertCircle className="h-3 w-3" />이 링크를 아는 사람만 설문에 접근할 수
-                  있습니다
+                  <AlertCircle className="h-3 w-3" />이 링크를 아는 사람만 설문에 접근할 수 있습니다
                 </p>
               </div>
 

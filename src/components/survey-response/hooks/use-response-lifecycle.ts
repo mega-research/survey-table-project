@@ -36,6 +36,7 @@ interface AdminContext {
 interface UseResponseLifecycleArgs {
   // 모드/식별
   isAdminEdit: boolean;
+  isPreview?: boolean;
   adminContext: AdminContext | undefined;
   inviteToken: string | null;
 
@@ -114,6 +115,7 @@ interface UseResponseLifecycleResult {
  */
 export function useResponseLifecycle({
   isAdminEdit,
+  isPreview = false,
   adminContext,
   inviteToken,
   loadedSurvey,
@@ -168,6 +170,7 @@ export function useResponseLifecycle({
       // admin-edit 분기 (5/8) — 어드민 수정은 자동 저장 없음. 마지막 submit 시점에 일괄 갱신.
       if (
         !isAdminEdit &&
+        !isPreview &&
         currentResponseId === null &&
         !isCreatingResponse &&
         !isRecovering &&    // I-1 fix: 회복 진행 중에는 INSERT 발사 안 함
@@ -225,6 +228,7 @@ export function useResponseLifecycle({
       isCreatingResponse,
       isRecovering,
       isAdminEdit,
+      isPreview,
       loadedSurvey,
       currentStep,
       sessionId,
@@ -280,6 +284,12 @@ export function useResponseLifecycle({
         // onSubmit 안에서 router.push 처리 — 본 컴포넌트는 thank-you 화면을 띄우지 않는다.
         await adminContext.onSubmit({ questionResponses });
         resetResponseState();
+        return;
+      }
+
+      if (isPreview) {
+        resetResponseState();
+        setIsCompleted(true);
         return;
       }
 
@@ -415,6 +425,7 @@ export function useResponseLifecycle({
     groups,
     inviteToken,
     isAdminEdit,
+    isPreview,
     isQuestionAnswered,
     loadedSurvey,
     questions,

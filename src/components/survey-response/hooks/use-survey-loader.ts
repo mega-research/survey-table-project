@@ -22,10 +22,17 @@ interface AdminContext {
   onSubmit: (payload: SaveAdminEditPayload) => Promise<void>;
 }
 
+interface PreviewContext {
+  survey: Survey;
+  versionId: string | null;
+}
+
 interface UseSurveyLoaderArgs {
   identifier: string;
   isAdminEdit: boolean;
+  isPreview?: boolean;
   adminContext: AdminContext | undefined;
+  previewContext?: PreviewContext | undefined;
   inviteToken: string | null;
   /**
    * 응답값 prefill 용 세터. responses state 는 컴포넌트가 소유하며
@@ -59,7 +66,9 @@ interface UseSurveyLoaderResult {
 export function useSurveyLoader({
   identifier,
   isAdminEdit,
+  isPreview = false,
   adminContext,
+  previewContext,
   inviteToken,
   setResponses,
 }: UseSurveyLoaderArgs): UseSurveyLoaderResult {
@@ -132,6 +141,20 @@ export function useSurveyLoader({
           setResponses(adminContext.initialResponses);
           // 응답 당시 contact attrs 복원 — 조건/토큰 표시 평가에 사용.
           setContactAttrs(adminContext.initialContactAttrs ?? {});
+          return;
+        }
+
+        if (isPreview) {
+          if (!previewContext) {
+            setLoadError('미리보기 설문 데이터를 찾을 수 없습니다.');
+            setLoadedSurvey(null);
+            return;
+          }
+          setLoadedSurvey(previewContext.survey);
+          setVersionId(previewContext.versionId);
+          setResponses({});
+          setContactAttrs({});
+          setShowInviteRequired(false);
           return;
         }
 
@@ -212,9 +235,9 @@ export function useSurveyLoader({
     };
 
     loadSurvey();
-    // adminContext 는 페이지 수명 동안 안정적 (부모에서 한 번만 생성) — deps 미포함
+    // adminContext/previewContext 는 페이지 수명 동안 안정적 (부모에서 한 번만 생성) — deps 미포함
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [identifier, isAdminEdit]);
+  }, [identifier, isAdminEdit, isPreview]);
 
   return { isLoading, loadedSurvey, loadError, contactAttrs, showInviteRequired, versionId };
 }

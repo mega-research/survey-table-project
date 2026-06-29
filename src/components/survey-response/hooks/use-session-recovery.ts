@@ -7,6 +7,7 @@ import { sendVisibilitySegment, sessionStorageKey } from './session-helpers';
 
 interface UseSessionRecoveryArgs {
   isAdminEdit: boolean;
+  isPreview?: boolean;
   loadedSurvey: Survey | null;
   currentResponseId: string | null;
   inviteToken: string | null;
@@ -40,6 +41,7 @@ interface UseSessionRecoveryResult {
  */
 export function useSessionRecovery({
   isAdminEdit,
+  isPreview = false,
   loadedSurvey,
   currentResponseId,
   inviteToken,
@@ -59,7 +61,7 @@ export function useSessionRecovery({
   // - dep array에 sessionId 자체는 넣지 않는다 (saved 값을 effect 내부에서 직접 set → 무한 루프 방지)
   useEffect(() => {
     // admin-edit 분기 (4/8) — localStorage 회복은 응답자 세션 전용이므로 건너뜀.
-    if (isAdminEdit) return;
+    if (isAdminEdit || isPreview) return;
     if (!loadedSurvey || currentResponseId !== null) return;
 
     const key = sessionStorageKey(loadedSurvey.id);
@@ -104,7 +106,7 @@ export function useSessionRecovery({
     // deps 는 원본과 1:1 동일. setSessionId 는 안정적 setter 라 의도적으로 제외(원본 동일),
     // sessionId 도 effect 내부에서 직접 set 하므로 deps 미포함(무한 루프 방지).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAdminEdit, loadedSurvey, currentResponseId, setCurrentResponseId, inviteToken]);
+  }, [isAdminEdit, isPreview, loadedSurvey, currentResponseId, setCurrentResponseId, inviteToken]);
 
   // 토스트 dismiss 는 <ResumeToast> 가 자체 마운트 시점부터 4초 타이머로 호출한다.
   // 안정 참조라 ResumeToast 의 마운트 전용 effect deps 에서 안전하게 제외된다.

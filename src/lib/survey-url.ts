@@ -66,6 +66,16 @@ export function generateSlugFromTitle(title: string): string {
 }
 
 /**
+ * 설문 URL path segment 로 사용할 식별자를 인코딩한다.
+ *
+ * 한글 슬러그 raw URL 은 일부 메신저 자동 링크 파서에서 중간에 끊길 수 있으므로
+ * 공유/복사용 URL 에서는 percent-encoding 된 ASCII 경로를 사용한다.
+ */
+export function encodeSurveyIdentifier(identifier: string): string {
+  return encodeURIComponent(identifier);
+}
+
+/**
  * 슬러그 유효성 검사
  * @param slug 검사할 슬러그
  * @returns 유효성 검사 결과 객체
@@ -161,8 +171,8 @@ export function isUUID(str: string): boolean {
 export function getSurveyAccessUrl(
   survey: {
     id: string;
-    slug?: string;
-    privateToken?: string;
+    slug?: string | null | undefined;
+    privateToken?: string | null | undefined;
     settings: { isPublic: boolean };
   },
   baseUrl: string = typeof window !== 'undefined' ? window.location.origin : '',
@@ -170,12 +180,12 @@ export function getSurveyAccessUrl(
   if (survey.settings.isPublic) {
     // 공개 설문: slug 사용, 없으면 id 사용
     const identifier = survey.slug || survey.id;
-    return `${baseUrl}/survey/${identifier}`;
+    return `${baseUrl}/survey/${encodeSurveyIdentifier(identifier)}`;
   }
 
   // 비공개 설문: privateToken 사용, 없으면 id 사용
   const identifier = survey.privateToken || survey.id;
-  return `${baseUrl}/survey/${identifier}`;
+  return `${baseUrl}/survey/${encodeSurveyIdentifier(identifier)}`;
 }
 
 /**

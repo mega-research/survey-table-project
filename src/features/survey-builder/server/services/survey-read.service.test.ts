@@ -231,4 +231,34 @@ describe('survey-read.service getSurveyForResponse requireInviteToken', () => {
 
     expect(result?.survey.settings.requireInviteToken).toBe(true);
   });
+
+  it('requirePublished 옵션이면 배포 버전 없는 설문을 현재 draft 로 fallback 하지 않는다', async () => {
+    const surveyId = 'survey-draft-only';
+    surveysFindFirst.mockResolvedValue({
+      id: surveyId,
+      currentVersionId: null,
+      requireInviteToken: false,
+      slug: null,
+      privateToken: null,
+      contactColumns: null,
+      contactEmail: null,
+      lookups: [],
+      createdAt: new Date('2026-06-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-06-01T00:00:00.000Z'),
+    });
+    vi.mocked(getSurveyWithDetailsData).mockResolvedValue({
+      id: surveyId,
+      title: 'draft',
+      groups: [],
+      questions: [],
+      settings: snapshotSettings(false),
+      createdAt: new Date('2026-06-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-06-01T00:00:00.000Z'),
+    } as unknown as SurveyType);
+
+    const result = await getSurveyForResponse({ surveyId }, { requirePublished: true });
+
+    expect(result).toBeNull();
+    expect(getSurveyWithDetailsData).not.toHaveBeenCalled();
+  });
 });

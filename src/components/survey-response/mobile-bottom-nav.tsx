@@ -10,6 +10,8 @@ interface MobileBottomNavProps {
   hasPrevious: boolean;
   isLastStep: boolean;
   isSubmitting: boolean;
+  submitLabel?: string;
+  submittingLabel?: string;
   onPrevious: () => void;
   onNext: () => void;
 }
@@ -32,6 +34,8 @@ export function MobileBottomNav({
   hasPrevious,
   isLastStep,
   isSubmitting,
+  submitLabel = '제출',
+  submittingLabel = '제출 중...',
   onPrevious,
   onNext,
 }: MobileBottomNavProps) {
@@ -67,7 +71,7 @@ export function MobileBottomNav({
             disabled={!canProceed || isSubmitting}
             className={primaryButtonCls}
           >
-            {isSubmitting ? '제출 중...' : '제출'}
+            {isSubmitting ? submittingLabel : submitLabel}
           </button>
         ) : (
           <button

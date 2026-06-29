@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-import { Activity, ArrowLeft, Pencil } from 'lucide-react';
+import { Activity, ArrowLeft, Eye, Pencil } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 
@@ -39,6 +39,12 @@ export function OperationsPageHeader({ surveyId, surveyTitle }: Props) {
 
         <div className="flex items-center space-x-3">
           <RefreshButton />
+          <Link href={`/admin/surveys/${surveyId}/preview`}>
+            <Button variant="outline" size="sm">
+              <Eye className="mr-2 h-4 w-4" />
+              설문 보기
+            </Button>
+          </Link>
           <Link href={`/admin/surveys/${surveyId}/edit`}>
             <Button variant="outline" size="sm">
               <Pencil className="mr-2 h-4 w-4" />

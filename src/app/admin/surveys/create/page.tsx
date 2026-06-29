@@ -32,10 +32,9 @@ import {
   Table,
   Type,
 } from 'lucide-react';
-
 import { toast } from 'sonner';
+import { useShallow } from 'zustand/react/shallow';
 
-import { client } from '@/shared/lib/rpc';
 import { GroupManager } from '@/components/survey-builder/group-manager';
 import { ImportExportLibraryModal } from '@/components/survey-builder/import-export-library-modal';
 import { QuestionLibraryPanel } from '@/components/survey-builder/question-library-panel';
@@ -55,12 +54,17 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useSaveSurvey } from '@/hooks/queries/use-surveys';
 import { formatLocalDate } from '@/lib/date-formatters';
-import { generateSlugFromTitle, validateSlug } from '@/lib/survey-url';
+import {
+  encodeSurveyIdentifier,
+  generateSlugFromTitle,
+  getSurveyAccessUrl,
+  validateSlug,
+} from '@/lib/survey-url';
 import { generateId } from '@/lib/utils';
+import { client } from '@/shared/lib/rpc';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { useSurveyUIStore } from '@/stores/ui-store';
 import { Question } from '@/types/survey';
-import { useShallow } from 'zustand/react/shallow';
 
 const questionTypes = [
   {
@@ -264,14 +268,15 @@ export default function CreateSurveyPage() {
   // URL 복사
   const handleCopyUrl = () => {
     const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
-    let url: string;
-
-    if (currentSurvey.settings.isPublic) {
-      const slug = slugInput || generateSlugFromTitle(titleInput);
-      url = `${baseUrl}/survey/${slug}`;
-    } else {
-      url = `${baseUrl}/survey/${currentSurvey.privateToken}`;
-    }
+    const url = getSurveyAccessUrl(
+      {
+        id: currentSurvey.id,
+        slug: slugInput || generateSlugFromTitle(titleInput),
+        privateToken: currentSurvey.privateToken,
+        settings: currentSurvey.settings,
+      },
+      baseUrl,
+    );
 
     navigator.clipboard.writeText(url);
     setCopySuccess(true);
@@ -324,7 +329,11 @@ export default function CreateSurveyPage() {
       setIsEditingSlugInModal(false);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (message.includes('이미 사용 중인 URL') || message.includes('slug_unique') || message.includes('23505')) {
+      if (
+        message.includes('이미 사용 중인 URL') ||
+        message.includes('slug_unique') ||
+        message.includes('23505')
+      ) {
         setSlugError('이미 사용 중인 URL입니다. 다른 URL을 입력해주세요.');
       } else {
         toast.error('설문 저장에 실패했습니다. 다시 시도해주세요.');
@@ -477,7 +486,9 @@ export default function CreateSurveyPage() {
                   <div className="space-y-1 text-xs text-gray-500">
                     <p>그룹 수: {(currentSurvey.groups || []).length}개</p>
                     <p>질문 수: {currentSurvey.questions.length}개</p>
-                    <p suppressHydrationWarning>마지막 수정: {formatLocalDate(currentSurvey.updatedAt)}</p>
+                    <p suppressHydrationWarning>
+                      마지막 수정: {formatLocalDate(currentSurvey.updatedAt)}
+                    </p>
                   </div>
                 </div>
               </TabsContent>
@@ -670,7 +681,7 @@ export default function CreateSurveyPage() {
                     <p className="text-sm break-all text-gray-700">
                       {typeof window !== 'undefined' ? window.location.origin : ''}/survey/
                       <span className="font-medium text-blue-600">
-                        {slugInput || generateSlugFromTitle(titleInput)}
+                        {encodeSurveyIdentifier(slugInput || generateSlugFromTitle(titleInput))}
                       </span>
                     </p>
                   </div>
@@ -743,7 +754,7 @@ export default function CreateSurveyPage() {
                   <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
                     <p className="font-mono text-sm break-all text-gray-700">
                       {typeof window !== 'undefined' ? window.location.origin : ''}/survey/
-                      {currentSurvey.privateToken}
+                      {encodeSurveyIdentifier(currentSurvey.privateToken || currentSurvey.id)}
                     </p>
                   </div>
                   <p className="mt-2 flex items-center gap-1 text-xs text-amber-600">

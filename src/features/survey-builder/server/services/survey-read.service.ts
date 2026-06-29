@@ -161,6 +161,7 @@ export async function getSurveyByPrivateToken(input: SurveyByPrivateTokenInput) 
 // 응답 페이지용 설문 조회 (배포 버전 스냅샷 우선, fallback 기존 방식)
 export async function getSurveyForResponse(
   input: SurveyIdInput,
+  options: { requirePublished?: boolean } = {},
 ): Promise<SurveyForResponseResult> {
   const { surveyId } = input;
   const survey = await getSurveyById(surveyId);
@@ -239,6 +240,8 @@ export async function getSurveyForResponse(
       return { survey: surveyData, versionId: version.id };
     }
   }
+
+  if (options.requirePublished) return null;
 
   // 미배포 설문: 기존 방식 fallback
   const surveyData = await getSurveyWithDetails(surveyId);
