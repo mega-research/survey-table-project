@@ -41,6 +41,16 @@ _Avoid_: 모드 분기, isTestMode 스위치
 **SurveyDiffPayload 조립 (diff-payload)**:
 changeset snapshot + 현재 설문 상태 → 저장 payload 변환 규칙(`src/lib/survey-builder/diff-payload.ts`, 순수 함수). dirtyIds = added∪updated 필터, 메타데이터 조건부 필드, reordered 전체 id 순서를 소유한다. use-survey-sync는 저장 오케스트레이션만 담당한다.
 
+### 응답 페이지 표시
+
+**응답 페이지 헤더 (response page header)**:
+공개 설문 응답 화면 상단에서 설문 제목, 로고, 통계법 문구 같은 설문지 머리말 요소를 표현하는 영역. 응답 진행률이나 질문 입력 영역과 별개의 설문 정체성 표현이다.
+_Avoid_: 상단 장식, 레거시 헤더
+
+**기본형 헤더 (plain response header)**:
+로고와 통계법 문구 없이 제목 중심으로 표시되는 응답 페이지 헤더 프리셋. 기존 화면의 픽셀 보존 모드가 아니라 로고 없는 설문의 기본 표현이다.
+_Avoid_: 레거시 호환 모드
+
 ### 질문 유형과 정규화
 
 **질문 유형 레지스트리 (question type registry)**:

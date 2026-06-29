@@ -33,7 +33,7 @@
 - Modify `src/lib/versioning/snapshot-builder.ts`
   - 배포 스냅샷에 `settings.responseHeader`를 포함한다.
 - Modify `src/features/survey-builder/server/services/survey-read.service.ts`
-  - 공개 응답 조회에서 snapshot 값을 우선하고, 레거시는 기본형으로 fallback한다.
+  - 공개 응답 조회에서 snapshot 값을 우선하고, responseHeader가 없는 기존 배포본은 새 기본형으로 fallback한다.
 - Modify `src/components/survey-response/hooks/use-survey-loader.ts`
   - admin-edit snapshot 복원 경로도 `settings.responseHeader`를 복원한다.
 - Create `src/components/survey-builder/response-header-settings.tsx`
@@ -621,7 +621,7 @@ Add this field in the returned `settings` object:
       responseHeader: survey.settings.responseHeader,
 ```
 
-- [ ] **Step 4: Add response read tests for snapshot priority and legacy fallback**
+- [ ] **Step 4: Add response read tests for snapshot priority and default fallback**
 
 Modify `src/features/survey-builder/server/services/survey-read.service.test.ts`. Add two tests in the `getSurveyForResponse` describe block:
 
@@ -670,7 +670,7 @@ Modify `src/features/survey-builder/server/services/survey-read.service.test.ts`
     });
   });
 
-  it('responseHeader 가 없는 legacy snapshot 은 현재 surveys 행이 아니라 기본형으로 fallback 한다', async () => {
+  it('responseHeader 가 없는 기존 snapshot 은 현재 surveys 행이 아니라 새 기본형으로 fallback 한다', async () => {
     const surveyId = 'survey-header-legacy';
     surveysFindFirst.mockResolvedValue({
       id: surveyId,
@@ -1631,7 +1631,7 @@ If `git status --short` prints no files, do not create an empty commit.
   - 접힌 고급 설정: Task 4.
   - `Survey.settings.responseHeader` 호환성: Task 1, Task 2, Task 3.
   - 배포 스냅샷 우선: Task 3.
-  - 기존 설문 fallback: Task 1 and Task 3.
+  - 기존 설문 fallback: Task 1 and Task 3. 기존 화면의 픽셀 보존은 요구하지 않고 새 기본형을 적용한다.
   - ID 제외: Task 5 tests.
   - 모바일 세로 배치: Task 5 CSS and Task 6 manual check.
 - Red-flag scan:
