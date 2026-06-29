@@ -450,6 +450,7 @@ export interface QuestionGroup {
   parentGroupId?: string; // 상위 그룹 ID (하위 그룹인 경우)
   color?: string; // 그룹 색상 (UI용)
   collapsed?: boolean; // 접힘 상태 (UI용)
+  hideName?: boolean; // 응답 페이지에서 그룹 이름 숨김 여부 (기본 false = 표시)
   displayCondition?: QuestionConditionGroup; // 그룹 표시 조건
 }
 
@@ -500,6 +501,8 @@ export interface Question {
   dynamicRowConfigs?: DynamicRowGroupConfig[];
   // 열 라벨 숨기기 (테이블 타입 전용, UI에서만 숨기고 데이터는 보존)
   hideColumnLabels?: boolean;
+  // 응답 페이지에서 질문 제목 숨기기 (기본 false = 표시)
+  hideTitle?: boolean;
   // 질문 표시 조건 (이 질문을 표시하기 위한 조건)
   displayCondition?: QuestionConditionGroup;
   // SPSS .sav 내보내기 오버라이드 (없으면 질문 타입 기반 자동 판단)

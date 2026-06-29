@@ -25,6 +25,8 @@
     "0038_add_dedup_partial_indexes",
     "0039_revoke_lookup_invite_token_anon_execute",
     "0040_survey_list_indexes",
-    "0041_add_survey_response_header"
+    "0041_add_survey_response_header",
+    "0042_add_question_group_hide_name",
+    "0043_add_question_hide_title"
   ]
 }

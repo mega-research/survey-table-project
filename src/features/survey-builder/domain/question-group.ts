@@ -37,6 +37,7 @@ export const UpdateQuestionGroupData = z.object({
   parentGroupId: z.string().nullable().optional(),
   color: z.string().optional(),
   collapsed: z.boolean().optional(),
+  hideName: z.boolean().optional(),
   displayCondition: z.custom<QuestionConditionGroup>().optional(),
 });
 export type UpdateQuestionGroupData = z.infer<typeof UpdateQuestionGroupData>;

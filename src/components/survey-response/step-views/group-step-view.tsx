@@ -38,14 +38,14 @@ export function GroupStepView({
 
   return (
     <Card className="animate-in fade-in duration-200">
-      <CardHeader className="pb-6">
-        {step.rootGroupName && (
+      {step.rootGroupName && (
+        <CardHeader className="pb-6">
           <span className="inline-block w-fit rounded-md bg-blue-50 px-3.5 py-2 text-base font-semibold tracking-wide text-blue-700">
             {step.rootGroupName}
           </span>
-        )}
-      </CardHeader>
-      <CardContent className="md:px-8">
+        </CardHeader>
+      )}
+      <CardContent className={`md:px-8 ${step.rootGroupName ? '' : 'pt-6'}`}>
         <div className="divide-y divide-gray-100">
           {visibleItems.map((item) => (
             <GroupStepItem

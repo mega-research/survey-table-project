@@ -84,6 +84,7 @@ export const questionGroups = pgTable('question_groups', {
   parentGroupId: uuid('parent_group_id'),
   color: text('color'),
   collapsed: boolean('collapsed').default(false),
+  hideName: boolean('hide_name').default(false), // 응답 페이지에서 그룹 이름(배지/소제목) 숨김 여부
   displayCondition: jsonb('display_condition').$type<QuestionConditionGroup>(),
 
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -160,6 +161,9 @@ export const questions = pgTable('questions', {
 
   // 열 라벨 숨기기 (테이블 타입 전용)
   hideColumnLabels: boolean('hide_column_labels').default(false),
+
+  // 응답 페이지에서 질문 제목 숨기기 (기본 false = 표시)
+  hideTitle: boolean('hide_title').default(false),
 
   // 검증 규칙 및 조건부 표시
   tableValidationRules: jsonb('table_validation_rules').$type<TableValidationRule[]>(),

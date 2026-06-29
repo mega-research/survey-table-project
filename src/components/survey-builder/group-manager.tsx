@@ -63,6 +63,7 @@ export function GroupManager({ className }: GroupManagerProps) {
   const [groupDescription, setGroupDescription] = useState('');
   const [parentGroupIdForNew, setParentGroupIdForNew] = useState<string | undefined>(undefined);
   const [parentGroupIdForEdit, setParentGroupIdForEdit] = useState<string | undefined>(undefined);
+  const [hideNameForEdit, setHideNameForEdit] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [, setActiveId] = useState<string | null>(null);
   const [, setOverId] = useState<string | null>(null);
@@ -280,6 +281,7 @@ export function GroupManager({ className }: GroupManagerProps) {
     setGroupName(latestGroup.name);
     setGroupDescription(latestGroup.description || '');
     setParentGroupIdForEdit(latestGroup.parentGroupId);
+    setHideNameForEdit(latestGroup.hideName ?? false);
     setIsEditModalOpen(true);
   };
 
@@ -349,12 +351,14 @@ export function GroupManager({ className }: GroupManagerProps) {
             ...(groupDescription.trim() ? { description: groupDescription.trim() } : {}),
             parentGroupId: newParentGroupId,
             order: newOrder,
+            hideName: hideNameForEdit,
           });
         } else {
           updateGroup(editingGroup.id, {
             name: groupName.trim(),
             ...(groupDescription.trim() ? { description: groupDescription.trim() } : {}),
             order: newOrder,
+            hideName: hideNameForEdit,
           });
           clearGroupParent(editingGroup.id);
         }
@@ -376,6 +380,7 @@ export function GroupManager({ className }: GroupManagerProps) {
                 ...(groupDescription.trim() ? { description: groupDescription.trim() } : {}),
                 parentGroupId: newParentGroupId ?? null,
                 order: newOrder,
+                hideName: hideNameForEdit,
                 ...(finalDisplayCondition !== undefined ? { displayCondition: finalDisplayCondition } : {}),
               },
             });
@@ -389,10 +394,11 @@ export function GroupManager({ className }: GroupManagerProps) {
           setExpandedGroups((prev) => new Set(prev).add(newParentGroupId));
         }
       } else {
-        // 이름/설명만 변경된 경우
+        // 이름/설명/표시 옵션만 변경된 경우
         updateGroup(editingGroup.id, {
           name: groupName.trim(),
           ...(groupDescription.trim() ? { description: groupDescription.trim() } : {}),
+          hideName: hideNameForEdit,
         });
 
         // DB에 저장 (그룹 ID가 UUID인 경우에만)
@@ -405,6 +411,7 @@ export function GroupManager({ className }: GroupManagerProps) {
               data: {
                 name: groupName.trim(),
                 ...(groupDescription.trim() ? { description: groupDescription.trim() } : {}),
+                hideName: hideNameForEdit,
                 ...(finalDisplayCondition !== undefined ? { displayCondition: finalDisplayCondition } : {}),
               },
             });
@@ -418,6 +425,7 @@ export function GroupManager({ className }: GroupManagerProps) {
       setGroupName('');
       setGroupDescription('');
       setParentGroupIdForEdit(undefined);
+      setHideNameForEdit(false);
       setIsEditModalOpen(false);
       // 그룹 수정은 이미 updateQuestionGroup API로 저장됨
     }
@@ -617,6 +625,7 @@ export function GroupManager({ className }: GroupManagerProps) {
           setGroupName('');
           setGroupDescription('');
           setParentGroupIdForEdit(undefined);
+          setHideNameForEdit(false);
         }}
         onSubmit={handleUpdateGroup}
         editingGroup={editingGroup}
@@ -626,6 +635,8 @@ export function GroupManager({ className }: GroupManagerProps) {
         setGroupDescription={setGroupDescription}
         parentGroupId={parentGroupIdForEdit}
         setParentGroupId={setParentGroupIdForEdit}
+        hideName={hideNameForEdit}
+        setHideName={setHideNameForEdit}
         topLevelGroups={topLevelGroups}
         allGroups={groupsOrEmpty}
         allQuestions={questions}

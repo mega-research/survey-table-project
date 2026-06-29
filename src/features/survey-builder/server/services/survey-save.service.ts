@@ -152,6 +152,7 @@ export async function saveSurveyDiff(
           parentGroupId: group.parentGroupId || null,
           color: group.color,
           collapsed: group.collapsed,
+          hideName: group.hideName,
           displayCondition: group.displayCondition as NewQuestionGroup['displayCondition'],
           updatedAt: new Date(),
         }));
@@ -168,6 +169,7 @@ export async function saveSurveyDiff(
               parentGroupId: sql`excluded.parent_group_id`,
               color: sql`excluded.color`,
               collapsed: sql`excluded.collapsed`,
+              hideName: sql`excluded.hide_name`,
               displayCondition: sql`excluded.display_condition`,
               updatedAt: sql`excluded.updated_at`,
             },
@@ -247,6 +249,7 @@ export async function saveSurveyDiff(
           dynamicRowConfigs:
             question.dynamicRowConfigs as NewQuestion['dynamicRowConfigs'],
           hideColumnLabels: question.hideColumnLabels,
+          hideTitle: question.hideTitle,
           displayCondition: question.displayCondition as NewQuestion['displayCondition'],
           questionCode: question.questionCode,
           isCustomSpssVarName: question.isCustomSpssVarName,
@@ -289,6 +292,7 @@ export async function saveSurveyDiff(
               tableValidationRules: sql`excluded.table_validation_rules`,
               dynamicRowConfigs: sql`excluded.dynamic_row_config`,
               hideColumnLabels: sql`excluded.hide_column_labels`,
+              hideTitle: sql`excluded.hide_title`,
               displayCondition: sql`excluded.display_condition`,
               questionCode: sql`excluded.question_code`,
               isCustomSpssVarName: sql`excluded.is_custom_spss_var_name`,
@@ -464,6 +468,7 @@ export async function saveSurveyWithDetails(
         parentGroupId: group.parentGroupId || null,
         color: group.color,
         collapsed: group.collapsed,
+        hideName: group.hideName,
         displayCondition: group.displayCondition as NewQuestionGroup['displayCondition'],
         updatedAt: new Date(),
       }));
@@ -480,6 +485,7 @@ export async function saveSurveyWithDetails(
             parentGroupId: sql`excluded.parent_group_id`,
             color: sql`excluded.color`,
             collapsed: sql`excluded.collapsed`,
+            hideName: sql`excluded.hide_name`,
             displayCondition: sql`excluded.display_condition`,
             updatedAt: sql`excluded.updated_at`,
           },
@@ -565,6 +571,7 @@ export async function saveSurveyWithDetails(
           dynamicRowConfigs:
             question.dynamicRowConfigs as NewQuestion['dynamicRowConfigs'],
           hideColumnLabels: question.hideColumnLabels,
+          hideTitle: question.hideTitle,
           displayCondition: question.displayCondition as NewQuestion['displayCondition'],
           questionCode: question.questionCode,
           isCustomSpssVarName: question.isCustomSpssVarName,
@@ -607,6 +614,7 @@ export async function saveSurveyWithDetails(
               tableValidationRules: sql`excluded.table_validation_rules`,
               dynamicRowConfigs: sql`excluded.dynamic_row_config`,
               hideColumnLabels: sql`excluded.hide_column_labels`,
+              hideTitle: sql`excluded.hide_title`,
               displayCondition: sql`excluded.display_condition`,
               questionCode: sql`excluded.question_code`,
               isCustomSpssVarName: sql`excluded.is_custom_spss_var_name`,

@@ -89,6 +89,7 @@ export interface QuestionGroupData {
   parentGroupId?: string;
   color?: string;
   collapsed?: boolean;
+  hideName?: boolean;
   displayCondition?: QuestionConditionGroup;
 }
 
@@ -173,6 +174,7 @@ export interface QuestionData {
   placeholder?: string;
   tableValidationRules?: TableValidationRule[];
   hideColumnLabels?: boolean;
+  hideTitle?: boolean;
   displayCondition?: QuestionConditionGroup;
   rankingConfig?: RankingConfig;
   defaultValueTemplate?: string | null;

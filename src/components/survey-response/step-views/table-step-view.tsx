@@ -44,10 +44,14 @@ export function TableStepView({
     [q.description, attrs],
   );
 
+  // 헤더(그룹/소제목 배지 · 제목 · 설명)에 표시할 내용이 하나도 없으면 헤더 영역을 통째로 숨긴다.
+  const hasHeaderContent =
+    !!step.rootGroupName || !!step.subgroupName || !q.hideTitle || !isEmptyHtml(q.description);
+
   return (
     <>
       {/* 모바일: 제목/설명을 카드 밖으로 분리 */}
-      {isMobile && (
+      {isMobile && hasHeaderContent && (
         <div className="mb-4 space-y-2.5" data-question-id={q.id}>
           {(step.rootGroupName || step.subgroupName) && (
             <div className="flex flex-wrap items-center gap-2">
@@ -63,18 +67,20 @@ export function TableStepView({
               )}
             </div>
           )}
-          <h2
-            className={`${
-              titleHasMultipleLines ? 'text-lg' : 'text-xl'
-            } leading-[1.6] font-bold break-keep text-gray-900`}
-          >
-            {titleText}
-            {q.required && (
-              <span className="ml-1 align-top text-sm text-red-500" aria-label="필수 질문">
-                *
-              </span>
-            )}
-          </h2>
+          {!q.hideTitle && (
+            <h2
+              className={`${
+                titleHasMultipleLines ? 'text-lg' : 'text-xl'
+              } leading-[1.6] font-bold break-keep text-gray-900`}
+            >
+              {titleText}
+              {q.required && (
+                <span className="ml-1 align-top text-sm text-red-500" aria-label="필수 질문">
+                  *
+                </span>
+              )}
+            </h2>
+          )}
           {!isEmptyHtml(q.description) && (
             <RichDescription
               html={descriptionHtml}
@@ -92,7 +98,7 @@ export function TableStepView({
         }`}
         data-question-id={q.id}
       >
-        {!isMobile && (
+        {!isMobile && hasHeaderContent && (
           <CardHeader className="pb-4">
             {(step.rootGroupName || step.subgroupName) && (
               <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -109,14 +115,16 @@ export function TableStepView({
               </div>
             )}
             <div className="min-w-0">
-              <CardTitle className="text-2xl leading-relaxed font-semibold break-keep text-gray-900">
-                {titleText}
-                {q.required && (
-                  <span className="ml-1.5 align-top text-sm text-red-500" aria-label="필수 질문">
-                    *
-                  </span>
-                )}
-              </CardTitle>
+              {!q.hideTitle && (
+                <CardTitle className="text-2xl leading-relaxed font-semibold break-keep text-gray-900">
+                  {titleText}
+                  {q.required && (
+                    <span className="ml-1.5 align-top text-sm text-red-500" aria-label="필수 질문">
+                      *
+                    </span>
+                  )}
+                </CardTitle>
+              )}
               {!isEmptyHtml(q.description) && (
                 <RichDescription
                   html={descriptionHtml}
@@ -128,7 +136,7 @@ export function TableStepView({
           </CardHeader>
         )}
 
-        <CardContent className={isMobile ? 'p-4' : ''}>
+        <CardContent className={isMobile ? 'p-4' : hasHeaderContent ? '' : 'pt-6'}>
           <div className="space-y-4">
             <QuestionInput
               question={q}

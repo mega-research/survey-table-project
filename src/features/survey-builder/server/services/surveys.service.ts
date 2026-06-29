@@ -262,6 +262,7 @@ export async function duplicateSurvey(
         tableValidationRules: question.tableValidationRules as NewQuestion['tableValidationRules'],
         dynamicRowConfigs: question.dynamicRowConfigs as NewQuestion['dynamicRowConfigs'],
         hideColumnLabels: question.hideColumnLabels,
+        hideTitle: question.hideTitle,
         displayCondition: question.displayCondition as NewQuestion['displayCondition'],
       } satisfies CompleteQuestionWrite;
     });

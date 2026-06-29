@@ -39,6 +39,7 @@ export const PERSISTED_QUESTION_FIELDS = [
   'tableValidationRules',
   'dynamicRowConfigs',
   'hideColumnLabels',
+  'hideTitle',
   'rankingConfig',
   'choiceGroups',
   'displayCondition',

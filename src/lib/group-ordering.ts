@@ -206,7 +206,8 @@ function flattenRootScope(
         result.push({ question: child.data, subgroupName: subName });
         subName = null;
       } else {
-        walk(child.data.id, child.data.name);
+        // hideName 그룹은 응답 페이지에서 소제목을 노출하지 않는다.
+        walk(child.data.id, child.data.hideName ? null : child.data.name);
         subName = null;
       }
     }
@@ -291,7 +292,9 @@ export function buildRenderSteps(
   for (const rootGroup of topLevelGroups) {
     const items = flattenRootScope(rootGroup.id, questions, groups);
     if (items.length === 0) continue;
-    steps.push(...splitByTable(items, rootGroup.id, rootGroup.name));
+    // hideName 그룹은 응답 페이지에서 그룹 이름 배지를 노출하지 않는다 (빌더 표시는 유지).
+    const rootGroupName = rootGroup.hideName ? null : rootGroup.name;
+    steps.push(...splitByTable(items, rootGroup.id, rootGroupName));
   }
 
   const ungroupedItems = flattenRootScope(null, questions, groups);

@@ -155,6 +155,7 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
         ...(question.emptyDefault !== undefined ? { emptyDefault: question.emptyDefault } : {}),
         tableValidationRules: (question as any).tableValidationRules || [],
         dynamicRowConfigs: (question as any).dynamicRowConfigs || undefined,
+        hideTitle: question.hideTitle ?? false,
         ...(question.displayCondition !== undefined ? { displayCondition: question.displayCondition } : {}),
         spssVarType: (question as any).spssVarType,
         spssMeasure: (question as any).spssMeasure,
@@ -346,6 +347,7 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
               tableValidationRules: currentFormData.tableValidationRules || question?.tableValidationRules,
               displayCondition: currentFormData.displayCondition || question?.displayCondition,
               dynamicRowConfigs: currentFormData.dynamicRowConfigs || question?.dynamicRowConfigs,
+              hideTitle: currentFormData.hideTitle ?? question?.hideTitle,
               rankingConfig: currentFormData.rankingConfig || question?.rankingConfig,
               questionCode: currentFormData.questionCode || question?.questionCode,
               isCustomSpssVarName: currentFormData.isCustomSpssVarName ?? question?.isCustomSpssVarName,
@@ -425,7 +427,8 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
 
   // 모달 크기 결정 (테이블 편집시 큰 화면 사용)
   const isTableType = question.type === 'table';
-  const modalSize = isTableType ? 'max-w-6xl' : 'max-w-3xl';
+  // 모든 질문 편집 모달 폭을 테이블 편집 모달과 동일하게 통일
+  const modalSize = 'max-w-6xl';
 
   return (
     <Dialog

@@ -56,21 +56,23 @@ export function GroupStepItem({
           isHighlighted ? '-mx-3 rounded-md bg-red-50/40 p-3 ring-1 ring-red-200' : ''
         }`}
       >
-        <div className="flex items-start">
-          <div
-            id={`q-label-${q.id}`}
-            className={`text-lg leading-snug font-semibold break-keep ${
-              isHighlighted ? 'text-red-700' : 'text-gray-900'
-            }`}
-          >
-            {titleText}
-            {q.required && (
-              <span className="ml-1 text-red-500" aria-label="필수 질문">
-                *
-              </span>
-            )}
+        {!q.hideTitle && (
+          <div className="flex items-start">
+            <div
+              id={`q-label-${q.id}`}
+              className={`text-lg leading-snug font-semibold break-keep ${
+                isHighlighted ? 'text-red-700' : 'text-gray-900'
+              }`}
+            >
+              {titleText}
+              {q.required && (
+                <span className="ml-1 text-red-500" aria-label="필수 질문">
+                  *
+                </span>
+              )}
+            </div>
           </div>
-        </div>
+        )}
         {!isEmptyHtml(q.description) && (
           <RichDescription
             html={descriptionHtml}

@@ -85,6 +85,7 @@ export async function getSurveyWithDetails(surveyId: string): Promise<SurveyType
       ...(g.parentGroupId != null ? { parentGroupId: g.parentGroupId } : {}),
       ...(g.color != null ? { color: g.color } : {}),
       ...(g.collapsed != null ? { collapsed: g.collapsed } : {}),
+      ...(g.hideName != null ? { hideName: g.hideName } : {}),
       ...(g.displayCondition != null ? { displayCondition: g.displayCondition as NonNullable<QuestionGroup['displayCondition']> } : {}),
     })),
     questions: questionList.map((q) => {
@@ -117,6 +118,7 @@ export async function getSurveyWithDetails(surveyId: string): Promise<SurveyType
         ...(q.tableValidationRules != null ? { tableValidationRules: q.tableValidationRules as NonNullable<QuestionType['tableValidationRules']> } : {}),
         ...(q.dynamicRowConfigs != null ? { dynamicRowConfigs: q.dynamicRowConfigs as NonNullable<QuestionType['dynamicRowConfigs']> } : {}),
         ...(q.hideColumnLabels != null ? { hideColumnLabels: q.hideColumnLabels } : {}),
+        ...(q.hideTitle != null ? { hideTitle: q.hideTitle } : {}),
         ...(q.displayCondition != null ? { displayCondition: q.displayCondition as NonNullable<QuestionType['displayCondition']> } : {}),
         ...(q.questionCode != null ? { questionCode: q.questionCode } : {}),
         ...(q.isCustomSpssVarName != null ? { isCustomSpssVarName: q.isCustomSpssVarName } : {}),

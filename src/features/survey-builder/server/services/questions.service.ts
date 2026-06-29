@@ -61,6 +61,7 @@ export async function createQuestion(data: CreateQuestionInput): Promise<Questio
     displayCondition: data.displayCondition as NewQuestion['displayCondition'],
     dynamicRowConfigs: data.dynamicRowConfigs as NewQuestion['dynamicRowConfigs'],
     hideColumnLabels: data.hideColumnLabels,
+    hideTitle: data.hideTitle,
     rankingConfig: data.rankingConfig as NewQuestion['rankingConfig'],
     choiceGroups: data.choiceGroups as NewQuestion['choiceGroups'],
     questionCode: data.questionCode,

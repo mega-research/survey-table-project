@@ -233,6 +233,20 @@ export function QuestionBasicTab({
           )}
         </div>
 
+        {/* 응답 페이지 질문 제목 표시 토글 (빌더에는 항상 표시) */}
+        <div className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2.5">
+          <div className="pr-3">
+            <Label>응답 페이지에 질문 제목 표시</Label>
+            <p className="mt-0.5 text-xs text-gray-500">
+              끄면 설문 응답 페이지에서 이 질문의 제목이 보이지 않습니다 (빌더에는 그대로 표시)
+            </p>
+          </div>
+          <Switch
+            checked={!formData.hideTitle}
+            onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, hideTitle: !checked }))}
+          />
+        </div>
+
         {/* SPSS 변수명 및 엑셀 라벨 */}
         {(question?.type !== 'notice' || formData.requiresAcknowledgment) && (
           <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">

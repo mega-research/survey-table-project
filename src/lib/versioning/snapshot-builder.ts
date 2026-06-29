@@ -61,6 +61,7 @@ interface SnapshotQuestion {
   tableValidationRules?: Question['tableValidationRules'] | undefined;
   dynamicRowConfigs?: Question['dynamicRowConfigs'] | undefined;
   hideColumnLabels?: boolean | undefined;
+  hideTitle?: boolean | undefined;
   displayCondition?: Question['displayCondition'] | undefined;
   questionCode?: string | undefined;
   defaultValueTemplate?: string | null | undefined;
@@ -77,6 +78,7 @@ interface SnapshotGroup {
   parentGroupId?: string | undefined;
   color?: string | undefined;
   collapsed?: boolean | undefined;
+  hideName?: boolean | undefined;
   displayCondition?: QuestionGroup['displayCondition'] | undefined;
 }
 
@@ -122,6 +124,7 @@ export function buildSurveySnapshot(survey: Survey): SurveySnapshot {
       tableValidationRules: q.tableValidationRules,
       dynamicRowConfigs: q.dynamicRowConfigs,
       hideColumnLabels: q.hideColumnLabels,
+      hideTitle: q.hideTitle,
       displayCondition: q.displayCondition,
       questionCode: q.questionCode,
       defaultValueTemplate: q.defaultValueTemplate,
@@ -137,6 +140,7 @@ export function buildSurveySnapshot(survey: Survey): SurveySnapshot {
       parentGroupId: g.parentGroupId,
       color: g.color,
       collapsed: g.collapsed,
+      hideName: g.hideName,
       displayCondition: g.displayCondition,
     })),
     settings: {

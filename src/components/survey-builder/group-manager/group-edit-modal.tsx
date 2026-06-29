@@ -16,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { Question, QuestionConditionGroup, QuestionGroup } from '@/types/survey';
 
@@ -32,6 +33,8 @@ interface GroupEditModalProps {
   setGroupDescription: (description: string) => void;
   parentGroupId: string | undefined;
   setParentGroupId: (id: string | undefined) => void;
+  hideName: boolean;
+  setHideName: (hide: boolean) => void;
   topLevelGroups: QuestionGroup[];
   allGroups: QuestionGroup[];
   allQuestions: Question[];
@@ -49,6 +52,8 @@ export function GroupEditModal({
   setGroupDescription,
   parentGroupId,
   setParentGroupId,
+  hideName,
+  setHideName,
   topLevelGroups,
   allGroups,
   allQuestions,
@@ -88,6 +93,18 @@ export function GroupEditModal({
                 }
               }}
             />
+          </div>
+          {/* 응답 페이지 그룹 이름 표시 토글 (빌더에는 항상 표시) */}
+          <div className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2.5">
+            <div className="pr-3">
+              <label className="block text-sm font-medium text-gray-700">
+                응답 페이지에 그룹 이름 표시
+              </label>
+              <p className="mt-0.5 text-xs text-gray-500">
+                끄면 설문 응답 페이지에서 이 그룹 이름이 보이지 않습니다 (빌더에는 그대로 표시)
+              </p>
+            </div>
+            <Switch checked={!hideName} onCheckedChange={(checked) => setHideName(!checked)} />
           </div>
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">그룹 설명 (선택)</label>
