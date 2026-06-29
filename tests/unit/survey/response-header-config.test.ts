@@ -10,6 +10,14 @@ import {
 } from '@/lib/survey/response-header-config';
 
 describe('response-header-config', () => {
+  it('통계법 기본 문구는 제품 스펙 문구를 사용한다', () => {
+    expect(DEFAULT_STATISTIC_NOTICE).toEqual({
+      title: '통계법 제33조(비밀의 보호)',
+      body: '통계의 작성 과정에서 알려진 사항으로서 개인이나 법인 또는 단체의 비밀에 속하는 사항은 보호되어야 한다.',
+      width: 'md',
+    });
+  });
+
   it('undefined 설정은 기본 응답 헤더 설정으로 정규화한다', () => {
     expect(normalizeResponseHeaderConfig(undefined)).toEqual(DEFAULT_RESPONSE_HEADER_CONFIG);
   });

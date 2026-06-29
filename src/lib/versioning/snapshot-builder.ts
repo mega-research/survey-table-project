@@ -4,7 +4,13 @@
  * 설문 데이터를 불변 스냅샷 구조로 변환하는 순수 함수
  */
 
-import type { Question, QuestionGroup, Survey, SurveyLookup } from '@/types/survey';
+import type {
+  Question,
+  QuestionGroup,
+  Survey,
+  SurveyLookup,
+  SurveyResponseHeaderConfig,
+} from '@/types/survey';
 import { stripTableRowsData } from '@/utils/table-cell-optimizer';
 
 export interface SurveySnapshot {
@@ -23,6 +29,7 @@ export interface SurveySnapshot {
     thankYouMessage: string;
     // 컨택 attrs invite token 강제 — 스냅샷에 freeze (schema-types.ts SurveyVersionSnapshot.settings 와 정렬)
     requireInviteToken?: boolean | undefined;
+    responseHeader?: SurveyResponseHeaderConfig | undefined;
   };
   // 외부 데이터 LUT 사본 — publish 시점 freeze. 응답 페이지가 분기 조건 우변 룩업을 평가할 때 사용.
   lookups: SurveyLookup[];
@@ -144,6 +151,7 @@ export function buildSurveySnapshot(survey: Survey): SurveySnapshot {
       maxResponses: survey.settings.maxResponses,
       thankYouMessage: survey.settings.thankYouMessage,
       requireInviteToken: survey.settings.requireInviteToken,
+      responseHeader: survey.settings.responseHeader,
     },
     lookups: survey.lookups ?? [],
   };

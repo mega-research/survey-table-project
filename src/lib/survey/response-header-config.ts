@@ -19,8 +19,8 @@ type OfficialBandArrangement = Extract<
 >['officialBand']['arrangement'];
 
 export const DEFAULT_STATISTIC_NOTICE = {
-  title: '통계법 제33조에 따라 응답 내용은 통계 작성 목적으로만 사용됩니다.',
-  body: '귀하의 응답은 비밀이 보장되며, 조사 결과는 통계적으로 처리되어 공개됩니다.',
+  title: '통계법 제33조(비밀의 보호)',
+  body: '통계의 작성 과정에서 알려진 사항으로서 개인이나 법인 또는 단체의 비밀에 속하는 사항은 보호되어야 한다.',
   width: 'md',
 } satisfies StatisticNoticeConfig;
 

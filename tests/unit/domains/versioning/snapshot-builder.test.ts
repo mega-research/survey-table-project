@@ -134,6 +134,31 @@ describe('buildSurveySnapshot', () => {
     expect(snapshot.settings.requireInviteToken).toBeUndefined();
   });
 
+  it('responseHeader 설정을 스냅샷 settings 에 보존', () => {
+    const surveyWithResponseHeader: Survey = {
+      ...mockSurvey,
+      settings: {
+        ...mockSurvey.settings,
+        responseHeader: {
+          style: 'logo-title',
+          titleSize: 'lg',
+          logo: {
+            imageUrl: 'https://example.com/logo.png',
+            size: 'md',
+          },
+          logoTitle: {
+            logoPosition: 'right',
+          },
+        },
+      },
+    };
+    const snapshot = buildSurveySnapshot(surveyWithResponseHeader);
+
+    expect(snapshot.settings.responseHeader).toEqual(
+      surveyWithResponseHeader.settings.responseHeader,
+    );
+  });
+
   it('endDate가 없으면 undefined', () => {
     const { endDate: _ed, ...settingsWithoutEndDate } = mockSurvey.settings;
     const surveyNoEndDate: Survey = {
