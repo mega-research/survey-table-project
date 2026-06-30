@@ -18,7 +18,6 @@ type ResponsesMap = Record<string, unknown>;
 export function TableStepView({
   step,
   isMobile,
-  titleHasMultipleLines,
   responses,
   questions,
   onResponse,
@@ -26,7 +25,6 @@ export function TableStepView({
 }: {
   step: Extract<RenderStep, { kind: 'table' }>;
   isMobile: boolean;
-  titleHasMultipleLines: boolean;
   responses: ResponsesMap;
   questions: Question[];
   onResponse: (questionId: string, value: unknown) => void;
@@ -50,12 +48,18 @@ export function TableStepView({
     !!step.rootGroupName || !!step.subgroupName || !q.hideTitle || !isEmptyHtml(q.description);
 
   return (
-    <>
-      {/* 모바일: 제목/설명을 카드 밖으로 분리 */}
+    <Card
+      key={q.id}
+      className={`animate-in fade-in duration-200 ${
+        isHighlighted ? 'border-red-300 ring-2 ring-red-100' : ''
+      }`}
+      data-question-id={q.id}
+    >
+      {/* 모바일: 제목/설명을 카드 안 상단에 표시 */}
       {isMobile && hasHeaderContent && (
-        <div className="mb-4 space-y-2.5" data-question-id={q.id}>
+        <CardHeader className="pb-4">
           {(step.rootGroupName || step.subgroupName) && (
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="mb-6 flex flex-wrap items-center gap-2">
               {step.rootGroupName && (
                 <RootGroupNameBadge name={step.rootGroupName} design={step.rootGroupNameDesign} />
               )}
@@ -67,14 +71,10 @@ export function TableStepView({
             </div>
           )}
           {!q.hideTitle && (
-            <h2
-              className={`${
-                titleHasMultipleLines ? 'text-lg' : 'text-xl'
-              } leading-[1.6] font-bold break-keep text-gray-900`}
-            >
+            <h2 className="text-lg leading-snug font-semibold break-keep text-gray-900">
               {titleText}
               {q.required && (
-                <span className="ml-1 align-top text-sm text-red-500" aria-label="필수 질문">
+                <span className="ml-1 text-red-500" aria-label="필수 질문">
                   *
                 </span>
               )}
@@ -83,68 +83,60 @@ export function TableStepView({
           {!isEmptyHtml(q.description) && (
             <RichDescription
               html={descriptionHtml}
-              size="base"
-              className="max-h-[40vh] overflow-y-auto leading-relaxed text-base text-gray-500 [&_p]:min-h-[1.5em] [&_p]:leading-relaxed [&_table]:my-2 [&_table_td]:px-3 [&_table_td]:py-1.5 [&_table_th]:px-3 [&_table_th]:py-1.5"
+              size="sm"
+              className="mt-2 max-h-[40vh] overflow-y-auto text-sm text-gray-500 [&_p]:min-h-[1.3em] [&_table]:my-1.5 [&_table_td]:px-2.5 [&_table_td]:py-1 [&_table_th]:px-2.5 [&_table_th]:py-1"
             />
           )}
-        </div>
+        </CardHeader>
       )}
 
-      <Card
-        key={q.id}
-        className={`animate-in fade-in duration-200 ${
-          isHighlighted ? 'border-red-300 ring-2 ring-red-100' : ''
-        }`}
-        data-question-id={q.id}
-      >
-        {!isMobile && hasHeaderContent && (
-          <CardHeader className="pb-4">
-            {(step.rootGroupName || step.subgroupName) && (
-              <div className="mb-2 flex flex-wrap items-center gap-2">
-                {step.rootGroupName && (
-                  <RootGroupNameBadge name={step.rootGroupName} design={step.rootGroupNameDesign} />
-                )}
-                {step.subgroupName && step.subgroupName !== step.rootGroupName && (
-                  <span className="inline-block rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
-                    {step.subgroupName}
-                  </span>
-                )}
-              </div>
-            )}
-            <div className="min-w-0">
-              {!q.hideTitle && (
-                <CardTitle className="text-2xl leading-relaxed font-semibold break-keep text-gray-900">
-                  {titleText}
-                  {q.required && (
-                    <span className="ml-1.5 align-top text-sm text-red-500" aria-label="필수 질문">
-                      *
-                    </span>
-                  )}
-                </CardTitle>
+      {!isMobile && hasHeaderContent && (
+        <CardHeader className="pb-4">
+          {(step.rootGroupName || step.subgroupName) && (
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              {step.rootGroupName && (
+                <RootGroupNameBadge name={step.rootGroupName} design={step.rootGroupNameDesign} />
               )}
-              {!isEmptyHtml(q.description) && (
-                <RichDescription
-                  html={descriptionHtml}
-                  size="base"
-                  className="mt-3 max-h-[60vh] overflow-y-auto text-base text-gray-600 [&_p]:min-h-[1.6em] [&_table]:my-2 [&_table_td]:px-4 [&_table_td]:py-2 [&_table_th]:px-4 [&_table_th]:py-2"
-                />
+              {step.subgroupName && step.subgroupName !== step.rootGroupName && (
+                <span className="inline-block rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
+                  {step.subgroupName}
+                </span>
               )}
             </div>
-          </CardHeader>
-        )}
-
-        <CardContent className={isMobile ? 'p-4' : hasHeaderContent ? '' : 'pt-6'}>
-          <div className="space-y-4">
-            <QuestionInput
-              question={q}
-              value={responses[q.id]}
-              onChange={onChange}
-              allResponses={responses as Record<string, unknown>}
-              allQuestions={questions}
-            />
+          )}
+          <div className="min-w-0">
+            {!q.hideTitle && (
+              <CardTitle className="text-2xl leading-relaxed font-semibold break-keep text-gray-900">
+                {titleText}
+                {q.required && (
+                  <span className="ml-1.5 align-top text-sm text-red-500" aria-label="필수 질문">
+                    *
+                  </span>
+                )}
+              </CardTitle>
+            )}
+            {!isEmptyHtml(q.description) && (
+              <RichDescription
+                html={descriptionHtml}
+                size="base"
+                className="mt-3 max-h-[60vh] overflow-y-auto text-base text-gray-600 [&_p]:min-h-[1.6em] [&_table]:my-2 [&_table_td]:px-4 [&_table_td]:py-2 [&_table_th]:px-4 [&_table_th]:py-2"
+              />
+            )}
           </div>
-        </CardContent>
-      </Card>
-    </>
+        </CardHeader>
+      )}
+
+      <CardContent className={`md:px-8 ${hasHeaderContent ? '' : 'pt-6'}`}>
+        <div className="space-y-4">
+          <QuestionInput
+            question={q}
+            value={responses[q.id]}
+            onChange={onChange}
+            allResponses={responses as Record<string, unknown>}
+            allQuestions={questions}
+          />
+        </div>
+      </CardContent>
+    </Card>
   );
 }

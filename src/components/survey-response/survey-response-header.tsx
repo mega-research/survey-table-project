@@ -19,6 +19,11 @@ interface SurveyResponseHeaderProps {
   description?: string | null | undefined;
   responseHeader?: SurveyResponseHeaderConfig | null | undefined;
   sideMeta?: ReactNode;
+  /**
+   * 로고/통계법 밴드 노출 여부. 인트로(첫 스텝)에서만 true 로 주고
+   * 이후 질문 페이지에서는 false 로 내려 제목만 컴팩트하게 남긴다.
+   */
+  showBranding?: boolean;
 }
 
 export function SurveyResponseHeader({
@@ -26,8 +31,15 @@ export function SurveyResponseHeader({
   description,
   responseHeader,
   sideMeta,
+  showBranding = true,
 }: SurveyResponseHeaderProps) {
   const config = normalizeResponseHeaderConfig(responseHeader);
+
+  // 브랜딩(로고+통계법)을 숨길 때는 스타일과 무관하게 제목만 컴팩트하게 렌더한다.
+  // 설명문은 인트로에서만 노출하므로 여기서는 생략한다.
+  if (!showBranding) {
+    return <TitleBlock title={title} titleSize="md" align={config.titleAlign ?? 'center'} />;
+  }
 
   if (config.style === 'logo-title') {
     const logo = <HeaderLogo config={config.logo} />;
@@ -75,7 +87,8 @@ export function SurveyResponseHeader({
           data-testid="official-band-row"
           data-logo-align={config.officialBand?.logoAlign ?? 'top'}
           className={cn(
-            'flex flex-col gap-4 md:flex-row md:justify-between',
+            // 모바일: 세로 스택 + 로고 중앙 정렬(통계법 박스는 w-full 이라 풀폭 유지)
+            'flex flex-col items-center gap-4 md:flex-row md:justify-between',
             getLogoAlignClass(config.officialBand?.logoAlign ?? 'top'),
           )}
         >

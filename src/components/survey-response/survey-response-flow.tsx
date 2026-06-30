@@ -19,13 +19,11 @@ import {
 import { GroupStepView } from '@/components/survey-response/step-views/group-step-view';
 import { TableStepView } from '@/components/survey-response/step-views/table-step-view';
 import { ContactAttrsProvider } from '@/lib/survey/contact-attrs-context';
-import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { Button } from '@/components/ui/button';
 
 import { useClientSignals } from '@/hooks/use-client-signals';
 import { HoneypotField } from '@/components/survey-response/honeypot-field';
 import { useKeyboardOpen } from '@/hooks/use-keyboard-open';
-import { useMultiLineDetection } from '@/hooks/use-line-count-detection';
 import { useMediaQuery } from '@/hooks/use-media-query';
 import {
   buildRenderSteps,
@@ -301,18 +299,6 @@ export function SurveyResponseFlow({
 
   // 모바일 화면 감지 (matchMedia — resize 루프 방지)
   const isMobile = useMediaQuery('(max-width: 767px)');
-
-  // 테이블 step 단일 질문의 타이틀 줄 수 감지 (group step에선 사용 안 함)
-  const currentTableQuestion =
-    currentStep?.kind === 'table' ? currentStep.question : null;
-  const currentTableTitleResolved = useMemo(
-    () => substituteTokens(currentTableQuestion?.title ?? '', contactAttrs),
-    [currentTableQuestion?.title, contactAttrs],
-  );
-  const titleHasMultipleLines = useMultiLineDetection(
-    isMobile,
-    currentTableTitleResolved,
-  );
 
   // 진행도 — step 기반
   const currentVisibleStepNumber = useMemo(() => {
@@ -602,6 +588,7 @@ export function SurveyResponseFlow({
             title={loadedSurvey.title}
             description={loadedSurvey.description}
             responseHeader={loadedSurvey.settings.responseHeader}
+            showBranding={currentVisibleStepNumber <= 1}
           />
         </div>
       </div>
@@ -659,7 +646,6 @@ export function SurveyResponseFlow({
           <TableStepView
             step={currentStep}
             isMobile={isMobile}
-            titleHasMultipleLines={titleHasMultipleLines}
             responses={responses}
             questions={questions}
             onResponse={handleResponse}

@@ -844,5 +844,25 @@ a.notice-file-attachment:hover {
     overflow-wrap: break-word;
     padding: 0.375rem 0.5rem !important;
   }
+  /* 가로 한 줄(행 1개)짜리 표는 좁은 화면에서 열을 세로로 쌓아 가독성 확보.
+   * :not(:has(tr + tr)) = 형제 tr 이 둘 이상이 아닌(= 행 하나뿐인) 표만 대상.
+   * TipTap 표는 모든 tr 이 tbody 형제라 정확히 단일 row 표만 잡힌다. */
+  .tiptap-mobile-tame table:not(:has(tr + tr)),
+  .tiptap-mobile-tame table:not(:has(tr + tr)) tbody,
+  .tiptap-mobile-tame table:not(:has(tr + tr)) tr {
+    display: block;
+    width: 100% !important;
+  }
+  .tiptap-mobile-tame table:not(:has(tr + tr)) th,
+  .tiptap-mobile-tame table:not(:has(tr + tr)) td {
+    display: block;
+    width: 100% !important;
+  }
+  /* display:block 으로 border-collapse 가 풀려 생기는 셀 간 이중 테두리 제거 */
+  .tiptap-mobile-tame table:not(:has(tr + tr)) th + td,
+  .tiptap-mobile-tame table:not(:has(tr + tr)) td + td,
+  .tiptap-mobile-tame table:not(:has(tr + tr)) td + th {
+    border-top: 0 !important;
+  }
 }
 

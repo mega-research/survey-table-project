@@ -174,13 +174,14 @@ export function getLogoSizeClass(size: ResponseHeaderLogoSize): string {
 }
 
 export function getTitleSizeClass(size: ResponseHeaderTitleSize): string {
+  // 모바일은 한 단계 작게 잡고 sm/md 부터 키운다 — 긴 제목이 좁은 화면에서 과하게 줄바꿈되는 것을 줄인다.
   switch (size) {
     case 'lg':
-      return 'text-3xl font-semibold';
-    case 'md':
-      return 'text-2xl font-semibold';
-    case 'auto':
       return 'text-2xl sm:text-3xl font-semibold';
+    case 'md':
+      return 'text-xl sm:text-2xl font-semibold';
+    case 'auto':
+      return 'text-xl sm:text-2xl md:text-3xl font-semibold';
   }
 }
 
@@ -207,13 +208,14 @@ export function getLogoAlignClass(align: ResponseHeaderLogoAlign): string {
 }
 
 export function getNoticeWidthClass(width: ResponseHeaderNoticeWidth): string {
+  // 모바일에서는 풀폭으로 늘려 통계 표지처럼 보이게 하고, md 이상에서만 폭 상한을 적용한다.
   switch (width) {
     case 'sm':
-      return 'max-w-[200px]';
+      return 'md:max-w-[200px]';
     case 'lg':
-      return 'max-w-[360px]';
+      return 'md:max-w-[360px]';
     case 'md':
-      return 'max-w-[280px]';
+      return 'md:max-w-[280px]';
   }
 }
 
