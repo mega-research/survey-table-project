@@ -1,6 +1,6 @@
-import type { ContactColumnScheme, SurveyResponseHeaderConfig } from '@/db/schema/schema-types';
+import type { ContactColumnScheme, GroupNameDesign, SurveyResponseHeaderConfig } from '@/db/schema/schema-types';
 
-export type { SurveyResponseHeaderConfig };
+export type { GroupNameDesign, SurveyResponseHeaderConfig };
 
 export type QuestionType =
   | 'text'
@@ -451,6 +451,7 @@ export interface QuestionGroup {
   color?: string; // 그룹 색상 (UI용)
   collapsed?: boolean; // 접힘 상태 (UI용)
   hideName?: boolean; // 응답 페이지에서 그룹 이름 숨김 여부 (기본 false = 표시)
+  nameDesign?: GroupNameDesign; // 루트 그룹 이름 배지 디자인 (미설정 시 기본 배지)
   displayCondition?: QuestionConditionGroup; // 그룹 표시 조건
 }
 

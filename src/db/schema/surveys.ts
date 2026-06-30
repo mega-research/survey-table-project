@@ -7,6 +7,7 @@ import type {
   ContactColumnScheme,
   ContactResultCode,
   DynamicRowGroupConfig,
+  GroupNameDesign,
   HeaderCell,
   PageVisit,
   ProgressColumnScheme,
@@ -85,6 +86,7 @@ export const questionGroups = pgTable('question_groups', {
   color: text('color'),
   collapsed: boolean('collapsed').default(false),
   hideName: boolean('hide_name').default(false), // 응답 페이지에서 그룹 이름(배지/소제목) 숨김 여부
+  nameDesign: jsonb('name_design').$type<GroupNameDesign>(), // 루트 그룹 이름 배지 디자인 (미설정 시 기본 배지)
   displayCondition: jsonb('display_condition').$type<QuestionConditionGroup>(),
 
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),

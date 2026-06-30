@@ -34,6 +34,16 @@ export interface SurveyVersionSnapshot {
   };
 }
 
+/**
+ * 루트 질문 그룹 이름 배지 디자인 설정 (응답 페이지). 미설정/누락 시 기본 라이트 블루 배지로 폴백.
+ * 복합 디자인 설정은 단일 JSONB 로 묶는다(responseHeader 선례).
+ */
+export interface GroupNameDesign {
+  fullWidth?: boolean; // true 면 카드 콘텐츠 영역 전체 너비(w-full), 기본 false = 컨텐츠 크기(w-fit)
+  bgColor?: string; // 배경색 hex (미설정 시 bg-blue-50)
+  textColor?: string; // 폰트색 hex (미설정 시 text-blue-700)
+}
+
 export type ResponseHeaderStyle = 'plain' | 'logo-title' | 'official-band';
 export type ResponseHeaderLogoSize = 'sm' | 'md' | 'lg';
 export type ResponseHeaderTitleSize = 'auto' | 'md' | 'lg';

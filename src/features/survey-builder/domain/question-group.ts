@@ -1,7 +1,7 @@
 import * as z from 'zod';
 
 import type { NewQuestionGroup, QuestionGroup } from '@/db/schema';
-import type { QuestionConditionGroup } from '@/types/survey';
+import type { GroupNameDesign, QuestionConditionGroup } from '@/types/survey';
 
 /**
  * 질문 그룹 CRUD 도메인 스키마.
@@ -38,6 +38,7 @@ export const UpdateQuestionGroupData = z.object({
   color: z.string().optional(),
   collapsed: z.boolean().optional(),
   hideName: z.boolean().optional(),
+  nameDesign: z.custom<GroupNameDesign>().nullable().optional(),
   displayCondition: z.custom<QuestionConditionGroup>().optional(),
 });
 export type UpdateQuestionGroupData = z.infer<typeof UpdateQuestionGroupData>;
