@@ -18,9 +18,10 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import { Question, QuestionConditionGroup, QuestionGroup } from '@/types/survey';
+import { GroupNameDesign, Question, QuestionConditionGroup, QuestionGroup } from '@/types/survey';
 
 import { getAvailableParentGroups } from './group-helpers';
+import { GroupNameDesignSettings } from './group-name-design-settings';
 
 interface GroupEditModalProps {
   isOpen: boolean;
@@ -35,6 +36,8 @@ interface GroupEditModalProps {
   setParentGroupId: (id: string | undefined) => void;
   hideName: boolean;
   setHideName: (hide: boolean) => void;
+  nameDesign: GroupNameDesign | undefined;
+  setNameDesign: (value: GroupNameDesign | undefined) => void;
   topLevelGroups: QuestionGroup[];
   allGroups: QuestionGroup[];
   allQuestions: Question[];
@@ -54,6 +57,8 @@ export function GroupEditModal({
   setParentGroupId,
   hideName,
   setHideName,
+  nameDesign,
+  setNameDesign,
   topLevelGroups,
   allGroups,
   allQuestions,
@@ -106,6 +111,11 @@ export function GroupEditModal({
             </div>
             <Switch checked={!hideName} onCheckedChange={(checked) => setHideName(!checked)} />
           </div>
+          <GroupNameDesignSettings
+            value={nameDesign}
+            onChange={setNameDesign}
+            previewName={groupName}
+          />
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">그룹 설명 (선택)</label>
             <Textarea

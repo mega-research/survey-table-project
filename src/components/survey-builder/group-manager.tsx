@@ -29,7 +29,7 @@ import { client } from '@/shared/lib/rpc';
 import { useEnsureSurveyInDb } from '@/hooks/use-ensure-survey-in-db';
 import { isUUID } from '@/lib/survey-url';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
-import { QuestionConditionGroup, QuestionGroup } from '@/types/survey';
+import { GroupNameDesign, QuestionConditionGroup, QuestionGroup } from '@/types/survey';
 
 import { GroupCreateModal } from './group-manager/group-create-modal';
 import { GroupEditModal } from './group-manager/group-edit-modal';
@@ -41,17 +41,25 @@ interface GroupManagerProps {
 }
 
 export function GroupManager({ className }: GroupManagerProps) {
-  const { addGroup, updateGroup, clearGroupParent, deleteGroup, reorderGroups, toggleGroupCollapse } =
-    useSurveyBuilderStore(
-      useShallow((s) => ({
-        addGroup: s.addGroup,
-        updateGroup: s.updateGroup,
-        clearGroupParent: s.clearGroupParent,
-        deleteGroup: s.deleteGroup,
-        reorderGroups: s.reorderGroups,
-        toggleGroupCollapse: s.toggleGroupCollapse,
-      })),
-    );
+  const {
+    addGroup,
+    updateGroup,
+    clearGroupParent,
+    clearGroupNameDesign,
+    deleteGroup,
+    reorderGroups,
+    toggleGroupCollapse,
+  } = useSurveyBuilderStore(
+    useShallow((s) => ({
+      addGroup: s.addGroup,
+      updateGroup: s.updateGroup,
+      clearGroupParent: s.clearGroupParent,
+      clearGroupNameDesign: s.clearGroupNameDesign,
+      deleteGroup: s.deleteGroup,
+      reorderGroups: s.reorderGroups,
+      toggleGroupCollapse: s.toggleGroupCollapse,
+    })),
+  );
   const groups = useSurveyBuilderStore(useShallow((s) => s.currentSurvey.groups));
   const questions = useSurveyBuilderStore(useShallow((s) => s.currentSurvey.questions));
   const surveyId = useSurveyBuilderStore((s) => s.currentSurvey.id);
@@ -64,6 +72,7 @@ export function GroupManager({ className }: GroupManagerProps) {
   const [parentGroupIdForNew, setParentGroupIdForNew] = useState<string | undefined>(undefined);
   const [parentGroupIdForEdit, setParentGroupIdForEdit] = useState<string | undefined>(undefined);
   const [hideNameForEdit, setHideNameForEdit] = useState(false);
+  const [nameDesignForEdit, setNameDesignForEdit] = useState<GroupNameDesign | undefined>(undefined);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [, setActiveId] = useState<string | null>(null);
   const [, setOverId] = useState<string | null>(null);
@@ -282,6 +291,7 @@ export function GroupManager({ className }: GroupManagerProps) {
     setGroupDescription(latestGroup.description || '');
     setParentGroupIdForEdit(latestGroup.parentGroupId);
     setHideNameForEdit(latestGroup.hideName ?? false);
+    setNameDesignForEdit(latestGroup.nameDesign);
     setIsEditModalOpen(true);
   };
 
@@ -381,6 +391,7 @@ export function GroupManager({ className }: GroupManagerProps) {
                 parentGroupId: newParentGroupId ?? null,
                 order: newOrder,
                 hideName: hideNameForEdit,
+                nameDesign: nameDesignForEdit ?? null,
                 ...(finalDisplayCondition !== undefined ? { displayCondition: finalDisplayCondition } : {}),
               },
             });
@@ -412,6 +423,7 @@ export function GroupManager({ className }: GroupManagerProps) {
                 name: groupName.trim(),
                 ...(groupDescription.trim() ? { description: groupDescription.trim() } : {}),
                 hideName: hideNameForEdit,
+                nameDesign: nameDesignForEdit ?? null,
                 ...(finalDisplayCondition !== undefined ? { displayCondition: finalDisplayCondition } : {}),
               },
             });
@@ -421,11 +433,20 @@ export function GroupManager({ className }: GroupManagerProps) {
         }
       }
 
+      // 이름 디자인 로컬 반영: 값이 있으면 set, 없으면 기본값으로 초기화(키 삭제).
+      // Object.assign 기반 updateGroup 으로는 undefined 전달/키 삭제가 불가하므로 분기한다.
+      if (nameDesignForEdit) {
+        updateGroup(editingGroup.id, { nameDesign: nameDesignForEdit });
+      } else {
+        clearGroupNameDesign(editingGroup.id);
+      }
+
       setEditingGroup(null);
       setGroupName('');
       setGroupDescription('');
       setParentGroupIdForEdit(undefined);
       setHideNameForEdit(false);
+      setNameDesignForEdit(undefined);
       setIsEditModalOpen(false);
       // 그룹 수정은 이미 updateQuestionGroup API로 저장됨
     }
@@ -626,6 +647,7 @@ export function GroupManager({ className }: GroupManagerProps) {
           setGroupDescription('');
           setParentGroupIdForEdit(undefined);
           setHideNameForEdit(false);
+          setNameDesignForEdit(undefined);
         }}
         onSubmit={handleUpdateGroup}
         editingGroup={editingGroup}
@@ -637,6 +659,8 @@ export function GroupManager({ className }: GroupManagerProps) {
         setParentGroupId={setParentGroupIdForEdit}
         hideName={hideNameForEdit}
         setHideName={setHideNameForEdit}
+        nameDesign={nameDesignForEdit}
+        setNameDesign={setNameDesignForEdit}
         topLevelGroups={topLevelGroups}
         allGroups={groupsOrEmpty}
         allQuestions={questions}

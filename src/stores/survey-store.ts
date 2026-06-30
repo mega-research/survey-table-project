@@ -96,6 +96,7 @@ export interface SurveyBuilderState {
   addGroup: (name: string, description?: string, parentGroupId?: string) => void;
   updateGroup: (groupId: string, updates: Partial<QuestionGroup>) => void;
   clearGroupParent: (groupId: string) => void;
+  clearGroupNameDesign: (groupId: string) => void;
   deleteGroup: (groupId: string) => void;
   reorderGroups: (groupIds: string[]) => void;
   reorderGroupChildren: (parentGroupId: string, items: Array<{ kind: 'question' | 'subgroup'; id: string }>) => void;
@@ -330,6 +331,21 @@ export const useSurveyBuilderStore = create<SurveyBuilderState>()(
           const group = state.currentSurvey.groups?.find((g) => g.id === groupId);
           if (group) {
             delete group.parentGroupId;
+            state.currentSurvey.updatedAt = new Date();
+            state.isDirty = true;
+            state.isMetadataDirty = true;
+            if (state.currentSurvey.status === 'published') {
+              state.isModifiedSincePublish = true;
+            }
+          }
+        }),
+
+      // 그룹 이름 디자인을 기본값으로 초기화한다 (clearGroupParent 와 동일 이유 - 키 삭제/undefined 전달 불가).
+      clearGroupNameDesign: (groupId: string) =>
+        set((state) => {
+          const group = state.currentSurvey.groups?.find((g) => g.id === groupId);
+          if (group) {
+            delete group.nameDesign;
             state.currentSurvey.updatedAt = new Date();
             state.isDirty = true;
             state.isMetadataDirty = true;
