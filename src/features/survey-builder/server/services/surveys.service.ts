@@ -214,6 +214,7 @@ export async function duplicateSurvey(
         parentGroupId: group.parentGroupId ? groupIdMap.get(group.parentGroupId) : null,
         color: group.color,
         collapsed: group.collapsed,
+        nameDesign: group.nameDesign as NewQuestionGroup['nameDesign'],
         displayCondition: group.displayCondition as NewQuestionGroup['displayCondition'],
       };
     });

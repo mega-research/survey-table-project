@@ -153,6 +153,7 @@ export async function saveSurveyDiff(
           color: group.color,
           collapsed: group.collapsed,
           hideName: group.hideName,
+          nameDesign: group.nameDesign as NewQuestionGroup['nameDesign'],
           displayCondition: group.displayCondition as NewQuestionGroup['displayCondition'],
           updatedAt: new Date(),
         }));
@@ -170,6 +171,7 @@ export async function saveSurveyDiff(
               color: sql`excluded.color`,
               collapsed: sql`excluded.collapsed`,
               hideName: sql`excluded.hide_name`,
+              nameDesign: sql`excluded.name_design`,
               displayCondition: sql`excluded.display_condition`,
               updatedAt: sql`excluded.updated_at`,
             },
@@ -469,6 +471,7 @@ export async function saveSurveyWithDetails(
         color: group.color,
         collapsed: group.collapsed,
         hideName: group.hideName,
+        nameDesign: group.nameDesign as NewQuestionGroup['nameDesign'],
         displayCondition: group.displayCondition as NewQuestionGroup['displayCondition'],
         updatedAt: new Date(),
       }));
@@ -486,6 +489,7 @@ export async function saveSurveyWithDetails(
             color: sql`excluded.color`,
             collapsed: sql`excluded.collapsed`,
             hideName: sql`excluded.hide_name`,
+            nameDesign: sql`excluded.name_design`,
             displayCondition: sql`excluded.display_condition`,
             updatedAt: sql`excluded.updated_at`,
           },
