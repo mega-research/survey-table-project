@@ -40,6 +40,7 @@ export const PERSISTED_QUESTION_FIELDS = [
   'dynamicRowConfigs',
   'hideColumnLabels',
   'hideTitle',
+  'pageBreakBefore',
   'rankingConfig',
   'choiceGroups',
   'displayCondition',

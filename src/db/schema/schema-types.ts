@@ -186,6 +186,7 @@ export interface QuestionData {
   tableValidationRules?: TableValidationRule[];
   hideColumnLabels?: boolean;
   hideTitle?: boolean;
+  pageBreakBefore?: boolean;
   displayCondition?: QuestionConditionGroup;
   rankingConfig?: RankingConfig;
   defaultValueTemplate?: string | null;

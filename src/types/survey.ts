@@ -504,6 +504,8 @@ export interface Question {
   hideColumnLabels?: boolean;
   // 응답 페이지에서 질문 제목 숨기기 (기본 false = 표시)
   hideTitle?: boolean;
+  // 응답 페이지 수동 페이지 구분점 — 이 질문 앞에서 새 페이지를 시작한다
+  pageBreakBefore?: boolean;
   // 질문 표시 조건 (이 질문을 표시하기 위한 조건)
   displayCondition?: QuestionConditionGroup;
   // SPSS .sav 내보내기 오버라이드 (없으면 질문 타입 기반 자동 판단)

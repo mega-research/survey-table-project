@@ -28,6 +28,7 @@
     "0041_add_survey_response_header",
     "0042_add_question_group_hide_name",
     "0043_add_question_hide_title",
-    "0044_add_question_group_name_design"
+    "0044_add_question_group_name_design",
+    "0045_add_question_page_break_before"
   ]
 }

@@ -62,6 +62,7 @@ interface SnapshotQuestion {
   dynamicRowConfigs?: Question['dynamicRowConfigs'] | undefined;
   hideColumnLabels?: boolean | undefined;
   hideTitle?: boolean | undefined;
+  pageBreakBefore?: boolean | undefined;
   displayCondition?: Question['displayCondition'] | undefined;
   questionCode?: string | undefined;
   defaultValueTemplate?: string | null | undefined;
@@ -126,6 +127,7 @@ export function buildSurveySnapshot(survey: Survey): SurveySnapshot {
       dynamicRowConfigs: q.dynamicRowConfigs,
       hideColumnLabels: q.hideColumnLabels,
       hideTitle: q.hideTitle,
+      pageBreakBefore: q.pageBreakBefore,
       displayCondition: q.displayCondition,
       questionCode: q.questionCode,
       defaultValueTemplate: q.defaultValueTemplate,

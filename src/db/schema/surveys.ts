@@ -167,6 +167,9 @@ export const questions = pgTable('questions', {
   // 응답 페이지에서 질문 제목 숨기기 (기본 false = 표시)
   hideTitle: boolean('hide_title').default(false),
 
+  // 응답 페이지 수동 페이지 구분점 — true면 이 질문 앞에서 새 페이지 시작
+  pageBreakBefore: boolean('page_break_before').default(false),
+
   // 검증 규칙 및 조건부 표시
   tableValidationRules: jsonb('table_validation_rules').$type<TableValidationRule[]>(),
   dynamicRowConfigs: jsonb('dynamic_row_config').$type<DynamicRowGroupConfig[]>(),
