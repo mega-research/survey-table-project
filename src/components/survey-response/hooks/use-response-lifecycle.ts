@@ -4,7 +4,7 @@ import type { Dispatch, RefObject, SetStateAction } from 'react';
 import { toast } from 'sonner';
 
 import { client } from '@/shared/lib/rpc';
-import { stepIdOf, type RenderStep } from '@/lib/group-ordering';
+import { findStepIndexOfQuestion, stepIdOf, type RenderStep } from '@/lib/group-ordering';
 import type { ClientSignals } from '@/lib/duplicate-detection/types';
 import type { Question, QuestionGroup, Survey } from '@/types/survey';
 import type { BranchEvalCtx } from '@/utils/branch-logic';
@@ -256,10 +256,7 @@ export function useResponseLifecycle({
         const firstRequired = unansweredRequired[0];
         if (!firstRequired) return;
         const firstId = firstRequired.id;
-        const targetIdx = steps.findIndex((s) => {
-          if (s.kind === 'table') return s.question.id === firstId;
-          return s.items.some((it) => it.question.id === firstId);
-        });
+        const targetIdx = findStepIndexOfQuestion(steps, firstId);
         if (targetIdx !== -1 && targetIdx !== currentStepIndex) {
           setCurrentStepIndex(targetIdx);
           window.scrollTo({ top: 0, behavior: 'smooth' });

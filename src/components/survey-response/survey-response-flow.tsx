@@ -16,8 +16,7 @@ import {
   SurveyErrorScreen,
   SurveyLoadingScreen,
 } from '@/components/survey-response/survey-response-screens';
-import { GroupStepView } from '@/components/survey-response/step-views/group-step-view';
-import { TableStepView } from '@/components/survey-response/step-views/table-step-view';
+import { PageStepView } from '@/components/survey-response/step-views/page-step-view';
 import { ContactAttrsProvider } from '@/lib/survey/contact-attrs-context';
 import { Button } from '@/components/ui/button';
 
@@ -77,7 +76,7 @@ export interface SurveyResponseFlowProps {
   };
 }
 
-// step 내에서 표시 가능한 질문만 추린 뒤 step-like 객체로 반환
+// step 내에서 표시 가능한 질문만 추린다.
 function getDisplayableItemsOfStep(
   step: RenderStep,
   responses: ResponsesMap,
@@ -85,11 +84,6 @@ function getDisplayableItemsOfStep(
   allGroups: QuestionGroup[],
   evalCtx?: BranchEvalCtx,
 ): Question[] {
-  if (step.kind === 'table') {
-    return shouldDisplayQuestion(step.question, responses, allQuestions, allGroups, evalCtx)
-      ? [step.question]
-      : [];
-  }
   return step.items
     .filter((i) => shouldDisplayQuestion(i.question, responses, allQuestions, allGroups, evalCtx))
     .map((i) => i.question);
@@ -570,8 +564,8 @@ export function SurveyResponseFlow({
     );
   }
 
-  const isTableStep = currentStep.kind === 'table';
-  const containerMaxWidth = isTableStep ? 'max-w-7xl' : 'max-w-4xl';
+  const pageHasTable = currentStep.items.some((i) => i.question.type === 'table');
+  const containerMaxWidth = pageHasTable ? 'max-w-7xl' : 'max-w-4xl';
   const showRequiredHighlight = highlightQuestionIds.size > 0;
   const submitLabel = isPreview ? '확인 완료' : '제출';
   const submittingLabel = isPreview ? '확인 중...' : '제출 중...';
@@ -642,26 +636,15 @@ export function SurveyResponseFlow({
             <div>초대 링크가 유효하지 않아 익명 응답으로 진행됩니다.</div>
           </div>
         )}
-        {currentStep.kind === 'table' ? (
-          <TableStepView
-            step={currentStep}
-            isMobile={isMobile}
-            responses={responses}
-            questions={questions}
-            onResponse={handleResponse}
-            highlightQuestionIds={highlightQuestionIds}
-          />
-        ) : (
-          <GroupStepView
-            step={currentStep}
-            responses={responses}
-            questions={questions}
-            groups={groups}
-            evalCtx={evalCtx}
-            onResponse={handleResponse}
-            highlightQuestionIds={highlightQuestionIds}
-          />
-        )}
+        <PageStepView
+          step={currentStep}
+          responses={responses}
+          questions={questions}
+          groups={groups}
+          evalCtx={evalCtx}
+          onResponse={handleResponse}
+          highlightQuestionIds={highlightQuestionIds}
+        />
 
         {/* 데스크톱 네비게이션 */}
         <div className="mt-8 hidden items-center justify-between md:flex">
