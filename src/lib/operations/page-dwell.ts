@@ -13,12 +13,8 @@
  *
  * 정책 (plan §5, §10):
  *   - **stepId 컨벤션** (응답 페이지 `stepIdOf`와 일치):
- *     - table step: `'table:' + question.id`
- *     - group step: `'group:' + (rootGroupId ?? 'root')`
- *     ungrouped 영역(들)은 모두 'group:root' 하나로 합쳐진다.
- *   - **캐노니컬 순서**: snapshot의 최상위 그룹을 order 순으로 + ungrouped 마지막,
- *     테이블 질문은 단독 step으로 분리. `buildRenderSteps`와 동일한 알고리즘이지만
- *     `Question[]` 타입 변환 비용을 피하기 위해 본 파일 안에서 최소 형태로 재구현한다.
+ *     - 신모델: `'page:' + 페이지 첫 질문 id`. 구 'group:'/'table:' stepId는 미상 처리.
+ *   - **캐노니컬 순서**: `buildRenderSteps`/`stepIdOf` 위임. 각 RenderStep(한 페이지)이 CanonicalStep 1개.
  *   - **체류시간 산출**: 각 PageVisit의 `(leftAt - enteredAt) / 1000`.
  *     - leftAt 미정의 / leftAt ≤ enteredAt → skip.
  *     - 비유한 값은 사전 필터.
@@ -31,25 +27,24 @@
 
 import type {
   PageVisit,
-  QuestionData,
-  QuestionGroupData,
   SurveyVersionSnapshot,
 } from '@/db/schema/schema-types';
+import { buildRenderSteps, stepIdOf } from '@/lib/group-ordering';
+import type { Question, QuestionGroup } from '@/types/survey';
 
 import { validVisitMs } from './active-seconds';
 
 /** 한 페이지(RenderStep)의 체류시간 통계. */
 export interface DwellPage {
-  /** stepId — 'group:<rootGroupId | "root">' 또는 'table:<questionId>'. */
+  /** stepId — 신모델: 'page:<페이지 첫 질문 id>'. */
   stepId: string;
-  /** 차트 라벨. group: groupName (없으면 빈 문자열) / table: questionCode 또는 'QN'. */
+  /** 차트 라벨. 페이지 첫 항목의 rootGroupName → questionCode → 'Q<position>'. */
   label: string;
   /** 캐노니컬 순서 내 1-based 위치. */
   position: number;
   /**
    * 소속 페이지 번호 (1-based).
-   * - group step: 해당 그룹의 order + 1.
-   * - table step: 질문이 속한 그룹의 order + 1. 그룹 없으면 null.
+   * 신모델: 각 step이 곧 한 페이지이므로 position과 동일.
    */
   page: number | null;
   /** 트리밍 적용 후 표본 수. */
@@ -113,7 +108,7 @@ export interface CanonicalStep {
   stepId: string;
   label: string;
   position: number;
-  /** 소속 페이지 번호 (1-based). group: order+1, table: 그룹 order+1 or null. */
+  /** 소속 페이지 번호 (1-based). 신모델: position과 동일. */
   page: number | null;
 }
 
@@ -127,178 +122,57 @@ export interface DwellStats {
 /**
  * snapshot에서 캐노니컬 RenderStep 순서를 추출한다.
  *
- * 알고리즘 (group-ordering.ts의 `buildRenderSteps`와 동일):
- *   1. 최상위 그룹(parentGroupId 없음)을 order 순으로 순회.
- *   2. 각 최상위 그룹의 직간접 자식 질문을 인터리브 평탄화.
- *      그룹 step은 stepId='group:'+rootId 단 하나, 테이블 질문은 단독 'table:'+qid step.
- *   3. ungrouped 질문(groupId 없음)도 동일하게 — stepId='group:root' 단 하나.
+ * 신모델: `buildRenderSteps`/`stepIdOf` 위임. 각 RenderStep(= 한 페이지)이 곧 한 CanonicalStep.
+ * stepId 컨벤션: 'page:<페이지 첫 질문 id>' (응답 페이지 `stepIdOf`와 동일).
  *
  * 라벨 규칙 (멀티라인 X축 분리 기준):
- *   - group step: groupName (없으면 빈 문자열). 페이지 번호는 DwellPage.page 필드.
- *   - table step: questionCode (있으면) 그대로 / 없으면 'Q<questionPosition>'. 페이지 번호는 DwellPage.page.
+ *   - 페이지 첫 항목의 rootGroupName → questionCode → 'Q<position>'.
  *
  * Edge:
  *   - 그룹/질문 0건 → [] 반환.
- *   - 모든 질문이 ungrouped → 단일 'group:root' step + table들.
- *   - 어떤 그룹/하위그룹이 비어있어도 (자식이 모두 다른 곳에 있어도) group step은 만들지 않는다.
+ *   - 구 응답의 'group:'/'table:' stepId는 validStepIds에 없어 무시(legacyCount 처리는 소비처 담당).
  */
 export function buildCanonicalSteps(snapshot: SurveyVersionSnapshot): CanonicalStep[] {
-  const groups: QuestionGroupData[] = Array.isArray(snapshot.groups)
-    ? snapshot.groups
-    : [];
-  const questions: QuestionData[] = Array.isArray(snapshot.questions)
-    ? snapshot.questions
-    : [];
+  const rawGroups = Array.isArray(snapshot.groups) ? snapshot.groups : [];
+  const rawQuestions = Array.isArray(snapshot.questions) ? snapshot.questions : [];
 
-  // 캐노니컬 순서의 표시 위치를 1부터 부여.
+  // buildRenderSteps 가 읽는 필드만 도메인 형태로 정규화한다 (profiles.ts 와 동일 패턴).
+  const qs: Question[] = rawQuestions.map((q) => ({
+    id: q.id,
+    order: q.order,
+    title: q.title,
+    type: q.type as Question['type'],
+    required: false,
+    ...(q.groupId != null ? { groupId: q.groupId } : {}),
+    ...(q.pageBreakBefore ? { pageBreakBefore: true } : {}),
+  }));
+  const gs: QuestionGroup[] = rawGroups.map((g) => ({
+    id: g.id,
+    surveyId: '',
+    name: g.name,
+    order: g.order,
+    ...(g.parentGroupId != null ? { parentGroupId: g.parentGroupId } : {}),
+    ...((g as { hideName?: boolean }).hideName ? { hideName: true } : {}),
+  }));
+
+  const questionCodeOf = new Map<string, string | undefined>(
+    rawQuestions.map((q) => [q.id, (q as { questionCode?: string }).questionCode]),
+  );
+
   const steps: CanonicalStep[] = [];
-  let position = 0;
-
-  /** snapshot 내에서 이 질문의 1-based 인덱스 (questionCode 폴백용). */
-  const questionPosition = new Map<string, number>();
-  questions.forEach((q, idx) => {
-    questionPosition.set(q.id, idx + 1);
+  buildRenderSteps(qs, gs).forEach((step, idx) => {
+    const first = step.items[0];
+    if (!first) return;
+    const position = idx + 1;
+    const code = questionCodeOf.get(first.question.id);
+    const label = first.rootGroupName ?? code ?? `Q${position}`;
+    steps.push({
+      stepId: stepIdOf(step),
+      label,
+      position,
+      page: position, // 신모델: 각 step 이 곧 한 페이지
+    });
   });
-
-  /**
-   * 지정 그룹의 인터리브 자식 (질문 + 직속 하위그룹)을 order 순으로 반환.
-   * `getInterleavedChildren`의 단순화 버전 — 본 함수는 질문/테이블만 모아주면 충분.
-   *
-   * 반환은 평탄화된 질문 배열 (하위그룹은 재귀로 풀어 같은 배열에 끼워넣음).
-   */
-  const flattenScope = (rootGroupId: string | null): QuestionData[] => {
-    const out: QuestionData[] = [];
-
-    const walk = (groupId: string | null) => {
-      // 직속 질문 + 직속 하위그룹.
-      const directQs = questions
-        .filter((q) =>
-          groupId === null ? !q.groupId : q.groupId === groupId,
-        )
-        .sort((a, b) => a.order - b.order);
-      const directSGs =
-        groupId === null
-          ? []
-          : groups
-              .filter((g) => g.parentGroupId === groupId)
-              .sort((a, b) => a.order - b.order);
-
-      if (directSGs.length === 0) {
-        out.push(...directQs);
-        return;
-      }
-
-      // 인터리브: subgroup을 order 슬롯에 우선 배치, 나머지를 질문이 채움.
-      const totalSize = directQs.length + directSGs.length;
-      const slots: Array<{ kind: 'q'; data: QuestionData } | { kind: 'g'; data: QuestionGroupData } | null> = new Array(
-        totalSize,
-      ).fill(null);
-      const used = new Set<number>();
-      for (const sg of directSGs) {
-        const pos = Math.max(0, Math.min(sg.order, totalSize - 1));
-        let slot = pos;
-        while (used.has(slot) && slot < totalSize) slot++;
-        if (slot >= totalSize) {
-          slot = 0;
-          while (used.has(slot) && slot < totalSize) slot++;
-        }
-        if (slot < totalSize) {
-          used.add(slot);
-          slots[slot] = { kind: 'g', data: sg };
-        }
-      }
-      let qIdx = 0;
-      for (let i = 0; i < totalSize; i++) {
-        if (slots[i] === null && qIdx < directQs.length) {
-          const qItem = directQs[qIdx];
-          if (qItem) {
-            slots[i] = { kind: 'q', data: qItem };
-          }
-          qIdx++;
-        }
-      }
-
-      for (const slot of slots) {
-        if (!slot) continue;
-        if (slot.kind === 'q') {
-          out.push(slot.data);
-        } else {
-          walk(slot.data.id);
-        }
-      }
-    };
-
-    if (rootGroupId === null) {
-      // ungrouped 영역: 그룹 없는 질문만 order 순.
-      out.push(
-        ...questions.filter((q) => !q.groupId).sort((a, b) => a.order - b.order),
-      );
-    } else {
-      walk(rootGroupId);
-    }
-    return out;
-  };
-
-  /** flatten된 질문 목록을 group step + table step으로 분리해 push. */
-  const splitByTable = (
-    items: QuestionData[],
-    rootGroupId: string | null,
-    rootGroupName: string | null,
-    rootGroupOrder: number | null,
-  ): void => {
-    let nonTableBuffer: QuestionData[] = [];
-    const flush = () => {
-      if (nonTableBuffer.length === 0) return;
-      position += 1;
-      const stepId = `group:${rootGroupId ?? 'root'}`;
-      // label: groupName만 (페이지 번호는 page 필드로 분리).
-      const label = rootGroupName ?? '';
-      // page: group order + 1 (1-based). ungrouped 영역은 null.
-      const page = rootGroupOrder != null ? rootGroupOrder + 1 : null;
-      steps.push({ stepId, label, position, page });
-      nonTableBuffer = [];
-    };
-
-    for (const q of items) {
-      if (q.type === 'table') {
-        flush();
-        position += 1;
-        const code = (q as { questionCode?: string | null }).questionCode;
-        const baseLabel =
-          typeof code === 'string' && code.length > 0
-            ? code
-            : `Q${questionPosition.get(q.id) ?? position}`;
-        // page: 질문이 속한 루트 그룹의 order + 1. ungrouped table은 null.
-        const page = rootGroupOrder != null ? rootGroupOrder + 1 : null;
-        steps.push({
-          stepId: `table:${q.id}`,
-          label: baseLabel,
-          position,
-          page,
-        });
-      } else {
-        nonTableBuffer.push(q);
-      }
-    }
-    flush();
-  };
-
-  // 1) 최상위 그룹 순회.
-  const topLevel = groups
-    .filter((g) => !g.parentGroupId)
-    .sort((a, b) => a.order - b.order);
-  for (const root of topLevel) {
-    const items = flattenScope(root.id);
-    if (items.length === 0) continue;
-    splitByTable(items, root.id, root.name ?? null, root.order);
-  }
-
-  // 2) ungrouped 영역.
-  const ungrouped = flattenScope(null);
-  if (ungrouped.length > 0) {
-    splitByTable(ungrouped, null, null, null);
-  }
-
   return steps;
 }
 

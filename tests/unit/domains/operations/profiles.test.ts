@@ -141,36 +141,49 @@ describe('mapStatusPill', () => {
 })
 
 describe('buildStepLocationMap', () => {
-  it('group step → 키 "group:<rootGroupId>", 첫 질문의 order/qNumber', () => {
+  it('신모델: 키 "page:<첫 질문 id>", 첫 질문의 order/qNumber', () => {
     const groups = [g({ id: 'g1', order: 0, name: 'A' })]
     const questions = [
       q({ id: 'q1', groupId: 'g1', order: 0, title: 'Q1. 첫번째' }),
       q({ id: 'q2', groupId: 'g1', order: 1, title: 'Q2. 두번째' }),
     ]
     const map = buildStepLocationMap(questions, groups)
-    expect(map.get('group:g1')).toEqual({ order: 0, qNumber: 'Q1' })
+    expect(map.get('page:q1')).toEqual({ order: 0, qNumber: 'Q1' })
   })
 
-  it('table step → 키 "table:<questionId>", 해당 질문의 order/qNumber', () => {
+  it('table 포함 단일 페이지 — pageBreakBefore 없으면 나뉘지 않음', () => {
     const groups = [g({ id: 'g1', order: 0, name: 'A' })]
     const questions = [
       q({ id: 'q1', groupId: 'g1', order: 0, title: 'Q1. 첫번째' }),
       q({ id: 't1', groupId: 'g1', order: 1, type: 'table', title: 'Q2. 표질문' }),
     ]
     const map = buildStepLocationMap(questions, groups)
-    expect(map.get('table:t1')).toEqual({ order: 1, qNumber: 'Q2' })
+    // pageBreakBefore 없으면 단일 페이지 page:q1 로 묶인다 (table 단독 분리 없음)
+    expect(map.get('page:q1')).toEqual({ order: 0, qNumber: 'Q1' })
+    expect(map.has('page:t1')).toBe(false)
   })
 
-  it('ungrouped 질문 → 키 "group:root", 첫 질문', () => {
+  it('pageBreakBefore로 나뉜 페이지 각각이 독립 키', () => {
+    const groups = [g({ id: 'g1', order: 0, name: 'A' })]
+    const questions = [
+      q({ id: 'q1', groupId: 'g1', order: 0, title: 'Q1. 첫번째' }),
+      q({ id: 'q2', groupId: 'g1', order: 1, type: 'table', title: 'Q2. 표질문', pageBreakBefore: true }),
+    ]
+    const map = buildStepLocationMap(questions, groups)
+    expect(map.get('page:q1')).toEqual({ order: 0, qNumber: 'Q1' })
+    expect(map.get('page:q2')).toEqual({ order: 1, qNumber: 'Q2' })
+  })
+
+  it('ungrouped 질문 → 키 "page:<첫 질문 id>", 첫 질문', () => {
     const questions = [q({ id: 'u1', order: 0, title: 'Q1. 무그룹' })]
     const map = buildStepLocationMap(questions, [])
-    expect(map.get('group:root')).toEqual({ order: 0, qNumber: 'Q1' })
+    expect(map.get('page:u1')).toEqual({ order: 0, qNumber: 'Q1' })
   })
 
   it('Q번호 없는 title → qNumber null (order 는 그대로)', () => {
     const questions = [q({ id: 'u1', order: 0, title: '안내문' })]
     const map = buildStepLocationMap(questions, [])
-    expect(map.get('group:root')).toEqual({ order: 0, qNumber: null })
+    expect(map.get('page:u1')).toEqual({ order: 0, qNumber: null })
   })
 
   it('빈 입력 → 빈 맵', () => {

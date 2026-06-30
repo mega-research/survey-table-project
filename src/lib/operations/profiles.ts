@@ -214,6 +214,7 @@ export interface StepQuestionInput {
   title: string
   type: string
   groupId?: string | null
+  pageBreakBefore?: boolean
 }
 export interface StepGroupInput {
   id: string
@@ -225,10 +226,10 @@ export interface StepGroupInput {
 /**
  * 진행 위치(`survey_responses.current_step_id`) → 질문 단위 표시 환산 맵.
  *
- * currentStepId 는 "페이지(step) ID"(`stepIdOf` 컨벤션: 'group:<rootGroupId|root>'
- * 또는 'table:<questionId>')로 저장되므로 순수 question.id 로는 매칭되지 않는다.
+ * currentStepId 는 "페이지(step) ID"(`stepIdOf` 컨벤션: 'page:<페이지 첫 질문 id>')로
+ * 저장되므로 순수 question.id 로는 매칭되지 않는다.
  * 응답 페이지와 동일한 `buildRenderSteps` 로 step 목록을 만들고, 각 step 의 stepId 를
- * 그 step 의 대표 질문 order/질문번호에 매핑한다. (group step 은 첫 질문이 대표)
+ * 그 step 의 대표 질문 order/질문번호에 매핑한다. (각 페이지의 첫 질문이 대표)
  */
 export function buildStepLocationMap(
   questions: StepQuestionInput[],
@@ -243,6 +244,7 @@ export function buildStepLocationMap(
     type: q.type as Question['type'],
     required: false,
     ...(q.groupId != null ? { groupId: q.groupId } : {}),
+    ...(q.pageBreakBefore ? { pageBreakBefore: true } : {}),
   }))
   const gs: QuestionGroup[] = groups.map((g) => ({
     id: g.id,
@@ -253,7 +255,7 @@ export function buildStepLocationMap(
   }))
   const map = new Map<string, StepLocation>()
   for (const step of buildRenderSteps(qs, gs)) {
-    const rep = step.kind === 'table' ? step.question : step.items[0]?.question
+    const rep = step.items[0]?.question
     if (!rep) continue
     map.set(stepIdOf(step), { order: rep.order, qNumber: parseQuestionNumberFromTitle(rep.title) })
   }
