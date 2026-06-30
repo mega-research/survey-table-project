@@ -100,6 +100,7 @@ export interface QuestionGroupData {
   color?: string;
   collapsed?: boolean;
   hideName?: boolean;
+  nameDesign?: GroupNameDesign;
   displayCondition?: QuestionConditionGroup;
 }
 

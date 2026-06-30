@@ -79,6 +79,7 @@ interface SnapshotGroup {
   color?: string | undefined;
   collapsed?: boolean | undefined;
   hideName?: boolean | undefined;
+  nameDesign?: QuestionGroup['nameDesign'] | undefined;
   displayCondition?: QuestionGroup['displayCondition'] | undefined;
 }
 
@@ -141,6 +142,7 @@ export function buildSurveySnapshot(survey: Survey): SurveySnapshot {
       color: g.color,
       collapsed: g.collapsed,
       hideName: g.hideName,
+      nameDesign: g.nameDesign,
       displayCondition: g.displayCondition,
     })),
     settings: {

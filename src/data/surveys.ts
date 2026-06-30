@@ -86,6 +86,7 @@ export async function getSurveyWithDetails(surveyId: string): Promise<SurveyType
       ...(g.color != null ? { color: g.color } : {}),
       ...(g.collapsed != null ? { collapsed: g.collapsed } : {}),
       ...(g.hideName != null ? { hideName: g.hideName } : {}),
+      ...(g.nameDesign != null ? { nameDesign: g.nameDesign as NonNullable<QuestionGroup['nameDesign']> } : {}),
       ...(g.displayCondition != null ? { displayCondition: g.displayCondition as NonNullable<QuestionGroup['displayCondition']> } : {}),
     })),
     questions: questionList.map((q) => {

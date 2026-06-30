@@ -98,6 +98,25 @@ describe('buildSurveySnapshot', () => {
     expect(g1.id).toBe('g-2');
   });
 
+  it('그룹 이름 디자인(nameDesign)을 스냅샷에 보존', () => {
+    const survey: Survey = {
+      ...mockSurvey,
+      groups: [
+        {
+          id: 'g-1',
+          surveyId: 'survey-001',
+          name: '그룹 A',
+          order: 1,
+          nameDesign: { fullWidth: true, bgColor: '#121358', textColor: '#e5e5ec' },
+        },
+      ],
+    };
+    const snapshot = buildSurveySnapshot(survey);
+    const g0 = snapshot.groups[0];
+    if (!g0) throw new Error('snapshot.groups[0] undefined');
+    expect(g0.nameDesign).toEqual({ fullWidth: true, bgColor: '#121358', textColor: '#e5e5ec' });
+  });
+
   it('설문 제목과 설명을 포함', () => {
     const snapshot = buildSurveySnapshot(mockSurvey);
 
