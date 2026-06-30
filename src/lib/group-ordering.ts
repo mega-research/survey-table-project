@@ -152,42 +152,28 @@ export function findParentGroupId(
 
 export type StepItem = {
   question: Question;
+  // 페이지 헤더 출처가 되는 root 그룹 컨텍스트
+  rootGroupId: string | null;
+  rootGroupName: string | null; // hideName 그룹이면 null
+  rootGroupNameDesign?: GroupNameDesign | undefined;
   // 이 질문의 바로 위에 새 하위그룹이 시작되면 그 이름 (소제목 표시용)
   subgroupName: string | null;
 };
 
-export type RenderStep =
-  | {
-      kind: 'group';
-      rootGroupId: string | null;
-      rootGroupName: string | null;
-      rootGroupNameDesign?: GroupNameDesign | undefined;
-      items: StepItem[];
-    }
-  | {
-      kind: 'table';
-      rootGroupId: string | null;
-      rootGroupName: string | null;
-      rootGroupNameDesign?: GroupNameDesign | undefined;
-      subgroupName: string | null;
-      question: Question;
-    };
+export type RenderStep = {
+  kind: 'page';
+  items: StepItem[]; // 1개 이상
+};
 
 /**
- * 운영 현황 콘솔용 step 고유 식별자 (응답 페이지 진행 위치 = `survey_responses.current_step_id`).
- * - table step: 'table:<questionId>'
- * - group step: 'group:<rootGroupId | "root">' (ungrouped는 'root')
- *
- * 동일 RenderStep에 대해 항상 같은 문자열을 반환해야 recordStepVisit의
- * 멱등성(no-op when currentStepId === nextStepId)이 유지되고, 운영 콘솔의
- * 진행 위치 역매핑(buildStepLocationMap)이 정확히 맞물린다.
+ * 운영 현황 콘솔용 step 고유 식별자 (`survey_responses.current_step_id`).
+ * 신모델: 'page:<페이지 첫 질문 id>'. 구조적 anchor라 분기/역매핑이 맞물린다.
  */
 export function stepIdOf(step: RenderStep): string {
-  if (step.kind === 'table') {
-    return `table:${step.question.id}`;
-  }
-  return `group:${step.rootGroupId ?? 'root'}`;
+  return `page:${step.items[0]?.question.id ?? 'empty'}`;
 }
+
+type FlatItem = { question: Question; subgroupName: string | null };
 
 /**
  * 최상위 그룹(또는 ungrouped)의 질문들을 인터리브 순서로 flatten하고,
@@ -197,8 +183,8 @@ function flattenRootScope(
   rootGroupId: string | null,
   questions: Question[],
   groups: QuestionGroup[],
-): StepItem[] {
-  const result: StepItem[] = [];
+): FlatItem[] {
+  const result: FlatItem[] = [];
 
   const walk = (groupId: string | null, pendingSubgroupName: string | null) => {
     const children = getInterleavedChildren(groupId, questions, groups);
@@ -231,82 +217,70 @@ function flattenRootScope(
 }
 
 /**
- * flatten된 StepItem 목록을 "연속 비테이블 구간" + "테이블 단독"으로 분할한다.
+ * 모든 최상위 그룹(order 순) + ungrouped를 이어 하나의 선형 StepItem 목록으로 만든다.
+ * 각 항목에 root 그룹 컨텍스트(이름/디자인)를 주석한다 — 페이지는 그룹과 무관하게 잘리지만
+ * 헤더는 항목이 속한 그룹에서 파생되기 때문이다.
  */
-function splitByTable(
-  items: StepItem[],
-  rootGroupId: string | null,
-  rootGroupName: string | null,
-  design?: GroupNameDesign,
-): RenderStep[] {
-  const steps: RenderStep[] = [];
-  let buffer: StepItem[] = [];
-
-  const flushBuffer = () => {
-    if (buffer.length === 0) return;
-    steps.push({
-      kind: 'group',
-      rootGroupId,
-      rootGroupName,
-      rootGroupNameDesign: design,
-      items: buffer,
-    });
-    buffer = [];
-  };
-
-  for (const item of items) {
-    if (item.question.type === 'table') {
-      flushBuffer();
-      steps.push({
-        kind: 'table',
-        rootGroupId,
-        rootGroupName,
-        rootGroupNameDesign: design,
-        subgroupName: item.subgroupName,
-        question: item.question,
-      });
-    } else {
-      buffer.push(item);
-    }
-  }
-  flushBuffer();
-
-  return steps;
-}
-
-/**
- * 전체 설문을 "상위그룹 단위 + 테이블 분리" 렌더 스텝 배열로 변환한다.
- *
- * 규칙:
- * 1. 최상위(root) 그룹을 order 순으로 순회
- * 2. 각 최상위 그룹의 질문을 인터리브 순서로 flatten (하위그룹 경계는 무시하되, 각
- *    하위그룹의 첫 질문에 subgroupName을 기록하여 소제목으로 쓸 수 있게 한다)
- * 3. 연속된 비테이블 질문은 하나의 group step, 테이블 질문은 각각 단독 table step
- * 4. 그룹 없는 질문(ungrouped)도 동일 규칙 적용하여 마지막에 추가
- */
-export function buildRenderSteps(
-  questions: Question[],
-  groups: QuestionGroup[],
-): RenderStep[] {
-  const steps: RenderStep[] = [];
+function buildLinearStepItems(questions: Question[], groups: QuestionGroup[]): StepItem[] {
+  const result: StepItem[] = [];
 
   const topLevelGroups = groups
     .filter((g) => !g.parentGroupId)
     .sort((a, b) => a.order - b.order);
 
   for (const rootGroup of topLevelGroups) {
-    const items = flattenRootScope(rootGroup.id, questions, groups);
-    if (items.length === 0) continue;
-    // hideName 그룹은 응답 페이지에서 그룹 이름 배지를 노출하지 않는다 (빌더 표시는 유지).
     const rootGroupName = rootGroup.hideName ? null : rootGroup.name;
     const design = rootGroup.hideName ? undefined : rootGroup.nameDesign;
-    steps.push(...splitByTable(items, rootGroup.id, rootGroupName, design));
+    for (const it of flattenRootScope(rootGroup.id, questions, groups)) {
+      result.push({
+        question: it.question,
+        rootGroupId: rootGroup.id,
+        rootGroupName,
+        rootGroupNameDesign: design,
+        subgroupName: it.subgroupName,
+      });
+    }
   }
 
-  const ungroupedItems = flattenRootScope(null, questions, groups);
-  if (ungroupedItems.length > 0) {
-    steps.push(...splitByTable(ungroupedItems, null, null));
+  for (const it of flattenRootScope(null, questions, groups)) {
+    result.push({
+      question: it.question,
+      rootGroupId: null,
+      rootGroupName: null,
+      rootGroupNameDesign: undefined,
+      subgroupName: it.subgroupName,
+    });
   }
+
+  return result;
+}
+
+/**
+ * 전체 설문을 페이지 렌더 스텝 배열로 변환한다.
+ *
+ * 규칙(수동 구분점 모델):
+ * 1. 그룹 계층 + 인터리브 순서를 보존한 전역 선형 질문열을 만든다.
+ * 2. 첫 항목과, `pageBreakBefore === true`인 항목에서만 새 페이지를 시작한다.
+ *    (전체 첫 질문의 플래그는 무시 — 이미 페이지 시작이다.)
+ */
+export function buildRenderSteps(
+  questions: Question[],
+  groups: QuestionGroup[],
+): RenderStep[] {
+  const linear = buildLinearStepItems(questions, groups);
+  if (linear.length === 0) return [];
+
+  const steps: RenderStep[] = [];
+  let buffer: StepItem[] = [];
+
+  linear.forEach((item, idx) => {
+    if (idx > 0 && item.question.pageBreakBefore) {
+      steps.push({ kind: 'page', items: buffer });
+      buffer = [];
+    }
+    buffer.push(item);
+  });
+  if (buffer.length > 0) steps.push({ kind: 'page', items: buffer });
 
   return steps;
 }
@@ -317,11 +291,7 @@ export function buildRenderSteps(
  * 주어진 질문 id 가 속한 렌더 스텝의 인덱스를 반환한다. 없으면 -1.
  */
 export function findStepIndexOfQuestion(steps: RenderStep[], questionId: string): number {
-  return steps.findIndex((s) =>
-    s.kind === 'table'
-      ? s.question.id === questionId
-      : s.items.some((it) => it.question.id === questionId),
-  );
+  return steps.findIndex((s) => s.items.some((it) => it.question.id === questionId));
 }
 
 export type StepBranchOutcome =
