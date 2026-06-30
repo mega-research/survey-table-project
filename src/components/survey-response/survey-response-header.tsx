@@ -70,7 +70,7 @@ export function SurveyResponseHeader({
     );
 
     return (
-      <div data-testid="official-band-layout" data-arrangement={arrangement} className="space-y-6">
+      <div data-testid="official-band-layout" data-arrangement={arrangement} className="space-y-4">
         <div
           data-testid="official-band-row"
           data-logo-align={config.officialBand?.logoAlign ?? 'top'}

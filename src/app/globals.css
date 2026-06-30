@@ -816,8 +816,11 @@ a.notice-file-attachment:hover {
 
 /* 모바일에서 TipTap 출력 표 길들이기.
  * TipTap이 <colgroup>/<col>에 inline width를 박아서 Tailwind utility로는 못 누른다.
- * - 표는 콘텐츠 비례 폭(auto) + 부모 안에서 가로 스크롤로 폴백
- * - 한국어 어절 보존(keep-all), 영문 긴 토큰만 강제 줄바꿈(anywhere) */
+ * - 표는 콘텐츠 비례 폭(auto)으로 부모 폭에 맞춰 reflow
+ * - 한국어 어절 보존(keep-all)
+ * - overflow-wrap 은 anywhere 대신 break-word: 셀 min-content 폭을 "가장 긴 단어"
+ *   기준으로 잡아 컬럼이 1글자까지 찌그러지는 것을 막고, 정말 안 들어가는 긴 토큰만
+ *   마지막 수단으로 끊는다. (anywhere 는 min-content 를 1글자로 만들어 과도하게 눌림) */
 @media (max-width: 767px) {
   .tiptap-mobile-tame {
     overflow-x: auto;
@@ -836,8 +839,9 @@ a.notice-file-attachment:hover {
   .tiptap-mobile-tame td {
     width: auto !important;
     min-width: 0 !important;
-    word-break: keep-all;
-    overflow-wrap: anywhere;
+    /* body 의 keep-all 상속을 끊고 일반 줄바꿈으로 (좁은 셀에서 글자 단위 줄바꿈 허용) */
+    word-break: normal;
+    overflow-wrap: break-word;
     padding: 0.375rem 0.5rem !important;
   }
 }

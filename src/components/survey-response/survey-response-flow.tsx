@@ -607,7 +607,7 @@ export function SurveyResponseFlow({
       </div>
 
       {/* 진행 현황 — 헤더 밖 회색 영역(콘텐츠 컨테이너 위) */}
-      <div className={`${containerMaxWidth} mx-auto px-4 pt-4 transition-all duration-300 md:px-6`}>
+      <div className={`${containerMaxWidth} mx-auto px-4 pt-3 transition-all duration-300 md:px-6`}>
         <div className="hidden items-center justify-end text-sm text-gray-500 md:flex">
           {currentVisibleStepNumber || 1} / {Math.max(totalVisibleStepCount, 1)}
           <span className="ml-2 text-xs text-gray-400">(전체 {questions.length}개 질문)</span>
@@ -641,7 +641,7 @@ export function SurveyResponseFlow({
 
       {/* 메인 콘텐츠 */}
       <div
-        className={`${containerMaxWidth} mx-auto px-4 pt-6 transition-all duration-300 md:px-6 md:pt-8 ${
+        className={`${containerMaxWidth} mx-auto px-4 pt-6 transition-all duration-300 md:px-6 md:pt-6 ${
           isMobile ? 'pb-28' : 'pb-16 md:pb-24'
         }`}
       >
