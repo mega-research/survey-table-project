@@ -4,6 +4,7 @@ import { useCallback, useMemo } from 'react';
 
 import { QuestionInput } from '@/components/survey-response/question-input';
 import { RichDescription } from '@/components/survey-response/step-views/rich-description';
+import { RootGroupNameBadge } from '@/components/survey-response/step-views/root-group-name-badge';
 import { useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -56,9 +57,7 @@ export function TableStepView({
           {(step.rootGroupName || step.subgroupName) && (
             <div className="flex flex-wrap items-center gap-2">
               {step.rootGroupName && (
-                <span className="inline-block rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
-                  {step.rootGroupName}
-                </span>
+                <RootGroupNameBadge name={step.rootGroupName} design={step.rootGroupNameDesign} />
               )}
               {step.subgroupName && step.subgroupName !== step.rootGroupName && (
                 <span className="inline-block rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
@@ -103,9 +102,7 @@ export function TableStepView({
             {(step.rootGroupName || step.subgroupName) && (
               <div className="mb-2 flex flex-wrap items-center gap-2">
                 {step.rootGroupName && (
-                  <span className="inline-block rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
-                    {step.rootGroupName}
-                  </span>
+                  <RootGroupNameBadge name={step.rootGroupName} design={step.rootGroupNameDesign} />
                 )}
                 {step.subgroupName && step.subgroupName !== step.rootGroupName && (
                   <span className="inline-block rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">

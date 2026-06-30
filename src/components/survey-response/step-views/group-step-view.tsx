@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 
 import { GroupStepItem } from '@/components/survey-response/step-views/group-step-item';
+import { RootGroupNameBadge } from '@/components/survey-response/step-views/root-group-name-badge';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { RenderStep, StepItem } from '@/lib/group-ordering';
 import { Question, QuestionGroup } from '@/types/survey';
@@ -40,9 +41,7 @@ export function GroupStepView({
     <Card className="animate-in fade-in duration-200">
       {step.rootGroupName && (
         <CardHeader className="pb-6">
-          <span className="inline-block w-fit rounded-md bg-blue-50 px-3.5 py-2 text-base font-semibold tracking-wide text-blue-700">
-            {step.rootGroupName}
-          </span>
+          <RootGroupNameBadge name={step.rootGroupName} design={step.rootGroupNameDesign} />
         </CardHeader>
       )}
       <CardContent className={`md:px-8 ${step.rootGroupName ? '' : 'pt-6'}`}>

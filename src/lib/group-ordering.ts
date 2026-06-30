@@ -1,4 +1,4 @@
-import type { BranchRule, Question, QuestionGroup } from '@/types/survey';
+import type { BranchRule, GroupNameDesign, Question, QuestionGroup } from '@/types/survey';
 
 // ── 타입 ──
 
@@ -161,12 +161,14 @@ export type RenderStep =
       kind: 'group';
       rootGroupId: string | null;
       rootGroupName: string | null;
+      rootGroupNameDesign?: GroupNameDesign | undefined;
       items: StepItem[];
     }
   | {
       kind: 'table';
       rootGroupId: string | null;
       rootGroupName: string | null;
+      rootGroupNameDesign?: GroupNameDesign | undefined;
       subgroupName: string | null;
       question: Question;
     };
@@ -235,6 +237,7 @@ function splitByTable(
   items: StepItem[],
   rootGroupId: string | null,
   rootGroupName: string | null,
+  design?: GroupNameDesign,
 ): RenderStep[] {
   const steps: RenderStep[] = [];
   let buffer: StepItem[] = [];
@@ -245,6 +248,7 @@ function splitByTable(
       kind: 'group',
       rootGroupId,
       rootGroupName,
+      rootGroupNameDesign: design,
       items: buffer,
     });
     buffer = [];
@@ -257,6 +261,7 @@ function splitByTable(
         kind: 'table',
         rootGroupId,
         rootGroupName,
+        rootGroupNameDesign: design,
         subgroupName: item.subgroupName,
         question: item.question,
       });
@@ -294,7 +299,8 @@ export function buildRenderSteps(
     if (items.length === 0) continue;
     // hideName 그룹은 응답 페이지에서 그룹 이름 배지를 노출하지 않는다 (빌더 표시는 유지).
     const rootGroupName = rootGroup.hideName ? null : rootGroup.name;
-    steps.push(...splitByTable(items, rootGroup.id, rootGroupName));
+    const design = rootGroup.hideName ? undefined : rootGroup.nameDesign;
+    steps.push(...splitByTable(items, rootGroup.id, rootGroupName, design));
   }
 
   const ungroupedItems = flattenRootScope(null, questions, groups);
