@@ -1,8 +1,8 @@
 import * as z from 'zod';
 
-import { authed } from '@/server/orpc';
+import { authed, pub, withRateLimit } from '@/server/orpc';
 
-import { QuotaConfigSchema } from '../../domain/quota';
+import { QuotaCheckInput, QuotaCheckResult, QuotaConfigSchema } from '../../domain/quota';
 import * as svc from '../services/quota.service';
 
 const get = authed
@@ -15,4 +15,10 @@ const save = authed
   .output(QuotaConfigSchema)
   .handler(({ input }) => svc.saveQuotaConfig(input.surveyId, input.config));
 
-export const quota = { get, save };
+const check = pub
+  .use(withRateLimit('response-mutation'))
+  .input(QuotaCheckInput)
+  .output(QuotaCheckResult)
+  .handler(({ input }) => svc.checkQuota(input));
+
+export const quota = { get, save, check };

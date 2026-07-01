@@ -7,6 +7,8 @@ import type { QuotaConfig } from '@/db/schema/schema-types';
 vi.mock('../services/quota.service', () => ({
   getQuotaConfig: vi.fn(),
   saveQuotaConfig: vi.fn(),
+  checkQuota: vi.fn(),
+  markQuotaFull: vi.fn(),
 }));
 
 import * as svc from '../services/quota.service';
@@ -73,5 +75,31 @@ describe('quota procedures', () => {
       { context: { db: {} as never, supabase: {} as never, user: null } as ORPCContext },
     );
     await expect(client.quota.get({ surveyId: 's1' })).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+  });
+
+  it('check는 pub — 인증 없이 호출되고 service.checkQuota에 위임', async () => {
+    vi.mocked(svc.checkQuota).mockResolvedValue({ blocked: true, closedMessage: '마감' });
+    const client = createRouterClient(
+      { quota },
+      {
+        context: {
+          db: {} as never,
+          supabase: {} as never,
+          user: null,
+          headers: new Headers({ 'x-real-ip': '203.0.113.7' }),
+        } as ORPCContext,
+      },
+    );
+    const res = await client.quota.check({
+      responseId: 'r1',
+      surveyId: 's1',
+      answers: { q1: 'female' },
+    });
+    expect(svc.checkQuota).toHaveBeenCalledWith({
+      responseId: 'r1',
+      surveyId: 's1',
+      answers: { q1: 'female' },
+    });
+    expect(res).toEqual({ blocked: true, closedMessage: '마감' });
   });
 });

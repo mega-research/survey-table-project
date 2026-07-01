@@ -38,3 +38,14 @@ const _c1: _InferMatchesDrizzle = true;
 const _c2: _DrizzleMatchesInfer = true;
 void _c1;
 void _c2;
+
+export const QuotaCheckInput = z.object({
+  responseId: z.string(),
+  surveyId: z.string(),
+  answers: z.record(z.string(), z.unknown()),
+});
+
+export const QuotaCheckResult = z.object({
+  blocked: z.boolean(),
+  closedMessage: z.string().nullable(),
+});
