@@ -137,3 +137,22 @@ describe('countCell / tallyAll', () => {
     expect([...map.values()].reduce((a, b) => a + b, 0)).toBe(3); // 미분류 1건 제외
   });
 });
+
+describe('resolveCategoryId — numeric: 빈/공백은 0으로 오인 금지 (0 포함 구간)', () => {
+  const zeroBinDim: QuotaDimension = {
+    id: 'd-hh',
+    questionId: 'q-hh',
+    label: '가구원수',
+    kind: 'numeric',
+    categories: [{ id: 'c-0-2', label: '0-2', min: 0, max: 3 }],
+  };
+  it('빈 문자열은 0 구간에 매칭되지 않음', () => {
+    expect(resolveCategoryId(zeroBinDim, '')).toBeNull();
+  });
+  it('공백 문자열도 매칭되지 않음', () => {
+    expect(resolveCategoryId(zeroBinDim, '   ')).toBeNull();
+  });
+  it('실제 0은 매칭됨', () => {
+    expect(resolveCategoryId(zeroBinDim, '0')).toBe('c-0-2');
+  });
+});

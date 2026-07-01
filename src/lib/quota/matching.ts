@@ -21,6 +21,7 @@ export function normalizeAnswerValues(answer: unknown): string[] {
 function matchesNumeric(category: QuotaCategory, answer: unknown): boolean {
   const raw = normalizeAnswerValues(answer)[0];
   if (raw === undefined) return false;
+  if (raw.trim() === '') return false; // 빈/공백 문자열은 미응답 — Number('')=0 오분류 방지
   const n = Number(raw);
   if (!Number.isFinite(n)) return false;
   const min = category.min ?? null;
