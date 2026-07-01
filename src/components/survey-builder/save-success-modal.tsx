@@ -128,7 +128,7 @@ export const SaveSuccessModal = React.memo(function SaveSuccessModal({
                   <p className="text-sm break-all text-gray-700">
                     {typeof window !== 'undefined' ? window.location.origin : ''}/survey/
                     <span className="font-medium text-blue-600">
-                      {encodeSurveyIdentifier(slugInput || generateSlugFromTitle(titleInput) || id)}
+                      {slugInput || generateSlugFromTitle(titleInput) || id}
                     </span>
                   </p>
                 </div>
