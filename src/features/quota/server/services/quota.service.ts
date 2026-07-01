@@ -63,20 +63,24 @@ export async function checkQuota(input: {
   const current = countCell(config, categoryIds, answersList);
 
   if (current >= target) {
-    await markQuotaFull(input.responseId);
+    await markQuotaFull(input.responseId, input.surveyId);
     return { blocked: true, closedMessage: config.closedMessage };
   }
   return { blocked: false, closedMessage: null };
 }
 
-/** 응답을 quotaful_out 으로 마킹. in_progress·비삭제 행에만 적용(종결 상태 덮어쓰기 방지). */
-export async function markQuotaFull(responseId: string): Promise<void> {
+/**
+ * 응답을 quotaful_out 으로 마킹. 반드시 (id + surveyId) 로 스코프하고 in_progress·비삭제 행에만 적용.
+ * surveyId 가드는 pub 호출자가 타 설문의 응답을 변조하는 것을 차단하고, in_progress 가드는 종결 상태 덮어쓰기를 막는다.
+ */
+export async function markQuotaFull(responseId: string, surveyId: string): Promise<void> {
   await db
     .update(surveyResponses)
     .set({ status: 'quotaful_out', lastActivityAt: new Date() })
     .where(
       and(
         eq(surveyResponses.id, responseId),
+        eq(surveyResponses.surveyId, surveyId),
         isNull(surveyResponses.deletedAt),
         eq(surveyResponses.status, 'in_progress'),
       ),
