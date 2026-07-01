@@ -6,6 +6,7 @@ import { DropFunnel } from '@/components/operations/drop-funnel';
 import { InquiriesEmptyCard } from '@/components/operations/inquiries-empty-card';
 import { KpiRow } from '@/components/operations/kpi-row';
 import { PageDwellDistribution } from '@/components/operations/page-dwell-distribution';
+import { QuotaStatusPanel } from '@/components/operations/quota/quota-status-panel';
 import { ResponseTimeStats } from '@/components/operations/response-time-stats';
 import {
   aggregateDaily,
@@ -15,6 +16,7 @@ import { aggregateStatus } from '@/lib/operations/aggregate-status.server';
 import { getDailyStats } from '@/lib/operations/daily-stats.server';
 import { getDropFunnel } from '@/lib/operations/drop-funnel.server';
 import { getPageDwell } from '@/lib/operations/page-dwell.server';
+import { getQuotaStatus } from '@/lib/operations/quota-status.server';
 import { getResponseTime } from '@/lib/operations/response-time.server';
 
 /**
@@ -65,12 +67,13 @@ function todayKst(): string {
  *
  * 슬라이스 1 의 7개 위젯을 모두 마운트한다 (A1 KPI → A2 일자별 차트 →
  * A3 일자별 통계 → A4 응답시간 → A5 Drop funnel → A6 Page dwell →
- * Inquiries placeholder).
+ * Inquiries placeholder). 계획 3 에서 쿼터 진행 카드(A1 옆) + 쿼터 현황판을 추가한다.
  *
- * - 6개 어댑터를 `Promise.all` 로 병렬 호출.
+ * - 7개 어댑터를 `Promise.all` 로 병렬 호출.
  * - hour 모드에서 `date` 미지정 시 응답이 존재하는 가장 최근 일자(KST)로 자동 결정.
  *   응답이 전무하면 KST 오늘 일자로 fallback (어댑터의 `hourModeDate` 필수 조건 충족).
  * - 설문이 존재하지 않거나 soft-delete 된 경우 `notFound()` (D-7 전용 UI 는 후속 작업).
+ * - `getQuotaStatus`는 쿼터 미설정 설문에서 null을 반환 — 이 경우 쿼터 카드/현황판 모두 렌더 생략.
  */
 export default async function OperationsOverviewPage({
   params,
@@ -89,7 +92,7 @@ export default async function OperationsOverviewPage({
   const effectiveDate =
     mode === 'hour' ? (date ?? latestAvailable ?? todayKst()) : undefined;
 
-  const [statusCounts, dailyBuckets, dailyStats, responseTime, dropFunnel, pageDwell] =
+  const [statusCounts, dailyBuckets, dailyStats, responseTime, dropFunnel, pageDwell, quotaStatus] =
     await Promise.all([
       aggregateStatus(surveyId),
       aggregateDaily({ surveyId, mode, ...(effectiveDate !== undefined ? { hourModeDate: effectiveDate } : {}) }),
@@ -97,6 +100,7 @@ export default async function OperationsOverviewPage({
       getResponseTime(surveyId),
       getDropFunnel(surveyId),
       getPageDwell(surveyId),
+      getQuotaStatus(surveyId),
     ]);
 
   return (
@@ -108,7 +112,9 @@ export default async function OperationsOverviewPage({
         </p>
       </div>
 
-      <KpiRow counts={statusCounts} />
+      <KpiRow counts={statusCounts} quota={quotaStatus?.summary ?? null} />
+
+      {quotaStatus && quotaStatus.cells.length > 0 && <QuotaStatusPanel status={quotaStatus} />}
 
       <DailyParticipationChart
         data={dailyBuckets}

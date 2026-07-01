@@ -1,10 +1,13 @@
 import type { StatusCounts } from '@/lib/operations/aggregate-status';
 import { numberFormatter } from '@/lib/operations/format';
+import type { QuotaSummary } from '@/lib/operations/quota-status';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 
 interface KpiRowProps {
   counts: StatusCounts;
+  /** 쿼터 요약. 쿼터 미설정(getQuotaStatus null)이면 undefined/null — 카드 자체를 숨긴다. */
+  quota?: QuotaSummary | null;
 }
 
 interface KpiCellSpec {
@@ -25,7 +28,6 @@ const CELLS: KpiCellSpec[] = [
   { label: '진행중', field: 'inProgress', deltaTone: 'live' },
   { label: '완료', field: 'completed', deltaTone: 'slate' },
   { label: '자격 미달', field: 'screenedOut', deltaTone: 'slate' },
-  { label: '쿼터마감', field: 'quotafulOut', deltaTone: 'slate' },
   { label: '불량', field: 'bad', deltaTone: 'slate' },
   { label: '이탈', field: 'drop', deltaTone: 'rose' },
 ];
@@ -81,15 +83,37 @@ function KpiCell({ label, value, delta, deltaTone }: KpiCellProps) {
 }
 
 /**
+ * 쿼터 진행 카드 — 예전 "쿼터마감" 단일 카운트 셀을 대체한다.
+ * 완료/목표 총합 대비 % + 마감된 셀 수(closedCells)를 함께 보여줘, 쿼터 전체
+ * 진척을 한눈에 파악할 수 있게 한다. 셀 단위 상세는 QuotaStatusPanel 담당.
+ */
+function QuotaKpiCell({ quota }: { quota: QuotaSummary }) {
+  return (
+    <Card>
+      <CardContent className="px-4 py-3 pt-3">
+        <p className="text-xs text-slate-500">쿼터</p>
+        <p className="mt-1 text-2xl font-semibold text-blue-600">{quota.pct}%</p>
+        <p className="mt-0.5 text-xs text-slate-400">
+          {numberFormatter.format(quota.currentTotal)}/{numberFormatter.format(quota.targetTotal)} ·{' '}
+          {quota.closedCells} 마감
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
  * 운영 현황 콘솔 — A1 KPI Row.
- * 7개 셀(전체 / 진행중 / 완료 / 자격 미달 / 쿼터마감 / 불량 / 이탈)을 가로로 나열한다.
+ * 6개 셀(전체 / 진행중 / 완료 / 자격 미달 / 불량 / 이탈) + (쿼터 설정 시) 쿼터 진행 카드를
+ * 가로로 나열한다. 쿼터마감 카운트는 더 이상 단일 셀이 아니라 쿼터 진행 카드(quota.closedCells)에
+ * 흡수됐다 — 셀별 상세는 QuotaStatusPanel 참조.
  *
  * total === 0 (종결 응답 없음)일 때:
- *   - 종결성 셀은 "—"로 표기 (전체/완료/자격미달/쿼터마감/불량/이탈)
+ *   - 종결성 셀은 "—"로 표기 (전체/완료/자격미달/불량/이탈)
  *   - 진행중 셀(deltaTone === 'live')은 in_progress 가시성이 존재 이유라 항상 실수 노출
  *   - 페이지 단위 EmptyState는 상위 컴포지션에서 처리한다 (plan §9).
  */
-export function KpiRow({ counts }: KpiRowProps) {
+export function KpiRow({ counts, quota }: KpiRowProps) {
   const isEmpty = counts.total === 0;
 
   return (
@@ -108,6 +132,7 @@ export function KpiRow({ counts }: KpiRowProps) {
           />
         );
       })}
+      {quota && <QuotaKpiCell quota={quota} />}
     </div>
   );
 }
