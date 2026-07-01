@@ -14,6 +14,7 @@ import type {
   QuestionConditionGroup,
   QuestionData,
   QuestionOption,
+  QuotaConfig,
   RankingConfig,
   ResponseEditChange,
   SelectLevel,
@@ -57,6 +58,9 @@ export const surveys = pgTable('surveys', {
 
   // 진척률 표 표시 컬럼 픽커 (NULL = 4개 고정 컬럼만, slice 4 — 0017 마이그레이션)
   progressColumns: jsonb('progress_columns').$type<ProgressColumnScheme>(),
+
+  // 쿼터 플랜 (NULL = 쿼터 없음, 스냅샷 밖 라이브 편집 — 0045 마이그레이션)
+  quotaConfig: jsonb('quota_config').$type<QuotaConfig>(),
 
   // 컨택 attrs 토큰 — invite token 강제 (0022 마이그레이션)
   requireInviteToken: boolean('require_invite_token').default(false).notNull(),
