@@ -384,11 +384,15 @@ export interface CampaignFilterSnapshot {
 export interface QuotaCategory {
   id: string;
   label: string;
-  /** choice: 이 카테고리에 속하는 보기값(수동=option.value, 테이블소스=cell.id) */
-  values?: string[];
+  /**
+   * choice: 이 카테고리에 속하는 보기값(수동=option.value, 테이블소스=cell.id)
+   * `| undefined` 명시: zod `.optional()` 추론 타입과 exactOptionalPropertyTypes 하에서
+   * 정합하려면 필요(features/quota/domain 의 컴파일 타임 zod↔drizzle 가드 참조).
+   */
+  values?: string[] | undefined;
   /** numeric: 반열림 구간 min ≤ 값 < max (null = 무한) */
-  min?: number | null;
-  max?: number | null;
+  min?: number | null | undefined;
+  max?: number | null | undefined;
 }
 
 /** 쿼터 축. 문항 1개에 바인딩. */
