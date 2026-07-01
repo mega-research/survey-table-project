@@ -68,3 +68,59 @@ _Avoid_: 테이블 필드 = table 유형 전용이라는 가정, isChoiceGroupCa
 **질문 정규화 경계 (question normalize boundary)**:
 스냅샷·export 등 신뢰 불가 직렬화 데이터가 `Question[]`로 들어오는 읽기 경계의 단일 거처(`src/lib/question/normalize.ts`). preserve(판별자만 검증, 무변형 passthrough + 관측)와 strict(zod parse + cross-type 오염 키 소거) 2모드. 경계 캐스트는 이 module 안 한 곳에만 존재한다 — 새 역직렬화 지점에서 `as unknown as Question[]`을 만들지 않는다.
 _Avoid_: 역직렬화 단언, 호출처별 자가 검증
+
+### 분석 보고서
+
+**조사 아키타입 (survey archetype)**:
+설문의 큰 조사 목적. 실태조사, 만족도조사, 성과조사, 인식조사처럼 분석 추천의 기본 방향을 정하는 분류이며 개별 문항의 역할이 아니다.
+_Avoid_: 조사 유형 태그를 문항 역할로 쓰기
+
+**분석 변수 (analysis variable)**:
+보고서 분석과 통계 검정의 최소 단위. 문항 하나가 아니라 SPSS export column 하나에 대응하며, 복수응답·테이블·순위형 문항은 여러 분석 변수로 펼쳐진다.
+_Avoid_: 문항 단위 통계 변수
+
+**변수 프로파일 (variable profile)**:
+분석 변수의 역할, 도메인, 척도, 값 타입, 응답 형태, 시간 성격, 분석 용도를 묶은 해석 메타데이터. 자동 추론 초안으로 만들되 사용자가 검토·수정할 수 있어야 한다.
+_Avoid_: role 단일 enum, 문항 태그
+
+**분석 레시피 (analysis recipe)**:
+조사 아키타입과 변수 프로파일 조합에서 추천되는 분석 묶음. 차트, 기술통계, 교차분석, 집단 차이 확인, AI 초벌 해석의 기본 구성을 함께 정한다.
+_Avoid_: 문항별 하드코딩 추천
+
+**문항 요약 (question summary)**:
+단일 문항 또는 문항 블록의 현황을 설명하는 분석. 빈도, 비율, 평균, 중앙값, Top2·Bottom2 비율처럼 보고서 본문에 바로 쓰는 기술통계를 포함한다.
+_Avoid_: 통계 검정까지 포함한 요약
+
+**집단 차이 분석 (group difference analysis)**:
+segment 변수로 나눈 집단 사이에 outcome/evaluation/barrier 계열 변수가 다르게 나타나는지 확인하는 분석. 보고서 UI에서는 "차이 없음/차이 가능성/차이 뚜렷함/표본 부족"처럼 해석 중심으로 표현한다.
+_Avoid_: 검정명 중심 메뉴
+
+**AI 초벌 해석 (AI draft interpretation)**:
+계산된 분석 결과와 주의사항을 근거로 작성되는 보고서 문장 초안. 원본 응답 JSONB를 직접 해석하지 않고 검증된 요약·교차표·집단 차이 결과를 입력으로 삼는다.
+_Avoid_: AI 통계 판정, 원본 JSONB 자유 해석
+
+**분석 설정 오버라이드 (analysis override)**:
+자동 생성된 변수 프로파일·분석 레시피 위에 사용자가 분석 페이지나 리포트에서 덮어쓴 표시·지표·태그 설정. 원본 SPSS 메타데이터를 곧바로 바꾸는 것이 아니라 해당 분석 관점의 의도를 기록한다.
+_Avoid_: 원본 태그 수정, 일회성 차트 상태
+
+**표시조건 관계 신호 (display-condition relationship signal)**:
+displayCondition의 sourceQuestionId와 requiredValues가 만들어내는 문항 간 의존 신호. 후속 문항의 분모, 필터 코호트, 추천 교차분석 후보를 정하는 강한 근거지만 인과관계 자체를 의미하지는 않는다.
+_Avoid_: 분기 로직을 원인-결과 관계로 해석
+
+### 쿼터
+
+**쿼터 플랜 (quota config)**:
+한 설문의 교차 셀별 목표 정의 전체 — 차원·카테고리·셀 목표·마감 문구·집행 스위치. `surveys.quotaConfig` JSONB 한 곳이 소유하며, 버전 스냅샷 밖이라 실사 도중 재배포 없이 편집된다. 카운트는 저장하지 않고 완료 응답에서 실시간 계산한다.
+_Avoid_: survey_quotas 위성 테이블, 저장된 카운터
+
+**쿼터 차원 (quota dimension)**:
+쿼터를 나누는 축. 문항 1개에 바인딩하며 유형은 옵션형(보기값 집합)·숫자형(반열림 구간 min ≤ 값 < max). 성별·연령처럼 단일값 소스만 차원이 된다.
+_Avoid_: 복수형 차원, 마진 합계 쿼터
+
+**쿼터 셀 (quota cell)**:
+차원들의 카테고리 조합과 목표 수. 셀 키는 categoryId를 차원 순서대로 이은 문자열(인덱스 아님 — 재정렬해도 목표 보존). "현재"는 완료 응답에서 실시간 집계하며 current ≥ target이면 "마감"이다.
+_Avoid_: 인덱스 기반 셀 식별, 저장된 현재 수
+
+**쿼터 마감 vs 쿼터마감 응답 (quota closed vs quotaful_out)**:
+"마감"은 셀이 목표에 도달해 닫힌 상태(플랜 진척, 셀 수). `quotaful_out`은 마감된 셀에 걸려 종료된 응답의 처리 상태(사람 수)다. 서로 다른 층위이며 UI에서 섞지 않는다 — KPI 쿼터 카드는 진척(완료/목표·%·마감 셀 수)을, disposition은 별도로 표현한다.
+_Avoid_: 마감 셀 수와 튕긴 응답 수 혼용
