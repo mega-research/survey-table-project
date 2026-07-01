@@ -10,6 +10,8 @@ interface Props {
   reason: BlockReason;
   surveyTitle: string;
   contactEmail: string | null;
+  /** quota_closed 등 설문별 커스텀 문구. 있으면 기본 body 대신 표시(줄바꿈 보존). */
+  customBody?: string | null;
 }
 
 interface MessageDef {
@@ -40,12 +42,18 @@ const MESSAGES: Record<BlockReason, MessageDef> = {
     body: '이 초대 링크로는 더 이상 응답을 받지 않습니다. 운영자에게 문의해 주세요.',
     tone: 'info',
   },
+  quota_closed: {
+    title: '설문이 마감되었습니다',
+    body: '해당 조건의 모집이 완료되어 더 이상 참여하실 수 없습니다. 참여해 주셔서 감사합니다.',
+    tone: 'info',
+  },
 };
 
-export function AlreadyRespondedView({ reason, surveyTitle, contactEmail }: Props) {
+export function AlreadyRespondedView({ reason, surveyTitle, contactEmail, customBody }: Props) {
   const msg = MESSAGES[reason];
   const Icon = msg.tone === 'error' ? AlertCircle : CheckCircle2;
   const iconColor = msg.tone === 'error' ? 'text-red-500' : 'text-blue-500';
+  const body = customBody && customBody.trim() ? customBody : msg.body;
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50">
@@ -56,7 +64,7 @@ export function AlreadyRespondedView({ reason, surveyTitle, contactEmail }: Prop
           {surveyTitle && (
             <p className="mb-3 text-sm text-gray-500">{surveyTitle}</p>
           )}
-          <p className="text-gray-600">{msg.body}</p>
+          <p className="whitespace-pre-wrap text-gray-600">{body}</p>
           {contactEmail && (
             <div className="mt-6 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm">
               <p className="text-gray-500">문의 이메일</p>

@@ -29,7 +29,8 @@ export type BlockReason =
   | 'invalid_token'
   | 'token_already_used'
   | 'device_already_responded'
-  | 'excluded_from_population';
+  | 'excluded_from_population'
+  | 'quota_closed';
 
 export type CheckResult =
   | { blocked: true; reason: BlockReason }
