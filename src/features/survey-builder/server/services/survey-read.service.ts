@@ -237,6 +237,10 @@ export async function getSurveyForResponse(
         },
         lookups: snapshot.lookups ?? survey.lookups ?? [],
         ...(survey.contactColumns != null ? { contactColumns: survey.contactColumns } : {}),
+        quotaGate:
+          survey.quotaConfig && survey.quotaConfig.enabled
+            ? { questionIds: survey.quotaConfig.dimensions.map((d) => d.questionId) }
+            : null,
         contactEmail: survey.contactEmail ?? null,
         createdAt: survey.createdAt,
         updatedAt: survey.updatedAt,
@@ -252,7 +256,12 @@ export async function getSurveyForResponse(
   const surveyData = await getSurveyWithDetails(surveyId);
   if (!surveyData) return null;
 
-  return { survey: surveyData, versionId: null };
+  const quotaGate =
+    survey.quotaConfig && survey.quotaConfig.enabled
+      ? { questionIds: survey.quotaConfig.dimensions.map((d) => d.questionId) }
+      : null;
+
+  return { survey: { ...surveyData, quotaGate }, versionId: null };
 }
 
 // ========================

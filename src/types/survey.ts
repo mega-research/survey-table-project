@@ -526,6 +526,8 @@ export interface Survey {
   lookups?: SurveyLookup[]; // 설문에 복사된 LUT 사본 목록
   // 컨택리스트 표시 컬럼 스킴 — 빌더에서 attrs 키 셀렉터·LUT 키 매핑 UI 가 참조.
   contactColumns?: ContactColumnScheme;
+  // 쿼터 게이트 — enabled면 이 문항들 응답 직후 checkQuota 발동 + 런타임 필수 강제. null=쿼터 없음/미집행.
+  quotaGate?: { questionIds: string[] } | null;
   createdAt: Date;
   updatedAt: Date;
 }
