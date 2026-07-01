@@ -42,6 +42,8 @@ import {
   collectTableQuestionOptions,
   filterOptionTextsForSubmission,
 } from '@/lib/option-text-migration';
+import { allQuotaQuestionsAnswered } from '@/lib/quota/gate';
+import { client } from '@/shared/lib/rpc';
 
 import { useSurveyResponseStore } from '@/stores/survey-response-store';
 import { useShallow } from 'zustand/react/shallow';
@@ -226,6 +228,14 @@ export function SurveyResponseFlow({
     () => new Set(),
   );
 
+  // 쿼터 게이트 — 이 문항들은 런타임 필수로 취급하고, 전부 답변되면 checkQuota 1회 호출.
+  const quotaGateIds = useMemo(
+    () => new Set(loadedSurvey?.quotaGate?.questionIds ?? []),
+    [loadedSurvey],
+  );
+  const quotaCheckedRef = useRef(false);
+  const [quotaClosedMessage, setQuotaClosedMessage] = useState<string | null>(null);
+
   const keyboardOpen = useKeyboardOpen();
 
   // 클라이언트 신호 (deviceId, screen 등) — 마운트 시 한 번 수집
@@ -375,7 +385,8 @@ export function SurveyResponseFlow({
 
   const hasPreviousDisplayable = stepHistory.length > 0;
 
-  const isQuestionRequired = (question: Question) => question.required;
+  const isQuestionRequired = (question: Question) =>
+    question.required || quotaGateIds.has(question.id);
 
   // 타입별 응답 충족 판정은 순수 함수(isQuestionAnswered)로 추출.
   // 원본 useCallback 의 [responses] deps 를 유지해 참조 안정성(answeredCount/requiredRemaining/handleSubmit) 보존.
@@ -460,8 +471,33 @@ export function SurveyResponseFlow({
     buildOptTextsPayload,
   });
 
-  const handleNext = () => {
+  const handleNext = async () => {
     const nextIndex = resolveNextStepIndex();
+
+    // 쿼터 게이트: 인구통계 문항 전부 답변 & 미체크 & responseId 확보 시 서버 확인.
+    // fail-open: 오류/미설정은 통과. 판정을 받으면(blocked 여부 무관) 재발동 방지 플래그 set.
+    if (
+      !quotaCheckedRef.current &&
+      currentResponseId &&
+      allQuotaQuestionsAnswered([...quotaGateIds], responses)
+    ) {
+      try {
+        const res = await client.quota.check({
+          responseId: currentResponseId,
+          surveyId: loadedSurvey?.id ?? '',
+          answers: responses,
+        });
+        quotaCheckedRef.current = true;
+        if (res.blocked) {
+          setQuotaClosedMessage(res.closedMessage);
+          setDuplicateStatus({ kind: 'blocked', reason: 'quota_closed' });
+          return;
+        }
+      } catch (err) {
+        console.error('쿼터 확인 오류:', err);
+        quotaCheckedRef.current = true; // fail-open: 무한 재시도 방지
+      }
+    }
 
     setStepHistory((prev) => [...prev, currentStepIndex]);
 
@@ -536,6 +572,7 @@ export function SurveyResponseFlow({
         reason={duplicateStatus.reason}
         surveyTitle={loadedSurvey?.title ?? ''}
         contactEmail={loadedSurvey?.contactEmail ?? null}
+        customBody={duplicateStatus.reason === 'quota_closed' ? quotaClosedMessage : null}
       />
     );
   }
