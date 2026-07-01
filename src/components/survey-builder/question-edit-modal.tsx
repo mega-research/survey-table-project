@@ -27,6 +27,7 @@ import { isValidUUID } from '@/lib/utils';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { useSurveyUIStore } from '@/stores/ui-store';
 import { isOptionListType } from '@/types/question-types';
+import type { CompleteQuestionWrite } from '@/db/schema/question-persisted-fields';
 import { Question } from '@/types/survey';
 import { collectChoiceOptCells, resolveChoiceOptions } from '@/utils/choice-source';
 import { collectRankingOptCells } from '@/utils/ranking-source';
@@ -261,12 +262,18 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
     if (!questionId || !validateForm()) return;
 
     // store에서 hideColumnLabels 최신값 머지 (silentUpdateQuestion으로 토글한 값)
+    // choiceGroups(보기 옵션 그룹)도 formData 가 아닌 셀 모달의 silentUpdateQuestion 경로로
+    // 스토어에만 반영되므로, 저장 페이로드(formData)가 누락해 CREATE 시 그룹이 사라진다.
+    // hideColumnLabels 와 동일하게 저장 직전 스토어 값을 머지해 동기화한다.
     const storeQuestion = useSurveyBuilderStore.getState()
       .currentSurvey.questions.find((q) => q.id === questionId);
     const currentFormData: Partial<Question> = {
       ...formDataRef.current,
       ...(storeQuestion?.hideColumnLabels !== undefined
         ? { hideColumnLabels: storeQuestion.hideColumnLabels }
+        : {}),
+      ...(storeQuestion?.choiceGroups !== undefined
+        ? { choiceGroups: storeQuestion.choiceGroups }
         : {}),
     };
     didSaveRef.current = true;
@@ -311,8 +318,12 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
               data: updateData,
             });
           } else {
-            // 새 질문: CREATE 경로
-            const createdQuestion = await client.surveyBuilder.questions.create({
+            // 새 질문: CREATE 경로.
+            // 가드: PERSISTED_QUESTION_FIELDS 를 모두 포함하도록 satisfies 로 강제한다.
+            // 신규 영속 컬럼이 SSOT 에 추가되면 여기 누락이 컴파일 에러로 호명되어
+            // hideColumnLabels/choiceGroups 류 silent create-drop 회귀를 봉인한다.
+            // (id/surveyId 는 CompleteQuestionWrite 의 index signature 가 흡수)
+            const createPayload = {
               id: questionId,
               surveyId: store.currentSurvey.id,
               groupId: currentFormData.groupId ?? question?.groupId,
@@ -349,12 +360,18 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
               dynamicRowConfigs: currentFormData.dynamicRowConfigs || question?.dynamicRowConfigs,
               hideTitle: currentFormData.hideTitle ?? question?.hideTitle,
               rankingConfig: currentFormData.rankingConfig || question?.rankingConfig,
+              choiceGroups: currentFormData.choiceGroups ?? question?.choiceGroups,
+              // hideColumnLabels 도 silentUpdateQuestion(표 에디터 토글)으로 store 에만 쓰여
+              // formData 가 소유하지 않는다. currentFormData 머지값을 CREATE 에 전달해
+              // 신규 질문에서 ON 토글이 default(false)로 silent drop 되는 회귀를 막는다.
+              hideColumnLabels: currentFormData.hideColumnLabels ?? question?.hideColumnLabels,
               questionCode: currentFormData.questionCode || question?.questionCode,
               isCustomSpssVarName: currentFormData.isCustomSpssVarName ?? question?.isCustomSpssVarName,
               exportLabel: currentFormData.exportLabel || question?.exportLabel,
               spssVarType: currentFormData.spssVarType ?? question?.spssVarType,
               spssMeasure: currentFormData.spssMeasure ?? question?.spssMeasure,
-            });
+            } satisfies CompleteQuestionWrite;
+            const createdQuestion = await client.surveyBuilder.questions.create(createPayload);
 
             if (createdQuestion?.id) {
               // DB에 생성 완료 → added에서 제거 (다음 모달 저장 시 UPDATE 경로 사용)

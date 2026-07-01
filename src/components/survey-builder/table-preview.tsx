@@ -41,6 +41,16 @@ interface TablePreviewProps {
   hideColumnLabels?: boolean | undefined;
   /** 셀 콘텐츠 렌더 오버라이드. undefined/null 반환 시 기본 PreviewCell 로 폴백. */
   renderCell?: (cell: TableCell) => React.ReactNode;
+  /**
+   * 보기 옵션(choice_opt) 셀의 컨트롤 종류. 질문 타입/그룹에서 내려준다. 미지정 시 checkbox.
+   * - 'radio' | 'checkbox': 모든 보기 옵션 셀에 동일 적용(비그룹/단일 타입)
+   * - (cell) => 'radio' | 'checkbox': 셀별 해석(그룹 혼합 — getGroupTypeOfCell 등)
+   */
+  choiceControlType?:
+    | 'radio'
+    | 'checkbox'
+    | ((cell: TableCell) => 'radio' | 'checkbox')
+    | undefined;
 }
 
 export const TablePreview = React.memo(function TablePreview({
@@ -51,6 +61,7 @@ export const TablePreview = React.memo(function TablePreview({
   className,
   hideColumnLabels = false,
   renderCell,
+  choiceControlType = 'checkbox',
 }: TablePreviewProps) {
   const totalWidth = useMemo(() => calcTotalWidth(columns), [columns]);
   const gridTemplateCols = useMemo(() => buildGridTemplateCols(columns), [columns]);
@@ -269,10 +280,16 @@ export const TablePreview = React.memo(function TablePreview({
                         >
                           {(() => {
                             const override = renderCell?.(cell);
-                            return override !== undefined && override !== null ? (
-                              override
-                            ) : (
-                              <PreviewCell cell={cell} />
+                            if (override !== undefined && override !== null) return override;
+                            // choice_opt 셀만 리졸버 호출(그룹 혼합 대응). 그 외 셀은 무시.
+                            const resolvedChoiceType =
+                              typeof choiceControlType === 'function'
+                                ? cell.type === 'choice_opt'
+                                  ? choiceControlType(cell)
+                                  : 'checkbox'
+                                : choiceControlType;
+                            return (
+                              <PreviewCell cell={cell} choiceControlType={resolvedChoiceType} />
                             );
                           })()}
                         </div>

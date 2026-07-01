@@ -46,7 +46,7 @@ import { useEnsureSurveyInDb } from '@/hooks/use-ensure-survey-in-db';
 import { generateId } from '@/lib/utils';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { useSurveyUIStore } from '@/stores/ui-store';
-import { ChoiceGroup, TableCell } from '@/types/survey';
+import { ChoiceGroup, TableCell, TableRow } from '@/types/survey';
 import { collectChoiceOptCells } from '@/utils/choice-source';
 import { isPartialNumericInput } from '@/utils/numeric-input';
 import { getMaxSpssCode } from '@/utils/option-code-generator';
@@ -105,6 +105,13 @@ interface CellContentModalProps {
   choiceGroups?: ChoiceGroup[] | undefined;
   /** choice_opt 그룹 변경 시 부모에게 통보 (prune 후 저장은 부모 책임) */
   onChoiceGroupsChange?: ((groups: ChoiceGroup[]) => void) | undefined;
+  /**
+   * 에디터의 권위 있는 최신 행(currentRowsRef). DB 저장/그룹 prune 의 베이스로 쓴다.
+   * store 의 tableRowsData 는 구조 편집(열/행 추가 등)이 formData 에만 반영되어 편집 중
+   * stale 할 수 있으므로, onSave 반영 직후의 에디터 행을 그대로 사용해야
+   * prune 이 멤버를 놓쳐 그룹이 풀리는 회귀를 막는다.
+   */
+  getLatestRows?: (() => TableRow[] | undefined) | undefined;
 }
 
 export function CellContentModal({
@@ -120,6 +127,7 @@ export function CellContentModal({
   columnLabel,
   choiceGroups: choiceGroupsProp,
   onChoiceGroupsChange,
+  getLatestRows,
 }: CellContentModalProps) {
   const questions = useSurveyBuilderStore(useShallow((s) => s.currentSurvey.questions));
   const variableCatalog = useSurveyUIStore((s) => s.variableCatalog);
@@ -337,9 +345,13 @@ export function CellContentModal({
       // 서버에 질문 저장/업데이트
       if (currentQuestionId && useSurveyBuilderStore.getState().currentSurvey.id) {
         const question = questions.find((q) => q.id === currentQuestionId);
-        if (question && question.tableRowsData) {
-          // tableRowsData에서 해당 셀을 찾아 업데이트
-          const updatedRowsData = question.tableRowsData.map((row) => ({
+        // 저장/prune 베이스는 에디터의 권위 있는 최신 행을 우선 사용한다.
+        // store.tableRowsData 는 구조 편집이 formData 에만 반영되어 stale 할 수 있어
+        // 그걸로 prune 하면 그룹 멤버를 놓쳐 그룹이 풀린다(getLatestRows 폴백은 store).
+        const baseRows = getLatestRows?.() ?? question?.tableRowsData;
+        if (question && baseRows) {
+          // 최신 행에서 해당 셀을 업데이트(onSave 로 이미 반영됐어도 id 기준 재적용은 idempotent)
+          const updatedRowsData = baseRows.map((row) => ({
             ...row,
             cells: row.cells.map((c) => (c.id === cell.id ? updatedCell : c)),
           }));

@@ -93,7 +93,7 @@ export function TableStepView({
       {!isMobile && hasHeaderContent && (
         <CardHeader className="pb-4">
           {(step.rootGroupName || step.subgroupName) && (
-            <div className="mb-2 flex flex-wrap items-center gap-2">
+            <div className="mb-6 flex flex-wrap items-center gap-2">
               {step.rootGroupName && (
                 <RootGroupNameBadge name={step.rootGroupName} design={step.rootGroupNameDesign} />
               )}

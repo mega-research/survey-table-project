@@ -29,6 +29,7 @@ import {
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { getGroupTypeOfCell } from '@/utils/choice-group-helpers';
 import { isPartialNumericInput, parseNumericInput } from '@/utils/numeric-input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
@@ -1213,6 +1214,17 @@ export function QuestionBasicTab({
                 tableHeaderGrid={formData.tableHeaderGrid}
                 className="border-2 border-dashed border-gray-300"
                 hideColumnLabels={questions.find((q) => q.id === questionId)?.hideColumnLabels}
+                choiceControlType={(cell) =>
+                  getGroupTypeOfCell(
+                    {
+                      ...(question as Question),
+                      type: question?.type ?? 'radio',
+                      tableRowsData: formData.tableRowsData,
+                      choiceGroups: questions.find((q) => q.id === questionId)?.choiceGroups,
+                    } as Question,
+                    cell.id,
+                  )
+                }
               />
             </div>
           )}
