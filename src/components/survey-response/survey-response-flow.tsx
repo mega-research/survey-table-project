@@ -481,21 +481,22 @@ export function SurveyResponseFlow({
       currentResponseId &&
       allQuotaQuestionsAnswered([...quotaGateIds], responses)
     ) {
+      // 재진입/중복 발동 방지 — await 완료 전에 먼저 플래그를 세워 재클릭 시에도
+      // 서버 확인은 최대 1회만 시도된다.
+      quotaCheckedRef.current = true;
       try {
         const res = await client.quota.check({
           responseId: currentResponseId,
           surveyId: loadedSurvey?.id ?? '',
           answers: responses,
         });
-        quotaCheckedRef.current = true;
         if (res.blocked) {
           setQuotaClosedMessage(res.closedMessage);
           setDuplicateStatus({ kind: 'blocked', reason: 'quota_closed' });
           return;
         }
       } catch (err) {
-        console.error('쿼터 확인 오류:', err);
-        quotaCheckedRef.current = true; // fail-open: 무한 재시도 방지
+        console.error('쿼터 확인 오류:', err); // fail-open: 플래그는 이미 위에서 세팅됨
       }
     }
 
