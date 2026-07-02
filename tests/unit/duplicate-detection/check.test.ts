@@ -103,7 +103,8 @@ describe('checkTrackB (신호 기반)', () => {
     });
 
     expect(mockFindFirst).toHaveBeenCalledTimes(1);
-    const { where } = mockFindFirst.mock.calls[0][0];
+    // noUncheckedIndexedAccess 대응 — 직전 toHaveBeenCalledTimes(1) 단언이 존재를 보장한다.
+    const { where } = mockFindFirst.mock.calls[0]![0];
     const query = dialect.sqlToQuery(where);
     // notTestResponse(eq(surveyResponses.isTest, false)) 가 where 절에 실제로
     // 포함돼야 한다 — 이 mock 은 where 를 해석하지 않고 무조건 undefined 를
