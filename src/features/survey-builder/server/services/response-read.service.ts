@@ -5,7 +5,7 @@ import { and, desc, eq, isNull } from 'drizzle-orm';
 import { db } from '@/db';
 import { responseAnswers, surveyResponses, surveyVersions } from '@/db/schema';
 import { answersToQuestionResponses } from '@/lib/analytics/response-adapter';
-import { notDeletedResponse } from '@/data/response-filters';
+import { notDeletedResponse, notTestResponse } from '@/data/response-filters';
 
 import type { ResponsesWithAnswersInput } from '../../domain/survey-read';
 
@@ -17,22 +17,24 @@ import type { ResponsesWithAnswersInput } from '../../domain/survey-read';
 // 응답 조회 (authed)
 // ========================
 
-// 설문별 응답 조회
+// 설문별 응답 조회 (테스트 응답 제외 — 통계·목록 공용 모수. 테스트 응답 표시가 필요한
+// 화면은 operations profiles 경로가 담당한다.)
 export async function getResponsesBySurvey(surveyId: string) {
   const responses = await db.query.surveyResponses.findMany({
-    where: and(eq(surveyResponses.surveyId, surveyId), notDeletedResponse),
+    where: and(eq(surveyResponses.surveyId, surveyId), notDeletedResponse, notTestResponse),
     orderBy: [desc(surveyResponses.startedAt)],
   });
   return responses;
 }
 
-// 완료된 응답만 조회
+// 완료된 응답만 조회 (테스트 응답 제외 — export 모수)
 export async function getCompletedResponses(surveyId: string) {
   const responses = await db.query.surveyResponses.findMany({
     where: and(
       eq(surveyResponses.surveyId, surveyId),
       eq(surveyResponses.isCompleted, true),
       notDeletedResponse,
+      notTestResponse,
     ),
     orderBy: [desc(surveyResponses.completedAt)],
   });
@@ -42,6 +44,8 @@ export async function getCompletedResponses(surveyId: string) {
 // 응답 단일 조회(소프트삭제 제외). WS-2 IDOR 봉인: responseId 단독 조회는 다른 설문
 // 소속 응답까지 끄집어낼 수 있으므로 surveyId 를 WHERE 스코프에 추가해 봉인한다.
 // (data/responses 의 includeDeleted 경로는 다른 호출자 전용 — 본 service 미노출.)
+// notTestResponse 의도적 미적용: 단건 조회는 모수 통계가 아니고, 관리자가 테스트 응답
+// 상세를 열람할 수 있어야 한다 (data/responses.ts getResponseById 와 동일 예외).
 export async function getResponseById(responseId: string, surveyId: string) {
   const where = and(
     eq(surveyResponses.id, responseId),
@@ -56,11 +60,12 @@ export async function getResponseById(responseId: string, surveyId: string) {
 export async function getResponsesWithAnswers(input: ResponsesWithAnswersInput) {
   const { surveyId, versionId } = input;
 
-  // 버전 필터 조건 구성
+  // 버전 필터 조건 구성 (테스트 응답 제외 — analytics 모수)
   const conditions = [
     eq(surveyResponses.surveyId, surveyId),
     eq(surveyResponses.isCompleted, true),
     notDeletedResponse,
+    notTestResponse,
   ];
 
   if (versionId) {
