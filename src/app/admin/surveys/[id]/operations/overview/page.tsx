@@ -73,7 +73,7 @@ function todayKst(): string {
  * - hour 모드에서 `date` 미지정 시 응답이 존재하는 가장 최근 일자(KST)로 자동 결정.
  *   응답이 전무하면 KST 오늘 일자로 fallback (어댑터의 `hourModeDate` 필수 조건 충족).
  * - 설문이 존재하지 않거나 soft-delete 된 경우 `notFound()` (D-7 전용 UI 는 후속 작업).
- * - `getQuotaStatus`는 쿼터 미설정 설문에서 null을 반환 — 이 경우 쿼터 카드/현황판 모두 렌더 생략.
+ * - `getQuotaStatus`는 쿼터 미설정 설문에서 null을 반환 — 이 경우 KPI 쿼터 카드는 '-'를 표시하고 현황판만 생략.
  */
 export default async function OperationsOverviewPage({
   params,

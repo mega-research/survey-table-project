@@ -1,3 +1,5 @@
+import { Fragment } from 'react';
+
 import type { StatusCounts } from '@/lib/operations/aggregate-status';
 import { numberFormatter } from '@/lib/operations/format';
 import type { QuotaSummary } from '@/lib/operations/quota-status';
@@ -6,7 +8,7 @@ import { cn } from '@/lib/utils';
 
 interface KpiRowProps {
   counts: StatusCounts;
-  /** 쿼터 요약. 쿼터 미설정(getQuotaStatus null)이면 undefined/null — 카드 자체를 숨긴다. */
+  /** 쿼터 요약. 쿼터 미설정(getQuotaStatus null)이면 카드 값만 '-'로 표시한다. */
   quota?: QuotaSummary | null;
 }
 
@@ -87,16 +89,22 @@ function KpiCell({ label, value, delta, deltaTone }: KpiCellProps) {
  * 완료/목표 총합 대비 % + 마감된 셀 수(closedCells)를 함께 보여줘, 쿼터 전체
  * 진척을 한눈에 파악할 수 있게 한다. 셀 단위 상세는 QuotaStatusPanel 담당.
  */
-function QuotaKpiCell({ quota }: { quota: QuotaSummary }) {
+function QuotaKpiCell({ quota }: { quota?: QuotaSummary | null }) {
+  const hasQuota = quota != null;
+  const value = hasQuota ? `${quota.pct}%` : '-';
+  const detail = hasQuota
+    ? `${numberFormatter.format(quota.currentTotal)}/${numberFormatter.format(quota.targetTotal)} · ${quota.closedCells} 마감`
+    : '-';
+
   return (
     <Card>
       <CardContent className="px-4 py-3 pt-3">
         <p className="text-xs text-slate-500">쿼터</p>
-        <p className="mt-1 text-2xl font-semibold text-blue-600">{quota.pct}%</p>
-        <p className="mt-0.5 text-xs text-slate-400">
-          {numberFormatter.format(quota.currentTotal)}/{numberFormatter.format(quota.targetTotal)} ·{' '}
-          {quota.closedCells} 마감
-        </p>
+        <p className={cn(
+          'mt-1 text-2xl font-semibold',
+          hasQuota ? 'text-blue-600' : 'text-slate-900',
+        )}>{value}</p>
+        <p className="mt-0.5 text-xs text-slate-400">{detail}</p>
       </CardContent>
     </Card>
   );
@@ -104,9 +112,9 @@ function QuotaKpiCell({ quota }: { quota: QuotaSummary }) {
 
 /**
  * 운영 현황 콘솔 — A1 KPI Row.
- * 6개 셀(전체 / 진행중 / 완료 / 자격 미달 / 불량 / 이탈) + (쿼터 설정 시) 쿼터 진행 카드를
+ * 6개 셀(전체 / 진행중 / 완료 / 자격 미달 / 불량 / 이탈) + 쿼터 진행 카드를
  * 가로로 나열한다. 쿼터마감 카운트는 더 이상 단일 셀이 아니라 쿼터 진행 카드(quota.closedCells)에
- * 흡수됐다 — 셀별 상세는 QuotaStatusPanel 참조.
+ * 흡수됐다 — 미설정이면 '-'로 표시하고, 셀별 상세는 QuotaStatusPanel 참조.
  *
  * total === 0 (종결 응답 없음)일 때:
  *   - 종결성 셀은 "—"로 표기 (전체/완료/자격미달/불량/이탈)
@@ -122,7 +130,7 @@ export function KpiRow({ counts, quota }: KpiRowProps) {
         const value = counts[cell.field];
         // 진행중 셀은 isEmpty 와 무관하게 항상 카운트 노출 (live 가시성 보존)
         const cellIsEmpty = cell.deltaTone === 'live' ? false : isEmpty;
-        return (
+        const kpiCell = (
           <KpiCell
             key={cell.field}
             label={cell.label}
@@ -131,8 +139,16 @@ export function KpiRow({ counts, quota }: KpiRowProps) {
             deltaTone={cell.deltaTone}
           />
         );
+
+        if (cell.field !== 'completed') return kpiCell;
+
+        return (
+          <Fragment key={cell.field}>
+            {kpiCell}
+            <QuotaKpiCell quota={quota ?? null} />
+          </Fragment>
+        );
       })}
-      {quota && <QuotaKpiCell quota={quota} />}
     </div>
   );
 }
