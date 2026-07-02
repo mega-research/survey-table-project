@@ -22,3 +22,9 @@ export const deletedResponse: SQL = isNotNull(surveyResponses.deletedAt);
  * 행 단위로 제외한다 — 이탈/진행중은 missing 값이 아니라 분석 대상 아님.
  */
 export const completedResponse: SQL = eq(surveyResponses.status, 'completed');
+
+/**
+ * 테스트 모드 응답 제외 조건.
+ * 통계·쿼터·중복대조·export 모수에서 사용. profiles 목록은 예외(표시 + 배지).
+ */
+export const notTestResponse: SQL = eq(surveyResponses.isTest, false);
