@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 
 import { useRouter } from 'next/navigation';
 import { CirclePause, CirclePlay, Copy, FlaskConical } from 'lucide-react';
@@ -50,7 +50,8 @@ interface Props {
  * 운영 헤더의 설문 중단·테스트 모드 토글 버튼.
  *
  * - 테스트 모드: 응답 페이지가 `?test=<token>` 링크로 접근됐을 때 중단/중복 게이트를 우회하고
- *   `survey_responses.isTest=true` 로 적재되게 만든다(집계 제외). ON 이면 amber 톤 드롭다운으로
+ *   `survey_responses.isTest=true` 로 적재되게 만든다(집계 제외). 켜는 즉시 테스트 링크를
+ *   클립보드에 자동 복사하고, ON 이면 amber 톤 버튼에 호버(또는 클릭)로 열리는 드롭다운으로
  *   링크 복사/끄기를 제공한다.
  * - 중단: 응답자 화면에 안내 문구만 노출하고 신규 응답 접수를 막는다. ON 이면 rose 톤으로
  *   "중단 중" 을 표시하고 클릭 시 재개 확인을 받는다.
@@ -72,9 +73,41 @@ export function SurveyControlButtons({ surveyId, initial }: Props) {
     initial.pausedMessage ?? DEFAULT_PAUSED_MESSAGE,
   );
 
+  // 테스트 모드 드롭다운 — 클릭 외에 호버로도 열린다. 대각선 이동 중 닫힘을 막기 위해
+  // mouseleave 후 200ms 지연 뒤 닫고, 트리거/콘텐츠 어느 쪽이든 재진입하면 취소한다.
+  const [testMenuOpen, setTestMenuOpen] = useState(false);
+  const menuCloseTimer = useRef<number | null>(null);
+
+  const openTestMenu = () => {
+    if (menuCloseTimer.current !== null) {
+      window.clearTimeout(menuCloseTimer.current);
+      menuCloseTimer.current = null;
+    }
+    setTestMenuOpen(true);
+  };
+
+  const scheduleTestMenuClose = () => {
+    if (menuCloseTimer.current !== null) {
+      window.clearTimeout(menuCloseTimer.current);
+    }
+    menuCloseTimer.current = window.setTimeout(() => setTestMenuOpen(false), 200);
+  };
+
+  useEffect(
+    () => () => {
+      if (menuCloseTimer.current !== null) {
+        window.clearTimeout(menuCloseTimer.current);
+      }
+    },
+    [],
+  );
+
+  const buildTestLink = (token: string) =>
+    `${window.location.origin}/survey/${surveyId}?test=${token}`;
+
   const testLink =
     typeof window !== 'undefined' && state.testToken
-      ? `${window.location.origin}/survey/${surveyId}?test=${state.testToken}`
+      ? buildTestLink(state.testToken)
       : null;
 
   // --- 테스트 모드 ---
@@ -83,7 +116,18 @@ export function SurveyControlButtons({ surveyId, initial }: Props) {
       try {
         const result = await client.operations.control.setTestMode({ surveyId, enabled: true });
         setState((s) => ({ ...s, ...result }));
-        toast.success('테스트 모드가 켜졌습니다. 테스트 링크를 복사해 사용하세요.');
+        // 발견성: 켜는 즉시 링크를 클립보드에 복사해준다. 클립보드 권한 실패(비HTTPS 등) 시
+        // 호버 메뉴 안내로 폴백 — 켜짐 자체는 성공이므로 success 토스트 유지.
+        if (result.testToken) {
+          try {
+            await navigator.clipboard.writeText(buildTestLink(result.testToken));
+            toast.success('테스트 모드가 켜졌습니다. 테스트 링크를 클립보드에 복사했습니다.');
+          } catch {
+            toast.success(
+              '테스트 모드가 켜졌습니다. 버튼에 마우스를 올리면 테스트 링크를 복사할 수 있습니다.',
+            );
+          }
+        }
         router.refresh();
       } catch (err) {
         toast.error(getErrorMessage(err, '테스트 모드 전환에 실패했습니다.'));
@@ -171,7 +215,8 @@ export function SurveyControlButtons({ surveyId, initial }: Props) {
   return (
     <>
       {state.testModeEnabled ? (
-        <DropdownMenu>
+        // modal={false}: 호버 오픈 중 배경 pointer-events 잠금이 없어야 mouseleave 닫힘이 자연스럽다
+        <DropdownMenu open={testMenuOpen} onOpenChange={setTestMenuOpen} modal={false}>
           <DropdownMenuTrigger asChild>
             <Button
               type="button"
@@ -179,12 +224,18 @@ export function SurveyControlButtons({ surveyId, initial }: Props) {
               size="sm"
               disabled={isPending}
               className="border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100"
+              onMouseEnter={openTestMenu}
+              onMouseLeave={scheduleTestMenuClose}
             >
               <FlaskConical className="mr-2 h-4 w-4" />
               테스트 모드
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
+          <DropdownMenuContent
+            align="end"
+            onMouseEnter={openTestMenu}
+            onMouseLeave={scheduleTestMenuClose}
+          >
             <DropdownMenuItem disabled={!testLink} onSelect={copyTestLink}>
               <Copy className="mr-2 h-4 w-4" />
               테스트 링크 복사
