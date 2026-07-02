@@ -99,9 +99,13 @@ export function useDuplicateGuard({
   }, [isAdminEdit, isPreview, skip, loadedSurvey?.id, inviteToken, signals]);
 
   // 유효 테스트 세션은 진입 시 중복검사 없이 통과. 내부 state 를 effect 에서 동기 set 하면
-  // cascading render 가 되므로(react-hooks/set-state-in-effect), 반환값만 ok 로 파생해 덮는다.
-  // 테스트 세션은 중단/중복 예외 대상이라 그 사이 blocked 로 set 될 경로가 없어 마스킹은 안전하다.
-  const effectiveStatus: DuplicateStatus = skip ? { kind: 'ok' } : duplicateStatus;
+  // cascading render 가 되므로(react-hooks/set-state-in-effect), 반환값만 파생해 덮는다.
+  // 단, skip 의 목적은 checkOnEntry 네트워크 호출 억제 + entry-check 진행 상태(checking) 우회이지
+  // blocked 은폐가 아니다. 사후에 외부(쿼터 마감 quota_closed / 봇가드 / 무효 테스트 토큰
+  // invalid_test_token)가 set 한 blocked 는 마스킹하지 않고 그대로 노출해야 실플로우 검증이 된다
+  // (I-2). 그래서 checking 만 ok 로 파생하고 blocked/ok 는 그대로 통과시킨다.
+  const effectiveStatus: DuplicateStatus =
+    skip && duplicateStatus.kind === 'checking' ? { kind: 'ok' } : duplicateStatus;
 
   return { duplicateStatus: effectiveStatus, setDuplicateStatus };
 }

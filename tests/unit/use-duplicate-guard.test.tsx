@@ -228,6 +228,51 @@ describe('useDuplicateGuard - checkOnEntry effect', () => {
   });
 });
 
+// I-2: skip(유효 테스트 세션)은 entry-check 진행 상태(checking)만 ok 로 우회하고,
+// 사후에 외부(쿼터 마감 / 봇가드 / 무효 테스트 토큰)가 set 한 blocked 는 마스킹하지 않고 노출한다.
+// (skip 의 목적은 checkOnEntry 네트워크 호출 억제 + checking 우회이지 blocked 은폐가 아님.)
+describe('useDuplicateGuard - skip 이어도 blocked 는 노출한다 (I-2)', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('skip 상태에서 쿼터 마감(quota_closed)이 사후 set 되면 마스킹하지 않고 노출한다', () => {
+    const { result } = renderHook(() =>
+      useDuplicateGuard(baseArgs({ skip: true, signals })),
+    );
+    // 진입 checking 은 skip 으로 ok 파생 (entry-check 우회는 유지).
+    expect(result.current.duplicateStatus).toEqual({ kind: 'ok' });
+
+    // survey-response-flow handleNext 의 쿼터 게이트가 사후 blocked 로 set 하는 경로.
+    act(() => {
+      result.current.setDuplicateStatus({ kind: 'blocked', reason: 'quota_closed' });
+    });
+    expect(result.current.duplicateStatus).toEqual({
+      kind: 'blocked',
+      reason: 'quota_closed',
+    });
+  });
+
+  it('skip 상태에서 무효 테스트 토큰(invalid_test_token)이 사후 set 되면 마스킹하지 않고 노출한다', () => {
+    const { result } = renderHook(() =>
+      useDuplicateGuard(baseArgs({ skip: true, signals })),
+    );
+
+    // 테스트 모드 OFF 후 stale 탭의 신규 응답이 서버에서 invalid_test_token 으로 blocked →
+    // useResponseLifecycle 가 이 setter 로 set 하는 경로.
+    act(() => {
+      result.current.setDuplicateStatus({
+        kind: 'blocked',
+        reason: 'invalid_test_token',
+      });
+    });
+    expect(result.current.duplicateStatus).toEqual({
+      kind: 'blocked',
+      reason: 'invalid_test_token',
+    });
+  });
+});
+
 // 중단 감지 공통 헬퍼 — mutation catch 3곳(첫 답변 create / blank+complete / resume)의 단일 진입점.
 describe('handlePausedMutationError', () => {
   // 헬퍼 인자 기본값. 각 테스트가 필요한 필드만 override 한다.
