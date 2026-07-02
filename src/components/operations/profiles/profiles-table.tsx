@@ -8,6 +8,7 @@ import {
 } from '@tanstack/react-table';
 import { useMemo } from 'react';
 
+import { Badge } from '@/components/ui/badge';
 import { LocalDateTime } from '@/components/ui/local-date-time';
 import { useSearchParamsMutator } from '@/hooks/use-search-params-mutator';
 import { cn } from '@/lib/utils';
@@ -67,6 +68,7 @@ interface DisplayRow {
   completedAt: Date | null;
   isInProgress: boolean;
   totalTimeText: string;
+  isTest: boolean;
 }
 
 const meta = (align: CellAlign, sortable: boolean): ColumnMeta => ({ align, sortable });
@@ -107,6 +109,7 @@ export function ProfilesTable({ rows, total, page, pageSize, sort, dir, stepLoca
           completedAt: r.completedAt,
           isInProgress: r.status === 'in_progress',
           totalTimeText: formatTotalTime(r.totalSeconds, r.status),
+          isTest: r.isTest,
         };
       }),
     [rows, stepLocations, totalSteps],
@@ -132,7 +135,19 @@ export function ProfilesTable({ rows, total, page, pageSize, sort, dir, stepLoca
         id: 'status',
         accessorKey: 'pill',
         header: '상태',
-        cell: ({ row }) => <StatusPill pill={row.original.pill} />,
+        cell: ({ row }) => (
+          <div className="flex items-center justify-center gap-1.5">
+            <StatusPill pill={row.original.pill} />
+            {row.original.isTest && (
+              <Badge
+                variant="outline"
+                className="border-amber-300 bg-amber-50 text-amber-700"
+              >
+                테스트
+              </Badge>
+            )}
+          </div>
+        ),
         meta: meta('center', true),
       },
       {

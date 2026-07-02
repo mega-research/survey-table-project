@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useSearchParamsMutator } from '@/hooks/use-search-params-mutator';
-import { hasActiveFilters, type StatusFilter } from '@/lib/operations/profiles';
+import { hasActiveFilters, type StatusFilter, type TestFilter } from '@/lib/operations/profiles';
 import {
   placeholderFor as sharedPlaceholderFor,
   type ColumnCandidate,
@@ -26,6 +26,7 @@ interface Props {
   initialSource: string;
   initialValue: string;
   initialStatus: StatusFilter;
+  initialTest: TestFilter;
   columnCandidates: ColumnCandidate[];
 }
 
@@ -37,6 +38,12 @@ const STATUS_OPTIONS: ReadonlyArray<{ value: StatusFilter; label: string }> = [
   { value: 'screened_out', label: '자격 미달' },
   { value: 'quotaful_out', label: '쿼터마감' },
   { value: 'bad', label: '불량' },
+];
+
+const TEST_OPTIONS: ReadonlyArray<{ value: TestFilter; label: string }> = [
+  { value: 'all', label: '테스트 포함' },
+  { value: 'exclude', label: '테스트 제외' },
+  { value: 'only', label: '테스트만' },
 ];
 
 /** idx/browser 는 응답 전용 placeholder, 그 외는 공유 헬퍼('부분일치'). */
@@ -58,11 +65,13 @@ export function ProfilesFilterBar({
   initialSource,
   initialValue,
   initialStatus,
+  initialTest,
   columnCandidates,
 }: Props) {
   const [source, setSource] = useState(initialSource);
   const [value, setValue] = useState(initialValue);
   const [status, setStatus] = useState<StatusFilter>(initialStatus);
+  const [test, setTest] = useState<TestFilter>(initialTest);
   const [, startTransition] = useTransition();
   const pushParams = useSearchParamsMutator();
   const searchParams = useSearchParams();
@@ -73,8 +82,9 @@ export function ProfilesFilterBar({
       setSource(initialSource);
       setValue(initialValue);
       setStatus(initialStatus);
+      setTest(initialTest);
     });
-  }, [initialSource, initialValue, initialStatus]);
+  }, [initialSource, initialValue, initialStatus, initialTest]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -90,6 +100,8 @@ export function ProfilesFilterBar({
         }
         if (status !== 'all') p.set('status', status);
         else p.delete('status');
+        if (test !== 'all') p.set('test', test);
+        else p.delete('test');
         p.delete('page');
       });
     });
@@ -99,11 +111,13 @@ export function ProfilesFilterBar({
     setSource('');
     setValue('');
     setStatus('all');
+    setTest('all');
     startTransition(() => {
       pushParams((p) => {
         p.delete('col');
         p.delete('q');
         p.delete('status');
+        p.delete('test');
         p.delete('page');
       });
     });
@@ -112,10 +126,12 @@ export function ProfilesFilterBar({
   const _q = searchParams?.get('q') ?? undefined;
   const _col = searchParams?.get('col') ?? undefined;
   const _status = searchParams?.get('status') ?? undefined;
+  const _test = searchParams?.get('test') ?? undefined;
   const showReset = hasActiveFilters({
     ...(_q !== undefined ? { q: _q } : {}),
     ...(_col !== undefined ? { col: _col } : {}),
     ...(_status !== undefined ? { status: _status } : {}),
+    ...(_test !== undefined ? { test: _test } : {}),
   });
 
   return (
@@ -162,6 +178,20 @@ export function ProfilesFilterBar({
           ))}
           <SelectSeparator />
           <SelectItem value="deleted">삭제됨</SelectItem>
+        </SelectContent>
+      </Select>
+
+      <label htmlFor="profiles-filter-test" className="sr-only">테스트 응답 필터</label>
+      <Select value={test} onValueChange={(v) => setTest(v as TestFilter)}>
+        <SelectTrigger id="profiles-filter-test" className="w-[140px] shrink-0">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {TEST_OPTIONS.map((o) => (
+            <SelectItem key={o.value} value={o.value}>
+              {o.label}
+            </SelectItem>
+          ))}
         </SelectContent>
       </Select>
 

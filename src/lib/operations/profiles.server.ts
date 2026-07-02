@@ -41,6 +41,8 @@ export interface ProfilesRow {
   totalSeconds: number | null;
   /** 매칭된 contact_targets.group_value (전시회명 국문 등). 익명/미매칭이면 null. */
   groupValue: string | null;
+  /** 테스트 모드 응답(survey_control) 여부. 통계에서는 항상 제외되지만 목록에는 배지로 노출한다. */
+  isTest: boolean;
 }
 
 export interface ListProfilesResult {
@@ -118,7 +120,7 @@ function profilesConditionToSql(
 export async function listResponsesForProfiles(
   args: ListProfilesArgs,
 ): Promise<ListProfilesResult> {
-  const { surveyId, page, pageSize, status, sort, dir, view, condition } = args;
+  const { surveyId, page, pageSize, status, sort, dir, view, condition, test } = args;
 
   // negative result codes — base subquery WHERE 의 NOT EXISTS 분기에 사용.
   // 빈 배열이면 unsubscribed_at 만 검사 (negative code 분기는 SQL 차원에서 생략).
@@ -144,6 +146,7 @@ export async function listResponsesForProfiles(
       startedAt: surveyResponses.startedAt,
       completedAt: surveyResponses.completedAt,
       totalSeconds: surveyResponses.totalSeconds,
+      isTest: surveyResponses.isTest,
       groupValue: contactTargets.groupValue,
       contactResid: contactTargets.resid,
       contactAttrs: contactTargets.attrs,
@@ -195,6 +198,14 @@ export async function listResponsesForProfiles(
     whereParts.push(eq(numbered.status, status));
   }
 
+  // 테스트 필터는 status/view 와 독립 축 — 휴지통(deleted view)에서도 동일하게 적용해
+  // 테스트 모드 OFF 시 일괄 삭제 전/후 확인 용도로 쓸 수 있게 한다.
+  if (test === 'only') {
+    whereParts.push(eq(numbered.isTest, true));
+  } else if (test === 'exclude') {
+    whereParts.push(eq(numbered.isTest, false));
+  }
+
   const conditionSql = profilesConditionToSql(condition, {
     idx: sql`${numbered.idx}`,
     browser: sql`${numbered.browser}`,
@@ -233,6 +244,7 @@ export async function listResponsesForProfiles(
       startedAt: numbered.startedAt,
       completedAt: numbered.completedAt,
       totalSeconds: numbered.totalSeconds,
+      isTest: numbered.isTest,
       groupValue: numbered.groupValue,
     })
     .from(numbered);
@@ -254,6 +266,7 @@ export async function listResponsesForProfiles(
     startedAt: r.startedAt,
     completedAt: r.completedAt,
     totalSeconds: r.totalSeconds,
+    isTest: r.isTest,
     groupValue: r.groupValue ?? null,
   }));
 

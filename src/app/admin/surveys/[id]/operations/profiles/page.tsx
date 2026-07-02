@@ -32,6 +32,7 @@ interface PageProps {
     status?: string;
     sort?: string;
     dir?: string;
+    test?: string;
   }>;
 }
 
@@ -70,6 +71,7 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
       dir: args.dir,
       view: args.view,
       condition,
+      test: args.test,
     }),
     db
       .select({
@@ -111,6 +113,7 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
               initialSource={args.col}
               initialValue={args.q}
               initialStatus={args.status}
+              initialTest={args.test}
               columnCandidates={columnCandidates}
             />
           </div>

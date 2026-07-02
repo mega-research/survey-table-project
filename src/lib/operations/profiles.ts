@@ -42,6 +42,10 @@ export const STATUS_FILTERS = [
 ] as const;
 export type StatusFilter = (typeof STATUS_FILTERS)[number];
 
+/** status 필터와 별개 축(테스트 모드 응답 표시 여부). 별도 select + URL 파라미터로 관리. */
+export const TEST_FILTERS = ['all', 'only', 'exclude'] as const;
+export type TestFilter = (typeof TEST_FILTERS)[number];
+
 /** UI 가 사용하는 고정 페이지 사이즈. URL 사용자 조작 차단. */
 export const PROFILES_PAGE_SIZE = 20;
 
@@ -63,6 +67,8 @@ export interface NormalizedListArgs {
   dir: SortDir;
   /** status='deleted' 이면 'deleted', 그 외 전부 'active'. */
   view: ProfilesView;
+  /** 테스트 모드 응답('is_test') 표시 여부. status 축과 독립적으로 결합. */
+  test: TestFilter;
 }
 
 /** `searchParams` 의 가공되지 않은 string 입력을 화이트리스트 + 기본값으로 normalize. */
@@ -73,6 +79,7 @@ export function normalizeListArgs(input: {
   status?: string;
   sort?: string;
   dir?: string;
+  test?: string;
 }): NormalizedListArgs {
   const status = pickFromWhitelist(input.status, STATUS_FILTERS, 'all');
   const view: ProfilesView = status === 'deleted' ? 'deleted' : 'active';
@@ -84,6 +91,7 @@ export function normalizeListArgs(input: {
     sort: pickFromWhitelist(input.sort, SORT_KEYS, 'idx'),
     dir: input.dir === 'asc' ? 'asc' : 'desc',
     view,
+    test: pickFromWhitelist(input.test, TEST_FILTERS, 'all'),
   };
 }
 
@@ -95,9 +103,10 @@ export function hasActiveFilters(input: {
   q?: string;
   col?: string;
   status?: string;
+  test?: string;
 }): boolean {
   const hasSearch = (input.col ?? '') !== '' && (input.q ?? '') !== '';
-  return hasSearch || (input.status ?? 'all') !== 'all';
+  return hasSearch || (input.status ?? 'all') !== 'all' || (input.test ?? 'all') !== 'all';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
