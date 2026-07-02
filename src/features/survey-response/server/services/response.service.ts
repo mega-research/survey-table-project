@@ -602,6 +602,14 @@ export async function createResponseWithFirstAnswer(
   const survey = await loadSurveyGateRow(surveyId);
   const isTest = isValidTestToken(survey, testToken);
 
+  // 무효 테스트 링크 차단(스펙 §9, 결정 5): testToken 이 왔는데 유효 세션으로 판정되지 않으면
+  // (테스트 모드 OFF 또는 토큰 불일치) 익명 실데이터로 폴백하지 않고 즉시 차단한다.
+  // 테스트 모드 OFF 후 stale 테스트 탭의 신규 응답이 isTest=false 실데이터로 새는 것 방지.
+  // 위치: 봇 가드 뒤, 중복검사(Track A/B) 앞.
+  if (testToken != null && !isTest) {
+    return { kind: 'blocked', reason: 'invalid_test_token' };
+  }
+
   // 중복 감지 재검증 (bypass defense — checkDuplicateOnEntry 우회 시 server action에서 2차 차단)
   // checkTrackA 가 통과 시 contactTargetId 를 반환하므로 그대로 사용 (중복 DB 호출 회피)
   // clientSignals null 시 Track B 검사 skip (수용된 trade-off — fallback 신호로 거짓 차단 회피)
@@ -702,6 +710,13 @@ export async function createBlankResponse(
   // 먼저 로드해 isTest 를 판정하고, isTest 면 아래 중복 감지를 skip 한다.
   const survey = await loadSurveyGateRow(surveyId);
   const isTest = isValidTestToken(survey, testToken);
+
+  // 무효 테스트 링크 차단(스펙 §9, 결정 5): createResponseWithFirstAnswer 와 동일 정책 —
+  // testToken 이 왔는데 유효 세션이 아니면 익명 폴백 없이 즉시 차단한다.
+  // 위치: 봇 가드 뒤, 중복검사(Track A/B) 앞.
+  if (testToken != null && !isTest) {
+    return { kind: 'blocked', reason: 'invalid_test_token' };
+  }
 
   // 중복 감지 재검증 (bypass defense). checkTrackA 반환의 contactTargetId 를 재사용해 중복 DB 호출 회피
   // clientSignals null 시 Track B 검사 skip. isTest 세션은 Track A/B 자체를 skip (스펙 4절).
