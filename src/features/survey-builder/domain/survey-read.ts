@@ -148,13 +148,22 @@ export const VariableCatalogOutput = z.custom<VariableDef[]>();
 // 원본 3함수 모두 requireAuth 없음. 응답자 공개 경로(survey-response-flow).
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** bySlug(getSurveyBySlug). 반환 surveys.$inferSelect | undefined → nullable. */
+/** bySlug(getSurveyBySlug). */
 export const SurveyBySlugInput = z.object({ slug: z.string() });
 export type SurveyBySlugInput = z.infer<typeof SurveyBySlugInput>;
 
-/** byPrivateToken(getSurveyByPrivateToken). 반환 surveys.$inferSelect | undefined → nullable. */
+/** byPrivateToken(getSurveyByPrivateToken). */
 export const SurveyByPrivateTokenInput = z.object({ token: z.string() });
 export type SurveyByPrivateTokenInput = z.infer<typeof SurveyByPrivateTokenInput>;
+
+/**
+ * bySlug / byPrivateToken 반환. 두 pub 절차는 익명 응답자에게 노출되므로 full row 를
+ * 반환하면 testToken/testModeEnabled/isPaused/pausedMessage/privateToken 같은 라이브
+ * 제어·비밀 컬럼이 유출된다(I-3). 호출자(응답 로더 use-survey-loader)는 id 만 소비하므로
+ * id 만 투영해 반환한다. findFirst 미스 시 undefined → nullable.
+ */
+export type SurveyIdRow = { id: string };
+export const SurveyIdRowOutput = z.custom<SurveyIdRow | null | undefined>();
 
 /** forResponse(getSurveyForResponse) 전용 input. testToken 은 테스트 링크 검증용(옵셔널). */
 export const SurveyForResponseInput = SurveyIdInput.extend({

@@ -25,6 +25,7 @@ import type {
   SurveyByPrivateTokenInput,
   SurveyForResponseInput,
   SurveyForResponseResult,
+  SurveyIdRow,
   SurveyListItem,
 } from '../../domain/survey-read';
 
@@ -144,18 +145,26 @@ export async function getSurveyListWithCounts(): Promise<SurveyListItem[]> {
 // 공개(pub) 응답자 조회 — requireAuth 없음
 // ========================
 
-// 슬러그로 설문 조회
-export async function getSurveyBySlug(input: SurveyBySlugInput) {
+// 슬러그로 설문 조회 (pub — 익명 응답자 진입).
+// 익명 노출 경로이므로 full row 를 반환하지 않고 호출자(use-survey-loader)가 실제 쓰는 id 만
+// 투영한다. testToken/testModeEnabled/isPaused/pausedMessage/privateToken 유출 차단(I-3).
+export async function getSurveyBySlug(
+  input: SurveyBySlugInput,
+): Promise<SurveyIdRow | undefined> {
   const survey = await db.query.surveys.findFirst({
     where: eq(surveys.slug, input.slug),
+    columns: { id: true },
   });
   return survey;
 }
 
-// 비공개 토큰으로 설문 조회
-export async function getSurveyByPrivateToken(input: SurveyByPrivateTokenInput) {
+// 비공개 토큰으로 설문 조회 (pub). 토큰으로 조회하되(로직 유지) 반환은 id 만 투영(I-3).
+export async function getSurveyByPrivateToken(
+  input: SurveyByPrivateTokenInput,
+): Promise<SurveyIdRow | undefined> {
   const survey = await db.query.surveys.findFirst({
     where: eq(surveys.privateToken, input.token),
+    columns: { id: true },
   });
   return survey;
 }
