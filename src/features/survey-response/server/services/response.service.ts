@@ -21,6 +21,7 @@ import { computeSignals } from '@/lib/duplicate-detection/signals';
 import { sumActiveSeconds } from '@/lib/operations/active-seconds';
 import { parseBrowser, parsePlatform } from '@/lib/operations/parse-ua';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
+import { isValidTestToken } from '@/lib/survey-control';
 
 import type {
   ClientSignals,
@@ -151,6 +152,10 @@ type SurveyGateRow = {
   requireInviteToken: boolean;
   // #24 버전 무결성: 클라 제공 versionId 의 "현재 활성" 판정에 사용.
   currentVersionId: string | null;
+  // 설문 중단·테스트 모드 (isValidTestToken 판정 + paused 게이트에 사용).
+  isPaused: boolean;
+  testModeEnabled: boolean;
+  testToken: string | null;
 };
 
 /** 가용성 게이트 입력 — 응답 시점 활성 버전(없으면 null). */
@@ -176,17 +181,25 @@ export class SurveyNotAcceptingResponsesError extends Error {
  *   채우는 경우)도 DB 레벨 락 없이 허용하는 잔여 window 다(문서화된 trade-off).
  * - isPublic === false 면 유효 invite(contactTargetId)가 필요. requireInviteToken 이면 토큰 강제
  *   (기존 checkTrackA 가 inviteToken 유효성을 별도 검증하므로 여기서는 contactTargetId 매칭 유무만 본다).
+ *   단, isTest(테스트 세션)면 예외 — 테스트 링크는 invite 없이 진입하는 것이 정상 설계다.
+ * - survey.isPaused 면 거부. 단, isTest(테스트 세션)면 예외 — 운영자가 중단 중에도 테스트
+ *   링크로 미리보기/QA 할 수 있어야 한다(스펙 5절).
  */
 function assertSurveyAcceptingResponses(
   survey: SurveyGateRow,
   version: VersionGateRow,
-  opts: { contactTargetId: string | null; completedCount?: number | null },
+  opts: { contactTargetId: string | null; completedCount?: number | null; isTest: boolean },
 ): void {
   // status: 설문 자체가 published 이거나, 활성 version 이 published 여야 함.
   const surveyPublished = survey.status === 'published';
   const versionPublished = version?.status === 'published';
   if (!surveyPublished && !versionPublished) {
     throw new SurveyNotAcceptingResponsesError('status_not_published');
+  }
+
+  // 중단 모드: 테스트 세션(isTest)만 예외 (스펙 5절)
+  if (survey.isPaused && !opts.isTest) {
+    throw new SurveyNotAcceptingResponsesError('survey_paused');
   }
 
   // endDate 경과
@@ -203,8 +216,12 @@ function assertSurveyAcceptingResponses(
     throw new SurveyNotAcceptingResponsesError('max_responses_reached');
   }
 
-  // 비공개 설문 / invite 강제
-  if ((survey.isPublic === false || survey.requireInviteToken) && opts.contactTargetId == null) {
+  // 비공개 설문 / invite 강제 — 테스트 세션(isTest)은 invite 없이 진입하는 것이 정상이므로 예외.
+  if (
+    (survey.isPublic === false || survey.requireInviteToken) &&
+    opts.contactTargetId == null &&
+    !opts.isTest
+  ) {
     throw new SurveyNotAcceptingResponsesError('invite_required');
   }
 }
@@ -220,6 +237,9 @@ async function loadSurveyGateRow(surveyId: string): Promise<SurveyGateRow> {
       isPublic: true,
       requireInviteToken: true,
       currentVersionId: true,
+      isPaused: true,
+      testModeEnabled: true,
+      testToken: true,
     },
   });
   if (!row) {
@@ -408,7 +428,8 @@ export async function startResponse(input: StartResponseInput): Promise<SurveyRe
   const survey = await loadSurveyGateRow(surveyId);
   // #24 버전 무결성: 클라 제공 versionId 가 동일 surveyId 의 유효 버전인지 검증(불일치 거부).
   const version = await loadValidatedVersionGateRow(surveyId, versionId, survey.currentVersionId);
-  assertSurveyAcceptingResponses(survey, version, { contactTargetId: null });
+  // startResponse 는 테스트 전용 유지 함수(#402 주석 참조)라 isTest 판정 없이 고정한다.
+  assertSurveyAcceptingResponses(survey, version, { contactTargetId: null, isTest: false });
 
   const newResponse: NewSurveyResponse = {
     surveyId,
@@ -546,9 +567,9 @@ function isLikelyBot(args: {
 export async function createResponseWithFirstAnswer(
   input: CreateResponseWithFirstAnswerInput,
 ): Promise<FirstAnswerResult> {
-  const { surveyId, sessionId, versionId, questionId, value, currentStepId, visibleStepIndex, visibleStepTotal, inviteToken, clientSignals, honeypot } = input;
+  const { surveyId, sessionId, versionId, questionId, value, currentStepId, visibleStepIndex, visibleStepTotal, inviteToken, clientSignals, honeypot, testToken } = input;
 
-  // 봇 방어: db/헤더 접근 전에 차단. 사유는 device_already_responded 로 통일(탐지 비노출).
+  // 봇 방어: db/헤더 접근 전에 차단. 사유는 device_already_responded 로 통일(탐지 비노출). 위치·동작 불변.
   if (isLikelyBot({ honeypot, inviteToken, clientSignals })) {
     return { kind: 'blocked', reason: 'device_already_responded' };
   }
@@ -562,25 +583,33 @@ export async function createResponseWithFirstAnswer(
   // 신호 계산: ipHash, fpHash, deviceId (clientSignals null 이면 모두 null)
   const signals = clientSignals ? computeSignals(headerStore, clientSignals) : null;
 
+  // 가용성 게이트 + 테스트 세션 판정: contactTargetId 확정보다 survey 를 먼저 로드해야
+  // isTest(testModeEnabled + testToken 일치) 판정이 가능하고, isTest 면 아래 중복 감지를 skip 한다.
+  const survey = await loadSurveyGateRow(surveyId);
+  const isTest = isValidTestToken(survey, testToken);
+
   // 중복 감지 재검증 (bypass defense — checkDuplicateOnEntry 우회 시 server action에서 2차 차단)
   // checkTrackA 가 통과 시 contactTargetId 를 반환하므로 그대로 사용 (중복 DB 호출 회피)
   // clientSignals null 시 Track B 검사 skip (수용된 trade-off — fallback 신호로 거짓 차단 회피)
+  // isTest 세션은 통계·쿼터·중복대조 모수에서 제외되므로 Track A/B 자체를 skip (스펙 4절).
+  // inviteToken 이 함께 와도 isTest 면 Track A 를 건너뛰므로 contactTargetId 는 null 로 남는다
+  // (테스트 링크는 invite 없이 진입하는 것이 정상 설계 — invite 병용은 지원하지 않는다).
   let contactTargetId: string | null = null;
-  if (inviteToken) {
-    const trackA = await checkTrackA(surveyId, inviteToken);
-    if (trackA.blocked) return { kind: 'blocked', reason: trackA.reason };
-    contactTargetId = trackA.contactTargetId ?? null;
-  } else if (signals) {
-    const trackB = await checkTrackB({ surveyId, signals });
-    if (trackB.blocked) return { kind: 'blocked', reason: trackB.reason };
+  if (!isTest) {
+    if (inviteToken) {
+      const trackA = await checkTrackA(surveyId, inviteToken);
+      if (trackA.blocked) return { kind: 'blocked', reason: trackA.reason };
+      contactTargetId = trackA.contactTargetId ?? null;
+    } else if (signals) {
+      const trackB = await checkTrackB({ surveyId, signals });
+      if (trackB.blocked) return { kind: 'blocked', reason: trackB.reason };
+    }
   }
 
-  // 가용성 게이트: contactTargetId 확정 후 검사(비공개/토큰강제는 유효 invite 매칭 필요).
-  // create 시점은 정원 soft(completedCount 미전달) — 잔여 race window 는 complete 하드체크가 보강.
-  const survey = await loadSurveyGateRow(surveyId);
   // #24 버전 무결성: 클라 제공 versionId 가 동일 surveyId 의 유효 버전인지 검증(불일치 거부).
+  // create 시점 정원은 soft(completedCount 미전달) — 잔여 race window 는 complete 하드체크가 보강.
   const version = await loadValidatedVersionGateRow(surveyId, versionId, survey.currentVersionId);
-  assertSurveyAcceptingResponses(survey, version, { contactTargetId });
+  assertSurveyAcceptingResponses(survey, version, { contactTargetId, isTest });
 
   const firstVisit: PageVisit = {
     stepId: currentStepId,
@@ -605,6 +634,7 @@ export async function createResponseWithFirstAnswer(
     visibleStepTotal: visibleStepTotal ?? null,
     pageVisits: [firstVisit],
     contactTargetId,
+    isTest,
   };
 
   const result = await insertResponseWithContactReuse({
@@ -639,9 +669,9 @@ export async function createResponseWithFirstAnswer(
 export async function createBlankResponse(
   input: CreateBlankResponseInput,
 ): Promise<FirstAnswerResult> {
-  const { surveyId, sessionId, versionId, currentStepId, inviteToken, clientSignals, honeypot } = input;
+  const { surveyId, sessionId, versionId, currentStepId, inviteToken, clientSignals, honeypot, testToken } = input;
 
-  // 봇 방어: db/헤더 접근 전에 차단. 사유는 device_already_responded 로 통일(탐지 비노출).
+  // 봇 방어: db/헤더 접근 전에 차단. 사유는 device_already_responded 로 통일(탐지 비노출). 위치·동작 불변.
   if (isLikelyBot({ honeypot, inviteToken, clientSignals })) {
     return { kind: 'blocked', reason: 'device_already_responded' };
   }
@@ -654,23 +684,29 @@ export async function createBlankResponse(
   // 신호 계산: ipHash, fpHash, deviceId (clientSignals null 이면 모두 null)
   const signals = clientSignals ? computeSignals(headerStore, clientSignals) : null;
 
+  // 가용성 게이트 + 테스트 세션 판정: createResponseWithFirstAnswer 와 동일하게 survey 를
+  // 먼저 로드해 isTest 를 판정하고, isTest 면 아래 중복 감지를 skip 한다.
+  const survey = await loadSurveyGateRow(surveyId);
+  const isTest = isValidTestToken(survey, testToken);
+
   // 중복 감지 재검증 (bypass defense). checkTrackA 반환의 contactTargetId 를 재사용해 중복 DB 호출 회피
-  // clientSignals null 시 Track B 검사 skip
+  // clientSignals null 시 Track B 검사 skip. isTest 세션은 Track A/B 자체를 skip (스펙 4절).
   let contactTargetId: string | null = null;
-  if (inviteToken) {
-    const trackA = await checkTrackA(surveyId, inviteToken);
-    if (trackA.blocked) return { kind: 'blocked', reason: trackA.reason };
-    contactTargetId = trackA.contactTargetId ?? null;
-  } else if (signals) {
-    const trackB = await checkTrackB({ surveyId, signals });
-    if (trackB.blocked) return { kind: 'blocked', reason: trackB.reason };
+  if (!isTest) {
+    if (inviteToken) {
+      const trackA = await checkTrackA(surveyId, inviteToken);
+      if (trackA.blocked) return { kind: 'blocked', reason: trackA.reason };
+      contactTargetId = trackA.contactTargetId ?? null;
+    } else if (signals) {
+      const trackB = await checkTrackB({ surveyId, signals });
+      if (trackB.blocked) return { kind: 'blocked', reason: trackB.reason };
+    }
   }
 
-  // 가용성 게이트: contactTargetId 확정 후 검사. create 시점 정원 soft.
-  const survey = await loadSurveyGateRow(surveyId);
   // #24 버전 무결성: 클라 제공 versionId 가 동일 surveyId 의 유효 버전인지 검증(불일치 거부).
+  // create 시점 정원 soft.
   const version = await loadValidatedVersionGateRow(surveyId, versionId, survey.currentVersionId);
-  assertSurveyAcceptingResponses(survey, version, { contactTargetId });
+  assertSurveyAcceptingResponses(survey, version, { contactTargetId, isTest });
 
   const firstVisit: PageVisit = {
     stepId: currentStepId,
@@ -693,6 +729,7 @@ export async function createBlankResponse(
     currentStepId,
     pageVisits: [firstVisit],
     contactTargetId,
+    isTest,
   };
 
   const result = await insertResponseWithContactReuse({
@@ -727,6 +764,9 @@ export async function completeResponse(
     assertSurveyAcceptingResponses(survey, version, {
       contactTargetId: gateRow.contactTargetId,
       completedCount,
+      // TODO(Task 6): gateRow(survey_responses.isTest) 기준으로 교체 — 이 태스크는 create
+      // 경로만 다루므로 completeResponse 는 아직 isTest 판정 없이 고정한다.
+      isTest: false,
     });
   }
 

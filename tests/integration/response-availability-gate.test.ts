@@ -20,6 +20,7 @@ const {
   insertReturningMock,
   selectLimitMock,
   countResultMock,
+  headersMock,
 } = vi.hoisted(() => ({
   surveyFindFirstMock: vi.fn(),
   versionFindFirstMock: vi.fn(),
@@ -28,6 +29,7 @@ const {
   insertReturningMock: vi.fn(),
   selectLimitMock: vi.fn(),
   countResultMock: vi.fn(),
+  headersMock: vi.fn(),
 }));
 
 const insertChain = {
@@ -89,6 +91,10 @@ vi.mock('@/features/survey-response/server/services/response-answers.service', (
 
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 
+// createResponseWithFirstAnswer 는 UA 파싱을 위해 next/headers 를 호출한다(테스트 세션
+// 판정 게이트 테스트에서만 필요 — startResponse/completeResponse 는 호출하지 않는다).
+vi.mock('next/headers', () => ({ headers: headersMock }));
+
 const SURVEY_ID = '00000000-0000-4000-8000-000000000001';
 
 function publishedSurvey(over: Record<string, unknown> = {}) {
@@ -99,6 +105,10 @@ function publishedSurvey(over: Record<string, unknown> = {}) {
     maxResponses: null,
     isPublic: true,
     requireInviteToken: false,
+    // 설문 중단·테스트 모드 (Task 5) — 기본은 off.
+    isPaused: false,
+    testModeEnabled: false,
+    testToken: null,
     ...over,
   };
 }
@@ -214,5 +224,102 @@ describe('assertSurveyAcceptingResponses — completeResponse 정원 하드체�
     const { completeResponse } = await import('@/features/survey-response/server/services/response.service');
     const res = await completeResponse({ responseId: 'r1' });
     expect(res).toMatchObject({ id: 'r1' });
+  });
+});
+
+describe('assertSurveyAcceptingResponses — createResponseWithFirstAnswer 테스트 세션 판정 + 중단 게이트', () => {
+  const VALID_SIGNALS = {
+    deviceId: 'dev-gate-1',
+    screen: '1920x1080',
+    tz: 'Asia/Seoul',
+    lang: 'ko-KR',
+    platform: 'MacIntel',
+  };
+
+  beforeEach(() => {
+    surveyFindFirstMock.mockReset();
+    versionFindFirstMock.mockReset();
+    responseFindFirstMock.mockReset();
+    contactFindFirstMock.mockReset();
+    insertReturningMock.mockReset();
+    selectLimitMock.mockReset();
+    countResultMock.mockReset();
+    headersMock.mockReset();
+    insertChain.values.mockClear();
+
+    headersMock.mockResolvedValue(
+      new Headers({ 'x-forwarded-for': '10.0.0.9', 'user-agent': 'Chrome/120' }),
+    );
+    insertReturningMock.mockResolvedValue([{ id: 'r1', contactTargetId: null }]);
+    // updateQuestionResponse 의 questionId 존재 검사(select().where().limit()) 기본 hit.
+    selectLimitMock.mockResolvedValue([{ id: 'q1' }]);
+    countResultMock.mockResolvedValue([{ total: 0 }]);
+  });
+
+  it('isPaused 설문은 create 를 survey_paused 로 거부한다', async () => {
+    surveyFindFirstMock.mockResolvedValue(publishedSurvey({ isPaused: true }));
+    // Track B: 매칭되는 완료 응답 없음 → 통과 후 paused 게이트에서 거부되는지 확인.
+    responseFindFirstMock.mockResolvedValue(undefined);
+
+    const { createResponseWithFirstAnswer } = await import('@/features/survey-response/server/services/response.service');
+    await expect(
+      createResponseWithFirstAnswer({
+        surveyId: SURVEY_ID,
+        sessionId: 'gate-session-paused',
+        versionId: null,
+        questionId: 'q1',
+        value: 'a',
+        currentStepId: 'step1',
+        clientSignals: VALID_SIGNALS,
+      }),
+    ).rejects.toThrow(/survey_paused/);
+  });
+
+  it('isPaused 여도 유효한 testToken 이면 생성되고 isTest=true 로 기록된다', async () => {
+    surveyFindFirstMock.mockResolvedValue(
+      publishedSurvey({ isPaused: true, testModeEnabled: true, testToken: 'tok' }),
+    );
+    // isTest 세션이므로 Track B 는 호출되지 않아야 한다. updateQuestionResponse 내부의
+    // 응답 행 조회(surveyResponses.findFirst)에만 쓰인다.
+    responseFindFirstMock.mockResolvedValue({ id: 'r1', surveyId: SURVEY_ID, versionId: null });
+
+    const { createResponseWithFirstAnswer } = await import('@/features/survey-response/server/services/response.service');
+    const result = await createResponseWithFirstAnswer({
+      surveyId: SURVEY_ID,
+      sessionId: 'gate-session-test-token',
+      versionId: null,
+      questionId: 'q1',
+      value: 'a',
+      currentStepId: 'step1',
+      clientSignals: VALID_SIGNALS,
+      testToken: 'tok',
+    });
+
+    expect(result).toMatchObject({ kind: 'created', id: 'r1' });
+    const valuesCalls = insertChain.values.mock.calls as unknown as Array<
+      [{ isTest: boolean }]
+    >;
+    const inserted = valuesCalls[0]![0];
+    expect(inserted.isTest).toBe(true);
+  });
+
+  it('무효 testToken 은 isTest 로 기록되지 않고 Track B 검사가 수행된다', async () => {
+    surveyFindFirstMock.mockResolvedValue(publishedSurvey({ testModeEnabled: false }));
+    // Track B 관점에서 매칭되는 완료 응답이 존재 — 정상 취급이면 여기서 차단돼야 한다.
+    responseFindFirstMock.mockResolvedValue({ id: 'prior-response' });
+
+    const { createResponseWithFirstAnswer } = await import('@/features/survey-response/server/services/response.service');
+    const result = await createResponseWithFirstAnswer({
+      surveyId: SURVEY_ID,
+      sessionId: 'gate-session-invalid-token',
+      versionId: null,
+      questionId: 'q1',
+      value: 'a',
+      currentStepId: 'step1',
+      clientSignals: VALID_SIGNALS,
+      testToken: 'tok',
+    });
+
+    expect(result).toEqual({ kind: 'blocked', reason: 'device_already_responded' });
   });
 });

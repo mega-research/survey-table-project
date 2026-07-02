@@ -71,6 +71,8 @@ export const CreateResponseWithFirstAnswerInput = z.object({
   clientSignals: ClientSignalsSchema.nullable(),
   // 봇 방어 허니팟. 실제 클라이언트는 hidden 필드라 항상 빈 값. 봇이 채우면 차단.
   honeypot: z.string().optional(),
+  // 테스트 링크 토큰 — surveys.testModeEnabled + testToken 과 일치하면 isTest 세션으로 기록.
+  testToken: z.string().optional(),
 });
 export type CreateResponseWithFirstAnswerInput = z.infer<
   typeof CreateResponseWithFirstAnswerInput
@@ -85,6 +87,8 @@ export const CreateBlankResponseInput = z.object({
   clientSignals: ClientSignalsSchema.nullable(),
   // 봇 방어 허니팟. 실제 클라이언트는 hidden 필드라 항상 빈 값. 봇이 채우면 차단.
   honeypot: z.string().optional(),
+  // 테스트 링크 토큰 — surveys.testModeEnabled + testToken 과 일치하면 isTest 세션으로 기록.
+  testToken: z.string().optional(),
 });
 export type CreateBlankResponseInput = z.infer<typeof CreateBlankResponseInput>;
 
