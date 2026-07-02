@@ -2,7 +2,7 @@ import { and, eq, isNull, isNotNull, or, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { surveyResponses } from '@/db/schema/surveys';
-import { notDeletedResponse } from '@/data/response-filters';
+import { notDeletedResponse, notTestResponse } from '@/data/response-filters';
 import { findContactByInviteToken } from './invite-lookup';
 import type { CheckResult, ServerSignals } from './types';
 
@@ -56,6 +56,7 @@ export async function checkTrackB(params: {
     where: and(
       eq(surveyResponses.surveyId, surveyId),
       notDeletedResponse,
+      notTestResponse,
       isNotNull(surveyResponses.completedAt),
       or(cond1, cond2),
     ),

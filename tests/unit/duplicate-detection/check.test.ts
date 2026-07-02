@@ -1,10 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { PgDialect } from 'drizzle-orm/pg-core';
 
 // db.query.surveyResponses.findFirst 와 findContactByInviteToken 을 mock
 const { mockFindFirst, mockFindContact } = vi.hoisted(() => ({
   mockFindFirst: vi.fn(),
   mockFindContact: vi.fn(),
 }));
+
+const dialect = new PgDialect();
 
 vi.mock('@/db', () => ({
   db: { query: { surveyResponses: { findFirst: mockFindFirst } } },
@@ -89,5 +92,23 @@ describe('checkTrackB (신호 기반)', () => {
       signals: { ipHash: null, fpHash: null, deviceId: null },
     });
     expect(r).toEqual({ blocked: false });
+  });
+
+  it('isTest 완료 응답은 중복 매칭에서 제외한다 (where 절에 is_test=false 조건 포함)', async () => {
+    mockFindFirst.mockResolvedValue(undefined);
+    const { checkTrackB } = await import('@/lib/duplicate-detection/check');
+    await checkTrackB({
+      surveyId: 's1',
+      signals: { ipHash: 'iH', fpHash: 'fH', deviceId: 'dev1' },
+    });
+
+    expect(mockFindFirst).toHaveBeenCalledTimes(1);
+    const { where } = mockFindFirst.mock.calls[0][0];
+    const query = dialect.sqlToQuery(where);
+    // notTestResponse(eq(surveyResponses.isTest, false)) 가 where 절에 실제로
+    // 포함돼야 한다 — 이 mock 은 where 를 해석하지 않고 무조건 undefined 를
+    // 반환하므로, 조건 누락은 결과값 비교만으로는 잡히지 않는다.
+    expect(query.sql).toContain('is_test');
+    expect(query.params).toContain(false);
   });
 });
