@@ -39,6 +39,9 @@ export const ResumeOrCreateResponseInput = z.object({
   surveyId: z.string(),
   sessionId: z.string(),
   inviteToken: z.string().optional(),
+  // 테스트 링크 토큰 — surveys.testModeEnabled + testToken 과 일치하면 재개 게이트에서
+  // isTest 세션으로 취급해 중단(paused) 예외를 허용한다.
+  testToken: z.string().optional(),
 });
 export type ResumeOrCreateResponseInput = z.infer<typeof ResumeOrCreateResponseInput>;
 

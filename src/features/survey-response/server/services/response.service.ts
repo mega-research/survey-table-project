@@ -16,12 +16,13 @@ import {
   surveyVersions,
 } from '@/db/schema';
 import type { PageVisit } from '@/db/schema/schema-types';
+import { notTestResponse } from '@/data/response-filters';
 import { checkTrackA, checkTrackB } from '@/lib/duplicate-detection/check';
 import { computeSignals } from '@/lib/duplicate-detection/signals';
 import { sumActiveSeconds } from '@/lib/operations/active-seconds';
 import { parseBrowser, parsePlatform } from '@/lib/operations/parse-ua';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
-import { isValidTestToken } from '@/lib/survey-control';
+import { getSurveyControlFlags, isValidTestToken } from '@/lib/survey-control';
 
 import type {
   ClientSignals,
@@ -388,7 +389,10 @@ async function loadValidQuestionIds(
   return new Set(rows.map((r) => r.id));
 }
 
-/** surveyId 의 완료 응답 수 (soft-delete 제외). complete 시점 정원 하드체크용. */
+/**
+ * surveyId 의 완료 응답 수 (soft-delete 제외, 테스트 모드 응답 제외). complete 시점 정원
+ * 하드체크용 — isTest 완료는 통계·쿼터 모수에서 제외되므로(스펙 4절) 정원 카운트에도 포함하지 않는다.
+ */
 async function countCompletedResponses(surveyId: string): Promise<number> {
   const [row] = await db
     .select({ total: sql<number>`count(*)::int` })
@@ -398,6 +402,7 @@ async function countCompletedResponses(surveyId: string): Promise<number> {
         eq(surveyResponses.surveyId, surveyId),
         eq(surveyResponses.status, 'completed'),
         isNull(surveyResponses.deletedAt),
+        notTestResponse,
       ),
     );
   return row?.total ?? 0;
@@ -463,7 +468,7 @@ export async function updateQuestionResponse(
   // #5 변조 가드 2: 응답 행 조회 — versionId/surveyId 로 questionId 소속을 검증한다.
   const responseRow = await db.query.surveyResponses.findFirst({
     where: eq(surveyResponses.id, responseId),
-    columns: { id: true, surveyId: true, versionId: true },
+    columns: { id: true, surveyId: true, versionId: true, isTest: true },
   });
   if (!responseRow) {
     throw new Error('응답을 찾을 수 없습니다.');
@@ -472,6 +477,15 @@ export async function updateQuestionResponse(
   // #5 변조 가드 3: questionId 가 해당 응답의 versionId 스냅샷(또는 surveyId 의 questions)에
   // 존재해야 한다. 미존재면 거부 — 임의 키 JSONB 주입 차단.
   await assertQuestionBelongsToResponse(responseRow.versionId, responseRow.surveyId, questionId);
+
+  // 중단 모드: 열려 있던 탭의 답변 저장 차단 (테스트 행 예외) — 스펙 5절 게이트 3.
+  // isTest 행은 flags 조회 자체를 skip해 정상 트래픽 경로의 오버헤드를 늘리지 않는다.
+  if (!responseRow.isTest) {
+    const flags = await getSurveyControlFlags(responseRow.surveyId);
+    if (flags?.isPaused) {
+      throw new SurveyNotAcceptingResponsesError('survey_paused');
+    }
+  }
 
   // jsonb_set 으로 답변 저장 + progress_pct 동기 갱신.
   // progress_pct 는 versionId 의 snapshot 에서 questionId 의 1-based position 을 찾아
@@ -755,7 +769,7 @@ export async function completeResponse(
   // 동시성 갭(동시 완료가 마지막 정원을 함께 채우는 경우)은 DB 락 없이 허용하는 잔여 window 다.
   const gateRow = await db.query.surveyResponses.findFirst({
     where: eq(surveyResponses.id, responseId),
-    columns: { surveyId: true, versionId: true, contactTargetId: true },
+    columns: { surveyId: true, versionId: true, contactTargetId: true, isTest: true },
   });
   if (gateRow) {
     const survey = await loadSurveyGateRow(gateRow.surveyId);
@@ -764,9 +778,9 @@ export async function completeResponse(
     assertSurveyAcceptingResponses(survey, version, {
       contactTargetId: gateRow.contactTargetId,
       completedCount,
-      // TODO(Task 6): gateRow(survey_responses.isTest) 기준으로 교체 — 이 태스크는 create
-      // 경로만 다루므로 completeResponse 는 아직 isTest 판정 없이 고정한다.
-      isTest: false,
+      // 응답 행 자체의 isTest 컬럼이 권위 소스 — create 시점에 확정된 값을 그대로 신뢰한다
+      // (여기서 재차 testToken 을 검증하지 않는다. complete 는 responseId 만 받는 pub 엔드포인트).
+      isTest: gateRow.isTest,
     });
   }
 

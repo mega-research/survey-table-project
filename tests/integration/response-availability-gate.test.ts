@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { PgDialect } from 'drizzle-orm/pg-core';
 
 // ========================
 // 모듈 모킹
@@ -21,6 +22,7 @@ const {
   selectLimitMock,
   countResultMock,
   headersMock,
+  selectWhereLogMock,
 } = vi.hoisted(() => ({
   surveyFindFirstMock: vi.fn(),
   versionFindFirstMock: vi.fn(),
@@ -30,6 +32,9 @@ const {
   selectLimitMock: vi.fn(),
   countResultMock: vi.fn(),
   headersMock: vi.fn(),
+  // db.select(...).where(조건) 에 실제로 전달된 SQL 조건을 기록 — countCompletedResponses 의
+  // notTestResponse 포함 여부를 where 절 SQL 문자열/파라미터로 검증하는 데 사용한다.
+  selectWhereLogMock: vi.fn(),
 }));
 
 const insertChain = {
@@ -42,7 +47,8 @@ const insertChain = {
 function makeSelectChain(): Record<string, unknown> {
   const chain: Record<string, unknown> = {};
   chain['from'] = vi.fn(() => chain);
-  chain['where'] = vi.fn(() => {
+  chain['where'] = vi.fn((cond: unknown) => {
+    selectWhereLogMock(cond);
     const whereResult: Record<string, unknown> = {
       limit: vi.fn(() => selectLimitMock()),
       then: (resolve: (v: unknown) => unknown) => resolve(countResultMock()),
@@ -94,6 +100,8 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 // createResponseWithFirstAnswer 는 UA 파싱을 위해 next/headers 를 호출한다(테스트 세션
 // 판정 게이트 테스트에서만 필요 — startResponse/completeResponse 는 호출하지 않는다).
 vi.mock('next/headers', () => ({ headers: headersMock }));
+
+const dialect = new PgDialect();
 
 const SURVEY_ID = '00000000-0000-4000-8000-000000000001';
 
@@ -280,8 +288,15 @@ describe('assertSurveyAcceptingResponses — createResponseWithFirstAnswer 테�
       publishedSurvey({ isPaused: true, testModeEnabled: true, testToken: 'tok' }),
     );
     // isTest 세션이므로 Track B 는 호출되지 않아야 한다. updateQuestionResponse 내부의
-    // 응답 행 조회(surveyResponses.findFirst)에만 쓰인다.
-    responseFindFirstMock.mockResolvedValue({ id: 'r1', surveyId: SURVEY_ID, versionId: null });
+    // 응답 행 조회(surveyResponses.findFirst)에만 쓰인다. isTest: true 는 실제로 INSERT
+    // 된 행을 그대로 반영(Task 6: isTest 행이면 updateQuestionResponse 의 중단 게이트가
+    // flags 조회 자체를 skip해야 한다).
+    responseFindFirstMock.mockResolvedValue({
+      id: 'r1',
+      surveyId: SURVEY_ID,
+      versionId: null,
+      isTest: true,
+    });
 
     const { createResponseWithFirstAnswer } = await import('@/features/survey-response/server/services/response.service');
     const result = await createResponseWithFirstAnswer({
@@ -321,5 +336,200 @@ describe('assertSurveyAcceptingResponses — createResponseWithFirstAnswer 테�
     });
 
     expect(result).toEqual({ kind: 'blocked', reason: 'device_already_responded' });
+  });
+});
+
+describe('resumeOrCreateResponse — 중단 게이트 (Task 6)', () => {
+  beforeEach(() => {
+    surveyFindFirstMock.mockReset();
+    versionFindFirstMock.mockReset();
+    responseFindFirstMock.mockReset();
+    contactFindFirstMock.mockReset();
+    selectLimitMock.mockReset();
+    countResultMock.mockReset();
+  });
+
+  it('isPaused 설문은 in_progress 재개를 survey_paused 로 거부한다', async () => {
+    surveyFindFirstMock.mockResolvedValue(publishedSurvey({ isPaused: true }));
+    selectLimitMock.mockResolvedValue([{ id: 'resp-1', status: 'in_progress', isTest: false }]);
+
+    const { resumeOrCreateResponse } = await import(
+      '@/features/survey-response/server/services/lifecycle.service'
+    );
+    await expect(
+      resumeOrCreateResponse({ surveyId: SURVEY_ID, sessionId: 'sess-paused-1' }),
+    ).rejects.toThrow(/survey_paused/);
+  });
+
+  it('isPaused 설문의 drop → in_progress 회복도 거부한다', async () => {
+    surveyFindFirstMock.mockResolvedValue(publishedSurvey({ isPaused: true }));
+    selectLimitMock.mockResolvedValue([{ id: 'resp-2', status: 'drop', isTest: false }]);
+
+    const { resumeOrCreateResponse } = await import(
+      '@/features/survey-response/server/services/lifecycle.service'
+    );
+    await expect(
+      resumeOrCreateResponse({ surveyId: SURVEY_ID, sessionId: 'sess-paused-2' }),
+    ).rejects.toThrow(/survey_paused/);
+  });
+
+  it('isTest 행은 isPaused 여도 재개된다', async () => {
+    surveyFindFirstMock.mockResolvedValue(publishedSurvey({ isPaused: true }));
+    selectLimitMock.mockResolvedValue([{ id: 'resp-3', status: 'drop', isTest: true }]);
+
+    const { resumeOrCreateResponse } = await import(
+      '@/features/survey-response/server/services/lifecycle.service'
+    );
+    const result = await resumeOrCreateResponse({
+      surveyId: SURVEY_ID,
+      sessionId: 'sess-paused-3',
+    });
+    expect(result).toEqual({ id: 'resp-3', status: 'in_progress', resumed: true });
+  });
+});
+
+describe('updateQuestionResponse — 중단 게이트 (Task 6)', () => {
+  beforeEach(() => {
+    surveyFindFirstMock.mockReset();
+    responseFindFirstMock.mockReset();
+    selectLimitMock.mockReset();
+  });
+
+  it('isPaused 설문은 updateQuestionResponse 를 거부한다 (isTest 행은 허용)', async () => {
+    const { updateQuestionResponse } = await import(
+      '@/features/survey-response/server/services/response.service'
+    );
+    selectLimitMock.mockResolvedValue([{ id: 'q1' }]);
+
+    // 비-테스트 행: paused 설문이면 거부한다.
+    surveyFindFirstMock.mockResolvedValue(publishedSurvey({ isPaused: true }));
+    responseFindFirstMock.mockResolvedValue({
+      id: 'r1',
+      surveyId: SURVEY_ID,
+      versionId: null,
+      isTest: false,
+    });
+    await expect(
+      updateQuestionResponse({ responseId: 'r1', questionId: 'q1', value: 'a' }),
+    ).rejects.toThrow(/survey_paused/);
+
+    // 테스트 행: 허용하고, 오버헤드 절약을 위해 surveys(flags) 를 재조회하지 않는다.
+    surveyFindFirstMock.mockClear();
+    responseFindFirstMock.mockResolvedValue({
+      id: 'r1',
+      surveyId: SURVEY_ID,
+      versionId: null,
+      isTest: true,
+    });
+    const result = await updateQuestionResponse({
+      responseId: 'r1',
+      questionId: 'q1',
+      value: 'a',
+    });
+    expect(result).toMatchObject({ id: 'r1' });
+    expect(surveyFindFirstMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('countCompletedResponses — isTest 제외 (Task 6)', () => {
+  beforeEach(() => {
+    surveyFindFirstMock.mockReset();
+    versionFindFirstMock.mockReset();
+    responseFindFirstMock.mockReset();
+    selectLimitMock.mockReset();
+    countResultMock.mockReset();
+    selectWhereLogMock.mockReset();
+  });
+
+  it('countCompletedResponses 는 isTest 완료를 세지 않는다 (where 절에 is_test=false 조건 포함)', async () => {
+    surveyFindFirstMock.mockResolvedValue(publishedSurvey({ maxResponses: 2 }));
+    responseFindFirstMock.mockResolvedValue({
+      surveyId: SURVEY_ID,
+      versionId: null,
+      contactTargetId: null,
+      isTest: false,
+    });
+    countResultMock.mockResolvedValue([{ total: 1 }]);
+
+    const { completeResponse } = await import(
+      '@/features/survey-response/server/services/response.service'
+    );
+    await completeResponse({ responseId: 'r1' });
+
+    // completeResponse 이 시나리오(data 없음, versionId 없음)에서는 정원 count 쿼리 1건만
+    // db.select(...).where(...) 를 탄다 — 그 조건에 notTestResponse(is_test=false) 가
+    // 실제로 포함됐는지 SQL 문자열/파라미터로 검증한다(mock 은 조건을 해석하지 않으므로
+    // 결과값 비교만으로는 누락을 잡지 못한다).
+    expect(selectWhereLogMock).toHaveBeenCalledTimes(1);
+    const whereArg = selectWhereLogMock.mock.calls[0]![0];
+    const query = dialect.sqlToQuery(whereArg);
+    expect(query.sql).toContain('is_test');
+    expect(query.params).toContain(false);
+  });
+});
+
+describe('회귀: 비공개 설문 + 유효 테스트 세션 create→complete 왕복 (Task 6)', () => {
+  const VALID_SIGNALS = {
+    deviceId: 'dev-roundtrip-1',
+    screen: '1920x1080',
+    tz: 'Asia/Seoul',
+    lang: 'ko-KR',
+    platform: 'MacIntel',
+  };
+
+  beforeEach(() => {
+    surveyFindFirstMock.mockReset();
+    versionFindFirstMock.mockReset();
+    responseFindFirstMock.mockReset();
+    contactFindFirstMock.mockReset();
+    insertReturningMock.mockReset();
+    selectLimitMock.mockReset();
+    countResultMock.mockReset();
+    headersMock.mockReset();
+    insertChain.values.mockClear();
+
+    headersMock.mockResolvedValue(
+      new Headers({ 'x-forwarded-for': '10.0.0.9', 'user-agent': 'Chrome/120' }),
+    );
+    insertReturningMock.mockResolvedValue([{ id: 'r1', contactTargetId: null }]);
+    selectLimitMock.mockResolvedValue([{ id: 'q1' }]);
+    countResultMock.mockResolvedValue([{ total: 0 }]);
+  });
+
+  it('비공개 설문에서 유효 테스트 세션은 create 후 complete 까지 성공한다', async () => {
+    // isPublic=false 설문 — 테스트 세션(isTest)이 아니면 invite_required 로 거부되는 설정.
+    surveyFindFirstMock.mockResolvedValue(
+      publishedSurvey({ isPublic: false, testModeEnabled: true, testToken: 'tok' }),
+    );
+    // updateQuestionResponse(내부 호출)의 응답 행 조회와 completeResponse 의 gateRow 조회가
+    // 모두 이 값을 사용 — isTest=true 라 두 게이트 모두 예외를 타야 한다.
+    responseFindFirstMock.mockResolvedValue({
+      id: 'r1',
+      surveyId: SURVEY_ID,
+      versionId: null,
+      contactTargetId: null,
+      isTest: true,
+    });
+
+    const { createResponseWithFirstAnswer, completeResponse } = await import(
+      '@/features/survey-response/server/services/response.service'
+    );
+
+    const createResult = await createResponseWithFirstAnswer({
+      surveyId: SURVEY_ID,
+      sessionId: 'roundtrip-session',
+      versionId: null,
+      questionId: 'q1',
+      value: 'answer',
+      currentStepId: 'step1',
+      clientSignals: VALID_SIGNALS,
+      testToken: 'tok',
+    });
+    expect(createResult).toMatchObject({ kind: 'created', id: 'r1' });
+
+    // Task 6 이전에는 completeResponse 가 isTest 를 false 로 고정해 여기서
+    // invite_required 로 거부됐다(비공개 설문 + contactTargetId 없음).
+    const completeResult = await completeResponse({ responseId: 'r1' });
+    expect(completeResult).toMatchObject({ id: 'r1' });
   });
 });
