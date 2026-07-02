@@ -5,6 +5,7 @@ import { AlertCircle, CheckCircle2 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 
 import type { BlockReason } from '@/lib/duplicate-detection/types';
+import { cn } from '@/lib/utils';
 
 interface Props {
   reason: BlockReason;
@@ -15,7 +16,8 @@ interface Props {
 }
 
 interface MessageDef {
-  title: string;
+  /** null = 제목 없이 body만 크게 표시 (quota_closed — 커스텀 문구가 주인공). */
+  title: string | null;
   body: string;
   tone: 'error' | 'info';
 }
@@ -43,7 +45,8 @@ const MESSAGES: Record<BlockReason, MessageDef> = {
     tone: 'info',
   },
   quota_closed: {
-    title: '설문이 마감되었습니다',
+    // 기본 제목 멘트 없이 운영자가 입력한 마감 안내 문구만 표시 (2026-07-02 운영 피드백).
+    title: null,
     body: '해당 조건의 모집이 완료되어 더 이상 참여하실 수 없습니다. 참여해 주셔서 감사합니다.',
     tone: 'info',
   },
@@ -59,12 +62,26 @@ export function AlreadyRespondedView({ reason, surveyTitle, contactEmail, custom
     <div className="flex min-h-screen items-center justify-center bg-gray-50">
       <Card className="mx-auto max-w-md">
         <CardContent className="p-8 text-center">
-          <Icon className={`mx-auto mb-4 h-12 w-12 ${iconColor}`} />
-          <h2 className="mb-2 text-xl font-semibold text-gray-900">{msg.title}</h2>
-          {surveyTitle && (
+          {/* 제목 없는 케이스(quota_closed)는 에디터 미리보기와 동일한 배지 아이콘 + 문구만 */}
+          {msg.title === null ? (
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-blue-50">
+              <Icon className={`h-6 w-6 ${iconColor}`} />
+            </div>
+          ) : (
+            <Icon className={`mx-auto mb-4 h-12 w-12 ${iconColor}`} />
+          )}
+          {msg.title && <h2 className="mb-2 text-xl font-semibold text-gray-900">{msg.title}</h2>}
+          {surveyTitle && msg.title !== null && (
             <p className="mb-3 text-sm text-gray-500">{surveyTitle}</p>
           )}
-          <p className="whitespace-pre-wrap text-gray-600">{body}</p>
+          <p
+            className={cn(
+              'whitespace-pre-wrap',
+              msg.title ? 'text-gray-600' : 'text-lg leading-relaxed text-gray-800',
+            )}
+          >
+            {body}
+          </p>
           {contactEmail && (
             <div className="mt-6 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm">
               <p className="text-gray-500">문의 이메일</p>
