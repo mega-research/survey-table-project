@@ -23,6 +23,8 @@ interface UseSessionRecoveryArgs {
   setCurrentResponseId: (id: string) => void;
   /** resume 이 survey_paused 로 실패하면 중단 화면으로 전환 (공통 채널, use-duplicate-guard 소유). */
   setDuplicateStatus: Dispatch<SetStateAction<DuplicateStatus>>;
+  /** 세션 도중 중단 감지 시 재조회한 최신 중단 문구 승격용 (handlePausedMutationError 로 전달). */
+  setPausedMessage?: Dispatch<SetStateAction<string | null>>;
 }
 
 interface UseSessionRecoveryResult {
@@ -58,6 +60,7 @@ export function useSessionRecovery({
   setSessionId,
   setCurrentResponseId,
   setDuplicateStatus,
+  setPausedMessage,
 }: UseSessionRecoveryArgs): UseSessionRecoveryResult {
   // recovery effect 가 resumeOrCreateResponse 를 await 하는 동안 true.
   // handleResponse 의 INSERT 가드에서 참조해 recovery 완료 전 신규 INSERT 발사를 차단한다 (I-1).
@@ -119,6 +122,7 @@ export function useSessionRecovery({
             testToken,
             isTestSession,
             setDuplicateStatus,
+            setPausedMessage,
           })
         ) {
           return;

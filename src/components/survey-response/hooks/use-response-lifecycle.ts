@@ -81,6 +81,8 @@ interface UseResponseLifecycleArgs {
   visibleProgressRef: RefObject<{ index: number; total: number }>;
   setHighlightQuestionIds: Dispatch<SetStateAction<Set<string>>>;
   setDuplicateStatus: Dispatch<SetStateAction<DuplicateStatus>>;
+  /** 세션 도중 중단 감지 시 재조회한 최신 중단 문구 승격용 (handlePausedMutationError 로 전달). */
+  setPausedMessage?: Dispatch<SetStateAction<string | null>>;
   setInviteIsInvalid: Dispatch<SetStateAction<boolean>>;
   setIsSubmitting: Dispatch<SetStateAction<boolean>>;
   setCurrentStepIndex: Dispatch<SetStateAction<number>>;
@@ -147,6 +149,7 @@ export function useResponseLifecycle({
   visibleProgressRef,
   setHighlightQuestionIds,
   setDuplicateStatus,
+  setPausedMessage,
   setInviteIsInvalid,
   setIsSubmitting,
   setCurrentStepIndex,
@@ -225,6 +228,7 @@ export function useResponseLifecycle({
                 testToken,
                 isTestSession,
                 setDuplicateStatus,
+                setPausedMessage,
               })
             ) {
               return;
@@ -437,6 +441,7 @@ export function useResponseLifecycle({
           testToken,
           isTestSession,
           setDuplicateStatus,
+          setPausedMessage,
         })
       ) {
         return;

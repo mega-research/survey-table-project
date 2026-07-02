@@ -118,7 +118,8 @@ export function useDuplicateGuard({
  *  2) 재조회 fallback: RPCHandler 는 비-ORPCError 를 "Internal server error" 로 마스킹해
  *     클라이언트로 오는 message 에서 사유가 소실된다(toJSON 이 cause 를 직렬화하지 않음).
  *     따라서 실제 네트워크 경로에서는 현재 control 을 재조회해 isPaused 를 직접 확인한다.
- *     이 방식은 세션 도중 중단된 경우에도 stale 없이 최신 문구를 반영한다.
+ *     재조회로 얻은 최신 pausedMessage 는 setPausedMessage 로 승격해, 세션 도중 중단 시
+ *     화면 문구가 로드 시점 stale 값 대신 운영자 최신 입력을 반영하게 한다.
  *
  * 유효 테스트 세션(isTestSession)은 중단 예외 대상이므로 재조회 자체를 건너뛴다.
  */
@@ -128,8 +129,10 @@ export async function handlePausedMutationError(args: {
   testToken: string | null;
   isTestSession: boolean;
   setDuplicateStatus: Dispatch<SetStateAction<DuplicateStatus>>;
+  /** 재조회로 확인한 최신 중단 문구 승격용 (옵셔널 — fast-path 는 문구를 알 수 없어 미호출). */
+  setPausedMessage?: Dispatch<SetStateAction<string | null>> | undefined;
 }): Promise<boolean> {
-  const { err, surveyId, testToken, isTestSession, setDuplicateStatus } = args;
+  const { err, surveyId, testToken, isTestSession, setDuplicateStatus, setPausedMessage } = args;
 
   if (err instanceof Error && err.message.includes('survey_paused')) {
     setDuplicateStatus({ kind: 'blocked', reason: 'survey_paused' });
@@ -144,6 +147,9 @@ export async function handlePausedMutationError(args: {
       ...(testToken != null ? { testToken } : {}),
     });
     if (res?.control.isPaused) {
+      // 세션 도중 중단이면 운영자가 방금 입력한 문구가 로드 시점 control 보다 최신 —
+      // 화면 폴백 체인(재조회 문구 → 로드 시점 문구 → DEFAULT)의 최우선 값으로 승격한다.
+      setPausedMessage?.(res.control.pausedMessage);
       setDuplicateStatus({ kind: 'blocked', reason: 'survey_paused' });
       return true;
     }

@@ -246,6 +246,9 @@ export function SurveyResponseFlow({
   );
   const quotaCheckedRef = useRef(false);
   const [quotaClosedMessage, setQuotaClosedMessage] = useState<string | null>(null);
+  // 세션 도중 중단 감지 시 재조회한 최신 중단 문구 (handlePausedMutationError 가 승격).
+  // 화면 폴백 체인: 재조회 문구 → 로드 시점 control.pausedMessage → DEFAULT_PAUSED_MESSAGE.
+  const [refetchedPausedMessage, setRefetchedPausedMessage] = useState<string | null>(null);
 
   const keyboardOpen = useKeyboardOpen();
 
@@ -397,6 +400,7 @@ export function SurveyResponseFlow({
     setSessionId,
     setCurrentResponseId,
     setDuplicateStatus,
+    setPausedMessage: setRefetchedPausedMessage,
   });
 
   const hasPreviousDisplayable = stepHistory.length > 0;
@@ -482,6 +486,7 @@ export function SurveyResponseFlow({
     visibleProgressRef,
     setHighlightQuestionIds,
     setDuplicateStatus,
+    setPausedMessage: setRefetchedPausedMessage,
     setInviteIsInvalid,
     setIsSubmitting,
     setCurrentStepIndex,
@@ -620,7 +625,7 @@ export function SurveyResponseFlow({
           duplicateStatus.reason === 'quota_closed'
             ? quotaClosedMessage
             : duplicateStatus.reason === 'survey_paused'
-              ? (control?.pausedMessage ?? DEFAULT_PAUSED_MESSAGE)
+              ? (refetchedPausedMessage ?? control?.pausedMessage ?? DEFAULT_PAUSED_MESSAGE)
               : null
         }
       />
