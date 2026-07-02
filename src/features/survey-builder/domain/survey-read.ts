@@ -156,12 +156,30 @@ export type SurveyBySlugInput = z.infer<typeof SurveyBySlugInput>;
 export const SurveyByPrivateTokenInput = z.object({ token: z.string() });
 export type SurveyByPrivateTokenInput = z.infer<typeof SurveyByPrivateTokenInput>;
 
+/** forResponse(getSurveyForResponse) 전용 input. testToken 은 테스트 링크 검증용(옵셔널). */
+export const SurveyForResponseInput = SurveyIdInput.extend({
+  testToken: z.string().optional(),
+});
+export type SurveyForResponseInput = z.infer<typeof SurveyForResponseInput>;
+
 /**
- * forResponse(getSurveyForResponse). 반환 { survey, versionId } | null.
+ * 응답 페이지 첫 화면 게이트용 라이브 제어값. snapshot 밖 값이므로 항상 현재
+ * surveys 행에서 읽는다 — publish 이전에도 즉시 반영돼야 하는 운영 스위치.
+ */
+export type SurveyControl = {
+  isPaused: boolean;
+  pausedMessage: string | null;
+  testSession: 'none' | 'valid' | 'invalid';
+};
+
+/**
+ * forResponse(getSurveyForResponse). 반환 { survey, versionId, control } | null.
  * survey 는 SurveyType, versionId 는 배포 버전 id 또는 null(미배포 fallback).
+ * control 은 스냅샷 밖 라이브 값(중단 상태 + 테스트 링크 판정).
  */
 export type SurveyForResponseResult = {
   survey: SurveyType;
   versionId: string | null;
+  control: SurveyControl;
 } | null;
 export const SurveyForResponseOutput = z.custom<SurveyForResponseResult>();

@@ -3,8 +3,8 @@ import { pub } from '@/server/orpc';
 import {
   SurveyBySlugInput,
   SurveyByPrivateTokenInput,
+  SurveyForResponseInput,
   SurveyForResponseOutput,
-  SurveyIdInput,
   SurveyRowOutput,
 } from '../../domain/survey-read';
 import * as surveySvc from '../services/survey-read.service';
@@ -23,9 +23,10 @@ const byPrivateToken = pub
   .output(SurveyRowOutput)
   .handler(({ input }) => surveySvc.getSurveyByPrivateToken(input));
 
-/** 응답 페이지용 설문 조회(pub). 배포 스냅샷 우선 + 미배포 fallback. */
+/** 응답 페이지용 설문 조회(pub). 배포 스냅샷 우선 + 미배포 fallback
+ * + 중단 상태/테스트 링크 판정(control). */
 const forResponse = pub
-  .input(SurveyIdInput)
+  .input(SurveyForResponseInput)
   .output(SurveyForResponseOutput)
   .handler(({ input }) => surveySvc.getSurveyForResponse(input));
 

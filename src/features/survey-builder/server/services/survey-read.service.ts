@@ -14,6 +14,7 @@ import {
   type VariableDef,
 } from '@/components/operations/mail-template/variable-catalog';
 import { normalizeQuestions } from '@/lib/question';
+import { isValidTestToken } from '@/lib/survey-control';
 import { normalizeResponseHeaderConfig } from '@/lib/survey/response-header-config';
 import type { QuestionGroup, Question as QuestionType, Survey as SurveyType } from '@/types/survey';
 import { generateAllCellCodes } from '@/utils/table-cell-code-generator';
@@ -22,8 +23,8 @@ import type {
   SlugAvailableInput,
   SurveyBySlugInput,
   SurveyByPrivateTokenInput,
+  SurveyForResponseInput,
   SurveyForResponseResult,
-  SurveyIdInput,
   SurveyListItem,
 } from '../../domain/survey-read';
 
@@ -161,12 +162,26 @@ export async function getSurveyByPrivateToken(input: SurveyByPrivateTokenInput) 
 
 // 응답 페이지용 설문 조회 (배포 버전 스냅샷 우선, fallback 기존 방식)
 export async function getSurveyForResponse(
-  input: SurveyIdInput,
+  input: SurveyForResponseInput,
   options: { requirePublished?: boolean } = {},
 ): Promise<SurveyForResponseResult> {
   const { surveyId } = input;
   const survey = await getSurveyById(surveyId);
   if (!survey) return null;
+
+  // 응답 페이지 첫 화면 게이트용 라이브 제어값. snapshot 밖 값이므로 항상 현재
+  // surveys 행에서 읽는다 — snapshot.settings 에서 가져오면 안 된다.
+  const testSession: 'none' | 'valid' | 'invalid' =
+    input.testToken == null
+      ? 'none'
+      : isValidTestToken(survey, input.testToken)
+        ? 'valid'
+        : 'invalid';
+  const control = {
+    isPaused: survey.isPaused,
+    pausedMessage: survey.pausedMessage,
+    testSession,
+  };
 
   // 배포된 버전이 있으면 스냅샷 기반으로 반환
   if (survey.currentVersionId) {
@@ -246,7 +261,7 @@ export async function getSurveyForResponse(
         updatedAt: survey.updatedAt,
       };
 
-      return { survey: surveyData, versionId: version.id };
+      return { survey: surveyData, versionId: version.id, control };
     }
   }
 
@@ -261,7 +276,7 @@ export async function getSurveyForResponse(
       ? { questionIds: survey.quotaConfig.dimensions.map((d) => d.questionId) }
       : null;
 
-  return { survey: { ...surveyData, quotaGate }, versionId: null };
+  return { survey: { ...surveyData, quotaGate }, versionId: null, control };
 }
 
 // ========================
