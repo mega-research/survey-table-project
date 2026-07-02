@@ -4,7 +4,7 @@ import { and, eq, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { surveyResponses } from '@/db/schema';
-import { notDeletedResponse } from '@/data/response-filters';
+import { notDeletedResponse, notTestResponse } from '@/data/response-filters';
 
 import {
   shapeDailyStats,
@@ -31,7 +31,7 @@ export async function getDailyStats(surveyId: string): Promise<DailyStatsRow[]> 
       drop: sql<number>`count(*) FILTER (WHERE ${surveyResponses.status} = 'drop')::int`,
     })
     .from(surveyResponses)
-    .where(and(eq(surveyResponses.surveyId, surveyId), notDeletedResponse))
+    .where(and(eq(surveyResponses.surveyId, surveyId), notDeletedResponse, notTestResponse))
     .groupBy(sql`1`)
     .orderBy(sql`1 DESC`);
 

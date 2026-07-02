@@ -4,7 +4,7 @@ import { and, eq } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { surveyResponses, surveys } from '@/db/schema';
-import { completedResponse, notDeletedResponse } from '@/data/response-filters';
+import { completedResponse, notDeletedResponse, notTestResponse } from '@/data/response-filters';
 import { normalizeQuestions } from '@/lib/question';
 import { requireAuth } from '@/lib/auth';
 import { isAdminUserAllowed } from '@/lib/auth/admin-allowlist';
@@ -52,12 +52,13 @@ export async function GET(
       });
     }
 
-    // resp 집계: raw export와 동일 모수 (deleted 제외 + completed만)
+    // resp 집계: raw export와 동일 모수 (deleted 제외 + completed만 + 테스트 응답 제외)
     const responses = await db.query.surveyResponses.findMany({
       where: and(
         eq(surveyResponses.surveyId, surveyId),
         notDeletedResponse,
         completedResponse,
+        notTestResponse,
       ),
       columns: { questionResponses: true },
     });

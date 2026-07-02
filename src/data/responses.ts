@@ -3,7 +3,7 @@ import { and, count, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { responseAnswers, surveyResponses, surveyVersions } from '@/db/schema';
 import { answersToQuestionResponses } from '@/lib/analytics/response-adapter';
-import { notDeletedResponse } from '@/data/response-filters';
+import { notDeletedResponse, notTestResponse } from '@/data/response-filters';
 
 // ========================
 // 응답 조회 함수
@@ -16,13 +16,15 @@ export async function getCompletedResponses(surveyId: string) {
       eq(surveyResponses.surveyId, surveyId),
       eq(surveyResponses.isCompleted, true),
       notDeletedResponse,
+      notTestResponse,
     ),
     orderBy: [desc(surveyResponses.completedAt)],
   });
   return responses;
 }
 
-// 응답 단일 조회
+// 응답 단일 조회. 의도적으로 notTestResponse 미적용 — 관리자 응답 상세/수정 페이지는
+// 테스트 응답도 열람·수정할 수 있어야 한다(단건 조회는 "모수" 통계가 아님).
 export async function getResponseById(
   responseId: string,
   options: { includeDeleted?: boolean } = {},
@@ -43,8 +45,8 @@ export async function getResponseCountsGroupedBySurvey(surveyIds?: readonly stri
   }
 
   const where = surveyIds
-    ? and(notDeletedResponse, inArray(surveyResponses.surveyId, [...surveyIds]))
-    : notDeletedResponse;
+    ? and(notDeletedResponse, notTestResponse, inArray(surveyResponses.surveyId, [...surveyIds]))
+    : and(notDeletedResponse, notTestResponse);
 
   const rows = await db
     .select({
@@ -73,6 +75,7 @@ export async function getResponsesWithAnswers(
     eq(surveyResponses.surveyId, surveyId),
     eq(surveyResponses.isCompleted, true),
     notDeletedResponse,
+    notTestResponse,
   ];
 
   if (versionId) {

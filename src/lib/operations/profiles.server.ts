@@ -4,6 +4,8 @@ import { and, asc, eq, sql, type AnyColumn, type SQL } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { surveyResponses, contactTargets } from '@/db/schema';
+// notTestResponse 의도적 미적용: 응답 내역 목록/배지는 테스트 응답도 표시한다
+// (T11 에서 배지로 구분 표시 — 통계·모수 집계가 아니라 리스트 표시이므로 T10 스윕 예외).
 import { deletedResponse, notDeletedResponse } from '@/data/response-filters';
 
 import { escapeLikePattern } from './filter-shared';

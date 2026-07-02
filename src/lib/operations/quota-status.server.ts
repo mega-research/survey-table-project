@@ -2,7 +2,7 @@ import 'server-only';
 
 import { and, eq } from 'drizzle-orm';
 
-import { completedResponse, notDeletedResponse } from '@/data/response-filters';
+import { completedResponse, notDeletedResponse, notTestResponse } from '@/data/response-filters';
 import { db } from '@/db';
 import { surveyResponses, surveys } from '@/db/schema/surveys';
 
@@ -20,7 +20,14 @@ export async function getQuotaStatus(surveyId: string): Promise<QuotaStatus | nu
   const rows = await db
     .select({ questionResponses: surveyResponses.questionResponses })
     .from(surveyResponses)
-    .where(and(eq(surveyResponses.surveyId, surveyId), completedResponse, notDeletedResponse));
+    .where(
+      and(
+        eq(surveyResponses.surveyId, surveyId),
+        completedResponse,
+        notDeletedResponse,
+        notTestResponse,
+      ),
+    );
 
   const answersList = rows.map((r) => (r.questionResponses ?? {}) as Record<string, unknown>);
   return buildQuotaStatus(config, answersList);

@@ -2,7 +2,7 @@ import 'server-only';
 
 import { and, eq, isNull } from 'drizzle-orm';
 
-import { completedResponse, notDeletedResponse } from '@/data/response-filters';
+import { completedResponse, notDeletedResponse, notTestResponse } from '@/data/response-filters';
 import { db } from '@/db';
 import { surveyResponses, surveys } from '@/db/schema/surveys';
 import type { QuotaConfig } from '@/db/schema/schema-types';
@@ -55,7 +55,12 @@ export async function checkQuota(input: {
     .select({ questionResponses: surveyResponses.questionResponses })
     .from(surveyResponses)
     .where(
-      and(eq(surveyResponses.surveyId, input.surveyId), completedResponse, notDeletedResponse),
+      and(
+        eq(surveyResponses.surveyId, input.surveyId),
+        completedResponse,
+        notDeletedResponse,
+        notTestResponse,
+      ),
     );
   const answersList = rows.map(
     (r) => (r.questionResponses ?? {}) as Record<string, unknown>,

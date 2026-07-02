@@ -4,7 +4,7 @@ import { and, count, eq, inArray } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { contactTargets, surveyResponses, surveys } from '@/db/schema';
-import { completedResponse, notDeletedResponse } from '@/data/response-filters';
+import { completedResponse, notDeletedResponse, notTestResponse } from '@/data/response-filters';
 import { normalizeQuestions } from '@/lib/question';
 import { requireAuth } from '@/lib/auth';
 import { isAdminUserAllowed } from '@/lib/auth/admin-allowlist';
@@ -65,7 +65,14 @@ export async function GET(
       const totalRows = await db
         .select({ total: count() })
         .from(surveyResponses)
-        .where(and(eq(surveyResponses.surveyId, surveyId), notDeletedResponse, completedResponse));
+        .where(
+          and(
+            eq(surveyResponses.surveyId, surveyId),
+            notDeletedResponse,
+            completedResponse,
+            notTestResponse,
+          ),
+        );
       const total = totalRows[0]?.total ?? 0;
 
       if (total > MAX_EXPORT_RESPONSES) {
@@ -76,7 +83,12 @@ export async function GET(
       }
 
       responses = await db.query.surveyResponses.findMany({
-        where: and(eq(surveyResponses.surveyId, surveyId), notDeletedResponse, completedResponse),
+        where: and(
+          eq(surveyResponses.surveyId, surveyId),
+          notDeletedResponse,
+          completedResponse,
+          notTestResponse,
+        ),
         orderBy: (responses, { desc }) => [desc(responses.createdAt)],
       });
     }
@@ -105,12 +117,13 @@ export async function GET(
 
     // 3. Raw Data xlsx
     if (type === 'raw') {
-      // raw 전용 모수: deleted 제외 + completed만 (행 포함 정책 통일)
+      // raw 전용 모수: deleted 제외 + completed만 + 테스트 응답 제외 (행 포함 정책 통일)
       const rawResponses = await db.query.surveyResponses.findMany({
         where: and(
           eq(surveyResponses.surveyId, surveyId),
           notDeletedResponse,
           completedResponse,
+          notTestResponse,
         ),
         orderBy: (r, { asc }) => [asc(r.startedAt)],
       });
@@ -186,6 +199,7 @@ export async function GET(
           eq(surveyResponses.surveyId, surveyId),
           notDeletedResponse,
           completedResponse,
+          notTestResponse,
         ),
         orderBy: (r, { asc }) => [asc(r.startedAt)],
       });
