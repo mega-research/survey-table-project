@@ -18,6 +18,7 @@ import type {
 import { numberFormatter } from '@/lib/operations/format';
 
 import { EmptyState } from './empty-state';
+import { StepAxisTick, type StepTickItem } from './step-axis-tick';
 
 /**
  * 다른 운영 콘솔 차트 (페이지별 체류시간) 와 동일하게 막대가 적을 때 좌측 정렬되도록
@@ -39,64 +40,10 @@ const CHART_CONFIG: ChartConfig = {
 };
 
 /**
- * X축 멀티라인 tick — mockup p1 형식 (3줄):
- *   1행: 라벨 (Q16 / SQ / 기타 / (legacy))
- *   2행: page N (값 있을 때만, 회색)
- *   3행: 진행률 % (값 있을 때만, 회색)
- *
- * recharts XAxis tick prop 시그니처:
- *   - x, y: tick 좌표 (axisLine 기준)
- *   - payload.value: dataKey('label')에서 추출된 값
- *   - payload.index: 데이터 배열 내 인덱스
- *
- * tspan dy 누적: 각 tspan은 직전 tspan의 baseline 기준 상대 이동.
- *   1행 dy=12 (axis line 아래 약간), 2행/3행 dy=12.
- */
-interface FunnelTickProps {
-  x?: number;
-  y?: number;
-  payload?: { value?: string | number; index?: number };
-  bars: DropFunnelBar[];
-}
-
-function FunnelTick({ x = 0, y = 0, payload, bars }: FunnelTickProps) {
-  const idx = payload?.index ?? 0;
-  const bar = bars[idx];
-  // 패딩 슬롯은 라벨/페이지/진행률 모두 비워둔다 — 옅은 grid only.
-  if (bar?.questionId.startsWith(PAD_QUESTION_ID_PREFIX)) {
-    return null;
-  }
-  const label = String(payload?.value ?? '');
-  const pageText = bar?.page != null ? `page ${bar.page}` : '';
-  const pctText =
-    bar?.cumulativeProgressPct != null && Number.isFinite(bar.cumulativeProgressPct)
-      ? `${bar.cumulativeProgressPct.toFixed(1)}%`
-      : '';
-
-  return (
-    <text x={x} y={y} textAnchor="middle" fontSize={11}>
-      <tspan x={x} dy={12} fill="#475569">
-        {label}
-      </tspan>
-      {pageText && (
-        <tspan x={x} dy={12} fill="#94a3b8">
-          {pageText}
-        </tspan>
-      )}
-      {pctText && (
-        <tspan x={x} dy={12} fill="#94a3b8">
-          {pctText}
-        </tspan>
-      )}
-    </text>
-  );
-}
-
-/**
  * 운영 현황 콘솔 — A5 Drop funnel.
  *
- * x축: 이탈 위치 (멀티라인 라벨: Q16 / page 6 / 32.0%).
- * y축: 이탈자 수.
+ * x축: 이탈 위치 (2줄 tick: 페이지 N / 라벨 — StepAxisTick, A6 체류시간 차트와 동일 형식).
+ * y축: 이탈자 수. 진행률은 tick 에서 빼고 툴팁에만 표시.
  * 정렬: 질문 위치 ASC (snapshot 순서대로 funnel 형태).
  *
  * 빈 상태:
@@ -124,6 +71,15 @@ export function DropFunnel({ data }: Props) {
     return [...data.bars, ...padding];
   }, [data.bars]);
 
+  const tickItems = useMemo<StepTickItem[]>(
+    () =>
+      visibleBars.map((bar) => ({
+        page: bar.page,
+        hidden: bar.questionId.startsWith(PAD_QUESTION_ID_PREFIX),
+      })),
+    [visibleBars],
+  );
+
   return (
     <Card>
       <CardContent className="px-5 py-4">
@@ -132,7 +88,7 @@ export function DropFunnel({ data }: Props) {
             이탈 응답 위치별 사례
           </h3>
           <p className="mt-0.5 text-xs text-slate-400">
-            x: 이탈 위치 (질문·페이지 · 진행률) · y: 이탈자 수
+            x: 이탈 위치 · y: 이탈자 수 · 진행률은 툴팁에서 확인
           </p>
         </div>
 
@@ -154,9 +110,9 @@ export function DropFunnel({ data }: Props) {
                 axisLine={false}
                 tickMargin={4}
                 interval={0}
-                height={56}
+                height={44}
                 tick={(tickProps) => (
-                  <FunnelTick {...tickProps} bars={visibleBars} />
+                  <StepAxisTick {...tickProps} items={tickItems} />
                 )}
               />
               <YAxis
@@ -184,7 +140,7 @@ export function DropFunnel({ data }: Props) {
                       if (payload.page != null) {
                         lines.push(
                           <span key="page" className="ml-2 text-slate-500">
-                            page {payload.page}
+                            페이지 {payload.page}
                           </span>,
                         );
                       }
