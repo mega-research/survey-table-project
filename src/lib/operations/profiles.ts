@@ -19,6 +19,7 @@ export const SORT_KEYS = [
   'idx',
   'platform',
   'browser',
+  'status',
   'startedAt',
   'completedAt',
   'totalSeconds',

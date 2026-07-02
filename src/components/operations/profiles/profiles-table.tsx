@@ -133,7 +133,7 @@ export function ProfilesTable({ rows, total, page, pageSize, sort, dir, stepLoca
         accessorKey: 'pill',
         header: '상태',
         cell: ({ row }) => <StatusPill pill={row.original.pill} />,
-        meta: meta('center', false),
+        meta: meta('center', true),
       },
       {
         id: 'startedAt',
