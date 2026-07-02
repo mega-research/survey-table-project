@@ -18,10 +18,19 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import type { QuotaCategory, QuotaConfig, QuotaDimension } from '@/db/schema/schema-types';
-import { generateId } from '@/lib/utils';
+import { numberFormatter } from '@/lib/operations/format';
+import { cn, generateId } from '@/lib/utils';
 import { client } from '@/shared/lib/rpc';
 import type { Question } from '@/types/survey';
 import { resolveChoiceOptions } from '@/utils/choice-source';
+
+import {
+  buildQuotaPivot,
+  pivotCategoryIds,
+  pivotColBorderClass,
+  pivotColKey,
+  pivotTotals,
+} from './quota-pivot';
 
 interface Props {
   surveyId: string;
@@ -39,7 +48,7 @@ const EMPTY: QuotaConfig = { enabled: false, dimensions: [], cells: [], closedMe
 const QUOTA_CLOSED_FALLBACK =
   '해당 조건의 모집이 완료되어 더 이상 참여하실 수 없습니다. 참여해 주셔서 감사합니다.';
 
-/** 문항 유형 → 차원 kind. 단답 숫자는 numeric, radio/select는 choice. 그 외는 지원 안 함(null). */
+/** 문항 유형 → 조건 kind. 단답 숫자는 numeric, radio/select는 choice. 그 외는 지원 안 함(null). */
 function kindForQuestion(q: Question): 'choice' | 'numeric' | null {
   if (q.type === 'radio' || q.type === 'select') return 'choice';
   if (q.type === 'text' && q.inputType === 'number') return 'numeric';
@@ -55,12 +64,19 @@ function choiceCategories(q: Question): QuotaCategory[] {
   }));
 }
 
+/**
+ * 목표 입력 공통 — 네이티브 숫자 스피너 제거. 좁은 셀에서 위/아래 버튼이 숫자를
+ * 가리는 것 방지 (webkit 계열 + Firefox appearance:textfield).
+ */
+const TARGET_INPUT_CLASS =
+  '[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none';
+
 interface QuotaCombo {
   categoryIds: string[];
   labels: string[];
 }
 
-/** 차원 3개 이상일 때 매트릭스 대신 보여줄 조합 플랫 리스트(카테시안 곱). */
+/** 조건 3개 이상일 때 매트릭스 대신 보여줄 조합 플랫 리스트(카테시안 곱). */
 function cartesianCombos(dimensions: QuotaDimension[]): QuotaCombo[] {
   return dimensions.reduce<QuotaCombo[]>(
     (acc, dim) =>
@@ -84,20 +100,26 @@ export function QuotaEditor({ surveyId, initialConfig, questions }: Props) {
   const [config, setConfig] = useState<QuotaConfig>(initialConfig ?? EMPTY);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
-  // "+ 차원 추가" 셀렉트 자체의 UI 상태. 고르는 즉시 addDimensionFromQuestion 을 실행하고
+  // "+ 조건 추가" 셀렉트 자체의 UI 상태. 고르는 즉시 addDimensionFromQuestion 을 실행하고
   // 다시 placeholder 로 리셋 — QuotaConfig 에는 속하지 않는 순수 위젯 상태.
   const [addDimensionValue, setAddDimensionValue] = useState('');
 
-  // 차원으로 쓸 수 있는 문항만 (단일형/단답숫자)
+  // 조건으로 쓸 수 있는 문항만 (단일형/단답숫자)
   const eligibleQuestions = useMemo(
     () => questions.filter((q) => kindForQuestion(q) !== null),
     [questions],
   );
-  // 이미 차원으로 등록된 문항은 추가 후보에서 제외 — 동일 문항 중복 차원 방지.
+  // 이미 조건으로 등록된 문항은 추가 후보에서 제외 — 동일 문항 중복 방지.
   const addableQuestions = eligibleQuestions.filter(
     (q) => !config.dimensions.some((d) => d.questionId === q.id),
   );
   const combos = useMemo(() => cartesianCombos(config.dimensions), [config.dimensions]);
+  // 조건 3개 전용 피벗(행=최다 카테고리 조건, 열=나머지 둘 중첩). 그 외 개수면 null.
+  const pivot = useMemo(() => buildQuotaPivot(config.dimensions), [config.dimensions]);
+  const totals = useMemo(
+    () => (pivot ? pivotTotals(config.cells, pivot, config.dimensions) : null),
+    [config.cells, pivot, config.dimensions],
+  );
 
   function patch(p: Partial<QuotaConfig>) {
     setConfig((prev) => ({ ...prev, ...p }));
@@ -115,7 +137,7 @@ export function QuotaEditor({ surveyId, initialConfig, questions }: Props) {
       kind,
       categories: kind === 'choice' ? choiceCategories(q) : [],
     };
-    // 차원 추가 시 셀은 초기화(조합이 바뀌므로) — 목표 재입력.
+    // 조건 추가 시 셀은 초기화(조합이 바뀌므로) — 목표 재입력.
     patch({ dimensions: [...config.dimensions, dim], cells: [] });
   }
 
@@ -158,7 +180,7 @@ export function QuotaEditor({ surveyId, initialConfig, questions }: Props) {
     });
   }
 
-  /** 숫자형 차원의 구간 한 줄 삭제(mockup "삭제" 링크). addNumericCategory 의 역연산, 동일 patch 조합. */
+  /** 숫자형 조건의 구간 한 줄 삭제(mockup "삭제" 링크). addNumericCategory 의 역연산, 동일 patch 조합. */
   function removeCategory(dimId: string, catId: string) {
     patch({
       dimensions: config.dimensions.map((d) =>
@@ -188,7 +210,7 @@ export function QuotaEditor({ surveyId, initialConfig, questions }: Props) {
 
   function validate(): string | null {
     for (const d of config.dimensions) {
-      if (d.categories.length === 0) return `차원 "${d.label}"에 카테고리가 없습니다.`;
+      if (d.categories.length === 0) return `조건 "${d.label}"에 카테고리가 없습니다.`;
       if (d.kind === 'numeric') {
         for (const c of d.categories) {
           if (
@@ -251,15 +273,15 @@ export function QuotaEditor({ surveyId, initialConfig, questions }: Props) {
         </Button>
       </div>
 
-      {/* 2) 차원 카드 — eligibleQuestions Select 로 추가, choice=읽기전용 보기 목록 / numeric=구간 편집 */}
+      {/* 2) 조건 카드 — eligibleQuestions Select 로 추가, choice=읽기전용 보기 목록 / numeric=구간 편집 */}
       <div className="space-y-3">
-        <h3 className="text-xs font-bold tracking-wide text-slate-400 uppercase">차원</h3>
+        <h3 className="text-xs font-bold tracking-wide text-slate-400 uppercase">조건</h3>
 
         {config.dimensions.map((dim, i) => (
           <div key={dim.id} className="rounded-lg border bg-white p-4">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm font-bold text-slate-900">차원 {i + 1}</span>
+                <span className="text-sm font-bold text-slate-900">조건 {i + 1}</span>
                 <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-bold text-slate-500">
                   {dim.kind === 'choice' ? '옵션형' : '숫자형'}
                 </span>
@@ -274,27 +296,24 @@ export function QuotaEditor({ surveyId, initialConfig, questions }: Props) {
                 className="text-red-600"
                 onClick={() => removeDimension(dim.id)}
               >
-                차원 삭제
+                조건 삭제
               </Button>
             </div>
 
             {dim.kind === 'choice' ? (
-              <div className="max-w-sm overflow-hidden rounded-lg border">
-                <p className="border-b bg-slate-50 px-3 py-1.5 text-xs text-slate-400">
-                  보기가 자동으로 등록됩니다 (읽기 전용).
-                </p>
+              <ul aria-label={`${dim.label} 변수 목록`} className="flex flex-wrap gap-2">
                 {dim.categories.map((cat, ci) => (
-                  <div
+                  <li
                     key={cat.id}
-                    className="flex items-center gap-3 border-b px-3 py-2 text-sm last:border-b-0"
+                    className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2 text-sm text-slate-700"
                   >
-                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-blue-50 text-xs font-bold text-blue-600">
+                    <span className="text-xs font-semibold text-blue-600">
                       {ci + 1}
                     </span>
                     {cat.label}
-                  </div>
+                  </li>
                 ))}
-              </div>
+              </ul>
             ) : (
               <div>
                 <table className="border-collapse text-sm">
@@ -374,7 +393,7 @@ export function QuotaEditor({ surveyId, initialConfig, questions }: Props) {
         <div className="rounded-lg border border-dashed border-slate-300 bg-white p-3">
           <Select value={addDimensionValue} onValueChange={handleAddDimension}>
             <SelectTrigger className="w-full border-dashed border-blue-300 font-semibold text-blue-600 hover:bg-blue-50">
-              <SelectValue placeholder="+ 차원 추가" />
+              <SelectValue placeholder="+ 조건 추가" />
             </SelectTrigger>
             <SelectContent>
               {addableQuestions.map((q) => (
@@ -394,14 +413,14 @@ export function QuotaEditor({ surveyId, initialConfig, questions }: Props) {
         </div>
       </div>
 
-      {/* 3) 쿼터 셀 매트릭스 — 차원 1개=리스트, 2개=행×열 매트릭스, 3개 이상=조합 플랫 리스트 */}
+      {/* 3) 조건 보기 — 조건 1개=리스트, 2개=행×열 매트릭스, 3개=피벗 테이블, 4개 이상=조합 플랫 리스트 */}
       <div className="rounded-lg border bg-white p-4">
         <h3 className="mb-3 text-xs font-bold tracking-wide text-slate-400 uppercase">
-          쿼터 셀 · 목표 입력
+          조건 보기
         </h3>
 
         {config.dimensions.length === 0 && (
-          <p className="text-sm text-slate-400">차원을 먼저 추가하세요.</p>
+          <p className="text-sm text-slate-400">조건을 먼저 추가하세요.</p>
         )}
 
         {config.dimensions.length === 1 && (
@@ -417,7 +436,7 @@ export function QuotaEditor({ surveyId, initialConfig, questions }: Props) {
                   onChange={(e) =>
                     setCellTarget([cat.id], e.target.value === '' ? null : Number(e.target.value))
                   }
-                  className="h-8 w-24 text-center text-sm"
+                  className={cn(TARGET_INPUT_CLASS, 'h-8 w-24 px-2 text-center text-sm')}
                 />
               </div>
             ))}
@@ -461,7 +480,10 @@ export function QuotaEditor({ surveyId, initialConfig, questions }: Props) {
                                 e.target.value === '' ? null : Number(e.target.value),
                               )
                             }
-                            className="mx-auto h-9 w-20 text-center text-sm"
+                            className={cn(
+                              TARGET_INPUT_CLASS,
+                              'mx-auto h-9 w-20 px-2 text-center text-sm',
+                            )}
                           />
                         </td>
                       );
@@ -473,7 +495,140 @@ export function QuotaEditor({ surveyId, initialConfig, questions }: Props) {
           </div>
         )}
 
-        {config.dimensions.length >= 3 && (
+        {config.dimensions.length === 3 && pivot && totals && (
+          <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <table className="border-separate border-spacing-0 text-sm">
+              <thead>
+                <tr>
+                  <th
+                    rowSpan={2}
+                    className="min-w-[110px] max-w-[160px] border-r border-b border-slate-300 bg-slate-50 px-3 py-2 text-left align-middle text-xs font-semibold break-keep text-slate-500"
+                  >
+                    {pivot.rowDim.label}
+                  </th>
+                  <th
+                    rowSpan={2}
+                    className="border-r border-b border-slate-300 bg-slate-100 px-3 py-2 text-center align-middle font-semibold text-slate-700"
+                  >
+                    계
+                  </th>
+                  {pivot.colOuterDim.categories.map((outer, oi) => (
+                    <th
+                      key={outer.id}
+                      colSpan={pivot.colInnerDim.categories.length}
+                      className={cn(
+                        'border-b border-slate-200 bg-slate-50 px-2 py-1.5 text-center font-semibold text-slate-700',
+                        oi < pivot.colOuterDim.categories.length - 1 &&
+                          'border-r border-r-slate-300',
+                      )}
+                    >
+                      {outer.label}
+                    </th>
+                  ))}
+                </tr>
+                <tr>
+                  {pivot.columns.map((col, ci) => (
+                    <th
+                      key={pivotColKey(col)}
+                      className={cn(
+                        'border-b border-slate-300 bg-slate-50 px-2 py-1.5 text-center text-xs font-semibold text-slate-500',
+                        pivotColBorderClass(ci, pivot),
+                      )}
+                    >
+                      {col.inner.label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {/* 계 행 — 설정된 목표만 합산한 read-only 요약. 저장 데이터에는 포함되지 않는다. */}
+                <tr>
+                  <th
+                    scope="row"
+                    className="border-r border-b border-slate-300 bg-slate-100 px-3 py-1.5 text-left font-semibold text-slate-700"
+                  >
+                    계
+                  </th>
+                  <td className="border-r border-b border-slate-300 bg-slate-100 px-2 py-1.5 text-center font-bold text-slate-900">
+                    {totals.grand == null ? '—' : numberFormatter.format(totals.grand)}
+                  </td>
+                  {pivot.columns.map((col, ci) => {
+                    const sum = totals.cols.get(pivotColKey(col));
+                    return (
+                      <td
+                        key={pivotColKey(col)}
+                        className={cn(
+                          'border-b border-slate-300 bg-slate-100 px-2 py-1.5 text-center font-semibold text-slate-700',
+                          pivotColBorderClass(ci, pivot),
+                        )}
+                      >
+                        {sum == null ? '—' : numberFormatter.format(sum)}
+                      </td>
+                    );
+                  })}
+                </tr>
+                {pivot.rowDim.categories.map((row, ri) => {
+                  const rowSum = totals.rows.get(row.id);
+                  const isLastRow = ri === pivot.rowDim.categories.length - 1;
+                  return (
+                    <tr key={row.id}>
+                      <th
+                        scope="row"
+                        className={cn(
+                          'border-r border-r-slate-300 bg-slate-50 px-3 py-1.5 text-left font-semibold whitespace-nowrap text-slate-700',
+                          !isLastRow && 'border-b border-b-slate-200',
+                        )}
+                      >
+                        {row.label}
+                      </th>
+                      <td
+                        className={cn(
+                          'border-r border-r-slate-300 bg-slate-50 px-2 py-1.5 text-center font-semibold text-slate-700',
+                          !isLastRow && 'border-b border-b-slate-200',
+                        )}
+                      >
+                        {rowSum == null ? '—' : numberFormatter.format(rowSum)}
+                      </td>
+                      {pivot.columns.map((col, ci) => {
+                        const ids = pivotCategoryIds(config.dimensions, pivot, row.id, col);
+                        return (
+                          <td
+                            key={pivotColKey(col)}
+                            className={cn(
+                              'p-1.5 text-center',
+                              !isLastRow && 'border-b border-b-slate-200',
+                              pivotColBorderClass(ci, pivot),
+                            )}
+                          >
+                            <Input
+                              type="number"
+                              min={0}
+                              placeholder="무제한"
+                              aria-label={`${row.label} · ${col.outer.label} · ${col.inner.label} 목표`}
+                              value={cellTargetOf(ids) ?? ''}
+                              onChange={(e) =>
+                                setCellTarget(
+                                  ids,
+                                  e.target.value === '' ? null : Number(e.target.value),
+                                )
+                              }
+                              className={cn(
+                                TARGET_INPUT_CLASS,
+                                'mx-auto h-8 w-16 px-1 text-center text-sm',
+                              )}
+                            />
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {config.dimensions.length > 3 && (
           <div className="divide-y overflow-hidden rounded-lg border">
             {combos.map((combo) => (
               <div
@@ -492,7 +647,7 @@ export function QuotaEditor({ surveyId, initialConfig, questions }: Props) {
                       e.target.value === '' ? null : Number(e.target.value),
                     )
                   }
-                  className="h-8 w-24 shrink-0 text-center text-sm"
+                  className={cn(TARGET_INPUT_CLASS, 'h-8 w-24 shrink-0 px-2 text-center text-sm')}
                 />
               </div>
             ))}
@@ -537,8 +692,8 @@ export function QuotaEditor({ surveyId, initialConfig, questions }: Props) {
                 <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-blue-50">
                   <CheckCircle2 className="h-6 w-6 text-blue-500" />
                 </div>
-                <p className="mb-2 text-sm font-semibold text-gray-900">설문이 마감되었습니다</p>
-                <p className="text-sm leading-relaxed whitespace-pre-wrap text-slate-600">
+                {/* 실제 응답자 화면(already-responded-view quota_closed)과 동일 — 제목 없이 문구만 크게 */}
+                <p className="text-lg leading-relaxed whitespace-pre-wrap text-gray-800">
                   {config.closedMessage?.trim() ? config.closedMessage : QUOTA_CLOSED_FALLBACK}
                 </p>
               </div>
