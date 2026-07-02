@@ -44,6 +44,7 @@ import {
 } from '@/lib/option-text-migration';
 import { allQuotaQuestionsAnswered } from '@/lib/quota/gate';
 import { client } from '@/shared/lib/rpc';
+import { DEFAULT_PAUSED_MESSAGE } from '@/shared/lib/survey-control';
 
 import { useSurveyResponseStore } from '@/stores/survey-response-store';
 import { useShallow } from 'zustand/react/shallow';
@@ -62,6 +63,8 @@ export interface SurveyResponseFlowProps {
   mode?: 'public' | 'admin-edit' | 'preview';
   surveyIdentifier: string; // slug | uuid | privateToken (이미 decodeURIComponent 된 값)
   inviteToken?: string | null;
+  // ?test=<token> — 운영 콘솔 발급 테스트 링크. public 모드에서만 의미가 있다(미전달 시 null).
+  testToken?: string | null;
   // admin-edit 모드 전용 — Task 15 에서 활성화.
   adminContext?: {
     responseId: string;
@@ -162,6 +165,7 @@ function buildOptTextsPayload(
 export function SurveyResponseFlow({
   surveyIdentifier,
   inviteToken: inviteTokenProp = null,
+  testToken: testTokenProp = null,
   mode = 'public',
   adminContext,
   previewContext,
@@ -174,6 +178,8 @@ export function SurveyResponseFlow({
   // ?invite=<token> — contact 매칭용. 없으면 익명 응답 흐름 그대로.
   // admin-edit 분기 (7/8) — admin-edit 모드에서는 invite 토큰 매칭/검증 자체를 건너뛴다.
   const inviteToken = isAdminEdit || isPreview ? null : inviteTokenProp ?? null;
+  // ?test=<token> — invite 와 동일하게 admin-edit/preview 에서는 무시(중단/무효 링크 게이트 비대상).
+  const testToken = isAdminEdit || isPreview ? null : testTokenProp ?? null;
   const [inviteIsInvalid, setInviteIsInvalid] = useState(false);
 
   // 응답 스토어 — 액션만 셀렉트 (전체 구독 → 불필요 리렌더 방지)
@@ -200,6 +206,7 @@ export function SurveyResponseFlow({
     contactAttrs,
     showInviteRequired,
     versionId,
+    control,
   } = useSurveyLoader({
     identifier,
     isAdminEdit,
@@ -207,8 +214,12 @@ export function SurveyResponseFlow({
     adminContext,
     previewContext,
     inviteToken,
+    testToken,
     setResponses,
   });
+
+  // 유효 테스트 세션 — 중단 게이트 우회 + 중복검사 skip + create/resume 에 testToken 전달.
+  const isTestSession = control?.testSession === 'valid';
 
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -254,6 +265,8 @@ export function SurveyResponseFlow({
     loadedSurvey,
     inviteToken,
     signals,
+    // 유효 테스트 세션은 같은 브라우저로 반복 응답이 정상 → 진입 시 중복검사 skip.
+    skip: isTestSession,
   });
 
   // 운영 현황 콘솔(T5): 페이지 진입 시 DB INSERT를 더 이상 하지 않는다.
@@ -379,8 +392,11 @@ export function SurveyResponseFlow({
     loadedSurvey,
     currentResponseId,
     inviteToken,
+    testToken,
+    isTestSession,
     setSessionId,
     setCurrentResponseId,
+    setDuplicateStatus,
   });
 
   const hasPreviousDisplayable = stepHistory.length > 0;
@@ -441,6 +457,8 @@ export function SurveyResponseFlow({
     isPreview,
     adminContext,
     inviteToken,
+    testToken,
+    isTestSession,
     loadedSurvey,
     currentStep,
     currentStepIndex,
@@ -557,6 +575,31 @@ export function SurveyResponseFlow({
     return <InviteRequiredScreen />;
   }
 
+  // 무효 테스트 링크 — 익명 폴백 없이 차단 (스펙 결정 5). control 은 public 경로에서만 채워지므로
+  // admin-edit/preview 는 이 분기에 도달하지 않는다.
+  if (control?.testSession === 'invalid') {
+    return (
+      <AlreadyRespondedView
+        reason="invalid_test_token"
+        surveyTitle={loadedSurvey?.title ?? ''}
+        contactEmail={loadedSurvey?.contactEmail ?? null}
+        customBody={null}
+      />
+    );
+  }
+
+  // 중단 모드 — 테스트 세션만 통과 (스펙 결정 4)
+  if (control?.isPaused && !isTestSession) {
+    return (
+      <AlreadyRespondedView
+        reason="survey_paused"
+        surveyTitle={loadedSurvey?.title ?? ''}
+        contactEmail={loadedSurvey?.contactEmail ?? null}
+        customBody={control.pausedMessage ?? DEFAULT_PAUSED_MESSAGE}
+      />
+    );
+  }
+
   // 중복 검사 진행 중
   if (duplicateStatus.kind === 'checking') {
     return (
@@ -573,7 +616,13 @@ export function SurveyResponseFlow({
         reason={duplicateStatus.reason}
         surveyTitle={loadedSurvey?.title ?? ''}
         contactEmail={loadedSurvey?.contactEmail ?? null}
-        customBody={duplicateStatus.reason === 'quota_closed' ? quotaClosedMessage : null}
+        customBody={
+          duplicateStatus.reason === 'quota_closed'
+            ? quotaClosedMessage
+            : duplicateStatus.reason === 'survey_paused'
+              ? (control?.pausedMessage ?? DEFAULT_PAUSED_MESSAGE)
+              : null
+        }
       />
     );
   }

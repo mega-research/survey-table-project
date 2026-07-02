@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
 
 import { client } from '@/shared/lib/rpc';
 import type { Survey } from '@/types/survey';
 
 import { sendVisibilitySegment, sessionStorageKey } from './session-helpers';
+import { handlePausedMutationError, type DuplicateStatus } from './use-duplicate-guard';
 
 interface UseSessionRecoveryArgs {
   isAdminEdit: boolean;
@@ -11,10 +13,16 @@ interface UseSessionRecoveryArgs {
   loadedSurvey: Survey | null;
   currentResponseId: string | null;
   inviteToken: string | null;
+  /** ?test=<token>. isTestSession 일 때만 resume 게이트로 전달해 중단 우회 + isTest 유지. */
+  testToken: string | null;
+  /** control.testSession==='valid'. 유효 테스트 세션이면 중단 게이트를 우회한다. */
+  isTestSession: boolean;
   /** 회복된 DB row 의 sessionId 로 컴포넌트 sessionId state 를 갱신 (소유권은 컴포넌트). */
   setSessionId: (sessionId: string) => void;
   /** 회복된 응답 row id 를 응답 스토어에 반영 (Zustand 액션). */
   setCurrentResponseId: (id: string) => void;
+  /** resume 이 survey_paused 로 실패하면 중단 화면으로 전환 (공통 채널, use-duplicate-guard 소유). */
+  setDuplicateStatus: Dispatch<SetStateAction<DuplicateStatus>>;
 }
 
 interface UseSessionRecoveryResult {
@@ -45,8 +53,11 @@ export function useSessionRecovery({
   loadedSurvey,
   currentResponseId,
   inviteToken,
+  testToken,
+  isTestSession,
   setSessionId,
   setCurrentResponseId,
+  setDuplicateStatus,
 }: UseSessionRecoveryArgs): UseSessionRecoveryResult {
   // recovery effect 가 resumeOrCreateResponse 를 await 하는 동안 true.
   // handleResponse 의 INSERT 가드에서 참조해 recovery 완료 전 신규 INSERT 발사를 차단한다 (I-1).
@@ -75,6 +86,7 @@ export function useSessionRecovery({
       surveyId: loadedSurvey.id,
       sessionId: savedSessionId,
       ...(inviteToken != null ? { inviteToken } : {}),
+      ...(isTestSession && testToken != null ? { testToken } : {}),
     })
       .then((result) => {
         if (!result) {
@@ -97,7 +109,20 @@ export function useSessionRecovery({
           setResumeMessage('이전 응답을 이어서 진행합니다');
         }
       })
-      .catch((err) => {
+      .catch(async (err) => {
+        // 진입 시점에 이미 중단됐다면 resume 이 survey_paused throw → 중단 화면으로 전환.
+        // (통상은 control.isPaused 렌더 게이트가 먼저 막지만, 채널을 일치시켜 둔다.)
+        if (
+          await handlePausedMutationError({
+            err,
+            surveyId: loadedSurvey.id,
+            testToken,
+            isTestSession,
+            setDuplicateStatus,
+          })
+        ) {
+          return;
+        }
         console.error('응답 회복 실패:', err);
       })
       .finally(() => {
@@ -105,8 +130,9 @@ export function useSessionRecovery({
       });
     // deps 는 원본과 1:1 동일. setSessionId 는 안정적 setter 라 의도적으로 제외(원본 동일),
     // sessionId 도 effect 내부에서 직접 set 하므로 deps 미포함(무한 루프 방지).
+    // testToken/isTestSession 은 세션 동안 안정적이나 클로저 정합을 위해 deps 에 포함한다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAdminEdit, isPreview, loadedSurvey, currentResponseId, setCurrentResponseId, inviteToken]);
+  }, [isAdminEdit, isPreview, loadedSurvey, currentResponseId, setCurrentResponseId, inviteToken, testToken, isTestSession]);
 
   // 토스트 dismiss 는 <ResumeToast> 가 자체 마운트 시점부터 4초 타이머로 호출한다.
   // 안정 참조라 ResumeToast 의 마운트 전용 effect deps 에서 안전하게 제외된다.

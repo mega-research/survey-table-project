@@ -62,6 +62,13 @@ describe('useDuplicateGuard - 초기값', () => {
     );
     expect(result.current.duplicateStatus).toEqual({ kind: 'ok' });
   });
+
+  it('skip(유효 테스트 세션) 이면 ok 로 시작한다', () => {
+    const { result } = renderHook(() =>
+      useDuplicateGuard(baseArgs({ skip: true })),
+    );
+    expect(result.current.duplicateStatus).toEqual({ kind: 'ok' });
+  });
 });
 
 describe('useDuplicateGuard - checkOnEntry effect', () => {
@@ -103,6 +110,28 @@ describe('useDuplicateGuard - checkOnEntry effect', () => {
     );
     expect(checkOnEntry).not.toHaveBeenCalled();
     expect(result.current.duplicateStatus).toEqual({ kind: 'ok' });
+  });
+
+  it('skip 이면 signals/survey 가 있어도 checkOnEntry 없이 ok 로 통과한다', () => {
+    const { result } = renderHook(() =>
+      useDuplicateGuard(baseArgs({ skip: true, signals })),
+    );
+    expect(checkOnEntry).not.toHaveBeenCalled();
+    expect(result.current.duplicateStatus).toEqual({ kind: 'ok' });
+  });
+
+  it('control 로드로 skip 이 false→true 로 바뀌면 checkOnEntry 결과와 무관하게 ok 로 맞춘다', async () => {
+    checkOnEntry.mockResolvedValue({ blocked: true, reason: 'device_already_responded' });
+    const { result, rerender } = renderHook((props) => useDuplicateGuard(props), {
+      initialProps: baseArgs({ signals, skip: false }),
+    });
+
+    // skip 전환 — 이후 상태는 ok 여야 하고, 이미 발사된 검사 결과(blocked)로 되돌아가지 않는다.
+    rerender(baseArgs({ signals, skip: true }));
+
+    await waitFor(() =>
+      expect(result.current.duplicateStatus).toEqual({ kind: 'ok' }),
+    );
   });
 
   it('signals 가 채워지면 checkOnEntry 를 호출하고 ok 로 전이한다', async () => {

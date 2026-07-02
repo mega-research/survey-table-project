@@ -57,6 +57,8 @@ function baseArgs(over: Partial<Parameters<typeof useResponseLifecycle>[0]> = {}
     isAdminEdit: false,
     adminContext: undefined,
     inviteToken: null,
+    testToken: null as string | null,
+    isTestSession: false,
     loadedSurvey: survey,
     currentStep: step,
     currentStepIndex: 0,

@@ -5,6 +5,7 @@ import { AlertCircle, CheckCircle2 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 
 import type { BlockReason } from '@/lib/duplicate-detection/types';
+import { DEFAULT_PAUSED_MESSAGE } from '@/shared/lib/survey-control';
 import { cn } from '@/lib/utils';
 
 interface Props {
@@ -49,6 +50,18 @@ const MESSAGES: Record<BlockReason, MessageDef> = {
     title: null,
     body: '해당 조건의 모집이 완료되어 더 이상 참여하실 수 없습니다. 참여해 주셔서 감사합니다.',
     tone: 'info',
+  },
+  survey_paused: {
+    // quota_closed 와 동일하게 제목 없이 운영자가 입력한 중단 문구(customBody)만 크게 표시.
+    // customBody 미전달 시 기본 중단 문구로 폴백.
+    title: null,
+    body: DEFAULT_PAUSED_MESSAGE,
+    tone: 'info',
+  },
+  invalid_test_token: {
+    title: '테스트 링크가 유효하지 않습니다',
+    body: '테스트 모드가 꺼져 있거나 링크가 잘못되었습니다. 운영 콘솔에서 테스트 링크를 다시 복사해 주세요.',
+    tone: 'error',
   },
 };
 
