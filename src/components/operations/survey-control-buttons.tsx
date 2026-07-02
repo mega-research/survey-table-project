@@ -57,8 +57,9 @@ interface Props {
  *
  * 테스트 링크는 `/survey/{surveyId}?test={token}` 형식 — 컨택 초대 링크(`CopyInviteUrlButton`,
  * `campaign-dispatch.ts`)와 동일하게 slug 대신 surveyId 를 직접 사용한다. 응답 페이지의 식별자
- * 파서(`use-survey-loader.ts`)는 UUID 형태면 slug/privateToken 조회를 거치지 않고 surveyId 로
- * 바로 처리하므로, 비공개 설문이거나 슬러그가 없는 설문에서도 항상 유효하다.
+ * 파서(`parsesurveyIdentifier`)는 UUID 를 privateToken 으로 분류하지만, `use-survey-loader.ts`가
+ * byPrivateToken 매칭 실패 시 surveyId 직접 조회로 폴백하므로(초대 링크와 같은 호환 경로)
+ * 비공개 설문이거나 슬러그가 없는 설문에서도 항상 유효하다.
  */
 export function SurveyControlButtons({ surveyId, initial }: Props) {
   const router = useRouter();
@@ -103,23 +104,28 @@ export function SurveyControlButtons({ surveyId, initial }: Props) {
       }
     });
 
-  const disableTestMode = (deleteResponses: boolean) =>
-    startTransition(async () => {
-      try {
-        if (deleteResponses) {
-          const { deletedCount } = await client.operations.control.deleteTestResponses({
-            surveyId,
-          });
-          toast.success(`테스트 응답 ${deletedCount}건을 삭제했습니다.`);
-        }
-        const result = await client.operations.control.setTestMode({ surveyId, enabled: false });
-        setState((s) => ({ ...s, ...result }));
-        setTestOffConfirm(null);
-        router.refresh();
-      } catch (err) {
-        toast.error(getErrorMessage(err, '테스트 모드 전환에 실패했습니다.'));
+  /**
+   * 실제 OFF 처리. 성공 시에만 setTestOffConfirm(null) 로 확인 다이얼로그를 닫고,
+   * 실패 시 다이얼로그를 유지한 채 toast 만 띄워 재시도 경로를 남긴다.
+   * plain async 로 둔 이유: requestDisableTestMode 의 transition 안에서 await 가 유효해야
+   * isPending 이 이 작업 완료까지 이어진다. 다이얼로그 버튼 호출부는 각자 startTransition 으로 감싼다.
+   */
+  const disableTestMode = async (deleteResponses: boolean) => {
+    try {
+      if (deleteResponses) {
+        const { deletedCount } = await client.operations.control.deleteTestResponses({
+          surveyId,
+        });
+        toast.success(`테스트 응답 ${deletedCount}건을 삭제했습니다.`);
       }
-    });
+      const result = await client.operations.control.setTestMode({ surveyId, enabled: false });
+      setState((s) => ({ ...s, ...result }));
+      setTestOffConfirm(null);
+      router.refresh();
+    } catch (err) {
+      toast.error(getErrorMessage(err, '테스트 모드 전환에 실패했습니다.'));
+    }
+  };
 
   const copyTestLink = async () => {
     if (!testLink) return;
@@ -246,11 +252,18 @@ export function SurveyControlButtons({ surveyId, initial }: Props) {
               variant="outline"
               size="sm"
               disabled={isPending}
-              onClick={() => disableTestMode(false)}
+              onClick={() => startTransition(() => disableTestMode(false))}
             >
               보관하고 끄기
             </Button>
-            <AlertDialogAction disabled={isPending} onClick={() => disableTestMode(true)}>
+            {/* preventDefault: Radix Action 의 자동 닫힘을 막아 실패 시 다이얼로그를 유지한다 */}
+            <AlertDialogAction
+              disabled={isPending}
+              onClick={(e) => {
+                e.preventDefault();
+                startTransition(() => disableTestMode(true));
+              }}
+            >
               삭제 후 끄기
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -301,7 +314,14 @@ export function SurveyControlButtons({ surveyId, initial }: Props) {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isPending}>취소</AlertDialogCancel>
-            <AlertDialogAction disabled={isPending} onClick={resumeSurvey}>
+            {/* preventDefault: Radix Action 의 자동 닫힘을 막아 실패 시 다이얼로그를 유지한다 */}
+            <AlertDialogAction
+              disabled={isPending}
+              onClick={(e) => {
+                e.preventDefault();
+                resumeSurvey();
+              }}
+            >
               재개
             </AlertDialogAction>
           </AlertDialogFooter>
