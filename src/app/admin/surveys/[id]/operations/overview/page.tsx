@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 
+import { ExportDataModal } from '@/components/analytics/export-data-modal';
 import { DailyParticipationChart } from '@/components/operations/daily-participation-chart';
 import { DailyStatsTable } from '@/components/operations/daily-stats-table';
 import { DropFunnel } from '@/components/operations/drop-funnel';
@@ -18,6 +19,7 @@ import { getDropFunnel } from '@/lib/operations/drop-funnel.server';
 import { getPageDwell } from '@/lib/operations/page-dwell.server';
 import { getQuotaStatus } from '@/lib/operations/quota-status.server';
 import { getResponseTime } from '@/lib/operations/response-time.server';
+import { getSurveyById } from '@/features/survey-builder/server/services/survey-read.service';
 
 /**
  * 플랜 §9 정책 — 30초 자동 폴링 의도.
@@ -92,7 +94,7 @@ export default async function OperationsOverviewPage({
   const effectiveDate =
     mode === 'hour' ? (date ?? latestAvailable ?? todayKst()) : undefined;
 
-  const [statusCounts, dailyBuckets, dailyStats, responseTime, dropFunnel, pageDwell, quotaStatus] =
+  const [statusCounts, dailyBuckets, dailyStats, responseTime, dropFunnel, pageDwell, quotaStatus, survey] =
     await Promise.all([
       aggregateStatus(surveyId),
       aggregateDaily({ surveyId, mode, ...(effectiveDate !== undefined ? { hourModeDate: effectiveDate } : {}) }),
@@ -101,15 +103,20 @@ export default async function OperationsOverviewPage({
       getDropFunnel(surveyId),
       getPageDwell(surveyId),
       getQuotaStatus(surveyId),
+      getSurveyById(surveyId),
     ]);
 
   return (
     <main className="mx-auto max-w-7xl space-y-4 px-6 py-8">
-      <div>
-        <h2 className="text-xl font-bold text-gray-900">응답 현황</h2>
-        <p className="text-sm text-slate-500">
-          응답자 진행 현황 · 일자별 추이 · 응답시간 통계 · 이탈 위치 분석
-        </p>
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <h2 className="text-xl font-bold text-gray-900">응답 현황</h2>
+          <p className="text-sm text-slate-500">
+            응답자 진행 현황 · 일자별 추이 · 응답시간 통계 · 이탈 위치 분석
+          </p>
+        </div>
+        {/* analytics 대시보드와 동일한 내보내기 모달 — RawData·SPSS·분할 다운로드 */}
+        <ExportDataModal surveyId={surveyId} surveyTitle={survey?.title ?? '설문'} />
       </div>
 
       <KpiRow counts={statusCounts} quota={quotaStatus?.summary ?? null} />
