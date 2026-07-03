@@ -33,9 +33,10 @@ export async function GET(
     const { surveyId } = await params;
     const basis = request.nextUrl.searchParams.get('basis');
 
+    // questions 는 order 오름차순 고정 (export/route.ts 와 동일 — 변수 순서를 문항 순서에 고정).
     const surveyData = await db.query.surveys.findFirst({
       where: eq(surveys.id, surveyId),
-      with: { questions: true },
+      with: { questions: { orderBy: (q, { asc }) => [asc(q.order)] } },
     });
     if (!surveyData) return NextResponse.json({ error: 'Survey not found' }, { status: 404 });
 

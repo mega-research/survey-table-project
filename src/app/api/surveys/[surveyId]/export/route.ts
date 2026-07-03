@@ -45,9 +45,12 @@ export async function GET(
     }
 
     // 1. 설문 데이터 조회
+    // questions 는 반드시 order 오름차순으로 조회한다. orderBy 가 없으면 drizzle relational
+    // query 가 ORDER BY 를 넣지 않아 Postgres 힙(물리) 순서를 따르고, 그 결과 SPSS/Raw
+    // 변수 순서가 문항 순서와 어긋나며 편집할 때마다 흔들린다.
     const surveyData = await db.query.surveys.findFirst({
       where: eq(surveys.id, surveyId),
-      with: { questions: true },
+      with: { questions: { orderBy: (q, { asc }) => [asc(q.order)] } },
     });
 
     if (!surveyData) {
