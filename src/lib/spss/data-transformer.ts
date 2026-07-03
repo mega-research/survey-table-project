@@ -2,6 +2,7 @@ import type { Question, QuestionOption, RankingAnswer } from '@/types/survey';
 import { resolveChoiceOptions } from '@/utils/choice-source';
 import { parseNumericInput } from '@/utils/numeric-input';
 import { RANKING_OTHER_VALUE } from '@/utils/ranking-shared';
+import { unwrapOptionId } from '@/utils/table-cell-semantics';
 
 export interface SPSSColumn {
   spssVarName: string;
@@ -158,10 +159,12 @@ export function transformTableChoiceCell(
 ): string | number | null {
   if (value == null) return null;
   if ((cellType === 'radio' || cellType === 'select') && options && options.length > 0) {
-    // 정상 응답은 옵션 id/value 문자열. 비문자열(레거시 number/object)은 매핑 불가 →
-    // 기존 transformTableCell 동작으로 폴백. 옵션에 없는 값이면 getNumericCode가 null(system-missing).
-    if (typeof value !== 'string') return transformTableCell(cellType, value);
-    return getNumericCode(options, value);
+    // 표 radio/select 응답은 optionId 문자열 또는 { optionId } 객체로 저장된다.
+    // unwrapOptionId(table-cell-semantics SSOT)로 두 형태를 모두 언랩한 뒤 옵션 코드로 매핑한다.
+    // 언랩 불가(레거시 number 등)면 기존 transformTableCell 폴백, 옵션에 없는 id면 null(system-missing).
+    const optionId = unwrapOptionId(value);
+    if (optionId === null) return transformTableCell(cellType, value);
+    return getNumericCode(options, optionId);
   }
   return transformTableCell(cellType, value);
 }
