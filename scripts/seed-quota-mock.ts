@@ -17,6 +17,9 @@
  *   - 응답 내역은 fake-data-generator 로 생성 (displayCondition·분기·테이블 검증 준수).
  *     쿼터 조건 문항은 배분된 셀의 보기로 강제(해당 보기만 남긴 설문 사본으로 생성).
  *   - 텍스트 문항은 제목 키워드 기반 시맨틱 응답(성명/전화/병원/가구원 수 등).
+ *   - 기타(allowTextInput) 옵션 선택 시 __optTexts__ 사이드카에 주관식 텍스트 생성
+ *     (제목 키워드 기반 시맨틱 풀 — 실제 제출 payload 와 동일 구조).
+ *   - 표 radio/select/input 셀은 보이는 행 전부 채움 (radio 그리드 완답 가정).
  *   - page_visits / totalSeconds / progressPct / response_answers 정규화 포함
  *     (seed-fieldwork-mock.ts 와 동일 패턴).
  *
@@ -30,7 +33,11 @@ import { and, eq, inArray, isNull, like } from 'drizzle-orm';
 import { db } from '@/db';
 import { questions, responseAnswers, surveyResponses, surveyVersions, surveys } from '@/db/schema';
 import type { PageVisit, QuotaConfig, SurveyVersionSnapshot } from '@/db/schema/schema-types';
-import { generateFakeSurveyResponse } from '@/lib/fake-data-generator';
+import {
+  generateFakeSurveyResponse,
+  OPT_TEXTS_KEY,
+  truncateFakeResponses,
+} from '@/lib/fake-data-generator';
 import { parseBrowser } from '@/lib/operations/parse-ua';
 import { cellKeyOf, tallyAll } from '@/lib/quota/matching';
 import { normalizeToAnswers } from '@/lib/response-normalizer';
@@ -173,6 +180,27 @@ function semanticTextAnswer(q: Question): string {
   }
   if (q.type === 'textarea') return '특별한 의견은 없습니다. 조사 취지에 공감합니다.';
   return '해당 없음';
+}
+
+/** 기타(allowTextInput) 옵션의 주관식 텍스트 — 문항 제목 키워드 기반 시맨틱 풀. 첫 매칭 우선. */
+const OTHER_TEXT_POOLS: Array<{ pattern: RegExp; pool: string[] }> = [
+  { pattern: /담배/, pool: ['액상형 전자담배', '파이프 담배', '궐련형 전자담배와 일반담배 혼용'] },
+  { pattern: /심폐소생술/, pool: ['방법이 기억나지 않아서', '허리가 안 좋아서', '겁이 나서 못 할 것 같아서'] },
+  { pattern: /매체|홍보물|광고/, pool: ['유튜브 영상', '아파트 승강기 게시판', '마을 방송', '지역 인터넷 카페'] },
+  { pattern: /이동|교통/, pool: ['도보로 이동', '지인 차량 이용', '병원 셔틀버스'] },
+  { pattern: /직업/, pool: ['프리랜서', '자영업', '농업과 판매업 겸업'] },
+  { pattern: /이유/, pool: ['집에서 가까워서', '가족이 다니는 병원이라서', '예전에 진료받은 적이 있어서'] },
+  // "( ___ ) 병원" 빈칸 채움 — 병원 이름 부분만 입력 (이유 패턴이 먼저 매칭되어야 하므로 뒤에 배치)
+  { pattern: /병원/, pool: ['안동', '경북대학교', '안동성소', '가까운 종합'] },
+  { pattern: /무엇을 해야|가장 먼저/, pool: ['가족에게 먼저 연락한다', '증상을 조금 지켜본 뒤 결정한다'] },
+];
+
+function semanticOtherText(q: Question | undefined): string {
+  const title = q?.title ?? '';
+  for (const { pattern, pool } of OTHER_TEXT_POOLS) {
+    if (pattern.test(title)) return pickRandom(pool);
+  }
+  return '기타 사유';
 }
 
 // === production DB 가드 (seed-fieldwork-mock 과 동일) ===
@@ -425,7 +453,14 @@ async function main() {
       surveyForGenerator(forced),
     );
     // 강제 인구통계 최종 보증 (생성기 경로와 무관하게 셀 일치 유지)
-    for (const [qid, v] of Object.entries(forced)) questionResponses[qid] = v;
+    const optTextsSidecar = questionResponses[OPT_TEXTS_KEY] as
+      | Record<string, Record<string, string>>
+      | undefined;
+    for (const [qid, v] of Object.entries(forced)) {
+      questionResponses[qid] = v;
+      // 강제로 값이 바뀐 문항은 옵션 텍스트의 선택 정합성이 깨질 수 있어 제거
+      if (optTextsSidecar) delete optTextsSidecar[qid];
+    }
 
     // 텍스트 문항 시맨틱 응답 교체
     for (const qid of Object.keys(questionResponses)) {
@@ -435,12 +470,20 @@ async function main() {
       }
     }
 
+    // 기타 옵션 주관식 텍스트 시맨틱 교체 (생성기 기본 텍스트 → 문항 키워드 기반)
+    if (optTextsSidecar) {
+      for (const [qid, perOpt] of Object.entries(optTextsSidecar)) {
+        const q = questionById.get(qid);
+        for (const optId of Object.keys(perOpt)) {
+          perOpt[optId] = semanticOtherText(q);
+        }
+      }
+    }
+
     if (status !== 'completed') {
       const stopAt = Math.max(1, Math.round(orderedQuestions.length * sim.ratio));
       const allowedIds = new Set(orderedQuestions.slice(0, stopAt).map((q) => q.id));
-      questionResponses = Object.fromEntries(
-        Object.entries(questionResponses).filter(([qid]) => allowedIds.has(qid)),
-      );
+      questionResponses = truncateFakeResponses(questionResponses, allowedIds);
     }
 
     const totalSeconds =

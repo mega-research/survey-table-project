@@ -28,7 +28,7 @@ import {
   surveys,
 } from '@/db/schema';
 import type { PageVisit, SurveyVersionSnapshot } from '@/db/schema/schema-types';
-import { generateFakeSurveyResponse } from '@/lib/fake-data-generator';
+import { generateFakeSurveyResponse, truncateFakeResponses } from '@/lib/fake-data-generator';
 import { parseBrowser } from '@/lib/operations/parse-ua';
 import { normalizeToAnswers } from '@/lib/response-normalizer';
 import type { Survey as SurveyClientType } from '@/types/survey';
@@ -266,9 +266,7 @@ async function main() {
       const allowedIds = new Set(
         orderedQuestions.slice(0, stopAt).map((q) => (q as { id: string }).id),
       );
-      questionResponses = Object.fromEntries(
-        Object.entries(questionResponses).filter(([qid]) => allowedIds.has(qid)),
-      );
+      questionResponses = truncateFakeResponses(questionResponses, allowedIds);
     }
 
     const sessionId = `seed-mock-${Date.now()}-${i}`;
