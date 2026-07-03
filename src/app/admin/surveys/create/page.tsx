@@ -55,12 +55,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useSaveSurvey } from '@/hooks/queries/use-surveys';
 import { formatLocalDate } from '@/lib/date-formatters';
-import {
-  encodeSurveyIdentifier,
-  generateSlugFromTitle,
-  getSurveyAccessUrl,
-  validateSlug,
-} from '@/lib/survey-url';
+import { generateSlugFromTitle, getSurveyAccessUrl, validateSlug } from '@/lib/survey-url';
 import { generateId } from '@/lib/utils';
 import { client } from '@/shared/lib/rpc';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
@@ -683,7 +678,7 @@ export default function CreateSurveyPage() {
                     <p className="text-sm break-all text-gray-700">
                       {typeof window !== 'undefined' ? window.location.origin : ''}/survey/
                       <span className="font-medium text-blue-600">
-                        {encodeSurveyIdentifier(slugInput || generateSlugFromTitle(titleInput))}
+                        {slugInput || generateSlugFromTitle(titleInput)}
                       </span>
                     </p>
                   </div>
@@ -756,7 +751,7 @@ export default function CreateSurveyPage() {
                   <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
                     <p className="font-mono text-sm break-all text-gray-700">
                       {typeof window !== 'undefined' ? window.location.origin : ''}/survey/
-                      {encodeSurveyIdentifier(currentSurvey.privateToken || currentSurvey.id)}
+                      {currentSurvey.privateToken || currentSurvey.id}
                     </p>
                   </div>
                   <p className="mt-2 flex items-center gap-1 text-xs text-amber-600">

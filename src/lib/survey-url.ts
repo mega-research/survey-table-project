@@ -66,16 +66,6 @@ export function generateSlugFromTitle(title: string): string {
 }
 
 /**
- * 설문 URL path segment 로 사용할 식별자를 인코딩한다.
- *
- * 한글 슬러그 raw URL 은 일부 메신저 자동 링크 파서에서 중간에 끊길 수 있으므로
- * 공유/복사용 URL 에서는 percent-encoding 된 ASCII 경로를 사용한다.
- */
-export function encodeSurveyIdentifier(identifier: string): string {
-  return encodeURIComponent(identifier);
-}
-
-/**
  * 슬러그 유효성 검사
  * @param slug 검사할 슬러그
  * @returns 유효성 검사 결과 객체
@@ -164,6 +154,12 @@ export function isUUID(str: string): boolean {
 
 /**
  * 설문 접근 URL 생성
+ *
+ * 한글 슬러그는 percent-encoding 없이 원문 그대로 사용한다 (2026-07-02 결정).
+ * 인코딩된 %EB%85... URL 이 공유 화면에서 깨져 보이는 문제가 더 커서,
+ * 문자(SMS)·구형 링크 파서가 한글 경로에서 링크를 끊을 수 있는 리스크는 감수한다.
+ * 슬러그 허용 문자는 한글·영문·숫자·하이픈뿐이라(validateSlug) URL 구조는 깨지지 않는다.
+ *
  * @param survey 설문 객체
  * @param baseUrl 기본 URL (기본값: 현재 origin)
  * @returns 설문 접근 URL
@@ -180,12 +176,12 @@ export function getSurveyAccessUrl(
   if (survey.settings.isPublic) {
     // 공개 설문: slug 사용, 없으면 id 사용
     const identifier = survey.slug || survey.id;
-    return `${baseUrl}/survey/${encodeSurveyIdentifier(identifier)}`;
+    return `${baseUrl}/survey/${identifier}`;
   }
 
   // 비공개 설문: privateToken 사용, 없으면 id 사용
   const identifier = survey.privateToken || survey.id;
-  return `${baseUrl}/survey/${encodeSurveyIdentifier(identifier)}`;
+  return `${baseUrl}/survey/${identifier}`;
 }
 
 /**
