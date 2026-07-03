@@ -86,7 +86,6 @@ describe('survey response step headings', () => {
       <TableStepView
         step={step}
         isMobile={false}
-        titleHasMultipleLines={false}
         responses={{}}
         questions={[question]}
         onResponse={vi.fn()}
