@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect, useRef, useState, type InputHTMLAttributes } from 'react';
+
 import { Trash2 } from 'lucide-react';
 
 import { CellImageEditor } from '@/components/survey-builder/cell-image-editor';
@@ -221,13 +223,12 @@ export function ResponseHeaderSettings({ title, onTitleChange, settings, onChang
             제목 크기 직접 지정 (px)
           </Label>
           <div className="flex items-center gap-2">
-            <Input
+            <ClampedNumberInput
               id="header-title-px"
-              type="number"
               min={14}
               max={72}
-              value={config.titlePx ?? ''}
-              onChange={(e) => patch({ titlePx: e.target.value === '' ? null : Number(e.target.value) })}
+              value={config.titlePx}
+              onCommit={(titlePx) => patch({ titlePx })}
               className="w-24"
             />
             <Button type="button" variant="ghost" size="sm" onClick={() => patch({ titlePx: null })}>
@@ -356,7 +357,7 @@ function BlockCard({
     <div className="space-y-3 rounded-lg border border-gray-200 p-3">
       <div className="flex items-center justify-between gap-2">
         <span className="truncate text-sm font-medium text-gray-700">{blockName(block)}</span>
-        <Button type="button" variant="ghost" size="sm" aria-label="삭제" onClick={onRemove}>
+        <Button type="button" variant="ghost" size="sm" aria-label={`${blockName(block)} 삭제`} onClick={onRemove}>
           <Trash2 className="h-4 w-4" />
         </Button>
       </div>
@@ -440,14 +441,13 @@ function BlockCard({
               글자 크기
             </Label>
             <div className="flex items-center gap-2">
-              <Input
+              <ClampedNumberInput
                 id={`header-notice-font-size-${block.id}`}
-                type="number"
                 min={9}
                 max={28}
                 step={0.5}
-                value={block.fontSize ?? ''}
-                onChange={(e) => onPatch({ fontSize: e.target.value === '' ? null : Number(e.target.value) })}
+                value={block.fontSize}
+                onCommit={(fontSize) => onPatch({ fontSize })}
                 className="w-24"
               />
               <Button type="button" variant="ghost" size="sm" onClick={() => onPatch({ fontSize: null })}>
@@ -458,6 +458,85 @@ function BlockCard({
         </>
       )}
     </div>
+  );
+}
+
+// 클램프가 필요한 숫자 입력(제목 크기 직접 지정 / 문구 글자 크기) 전용 — keystroke마다
+// store에 commit하면 normalize 클램프가 즉시 되돌아와("3" 입력 즉시 14로 강제 등) 다자리
+// 값을 타이핑으로 완성할 수 없다. 로컬 draft로 타이핑을 받고 blur/Enter에서만 파싱·클램프해
+// commit한다. 외부에서 값이 바뀌면(자동 버튼, 프리셋 적용 등) draft를 재동기화하되, 포커스
+// 중에는 덮어쓰지 않는다(패널 내 여러 인스턴스가 각자 로컬 state로 격리되어 서로 간섭하지 않음).
+type ClampedNumberInputProps = {
+  id?: string;
+  value: number | null;
+  min: number;
+  max: number;
+  step?: number;
+  onCommit: (value: number | null) => void;
+  className?: string;
+} & Omit<
+  InputHTMLAttributes<HTMLInputElement>,
+  'id' | 'value' | 'min' | 'max' | 'step' | 'className' | 'type' | 'onChange' | 'onBlur' | 'onKeyDown'
+>;
+
+function ClampedNumberInput({
+  id,
+  value,
+  min,
+  max,
+  step,
+  onCommit,
+  className,
+  ...aria
+}: ClampedNumberInputProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [draft, setDraft] = useState(value === null ? '' : String(value));
+
+  // document.activeElement(외부 시스템인 브라우저 포커스 상태)를 읽어야만 "타이핑 중" 여부를
+  // 판단할 수 있어 effect가 필요하다 — 포커스 중엔 외부 value 변경으로 draft를 덮어쓰지 않는다.
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (document.activeElement !== inputRef.current) {
+      setDraft(value === null ? '' : String(value));
+    }
+  }, [value]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  const commit = () => {
+    if (draft === '') {
+      onCommit(null);
+      return;
+    }
+    const parsed = Number(draft);
+    if (Number.isNaN(parsed)) {
+      setDraft(value === null ? '' : String(value)); // 파싱 불가 시 마지막 commit 값으로 되돌림
+      return;
+    }
+    const clamped = Math.min(max, Math.max(min, parsed));
+    setDraft(String(clamped));
+    onCommit(clamped);
+  };
+
+  return (
+    <Input
+      ref={inputRef}
+      id={id}
+      type="number"
+      min={min}
+      max={max}
+      step={step}
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          commit();
+        }
+      }}
+      className={className}
+      {...aria}
+    />
   );
 }
 

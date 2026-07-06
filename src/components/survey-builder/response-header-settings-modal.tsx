@@ -55,6 +55,7 @@ export function ResponseHeaderSettingsModal() {
                   type="button"
                   variant="outline"
                   size="sm"
+                  aria-pressed={device === 'desktop'}
                   className={responseHeaderButtonClass(device === 'desktop')}
                   onClick={() => setDevice('desktop')}
                 >
@@ -64,6 +65,7 @@ export function ResponseHeaderSettingsModal() {
                   type="button"
                   variant="outline"
                   size="sm"
+                  aria-pressed={device === 'mobile'}
                   className={responseHeaderButtonClass(device === 'mobile')}
                   onClick={() => setDevice('mobile')}
                 >

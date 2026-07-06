@@ -54,7 +54,8 @@ describe('ResponseHeaderSettings (composed)', () => {
       ...DEFAULT_COMPOSED_RESPONSE_HEADER,
       blocks: [{ id: 'l1', type: 'logo', pos: 'right', size: 'md', imageUrl: '', altText: '', frame: 'none' }],
     });
-    fireEvent.click(screen.getByRole('button', { name: '삭제' }));
+    // aria-label이 블록별로 구분되므로(`${블록이름} 삭제`) "삭제"로 끝나는 접근 가능한 이름으로 매칭한다.
+    fireEvent.click(screen.getByRole('button', { name: /삭제$/ }));
     expect(onChange.mock.calls[0]![0].blocks).toHaveLength(0);
   });
 
@@ -97,5 +98,47 @@ describe('ResponseHeaderSettings (composed)', () => {
     expect(onChange.mock.calls[0]![0].bandStyle).toBe('boxed');
     fireEvent.click(screen.getByRole('button', { name: '밴드 배경 #cfe0ad' }));
     expect(onChange.mock.calls[1]![0].bandBg).toBe('#cfe0ad');
+  });
+});
+
+// ClampedNumberInput(제목 크기 직접 지정) draft/blur commit 동작 — keystroke마다 store에 commit하던
+// 구버전은 normalize 클램프가 즉시 되돌아와 "3" 입력 즉시 14로 강제되는 등 2자리 값을 타이핑할 수
+// 없었다. 타이핑 중에는 로컬 draft만 갱신되고(onChange 미호출), blur에서만 커밋되어야 한다.
+describe('ResponseHeaderSettings (제목 크기 직접 지정 — draft/blur commit)', () => {
+  it('타이핑 중에는 onChange가 호출되지 않고, blur 시 완성된 값으로 commit된다', () => {
+    const { onChange } = setup();
+    const input = screen.getByLabelText('제목 크기 직접 지정 (px)');
+
+    fireEvent.change(input, { target: { value: '3' } });
+    expect(onChange).not.toHaveBeenCalled();
+
+    fireEvent.change(input, { target: { value: '36' } });
+    expect(onChange).not.toHaveBeenCalled();
+
+    fireEvent.blur(input);
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0]![0].titlePx).toBe(36);
+  });
+
+  it('min 미만 값은 blur 시 최솟값(14)으로 클램프되어 commit된다', () => {
+    const { onChange } = setup();
+    const input = screen.getByLabelText('제목 크기 직접 지정 (px)');
+
+    fireEvent.change(input, { target: { value: '3' } });
+    fireEvent.blur(input);
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0]![0].titlePx).toBe(14);
+  });
+
+  it('Enter 입력도 blur와 동일하게 commit을 트리거한다', () => {
+    const { onChange } = setup();
+    const input = screen.getByLabelText('제목 크기 직접 지정 (px)');
+
+    fireEvent.change(input, { target: { value: '50' } });
+    expect(onChange).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onChange.mock.calls[0]![0].titlePx).toBe(50);
   });
 });
