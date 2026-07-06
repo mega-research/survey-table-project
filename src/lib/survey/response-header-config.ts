@@ -418,6 +418,12 @@ export function resolveMobileHeaderTitlePx(desktopPx: number): number {
   return Math.min(26, Math.max(17, Math.round(desktopPx * 0.62)));
 }
 
+/** 문구 블록의 실효 글자 크기 px — fontSize 직접 지정이 없으면 형식·크기별 자동값 */
+export function resolveNoticeFontPx(block: NormalizedHeaderNoticeBlock): number {
+  if (block.fontSize !== null) return block.fontSize;
+  return block.format === 'line' ? HEADER_NOTICE_LINE_FONT_PX[block.size] : 11.5;
+}
+
 export function getHeaderBandBorders(style: ResponseHeaderBandStyle): { top: string; bottom: string; side: string } {
   switch (style) {
     case 'band': return { top: '2px solid #3f3f3f', bottom: '2px solid #3f3f3f', side: 'none' };

@@ -2,8 +2,8 @@ import type { CSSProperties, ReactNode } from 'react';
 
 import {
   getHeaderBandBorders, getTitleAlignClass, HEADER_LOGO_HEIGHTS, HEADER_MARK_HEIGHTS,
-  HEADER_NOTICE_BOX_WIDTHS, HEADER_NOTICE_LINE_FONT_PX, normalizeResponseHeaderConfig, partitionHeaderBlocks,
-  resolveHeaderTitlePx, resolveMobileHeaderTitlePx,
+  HEADER_NOTICE_BOX_WIDTHS, normalizeResponseHeaderConfig, partitionHeaderBlocks,
+  resolveHeaderTitlePx, resolveMobileHeaderTitlePx, resolveNoticeFontPx,
 } from '@/lib/survey/response-header-config';
 import type {
   NormalizedHeaderImageBlock, NormalizedHeaderNoticeBlock,
@@ -310,7 +310,7 @@ function NoticeBox({ block, inline = false }: { block: NormalizedHeaderNoticeBlo
       <div className="bg-[#111111] px-2 py-[5px] text-[13px] font-bold tracking-[-0.2px] text-white">{block.title}</div>
       <div
         className="whitespace-pre-line leading-[1.5] text-[#3d3d3f] [text-wrap:pretty]"
-        style={{ fontSize: block.fontSize ?? 11.5, textAlign: block.alignBox, padding: inline ? '6px 4px 0' : '7px 10px 9px' }}
+        style={{ fontSize: resolveNoticeFontPx(block), textAlign: block.alignBox, padding: inline ? '6px 4px 0' : '7px 10px 9px' }}
       >
         {block.boxBody}
       </div>
@@ -322,7 +322,7 @@ function NoticeLine({ block, mobile = false }: { block: NormalizedHeaderNoticeBl
   return (
     <div
       className={cn('inline-block max-w-full whitespace-pre-line leading-[1.5] text-[#3d3d3f] [text-wrap:pretty]', mobile ? 'text-xs font-semibold' : 'font-semibold')}
-      style={{ ...(mobile ? {} : { fontSize: block.fontSize ?? HEADER_NOTICE_LINE_FONT_PX[block.size] }), textAlign: block.alignLine }}
+      style={{ ...(mobile ? {} : { fontSize: resolveNoticeFontPx(block) }), textAlign: block.alignLine }}
     >
       {block.lineBody}
     </div>

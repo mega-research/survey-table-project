@@ -142,3 +142,23 @@ describe('ResponseHeaderSettings (제목 크기 직접 지정 — draft/blur com
     expect(onChange.mock.calls[0]![0].titlePx).toBe(50);
   });
 });
+
+// 자동(titlePx null) 상태에서도 입력칸에 현재 적용 중인 실효값을 보여줘야 한다(목업 동작).
+// 실효값을 그대로 표시하되, 사용자가 실제로 편집하지 않은 blur는 자동 상태를 해제하면 안 된다.
+describe('ResponseHeaderSettings (자동 상태 실효값 표시)', () => {
+  it('자동 상태에서 직접 지정 입력칸이 실효값을 표시한다', () => {
+    setup(); // 기본 config(titlePx: null) + 제목 "설문 제목"(5자) → titleScale md 33px 그대로
+    const input = screen.getByLabelText('제목 크기 직접 지정 (px)');
+    expect(input).toHaveValue(33);
+  });
+
+  it('자동 상태에서 포커스 후 무편집 blur → onChange 미호출 (자동 유지)', () => {
+    const { onChange } = setup();
+    const input = screen.getByLabelText('제목 크기 직접 지정 (px)');
+
+    fireEvent.focus(input);
+    fireEvent.blur(input);
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+});

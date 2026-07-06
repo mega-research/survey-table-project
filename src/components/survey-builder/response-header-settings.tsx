@@ -15,6 +15,8 @@ import {
   createHeaderBlock,
   normalizeResponseHeaderConfig,
   noticeFormatPatch,
+  resolveHeaderTitlePx,
+  resolveNoticeFontPx,
   responseHeaderButtonClass,
 } from '@/lib/survey/response-header-config';
 import type {
@@ -228,6 +230,7 @@ export function ResponseHeaderSettings({ title, onTitleChange, settings, onChang
               min={14}
               max={72}
               value={config.titlePx}
+              autoValue={resolveHeaderTitlePx(config, title)}
               onCommit={(titlePx) => patch({ titlePx })}
               className="w-24"
             />
@@ -447,6 +450,7 @@ function BlockCard({
                 max={28}
                 step={0.5}
                 value={block.fontSize}
+                autoValue={resolveNoticeFontPx(block)}
                 onCommit={(fontSize) => onPatch({ fontSize })}
                 className="w-24"
               />
@@ -466,9 +470,16 @@ function BlockCard({
 // 값을 타이핑으로 완성할 수 없다. 로컬 draft로 타이핑을 받고 blur/Enter에서만 파싱·클램프해
 // commit한다. 외부에서 값이 바뀌면(자동 버튼, 프리셋 적용 등) draft를 재동기화하되, 포커스
 // 중에는 덮어쓰지 않는다(패널 내 여러 인스턴스가 각자 로컬 state로 격리되어 서로 간섭하지 않음).
+//
+// value가 null(자동)이면 draft는 빈칸이 아니라 autoValue(현재 적용 중인 계산값)를 표시한다
+// (목업 동작). 또한 draft가 마지막 동기화 기준값(baseline)과 같으면 "무편집 blur"로 보고
+// commit을 건너뛴다 — 포커스만 갔다 나온 경우 자동 상태가 explicit 값으로 바뀌어버리는 것을
+// 막고, explicit 값 상태에서도 불필요한 동일 값 재커밋(no-op commit)을 없앤다.
 type ClampedNumberInputProps = {
   id?: string;
   value: number | null;
+  /** value가 null일 때 입력칸에 보여줄 실효값(자동 계산값) */
+  autoValue: number;
   min: number;
   max: number;
   step?: number;
@@ -482,6 +493,7 @@ type ClampedNumberInputProps = {
 function ClampedNumberInput({
   id,
   value,
+  autoValue,
   min,
   max,
   step,
@@ -490,30 +502,38 @@ function ClampedNumberInput({
   ...aria
 }: ClampedNumberInputProps) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [draft, setDraft] = useState(value === null ? '' : String(value));
+  const displayOf = (v: number | null) => (v === null ? String(autoValue) : String(v));
+  const [draft, setDraft] = useState(() => displayOf(value));
+  // draft를 마지막으로 동기화한 기준값 — blur 시 draft가 이 값과 같으면 편집이 없었던 것이므로
+  // commit 자체를 생략한다(자동 상태 해제 방지 + explicit 값의 무의미한 재commit 방지).
+  const baselineRef = useRef(displayOf(value));
 
   // document.activeElement(외부 시스템인 브라우저 포커스 상태)를 읽어야만 "타이핑 중" 여부를
-  // 판단할 수 있어 effect가 필요하다 — 포커스 중엔 외부 value 변경으로 draft를 덮어쓰지 않는다.
-  /* eslint-disable react-hooks/set-state-in-effect */
+  // 판단할 수 있어 effect가 필요하다 — 포커스 중엔 외부 value/autoValue 변경으로 draft를 덮어쓰지 않는다.
   useEffect(() => {
     if (document.activeElement !== inputRef.current) {
-      setDraft(value === null ? '' : String(value));
+      const next = displayOf(value);
+      setDraft(next);
+      baselineRef.current = next;
     }
-  }, [value]);
-  /* eslint-enable react-hooks/set-state-in-effect */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, autoValue]);
 
   const commit = () => {
+    if (draft === baselineRef.current) return; // 무편집 blur — 자동/기존 값 그대로 유지
     if (draft === '') {
+      baselineRef.current = draft;
       onCommit(null);
       return;
     }
     const parsed = Number(draft);
     if (Number.isNaN(parsed)) {
-      setDraft(value === null ? '' : String(value)); // 파싱 불가 시 마지막 commit 값으로 되돌림
+      setDraft(baselineRef.current); // 파싱 불가 시 마지막 동기화 값으로 되돌림
       return;
     }
     const clamped = Math.min(max, Math.max(min, parsed));
     setDraft(String(clamped));
+    baselineRef.current = String(clamped);
     onCommit(clamped);
   };
 

@@ -20,6 +20,7 @@ import {
   partitionHeaderBlocks,
   resolveHeaderTitlePx,
   resolveMobileHeaderTitlePx,
+  resolveNoticeFontPx,
 } from '@/lib/survey/response-header-config';
 import type { NormalizedHeaderNoticeBlock } from '@/lib/survey/response-header-config';
 
@@ -248,6 +249,15 @@ describe('헤더 크기 상수', () => {
     expect(HEADER_LOGO_HEIGHTS).toEqual({ sm: 26, md: 38, lg: 52 });
     expect(HEADER_NOTICE_BOX_WIDTHS).toEqual({ sm: 190, md: 201, lg: 300 });
     expect(HEADER_NOTICE_LINE_FONT_PX).toEqual({ sm: 12, md: 13.5, lg: 15.5 });
+  });
+});
+
+describe('resolveNoticeFontPx', () => {
+  it('resolveNoticeFontPx — 직접 지정 우선, 자동은 형식·크기별', () => {
+    const base = createHeaderBlock('notice') as NormalizedHeaderNoticeBlock; // box, md
+    expect(resolveNoticeFontPx(base)).toBe(11.5);
+    expect(resolveNoticeFontPx({ ...base, format: 'line', size: 'lg' })).toBe(15.5);
+    expect(resolveNoticeFontPx({ ...base, fontSize: 18 })).toBe(18);
   });
 });
 
