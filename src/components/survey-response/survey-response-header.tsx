@@ -1,182 +1,224 @@
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 
 import {
-  getLogoAlignClass,
-  getLogoSizeClass,
-  getNoticeWidthClass,
-  getTitleAlignClass,
-  getTitleSizeClass,
-  normalizeResponseHeaderConfig,
+  getHeaderBandBorders, getTitleAlignClass, HEADER_LOGO_HEIGHTS, HEADER_MARK_HEIGHTS,
+  HEADER_NOTICE_BOX_WIDTHS, HEADER_NOTICE_LINE_FONT_PX, partitionHeaderBlocks,
+  resolveHeaderTitlePx, resolveResponseHeaderConfig,
+} from '@/lib/survey/response-header-config';
+import type {
+  NormalizedHeaderImageBlock, NormalizedHeaderNoticeBlock,
+  NormalizedResponseHeaderBlock, NormalizedResponseHeaderConfig,
 } from '@/lib/survey/response-header-config';
 import { cn, isEmptyHtml } from '@/lib/utils';
-import type {
-  ResponseHeaderTitleAlign,
-  ResponseHeaderTitleSize,
-  SurveyResponseHeaderConfig,
-} from '@/db/schema/schema-types';
+import type { ResponseHeaderTitleAlign, SurveyResponseHeaderConfig } from '@/db/schema/schema-types';
 
 interface SurveyResponseHeaderProps {
   title: string;
   description?: string | null | undefined;
   responseHeader?: SurveyResponseHeaderConfig | null | undefined;
   sideMeta?: ReactNode;
-  /**
-   * 로고/통계법 밴드 노출 여부. 인트로(첫 스텝)에서만 true 로 주고
-   * 이후 질문 페이지에서는 false 로 내려 제목만 컴팩트하게 남긴다.
-   */
+  /** 로고/문구 밴드 노출 여부. 인트로(첫 스텝)에서만 true (기존 계약 유지) */
   showBranding?: boolean;
+  /** auto = 응답 페이지(브레이크포인트 토글), desktop/mobile = 모달 미리보기 강제 */
+  device?: 'auto' | 'desktop' | 'mobile';
 }
+
+const V_ALIGN_SELF = { top: 'flex-start', center: 'center', bottom: 'flex-end' } as const;
 
 export function SurveyResponseHeader({
-  title,
-  description,
-  responseHeader,
-  sideMeta,
-  showBranding = true,
+  title, description, responseHeader, sideMeta, showBranding = true, device = 'auto',
 }: SurveyResponseHeaderProps) {
-  const normalized = normalizeResponseHeaderConfig(responseHeader);
-  // composed(v2) 렌더러는 후속 태스크에서 도입 — 그때까지 v1 기본형으로 폴백한다 (과도기 심)
-  const config = normalized.style === 'composed'
-    ? ({ style: 'plain', titleSize: 'auto', titleAlign: 'left' } as const)
-    : normalized;
+  const config = resolveResponseHeaderConfig(responseHeader);
 
-  // 브랜딩(로고+통계법)을 숨길 때는 스타일과 무관하게 제목만 컴팩트하게 렌더한다.
-  // 설명문은 인트로에서만 노출하므로 여기서는 생략한다.
   if (!showBranding) {
-    return <TitleBlock title={title} titleSize="md" align={config.titleAlign ?? 'center'} />;
+    return <TitleBlock title={title} align={config.titleTextAlign} />;
   }
 
-  if (config.style === 'logo-title') {
-    const logo = <HeaderLogo config={config.logo} />;
-    const titleBlock = (
-      <TitleBlock title={title} description={description} titleSize={config.titleSize} align={config.titleAlign ?? 'center'} />
-    );
-    const logoPosition = config.logoTitle?.logoPosition ?? 'left';
-
-    return (
-      <div
-        data-testid="logo-title-layout"
-        data-logo-position={logoPosition}
-        className="space-y-4"
-      >
-        <div className="grid gap-4 md:grid-cols-[auto_1fr] md:items-center">
-          {logoPosition === 'left' ? logo : titleBlock}
-          {logoPosition === 'left' ? titleBlock : logo}
-        </div>
-        {sideMeta && (
-          <div className="hidden text-right text-sm text-gray-500 md:block">{sideMeta}</div>
-        )}
-      </div>
-    );
-  }
-
-  if (config.style === 'official-band') {
-    const arrangement = config.officialBand?.arrangement ?? 'stat-left-logo-right';
-    const notice = config.officialBand?.statisticNotice;
-    const logo = <HeaderLogo config={config.logo} />;
-    const noticeBox = (
-      <div
-        className={cn(
-          'w-full border border-gray-900 bg-white text-center',
-          getNoticeWidthClass(notice?.width ?? 'md'),
-        )}
-      >
-        <div className="bg-black px-1.5 py-1.5 text-xs font-semibold text-white">{notice?.title}</div>
-        <div className="px-1.5 py-2 text-[11px] leading-snug text-gray-600">{notice?.body}</div>
-      </div>
-    );
-
-    return (
-      <div data-testid="official-band-layout" data-arrangement={arrangement} className="space-y-4">
-        <div
-          data-testid="official-band-row"
-          data-logo-align={config.officialBand?.logoAlign ?? 'top'}
-          className={cn(
-            // 모바일: 세로 스택 + 로고 중앙 정렬(통계법 박스는 w-full 이라 풀폭 유지)
-            'flex flex-col items-center gap-4 md:flex-row md:justify-between',
-            getLogoAlignClass(config.officialBand?.logoAlign ?? 'top'),
-          )}
-        >
-          {arrangement === 'stat-left-logo-right' ? noticeBox : logo}
-          {arrangement === 'stat-left-logo-right' ? logo : noticeBox}
-        </div>
-        <TitleBlock title={title} description={description} titleSize={config.titleSize} align={config.titleAlign ?? 'center'} />
-        {sideMeta && (
-          <div className="hidden text-right text-sm text-gray-500 md:block">{sideMeta}</div>
-        )}
-      </div>
-    );
-  }
+  const desktop = <ComposedHeaderDesktop config={config} title={title} />;
+  const mobile = <ComposedHeaderMobile config={config} title={title} />;
 
   return (
-    <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-      <TitleBlock title={title} description={description} titleSize={config.titleSize} align={config.titleAlign ?? 'left'} />
-      {sideMeta && (
-        <div className="hidden self-start text-sm text-gray-500 md:block md:self-auto">
-          {sideMeta}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function TitleBlock({
-  title,
-  description,
-  titleSize,
-  align = 'center',
-}: {
-  title: string;
-  description?: string | null | undefined;
-  titleSize: ResponseHeaderTitleSize;
-  align?: ResponseHeaderTitleAlign;
-}) {
-  return (
-    <div data-testid="title-block" data-title-align={align} className={getTitleAlignClass(align)}>
-      <h1 className={cn('font-semibold leading-tight text-gray-900', getTitleSizeClass(titleSize ?? 'auto'))}>
-        {title}
-      </h1>
+    <div className="space-y-4">
+      {device === 'auto' ? (
+        <>
+          <div className="hidden md:block">{desktop}</div>
+          <div className="md:hidden">{mobile}</div>
+        </>
+      ) : device === 'desktop' ? desktop : mobile}
       {!isEmptyHtml(description) && (
-        <p
-          className={cn(
-            'mt-1 text-base text-gray-600 md:text-sm',
-            align === 'center' ? 'mx-auto max-w-3xl' : '',
-          )}
-        >
+        <p className={cn('text-base text-gray-600 md:text-sm', config.titleTextAlign === 'center' && 'mx-auto max-w-3xl text-center', config.titleTextAlign === 'right' && 'text-right')}>
           {description}
         </p>
       )}
+      {sideMeta && <div className="hidden text-right text-sm text-gray-500 md:block">{sideMeta}</div>}
     </div>
   );
 }
 
-function HeaderLogo({
-  config,
-}: {
-  config: {
-    imageUrl: string;
-    altText?: string;
-    size?: 'sm' | 'md' | 'lg';
-  };
-}) {
-  if (!config.imageUrl) {
+// Task 4에서 구현 — 데스크톱 태스크에서는 스텁
+function ComposedHeaderMobile(_props: { config: NormalizedResponseHeaderConfig; title: string }) {
+  return null;
+}
+
+function ComposedHeaderDesktop({ config, title }: { config: NormalizedResponseHeaderConfig; title: string }) {
+  const parts = partitionHeaderBlocks(config.blocks);
+  const above = parts.above.length > 0 && (
+    <div data-testid="header-above-notices" className="mb-3 flex flex-col items-center gap-1.5 text-center">
+      {parts.above.map((b) => <NoticeLine key={b.id} block={b} />)}
+    </div>
+  );
+  const below = parts.below.length > 0 && (
+    <div data-testid="header-below-notices" className="mt-3 flex flex-col items-center gap-1.5 text-center">
+      {parts.below.map((b) => <NoticeLine key={b.id} block={b} />)}
+    </div>
+  );
+
+  if (config.layout === 'inline') {
     return (
-      <div
-        className={cn(
-          // 고정 높이만으로는 width 가 0 이 되므로 placeholder 에 명시 폭을 준다.
-          'w-40 rounded border border-dashed border-gray-300 bg-gray-50',
-          getLogoSizeClass(config.size ?? 'md'),
-        )}
-      />
+      <div>
+        {above}
+        <div data-testid="header-inline-table" className="flex items-stretch bg-white" style={{ border: '1.5px solid #4a4a4c' }}>
+          {parts.rowLeft.map((b) => (
+            <div key={b.id} className="flex items-center justify-center" style={{ borderRight: '1.5px solid #4a4a4c', padding: '14px 20px' }}>
+              <HeaderBlockView block={b} config={config} inline />
+            </div>
+          ))}
+          <div
+            className="flex min-w-0 flex-1 flex-col px-[30px] py-[22px]"
+            style={{ backgroundColor: config.bandBg, justifyContent: V_ALIGN_SELF[config.titleVAlign], textAlign: config.titleAlign }}
+          >
+            <TitleBandText config={config} title={title} inline />
+          </div>
+          {parts.rowRight.map((b) => (
+            <div key={b.id} className="flex items-center justify-center" style={{ borderLeft: '1.5px solid #4a4a4c', padding: '14px 20px' }}>
+              <HeaderBlockView block={b} config={config} inline />
+            </div>
+          ))}
+        </div>
+        {below}
+      </div>
     );
   }
 
+  const hasRow = parts.rowLeft.length + parts.rowCenter.length + parts.rowRight.length > 0;
+  const band = getHeaderBandBorders(config.bandStyle);
   return (
+    <div>
+      {hasRow && (
+        <div data-testid="header-block-row" className="mb-7 flex items-stretch justify-between gap-6">
+          <div className="flex flex-wrap items-stretch gap-3.5">{parts.rowLeft.map((b) => <HeaderBlockView key={b.id} block={b} config={config} />)}</div>
+          <div className="flex flex-wrap items-stretch justify-center gap-3.5">{parts.rowCenter.map((b) => <HeaderBlockView key={b.id} block={b} config={config} />)}</div>
+          <div className="flex flex-wrap items-stretch justify-end gap-3.5">{parts.rowRight.map((b) => <HeaderBlockView key={b.id} block={b} config={config} />)}</div>
+        </div>
+      )}
+      {above}
+      <div
+        data-testid="header-band"
+        className="flex items-center gap-7 px-7 py-4"
+        style={{ backgroundColor: config.bandBg, borderTop: band.top, borderBottom: band.bottom, borderLeft: band.side, borderRight: band.side }}
+      >
+        {parts.titleLeft.map((b) => <div key={b.id} className="flex flex-none items-center"><HeaderBlockView block={b} config={config} /></div>)}
+        <div className="min-w-0 flex-1" style={{ textAlign: config.titleAlign, alignSelf: V_ALIGN_SELF[config.titleVAlign] }}>
+          <TitleBandText config={config} title={title} />
+        </div>
+        {parts.titleRight.map((b) => <div key={b.id} className="flex flex-none items-center"><HeaderBlockView block={b} config={config} /></div>)}
+      </div>
+      {below}
+    </div>
+  );
+}
+
+function TitleBandText({ config, title, inline = false }: { config: NormalizedResponseHeaderConfig; title: string; inline?: boolean }) {
+  const titlePx = resolveHeaderTitlePx(config, title);
+  return (
+    <div className="inline-block max-w-full" style={{ textAlign: config.titleTextAlign }}>
+      {/* 기존 테스트·a11y 관례: 설문 제목은 heading (v1 TitleBlock h1 계승) */}
+      <h1
+        className={cn('break-keep font-extrabold text-[#141414]', inline ? 'leading-[1.3] [text-wrap:pretty]' : 'leading-[1.25] [text-wrap:balance]')}
+        style={{ fontSize: titlePx, letterSpacing: '-0.5px' }}
+      >
+        {title}
+      </h1>
+      {config.subtitle.trim() !== '' && (
+        <div className="mt-1 font-bold text-[#2a2a2c]" style={{ fontSize: Math.round(titlePx * 0.74) }}>{config.subtitle}</div>
+      )}
+    </div>
+  );
+}
+
+function HeaderBlockView({ block, config, inline = false, mobile = false }: {
+  block: NormalizedResponseHeaderBlock; config: NormalizedResponseHeaderConfig; inline?: boolean; mobile?: boolean;
+}) {
+  if (block.type === 'notice') {
+    return (
+      <div style={{ alignSelf: inline ? undefined : V_ALIGN_SELF[config.vAlignNotice] }}>
+        <NoticeBox block={block} inline={inline} />
+      </div>
+    );
+  }
+  const heightPx = (block.type === 'mark' ? HEADER_MARK_HEIGHTS : HEADER_LOGO_HEIGHTS)[block.size];
+  return (
+    <div style={{ alignSelf: inline ? undefined : V_ALIGN_SELF[config.vAlignLogo] }}>
+      <HeaderImageBlock block={block} heightPx={heightPx} mobile={mobile} />
+    </div>
+  );
+}
+
+function HeaderImageBlock({ block, heightPx, mobile = false }: { block: NormalizedHeaderImageBlock; heightPx: number; mobile?: boolean }) {
+  const defaultAlt = block.type === 'mark' ? '국가통계 마크' : '설문 로고';
+  const lineStyle: CSSProperties = block.frame === 'line'
+    ? { border: '1.5px solid #1f1f1f', padding: mobile ? '4px 6px' : '6px 10px', boxSizing: 'content-box' }
+    : {};
+  const img = block.imageUrl ? (
     // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={config.imageUrl}
-      alt={config.altText || '설문 로고'}
-      className={cn('w-auto object-contain', getLogoSizeClass(config.size ?? 'md'))}
-    />
+    <img src={block.imageUrl} alt={block.altText || defaultAlt} className="w-auto object-contain" style={{ height: heightPx, ...lineStyle }} />
+  ) : (
+    <div
+      className="flex items-center justify-center border border-dashed border-[#c3c9d4] font-mono text-[11px] text-[#8b93a3]"
+      style={{
+        height: heightPx,
+        width: block.type === 'mark' ? heightPx : Math.round(heightPx * 3.2),
+        background: 'repeating-linear-gradient(45deg,#f3f4f6 0 8px,#e9eaee 8px 16px)',
+      }}
+    >
+      로고
+    </div>
+  );
+  if (block.frame === 'wrap') {
+    return <div className="flex items-center self-stretch" style={{ border: '1.5px solid #1f1f1f', padding: '10px 16px' }}>{img}</div>;
+  }
+  return img;
+}
+
+function NoticeBox({ block, inline = false }: { block: NormalizedHeaderNoticeBlock; inline?: boolean }) {
+  return (
+    <div className="bg-white text-center" style={{ width: HEADER_NOTICE_BOX_WIDTHS[block.size], border: inline ? 'none' : '1.5px solid #1f1f1f' }}>
+      <div className="bg-[#111111] px-2 py-[5px] text-[13px] font-bold tracking-[-0.2px] text-white">{block.title}</div>
+      <div
+        className="whitespace-pre-line leading-[1.5] text-[#3d3d3f] [text-wrap:pretty]"
+        style={{ fontSize: block.fontSize ?? 11.5, textAlign: block.alignBox, padding: inline ? '6px 4px 0' : '7px 10px 9px' }}
+      >
+        {block.boxBody}
+      </div>
+    </div>
+  );
+}
+
+function NoticeLine({ block, mobile = false }: { block: NormalizedHeaderNoticeBlock; mobile?: boolean }) {
+  return (
+    <div
+      className={cn('inline-block max-w-full whitespace-pre-line leading-[1.5] text-[#3d3d3f] [text-wrap:pretty]', mobile ? 'text-xs font-semibold' : 'font-semibold')}
+      style={{ ...(mobile ? {} : { fontSize: block.fontSize ?? HEADER_NOTICE_LINE_FONT_PX[block.size] }), textAlign: block.alignLine }}
+    >
+      {block.lineBody}
+    </div>
+  );
+}
+
+function TitleBlock({ title, align = 'center' }: { title: string; align?: ResponseHeaderTitleAlign }) {
+  return (
+    <div data-testid="title-block" data-title-align={align} className={getTitleAlignClass(align)}>
+      <h1 className="text-xl font-semibold leading-tight text-gray-900 sm:text-2xl">{title}</h1>
+    </div>
   );
 }
