@@ -7,12 +7,16 @@ import { useShallow } from 'zustand/react/shallow';
 
 import { ResponseHeaderSettings } from '@/components/survey-builder/response-header-settings';
 import { SurveyResponseHeader } from '@/components/survey-response/survey-response-header';
+import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { responseHeaderButtonClass } from '@/lib/survey/response-header-config';
+import { cn } from '@/lib/utils';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 
 export function ResponseHeaderSettingsModal() {
   const [open, setOpen] = useState(false);
+  const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop');
 
   const updateSurveySettings = useSurveyBuilderStore((s) => s.updateSurveySettings);
   const updateSurveyTitle = useSurveyBuilderStore((s) => s.updateSurveyTitle);
@@ -38,35 +42,92 @@ export function ResponseHeaderSettingsModal() {
       </Card>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        {/* 너비를 응답 페이지 콘텐츠 컨테이너(max-w-4xl)에 맞춰 미리보기가 실제 비율로 보이게 한다 */}
-        <DialogContent className="flex max-h-[90vh] w-[min(56rem,calc(100vw-2rem))] max-w-4xl flex-col p-0">
+        <DialogContent className="flex h-[min(92vh,60rem)] w-[min(90rem,calc(100vw-2rem))] max-w-none flex-col p-0">
           <DialogHeader className="border-b border-gray-200 px-6 py-4">
             <DialogTitle>설문 헤더</DialogTitle>
           </DialogHeader>
 
-          {/* 미리보기: 스크롤되지 않는 고정 영역 (응답 페이지와 동일 컴포넌트) */}
-          {/* device 고정: auto 는 데스크톱+모바일 마크업을 동시에 렌더해 미리보기가 두 배로 보인다.
-              데스크톱/모바일 동시 미리보기는 Task 7(모달 2-pane)에서 다룬다. */}
-          <div className="border-b border-gray-200 bg-gray-50 px-6 py-4">
-            <SurveyResponseHeader
-              title={title}
-              description={description}
-              responseHeader={settings.responseHeader}
-              device="desktop"
-            />
-          </div>
+          <div className="flex min-h-0 flex-1">
+            {/* 좌: 미리보기 (PC/모바일 토글) */}
+            <div className="min-w-0 flex-1 overflow-auto bg-gray-100 px-8 pb-9 pt-6">
+              <div className="mb-4 flex justify-center gap-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className={responseHeaderButtonClass(device === 'desktop')}
+                  onClick={() => setDevice('desktop')}
+                >
+                  PC
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className={responseHeaderButtonClass(device === 'mobile')}
+                  onClick={() => setDevice('mobile')}
+                >
+                  모바일
+                </Button>
+              </div>
+              {device === 'desktop' ? (
+                <div
+                  data-testid="header-preview-desktop"
+                  className="mx-auto w-[880px] bg-white px-[52px] pb-14 pt-11 shadow-[0_4px_28px_rgba(0,0,0,0.14)]"
+                >
+                  <SurveyResponseHeader
+                    title={title}
+                    description={description}
+                    responseHeader={settings.responseHeader}
+                    device="desktop"
+                  />
+                  <PreviewSkeleton />
+                </div>
+              ) : (
+                <div
+                  data-testid="header-preview-mobile"
+                  className="mx-auto w-[390px] rounded-2xl bg-white px-4 pb-8 pt-5 shadow-[0_4px_28px_rgba(0,0,0,0.14)]"
+                >
+                  <SurveyResponseHeader
+                    title={title}
+                    description={description}
+                    responseHeader={settings.responseHeader}
+                    device="mobile"
+                  />
+                  <PreviewSkeleton compact />
+                </div>
+              )}
+            </div>
 
-          {/* 설정: 스크롤 영역 */}
-          <div className="flex-1 overflow-y-auto px-6 py-4">
-            <ResponseHeaderSettings
-              title={title}
-              onTitleChange={updateSurveyTitle}
-              settings={settings}
-              onChange={(responseHeader) => updateSurveySettings({ responseHeader })}
-            />
+            {/* 우: 설정 사이드바 */}
+            <aside className="w-[322px] flex-none overflow-y-auto border-l border-gray-200 px-4 py-5">
+              <ResponseHeaderSettings
+                title={title}
+                onTitleChange={updateSurveyTitle}
+                settings={settings}
+                onChange={(responseHeader) => updateSurveySettings({ responseHeader })}
+              />
+            </aside>
           </div>
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+// 미리보기 하단 가짜 문항 스켈레톤 — 헤더가 실제 문맥에서 어떻게 보이는지 보여준다
+function PreviewSkeleton({ compact = false }: { compact?: boolean }) {
+  return (
+    <div className={cn('flex flex-col opacity-55', compact ? 'mt-6 gap-4' : 'mt-9 gap-5')} aria-hidden>
+      <div className="flex flex-col gap-2">
+        <div className="h-3 w-3/5 rounded bg-[#dcdee3]" />
+        <div className="h-2.5 w-2/5 rounded bg-[#eceef1]" />
+        <div className="h-2.5 w-1/2 rounded bg-[#eceef1]" />
+      </div>
+      <div className="flex flex-col gap-2">
+        <div className="h-3 w-1/2 rounded bg-[#dcdee3]" />
+        <div className={cn('w-full rounded border border-[#e4e6ea] bg-[#f2f3f5]', compact ? 'h-12' : 'h-16')} />
+      </div>
+    </div>
   );
 }

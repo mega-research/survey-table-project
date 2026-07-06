@@ -43,18 +43,25 @@ describe('ResponseHeaderSettingsModal', () => {
     cleanup();
   });
 
-  it('카드 클릭 시 미리보기와 설정이 함께 있는 모달이 열린다', async () => {
+  it('카드를 클릭하면 2-pane 다이얼로그가 열리고 데스크톱 미리보기가 기본이다', async () => {
     render(<ResponseHeaderSettingsModal />);
-
-    // 닫힌 상태: 설정 컨트롤은 보이지 않는다
-    expect(screen.queryByRole('button', { name: '프리셋 국가통계형' })).not.toBeInTheDocument();
-
     await userEvent.click(screen.getByText('응답 페이지 머리말 설정'));
+    expect(screen.getByTestId('header-preview-desktop')).toBeInTheDocument();
+    expect(screen.queryByTestId('header-preview-mobile')).not.toBeInTheDocument();
+  });
 
-    // 미리보기(설문 제목) + 설정 컨트롤이 함께 렌더된다
-    expect(screen.getByRole('heading', { name: '내 설문' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '프리셋 국가통계형' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '프리셋 컬러 밴드형' })).toBeInTheDocument();
+  it('모바일 토글을 누르면 390px 미리보기로 전환된다', async () => {
+    render(<ResponseHeaderSettingsModal />);
+    await userEvent.click(screen.getByText('응답 페이지 머리말 설정'));
+    await userEvent.click(screen.getByRole('button', { name: '모바일' }));
+    expect(screen.getByTestId('header-preview-mobile')).toBeInTheDocument();
+  });
+
+  it('제목 입력이 설문 제목 store를 갱신한다 — 단일 소스', async () => {
+    render(<ResponseHeaderSettingsModal />);
+    await userEvent.click(screen.getByText('응답 페이지 머리말 설정'));
+    await userEvent.type(screen.getByLabelText('제목'), '!');
+    expect(useSurveyBuilderStore.getState().currentSurvey.title).toBe('내 설문!');
   });
 
   it('프리셋 변경 시 store 가 갱신되고 미리보기가 반영된다', async () => {
@@ -67,8 +74,7 @@ describe('ResponseHeaderSettingsModal', () => {
       useSurveyBuilderStore.getState().currentSurvey.settings.responseHeader?.style,
     ).toBe('composed');
     // v1 plain(블록 없음)에서 국가통계형 프리셋 적용 후 마크·로고 2개가 빈 이미지 슬롯으로 추가되어
-    // 밴드와 자리표시자가 함께 렌더된다 (클릭 전에는 블록이 전혀 없어 재렌더를 실제로 판별한다.
-    // 모달 미리보기 개편은 Task 7)
+    // 밴드와 자리표시자가 함께 렌더된다 (클릭 전에는 블록이 전혀 없어 재렌더를 실제로 판별한다).
     expect(screen.getByTestId('header-band')).toBeInTheDocument();
     expect(screen.getAllByText('로고').length).toBeGreaterThan(0);
   });
