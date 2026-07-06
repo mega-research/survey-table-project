@@ -1,4 +1,4 @@
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -66,7 +66,8 @@ describe('ResponseHeaderSettingsModal', () => {
     expect(
       useSurveyBuilderStore.getState().currentSurvey.settings.responseHeader?.style,
     ).toBe('logo-title');
-    // v1 logo-title 설정은 composed 로 마이그레이션되어 제목 밴드로 렌더된다 (모달 미리보기 개편은 Task 7)
-    expect(screen.getByTestId('header-band')).toBeInTheDocument();
+    // v1 logo-title 설정은 composed 로 마이그레이션되어 제목 밴드 안에 로고 자리표시자가 생긴다
+    // (클릭 전에는 밴드에 이미지 블록이 없으므로 재렌더를 실제로 판별한다. 모달 미리보기 개편은 Task 7)
+    expect(within(screen.getByTestId('header-band')).getByText('로고')).toBeInTheDocument();
   });
 });
