@@ -3,7 +3,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import {
   getHeaderBandBorders, getTitleAlignClass, HEADER_LOGO_HEIGHTS, HEADER_MARK_HEIGHTS,
   HEADER_NOTICE_BOX_WIDTHS, HEADER_NOTICE_LINE_FONT_PX, partitionHeaderBlocks,
-  resolveHeaderTitlePx, resolveResponseHeaderConfig,
+  resolveHeaderTitlePx, resolveMobileHeaderTitlePx, resolveResponseHeaderConfig,
 } from '@/lib/survey/response-header-config';
 import type {
   NormalizedHeaderImageBlock, NormalizedHeaderNoticeBlock,
@@ -55,9 +55,123 @@ export function SurveyResponseHeader({
   );
 }
 
-// Task 4에서 구현 — 데스크톱 태스크에서는 스텁
-function ComposedHeaderMobile(_props: { config: NormalizedResponseHeaderConfig; title: string }) {
-  return null;
+function ComposedHeaderMobile({ config, title }: { config: NormalizedResponseHeaderConfig; title: string }) {
+  const parts = partitionHeaderBlocks(config.blocks);
+  const images = config.blocks.filter((b): b is NormalizedHeaderImageBlock => b.type === 'mark' || b.type === 'logo');
+  const boxNotices = config.blocks.filter((b): b is NormalizedHeaderNoticeBlock => b.type === 'notice' && b.format === 'box');
+  const titlePx = resolveMobileHeaderTitlePx(resolveHeaderTitlePx(config, title));
+  const band = getHeaderBandBorders(config.bandStyle);
+
+  const above = parts.above.length > 0 && (
+    <div className="mb-2.5 flex flex-col items-center gap-1 text-center">
+      {parts.above.map((b) => <NoticeLine key={b.id} block={b} mobile />)}
+    </div>
+  );
+  const below = parts.below.length > 0 && (
+    <div className="mt-2.5 flex flex-col items-center gap-1 text-center">
+      {parts.below.map((b) => <NoticeLine key={b.id} block={b} mobile />)}
+    </div>
+  );
+  const cards = boxNotices.map((b) => <MobileNoticeCard key={b.id} block={b} />);
+
+  if (config.mobileStyle === 'band') {
+    const cellImgs = images.filter((b) => b.pos === 'left');
+    const topImgs = images.filter((b) => b.pos !== 'left');
+    const isRight = (p: string) => p === 'right' || p === 'title-right';
+    const scale = (b: NormalizedHeaderImageBlock) =>
+      b.type === 'mark'
+        ? Math.max(40, Math.round(HEADER_MARK_HEIGHTS[b.size] * 0.6))
+        : Math.max(20, Math.round(HEADER_LOGO_HEIGHTS[b.size] * 0.7));
+    return (
+      <div data-testid="header-mobile-band">
+        {topImgs.length > 0 && (
+          <div className="mb-3.5 flex flex-wrap items-center justify-between gap-2.5">
+            <div className="flex flex-wrap items-center gap-2.5">{topImgs.filter((b) => !isRight(b.pos)).map((b) => <HeaderImageBlock key={b.id} block={b} heightPx={scale(b)} mobile />)}</div>
+            <div className="flex flex-wrap items-center justify-end gap-2.5">{topImgs.filter((b) => isRight(b.pos)).map((b) => <HeaderImageBlock key={b.id} block={b} heightPx={scale(b)} mobile />)}</div>
+          </div>
+        )}
+        {above}
+        <div className="flex items-stretch bg-white" style={{ border: '1.5px solid #4a4a4c' }}>
+          {cellImgs.map((b) => (
+            <div key={b.id} className="flex items-center justify-center" style={{ borderRight: '1.5px solid #4a4a4c', padding: '10px 12px' }}>
+              <HeaderImageBlock block={b} heightPx={scale(b)} mobile />
+            </div>
+          ))}
+          <div className="flex min-w-0 flex-1 flex-col justify-center px-3 py-3.5" style={{ backgroundColor: config.bandBg, textAlign: config.titleTextAlign }}>
+            <h1 className="break-keep font-extrabold leading-[1.3] text-[#141414] [text-wrap:pretty]" style={{ fontSize: titlePx, letterSpacing: '-0.4px' }}>{title}</h1>
+            {config.subtitle.trim() !== '' && (
+              <div className="mt-[3px] font-bold text-[#2a2a2c]" style={{ fontSize: Math.round(titlePx * 0.76) }}>{config.subtitle}</div>
+            )}
+          </div>
+        </div>
+        {below}
+        {boxNotices.length > 0 && (
+          <div className="mt-3 flex flex-col gap-1.5">
+            {boxNotices.map((b) => (
+              <div key={b.id} className="whitespace-pre-line text-xs font-semibold leading-[1.55] text-[#3d3d3f]" style={{ textAlign: b.alignLine }}>{b.lineBody}</div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (config.mobileStyle === 'title') {
+    const marks = images.filter((b) => b.type === 'mark');
+    const logos = images.filter((b) => b.type === 'logo');
+    return (
+      <div data-testid="header-mobile-title">
+        {above}
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="min-w-0 flex-1 break-keep text-xl font-extrabold leading-[1.3] text-[#141414]" style={{ letterSpacing: '-0.5px' }}>{title}</h1>
+          {marks.map((b) => <HeaderImageBlock key={b.id} block={b} heightPx={48} mobile />)}
+        </div>
+        {logos.length > 0 && (
+          <div className="mt-3 flex flex-wrap items-center gap-2.5">
+            {logos.map((b) => <HeaderImageBlock key={b.id} block={b} heightPx={26} mobile />)}
+          </div>
+        )}
+        {cards.length > 0 && <div className="mt-3 flex flex-col gap-2">{cards}</div>}
+        {below}
+        <div className="mt-3.5 border-b-2 border-[#141414]" />
+      </div>
+    );
+  }
+
+  // gov (기본)
+  const marks = images.filter((b) => b.type === 'mark');
+  const logos = images.filter((b) => b.type === 'logo');
+  return (
+    <div data-testid="header-mobile-gov">
+      {above}
+      {(marks.length > 0 || logos.length > 0) && (
+        <div data-testid="header-mobile-lockup" className="mb-3 flex flex-wrap items-center justify-center gap-3.5">
+          {marks.map((b) => <HeaderImageBlock key={b.id} block={b} heightPx={44} mobile />)}
+          {marks.length > 0 && logos.length > 0 && <div className="h-7 w-px bg-[#d7dae0]" />}
+          {logos.map((b) => <HeaderImageBlock key={b.id} block={b} heightPx={26} mobile />)}
+        </div>
+      )}
+      <div className="px-4 py-3" style={{ backgroundColor: config.bandBg, borderTop: band.top, borderBottom: band.bottom, borderLeft: band.side, borderRight: band.side, textAlign: config.titleTextAlign }}>
+        <h1 className="break-keep font-extrabold leading-[1.35] text-[#141414] [text-wrap:balance]" style={{ fontSize: titlePx, letterSpacing: '-0.4px' }}>{title}</h1>
+      </div>
+      {cards.length > 0 && <div className="mt-3 flex flex-col gap-2">{cards}</div>}
+      {below}
+    </div>
+  );
+}
+
+function MobileNoticeCard({ block }: { block: NormalizedHeaderNoticeBlock }) {
+  return (
+    <details data-testid="header-notice-card" className="group rounded-lg border border-[#d7dae0]">
+      <summary className="flex min-h-[44px] cursor-pointer list-none items-center justify-between gap-2.5 px-3 py-2.5 [&::-webkit-details-marker]:hidden">
+        <div className="break-keep text-xs font-bold leading-[1.4] text-gray-700">
+          {block.title.trim() || '통계법 제33조(비밀의 보호)'}
+        </div>
+        <div className="h-2 w-2 flex-none -translate-y-0.5 rotate-45 border-b-2 border-r-2 border-gray-500 transition-transform group-open:translate-y-0 group-open:rotate-[135deg]" />
+      </summary>
+      <div className="whitespace-pre-line px-3 pb-3 text-xs leading-[1.5] text-[#3d3d3f]">{block.boxBody}</div>
+    </details>
+  );
 }
 
 function ComposedHeaderDesktop({ config, title }: { config: NormalizedResponseHeaderConfig; title: string }) {

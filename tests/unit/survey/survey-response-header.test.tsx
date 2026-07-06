@@ -107,3 +107,61 @@ describe('SurveyResponseHeader (composed 데스크톱)', () => {
     expect(screen.getByAltText('설문 로고')).toHaveAttribute('src', 'https://x/l.png');
   });
 });
+
+describe('SurveyResponseHeader (composed 모바일)', () => {
+  const blocks: SurveyResponseHeaderConfig = composed({
+    mobileStyle: 'gov', bandStyle: 'band', bandBg: '#f0f0f0',
+    blocks: [
+      { id: 'm1', type: 'mark', pos: 'left', size: 'lg', imageUrl: 'https://x/mark.png' },
+      { id: 'n1', type: 'notice', pos: 'left', size: 'md', format: 'box', title: '통계법 제33조(비밀의 보호)', boxBody: '박스 본문', lineBody: '한줄 요약' },
+      { id: 'l1', type: 'logo', pos: 'right', size: 'md', imageUrl: 'https://x/logo.png' },
+    ],
+  });
+
+  it('gov — 락업 행과 밴드 제목, 문구 카드를 렌더하고 카드를 펼치면 본문이 보인다', () => {
+    render(<SurveyResponseHeader title="T" device="mobile" responseHeader={blocks} />);
+    expect(screen.getByTestId('header-mobile-gov')).toBeInTheDocument();
+    expect(screen.getByTestId('header-mobile-lockup')).toBeInTheDocument();
+    const card = screen.getByTestId('header-notice-card');
+    expect(card).toHaveTextContent('통계법 제33조(비밀의 보호)');
+    expect(card).not.toHaveAttribute('open');
+    expect(screen.getByText('박스 본문')).toBeInTheDocument(); // details 내부(접힘 상태 DOM 존재)
+  });
+
+  it('title — 제목+마크, 로고 행, 하단 밑줄을 렌더한다 (로고도 표시 결정)', () => {
+    render(
+      <SurveyResponseHeader
+        title="2025년 인공지능산업 실태조사" device="mobile"
+        responseHeader={composed({
+          mobileStyle: 'title',
+          blocks: [
+            { id: 'm1', type: 'mark', pos: 'title-right', size: 'md', imageUrl: 'https://x/mark.png' },
+            { id: 'l1', type: 'logo', pos: 'right', size: 'md', imageUrl: 'https://x/logo.png' },
+          ],
+        })}
+      />,
+    );
+    expect(screen.getByTestId('header-mobile-title')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: '국가통계 마크' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: '설문 로고' })).toBeInTheDocument();
+  });
+
+  it('band — 인라인 밴드와 박스형 문구의 한줄 텍스트를 렌더하고 부제를 표시한다', () => {
+    render(
+      <SurveyResponseHeader
+        title="목재이용실태조사" device="mobile"
+        responseHeader={composed({
+          mobileStyle: 'band', layout: 'inline', subtitle: '(본 조사)', bandBg: '#cfe0ad',
+          blocks: [
+            { id: 'm1', type: 'mark', pos: 'left', size: 'md', imageUrl: 'https://x/m.png' },
+            { id: 'n1', type: 'notice', pos: 'left', size: 'md', format: 'box', title: '제목', boxBody: '박스', lineBody: '모바일 한줄 문구' },
+          ],
+        })}
+      />,
+    );
+    expect(screen.getByTestId('header-mobile-band')).toBeInTheDocument();
+    expect(screen.getByText('(본 조사)')).toBeInTheDocument();
+    expect(screen.getByText('모바일 한줄 문구')).toBeInTheDocument();
+    expect(screen.queryByTestId('header-notice-card')).not.toBeInTheDocument(); // band 모드는 카드 대신 한줄
+  });
+});

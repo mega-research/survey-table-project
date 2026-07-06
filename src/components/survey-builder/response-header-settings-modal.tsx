@@ -44,11 +44,14 @@ export function ResponseHeaderSettingsModal() {
           </DialogHeader>
 
           {/* 미리보기: 스크롤되지 않는 고정 영역 (응답 페이지와 동일 컴포넌트) */}
+          {/* device 고정: auto 는 데스크톱+모바일 마크업을 동시에 렌더해 미리보기가 두 배로 보인다.
+              데스크톱/모바일 동시 미리보기는 Task 7(모달 2-pane)에서 다룬다. */}
           <div className="border-b border-gray-200 bg-gray-50 px-6 py-4">
             <SurveyResponseHeader
               title={title}
               description={description}
               responseHeader={settings.responseHeader}
+              device="desktop"
             />
           </div>
 
