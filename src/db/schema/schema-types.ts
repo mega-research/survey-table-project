@@ -73,11 +73,13 @@ export type ResponseHeaderBandStyle = 'band' | 'boxed' | 'rule' | 'plain';
 export type ResponseHeaderMobileStyle = 'gov' | 'band' | 'title';
 export type ResponseHeaderLayout = 'stacked' | 'inline';
 
-interface ResponseHeaderBlockBase {
+// interface 는 암묵 인덱스 시그니처가 없어 JSONB 패스스루 타입({ [key: string]: unknown })에
+// 대입 불가하므로 type alias 로 선언한다 (promote 등 소비처 호환)
+type ResponseHeaderBlockBase = {
   id: string; // generateId() — 질문·옵션 id 와 동일 관례. 마이그레이션 산출 블록만 결정적 id
   pos: ResponseHeaderBlockPos;
   size: ResponseHeaderBlockSize;
-}
+};
 
 export type ResponseHeaderBlock =
   | (ResponseHeaderBlockBase & {
