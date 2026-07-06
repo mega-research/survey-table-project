@@ -11,8 +11,8 @@ import {
   applyResponseHeaderPreset,
   coerceBlocksForInlineLayout,
   createHeaderBlock,
+  normalizeResponseHeaderConfig,
   noticeFormatPatch,
-  resolveResponseHeaderConfig,
   responseHeaderButtonClass,
 } from '@/lib/survey/response-header-config';
 import type {
@@ -73,7 +73,7 @@ const SIZE_OPTIONS: Array<[ResponseHeaderBlockSize, string]> = [
 ];
 
 export function ResponseHeaderSettings({ title, onTitleChange, settings, onChange }: ResponseHeaderSettingsProps) {
-  const config = resolveResponseHeaderConfig(settings.responseHeader);
+  const config = normalizeResponseHeaderConfig(settings.responseHeader);
 
   const patch = (p: Partial<NormalizedResponseHeaderConfig>) => onChange({ ...config, ...p });
   const patchBlock = (id: string, p: BlockPatch) =>

@@ -35,7 +35,9 @@ export const DEFAULT_STATISTIC_NOTICE = {
   width: 'md',
 } satisfies StatisticNoticeConfig;
 
-export const DEFAULT_RESPONSE_HEADER_CONFIG: Extract<SurveyResponseHeaderConfig, { style: 'plain' }> = {
+// v1(plain) 스타일 전용 기본값 — normalizeV1ResponseHeaderConfig 내부 폴백 전용(비공개).
+// 공개 기본값은 파일 하단의 DEFAULT_RESPONSE_HEADER_CONFIG(= DEFAULT_COMPOSED_RESPONSE_HEADER) 참조.
+const DEFAULT_V1_RESPONSE_HEADER_CONFIG: Extract<SurveyResponseHeaderConfig, { style: 'plain' }> = {
   style: 'plain',
   titleSize: 'auto',
   titleAlign: 'left',
@@ -61,7 +63,7 @@ function asRecord(value: unknown): HeaderConfigRecord | null {
 function normalizeTitleSize(value: unknown): ResponseHeaderTitleSize {
   return typeof value === 'string' && titleSizes.has(value as ResponseHeaderTitleSize)
     ? (value as ResponseHeaderTitleSize)
-    : DEFAULT_RESPONSE_HEADER_CONFIG.titleSize;
+    : DEFAULT_V1_RESPONSE_HEADER_CONFIG.titleSize;
 }
 
 function normalizeLogoPosition(value: unknown): LogoPosition {
@@ -119,14 +121,13 @@ function normalizeNotice(config: HeaderConfigRecord | null) {
   };
 }
 
-export function normalizeResponseHeaderConfig(
+// v1(plain/logo-title/official-band) 저장 형태 정제 — composed 마이그레이션 전 단계.
+// 비공개: 공개 API 인 normalizeResponseHeaderConfig(파일 하단)가 composed 매핑 직전에 호출한다.
+function normalizeV1ResponseHeaderConfig(
   config: SurveyResponseHeaderConfig | null | undefined,
 ): SurveyResponseHeaderConfig {
   const raw = asRecord(config);
-  if (!raw) return DEFAULT_RESPONSE_HEADER_CONFIG;
-
-  // composed 는 그대로 통과 — 정밀 정규화는 resolveResponseHeaderConfig 가 담당 (Task 8 에서 통합)
-  if (raw['style'] === 'composed') return config as SurveyResponseHeaderConfig;
+  if (!raw) return DEFAULT_V1_RESPONSE_HEADER_CONFIG;
 
   if (raw['style'] === 'plain') {
     return {
@@ -168,32 +169,7 @@ export function normalizeResponseHeaderConfig(
     };
   }
 
-  return DEFAULT_RESPONSE_HEADER_CONFIG;
-}
-
-export function getLogoSizeClass(size: ResponseHeaderLogoSize): string {
-  // 고정 높이 + 폭 상한. max-h-*(최댓값)만 쓰면 원본보다 작은 로고는 크기 차이가 안 보이므로
-  // 고정 높이로 단계별 차이를 보장한다(가로가 긴 로고는 max-w 가 지배해 폭 차이로 드러난다).
-  switch (size) {
-    case 'sm':
-      return 'h-10 max-w-[180px]';
-    case 'lg':
-      return 'h-24 max-w-[340px]';
-    case 'md':
-      return 'h-16 max-w-[240px]';
-  }
-}
-
-export function getTitleSizeClass(size: ResponseHeaderTitleSize): string {
-  // 모바일은 한 단계 작게 잡고 sm/md 부터 키운다 — 긴 제목이 좁은 화면에서 과하게 줄바꿈되는 것을 줄인다.
-  switch (size) {
-    case 'lg':
-      return 'text-2xl sm:text-3xl font-semibold';
-    case 'md':
-      return 'text-xl sm:text-2xl font-semibold';
-    case 'auto':
-      return 'text-xl sm:text-2xl md:text-3xl font-semibold';
-  }
+  return DEFAULT_V1_RESPONSE_HEADER_CONFIG;
 }
 
 export function getTitleAlignClass(align: ResponseHeaderTitleAlign): string {
@@ -204,29 +180,6 @@ export function getTitleAlignClass(align: ResponseHeaderTitleAlign): string {
       return 'text-right';
     case 'center':
       return 'text-center';
-  }
-}
-
-export function getLogoAlignClass(align: ResponseHeaderLogoAlign): string {
-  switch (align) {
-    case 'top':
-      return 'md:items-start';
-    case 'bottom':
-      return 'md:items-end';
-    case 'center':
-      return 'md:items-center';
-  }
-}
-
-export function getNoticeWidthClass(width: ResponseHeaderNoticeWidth): string {
-  // 모바일에서는 풀폭으로 늘려 통계 표지처럼 보이게 하고, md 이상에서만 폭 상한을 적용한다.
-  switch (width) {
-    case 'sm':
-      return 'md:max-w-[200px]';
-    case 'lg':
-      return 'md:max-w-[360px]';
-    case 'md':
-      return 'md:max-w-[280px]';
   }
 }
 
@@ -295,6 +248,10 @@ export const DEFAULT_COMPOSED_RESPONSE_HEADER: NormalizedResponseHeaderConfig = 
   titleScale: 'md', titlePx: null, vAlignLogo: 'center', vAlignNotice: 'center',
   bandStyle: 'plain', bandBg: '#ffffff',
 };
+
+// 공개 기본값 — 과거 v1 plain 리터럴을 대체해 composed 기본값을 그대로 노출한다.
+// store import 이름(DEFAULT_RESPONSE_HEADER_CONFIG)은 유지하고 형태만 composed 로 전환(Task 8 normalize 통합).
+export const DEFAULT_RESPONSE_HEADER_CONFIG: NormalizedResponseHeaderConfig = DEFAULT_COMPOSED_RESPONSE_HEADER;
 
 const blockSizes = new Set<ResponseHeaderBlockSize>(['sm', 'md', 'lg']);
 const blockPositions = new Set<ResponseHeaderBlockPos>(['left', 'center', 'right', 'title-left', 'title-right', 'above', 'below']);
@@ -390,9 +347,9 @@ const V1_TITLE_SCALE: Record<ResponseHeaderTitleSize, ResponseHeaderBlockSize> =
   auto: 'md', md: 'sm', lg: 'md',
 };
 
-// 기존 normalizeResponseHeaderConfig(v1 정제)의 출력을 composed 로 매핑
+// normalizeV1ResponseHeaderConfig(v1 정제)의 출력을 composed 로 매핑
 function migrateV1ResponseHeader(config: SurveyResponseHeaderConfig): NormalizedResponseHeaderConfig {
-  // composed 는 호출부(resolveResponseHeaderConfig)에서 이미 분기 처리되어 여기 도달하지 않음 — 타입 좁히기용 안전망
+  // composed 는 호출부(normalizeResponseHeaderConfig)에서 이미 분기 처리되어 여기 도달하지 않음 — 타입 좁히기용 안전망
   if (config.style === 'composed') return DEFAULT_COMPOSED_RESPONSE_HEADER;
   const base: NormalizedResponseHeaderConfig = {
     ...DEFAULT_COMPOSED_RESPONSE_HEADER,
@@ -439,13 +396,13 @@ function migrateV1ResponseHeader(config: SurveyResponseHeaderConfig): Normalized
   };
 }
 
-export function resolveResponseHeaderConfig(
+export function normalizeResponseHeaderConfig(
   config: SurveyResponseHeaderConfig | null | undefined,
 ): NormalizedResponseHeaderConfig {
   const rec = asRecord(config);
   if (!rec) return DEFAULT_COMPOSED_RESPONSE_HEADER;
   if (rec['style'] === 'composed') return normalizeComposedResponseHeader(rec);
-  return migrateV1ResponseHeader(normalizeResponseHeaderConfig(config));
+  return migrateV1ResponseHeader(normalizeV1ResponseHeaderConfig(config));
 }
 
 export function resolveHeaderTitlePx(config: NormalizedResponseHeaderConfig, title: string): number {

@@ -2,8 +2,8 @@ import type { CSSProperties, ReactNode } from 'react';
 
 import {
   getHeaderBandBorders, getTitleAlignClass, HEADER_LOGO_HEIGHTS, HEADER_MARK_HEIGHTS,
-  HEADER_NOTICE_BOX_WIDTHS, HEADER_NOTICE_LINE_FONT_PX, partitionHeaderBlocks,
-  resolveHeaderTitlePx, resolveMobileHeaderTitlePx, resolveResponseHeaderConfig,
+  HEADER_NOTICE_BOX_WIDTHS, HEADER_NOTICE_LINE_FONT_PX, normalizeResponseHeaderConfig, partitionHeaderBlocks,
+  resolveHeaderTitlePx, resolveMobileHeaderTitlePx,
 } from '@/lib/survey/response-header-config';
 import type {
   NormalizedHeaderImageBlock, NormalizedHeaderNoticeBlock,
@@ -28,7 +28,7 @@ const V_ALIGN_SELF = { top: 'flex-start', center: 'center', bottom: 'flex-end' }
 export function SurveyResponseHeader({
   title, description, responseHeader, sideMeta, showBranding = true, device = 'auto',
 }: SurveyResponseHeaderProps) {
-  const config = resolveResponseHeaderConfig(responseHeader);
+  const config = normalizeResponseHeaderConfig(responseHeader);
 
   if (!showBranding) {
     return <TitleBlock title={title} align={config.titleTextAlign} />;

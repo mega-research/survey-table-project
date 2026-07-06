@@ -10,17 +10,12 @@ import {
   coerceBlocksForInlineLayout,
   createHeaderBlock,
   getHeaderBandBorders,
-  getLogoAlignClass,
-  getLogoSizeClass,
-  getNoticeWidthClass,
   getTitleAlignClass,
-  getTitleSizeClass,
   normalizeResponseHeaderConfig,
   noticeFormatPatch,
   partitionHeaderBlocks,
   resolveHeaderTitlePx,
   resolveMobileHeaderTitlePx,
-  resolveResponseHeaderConfig,
 } from '@/lib/survey/response-header-config';
 import type { NormalizedHeaderNoticeBlock } from '@/lib/survey/response-header-config';
 
@@ -33,6 +28,10 @@ describe('response-header-config', () => {
     });
   });
 
+  it('DEFAULT_RESPONSE_HEADER_CONFIG는 composed 기본값이다', () => {
+    expect(DEFAULT_RESPONSE_HEADER_CONFIG).toEqual(DEFAULT_COMPOSED_RESPONSE_HEADER);
+  });
+
   it('undefined 설정은 기본 응답 헤더 설정으로 정규화한다', () => {
     expect(normalizeResponseHeaderConfig(undefined)).toEqual(DEFAULT_RESPONSE_HEADER_CONFIG);
   });
@@ -41,88 +40,50 @@ describe('response-header-config', () => {
     expect(normalizeResponseHeaderConfig(null)).toEqual(DEFAULT_RESPONSE_HEADER_CONFIG);
   });
 
-  it('logo-title 설정의 누락된 중첩값을 기본값으로 채운다', () => {
-    expect(
-      normalizeResponseHeaderConfig({
-        style: 'logo-title',
-        titleSize: 'lg',
-        logo: { imageUrl: 'https://example.com/logo.png' },
-      } as never),
-    ).toEqual({
+  it('logo-title 설정의 누락된 중첩값을 기본값으로 채우고 composed 로 마이그레이션한다', () => {
+    const result = normalizeResponseHeaderConfig({
       style: 'logo-title',
       titleSize: 'lg',
-      titleAlign: 'center',
-      logo: {
-        imageUrl: 'https://example.com/logo.png',
-        altText: '',
-        size: 'md',
-      },
-      logoTitle: {
-        logoPosition: 'left',
-      },
-    });
+      logo: { imageUrl: 'https://example.com/logo.png' },
+    } as never);
+    expect(result.titleScale).toBe('md');
+    expect(result.titleAlign).toBe('center');
+    expect(result.titleTextAlign).toBe('center');
+    expect(result.blocks).toEqual([{
+      id: 'v1-logo', type: 'logo', pos: 'title-left', size: 'md',
+      imageUrl: 'https://example.com/logo.png', altText: '', frame: 'none',
+    }]);
   });
 
-  it('official-band 설정의 통계 안내문과 폭 기본값을 채운다', () => {
-    expect(
-      normalizeResponseHeaderConfig({
-        style: 'official-band',
-        titleSize: 'md',
-        logo: {
-          imageUrl: 'https://example.com/logo.png',
-          size: 'lg',
-        },
-        officialBand: {
-          arrangement: 'logo-left-stat-right',
-        },
-      } as never),
-    ).toEqual({
+  it('official-band 설정의 통계 안내문과 폭 기본값을 채우고 composed 로 마이그레이션한다', () => {
+    const result = normalizeResponseHeaderConfig({
       style: 'official-band',
       titleSize: 'md',
-      titleAlign: 'center',
       logo: {
         imageUrl: 'https://example.com/logo.png',
-        altText: '',
         size: 'lg',
       },
       officialBand: {
         arrangement: 'logo-left-stat-right',
-        logoAlign: 'top',
-        statisticNotice: {
-          ...DEFAULT_STATISTIC_NOTICE,
-          width: 'md',
-        },
       },
+    } as never);
+    expect(result.titleScale).toBe('sm');
+    expect(result.vAlignLogo).toBe('top');
+    const notice = result.blocks.find((b) => b.type === 'notice');
+    const logo = result.blocks.find((b) => b.type === 'logo');
+    expect(notice).toMatchObject({
+      id: 'v1-notice', pos: 'right', size: 'md', format: 'box',
+      title: DEFAULT_STATISTIC_NOTICE.title, boxBody: DEFAULT_STATISTIC_NOTICE.body,
     });
-  });
-
-  it('로고 크기는 고정 높이로 단계별 차이를 보장한다', () => {
-    // 회귀: 과거 max-h-*(최댓값)만 반환해 작은 로고는 sm/md/lg 가 동일하게 보였다.
-    expect(getLogoSizeClass('sm')).toBe('h-10 max-w-[180px]');
-    expect(getLogoSizeClass('md')).toBe('h-16 max-w-[240px]');
-    expect(getLogoSizeClass('lg')).toBe('h-24 max-w-[340px]');
-  });
-
-  it('통계법 박스 좁게는 충분히 좁은 폭을 사용한다', () => {
-    expect(getNoticeWidthClass('sm')).toBe('md:max-w-[200px]');
-    expect(getNoticeWidthClass('md')).toBe('md:max-w-[280px]');
-    expect(getNoticeWidthClass('lg')).toBe('md:max-w-[360px]');
-  });
-
-  it('제목 크기 헬퍼는 의미 있는 Tailwind 클래스를 반환한다', () => {
-    expect(getTitleSizeClass('lg')).toContain('text-3xl');
+    expect(logo).toMatchObject({
+      id: 'v1-logo', pos: 'left', size: 'lg', imageUrl: 'https://example.com/logo.png',
+    });
   });
 
   it('제목 정렬 클래스를 매핑한다', () => {
     expect(getTitleAlignClass('left')).toBe('text-left');
     expect(getTitleAlignClass('center')).toBe('text-center');
     expect(getTitleAlignClass('right')).toBe('text-right');
-  });
-
-  it('로고 세로 정렬 클래스를 매핑한다', () => {
-    expect(getLogoAlignClass('top')).toBe('md:items-start');
-    expect(getLogoAlignClass('center')).toBe('md:items-center');
-    expect(getLogoAlignClass('bottom')).toBe('md:items-end');
   });
 
   it('정규화는 제목 정렬 기본값을 스타일별로 채운다', () => {
@@ -144,13 +105,13 @@ describe('response-header-config', () => {
       titleSize: 'auto',
       logo: { imageUrl: 'https://example.com/logo.png' },
     } as never);
-    expect(config.style === 'official-band' ? config.officialBand.logoAlign : null).toBe('top');
+    expect(config.vAlignLogo).toBe('top');
   });
 });
 
-describe('resolveResponseHeaderConfig (composed)', () => {
+describe('normalizeResponseHeaderConfig (composed)', () => {
   it('null 입력이면 composed 기본값을 반환한다', () => {
-    expect(resolveResponseHeaderConfig(null)).toEqual(DEFAULT_COMPOSED_RESPONSE_HEADER);
+    expect(normalizeResponseHeaderConfig(null)).toEqual(DEFAULT_COMPOSED_RESPONSE_HEADER);
     expect(DEFAULT_COMPOSED_RESPONSE_HEADER).toMatchObject({
       style: 'composed', layout: 'stacked', mobileStyle: 'gov',
       bandStyle: 'plain', bandBg: '#ffffff', blocks: [], titlePx: null,
@@ -158,7 +119,7 @@ describe('resolveResponseHeaderConfig (composed)', () => {
   });
 
   it('composed 입력의 열거값 이상치를 기본값으로 보정한다', () => {
-    const result = resolveResponseHeaderConfig({
+    const result = normalizeResponseHeaderConfig({
       style: 'composed', layout: 'diagonal', bandStyle: 'neon', mobileStyle: 'x',
       titleScale: 'xl', titlePx: 999, blocks: [
         { id: '', type: 'notice', pos: 'above', size: 'md', format: 'box', title: 't', boxBody: 'b', lineBody: 'l', fontSize: 100 },
@@ -177,7 +138,7 @@ describe('resolveResponseHeaderConfig (composed)', () => {
   });
 
   it('layout이 inline이면 위치를 보정한다 — center·title-left→left, title-right→right, above/below 유지', () => {
-    const result = resolveResponseHeaderConfig({
+    const result = normalizeResponseHeaderConfig({
       style: 'composed', layout: 'inline', blocks: [
         { id: 'a', type: 'logo', pos: 'center', size: 'md', imageUrl: '' },
         { id: 'b', type: 'logo', pos: 'title-left', size: 'md', imageUrl: '' },
@@ -190,18 +151,27 @@ describe('resolveResponseHeaderConfig (composed)', () => {
 
   it('같은 입력에 대해 결정적이다 (id 생성 없음)', () => {
     const input = { style: 'composed' as const, blocks: [{ id: 'k1', type: 'mark' as const, pos: 'left' as const, size: 'lg' as const, imageUrl: 'https://x/m.png' }] };
-    expect(resolveResponseHeaderConfig(input)).toEqual(resolveResponseHeaderConfig(input));
+    expect(normalizeResponseHeaderConfig(input)).toEqual(normalizeResponseHeaderConfig(input));
   });
 
-  it('기존 normalizeResponseHeaderConfig는 composed 입력을 그대로 통과시킨다 (읽기 경로 왕복 보존)', () => {
-    const stored: SurveyResponseHeaderConfig = { style: 'composed', blocks: [] };
-    expect(normalizeResponseHeaderConfig(stored)).toBe(stored); // Task 8 통합 전까지의 안전장치
+  it('이미 정규화된 composed 값을 재정규화해도 값이 보존된다 (멱등성)', () => {
+    const input: SurveyResponseHeaderConfig = {
+      style: 'composed', layout: 'inline', bandStyle: 'boxed', bandBg: '#123456',
+      titleScale: 'lg', subtitle: '부제',
+      blocks: [{ id: 'k1', type: 'mark', pos: 'left', size: 'lg', imageUrl: 'https://x/m.png', altText: '마크', frame: 'line' }],
+    };
+    const normalized = normalizeResponseHeaderConfig(input);
+    const renormalized = normalizeResponseHeaderConfig(normalized);
+    expect(renormalized).toEqual(normalized);
+    expect(renormalized.bandBg).toBe('#123456');
+    expect(renormalized.subtitle).toBe('부제');
+    expect(renormalized.blocks).toEqual(normalized.blocks);
   });
 });
 
-describe('resolveResponseHeaderConfig (v1 마이그레이션)', () => {
+describe('normalizeResponseHeaderConfig (v1 마이그레이션)', () => {
   it('plain을 블록 없는 composed로 매핑한다', () => {
-    const result = resolveResponseHeaderConfig({ style: 'plain', titleSize: 'lg', titleAlign: 'right' });
+    const result = normalizeResponseHeaderConfig({ style: 'plain', titleSize: 'lg', titleAlign: 'right' });
     expect(result).toMatchObject({
       style: 'composed', blocks: [], bandStyle: 'plain', bandBg: '#ffffff',
       titleAlign: 'right', titleTextAlign: 'right', titleScale: 'md', mobileStyle: 'gov',
@@ -209,13 +179,13 @@ describe('resolveResponseHeaderConfig (v1 마이그레이션)', () => {
   });
 
   it('titleSize를 매핑한다 — auto→md, md→sm, lg→md', () => {
-    expect(resolveResponseHeaderConfig({ style: 'plain', titleSize: 'auto' }).titleScale).toBe('md');
-    expect(resolveResponseHeaderConfig({ style: 'plain', titleSize: 'md' }).titleScale).toBe('sm');
-    expect(resolveResponseHeaderConfig({ style: 'plain', titleSize: 'lg' }).titleScale).toBe('md');
+    expect(normalizeResponseHeaderConfig({ style: 'plain', titleSize: 'auto' }).titleScale).toBe('md');
+    expect(normalizeResponseHeaderConfig({ style: 'plain', titleSize: 'md' }).titleScale).toBe('sm');
+    expect(normalizeResponseHeaderConfig({ style: 'plain', titleSize: 'lg' }).titleScale).toBe('md');
   });
 
   it('logo-title을 title 옆 로고 블록으로 매핑한다', () => {
-    const result = resolveResponseHeaderConfig({
+    const result = normalizeResponseHeaderConfig({
       style: 'logo-title', titleSize: 'auto',
       logo: { imageUrl: 'https://x/logo.png', altText: '기관', size: 'lg' },
       logoTitle: { logoPosition: 'right' },
@@ -228,7 +198,7 @@ describe('resolveResponseHeaderConfig (v1 마이그레이션)', () => {
   });
 
   it('official-band를 문구+로고 블록 행으로 매핑한다', () => {
-    const result = resolveResponseHeaderConfig({
+    const result = normalizeResponseHeaderConfig({
       style: 'official-band', titleSize: 'auto',
       logo: { imageUrl: 'https://x/l.png', size: 'md' },
       officialBand: {
