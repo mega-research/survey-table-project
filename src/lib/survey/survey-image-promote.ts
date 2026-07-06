@@ -42,13 +42,18 @@ export type PromotableQuestion = {
 };
 
 /**
+ * promote 가 다루는 데 필요한 최소 블록 형태 — imageUrl 외 필드는 그대로 통과
+ */
+export type PromotableHeaderBlock = { imageUrl?: unknown; [key: string]: unknown };
+
+/**
  * promoteSurveyResponseHeader가 처리하는 데 필요한 최소 응답 헤더 형태.
  * SurveyResponseHeaderConfig 의 모든 변형과 호환됩니다.
  */
 export type PromotableResponseHeader =
   | {
       logo?: { imageUrl?: string | null; [key: string]: unknown } | null;
-      blocks?: any[] | null;
+      blocks?: PromotableHeaderBlock[] | null;
       [key: string]: unknown;
     }
   | null
@@ -156,7 +161,7 @@ export function extractTmpSurveyUrlsFromResponseHeader(
   const logoUrl = responseHeader?.logo?.imageUrl;
   if (logoUrl && isTmpSurveyUrl(logoUrl)) urls.push(logoUrl);
   for (const block of responseHeader?.blocks ?? []) {
-    if (block.imageUrl && isTmpSurveyUrl(block.imageUrl)) urls.push(block.imageUrl);
+    if (typeof block.imageUrl === 'string' && isTmpSurveyUrl(block.imageUrl)) urls.push(block.imageUrl);
   }
   return urls;
 }
@@ -172,7 +177,7 @@ export function replaceUrlsInResponseHeader<T extends PromotableResponseHeader>(
   if (!responseHeader || mapping.size === 0) return responseHeader;
   const logoUrl = responseHeader.logo?.imageUrl;
   const needsLogo = !!(logoUrl && mapping.has(logoUrl));
-  const needsBlocks = (responseHeader.blocks ?? []).some((b) => b.imageUrl && mapping.has(b.imageUrl));
+  const needsBlocks = (responseHeader.blocks ?? []).some((b) => typeof b.imageUrl === 'string' && mapping.has(b.imageUrl));
   if (!needsLogo && !needsBlocks) return responseHeader;
   return {
     ...responseHeader,
@@ -180,7 +185,7 @@ export function replaceUrlsInResponseHeader<T extends PromotableResponseHeader>(
     ...(needsBlocks
       ? {
           blocks: responseHeader.blocks!.map((b) =>
-            b.imageUrl && mapping.has(b.imageUrl) ? { ...b, imageUrl: mapping.get(b.imageUrl)! } : b,
+            typeof b.imageUrl === 'string' && mapping.has(b.imageUrl) ? { ...b, imageUrl: mapping.get(b.imageUrl)! } : b,
           ),
         }
       : {}),
