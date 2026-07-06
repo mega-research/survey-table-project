@@ -6,6 +6,10 @@ import {
   DEFAULT_NOTICE_LINE,
   DEFAULT_RESPONSE_HEADER_CONFIG,
   DEFAULT_STATISTIC_NOTICE,
+  HEADER_LOGO_HEIGHTS,
+  HEADER_MARK_HEIGHTS,
+  HEADER_NOTICE_BOX_WIDTHS,
+  HEADER_NOTICE_LINE_FONT_PX,
   applyResponseHeaderPreset,
   coerceBlocksForInlineLayout,
   createHeaderBlock,
@@ -235,6 +239,15 @@ describe('제목 px 계산', () => {
     expect(resolveMobileHeaderTitlePx(33)).toBe(20);
     expect(resolveMobileHeaderTitlePx(72)).toBe(26);
     expect(resolveMobileHeaderTitlePx(14)).toBe(17);
+  });
+});
+
+describe('헤더 크기 상수', () => {
+  it('크기 상수는 확정 수치를 유지한다', () => {
+    expect(HEADER_MARK_HEIGHTS).toEqual({ sm: 72, md: 98, lg: 128 });
+    expect(HEADER_LOGO_HEIGHTS).toEqual({ sm: 26, md: 38, lg: 52 });
+    expect(HEADER_NOTICE_BOX_WIDTHS).toEqual({ sm: 190, md: 201, lg: 300 });
+    expect(HEADER_NOTICE_LINE_FONT_PX).toEqual({ sm: 12, md: 13.5, lg: 15.5 });
   });
 });
 
