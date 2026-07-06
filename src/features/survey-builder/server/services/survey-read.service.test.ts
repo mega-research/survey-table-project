@@ -33,6 +33,7 @@ vi.mock('@/db', () => ({
 
 import { getResponseCountsGroupedBySurvey } from '@/data/responses';
 import { getSurveyWithDetails as getSurveyWithDetailsData } from '@/data/surveys';
+import { DEFAULT_RESPONSE_HEADER_CONFIG } from '@/lib/survey/response-header-config';
 
 import {
   getSurveyForResponse,
@@ -263,6 +264,9 @@ describe('survey-read.service getSurveyForResponse requireInviteToken', () => {
           responseHeader: {
             style: 'plain',
             titleSize: 'auto',
+            // 'right' 는 현재 surveys 행(logo-title 스타일 → composed 변환 시 titleAlign 'center')과도,
+            // composed 기본값('left')과도 겹치지 않는 판별값 — 스냅샷 값이 실제로 쓰였는지 구분 가능하게 한다.
+            titleAlign: 'right',
           },
         },
       },
@@ -270,11 +274,12 @@ describe('survey-read.service getSurveyForResponse requireInviteToken', () => {
 
     const result = await getSurveyForResponse({ surveyId });
 
-    expect(result?.survey.settings.responseHeader).toEqual({
-      style: 'plain',
-      titleSize: 'auto',
-      titleAlign: 'left',
-    });
+    const responseHeader = result?.survey.settings.responseHeader;
+    // v2 normalize 는 항상 composed 로 통합 변환한다 — v1 plain 리터럴 형태로 남지 않는다.
+    expect(responseHeader?.style).toBe('composed');
+    // titleAlign='right' 는 snapshot 전용 값. 코드가 현재 surveys 행(logo-title → 'center')을 잘못
+    // 사용했거나, 스냅샷을 무시하고 기본값('left')으로 fallback 했다면 이 값과 어긋난다.
+    expect(responseHeader?.titleAlign).toBe('right');
   });
 
   it('responseHeader 가 없는 기존 snapshot 은 현재 surveys 행이 아니라 새 기본형으로 fallback 한다', async () => {
@@ -309,11 +314,9 @@ describe('survey-read.service getSurveyForResponse requireInviteToken', () => {
 
     const result = await getSurveyForResponse({ surveyId });
 
-    expect(result?.survey.settings.responseHeader).toEqual({
-      style: 'plain',
-      titleSize: 'auto',
-      titleAlign: 'left',
-    });
+    // 스냅샷에 responseHeader 가 없는 이전 publish 본 — 현재 surveys 행(logo-title)이 아니라
+    // composed 기본값으로 fallback 해야 한다.
+    expect(result?.survey.settings.responseHeader).toEqual(DEFAULT_RESPONSE_HEADER_CONFIG);
   });
 
   it('requirePublished 옵션이면 배포 버전 없는 설문을 현재 draft 로 fallback 하지 않는다', async () => {
