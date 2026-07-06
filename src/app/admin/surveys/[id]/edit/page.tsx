@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useEffect, useState } from 'react';
+import { use, useEffect, useRef, useState } from 'react';
 
 import Link from 'next/link';
 
@@ -141,6 +141,8 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
       isModifiedSincePublish: s.isModifiedSincePublish,
     })),
   );
+  // 헤더 모달이 updateSurveyTitle로 직접 바꾸는 store.title — 툴바 로컬 titleInput 동기화용 구독
+  const storeTitle = useSurveyBuilderStore((s) => s.currentSurvey.title);
 
   // 질문/그룹 배열은 SortableQuestionList 내부에서 직접 구독
   // 페이지에서는 길이만 구독하여 리렌더 최소화
@@ -162,6 +164,7 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
   const { saveSurvey } = useSurveySync();
 
   const [titleInput, setTitleInput] = useState('');
+  const titleInputRef = useRef<HTMLInputElement>(null);
   const [questionNumberInput, setQuestionNumberInput] = useState('');
   const [showScrollButtons, setShowScrollButtons] = useState(false);
   const [slugInput, setSlugInput] = useState('');
@@ -185,6 +188,15 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
       setInitializedSurveyId(id);
     }
   }, [survey, initializedSurveyId, id]);
+
+  // 헤더 모달이 updateSurveyTitle로 store.title을 직접 바꿀 수 있어(설문 헤더 설정 등),
+  // 툴바 로컬 titleInput이 stale해지지 않도록 store 값으로 동기화한다.
+  // 단, 툴바 입력이 포커스 상태(한글 IME 조합 포함)일 때 되돌리면 조합이 깨지므로 포커스 가드를 둔다.
+  useEffect(() => {
+    if (document.activeElement !== titleInputRef.current) {
+      setTitleInput(storeTitle);
+    }
+  }, [storeTitle]);
 
   // 변수 카탈로그 fetch (prefill 토큰 빌더 UI용)
   useEffect(() => {
@@ -460,6 +472,7 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
             </Link>
             <div className="h-6 w-px bg-gray-300" />
             <Input
+              ref={titleInputRef}
               value={titleInput}
               onChange={(e) => {
                 setTitleInput(e.target.value);

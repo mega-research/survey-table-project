@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -156,6 +156,7 @@ export default function CreateSurveyPage() {
   const { mutateAsync: saveSurvey } = useSaveSurvey();
 
   const [titleInput, setTitleInput] = useState('새 설문조사');
+  const titleInputRef = useRef<HTMLInputElement>(null);
   const [questionNumberInput, setQuestionNumberInput] = useState('');
   const [showScrollButtons, setShowScrollButtons] = useState(false);
   const [slugInput, setSlugInput] = useState('');
@@ -174,6 +175,18 @@ export default function CreateSurveyPage() {
   useEffect(() => {
     resetSurvey();
   }, [resetSurvey]);
+
+  // 헤더 모달이 updateSurveyTitle로 store.title을 직접 바꿀 수 있어(설문 헤더 설정 등),
+  // 툴바 로컬 titleInput이 stale해지지 않도록 store 값으로 동기화한다.
+  // 단, 툴바 입력이 포커스 상태(한글 IME 조합 포함)일 때 되돌리면 조합이 깨지므로 포커스 가드를 둔다.
+  // document.activeElement(외부 시스템인 브라우저 포커스 상태)를 읽어야만 판단 가능해 effect가 필요하다.
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (document.activeElement !== titleInputRef.current) {
+      setTitleInput(currentSurvey.title);
+    }
+  }, [currentSurvey.title]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // 슬러그 입력 핸들러 (입력값만 업데이트, 서버 호출은 제거)
   const handleSlugChange = useCallback(
@@ -396,6 +409,7 @@ export default function CreateSurveyPage() {
             </Link>
             <div className="h-6 w-px bg-gray-300" />
             <Input
+              ref={titleInputRef}
               value={titleInput}
               onChange={(e) => {
                 setTitleInput(e.target.value);
