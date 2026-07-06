@@ -15,6 +15,7 @@ export function ResponseHeaderSettingsModal() {
   const [open, setOpen] = useState(false);
 
   const updateSurveySettings = useSurveyBuilderStore((s) => s.updateSurveySettings);
+  const updateSurveyTitle = useSurveyBuilderStore((s) => s.updateSurveyTitle);
   const settings = useSurveyBuilderStore(useShallow((s) => s.currentSurvey.settings));
   const title = useSurveyBuilderStore((s) => s.currentSurvey.title);
   const description = useSurveyBuilderStore((s) => s.currentSurvey.description);
@@ -58,6 +59,8 @@ export function ResponseHeaderSettingsModal() {
           {/* 설정: 스크롤 영역 */}
           <div className="flex-1 overflow-y-auto px-6 py-4">
             <ResponseHeaderSettings
+              title={title}
+              onTitleChange={updateSurveyTitle}
               settings={settings}
               onChange={(responseHeader) => updateSurveySettings({ responseHeader })}
             />

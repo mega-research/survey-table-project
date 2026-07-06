@@ -1,4 +1,4 @@
-import { render, screen, cleanup, within } from '@testing-library/react';
+import { render, screen, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -47,27 +47,29 @@ describe('ResponseHeaderSettingsModal', () => {
     render(<ResponseHeaderSettingsModal />);
 
     // 닫힌 상태: 설정 컨트롤은 보이지 않는다
-    expect(screen.queryByRole('button', { name: '제목 옆 로고형' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '프리셋 국가통계형' })).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByText('응답 페이지 머리말 설정'));
 
     // 미리보기(설문 제목) + 설정 컨트롤이 함께 렌더된다
     expect(screen.getByRole('heading', { name: '내 설문' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '기본형' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '제목 옆 로고형' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '프리셋 국가통계형' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '프리셋 컬러 밴드형' })).toBeInTheDocument();
   });
 
   it('프리셋 변경 시 store 가 갱신되고 미리보기가 반영된다', async () => {
     render(<ResponseHeaderSettingsModal />);
     await userEvent.click(screen.getByText('응답 페이지 머리말 설정'));
 
-    await userEvent.click(screen.getByRole('button', { name: '제목 옆 로고형' }));
+    await userEvent.click(screen.getByRole('button', { name: '프리셋 국가통계형' }));
 
     expect(
       useSurveyBuilderStore.getState().currentSurvey.settings.responseHeader?.style,
-    ).toBe('logo-title');
-    // v1 logo-title 설정은 composed 로 마이그레이션되어 제목 밴드 안에 로고 자리표시자가 생긴다
-    // (클릭 전에는 밴드에 이미지 블록이 없으므로 재렌더를 실제로 판별한다. 모달 미리보기 개편은 Task 7)
-    expect(within(screen.getByTestId('header-band')).getByText('로고')).toBeInTheDocument();
+    ).toBe('composed');
+    // v1 plain(블록 없음)에서 국가통계형 프리셋 적용 후 마크·로고 2개가 빈 이미지 슬롯으로 추가되어
+    // 밴드와 자리표시자가 함께 렌더된다 (클릭 전에는 블록이 전혀 없어 재렌더를 실제로 판별한다.
+    // 모달 미리보기 개편은 Task 7)
+    expect(screen.getByTestId('header-band')).toBeInTheDocument();
+    expect(screen.getAllByText('로고').length).toBeGreaterThan(0);
   });
 });
