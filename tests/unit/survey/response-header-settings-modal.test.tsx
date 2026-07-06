@@ -66,6 +66,7 @@ describe('ResponseHeaderSettingsModal', () => {
     expect(
       useSurveyBuilderStore.getState().currentSurvey.settings.responseHeader?.style,
     ).toBe('logo-title');
-    expect(screen.getByTestId('logo-title-layout')).toBeInTheDocument();
+    // v1 logo-title 설정은 composed 로 마이그레이션되어 제목 밴드로 렌더된다 (모달 미리보기 개편은 Task 7)
+    expect(screen.getByTestId('header-band')).toBeInTheDocument();
   });
 });
