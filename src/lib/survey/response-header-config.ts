@@ -27,7 +27,7 @@ export const DEFAULT_STATISTIC_NOTICE = {
   width: 'md',
 } satisfies StatisticNoticeConfig;
 
-export const DEFAULT_RESPONSE_HEADER_CONFIG: SurveyResponseHeaderConfig = {
+export const DEFAULT_RESPONSE_HEADER_CONFIG: Extract<SurveyResponseHeaderConfig, { style: 'plain' }> = {
   style: 'plain',
   titleSize: 'auto',
   titleAlign: 'left',

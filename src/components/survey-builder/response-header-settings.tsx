@@ -26,7 +26,11 @@ interface ResponseHeaderSettingsProps {
 }
 
 export function ResponseHeaderSettings({ settings, onChange }: ResponseHeaderSettingsProps) {
-  const config = normalizeResponseHeaderConfig(settings.responseHeader);
+  const normalized = normalizeResponseHeaderConfig(settings.responseHeader);
+  // composed(v2) 설정 UI 는 후속 태스크에서 도입 — 그때까지 v1 기본형으로 폴백한다 (과도기 심)
+  const config = normalized.style === 'composed'
+    ? ({ style: 'plain', titleSize: 'auto', titleAlign: 'left' } as const)
+    : normalized;
 
   const setPlain = () =>
     onChange({ style: 'plain', titleSize: config.titleSize ?? 'auto', titleAlign: config.titleAlign ?? 'left' });

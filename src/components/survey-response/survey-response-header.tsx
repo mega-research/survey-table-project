@@ -11,6 +11,7 @@ import {
 import { cn, isEmptyHtml } from '@/lib/utils';
 import type {
   ResponseHeaderTitleAlign,
+  ResponseHeaderTitleSize,
   SurveyResponseHeaderConfig,
 } from '@/db/schema/schema-types';
 
@@ -33,7 +34,11 @@ export function SurveyResponseHeader({
   sideMeta,
   showBranding = true,
 }: SurveyResponseHeaderProps) {
-  const config = normalizeResponseHeaderConfig(responseHeader);
+  const normalized = normalizeResponseHeaderConfig(responseHeader);
+  // composed(v2) 렌더러는 후속 태스크에서 도입 — 그때까지 v1 기본형으로 폴백한다 (과도기 심)
+  const config = normalized.style === 'composed'
+    ? ({ style: 'plain', titleSize: 'auto', titleAlign: 'left' } as const)
+    : normalized;
 
   // 브랜딩(로고+통계법)을 숨길 때는 스타일과 무관하게 제목만 컴팩트하게 렌더한다.
   // 설명문은 인트로에서만 노출하므로 여기서는 생략한다.
@@ -123,7 +128,7 @@ function TitleBlock({
 }: {
   title: string;
   description?: string | null | undefined;
-  titleSize: SurveyResponseHeaderConfig['titleSize'];
+  titleSize: ResponseHeaderTitleSize;
   align?: ResponseHeaderTitleAlign;
 }) {
   return (
