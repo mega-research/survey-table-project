@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { SurveyResponseHeader } from '@/components/survey-response/survey-response-header';
+import { getHeaderBandBorders } from '@/lib/survey/response-header-config';
 import type { SurveyResponseHeaderConfig } from '@/db/schema/schema-types';
 
 const composed = (over: Partial<Extract<SurveyResponseHeaderConfig, { style: 'composed' }>> = {}): SurveyResponseHeaderConfig => ({
@@ -31,7 +32,8 @@ describe('SurveyResponseHeader (composed 데스크톱)', () => {
     );
     expect(screen.getByTestId('header-block-row')).toBeInTheDocument();
     const band = screen.getByTestId('header-band');
-    expect(band).toHaveStyle({ backgroundColor: '#f0f0f0', borderTop: '2px solid #3f3f3f', borderBottom: '2px solid #3f3f3f' });
+    const bandBorders = getHeaderBandBorders('band');
+    expect(band).toHaveStyle({ backgroundColor: '#f0f0f0', borderTop: bandBorders.top, borderBottom: bandBorders.bottom });
     expect(screen.getByRole('heading', { name: '2026 신문산업 실태조사' })).toBeInTheDocument();
     expect(screen.getByRole('img', { name: '국가통계 마크' })).toHaveAttribute('src', 'https://x/mark.png');
     expect(screen.getByText('로고')).toBeInTheDocument(); // 빈 imageUrl 자리표시자

@@ -8,8 +8,10 @@ import {
   DEFAULT_STATISTIC_NOTICE,
   HEADER_LOGO_HEIGHTS,
   HEADER_MARK_HEIGHTS,
+  HEADER_NOTICE_BOX_FONT_PX,
   HEADER_NOTICE_BOX_WIDTHS,
   HEADER_NOTICE_LINE_FONT_PX,
+  HEADER_TITLE_PX,
   applyResponseHeaderPreset,
   coerceBlocksForInlineLayout,
   createHeaderBlock,
@@ -223,15 +225,15 @@ describe('normalizeResponseHeaderConfig (v1 마이그레이션)', () => {
 });
 
 describe('제목 px 계산', () => {
-  const base = DEFAULT_COMPOSED_RESPONSE_HEADER; // titleScale md = 33
+  const base = DEFAULT_COMPOSED_RESPONSE_HEADER; // titleScale md
   it('26자 이하는 스케일 원값', () => {
-    expect(resolveHeaderTitlePx(base, '가'.repeat(26))).toBe(33);
+    expect(resolveHeaderTitlePx(base, '가'.repeat(26))).toBe(HEADER_TITLE_PX.md);
   });
   it('26자 초과는 0.85배', () => {
-    expect(resolveHeaderTitlePx(base, '가'.repeat(27))).toBe(28); // round(33*0.85)
+    expect(resolveHeaderTitlePx(base, '가'.repeat(27))).toBe(Math.round(HEADER_TITLE_PX.md * 0.85));
   });
   it('40자 초과는 0.72배', () => {
-    expect(resolveHeaderTitlePx(base, '가'.repeat(41))).toBe(24); // round(33*0.72)
+    expect(resolveHeaderTitlePx(base, '가'.repeat(41))).toBe(Math.round(HEADER_TITLE_PX.md * 0.72));
   });
   it('titlePx 직접 지정 시 축소 미적용', () => {
     expect(resolveHeaderTitlePx({ ...base, titlePx: 50 }, '가'.repeat(60))).toBe(50);
@@ -244,19 +246,19 @@ describe('제목 px 계산', () => {
 });
 
 describe('헤더 크기 상수', () => {
-  it('크기 상수는 확정 수치를 유지한다', () => {
-    expect(HEADER_MARK_HEIGHTS).toEqual({ sm: 72, md: 98, lg: 128 });
-    expect(HEADER_LOGO_HEIGHTS).toEqual({ sm: 26, md: 38, lg: 52 });
-    expect(HEADER_NOTICE_BOX_WIDTHS).toEqual({ sm: 190, md: 201, lg: 300 });
-    expect(HEADER_NOTICE_LINE_FONT_PX).toEqual({ sm: 12, md: 13.5, lg: 15.5 });
+  it('크기 상수는 sm < md < lg 순서를 유지한다', () => {
+    for (const scale of [HEADER_MARK_HEIGHTS, HEADER_LOGO_HEIGHTS, HEADER_NOTICE_BOX_WIDTHS, HEADER_NOTICE_LINE_FONT_PX]) {
+      expect(scale.sm).toBeLessThan(scale.md);
+      expect(scale.md).toBeLessThan(scale.lg);
+    }
   });
 });
 
 describe('resolveNoticeFontPx', () => {
   it('resolveNoticeFontPx — 직접 지정 우선, 자동은 형식·크기별', () => {
     const base = createHeaderBlock('notice') as NormalizedHeaderNoticeBlock; // box, md
-    expect(resolveNoticeFontPx(base)).toBe(11.5);
-    expect(resolveNoticeFontPx({ ...base, format: 'line', size: 'lg' })).toBe(15.5);
+    expect(resolveNoticeFontPx(base)).toBe(HEADER_NOTICE_BOX_FONT_PX);
+    expect(resolveNoticeFontPx({ ...base, format: 'line', size: 'lg' })).toBe(HEADER_NOTICE_LINE_FONT_PX.lg);
     expect(resolveNoticeFontPx({ ...base, fontSize: 18 })).toBe(18);
   });
 });

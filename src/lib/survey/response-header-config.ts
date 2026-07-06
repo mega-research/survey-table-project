@@ -242,6 +242,7 @@ export const HEADER_LOGO_HEIGHTS = { sm: 26, md: 38, lg: 52 } as const;
 export const HEADER_NOTICE_BOX_WIDTHS = { sm: 190, md: 201, lg: 300 } as const;
 export const HEADER_TITLE_PX = { sm: 26, md: 33, lg: 42 } as const;
 export const HEADER_NOTICE_LINE_FONT_PX = { sm: 12, md: 13.5, lg: 15.5 } as const;
+export const HEADER_NOTICE_BOX_FONT_PX = 11.5; // 박스형 문구 자동 글자 크기
 
 export const DEFAULT_COMPOSED_RESPONSE_HEADER: NormalizedResponseHeaderConfig = {
   style: 'composed', mobileStyle: 'gov', layout: 'stacked', blocks: [], subtitle: '',
@@ -421,7 +422,7 @@ export function resolveMobileHeaderTitlePx(desktopPx: number): number {
 /** 문구 블록의 실효 글자 크기 px — fontSize 직접 지정이 없으면 형식·크기별 자동값 */
 export function resolveNoticeFontPx(block: NormalizedHeaderNoticeBlock): number {
   if (block.fontSize !== null) return block.fontSize;
-  return block.format === 'line' ? HEADER_NOTICE_LINE_FONT_PX[block.size] : 11.5;
+  return block.format === 'line' ? HEADER_NOTICE_LINE_FONT_PX[block.size] : HEADER_NOTICE_BOX_FONT_PX;
 }
 
 export function getHeaderBandBorders(style: ResponseHeaderBandStyle): { top: string; bottom: string; side: string } {

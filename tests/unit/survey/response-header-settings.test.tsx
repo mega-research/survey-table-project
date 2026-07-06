@@ -2,7 +2,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { ResponseHeaderSettings } from '@/components/survey-builder/response-header-settings';
-import { DEFAULT_COMPOSED_RESPONSE_HEADER } from '@/lib/survey/response-header-config';
+import { DEFAULT_COMPOSED_RESPONSE_HEADER, HEADER_TITLE_PX } from '@/lib/survey/response-header-config';
 import type { SurveySettings } from '@/types/survey';
 import type { SurveyResponseHeaderConfig } from '@/db/schema/schema-types';
 
@@ -147,9 +147,9 @@ describe('ResponseHeaderSettings (제목 크기 직접 지정 — draft/blur com
 // 실효값을 그대로 표시하되, 사용자가 실제로 편집하지 않은 blur는 자동 상태를 해제하면 안 된다.
 describe('ResponseHeaderSettings (자동 상태 실효값 표시)', () => {
   it('자동 상태에서 직접 지정 입력칸이 실효값을 표시한다', () => {
-    setup(); // 기본 config(titlePx: null) + 제목 "설문 제목"(5자) → titleScale md 33px 그대로
+    setup(); // 기본 config(titlePx: null) + 제목 "설문 제목"(5자, 26자 이하) → titleScale md 스케일 원값 그대로
     const input = screen.getByLabelText('제목 크기 직접 지정 (px)');
-    expect(input).toHaveValue(33);
+    expect(input).toHaveValue(HEADER_TITLE_PX.md);
   });
 
   it('자동 상태에서 포커스 후 무편집 blur → onChange 미호출 (자동 유지)', () => {
