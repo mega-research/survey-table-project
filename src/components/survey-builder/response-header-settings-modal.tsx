@@ -10,7 +10,8 @@ import { SurveyResponseHeader } from '@/components/survey-response/survey-respon
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { responseHeaderButtonClass } from '@/lib/survey/response-header-config';
+import { normalizeResponseHeaderConfig, responseHeaderButtonClass } from '@/lib/survey/response-header-config';
+import type { NormalizedResponseHeaderConfig } from '@/lib/survey/response-header-config';
 import { cn } from '@/lib/utils';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 
@@ -24,11 +25,37 @@ export function ResponseHeaderSettingsModal() {
   const title = useSurveyBuilderStore((s) => s.currentSurvey.title);
   const description = useSurveyBuilderStore((s) => s.currentSurvey.description);
 
+  // 초안(draft) 게이트 — 열리는 시점에 store 스냅샷으로 시드하고, 저장을 누르기 전까지
+  // 미리보기·설정 패널은 이 초안만 읽고 쓴다. store 반영은 저장 시점에만 일어난다.
+  const [draftConfig, setDraftConfig] = useState<NormalizedResponseHeaderConfig>(() =>
+    normalizeResponseHeaderConfig(settings.responseHeader),
+  );
+  const [draftTitle, setDraftTitle] = useState(title);
+
+  const handleOpenChange = (next: boolean) => {
+    if (next) {
+      // 열릴 때마다 최신 store 기준으로 재시드 — 이전 초안(취소로 폐기된 편집분 포함)은 버린다
+      setDraftConfig(normalizeResponseHeaderConfig(settings.responseHeader));
+      setDraftTitle(title);
+    }
+    setOpen(next);
+  };
+
+  const handleSave = () => {
+    updateSurveySettings({ responseHeader: draftConfig });
+    if (draftTitle !== title) {
+      updateSurveyTitle(draftTitle);
+    }
+    setOpen(false);
+  };
+
+  const draftSettings = { ...settings, responseHeader: draftConfig };
+
   return (
     <>
       <Card
         className="hover-lift cursor-pointer border-gray-200 p-4 transition-all duration-200 hover:border-blue-200"
-        onClick={() => setOpen(true)}
+        onClick={() => handleOpenChange(true)}
       >
         <div className="flex items-start space-x-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 text-blue-600">
@@ -41,7 +68,8 @@ export function ResponseHeaderSettingsModal() {
         </div>
       </Card>
 
-      <Dialog open={open} onOpenChange={setOpen}>
+      {/* onOpenChange(false)는 X·ESC·바깥 클릭 포함 — 확인창 없이 조용히 초안을 폐기한다 */}
+      <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent className="flex h-[min(92vh,60rem)] w-[min(90rem,calc(100vw-2rem))] max-w-none flex-col p-0">
           <DialogHeader className="border-b border-gray-200 px-6 py-4">
             <DialogTitle>설문 헤더</DialogTitle>
@@ -78,9 +106,9 @@ export function ResponseHeaderSettingsModal() {
                   className="mx-auto w-[880px] bg-white px-[52px] pb-14 pt-11 shadow-[0_4px_28px_rgba(0,0,0,0.14)]"
                 >
                   <SurveyResponseHeader
-                    title={title}
+                    title={draftTitle}
                     description={description}
-                    responseHeader={settings.responseHeader}
+                    responseHeader={draftConfig}
                     device="desktop"
                   />
                   <PreviewSkeleton />
@@ -91,9 +119,9 @@ export function ResponseHeaderSettingsModal() {
                   className="mx-auto w-[390px] rounded-2xl bg-white px-4 pb-8 pt-5 shadow-[0_4px_28px_rgba(0,0,0,0.14)]"
                 >
                   <SurveyResponseHeader
-                    title={title}
+                    title={draftTitle}
                     description={description}
-                    responseHeader={settings.responseHeader}
+                    responseHeader={draftConfig}
                     device="mobile"
                   />
                   <PreviewSkeleton compact />
@@ -104,12 +132,22 @@ export function ResponseHeaderSettingsModal() {
             {/* 우: 설정 사이드바 */}
             <aside className="w-[322px] flex-none overflow-y-auto border-l border-gray-200 px-4 py-5">
               <ResponseHeaderSettings
-                title={title}
-                onTitleChange={updateSurveyTitle}
-                settings={settings}
-                onChange={(responseHeader) => updateSurveySettings({ responseHeader })}
+                title={draftTitle}
+                onTitleChange={setDraftTitle}
+                settings={draftSettings}
+                onChange={(responseHeader) => setDraftConfig(normalizeResponseHeaderConfig(responseHeader))}
               />
             </aside>
+          </div>
+
+          {/* 저장/취소 게이트 — X·ESC·바깥 클릭은 위 onOpenChange(false)가 담당(조용히 폐기) */}
+          <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-gray-200 px-6 py-4">
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+              취소
+            </Button>
+            <Button type="button" onClick={handleSave}>
+              저장
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
