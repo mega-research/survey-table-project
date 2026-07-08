@@ -714,7 +714,7 @@ export function SurveyResponseFlow({
 
       {/* 메인 콘텐츠 */}
       <div
-        className={`${containerMaxWidth} mx-auto px-4 pt-6 transition-all duration-300 md:px-6 md:pt-6 ${
+        className={`${containerMaxWidth} mx-auto px-4 pt-2 transition-all duration-300 md:px-6 md:pt-2 ${
           isMobile ? 'pb-28' : 'pb-16 md:pb-24'
         }`}
       >
