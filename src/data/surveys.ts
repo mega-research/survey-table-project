@@ -120,6 +120,7 @@ export async function getSurveyWithDetails(surveyId: string): Promise<SurveyType
         ...(q.dynamicRowConfigs != null ? { dynamicRowConfigs: q.dynamicRowConfigs as NonNullable<QuestionType['dynamicRowConfigs']> } : {}),
         ...(q.hideColumnLabels != null ? { hideColumnLabels: q.hideColumnLabels } : {}),
         ...(q.hideTitle != null ? { hideTitle: q.hideTitle } : {}),
+        ...(q.pageBreakBefore != null ? { pageBreakBefore: q.pageBreakBefore } : {}),
         ...(q.displayCondition != null ? { displayCondition: q.displayCondition as NonNullable<QuestionType['displayCondition']> } : {}),
         ...(q.questionCode != null ? { questionCode: q.questionCode } : {}),
         ...(q.isCustomSpssVarName != null ? { isCustomSpssVarName: q.isCustomSpssVarName } : {}),
