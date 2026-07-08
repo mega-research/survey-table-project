@@ -113,9 +113,10 @@ describe('handleRequest', () => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        body: '[Sentry] ReferenceError: heck is not defined',
+        body: '[Sentry:error] ReferenceError: heck is not defined',
         connectColor: '#E5484D',
         connectInfo: [
+          { title: 'Type', description: 'ReferenceError' },
           { title: 'Project', description: 'survey-table-project' },
           { title: 'Level', description: 'error' },
         ],
