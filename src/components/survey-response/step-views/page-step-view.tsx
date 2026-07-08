@@ -40,7 +40,7 @@ export function PageStepView({
 
   return (
     <Card className="animate-in fade-in duration-200">
-      <CardContent className="pt-6 md:px-8">
+      <CardContent className="p-4 pt-6 md:p-6 md:px-8 md:pt-6">
         <div className="divide-y divide-gray-100">
           {visibleItems.map((item, idx) => {
             const prev = visibleItems[idx - 1];
