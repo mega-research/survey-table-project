@@ -63,7 +63,7 @@ describe('PageStepView', () => {
     const wrappers = container.querySelectorAll('.divide-y > div');
     expect(wrappers.length).toBe(2);
     wrappers.forEach((w) => {
-      expect(w.className).toContain('py-6');
+      expect(w.className).toContain('py-4');
       expect(w.className).toContain('first:pt-0');
       expect(w.className).toContain('last:pb-0');
     });
