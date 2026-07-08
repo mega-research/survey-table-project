@@ -669,7 +669,7 @@ export function SurveyResponseFlow({
       <HoneypotField ref={honeypotRef} />
       {/* 헤더 — 제목/로고/통계법만 (진행바·카운트는 아래 회색 영역으로 분리) */}
       <div className="border-b border-gray-200 bg-white">
-        <div className={`${containerMaxWidth} mx-auto px-4 pt-4 pb-2 transition-all duration-300 md:px-6 md:pb-0`}>
+        <div className={`${containerMaxWidth} mx-auto px-4 pt-2 pb-2 transition-all duration-300 md:px-6 md:pb-0`}>
           <SurveyResponseHeader
             title={loadedSurvey.title}
             description={loadedSurvey.description}

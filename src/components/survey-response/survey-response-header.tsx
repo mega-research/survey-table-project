@@ -162,7 +162,7 @@ function ComposedHeaderMobile({ config, title }: { config: NormalizedResponseHea
           {logos.map((b) => <HeaderImageBlock key={b.id} block={b} heightPx={50} mobile />)}
         </div>
       )}
-      <div className="px-4 pt-3" style={{ backgroundColor: config.bandBg, borderTop: band.top, borderBottom: band.bottom, borderLeft: band.side, borderRight: band.side, textAlign: config.titleTextAlign }}>
+      <div className="px-4" style={{ backgroundColor: config.bandBg, borderTop: band.top, borderBottom: band.bottom, borderLeft: band.side, borderRight: band.side, textAlign: config.titleTextAlign }}>
         <h1 className="break-keep font-extrabold leading-[1.35] text-[#141414] [text-wrap:balance]" style={{ fontSize: titlePx, letterSpacing: '-0.4px' }}>{title}</h1>
       </div>
       {cards.length > 0 && <div className="mt-3 flex flex-col gap-2">{cards}</div>}
