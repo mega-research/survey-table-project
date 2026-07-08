@@ -61,7 +61,7 @@ export function GroupStepItem({
           <div className="flex items-start">
             <div
               id={`q-label-${q.id}`}
-              className={`text-lg leading-snug font-semibold break-keep ${
+              className={`px-1 text-lg leading-snug font-semibold break-keep ${
                 isHighlighted ? 'text-red-700' : 'text-gray-900'
               }`}
             >
