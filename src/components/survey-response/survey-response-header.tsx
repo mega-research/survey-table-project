@@ -261,7 +261,7 @@ function TitleBandText({ config, title, inline = false }: { config: NormalizedRe
     <div className="inline-block max-w-full" style={{ textAlign: config.titleTextAlign }}>
       {/* 기존 테스트·a11y 관례: 설문 제목은 heading (v1 TitleBlock h1 계승) */}
       <h1
-        className={cn('break-keep font-extrabold text-[#141414]', inline ? 'leading-[1.3] [text-wrap:pretty]' : 'leading-[1.25] [text-wrap:balance]')}
+        className={cn('break-keep font-semibold text-[#141414]', inline ? 'leading-[1.3] [text-wrap:pretty]' : 'leading-[1.25] [text-wrap:balance]')}
         style={{ fontSize: titlePx, letterSpacing: '-0.5px' }}
       >
         {title}
