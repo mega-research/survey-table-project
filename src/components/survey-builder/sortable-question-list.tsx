@@ -57,7 +57,9 @@ import { useSurveyUIStore } from '@/stores/ui-store';
 import { computeTableEstimatedHeight } from '@/hooks/use-row-heights';
 import { Question, QuestionGroup } from '@/types/survey';
 
+import { buildFlatOrderedQuestions } from '@/lib/group-ordering';
 import { noop, estimateCardHeight, getQuestionTypeLabel } from './question-list-utils';
+import { PageBreakDivider } from './page-break-divider';
 import { QuestionPreview } from './question-preview';
 import { QuestionTestCard } from './question-test-card';
 import { GroupHeader } from './group-header';
@@ -339,12 +341,13 @@ export function SortableQuestionList({
 }: SortableQuestionListProps) {
   // 스토어에서 직접 구독 (편집 페이지 리렌더와 분리)
   const questions = useSurveyBuilderStore(useShallow((s) => s.currentSurvey.questions));
-  const { reorderQuestions, reorderGroupChildren, deleteQuestion } =
+  const { reorderQuestions, reorderGroupChildren, deleteQuestion, updateQuestion } =
     useSurveyBuilderStore(
       useShallow((s) => ({
         reorderQuestions: s.reorderQuestions,
         reorderGroupChildren: s.reorderGroupChildren,
         deleteQuestion: s.deleteQuestion,
+        updateQuestion: s.updateQuestion,
       })),
     );
   const { surveyId } = useSurveyBuilderStore(
@@ -354,6 +357,12 @@ export function SortableQuestionList({
   const lookups = useSurveyBuilderStore(useShallow((s) => s.currentSurvey.lookups || []));
   const selectQuestion = useSurveyUIStore((s) => s.selectQuestion);
   const ensureSurvey = useEnsureSurveyInDb();
+
+  // 선형 렌더 순서의 첫 질문 — 엔진이 첫 질문의 pageBreakBefore를 무시하므로 divider도 숨긴다
+  const firstLinearQuestionId = useMemo(
+    () => buildFlatOrderedQuestions(questions, groups)[0]?.id ?? null,
+    [questions, groups],
+  );
 
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -739,6 +748,14 @@ export function SortableQuestionList({
       >
         {overId === question.id && activeId !== question.id && (
           <div className="absolute -top-2 right-0 left-0 z-10 h-1 animate-pulse rounded-full bg-blue-500" />
+        )}
+        {question.id !== firstLinearQuestionId && (
+          <PageBreakDivider
+            active={!!question.pageBreakBefore}
+            onToggle={() =>
+              updateQuestion(question.id, { pageBreakBefore: !question.pageBreakBefore })
+            }
+          />
         )}
         <SortableQuestion
           question={question}
