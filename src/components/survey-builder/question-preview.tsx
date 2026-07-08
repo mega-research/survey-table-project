@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Question } from '@/types/survey';
 import {
   collectRankingGroups,
+  getGroupTypeOfCell,
   isGroupedRankingQuestion,
 } from '@/utils/choice-group-helpers';
 import { getOptionsLayout } from '@/utils/options-layout';
@@ -51,6 +52,7 @@ export function QuestionPreview({ question }: { question: Question }) {
             tableHeaderGrid={question.tableHeaderGrid}
             className="border-0 shadow-none"
             hideColumnLabels={question.hideColumnLabels}
+            choiceControlType={(cell) => getGroupTypeOfCell(question, cell.id)}
           />
         );
       }

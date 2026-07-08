@@ -66,6 +66,7 @@ describe('survey response step headings', () => {
       />,
     );
     expect(screen.getByText('현재 담배를 피우십니까?')).toBeInTheDocument();
+    expect(screen.getByText('최근 1년 동안 술을 마신 적이 있습니까?')).toBeInTheDocument();
     // 빌더 전용 질문 번호 배지(4/5/6)가 응답 페이지에 새지 않는다.
     expect(screen.queryByText('4')).not.toBeInTheDocument();
     expect(screen.queryByText('5')).not.toBeInTheDocument();

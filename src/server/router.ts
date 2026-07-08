@@ -26,7 +26,9 @@ import { preview } from '@/features/mail/server/procedures/preview';
 import { templates } from '@/features/mail/server/procedures/templates';
 import { unsubscribe } from '@/features/mail/server/procedures/unsubscribe';
 import { media } from '@/features/media/server/procedures/media';
+import { control } from '@/features/operations/server/procedures/control';
 import { progress } from '@/features/operations/server/procedures/progress';
+import { quota } from '@/features/quota/server/procedures/quota';
 import { duplicate } from '@/features/survey-response/server/procedures/duplicate';
 import { edit } from '@/features/survey-response/server/procedures/edit';
 import { lifecycle } from '@/features/survey-response/server/procedures/lifecycle';
@@ -82,7 +84,9 @@ export const router = {
   },
   operations: {
     progress,
+    control,
   },
+  quota,
 };
 
 export type AppRouter = typeof router;

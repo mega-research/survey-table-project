@@ -15,11 +15,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  encodeSurveyIdentifier,
-  generateSlugFromTitle,
-  getSurveyAccessUrl,
-} from '@/lib/survey-url';
+import { generateSlugFromTitle, getSurveyAccessUrl } from '@/lib/survey-url';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 
 interface SaveSuccessModalProps {
@@ -198,7 +194,7 @@ export const SaveSuccessModal = React.memo(function SaveSuccessModal({
                 <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
                   <p className="font-mono text-sm break-all text-gray-700">
                     {typeof window !== 'undefined' ? window.location.origin : ''}/survey/
-                    {encodeSurveyIdentifier(privateToken || id)}
+                    {privateToken || id}
                   </p>
                 </div>
                 <p className="mt-2 flex items-center gap-1 text-xs text-amber-600">

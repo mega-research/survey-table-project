@@ -1,114 +1,164 @@
-import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { ResponseHeaderSettings } from '@/components/survey-builder/response-header-settings';
-import { DEFAULT_RESPONSE_HEADER_CONFIG } from '@/lib/survey/response-header-config';
+import { DEFAULT_COMPOSED_RESPONSE_HEADER, HEADER_TITLE_PX } from '@/lib/survey/response-header-config';
 import type { SurveySettings } from '@/types/survey';
+import type { SurveyResponseHeaderConfig } from '@/db/schema/schema-types';
 
-function settings(overrides: Partial<SurveySettings> = {}): SurveySettings {
-  return {
-    isPublic: true,
-    allowMultipleResponses: false,
-    showProgressBar: true,
-    shuffleQuestions: false,
-    requireLogin: false,
-    thankYouMessage: '감사합니다',
-    responseHeader: DEFAULT_RESPONSE_HEADER_CONFIG,
-    ...overrides,
-  };
+vi.mock('@/components/survey-builder/cell-image-editor', () => ({
+  CellImageEditor: ({ imageUrl }: { imageUrl: string }) => <div data-testid="image-editor">{imageUrl}</div>,
+}));
+
+const baseSettings = (responseHeader?: SurveyResponseHeaderConfig): SurveySettings => ({
+  isPublic: true, allowMultipleResponses: false, showProgressBar: true,
+  shuffleQuestions: false, requireLogin: false, thankYouMessage: '',
+  // exactOptionalPropertyTypes: 키를 아예 생략해야 optional 계약을 지킨다 (undefined 명시 대입 금지)
+  ...(responseHeader !== undefined ? { responseHeader } : {}),
+});
+
+function setup(responseHeader?: SurveyResponseHeaderConfig) {
+  const onChange = vi.fn();
+  const onTitleChange = vi.fn();
+  render(
+    <ResponseHeaderSettings title="설문 제목" onTitleChange={onTitleChange} settings={baseSettings(responseHeader)} onChange={onChange} />,
+  );
+  return { onChange, onTitleChange };
 }
 
-describe('ResponseHeaderSettings', () => {
-  it('기본형에서는 로고 위치와 통계법 문구 입력을 숨긴다', () => {
-    render(<ResponseHeaderSettings settings={settings()} onChange={vi.fn()} />);
-
-    expect(screen.getByRole('button', { name: '기본형' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.queryByText('로고 위치')).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('통계법 제목')).not.toBeInTheDocument();
+// 버튼 클릭·텍스트 입력 모두 fireEvent 사용 — onChange 가 vi.fn()(비제어 mock)이라 컴포넌트가
+// 부모 상태로 재렌더되지 않는다. userEvent.type 은 키 입력마다 이벤트를 나눠 보내므로 매 입력마다
+// 최신 값을 반영해 재렌더되는 제어 컴포넌트를 전제하는데, 이 목업 환경에서는 미갱신 값으로 이벤트가
+// 나가 전체 값 단언이 불가능하다. fireEvent.change/click 은 단일 이벤트로 최종 값을 그대로 전달하므로
+// 이 테스트 목적에 부합한다 (shadcn Button 은 플레인 button 이라 fireEvent.click 으로 충분).
+describe('ResponseHeaderSettings (composed)', () => {
+  it('국가통계형 프리셋 적용 시 composed 구성(블록 4개)을 방출한다', () => {
+    const { onChange } = setup();
+    fireEvent.click(screen.getByRole('button', { name: '프리셋 국가통계형' }));
+    const config = onChange.mock.calls[0]![0];
+    expect(config.style).toBe('composed');
+    expect(config.blocks.map((b: { type: string }) => b.type)).toEqual(['mark', 'notice', 'logo', 'logo']);
+    expect(config.bandStyle).toBe('band');
   });
 
-  it('제목 옆 로고형 선택 시 로고 위치 선택을 표시하고 설정을 갱신한다', async () => {
-    const onChange = vi.fn();
-    render(<ResponseHeaderSettings settings={settings()} onChange={onChange} />);
+  it('+ 로고 클릭 시 로고 블록이 추가된다', () => {
+    const { onChange } = setup();
+    fireEvent.click(screen.getByRole('button', { name: '+ 로고' }));
+    const config = onChange.mock.calls[0]![0];
+    expect(config.blocks).toHaveLength(1);
+    expect(config.blocks[0]).toMatchObject({ type: 'logo', pos: 'right', size: 'md', imageUrl: '' });
+  });
 
-    await userEvent.click(screen.getByRole('button', { name: '제목 옆 로고형' }));
-
-    expect(onChange).toHaveBeenCalledWith({
-      style: 'logo-title',
-      titleSize: 'auto',
-      titleAlign: 'left',
-      logo: {
-        imageUrl: '',
-        altText: '',
-        size: 'md',
-      },
-      logoTitle: {
-        logoPosition: 'left',
-      },
+  it('블록 삭제 버튼이 해당 블록을 제거한다', () => {
+    const { onChange } = setup({
+      ...DEFAULT_COMPOSED_RESPONSE_HEADER,
+      blocks: [{ id: 'l1', type: 'logo', pos: 'right', size: 'md', imageUrl: '', altText: '', frame: 'none' }],
     });
+    // aria-label이 블록별로 구분되므로(`${블록이름} 삭제`) "삭제"로 끝나는 접근 가능한 이름으로 매칭한다.
+    fireEvent.click(screen.getByRole('button', { name: /삭제$/ }));
+    expect(onChange.mock.calls[0]![0].blocks).toHaveLength(0);
   });
 
-  it('제목 정렬 버튼은 모든 스타일에서 표시되고 onChange 로 titleAlign 을 갱신한다', async () => {
-    const onChange = vi.fn();
-    render(<ResponseHeaderSettings settings={settings()} onChange={onChange} />);
-
-    await userEvent.click(screen.getByRole('button', { name: '오른쪽' }));
-
-    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ titleAlign: 'right' }));
+  it('문구 블록을 한줄형으로 전환하면 pos가 above로 보정된다', () => {
+    const { onChange } = setup({
+      ...DEFAULT_COMPOSED_RESPONSE_HEADER,
+      blocks: [{ id: 'n1', type: 'notice', pos: 'left', size: 'md', format: 'box', title: 't', boxBody: 'b', lineBody: 'l', alignBox: 'left', alignLine: 'center', fontSize: null }],
+    });
+    fireEvent.click(screen.getByRole('button', { name: '한줄형' }));
+    expect(onChange.mock.calls[0]![0].blocks[0]).toMatchObject({ format: 'line', pos: 'above' });
   });
 
-  it('로고 세로 정렬은 양끝 정보형에서만 표시된다', () => {
-    const { rerender } = render(<ResponseHeaderSettings settings={settings()} onChange={vi.fn()} />);
-    expect(screen.queryByText('로고 세로 정렬')).not.toBeInTheDocument();
-
-    rerender(
-      <ResponseHeaderSettings
-        settings={settings({
-          responseHeader: {
-            style: 'official-band',
-            titleSize: 'auto',
-            titleAlign: 'center',
-            logo: { imageUrl: '', size: 'md' },
-            officialBand: {
-              arrangement: 'stat-left-logo-right',
-              logoAlign: 'top',
-              statisticNotice: { title: 't', body: 'b', width: 'md' },
-            },
-          },
-        })}
-        onChange={vi.fn()}
-      />,
-    );
-    expect(screen.getByText('로고 세로 정렬')).toBeInTheDocument();
+  it('제목 옆 배치로 전환하면 블록 위치가 보정된다', () => {
+    const { onChange } = setup({
+      ...DEFAULT_COMPOSED_RESPONSE_HEADER,
+      blocks: [{ id: 'l1', type: 'logo', pos: 'title-right', size: 'md', imageUrl: '', altText: '', frame: 'none' }],
+    });
+    fireEvent.click(screen.getByRole('button', { name: '제목 옆 배치' }));
+    const config = onChange.mock.calls[0]![0];
+    expect(config.layout).toBe('inline');
+    expect(config.blocks[0].pos).toBe('right');
   });
 
-  it('양끝 정보형 선택 시 통계법 문구 입력을 표시한다', () => {
-    render(
-      <ResponseHeaderSettings
-        settings={settings({
-          responseHeader: {
-            style: 'official-band',
-            titleSize: 'auto',
-            logo: {
-              imageUrl: '',
-              size: 'md',
-            },
-            officialBand: {
-              arrangement: 'stat-left-logo-right',
-              statisticNotice: {
-                title: '통계법',
-                body: '보호됩니다.',
-                width: 'md',
-              },
-            },
-          },
-        })}
-        onChange={vi.fn()}
-      />,
-    );
+  it('제목 입력은 onTitleChange를 호출한다 (설문 제목 단일 소스)', () => {
+    const { onTitleChange, onChange } = setup();
+    fireEvent.change(screen.getByLabelText('제목'), { target: { value: '새 제목' } });
+    expect(onTitleChange).toHaveBeenCalledWith('새 제목');
+    expect(onChange).not.toHaveBeenCalled();
+  });
 
-    expect(screen.getByLabelText('통계법 제목')).toHaveValue('통계법');
-    expect(screen.getByLabelText('통계법 문구')).toHaveValue('보호됩니다.');
+  it('부제목 입력은 config.subtitle을 갱신한다', () => {
+    const { onChange } = setup();
+    fireEvent.change(screen.getByLabelText('부제목'), { target: { value: '(본 조사)' } });
+    expect(onChange.mock.calls[0]![0].subtitle).toBe('(본 조사)');
+  });
+
+  it('밴드 스타일과 배경 스와치를 변경한다', () => {
+    const { onChange } = setup();
+    fireEvent.click(screen.getByRole('button', { name: '테두리 박스' }));
+    expect(onChange.mock.calls[0]![0].bandStyle).toBe('boxed');
+    fireEvent.click(screen.getByRole('button', { name: '밴드 배경 #cfe0ad' }));
+    expect(onChange.mock.calls[1]![0].bandBg).toBe('#cfe0ad');
+  });
+});
+
+// ClampedNumberInput(제목 크기 직접 지정) draft/blur commit 동작 — keystroke마다 store에 commit하던
+// 구버전은 normalize 클램프가 즉시 되돌아와 "3" 입력 즉시 14로 강제되는 등 2자리 값을 타이핑할 수
+// 없었다. 타이핑 중에는 로컬 draft만 갱신되고(onChange 미호출), blur에서만 커밋되어야 한다.
+describe('ResponseHeaderSettings (제목 크기 직접 지정 — draft/blur commit)', () => {
+  it('타이핑 중에는 onChange가 호출되지 않고, blur 시 완성된 값으로 commit된다', () => {
+    const { onChange } = setup();
+    const input = screen.getByLabelText('제목 크기 직접 지정 (px)');
+
+    fireEvent.change(input, { target: { value: '3' } });
+    expect(onChange).not.toHaveBeenCalled();
+
+    fireEvent.change(input, { target: { value: '36' } });
+    expect(onChange).not.toHaveBeenCalled();
+
+    fireEvent.blur(input);
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0]![0].titlePx).toBe(36);
+  });
+
+  it('min 미만 값은 blur 시 최솟값(14)으로 클램프되어 commit된다', () => {
+    const { onChange } = setup();
+    const input = screen.getByLabelText('제목 크기 직접 지정 (px)');
+
+    fireEvent.change(input, { target: { value: '3' } });
+    fireEvent.blur(input);
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0]![0].titlePx).toBe(14);
+  });
+
+  it('Enter 입력도 blur와 동일하게 commit을 트리거한다', () => {
+    const { onChange } = setup();
+    const input = screen.getByLabelText('제목 크기 직접 지정 (px)');
+
+    fireEvent.change(input, { target: { value: '50' } });
+    expect(onChange).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onChange.mock.calls[0]![0].titlePx).toBe(50);
+  });
+});
+
+// 자동(titlePx null) 상태에서도 입력칸에 현재 적용 중인 실효값을 보여줘야 한다(목업 동작).
+// 실효값을 그대로 표시하되, 사용자가 실제로 편집하지 않은 blur는 자동 상태를 해제하면 안 된다.
+describe('ResponseHeaderSettings (자동 상태 실효값 표시)', () => {
+  it('자동 상태에서 직접 지정 입력칸이 실효값을 표시한다', () => {
+    setup(); // 기본 config(titlePx: null) + 제목 "설문 제목"(5자, 26자 이하) → titleScale md 스케일 원값 그대로
+    const input = screen.getByLabelText('제목 크기 직접 지정 (px)');
+    expect(input).toHaveValue(HEADER_TITLE_PX.md);
+  });
+
+  it('자동 상태에서 포커스 후 무편집 blur → onChange 미호출 (자동 유지)', () => {
+    const { onChange } = setup();
+    const input = screen.getByLabelText('제목 크기 직접 지정 (px)');
+
+    fireEvent.focus(input);
+    fireEvent.blur(input);
+
+    expect(onChange).not.toHaveBeenCalled();
   });
 });

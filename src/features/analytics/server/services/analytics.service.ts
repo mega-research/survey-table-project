@@ -4,7 +4,7 @@ import { and, desc, eq } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { surveyResponses } from '@/db/schema';
-import { notDeletedResponse } from '@/data/response-filters';
+import { notDeletedResponse, notTestResponse } from '@/data/response-filters';
 import { getResponsesWithAnswers } from '@/data/responses';
 import { getSurveyWithDetails } from '@/data/surveys';
 import { analyzeSurvey } from '@/lib/analytics/analyzer';
@@ -19,21 +19,22 @@ import type {
 // 내부 조회 헬퍼 (data/responses.ts 로직 인라인 — service 자기완결)
 // ========================
 
-/** 설문별 응답 조회 (삭제 제외, 시작시간 내림차순) */
+/** 설문별 응답 조회 (삭제·테스트 제외, 시작시간 내림차순) — 통계 모수 */
 async function listResponses(surveyId: string) {
   return db.query.surveyResponses.findMany({
-    where: and(eq(surveyResponses.surveyId, surveyId), notDeletedResponse),
+    where: and(eq(surveyResponses.surveyId, surveyId), notDeletedResponse, notTestResponse),
     orderBy: [desc(surveyResponses.startedAt)],
   });
 }
 
-/** 완료된 응답만 조회 (삭제 제외, 완료시간 내림차순) */
+/** 완료된 응답만 조회 (삭제·테스트 제외, 완료시간 내림차순) — 통계 모수 */
 async function listCompletedResponses(surveyId: string) {
   return db.query.surveyResponses.findMany({
     where: and(
       eq(surveyResponses.surveyId, surveyId),
       eq(surveyResponses.isCompleted, true),
       notDeletedResponse,
+      notTestResponse,
     ),
     orderBy: [desc(surveyResponses.completedAt)],
   });

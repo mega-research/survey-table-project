@@ -6,7 +6,6 @@ import {
   BarChart,
   CartesianGrid,
   ErrorBar,
-  LabelList,
   XAxis,
   YAxis,
 } from 'recharts';
@@ -24,12 +23,14 @@ import { formatSeconds } from '@/lib/operations/format';
 import type { DwellOutput, DwellPage } from '@/lib/operations/page-dwell';
 
 import { EmptyState } from './empty-state';
+import {
+  OCCURRENCE_GLYPHS,
+  StepAxisTick,
+  type StepTickItem,
+} from './step-axis-tick';
 
 const DWELL_PAGE_SIZE = 10;
 const PAD_STEP_ID_PREFIX = '__pad__';
-
-/** 같은 label 이 여러 번 등장할 때 occurrence index 표기용 동그라미 숫자. */
-const OCCURRENCE_GLYPHS = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨'];
 
 interface Props {
   data: DwellOutput;
@@ -44,44 +45,6 @@ const CHART_CONFIG: ChartConfig = {
     color: CHART_COLOR_BLUE_500,
   },
 };
-
-/**
- * X축 멀티라인 tick — mockup p1 형식 (2줄):
- *   1행: 페이지 N (page 있을 때만, 회색)
- *   2행: 라벨 (questionCode 또는 groupName)
- *
- * A5(drop-funnel)의 FunnelTick과 동일한 패턴.
- */
-interface DwellTickProps {
-  x?: number;
-  y?: number;
-  payload?: { value?: string | number; index?: number };
-  pages: DwellPage[];
-}
-
-function DwellTick({ x = 0, y = 0, payload, pages }: DwellTickProps) {
-  const idx = payload?.index ?? 0;
-  const page = pages[idx];
-  // 패딩 슬롯은 라벨/페이지 모두 비워둔다 — 옅은 grid only.
-  if (page?.stepId.startsWith(PAD_STEP_ID_PREFIX)) {
-    return null;
-  }
-  const label = String(payload?.value ?? '');
-  const pageText = page?.page != null ? `페이지 ${page.page}` : '';
-
-  return (
-    <text x={x} y={y} textAnchor="middle" fontSize={11}>
-      {pageText && (
-        <tspan x={x} dy={12} fill="#94a3b8">
-          {pageText}
-        </tspan>
-      )}
-      <tspan x={x} dy={12} fill="#475569">
-        {label}
-      </tspan>
-    </text>
-  );
-}
 
 /**
  * 차트에 직접 들어갈 행 형태.
@@ -188,6 +151,15 @@ export function PageDwellDistribution({ data, pageOffset }: Props) {
     });
   }, [visiblePages]);
 
+  const tickItems = useMemo<StepTickItem[]>(
+    () =>
+      visiblePages.map((p) => ({
+        page: p.page,
+        hidden: p.stepId.startsWith(PAD_STEP_ID_PREFIX),
+      })),
+    [visiblePages],
+  );
+
   // visiblePages 는 data.pages 의 슬라이스이므로, data.pages 가 비어 있으면 visiblePages 도 비어 있다.
   const allEmpty = visiblePages.length === 0;
 
@@ -240,7 +212,7 @@ export function PageDwellDistribution({ data, pageOffset }: Props) {
           <ChartContainer config={CHART_CONFIG} className="aspect-auto h-72 w-full">
             <BarChart
               data={chartRows}
-              margin={{ top: 28, right: 8, bottom: 0, left: 0 }}
+              margin={{ top: 16, right: 8, bottom: 0, left: 0 }}
             >
               <CartesianGrid vertical={false} strokeDasharray="3 3" />
               <XAxis
@@ -251,7 +223,7 @@ export function PageDwellDistribution({ data, pageOffset }: Props) {
                 interval={0}
                 height={44}
                 tick={(tickProps) => (
-                  <DwellTick {...tickProps} pages={visiblePages} />
+                  <StepAxisTick {...tickProps} items={tickItems} />
                 )}
               />
               <YAxis
@@ -293,6 +265,7 @@ export function PageDwellDistribution({ data, pageOffset }: Props) {
                   />
                 }
               />
+              {/* 막대 위 숫자 라벨은 ErrorBar whisker 와 겹쳐 제거 — 평균/±SD/n 은 툴팁이 담당. */}
               <Bar
                 dataKey="meanSeconds"
                 fill="var(--color-meanSeconds)"
@@ -305,14 +278,6 @@ export function PageDwellDistribution({ data, pageOffset }: Props) {
                   stroke="#94a3b8"
                   strokeWidth={1.25}
                   strokeOpacity={0.7}
-                />
-                <LabelList
-                  dataKey="meanSeconds"
-                  position="top"
-                  className="fill-slate-600"
-                  fontSize={11}
-                  offset={20}
-                  formatter={(v: number) => (v > 0 ? formatSeconds(v) : '')}
                 />
               </Bar>
             </BarChart>

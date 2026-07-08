@@ -148,20 +148,47 @@ export const VariableCatalogOutput = z.custom<VariableDef[]>();
 // 원본 3함수 모두 requireAuth 없음. 응답자 공개 경로(survey-response-flow).
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** bySlug(getSurveyBySlug). 반환 surveys.$inferSelect | undefined → nullable. */
+/** bySlug(getSurveyBySlug). */
 export const SurveyBySlugInput = z.object({ slug: z.string() });
 export type SurveyBySlugInput = z.infer<typeof SurveyBySlugInput>;
 
-/** byPrivateToken(getSurveyByPrivateToken). 반환 surveys.$inferSelect | undefined → nullable. */
+/** byPrivateToken(getSurveyByPrivateToken). */
 export const SurveyByPrivateTokenInput = z.object({ token: z.string() });
 export type SurveyByPrivateTokenInput = z.infer<typeof SurveyByPrivateTokenInput>;
 
 /**
- * forResponse(getSurveyForResponse). 반환 { survey, versionId } | null.
+ * bySlug / byPrivateToken 반환. 두 pub 절차는 익명 응답자에게 노출되므로 full row 를
+ * 반환하면 testToken/testModeEnabled/isPaused/pausedMessage/privateToken 같은 라이브
+ * 제어·비밀 컬럼이 유출된다(I-3). 호출자(응답 로더 use-survey-loader)는 id 만 소비하므로
+ * id 만 투영해 반환한다. findFirst 미스 시 undefined → nullable.
+ */
+export type SurveyIdRow = { id: string };
+export const SurveyIdRowOutput = z.custom<SurveyIdRow | null | undefined>();
+
+/** forResponse(getSurveyForResponse) 전용 input. testToken 은 테스트 링크 검증용(옵셔널). */
+export const SurveyForResponseInput = SurveyIdInput.extend({
+  testToken: z.string().optional(),
+});
+export type SurveyForResponseInput = z.infer<typeof SurveyForResponseInput>;
+
+/**
+ * 응답 페이지 첫 화면 게이트용 라이브 제어값. snapshot 밖 값이므로 항상 현재
+ * surveys 행에서 읽는다 — publish 이전에도 즉시 반영돼야 하는 운영 스위치.
+ */
+export type SurveyControl = {
+  isPaused: boolean;
+  pausedMessage: string | null;
+  testSession: 'none' | 'valid' | 'invalid';
+};
+
+/**
+ * forResponse(getSurveyForResponse). 반환 { survey, versionId, control } | null.
  * survey 는 SurveyType, versionId 는 배포 버전 id 또는 null(미배포 fallback).
+ * control 은 스냅샷 밖 라이브 값(중단 상태 + 테스트 링크 판정).
  */
 export type SurveyForResponseResult = {
   survey: SurveyType;
   versionId: string | null;
+  control: SurveyControl;
 } | null;
 export const SurveyForResponseOutput = z.custom<SurveyForResponseResult>();

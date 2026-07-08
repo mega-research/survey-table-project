@@ -101,8 +101,13 @@ function criterionFrom(criteria?: CellCriteria): CellCriterion {
 
 // ─── 내부: 셀 타입별 의미론 registry ─────────────────────────────────────────
 
-/** 응답값에서 optionId 를 언랩 — string | { optionId } 두 형태만 인정, 그 외 null */
-function unwrapOptionId(value: unknown): string | null {
+/**
+ * 응답값에서 optionId 를 언랩 — string | { optionId } 두 형태만 인정, 그 외 null.
+ *
+ * 표 radio/select 셀 응답의 정본 언랩 규칙(SSOT). SPSS 데이터 변환기
+ * (lib/spss/data-transformer.ts)도 이 함수를 재사용해 저장 형태와 동기화를 유지한다.
+ */
+export function unwrapOptionId(value: unknown): string | null {
   if (typeof value === 'object' && value !== null && 'optionId' in value) {
     return (value as { optionId: string }).optionId;
   }

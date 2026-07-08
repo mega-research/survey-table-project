@@ -5,6 +5,7 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { surveyResponses } from '@/db/schema';
 import { findContactByInviteToken } from '@/lib/duplicate-detection/invite-lookup';
+import { getSurveyControlFlags, isValidTestToken } from '@/lib/survey-control';
 
 import type {
   RecordStepVisitInput,
@@ -12,6 +13,7 @@ import type {
   ResumeOrCreateResponseInput,
   ResumeOrCreateResponseOutput,
 } from '../../domain/lifecycle';
+import { SurveyNotAcceptingResponsesError } from './response.service';
 
 // ========================
 // 응답 라이프사이클 service (pub)
@@ -155,11 +157,22 @@ export async function recordVisibilitySegment(
  * - completed/screened_out/quotaful_out/bad 면 그대로 반환 — 호출자가 "이미 끝남" UX 처리
  *
  * 반환 null 이면 첫 진입 — 호출자는 평소대로 createResponseWithFirstAnswer 흐름.
+ *
+ * 중단 모드 게이트(스펙 5절): 설문이 isPaused 면 drop 회복 및 in_progress 터치를 거부한다.
+ * 단, 행이 이미 isTest 이거나 유효한 testToken 으로 재진입한 경우는 예외(운영자 QA 목적).
+ * 종결 상태 반환과 null 반환(첫 진입)은 게이트 대상이 아니다 — 종결은 이미 끝난 응답이고,
+ * 첫 진입은 create 경로(Task 5)가 별도로 게이트한다.
  */
 export async function resumeOrCreateResponse(
   input: ResumeOrCreateResponseInput,
 ): Promise<ResumeOrCreateResponseOutput> {
-  const { surveyId, sessionId, inviteToken } = input;
+  const { surveyId, sessionId, inviteToken, testToken } = input;
+
+  // 중단 모드 게이트(스펙 5절): 함수 진입부에서 1회만 조회해 아래 두 분기(컨택/세션)에서
+  // 재사용한다. isPaused=false 인 정상 케이스가 압도적으로 많으므로, 이 조회 자체가
+  // 추가 오버헤드지만 게이트 판정에 필수라 트레이드오프로 감수한다.
+  const flags = await getSurveyControlFlags(surveyId);
+  const isTestSession = flags ? isValidTestToken(flags, testToken) : false;
 
   // 컨택 매칭 우선순위: 유효한 inviteToken 이 있으면 같은 컨택의 in_progress 응답 우선 resume.
   // - 유효 토큰 + in_progress 행 존재 → 그 행 resume (sessionId 무시)
@@ -177,6 +190,7 @@ export async function resumeOrCreateResponse(
         .select({
           id: surveyResponses.id,
           status: surveyResponses.status,
+          isTest: surveyResponses.isTest,
         })
         .from(surveyResponses)
         .where(
@@ -193,6 +207,10 @@ export async function resumeOrCreateResponse(
       if (existingByContact) {
         const now = new Date();
         if (existingByContact.status === 'drop') {
+          // 중단 모드: 행이 isTest 이거나 유효한 테스트 링크로 재진입한 경우만 예외
+          if (flags?.isPaused && !existingByContact.isTest && !isTestSession) {
+            throw new SurveyNotAcceptingResponsesError('survey_paused');
+          }
           await db
             .update(surveyResponses)
             .set({ status: 'in_progress', lastActivityAt: now })
@@ -200,6 +218,10 @@ export async function resumeOrCreateResponse(
           return { id: existingByContact.id, status: 'in_progress', resumed: true };
         }
         if (existingByContact.status === 'in_progress') {
+          // 중단 모드: 행이 isTest 이거나 유효한 테스트 링크로 재진입한 경우만 예외
+          if (flags?.isPaused && !existingByContact.isTest && !isTestSession) {
+            throw new SurveyNotAcceptingResponsesError('survey_paused');
+          }
           await db
             .update(surveyResponses)
             .set({ lastActivityAt: now })
@@ -218,6 +240,7 @@ export async function resumeOrCreateResponse(
     .select({
       id: surveyResponses.id,
       status: surveyResponses.status,
+      isTest: surveyResponses.isTest,
     })
     .from(surveyResponses)
     .where(
@@ -236,6 +259,10 @@ export async function resumeOrCreateResponse(
   const now = new Date();
 
   if (existing.status === 'drop') {
+    // 중단 모드: 행이 isTest 이거나 유효한 테스트 링크로 재진입한 경우만 예외
+    if (flags?.isPaused && !existing.isTest && !isTestSession) {
+      throw new SurveyNotAcceptingResponsesError('survey_paused');
+    }
     // 회복 — drop → in_progress, lastActivityAt 새로 박는다
     await db
       .update(surveyResponses)
@@ -245,6 +272,10 @@ export async function resumeOrCreateResponse(
   }
 
   if (existing.status === 'in_progress') {
+    // 중단 모드: 행이 isTest 이거나 유효한 테스트 링크로 재진입한 경우만 예외
+    if (flags?.isPaused && !existing.isTest && !isTestSession) {
+      throw new SurveyNotAcceptingResponsesError('survey_paused');
+    }
     // stale 방지용 lastActivityAt 터치
     await db
       .update(surveyResponses)

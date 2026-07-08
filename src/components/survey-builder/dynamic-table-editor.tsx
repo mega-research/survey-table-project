@@ -752,6 +752,7 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
           columnCode={selectedCellContext.columnCode}
           columnLabel={selectedCellContext.columnLabel}
           cell={selectedCellContext.cell}
+          getLatestRows={() => currentRowsRef.current}
           choiceGroups={currentQuestion?.choiceGroups}
           onChoiceGroupsChange={(groups: ChoiceGroup[]) => {
             if (!currentQuestionId) return;

@@ -551,6 +551,7 @@ describe('profiles-row-actions', () => {
         dir: 'desc' as const,
         view: 'active' as const,
         condition: null,
+        test: 'all' as const,
       };
 
       const before = await profilesServer.listResponsesForProfiles(normalizedArgs);
@@ -607,6 +608,7 @@ describe('profiles-row-actions', () => {
         dir: 'desc' as const,
         view: 'active' as const,
         condition: null,
+        test: 'all' as const,
       };
 
       // 1단계: softDelete

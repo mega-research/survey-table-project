@@ -9,6 +9,7 @@ import {
   transformNumericText,
   transformMultiselect,
   transformOtherOption,
+  transformTableChoiceCell,
 } from '@/lib/spss/data-transformer';
 
 // 옵션 헬퍼
@@ -187,6 +188,45 @@ describe('transformNumericText', () => {
     expect(transformNumericText('0')).toBe(0);
     expect(transformNumericText('12.5')).toBe(12.5);
     expect(transformNumericText('-3')).toBe(-3);
+  });
+});
+
+describe('transformTableChoiceCell', () => {
+  // Q11(설문 25393c08%) 표 radio 셀의 실제 옵션 구조를 그대로 옮긴 fixture.
+  // 실제 응답은 { optionId } 객체로 저장된다 (fake-data-generator / branch-logic 참조).
+  const options: QuestionOption[] = [
+    makeOption({ id: 'd4646482-e25d-4b1a-94ed-3e0829e9f8c5', label: '① 그렇다', value: 'option-1', spssNumericCode: 1 }),
+    makeOption({ id: '2fa36b1e-a652-4fdf-a140-6ba285bfe887', label: '② 아니다', value: 'option-2', spssNumericCode: 2 }),
+    makeOption({ id: '136c7b7c-91e6-469c-aaa4-67afeed3cfb2', label: '③ 모르겠다', value: 'option-3', spssNumericCode: 3 }),
+  ];
+
+  it('radio 셀의 { optionId } 객체 응답을 옵션 숫자코드로 변환한다', () => {
+    // 실데이터 형태: {"optionId":"2fa36b1e-..."} → spssNumericCode 2
+    expect(transformTableChoiceCell('radio', { optionId: '2fa36b1e-a652-4fdf-a140-6ba285bfe887' }, options)).toBe(2);
+    expect(transformTableChoiceCell('radio', { optionId: 'd4646482-e25d-4b1a-94ed-3e0829e9f8c5' }, options)).toBe(1);
+    expect(transformTableChoiceCell('radio', { optionId: '136c7b7c-91e6-469c-aaa4-67afeed3cfb2' }, options)).toBe(3);
+  });
+
+  it('select 셀의 { optionId } 객체 응답도 숫자코드로 변환한다', () => {
+    expect(transformTableChoiceCell('select', { optionId: '2fa36b1e-a652-4fdf-a140-6ba285bfe887' }, options)).toBe(2);
+  });
+
+  it('bare 문자열(optionId) 응답도 계속 변환한다 (회귀 방지)', () => {
+    expect(transformTableChoiceCell('radio', '136c7b7c-91e6-469c-aaa4-67afeed3cfb2', options)).toBe(3);
+    expect(transformTableChoiceCell('radio', 'option-3', options)).toBe(3);
+  });
+
+  it('옵션 목록에 없는 optionId 는 null(system-missing)', () => {
+    expect(transformTableChoiceCell('radio', { optionId: 'unknown-id' }, options)).toBeNull();
+  });
+
+  it('미응답(null/undefined)은 null', () => {
+    expect(transformTableChoiceCell('radio', null, options)).toBeNull();
+    expect(transformTableChoiceCell('radio', undefined, options)).toBeNull();
+  });
+
+  it('옵션이 없으면(자유 입력 등) input 폴백 동작', () => {
+    expect(transformTableChoiceCell('input', '텍스트', undefined)).toBe('텍스트');
   });
 });
 

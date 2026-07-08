@@ -33,6 +33,7 @@ vi.mock('@/db', () => ({
 
 import { getResponseCountsGroupedBySurvey } from '@/data/responses';
 import { getSurveyWithDetails as getSurveyWithDetailsData } from '@/data/surveys';
+import { DEFAULT_RESPONSE_HEADER_CONFIG } from '@/lib/survey/response-header-config';
 
 import {
   getSurveyForResponse,
@@ -263,6 +264,9 @@ describe('survey-read.service getSurveyForResponse requireInviteToken', () => {
           responseHeader: {
             style: 'plain',
             titleSize: 'auto',
+            // 'right' 는 현재 surveys 행(logo-title 스타일 → composed 변환 시 titleAlign 'center')과도,
+            // composed 기본값('left')과도 겹치지 않는 판별값 — 스냅샷 값이 실제로 쓰였는지 구분 가능하게 한다.
+            titleAlign: 'right',
           },
         },
       },
@@ -270,11 +274,12 @@ describe('survey-read.service getSurveyForResponse requireInviteToken', () => {
 
     const result = await getSurveyForResponse({ surveyId });
 
-    expect(result?.survey.settings.responseHeader).toEqual({
-      style: 'plain',
-      titleSize: 'auto',
-      titleAlign: 'left',
-    });
+    const responseHeader = result?.survey.settings.responseHeader;
+    // v2 normalize 는 항상 composed 로 통합 변환한다 — v1 plain 리터럴 형태로 남지 않는다.
+    expect(responseHeader?.style).toBe('composed');
+    // titleAlign='right' 는 snapshot 전용 값. 코드가 현재 surveys 행(logo-title → 'center')을 잘못
+    // 사용했거나, 스냅샷을 무시하고 기본값('left')으로 fallback 했다면 이 값과 어긋난다.
+    expect(responseHeader?.titleAlign).toBe('right');
   });
 
   it('responseHeader 가 없는 기존 snapshot 은 현재 surveys 행이 아니라 새 기본형으로 fallback 한다', async () => {
@@ -309,11 +314,9 @@ describe('survey-read.service getSurveyForResponse requireInviteToken', () => {
 
     const result = await getSurveyForResponse({ surveyId });
 
-    expect(result?.survey.settings.responseHeader).toEqual({
-      style: 'plain',
-      titleSize: 'auto',
-      titleAlign: 'left',
-    });
+    // 스냅샷에 responseHeader 가 없는 이전 publish 본 — 현재 surveys 행(logo-title)이 아니라
+    // composed 기본값으로 fallback 해야 한다.
+    expect(result?.survey.settings.responseHeader).toEqual(DEFAULT_RESPONSE_HEADER_CONFIG);
   });
 
   it('requirePublished 옵션이면 배포 버전 없는 설문을 현재 draft 로 fallback 하지 않는다', async () => {
@@ -344,5 +347,154 @@ describe('survey-read.service getSurveyForResponse requireInviteToken', () => {
 
     expect(result).toBeNull();
     expect(getSurveyWithDetailsData).not.toHaveBeenCalled();
+  });
+});
+
+// getSurveyForResponse 의 control 페이로드(T7).
+// isPaused/pausedMessage 는 스냅샷 밖 라이브 값이므로 항상 현재 surveys 행에서 와야 하고,
+// testSession 은 testToken 유무 + isValidTestToken 판정으로 3분기한다.
+describe('survey-read.service getSurveyForResponse control', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  function baseSurveyRow(surveyId: string, overrides: Record<string, unknown> = {}) {
+    return {
+      id: surveyId,
+      currentVersionId: null,
+      requireInviteToken: false,
+      slug: null,
+      privateToken: null,
+      contactColumns: null,
+      contactEmail: null,
+      lookups: [],
+      isPaused: false,
+      pausedMessage: null,
+      testModeEnabled: false,
+      testToken: null,
+      createdAt: new Date('2026-06-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-06-01T00:00:00.000Z'),
+      ...overrides,
+    };
+  }
+
+  function mockFallbackDetails(surveyId: string) {
+    vi.mocked(getSurveyWithDetailsData).mockResolvedValue({
+      id: surveyId,
+      title: 'draft',
+      groups: [],
+      questions: [],
+      settings: {
+        isPublic: true,
+        allowMultipleResponses: false,
+        showProgressBar: true,
+        shuffleQuestions: false,
+        requireLogin: false,
+        thankYouMessage: '감사합니다',
+      },
+      createdAt: new Date('2026-06-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-06-01T00:00:00.000Z'),
+    } as unknown as SurveyType);
+  }
+
+  it('testToken 미전달이면 testSession=none 이다 (미배포 fallback 경로)', async () => {
+    const surveyId = 'survey-control-none';
+    surveysFindFirst.mockResolvedValue(baseSurveyRow(surveyId));
+    mockFallbackDetails(surveyId);
+
+    const result = await getSurveyForResponse({ surveyId });
+
+    expect(result?.control).toEqual({
+      isPaused: false,
+      pausedMessage: null,
+      testSession: 'none',
+    });
+  });
+
+  it('유효한 testToken 이면 testSession=valid 이다', async () => {
+    const surveyId = 'survey-control-valid';
+    surveysFindFirst.mockResolvedValue(
+      baseSurveyRow(surveyId, { testModeEnabled: true, testToken: 'tok-valid' }),
+    );
+    mockFallbackDetails(surveyId);
+
+    const result = await getSurveyForResponse({ surveyId, testToken: 'tok-valid' });
+
+    expect(result?.control.testSession).toBe('valid');
+  });
+
+  it('testModeEnabled=false 면 토큰이 일치해도 testSession=invalid 이다', async () => {
+    const surveyId = 'survey-control-invalid-mode-off';
+    surveysFindFirst.mockResolvedValue(
+      baseSurveyRow(surveyId, { testModeEnabled: false, testToken: 'tok-valid' }),
+    );
+    mockFallbackDetails(surveyId);
+
+    const result = await getSurveyForResponse({ surveyId, testToken: 'tok-valid' });
+
+    expect(result?.control.testSession).toBe('invalid');
+  });
+
+  it('testToken 이 불일치하면 testSession=invalid 이다', async () => {
+    const surveyId = 'survey-control-invalid-mismatch';
+    surveysFindFirst.mockResolvedValue(
+      baseSurveyRow(surveyId, { testModeEnabled: true, testToken: 'tok-valid' }),
+    );
+    mockFallbackDetails(surveyId);
+
+    const result = await getSurveyForResponse({ surveyId, testToken: 'tok-wrong' });
+
+    expect(result?.control.testSession).toBe('invalid');
+  });
+
+  it('isPaused/pausedMessage 는 현재 surveys 행 값을 그대로 전달한다 (미배포 fallback 경로)', async () => {
+    const surveyId = 'survey-control-paused-fallback';
+    surveysFindFirst.mockResolvedValue(
+      baseSurveyRow(surveyId, { isPaused: true, pausedMessage: '점검 중입니다' }),
+    );
+    mockFallbackDetails(surveyId);
+
+    const result = await getSurveyForResponse({ surveyId });
+
+    expect(result?.control.isPaused).toBe(true);
+    expect(result?.control.pausedMessage).toBe('점검 중입니다');
+  });
+
+  it('배포 스냅샷 경로에서도 control 은 스냅샷이 아니라 현재 surveys 행에서 온다', async () => {
+    const surveyId = 'survey-control-paused-snapshot';
+    surveysFindFirst.mockResolvedValue(
+      baseSurveyRow(surveyId, {
+        currentVersionId: 'ver-control-1',
+        isPaused: true,
+        pausedMessage: '점검 중입니다',
+        testModeEnabled: true,
+        testToken: 'tok-valid',
+      }),
+    );
+    surveyVersionsFindFirst.mockResolvedValue({
+      id: 'ver-control-1',
+      snapshot: {
+        title: '설문',
+        questions: [],
+        groups: [],
+        settings: {
+          isPublic: true,
+          allowMultipleResponses: false,
+          showProgressBar: true,
+          shuffleQuestions: false,
+          requireLogin: false,
+          thankYouMessage: '감사합니다',
+        },
+      },
+    });
+
+    const result = await getSurveyForResponse({ surveyId, testToken: 'tok-valid' });
+
+    expect(result?.versionId).toBe('ver-control-1');
+    expect(result?.control).toEqual({
+      isPaused: true,
+      pausedMessage: '점검 중입니다',
+      testSession: 'valid',
+    });
   });
 });

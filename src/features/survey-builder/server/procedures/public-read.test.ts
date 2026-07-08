@@ -57,4 +57,22 @@ describe('surveyBuilder.publicRead procedures', () => {
     const res = await client.publicRead.forResponse({ surveyId: SURVEY_ID });
     expect(res).toBeNull();
   });
+
+  it('forResponse(pub)는 testToken 을 그대로 위임하고 control 을 반환한다', async () => {
+    vi.mocked(surveySvc.getSurveyForResponse).mockResolvedValue({
+      survey: { id: SURVEY_ID },
+      versionId: VERSION_ID,
+      control: { isPaused: false, pausedMessage: null, testSession: 'valid' },
+    } as never);
+    const client = createRouterClient({ publicRead }, { context: anonContext() });
+    const res = await client.publicRead.forResponse({
+      surveyId: SURVEY_ID,
+      testToken: 'tok-1',
+    });
+    expect(surveySvc.getSurveyForResponse).toHaveBeenCalledWith({
+      surveyId: SURVEY_ID,
+      testToken: 'tok-1',
+    });
+    expect((res as { control: { testSession: string } }).control.testSession).toBe('valid');
+  });
 });

@@ -7,6 +7,7 @@ import { parsesurveyIdentifier } from '@/lib/survey-url';
 import type { SurveyVersionSnapshot } from '@/db/schema';
 import type { QuestionGroup, Survey } from '@/types/survey';
 import type { SaveAdminEditPayload } from '@/features/survey-response/domain/response-edit';
+import type { SurveyControl } from '@/features/survey-builder/domain/survey-read';
 
 type ResponsesMap = Record<string, unknown>;
 
@@ -35,6 +36,8 @@ interface UseSurveyLoaderArgs {
   adminContext: AdminContext | undefined;
   previewContext?: PreviewContext | undefined;
   inviteToken: string | null;
+  /** ?test=<token> — 테스트 링크 판정용. forResponse input 으로 그대로 전달한다(public 경로 전용). */
+  testToken: string | null;
   /**
    * 응답값 prefill 용 세터. responses state 는 컴포넌트가 소유하며
    * (handleResponse/handleSubmit 도 갱신하므로) 여기서는 admin-edit 초기 prefill
@@ -50,6 +53,11 @@ interface UseSurveyLoaderResult {
   contactAttrs: Record<string, string>;
   showInviteRequired: boolean;
   versionId: string | null;
+  /**
+   * 스냅샷 밖 라이브 제어값(중단 상태 + 테스트 링크 판정). public 응답 경로에서만 채워지며
+   * admin-edit/preview 모드는 null(중단/무효 링크 게이트 비대상). Survey 타입 밖 값이라 별도 반환.
+   */
+  control: SurveyControl | null;
 }
 
 /**
@@ -71,6 +79,7 @@ export function useSurveyLoader({
   adminContext,
   previewContext,
   inviteToken,
+  testToken,
   setResponses,
 }: UseSurveyLoaderArgs): UseSurveyLoaderResult {
   const [isLoading, setIsLoading] = useState(true);
@@ -81,6 +90,8 @@ export function useSurveyLoader({
   // requireInviteToken=true 설문에 invite 없이 접근 시 차단
   const [showInviteRequired, setShowInviteRequired] = useState(false);
   const [versionId, setVersionId] = useState<string | null>(null);
+  // 라이브 제어값(중단/테스트 링크) — public 경로에서만 set, 그 외 모드는 null 유지.
+  const [control, setControl] = useState<SurveyControl | null>(null);
 
   // URL 식별자로 설문 조회
   useEffect(() => {
@@ -192,7 +203,10 @@ export function useSurveyLoader({
           return;
         }
 
-        const result = await client.surveyBuilder.publicRead.forResponse({ surveyId });
+        const result = await client.surveyBuilder.publicRead.forResponse({
+          surveyId,
+          ...(testToken != null ? { testToken } : {}),
+        });
 
         if (!result) {
           setLoadError('요청하신 설문을 찾을 수 없습니다.');
@@ -203,6 +217,8 @@ export function useSurveyLoader({
         } else {
           setLoadedSurvey(result.survey);
           setVersionId(result.versionId);
+          // 라이브 제어값 — 렌더 게이트(중단/무효 링크) + 중복검사 skip 판정에 사용.
+          setControl(result.control);
 
           // requireInviteToken 체크 + attrs 로드
           if (result.survey.settings.requireInviteToken && !inviteToken) {
@@ -241,5 +257,5 @@ export function useSurveyLoader({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [identifier, isAdminEdit, isPreview]);
 
-  return { isLoading, loadedSurvey, loadError, contactAttrs, showInviteRequired, versionId };
+  return { isLoading, loadedSurvey, loadError, contactAttrs, showInviteRequired, versionId, control };
 }

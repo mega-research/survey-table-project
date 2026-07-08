@@ -21,9 +21,16 @@ export default async function OperationsLayout({ children, params }: LayoutProps
   const survey = await getSurveyById(surveyId);
   if (!survey || survey.deletedAt) notFound();
 
+  const control = {
+    isPaused: survey.isPaused,
+    pausedMessage: survey.pausedMessage,
+    testModeEnabled: survey.testModeEnabled,
+    testToken: survey.testToken,
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
-      <OperationsPageHeader surveyId={surveyId} surveyTitle={survey.title} />
+      <OperationsPageHeader surveyId={surveyId} surveyTitle={survey.title} control={control} />
       <OperationsTabStrip surveyId={surveyId} />
       {children}
     </div>

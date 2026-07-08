@@ -4,7 +4,7 @@ import { and, count, eq, inArray } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { contactTargets, surveyResponses, surveys } from '@/db/schema';
-import { completedResponse, notDeletedResponse } from '@/data/response-filters';
+import { completedResponse, notDeletedResponse, notTestResponse } from '@/data/response-filters';
 import { normalizeQuestions } from '@/lib/question';
 import { requireAuth } from '@/lib/auth';
 import { isAdminUserAllowed } from '@/lib/auth/admin-allowlist';
@@ -45,9 +45,12 @@ export async function GET(
     }
 
     // 1. 설문 데이터 조회
+    // questions 는 반드시 order 오름차순으로 조회한다. orderBy 가 없으면 drizzle relational
+    // query 가 ORDER BY 를 넣지 않아 Postgres 힙(물리) 순서를 따르고, 그 결과 SPSS/Raw
+    // 변수 순서가 문항 순서와 어긋나며 편집할 때마다 흔들린다.
     const surveyData = await db.query.surveys.findFirst({
       where: eq(surveys.id, surveyId),
-      with: { questions: true },
+      with: { questions: { orderBy: (q, { asc }) => [asc(q.order)] } },
     });
 
     if (!surveyData) {
@@ -65,7 +68,14 @@ export async function GET(
       const totalRows = await db
         .select({ total: count() })
         .from(surveyResponses)
-        .where(and(eq(surveyResponses.surveyId, surveyId), notDeletedResponse, completedResponse));
+        .where(
+          and(
+            eq(surveyResponses.surveyId, surveyId),
+            notDeletedResponse,
+            completedResponse,
+            notTestResponse,
+          ),
+        );
       const total = totalRows[0]?.total ?? 0;
 
       if (total > MAX_EXPORT_RESPONSES) {
@@ -76,7 +86,12 @@ export async function GET(
       }
 
       responses = await db.query.surveyResponses.findMany({
-        where: and(eq(surveyResponses.surveyId, surveyId), notDeletedResponse, completedResponse),
+        where: and(
+          eq(surveyResponses.surveyId, surveyId),
+          notDeletedResponse,
+          completedResponse,
+          notTestResponse,
+        ),
         orderBy: (responses, { desc }) => [desc(responses.createdAt)],
       });
     }
@@ -105,12 +120,13 @@ export async function GET(
 
     // 3. Raw Data xlsx
     if (type === 'raw') {
-      // raw 전용 모수: deleted 제외 + completed만 (행 포함 정책 통일)
+      // raw 전용 모수: deleted 제외 + completed만 + 테스트 응답 제외 (행 포함 정책 통일)
       const rawResponses = await db.query.surveyResponses.findMany({
         where: and(
           eq(surveyResponses.surveyId, surveyId),
           notDeletedResponse,
           completedResponse,
+          notTestResponse,
         ),
         orderBy: (r, { asc }) => [asc(r.startedAt)],
       });
@@ -186,6 +202,7 @@ export async function GET(
           eq(surveyResponses.surveyId, surveyId),
           notDeletedResponse,
           completedResponse,
+          notTestResponse,
         ),
         orderBy: (r, { asc }) => [asc(r.startedAt)],
       });

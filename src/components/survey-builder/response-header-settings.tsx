@@ -1,386 +1,562 @@
 'use client';
 
-import { ChevronDown, ImageIcon } from 'lucide-react';
+import { useEffect, useRef, useState, type InputHTMLAttributes } from 'react';
+
+import { Trash2 } from 'lucide-react';
 
 import { CellImageEditor } from '@/components/survey-builder/cell-image-editor';
 import { Button } from '@/components/ui/button';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
-  DEFAULT_STATISTIC_NOTICE,
+  applyResponseHeaderPreset,
+  coerceBlocksForInlineLayout,
+  createHeaderBlock,
   normalizeResponseHeaderConfig,
+  noticeFormatPatch,
+  resolveHeaderTitlePx,
+  resolveNoticeFontPx,
   responseHeaderButtonClass,
 } from '@/lib/survey/response-header-config';
 import type {
-  ResponseHeaderLogoAlign,
+  NormalizedHeaderImageBlock,
+  NormalizedHeaderNoticeBlock,
+  NormalizedResponseHeaderBlock,
+  NormalizedResponseHeaderConfig,
+  ResponseHeaderPresetKey,
+} from '@/lib/survey/response-header-config';
+import { cn } from '@/lib/utils';
+import type {
+  ResponseHeaderBlockPos,
+  ResponseHeaderBlockSize,
+  ResponseHeaderLayout,
   ResponseHeaderTitleAlign,
+  ResponseHeaderVAlign,
   SurveyResponseHeaderConfig,
 } from '@/db/schema/schema-types';
 import type { SurveySettings } from '@/types/survey';
 
 interface ResponseHeaderSettingsProps {
+  title: string; // 설문 제목 (단일 소스)
+  onTitleChange: (title: string) => void; // 모달이 updateSurveyTitle 연결
   settings: SurveySettings;
-  onChange: (config: SurveyResponseHeaderConfig) => void;
+  onChange: (config: SurveyResponseHeaderConfig) => void; // 항상 composed 방출
 }
 
-export function ResponseHeaderSettings({ settings, onChange }: ResponseHeaderSettingsProps) {
+// 블록 패치 — 타입별 필드를 전부 optional 로 합쳐 patchBlock 이 어떤 블록 타입이든
+// 부분 갱신 객체를 받을 수 있게 한다 (Partial<유니언> 은 공통 키로만 좁혀져 사용 불가).
+// discriminant(type)는 마크/로고('mark'|'logo')와 문구('notice')가 서로 겹치지 않아
+// 교집합 자체가 성립하지 않으므로 패치 대상에서 제외한다 (블록 타입은 애초에 패치 불필요).
+type BlockPatch = Partial<Omit<NormalizedHeaderImageBlock, 'type'>> & Partial<Omit<NormalizedHeaderNoticeBlock, 'type'>>;
+
+const PRESET_OPTIONS: Array<{ key: ResponseHeaderPresetKey; label: string }> = [
+  { key: 'gov', label: '국가통계형' },
+  { key: 'band', label: '컬러 밴드형' },
+  { key: 'title', label: '타이틀 중심형' },
+];
+
+const BAND_COLORS = ['#f0f0f0', '#ffffff', '#cfe0ad', '#dbe7f5', '#fbe9c8', '#ecdff0'];
+
+const ALIGN_OPTIONS: Array<[ResponseHeaderTitleAlign, string]> = [
+  ['left', '왼쪽'],
+  ['center', '중앙'],
+  ['right', '오른쪽'],
+];
+
+const VALIGN_OPTIONS: Array<[ResponseHeaderVAlign, string]> = [
+  ['top', '위'],
+  ['center', '중앙'],
+  ['bottom', '아래'],
+];
+
+const SIZE_OPTIONS: Array<[ResponseHeaderBlockSize, string]> = [
+  ['sm', '작게'],
+  ['md', '보통'],
+  ['lg', '크게'],
+];
+
+export function ResponseHeaderSettings({ title, onTitleChange, settings, onChange }: ResponseHeaderSettingsProps) {
   const config = normalizeResponseHeaderConfig(settings.responseHeader);
 
-  const setPlain = () =>
-    onChange({ style: 'plain', titleSize: config.titleSize ?? 'auto', titleAlign: config.titleAlign ?? 'left' });
-  const setLogoTitle = () =>
-    onChange({
-      style: 'logo-title',
-      titleSize: config.titleSize ?? 'auto',
-      titleAlign: config.titleAlign ?? 'center',
-      logo: {
-        imageUrl: config.style === 'plain' ? '' : config.logo.imageUrl,
-        altText: config.style === 'plain' ? '' : config.logo.altText ?? '',
-        size: config.style === 'plain' ? 'md' : config.logo.size ?? 'md',
-      },
-      logoTitle: {
-        logoPosition:
-          config.style === 'logo-title' ? config.logoTitle?.logoPosition ?? 'left' : 'left',
-      },
-    });
-  const setOfficialBand = () =>
-    onChange({
-      style: 'official-band',
-      titleSize: config.titleSize ?? 'auto',
-      titleAlign: config.titleAlign ?? 'center',
-      logo: {
-        imageUrl: config.style === 'plain' ? '' : config.logo.imageUrl,
-        altText: config.style === 'plain' ? '' : config.logo.altText ?? '',
-        size: config.style === 'plain' ? 'md' : config.logo.size ?? 'md',
-      },
-      officialBand: {
-        arrangement:
-          config.style === 'official-band'
-            ? config.officialBand?.arrangement ?? 'stat-left-logo-right'
-            : 'stat-left-logo-right',
-        logoAlign:
-          config.style === 'official-band' ? config.officialBand?.logoAlign ?? 'top' : 'top',
-        statisticNotice:
-          config.style === 'official-band'
-            ? {
-                title:
-                  config.officialBand?.statisticNotice?.title ?? DEFAULT_STATISTIC_NOTICE.title,
-                body: config.officialBand?.statisticNotice?.body ?? DEFAULT_STATISTIC_NOTICE.body,
-                width: config.officialBand?.statisticNotice?.width ?? 'md',
-              }
-            : {
-                ...DEFAULT_STATISTIC_NOTICE,
-                width: 'md',
-              },
-      },
-    });
+  const patch = (p: Partial<NormalizedResponseHeaderConfig>) => onChange({ ...config, ...p });
+  const patchBlock = (id: string, p: BlockPatch) =>
+    patch({ blocks: config.blocks.map((b) => (b.id === id ? ({ ...b, ...p } as NormalizedResponseHeaderBlock) : b)) });
+  const removeBlock = (id: string) => patch({ blocks: config.blocks.filter((b) => b.id !== id) });
+  const addBlock = (type: 'mark' | 'logo' | 'notice') => patch({ blocks: [...config.blocks, createHeaderBlock(type)] });
+  const setLayout = (layout: ResponseHeaderLayout) =>
+    patch(layout === 'inline' ? { layout, blocks: coerceBlocksForInlineLayout(config.blocks) } : { layout });
+  const applyPreset = (key: ResponseHeaderPresetKey) => onChange(applyResponseHeaderPreset(key, config));
 
-  const updateLogoUrl = (imageUrl: string) => {
-    if (config.style === 'plain') return;
-    onChange({
-      ...config,
-      logo: {
-        ...config.logo,
-        imageUrl,
-      },
-    });
-  };
+  return (
+    <div className="space-y-6">
+      {/* 1. 프리셋 */}
+      <div className="space-y-2">
+        <Label className="text-xs text-gray-600">프리셋</Label>
+        <div className="grid grid-cols-2 gap-2">
+          {PRESET_OPTIONS.map(({ key, label }) => (
+            <Button
+              key={key}
+              type="button"
+              variant="outline"
+              size="sm"
+              aria-label={`프리셋 ${label}`}
+              className={cn(responseHeaderButtonClass(false), 'h-auto flex-col items-stretch gap-2 py-3')}
+              onClick={() => applyPreset(key)}
+            >
+              <PresetThumbnail preset={key} />
+              <span>{label}</span>
+            </Button>
+          ))}
+        </div>
+      </div>
 
-  const updateLogoPosition = (logoPosition: 'left' | 'right') => {
-    if (config.style !== 'logo-title') return;
-    onChange({
-      ...config,
-      logoTitle: { logoPosition },
-    });
-  };
+      {/* 2. 구성 요소 */}
+      <div className="space-y-3 border-t border-gray-200 pt-4">
+        <Label className="text-xs text-gray-600">구성 요소</Label>
+        {config.blocks.length === 0 && (
+          <p className="text-xs text-gray-400">추가된 블록이 없습니다. 아래에서 블록을 추가하세요.</p>
+        )}
+        {config.blocks.map((block) => (
+          <BlockCard
+            key={block.id}
+            block={block}
+            layout={config.layout}
+            onPatch={(p) => patchBlock(block.id, p)}
+            onRemove={() => removeBlock(block.id)}
+          />
+        ))}
 
-  const updateArrangement = (
-    arrangement: 'stat-left-logo-right' | 'logo-left-stat-right',
-  ) => {
-    if (config.style !== 'official-band') return;
-    onChange({
-      ...config,
-      officialBand: {
-        ...config.officialBand,
-        arrangement,
-      },
-    });
-  };
+        {/* 3. 추가 버튼 행 */}
+        <div className="grid grid-cols-3 gap-2">
+          <Button type="button" variant="outline" size="sm" className="border-dashed" onClick={() => addBlock('logo')}>
+            + 로고
+          </Button>
+          <Button type="button" variant="outline" size="sm" className="border-dashed" onClick={() => addBlock('mark')}>
+            + 국가통계
+          </Button>
+          <Button type="button" variant="outline" size="sm" className="border-dashed" onClick={() => addBlock('notice')}>
+            + OO법 문구
+          </Button>
+        </div>
+      </div>
 
-  const updateStatisticNotice = (field: 'title' | 'body', value: string) => {
-    if (config.style !== 'official-band') return;
-    onChange({
-      ...config,
-      officialBand: {
-        ...config.officialBand,
-        statisticNotice: {
-          title: config.officialBand?.statisticNotice?.title ?? DEFAULT_STATISTIC_NOTICE.title,
-          body: config.officialBand?.statisticNotice?.body ?? DEFAULT_STATISTIC_NOTICE.body,
-          width: config.officialBand?.statisticNotice?.width ?? 'md',
-          [field]: value,
-        },
-      },
-    });
-  };
+      {/* 4. 배치 */}
+      <div className="space-y-3 border-t border-gray-200 pt-4">
+        <PresetButtonGroup
+          label="배치"
+          value={config.layout}
+          options={[
+            ['stacked', '제목 위 배치'],
+            ['inline', '제목 옆 배치'],
+          ]}
+          columns={2}
+          onChange={setLayout}
+        />
+        {config.layout === 'stacked' && (
+          <>
+            <PresetButtonGroup
+              label="로고 정렬"
+              value={config.vAlignLogo}
+              options={VALIGN_OPTIONS}
+              columns={3}
+              onChange={(vAlignLogo) => patch({ vAlignLogo })}
+            />
+            <PresetButtonGroup
+              label="문구 정렬"
+              value={config.vAlignNotice}
+              options={VALIGN_OPTIONS}
+              columns={3}
+              onChange={(vAlignNotice) => patch({ vAlignNotice })}
+            />
+          </>
+        )}
+      </div>
 
-  const updateLogoSize = (size: 'sm' | 'md' | 'lg') => {
-    if (config.style === 'plain') return;
-    onChange({
-      ...config,
-      logo: {
-        ...config.logo,
-        size,
-      },
-    });
-  };
+      {/* 5. 제목 */}
+      <div className="space-y-3 border-t border-gray-200 pt-4">
+        <div className="space-y-2">
+          <Label htmlFor="header-title" className="text-xs text-gray-600">
+            제목
+          </Label>
+          <Input id="header-title" value={title} onChange={(e) => onTitleChange(e.target.value)} />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="header-subtitle" className="text-xs text-gray-600">
+            부제목
+          </Label>
+          <Input
+            id="header-subtitle"
+            value={config.subtitle}
+            placeholder="부제목 (비우면 숨김)"
+            onChange={(e) => patch({ subtitle: e.target.value })}
+          />
+        </div>
+        <PresetButtonGroup
+          label="위치"
+          value={config.titleAlign}
+          options={ALIGN_OPTIONS}
+          columns={3}
+          onChange={(titleAlign) => patch({ titleAlign })}
+        />
+        <PresetButtonGroup
+          label="텍스트 정렬"
+          value={config.titleTextAlign}
+          options={ALIGN_OPTIONS}
+          columns={3}
+          onChange={(titleTextAlign) => patch({ titleTextAlign })}
+        />
+        <PresetButtonGroup
+          label="세로 위치"
+          value={config.titleVAlign}
+          options={VALIGN_OPTIONS}
+          columns={3}
+          onChange={(titleVAlign) => patch({ titleVAlign })}
+        />
+        <PresetButtonGroup
+          label="크기"
+          value={config.titlePx !== null ? null : config.titleScale}
+          options={SIZE_OPTIONS}
+          columns={3}
+          onChange={(titleScale) => patch({ titleScale, titlePx: null })}
+        />
+        <div className="space-y-2">
+          <Label htmlFor="header-title-px" className="text-xs text-gray-600">
+            제목 크기 직접 지정 (px)
+          </Label>
+          <div className="flex items-center gap-2">
+            <ClampedNumberInput
+              id="header-title-px"
+              min={14}
+              max={72}
+              value={config.titlePx}
+              autoValue={resolveHeaderTitlePx(config, title)}
+              onCommit={(titlePx) => patch({ titlePx })}
+              className="w-24"
+            />
+            <Button type="button" variant="ghost" size="sm" onClick={() => patch({ titlePx: null })}>
+              자동
+            </Button>
+          </div>
+        </div>
+      </div>
 
-  const updateTitleSize = (titleSize: 'auto' | 'md' | 'lg') => {
-    onChange({
-      ...config,
-      titleSize,
-    });
-  };
+      {/* 6. 제목 밴드 */}
+      <div className="space-y-3 border-t border-gray-200 pt-4">
+        <PresetButtonGroup
+          label="제목 밴드 스타일"
+          value={config.bandStyle}
+          options={[
+            ['band', '상하 괘선'],
+            ['boxed', '테두리 박스'],
+            ['rule', '밑줄만'],
+            ['plain', '없음'],
+          ]}
+          columns={2}
+          onChange={(bandStyle) => patch({ bandStyle })}
+        />
+        <div className="space-y-2">
+          <Label className="text-xs text-gray-600">밴드 배경</Label>
+          <div className="flex flex-wrap items-center gap-2">
+            {BAND_COLORS.map((color) => (
+              <button
+                key={color}
+                type="button"
+                aria-label={`밴드 배경 ${color}`}
+                aria-pressed={config.bandBg === color}
+                className={cn(
+                  'h-8 w-8 rounded-full border border-gray-300',
+                  config.bandBg === color && 'ring-2 ring-offset-1 ring-blue-500',
+                )}
+                style={{ backgroundColor: color }}
+                onClick={() => patch({ bandBg: color })}
+              />
+            ))}
+            <input
+              type="color"
+              value={config.bandBg}
+              onChange={(e) => patch({ bandBg: e.target.value })}
+              aria-label="밴드 배경 직접 선택"
+              className="h-8 w-10 cursor-pointer rounded border border-gray-200"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
-  const updateTitleAlign = (titleAlign: ResponseHeaderTitleAlign) => {
-    onChange({ ...config, titleAlign });
-  };
+function PresetThumbnail({ preset }: { preset: ResponseHeaderPresetKey }) {
+  // 목업 참고 미니 스키매틱 — 단순 div 조합 (과한 장식 없이 형태만 암시)
+  if (preset === 'gov') {
+    return (
+      <div className="flex h-10 w-full flex-col justify-between border-t-2 border-b-2 border-gray-400 bg-gray-50 px-2 py-1">
+        <div className="h-1 w-8 rounded-full bg-gray-300" />
+        <div className="mx-auto h-1.5 w-12 rounded-full bg-gray-500" />
+      </div>
+    );
+  }
+  if (preset === 'band') {
+    return (
+      <div className="flex h-10 w-full divide-x divide-gray-400 border border-gray-400 bg-gray-50">
+        <div className="w-4 bg-gray-300" />
+        <div className="flex flex-1 items-center justify-center">
+          <div className="h-1.5 w-10 rounded-full bg-gray-500" />
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="flex h-10 w-full flex-col justify-center gap-1 bg-gray-50 px-2">
+      <div className="h-1.5 w-14 rounded-full bg-gray-500" />
+      <div className="h-1.5 w-9 rounded-full bg-gray-300" />
+    </div>
+  );
+}
 
-  const updateLogoAlign = (logoAlign: ResponseHeaderLogoAlign) => {
-    if (config.style !== 'official-band') return;
-    onChange({
-      ...config,
-      officialBand: {
-        ...config.officialBand,
-        logoAlign,
-      },
-    });
-  };
+function blockName(block: NormalizedResponseHeaderBlock): string {
+  // 'notice' 를 먼저 양성 판별해야 나머지 분기에서 image 유니언 멤버가 확실히 배제된다
+  // (mark|logo 처럼 판별값이 리터럴 유니언인 멤버는 순차 소거만으로는 좁혀지지 않는다).
+  if (block.type === 'notice') {
+    const prefix = block.title.slice(0, 20);
+    return prefix || '문구';
+  }
+  if (block.type === 'mark') return '국가통계 마크';
+  return `로고 · ${block.altText || '자리표시자'}`;
+}
 
-  const updateNoticeWidth = (width: 'sm' | 'md' | 'lg') => {
-    if (config.style !== 'official-band') return;
-    onChange({
-      ...config,
-      officialBand: {
-        ...config.officialBand,
-        statisticNotice: {
-          title: config.officialBand?.statisticNotice?.title ?? DEFAULT_STATISTIC_NOTICE.title,
-          body: config.officialBand?.statisticNotice?.body ?? DEFAULT_STATISTIC_NOTICE.body,
-          width,
-        },
-      },
-    });
+function BlockCard({
+  block,
+  layout,
+  onPatch,
+  onRemove,
+}: {
+  block: NormalizedResponseHeaderBlock;
+  layout: ResponseHeaderLayout;
+  onPatch: (p: BlockPatch) => void;
+  onRemove: () => void;
+}) {
+  const isLineNotice = block.type === 'notice' && block.format === 'line';
+  const posOptions: Array<[ResponseHeaderBlockPos, string]> = isLineNotice
+    ? [
+        ['above', '제목 위'],
+        ['below', '제목 아래'],
+      ]
+    : layout === 'inline'
+      ? [
+          ['left', '좌'],
+          ['right', '우'],
+        ]
+      : [
+          ['left', '좌'],
+          ['center', '중'],
+          ['right', '우'],
+          ['title-left', '제목 좌'],
+          ['title-right', '제목 우'],
+        ];
+  const posColumns = isLineNotice || layout === 'inline' ? 2 : 5;
+
+  return (
+    <div className="space-y-3 rounded-lg border border-gray-200 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <span className="truncate text-sm font-medium text-gray-700">{blockName(block)}</span>
+        <Button type="button" variant="ghost" size="sm" aria-label={`${blockName(block)} 삭제`} onClick={onRemove}>
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </div>
+
+      <PresetButtonGroup label="위치" value={block.pos} options={posOptions} columns={posColumns} onChange={(pos) => onPatch({ pos })} />
+      <PresetButtonGroup label="크기" value={block.size} options={SIZE_OPTIONS} columns={3} onChange={(size) => onPatch({ size })} />
+
+      {(block.type === 'mark' || block.type === 'logo') && (
+        <>
+          <PresetButtonGroup
+            label="이미지 선"
+            value={block.frame}
+            options={[
+              ['none', '없음'],
+              ['line', '테두리'],
+              ['wrap', '컨테이너'],
+            ]}
+            columns={3}
+            onChange={(frame) => onPatch({ frame })}
+          />
+          <div className="space-y-2">
+            <Label className="text-xs text-gray-600">이미지</Label>
+            <CellImageEditor imageUrl={block.imageUrl} onImageUrlChange={(imageUrl) => onPatch({ imageUrl })} />
+          </div>
+        </>
+      )}
+
+      {block.type === 'notice' && (
+        <>
+          <PresetButtonGroup
+            label="형식"
+            value={block.format}
+            options={[
+              ['box', '박스형'],
+              ['line', '한줄형'],
+            ]}
+            columns={2}
+            onChange={(format) => onPatch(noticeFormatPatch(block, format))}
+          />
+          <PresetButtonGroup
+            label="텍스트 정렬"
+            value={block.format === 'box' ? block.alignBox : block.alignLine}
+            options={ALIGN_OPTIONS}
+            columns={3}
+            onChange={(align) => onPatch(block.format === 'box' ? { alignBox: align } : { alignLine: align })}
+          />
+          <div className="space-y-2">
+            <Label htmlFor={`header-notice-title-${block.id}`} className="text-xs text-gray-600">
+              문구 제목
+            </Label>
+            <Input
+              id={`header-notice-title-${block.id}`}
+              value={block.title}
+              onChange={(e) => onPatch({ title: e.target.value })}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor={`header-notice-box-${block.id}`} className="text-xs text-gray-600">
+              박스형 문구
+            </Label>
+            <Textarea
+              id={`header-notice-box-${block.id}`}
+              rows={3}
+              value={block.boxBody}
+              onChange={(e) => onPatch({ boxBody: e.target.value })}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor={`header-notice-line-${block.id}`} className="text-xs text-gray-600">
+              한줄형 문구 (모바일 전환 시 사용)
+            </Label>
+            <Textarea
+              id={`header-notice-line-${block.id}`}
+              rows={2}
+              value={block.lineBody}
+              onChange={(e) => onPatch({ lineBody: e.target.value })}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor={`header-notice-font-size-${block.id}`} className="text-xs text-gray-600">
+              글자 크기
+            </Label>
+            <div className="flex items-center gap-2">
+              <ClampedNumberInput
+                id={`header-notice-font-size-${block.id}`}
+                min={9}
+                max={28}
+                step={0.5}
+                value={block.fontSize}
+                autoValue={resolveNoticeFontPx(block)}
+                onCommit={(fontSize) => onPatch({ fontSize })}
+                className="w-24"
+              />
+              <Button type="button" variant="ghost" size="sm" onClick={() => onPatch({ fontSize: null })}>
+                자동
+              </Button>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// 클램프가 필요한 숫자 입력(제목 크기 직접 지정 / 문구 글자 크기) 전용 — keystroke마다
+// store에 commit하면 normalize 클램프가 즉시 되돌아와("3" 입력 즉시 14로 강제 등) 다자리
+// 값을 타이핑으로 완성할 수 없다. 로컬 draft로 타이핑을 받고 blur/Enter에서만 파싱·클램프해
+// commit한다. 외부에서 값이 바뀌면(자동 버튼, 프리셋 적용 등) draft를 재동기화하되, 포커스
+// 중에는 덮어쓰지 않는다(패널 내 여러 인스턴스가 각자 로컬 state로 격리되어 서로 간섭하지 않음).
+//
+// value가 null(자동)이면 draft는 빈칸이 아니라 autoValue(현재 적용 중인 계산값)를 표시한다
+// (목업 동작). 또한 draft가 마지막 동기화 기준값(baseline)과 같으면 "무편집 blur"로 보고
+// commit을 건너뛴다 — 포커스만 갔다 나온 경우 자동 상태가 explicit 값으로 바뀌어버리는 것을
+// 막고, explicit 값 상태에서도 불필요한 동일 값 재커밋(no-op commit)을 없앤다.
+type ClampedNumberInputProps = {
+  id?: string;
+  value: number | null;
+  /** value가 null일 때 입력칸에 보여줄 실효값(자동 계산값) */
+  autoValue: number;
+  min: number;
+  max: number;
+  step?: number;
+  onCommit: (value: number | null) => void;
+  className?: string;
+} & Omit<
+  InputHTMLAttributes<HTMLInputElement>,
+  'id' | 'value' | 'min' | 'max' | 'step' | 'className' | 'type' | 'onChange' | 'onBlur' | 'onKeyDown'
+>;
+
+function ClampedNumberInput({
+  id,
+  value,
+  autoValue,
+  min,
+  max,
+  step,
+  onCommit,
+  className,
+  ...aria
+}: ClampedNumberInputProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const displayOf = (v: number | null) => (v === null ? String(autoValue) : String(v));
+  const [draft, setDraft] = useState(() => displayOf(value));
+  // draft를 마지막으로 동기화한 기준값 — blur 시 draft가 이 값과 같으면 편집이 없었던 것이므로
+  // commit 자체를 생략한다(자동 상태 해제 방지 + explicit 값의 무의미한 재commit 방지).
+  const baselineRef = useRef(displayOf(value));
+
+  // document.activeElement(외부 시스템인 브라우저 포커스 상태)를 읽어야만 "타이핑 중" 여부를
+  // 판단할 수 있어 effect가 필요하다 — 포커스 중엔 외부 value/autoValue 변경으로 draft를 덮어쓰지 않는다.
+  useEffect(() => {
+    if (document.activeElement !== inputRef.current) {
+      const next = displayOf(value);
+      setDraft(next);
+      baselineRef.current = next;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, autoValue]);
+
+  const commit = () => {
+    if (draft === baselineRef.current) return; // 무편집 blur — 자동/기존 값 그대로 유지
+    if (draft === '') {
+      baselineRef.current = draft;
+      onCommit(null);
+      return;
+    }
+    const parsed = Number(draft);
+    if (Number.isNaN(parsed)) {
+      setDraft(baselineRef.current); // 파싱 불가 시 마지막 동기화 값으로 되돌림
+      return;
+    }
+    const clamped = Math.min(max, Math.max(min, parsed));
+    setDraft(String(clamped));
+    baselineRef.current = String(clamped);
+    onCommit(clamped);
   };
 
   return (
-    <section className="space-y-4 border-t border-gray-200 pt-6">
-      <div>
-        <h4 className="text-sm font-medium text-gray-700">응답 페이지 헤더</h4>
-        <p className="mt-1 text-xs text-gray-400">설문지 원본과 비슷한 머리말을 표시합니다.</p>
-      </div>
-
-      <div className="grid grid-cols-2 gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          aria-pressed={config.style === 'plain'}
-          className={responseHeaderButtonClass(config.style === 'plain')}
-          onClick={setPlain}
-        >
-          기본형
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          aria-pressed={config.style === 'logo-title'}
-          className={responseHeaderButtonClass(config.style === 'logo-title')}
-          onClick={setLogoTitle}
-        >
-          제목 옆 로고형
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          aria-pressed={config.style === 'official-band'}
-          className={responseHeaderButtonClass(config.style === 'official-band') + ' col-span-2'}
-          onClick={setOfficialBand}
-        >
-          양끝 정보형
-        </Button>
-      </div>
-
-      <PresetButtonGroup
-        label="제목 정렬"
-        value={config.titleAlign ?? 'center'}
-        options={[
-          ['left', '왼쪽'],
-          ['center', '중앙'],
-          ['right', '오른쪽'],
-        ]}
-        onChange={updateTitleAlign}
-      />
-
-      {config.style !== 'plain' && (
-        <div className="space-y-3">
-          <div className="space-y-2">
-            <Label className="text-xs text-gray-600">
-              <ImageIcon className="mr-1 inline h-3.5 w-3.5" />
-              로고 이미지
-            </Label>
-            <CellImageEditor imageUrl={config.logo.imageUrl} onImageUrlChange={updateLogoUrl} />
-          </div>
-
-          {config.style === 'logo-title' && (
-            <div className="space-y-2">
-              <Label className="text-xs text-gray-600">로고 위치</Label>
-              <div className="grid grid-cols-2 gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  aria-pressed={config.logoTitle?.logoPosition !== 'right'}
-                  className={responseHeaderButtonClass(config.logoTitle?.logoPosition !== 'right')}
-                  onClick={() => updateLogoPosition('left')}
-                >
-                  왼쪽
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  aria-pressed={config.logoTitle?.logoPosition === 'right'}
-                  className={responseHeaderButtonClass(config.logoTitle?.logoPosition === 'right')}
-                  onClick={() => updateLogoPosition('right')}
-                >
-                  오른쪽
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {config.style === 'official-band' && (
-            <div className="space-y-3">
-              <div className="space-y-2">
-                <Label className="text-xs text-gray-600">양끝 배치</Label>
-                <div className="grid grid-cols-2 gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    aria-pressed={config.officialBand?.arrangement !== 'logo-left-stat-right'}
-                    className={responseHeaderButtonClass(
-                      config.officialBand?.arrangement !== 'logo-left-stat-right',
-                    )}
-                    onClick={() => updateArrangement('stat-left-logo-right')}
-                  >
-                    통계법 왼쪽
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    aria-pressed={config.officialBand?.arrangement === 'logo-left-stat-right'}
-                    className={responseHeaderButtonClass(
-                      config.officialBand?.arrangement === 'logo-left-stat-right',
-                    )}
-                    onClick={() => updateArrangement('logo-left-stat-right')}
-                  >
-                    로고 왼쪽
-                  </Button>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label className="text-xs text-gray-600">로고 세로 정렬</Label>
-                <div className="grid grid-cols-3 gap-2">
-                  <Button type="button" variant="outline" size="sm" aria-pressed={config.officialBand?.logoAlign === 'top' || !config.officialBand?.logoAlign} className={responseHeaderButtonClass(config.officialBand?.logoAlign === 'top' || !config.officialBand?.logoAlign)} onClick={() => updateLogoAlign('top')}>
-                    위
-                  </Button>
-                  <Button type="button" variant="outline" size="sm" aria-pressed={config.officialBand?.logoAlign === 'center'} className={responseHeaderButtonClass(config.officialBand?.logoAlign === 'center')} onClick={() => updateLogoAlign('center')}>
-                    중앙
-                  </Button>
-                  <Button type="button" variant="outline" size="sm" aria-pressed={config.officialBand?.logoAlign === 'bottom'} className={responseHeaderButtonClass(config.officialBand?.logoAlign === 'bottom')} onClick={() => updateLogoAlign('bottom')}>
-                    아래
-                  </Button>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="response-header-stat-title" className="text-xs text-gray-600">
-                  통계법 제목
-                </Label>
-                <Input
-                  id="response-header-stat-title"
-                  value={
-                    config.officialBand?.statisticNotice?.title ?? DEFAULT_STATISTIC_NOTICE.title
-                  }
-                  onChange={(event) => updateStatisticNotice('title', event.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="response-header-stat-body" className="text-xs text-gray-600">
-                  통계법 문구
-                </Label>
-                <Textarea
-                  id="response-header-stat-body"
-                  value={
-                    config.officialBand?.statisticNotice?.body ?? DEFAULT_STATISTIC_NOTICE.body
-                  }
-                  onChange={(event) => updateStatisticNotice('body', event.target.value)}
-                />
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      <Collapsible>
-        <CollapsibleTrigger asChild>
-          <Button type="button" variant="ghost" size="sm" className="w-full justify-between">
-            세부 조정
-            <ChevronDown className="h-4 w-4" />
-          </Button>
-        </CollapsibleTrigger>
-        <CollapsibleContent className="space-y-4 pt-3">
-          {config.style !== 'plain' && (
-            <PresetButtonGroup
-              label="로고 크기"
-              value={config.logo.size ?? 'md'}
-              options={[
-                ['sm', '작게'],
-                ['md', '보통'],
-                ['lg', '크게'],
-              ]}
-              onChange={updateLogoSize}
-            />
-          )}
-          <PresetButtonGroup
-            label="제목 크기"
-            value={config.titleSize ?? 'auto'}
-            options={[
-              ['auto', '자동'],
-              ['md', '보통'],
-              ['lg', '크게'],
-            ]}
-            onChange={updateTitleSize}
-          />
-          {config.style === 'official-band' && (
-            <PresetButtonGroup
-              label="통계법 박스 폭"
-              value={config.officialBand?.statisticNotice?.width ?? 'md'}
-              options={[
-                ['sm', '좁게'],
-                ['md', '보통'],
-                ['lg', '넓게'],
-              ]}
-              onChange={updateNoticeWidth}
-            />
-          )}
-        </CollapsibleContent>
-      </Collapsible>
-    </section>
+    <Input
+      ref={inputRef}
+      id={id}
+      type="number"
+      min={min}
+      max={max}
+      step={step}
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          commit();
+        }
+      }}
+      className={className}
+      {...aria}
+    />
   );
 }
 
@@ -389,16 +565,19 @@ function PresetButtonGroup<T extends string>({
   value,
   options,
   onChange,
+  columns = 3,
 }: {
   label: string;
-  value: T;
+  value: T | null;
   options: Array<[T, string]>;
   onChange: (value: T) => void;
+  columns?: number;
 }) {
+  const grid = { 2: 'grid-cols-2', 3: 'grid-cols-3', 4: 'grid-cols-4', 5: 'grid-cols-5' }[columns] ?? 'grid-cols-3';
   return (
     <div className="space-y-2">
       <Label className="text-xs text-gray-600">{label}</Label>
-      <div className="grid grid-cols-3 gap-2">
+      <div className={`grid ${grid} gap-2`}>
         {options.map(([optionValue, optionLabel]) => (
           <Button
             key={optionValue}

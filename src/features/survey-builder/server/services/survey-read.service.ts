@@ -14,6 +14,7 @@ import {
   type VariableDef,
 } from '@/components/operations/mail-template/variable-catalog';
 import { normalizeQuestions } from '@/lib/question';
+import { isValidTestToken } from '@/lib/survey-control';
 import { normalizeResponseHeaderConfig } from '@/lib/survey/response-header-config';
 import type { QuestionGroup, Question as QuestionType, Survey as SurveyType } from '@/types/survey';
 import { generateAllCellCodes } from '@/utils/table-cell-code-generator';
@@ -22,8 +23,9 @@ import type {
   SlugAvailableInput,
   SurveyBySlugInput,
   SurveyByPrivateTokenInput,
+  SurveyForResponseInput,
   SurveyForResponseResult,
-  SurveyIdInput,
+  SurveyIdRow,
   SurveyListItem,
 } from '../../domain/survey-read';
 
@@ -143,30 +145,52 @@ export async function getSurveyListWithCounts(): Promise<SurveyListItem[]> {
 // 공개(pub) 응답자 조회 — requireAuth 없음
 // ========================
 
-// 슬러그로 설문 조회
-export async function getSurveyBySlug(input: SurveyBySlugInput) {
+// 슬러그로 설문 조회 (pub — 익명 응답자 진입).
+// 익명 노출 경로이므로 full row 를 반환하지 않고 호출자(use-survey-loader)가 실제 쓰는 id 만
+// 투영한다. testToken/testModeEnabled/isPaused/pausedMessage/privateToken 유출 차단(I-3).
+export async function getSurveyBySlug(
+  input: SurveyBySlugInput,
+): Promise<SurveyIdRow | undefined> {
   const survey = await db.query.surveys.findFirst({
     where: eq(surveys.slug, input.slug),
+    columns: { id: true },
   });
   return survey;
 }
 
-// 비공개 토큰으로 설문 조회
-export async function getSurveyByPrivateToken(input: SurveyByPrivateTokenInput) {
+// 비공개 토큰으로 설문 조회 (pub). 토큰으로 조회하되(로직 유지) 반환은 id 만 투영(I-3).
+export async function getSurveyByPrivateToken(
+  input: SurveyByPrivateTokenInput,
+): Promise<SurveyIdRow | undefined> {
   const survey = await db.query.surveys.findFirst({
     where: eq(surveys.privateToken, input.token),
+    columns: { id: true },
   });
   return survey;
 }
 
 // 응답 페이지용 설문 조회 (배포 버전 스냅샷 우선, fallback 기존 방식)
 export async function getSurveyForResponse(
-  input: SurveyIdInput,
+  input: SurveyForResponseInput,
   options: { requirePublished?: boolean } = {},
 ): Promise<SurveyForResponseResult> {
   const { surveyId } = input;
   const survey = await getSurveyById(surveyId);
   if (!survey) return null;
+
+  // 응답 페이지 첫 화면 게이트용 라이브 제어값. snapshot 밖 값이므로 항상 현재
+  // surveys 행에서 읽는다 — snapshot.settings 에서 가져오면 안 된다.
+  const testSession: 'none' | 'valid' | 'invalid' =
+    input.testToken == null
+      ? 'none'
+      : isValidTestToken(survey, input.testToken)
+        ? 'valid'
+        : 'invalid';
+  const control = {
+    isPaused: survey.isPaused,
+    pausedMessage: survey.pausedMessage,
+    testSession,
+  };
 
   // 배포된 버전이 있으면 스냅샷 기반으로 반환
   if (survey.currentVersionId) {
@@ -237,12 +261,16 @@ export async function getSurveyForResponse(
         },
         lookups: snapshot.lookups ?? survey.lookups ?? [],
         ...(survey.contactColumns != null ? { contactColumns: survey.contactColumns } : {}),
+        quotaGate:
+          survey.quotaConfig && survey.quotaConfig.enabled
+            ? { questionIds: survey.quotaConfig.dimensions.map((d) => d.questionId) }
+            : null,
         contactEmail: survey.contactEmail ?? null,
         createdAt: survey.createdAt,
         updatedAt: survey.updatedAt,
       };
 
-      return { survey: surveyData, versionId: version.id };
+      return { survey: surveyData, versionId: version.id, control };
     }
   }
 
@@ -252,7 +280,12 @@ export async function getSurveyForResponse(
   const surveyData = await getSurveyWithDetails(surveyId);
   if (!surveyData) return null;
 
-  return { survey: surveyData, versionId: null };
+  const quotaGate =
+    survey.quotaConfig && survey.quotaConfig.enabled
+      ? { questionIds: survey.quotaConfig.dimensions.map((d) => d.questionId) }
+      : null;
+
+  return { survey: { ...surveyData, quotaGate }, versionId: null, control };
 }
 
 // ========================

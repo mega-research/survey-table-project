@@ -37,6 +37,8 @@ const TRIM = 0.025;
  *   - drop 의 마지막 visit 는 leftAt 미설정 가능 → SQL WHERE 절이 자동 skip.
  *   - SQL FILTER 조건은 page-dwell.ts 의 `trimmedStats` 와 동등:
  *     JS slice(trimCount, n - trimCount) ⇔ SQL rn > trimCount AND rn <= n - trimCount.
+ *   - `sr.is_test = false` — 테스트 응답은 체류시간 모수에서 제외(notTestResponse 와 동일
+ *     의미, raw SQL 컨텍스트라 인라인 유지).
  */
 export async function getPageDwell(surveyId: string): Promise<DwellOutput> {
   // ── A) snapshot 로드 + 캐노니컬 step ─────────────────────────────────────
@@ -72,6 +74,7 @@ export async function getPageDwell(surveyId: string): Promise<DwellOutput> {
       LATERAL jsonb_array_elements(sr.page_visits) AS visit
       WHERE sr.survey_id = ${surveyId}::uuid
         AND sr.status IN ('completed', 'drop')
+        AND sr.is_test = false
         AND jsonb_array_length(sr.page_visits) > 0
         AND visit->>'stepId' IS NOT NULL
         AND visit->>'leftAt' IS NOT NULL

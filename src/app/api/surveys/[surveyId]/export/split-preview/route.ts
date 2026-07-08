@@ -4,7 +4,7 @@ import { and, eq } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { surveyResponses, surveys } from '@/db/schema';
-import { completedResponse, notDeletedResponse } from '@/data/response-filters';
+import { completedResponse, notDeletedResponse, notTestResponse } from '@/data/response-filters';
 import { normalizeQuestions } from '@/lib/question';
 import { requireAuth } from '@/lib/auth';
 import { isAdminUserAllowed } from '@/lib/auth/admin-allowlist';
@@ -33,9 +33,10 @@ export async function GET(
     const { surveyId } = await params;
     const basis = request.nextUrl.searchParams.get('basis');
 
+    // questions 는 order 오름차순 고정 (export/route.ts 와 동일 — 변수 순서를 문항 순서에 고정).
     const surveyData = await db.query.surveys.findFirst({
       where: eq(surveys.id, surveyId),
-      with: { questions: true },
+      with: { questions: { orderBy: (q, { asc }) => [asc(q.order)] } },
     });
     if (!surveyData) return NextResponse.json({ error: 'Survey not found' }, { status: 404 });
 
@@ -52,12 +53,13 @@ export async function GET(
       });
     }
 
-    // resp 집계: raw export와 동일 모수 (deleted 제외 + completed만)
+    // resp 집계: raw export와 동일 모수 (deleted 제외 + completed만 + 테스트 응답 제외)
     const responses = await db.query.surveyResponses.findMany({
       where: and(
         eq(surveyResponses.surveyId, surveyId),
         notDeletedResponse,
         completedResponse,
+        notTestResponse,
       ),
       columns: { questionResponses: true },
     });

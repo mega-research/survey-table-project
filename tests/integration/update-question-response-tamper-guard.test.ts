@@ -16,10 +16,15 @@ const {
   responseFindFirstMock,
   questionExistsMock,
   updateReturningMock,
+  surveyFindFirstMock,
 } = vi.hoisted(() => ({
   responseFindFirstMock: vi.fn(),
   questionExistsMock: vi.fn(),
   updateReturningMock: vi.fn(),
+  // 중단 게이트(Task 6): 비-isTest 응답이면 updateQuestionResponse 가
+  // getSurveyControlFlags 로 surveys 행을 조회한다 — 이 파일의 관심사(변조 가드 #5)와는
+  // 무관하지만, 그 조회 자체가 크래시하지 않도록 기본은 non-paused 로 목킹한다.
+  surveyFindFirstMock: vi.fn(),
 }));
 
 vi.mock('@/db', () => {
@@ -41,6 +46,7 @@ vi.mock('@/db', () => {
   chainable['limit'] = vi.fn(() => questionExistsMock());
   chainable['query'] = {
     surveyResponses: { findFirst: (...a: unknown[]) => responseFindFirstMock(...a) },
+    surveys: { findFirst: (...a: unknown[]) => surveyFindFirstMock(...a) },
   };
   return { db: chainable };
 });
@@ -61,6 +67,7 @@ describe('updateQuestionResponse — 변조 가드(#5)', () => {
     responseFindFirstMock.mockReset();
     questionExistsMock.mockReset();
     updateReturningMock.mockReset();
+    surveyFindFirstMock.mockReset();
     // 기본: 활성 in_progress 응답 + 유효 questionId + 정상 UPDATE 1행
     responseFindFirstMock.mockResolvedValue({
       id: RESPONSE_ID,
@@ -68,9 +75,17 @@ describe('updateQuestionResponse — 변조 가드(#5)', () => {
       versionId: VERSION_ID,
       status: 'in_progress',
       deletedAt: null,
+      isTest: false,
     });
     questionExistsMock.mockResolvedValue([{ id: QUESTION_ID }]);
     updateReturningMock.mockResolvedValue([{ id: RESPONSE_ID }]);
+    // 중단 게이트(Task 6) 기본값: paused 아님 — 이 파일의 시나리오는 모두 정상 운영 설문 기준.
+    surveyFindFirstMock.mockResolvedValue({
+      isPaused: false,
+      pausedMessage: null,
+      testModeEnabled: false,
+      testToken: null,
+    });
   });
 
   it('in_progress + 유효 questionId + 정상 크기면 성공한다', async () => {

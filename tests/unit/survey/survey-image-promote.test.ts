@@ -408,3 +408,49 @@ describe('replaceUrlsInResponseHeader', () => {
     ).toBe('https://cdn.test/survey/header-logo.webp');
   });
 });
+
+// ========================
+// responseHeader blocks promote
+// ========================
+
+describe('responseHeader blocks promote', () => {
+  beforeEach(() => {
+    process.env['CLOUDFLARE_R2_PUBLIC_URL'] = 'https://cdn.test';
+  });
+
+  afterEach(() => {
+    delete process.env['CLOUDFLARE_R2_PUBLIC_URL'];
+  });
+
+  const R2_PUBLIC = 'https://cdn.test';
+
+  it('blocks의 tmp 이미지 URL을 추출한다 (v1 logo와 병행)', () => {
+    const tmpA = `${R2_PUBLIC}/tmp/survey/a.png`;
+    const tmpB = `${R2_PUBLIC}/tmp/survey/b.png`;
+    const urls = extractTmpSurveyUrlsFromResponseHeader({
+      logo: { imageUrl: tmpA },
+      blocks: [
+        { id: 'l1', type: 'logo', imageUrl: tmpB },
+        { id: 'm1', type: 'mark', imageUrl: `${R2_PUBLIC}/survey/perm.png` }, // 이미 영구 — 제외
+        { id: 'n1', type: 'notice' }, // imageUrl 없음 — 제외
+      ],
+    });
+    expect(urls).toEqual([tmpA, tmpB]);
+  });
+
+  it('blocks의 URL을 mapping으로 치환하고 mapping에 없으면 원본 참조를 유지한다', () => {
+    const tmpB = `${R2_PUBLIC}/tmp/survey/b.png`;
+    const header = {
+      style: 'composed',
+      blocks: [
+        { id: 'l1', type: 'logo', imageUrl: tmpB },
+        { id: 'm1', type: 'mark', imageUrl: '' },
+      ],
+    };
+    const replaced = replaceUrlsInResponseHeader(header, new Map([[tmpB, `${R2_PUBLIC}/survey/b.png`]]));
+    expect(replaced.blocks?.[0]?.imageUrl).toBe(`${R2_PUBLIC}/survey/b.png`);
+    expect(replaced.blocks?.[1]).toBe(header.blocks[1]); // 치환 없는 블록은 동일 참조
+    const untouched = replaceUrlsInResponseHeader(header, new Map());
+    expect(untouched).toBe(header); // 전체 무치환이면 동일 참조 (기존 계약)
+  });
+});

@@ -14,6 +14,7 @@ import type {
   QuestionConditionGroup,
   QuestionData,
   QuestionOption,
+  QuotaConfig,
   RankingConfig,
   ResponseEditChange,
   SelectLevel,
@@ -57,6 +58,15 @@ export const surveys = pgTable('surveys', {
 
   // 진척률 표 표시 컬럼 픽커 (NULL = 4개 고정 컬럼만, slice 4 — 0017 마이그레이션)
   progressColumns: jsonb('progress_columns').$type<ProgressColumnScheme>(),
+
+  // 쿼터 플랜 (NULL = 쿼터 없음, 스냅샷 밖 라이브 편집 — 0045 마이그레이션)
+  quotaConfig: jsonb('quota_config').$type<QuotaConfig>(),
+
+  // 운영 제어 — 스냅샷 밖 라이브 컬럼 (quotaConfig 와 동일하게 publish 없이 즉시 반영)
+  isPaused: boolean('is_paused').default(false).notNull(),
+  pausedMessage: text('paused_message'),
+  testModeEnabled: boolean('test_mode_enabled').default(false).notNull(),
+  testToken: uuid('test_token'),
 
   // 컨택 attrs 토큰 — invite token 강제 (0022 마이그레이션)
   requireInviteToken: boolean('require_invite_token').default(false).notNull(),
@@ -200,6 +210,8 @@ export const surveyResponses = pgTable('survey_responses', {
   ipHash: text('ip_hash'),
   fpHash: text('fp_hash'),
   deviceId: text('device_id'),
+  // 테스트 모드 세션이 생성한 응답 — 통계·쿼터·중복대조·export 모수에서 제외
+  isTest: boolean('is_test').default(false).notNull(),
   // 미래 soft delete hook
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
   // 어드민 수정 시각 (응답자 본인 흐름과 구분). NULL = 미수정.

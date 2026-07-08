@@ -42,12 +42,18 @@ export type PromotableQuestion = {
 };
 
 /**
+ * promote 가 다루는 데 필요한 최소 블록 형태 — imageUrl 외 필드는 그대로 통과
+ */
+export type PromotableHeaderBlock = { imageUrl?: unknown; [key: string]: unknown };
+
+/**
  * promoteSurveyResponseHeader가 처리하는 데 필요한 최소 응답 헤더 형태.
  * SurveyResponseHeaderConfig 의 모든 변형과 호환됩니다.
  */
 export type PromotableResponseHeader =
   | {
       logo?: { imageUrl?: string | null; [key: string]: unknown } | null;
+      blocks?: PromotableHeaderBlock[] | null;
       [key: string]: unknown;
     }
   | null
@@ -146,32 +152,43 @@ export function replaceUrlsInQuestion<T extends PromotableQuestion>(
 }
 
 /**
- * 단일 응답 헤더 설정에서 tmp/survey/ 로고 URL을 추출합니다.
+ * 단일 응답 헤더 설정에서 tmp/survey/ 로고 및 블록 URL을 추출합니다.
  */
 export function extractTmpSurveyUrlsFromResponseHeader(
   responseHeader: PromotableResponseHeader,
 ): string[] {
-  const imageUrl = responseHeader?.logo?.imageUrl;
-  return imageUrl && isTmpSurveyUrl(imageUrl) ? [imageUrl] : [];
+  const urls: string[] = [];
+  const logoUrl = responseHeader?.logo?.imageUrl;
+  if (logoUrl && isTmpSurveyUrl(logoUrl)) urls.push(logoUrl);
+  for (const block of responseHeader?.blocks ?? []) {
+    if (typeof block.imageUrl === 'string' && isTmpSurveyUrl(block.imageUrl)) urls.push(block.imageUrl);
+  }
+  return urls;
 }
 
 /**
- * 응답 헤더 설정의 로고 URL을 mapping 값으로 치환합니다.
+ * 응답 헤더 설정의 로고 및 블록 URL을 mapping 값으로 치환합니다.
  * mapping에 없으면 원본을 그대로(동일 참조) 반환합니다.
  */
 export function replaceUrlsInResponseHeader<T extends PromotableResponseHeader>(
   responseHeader: T,
   mapping: Map<string, string>,
 ): T {
-  const imageUrl = responseHeader?.logo?.imageUrl;
-  if (!responseHeader || !imageUrl || !mapping.has(imageUrl)) return responseHeader;
-
+  if (!responseHeader || mapping.size === 0) return responseHeader;
+  const logoUrl = responseHeader.logo?.imageUrl;
+  const needsLogo = !!(logoUrl && mapping.has(logoUrl));
+  const needsBlocks = (responseHeader.blocks ?? []).some((b) => typeof b.imageUrl === 'string' && mapping.has(b.imageUrl));
+  if (!needsLogo && !needsBlocks) return responseHeader;
   return {
     ...responseHeader,
-    logo: {
-      ...responseHeader.logo,
-      imageUrl: mapping.get(imageUrl)!,
-    },
+    ...(needsLogo ? { logo: { ...responseHeader.logo, imageUrl: mapping.get(logoUrl!)! } } : {}),
+    ...(needsBlocks
+      ? {
+          blocks: responseHeader.blocks!.map((b) =>
+            typeof b.imageUrl === 'string' && mapping.has(b.imageUrl) ? { ...b, imageUrl: mapping.get(b.imageUrl)! } : b,
+          ),
+        }
+      : {}),
   } as T;
 }
 

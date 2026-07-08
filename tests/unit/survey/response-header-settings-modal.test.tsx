@@ -34,6 +34,11 @@ function seedSurvey() {
   useSurveyBuilderStore.getState().setSurvey(survey);
 }
 
+async function openModal() {
+  render(<ResponseHeaderSettingsModal />);
+  await userEvent.click(screen.getByText('응답 페이지 머리말 설정'));
+}
+
 describe('ResponseHeaderSettingsModal', () => {
   beforeEach(() => {
     seedSurvey();
@@ -43,29 +48,70 @@ describe('ResponseHeaderSettingsModal', () => {
     cleanup();
   });
 
-  it('카드 클릭 시 미리보기와 설정이 함께 있는 모달이 열린다', async () => {
-    render(<ResponseHeaderSettingsModal />);
-
-    // 닫힌 상태: 설정 컨트롤은 보이지 않는다
-    expect(screen.queryByRole('button', { name: '제목 옆 로고형' })).not.toBeInTheDocument();
-
-    await userEvent.click(screen.getByText('응답 페이지 머리말 설정'));
-
-    // 미리보기(설문 제목) + 설정 컨트롤이 함께 렌더된다
-    expect(screen.getByRole('heading', { name: '내 설문' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '기본형' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '제목 옆 로고형' })).toBeInTheDocument();
+  it('카드를 클릭하면 2-pane 다이얼로그가 열리고 데스크톱 미리보기가 기본이다', async () => {
+    await openModal();
+    expect(screen.getByTestId('header-preview-desktop')).toBeInTheDocument();
+    expect(screen.queryByTestId('header-preview-mobile')).not.toBeInTheDocument();
   });
 
-  it('프리셋 변경 시 store 가 갱신되고 미리보기가 반영된다', async () => {
-    render(<ResponseHeaderSettingsModal />);
+  it('모바일 토글을 누르면 390px 미리보기로 전환된다', async () => {
+    await openModal();
+    await userEvent.click(screen.getByRole('button', { name: '모바일' }));
+    expect(screen.getByTestId('header-preview-mobile')).toBeInTheDocument();
+  });
+
+  it('편집이 store에 즉시 반영되지 않는다 — 미리보기에만 반영된다', async () => {
+    await openModal();
+
+    await userEvent.click(screen.getByRole('button', { name: '프리셋 국가통계형' }));
+
+    // 초안(draft) 게이트 — 저장 전까지 store는 원상 유지
+    expect(useSurveyBuilderStore.getState().currentSurvey.settings.responseHeader).toEqual(
+      DEFAULT_RESPONSE_HEADER_CONFIG,
+    );
+
+    // 미리보기(초안)에는 즉시 반영 — 마크·로고 자리표시자가 밴드에 렌더된다
+    expect(screen.getByTestId('header-band')).toBeInTheDocument();
+    expect(screen.getAllByText('로고').length).toBeGreaterThan(0);
+  });
+
+  it('저장을 누르면 초안이 store에 반영되고 모달이 닫힌다', async () => {
+    await openModal();
+
+    await userEvent.click(screen.getByRole('button', { name: '프리셋 국가통계형' }));
+    await userEvent.click(screen.getByRole('button', { name: '저장' }));
+
+    const responseHeader = useSurveyBuilderStore.getState().currentSurvey.settings.responseHeader;
+    expect(responseHeader?.style).toBe('composed');
+    if (responseHeader?.style !== 'composed') throw new Error('composed 헤더가 아닙니다');
+    expect(responseHeader.blocks?.map((b) => b.type)).toEqual(['mark', 'notice', 'logo', 'logo']);
+
+    // 모달이 닫혔다 — 설정 컨트롤(프리셋 버튼)이 더 이상 존재하지 않는다
+    expect(screen.queryByRole('button', { name: '프리셋 국가통계형' })).not.toBeInTheDocument();
+  });
+
+  it('취소를 누르면 초안이 폐기되고 재오픈 시 store 기준으로 재시드된다', async () => {
+    await openModal();
+
+    await userEvent.click(screen.getByRole('button', { name: '프리셋 국가통계형' }));
+    await userEvent.click(screen.getByRole('button', { name: '취소' }));
+
+    expect(useSurveyBuilderStore.getState().currentSurvey.settings.responseHeader).toEqual(
+      DEFAULT_RESPONSE_HEADER_CONFIG,
+    );
+
+    // 재오픈 — 직전 초안(프리셋 적용분)이 아니라 store 원본 기준으로 재시드된다
     await userEvent.click(screen.getByText('응답 페이지 머리말 설정'));
+    expect(screen.queryByText('로고')).not.toBeInTheDocument();
+  });
 
-    await userEvent.click(screen.getByRole('button', { name: '제목 옆 로고형' }));
+  it('제목 입력은 저장 전까지 store에 반영되지 않고, 저장 시 반영된다', async () => {
+    await openModal();
 
-    expect(
-      useSurveyBuilderStore.getState().currentSurvey.settings.responseHeader?.style,
-    ).toBe('logo-title');
-    expect(screen.getByTestId('logo-title-layout')).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText('제목'), '!');
+    expect(useSurveyBuilderStore.getState().currentSurvey.title).toBe('내 설문');
+
+    await userEvent.click(screen.getByRole('button', { name: '저장' }));
+    expect(useSurveyBuilderStore.getState().currentSurvey.title).toBe('내 설문!');
   });
 });

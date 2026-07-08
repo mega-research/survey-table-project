@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { PgDialect } from 'drizzle-orm/pg-core';
 
 // exportResponsesAsCsv 의 셀 포맷 로직 회귀 테스트.
 // 핵심: questionResponses 값이 명시적 null 이면 "null" 문자열이 아니라 빈 셀이 되어야 한다
 // (typeof null === 'object' 함정). DB 는 db.query.surveyResponses.findMany 만 모킹한다.
 
 const findMany = vi.fn();
+const dialect = new PgDialect();
 
 vi.mock('@/db', () => ({
   db: {
@@ -94,5 +96,20 @@ describe('exportResponsesAsCsv 셀 포맷', () => {
     expect(row1[headerCells.indexOf('arr')]).toBe('x; y');
     expect(row1[headerCells.indexOf('obj')]).toBe('{"k":1}');
     expect(row1[headerCells.indexOf('str')]).toBe('hello');
+  });
+
+  it('isTest 응답을 export 모수에서 제외한다 (where 절에 is_test=false 조건 포함)', async () => {
+    // mock 은 where 를 해석하지 않으므로 결과값 비교로는 조건 누락을 못 잡는다 —
+    // T3/T10 선례대로 where 절 SQL 을 직접 파싱해 검증한다 (duplicate-detection check.test.ts).
+    findMany.mockResolvedValue([]);
+
+    await exportResponsesAsCsv(SURVEY_ID);
+
+    expect(findMany).toHaveBeenCalledTimes(1);
+    // noUncheckedIndexedAccess 대응 — 직전 toHaveBeenCalledTimes(1) 단언이 존재를 보장한다.
+    const { where } = (findMany.mock.calls[0]![0] ?? {}) as { where: never };
+    const query = dialect.sqlToQuery(where);
+    expect(query.sql).toContain('is_test');
+    expect(query.params).toContain(false);
   });
 });

@@ -4,6 +4,8 @@ import { and, asc, eq, sql, type AnyColumn, type SQL } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { surveyResponses, contactTargets } from '@/db/schema';
+// notTestResponse 의도적 미적용: 응답 내역 목록/배지는 테스트 응답도 표시한다
+// (T11 에서 배지로 구분 표시 — 통계·모수 집계가 아니라 리스트 표시이므로 T10 스윕 예외).
 import { deletedResponse, notDeletedResponse } from '@/data/response-filters';
 
 import { escapeLikePattern } from './filter-shared';
@@ -25,7 +27,7 @@ export type ListProfilesArgs = Omit<NormalizedListArgs, 'q' | 'col'> & {
 
 export interface ProfilesRow {
   id: string;
-  /** ROW_NUMBER() — 표시용 순번 (started_at desc 기준, surveyId 단위 절대값) */
+  /** ROW_NUMBER() — 표시용 순번 (started_at asc 기준 접수 번호, surveyId 단위 절대값) */
   idx: number;
   platform: Platform | null;
   browser: string | null;
@@ -39,6 +41,8 @@ export interface ProfilesRow {
   totalSeconds: number | null;
   /** 매칭된 contact_targets.group_value (전시회명 국문 등). 익명/미매칭이면 null. */
   groupValue: string | null;
+  /** 테스트 모드 응답(survey_control) 여부. 통계에서는 항상 제외되지만 목록에는 배지로 노출한다. */
+  isTest: boolean;
 }
 
 export interface ListProfilesResult {
@@ -103,8 +107,8 @@ function profilesConditionToSql(
  * 응답 내역 페이지의 메인 어댑터.
  *
  * 핵심 설계:
- * - **순번(idx)** 은 surveyId 단위의 절대 row_number (started_at desc 기준).
- *   status / condition 필터와 독립 → 운영자에게 "최근 응답이 1번" 의미가 일관됨.
+ * - **순번(idx)** 은 surveyId 단위의 절대 row_number (started_at asc 기준 — 접수 순번).
+ *   status / condition 필터와 독립 → "첫 응답이 1번, 새 응답이 마지막 번호" 의미가 일관됨.
  *   이를 위해 base subquery 에서 row_number 를 먼저 매기고, 외부 select 에서 필터를 건다.
  *   ct 는 base subquery 에 LEFT JOIN 하되 row_number 는 전체 기준 유지.
  * - **condition 필터**: profilesConditionToSql 로 idx/browser/resid/attrs/pii 를
@@ -116,7 +120,7 @@ function profilesConditionToSql(
 export async function listResponsesForProfiles(
   args: ListProfilesArgs,
 ): Promise<ListProfilesResult> {
-  const { surveyId, page, pageSize, status, sort, dir, view, condition } = args;
+  const { surveyId, page, pageSize, status, sort, dir, view, condition, test } = args;
 
   // negative result codes — base subquery WHERE 의 NOT EXISTS 분기에 사용.
   // 빈 배열이면 unsubscribed_at 만 검사 (negative code 분기는 SQL 차원에서 생략).
@@ -130,7 +134,7 @@ export async function listResponsesForProfiles(
   const numbered = db
     .select({
       id: surveyResponses.id,
-      idx: sql<number>`row_number() over (order by ${surveyResponses.startedAt} desc)`.as(
+      idx: sql<number>`row_number() over (order by ${surveyResponses.startedAt} asc)`.as(
         'idx',
       ),
       platform: surveyResponses.platform,
@@ -142,6 +146,7 @@ export async function listResponsesForProfiles(
       startedAt: surveyResponses.startedAt,
       completedAt: surveyResponses.completedAt,
       totalSeconds: surveyResponses.totalSeconds,
+      isTest: surveyResponses.isTest,
       groupValue: contactTargets.groupValue,
       contactResid: contactTargets.resid,
       contactAttrs: contactTargets.attrs,
@@ -179,6 +184,7 @@ export async function listResponsesForProfiles(
   const SORT_COLUMN_MAP = {
     platform: numbered.platform,
     browser: numbered.browser,
+    status: numbered.status,
     startedAt: numbered.startedAt,
     completedAt: numbered.completedAt,
     totalSeconds: numbered.totalSeconds,
@@ -190,6 +196,14 @@ export async function listResponsesForProfiles(
   // status 필터는 active view 일 때만 적용 (deleted view 는 전체 노출).
   if (view === 'active' && status !== 'all') {
     whereParts.push(eq(numbered.status, status));
+  }
+
+  // 테스트 필터는 status/view 와 독립 축 — 휴지통(deleted view)에서도 동일하게 적용해
+  // 테스트 모드 OFF 시 일괄 삭제 전/후 확인 용도로 쓸 수 있게 한다.
+  if (test === 'only') {
+    whereParts.push(eq(numbered.isTest, true));
+  } else if (test === 'exclude') {
+    whereParts.push(eq(numbered.isTest, false));
   }
 
   const conditionSql = profilesConditionToSql(condition, {
@@ -211,10 +225,10 @@ export async function listResponsesForProfiles(
   const clampedPage = Math.min(Math.max(1, page), totalPages);
   const offset = (clampedPage - 1) * pageSize;
 
-  // idx asc = "최근일수록 1번" 이므로 startedAt 정렬 방향이 반대.
+  // idx = startedAt asc 기준 접수 순번이므로 방향 그대로 startedAt 에 매핑.
   const orderClause =
     sort === 'idx'
-      ? orderExpr(numbered.startedAt, dir === 'asc' ? 'desc' : 'asc')
+      ? orderExpr(numbered.startedAt, dir)
       : orderExpr(SORT_COLUMN_MAP[sort], dir);
 
   const dataQuery = db
@@ -230,6 +244,7 @@ export async function listResponsesForProfiles(
       startedAt: numbered.startedAt,
       completedAt: numbered.completedAt,
       totalSeconds: numbered.totalSeconds,
+      isTest: numbered.isTest,
       groupValue: numbered.groupValue,
     })
     .from(numbered);
@@ -251,6 +266,7 @@ export async function listResponsesForProfiles(
     startedAt: r.startedAt,
     completedAt: r.completedAt,
     totalSeconds: r.totalSeconds,
+    isTest: r.isTest,
     groupValue: r.groupValue ?? null,
   }));
 

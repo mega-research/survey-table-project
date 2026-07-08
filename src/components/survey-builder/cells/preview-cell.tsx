@@ -11,8 +11,16 @@ import { CellContentLayout } from './cell-content-layout';
 import { CellOptionsContainer } from './cell-options-container';
 import { ImageCell } from './image-cell';
 
-/** 미리보기용 셀 컨텐츠 (읽기 전용) */
-export const PreviewCell = React.memo(function PreviewCell({ cell }: { cell: TableCell }) {
+/** 미리보기용 셀 컨텐츠 (읽기 전용)
+ * choiceControlType: 보기 옵션(choice_opt) 셀의 컨트롤 종류. 질문 타입(radio/checkbox)에서
+ * 내려준다. 미지정 시 'checkbox' 폴백(표 질문 등 타입 컨텍스트 없는 경우). */
+export const PreviewCell = React.memo(function PreviewCell({
+  cell,
+  choiceControlType = 'checkbox',
+}: {
+  cell: TableCell;
+  choiceControlType?: 'radio' | 'checkbox';
+}) {
   if (!cell) return <span className="text-sm text-gray-400">-</span>;
 
   switch (cell.type) {
@@ -190,18 +198,24 @@ export const PreviewCell = React.memo(function PreviewCell({ cell }: { cell: Tab
         </div>
       );
 
-    case 'choice_opt':
-      // 보기 옵션 셀 — 프리뷰에서는 체크박스 표시 (실제 응답은 ChoiceTableResponse 가 렌더)
+    case 'choice_opt': {
+      // 보기 옵션 셀 — 프리뷰에서는 체크박스 표시 (실제 응답은 ChoiceTableResponse 가 렌더).
+      // 라벨(choiceLabel > content)이 있으면 컨트롤 옆에 표시, 비어 있으면 컨트롤만.
+      const choiceLabelText = (cell.choiceLabel ?? '').trim() || (cell.content ?? '').trim();
       return (
-        <div className="flex items-center justify-center">
+        <div className="flex items-center justify-center gap-2">
           <input
-            type="checkbox"
+            type={choiceControlType}
             disabled
             className="h-4 w-4"
             aria-label={cell.choiceLabel || '보기 선택'}
           />
+          {choiceLabelText && (
+            <span className="text-sm text-gray-700">{choiceLabelText}</span>
+          )}
         </div>
       );
+    }
 
     default:
       return cell.content ? (

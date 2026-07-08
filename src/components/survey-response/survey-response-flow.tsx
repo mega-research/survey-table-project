@@ -41,6 +41,9 @@ import {
   collectTableQuestionOptions,
   filterOptionTextsForSubmission,
 } from '@/lib/option-text-migration';
+import { allQuotaQuestionsAnswered } from '@/lib/quota/gate';
+import { client } from '@/shared/lib/rpc';
+import { DEFAULT_PAUSED_MESSAGE } from '@/shared/lib/survey-control';
 
 import { useSurveyResponseStore } from '@/stores/survey-response-store';
 import { useShallow } from 'zustand/react/shallow';
@@ -59,6 +62,8 @@ export interface SurveyResponseFlowProps {
   mode?: 'public' | 'admin-edit' | 'preview';
   surveyIdentifier: string; // slug | uuid | privateToken (이미 decodeURIComponent 된 값)
   inviteToken?: string | null;
+  // ?test=<token> — 운영 콘솔 발급 테스트 링크. public 모드에서만 의미가 있다(미전달 시 null).
+  testToken?: string | null;
   // admin-edit 모드 전용 — Task 15 에서 활성화.
   adminContext?: {
     responseId: string;
@@ -154,6 +159,7 @@ function buildOptTextsPayload(
 export function SurveyResponseFlow({
   surveyIdentifier,
   inviteToken: inviteTokenProp = null,
+  testToken: testTokenProp = null,
   mode = 'public',
   adminContext,
   previewContext,
@@ -166,6 +172,8 @@ export function SurveyResponseFlow({
   // ?invite=<token> — contact 매칭용. 없으면 익명 응답 흐름 그대로.
   // admin-edit 분기 (7/8) — admin-edit 모드에서는 invite 토큰 매칭/검증 자체를 건너뛴다.
   const inviteToken = isAdminEdit || isPreview ? null : inviteTokenProp ?? null;
+  // ?test=<token> — invite 와 동일하게 admin-edit/preview 에서는 무시(중단/무효 링크 게이트 비대상).
+  const testToken = isAdminEdit || isPreview ? null : testTokenProp ?? null;
   const [inviteIsInvalid, setInviteIsInvalid] = useState(false);
 
   // 응답 스토어 — 액션만 셀렉트 (전체 구독 → 불필요 리렌더 방지)
@@ -192,6 +200,7 @@ export function SurveyResponseFlow({
     contactAttrs,
     showInviteRequired,
     versionId,
+    control,
   } = useSurveyLoader({
     identifier,
     isAdminEdit,
@@ -199,8 +208,12 @@ export function SurveyResponseFlow({
     adminContext,
     previewContext,
     inviteToken,
+    testToken,
     setResponses,
   });
+
+  // 유효 테스트 세션 — 중단 게이트 우회 + 중복검사 skip + create/resume 에 testToken 전달.
+  const isTestSession = control?.testSession === 'valid';
 
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -220,6 +233,17 @@ export function SurveyResponseFlow({
     () => new Set(),
   );
 
+  // 쿼터 게이트 — 이 문항들은 런타임 필수로 취급하고, 전부 답변되면 checkQuota 1회 호출.
+  const quotaGateIds = useMemo(
+    () => new Set(loadedSurvey?.quotaGate?.questionIds ?? []),
+    [loadedSurvey],
+  );
+  const quotaCheckedRef = useRef(false);
+  const [quotaClosedMessage, setQuotaClosedMessage] = useState<string | null>(null);
+  // 세션 도중 중단 감지 시 재조회한 최신 중단 문구 (handlePausedMutationError 가 승격).
+  // 화면 폴백 체인: 재조회 문구 → 로드 시점 control.pausedMessage → DEFAULT_PAUSED_MESSAGE.
+  const [refetchedPausedMessage, setRefetchedPausedMessage] = useState<string | null>(null);
+
   const keyboardOpen = useKeyboardOpen();
 
   // 클라이언트 신호 (deviceId, screen 등) — 마운트 시 한 번 수집
@@ -238,6 +262,8 @@ export function SurveyResponseFlow({
     loadedSurvey,
     inviteToken,
     signals,
+    // 유효 테스트 세션은 같은 브라우저로 반복 응답이 정상 → 진입 시 중복검사 skip.
+    skip: isTestSession,
   });
 
   // 운영 현황 콘솔(T5): 페이지 진입 시 DB INSERT를 더 이상 하지 않는다.
@@ -363,13 +389,18 @@ export function SurveyResponseFlow({
     loadedSurvey,
     currentResponseId,
     inviteToken,
+    testToken,
+    isTestSession,
     setSessionId,
     setCurrentResponseId,
+    setDuplicateStatus,
+    setPausedMessage: setRefetchedPausedMessage,
   });
 
   const hasPreviousDisplayable = stepHistory.length > 0;
 
-  const isQuestionRequired = (question: Question) => question.required;
+  const isQuestionRequired = (question: Question) =>
+    question.required || quotaGateIds.has(question.id);
 
   // 타입별 응답 충족 판정은 순수 함수(isQuestionAnswered)로 추출.
   // 원본 useCallback 의 [responses] deps 를 유지해 참조 안정성(answeredCount/requiredRemaining/handleSubmit) 보존.
@@ -424,6 +455,8 @@ export function SurveyResponseFlow({
     isPreview,
     adminContext,
     inviteToken,
+    testToken,
+    isTestSession,
     loadedSurvey,
     currentStep,
     currentStepIndex,
@@ -447,6 +480,7 @@ export function SurveyResponseFlow({
     visibleProgressRef,
     setHighlightQuestionIds,
     setDuplicateStatus,
+    setPausedMessage: setRefetchedPausedMessage,
     setInviteIsInvalid,
     setIsSubmitting,
     setCurrentStepIndex,
@@ -454,8 +488,34 @@ export function SurveyResponseFlow({
     buildOptTextsPayload,
   });
 
-  const handleNext = () => {
+  const handleNext = async () => {
     const nextIndex = resolveNextStepIndex();
+
+    // 쿼터 게이트: 인구통계 문항 전부 답변 & 미체크 & responseId 확보 시 서버 확인.
+    // fail-open: 오류/미설정은 통과. 판정을 받으면(blocked 여부 무관) 재발동 방지 플래그 set.
+    if (
+      !quotaCheckedRef.current &&
+      currentResponseId &&
+      allQuotaQuestionsAnswered([...quotaGateIds], responses)
+    ) {
+      // 재진입/중복 발동 방지 — await 완료 전에 먼저 플래그를 세워 재클릭 시에도
+      // 서버 확인은 최대 1회만 시도된다.
+      quotaCheckedRef.current = true;
+      try {
+        const res = await client.quota.check({
+          responseId: currentResponseId,
+          surveyId: loadedSurvey?.id ?? '',
+          answers: responses,
+        });
+        if (res.blocked) {
+          setQuotaClosedMessage(res.closedMessage);
+          setDuplicateStatus({ kind: 'blocked', reason: 'quota_closed' });
+          return;
+        }
+      } catch (err) {
+        console.error('쿼터 확인 오류:', err); // fail-open: 플래그는 이미 위에서 세팅됨
+      }
+    }
 
     setStepHistory((prev) => [...prev, currentStepIndex]);
 
@@ -514,6 +574,31 @@ export function SurveyResponseFlow({
     return <InviteRequiredScreen />;
   }
 
+  // 무효 테스트 링크 — 익명 폴백 없이 차단 (스펙 결정 5). control 은 public 경로에서만 채워지므로
+  // admin-edit/preview 는 이 분기에 도달하지 않는다.
+  if (control?.testSession === 'invalid') {
+    return (
+      <AlreadyRespondedView
+        reason="invalid_test_token"
+        surveyTitle={loadedSurvey?.title ?? ''}
+        contactEmail={loadedSurvey?.contactEmail ?? null}
+        customBody={null}
+      />
+    );
+  }
+
+  // 중단 모드 — 테스트 세션만 통과 (스펙 결정 4)
+  if (control?.isPaused && !isTestSession) {
+    return (
+      <AlreadyRespondedView
+        reason="survey_paused"
+        surveyTitle={loadedSurvey?.title ?? ''}
+        contactEmail={loadedSurvey?.contactEmail ?? null}
+        customBody={control.pausedMessage ?? DEFAULT_PAUSED_MESSAGE}
+      />
+    );
+  }
+
   // 중복 검사 진행 중
   if (duplicateStatus.kind === 'checking') {
     return (
@@ -530,6 +615,13 @@ export function SurveyResponseFlow({
         reason={duplicateStatus.reason}
         surveyTitle={loadedSurvey?.title ?? ''}
         contactEmail={loadedSurvey?.contactEmail ?? null}
+        customBody={
+          duplicateStatus.reason === 'quota_closed'
+            ? quotaClosedMessage
+            : duplicateStatus.reason === 'survey_paused'
+              ? (refetchedPausedMessage ?? control?.pausedMessage ?? DEFAULT_PAUSED_MESSAGE)
+              : null
+        }
       />
     );
   }
@@ -577,7 +669,7 @@ export function SurveyResponseFlow({
       <HoneypotField ref={honeypotRef} />
       {/* 헤더 — 제목/로고/통계법만 (진행바·카운트는 아래 회색 영역으로 분리) */}
       <div className="border-b border-gray-200 bg-white">
-        <div className={`${containerMaxWidth} mx-auto px-4 py-4 transition-all duration-300 md:px-6`}>
+        <div className={`${containerMaxWidth} mx-auto px-4 pt-4 pb-2 transition-all duration-300 md:px-6 md:pb-0`}>
           <SurveyResponseHeader
             title={loadedSurvey.title}
             description={loadedSurvey.description}
@@ -588,7 +680,7 @@ export function SurveyResponseFlow({
       </div>
 
       {/* 진행 현황 — 헤더 밖 회색 영역(콘텐츠 컨테이너 위) */}
-      <div className={`${containerMaxWidth} mx-auto px-4 pt-3 transition-all duration-300 md:px-6`}>
+      <div className={`${containerMaxWidth} mx-auto px-4 pt-1 transition-all duration-300 md:px-6`}>
         <div className="hidden items-center justify-end text-sm text-gray-500 md:flex">
           {currentVisibleStepNumber || 1} / {Math.max(totalVisibleStepCount, 1)}
           <span className="ml-2 text-xs text-gray-400">(전체 {questions.length}개 질문)</span>

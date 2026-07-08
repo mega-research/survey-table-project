@@ -12,7 +12,7 @@ import { shouldDisplayDynamicGroup, shouldDisplayQuestion, shouldDisplayRow } fr
 import type { SaveAdminEditPayload } from '@/features/survey-response/domain/response-edit';
 
 import { sessionStorageKey } from './session-helpers';
-import type { DuplicateStatus } from './use-duplicate-guard';
+import { handlePausedMutationError, type DuplicateStatus } from './use-duplicate-guard';
 
 type ResponsesMap = Record<string, unknown>;
 
@@ -39,6 +39,10 @@ interface UseResponseLifecycleArgs {
   isPreview?: boolean;
   adminContext: AdminContext | undefined;
   inviteToken: string | null;
+  /** ?test=<token>. isTestSession 일 때만 create/complete 게이트로 전달해 isTest 로 기록시킨다. */
+  testToken: string | null;
+  /** control.testSession==='valid'. 유효 테스트 세션이면 중단 게이트를 우회한다. */
+  isTestSession: boolean;
 
   // 설문/스텝 파생값
   loadedSurvey: Survey | null;
@@ -77,6 +81,8 @@ interface UseResponseLifecycleArgs {
   visibleProgressRef: RefObject<{ index: number; total: number }>;
   setHighlightQuestionIds: Dispatch<SetStateAction<Set<string>>>;
   setDuplicateStatus: Dispatch<SetStateAction<DuplicateStatus>>;
+  /** 세션 도중 중단 감지 시 재조회한 최신 중단 문구 승격용 (handlePausedMutationError 로 전달). */
+  setPausedMessage?: Dispatch<SetStateAction<string | null>>;
   setInviteIsInvalid: Dispatch<SetStateAction<boolean>>;
   setIsSubmitting: Dispatch<SetStateAction<boolean>>;
   setCurrentStepIndex: Dispatch<SetStateAction<number>>;
@@ -118,6 +124,8 @@ export function useResponseLifecycle({
   isPreview = false,
   adminContext,
   inviteToken,
+  testToken,
+  isTestSession,
   loadedSurvey,
   currentStep,
   currentStepIndex,
@@ -141,6 +149,7 @@ export function useResponseLifecycle({
   visibleProgressRef,
   setHighlightQuestionIds,
   setDuplicateStatus,
+  setPausedMessage,
   setInviteIsInvalid,
   setIsSubmitting,
   setCurrentStepIndex,
@@ -190,6 +199,7 @@ export function useResponseLifecycle({
           visibleStepIndex: visibleProgressRef.current.index,
           visibleStepTotal: visibleProgressRef.current.total,
           ...(inviteToken != null ? { inviteToken } : {}),
+          ...(isTestSession && testToken != null ? { testToken } : {}),
           clientSignals: signals,
           ...(honeypotRef.current?.value ? { honeypot: honeypotRef.current.value } : {}),
         })
@@ -209,7 +219,20 @@ export function useResponseLifecycle({
               window.localStorage.setItem(sessionStorageKey(loadedSurvey.id), sessionId);
             }
           })
-          .catch((err) => {
+          .catch(async (err) => {
+            // 첫 답변 직전에 설문이 중단된 경우 → 중단 화면으로 전환 (공통 헬퍼).
+            if (
+              await handlePausedMutationError({
+                err,
+                surveyId: loadedSurvey?.id,
+                testToken,
+                isTestSession,
+                setDuplicateStatus,
+                setPausedMessage,
+              })
+            ) {
+              return;
+            }
             console.error('응답 시작 오류:', err);
           })
           .finally(() => {
@@ -235,6 +258,8 @@ export function useResponseLifecycle({
       versionId,
       setCurrentResponseId,
       inviteToken,
+      testToken,
+      isTestSession,
     ],
   );
 
@@ -304,6 +329,7 @@ export function useResponseLifecycle({
             versionId: versionId ?? null,
             currentStepId: stepIdOf(currentStep),
             ...(inviteToken != null ? { inviteToken } : {}),
+            ...(isTestSession && testToken != null ? { testToken } : {}),
             clientSignals: signals,
             ...(honeypotRef.current?.value ? { honeypot: honeypotRef.current.value } : {}),
           });
@@ -403,6 +429,20 @@ export function useResponseLifecycle({
       resetResponseState();
       setIsCompleted(true);
     } catch (error) {
+      // 세션 도중 설문이 중단된 경우(blank INSERT 또는 complete 가 survey_paused throw)
+      // → 일반 에러 토스트 대신 중단 화면으로 전환 (공통 헬퍼). finally 가 isSubmitting 을 해제한다.
+      if (
+        await handlePausedMutationError({
+          err: error,
+          surveyId: loadedSurvey?.id,
+          testToken,
+          isTestSession,
+          setDuplicateStatus,
+          setPausedMessage,
+        })
+      ) {
+        return;
+      }
       console.error('응답 제출 오류:', error);
       toast.error('응답 제출 중 오류가 발생했습니다. 다시 시도해주세요.');
     } finally {
@@ -434,6 +474,8 @@ export function useResponseLifecycle({
     steps,
     versionId,
     visibleQuestions,
+    testToken,
+    isTestSession,
   ]);
 
   return { handleResponse, handleSubmit, isCreatingResponse };

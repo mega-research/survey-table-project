@@ -32,6 +32,9 @@ const EMPTY_OUTPUT: DropFunnelOutput = { bars: [], totalDrops: 0 };
  * Edge case:
  *   - currentVersionId 없음 / snapshot 비어있음 → 빈 결과.
  *   - drop 세션 0건이어도 formatDropFunnel 이 빈 bars 를 반환.
+ *
+ * `sr.is_test = false` — 테스트 응답은 drop funnel 모수에서 제외(notTestResponse 와 동일
+ * 의미, raw SQL 컨텍스트라 인라인 유지).
  */
 export async function getDropFunnel(surveyId: string): Promise<DropFunnelOutput> {
   // ── A) 현재 published snapshot 로드 + 캐노니컬 step ──────────────────────────
@@ -67,7 +70,7 @@ export async function getDropFunnel(surveyId: string): Promise<DropFunnelOutput>
       COALESCE(sr.page_visits, '[]'::jsonb) -> -1 ->> 'stepId' AS last_step_id,
       COUNT(*)::int AS cnt
     FROM survey_responses sr
-    WHERE sr.survey_id = ${surveyId}::uuid AND sr.status = 'drop'
+    WHERE sr.survey_id = ${surveyId}::uuid AND sr.status = 'drop' AND sr.is_test = false
     GROUP BY COALESCE(sr.page_visits, '[]'::jsonb) -> -1 ->> 'stepId'
   `);
 

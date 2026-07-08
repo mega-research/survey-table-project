@@ -44,12 +44,66 @@ export interface GroupNameDesign {
   textColor?: string; // 폰트색 hex (미설정 시 text-blue-700)
 }
 
-export type ResponseHeaderStyle = 'plain' | 'logo-title' | 'official-band';
+export type ResponseHeaderStyle = 'plain' | 'logo-title' | 'official-band' | 'composed';
 export type ResponseHeaderLogoSize = 'sm' | 'md' | 'lg';
 export type ResponseHeaderTitleSize = 'auto' | 'md' | 'lg';
 export type ResponseHeaderNoticeWidth = 'sm' | 'md' | 'lg';
 export type ResponseHeaderTitleAlign = 'left' | 'center' | 'right';
 export type ResponseHeaderLogoAlign = 'top' | 'center' | 'bottom';
+
+// ── composed(v2) 응답 헤더 — 블록 조합형 ────────────────────────────────────
+// plain/logo-title/official-band 는 레거시 저장 형태로 유지되고, 읽기 시
+// normalizeResponseHeaderConfig 가 composed 로 마이그레이션한다.
+export type ResponseHeaderBlockSize = 'sm' | 'md' | 'lg';
+/** left/center/right = 블록 행(stacked)·inline 셀, title-left/right = 제목 밴드 안, above/below = 한줄형 문구 전용 */
+export type ResponseHeaderBlockPos =
+  | 'left'
+  | 'center'
+  | 'right'
+  | 'title-left'
+  | 'title-right'
+  | 'above'
+  | 'below';
+/** 이미지 선: none = 없음, line = 이미지 테두리, wrap = 컨테이너 박스 */
+export type ResponseHeaderImageFrame = 'none' | 'line' | 'wrap';
+export type ResponseHeaderNoticeFormat = 'box' | 'line';
+export type ResponseHeaderVAlign = 'top' | 'center' | 'bottom';
+export type ResponseHeaderBandStyle = 'band' | 'boxed' | 'rule' | 'plain';
+/** 모바일 렌더 모드 — 마지막 적용 프리셋이 겸한다 */
+export type ResponseHeaderMobileStyle = 'gov' | 'band' | 'title';
+export type ResponseHeaderLayout = 'stacked' | 'inline';
+
+// interface 는 암묵 인덱스 시그니처가 없어 JSONB 패스스루 타입({ [key: string]: unknown })에
+// 대입 불가하므로 type alias 로 선언한다 (promote 등 소비처 호환)
+type ResponseHeaderBlockBase = {
+  id: string; // generateId() — 질문·옵션 id 와 동일 관례. 마이그레이션 산출 블록만 결정적 id
+  pos: ResponseHeaderBlockPos;
+  size: ResponseHeaderBlockSize;
+};
+
+export type ResponseHeaderBlock =
+  | (ResponseHeaderBlockBase & {
+      type: 'mark'; // 국가통계 마크 — 업로드형 (번들 에셋 없음)
+      imageUrl: string; // 미업로드 시 빈 문자열(자리표시자 렌더)
+      altText?: string;
+      frame?: ResponseHeaderImageFrame;
+    })
+  | (ResponseHeaderBlockBase & {
+      type: 'logo';
+      imageUrl: string;
+      altText?: string;
+      frame?: ResponseHeaderImageFrame;
+    })
+  | (ResponseHeaderBlockBase & {
+      type: 'notice'; // OO법 문구
+      format: ResponseHeaderNoticeFormat;
+      title: string; // 박스형 상단 검정 바 제목
+      boxBody: string; // 박스형 본문
+      lineBody: string; // 한줄형 본문 (모바일 밴드 모드 전환 시에도 사용)
+      alignBox?: ResponseHeaderTitleAlign;
+      alignLine?: ResponseHeaderTitleAlign;
+      fontSize?: number | null; // 직접 지정 px(9~28), null/미설정 = 자동
+    });
 
 export type SurveyResponseHeaderConfig =
   | {
@@ -88,6 +142,22 @@ export type SurveyResponseHeaderConfig =
           width: ResponseHeaderNoticeWidth;
         };
       };
+    }
+  | {
+      style: 'composed';
+      mobileStyle?: ResponseHeaderMobileStyle;
+      layout?: ResponseHeaderLayout;
+      blocks?: ResponseHeaderBlock[];
+      subtitle?: string;
+      titleAlign?: ResponseHeaderTitleAlign; // 밴드 내 제목 배치
+      titleTextAlign?: ResponseHeaderTitleAlign; // 제목 텍스트 정렬
+      titleVAlign?: ResponseHeaderVAlign; // 세로 위치(inline 배치에서 의미)
+      titleScale?: ResponseHeaderBlockSize;
+      titlePx?: number | null; // 직접 지정(14~72), 지정 시 자동 축소 미적용
+      vAlignLogo?: ResponseHeaderVAlign; // stacked 블록 행 이미지 세로 정렬
+      vAlignNotice?: ResponseHeaderVAlign; // stacked 블록 행 문구 세로 정렬
+      bandStyle?: ResponseHeaderBandStyle;
+      bandBg?: string; // 모든 밴드 스타일에서 배경으로 칠함, 기본 #ffffff
     };
 
 export interface QuestionGroupData {
@@ -378,4 +448,46 @@ export interface CampaignFilterSnapshot {
   resultCodes?: string[];
   /** @deprecated legacy 그룹값 필터 */
   groupValues?: string[];
+}
+
+// ── 쿼터 (surveys.quota_config) ──────────────────────────────
+/** 한 차원 안의 구간. kind='choice'면 values, kind='numeric'이면 min/max 사용. */
+export interface QuotaCategory {
+  id: string;
+  label: string;
+  /**
+   * choice: 이 카테고리에 속하는 보기값(수동=option.value, 테이블소스=cell.id)
+   * `| undefined` 명시: zod `.optional()` 추론 타입과 exactOptionalPropertyTypes 하에서
+   * 정합하려면 필요(features/quota/domain 의 컴파일 타임 zod↔drizzle 가드 참조).
+   */
+  values?: string[] | undefined;
+  /** numeric: 반열림 구간 min ≤ 값 < max (null = 무한) */
+  min?: number | null | undefined;
+  max?: number | null | undefined;
+}
+
+/** 쿼터 축. 문항 1개에 바인딩. */
+export interface QuotaDimension {
+  id: string;
+  questionId: string;
+  label: string;
+  kind: 'choice' | 'numeric';
+  categories: QuotaCategory[];
+}
+
+/** 셀 = 차원 카테고리 조합 + 목표. categoryIds는 dimensions 순서대로. */
+export interface QuotaCell {
+  categoryIds: string[];
+  target: number;
+}
+
+/** surveys.quota_config — 설문 쿼터 플랜 전체 (NULL = 쿼터 없음) */
+export interface QuotaConfig {
+  /** 집행 on/off. false면 정의·집계만 하고 응답자 차단 안 함. */
+  enabled: boolean;
+  dimensions: QuotaDimension[];
+  /** sparse — 목표가 있는 셀만 */
+  cells: QuotaCell[];
+  /** 마감 종료 화면 문구. null이면 기본 폴백. */
+  closedMessage: string | null;
 }
