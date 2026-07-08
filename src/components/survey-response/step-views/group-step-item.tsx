@@ -84,7 +84,7 @@ export function GroupStepItem({
         <div
           role="group"
           aria-labelledby={`q-label-${q.id}`}
-          className="mt-2"
+          className="m-2"
         >
           <QuestionInput
             question={q}
