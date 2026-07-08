@@ -237,7 +237,7 @@ export const DEFAULT_NOTICE_LINE =
   '본 조사는 통계법 제33조(비밀의 보호)에 의거, 응답하신 내용은 통계 작성 목적 외에는 사용되지 않습니다.';
 
 export const HEADER_MARK_HEIGHTS = { sm: 72, md: 98, lg: 128 } as const;
-export const HEADER_LOGO_HEIGHTS = { sm: 26, md: 38, lg: 52 } as const;
+export const HEADER_LOGO_HEIGHTS = { sm: 35, md: 51, lg: 70 } as const;
 // md 폭은 240 목업 원안에서 사용자 실측 조정을 거쳐 201로 확정되었다.
 export const HEADER_NOTICE_BOX_WIDTHS = { sm: 190, md: 201, lg: 300 } as const;
 export const HEADER_TITLE_PX = { sm: 26, md: 33, lg: 42 } as const;
@@ -415,8 +415,11 @@ export function resolveHeaderTitlePx(config: NormalizedResponseHeaderConfig, tit
   return Math.round(base * shrink);
 }
 
-export function resolveMobileHeaderTitlePx(desktopPx: number): number {
-  return Math.min(26, Math.max(17, Math.round(desktopPx * 0.62)));
+export function resolveMobileHeaderTitlePx(config: NormalizedResponseHeaderConfig, title: string): number {
+  if (config.titlePx !== null) return Math.min(27, Math.max(17, Math.round(config.titlePx * 0.62)));
+  const len = title.trim().length;
+  // 모바일 제목: 약 2줄이면 27px, 3줄 이상 길수록 단계적으로 축소 (글자수로 줄 수 근사)
+  return len > 54 ? 20 : len > 40 ? 23 : 27;
 }
 
 /** 문구 블록의 실효 글자 크기 px — fontSize 직접 지정이 없으면 형식·크기별 자동값 */

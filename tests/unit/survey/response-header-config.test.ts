@@ -238,10 +238,11 @@ describe('제목 px 계산', () => {
   it('titlePx 직접 지정 시 축소 미적용', () => {
     expect(resolveHeaderTitlePx({ ...base, titlePx: 50 }, '가'.repeat(60))).toBe(50);
   });
-  it('모바일 px는 0.62배 후 17~26 클램프', () => {
-    expect(resolveMobileHeaderTitlePx(33)).toBe(20);
-    expect(resolveMobileHeaderTitlePx(72)).toBe(26);
-    expect(resolveMobileHeaderTitlePx(14)).toBe(17);
+  it('모바일 px는 길이 기반 — 약 2줄 27, 3줄 이상 단계 축소', () => {
+    expect(resolveMobileHeaderTitlePx(base, '가'.repeat(30))).toBe(27);
+    expect(resolveMobileHeaderTitlePx(base, '가'.repeat(45))).toBe(23);
+    expect(resolveMobileHeaderTitlePx(base, '가'.repeat(60))).toBe(20);
+    expect(resolveMobileHeaderTitlePx({ ...base, titlePx: 40 }, '가')).toBe(25);
   });
 });
 

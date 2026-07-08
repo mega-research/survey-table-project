@@ -675,7 +675,7 @@ export function SurveyResponseFlow({
       <HoneypotField ref={honeypotRef} />
       {/* 헤더 — 제목/로고/통계법만 (진행바·카운트는 아래 회색 영역으로 분리) */}
       <div className="border-b border-gray-200 bg-white">
-        <div className={`${containerMaxWidth} mx-auto px-4 py-4 transition-all duration-300 md:px-6`}>
+        <div className={`${containerMaxWidth} mx-auto px-4 pt-4 pb-2 transition-all duration-300 md:px-6 md:pb-0`}>
           <SurveyResponseHeader
             title={loadedSurvey.title}
             description={loadedSurvey.description}
@@ -686,7 +686,7 @@ export function SurveyResponseFlow({
       </div>
 
       {/* 진행 현황 — 헤더 밖 회색 영역(콘텐츠 컨테이너 위) */}
-      <div className={`${containerMaxWidth} mx-auto px-4 pt-3 transition-all duration-300 md:px-6`}>
+      <div className={`${containerMaxWidth} mx-auto px-4 pt-1 transition-all duration-300 md:px-6`}>
         <div className="hidden items-center justify-end text-sm text-gray-500 md:flex">
           {currentVisibleStepNumber || 1} / {Math.max(totalVisibleStepCount, 1)}
           <span className="ml-2 text-xs text-gray-400">(전체 {questions.length}개 질문)</span>

@@ -59,7 +59,7 @@ function ComposedHeaderMobile({ config, title }: { config: NormalizedResponseHea
   const parts = partitionHeaderBlocks(config.blocks);
   const images = config.blocks.filter((b): b is NormalizedHeaderImageBlock => b.type === 'mark' || b.type === 'logo');
   const boxNotices = config.blocks.filter((b): b is NormalizedHeaderNoticeBlock => b.type === 'notice' && b.format === 'box');
-  const titlePx = resolveMobileHeaderTitlePx(resolveHeaderTitlePx(config, title));
+  const titlePx = resolveMobileHeaderTitlePx(config, title);
   const band = getHeaderBandBorders(config.bandStyle);
 
   const above = parts.above.length > 0 && (
@@ -145,13 +145,13 @@ function ComposedHeaderMobile({ config, title }: { config: NormalizedResponseHea
     <div data-testid="header-mobile-gov">
       {above}
       {(marks.length > 0 || logos.length > 0) && (
-        <div data-testid="header-mobile-lockup" className="mb-3 flex flex-wrap items-center justify-center gap-3.5">
+        <div data-testid="header-mobile-lockup" className="flex flex-wrap items-center justify-center gap-3.5">
           {marks.map((b) => <HeaderImageBlock key={b.id} block={b} heightPx={44} mobile />)}
           {marks.length > 0 && logos.length > 0 && <div className="h-7 w-px bg-[#d7dae0]" />}
-          {logos.map((b) => <HeaderImageBlock key={b.id} block={b} heightPx={26} mobile />)}
+          {logos.map((b) => <HeaderImageBlock key={b.id} block={b} heightPx={50} mobile />)}
         </div>
       )}
-      <div className="px-4 py-3" style={{ backgroundColor: config.bandBg, borderTop: band.top, borderBottom: band.bottom, borderLeft: band.side, borderRight: band.side, textAlign: config.titleTextAlign }}>
+      <div className="px-4 pt-3" style={{ backgroundColor: config.bandBg, borderTop: band.top, borderBottom: band.bottom, borderLeft: band.side, borderRight: band.side, textAlign: config.titleTextAlign }}>
         <h1 className="break-keep font-extrabold leading-[1.35] text-[#141414] [text-wrap:balance]" style={{ fontSize: titlePx, letterSpacing: '-0.4px' }}>{title}</h1>
       </div>
       {cards.length > 0 && <div className="mt-3 flex flex-col gap-2">{cards}</div>}
@@ -163,8 +163,8 @@ function ComposedHeaderMobile({ config, title }: { config: NormalizedResponseHea
 function MobileNoticeCard({ block }: { block: NormalizedHeaderNoticeBlock }) {
   return (
     <details data-testid="header-notice-card" className="group rounded-lg border border-[#d7dae0]">
-      <summary className="flex min-h-[44px] cursor-pointer list-none items-center justify-between gap-2.5 px-3 py-2.5 [&::-webkit-details-marker]:hidden">
-        <div className="break-keep text-xs font-bold leading-[1.4] text-gray-700">
+      <summary className="flex min-h-[44px] cursor-pointer list-none items-center justify-between gap-2.5 px-3.5 py-3 [&::-webkit-details-marker]:hidden">
+        <div className="break-keep text-sm font-bold leading-[1.4] text-gray-700">
           {block.title.trim() || '통계법 제33조(비밀의 보호)'}
         </div>
         <div className="h-2 w-2 flex-none -translate-y-0.5 rotate-45 border-b-2 border-r-2 border-gray-500 transition-transform group-open:translate-y-0 group-open:rotate-[135deg]" />
@@ -219,7 +219,7 @@ function ComposedHeaderDesktop({ config, title }: { config: NormalizedResponseHe
   return (
     <div>
       {hasRow && (
-        <div data-testid="header-block-row" className="mb-7 flex items-stretch justify-between gap-6">
+        <div data-testid="header-block-row" className="mb-1 flex items-stretch justify-between gap-6">
           <div className="flex flex-wrap items-stretch gap-3.5">{parts.rowLeft.map((b) => <HeaderBlockView key={b.id} block={b} config={config} />)}</div>
           <div className="flex flex-wrap items-stretch justify-center gap-3.5">{parts.rowCenter.map((b) => <HeaderBlockView key={b.id} block={b} config={config} />)}</div>
           <div className="flex flex-wrap items-stretch justify-end gap-3.5">{parts.rowRight.map((b) => <HeaderBlockView key={b.id} block={b} config={config} />)}</div>
@@ -228,7 +228,7 @@ function ComposedHeaderDesktop({ config, title }: { config: NormalizedResponseHe
       {above}
       <div
         data-testid="header-band"
-        className="flex items-center gap-7 px-7 py-4"
+        className="flex items-center gap-7 px-7 pt-3"
         style={{ backgroundColor: config.bandBg, borderTop: band.top, borderBottom: band.bottom, borderLeft: band.side, borderRight: band.side }}
       >
         {parts.titleLeft.map((b) => <div key={b.id} className="flex flex-none items-center"><HeaderBlockView block={b} config={config} /></div>)}
@@ -310,7 +310,7 @@ function NoticeBox({ block, inline = false }: { block: NormalizedHeaderNoticeBlo
       <div className="bg-[#111111] px-2 py-[5px] text-[13px] font-bold tracking-[-0.2px] text-white">{block.title}</div>
       <div
         className="whitespace-pre-line leading-[1.5] text-[#3d3d3f] [text-wrap:pretty]"
-        style={{ fontSize: resolveNoticeFontPx(block), textAlign: block.alignBox, padding: inline ? '6px 4px 0' : '7px 10px 9px' }}
+        style={{ fontSize: resolveNoticeFontPx(block), textAlign: block.alignBox, padding: inline ? '6px 4px 0' : '5px 10px 5px' }}
       >
         {block.boxBody}
       </div>
