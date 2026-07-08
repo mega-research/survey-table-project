@@ -44,4 +44,28 @@ describe('PageStepView', () => {
     expect(screen.getByTestId('qi-q1')).toBeInTheDocument();
     expect(screen.getByTestId('qi-q2')).toBeInTheDocument();
   });
+
+  it('문항 래퍼가 divide-y 직계 형제로 py 여백을 소유한다 (중간 문항 간격 회귀 가드)', () => {
+    const { container } = render(
+      <PageStepView
+        step={step}
+        responses={{}}
+        questions={step.items.map((i) => i.question)}
+        groups={[]}
+        evalCtx={undefined as never}
+        onResponse={() => {}}
+        highlightQuestionIds={new Set()}
+      />,
+    );
+    // 여백 클래스는 divide-y 컨테이너의 직계 자식(래퍼)에 있어야 first:/last:가
+    // 페이지 내 실제 첫/마지막 문항에만 적용된다. GroupStepItem 내부에 두면
+    // 항목마다 유일한 자식이 되어 py가 전부 0으로 죽는다.
+    const wrappers = container.querySelectorAll('.divide-y > div');
+    expect(wrappers.length).toBe(2);
+    wrappers.forEach((w) => {
+      expect(w.className).toContain('py-6');
+      expect(w.className).toContain('first:pt-0');
+      expect(w.className).toContain('last:pb-0');
+    });
+  });
 });

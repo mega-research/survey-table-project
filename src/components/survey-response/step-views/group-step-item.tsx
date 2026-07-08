@@ -44,7 +44,8 @@ export function GroupStepItem({
   );
 
   return (
-    <div className="py-6 first:pt-0 last:pb-0">
+    // 페이지 내 문항 간 여백은 PageStepView 래퍼가 소유한다 (first/last 판정이 래퍼 형제 기준이어야 해서)
+    <div>
       {showSubgroupHeading && (
         <h3 className="mb-3 text-sm font-semibold tracking-[0.12em] text-gray-500 uppercase md:text-xs">
           {item.subgroupName}
