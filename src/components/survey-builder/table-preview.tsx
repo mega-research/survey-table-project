@@ -181,7 +181,9 @@ export const TablePreview = React.memo(function TablePreview({
           <CardTitle>{tableTitle}</CardTitle>
         </CardHeader>
       )}
-      <CardContent>
+      {/* CardContent 기본 pt-0 — 제목(CardHeader) 없는 표는 위 여백이 0이라 표가 상단에
+          붙는다. 아래(p-6)와 대칭이 되도록 제목 없을 때만 pt-6을 준다. */}
+      <CardContent className={tableTitle ? undefined : 'pt-6'}>
         <div className="relative">
           <div
             role="grid"
