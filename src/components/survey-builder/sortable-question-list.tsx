@@ -59,7 +59,7 @@ import { Question, QuestionGroup } from '@/types/survey';
 
 import { buildFlatOrderedQuestions } from '@/lib/group-ordering';
 import { noop, estimateCardHeight, getQuestionTypeLabel } from './question-list-utils';
-import { PageBreakDivider } from './page-break-divider';
+import { PageBreakToggle } from './page-break-toggle';
 import { QuestionPreview } from './question-preview';
 import { QuestionTestCard } from './question-test-card';
 import { GroupHeader } from './group-header';
@@ -130,6 +130,8 @@ interface SortableQuestionProps {
   onDelete: (id: string) => void;
   onDuplicate: (id: string) => void;
   onSaveToLibrary?: ((question: Question) => void) | undefined;
+  // 페이지 구분점 토글 — 선형 첫 질문·드래그 오버레이에는 넘기지 않아 버튼을 숨긴다
+  onTogglePageBreak?: ((id: string) => void) | undefined;
   isDragOverlay?: boolean | undefined;
 }
 
@@ -142,6 +144,7 @@ const SortableQuestion = React.memo(function SortableQuestion({
   onDelete,
   onDuplicate,
   onSaveToLibrary,
+  onTogglePageBreak,
   isDragOverlay = false,
 }: SortableQuestionProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -195,6 +198,9 @@ const SortableQuestion = React.memo(function SortableQuestion({
           </div>
 
           <div className="flex items-center space-x-1">
+            {question.pageBreakBefore && onTogglePageBreak && (
+              <span className="rounded bg-blue-50 px-2 py-1 text-xs text-blue-500">새 페이지</span>
+            )}
             {question.required && (
               <span className="rounded bg-red-50 px-2 py-1 text-xs text-red-500">필수</span>
             )}
@@ -225,6 +231,12 @@ const SortableQuestion = React.memo(function SortableQuestion({
               >
                 <Copy className="h-4 w-4" />
               </Button>
+              {onTogglePageBreak && (
+                <PageBreakToggle
+                  active={!!question.pageBreakBefore}
+                  onToggle={() => onTogglePageBreak(question.id)}
+                />
+              )}
               {onSaveToLibrary && (
                 <Button
                   variant="ghost"
@@ -713,6 +725,18 @@ export function SortableQuestionList({
     }
   }, []);
 
+  // 페이지 구분점 토글 — React.memo 유지를 위해 안정 참조로 전달
+  const handleTogglePageBreak = useCallback(
+    (questionId: string) => {
+      const target = useSurveyBuilderStore
+        .getState()
+        .currentSurvey.questions.find((q) => q.id === questionId);
+      if (!target) return;
+      updateQuestion(questionId, { pageBreakBefore: !target.pageBreakBefore });
+    },
+    [updateQuestion],
+  );
+
   if (questions.length === 0) {
     return null;
   }
@@ -749,14 +773,6 @@ export function SortableQuestionList({
         {overId === question.id && activeId !== question.id && (
           <div className="absolute -top-2 right-0 left-0 z-10 h-1 animate-pulse rounded-full bg-blue-500" />
         )}
-        {question.id !== firstLinearQuestionId && (
-          <PageBreakDivider
-            active={!!question.pageBreakBefore}
-            onToggle={() =>
-              updateQuestion(question.id, { pageBreakBefore: !question.pageBreakBefore })
-            }
-          />
-        )}
         <SortableQuestion
           question={question}
           index={qIdx}
@@ -766,6 +782,9 @@ export function SortableQuestionList({
           onDelete={handleDelete}
           onDuplicate={handleDuplicate}
           onSaveToLibrary={onSaveToLibrary}
+          onTogglePageBreak={
+            question.id !== firstLinearQuestionId ? handleTogglePageBreak : undefined
+          }
         />
       </div>
     );
