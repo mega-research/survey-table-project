@@ -156,7 +156,7 @@ function ComposedHeaderMobile({ config, title }: { config: NormalizedResponseHea
     <div data-testid="header-mobile-gov">
       {above}
       {(marks.length > 0 || logos.length > 0) && (
-        <div data-testid="header-mobile-lockup" className="flex flex-wrap items-center justify-center gap-3.5">
+        <div data-testid="header-mobile-lockup" className="flex flex-wrap items-center justify-center gap-3.5 pb-3">
           {marks.map((b) => <HeaderImageBlock key={b.id} block={b} heightPx={44} mobile />)}
           {marks.length > 0 && logos.length > 0 && <div className="h-7 w-px bg-[#d7dae0]" />}
           {logos.map((b) => <HeaderImageBlock key={b.id} block={b} heightPx={50} mobile />)}
