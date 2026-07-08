@@ -37,12 +37,12 @@ export function SurveyResponseHeader({
     const titleOnly = { ...config, blocks: [] };
     const desktopCompact = <ComposedHeaderDesktop config={titleOnly} title={title} />;
     const mobileCompact = <ComposedHeaderMobile config={titleOnly} title={title} />;
-    if (device === 'desktop') return <div className="py-3">{desktopCompact}</div>;
-    if (device === 'mobile') return <div className="py-2">{mobileCompact}</div>;
+    if (device === 'desktop') return <div className="pb-3">{desktopCompact}</div>;
+    if (device === 'mobile') return mobileCompact;
     return (
       <>
-        <div className="hidden py-3 md:block">{desktopCompact}</div>
-        <div className="py-2 md:hidden">{mobileCompact}</div>
+        <div className="hidden pb-3 md:block">{desktopCompact}</div>
+        <div className="md:hidden">{mobileCompact}</div>
       </>
     );
   }
