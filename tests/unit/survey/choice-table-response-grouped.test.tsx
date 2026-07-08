@@ -377,3 +377,21 @@ describe('비그룹 radio 계약 - 재클릭 해제 불가 유지', () => {
     expect(onChange).toHaveBeenCalledWith('cellB');
   });
 });
+
+describe('ChoiceTableResponse — controlled input 경고', () => {
+  it('그룹 radio 셀 렌더 시 checked-without-onChange 경고를 내지 않는다', () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    render(
+      <ChoiceTableResponse
+        question={groupedRadioQuestion()}
+        value={null}
+        onChange={() => {}}
+      />,
+    );
+    const warned = errorSpy.mock.calls.some((call) =>
+      call.some((arg) => typeof arg === 'string' && arg.includes('checked')),
+    );
+    errorSpy.mockRestore();
+    expect(warned).toBe(false);
+  });
+});

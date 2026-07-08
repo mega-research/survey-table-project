@@ -19,6 +19,10 @@ import { findMobileHeaderCell } from '@/utils/mobile-display-cells';
 import { MobileOptionCard } from './mobile-card-shared';
 import { OptionTextInput } from './option-text-input';
 
+// 그룹 radio 셀은 onClick 이 토글을 전담하므로 onChange 는 no-op.
+// 핸들러를 아예 빼면 controlled checked 에 대한 React 경고가 발생한다.
+const noopChange = () => {};
+
 interface ChoiceTableResponseProps {
   question: Question;
   /**
@@ -172,11 +176,12 @@ export function ChoiceTableResponse({ question, value, onChange }: ChoiceTableRe
           // radio 셀: 그룹 모드에서 재클릭(이미 선택) 은 onChange 가 발화하지 않으므로
           //   onClick 에서 토글 해제. 비그룹 radio 는 기존대로 해제 불가(onChange만).
           // checkbox 셀: onChange 경로(native toggle). onClick 불필요.
+          // 그룹 radio 의 onChange 는 no-op — 핸들러 부재 시 React controlled 경고 발생.
           onClick={isGrouped && cellType === 'radio' ? () => toggle(cell.id, !checked) : undefined}
           onChange={
             !isGrouped || cellType === 'checkbox'
               ? (e) => toggle(cell.id, e.target.checked)
-              : undefined
+              : noopChange
           }
           className="h-4 w-4"
         />
@@ -245,7 +250,7 @@ export function ChoiceTableResponse({ question, value, onChange }: ChoiceTableRe
                       onChange={
                         !isGrouped || mobileCellType === 'checkbox'
                           ? (e) => toggle(choiceCell.id, e.target.checked)
-                          : undefined
+                          : noopChange
                       }
                       className="h-5 w-5"
                     />
