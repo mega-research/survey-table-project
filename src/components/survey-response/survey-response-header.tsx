@@ -31,16 +31,18 @@ export function SurveyResponseHeader({
   const config = normalizeResponseHeaderConfig(responseHeader);
 
   // 비-첫페이지: 로고·문구 블록만 제거하고 제목 밴드는 1페이지와 동일한 스타일로 유지한다.
+  // 1페이지는 로고·문구가 세로 지지대 역할을 하지만 컴팩트 헤더는 제목뿐이라
+  // 자체 세로 여백을 줘야 위아래가 붙어 보이지 않는다.
   if (!showBranding) {
     const titleOnly = { ...config, blocks: [] };
     const desktopCompact = <ComposedHeaderDesktop config={titleOnly} title={title} />;
     const mobileCompact = <ComposedHeaderMobile config={titleOnly} title={title} />;
-    if (device === 'desktop') return desktopCompact;
-    if (device === 'mobile') return mobileCompact;
+    if (device === 'desktop') return <div className="py-3">{desktopCompact}</div>;
+    if (device === 'mobile') return <div className="py-2">{mobileCompact}</div>;
     return (
       <>
-        <div className="hidden md:block">{desktopCompact}</div>
-        <div className="md:hidden">{mobileCompact}</div>
+        <div className="hidden py-3 md:block">{desktopCompact}</div>
+        <div className="py-2 md:hidden">{mobileCompact}</div>
       </>
     );
   }
