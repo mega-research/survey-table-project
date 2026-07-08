@@ -195,12 +195,14 @@ const SortableQuestion = React.memo(function SortableQuestion({
             <span className="text-sm font-medium text-gray-600 capitalize">
               {getQuestionTypeLabel(question.type)}
             </span>
+            {question.pageBreakBefore && onTogglePageBreak && (
+              <span className="rounded bg-blue-50 px-2 py-1 text-xs text-blue-500">
+                페이지 분할
+              </span>
+            )}
           </div>
 
           <div className="flex items-center space-x-1">
-            {question.pageBreakBefore && onTogglePageBreak && (
-              <span className="rounded bg-blue-50 px-2 py-1 text-xs text-blue-500">새 페이지</span>
-            )}
             {question.required && (
               <span className="rounded bg-red-50 px-2 py-1 text-xs text-red-500">필수</span>
             )}
