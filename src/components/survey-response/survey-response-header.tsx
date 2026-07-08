@@ -1,7 +1,7 @@
 import type { CSSProperties, ReactNode } from 'react';
 
 import {
-  getHeaderBandBorders, getTitleAlignClass, HEADER_LOGO_HEIGHTS, HEADER_MARK_HEIGHTS,
+  getHeaderBandBorders, HEADER_LOGO_HEIGHTS, HEADER_MARK_HEIGHTS,
   HEADER_NOTICE_BOX_WIDTHS, normalizeResponseHeaderConfig, partitionHeaderBlocks,
   resolveHeaderTitlePx, resolveMobileHeaderTitlePx, resolveNoticeFontPx,
 } from '@/lib/survey/response-header-config';
@@ -10,7 +10,7 @@ import type {
   NormalizedResponseHeaderBlock, NormalizedResponseHeaderConfig,
 } from '@/lib/survey/response-header-config';
 import { cn, isEmptyHtml } from '@/lib/utils';
-import type { ResponseHeaderTitleAlign, SurveyResponseHeaderConfig } from '@/db/schema/schema-types';
+import type { SurveyResponseHeaderConfig } from '@/db/schema/schema-types';
 
 interface SurveyResponseHeaderProps {
   title: string;
@@ -30,8 +30,19 @@ export function SurveyResponseHeader({
 }: SurveyResponseHeaderProps) {
   const config = normalizeResponseHeaderConfig(responseHeader);
 
+  // 비-첫페이지: 로고·문구 블록만 제거하고 제목 밴드는 1페이지와 동일한 스타일로 유지한다.
   if (!showBranding) {
-    return <TitleBlock title={title} align={config.titleTextAlign} />;
+    const titleOnly = { ...config, blocks: [] };
+    const desktopCompact = <ComposedHeaderDesktop config={titleOnly} title={title} />;
+    const mobileCompact = <ComposedHeaderMobile config={titleOnly} title={title} />;
+    if (device === 'desktop') return desktopCompact;
+    if (device === 'mobile') return mobileCompact;
+    return (
+      <>
+        <div className="hidden md:block">{desktopCompact}</div>
+        <div className="md:hidden">{mobileCompact}</div>
+      </>
+    );
   }
 
   const desktop = <ComposedHeaderDesktop config={config} title={title} />;
@@ -329,10 +340,3 @@ function NoticeLine({ block, mobile = false }: { block: NormalizedHeaderNoticeBl
   );
 }
 
-function TitleBlock({ title, align = 'center' }: { title: string; align?: ResponseHeaderTitleAlign }) {
-  return (
-    <div data-testid="title-block" data-title-align={align} className={getTitleAlignClass(align)}>
-      <h1 className="text-xl font-semibold leading-tight text-gray-900 sm:text-2xl">{title}</h1>
-    </div>
-  );
-}

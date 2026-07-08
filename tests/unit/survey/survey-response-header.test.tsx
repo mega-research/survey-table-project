@@ -10,10 +10,29 @@ const composed = (over: Partial<Extract<SurveyResponseHeaderConfig, { style: 'co
 });
 
 describe('SurveyResponseHeader (composed 데스크톱)', () => {
-  it('showBranding=false면 컴팩트 제목만 렌더한다', () => {
-    render(<SurveyResponseHeader title="제목" responseHeader={composed()} showBranding={false} />);
-    expect(screen.getByTestId('title-block')).toBeInTheDocument();
-    expect(screen.queryByTestId('header-band')).not.toBeInTheDocument();
+  it('showBranding=false면 로고·문구 블록 없이 제목 밴드를 브랜딩과 동일한 스타일로 렌더한다', () => {
+    render(
+      <SurveyResponseHeader
+        title="제목"
+        device="desktop"
+        showBranding={false}
+        responseHeader={composed({
+          bandStyle: 'band', bandBg: '#f0f0f0',
+          blocks: [
+            { id: 'l1', type: 'logo', pos: 'right', size: 'lg', imageUrl: 'https://x/logo.png' },
+            { id: 'n1', type: 'notice', pos: 'left', size: 'md', format: 'box', title: '통계법', boxBody: '보호', lineBody: '' },
+          ],
+        })}
+      />,
+    );
+    // 제목 밴드는 1페이지와 동일하게 유지된다 (같은 heading + 밴드 스타일)
+    const band = screen.getByTestId('header-band');
+    expect(band).toHaveStyle({ backgroundColor: '#f0f0f0' });
+    expect(screen.getByRole('heading', { name: '제목' })).toBeInTheDocument();
+    // 로고·통계법 블록만 사라진다
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('header-block-row')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('header-notice-card')).not.toBeInTheDocument();
   });
 
   it('stacked — 블록 행과 제목 밴드를 렌더하고 밴드 스타일 괘선을 적용한다', () => {
