@@ -50,7 +50,7 @@ export function PageStepView({
             return (
               <div key={item.question.id}>
                 {showRootBadge && item.rootGroupName && (
-                  <div className="pt-5 pb-2 first:pt-0">
+                  <div className="pt-8 pb-3 first:pt-0">
                     <RootGroupNameBadge
                       name={item.rootGroupName}
                       design={item.rootGroupNameDesign}

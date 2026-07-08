@@ -44,7 +44,7 @@ export function GroupStepItem({
   );
 
   return (
-    <div className="py-5 first:pt-0 last:pb-0">
+    <div className="py-6 first:pt-0 last:pb-0">
       {showSubgroupHeading && (
         <h3 className="mb-3 text-sm font-semibold tracking-[0.12em] text-gray-500 uppercase md:text-xs">
           {item.subgroupName}
