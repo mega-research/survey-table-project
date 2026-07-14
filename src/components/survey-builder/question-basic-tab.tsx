@@ -739,6 +739,10 @@ export function QuestionBasicTab({
               onChange={(next) =>
                 setFormData((prev) => ({ ...prev, optionsColumns: next }))
               }
+              align={formData.optionsAlign}
+              onAlignChange={(next) =>
+                setFormData((prev) => ({ ...prev, optionsAlign: next }))
+              }
             />
           )}
 

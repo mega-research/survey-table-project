@@ -145,6 +145,7 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
         tableHeaderGrid: (question as any).tableHeaderGrid || undefined,
         allowOtherOption: (question as any).allowOtherOption || false,
         optionsColumns: (question as any).optionsColumns,
+        optionsAlign: (question as any).optionsAlign,
         rankingConfig: (question as any).rankingConfig,
         minSelections: (question as any).minSelections,
         maxSelections: (question as any).maxSelections,
