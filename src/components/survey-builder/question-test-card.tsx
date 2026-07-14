@@ -102,7 +102,8 @@ function RadioTestInput({
     <div className={layout.className} style={layout.style}>
       {question.options?.map((option) => (
         <div key={option.id} className="space-y-2">
-          <div className="flex items-center space-x-3">
+          {/* items-start + mt-0.5: 라벨(text-sm)이 2줄로 감겨도 라디오가 첫 줄 중앙에 고정 */}
+          <div className="flex items-start space-x-3">
             <input
               type="radio"
               id={`${question.id}-${option.id}`}
@@ -111,7 +112,7 @@ function RadioTestInput({
               checked={isSelected(option.value)}
               onChange={() => handleOptionChange(option.value, option.id)}
               onClick={() => handleOptionChange(option.value, option.id)}
-              className="h-4 w-4 cursor-pointer border-gray-300 text-blue-600 focus:ring-blue-500"
+              className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer border-gray-300 text-blue-600 focus:ring-blue-500"
             />
             <label
               htmlFor={`${question.id}-${option.id}`}
@@ -250,14 +251,15 @@ function CheckboxTestInput({
 
         return (
           <div key={option.id} className="space-y-2">
-            <div className="flex items-center space-x-3">
+            {/* items-start + mt-0.5: 라벨(text-sm)이 2줄로 감겨도 체크박스가 첫 줄 중앙에 고정 */}
+            <div className="flex items-start space-x-3">
               <input
                 type="checkbox"
                 id={`${question.id}-${option.id}`}
                 checked={checked}
                 disabled={disabled}
                 onChange={(e) => handleOptionChange(option.value, option.id, e.target.checked)}
-                className={`h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 ${
+                className={`mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300 text-blue-600 focus:ring-blue-500 ${
                   disabled ? 'cursor-not-allowed opacity-50' : ''
                 }`}
               />
