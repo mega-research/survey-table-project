@@ -10,6 +10,8 @@
 }
 
 :root {
+  /* 앱은 라이트 전용 — OS 다크 테마에서 UA 폼 컨트롤(input/select)까지 어두워지는 것 차단 */
+  color-scheme: light;
   --background: #ffffff;
   --foreground: #1c1c1e;
   --primary: #007aff;
@@ -470,12 +472,16 @@
 .fill-gray-800 { fill: var(--color-gray-800); }
 .fill-gray-900 { fill: var(--color-gray-900); }
 
+/* 다크 테마 미지원 — 서피스가 라이트 하드코딩(bg-white 등)이라 foreground만 뒤집히면
+   테이블 셀처럼 색을 상속받는 텍스트가 흰 배경 위 흰 글자가 된다.
+   추후 다크 테마 도입 시 서피스 토큰화와 함께 복원할 것.
 @media (prefers-color-scheme: dark) {
   :root {
     --background: #000000;
     --foreground: #ffffff;
   }
 }
+*/
 
 body {
   background: var(--background);
