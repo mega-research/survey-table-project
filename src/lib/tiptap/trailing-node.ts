@@ -9,9 +9,13 @@ interface TrailingNodeOptions {
   notAfter: string[];
 }
 
-/** TrailingNode가 자동으로 붙이는 문서 끝 빈 paragraph 제거 — 부모 isDirty 오탐 방지 */
+/**
+ * TrailingNode가 자동으로 붙이는 문서 끝 빈 paragraph 제거 — 부모 isDirty 오탐 방지.
+ * TextAlign(v3)이 모든 문단에 style="text-align: ..." 을 렌더하므로 속성 유무와 무관하게 매치해야 한다.
+ * 내용이 있는 문단과 의도적 빈 줄(<p><br></p>)은 유지한다.
+ */
 export function stripTrailingEmptyParagraph(html: string): string {
-  return html.replace(/(?:<p><\/p>\s*)+$/i, '');
+  return html.replace(/(?:<p\b[^>]*><\/p>\s*)+$/i, '');
 }
 
 /**
