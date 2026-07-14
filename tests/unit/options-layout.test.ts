@@ -20,14 +20,14 @@ describe('getOptionsLayout', () => {
       'flex flex-wrap gap-x-4 gap-y-2 justify-center',
     );
     expect(getOptionsLayout(0, 'right').className).toBe(
-      'flex flex-wrap gap-x-4 gap-y-2 justify-end',
+      'flex flex-wrap gap-x-4 gap-y-2 justify-end pr-5',
     );
   });
 
   it('세로(1/undefined) 배치는 w-fit + margin 으로 블록째 이동한다', () => {
     expect(getOptionsLayout(1, 'center').className).toBe('flex flex-col gap-2 w-fit mx-auto');
     expect(getOptionsLayout(undefined, 'right').className).toBe(
-      'flex flex-col gap-2 w-fit ml-auto',
+      'flex flex-col gap-2 w-fit ml-auto pr-5',
     );
   });
 
