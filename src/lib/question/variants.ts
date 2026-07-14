@@ -49,7 +49,7 @@ type EmbeddedTableFields = Pick<
 type ChoiceGroupFields = Pick<Question, 'choiceGroups'>;
 
 /** question.options 옵션 리스트 — radio/checkbox/select/ranking(manual). */
-type OptionListFields = Pick<Question, 'options' | 'optionsColumns' | 'allowOtherOption'>;
+type OptionListFields = Pick<Question, 'options' | 'optionsColumns' | 'optionsAlign' | 'allowOtherOption'>;
 
 export interface TextQuestion
   extends QuestionBase,

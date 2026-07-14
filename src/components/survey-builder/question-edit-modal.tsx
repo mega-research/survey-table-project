@@ -340,6 +340,7 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
               tableHeaderGrid: currentFormData.tableHeaderGrid ?? question?.tableHeaderGrid,
               allowOtherOption: currentFormData.allowOtherOption ?? question?.allowOtherOption,
               optionsColumns: currentFormData.optionsColumns ?? question?.optionsColumns,
+              optionsAlign: currentFormData.optionsAlign ?? question?.optionsAlign,
               minSelections: currentFormData.minSelections ?? question?.minSelections,
               maxSelections: currentFormData.maxSelections ?? question?.maxSelections,
               noticeContent: currentFormData.noticeContent || question?.noticeContent,

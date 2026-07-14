@@ -28,6 +28,7 @@ export const PERSISTED_QUESTION_FIELDS = [
   'tableHeaderGrid',
   'allowOtherOption',
   'optionsColumns',
+  'optionsAlign',
   'minSelections',
   'maxSelections',
   'noticeContent',

@@ -51,6 +51,7 @@ interface SnapshotQuestion {
   order: number;
   allowOtherOption?: boolean | undefined;
   optionsColumns?: number | undefined;
+  optionsAlign?: Question['optionsAlign'] | undefined;
   rankingConfig?: Question['rankingConfig'] | undefined;
   choiceGroups?: Question['choiceGroups'] | undefined;
   minSelections?: number | undefined;
@@ -116,6 +117,7 @@ export function buildSurveySnapshot(survey: Survey): SurveySnapshot {
       order: q.order,
       allowOtherOption: q.allowOtherOption,
       optionsColumns: q.optionsColumns,
+      optionsAlign: q.optionsAlign,
       rankingConfig: q.rankingConfig,
       choiceGroups: q.choiceGroups,
       minSelections: q.minSelections,

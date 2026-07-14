@@ -13,6 +13,9 @@ export type QuestionType =
   | 'table'
   | 'notice';
 
+// 옵션 그룹 블록 정렬 (radio/checkbox 전용)
+export type OptionsAlign = 'left' | 'center' | 'right';
+
 // 순위형 질문 설정
 export interface RankingConfig {
   positions: number; // 매길 순위 개수 (1~10, 기본 3)
@@ -478,6 +481,9 @@ export interface Question {
   // 옵션 리스트 렌더 방식 (radio/checkbox/ranking 공통)
   // undefined 또는 1 = 세로 1열(기본) / 0 = 가로 한 줄(wrap) / N ≥ 2 = N열 그리드
   optionsColumns?: number;
+  // 옵션 그룹 블록 정렬 (radio/checkbox 전용). null/undefined = left.
+  // 가로(0)/세로(1)에서만 유효, N열 그리드는 무시. 내부는 항상 좌측 정렬(체크박스 세로선 유지).
+  optionsAlign?: OptionsAlign;
   // 체크박스 선택 개수 제한 (checkbox 타입 전용)
   minSelections?: number; // 최소 선택 개수
   maxSelections?: number; // 최대 선택 개수

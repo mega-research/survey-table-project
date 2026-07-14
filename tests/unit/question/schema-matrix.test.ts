@@ -61,7 +61,7 @@ const EMBEDDED_TABLE_KEYS = [
   'hideColumnLabels',
 ];
 
-const OPTION_LIST_KEYS = ['options', 'optionsColumns', 'allowOtherOption'];
+const OPTION_LIST_KEYS = ['options', 'optionsColumns', 'optionsAlign', 'allowOtherOption'];
 
 function shapeKeys(schema: { shape: Record<string, unknown> }): string[] {
   return Object.keys(schema.shape).sort();

@@ -49,6 +49,7 @@ export async function createQuestion(data: CreateQuestionInput): Promise<Questio
     tableHeaderGrid: data.tableHeaderGrid as NewQuestion['tableHeaderGrid'],
     allowOtherOption: data.allowOtherOption,
     optionsColumns: data.optionsColumns,
+    optionsAlign: data.optionsAlign,
     minSelections: data.minSelections,
     maxSelections: data.maxSelections,
     noticeContent: data.noticeContent,

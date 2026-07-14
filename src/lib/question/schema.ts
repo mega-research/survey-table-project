@@ -59,6 +59,7 @@ const choiceGroups = z.object({
 const optionList = z.object({
   options: z.custom<NonNullable<Question['options']>>().optional(),
   optionsColumns: z.number().optional(),
+  optionsAlign: z.enum(['left', 'center', 'right']).optional(),
   allowOtherOption: z.boolean().optional(),
 });
 

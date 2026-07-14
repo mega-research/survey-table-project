@@ -245,6 +245,7 @@ export async function duplicateSurvey(
         tableHeaderGrid: question.tableHeaderGrid as NewQuestion['tableHeaderGrid'],
         allowOtherOption: question.allowOtherOption,
         optionsColumns: question.optionsColumns,
+        optionsAlign: question.optionsAlign,
         minSelections: question.minSelections,
         maxSelections: question.maxSelections,
         rankingConfig: question.rankingConfig as NewQuestion['rankingConfig'],

@@ -248,6 +248,7 @@ export interface QuestionData {
   order: number;
   allowOtherOption?: boolean;
   optionsColumns?: number;
+  optionsAlign?: 'left' | 'center' | 'right';
   minSelections?: number;
   maxSelections?: number;
   noticeContent?: string;
