@@ -96,7 +96,7 @@ function RadioTestInput({
     return value === optionValue;
   };
 
-  const layout = getOptionsLayout(question.optionsColumns);
+  const layout = getOptionsLayout(question.optionsColumns, question.optionsAlign);
 
   return (
     <div className={layout.className} style={layout.style}>
@@ -241,7 +241,7 @@ function CheckboxTestInput({
     return true;
   };
 
-  const layout = getOptionsLayout(question.optionsColumns);
+  const layout = getOptionsLayout(question.optionsColumns, question.optionsAlign);
 
   return (
     <div className={layout.className} style={layout.style}>

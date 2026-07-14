@@ -212,7 +212,7 @@ function RadioQuestion({
   const effectiveColumns = isMobileView
     ? computeMobileOptionsColumnsByLabels(question.options?.map((o) => o.label) ?? [])
     : question.optionsColumns;
-  const layout = getOptionsLayout(effectiveColumns);
+  const layout = getOptionsLayout(effectiveColumns, question.optionsAlign);
   const layoutStyle = isMobileView
     ? applyMobileOptionsGridOverride(layout.style, effectiveColumns)
     : layout.style;
@@ -322,7 +322,7 @@ function CheckboxQuestion({
   const effectiveColumns = isMobileView
     ? computeMobileOptionsColumnsByLabels(question.options?.map((o) => o.label) ?? [])
     : question.optionsColumns;
-  const layout = getOptionsLayout(effectiveColumns);
+  const layout = getOptionsLayout(effectiveColumns, question.optionsAlign);
   const layoutStyle = isMobileView
     ? applyMobileOptionsGridOverride(layout.style, effectiveColumns)
     : layout.style;

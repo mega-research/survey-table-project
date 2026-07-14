@@ -56,7 +56,7 @@ export function QuestionPreview({ question }: { question: Question }) {
           />
         );
       }
-      const layout = getOptionsLayout(question.optionsColumns);
+      const layout = getOptionsLayout(question.optionsColumns, question.optionsAlign);
       return (
         <div className={layout.className} style={layout.style}>
           {question.options?.map((option) => (
