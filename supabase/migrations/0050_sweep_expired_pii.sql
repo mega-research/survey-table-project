@@ -42,6 +42,7 @@ CREATE OR REPLACE FUNCTION sweep_expired_pii() RETURNS void AS $$
     AND s.pii_retention_until IS NOT NULL
     AND s.pii_retention_until < now()
     AND sr.question_responses IS NOT NULL
+    AND jsonb_typeof(sr.question_responses) = 'object'
     AND EXISTS (
       SELECT 1
       FROM jsonb_each(sr.question_responses) AS e2(key, value)
