@@ -609,6 +609,27 @@ export function QuestionBasicTab({
             </div>
           </>
         )}
+
+        {/* 단답형·장문형 개인정보 암호화 토글 */}
+        {(question.type === 'text' || question.type === 'textarea') && (
+          <div className="flex items-start space-x-2">
+            <Switch
+              id="pii-encrypted"
+              checked={formData.piiEncrypted || false}
+              onCheckedChange={(checked) =>
+                setFormData((prev) => ({ ...prev, piiEncrypted: checked }))
+              }
+            />
+            <div className="space-y-1">
+              <Label htmlFor="pii-encrypted">개인정보 암호화</Label>
+              <p className="text-xs text-gray-500">
+                성명, 전화번호, 주소 같은 개인정보 응답을 암호화해 저장합니다. 배포 후
+                수집되는 응답부터 적용되며, 관리자 화면과 다운로드에서는 자동으로
+                복호화되어 표시됩니다.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 순위형(ranking) 설정 — 선택 옵션 블록 위로 배치해 항상 먼저 보이도록 */}

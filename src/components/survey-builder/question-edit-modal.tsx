@@ -152,6 +152,7 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
         noticeContent: (question as any).noticeContent || '',
         requiresAcknowledgment: (question as any).requiresAcknowledgment || false,
         placeholder: question.placeholder || '',
+        piiEncrypted: question.piiEncrypted ?? false,
         defaultValueTemplate: question.defaultValueTemplate ?? null,
         inputType: question.inputType ?? 'text',
         ...(question.emptyDefault !== undefined ? { emptyDefault: question.emptyDefault } : {}),
