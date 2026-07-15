@@ -35,6 +35,7 @@ import { useShallow } from 'zustand/react/shallow';
 
 import { QuestionBasicTab } from './question-basic-tab';
 import { QuestionConditionEditor } from './question-condition-editor';
+import { SumConstraintEditor } from './sum-constraint-editor';
 import { TableValidationEditor } from './table-validation-editor';
 import {
   createAddOption,
@@ -555,6 +556,19 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
                   }
                   allQuestions={questions}
                 />
+
+                <div className="mt-8 border-t border-gray-200 pt-6">
+                  <SumConstraintEditor
+                    constraints={formData.sumConstraints ?? question.sumConstraints ?? []}
+                    tableColumns={formData.tableColumns ?? question.tableColumns ?? []}
+                    tableRowsData={formData.tableRowsData ?? question.tableRowsData ?? []}
+                    tableHeaderGrid={formData.tableHeaderGrid ?? question.tableHeaderGrid}
+                    hideColumnLabels={formData.hideColumnLabels ?? question.hideColumnLabels}
+                    onUpdate={(sumConstraints) =>
+                      setFormData((prev) => ({ ...prev, sumConstraints }))
+                    }
+                  />
+                </div>
               </TabsContent>
             )}
 
