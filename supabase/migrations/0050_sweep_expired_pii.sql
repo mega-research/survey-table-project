@@ -4,6 +4,8 @@
 --          접두사 단독 기준 — 토글 이전 평문 잔존분은 의도적으로 대상 아님 (스펙 6.2).
 --          soft delete 된 설문(deleted_at IS NOT NULL)도 파기 대상에 포함한다.
 --          마커는 'v_:%' 에 매치되지 않으므로 재실행 멱등.
+--          적용 방법: psql -f 또는 Supabase MCP apply_migration 으로 직접 실행할 것.
+--          pnpm db:migrate 는 _journal 밖의 manual migration 을 적용하지 않는다 (silent no-op).
 
 CREATE EXTENSION IF NOT EXISTS pg_cron;
 
