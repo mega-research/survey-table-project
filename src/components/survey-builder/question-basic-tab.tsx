@@ -539,7 +539,10 @@ export function QuestionBasicTab({
                       const checked = e.target.checked;
                       setFormData((prev) => {
                         const next: Partial<Question> = { ...prev, inputType: checked ? 'number' : 'text' };
-                        if (!checked) delete next.emptyDefault;
+                        if (!checked) {
+                          delete next.emptyDefault;
+                          delete next.numberFormat;
+                        }
                         return next;
                       });
                     }}
