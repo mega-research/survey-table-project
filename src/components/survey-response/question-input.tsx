@@ -8,7 +8,6 @@ import { UserDefinedMultiLevelSelect } from '@/components/survey-builder/user-de
 import { Input } from '@/components/ui/input';
 import { useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
-import { isPartialNumericInput } from '@/utils/numeric-input';
 import { Question, QuestionOption } from '@/types/survey';
 import {
   applyMobileOptionsGridOverride,
@@ -17,6 +16,7 @@ import {
 import { isChoiceTableSource } from '@/utils/choice-source';
 import { getOptionsLayout } from '@/utils/options-layout';
 
+import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
 import { useMobileView } from '@/hooks/use-media-query';
 
 import { ChoiceTableResponse } from './choice-table-response';
@@ -493,8 +493,15 @@ function TextResponseInput({
   const isPrefilled = template.trim().length > 0;
   const prefilledValue = isPrefilled ? substituteTokens(template, attrs) : '';
   const currentValue = typeof value === 'string' ? value : '';
-  const inputValue = isPrefilled ? prefilledValue : currentValue;
   const isNumberMode = question.inputType === 'number';
+
+  const { displayValue, handleChange, handleFocus, handleBlur, unitReading, rangeViolation } =
+    useFormattedNumericInput({
+      rawValue: currentValue,
+      onRawChange: onChange,
+      numberFormat: question.numberFormat,
+      enabled: isNumberMode,
+    });
 
   useEffect(() => {
     if (isPrefilled && value !== prefilledValue) {
@@ -518,21 +525,27 @@ function TextResponseInput({
   }, [value, isPrefilled, isNumberMode, question.emptyDefault]);
 
   return (
-    <Input
-      type="text"
-      inputMode={isNumberMode ? 'decimal' : undefined}
-      placeholder={
-        question.placeholder || (isNumberMode ? '숫자만 입력하세요...' : '답변을 입력하세요...')
-      }
-      value={inputValue}
-      onChange={(e) => {
-        const v = e.target.value;
-        if (isNumberMode && !isPartialNumericInput(v)) return;
-        onChange(v);
-      }}
-      className="w-full text-base"
-      disabled={isPrefilled}
-      data-prefilled={isPrefilled || undefined}
-    />
+    <div className="w-full">
+      <Input
+        type="text"
+        inputMode={isNumberMode ? 'decimal' : undefined}
+        placeholder={
+          question.placeholder || (isNumberMode ? '숫자만 입력하세요...' : '답변을 입력하세요...')
+        }
+        value={isPrefilled ? prefilledValue : displayValue}
+        onChange={handleChange}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
+        className="w-full text-base"
+        disabled={isPrefilled}
+        data-prefilled={isPrefilled || undefined}
+      />
+      {(unitReading || rangeViolation) && !isPrefilled && (
+        <div className="mt-1 space-y-0.5 px-1">
+          {unitReading && <p className="text-xs text-muted-foreground">{unitReading}</p>}
+          {rangeViolation && <p className="text-xs text-red-500">* {rangeViolation}</p>}
+        </div>
+      )}
+    </div>
   );
 }
