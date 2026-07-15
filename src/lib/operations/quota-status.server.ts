@@ -5,6 +5,7 @@ import { and, eq } from 'drizzle-orm';
 import { completedResponse, notDeletedResponse, notTestResponse } from '@/data/response-filters';
 import { db } from '@/db';
 import { surveyResponses, surveys } from '@/db/schema/surveys';
+import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 
 import { buildQuotaStatus, type QuotaStatus, type QuotaSummary } from './quota-status';
 
@@ -29,7 +30,9 @@ export async function getQuotaStatus(surveyId: string): Promise<QuotaStatus | nu
       ),
     );
 
-  const answersList = rows.map((r) => (r.questionResponses ?? {}) as Record<string, unknown>);
+  const answersList = rows.map((r) =>
+    decryptQuestionResponses((r.questionResponses ?? {}) as Record<string, unknown>),
+  );
   return buildQuotaStatus(config, answersList);
 }
 

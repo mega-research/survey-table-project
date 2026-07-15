@@ -25,7 +25,14 @@ export async function getResponsesBySurvey(surveyId: string) {
     where: and(eq(surveyResponses.surveyId, surveyId), notDeletedResponse, notTestResponse),
     orderBy: [desc(surveyResponses.startedAt)],
   });
-  return responses;
+  // authed procedure 로 그대로 노출되는 경계 — PII 암호문을 평문으로 복호화해 반환
+  return responses.map((r) => ({
+    ...r,
+    questionResponses: decryptQuestionResponses(
+      (r.questionResponses ?? {}) as Record<string, unknown>,
+      { responseId: r.id },
+    ),
+  }));
 }
 
 // 완료된 응답만 조회 (테스트 응답 제외 — export 모수)
@@ -39,7 +46,14 @@ export async function getCompletedResponses(surveyId: string) {
     ),
     orderBy: [desc(surveyResponses.completedAt)],
   });
-  return responses;
+  // authed procedure 로 그대로 노출되는 경계 — PII 암호문을 평문으로 복호화해 반환
+  return responses.map((r) => ({
+    ...r,
+    questionResponses: decryptQuestionResponses(
+      (r.questionResponses ?? {}) as Record<string, unknown>,
+      { responseId: r.id },
+    ),
+  }));
 }
 
 // 응답 단일 조회(소프트삭제 제외). WS-2 IDOR 봉인: responseId 단독 조회는 다른 설문
