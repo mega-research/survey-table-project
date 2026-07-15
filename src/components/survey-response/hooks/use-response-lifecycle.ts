@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { client } from '@/shared/lib/rpc';
 import { findStepIndexOfQuestion, stepIdOf, type RenderStep } from '@/lib/group-ordering';
 import type { ClientSignals } from '@/lib/duplicate-detection/types';
+import { collectNumericIssues } from '@/lib/survey/numeric-validation';
 import type { Question, QuestionGroup, Survey } from '@/types/survey';
 import type { BranchEvalCtx } from '@/utils/branch-logic';
 import { shouldDisplayDynamicGroup, shouldDisplayQuestion, shouldDisplayRow } from '@/utils/branch-logic';
@@ -87,6 +88,8 @@ interface UseResponseLifecycleArgs {
   setIsSubmitting: Dispatch<SetStateAction<boolean>>;
   setCurrentStepIndex: Dispatch<SetStateAction<number>>;
   setIsCompleted: Dispatch<SetStateAction<boolean>>;
+  /** 숫자 차단형 검증 위반 시 에러를 표시할 step index (컴포넌트 소유). */
+  setNumericErrorStepIndex: (idx: number | null) => void;
 
   // 제출 직전 옵션 텍스트 사이드카 병합 (module-level helper 를 컴포넌트에서 주입)
   buildOptTextsPayload: (
@@ -154,6 +157,7 @@ export function useResponseLifecycle({
   setIsSubmitting,
   setCurrentStepIndex,
   setIsCompleted,
+  setNumericErrorStepIndex,
   buildOptTextsPayload,
 }: UseResponseLifecycleArgs): UseResponseLifecycleResult {
   // INSERT 진행 중인지 추적 (첫 답변 동시 발사 시 중복 INSERT 방어).
@@ -291,6 +295,27 @@ export function useResponseLifecycle({
             `[data-question-id="${firstId}"]`,
           );
           el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        setIsSubmitting(false);
+        return;
+      }
+
+      // 숫자 차단형 검증 — 표시 중인 질문 전체 대상
+      const numericViolated = questions.filter((q) => {
+        if (!shouldDisplayQuestion(q, responses, questions, groups, evalCtx)) return false;
+        return collectNumericIssues(q, responses[q.id]).length > 0;
+      });
+      if (numericViolated.length > 0) {
+        const firstId = numericViolated[0]!.id;
+        const targetIdx = findStepIndexOfQuestion(steps, firstId);
+        if (targetIdx !== -1) setNumericErrorStepIndex(targetIdx);
+        if (targetIdx !== -1 && targetIdx !== currentStepIndex) {
+          setCurrentStepIndex(targetIdx);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        } else {
+          document
+            .querySelector<HTMLElement>(`[data-question-id="${firstId}"]`)
+            ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
         setIsSubmitting(false);
         return;
@@ -470,6 +495,7 @@ export function useResponseLifecycle({
     responses,
     sessionId,
     setCurrentResponseId,
+    setNumericErrorStepIndex,
     signals,
     steps,
     versionId,

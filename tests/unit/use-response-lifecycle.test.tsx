@@ -86,6 +86,7 @@ function baseArgs(over: Partial<Parameters<typeof useResponseLifecycle>[0]> = {}
     setIsSubmitting: vi.fn(),
     setCurrentStepIndex: vi.fn(),
     setIsCompleted: vi.fn(),
+    setNumericErrorStepIndex: vi.fn(),
     buildOptTextsPayload: vi.fn((_vq: Question[], r: Record<string, unknown>) => r),
     ...over,
   } satisfies Parameters<typeof useResponseLifecycle>[0];

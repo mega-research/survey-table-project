@@ -217,6 +217,7 @@ interface RenderRowCellsProps {
   value?: Record<string, any> | undefined;
   onChange?: ((v: Record<string, any>) => void) | undefined;
   stickyInfo?: StickyLeftInfo | undefined;
+  errorCellIds?: Set<string> | undefined;
 }
 
 function renderRowCells({
@@ -228,6 +229,7 @@ function renderRowCells({
   value,
   onChange,
   stickyInfo,
+  errorCellIds,
 }: RenderRowCellsProps) {
   const stickyCount = stickyInfo?.stickyColCount ?? 0;
 
@@ -277,6 +279,7 @@ function renderRowCells({
               ? 'bg-green-50/40'
               : 'bg-white',
           getAlignmentClasses(cell.horizontalAlign, cell.verticalAlign),
+          errorCellIds?.has(cell.id) && 'ring-2 ring-inset ring-red-300',
         )}
         style={style}
         data-row-id={row.id}
@@ -332,6 +335,10 @@ interface InteractiveTableResponseProps {
   hideColumnLabels?: boolean | undefined;
   /** 헤더·좌측 열 sticky 동작 활성화. 기본 true. 빌더 프리뷰 등에서 끌 수 있음 */
   enableSticky?: boolean | undefined;
+  /** 차단형 검증 위반 셀 (빨간 ring 하이라이트) */
+  errorCellIds?: Set<string> | undefined;
+  /** 차단형 검증 에러 메시지 (테이블 아래 에러 박스) */
+  errorMessages?: string[] | undefined;
 }
 
 export const InteractiveTableResponse = React.memo(function InteractiveTableResponse({
@@ -349,6 +356,8 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
   dynamicRowConfigs,
   hideColumnLabels = false,
   enableSticky = true,
+  errorCellIds,
+  errorMessages,
 }: InteractiveTableResponseProps) {
   // 같은 render tick 안에 여러 cell 이 동시에 onChange 를 호출할 때 (예: emptyDefault prefill)
   // 부모 prop 의 batch 지연으로 stale 한 객체가 덮어쓰는 race 를 방지하기 위해
@@ -615,6 +624,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
                   value,
                   onChange: mergedOnChange,
                   stickyInfo,
+                  errorCellIds,
                 })}
               </React.Fragment>,
             );
@@ -639,6 +649,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
       mergedOnChange,
       hiddenGroupIds,
       stickyInfo,
+      errorCellIds,
     ],
   );
 
@@ -770,6 +781,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
                       value,
                       onChange: mergedOnChange,
                       stickyInfo,
+                      errorCellIds,
                     })}
                   </React.Fragment>
                 ))}
@@ -811,6 +823,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     selectedRowIds,
     groupConfigMap,
     onSelectGroup: handleSelectGroup,
+    errorCellIds,
   };
 
   return (
@@ -833,6 +846,17 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
               renderTableView()
             )}
           </div>
+
+          {errorMessages && errorMessages.length > 0 && (
+            <div
+              role="alert"
+              className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+            >
+              {errorMessages.map((message, i) => (
+                <p key={i}>{message}</p>
+              ))}
+            </div>
+          )}
 
           {isTestMode && (
             <div className="mx-4 mt-4 mb-4 rounded-lg bg-blue-50 p-3 sm:mx-0 sm:mb-0">

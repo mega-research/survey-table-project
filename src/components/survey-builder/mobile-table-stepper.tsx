@@ -35,6 +35,8 @@ interface MobileTableStepperProps {
   selectedRowIds: string[];
   groupConfigMap: Map<string, unknown>;
   onSelectGroup?: (groupId: string) => void;
+  /** 차단형 검증 위반 셀 (빨간 ring 하이라이트) */
+  errorCellIds?: Set<string> | undefined;
 }
 
 // ── 유틸 ──
@@ -70,6 +72,7 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
   selectedRowIds,
   groupConfigMap,
   onSelectGroup,
+  errorCellIds,
 }: MobileTableStepperProps) {
   // ── 내부에서 훅으로 계산 (props drilling 제거) ──
   const rowGroups = useRowGroups(displayRows);
@@ -251,6 +254,7 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
             isTestMode={isTestMode}
             value={value}
             onChange={onChange}
+            errorCellIds={errorCellIds}
           />
         ))}
       </div>
@@ -392,6 +396,7 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
           isTestMode={isTestMode}
           value={value}
           onChange={onChange}
+          errorCellIds={errorCellIds}
         />
 
         <div className="flex gap-2 pt-1">
@@ -529,6 +534,7 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
         isTestMode={isTestMode}
         value={value}
         onChange={onChange}
+        errorCellIds={errorCellIds}
       />
 
       <div className="flex gap-2 pt-1">

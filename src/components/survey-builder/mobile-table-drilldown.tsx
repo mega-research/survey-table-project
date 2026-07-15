@@ -29,6 +29,8 @@ interface MobileTableDrilldownProps {
   selectedRowIds: string[];
   groupConfigMap: Map<string, unknown>;
   onSelectGroup?: (groupId: string) => void;
+  /** 차단형 검증 위반 셀 (빨간 ring 하이라이트) */
+  errorCellIds?: Set<string> | undefined;
 }
 
 // ── 메인 컴포넌트 ──
@@ -41,6 +43,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
   isTestMode,
   value,
   onChange,
+  errorCellIds,
 }: MobileTableDrilldownProps) {
   const sections = useMemo(
     () =>
@@ -137,13 +140,15 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
     const cell = cellById.get(cellId);
     if (!cell) return null;
     return (
-      <InteractiveCell
-        cell={cell}
-        questionId={questionId}
-        isTestMode={isTestMode}
-        value={value}
-        onChange={onChange}
-      />
+      <div className={cn(errorCellIds?.has(cellId) && 'ring-2 ring-inset ring-red-300')}>
+        <InteractiveCell
+          cell={cell}
+          questionId={questionId}
+          isTestMode={isTestMode}
+          value={value}
+          onChange={onChange}
+        />
+      </div>
     );
   };
 

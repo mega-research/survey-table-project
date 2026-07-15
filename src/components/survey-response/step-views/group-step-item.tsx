@@ -9,6 +9,7 @@ import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { isEmptyHtml } from '@/lib/utils';
 import { sanitizeRichHtml } from '@/lib/sanitize';
 import { StepItem } from '@/lib/group-ordering';
+import type { NumericIssue } from '@/lib/survey/numeric-validation';
 import { Question } from '@/types/survey';
 
 type ResponsesMap = Record<string, unknown>;
@@ -20,6 +21,7 @@ export function GroupStepItem({
   questions,
   onResponse,
   isHighlighted,
+  issues,
 }: {
   item: StepItem;
   showSubgroupHeading: boolean;
@@ -27,6 +29,7 @@ export function GroupStepItem({
   questions: Question[];
   onResponse: (questionId: string, value: unknown) => void;
   isHighlighted: boolean;
+  issues?: NumericIssue[] | undefined;
 }) {
   const q = item.question;
   const onChange = useCallback(
@@ -92,6 +95,7 @@ export function GroupStepItem({
             onChange={onChange}
             allResponses={responses as Record<string, unknown>}
             allQuestions={questions}
+            numericIssues={issues}
           />
         </div>
       </div>

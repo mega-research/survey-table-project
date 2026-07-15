@@ -18,6 +18,7 @@ import {
 } from '@/components/survey-response/survey-response-screens';
 import { PageStepView } from '@/components/survey-response/step-views/page-step-view';
 import { ContactAttrsProvider } from '@/lib/survey/contact-attrs-context';
+import { collectNumericIssues, type NumericIssue } from '@/lib/survey/numeric-validation';
 import { Button } from '@/components/ui/button';
 
 import { useClientSignals } from '@/hooks/use-client-signals';
@@ -57,6 +58,8 @@ import {
 import type { SaveAdminEditPayload } from '@/features/survey-response/domain/response-edit';
 
 type ResponsesMap = Record<string, unknown>;
+
+const EMPTY_ISSUES = new Map<string, NumericIssue[]>();
 
 export interface SurveyResponseFlowProps {
   mode?: 'public' | 'admin-edit' | 'preview';
@@ -441,6 +444,19 @@ export function SurveyResponseFlow({
     [visibleQuestions, isQuestionAnswered],
   );
 
+  // 숫자 차단형 검증 (min/합계/필수 셀) — 라이브 계산, 표시는 "다음"을 시도한 step 에서만
+  const numericIssuesByQuestion = useMemo(() => {
+    const map = new Map<string, NumericIssue[]>();
+    for (const q of currentStepQuestions) {
+      const issues = collectNumericIssues(q, responses[q.id]);
+      if (issues.length > 0) map.set(q.id, issues);
+    }
+    return map;
+  }, [currentStepQuestions, responses]);
+  const [numericErrorStepIndex, setNumericErrorStepIndex] = useState<number | null>(null);
+  const showNumericErrors = numericErrorStepIndex === currentStepIndex;
+  const visibleNumericIssues = showNumericErrors ? numericIssuesByQuestion : EMPTY_ISSUES;
+
   const canProceed = () => {
     if (!currentStep) return false;
     // step 내 표시되는 필수 질문 전부가 답변되어야 함
@@ -486,9 +502,22 @@ export function SurveyResponseFlow({
     setCurrentStepIndex,
     setIsCompleted,
     buildOptTextsPayload,
+    setNumericErrorStepIndex,
   });
 
   const handleNext = async () => {
+    // 숫자 차단형 검증 — 위반이 있으면 진행하지 않고 에러 표시 + 첫 위반 질문으로 스크롤
+    if (numericIssuesByQuestion.size > 0) {
+      setNumericErrorStepIndex(currentStepIndex);
+      const firstId = numericIssuesByQuestion.keys().next().value;
+      if (firstId) {
+        document
+          .querySelector<HTMLElement>(`[data-question-id="${firstId}"]`)
+          ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      return;
+    }
+
     const nextIndex = resolveNextStepIndex();
 
     // 쿼터 게이트: 인구통계 문항 전부 답변 & 미체크 & responseId 확보 시 서버 확인.
@@ -736,6 +765,7 @@ export function SurveyResponseFlow({
           evalCtx={evalCtx}
           onResponse={handleResponse}
           highlightQuestionIds={highlightQuestionIds}
+          numericIssues={visibleNumericIssues}
         />
 
         {/* 데스크톱 네비게이션 */}

@@ -37,6 +37,7 @@ describe('PageStepView', () => {
         evalCtx={undefined as never}
         onResponse={() => {}}
         highlightQuestionIds={new Set()}
+        numericIssues={new Map()}
       />,
     );
     expect(screen.getByText('기본정보')).toBeInTheDocument();
@@ -55,6 +56,7 @@ describe('PageStepView', () => {
         evalCtx={undefined as never}
         onResponse={() => {}}
         highlightQuestionIds={new Set()}
+        numericIssues={new Map()}
       />,
     );
     // 여백 클래스는 divide-y 컨테이너의 직계 자식(래퍼)에 있어야 first:/last:가

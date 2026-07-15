@@ -6,6 +6,7 @@ import { GroupStepItem } from '@/components/survey-response/step-views/group-ste
 import { RootGroupNameBadge } from '@/components/survey-response/step-views/root-group-name-badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { RenderStep, StepItem } from '@/lib/group-ordering';
+import type { NumericIssue } from '@/lib/survey/numeric-validation';
 import { Question, QuestionGroup } from '@/types/survey';
 import { shouldDisplayQuestion, type BranchEvalCtx } from '@/utils/branch-logic';
 
@@ -19,6 +20,7 @@ export function PageStepView({
   evalCtx,
   onResponse,
   highlightQuestionIds,
+  numericIssues,
 }: {
   step: RenderStep;
   responses: ResponsesMap;
@@ -27,6 +29,7 @@ export function PageStepView({
   evalCtx: BranchEvalCtx;
   onResponse: (questionId: string, value: unknown) => void;
   highlightQuestionIds: Set<string>;
+  numericIssues: Map<string, NumericIssue[]>;
 }) {
   const visibleItems: StepItem[] = useMemo(
     () =>
@@ -66,6 +69,7 @@ export function PageStepView({
                   questions={questions}
                   onResponse={onResponse}
                   isHighlighted={highlightQuestionIds.has(item.question.id)}
+                  issues={numericIssues.get(item.question.id)}
                 />
               </div>
             );

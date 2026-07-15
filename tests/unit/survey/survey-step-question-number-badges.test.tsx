@@ -63,6 +63,7 @@ describe('survey response step headings', () => {
         evalCtx={undefined as never}
         onResponse={vi.fn()}
         highlightQuestionIds={new Set()}
+        numericIssues={new Map()}
       />,
     );
     expect(screen.getByText('현재 담배를 피우십니까?')).toBeInTheDocument();

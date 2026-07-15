@@ -7,6 +7,7 @@ import { NoticeRenderer } from '@/components/survey-builder/notice-renderer';
 import { UserDefinedMultiLevelSelect } from '@/components/survey-builder/user-defined-multi-level-select';
 import { Input } from '@/components/ui/input';
 import { useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import type { NumericIssue } from '@/lib/survey/numeric-validation';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { Question, QuestionOption } from '@/types/survey';
 import {
@@ -29,6 +30,8 @@ interface QuestionInputProps {
   onChange: (value: unknown) => void;
   allResponses?: Record<string, unknown>;
   allQuestions?: Question[];
+  /** 숫자 차단형 검증 위반 목록 — "다음"/제출 시도 후에만 채워짐(라이브 계산은 상위 소유). */
+  numericIssues?: NumericIssue[] | undefined;
 }
 
 // 타입 정의
@@ -63,6 +66,7 @@ export function QuestionInput({
   onChange,
   allResponses,
   allQuestions,
+  numericIssues,
 }: QuestionInputProps) {
   const attrs = useContactAttrs();
 
@@ -173,6 +177,16 @@ export function QuestionInput({
           allQuestions={allQuestions}
           {...(question.dynamicRowConfigs !== undefined ? { dynamicRowConfigs: question.dynamicRowConfigs } : {})}
           {...(question.hideColumnLabels !== undefined ? { hideColumnLabels: question.hideColumnLabels } : {})}
+          errorCellIds={
+            numericIssues && numericIssues.length > 0
+              ? new Set(numericIssues.flatMap((i) => i.cellIds ?? []))
+              : undefined
+          }
+          errorMessages={
+            numericIssues && numericIssues.length > 0
+              ? numericIssues.map((i) => i.message)
+              : undefined
+          }
         />
       ) : (
         <div className="py-4 text-center text-gray-500">테이블이 구성되지 않았습니다.</div>

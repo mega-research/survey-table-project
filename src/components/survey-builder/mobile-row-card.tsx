@@ -39,6 +39,8 @@ interface MobileRowCardProps {
   isTestMode: boolean;
   value?: Record<string, unknown> | undefined;
   onChange?: ((value: Record<string, unknown>) => void) | undefined;
+  /** 차단형 검증 위반 셀 (빨간 ring 하이라이트) */
+  errorCellIds?: Set<string> | undefined;
 }
 
 function findPreviousSection(
@@ -64,6 +66,7 @@ export const MobileRowCard = React.memo(function MobileRowCard({
   isTestMode,
   value,
   onChange,
+  errorCellIds,
 }: MobileRowCardProps) {
   const attrs = useContactAttrs();
 
@@ -198,7 +201,12 @@ export const MobileRowCard = React.memo(function MobileRowCard({
                 })()}
                 {isUnitPairStart && nextEntry ? (
                   <div className="flex items-end gap-2 pl-3">
-                    <div className="flex-1">
+                    <div
+                      className={cn(
+                        'flex-1',
+                        errorCellIds?.has(cell.id) && 'ring-2 ring-inset ring-red-300',
+                      )}
+                    >
                       <InteractiveCell
                         cell={cell}
                         questionId={questionId}
@@ -207,7 +215,12 @@ export const MobileRowCard = React.memo(function MobileRowCard({
                         onChange={onChange}
                       />
                     </div>
-                    <div className="w-28 shrink-0">
+                    <div
+                      className={cn(
+                        'w-28 shrink-0',
+                        errorCellIds?.has(nextEntry.cell.id) && 'ring-2 ring-inset ring-red-300',
+                      )}
+                    >
                       <InteractiveCell
                         cell={nextEntry.cell}
                         questionId={questionId}
@@ -222,6 +235,7 @@ export const MobileRowCard = React.memo(function MobileRowCard({
                     className={cn(
                       'pl-3',
                       getAlignmentClasses(cell.horizontalAlign, cell.verticalAlign),
+                      errorCellIds?.has(cell.id) && 'ring-2 ring-inset ring-red-300',
                     )}
                   >
                     <InteractiveCell
