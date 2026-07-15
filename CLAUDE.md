@@ -176,6 +176,7 @@ surveys                    # 설문 설정
 ├── id, title, description, slug, privateToken
 ├── isPublic, allowMultipleResponses, showProgressBar, shuffleQuestions, requireLogin
 ├── endDate, maxResponses, thankYouMessage, contactEmail
+├── piiRetentionUntil (개인정보 보관기한)
 ├── contactColumns (JSONB)        # 컨택리스트 표시 컬럼 스킴
 ├── lookups (JSONB)               # 설문에 복사된 LUT 사본 목록
 ├── contactResultCodes (JSONB)    # 결과코드 사용자 정의
@@ -203,6 +204,7 @@ questions                  # 개별 질문
 ├── optionsColumns, minSelections, maxSelections, allowOtherOption
 ├── placeholder, defaultValueTemplate  # 단답형(prefill 토큰 지원)
 ├── inputType, emptyDefault       # 단답형 숫자 입력 모드
+├── piiEncrypted                  # 응답값 암호화 저장 여부 (단답형·장문형)
 ├── questionCode, isCustomSpssVarName, exportLabel, spssVarType, spssMeasure  # SPSS export
 ├── hideColumnLabels
 ├── noticeContent, requiresAcknowledgment  # 공지
@@ -513,7 +515,8 @@ INNGEST_*=
 SENTRY_*=
 
 # 컨택 PII 암호화
-CONTACT_PII_KEY=                # cipher + blind index 키
+CONTACT_PII_AES_KEY=            # cipher 키
+CONTACT_PII_HMAC_KEY=           # blind index 키
 ```
 
 > 메일/컨택 메타(발신 표시명, 수행기관 등)는 env default 금지. DB 컬럼 또는 attrs로 관리. env는 비밀+인프라 상수만.
