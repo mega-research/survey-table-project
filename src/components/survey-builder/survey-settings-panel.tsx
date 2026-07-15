@@ -127,10 +127,6 @@ export const SurveySettingsPanel = React.memo(function SurveySettingsPanel({
             }
             className="w-full rounded border border-input bg-background px-3 py-2 text-sm"
           />
-          <p className="text-xs text-gray-500">
-            개인정보 암호화 문항의 응답을 이 날짜까지 보유합니다. 기한이 지나면 해당
-            응답값이 자동 파기되며 복구할 수 없습니다. 비워두면 파기하지 않습니다.
-          </p>
         </div>
 
         {/* 토큰 경고 */}
