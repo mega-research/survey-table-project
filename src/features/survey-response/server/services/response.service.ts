@@ -23,6 +23,7 @@ import { sumActiveSeconds } from '@/lib/operations/active-seconds';
 import { parseBrowser, parsePlatform } from '@/lib/operations/parse-ua';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { getSurveyControlFlags, isValidTestToken } from '@/lib/survey-control';
+import { encryptAnswerValue, encryptResponsesForStorage } from '@/lib/crypto/response-pii';
 
 import type {
   ClientSignals,
@@ -307,41 +308,38 @@ async function assertQuestionBelongsToResponse(
   versionId: string | null,
   surveyId: string,
   questionId: string,
-): Promise<void> {
+): Promise<{ piiEncrypted: boolean }> {
   if (versionId) {
-    const [hit] = await db
-      .select({ id: surveyVersions.id })
-      .from(surveyVersions)
-      .where(
-        and(
-          eq(surveyVersions.id, versionId),
-          sql`EXISTS (
-            SELECT 1
-            FROM jsonb_array_elements(
-              CASE WHEN jsonb_typeof(${surveyVersions.snapshot}->'questions') = 'array'
-                   THEN ${surveyVersions.snapshot}->'questions'
-                   ELSE '[]'::jsonb
-              END
-            ) AS qe(elem)
-            WHERE qe.elem->>'id' = ${questionId}
-          )`,
-        ),
-      )
-      .limit(1);
-    if (!hit) {
+    // 소속 검증 + piiEncrypted 플래그를 한 쿼리로. 행이 없으면 미소속 → 거부.
+    const rows = await db.execute<{ pii: boolean | null }>(sql`
+      SELECT COALESCE((qe.elem->>'piiEncrypted')::boolean, false) AS pii
+      FROM survey_versions sv,
+           jsonb_array_elements(
+             CASE WHEN jsonb_typeof(sv.snapshot->'questions') = 'array'
+                  THEN sv.snapshot->'questions'
+                  ELSE '[]'::jsonb
+             END
+           ) AS qe(elem)
+      WHERE sv.id = ${versionId}
+        AND qe.elem->>'id' = ${questionId}
+      LIMIT 1
+    `);
+    const row = rows[0];
+    if (!row) {
       throw new Error('해당 설문에 존재하지 않는 질문입니다.');
     }
-    return;
+    return { piiEncrypted: row.pii === true };
   }
 
   const [hit] = await db
-    .select({ id: questions.id })
+    .select({ id: questions.id, piiEncrypted: questions.piiEncrypted })
     .from(questions)
     .where(and(eq(questions.surveyId, surveyId), eq(questions.id, questionId)))
     .limit(1);
   if (!hit) {
     throw new Error('해당 설문에 존재하지 않는 질문입니다.');
   }
+  return { piiEncrypted: hit.piiEncrypted === true };
 }
 
 /**
@@ -386,6 +384,38 @@ async function loadValidQuestionIds(
     .select({ id: questions.id })
     .from(questions)
     .where(eq(questions.surveyId, surveyId));
+  return new Set(rows.map((r) => r.id));
+}
+
+/** 버전 스냅샷(또는 라이브 questions)에서 piiEncrypted=true 인 질문 id 집합을 로드한다. */
+export async function loadPiiQuestionIds(
+  versionId: string | null,
+  surveyId: string,
+): Promise<Set<string>> {
+  if (versionId) {
+    const rows = await db.execute<{ id: string | null }>(sql`
+      SELECT qe.elem->>'id' AS id
+      FROM survey_versions sv,
+           jsonb_array_elements(
+             CASE WHEN jsonb_typeof(sv.snapshot->'questions') = 'array'
+                  THEN sv.snapshot->'questions'
+                  ELSE '[]'::jsonb
+             END
+           ) AS qe(elem)
+      WHERE sv.id = ${versionId}
+        AND (qe.elem->>'piiEncrypted')::boolean IS TRUE
+    `);
+    const ids = new Set<string>();
+    for (const r of rows) {
+      if (r.id != null) ids.add(r.id);
+    }
+    return ids;
+  }
+
+  const rows = await db
+    .select({ id: questions.id })
+    .from(questions)
+    .where(and(eq(questions.surveyId, surveyId), eq(questions.piiEncrypted, true)));
   return new Set(rows.map((r) => r.id));
 }
 
@@ -476,7 +506,13 @@ export async function updateQuestionResponse(
 
   // #5 변조 가드 3: questionId 가 해당 응답의 versionId 스냅샷(또는 surveyId 의 questions)에
   // 존재해야 한다. 미존재면 거부 — 임의 키 JSONB 주입 차단.
-  await assertQuestionBelongsToResponse(responseRow.versionId, responseRow.surveyId, questionId);
+  const { piiEncrypted } = await assertQuestionBelongsToResponse(
+    responseRow.versionId,
+    responseRow.surveyId,
+    questionId,
+  );
+  // PII 문항이면 저장 직전 암호화. 이미 암호문이면 encryptAnswerValue 가 통과시킨다.
+  const storedValue = piiEncrypted ? encryptAnswerValue(value) : value;
 
   // 중단 모드: 열려 있던 탭의 답변 저장 차단 (테스트 행 예외) — 스펙 5절 게이트 3.
   // isTest 행은 flags 조회 자체를 skip해 정상 트래픽 경로의 오버헤드를 늘리지 않는다.
@@ -500,7 +536,7 @@ export async function updateQuestionResponse(
       questionResponses: sql`jsonb_set(
         COALESCE(${surveyResponses.questionResponses}, '{}'::jsonb),
         ARRAY[${questionId}],
-        ${JSON.stringify(value)}::jsonb,
+        ${JSON.stringify(storedValue)}::jsonb,
         true
       )`,
       progressPct: sql`NULLIF(LEAST(100, GREATEST(
@@ -633,6 +669,15 @@ export async function createResponseWithFirstAnswer(
   const version = await loadValidatedVersionGateRow(surveyId, versionId, survey.currentVersionId);
   assertSurveyAcceptingResponses(survey, version, { contactTargetId, isTest });
 
+  // PII 문항이면 INSERT 전에 암호화 — 평문이 순간이라도 DB(WAL 포함)에 닿지 않게 한다.
+  // 이후 updateQuestionResponse 재호출은 이미 암호문이라 이중 암호화되지 않는다.
+  const { piiEncrypted } = await assertQuestionBelongsToResponse(
+    versionId ?? null,
+    surveyId,
+    questionId,
+  );
+  const storedValue = piiEncrypted ? encryptAnswerValue(value) : value;
+
   const firstVisit: PageVisit = {
     stepId: currentStepId,
     enteredAt: new Date().toISOString(),
@@ -642,7 +687,7 @@ export async function createResponseWithFirstAnswer(
     surveyId,
     sessionId,
     versionId: versionId ?? null,
-    questionResponses: { [questionId]: value },
+    questionResponses: { [questionId]: storedValue },
     isCompleted: false,
     status: 'in_progress',
     userAgent,
@@ -668,7 +713,7 @@ export async function createResponseWithFirstAnswer(
   // 신규 INSERT 든 reuse 든 모두 updateQuestionResponse 로 첫 답변 머지 + progress_pct
   // 갱신을 단일화. jsonb_set 은 동일 값 덮어쓰기라 멱등이라 신규 INSERT path 의 중복 set
   // 도 안전. onReuse 콜백을 사용하지 않는 이유: progress_pct 가 신규 INSERT 에서도 필요.
-  await updateQuestionResponse({ responseId: result.id, questionId, value });
+  await updateQuestionResponse({ responseId: result.id, questionId, value: storedValue });
   return { kind: 'created', id: result.id, contactTargetId: result.contactTargetId };
 }
 
@@ -864,6 +909,14 @@ export async function completeResponse(
           validatedResponses[q.id] = expected;
         }
       }
+    }
+  }
+
+  // PII 문항 암호화 — prefill 복원(평문 비교) 이후, 저장 직전에 수행한다.
+  if (validatedResponses && gateRow) {
+    const piiIds = await loadPiiQuestionIds(gateRow.versionId, gateRow.surveyId);
+    if (piiIds.size > 0) {
+      validatedResponses = encryptResponsesForStorage(validatedResponses, piiIds);
     }
   }
 

@@ -13,6 +13,8 @@ import {
   diffQuestionResponses,
 } from '@/lib/operations/response-edit-diff';
 import { SurveyOwnershipError } from '@/lib/auth/require-survey-ownership';
+import { decryptQuestionResponses, encryptResponsesForStorage } from '@/lib/crypto/response-pii';
+import { loadPiiQuestionIds } from './response.service';
 
 import type { SaveAdminEditInput } from '../../domain/response-edit';
 
@@ -66,7 +68,12 @@ export async function saveAdminEdit(
   const now = new Date();
 
   // 바뀐 질문 추출 (audit 용). 변경 0개면 audit 행 미생성.
-  const prevResponses = (existing.questionResponses ?? {}) as Record<string, unknown>;
+  // diff 는 평문끼리 비교한다 — DB 의 암호문 prev 와 입력 평문을 그대로 비교하면
+  // 손대지 않은 PII 문항도 매번 "변경됨"으로 edit log 에 남는다.
+  const prevResponses = decryptQuestionResponses(
+    (existing.questionResponses ?? {}) as Record<string, unknown>,
+    { responseId },
+  );
   const changedIds = diffQuestionResponses(prevResponses, questionResponses);
   let changedQuestions: ReturnType<typeof buildChangedQuestions> = [];
   if (changedIds.length > 0) {
@@ -96,6 +103,13 @@ export async function saveAdminEdit(
     );
   }
 
+  // 저장은 재암호화 — 판단 기준은 응답의 versionId 스냅샷(레거시 null 은 questions 폴백).
+  const piiIds = await loadPiiQuestionIds(existing.versionId, surveyId);
+  const storedResponses =
+    piiIds.size > 0
+      ? encryptResponsesForStorage(questionResponses, piiIds)
+      : questionResponses;
+
   await db.transaction(async (tx) => {
     // deletedAt 검사(line 61)와 이 UPDATE 사이에 동시 softDeleteResponse 가 deletedAt 을
     // 세팅하는 TOCTOU 를 차단한다. WHERE 에 isNull(deletedAt) 를 추가하고 .returning() 으로
@@ -104,7 +118,7 @@ export async function saveAdminEdit(
     const updated = await tx
       .update(surveyResponses)
       .set({
-        questionResponses: questionResponses,
+        questionResponses: storedResponses,
         lastEditedAt: now,
         lastActivityAt: now,
         currentStepId: null,
@@ -127,7 +141,7 @@ export async function saveAdminEdit(
       tx,
       responseId,
       surveyId,
-      questionResponses,
+      storedResponses,
     );
 
     if (changedQuestions.length > 0) {

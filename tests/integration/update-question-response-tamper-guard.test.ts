@@ -44,6 +44,10 @@ vi.mock('@/db', () => {
   chainable['select'] = vi.fn(() => chainable);
   chainable['from'] = vi.fn(() => chainable);
   chainable['limit'] = vi.fn(() => questionExistsMock());
+  // assertQuestionBelongsToResponse 의 versionId 분기(PII 플래그 포함 소속 검증)가
+  // db.execute(sql...) 를 사용한다. questionExistsMock 을 그대로 재사용 —
+  // 기본 { id: QUESTION_ID } 행은 piiEncrypted 필드가 없어 pii=false 로 해석된다.
+  chainable['execute'] = vi.fn(async (..._args: unknown[]) => questionExistsMock());
   chainable['query'] = {
     surveyResponses: { findFirst: (...a: unknown[]) => responseFindFirstMock(...a) },
     surveys: { findFirst: (...a: unknown[]) => surveyFindFirstMock(...a) },

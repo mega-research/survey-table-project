@@ -11,12 +11,20 @@ const {
   updateReturningMock,
   findFirstMock,
   selectLimitMock,
+  selectWhereMock,
+  executeMock,
   txMock,
 } = vi.hoisted(() => ({
   updateSetMock: vi.fn(),
   updateReturningMock: vi.fn(),
   findFirstMock: vi.fn(),
   selectLimitMock: vi.fn(),
+  // loadPiiQuestionIds(versionId=null 폴백) 의 select().from().where() 는 .limit() 없이
+  // 바로 await 된다 — 기본값 빈 배열(PII 문항 없음)로 기존 시나리오를 그대로 보존한다.
+  selectWhereMock: vi.fn(),
+  // loadPiiQuestionIds/assertQuestionBelongsToResponse 의 versionId 분기가 사용하는
+  // db.execute(sql...) — 기본값 빈 배열(PII 아님)로 기존 progress_pct 시나리오를 보존한다.
+  executeMock: vi.fn(),
   txMock: vi.fn(),
 }));
 
@@ -28,12 +36,21 @@ vi.mock('@/db', () => {
     updateSetMock(arg);
     return chainable;
   });
-  chainable['where'] = vi.fn(() => chainable);
-  chainable['returning'] = vi.fn(() => updateReturningMock());
+  // where() 이후 세 갈래 계속을 모두 지원한다:
+  //  - .limit(n)  → update/select 의 기존 흐름(selectLimitMock)
+  //  - .returning() → update().set().where().returning() 흐름(updateReturningMock)
+  //  - 바로 await(then) → loadPiiQuestionIds 의 .limit() 없는 select 흐름(selectWhereMock)
+  chainable['where'] = vi.fn(() => ({
+    limit: vi.fn(() => selectLimitMock()),
+    returning: vi.fn(() => updateReturningMock()),
+    then: (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) =>
+      Promise.resolve(selectWhereMock()).then(resolve, reject),
+  }));
   // select().from().where().limit()
   chainable['select'] = vi.fn(() => chainable);
   chainable['from'] = vi.fn(() => chainable);
   chainable['limit'] = vi.fn(() => selectLimitMock());
+  chainable['execute'] = vi.fn(async (..._args: unknown[]) => executeMock());
   // insert().values() — saveAdminEdit 의 response_edit_logs audit insert glue
   chainable['insert'] = vi.fn(() => chainable);
   chainable['values'] = vi.fn(async () => undefined);
@@ -73,11 +90,15 @@ describe('updateQuestionResponse — progress_pct SET', () => {
     updateReturningMock.mockReset();
     findFirstMock.mockReset();
     selectLimitMock.mockReset();
+    selectWhereMock.mockReset();
+    executeMock.mockReset();
     updateReturningMock.mockResolvedValue([{ id: 'r1' }]);
     // 변조 가드(#5): 응답 행 조회 → questionId 소속 검증.
     // versionId=null 이면 questions 테이블 폴백, select().limit() = selectLimitMock.
     findFirstMock.mockResolvedValue({ id: 'r1', surveyId: 's1', versionId: null });
     selectLimitMock.mockResolvedValue([{ id: 'q3' }]);
+    selectWhereMock.mockResolvedValue([]);
+    executeMock.mockResolvedValue([]);
   });
 
   it('set() 인자에 progressPct SQL 이 포함된다', async () => {
@@ -109,6 +130,8 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
     updateReturningMock.mockReset();
     findFirstMock.mockReset();
     selectLimitMock.mockReset();
+    selectWhereMock.mockReset();
+    executeMock.mockReset();
     // 기본값: 빈 결과. audit diff 의 버전 스냅샷 조회와 progress snapshot 조회가
     // 같은 limit mock 을 공유하므로, 스냅샷이 필요한 테스트만 개별 mockResolvedValue 로 덮는다.
     selectLimitMock.mockResolvedValue([]);
@@ -116,6 +139,10 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
     // 기본값은 1행(정상 경합 없음) — 삭제 경합 케이스만 개별 테스트에서 []로 덮는다.
     updateReturningMock.mockResolvedValue([{ id: 'r1' }]);
     // transaction 바깥 select().from().where().limit() 는 selectLimitMock 으로 제어
+    // loadPiiQuestionIds — versionId 있으면 db.execute(executeMock), 없으면 select().where()
+    // (selectWhereMock). 기본값 빈 배열 = PII 문항 없음, 기존 progress_pct 시나리오 보존.
+    selectWhereMock.mockResolvedValue([]);
+    executeMock.mockResolvedValue([]);
   });
 
   it('status=completed → progressPct=100 으로 SET', async () => {

@@ -157,6 +157,25 @@ vi.mock('@/db', () => {
         }),
       },
     },
+    // saveAdminEdit 의 loadPiiQuestionIds(versionId=null 폴백) 가 questions 테이블에서
+    // piiEncrypted=true 인 질문 id 를 조회한다. 이 테스트 스위트의 fixture 질문은
+    // piiEncrypted 필드가 없어(undefined !== true) 항상 빈 배열을 반환 — 기존 시나리오는
+    // PII 문항이 없는 것으로 취급되어 저장 동작이 그대로 보존된다.
+    select: vi.fn(() => ({
+      from: vi.fn((table: { __table: string }) => ({
+        where: vi.fn((cond: (row: Record<string, unknown>) => boolean) => {
+          let rows: Array<Record<string, unknown>> = [];
+          if (table.__table === 'questions') {
+            rows = Array.from(h.questionStore.values()).filter(cond);
+          }
+          const result = Promise.resolve(rows) as Promise<typeof rows> & {
+            limit: (n: number) => Promise<typeof rows>;
+          };
+          result.limit = () => Promise.resolve(rows);
+          return result;
+        }),
+      })),
+    })),
     update: vi.fn((table: { __table: string }) => ({
       set: vi.fn((patch: Record<string, unknown>) => ({
         where: vi.fn((cond: (row: SurveyResponseRow | ContactTargetRow) => boolean) => {
