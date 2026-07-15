@@ -33,6 +33,7 @@
     "0046_add_survey_control",
     "0047_add_question_page_break_before",
     "0048_add_question_options_align",
-    "0049_add_question_pii_encryption"
+    "0049_add_question_pii_encryption",
+    "0050_sweep_expired_pii"
   ]
 }
