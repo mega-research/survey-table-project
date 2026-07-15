@@ -363,6 +363,8 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
                   ? currentFormData.piiEncrypted
                   : question?.piiEncrypted,
               tableValidationRules: currentFormData.tableValidationRules || question?.tableValidationRules,
+              numberFormat: currentFormData.numberFormat || question?.numberFormat,
+              sumConstraints: currentFormData.sumConstraints || question?.sumConstraints,
               displayCondition: currentFormData.displayCondition || question?.displayCondition,
               dynamicRowConfigs: currentFormData.dynamicRowConfigs || question?.dynamicRowConfigs,
               hideTitle: currentFormData.hideTitle ?? question?.hideTitle,

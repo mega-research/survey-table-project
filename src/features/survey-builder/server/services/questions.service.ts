@@ -60,6 +60,8 @@ export async function createQuestion(data: CreateQuestionInput): Promise<Questio
     emptyDefault: data.emptyDefault,
     piiEncrypted: data.piiEncrypted,
     tableValidationRules: data.tableValidationRules as NewQuestion['tableValidationRules'],
+    numberFormat: data.numberFormat as NewQuestion['numberFormat'],
+    sumConstraints: data.sumConstraints as NewQuestion['sumConstraints'],
     displayCondition: data.displayCondition as NewQuestion['displayCondition'],
     dynamicRowConfigs: data.dynamicRowConfigs as NewQuestion['dynamicRowConfigs'],
     hideColumnLabels: data.hideColumnLabels,

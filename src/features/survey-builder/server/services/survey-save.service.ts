@@ -253,6 +253,8 @@ export async function saveSurveyDiff(
           placeholder: question.placeholder,
           tableValidationRules:
             question.tableValidationRules as NewQuestion['tableValidationRules'],
+          numberFormat: question.numberFormat as NewQuestion['numberFormat'],
+          sumConstraints: question.sumConstraints as NewQuestion['sumConstraints'],
           dynamicRowConfigs:
             question.dynamicRowConfigs as NewQuestion['dynamicRowConfigs'],
           hideColumnLabels: question.hideColumnLabels,
@@ -300,6 +302,8 @@ export async function saveSurveyDiff(
               requiresAcknowledgment: sql`excluded.requires_acknowledgment`,
               placeholder: sql`excluded.placeholder`,
               tableValidationRules: sql`excluded.table_validation_rules`,
+              numberFormat: sql`excluded.number_format`,
+              sumConstraints: sql`excluded.sum_constraints`,
               dynamicRowConfigs: sql`excluded.dynamic_row_config`,
               hideColumnLabels: sql`excluded.hide_column_labels`,
               hideTitle: sql`excluded.hide_title`,
@@ -589,6 +593,8 @@ export async function saveSurveyWithDetails(
           placeholder: question.placeholder,
           tableValidationRules:
             question.tableValidationRules as NewQuestion['tableValidationRules'],
+          numberFormat: question.numberFormat as NewQuestion['numberFormat'],
+          sumConstraints: question.sumConstraints as NewQuestion['sumConstraints'],
           dynamicRowConfigs:
             question.dynamicRowConfigs as NewQuestion['dynamicRowConfigs'],
           hideColumnLabels: question.hideColumnLabels,
@@ -636,6 +642,8 @@ export async function saveSurveyWithDetails(
               requiresAcknowledgment: sql`excluded.requires_acknowledgment`,
               placeholder: sql`excluded.placeholder`,
               tableValidationRules: sql`excluded.table_validation_rules`,
+              numberFormat: sql`excluded.number_format`,
+              sumConstraints: sql`excluded.sum_constraints`,
               dynamicRowConfigs: sql`excluded.dynamic_row_config`,
               hideColumnLabels: sql`excluded.hide_column_labels`,
               hideTitle: sql`excluded.hide_title`,

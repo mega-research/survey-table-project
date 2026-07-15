@@ -1,7 +1,7 @@
 import { relations } from 'drizzle-orm';
 import { boolean, doublePrecision, integer, jsonb, pgTable, smallint, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
 
-import type { ChoiceGroup, SurveyLookup } from '@/types/survey';
+import type { ChoiceGroup, NumberFormat, SumConstraint, SurveyLookup } from '@/types/survey';
 
 import type {
   ContactColumnScheme,
@@ -167,6 +167,8 @@ export const questions = pgTable('questions', {
   // 단답형 숫자 입력 모드 — 0030 마이그레이션
   inputType: text('input_type'), // 'text' | 'number'
   emptyDefault: doublePrecision('empty_default'), // 숫자 모드 초기값
+  // 단답형 숫자 모드 표시 포맷·범위 (콤마/단위/min/max/소수 자릿수)
+  numberFormat: jsonb('number_format').$type<NumberFormat>(),
 
   // 단답형·장문형 개인정보 암호화 토글 — 응답값을 encryptPii 암호문으로 저장 (ADR-0012)
   piiEncrypted: boolean('pii_encrypted').default(false).notNull(),
@@ -191,6 +193,8 @@ export const questions = pgTable('questions', {
   tableValidationRules: jsonb('table_validation_rules').$type<TableValidationRule[]>(),
   dynamicRowConfigs: jsonb('dynamic_row_config').$type<DynamicRowGroupConfig[]>(),
   displayCondition: jsonb('display_condition').$type<QuestionConditionGroup>(),
+  // 숫자 셀 합계 제약 (테이블 타입 전용, 차단형 검증 — tableValidationRules 와 별개)
+  sumConstraints: jsonb('sum_constraints').$type<SumConstraint[]>(),
 
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),

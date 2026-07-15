@@ -264,6 +264,8 @@ export async function duplicateSurvey(
         spssVarType: question.spssVarType,
         spssMeasure: question.spssMeasure,
         tableValidationRules: question.tableValidationRules as NewQuestion['tableValidationRules'],
+        numberFormat: question.numberFormat as NewQuestion['numberFormat'],
+        sumConstraints: question.sumConstraints as NewQuestion['sumConstraints'],
         dynamicRowConfigs: question.dynamicRowConfigs as NewQuestion['dynamicRowConfigs'],
         hideColumnLabels: question.hideColumnLabels,
         hideTitle: question.hideTitle,

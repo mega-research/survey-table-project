@@ -191,12 +191,14 @@ import type {
   ExpressionConditionConfig,
   ExpressionOperand,
   HeaderCell,
+  NumberFormat,
   QuestionCondition,
   QuestionConditionGroup,
   QuestionOption,
   RadioOption,
   RankingConfig,
   SelectLevel,
+  SumConstraint,
   TableCell,
   TableColumn,
   TableRow,
@@ -212,12 +214,14 @@ export type {
   ExpressionConditionConfig,
   ExpressionOperand,
   HeaderCell,
+  NumberFormat,
   QuestionCondition,
   QuestionConditionGroup,
   QuestionOption,
   RadioOption,
   RankingConfig,
   SelectLevel,
+  SumConstraint,
   TableCell,
   TableColumn,
   TableRow,
@@ -264,6 +268,8 @@ export interface QuestionData {
   inputType?: 'text' | 'number';
   emptyDefault?: number;
   piiEncrypted?: boolean;
+  numberFormat?: NumberFormat | null;
+  sumConstraints?: SumConstraint[] | null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
