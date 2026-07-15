@@ -257,6 +257,27 @@ describe('updateQuestionResponse — PII 문항 암호화', () => {
     const setArg = updateSetLogMock.mock.calls[0]![0] as Record<string, unknown>;
     expect(extractSqlSetParams(setArg)).toContain('평문 답변');
   });
+
+  // 회귀 가드: 암호화 판단이 스냅샷 ∪ 현재 questions 플래그 합집합인지는 SQL 문자열 조각의
+  // 존재 여부로만 확인 가능하다 — mock 은 SQL 을 실행하지 않으므로 UNION 의 실제 동작(즉
+  // "스냅샷에 없어도 라이브 플래그가 켜져 있으면 true") 자체는 이 테스트로 검증되지 않는다.
+  // 그 의미론은 실DB 테스트(*.realdb.test.ts) 영역이며, 여기서는 assertQuestionBelongsToResponse
+  // 가 보내는 쿼리 텍스트에 live 서브셀렉트 조각이 실수로 빠지지 않았는지만 가드한다.
+  it('assert 쿼리 SQL 텍스트에 live 합집합 조각(FROM questions 서브셀렉트 + OR COALESCE)이 포함된다', async () => {
+    executeMock.mockResolvedValue([{ pii: true }]);
+    const { updateQuestionResponse } = await import(
+      '@/features/survey-response/server/services/response.service'
+    );
+    await updateQuestionResponse({
+      responseId: RESPONSE_ID,
+      questionId: QUESTION_ID,
+      value: PII_PLAINTEXT,
+    });
+    const queryArg = executeMock.mock.calls[0]![0];
+    const text = sqlText(queryArg);
+    expect(text).toContain('FROM questions');
+    expect(text).toContain('OR COALESCE');
+  });
 });
 
 describe('createResponseWithFirstAnswer — 첫 답변 INSERT 전 암호화', () => {
@@ -393,6 +414,29 @@ describe('completeResponse — PII 문항만 선별 암호화', () => {
     expect(String(answersMap[QUESTION_ID])).toMatch(/^v\d+:/);
     expect(answersMap[PLAIN_QUESTION_ID]).toBe('평문 답변');
     expect(JSON.stringify(answersMap)).not.toContain(PII_PLAINTEXT);
+  });
+
+  // 회귀 가드: loadPiiQuestionIds 가 보내는 쿼리 텍스트에 UNION + live pii_encrypted 조각이
+  // 실수로 빠지지 않았는지만 확인한다. mock 은 SQL 을 실행하지 않으므로 "스냅샷에 없어도
+  // 라이브 플래그로 잡힌다"는 실제 합집합 동작 자체는 이 테스트로 검증되지 않는다(실DB 영역).
+  it('loadPiiQuestionIds 쿼리 텍스트에 UNION 과 live pii_encrypted 조각이 포함된다', async () => {
+    const { completeResponse } = await import(
+      '@/features/survey-response/server/services/response.service'
+    );
+    await completeResponse({
+      responseId: RESPONSE_ID,
+      data: {
+        questionResponses: {
+          [QUESTION_ID]: PII_PLAINTEXT,
+          [PLAIN_QUESTION_ID]: '평문 답변',
+        },
+      },
+    });
+
+    const unionCall = executeMock.mock.calls.find((call) => sqlText(call[0]).includes('UNION'));
+    expect(unionCall).toBeDefined();
+    const text = sqlText(unionCall![0]);
+    expect(text).toContain('pii_encrypted = true');
   });
 });
 

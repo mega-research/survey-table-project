@@ -623,9 +623,9 @@ export function QuestionBasicTab({
             <div className="space-y-1">
               <Label htmlFor="pii-encrypted">개인정보 암호화</Label>
               <p className="text-xs text-gray-500">
-                성명, 전화번호, 주소 같은 개인정보 응답을 암호화해 저장합니다. 배포 후
-                수집되는 응답부터 적용되며, 관리자 화면과 다운로드에서는 자동으로
-                복호화되어 표시됩니다.
+                성명, 전화번호, 주소 같은 개인정보 응답을 암호화해 저장합니다. 설정 저장
+                후 새로 저장되는 응답값부터 암호화되며, 관리자 화면과 다운로드에서는
+                자동으로 복호화되어 표시됩니다.
               </p>
             </div>
           </div>

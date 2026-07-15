@@ -302,6 +302,9 @@ async function loadValidatedVersionGateRow(
  *   (응답은 응답 시점 스냅샷을 기준으로 하므로 권위 소스). non-array 스냅샷은 빈 배열로 폴백.
  * - versionId 가 없으면(레거시/버전 미연결) surveyId 의 라이브 questions 테이블로 폴백.
  *
+ * 암호화 플래그는 스냅샷 ∪ 현재 설정 합집합 — 진행 중 세션이 옛 버전에 고정돼도 새로 켠
+ * 토글이 새 저장분부터 적용되게 한다(과잉 암호화 방향만 허용). 멤버십 검증은 여전히 스냅샷 단독.
+ *
  * 임의 키 JSONB 주입(설문에 없는 questionId 로 questionResponses 오염)을 차단한다.
  */
 async function assertQuestionBelongsToResponse(
@@ -310,9 +313,17 @@ async function assertQuestionBelongsToResponse(
   questionId: string,
 ): Promise<{ piiEncrypted: boolean }> {
   if (versionId) {
-    // 소속 검증 + piiEncrypted 플래그를 한 쿼리로. 행이 없으면 미소속 → 거부.
+    // 소속 검증(스냅샷 단독) + piiEncrypted 플래그(스냅샷 ∪ 라이브 questions 합집합)를 한
+    // 쿼리로. 행이 없으면 미소속 → 거부. questionId 는 text 바인딩이라 questions.id(uuid)
+    // 비교 시 명시 캐스트 필요.
     const rows = await db.execute<{ pii: boolean | null }>(sql`
-      SELECT COALESCE((qe.elem->>'piiEncrypted')::boolean, false) AS pii
+      SELECT
+        COALESCE((qe.elem->>'piiEncrypted')::boolean, false)
+        OR COALESCE(
+          (SELECT q.pii_encrypted FROM questions q
+           WHERE q.id = ${questionId}::uuid AND q.survey_id = ${surveyId}::uuid),
+          false
+        ) AS pii
       FROM survey_versions sv,
            jsonb_array_elements(
              CASE WHEN jsonb_typeof(sv.snapshot->'questions') = 'array'
@@ -387,7 +398,16 @@ async function loadValidQuestionIds(
   return new Set(rows.map((r) => r.id));
 }
 
-/** 버전 스냅샷(또는 라이브 questions)에서 piiEncrypted=true 인 질문 id 집합을 로드한다. */
+/**
+ * 버전 스냅샷과 현재 questions 플래그의 합집합에서 piiEncrypted=true 인 질문 id 집합을 로드한다.
+ *
+ * 암호화 판단은 스냅샷 단독이 아니라 스냅샷 ∪ 현재 설정 합집합이다 — 진행 중(이어하기) 세션은
+ * 옛 versionId 에 고정되므로, 토글을 새로 켜고 배포해도 그 세션은 여전히 옛 스냅샷을 참조한다.
+ * 합집합이면 어느 쪽이든 켜져 있을 때 암호화하므로 과소 암호화(평문 유출) 갭이 사라진다.
+ * live-only id(스냅샷엔 없지만 현재 questions 에만 켜진 id)가 집합에 섞여도 무해하다 —
+ * completeResponse/saveAdminEdit 는 이 집합을 "제출된 맵의 키 중 암호화 대상"으로만 쓰므로,
+ * 애초에 제출 맵에 없는 키는 걸러지지 않는다(과잉 암호화 방향만 허용, 과소 암호화 없음).
+ */
 export async function loadPiiQuestionIds(
   versionId: string | null,
   surveyId: string,
@@ -404,6 +424,10 @@ export async function loadPiiQuestionIds(
            ) AS qe(elem)
       WHERE sv.id = ${versionId}
         AND (qe.elem->>'piiEncrypted')::boolean IS TRUE
+      UNION
+      SELECT q.id::text AS id
+      FROM questions q
+      WHERE q.survey_id = ${surveyId}::uuid AND q.pii_encrypted = true
     `);
     const ids = new Set<string>();
     for (const r of rows) {
