@@ -72,6 +72,7 @@ import { CellChoiceEditor } from './cell-choice-editor';
 import { CellImageEditor } from './cell-image-editor';
 import { CellContentLayout } from './cells/cell-content-layout';
 import { ChoiceOptCellTab } from './choice-opt-cell-tab';
+import { NumberFormatFields } from './number-format-fields';
 import { OptionsLayoutSelector } from './options-layout-selector';
 import { RankingCellTab } from './ranking-cell-tab';
 import { RankingOptCellTab } from './ranking-opt-cell-tab';
@@ -161,6 +162,8 @@ export function CellContentModal({
     inputType,
     emptyDefaultEnabled,
     emptyDefaultRaw,
+    cellNumberFormat,
+    inputRequired,
     minSelections,
     maxSelections,
     rankingOptions,
@@ -212,6 +215,8 @@ export function CellContentModal({
     setInputType,
     setEmptyDefaultEnabled,
     setEmptyDefaultRaw,
+    setCellNumberFormat,
+    setInputRequired,
     setMinSelections,
     setMaxSelections,
     setRankingOptions,
@@ -905,6 +910,30 @@ export function CellContentModal({
                     />
                   </div>
                 )}
+                {inputType === 'number' && (
+                  <div className="ml-7">
+                    <NumberFormatFields
+                      idPrefix="cell-nf"
+                      value={cellNumberFormat}
+                      onChange={setCellNumberFormat}
+                    />
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  id="cell-input-required"
+                  checked={inputRequired}
+                  onChange={(e) => setInputRequired(e.target.checked)}
+                  className="h-4 w-4"
+                />
+                <label htmlFor="cell-input-required" className="cursor-pointer">
+                  필수 입력 셀
+                </label>
+                <span className="text-xs text-gray-400">
+                  지정 셀이 채워져야 다음으로 진행됩니다
+                </span>
               </div>
             </div>
 
@@ -977,6 +1006,12 @@ export function CellContentModal({
                   ? '글자 수 제한이 없습니다'
                   : `최대 ${inputMaxLength}자까지 입력 가능`}
               </p>
+              {inputType === 'number' && cellNumberFormat?.thousandSeparator && (
+                <p className="text-xs text-amber-600">
+                  천단위 콤마 표시가 켜져 있으면 화면에 콤마가 포함된 문자열 기준으로 글자 수가
+                  계산됩니다. 큰 숫자가 잘리지 않도록 여유 있게 설정하세요.
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">

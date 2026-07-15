@@ -53,6 +53,8 @@ export interface CellFormSetters {
   setInputType: (v: 'text' | 'number') => void;
   setEmptyDefaultEnabled: (v: boolean) => void;
   setEmptyDefaultRaw: (v: string) => void;
+  setCellNumberFormat: (v: CellFormState['cellNumberFormat']) => void;
+  setInputRequired: (v: boolean) => void;
   setMinSelections: (v: number | undefined) => void;
   setMaxSelections: (v: number | undefined) => void;
   setRankingOptions: (v: CellFormState['rankingOptions']) => void;
@@ -128,6 +130,8 @@ export function useCellForm(cell: TableCell, isOpen: boolean): UseCellFormResult
       setInputType: set('inputType'),
       setEmptyDefaultEnabled: set('emptyDefaultEnabled'),
       setEmptyDefaultRaw: set('emptyDefaultRaw'),
+      setCellNumberFormat: set('cellNumberFormat'),
+      setInputRequired: set('inputRequired'),
       setMinSelections: set('minSelections'),
       setMaxSelections: set('maxSelections'),
       setRankingOptions: set('rankingOptions'),

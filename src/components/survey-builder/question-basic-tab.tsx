@@ -47,6 +47,7 @@ import { BranchRuleEditor } from './branch-rule-editor';
 import { DynamicTableEditor } from './dynamic-table-editor';
 import { RichTextEditor, type RichTextEditorHandle } from '@/components/ui/rich-text-editor';
 import { NoticeRenderer } from './notice-renderer';
+import { NumberFormatFields } from './number-format-fields';
 import { OptionsLayoutSelector } from './options-layout-selector';
 import { RankingConfigEditorForQuestion } from './ranking-config-editor';
 import { SpssVariableEditor } from './spss-variable-editor';
@@ -557,53 +558,64 @@ export function QuestionBasicTab({
                 </div>
 
                 {formData.inputType === 'number' && (
-                  <div className="ml-7 flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      id="text-empty-default-enabled"
-                      checked={formData.emptyDefault !== undefined}
-                      disabled={hasTokenPrefill}
-                      onChange={(e) => {
-                        const checked = e.target.checked;
-                        setFormData((prev) => {
-                          const next: Partial<Question> = { ...prev };
-                          if (checked) {
-                            next.emptyDefault = prev.emptyDefault ?? 0;
-                          } else {
-                            delete next.emptyDefault;
-                          }
-                          return next;
-                        });
-                      }}
-                      className="h-4 w-4"
-                    />
-                    <label htmlFor="text-empty-default-enabled" className="cursor-pointer">
-                      응답자 입력란 초기값
-                    </label>
-                    <Input
-                      type="text"
-                      inputMode="decimal"
-                      value={
-                        formData.emptyDefault !== undefined ? String(formData.emptyDefault) : ''
-                      }
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        if (isPartialNumericInput(v)) {
-                          setFormData((prev) => ({
-                            ...prev,
-                            emptyDefault:
-                              v === '' ? 0 : (parseNumericInput(v) ?? prev.emptyDefault ?? 0),
-                          }));
+                  <>
+                    <div className="ml-7 flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        id="text-empty-default-enabled"
+                        checked={formData.emptyDefault !== undefined}
+                        disabled={hasTokenPrefill}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setFormData((prev) => {
+                            const next: Partial<Question> = { ...prev };
+                            if (checked) {
+                              next.emptyDefault = prev.emptyDefault ?? 0;
+                            } else {
+                              delete next.emptyDefault;
+                            }
+                            return next;
+                          });
+                        }}
+                        className="h-4 w-4"
+                      />
+                      <label htmlFor="text-empty-default-enabled" className="cursor-pointer">
+                        응답자 입력란 초기값
+                      </label>
+                      <Input
+                        type="text"
+                        inputMode="decimal"
+                        value={
+                          formData.emptyDefault !== undefined ? String(formData.emptyDefault) : ''
                         }
-                      }}
-                      disabled={formData.emptyDefault === undefined || hasTokenPrefill}
-                      className="h-8 w-24"
-                      aria-label="초기값"
-                    />
-                    {hasTokenPrefill && (
-                      <span className="text-xs text-gray-400">토큰 prefill 사용 중 (우선)</span>
-                    )}
-                  </div>
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          if (isPartialNumericInput(v)) {
+                            setFormData((prev) => ({
+                              ...prev,
+                              emptyDefault:
+                                v === '' ? 0 : (parseNumericInput(v) ?? prev.emptyDefault ?? 0),
+                            }));
+                          }
+                        }}
+                        disabled={formData.emptyDefault === undefined || hasTokenPrefill}
+                        className="h-8 w-24"
+                        aria-label="초기값"
+                      />
+                      {hasTokenPrefill && (
+                        <span className="text-xs text-gray-400">토큰 prefill 사용 중 (우선)</span>
+                      )}
+                    </div>
+                    <div className="ml-7">
+                      <NumberFormatFields
+                        idPrefix="text-nf"
+                        value={formData.numberFormat ?? undefined}
+                        onChange={(nf) =>
+                          setFormData((prev) => ({ ...prev, numberFormat: nf ?? null }))
+                        }
+                      />
+                    </div>
+                  </>
                 )}
               </div>
             </div>

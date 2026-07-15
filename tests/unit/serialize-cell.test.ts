@@ -138,6 +138,60 @@ describe('buildUpdatedCell — 셀타입별 characterization', () => {
     expect(out.emptyDefault).toBe(7);
   });
 
+  it('input: numberFormat 은 inputType=number 이고 폼에 값이 있을 때만 저장된다', () => {
+    const nf = { thousandSeparator: true, unit: 'tenThousand' as const, min: 0, max: 100 };
+    const numberMode = buildUpdatedCell(
+      { ...baseForm('input'), inputType: 'number', cellNumberFormat: nf },
+      baseCell,
+    );
+    expect(numberMode.numberFormat).toEqual(nf);
+
+    // text 모드면 폼에 값이 남아있어도 저장하지 않는다 (numberFormat 은 숫자 모드 전용).
+    const textMode = buildUpdatedCell(
+      { ...baseForm('input'), inputType: 'text', cellNumberFormat: nf },
+      baseCell,
+    );
+    expect(textMode).not.toHaveProperty('numberFormat');
+  });
+
+  it('input: 기존 numberFormat 을 폼에서 비우면 제거된다 (cellBase 스테일 값 방지)', () => {
+    const existing: TableCell = {
+      id: 'input1',
+      type: 'input',
+      content: '',
+      inputType: 'number',
+      numberFormat: { thousandSeparator: true },
+    };
+    const out = buildUpdatedCell(
+      { ...baseForm('input'), inputType: 'number', cellNumberFormat: undefined },
+      existing,
+    );
+    expect(out).not.toHaveProperty('numberFormat');
+  });
+
+  it('input: inputRequired 체크 시 required=true 저장 (inputType 무관)', () => {
+    const out = buildUpdatedCell(
+      { ...baseForm('input'), inputType: 'text', inputRequired: true },
+      baseCell,
+    );
+    expect(out.required).toBe(true);
+  });
+
+  it('input: 기존 required 를 폼에서 해제하면 제거된다 (cellBase 스테일 값 방지)', () => {
+    const existing: TableCell = {
+      id: 'input1',
+      type: 'input',
+      content: '',
+      inputType: 'text',
+      required: true,
+    };
+    const out = buildUpdatedCell(
+      { ...baseForm('input'), inputType: 'text', inputRequired: false },
+      existing,
+    );
+    expect(out).not.toHaveProperty('required');
+  });
+
   it('checkbox: checkboxOptions + allowOtherOption + optionsColumns + min/max', () => {
     const form: CellFormState = {
       ...baseForm('checkbox'),
@@ -606,5 +660,23 @@ describe('cellToFormState — 라운드트립', () => {
     expect(out.minSelections).toBe(1);
     expect(out.maxSelections).toBe(2);
     expect(out.horizontalAlign).toBe('center');
+  });
+
+  it('numberFormat/required 를 가진 숫자 input 셀은 폼 왕복 후에도 값이 보존된다', () => {
+    const cell: TableCell = {
+      id: 'c10',
+      type: 'input',
+      content: '',
+      inputType: 'number',
+      numberFormat: { thousandSeparator: true, unit: 'percent', min: 0, max: 100 },
+      required: true,
+    };
+    const form = cellToFormState(cell);
+    expect(form.cellNumberFormat).toEqual(cell.numberFormat);
+    expect(form.inputRequired).toBe(true);
+
+    const out = buildUpdatedCell(form, cell);
+    expect(out.numberFormat).toEqual(cell.numberFormat);
+    expect(out.required).toBe(true);
   });
 });

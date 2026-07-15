@@ -1,6 +1,7 @@
 import {
   BranchRule,
   CheckboxOption,
+  NumberFormat,
   QuestionOption,
   RadioOption,
   RankingConfig,
@@ -33,6 +34,8 @@ export interface CellFormState {
   inputType: 'text' | 'number';
   emptyDefaultEnabled: boolean;
   emptyDefaultRaw: string;
+  cellNumberFormat: NumberFormat | undefined;
+  inputRequired: boolean;
   minSelections: number | undefined;
   maxSelections: number | undefined;
   rankingOptions: QuestionOption[];
@@ -122,6 +125,8 @@ export function cellToFormState(cell: TableCell): CellFormState {
     inputType: cell.inputType ?? 'text',
     emptyDefaultEnabled: cell.emptyDefault !== undefined,
     emptyDefaultRaw: cell.emptyDefault !== undefined ? String(cell.emptyDefault) : '0',
+    cellNumberFormat: cell.numberFormat,
+    inputRequired: cell.required ?? false,
     minSelections: cell.minSelections,
     maxSelections: cell.maxSelections,
     rankingOptions: cell.rankingOptions || [],
@@ -193,6 +198,8 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
     defaultValueTemplate: _defaultValueTemplate,
     inputType: _inputType,
     emptyDefault: _emptyDefault,
+    numberFormat: _numberFormat,
+    required: _required,
     minSelections: _minSelections,
     maxSelections: _maxSelections,
     rankingConfig: _rankingConfig,
@@ -248,6 +255,10 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
           ...(form.inputType === 'number' && form.emptyDefaultEnabled
             ? { emptyDefault: parseNumericInput(form.emptyDefaultRaw) ?? 0 }
             : {}),
+          ...(form.inputType === 'number' && form.cellNumberFormat
+            ? { numberFormat: form.cellNumberFormat }
+            : {}),
+          ...(form.inputRequired ? { required: true } : {}),
         }
       : {}),
     // 체크박스 선택 개수 제한 (체크박스 타입 전용)
