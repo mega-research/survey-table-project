@@ -20,6 +20,12 @@ vi.mock('@/db', () => ({
         };
       }),
     })),
+    delete: vi.fn(() => ({
+      where: vi.fn((cond: unknown) => {
+        capturedWheres.push(cond);
+        return { returning: vi.fn(async () => returningRows) };
+      }),
+    })),
   },
 }));
 
@@ -75,29 +81,29 @@ describe('setPaused pausedMessage 3분기', () => {
 });
 
 describe('deleteTestResponses', () => {
-  it('where 에 is_test=true 와 deleted_at IS NULL 조건이 반영되고 삭제 건수를 반환한다', async () => {
+  it('db.delete 하드 딜리트 — where 에 is_test=true 만 있고 deleted_at 필터가 없다(soft delete 잔존분 포함 삭제)', async () => {
     returningRows = [{ id: 'r1' }, { id: 'r2' }];
 
     const res = await deleteTestResponses(SURVEY_ID);
 
     expect(res).toEqual({ deletedCount: 2 });
+    // update(set deletedAt) 경로를 쓰지 않아야 한다 — soft delete 회귀 가드.
+    expect(capturedSets).toHaveLength(0);
     expect(capturedWheres).toHaveLength(1);
     // 캡처한 drizzle 조건을 실제 SQL 로 직조해 검증 (tests/unit/contacts-filter-sql.test.ts 패턴).
     const query = dialect.sqlToQuery(capturedWheres[0] as SQL);
     expect(query.sql).toContain('"is_test"');
-    expect(query.sql).toMatch(/"deleted_at" is null/i);
+    expect(query.sql).not.toMatch(/deleted_at/i);
     expect(query.params).toContain(true);
     expect(query.params).toContain(SURVEY_ID);
   });
 
-  it('soft delete 페이로드는 deletedAt 만 갱신한다', async () => {
+  it('삭제 대상이 없으면 deletedCount 0 을 반환한다', async () => {
     returningRows = [];
 
     const res = await deleteTestResponses(SURVEY_ID);
 
     expect(res).toEqual({ deletedCount: 0 });
-    expect(capturedSets).toHaveLength(1);
-    expect(Object.keys(capturedSets[0]!)).toEqual(['deletedAt']);
-    expect(capturedSets[0]!['deletedAt']).toBeInstanceOf(Date);
+    expect(capturedSets).toHaveLength(0);
   });
 });

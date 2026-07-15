@@ -89,14 +89,16 @@ export async function setTestMode(input: {
 export async function deleteTestResponses(
   surveyId: string,
 ): Promise<{ deletedCount: number }> {
+  // "삭제 후 끄기"는 하드 딜리트 — 다이얼로그가 "복구할 수 없음"을 안내하므로 행을 실제로
+  // 제거한다. response_answers/response_edit_logs 는 FK CASCADE, contact_targets.response_id
+  // 는 ON DELETE SET NULL 이라 추가 정리가 필요 없다. 과거 soft delete 로 "삭제된 응답"에
+  // 남아 있던 테스트 행도 함께 제거한다 (deleted_at 무관 — 테스트 데이터 전체 정리).
   const deleted = await db
-    .update(surveyResponses)
-    .set({ deletedAt: new Date() })
+    .delete(surveyResponses)
     .where(
       and(
         eq(surveyResponses.surveyId, surveyId),
         eq(surveyResponses.isTest, true),
-        isNull(surveyResponses.deletedAt),
       ),
     )
     .returning({ id: surveyResponses.id });
