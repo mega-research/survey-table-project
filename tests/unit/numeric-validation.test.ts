@@ -51,6 +51,10 @@ describe('evaluateSumConstraint', () => {
     expect(evaluateSumConstraint(lte, { c1: '60', c2: '30' }, ids).ok).toBe(true);
     expect(evaluateSumConstraint(lte, { c1: '60', c2: '50' }, ids).ok).toBe(false);
     expect(evaluateSumConstraint(gte, { c1: '60', c2: '50' }, ids).ok).toBe(true);
+    expect(evaluateSumConstraint(gte, { c1: '30', c2: '20' }, ids)).toMatchObject({
+      ok: false,
+      sum: 50,
+    });
   });
 
   it('빈 셀은 0으로 간주하고, 전부 빈 값이면 skipped', () => {
@@ -186,6 +190,51 @@ describe('collectNumericIssues — 테이블', () => {
     // r2 선택 — c2 가 표시되므로 필수 발동
     const issues = collectNumericIssues(q, { c1: '5', __selectedRowIds: ['r2'] });
     expect(issues[0]).toMatchObject({ kind: 'required-cells', cellIds: ['c2'] });
+  });
+
+  it('미선택 동적 행에 잔존한 셀 값은 합계에서 제외한다 (선택되면 포함)', () => {
+    const rows: TableRow[] = [
+      {
+        id: 'r1',
+        cells: [{ id: 'c1', type: 'input', content: '', inputType: 'number' }],
+      },
+      {
+        id: 'r2',
+        dynamicGroupId: 'g1',
+        cells: [{ id: 'c2', type: 'input', content: '', inputType: 'number' }],
+      },
+    ] as TableRow[];
+    const q = tableQuestion({
+      tableRowsData: rows,
+      dynamicRowConfigs: [{ groupId: 'g1', enabled: true }],
+      sumConstraints: [eq100],
+    } as Partial<Question>);
+    // r2 미선택 — c2 에 값(30)이 잔존해도(선택 해제 시 use-dynamic-row-state 가 값을 지우지 않음)
+    // 합계 평가에서 제외돼 c1(100) 단독으로 eq 100 을 충족한다.
+    expect(collectNumericIssues(q, { c1: '100', c2: '30' })).toHaveLength(0);
+    // r2 선택 — c2 가 화면에 표시되므로 합산에 포함되어 100+30=130 ≠ 100 위반.
+    const issues = collectNumericIssues(q, {
+      c1: '100',
+      c2: '30',
+      __selectedRowIds: ['r2'],
+    });
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toMatchObject({ kind: 'sum', cellIds: ['c1', 'c2'] });
+  });
+
+  it('isHidden 셀은 합계에서도 제외한다', () => {
+    const rows: TableRow[] = [
+      {
+        id: 'r1',
+        cells: [
+          { id: 'c1', type: 'input', content: '', inputType: 'number' },
+          { id: 'c2', type: 'input', content: '', inputType: 'number', isHidden: true },
+        ],
+      },
+    ] as TableRow[];
+    const q = tableQuestion({ tableRowsData: rows, sumConstraints: [eq100] });
+    // c2 는 isHidden — 값이 남아 있어도 합산 대상에서 제외돼 c1(100) 단독으로 eq 100 충족.
+    expect(collectNumericIssues(q, { c1: '100', c2: '30' })).toHaveLength(0);
   });
 
   it('isHidden 필수 셀은 평가에서 제외한다', () => {

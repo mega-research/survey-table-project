@@ -25,7 +25,41 @@ function isEmptyCellValue(v: unknown): boolean {
   return v === undefined || v === null || (typeof v === 'string' && v.trim() === '');
 }
 
-/** 합계 평가 — 빈 셀은 0, 전부 빈 값이거나 유효 셀 0개면 skipped. 소수 9자리 반올림 후 비교. */
+/**
+ * 응답자에게 실제로 "보이는" 셀 목록 — 미선택 동적 행(enabledDynamicGroupIds에 속하고
+ * __selectedRowIds에 없는 행)의 셀과 isHidden 셀을 제외한다.
+ * 필수 셀 검증과 합계 검증이 이 필터를 공유한다: 동적 행을 선택→입력→선택 해제하면 셀 값이
+ * 응답 객체에 잔존하는데(use-dynamic-row-state 는 __selectedRowIds 만 patch), 화면에 없는
+ * 그 값이 필수 판정·합계에 기여하면 안 된다.
+ */
+function visibleCells(
+  rows: TableRow[],
+  cellValues: Record<string, unknown>,
+  dynamicRowConfigs: Question['dynamicRowConfigs'],
+): TableCell[] {
+  const enabledDynamicGroupIds = new Set(
+    (dynamicRowConfigs ?? []).filter((c) => c.enabled).map((c) => c.groupId),
+  );
+  const selectedRowIds = new Set(
+    Array.isArray(cellValues['__selectedRowIds'])
+      ? (cellValues['__selectedRowIds'] as string[])
+      : [],
+  );
+  return rows
+    .filter(
+      (row) =>
+        !(row.dynamicGroupId && enabledDynamicGroupIds.has(row.dynamicGroupId)) ||
+        selectedRowIds.has(row.id),
+    )
+    .flatMap((row) => row.cells)
+    .filter((c) => !c.isHidden);
+}
+
+/**
+ * 합계 평가 — 빈 셀은 0, 전부 빈 값이거나 유효 셀 0개면 skipped. 소수 9자리 반올림 후 비교.
+ * @param existingCellIds 합산 대상으로 유효한(=보이는) 셀 id 집합. 호출부가 미선택 동적 행·isHidden
+ *   셀을 미리 걸러 넘긴다 — 화면에 없는 잔존 값이 합계에 기여하지 않도록.
+ */
 export function evaluateSumConstraint(
   constraint: SumConstraint,
   cellValues: Record<string, unknown>,
@@ -108,8 +142,9 @@ export function collectNumericIssues(question: Question, response: unknown): Num
     });
   }
 
-  // 2) 합계 제약
-  const existingIds = new Set(cells.map((c) => c.id));
+  // 2) 합계 제약 — 합산 대상은 "보이는 셀"로 한정 (미선택 동적 행 잔존 값·isHidden 셀 제외)
+  const visible = visibleCells(rows, cellValues, question.dynamicRowConfigs);
+  const existingIds = new Set(visible.map((c) => c.id));
   for (const constraint of question.sumConstraints ?? []) {
     const result = evaluateSumConstraint(constraint, cellValues, existingIds);
     if (!result.skipped && !result.ok) {
@@ -122,24 +157,9 @@ export function collectNumericIssues(question: Question, response: unknown): Num
   }
 
   // 3) 필수 셀 — "표시될 때만 필수": isHidden 셀과 미선택 동적 행의 셀은 제외 (영구 차단 방지)
-  const enabledDynamicGroupIds = new Set(
-    (question.dynamicRowConfigs ?? []).filter((c) => c.enabled).map((c) => c.groupId),
+  const missingRequired = visible.filter(
+    (c) => c.type === 'input' && c.required && isEmptyCellValue(cellValues[c.id]),
   );
-  const selectedRowIds = new Set(
-    Array.isArray(cellValues['__selectedRowIds'])
-      ? (cellValues['__selectedRowIds'] as string[])
-      : [],
-  );
-  const missingRequired = rows
-    .filter(
-      (row) =>
-        !(row.dynamicGroupId && enabledDynamicGroupIds.has(row.dynamicGroupId)) ||
-        selectedRowIds.has(row.id),
-    )
-    .flatMap((row) => row.cells)
-    .filter(
-      (c) => c.type === 'input' && c.required && !c.isHidden && isEmptyCellValue(cellValues[c.id]),
-    );
   if (missingRequired.length > 0) {
     issues.push({
       kind: 'required-cells',

@@ -303,4 +303,41 @@ describe('useResponseLifecycle - handleSubmit', () => {
     expect(args.resetResponseState).toHaveBeenCalledTimes(1);
     expect(args.setIsCompleted).not.toHaveBeenCalled();
   });
+
+  it('숫자 차단형 검증 위반이면 제출을 진행하지 않고 setNumericErrorStepIndex 를 호출한다', async () => {
+    const numQ = {
+      id: 'q-num',
+      type: 'text',
+      title: '숫자',
+      required: false,
+      order: 0,
+      inputType: 'number',
+      numberFormat: { min: 10 },
+    } as unknown as Question;
+    const numStep: RenderStep = {
+      kind: 'page',
+      items: [
+        { question: numQ, rootGroupId: null, rootGroupName: null, subgroupName: null },
+      ],
+    } as unknown as RenderStep;
+    const args = baseArgs({
+      questions: [numQ],
+      steps: [numStep],
+      currentStep: numStep,
+      currentStepIndex: 0,
+      // min 10 미달 — collectNumericIssues 가 range 위반을 반환한다
+      responses: { 'q-num': '5' },
+    });
+    const { result } = renderHook(() => useResponseLifecycle(args));
+
+    await act(async () => {
+      await result.current.handleSubmit();
+    });
+
+    expect(args.setNumericErrorStepIndex).toHaveBeenCalledWith(0);
+    expect(args.setIsSubmitting).toHaveBeenCalledWith(false);
+    expect(createBlank).not.toHaveBeenCalled();
+    expect(complete).not.toHaveBeenCalled();
+    expect(args.setIsCompleted).not.toHaveBeenCalled();
+  });
 });
