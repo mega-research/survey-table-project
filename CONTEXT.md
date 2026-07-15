@@ -11,8 +11,16 @@
 _Avoid_: 셀 값 추출 로직, 셀 타입 switch
 
 **검증 규칙 (table validation rule)**:
-테이블 응답에 대한 분기 규칙. 5종 수량자(exclusive-check / any-of / all-of / none-of / required-combination)를 가지며, 이 수량자 어휘는 검증 규칙 interface 소유다 — 셀 의미론으로 내리지 않는다.
+테이블 응답에 대한 분기 규칙. 5종 수량자(exclusive-check / any-of / all-of / none-of / required-combination)를 가지며, 이 수량자 어휘는 검증 규칙 interface 소유다 — 셀 의미론으로 내리지 않는다. 차단형 검증과 별개 — 이쪽은 분기(end/goto)만 하고 진행을 차단하지 않는다.
 _Avoid_: 테이블 밸리데이션, 검증 조건
+
+**차단형 검증 (blocking validation)**:
+숫자 입력에 대한 진행 차단형 검증 계열 — min 미달, 합계 제약, 필수 셀. "다음"/제출 시점에 평가되어 위반 시 인라인 에러를 표시하고 진행을 막는다. 검증 규칙(분기 전용)과 달리 응답 흐름을 바꾸지 않으며, 클라이언트 전용이다(서버 재검증 없음 — 비목표로 확정).
+_Avoid_: 검증 규칙(분기 어휘와 충돌), 제출 검증
+
+**합계 제약 (sum constraint)**:
+차단형 검증의 규칙 엔티티 — 임의 선택한 숫자 input 셀 집합의 합이 목표값과 =/≤/≥ 관계를 만족해야 한다. 대상 셀이 전부 빈 값이면 평가를 스킵한다(미접촉 허용 — 미응답 차단은 필수 여부 소관).
+_Avoid_: 합계 규칙, 100% 검증
 
 **표시조건 (displayCondition)**:
 질문·그룹·행·열·동적 그룹의 노출 여부를 결정하는 조건 그룹(AND/OR/NOT + 조건 목록). 테이블 검사 시 checkType(any/all/none) 어휘를 쓰며 검증 규칙의 5종 수량자와 별개 interface다.
