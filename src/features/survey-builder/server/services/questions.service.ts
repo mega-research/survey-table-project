@@ -58,6 +58,7 @@ export async function createQuestion(data: CreateQuestionInput): Promise<Questio
     defaultValueTemplate: data.defaultValueTemplate,
     inputType: data.inputType,
     emptyDefault: data.emptyDefault,
+    piiEncrypted: data.piiEncrypted,
     tableValidationRules: data.tableValidationRules as NewQuestion['tableValidationRules'],
     displayCondition: data.displayCondition as NewQuestion['displayCondition'],
     dynamicRowConfigs: data.dynamicRowConfigs as NewQuestion['dynamicRowConfigs'],

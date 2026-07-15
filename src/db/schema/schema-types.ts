@@ -263,6 +263,7 @@ export interface QuestionData {
   defaultValueTemplate?: string | null;
   inputType?: 'text' | 'number';
   emptyDefault?: number;
+  piiEncrypted?: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

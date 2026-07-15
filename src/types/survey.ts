@@ -502,6 +502,8 @@ export interface Question {
   inputType?: 'text' | 'number';
   // 숫자 모드 첫 진입 시 입력란 자동 채움 값(선택). 토큰 prefill 없을 때만 적용.
   emptyDefault?: number;
+  // 단답형·장문형 개인정보 암호화 토글 — 응답값을 encryptPii 암호문으로 저장 (ADR-0012)
+  piiEncrypted?: boolean;
   // 테이블 검증 규칙 (테이블 타입 전용)
   tableValidationRules?: TableValidationRule[];
   // 동적 행 그룹 설정 (테이블 타입 전용)

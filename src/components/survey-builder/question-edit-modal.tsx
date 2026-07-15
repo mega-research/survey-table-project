@@ -357,6 +357,10 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
                 currentFormData.inputType !== undefined ? currentFormData.inputType : question?.inputType,
               emptyDefault:
                 currentFormData.emptyDefault !== undefined ? currentFormData.emptyDefault : question?.emptyDefault,
+              piiEncrypted:
+                currentFormData.piiEncrypted !== undefined
+                  ? currentFormData.piiEncrypted
+                  : question?.piiEncrypted,
               tableValidationRules: currentFormData.tableValidationRules || question?.tableValidationRules,
               displayCondition: currentFormData.displayCondition || question?.displayCondition,
               dynamicRowConfigs: currentFormData.dynamicRowConfigs || question?.dynamicRowConfigs,

@@ -41,6 +41,8 @@ export const surveys = pgTable('surveys', {
   shuffleQuestions: boolean('shuffle_questions').default(false).notNull(),
   requireLogin: boolean('require_login').default(false).notNull(),
   endDate: timestamp('end_date', { withTimezone: true }),
+  // 개인정보 보관기한 — 해당일 포함 보유, KST 익일 0시 timestamp 로 저장. 경과 시 pg_cron 파기 (ADR-0012)
+  piiRetentionUntil: timestamp('pii_retention_until', { withTimezone: true }),
   maxResponses: integer('max_responses'),
   thankYouMessage: text('thank_you_message').default('응답해주셔서 감사합니다!').notNull(),
 
@@ -165,6 +167,9 @@ export const questions = pgTable('questions', {
   // 단답형 숫자 입력 모드 — 0030 마이그레이션
   inputType: text('input_type'), // 'text' | 'number'
   emptyDefault: doublePrecision('empty_default'), // 숫자 모드 초기값
+
+  // 단답형·장문형 개인정보 암호화 토글 — 응답값을 encryptPii 암호문으로 저장 (ADR-0012)
+  piiEncrypted: boolean('pii_encrypted').default(false).notNull(),
 
   // SPSS 변수명 관련
   questionCode: text('question_code'), // SPSS 변수명 (예: "Q1", "Q2M1")

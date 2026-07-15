@@ -37,6 +37,7 @@ export const PERSISTED_QUESTION_FIELDS = [
   'defaultValueTemplate',
   'inputType',
   'emptyDefault',
+  'piiEncrypted',
   'tableValidationRules',
   'dynamicRowConfigs',
   'hideColumnLabels',

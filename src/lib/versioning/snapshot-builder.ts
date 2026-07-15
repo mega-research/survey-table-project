@@ -69,6 +69,7 @@ interface SnapshotQuestion {
   defaultValueTemplate?: string | null | undefined;
   inputType?: 'text' | 'number' | undefined;
   emptyDefault?: number | undefined;
+  piiEncrypted?: boolean | undefined;
 }
 
 interface SnapshotGroup {
@@ -135,6 +136,7 @@ export function buildSurveySnapshot(survey: Survey): SurveySnapshot {
       defaultValueTemplate: q.defaultValueTemplate,
       inputType: q.inputType,
       emptyDefault: q.emptyDefault,
+      piiEncrypted: q.piiEncrypted,
     })),
     groups: sortedGroups.map((g) => ({
       id: g.id,

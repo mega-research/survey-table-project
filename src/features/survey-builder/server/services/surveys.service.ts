@@ -256,6 +256,7 @@ export async function duplicateSurvey(
         defaultValueTemplate: question.defaultValueTemplate,
         inputType: question.inputType,
         emptyDefault: question.emptyDefault,
+        piiEncrypted: question.piiEncrypted,
         questionCode: question.questionCode,
         isCustomSpssVarName: question.isCustomSpssVarName,
         exportLabel: question.exportLabel,

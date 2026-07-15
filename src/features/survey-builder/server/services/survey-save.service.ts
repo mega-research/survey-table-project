@@ -262,6 +262,7 @@ export async function saveSurveyDiff(
           defaultValueTemplate: question.defaultValueTemplate ?? null,
           inputType: question.inputType ?? null,
           emptyDefault: question.emptyDefault ?? null,
+          piiEncrypted: question.piiEncrypted ?? false,
           pageBreakBefore: question.pageBreakBefore,
           updatedAt: new Date(),
         }) satisfies CompleteQuestionWrite);
@@ -307,6 +308,7 @@ export async function saveSurveyDiff(
               defaultValueTemplate: sql`excluded.default_value_template`,
               inputType: sql`excluded.input_type`,
               emptyDefault: sql`excluded.empty_default`,
+              piiEncrypted: sql`excluded.pii_encrypted`,
               pageBreakBefore: sql`excluded.page_break_before`,
               updatedAt: sql`excluded.updated_at`,
             } satisfies CompleteQuestionWrite,
@@ -590,6 +592,7 @@ export async function saveSurveyWithDetails(
           defaultValueTemplate: question.defaultValueTemplate ?? null,
           inputType: question.inputType ?? null,
           emptyDefault: question.emptyDefault ?? null,
+          piiEncrypted: question.piiEncrypted ?? false,
           pageBreakBefore: question.pageBreakBefore,
           updatedAt: new Date(),
         }) satisfies CompleteQuestionWrite);
@@ -635,6 +638,7 @@ export async function saveSurveyWithDetails(
               defaultValueTemplate: sql`excluded.default_value_template`,
               inputType: sql`excluded.input_type`,
               emptyDefault: sql`excluded.empty_default`,
+              piiEncrypted: sql`excluded.pii_encrypted`,
               pageBreakBefore: sql`excluded.page_break_before`,
               updatedAt: sql`excluded.updated_at`,
             } satisfies CompleteQuestionWrite,
