@@ -85,6 +85,34 @@ export interface TableValidationRule {
   errorMessage?: string; // 조건 미충족 시 표시할 메시지
 }
 
+// ── 숫자 입력 표시 포맷·범위 설정 (단답형 숫자 모드 + 테이블 숫자 input 셀 공용) ──
+// 콤마·환산 표시는 화면 전용이며 응답 저장값은 항상 raw 숫자 문자열이다.
+export type NumberUnit =
+  | 'thousand' // 천 (1e3)
+  | 'tenThousand' // 만 (1e4)
+  | 'million' // 백만 (1e6)
+  | 'tenMillion' // 천만 (1e7)
+  | 'hundredMillion' // 억 (1e8)
+  | 'percent'; // % — 배수·환산 표시 없음. 빌더에서 max=100 프리셋
+
+export interface NumberFormat {
+  thousandSeparator?: boolean; // 천단위 콤마 표시 (화면 전용)
+  unit?: NumberUnit; // 미지정 = 기본 (배수 1, 환산 표시 없음)
+  min?: number; // 미달 값은 "다음" 시점 검증 (빈 값은 검증 안 함)
+  max?: number; // 초과 값은 타이핑 자체 차단
+  decimalPlaces?: number; // undefined = 제한 없음, 0 = 정수만, N = 소수 N자리
+}
+
+// 테이블 숫자 input 셀 합계 제약 (질문 레벨, table 타입 전용).
+// tableValidationRules(분기 전용)와 별개 — 이쪽은 "다음"/제출 차단형 검증이다.
+export interface SumConstraint {
+  id: string;
+  cellIds: string[]; // 합산 대상 셀 (inputType 'number' input 셀). 존재하지 않는 id는 평가 시 무시
+  operator: 'eq' | 'lte' | 'gte'; // 정확히 / 이하 / 이상
+  target: number; // 기본 100
+  errorMessage?: string; // 미지정 시 자동 생성 메시지 사용
+}
+
 // 질문 표시 조건 논리 타입
 export type ConditionLogicType = 'AND' | 'OR' | 'NOT';
 
@@ -288,6 +316,10 @@ export interface TableCell {
   // 숫자 input 셀(inputType==='number')의 초기 prefill 값. 정의되어 있으면 응답자 첫 진입 시
   // 자동으로 이 값이 입력란에 채워져 저장됨. 응답자가 backspace 로 지우면 빈 응답으로 저장 가능 (자동 재채움 X).
   emptyDefault?: number;
+  // 숫자 input 셀 표시 포맷·범위 (inputType==='number' 일 때만 의미)
+  numberFormat?: NumberFormat;
+  // input 셀 필수 여부 — 지정 셀이 채워져야 "다음" 통과. 테이블 미접촉(전 셀 빈 값) 시 스킵
+  required?: boolean;
   // 체크박스 선택 개수 제한 (체크박스 타입 셀 전용)
   minSelections?: number; // 최소 선택 개수
   maxSelections?: number; // 최대 선택 개수
@@ -502,10 +534,14 @@ export interface Question {
   inputType?: 'text' | 'number';
   // 숫자 모드 첫 진입 시 입력란 자동 채움 값(선택). 토큰 prefill 없을 때만 적용.
   emptyDefault?: number;
+  // 단답형 숫자 모드 표시 포맷·범위 (inputType==='number' 일 때만 의미)
+  numberFormat?: NumberFormat | null;
   // 단답형·장문형 개인정보 암호화 토글 — 응답값을 encryptPii 암호문으로 저장 (ADR-0012)
   piiEncrypted?: boolean;
   // 테이블 검증 규칙 (테이블 타입 전용)
   tableValidationRules?: TableValidationRule[];
+  // 숫자 셀 합계 제약 (테이블 타입 전용, 차단형 검증)
+  sumConstraints?: SumConstraint[] | null;
   // 동적 행 그룹 설정 (테이블 타입 전용)
   dynamicRowConfigs?: DynamicRowGroupConfig[];
   // 열 라벨 숨기기 (테이블 타입 전용, UI에서만 숨기고 데이터는 보존)
