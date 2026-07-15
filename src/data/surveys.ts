@@ -4,6 +4,7 @@ import { desc, eq } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { questionGroups, questions, surveys } from '@/db/schema';
+import { retentionTimestampToDate } from '@/lib/survey/pii-retention';
 import { normalizeResponseHeaderConfig } from '@/lib/survey/response-header-config';
 import { isCodedChoiceType } from '@/types/question-types';
 import type { QuestionGroup, Question as QuestionType, Survey as SurveyType } from '@/types/survey';
@@ -152,6 +153,9 @@ export async function getSurveyWithDetails(surveyId: string): Promise<SurveyType
       requireLogin: survey.requireLogin,
       ...(survey.endDate != null ? { endDate: survey.endDate } : {}),
       ...(survey.maxResponses != null ? { maxResponses: survey.maxResponses } : {}),
+      ...(survey.piiRetentionUntil
+        ? { piiRetentionUntil: retentionTimestampToDate(survey.piiRetentionUntil) }
+        : {}),
       thankYouMessage: survey.thankYouMessage,
       requireInviteToken: survey.requireInviteToken,
       responseHeader: normalizeResponseHeaderConfig(survey.responseHeader),

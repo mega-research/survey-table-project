@@ -113,6 +113,26 @@ export const SurveySettingsPanel = React.memo(function SurveySettingsPanel({
           </p>
         </div>
 
+        {/* 개인정보 보관기한 */}
+        <div className="space-y-2">
+          <label htmlFor="pii-retention" className="text-sm font-medium text-gray-700">
+            개인정보 보관기한
+          </label>
+          <input
+            id="pii-retention"
+            type="date"
+            value={surveySettings.piiRetentionUntil ?? ''}
+            onChange={(e) =>
+              updateSurveySettings({ piiRetentionUntil: e.target.value || null })
+            }
+            className="w-full rounded border border-input bg-background px-3 py-2 text-sm"
+          />
+          <p className="text-xs text-gray-500">
+            개인정보 암호화 문항의 응답을 이 날짜까지 보유합니다. 기한이 지나면 해당
+            응답값이 자동 파기되며 복구할 수 없습니다. 비워두면 파기하지 않습니다.
+          </p>
+        </div>
+
         {/* 토큰 경고 */}
         {variableCatalog.length > 0 && (
           <TokenWarningPanel questions={questions} catalog={variableCatalog} />

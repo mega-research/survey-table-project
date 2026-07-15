@@ -74,6 +74,7 @@ export const UpdateSurveyDataSchema = z.custom<
     shuffleQuestions: boolean;
     requireLogin: boolean;
     endDate: Date | null;
+    piiRetentionUntil: Date | null;
     maxResponses: number | null;
     thankYouMessage: string;
     responseHeader: SurveyType['settings']['responseHeader'];

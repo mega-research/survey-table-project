@@ -165,6 +165,7 @@ export async function duplicateSurvey(
         shuffleQuestions: original.shuffleQuestions,
         requireLogin: original.requireLogin,
         endDate: original.endDate,
+        piiRetentionUntil: original.piiRetentionUntil,
         maxResponses: original.maxResponses,
         thankYouMessage: original.thankYouMessage,
         responseHeader: original.responseHeader ?? null,

@@ -554,6 +554,8 @@ export interface SurveySettings {
   // 컨택 attrs 토큰 — invite token 강제 (0022 마이그레이션)
   requireInviteToken?: boolean;
   responseHeader?: SurveyResponseHeaderConfig;
+  // 개인정보 보관기한 — 'YYYY-MM-DD' 날짜 문자열(해당일 포함 보유). null/미설정 = 파기하지 않음.
+  piiRetentionUntil?: string | null;
 }
 
 // 기타 옵션 입력값 처리를 위한 타입

@@ -13,6 +13,7 @@ import {
 import type { CompleteQuestionWrite } from '@/db/schema/question-persisted-fields';
 import { extractImageUrlsFromQuestions } from '@/lib/image-extractor';
 import { deleteImagesFromR2Server, deleteR2ObjectsByKey } from '@/lib/image-utils-server';
+import { retentionDateToTimestamp } from '@/lib/survey/pii-retention';
 import {
   promoteSurveyImages,
   promoteSurveyResponseHeader,
@@ -102,6 +103,9 @@ export async function saveSurveyDiff(
           shuffleQuestions: metadata.settings.shuffleQuestions,
           requireLogin: metadata.settings.requireLogin,
           endDate: metadata.settings.endDate ? new Date(metadata.settings.endDate) : null,
+          piiRetentionUntil: metadata.settings.piiRetentionUntil
+            ? retentionDateToTimestamp(metadata.settings.piiRetentionUntil)
+            : null,
           maxResponses: metadata.settings.maxResponses ?? null,
           thankYouMessage: metadata.settings.thankYouMessage,
           requireInviteToken: metadata.settings.requireInviteToken ?? false,
@@ -379,6 +383,9 @@ export async function saveSurveyWithDetails(
         shuffleQuestions: surveyData.settings.shuffleQuestions,
         requireLogin: surveyData.settings.requireLogin,
         endDate: surveyData.settings.endDate ? new Date(surveyData.settings.endDate) : null,
+        piiRetentionUntil: surveyData.settings.piiRetentionUntil
+          ? retentionDateToTimestamp(surveyData.settings.piiRetentionUntil)
+          : null,
         maxResponses: surveyData.settings.maxResponses ?? null,
         thankYouMessage: surveyData.settings.thankYouMessage,
         requireInviteToken: surveyData.settings.requireInviteToken ?? false,
@@ -417,6 +424,9 @@ export async function saveSurveyWithDetails(
         shuffleQuestions: surveyData.settings.shuffleQuestions,
         requireLogin: surveyData.settings.requireLogin,
         endDate: surveyData.settings.endDate ? new Date(surveyData.settings.endDate) : null,
+        piiRetentionUntil: surveyData.settings.piiRetentionUntil
+          ? retentionDateToTimestamp(surveyData.settings.piiRetentionUntil)
+          : null,
         maxResponses: surveyData.settings.maxResponses ?? null,
         thankYouMessage: surveyData.settings.thankYouMessage,
         requireInviteToken: surveyData.settings.requireInviteToken ?? false,
