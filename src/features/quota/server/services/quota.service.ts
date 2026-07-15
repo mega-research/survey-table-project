@@ -6,6 +6,7 @@ import { completedResponse, notDeletedResponse, notTestResponse } from '@/data/r
 import { db } from '@/db';
 import { surveyResponses, surveys } from '@/db/schema/surveys';
 import type { QuotaConfig } from '@/db/schema/schema-types';
+import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { countCell, deriveCategoryIds, findTarget } from '@/lib/quota/matching';
 
 /** 설문의 쿼터 플랜 조회. 미설정이면 null. */
@@ -62,8 +63,8 @@ export async function checkQuota(input: {
         notTestResponse,
       ),
     );
-  const answersList = rows.map(
-    (r) => (r.questionResponses ?? {}) as Record<string, unknown>,
+  const answersList = rows.map((r) =>
+    decryptQuestionResponses((r.questionResponses ?? {}) as Record<string, unknown>),
   );
   const current = countCell(config, categoryIds, answersList);
 

@@ -8,6 +8,7 @@ import { notDeletedResponse, notTestResponse } from '@/data/response-filters';
 import { getResponsesWithAnswers } from '@/data/responses';
 import { getSurveyWithDetails } from '@/data/surveys';
 import { analyzeSurvey } from '@/lib/analytics/analyzer';
+import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 
 import type {
   QuestionStatistics,
@@ -93,7 +94,14 @@ export async function getQuestionStatistics(
   surveyId: string,
   questionId: string,
 ): Promise<QuestionStatistics> {
-  const completedResponses = await listCompletedResponses(surveyId);
+  const rawCompletedResponses = await listCompletedResponses(surveyId);
+  const completedResponses = rawCompletedResponses.map((r) => ({
+    ...r,
+    questionResponses: decryptQuestionResponses(
+      (r.questionResponses ?? {}) as Record<string, unknown>,
+      { responseId: r.id },
+    ),
+  }));
 
   const questionResponses = completedResponses
     .map((r) => (r.questionResponses as Record<string, unknown>)[questionId])
@@ -173,7 +181,16 @@ export async function analyzeSurveyById(surveyId: string): Promise<SurveyAnalyti
 
   // analyzeSurvey 는 완료 응답을 내부에서 isCompleted 필터하지만,
   // 분모 일관성을 위해 response_answers 조인 변환된 완료 응답을 전달한다.
-  const responses = await getResponsesWithAnswers(surveyId);
+  // getResponsesWithAnswers 는 이미 복호화되어 반환되지만, 접두사 감지로 재적용해도
+  // 무해하므로 이 경계에서도 명시적으로 감싼다(호출 경로 변경에 대한 방어).
+  const rawResponses = await getResponsesWithAnswers(surveyId);
+  const responses = rawResponses.map((r) => ({
+    ...r,
+    questionResponses: decryptQuestionResponses(
+      (r.questionResponses ?? {}) as Record<string, unknown>,
+      { responseId: r.id },
+    ),
+  }));
 
   return analyzeSurvey(
     { id: survey.id, title: survey.title, questions: survey.questions },

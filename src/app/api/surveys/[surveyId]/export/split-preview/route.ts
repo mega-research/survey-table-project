@@ -5,6 +5,7 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { surveyResponses, surveys } from '@/db/schema';
 import { completedResponse, notDeletedResponse, notTestResponse } from '@/data/response-filters';
+import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { normalizeQuestions } from '@/lib/question';
 import { requireAuth } from '@/lib/auth';
 import { isAdminUserAllowed } from '@/lib/auth/admin-allowlist';
@@ -54,15 +55,22 @@ export async function GET(
     }
 
     // resp 집계: raw export와 동일 모수 (deleted 제외 + completed만 + 테스트 응답 제외)
-    const responses = await db.query.surveyResponses.findMany({
+    const rawResponses = await db.query.surveyResponses.findMany({
       where: and(
         eq(surveyResponses.surveyId, surveyId),
         notDeletedResponse,
         completedResponse,
         notTestResponse,
       ),
-      columns: { questionResponses: true },
+      columns: { id: true, questionResponses: true },
     });
+    const responses = rawResponses.map((r) => ({
+      ...r,
+      questionResponses: decryptQuestionResponses(
+        (r.questionResponses ?? {}) as Record<string, unknown>,
+        { responseId: r.id },
+      ),
+    }));
     const respCounts: Record<string, number> = {};
     for (const r of responses) {
       const ans = (r.questionResponses as Record<string, unknown> | null)?.[basis];

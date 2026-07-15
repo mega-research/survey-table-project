@@ -5,6 +5,7 @@ import { and, count, eq, inArray } from 'drizzle-orm';
 import { db } from '@/db';
 import { contactTargets, surveyResponses, surveys } from '@/db/schema';
 import { completedResponse, notDeletedResponse, notTestResponse } from '@/data/response-filters';
+import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { normalizeQuestions } from '@/lib/question';
 import { requireAuth } from '@/lib/auth';
 import { isAdminUserAllowed } from '@/lib/auth/admin-allowlist';
@@ -85,7 +86,7 @@ export async function GET(
         );
       }
 
-      responses = await db.query.surveyResponses.findMany({
+      const rawFetched = await db.query.surveyResponses.findMany({
         where: and(
           eq(surveyResponses.surveyId, surveyId),
           notDeletedResponse,
@@ -94,6 +95,13 @@ export async function GET(
         ),
         orderBy: (responses, { desc }) => [desc(responses.createdAt)],
       });
+      responses = rawFetched.map((r) => ({
+        ...r,
+        questionResponses: decryptQuestionResponses(
+          (r.questionResponses ?? {}) as Record<string, unknown>,
+          { responseId: r.id },
+        ),
+      }));
     }
 
     const dateSlice = new Date().toISOString().slice(0, 10);
@@ -157,7 +165,10 @@ export async function GET(
         const c = r.contactTargetId ? contactMap.get(r.contactTargetId) : undefined;
         return {
           id: r.id,
-          questionResponses: (r.questionResponses ?? {}) as Record<string, unknown>,
+          questionResponses: decryptQuestionResponses(
+            (r.questionResponses ?? {}) as Record<string, unknown>,
+            { responseId: r.id },
+          ),
           groupValue: c?.groupValue ?? null,
           resid: c?.resid ?? null,
           platform: r.platform,
@@ -232,7 +243,10 @@ export async function GET(
         const c = r.contactTargetId ? contactMap.get(r.contactTargetId) : undefined;
         return {
           id: r.id,
-          questionResponses: (r.questionResponses ?? {}) as Record<string, unknown>,
+          questionResponses: decryptQuestionResponses(
+            (r.questionResponses ?? {}) as Record<string, unknown>,
+            { responseId: r.id },
+          ),
           groupValue: c?.groupValue ?? null,
           resid: c?.resid ?? null,
           platform: r.platform,

@@ -3,6 +3,7 @@ import { and, count, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { responseAnswers, surveyResponses, surveyVersions } from '@/db/schema';
 import { answersToQuestionResponses } from '@/lib/analytics/response-adapter';
+import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { notDeletedResponse, notTestResponse } from '@/data/response-filters';
 
 // ========================
@@ -33,7 +34,14 @@ export async function getResponseById(
     ? eq(surveyResponses.id, responseId)
     : and(eq(surveyResponses.id, responseId), notDeletedResponse);
   const response = await db.query.surveyResponses.findFirst({ where });
-  return response;
+  if (!response) return response;
+  return {
+    ...response,
+    questionResponses: decryptQuestionResponses(
+      (response.questionResponses ?? {}) as Record<string, unknown>,
+      { responseId: response.id },
+    ),
+  };
 }
 
 // 전체 설문의 응답 수를 한 번의 GROUP BY 로 집계 (설문별 fan-out N+1 제거).
@@ -93,13 +101,17 @@ export async function getResponsesWithAnswers(
   // response_answers가 있으면 어댑터로 변환, 없으면 기존 JSONB 사용
   return responses.map((r) => {
     const answers = (r as typeof r & { answers?: typeof responseAnswers.$inferSelect[] }).answers;
-    if (answers && answers.length > 0) {
-      return {
-        ...r,
-        questionResponses: answersToQuestionResponses(answers),
-      };
-    }
-    return r;
+    const merged =
+      answers && answers.length > 0
+        ? { ...r, questionResponses: answersToQuestionResponses(answers) }
+        : r;
+    return {
+      ...merged,
+      questionResponses: decryptQuestionResponses(
+        (merged.questionResponses ?? {}) as Record<string, unknown>,
+        { responseId: r.id },
+      ),
+    };
   });
 }
 
@@ -129,7 +141,14 @@ export async function getSurveyVersions(surveyId: string) {
 // 응답 데이터 내보내기 (JSON)
 export async function exportResponsesAsJson(surveyId: string) {
   const responses = await getCompletedResponses(surveyId);
-  return JSON.stringify(responses, null, 2);
+  const decrypted = responses.map((r) => ({
+    ...r,
+    questionResponses: decryptQuestionResponses(
+      (r.questionResponses ?? {}) as Record<string, unknown>,
+      { responseId: r.id },
+    ),
+  }));
+  return JSON.stringify(decrypted, null, 2);
 }
 
 // 응답 데이터 내보내기 (CSV)
@@ -162,7 +181,10 @@ export async function exportResponsesAsCsv(surveyId: string) {
       completionTime.toFixed(2),
     ];
 
-    const responseData = response.questionResponses as Record<string, unknown>;
+    const responseData = decryptQuestionResponses(
+      response.questionResponses as Record<string, unknown>,
+      { responseId: response.id },
+    );
     Array.from(questionIds).forEach((questionId) => {
       const value = responseData[questionId];
       if (value === null || value === undefined) {
