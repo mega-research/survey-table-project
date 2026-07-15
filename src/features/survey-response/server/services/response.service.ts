@@ -314,14 +314,15 @@ async function assertQuestionBelongsToResponse(
 ): Promise<{ piiEncrypted: boolean }> {
   if (versionId) {
     // 소속 검증(스냅샷 단독) + piiEncrypted 플래그(스냅샷 ∪ 라이브 questions 합집합)를 한
-    // 쿼리로. 행이 없으면 미소속 → 거부. questionId 는 text 바인딩이라 questions.id(uuid)
-    // 비교 시 명시 캐스트 필요.
+    // 쿼리로. 행이 없으면 미소속 → 거부. questionId 는 pub 입력이라 uuid 형식이 아닐 수
+    // 있다 — 파라미터에 ::uuid 를 걸면 plan 시점 캐스트 에러(DB 500)가 나므로, 캐스트는
+    // 컬럼 쪽(q.id::text)에 건다. 비정상 id 는 스냅샷 텍스트 비교에서 0행 → 정상 거부.
     const rows = await db.execute<{ pii: boolean | null }>(sql`
       SELECT
         COALESCE((qe.elem->>'piiEncrypted')::boolean, false)
         OR COALESCE(
           (SELECT q.pii_encrypted FROM questions q
-           WHERE q.id = ${questionId}::uuid AND q.survey_id = ${surveyId}::uuid),
+           WHERE q.id::text = ${questionId} AND q.survey_id = ${surveyId}::uuid),
           false
         ) AS pii
       FROM survey_versions sv,
