@@ -156,6 +156,7 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
         defaultValueTemplate: question.defaultValueTemplate ?? null,
         inputType: question.inputType ?? 'text',
         ...(question.emptyDefault !== undefined ? { emptyDefault: question.emptyDefault } : {}),
+        ...(question.numberFormat !== undefined ? { numberFormat: question.numberFormat } : {}),
         tableValidationRules: (question as any).tableValidationRules || [],
         dynamicRowConfigs: (question as any).dynamicRowConfigs || undefined,
         hideTitle: question.hideTitle ?? false,
@@ -363,7 +364,10 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
                   ? currentFormData.piiEncrypted
                   : question?.piiEncrypted,
               tableValidationRules: currentFormData.tableValidationRules || question?.tableValidationRules,
-              numberFormat: currentFormData.numberFormat || question?.numberFormat,
+              numberFormat:
+                currentFormData.numberFormat !== undefined
+                  ? currentFormData.numberFormat
+                  : question?.numberFormat,
               sumConstraints: currentFormData.sumConstraints || question?.sumConstraints,
               displayCondition: currentFormData.displayCondition || question?.displayCondition,
               dynamicRowConfigs: currentFormData.dynamicRowConfigs || question?.dynamicRowConfigs,
