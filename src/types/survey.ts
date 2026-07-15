@@ -88,6 +88,7 @@ export interface TableValidationRule {
 // ── 숫자 입력 표시 포맷·범위 설정 (단답형 숫자 모드 + 테이블 숫자 input 셀 공용) ──
 // 콤마·환산 표시는 화면 전용이며 응답 저장값은 항상 raw 숫자 문자열이다.
 export type NumberUnit =
+  | 'one' // 일 (배수 1) — "기본"과 달리 환산 읽기를 표시한다 (만 미만 값은 정보가 없어 미표시)
   | 'thousand' // 천 (1e3)
   | 'tenThousand' // 만 (1e4)
   | 'million' // 백만 (1e6)

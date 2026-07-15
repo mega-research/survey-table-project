@@ -10,6 +10,7 @@ import { isPartialNumericInput, parseNumericInput } from '@/utils/numeric-input'
 
 /** 단위 → 배수. percent 는 배수 개념이 없어 null (환산 표시 없음). */
 export const UNIT_MULTIPLIERS: Record<NumberUnit, number | null> = {
+  one: 1,
   thousand: 1e3,
   tenThousand: 1e4,
   million: 1e6,
@@ -20,6 +21,7 @@ export const UNIT_MULTIPLIERS: Record<NumberUnit, number | null> = {
 
 /** 빌더 select 라벨용 단위 표기 */
 export const UNIT_LABELS: Record<NumberUnit, string> = {
+  one: '일',
   thousand: '천',
   tenThousand: '만',
   million: '백만',
@@ -107,8 +109,10 @@ function readGroup(n: number): string {
 
 /**
  * raw 입력값에 단위 배수를 적용한 총량의 한글 읽기.
- * 예: unit='tenMillion', raw='123' → "12억 3천만"
- * percent·기본(undefined) 단위, 부분 입력, 0 은 null (표시하지 않음).
+ * 예: unit='tenMillion', raw='123' → "12억 3천만" / unit='one', raw='123456' → "12만 3,456"
+ * 만/억/조 그룹 내부는 천/백 분해(readGroup), 만 미만 잔여는 콤마 숫자로 표기한다.
+ * percent·기본(undefined) 단위, 부분 입력, 0 은 null.
+ * 일(one) 단위는 만 미만 값이면 입력 숫자 재표기일 뿐이라 null (표시하지 않음).
  */
 export function formatKoreanUnitReading(
   raw: string,
@@ -122,6 +126,7 @@ export function formatKoreanUnitReading(
 
   const neg = n < 0;
   const total = Math.abs(n) * multiplier;
+  if (unit === 'one' && total < 1e4) return null;
   let intPart = Math.floor(total);
   const frac = total - intPart;
 
@@ -131,11 +136,11 @@ export function formatKoreanUnitReading(
     if (g > 0) parts.push(`${readGroup(g)}${label}`);
     intPart -= g * value;
   }
-  // 만 미만 잔여 — 소수부가 있으면 콤마 숫자 그대로, 없으면 그룹 읽기 적용
+  // 만 미만 잔여 — 콤마 숫자로 표기 (소수부 포함)
   if (frac > 0) {
     parts.push(formatWithComma(String(Math.round((intPart + frac) * 1e9) / 1e9)));
   } else if (intPart > 0) {
-    parts.push(readGroup(intPart));
+    parts.push(formatWithComma(String(intPart)));
   }
   if (parts.length === 0) return null;
   return (neg ? '-' : '') + parts.join(' ');

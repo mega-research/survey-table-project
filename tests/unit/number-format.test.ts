@@ -87,10 +87,20 @@ describe('formatKoreanUnitReading', () => {
     expect(formatKoreanUnitReading('12.5', 'tenMillion')).toBe('1억 2천 5백만');
   });
 
-  it('백만/천 단위 환산', () => {
+  it('백만/천 단위 환산 — 만 미만 잔여는 콤마 숫자', () => {
     expect(formatKoreanUnitReading('123', 'million')).toBe('1억 2천 3백만');
-    expect(formatKoreanUnitReading('1.5', 'thousand')).toBe('1천 5백');
-    expect(formatKoreanUnitReading('5', 'thousand')).toBe('5천');
+    expect(formatKoreanUnitReading('1.5', 'thousand')).toBe('1,500');
+    expect(formatKoreanUnitReading('5', 'thousand')).toBe('5,000');
+    expect(formatKoreanUnitReading('12.5', 'tenThousand')).toBe('12만 5,000');
+  });
+
+  it('일 단위 — 만 이상만 읽기 표시', () => {
+    expect(formatKoreanUnitReading('123456', 'one')).toBe('12만 3,456');
+    expect(formatKoreanUnitReading('123456789', 'one')).toBe('1억 2천 3백 45만 6,789');
+    expect(formatKoreanUnitReading('-123456', 'one')).toBe('-12만 3,456');
+    // 만 미만은 입력 숫자 재표기일 뿐이라 표시하지 않는다
+    expect(formatKoreanUnitReading('9999', 'one')).toBeNull();
+    expect(formatKoreanUnitReading('3456', 'one')).toBeNull();
   });
 
   it('음수는 - 접두', () => {
