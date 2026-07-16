@@ -19,7 +19,7 @@ export function RichDescription({
   return (
     <div
       className={cn(
-        'tiptap-mobile-tame prose min-w-0 max-w-none [&_a]:break-all [&_p]:break-words',
+        'tiptap-mobile-tame prose min-w-0 max-w-none [&_a]:[overflow-wrap:anywhere] [&_p]:break-words',
         '[&_table]:max-w-full [&_table]:table-auto [&_table]:border-collapse [&_table]:border [&_table]:border-gray-200 [&_table_p]:m-0',
         '[&_table_td]:border [&_table_td]:border-gray-200 [&_table_td]:break-words',
         '[&_table_th]:border [&_table_th]:border-gray-200 [&_table_th]:bg-gray-50 [&_table_th]:break-words [&_table_th]:font-semibold',
