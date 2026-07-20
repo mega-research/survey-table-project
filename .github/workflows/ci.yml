@@ -131,11 +131,21 @@ jobs:
         run: |
           set -euo pipefail
           STATUS_ENV="$(supabase status -o env)"
-          SUPABASE_URL="$(printf '%s\n' "$STATUS_ENV" | awk -F= '/^(API_URL|SUPABASE_URL)=/{ print $2; exit }')"
-          SUPABASE_KEY="$(printf '%s\n' "$STATUS_ENV" | awk -F= '/^(ANON_KEY|SUPABASE_ANON_KEY|PUBLISHABLE_KEY|SUPABASE_PUBLISHABLE_KEY)=/{ print $2; exit }')"
+          # supabase status -o env 는 dotenv 형식(KEY="value")으로 값을 따옴표로 감싸 출력한다.
+          # 따옴표를 그대로 두면 NEXT_PUBLIC_SUPABASE_URL 이 무효 URL 이 되어 e2e webServer 가
+          # "Invalid supabaseUrl" 로 죽는다(과거 e2e 상시 실패 원인). 또 값에 = 가 포함될 수
+          # 있으므로($2 는 base64 키를 자른다) 첫 = 이후 전체를 값으로 취하고 양끝 따옴표를 제거한다.
+          extract_env() {
+            printf '%s\n' "$STATUS_ENV" | awk -v pat="$1" '
+              $0 ~ pat { sub(/^[^=]*=/, ""); gsub(/^"|"$/, ""); print; exit }'
+          }
+          SUPABASE_URL="$(extract_env '^(API_URL|SUPABASE_URL)=')"
+          SUPABASE_KEY="$(extract_env '^(ANON_KEY|SUPABASE_ANON_KEY|PUBLISHABLE_KEY|SUPABASE_PUBLISHABLE_KEY)=')"
           if [ -z "$SUPABASE_URL" ]; then
             SUPABASE_URL="http://127.0.0.1:54321"
           fi
+          # URL 은 비밀이 아니므로 파싱 검증용으로 로그에 남긴다(키는 아래에서 마스킹).
+          echo "resolved NEXT_PUBLIC_SUPABASE_URL=$SUPABASE_URL"
           if [ -z "$SUPABASE_KEY" ]; then
             echo "ERROR: Supabase local publishable/anon key not found in status output." >&2
             exit 1
