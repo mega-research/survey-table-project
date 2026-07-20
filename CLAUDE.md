@@ -592,7 +592,7 @@ export function QuestionEditor({ questionId, onSave }: Props) {
 
 8. **서버 sanitize**: jsdom 의존 라이브러리 금지 (isomorphic-dompurify 크래시). `sanitize-html` 사용.
 
-9. **테스트**: Vitest include는 `tests/` + `src/features/**/*.test.ts`(colocated procedure 테스트). service 모킹은 `tests/integration` 패턴(top-level `vi.mock` + `vi.mocked`). 실DB 왕복은 `*.realdb.test.ts` — `pnpm test:integration`(로컬 supabase 54322 필요), 일반 `pnpm test`에서는 스킵. `tests/integration/profiles-row-actions.test.ts`는 전체 스위트에서 간헐 12 fail하는 알려진 flaky(격리 실행은 항상 통과) — 회귀로 오해 금지.
+9. **테스트**: Vitest include는 `tests/` + `src/features/**/*.test.ts`(colocated procedure 테스트). service 모킹은 `tests/integration` 패턴(top-level `vi.mock` + `vi.mocked`). 실DB 왕복은 `*.realdb.test.ts` — `pnpm test:integration`(로컬 supabase 54322 필요), 일반 `pnpm test`에서는 스킵. `tests/integration/profiles-row-actions.test.ts`는 전체 스위트에서만 모킹 간섭으로 깨지는 알려진 flaky — `pnpm test`가 [본 스위트(제외) → 격리 단독] 2단으로 자동 실행한다(vitest.config `ISOLATED_FLAKY_TESTS`). 근본 원인 수리 시 목록에서 제거할 것.
 
 10. **drizzle 함정**: timestamptz optimistic lock은 PG μs ↔ JS ms 정밀도 차로 거짓 충돌 (version int 또는 string mode 사용). `ANY(${arr})` 바인딩 금지 (length=1 silent unwrap) → `inArray`/`sql.join`.
 

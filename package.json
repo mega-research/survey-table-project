@@ -22,7 +22,7 @@
     "spss:migrate:live": "DRY_RUN=false tsx scripts/migrate-spss-fields.ts",
     "spss:rollback": "tsx scripts/rollback-spss-fields.ts",
     "spss:rollback:live": "DRY_RUN=false tsx scripts/rollback-spss-fields.ts",
-    "test": "vitest run",
+    "test": "vitest run && cross-env RUN_FLAKY_ISOLATED=1 vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
