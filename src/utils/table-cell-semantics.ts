@@ -143,6 +143,19 @@ interface CellTypeSemantics {
   supportsNumeric: boolean;
 }
 
+/**
+ * 저장값으로 옵션 역참조. 인터랙티브 셀(radio/select/checkbox-cell.tsx)은 응답값으로
+ * flat string `option.value ?? option.id` 를 저장하므로 id 와 value 둘 다로 찾는다.
+ * (id 매칭은 value 미지정 옵션 및 legacy { optionId } 저장 호환용 —
+ * branch-logic getBranchRuleForTable 의 matchesOption 과 동일 정책.)
+ */
+function findOptionByStored(
+  options: ReadonlyArray<{ id: string; value?: string }>,
+  stored: string,
+): { id: string; value?: string } | undefined {
+  return options.find((opt) => opt.id === stored || (opt.value != null && opt.value === stored));
+}
+
 const checkboxSemantics: CellTypeSemantics = {
   isAnswered: (_cell, raw) => Array.isArray(raw) && raw.length > 0,
   selectedValues: (cell, raw) => {
@@ -151,7 +164,7 @@ const checkboxSemantics: CellTypeSemantics = {
     if (!options) return [];
     const ids = raw.map(unwrapOptionId).filter((id): id is string => id !== null);
     return ids
-      .map((id) => options.find((opt) => opt.id === id)?.value)
+      .map((id) => findOptionByStored(options, id)?.value)
       .filter((v): v is string => v !== undefined);
   },
   representativeValue: (cell, raw) => {
@@ -160,7 +173,7 @@ const checkboxSemantics: CellTypeSemantics = {
     if (!options) return null;
     const ids = raw.map(unwrapOptionId).filter((id): id is string => id !== null);
     if (ids.length === 0) return null;
-    return options.find((opt) => opt.id === ids[0])?.value ?? null;
+    return findOptionByStored(options, ids[0]!)?.value ?? null;
   },
   supportsNumeric: false,
 };
@@ -171,14 +184,14 @@ const singleSelectSemantics: CellTypeSemantics = {
     const options = optionsOf(cell);
     const id = unwrapOptionId(raw);
     if (!options || id === null) return [];
-    const value = options.find((opt) => opt.id === id)?.value;
+    const value = findOptionByStored(options, id)?.value;
     return value !== undefined ? [value] : [];
   },
   representativeValue: (cell, raw) => {
     const options = optionsOf(cell);
     const id = unwrapOptionId(raw);
     if (!options || id === null) return null;
-    return options.find((opt) => opt.id === id)?.value ?? null;
+    return findOptionByStored(options, id)?.value ?? null;
   },
   supportsNumeric: false,
 };

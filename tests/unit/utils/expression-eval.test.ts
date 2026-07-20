@@ -140,7 +140,9 @@ describe('expression conditionType — evaluator', () => {
     expect(shouldDisplayQuestion(target, responses, [makeTableQuestion(), target])).toBe(false);
   });
 
-  it('binop with /0 → undefined → fail-safe SHOW (true)', () => {
+  // 응답자 입력(cell) 기반 비교가 평가 불가능하면 fail-closed (2026-07-16 정책 변경 —
+  // 미응답/평가불능 시 표시조건 미충족. expression-unanswered-fail-closed.test.ts 참조)
+  it('binop with /0 → undefined → 응답 기반이므로 fail-closed (false)', () => {
     const config: ExpressionConditionConfig = {
       clauses: [{
         kind: 'comparison',
@@ -157,8 +159,8 @@ describe('expression conditionType — evaluator', () => {
       joinOps: [],
     };
     const target = makeTargetQuestion(config);
-    const responses = makeResponses(500, 0); // 500/0 = undefined → SHOW
-    expect(shouldDisplayQuestion(target, responses, [makeTableQuestion(), target])).toBe(true);
+    const responses = makeResponses(500, 0); // 500/0 = undefined → 미충족
+    expect(shouldDisplayQuestion(target, responses, [makeTableQuestion(), target])).toBe(false);
   });
 
   it('AND clause 조합 — 둘 다 만족', () => {
@@ -311,7 +313,8 @@ describe('expression conditionType — evaluator', () => {
     expect(shouldDisplayQuestion(target, {}, [makeTableQuestion(), target])).toBe(true);
   });
 
-  it('응답 부재 → undefined operand → SHOW', () => {
+  // 미응답 cell operand 는 "아직 미충족" — legacy 조건 타입과 동일한 fail-closed
+  it('응답 부재 → undefined cell operand → 숨김 (fail-closed)', () => {
     const config: ExpressionConditionConfig = {
       clauses: [{
         kind: 'comparison',
@@ -324,6 +327,6 @@ describe('expression conditionType — evaluator', () => {
       joinOps: [],
     };
     const target = makeTargetQuestion(config);
-    expect(shouldDisplayQuestion(target, {}, [makeTableQuestion(), target])).toBe(true);
+    expect(shouldDisplayQuestion(target, {}, [makeTableQuestion(), target])).toBe(false);
   });
 });

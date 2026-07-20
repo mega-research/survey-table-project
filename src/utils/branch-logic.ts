@@ -213,15 +213,19 @@ function getBranchRuleForTable(question: Question, response: unknown): BranchRul
       const cellValue = tableResponse[cell.id];
       if (!cellValue) continue;
 
+      // 인터랙티브 셀은 응답값으로 option.value ?? option.id 를 저장한다
+      // (radio/select/checkbox-cell.tsx). id 매칭은 value 미지정 레거시 호환용.
+      const matchesOption = (opt: { id: string; value?: string }, v: unknown) =>
+        opt.id === v || (opt.value != null && opt.value === v);
+
       // Select 타입 셀 처리
       if (cell.type === 'select' && cell.selectOptions) {
-        // select는 optionId를 저장하므로 optionId로 찾기
         const selectedOptionId =
           typeof cellValue === 'object' && cellValue !== null && 'optionId' in cellValue
             ? (cellValue as { optionId: string }).optionId
             : cellValue;
 
-        const selectedOption = cell.selectOptions.find((opt) => opt.id === selectedOptionId);
+        const selectedOption = cell.selectOptions.find((opt) => matchesOption(opt, selectedOptionId));
         if (selectedOption?.branchRule) {
           return selectedOption.branchRule;
         }
@@ -229,13 +233,12 @@ function getBranchRuleForTable(question: Question, response: unknown): BranchRul
 
       // Radio 타입 셀 처리
       if (cell.type === 'radio' && cell.radioOptions) {
-        // 라디오는 optionId를 저장하므로 optionId로 찾기
         const selectedOptionId =
           typeof cellValue === 'object' && cellValue !== null && 'optionId' in cellValue
             ? (cellValue as { optionId: string }).optionId
             : cellValue;
 
-        const selectedOption = cell.radioOptions.find((opt) => opt.id === selectedOptionId);
+        const selectedOption = cell.radioOptions.find((opt) => matchesOption(opt, selectedOptionId));
         if (selectedOption?.branchRule) {
           return selectedOption.branchRule;
         }
@@ -243,15 +246,14 @@ function getBranchRuleForTable(question: Question, response: unknown): BranchRul
 
       // Checkbox 타입 셀 처리 (첫 번째 체크된 옵션의 branchRule 사용)
       if (cell.type === 'checkbox' && cell.checkboxOptions && Array.isArray(cellValue)) {
-        // 체크박스는 optionId 배열을 저장
-        const checkedOptionIds = cellValue.map((val: unknown) =>
+        const checkedValues = cellValue.map((val: unknown) =>
           typeof val === 'object' && val !== null && 'optionId' in val
             ? (val as { optionId: string }).optionId
             : val,
         );
 
         for (const option of cell.checkboxOptions) {
-          if (checkedOptionIds.includes(option.id) && option.branchRule) {
+          if (option.branchRule && checkedValues.some((v) => matchesOption(option, v))) {
             return option.branchRule;
           }
         }
@@ -681,6 +683,31 @@ function evaluateExpressionOperand(
   }
 }
 
+/**
+ * operand 서브트리가 응답자 입력(cell/question)을 참조하는지 여부.
+ * 미해결 비교의 fail 방향을 가른다:
+ * - 응답 참조 → fail-closed(미충족). 미응답은 "아직 조건 미충족"이며, legacy 조건 타입
+ *   (value-match/table-cell-check 의 !sourceResponse → false)과 동일 정책.
+ * - 환경 전용(lookup/attr) → fail-safe SHOW. ctx 미주입 미리보기·익명 진입에서
+ *   질문이 사라지지 않도록 하는 기존 안전 기본값 유지.
+ */
+function operandDependsOnResponse(operand: ExpressionOperand): boolean {
+  switch (operand.kind) {
+    case 'cell':
+    case 'question':
+      return true;
+    case 'binop':
+      return operandDependsOnResponse(operand.left) || operandDependsOnResponse(operand.right);
+    default:
+      return false;
+  }
+}
+
+/** 미해결 operand 들의 fail 방향 결정 — 하나라도 응답 참조면 미충족(false), 아니면 SHOW(true) */
+function unresolvedComparisonResult(unresolved: ExpressionOperand[]): boolean {
+  return !unresolved.some(operandDependsOnResponse);
+}
+
 function evaluateExpressionComparison(
   comparison: ExpressionComparison,
   responses: Record<string, unknown>,
@@ -688,7 +715,12 @@ function evaluateExpressionComparison(
 ): boolean {
   const L = evaluateExpressionOperand(comparison.left, responses, ctx);
   const R = evaluateExpressionOperand(comparison.right, responses, ctx);
-  if (L === undefined || R === undefined) return true; // fail-safe SHOW
+  if (L === undefined || R === undefined) {
+    return unresolvedComparisonResult([
+      ...(L === undefined ? [comparison.left] : []),
+      ...(R === undefined ? [comparison.right] : []),
+    ]);
+  }
 
   if (comparison.op === '==' || comparison.op === '!=') {
     const eq = String(L) === String(R);
@@ -696,7 +728,12 @@ function evaluateExpressionComparison(
   }
   const ln = toNumber(L);
   const rn = toNumber(R);
-  if (ln === undefined || rn === undefined) return true;
+  if (ln === undefined || rn === undefined) {
+    return unresolvedComparisonResult([
+      ...(ln === undefined ? [comparison.left] : []),
+      ...(rn === undefined ? [comparison.right] : []),
+    ]);
+  }
   switch (comparison.op) {
     case '>': return ln > rn;
     case '<': return ln < rn;
