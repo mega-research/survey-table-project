@@ -41,6 +41,8 @@ interface MobileRowCardProps {
   onChange?: ((value: Record<string, unknown>) => void) | undefined;
   /** 차단형 검증 위반 셀 (빨간 ring 하이라이트) */
   errorCellIds?: Set<string> | undefined;
+  /** 표 전체 "카드 범례"(mobileDisplay: 'legend') 라벨 — 카드 상단 한 행에 양끝 정렬로 표시 */
+  legendLabels?: string[] | undefined;
 }
 
 function findPreviousSection(
@@ -67,6 +69,7 @@ export const MobileRowCard = React.memo(function MobileRowCard({
   value,
   onChange,
   errorCellIds,
+  legendLabels,
 }: MobileRowCardProps) {
   const attrs = useContactAttrs();
 
@@ -128,6 +131,25 @@ export const MobileRowCard = React.memo(function MobileRowCard({
     });
   }, [columnSectionMap, inputCells, visibleColumns]);
 
+  // 범례 첫/마지막 항목에 이 카드 옵션 셀의 첫/마지막 옵션 라벨(⓪/⑩ 등)을 자동 접두.
+  const decoratedLegendLabels = useMemo(() => {
+    if (!legendLabels || legendLabels.length === 0) return [];
+    const optionCell = inputCells.find(
+      ({ cell }) =>
+        (cell.radioOptions ?? cell.checkboxOptions ?? cell.selectOptions ?? []).length > 1,
+    )?.cell;
+    const opts = optionCell
+      ? (optionCell.radioOptions ?? optionCell.checkboxOptions ?? optionCell.selectOptions ?? [])
+      : [];
+    const first = opts[0]?.label?.trim();
+    const last = opts.length > 1 ? opts[opts.length - 1]?.label?.trim() : undefined;
+    return legendLabels.map((label, i) => {
+      if (i === 0 && first) return `${first} ${label}`;
+      if (i === legendLabels.length - 1 && last) return `${last} ${label}`;
+      return label;
+    });
+  }, [legendLabels, inputCells]);
+
   // mobileDisplay 미지정/hidden 은 기존 동작처럼 카드에 표시하지 않는다.
   const hasDisplayCells = hasMobileDisplayCells(row.cells);
   if (inputCells.length === 0 && !hasDisplayCells) return null;
@@ -160,6 +182,20 @@ export const MobileRowCard = React.memo(function MobileRowCard({
       </div>
 
       <CardContent className="space-y-3 p-4">
+        {/* 카드 범례 — 스케일 앵커 라벨(전혀/매우 등)을 입력 컨트롤 위 한 행에,
+            라벨 사이는 점선 리더로 채워 양끝 대응 관계를 시각화 */}
+        {decoratedLegendLabels.length > 0 && inputCells.length > 0 && (
+          <div className="flex items-center gap-2 text-xs text-gray-500">
+            {decoratedLegendLabels.map((label, i) => (
+              <React.Fragment key={i}>
+                {i > 0 && (
+                  <span aria-hidden className="min-w-3 flex-1 border-b border-dotted border-gray-300" />
+                )}
+                <span>{substituteTokens(label, attrs)}</span>
+              </React.Fragment>
+            ))}
+          </div>
+        )}
         {mobileCells.map(({ cell, arrIdx, cellLabel, columnLabel, sectionHeader, shortLabel }) => {
           const nextEntry = inputCells[arrIdx + 1];
           const prevEntry = arrIdx > 0 ? inputCells[arrIdx - 1] : null;
@@ -204,7 +240,7 @@ export const MobileRowCard = React.memo(function MobileRowCard({
                     <div
                       className={cn(
                         'flex-1',
-                        errorCellIds?.has(cell.id) && 'ring-2 ring-inset ring-red-300',
+                        errorCellIds?.has(cell.id) && 'rounded-lg ring-2 ring-red-300',
                       )}
                     >
                       <InteractiveCell
@@ -218,7 +254,7 @@ export const MobileRowCard = React.memo(function MobileRowCard({
                     <div
                       className={cn(
                         'w-28 shrink-0',
-                        errorCellIds?.has(nextEntry.cell.id) && 'ring-2 ring-inset ring-red-300',
+                        errorCellIds?.has(nextEntry.cell.id) && 'rounded-lg ring-2 ring-red-300',
                       )}
                     >
                       <InteractiveCell
@@ -235,7 +271,7 @@ export const MobileRowCard = React.memo(function MobileRowCard({
                     className={cn(
                       'pl-3',
                       getAlignmentClasses(cell.horizontalAlign, cell.verticalAlign),
-                      errorCellIds?.has(cell.id) && 'ring-2 ring-inset ring-red-300',
+                      errorCellIds?.has(cell.id) && 'rounded-lg ring-2 ring-red-300',
                     )}
                   >
                     <InteractiveCell

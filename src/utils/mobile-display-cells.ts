@@ -42,6 +42,24 @@ export function hasMobileDisplayCells(cells: TableCell[]): boolean {
 }
 
 /**
+ * 표 전체에서 "카드 범례"(mobileDisplay: 'legend') text 셀 내용을 순서대로 수집한다.
+ * 각 응답 카드 상단에 한 행으로 표시된다 — 스케일 표의 앵커 라벨(전혀/매우 등)용.
+ * 빈 내용·isHidden·continuation 셀은 제외.
+ */
+export function collectMobileLegendLabels(rows: Array<{ cells: TableCell[] }>): string[] {
+  const labels: string[] = [];
+  for (const row of rows) {
+    for (const cell of row.cells) {
+      if (cell.isHidden || cell._isContinuation) continue;
+      if (cell.type !== 'text' || cell.mobileDisplay !== 'legend') continue;
+      const content = (cell.content ?? '').trim();
+      if (content) labels.push(content);
+    }
+  }
+  return labels;
+}
+
+/**
  * 모바일 카드의 제목으로 사용할 셀을 찾는다.
  * mobileDisplay 'header' 로 명시 지정된 첫 text 셀(비숨김/비continuation)을 반환.
  * 없으면 undefined — 호출부가 자체 폴백(옵션 라벨, 행 라벨 등)을 사용한다.

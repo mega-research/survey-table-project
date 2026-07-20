@@ -183,9 +183,13 @@ export function QuestionInput({
               : undefined
           }
           errorMessages={
-            numericIssues && numericIssues.length > 0
-              ? numericIssues.map((i) => i.message)
-              : undefined
+            // 범위(range) 위반은 셀 빨간 링 + 셀 인라인 안내로만 표시 — 하단 배너 제외
+            (() => {
+              const messages = (numericIssues ?? [])
+                .filter((i) => i.kind !== 'range')
+                .map((i) => i.message);
+              return messages.length > 0 ? messages : undefined;
+            })()
           }
         />
       ) : (

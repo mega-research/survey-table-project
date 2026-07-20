@@ -140,7 +140,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
     const cell = cellById.get(cellId);
     if (!cell) return null;
     return (
-      <div className={cn(errorCellIds?.has(cellId) && 'ring-2 ring-inset ring-red-300')}>
+      <div className={cn(errorCellIds?.has(cellId) && 'rounded-lg ring-2 ring-red-300')}>
         <InteractiveCell
           cell={cell}
           questionId={questionId}

@@ -7,6 +7,7 @@ import { Check, ChevronLeft, ChevronRight, ListChecks } from 'lucide-react';
 import { useColumnSectionMap, useRowGroups } from '@/hooks/use-row-groups';
 import { cn } from '@/lib/utils';
 import type { HeaderCell, TableColumn, TableRow } from '@/types/survey';
+import { collectMobileLegendLabels } from '@/utils/mobile-display-cells';
 import { isTableRowCompleted } from '@/utils/table-row-completion';
 
 import { MobileRowCard } from './mobile-row-card';
@@ -76,6 +77,8 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
 }: MobileTableStepperProps) {
   // ── 내부에서 훅으로 계산 (props drilling 제거) ──
   const rowGroups = useRowGroups(displayRows);
+  // 표 전체 "카드 범례" 라벨 — 모든 응답 카드 상단에 공통 표시
+  const legendLabels = useMemo(() => collectMobileLegendLabels(displayRows), [displayRows]);
   const columnSectionMap = useColumnSectionMap(visibleHeaderGrid);
 
   const rowCompletionMap = useMemo(() => {
@@ -246,6 +249,7 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
           <MobileRowCard
             key={row.id}
             row={row}
+            legendLabels={legendLabels}
             visibleColumns={visibleColumns}
             columnSectionMap={columnSectionMap}
             completed={rowCompletionMap.get(row.id) ?? false}
@@ -388,6 +392,7 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
 
         <MobileRowCard
           row={detailRow}
+          legendLabels={legendLabels}
           visibleColumns={visibleColumns}
           columnSectionMap={columnSectionMap}
           completed={rowCompletionMap.get(detailRow.id) ?? false}
@@ -526,6 +531,7 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
 
       <MobileRowCard
         row={currentRow}
+        legendLabels={legendLabels}
         visibleColumns={visibleColumns}
         columnSectionMap={columnSectionMap}
         completed={rowCompletionMap.get(currentRow.id) ?? false}
