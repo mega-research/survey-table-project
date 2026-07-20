@@ -63,6 +63,51 @@ describe('computeStickyLeftColumns', () => {
     expect(info.stickyColCount).toBe(1);
   });
 
+  it('라벨 + 응답 colspan 2열 표도 라벨 열이 고정된다 (Part-A 형 표)', () => {
+    const columns: TableColumn[] = [
+      { id: 'c0', label: '', width: 120 },
+      { id: 'c1', label: '', width: 600 },
+    ];
+    const rows = [
+      {
+        id: 'r1',
+        label: '',
+        cells: [
+          { id: 'a', type: 'text', content: '소재지' },
+          {
+            id: 'b',
+            type: 'radio',
+            content: '',
+            radioOptions: Array.from({ length: 17 }, (_, i) => ({
+              id: `o${i}`,
+              label: `지역${i}`,
+              value: String(i),
+            })),
+          },
+        ],
+      },
+    ] as unknown as TableRow[];
+    expect(computeStickyLeftColumns(columns, rows, 460).stickyColCount).toBe(1);
+  });
+
+  it('전 열이 고정 후보면 비활성 — 스크롤 열이 하나도 안 남는 경우', () => {
+    const columns: TableColumn[] = [
+      { id: 'c0', label: '', width: 100 },
+      { id: 'c1', label: '', width: 100 },
+    ];
+    const rows = [
+      {
+        id: 'r1',
+        label: '',
+        cells: [
+          { id: 'a', type: 'text', content: 'ㄱ' },
+          { id: 'b', type: 'text', content: 'ㄴ' },
+        ],
+      },
+    ] as unknown as TableRow[];
+    expect(computeStickyLeftColumns(columns, rows, 460).stickyColCount).toBe(0);
+  });
+
   it('라디오 1개짜리 라벨 셀 열은 여전히 sticky 후보다 (기존 의도 보존)', () => {
     const columns: TableColumn[] = [
       { id: 'c0', label: '', width: 120 },

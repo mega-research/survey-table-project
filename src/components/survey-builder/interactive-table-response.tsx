@@ -555,18 +555,18 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
   });
 
   // 스크롤 뷰포트(가로 스크롤 컨테이너) 실측 폭 — sticky 열이 화면을 다 가리지 않도록
-  // 누적 sticky 너비 상한 계산에 사용. 모바일/비활성 시 측정 생략(0).
-  const scrollViewportWidth = useElementWidth(tableContainerRef, !enableSticky || isMobileView);
+  // 누적 sticky 너비 상한 계산에 사용. 카드 모드/비활성 시 측정 생략(0).
+  const scrollViewportWidth = useElementWidth(tableContainerRef, !enableSticky || mobileUsesCards);
 
-  // 좌측 sticky 열 판정 (모바일이거나 비활성화면 비적용)
+  // 좌측 sticky 열 판정 (카드 모드거나 비활성화면 비적용 — 모바일 원본 표 모드는 적용)
   const stickyInfo = useMemo<StickyLeftInfo | undefined>(() => {
-    if (!enableSticky || isMobileView) return undefined;
+    if (!enableSticky || mobileUsesCards) return undefined;
     // 좁은 뷰포트에서 넓은 텍스트 열이 sticky로 화면을 다 덮는 것을 방지.
     // 측정 전(0)에는 제한 없음(undefined) — 측정 직후 ResizeObserver가 재계산한다.
     const maxStickyWidth =
       scrollViewportWidth > 0 ? scrollViewportWidth * STICKY_MAX_VIEWPORT_RATIO : undefined;
     return computeStickyLeftColumns(visibleColumns, displayRows, maxStickyWidth);
-  }, [enableSticky, isMobileView, visibleColumns, displayRows, scrollViewportWidth]);
+  }, [enableSticky, mobileUsesCards, visibleColumns, displayRows, scrollViewportWidth]);
 
   // 헤더/바디 grid 컨테이너 공용 스타일 (가로 폭·템플릿 동일하게 정렬)
   const gridContainerStyle = useMemo<React.CSSProperties>(

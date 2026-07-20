@@ -110,7 +110,8 @@ function isStickyEligibleCell(cell: TableRow['cells'][number]): boolean {
   if (STICKY_ELIGIBLE_CELL_TYPES.has(cell.type)) return true;
   return cell.type === 'radio' && (cell.radioOptions?.length ?? 0) <= 1;
 }
-const MIN_COLUMNS_FOR_STICKY = 4;
+// 2 = [라벨 열 + 응답 colspan 열] 구조도 라벨 고정 대상 (스크롤 열 1개 이상만 남으면 됨)
+const MIN_COLUMNS_FOR_STICKY = 2;
 
 /** 헤더 행의 최소 높이(px). sticky 활성 시 grid row가 contents 높이로 붕괴되는 것을 방지 */
 export const HEADER_ROW_MIN_HEIGHT = 40;
@@ -191,8 +192,8 @@ export function computeStickyLeftColumns(
     stickyColCount++;
   }
 
-  // 가로 스크롤 의미가 남지 않으면 비활성
-  if (stickyColCount > visibleColumns.length - 2) {
+  // 스크롤할 열이 하나도 안 남으면(전 열 고정) 비활성
+  if (stickyColCount >= visibleColumns.length) {
     return { stickyColCount: 0, leftOffsets };
   }
 
