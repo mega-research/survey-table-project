@@ -169,9 +169,9 @@ describe('buildUpdatedCell — 셀타입별 characterization', () => {
     expect(out).not.toHaveProperty('numberFormat');
   });
 
-  it('input: inputRequired 체크 시 required=true 저장 (inputType 무관)', () => {
+  it('input: cellRequired 체크 시 required=true 저장 (inputType 무관)', () => {
     const out = buildUpdatedCell(
-      { ...baseForm('input'), inputType: 'text', inputRequired: true },
+      { ...baseForm('input'), inputType: 'text', cellRequired: true },
       baseCell,
     );
     expect(out.required).toBe(true);
@@ -186,7 +186,7 @@ describe('buildUpdatedCell — 셀타입별 characterization', () => {
       required: true,
     };
     const out = buildUpdatedCell(
-      { ...baseForm('input'), inputType: 'text', inputRequired: false },
+      { ...baseForm('input'), inputType: 'text', cellRequired: false },
       existing,
     );
     expect(out).not.toHaveProperty('required');
@@ -673,10 +673,52 @@ describe('cellToFormState — 라운드트립', () => {
     };
     const form = cellToFormState(cell);
     expect(form.cellNumberFormat).toEqual(cell.numberFormat);
-    expect(form.inputRequired).toBe(true);
+    expect(form.cellRequired).toBe(true);
 
     const out = buildUpdatedCell(form, cell);
     expect(out.numberFormat).toEqual(cell.numberFormat);
     expect(out.required).toBe(true);
+  });
+});
+
+describe('buildUpdatedCell — 인터랙티브 셀 공용 필수 응답 (cellRequired)', () => {
+  it.each(['radio', 'checkbox', 'select', 'ranking'] as const)(
+    '%s: cellRequired 체크 시 required=true 저장',
+    (type) => {
+      const out = buildUpdatedCell({ ...baseForm(type), cellRequired: true }, baseCell);
+      expect(out.required).toBe(true);
+    },
+  );
+
+  it('해제 시 기존 required 가 제거된다 (cellBase 스테일 값 방지)', () => {
+    const cell: TableCell = { id: 'c1', type: 'radio', content: '', required: true };
+    const out = buildUpdatedCell({ ...baseForm('radio'), cellRequired: false }, cell);
+    expect(out).not.toHaveProperty('required');
+  });
+
+  it('비대상 타입(text)은 cellRequired 를 저장하지 않는다', () => {
+    const out = buildUpdatedCell({ ...baseForm('text'), cellRequired: true }, baseCell);
+    expect(out).not.toHaveProperty('required');
+  });
+
+  it("text 셀 mobileDisplay 'legend' 는 저장·폼 왕복 후에도 보존된다", () => {
+    const out = buildUpdatedCell({ ...baseForm('text'), mobileDisplay: 'legend' }, baseCell);
+    expect(out.mobileDisplay).toBe('legend');
+
+    const cell: TableCell = { id: 'c1', type: 'text', content: '전혀 도움 안 됨', mobileDisplay: 'legend' };
+    expect(cellToFormState(cell).mobileDisplay).toBe('legend');
+  });
+
+  it('required 있는 radio 셀은 폼 왕복 후에도 보존된다', () => {
+    const cell: TableCell = {
+      id: 'c1',
+      type: 'radio',
+      content: '',
+      required: true,
+      radioOptions: [{ id: 'o1', label: '예', value: '1' }],
+    };
+    const form = cellToFormState(cell);
+    expect(form.cellRequired).toBe(true);
+    expect(buildUpdatedCell(form, cell).required).toBe(true);
   });
 });

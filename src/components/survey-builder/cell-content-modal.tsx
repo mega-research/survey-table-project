@@ -56,6 +56,7 @@ import {
   GROUPABLE_CELL_TYPES,
   MOBILE_LABEL_CELL_TYPES,
   MOBILE_DISPLAY_CELL_TYPES,
+  REQUIRED_CELL_TYPES,
   TEXT_POSITION_CELL_TYPES,
   buildUpdatedCell,
 } from '@/utils/serialize-cell';
@@ -163,7 +164,7 @@ export function CellContentModal({
     emptyDefaultEnabled,
     emptyDefaultRaw,
     cellNumberFormat,
-    inputRequired,
+    cellRequired,
     minSelections,
     maxSelections,
     rankingOptions,
@@ -216,7 +217,7 @@ export function CellContentModal({
     setEmptyDefaultEnabled,
     setEmptyDefaultRaw,
     setCellNumberFormat,
-    setInputRequired,
+    setCellRequired,
     setMinSelections,
     setMaxSelections,
     setRankingOptions,
@@ -920,21 +921,6 @@ export function CellContentModal({
                   </div>
                 )}
               </div>
-              <div className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  id="cell-input-required"
-                  checked={inputRequired}
-                  onChange={(e) => setInputRequired(e.target.checked)}
-                  className="h-4 w-4"
-                />
-                <label htmlFor="cell-input-required" className="cursor-pointer">
-                  필수 입력 셀
-                </label>
-                <span className="text-xs text-gray-400">
-                  지정 셀이 채워져야 다음으로 진행됩니다
-                </span>
-              </div>
             </div>
 
             <div className="space-y-2">
@@ -1161,6 +1147,27 @@ export function CellContentModal({
           </TabsContent>
         </Tabs>
 
+        {/* 필수 응답 셀 — 인터랙티브 셀 공용 (input/radio/checkbox/select/ranking) */}
+        {REQUIRED_CELL_TYPES.has(contentType) && (
+          <div className="mt-6 border-t border-gray-200 pt-6">
+            <div className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                id="cell-required"
+                checked={cellRequired}
+                onChange={(e) => setCellRequired(e.target.checked)}
+                className="h-4 w-4"
+              />
+              <label htmlFor="cell-required" className="cursor-pointer">
+                필수 응답 셀
+              </label>
+              <span className="text-xs text-gray-400">
+                지정 셀이 응답되어야 다음으로 진행됩니다
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* 셀 병합 설정 */}
         <div className="mt-6 border-t border-gray-200 pt-6">
           <div className="mb-4 flex items-center justify-between">
@@ -1269,12 +1276,7 @@ export function CellContentModal({
         {/* 모바일 카드 표시 설정 */}
         {(showContentMobileDisplay || showInteractiveMobileLabel) && (
           <div className="mt-6 border-t border-gray-200 pt-6">
-            <h3 className="mb-2 text-sm font-medium text-gray-900">모바일 카드 표시</h3>
-            <p className="mb-3 text-xs text-gray-500">
-              {showInteractiveMobileLabel
-                ? '좁은 화면(모바일) 카드에서 이 셀의 엑셀라벨을 보여줄지 선택합니다. 입력 컨트롤은 항상 표시됩니다.'
-                : '좁은 화면(모바일) 카드에서 이 셀을 어떻게 보여줄지 선택합니다. 의미는 지정하지 않으며 저작자가 결정합니다.'}
-            </p>
+            <h3 className="mb-3 text-sm font-medium text-gray-900">모바일 카드 표시</h3>
             <div className="flex gap-2">
               <Button
                 type="button"
@@ -1288,15 +1290,27 @@ export function CellContentModal({
               {showContentMobileDisplay ? (
                 <>
                   {contentType === 'text' && (
-                    <Button
-                      type="button"
-                      variant={mobileDisplay === 'header' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setMobileDisplay('header')}
-                      className="flex-1"
-                    >
-                      헤더
-                    </Button>
+                    <>
+                      <Button
+                        type="button"
+                        variant={mobileDisplay === 'header' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setMobileDisplay('header')}
+                        className="flex-1"
+                      >
+                        헤더
+                      </Button>
+                      {/* 카드 범례: 이 표의 모든 응답 카드 상단에 한 행으로 표시 (스케일 앵커 라벨용) */}
+                      <Button
+                        type="button"
+                        variant={mobileDisplay === 'legend' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setMobileDisplay('legend')}
+                        className="flex-1"
+                      >
+                        카드 범례
+                      </Button>
+                    </>
                   )}
                   <Button
                     type="button"

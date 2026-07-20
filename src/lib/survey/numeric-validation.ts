@@ -9,6 +9,8 @@
 import type { Question, SumConstraint, TableCell, TableRow } from '@/types/survey';
 import { rangeViolationMessage } from '@/utils/number-format';
 import { parseNumericInput } from '@/utils/numeric-input';
+import { REQUIRED_CELL_TYPES } from '@/utils/serialize-cell';
+import { isCellValuePresent } from '@/utils/table-cell-semantics';
 
 export interface NumericIssue {
   kind: 'range' | 'sum' | 'required-cells';
@@ -157,13 +159,16 @@ export function collectNumericIssues(question: Question, response: unknown): Num
   }
 
   // 3) 필수 셀 — "표시될 때만 필수": isHidden 셀과 미선택 동적 행의 셀은 제외 (영구 차단 방지)
+  //    대상은 REQUIRED_CELL_TYPES(input/radio/checkbox/select/ranking). 응답됨 판정은
+  //    isCellValuePresent 정본(배열 length>0, 문자열 trim, 그 외 truthy) — checkbox/ranking
+  //    빈 배열을 미응답으로 본다.
   const missingRequired = visible.filter(
-    (c) => c.type === 'input' && c.required && isEmptyCellValue(cellValues[c.id]),
+    (c) => REQUIRED_CELL_TYPES.has(c.type) && c.required && !isCellValuePresent(cellValues[c.id]),
   );
   if (missingRequired.length > 0) {
     issues.push({
       kind: 'required-cells',
-      message: `필수 셀 ${missingRequired.length}개가 비어 있습니다`,
+      message: '필수 응답이 비어있습니다',
       cellIds: missingRequired.map((c) => c.id),
     });
   }

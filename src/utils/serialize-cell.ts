@@ -35,7 +35,8 @@ export interface CellFormState {
   emptyDefaultEnabled: boolean;
   emptyDefaultRaw: string;
   cellNumberFormat: NumberFormat | undefined;
-  inputRequired: boolean;
+  /** 필수 응답 셀 (REQUIRED_CELL_TYPES 공용 — TableCell.required 로 직렬화) */
+  cellRequired: boolean;
   minSelections: number | undefined;
   maxSelections: number | undefined;
   rankingOptions: QuestionOption[];
@@ -87,6 +88,15 @@ export const TEXT_POSITION_CELL_TYPES = new Set<ContentType>([
   'ranking',
 ]);
 export const MOBILE_DISPLAY_CELL_TYPES = new Set<TableCell['type']>(['text', 'image', 'video']);
+
+/** 필수 응답(TableCell.required) 지정이 가능한 셀 타입 — "다음" 차단형 검증 대상 */
+export const REQUIRED_CELL_TYPES = new Set<TableCell['type']>([
+  'input',
+  'radio',
+  'checkbox',
+  'select',
+  'ranking',
+]);
 export const MOBILE_LABEL_CELL_TYPES = new Set<TableCell['type']>([
   'checkbox',
   'radio',
@@ -126,7 +136,7 @@ export function cellToFormState(cell: TableCell): CellFormState {
     emptyDefaultEnabled: cell.emptyDefault !== undefined,
     emptyDefaultRaw: cell.emptyDefault !== undefined ? String(cell.emptyDefault) : '0',
     cellNumberFormat: cell.numberFormat,
-    inputRequired: cell.required ?? false,
+    cellRequired: cell.required ?? false,
     minSelections: cell.minSelections,
     maxSelections: cell.maxSelections,
     rankingOptions: cell.rankingOptions || [],
@@ -258,9 +268,10 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
           ...(form.inputType === 'number' && form.cellNumberFormat
             ? { numberFormat: form.cellNumberFormat }
             : {}),
-          ...(form.inputRequired ? { required: true } : {}),
         }
       : {}),
+    // 필수 응답 셀 — 인터랙티브 셀 공용 (미체크·비대상 타입은 키 자체 제거)
+    ...(REQUIRED_CELL_TYPES.has(contentType) && form.cellRequired ? { required: true } : {}),
     // 체크박스 선택 개수 제한 (체크박스 타입 전용)
     ...(contentType === 'checkbox'
       ? {

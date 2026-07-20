@@ -281,3 +281,80 @@ describe('pruneSumConstraints', () => {
     expect(pruned[0]!.cellIds).toEqual(['c1']);
   });
 });
+
+describe('collectNumericIssues — 인터랙티브 셀 필수 (radio/checkbox/select/ranking)', () => {
+  function interactiveQuestion(): Question {
+    const rows: TableRow[] = [
+      {
+        id: 'r1',
+        label: '행1',
+        cells: [
+          {
+            id: 'radio-1',
+            type: 'radio',
+            content: '',
+            required: true,
+            radioOptions: [{ id: 'o1', label: '예', value: '1' }],
+          },
+          {
+            id: 'check-1',
+            type: 'checkbox',
+            content: '',
+            required: true,
+            checkboxOptions: [{ id: 'k1', label: 'A', value: 'A' }],
+          },
+          {
+            id: 'sel-1',
+            type: 'select',
+            content: '',
+            required: true,
+            selectOptions: [{ id: 's1', label: 'S', value: 'S' }],
+          },
+          {
+            id: 'rank-1',
+            type: 'ranking',
+            content: '',
+            required: true,
+            rankingOptions: [{ id: 'ro1', label: '가', value: 'ga' }],
+          },
+          { id: 'free-1', type: 'input', content: '' },
+        ],
+      },
+    ] as TableRow[];
+    return tableQuestion({ tableRowsData: rows });
+  }
+
+  const answeredAll = {
+    'radio-1': '1', // flat value 저장 형태
+    'check-1': ['A'],
+    'sel-1': 'S',
+    'rank-1': [{ rank: 1, optionValue: 'ga' }],
+  };
+
+  it('접촉 후 미응답인 필수 인터랙티브 셀을 전부 잡는다', () => {
+    const issues = collectNumericIssues(interactiveQuestion(), { 'free-1': 'x' });
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toMatchObject({
+      kind: 'required-cells',
+      cellIds: ['radio-1', 'check-1', 'sel-1', 'rank-1'],
+    });
+  });
+
+  it('전 타입 응답 시 위반 없음', () => {
+    expect(collectNumericIssues(interactiveQuestion(), answeredAll)).toHaveLength(0);
+  });
+
+  it('checkbox 빈 배열·ranking 빈 배열은 미응답으로 본다', () => {
+    const issues = collectNumericIssues(interactiveQuestion(), {
+      ...answeredAll,
+      'check-1': [],
+      'rank-1': [],
+    });
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toMatchObject({ kind: 'required-cells', cellIds: ['check-1', 'rank-1'] });
+  });
+
+  it('테이블 미접촉이면 인터랙티브 필수 셀도 스킵한다', () => {
+    expect(collectNumericIssues(interactiveQuestion(), {})).toHaveLength(0);
+  });
+});

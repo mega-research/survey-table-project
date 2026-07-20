@@ -363,7 +363,9 @@ export interface TableCell {
   // - text/image/video 표시 셀: 미지정 = hidden, header/inline/collapsed 로 콘텐츠 노출 방식 지정.
   // - input/radio/checkbox/select/ranking 계열 인터랙티브 셀: hidden 이면 모바일 엑셀라벨만 숨김.
   //   미지정 또는 inline/collapsed/header 는 라벨 표시로 취급하며, 입력 컨트롤은 항상 렌더된다.
-  mobileDisplay?: 'hidden' | 'header' | 'inline' | 'collapsed';
+  //   'legend' 는 text 셀 전용 — 셀 내용이 이 표의 "모든" 응답 카드 상단에 한 행
+  //   (양끝 정렬) 범례로 표시된다. 스케일 표의 앵커 라벨(전혀/매우 등)용.
+  mobileDisplay?: 'hidden' | 'header' | 'inline' | 'collapsed' | 'legend';
   // 런타임 전용: 셀렉터 경계에서 분리된 continuation 셀 마커
   _isContinuation?: boolean;
 }
