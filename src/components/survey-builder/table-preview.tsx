@@ -217,13 +217,13 @@ export const TablePreview = React.memo(function TablePreview({
                   {canScrollRight && (
                     <div
                       aria-hidden="true"
-                      className="pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-gray-50 via-gray-50/60 to-transparent print:hidden"
+                      className="pointer-events-none absolute inset-y-0 z-20 transform-gpu right-0 w-12 bg-gradient-to-l from-gray-50 via-gray-50/60 to-transparent print:hidden"
                     />
                   )}
                   {canScrollLeft && (
                     <div
                       aria-hidden="true"
-                      className="pointer-events-none absolute inset-y-0 left-0 w-6 bg-gradient-to-r from-gray-50/80 to-transparent print:hidden"
+                      className="pointer-events-none absolute inset-y-0 z-20 transform-gpu left-0 w-6 bg-gradient-to-r from-gray-50/80 to-transparent print:hidden"
                     />
                   )}
                 </div>
@@ -309,13 +309,13 @@ export const TablePreview = React.memo(function TablePreview({
               {canScrollRight && (
                 <div
                   aria-hidden="true"
-                  className="pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-black/10 to-transparent print:hidden"
+                  className="pointer-events-none absolute inset-y-0 z-20 transform-gpu right-0 w-12 bg-gradient-to-l from-black/10 to-transparent print:hidden"
                 />
               )}
               {canScrollLeft && (
                 <div
                   aria-hidden="true"
-                  className="pointer-events-none absolute inset-y-0 left-0 w-6 bg-gradient-to-r from-black/10 to-transparent print:hidden"
+                  className="pointer-events-none absolute inset-y-0 z-20 transform-gpu left-0 w-6 bg-gradient-to-r from-black/10 to-transparent print:hidden"
                 />
               )}
             </div>

@@ -729,13 +729,13 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
               {canScrollRight && (
                 <div
                   aria-hidden="true"
-                  className="pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-gray-50 via-gray-50/60 to-transparent print:hidden"
+                  className="pointer-events-none absolute inset-y-0 z-20 transform-gpu right-0 w-12 bg-gradient-to-l from-gray-50 via-gray-50/60 to-transparent print:hidden"
                 />
               )}
               {canScrollLeft && (
                 <div
                   aria-hidden="true"
-                  className="pointer-events-none absolute inset-y-0 left-0 w-6 bg-gradient-to-r from-gray-50/80 to-transparent print:hidden"
+                  className="pointer-events-none absolute inset-y-0 z-20 transform-gpu left-0 w-6 bg-gradient-to-r from-gray-50/80 to-transparent print:hidden"
                 />
               )}
             </div>
@@ -744,7 +744,10 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
 
         {/* 바디: 가로 스크롤 + 우측/좌측 페이드. relative 래퍼로 페이드를 우측에
             고정한다(스크롤 컨테이너 안에 두면 콘텐츠와 함께 밀려 힌트 효과가 사라진다).
-            잘린 셀 텍스트가 있는 바디는 bg-white 이므로 from-white 로 페이드아웃시킨다. */}
+            잘린 셀 텍스트가 있는 바디는 bg-white 이므로 from-white 로 페이드아웃시킨다.
+            페이드의 z-20 transform-gpu: iOS WebKit 은 overflow 스크롤 컨테이너를
+            합성 레이어로 승격해 z-index 없는 형제 오버레이를 덮어버린다(아이폰에서
+            그라데이션 미표시). 페이드도 자체 레이어 + sticky 셀(z-10) 위 z 로 강제한다. */}
         <div className={cn('relative', mobileOriginalTable ? 'mx-0' : '-mx-4 md:mx-0')}>
           {/* iOS WebKit(아이패드/아이폰 크롬·사파리 공통 엔진)에서는
               -webkit-overflow-scrolling: touch + display:grid + position:sticky 좌측 고정 열
@@ -811,13 +814,13 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
           {canScrollRight && (
             <div
               aria-hidden="true"
-              className="pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-black/10 to-transparent print:hidden"
+              className="pointer-events-none absolute inset-y-0 z-20 transform-gpu right-0 w-12 bg-gradient-to-l from-black/10 to-transparent print:hidden"
             />
           )}
           {canScrollLeft && (
             <div
               aria-hidden="true"
-              className="pointer-events-none absolute inset-y-0 left-0 w-6 bg-gradient-to-r from-black/10 to-transparent print:hidden"
+              className="pointer-events-none absolute inset-y-0 z-20 transform-gpu left-0 w-6 bg-gradient-to-r from-black/10 to-transparent print:hidden"
             />
           )}
         </div>
