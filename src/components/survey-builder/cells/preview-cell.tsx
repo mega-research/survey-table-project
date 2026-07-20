@@ -203,8 +203,8 @@ export const PreviewCell = React.memo(function PreviewCell({
 
     case 'choice_opt': {
       // 보기 옵션 셀 — 프리뷰에서는 체크박스 표시 (실제 응답은 ChoiceTableResponse 가 렌더).
-      // 라벨(choiceLabel > content)이 있으면 컨트롤 옆에 표시, 비어 있으면 컨트롤만.
-      const choiceLabelText = (cell.choiceLabel ?? '').trim() || (cell.content ?? '').trim();
+      // 셀 표시는 셀 텍스트(content) 전용 — choiceLabel 은 데이터로만 저장 (응답 렌더와 동일 규칙).
+      const choiceLabelText = (cell.content ?? '').trim();
       return (
         <div className="flex items-center justify-center gap-2">
           <input

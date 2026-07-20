@@ -33,6 +33,30 @@ describe('PreviewCell 보기 옵션 컨트롤 종류', () => {
     render(<PreviewCell cell={choiceCell} />);
     expect(screen.getByRole('checkbox')).toBeTruthy();
   });
+
+  it('choiceLabel 만 있는 셀은 미리보기에 라벨을 렌더하지 않는다 (응답 렌더와 동일 규칙)', () => {
+    const cell: TableCell = {
+      id: 'cell-2',
+      type: 'choice_opt',
+      content: '',
+      choiceLabel: '저장만 되는 옵션 라벨',
+    };
+    render(<PreviewCell cell={cell} choiceControlType="radio" />);
+    expect(screen.getByRole('radio')).toBeTruthy();
+    expect(screen.queryByText('저장만 되는 옵션 라벨')).toBeNull();
+  });
+
+  it('choiceLabel 과 content 둘 다 있으면 content 만 렌더한다', () => {
+    const cell: TableCell = {
+      id: 'cell-3',
+      type: 'choice_opt',
+      content: '셀 텍스트',
+      choiceLabel: '옵션 라벨',
+    };
+    render(<PreviewCell cell={cell} choiceControlType="radio" />);
+    expect(screen.getByText('셀 텍스트')).toBeTruthy();
+    expect(screen.queryByText('옵션 라벨')).toBeNull();
+  });
 });
 
 // 그룹 혼합: radio 질문이지만 일부 셀이 checkbox 그룹에 속하면 셀별로 다르게 렌더되어야 한다.

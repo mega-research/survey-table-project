@@ -1,7 +1,9 @@
 /**
  * 보기 옵션(choice_opt) 셀의 라벨을 라디오/체크박스 옆에 렌더하는지 검증.
- * - 라벨(choiceLabel > content)이 있으면 컨트롤 옆에 텍스트로 표시
+ * - 데스크톱 셀 표시는 셀 텍스트(content) 전용 — choiceLabel 은 데이터(옵션 라벨)로만
+ *   저장되고 셀에는 렌더하지 않는다 (둘 다 있으면 content 만 표시).
  * - 비어 있으면 컨트롤만 (라벨 다른 열에 있는 경우 대비)
+ * - 모바일 카드는 option.label(choiceLabel 우선)을 계속 사용 — choice-table-response-mobile 테스트가 보장.
  */
 import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
@@ -119,5 +121,34 @@ describe('ChoiceTableResponse 라벨 렌더 (데스크톱)', () => {
     // 비어있으면 '(라벨 없음)' 등 텍스트가 노출되면 안 된다.
     expect(within(cellB).queryByText('(라벨 없음)')).toBeNull();
     expect(cellB.textContent?.trim()).toBe('');
+  });
+
+  it('choiceLabel 만 있는 셀은 셀에 렌더하지 않고 컨트롤만 표시한다', () => {
+    const q = radioQuestion();
+    q.tableRowsData![0]!.cells[1] = {
+      id: 'cellB',
+      type: 'choice_opt',
+      content: '',
+      choiceLabel: '① 저장만 되는 라벨',
+    } as TableCell;
+    render(<ChoiceTableResponse question={q} value={null} onChange={vi.fn()} />);
+    const cellB = screen.getByTestId('cell-cellB');
+    expect(within(cellB).getByRole('radio')).toBeTruthy();
+    expect(within(cellB).queryByText('① 저장만 되는 라벨')).toBeNull();
+    expect(cellB.textContent?.trim()).toBe('');
+  });
+
+  it('choiceLabel 과 content 둘 다 있으면 content 만 렌더한다', () => {
+    const q = radioQuestion();
+    q.tableRowsData![0]!.cells[0] = {
+      id: 'cellA',
+      type: 'choice_opt',
+      content: '셀에 보일 텍스트',
+      choiceLabel: '옵션 라벨',
+    } as TableCell;
+    render(<ChoiceTableResponse question={q} value={null} onChange={vi.fn()} />);
+    const cellA = screen.getByTestId('cell-cellA');
+    expect(within(cellA).getByText('셀에 보일 텍스트')).toBeTruthy();
+    expect(within(cellA).queryByText('옵션 라벨')).toBeNull();
   });
 });

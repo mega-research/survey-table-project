@@ -161,9 +161,10 @@ export function ChoiceTableResponse({ question, value, onChange }: ChoiceTableRe
     // 셀이 속한 그룹의 type 결정. 비그룹 경로는 질문 type 그대로 사용.
     const cellType = isGrouped ? getGroupTypeOfCell(question, cell.id) : (isCheckbox ? 'checkbox' : 'radio');
 
-    // 컨트롤 옆 라벨: choiceLabel > content. 비어 있으면(라벨이 다른 열에 있는 구성)
-    // 컨트롤만 렌더한다. 토큰은 응답 컨텍스트(attrs)로 치환.
-    const rawLabel = (cell.choiceLabel ?? '').trim() || (cell.content ?? '').trim();
+    // 컨트롤 옆 라벨: 셀 텍스트(content) 전용. choiceLabel 은 데이터(옵션 라벨 —
+    // 모바일 카드·응답 매칭·export)로만 저장되고 데스크톱 셀에는 렌더하지 않는다.
+    // 둘 다 있으면 content 만 표시. 비어 있으면(라벨이 다른 열에 있는 구성) 컨트롤만 렌더.
+    const rawLabel = (cell.content ?? '').trim();
     const labelText = rawLabel ? substituteTokens(rawLabel, attrs) : '';
 
     return (
