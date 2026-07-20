@@ -97,8 +97,19 @@ export function getGridContainerStyle(
 
 // ── Sticky 좌측 열 판정 ──
 
-// 좌측 sticky 대상 셀 타입: 정적 셀 + radio (사용자 요구: "인터랙티브(radio 제외)가 아닌 경우")
-const STICKY_ELIGIBLE_CELL_TYPES = new Set(['text', 'image', 'video', 'radio']);
+// 좌측 sticky 대상 셀 타입: 정적 셀 + 라벨 전용 radio
+const STICKY_ELIGIBLE_CELL_TYPES = new Set(['text', 'image', 'video']);
+
+/**
+ * 셀이 좌측 sticky 후보인지. radio 는 "라디오 1개짜리 라벨 셀"(행 라벨 용도)만
+ * 허용한다 — 응답용 radio(옵션 여러 개)까지 후보로 인정하면 colspan 점유 열
+ * (판정 스킵)과 결합해 sticky 범위가 척도 영역까지 번지고, 태블릿 폭에서
+ * 너비 클램프에 걸리면 "몇 열만 고정 + 다음 열 겹침" 깨짐이 생긴다.
+ */
+function isStickyEligibleCell(cell: TableRow['cells'][number]): boolean {
+  if (STICKY_ELIGIBLE_CELL_TYPES.has(cell.type)) return true;
+  return cell.type === 'radio' && (cell.radioOptions?.length ?? 0) <= 1;
+}
 const MIN_COLUMNS_FOR_STICKY = 4;
 
 /** 헤더 행의 최소 높이(px). sticky 활성 시 grid row가 contents 높이로 붕괴되는 것을 방지 */
@@ -158,7 +169,7 @@ export function computeStickyLeftColumns(
       // colspan으로 점유돼 숨겨진 셀은 건너뜀 (colspan 자체는 경계 위반 아님 — 각 열 독립 판정)
       if (cell.isHidden) continue;
       if (cell._isContinuation) continue;
-      if (!STICKY_ELIGIBLE_CELL_TYPES.has(cell.type)) {
+      if (!isStickyEligibleCell(cell)) {
         ok = false;
         break;
       }
