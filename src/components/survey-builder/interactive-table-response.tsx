@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 
 import { ChevronDown, ChevronRight, FileText, ListChecks } from 'lucide-react';
 
+import { scrollToCell } from '@/components/survey-response/scroll-to-issue';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useDynamicRows } from '@/hooks/use-dynamic-rows';
 import { useElementWidth } from '@/hooks/use-element-width';
@@ -283,6 +284,7 @@ function renderRowCells({
         )}
         style={style}
         data-row-id={row.id}
+        data-cell-id={cell.id}
         data-grid-cell
         {...getGridCellAria('gridcell', cs, rs)}
       >
@@ -340,7 +342,8 @@ interface InteractiveTableResponseProps {
   /** 차단형 검증 위반 셀 (빨간 ring 하이라이트) */
   errorCellIds?: Set<string> | undefined;
   /** 차단형 검증 에러 메시지 (테이블 아래 에러 박스) */
-  errorMessages?: string[] | undefined;
+  /** 차단형 검증 오류 배너 항목 — cellIds 가 있으면 "위치로 이동" 버튼을 단다 */
+  errorItems?: { message: string; cellIds?: string[] | undefined }[] | undefined;
 }
 
 export const InteractiveTableResponse = React.memo(function InteractiveTableResponse({
@@ -360,7 +363,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
   mobileOriginalTable = false,
   enableSticky = true,
   errorCellIds,
-  errorMessages,
+  errorItems,
 }: InteractiveTableResponseProps) {
   // 같은 render tick 안에 여러 cell 이 동시에 onChange 를 호출할 때 (예: emptyDefault prefill)
   // 부모 prop 의 batch 지연으로 stale 한 객체가 덮어쓰는 race 를 방지하기 위해
@@ -870,13 +873,24 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
             )}
           </div>
 
-          {errorMessages && errorMessages.length > 0 && (
+          {errorItems && errorItems.length > 0 && (
             <div
               role="alert"
-              className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+              className="mt-2 space-y-1 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
             >
-              {errorMessages.map((message, i) => (
-                <p key={i}>{message}</p>
+              {errorItems.map((item, i) => (
+                <div key={i} className="flex items-center justify-between gap-3">
+                  <p className="min-w-0">{item.message}</p>
+                  {item.cellIds && item.cellIds.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => scrollToCell(item.cellIds!)}
+                      className="shrink-0 rounded border border-red-300 bg-white px-2 py-0.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-100"
+                    >
+                      위치로 이동
+                    </button>
+                  )}
+                </div>
               ))}
             </div>
           )}

@@ -185,13 +185,15 @@ export function QuestionInput({
               ? new Set(numericIssues.flatMap((i) => i.cellIds ?? []))
               : undefined
           }
-          errorMessages={
-            // 범위(range) 위반은 셀 빨간 링 + 셀 인라인 안내로만 표시 — 하단 배너 제외
+          errorItems={
+            // 범위(range) 위반은 셀 빨간 링 + 셀 인라인 안내로만 표시 — 하단 배너 제외.
+            // cellIds 전체를 배너 "위치로 이동" 버튼에 넘긴다 — 열 displayCondition 으로
+            // 숨은(미렌더) 셀이 앞에 올 수 있어, 버튼이 렌더된 첫 셀을 골라 스크롤한다.
             (() => {
-              const messages = (numericIssues ?? [])
+              const items = (numericIssues ?? [])
                 .filter((i) => i.kind !== 'range')
-                .map((i) => i.message);
-              return messages.length > 0 ? messages : undefined;
+                .map((i) => ({ message: i.message, cellIds: i.cellIds ?? [] }));
+              return items.length > 0 ? items : undefined;
             })()
           }
         />

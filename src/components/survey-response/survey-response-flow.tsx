@@ -506,15 +506,10 @@ export function SurveyResponseFlow({
   });
 
   const handleNext = async () => {
-    // 숫자 차단형 검증 — 위반이 있으면 진행하지 않고 에러 표시 + 첫 위반 질문으로 스크롤
+    // 숫자 차단형 검증 — 위반이 있으면 진행하지 않고 에러 배너만 표시한다.
+    // 위반 셀 이동은 배너의 "위치로 이동" 버튼이 담당(자동 스크롤은 표가 커서 어중간하게 멈침).
     if (numericIssuesByQuestion.size > 0) {
       setNumericErrorStepIndex(currentStepIndex);
-      const firstId = numericIssuesByQuestion.keys().next().value;
-      if (firstId) {
-        document
-          .querySelector<HTMLElement>(`[data-question-id="${firstId}"]`)
-          ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
       return;
     }
 

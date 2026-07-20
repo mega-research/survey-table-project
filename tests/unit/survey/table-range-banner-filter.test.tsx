@@ -15,7 +15,7 @@ import type { Question } from '@/types/survey';
 
 interface CapturedProps {
   errorCellIds?: Set<string>;
-  errorMessages?: string[];
+  errorItems?: { message: string; cellId?: string }[];
 }
 
 const captured: CapturedProps[] = [];
@@ -55,12 +55,12 @@ function renderWithIssues(issues: NumericIssue[]) {
 }
 
 describe('표 range 위반 배너 제외', () => {
-  it('range 메시지는 배너에서 제외하고 다른 kind 메시지는 유지한다', () => {
+  it('range 메시지는 배너에서 제외하고 다른 kind 메시지는 유지한다 (셀 id 목록 포함)', () => {
     const props = renderWithIssues([
       { kind: 'range', message: '허용 범위를 벗어난 값이 입력된 셀이 있습니다', cellIds: ['c1'] },
       { kind: 'required-cells', message: '필수 응답이 비어있습니다', cellIds: ['c2'] },
     ]);
-    expect(props.errorMessages).toEqual(['필수 응답이 비어있습니다']);
+    expect(props.errorItems).toEqual([{ message: '필수 응답이 비어있습니다', cellIds: ['c2'] }]);
   });
 
   it('range 위반 셀도 빨간 링(errorCellIds)에는 계속 포함된다', () => {
@@ -71,11 +71,11 @@ describe('표 range 위반 배너 제외', () => {
     expect(props.errorCellIds).toEqual(new Set(['c1', 'c2']));
   });
 
-  it('range 위반만 있으면 배너 자체가 없다 (errorMessages undefined)', () => {
+  it('range 위반만 있으면 배너 자체가 없다 (errorItems undefined)', () => {
     const props = renderWithIssues([
       { kind: 'range', message: '허용 범위를 벗어난 값이 입력된 셀이 있습니다', cellIds: ['c1'] },
     ]);
-    expect(props.errorMessages).toBeUndefined();
+    expect(props.errorItems).toBeUndefined();
     expect(props.errorCellIds).toEqual(new Set(['c1']));
   });
 });

@@ -309,13 +309,11 @@ export function useResponseLifecycle({
         const firstId = numericViolated[0]!.id;
         const targetIdx = findStepIndexOfQuestion(steps, firstId);
         if (targetIdx !== -1) setNumericErrorStepIndex(targetIdx);
+        // 다른 step 이면 그 step 으로 전환(상단 스크롤). 같은 step 이면 배너만 —
+        // 위반 셀 이동은 배너의 "위치로 이동" 버튼이 담당.
         if (targetIdx !== -1 && targetIdx !== currentStepIndex) {
           setCurrentStepIndex(targetIdx);
           window.scrollTo({ top: 0, behavior: 'smooth' });
-        } else {
-          document
-            .querySelector<HTMLElement>(`[data-question-id="${firstId}"]`)
-            ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
         setIsSubmitting(false);
         return;
