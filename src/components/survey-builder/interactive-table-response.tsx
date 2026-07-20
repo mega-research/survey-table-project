@@ -484,7 +484,10 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
   // 헤더-바디 scrollLeft 상호 동기화 (각각 별도 가로 스크롤 컨테이너)
   // 헤더는 hideColumnLabels=false 일 때만 마운트되므로, 토글 시 리스너 재부착이
   // 필요하다(ref/disabled는 안 바뀌어 deps 없이는 effect가 재실행되지 않음).
-  useScrollLeftSync(headerScrollRef, tableContainerRef, isMobileView, [hideColumnLabels]);
+  // 모바일은 카드 전환이라 원래 불필요하지만, 원본 표 모드는 모바일에서도
+  // 표를 렌더하므로 동기화·측정을 켜야 한다.
+  const mobileUsesCards = isMobileView && !mobileOriginalTable;
+  useScrollLeftSync(headerScrollRef, tableContainerRef, mobileUsesCards, [hideColumnLabels]);
 
   // Grid 관련 계산
   const totalWidth = useMemo(() => calcTotalWidth(visibleColumns), [visibleColumns]);
@@ -547,7 +550,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
 
   // 가로 스크롤 인디케이터 (좌/우 섀도우·버튼 표시 여부)
   const { canScrollLeft, canScrollRight } = useHorizontalScrollIndicators(tableContainerRef, {
-    disabled: isMobileView,
+    disabled: mobileUsesCards,
     deps: [visibleColumns.length, displayRows.length],
   });
 
@@ -856,7 +859,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
         <CardContent className={cn(isMobileView ? 'p-3 sm:p-4' : 'p-0 sm:px-6 sm:pb-6')}>
           <div className="w-full">
             {/* 모바일 원본 표 옵션이 켜진 질문은 카드/스테퍼 전환 없이 원본 표(가로 스크롤) 유지 */}
-            {isMobileView && !mobileOriginalTable ? (
+            {mobileUsesCards ? (
               useDrilldown ? (
                 <MobileTableDrilldown {...mobileTableProps} />
               ) : (
