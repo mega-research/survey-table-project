@@ -35,12 +35,13 @@ export const PreviewCell = React.memo(function PreviewCell({
       return (
         <CellOptionsContainer cell={cell}>
           {cell.checkboxOptions.map((option) => (
-            <div key={option.id} className="flex items-center gap-2">
+            // items-start + mt-0.5: 라벨(text-sm)이 2줄로 감겨도 체크박스가 첫 줄 중앙에 고정
+            <div key={option.id} className="flex items-start gap-2">
               <input
                 type="checkbox"
                 checked={option.checked || false}
                 readOnly
-                className="rounded"
+                className="mt-0.5 h-4 w-4 shrink-0 rounded"
               />
               <span className="text-sm">{option.label}</span>
             </div>
@@ -59,12 +60,14 @@ export const PreviewCell = React.memo(function PreviewCell({
       return (
         <CellOptionsContainer cell={cell}>
           {cell.radioOptions.map((option) => (
-            <div key={option.id} className="flex items-center gap-2">
+            // items-start + mt-0.5: 라벨(text-sm)이 2줄로 감겨도 라디오가 첫 줄 중앙에 고정
+            <div key={option.id} className="flex items-start gap-2">
               <input
                 type="radio"
                 name={`preview-${cell.id}`}
                 checked={option.selected || false}
                 readOnly
+                className="mt-0.5 h-4 w-4 shrink-0"
               />
               <span className="text-sm">{option.label}</span>
             </div>

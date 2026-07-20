@@ -46,7 +46,8 @@ export const RadioCell = React.memo(function RadioCell({
 
         return (
           <div key={option.id} className="space-y-2">
-            <div className="flex items-center gap-2">
+            {/* items-start + mt-1: 라벨이 2줄로 감겨도 라디오가 첫 줄 중앙에 고정 (한 줄일 때 위치 동일) */}
+            <div className="flex items-start gap-2">
               <input
                 type="radio"
                 id={`${cell.id}-${option.id}`}
@@ -54,7 +55,7 @@ export const RadioCell = React.memo(function RadioCell({
                 checked={isSelected}
                 onChange={() => {}}
                 onClick={() => handleRadioChange(optionKey)}
-                className="cursor-pointer border-gray-300 text-blue-600 focus:ring-blue-500"
+                className="mt-1 h-4 w-4 shrink-0 cursor-pointer border-gray-300 text-blue-600 focus:ring-blue-500"
               />
               <label
                 htmlFor={`${cell.id}-${option.id}`}

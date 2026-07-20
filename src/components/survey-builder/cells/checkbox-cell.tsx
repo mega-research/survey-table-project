@@ -81,14 +81,15 @@ export const CheckboxCell = React.memo(function CheckboxCell({
 
         return (
           <div key={option.id} className="space-y-2">
-            <div className="flex items-center gap-2">
+            {/* items-start + mt-1: 라벨이 2줄로 감겨도 체크박스가 첫 줄 중앙에 고정 (한 줄일 때 위치 동일) */}
+            <div className="flex items-start gap-2">
               <input
                 type="checkbox"
                 id={`${cell.id}-${option.id}`}
                 checked={isChecked}
                 disabled={disabled}
                 onChange={(e) => handleCheckboxChange(optionKey, e.target.checked)}
-                className={`rounded border-gray-300 text-blue-600 focus:ring-blue-500 ${
+                className={`mt-1 h-4 w-4 shrink-0 rounded border-gray-300 text-blue-600 focus:ring-blue-500 ${
                   disabled ? 'cursor-not-allowed opacity-50' : ''
                 }`}
               />
