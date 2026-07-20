@@ -165,7 +165,8 @@
       "protobufjs@8": ">=8.6.3",
       "undici@7": "7.28.0",
       "@chenglou/pretext": "^0.0.5",
-      "linkify-it": "5.0.1"
+      "linkify-it": "5.0.1",
+      "adm-zip": ">=0.6.0"
     }
   }
 }
