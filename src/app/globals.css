@@ -870,5 +870,54 @@ a.notice-file-attachment:hover {
   .tiptap-mobile-tame table:not(:has(tr + tr)) td + th {
     border-top: 0 !important;
   }
+  /* 행이 정확히 2개인 표는 각 행을 [첫 셀 = 라벨 | 나머지 셀 = 세로 스택] 2열
+   * 그리드로 전환. :has(tr + tr):not(:has(tr + tr + tr)) = 행 2개짜리 표.
+   * 라벨 셀은 넉넉한 grid-row 스팬으로 스택 전체 높이에 걸쳐 병합된 것처럼
+   * 늘어나고, 남는 암시적 행은 높이 0으로 붕괴한다. colspan 은 grid 전환 시
+   * 무시되므로 가로 병합 셀도 스택 셀 하나로 자연스럽게 흡수된다.
+   * min-width 무력화 필요: sanitize 가 TipTap 이 표에 박는 인라인 min-width 를
+   * 허용해 통과시키므로 이를 눌러야 표가 화면 폭 안에 들어온다.
+   * 테두리는 셀 기본 테두리(sanitize 주입 인라인 포함)를 전부 끄고 외곽은
+   * table 자체 테두리, 내부 구분선만 다시 그린다 — 라벨 오버스팬 끝단의
+   * 서브픽셀 어긋남이 테두리로 드러나지 않도록. */
+  .tiptap-mobile-tame table:has(tr + tr):not(:has(tr + tr + tr)),
+  .tiptap-mobile-tame table:has(tr + tr):not(:has(tr + tr + tr)) tbody {
+    display: block;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+  .tiptap-mobile-tame table:has(tr + tr):not(:has(tr + tr + tr)) tr {
+    display: grid;
+    grid-template-columns: 35% minmax(0, 1fr);
+  }
+  .tiptap-mobile-tame table:has(tr + tr):not(:has(tr + tr + tr)) tr + tr {
+    /* 행 그룹 구분선. #d1d5db = sanitize CELL_STYLE 주입값과 동일 (gray-300) */
+    border-top: 1px solid #d1d5db;
+  }
+  .tiptap-mobile-tame table:has(tr + tr):not(:has(tr + tr + tr)) tr > th,
+  .tiptap-mobile-tame table:has(tr + tr):not(:has(tr + tr + tr)) tr > td {
+    border: 0 !important;
+  }
+  .tiptap-mobile-tame table:has(tr + tr):not(:has(tr + tr + tr)) tr > :first-child {
+    grid-column: 1;
+    grid-row: 1 / span 32;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    border-right: 1px solid #d1d5db !important;
+  }
+  .tiptap-mobile-tame table:has(tr + tr):not(:has(tr + tr + tr)) tr > :not(:first-child) {
+    grid-column: 2;
+  }
+  .tiptap-mobile-tame table:has(tr + tr):not(:has(tr + tr + tr)) tr > :not(:first-child):not(:last-child) {
+    border-bottom: 1px solid #d1d5db !important;
+  }
+  /* 셀이 하나뿐인 행은 라벨/스택 구분 없이 전체 폭 사용 */
+  .tiptap-mobile-tame table:has(tr + tr):not(:has(tr + tr + tr)) tr > :first-child:last-child {
+    grid-column: 1 / -1;
+    grid-row: auto;
+    display: block;
+    border-right: 0 !important;
+  }
 }
 
