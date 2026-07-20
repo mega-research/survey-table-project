@@ -18,7 +18,6 @@ import {
   Library,
   List,
   ListOrdered,
-  PlayCircle,
   Plus,
   Rocket,
   Save,
@@ -41,6 +40,7 @@ import { SortableQuestionList } from '@/components/survey-builder/sortable-quest
 import { SurveySettingsPanel } from '@/components/survey-builder/survey-settings-panel';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { TestModeControl } from '@/components/operations/test-mode-control';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useSurvey } from '@/hooks/queries/use-surveys';
@@ -150,12 +150,10 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
   const groupCount = useSurveyBuilderStore((s) => (s.currentSurvey.groups || []).length);
   const isDirty = useSurveyBuilderStore((s) => s.isDirty);
 
-  const { selectedQuestionId, isTestMode, selectQuestion, toggleTestMode, setVariableCatalog } = useSurveyUIStore(
+  const { selectedQuestionId, selectQuestion, setVariableCatalog } = useSurveyUIStore(
     useShallow((s) => ({
       selectedQuestionId: s.selectedQuestionId,
-      isTestMode: s.isTestMode,
       selectQuestion: s.selectQuestion,
-      toggleTestMode: s.toggleTestMode,
       setVariableCatalog: s.setVariableCatalog,
     })),
   );
@@ -484,15 +482,8 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
           </div>
 
           <div className="flex items-center space-x-3">
-            <Button
-              variant={isTestMode ? 'default' : 'outline'}
-              size="sm"
-              onClick={toggleTestMode}
-              className={isTestMode ? 'bg-green-600 hover:bg-green-700' : ''}
-            >
-              <PlayCircle className="mr-2 h-4 w-4" />
-              {isTestMode ? '테스트 중' : '테스트'}
-            </Button>
+            {/* 운영 콘솔과 동일한 DB 테스트 모드 토글 — 테스트 링크는 마지막 발행본 기준 */}
+            {surveyId && <TestModeControl surveyId={surveyId} />}
             <Button variant="outline" size="sm" onClick={handleSaveSurvey}>
               <Save className="mr-2 h-4 w-4" />
               저장
@@ -625,15 +616,8 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
             <div className="border-b border-gray-200 p-6">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
-                  <h3 className="text-lg font-semibold text-gray-900">
-                    {isTestMode ? '질문 테스트' : '설문 편집'}
-                  </h3>
-                  {isTestMode && (
-                    <span className="rounded-full bg-green-100 px-2 py-1 text-xs text-green-800">
-                      테스트 모드
-                    </span>
-                  )}
-                  {!isTestMode && questionCount > 0 && (
+                  <h3 className="text-lg font-semibold text-gray-900">설문 편집</h3>
+                  {questionCount > 0 && (
                     <div className="flex items-center space-x-2">
                       <Input
                         type="number"
@@ -682,7 +666,6 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
               ) : (
                 <SortableQuestionList
                   selectedQuestionId={selectedQuestionId}
-                  isTestMode={isTestMode}
                   onSaveToLibrary={handleSaveToLibrary}
                 />
               )}

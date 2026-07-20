@@ -2,10 +2,7 @@
 
 import { useMemo } from 'react';
 
-import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { isEmptyHtml } from '@/lib/utils';
-import { sanitizeRichHtml } from '@/lib/sanitize';
 import { OptionTextInput } from '@/components/survey-response/option-text-input';
 import { useTestResponseStore } from '@/stores/test-response-store';
 import { Question, SurveyLookup } from '@/types/survey';
@@ -530,13 +527,16 @@ function QuestionTestInput({
 }
 
 // 테스트 모드용 인터랙티브 질문 카드 컴포넌트
-export function QuestionTestCard({
+/**
+ * 실제 응답 렌더링 본문 — 편집 페이지 질문 카드의 미리보기로 사용.
+ * 테스트 응답 스토어에 입력이 쌓이며(저장 안 됨) 분기·검증 동작까지 실제와 동일하다.
+ * 카드 껍데기(번호·제목·설명)는 호출부(SortableQuestion)가 소유한다.
+ */
+export function QuestionTestBody({
   question,
-  index,
   lookups = [],
 }: {
   question: Question;
-  index: number;
   /** 분기 조건 우변 LUT 룩업 평가에 사용. currentSurvey.lookups 를 전달. */
   lookups?: SurveyLookup[];
 }) {
@@ -591,32 +591,7 @@ export function QuestionTestCard({
   }, [question.displayCondition, allTestResponses, attrs, lookups]);
 
   return (
-    <Card className="border-l-4 border-l-blue-500 p-6" data-question-index={index}>
-      <div className="mb-4">
-        <div className="mb-2 flex items-center space-x-2">
-          <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-blue-100 text-sm font-medium text-blue-600">
-            {index + 1}
-          </span>
-          {question.required && <span className="text-sm text-red-500">*</span>}
-        </div>
-        <h3 className="mb-1 text-lg font-medium text-gray-900">
-          {substituteTokens(question.title, attrs)}
-        </h3>
-        {!isEmptyHtml(question.description) && (
-          <div
-            className="prose prose-sm mb-4 max-w-none overflow-x-auto text-sm text-gray-600 [&_p]:min-h-[1.6em] [&_table]:my-2 [&_table]:w-full [&_table]:table-fixed [&_table]:border-collapse [&_table]:border-2 [&_table]:border-gray-300 [&_table_p]:m-0 [&_table_td]:border [&_table_td]:border-gray-300 [&_table_td]:px-3 [&_table_td]:py-2 [&_table_th]:border [&_table_th]:border-gray-300 [&_table_th]:bg-transparent [&_table_th]:px-3 [&_table_th]:py-2 [&_table_th]:font-normal"
-            style={{
-              WebkitOverflowScrolling: 'touch',
-            }}
-            dangerouslySetInnerHTML={{
-              __html: sanitizeRichHtml(
-                substituteTokens(question.description!, attrs),
-              ),
-            }}
-          />
-        )}
-      </div>
-
+    <div>
       <div className="space-y-3">
         {question.type === 'table' ? (
           <LazyMount
@@ -646,6 +621,6 @@ export function QuestionTestCard({
           ))}
         </div>
       )}
-    </Card>
+    </div>
   );
 }

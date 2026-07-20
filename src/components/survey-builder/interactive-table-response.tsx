@@ -856,7 +856,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
             <CardTitle className="text-lg font-medium">{tableTitle}</CardTitle>
           </CardHeader>
         )}
-        <CardContent className={cn(isMobileView ? 'p-3 sm:p-4' : 'p-0 sm:px-6 sm:pb-6')}>
+        <CardContent className={cn(isMobileView ? 'p-3 sm:p-4' : 'p-0 sm:px-6')}>
           <div className="w-full">
             {/* 모바일 원본 표 옵션이 켜진 질문은 카드/스테퍼 전환 없이 원본 표(가로 스크롤) 유지 */}
             {mobileUsesCards ? (
@@ -881,14 +881,6 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
             </div>
           )}
 
-          {isTestMode && (
-            <div className="mx-4 mt-4 mb-4 rounded-lg bg-blue-50 p-3 sm:mx-0 sm:mb-0">
-              <div className="text-sm text-blue-700">
-                <span className="font-medium">테스트 모드:</span> 위 테이블에서 실제로 응답해보세요.
-                응답 데이터는 저장되지 않습니다.
-              </div>
-            </div>
-          )}
         </CardContent>
       </Card>
 

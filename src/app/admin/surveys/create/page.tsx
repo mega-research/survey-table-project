@@ -24,7 +24,6 @@ import {
   ListOrdered,
   Lock,
   Pencil,
-  PlayCircle,
   Plus,
   RefreshCw,
   Save,
@@ -151,7 +150,7 @@ export default function CreateSurveyPage() {
   );
   const currentSurvey = useSurveyBuilderStore((s) => s.currentSurvey);
 
-  const { selectedQuestionId, isTestMode, selectQuestion, toggleTestMode } = useSurveyUIStore();
+  const { selectedQuestionId, selectQuestion } = useSurveyUIStore();
 
   const { mutateAsync: saveSurvey } = useSaveSurvey();
 
@@ -421,15 +420,7 @@ export default function CreateSurveyPage() {
           </div>
 
           <div className="flex items-center space-x-3">
-            <Button
-              variant={isTestMode ? 'default' : 'outline'}
-              size="sm"
-              onClick={toggleTestMode}
-              className={isTestMode ? 'bg-green-600 hover:bg-green-700' : ''}
-            >
-              <PlayCircle className="mr-2 h-4 w-4" />
-              {isTestMode ? '테스트 중' : '테스트'}
-            </Button>
+            {/* 테스트 모드 토글은 저장된 설문 전용(DB 공유) — 생성 화면은 미리보기가 실제 렌더링이라 불필요 */}
             <Button variant="outline" size="sm" onClick={handleSaveSurvey}>
               <Save className="mr-2 h-4 w-4" />
               저장
@@ -528,15 +519,8 @@ export default function CreateSurveyPage() {
             <div className="border-b border-gray-200 p-6">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
-                  <h3 className="text-lg font-semibold text-gray-900">
-                    {isTestMode ? '질문 테스트' : '설문 편집'}
-                  </h3>
-                  {isTestMode && (
-                    <span className="rounded-full bg-green-100 px-2 py-1 text-xs text-green-800">
-                      테스트 모드
-                    </span>
-                  )}
-                  {!isTestMode && currentSurvey.questions.length > 0 && (
+                  <h3 className="text-lg font-semibold text-gray-900">설문 편집</h3>
+                  {currentSurvey.questions.length > 0 && (
                     <div className="flex items-center space-x-2">
                       <Input
                         type="number"
@@ -581,7 +565,6 @@ export default function CreateSurveyPage() {
               ) : (
                 <SortableQuestionList
                   selectedQuestionId={selectedQuestionId}
-                  isTestMode={isTestMode}
                   onSaveToLibrary={handleSaveToLibrary}
                 />
               )}

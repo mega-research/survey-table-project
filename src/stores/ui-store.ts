@@ -6,7 +6,6 @@ import type { VariableDef } from '@/components/operations/mail-template/variable
 interface SurveyUIState {
   // UI 상태
   selectedQuestionId: string | null;
-  isTestMode: boolean;
 
   // 현재 편집 중인 질문 ID (모달 open/close 시 설정)
   editingQuestionId: string | null;
@@ -16,8 +15,6 @@ interface SurveyUIState {
 
   // 액션들
   selectQuestion: (questionId: string | null) => void;
-  toggleTestMode: () => void;
-  setTestMode: (isTestMode: boolean) => void;
   setEditingQuestionId: (id: string | null) => void;
   setVariableCatalog: (catalog: VariableDef[]) => void;
 }
@@ -26,13 +23,10 @@ export const useSurveyUIStore = create<SurveyUIState>()(
   devtools(
     (set) => ({
       selectedQuestionId: null,
-      isTestMode: false,
       editingQuestionId: null,
       variableCatalog: [],
 
       selectQuestion: (questionId) => set({ selectedQuestionId: questionId }),
-      toggleTestMode: () => set((state) => ({ isTestMode: !state.isTestMode })),
-      setTestMode: (isTestMode) => set({ isTestMode }),
       setEditingQuestionId: (id) => set({ editingQuestionId: id }),
       setVariableCatalog: (catalog) => set({ variableCatalog: catalog }),
     }),

@@ -97,11 +97,9 @@ export function useSurveySync() {
         useSurveyBuilderStore.getState().setSurvey(survey);
 
         // UI 상태 초기화
-        const { selectQuestion, setTestMode } = useSurveyUIStore.getState();
-        selectQuestion(null);
-        setTestMode(false);
+        useSurveyUIStore.getState().selectQuestion(null);
 
-        // 테스트 응답 초기화
+        // 미리보기(실제 렌더링) 테스트 응답 초기화
         useTestResponseStore.getState().clearTestResponses();
       }
       return survey;
@@ -116,9 +114,7 @@ export function useSurveySync() {
     resetSurvey();
 
     // UI 및 테스트 응답 초기화
-    const { selectQuestion, setTestMode } = useSurveyUIStore.getState();
-    selectQuestion(null);
-    setTestMode(false);
+    useSurveyUIStore.getState().selectQuestion(null);
     useTestResponseStore.getState().clearTestResponses();
 
     const newSurvey = useSurveyBuilderStore.getState().currentSurvey;

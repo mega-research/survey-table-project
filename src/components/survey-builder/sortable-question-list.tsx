@@ -55,13 +55,12 @@ import { sanitizeRichHtml } from '@/lib/sanitize';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { useSurveyUIStore } from '@/stores/ui-store';
 import { computeTableEstimatedHeight } from '@/hooks/use-row-heights';
-import { Question, QuestionGroup } from '@/types/survey';
+import { Question, QuestionGroup, SurveyLookup } from '@/types/survey';
 
 import { buildFlatOrderedQuestions } from '@/lib/group-ordering';
 import { noop, estimateCardHeight, getQuestionTypeLabel } from './question-list-utils';
 import { PageBreakToggle } from './page-break-toggle';
-import { QuestionPreview } from './question-preview';
-import { QuestionTestCard } from './question-test-card';
+import { QuestionTestBody } from './question-test-card';
 import { GroupHeader } from './group-header';
 import { QuestionEditModal } from './question-edit-modal';
 
@@ -133,6 +132,8 @@ interface SortableQuestionProps {
   // 페이지 구분점 토글 — 선형 첫 질문·드래그 오버레이에는 넘기지 않아 버튼을 숨긴다
   onTogglePageBreak?: ((id: string) => void) | undefined;
   isDragOverlay?: boolean | undefined;
+  /** 미리보기(실제 렌더링)의 분기 조건 LUT 평가용 */
+  lookups?: SurveyLookup[] | undefined;
 }
 
 const SortableQuestion = React.memo(function SortableQuestion({
@@ -146,6 +147,7 @@ const SortableQuestion = React.memo(function SortableQuestion({
   onSaveToLibrary,
   onTogglePageBreak,
   isDragOverlay = false,
+  lookups = [],
 }: SortableQuestionProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: question.id,
@@ -285,7 +287,7 @@ const SortableQuestion = React.memo(function SortableQuestion({
           )}
         </div>
 
-        {/* Question preview */}
+        {/* 미리보기 — 실제 응답 렌더링. 입력은 테스트 응답 스토어에만 쌓인다(저장 안 됨) */}
         <div className="rounded-lg bg-gray-50 p-3">
           {question.type === 'table' ? (
             <LazyMount
@@ -294,10 +296,10 @@ const SortableQuestion = React.memo(function SortableQuestion({
               estimatedHeight={computeTableEstimatedHeight(question.tableColumns ?? [], question.tableRowsData ?? [], question.tableHeaderGrid)}
               immediate={isDragOverlay}
             >
-              <QuestionPreview question={question} />
+              <QuestionTestBody question={question} lookups={lookups} />
             </LazyMount>
           ) : (
-            <QuestionPreview question={question} />
+            <QuestionTestBody question={question} lookups={lookups} />
           )}
         </div>
       </div>
@@ -344,13 +346,11 @@ const SortableSubGroup = React.memo(function SortableSubGroup({
 
 interface SortableQuestionListProps {
   selectedQuestionId: string | null;
-  isTestMode?: boolean;
   onSaveToLibrary?: (question: Question) => void;
 }
 
 export function SortableQuestionList({
   selectedQuestionId,
-  isTestMode = false,
   onSaveToLibrary,
 }: SortableQuestionListProps) {
   // 스토어에서 직접 구독 (편집 페이지 리렌더와 분리)
@@ -381,15 +381,12 @@ export function SortableQuestionList({
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
-  // 테스트 모드 lazy 첫 마운트: 첫 토글 전까지 테스트 트리를 렌더하지 않음
-  const [testModeEverActivated, setTestModeEverActivated] = useState(isTestMode);
-  if (isTestMode && !testModeEverActivated) setTestModeEverActivated(true);
 
-  // 테스트 모드 진입 시 첫 컨택의 attrs 를 fetch — 본문의 {{변수}} 토큰 치환 + 분기 조건 평가에 사용.
+  // 첫 컨택의 attrs 를 fetch — 미리보기(실제 렌더링)의 {{변수}} 토큰 치환 + 분기 조건 평가에 사용.
   // 컨택 0건/인증 실패/키 부재 시 아래 Proxy 가 `[key]` placeholder 로 폴백.
   const [defaultContactAttrs, setDefaultContactAttrs] = useState<Record<string, string>>({});
   useEffect(() => {
-    if (!isTestMode || !surveyId) return;
+    if (!surveyId) return;
     let cancelled = false;
     client.surveyBuilder.testSample
       .get({ surveyId })
@@ -405,9 +402,9 @@ export function SortableQuestionList({
     return () => {
       cancelled = true;
     };
-  }, [isTestMode, surveyId]);
+  }, [surveyId]);
 
-  // 빌더 테스트 모드용 attrs — 미정의 키는 `[key]` placeholder 로 가시화.
+  // 빌더 미리보기용 attrs — 미정의 키는 `[key]` placeholder 로 가시화.
   const testContactAttrs = useMemo(
     () => createPlaceholderAttrs(defaultContactAttrs),
     [defaultContactAttrs],
@@ -415,25 +412,18 @@ export function SortableQuestionList({
 
   // querySelector 스코프용 컨테이너 ref
   const editContainerRef = useRef<HTMLDivElement>(null);
-  const testContainerRef = useRef<HTMLDivElement>(null);
 
   // 콜백 안정화용 ref (questions 참조를 useCallback deps에서 제거)
   const questionsRef = useRef(questions);
   useSyncLatestRef(questionsRef, questions);
 
-  // content-visibility용 카드 높이 캐시 (모드별 분리)
+  // content-visibility용 카드 높이 캐시 — 편집 카드가 실제 렌더링(테스트 입력)을 품으므로
+  // 'test' 추정치를 사용한다
   const editHeightMap = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const q of questions) map.set(q.id, estimateCardHeight(q, 'edit'));
-    return map;
-  }, [questions]);
-
-  const testHeightMap = useMemo(() => {
-    if (!testModeEverActivated) return new Map<string, number>();
     const map = new Map<string, number>();
     for (const q of questions) map.set(q.id, estimateCardHeight(q, 'test'));
     return map;
-  }, [questions, testModeEverActivated]);
+  }, [questions]);
 
   // SPA 내비게이션 시 모듈 레벨 mountedTableIdsRef 정리
   useEffect(() => {
@@ -495,7 +485,7 @@ export function SortableQuestionList({
   useEffect(() => {
     if (!selectedQuestionId) return;
     const rafId = requestAnimationFrame(() => {
-      const container = isTestMode ? testContainerRef.current : editContainerRef.current;
+      const container = editContainerRef.current;
       const el = container?.querySelector(`[data-question-id="${selectedQuestionId}"]`)
         ?? document.querySelector(`[data-question-id="${selectedQuestionId}"]`);
       if (el) {
@@ -503,7 +493,7 @@ export function SortableQuestionList({
       }
     });
     return () => cancelAnimationFrame(rafId);
-  }, [selectedQuestionId, isTestMode]);
+  }, [selectedQuestionId]);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -743,25 +733,6 @@ export function SortableQuestionList({
     return null;
   }
 
-  // 편집/테스트 모드를 display:none으로 토글 (언마운트 방지 → 즉시 전환)
-  const editStyle = isTestMode ? { display: 'none' as const } : undefined;
-  const testStyle = isTestMode ? undefined : { display: 'none' as const };
-
-  // 질문 카드 렌더 헬퍼 — 테스트 모드
-  const renderTestCard = (question: Question) => (
-    <div
-      key={question.id}
-      data-question-id={question.id}
-      style={{ contentVisibility: 'auto', containIntrinsicSize: `auto ${testHeightMap.get(question.id) ?? estimateCardHeight(question, 'test')}px` }}
-    >
-      <QuestionTestCard
-        question={question}
-        index={questions.indexOf(question)}
-        lookups={lookups}
-      />
-    </div>
-  );
-
   // 질문 카드 렌더 헬퍼 — 편집 모드
   const renderEditCard = (question: Question) => {
     const qIdx = questions.indexOf(question);
@@ -778,6 +749,7 @@ export function SortableQuestionList({
         <SortableQuestion
           question={question}
           index={qIdx}
+          lookups={lookups}
           isSelected={selectedQuestionId === question.id}
           onSelect={selectQuestion}
           onEdit={handleEdit}
@@ -880,6 +852,7 @@ export function SortableQuestionList({
         <SortableQuestion
           question={question}
           index={questions.findIndex((q) => q.id === id)}
+          lookups={lookups}
           isSelected={false}
           onSelect={noop}
           onEdit={noop}
@@ -923,41 +896,32 @@ export function SortableQuestionList({
 
   return (
     <>
-      {/* 편집 모드 */}
-      <div ref={editContainerRef} style={editStyle}>
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragStart={handleDragStart}
-          onDragOver={handleDragOver}
-          onDragEnd={handleDragEnd}
-        >
-          {/* 그룹 없는 질문용 SortableContext */}
-          <SortableContext
-            items={ungroupedQuestions.map((q) => q.id)}
-            strategy={verticalListSortingStrategy}
+      {/* 편집 목록 — 카드 미리보기가 실제 응답 렌더링이므로 토큰 치환용 attrs 컨텍스트로 감싼다 */}
+      <ContactAttrsProvider attrs={testContactAttrs}>
+        <div ref={editContainerRef}>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDragEnd={handleDragEnd}
           >
-            <div className="space-y-6">
-              {renderGroups(renderEditCard, true)}
-            </div>
-          </SortableContext>
+            {/* 그룹 없는 질문용 SortableContext */}
+            <SortableContext
+              items={ungroupedQuestions.map((q) => q.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              <div className="space-y-6">
+                {renderGroups(renderEditCard, true)}
+              </div>
+            </SortableContext>
 
-          <DragOverlay>
-            {activeId && renderDragOverlay(activeId)}
-          </DragOverlay>
-        </DndContext>
-      </div>
-
-      {/* 테스트 모드 (첫 토글 시에만 마운트) */}
-      {testModeEverActivated && (
-        <ContactAttrsProvider attrs={testContactAttrs}>
-          <div ref={testContainerRef} style={testStyle}>
-            <div className="space-y-6">
-              {renderGroups(renderTestCard, false)}
-            </div>
-          </div>
-        </ContactAttrsProvider>
-      )}
+            <DragOverlay>
+              {activeId && renderDragOverlay(activeId)}
+            </DragOverlay>
+          </DndContext>
+        </div>
+      </ContactAttrsProvider>
 
       {/* 모달 — 양 모드 밖 */}
       <QuestionEditModal
