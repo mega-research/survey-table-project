@@ -333,6 +333,8 @@ interface InteractiveTableResponseProps {
   allQuestions?: Question[] | undefined;
   dynamicRowConfigs?: DynamicRowGroupConfig[] | undefined;
   hideColumnLabels?: boolean | undefined;
+  /** 모바일에서도 카드/스테퍼 전환 없이 원본 표(가로 스크롤)로 렌더 */
+  mobileOriginalTable?: boolean | undefined;
   /** 헤더·좌측 열 sticky 동작 활성화. 기본 true. 빌더 프리뷰 등에서 끌 수 있음 */
   enableSticky?: boolean | undefined;
   /** 차단형 검증 위반 셀 (빨간 ring 하이라이트) */
@@ -355,6 +357,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
   allQuestions,
   dynamicRowConfigs,
   hideColumnLabels = false,
+  mobileOriginalTable = false,
   enableSticky = true,
   errorCellIds,
   errorMessages,
@@ -695,7 +698,13 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
             컨트롤은 hideColumnLabels 여부와 무관하게 렌더한다 — 헤더 라벨을 숨긴
             테이블도 넓으면 가로 스크롤 수단이 필요한데, 과거엔 이 컨트롤이 헤더
             블록 안에 갇혀 hideColumnLabels=true 시 함께 사라지는 버그가 있었다. */}
-        <div className="sticky top-0 z-30 -mx-4 bg-white md:mx-0 print:static print:z-auto">
+        <div
+          className={cn(
+            'sticky top-0 z-30 bg-white print:static print:z-auto',
+            // 모바일 원본 표 모드는 풀블리드 해크 없이 카드 패딩 안에 좌우 대칭으로 가둔다
+            mobileOriginalTable ? 'mx-0' : '-mx-4 md:mx-0',
+          )}
+        >
           {/* 가로 스크롤 컨트롤 (버튼 + 진행도) — sticky 영역이라 항상 조작 가능 */}
           <TableScrollControls
             scrollRef={tableContainerRef}
@@ -704,7 +713,10 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
           />
           {!hideColumnLabels && (
             <div className="relative">
-              <div ref={headerScrollRef} className={HEADER_SCROLL_CLASS}>
+              <div
+                ref={headerScrollRef}
+                className={cn(HEADER_SCROLL_CLASS, mobileOriginalTable && 'px-0')}
+              >
                 <div
                   role="rowgroup"
                   className="mx-auto rounded-t-md border-t border-r border-l border-gray-300 bg-gray-50 text-sm"
@@ -733,7 +745,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
         {/* 바디: 가로 스크롤 + 우측/좌측 페이드. relative 래퍼로 페이드를 우측에
             고정한다(스크롤 컨테이너 안에 두면 콘텐츠와 함께 밀려 힌트 효과가 사라진다).
             잘린 셀 텍스트가 있는 바디는 bg-white 이므로 from-white 로 페이드아웃시킨다. */}
-        <div className="relative -mx-4 md:mx-0">
+        <div className={cn('relative', mobileOriginalTable ? 'mx-0' : '-mx-4 md:mx-0')}>
           {/* iOS WebKit(아이패드/아이폰 크롬·사파리 공통 엔진)에서는
               -webkit-overflow-scrolling: touch + display:grid + position:sticky 좌측 고정 열
               조합이 별도 GPU 합성 레이어를 강제해, 초기 뷰포트 밖(오른쪽) 셀이 래스터되지
@@ -741,7 +753,11 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
               기본 동작이라 이 속성은 사실상 no-op이므로 제거한다. 재추가 금지. */}
           <div
             ref={tableContainerRef}
-            className="overflow-x-auto px-4 pb-4 md:px-0 print:overflow-visible"
+            className={cn(
+              // 모바일은 상단 스크롤 컨트롤이 스크롤 수단 — 네이티브 가로 스크롤바 숨김
+              'overflow-x-auto pb-4 max-md:[-ms-overflow-style:none] max-md:[scrollbar-width:none] max-md:[&::-webkit-scrollbar]:hidden print:overflow-visible',
+              mobileOriginalTable ? 'px-0' : 'px-4 md:px-0',
+            )}
           >
             {shouldVirtualize ? (
               /* 가상화: 바디만 렌더 */
@@ -836,7 +852,8 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
         )}
         <CardContent className={cn(isMobileView ? 'p-3 sm:p-4' : 'p-0 sm:px-6 sm:pb-6')}>
           <div className="w-full">
-            {isMobileView ? (
+            {/* 모바일 원본 표 옵션이 켜진 질문은 카드/스테퍼 전환 없이 원본 표(가로 스크롤) 유지 */}
+            {isMobileView && !mobileOriginalTable ? (
               useDrilldown ? (
                 <MobileTableDrilldown {...mobileTableProps} />
               ) : (

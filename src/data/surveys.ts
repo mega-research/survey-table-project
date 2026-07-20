@@ -123,6 +123,7 @@ export async function getSurveyWithDetails(surveyId: string): Promise<SurveyType
         ...(q.numberFormat != null ? { numberFormat: q.numberFormat as NonNullable<QuestionType['numberFormat']> } : {}),
         ...(q.sumConstraints != null ? { sumConstraints: q.sumConstraints as NonNullable<QuestionType['sumConstraints']> } : {}),
         ...(q.hideColumnLabels != null ? { hideColumnLabels: q.hideColumnLabels } : {}),
+        ...(q.mobileOriginalTable != null ? { mobileOriginalTable: q.mobileOriginalTable } : {}),
         ...(q.hideTitle != null ? { hideTitle: q.hideTitle } : {}),
         ...(q.pageBreakBefore != null ? { pageBreakBefore: q.pageBreakBefore } : {}),
         ...(q.displayCondition != null ? { displayCondition: q.displayCondition as NonNullable<QuestionType['displayCondition']> } : {}),

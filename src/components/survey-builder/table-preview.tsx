@@ -201,7 +201,10 @@ export const TablePreview = React.memo(function TablePreview({
               />
               {!hideColumnLabels && (
                 <div className="relative">
-                  <div ref={headerScrollRef} className={HEADER_SCROLL_CLASS}>
+                  {/* TablePreview 바디는 좌우 패딩이 없으므로 헤더도 px-0 으로 맞춘다
+                      (HEADER_SCROLL_CLASS 의 모바일 px-4 는 바디도 px-4 인
+                      interactive-table-response 전용 — 여기 남으면 헤더/바디가 16px 어긋난다) */}
+                  <div ref={headerScrollRef} className={cn(HEADER_SCROLL_CLASS, 'px-0')}>
                     <div
                       role="rowgroup"
                       className="mx-auto rounded-t-md border-t border-r border-l border-gray-300 bg-gray-50 text-sm"
@@ -237,7 +240,9 @@ export const TablePreview = React.memo(function TablePreview({
                   (interactive-table-response.tsx 와 동일 조치) */}
               <div
                 ref={tableContainerRef}
-                className="overflow-x-auto print:overflow-visible"
+                // 모바일은 상단 스크롤 컨트롤이 스크롤 수단이므로 네이티브 가로
+                // 스크롤바를 숨긴다 — 표 아래 회색 띠(이중 스크롤 표시) 제거
+                className="overflow-x-auto max-md:[-ms-overflow-style:none] max-md:[scrollbar-width:none] max-md:[&::-webkit-scrollbar]:hidden print:overflow-visible"
               >
                 <div
                   role="rowgroup"

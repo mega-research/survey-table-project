@@ -258,6 +258,7 @@ export async function saveSurveyDiff(
           dynamicRowConfigs:
             question.dynamicRowConfigs as NewQuestion['dynamicRowConfigs'],
           hideColumnLabels: question.hideColumnLabels,
+          mobileOriginalTable: question.mobileOriginalTable,
           hideTitle: question.hideTitle,
           displayCondition: question.displayCondition as NewQuestion['displayCondition'],
           questionCode: question.questionCode,
@@ -306,6 +307,7 @@ export async function saveSurveyDiff(
               sumConstraints: sql`excluded.sum_constraints`,
               dynamicRowConfigs: sql`excluded.dynamic_row_config`,
               hideColumnLabels: sql`excluded.hide_column_labels`,
+              mobileOriginalTable: sql`excluded.mobile_original_table`,
               hideTitle: sql`excluded.hide_title`,
               displayCondition: sql`excluded.display_condition`,
               questionCode: sql`excluded.question_code`,
@@ -598,6 +600,7 @@ export async function saveSurveyWithDetails(
           dynamicRowConfigs:
             question.dynamicRowConfigs as NewQuestion['dynamicRowConfigs'],
           hideColumnLabels: question.hideColumnLabels,
+          mobileOriginalTable: question.mobileOriginalTable,
           hideTitle: question.hideTitle,
           displayCondition: question.displayCondition as NewQuestion['displayCondition'],
           questionCode: question.questionCode,
@@ -646,6 +649,7 @@ export async function saveSurveyWithDetails(
               sumConstraints: sql`excluded.sum_constraints`,
               dynamicRowConfigs: sql`excluded.dynamic_row_config`,
               hideColumnLabels: sql`excluded.hide_column_labels`,
+              mobileOriginalTable: sql`excluded.mobile_original_table`,
               hideTitle: sql`excluded.hide_title`,
               displayCondition: sql`excluded.display_condition`,
               questionCode: sql`excluded.question_code`,

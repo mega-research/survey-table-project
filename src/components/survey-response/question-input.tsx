@@ -177,6 +177,9 @@ export function QuestionInput({
           allQuestions={allQuestions}
           {...(question.dynamicRowConfigs !== undefined ? { dynamicRowConfigs: question.dynamicRowConfigs } : {})}
           {...(question.hideColumnLabels !== undefined ? { hideColumnLabels: question.hideColumnLabels } : {})}
+          {...(question.mobileOriginalTable !== undefined
+            ? { mobileOriginalTable: question.mobileOriginalTable }
+            : {})}
           errorCellIds={
             numericIssues && numericIssues.length > 0
               ? new Set(numericIssues.flatMap((i) => i.cellIds ?? []))

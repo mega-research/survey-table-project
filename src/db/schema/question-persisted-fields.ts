@@ -43,6 +43,7 @@ export const PERSISTED_QUESTION_FIELDS = [
   'sumConstraints',
   'dynamicRowConfigs',
   'hideColumnLabels',
+  'mobileOriginalTable',
   'hideTitle',
   'pageBreakBefore',
   'rankingConfig',

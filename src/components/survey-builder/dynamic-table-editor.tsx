@@ -58,6 +58,9 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
   const hideColumnLabels = useSurveyBuilderStore(
     (s) => s.currentSurvey.questions.find((q) => q.id === editingQuestionId)?.hideColumnLabels ?? false,
   );
+  const mobileOriginalTable = useSurveyBuilderStore(
+    (s) => s.currentSurvey.questions.find((q) => q.id === editingQuestionId)?.mobileOriginalTable ?? false,
+  );
   const silentUpdateQuestion = useSurveyBuilderStore((s) => s.silentUpdateQuestion);
   const { state, actions } = useTableEditor(props);
 
@@ -421,6 +424,31 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
               onChange={(e) => {
                 if (editingQuestionId) {
                   silentUpdateQuestion(editingQuestionId, { hideColumnLabels: e.target.checked });
+                }
+              }}
+              className="peer sr-only"
+            />
+            <div className="peer h-5 w-9 rounded-full bg-gray-200 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-blue-600 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:outline-none" />
+          </label>
+        </div>
+      </div>
+
+      {/* 모바일 원본 표 보기 설정 */}
+      <div className="space-y-3 rounded-lg border border-gray-200 p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <Label className="text-sm font-medium">모바일에서 원본 표로 보기</Label>
+            <p className="text-xs text-gray-500">
+              모바일에서도 카드로 바꾸지 않고 이 표를 원본 그대로 가로 스크롤로 보여줍니다. 5점·10점 척도처럼 원본 배치가 중요한 표에 사용합니다.
+            </p>
+          </div>
+          <label className="relative inline-flex cursor-pointer items-center">
+            <input
+              type="checkbox"
+              checked={mobileOriginalTable}
+              onChange={(e) => {
+                if (editingQuestionId) {
+                  silentUpdateQuestion(editingQuestionId, { mobileOriginalTable: e.target.checked });
                 }
               }}
               className="peer sr-only"

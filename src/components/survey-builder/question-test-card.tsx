@@ -505,6 +505,7 @@ function QuestionTestInput({
           className="border-0 shadow-none"
           dynamicRowConfigs={question.dynamicRowConfigs}
           hideColumnLabels={question.hideColumnLabels}
+          mobileOriginalTable={question.mobileOriginalTable}
         />
       ) : (
         <div className="py-4 text-center text-gray-500">테이블이 구성되지 않았습니다.</div>

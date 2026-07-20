@@ -260,6 +260,7 @@ export interface QuestionData {
   placeholder?: string;
   tableValidationRules?: TableValidationRule[];
   hideColumnLabels?: boolean;
+  mobileOriginalTable?: boolean;
   hideTitle?: boolean;
   pageBreakBefore?: boolean;
   displayCondition?: QuestionConditionGroup;

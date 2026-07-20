@@ -214,7 +214,8 @@ export function ChoiceTableResponse({ question, value, onChange }: ChoiceTableRe
     </div>
   ) : null;
 
-  if (isMobile) {
+  // 모바일 원본 표 옵션이 켜진 질문은 카드 전환 없이 원본 표(가로 스크롤) 유지
+  if (isMobile && !question.mobileOriginalTable) {
     return (
       <div className="space-y-2">
         {(question.tableRowsData ?? []).flatMap((row) =>

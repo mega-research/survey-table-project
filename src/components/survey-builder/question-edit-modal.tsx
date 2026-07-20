@@ -276,6 +276,10 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
       ...(storeQuestion?.hideColumnLabels !== undefined
         ? { hideColumnLabels: storeQuestion.hideColumnLabels }
         : {}),
+      // mobileOriginalTable 도 표 에디터 토글(silentUpdateQuestion)로 store 에만 쓰인다
+      ...(storeQuestion?.mobileOriginalTable !== undefined
+        ? { mobileOriginalTable: storeQuestion.mobileOriginalTable }
+        : {}),
       ...(storeQuestion?.choiceGroups !== undefined
         ? { choiceGroups: storeQuestion.choiceGroups }
         : {}),
@@ -382,6 +386,7 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
               // formData 가 소유하지 않는다. currentFormData 머지값을 CREATE 에 전달해
               // 신규 질문에서 ON 토글이 default(false)로 silent drop 되는 회귀를 막는다.
               hideColumnLabels: currentFormData.hideColumnLabels ?? question?.hideColumnLabels,
+              mobileOriginalTable: currentFormData.mobileOriginalTable ?? question?.mobileOriginalTable,
               questionCode: currentFormData.questionCode || question?.questionCode,
               isCustomSpssVarName: currentFormData.isCustomSpssVarName ?? question?.isCustomSpssVarName,
               exportLabel: currentFormData.exportLabel || question?.exportLabel,

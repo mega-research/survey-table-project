@@ -183,6 +183,10 @@ export const questions = pgTable('questions', {
   // 열 라벨 숨기기 (테이블 타입 전용)
   hideColumnLabels: boolean('hide_column_labels').default(false),
 
+  // 모바일에서도 원본 표 레이아웃(가로 스크롤)으로 표시 — 카드/스테퍼 전환 안 함
+  // (테이블 타입 + 설명 테이블 소스 radio/checkbox 전용)
+  mobileOriginalTable: boolean('mobile_original_table').default(false),
+
   // 응답 페이지에서 질문 제목 숨기기 (기본 false = 표시)
   hideTitle: boolean('hide_title').default(false),
 
