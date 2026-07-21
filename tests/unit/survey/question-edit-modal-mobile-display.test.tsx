@@ -3,9 +3,16 @@ import { useState } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { deleteImagesFromR2Mock, extractImageUrlsFromQuestionMock } = vi.hoisted(() => ({
+const {
+  deleteImagesFromR2Mock,
+  ensureSurveyMock,
+  extractImageUrlsFromQuestionMock,
+  updateQuestionMock,
+} = vi.hoisted(() => ({
   deleteImagesFromR2Mock: vi.fn(),
+  ensureSurveyMock: vi.fn(),
   extractImageUrlsFromQuestionMock: vi.fn(),
+  updateQuestionMock: vi.fn(),
 }));
 
 vi.mock('@/components/survey-builder/question-basic-tab', () => ({
@@ -18,9 +25,15 @@ vi.mock('@/components/survey-builder/table-validation-editor', () => ({
   TableValidationEditor: () => null,
 }));
 vi.mock('@/hooks/use-ensure-survey-in-db', () => ({
-  useEnsureSurveyInDb: () => async () => {},
+  useEnsureSurveyInDb: () => ensureSurveyMock,
 }));
-vi.mock('@/shared/lib/rpc', () => ({ client: {} }));
+vi.mock('@/shared/lib/rpc', () => ({
+  client: {
+    surveyBuilder: {
+      questions: { update: updateQuestionMock },
+    },
+  },
+}));
 vi.mock('@/lib/image-extractor', () => ({
   extractImageUrlsFromQuestion: extractImageUrlsFromQuestionMock,
 }));
@@ -59,6 +72,14 @@ function getQuestion() {
   return useSurveyBuilderStore.getState().currentSurvey.questions.find((question) => question.id === 'q1');
 }
 
+function createDeferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
 function ModalHarness() {
   const [isOpen, setIsOpen] = useState(true);
 
@@ -76,11 +97,14 @@ describe('QuestionEditModal 모바일 표시 설정 롤백', () => {
     seedSurvey();
     extractImageUrlsFromQuestionMock.mockReturnValue([]);
     deleteImagesFromR2Mock.mockResolvedValue(undefined);
+    ensureSurveyMock.mockResolvedValue(undefined);
+    updateQuestionMock.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+    vi.clearAllMocks();
   });
 
   it('편집기에서 변경한 값을 취소하면 undefined를 포함한 원래값을 정확히 복원한다', () => {
@@ -139,5 +163,59 @@ describe('QuestionEditModal 모바일 표시 설정 롤백', () => {
     expect(restoredQuestion?.mobileDrilldownOmitLeadingColumns).toBeUndefined();
     expect(Object.hasOwn(restoredQuestion ?? {}, 'mobileDrilldownOmitLeadingColumns')).toBe(false);
     expect(consoleError).toHaveBeenCalledWith('저장 중 오류가 발생했습니다:', expect.any(Error));
+  });
+
+  it('저장 중 Escape를 무시하고 성공한 저장값을 유지한 채 닫는다', async () => {
+    const deferred = createDeferred();
+    ensureSurveyMock.mockReturnValue(deferred.promise);
+    render(<ModalHarness />);
+
+    act(() => {
+      useSurveyBuilderStore.getState().silentUpdateQuestion('q1', {
+        mobileTableDisplayMode: 'drilldown-original-row',
+        mobileDrilldownOmitLeadingColumns: 2,
+      });
+    });
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+
+    await waitFor(() => {
+      expect(ensureSurveyMock).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole('button', { name: '취소' })).toBeDisabled();
+    });
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    expect(screen.getByRole('button', { name: '취소' })).toBeDisabled();
+    expect(getQuestion()?.mobileTableDisplayMode).toBe('drilldown-original-row');
+    expect(getQuestion()?.mobileDrilldownOmitLeadingColumns).toBe(2);
+
+    act(() => deferred.resolve());
+
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: '취소' })).toBeNull();
+    });
+    expect(getQuestion()?.mobileTableDisplayMode).toBe('drilldown-original-row');
+    expect(getQuestion()?.mobileDrilldownOmitLeadingColumns).toBe(2);
+  });
+
+  it('저장 중 Ctrl+S를 무시해 중복 저장을 시작하지 않는다', async () => {
+    const deferred = createDeferred();
+    ensureSurveyMock.mockReturnValue(deferred.promise);
+    render(<ModalHarness />);
+
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+    await waitFor(() => {
+      expect(ensureSurveyMock).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole('button', { name: '저장' })).toBeDisabled();
+    });
+
+    fireEvent.keyDown(document, { key: 's', ctrlKey: true });
+
+    expect(ensureSurveyMock).toHaveBeenCalledTimes(1);
+
+    act(() => deferred.resolve());
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: '취소' })).toBeNull();
+    });
   });
 });

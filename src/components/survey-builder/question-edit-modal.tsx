@@ -468,14 +468,19 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
   // 키보드 이벤트 핸들러
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
+      const isSaveShortcut = e.key === 's' && (e.ctrlKey || e.metaKey);
+      if (isSaving && (e.key === 'Escape' || isSaveShortcut)) {
+        e.preventDefault();
+        return;
+      }
       if (e.key === 'Escape') {
         onClose();
-      } else if (e.key === 's' && (e.ctrlKey || e.metaKey)) {
+      } else if (isSaveShortcut) {
         e.preventDefault();
         handleSave();
       }
     },
-    [onClose, handleSave],
+    [isSaving, onClose, handleSave],
   );
 
   useEffect(() => {
