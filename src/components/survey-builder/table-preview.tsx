@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 
 import { FileText } from 'lucide-react';
 
@@ -51,6 +51,9 @@ interface TablePreviewProps {
     | 'checkbox'
     | ((cell: TableCell) => 'radio' | 'checkbox')
     | undefined;
+  scrollLeftRef?: React.MutableRefObject<number> | undefined;
+  resetScrollKey?: string | number | undefined;
+  errorCellIds?: Set<string> | undefined;
 }
 
 export const TablePreview = React.memo(function TablePreview({
@@ -62,6 +65,9 @@ export const TablePreview = React.memo(function TablePreview({
   hideColumnLabels = false,
   renderCell,
   choiceControlType = 'checkbox',
+  scrollLeftRef,
+  resetScrollKey,
+  errorCellIds,
 }: TablePreviewProps) {
   const totalWidth = useMemo(() => calcTotalWidth(columns), [columns]);
   const gridTemplateCols = useMemo(() => buildGridTemplateCols(columns), [columns]);
@@ -69,6 +75,21 @@ export const TablePreview = React.memo(function TablePreview({
   // 가로 스크롤: 헤더/바디 별도 컨테이너 + 썸-버튼 컨트롤 + 좌우 그라디언트 힌트 + sticky 좌측 열
   const tableContainerRef = useRef<HTMLDivElement>(null);
   const headerScrollRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const element = tableContainerRef.current;
+    if (!element || !scrollLeftRef) return;
+    element.scrollLeft = Math.min(
+      scrollLeftRef.current,
+      Math.max(0, element.scrollWidth - element.clientWidth),
+    );
+  }, [columns, rows, scrollLeftRef]);
+
+  useEffect(() => {
+    if (resetScrollKey === undefined || !scrollLeftRef) return;
+    scrollLeftRef.current = 0;
+    if (tableContainerRef.current) tableContainerRef.current.scrollLeft = 0;
+  }, [resetScrollKey, scrollLeftRef]);
 
   const { canScrollLeft, canScrollRight } = useHorizontalScrollIndicators(tableContainerRef, {
     deps: [columns.length, rows.length],
@@ -240,6 +261,10 @@ export const TablePreview = React.memo(function TablePreview({
                   (interactive-table-response.tsx 와 동일 조치) */}
               <div
                 ref={tableContainerRef}
+                data-testid="table-preview-scroll"
+                onScroll={(event) => {
+                  if (scrollLeftRef) scrollLeftRef.current = event.currentTarget.scrollLeft;
+                }}
                 // 모바일은 상단 스크롤 컨트롤이 스크롤 수단이므로 네이티브 가로
                 // 스크롤바를 숨긴다 — 표 아래 회색 띠(이중 스크롤 표시) 제거
                 className="overflow-x-auto max-md:[-ms-overflow-style:none] max-md:[scrollbar-width:none] max-md:[&::-webkit-scrollbar]:hidden print:overflow-visible"
@@ -254,7 +279,7 @@ export const TablePreview = React.memo(function TablePreview({
                 >
                   {rows.map((row) =>
                     row.cells.map((cell, cellIndex) => {
-                      if (cell.isHidden) return null;
+                      if (cell.isHidden || cell._isContinuation) return null;
                       const col = cellIndex + 1;
                       const cs = cell.colspan || 1;
                       const rs = cell.rowspan || 1;
@@ -280,9 +305,12 @@ export const TablePreview = React.memo(function TablePreview({
                           className={cn(
                             'min-w-0 border-r border-b border-gray-300 bg-white p-3',
                             getAlignmentClasses(cell.horizontalAlign, cell.verticalAlign),
+                            errorCellIds?.has(cell.id) && 'ring-2 ring-inset ring-red-300',
                           )}
                           style={style}
                           data-row-id={row.id}
+                          data-testid={`cell-${cell.id}`}
+                          data-cell-id={cell.id}
                           {...getGridCellAria('gridcell', cs, rs)}
                         >
                           {(() => {
