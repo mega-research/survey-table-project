@@ -8,6 +8,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { contactTargets } from '@/db/schema/contacts';
 import { mailCampaigns, mailRecipients } from '@/db/schema/mail';
+import { buildInviteUrl } from '@/lib/survey-url';
 import { finalizeCampaignIfDone } from '@/lib/mail/recipient-status-transition';
 import { renderForCampaignSend } from '@/lib/mail/render-for-send';
 import {
@@ -81,7 +82,7 @@ export async function dispatchCampaignChunk(
     .select({
       recipientId: mailRecipients.id,
       emailSnapshot: mailRecipients.emailSnapshot,
-      inviteToken: contactTargets.inviteToken,
+      inviteCode: contactTargets.inviteCode,
       unsubscribeToken: contactTargets.unsubscribeToken,
       attrs: contactTargets.attrs,
       unsubscribedAt: contactTargets.unsubscribedAt,
@@ -143,7 +144,7 @@ export async function dispatchCampaignChunk(
 
   const bulkInputs: BulkRecipientInput[] = await Promise.all(
     activeRows.map(async (row) => {
-      const inviteUrl = `${baseUrl}/survey/${campaign.surveyId}?invite=${row.inviteToken}`;
+      const inviteUrl = buildInviteUrl(row.inviteCode, baseUrl);
       const unsubscribeUrl = `${baseUrl}/unsubscribe/${row.unsubscribeToken}`;
 
       const rendered = renderForCampaignSend({
