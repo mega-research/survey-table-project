@@ -63,6 +63,12 @@ const EMBEDDED_TABLE_KEYS = [
 
 const OPTION_LIST_KEYS = ['options', 'optionsColumns', 'optionsAlign', 'allowOtherOption'];
 
+const MOBILE_TABLE_DISPLAY_KEYS = [
+  'mobileOriginalTable',
+  'mobileTableDisplayMode',
+  'mobileDrilldownOmitLeadingColumns',
+];
+
 function shapeKeys(schema: { shape: Record<string, unknown> }): string[] {
   return Object.keys(schema.shape).sort();
 }
@@ -82,9 +88,15 @@ describe('유형별 필드 매트릭스 (실측 박제)', () => {
     expect(shapeKeys(TextareaQuestionSchema)).toEqual(sorted(BASE_KEYS));
   });
 
-  it('radio: base + 옵션 리스트 + 내장 테이블 + choiceGroups', () => {
+  it('radio: base + 옵션 리스트 + 내장 테이블 + 모바일 표시 + choiceGroups', () => {
     expect(shapeKeys(RadioQuestionSchema)).toEqual(
-      sorted([...BASE_KEYS, ...OPTION_LIST_KEYS, ...EMBEDDED_TABLE_KEYS, 'choiceGroups']),
+      sorted([
+        ...BASE_KEYS,
+        ...OPTION_LIST_KEYS,
+        ...EMBEDDED_TABLE_KEYS,
+        ...MOBILE_TABLE_DISPLAY_KEYS,
+        'choiceGroups',
+      ]),
     );
   });
 
@@ -94,6 +106,7 @@ describe('유형별 필드 매트릭스 (실측 박제)', () => {
         ...BASE_KEYS,
         ...OPTION_LIST_KEYS,
         ...EMBEDDED_TABLE_KEYS,
+        ...MOBILE_TABLE_DISPLAY_KEYS,
         'choiceGroups',
         'minSelections',
         'maxSelections',
@@ -123,9 +136,15 @@ describe('유형별 필드 매트릭스 (실측 박제)', () => {
     );
   });
 
-  it('table: 내장 테이블 + 검증 규칙/동적 행 — choiceGroups·options 없음', () => {
+  it('table: 내장 테이블 + 모바일 표시 + 검증 규칙/동적 행 — choiceGroups·options 없음', () => {
     expect(shapeKeys(TableQuestionSchema)).toEqual(
-      sorted([...BASE_KEYS, ...EMBEDDED_TABLE_KEYS, 'tableValidationRules', 'dynamicRowConfigs']),
+      sorted([
+        ...BASE_KEYS,
+        ...EMBEDDED_TABLE_KEYS,
+        ...MOBILE_TABLE_DISPLAY_KEYS,
+        'tableValidationRules',
+        'dynamicRowConfigs',
+      ]),
     );
   });
 

@@ -262,6 +262,24 @@ describe('normalizeQuestion - strict 모드 (strip 활성화 목적지)', () => 
     expect(parsed['dynamicRowConfigs']).toEqual([]);
   });
 
+  it('과거 table snapshot의 mobileOriginalTable 키를 strict 모드에서도 보존한다', () => {
+    const parsed = normalizeQuestion(
+      { ...GEN_NEW_TABLE, mobileOriginalTable: true },
+      'strict',
+    ) as unknown as Record<string, unknown>;
+    expect(parsed['mobileOriginalTable']).toBe(true);
+    expect(parsed['mobileTableDisplayMode']).toBeUndefined();
+  });
+
+  it('유효하지 않은 snapshot enum은 strict 모드에서 legacy fallback 가능한 형태로 수렴한다', () => {
+    const parsed = normalizeQuestion(
+      { ...GEN_NEW_TABLE, mobileTableDisplayMode: 'broken', mobileOriginalTable: true },
+      'strict',
+    ) as unknown as Record<string, unknown>;
+    expect(parsed['mobileTableDisplayMode']).toBeUndefined();
+    expect(parsed['mobileOriginalTable']).toBe(true);
+  });
+
   it('notice 픽스처에서 테이블/옵션 오염을 소거하고 공지 필드를 보존한다', () => {
     const parsed = normalizeQuestion(GEN_NOTICE, 'strict') as unknown as Record<string, unknown>;
     expect(parsed).not.toHaveProperty('tableColumns');
