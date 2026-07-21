@@ -1,7 +1,8 @@
 # 모바일 드릴다운 + 선택 행 원본 렌더링 — 설계
 
 > 작성일: 2026-07-21
-> 상태: 설계 확정, 구현 계획 대기
+> 상태: 설계 확정, 구현 계획 작성됨
+> 구현 계획: [2026-07-21-mobile-drilldown-original-row.md](../plans/2026-07-21-mobile-drilldown-original-row.md)
 
 ## 배경 / 문제
 
@@ -333,7 +334,7 @@ radio 재선택 및 `allowTextInput` 후속 입력을 모두 안전하게 보존
 6. **동일 행 radio 그룹**: 공통 name + sibling clear로 단일 선택을 유지한다.
 7. **구조적 숨김·병합**: `isHidden`/`_isContinuation`은 렌더하지 않고, 투영 후 재계산된 rowspan/colspan과 `isHeaderHidden`을 유지한다.
 8. **헤더 숨김**: 질문의 `hideColumnLabels=true`면 상세 원본 행에서도 열 헤더 전체를 숨긴다.
-9. **정적 셀 mobile hidden**: text/image/video의 `mobileDisplay='hidden'`은 콘텐츠를 숨긴다.
+9. **정적 셀 mobile hidden**: text/image/video의 `mobileDisplay='hidden'`은 콘텐츠를 숨기며 카드·breadcrumb 제목 후보에서도 제외한다. 숨긴 text와 같은 값인 `row.label` 폴백으로 다시 노출하지 않는다.
 10. **입력 셀 mobile hidden**: radio/checkbox/input/select/ranking/`choice_opt`의 `mobileDisplay='hidden'`은 라벨만 숨기고 응답 컨트롤은 유지한다.
 11. **Case A 카드 탭**: 탐색 전용이다. 실제 선택은 상세 행의 입력에서만 발생한다.
 12. **Case A 한 행에 여러 선택 셀**: 목차 카드는 한 개이며 상세 원본 행 안에 모두 표시한다.
