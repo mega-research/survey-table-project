@@ -12,7 +12,6 @@ import { getMailPreviewSample } from './mail-preview.service';
 
 const sampleData: FirstContactSample = {
   attrs: { name: '홍길동' },
-  inviteToken: 'tok-123',
   inviteCode: 'abc123',
   email: 'h@example.com',
   resid: 1,
