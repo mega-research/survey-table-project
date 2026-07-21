@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { renderMailPreview, type PreviewResult, type PreviewSample } from './render-preview';
+import { buildInviteUrl } from '@/lib/survey-url';
 
 interface Input {
   surveyId: string;
@@ -19,7 +20,7 @@ interface Input {
  */
 export function renderForTestSend(input: Input): PreviewResult {
   const baseUrl = (process.env['NEXT_PUBLIC_APP_URL'] ?? '').replace(/\/+$/, '');
-  const sandboxInvite = `${baseUrl}/survey/${input.surveyId}?invite=__test__`;
+  const sandboxInvite = buildInviteUrl('__test__', baseUrl);
 
   const sandboxSample: PreviewSample = input.sample
     ? { attrs: input.sample.attrs, email: input.sample.email, inviteUrl: sandboxInvite }

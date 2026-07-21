@@ -9,6 +9,7 @@ import { decryptPii } from '@/lib/crypto/aes';
 export interface FirstContactSample {
   attrs: Record<string, string>;
   inviteToken: string;
+  inviteCode: string;
   /** 첫 email PII 의 복호화 평문 — 미리보기 표시용. 없으면 null. */
   email: string | null;
   resid: number;
@@ -30,6 +31,7 @@ export async function getFirstContactSample(
       id: contactTargets.id,
       attrs: contactTargets.attrs,
       inviteToken: contactTargets.inviteToken,
+      inviteCode: contactTargets.inviteCode,
       resid: contactTargets.resid,
     })
     .from(contactTargets)
@@ -62,6 +64,7 @@ export async function getFirstContactSample(
   return {
     attrs: row.attrs as Record<string, string>,
     inviteToken: row.inviteToken,
+    inviteCode: row.inviteCode,
     email,
     resid: row.resid,
   };

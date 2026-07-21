@@ -13,6 +13,7 @@ import { getMailPreviewSample } from './mail-preview.service';
 const sampleData: FirstContactSample = {
   attrs: { name: '홍길동' },
   inviteToken: 'tok-123',
+  inviteCode: 'abc123',
   email: 'h@example.com',
   resid: 1,
 };
@@ -34,7 +35,7 @@ describe('getMailPreviewSample', () => {
     const res = await getMailPreviewSample({ surveyId: 'sv-1' });
     expect(res).toEqual({
       attrs: sampleData.attrs,
-      inviteUrl: 'https://survey.example.com/survey/sv-1?invite=tok-123',
+      inviteUrl: 'https://survey.example.com/i/abc123',
       email: 'h@example.com',
       resid: 1,
     });

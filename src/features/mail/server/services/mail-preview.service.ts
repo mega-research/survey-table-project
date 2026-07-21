@@ -8,6 +8,7 @@ import { UNSUBSCRIBE_SANDBOX_TOKEN } from '@/lib/mail/constants';
 import { renderForTestSend } from '@/lib/mail/render-for-send';
 import { sendTestMail } from '@/lib/mail/send';
 import { MailWrapper } from '@/lib/mail/template-wrapper';
+import { buildInviteUrl } from '@/lib/survey-url';
 import { getFirstContactSample } from '@/lib/operations/contact-sample.server';
 
 import type {
@@ -35,7 +36,7 @@ export async function getMailPreviewSample(
   if (!baseUrl) {
     throw new Error('NEXT_PUBLIC_APP_URL 환경변수가 설정되지 않았습니다.');
   }
-  const inviteUrl = `${baseUrl}/survey/${input.surveyId}?invite=${sample.inviteToken}`;
+  const inviteUrl = buildInviteUrl(sample.inviteCode, baseUrl);
 
   return {
     attrs: sample.attrs,
