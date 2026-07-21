@@ -56,9 +56,10 @@ export function MobileDrilldownShell({
   }, [nav.sec, nav.leaf]);
 
   const requiresLeafList = (section: ClassifiedSection) =>
-    leafNavigation === 'always'
+    section.leaves.length === 0 ||
+    (leafNavigation === 'always'
       ? section.leaves.length > 1
-      : section.kind === 'matrix' && section.leaves.length > 1;
+      : section.kind === 'matrix' && section.leaves.length > 1);
 
   const enterSection = (sectionIndex: number) => {
     const section = sections[sectionIndex];
