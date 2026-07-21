@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { OperationsPageHeader } from '@/components/operations/operations-page-header';
 import { OperationsTabStrip } from '@/components/operations/operations-tab-strip';
 import { getSurveyById } from '@/features/survey-builder/server/services/survey-read.service';
+import { getSurveyAccessIdentifier } from '@/lib/survey-url';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -26,6 +27,7 @@ export default async function OperationsLayout({ children, params }: LayoutProps
     pausedMessage: survey.pausedMessage,
     testModeEnabled: survey.testModeEnabled,
     testToken: survey.testToken,
+    accessIdentifier: getSurveyAccessIdentifier(survey),
   };
 
   return (

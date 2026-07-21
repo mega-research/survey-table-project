@@ -39,6 +39,7 @@ interface Props {
     pausedMessage: string | null;
     testModeEnabled: boolean;
     testToken: string | null;
+    accessIdentifier: string;
   };
 }
 
@@ -96,7 +97,11 @@ export function SurveyControlButtons({ surveyId, initial }: Props) {
     <>
       <TestModeControl
         surveyId={surveyId}
-        initial={{ testModeEnabled: initial.testModeEnabled, testToken: initial.testToken }}
+        initial={{
+          testModeEnabled: initial.testModeEnabled,
+          testToken: initial.testToken,
+          accessIdentifier: initial.accessIdentifier,
+        }}
       />
 
       {state.isPaused ? (

@@ -15,6 +15,7 @@ interface Props {
     pausedMessage: string | null;
     testModeEnabled: boolean;
     testToken: string | null;
+    accessIdentifier: string;
   };
 }
 

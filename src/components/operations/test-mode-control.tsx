@@ -29,6 +29,7 @@ import { client } from '@/shared/lib/rpc';
 interface TestModeState {
   testModeEnabled: boolean;
   testToken: string | null;
+  accessIdentifier: string;
 }
 
 interface Props {
@@ -62,12 +63,16 @@ export function TestModeControl({ surveyId, initial }: Props) {
       .get({ surveyId })
       .then((row) => {
         if (cancelled) return;
-        setState({ testModeEnabled: row.testModeEnabled, testToken: row.testToken });
+        setState({
+          testModeEnabled: row.testModeEnabled,
+          testToken: row.testToken,
+          accessIdentifier: row.accessIdentifier,
+        });
       })
       .catch(() => {
         // 조회 실패 시 버튼은 OFF 모양으로 폴백 — 클릭 시 토글 시도에서 에러 안내
         if (cancelled) return;
-        setState({ testModeEnabled: false, testToken: null });
+        setState({ testModeEnabled: false, testToken: null, accessIdentifier: surveyId });
       });
     return () => {
       cancelled = true;
@@ -104,22 +109,27 @@ export function TestModeControl({ surveyId, initial }: Props) {
     [],
   );
 
-  const buildTestLink = (token: string) =>
-    `${window.location.origin}/survey/${surveyId}?test=${token}`;
+  const buildTestLink = (token: string, identifier: string) =>
+    `${window.location.origin}/survey/${identifier}?test=${token}`;
 
   const testLink =
-    typeof window !== 'undefined' && state?.testToken ? buildTestLink(state.testToken) : null;
+    typeof window !== 'undefined' && state?.testToken
+      ? buildTestLink(state.testToken, state.accessIdentifier ?? surveyId)
+      : null;
 
   const enableTestMode = () =>
     startTransition(async () => {
       try {
         const result = await client.operations.control.setTestMode({ surveyId, enabled: true });
-        setState((s) => ({ ...(s ?? { testModeEnabled: false, testToken: null }), ...result }));
+        setState((s) => ({
+          ...(s ?? { testModeEnabled: false, testToken: null, accessIdentifier: surveyId }),
+          ...result,
+        }));
         // 발견성: 켜는 즉시 링크를 클립보드에 복사해준다. 클립보드 권한 실패(비HTTPS 등) 시
         // 호버 메뉴 안내로 폴백 — 켜짐 자체는 성공이므로 success 토스트 유지.
         if (result.testToken) {
           try {
-            await navigator.clipboard.writeText(buildTestLink(result.testToken));
+            await navigator.clipboard.writeText(buildTestLink(result.testToken, result.accessIdentifier));
             toast.success('테스트 모드가 켜졌습니다. 테스트 링크를 클립보드에 복사했습니다.');
           } catch {
             toast.success(
@@ -162,7 +172,10 @@ export function TestModeControl({ surveyId, initial }: Props) {
         toast.success(`테스트 응답 ${deletedCount}건을 삭제했습니다.`);
       }
       const result = await client.operations.control.setTestMode({ surveyId, enabled: false });
-      setState((s) => ({ ...(s ?? { testModeEnabled: false, testToken: null }), ...result }));
+      setState((s) => ({
+        ...(s ?? { testModeEnabled: false, testToken: null, accessIdentifier: surveyId }),
+        ...result,
+      }));
       setTestOffConfirm(null);
       router.refresh();
     } catch (err) {
