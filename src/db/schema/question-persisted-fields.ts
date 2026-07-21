@@ -44,6 +44,8 @@ export const PERSISTED_QUESTION_FIELDS = [
   'dynamicRowConfigs',
   'hideColumnLabels',
   'mobileOriginalTable',
+  'mobileTableDisplayMode',
+  'mobileDrilldownOmitLeadingColumns',
   'hideTitle',
   'pageBreakBefore',
   'rankingConfig',

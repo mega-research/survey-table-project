@@ -66,6 +66,8 @@ export async function createQuestion(data: CreateQuestionInput): Promise<Questio
     dynamicRowConfigs: data.dynamicRowConfigs as NewQuestion['dynamicRowConfigs'],
     hideColumnLabels: data.hideColumnLabels,
     mobileOriginalTable: data.mobileOriginalTable,
+    mobileTableDisplayMode: data.mobileTableDisplayMode,
+    mobileDrilldownOmitLeadingColumns: data.mobileDrilldownOmitLeadingColumns,
     hideTitle: data.hideTitle,
     pageBreakBefore: data.pageBreakBefore,
     rankingConfig: data.rankingConfig as NewQuestion['rankingConfig'],

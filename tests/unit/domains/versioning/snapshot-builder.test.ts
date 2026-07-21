@@ -209,6 +209,26 @@ describe('buildSurveySnapshot', () => {
     expect(firstOption.value).toBe('male');
   });
 
+  it('모바일 표시 모드와 상세 제외 선행 열 수를 스냅샷에 보존한다', () => {
+    const survey: Survey = {
+      ...mockSurvey,
+      questions: [{
+        id: 'q-table',
+        type: 'table',
+        title: '척도',
+        required: false,
+        order: 0,
+        tableColumns: [{ id: 'c0', label: '항목' }, { id: 'c1', label: '점수' }],
+        tableRowsData: [],
+        mobileTableDisplayMode: 'drilldown-original-row',
+        mobileDrilldownOmitLeadingColumns: 1,
+      }],
+    };
+    const question = buildSurveySnapshot(survey).questions[0];
+    expect(question?.mobileTableDisplayMode).toBe('drilldown-original-row');
+    expect(question?.mobileDrilldownOmitLeadingColumns).toBe(1);
+  });
+
   it('질문/그룹이 빈 배열이어도 정상 동작', () => {
     const emptySurvey: Survey = {
       ...mockSurvey,

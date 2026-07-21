@@ -1,6 +1,7 @@
-import { relations } from 'drizzle-orm';
-import { boolean, doublePrecision, integer, jsonb, pgTable, smallint, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
+import { relations, sql } from 'drizzle-orm';
+import { boolean, check, doublePrecision, integer, jsonb, pgTable, smallint, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
 
+import { MOBILE_TABLE_DISPLAY_MODES } from '@/types/mobile-table-display';
 import type { ChoiceGroup, NumberFormat, SumConstraint, SurveyLookup } from '@/types/survey';
 
 import type {
@@ -186,6 +187,10 @@ export const questions = pgTable('questions', {
   // 모바일에서도 원본 표 레이아웃(가로 스크롤)으로 표시 — 카드/스테퍼 전환 안 함
   // (테이블 타입 + 설명 테이블 소스 radio/checkbox 전용)
   mobileOriginalTable: boolean('mobile_original_table').default(false),
+  mobileTableDisplayMode: text('mobile_table_display_mode', {
+    enum: MOBILE_TABLE_DISPLAY_MODES,
+  }).default('auto'),
+  mobileDrilldownOmitLeadingColumns: integer('mobile_drilldown_omit_leading_columns').default(1),
 
   // 응답 페이지에서 질문 제목 숨기기 (기본 false = 표시)
   hideTitle: boolean('hide_title').default(false),
@@ -202,7 +207,12 @@ export const questions = pgTable('questions', {
 
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-});
+}, (table) => [
+  check(
+    'questions_mobile_table_display_mode_check',
+    sql`${table.mobileTableDisplayMode} in ('auto', 'drilldown-original-row', 'original')`,
+  ),
+]);
 
 // 설문 응답 테이블
 export const surveyResponses = pgTable('survey_responses', {

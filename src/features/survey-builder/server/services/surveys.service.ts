@@ -269,6 +269,8 @@ export async function duplicateSurvey(
         dynamicRowConfigs: question.dynamicRowConfigs as NewQuestion['dynamicRowConfigs'],
         hideColumnLabels: question.hideColumnLabels,
         mobileOriginalTable: question.mobileOriginalTable,
+        mobileTableDisplayMode: question.mobileTableDisplayMode,
+        mobileDrilldownOmitLeadingColumns: question.mobileDrilldownOmitLeadingColumns,
         hideTitle: question.hideTitle,
         pageBreakBefore: question.pageBreakBefore,
         displayCondition: question.displayCondition as NewQuestion['displayCondition'],

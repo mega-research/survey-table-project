@@ -4,6 +4,7 @@
  * 설문 데이터를 불변 스냅샷 구조로 변환하는 순수 함수
  */
 
+import type { MobileTableDisplayMode } from '@/types/mobile-table-display';
 import type {
   Question,
   QuestionGroup,
@@ -63,6 +64,8 @@ interface SnapshotQuestion {
   dynamicRowConfigs?: Question['dynamicRowConfigs'] | undefined;
   hideColumnLabels?: boolean | undefined;
   mobileOriginalTable?: boolean | undefined;
+  mobileTableDisplayMode?: MobileTableDisplayMode | undefined;
+  mobileDrilldownOmitLeadingColumns?: number | undefined;
   hideTitle?: boolean | undefined;
   pageBreakBefore?: boolean | undefined;
   displayCondition?: Question['displayCondition'] | undefined;
@@ -133,6 +136,8 @@ export function buildSurveySnapshot(survey: Survey): SurveySnapshot {
       dynamicRowConfigs: q.dynamicRowConfigs,
       hideColumnLabels: q.hideColumnLabels,
       mobileOriginalTable: q.mobileOriginalTable,
+      mobileTableDisplayMode: q.mobileTableDisplayMode,
+      mobileDrilldownOmitLeadingColumns: q.mobileDrilldownOmitLeadingColumns,
       hideTitle: q.hideTitle,
       pageBreakBefore: q.pageBreakBefore,
       displayCondition: q.displayCondition,
