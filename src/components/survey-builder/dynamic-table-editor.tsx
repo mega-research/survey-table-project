@@ -13,6 +13,10 @@ import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { useSurveyUIStore } from '@/stores/ui-store';
 import { ChoiceGroup, DynamicRowGroupConfig, HeaderCell, QuestionConditionGroup, TableCell, TableColumn, TableRow } from '@/types/survey';
 import { pruneChoiceGroups } from '@/utils/choice-group-helpers';
+import {
+  clampMobileDrilldownOmitLeadingColumns,
+  resolveMobileTableDisplayMode,
+} from '@/utils/mobile-table-display-mode';
 
 import { BulkGeneratorModal, BulkColumnDef } from './bulk-generator';
 import { CellContentModal } from './cell-content-modal';
@@ -21,6 +25,7 @@ import { EditorTableRow } from './editor-table-row';
 import { HeaderGridEditor } from './header-grid-editor';
 import { useTableEditor } from './hooks/use-table-editor';
 import { LoadCellModal } from './load-cell-modal';
+import { MobileTableDisplaySettings } from './mobile-table-display-settings';
 import { SaveCellModal } from './save-cell-modal';
 import { TableHeaderSection } from './table-header-section';
 import { TableSummaryCard } from './table-summary-card';
@@ -58,8 +63,8 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
   const hideColumnLabels = useSurveyBuilderStore(
     (s) => s.currentSurvey.questions.find((q) => q.id === editingQuestionId)?.hideColumnLabels ?? false,
   );
-  const mobileOriginalTable = useSurveyBuilderStore(
-    (s) => s.currentSurvey.questions.find((q) => q.id === editingQuestionId)?.mobileOriginalTable ?? false,
+  const mobileTableQuestion = useSurveyBuilderStore(
+    (state) => state.currentSurvey.questions.find((q) => q.id === editingQuestionId),
   );
   const silentUpdateQuestion = useSurveyBuilderStore((s) => s.silentUpdateQuestion);
   const { state, actions } = useTableEditor(props);
@@ -88,6 +93,12 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
     questionCode,
     questionTitle,
   } = state;
+
+  const mobileTableDisplayMode = resolveMobileTableDisplayMode(mobileTableQuestion ?? {});
+  const mobileDrilldownOmitLeadingColumns = clampMobileDrilldownOmitLeadingColumns(
+    mobileTableQuestion?.mobileDrilldownOmitLeadingColumns,
+    currentColumns.length,
+  );
 
   const {
     updateTitle,
@@ -433,30 +444,23 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
         </div>
       </div>
 
-      {/* 모바일 원본 표 보기 설정 */}
-      <div className="space-y-3 rounded-lg border border-gray-200 p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <Label className="text-sm font-medium">모바일에서 원본 표로 보기</Label>
-            <p className="text-xs text-gray-500">
-              모바일에서도 카드로 바꾸지 않고 이 표를 원본 그대로 가로 스크롤로 보여줍니다. 5점·10점 척도처럼 원본 배치가 중요한 표에 사용합니다.
-            </p>
-          </div>
-          <label className="relative inline-flex cursor-pointer items-center">
-            <input
-              type="checkbox"
-              checked={mobileOriginalTable}
-              onChange={(e) => {
-                if (editingQuestionId) {
-                  silentUpdateQuestion(editingQuestionId, { mobileOriginalTable: e.target.checked });
-                }
+      {mobileTableQuestion
+        && (mobileTableQuestion.type === 'table'
+          || mobileTableQuestion.type === 'radio'
+          || mobileTableQuestion.type === 'checkbox') ? (
+            <MobileTableDisplaySettings
+              mode={mobileTableDisplayMode}
+              omitLeadingColumns={mobileDrilldownOmitLeadingColumns}
+              columnCount={currentColumns.length}
+              onChange={({ mode, omitLeadingColumns }) => {
+                if (!editingQuestionId) return;
+                silentUpdateQuestion(editingQuestionId, {
+                  mobileTableDisplayMode: mode,
+                  mobileDrilldownOmitLeadingColumns: omitLeadingColumns,
+                });
               }}
-              className="peer sr-only"
             />
-            <div className="peer h-5 w-9 rounded-full bg-gray-200 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-blue-600 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:outline-none" />
-          </label>
-        </div>
-      </div>
+          ) : null}
 
       {/* 테이블 정보 요약 */}
       <TableSummaryCard rows={currentRows} columns={currentColumns} />

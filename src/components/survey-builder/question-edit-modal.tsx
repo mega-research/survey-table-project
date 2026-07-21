@@ -276,9 +276,15 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
       ...(storeQuestion?.hideColumnLabels !== undefined
         ? { hideColumnLabels: storeQuestion.hideColumnLabels }
         : {}),
-      // mobileOriginalTable 도 표 에디터 토글(silentUpdateQuestion)로 store 에만 쓰인다
+      // 모바일 표 표시 설정도 표 에디터의 silentUpdateQuestion 경로로 store에만 쓰인다.
       ...(storeQuestion?.mobileOriginalTable !== undefined
         ? { mobileOriginalTable: storeQuestion.mobileOriginalTable }
+        : {}),
+      ...(storeQuestion?.mobileTableDisplayMode !== undefined
+        ? { mobileTableDisplayMode: storeQuestion.mobileTableDisplayMode }
+        : {}),
+      ...(storeQuestion?.mobileDrilldownOmitLeadingColumns !== undefined
+        ? { mobileDrilldownOmitLeadingColumns: storeQuestion.mobileDrilldownOmitLeadingColumns }
         : {}),
       ...(storeQuestion?.choiceGroups !== undefined
         ? { choiceGroups: storeQuestion.choiceGroups }
