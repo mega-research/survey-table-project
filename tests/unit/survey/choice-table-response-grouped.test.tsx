@@ -6,16 +6,27 @@
  * Step 3 — checkbox 그룹 구현 완료 후 전체 통과
  */
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 
-import type { Question } from '@/types/survey';
 import { ChoiceTableResponse } from '@/components/survey-response/choice-table-response';
+import type { Question } from '@/types/survey';
 
 // 모바일 강제 — TablePreview(ResizeObserver 의존) 우회
 vi.mock('@/hooks/use-media-query', () => ({
   useMobileView: () => true,
   useMediaQuery: () => true,
 }));
+
+beforeAll(() => {
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+});
 
 /**
  * 그룹별 선택 radio 질문 픽스처.
@@ -82,11 +93,7 @@ describe('ChoiceTableResponse — 그룹별 선택 radio', () => {
   it('1. 그룹마다 독립 선택: cellA 클릭 시 onChange({ rad1: cellA })', () => {
     const onChange = vi.fn();
     render(
-      <ChoiceTableResponse
-        question={groupedRadioQuestion()}
-        value={null}
-        onChange={onChange}
-      />,
+      <ChoiceTableResponse question={groupedRadioQuestion()} value={null} onChange={onChange} />,
     );
     fireEvent.click(screen.getByLabelText('보기A'));
     expect(onChange).toHaveBeenCalledWith({ rad1: 'cellA' });
@@ -134,11 +141,7 @@ describe('ChoiceTableResponse — 그룹별 선택 radio', () => {
   it('4. 미소속 셀(cellD) 클릭 시 default 키에 저장', () => {
     const onChange = vi.fn();
     render(
-      <ChoiceTableResponse
-        question={groupedRadioQuestion()}
-        value={null}
-        onChange={onChange}
-      />,
+      <ChoiceTableResponse question={groupedRadioQuestion()} value={null} onChange={onChange} />,
     );
     fireEvent.click(screen.getByLabelText('보기D'));
     expect(onChange).toHaveBeenCalledWith({ default: 'cellD' });
@@ -180,10 +183,34 @@ function mixedGroupQuestion(): Question {
         id: 'row1',
         label: '',
         cells: [
-          { id: 'cellA', type: 'choice_opt', content: '', choiceLabel: '보기A', choiceGroupId: 'grp1' },
-          { id: 'cellB', type: 'choice_opt', content: '', choiceLabel: '보기B', choiceGroupId: 'grp1' },
-          { id: 'cellE', type: 'choice_opt', content: '', choiceLabel: '보기E', choiceGroupId: 'grpCb' },
-          { id: 'cellF', type: 'choice_opt', content: '', choiceLabel: '보기F', choiceGroupId: 'grpCb' },
+          {
+            id: 'cellA',
+            type: 'choice_opt',
+            content: '',
+            choiceLabel: '보기A',
+            choiceGroupId: 'grp1',
+          },
+          {
+            id: 'cellB',
+            type: 'choice_opt',
+            content: '',
+            choiceLabel: '보기B',
+            choiceGroupId: 'grp1',
+          },
+          {
+            id: 'cellE',
+            type: 'choice_opt',
+            content: '',
+            choiceLabel: '보기E',
+            choiceGroupId: 'grpCb',
+          },
+          {
+            id: 'cellF',
+            type: 'choice_opt',
+            content: '',
+            choiceLabel: '보기F',
+            choiceGroupId: 'grpCb',
+          },
           { id: 'cellD', type: 'choice_opt', content: '', choiceLabel: '보기D' },
         ],
       },
@@ -212,15 +239,25 @@ function checkboxGroupQuestion(): Question {
         id: 'row1',
         label: '',
         cells: [
-          { id: 'cellE', type: 'choice_opt', content: '', choiceLabel: '보기E', choiceGroupId: 'grpCb' },
-          { id: 'cellF', type: 'choice_opt', content: '', choiceLabel: '보기F', choiceGroupId: 'grpCb' },
+          {
+            id: 'cellE',
+            type: 'choice_opt',
+            content: '',
+            choiceLabel: '보기E',
+            choiceGroupId: 'grpCb',
+          },
+          {
+            id: 'cellF',
+            type: 'choice_opt',
+            content: '',
+            choiceLabel: '보기F',
+            choiceGroupId: 'grpCb',
+          },
           { id: 'cellD', type: 'choice_opt', content: '', choiceLabel: '보기D' },
         ],
       },
     ],
-    choiceGroups: [
-      { id: 'grpCb', type: 'checkbox', groupKey: 'cb1', label: 'CB그룹' },
-    ],
+    choiceGroups: [{ id: 'grpCb', type: 'checkbox', groupKey: 'cb1', label: 'CB그룹' }],
   } as unknown as Question;
 }
 
@@ -228,11 +265,7 @@ describe('ChoiceTableResponse — checkbox 그룹 복수 선택', () => {
   it('cb1 셀 하나(cellE) 선택 → { cb1: [cellE] }', () => {
     const onChange = vi.fn();
     render(
-      <ChoiceTableResponse
-        question={mixedGroupQuestion()}
-        value={null}
-        onChange={onChange}
-      />,
+      <ChoiceTableResponse question={mixedGroupQuestion()} value={null} onChange={onChange} />,
     );
     fireEvent.click(screen.getByLabelText('보기E'));
     expect(onChange).toHaveBeenCalledWith({ cb1: ['cellE'] });
@@ -310,11 +343,7 @@ describe('ChoiceTableResponse — checkbox 질문 + checkbox 그룹', () => {
   it('checkbox 질문의 그룹 셀도 배열 응답 동작', () => {
     const onChange = vi.fn();
     render(
-      <ChoiceTableResponse
-        question={checkboxGroupQuestion()}
-        value={null}
-        onChange={onChange}
-      />,
+      <ChoiceTableResponse question={checkboxGroupQuestion()} value={null} onChange={onChange} />,
     );
     fireEvent.click(screen.getByLabelText('보기E'));
     expect(onChange).toHaveBeenCalledWith({ cb1: ['cellE'] });
@@ -323,14 +352,60 @@ describe('ChoiceTableResponse — checkbox 질문 + checkbox 그룹', () => {
   it('checkbox 질문의 미소속 셀(default=checkbox): 클릭 → { default: [cellD] }', () => {
     const onChange = vi.fn();
     render(
+      <ChoiceTableResponse question={checkboxGroupQuestion()} value={null} onChange={onChange} />,
+    );
+    fireEvent.click(screen.getByLabelText('보기D'));
+    expect(onChange).toHaveBeenCalledWith({ default: ['cellD'] });
+  });
+});
+
+function drilldownQuestion(question: Question): Question {
+  const rows = question.tableRowsData ?? [];
+  const cellCount = rows[0]?.cells.length ?? 0;
+  return {
+    ...question,
+    mobileTableDisplayMode: 'drilldown-original-row',
+    mobileDrilldownOmitLeadingColumns: 0,
+    tableColumns: Array.from(
+      { length: cellCount },
+      (_, index) =>
+        question.tableColumns?.[index] ?? { id: `col${index + 1}`, label: `열${index + 1}` },
+    ),
+    tableRowsData: rows.map((row) => ({
+      ...row,
+      label: '그룹 선택',
+    })),
+  };
+}
+
+describe('ChoiceTableResponse — 원본 행 드릴다운 그룹 응답 shape', () => {
+  it('radio 그룹은 상세 control에서 기존 string map shape를 유지한다', () => {
+    const onChange = vi.fn();
+    render(
       <ChoiceTableResponse
-        question={checkboxGroupQuestion()}
+        question={drilldownQuestion(groupedRadioQuestion())}
         value={null}
         onChange={onChange}
       />,
     );
-    fireEvent.click(screen.getByLabelText('보기D'));
-    expect(onChange).toHaveBeenCalledWith({ default: ['cellD'] });
+    fireEvent.click(screen.getByRole('button', { name: /그룹 선택/ }));
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByLabelText('보기A'));
+    expect(onChange).toHaveBeenCalledWith({ rad1: 'cellA' });
+  });
+
+  it('checkbox 그룹은 상세 control에서 기존 string array map shape를 유지한다', () => {
+    const onChange = vi.fn();
+    render(
+      <ChoiceTableResponse
+        question={drilldownQuestion(checkboxGroupQuestion())}
+        value={{ cb1: ['cellE'] }}
+        onChange={onChange}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /그룹 선택/ }));
+    fireEvent.click(screen.getByLabelText('보기F'));
+    expect(onChange).toHaveBeenCalledWith({ cb1: ['cellE', 'cellF'] });
   });
 });
 
@@ -382,11 +457,7 @@ describe('ChoiceTableResponse — controlled input 경고', () => {
   it('그룹 radio 셀 렌더 시 checked-without-onChange 경고를 내지 않는다', () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     render(
-      <ChoiceTableResponse
-        question={groupedRadioQuestion()}
-        value={null}
-        onChange={() => {}}
-      />,
+      <ChoiceTableResponse question={groupedRadioQuestion()} value={null} onChange={() => {}} />,
     );
     const warned = errorSpy.mock.calls.some((call) =>
       call.some((arg) => typeof arg === 'string' && arg.includes('checked')),

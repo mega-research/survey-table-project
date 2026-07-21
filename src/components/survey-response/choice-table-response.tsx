@@ -1,21 +1,23 @@
 'use client';
 
-import { useMemo, type ReactNode } from 'react';
+import { type ReactNode, useCallback, useMemo } from 'react';
 
 import { TablePreview } from '@/components/survey-builder/table-preview';
 import { useMobileView } from '@/hooks/use-media-query';
 import { useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import type { Question, TableCell } from '@/types/survey';
-import { resolveChoiceOptions } from '@/utils/choice-source';
 import {
-  isGroupedChoiceQuestion,
+  type GroupedChoiceAnswer,
   getGroupKeyOfCell,
   getGroupTypeOfCell,
-  type GroupedChoiceAnswer,
+  isGroupedChoiceQuestion,
 } from '@/utils/choice-group-helpers';
+import { resolveChoiceOptions } from '@/utils/choice-source';
 import { findMobileHeaderCell } from '@/utils/mobile-display-cells';
+import { resolveMobileTableDisplayMode } from '@/utils/mobile-table-display-mode';
 
+import { ChoiceTableDrilldown } from './choice-table-drilldown';
 import { MobileOptionCard } from './mobile-card-shared';
 import { OptionTextInput } from './option-text-input';
 
@@ -47,6 +49,10 @@ export function ChoiceTableResponse({ question, value, onChange }: ChoiceTableRe
     () => new Map(options.map((option) => [option.value, option])),
     [options],
   );
+  const resolveChoiceLabel = useCallback(
+    (cellId: string) => optionByValue.get(cellId)?.label,
+    [optionByValue],
+  );
 
   // checkbox: cell.id[] / 비그룹 radio: [선택 cellId] / 그룹별(radio+checkbox 혼재): 맵 values flat
   const selectedIds: string[] = useMemo(() => {
@@ -55,12 +61,11 @@ export function ChoiceTableResponse({ question, value, onChange }: ChoiceTableRe
       if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
       // GroupedChoiceAnswer 값은 string(radio 그룹) | string[](checkbox 그룹).
       // flat()으로 두 종류를 통합하여 선택된 모든 cellId 를 추출한다.
-      return Object.values(value as GroupedChoiceAnswer)
-        .flatMap((v): string[] => {
-          if (typeof v === 'string' && v !== '') return [v];
-          if (Array.isArray(v)) return v.filter((s): s is string => typeof s === 'string');
-          return [];
-        });
+      return Object.values(value as GroupedChoiceAnswer).flatMap((v): string[] => {
+        if (typeof v === 'string' && v !== '') return [v];
+        if (Array.isArray(v)) return v.filter((s): s is string => typeof s === 'string');
+        return [];
+      });
     }
     return typeof value === 'string' && value ? [value] : [];
   }, [isCheckbox, isGrouped, value]);
@@ -74,9 +79,11 @@ export function ChoiceTableResponse({ question, value, onChange }: ChoiceTableRe
     if (isGrouped) {
       const groupKey = getGroupKeyOfCell(question, cellId);
       const cellType = getGroupTypeOfCell(question, cellId);
-      const map = (value && typeof value === 'object' && !Array.isArray(value)
-        ? (value as GroupedChoiceAnswer)
-        : {}) as GroupedChoiceAnswer;
+      const map = (
+        value && typeof value === 'object' && !Array.isArray(value)
+          ? (value as GroupedChoiceAnswer)
+          : {}
+      ) as GroupedChoiceAnswer;
 
       if (cellType === 'checkbox') {
         // checkbox 그룹: 배열 push/filter. 빈 배열이 되면 키 삭제.
@@ -159,12 +166,16 @@ export function ChoiceTableResponse({ question, value, onChange }: ChoiceTableRe
       : question.id;
 
     // 셀이 속한 그룹의 type 결정. 비그룹 경로는 질문 type 그대로 사용.
-    const cellType = isGrouped ? getGroupTypeOfCell(question, cell.id) : (isCheckbox ? 'checkbox' : 'radio');
+    const cellType = isGrouped
+      ? getGroupTypeOfCell(question, cell.id)
+      : isCheckbox
+        ? 'checkbox'
+        : 'radio';
 
     // 컨트롤 옆 라벨: 셀 텍스트(content) 전용. choiceLabel 은 데이터(옵션 라벨 —
     // 모바일 카드·응답 매칭·export)로만 저장되고 데스크톱 셀에는 렌더하지 않는다.
     // 둘 다 있으면 content 만 표시. 비어 있으면(라벨이 다른 열에 있는 구성) 컨트롤만 렌더.
-    const rawLabel = (cell.content ?? '').trim();
+    const rawLabel = cell.mobileDisplay === 'hidden' ? '' : (cell.content ?? '').trim();
     const labelText = rawLabel ? substituteTokens(rawLabel, attrs) : '';
 
     return (
@@ -179,7 +190,9 @@ export function ChoiceTableResponse({ question, value, onChange }: ChoiceTableRe
             // radio 셀: 그룹 모드에서 재클릭(이미 선택) 은 onChange 가 발화하지 않으므로
             //   onClick 에서 토글 해제. 비그룹 radio 는 기존대로 해제 불가(onChange만).
             // checkbox 셀: onChange 경로(native toggle). onClick 불필요.
-            onClick={isGrouped && cellType === 'radio' ? () => toggle(cell.id, !checked) : undefined}
+            onClick={
+              isGrouped && cellType === 'radio' ? () => toggle(cell.id, !checked) : undefined
+            }
             onChange={
               !isGrouped || cellType === 'checkbox'
                 ? (e) => toggle(cell.id, e.target.checked)
@@ -214,86 +227,107 @@ export function ChoiceTableResponse({ question, value, onChange }: ChoiceTableRe
     </div>
   ) : null;
 
-  // 모바일 원본 표 옵션이 켜진 질문은 카드 전환 없이 원본 표(가로 스크롤) 유지
-  if (isMobile && !question.mobileOriginalTable) {
-    return (
-      <div className="space-y-2">
-        {(question.tableRowsData ?? []).flatMap((row) =>
-          row.cells
-            .filter((c) => c.type === 'choice_opt' && !c.isHidden)
-            .map((choiceCell) => {
-              const { checked, disabled, option } = getChoiceCellState(choiceCell);
-              // 카드 제목: 행에 'header' 로 지정된 text 셀이 있으면 그 내용을 제목으로 사용하고,
-              // 없으면 선택지 라벨(choiceLabel > content)로 폴백한다. exportLabel 은 제목으로 쓰지 않는다.
-              const headerCell = findMobileHeaderCell(row.cells);
-              const headerText = headerCell ? (headerCell.content ?? '').trim() : '';
-              const cardLabel = headerText
-                ? substituteTokens(headerText, attrs)
-                : (option?.label ?? '(라벨 없음)');
-              // 그룹별 선택 모드: name 을 그룹 키 단위로 분리
-              const mobileInputName = isGrouped
-                ? `${question.id}-${getGroupKeyOfCell(question, choiceCell.id)}`
-                : question.id;
-              // 모바일도 셀별 group type 결정
-              const mobileCellType = isGrouped
-                ? getGroupTypeOfCell(question, choiceCell.id)
-                : (isCheckbox ? 'checkbox' : 'radio');
-              return (
-                <MobileOptionCard
-                  key={choiceCell.id}
-                  label={cardLabel}
-                  cells={row.cells}
-                  selected={checked}
-                  disabled={disabled}
-                  onToggle={() => toggle(choiceCell.id, !checked)}
-                  control={
-                    <input
-                      type={mobileCellType === 'checkbox' ? 'checkbox' : 'radio'}
-                      name={mobileInputName}
-                      aria-label={cardLabel}
-                      checked={checked}
-                      disabled={disabled}
-                      // radio 셀: 그룹 모드에서 재클릭 onClick 해제. checkbox 셀: onChange 경로.
-                      onClick={isGrouped && mobileCellType === 'radio' ? () => toggle(choiceCell.id, !checked) : undefined}
-                      onChange={
-                        !isGrouped || mobileCellType === 'checkbox'
-                          ? (e) => toggle(choiceCell.id, e.target.checked)
-                          : undefined
-                      }
-                      // 그룹 radio: onClick 토글 — controlled checked 경고 방지용 readOnly
-                      readOnly={isGrouped && mobileCellType === 'radio'}
-                      className="h-5 w-5"
-                    />
-                  }
-                  footer={
-                    option?.allowTextInput && checked ? (
-                      <OptionTextInput
-                        questionId={question.id}
-                        option={option}
-                        className="w-full"
-                      />
-                    ) : null
-                  }
-                />
-              );
-            }),
-        )}
-        {counter}
-      </div>
-    );
-  }
+  const renderMobileOptionCards = () => (
+    <div className="space-y-2">
+      {(question.tableRowsData ?? []).flatMap((row) =>
+        row.cells
+          .filter((c) => c.type === 'choice_opt' && !c.isHidden)
+          .map((choiceCell) => {
+            const { checked, disabled, option } = getChoiceCellState(choiceCell);
+            // 카드 제목: 행에 'header' 로 지정된 text 셀이 있으면 그 내용을 제목으로 사용하고,
+            // 없으면 선택지 라벨(choiceLabel > content)로 폴백한다. exportLabel 은 제목으로 쓰지 않는다.
+            const headerCell = findMobileHeaderCell(row.cells);
+            const headerText = headerCell ? (headerCell.content ?? '').trim() : '';
+            const cardLabel = headerText
+              ? substituteTokens(headerText, attrs)
+              : (option?.label ?? '(라벨 없음)');
+            // 그룹별 선택 모드: name 을 그룹 키 단위로 분리
+            const mobileInputName = isGrouped
+              ? `${question.id}-${getGroupKeyOfCell(question, choiceCell.id)}`
+              : question.id;
+            // 모바일도 셀별 group type 결정
+            const mobileCellType = isGrouped
+              ? getGroupTypeOfCell(question, choiceCell.id)
+              : isCheckbox
+                ? 'checkbox'
+                : 'radio';
+            return (
+              <MobileOptionCard
+                key={choiceCell.id}
+                label={cardLabel}
+                cells={row.cells}
+                selected={checked}
+                disabled={disabled}
+                onToggle={() => toggle(choiceCell.id, !checked)}
+                control={
+                  <input
+                    type={mobileCellType === 'checkbox' ? 'checkbox' : 'radio'}
+                    name={mobileInputName}
+                    aria-label={cardLabel}
+                    checked={checked}
+                    disabled={disabled}
+                    // radio 셀: 그룹 모드에서 재클릭 onClick 해제. checkbox 셀: onChange 경로.
+                    onClick={
+                      isGrouped && mobileCellType === 'radio'
+                        ? () => toggle(choiceCell.id, !checked)
+                        : undefined
+                    }
+                    onChange={
+                      !isGrouped || mobileCellType === 'checkbox'
+                        ? (e) => toggle(choiceCell.id, e.target.checked)
+                        : undefined
+                    }
+                    // 그룹 radio: onClick 토글 — controlled checked 경고 방지용 readOnly
+                    readOnly={isGrouped && mobileCellType === 'radio'}
+                    className="h-5 w-5"
+                  />
+                }
+                footer={
+                  option?.allowTextInput && checked ? (
+                    <OptionTextInput questionId={question.id} option={option} className="w-full" />
+                  ) : null
+                }
+              />
+            );
+          }),
+      )}
+      {counter}
+    </div>
+  );
 
-  return (
+  const renderOriginalTable = () => (
     <div className="space-y-2">
       <TablePreview
         {...(question.tableTitle !== undefined ? { tableTitle: question.tableTitle } : {})}
         {...(question.tableColumns !== undefined ? { columns: question.tableColumns } : {})}
         {...(question.tableRowsData !== undefined ? { rows: question.tableRowsData } : {})}
-        {...(question.tableHeaderGrid !== undefined ? { tableHeaderGrid: question.tableHeaderGrid } : {})}
-        {...(question.hideColumnLabels !== undefined ? { hideColumnLabels: question.hideColumnLabels } : {})}
+        {...(question.tableHeaderGrid !== undefined
+          ? { tableHeaderGrid: question.tableHeaderGrid }
+          : {})}
+        {...(question.hideColumnLabels !== undefined
+          ? { hideColumnLabels: question.hideColumnLabels }
+          : {})}
         renderCell={renderCell}
       />
       {counter}
     </div>
   );
+
+  const mobileMode = resolveMobileTableDisplayMode(question);
+
+  if (isMobile && mobileMode === 'drilldown-original-row') {
+    return (
+      <ChoiceTableDrilldown
+        question={question}
+        selectedIds={selectedIds}
+        renderChoiceCell={renderCell}
+        resolveChoiceLabel={resolveChoiceLabel}
+        counter={counter}
+      />
+    );
+  }
+
+  if (isMobile && mobileMode === 'auto') return renderMobileOptionCards();
+
+  return renderOriginalTable();
 }

@@ -152,4 +152,16 @@ describe('ChoiceTableResponse — 모바일 원본 표 분기', () => {
     expect(screen.getByText('기술')).toBeInTheDocument();
     expect(screen.getByRole('radio')).toBeInTheDocument();
   });
+
+  it('mobileTableDisplayMode original 이면 legacy boolean 없이도 원본 표를 렌더한다', () => {
+    render(
+      <ChoiceTableResponse
+        question={choiceQuestion({ mobileTableDisplayMode: 'original' })}
+        value={null}
+        onChange={() => {}}
+      />,
+    );
+    expect(screen.getByText('기술')).toBeInTheDocument();
+    expect(screen.getByRole('radio')).toBeInTheDocument();
+  });
 });
