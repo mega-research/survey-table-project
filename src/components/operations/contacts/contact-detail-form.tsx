@@ -45,6 +45,7 @@ interface ContactDetailFormProps {
     contactMethod: ContactMethod | null;
     respondedAt: Date | null;
     inviteToken: string;
+    inviteCode: string;
     responseId: string | null;
     attempts: ContactAttemptRow[];
   };
@@ -329,8 +330,8 @@ export function ContactDetailForm({
                 삭제
               </Button>
             )}
-            {isEdit && initial?.inviteToken && (
-              <CopyInviteUrlButton surveyId={surveyId} inviteToken={initial.inviteToken} />
+            {isEdit && initial?.inviteCode && (
+              <CopyInviteUrlButton inviteCode={initial.inviteCode} />
             )}
             <span className="flex-1" />
             <Button onClick={save} disabled={isPending}>

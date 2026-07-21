@@ -278,6 +278,7 @@ export interface ContactDetailRow {
   memo: string | null;
   contactMethod: ContactMethod | null;
   inviteToken: string;
+  inviteCode: string;
   respondedAt: Date | null;
   responseId: string | null;
   createdAt: Date;
@@ -314,6 +315,7 @@ export async function getContactDetailById(
       memo: contactTargets.memo,
       contactMethod: contactTargets.contactMethod,
       inviteToken: contactTargets.inviteToken,
+      inviteCode: contactTargets.inviteCode,
       respondedAt: contactTargets.respondedAt,
       responseId: contactTargets.responseId,
       createdAt: contactTargets.createdAt,

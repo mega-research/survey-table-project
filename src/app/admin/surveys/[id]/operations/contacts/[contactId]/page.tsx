@@ -67,6 +67,7 @@ export default async function ContactDetailPage({ params }: PageProps) {
           contactMethod: detail.contact.contactMethod,
           respondedAt: detail.contact.respondedAt,
           inviteToken: detail.contact.inviteToken,
+          inviteCode: detail.contact.inviteCode,
           responseId: detail.contact.responseId,
           attempts: detail.attempts,
         }}
