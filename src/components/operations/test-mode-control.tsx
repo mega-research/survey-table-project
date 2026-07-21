@@ -44,7 +44,7 @@ interface Props {
 /**
  * 설문 테스트 모드 토글 (운영 콘솔·설문 편집 헤더 공용).
  *
- * 켜면 `/survey/{surveyId}?test={token}` 링크가 활성화되어 중단/중복 게이트를 우회하고
+ * 켜면 `/survey/{accessIdentifier}?test={token}` 링크가 활성화되어 중단/중복 게이트를 우회하고
  * 응답이 `survey_responses.isTest=true` 로 적재된다(집계 제외). 켜는 즉시 링크를
  * 클립보드에 복사하고, ON 상태에서는 amber 버튼 호버/클릭 드롭다운으로 링크 복사·끄기 제공.
  * 테스트 링크는 마지막 발행본(스냅샷) 기준 — 편집 중 미발행 내용은 반영되지 않는다.
