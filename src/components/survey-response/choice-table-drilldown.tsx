@@ -11,11 +11,7 @@ import { useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import type { Question, TableCell } from '@/types/survey';
 import { type ClassifiedLeaf, type ClassifiedSection, classifyTable } from '@/utils/classify-table';
-import {
-  getMobileOriginalRowHiddenLabelCandidates,
-  getMobileOriginalRowLabel,
-  projectMobileOriginalRow,
-} from '@/utils/mobile-original-row';
+import { getMobileOriginalRowLabel, projectMobileOriginalRow } from '@/utils/mobile-original-row';
 import { clampMobileDrilldownOmitLeadingColumns } from '@/utils/mobile-table-display-mode';
 
 const EMPTY_COLUMNS: NonNullable<Question['tableColumns']> = [];
@@ -44,6 +40,10 @@ export function ChoiceTableDrilldown({
     columns.length,
   );
   const rowById = useMemo(() => new Map(rows.map((row) => [row.id, row])), [rows]);
+  const cellById = useMemo(
+    () => new Map(rows.flatMap((row) => row.cells.map((cell) => [cell.id, cell] as const))),
+    [rows],
+  );
   const sections = useMemo(
     () =>
       classifyTable({
@@ -61,11 +61,10 @@ export function ChoiceTableDrilldown({
         const leaves = section.leaves.map((leaf) => {
           const row = rowById.get(leaf.rowId);
           const rawSubGroup = leaf.subGroup.trim();
-          const subGroupIsHidden =
-            !!row &&
-            getMobileOriginalRowHiddenLabelCandidates({ row, resolveChoiceLabel }).includes(
-              rawSubGroup,
-            );
+          const subGroupSourceCell = leaf.subGroupSourceCellId
+            ? cellById.get(leaf.subGroupSourceCellId)
+            : undefined;
+          const subGroupIsHidden = subGroupSourceCell?.mobileDisplay === 'hidden';
           return row
             ? {
                 ...leaf,
@@ -100,7 +99,7 @@ export function ChoiceTableDrilldown({
           leaves,
         };
       }),
-    [attrs, columns, omit, resolveChoiceLabel, rowById, sections],
+    [attrs, cellById, columns, omit, resolveChoiceLabel, rowById, sections],
   );
   const horizontalScrollRef = useRef(0);
 

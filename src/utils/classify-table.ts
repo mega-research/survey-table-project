@@ -1,4 +1,4 @@
-import type { TableCell, TableColumn, TableRow, HeaderCell } from '@/types/survey';
+import type { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
 
 /**
  * 모바일 테이블 드릴다운용 표 구조 자동 분류기.
@@ -43,6 +43,7 @@ export interface ClassifiedLeaf {
   rowId: string;
   label: string;
   subGroup: string;
+  subGroupSourceCellId?: string | undefined;
   inputCellIds: string[];
   // 실제 열 인덱스 → 입력 셀 id. matrix 폼은 colGroups 의 col(실제 열 인덱스)로 셀을 찾는다.
   // inputCellIds 는 행마다 길이가 다를 수 있어(비대칭 matrix) 위치로 끼워맞추면 밀린다.
@@ -70,13 +71,17 @@ function valueColumns(q: ClassifyInput, types = answerableTypes(q)): number[] {
 
 // 한 라벨 열의 rowspan 으로 행 그룹핑 (use-row-groups 의 detectRowGroups 일반화)
 function groupByColumn(rows: TableRow[], col: number) {
-  const groups: { label: string; rows: TableRow[] }[] = [];
+  const groups: { label: string; rows: TableRow[]; sourceCellId?: string | undefined }[] = [];
   for (let i = 0; i < rows.length; ) {
     const row = rows[i];
     if (!row) break;
     const c = row.cells[col];
-    const span = c && !c.isHidden && (c.rowspan ?? 1) > 1 ? c.rowspan ?? 1 : 1;
-    groups.push({ label: (c?.content ?? '').trim(), rows: rows.slice(i, i + span) });
+    const span = c && !c.isHidden && (c.rowspan ?? 1) > 1 ? (c.rowspan ?? 1) : 1;
+    groups.push({
+      label: (c?.content ?? '').trim(),
+      rows: rows.slice(i, i + span),
+      ...(c ? { sourceCellId: c.id } : {}),
+    });
     i += span;
   }
   return groups;
@@ -108,13 +113,15 @@ function columnPaths(grid: HeaderCell[][], n: number): string[][] {
 function buildColGroups(q: ClassifyInput, vcols: number[]): ColGroup[] {
   const grid = q.tableHeaderGrid;
   if (!grid || grid.length < 2)
-    return [{ label: '', cols: vcols.map((j) => ({ col: j, label: q.tableColumns[j]?.label ?? '' })) }];
+    return [
+      { label: '', cols: vcols.map((j) => ({ col: j, label: q.tableColumns[j]?.label ?? '' })) },
+    ];
   const paths = columnPaths(grid, q.tableColumns.length);
   const groups: ColGroup[] = [];
   for (const j of vcols) {
     const p = paths[j] ?? [];
     const leaf = p[p.length - 1] ?? q.tableColumns[j]?.label ?? '';
-    const parent = p.length >= 2 ? p[p.length - 2] ?? '' : '';
+    const parent = p.length >= 2 ? (p[p.length - 2] ?? '') : '';
     let g = groups[groups.length - 1];
     if (!g || g.label !== parent) groups.push((g = { label: parent, cols: [] }));
     g.cols.push({ col: j, label: leaf });
@@ -145,15 +152,15 @@ export function classifyTable(q: ClassifyInput): ClassifiedSection[] {
   const subCol = labelCols[1]; // 매트릭스 하위 그룹 열
   const colGroups = buildColGroups(q, vcols);
   const colMeta = new Map<number, { group: string; leaf: string }>();
-  colGroups.forEach((g) => g.cols.forEach((c) => colMeta.set(c.col, { group: g.label, leaf: c.label })));
+  colGroups.forEach((g) =>
+    g.cols.forEach((c) => colMeta.set(c.col, { group: g.label, leaf: c.label })),
+  );
 
   return groupByColumn(rows, leftmost).map((sec) => {
     const usedPerRow = sec.rows.map((row) =>
       vcols.filter((column) => isInput(row.cells[column], types)),
     );
-    const inputRows = sec.rows.filter((row) =>
-      row.cells.some((cell) => isInput(cell, types)),
-    );
+    const inputRows = sec.rows.filter((row) => row.cells.some((cell) => isInput(cell, types)));
 
     let kind: SectionKind;
     let reason: string;
@@ -171,10 +178,12 @@ export function classifyTable(q: ClassifyInput): ClassifiedSection[] {
       reason = `값 열 1개 · 반복 항목 ${inputRows.length}개`;
     }
 
-    const subGroups = subCol != null ? groupByColumn(sec.rows, subCol) : [{ label: '', rows: sec.rows }];
-    const subOf = (row: TableRow) => subGroups.find((g) => g.rows.includes(row))?.label ?? '';
+    const subGroups =
+      subCol != null ? groupByColumn(sec.rows, subCol) : [{ label: '', rows: sec.rows }];
+    const subOf = (row: TableRow) => subGroups.find((g) => g.rows.includes(row));
 
     const leaves: ClassifiedLeaf[] = inputRows.map((row) => {
+      const subGroup = subOf(row);
       const cellByCol: Record<number, string> = {};
       row.cells.forEach((cell, columnIndex) => {
         if (isInput(cell, types)) cellByCol[columnIndex] = cell.id;
@@ -182,10 +191,9 @@ export function classifyTable(q: ClassifyInput): ClassifiedSection[] {
       return {
         rowId: row.id,
         label: rightmostLabel(row, labelCols),
-        subGroup: subOf(row),
-        inputCellIds: row.cells
-          .filter((cell) => isInput(cell, types))
-          .map((cell) => cell.id),
+        subGroup: subGroup?.label ?? '',
+        ...(subGroup?.sourceCellId ? { subGroupSourceCellId: subGroup.sourceCellId } : {}),
+        inputCellIds: row.cells.filter((cell) => isInput(cell, types)).map((cell) => cell.id),
         cellByCol,
       };
     });

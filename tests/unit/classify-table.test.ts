@@ -202,7 +202,8 @@ describe('classifyTable — 종사자 (MATRIX)', () => {
 
 describe('classifyTable — 숯 혼합 (MATRIX + SCALAR + SCALAR)', () => {
   it('한 표가 섹션별로 다른 kind', () => {
-    const secs = classifyTable(charcoal());
+    const input = charcoal();
+    const secs = classifyTable(input);
     expect(secs.map((s) => s.label)).toEqual([
       '1) 생산방식별 시설 용량 및 개수',
       '2) 연간 최대 생산 가능량',
@@ -223,6 +224,17 @@ describe('classifyTable — 숯 혼합 (MATRIX + SCALAR + SCALAR)', () => {
     if (!leaf3) throw new Error('sec0.leaves[3] undefined');
     expect(leaf0.subGroup).toBe('전통식 가마');
     expect(leaf3.subGroup).toBe('기계식 탄화로');
+    const traditionalAnchorId = input.tableRowsData[0]?.cells[1]?.id;
+    const machineAnchorId = input.tableRowsData[3]?.cells[1]?.id;
+    expect(sec0.leaves.slice(0, 3).map((leaf) => leaf.subGroupSourceCellId)).toEqual([
+      traditionalAnchorId,
+      traditionalAnchorId,
+      traditionalAnchorId,
+    ]);
+    expect(sec0.leaves.slice(3).map((leaf) => leaf.subGroupSourceCellId)).toEqual([
+      machineAnchorId,
+      machineAnchorId,
+    ]);
     expect(sec0.colGroups.map((g) => g.label)).toEqual(['시설 1', '시설 2']);
     expect(leaf0.inputCellIds).toEqual(['s1-heuk-1c', 's1-heuk-1q', 's1-heuk-2c', 's1-heuk-2q']);
     // scalar 섹션: 입력 1칸이 값 열 전체 colspan

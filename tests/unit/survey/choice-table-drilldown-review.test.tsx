@@ -300,7 +300,13 @@ function complexQuestion({ hiddenSection = false } = {}): Question {
   } as Question;
 }
 
-function subGroupVisibilityQuestion({ hiddenSubGroup }: { hiddenSubGroup: boolean }): Question {
+function subGroupVisibilityQuestion({
+  hiddenSubGroup,
+  rowspanSubGroup = false,
+}: {
+  hiddenSubGroup: boolean;
+  rowspanSubGroup?: boolean;
+}): Question {
   const subGroupContent = `${hiddenSubGroup ? '숨긴' : '공개'} {{primary}}`;
   return {
     id: hiddenSubGroup ? 'q-hidden-sub-group' : 'q-visible-sub-group',
@@ -326,6 +332,7 @@ function subGroupVisibilityQuestion({ hiddenSubGroup }: { hiddenSubGroup: boolea
             id: 'sub-group-label-1',
             type: 'text',
             content: subGroupContent,
+            ...(rowspanSubGroup ? { rowspan: 2 } : {}),
             ...(hiddenSubGroup ? { mobileDisplay: 'hidden' as const } : {}),
           },
           { id: 'sub-group-item-1', type: 'text', content: '첫 항목' },
@@ -348,12 +355,20 @@ function subGroupVisibilityQuestion({ hiddenSubGroup }: { hiddenSubGroup: boolea
             isHidden: true,
             _isContinuation: true,
           },
-          {
-            id: 'sub-group-label-2',
-            type: 'text',
-            content: subGroupContent,
-            ...(hiddenSubGroup ? { mobileDisplay: 'hidden' as const } : {}),
-          },
+          rowspanSubGroup
+            ? {
+                id: 'sub-group-label-continuation',
+                type: 'text',
+                content: '',
+                isHidden: true,
+                _isContinuation: true,
+              }
+            : {
+                id: 'sub-group-label-2',
+                type: 'text',
+                content: subGroupContent,
+                ...(hiddenSubGroup ? { mobileDisplay: 'hidden' as const } : {}),
+              },
           { id: 'sub-group-item-2', type: 'text', content: '둘째 항목' },
           {
             id: 'sub-group-choice-2',
@@ -560,11 +575,45 @@ describe('선택 행 상세 복합 테이블 통합', () => {
     expectHiddenSubGroupAbsent();
   });
 
-  it('가시 하위 라벨은 divider와 breadcrumb에서 토큰을 한 번만 치환한다', () => {
+  it('rowspan hidden 하위 라벨 정책은 anchor와 continuation leaf 모두 상속한다', () => {
     contactAttrs.current = { primary: '{{secondary}}', secondary: '재치환 금지' };
     render(
       <ChoiceTableResponse
-        question={subGroupVisibilityQuestion({ hiddenSubGroup: false })}
+        question={subGroupVisibilityQuestion({
+          hiddenSubGroup: true,
+          rowspanSubGroup: true,
+        })}
+        value={[]}
+        onChange={vi.fn()}
+      />,
+    );
+
+    const expectHiddenSubGroupAbsent = () => {
+      expect(document.body.textContent).not.toContain('숨긴 {{primary}}');
+      expect(document.body.textContent).not.toContain('숨긴 {{secondary}}');
+      expect(document.body.textContent).not.toContain('숨긴 재치환 금지');
+    };
+
+    expectHiddenSubGroupAbsent();
+    fireEvent.click(screen.getByRole('button', { name: /공개 섹션/ }));
+    expectHiddenSubGroupAbsent();
+
+    fireEvent.click(screen.getByRole('button', { name: /첫 항목/ }));
+    expectHiddenSubGroupAbsent();
+    fireEvent.click(screen.getByRole('button', { name: '뒤로' }));
+
+    fireEvent.click(screen.getByRole('button', { name: /둘째 항목/ }));
+    expectHiddenSubGroupAbsent();
+  });
+
+  it('가시 rowspan 하위 라벨은 두 leaf의 divider와 breadcrumb에서 토큰을 한 번만 치환한다', () => {
+    contactAttrs.current = { primary: '{{secondary}}', secondary: '재치환 금지' };
+    render(
+      <ChoiceTableResponse
+        question={subGroupVisibilityQuestion({
+          hiddenSubGroup: false,
+          rowspanSubGroup: true,
+        })}
         value={[]}
         onChange={vi.fn()}
       />,
@@ -577,6 +626,13 @@ describe('선택 행 상세 복합 테이블 통합', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /첫 항목/ }));
     expect(screen.getByText('공개 {{secondary}} › 첫 항목')).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('공개 {{primary}}');
+    expect(document.body.textContent).not.toContain('공개 재치환 금지');
+
+    fireEvent.click(screen.getByRole('button', { name: '뒤로' }));
+    expect(screen.getByText('공개 {{secondary}}')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /둘째 항목/ }));
+    expect(screen.getByText('공개 {{secondary}} › 둘째 항목')).toBeInTheDocument();
     expect(document.body.textContent).not.toContain('공개 {{primary}}');
     expect(document.body.textContent).not.toContain('공개 재치환 금지');
   });
