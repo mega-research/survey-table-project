@@ -309,7 +309,7 @@ export function ContactDetailForm({
             memo={memo}
             contactMethod={contactMethod}
             respondedAt={initial?.respondedAt ?? null}
-            inviteToken={initial?.inviteToken ?? null}
+            inviteCode={initial?.inviteCode ?? null}
             {...(isEdit && onColumnToggle !== undefined ? { onColumnToggle } : {})}
             onAttrsChange={setAttrs}
             onPiiChange={(k, v) => setPiiValues((prev) => ({ ...prev, [k]: v }))}

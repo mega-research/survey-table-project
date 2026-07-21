@@ -13,6 +13,7 @@ import {
 import { LocalDateTime } from '@/components/ui/local-date-time';
 import { attrsKeyOf, piiKeyOf } from '@/lib/operations/contacts';
 import { piiFieldLabel, type PiiFieldType } from '@/lib/crypto/pii-fields';
+import { buildInviteUrl } from '@/lib/survey-url';
 
 interface ContactInfoCardProps {
   surveyId: string;
@@ -26,7 +27,7 @@ interface ContactInfoCardProps {
   memo: string | null;
   contactMethod: ContactMethod | null;
   respondedAt: Date | null;
-  inviteToken: string | null;
+  inviteCode: string | null;
   /** 헤더 토글 변경 시 호출 — 컬럼 스킴 hidden 갱신. 신규 모드는 undefined. */
   onColumnToggle?: (key: string, hidden: boolean) => void;
   /** attrs 입력 변경 */
@@ -51,7 +52,7 @@ export function ContactInfoCard({
   memo,
   contactMethod,
   respondedAt,
-  inviteToken,
+  inviteCode,
   onColumnToggle,
   onAttrsChange,
   onPiiChange,
@@ -71,6 +72,11 @@ export function ContactInfoCard({
   function setAttrsField(attrsKey: string, value: string) {
     onAttrsChange({ ...attrs, [attrsKey]: value });
   }
+
+  // 초대 링크(짧은 URL) — NEXT_PUBLIC_APP_URL(빌드 상수) 기준으로 조립해 SSR/클라이언트 동일.
+  // 메일 초대 링크와 같은 도메인을 쓴다. env 미설정 시 상대경로로 폴백.
+  const inviteBaseUrl = (process.env['NEXT_PUBLIC_APP_URL'] ?? '').replace(/\/+$/, '');
+  const inviteUrl = inviteCode ? buildInviteUrl(inviteCode, inviteBaseUrl) : '';
 
   return (
     <div className="rounded-lg border bg-white">
@@ -188,9 +194,9 @@ export function ContactInfoCard({
               응답 보기
             </Button>
           </div>
-          {inviteToken && (
-            <div className="mt-1 text-[10px] text-slate-400">
-              초대 토큰: {inviteToken.slice(0, 8)}…
+          {inviteCode && inviteUrl && (
+            <div className="mt-1 break-all text-sm text-slate-900">
+              초대 링크: {inviteUrl}
             </div>
           )}
         </div>
