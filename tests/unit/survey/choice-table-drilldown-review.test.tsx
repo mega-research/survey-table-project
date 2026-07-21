@@ -300,6 +300,73 @@ function complexQuestion({ hiddenSection = false } = {}): Question {
   } as Question;
 }
 
+function subGroupVisibilityQuestion({ hiddenSubGroup }: { hiddenSubGroup: boolean }): Question {
+  const subGroupContent = `${hiddenSubGroup ? '숨긴' : '공개'} {{primary}}`;
+  return {
+    id: hiddenSubGroup ? 'q-hidden-sub-group' : 'q-visible-sub-group',
+    type: 'checkbox',
+    title: '하위 라벨 선택',
+    required: false,
+    order: 0,
+    mobileTableDisplayMode: 'drilldown-original-row',
+    mobileDrilldownOmitLeadingColumns: 3,
+    tableColumns: [
+      { id: 'section', label: '섹션' },
+      { id: 'sub-group', label: '하위 그룹' },
+      { id: 'item', label: '항목' },
+      { id: 'choice', label: '선택' },
+    ],
+    tableRowsData: [
+      {
+        id: 'sub-group-row-1',
+        label: '첫 행 폴백',
+        cells: [
+          { id: 'sub-group-section', type: 'text', content: '공개 섹션', rowspan: 2 },
+          {
+            id: 'sub-group-label-1',
+            type: 'text',
+            content: subGroupContent,
+            ...(hiddenSubGroup ? { mobileDisplay: 'hidden' as const } : {}),
+          },
+          { id: 'sub-group-item-1', type: 'text', content: '첫 항목' },
+          {
+            id: 'sub-group-choice-1',
+            type: 'choice_opt',
+            content: '',
+            choiceLabel: '첫 선택',
+          },
+        ],
+      },
+      {
+        id: 'sub-group-row-2',
+        label: '둘째 행 폴백',
+        cells: [
+          {
+            id: 'sub-group-section-continuation',
+            type: 'text',
+            content: '',
+            isHidden: true,
+            _isContinuation: true,
+          },
+          {
+            id: 'sub-group-label-2',
+            type: 'text',
+            content: subGroupContent,
+            ...(hiddenSubGroup ? { mobileDisplay: 'hidden' as const } : {}),
+          },
+          { id: 'sub-group-item-2', type: 'text', content: '둘째 항목' },
+          {
+            id: 'sub-group-choice-2',
+            type: 'choice_opt',
+            content: '',
+            choiceLabel: '둘째 선택',
+          },
+        ],
+      },
+    ],
+  } as Question;
+}
+
 function enterSingleRow(label: string) {
   fireEvent.click(screen.getByRole('button', { name: new RegExp(label) }));
 }
@@ -468,6 +535,50 @@ describe('선택 행 상세 복합 테이블 통합', () => {
     expect(screen.getByRole('button', { name: /첫 공개 항목/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /둘째 공개 항목/ })).toBeInTheDocument();
     expect(screen.queryByText('노출 금지 섹션')).toBeNull();
+  });
+
+  it('mobile hidden인 두 번째 제외 라벨은 root/list/divider/breadcrumb/detail에 노출하지 않는다', () => {
+    contactAttrs.current = { primary: '{{secondary}}', secondary: '재치환 금지' };
+    render(
+      <ChoiceTableResponse
+        question={subGroupVisibilityQuestion({ hiddenSubGroup: true })}
+        value={[]}
+        onChange={vi.fn()}
+      />,
+    );
+
+    const expectHiddenSubGroupAbsent = () => {
+      expect(document.body.textContent).not.toContain('숨긴 {{primary}}');
+      expect(document.body.textContent).not.toContain('숨긴 {{secondary}}');
+      expect(document.body.textContent).not.toContain('숨긴 재치환 금지');
+    };
+
+    expectHiddenSubGroupAbsent();
+    fireEvent.click(screen.getByRole('button', { name: /공개 섹션/ }));
+    expectHiddenSubGroupAbsent();
+    fireEvent.click(screen.getByRole('button', { name: /첫 항목/ }));
+    expectHiddenSubGroupAbsent();
+  });
+
+  it('가시 하위 라벨은 divider와 breadcrumb에서 토큰을 한 번만 치환한다', () => {
+    contactAttrs.current = { primary: '{{secondary}}', secondary: '재치환 금지' };
+    render(
+      <ChoiceTableResponse
+        question={subGroupVisibilityQuestion({ hiddenSubGroup: false })}
+        value={[]}
+        onChange={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /공개 섹션/ }));
+    expect(screen.getByText('공개 {{secondary}}')).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('공개 {{primary}}');
+    expect(document.body.textContent).not.toContain('공개 재치환 금지');
+
+    fireEvent.click(screen.getByRole('button', { name: /첫 항목/ }));
+    expect(screen.getByText('공개 {{secondary}} › 첫 항목')).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('공개 {{primary}}');
+    expect(document.body.textContent).not.toContain('공개 재치환 금지');
   });
 
   it('실제 상세 unmount/remount 간 scroll을 공유하고 root 복귀 후 0으로 초기화한다', () => {

@@ -48,13 +48,9 @@ export function projectMobileOriginalRow(
     input.omitLeadingAuthoredColumns,
     input.authoredColumns.length,
   );
-  const omittedIds = new Set(
-    input.authoredColumns.slice(0, omit).map((column) => column.id),
-  );
+  const omittedIds = new Set(input.authoredColumns.slice(0, omit).map((column) => column.id));
   const keptVisibleIds = new Set(
-    input.visibleColumns
-      .filter((column) => !omittedIds.has(column.id))
-      .map((column) => column.id),
+    input.visibleColumns.filter((column) => !omittedIds.has(column.id)).map((column) => column.id),
   );
   const projected = recalculateColspansForVisibleColumns(
     input.visibleColumns,
@@ -110,12 +106,9 @@ export function getMobileOriginalRowLabel({
     }
   }
 
-  const explicitlyHiddenLabels = row.cells.flatMap((cell) => {
-    if (cell.mobileDisplay !== 'hidden') return [];
-    const labels = cell.content.trim() ? [cell.content.trim()] : [];
-    if (cell.type !== 'choice_opt') return labels;
-    const choiceLabel = resolveChoiceLabel(cell.id)?.trim();
-    return choiceLabel ? [...labels, choiceLabel] : labels;
+  const explicitlyHiddenLabels = getMobileOriginalRowHiddenLabelCandidates({
+    row,
+    resolveChoiceLabel,
   });
   if (row.label.trim() && !explicitlyHiddenLabels.includes(row.label.trim())) {
     return row.label.trim();
@@ -129,4 +122,20 @@ export function getMobileOriginalRowLabel({
       cell.mobileDisplay !== 'hidden',
   );
   return (choice && resolveChoiceLabel(choice.id)) || '(라벨 없음)';
+}
+
+export function getMobileOriginalRowHiddenLabelCandidates({
+  row,
+  resolveChoiceLabel,
+}: {
+  row: TableRow;
+  resolveChoiceLabel: (cellId: string) => string | undefined;
+}): string[] {
+  return row.cells.flatMap((cell) => {
+    if (cell.mobileDisplay !== 'hidden') return [];
+    const labels = cell.content.trim() ? [cell.content.trim()] : [];
+    if (cell.type !== 'choice_opt') return labels;
+    const choiceLabel = resolveChoiceLabel(cell.id)?.trim();
+    return choiceLabel ? [...labels, choiceLabel] : labels;
+  });
 }

@@ -11,7 +11,11 @@ import { useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import type { Question, TableCell } from '@/types/survey';
 import { type ClassifiedLeaf, type ClassifiedSection, classifyTable } from '@/utils/classify-table';
-import { getMobileOriginalRowLabel, projectMobileOriginalRow } from '@/utils/mobile-original-row';
+import {
+  getMobileOriginalRowHiddenLabelCandidates,
+  getMobileOriginalRowLabel,
+  projectMobileOriginalRow,
+} from '@/utils/mobile-original-row';
 import { clampMobileDrilldownOmitLeadingColumns } from '@/utils/mobile-table-display-mode';
 
 const EMPTY_COLUMNS: NonNullable<Question['tableColumns']> = [];
@@ -56,6 +60,12 @@ export function ChoiceTableDrilldown({
       sections.map((section) => {
         const leaves = section.leaves.map((leaf) => {
           const row = rowById.get(leaf.rowId);
+          const rawSubGroup = leaf.subGroup.trim();
+          const subGroupIsHidden =
+            !!row &&
+            getMobileOriginalRowHiddenLabelCandidates({ row, resolveChoiceLabel }).includes(
+              rawSubGroup,
+            );
           return row
             ? {
                 ...leaf,
@@ -68,7 +78,8 @@ export function ChoiceTableDrilldown({
                   }),
                   attrs,
                 ),
-                subGroup: leaf.subGroup ? substituteTokens(leaf.subGroup, attrs) : '',
+                subGroup:
+                  rawSubGroup && !subGroupIsHidden ? substituteTokens(rawSubGroup, attrs) : '',
               }
             : leaf;
         });
