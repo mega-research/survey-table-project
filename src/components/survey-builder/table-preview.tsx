@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import React, { useLayoutEffect, useMemo, useRef } from 'react';
 
 import { FileText } from 'lucide-react';
 
@@ -77,18 +77,22 @@ export const TablePreview = React.memo(function TablePreview({
   const headerScrollRef = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
-    const element = tableContainerRef.current;
-    if (!element || !scrollLeftRef) return;
-    element.scrollLeft = Math.min(
-      scrollLeftRef.current,
-      Math.max(0, element.scrollWidth - element.clientWidth),
+    const body = tableContainerRef.current;
+    if (!body || !scrollLeftRef) return;
+    const restoredScrollLeft = Math.min(
+      Math.max(0, scrollLeftRef.current),
+      Math.max(0, body.scrollWidth - body.clientWidth),
     );
+    scrollLeftRef.current = restoredScrollLeft;
+    body.scrollLeft = restoredScrollLeft;
+    if (headerScrollRef.current) headerScrollRef.current.scrollLeft = restoredScrollLeft;
   }, [columns, rows, scrollLeftRef]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (resetScrollKey === undefined || !scrollLeftRef) return;
     scrollLeftRef.current = 0;
     if (tableContainerRef.current) tableContainerRef.current.scrollLeft = 0;
+    if (headerScrollRef.current) headerScrollRef.current.scrollLeft = 0;
   }, [resetScrollKey, scrollLeftRef]);
 
   const { canScrollLeft, canScrollRight } = useHorizontalScrollIndicators(tableContainerRef, {

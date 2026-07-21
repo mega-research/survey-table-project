@@ -35,6 +35,17 @@ function renderOriginalRow({ hideColumnLabels = false } = {}) {
   );
 }
 
+function getHeaderScroller(): HTMLElement {
+  const scroller = screen.getAllByRole('columnheader')[0]?.parentElement?.parentElement;
+  if (!(scroller instanceof HTMLElement)) throw new Error('헤더 스크롤 컨테이너가 없습니다.');
+  return scroller;
+}
+
+function setScrollGeometry(element: HTMLElement, scrollWidth: number, clientWidth: number) {
+  Object.defineProperty(element, 'scrollWidth', { configurable: true, value: scrollWidth });
+  Object.defineProperty(element, 'clientWidth', { configurable: true, value: clientWidth });
+}
+
 describe('MobileOriginalRowTable', () => {
   it('정적 hidden 콘텐츠는 숨기고 interactive hidden 입력은 유지한다', () => {
     render(
@@ -73,7 +84,7 @@ describe('MobileOriginalRowTable', () => {
   });
 
   it('_isContinuation 셀은 grid cell과 입력을 모두 렌더하지 않는다', () => {
-    render(
+    const { container } = render(
       <MobileOriginalRowTable
         columns={[col('점수')]}
         row={row([{ ...inputCell, _isContinuation: true }])}
@@ -91,9 +102,10 @@ describe('MobileOriginalRowTable', () => {
     );
     expect(screen.queryByPlaceholderText('점수')).toBeNull();
     expect(screen.queryByTestId('cell-input')).toBeNull();
+    expect(container.querySelector('[data-cell-id="input"]')).toBeNull();
   });
 
-  it('행이 바뀌어도 scrollLeft를 복원하고 reset key에서 0으로 초기화한다', () => {
+  it('행이 바뀌면 저장한 scrollLeft를 헤더와 body에 함께 복원한다', () => {
     const scrollLeftRef: MutableRefObject<number> = { current: 120 };
     const renderCell = (cell: TableCell) => (
       <InteractiveCell cell={cell} questionId="q1" isTestMode value={{}} onChange={vi.fn()} />
@@ -107,9 +119,11 @@ describe('MobileOriginalRowTable', () => {
         renderCell={renderCell}
       />,
     );
-    const scroller = screen.getByTestId('table-preview-scroll');
-    Object.defineProperty(scroller, 'scrollWidth', { configurable: true, value: 500 });
-    Object.defineProperty(scroller, 'clientWidth', { configurable: true, value: 200 });
+    const bodyScroller = screen.getByTestId('table-preview-scroll');
+    const headerScroller = getHeaderScroller();
+    setScrollGeometry(bodyScroller, 500, 200);
+    setScrollGeometry(headerScroller, 500, 200);
+    scrollLeftRef.current = 120;
     rerender(
       <MobileOriginalRowTable
         columns={[col('점수')]}
@@ -119,10 +133,84 @@ describe('MobileOriginalRowTable', () => {
         renderCell={renderCell}
       />,
     );
-    expect(scroller.scrollLeft).toBe(120);
-    scroller.scrollLeft = 80;
-    fireEvent.scroll(scroller);
+    expect(headerScroller.scrollLeft).toBe(120);
+    expect(bodyScroller.scrollLeft).toBe(120);
+  });
+
+  it('짧은 행으로 바뀌면 헤더와 body를 유효 범위로 clamp하고 공유 ref를 갱신한다', () => {
+    const scrollLeftRef: MutableRefObject<number> = { current: 240 };
+    const renderCell = (cell: TableCell) => <span>{cell.id}</span>;
+    const { rerender } = render(
+      <MobileOriginalRowTable
+        columns={[col('항목'), col('점수')]}
+        row={row([{ id: 'label', type: 'text', content: '직무' }, inputCell])}
+        hideColumnLabels={false}
+        scrollLeftRef={scrollLeftRef}
+        renderCell={renderCell}
+      />,
+    );
+    const bodyScroller = screen.getByTestId('table-preview-scroll');
+    const headerScroller = getHeaderScroller();
+    setScrollGeometry(bodyScroller, 500, 200);
+    setScrollGeometry(headerScroller, 500, 200);
+    scrollLeftRef.current = 240;
+    rerender(
+      <MobileOriginalRowTable
+        columns={[col('항목'), col('점수')]}
+        row={row([{ id: 'label-2', type: 'text', content: '직무' }, inputCell], 'r2')}
+        hideColumnLabels={false}
+        scrollLeftRef={scrollLeftRef}
+        renderCell={renderCell}
+      />,
+    );
+    expect(bodyScroller.scrollLeft).toBe(240);
+
+    setScrollGeometry(bodyScroller, 260, 200);
+    setScrollGeometry(headerScroller, 260, 200);
+    rerender(
+      <MobileOriginalRowTable
+        columns={[col('점수')]}
+        row={row([{ ...inputCell, id: 'input-2' }], 'r3')}
+        hideColumnLabels={false}
+        scrollLeftRef={scrollLeftRef}
+        renderCell={renderCell}
+      />,
+    );
+    expect(headerScroller.scrollLeft).toBe(60);
+    expect(bodyScroller.scrollLeft).toBe(60);
+    expect(scrollLeftRef.current).toBe(60);
+  });
+
+  it('scroll 이벤트를 저장하고 reset key에서 헤더와 body 및 ref를 0으로 초기화한다', () => {
+    const scrollLeftRef: MutableRefObject<number> = { current: 120 };
+    const renderCell = (cell: TableCell) => <span>{cell.id}</span>;
+    const { rerender } = render(
+      <MobileOriginalRowTable
+        columns={[col('점수')]}
+        row={row([inputCell])}
+        hideColumnLabels={false}
+        scrollLeftRef={scrollLeftRef}
+        renderCell={renderCell}
+      />,
+    );
+    const bodyScroller = screen.getByTestId('table-preview-scroll');
+    const headerScroller = getHeaderScroller();
+    setScrollGeometry(bodyScroller, 500, 200);
+    setScrollGeometry(headerScroller, 500, 200);
+    scrollLeftRef.current = 120;
+    rerender(
+      <MobileOriginalRowTable
+        columns={[col('점수')]}
+        row={row([{ ...inputCell, id: 'input-2' }], 'r2')}
+        hideColumnLabels={false}
+        scrollLeftRef={scrollLeftRef}
+        renderCell={renderCell}
+      />,
+    );
+    bodyScroller.scrollLeft = 80;
+    fireEvent.scroll(bodyScroller);
     expect(scrollLeftRef.current).toBe(80);
+    expect(headerScroller.scrollLeft).toBe(80);
     rerender(
       <MobileOriginalRowTable
         columns={[col('점수')]}
@@ -134,11 +222,12 @@ describe('MobileOriginalRowTable', () => {
       />,
     );
     expect(scrollLeftRef.current).toBe(0);
-    expect(scroller.scrollLeft).toBe(0);
+    expect(headerScroller.scrollLeft).toBe(0);
+    expect(bodyScroller.scrollLeft).toBe(0);
   });
 
   it('단일 헤더와 body 병합 semantics를 보존하고 숨김 셀은 생략한다', () => {
-    render(
+    const { container } = render(
       <MobileOriginalRowTable
         columns={[
           { ...col('병합 헤더'), colspan: 2 },
@@ -162,6 +251,8 @@ describe('MobileOriginalRowTable', () => {
     expect(merged).toHaveAttribute('aria-colspan', '2');
     expect(merged).toHaveAttribute('aria-rowspan', '2');
     expect(screen.queryByText('숨김 본문')).toBeNull();
+    expect(screen.queryByTestId('cell-hidden')).toBeNull();
+    expect(container.querySelector('[data-cell-id="hidden"]')).toBeNull();
   });
 
   it('body cell 식별자와 오류 ring을 노출한다', () => {
