@@ -314,7 +314,6 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
         ? { choiceGroups: storeQuestion.choiceGroups }
         : {}),
     };
-    didSaveRef.current = true;
     setIsSaving(true);
     try {
       const updatedQuestion = {
@@ -457,6 +456,7 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
         }
       }
 
+      didSaveRef.current = true;
       onClose();
     } catch (error) {
       console.error('저장 중 오류가 발생했습니다:', error);

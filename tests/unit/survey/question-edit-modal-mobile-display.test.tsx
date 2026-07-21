@@ -1,7 +1,12 @@
 import { useState } from 'react';
 
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const { deleteImagesFromR2Mock, extractImageUrlsFromQuestionMock } = vi.hoisted(() => ({
+  deleteImagesFromR2Mock: vi.fn(),
+  extractImageUrlsFromQuestionMock: vi.fn(),
+}));
 
 vi.mock('@/components/survey-builder/question-basic-tab', () => ({
   QuestionBasicTab: () => null,
@@ -16,8 +21,10 @@ vi.mock('@/hooks/use-ensure-survey-in-db', () => ({
   useEnsureSurveyInDb: () => async () => {},
 }));
 vi.mock('@/shared/lib/rpc', () => ({ client: {} }));
-vi.mock('@/lib/image-extractor', () => ({ extractImageUrlsFromQuestion: () => [] }));
-vi.mock('@/lib/image-utils', () => ({ deleteImagesFromR2: async () => {} }));
+vi.mock('@/lib/image-extractor', () => ({
+  extractImageUrlsFromQuestion: extractImageUrlsFromQuestionMock,
+}));
+vi.mock('@/lib/image-utils', () => ({ deleteImagesFromR2: deleteImagesFromR2Mock }));
 
 import { QuestionEditModal } from '@/components/survey-builder/question-edit-modal';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
@@ -67,11 +74,13 @@ function ModalHarness() {
 describe('QuestionEditModal 모바일 표시 설정 롤백', () => {
   beforeEach(() => {
     seedSurvey();
+    extractImageUrlsFromQuestionMock.mockReturnValue([]);
+    deleteImagesFromR2Mock.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
     cleanup();
-    vi.clearAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('편집기에서 변경한 값을 취소하면 undefined를 포함한 원래값을 정확히 복원한다', () => {
@@ -99,5 +108,36 @@ describe('QuestionEditModal 모바일 표시 설정 롤백', () => {
     expect(restoredQuestion?.mobileTableDisplayMode).toBe('original');
     expect(restoredQuestion?.mobileDrilldownOmitLeadingColumns).toBeUndefined();
     expect(Object.hasOwn(restoredQuestion ?? {}, 'mobileDrilldownOmitLeadingColumns')).toBe(false);
+  });
+
+  it('외부 비동기 저장이 실패한 뒤 취소해도 모바일 설정을 원래값으로 복원한다', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    extractImageUrlsFromQuestionMock
+      .mockReturnValueOnce([])
+      .mockReturnValueOnce(['/old-image.png']);
+    deleteImagesFromR2Mock.mockRejectedValueOnce(new Error('이미지 삭제 실패'));
+    render(<ModalHarness />);
+
+    act(() => {
+      useSurveyBuilderStore.getState().silentUpdateQuestion('q1', {
+        mobileTableDisplayMode: 'drilldown-original-row',
+        mobileDrilldownOmitLeadingColumns: 2,
+      });
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+
+    await waitFor(() => {
+      expect(deleteImagesFromR2Mock).toHaveBeenCalledWith(['/old-image.png']);
+      expect(screen.getByRole('button', { name: '취소' })).toBeEnabled();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '취소' }));
+
+    const restoredQuestion = getQuestion();
+    expect(restoredQuestion?.mobileTableDisplayMode).toBe('original');
+    expect(restoredQuestion?.mobileDrilldownOmitLeadingColumns).toBeUndefined();
+    expect(Object.hasOwn(restoredQuestion ?? {}, 'mobileDrilldownOmitLeadingColumns')).toBe(false);
+    expect(consoleError).toHaveBeenCalledWith('저장 중 오류가 발생했습니다:', expect.any(Error));
   });
 });
