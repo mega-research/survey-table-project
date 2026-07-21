@@ -97,8 +97,6 @@ export function getMobileOriginalRowLabel({
     omitLeadingAuthoredColumns,
     authoredColumns.length,
   );
-  const omittedCells = row.cells.slice(0, omit);
-
   for (let index = omit - 1; index >= 0; index -= 1) {
     const cell = row.cells[index];
     if (
@@ -112,15 +110,23 @@ export function getMobileOriginalRowLabel({
     }
   }
 
-  const explicitlyHiddenLabels = omittedCells
-    .filter((cell) => cell.type === 'text' && cell.mobileDisplay === 'hidden')
-    .map((cell) => cell.content.trim());
+  const explicitlyHiddenLabels = row.cells.flatMap((cell) => {
+    if (cell.mobileDisplay !== 'hidden') return [];
+    const labels = cell.content.trim() ? [cell.content.trim()] : [];
+    if (cell.type !== 'choice_opt') return labels;
+    const choiceLabel = resolveChoiceLabel(cell.id)?.trim();
+    return choiceLabel ? [...labels, choiceLabel] : labels;
+  });
   if (row.label.trim() && !explicitlyHiddenLabels.includes(row.label.trim())) {
     return row.label.trim();
   }
 
   const choice = row.cells.find(
-    (cell) => cell.type === 'choice_opt' && !cell.isHidden && !cell._isContinuation,
+    (cell) =>
+      cell.type === 'choice_opt' &&
+      !cell.isHidden &&
+      !cell._isContinuation &&
+      cell.mobileDisplay !== 'hidden',
   );
   return (choice && resolveChoiceLabel(choice.id)) || '(라벨 없음)';
 }

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
 import {
   getMobileOriginalRowLabel,
+  isMobileOriginalRowInteractiveCell,
   projectMobileOriginalRow,
 } from '@/utils/mobile-original-row';
 
@@ -88,5 +89,84 @@ describe('getMobileOriginalRowLabel', () => {
         resolveChoiceLabel: (cellId) => (cellId === 'choice' ? '선택지 제목' : undefined),
       }),
     ).toBe('선택지 제목');
+  });
+
+  it.each(['text', 'image', 'video'] as const)(
+    '행 전체의 mobileDisplay hidden %s 콘텐츠는 row.label로 다시 노출하지 않는다',
+    (type) => {
+      const hiddenStatic: TableCell = {
+        id: 'hidden-static',
+        type,
+        content: '행 전체 숨김 제목',
+        mobileDisplay: 'hidden',
+      };
+
+      expect(
+        getMobileOriginalRowLabel({
+          authoredColumns: [col('c0'), col('c1')],
+          row: {
+            id: 'r1',
+            label: '행 전체 숨김 제목',
+            cells: [text('empty', ''), hiddenStatic],
+          },
+          omitLeadingAuthoredColumns: 1,
+          resolveChoiceLabel: () => undefined,
+        }),
+      ).toBe('(라벨 없음)');
+    },
+  );
+
+  it('mobileDisplay hidden choice_opt는 건너뛰고 다음 가시 choice를 fallback으로 쓴다', () => {
+    const hiddenChoice: TableCell = {
+      id: 'hidden-choice',
+      type: 'choice_opt',
+      content: '',
+      mobileDisplay: 'hidden',
+    };
+    const visibleChoice: TableCell = {
+      id: 'visible-choice',
+      type: 'choice_opt',
+      content: '',
+    };
+
+    expect(
+      getMobileOriginalRowLabel({
+        authoredColumns: [col('c0'), col('c1'), col('c2')],
+        row: {
+          id: 'r1',
+          label: '',
+          cells: [text('empty', ''), hiddenChoice, visibleChoice],
+        },
+        omitLeadingAuthoredColumns: 1,
+        resolveChoiceLabel: (cellId) =>
+          cellId === 'hidden-choice' ? '숨긴 선택지' : '가시 선택지',
+      }),
+    ).toBe('가시 선택지');
+  });
+
+  it('mobileDisplay hidden interactive 셀도 응답 컨트롤 대상이다', () => {
+    const hiddenChoice: TableCell = {
+      id: 'hidden-choice',
+      type: 'choice_opt',
+      content: '',
+      mobileDisplay: 'hidden',
+    };
+
+    expect(isMobileOriginalRowInteractiveCell(hiddenChoice)).toBe(true);
+  });
+
+  it('제외 열의 가시 text 후보는 오른쪽 값을 우선한다', () => {
+    expect(
+      getMobileOriginalRowLabel({
+        authoredColumns: [col('c0'), col('c1'), col('c2')],
+        row: {
+          id: 'r1',
+          label: '',
+          cells: [text('left', '왼쪽'), text('right', '오른쪽'), radio('value')],
+        },
+        omitLeadingAuthoredColumns: 2,
+        resolveChoiceLabel: () => undefined,
+      }),
+    ).toBe('오른쪽');
   });
 });

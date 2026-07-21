@@ -23,7 +23,14 @@ export function resolveRadioGroupProps(
   rowId: string,
   buckets: Map<string, string[]>,
 ): { groupName?: string; siblingCellIds?: string[] } {
-  if (cell.type !== 'radio' || !cell.radioGroupName) return {};
+  if (
+    cell.type !== 'radio' ||
+    cell.isHidden ||
+    cell._isContinuation ||
+    !cell.radioGroupName
+  ) {
+    return {};
+  }
   const members = buckets.get(cell.radioGroupName);
   if (!members || members.length < 2) return {};
   return {

@@ -59,4 +59,13 @@ describe('table radio groups', () => {
 
     expect(buildRadioGroupBuckets(r).get('score')).toEqual(['visible']);
   });
+
+  it.each([
+    ['isHidden', radio('hidden', { isHidden: true })],
+    ['_isContinuation', radio('continuation', { _isContinuation: true })],
+  ])('%s 셀은 유효한 bucket을 직접 전달해도 group props를 반환하지 않는다', (_case, cell) => {
+    const buckets = new Map([['score', [cell.id, 'visible']]]);
+
+    expect(resolveRadioGroupProps(cell, 'row-1', buckets)).toEqual({});
+  });
 });

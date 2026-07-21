@@ -41,6 +41,36 @@ describe('recalculateColspansForVisibleColumns - 가로 병합 시작 열 필터
     );
 
     expect(result.columns[0]?.isHeaderHidden).toBe(false);
+    expect(result.columns[0]?.colspan).toBe(2);
+    expect(result.columns[1]?.isHeaderHidden).toBe(true);
+  });
+
+  it('병합 시작 셀이 빠지면 첫 가시 continuation 본문 셀을 잔여 colspan 시작으로 승격한다', () => {
+    const result = recalculateColspansForVisibleColumns(
+      [col('A'), col('B'), col('C')],
+      [
+        {
+          id: 'r1',
+          label: '',
+          cells: [
+            cell('a', { colspan: 3 }),
+            cell('b', { isHidden: true }),
+            cell('c', { isHidden: true }),
+          ],
+        },
+      ],
+      new Set(['B', 'C']),
+    );
+
+    expect(result.rows[0]?.cells[0]).toMatchObject({
+      id: 'b',
+      isHidden: false,
+      colspan: 2,
+    });
+    expect(result.rows[0]?.cells[1]).toMatchObject({
+      id: 'c',
+      isHidden: true,
+    });
   });
 
   // 컬럼 [A, B, C]. A 셀이 colspan 2 로 A+B 를 가로 병합 → B 는 continuation(isHidden:true, colspan 없음).
