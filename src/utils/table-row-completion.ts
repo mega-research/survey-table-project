@@ -1,7 +1,8 @@
 import type { TableCell, TableRow } from '@/types/survey';
+import { buildRadioGroupBuckets } from '@/utils/table-radio-groups';
 
 // 완료 판정 대상이 되는 입력 셀 타입
-const ANSWERABLE_CELL_TYPES = ['text', 'checkbox', 'radio', 'select', 'input'] as const;
+const DEFAULT_ANSWERABLE_CELL_TYPES = ['text', 'checkbox', 'radio', 'select', 'input'] as const;
 
 /**
  * 셀 응답값이 "응답됨"으로 간주되는지 여부.
@@ -9,26 +10,6 @@ const ANSWERABLE_CELL_TYPES = ['text', 'checkbox', 'radio', 'select', 'input'] a
  */
 function isCellAnswered(val: unknown): boolean {
   return val !== undefined && val !== null && val !== '';
-}
-
-/**
- * 같은 행 + 같은 radioGroupName 셀들(멤버 ≥ 2)을 single-select 그룹으로 묶는다.
- * 렌더 경로(resolveRadioGroupProps)와 동일하게 isHidden 셀은 제외하고, 멤버가 2개 이상일 때만 그룹으로 본다.
- * 반환: radioGroupName -> 그룹 멤버 cell.id 목록(2개 이상).
- */
-function buildRadioGroupBuckets(row: TableRow): Map<string, string[]> {
-  const buckets = new Map<string, string[]>();
-  for (const c of row.cells) {
-    if (c.type !== 'radio' || c.isHidden || !c.radioGroupName) continue;
-    const list = buckets.get(c.radioGroupName) ?? [];
-    list.push(c.id);
-    buckets.set(c.radioGroupName, list);
-  }
-  // 멤버가 1개뿐이면 그룹으로 묶을 의미가 없으므로 제거
-  for (const [name, ids] of buckets) {
-    if (ids.length < 2) buckets.delete(name);
-  }
-  return buckets;
 }
 
 /**
@@ -42,7 +23,9 @@ function buildRadioGroupBuckets(row: TableRow): Map<string, string[]> {
 export function isTableRowCompleted(
   row: TableRow,
   response: Record<string, unknown>,
+  answerableCellTypes: readonly TableCell['type'][] = DEFAULT_ANSWERABLE_CELL_TYPES,
 ): boolean {
+  const answerable = new Set<TableCell['type']>(answerableCellTypes);
   const groupBuckets = buildRadioGroupBuckets(row);
 
   // 그룹별 완료 여부를 미리 계산 (멤버 중 하나라도 응답되면 완료)
@@ -65,9 +48,7 @@ export function isTableRowCompleted(
     // buildRadioGroupBuckets 도 isHidden 을 제외하므로 완료 판정도 동일하게 제외해 정합을 맞춘다.
     // (colspan 병합으로 숨겨진 answerable 셀이 미응답으로 남아 행을 영구 미완료로 만드는 비대칭 방지.)
     if (cell.isHidden) return true;
-    if (!ANSWERABLE_CELL_TYPES.includes(cell.type as (typeof ANSWERABLE_CELL_TYPES)[number])) {
-      return true;
-    }
+    if (!answerable.has(cell.type)) return true;
     // single-select radio 그룹 멤버는 그룹 단위로 판정
     const groupName = cellGroupName.get(cell.id);
     if (groupName) {

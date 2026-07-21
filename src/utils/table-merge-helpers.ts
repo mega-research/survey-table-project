@@ -300,6 +300,18 @@ export function recalculateColspansForVisibleColumns(
     if (visibleColumnIds.has(col.id)) visibleColIndices.add(idx);
   });
 
+  const coveredHeaderIndices = new Set<number>();
+  for (let index = 0; index < originalColumns.length; index += 1) {
+    if (!visibleColIndices.has(index)) continue;
+    const start = originalColumns[index];
+    if (!start || start.isHeaderHidden || (start.colspan ?? 1) <= 1) continue;
+    const coveredVisible = Array.from(
+      { length: start.colspan ?? 1 },
+      (_, offset) => index + offset,
+    ).filter((covered) => visibleColIndices.has(covered));
+    coveredVisible.slice(1).forEach((covered) => coveredHeaderIndices.add(covered));
+  }
+
   // 열 필터링 + 헤더 colspan 재계산
   const filteredColumns: TableColumn[] = [];
   for (let i = 0; i < originalColumns.length; i++) {
@@ -316,7 +328,7 @@ export function recalculateColspansForVisibleColumns(
       }
       if (newColspan > 1) { col.colspan = newColspan; } else { delete col.colspan; }
     }
-    col.isHeaderHidden = false; // 필터링 후에는 모두 표시
+    col.isHeaderHidden = coveredHeaderIndices.has(i);
     filteredColumns.push(col);
   }
 

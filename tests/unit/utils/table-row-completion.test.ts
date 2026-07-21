@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { TableCell, TableRow } from '@/types/survey';
+import { MOBILE_TABLE_COMPLETION_TYPES } from '@/utils/mobile-original-row';
 import { isTableRowCompleted } from '@/utils/table-row-completion';
 
 // 테스트용 셀 팩토리 — 최소 필드만 채우고 나머지는 기본값
@@ -107,5 +108,20 @@ describe('isTableRowCompleted', () => {
     const rSelect = row([cell({ id: 'sel', type: 'select' })]);
     expect(isTableRowCompleted(rSelect, { sel: 'x' })).toBe(true);
     expect(isTableRowCompleted(rSelect, { sel: '' })).toBe(false);
+  });
+
+  it('모바일 원본 행 타입 집합에서는 정적 text를 제외한다', () => {
+    const r = row([
+      cell({ id: 'label', type: 'text' }),
+      cell({ id: 'v', type: 'input' }),
+    ]);
+
+    expect(isTableRowCompleted(r, { v: '1' }, MOBILE_TABLE_COMPLETION_TYPES)).toBe(true);
+  });
+
+  it('모바일 원본 행 타입 집합에서는 ranking을 완료 대상으로 포함한다', () => {
+    const r = row([cell({ id: 'rank', type: 'ranking' })]);
+
+    expect(isTableRowCompleted(r, {}, MOBILE_TABLE_COMPLETION_TYPES)).toBe(false);
   });
 });

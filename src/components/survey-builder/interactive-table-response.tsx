@@ -17,7 +17,6 @@ import {
   DynamicRowGroupConfig,
   HeaderCell,
   Question,
-  TableCell,
   TableColumn,
   TableRow,
 } from '@/types/survey';
@@ -41,6 +40,10 @@ import {
   getHeaderCellStickyStyle,
 } from '@/utils/table-grid-utils';
 import { recalculateColspansForVisibleColumns } from '@/utils/table-merge-helpers';
+import {
+  buildRadioGroupBuckets,
+  resolveRadioGroupProps,
+} from '@/utils/table-radio-groups';
 
 import { InteractiveCell } from './cells';
 import { DynamicRowSelectorModal } from './dynamic-row-selector-modal';
@@ -237,13 +240,7 @@ function renderRowCells({
   // Phase 5-D: 같은 행 + 같은 radioGroupName 셀들 묶음 분석.
   // 같은 그룹 셀 ≥ 2개일 때만 활성 (단일 셀 그룹은 묶을 의미 없음).
   // 같은 열에 걸친 그룹(다른 행끼리 묶음)은 이번 단계 범위 외 — 백엔드 P1 정책이 다중체크를 처리.
-  const radioGroupBuckets = new Map<string, string[]>();
-  for (const c of row.cells) {
-    if (c.type !== 'radio' || c.isHidden || !c.radioGroupName) continue;
-    const list = radioGroupBuckets.get(c.radioGroupName) ?? [];
-    list.push(c.id);
-    radioGroupBuckets.set(c.radioGroupName, list);
-  }
+  const radioGroupBuckets = buildRadioGroupBuckets(row);
 
   return row.cells.map((cell, cellIndex) => {
     if (cell.isHidden) return null;
@@ -299,24 +296,6 @@ function renderRowCells({
       </div>
     );
   });
-}
-
-/**
- * Phase 5-D: 같은 행 + 같은 radioGroupName 셀에 대해 HTML name + sibling 클리어 props 결정.
- * 그룹 멤버 ≥ 2 일 때만 활성 (1개면 묶을 의미 없음).
- */
-function resolveRadioGroupProps(
-  cell: TableCell,
-  rowId: string,
-  buckets: Map<string, string[]>,
-): { groupName?: string; siblingCellIds?: string[] } {
-  if (cell.type !== 'radio' || !cell.radioGroupName) return {};
-  const groupCells = buckets.get(cell.radioGroupName);
-  if (!groupCells || groupCells.length < 2) return {};
-  return {
-    groupName: `${rowId}-${cell.radioGroupName}`,
-    siblingCellIds: groupCells.filter((cid) => cid !== cell.id),
-  };
 }
 
 // ── 메인 컴포넌트 ──

@@ -289,6 +289,37 @@ describe('classifyTable — 수출 국가 (라벨 rowspan 병합)', () => {
   });
 });
 
+describe('classifyTable — 주입된 answerable 셀 타입', () => {
+  it('choice_opt를 주입한 경우 기존 rowspan section과 원본 행 leaf를 만든다', () => {
+    const input: ClassifyInput = {
+      tableColumns: [C('대분류'), C('항목'), C('선택')],
+      tableRowsData: [
+        {
+          id: 'r1',
+          label: '',
+          cells: [
+            T('유저 지표', { rs: 2 }),
+            T('활성 사용자'),
+            { id: 'o1', type: 'choice_opt', content: '' },
+          ],
+        },
+        {
+          id: 'r2',
+          label: '',
+          cells: [H(), T('재방문율'), { id: 'o2', type: 'choice_opt', content: '' }],
+        },
+      ],
+      answerableCellTypes: ['choice_opt'],
+    };
+
+    const sections = classifyTable(input);
+
+    expect(sections).toHaveLength(1);
+    expect(sections[0]?.label).toBe('유저 지표');
+    expect(sections[0]?.leaves.map((leaf) => leaf.rowId)).toEqual(['r1', 'r2']);
+  });
+});
+
 describe('decideDrilldown', () => {
   it('GPU(입력 5개): 15 이하 → 기존 카드 유지', () => {
     expect(decideDrilldown(gpu()).useDrilldown).toBe(false);

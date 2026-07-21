@@ -13,10 +13,24 @@ export interface ClassifyInput {
   tableColumns: TableColumn[];
   tableRowsData: TableRow[];
   tableHeaderGrid?: HeaderCell[][] | null | undefined;
+  answerableCellTypes?: readonly TableCell['type'][] | undefined;
 }
 
-const INPUT_TYPES = new Set<TableCell['type']>(['input', 'radio', 'checkbox', 'select', 'ranking']);
-const isInput = (c?: TableCell) => !!c && !c.isHidden && !c._isContinuation && INPUT_TYPES.has(c.type);
+export const DEFAULT_TABLE_ANSWERABLE_CELL_TYPES = [
+  'input',
+  'radio',
+  'checkbox',
+  'select',
+  'ranking',
+] as const satisfies readonly TableCell['type'][];
+
+function answerableTypes(q: ClassifyInput): ReadonlySet<TableCell['type']> {
+  return new Set(q.answerableCellTypes ?? DEFAULT_TABLE_ANSWERABLE_CELL_TYPES);
+}
+
+function isInput(cell: TableCell | undefined, types: ReadonlySet<TableCell['type']>) {
+  return !!cell && !cell.isHidden && !cell._isContinuation && types.has(cell.type);
+}
 const isLabel = (c?: TableCell) =>
   !!c && !c.isHidden && (c.type === 'text' || c.type === 'image' || c.type === 'video');
 
@@ -44,12 +58,12 @@ export interface ClassifiedSection {
 }
 
 // 값 열(입력 있는 열) 판별 — cells 배열 인덱스 === 열 인덱스
-function valueColumns(q: ClassifyInput): number[] {
+function valueColumns(q: ClassifyInput, types = answerableTypes(q)): number[] {
   const n = q.tableColumns.length;
   const isVal = new Array(n).fill(false);
   for (const row of q.tableRowsData)
     row.cells.forEach((c, j) => {
-      if (isInput(c)) isVal[j] = true;
+      if (isInput(c, types)) isVal[j] = true;
     });
   return isVal.flatMap((v, j) => (v ? [j] : []));
 }
@@ -121,9 +135,10 @@ const rightmostLabel = (row: TableRow, labelCols: number[]) => {
 };
 
 export function classifyTable(q: ClassifyInput): ClassifiedSection[] {
+  const types = answerableTypes(q);
   const cols = q.tableColumns;
   const rows = q.tableRowsData;
-  const vcols = valueColumns(q);
+  const vcols = valueColumns(q, types);
   const V = vcols.length;
   const labelCols = cols.map((_, j) => j).filter((j) => !vcols.includes(j));
   const leftmost = labelCols[0] ?? 0; // 목차(섹션) 열
@@ -133,8 +148,12 @@ export function classifyTable(q: ClassifyInput): ClassifiedSection[] {
   colGroups.forEach((g) => g.cols.forEach((c) => colMeta.set(c.col, { group: g.label, leaf: c.label })));
 
   return groupByColumn(rows, leftmost).map((sec) => {
-    const usedPerRow = sec.rows.map((r) => vcols.filter((j) => isInput(r.cells[j])));
-    const inputRows = sec.rows.filter((r) => r.cells.some(isInput));
+    const usedPerRow = sec.rows.map((row) =>
+      vcols.filter((column) => isInput(row.cells[column], types)),
+    );
+    const inputRows = sec.rows.filter((row) =>
+      row.cells.some((cell) => isInput(cell, types)),
+    );
 
     let kind: SectionKind;
     let reason: string;
@@ -157,14 +176,16 @@ export function classifyTable(q: ClassifyInput): ClassifiedSection[] {
 
     const leaves: ClassifiedLeaf[] = inputRows.map((row) => {
       const cellByCol: Record<number, string> = {};
-      row.cells.forEach((c, j) => {
-        if (isInput(c)) cellByCol[j] = c.id;
+      row.cells.forEach((cell, columnIndex) => {
+        if (isInput(cell, types)) cellByCol[columnIndex] = cell.id;
       });
       return {
         rowId: row.id,
         label: rightmostLabel(row, labelCols),
         subGroup: subOf(row),
-        inputCellIds: row.cells.filter(isInput).map((c) => c.id),
+        inputCellIds: row.cells
+          .filter((cell) => isInput(cell, types))
+          .map((cell) => cell.id),
         cellByCol,
       };
     });
