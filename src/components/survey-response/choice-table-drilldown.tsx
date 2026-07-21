@@ -68,6 +68,7 @@ export function ChoiceTableDrilldown({
                   }),
                   attrs,
                 ),
+                subGroup: leaf.subGroup ? substituteTokens(leaf.subGroup, attrs) : '',
               }
             : leaf;
         });
@@ -81,14 +82,10 @@ export function ChoiceTableDrilldown({
                 cell.mobileDisplay === 'hidden' &&
                 cell.content.trim() === section.label.trim(),
             ) ?? false;
+        const sectionLabel = sectionLabelIsHidden ? '' : substituteTokens(section.label, attrs);
         return {
           ...section,
-          label:
-            leaves.length === 1
-              ? (leaves[0]?.label ?? '')
-              : sectionLabelIsHidden
-                ? ''
-                : section.label,
+          label: leaves.length === 1 ? (leaves[0]?.label ?? '') : sectionLabel,
           leaves,
         };
       }),

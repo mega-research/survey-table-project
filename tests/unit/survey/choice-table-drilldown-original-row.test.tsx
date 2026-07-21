@@ -132,6 +132,33 @@ it('mobileDisplay hidden choice는 라벨을 숨기지만 control을 유지한�
   expect(screen.getByRole('radio', { name: '선택' })).toBeInTheDocument();
 });
 
+it('hidden-label control은 44px label target 전체로 선택할 수 있다', () => {
+  const onChange = vi.fn();
+  render(
+    <ChoiceTableResponse question={hiddenChoiceQuestion()} value={null} onChange={onChange} />,
+  );
+  enterRow('지표');
+  const control = screen.getByRole('radio', { name: '선택' });
+  const target = control.closest('label');
+  expect(target).not.toBeNull();
+  expect(target).toHaveClass('min-h-11', 'min-w-11');
+  fireEvent.click(target!);
+  expect(onChange).toHaveBeenCalledWith('choice-hidden');
+});
+
+it('hidden-label checkbox도 44px label target 전체로 선택할 수 있다', () => {
+  const onChange = vi.fn();
+  const question = { ...hiddenChoiceQuestion(), type: 'checkbox' as const };
+  render(<ChoiceTableResponse question={question} value={[]} onChange={onChange} />);
+  enterRow('지표');
+  const control = screen.getByRole('checkbox', { name: '선택' });
+  const target = control.closest('label');
+  expect(target).not.toBeNull();
+  expect(target).toHaveClass('min-h-11', 'min-w-11');
+  fireEvent.click(target!);
+  expect(onChange).toHaveBeenCalledWith(['choice-hidden']);
+});
+
 it('선택 후 현재 상세를 유지하고 카드 badge와 기존 min/max footer만 갱신한다', () => {
   render(<ControlledChoiceTable />);
   expect(screen.getByText('0/2개 선택됨')).toBeInTheDocument();

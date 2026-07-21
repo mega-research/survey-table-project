@@ -8,6 +8,7 @@
 import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
+import { ChoiceTableResponse } from '@/components/survey-response/choice-table-response';
 import type { Question, TableCell, TableRow } from '@/types/survey';
 
 // 데스크톱 강제
@@ -29,16 +30,16 @@ vi.mock('@/components/survey-builder/table-preview', () => ({
     renderCell: (cell: TableCell) => React.ReactNode;
   }) => (
     <div>
-      {rows.flatMap((r) => r.cells).map((cell) => (
-        <div key={cell.id} data-testid={`cell-${cell.id}`}>
-          {renderCell(cell)}
-        </div>
-      ))}
+      {rows
+        .flatMap((r) => r.cells)
+        .map((cell) => (
+          <div key={cell.id} data-testid={`cell-${cell.id}`}>
+            {renderCell(cell)}
+          </div>
+        ))}
     </div>
   ),
 }));
-
-import { ChoiceTableResponse } from '@/components/survey-response/choice-table-response';
 
 function radioQuestion(): Question {
   return {
@@ -95,9 +96,7 @@ function groupedRadioQuestion(): Question {
 describe('ChoiceTableResponse 그룹 라디오 controlled 경고', () => {
   it('그룹 라디오 셀 렌더 시 onChange 없는 controlled 경고가 나지 않는다', () => {
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    render(
-      <ChoiceTableResponse question={groupedRadioQuestion()} value={{}} onChange={vi.fn()} />,
-    );
+    render(<ChoiceTableResponse question={groupedRadioQuestion()} value={{}} onChange={vi.fn()} />);
     const offending = errSpy.mock.calls.filter((args) =>
       String(args[0] ?? '').includes('onChange'),
     );
@@ -150,5 +149,28 @@ describe('ChoiceTableResponse 라벨 렌더 (데스크톱)', () => {
     const cellA = screen.getByTestId('cell-cellA');
     expect(within(cellA).getByText('셀에 보일 텍스트')).toBeTruthy();
     expect(within(cellA).queryByText('옵션 라벨')).toBeNull();
+  });
+
+  it('mobileDisplay hidden은 데스크톱 셀의 content 라벨을 숨기지 않는다', () => {
+    const q = radioQuestion();
+    q.tableRowsData![0]!.cells[0] = {
+      id: 'cellA',
+      type: 'choice_opt',
+      content: '데스크톱 원본 라벨',
+      choiceLabel: '접근 가능한 선택 라벨',
+      mobileDisplay: 'hidden',
+    } as TableCell;
+    render(<ChoiceTableResponse question={q} value={null} onChange={vi.fn()} />);
+    const cellA = screen.getByTestId('cell-cellA');
+    expect(within(cellA).getByText('데스크톱 원본 라벨')).toBeInTheDocument();
+    expect(within(cellA).getByRole('radio', { name: '접근 가능한 선택 라벨' })).toBeTruthy();
+  });
+
+  it('데스크톱은 drilldown-original-row 설정을 무시하고 전체 원본 셀을 렌더한다', () => {
+    const q = { ...radioQuestion(), mobileTableDisplayMode: 'drilldown-original-row' } as Question;
+    render(<ChoiceTableResponse question={q} value={null} onChange={vi.fn()} />);
+    expect(screen.getByTestId('cell-cellA')).toBeInTheDocument();
+    expect(screen.getByTestId('cell-cellB')).toBeInTheDocument();
+    expect(screen.queryByText('작성할 항목을 선택하세요')).toBeNull();
   });
 });

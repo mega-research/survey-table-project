@@ -6,6 +6,7 @@ import { TablePreview } from '@/components/survey-builder/table-preview';
 import { useMobileView } from '@/hooks/use-media-query';
 import { useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
+import { cn } from '@/lib/utils';
 import type { Question, TableCell } from '@/types/survey';
 import {
   type GroupedChoiceAnswer,
@@ -156,7 +157,7 @@ export function ChoiceTableResponse({ question, value, onChange }: ChoiceTableRe
     };
   };
 
-  const renderCell = (cell: TableCell): ReactNode => {
+  const renderCell = (cell: TableCell, isSelectedRowDetail = false): ReactNode => {
     if (cell.type !== 'choice_opt' || cell.isHidden) return undefined;
     const { checked, disabled, option } = getChoiceCellState(cell);
     // 그룹별 선택 모드: name 을 그룹 키 단위로 분리해야 브라우저가 그룹 간 선택을 지우지 않는다.
@@ -175,12 +176,17 @@ export function ChoiceTableResponse({ question, value, onChange }: ChoiceTableRe
     // 컨트롤 옆 라벨: 셀 텍스트(content) 전용. choiceLabel 은 데이터(옵션 라벨 —
     // 모바일 카드·응답 매칭·export)로만 저장되고 데스크톱 셀에는 렌더하지 않는다.
     // 둘 다 있으면 content 만 표시. 비어 있으면(라벨이 다른 열에 있는 구성) 컨트롤만 렌더.
-    const rawLabel = cell.mobileDisplay === 'hidden' ? '' : (cell.content ?? '').trim();
+    const rawLabel = (cell.content ?? '').trim();
     const labelText = rawLabel ? substituteTokens(rawLabel, attrs) : '';
 
     return (
       <div className="flex flex-col items-center gap-2">
-        <label className="flex cursor-pointer items-center justify-center gap-2">
+        <label
+          className={cn(
+            'flex cursor-pointer items-center justify-center gap-2',
+            isSelectedRowDetail && 'min-h-11 min-w-11',
+          )}
+        >
           <input
             type={cellType === 'checkbox' ? 'checkbox' : 'radio'}
             name={inputName}
@@ -315,12 +321,15 @@ export function ChoiceTableResponse({ question, value, onChange }: ChoiceTableRe
 
   const mobileMode = resolveMobileTableDisplayMode(question);
 
+  const renderSelectedRowCell = (cell: TableCell) =>
+    renderCell(cell.mobileDisplay === 'hidden' ? { ...cell, content: '' } : cell, true);
+
   if (isMobile && mobileMode === 'drilldown-original-row') {
     return (
       <ChoiceTableDrilldown
         question={question}
         selectedIds={selectedIds}
-        renderChoiceCell={renderCell}
+        renderChoiceCell={renderSelectedRowCell}
         resolveChoiceLabel={resolveChoiceLabel}
         counter={counter}
       />

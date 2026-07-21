@@ -134,6 +134,18 @@ function choiceQuestion(overrides: Partial<Question> = {}): Question {
   } as unknown as Question;
 }
 
+function hiddenChoiceContentQuestion(overrides: Partial<Question>): Question {
+  const question = choiceQuestion(overrides);
+  question.tableRowsData![0]!.cells[1] = {
+    id: 'r1c1',
+    type: 'choice_opt',
+    content: '전체 원본에서 보일 라벨',
+    choiceLabel: '접근 가능한 선택',
+    mobileDisplay: 'hidden',
+  };
+  return question;
+}
+
 describe('ChoiceTableResponse — 모바일 원본 표 분기', () => {
   it('기본값이면 모바일에서 옵션 카드로 전환한다 (열 라벨 미표시)', () => {
     render(<ChoiceTableResponse question={choiceQuestion()} value={null} onChange={() => {}} />);
@@ -163,5 +175,20 @@ describe('ChoiceTableResponse — 모바일 원본 표 분기', () => {
     );
     expect(screen.getByText('기술')).toBeInTheDocument();
     expect(screen.getByRole('radio')).toBeInTheDocument();
+  });
+
+  it.each([
+    ['legacy', { mobileOriginalTable: true }],
+    ['canonical', { mobileTableDisplayMode: 'original' as const }],
+  ])('%s 전체 원본 모드는 mobileDisplay hidden choice content 라벨을 유지한다', (_, mode) => {
+    render(
+      <ChoiceTableResponse
+        question={hiddenChoiceContentQuestion(mode)}
+        value={null}
+        onChange={() => {}}
+      />,
+    );
+    expect(screen.getByText('전체 원본에서 보일 라벨')).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: '접근 가능한 선택' })).toBeInTheDocument();
   });
 });
