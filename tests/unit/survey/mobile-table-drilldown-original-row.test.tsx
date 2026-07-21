@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 import { fireEvent, render, screen } from '@testing-library/react';
-import { beforeAll, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, expect, it, vi } from 'vitest';
 
 import { InteractiveTableResponse } from '@/components/survey-builder/interactive-table-response';
 import { MobileDrilldownShell } from '@/components/survey-builder/mobile-drilldown-shell';
@@ -25,6 +25,10 @@ beforeAll(() => {
       disconnect() {}
     },
   );
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 const scaleColumns = (): TableColumn[] => [
@@ -60,7 +64,11 @@ const scaleRows = (count: number): TableRow[] =>
     ],
   }));
 
-function ControlledScale() {
+function ControlledScale({
+  onValue,
+}: {
+  onValue?: (value: Record<string, unknown>) => void;
+} = {}) {
   const [value, setValue] = useState<Record<string, unknown>>({});
   return (
     <InteractiveTableResponse
@@ -70,9 +78,18 @@ function ControlledScale() {
       mobileTableDisplayMode="drilldown-original-row"
       mobileDrilldownOmitLeadingColumns={1}
       value={value}
-      onChange={setValue}
+      onChange={(next) => {
+        setValue(next);
+        onValue?.(next);
+      }}
     />
   );
+}
+
+function getOriginalRowHeaderScroller(): HTMLElement {
+  const scroller = screen.getAllByRole('columnheader')[0]?.parentElement?.parentElement;
+  if (!(scroller instanceof HTMLElement)) throw new Error('헤더 스크롤 컨테이너가 없습니다.');
+  return scroller;
 }
 
 it('임계값 이하 2행도 명시 모드면 카드부터 보여주고 선택 행 원본 헤더를 렌더한다', () => {
@@ -100,6 +117,90 @@ it('방문만으로 완료되지 않고 radio 선택 후 완료 행 수가 1 증
   expect(screen.getByText(/전체/)).toHaveTextContent('전체 0 / 2개 항목');
   fireEvent.click(screen.getByRole('radio', { name: '5점' }));
   expect(screen.getByText(/전체/)).toHaveTextContent('전체 1 / 2개 항목');
+});
+
+it('원본 행 상세의 가로 위치를 다음 섹션에 보존하고 목차 복귀 후 0으로 초기화한다', () => {
+  vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockReturnValue(500);
+  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(200);
+  render(<ControlledScale />);
+  fireEvent.click(screen.getByRole('button', { name: /직무 설정/ }));
+
+  const firstBodyScroller = screen.getByTestId('table-preview-scroll');
+  const firstHeaderScroller = getOriginalRowHeaderScroller();
+  firstBodyScroller.scrollLeft = 80;
+  fireEvent.scroll(firstBodyScroller);
+  expect(firstHeaderScroller.scrollLeft).toBe(80);
+
+  fireEvent.click(screen.getByRole('button', { name: '다음 섹션' }));
+  const secondBodyScroller = screen.getByTestId('table-preview-scroll');
+  const secondHeaderScroller = getOriginalRowHeaderScroller();
+  expect(secondBodyScroller.scrollLeft).toBe(80);
+  expect(secondHeaderScroller.scrollLeft).toBe(80);
+
+  fireEvent.click(screen.getByRole('button', { name: '목차로' }));
+  fireEvent.click(screen.getByRole('button', { name: /직무 설정/ }));
+  expect(screen.getByTestId('table-preview-scroll').scrollLeft).toBe(0);
+  expect(getOriginalRowHeaderScroller().scrollLeft).toBe(0);
+});
+
+it('제외된 열 뒤에 interactive cell이 없으면 기존 카드 상세로 fallback한다', () => {
+  const columns: TableColumn[] = [
+    { id: 'c0', label: '선택', width: 140 },
+    { id: 'c1', label: '섹션', width: 140 },
+    { id: 'c2', label: '설명', width: 140 },
+  ];
+  const rows: TableRow[] = [
+    {
+      id: 'fallback-row',
+      label: '행 A',
+      cells: [
+        {
+          id: 'fallback-radio',
+          type: 'radio',
+          content: '',
+          radioOptions: [{ id: 'yes', label: '선택하기', value: 'yes' }],
+        },
+        { id: 'fallback-section', type: 'text', content: '기본 섹션' },
+        { id: 'fallback-label', type: 'text', content: '행 A' },
+      ],
+    },
+  ];
+
+  render(
+    <InteractiveTableResponse
+      questionId="fallback-question"
+      columns={columns}
+      rows={rows}
+      mobileTableDisplayMode="drilldown-original-row"
+      mobileDrilldownOmitLeadingColumns={1}
+      value={{}}
+      onChange={vi.fn()}
+    />,
+  );
+  fireEvent.click(screen.getByRole('button', { name: /기본 섹션/ }));
+  expect(screen.getByRole('radio', { name: '선택하기' })).toBeInTheDocument();
+  expect(screen.queryByRole('grid')).toBeNull();
+});
+
+it('통합 원본 행 radio가 같은 행 sibling을 비우고 cell id 응답 shape를 유지한다', () => {
+  const onValue = vi.fn<(value: Record<string, unknown>) => void>();
+  render(<ControlledScale onValue={onValue} />);
+  fireEvent.click(screen.getByRole('button', { name: /직무 설정/ }));
+
+  const first = screen.getByRole('radio', { name: '1점' });
+  fireEvent.click(first);
+  expect(first).toBeChecked();
+  expect(onValue).toHaveBeenLastCalledWith({
+    'r1-score-5': '',
+    'r1-score-1': '1',
+  });
+
+  fireEvent.click(screen.getByRole('radio', { name: '5점' }));
+  expect(onValue).toHaveBeenLastCalledWith({
+    'r1-score-5': '5',
+    'r1-score-1': '',
+  });
+  expect(screen.getByRole('radio', { name: '1점' })).not.toBeChecked();
 });
 
 const leaf = (rowId: string, label: string): ClassifiedLeaf => ({
