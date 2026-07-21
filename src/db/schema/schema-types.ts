@@ -1,6 +1,8 @@
 // JSONB 컬럼에 사용되는 내부 타입 정의
 // 테이블 정의의 $type<>() 제네릭에서 참조됨
 
+import type { MobileTableDisplayMode } from '@/types/mobile-table-display';
+
 /**
  * response_edit_logs.changed_questions 항목.
  * 바뀐 질문의 버전 스냅샷 기준 식별 정보. 기록 시점에 스냅샷 저장돼
@@ -261,6 +263,8 @@ export interface QuestionData {
   tableValidationRules?: TableValidationRule[];
   hideColumnLabels?: boolean;
   mobileOriginalTable?: boolean;
+  mobileTableDisplayMode?: MobileTableDisplayMode;
+  mobileDrilldownOmitLeadingColumns?: number;
   hideTitle?: boolean;
   pageBreakBefore?: boolean;
   displayCondition?: QuestionConditionGroup;

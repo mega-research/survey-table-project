@@ -387,6 +387,11 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
               // 신규 질문에서 ON 토글이 default(false)로 silent drop 되는 회귀를 막는다.
               hideColumnLabels: currentFormData.hideColumnLabels ?? question?.hideColumnLabels,
               mobileOriginalTable: currentFormData.mobileOriginalTable ?? question?.mobileOriginalTable,
+              mobileTableDisplayMode:
+                currentFormData.mobileTableDisplayMode ?? question?.mobileTableDisplayMode,
+              mobileDrilldownOmitLeadingColumns:
+                currentFormData.mobileDrilldownOmitLeadingColumns
+                ?? question?.mobileDrilldownOmitLeadingColumns,
               questionCode: currentFormData.questionCode || question?.questionCode,
               isCustomSpssVarName: currentFormData.isCustomSpssVarName ?? question?.isCustomSpssVarName,
               exportLabel: currentFormData.exportLabel || question?.exportLabel,

@@ -2,6 +2,7 @@ import * as z from 'zod';
 
 import type { NewQuestion, Question } from '@/db/schema';
 import type { PersistedQuestionField } from '@/db/schema/question-persisted-fields';
+import { MOBILE_TABLE_DISPLAY_MODES } from '@/types/mobile-table-display';
 import { QUESTION_TYPES } from '@/types/question-types';
 import type { Question as QuestionType } from '@/types/survey';
 
@@ -55,6 +56,8 @@ export const CreateQuestionInput = z.object({
   dynamicRowConfigs: z.custom<QuestionType['dynamicRowConfigs']>().optional(),
   hideColumnLabels: z.boolean().optional(),
   mobileOriginalTable: z.boolean().optional(),
+  mobileTableDisplayMode: z.enum(MOBILE_TABLE_DISPLAY_MODES).optional(),
+  mobileDrilldownOmitLeadingColumns: z.number().int().min(0).optional(),
   hideTitle: z.boolean().optional(),
   pageBreakBefore: z.boolean().optional(),
   rankingConfig: z.custom<QuestionType['rankingConfig']>().optional(),
@@ -103,6 +106,8 @@ export const UpdateQuestionData = z.object({
   dynamicRowConfigs: z.custom<QuestionType['dynamicRowConfigs']>().optional(),
   hideColumnLabels: z.boolean().optional(),
   mobileOriginalTable: z.boolean().optional(),
+  mobileTableDisplayMode: z.enum(MOBILE_TABLE_DISPLAY_MODES).optional(),
+  mobileDrilldownOmitLeadingColumns: z.number().int().min(0).optional(),
   hideTitle: z.boolean().optional(),
   pageBreakBefore: z.boolean().optional(),
   rankingConfig: z.custom<QuestionType['rankingConfig']>().optional(),
