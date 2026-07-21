@@ -1,6 +1,8 @@
 import { render, screen } from '@testing-library/react';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 
+import { InteractiveTableResponse } from '@/components/survey-builder/interactive-table-response';
+import { ChoiceTableResponse } from '@/components/survey-response/choice-table-response';
 import type { Question } from '@/types/survey';
 
 /**
@@ -25,9 +27,6 @@ vi.mock('@/components/survey-builder/mobile-table-stepper', () => ({
 vi.mock('@/components/survey-builder/mobile-table-drilldown', () => ({
   MobileTableDrilldown: () => <div data-testid="mobile-drilldown" />,
 }));
-
-import { InteractiveTableResponse } from '@/components/survey-builder/interactive-table-response';
-import { ChoiceTableResponse } from '@/components/survey-response/choice-table-response';
 
 beforeAll(() => {
   vi.stubGlobal(
@@ -91,6 +90,21 @@ describe('InteractiveTableResponse — 모바일 원본 표 분기', () => {
     expect(screen.queryByTestId('mobile-stepper')).toBeNull();
     expect(screen.queryByTestId('mobile-drilldown')).toBeNull();
     // 원본 표의 열 라벨이 보인다
+    expect(screen.getByText('점수')).toBeInTheDocument();
+  });
+
+  it('mobileTableDisplayMode original 이면 legacy boolean 없이도 원본 표를 렌더한다', () => {
+    render(
+      <InteractiveTableResponse
+        questionId="q1"
+        columns={columns as never}
+        rows={rows as never}
+        onChange={() => {}}
+        mobileTableDisplayMode="original"
+      />,
+    );
+    expect(screen.queryByTestId('mobile-stepper')).toBeNull();
+    expect(screen.queryByTestId('mobile-drilldown')).toBeNull();
     expect(screen.getByText('점수')).toBeInTheDocument();
   });
 });

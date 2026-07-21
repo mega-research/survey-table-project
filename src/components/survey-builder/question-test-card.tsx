@@ -2,26 +2,24 @@
 
 import { useMemo } from 'react';
 
-import { Input } from '@/components/ui/input';
+import { ChoiceTableResponse } from '@/components/survey-response/choice-table-response';
 import { OptionTextInput } from '@/components/survey-response/option-text-input';
+import { RankingQuestion } from '@/components/survey-response/ranking-question';
+import { Input } from '@/components/ui/input';
+import { computeTableEstimatedHeight } from '@/hooks/use-row-heights';
+import { useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { useTestResponseStore } from '@/stores/test-response-store';
 import { Question, SurveyLookup } from '@/types/survey';
-import { getOptionsLayout } from '@/utils/options-layout';
 import { evaluateNumericComparisonV2 } from '@/utils/branch-logic';
-
-import { RankingQuestion } from '@/components/survey-response/ranking-question';
-import { ChoiceTableResponse } from '@/components/survey-response/choice-table-response';
 import { isChoiceTableSource } from '@/utils/choice-source';
+import { getOptionsLayout } from '@/utils/options-layout';
 
 import { ConditionDebugPanel } from './condition-debug-panel';
 import { InteractiveTableResponse } from './interactive-table-response';
-import { LazyMount } from './sortable-question-list';
-import { useContactAttrs } from '@/lib/survey/contact-attrs-context';
-import { substituteTokens } from '@/lib/survey/substitute-tokens';
-
 import { NoticeRenderer } from './notice-renderer';
+import { LazyMount } from './sortable-question-list';
 import { UserDefinedMultiLevelSelect } from './user-defined-multi-level-select';
-import { computeTableEstimatedHeight } from '@/hooks/use-row-heights';
 
 // 기타 옵션 관련 타입 정의
 type OtherChoiceValue = {
@@ -53,7 +51,7 @@ function RadioTestInput({
   value: SingleChoiceResponse;
   onChange: (value: SingleChoiceResponse) => void;
 }) {
-  const otherInput = isOtherChoiceValue(value) ? value.otherValue ?? '' : '';
+  const otherInput = isOtherChoiceValue(value) ? (value.otherValue ?? '') : '';
 
   const handleOptionChange = (optionValue: string, optionId: string) => {
     const isOtherOption = optionId === 'other-option';
@@ -319,7 +317,7 @@ function SelectTestInput({
   onChange: (value: SingleChoiceResponse) => void;
 }) {
   const selectedValue = isOtherChoiceValue(value) ? value.selectedValue : value || '';
-  const otherInput = isOtherChoiceValue(value) ? value.otherValue ?? '' : '';
+  const otherInput = isOtherChoiceValue(value) ? (value.otherValue ?? '') : '';
 
   const handleSelectChange = (newValue: string) => {
     const selectedOption = question.options?.find((opt) => opt.value === newValue);
@@ -386,11 +384,7 @@ function SelectTestInput({
         if (!selectedOption || selectedOption.id === 'other-option') return null;
         if (!selectedOption.allowTextInput) return null;
         return (
-          <OptionTextInput
-            questionId={question.id}
-            option={selectedOption}
-            className="w-full"
-          />
+          <OptionTextInput questionId={question.id} option={selectedOption} className="w-full" />
         );
       })()}
     </div>
@@ -410,7 +404,10 @@ function QuestionTestInput({
   const attrs = useContactAttrs();
 
   // choice_opt 테이블 소스 라디오/체크박스는 switch 진입 전에 단일 가드로 분기
-  if ((question.type === 'radio' || question.type === 'checkbox') && isChoiceTableSource(question)) {
+  if (
+    (question.type === 'radio' || question.type === 'checkbox') &&
+    isChoiceTableSource(question)
+  ) {
     return (
       <ChoiceTableResponse
         question={question}
@@ -480,13 +477,7 @@ function QuestionTestInput({
       ) : null;
 
     case 'ranking':
-      return (
-        <RankingQuestion
-          question={question}
-          value={value}
-          onChange={(v) => onChange(v)}
-        />
-      );
+      return <RankingQuestion question={question} value={value} onChange={(v) => onChange(v)} />;
 
     case 'table':
       return question.tableColumns && question.tableRowsData ? (
@@ -503,6 +494,8 @@ function QuestionTestInput({
           dynamicRowConfigs={question.dynamicRowConfigs}
           hideColumnLabels={question.hideColumnLabels}
           mobileOriginalTable={question.mobileOriginalTable}
+          mobileTableDisplayMode={question.mobileTableDisplayMode}
+          mobileDrilldownOmitLeadingColumns={question.mobileDrilldownOmitLeadingColumns}
         />
       ) : (
         <div className="py-4 text-center text-gray-500">테이블이 구성되지 않았습니다.</div>
@@ -556,7 +549,8 @@ export function QuestionTestBody({
 
   // displayCondition 의 numericComparison 들을 평가해서 디버그 패널 prop 으로 변환.
   const debugConditions = useMemo(() => {
-    const out: Array<{ label: string; result: ReturnType<typeof evaluateNumericComparisonV2> }> = [];
+    const out: Array<{ label: string; result: ReturnType<typeof evaluateNumericComparisonV2> }> =
+      [];
     const conds = question.displayCondition?.conditions ?? [];
     // responses 를 LookupEvalCtx 가 기대하는 형태로 평탄화 (table 응답만 의미 있음).
     const responsesShaped: Record<string, Record<string, string | undefined>> = {};
@@ -596,20 +590,16 @@ export function QuestionTestBody({
         {question.type === 'table' ? (
           <LazyMount
             questionId={question.id}
-            estimatedHeight={computeTableEstimatedHeight(question.tableColumns ?? [], question.tableRowsData ?? [], question.tableHeaderGrid)}
+            estimatedHeight={computeTableEstimatedHeight(
+              question.tableColumns ?? [],
+              question.tableRowsData ?? [],
+              question.tableHeaderGrid,
+            )}
           >
-            <QuestionTestInput
-              question={question}
-              value={testResponse}
-              onChange={handleResponse}
-            />
+            <QuestionTestInput question={question} value={testResponse} onChange={handleResponse} />
           </LazyMount>
         ) : (
-          <QuestionTestInput
-            question={question}
-            value={testResponse}
-            onChange={handleResponse}
-          />
+          <QuestionTestInput question={question} value={testResponse} onChange={handleResponse} />
         )}
       </div>
 

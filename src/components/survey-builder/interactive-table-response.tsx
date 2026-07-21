@@ -16,6 +16,7 @@ import { cn } from '@/lib/utils';
 import {
   DynamicRowGroupConfig,
   HeaderCell,
+  MobileTableDisplayMode,
   Question,
   TableColumn,
   TableRow,
@@ -27,6 +28,10 @@ import {
 } from '@/utils/branch-logic';
 import { decideDrilldown } from '@/utils/classify-table';
 import { expandHeaderGrid } from '@/utils/expand-header-grid';
+import {
+  clampMobileDrilldownOmitLeadingColumns,
+  resolveMobileTableDisplayMode,
+} from '@/utils/mobile-table-display-mode';
 import {
   HEADER_ROW_MIN_HEIGHT,
   STICKY_BODY_Z,
@@ -40,10 +45,7 @@ import {
   getHeaderCellStickyStyle,
 } from '@/utils/table-grid-utils';
 import { recalculateColspansForVisibleColumns } from '@/utils/table-merge-helpers';
-import {
-  buildRadioGroupBuckets,
-  resolveRadioGroupProps,
-} from '@/utils/table-radio-groups';
+import { buildRadioGroupBuckets, resolveRadioGroupProps } from '@/utils/table-radio-groups';
 
 import { InteractiveCell } from './cells';
 import { DynamicRowSelectorModal } from './dynamic-row-selector-modal';
@@ -277,7 +279,7 @@ function renderRowCells({
               ? 'bg-green-50/40'
               : 'bg-white',
           getAlignmentClasses(cell.horizontalAlign, cell.verticalAlign),
-          errorCellIds?.has(cell.id) && 'ring-2 ring-inset ring-red-300',
+          errorCellIds?.has(cell.id) && 'ring-2 ring-red-300 ring-inset',
         )}
         style={style}
         data-row-id={row.id}
@@ -316,6 +318,8 @@ interface InteractiveTableResponseProps {
   hideColumnLabels?: boolean | undefined;
   /** 모바일에서도 카드/스테퍼 전환 없이 원본 표(가로 스크롤)로 렌더 */
   mobileOriginalTable?: boolean | undefined;
+  mobileTableDisplayMode?: MobileTableDisplayMode | undefined;
+  mobileDrilldownOmitLeadingColumns?: number | undefined;
   /** 헤더·좌측 열 sticky 동작 활성화. 기본 true. 빌더 프리뷰 등에서 끌 수 있음 */
   enableSticky?: boolean | undefined;
   /** 차단형 검증 위반 셀 (빨간 ring 하이라이트) */
@@ -340,6 +344,8 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
   dynamicRowConfigs,
   hideColumnLabels = false,
   mobileOriginalTable = false,
+  mobileTableDisplayMode,
+  mobileDrilldownOmitLeadingColumns,
   enableSticky = true,
   errorCellIds,
   errorItems,
@@ -381,6 +387,13 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
   const headerScrollRef = useRef<HTMLDivElement>(null);
   useTablePerf(`InteractiveTable(${rows.length}×${columns.length})`);
   const isMobileView = useMobileView();
+  const mobileMode = resolveMobileTableDisplayMode({
+    mobileTableDisplayMode,
+    mobileOriginalTable,
+  });
+  const useOriginalRowDetail = isMobileView && mobileMode === 'drilldown-original-row';
+  const mobileUsesCards = isMobileView && mobileMode !== 'original';
+  const rendersFullOriginalTable = mobileMode === 'original';
 
   // displayCondition에서 참조하는 질문 ID만 추출 → 관련 응답만 의존
   const relevantResponseKeys = useMemo(() => {
@@ -468,7 +481,6 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
   // 필요하다(ref/disabled는 안 바뀌어 deps 없이는 effect가 재실행되지 않음).
   // 모바일은 카드 전환이라 원래 불필요하지만, 원본 표 모드는 모바일에서도
   // 표를 렌더하므로 동기화·측정을 켜야 한다.
-  const mobileUsesCards = isMobileView && !mobileOriginalTable;
   useScrollLeftSync(headerScrollRef, tableContainerRef, mobileUsesCards, [hideColumnLabels]);
 
   // Grid 관련 계산
@@ -687,7 +699,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
           className={cn(
             'sticky top-0 z-30 bg-white print:static print:z-auto',
             // 모바일 원본 표 모드는 풀블리드 해크 없이 카드 패딩 안에 좌우 대칭으로 가둔다
-            mobileOriginalTable ? 'mx-0' : '-mx-4 md:mx-0',
+            rendersFullOriginalTable ? 'mx-0' : '-mx-4 md:mx-0',
           )}
         >
           {/* 가로 스크롤 컨트롤 (버튼 + 진행도) — sticky 영역이라 항상 조작 가능 */}
@@ -700,7 +712,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
             <div className="relative">
               <div
                 ref={headerScrollRef}
-                className={cn(HEADER_SCROLL_CLASS, mobileOriginalTable && 'px-0')}
+                className={cn(HEADER_SCROLL_CLASS, rendersFullOriginalTable && 'px-0')}
               >
                 <div
                   role="rowgroup"
@@ -714,13 +726,13 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
               {canScrollRight && (
                 <div
                   aria-hidden="true"
-                  className="pointer-events-none absolute inset-y-0 z-20 transform-gpu right-0 w-12 bg-gradient-to-l from-gray-50 via-gray-50/60 to-transparent print:hidden"
+                  className="pointer-events-none absolute inset-y-0 right-0 z-20 w-12 transform-gpu bg-gradient-to-l from-gray-50 via-gray-50/60 to-transparent print:hidden"
                 />
               )}
               {canScrollLeft && (
                 <div
                   aria-hidden="true"
-                  className="pointer-events-none absolute inset-y-0 z-20 transform-gpu left-0 w-6 bg-gradient-to-r from-gray-50/80 to-transparent print:hidden"
+                  className="pointer-events-none absolute inset-y-0 left-0 z-20 w-6 transform-gpu bg-gradient-to-r from-gray-50/80 to-transparent print:hidden"
                 />
               )}
             </div>
@@ -733,7 +745,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
             페이드의 z-20 transform-gpu: iOS WebKit 은 overflow 스크롤 컨테이너를
             합성 레이어로 승격해 z-index 없는 형제 오버레이를 덮어버린다(아이폰에서
             그라데이션 미표시). 페이드도 자체 레이어 + sticky 셀(z-10) 위 z 로 강제한다. */}
-        <div className={cn('relative', mobileOriginalTable ? 'mx-0' : '-mx-4 md:mx-0')}>
+        <div className={cn('relative', rendersFullOriginalTable ? 'mx-0' : '-mx-4 md:mx-0')}>
           {/* iOS WebKit(아이패드/아이폰 크롬·사파리 공통 엔진)에서는
               -webkit-overflow-scrolling: touch + display:grid + position:sticky 좌측 고정 열
               조합이 별도 GPU 합성 레이어를 강제해, 초기 뷰포트 밖(오른쪽) 셀이 래스터되지
@@ -743,8 +755,8 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
             ref={tableContainerRef}
             className={cn(
               // 모바일은 상단 스크롤 컨트롤이 스크롤 수단 — 네이티브 가로 스크롤바 숨김
-              'overflow-x-auto pb-4 max-md:[-ms-overflow-style:none] max-md:[scrollbar-width:none] max-md:[&::-webkit-scrollbar]:hidden print:overflow-visible',
-              mobileOriginalTable ? 'px-0' : 'px-4 md:px-0',
+              'overflow-x-auto pb-4 max-md:[-ms-overflow-style:none] max-md:[scrollbar-width:none] print:overflow-visible max-md:[&::-webkit-scrollbar]:hidden',
+              rendersFullOriginalTable ? 'px-0' : 'px-4 md:px-0',
             )}
           >
             {shouldVirtualize ? (
@@ -799,13 +811,13 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
           {canScrollRight && (
             <div
               aria-hidden="true"
-              className="pointer-events-none absolute inset-y-0 z-20 transform-gpu right-0 w-12 bg-gradient-to-l from-black/10 to-transparent print:hidden"
+              className="pointer-events-none absolute inset-y-0 right-0 z-20 w-12 transform-gpu bg-gradient-to-l from-black/10 to-transparent print:hidden"
             />
           )}
           {canScrollLeft && (
             <div
               aria-hidden="true"
-              className="pointer-events-none absolute inset-y-0 z-20 transform-gpu left-0 w-6 bg-gradient-to-r from-black/10 to-transparent print:hidden"
+              className="pointer-events-none absolute inset-y-0 left-0 z-20 w-6 transform-gpu bg-gradient-to-r from-black/10 to-transparent print:hidden"
             />
           )}
         </div>
@@ -842,8 +854,16 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
           <div className="w-full">
             {/* 모바일 원본 표 옵션이 켜진 질문은 카드/스테퍼 전환 없이 원본 표(가로 스크롤) 유지 */}
             {mobileUsesCards ? (
-              useDrilldown ? (
-                <MobileTableDrilldown {...mobileTableProps} />
+              useOriginalRowDetail || useDrilldown ? (
+                <MobileTableDrilldown
+                  {...mobileTableProps}
+                  authoredColumns={columns}
+                  detailMode={useOriginalRowDetail ? 'original-row' : 'legacy'}
+                  omitLeadingAuthoredColumns={clampMobileDrilldownOmitLeadingColumns(
+                    mobileDrilldownOmitLeadingColumns,
+                    columns.length,
+                  )}
+                />
               ) : (
                 <MobileTableStepper {...mobileTableProps} />
               )
@@ -873,7 +893,6 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
               ))}
             </div>
           )}
-
         </CardContent>
       </Card>
 

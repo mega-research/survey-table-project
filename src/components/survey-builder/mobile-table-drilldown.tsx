@@ -1,19 +1,27 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 
 import { CheckCircle2 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import type { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
 import { type ClassifiedLeaf, type ClassifiedSection, classifyTable } from '@/utils/classify-table';
+import {
+  MOBILE_TABLE_COMPLETION_TYPES,
+  projectMobileOriginalRow,
+} from '@/utils/mobile-original-row';
+import { buildRadioGroupBuckets, resolveRadioGroupProps } from '@/utils/table-radio-groups';
+import { isTableRowCompleted } from '@/utils/table-row-completion';
 
 import { InteractiveCell } from './cells';
 import { MobileDrilldownShell } from './mobile-drilldown-shell';
+import { MobileOriginalRowTable } from './mobile-original-row-table';
 
 interface MobileTableDrilldownProps {
   questionId: string;
   displayRows: TableRow[];
+  authoredColumns: TableColumn[];
   visibleColumns: TableColumn[];
   visibleHeaderGrid?: HeaderCell[][] | null | undefined;
   currentResponse: Record<string, unknown>;
@@ -28,6 +36,8 @@ interface MobileTableDrilldownProps {
   onSelectGroup?: (groupId: string) => void;
   /** 차단형 검증 위반 셀 (빨간 ring 하이라이트) */
   errorCellIds?: Set<string> | undefined;
+  detailMode: 'legacy' | 'original-row';
+  omitLeadingAuthoredColumns: number;
 }
 
 // ── 메인 컴포넌트 ──
@@ -35,12 +45,17 @@ interface MobileTableDrilldownProps {
 export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
   questionId,
   displayRows,
+  authoredColumns,
   visibleColumns,
   visibleHeaderGrid,
+  currentResponse,
+  hideColumnLabels,
   isTestMode,
   value,
   onChange,
   errorCellIds,
+  detailMode,
+  omitLeadingAuthoredColumns,
 }: MobileTableDrilldownProps) {
   const sections = useMemo(
     () =>
@@ -63,6 +78,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
   // 값이 없어도 이 집합에 들면 진행률·완료 표시에서 "채운 것"으로 카운트한다.
   // 컴포넌트 로컬 상태라 새로고침 시 초기화된다(실제 입력값은 value에 보존).
   const [acknowledged, setAcknowledged] = useState<Set<string>>(new Set());
+  const horizontalScrollRef = useRef(0);
   const ackCells = (cellIds: string[]) =>
     setAcknowledged((prev) => {
       const next = new Set(prev);
@@ -179,6 +195,88 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
       </div>
     </div>
   );
+
+  const rowById = new Map(displayRows.map((row) => [row.id, row]));
+  const completedRows = displayRows.filter((row) =>
+    isTableRowCompleted(row, currentResponse, MOBILE_TABLE_COMPLETION_TYPES),
+  ).length;
+
+  const renderOriginalRowDetail = (leaf: ClassifiedLeaf) => {
+    const projection = projectMobileOriginalRow({
+      authoredColumns,
+      visibleColumns,
+      visibleHeaderGrid: visibleHeaderGrid ?? undefined,
+      displayRows,
+      selectedRowId: leaf.rowId,
+      omitLeadingAuthoredColumns,
+    });
+    if (!projection?.hasInteractiveCells) {
+      return (
+        <div className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
+          {leaf.inputCellIds.map((cellId) => (
+            <div key={cellId}>{renderCell(cellId)}</div>
+          ))}
+        </div>
+      );
+    }
+
+    const radioBuckets = buildRadioGroupBuckets(projection.row);
+    return (
+      <MobileOriginalRowTable
+        columns={projection.columns}
+        row={projection.row}
+        headerGrid={projection.headerGrid}
+        hideColumnLabels={hideColumnLabels}
+        scrollLeftRef={horizontalScrollRef}
+        errorCellIds={errorCellIds}
+        renderCell={(cell) => (
+          <InteractiveCell
+            cell={cell}
+            questionId={questionId}
+            isTestMode={isTestMode}
+            value={value}
+            onChange={onChange}
+            {...resolveRadioGroupProps(cell, projection.row.id, radioBuckets)}
+          />
+        )}
+      />
+    );
+  };
+
+  if (detailMode === 'original-row') {
+    return (
+      <MobileDrilldownShell
+        sections={sections}
+        leafNavigation="always"
+        overallStatus={{ completed: completedRows, total: displayRows.length, unit: '개 항목' }}
+        getSectionStatus={(section) => ({
+          completed: section.leaves.filter((leaf) => {
+            const row = rowById.get(leaf.rowId);
+            return row
+              ? isTableRowCompleted(row, currentResponse, MOBILE_TABLE_COMPLETION_TYPES)
+              : false;
+          }).length,
+          total: section.leaves.length,
+          unit: '개 항목',
+        })}
+        getLeafStatus={(leaf) => {
+          const row = rowById.get(leaf.rowId);
+          return {
+            completed:
+              row && isTableRowCompleted(row, currentResponse, MOBILE_TABLE_COMPLETION_TYPES)
+                ? 1
+                : 0,
+            total: 1,
+            unit: '개 항목',
+          };
+        }}
+        renderLeafDetail={renderOriginalRowDetail}
+        onReturnToRoot={() => {
+          horizontalScrollRef.current = 0;
+        }}
+      />
+    );
+  }
 
   return (
     <MobileDrilldownShell

@@ -1,10 +1,106 @@
 import { useState } from 'react';
 
 import { fireEvent, render, screen } from '@testing-library/react';
-import { expect, it, vi } from 'vitest';
+import { beforeAll, expect, it, vi } from 'vitest';
 
+import { InteractiveTableResponse } from '@/components/survey-builder/interactive-table-response';
 import { MobileDrilldownShell } from '@/components/survey-builder/mobile-drilldown-shell';
+import type { TableColumn, TableRow } from '@/types/survey';
 import type { ClassifiedLeaf, ClassifiedSection } from '@/utils/classify-table';
+
+vi.mock('@/hooks/use-media-query', () => ({
+  useMobileView: () => true,
+  useMediaQuery: () => true,
+}));
+vi.mock('@/lib/survey/contact-attrs-context', () => ({
+  useContactAttrs: () => ({}),
+}));
+
+beforeAll(() => {
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+});
+
+const scaleColumns = (): TableColumn[] => [
+  { id: 'c0', label: '항목', width: 140 },
+  { id: 'c1', label: '전혀 도움 안 됨', width: 140 },
+  { id: 'c2', label: '매우 도움 됨', width: 140 },
+];
+
+const scaleRows = (count: number): TableRow[] =>
+  Array.from({ length: count }, (_, index) => ({
+    id: `r${index + 1}`,
+    label: index === 0 ? '직무 설정' : '취업 도움',
+    cells: [
+      {
+        id: `r${index + 1}-label`,
+        type: 'text',
+        content: index === 0 ? '직무 설정' : '취업 도움',
+      },
+      {
+        id: `r${index + 1}-score-1`,
+        type: 'radio',
+        content: '',
+        radioGroupName: `scale-${index + 1}`,
+        radioOptions: [{ id: 'one', label: '1점', value: '1' }],
+      },
+      {
+        id: `r${index + 1}-score-5`,
+        type: 'radio',
+        content: '',
+        radioGroupName: `scale-${index + 1}`,
+        radioOptions: [{ id: 'five', label: '5점', value: '5' }],
+      },
+    ],
+  }));
+
+function ControlledScale() {
+  const [value, setValue] = useState<Record<string, unknown>>({});
+  return (
+    <InteractiveTableResponse
+      questionId="q1"
+      columns={scaleColumns()}
+      rows={scaleRows(2)}
+      mobileTableDisplayMode="drilldown-original-row"
+      mobileDrilldownOmitLeadingColumns={1}
+      value={value}
+      onChange={setValue}
+    />
+  );
+}
+
+it('임계값 이하 2행도 명시 모드면 카드부터 보여주고 선택 행 원본 헤더를 렌더한다', () => {
+  render(
+    <InteractiveTableResponse
+      questionId="q1"
+      columns={scaleColumns()}
+      rows={scaleRows(2)}
+      mobileTableDisplayMode="drilldown-original-row"
+      mobileDrilldownOmitLeadingColumns={1}
+      value={{}}
+      onChange={vi.fn()}
+    />,
+  );
+  expect(screen.getByText('직무 설정')).toBeInTheDocument();
+  expect(screen.queryByText('전혀 도움 안 됨')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: /직무 설정/ }));
+  expect(screen.getByText('전혀 도움 안 됨')).toBeInTheDocument();
+  expect(screen.queryByRole('columnheader', { name: '항목' })).toBeNull();
+});
+
+it('방문만으로 완료되지 않고 radio 선택 후 완료 행 수가 1 증가한다', () => {
+  render(<ControlledScale />);
+  fireEvent.click(screen.getByRole('button', { name: /직무 설정/ }));
+  expect(screen.getByText(/전체/)).toHaveTextContent('전체 0 / 2개 항목');
+  fireEvent.click(screen.getByRole('radio', { name: '5점' }));
+  expect(screen.getByText(/전체/)).toHaveTextContent('전체 1 / 2개 항목');
+});
 
 const leaf = (rowId: string, label: string): ClassifiedLeaf => ({
   rowId,
