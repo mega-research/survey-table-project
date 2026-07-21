@@ -68,7 +68,7 @@ export const surveys = pgTable('surveys', {
   isPaused: boolean('is_paused').default(false).notNull(),
   pausedMessage: text('paused_message'),
   testModeEnabled: boolean('test_mode_enabled').default(false).notNull(),
-  testToken: uuid('test_token'),
+  testToken: text('test_token'),
 
   // 컨택 attrs 토큰 — invite token 강제 (0022 마이그레이션)
   requireInviteToken: boolean('require_invite_token').default(false).notNull(),
