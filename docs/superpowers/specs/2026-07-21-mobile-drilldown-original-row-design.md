@@ -1,7 +1,7 @@
 # 모바일 드릴다운 + 선택 행 원본 렌더링 — 설계
 
 > 작성일: 2026-07-21
-> 상태: 설계 확정, 구현 계획 작성됨
+> 상태: 구현 완료, 회귀 검증 완료
 > 구현 계획: [2026-07-21-mobile-drilldown-original-row.md](../plans/2026-07-21-mobile-drilldown-original-row.md)
 
 ## 배경 / 문제
