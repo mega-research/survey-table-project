@@ -68,7 +68,7 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [showBranchSettings, setShowBranchSettings] = useState(false);
 
-  // 저장 없이 모달이 닫히면 silentUpdateQuestion 으로 토글한 hideColumnLabels 를 롤백한다.
+  // 저장 없이 모달이 닫히면 silentUpdateQuestion 경로로 바꾼 설정을 롤백한다.
   const didSaveRef = useRef(false);
 
   // ── 로컬 state: 타이핑 성능을 위해 formData와 분리 ──
@@ -93,24 +93,48 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
     };
   }, []);
 
-  // editingQuestionId 라이프사이클 + hideColumnLabels 롤백
+  // editingQuestionId 라이프사이클 + store-only 설정 롤백
   useEffect(() => {
     // 이 effect 가 set up 한 질문 id 와 원래값을 렌더별 closure 로 캡처한다.
     // cleanup 에서 ref(questionIdRef.current)를 읽으면 React 가 새 effect setup 직전
     // 이미 "다음에 여는 질문 id" 로 갱신해둔 값을 읽게 되어, 직전 질문의 original 을
     // 새 질문에 덮어써 hideColumnLabels(열 라벨 숨김)가 풀리는 회귀가 난다.
     let originalHidden = false;
+    let originalMobileTableDisplayMode: Question['mobileTableDisplayMode'];
+    let originalMobileDrilldownOmitLeadingColumns: Question['mobileDrilldownOmitLeadingColumns'];
     if (isOpen && questionId) {
       setEditingQuestionId(questionId);
       const q = useSurveyBuilderStore.getState().currentSurvey.questions.find((q) => q.id === questionId);
       originalHidden = q?.hideColumnLabels ?? false;
+      originalMobileTableDisplayMode = q?.mobileTableDisplayMode;
+      originalMobileDrilldownOmitLeadingColumns = q?.mobileDrilldownOmitLeadingColumns;
       didSaveRef.current = false;
     }
     return () => {
       // setup 과 동일 조건일 때만 — 즉 이 effect 가 실제로 연 질문에 대해서만 롤백한다.
       if (isOpen && questionId) {
         if (!didSaveRef.current) {
-          useSurveyBuilderStore.getState().silentUpdateQuestion(questionId, { hideColumnLabels: originalHidden });
+          useSurveyBuilderStore.setState((state) => ({
+            currentSurvey: {
+              ...state.currentSurvey,
+              questions: state.currentSurvey.questions.map((question) => {
+                if (question.id !== questionId) return question;
+
+                const restoredQuestion = { ...question, hideColumnLabels: originalHidden };
+                if (originalMobileTableDisplayMode === undefined) {
+                  delete restoredQuestion.mobileTableDisplayMode;
+                } else {
+                  restoredQuestion.mobileTableDisplayMode = originalMobileTableDisplayMode;
+                }
+                if (originalMobileDrilldownOmitLeadingColumns === undefined) {
+                  delete restoredQuestion.mobileDrilldownOmitLeadingColumns;
+                } else {
+                  restoredQuestion.mobileDrilldownOmitLeadingColumns = originalMobileDrilldownOmitLeadingColumns;
+                }
+                return restoredQuestion;
+              }),
+            },
+          }));
         }
         useSurveyUIStore.getState().setEditingQuestionId(null);
       }
