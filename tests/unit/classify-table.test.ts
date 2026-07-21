@@ -330,6 +330,58 @@ describe('classifyTable — 주입된 answerable 셀 타입', () => {
     expect(sections[0]?.label).toBe('유저 지표');
     expect(sections[0]?.leaves.map((leaf) => leaf.rowId)).toEqual(['r1', 'r2']);
   });
+
+  it('section·leaf·subgroup 라벨 provenance를 rowspan anchor identity로 보존한다', () => {
+    const sections = classifyTable({
+      tableColumns: [C('섹션'), C('하위 그룹'), C('항목'), C('응답')],
+      tableRowsData: [
+        {
+          id: 'provenance-r1',
+          label: '첫 항목',
+          cells: [
+            { id: 'section-anchor', type: 'text', content: '섹션', rowspan: 2 },
+            { id: 'subgroup-anchor', type: 'image', content: '하위 그룹', rowspan: 2 },
+            { id: 'leaf-source-1', type: 'text', content: '첫 항목' },
+            I('provenance-input-1'),
+          ],
+        },
+        {
+          id: 'provenance-r2',
+          label: '둘째 항목',
+          cells: [
+            {
+              id: 'section-continuation',
+              type: 'text',
+              content: '',
+              isHidden: true,
+              _isContinuation: true,
+            },
+            {
+              id: 'subgroup-continuation',
+              type: 'image',
+              content: '',
+              isHidden: true,
+              _isContinuation: true,
+            },
+            { id: 'leaf-source-2', type: 'video', content: '둘째 항목' },
+            I('provenance-input-2'),
+          ],
+        },
+      ],
+    });
+
+    expect(sections[0]).toMatchObject({ labelSourceCellId: 'section-anchor' });
+    expect(sections[0]?.leaves).toMatchObject([
+      {
+        labelSourceCellId: 'leaf-source-1',
+        subGroupSourceCellId: 'subgroup-anchor',
+      },
+      {
+        labelSourceCellId: 'leaf-source-2',
+        subGroupSourceCellId: 'subgroup-anchor',
+      },
+    ]);
+  });
 });
 
 describe('decideDrilldown', () => {

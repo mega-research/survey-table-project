@@ -124,4 +124,23 @@ describe('isTableRowCompleted', () => {
 
     expect(isTableRowCompleted(r, {}, MOBILE_TABLE_COMPLETION_TYPES)).toBe(false);
   });
+
+  it('ranking은 유효 배열이 비면 미완료지만 checkbox 빈 배열의 기존 완료 의미는 보존한다', () => {
+    const rankingRow = row([cell({ id: 'rank', type: 'ranking' })]);
+    const checkboxRow = row([cell({ id: 'check', type: 'checkbox' })]);
+
+    expect(
+      isTableRowCompleted(
+        rankingRow,
+        { rank: [{ rank: 1, optionValue: 'a' }] },
+        MOBILE_TABLE_COMPLETION_TYPES,
+      ),
+    ).toBe(true);
+    expect(
+      isTableRowCompleted(rankingRow, { rank: [] }, MOBILE_TABLE_COMPLETION_TYPES),
+    ).toBe(false);
+    expect(
+      isTableRowCompleted(checkboxRow, { check: [] }, MOBILE_TABLE_COMPLETION_TYPES),
+    ).toBe(true);
+  });
 });

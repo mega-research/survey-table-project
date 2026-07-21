@@ -11,7 +11,10 @@ import { useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import type { Question, TableCell } from '@/types/survey';
 import { type ClassifiedLeaf, type ClassifiedSection, classifyTable } from '@/utils/classify-table';
-import { getMobileOriginalRowLabel, projectMobileOriginalRow } from '@/utils/mobile-original-row';
+import {
+  getMobileOriginalRowLabelCandidate,
+  projectMobileOriginalRow,
+} from '@/utils/mobile-original-row';
 import { clampMobileDrilldownOmitLeadingColumns } from '@/utils/mobile-table-display-mode';
 
 const EMPTY_COLUMNS: NonNullable<Question['tableColumns']> = [];
@@ -60,38 +63,31 @@ export function ChoiceTableDrilldown({
       sections.map((section) => {
         const leaves = section.leaves.map((leaf) => {
           const row = rowById.get(leaf.rowId);
-          const rawSubGroup = leaf.subGroup.trim();
-          const subGroupSourceCell = leaf.subGroupSourceCellId
-            ? cellById.get(leaf.subGroupSourceCellId)
-            : undefined;
-          const subGroupIsHidden = subGroupSourceCell?.mobileDisplay === 'hidden';
-          return row
-            ? {
-                ...leaf,
-                label: substituteTokens(
-                  getMobileOriginalRowLabel({
-                    authoredColumns: columns,
-                    row,
-                    omitLeadingAuthoredColumns: omit,
-                    resolveChoiceLabel,
-                  }),
-                  attrs,
-                ),
-                subGroup:
-                  rawSubGroup && !subGroupIsHidden ? substituteTokens(rawSubGroup, attrs) : '',
-              }
-            : leaf;
+          if (!row) return leaf;
+          const labelCandidate = getMobileOriginalRowLabelCandidate({
+            authoredColumns: columns,
+            row,
+            omitLeadingAuthoredColumns: omit,
+            resolveChoiceLabel,
+            rowLabelSourceCellId: leaf.labelSourceCellId,
+            isLabelSourceHidden: (cellId) =>
+              cellById.get(cellId)?.mobileDisplay === 'hidden',
+          });
+          const subGroupIsHidden = leaf.subGroupSourceCellId
+            ? cellById.get(leaf.subGroupSourceCellId)?.mobileDisplay === 'hidden'
+            : false;
+          return {
+            ...leaf,
+            label: substituteTokens(labelCandidate.label, attrs),
+            subGroup:
+              leaf.subGroup.trim() && !subGroupIsHidden
+                ? substituteTokens(leaf.subGroup.trim(), attrs)
+                : '',
+          };
         });
-        const firstRow = section.leaves[0] ? rowById.get(section.leaves[0].rowId) : undefined;
-        const sectionLabelIsHidden =
-          firstRow?.cells
-            .slice(0, omit)
-            .some(
-              (cell) =>
-                cell.type === 'text' &&
-                cell.mobileDisplay === 'hidden' &&
-                cell.content.trim() === section.label.trim(),
-            ) ?? false;
+        const sectionLabelIsHidden = section.labelSourceCellId
+          ? cellById.get(section.labelSourceCellId)?.mobileDisplay === 'hidden'
+          : false;
         const sectionLabel = sectionLabelIsHidden ? '' : substituteTokens(section.label, attrs);
         return {
           ...section,

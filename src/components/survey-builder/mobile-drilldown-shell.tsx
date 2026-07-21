@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
@@ -27,6 +27,11 @@ interface MobileDrilldownShellProps {
   onReturnToRoot?: () => void;
 }
 
+function getSectionIdentity(section: ClassifiedSection): string {
+  return section.labelSourceCellId
+    ?? `${section.kind}:${section.label}`;
+}
+
 export function MobileDrilldownShell({
   sections,
   leafNavigation,
@@ -40,10 +45,49 @@ export function MobileDrilldownShell({
   onLeaveSection,
   onReturnToRoot,
 }: MobileDrilldownShellProps) {
-  const [nav, setNav] = useState<{ sec: number | null; leaf: number | null }>({
-    sec: null,
-    leaf: null,
+  const [nav, setNav] = useState<{ sectionId: string | null; leafId: string | null }>({
+    sectionId: null,
+    leafId: null,
   });
+  const sectionEntries = useMemo(
+    () => sections.map((section, index) => ({ id: getSectionIdentity(section), index, section })),
+    [sections],
+  );
+  const selectedSectionEntry = nav.sectionId === null
+    ? undefined
+    : sectionEntries.find((entry) => entry.id === nav.sectionId);
+  const section = selectedSectionEntry?.section;
+  const sectionIndex = selectedSectionEntry?.index ?? null;
+  const leafIndex = section && nav.leafId !== null
+    ? section.leaves.findIndex((leaf) => leaf.rowId === nav.leafId)
+    : null;
+  const leaf = section && leafIndex != null && leafIndex >= 0
+    ? section.leaves[leafIndex]
+    : undefined;
+  const sectionMissing = nav.sectionId !== null && !section;
+  const leafMissing = section != null && nav.leafId !== null && !leaf;
+
+  useEffect(() => {
+    if (!sectionMissing && !leafMissing) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setNav((current) => {
+        if (sectionMissing && current.sectionId === nav.sectionId) {
+          return { sectionId: null, leafId: null };
+        }
+        if (
+          leafMissing
+          && current.sectionId === nav.sectionId
+          && current.leafId === nav.leafId
+        ) {
+          return { sectionId: current.sectionId, leafId: null };
+        }
+        return current;
+      });
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [leafMissing, nav.leafId, nav.sectionId, sectionMissing]);
 
   const rootRef = useRef<HTMLDivElement>(null);
   const isFirstNav = useRef(true);
@@ -53,7 +97,7 @@ export function MobileDrilldownShell({
       return;
     }
     rootRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
-  }, [nav.sec, nav.leaf]);
+  }, [nav.sectionId, nav.leafId]);
 
   const requiresLeafList = (section: ClassifiedSection) =>
     section.leaves.length === 0 ||
@@ -62,19 +106,21 @@ export function MobileDrilldownShell({
       : section.kind === 'matrix' && section.leaves.length > 1);
 
   const enterSection = (sectionIndex: number) => {
-    const section = sections[sectionIndex];
-    if (!section) return;
-    if (leafNavigation === 'matrix-only' && section.kind !== 'matrix') {
-      setNav({ sec: sectionIndex, leaf: null });
+    const entry = sectionEntries[sectionIndex];
+    if (!entry) return;
+    if (leafNavigation === 'matrix-only' && entry.section.kind !== 'matrix') {
+      setNav({ sectionId: entry.id, leafId: null });
       return;
     }
-    setNav({ sec: sectionIndex, leaf: requiresLeafList(section) ? null : 0 });
+    setNav({
+      sectionId: entry.id,
+      leafId: requiresLeafList(entry.section) ? null : (entry.section.leaves[0]?.rowId ?? null),
+    });
   };
 
   const goToRoot = () => {
-    const current = nav.sec === null ? undefined : sections[nav.sec];
-    if (current) onLeaveSection?.(current);
-    setNav({ sec: null, leaf: null });
+    if (section) onLeaveSection?.(section);
+    setNav({ sectionId: null, leafId: null });
     onReturnToRoot?.();
   };
 
@@ -95,7 +141,7 @@ export function MobileDrilldownShell({
       <button
         type="button"
         onClick={onBack}
-        className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-gray-100 px-3 py-2 text-sm font-semibold text-gray-600 active:bg-gray-200"
+        className="inline-flex min-h-11 shrink-0 items-center gap-1 rounded-lg bg-gray-100 px-3 py-2 text-sm font-semibold text-gray-600 active:bg-gray-200"
       >
         <ChevronLeft className="h-4 w-4" />
         뒤로
@@ -105,11 +151,10 @@ export function MobileDrilldownShell({
   );
 
   const renderProgressBar = () => {
-    const sectionIndex = nav.sec;
     const completed = overallStatus?.completed ?? 0;
     const total = overallStatus?.total ?? 0;
     const pct = total ? Math.round((completed / total) * 100) : 0;
-    const showSectionNavigation = sectionIndex !== null && nav.leaf === null;
+    const showSectionNavigation = sectionIndex !== null && (nav.leafId === null || leafMissing);
 
     if (!showSectionNavigation && !overallStatus && !footer) return null;
 
@@ -129,8 +174,8 @@ export function MobileDrilldownShell({
               <button
                 type="button"
                 onClick={() => {
-                  const section = sections[sectionIndex];
-                  if (section) goToNextSection(sectionIndex, section);
+                  const currentSection = sections[sectionIndex];
+                  if (currentSection) goToNextSection(sectionIndex, currentSection);
                 }}
                 className="flex flex-1 items-center justify-center gap-1 rounded-xl border border-blue-200 bg-blue-50 py-3 text-sm font-semibold text-blue-600 active:bg-blue-100"
               >
@@ -162,7 +207,7 @@ export function MobileDrilldownShell({
     );
   };
 
-  if (nav.sec === null) {
+  if (nav.sectionId === null || !section || sectionIndex === null) {
     return (
       <div ref={rootRef}>
         <p className="mb-3 px-1 text-sm font-medium text-gray-500">작성할 항목을 선택하세요</p>
@@ -172,7 +217,7 @@ export function MobileDrilldownShell({
             const full = status.total > 0 && status.completed === status.total;
             return (
               <button
-                key={sectionIndex}
+                key={getSectionIdentity(section)}
                 type="button"
                 onClick={() => enterSection(sectionIndex)}
                 className="flex w-full items-center gap-3 rounded-xl border border-gray-200 bg-white p-4 text-left active:bg-gray-50"
@@ -201,9 +246,6 @@ export function MobileDrilldownShell({
     );
   }
 
-  const section = sections[nav.sec];
-  if (!section) return null;
-
   if (leafNavigation === 'matrix-only' && section.kind !== 'matrix') {
     return (
       <div ref={rootRef}>
@@ -214,7 +256,7 @@ export function MobileDrilldownShell({
     );
   }
 
-  if (nav.leaf === null) {
+  if (nav.leafId === null || !leaf || leafIndex === null || leafIndex < 0) {
     return (
       <div ref={rootRef}>
         {renderCrumb({ label: section.label || '항목', onBack: goToRoot })}
@@ -233,7 +275,7 @@ export function MobileDrilldownShell({
                 )}
                 <button
                   type="button"
-                  onClick={() => setNav({ sec: nav.sec, leaf: leafIndex })}
+                  onClick={() => setNav({ sectionId: nav.sectionId, leafId: leaf.rowId })}
                   className="flex w-full items-center gap-3 rounded-xl border border-gray-200 bg-white p-4 text-left active:bg-gray-50"
                 >
                   <span className="min-w-0 flex-1 text-sm font-semibold text-gray-900">
@@ -258,12 +300,7 @@ export function MobileDrilldownShell({
     );
   }
 
-  const leaf = section.leaves[nav.leaf];
-  if (!leaf) return null;
-
   const usesLeafList = requiresLeafList(section);
-  const leafIndex = nav.leaf;
-  const sectionIndex = nav.sec;
   const isFirstLeaf = leafIndex <= 0;
   const isLastLeaf = leafIndex >= section.leaves.length - 1;
   const hasNextSection = sectionIndex < sections.length - 1;
@@ -272,7 +309,10 @@ export function MobileDrilldownShell({
     'flex flex-1 items-center justify-center gap-1 rounded-xl border border-gray-200 bg-white py-3 text-sm font-semibold text-gray-600 active:bg-gray-50';
   const navBlue =
     'flex flex-1 items-center justify-center gap-1 rounded-xl border border-blue-200 bg-blue-50 py-3 text-sm font-semibold text-blue-600 active:bg-blue-100';
-  const backToLeaves = () => (usesLeafList ? setNav({ sec: nav.sec, leaf: null }) : goToRoot());
+  const backToLeaves = () =>
+    (usesLeafList
+      ? setNav({ sectionId: nav.sectionId, leafId: null })
+      : goToRoot());
 
   return (
     <div ref={rootRef}>
@@ -302,7 +342,12 @@ export function MobileDrilldownShell({
           ) : (
             <button
               type="button"
-              onClick={() => setNav({ sec: nav.sec, leaf: leafIndex - 1 })}
+              onClick={() =>
+                setNav({
+                  sectionId: nav.sectionId,
+                  leafId: section.leaves[leafIndex - 1]?.rowId ?? null,
+                })
+              }
               className={navGray}
             >
               <ChevronLeft className="h-4 w-4" />
@@ -314,7 +359,10 @@ export function MobileDrilldownShell({
               type="button"
               onClick={() => {
                 onLeaveLeafForward?.(leaf);
-                setNav({ sec: nav.sec, leaf: leafIndex + 1 });
+                setNav({
+                  sectionId: nav.sectionId,
+                  leafId: section.leaves[leafIndex + 1]?.rowId ?? null,
+                });
               }}
               className={navBlue}
             >

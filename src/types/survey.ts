@@ -2,6 +2,7 @@ import type { ContactColumnScheme, GroupNameDesign, SurveyResponseHeaderConfig }
 import type { MobileTableDisplayMode } from '@/types/mobile-table-display';
 
 export type { GroupNameDesign, SurveyResponseHeaderConfig };
+export { MOBILE_TABLE_DISPLAY_MODES } from '@/types/mobile-table-display';
 export type { MobileTableDisplayMode } from '@/types/mobile-table-display';
 
 export type QuestionType =

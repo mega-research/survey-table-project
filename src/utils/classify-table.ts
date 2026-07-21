@@ -1,4 +1,5 @@
 import type { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
+import { buildTableRowspanCoverage } from '@/utils/table-rowspan-coverage';
 
 /**
  * 모바일 테이블 드릴다운용 표 구조 자동 분류기.
@@ -42,6 +43,7 @@ export interface ColGroup {
 export interface ClassifiedLeaf {
   rowId: string;
   label: string;
+  labelSourceCellId?: string | undefined;
   subGroup: string;
   subGroupSourceCellId?: string | undefined;
   inputCellIds: string[];
@@ -51,6 +53,7 @@ export interface ClassifiedLeaf {
 }
 export interface ClassifiedSection {
   label: string;
+  labelSourceCellId?: string | undefined;
   kind: SectionKind;
   reason: string;
   leaves: ClassifiedLeaf[];
@@ -70,19 +73,28 @@ function valueColumns(q: ClassifyInput, types = answerableTypes(q)): number[] {
 }
 
 // 한 라벨 열의 rowspan 으로 행 그룹핑 (use-row-groups 의 detectRowGroups 일반화)
-function groupByColumn(rows: TableRow[], col: number) {
+function groupByColumn(
+  rows: TableRow[],
+  col: number,
+  coverage: Map<string, Array<TableCell | undefined>>,
+) {
   const groups: { label: string; rows: TableRow[]; sourceCellId?: string | undefined }[] = [];
   for (let i = 0; i < rows.length; ) {
     const row = rows[i];
     if (!row) break;
-    const c = row.cells[col];
-    const span = c && !c.isHidden && (c.rowspan ?? 1) > 1 ? (c.rowspan ?? 1) : 1;
+    const c = coverage.get(row.id)?.[col] ?? row.cells[col];
+    let end = i + 1;
+    while (c && end < rows.length) {
+      const nextRow = rows[end];
+      if (!nextRow || coverage.get(nextRow.id)?.[col]?.id !== c.id) break;
+      end += 1;
+    }
     groups.push({
       label: (c?.content ?? '').trim(),
-      rows: rows.slice(i, i + span),
+      rows: rows.slice(i, end),
       ...(c ? { sourceCellId: c.id } : {}),
     });
-    i += span;
+    i = end;
   }
   return groups;
 }
@@ -129,22 +141,43 @@ function buildColGroups(q: ClassifyInput, vcols: number[]): ColGroup[] {
   return groups;
 }
 
-const rightmostLabel = (row: TableRow, labelCols: number[]) => {
+const rightmostLabel = (
+  row: TableRow,
+  labelCols: number[],
+  coverage: Map<string, Array<TableCell | undefined>>,
+): { label: string; sourceCellId?: string | undefined } => {
+  const coveredCells = coverage.get(row.id) ?? row.cells;
   for (let k = labelCols.length - 1; k >= 0; k--) {
     const colIdx = labelCols[k];
     if (colIdx === undefined) continue;
-    const c = row.cells[colIdx];
+    const c = coveredCells[colIdx];
     // rowspan 으로 병합된 라벨 셀의 첫 행 content 는 그룹 전체를 대표하는 라벨이라
     // 개별 행(리프)을 구분하지 못한다. 이런 셀은 건너뛰고 row.label 로 떨어진다.
-    if (isLabel(c) && c?.content.trim() && (c?.rowspan ?? 1) <= 1) return c.content.trim();
+    if (isLabel(c) && c?.content.trim() && (c?.rowspan ?? 1) <= 1) {
+      return { label: c.content.trim(), sourceCellId: c.id };
+    }
   }
-  return row.label || '';
+  const rowLabel = row.label.trim();
+  if (!rowLabel) return { label: '' };
+
+  // row.label이 셀 콘텐츠의 복제본인 경우 source identity를 함께 보존한다.
+  // 같은 문자열을 가진 다른 hidden 셀이 있더라도 전역 문자열 비교로 라벨을 숨기지 않는다.
+  for (let k = labelCols.length - 1; k >= 0; k--) {
+    const colIdx = labelCols[k];
+    if (colIdx === undefined) continue;
+    const source = coveredCells[colIdx];
+    if (isLabel(source) && source?.content.trim() === rowLabel) {
+      return { label: rowLabel, sourceCellId: source.id };
+    }
+  }
+  return { label: rowLabel };
 };
 
 export function classifyTable(q: ClassifyInput): ClassifiedSection[] {
   const types = answerableTypes(q);
   const cols = q.tableColumns;
   const rows = q.tableRowsData;
+  const coverage = buildTableRowspanCoverage(rows);
   const vcols = valueColumns(q, types);
   const V = vcols.length;
   const labelCols = cols.map((_, j) => j).filter((j) => !vcols.includes(j));
@@ -156,7 +189,7 @@ export function classifyTable(q: ClassifyInput): ClassifiedSection[] {
     g.cols.forEach((c) => colMeta.set(c.col, { group: g.label, leaf: c.label })),
   );
 
-  return groupByColumn(rows, leftmost).map((sec) => {
+  return groupByColumn(rows, leftmost, coverage).map((sec) => {
     const usedPerRow = sec.rows.map((row) =>
       vcols.filter((column) => isInput(row.cells[column], types)),
     );
@@ -179,18 +212,24 @@ export function classifyTable(q: ClassifyInput): ClassifiedSection[] {
     }
 
     const subGroups =
-      subCol != null ? groupByColumn(sec.rows, subCol) : [{ label: '', rows: sec.rows }];
+      subCol != null
+        ? groupByColumn(sec.rows, subCol, coverage)
+        : [{ label: '', rows: sec.rows }];
     const subOf = (row: TableRow) => subGroups.find((g) => g.rows.includes(row));
 
     const leaves: ClassifiedLeaf[] = inputRows.map((row) => {
       const subGroup = subOf(row);
+      const leafLabel = rightmostLabel(row, labelCols, coverage);
       const cellByCol: Record<number, string> = {};
       row.cells.forEach((cell, columnIndex) => {
         if (isInput(cell, types)) cellByCol[columnIndex] = cell.id;
       });
       return {
         rowId: row.id,
-        label: rightmostLabel(row, labelCols),
+        label: leafLabel.label,
+        ...(leafLabel.sourceCellId
+          ? { labelSourceCellId: leafLabel.sourceCellId }
+          : {}),
         subGroup: subGroup?.label ?? '',
         ...(subGroup?.sourceCellId ? { subGroupSourceCellId: subGroup.sourceCellId } : {}),
         inputCellIds: row.cells.filter((cell) => isInput(cell, types)).map((cell) => cell.id),
@@ -200,6 +239,7 @@ export function classifyTable(q: ClassifyInput): ClassifiedSection[] {
 
     return {
       label: sec.label,
+      ...(sec.sourceCellId ? { labelSourceCellId: sec.sourceCellId } : {}),
       kind,
       reason,
       leaves,

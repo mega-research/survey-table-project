@@ -30,7 +30,7 @@ describe('MobileTableDisplaySettings', () => {
       <MobileTableDisplaySettings mode="auto" omitLeadingColumns={1} columnCount={3} onChange={onChange} />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: '드릴다운 후 선택 행 원본' }));
+    fireEvent.click(screen.getByRole('radio', { name: '드릴다운 후 선택 행 원본' }));
 
     expect(onChange).toHaveBeenCalledWith({ mode: 'drilldown-original-row', omitLeadingColumns: 1 });
   });
@@ -49,5 +49,21 @@ describe('MobileTableDisplaySettings', () => {
     fireEvent.change(screen.getByLabelText('상세에서 제외할 앞쪽 열 수'), { target: { value: '9' } });
 
     expect(onChange).toHaveBeenCalledWith({ mode: 'drilldown-original-row', omitLeadingColumns: 2 });
+  });
+
+  it('라벨된 radiogroup과 세 radio 및 비색상 선택 표시를 제공한다', () => {
+    render(
+      <MobileTableDisplaySettings
+        mode="auto"
+        omitLeadingColumns={1}
+        columnCount={3}
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole('radiogroup', { name: '모바일 표시 방식' })).toBeInTheDocument();
+    expect(screen.getAllByRole('radio')).toHaveLength(3);
+    expect(screen.getByRole('radio', { name: '자동 카드' })).toBeChecked();
+    expect(screen.getByText('선택됨')).toBeInTheDocument();
   });
 });

@@ -1,4 +1,5 @@
 import type { TableCell, TableRow } from '@/types/survey';
+import { parseRankingAnswers } from '@/utils/ranking-shared';
 import { buildRadioGroupBuckets } from '@/utils/table-radio-groups';
 
 // 완료 판정 대상이 되는 입력 셀 타입
@@ -8,7 +9,8 @@ const DEFAULT_ANSWERABLE_CELL_TYPES = ['text', 'checkbox', 'radio', 'select', 'i
  * 셀 응답값이 "응답됨"으로 간주되는지 여부.
  * undefined/null/빈 문자열은 미응답으로 본다.
  */
-function isCellAnswered(val: unknown): boolean {
+function isCellAnswered(val: unknown, cellType?: TableCell['type']): boolean {
+  if (cellType === 'ranking') return parseRankingAnswers(val).length > 0;
   return val !== undefined && val !== null && val !== '';
 }
 
@@ -54,6 +56,6 @@ export function isTableRowCompleted(
     if (groupName) {
       return groupCompleted.get(groupName) ?? false;
     }
-    return isCellAnswered(response[cell.id]);
+    return isCellAnswered(response[cell.id], cell.type);
   });
 }

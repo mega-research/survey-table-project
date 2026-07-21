@@ -1,6 +1,7 @@
 import type { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
 import { clampMobileDrilldownOmitLeadingColumns } from '@/utils/mobile-table-display-mode';
 import { recalculateColspansForVisibleColumns } from '@/utils/table-merge-helpers';
+import { buildTableRowspanCoverage } from '@/utils/table-rowspan-coverage';
 
 export const MOBILE_ORIGINAL_ROW_INTERACTIVE_TYPES = [
   'checkbox',
@@ -60,12 +61,21 @@ export function projectMobileOriginalRow(
   );
   const selected = projected.rows.find((row) => row.id === input.selectedRowId);
   if (!selected) return null;
+  const coverage = buildTableRowspanCoverage(projected.rows);
+  const selectedCoverage = coverage.get(selected.id) ?? selected.cells;
 
   const row: TableRow = {
     ...selected,
-    cells: selected.cells.map((cell) => {
-      const normalized = { ...cell };
+    cells: selected.cells.map((cell, columnIndex) => {
+      const source = selectedCoverage[columnIndex];
+      const materializesAnchor =
+        source != null && source.id !== cell.id && (cell.isHidden || cell._isContinuation);
+      const normalized = { ...(materializesAnchor ? source : cell) };
       delete normalized.rowspan;
+      if (materializesAnchor) {
+        delete normalized.isHidden;
+        delete normalized._isContinuation;
+      }
       return normalized;
     }),
   };
@@ -83,12 +93,46 @@ export function getMobileOriginalRowLabel({
   row,
   omitLeadingAuthoredColumns,
   resolveChoiceLabel,
+  rowLabelSourceCellId,
+  isLabelSourceHidden,
 }: {
   authoredColumns: TableColumn[];
   row: TableRow;
   omitLeadingAuthoredColumns: number;
   resolveChoiceLabel: (cellId: string) => string | undefined;
+  rowLabelSourceCellId?: string | undefined;
+  isLabelSourceHidden?: ((cellId: string) => boolean) | undefined;
 }): string {
+  return getMobileOriginalRowLabelCandidate({
+    authoredColumns,
+    row,
+    omitLeadingAuthoredColumns,
+    resolveChoiceLabel,
+    rowLabelSourceCellId,
+    isLabelSourceHidden,
+  }).label;
+}
+
+export interface MobileOriginalRowLabelCandidate {
+  label: string;
+  sourceCellId?: string | undefined;
+}
+
+export function getMobileOriginalRowLabelCandidate({
+  authoredColumns,
+  row,
+  omitLeadingAuthoredColumns,
+  resolveChoiceLabel,
+  rowLabelSourceCellId,
+  isLabelSourceHidden,
+}: {
+  authoredColumns: TableColumn[];
+  row: TableRow;
+  omitLeadingAuthoredColumns: number;
+  resolveChoiceLabel: (cellId: string) => string | undefined;
+  rowLabelSourceCellId?: string | undefined;
+  isLabelSourceHidden?: ((cellId: string) => boolean) | undefined;
+}): MobileOriginalRowLabelCandidate {
   const omit = clampMobileDrilldownOmitLeadingColumns(
     omitLeadingAuthoredColumns,
     authoredColumns.length,
@@ -96,22 +140,36 @@ export function getMobileOriginalRowLabel({
   for (let index = omit - 1; index >= 0; index -= 1) {
     const cell = row.cells[index];
     if (
-      cell?.type === 'text' &&
+      cell != null &&
+      (cell.type === 'text' || cell.type === 'image' || cell.type === 'video') &&
       !cell.isHidden &&
       !cell._isContinuation &&
       cell.mobileDisplay !== 'hidden' &&
       cell.content.trim()
     ) {
-      return cell.content.trim();
+      return { label: cell.content.trim(), sourceCellId: cell.id };
     }
   }
 
-  const explicitlyHiddenLabels = getMobileOriginalRowHiddenLabelCandidates({
-    row,
-    resolveChoiceLabel,
-  });
-  if (row.label.trim() && !explicitlyHiddenLabels.includes(row.label.trim())) {
-    return row.label.trim();
+  const rowLabel = row.label.trim();
+  if (rowLabel) {
+    const inferredSource = rowLabelSourceCellId
+      ? undefined
+      : [...row.cells].reverse().find((cell) => {
+          if (cell.type === 'choice_opt') return resolveChoiceLabel(cell.id)?.trim() === rowLabel;
+          return cell.content.trim() === rowLabel;
+        });
+    const sourceCellId = rowLabelSourceCellId ?? inferredSource?.id;
+    const sourceIsHidden = sourceCellId
+      ? (isLabelSourceHidden?.(sourceCellId)
+        ?? inferredSource?.mobileDisplay === 'hidden')
+      : false;
+    if (!sourceIsHidden) {
+      return {
+        label: rowLabel,
+        ...(sourceCellId ? { sourceCellId } : {}),
+      };
+    }
   }
 
   const choice = row.cells.find(
@@ -121,21 +179,8 @@ export function getMobileOriginalRowLabel({
       !cell._isContinuation &&
       cell.mobileDisplay !== 'hidden',
   );
-  return (choice && resolveChoiceLabel(choice.id)) || '(라벨 없음)';
-}
-
-export function getMobileOriginalRowHiddenLabelCandidates({
-  row,
-  resolveChoiceLabel,
-}: {
-  row: TableRow;
-  resolveChoiceLabel: (cellId: string) => string | undefined;
-}): string[] {
-  return row.cells.flatMap((cell) => {
-    if (cell.mobileDisplay !== 'hidden') return [];
-    const labels = cell.content.trim() ? [cell.content.trim()] : [];
-    if (cell.type !== 'choice_opt') return labels;
-    const choiceLabel = resolveChoiceLabel(cell.id)?.trim();
-    return choiceLabel ? [...labels, choiceLabel] : labels;
-  });
+  const choiceLabel = choice ? resolveChoiceLabel(choice.id)?.trim() : undefined;
+  return choice && choiceLabel
+    ? { label: choiceLabel, sourceCellId: choice.id }
+    : { label: '(라벨 없음)' };
 }

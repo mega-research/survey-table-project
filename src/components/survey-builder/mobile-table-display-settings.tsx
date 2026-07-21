@@ -1,5 +1,7 @@
 'use client';
 
+import { Check } from 'lucide-react';
+
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
@@ -34,28 +36,57 @@ export function MobileTableDisplaySettings({
   return (
     <div className="space-y-3 rounded-lg border border-gray-200 p-4">
       <div>
-        <Label className="text-sm font-medium">모바일 표시 방식</Label>
+        <div id="mobile-table-display-mode-label" className="text-sm font-medium">
+          모바일 표시 방식
+        </div>
         <p className="text-xs text-gray-500">
           원본 배치가 중요한 척도형 표의 모바일 탐색 방식을 선택합니다.
         </p>
       </div>
-      <div className="grid gap-2 sm:grid-cols-3">
-        {OPTIONS.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            aria-label={option.label}
-            aria-pressed={mode === option.value}
-            onClick={() => onChange({ mode: option.value, omitLeadingColumns: normalizedCount })}
-            className={cn(
-              'rounded-lg border p-3 text-left',
-              mode === option.value ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white',
-            )}
-          >
-            <span className="block text-sm font-semibold text-gray-900">{option.label}</span>
-            <span className="mt-1 block text-xs text-gray-500">{option.description}</span>
-          </button>
-        ))}
+      <div
+        role="radiogroup"
+        aria-labelledby="mobile-table-display-mode-label"
+        className="grid gap-2 sm:grid-cols-3"
+      >
+        {OPTIONS.map((option) => {
+          const selected = mode === option.value;
+
+          return (
+            <label
+              key={option.value}
+              className={cn(
+                'cursor-pointer rounded-lg border p-3 text-left has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-blue-500 has-[:focus-visible]:ring-offset-2',
+                selected ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white',
+              )}
+            >
+              <input
+                type="radio"
+                name="mobile-table-display-mode"
+                value={option.value}
+                aria-label={option.label}
+                checked={selected}
+                onChange={() => onChange({
+                  mode: option.value,
+                  omitLeadingColumns: normalizedCount,
+                })}
+                className="sr-only"
+              />
+              <span className="block text-sm font-semibold text-gray-900">{option.label}</span>
+              <span className="mt-1 block text-xs text-gray-500">{option.description}</span>
+              <span
+                aria-hidden="true"
+                className="mt-2 inline-flex min-h-5 items-center gap-1 text-xs font-semibold text-blue-700"
+              >
+                {selected ? (
+                  <>
+                    <Check className="h-3.5 w-3.5" />
+                    선택됨
+                  </>
+                ) : null}
+              </span>
+            </label>
+          );
+        })}
       </div>
       {mode === 'drilldown-original-row' ? (
         <div className="max-w-xs space-y-1.5">

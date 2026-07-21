@@ -1,11 +1,11 @@
 import { useState } from 'react';
 
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeAll, expect, it, vi } from 'vitest';
 
 import { InteractiveTableResponse } from '@/components/survey-builder/interactive-table-response';
 import { MobileDrilldownShell } from '@/components/survey-builder/mobile-drilldown-shell';
-import type { TableColumn, TableRow } from '@/types/survey';
+import type { TableCell, TableColumn, TableRow } from '@/types/survey';
 import type { ClassifiedLeaf, ClassifiedSection } from '@/utils/classify-table';
 
 vi.mock('@/hooks/use-media-query', () => ({
@@ -146,6 +146,103 @@ function ControlledScale({
   );
 }
 
+function ControlledOmittedRadioScale({
+  onValue,
+}: {
+  onValue: (value: Record<string, unknown>) => void;
+}) {
+  const [value, setValue] = useState<Record<string, unknown>>({
+    'omitted-score': '0',
+    'retained-score-1': '',
+    'retained-score-2': '',
+  });
+  const columns: TableColumn[] = [
+    { id: 'label', label: '항목' },
+    { id: 'omitted', label: '0점' },
+    { id: 'retained-1', label: '1점' },
+    { id: 'retained-2', label: '2점' },
+  ];
+  const rows: TableRow[] = [{
+    id: 'omitted-radio-row',
+    label: '원본 라디오 행',
+    cells: [
+      { id: 'omitted-label', type: 'text', content: '원본 라디오 행' },
+      {
+        id: 'omitted-score',
+        type: 'radio',
+        content: '',
+        radioGroupName: 'score',
+        radioOptions: [{ id: 'zero', label: '0점', value: '0' }],
+      },
+      {
+        id: 'retained-score-1',
+        type: 'radio',
+        content: '',
+        radioGroupName: 'score',
+        radioOptions: [{ id: 'one', label: '1점', value: '1' }],
+      },
+      {
+        id: 'retained-score-2',
+        type: 'radio',
+        content: '',
+        radioGroupName: 'score',
+        radioOptions: [{ id: 'two', label: '2점', value: '2' }],
+      },
+    ],
+  }];
+
+  return (
+    <InteractiveTableResponse
+      questionId="omitted-radio-question"
+      columns={columns}
+      rows={rows}
+      mobileTableDisplayMode="drilldown-original-row"
+      mobileDrilldownOmitLeadingColumns={2}
+      value={value}
+      onChange={(next) => {
+        setValue(next);
+        onValue(next);
+      }}
+    />
+  );
+}
+
+function ControlledRankingScale() {
+  const [value, setValue] = useState<Record<string, unknown>>({});
+  const rankingCell: TableCell = {
+    id: 'ranking-cell',
+    type: 'ranking',
+    content: '',
+    rankingConfig: { positions: 1 },
+    rankingOptions: [
+      { id: 'ranking-a', label: '선택 A', value: 'a' },
+      { id: 'ranking-b', label: '선택 B', value: 'b' },
+    ],
+  };
+
+  return (
+    <InteractiveTableResponse
+      questionId="ranking-table-question"
+      columns={[
+        { id: 'ranking-label-column', label: '항목' },
+        { id: 'ranking-value-column', label: '순위' },
+      ]}
+      rows={[{
+        id: 'ranking-row',
+        label: '순위 행',
+        cells: [
+          { id: 'ranking-label', type: 'text', content: '순위 행' },
+          rankingCell,
+        ],
+      }]}
+      mobileTableDisplayMode="drilldown-original-row"
+      mobileDrilldownOmitLeadingColumns={1}
+      value={value}
+      onChange={setValue}
+    />
+  );
+}
+
 function GroupedScale() {
   return (
     <InteractiveTableResponse
@@ -282,6 +379,167 @@ it('통합 원본 행 radio가 같은 행 sibling을 비우고 cell id 응답 sh
   expect(screen.getByRole('radio', { name: '1점' })).not.toBeChecked();
 });
 
+it('제외된 radio에 기존 응답이 있어도 retained 멤버 선택 시 같은 그룹 전체를 비운다', () => {
+  const onValue = vi.fn<(value: Record<string, unknown>) => void>();
+  render(<ControlledOmittedRadioScale onValue={onValue} />);
+  fireEvent.click(screen.getByRole('button', { name: /원본 라디오 행/ }));
+
+  expect(screen.queryByRole('radio', { name: '0점' })).toBeNull();
+  fireEvent.click(screen.getByRole('radio', { name: '2점' }));
+
+  expect(onValue).toHaveBeenLastCalledWith({
+    'omitted-score': '',
+    'retained-score-1': '',
+    'retained-score-2': '2',
+  });
+});
+
+it('ranking의 마지막 순위를 지우면 행 진행률이 다시 미완료가 된다', () => {
+  render(<ControlledRankingScale />);
+  fireEvent.click(screen.getByRole('button', { name: /순위 행/ }));
+  const ranking = screen.getByRole('combobox');
+
+  expect(screen.getByText(/전체/)).toHaveTextContent('전체 0 / 1개 항목');
+  fireEvent.change(ranking, { target: { value: 'a' } });
+  expect(screen.getByText(/전체/)).toHaveTextContent('전체 1 / 1개 항목');
+  fireEvent.change(ranking, { target: { value: '' } });
+  expect(screen.getByText(/전체/)).toHaveTextContent('전체 0 / 1개 항목');
+});
+
+it('정적 행은 전체 진행률 분모와 완료 수에서 제외한다', () => {
+  render(
+    <InteractiveTableResponse
+      questionId="static-progress-question"
+      columns={[
+        { id: 'static-label-column', label: '항목' },
+        { id: 'static-value-column', label: '응답' },
+      ]}
+      rows={[
+        {
+          id: 'static-row',
+          label: '설명',
+          cells: [
+            { id: 'static-label', type: 'text', content: '설명' },
+            { id: 'static-description', type: 'text', content: '응답 안내' },
+          ],
+        },
+        {
+          id: 'answer-row-1',
+          label: '첫 응답',
+          cells: [
+            { id: 'answer-label-1', type: 'text', content: '첫 응답' },
+            { id: 'answer-input-1', type: 'input', content: '' },
+          ],
+        },
+        {
+          id: 'answer-row-2',
+          label: '둘째 응답',
+          cells: [
+            { id: 'answer-label-2', type: 'text', content: '둘째 응답' },
+            { id: 'answer-input-2', type: 'input', content: '' },
+          ],
+        },
+      ]}
+      mobileTableDisplayMode="drilldown-original-row"
+      mobileDrilldownOmitLeadingColumns={1}
+      value={{}}
+      onChange={vi.fn()}
+    />,
+  );
+
+  expect(screen.getByText(/전체/)).toHaveTextContent('전체 0 / 2개 항목');
+});
+
+it.each(['text', 'image', 'video'] as const)(
+  'table의 hidden %s rowspan 하위 라벨은 anchor와 continuation 탐색에 새지 않고 입력은 남긴다',
+  (hiddenType) => {
+    const hiddenLabel = `숨긴 ${hiddenType} 하위 라벨`;
+    render(
+      <InteractiveTableResponse
+        questionId={`hidden-${hiddenType}-table`}
+        columns={[
+          { id: 'hidden-section-column', label: '섹션' },
+          { id: 'hidden-subgroup-column', label: '하위 그룹' },
+          { id: 'hidden-item-column', label: '항목' },
+          { id: 'hidden-input-column', label: '응답' },
+        ]}
+        rows={[
+          {
+            id: 'hidden-row-1',
+            label: hiddenLabel,
+            cells: [
+              { id: 'visible-section', type: 'text', content: '공개 섹션', rowspan: 2 },
+              {
+                id: 'hidden-subgroup',
+                type: hiddenType,
+                content: hiddenLabel,
+                rowspan: 2,
+                mobileDisplay: 'hidden',
+              },
+              { id: 'visible-item-1', type: 'text', content: '첫 공개 항목' },
+              {
+                id: 'visible-input-1',
+                type: 'input',
+                content: '숨긴 인터랙티브 라벨',
+                placeholder: '첫 응답 가능',
+                mobileDisplay: 'hidden',
+              },
+            ],
+          },
+          {
+            id: 'hidden-row-2',
+            label: hiddenLabel,
+            cells: [
+              {
+                id: 'visible-section-continuation',
+                type: 'text',
+                content: '',
+                isHidden: true,
+                _isContinuation: true,
+              },
+              {
+                id: 'hidden-subgroup-continuation',
+                type: hiddenType,
+                content: '',
+                isHidden: true,
+                _isContinuation: true,
+              },
+              { id: 'visible-item-2', type: 'text', content: '둘째 공개 항목' },
+              {
+                id: 'visible-input-2',
+                type: 'input',
+                content: '숨긴 인터랙티브 라벨',
+                placeholder: '둘째 응답 가능',
+                mobileDisplay: 'hidden',
+              },
+            ],
+          },
+        ]}
+        mobileTableDisplayMode="drilldown-original-row"
+        mobileDrilldownOmitLeadingColumns={3}
+        value={{}}
+        onChange={vi.fn()}
+      />,
+    );
+
+    const expectHiddenLabelsAbsent = () => {
+      expect(document.body.textContent).not.toContain(hiddenLabel);
+      expect(document.body.textContent).not.toContain('숨긴 인터랙티브 라벨');
+    };
+
+    expectHiddenLabelsAbsent();
+    fireEvent.click(screen.getByRole('button', { name: /공개 섹션/ }));
+    expectHiddenLabelsAbsent();
+    fireEvent.click(screen.getByRole('button', { name: /첫 공개 항목/ }));
+    expectHiddenLabelsAbsent();
+    expect(screen.getByPlaceholderText('첫 응답 가능')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '뒤로' }));
+    fireEvent.click(screen.getByRole('button', { name: /둘째 공개 항목/ }));
+    expectHiddenLabelsAbsent();
+    expect(screen.getByPlaceholderText('둘째 응답 가능')).toBeInTheDocument();
+  },
+);
+
 const leaf = (rowId: string, label: string): ClassifiedLeaf => ({
   rowId,
   label,
@@ -347,6 +605,27 @@ function renderShell({
       onLeaveSection={onLeaveSection}
       onReturnToRoot={onReturnToRoot}
     />,
+  );
+}
+
+function RerenderableShell({ sections }: { sections: ClassifiedSection[] }) {
+  return (
+    <MobileDrilldownShell
+      sections={sections}
+      leafNavigation="always"
+      overallStatus={{
+        completed: 0,
+        total: sections.flatMap((item) => item.leaves).length,
+        unit: '개 항목',
+      }}
+      getSectionStatus={(item) => ({
+        completed: 0,
+        total: item.leaves.length,
+        unit: '개 항목',
+      })}
+      getLeafStatus={() => ({ completed: 0, total: 1, unit: '개 항목' })}
+      renderLeafDetail={(item) => <div data-testid="rerender-leaf-detail">{item.label}</div>}
+    />
   );
 }
 
@@ -423,6 +702,97 @@ it('응답과 상태가 제어 rerender되어도 명시적 다음 버튼 전에�
   expect(screen.getByText(/전체/)).toHaveTextContent('전체 1 / 2개 항목');
   fireEvent.click(screen.getByRole('button', { name: '다음 항목' }));
   expect(screen.getByTestId('leaf-detail')).toHaveTextContent('둘째 항목');
+});
+
+it('현재 leaf 앞에 항목이 삽입되거나 재정렬되어도 row identity로 같은 상세를 유지한다', () => {
+  const initial = [section([leaf('r1', '첫 항목'), leaf('r2', '둘째 항목')])];
+  const { rerender } = render(<RerenderableShell sections={initial} />);
+  enterFirstLeaf();
+  fireEvent.click(screen.getByRole('button', { name: '다음 항목' }));
+  expect(screen.getByTestId('rerender-leaf-detail')).toHaveTextContent('둘째 항목');
+
+  rerender(
+    <RerenderableShell
+      sections={[
+        section([
+          leaf('inserted', '삽입 항목'),
+          leaf('r1', '첫 항목'),
+          leaf('r2', '둘째 항목'),
+        ]),
+      ]}
+    />,
+  );
+
+  expect(screen.getByTestId('rerender-leaf-detail')).toHaveTextContent('둘째 항목');
+});
+
+it('현재 section 앞에 section이 삽입되어도 안정 section identity로 같은 상세를 유지한다', () => {
+  const first = section([leaf('section-a-leaf', 'A 항목')], { label: 'A 섹션' });
+  const current = section([leaf('section-b-leaf', 'B 항목')], { label: 'B 섹션' });
+  const { rerender } = render(<RerenderableShell sections={[first, current]} />);
+  fireEvent.click(screen.getByRole('button', { name: /B 섹션/ }));
+  expect(screen.getByTestId('rerender-leaf-detail')).toHaveTextContent('B 항목');
+
+  rerender(
+    <RerenderableShell
+      sections={[
+        section([leaf('inserted-section-leaf', '삽입 항목')], { label: '삽입 섹션' }),
+        first,
+        current,
+      ]}
+    />,
+  );
+
+  expect(screen.getByTestId('rerender-leaf-detail')).toHaveTextContent('B 항목');
+});
+
+it('현재 leaf가 제거되면 저장된 nav도 정리하고 해당 section의 안전한 목록으로 돌아간다', async () => {
+  const original = section([leaf('r1', '첫 항목'), leaf('r2', '둘째 항목')]);
+  const { rerender } = render(
+    <RerenderableShell sections={[original]} />,
+  );
+  enterFirstLeaf();
+  fireEvent.click(screen.getByRole('button', { name: '다음 항목' }));
+
+  rerender(
+    <RerenderableShell
+      sections={[section([leaf('r1', '첫 항목')], { label: '척도' })]}
+    />,
+  );
+
+  expect(screen.queryByTestId('rerender-leaf-detail')).toBeNull();
+  expect(screen.getByRole('button', { name: /첫 항목/ })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '뒤로' })).toBeInTheDocument();
+
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+  rerender(<RerenderableShell sections={[original]} />);
+  expect(screen.queryByTestId('rerender-leaf-detail')).toBeNull();
+  expect(screen.getByRole('button', { name: /둘째 항목/ })).toBeInTheDocument();
+});
+
+it('현재 section이 제거되면 저장된 nav도 정리하고 빈 화면 없이 안전한 root로 돌아간다', async () => {
+  const remaining = section([leaf('section-a-leaf', 'A 항목')], { label: 'A 섹션' });
+  const removed = section([leaf('section-b-leaf', 'B 항목')], { label: 'B 섹션' });
+  const { rerender } = render(<RerenderableShell sections={[remaining, removed]} />);
+  fireEvent.click(screen.getByRole('button', { name: /B 섹션/ }));
+
+  rerender(<RerenderableShell sections={[remaining]} />);
+
+  expect(screen.queryByTestId('rerender-leaf-detail')).toBeNull();
+  expect(screen.getByText('작성할 항목을 선택하세요')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /A 섹션/ })).toBeInTheDocument();
+
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+  rerender(<RerenderableShell sections={[remaining, removed]} />);
+  expect(screen.queryByTestId('rerender-leaf-detail')).toBeNull();
+  expect(screen.getByText('작성할 항목을 선택하세요')).toBeInTheDocument();
+});
+
+it('breadcrumb 뒤로 버튼은 44px 최소 터치 타깃을 가진다', () => {
+  renderShell({ sections: twoLeafMatrix(), leafNavigation: 'always' });
+  enterFirstLeaf();
+
+  expect(screen.getByRole('button', { name: '뒤로' })).toHaveClass('min-h-11');
 });
 
 it('always 모드는 빈 leaf section에서도 목록 탐색과 다음 section 이동을 유지한다', () => {

@@ -1,11 +1,20 @@
 import { describe, expect, it } from 'vitest';
 
+import { MOBILE_TABLE_DISPLAY_MODES } from '@/types/survey';
 import {
   clampMobileDrilldownOmitLeadingColumns,
   resolveMobileTableDisplayMode,
 } from '@/utils/mobile-table-display-mode';
 
 describe('resolveMobileTableDisplayMode', () => {
+  it('런타임 registry를 survey 정본 모듈에서 re-export한다', () => {
+    expect(MOBILE_TABLE_DISPLAY_MODES).toEqual([
+      'auto',
+      'drilldown-original-row',
+      'original',
+    ]);
+  });
+
   it.each([
     ['auto', 'auto'],
     ['drilldown-original-row', 'drilldown-original-row'],

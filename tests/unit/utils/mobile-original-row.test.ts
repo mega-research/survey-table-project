@@ -74,6 +74,84 @@ describe('projectMobileOriginalRow', () => {
       })?.hasInteractiveCells,
     ).toBe(false);
   });
+
+  it('선택한 continuation 행의 retained 정적 rowspan anchor를 원본 identity로 materialize한다', () => {
+    const columns = [col('label'), col('shared'), col('value')];
+    const projection = projectMobileOriginalRow({
+      authoredColumns: columns,
+      visibleColumns: columns,
+      displayRows: [
+        row('row-1', [
+          text('label-1', '첫 행'),
+          { ...text('shared-static', '공유 설명'), rowspan: 2 },
+          { id: 'value-1', type: 'input', content: '' },
+        ]),
+        row('row-2', [
+          text('label-2', '둘째 행'),
+          {
+            id: 'shared-static-continuation',
+            type: 'text',
+            content: '',
+            isHidden: true,
+            _isContinuation: true,
+          },
+          { id: 'value-2', type: 'input', content: '' },
+        ]),
+      ],
+      selectedRowId: 'row-2',
+      omitLeadingAuthoredColumns: 1,
+    });
+
+    expect(projection?.row.cells[0]).toMatchObject({
+      id: 'shared-static',
+      type: 'text',
+      content: '공유 설명',
+    });
+    expect(projection?.row.cells[0]).not.toHaveProperty('isHidden', true);
+    expect(projection?.row.cells[0]).not.toHaveProperty('_isContinuation', true);
+    expect(projection?.row.cells[0]?.rowspan ?? 1).toBe(1);
+  });
+
+  it('선택한 continuation 행의 retained interactive rowspan anchor를 같은 응답 key로 materialize한다', () => {
+    const columns = [col('label'), col('shared-control'), col('description')];
+    const projection = projectMobileOriginalRow({
+      authoredColumns: columns,
+      visibleColumns: columns,
+      displayRows: [
+        row('row-1', [
+          text('label-1', '첫 행'),
+          {
+            id: 'shared-input',
+            type: 'input',
+            content: '',
+            placeholder: '공유 응답',
+            rowspan: 2,
+          },
+          text('description-1', '설명 1'),
+        ]),
+        row('row-2', [
+          text('label-2', '둘째 행'),
+          {
+            id: 'shared-input-continuation',
+            type: 'input',
+            content: '',
+            isHidden: true,
+            _isContinuation: true,
+          },
+          text('description-2', '설명 2'),
+        ]),
+      ],
+      selectedRowId: 'row-2',
+      omitLeadingAuthoredColumns: 1,
+    });
+
+    expect(projection?.row.cells[0]).toMatchObject({
+      id: 'shared-input',
+      type: 'input',
+      placeholder: '공유 응답',
+    });
+    expect(projection?.hasInteractiveCells).toBe(true);
+  });
 });
 
 describe('getMobileOriginalRowLabel', () => {

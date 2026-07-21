@@ -219,7 +219,13 @@ function textInputQuestion(): Question {
   } as Question;
 }
 
-function complexQuestion({ hiddenSection = false } = {}): Question {
+function complexQuestion({
+  hiddenSection = false,
+  hiddenSectionType = 'text',
+}: {
+  hiddenSection?: boolean;
+  hiddenSectionType?: 'text' | 'image' | 'video';
+} = {}): Question {
   const sectionContent = hiddenSection ? '노출 금지 섹션' : '성과 {{primary}}';
   return {
     id: hiddenSection ? 'q-hidden-hierarchy' : 'q-hierarchy',
@@ -242,7 +248,7 @@ function complexQuestion({ hiddenSection = false } = {}): Question {
         cells: [
           {
             id: 'complex-section',
-            type: 'text',
+            type: hiddenSection ? hiddenSectionType : 'text',
             content: sectionContent,
             rowspan: 2,
             ...(hiddenSection ? { mobileDisplay: 'hidden' as const } : {}),
@@ -272,7 +278,7 @@ function complexQuestion({ hiddenSection = false } = {}): Question {
         cells: [
           {
             id: 'complex-section-continuation',
-            type: 'text',
+            type: hiddenSection ? hiddenSectionType : 'text',
             content: '',
             isHidden: true,
             _isContinuation: true,
@@ -294,6 +300,59 @@ function complexQuestion({ hiddenSection = false } = {}): Question {
             content: '',
             choiceLabel: '둘째 재방문',
           },
+        ],
+      },
+    ],
+  } as Question;
+}
+
+function duplicateLabelIdentityQuestion(): Question {
+  return {
+    id: 'q-duplicate-label-identity',
+    type: 'checkbox',
+    title: '동일 라벨 출처',
+    required: false,
+    order: 0,
+    mobileTableDisplayMode: 'drilldown-original-row',
+    mobileDrilldownOmitLeadingColumns: 2,
+    tableColumns: [
+      { id: 'visible-section-column', label: '섹션' },
+      { id: 'hidden-decoy-column', label: '보조' },
+      { id: 'choice-column', label: '선택' },
+    ],
+    tableRowsData: [
+      {
+        id: 'duplicate-row-1',
+        label: '동일 라벨',
+        cells: [
+          { id: 'visible-section-source', type: 'text', content: '동일 라벨', rowspan: 2 },
+          {
+            id: 'hidden-decoy-1',
+            type: 'text',
+            content: '동일 라벨',
+            mobileDisplay: 'hidden',
+          },
+          { id: 'duplicate-choice-1', type: 'choice_opt', content: '', choiceLabel: '첫 선택' },
+        ],
+      },
+      {
+        id: 'duplicate-row-2',
+        label: '동일 라벨',
+        cells: [
+          {
+            id: 'visible-section-continuation',
+            type: 'text',
+            content: '',
+            isHidden: true,
+            _isContinuation: true,
+          },
+          {
+            id: 'hidden-decoy-2',
+            type: 'text',
+            content: '동일 라벨',
+            mobileDisplay: 'hidden',
+          },
+          { id: 'duplicate-choice-2', type: 'choice_opt', content: '', choiceLabel: '둘째 선택' },
         ],
       },
     ],
@@ -550,6 +609,47 @@ describe('선택 행 상세 복합 테이블 통합', () => {
     expect(screen.getByRole('button', { name: /첫 공개 항목/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /둘째 공개 항목/ })).toBeInTheDocument();
     expect(screen.queryByText('노출 금지 섹션')).toBeNull();
+  });
+
+  it.each(['text', 'image', 'video'] as const)(
+    'choice의 hidden %s section anchor는 continuation 탐색과 detail 제목에 새지 않고 control은 남긴다',
+    (hiddenSectionType) => {
+      const question = complexQuestion({ hiddenSection: true, hiddenSectionType });
+      const firstChoice = question.tableRowsData?.[0]?.cells[2];
+      if (firstChoice) {
+        firstChoice.content = '숨긴 인터랙티브 라벨';
+        firstChoice.mobileDisplay = 'hidden';
+      }
+      render(<ChoiceTableResponse question={question} value={[]} onChange={vi.fn()} />);
+
+      const expectHiddenLabelsAbsent = () => {
+        expect(document.body.textContent).not.toContain('노출 금지 섹션');
+        expect(document.body.textContent).not.toContain('숨긴 인터랙티브 라벨');
+      };
+
+      expectHiddenLabelsAbsent();
+      fireEvent.click(screen.getByRole('button', { name: /^항목/ }));
+      expectHiddenLabelsAbsent();
+      fireEvent.click(screen.getByRole('button', { name: /첫 공개 항목/ }));
+      expectHiddenLabelsAbsent();
+      expect(screen.getByRole('checkbox', { name: '첫 활성' })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: '뒤로' }));
+      fireEvent.click(screen.getByRole('button', { name: /둘째 공개 항목/ }));
+      expectHiddenLabelsAbsent();
+      expect(screen.getByRole('checkbox', { name: '둘째 활성' })).toBeInTheDocument();
+    },
+  );
+
+  it('동일 문자열의 hidden 셀이 있어도 visible section source identity의 라벨은 유지한다', () => {
+    render(
+      <ChoiceTableResponse
+        question={duplicateLabelIdentityQuestion()}
+        value={[]}
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: /동일 라벨/ })).toBeInTheDocument();
   });
 
   it('mobile hidden인 두 번째 제외 라벨은 root/list/divider/breadcrumb/detail에 노출하지 않는다', () => {

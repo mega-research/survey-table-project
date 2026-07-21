@@ -7,11 +7,13 @@ const {
   deleteImagesFromR2Mock,
   ensureSurveyMock,
   extractImageUrlsFromQuestionMock,
+  createQuestionMock,
   updateQuestionMock,
 } = vi.hoisted(() => ({
   deleteImagesFromR2Mock: vi.fn(),
   ensureSurveyMock: vi.fn(),
   extractImageUrlsFromQuestionMock: vi.fn(),
+  createQuestionMock: vi.fn(),
   updateQuestionMock: vi.fn(),
 }));
 
@@ -30,7 +32,7 @@ vi.mock('@/hooks/use-ensure-survey-in-db', () => ({
 vi.mock('@/shared/lib/rpc', () => ({
   client: {
     surveyBuilder: {
-      questions: { update: updateQuestionMock },
+      questions: { create: createQuestionMock, update: updateQuestionMock },
     },
   },
 }));
@@ -42,7 +44,7 @@ vi.mock('@/lib/image-utils', () => ({ deleteImagesFromR2: deleteImagesFromR2Mock
 import { QuestionEditModal } from '@/components/survey-builder/question-edit-modal';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 
-function seedSurvey() {
+function seedSurvey({ withMobileMode = true }: { withMobileMode?: boolean } = {}) {
   useSurveyBuilderStore.getState().setSurvey({
     id: 's1',
     title: 't',
@@ -59,7 +61,7 @@ function seedSurvey() {
       order: 0,
       tableColumns: [],
       tableRowsData: [],
-      mobileTableDisplayMode: 'original',
+      ...(withMobileMode ? { mobileTableDisplayMode: 'original' as const } : {}),
     }],
     lookups: [],
     settings: {},
@@ -98,6 +100,7 @@ describe('QuestionEditModal 모바일 표시 설정 롤백', () => {
     extractImageUrlsFromQuestionMock.mockReturnValue([]);
     deleteImagesFromR2Mock.mockResolvedValue(undefined);
     ensureSurveyMock.mockResolvedValue(undefined);
+    createQuestionMock.mockResolvedValue({ id: 'q1' });
     updateQuestionMock.mockResolvedValue(undefined);
   });
 
@@ -217,5 +220,85 @@ describe('QuestionEditModal 모바일 표시 설정 롤백', () => {
     await waitFor(() => {
       expect(screen.queryByRole('button', { name: '취소' })).toBeNull();
     });
+  });
+
+  it('ensureSurvey 실패는 모달을 닫지 않고 취소 시 absent 모바일 필드를 정확히 복원한다', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    seedSurvey({ withMobileMode: false });
+    ensureSurveyMock.mockRejectedValueOnce(new Error('설문 확보 실패'));
+    render(<ModalHarness />);
+
+    act(() => {
+      useSurveyBuilderStore.getState().silentUpdateQuestion('q1', {
+        mobileTableDisplayMode: 'drilldown-original-row',
+        mobileDrilldownOmitLeadingColumns: 2,
+      });
+    });
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+
+    await waitFor(() => {
+      expect(ensureSurveyMock).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole('button', { name: '취소' })).toBeEnabled();
+    });
+    expect(consoleError).toHaveBeenCalledWith('질문 저장/업데이트 실패:', expect.any(Error));
+
+    fireEvent.click(screen.getByRole('button', { name: '취소' }));
+    const restored = getQuestion();
+    expect(Object.hasOwn(restored ?? {}, 'mobileTableDisplayMode')).toBe(false);
+    expect(Object.hasOwn(restored ?? {}, 'mobileDrilldownOmitLeadingColumns')).toBe(false);
+  });
+
+  it('기존 질문 update RPC 실패는 모달을 닫지 않고 취소 롤백을 허용한다', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    updateQuestionMock.mockRejectedValueOnce(new Error('질문 업데이트 실패'));
+    render(<ModalHarness />);
+
+    act(() => {
+      useSurveyBuilderStore.getState().silentUpdateQuestion('q1', {
+        mobileTableDisplayMode: 'drilldown-original-row',
+        mobileDrilldownOmitLeadingColumns: 2,
+      });
+    });
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+
+    await waitFor(() => {
+      expect(updateQuestionMock).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole('button', { name: '취소' })).toBeEnabled();
+    });
+    expect(consoleError).toHaveBeenCalledWith('질문 저장/업데이트 실패:', expect.any(Error));
+
+    fireEvent.click(screen.getByRole('button', { name: '취소' }));
+    expect(getQuestion()?.mobileTableDisplayMode).toBe('original');
+    expect(Object.hasOwn(getQuestion() ?? {}, 'mobileDrilldownOmitLeadingColumns')).toBe(false);
+  });
+
+  it('새 질문 create RPC 실패는 모달을 닫지 않고 취소 롤백을 허용한다', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    createQuestionMock.mockRejectedValueOnce(new Error('질문 생성 실패'));
+    useSurveyBuilderStore.setState((state) => ({
+      questionChanges: {
+        ...state.questionChanges,
+        added: { ...state.questionChanges.added, q1: true },
+      },
+    }));
+    render(<ModalHarness />);
+
+    act(() => {
+      useSurveyBuilderStore.getState().silentUpdateQuestion('q1', {
+        mobileTableDisplayMode: 'drilldown-original-row',
+        mobileDrilldownOmitLeadingColumns: 2,
+      });
+    });
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+
+    await waitFor(() => {
+      expect(createQuestionMock).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole('button', { name: '취소' })).toBeEnabled();
+    });
+    expect(consoleError).toHaveBeenCalledWith('질문 저장/업데이트 실패:', expect.any(Error));
+
+    fireEvent.click(screen.getByRole('button', { name: '취소' }));
+    expect(getQuestion()?.mobileTableDisplayMode).toBe('original');
+    expect(Object.hasOwn(getQuestion() ?? {}, 'mobileDrilldownOmitLeadingColumns')).toBe(false);
   });
 });

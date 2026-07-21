@@ -2,9 +2,8 @@ import * as z from 'zod';
 
 import type { NewQuestion, Question } from '@/db/schema';
 import type { PersistedQuestionField } from '@/db/schema/question-persisted-fields';
-import { MOBILE_TABLE_DISPLAY_MODES } from '@/types/mobile-table-display';
 import { QUESTION_TYPES } from '@/types/question-types';
-import type { Question as QuestionType } from '@/types/survey';
+import { MOBILE_TABLE_DISPLAY_MODES, type Question as QuestionType } from '@/types/survey';
 
 /**
  * 질문 CRUD 도메인 스키마.

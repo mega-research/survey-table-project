@@ -453,6 +453,7 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
           }
         } catch (error) {
           console.error('질문 저장/업데이트 실패:', error);
+          throw error;
         }
       }
 

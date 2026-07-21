@@ -11,6 +11,7 @@ import { normalizeQuestion } from '@/lib/question';
 import { promoteSurveyImages } from '@/lib/survey/survey-image-promote';
 import { generateId } from '@/lib/utils';
 import type { Question, SavedQuestion } from '@/types/survey';
+import { resolveMobileTableDisplayMode } from '@/utils/mobile-table-display-mode';
 
 import type {
   CreateSavedQuestionInput,
@@ -40,6 +41,25 @@ function toDomainSavedQuestion(
     result.description = row.description;
   }
   return result;
+}
+
+function prepareAppliedQuestion(question: Question): Question {
+  const supportsMobileTableDisplay = question.type === 'radio'
+    || question.type === 'checkbox'
+    || question.type === 'table';
+  const canonicalQuestion = supportsMobileTableDisplay
+    ? {
+        ...question,
+        mobileTableDisplayMode: resolveMobileTableDisplayMode(question),
+      }
+    : question;
+  const { groupId: _groupId, ...questionWithoutGroup } = canonicalQuestion;
+
+  return {
+    ...questionWithoutGroup,
+    id: generateId(),
+    order: 0,
+  } as Question;
 }
 
 // ========================
@@ -193,13 +213,7 @@ export async function applySavedQuestion(id: string): Promise<Question | null> {
 
   if (!updated) return null;
 
-  const question = normalizeQuestion(updated.question);
-  const { groupId: _g, ...questionWithoutGroup } = question;
-  return {
-    ...questionWithoutGroup,
-    id: generateId(),
-    order: 0,
-  } as Question;
+  return prepareAppliedQuestion(normalizeQuestion(updated.question));
 }
 
 /**
@@ -229,13 +243,5 @@ export async function applyMultipleSavedQuestions(ids: string[]): Promise<Questi
     .map((id) => savedById.get(id))
     .filter((saved): saved is (typeof savedItems)[number] => saved !== undefined);
 
-  return orderedItems.map((saved) => {
-    const question = normalizeQuestion(saved.question);
-    const { groupId: _g, ...questionWithoutGroup } = question;
-    return {
-      ...questionWithoutGroup,
-      id: generateId(),
-      order: 0,
-    } as Question;
-  });
+  return orderedItems.map((saved) => prepareAppliedQuestion(normalizeQuestion(saved.question)));
 }

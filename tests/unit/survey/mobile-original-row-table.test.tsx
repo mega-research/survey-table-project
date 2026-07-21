@@ -5,6 +5,7 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { InteractiveCell } from '@/components/survey-builder/cells';
 import { MobileOriginalRowTable } from '@/components/survey-builder/mobile-original-row-table';
 import type { TableCell, TableColumn, TableRow } from '@/types/survey';
+import { projectMobileOriginalRow } from '@/utils/mobile-original-row';
 
 const col = (label: string): TableColumn => ({ id: label, label, width: 120 });
 const row = (cells: TableCell[], id = 'r1'): TableRow => ({ id, label: id, cells });
@@ -269,5 +270,62 @@ describe('MobileOriginalRowTable', () => {
     const cell = screen.getByTestId('cell-input');
     expect(cell).toHaveAttribute('data-cell-id', 'input');
     expect(cell).toHaveClass('ring-2', 'ring-inset', 'ring-red-300');
+  });
+
+  it('continuation 상세에 materialize된 interactive anchor를 원본 cell id로 렌더하고 저장한다', () => {
+    const columns = [col('항목'), col('공유 입력')];
+    const projection = projectMobileOriginalRow({
+      authoredColumns: columns,
+      visibleColumns: columns,
+      displayRows: [
+        row([
+          { id: 'label-1', type: 'text', content: '첫 행' },
+          {
+            id: 'shared-input-anchor',
+            type: 'input',
+            content: '',
+            placeholder: '공유 응답 입력',
+            rowspan: 2,
+          },
+        ], 'anchor-row'),
+        row([
+          { id: 'label-2', type: 'text', content: '둘째 행' },
+          {
+            id: 'shared-input-continuation',
+            type: 'input',
+            content: '',
+            isHidden: true,
+            _isContinuation: true,
+          },
+        ], 'continuation-row'),
+      ],
+      selectedRowId: 'continuation-row',
+      omitLeadingAuthoredColumns: 1,
+    });
+    if (!projection) throw new Error('projection이 필요합니다.');
+    const onChange = vi.fn();
+
+    const { container } = render(
+      <MobileOriginalRowTable
+        columns={projection.columns}
+        row={projection.row}
+        hideColumnLabels={false}
+        renderCell={(cell) => (
+          <InteractiveCell
+            cell={cell}
+            questionId="rowspan-question"
+            isTestMode={false}
+            value={{}}
+            onChange={onChange}
+          />
+        )}
+      />,
+    );
+
+    expect(container.querySelector('[data-cell-id="shared-input-anchor"]')).not.toBeNull();
+    fireEvent.change(screen.getByPlaceholderText('공유 응답 입력'), {
+      target: { value: '연속 행 응답' },
+    });
+    expect(onChange).toHaveBeenLastCalledWith({ 'shared-input-anchor': '연속 행 응답' });
   });
 });

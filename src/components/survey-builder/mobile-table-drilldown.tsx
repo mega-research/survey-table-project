@@ -57,7 +57,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
   detailMode,
   omitLeadingAuthoredColumns,
 }: MobileTableDrilldownProps) {
-  const sections = useMemo(
+  const classifiedSections = useMemo(
     () =>
       classifyTable({
         tableColumns: visibleColumns,
@@ -73,6 +73,31 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
     for (const row of displayRows) for (const cell of row.cells) m.set(cell.id, cell);
     return m;
   }, [displayRows]);
+  const sections = useMemo(
+    () =>
+      classifiedSections.map((section) => ({
+        ...section,
+        label:
+          section.labelSourceCellId
+          && cellById.get(section.labelSourceCellId)?.mobileDisplay === 'hidden'
+            ? ''
+            : section.label,
+        leaves: section.leaves.map((leaf) => ({
+          ...leaf,
+          label:
+            leaf.labelSourceCellId
+            && cellById.get(leaf.labelSourceCellId)?.mobileDisplay === 'hidden'
+              ? ''
+              : leaf.label,
+          subGroup:
+            leaf.subGroupSourceCellId
+            && cellById.get(leaf.subGroupSourceCellId)?.mobileDisplay === 'hidden'
+              ? ''
+              : leaf.subGroup,
+        })),
+      })),
+    [cellById, classifiedSections],
+  );
 
   // 사용자가 거쳐가며 비워둔 입력 칸(빈 응답으로 확정) 집합.
   // 값이 없어도 이 집합에 들면 진행률·완료 표시에서 "채운 것"으로 카운트한다.
@@ -196,8 +221,16 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
     </div>
   );
 
-  const rowById = new Map(displayRows.map((row) => [row.id, row]));
-  const completedRows = displayRows.filter((row) =>
+  const rowById = useMemo(
+    () => new Map(displayRows.map((row) => [row.id, row])),
+    [displayRows],
+  );
+  const answerableRowIds = useMemo(
+    () => new Set(sections.flatMap((section) => section.leaves.map((leaf) => leaf.rowId))),
+    [sections],
+  );
+  const answerableRows = displayRows.filter((row) => answerableRowIds.has(row.id));
+  const completedRows = answerableRows.filter((row) =>
     isTableRowCompleted(row, currentResponse, MOBILE_TABLE_COMPLETION_TYPES),
   ).length;
 
@@ -220,7 +253,9 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
       );
     }
 
-    const radioBuckets = buildRadioGroupBuckets(projection.row);
+    // 투영 전에 가시 원본 행에서 그룹을 만든다. 제외된 선행 radio도 retained 멤버의
+    // sibling clear 대상이어야 과거 응답이 남아 single-select 의미를 깨뜨리지 않는다.
+    const radioBuckets = buildRadioGroupBuckets(rowById.get(leaf.rowId) ?? projection.row);
     return (
       <MobileOriginalRowTable
         columns={projection.columns}
@@ -248,7 +283,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
       <MobileDrilldownShell
         sections={sections}
         leafNavigation="always"
-        overallStatus={{ completed: completedRows, total: displayRows.length, unit: '개 항목' }}
+        overallStatus={{ completed: completedRows, total: answerableRows.length, unit: '개 항목' }}
         getSectionStatus={(section) => ({
           completed: section.leaves.filter((leaf) => {
             const row = rowById.get(leaf.rowId);
