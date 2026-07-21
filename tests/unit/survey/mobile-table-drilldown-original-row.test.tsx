@@ -64,6 +64,66 @@ const scaleRows = (count: number): TableRow[] =>
     ],
   }));
 
+const groupedScaleColumns = (): TableColumn[] => [
+  { id: 'group', label: '그룹', width: 140 },
+  { id: 'item', label: '항목', width: 140 },
+  { id: 'score-1', label: '전혀 도움 안 됨', width: 140 },
+  { id: 'score-5', label: '매우 도움 됨', width: 140 },
+];
+
+const groupedScaleRows = (): TableRow[] => [
+  {
+    id: 'grouped-r1',
+    label: '직무 설정',
+    cells: [
+      { id: 'group-label', type: 'text', content: '척도', rowspan: 2 },
+      { id: 'grouped-r1-label', type: 'text', content: '직무 설정' },
+      {
+        id: 'grouped-r1-score-1',
+        type: 'radio',
+        content: '',
+        radioGroupName: 'grouped-scale-1',
+        radioOptions: [{ id: 'one', label: '1점', value: '1' }],
+      },
+      {
+        id: 'grouped-r1-score-5',
+        type: 'radio',
+        content: '',
+        radioGroupName: 'grouped-scale-1',
+        radioOptions: [{ id: 'five', label: '5점', value: '5' }],
+      },
+    ],
+  },
+  {
+    id: 'grouped-r2',
+    label: '취업 도움',
+    cells: [
+      {
+        id: 'group-label-continuation',
+        type: 'text',
+        content: '',
+        isHidden: true,
+        _isContinuation: true,
+      },
+      { id: 'grouped-r2-label', type: 'text', content: '취업 도움' },
+      {
+        id: 'grouped-r2-score-1',
+        type: 'radio',
+        content: '',
+        radioGroupName: 'grouped-scale-2',
+        radioOptions: [{ id: 'one', label: '1점', value: '1' }],
+      },
+      {
+        id: 'grouped-r2-score-5',
+        type: 'radio',
+        content: '',
+        radioGroupName: 'grouped-scale-2',
+        radioOptions: [{ id: 'five', label: '5점', value: '5' }],
+      },
+    ],
+  },
+];
+
 function ControlledScale({
   onValue,
 }: {
@@ -82,6 +142,20 @@ function ControlledScale({
         setValue(next);
         onValue?.(next);
       }}
+    />
+  );
+}
+
+function GroupedScale() {
+  return (
+    <InteractiveTableResponse
+      questionId="grouped-question"
+      columns={groupedScaleColumns()}
+      rows={groupedScaleRows()}
+      mobileTableDisplayMode="drilldown-original-row"
+      mobileDrilldownOmitLeadingColumns={2}
+      value={{}}
+      onChange={vi.fn()}
     />
   );
 }
@@ -119,10 +193,11 @@ it('방문만으로 완료되지 않고 radio 선택 후 완료 행 수가 1 증
   expect(screen.getByText(/전체/)).toHaveTextContent('전체 1 / 2개 항목');
 });
 
-it('원본 행 상세의 가로 위치를 다음 섹션에 보존하고 목차 복귀 후 0으로 초기화한다', () => {
+it('상세 unmount 후 다음 leaf에 가로 위치를 복원하고 목차 복귀 후 0으로 초기화한다', () => {
   vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockReturnValue(500);
   vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(200);
-  render(<ControlledScale />);
+  render(<GroupedScale />);
+  fireEvent.click(screen.getByRole('button', { name: /척도/ }));
   fireEvent.click(screen.getByRole('button', { name: /직무 설정/ }));
 
   const firstBodyScroller = screen.getByTestId('table-preview-scroll');
@@ -131,13 +206,17 @@ it('원본 행 상세의 가로 위치를 다음 섹션에 보존하고 목차 �
   fireEvent.scroll(firstBodyScroller);
   expect(firstHeaderScroller.scrollLeft).toBe(80);
 
-  fireEvent.click(screen.getByRole('button', { name: '다음 섹션' }));
+  fireEvent.click(screen.getByRole('button', { name: '뒤로' }));
+  expect(screen.queryByTestId('table-preview-scroll')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: /취업 도움/ }));
   const secondBodyScroller = screen.getByTestId('table-preview-scroll');
   const secondHeaderScroller = getOriginalRowHeaderScroller();
+  expect(secondBodyScroller).not.toBe(firstBodyScroller);
   expect(secondBodyScroller.scrollLeft).toBe(80);
   expect(secondHeaderScroller.scrollLeft).toBe(80);
 
   fireEvent.click(screen.getByRole('button', { name: '목차로' }));
+  fireEvent.click(screen.getByRole('button', { name: /척도/ }));
   fireEvent.click(screen.getByRole('button', { name: /직무 설정/ }));
   expect(screen.getByTestId('table-preview-scroll').scrollLeft).toBe(0);
   expect(getOriginalRowHeaderScroller().scrollLeft).toBe(0);
