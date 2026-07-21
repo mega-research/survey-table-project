@@ -5,5 +5,5 @@
 ALTER TABLE surveys ALTER COLUMN test_token TYPE text USING test_token::text;
 
 UPDATE surveys
-SET test_token = substr(md5(gen_random_uuid()::text), 1, 12)
+SET test_token = substr(md5(gen_random_uuid()::text), 1, 8)
 WHERE test_token IS NOT NULL;

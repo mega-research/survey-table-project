@@ -85,7 +85,7 @@ export async function setTestMode(input: {
   });
   if (!row) throw new Error('설문을 찾을 수 없습니다.');
   // 토큰은 최초 ON 때 한 번 생성 후 재사용 (rotate 없음 — 스펙 11절). 신규는 짧은 nanoid.
-  const testToken = row.testToken ?? nanoid(10);
+  const testToken = row.testToken ?? nanoid(8);
   const [updated] = await db
     .update(surveys)
     .set({ testModeEnabled: input.enabled, testToken, updatedAt: new Date() })

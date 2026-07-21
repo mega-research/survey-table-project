@@ -20,7 +20,9 @@ vi.mock('@/db', () => ({
   },
 }));
 
-vi.mock('nanoid', () => ({ nanoid: vi.fn(() => 'nano123456') }));
+vi.mock('nanoid', () => ({ nanoid: vi.fn(() => 'nano1234') }));
+
+import { nanoid } from 'nanoid';
 
 import { getControlState, setTestMode } from './control.service';
 
@@ -37,12 +39,13 @@ beforeEach(() => {
 describe('setTestMode 짧은 토큰 + accessIdentifier', () => {
   it('기존 토큰이 없으면 nanoid 로 짧은 토큰을 생성한다', async () => {
     surveyRow = { id: SURVEY_ID, slug: '게임-기초조사', privateToken: 'ptok', isPublic: true, testToken: null };
-    returningRows = [{ testModeEnabled: true, testToken: 'nano123456' }];
+    returningRows = [{ testModeEnabled: true, testToken: 'nano1234' }];
 
     const res = await setTestMode({ surveyId: SURVEY_ID, enabled: true });
 
-    expect(capturedSets[0]!['testToken']).toBe('nano123456');
-    expect(res.testToken).toBe('nano123456');
+    expect(vi.mocked(nanoid)).toHaveBeenCalledWith(8); // 짧은 토큰은 8자
+    expect(capturedSets[0]!['testToken']).toBe('nano1234');
+    expect(res.testToken).toBe('nano1234');
     expect(res.accessIdentifier).toBe('게임-기초조사'); // 공개 → slug
   });
 
@@ -52,6 +55,7 @@ describe('setTestMode 짧은 토큰 + accessIdentifier', () => {
 
     const res = await setTestMode({ surveyId: SURVEY_ID, enabled: true });
 
+    expect(vi.mocked(nanoid)).not.toHaveBeenCalled(); // 기존 토큰 재사용 시 신규 생성 없음
     expect(capturedSets[0]!['testToken']).toBe('existing-tok');
     expect(res.accessIdentifier).toBe('ptok'); // 비공개 → privateToken
   });
