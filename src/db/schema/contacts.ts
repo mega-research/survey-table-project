@@ -28,6 +28,7 @@ export const contactTargets = pgTable(
     resid: integer('resid').notNull(),
     groupValue: text('group_value'),
     inviteToken: uuid('invite_token').defaultRandom().notNull(),
+    inviteCode: text('invite_code').notNull(),
     unsubscribeToken: uuid('unsubscribe_token').defaultRandom().notNull(),
     unsubscribedAt: timestamp('unsubscribed_at', { withTimezone: true }),
     attrs: jsonb('attrs').$type<Record<string, string>>().notNull().default({}),
@@ -42,6 +43,7 @@ export const contactTargets = pgTable(
   (table) => ({
     surveyResidUnique: unique('contact_targets_survey_resid_unique').on(table.surveyId, table.resid),
     inviteTokenUnique: unique('contact_targets_invite_token_unique').on(table.inviteToken),
+    inviteCodeUnique: unique('contact_targets_invite_code_unique').on(table.inviteCode),
     unsubscribeTokenUnique: unique('contact_targets_unsubscribe_token_unique').on(table.unsubscribeToken),
   }),
 );

@@ -37,6 +37,7 @@
     "0050_sweep_expired_pii",
     "0051_add_question_number_format",
     "0052_add_question_mobile_original_table",
-    "0053_test_token_to_text"
+    "0053_test_token_to_text",
+    "0054_add_contact_invite_code"
   ]
 }

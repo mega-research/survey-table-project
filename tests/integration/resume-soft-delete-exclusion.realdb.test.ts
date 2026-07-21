@@ -36,6 +36,7 @@ import {
 } from '@/db/schema';
 
 import { resumeOrCreateResponse } from '@/features/survey-response/server/services/lifecycle.service';
+import { generateInviteCode } from '@/lib/survey-url';
 
 const dbUrl = process.env['DATABASE_URL'] ?? '';
 const isLocalDb = dbUrl.includes('127.0.0.1') || dbUrl.includes('localhost');
@@ -62,7 +63,7 @@ describe.skipIf(!isLocalDb)('resumeOrCreateResponse soft-delete 제외 (real loc
 
     const [contact] = await db
       .insert(contactTargetsTable)
-      .values({ surveyId: survey.id, resid: 1 })
+      .values({ surveyId: survey.id, resid: 1, inviteCode: generateInviteCode() })
       .returning({ id: contactTargetsTable.id });
     if (!contact) throw new Error('contact_target 삽입 실패');
 

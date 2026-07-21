@@ -13,6 +13,7 @@ import { parseExcelRows, previewExcel } from '@/lib/contacts/excel-parser';
 import { MAX_UPLOAD_ROWS, validateXlsxFile } from '@/lib/contacts/upload-limits';
 import { buildPiiRows, insertPiiRows, type PiiInput } from '@/lib/crypto/contact-pii-repo';
 import type { PiiFieldType } from '@/lib/crypto/pii-fields';
+import { generateInviteCode } from '@/lib/survey-url';
 
 import type {
   IngestContactUploadInput,
@@ -152,6 +153,7 @@ export async function ingestContactUpload(
               groupValue,
               attrs: cleanAttrs,
               uploadId: upload.id,
+              inviteCode: generateInviteCode(),
             })
             .returning({ id: contactTargets.id });
           if (!target) throw new Error('contact_targets INSERT 실패');

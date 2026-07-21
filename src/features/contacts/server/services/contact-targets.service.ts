@@ -6,6 +6,7 @@ import { db } from '@/db';
 import { contactTargets } from '@/db/schema';
 import { sanitizeAttrsAgainstPii } from '@/lib/contacts/scheme-helpers';
 import { upsertPiiValue } from '@/lib/crypto/contact-pii-repo';
+import { generateInviteCode } from '@/lib/survey-url';
 
 import type {
   AddContactTargetInput,
@@ -49,6 +50,7 @@ export async function addContactTarget(
         attrs,
         memo: memo ?? null,
         contactMethod: contactMethod ?? null,
+        inviteCode: generateInviteCode(),
       })
       .returning({ id: contactTargets.id, resid: contactTargets.resid });
     if (!row) throw new Error('contact_targets INSERT 실패');
