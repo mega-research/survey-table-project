@@ -1,6 +1,8 @@
 import type { ContactColumnScheme, GroupNameDesign, SurveyResponseHeaderConfig } from '@/db/schema/schema-types';
+import type { MobileTableDisplayMode } from '@/types/mobile-table-display';
 
 export type { GroupNameDesign, SurveyResponseHeaderConfig };
+export type { MobileTableDisplayMode } from '@/types/mobile-table-display';
 
 export type QuestionType =
   | 'text'
@@ -551,7 +553,10 @@ export interface Question {
   hideColumnLabels?: boolean;
   // 모바일에서도 원본 표 레이아웃(가로 스크롤)으로 표시 — 카드/스테퍼 전환 안 함
   // (table 타입 + 설명 테이블 소스 radio/checkbox 전용)
+  // 레거시 읽기 호환 전용 — 새 데이터는 mobileTableDisplayMode 사용
   mobileOriginalTable?: boolean;
+  mobileTableDisplayMode?: MobileTableDisplayMode;
+  mobileDrilldownOmitLeadingColumns?: number;
   // 응답 페이지에서 질문 제목 숨기기 (기본 false = 표시)
   hideTitle?: boolean;
   // 응답 페이지 수동 페이지 구분점 — 이 질문 앞에서 새 페이지를 시작한다

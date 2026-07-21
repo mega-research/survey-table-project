@@ -1,5 +1,6 @@
 import * as z from 'zod';
 
+import { MOBILE_TABLE_DISPLAY_MODES } from '@/types/mobile-table-display';
 import { QUESTION_TYPES } from '@/types/question-types';
 import type { Question } from '@/types/survey';
 
@@ -63,6 +64,12 @@ const optionList = z.object({
   allowOtherOption: z.boolean().optional(),
 });
 
+const mobileTableDisplay = z.object({
+  mobileOriginalTable: z.boolean().optional(),
+  mobileTableDisplayMode: z.enum(MOBILE_TABLE_DISPLAY_MODES).optional().catch(undefined),
+  mobileDrilldownOmitLeadingColumns: z.number().int().min(0).optional(),
+});
+
 export const TextQuestionSchema = base.extend({
   type: z.literal('text'),
   placeholder: z.string().optional(),
@@ -78,12 +85,14 @@ export const TextareaQuestionSchema = base.extend({
 export const RadioQuestionSchema = base
   .extend(optionList.shape)
   .extend(embeddedTable.shape)
+  .extend(mobileTableDisplay.shape)
   .extend(choiceGroups.shape)
   .extend({ type: z.literal('radio') });
 
 export const CheckboxQuestionSchema = base
   .extend(optionList.shape)
   .extend(embeddedTable.shape)
+  .extend(mobileTableDisplay.shape)
   .extend(choiceGroups.shape)
   .extend({
     type: z.literal('checkbox'),
@@ -111,11 +120,14 @@ export const RankingQuestionSchema = base
     rankingConfig: z.custom<NonNullable<Question['rankingConfig']>>().optional(),
   });
 
-export const TableQuestionSchema = base.extend(embeddedTable.shape).extend({
-  type: z.literal('table'),
-  tableValidationRules: z.custom<NonNullable<Question['tableValidationRules']>>().optional(),
-  dynamicRowConfigs: z.custom<NonNullable<Question['dynamicRowConfigs']>>().optional(),
-});
+export const TableQuestionSchema = base
+  .extend(embeddedTable.shape)
+  .extend(mobileTableDisplay.shape)
+  .extend({
+    type: z.literal('table'),
+    tableValidationRules: z.custom<NonNullable<Question['tableValidationRules']>>().optional(),
+    dynamicRowConfigs: z.custom<NonNullable<Question['dynamicRowConfigs']>>().optional(),
+  });
 
 export const NoticeQuestionSchema = base.extend({
   type: z.literal('notice'),

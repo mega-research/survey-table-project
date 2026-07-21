@@ -51,6 +51,12 @@ type ChoiceGroupFields = Pick<Question, 'choiceGroups'>;
 /** question.options 옵션 리스트 — radio/checkbox/select/ranking(manual). */
 type OptionListFields = Pick<Question, 'options' | 'optionsColumns' | 'optionsAlign' | 'allowOtherOption'>;
 
+/** 모바일 테이블 표시 capability — radio/checkbox/table 3유형 전용. */
+type MobileTableDisplayFields = Pick<
+  Question,
+  'mobileOriginalTable' | 'mobileTableDisplayMode' | 'mobileDrilldownOmitLeadingColumns'
+>;
+
 export interface TextQuestion
   extends QuestionBase,
     Pick<Question, 'placeholder' | 'defaultValueTemplate' | 'inputType' | 'emptyDefault'> {
@@ -65,6 +71,7 @@ export interface RadioQuestion
   extends QuestionBase,
     OptionListFields,
     EmbeddedTableFields,
+    MobileTableDisplayFields,
     ChoiceGroupFields {
   type: 'radio';
 }
@@ -73,6 +80,7 @@ export interface CheckboxQuestion
   extends QuestionBase,
     OptionListFields,
     EmbeddedTableFields,
+    MobileTableDisplayFields,
     ChoiceGroupFields,
     Pick<Question, 'minSelections' | 'maxSelections'> {
   type: 'checkbox';
@@ -100,6 +108,7 @@ export interface RankingQuestion
 export interface TableQuestion
   extends QuestionBase,
     EmbeddedTableFields,
+    MobileTableDisplayFields,
     Pick<Question, 'tableValidationRules' | 'dynamicRowConfigs'> {
   type: 'table';
 }
