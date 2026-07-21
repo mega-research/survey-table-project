@@ -191,6 +191,7 @@ export function recalculateRowspansForVisibleRows(
 
   // 변경이 필요한 셀만 추적: Map<visibleRowIndex, Map<colIdx, cellOverrides>>
   const modifications = new Map<number, Map<number, Partial<TableRow['cells'][0]>>>();
+  const replacements = new Map<number, Map<number, TableRow['cells'][0]>>();
 
   const setMod = (rowIdx: number, colIdx: number, overrides: Partial<TableRow['cells'][0]>) => {
     let rowMods = modifications.get(rowIdx);
@@ -199,6 +200,15 @@ export function recalculateRowspansForVisibleRows(
       modifications.set(rowIdx, rowMods);
     }
     rowMods.set(colIdx, { ...rowMods.get(colIdx), ...overrides });
+  };
+
+  const setReplacement = (rowIdx: number, colIdx: number, cell: TableRow['cells'][0]) => {
+    let rowReplacements = replacements.get(rowIdx);
+    if (!rowReplacements) {
+      rowReplacements = new Map();
+      replacements.set(rowIdx, rowReplacements);
+    }
+    rowReplacements.set(colIdx, cell);
   };
 
   // 각 열에 대해 병합 재계산
@@ -245,12 +255,14 @@ export function recalculateRowspansForVisibleRows(
       // 첫 번째 가시 행에 병합 시작 셀 배치
       const firstIdx = visibleInGroup[0];
       if (firstIdx === undefined) continue;
-      setMod(firstIdx, colIdx, {
+      const promotedCell = {
+        ...group.cellContent,
         isHidden: false,
-        content: group.cellContent.content,
-        type: group.cellContent.type,
         ...(visibleInGroup.length > 1 ? { rowspan: visibleInGroup.length } : {}),
-      });
+      };
+      delete promotedCell._isContinuation;
+      if (visibleInGroup.length <= 1) delete promotedCell.rowspan;
+      setReplacement(firstIdx, colIdx, promotedCell);
 
       // 나머지 가시 행의 해당 열 셀은 isHidden
       for (let i = 1; i < visibleInGroup.length; i++) {
@@ -266,12 +278,15 @@ export function recalculateRowspansForVisibleRows(
   // 변경 필요한 행만 복사, 나머지는 원본 참조 유지
   return visibleRows.map((row, rowIdx) => {
     const rowMods = modifications.get(rowIdx);
-    if (!rowMods) return row;
+    const rowReplacements = replacements.get(rowIdx);
+    if (!rowMods && !rowReplacements) return row;
 
     return {
       ...row,
       cells: row.cells.map((cell, colIdx) => {
-        const cellMod = rowMods.get(colIdx);
+        const replacement = rowReplacements?.get(colIdx);
+        if (replacement) return replacement;
+        const cellMod = rowMods?.get(colIdx);
         if (!cellMod) return cell;
         return { ...cell, ...cellMod };
       }),

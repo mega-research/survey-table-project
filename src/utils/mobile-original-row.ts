@@ -40,6 +40,7 @@ export interface MobileOriginalRowProjection {
   row: TableRow;
   headerGrid?: HeaderCell[][] | undefined;
   hasInteractiveCells: boolean;
+  sourceRowIdByCellId: ReadonlyMap<string, string>;
 }
 
 export function projectMobileOriginalRow(
@@ -63,6 +64,13 @@ export function projectMobileOriginalRow(
   if (!selected) return null;
   const coverage = buildTableRowspanCoverage(projected.rows);
   const selectedCoverage = coverage.get(selected.id) ?? selected.cells;
+  const originalSourceRowIdByCellId = new Map<string, string>();
+  for (const projectedRow of projected.rows) {
+    for (const cell of projectedRow.cells) {
+      originalSourceRowIdByCellId.set(cell.id, projectedRow.id);
+    }
+  }
+  const sourceRowIdByCellId = new Map<string, string>();
 
   const row: TableRow = {
     ...selected,
@@ -76,6 +84,10 @@ export function projectMobileOriginalRow(
         delete normalized.isHidden;
         delete normalized._isContinuation;
       }
+      sourceRowIdByCellId.set(
+        normalized.id,
+        originalSourceRowIdByCellId.get(normalized.id) ?? selected.id,
+      );
       return normalized;
     }),
   };
@@ -85,6 +97,7 @@ export function projectMobileOriginalRow(
     row,
     ...(projected.headerGrid ? { headerGrid: projected.headerGrid } : {}),
     hasInteractiveCells: row.cells.some(isMobileOriginalRowInteractiveCell),
+    sourceRowIdByCellId,
   };
 }
 

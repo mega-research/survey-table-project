@@ -253,9 +253,20 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
       );
     }
 
-    // 투영 전에 가시 원본 행에서 그룹을 만든다. 제외된 선행 radio도 retained 멤버의
-    // sibling clear 대상이어야 과거 응답이 남아 single-select 의미를 깨뜨리지 않는다.
-    const radioBuckets = buildRadioGroupBuckets(rowById.get(leaf.rowId) ?? projection.row);
+    // 투영 전의 source 행별로 그룹을 만든다. 일반 retained cell은 선택 행 bucket을,
+    // rowspan materialize cell은 anchor source 행 bucket을 써야 그 행의 sibling을 비운다.
+    // 두 경우 모두 제외된 선행 radio까지 sibling clear 대상에 남는다.
+    const radioBucketsByRowId = new Map<string, ReturnType<typeof buildRadioGroupBuckets>>();
+    for (const sourceRowId of new Set(projection.sourceRowIdByCellId.values())) {
+      const sourceRow = rowById.get(sourceRowId);
+      if (sourceRow) radioBucketsByRowId.set(sourceRowId, buildRadioGroupBuckets(sourceRow));
+    }
+    const selectedRowBuckets = buildRadioGroupBuckets(
+      rowById.get(leaf.rowId) ?? projection.row,
+    );
+    if (!radioBucketsByRowId.has(leaf.rowId)) {
+      radioBucketsByRowId.set(leaf.rowId, selectedRowBuckets);
+    }
     return (
       <MobileOriginalRowTable
         columns={projection.columns}
@@ -264,16 +275,20 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
         hideColumnLabels={hideColumnLabels}
         scrollLeftRef={horizontalScrollRef}
         errorCellIds={errorCellIds}
-        renderCell={(cell) => (
-          <InteractiveCell
-            cell={cell}
-            questionId={questionId}
-            isTestMode={isTestMode}
-            value={value}
-            onChange={onChange}
-            {...resolveRadioGroupProps(cell, projection.row.id, radioBuckets)}
-          />
-        )}
+        renderCell={(cell) => {
+          const sourceRowId = projection.sourceRowIdByCellId.get(cell.id) ?? leaf.rowId;
+          const radioBuckets = radioBucketsByRowId.get(sourceRowId) ?? selectedRowBuckets;
+          return (
+            <InteractiveCell
+              cell={cell}
+              questionId={questionId}
+              isTestMode={isTestMode}
+              value={value}
+              onChange={onChange}
+              {...resolveRadioGroupProps(cell, sourceRowId, radioBuckets)}
+            />
+          );
+        }}
       />
     );
   };

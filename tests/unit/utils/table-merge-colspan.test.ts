@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import type { TableCell, TableColumn, TableRow } from '@/types/survey';
-import { recalculateColspansForVisibleColumns } from '@/utils/table-merge-helpers';
+import {
+  recalculateColspansForVisibleColumns,
+  recalculateRowspansForVisibleRows,
+} from '@/utils/table-merge-helpers';
 
 // 최소 셀 팩토리 — content/type 는 TableCell 필수 필드
 function cell(id: string, overrides: Partial<TableCell> = {}): TableCell {
@@ -176,4 +179,48 @@ describe('recalculateColspansForVisibleColumns - 가로 병합 시작 열 필터
     expect(cells[0]!.isHidden).toBe(false);
     expect(cells[1]!.isHidden).toBe(true); // C 는 여전히 A 의 병합 범위 안
   });
+});
+
+describe('recalculateRowspansForVisibleRows - 조건부 anchor 승격 provenance', () => {
+  it.each(['text', 'image', 'video'] as const)(
+    'hidden %s anchor 행이 제거되면 continuation을 anchor identity와 표시 속성으로 교체한다',
+    (type) => {
+      const anchorId = `${type}-anchor`;
+      const result = recalculateRowspansForVisibleRows(
+        [
+          {
+            id: 'hidden-anchor-row',
+            label: '숨김 행',
+            cells: [cell(anchorId, {
+              type,
+              content: `${type} 숨김 라벨`,
+              rowspan: 2,
+              mobileDisplay: 'hidden',
+            })],
+          },
+          {
+            id: 'visible-continuation-row',
+            label: '공개 행',
+            cells: [cell(`${type}-continuation`, {
+              type,
+              content: '',
+              isHidden: true,
+              _isContinuation: true,
+            })],
+          },
+        ],
+        new Set(['visible-continuation-row']),
+      );
+
+      expect(result[0]?.cells[0]).toMatchObject({
+        id: anchorId,
+        type,
+        content: `${type} 숨김 라벨`,
+        mobileDisplay: 'hidden',
+        isHidden: false,
+      });
+      expect(result[0]?.cells[0]).not.toHaveProperty('_isContinuation');
+      expect(result[0]?.cells[0]?.rowspan ?? 1).toBe(1);
+    },
+  );
 });

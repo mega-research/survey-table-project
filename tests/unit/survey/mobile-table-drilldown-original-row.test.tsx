@@ -5,7 +5,7 @@ import { afterEach, beforeAll, expect, it, vi } from 'vitest';
 
 import { InteractiveTableResponse } from '@/components/survey-builder/interactive-table-response';
 import { MobileDrilldownShell } from '@/components/survey-builder/mobile-drilldown-shell';
-import type { TableCell, TableColumn, TableRow } from '@/types/survey';
+import type { Question, TableCell, TableColumn, TableRow } from '@/types/survey';
 import type { ClassifiedLeaf, ClassifiedSection } from '@/utils/classify-table';
 
 vi.mock('@/hooks/use-media-query', () => ({
@@ -207,6 +207,81 @@ function ControlledOmittedRadioScale({
   );
 }
 
+function ControlledRowspanRadioScale({
+  onValue,
+}: {
+  onValue: (value: Record<string, unknown>) => void;
+}) {
+  const [value, setValue] = useState<Record<string, unknown>>({});
+  const columns: TableColumn[] = [
+    { id: 'rowspan-radio-section', label: '섹션' },
+    { id: 'rowspan-radio-a-column', label: 'A' },
+    { id: 'rowspan-radio-b-column', label: 'B' },
+    { id: 'rowspan-radio-extra-column', label: '추가 입력' },
+  ];
+  const rows: TableRow[] = [
+    {
+      id: 'rowspan-radio-source-row',
+      label: '첫 항목',
+      cells: [
+        { id: 'rowspan-radio-first-section', type: 'text', content: '첫 섹션' },
+        {
+          id: 'rowspan-radio-a',
+          type: 'radio',
+          content: '',
+          rowspan: 2,
+          radioGroupName: 'rowspan-shared-group',
+          radioOptions: [{ id: 'a', label: 'A 선택', value: 'a' }],
+        },
+        {
+          id: 'rowspan-radio-b',
+          type: 'radio',
+          content: '',
+          radioGroupName: 'rowspan-shared-group',
+          radioOptions: [{ id: 'b', label: 'B 선택', value: 'b' }],
+        },
+        { id: 'rowspan-radio-first-description', type: 'text', content: '첫 행 설명' },
+      ],
+    },
+    {
+      id: 'rowspan-radio-continuation-row',
+      label: '둘째 항목',
+      cells: [
+        { id: 'rowspan-radio-second-section', type: 'text', content: '둘째 섹션' },
+        {
+          id: 'rowspan-radio-a-continuation',
+          type: 'radio',
+          content: '',
+          isHidden: true,
+          _isContinuation: true,
+        },
+        { id: 'rowspan-radio-second-description', type: 'text', content: '둘째 행 설명' },
+        {
+          id: 'rowspan-radio-second-input',
+          type: 'input',
+          content: '',
+          placeholder: '둘째 행 입력',
+        },
+      ],
+    },
+  ];
+
+  return (
+    <InteractiveTableResponse
+      questionId="rowspan-radio-question"
+      columns={columns}
+      rows={rows}
+      mobileTableDisplayMode="drilldown-original-row"
+      mobileDrilldownOmitLeadingColumns={1}
+      value={value}
+      onChange={(next) => {
+        setValue(next);
+        onValue(next);
+      }}
+    />
+  );
+}
+
 function ControlledRankingScale() {
   const [value, setValue] = useState<Record<string, unknown>>({});
   const rankingCell: TableCell = {
@@ -249,6 +324,100 @@ function GroupedScale() {
       questionId="grouped-question"
       columns={groupedScaleColumns()}
       rows={groupedScaleRows()}
+      mobileTableDisplayMode="drilldown-original-row"
+      mobileDrilldownOmitLeadingColumns={2}
+      value={{}}
+      onChange={vi.fn()}
+    />
+  );
+}
+
+const conditionalSectionColumns = (): TableColumn[] => [
+  { id: 'conditional-section', label: '섹션', width: 140 },
+  { id: 'conditional-item', label: '항목', width: 140 },
+  { id: 'conditional-score-1', label: '1점', width: 140 },
+  { id: 'conditional-score-5', label: '5점', width: 140 },
+];
+
+const visibilitySourceQuestion = {
+  id: 'visibility-source',
+  type: 'radio',
+  title: '섹션 표시',
+  required: false,
+  order: 0,
+  options: [
+    { id: 'show', label: '표시', value: 'show' },
+    { id: 'hide', label: '숨김', value: 'hide' },
+  ],
+} as Question;
+
+const conditionalSectionRows = (): TableRow[] => [
+  {
+    id: 'conditional-first-row',
+    label: '첫 항목',
+    displayCondition: {
+      logicType: 'AND',
+      conditions: [{
+        id: 'show-first-section',
+        sourceQuestionId: visibilitySourceQuestion.id,
+        conditionType: 'value-match',
+        logicType: 'AND',
+        requiredValues: ['show'],
+      }],
+    },
+    cells: [
+      { id: 'conditional-first-section-label', type: 'text', content: '첫 섹션' },
+      { id: 'conditional-first-item-label', type: 'text', content: '첫 항목' },
+      {
+        id: 'conditional-first-score-1',
+        type: 'radio',
+        content: '',
+        radioGroupName: 'conditional-first-score',
+        radioOptions: [{ id: 'one', label: '1점', value: '1' }],
+      },
+      {
+        id: 'conditional-first-score-5',
+        type: 'radio',
+        content: '',
+        radioGroupName: 'conditional-first-score',
+        radioOptions: [{ id: 'five', label: '5점', value: '5' }],
+      },
+    ],
+  },
+  {
+    id: 'conditional-second-row',
+    label: '둘째 항목',
+    cells: [
+      { id: 'conditional-second-section-label', type: 'text', content: '둘째 섹션' },
+      { id: 'conditional-second-item-label', type: 'text', content: '둘째 항목' },
+      {
+        id: 'conditional-second-score-1',
+        type: 'radio',
+        content: '',
+        radioGroupName: 'conditional-second-score',
+        radioOptions: [{ id: 'one', label: '1점', value: '1' }],
+      },
+      {
+        id: 'conditional-second-score-5',
+        type: 'radio',
+        content: '',
+        radioGroupName: 'conditional-second-score',
+        radioOptions: [{ id: 'five', label: '5점', value: '5' }],
+      },
+    ],
+  },
+];
+
+function ConditionalSectionScale({ showFirstSection }: { showFirstSection: boolean }) {
+  return (
+    <InteractiveTableResponse
+      questionId="conditional-section-question"
+      columns={conditionalSectionColumns()}
+      rows={conditionalSectionRows()}
+      allQuestions={[visibilitySourceQuestion]}
+      allResponses={{
+        [visibilitySourceQuestion.id]: showFirstSection ? 'show' : 'hide',
+      }}
       mobileTableDisplayMode="drilldown-original-row"
       mobileDrilldownOmitLeadingColumns={2}
       value={{}}
@@ -315,6 +484,25 @@ it('상세 unmount 후 다음 leaf에 가로 위치를 복원하고 목차 복�
   fireEvent.click(screen.getByRole('button', { name: '목차로' }));
   fireEvent.click(screen.getByRole('button', { name: /척도/ }));
   fireEvent.click(screen.getByRole('button', { name: /직무 설정/ }));
+  expect(screen.getByTestId('table-preview-scroll').scrollLeft).toBe(0);
+  expect(getOriginalRowHeaderScroller().scrollLeft).toBe(0);
+});
+
+it('displayCondition으로 현재 section이 사라져 자동 root 복귀하면 다음 section 상세 scroll을 0으로 초기화한다', async () => {
+  vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockReturnValue(500);
+  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(200);
+  const { rerender } = render(<ConditionalSectionScale showFirstSection />);
+  fireEvent.click(screen.getByRole('button', { name: /첫 섹션/ }));
+
+  const firstBodyScroller = screen.getByTestId('table-preview-scroll');
+  firstBodyScroller.scrollLeft = 80;
+  fireEvent.scroll(firstBodyScroller);
+
+  rerender(<ConditionalSectionScale showFirstSection={false} />);
+  expect(screen.getByText('작성할 항목을 선택하세요')).toBeInTheDocument();
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+
+  fireEvent.click(screen.getByRole('button', { name: /둘째 섹션/ }));
   expect(screen.getByTestId('table-preview-scroll').scrollLeft).toBe(0);
   expect(getOriginalRowHeaderScroller().scrollLeft).toBe(0);
 });
@@ -391,6 +579,27 @@ it('제외된 radio에 기존 응답이 있어도 retained 멤버 선택 시 같
     'omitted-score': '',
     'retained-score-1': '',
     'retained-score-2': '2',
+  });
+});
+
+it('continuation 상세에 materialize된 rowspan radio는 source 행 sibling 응답을 비운다', () => {
+  const onValue = vi.fn<(value: Record<string, unknown>) => void>();
+  render(<ControlledRowspanRadioScale onValue={onValue} />);
+
+  fireEvent.click(screen.getByRole('button', { name: /첫 섹션/ }));
+  fireEvent.click(screen.getByRole('radio', { name: 'B 선택' }));
+  expect(onValue).toHaveBeenLastCalledWith({
+    'rowspan-radio-a': '',
+    'rowspan-radio-b': 'b',
+  });
+
+  fireEvent.click(screen.getByRole('button', { name: '목차로' }));
+  fireEvent.click(screen.getByRole('button', { name: /둘째 섹션/ }));
+  fireEvent.click(screen.getByRole('radio', { name: 'A 선택' }));
+
+  expect(onValue).toHaveBeenLastCalledWith({
+    'rowspan-radio-a': 'a',
+    'rowspan-radio-b': '',
   });
 });
 
@@ -540,6 +749,93 @@ it.each(['text', 'image', 'video'] as const)(
   },
 );
 
+it.each(['text', 'image', 'video'] as const)(
+  'displayCondition으로 hidden %s rowspan anchor 행이 제거되어도 승격 continuation에 라벨이 새지 않는다',
+  (hiddenType) => {
+    const hiddenLabel = `조건부 숨김 ${hiddenType} anchor`;
+    render(
+      <InteractiveTableResponse
+        questionId={`conditional-hidden-${hiddenType}`}
+        columns={[
+          { id: `conditional-hidden-${hiddenType}-section`, label: '섹션' },
+          { id: `conditional-hidden-${hiddenType}-item`, label: '항목' },
+          { id: `conditional-hidden-${hiddenType}-value`, label: '응답' },
+        ]}
+        rows={[
+          {
+            id: `conditional-hidden-${hiddenType}-anchor-row`,
+            label: '숨겨질 anchor 행',
+            displayCondition: {
+              logicType: 'AND',
+              conditions: [{
+                id: `conditional-hidden-${hiddenType}-condition`,
+                sourceQuestionId: visibilitySourceQuestion.id,
+                conditionType: 'value-match',
+                logicType: 'AND',
+                requiredValues: ['show'],
+              }],
+            },
+            cells: [
+              {
+                id: `conditional-hidden-${hiddenType}-anchor`,
+                type: hiddenType,
+                content: hiddenLabel,
+                rowspan: 2,
+                mobileDisplay: 'hidden',
+              },
+              {
+                id: `conditional-hidden-${hiddenType}-anchor-item`,
+                type: 'text',
+                content: '숨겨질 항목',
+              },
+              {
+                id: `conditional-hidden-${hiddenType}-anchor-input`,
+                type: 'input',
+                content: '',
+              },
+            ],
+          },
+          {
+            id: `conditional-hidden-${hiddenType}-continuation-row`,
+            label: '공개 항목',
+            cells: [
+              {
+                id: `conditional-hidden-${hiddenType}-continuation`,
+                type: hiddenType,
+                content: '',
+                isHidden: true,
+                _isContinuation: true,
+              },
+              {
+                id: `conditional-hidden-${hiddenType}-public-item`,
+                type: 'text',
+                content: '공개 항목',
+              },
+              {
+                id: `conditional-hidden-${hiddenType}-public-input`,
+                type: 'input',
+                content: '',
+                placeholder: `${hiddenType} 공개 입력`,
+              },
+            ],
+          },
+        ]}
+        allQuestions={[visibilitySourceQuestion]}
+        allResponses={{ [visibilitySourceQuestion.id]: 'hide' }}
+        mobileTableDisplayMode="drilldown-original-row"
+        mobileDrilldownOmitLeadingColumns={2}
+        value={{}}
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(document.body.textContent).not.toContain(hiddenLabel);
+    fireEvent.click(screen.getByRole('button', { name: /^항목/ }));
+    expect(document.body.textContent).not.toContain(hiddenLabel);
+    expect(screen.getByPlaceholderText(`${hiddenType} 공개 입력`)).toBeInTheDocument();
+  },
+);
+
 const leaf = (rowId: string, label: string): ClassifiedLeaf => ({
   rowId,
   label,
@@ -608,7 +904,13 @@ function renderShell({
   );
 }
 
-function RerenderableShell({ sections }: { sections: ClassifiedSection[] }) {
+function RerenderableShell({
+  sections,
+  onReturnToRoot,
+}: {
+  sections: ClassifiedSection[];
+  onReturnToRoot?: () => void;
+}) {
   return (
     <MobileDrilldownShell
       sections={sections}
@@ -625,6 +927,7 @@ function RerenderableShell({ sections }: { sections: ClassifiedSection[] }) {
       })}
       getLeafStatus={() => ({ completed: 0, total: 1, unit: '개 항목' })}
       renderLeafDetail={(item) => <div data-testid="rerender-leaf-detail">{item.label}</div>}
+      {...(onReturnToRoot ? { onReturnToRoot } : {})}
     />
   );
 }
@@ -773,19 +1076,26 @@ it('현재 leaf가 제거되면 저장된 nav도 정리하고 해당 section의 
 it('현재 section이 제거되면 저장된 nav도 정리하고 빈 화면 없이 안전한 root로 돌아간다', async () => {
   const remaining = section([leaf('section-a-leaf', 'A 항목')], { label: 'A 섹션' });
   const removed = section([leaf('section-b-leaf', 'B 항목')], { label: 'B 섹션' });
-  const { rerender } = render(<RerenderableShell sections={[remaining, removed]} />);
+  const onReturnToRoot = vi.fn();
+  const { rerender } = render(
+    <RerenderableShell sections={[remaining, removed]} onReturnToRoot={onReturnToRoot} />,
+  );
   fireEvent.click(screen.getByRole('button', { name: /B 섹션/ }));
 
-  rerender(<RerenderableShell sections={[remaining]} />);
+  rerender(<RerenderableShell sections={[remaining]} onReturnToRoot={onReturnToRoot} />);
 
   expect(screen.queryByTestId('rerender-leaf-detail')).toBeNull();
   expect(screen.getByText('작성할 항목을 선택하세요')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /A 섹션/ })).toBeInTheDocument();
 
   await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
-  rerender(<RerenderableShell sections={[remaining, removed]} />);
+  expect(onReturnToRoot).toHaveBeenCalledTimes(1);
+  rerender(
+    <RerenderableShell sections={[remaining, removed]} onReturnToRoot={onReturnToRoot} />,
+  );
   expect(screen.queryByTestId('rerender-leaf-detail')).toBeNull();
   expect(screen.getByText('작성할 항목을 선택하세요')).toBeInTheDocument();
+  expect(onReturnToRoot).toHaveBeenCalledTimes(1);
 });
 
 it('breadcrumb 뒤로 버튼은 44px 최소 터치 타깃을 가진다', () => {

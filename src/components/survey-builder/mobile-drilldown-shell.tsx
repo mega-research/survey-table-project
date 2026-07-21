@@ -71,6 +71,11 @@ export function MobileDrilldownShell({
     if (!sectionMissing && !leafMissing) return;
 
     const timeoutId = window.setTimeout(() => {
+      if (sectionMissing) {
+        // 조건부 표시 변경으로 현재 section이 사라진 경우도 명시적 목차 복귀와 같은
+        // 수명주기다. 상세별 공유 상태(scroll 등)를 정확히 한 번 초기화한다.
+        onReturnToRoot?.();
+      }
       setNav((current) => {
         if (sectionMissing && current.sectionId === nav.sectionId) {
           return { sectionId: null, leafId: null };
@@ -87,7 +92,7 @@ export function MobileDrilldownShell({
     }, 0);
 
     return () => window.clearTimeout(timeoutId);
-  }, [leafMissing, nav.leafId, nav.sectionId, sectionMissing]);
+  }, [leafMissing, nav.leafId, nav.sectionId, onReturnToRoot, sectionMissing]);
 
   const rootRef = useRef<HTMLDivElement>(null);
   const isFirstNav = useRef(true);

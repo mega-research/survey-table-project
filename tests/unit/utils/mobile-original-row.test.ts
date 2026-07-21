@@ -150,6 +150,7 @@ describe('projectMobileOriginalRow', () => {
       type: 'input',
       placeholder: '공유 응답',
     });
+    expect(projection?.sourceRowIdByCellId.get('shared-input')).toBe('row-1');
     expect(projection?.hasInteractiveCells).toBe(true);
   });
 });
