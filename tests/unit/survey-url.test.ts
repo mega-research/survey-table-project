@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { getSurveyAccessIdentifier, getSurveyAccessUrl } from '@/lib/survey-url';
+import {
+  buildInviteUrl,
+  generateInviteCode,
+  getSurveyAccessIdentifier,
+  getSurveyAccessUrl,
+} from '@/lib/survey-url';
 
 describe('getSurveyAccessUrl', () => {
   it('공개 설문 한글 슬러그를 인코딩 없이 원문 그대로 URL에 사용한다', () => {
@@ -52,5 +57,27 @@ describe('getSurveyAccessIdentifier', () => {
     expect(
       getSurveyAccessIdentifier({ id: 'survey-1', slug: null, privateToken: null, isPublic: false }),
     ).toBe('survey-1');
+  });
+});
+
+describe('buildInviteUrl', () => {
+  it('baseUrl 과 코드로 /i/ 경로를 만든다', () => {
+    expect(buildInviteUrl('aB3xY7Kw12', 'https://dev.megaresearch.co.kr')).toBe(
+      'https://dev.megaresearch.co.kr/i/aB3xY7Kw12',
+    );
+  });
+
+  it('빈 baseUrl 이면 상대 경로로 폴백한다', () => {
+    expect(buildInviteUrl('code123', '')).toBe('/i/code123');
+  });
+});
+
+describe('generateInviteCode', () => {
+  it('10자 코드를 만든다', () => {
+    expect(generateInviteCode()).toHaveLength(10);
+  });
+
+  it('호출마다 다른 값을 만든다', () => {
+    expect(generateInviteCode()).not.toBe(generateInviteCode());
   });
 });

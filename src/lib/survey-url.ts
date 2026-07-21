@@ -1,3 +1,5 @@
+import { nanoid } from 'nanoid';
+
 /**
  * 설문 URL 관련 유틸리티 함수들
  * - 공개 설문: 사용자 정의 슬러그 또는 제목에서 자동 생성
@@ -230,4 +232,23 @@ export function appendUniqueSlugSuffix(baseSlug: string): string {
   const maxBaseLength = 50 - suffix.length - 1; // -1 for hyphen
   const truncatedBase = baseSlug.slice(0, maxBaseLength);
   return `${truncatedBase}-${suffix}`;
+}
+
+/**
+ * 초대 전용 짧은 코드 생성 — /i/{code} 응답 URL 용.
+ * contact_targets.inviteCode 컬럼에 저장하며 inviteToken(UUID)과는 별개.
+ */
+export function generateInviteCode(): string {
+  return nanoid(10);
+}
+
+/**
+ * 짧은 초대 URL 빌드 — {baseUrl}/i/{inviteCode}.
+ * baseUrl 미지정 시 브라우저 origin (getSurveyAccessUrl 과 동일 폴백 관행).
+ */
+export function buildInviteUrl(
+  inviteCode: string,
+  baseUrl: string = typeof window !== 'undefined' ? window.location.origin : '',
+): string {
+  return `${baseUrl}/i/${inviteCode}`;
 }
