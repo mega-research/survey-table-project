@@ -39,6 +39,7 @@
     "0052_add_question_mobile_original_table",
     "0053_test_token_to_text",
     "0054_add_contact_invite_code",
-    "0055_contact_invite_code_not_null"
+    "0055_contact_invite_code_not_null",
+    "0057_survey_target_test_mode"
   ]
 }

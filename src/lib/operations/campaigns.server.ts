@@ -225,7 +225,7 @@ export async function getCampaignDetail(cid: string): Promise<CampaignDetail | n
 // 단체 메일 detail 의 recipients 목록 (status 필터 + email 검색 + 페이지네이션)
 export interface CampaignRecipientRow {
   id: string;
-  contactTargetId: string;
+  contactTargetId: string | null;
   contactResid: number;
   contactGroupValue: string | null;
   emailMasked: string;

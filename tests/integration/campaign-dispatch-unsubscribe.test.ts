@@ -29,11 +29,18 @@ const campaign = {
 };
 
 // r1: 활성 수신자. r2: 큐잉 후 수신거부(unsubscribedAt set) → 발송 제외 대상.
-const recipientRows = [
+const recipientRows: Array<{
+  recipientId: string;
+  emailSnapshot: string | null;
+  inviteCode: string;
+  unsubscribeToken: string;
+  attrs: Record<string, string>;
+  unsubscribedAt: Date | null;
+}> = [
   {
     recipientId: 'r1',
     emailSnapshot: 'active@example.com',
-    inviteToken: 'inv1',
+    inviteCode: 'inv1',
     unsubscribeToken: 'unsub1',
     attrs: {},
     unsubscribedAt: null,
@@ -41,7 +48,7 @@ const recipientRows = [
   {
     recipientId: 'r2',
     emailSnapshot: 'gone@example.com',
-    inviteToken: 'inv2',
+    inviteCode: 'inv2',
     unsubscribeToken: 'unsub2',
     attrs: {},
     unsubscribedAt: new Date('2026-01-01T00:00:00Z'),
@@ -108,6 +115,7 @@ import { dispatchCampaignChunk } from '@/lib/mail/campaign-dispatch';
 beforeEach(() => {
   setPayloads.length = 0;
   selectState.call = 0;
+  recipientRows[0]!.emailSnapshot = 'active@example.com';
   sendBatchMock.mockReset();
   sendBatchMock.mockImplementation(
     async (input: { recipients: Array<{ recipientId: string; to: string }> }) =>
@@ -133,5 +141,14 @@ describe('dispatchCampaignChunk 수신거부 재검증', () => {
 
     const skipped = setPayloads.some((p) => p['status'] === 'skipped_unsubscribed');
     expect(skipped).toBe(true);
+  });
+
+  it('이메일 스냅샷이 없으면 외부 발송 전에 거부한다', async () => {
+    recipientRows[0]!.emailSnapshot = null;
+
+    await expect(dispatchCampaignChunk('c1', ['r1'])).rejects.toThrow(
+      '수신자 이메일 스냅샷이 없습니다: r1',
+    );
+    expect(sendBatchMock).not.toHaveBeenCalled();
   });
 });

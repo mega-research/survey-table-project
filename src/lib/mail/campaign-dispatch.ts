@@ -144,6 +144,10 @@ export async function dispatchCampaignChunk(
 
   const bulkInputs: BulkRecipientInput[] = await Promise.all(
     activeRows.map(async (row) => {
+      if (row.emailSnapshot === null) {
+        throw new Error(`수신자 이메일 스냅샷이 없습니다: ${row.recipientId}`);
+      }
+
       const inviteUrl = buildInviteUrl(row.inviteCode, baseUrl);
       const unsubscribeUrl = `${baseUrl}/unsubscribe/${row.unsubscribeToken}`;
 
