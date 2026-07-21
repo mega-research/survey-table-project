@@ -153,6 +153,21 @@ export function isUUID(str: string): boolean {
 }
 
 /**
+ * 설문 접근 식별자(경로에 들어갈 값) 계산.
+ * 공개면 slug(없으면 id), 비공개면 privateToken(없으면 id).
+ * getSurveyAccessUrl 과 테스트 링크 생성이 공유하는 단일 규약.
+ */
+export function getSurveyAccessIdentifier(survey: {
+  id: string;
+  slug?: string | null | undefined;
+  privateToken?: string | null | undefined;
+  isPublic: boolean;
+}): string {
+  if (survey.isPublic) return survey.slug || survey.id;
+  return survey.privateToken || survey.id;
+}
+
+/**
  * 설문 접근 URL 생성
  *
  * 한글 슬러그는 percent-encoding 없이 원문 그대로 사용한다 (2026-07-02 결정).
@@ -173,14 +188,12 @@ export function getSurveyAccessUrl(
   },
   baseUrl: string = typeof window !== 'undefined' ? window.location.origin : '',
 ): string {
-  if (survey.settings.isPublic) {
-    // 공개 설문: slug 사용, 없으면 id 사용
-    const identifier = survey.slug || survey.id;
-    return `${baseUrl}/survey/${identifier}`;
-  }
-
-  // 비공개 설문: privateToken 사용, 없으면 id 사용
-  const identifier = survey.privateToken || survey.id;
+  const identifier = getSurveyAccessIdentifier({
+    id: survey.id,
+    slug: survey.slug,
+    privateToken: survey.privateToken,
+    isPublic: survey.settings.isPublic,
+  });
   return `${baseUrl}/survey/${identifier}`;
 }
 
