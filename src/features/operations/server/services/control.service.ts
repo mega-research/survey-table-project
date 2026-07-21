@@ -1,16 +1,18 @@
 import 'server-only';
 
-import { randomUUID } from 'crypto';
 import { and, count, eq, isNull } from 'drizzle-orm';
+import { nanoid } from 'nanoid';
 
 import { db } from '@/db';
 import { surveyResponses, surveys } from '@/db/schema/surveys';
+import { getSurveyAccessIdentifier } from '@/lib/survey-url';
 
 export interface SurveyControlState {
   isPaused: boolean;
   pausedMessage: string | null;
   testModeEnabled: boolean;
   testToken: string | null;
+  accessIdentifier: string;
   testResponseCount: number;
 }
 
@@ -37,10 +39,21 @@ export async function getControlState(surveyId: string): Promise<SurveyControlSt
       pausedMessage: true,
       testModeEnabled: true,
       testToken: true,
+      id: true,
+      slug: true,
+      privateToken: true,
+      isPublic: true,
     },
   });
   if (!row) throw new Error('설문을 찾을 수 없습니다.');
-  return { ...row, testResponseCount: await countTestResponses(surveyId) };
+  return {
+    isPaused: row.isPaused,
+    pausedMessage: row.pausedMessage,
+    testModeEnabled: row.testModeEnabled,
+    testToken: row.testToken,
+    accessIdentifier: getSurveyAccessIdentifier(row),
+    testResponseCount: await countTestResponses(surveyId),
+  };
 }
 
 export async function setPaused(input: {
@@ -65,14 +78,14 @@ export async function setPaused(input: {
 export async function setTestMode(input: {
   surveyId: string;
   enabled: boolean;
-}): Promise<{ testModeEnabled: boolean; testToken: string | null }> {
+}): Promise<{ testModeEnabled: boolean; testToken: string | null; accessIdentifier: string }> {
   const row = await db.query.surveys.findFirst({
     where: and(eq(surveys.id, input.surveyId), isNull(surveys.deletedAt)),
-    columns: { testToken: true },
+    columns: { id: true, slug: true, privateToken: true, isPublic: true, testToken: true },
   });
   if (!row) throw new Error('설문을 찾을 수 없습니다.');
-  // 토큰은 최초 ON 때 한 번 생성 후 재사용 (rotate 없음 — 스펙 11절)
-  const testToken = row.testToken ?? randomUUID();
+  // 토큰은 최초 ON 때 한 번 생성 후 재사용 (rotate 없음 — 스펙 11절). 신규는 짧은 nanoid.
+  const testToken = row.testToken ?? nanoid(10);
   const [updated] = await db
     .update(surveys)
     .set({ testModeEnabled: input.enabled, testToken, updatedAt: new Date() })
@@ -82,7 +95,7 @@ export async function setTestMode(input: {
       testToken: surveys.testToken,
     });
   if (!updated) throw new Error('테스트 모드 저장에 실패했습니다.');
-  return updated;
+  return { ...updated, accessIdentifier: getSurveyAccessIdentifier(row) };
 }
 
 /** isTest 응답 일괄 soft delete — response-manage.service 의 softDeleteResponse 와 동일 방식. */

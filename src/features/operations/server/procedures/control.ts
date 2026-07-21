@@ -9,6 +9,7 @@ const ControlStateSchema = z.object({
   pausedMessage: z.string().nullable(),
   testModeEnabled: z.boolean(),
   testToken: z.string().nullable(),
+  accessIdentifier: z.string(),
   testResponseCount: z.number().int(),
 });
 
@@ -36,7 +37,13 @@ const setPaused = authed
 
 const setTestMode = authed
   .input(z.object({ surveyId: z.string(), enabled: z.boolean() }))
-  .output(z.object({ testModeEnabled: z.boolean(), testToken: z.string().nullable() }))
+  .output(
+    z.object({
+      testModeEnabled: z.boolean(),
+      testToken: z.string().nullable(),
+      accessIdentifier: z.string(),
+    }),
+  )
   .handler(({ input }) => svc.setTestMode(input));
 
 const deleteTestResponses = authed

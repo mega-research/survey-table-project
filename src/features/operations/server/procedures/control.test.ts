@@ -28,6 +28,7 @@ describe('operations.control procedures', () => {
       pausedMessage: null,
       testModeEnabled: false,
       testToken: null,
+      accessIdentifier: 'survey-1',
       testResponseCount: 0,
     });
     const client = createRouterClient({ control }, { context: authedContext() });
@@ -38,6 +39,7 @@ describe('operations.control procedures', () => {
       pausedMessage: null,
       testModeEnabled: false,
       testToken: null,
+      accessIdentifier: 'survey-1',
       testResponseCount: 0,
     });
   });
@@ -59,11 +61,15 @@ describe('operations.control procedures', () => {
   });
 
   it('setTestMode 는 enabled 를 위임한다', async () => {
-    vi.mocked(svc.setTestMode).mockResolvedValue({ testModeEnabled: true, testToken: 'tok' });
+    vi.mocked(svc.setTestMode).mockResolvedValue({
+      testModeEnabled: true,
+      testToken: 'tok',
+      accessIdentifier: 'survey-1',
+    });
     const client = createRouterClient({ control }, { context: authedContext() });
     const res = await client.control.setTestMode({ surveyId: SURVEY_ID, enabled: true });
     expect(svc.setTestMode).toHaveBeenCalledWith({ surveyId: SURVEY_ID, enabled: true });
-    expect(res).toEqual({ testModeEnabled: true, testToken: 'tok' });
+    expect(res).toEqual({ testModeEnabled: true, testToken: 'tok', accessIdentifier: 'survey-1' });
   });
 
   it('deleteTestResponses 는 서비스에 위임하고 삭제 건수를 반환한다', async () => {
