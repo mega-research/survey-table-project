@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type MouseEvent as ReactMouseEvent } from 'react';
+import { useState, type PointerEvent as ReactPointerEvent } from 'react';
 
 import type { Editor } from '@tiptap/react';
 import { AlertCircle } from 'lucide-react';
@@ -32,7 +32,7 @@ function clamp01(n: number): number {
   return Math.min(1, Math.max(0, n));
 }
 
-function toRelativePoint(e: ReactMouseEvent, el: HTMLElement): Point {
+function toRelativePoint(e: ReactPointerEvent, el: HTMLElement): Point {
   const r = el.getBoundingClientRect();
   return {
     x: clamp01((e.clientX - r.left) / r.width),
@@ -66,21 +66,28 @@ export function ImageLinkAreaModal({ editor, onClose }: Props) {
   const hadRect = attrs['linkRect'] != null;
 
   const fixWidth = () => {
+    // updateAttributes 로 NodeView 가 재생성되면 이미지 노드 선택이 풀리고,
+    // imageActive 조건부인 상위 ImageContextToolbar 가 언마운트되어 모달까지
+    // 닫혀버린다. 같은 체인에서 NodeSelection 을 복원해 모달을 유지한다.
+    // focus() 는 모달이 열린 동안 에디터로 포커스를 뺏으므로 호출하지 않는다.
+    const { from } = editor.state.selection;
     editor
       .chain()
-      .focus()
       .updateAttributes(IMAGE_NODE, {
         width: IMAGE_LINK_AREA_MAX_WIDTH,
         height: null,
         wrapperStyle: WRAPPER_BASE,
         containerStyle: 'width: 100%; height: auto;',
       })
+      .setNodeSelection(from)
       .run();
     setWidthOverride(IMAGE_LINK_AREA_MAX_WIDTH);
   };
 
   const save = () => {
     if (!rect || !natural || !widthOk) return;
+    // 닫힌 뒤에도 이미지 컨텍스트 툴바(버튼 active 표시)가 유지되도록 선택 복원
+    const { from } = editor.state.selection;
     editor
       .chain()
       .focus()
@@ -88,27 +95,33 @@ export function ImageLinkAreaModal({ editor, onClose }: Props) {
         linkRect: [rect.x, rect.y, rect.w, rect.h].map((n) => n.toFixed(4)).join(','),
         linkNatural: `${natural.width},${natural.height}`,
       })
+      .setNodeSelection(from)
       .run();
     onClose();
   };
 
   const remove = () => {
+    const { from } = editor.state.selection;
     editor
       .chain()
       .focus()
       .updateAttributes(IMAGE_NODE, { linkRect: null, linkNatural: null })
+      .setNodeSelection(from)
       .run();
     onClose();
   };
 
-  const onMouseDown = (e: ReactMouseEvent<HTMLDivElement>) => {
-    if (!widthOk) return;
+  // 마우스 이벤트 대신 pointer capture 를 사용한다 — 드래그 중 포인터가 이미지
+  // 밖으로 나가도 move/up 이 계속 이 요소로 전달되어 실사용 드래그가 끊기지 않는다.
+  const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!widthOk || !e.isPrimary) return;
     e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
     setRect(null);
     setDragStart(toRelativePoint(e, e.currentTarget));
   };
 
-  const onMouseMove = (e: ReactMouseEvent<HTMLDivElement>) => {
+  const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (!dragStart) return;
     setRect(normalizeRect(dragStart, toRelativePoint(e, e.currentTarget)));
   };
@@ -146,11 +159,12 @@ export function ImageLinkAreaModal({ editor, onClose }: Props) {
 
         <div className="min-h-0 flex-1 overflow-auto p-5">
           <div
-            className={widthOk ? 'relative inline-block cursor-crosshair select-none' : 'relative inline-block select-none opacity-50'}
-            onMouseDown={onMouseDown}
-            onMouseMove={onMouseMove}
-            onMouseUp={endDrag}
-            onMouseLeave={endDrag}
+            className={widthOk ? 'relative inline-block cursor-crosshair select-none touch-none' : 'relative inline-block select-none opacity-50'}
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={endDrag}
+            onPointerCancel={endDrag}
+            onDragStart={(e) => e.preventDefault()}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
