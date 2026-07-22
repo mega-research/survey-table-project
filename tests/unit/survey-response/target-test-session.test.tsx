@@ -1,4 +1,4 @@
-import { createRef } from 'react';
+import { createRef, StrictMode } from 'react';
 import type { RefObject } from 'react';
 
 import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
@@ -125,6 +125,16 @@ function readBlob(blob: Blob): Promise<string> {
   });
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
 describe('대상자 테스트 응답 세션', () => {
   beforeEach(() => {
     Object.defineProperty(window, 'matchMedia', {
@@ -161,6 +171,48 @@ describe('대상자 테스트 응답 세션', () => {
       'survey-session:survey-1:invite:invite-b',
     );
     expect(sessionStorageKey('survey-1')).toBe('survey-session:survey-1');
+  });
+
+  it('초기 무효 테스트 링크는 stale 응답 상태를 비우고 recovery와 telemetry를 mount하지 않는다', async () => {
+    bySlug.mockResolvedValue({ id: 'survey-1' });
+    forResponse.mockResolvedValue({
+      survey: targetSurvey,
+      versionId: 'version-1',
+      control: {
+        isPaused: false,
+        pausedMessage: null,
+        testSession: 'invalid',
+        testSessionKind: null,
+      },
+    });
+    attrsLookup.mockResolvedValue({});
+    window.localStorage.setItem(
+      'survey-session:survey-1:invite:invite-invalid',
+      'stale-session',
+    );
+    useSurveyResponseStore.getState().setCurrentResponseId('stale-response');
+    useSurveyResponseStore.getState().setPendingResponse('q1', 'stale-answer');
+
+    render(
+      <SurveyResponseFlow
+        surveyIdentifier="target-survey"
+        inviteToken="invite-invalid"
+        testToken={null}
+      />,
+    );
+
+    expect(
+      await screen.findByRole('heading', { name: '유효하지 않은 테스트 링크입니다' }),
+    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(useSurveyResponseStore.getState().currentResponseId).toBeNull();
+      expect(useSurveyResponseStore.getState().pendingResponses).toEqual({});
+      expect(
+        window.localStorage.getItem('survey-session:survey-1:invite:invite-invalid'),
+      ).toBeNull();
+    });
+    expect(resume).not.toHaveBeenCalled();
+    expect(stepVisit).not.toHaveBeenCalled();
   });
 
   it('페이지 종료 segment의 sendBeacon 본문에 attempt identity를 보낸다', async () => {
@@ -269,6 +321,185 @@ describe('대상자 테스트 응답 세션', () => {
     expect(setResponses).toHaveBeenCalledWith({ q1: '기존 답' });
     expect(setCurrentResponseId).toHaveBeenCalledWith('response-1');
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('이전 identity의 지연된 resume 결과가 새 identity의 응답 상태를 덮지 않는다', async () => {
+    const first = deferred<{
+      id: string;
+      status: 'in_progress';
+      resumed: false;
+      questionResponses: Record<string, unknown>;
+    } | null>();
+    const second = deferred<{
+      id: string;
+      status: 'in_progress';
+      resumed: false;
+      questionResponses: Record<string, unknown>;
+    } | null>();
+    resume.mockImplementation(({ sessionId }: { sessionId: string }) =>
+      sessionId === 'session-a' ? first.promise : second.promise,
+    );
+    const setResponses = vi.fn();
+    const setCurrentResponseId = vi.fn();
+    const setSessionId = vi.fn();
+    const setDuplicateStatus = vi.fn();
+    const survey = { id: 'survey-1' } as Survey;
+    const base = {
+      isAdminEdit: false,
+      loadedSurvey: survey,
+      currentResponseId: null,
+      testToken: null,
+      isTestSession: true,
+      isTargetTestSession: true,
+      setSessionId,
+      setResponses,
+      setCurrentResponseId,
+      setDuplicateStatus,
+    };
+
+    const { result, rerender } = renderHook(
+      (props: { inviteToken: string; sessionId: string }) =>
+        useSessionRecovery({ ...base, ...props }),
+      { initialProps: { inviteToken: 'invite-a', sessionId: 'session-a' } },
+    );
+    expect(result.current.isRecovering).toBe(true);
+
+    rerender({ inviteToken: 'invite-b', sessionId: 'session-b' });
+    await act(async () => {
+      second.resolve({
+        id: 'response-b',
+        status: 'in_progress',
+        resumed: false,
+        questionResponses: { q1: 'B 답' },
+      });
+      await second.promise;
+    });
+    await waitFor(() => expect(setCurrentResponseId).toHaveBeenCalledWith('response-b'));
+
+    await act(async () => {
+      first.resolve({
+        id: 'response-a',
+        status: 'in_progress',
+        resumed: false,
+        questionResponses: { q1: 'A 답' },
+      });
+      await first.promise;
+    });
+
+    expect(setCurrentResponseId).not.toHaveBeenCalledWith('response-a');
+    expect(setResponses).not.toHaveBeenCalledWith({ q1: 'A 답' });
+    expect(result.current.isRecovering).toBe(false);
+  });
+
+  it('StrictMode에서 같은 identity resume를 한 번만 요청한다', async () => {
+    const pending = deferred<null>();
+    resume.mockReturnValue(pending.promise);
+    const args = {
+      isAdminEdit: false,
+      loadedSurvey: { id: 'survey-1' } as Survey,
+      currentResponseId: null,
+      inviteToken: 'invite-a',
+      testToken: null,
+      isTestSession: true,
+      isTargetTestSession: true,
+      sessionId: 'session-a',
+      setSessionId: vi.fn(),
+      setResponses: vi.fn(),
+      setCurrentResponseId: vi.fn(),
+      setDuplicateStatus: vi.fn(),
+    };
+
+    const view = renderHook(
+      () => useSessionRecovery(args),
+      { wrapper: StrictMode },
+    );
+
+    expect(resume).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      pending.resolve(null);
+      await pending.promise;
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(view.result.current.isRecovering).toBe(false);
+  });
+
+  it('이전 identity의 지연된 resume 실패가 새 identity를 차단하지 않는다', async () => {
+    const first = deferred<null>();
+    const second = deferred<null>();
+    resume.mockImplementation(({ sessionId }: { sessionId: string }) =>
+      sessionId === 'session-a' ? first.promise : second.promise,
+    );
+    const setDuplicateStatus = vi.fn();
+    const base = {
+      isAdminEdit: false,
+      loadedSurvey: { id: 'survey-1' } as Survey,
+      currentResponseId: null,
+      testToken: null,
+      isTestSession: true,
+      isTargetTestSession: true,
+      setSessionId: vi.fn(),
+      setResponses: vi.fn(),
+      setCurrentResponseId: vi.fn(),
+      setDuplicateStatus,
+    };
+    const { rerender } = renderHook(
+      (props: { inviteToken: string; sessionId: string }) =>
+        useSessionRecovery({ ...base, ...props }),
+      { initialProps: { inviteToken: 'invite-a', sessionId: 'session-a' } },
+    );
+
+    rerender({ inviteToken: 'invite-b', sessionId: 'session-b' });
+    await act(async () => {
+      second.resolve(null);
+      await second.promise;
+      first.reject(new Error('survey_paused'));
+      await first.promise.catch(() => undefined);
+    });
+
+    expect(setDuplicateStatus).not.toHaveBeenCalled();
+  });
+
+  it('unmount 후 도착한 resume 결과는 외부 상태를 갱신하지 않는다', async () => {
+    const pending = deferred<{
+      id: string;
+      status: 'in_progress';
+      resumed: false;
+      questionResponses: Record<string, unknown>;
+    } | null>();
+    resume.mockReturnValue(pending.promise);
+    const setResponses = vi.fn();
+    const setCurrentResponseId = vi.fn();
+    const { unmount } = renderHook(() =>
+      useSessionRecovery({
+        isAdminEdit: false,
+        loadedSurvey: { id: 'survey-1' } as Survey,
+        currentResponseId: null,
+        inviteToken: 'invite-a',
+        testToken: null,
+        isTestSession: true,
+        isTargetTestSession: true,
+        sessionId: 'session-a',
+        setSessionId: vi.fn(),
+        setResponses,
+        setCurrentResponseId,
+        setDuplicateStatus: vi.fn(),
+      }),
+    );
+
+    unmount();
+    await act(async () => {
+      pending.resolve({
+        id: 'response-a',
+        status: 'in_progress',
+        resumed: false,
+        questionResponses: { q1: 'A 답' },
+      });
+      await pending.promise;
+    });
+
+    expect(setCurrentResponseId).not.toHaveBeenCalled();
+    expect(setResponses).not.toHaveBeenCalled();
   });
 
   it('target test 첫 입력과 후속 telemetry에 같은 attemptId와 sessionId를 보낸다', async () => {
@@ -541,6 +772,81 @@ describe('대상자 테스트 응답 세션', () => {
     expect(firstAttempt).toMatch(/^[0-9a-f-]{36}$/i);
     expect(secondAttempt).toMatch(/^[0-9a-f-]{36}$/i);
     expect(secondAttempt).not.toBe(firstAttempt);
+  });
+
+  it('같은 flow에서 invite identity가 바뀌면 이전 응답을 새 invite로 완료하지 않는다', async () => {
+    bySlug.mockResolvedValue({ id: 'survey-1' });
+    forResponse.mockResolvedValue({
+      survey: targetSurvey,
+      versionId: 'version-1',
+      control: {
+        isPaused: false,
+        pausedMessage: null,
+        testSession: 'valid',
+        testSessionKind: 'target',
+      },
+    });
+    attrsLookup.mockResolvedValue({});
+    resume.mockResolvedValue(null);
+    createWithFirstAnswer
+      .mockResolvedValueOnce({ kind: 'created', id: 'response-a', contactTargetId: 'target-a' })
+      .mockResolvedValueOnce({ kind: 'created', id: 'response-b', contactTargetId: 'target-b' });
+    complete.mockResolvedValue(undefined);
+    stepVisit.mockResolvedValue(undefined);
+
+    const { rerender } = render(
+      <SurveyResponseFlow
+        surveyIdentifier="target-survey"
+        inviteToken="invite-a"
+        testToken={null}
+      />,
+    );
+    fireEvent.change(await screen.findByPlaceholderText('첫 답변'), {
+      target: { value: 'A 응답' },
+    });
+    await waitFor(() => expect(createWithFirstAnswer).toHaveBeenCalledTimes(1));
+    const firstCreate = createWithFirstAnswer.mock.calls[0]?.[0] as {
+      attemptId: string;
+      sessionId: string;
+    };
+
+    rerender(
+      <SurveyResponseFlow
+        surveyIdentifier="target-survey"
+        inviteToken="invite-b"
+        testToken={null}
+      />,
+    );
+
+    expect(await screen.findByPlaceholderText('첫 답변')).toHaveValue('');
+    await waitFor(() => expect(resume).toHaveBeenCalledTimes(2));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    fireEvent.change(screen.getByPlaceholderText('첫 답변'), {
+      target: { value: 'B 응답' },
+    });
+    await waitFor(() => expect(createWithFirstAnswer).toHaveBeenCalledTimes(2));
+    const secondCreate = createWithFirstAnswer.mock.calls[1]?.[0] as {
+      attemptId: string;
+      sessionId: string;
+    };
+    expect(secondCreate.attemptId).not.toBe(firstCreate.attemptId);
+    expect(secondCreate.sessionId).not.toBe(firstCreate.sessionId);
+
+    fireEvent.click(screen.getByRole('button', { name: '제출' }));
+    await waitFor(() =>
+      expect(complete).toHaveBeenCalledWith(
+        expect.objectContaining({
+          responseId: 'response-b',
+          attemptId: secondCreate.attemptId,
+          sessionId: secondCreate.sessionId,
+        }),
+      ),
+    );
+    expect(complete).not.toHaveBeenCalledWith(
+      expect.objectContaining({ responseId: 'response-a' }),
+    );
   });
 
   it('저장 중 무효화된 target 링크는 재시작 CTA 없는 종료 화면으로 전환한다', async () => {

@@ -11,7 +11,7 @@ import type { Question, QuestionGroup, Survey } from '@/types/survey';
 import type { BranchEvalCtx } from '@/utils/branch-logic';
 import { shouldDisplayDynamicGroup, shouldDisplayQuestion, shouldDisplayRow } from '@/utils/branch-logic';
 import type { SaveAdminEditPayload } from '@/features/survey-response/domain/response-edit';
-import type { TestAttemptIdentity } from '@/features/survey-response/domain/response';
+import type { TestAttemptIdentity } from '@/shared/types/test-attempt';
 
 import { sessionStorageKey } from './session-helpers';
 import {
@@ -217,7 +217,7 @@ export function useResponseLifecycle({
         // (placeholder 신호로 hash 충돌 발생을 방지하기 위함)
         client.surveyResponse.response.createWithFirstAnswer({
           surveyId: loadedSurvey.id,
-          sessionId,
+          sessionId: testIdentity?.sessionId ?? sessionId,
           versionId: versionId ?? null,
           questionId,
           value,
@@ -226,7 +226,7 @@ export function useResponseLifecycle({
           visibleStepTotal: visibleProgressRef.current.total,
           ...(inviteToken != null ? { inviteToken } : {}),
           ...(isTestSession && testToken != null ? { testToken } : {}),
-          ...(testIdentity ?? {}),
+          ...(testIdentity?.attemptId ? { attemptId: testIdentity.attemptId } : {}),
           clientSignals: signals,
           ...(honeypotRef.current?.value ? { honeypot: honeypotRef.current.value } : {}),
         })
@@ -394,12 +394,12 @@ export function useResponseLifecycle({
           // signalsRef.current 가 null 이면 그대로 전달 — server action 이 신호 기반 검사 skip
           const created = await client.surveyResponse.response.createBlank({
             surveyId: loadedSurvey.id,
-            sessionId,
+            sessionId: testIdentity?.sessionId ?? sessionId,
             versionId: versionId ?? null,
             currentStepId: stepIdOf(currentStep),
             ...(inviteToken != null ? { inviteToken } : {}),
             ...(isTestSession && testToken != null ? { testToken } : {}),
-            ...(testIdentity ?? {}),
+            ...(testIdentity?.attemptId ? { attemptId: testIdentity.attemptId } : {}),
             clientSignals: signals,
             ...(honeypotRef.current?.value ? { honeypot: honeypotRef.current.value } : {}),
           });

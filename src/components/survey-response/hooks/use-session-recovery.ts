@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 
 import { client } from '@/shared/lib/rpc';
@@ -75,6 +75,9 @@ export function useSessionRecovery({
   // handleResponse 의 INSERT 가드에서 참조해 recovery 완료 전 신규 INSERT 발사를 차단한다 (I-1).
   const [isRecovering, setIsRecovering] = useState(false);
   const [resumeMessage, setResumeMessage] = useState<string | null>(null);
+  type ResumeResult = Awaited<ReturnType<typeof client.surveyResponse.lifecycle.resume>>;
+  const resumeRequestRef = useRef<{ key: string; promise: Promise<ResumeResult> } | null>(null);
+  const requestGenerationRef = useRef(0);
 
   // 운영 현황 콘솔(T6): localStorage 기반 응답 회복.
   // - 진입 시 1회 실행 (loadedSurvey 로드 완료 + currentResponseId 가 아직 null 일 때)
@@ -83,6 +86,11 @@ export function useSessionRecovery({
   // - 종결 상태이거나 orphan(DB row 없음)이면 키 정리
   // - dep array에 sessionId 자체는 넣지 않는다 (saved 값을 effect 내부에서 직접 set → 무한 루프 방지)
   useEffect(() => {
+    const generation = ++requestGenerationRef.current;
+    let cancelled = false;
+    const isCurrentRequest = () =>
+      !cancelled && requestGenerationRef.current === generation;
+
     // admin-edit 분기 (4/8) — localStorage 회복은 응답자 세션 전용이므로 건너뜀.
     if (isAdminEdit || isPreview) return;
     if (!loadedSurvey || currentResponseId !== null) return;
@@ -95,13 +103,29 @@ export function useSessionRecovery({
     // 원본(survey-response-flow) 의 회복 effect 와 동일하게 진입 직후 동기 set.
     // resume RPC await 동안 isRecovering=true 로 handleResponse INSERT 가드(I-1)를 막는다.
     setIsRecovering(true);
-    client.surveyResponse.lifecycle.resume({
-      surveyId: loadedSurvey.id,
-      sessionId: recoverySessionId,
-      ...(inviteToken != null ? { inviteToken } : {}),
-      ...(isTestSession && testToken != null ? { testToken } : {}),
-    })
+    const requestKey = JSON.stringify([
+      loadedSurvey.id,
+      recoverySessionId,
+      inviteToken,
+      isTestSession ? testToken : null,
+    ]);
+    let request = resumeRequestRef.current;
+    if (!request || request.key !== requestKey) {
+      request = {
+        key: requestKey,
+        promise: client.surveyResponse.lifecycle.resume({
+          surveyId: loadedSurvey.id,
+          sessionId: recoverySessionId,
+          ...(inviteToken != null ? { inviteToken } : {}),
+          ...(isTestSession && testToken != null ? { testToken } : {}),
+        }),
+      };
+      resumeRequestRef.current = request;
+    }
+
+    request.promise
       .then((result) => {
+        if (!isCurrentRequest()) return;
         if (!result) {
           // localStorage 키는 있는데 DB에 row 없음 — orphan, 정리
           window.localStorage.removeItem(key);
@@ -116,8 +140,11 @@ export function useSessionRecovery({
         }
         // 응답 row 사용 — sessionId 를 saved 값으로 갱신해 DB row 와 일치시킨다
         if (!isTargetTestSession) setSessionId(recoverySessionId);
-        setCurrentResponseId(result.id);
         if (isTargetTestSession) setResponses?.(result.questionResponses ?? {});
+        // Zustand currentResponseId 갱신은 이 effect cleanup을 동기 유발할 수 있다.
+        // 먼저 recovery gate를 닫아 stale finally가 무시돼도 true가 남지 않게 한다.
+        setIsRecovering(false);
+        setCurrentResponseId(result.id);
         // 회복 직후 새 visit 열기 — recordStepVisit은 동일 step 재진입 시 no-op이라 의존 불가.
         if (!isTargetTestSession) sendVisibilitySegment(result.id, 'show');
         // 회복된 경우(drop → in_progress)만 토스트
@@ -126,6 +153,7 @@ export function useSessionRecovery({
         }
       })
       .catch(async (err) => {
+        if (!isCurrentRequest()) return;
         // 진입 시점에 이미 중단됐다면 resume 이 survey_paused throw → 중단 화면으로 전환.
         // (통상은 control.isPaused 렌더 게이트가 먼저 막지만, 채널을 일치시켜 둔다.)
         if (
@@ -134,17 +162,29 @@ export function useSessionRecovery({
             surveyId: loadedSurvey.id,
             testToken,
             isTestSession,
-            setDuplicateStatus,
-            setPausedMessage,
+            setDuplicateStatus: (value) => {
+              if (isCurrentRequest()) setDuplicateStatus(value);
+            },
+            ...(setPausedMessage
+              ? {
+                  setPausedMessage: (value: SetStateAction<string | null>) => {
+                    if (isCurrentRequest()) setPausedMessage(value);
+                  },
+                }
+              : {}),
           })
         ) {
           return;
         }
+        if (!isCurrentRequest()) return;
         console.error('응답 회복 실패:', err);
       })
       .finally(() => {
-        setIsRecovering(false);
+        if (isCurrentRequest()) setIsRecovering(false);
       });
+    return () => {
+      cancelled = true;
+    };
     // deps 는 원본과 1:1 동일. setSessionId 는 안정적 setter 라 의도적으로 제외(원본 동일),
     // sessionId 도 effect 내부에서 직접 set 하므로 deps 미포함(무한 루프 방지).
     // testToken/isTestSession 은 세션 동안 안정적이나 클로저 정합을 위해 deps 에 포함한다.

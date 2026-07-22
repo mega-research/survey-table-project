@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
 
 import { useRouter } from 'next/navigation';
 
@@ -36,6 +37,7 @@ import { useDuplicateGuard } from '@/components/survey-response/hooks/use-duplic
 import { useResponseLifecycle } from '@/components/survey-response/hooks/use-response-lifecycle';
 import { useResponseTelemetry } from '@/components/survey-response/hooks/use-response-telemetry';
 import { useSessionRecovery } from '@/components/survey-response/hooks/use-session-recovery';
+import { sessionStorageKey } from '@/components/survey-response/hooks/session-helpers';
 import { useSurveyLoader } from '@/components/survey-response/hooks/use-survey-loader';
 import { ResumeToast } from '@/components/survey-response/resume-toast';
 import { generateId } from '@/lib/utils';
@@ -160,7 +162,48 @@ function buildOptTextsPayload(
   };
 }
 
-export function SurveyResponseFlow({
+interface SurveyResponseFlowActiveProps {
+  flowProps: SurveyResponseFlowProps;
+  loader: Omit<ReturnType<typeof useSurveyLoader>, 'loadedSurvey'> & { loadedSurvey: Survey };
+  responses: ResponsesMap;
+  setResponses: Dispatch<SetStateAction<ResponsesMap>>;
+}
+
+/**
+ * URL 응답 identity 경계.
+ *
+ * 같은 React 인스턴스에서 invite/test token이 바뀌어도 key로 전체 응답 세션을 교체한다.
+ * 자식 훅이 mount되기 전에 Zustand 응답 상태를 동기 정리하므로 이전 대상자의
+ * currentResponseId를 새 대상자의 create/complete 경로가 관찰할 수 없다.
+ */
+export function SurveyResponseFlow(props: SurveyResponseFlowProps) {
+  const identityKey = [
+    props.mode ?? 'public',
+    props.surveyIdentifier,
+    props.inviteToken ?? '',
+    props.testToken ?? '',
+  ].join('\u0000');
+
+  return <SurveyResponseIdentityBoundary key={identityKey} flowProps={props} />;
+}
+
+function SurveyResponseIdentityBoundary({ flowProps }: { flowProps: SurveyResponseFlowProps }) {
+  const [ready, setReady] = useState(false);
+
+  useLayoutEffect(() => {
+    useSurveyResponseStore.getState().resetResponseState();
+    // identity 전환 commit에서 store 정리가 끝난 뒤에만 실제 응답 훅 트리를 mount한다.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setReady(true);
+    return () => {
+      useSurveyResponseStore.getState().resetResponseState();
+    };
+  }, []);
+
+  return ready ? <SurveyResponseFlowControl {...flowProps} /> : <SurveyLoadingScreen />;
+}
+
+function SurveyResponseFlowControl({
   surveyIdentifier,
   inviteToken: inviteTokenProp = null,
   testToken: testTokenProp = null,
@@ -178,6 +221,102 @@ export function SurveyResponseFlow({
   const inviteToken = isAdminEdit || isPreview ? null : inviteTokenProp ?? null;
   // ?test=<token> — invite 와 동일하게 admin-edit/preview 에서는 무시(중단/무효 링크 게이트 비대상).
   const testToken = isAdminEdit || isPreview ? null : testTokenProp ?? null;
+  const [responses, setResponses] = useState<ResponsesMap>({});
+  const clearResponses = useCallback(() => setResponses({}), []);
+  const loader = useSurveyLoader({
+    identifier,
+    isAdminEdit,
+    isPreview,
+    adminContext,
+    previewContext,
+    inviteToken,
+    testToken,
+    setResponses,
+  });
+
+  if (loader.isLoading) return <SurveyLoadingScreen />;
+  if (loader.showInviteRequired) return <InviteRequiredScreen />;
+  if (loader.control?.testSession === 'invalid') {
+    return (
+      <InvalidTestLinkGate
+        surveyId={loader.loadedSurvey?.id}
+        inviteToken={inviteToken}
+        clearResponses={clearResponses}
+      />
+    );
+  }
+
+  const isTestSession = loader.control?.testSession === 'valid';
+  if (loader.control?.isPaused && !isTestSession) {
+    return (
+      <AlreadyRespondedView
+        reason="survey_paused"
+        surveyTitle={loader.loadedSurvey?.title ?? ''}
+        contactEmail={loader.loadedSurvey?.contactEmail ?? null}
+        customBody={loader.control.pausedMessage ?? DEFAULT_PAUSED_MESSAGE}
+      />
+    );
+  }
+  if (loader.loadError || !loader.loadedSurvey) {
+    return <SurveyErrorScreen loadError={loader.loadError} onGoHome={() => router.push('/')} />;
+  }
+
+  return (
+    <SurveyResponseFlowActive
+      flowProps={{
+        surveyIdentifier,
+        inviteToken: inviteTokenProp,
+        testToken: testTokenProp,
+        mode,
+        ...(adminContext ? { adminContext } : {}),
+        ...(previewContext ? { previewContext } : {}),
+      }}
+      loader={{ ...loader, loadedSurvey: loader.loadedSurvey }}
+      responses={responses}
+      setResponses={setResponses}
+    />
+  );
+}
+
+function InvalidTestLinkGate({
+  surveyId,
+  inviteToken,
+  clearResponses,
+}: {
+  surveyId: string | undefined;
+  inviteToken: string | null;
+  clearResponses: () => void;
+}) {
+  useLayoutEffect(() => {
+    if (surveyId) window.localStorage.removeItem(sessionStorageKey(surveyId, inviteToken));
+    useSurveyResponseStore.getState().resetResponseState();
+    clearResponses();
+  }, [surveyId, inviteToken, clearResponses]);
+
+  return <InvalidTestLinkScreen />;
+}
+
+function SurveyResponseFlowActive({
+  flowProps: {
+    inviteToken: inviteTokenProp = null,
+    testToken: testTokenProp = null,
+    mode = 'public',
+    adminContext,
+  },
+  loader: {
+    loadedSurvey,
+    contactAttrs,
+    versionId,
+    control,
+  },
+  responses,
+  setResponses,
+}: SurveyResponseFlowActiveProps) {
+  const router = useRouter();
+  const isAdminEdit = mode === 'admin-edit';
+  const isPreview = mode === 'preview';
+  const inviteToken = isAdminEdit || isPreview ? null : inviteTokenProp ?? null;
+  const testToken = isAdminEdit || isPreview ? null : testTokenProp ?? null;
   const [inviteIsInvalid, setInviteIsInvalid] = useState(false);
 
   // 응답 스토어 — 액션만 셀렉트 (전체 구독 → 불필요 리렌더 방지)
@@ -190,31 +329,6 @@ export function SurveyResponseFlow({
       })),
     );
   const currentResponseId = useSurveyResponseStore((s) => s.currentResponseId);
-
-  // responses 는 loader prefill(admin-edit) + handleResponse/handleSubmit 가 공유하므로
-  // 컴포넌트가 소유한다. loader 가 setResponses 를 인자로 받기 위해 loader 호출보다 먼저 선언.
-  const [responses, setResponses] = useState<ResponsesMap>({});
-
-  // 설문 로딩 상태 — loadedSurvey/loadError/isLoading/contactAttrs/showInviteRequired/versionId
-  // 와 설문 로딩 effect 를 useSurveyLoader 로 추출 (세터가 loader effect 전용이라 훅이 소유).
-  const {
-    isLoading,
-    loadedSurvey,
-    loadError,
-    contactAttrs,
-    showInviteRequired,
-    versionId,
-    control,
-  } = useSurveyLoader({
-    identifier,
-    isAdminEdit,
-    isPreview,
-    adminContext,
-    previewContext,
-    inviteToken,
-    testToken,
-    setResponses,
-  });
 
   // 유효 테스트 세션 — 중단 게이트 우회 + 중복검사 skip + create/resume 에 testToken 전달.
   const isTestSession = control?.testSession === 'valid';
@@ -611,29 +725,6 @@ export function SurveyResponseFlow({
     return () => window.removeEventListener('beforeunload', handler);
   }, [isPreview, hasResponses, isCompleted]);
 
-  // 차단 화면 — requireInviteToken=true 인데 invite 없거나 무효
-  if (showInviteRequired) {
-    return <InviteRequiredScreen />;
-  }
-
-  // 무효 테스트 링크 — 익명 폴백 없이 차단 (스펙 결정 5). control 은 public 경로에서만 채워지므로
-  // admin-edit/preview 는 이 분기에 도달하지 않는다.
-  if (control?.testSession === 'invalid') {
-    return <InvalidTestLinkScreen />;
-  }
-
-  // 중단 모드 — 테스트 세션만 통과 (스펙 결정 4)
-  if (control?.isPaused && !isTestSession) {
-    return (
-      <AlreadyRespondedView
-        reason="survey_paused"
-        surveyTitle={loadedSurvey?.title ?? ''}
-        contactEmail={loadedSurvey?.contactEmail ?? null}
-        customBody={control.pausedMessage ?? DEFAULT_PAUSED_MESSAGE}
-      />
-    );
-  }
-
   // 중복 검사 진행 중
   if (duplicateStatus.kind === 'checking') {
     return (
@@ -662,16 +753,6 @@ export function SurveyResponseFlow({
         }
       />
     );
-  }
-
-  // 로딩 중
-  if (isLoading) {
-    return <SurveyLoadingScreen />;
-  }
-
-  // 에러 발생
-  if (loadError || !loadedSurvey) {
-    return <SurveyErrorScreen loadError={loadError} onGoHome={() => router.push('/')} />;
   }
 
   if (questions.length === 0 || steps.length === 0 || !currentStep) {

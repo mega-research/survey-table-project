@@ -2,8 +2,10 @@ import * as z from 'zod';
 
 import type { SurveyResponse } from '@/db/schema';
 import type { BlockReason, ClientSignals } from '@/lib/duplicate-detection/types';
+import type { TestAttemptIdentity } from '@/shared/types/test-attempt';
 
 export type { SurveyResponse, BlockReason, ClientSignals };
+export type { TestAttemptIdentity } from '@/shared/types/test-attempt';
 
 /**
  * 클라이언트 신호. lib/duplicate-detection/types.ts 의 ClientSignals 형태를 그대로 모델링.
@@ -34,10 +36,11 @@ export const TestAttemptIdentityFields = {
   attemptId: z.string().uuid().optional(),
   sessionId: z.string().optional(),
 } as const;
-export type TestAttemptIdentity = {
-  attemptId?: string;
-  sessionId?: string;
-};
+
+// zod 전송 필드와 shared 정적 계약의 드리프트를 컴파일 단계에서 막는다.
+type _TestAttemptIdentityContract = z.infer<z.ZodObject<typeof TestAttemptIdentityFields>>;
+const _testAttemptIdentityContract: TestAttemptIdentity = {} as _TestAttemptIdentityContract;
+void _testAttemptIdentityContract;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // startResponse

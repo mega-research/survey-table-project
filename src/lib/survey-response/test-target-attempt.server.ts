@@ -11,13 +11,9 @@ import {
   testResponseAttempts,
 } from '@/db/schema';
 import type { PageVisit } from '@/db/schema/schema-types';
+import type { TestAttemptIdentity } from '@/shared/types/test-attempt';
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
-
-export interface TestAttemptIdentity {
-  attemptId?: string | undefined;
-  sessionId?: string | undefined;
-}
 
 export interface AcquireTestTargetResponseInput {
   surveyId: string;

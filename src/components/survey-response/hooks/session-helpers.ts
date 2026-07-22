@@ -1,4 +1,4 @@
-import type { TestAttemptIdentity } from '@/features/survey-response/domain/response';
+import type { TestAttemptIdentity } from '@/shared/types/test-attempt';
 
 /**
  * survey-response-flow 의 세션/세그먼트 헬퍼.

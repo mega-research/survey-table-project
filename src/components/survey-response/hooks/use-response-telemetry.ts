@@ -3,7 +3,7 @@ import type { RefObject } from 'react';
 
 import { client } from '@/shared/lib/rpc';
 import { type RenderStep, stepIdOf } from '@/lib/group-ordering';
-import type { TestAttemptIdentity } from '@/features/survey-response/domain/response';
+import type { TestAttemptIdentity } from '@/shared/types/test-attempt';
 
 import { sendVisibilitySegment } from './session-helpers';
 
