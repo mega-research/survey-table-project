@@ -173,8 +173,7 @@ const SORT_COL_MAP: Record<Exclude<ProgressSortKey, `meta:${string}`>, string> =
  * 클로징 정의 W∪A: survey_responses.is_completed=true OR
  * contact_attempts.result_code='1.조사완료'. EXISTS 두 번.
  *
- * NULL group_value 는 대상자별 독립 행으로 표시하고 '(미분류)' 라벨을 사용.
- * 명시적 group_value 가 있는 행만 같은 그룹으로 집계한다.
+ * NULL group_value 는 '(미분류)' 라벨로 표시하고 하나의 그룹으로 집계한다.
  *
  * 구현 노트: PostgreSQL 은 ORDER BY 절의 expression 안에서 SELECT alias 를
  * 참조할 수 없음 (`ORDER BY (completed_count / list_count)` 같은 형태는
@@ -230,9 +229,7 @@ export async function getProgressRows(args: GetProgressRowsArgs): Promise<Progre
       WHERE ct.survey_id = ${surveyId}
         AND ct.is_test = ${isTest}
         AND ${filterSql}
-        -- 그룹 값이 명시된 행은 값으로 묶고, 미지정 행은 대상자별로 분리한다.
-        GROUP BY ct.group_value,
-          CASE WHEN ct.group_value IS NULL THEN ct.id::text ELSE NULL END
+        GROUP BY ct.group_value
     ) sub
     ORDER BY ${sortExpr} ${dirSql} NULLS LAST, group_value_raw NULLS LAST
     LIMIT ${size} OFFSET ${offset}
@@ -262,9 +259,9 @@ export async function getProgressRows(args: GetProgressRowsArgs): Promise<Progre
  * group_count 는 `getProgressRows` 의 `GROUP BY ct.group_value` (raw 컬럼) 과
  * 정확히 일치해야 한다 (footer "총 N개 그룹" + 페이지네이션 total 근거).
  *
- * 명시적 group_value 는 COUNT(DISTINCT) 로 세고, 미지정 대상자는 행마다 1개로 센다.
- * COALESCE(...,'(미분류)') 를 DISTINCT 안에서 쓰지 않아 리터럴 '(미분류)' 그룹과
- * 미지정 대상자 행을 서로 합치지 않는다.
+ * COUNT(DISTINCT ct.group_value) (NULL 제외)에 미지정 그룹이 있으면 1개를 더한다.
+ * COALESCE(...,'(미분류)') 를 DISTINCT 안에서 쓰면 리터럴 '(미분류)'와 NULL이
+ * 합쳐지므로 사용하지 않는다.
  */
 export async function getProgressTotals(
   surveyId: string,
@@ -280,7 +277,7 @@ export async function getProgressTotals(
   const result = await db.execute(sql`
     SELECT
       (COUNT(DISTINCT ct.group_value)
-        + COUNT(*) FILTER (WHERE ct.group_value IS NULL))::int AS group_count,
+        + (CASE WHEN COUNT(*) FILTER (WHERE ct.group_value IS NULL) > 0 THEN 1 ELSE 0 END))::int AS group_count,
       COUNT(*) FILTER (WHERE NOT (${excludeFilter}))::int AS list_total,
       COUNT(*) FILTER (WHERE (${closingFilter}) AND NOT (${excludeFilter}))::int AS completed_total,
       COUNT(*) FILTER (WHERE ${excludeFilter})::int AS excluded_total

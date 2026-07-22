@@ -55,12 +55,12 @@ function executeMock(sqlObj: unknown): unknown[] {
 
   // getProgressTotals SQL — group_count + list_total + completed_total + excluded_total
   if (raw.includes('group_count') && raw.includes('excluded_total')) {
-    // group_count 는 getProgressRows 의 그룹 키와 일치해야 한다:
-    // 명시적 group_value 는 값으로 묶고 NULL 대상자는 각 행을 별도 그룹으로 센다.
+    // group_count 는 getProgressRows 의 GROUP BY ct.group_value (raw) 와 일치해야 한다:
+    // COUNT(DISTINCT group_value) (NULL 제외) + NULL 그룹 존재 시 +1.
     const distinctGroups = new Set<string>(
       state.contacts.filter((c) => c.groupValue != null).map((c) => c.groupValue as string),
     );
-    const nullGroupCount = state.contacts.filter((c) => c.groupValue == null).length;
+    const hasNullGroup = state.contacts.some((c) => c.groupValue == null);
     const listTotal = state.contacts.filter((c) => !isExcluded(c)).length;
     const completedTotal = state.contacts.filter(
       (c) => isClosing(c) && !isExcluded(c),
@@ -68,7 +68,7 @@ function executeMock(sqlObj: unknown): unknown[] {
     const excludedTotal = state.contacts.filter((c) => isExcluded(c)).length;
     return [
       {
-        group_count: distinctGroups.size + nullGroupCount,
+        group_count: distinctGroups.size + (hasNullGroup ? 1 : 0),
         list_total: listTotal,
         completed_total: completedTotal,
         excluded_total: excludedTotal,
@@ -80,7 +80,7 @@ function executeMock(sqlObj: unknown): unknown[] {
   if (raw.includes('group_label') && raw.includes('excluded_count')) {
     const byGroup = new Map<string | null, SeedContact[]>();
     for (const c of state.contacts) {
-      const key = c.groupValue == null ? `__null:${c.id}` : c.groupValue;
+      const key = c.groupValue;
       const arr = byGroup.get(key) ?? [];
       arr.push(c);
       byGroup.set(key, arr);
@@ -244,7 +244,6 @@ describe('getProgressTotals — negative exclusion', () => {
     setup(['1.조사완료'], ['수신거부'], [
       { groupValue: 'A' },
       { groupValue: null },          // NULL 그룹
-      { groupValue: null },          // 또 다른 미지정 대상자 — 별도 행
       { groupValue: '(미분류)' },     // 리터럴 (미분류) 그룹 — NULL 과 별개
     ]);
     const totals = await getProgressTotals(SURVEY_ID, 'real', null);
@@ -258,8 +257,8 @@ describe('getProgressTotals — negative exclusion', () => {
       dir: 'asc',
       metaKeys: [],
     });
-    // A + 미지정 대상자 2건 + 리터럴 (미분류) = 4개 그룹
-    expect(rows).toHaveLength(4);
+    // A + NULL + 리터럴 (미분류) = 3개 그룹
+    expect(rows).toHaveLength(3);
     expect(totals.groupCount).toBe(rows.length);
   });
 });

@@ -49,7 +49,7 @@ function formatRate(completed: number, list: number): string {
  * - meta 컬럼은 surveys.progress_columns 스킴에 따라 동적으로 렌더링.
  *   그룹 라벨 컬럼은 자동 노출하지 않음 — 컬럼 설정에서 hidden=false 한 키만 메타로 표시.
  * - 응답률은 임계값(toneFromRate)에 따라 색상 pill 로 표기.
- * - groupValueRaw=null('(미분류)') 행은 firstResid 를 포함해 대상자별 key 를 유지.
+ * - groupValueRaw=null('(미분류)') 도 안정적인 row key 유지.
  */
 export function ProgressTable({
   rows,
@@ -138,10 +138,7 @@ export function ProgressTable({
             const tone = toneFromRate(r.completedCount, r.listCount);
             const rate = formatRate(r.completedCount, r.listCount);
             return (
-              <tr
-                key={`${r.groupValueRaw ?? '__null__'}:${r.firstResid ?? '__no_resid__'}`}
-                className="hover:bg-slate-50"
-              >
+              <tr key={r.groupValueRaw ?? '__null__'} className="hover:bg-slate-50">
                 <td className={cn(ALIGN_CLASS.right, 'px-3 py-2 tabular-nums text-slate-500')}>
                   {r.firstResid ?? <span className="text-slate-300">—</span>}
                 </td>
