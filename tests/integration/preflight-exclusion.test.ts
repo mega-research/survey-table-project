@@ -228,6 +228,7 @@ describe('preflightRecipients — excludedByCode 분기', () => {
     const idExcluded = seedContact({ withEmail: true, attempts: ['수신거부'] });
     const result = await preflightRecipients({
       surveyId: SURVEY_ID,
+      scope: 'real',
       selectedContactIds: [idValid, idExcluded],
     });
     expect(result.validIds).toEqual([idValid]);
@@ -245,6 +246,7 @@ describe('preflightRecipients — excludedByCode 분기', () => {
     });
     const result = await preflightRecipients({
       surveyId: SURVEY_ID,
+      scope: 'real',
       selectedContactIds: [id],
     });
     expect(result.unsubscribedIds).toEqual([id]);
@@ -257,6 +259,7 @@ describe('preflightRecipients — excludedByCode 분기', () => {
     const id = seedContact({ attempts: ['수신거부'] });
     const result = await preflightRecipients({
       surveyId: SURVEY_ID,
+      scope: 'real',
       selectedContactIds: [id],
     });
     expect(result.excludedByCodeIds).toEqual([id]);
@@ -281,6 +284,7 @@ describe('preflightRecipients — cipher 복호화 검증 (valid 과대보고 �
     const idOk = seedContact({ withEmail: true, emailPlain: 'real@x.com' });
     const result = await preflightRecipients({
       surveyId: SURVEY_ID,
+      scope: 'real',
       selectedContactIds: [idEmptyCipher, idOk],
     });
     expect(result.validIds).toEqual([idOk]);
@@ -294,6 +298,7 @@ describe('preflightRecipients — cipher 복호화 검증 (valid 과대보고 �
     const idWhitespace = seedContact({ withEmail: true, emailPlain: '   ' });
     const result = await preflightRecipients({
       surveyId: SURVEY_ID,
+      scope: 'real',
       selectedContactIds: [idWhitespace],
     });
     expect(result.emailMissingIds).toEqual([idWhitespace]);
@@ -304,6 +309,7 @@ describe('preflightRecipients — cipher 복호화 검증 (valid 과대보고 �
     const idCorrupt = seedContact({ withEmail: true, emailPlain: null });
     const result = await preflightRecipients({
       surveyId: SURVEY_ID,
+      scope: 'real',
       selectedContactIds: [idCorrupt],
     });
     expect(result.emailMissingIds).toEqual([idCorrupt]);
@@ -314,6 +320,7 @@ describe('preflightRecipients — cipher 복호화 검증 (valid 과대보고 �
     const id = seedContact({ withEmail: true, emailPlain: 'good@x.com' });
     const result = await preflightRecipients({
       surveyId: SURVEY_ID,
+      scope: 'real',
       selectedContactIds: [id],
     });
     expect(result.validIds).toEqual([id]);
@@ -342,6 +349,7 @@ describe('preflightRecipients — 멀티 email 컬럼 "첫 usable 컬럼" 폴백
     });
     const result = await preflightRecipients({
       surveyId: SURVEY_ID,
+      scope: 'real',
       selectedContactIds: [id],
     });
     expect(result.validIds).toEqual([id]);
@@ -358,6 +366,7 @@ describe('preflightRecipients — 멀티 email 컬럼 "첫 usable 컬럼" 폴백
     });
     const result = await preflightRecipients({
       surveyId: SURVEY_ID,
+      scope: 'real',
       selectedContactIds: [id],
     });
     expect(result.validIds).toEqual([id]);
@@ -374,6 +383,7 @@ describe('preflightRecipients — 멀티 email 컬럼 "첫 usable 컬럼" 폴백
     });
     const result = await preflightRecipients({
       surveyId: SURVEY_ID,
+      scope: 'real',
       selectedContactIds: [id],
     });
     expect(result.emailMissingIds).toEqual([id]);
@@ -390,6 +400,7 @@ describe('preflightRecipients — 멀티 email 컬럼 "첫 usable 컬럼" 폴백
     });
     const result = await preflightRecipients({
       surveyId: SURVEY_ID,
+      scope: 'real',
       selectedContactIds: [id],
     });
     expect(result.validIds).toEqual([id]);

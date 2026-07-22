@@ -28,7 +28,7 @@ export interface FirstContactSample {
  */
 export async function getFirstContactSample(
   surveyId: string,
-  scope: OperationsDataScope = 'real',
+  scope: OperationsDataScope,
 ): Promise<FirstContactSample | null> {
   const [row] = await db
     .select({

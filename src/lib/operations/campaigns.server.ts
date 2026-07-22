@@ -70,14 +70,14 @@ export interface ListCampaignsResult {
 
 export async function listCampaignsForSurvey(args: {
   surveyId: string;
-  scope?: OperationsDataScope;
+  scope: OperationsDataScope;
   page?: number;
   pageSize?: number;
 }): Promise<ListCampaignsResult> {
   const pageSize = args.pageSize ?? DEFAULT_PAGE_SIZE;
   const where = and(
     eq(mailCampaigns.surveyId, args.surveyId),
-    campaignScopeCondition(args.scope ?? 'real'),
+    campaignScopeCondition(args.scope),
     isNull(mailCampaigns.archivedAt),
   )!;
 
@@ -172,7 +172,7 @@ export interface CampaignDetail {
 export async function getCampaignDetail(
   surveyId: string,
   cid: string,
-  scope: OperationsDataScope = 'real',
+  scope: OperationsDataScope,
 ): Promise<CampaignDetail | null> {
   // count 쿼리는 부수 정보 — 실패해도 페이지 전체를 죽이지 않도록 0 fallback.
   // skipped_unsubscribed 상태는 발송 시도조차 없었으므로 "발송 대상 중 수신거부 응답"
@@ -274,9 +274,9 @@ export interface ListCampaignRecipientsResult {
 }
 
 export async function listCampaignRecipients(args: {
-  surveyId?: string;
+  surveyId: string;
   campaignId: string;
-  scope?: OperationsDataScope;
+  scope: OperationsDataScope;
   page?: number;
   pageSize?: number;
   status?: MailRecipientStatus | 'all';
@@ -285,8 +285,8 @@ export async function listCampaignRecipients(args: {
   const pageSize = args.pageSize ?? DEFAULT_PAGE_SIZE;
   const whereParts: SQL[] = [
     eq(mailRecipients.campaignId, args.campaignId),
-    eq(mailCampaigns.surveyId, args.surveyId ?? ''),
-    campaignScopeCondition(args.scope ?? 'real'),
+    eq(mailCampaigns.surveyId, args.surveyId),
+    campaignScopeCondition(args.scope),
     isNull(mailCampaigns.archivedAt),
     isNull(mailRecipients.archivedAt),
   ];
@@ -304,6 +304,7 @@ export async function listCampaignRecipients(args: {
   const [countRow] = await db
     .select({ total: sql<number>`count(*)::int` })
     .from(mailRecipients)
+    .innerJoin(mailCampaigns, eq(mailRecipients.campaignId, mailCampaigns.id))
     .where(where);
   const total = countRow?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -422,14 +423,14 @@ function buildNotExcludedByNegativeCode(negativeCodes: string[]): SQL {
  */
 function buildCandidateWhere(
   surveyId: string,
-  scope: OperationsDataScope | undefined,
+  scope: OperationsDataScope,
   clauses: FilterClause[],
   unrespondedOnly: boolean,
   negativeCodes: string[],
 ): SQL {
   const parts: SQL[] = [
     eq(contactTargets.surveyId, surveyId),
-    targetScopeCondition(scope ?? 'real'),
+    targetScopeCondition(scope),
     isNull(contactTargets.unsubscribedAt),
     HAS_EMAIL_PII,
     buildNotExcludedByNegativeCode(negativeCodes),
@@ -494,7 +495,7 @@ function buildCandidateOrderBy(sort: CampaignSortKey, dir: CampaignSortDir): SQL
 
 export async function previewCampaignCandidates(args: {
   surveyId: string;
-  scope?: OperationsDataScope;
+  scope: OperationsDataScope;
   clauses: FilterClause[];
   unrespondedOnly: boolean;
   sort?: CampaignSortKey;
@@ -506,7 +507,7 @@ export async function previewCampaignCandidates(args: {
   const { negative: negativeCodes } = await getResultCodeStatuses(args.surveyId);
   const where = buildCandidateWhere(
     args.surveyId,
-    args.scope ?? 'real',
+    args.scope,
     args.clauses,
     args.unrespondedOnly,
     negativeCodes,
@@ -556,14 +557,14 @@ export async function previewCampaignCandidates(args: {
 
 export async function countCampaignCandidates(args: {
   surveyId: string;
-  scope?: OperationsDataScope;
+  scope: OperationsDataScope;
   clauses: FilterClause[];
   unrespondedOnly: boolean;
 }): Promise<number> {
   const { negative: negativeCodes } = await getResultCodeStatuses(args.surveyId);
   const where = buildCandidateWhere(
     args.surveyId,
-    args.scope ?? 'real',
+    args.scope,
     args.clauses,
     args.unrespondedOnly,
     negativeCodes,
@@ -589,14 +590,14 @@ export interface UnsubscribedContactRow {
 
 export async function listUnsubscribedContacts(args: {
   surveyId: string;
-  scope?: OperationsDataScope;
+  scope: OperationsDataScope;
   page?: number;
   pageSize?: number;
 }): Promise<{ rows: UnsubscribedContactRow[]; total: number; page: number }> {
   const pageSize = args.pageSize ?? DEFAULT_PAGE_SIZE;
   const where = and(
     eq(contactTargets.surveyId, args.surveyId),
-    targetScopeCondition(args.scope ?? 'real'),
+    targetScopeCondition(args.scope),
     isNotNull(contactTargets.unsubscribedAt),
   )!;
 
@@ -653,7 +654,7 @@ export interface RecipientPreflightResult {
 
 export async function preflightRecipients(args: {
   surveyId: string;
-  scope?: OperationsDataScope;
+  scope: OperationsDataScope;
   selectedContactIds: string[];
 }): Promise<RecipientPreflightResult> {
   if (args.selectedContactIds.length === 0) {
@@ -688,7 +689,7 @@ export async function preflightRecipients(args: {
     .where(
       and(
         eq(contactTargets.surveyId, args.surveyId),
-        targetScopeCondition(args.scope ?? 'real'),
+        targetScopeCondition(args.scope),
         inArray(contactTargets.id, args.selectedContactIds),
       ),
     );

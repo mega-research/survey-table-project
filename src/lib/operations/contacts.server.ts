@@ -43,7 +43,7 @@ import {
 
 export interface ListContactsArgs {
   surveyId: string;
-  scope?: OperationsDataScope;
+  scope: OperationsDataScope;
   clauses: FilterClause[];
   page: number;
   sort: ContactsSortKey;
@@ -132,7 +132,7 @@ export async function listContactsForSurvey(
 
   const whereParts: SQL[] = [
     eq(contactTargets.surveyId, surveyId),
-    targetScopeCondition(scope ?? 'real'),
+    targetScopeCondition(scope),
   ];
 
   whereParts.push(buildContactsFilterSql(clauses));
@@ -236,7 +236,7 @@ export async function listContactUploads(surveyId: string): Promise<ContactUploa
 export const getContactColumnScheme = cache(
   async (
     surveyId: string,
-    scope: OperationsDataScope = 'real',
+    scope: OperationsDataScope,
   ): Promise<ContactColumnScheme | null> => {
     const [row] = await db
       .select({
@@ -322,7 +322,7 @@ export interface ContactDetailResult {
  */
 export async function getContactDetailById(
   id: string,
-  scope: OperationsDataScope = 'real',
+  scope: OperationsDataScope,
 ): Promise<ContactDetailResult | null> {
   const [contact] = await db
     .select({
@@ -409,7 +409,7 @@ export interface MailHistoryRow {
 /** 조사 대상에게 발송된 메일 수신 이력 (최근순). 캠페인 제목/회차 조인. */
 export async function getMailRecipientsForTarget(
   contactTargetId: string,
-  scope: OperationsDataScope = 'real',
+  scope: OperationsDataScope,
 ): Promise<MailHistoryRow[]> {
   return db
     .select({

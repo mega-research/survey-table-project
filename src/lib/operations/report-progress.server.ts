@@ -104,7 +104,7 @@ export const getProgressColumnScheme = cache(
  */
 export const getProgressGroupLabel = cache(async (
   surveyId: string,
-  scope: OperationsDataScope = 'real',
+  scope: OperationsDataScope,
 ): Promise<string> => {
   // 실제 저장된 group_value 로 attrs 키 역추론 (write-side 가 어떤 컬럼을 group 으로 썼든 일관)
   const rows = await db
@@ -150,7 +150,7 @@ export const getProgressGroupLabel = cache(async (
 
 export interface GetProgressRowsArgs {
   surveyId: string;
-  scope?: OperationsDataScope;
+  scope: OperationsDataScope;
   condition: FilterCondition | null;
   page: number;
   size: number;
@@ -185,7 +185,7 @@ const SORT_COL_MAP: Record<Exclude<ProgressSortKey, `meta:${string}`>, string> =
  * 참조 (meta_0..meta_N) 만 raw 임베드 — 사용자 입력이 SQL 에 직접 박히지 않음.
  */
 export async function getProgressRows(args: GetProgressRowsArgs): Promise<ProgressRow[]> {
-  const { surveyId, scope = 'real', condition, page, size, sort, dir, metaKeys } = args;
+  const { surveyId, scope, condition, page, size, sort, dir, metaKeys } = args;
   const offset = Math.max(0, (page - 1) * size);
   const isTest = testFlagForScope(scope);
 
@@ -265,11 +265,9 @@ export async function getProgressRows(args: GetProgressRowsArgs): Promise<Progre
  */
 export async function getProgressTotals(
   surveyId: string,
-  scopeOrCondition: OperationsDataScope | FilterCondition | null,
-  maybeCondition?: FilterCondition | null,
+  scope: OperationsDataScope,
+  condition: FilterCondition | null,
 ): Promise<ProgressTotals> {
-  const scope = typeof scopeOrCondition === 'string' ? scopeOrCondition : 'real';
-  const condition = typeof scopeOrCondition === 'string' ? maybeCondition ?? null : scopeOrCondition;
   const isTest = testFlagForScope(scope);
   const { positive: positiveCodes, negative: negativeCodes } =
     await getResultCodeStatuses(surveyId);

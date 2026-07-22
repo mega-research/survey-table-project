@@ -53,7 +53,11 @@ run('삭제된 대상자의 캠페인 수신자 보존', () => {
 
     await db.delete(contactTargets).where(eq(contactTargets.id, targetId));
 
-    const result = await listCampaignRecipients({ campaignId });
+    const result = await listCampaignRecipients({
+      surveyId,
+      campaignId,
+      scope: 'real',
+    });
 
     expect(result.total).toBe(1);
     expect(result.rows).toHaveLength(1);

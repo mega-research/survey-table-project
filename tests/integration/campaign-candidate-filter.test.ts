@@ -55,7 +55,12 @@ describe('countCampaignCandidates — 자동 제외 + clauses 결합', () => {
   });
 
   it('빈 clauses 여도 자동 제외(email PII / negative code)가 WHERE 에 포함된다', async () => {
-    await countCampaignCandidates({ surveyId: SURVEY_ID, clauses: [], unrespondedOnly: false });
+    await countCampaignCandidates({
+      surveyId: SURVEY_ID,
+      scope: 'real',
+      clauses: [],
+      unrespondedOnly: false,
+    });
     expect(state.lastWhereRaw).toContain('contact_pii'); // HAS_EMAIL_PII
     expect(state.lastWhereRaw).toContain('contact_attempts'); // negative code EXISTS
     expect(state.lastWhereRaw).toContain('result_code');
@@ -65,7 +70,12 @@ describe('countCampaignCandidates — 자동 제외 + clauses 결합', () => {
     const clauses: FilterClause[] = [
       { op: null, condition: { source: 'attrs.지역', mode: 'text', value: '서울' } },
     ];
-    await countCampaignCandidates({ surveyId: SURVEY_ID, clauses, unrespondedOnly: false });
+    await countCampaignCandidates({
+      surveyId: SURVEY_ID,
+      scope: 'real',
+      clauses,
+      unrespondedOnly: false,
+    });
     expect(state.lastWhereRaw).toContain('attrs');
     expect(state.lastWhereRaw).toContain('서울');
     // 자동 제외도 여전히 유지
@@ -76,7 +86,12 @@ describe('countCampaignCandidates — 자동 제외 + clauses 결합', () => {
     const clauses: FilterClause[] = [
       { op: null, condition: { source: 'system.web', mode: 'boolean', value: 'true' } },
     ];
-    await countCampaignCandidates({ surveyId: SURVEY_ID, clauses, unrespondedOnly: false });
+    await countCampaignCandidates({
+      surveyId: SURVEY_ID,
+      scope: 'real',
+      clauses,
+      unrespondedOnly: false,
+    });
     expect(state.lastWhereRaw).toContain('responded_at');
   });
 });

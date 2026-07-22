@@ -90,7 +90,7 @@ describe('getProgressGroupLabel — 그룹 헤더 라벨 결정성', () => {
       groupValue: '3월',
     };
 
-    const label = await getProgressGroupLabel(`${SURVEY_ID}-1`);
+    const label = await getProgressGroupLabel(`${SURVEY_ID}-1`, 'real');
     expect(label).toBe('개최 월');
   });
 
@@ -106,7 +106,7 @@ describe('getProgressGroupLabel — 그룹 헤더 라벨 결정성', () => {
       groupValue: '대상값',
     };
 
-    const label = await getProgressGroupLabel(`${SURVEY_ID}-2`);
+    const label = await getProgressGroupLabel(`${SURVEY_ID}-2`, 'real');
     expect(label).toBe('AAA 라벨');
   });
 
@@ -116,7 +116,7 @@ describe('getProgressGroupLabel — 그룹 헤더 라벨 결정성', () => {
     ]);
     state.firstContact = null;
 
-    const label = await getProgressGroupLabel(`${SURVEY_ID}-3`);
+    const label = await getProgressGroupLabel(`${SURVEY_ID}-3`, 'real');
     expect(label).toBe('그룹');
   });
 
@@ -130,7 +130,7 @@ describe('getProgressGroupLabel — 그룹 헤더 라벨 결정성', () => {
       groupValue: '부산모터쇼',
     };
 
-    const label = await getProgressGroupLabel(`${SURVEY_ID}-4`);
+    const label = await getProgressGroupLabel(`${SURVEY_ID}-4`, 'real');
     expect(label).toBe('전시회');
   });
 });
