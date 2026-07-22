@@ -34,3 +34,11 @@
 - 테스트 값의 반복된 `[TEST] ` 접두어를 정규화해 최종 접두어가 한 번만 남게 했다.
 - in-memory DB fake가 `survey_id`·`is_test`·선택 ID 집합을 실제 SQL parameter로 적용하고, 교차 설문·미선택 동일 scope 대상을 제외하는 회귀를 추가했다.
 - RED 2건을 확인한 뒤 집중 4파일 18건, 실DB 12파일 45건, 전체 320파일 2,620건+격리 14건을 통과했다. 실DB에서 scope별 동시 회차 발번과 mode flip의 `FOR SHARE` 직렬화를 검증했고, 신규 경쟁 파일은 단독 연속 3회 통과했다.
+
+## 재검토 후 경쟁 테스트 보강
+
+- 단순 `Promise.all` 동시 호출을 제거하고 첫 생성이 회차 발번과 캠페인 insert를 마친 뒤 result-code gate에서 멈추도록 했다. 두 번째 생성의 transaction backend PID를 별도로 포착하고, 첫 transaction PID가 두 번째 PID의 미승인 `advisory` lock blocker인지 `pg_blocking_pids`로 확인한 뒤 gate를 해제한다.
+- mode flip은 `max:1` 전용 postgres 연결의 backend PID를 먼저 얻은 뒤 UPDATE를 실행한다. DB 전체의 쿼리 문자열을 검색하지 않고 정확한 updater PID가 생성 transaction PID에 차단됐는지 확인한다.
+- 각 blocker 관찰에는 10초 timeout과 마지막 lock snapshot 오류를 두고, `finally`에서 gate 해제·진행 promise settle·spy 복구·전용 연결 종료를 수행한다. fixture는 UUID survey 단위 FK cascade 삭제로 정리한다.
+- RED: blocker 관찰 helper 미구현 오류로 두 경쟁 테스트가 각각 실패하는 것을 확인했다.
+- GREEN: 신규 경쟁 파일 단독 3회 연속 2건 통과, 전체 실DB 12파일 45건 통과, Task 9 관련 일반 테스트 4파일 18건 통과를 확인했다. 전체 `pnpm test`도 본 실행 320파일 2,620건과 격리 실행 1파일 14건이 모두 통과했다.
