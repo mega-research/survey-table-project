@@ -1,10 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// sanitizeAttrsAgainstPii 는 surveys 조회(DB)를 타므로 통과 stub.
-vi.mock('@/lib/contacts/scheme-helpers', () => ({
-  sanitizeAttrsAgainstPii: vi.fn(async (_surveyId: string, attrs: Record<string, string>) => attrs),
-}));
-
 vi.mock('@/lib/crypto/contact-pii-repo', () => ({
   upsertPiiValue: vi.fn(async () => undefined),
 }));

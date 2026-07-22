@@ -31,3 +31,12 @@
 - 업로드 가드는 초기 조회와 삭제 직전 잠금 재확인을 함께 사용해 UI 우회와 파싱 중 모드 전환을 모두 막는다.
 - `NOT_FOUND`는 존재 여부를 노출하지 않는 기존 범위 가드 정책에 맞춘다.
 - 전체 테스트 실패의 localStorage 환경 문제는 본 태스크 변경과 독립적이며 수정 범위 밖으로 남겼다.
+
+## 리뷰 수정
+
+- RED: 테스트 모드 대상자 수정 시 `testContactColumns`의 PII 키가 attrs 평문에 남는 회귀 테스트를 추가했고, `테스트담당자` 값이 그대로 저장되어 실패함을 확인했다.
+- GREEN: 설문 모드·실제/테스트 컬럼 스킴·대상 행을 같은 트랜잭션 잠금 스냅샷에서 확정하고, 해당 스킴으로 attrs를 sanitize하도록 잠금 helper 반환 계약을 확장했다.
+- 업로드 회귀 테스트: 초기 조회는 real이지만 삭제 직전 잠금 결과가 test이면 고정 문구로 거부하고 delete가 호출되지 않는지, real 경로는 delete 조건과 대상자 insert 값에 모두 `isTest=false`가 있는지 고정했다.
+- 타입 정리: 업로드 설문 잠금 raw result의 `as unknown as`를 제거하고 `SurveyModeRow extends Record<string, unknown>`와 `tx.execute<SurveyModeRow>`를 사용했다.
+- 집중 테스트: 4개 파일 26건 통과. `pnpm exec tsc --noEmit` 통과. `pnpm lint` 오류 0, 기존 경고 99건.
+- 전체 테스트: 314개 파일 2,530건 통과, 기존 `use-response-lifecycle.test.tsx` localStorage 환경 문제 13건 실패. 관련 변경의 추가 실패는 없다.

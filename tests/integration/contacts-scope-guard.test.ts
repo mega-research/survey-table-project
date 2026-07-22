@@ -20,18 +20,26 @@ const {
   deleteReturningQueue,
   selectResultQueue,
   capturedWheres,
+  capturedSets,
 } = vi.hoisted(() => ({
   updateReturningQueue: [] as unknown[][],
   deleteReturningQueue: [] as unknown[][],
   selectResultQueue: [] as unknown[][],
   capturedWheres: [] as unknown[],
+  capturedSets: [] as Array<Record<string, unknown>>,
 }));
 
 const upsertPiiValueMock = vi.fn(async () => undefined);
 
-vi.mock('@/lib/contacts/scheme-helpers', () => ({
-  sanitizeAttrsAgainstPii: vi.fn(async (_surveyId: string, attrs: Record<string, string>) => attrs),
-}));
+vi.mock('@/lib/contacts/scheme-helpers', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/contacts/scheme-helpers')>();
+  return {
+    ...actual,
+    sanitizeAttrsAgainstPii: vi.fn(
+      async (_surveyId: string, attrs: Record<string, string>) => attrs,
+    ),
+  };
+});
 
 vi.mock('@/lib/crypto/contact-pii-repo', () => ({
   upsertPiiValue: (...args: unknown[]) => upsertPiiValueMock(...(args as [])),
@@ -60,7 +68,10 @@ vi.mock('@/db', () => {
 
   function makeUpdateChain(): Record<string, unknown> {
     const chain: Record<string, unknown> = {};
-    chain['set'] = vi.fn(() => chain);
+    chain['set'] = vi.fn((values: Record<string, unknown>) => {
+      capturedSets.push(values);
+      return chain;
+    });
     chain['where'] = vi.fn((arg: unknown) => {
       capturedWheres.push(arg);
       return chain;
@@ -105,10 +116,48 @@ beforeEach(() => {
   deleteReturningQueue.length = 0;
   selectResultQueue.length = 0;
   capturedWheres.length = 0;
+  capturedSets.length = 0;
   upsertPiiValueMock.mockClear();
 });
 
 describe('updateContactTarget 설문 스코프', () => {
+  it('테스트 스코프 PII 컬럼을 attrs 평문에서 제거한다', async () => {
+    selectResultQueue.push(
+      [
+        {
+          enabled: true,
+          contactColumns: {
+            version: 1,
+            headerRow: 1,
+            columns: [{ key: '실제담당자', source: 'pii.실제담당자', piiType: 'representative' }],
+          },
+          testContactColumns: {
+            version: 1,
+            headerRow: 1,
+            columns: [{ key: '테스트담당자', source: 'pii.테스트담당자', piiType: 'representative' }],
+          },
+        },
+      ],
+      [{ id: 'ct-1' }],
+    );
+    updateReturningQueue.push([{ id: 'ct-1' }]);
+
+    await updateContactTarget({
+      id: 'ct-1',
+      surveyId: 'sv-1',
+      attrs: {
+        실제담당자: '실제 스킴 키',
+        테스트담당자: '평문 유출',
+        회사명: '아크미',
+      },
+    });
+
+    expect(capturedSets[0]?.['attrs']).toEqual({
+      실제담당자: '실제 스킴 키',
+      회사명: '아크미',
+    });
+  });
+
   it('현재 테스트 모드와 다른 실제 대상자는 수정하지 않고 NOT_FOUND로 처리한다', async () => {
     // 첫 읽기는 현재 설문 모드, 두 번째 읽기는 잠글 대상 행이다.
     selectResultQueue.push([{ enabled: true }], []);

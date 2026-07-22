@@ -3,10 +3,8 @@ import 'server-only';
 
 import { db } from '@/db';
 import { contactTargets, surveys } from '@/db/schema';
-import {
-  sanitizeAttrsAgainstPii,
-  sanitizeAttrsAgainstPiiScheme,
-} from '@/lib/contacts/scheme-helpers';
+import type { ContactColumnScheme } from '@/db/schema/schema-types';
+import { sanitizeAttrsAgainstPiiScheme } from '@/lib/contacts/scheme-helpers';
 import { upsertPiiValue } from '@/lib/crypto/contact-pii-repo';
 import { generateInviteCode } from '@/lib/survey-url';
 
@@ -29,9 +27,13 @@ type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 async function lockTargetInCurrentScope(
   tx: DbTransaction,
   input: { id: string; surveyId: string },
-): Promise<boolean> {
+): Promise<{ isTest: boolean; scheme: ContactColumnScheme | null }> {
   const [survey] = await tx
-    .select({ enabled: surveys.testModeEnabled })
+    .select({
+      enabled: surveys.testModeEnabled,
+      contactColumns: surveys.contactColumns,
+      testContactColumns: surveys.testContactColumns,
+    })
     .from(surveys)
     .where(eq(surveys.id, input.surveyId))
     .for('update');
@@ -51,7 +53,10 @@ async function lockTargetInCurrentScope(
     .for('update');
   if (!target) throw new Error('NOT_FOUND');
 
-  return isTest;
+  return {
+    isTest,
+    scheme: (isTest ? survey.testContactColumns : survey.contactColumns) ?? null,
+  };
 }
 
 /**
@@ -115,19 +120,19 @@ export async function addContactTarget(input: AddContactTargetInput): Promise<Co
 export async function updateContactTarget(input: UpdateContactTargetInput): Promise<void> {
   const { id, surveyId, attrs: rawAttrs, piiUpdates, memo, contactMethod, systemFieldKeys } = input;
 
-  // UI 우회로 PII 키가 attrs 에 섞여 들어오는 경우 차단 — 평문 누적 방지.
-  const attrs = await sanitizeAttrsAgainstPii(surveyId, rawAttrs);
-
-  // 분류 기준 키가 전달된 경우에만 group_value 재계산.
-  // systemFieldKeys.group 이 없으면(예: 자동 감지 실패) 기존 group_value 를 보존해야 함 —
-  // 무조건 set 하면 메모/PII 만 수정한 부분 업데이트에서 기존 분류값이 null 로 덮어써짐.
-  // 빈 셀('')만 NULL 처리. '0' 등 falsy 문자열 group 라벨은 보존 (|| 사용 금지).
-  const hasGroupKey = systemFieldKeys?.group != null;
-  const rawGroup = hasGroupKey ? attrs[systemFieldKeys.group as string] : undefined;
-  const groupValue = rawGroup != null && rawGroup !== '' ? rawGroup : null;
-
   await db.transaction(async (tx) => {
-    const isTest = await lockTargetInCurrentScope(tx, { id, surveyId });
+    const { isTest, scheme } = await lockTargetInCurrentScope(tx, { id, surveyId });
+    // 모드·대상 소속과 같은 잠금 스냅샷에서 확정한 스킴으로 PII 평문을 제거한다.
+    const attrs = sanitizeAttrsAgainstPiiScheme(rawAttrs, scheme);
+
+    // 분류 기준 키가 전달된 경우에만 group_value 재계산.
+    // systemFieldKeys.group 이 없으면(예: 자동 감지 실패) 기존 group_value 를 보존해야 함 —
+    // 무조건 set 하면 메모/PII 만 수정한 부분 업데이트에서 기존 분류값이 null 로 덮어써짐.
+    // 빈 셀('')만 NULL 처리. '0' 등 falsy 문자열 group 라벨은 보존 (|| 사용 금지).
+    const hasGroupKey = systemFieldKeys?.group != null;
+    const rawGroup = hasGroupKey ? attrs[systemFieldKeys.group as string] : undefined;
+    const groupValue = rawGroup != null && rawGroup !== '' ? rawGroup : null;
+
     // .returning() 길이로 영향 행 수를 판정한다. PII 재암호화(upsertPiiValue)는
     // 현재 모드의 행 소속이 확정된 뒤에만 일어나야 하므로 이 검증을 PII 부수효과보다 앞에 둔다.
     const updated = await tx
@@ -166,7 +171,7 @@ export async function updateContactTarget(input: UpdateContactTargetInput): Prom
 export async function deleteContactTarget(input: DeleteContactTargetInput): Promise<void> {
   const { id, surveyId } = input;
   await db.transaction(async (tx) => {
-    const isTest = await lockTargetInCurrentScope(tx, { id, surveyId });
+    const { isTest } = await lockTargetInCurrentScope(tx, { id, surveyId });
     const deleted = await tx
       .delete(contactTargets)
       .where(

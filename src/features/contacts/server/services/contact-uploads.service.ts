@@ -23,6 +23,10 @@ import type {
   ParseExcelPreviewResult,
 } from '../../domain/contact-upload';
 
+interface SurveyModeRow extends Record<string, unknown> {
+  test_mode_enabled: boolean;
+}
+
 function ensureXlsx(file: File): void {
   const err = validateXlsxFile(file);
   if (err) throw new Error(err);
@@ -118,12 +122,12 @@ export async function ingestContactUpload(
   const result = await db.transaction(async (tx) => {
     // 파싱 중 모드가 바뀐 race도 삭제 직전에 다시 막는다. 설문 행을 잠가 모드 전환과
     // 직렬화하고, 실제 대상자만 교체한다.
-    const scopeRows = (await tx.execute(sql`
+    const scopeRows = await tx.execute<SurveyModeRow>(sql`
       SELECT test_mode_enabled
       FROM surveys
       WHERE id = ${surveyId}::uuid
       FOR UPDATE
-    `)) as unknown as Array<{ test_mode_enabled: boolean }>;
+    `);
     const survey = scopeRows[0];
     if (!survey) throw new Error('설문을 찾을 수 없습니다.');
     if (survey.test_mode_enabled) {
