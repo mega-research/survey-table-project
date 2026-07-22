@@ -323,6 +323,118 @@ describe('대상자 테스트 응답 세션', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('회복 완료 후 제출 store reset이 되어도 정착된 결과를 다시 적용하지 않는다', async () => {
+    resume.mockResolvedValue({
+      id: 'response-1',
+      status: 'in_progress',
+      resumed: false,
+      questionResponses: { q1: '기존 답' },
+    });
+    const setResponses = vi.fn();
+    const setCurrentResponseId = vi.fn();
+    const base = {
+      isAdminEdit: false,
+      loadedSurvey: { id: 'survey-1' } as Survey,
+      inviteToken: 'invite-a',
+      testToken: null,
+      isTestSession: true,
+      isTargetTestSession: true,
+      sessionId: 'session-a',
+      setSessionId: vi.fn(),
+      setResponses,
+      setCurrentResponseId,
+      setDuplicateStatus: vi.fn(),
+    };
+
+    const initialProps: { currentResponseId: string | null; enabled: boolean } = {
+      currentResponseId: null,
+      enabled: true,
+    };
+    const { rerender } = renderHook(
+      (props: { currentResponseId: string | null; enabled: boolean }) =>
+        useSessionRecovery({ ...base, ...props }),
+      { initialProps },
+    );
+
+    await waitFor(() => expect(setCurrentResponseId).toHaveBeenCalledWith('response-1'));
+    rerender({ currentResponseId: 'response-1', enabled: false });
+    rerender({ currentResponseId: null, enabled: false });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(resume).toHaveBeenCalledTimes(1);
+    expect(setResponses).toHaveBeenCalledTimes(1);
+    expect(setCurrentResponseId).toHaveBeenCalledTimes(1);
+  });
+
+  it('완료나 terminal blocked 화면에서 recovery를 시작하지 않는다', () => {
+    resume.mockResolvedValue(null);
+    const base = {
+      isAdminEdit: false,
+      loadedSurvey: { id: 'survey-1' } as Survey,
+      currentResponseId: null,
+      inviteToken: 'invite-a',
+      testToken: null,
+      isTestSession: true,
+      isTargetTestSession: true,
+      sessionId: 'session-a',
+      setSessionId: vi.fn(),
+      setResponses: vi.fn(),
+      setCurrentResponseId: vi.fn(),
+      setDuplicateStatus: vi.fn(),
+    };
+
+    const { rerender } = renderHook(
+      (props: { enabled: boolean; terminalBlocked: boolean }) =>
+        useSessionRecovery({ ...base, ...props }),
+      { initialProps: { enabled: false, terminalBlocked: false } },
+    );
+    expect(resume).not.toHaveBeenCalled();
+
+    rerender({ enabled: true, terminalBlocked: true });
+    expect(resume).not.toHaveBeenCalled();
+  });
+
+  it('stale complete recovery 결과가 effect를 다시 렌더해도 cleanup을 반복하지 않는다', async () => {
+    resume.mockResolvedValue({
+      id: 'response-1',
+      status: 'completed',
+      resumed: false,
+      questionResponses: { q1: '이전 답' },
+    });
+    const setResponses = vi.fn();
+    const props = {
+      enabled: true,
+      terminalBlocked: false,
+      isAdminEdit: false,
+      loadedSurvey: { id: 'survey-1' } as Survey,
+      currentResponseId: null,
+      inviteToken: 'invite-a',
+      testToken: null,
+      isTestSession: true,
+      isTargetTestSession: true,
+      sessionId: 'session-a',
+      setSessionId: vi.fn(),
+      setResponses,
+      setCurrentResponseId: vi.fn(),
+      setDuplicateStatus: vi.fn(),
+    };
+
+    const { rerender } = renderHook(() => useSessionRecovery(props));
+    await waitFor(() => expect(setResponses).toHaveBeenCalledWith({}));
+    rerender();
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(resume).toHaveBeenCalledTimes(1);
+    expect(setResponses).toHaveBeenCalledTimes(1);
+    expect(stepVisit).not.toHaveBeenCalled();
+  });
+
   it('이전 identity의 지연된 resume 결과가 새 identity의 응답 상태를 덮지 않는다', async () => {
     const first = deferred<{
       id: string;
@@ -675,6 +787,106 @@ describe('대상자 테스트 응답 세션', () => {
       ),
     );
     await waitFor(() => expect(stepVisit).toHaveBeenCalledTimes(1));
+  });
+
+  it('복구된 target을 제출한 뒤 store reset이 recovery와 telemetry를 다시 열지 않는다', async () => {
+    const completing = deferred<undefined>();
+    bySlug.mockResolvedValue({ id: 'survey-1' });
+    forResponse.mockResolvedValue({
+      survey: targetSurvey,
+      versionId: 'version-1',
+      control: {
+        isPaused: false,
+        pausedMessage: null,
+        testSession: 'valid',
+        testSessionKind: 'target',
+      },
+    });
+    attrsLookup.mockResolvedValue({});
+    resume.mockResolvedValue({
+      id: 'response-1',
+      status: 'in_progress',
+      resumed: false,
+      questionResponses: { q1: '기존 답' },
+    });
+    createBlank.mockResolvedValue({
+      kind: 'created',
+      id: 'response-1',
+      contactTargetId: 'target-1',
+    });
+    complete.mockReturnValue(completing.promise);
+    stepVisit.mockResolvedValue(undefined);
+
+    render(
+      <SurveyResponseFlow
+        surveyIdentifier="target-survey"
+        inviteToken="invite-a"
+        testToken={null}
+      />,
+    );
+
+    expect(await screen.findByDisplayValue('기존 답')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '제출' }));
+    await waitFor(() => expect(createBlank).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(stepVisit).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      completing.resolve(undefined);
+      await completing.promise;
+    });
+    await waitFor(() => expect(useSurveyResponseStore.getState().currentResponseId).toBeNull());
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(resume).toHaveBeenCalledTimes(1);
+    expect(stepVisit).toHaveBeenCalledTimes(1);
+  });
+
+  it('복구된 target의 저장 중 무효 cleanup이 responseId와 telemetry를 다시 살리지 않는다', async () => {
+    bySlug.mockResolvedValue({ id: 'survey-1' });
+    forResponse.mockResolvedValue({
+      survey: targetSurvey,
+      versionId: 'version-1',
+      control: {
+        isPaused: false,
+        pausedMessage: null,
+        testSession: 'valid',
+        testSessionKind: 'target',
+      },
+    });
+    attrsLookup.mockResolvedValue({});
+    resume.mockResolvedValue({
+      id: 'response-1',
+      status: 'in_progress',
+      resumed: false,
+      questionResponses: { q1: '기존 답' },
+    });
+    createWithFirstAnswer.mockResolvedValue({
+      kind: 'blocked',
+      reason: 'invalid_test_token',
+    });
+
+    render(
+      <SurveyResponseFlow
+        surveyIdentifier="target-survey"
+        inviteToken="invite-a"
+        testToken={null}
+      />,
+    );
+
+    expect(await screen.findByDisplayValue('기존 답')).toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText('두 번째 답변'), {
+      target: { value: '새 입력' },
+    });
+    expect(
+      await screen.findByRole('heading', { name: '유효하지 않은 테스트 링크입니다' }),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(useSurveyResponseStore.getState().currentResponseId).toBeNull());
+
+    expect(resume).toHaveBeenCalledTimes(1);
+    expect(stepVisit).not.toHaveBeenCalled();
   });
 
   it('anonymous test 첫 입력 payload에는 attempt identity를 추가하지 않는다', async () => {

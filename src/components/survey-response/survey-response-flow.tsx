@@ -513,6 +513,8 @@ function SurveyResponseFlowActive({
   // useSessionRecovery 로 추출 (두 effect 등록 순서·deps 동일, 세터 전용이라 훅이 소유).
   // isRecovering 은 handleResponse 의 INSERT 가드(I-1)에서 참조한다.
   const { isRecovering, resumeMessage, dismissResume } = useSessionRecovery({
+    enabled: !isCompleted,
+    terminalBlocked: duplicateStatus.kind === 'blocked',
     isAdminEdit,
     isPreview,
     loadedSurvey,

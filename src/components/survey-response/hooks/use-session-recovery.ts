@@ -8,6 +8,10 @@ import { sendVisibilitySegment, sessionStorageKey } from './session-helpers';
 import { handlePausedMutationError, type DuplicateStatus } from './use-duplicate-guard';
 
 interface UseSessionRecoveryArgs {
+  /** false면 완료 등 종료 화면에서 recovery를 시작하거나 결과를 적용하지 않는다. */
+  enabled?: boolean;
+  /** 무효 테스트 링크나 중복·쿼터 등 terminal blocked 화면 여부. */
+  terminalBlocked?: boolean;
   isAdminEdit: boolean;
   isPreview?: boolean;
   loadedSurvey: Survey | null;
@@ -56,6 +60,8 @@ interface UseSessionRecoveryResult {
  *    떠 있는 동안 4초가 소진돼 메인 콘텐츠가 보일 땐 토스트가 이미 사라져 있었다.)
  */
 export function useSessionRecovery({
+  enabled = true,
+  terminalBlocked = false,
   isAdminEdit,
   isPreview = false,
   loadedSurvey,
@@ -76,7 +82,8 @@ export function useSessionRecovery({
   const [isRecovering, setIsRecovering] = useState(false);
   const [resumeMessage, setResumeMessage] = useState<string | null>(null);
   type ResumeResult = Awaited<ReturnType<typeof client.surveyResponse.lifecycle.resume>>;
-  const resumeRequestRef = useRef<{ key: string; promise: Promise<ResumeResult> } | null>(null);
+  const pendingResumeRequestsRef = useRef(new Map<string, Promise<ResumeResult>>());
+  const attemptedRecoveryKeysRef = useRef(new Set<string>());
   const requestGenerationRef = useRef(0);
 
   // 운영 현황 콘솔(T6): localStorage 기반 응답 회복.
@@ -92,7 +99,7 @@ export function useSessionRecovery({
       !cancelled && requestGenerationRef.current === generation;
 
     // admin-edit 분기 (4/8) — localStorage 회복은 응답자 세션 전용이므로 건너뜀.
-    if (isAdminEdit || isPreview) return;
+    if (!enabled || terminalBlocked || isAdminEdit || isPreview) return;
     if (!loadedSurvey || currentResponseId !== null) return;
 
     const key = sessionStorageKey(loadedSurvey.id, inviteToken);
@@ -100,30 +107,47 @@ export function useSessionRecovery({
     const recoverySessionId = savedSessionId ?? (isTargetTestSession ? sessionId : null);
     if (!recoverySessionId) return;
 
-    // 원본(survey-response-flow) 의 회복 effect 와 동일하게 진입 직후 동기 set.
-    // resume RPC await 동안 isRecovering=true 로 handleResponse INSERT 가드(I-1)를 막는다.
-    setIsRecovering(true);
     const requestKey = JSON.stringify([
       loadedSurvey.id,
       recoverySessionId,
       inviteToken,
       isTestSession ? testToken : null,
     ]);
-    let request = resumeRequestRef.current;
-    if (!request || request.key !== requestKey) {
-      request = {
-        key: requestKey,
-        promise: client.surveyResponse.lifecycle.resume({
-          surveyId: loadedSurvey.id,
-          sessionId: recoverySessionId,
-          ...(inviteToken != null ? { inviteToken } : {}),
-          ...(isTestSession && testToken != null ? { testToken } : {}),
-        }),
-      };
-      resumeRequestRef.current = request;
+    let request = pendingResumeRequestsRef.current.get(requestKey);
+    if (!request) {
+      // 같은 flow identity의 recovery는 hook 인스턴스 수명 동안 최초 1회만 허용한다.
+      // identity boundary remount는 새 ref를 만들므로 새 recovery를 시작할 수 있다.
+      if (attemptedRecoveryKeysRef.current.has(requestKey)) return;
+      attemptedRecoveryKeysRef.current.add(requestKey);
+      const rawRequest = client.surveyResponse.lifecycle.resume({
+        surveyId: loadedSurvey.id,
+        sessionId: recoverySessionId,
+        ...(inviteToken != null ? { inviteToken } : {}),
+        ...(isTestSession && testToken != null ? { testToken } : {}),
+      });
+      const trackedRequest = rawRequest.then(
+        (result) => {
+          if (pendingResumeRequestsRef.current.get(requestKey) === trackedRequest) {
+            pendingResumeRequestsRef.current.delete(requestKey);
+          }
+          return result;
+        },
+        (error: unknown) => {
+          if (pendingResumeRequestsRef.current.get(requestKey) === trackedRequest) {
+            pendingResumeRequestsRef.current.delete(requestKey);
+          }
+          throw error;
+        },
+      );
+      request = trackedRequest;
+      pendingResumeRequestsRef.current.set(requestKey, request);
     }
 
-    request.promise
+    // 원본(survey-response-flow) 의 회복 effect 와 동일하게 진입 직후 동기 set.
+    // resume RPC await 동안 isRecovering=true 로 handleResponse INSERT 가드(I-1)를 막는다.
+    setIsRecovering(true);
+
+    request
       .then((result) => {
         if (!isCurrentRequest()) return;
         if (!result) {
@@ -189,7 +213,7 @@ export function useSessionRecovery({
     // sessionId 도 effect 내부에서 직접 set 하므로 deps 미포함(무한 루프 방지).
     // testToken/isTestSession 은 세션 동안 안정적이나 클로저 정합을 위해 deps 에 포함한다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAdminEdit, isPreview, loadedSurvey, currentResponseId, setCurrentResponseId, inviteToken, testToken, isTestSession, isTargetTestSession, sessionId, setResponses]);
+  }, [enabled, terminalBlocked, isAdminEdit, isPreview, loadedSurvey, currentResponseId, setCurrentResponseId, inviteToken, testToken, isTestSession, isTargetTestSession, sessionId, setResponses]);
 
   // 토스트 dismiss 는 <ResumeToast> 가 자체 마운트 시점부터 4초 타이머로 호출한다.
   // 안정 참조라 ResumeToast 의 마운트 전용 effect deps 에서 안전하게 제외된다.
