@@ -5,7 +5,7 @@ const { getMock, applyMock } = vi.hoisted(() => ({
   applyMock: vi.fn(async () => true),
 }));
 
-const state: { stuck: Array<{ id: string; campaignId: string; status: string; resendMessageId: string | null }> } = {
+const state: { stuck: Array<{ id: string; campaignId: string; status: string; resendMessageId: string | null; archivedAt?: Date | null }> } = {
   stuck: [],
 };
 
@@ -76,6 +76,26 @@ describe('reconcileCampaignRecipients', () => {
     expect(applyMock).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({ recipientId: 'a', campaignId: 'c1', newStatus: 'delivered', prevStatus: 'sent' }),
+    );
+  });
+
+  it('보관된 recipient도 기존 message id로 상태를 계속 조정한다', async () => {
+    state.stuck = [{
+      id: 'archived',
+      campaignId: 'c1',
+      status: 'sent',
+      resendMessageId: 'message-archived',
+      archivedAt: new Date('2026-07-22T00:00:00Z'),
+    }];
+    getMock.mockResolvedValue({ data: { last_event: 'delivered' } });
+
+    const res = await reconcileCampaignRecipients('c1');
+
+    expect(res).toEqual({ checked: 1, updated: 1 });
+    expect(getMock).toHaveBeenCalledWith('message-archived');
+    expect(applyMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ recipientId: 'archived', newStatus: 'delivered' }),
     );
   });
 

@@ -18,6 +18,8 @@ const campaign = {
   id: 'c1',
   surveyId: 's1',
   status: 'sending',
+  archivedAt: null,
+  isTest: false,
   subjectSnapshot: 'subject',
   bodyHtmlSnapshot: '<p>body</p>',
   fromLocalSnapshot: 'noreply',
@@ -73,6 +75,15 @@ vi.mock('@/db', () => {
     }),
     transaction: vi.fn(async (cb: (tx: unknown) => Promise<void> | void) => {
       const tx = {
+        select: vi.fn(() => ({
+          from() {
+            return this;
+          },
+          where() {
+            return this;
+          },
+          for: vi.fn(async () => [campaign]),
+        })),
         update: vi.fn(() => ({
           set: vi.fn(() => ({
             where: vi.fn(() => ({
@@ -84,7 +95,7 @@ vi.mock('@/db', () => {
           executedSql.push(sqlToText(query));
         }),
       };
-      await cb(tx);
+      return cb(tx);
     }),
   };
   return { db };

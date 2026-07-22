@@ -3,7 +3,7 @@ import 'server-only';
 import { createElement } from 'react';
 
 import { render } from '@react-email/render';
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { contactTargets } from '@/db/schema/contacts';
@@ -17,10 +17,27 @@ import {
   type BulkRecipientInput,
 } from '@/lib/mail/send-bulk';
 import { MailWrapper } from '@/lib/mail/template-wrapper';
+import { UNSUBSCRIBE_SANDBOX_TOKEN } from '@/lib/mail/constants';
+
+type CampaignDispatchState = Pick<
+  typeof mailCampaigns.$inferSelect,
+  'status' | 'archivedAt'
+>;
+
+export interface DispatchChunkResult {
+  sent: number;
+  failed: number;
+  cancelled?: true;
+}
+
+function canDispatchCampaign(campaign: CampaignDispatchState): boolean {
+  return campaign.archivedAt === null
+    && (campaign.status === 'queued' || campaign.status === 'sending');
+}
 
 /**
  * Inngest dispatcher 의 'prepare' step.
- *   - campaign 검증 (cancelled/completed 면 skip)
+ *   - campaign 검증 (queued/sending + non-archived만 허용)
  *   - status='sending' + started_at 마킹 (이미 sending 이면 변동 없음)
  *   - queued 상태인 recipient id 목록 반환 (각 chunk step 에서 inArray 로 다시 페치)
  *
@@ -31,23 +48,35 @@ export async function prepareCampaignDispatch(
 ): Promise<{ recipientIds: string[] } | null> {
   const [campaign] = await db.select().from(mailCampaigns).where(eq(mailCampaigns.id, campaignId));
   if (!campaign) return null;
-  if (campaign.status === 'cancelled' || campaign.status === 'completed') return null;
+  if (!canDispatchCampaign(campaign)) return null;
 
-  const queued = await db
-    .select({ id: mailRecipients.id })
-    .from(mailRecipients)
-    .where(
-      and(eq(mailRecipients.campaignId, campaignId), eq(mailRecipients.status, 'queued')),
-    );
-
-  await db
+  const activated = await db
     .update(mailCampaigns)
     .set({
       status: 'sending',
       startedAt: campaign.startedAt ?? new Date(),
       updatedAt: new Date(),
     })
-    .where(eq(mailCampaigns.id, campaignId));
+    .where(
+      and(
+        eq(mailCampaigns.id, campaignId),
+        isNull(mailCampaigns.archivedAt),
+        or(eq(mailCampaigns.status, 'queued'), eq(mailCampaigns.status, 'sending')),
+      ),
+    )
+    .returning({ id: mailCampaigns.id });
+  if (activated.length === 0) return null;
+
+  const queued = await db
+    .select({ id: mailRecipients.id })
+    .from(mailRecipients)
+    .where(
+      and(
+        eq(mailRecipients.campaignId, campaignId),
+        eq(mailRecipients.status, 'queued'),
+        isNull(mailRecipients.archivedAt),
+      ),
+    );
 
   return { recipientIds: queued.map((r) => r.id) };
 }
@@ -57,18 +86,18 @@ export async function prepareCampaignDispatch(
  *   1. campaign + recipients + contact_targets 페치
  *   2. 첨부 R2 다운로드 (있으면 — 청크당 1회)
  *   3. recipient 별 html 빌드 (renderForCampaignSend → MailWrapper)
- *   4. sendCampaignBatch 호출
- *   5. 결과별 mail_recipients UPDATE + mail_campaigns 카운터 atomic delta
- *
- * 'sending' 상태는 짧은 transition 이라 DB 에 명시 마킹하지 않음:
- *   queued → (sendCampaignBatch) → sent | failed.
+ *   4. campaign 재확인 + queued recipient를 sending으로 원자 인수
+ *   5. 인수된 recipient만 sendCampaignBatch 호출
+ *   6. 결과별 mail_recipients UPDATE + mail_campaigns 카운터 atomic delta
  */
 export async function dispatchCampaignChunk(
   campaignId: string,
   recipientIds: string[],
-): Promise<{ sent: number; failed: number }> {
+): Promise<DispatchChunkResult> {
   const [campaign] = await db.select().from(mailCampaigns).where(eq(mailCampaigns.id, campaignId));
-  if (!campaign) throw new Error(`campaign not found: ${campaignId}`);
+  if (!campaign || !canDispatchCampaign(campaign)) {
+    return { sent: 0, failed: 0, cancelled: true };
+  }
 
   const baseUrl = (process.env['NEXT_PUBLIC_APP_URL'] ?? '').replace(/\/+$/, '');
   if (!baseUrl) throw new Error('NEXT_PUBLIC_APP_URL 환경변수가 설정되지 않았습니다.');
@@ -94,6 +123,7 @@ export async function dispatchCampaignChunk(
         eq(mailRecipients.campaignId, campaignId),
         inArray(mailRecipients.id, recipientIds),
         eq(mailRecipients.status, 'queued'),
+        isNull(mailRecipients.archivedAt),
       ),
     );
 
@@ -127,8 +157,13 @@ export async function dispatchCampaignChunk(
     });
   }
 
-  // 활성 수신자가 없으면(전건 수신거부) 발송 없이 종료 판정만 수행.
-  if (activeRows.length === 0) {
+  type ActiveRow = (typeof activeRows)[number];
+  const sendableRows = activeRows.filter(
+    (row): row is ActiveRow & { emailSnapshot: string } => row.emailSnapshot !== null,
+  );
+
+  // 활성 수신자가 없으면(전건 수신거부 또는 비식별 snapshot) 발송 없이 종료 판정만 수행.
+  if (sendableRows.length === 0) {
     await db.transaction((tx) => finalizeCampaignIfDone(tx, campaignId));
     return { sent: 0, failed: 0 };
   }
@@ -143,13 +178,12 @@ export async function dispatchCampaignChunk(
     campaign.replyToSnapshot ?? `${campaign.fromLocalSnapshot}@${fromDomain}`;
 
   const bulkInputs: BulkRecipientInput[] = await Promise.all(
-    activeRows.map(async (row) => {
-      if (row.emailSnapshot === null) {
-        throw new Error(`수신자 이메일 스냅샷이 없습니다: ${row.recipientId}`);
-      }
-
+    sendableRows.map(async (row) => {
       const inviteUrl = buildInviteUrl(row.inviteCode, baseUrl);
-      const unsubscribeUrl = `${baseUrl}/unsubscribe/${row.unsubscribeToken}`;
+      const unsubscribeToken = campaign.isTest
+        ? UNSUBSCRIBE_SANDBOX_TOKEN
+        : row.unsubscribeToken;
+      const unsubscribeUrl = `${baseUrl}/unsubscribe/${unsubscribeToken}`;
 
       const rendered = renderForCampaignSend({
         subject: campaign.subjectSnapshot,
@@ -165,7 +199,7 @@ export async function dispatchCampaignChunk(
           bodyHtml: rendered.bodyHtml,
           previewText: rendered.subject,
           unsubscribeUrl,
-          showTestFooter: false,
+          testFooterKind: campaign.isTest ? 'campaign' : null,
         }),
       );
 
@@ -178,12 +212,48 @@ export async function dispatchCampaignChunk(
     }),
   );
 
+  // campaign row의 SHARE lock이 future cancel/archive UPDATE와 직렬화된다. 이 transaction의
+  // queued -> sending claim을 외부 발송 시작의 선형화 지점으로 삼고, 반환된 행만 보낸다.
+  const claim = await db.transaction(async (tx) => {
+    const [freshCampaign] = await tx
+      .select({ status: mailCampaigns.status, archivedAt: mailCampaigns.archivedAt })
+      .from(mailCampaigns)
+      .where(eq(mailCampaigns.id, campaignId))
+      .for('share');
+    if (!freshCampaign || !canDispatchCampaign(freshCampaign)) {
+      return { cancelled: true as const, recipientIds: [] as string[] };
+    }
+
+    const claimedAt = new Date();
+    const claimed = await tx
+      .update(mailRecipients)
+      .set({ status: 'sending', updatedAt: claimedAt })
+      .where(
+        and(
+          eq(mailRecipients.campaignId, campaignId),
+          inArray(mailRecipients.id, sendableRows.map((row) => row.recipientId)),
+          eq(mailRecipients.status, 'queued'),
+          isNull(mailRecipients.archivedAt),
+          isNotNull(mailRecipients.emailSnapshot),
+        ),
+      )
+      .returning({ id: mailRecipients.id });
+
+    return { cancelled: false as const, recipientIds: claimed.map((row) => row.id) };
+  });
+
+  if (claim.cancelled) return { sent: 0, failed: 0, cancelled: true };
+
+  const claimedIds = new Set(claim.recipientIds);
+  const claimedInputs = bulkInputs.filter((input) => claimedIds.has(input.recipientId));
+  if (claimedInputs.length === 0) return { sent: 0, failed: 0 };
+
   const results = await sendCampaignBatch({
     from,
     replyTo,
     campaignId,
     ...(attachments !== undefined ? { attachments } : {}),
-    recipients: bulkInputs,
+    recipients: claimedInputs,
   });
 
   let sent = 0;
@@ -191,10 +261,10 @@ export async function dispatchCampaignChunk(
   const now = new Date();
 
   // 결과를 row 단위 트랜잭션으로 처리 — 카운터 atomic delta 보장.
-  // status='queued' 가드로 race condition 방지 (이미 sent 로 갱신된 row 는 skip).
+  // status='sending' 가드로 race condition 방지 (이미 terminal인 row는 skip).
   for (const r of results) {
     if (r.resendMessageId) {
-      await db.transaction(async (tx) => {
+      const applied = await db.transaction(async (tx) => {
         const updated = await tx
           .update(mailRecipients)
           .set({
@@ -204,10 +274,10 @@ export async function dispatchCampaignChunk(
             updatedAt: now,
           })
           .where(
-            and(eq(mailRecipients.id, r.recipientId), eq(mailRecipients.status, 'queued')),
+            and(eq(mailRecipients.id, r.recipientId), eq(mailRecipients.status, 'sending')),
           )
           .returning({ id: mailRecipients.id });
-        if (updated.length === 0) return;
+        if (updated.length === 0) return false;
         await tx
           .update(mailCampaigns)
           .set({
@@ -216,10 +286,11 @@ export async function dispatchCampaignChunk(
             updatedAt: now,
           })
           .where(eq(mailCampaigns.id, campaignId));
+        return true;
       });
-      sent += 1;
+      if (applied) sent += 1;
     } else {
-      await db.transaction(async (tx) => {
+      const applied = await db.transaction(async (tx) => {
         const updated = await tx
           .update(mailRecipients)
           .set({
@@ -228,10 +299,10 @@ export async function dispatchCampaignChunk(
             updatedAt: now,
           })
           .where(
-            and(eq(mailRecipients.id, r.recipientId), eq(mailRecipients.status, 'queued')),
+            and(eq(mailRecipients.id, r.recipientId), eq(mailRecipients.status, 'sending')),
           )
           .returning({ id: mailRecipients.id });
-        if (updated.length === 0) return;
+        if (updated.length === 0) return false;
         await tx
           .update(mailCampaigns)
           .set({
@@ -240,8 +311,9 @@ export async function dispatchCampaignChunk(
             updatedAt: now,
           })
           .where(eq(mailCampaigns.id, campaignId));
+        return true;
       });
-      failed += 1;
+      if (applied) failed += 1;
     }
   }
 

@@ -11,7 +11,7 @@ import type { MailRecipientStatus } from '@/db/schema/mail';
  * 동일한 newStatus에 대해 동일한 allowedPrev를 공유하기 위한 단일 출처.
  */
 export const STATUS_ALLOWED_PREV: Partial<Record<MailRecipientStatus, MailRecipientStatus[]>> = {
-  sent: ['queued'],
+  sent: ['queued', 'sending'],
   delivered: ['queued', 'sent'],
   opened: ['queued', 'sent', 'delivered'],
   bounced: ['queued', 'sent', 'delivered', 'opened'],
@@ -147,7 +147,7 @@ export async function applyRecipientTransition(
   await tx.execute(sql`
     UPDATE mail_campaigns
     SET
-      queued_count    = queued_count    - CASE WHEN ${prevStatus} = 'queued'    THEN 1 ELSE 0 END,
+      queued_count    = queued_count    - CASE WHEN ${prevStatus} IN ('queued', 'sending') THEN 1 ELSE 0 END,
       sent_count      = sent_count      - CASE WHEN ${prevStatus} = 'sent'      THEN 1 ELSE 0 END
                                         + CASE WHEN ${newStatus} = 'sent'        THEN 1 ELSE 0 END,
       delivered_count = delivered_count - CASE WHEN ${prevStatus} = 'delivered' THEN 1 ELSE 0 END

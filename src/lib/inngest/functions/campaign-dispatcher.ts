@@ -1,8 +1,32 @@
-import { dispatchCampaignChunk, prepareCampaignDispatch } from '@/lib/mail/campaign-dispatch';
+import {
+  dispatchCampaignChunk,
+  prepareCampaignDispatch,
+  type DispatchChunkResult,
+} from '@/lib/mail/campaign-dispatch';
 
 import { inngest, type MailCampaignQueuedData } from '../client';
 
 const CHUNK_SIZE = 50;
+
+export async function runCampaignChunks(
+  recipientIds: string[],
+  chunkSize: number,
+  runChunk: (recipientIds: string[], chunkIndex: number) => Promise<DispatchChunkResult>,
+): Promise<{ sent: number; failed: number; cancelled: boolean }> {
+  const totals = { sent: 0, failed: 0, cancelled: false };
+  for (let i = 0; i < recipientIds.length; i += chunkSize) {
+    const slice = recipientIds.slice(i, i + chunkSize);
+    const chunkIndex = Math.floor(i / chunkSize);
+    const result = await runChunk(slice, chunkIndex);
+    totals.sent += result.sent;
+    totals.failed += result.failed;
+    if (result.cancelled) {
+      totals.cancelled = true;
+      break;
+    }
+  }
+  return totals;
+}
 
 /**
  * 단체 메일 단체 메일 발송 dispatcher.
@@ -43,16 +67,14 @@ export const campaignDispatcher = inngest.createFunction(
       return { ok: true, total: 0 };
     }
 
-    const totals = { sent: 0, failed: 0 };
-    for (let i = 0; i < ctx.recipientIds.length; i += CHUNK_SIZE) {
-      const slice = ctx.recipientIds.slice(i, i + CHUNK_SIZE);
-      const chunkIndex = Math.floor(i / CHUNK_SIZE);
-      const result = await step.run(`send-chunk-${chunkIndex}`, () =>
-        dispatchCampaignChunk(campaignId, slice),
-      );
-      totals.sent += result.sent;
-      totals.failed += result.failed;
-    }
+    const totals = await runCampaignChunks(
+      ctx.recipientIds,
+      CHUNK_SIZE,
+      (slice, chunkIndex) => step.run(
+        `send-chunk-${chunkIndex}`,
+        () => dispatchCampaignChunk(campaignId, slice),
+      ),
+    );
 
     await step.sendEvent('emit-dispatched', {
       name: 'mail/campaign.dispatched',

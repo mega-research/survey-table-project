@@ -8,11 +8,20 @@ vi.mock('@/lib/operations/contact-sample.server', () => ({
 vi.mock('@/lib/operations/data-scope.server', () => ({
   loadOperationsDataScope: vi.fn(),
 }));
+vi.mock('@/lib/mail/send', () => ({
+  sendTestMail: vi.fn(),
+}));
+vi.mock('@/lib/mail/template-wrapper', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/mail/template-wrapper')>();
+  return { MailWrapper: vi.fn(actual.MailWrapper) };
+});
 
 import { getFirstContactSample } from '@/lib/operations/contact-sample.server';
 import { loadOperationsDataScope } from '@/lib/operations/data-scope.server';
+import { sendTestMail } from '@/lib/mail/send';
+import { MailWrapper } from '@/lib/mail/template-wrapper';
 
-import { getMailPreviewSample } from './mail-preview.service';
+import { getMailPreviewSample, sendTestTemplateMail } from './mail-preview.service';
 
 const sampleData: FirstContactSample = {
   attrs: { name: '홍길동' },
@@ -55,5 +64,38 @@ describe('getMailPreviewSample', () => {
     await expect(getMailPreviewSample({ surveyId: 'sv-1' })).rejects.toThrow(
       'NEXT_PUBLIC_APP_URL 환경변수가 설정되지 않았습니다.',
     );
+  });
+});
+
+describe('sendTestTemplateMail', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(loadOperationsDataScope).mockResolvedValue('test');
+    vi.mocked(getFirstContactSample).mockResolvedValue(sampleData);
+    vi.mocked(sendTestMail).mockResolvedValue({ ok: true, id: 'message-1' });
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://survey.example.com');
+    vi.stubEnv('RESEND_FROM_DOMAIN', 'mail.example.com');
+  });
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('template footer와 sandbox invite·unsubscribe만 렌더한다', async () => {
+    await sendTestTemplateMail({
+      surveyId: '00000000-0000-4000-8000-000000000001',
+      to: 'qa@example.com',
+      subject: '설문 {{invite_link}}',
+      bodyHtml: '<p>{{invite_link}}</p>',
+      fromName: '조사팀',
+      fromLocal: 'survey',
+      replyTo: 'reply@example.com',
+      attachments: [],
+    });
+
+    expect(vi.mocked(MailWrapper).mock.calls[0]?.[0]).toMatchObject({
+      testFooterKind: 'template',
+      unsubscribeUrl: 'https://survey.example.com/unsubscribe/__test__',
+    });
+    const sent = vi.mocked(sendTestMail).mock.calls[0]?.[0];
+    expect(sent?.html).toContain('https://survey.example.com/i/__test__');
+    expect(sent?.html).not.toContain('/i/abc123');
   });
 });

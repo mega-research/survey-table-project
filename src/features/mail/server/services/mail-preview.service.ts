@@ -93,6 +93,7 @@ export async function sendTestTemplateMail(
       bodyHtml: rendered.bodyHtml,
       previewText: rendered.subject,
       unsubscribeUrl,
+      testFooterKind: 'template',
     }),
   );
 

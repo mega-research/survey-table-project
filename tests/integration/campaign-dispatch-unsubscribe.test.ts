@@ -19,6 +19,8 @@ const campaign = {
   id: 'c1',
   surveyId: 's1',
   status: 'sending',
+  archivedAt: null,
+  isTest: false,
   subjectSnapshot: 'subject',
   bodyHtmlSnapshot: '<p>body</p>',
   fromLocalSnapshot: 'noreply',
@@ -75,19 +77,32 @@ vi.mock('@/db', () => {
     }),
     transaction: vi.fn(async (cb: (tx: unknown) => Promise<void> | void) => {
       const tx = {
+        select: vi.fn(() => ({
+          from() {
+            return this;
+          },
+          where() {
+            return this;
+          },
+          for: vi.fn(async () => [campaign]),
+        })),
         update: vi.fn(() => ({
           set: vi.fn((payload: Record<string, unknown>) => {
             setPayloads.push(payload);
             return {
               where: vi.fn(() => ({
-                returning: vi.fn(async () => [{ id: 'x' }]),
+                returning: vi.fn(async () => payload['status'] === 'sending'
+                  ? recipientRows
+                    .filter((row) => row.unsubscribedAt === null && row.emailSnapshot !== null)
+                    .map((row) => ({ id: row.recipientId }))
+                  : [{ id: 'x' }]),
               })),
             };
           }),
         })),
         execute: vi.fn(async () => {}),
       };
-      await cb(tx);
+      return cb(tx);
     }),
   };
   return { db };
@@ -143,12 +158,13 @@ describe('dispatchCampaignChunk 수신거부 재검증', () => {
     expect(skipped).toBe(true);
   });
 
-  it('이메일 스냅샷이 없으면 외부 발송 전에 거부한다', async () => {
+  it('이메일 스냅샷이 없으면 외부 발송 입력에서 제외한다', async () => {
     recipientRows[0]!.emailSnapshot = null;
 
-    await expect(dispatchCampaignChunk('c1', ['r1'])).rejects.toThrow(
-      '수신자 이메일 스냅샷이 없습니다: r1',
-    );
+    await expect(dispatchCampaignChunk('c1', ['r1'])).resolves.toEqual({
+      sent: 0,
+      failed: 0,
+    });
     expect(sendBatchMock).not.toHaveBeenCalled();
   });
 });
