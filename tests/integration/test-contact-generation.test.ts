@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ContactColumnScheme } from '@/db/schema/schema-types';
 import { addContactTarget } from '@/features/contacts/server/services/contact-targets.service';
+import { ingestContactUpload } from '@/features/contacts/server/services/contact-uploads.service';
 import { generateTestContacts } from '@/features/contacts/server/services/test-contacts.service';
 
 type TargetRow = {
@@ -51,6 +52,18 @@ const h = vi.hoisted(() => ({
   lockCount: 0,
   countWheres: [] as unknown[],
   responseDeleteWheres: [] as unknown[],
+  scope: 'test' as 'real' | 'test',
+}));
+
+const parseExcelRowsMock = vi.fn(async () => [] as Array<Record<string, string>>);
+
+vi.mock('@/lib/operations/data-scope.server', () => ({
+  loadOperationsDataScope: vi.fn(async () => h.scope),
+}));
+
+vi.mock('@/lib/contacts/excel-parser', () => ({
+  parseExcelRows: (...args: unknown[]) => parseExcelRowsMock(...(args as [])),
+  previewExcel: vi.fn(),
 }));
 
 vi.mock('@/lib/crypto/contact-pii-repo', () => ({
@@ -193,11 +206,34 @@ beforeEach(() => {
   h.lockCount = 0;
   h.countWheres.length = 0;
   h.responseDeleteWheres.length = 0;
+  h.scope = 'test';
+  parseExcelRowsMock.mockClear();
 });
 
 const dialect = new PgDialect();
 
 describe('테스트 대상자 자동 생성', () => {
+  it('테스트 모드에서는 ingestContactUpload를 파싱 전에 거부한다', async () => {
+    await expect(
+      ingestContactUpload({
+        surveyId: SURVEY_ID,
+        file: {
+          name: 'contacts.xlsx',
+          size: 11,
+          arrayBuffer: async () => new ArrayBuffer(0),
+        } as File,
+        mapping: {
+          sheetName: '',
+          headerRow: 1,
+          systemFields: {},
+          selectedAttrsKeys: [],
+        },
+      }),
+    ).rejects.toThrow('테스트 모드에서는 실제 조사대상자를 업로드할 수 없습니다.');
+
+    expect(parseExcelRowsMock).not.toHaveBeenCalled();
+  });
+
   it('최초 생성은 익명 테스트 응답을 지우고 테스트 컬럼과 같은 수신 이메일을 저장한다', async () => {
     h.responses.push(
       { id: 'anonymous-test', surveyId: SURVEY_ID, isTest: true, contactTargetId: null },

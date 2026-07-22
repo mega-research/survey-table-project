@@ -4,6 +4,7 @@ import { and, eq } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { contactTargets } from '@/db/schema/contacts';
+import { loadOperationsDataScope, testFlagForScope } from '@/lib/operations/data-scope.server';
 import { isValidUUID } from '@/lib/utils';
 
 import type {
@@ -29,6 +30,10 @@ export async function lookupContactAttrs(
 
   if (!inviteToken || !isValidUUID(inviteToken)) return null;
 
+  // 공개 응답 진입도 운영 콘솔의 현재 스코프를 따른다. 모드 전환 뒤 이전 링크로
+  // 반대 스코프 attrs 가 노출되는 것을 막되, 무효 토큰과 동일하게 익명 폴백한다.
+  const scope = await loadOperationsDataScope(surveyId);
+
   const [row] = await db
     .select({ attrs: contactTargets.attrs })
     .from(contactTargets)
@@ -36,6 +41,7 @@ export async function lookupContactAttrs(
       and(
         eq(contactTargets.surveyId, surveyId),
         eq(contactTargets.inviteToken, inviteToken),
+        eq(contactTargets.isTest, testFlagForScope(scope)),
       ),
     )
     .limit(1);

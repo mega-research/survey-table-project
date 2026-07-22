@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { Activity, ArrowLeft, Eye, Pencil } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { ContactUploadAction } from '@/components/operations/contacts/contact-upload-action';
 
 import { RefreshButton } from './refresh-button';
 import { SurveyControlButtons } from './survey-control-buttons';
@@ -48,6 +49,11 @@ export function OperationsPageHeader({ surveyId, surveyTitle, control }: Props) 
         <div className="flex items-center space-x-3">
           <RefreshButton />
           <SurveyControlButtons surveyId={surveyId} initial={control} />
+          <ContactUploadAction
+            href={`/admin/surveys/${surveyId}/operations/contacts/upload/new`}
+            label="조사 대상 업로드"
+            disabled={control.testModeEnabled}
+          />
           <Link href={`/admin/surveys/${surveyId}/preview`}>
             <Button variant="outline" size="sm">
               <Eye className="mr-2 h-4 w-4" />

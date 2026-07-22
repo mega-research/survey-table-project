@@ -14,6 +14,10 @@ vi.mock('../services/contact-columns.service', () => ({
   getExistingContactsCount: vi.fn(),
 }));
 
+vi.mock('@/lib/operations/data-scope.server', () => ({
+  loadOperationsDataScope: vi.fn(async () => 'real'),
+}));
+
 import * as columnsSvc from '../services/contact-columns.service';
 import * as uploadsSvc from '../services/contact-uploads.service';
 import { uploads } from './uploads';
@@ -74,7 +78,7 @@ describe('contacts.uploads procedures', () => {
     vi.mocked(columnsSvc.getExistingContactsCount).mockResolvedValue(7 as never);
     const client = createRouterClient({ uploads }, { context: authedContext() });
     const res = await client.uploads.existingCount({ surveyId: 'sv-1' });
-    expect(columnsSvc.getExistingContactsCount).toHaveBeenCalledWith('sv-1');
+    expect(columnsSvc.getExistingContactsCount).toHaveBeenCalledWith('sv-1', 'real');
     expect(res).toBe(7);
   });
 

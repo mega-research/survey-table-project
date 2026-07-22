@@ -2,7 +2,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import 'server-only';
 
 import { db } from '@/db';
-import { contactTargets } from '@/db/schema';
+import { contactTargets, surveys } from '@/db/schema';
 import {
   sanitizeAttrsAgainstPii,
   sanitizeAttrsAgainstPiiScheme,
@@ -17,6 +17,42 @@ import type {
   UpdateContactTargetInput,
 } from '../../domain/contact-target';
 import { prepareContactInsertScope } from './contact-insert-scope.service';
+
+type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * 현재 DB 모드를 기준으로 대상자를 잠근다.
+ *
+ * 목록을 연 뒤 테스트 모드가 전환된 경우에도 이전 탭이 반대 스코프 행을 수정·삭제하지
+ * 못하도록, 설문 행과 대상 행을 같은 트랜잭션에서 순서대로 잠근다.
+ */
+async function lockTargetInCurrentScope(
+  tx: DbTransaction,
+  input: { id: string; surveyId: string },
+): Promise<boolean> {
+  const [survey] = await tx
+    .select({ enabled: surveys.testModeEnabled })
+    .from(surveys)
+    .where(eq(surveys.id, input.surveyId))
+    .for('update');
+  if (!survey) throw new Error('NOT_FOUND');
+
+  const isTest = survey.enabled;
+  const [target] = await tx
+    .select({ id: contactTargets.id })
+    .from(contactTargets)
+    .where(
+      and(
+        eq(contactTargets.id, input.id),
+        eq(contactTargets.surveyId, input.surveyId),
+        eq(contactTargets.isTest, isTest),
+      ),
+    )
+    .for('update');
+  if (!target) throw new Error('NOT_FOUND');
+
+  return isTest;
+}
 
 /**
  * 컨택리스트의 "+ 컨택 추가" 모달 저장.
@@ -91,9 +127,9 @@ export async function updateContactTarget(input: UpdateContactTargetInput): Prom
   const groupValue = rawGroup != null && rawGroup !== '' ? rawGroup : null;
 
   await db.transaction(async (tx) => {
-    // 설문 스코프 가드: 행이 input.surveyId 소속일 때만 UPDATE.
+    const isTest = await lockTargetInCurrentScope(tx, { id, surveyId });
     // .returning() 길이로 영향 행 수를 판정한다. PII 재암호화(upsertPiiValue)는
-    // 행 소속이 확정된 뒤에만 일어나야 하므로 이 검증을 PII 부수효과보다 앞에 둔다.
+    // 현재 모드의 행 소속이 확정된 뒤에만 일어나야 하므로 이 검증을 PII 부수효과보다 앞에 둔다.
     const updated = await tx
       .update(contactTargets)
       .set({
@@ -103,7 +139,13 @@ export async function updateContactTarget(input: UpdateContactTargetInput): Prom
         contactMethod: contactMethod ?? null,
         updatedAt: new Date(),
       })
-      .where(and(eq(contactTargets.id, id), eq(contactTargets.surveyId, surveyId)))
+      .where(
+        and(
+          eq(contactTargets.id, id),
+          eq(contactTargets.surveyId, surveyId),
+          eq(contactTargets.isTest, isTest),
+        ),
+      )
       .returning({ id: contactTargets.id });
     if (updated.length === 0) throw new Error('NOT_FOUND');
 
@@ -123,9 +165,18 @@ export async function updateContactTarget(input: UpdateContactTargetInput): Prom
  */
 export async function deleteContactTarget(input: DeleteContactTargetInput): Promise<void> {
   const { id, surveyId } = input;
-  const deleted = await db
-    .delete(contactTargets)
-    .where(and(eq(contactTargets.id, id), eq(contactTargets.surveyId, surveyId)))
-    .returning({ id: contactTargets.id });
-  if (deleted.length === 0) throw new Error('NOT_FOUND');
+  await db.transaction(async (tx) => {
+    const isTest = await lockTargetInCurrentScope(tx, { id, surveyId });
+    const deleted = await tx
+      .delete(contactTargets)
+      .where(
+        and(
+          eq(contactTargets.id, id),
+          eq(contactTargets.surveyId, surveyId),
+          eq(contactTargets.isTest, isTest),
+        ),
+      )
+      .returning({ id: contactTargets.id });
+    if (deleted.length === 0) throw new Error('NOT_FOUND');
+  });
 }

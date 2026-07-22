@@ -1,9 +1,10 @@
 import 'server-only';
 
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { contactTargets, surveys } from '@/db/schema';
+import { testFlagForScope, type OperationsDataScope } from '@/lib/operations/data-scope.server';
 
 import type { UpdateContactColumnsInput } from '../../domain/contact-column';
 
@@ -20,17 +21,37 @@ export async function updateContactColumns(input: UpdateContactColumnsInput): Pr
       throw new Error('resid 컬럼은 숨길 수 없습니다.');
     }
   }
-  await db.update(surveys).set({ contactColumns: scheme }).where(eq(surveys.id, surveyId));
+  await db.transaction(async (tx) => {
+    const [survey] = await tx
+      .select({ enabled: surveys.testModeEnabled })
+      .from(surveys)
+      .where(eq(surveys.id, surveyId))
+      .for('update');
+    if (!survey) throw new Error('NOT_FOUND');
+
+    await tx
+      .update(surveys)
+      .set(survey.enabled ? { testContactColumns: scheme } : { contactColumns: scheme })
+      .where(eq(surveys.id, surveyId));
+  });
 }
 
 /**
  * 업로드 마법사 경고 카드용 — 기존 컨택 행 수.
  * 0 이면 신규 업로드, > 0 이면 통째 교체 경고 필요.
  */
-export async function getExistingContactsCount(surveyId: string): Promise<number> {
+export async function getExistingContactsCount(
+  surveyId: string,
+  scope: OperationsDataScope,
+): Promise<number> {
   const [row] = await db
     .select({ total: sql<number>`count(*)::int` })
     .from(contactTargets)
-    .where(eq(contactTargets.surveyId, surveyId));
+    .where(
+      and(
+        eq(contactTargets.surveyId, surveyId),
+        eq(contactTargets.isTest, testFlagForScope(scope)),
+      ),
+    );
   return row?.total ?? 0;
 }
