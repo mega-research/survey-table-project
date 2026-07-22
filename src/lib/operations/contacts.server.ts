@@ -98,7 +98,7 @@ const progressPctExpr = sql<number | null>`(
 // outer correlation 은 명시적 qualifier 필수 (latestAttemptNoExpr 주석 참고).
 // 인덱스: idx_mail_recipients_target_created (contact_target_id, created_at DESC).
 const latestMailStatusExpr = sql<MailRecipientStatus | null>`(
-  SELECT status FROM mail_recipients
+  SELECT mail_recipients.status FROM mail_recipients
   INNER JOIN mail_campaigns ON mail_campaigns.id = mail_recipients.campaign_id
   WHERE mail_recipients.contact_target_id = "contact_targets"."id"
     AND mail_recipients.archived_at IS NULL
