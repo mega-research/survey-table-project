@@ -857,7 +857,18 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
             <CardTitle className="text-lg font-medium">{tableTitle}</CardTitle>
           </CardHeader>
         )}
-        <CardContent className={cn(isMobileView ? 'p-3 sm:p-4' : 'p-0 sm:px-6')}>
+        {/* 모바일은 질문 제목 바로 아래에 카드가 오므로 상단 패딩을 제거해 제목과 붙인다
+            (좌우/하단 패딩은 유지). 단 tableTitle 이 있으면 CardHeader 에 하단 패딩이
+            없으므로 그 간격 역할을 하는 상단 패딩을 유지한다. 데스크탑은 기존 여백 그대로. */}
+        <CardContent
+          className={cn(
+            isMobileView
+              ? tableTitle
+                ? 'p-3 sm:p-4'
+                : 'p-3 pt-0 sm:p-4 sm:pt-1'
+              : 'p-0 sm:px-6',
+          )}
+        >
           <div className="w-full">
             {/* 모바일 원본 표 옵션이 켜진 질문은 카드/스테퍼 전환 없이 원본 표(가로 스크롤) 유지 */}
             {mobileUsesCards ? (

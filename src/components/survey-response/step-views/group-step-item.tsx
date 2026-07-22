@@ -88,16 +88,18 @@ export function GroupStepItem({
         <div
           role="group"
           aria-labelledby={`q-label-${q.id}`}
+          // 모바일은 입력 카드가 화면 폭을 그대로 써야 해서 좌우/하단 margin 은 두지 않고
+          // 제목과의 간격만 8px(mt-2) 준다. 데스크탑(md 이상)은 사방 8px(m-2).
           // 표 형태(테이블 질문·설명 테이블 소스)는 설명이 없으면 제목과 표가 8px 로
-          // 붙어 보여 24px(mt-6)로 벌린다. 단답형·일반 선택형은 기존 간격 유지.
+          // 붙어 보여 데스크탑만 24px(mt-6)로 벌린다.
           // 제목 숨김(hideTitle) 질문은 벌릴 기준(제목)이 없으므로 제외 — 그룹 헤더와
           // 표 사이가 불필요하게 벌어지는 회귀 방지.
-          className={`m-2 ${
+          className={`mt-2 md:m-2 ${
             !q.hideTitle &&
             isEmptyHtml(q.description) &&
             (q.type === 'table' ||
               ((q.type === 'radio' || q.type === 'checkbox') && isChoiceTableSource(q)))
-              ? 'mt-6'
+              ? 'md:mt-6'
               : ''
           }`}
         >
