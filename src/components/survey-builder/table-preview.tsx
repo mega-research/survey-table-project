@@ -40,9 +40,7 @@ interface TablePreviewProps {
   className?: string | undefined;
   hideColumnLabels?: boolean | undefined;
   /** 셀 콘텐츠 렌더 오버라이드. undefined/null 반환 시 기본 PreviewCell 로 폴백. */
-  renderCell?:
-    | ((cell: TableCell, row: TableRow) => React.ReactNode)
-    | ((cell: TableCell, isSelectedRowDetail?: boolean) => React.ReactNode);
+  renderCell?: (cell: TableCell, row: TableRow) => React.ReactNode;
   stickyHeader?: boolean | undefined;
   preserveRowHeights?: boolean | undefined;
   /**
@@ -335,21 +333,7 @@ export const TablePreview = React.memo(function TablePreview({
                           {...getGridCellAria('gridcell', cs, rs)}
                         >
                           {(() => {
-                            const override = renderCell
-                              ? renderCell.length >= 2
-                                ? (
-                                    renderCell as (
-                                      cell: TableCell,
-                                      row: TableRow,
-                                    ) => React.ReactNode
-                                  )(cell, row)
-                                : (
-                                    renderCell as (
-                                      cell: TableCell,
-                                      isSelectedRowDetail?: boolean,
-                                    ) => React.ReactNode
-                                  )(cell)
-                              : undefined;
+                            const override = renderCell?.(cell, row);
                             if (override !== undefined && override !== null) return override;
                             // choice_opt 셀만 리졸버 호출(그룹 혼합 대응). 그 외 셀은 무시.
                             const resolvedChoiceType =

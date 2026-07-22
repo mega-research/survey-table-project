@@ -3,7 +3,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { PreviewCell } from '@/components/survey-builder/cells/preview-cell';
 import { TablePreview } from '@/components/survey-builder/table-preview';
-import type { Question, TableCell } from '@/types/survey';
+import type { Question, TableCell, TableRow } from '@/types/survey';
 import { getGroupTypeOfCell } from '@/utils/choice-group-helpers';
 
 const choiceCell: TableCell = {
@@ -63,12 +63,34 @@ describe('PreviewCell 보기 옵션 컨트롤 종류', () => {
       id: 'preview-radio',
       type: 'radio',
       content: '',
-      radioOptions: [{ id: 'r1', label: '라디오', value: 'r1' }],
+      radioOptions: [{ id: 'r1', label: '라디오', value: 'r1', selected: true }],
     };
-    const { rerender } = render(<PreviewCell cell={radioCell} />);
+    const checkboxCell: TableCell = {
+      id: 'preview-checkbox',
+      type: 'checkbox',
+      content: '',
+      checkboxOptions: [{ id: 'c1', label: '체크박스', value: 'c1', checked: true }],
+    };
+    const { rerender } = render(
+      <>
+        <PreviewCell cell={radioCell} />
+        <PreviewCell cell={checkboxCell} />
+      </>,
+    );
     expect(screen.getByRole('radio')).not.toBeDisabled();
-    rerender(<PreviewCell cell={radioCell} disableControls />);
+    expect(screen.getByRole('radio')).toBeChecked();
+    expect(screen.getByRole('checkbox')).not.toBeDisabled();
+    expect(screen.getByRole('checkbox')).toBeChecked();
+    rerender(
+      <>
+        <PreviewCell cell={radioCell} disableControls />
+        <PreviewCell cell={checkboxCell} disableControls />
+      </>,
+    );
     expect(screen.getByRole('radio')).toBeDisabled();
+    expect(screen.getByRole('radio')).not.toBeChecked();
+    expect(screen.getByRole('checkbox')).toBeDisabled();
+    expect(screen.getByRole('checkbox')).not.toBeChecked();
   });
 });
 
@@ -135,5 +157,22 @@ describe('TablePreview 셀별 choiceControlType 리졸버 (그룹 혼합)', () =
     // 라벨도 함께 표시
     expect(within(container).getByText('단일')).toBeTruthy();
     expect(within(container).getByText('복수')).toBeTruthy();
+  });
+
+  it('renderCell의 두 번째 인자로 현재 행을 함수 arity와 무관하게 전달한다', () => {
+    const row: TableRow = { id: 'row-aware', label: '', cells: [choiceCell] };
+    const renderCell = (cell: TableCell, currentRow: TableRow | undefined = undefined) => (
+      <span>{`${currentRow?.id ?? '행 없음'}:${cell.id}`}</span>
+    );
+
+    render(
+      <TablePreview
+        columns={[{ id: 'c1', label: '열' }]}
+        rows={[row]}
+        renderCell={renderCell}
+      />,
+    );
+
+    expect(screen.getByText('row-aware:cell-1')).toBeInTheDocument();
   });
 });

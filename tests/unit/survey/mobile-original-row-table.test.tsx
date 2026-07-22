@@ -371,6 +371,57 @@ describe('MobileOriginalRowTable', () => {
     expect(onChange).toHaveBeenLastCalledWith({ 'answer-input': '7' });
   });
 
+  it('반복행 radio와 checkbox는 저장된 선택 상태를 버리고 빈 disabled control로 표시한다', () => {
+    render(
+      <MobileOriginalRowTable
+        columns={[col('라디오'), col('체크박스')]}
+        rows={[
+          row(
+            [
+              {
+                id: 'repeat-radio',
+                type: 'radio',
+                content: '',
+                radioOptions: [
+                  { id: 'radio-option', label: '저장된 라디오', value: 'radio', selected: true },
+                ],
+              },
+              {
+                id: 'repeat-checkbox',
+                type: 'checkbox',
+                content: '',
+                checkboxOptions: [
+                  {
+                    id: 'checkbox-option',
+                    label: '저장된 체크박스',
+                    value: 'checkbox',
+                    checked: true,
+                  },
+                ],
+              },
+            ],
+            'repeat-row',
+          ),
+          row(
+            [
+              { ...inputCell, id: 'answer-input-1' },
+              { ...inputCell, id: 'answer-input-2' },
+            ],
+            'answer-row',
+          ),
+        ]}
+        interactiveRowId="answer-row"
+        hideColumnLabels
+        renderCell={(cell) => <span>{cell.id}</span>}
+      />,
+    );
+
+    expect(screen.getByRole('radio')).toBeDisabled();
+    expect(screen.getByRole('radio')).not.toBeChecked();
+    expect(screen.getByRole('checkbox')).toBeDisabled();
+    expect(screen.getByRole('checkbox')).not.toBeChecked();
+  });
+
   it('반복행 mobileDisplay hidden은 숨기고 응답행 hidden 입력 컨트롤은 유지한다', () => {
     render(
       <MobileOriginalRowTable

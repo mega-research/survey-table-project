@@ -41,7 +41,7 @@ export const PreviewCell = React.memo(function PreviewCell({
             <div key={option.id} className="flex items-start gap-2">
               <input
                 type="checkbox"
-                checked={option.checked || false}
+                checked={disableControls ? false : option.checked || false}
                 disabled={disableControls}
                 readOnly={!disableControls}
                 className="mt-0.5 h-4 w-4 shrink-0 rounded"
@@ -68,7 +68,7 @@ export const PreviewCell = React.memo(function PreviewCell({
               <input
                 type="radio"
                 name={`preview-${cell.id}`}
-                checked={option.selected || false}
+                checked={disableControls ? false : option.selected || false}
                 disabled={disableControls}
                 readOnly={!disableControls}
                 className="mt-0.5 h-4 w-4 shrink-0"
