@@ -92,6 +92,49 @@ function extractWidthDecl(tag: string): string {
 
 const BAND_IMG_STYLE = 'display: block; width: 100%; height: auto;';
 
+/** 밴드 이미지 하나만(앞뒤 공백·<br> 허용) 들어 있는 문단 — 문단째 테이블로 교체할 대상 */
+const SOLE_IMG_PARAGRAPH_RE =
+  /<p\b([^>]*)>\s*(?:<br\s*\/?>\s*)*(<img\b[^>]*>)\s*(?:<br\s*\/?>\s*)*<\/p>/gi;
+
+/**
+ * 문단의 text-align 을 테이블 가로 정렬 margin 으로 옮긴다.
+ * 문단을 걷어내면 text-align 상속이 끊기므로, 폭이 100% 가 아닌 밴드가
+ * 왼쪽으로 쏠리지 않게 테이블 자신이 정렬을 들고 있어야 한다.
+ */
+function alignDeclFromParagraph(attrs: string): string {
+  const style = attrs.match(/\bstyle="([^"]*)"/i)?.[1] ?? '';
+  const align = style.match(/text-align:\s*(center|right)/i)?.[1]?.toLowerCase();
+  if (align === 'center') return '; margin: 0 auto';
+  if (align === 'right') return '; margin-left: auto; margin-right: 0';
+  return '';
+}
+
+/** data-link-bands 를 가진 img 태그 → 가로 밴드 <table>. 밴드 정보가 없으면 null. */
+function buildBandTable(tag: string, alignDecl: string): string | null {
+  const bands = parseLinkBands(tag.match(/data-link-bands="([^"]*)"/)?.[1]);
+  if (!bands) return null;
+  const widthDecl = extractWidthDecl(tag);
+  // font-size/line-height 0: 클라이언트가 셀 안에 공백 텍스트 노드를 만들어도
+  // 밴드 사이에 틈이 생기지 않게 하는 슬라이스 메일 표준 보정
+  const row = (inner: string) =>
+    `<tr><td class="${LINK_BANDS_CLASS}" style="padding: 0; font-size: 0px; line-height: 0;">${inner}</td></tr>`;
+  const bandImg = (src: string, alt: string) =>
+    `<img src="${src}" alt="${alt}" style="${BAND_IMG_STYLE}">`;
+  const rows = [
+    bands.top ? row(bandImg(bands.top, '')) : '',
+    row(
+      `<a href="{{invite_link}}" target="_blank" rel="noopener noreferrer">` +
+        `${bandImg(bands.mid, '설문 참여 링크')}</a>`,
+    ),
+    bands.bottom ? row(bandImg(bands.bottom, '')) : '',
+  ].join('');
+  return (
+    `<table class="${LINK_BANDS_CLASS}" ` +
+    `style="${widthDecl}; max-width: 100%; border-collapse: collapse${alignDecl};">` +
+    `<tbody>${rows}</tbody></table>`
+  );
+}
+
 /**
  * data-link-bands 를 가진 img 를 가로 밴드 <table> 로 치환.
  * 가운데 밴드는 <a href="{{invite_link}}"> 로 감싼다.
@@ -99,28 +142,16 @@ const BAND_IMG_STYLE = 'display: block; width: 100%; height: auto;';
  */
 export function expandImageLinkAreas(html: string): string {
   if (!html || !html.includes('data-link-bands')) return html;
-  return html.replace(IMG_TAG_RE, (tag) => {
-    const bands = parseLinkBands(tag.match(/data-link-bands="([^"]*)"/)?.[1]);
-    if (!bands) return tag;
-    const widthDecl = extractWidthDecl(tag);
-    // font-size/line-height 0: 클라이언트가 셀 안에 공백 텍스트 노드를 만들어도
-    // 밴드 사이에 틈이 생기지 않게 하는 슬라이스 메일 표준 보정
-    const row = (inner: string) =>
-      `<tr><td class="${LINK_BANDS_CLASS}" style="padding: 0; font-size: 0px; line-height: 0;">${inner}</td></tr>`;
-    const bandImg = (src: string, alt: string) =>
-      `<img src="${src}" alt="${alt}" style="${BAND_IMG_STYLE}">`;
-    const rows = [
-      bands.top ? row(bandImg(bands.top, '')) : '',
-      row(
-        `<a href="{{invite_link}}" target="_blank" rel="noopener noreferrer">` +
-          `${bandImg(bands.mid, '설문 참여 링크')}</a>`,
-      ),
-      bands.bottom ? row(bandImg(bands.bottom, '')) : '',
-    ].join('');
-    return (
-      `<table class="${LINK_BANDS_CLASS}" ` +
-      `style="${widthDecl}; max-width: 100%; border-collapse: collapse;">` +
-      `<tbody>${rows}</tbody></table>`
-    );
+  // 1단계: 밴드 이미지 하나만 담은 문단은 문단째 교체.
+  //   <table> 은 <p> 안에 올 수 없어 파서가 문단을 강제로 닫고 빈 <p> 를 남기는데,
+  //   그 껍데기가 sanitize 의 fillEmptyParagraphs 를 만나 빈 줄(&nbsp;)로 렌더되어
+  //   배너 위에 문단 높이+상하 margin 만큼 여백이 생긴다. 문단을 먼저 걷어내면
+  //   껍데기 자체가 만들어지지 않는다.
+  const unwrapped = html.replace(SOLE_IMG_PARAGRAPH_RE, (whole, attrs: string, imgTag: string) => {
+    return buildBandTable(imgTag, alignDeclFromParagraph(attrs)) ?? whole;
   });
+  // 2단계: 문단 밖이거나 텍스트와 섞여 있는 밴드 이미지는 제자리 치환.
+  //   문단째 걷어내면 같은 문단의 텍스트가 유실되므로 기존 동작을 유지한다.
+  //   1단계가 만든 테이블 안의 밴드 img 는 data-link-bands 가 없어 그대로 통과.
+  return unwrapped.replace(IMG_TAG_RE, (tag) => buildBandTable(tag, '') ?? tag);
 }

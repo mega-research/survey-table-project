@@ -126,4 +126,38 @@ describe('expandImageLinkAreas', () => {
     expect(expandImageLinkAreas(plain)).toBe(plain);
     expect(expandImageLinkAreas('')).toBe('');
   });
+
+  it('밴드 이미지만 담은 문단은 문단째 교체해 빈 <p> 껍데기를 남기지 않는다', () => {
+    const html = `<p style="text-align: left;"><img src="https://r2/x.png" data-link-bands="${bands}"></p>`;
+    const out = expandImageLinkAreas(html);
+    // <table> 은 <p> 안에 올 수 없어 파서가 문단을 닫고 남긴 껍데기가
+    // sanitize 의 fillEmptyParagraphs 를 만나 빈 줄로 렌더되던 회귀 방지
+    expect(out).not.toContain('<p');
+    expect(out.startsWith('<table class="mail-link-bands"')).toBe(true);
+  });
+
+  it('문단 안의 <br> 만 있는 여백은 문단째 교체를 막지 않는다', () => {
+    const html = `<p><br><img src="https://r2/x.png" data-link-bands="${bands}"><br></p>`;
+    expect(expandImageLinkAreas(html)).not.toContain('<p');
+  });
+
+  it('문단에 다른 내용이 섞여 있으면 문단을 유지하고 img 자리만 치환한다', () => {
+    const html = `<p>안내 <img src="https://r2/x.png" data-link-bands="${bands}"> 감사합니다</p>`;
+    const out = expandImageLinkAreas(html);
+    expect(out).toContain('안내 ');
+    expect(out).toContain(' 감사합니다');
+    expect(out).toContain('<table class="mail-link-bands"');
+  });
+
+  it('문단 정렬을 테이블 margin 으로 옮긴다', () => {
+    const center = `<p style="text-align: center;"><img src="https://r2/x.png" width="400" data-link-bands="${bands}"></p>`;
+    expect(expandImageLinkAreas(center)).toContain('border-collapse: collapse; margin: 0 auto;');
+
+    const right = `<p style="text-align: right;"><img src="https://r2/x.png" width="400" data-link-bands="${bands}"></p>`;
+    expect(expandImageLinkAreas(right)).toContain('margin-left: auto; margin-right: 0;');
+
+    const left = `<p style="text-align: left;"><img src="https://r2/x.png" width="400" data-link-bands="${bands}"></p>`;
+    expect(expandImageLinkAreas(left)).toContain('border-collapse: collapse;');
+    expect(expandImageLinkAreas(left)).not.toContain('margin');
+  });
 });
