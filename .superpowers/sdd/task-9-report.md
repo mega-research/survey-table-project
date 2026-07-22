@@ -50,3 +50,12 @@
 - cleanup settlement의 성공·실패와 무관하게 중첩 `finally`가 transaction spy를 복구하고 observer와 mode-flip 전용 postgres 연결을 모두 종료한다. 연결 종료는 각 client의 1초 timeout과 `Promise.allSettled`로 모든 client에 시도한다.
 - RED: DB fixture를 만들기 전 해제되지 않는 임시 대기를 두어 기존 테스트가 Vitest 기본 5,000ms timeout으로 실패함을 확인했다.
 - GREEN: 임시 대기를 제거한 최종 코드로 신규 경쟁 파일 단독 3회 연속 2건 통과, 전체 실DB 12파일 45건 통과, `pnpm exec tsc --noEmit` 및 해당 파일 ESLint 통과를 확인했다.
+
+## 최종 harness budget 재산정
+
+- 앞선 90초 timeout 설명을 폐기하고 phase 예산을 코드 상수로 직접 합산했다. fixture 20초 + lock coordination 30초 + blocker 관찰 10초 + lock 해제 후 operation 10초 + cleanup settle 20초 + PID 종료 2초 + 강제 cleanup 5초 + SQL close 3초 + 후속 검증 20초 = 120초이며, margin 30초를 더해 각 테스트 timeout을 150초로 정했다.
+- observer 연결은 `statement_timeout`을 1초로 낮췄고 각 blocker snapshot 호출에도 2초 JavaScript timeout을 적용했다. 두 제한 모두 전체 polling 예산 10초보다 짧아 단일 관찰 쿼리가 polling deadline을 넘겨 붙잡을 수 없다.
+- cleanup timeout 시 포착 PID를 개별 쿼리로 직렬 종료하지 않는다. campaign transaction PID와 mode-flip updater PID를 중복 제거한 JSON 목록으로 전달하고, 살아 있는 transaction backend를 하나의 2초 제한 SQL에서 일괄 종료한다.
+- postgres 연결 종료는 드라이버의 `end({ timeout: 1 })` 파괴 semantics와 별도의 3초 JavaScript timeout을 함께 적용해 observer나 mode-flip 전용 연결이 무기한 대기하지 않게 했다.
+- 각 테스트 callback과 모든 operation의 settlement를 별도로 추적한다. `afterEach`는 gate를 먼저 해제한 뒤 callback cleanup과 operation 최종 settlement가 끝난 경우에만 UUID fixture를 삭제하며, 이 hook은 120초 + operation 확인 20초 + margin 30초 = 170초 timeout을 갖는다. 따라서 Vitest가 테스트 timeout 후 hook을 시작해도 살아 있는 transaction과 fixture 삭제가 경합하지 않는다.
+- 최종 코드로 신규 경쟁 파일 단독 3회 연속 2건 통과, 전체 실DB 12파일 45건 통과, `pnpm exec tsc --noEmit`, 대상 파일 ESLint, `git diff --check` 통과를 확인했다.

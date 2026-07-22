@@ -1,8 +1,10 @@
-import { randomUUID } from 'node:crypto';
-
 import { sql } from 'drizzle-orm';
+import { randomUUID } from 'node:crypto';
 import postgres from 'postgres';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import { db } from '@/db';
+import { createCampaign } from '@/features/mail/server/services/mail-campaigns.service';
 
 const resultCodeGate = vi.hoisted(() => ({
   entered: null as (() => void) | null,
@@ -30,18 +32,43 @@ vi.mock('@/lib/operations/result-code-statuses.server', async () => {
   };
 });
 
-import { db } from '@/db';
-import { createCampaign } from '@/features/mail/server/services/mail-campaigns.service';
-
 const run = process.env['RUN_REALDB'] === '1' ? describe : describe.skip;
 const surveyIds: string[] = [];
-const OPERATION_TIMEOUT_MS = 10_000;
-const OBSERVATION_TIMEOUT_MS = 10_000;
-const CLEANUP_SETTLE_TIMEOUT_MS = 20_000;
-const FORCE_CLEANUP_TIMEOUT_MS = 5_000;
-const TEST_TIMEOUT_MS = 90_000;
-const SQL_TIMEOUT_MS = 15_000;
+const FIXTURE_SETUP_BUDGET_MS = 20_000;
+const OPERATION_WAIT_BUDGET_MS = 10_000;
+const LOCK_COORDINATION_STEP_COUNT = 3;
+const LOCK_COORDINATION_BUDGET_MS =
+  OPERATION_WAIT_BUDGET_MS * LOCK_COORDINATION_STEP_COUNT;
+const LOCK_OBSERVATION_BUDGET_MS = 10_000;
+const OBSERVER_STATEMENT_TIMEOUT_MS = 1_000;
+const OBSERVER_QUERY_BUDGET_MS = 2_000;
+const POST_LOCK_OPERATION_BUDGET_MS = 10_000;
+const CLEANUP_SETTLE_BUDGET_MS = 20_000;
+const TERMINATION_QUERY_BUDGET_MS = 2_000;
+const FORCED_CLEANUP_BUDGET_MS = 5_000;
+const POST_LOCK_ASSERTION_BUDGET_MS = 20_000;
+const TEST_TIMEOUT_MARGIN_MS = 30_000;
+const DEDICATED_SQL_TIMEOUT_MS = 15_000;
 const SQL_CLOSE_TIMEOUT_SECONDS = 1;
+const SQL_CLOSE_BUDGET_MS = 3_000;
+const AFTER_EACH_OPERATION_SETTLE_BUDGET_MS = 20_000;
+const TEST_PHASE_BUDGET_MS =
+  FIXTURE_SETUP_BUDGET_MS
+  + LOCK_COORDINATION_BUDGET_MS
+  + LOCK_OBSERVATION_BUDGET_MS
+  + POST_LOCK_OPERATION_BUDGET_MS
+  + CLEANUP_SETTLE_BUDGET_MS
+  + TERMINATION_QUERY_BUDGET_MS
+  + FORCED_CLEANUP_BUDGET_MS
+  + SQL_CLOSE_BUDGET_MS
+  + POST_LOCK_ASSERTION_BUDGET_MS;
+const TEST_TIMEOUT_MS = TEST_PHASE_BUDGET_MS + TEST_TIMEOUT_MARGIN_MS;
+const AFTER_EACH_TIMEOUT_MS =
+  TEST_PHASE_BUDGET_MS
+  + AFTER_EACH_OPERATION_SETTLE_BUDGET_MS
+  + TEST_TIMEOUT_MARGIN_MS;
+let activeTestCompletion: Promise<void> = Promise.resolve();
+let activeOperationSettlement: Promise<void> = Promise.resolve();
 
 interface CampaignFixture {
   surveyId: string;
@@ -66,7 +93,7 @@ function deferred<T>(): Deferred<T> {
 async function withTimeout<T>(
   promise: Promise<T>,
   label: string,
-  timeoutMs = OPERATION_TIMEOUT_MS,
+  timeoutMs = OPERATION_WAIT_BUDGET_MS,
 ): Promise<T> {
   let timeout: ReturnType<typeof setTimeout> | undefined;
   const timeoutPromise = new Promise<never>((_, reject) => {
@@ -76,6 +103,16 @@ async function withTimeout<T>(
     return await Promise.race([promise, timeoutPromise]);
   } finally {
     if (timeout) clearTimeout(timeout);
+  }
+}
+
+async function withTrackedTestCompletion<T>(callback: () => Promise<T>): Promise<T> {
+  const completed = deferred<void>();
+  activeTestCompletion = completed.promise;
+  try {
+    return await callback();
+  } finally {
+    completed.resolve();
   }
 }
 
@@ -91,7 +128,7 @@ function holdAtResultCodeLookup() {
   };
 }
 
-function createDedicatedSql() {
+function createDedicatedSql(statementTimeoutMs = DEDICATED_SQL_TIMEOUT_MS) {
   const connectionString = process.env['DATABASE_URL'];
   if (!connectionString) throw new Error('DATABASE_URL 환경 변수가 설정되지 않았습니다.');
   return postgres(connectionString, {
@@ -100,9 +137,9 @@ function createDedicatedSql() {
     idle_timeout: 5,
     connect_timeout: 5,
     connection: {
-      statement_timeout: SQL_TIMEOUT_MS,
-      lock_timeout: SQL_TIMEOUT_MS,
-      idle_in_transaction_session_timeout: SQL_TIMEOUT_MS,
+      statement_timeout: statementTimeoutMs,
+      lock_timeout: statementTimeoutMs,
+      idle_in_transaction_session_timeout: statementTimeoutMs,
     },
   });
 }
@@ -139,39 +176,68 @@ async function closeSqlClients(
   clients: Array<ReturnType<typeof postgres>>,
   label: string,
 ): Promise<void> {
-  const results = await Promise.allSettled(
-    clients.map((client) => client.end({ timeout: SQL_CLOSE_TIMEOUT_SECONDS })),
+  const results = await withTimeout(
+    Promise.allSettled(
+      clients.map((client) => client.end({ timeout: SQL_CLOSE_TIMEOUT_SECONDS })),
+    ),
+    `${label} 연결 종료`,
+    SQL_CLOSE_BUDGET_MS,
   );
   const errors = results.flatMap((result) => result.status === 'rejected' ? [result.reason] : []);
   if (errors.length > 0) throw new AggregateError(errors, `${label} 연결 종료에 실패했습니다.`);
 }
 
+async function terminateCapturedBackends(
+  observer: ReturnType<typeof postgres>,
+  backendPids: number[],
+  label: string,
+): Promise<void> {
+  const uniquePids = [...new Set(backendPids)];
+  if (uniquePids.length === 0) return;
+
+  const serializedPids = JSON.stringify(uniquePids);
+  await withTimeout(
+    observer`
+      WITH captured_pids AS (
+        SELECT DISTINCT value::int AS pid
+        FROM jsonb_array_elements_text(${serializedPids}::jsonb)
+      )
+      SELECT pg_terminate_backend(activity.pid)
+      FROM pg_stat_activity AS activity
+      INNER JOIN captured_pids USING (pid)
+      WHERE activity.pid <> pg_backend_pid()
+        AND activity.xact_start IS NOT NULL
+    `,
+    `${label} backend 일괄 종료`,
+    TERMINATION_QUERY_BUDGET_MS,
+  );
+}
+
 async function settleOperations(args: {
   operations: Array<Promise<unknown>>;
   observer: ReturnType<typeof postgres>;
-  transactionPids: number[];
+  backendPids: () => number[];
   label: string;
 }): Promise<void> {
   if (args.operations.length === 0) return;
   const settlement = Promise.allSettled(args.operations);
+  activeOperationSettlement = settlement.then(() => undefined);
 
   try {
-    await withTimeout(settlement, `${args.label} cleanup`, CLEANUP_SETTLE_TIMEOUT_MS);
+    await withTimeout(settlement, `${args.label} cleanup`, CLEANUP_SETTLE_BUDGET_MS);
   } catch (cleanupError) {
-    const terminationResults = await Promise.allSettled(
-      args.transactionPids.map(async (pid) => {
-        await args.observer`SELECT pg_terminate_backend(${pid})`;
-      }),
-    );
-    const terminationErrors = terminationResults.flatMap(
-      (result) => result.status === 'rejected' ? [result.reason] : [],
-    );
+    const terminationErrors: unknown[] = [];
+    try {
+      await terminateCapturedBackends(args.observer, args.backendPids(), args.label);
+    } catch (terminationError) {
+      terminationErrors.push(terminationError);
+    }
 
     try {
       await withTimeout(
         settlement,
         `${args.label} backend 종료 후 cleanup`,
-        FORCE_CLEANUP_TIMEOUT_MS,
+        FORCED_CLEANUP_BUDGET_MS,
       );
     } catch (forcedCleanupError) {
       throw new AggregateError(
@@ -195,36 +261,43 @@ async function waitUntilBlockedBy(
     expectedLockType?: 'advisory';
   },
 ): Promise<void> {
-  const deadline = Date.now() + OBSERVATION_TIMEOUT_MS;
+  const deadline = Date.now() + LOCK_OBSERVATION_BUDGET_MS;
   let lastSnapshot: unknown = null;
 
   while (Date.now() < deadline) {
-    const rows = await observer<{
-      blocking_pids: number[];
-      waiting_lock_types: string[];
-      wait_event_type: string | null;
-      wait_event: string | null;
-    }[]>`
-      SELECT
-        pg_blocking_pids(${args.blockedPid})::int[] AS blocking_pids,
-        COALESCE(
-          ARRAY(
-            SELECT locktype
-            FROM pg_locks
-            WHERE pid=${args.blockedPid} AND NOT granted
-          ),
-          ARRAY[]::text[]
-        ) AS waiting_lock_types,
-        wait_event_type,
-        wait_event
-      FROM pg_stat_activity
-      WHERE pid=${args.blockedPid}
-    `;
+    const rows = await withTimeout(
+      observer<
+        {
+          blocking_pids: number[];
+          waiting_lock_types: string[];
+          wait_event_type: string | null;
+          wait_event: string | null;
+        }[]
+      >`
+        SELECT
+          pg_blocking_pids(${args.blockedPid})::int[] AS blocking_pids,
+          COALESCE(
+            ARRAY(
+              SELECT locktype
+              FROM pg_locks
+              WHERE pid=${args.blockedPid} AND NOT granted
+            ),
+            ARRAY[]::text[]
+          ) AS waiting_lock_types,
+          wait_event_type,
+          wait_event
+        FROM pg_stat_activity
+        WHERE pid=${args.blockedPid}
+      `,
+      `backend ${args.blockedPid} blocker snapshot query`,
+      OBSERVER_QUERY_BUDGET_MS,
+    );
     const snapshot = rows[0];
     lastSnapshot = snapshot ?? null;
     const blockedByExpectedBackend = snapshot?.blocking_pids.includes(args.blockingPid) ?? false;
-    const waitingOnExpectedLock = args.expectedLockType === undefined
-      || snapshot?.waiting_lock_types.includes(args.expectedLockType) === true;
+    const waitingOnExpectedLock =
+      args.expectedLockType === undefined ||
+      snapshot?.waiting_lock_types.includes(args.expectedLockType) === true;
     if (blockedByExpectedBackend && waitingOnExpectedLock) return;
 
     await new Promise<void>((resolve) => setTimeout(resolve, 10));
@@ -268,11 +341,7 @@ async function seedCampaignFixture(): Promise<CampaignFixture> {
   return { surveyId, templateId, realTargetId, testTargetId };
 }
 
-function campaignInput(
-  fixture: CampaignFixture,
-  targetId: string,
-  title: string,
-) {
+function campaignInput(fixture: CampaignFixture, targetId: string, title: string) {
   return {
     surveyId: fixture.surveyId,
     mailTemplateId: fixture.templateId,
@@ -284,6 +353,18 @@ function campaignInput(
 run('메일 캠페인 생성 DB 경쟁', () => {
   afterEach(async () => {
     resultCodeGate.release?.();
+    await withTimeout(
+      activeTestCompletion,
+      '테스트 callback 및 transaction cleanup',
+      TEST_PHASE_BUDGET_MS,
+    );
+    await withTimeout(
+      activeOperationSettlement,
+      '테스트 operation 최종 settle',
+      AFTER_EACH_OPERATION_SETTLE_BUDGET_MS,
+    );
+    activeTestCompletion = Promise.resolve();
+    activeOperationSettlement = Promise.resolve();
     resultCodeGate.entered = null;
     resultCodeGate.wait = null;
     resultCodeGate.release = null;
@@ -292,11 +373,11 @@ run('메일 캠페인 생성 DB 경쟁', () => {
       const surveyId = surveyIds.pop();
       if (surveyId) await db.execute(sql`DELETE FROM surveys WHERE id=${surveyId}`);
     }
-  });
+  }, AFTER_EACH_TIMEOUT_MS);
 
-  it('동시 생성은 scope별로 중복 없는 회차를 발번한다', async () => {
+  it('동시 생성은 scope별로 중복 없는 회차를 발번한다', () => withTrackedTestCompletion(async () => {
     const fixture = await seedCampaignFixture();
-    const observer = createDedicatedSql();
+    const observer = createDedicatedSql(OBSERVER_STATEMENT_TIMEOUT_MS);
     const observedTransactions = observeCreateTransactionPids();
     const gate = holdAtResultCodeLookup();
     const creations: Array<Promise<unknown>> = [];
@@ -323,14 +404,18 @@ run('메일 캠페인 생성 DB 경쟁', () => {
       });
 
       gate.release();
-      await withTimeout(Promise.all(creations), '동시 캠페인 생성 완료');
+      await withTimeout(
+        Promise.all(creations),
+        '동시 캠페인 생성 완료',
+        POST_LOCK_OPERATION_BUDGET_MS,
+      );
     } finally {
       gate.release();
       try {
         await settleOperations({
           operations: creations,
           observer,
-          transactionPids: observedTransactions.pids(),
+          backendPids: observedTransactions.pids,
           label: '동시 캠페인 생성',
         });
       } finally {
@@ -361,11 +446,11 @@ run('메일 캠페인 생성 DB 경쟁', () => {
       { is_test: true, run_number: 1 },
       { is_test: true, run_number: 2 },
     ]);
-  }, TEST_TIMEOUT_MS);
+  }), TEST_TIMEOUT_MS);
 
-  it('모드 전환은 생성의 survey SHARE lock 뒤에 직렬화된다', async () => {
+  it('모드 전환은 생성의 survey SHARE lock 뒤에 직렬화된다', () => withTrackedTestCompletion(async () => {
     const fixture = await seedCampaignFixture();
-    const observer = createDedicatedSql();
+    const observer = createDedicatedSql(OBSERVER_STATEMENT_TIMEOUT_MS);
     const modeFlipSql = createDedicatedSql();
     const observedTransactions = observeCreateTransactionPids();
     const gate = holdAtResultCodeLookup();
@@ -373,6 +458,7 @@ run('메일 캠페인 생성 DB 경쟁', () => {
     const operations: Array<Promise<unknown>> = [];
     let creation: Promise<unknown> | null = null;
     let modeFlip: Promise<unknown> | null = null;
+    let capturedUpdaterPid: number | null = null;
     try {
       creation = createCampaign(
         campaignInput(fixture, fixture.testTargetId, 'locked-test'),
@@ -386,6 +472,7 @@ run('메일 캠페인 생성 DB 경쟁', () => {
         const rows = await connection<{ pid: number }[]>`SELECT pg_backend_pid()::int AS pid`;
         const pid = rows[0]?.pid;
         if (!pid) throw new Error('모드 전환 backend PID를 얻지 못했습니다.');
+        capturedUpdaterPid = pid;
         updaterPid.resolve(pid);
         await connection`UPDATE surveys SET test_mode_enabled=false WHERE id=${fixture.surveyId}`;
       });
@@ -394,14 +481,21 @@ run('메일 캠페인 생성 DB 경쟁', () => {
       await waitUntilBlockedBy(observer, { blockedPid, blockingPid: creationPid });
 
       gate.release();
-      await withTimeout(Promise.all([creation, modeFlip]), '캠페인 생성과 모드 전환 완료');
+      await withTimeout(
+        Promise.all([creation, modeFlip]),
+        '캠페인 생성과 모드 전환 완료',
+        POST_LOCK_OPERATION_BUDGET_MS,
+      );
     } finally {
       gate.release();
       try {
         await settleOperations({
           operations,
           observer,
-          transactionPids: observedTransactions.pids(),
+          backendPids: () => [
+            ...observedTransactions.pids(),
+            ...(capturedUpdaterPid === null ? [] : [capturedUpdaterPid]),
+          ],
           label: '캠페인 생성과 모드 전환',
         });
       } finally {
@@ -423,5 +517,5 @@ run('메일 캠페인 생성 DB 경쟁', () => {
         randomUUID(),
       ),
     ).rejects.toThrow('화면을 새로고침');
-  }, TEST_TIMEOUT_MS);
+  }), TEST_TIMEOUT_MS);
 });
