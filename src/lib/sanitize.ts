@@ -38,11 +38,14 @@ const FILE_TEXT_STYLE = 'display:inline-block;vertical-align:middle;';
 const FILE_LABEL_STYLE = 'display:block;color:#1f2937;font-weight:500;font-size:14px;';
 const FILE_META_STYLE = 'display:block;color:#6b7280;font-size:12px;margin-top:2px;';
 
+// 주입 스타일은 "기본값" 역할 — 사용자가 에디터에서 지정한 인라인 스타일
+// (셀 테두리 색·배경색 등)이 이겨야 하므로 injected 를 앞에, existing 을 뒤에 둔다.
+// (CSS 는 같은 속성이 중복되면 나중 선언이 우선)
 function mergeStyle(existing: string | undefined, injected: string): string {
   if (!existing) return injected;
   const trimmed = existing.trim();
-  const sep = trimmed.endsWith(';') ? '' : ';';
-  return `${trimmed}${sep}${injected}`;
+  const injectedSep = injected.trim().endsWith(';') ? '' : ';';
+  return `${injected}${injectedSep}${trimmed}`;
 }
 
 function withStyle(
@@ -58,6 +61,14 @@ function withStyle(
     },
   };
 }
+
+// 테두리 값 패턴 — 색상은 hex 외에 CSSOM 정규화 산물인 rgb()/rgba() 허용.
+// url()/expression() 등 function 토큰은 rgb 계열 외 매칭 실패로 차단된다.
+const BORDER_LINE_RE =
+  /^\d+(?:\.\d+)?px\s+(solid|dashed|dotted)\s+(#(?:[0-9a-f]{3}|[0-9a-f]{6})|rgba?\([\d.,\s%]+\))$/i;
+// "none" 및 CSSOM 정규화 변형 ("medium none currentcolor" 등)
+const BORDER_NONE_RE =
+  /^(?:(?:medium|thin|thick|\d+(?:\.\d+)?px)\s+)?(?:none|hidden)(?:\s+currentcolor)?$/i;
 
 const RICH_CONFIG: sanitizeHtml.IOptions = {
   allowedTags: [
@@ -135,8 +146,19 @@ const RICH_CONFIG: sanitizeHtml.IOptions = {
       // 표시 모드 (transformTags 가 주입하는 메일 첨부 박스 inline-block 등)
       display: [/^(inline|block|inline-block|none)$/i],
       'vertical-align': [/^(baseline|top|middle|bottom|sub|super|text-top|text-bottom)$/i],
-      // 테두리 (transformTags 가 주입하는 표/첨부 박스 border)
-      border: [/^\d+(?:\.\d+)?px\s+(solid|dashed|dotted)\s+#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i],
+      // 테두리 (transformTags 가 주입하는 표/첨부 박스 border + 에디터 셀 테두리 커스텀)
+      // 주의: 브라우저 CSSOM 이 에디터 직렬화 시 hex → rgb(), 변별 longhand →
+      // border-width/style/color 다중값 shorthand 로 정규화하므로 그 형태도 허용해야 한다.
+      border: [BORDER_LINE_RE, BORDER_NONE_RE],
+      'border-top': [BORDER_LINE_RE, BORDER_NONE_RE],
+      'border-bottom': [BORDER_LINE_RE, BORDER_NONE_RE],
+      'border-left': [BORDER_LINE_RE, BORDER_NONE_RE],
+      'border-right': [BORDER_LINE_RE, BORDER_NONE_RE],
+      'border-width': [/^(?:(?:\d+(?:\.\d+)?px|thin|medium|thick)\s*){1,4}$/i],
+      'border-style': [/^(?:(?:none|hidden|solid|dashed|dotted)\s*){1,4}$/i],
+      'border-color': [
+        /^(?:(?:#(?:[0-9a-f]{3}|[0-9a-f]{6})|rgba?\([\d.,\s%]+\)|currentcolor)\s*){1,4}$/i,
+      ],
       'border-collapse': [/^(collapse|separate)$/i],
       'border-radius': [/^\d+(?:\.\d+)?(?:px|pt|em|rem|%)$/i],
       // 배경 (transformTags 가 주입하는 첨부 박스 paperclip 아이콘) — data:image/svg+xml 만 허용.

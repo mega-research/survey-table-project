@@ -18,12 +18,22 @@ import { ImageTextIsolation } from '@/lib/tiptap/image-text-isolation';
 import { TableSelectOnBackspace } from '@/lib/tiptap/table-select-on-backspace';
 
 import { FileAttachment } from './file-attachment-node';
+import { FontFamily } from './font-family-mark';
 import { FontSize } from './font-size-mark';
 import {
+  cellBorderStyleAttr,
+  normalizeHexColor,
+  parseCellBorderMode,
+  parseCellBorderSideColors,
+  parseCellBorderSideWidths,
+  parseCellBorderWidth,
   parseTableAlign,
   parseVerticalAlign,
   tableAlignStyle,
   verticalAlignStyle,
+  type CellBorderMode,
+  type CellBorderSideColors,
+  type CellBorderSideWidths,
   type HAlign,
   type VAlign,
 } from './table-attrs-helpers';
@@ -147,6 +157,43 @@ function makeCellAttrs() {
         style: verticalAlignStyle((attrs.verticalAlign ?? 'top') as VAlign),
       }),
     },
+    // 셀 테두리 색·두께·모드 — 직렬화는 cellBorderStyleAttr 한 곳에서 담당.
+    // (attribute renderHTML 은 노드의 전체 attrs 를 받으므로 borderColor 쪽에서
+    // 세 attr 를 합쳐 렌더하고 나머지 둘은 style 미출력)
+    borderColor: {
+      default: null as string | null,
+      parseHTML: (el: HTMLElement) =>
+        normalizeHexColor(el.style.borderColor || el.style.borderTopColor),
+      renderHTML: (attrs: {
+        borderColor?: string | null;
+        borderWidth?: number | null;
+        borderMode?: CellBorderMode | null;
+        borderSideWidths?: CellBorderSideWidths | null;
+        borderSideColors?: CellBorderSideColors | null;
+      }) => cellBorderStyleAttr(attrs),
+    },
+    borderWidth: {
+      default: null as number | null,
+      parseHTML: parseCellBorderWidth,
+      renderHTML: () => ({}),
+    },
+    borderMode: {
+      default: 'all' as CellBorderMode,
+      parseHTML: parseCellBorderMode,
+      renderHTML: () => ({}),
+    },
+    // 변별 두께 [top,right,bottom,left] — 외곽선 전용. null 항목은 기본 규칙 폴백.
+    borderSideWidths: {
+      default: null as CellBorderSideWidths | null,
+      parseHTML: parseCellBorderSideWidths,
+      renderHTML: () => ({}),
+    },
+    // 변별 색 [top,right,bottom,left] — 외곽선 색 전용. null 항목은 borderColor 폴백.
+    borderSideColors: {
+      default: null as CellBorderSideColors | null,
+      parseHTML: parseCellBorderSideColors,
+      renderHTML: () => ({}),
+    },
     colwidth: {
       default: null as number[] | null,
       parseHTML: (el: HTMLElement) => {
@@ -207,6 +254,27 @@ export function createUnifiedExtensions(options: CreateUnifiedExtensionsOptions 
           },
         });
 
+  // 행 높이: tr inline style height 로 직렬화 — 편집기·미리보기·메일 HTML 왕복 유지.
+  // 테이블 셀 특성상 height 는 min-height 처럼 동작 (콘텐츠가 더 크면 자동 확장).
+  const TableRowExtended = TableRow.extend({
+    addAttributes() {
+      return {
+        ...this.parent?.(),
+        rowHeight: {
+          default: null as number | null,
+          parseHTML: (el: HTMLElement) => {
+            const h = parseInt(el.style.height, 10);
+            return Number.isFinite(h) && h > 0 ? h : null;
+          },
+          renderHTML: (attrs: { rowHeight?: number | null }) => {
+            if (!attrs.rowHeight) return {};
+            return { style: `height: ${attrs.rowHeight}px` };
+          },
+        },
+      };
+    },
+  });
+
   const TableExtended = Table.extend({
     addAttributes() {
       return {
@@ -241,6 +309,7 @@ export function createUnifiedExtensions(options: CreateUnifiedExtensionsOptions 
     Strike,
     TextStyle,
     FontSize,
+    FontFamily,
     TextAlign.configure({
       // ImageResize 는 NodeView 모드로 paragraph text-align 을 무시하고
       // 자체 wrapperStyle attr (float) 로 정렬을 제어한다. 이미지 정렬은 image-context-toolbar 가 담당.
@@ -261,7 +330,7 @@ export function createUnifiedExtensions(options: CreateUnifiedExtensionsOptions 
       lastColumnResizable: true,
       allowTableNodeSelection: true,
     }),
-    TableRow,
+    TableRowExtended,
     TableHeaderExtended,
     TableCellExtended,
     TrailingNode,
