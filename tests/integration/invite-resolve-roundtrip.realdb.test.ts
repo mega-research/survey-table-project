@@ -4,8 +4,9 @@
  * 실행 조건: DATABASE_URL 이 로컬(127.0.0.1/localhost)일 때만. prod URL 에서는 전체 skip.
  * 선행: pnpm db:setup-test (로컬 supabase + 스키마 push).
  */
-import { eq, sql } from 'drizzle-orm';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { eq } from 'drizzle-orm';
+import { randomUUID } from 'node:crypto';
+import { afterAll, describe, expect, it } from 'vitest';
 
 import { db } from '@/db';
 import { contactTargets, surveys } from '@/db/schema';
@@ -17,20 +18,6 @@ const isLocalDb = dbUrl.includes('127.0.0.1') || dbUrl.includes('localhost');
 describe.skipIf(!isLocalDb)('resolveInviteCode round-trip (real local DB)', () => {
   const createdSurveyIds: string[] = [];
 
-  beforeAll(async () => {
-    await db.execute(sql`
-      CREATE OR REPLACE FUNCTION next_contact_resid(p_survey_id uuid) RETURNS integer AS $$
-      DECLARE next_id integer;
-      BEGIN
-        PERFORM pg_advisory_xact_lock(hashtext('contact_resid:' || p_survey_id::text));
-        SELECT COALESCE(MAX(resid), 0) + 1 INTO next_id
-          FROM contact_targets WHERE survey_id = p_survey_id;
-        RETURN next_id;
-      END;
-      $$ LANGUAGE plpgsql;
-    `);
-  });
-
   afterAll(async () => {
     for (const id of createdSurveyIds) {
       await db.delete(contactTargets).where(eq(contactTargets.surveyId, id));
@@ -39,6 +26,7 @@ describe.skipIf(!isLocalDb)('resolveInviteCode round-trip (real local DB)', () =
   });
 
   it('비공개 설문: privateToken accessIdentifier + inviteToken 을 반환한다', async () => {
+    const inviteCode = randomUUID();
     const [survey] = await db
       .insert(surveys)
       .values({ title: '초대코드-역참조-테스트', isPublic: false, privateToken: '11111111-1111-1111-1111-111111111111' })
@@ -50,11 +38,12 @@ describe.skipIf(!isLocalDb)('resolveInviteCode round-trip (real local DB)', () =
       surveyId: survey.id,
       resid: 1,
       inviteToken: '22222222-2222-2222-2222-222222222222',
-      inviteCode: 'testcode01',
+      inviteCode,
     });
 
-    const resolved = await resolveInviteCode('testcode01');
+    const resolved = await resolveInviteCode(inviteCode);
     expect(resolved).toEqual({
+      kind: 'valid',
       accessIdentifier: '11111111-1111-1111-1111-111111111111',
       inviteToken: '22222222-2222-2222-2222-222222222222',
     });

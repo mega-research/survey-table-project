@@ -3,14 +3,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
+import * as svc from '../services/contact-targets.service';
+import { generateTestContacts } from '../services/test-contacts.service';
+import { targets } from './targets';
+
 vi.mock('../services/contact-targets.service', () => ({
   addContactTarget: vi.fn(),
   updateContactTarget: vi.fn(),
   deleteContactTarget: vi.fn(),
 }));
 
-import * as svc from '../services/contact-targets.service';
-import { targets } from './targets';
+vi.mock('../services/test-contacts.service', () => ({
+  generateTestContacts: vi.fn(),
+}));
 
 function authedContext(): ORPCContext {
   return { db: {} as never, supabase: {} as never, user: { id: 'admin-1', email: 'a@b.com' } };
@@ -45,13 +50,28 @@ describe('contacts.targets procedures', () => {
     expect(res).toEqual({ ok: true });
   });
 
+  it('generateTest는 검증된 입력을 테스트 대상자 생성 service에 위임한다', async () => {
+    vi.mocked(generateTestContacts).mockResolvedValue({ createdCount: 3 });
+    const client = createRouterClient({ targets }, { context: authedContext() });
+    const input = {
+      surveyId: '11111111-1111-4111-8111-111111111111',
+      count: 3,
+      recipientEmail: 'qa@example.com',
+    };
+
+    const result = await client.targets.generateTest(input);
+
+    expect(generateTestContacts).toHaveBeenCalledWith(input);
+    expect(result).toEqual({ createdCount: 3 });
+  });
+
   it('인증 없으면 add가 UNAUTHORIZED로 막힌다', async () => {
     const client = createRouterClient(
       { targets },
       { context: { db: {} as never, supabase: {} as never, user: null } },
     );
-    await expect(
-      client.targets.add({ surveyId: 'sv-1', attrs: {} }),
-    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    await expect(client.targets.add({ surveyId: 'sv-1', attrs: {} })).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+    });
   });
 });

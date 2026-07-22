@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 
 import { ColumnSchemeEditor } from '@/components/operations/contacts/column-scheme-editor';
 import { getContactColumnScheme } from '@/lib/operations/contacts.server';
+import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
 
 export const metadata: Metadata = {
   title: '현황 - 컬럼 설정',
@@ -14,7 +15,8 @@ interface PageProps {
 
 export default async function ContactsColumnsPage({ params }: PageProps) {
   const { id: surveyId } = await params;
-  const scheme = await getContactColumnScheme(surveyId);
+  const scope = await getOperationsDataScope(surveyId);
+  const scheme = await getContactColumnScheme(surveyId, scope);
   if (!scheme) notFound();
 
   return (

@@ -56,6 +56,17 @@ export const DeleteContactTargetInput = z.object({
 });
 export type DeleteContactTargetInput = z.infer<typeof DeleteContactTargetInput>;
 
+export const GenerateTestContactsInput = z.object({
+  surveyId: z.string().uuid(),
+  count: z.number().int().min(1).max(20),
+  recipientEmail: z.string().email(),
+});
+export type GenerateTestContactsInput = z.infer<typeof GenerateTestContactsInput>;
+
+export const GenerateTestContactsResult = z.object({
+  createdCount: z.number().int(),
+});
+
 /** add 후 반환 — resid 자동 발번 결과 포함 */
 export const ContactTargetRowSchema = z.object({
   id: z.string(),

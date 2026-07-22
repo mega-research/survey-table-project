@@ -57,7 +57,6 @@ function executeMock(sqlObj: unknown): unknown[] {
   if (raw.includes('group_count') && raw.includes('excluded_total')) {
     // group_count 는 getProgressRows 의 GROUP BY ct.group_value (raw) 와 일치해야 한다:
     // COUNT(DISTINCT group_value) (NULL 제외) + NULL 그룹 존재 시 +1.
-    // null 과 리터럴 '(미분류)' 는 별개 그룹으로 카운트.
     const distinctGroups = new Set<string>(
       state.contacts.filter((c) => c.groupValue != null).map((c) => c.groupValue as string),
     );
@@ -178,7 +177,7 @@ describe('getProgressTotals — negative exclusion', () => {
       { groupValue: 'A' },                                    // 분모만
       { groupValue: 'A', attempts: ['수신거부'] },            // 제외
     ]);
-    const totals = await getProgressTotals(SURVEY_ID, null);
+    const totals = await getProgressTotals(SURVEY_ID, 'real', null);
     expect(totals.listTotal).toBe(3);
     expect(totals.completedTotal).toBe(2);
     expect(totals.excludedTotal).toBe(1);
@@ -189,7 +188,7 @@ describe('getProgressTotals — negative exclusion', () => {
       { groupValue: 'A', responded: true },
       { groupValue: 'A', unsubscribed: true },                // 제외
     ]);
-    const totals = await getProgressTotals(SURVEY_ID, null);
+    const totals = await getProgressTotals(SURVEY_ID, 'real', null);
     expect(totals.listTotal).toBe(1);
     expect(totals.completedTotal).toBe(1);
     expect(totals.excludedTotal).toBe(1);
@@ -200,7 +199,7 @@ describe('getProgressTotals — negative exclusion', () => {
       { groupValue: 'A', responded: true, attempts: ['수신거부'] },  // 제외
       { groupValue: 'A', responded: true },                          // 분자+분모
     ]);
-    const totals = await getProgressTotals(SURVEY_ID, null);
+    const totals = await getProgressTotals(SURVEY_ID, 'real', null);
     expect(totals.listTotal).toBe(1);
     expect(totals.completedTotal).toBe(1);
     expect(totals.excludedTotal).toBe(1);
@@ -216,7 +215,7 @@ describe('getProgressTotals — negative exclusion', () => {
         { groupValue: 'A' },                                    // 분모만
       ],
     );
-    const totals = await getProgressTotals(SURVEY_ID, null);
+    const totals = await getProgressTotals(SURVEY_ID, 'real', null);
     expect(totals.listTotal).toBe(3);
     expect(totals.completedTotal).toBe(2);
     expect(totals.excludedTotal).toBe(0);
@@ -232,7 +231,7 @@ describe('getProgressTotals — negative exclusion', () => {
         { groupValue: 'A', attempts: ['2.재통화예약'] },       // 분모만
       ],
     );
-    const totals = await getProgressTotals(SURVEY_ID, null);
+    const totals = await getProgressTotals(SURVEY_ID, 'real', null);
     expect(totals.listTotal).toBe(2);
     expect(totals.completedTotal).toBe(1);
     expect(totals.excludedTotal).toBe(0);
@@ -247,9 +246,10 @@ describe('getProgressTotals — negative exclusion', () => {
       { groupValue: null },          // NULL 그룹
       { groupValue: '(미분류)' },     // 리터럴 (미분류) 그룹 — NULL 과 별개
     ]);
-    const totals = await getProgressTotals(SURVEY_ID, null);
+    const totals = await getProgressTotals(SURVEY_ID, 'real', null);
     const rows = await getProgressRows({
       surveyId: SURVEY_ID,
+      scope: 'real',
       condition: null,
       page: 1,
       size: 100,
@@ -280,6 +280,7 @@ describe('getProgressRows — 그룹별 excludedCount', () => {
     ]);
     const rows = await getProgressRows({
       surveyId: SURVEY_ID,
+      scope: 'real',
       condition: null,
       page: 1,
       size: 100,

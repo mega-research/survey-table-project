@@ -1,19 +1,24 @@
 import 'server-only';
 
-import { eq, sql } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { contactTargets } from '@/db/schema';
 import {
   buildNegativeCodeExists,
   getResultCodeStatuses,
 } from '@/lib/operations/result-code-statuses.server';
 import { isValidUUID } from '@/lib/utils';
 
+import {
+  classifyInviteTokenOwner,
+  findInviteTokenOwner,
+} from './invite-token-owner';
+
 /**
- * inviteToken 으로 컨택 lookup. 반환 케이스 3가지:
- * - valid: 정상 ct, contactTargetId 매칭됨 (+ respondedAt 동봉 — token_already_used 판정용)
+ * inviteToken 으로 컨택 lookup. 반환 케이스 4가지:
+ * - valid: 정상 ct, contactTargetId 매칭됨 (+ respondedAt/isTest 동봉)
  * - excluded: 부정 결과코드 OR unsubscribed_at IS NOT NULL [응답 차단]
+ * - invalid_test: 테스트 대상자지만 테스트 모드 OFF [익명 폴백 금지]
  * - invalid: 토큰 자체가 무효 [익명 폴백]
  *
  * mutation 흐름에서 호출되므로 dedupe 가 의미 없어 cache 적용 안 함.
@@ -27,8 +32,9 @@ import { isValidUUID } from '@/lib/utils';
  * lib/duplicate-detection(checkTrackA) 양쪽이 공유하므로 lib 로 승격.
  */
 export type InviteTokenLookupResult =
-  | { kind: 'valid'; contactTargetId: string; respondedAt: Date | null }
+  | { kind: 'valid'; contactTargetId: string; respondedAt: Date | null; isTest: boolean }
   | { kind: 'excluded' }
+  | { kind: 'invalid_test' }
   | { kind: 'invalid' };
 
 export async function findContactByInviteToken(
@@ -43,8 +49,30 @@ export async function findContactByInviteToken(
   const lookup = (await db.execute(
     sql`SELECT public.lookup_contact_by_invite_token(${surveyId}::uuid, ${inviteToken}::uuid) AS id`,
   )) as unknown as Array<{ id: string | null }>;
-  const contactTargetId = lookup[0]?.id ?? null;
-  if (!contactTargetId) return { kind: 'invalid' };
+  const resolvedContactTargetId = lookup[0]?.id ?? null;
+
+  // DB 함수는 survey_id를 함수 내부에서 제한하므로 교차 설문 token이면 null이다.
+  // server-only 직접 조회로 owner 종류만 복원해 테스트 링크의 익명 강등을 막는다.
+  const classification = classifyInviteTokenOwner(
+    await findInviteTokenOwner(inviteToken),
+    surveyId,
+  );
+  if (classification.kind !== 'valid') return classification;
+
+  const { owner } = classification;
+  if (resolvedContactTargetId && resolvedContactTargetId !== owner.id) {
+    return owner.isTest ? { kind: 'invalid_test' } : { kind: 'invalid' };
+  }
+  const contactTargetId = resolvedContactTargetId ?? owner.id;
+
+  if (owner.isTest) {
+    return {
+      kind: 'valid',
+      contactTargetId,
+      respondedAt: owner.respondedAt,
+      isTest: true,
+    };
+  }
 
   const { negative: negativeCodes } = await getResultCodeStatuses(surveyId);
   const excludedRows = (await db.execute(sql`
@@ -63,10 +91,10 @@ export async function findContactByInviteToken(
     return { kind: 'excluded' };
   }
 
-  const row = await db.query.contactTargets.findFirst({
-    where: eq(contactTargets.id, contactTargetId),
-    columns: { respondedAt: true },
-  });
-
-  return { kind: 'valid', contactTargetId, respondedAt: row?.respondedAt ?? null };
+  return {
+    kind: 'valid',
+    contactTargetId,
+    respondedAt: owner.respondedAt,
+    isTest: false,
+  };
 }

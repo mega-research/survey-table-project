@@ -1,14 +1,10 @@
 import 'server-only';
 
 import * as Sentry from '@sentry/nextjs';
-import { eq } from 'drizzle-orm';
 import { NextResponse, type NextRequest } from 'next/server';
 import { Webhook } from 'svix';
 
-import { db } from '@/db';
-import { mailRecipients, webhookEvents } from '@/db/schema/mail';
-import type { MailRecipientStatus } from '@/db/schema/mail';
-import { applyRecipientTransition, mapResendWebhookType } from '@/lib/mail/recipient-status-transition';
+import { processResendWebhookEvent } from '@/lib/mail/resend-webhook';
 
 /**
  * Resend webhook handler.
@@ -32,6 +28,7 @@ interface ResendEventPayload {
   created_at: string;
   data?: {
     email_id?: string;
+    tags?: Record<string, string>;
     // 나머지 필드는 본 핸들러에서 미사용.
   };
 }
@@ -63,66 +60,30 @@ const POST_HANDLER = async (req: NextRequest): Promise<NextResponse> => {
     return NextResponse.json({ error: 'invalid signature' }, { status: 401 });
   }
 
-  // Idempotency: 동일 svix-id 재전송 차단
-  const inserted = await db
-    .insert(webhookEvents)
-    .values({ id: svixId, source: 'resend', eventType: payload.type })
-    .onConflictDoNothing()
-    .returning({ id: webhookEvents.id });
-  if (inserted.length === 0) {
-    return NextResponse.json({ ok: true, deduped: true });
-  }
-
   const messageId = payload.data?.email_id;
-  if (!messageId) {
-    return NextResponse.json({ ok: true, ignored: 'no email_id' });
-  }
-
   try {
-    await processResendEvent(messageId, payload.type, payload.created_at);
+    const result = await processResendWebhookEvent({
+      id: svixId,
+      type: payload.type,
+      createdAt: payload.created_at,
+      ...(messageId !== undefined ? { resendMessageId: messageId } : {}),
+      ...(payload.data?.tags !== undefined ? { tags: payload.data.tags } : {}),
+    });
+    if (result === 'deduped') {
+      return NextResponse.json({ ok: true, deduped: true });
+    }
+    if (result === 'ignored') {
+      return NextResponse.json({ ok: true, ignored: 'unsupported event' });
+    }
     return NextResponse.json({ ok: true });
   } catch (err) {
     Sentry.captureException(err, {
       tags: { operation: 'resend_webhook' },
       extra: { eventType: payload.type, messageId, svixId },
     });
-    // 200 이외 응답하면 Resend 가 retry — 비결정적 에러는 위에서 dedupe 되니, 200 으로 응답하고 Sentry 만.
-    return NextResponse.json({ ok: false }, { status: 200 });
+    // non-2xx로 provider retry를 요청한다. transaction rollback으로 dedupe row도 남지 않는다.
+    return NextResponse.json({ ok: false }, { status: 500 });
   }
 };
 
 export { POST_HANDLER as POST };
-
-async function processResendEvent(
-  resendMessageId: string,
-  eventType: string,
-  createdAtRaw: string,
-): Promise<void> {
-  const newStatus = mapResendWebhookType(eventType);
-  if (!newStatus) return; // delivery_delayed 등 무시
-
-  const eventAt = new Date(createdAtRaw);
-  if (Number.isNaN(eventAt.getTime())) eventAt.setTime(Date.now());
-
-  await db.transaction(async (tx) => {
-    const rows = await tx
-      .select({
-        id: mailRecipients.id,
-        campaignId: mailRecipients.campaignId,
-        status: mailRecipients.status,
-      })
-      .from(mailRecipients)
-      .where(eq(mailRecipients.resendMessageId, resendMessageId))
-      .for('update');
-    const row = rows[0];
-    if (!row) return; // 외부 발송 또는 race window(아직 message_id 미커밋) — reconcile 이 보강
-
-    await applyRecipientTransition(tx, {
-      recipientId: row.id,
-      campaignId: row.campaignId,
-      prevStatus: row.status as MailRecipientStatus,
-      newStatus,
-      eventAt,
-    });
-  });
-}

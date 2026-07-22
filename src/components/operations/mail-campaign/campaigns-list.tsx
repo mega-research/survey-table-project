@@ -94,6 +94,11 @@ export function CampaignsList({ surveyId, rows, total, page, pageSize }: Props) 
                   </td>
                   <td className="font-medium text-gray-900">
                     <Link href={detailHref} className="block px-3 py-3">
+                      {r.isTest ? (
+                        <span className="mr-2 inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+                          테스트
+                        </span>
+                      ) : null}
                       {r.title}
                       {r.templateName ? (
                         <div className="text-xs text-slate-500">템플릿: {r.templateName}</div>

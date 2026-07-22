@@ -18,6 +18,7 @@ import { extractRawSql } from './_helpers/result-code-mock';
 
 interface SeedContact {
   id: string;
+  surveyId: string;
   inviteToken: string;
   unsubscribedAt: Date | null;
   attempts: string[];
@@ -76,7 +77,17 @@ vi.mock('@/db', () => ({
     execute: vi.fn((sqlObj: unknown) => Promise.resolve(executeMock(sqlObj))),
     query: {
       contactTargets: {
-        findFirst: vi.fn(async () => null),
+        findFirst: vi.fn(async () => {
+          const contact = state.contacts[0];
+          if (!contact) return undefined;
+          return {
+            id: contact.id,
+            surveyId: contact.surveyId,
+            respondedAt: null,
+            isTest: false,
+            survey: { testModeEnabled: true, deletedAt: null },
+          };
+        }),
       },
     },
   },
@@ -108,6 +119,7 @@ function seedContact(opts: SeedContactInput = {}): { id: string; inviteToken: st
   const inviteToken = randomUUID();
   state.contacts.push({
     id,
+    surveyId: SURVEY_ID,
     inviteToken,
     unsubscribedAt: opts.unsubscribed ? new Date() : null,
     attempts: opts.attempts ?? [],
@@ -127,6 +139,7 @@ describe('findContactByInviteToken — excluded 분기', () => {
     expect(result.kind).toBe('valid');
     if (result.kind === 'valid') {
       expect(result.contactTargetId).toBe(id);
+      expect(result.isTest).toBe(false);
     }
   });
 

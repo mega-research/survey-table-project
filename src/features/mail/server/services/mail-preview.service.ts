@@ -11,6 +11,7 @@ import { sendTestMail } from '@/lib/mail/send';
 import { MailWrapper } from '@/lib/mail/template-wrapper';
 import { buildInviteUrl } from '@/lib/survey-url';
 import { getFirstContactSample } from '@/lib/operations/contact-sample.server';
+import { loadOperationsDataScope } from '@/lib/operations/data-scope.server';
 
 import type {
   GetMailPreviewSampleInput,
@@ -28,7 +29,8 @@ import type {
 export async function getMailPreviewSample(
   input: GetMailPreviewSampleInput,
 ): Promise<GetMailPreviewSampleOutput> {
-  const sample = await getFirstContactSample(input.surveyId);
+  const scope = await loadOperationsDataScope(input.surveyId);
+  const sample = await getFirstContactSample(input.surveyId, scope);
   if (!sample) return null;
 
   // inviteUrl 은 절대 URL 이어야 한다 — NEXT_PUBLIC_APP_URL 가 없으면 relative path 가 되어
@@ -74,7 +76,8 @@ export async function sendTestTemplateMail(
   // /unsubscribe/[token] 페이지가 sandbox 토큰을 감지해 안내만 표시.
   const unsubscribeUrl = `${baseUrl}/unsubscribe/${UNSUBSCRIBE_SANDBOX_TOKEN}`;
 
-  const sample = await getFirstContactSample(input.surveyId);
+  const scope = await loadOperationsDataScope(input.surveyId);
+  const sample = await getFirstContactSample(input.surveyId, scope);
 
   // 테스트 발송은 미저장 초안(bodyHtml)을 그대로 받으므로, 클릭 영역이 있으면
   // 저장 전이라도 밴드 슬라이스를 여기서 생성한다 (키가 결정적이라 재실행 무해).
@@ -102,6 +105,7 @@ export async function sendTestTemplateMail(
       bodyHtml: rendered.bodyHtml,
       previewText: rendered.subject,
       unsubscribeUrl,
+      testFooterKind: 'template',
     }),
   );
 

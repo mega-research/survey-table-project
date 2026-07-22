@@ -6,9 +6,12 @@ import {
   AddContactTargetInput,
   ContactTargetRowSchema,
   DeleteContactTargetInput,
+  GenerateTestContactsInput,
+  GenerateTestContactsResult,
   UpdateContactTargetInput,
 } from '../../domain/contact-target';
 import * as svc from '../services/contact-targets.service';
+import { generateTestContacts } from '../services/test-contacts.service';
 
 const add = authed
   .input(AddContactTargetInput)
@@ -31,8 +34,14 @@ const remove = authed
     return { ok: true as const };
   });
 
+const generateTest = authed
+  .input(GenerateTestContactsInput)
+  .output(GenerateTestContactsResult)
+  .handler(({ input }) => generateTestContacts(input));
+
 export const targets = {
   add,
   update,
   remove,
+  generateTest,
 };

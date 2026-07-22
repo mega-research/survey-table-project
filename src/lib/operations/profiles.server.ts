@@ -4,8 +4,6 @@ import { and, asc, eq, sql, type AnyColumn, type SQL } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { surveyResponses, contactTargets } from '@/db/schema';
-// notTestResponse 의도적 미적용: 응답 내역 목록/배지는 테스트 응답도 표시한다
-// (T11 에서 배지로 구분 표시 — 통계·모수 집계가 아니라 리스트 표시이므로 T10 스윕 예외).
 import { deletedResponse, notDeletedResponse } from '@/data/response-filters';
 
 import { escapeLikePattern } from './filter-shared';
@@ -18,9 +16,15 @@ import {
 import { buildFilterSql } from './progress-filters.server';
 import type { ProfilesCondition } from './profiles-filters.server';
 import { buildNegativeCodeExists, getResultCodeStatuses } from './result-code-statuses.server';
+import {
+  responseScopeCondition,
+  testFlagForScope,
+  type OperationsDataScope,
+} from './data-scope.server';
 
 export type ListProfilesArgs = Omit<NormalizedListArgs, 'q' | 'col'> & {
   surveyId: string;
+  scope: OperationsDataScope;
   pageSize: number;
   condition: ProfilesCondition | null;
 };
@@ -41,7 +45,7 @@ export interface ProfilesRow {
   totalSeconds: number | null;
   /** 매칭된 contact_targets.group_value (전시회명 국문 등). 익명/미매칭이면 null. */
   groupValue: string | null;
-  /** 테스트 모드 응답(survey_control) 여부. 통계에서는 항상 제외되지만 목록에는 배지로 노출한다. */
+  /** 현재 서버 scope에 속한 응답의 테스트 여부. real scope는 false, test scope는 true로 고정된다. */
   isTest: boolean;
 }
 
@@ -120,7 +124,7 @@ function profilesConditionToSql(
 export async function listResponsesForProfiles(
   args: ListProfilesArgs,
 ): Promise<ListProfilesResult> {
-  const { surveyId, page, pageSize, status, sort, dir, view, condition, test } = args;
+  const { surveyId, scope, page, pageSize, status, sort, dir, view, condition } = args;
 
   // negative result codes — base subquery WHERE 의 NOT EXISTS 분기에 사용.
   // 빈 배열이면 unsubscribed_at 만 검사 (negative code 분기는 SQL 차원에서 생략).
@@ -160,18 +164,22 @@ export async function listResponsesForProfiles(
       and(
         eq(contactTargets.id, surveyResponses.contactTargetId),
         eq(contactTargets.surveyId, surveyResponses.surveyId),
+        eq(contactTargets.isTest, surveyResponses.isTest),
       ),
     )
     .where(
       and(
         eq(surveyResponses.surveyId, surveyId),
         view === 'deleted' ? deletedResponse : notDeletedResponse,
+        responseScopeCondition(scope),
         // negative ct 의 응답 가림. 익명 (contact_target_id IS NULL) 은
         // NOT EXISTS 가 자동 true → 통과. excluded 가 빠진 후 row_number 가
         // 다시 매겨지므로 idx 가 자동 보정된다.
         sql`NOT EXISTS (
           SELECT 1 FROM contact_targets ct
           WHERE ct.id = ${surveyResponses.contactTargetId}
+            AND ct.survey_id = ${surveyResponses.surveyId}
+            AND ct.is_test = ${surveyResponses.isTest}
             AND (
               ct.unsubscribed_at IS NOT NULL
               ${negativeCodeBranch}
@@ -196,14 +204,6 @@ export async function listResponsesForProfiles(
   // status 필터는 active view 일 때만 적용 (deleted view 는 전체 노출).
   if (view === 'active' && status !== 'all') {
     whereParts.push(eq(numbered.status, status));
-  }
-
-  // 테스트 필터는 status/view 와 독립 축 — 휴지통(deleted view)에서도 동일하게 적용해
-  // 테스트 모드 OFF 시 일괄 삭제 전/후 확인 용도로 쓸 수 있게 한다.
-  if (test === 'only') {
-    whereParts.push(eq(numbered.isTest, true));
-  } else if (test === 'exclude') {
-    whereParts.push(eq(numbered.isTest, false));
   }
 
   const conditionSql = profilesConditionToSql(condition, {
@@ -286,6 +286,7 @@ export async function listResponsesForProfiles(
 export async function isResponseExcluded(
   surveyId: string,
   responseId: string,
+  scope: OperationsDataScope,
 ): Promise<boolean> {
   const { negative: negativeCodes } = await getResultCodeStatuses(surveyId);
 
@@ -300,6 +301,9 @@ export async function isResponseExcluded(
     JOIN contact_targets ct ON ct.id = sr.contact_target_id
     WHERE sr.id = ${responseId}::uuid
       AND sr.survey_id = ${surveyId}::uuid
+      AND sr.is_test = ${testFlagForScope(scope)}
+      AND ct.survey_id = sr.survey_id
+      AND ct.is_test = sr.is_test
       AND (
         ct.unsubscribed_at IS NOT NULL
         ${negativeCodeBranch}

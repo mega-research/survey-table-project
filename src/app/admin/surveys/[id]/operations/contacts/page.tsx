@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/operations/empty-state';
+import { ContactUploadAction } from '@/components/operations/contacts/contact-upload-action';
 import { ContactsFilterBar } from '@/components/operations/contacts/contacts-filter-bar';
 import { ContactsPageClient } from '@/components/operations/contacts/contacts-page-client';
 import {
@@ -19,6 +20,7 @@ import {
   listContactsForSurvey,
 } from '@/lib/operations/contacts.server';
 import { parseClausesFromUrl } from '@/lib/operations/contacts-filters.server';
+import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
 
 export const metadata: Metadata = {
   title: '현황 - 조사 대상 목록',
@@ -39,6 +41,7 @@ interface PageProps {
 export default async function ContactsPage({ params, searchParams }: PageProps) {
   const { id: surveyId } = await params;
   const sp = await searchParams;
+  const scope = await getOperationsDataScope(surveyId);
 
   // page / sort / dir 파싱 — 다중 조건 필터 전환과 함께 normalizeContactListArgs 가 제거되어 인라인 처리.
   const pageRaw = Number(sp.page);
@@ -47,7 +50,7 @@ export default async function ContactsPage({ params, searchParams }: PageProps) 
 
   // 스킴 + resultCodes 병렬 로드
   const [scheme, resultCodes] = await Promise.all([
-    getContactColumnScheme(surveyId),
+    getContactColumnScheme(surveyId, scope),
     getContactResultCodes(surveyId),
   ]);
 
@@ -67,6 +70,7 @@ export default async function ContactsPage({ params, searchParams }: PageProps) 
 
   const { rows, total, page: clampedPage } = await listContactsForSurvey({
     surveyId,
+    scope,
     pageSize: CONTACTS_PAGE_SIZE,
     clauses,
     page: parsedPage,
@@ -87,11 +91,11 @@ export default async function ContactsPage({ params, searchParams }: PageProps) 
               description="엑셀 파일을 업로드해 명단을 적재하세요."
             />
             <div className="mt-4 flex justify-center">
-              <Button asChild>
-                <Link href={`/admin/surveys/${surveyId}/operations/contacts/upload/new`}>
-                  엑셀 업로드
-                </Link>
-              </Button>
+              <ContactUploadAction
+                href={`/admin/surveys/${surveyId}/operations/contacts/upload/new`}
+                label="엑셀 업로드"
+                disabled={scope === 'test'}
+              />
             </div>
           </CardContent>
         </Card>
@@ -109,9 +113,11 @@ export default async function ContactsPage({ params, searchParams }: PageProps) 
           <p className="text-sm text-slate-500">총 {total.toLocaleString('ko-KR')}건</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button asChild variant="outline" size="sm">
-            <Link href={`/admin/surveys/${surveyId}/operations/contacts/upload/new`}>+ 업로드</Link>
-          </Button>
+          <ContactUploadAction
+            href={`/admin/surveys/${surveyId}/operations/contacts/upload/new`}
+            label="+ 업로드"
+            disabled={scope === 'test'}
+          />
           <Button asChild size="sm">
             <Link href={`/admin/surveys/${surveyId}/operations/contacts/new`}>+ 조사 대상 추가</Link>
           </Button>

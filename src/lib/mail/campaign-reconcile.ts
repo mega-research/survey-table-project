@@ -3,13 +3,14 @@ import 'server-only';
 import { and, eq, inArray } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { mailRecipients } from '@/db/schema/mail';
+import { mailCampaigns, mailRecipients } from '@/db/schema/mail';
 import { getResend } from '@/lib/mail/resend-client';
 import { mapResendLastEvent, canTransition, applyRecipientTransition } from '@/lib/mail/recipient-status-transition';
 import type { MailRecipientStatus } from '@/db/schema/mail';
 
 export interface StuckRecipient {
   id: string;
+  campaignId: string;
   status: MailRecipientStatus;
   resendMessageId: string;
 }
@@ -23,6 +24,7 @@ export interface ResendLookup {
 
 export interface ReconcileAction {
   recipientId: string;
+  campaignId: string;
   prevStatus: MailRecipientStatus;
   newStatus: MailRecipientStatus;
 }
@@ -44,7 +46,12 @@ export function planReconcileTransitions(
     const newStatus = mapResendLastEvent(lk.lastEvent);
     if (!newStatus) continue;
     if (!canTransition(recipient.status, newStatus)) continue;
-    actions.push({ recipientId: recipient.id, prevStatus: recipient.status, newStatus });
+    actions.push({
+      recipientId: recipient.id,
+      campaignId: recipient.campaignId,
+      prevStatus: recipient.status,
+      newStatus,
+    });
   }
   return actions;
 }
@@ -62,6 +69,7 @@ export async function reconcileCampaignRecipients(
   const stuck = await db
     .select({
       id: mailRecipients.id,
+      campaignId: mailRecipients.campaignId,
       status: mailRecipients.status,
       resendMessageId: mailRecipients.resendMessageId,
     })
@@ -75,7 +83,12 @@ export async function reconcileCampaignRecipients(
 
   const targets: StuckRecipient[] = stuck
     .filter((r) => r.resendMessageId != null)
-    .map((r) => ({ id: r.id, status: r.status as MailRecipientStatus, resendMessageId: r.resendMessageId! }));
+    .map((r) => ({
+      id: r.id,
+      campaignId: r.campaignId,
+      status: r.status as MailRecipientStatus,
+      resendMessageId: r.resendMessageId!,
+    }));
 
   if (targets.length === 0) return { checked: 0, updated: 0 };
 
@@ -101,11 +114,19 @@ export async function reconcileCampaignRecipients(
 
   for (const action of actions) {
     await db.transaction(async (tx) => {
+      const [campaign] = await tx
+        .select({ id: mailCampaigns.id })
+        .from(mailCampaigns)
+        .where(eq(mailCampaigns.id, action.campaignId))
+        .for('update');
+      if (!campaign) return;
+
       const rows = await tx
         .select({
           id: mailRecipients.id,
           campaignId: mailRecipients.campaignId,
           status: mailRecipients.status,
+          archivedAt: mailRecipients.archivedAt,
         })
         .from(mailRecipients)
         .where(eq(mailRecipients.id, action.recipientId))
@@ -118,6 +139,7 @@ export async function reconcileCampaignRecipients(
         prevStatus: row.status as MailRecipientStatus,
         newStatus: action.newStatus,
         eventAt,
+        recipientArchivedAt: row.archivedAt,
       });
       if (ok) updated += 1;
     });

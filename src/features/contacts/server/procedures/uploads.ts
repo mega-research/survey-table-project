@@ -1,5 +1,6 @@
 import * as z from 'zod';
 
+import { loadOperationsDataScope } from '@/lib/operations/data-scope.server';
 import { authed } from '@/server/orpc';
 
 import { GetExistingContactsCountInput } from '../../domain/contact-column';
@@ -25,7 +26,9 @@ const ingest = authed
 const existingCount = authed
   .input(GetExistingContactsCountInput)
   .output(z.number())
-  .handler(({ input }) => columnsSvc.getExistingContactsCount(input.surveyId));
+  .handler(async ({ input }) =>
+    columnsSvc.getExistingContactsCount(input.surveyId, await loadOperationsDataScope(input.surveyId)),
+  );
 
 export const uploads = {
   parsePreview,

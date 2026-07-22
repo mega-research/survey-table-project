@@ -1,12 +1,17 @@
 import { describe, expect, it } from 'vitest';
+import { PgDialect } from 'drizzle-orm/pg-core';
 
 import {
+  applyRecipientTransition,
   buildTimestampUpdate,
   canTransition,
+  finalizeCampaignIfDone,
   mapResendLastEvent,
   mapResendWebhookType,
   STATUS_ALLOWED_PREV,
 } from '@/lib/mail/recipient-status-transition';
+
+const dialect = new PgDialect();
 
 describe('mapResendWebhookType', () => {
   it('알려진 이벤트를 status로 매핑한다', () => {
@@ -24,6 +29,7 @@ describe('mapResendWebhookType', () => {
 
 describe('mapResendLastEvent', () => {
   it('전달/열람/실패 계열을 매핑한다', () => {
+    expect(mapResendLastEvent('sent')).toBe('sent');
     expect(mapResendLastEvent('delivered')).toBe('delivered');
     expect(mapResendLastEvent('opened')).toBe('opened');
     expect(mapResendLastEvent('clicked')).toBe('opened');
@@ -34,7 +40,6 @@ describe('mapResendLastEvent', () => {
     expect(mapResendLastEvent('suppressed')).toBe('bounced');
   });
   it('아직 미전달 상태는 null', () => {
-    expect(mapResendLastEvent('sent')).toBeNull();
     expect(mapResendLastEvent('queued')).toBeNull();
     expect(mapResendLastEvent('scheduled')).toBeNull();
     expect(mapResendLastEvent('delivery_delayed')).toBeNull();
@@ -45,6 +50,8 @@ describe('canTransition', () => {
   it('정상 전이는 허용', () => {
     expect(canTransition('sent', 'delivered')).toBe(true);
     expect(canTransition('queued', 'sent')).toBe(true);
+    expect(canTransition('sending', 'sent')).toBe(true);
+    expect(canTransition('sending', 'failed')).toBe(true);
     expect(canTransition('delivered', 'opened')).toBe(true);
     expect(canTransition('sent', 'failed')).toBe(true);
   });
@@ -59,8 +66,15 @@ describe('canTransition', () => {
 });
 
 describe('STATUS_ALLOWED_PREV', () => {
-  it('delivered의 허용 이전 상태는 queued/sent', () => {
-    expect(STATUS_ALLOWED_PREV.delivered).toEqual(['queued', 'sent']);
+  it('sent의 허용 이전 상태는 queued/sending이다', () => {
+    expect(STATUS_ALLOWED_PREV.sent).toEqual(['queued', 'sending']);
+  });
+
+  it('email.sent 유실 복구를 위해 downstream 상태는 sending에서 직접 전이할 수 있다', () => {
+    expect(STATUS_ALLOWED_PREV.delivered).toEqual(['queued', 'sending', 'sent']);
+    expect(STATUS_ALLOWED_PREV.opened).toContain('sending');
+    expect(STATUS_ALLOWED_PREV.bounced).toContain('sending');
+    expect(STATUS_ALLOWED_PREV.complained).toContain('sending');
   });
 });
 
@@ -76,5 +90,49 @@ describe('buildTimestampUpdate', () => {
   it('타임스탬프 컬럼이 없는 status는 빈 객체', () => {
     expect(buildTimestampUpdate('failed', at)).toEqual({});
     expect(buildTimestampUpdate('sending', at)).toEqual({});
+  });
+});
+
+describe('applyRecipientTransition counter', () => {
+  it('sending에서 terminal로 전이할 때 queued_count를 한 번 감소시킨다', async () => {
+    const executed: unknown[] = [];
+    const tx = {
+      update: () => ({ set: () => ({ where: async () => undefined }) }),
+      execute: async (query: unknown) => {
+        executed.push(query);
+      },
+    };
+
+    const applied = await applyRecipientTransition(tx as never, {
+      recipientId: 'r1',
+      campaignId: 'c1',
+      prevStatus: 'sending',
+      newStatus: 'sent',
+      eventAt: new Date('2026-07-22T00:00:00Z'),
+      recipientArchivedAt: null,
+    });
+
+    expect(applied).toBe(true);
+    expect(executed).toHaveLength(2);
+
+    const counterQuery = dialect.sqlToQuery(executed[0] as never);
+    expect(counterQuery.sql).toMatch(
+      /queued_count\s*=\s*queued_count\s*-\s*CASE WHEN \$1 IN \('queued', 'sending'\)/,
+    );
+    expect(counterQuery.params[0]).toBe('sending');
+  });
+});
+
+describe('finalizeCampaignIfDone archive guard', () => {
+  it('보관된 campaign lifecycle을 변경하지 않도록 archived_at IS NULL을 요구한다', async () => {
+    const executed: unknown[] = [];
+    await finalizeCampaignIfDone({
+      execute: async (query: unknown) => {
+        executed.push(query);
+      },
+    } as never, 'campaign-1');
+
+    const query = dialect.sqlToQuery(executed[0] as never);
+    expect(query.sql).toContain('archived_at IS NULL');
   });
 });

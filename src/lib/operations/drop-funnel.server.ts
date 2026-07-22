@@ -11,6 +11,7 @@ import {
   type FunnelQuestion,
 } from './drop-funnel';
 import { buildCanonicalSteps } from './page-dwell';
+import { testFlagForScope, type OperationsDataScope } from './data-scope.server';
 
 /** 빈 결과 — published version 없거나 snapshot이 비어있을 때. */
 const EMPTY_OUTPUT: DropFunnelOutput = { bars: [], totalDrops: 0 };
@@ -33,10 +34,12 @@ const EMPTY_OUTPUT: DropFunnelOutput = { bars: [], totalDrops: 0 };
  *   - currentVersionId 없음 / snapshot 비어있음 → 빈 결과.
  *   - drop 세션 0건이어도 formatDropFunnel 이 빈 bars 를 반환.
  *
- * `sr.is_test = false` — 테스트 응답은 drop funnel 모수에서 제외(notTestResponse 와 동일
- * 의미, raw SQL 컨텍스트라 인라인 유지).
  */
-export async function getDropFunnel(surveyId: string): Promise<DropFunnelOutput> {
+export async function getDropFunnel(
+  surveyId: string,
+  scope: OperationsDataScope,
+): Promise<DropFunnelOutput> {
+  const isTest = testFlagForScope(scope);
   // ── A) 현재 published snapshot 로드 + 캐노니컬 step ──────────────────────────
   const surveyRow = await db
     .select({ currentVersionId: surveys.currentVersionId })
@@ -65,12 +68,17 @@ export async function getDropFunnel(surveyId: string): Promise<DropFunnelOutput>
   if (questions.length === 0) return EMPTY_OUTPUT;
 
   // ── B) SQL 위치별 COUNT 집계 (마지막 pageVisit stepId) ───────────────────────
+  const scopedWhere = sql`
+    sr.survey_id = ${surveyId}::uuid
+    AND sr.is_test = ${isTest}
+    AND sr.deleted_at IS NULL
+  `;
   const aggregateRows = await db.execute(sql`
     SELECT
       COALESCE(sr.page_visits, '[]'::jsonb) -> -1 ->> 'stepId' AS last_step_id,
       COUNT(*)::int AS cnt
     FROM survey_responses sr
-    WHERE sr.survey_id = ${surveyId}::uuid AND sr.status = 'drop' AND sr.is_test = false
+    WHERE ${scopedWhere} AND sr.status = 'drop'
     GROUP BY COALESCE(sr.page_visits, '[]'::jsonb) -> -1 ->> 'stepId'
   `);
 

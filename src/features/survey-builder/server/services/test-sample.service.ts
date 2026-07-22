@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { getFirstContactSample } from '@/lib/operations/contact-sample.server';
+import { loadOperationsDataScope } from '@/lib/operations/data-scope.server';
 
 import type { SurveyTestSample } from '../../domain/test-sample';
 
@@ -15,7 +16,8 @@ import type { SurveyTestSample } from '../../domain/test-sample';
 export async function getSurveyTestSample(
   surveyId: string,
 ): Promise<SurveyTestSample | null> {
-  const sample = await getFirstContactSample(surveyId);
+  const scope = await loadOperationsDataScope(surveyId);
+  const sample = await getFirstContactSample(surveyId, scope);
   if (!sample) return null;
   return { attrs: sample.attrs, resid: sample.resid };
 }

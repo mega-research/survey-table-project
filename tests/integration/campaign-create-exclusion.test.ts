@@ -109,10 +109,47 @@ function buildTemplateChain() {
   return chain;
 }
 
+function buildSurveyScopeChain() {
+  const chain: Record<string, unknown> = {
+    from() {
+      return chain;
+    },
+    where() {
+      return chain;
+    },
+    for() {
+      return Promise.resolve([{ enabled: false }]);
+    },
+  };
+  return chain;
+}
+
+function buildSelectedTargetsChain() {
+  const chain: Record<string, unknown> = {
+    from() {
+      return chain;
+    },
+    where(expr: unknown) {
+      const raw = extractRawSql(expr);
+      const uuids = raw.match(UUID_RE) ?? [];
+      const surveyId = uuids[0] ?? null;
+      const selectedIds = new Set(uuids.slice(1));
+      return Promise.resolve(
+        state.contacts
+          .filter((contact) => contact.surveyId === surveyId && selectedIds.has(contact.id))
+          .map((contact) => ({ id: contact.id, isTest: false })),
+      );
+    },
+  };
+  return chain;
+}
+
 const tx = {
-  select(cols?: unknown) {
-    // cols 인자 유무로 template(인자 없음) vs piiJoined(컬럼 명시) 구분
-    return cols === undefined ? buildTemplateChain() : buildPiiSelectChain();
+  select(cols?: Record<string, unknown>) {
+    if (cols === undefined) return buildTemplateChain();
+    if ('enabled' in cols) return buildSurveyScopeChain();
+    if ('isTest' in cols) return buildSelectedTargetsChain();
+    return buildPiiSelectChain();
   },
   execute() {
     return Promise.resolve([{ next_id: 1 }]);

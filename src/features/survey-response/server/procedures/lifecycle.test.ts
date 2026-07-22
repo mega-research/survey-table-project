@@ -3,6 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
+import * as svc from '../services/lifecycle.service';
+import { lifecycle } from './lifecycle';
+
 vi.mock('../services/lifecycle.service', () => ({
   recordStepVisit: vi.fn(),
   recordVisibilitySegment: vi.fn(),
@@ -18,9 +21,6 @@ vi.mock('@/lib/rate-limit/rate-limiter', async (importOriginal) => {
     getRateLimiter: () => ({ limit: limitMock }),
   };
 });
-
-import * as svc from '../services/lifecycle.service';
-import { lifecycle } from './lifecycle';
 
 // 신뢰 IP 가 추출되는 정상 요청 헤더. rate limit 미들웨어가 이 헤더로 키를 만든다.
 const TRUSTED_HEADERS = new Headers({ 'x-real-ip': '203.0.113.7' });
@@ -62,6 +62,26 @@ describe('surveyResponse.lifecycle procedures', () => {
     });
   });
 
+  it('stepVisit(pub)는 테스트 attempt 식별자를 위임한다', async () => {
+    const attemptId = '77777777-8888-4999-8aaa-bbbbbbbbbbbb';
+    vi.mocked(svc.recordStepVisit).mockResolvedValue(undefined as never);
+    const client = createRouterClient({ lifecycle }, { context: anonContext() });
+
+    await client.lifecycle.stepVisit({
+      responseId: RESPONSE_ID,
+      nextStepId: 'group:next',
+      attemptId,
+      sessionId: 'target-test-session',
+    } as never);
+
+    expect(svc.recordStepVisit).toHaveBeenCalledWith({
+      responseId: RESPONSE_ID,
+      nextStepId: 'group:next',
+      attemptId,
+      sessionId: 'target-test-session',
+    });
+  });
+
   it('visibilitySegment(pub)는 hide action 을 service 에 위임한다', async () => {
     vi.mocked(svc.recordVisibilitySegment).mockResolvedValue(undefined as never);
     const client = createRouterClient({ lifecycle }, { context: anonContext() });
@@ -83,6 +103,26 @@ describe('surveyResponse.lifecycle procedures', () => {
     expect(svc.recordVisibilitySegment).toHaveBeenCalledWith({
       responseId: RESPONSE_ID,
       action: 'show',
+    });
+  });
+
+  it('visibilitySegment(pub)는 테스트 attempt 식별자를 위임한다', async () => {
+    const attemptId = '77777777-8888-4999-8aaa-bbbbbbbbbbbb';
+    vi.mocked(svc.recordVisibilitySegment).mockResolvedValue(undefined as never);
+    const client = createRouterClient({ lifecycle }, { context: anonContext() });
+
+    await client.lifecycle.visibilitySegment({
+      responseId: RESPONSE_ID,
+      action: 'hide',
+      attemptId,
+      sessionId: 'target-test-session',
+    } as never);
+
+    expect(svc.recordVisibilitySegment).toHaveBeenCalledWith({
+      responseId: RESPONSE_ID,
+      action: 'hide',
+      attemptId,
+      sessionId: 'target-test-session',
     });
   });
 
@@ -159,10 +199,7 @@ describe('surveyResponse.lifecycle procedures', () => {
   });
 
   it('신뢰 IP 추출 불가(헤더 부재)면 fail-closed 로 거부하고 service 를 호출하지 않는다', async () => {
-    const client = createRouterClient(
-      { lifecycle },
-      { context: anonContext(new Headers()) },
-    );
+    const client = createRouterClient({ lifecycle }, { context: anonContext(new Headers()) });
     await expect(
       client.lifecycle.visibilitySegment({ responseId: RESPONSE_ID, action: 'hide' }),
     ).rejects.toThrow();

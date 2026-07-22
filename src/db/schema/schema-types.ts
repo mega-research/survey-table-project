@@ -465,6 +465,20 @@ export interface CampaignFilterSnapshot {
   groupValues?: string[];
 }
 
+/** mail_recipients.send_payload_snapshot — 최초 claim 시 확정한 재시도 불변 payload. */
+export interface MailRecipientSendPayloadSnapshot {
+  from: string;
+  replyTo: string;
+  to: string;
+  subject: string;
+  html: string;
+  attachments: Array<{
+    filename: string;
+    contentType?: string;
+    sha256: string;
+  }>;
+}
+
 // ── 쿼터 (surveys.quota_config) ──────────────────────────────
 /** 한 차원 안의 구간. kind='choice'면 values, kind='numeric'이면 min/max 사용. */
 export interface QuotaCategory {

@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
@@ -27,6 +29,7 @@ interface ContactInfoCardProps {
   memo: string | null;
   contactMethod: ContactMethod | null;
   respondedAt: Date | null;
+  responseId: string | null;
   inviteCode: string | null;
   /** 헤더 토글 변경 시 호출 — 컬럼 스킴 hidden 갱신. 신규 모드는 undefined. */
   onColumnToggle?: (key: string, hidden: boolean) => void;
@@ -52,6 +55,7 @@ export function ContactInfoCard({
   memo,
   contactMethod,
   respondedAt,
+  responseId,
   inviteCode,
   onColumnToggle,
   onAttrsChange,
@@ -190,9 +194,21 @@ export function ContactInfoCard({
             <Button size="sm" variant="outline" disabled title="후속 슬라이스 (메일발송)">
               QR
             </Button>
-            <Button size="sm" variant="outline" disabled title="후속 슬라이스 (응답 보기)">
-              응답 보기
-            </Button>
+            {responseId ? (
+              <Button asChild size="sm" variant="outline">
+                <Link
+                  href={`/admin/surveys/${surveyId}/operations/profiles/${responseId}/edit`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  응답 보기
+                </Link>
+              </Button>
+            ) : (
+              <Button size="sm" variant="outline" disabled title="응답이 아직 없습니다.">
+                응답 보기
+              </Button>
+            )}
           </div>
           {inviteCode && inviteUrl && (
             <div className="mt-1 break-all text-sm text-slate-900">

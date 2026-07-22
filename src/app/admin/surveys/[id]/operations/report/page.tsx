@@ -17,6 +17,7 @@ import {
 } from '@/lib/operations/report-progress.server';
 import { parseConditionFromUrl } from '@/lib/operations/progress-filters.server';
 import { FILTER_SOURCE, type ColumnCandidateWithPii } from '@/lib/operations/filter-shared';
+import { getOperationsDataScope, targetScopeCondition } from '@/lib/operations/data-scope.server';
 
 export const dynamic = 'force-dynamic';
 
@@ -65,6 +66,7 @@ function parseSort(s: string | undefined, metaKeys: string[]): ProgressSortKey {
 export default async function ReportProgressPage({ params, searchParams }: PageProps) {
   const { id: surveyId } = await params;
   const sp = await searchParams;
+  const scope = await getOperationsDataScope(surveyId);
 
   // page 파싱 NaN 가드 — `?page=abc` / 음수 / undefined 모두 1 로 fallback.
   // 가드 없으면 SQL OFFSET NaN ERROR 발생.
@@ -77,8 +79,8 @@ export default async function ReportProgressPage({ params, searchParams }: PageP
   // cache() 로 RSC pass dedupe 되어 있어 getProgressGroupLabel 내부 lookup 과 같은 query 를 공유한다.
   const [scheme, groupLabel, contactScheme] = await Promise.all([
     getProgressColumnScheme(surveyId),
-    getProgressGroupLabel(surveyId),
-    getContactColumnScheme(surveyId),
+    getProgressGroupLabel(surveyId, scope),
+    getContactColumnScheme(surveyId, scope),
   ]);
   const visibleColumns = scheme.columns
     .filter((c) => !c.hidden)
@@ -113,14 +115,14 @@ export default async function ReportProgressPage({ params, searchParams }: PageP
   const countRows = await db
     .select({ ct: sql<number>`count(*)::int` })
     .from(contactTargets)
-    .where(sql`${contactTargets.surveyId} = ${surveyId}`);
+    .where(sql`${contactTargets.surveyId} = ${surveyId} AND ${targetScopeCondition(scope)}`);
   const isEmpty = Number(countRows[0]?.ct ?? 0) === 0;
 
   const { rows, totals } = isEmpty
     ? { rows: [], totals: { groupCount: 0, listTotal: 0, completedTotal: 0, excludedTotal: 0 } }
     : await Promise.all([
-        getProgressRows({ surveyId, condition, page, size, sort, dir, metaKeys }),
-        getProgressTotals(surveyId, condition),
+        getProgressRows({ surveyId, scope, condition, page, size, sort, dir, metaKeys }),
+        getProgressTotals(surveyId, scope, condition),
       ]).then(([r, t]) => ({ rows: r, totals: t }));
 
   return (

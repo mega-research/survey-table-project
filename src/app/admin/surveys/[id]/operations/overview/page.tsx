@@ -19,6 +19,7 @@ import { getDropFunnel } from '@/lib/operations/drop-funnel.server';
 import { getPageDwell } from '@/lib/operations/page-dwell.server';
 import { getQuotaStatus } from '@/lib/operations/quota-status.server';
 import { getResponseTime } from '@/lib/operations/response-time.server';
+import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
 import { getSurveyById } from '@/features/survey-builder/server/services/survey-read.service';
 
 /**
@@ -88,7 +89,8 @@ export default async function OperationsOverviewPage({
 
   // hour 모드 진입 시 date 미지정이면 응답이 있는 가장 최근 일자, 응답 자체가 없으면 KST 오늘로
   // fallback. 어댑터가 effectiveDate 없는 hour 모드에서 throw 하지 않도록 보장.
-  const availableDates = await aggregateDailyAvailableDates(surveyId);
+  const scope = await getOperationsDataScope(surveyId);
+  const availableDates = await aggregateDailyAvailableDates(surveyId, scope);
   const latestAvailable =
     availableDates.length > 0 ? availableDates[availableDates.length - 1] : undefined;
   const effectiveDate =
@@ -96,13 +98,13 @@ export default async function OperationsOverviewPage({
 
   const [statusCounts, dailyBuckets, dailyStats, responseTime, dropFunnel, pageDwell, quotaStatus, survey] =
     await Promise.all([
-      aggregateStatus(surveyId),
-      aggregateDaily({ surveyId, mode, ...(effectiveDate !== undefined ? { hourModeDate: effectiveDate } : {}) }),
-      getDailyStats(surveyId),
-      getResponseTime(surveyId),
-      getDropFunnel(surveyId),
-      getPageDwell(surveyId),
-      getQuotaStatus(surveyId),
+      aggregateStatus(surveyId, scope),
+      aggregateDaily({ surveyId, scope, mode, ...(effectiveDate !== undefined ? { hourModeDate: effectiveDate } : {}) }),
+      getDailyStats(surveyId, scope),
+      getResponseTime(surveyId, scope),
+      getDropFunnel(surveyId, scope),
+      getPageDwell(surveyId, scope),
+      scope === 'test' ? Promise.resolve(null) : getQuotaStatus(surveyId),
       getSurveyById(surveyId),
     ]);
 

@@ -19,7 +19,7 @@ interface Props {
 /** 응답 편집 audit 이력 — 기본 접힘 collapsible. */
 export function ContactEditHistoryCard({ rows, hasResponse }: Props) {
   return (
-    <details className="rounded-lg border bg-white">
+    <details open={hasResponse} className="rounded-lg border bg-white">
       <summary className="flex cursor-pointer items-center justify-between px-5 py-3 text-sm">
         <span className="font-medium text-slate-700">
           수정 / 편집 현황 ({rows.length}건)

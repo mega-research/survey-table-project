@@ -16,6 +16,7 @@ const ARGS = {
   prevStatus: 'sent' as const,
   newStatus: 'delivered' as const,
   eventAt: new Date('2026-05-29T04:10:00Z'),
+  recipientArchivedAt: null as Date | null,
 };
 
 describe('applyRecipientTransition', () => {
@@ -58,5 +59,37 @@ describe('applyRecipientTransition', () => {
       expect.not.objectContaining({ deliveredAt: expect.anything() }),
     );
     expect(m.execute).toHaveBeenCalledTimes(2);
+  });
+
+  it('webhook이 sending row를 먼저 확정하면 durable lease도 함께 정리한다', async () => {
+    const m = makeTx();
+
+    const ok = await applyRecipientTransition(m.tx as never, {
+      ...ARGS,
+      prevStatus: 'sending',
+      newStatus: 'sent',
+    });
+
+    expect(ok).toBe(true);
+    expect(m.updateSet).toHaveBeenCalledWith(expect.objectContaining({
+      status: 'sent',
+      sendAttemptedAt: null,
+      sendLeaseToken: null,
+      sendLeaseExpiresAt: null,
+      sendPayloadSnapshot: null,
+    }));
+  });
+
+  it('archived recipient는 상태만 전이하고 active campaign counter를 변경하지 않는다', async () => {
+    const m = makeTx();
+
+    const ok = await applyRecipientTransition(m.tx as never, {
+      ...ARGS,
+      recipientArchivedAt: new Date('2026-07-22T00:00:00Z'),
+    });
+
+    expect(ok).toBe(true);
+    expect(m.update).toHaveBeenCalledTimes(1);
+    expect(m.execute).not.toHaveBeenCalled();
   });
 });

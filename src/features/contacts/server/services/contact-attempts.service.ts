@@ -3,7 +3,7 @@ import 'server-only';
 import { and, eq, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { contactAttempts, contactTargets } from '@/db/schema';
+import { contactAttempts, contactTargets, surveys } from '@/db/schema';
 
 import type {
   AddContactAttemptInput,
@@ -12,17 +12,33 @@ import type {
 } from '../../domain/contact-attempt';
 
 /**
- * 회차의 소속 사전 검증: contactTargetId 가 surveyId 설문 소속인지 확인.
- * 없으면 NOT_FOUND throw — 다른 설문 소속 컨택의 회차를 건드리는 IDOR 를 봉인한다.
- * update/delete WHERE 의 attempt.id + contactTargetId 스코프와 합쳐 2중 봉인.
+ * 현재 DB 모드에 속한 대상자를 잠근다. 목록을 본 뒤 모드가 바뀌어도 회차 변경은
+ * 현재 스코프 대상자에게만 허용된다.
  */
-async function assertTargetInSurvey(contactTargetId: string, surveyId: string): Promise<void> {
-  const rows = await db
+async function lockTargetInCurrentScope(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  contactTargetId: string,
+  surveyId: string,
+): Promise<void> {
+  const [survey] = await tx
+    .select({ enabled: surveys.testModeEnabled })
+    .from(surveys)
+    .where(eq(surveys.id, surveyId))
+    .for('update');
+  if (!survey) throw new Error('NOT_FOUND');
+
+  const [target] = await tx
     .select({ id: contactTargets.id })
     .from(contactTargets)
-    .where(and(eq(contactTargets.id, contactTargetId), eq(contactTargets.surveyId, surveyId)))
-    .limit(1);
-  if (rows.length === 0) throw new Error('NOT_FOUND');
+    .where(
+      and(
+        eq(contactTargets.id, contactTargetId),
+        eq(contactTargets.surveyId, surveyId),
+        eq(contactTargets.isTest, survey.enabled),
+      ),
+    )
+    .for('update');
+  if (!target) throw new Error('NOT_FOUND');
 }
 
 /**
@@ -64,6 +80,7 @@ export async function addAttempt(
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
       result = await db.transaction(async (tx) => {
+        await lockTargetInCurrentScope(tx, input.contactTargetId, input.surveyId);
         const [maxRow] = await tx
           .select({ maxNo: sql<number | null>`MAX(${contactAttempts.attemptNo})` })
           .from(contactAttempts)
@@ -105,13 +122,15 @@ export async function addAttempt(
  */
 export async function updateAttempt(input: UpdateContactAttemptInput): Promise<void> {
   const { id, contactTargetId, surveyId, resultCode, note } = input;
-  await assertTargetInSurvey(contactTargetId, surveyId);
-  const updated = await db
-    .update(contactAttempts)
-    .set({ resultCode, note: note ?? null })
-    .where(and(eq(contactAttempts.id, id), eq(contactAttempts.contactTargetId, contactTargetId)))
-    .returning({ id: contactAttempts.id });
-  if (updated.length === 0) throw new Error('NOT_FOUND');
+  await db.transaction(async (tx) => {
+    await lockTargetInCurrentScope(tx, contactTargetId, surveyId);
+    const updated = await tx
+      .update(contactAttempts)
+      .set({ resultCode, note: note ?? null })
+      .where(and(eq(contactAttempts.id, id), eq(contactAttempts.contactTargetId, contactTargetId)))
+      .returning({ id: contactAttempts.id });
+    if (updated.length === 0) throw new Error('NOT_FOUND');
+  });
 }
 
 /**
@@ -121,10 +140,12 @@ export async function updateAttempt(input: UpdateContactAttemptInput): Promise<v
  */
 export async function deleteAttempt(input: DeleteContactAttemptInput): Promise<void> {
   const { id, contactTargetId, surveyId } = input;
-  await assertTargetInSurvey(contactTargetId, surveyId);
-  const deleted = await db
-    .delete(contactAttempts)
-    .where(and(eq(contactAttempts.id, id), eq(contactAttempts.contactTargetId, contactTargetId)))
-    .returning({ id: contactAttempts.id });
-  if (deleted.length === 0) throw new Error('NOT_FOUND');
+  await db.transaction(async (tx) => {
+    await lockTargetInCurrentScope(tx, contactTargetId, surveyId);
+    const deleted = await tx
+      .delete(contactAttempts)
+      .where(and(eq(contactAttempts.id, id), eq(contactAttempts.contactTargetId, contactTargetId)))
+      .returning({ id: contactAttempts.id });
+    if (deleted.length === 0) throw new Error('NOT_FOUND');
+  });
 }

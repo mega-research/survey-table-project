@@ -11,6 +11,8 @@ const ControlStateSchema = z.object({
   testToken: z.string().nullable(),
   accessIdentifier: z.string(),
   testResponseCount: z.number().int(),
+  testTargetCount: z.number().int(),
+  firstTestInviteCode: z.string().nullable(),
 });
 
 const get = authed
@@ -36,19 +38,26 @@ const setPaused = authed
   );
 
 const setTestMode = authed
-  .input(z.object({ surveyId: z.string(), enabled: z.boolean() }))
-  .output(
-    z.object({
-      testModeEnabled: z.boolean(),
-      testToken: z.string().nullable(),
-      accessIdentifier: z.string(),
-    }),
-  )
+  .input(z.object({ surveyId: z.string(), enabled: z.literal(true) }))
+  .output(ControlStateSchema)
   .handler(({ input }) => svc.setTestMode(input));
 
-const deleteTestResponses = authed
-  .input(z.object({ surveyId: z.string() }))
-  .output(z.object({ deletedCount: z.number().int() }))
-  .handler(({ input }) => svc.deleteTestResponses(input.surveyId));
+const disable = authed
+  .input(
+    z.object({
+      surveyId: z.string(),
+      disposition: z.enum(['keep', 'delete']),
+    }),
+  )
+  .output(
+    z.object({
+      testModeEnabled: z.literal(false),
+      deletedResponseCount: z.number().int(),
+      deletedTargetCount: z.number().int(),
+      remainingResponseCount: z.number().int(),
+      remainingTargetCount: z.number().int(),
+    }),
+  )
+  .handler(({ input }) => svc.disableTestWorkspace(input));
 
-export const control = { get, setPaused, setTestMode, deleteTestResponses };
+export const control = { get, setPaused, setTestMode, disable };

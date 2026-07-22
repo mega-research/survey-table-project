@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ========================
 // 모듈 모킹
@@ -16,17 +16,13 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 // 호출 순서대로 큐잉된 결과를 돌려주고, 트랜잭션 내부 메인 UPDATE 의 .set() 인자와
 // replaceResponseAnswers 인자를 캡처해 최종 저장값을 검증한다.
 
-const {
-  selectTerminalQueue,
-  capturedUpdateSets,
-  updateReturningMock,
-  replaceResponseAnswersMock,
-} = vi.hoisted(() => ({
-  selectTerminalQueue: [] as unknown[][],
-  capturedUpdateSets: [] as Record<string, unknown>[],
-  updateReturningMock: vi.fn(),
-  replaceResponseAnswersMock: vi.fn(),
-}));
+const { selectTerminalQueue, capturedUpdateSets, updateReturningMock, replaceResponseAnswersMock } =
+  vi.hoisted(() => ({
+    selectTerminalQueue: [] as unknown[][],
+    capturedUpdateSets: [] as Record<string, unknown>[],
+    updateReturningMock: vi.fn(),
+    replaceResponseAnswersMock: vi.fn(),
+  }));
 
 vi.mock('@/db', () => {
   function nextSelectTerminal(): unknown[] {
@@ -64,7 +60,23 @@ vi.mock('@/db', () => {
     select: vi.fn(() => makeSelectChain()),
     update: vi.fn(() => makeUpdateChain()),
     transaction: vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => {
+      const lockedSelectResult: Record<string, unknown> = {
+        for: vi.fn(() => lockedSelectResult),
+        limit: vi.fn(async () => [
+          {
+            id: RESPONSE_ID,
+            surveyId: SURVEY_ID,
+            isTest: false,
+            contactTargetId: CONTACT_TARGET_ID,
+          },
+        ]),
+      };
+      const lockedSelectChain: Record<string, unknown> = {
+        from: vi.fn(() => lockedSelectChain),
+        where: vi.fn(() => lockedSelectResult),
+      };
       const tx = {
+        select: vi.fn(() => lockedSelectChain),
         update: vi.fn(() => makeUpdateChain()),
         insert: vi.fn(() => ({ values: vi.fn(() => Promise.resolve(undefined)) })),
       };
@@ -159,9 +171,8 @@ describe('completeResponse — JSONB 오염 가드 (멤버십/바이트 필터)'
   it('유효 집합에 없는 questionId 는 JSONB 와 response_answers 양쪽에서 drop 한다', async () => {
     queueSelects({ validQuestionIds: [VALID_QID], attrs: {} });
 
-    const { completeResponse } = await import(
-      '@/features/survey-response/server/services/response.service'
-    );
+    const { completeResponse } =
+      await import('@/features/survey-response/server/services/response.service');
 
     await completeResponse({
       responseId: RESPONSE_ID,
@@ -190,9 +201,8 @@ describe('completeResponse — JSONB 오염 가드 (멤버십/바이트 필터)'
   it('단일 키 256KB 초과 값은 그 키만 drop 하고 나머지 정상 키는 보존한다', async () => {
     queueSelects({ validQuestionIds: [VALID_QID, 'q-huge'], attrs: {} });
 
-    const { completeResponse } = await import(
-      '@/features/survey-response/server/services/response.service'
-    );
+    const { completeResponse } =
+      await import('@/features/survey-response/server/services/response.service');
 
     // 256KB 를 넘는 거대 문자열 (utf8 1바이트 문자 × 300KB)
     const huge = 'a'.repeat(300 * 1024);
@@ -221,9 +231,8 @@ describe('completeResponse — JSONB 오염 가드 (멤버십/바이트 필터)'
       prefillQid: PREFILL_QID,
     });
 
-    const { completeResponse } = await import(
-      '@/features/survey-response/server/services/response.service'
-    );
+    const { completeResponse } =
+      await import('@/features/survey-response/server/services/response.service');
 
     await completeResponse({
       responseId: RESPONSE_ID,

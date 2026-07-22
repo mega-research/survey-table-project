@@ -4,13 +4,14 @@ import { and, eq, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { surveyResponses } from '@/db/schema';
-import { notDeletedResponse, notTestResponse } from '@/data/response-filters';
+import { notDeletedResponse } from '@/data/response-filters';
 
 import {
   shapeDailyStats,
   type DailyStatsRawRow,
   type DailyStatsRow,
 } from './daily-stats';
+import { responseScopeCondition, type OperationsDataScope } from './data-scope.server';
 
 /**
  * 단일 설문의 일자별 통계(총/완료/드롭)를 반환한다 (서버 전용).
@@ -22,7 +23,10 @@ import {
  * 순수 변환 로직(완료율·컬럼 비율·정렬·라벨)은 `daily-stats.ts`의
  * `shapeDailyStats`에 위임하여 테스트 가능하게 분리한다.
  */
-export async function getDailyStats(surveyId: string): Promise<DailyStatsRow[]> {
+export async function getDailyStats(
+  surveyId: string,
+  scope: OperationsDataScope,
+): Promise<DailyStatsRow[]> {
   const rows = await db
     .select({
       date: sql<string>`((${surveyResponses.startedAt} AT TIME ZONE 'Asia/Seoul')::date)::text`,
@@ -31,7 +35,13 @@ export async function getDailyStats(surveyId: string): Promise<DailyStatsRow[]> 
       drop: sql<number>`count(*) FILTER (WHERE ${surveyResponses.status} = 'drop')::int`,
     })
     .from(surveyResponses)
-    .where(and(eq(surveyResponses.surveyId, surveyId), notDeletedResponse, notTestResponse))
+    .where(
+      and(
+        eq(surveyResponses.surveyId, surveyId),
+        notDeletedResponse,
+        responseScopeCondition(scope),
+      ),
+    )
     .groupBy(sql`1`)
     .orderBy(sql`1 DESC`);
 

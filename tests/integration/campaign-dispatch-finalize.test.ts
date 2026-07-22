@@ -6,8 +6,8 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
  * 직접 호출해 'partial'/'completed'로 종결시키는지 검증한다.
  */
 
-const { sendBatchMock } = vi.hoisted(() => ({
-  sendBatchMock: vi.fn(),
+const { sendRecipientMock } = vi.hoisted(() => ({
+  sendRecipientMock: vi.fn(),
 }));
 
 // 청크 처리에 필요한 환경변수.
@@ -18,6 +18,8 @@ const campaign = {
   id: 'c1',
   surveyId: 's1',
   status: 'sending',
+  archivedAt: null,
+  isTest: false,
   subjectSnapshot: 'subject',
   bodyHtmlSnapshot: '<p>body</p>',
   fromLocalSnapshot: 'noreply',
@@ -31,9 +33,18 @@ const recipientRows = [
   {
     recipientId: 'r1',
     emailSnapshot: 'a@example.com',
-    inviteToken: 'inv1',
+    inviteCode: 'inv1',
     unsubscribeToken: 'unsub1',
     attrs: {},
+    unsubscribedAt: null,
+    status: 'queued',
+    archivedAt: null,
+    resendMessageId: null,
+    sendAttemptedAt: null as Date | null,
+    sendLeaseToken: null as string | null,
+    sendLeaseExpiresAt: null as Date | null,
+    sendPayloadSnapshot: null,
+    contactTargetId: 'contact-r1',
   },
 ];
 
@@ -66,6 +77,9 @@ vi.mock('@/db', () => {
         innerJoin() {
           return this;
         },
+        leftJoin() {
+          return this;
+        },
         where() {
           return idx === 0 ? Promise.resolve([campaign]) : Promise.resolve(recipientRows);
         },
@@ -73,10 +87,41 @@ vi.mock('@/db', () => {
     }),
     transaction: vi.fn(async (cb: (tx: unknown) => Promise<void> | void) => {
       const tx = {
+        select: vi.fn((selection?: Record<string, unknown>) => {
+          const keys = Object.keys(selection ?? {});
+          let result: unknown[];
+          if (keys.includes('contactTargetId') && keys.length === 2) {
+            result = [{ id: 'r1', contactTargetId: 'contact-r1' }];
+          } else if (keys.includes('unsubscribedAt')) {
+            result = [{ id: 'contact-r1', unsubscribedAt: null }];
+          } else if (keys.includes('sendPayloadSnapshot')) {
+            result = [{ id: 'r1', ...recipientRows[0] }];
+          } else {
+            result = [campaign];
+          }
+          return {
+            from() {
+              return this;
+            },
+            where() {
+              return this;
+            },
+            for: vi.fn(async () => result),
+            then(
+              resolve: (value: unknown[]) => unknown,
+              reject?: (reason: unknown) => unknown,
+            ) {
+              return Promise.resolve(result).then(resolve, reject);
+            },
+          };
+        }),
         update: vi.fn(() => ({
-          set: vi.fn(() => ({
+          set: vi.fn((payload: Record<string, unknown>) => ({
             where: vi.fn(() => ({
-              returning: vi.fn(async () => [{ id: 'r1' }]),
+              returning: vi.fn(async () => {
+                Object.assign(recipientRows[0]!, payload);
+                return [{ id: 'r1', archivedAt: recipientRows[0]!.archivedAt }];
+              }),
             })),
           })),
         })),
@@ -84,7 +129,7 @@ vi.mock('@/db', () => {
           executedSql.push(sqlToText(query));
         }),
       };
-      await cb(tx);
+      return cb(tx);
     }),
   };
   return { db };
@@ -100,7 +145,7 @@ vi.mock('@/lib/mail/render-for-send', () => ({
 
 vi.mock('@/lib/mail/send-bulk', () => ({
   resolveCampaignAttachments: vi.fn(async () => undefined),
-  sendCampaignBatch: sendBatchMock,
+  sendCampaignRecipient: sendRecipientMock,
 }));
 
 vi.mock('@/lib/mail/template-wrapper', () => ({
@@ -111,14 +156,20 @@ import { dispatchCampaignChunk } from '@/lib/mail/campaign-dispatch';
 
 beforeEach(() => {
   executedSql.length = 0;
-  sendBatchMock.mockReset();
+  recipientRows[0]!.status = 'queued';
+  recipientRows[0]!.sendAttemptedAt = null;
+  recipientRows[0]!.sendLeaseToken = null;
+  recipientRows[0]!.sendLeaseExpiresAt = null;
+  recipientRows[0]!.resendMessageId = null;
+  sendRecipientMock.mockReset();
 });
 
 describe('dispatchCampaignChunk finalize', () => {
   it('전건 failed(message_id 없음)여도 청크 후 finalize SQL을 실행한다', async () => {
-    sendBatchMock.mockResolvedValue([
-      { recipientId: 'r1', resendMessageId: null, errorReason: 'rate limit' },
-    ]);
+    sendRecipientMock.mockResolvedValue({
+      kind: 'permanent_failure',
+      errorReason: 'invalid email',
+    });
 
     const res = await dispatchCampaignChunk('c1', ['r1']);
 

@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { contactTargets, contactUploads, surveys } from '@/db/schema';
@@ -14,6 +14,7 @@ import { MAX_UPLOAD_ROWS, validateXlsxFile } from '@/lib/contacts/upload-limits'
 import { buildPiiRows, insertPiiRows, type PiiInput } from '@/lib/crypto/contact-pii-repo';
 import type { PiiFieldType } from '@/lib/crypto/pii-fields';
 import { generateInviteCode } from '@/lib/survey-url';
+import { loadOperationsDataScope } from '@/lib/operations/data-scope.server';
 
 import type {
   IngestContactUploadInput,
@@ -21,6 +22,10 @@ import type {
   ParseExcelPreviewInput,
   ParseExcelPreviewResult,
 } from '../../domain/contact-upload';
+
+interface SurveyModeRow extends Record<string, unknown> {
+  test_mode_enabled: boolean;
+}
 
 function ensureXlsx(file: File): void {
   const err = validateXlsxFile(file);
@@ -72,8 +77,15 @@ export async function parseExcelPreview(
 export async function ingestContactUpload(
   input: IngestContactUploadInput,
 ): Promise<IngestContactUploadResult> {
-  ensureXlsx(input.file);
   const { surveyId, file, mapping } = input;
+
+  // 클라이언트 상태를 신뢰하지 않는다. 테스트 모드에서는 실제 대상자 전체 교체가
+  // 위험하므로, 파일을 읽기 전에 현재 DB 모드로 먼저 fail-closed 한다.
+  if ((await loadOperationsDataScope(surveyId)) === 'test') {
+    throw new Error('테스트 모드에서는 실제 조사대상자를 업로드할 수 없습니다.');
+  }
+
+  ensureXlsx(file);
 
   const buffer = Buffer.from(await file.arrayBuffer());
   const allRows = await parseExcelRows(buffer, {
@@ -108,9 +120,25 @@ export async function ingestContactUpload(
   let errorRows = 0;
 
   const result = await db.transaction(async (tx) => {
+    // 파싱 중 모드가 바뀐 race도 삭제 직전에 다시 막는다. 설문 행을 잠가 모드 전환과
+    // 직렬화하고, 실제 대상자만 교체한다.
+    const scopeRows = await tx.execute<SurveyModeRow>(sql`
+      SELECT test_mode_enabled
+      FROM surveys
+      WHERE id = ${surveyId}::uuid
+      FOR UPDATE
+    `);
+    const survey = scopeRows[0];
+    if (!survey) throw new Error('설문을 찾을 수 없습니다.');
+    if (survey.test_mode_enabled) {
+      throw new Error('테스트 모드에서는 실제 조사대상자를 업로드할 수 없습니다.');
+    }
+
     // 시나리오 B: 기존 컨택 통째 DELETE.
     // FK 동작: survey_responses 는 SET NULL (응답 보존), contact_attempts/contact_pii 는 CASCADE.
-    await tx.delete(contactTargets).where(eq(contactTargets.surveyId, surveyId));
+    await tx
+      .delete(contactTargets)
+      .where(and(eq(contactTargets.surveyId, surveyId), eq(contactTargets.isTest, false)));
 
     const [upload] = await tx
       .insert(contactUploads)
@@ -140,7 +168,7 @@ export async function ingestContactUpload(
           }
 
           const residRows = (await sp.execute(
-            sql`SELECT next_contact_resid(${surveyId}::uuid) AS resid`,
+            sql`SELECT next_contact_resid(${surveyId}::uuid, false) AS resid`,
           )) as unknown as Array<{ resid: number }>;
           const resid = residRows[0]?.resid;
           if (resid == null) throw new Error('next_contact_resid 호출 실패');
@@ -150,6 +178,7 @@ export async function ingestContactUpload(
             .values({
               surveyId,
               resid,
+              isTest: false,
               groupValue,
               attrs: cleanAttrs,
               uploadId: upload.id,

@@ -11,6 +11,7 @@ import {
   getMailRecipientsForTarget,
   getResponseEditLogs,
 } from '@/lib/operations/contacts.server';
+import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
 
 export const metadata: Metadata = {
   title: '현황 - 조사 대상 단건 편집',
@@ -22,14 +23,15 @@ interface PageProps {
 
 export default async function ContactDetailPage({ params }: PageProps) {
   const { id: surveyId, contactId } = await params;
+  const scope = await getOperationsDataScope(surveyId);
 
-  const detail = await getContactDetailById(contactId);
+  const detail = await getContactDetailById(contactId, scope);
   if (!detail || detail.contact.surveyId !== surveyId) notFound();
 
   const [scheme, resultCodes, mailHistory, editLogs] = await Promise.all([
-    getContactColumnScheme(surveyId),
+    getContactColumnScheme(surveyId, scope),
     getContactResultCodes(surveyId),
-    getMailRecipientsForTarget(detail.contact.id),
+    getMailRecipientsForTarget(detail.contact.id, scope),
     getResponseEditLogs(detail.contact.responseId),
   ]);
   if (!scheme) notFound();

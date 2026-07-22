@@ -9,6 +9,7 @@ import {
   listCampaignsForSurvey,
   listUnsubscribedContacts,
 } from '@/lib/operations/campaigns.server';
+import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
 
 const PAGE_SIZE = 20;
 const UNSUB_PAGE_SIZE = 10;
@@ -26,12 +27,13 @@ function parsePage(value: string | undefined): number {
 export default async function MailCampaignsListPage({ params, searchParams }: Props) {
   const { id: surveyId } = await params;
   const sp = await searchParams;
+  const scope = await getOperationsDataScope(surveyId);
   const page = parsePage(sp.page);
   const unsubPage = parsePage(sp.unsubPage);
 
   const [campaigns, unsubscribed] = await Promise.all([
-    listCampaignsForSurvey({ surveyId, page, pageSize: PAGE_SIZE }),
-    listUnsubscribedContacts({ surveyId, page: unsubPage, pageSize: UNSUB_PAGE_SIZE }),
+    listCampaignsForSurvey({ surveyId, scope, page, pageSize: PAGE_SIZE }),
+    listUnsubscribedContacts({ surveyId, scope, page: unsubPage, pageSize: UNSUB_PAGE_SIZE }),
   ]);
 
   return (

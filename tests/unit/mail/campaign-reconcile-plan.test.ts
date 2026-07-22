@@ -4,9 +4,9 @@ import { planReconcileTransitions } from '@/lib/mail/campaign-reconcile';
 import type { StuckRecipient } from '@/lib/mail/campaign-reconcile';
 
 const stuck: StuckRecipient[] = [
-  { id: 'a', status: 'sent', resendMessageId: 'ma' },
-  { id: 'b', status: 'sent', resendMessageId: 'mb' },
-  { id: 'c', status: 'sent', resendMessageId: 'mc' },
+  { id: 'a', campaignId: 'campaign-1', status: 'sent', resendMessageId: 'ma' },
+  { id: 'b', campaignId: 'campaign-1', status: 'sent', resendMessageId: 'mb' },
+  { id: 'c', campaignId: 'campaign-1', status: 'sent', resendMessageId: 'mc' },
 ];
 
 describe('planReconcileTransitions', () => {
@@ -14,7 +14,12 @@ describe('planReconcileTransitions', () => {
     const actions = planReconcileTransitions(stuck, [
       { recipientId: 'a', lastEvent: 'delivered' },
     ]);
-    expect(actions).toEqual([{ recipientId: 'a', prevStatus: 'sent', newStatus: 'delivered' }]);
+    expect(actions).toEqual([{
+      recipientId: 'a',
+      campaignId: 'campaign-1',
+      prevStatus: 'sent',
+      newStatus: 'delivered',
+    }]);
   });
 
   it('아직 sent(미전달)·조회실패·미매핑은 제외', () => {

@@ -14,7 +14,6 @@ describe('resolveMobileTableDisplayMode', () => {
       'original',
     ]);
   });
-
   it.each([
     ['auto', 'auto'],
     ['drilldown-original-row', 'drilldown-original-row'],

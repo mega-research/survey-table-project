@@ -1,12 +1,11 @@
 import { createRef } from 'react';
+
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  useResponseLifecycle,
-} from '@/components/survey-response/hooks/use-response-lifecycle';
-import type { Question, QuestionGroup, Survey } from '@/types/survey';
+import { useResponseLifecycle } from '@/components/survey-response/hooks/use-response-lifecycle';
 import type { RenderStep } from '@/lib/group-ordering';
+import type { Question, QuestionGroup, Survey } from '@/types/survey';
 import type { BranchEvalCtx } from '@/utils/branch-logic';
 
 // RPC client 모킹 — 응답 쓰기 경로(createWithFirstAnswer/createBlank/complete)만 사용.
@@ -24,12 +23,6 @@ vi.mock('@/shared/lib/rpc', () => ({
       },
     },
   },
-}));
-
-// session-helpers 모킹 — localStorage 키 생성/세그먼트 전송 부수효과 제거.
-vi.mock('@/components/survey-response/hooks/session-helpers', () => ({
-  sessionStorageKey: (surveyId: string) => `survey-session:${surveyId}`,
-  sendVisibilitySegment: vi.fn(),
 }));
 
 const survey = { id: 'survey-1', title: 't' } as unknown as Survey;
@@ -59,6 +52,9 @@ function baseArgs(over: Partial<Parameters<typeof useResponseLifecycle>[0]> = {}
     inviteToken: null,
     testToken: null as string | null,
     isTestSession: false,
+    testIdentity: null,
+    hasTestAttemptOwnership: false,
+    setHasTestAttemptOwnership: vi.fn(),
     loadedSurvey: survey,
     currentStep: step,
     currentStepIndex: 0,
@@ -130,9 +126,7 @@ describe('useResponseLifecycle - handleResponse INSERT 가드', () => {
       }),
     );
 
-    await waitFor(() =>
-      expect(args.setCurrentResponseId).toHaveBeenCalledWith('resp-1'),
-    );
+    await waitFor(() => expect(args.setCurrentResponseId).toHaveBeenCalledWith('resp-1'));
   });
 
   it('admin-edit 모드면 INSERT 를 발사하지 않는다 (분기 5/8)', () => {
@@ -165,6 +159,32 @@ describe('useResponseLifecycle - handleResponse INSERT 가드', () => {
       result.current.handleResponse('q1', 'v1');
     });
     expect(createWithFirstAnswer).not.toHaveBeenCalled();
+  });
+
+  it('대상자 테스트 회복 응답은 첫 새 입력에서 attempt 소유권을 획득한다', async () => {
+    createWithFirstAnswer.mockResolvedValue({
+      kind: 'created',
+      id: 'existing',
+      contactTargetId: 'target-1',
+    });
+    const testIdentity = {
+      attemptId: '77777777-8888-4999-8aaa-bbbbbbbbbbbb',
+      sessionId: 'target-session',
+    };
+    const args = baseArgs({
+      currentResponseId: 'existing',
+      isTestSession: true,
+      inviteToken: 'target-invite',
+      testIdentity,
+    });
+    const { result } = renderHook(() => useResponseLifecycle(args));
+
+    act(() => {
+      result.current.handleResponse('q2', '새 입력');
+    });
+
+    expect(createWithFirstAnswer).toHaveBeenCalledWith(expect.objectContaining(testIdentity));
+    await waitFor(() => expect(args.setHasTestAttemptOwnership).toHaveBeenCalledWith(true));
   });
 
   it('isRecovering 중이면 INSERT 를 발사하지 않는다 (I-1 가드)', () => {
@@ -201,6 +221,38 @@ describe('useResponseLifecycle - handleResponse INSERT 가드', () => {
     );
     expect(args.setCurrentResponseId).not.toHaveBeenCalled();
   });
+
+  it('대상자 테스트 링크가 저장 시 무효화되면 scoped 세션과 응답 상태를 지운다', async () => {
+    createWithFirstAnswer.mockResolvedValue({
+      kind: 'blocked',
+      reason: 'invalid_test_token',
+    });
+    const inviteToken = 'target-invite';
+    window.localStorage.setItem(`survey-session:survey-1:invite:${inviteToken}`, 'stale-session');
+    const args = baseArgs({
+      inviteToken,
+      isTestSession: true,
+      testIdentity: {
+        attemptId: '77777777-8888-4999-8aaa-bbbbbbbbbbbb',
+        sessionId: 'target-session',
+      },
+    });
+    const { result } = renderHook(() => useResponseLifecycle(args));
+
+    act(() => {
+      result.current.handleResponse('q1', '응답');
+    });
+
+    await waitFor(() =>
+      expect(args.setDuplicateStatus).toHaveBeenCalledWith({
+        kind: 'blocked',
+        reason: 'invalid_test_token',
+      }),
+    );
+    expect(window.localStorage.getItem(`survey-session:survey-1:invite:${inviteToken}`)).toBeNull();
+    expect(args.resetResponseState).toHaveBeenCalledTimes(1);
+    expect(args.setResponses).toHaveBeenCalledWith({});
+  });
 });
 
 describe('useResponseLifecycle - handleSubmit', () => {
@@ -228,9 +280,7 @@ describe('useResponseLifecycle - handleSubmit', () => {
     expect(createBlank).toHaveBeenCalledTimes(1);
     expect(args.setCurrentResponseId).toHaveBeenCalledWith('blank-1');
     expect(complete).toHaveBeenCalledTimes(1);
-    expect(complete).toHaveBeenCalledWith(
-      expect.objectContaining({ responseId: 'blank-1' }),
-    );
+    expect(complete).toHaveBeenCalledWith(expect.objectContaining({ responseId: 'blank-1' }));
     expect(args.setIsCompleted).toHaveBeenCalledWith(true);
   });
 
@@ -243,10 +293,37 @@ describe('useResponseLifecycle - handleSubmit', () => {
     });
 
     expect(createBlank).not.toHaveBeenCalled();
-    expect(complete).toHaveBeenCalledWith(
-      expect.objectContaining({ responseId: 'resp-existing' }),
-    );
+    expect(complete).toHaveBeenCalledWith(expect.objectContaining({ responseId: 'resp-existing' }));
     expect(args.setIsCompleted).toHaveBeenCalledWith(true);
+  });
+
+  it('대상자 테스트 회복 응답 제출은 같은 attempt로 소유권을 얻은 뒤 완료한다', async () => {
+    createBlank.mockResolvedValue({
+      kind: 'created',
+      id: 'resp-existing',
+      contactTargetId: 'target-1',
+    });
+    const testIdentity = {
+      attemptId: '77777777-8888-4999-8aaa-bbbbbbbbbbbb',
+      sessionId: 'target-session',
+    };
+    const args = baseArgs({
+      currentResponseId: 'resp-existing',
+      isTestSession: true,
+      inviteToken: 'target-invite',
+      testIdentity,
+    });
+    const { result } = renderHook(() => useResponseLifecycle(args));
+
+    await act(async () => {
+      await result.current.handleSubmit();
+    });
+
+    expect(createBlank).toHaveBeenCalledWith(expect.objectContaining(testIdentity));
+    expect(complete).toHaveBeenCalledWith(
+      expect.objectContaining({ responseId: 'resp-existing', ...testIdentity }),
+    );
+    expect(args.setHasTestAttemptOwnership).toHaveBeenCalledWith(true);
   });
 
   it('blank fallback 이 blocked 면 complete 없이 중단하고 setDuplicateStatus 호출', async () => {
@@ -316,9 +393,7 @@ describe('useResponseLifecycle - handleSubmit', () => {
     } as unknown as Question;
     const numStep: RenderStep = {
       kind: 'page',
-      items: [
-        { question: numQ, rootGroupId: null, rootGroupName: null, subgroupName: null },
-      ],
+      items: [{ question: numQ, rootGroupId: null, rootGroupName: null, subgroupName: null }],
     } as unknown as RenderStep;
     const args = baseArgs({
       questions: [numQ],

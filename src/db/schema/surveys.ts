@@ -1,5 +1,5 @@
 import { relations, sql } from 'drizzle-orm';
-import { boolean, check, doublePrecision, integer, jsonb, pgTable, smallint, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
+import { boolean, check, doublePrecision, integer, jsonb, pgTable, smallint, text, timestamp, unique, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 
 import { MOBILE_TABLE_DISPLAY_MODES } from '@/types/mobile-table-display';
 import type { ChoiceGroup, NumberFormat, SumConstraint, SurveyLookup } from '@/types/survey';
@@ -52,6 +52,7 @@ export const surveys = pgTable('surveys', {
 
   // 컨택리스트 표시 컬럼 스킴 (slice 3 — 0014 마이그레이션)
   contactColumns: jsonb('contact_columns').$type<ContactColumnScheme>(),
+  testContactColumns: jsonb('test_contact_columns').$type<ContactColumnScheme>(),
 
   // 설문에 복사된 LUT 사본 목록 — 외부 LUT 룩업 비교용 (T3 마이그레이션)
   lookups: jsonb('lookups').$type<SurveyLookup[]>().default([]).notNull(),
@@ -289,6 +290,28 @@ export const surveyResponses = pgTable('survey_responses', {
   ),
 }));
 
+export const testResponseAttemptStatusValues = ['active', 'superseded'] as const;
+export type TestResponseAttemptStatus = (typeof testResponseAttemptStatusValues)[number];
+
+export const testResponseAttempts = pgTable(
+  'test_response_attempts',
+  {
+    id: uuid('id').primaryKey(),
+    responseId: uuid('response_id')
+      .notNull()
+      .references(() => surveyResponses.id, { onDelete: 'cascade' }),
+    sessionId: text('session_id').notNull(),
+    status: text('status').$type<TestResponseAttemptStatus>().notNull(),
+    startedAt: timestamp('started_at', { withTimezone: true }).defaultNow().notNull(),
+    supersededAt: timestamp('superseded_at', { withTimezone: true }),
+  },
+  (table) => ({
+    activeResponseUnique: uniqueIndex('test_response_attempts_active_response_unique')
+      .on(table.responseId)
+      .where(sql`${table.status} = 'active'`),
+  }),
+);
+
 // 설문 버전 스냅샷 테이블
 export const surveyVersions = pgTable('survey_versions', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -502,6 +525,8 @@ export type NewQuestion = typeof questions.$inferInsert;
 
 export type SurveyResponse = typeof surveyResponses.$inferSelect;
 export type NewSurveyResponse = typeof surveyResponses.$inferInsert;
+export type TestResponseAttempt = typeof testResponseAttempts.$inferSelect;
+export type NewTestResponseAttempt = typeof testResponseAttempts.$inferInsert;
 
 export type SavedQuestion = typeof savedQuestions.$inferSelect;
 export type NewSavedQuestion = typeof savedQuestions.$inferInsert;

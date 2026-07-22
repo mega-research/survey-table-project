@@ -1,19 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// sanitizeAttrsAgainstPii 는 surveys 조회(DB)를 타므로 통과 stub.
-vi.mock('@/lib/contacts/scheme-helpers', () => ({
-  sanitizeAttrsAgainstPii: vi.fn(async (_surveyId: string, attrs: Record<string, string>) => attrs),
-}));
-
 vi.mock('@/lib/crypto/contact-pii-repo', () => ({
   upsertPiiValue: vi.fn(async () => undefined),
 }));
 
 // db.transaction(cb) 가 update().set().where() 체인의 set 페이로드를 캡처하도록 stub.
 const capturedSets: Array<Record<string, unknown>> = [];
+const selectResultQueue: Array<Array<Record<string, unknown>>> = [];
 
 vi.mock('@/db', () => {
   const tx = {
+    select: vi.fn(() => {
+      const chain = {
+        from: () => chain,
+        where: () => ({ for: async () => selectResultQueue.shift() ?? [] }),
+      };
+      return chain;
+    }),
     update: vi.fn(() => ({
       set: vi.fn((payload: Record<string, unknown>) => {
         capturedSets.push(payload);
@@ -39,6 +42,8 @@ import { updateContactTarget } from './contact-targets.service';
 describe('updateContactTarget groupValue 보존', () => {
   beforeEach(() => {
     capturedSets.length = 0;
+    selectResultQueue.length = 0;
+    selectResultQueue.push([{ enabled: false }], [{ id: 'ct-1' }]);
     vi.clearAllMocks();
   });
 

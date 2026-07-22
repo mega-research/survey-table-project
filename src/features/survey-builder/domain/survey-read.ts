@@ -165,9 +165,10 @@ export type SurveyByPrivateTokenInput = z.infer<typeof SurveyByPrivateTokenInput
 export type SurveyIdRow = { id: string };
 export const SurveyIdRowOutput = z.custom<SurveyIdRow | null | undefined>();
 
-/** forResponse(getSurveyForResponse) 전용 input. testToken 은 테스트 링크 검증용(옵셔널). */
+/** forResponse 전용 input. testToken/inviteToken은 서버 테스트 세션 판정용(옵셔널). */
 export const SurveyForResponseInput = SurveyIdInput.extend({
   testToken: z.string().optional(),
+  inviteToken: z.string().optional(),
 });
 export type SurveyForResponseInput = z.infer<typeof SurveyForResponseInput>;
 
@@ -179,6 +180,7 @@ export type SurveyControl = {
   isPaused: boolean;
   pausedMessage: string | null;
   testSession: 'none' | 'valid' | 'invalid';
+  testSessionKind: 'anonymous' | 'target' | null;
 };
 
 /**

@@ -45,16 +45,22 @@ describe.skipIf(!isLocalDb)('contacts.targets/columns procedure round-trip (real
     // drizzle-kit push 기반 로컬 DB에는 next_contact_resid 함수가 없으므로
     // supabase 마이그레이션과 동일한 정의를 idempotent하게 보장한다.
     await db.execute(sql`
-      CREATE OR REPLACE FUNCTION next_contact_resid(p_survey_id uuid) RETURNS integer AS $$
-      DECLARE
-        next_id integer;
+      DROP FUNCTION IF EXISTS next_contact_resid(uuid);
+      CREATE OR REPLACE FUNCTION next_contact_resid(
+        p_survey_id uuid,
+        p_is_test boolean DEFAULT false
+      ) RETURNS integer AS $$
+      DECLARE next_id integer;
       BEGIN
-        PERFORM pg_advisory_xact_lock(hashtext('contact_resid:' || p_survey_id::text));
+        PERFORM pg_advisory_xact_lock(
+          hashtextextended(p_survey_id::text || ':' || p_is_test::text, 0)
+        );
         SELECT COALESCE(MAX(resid), 0) + 1 INTO next_id
-          FROM contact_targets WHERE survey_id = p_survey_id;
+          FROM contact_targets
+          WHERE survey_id = p_survey_id AND is_test = p_is_test;
         RETURN next_id;
       END;
-      $$ LANGUAGE plpgsql;
+      $$ LANGUAGE plpgsql SECURITY INVOKER SET search_path = pg_catalog, public;
     `);
   });
 

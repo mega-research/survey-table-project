@@ -1,8 +1,12 @@
 import { relations } from 'drizzle-orm';
-import { integer, jsonb, pgTable, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
+import { boolean, integer, jsonb, pgTable, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
 
 import { contactTargets } from './contacts';
-import type { CampaignFilterSnapshot, MailAttachment } from './schema-types';
+import type {
+  CampaignFilterSnapshot,
+  MailAttachment,
+  MailRecipientSendPayloadSnapshot,
+} from './schema-types';
 import { surveys } from './surveys';
 
 export const mailTemplates = pgTable('mail_templates', {
@@ -63,6 +67,7 @@ export const mailCampaigns = pgTable(
       onDelete: 'set null',
     }),
     runNumber: integer('run_number').notNull(),
+    isTest: boolean('is_test').notNull().default(false),
     title: text('title').notNull(),
 
     // 발송 시점 스냅샷
@@ -97,11 +102,16 @@ export const mailCampaigns = pgTable(
     scheduledAt: timestamp('scheduled_at', { withTimezone: true }),
     startedAt: timestamp('started_at', { withTimezone: true }),
     completedAt: timestamp('completed_at', { withTimezone: true }),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => ({
-    surveyRunUnique: unique('mail_campaigns_survey_run_unique').on(table.surveyId, table.runNumber),
+    surveyScopeRunUnique: unique('mail_campaigns_survey_scope_run_unique').on(
+      table.surveyId,
+      table.isTest,
+      table.runNumber,
+    ),
   }),
 );
 
@@ -143,15 +153,20 @@ export const mailRecipients = pgTable(
     campaignId: uuid('campaign_id')
       .notNull()
       .references(() => mailCampaigns.id, { onDelete: 'cascade' }),
-    contactTargetId: uuid('contact_target_id')
-      .notNull()
-      .references(() => contactTargets.id, { onDelete: 'cascade' }),
-    emailSnapshot: text('email_snapshot').notNull(),
-    inviteTokenSnapshot: uuid('invite_token_snapshot').notNull(),
+    contactTargetId: uuid('contact_target_id').references(() => contactTargets.id, {
+      onDelete: 'set null',
+    }),
+    emailSnapshot: text('email_snapshot'),
+    inviteTokenSnapshot: uuid('invite_token_snapshot'),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
 
     status: text('status').$type<MailRecipientStatus>().notNull().default('queued'),
     resendMessageId: text('resend_message_id'),
     errorReason: text('error_reason'),
+    sendAttemptedAt: timestamp('send_attempted_at', { withTimezone: true }),
+    sendLeaseToken: uuid('send_lease_token'),
+    sendLeaseExpiresAt: timestamp('send_lease_expires_at', { withTimezone: true }),
+    sendPayloadSnapshot: jsonb('send_payload_snapshot').$type<MailRecipientSendPayloadSnapshot>(),
 
     sentAt: timestamp('sent_at', { withTimezone: true }),
     deliveredAt: timestamp('delivered_at', { withTimezone: true }),

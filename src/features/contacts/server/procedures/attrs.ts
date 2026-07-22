@@ -10,9 +10,24 @@ import * as svc from '../services/contact-attrs.service';
  */
 const lookup = pub
   .use(withRateLimit('lookup'))
+  .errors({
+    INVALID_TEST_LINK: {
+      status: 410,
+      message: '테스트 모드가 종료되었거나 이 링크를 더 이상 사용할 수 없습니다.',
+    },
+  })
   .input(LookupContactAttrsInput)
   .output(ContactAttrsOutput)
-  .handler(({ input }) => svc.lookupContactAttrs(input));
+  .handler(async ({ input, errors }) => {
+    try {
+      return await svc.lookupContactAttrs(input);
+    } catch (error) {
+      if (error instanceof svc.InvalidTestLinkError) {
+        throw errors.INVALID_TEST_LINK();
+      }
+      throw error;
+    }
+  });
 
 export const attrs = {
   lookup,

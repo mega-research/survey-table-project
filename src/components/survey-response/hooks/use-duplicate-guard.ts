@@ -111,6 +111,47 @@ export function useDuplicateGuard({
 }
 
 /**
+ * 대상자 테스트 mutation 실패가 stale 링크 때문인지 재확인한다.
+ * oRPC가 서버 Error를 마스킹할 수 있어 fast-path 문구 판정 뒤 현재 control을 다시 읽는다.
+ */
+export async function handleInvalidTestLinkMutationError(args: {
+  err: unknown;
+  surveyId: string | undefined;
+  inviteToken: string | null;
+  isTargetTestSession: boolean;
+  setDuplicateStatus: Dispatch<SetStateAction<DuplicateStatus>>;
+  onInvalid: () => void;
+}): Promise<boolean> {
+  const { err, surveyId, inviteToken, isTargetTestSession, setDuplicateStatus, onInvalid } = args;
+  if (!isTargetTestSession || !surveyId || !inviteToken) return false;
+
+  const message = err instanceof Error ? err.message : '';
+  let invalid =
+    message.includes('invalid_test_token') ||
+    message.includes('INVALID_TEST_LINK') ||
+    message.includes('테스트 링크가 더 이상 유효하지 않습니다');
+
+  if (!invalid) {
+    try {
+      const result = await client.surveyBuilder.publicRead.forResponse({
+        surveyId,
+        inviteToken,
+      });
+      invalid =
+        result?.control.testSession !== 'valid' || result.control.testSessionKind !== 'target';
+    } catch {
+      // 재조회 자체 실패만으로 링크 무효를 단정하지 않는다.
+      return false;
+    }
+  }
+
+  if (!invalid) return false;
+  onInvalid();
+  setDuplicateStatus({ kind: 'blocked', reason: 'invalid_test_token' });
+  return true;
+}
+
+/**
  * mutation 실패가 "설문 중단(survey_paused)" 때문인지 판정하고, 맞으면 blocked 로 전환한다.
  *
  * 여러 mutation catch 지점(첫 답변 create / blank+complete / resume)의 단일 공통 진입점이다

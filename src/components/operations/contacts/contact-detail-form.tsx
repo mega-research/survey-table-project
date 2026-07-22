@@ -296,6 +296,7 @@ export function ContactDetailForm({
             memo={memo}
             contactMethod={contactMethod}
             respondedAt={initial?.respondedAt ?? null}
+            responseId={initial?.responseId ?? null}
             inviteCode={initial?.inviteCode ?? null}
             {...(isEdit && onColumnToggle !== undefined ? { onColumnToggle } : {})}
             onAttrsChange={setAttrs}

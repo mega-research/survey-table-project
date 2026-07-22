@@ -70,6 +70,73 @@ export interface BulkSendResultItem {
   errorReason?: string;
 }
 
+export interface CampaignRecipientSendInput {
+  from: string;
+  replyTo: string;
+  attachments?: ResolvedBulkAttachment[];
+  campaignId: string;
+  idempotencyKey: string;
+  recipient: BulkRecipientInput;
+}
+
+export type CampaignRecipientSendResult =
+  | { kind: 'accepted'; resendMessageId: string }
+  | { kind: 'permanent_failure'; errorReason: string };
+
+export class RetryableCampaignSendError extends Error {
+  override readonly name = 'RetryableCampaignSendError';
+}
+
+const RETRYABLE_RESEND_ERROR_NAMES = new Set([
+  'application_error',
+  'concurrent_idempotent_requests',
+  'internal_server_error',
+  'rate_limit_exceeded',
+]);
+
+function isPermanentResendError(error: {
+  name: string;
+  statusCode: number | null;
+}): boolean {
+  if (error.statusCode === 429) return false;
+  if (RETRYABLE_RESEND_ERROR_NAMES.has(error.name)) return false;
+  return error.statusCode !== null && error.statusCode >= 400 && error.statusCode < 500;
+}
+
+/** recipient별 고정 payload와 idempotency key로 Resend 단건 발송을 수행한다. */
+export async function sendCampaignRecipient(
+  input: CampaignRecipientSendInput,
+): Promise<CampaignRecipientSendResult> {
+  const resend = getResend();
+  const { recipient } = input;
+  const { data, error } = await resend.emails.send(
+    {
+      from: input.from,
+      to: [recipient.to],
+      replyTo: input.replyTo,
+      subject: recipient.subject,
+      html: recipient.html,
+      headers: { 'X-Entity-Ref-ID': input.idempotencyKey },
+      tags: [
+        { name: 'kind', value: 'campaign' },
+        { name: 'campaign_id', value: input.campaignId },
+        { name: 'recipient_id', value: recipient.recipientId },
+      ],
+      ...(input.attachments !== undefined ? { attachments: input.attachments } : {}),
+    },
+    { idempotencyKey: input.idempotencyKey },
+  );
+
+  if (error) {
+    if (isPermanentResendError(error)) {
+      return { kind: 'permanent_failure', errorReason: error.message };
+    }
+    throw new RetryableCampaignSendError(error.message);
+  }
+  if (!data?.id) throw new RetryableCampaignSendError('Resend 응답 id 누락');
+  return { kind: 'accepted', resendMessageId: data.id };
+}
+
 const BATCH_CHUNK_SIZE = 50;
 
 /** batch.send permissive 응답의 성공 row(id) — data.data 요소 형태 */

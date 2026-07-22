@@ -1,5 +1,5 @@
 import { relations } from 'drizzle-orm';
-import { integer, jsonb, pgTable, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
+import { boolean, integer, jsonb, pgTable, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
 
 import { surveys, surveyResponses } from './surveys';
 import type { ContactUploadMapping } from './schema-types';
@@ -26,6 +26,7 @@ export const contactTargets = pgTable(
       .notNull()
       .references(() => surveys.id, { onDelete: 'cascade' }),
     resid: integer('resid').notNull(),
+    isTest: boolean('is_test').notNull().default(false),
     groupValue: text('group_value'),
     inviteToken: uuid('invite_token').defaultRandom().notNull(),
     inviteCode: text('invite_code').notNull(),
@@ -41,7 +42,11 @@ export const contactTargets = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => ({
-    surveyResidUnique: unique('contact_targets_survey_resid_unique').on(table.surveyId, table.resid),
+    surveyScopeResidUnique: unique('contact_targets_survey_scope_resid_unique').on(
+      table.surveyId,
+      table.isTest,
+      table.resid,
+    ),
     inviteTokenUnique: unique('contact_targets_invite_token_unique').on(table.inviteToken),
     inviteCodeUnique: unique('contact_targets_invite_code_unique').on(table.inviteCode),
     unsubscribeTokenUnique: unique('contact_targets_unsubscribe_token_unique').on(table.unsubscribeToken),

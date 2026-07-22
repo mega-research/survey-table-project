@@ -5,9 +5,12 @@ import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { contactPii, contactTargets } from '@/db/schema/contacts';
 import { mailCampaigns, mailRecipients, mailTemplates } from '@/db/schema/mail';
+import { surveys } from '@/db/schema/surveys';
 import type { CampaignFilterSnapshot } from '@/db/schema/schema-types';
 import { decryptPii } from '@/lib/crypto/aes';
 import { inngest } from '@/lib/inngest/client';
+import { withTestPrefix } from '@/lib/mail/test-campaign';
+import { loadOperationsDataScope } from '@/lib/operations/data-scope.server';
 
 import type {
   CancelCampaignInput,
@@ -25,7 +28,7 @@ import type {
  * 흐름:
  *  1. 트랜잭션:
  *     a. 템플릿 fetch → 스냅샷 컬럼 채움
- *     b. next_campaign_run_number(surveyId) 호출 (advisory lock)
+ *     b. next_campaign_run_number(surveyId, isTest) 호출 (scope별 advisory lock)
  *     c. mail_campaigns insert (status='queued')
  *     d. 선택된 contact 재페치 (unsubscribed_at IS NULL AND email IS NOT NULL)
  *     e. valid contact → mail_recipients(status='queued') 벌크 insert
@@ -49,7 +52,33 @@ export async function createCampaign(
   const uniqueTargetIds = Array.from(new Set(input.contactTargetIds));
 
   const result = await db.transaction(async (tx) => {
-    // a. 템플릿 fetch
+    // a. 현재 운영 scope 잠금. 모드 전환과 캠페인 생성을 직렬화하고 클라이언트 값은 신뢰하지 않는다.
+    const [survey] = await tx
+      .select({ enabled: surveys.testModeEnabled })
+      .from(surveys)
+      .where(eq(surveys.id, input.surveyId))
+      .for('share');
+    if (!survey) {
+      throw new Error('설문을 찾을 수 없습니다.');
+    }
+    const isTest = survey.enabled;
+
+    // 작성 화면을 연 뒤 모드가 바뀌었거나 반대 scope ID가 섞이면 현재 scope로 강등하지 않는다.
+    const selectedTargets = await tx
+      .select({ id: contactTargets.id, isTest: contactTargets.isTest })
+      .from(contactTargets)
+      .where(
+        and(
+          eq(contactTargets.surveyId, input.surveyId),
+          eq(contactTargets.isTest, isTest),
+          inArray(contactTargets.id, uniqueTargetIds),
+        ),
+      );
+    if (selectedTargets.length !== uniqueTargetIds.length) {
+      throw new Error('운영 모드가 변경되었습니다. 화면을 새로고침한 뒤 다시 시도하세요.');
+    }
+
+    // b. 템플릿 fetch — 실제/테스트 캠페인이 같은 템플릿을 공유한다.
     const [template] = await tx
       .select()
       .from(mailTemplates)
@@ -65,24 +94,25 @@ export async function createCampaign(
       throw new Error('선택한 메일 템플릿을 찾을 수 없습니다.');
     }
 
-    // b. next run number
+    // c. scope별 next run number
     const runRows = await tx.execute<{ next_id: number }>(
-      sql`SELECT next_campaign_run_number(${input.surveyId}) AS next_id`,
+      sql`SELECT next_campaign_run_number(${input.surveyId}, ${isTest}) AS next_id`,
     );
     const runNumber = Number(runRows[0]?.next_id ?? 0);
     if (!runNumber) {
       throw new Error('회차 번호 발급에 실패했습니다.');
     }
 
-    // c. campaign insert (스냅샷 explicit field set — spread 금지)
+    // d. campaign insert (스냅샷 explicit field set — spread 금지)
     const [campaign] = await tx
       .insert(mailCampaigns)
       .values({
         surveyId: input.surveyId,
+        isTest,
         mailTemplateId: template.id,
         runNumber,
-        title: input.title.trim(),
-        subjectSnapshot: template.subject,
+        title: withTestPrefix(input.title.trim(), isTest),
+        subjectSnapshot: withTestPrefix(template.subject, isTest),
         bodyHtmlSnapshot: template.bodyHtml,
         fromLocalSnapshot: template.fromLocal,
         fromNameSnapshot: template.fromName,
@@ -97,7 +127,7 @@ export async function createCampaign(
       throw new Error('단체 메일 생성에 실패했습니다.');
     }
 
-    // d. valid contact 재페치 — contact_pii 에서 email cipher 까지 같이 가져옴.
+    // e. valid contact 재페치 — contact_pii 에서 email cipher 까지 같이 가져옴.
     //    한 컨택에 email 컬럼이 여러 개면 column_key 알파벳 순 첫 번째 사용 (앞에서 dedupe).
     //    preflight(preflightRecipients) 와 동일 정책으로 부정 결과코드(연락금지) 컨택을 제외한다.
     //    제외하지 않으면 preflight 는 제외했다고 보고하나 실제로는 발송되는 미스매치 발생.
@@ -128,6 +158,7 @@ export async function createCampaign(
       .where(
         and(
           eq(contactTargets.surveyId, input.surveyId),
+          eq(contactTargets.isTest, isTest),
           inArray(contactTargets.id, uniqueTargetIds),
           isNull(contactTargets.unsubscribedAt),
           notExcludedByCode,
@@ -156,7 +187,7 @@ export async function createCampaign(
       throw new Error('발송 가능한 수신자가 없습니다. 수신거부 또는 이메일 누락 확인이 필요합니다.');
     }
 
-    // e. mail_recipients 벌크 insert (queued)
+    // f. mail_recipients 벌크 insert (queued)
     const recipientRows = validContacts.map((c) => ({
       campaignId: campaign.id,
       contactTargetId: c.id,
@@ -171,7 +202,7 @@ export async function createCampaign(
       await tx.insert(mailRecipients).values(recipientRows.slice(i, i + INSERT_CHUNK));
     }
 
-    // f. 카운터 초기값
+    // g. 카운터 초기값
     await tx
       .update(mailCampaigns)
       .set({
@@ -248,9 +279,10 @@ export async function fetchCandidateIds(
     '@/lib/operations/contacts.server'
   );
   const { parseClausesFromUrl } = await import('@/lib/operations/contacts-filters.server');
+  const scope = await loadOperationsDataScope(surveyId);
 
   const [scheme, resultCodes] = await Promise.all([
-    getContactColumnScheme(surveyId),
+    getContactColumnScheme(surveyId, scope),
     getContactResultCodes(surveyId),
   ]);
   const candidates = buildColumnCandidates(scheme);
@@ -264,7 +296,7 @@ export async function fetchCandidateIds(
   );
   const unrespondedOnly = filter.unrespondedOnly ?? false;
 
-  const total = await countCampaignCandidates({ surveyId, clauses, unrespondedOnly });
+  const total = await countCampaignCandidates({ surveyId, scope, clauses, unrespondedOnly });
   const MAX_IDS = 10_000;
   if (total > MAX_IDS) {
     throw new Error(
@@ -275,6 +307,7 @@ export async function fetchCandidateIds(
   // page=1, pageSize=total 로 한 번에 전체 페치
   const result = await previewCampaignCandidates({
     surveyId,
+    scope,
     clauses,
     unrespondedOnly,
     page: 1,
@@ -296,7 +329,8 @@ export async function previewPreflight(
   const { surveyId, selectedContactIds } = input;
 
   const { preflightRecipients } = await import('@/lib/operations/campaigns.server');
-  const result = await preflightRecipients({ surveyId, selectedContactIds });
+  const scope = await loadOperationsDataScope(surveyId);
+  const result = await preflightRecipients({ surveyId, scope, selectedContactIds });
   return {
     validCount: result.validIds.length,
     unsubscribedCount: result.unsubscribedIds.length,

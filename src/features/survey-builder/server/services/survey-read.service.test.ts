@@ -16,6 +16,11 @@ vi.mock('@/data/responses', () => ({
 const surveysFindFirst = vi.fn();
 const surveysFindMany = vi.fn();
 const surveyVersionsFindFirst = vi.fn();
+const contactTargetsFindFirst = vi.fn();
+
+vi.mock('@/lib/duplicate-detection/invite-lookup', () => ({
+  findContactByInviteToken: vi.fn(),
+}));
 
 vi.mock('@/db', () => ({
   db: {
@@ -27,6 +32,9 @@ vi.mock('@/db', () => ({
       surveyVersions: {
         findFirst: (...args: unknown[]) => surveyVersionsFindFirst(...args),
       },
+      contactTargets: {
+        findFirst: (...args: unknown[]) => contactTargetsFindFirst(...args),
+      },
     },
   },
 }));
@@ -34,6 +42,7 @@ vi.mock('@/db', () => ({
 import { getResponseCountsGroupedBySurvey } from '@/data/responses';
 import { getSurveyWithDetails as getSurveyWithDetailsData } from '@/data/surveys';
 import { DEFAULT_RESPONSE_HEADER_CONFIG } from '@/lib/survey/response-header-config';
+import { findContactByInviteToken } from '@/lib/duplicate-detection/invite-lookup';
 
 import {
   getSurveyForResponse,
@@ -46,6 +55,8 @@ const SURVEY_ID = 'survey-1';
 describe('survey-read.service getSurveyWithDetails', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    contactTargetsFindFirst.mockReset();
+    vi.mocked(findContactByInviteToken).mockReset();
   });
 
   it('data/surveys 의 단일 구현에 위임한다', async () => {
@@ -356,6 +367,8 @@ describe('survey-read.service getSurveyForResponse requireInviteToken', () => {
 describe('survey-read.service getSurveyForResponse control', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    contactTargetsFindFirst.mockReset();
+    vi.mocked(findContactByInviteToken).mockReset();
   });
 
   function baseSurveyRow(surveyId: string, overrides: Record<string, unknown> = {}) {
@@ -408,6 +421,7 @@ describe('survey-read.service getSurveyForResponse control', () => {
       isPaused: false,
       pausedMessage: null,
       testSession: 'none',
+      testSessionKind: null,
     });
   });
 
@@ -420,7 +434,111 @@ describe('survey-read.service getSurveyForResponse control', () => {
 
     const result = await getSurveyForResponse({ surveyId, testToken: 'tok-valid' });
 
-    expect(result?.control.testSession).toBe('valid');
+    expect(result?.control).toMatchObject({
+      testSession: 'valid',
+      testSessionKind: 'anonymous',
+    });
+  });
+
+  it('테스트 대상자가 있으면 유효한 익명 testToken도 invalid로 판정한다', async () => {
+    const surveyId = 'survey-control-anonymous-disabled';
+    surveysFindFirst.mockResolvedValue(
+      baseSurveyRow(surveyId, { testModeEnabled: true, testToken: 'tok-valid' }),
+    );
+    contactTargetsFindFirst.mockResolvedValue({ id: 'test-target-1' });
+    mockFallbackDetails(surveyId);
+
+    const result = await getSurveyForResponse({ surveyId, testToken: 'tok-valid' });
+
+    expect(result?.control).toMatchObject({
+      testSession: 'invalid',
+      testSessionKind: null,
+    });
+  });
+
+  it('inviteToken과 testToken을 섞으면 대상 종류와 무관하게 invalid로 판정한다', async () => {
+    const surveyId = 'survey-control-mixed';
+    surveysFindFirst.mockResolvedValue(
+      baseSurveyRow(surveyId, { testModeEnabled: true, testToken: 'tok-valid' }),
+    );
+    mockFallbackDetails(surveyId);
+
+    const result = await getSurveyForResponse({
+      surveyId,
+      inviteToken: 'invite-token',
+      testToken: 'tok-valid',
+    });
+
+    expect(result?.control).toMatchObject({
+      testSession: 'invalid',
+      testSessionKind: null,
+    });
+    expect(findContactByInviteToken).not.toHaveBeenCalled();
+  });
+
+  it('ON인 테스트 대상자 inviteToken은 target 테스트 세션으로 판정한다', async () => {
+    const surveyId = 'survey-control-target';
+    surveysFindFirst.mockResolvedValue(
+      baseSurveyRow(surveyId, { testModeEnabled: true }),
+    );
+    vi.mocked(findContactByInviteToken).mockResolvedValue({
+      kind: 'valid',
+      contactTargetId: 'test-target-1',
+      respondedAt: null,
+      isTest: true,
+    });
+    mockFallbackDetails(surveyId);
+
+    const result = await getSurveyForResponse({ surveyId, inviteToken: 'invite-token' });
+
+    expect(result?.control).toMatchObject({
+      testSession: 'valid',
+      testSessionKind: 'target',
+    });
+  });
+
+  it('실제 대상자 inviteToken은 테스트 모드 ON이어도 일반 세션이다', async () => {
+    const surveyId = 'survey-control-real-target';
+    surveysFindFirst.mockResolvedValue(
+      baseSurveyRow(surveyId, { testModeEnabled: true }),
+    );
+    vi.mocked(findContactByInviteToken).mockResolvedValue({
+      kind: 'valid',
+      contactTargetId: 'real-target-1',
+      respondedAt: null,
+      isTest: false,
+    });
+    mockFallbackDetails(surveyId);
+
+    const result = await getSurveyForResponse({ surveyId, inviteToken: 'invite-token' });
+
+    expect(result?.control).toMatchObject({
+      testSession: 'none',
+      testSessionKind: null,
+    });
+  });
+
+  it('초대 선택 설문에서도 교차 설문 테스트 토큰을 익명으로 폴백하지 않는다', async () => {
+    const surveyId = 'survey-control-optional-invite';
+    surveysFindFirst.mockResolvedValue(
+      baseSurveyRow(surveyId, { requireInviteToken: false }),
+    );
+    vi.mocked(findContactByInviteToken).mockResolvedValue({ kind: 'invalid_test' });
+    mockFallbackDetails(surveyId);
+
+    const result = await getSurveyForResponse({
+      surveyId,
+      inviteToken: 'cross-survey-test-token',
+    });
+
+    expect(result).not.toBeNull();
+    expect(result?.survey.settings.requireInviteToken).toBeFalsy();
+    expect(result?.control).toEqual({
+      isPaused: false,
+      pausedMessage: null,
+      testSession: 'invalid',
+      testSessionKind: null,
+    });
   });
 
   it('testModeEnabled=false 면 토큰이 일치해도 testSession=invalid 이다', async () => {
@@ -495,6 +613,7 @@ describe('survey-read.service getSurveyForResponse control', () => {
       isPaused: true,
       pausedMessage: '점검 중입니다',
       testSession: 'valid',
+      testSessionKind: 'anonymous',
     });
   });
 });

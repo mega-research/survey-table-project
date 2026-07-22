@@ -1,11 +1,12 @@
 import { notFound } from 'next/navigation';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { contactTargets, surveyVersions } from '@/db/schema';
 import { requireSurveyOwnership } from '@/lib/auth/require-survey-ownership';
 import { getResponseById } from '@/data/responses';
 import { isResponseExcluded } from '@/lib/operations/profiles.server';
+import { getOperationsDataScope, testFlagForScope } from '@/lib/operations/data-scope.server';
 
 import { AdminResponseEditor } from './admin-response-editor';
 
@@ -34,9 +35,16 @@ export default async function AdminResponseEditPage({ params, searchParams }: Pa
   const idxNum = sp.idx ? parseInt(sp.idx, 10) : NaN;
   const idx = Number.isFinite(idxNum) && idxNum > 0 ? idxNum : null;
   await requireSurveyOwnership(surveyId);
+  const scope = await getOperationsDataScope(surveyId);
 
   const response = await getResponseById(responseId, { includeDeleted: true });
-  if (!response || response.surveyId !== surveyId) notFound();
+  if (
+    !response ||
+    response.surveyId !== surveyId ||
+    response.isTest !== testFlagForScope(scope)
+  ) {
+    notFound();
+  }
 
   if (response.deletedAt !== null) {
     return (
@@ -58,11 +66,15 @@ export default async function AdminResponseEditPage({ params, searchParams }: Pa
       : Promise.resolve(null),
     response.contactTargetId
       ? db.query.contactTargets.findFirst({
-          where: eq(contactTargets.id, response.contactTargetId),
+          where: and(
+            eq(contactTargets.id, response.contactTargetId),
+            eq(contactTargets.surveyId, surveyId),
+            eq(contactTargets.isTest, testFlagForScope(scope)),
+          ),
           columns: { attrs: true },
         })
       : Promise.resolve(null),
-    isResponseExcluded(surveyId, responseId),
+    isResponseExcluded(surveyId, responseId, scope),
   ]);
   // contactTargetId 가 없으면 익명 응답이므로 빈 객체.
   const contactAttrs = contactRow?.attrs ?? {};
