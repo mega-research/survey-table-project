@@ -320,6 +320,8 @@ interface InteractiveTableResponseProps {
   mobileOriginalTable?: boolean | undefined;
   mobileTableDisplayMode?: MobileTableDisplayMode | undefined;
   mobileDrilldownOmitLeadingColumns?: number | undefined;
+  mobileDrilldownRepeatHeaderStartRow?: number | null | undefined;
+  mobileDrilldownRepeatHeaderEndRow?: number | null | undefined;
   /** 헤더·좌측 열 sticky 동작 활성화. 기본 true. 빌더 프리뷰 등에서 끌 수 있음 */
   enableSticky?: boolean | undefined;
   /** 차단형 검증 위반 셀 (빨간 ring 하이라이트) */
@@ -346,6 +348,8 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
   mobileOriginalTable = false,
   mobileTableDisplayMode,
   mobileDrilldownOmitLeadingColumns,
+  mobileDrilldownRepeatHeaderStartRow,
+  mobileDrilldownRepeatHeaderEndRow,
   enableSticky = true,
   errorCellIds,
   errorItems,
@@ -827,6 +831,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
 
   const mobileTableProps = {
     questionId,
+    authoredRows: rows,
     displayRows,
     visibleColumns,
     visibleHeaderGrid,
@@ -840,6 +845,8 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     groupConfigMap,
     onSelectGroup: handleSelectGroup,
     errorCellIds,
+    mobileDrilldownRepeatHeaderStartRow,
+    mobileDrilldownRepeatHeaderEndRow,
   };
 
   return (

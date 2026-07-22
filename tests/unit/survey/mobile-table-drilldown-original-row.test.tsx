@@ -351,6 +351,66 @@ const visibilitySourceQuestion = {
   ],
 } as Question;
 
+const repeatHeaderFixtureRows = (): TableRow[] =>
+  ['본문 1행', '본문 2행', '본문 3행', '응답 행'].map((label, index) => ({
+    id: `repeat-r${index + 1}`,
+    label,
+    cells: [
+      { id: `repeat-label-${index + 1}`, type: 'text', content: label },
+      {
+        id: `repeat-input-${index + 1}`,
+        type: 'input',
+        content: '',
+        placeholder: `${label} 입력`,
+      },
+    ],
+  }));
+
+function renderRepeatHeaderFixture({
+  start,
+  end,
+  rows = repeatHeaderFixtureRows(),
+  hideColumnLabels = false,
+  columns = [
+    { id: 'repeat-label-column', label: '항목', width: 140 },
+    { id: 'repeat-value-column', label: '점수', width: 180 },
+  ],
+  tableHeaderGrid,
+  allQuestions,
+  allResponses,
+}: {
+  start: number | null | undefined;
+  end: number | null | undefined;
+  rows?: TableRow[];
+  hideColumnLabels?: boolean;
+  columns?: TableColumn[];
+  tableHeaderGrid?: NonNullable<Question['tableHeaderGrid']> | undefined;
+  allQuestions?: Question[] | undefined;
+  allResponses?: Record<string, unknown> | undefined;
+}) {
+  return render(
+    <InteractiveTableResponse
+      questionId="repeat-header-question"
+      columns={columns}
+      rows={rows}
+      tableHeaderGrid={tableHeaderGrid}
+      hideColumnLabels={hideColumnLabels}
+      allQuestions={allQuestions}
+      allResponses={allResponses}
+      mobileTableDisplayMode="drilldown-original-row"
+      mobileDrilldownOmitLeadingColumns={1}
+      mobileDrilldownRepeatHeaderStartRow={start}
+      mobileDrilldownRepeatHeaderEndRow={end}
+      value={{}}
+      onChange={vi.fn()}
+    />,
+  );
+}
+
+function enterRepeatResponseRow() {
+  fireEvent.click(screen.getByRole('button', { name: /응답 행/ }));
+}
+
 const conditionalSectionRows = (): TableRow[] => [
   {
     id: 'conditional-first-row',
@@ -431,6 +491,87 @@ function getOriginalRowHeaderScroller(): HTMLElement {
   if (!(scroller instanceof HTMLElement)) throw new Error('헤더 스크롤 컨테이너가 없습니다.');
   return scroller;
 }
+
+it('본문 1행 반복은 목차와 진행률에서 제외하고 모든 상세 위에 disabled 원본행을 붙인다', () => {
+  renderRepeatHeaderFixture({ start: 1, end: 1 });
+  expect(screen.queryByRole('button', { name: /본문 1행/ })).toBeNull();
+  expect(screen.getByText(/전체/)).toHaveTextContent('전체 0 / 3개 항목');
+  enterRepeatResponseRow();
+  expect(screen.getByPlaceholderText('본문 1행 입력')).toBeDisabled();
+  expect(screen.getByPlaceholderText('응답 행 입력')).toBeEnabled();
+});
+
+it.each([
+  [null, null, false, []],
+  [0, 0, true, []],
+  [3, 3, false, ['본문 3행 입력']],
+  [2, 3, false, ['본문 2행 입력', '본문 3행 입력']],
+  [0, 2, true, ['본문 1행 입력', '본문 2행 입력']],
+] as const)('범위 %s-%s의 헤더와 본문 순서를 적용한다', (start, end, showsHeader, repeatedLabels) => {
+  renderRepeatHeaderFixture({ start, end });
+  enterRepeatResponseRow();
+  expect(screen.queryByRole('columnheader') !== null).toBe(showsHeader);
+  const repeated = repeatedLabels.map((label) => screen.getByPlaceholderText(label));
+  repeated.forEach((element, index) => {
+    const next = repeated[index + 1];
+    if (next) expect(element.compareDocumentPosition(next) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
+it('조건부로 숨은 반복행은 생략하고 작성 번호를 다시 매기지 않는다', () => {
+  const rows = repeatHeaderFixtureRows();
+  const second = rows[1];
+  if (!second) throw new Error('조건부 fixture 2행이 필요합니다.');
+  second.displayCondition = {
+    logicType: 'AND',
+    conditions: [{
+      id: 'hide-repeat-second',
+      sourceQuestionId: visibilitySourceQuestion.id,
+      conditionType: 'value-match',
+      logicType: 'AND',
+      requiredValues: ['show'],
+    }],
+  };
+  renderRepeatHeaderFixture({
+    start: 2,
+    end: 3,
+    rows,
+    allQuestions: [visibilitySourceQuestion],
+    allResponses: { [visibilitySourceQuestion.id]: 'hide' },
+  });
+  enterRepeatResponseRow();
+  expect(screen.queryByPlaceholderText('본문 2행 입력')).toBeNull();
+  expect(screen.getByPlaceholderText('본문 3행 입력')).toBeInTheDocument();
+});
+
+it('범위에 0이 있으면 선택 상세에서만 hideColumnLabels를 재정의한다', () => {
+  renderRepeatHeaderFixture({ start: 0, end: 0, hideColumnLabels: true });
+  enterRepeatResponseRow();
+  expect(screen.getByRole('columnheader', { name: '점수' })).toBeInTheDocument();
+});
+
+it.each([
+  [true, false],
+  [false, true],
+] as const)('필드가 없는 과거 질문은 hideColumnLabels=%s의 기존 헤더 표시를 보존한다', (
+  hideColumnLabels,
+  showsHeader,
+) => {
+  renderRepeatHeaderFixture({ start: undefined, end: undefined, hideColumnLabels });
+  enterRepeatResponseRow();
+  expect(screen.queryByRole('columnheader') !== null).toBe(showsHeader);
+});
+
+it('8-10 out-of-range는 본문을 제거하지 않고 헤더도 반복하지 않는다', () => {
+  renderRepeatHeaderFixture({ start: 8, end: 10 });
+  expect(screen.getAllByRole('button', { name: /본문|응답/ })).toHaveLength(4);
+});
+
+it('모든 본문 행을 반복 범위에 넣으면 빈 목차와 0/0 진행률을 유지한다', () => {
+  renderRepeatHeaderFixture({ start: 1, end: 4 });
+  expect(screen.queryAllByRole('button', { name: /본문|응답/ })).toHaveLength(0);
+  expect(screen.getByText(/전체/)).toHaveTextContent('전체 0 / 0개 항목');
+});
 
 it('임계값 이하 2행도 명시 모드면 카드부터 보여주고 선택 행 원본 헤더를 렌더한다', () => {
   render(

@@ -8,6 +8,12 @@ import { cn } from '@/lib/utils';
 import type { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
 import { type ClassifiedLeaf, type ClassifiedSection, classifyTable } from '@/utils/classify-table';
 import {
+  excludeMobileDrilldownRepeatedRows,
+  getMobileDrilldownRepeatedBodyRowIds,
+  includesMobileDrilldownColumnHeader,
+  resolveMobileDrilldownRepeatHeaderRange,
+} from '@/utils/mobile-drilldown-repeat-header';
+import {
   MOBILE_TABLE_COMPLETION_TYPES,
   projectMobileOriginalRow,
 } from '@/utils/mobile-original-row';
@@ -20,6 +26,7 @@ import { MobileOriginalRowTable } from './mobile-original-row-table';
 
 interface MobileTableDrilldownProps {
   questionId: string;
+  authoredRows: TableRow[];
   displayRows: TableRow[];
   authoredColumns: TableColumn[];
   visibleColumns: TableColumn[];
@@ -38,12 +45,15 @@ interface MobileTableDrilldownProps {
   errorCellIds?: Set<string> | undefined;
   detailMode: 'legacy' | 'original-row';
   omitLeadingAuthoredColumns: number;
+  mobileDrilldownRepeatHeaderStartRow?: number | null | undefined;
+  mobileDrilldownRepeatHeaderEndRow?: number | null | undefined;
 }
 
 // ── 메인 컴포넌트 ──
 
 export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
   questionId,
+  authoredRows,
   displayRows,
   authoredColumns,
   visibleColumns,
@@ -56,15 +66,35 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
   errorCellIds,
   detailMode,
   omitLeadingAuthoredColumns,
+  mobileDrilldownRepeatHeaderStartRow,
+  mobileDrilldownRepeatHeaderEndRow,
 }: MobileTableDrilldownProps) {
+  const repeatHeaderRange = useMemo(
+    () =>
+      resolveMobileDrilldownRepeatHeaderRange({
+        mobileDrilldownRepeatHeaderStartRow,
+        mobileDrilldownRepeatHeaderEndRow,
+        hideColumnLabels,
+      }),
+    [hideColumnLabels, mobileDrilldownRepeatHeaderEndRow, mobileDrilldownRepeatHeaderStartRow],
+  );
+  const repeatedBodyRowIds = useMemo(
+    () => getMobileDrilldownRepeatedBodyRowIds(authoredRows, repeatHeaderRange),
+    [authoredRows, repeatHeaderRange],
+  );
+  const navigationRows = useMemo(
+    () => excludeMobileDrilldownRepeatedRows(displayRows, repeatedBodyRowIds),
+    [displayRows, repeatedBodyRowIds],
+  );
+  const includeColumnHeader = includesMobileDrilldownColumnHeader(repeatHeaderRange);
   const classifiedSections = useMemo(
     () =>
       classifyTable({
         tableColumns: visibleColumns,
-        tableRowsData: displayRows,
+        tableRowsData: navigationRows,
         tableHeaderGrid: visibleHeaderGrid,
       }),
-    [visibleColumns, displayRows, visibleHeaderGrid],
+    [visibleColumns, navigationRows, visibleHeaderGrid],
   );
 
   // cell.id → TableCell (입력 셀 렌더용)
@@ -229,7 +259,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
     () => new Set(sections.flatMap((section) => section.leaves.map((leaf) => leaf.rowId))),
     [sections],
   );
-  const answerableRows = displayRows.filter((row) => answerableRowIds.has(row.id));
+  const answerableRows = navigationRows.filter((row) => answerableRowIds.has(row.id));
   const completedRows = answerableRows.filter((row) =>
     isTableRowCompleted(row, currentResponse, MOBILE_TABLE_COMPLETION_TYPES),
   ).length;
@@ -242,6 +272,8 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
       displayRows,
       selectedRowId: leaf.rowId,
       omitLeadingAuthoredColumns,
+      repeatedRowIds: repeatedBodyRowIds,
+      includeColumnHeader,
     });
     if (!projection?.hasInteractiveCells) {
       return (
@@ -270,9 +302,10 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
     return (
       <MobileOriginalRowTable
         columns={projection.columns}
-        row={projection.row}
+        rows={[...projection.repeatedRows, projection.row]}
+        interactiveRowId={projection.row.id}
         headerGrid={projection.headerGrid}
-        hideColumnLabels={hideColumnLabels}
+        hideColumnLabels={!projection.showColumnHeader}
         scrollLeftRef={horizontalScrollRef}
         errorCellIds={errorCellIds}
         renderCell={(cell) => {

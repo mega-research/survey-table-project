@@ -55,6 +55,8 @@ const tableQuestion = {
   mobileOriginalTable: true,
   mobileTableDisplayMode: 'drilldown-original-row',
   mobileDrilldownOmitLeadingColumns: 2,
+  mobileDrilldownRepeatHeaderStartRow: 0,
+  mobileDrilldownRepeatHeaderEndRow: 2,
 } as unknown as Question;
 
 function lastCapturedProps(): Record<string, unknown> {
@@ -84,6 +86,8 @@ describe('모바일 테이블 표시 설정 prop 전달', () => {
       mobileOriginalTable: true,
       mobileTableDisplayMode: 'drilldown-original-row',
       mobileDrilldownOmitLeadingColumns: 2,
+      mobileDrilldownRepeatHeaderStartRow: 0,
+      mobileDrilldownRepeatHeaderEndRow: 2,
       isTestMode: false,
     });
   });
@@ -95,6 +99,8 @@ describe('모바일 테이블 표시 설정 prop 전달', () => {
       mobileOriginalTable: true,
       mobileTableDisplayMode: 'drilldown-original-row',
       mobileDrilldownOmitLeadingColumns: 2,
+      mobileDrilldownRepeatHeaderStartRow: 0,
+      mobileDrilldownRepeatHeaderEndRow: 2,
       isTestMode: true,
     });
   });

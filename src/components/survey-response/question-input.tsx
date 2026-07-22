@@ -197,6 +197,14 @@ export function QuestionInput({
                 mobileDrilldownOmitLeadingColumns: question.mobileDrilldownOmitLeadingColumns,
               }
             : {})}
+          {...(question.mobileDrilldownRepeatHeaderStartRow !== undefined
+            ? {
+                mobileDrilldownRepeatHeaderStartRow: question.mobileDrilldownRepeatHeaderStartRow,
+              }
+            : {})}
+          {...(question.mobileDrilldownRepeatHeaderEndRow !== undefined
+            ? { mobileDrilldownRepeatHeaderEndRow: question.mobileDrilldownRepeatHeaderEndRow }
+            : {})}
           errorCellIds={
             numericIssues && numericIssues.length > 0
               ? new Set(numericIssues.flatMap((i) => i.cellIds ?? []))

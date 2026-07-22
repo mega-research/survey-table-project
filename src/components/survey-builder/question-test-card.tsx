@@ -496,6 +496,14 @@ function QuestionTestInput({
           mobileOriginalTable={question.mobileOriginalTable}
           mobileTableDisplayMode={question.mobileTableDisplayMode}
           mobileDrilldownOmitLeadingColumns={question.mobileDrilldownOmitLeadingColumns}
+          {...(question.mobileDrilldownRepeatHeaderStartRow !== undefined
+            ? {
+                mobileDrilldownRepeatHeaderStartRow: question.mobileDrilldownRepeatHeaderStartRow,
+              }
+            : {})}
+          {...(question.mobileDrilldownRepeatHeaderEndRow !== undefined
+            ? { mobileDrilldownRepeatHeaderEndRow: question.mobileDrilldownRepeatHeaderEndRow }
+            : {})}
         />
       ) : (
         <div className="py-4 text-center text-gray-500">테이블이 구성되지 않았습니다.</div>
