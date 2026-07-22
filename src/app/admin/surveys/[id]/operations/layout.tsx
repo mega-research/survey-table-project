@@ -2,7 +2,6 @@ import { notFound } from 'next/navigation';
 
 import { OperationsPageHeader } from '@/components/operations/operations-page-header';
 import { OperationsTabStrip } from '@/components/operations/operations-tab-strip';
-import { TestModeBanner } from '@/components/operations/test-mode-banner';
 import { getControlState } from '@/features/operations/server/services/control.service';
 import { getSurveyById } from '@/features/survey-builder/server/services/survey-read.service';
 
@@ -28,7 +27,6 @@ export default async function OperationsLayout({ children, params }: LayoutProps
     <div className="min-h-screen bg-gray-50">
       <OperationsPageHeader surveyId={surveyId} surveyTitle={survey.title} control={control} />
       <OperationsTabStrip surveyId={surveyId} />
-      {control.testModeEnabled ? <TestModeBanner /> : null}
       {children}
     </div>
   );
