@@ -9,8 +9,8 @@ import { inngest, type MailCampaignDispatchedData } from '../client';
  * 목적: race window(message_id 커밋 전 도착)로 유실된 webhook 을 Resend API 로 보강.
  * 추적 범위: 발송 후 1m / 5m / 30m 3회. 이후는 '알 수 없음'으로 남김.
  *
- * dispatcher 와 분리한 이유: step.sleep 이 dispatcher 의 concurrency(surveyId,limit=1)
- * 슬롯을 30분 점유해 같은 설문 다음 발송을 막는 것을 회피.
+ * dispatcher 와 분리한 이유: step.sleep 이 dispatcher 의 function-global concurrency=1
+ * 슬롯을 30분 점유해 모든 캠페인의 다음 발송을 막는 것을 회피.
  */
 export const campaignReconciler = inngest.createFunction(
   { id: 'campaign-reconciler', triggers: [{ event: 'mail/campaign.dispatched' }], retries: 2 },

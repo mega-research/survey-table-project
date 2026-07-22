@@ -42,6 +42,7 @@
     "0055_contact_invite_code_not_null",
     "0056_add_mobile_table_display_mode",
     "0057_survey_target_test_mode",
-    "0058_add_mobile_drilldown_repeat_header_rows"
+    "0058_add_mobile_drilldown_repeat_header_rows",
+    "0059_add_mail_recipient_dispatch_lease"
   ]
 }

@@ -46,3 +46,90 @@ campaign의 cancel/archive update는 campaign 행의 update lock이 필요하므
 - Task 11의 메일 비식별 보관 mutation
 - Task 12의 캠페인 archive mutation
 - 실제 캠페인의 invite 및 unsubscribe URL 정책
+
+## 최종 리뷰 보완 라운드
+
+### durable/idempotent 발송 복구
+
+- campaign batch 발송을 recipient별 단건 발송으로 전환하고
+  `campaign/<campaignId>/recipient/<recipientId>` 안정 idempotency key를 사용한다.
+- 요청 payload의 `X-Entity-Ref-ID`, campaign/recipient tag도 retry마다 동일하게 유지한다.
+- `mail_recipients`에 최초 시도 시각과 30초 lease token/만료 시각을 저장한다.
+  - 최초 claim과 같은 원자 update에서 최종 `from/replyTo/to/subject/html` payload도 JSONB snapshot으로 고정한다.
+  - 최초 resolve한 첨부의 filename/contentType/SHA-256도 함께 고정하며, retry에서 R2 bytes가 다르면
+    Resend 호출 전에 중단한다. 따라서 같은 idempotency key로 다른 payload를 보내지 않는다.
+  - retry는 contact attrs/token/email이나 배포 환경값이 바뀌어도 이 snapshot만 사용하며 terminal 전이에서 즉시 지운다.
+  - worker crash 또는 Resend 수락 뒤 DB 저장 실패 시 lease 만료 후 같은 key로 reclaim한다.
+  - 살아 있는 lease는 50ms 간격으로 최대 30초만 기다려 동시 이중 발송을 막는다.
+  - 23시간 경계에서도 active lease를 먼저 기다린 뒤 unresolved send를 재발송 없이 실패 종결한다.
+- Resend의 24시간 idempotency 보존 시간을 넘겨 중복 발송하지 않도록 복구 창을 23시간으로 제한했다.
+- retryable/unknown 외부 오류는 lease를 해제하고 throw하며, 검증 오류 등 확정 4xx만 failed로 종결한다.
+- Inngest의 최종 retry까지 소진되면 durable failure handler가 23시간 동안 webhook 복구를 기다린 뒤
+  남은 queued/stale-sending을 failed로 종결한다. 살아 있는 lease가 남아 있으면 1초 clock-skew buffer를 두고
+  busy row가 없어질 때까지 durable cleanup을 반복한다.
+- Resend tag 기반 webhook fallback으로 외부 수락 뒤 message id DB 저장이 실패한 row의 message id를 복구한다.
+  `email.sent` 유실에 대비해 sending에서 delivered/opened/bounced/complained로의 직접 전이도 허용한다.
+
+### archived recipient와 빈 campaign
+
+- 직접 dispatch 결과 update는 같은 statement의 `RETURNING archived_at`으로 보관 상태를 확인한다.
+- webhook/reconcile은 recipient를 `FOR UPDATE`로 잠근 조회에서 `archived_at`을 함께 읽는다.
+- archived recipient의 상태·message id는 계속 갱신하지만 active campaign counter/finalize는 건드리지 않는다.
+- archived in-flight row의 payload가 이미 scrub된 경우 즉시 failed로 바꾸지 않고 sending을 유지해 webhook tag 복구 창을 보장한다.
+- 삭제된 contact의 queued recipient도 LEFT JOIN으로 놓치지 않고 외부 호출 없이 failed/counter/finalize 처리한다.
+- prepare 결과가 0명이면 즉시 공용 finalize를 실행해 빈 campaign이 sending에 남지 않게 했다.
+
+### schema와 검증
+
+- `0059_add_mail_recipient_dispatch_lease.sql`과 manual migration manifest를 추가했다.
+- 원격 DB는 변경하지 않았다. 로컬 Supabase PostgreSQL에만 0059를 적용해 lease 컬럼 왕복 실DB 테스트를 수행했다.
+- focused: 10개 파일 69건 통과, realdb 3건 통과
+- `pnpm tsc --noEmit`: 통과
+- 변경 파일 ESLint: 통과
+- migration journal gate: 통과
+- `pnpm lint`: 오류 0건, 기존 경고 99건
+- 전체 본 스위트: 325개 파일 2670건 통과
+- 후속 flaky 단계의 알려진 `profiles-row-actions.test.ts` 12건 실패는 단독 재실행 14건 통과로 확인
+- 최종 독립 리뷰: Standards finding 3건, Spec finding 4건 모두 RED 재현 후 수정 완료;
+  attachment 보강 후 Standards 재검토 finding 0건
+
+## 최종 리뷰 2차 보완 라운드
+
+### inactive cleanup과 contact 경합
+
+- 취소 또는 보관된 캠페인의 unresolved `sending` recipient도 provider idempotency 창인 23시간을 기다린 뒤 정리한다.
+  - message id가 없으면 `failed`, 이미 저장돼 있으면 `sent`로 복구한다.
+  - lease와 payload snapshot은 지우되 inactive campaign counter와 finalize는 변경하지 않는다.
+- prepare 전체를 campaign `FOR UPDATE` transaction으로 묶어 active 판정 직후 cancel/archive가 끼어드는 경합을 막았다.
+  - inactive campaign에 ambiguous `sending` row가 있으면 빈 dispatch 성공으로 끝내지 않고 cleanup을 예약한다.
+  - prepare 결과가 0건이면 같은 transaction 안에서 finalize를 수행한다.
+- send claim 잠금 순서를 campaign → contact `FOR SHARE` → recipient `FOR UPDATE`로 통일했다.
+  - prefetch된 contact 정보는 렌더링 최적화에만 사용한다.
+  - 실제 발송 직전 contact 삭제·수신거부 및 recipient의 contact FK 변경을 잠금 아래 재검증한다.
+  - queued 대상은 `failed | skipped_unsubscribed`로 원자 종결하고, stale `sending` 대상은 재발송하지 않고 webhook 복구를 기다린다.
+- cleanup, 직접 결과 반영, webhook, reconcile도 campaign을 recipient보다 먼저 잠가 교차 경로 deadlock을 제거했다.
+
+### webhook 원자성, 속도 제한, failure 순서
+
+- Resend webhook 비즈니스 로직을 route에서 `lib/mail/resend-webhook.ts`로 이동했다.
+  - webhook dedupe insert와 recipient/campaign 전이를 한 DB transaction으로 처리한다.
+  - 전이 실패 시 dedupe도 rollback되고 route는 non-2xx를 반환해 provider retry가 가능하다.
+  - route module은 Next.js가 허용하는 `POST` export만 유지한다.
+- provider 호출 시작 간격을 125ms로 직렬화해 초당 최대 8건으로 제한했다.
+  - chunk별 limiter와 dispatcher function-global `concurrency=1`, 순차 chunk 실행을 함께 사용한다.
+- Inngest `onFailure`와 취소 후 cleanup은 먼저 `mail/campaign.dispatched`를 emit해 reconcile을 시작하고,
+  그 다음 23시간을 기다려 unresolved recipient를 종결한다.
+- 0059 migration의 컬럼과 recovery index를 모두 `IF NOT EXISTS`로 만들어 재적용 가능하게 했다.
+
+### 최종 검증
+
+- focused: 10개 파일 76건 통과, finalize 회귀 1건 추가 통과
+- realdb: lease/payload, contact 삭제·수신거부, inactive cleanup, webhook/cleanup 교차 경합 6건 통과
+- `pnpm tsc --noEmit`: 통과
+- 변경 파일 ESLint: 통과
+- 로컬 0059 migration 연속 2회 적용: 통과
+- `pnpm test`: 일반 328개 파일 2686건, 격리 flaky 단계 1개 파일 14건 모두 통과
+- `pnpm build`: production build 및 전체 route generation 통과
+- `pnpm lint`: 오류 0건, 기존 경고 99건
+- 최종 독립 재검토: Spec finding 0건, Standards/correctness/deep-module finding 0건
+- 원격 DB는 변경하지 않았다.

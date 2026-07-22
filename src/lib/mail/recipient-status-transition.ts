@@ -12,10 +12,10 @@ import type { MailRecipientStatus } from '@/db/schema/mail';
  */
 export const STATUS_ALLOWED_PREV: Partial<Record<MailRecipientStatus, MailRecipientStatus[]>> = {
   sent: ['queued', 'sending'],
-  delivered: ['queued', 'sent'],
-  opened: ['queued', 'sent', 'delivered'],
-  bounced: ['queued', 'sent', 'delivered', 'opened'],
-  complained: ['queued', 'sent', 'delivered', 'opened'],
+  delivered: ['queued', 'sending', 'sent'],
+  opened: ['queued', 'sending', 'sent', 'delivered'],
+  bounced: ['queued', 'sending', 'sent', 'delivered', 'opened'],
+  complained: ['queued', 'sending', 'sent', 'delivered', 'opened'],
   failed: ['queued', 'sending', 'sent'],
 };
 
@@ -48,6 +48,8 @@ export function mapResendWebhookType(eventType: string): MailRecipientStatus | n
 /** Resend GetEmail last_event -> 우리 status. 미전달/대기 상태는 null(변동 없음). */
 export function mapResendLastEvent(lastEvent: string): MailRecipientStatus | null {
   switch (lastEvent) {
+    case 'sent':
+      return 'sent';
     case 'delivered':
       return 'delivered';
     case 'opened':
@@ -63,7 +65,7 @@ export function mapResendLastEvent(lastEvent: string): MailRecipientStatus | nul
     case 'suppressed':
       return 'bounced';
     default:
-      // sent, queued, scheduled, delivery_delayed -> 아직 미전달, 변동 없음
+      // queued, scheduled, delivery_delayed -> 아직 발송 미확정, 변동 없음
       return null;
   }
 }
@@ -110,6 +112,7 @@ export async function finalizeCampaignIfDone(tx: Tx, campaignId: string): Promis
         updated_at = now()
     WHERE id = ${campaignId}
       AND status = 'sending'
+      AND archived_at IS NULL
       AND queued_count = 0
       AND sent_count = 0
   `);
@@ -130,9 +133,17 @@ export async function applyRecipientTransition(
     prevStatus: MailRecipientStatus;
     newStatus: MailRecipientStatus;
     eventAt: Date;
+    recipientArchivedAt: Date | null;
   },
 ): Promise<boolean> {
-  const { recipientId, campaignId, prevStatus, newStatus, eventAt } = args;
+  const {
+    recipientId,
+    campaignId,
+    prevStatus,
+    newStatus,
+    eventAt,
+    recipientArchivedAt,
+  } = args;
   if (!canTransition(prevStatus, newStatus)) return false;
 
   await tx
@@ -140,9 +151,18 @@ export async function applyRecipientTransition(
     .set({
       status: newStatus,
       ...buildTimestampUpdate(newStatus, eventAt),
+      ...(prevStatus === 'sending'
+        ? {
+            sendLeaseToken: null,
+            sendLeaseExpiresAt: null,
+            sendPayloadSnapshot: null,
+          }
+        : {}),
       updatedAt: new Date(),
     })
     .where(eq(mailRecipients.id, recipientId));
+
+  if (recipientArchivedAt !== null) return true;
 
   await tx.execute(sql`
     UPDATE mail_campaigns

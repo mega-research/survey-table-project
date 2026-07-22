@@ -95,7 +95,11 @@ describe('reconcileCampaignRecipients', () => {
     expect(getMock).toHaveBeenCalledWith('message-archived');
     expect(applyMock).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ recipientId: 'archived', newStatus: 'delivered' }),
+      expect.objectContaining({
+        recipientId: 'archived',
+        newStatus: 'delivered',
+        recipientArchivedAt: new Date('2026-07-22T00:00:00Z'),
+      }),
     );
   });
 

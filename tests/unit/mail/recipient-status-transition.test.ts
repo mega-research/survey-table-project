@@ -5,6 +5,7 @@ import {
   applyRecipientTransition,
   buildTimestampUpdate,
   canTransition,
+  finalizeCampaignIfDone,
   mapResendLastEvent,
   mapResendWebhookType,
   STATUS_ALLOWED_PREV,
@@ -28,6 +29,7 @@ describe('mapResendWebhookType', () => {
 
 describe('mapResendLastEvent', () => {
   it('전달/열람/실패 계열을 매핑한다', () => {
+    expect(mapResendLastEvent('sent')).toBe('sent');
     expect(mapResendLastEvent('delivered')).toBe('delivered');
     expect(mapResendLastEvent('opened')).toBe('opened');
     expect(mapResendLastEvent('clicked')).toBe('opened');
@@ -38,7 +40,6 @@ describe('mapResendLastEvent', () => {
     expect(mapResendLastEvent('suppressed')).toBe('bounced');
   });
   it('아직 미전달 상태는 null', () => {
-    expect(mapResendLastEvent('sent')).toBeNull();
     expect(mapResendLastEvent('queued')).toBeNull();
     expect(mapResendLastEvent('scheduled')).toBeNull();
     expect(mapResendLastEvent('delivery_delayed')).toBeNull();
@@ -69,8 +70,11 @@ describe('STATUS_ALLOWED_PREV', () => {
     expect(STATUS_ALLOWED_PREV.sent).toEqual(['queued', 'sending']);
   });
 
-  it('delivered의 허용 이전 상태는 queued/sent', () => {
-    expect(STATUS_ALLOWED_PREV.delivered).toEqual(['queued', 'sent']);
+  it('email.sent 유실 복구를 위해 downstream 상태는 sending에서 직접 전이할 수 있다', () => {
+    expect(STATUS_ALLOWED_PREV.delivered).toEqual(['queued', 'sending', 'sent']);
+    expect(STATUS_ALLOWED_PREV.opened).toContain('sending');
+    expect(STATUS_ALLOWED_PREV.bounced).toContain('sending');
+    expect(STATUS_ALLOWED_PREV.complained).toContain('sending');
   });
 });
 
@@ -105,6 +109,7 @@ describe('applyRecipientTransition counter', () => {
       prevStatus: 'sending',
       newStatus: 'sent',
       eventAt: new Date('2026-07-22T00:00:00Z'),
+      recipientArchivedAt: null,
     });
 
     expect(applied).toBe(true);
@@ -115,5 +120,19 @@ describe('applyRecipientTransition counter', () => {
       /queued_count\s*=\s*queued_count\s*-\s*CASE WHEN \$1 IN \('queued', 'sending'\)/,
     );
     expect(counterQuery.params[0]).toBe('sending');
+  });
+});
+
+describe('finalizeCampaignIfDone archive guard', () => {
+  it('보관된 campaign lifecycle을 변경하지 않도록 archived_at IS NULL을 요구한다', async () => {
+    const executed: unknown[] = [];
+    await finalizeCampaignIfDone({
+      execute: async (query: unknown) => {
+        executed.push(query);
+      },
+    } as never, 'campaign-1');
+
+    const query = dialect.sqlToQuery(executed[0] as never);
+    expect(query.sql).toContain('archived_at IS NULL');
   });
 });

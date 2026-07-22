@@ -2,7 +2,11 @@ import { relations } from 'drizzle-orm';
 import { boolean, integer, jsonb, pgTable, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
 
 import { contactTargets } from './contacts';
-import type { CampaignFilterSnapshot, MailAttachment } from './schema-types';
+import type {
+  CampaignFilterSnapshot,
+  MailAttachment,
+  MailRecipientSendPayloadSnapshot,
+} from './schema-types';
 import { surveys } from './surveys';
 
 export const mailTemplates = pgTable('mail_templates', {
@@ -159,6 +163,10 @@ export const mailRecipients = pgTable(
     status: text('status').$type<MailRecipientStatus>().notNull().default('queued'),
     resendMessageId: text('resend_message_id'),
     errorReason: text('error_reason'),
+    sendAttemptedAt: timestamp('send_attempted_at', { withTimezone: true }),
+    sendLeaseToken: uuid('send_lease_token'),
+    sendLeaseExpiresAt: timestamp('send_lease_expires_at', { withTimezone: true }),
+    sendPayloadSnapshot: jsonb('send_payload_snapshot').$type<MailRecipientSendPayloadSnapshot>(),
 
     sentAt: timestamp('sent_at', { withTimezone: true }),
     deliveredAt: timestamp('delivered_at', { withTimezone: true }),
