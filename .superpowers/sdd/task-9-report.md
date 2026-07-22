@@ -59,3 +59,12 @@
 - postgres 연결 종료는 드라이버의 `end({ timeout: 1 })` 파괴 semantics와 별도의 3초 JavaScript timeout을 함께 적용해 observer나 mode-flip 전용 연결이 무기한 대기하지 않게 했다.
 - 각 테스트 callback과 모든 operation의 settlement를 별도로 추적한다. `afterEach`는 gate를 먼저 해제한 뒤 callback cleanup과 operation 최종 settlement가 끝난 경우에만 UUID fixture를 삭제하며, 이 hook은 120초 + operation 확인 20초 + margin 30초 = 170초 timeout을 갖는다. 따라서 Vitest가 테스트 timeout 후 hook을 시작해도 살아 있는 transaction과 fixture 삭제가 경합하지 않는다.
 - 최종 코드로 신규 경쟁 파일 단독 3회 연속 2건 통과, 전체 실DB 12파일 45건 통과, `pnpm exec tsc --noEmit`, 대상 파일 ESLint, `git diff --check` 통과를 확인했다.
+
+## 최종 harness identity 및 phase bound 보정
+
+- 산식에만 있던 fixture와 post-lock assertion 예산을 실제 제한으로 바꿨다. fixture는 전용 연결에서 statement 5초·query 10초를 적용한 4개 query와 transaction 40초·close 3초로 제한한다. post-lock assertion은 전용 query 최대 2회 20초 + campaign operation 20초 + close 3초로 제한하고, campaign transaction에는 `SET LOCAL statement_timeout = '15000ms'`를 적용한다.
+- fixture 삭제도 UUID 목록 전체를 하나의 전용 SQL로 처리하며 statement 5초·query 10초·close 3초 제한을 갖는다. 실제 test phase는 fixture 43초 + lock coordination 30초 + 관찰 10초 + lock 해제 후 operation 10초 + cleanup 20초 + identity 종료 2초 + 강제 cleanup 5초 + observer close 3초 + assertion 43초 = 166초이고, margin 30초를 더한 test timeout은 196초다.
+- `afterEach`는 gate 해제, callback 대기, operation settlement, mock·상태 복구, bounded fixture 삭제를 각각 독립적으로 시도하고 모든 오류를 마지막 `AggregateError`로 합친다. 앞 단계가 실패해도 뒤 cleanup이 생략되지 않으며 hook timeout은 test phase 166초 + operation 확인 20초 + fixture 삭제 13초 + margin 30초 = 229초다.
+- campaign 생성과 mode flip transaction 시작 시 `pid`와 `transaction_timestamp()`를 함께 포착한다. backend 종료 SQL은 JSON recordset의 `(pid, xact_start)`가 현재 `pg_stat_activity`의 active transaction과 모두 일치할 때만 `pg_terminate_backend`를 호출한다.
+- 같은 `max:1` 연결의 첫 transaction이 끝난 뒤 동일 PID로 두 번째 transaction을 열어 첫 identity로는 두 번째가 종료되지 않는 realdb 회귀를 추가했다. identity join을 임시 제거한 RED에서는 새 transaction 조회가 빈 배열로 실패했고, join 복원 후 GREEN을 확인했다.
+- 최종 집중 realdb 파일은 3회 연속 각 3건 통과했고, 전체 실DB는 12파일 46건 통과했다. `pnpm exec tsc --noEmit`, 대상 파일 ESLint, `git diff --check`도 통과했다.
