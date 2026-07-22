@@ -1,10 +1,12 @@
-import 'server-only';
-
 import { and, eq, sql } from 'drizzle-orm';
+import 'server-only';
 
 import { db } from '@/db';
 import { contactTargets } from '@/db/schema';
-import { sanitizeAttrsAgainstPii } from '@/lib/contacts/scheme-helpers';
+import {
+  sanitizeAttrsAgainstPii,
+  sanitizeAttrsAgainstPiiScheme,
+} from '@/lib/contacts/scheme-helpers';
 import { upsertPiiValue } from '@/lib/crypto/contact-pii-repo';
 import { generateInviteCode } from '@/lib/survey-url';
 
@@ -14,6 +16,7 @@ import type {
   DeleteContactTargetInput,
   UpdateContactTargetInput,
 } from '../../domain/contact-target';
+import { prepareContactInsertScope } from './contact-insert-scope.service';
 
 /**
  * 컨택리스트의 "+ 컨택 추가" 모달 저장.
@@ -22,21 +25,23 @@ import type {
  *
  * 인증은 authed 미들웨어가 담당. 캐시 갱신은 소비처 router.refresh 로 대체.
  */
-export async function addContactTarget(
-  input: AddContactTargetInput,
-): Promise<ContactTargetRow> {
+export async function addContactTarget(input: AddContactTargetInput): Promise<ContactTargetRow> {
   const { surveyId, attrs: rawAttrs, piiUpdates, memo, contactMethod, systemFieldKeys } = input;
 
-  // UI 우회로 PII 키가 attrs 에 섞여 들어오는 경우 차단 — 평문 누적 방지.
-  const attrs = await sanitizeAttrsAgainstPii(surveyId, rawAttrs);
-
-  // 빈 셀('')만 NULL 처리. '0' 등 falsy 문자열 group 라벨은 보존 (|| 사용 금지).
-  const rawGroup = systemFieldKeys?.group ? attrs[systemFieldKeys.group] : undefined;
-  const groupValue = rawGroup != null && rawGroup !== '' ? rawGroup : null;
-
   const result = await db.transaction(async (tx) => {
+    const prepared = await prepareContactInsertScope(tx, {
+      surveyId,
+      requestedCount: 1,
+      requireEmptyTestScope: false,
+    });
+    // 잠금 뒤 읽은 현재 스코프의 스킴으로 평문 PII 누적을 차단한다.
+    const attrs = sanitizeAttrsAgainstPiiScheme(rawAttrs, prepared.scheme);
+    // 빈 셀('')만 NULL 처리. '0' 등 falsy 문자열 group 라벨은 보존 (|| 사용 금지).
+    const rawGroup = systemFieldKeys?.group ? attrs[systemFieldKeys.group] : undefined;
+    const groupValue = rawGroup != null && rawGroup !== '' ? rawGroup : null;
+
     const residRows = (await tx.execute(
-      sql`SELECT next_contact_resid(${surveyId}::uuid) AS resid`,
+      sql`SELECT next_contact_resid(${surveyId}::uuid, ${prepared.isTest}) AS resid`,
     )) as unknown as Array<{ resid: number }>;
     const resid = residRows[0]?.resid;
     if (resid == null) throw new Error('next_contact_resid 호출 실패');
@@ -46,6 +51,7 @@ export async function addContactTarget(
       .values({
         surveyId,
         resid,
+        isTest: prepared.isTest,
         groupValue,
         attrs,
         memo: memo ?? null,
