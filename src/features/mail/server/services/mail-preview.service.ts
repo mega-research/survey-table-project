@@ -108,7 +108,7 @@ export async function sendTestTemplateMail(
   try {
     return await sendTestMail({
       to: input.to,
-      subject: `[TEST] ${rendered.subject}`,
+      subject: rendered.subject,
       fromName: rendered.fromName,
       fromLocal: input.fromLocal,
       fromDomain,
