@@ -34,3 +34,10 @@
 - 기존 attempt 재사용은 `status=response active`, `responseId`, `sessionId`를 모두 쓰기 전에 검사하며, 세션 불일치 시 응답과 컨택 상태가 변하지 않는 실DB 회귀 테스트를 추가했다.
 - `recordStepVisit`는 트랜잭션 안에서 missing row를 다시 throw하고, 존재하는 동일 step은 기존 no-op 계약을 유지한다.
 - 리뷰 수정 검증: 집중 6파일 65개 통과, 실DB 11개 통과, TypeScript·관련 ESLint·`git diff --check` 통과. 일반 전체 스위트는 317파일 중 316파일, 2,586개 중 2,573개 통과했으며 기존 `use-response-lifecycle.test.tsx` localStorage 환경 실패 13개만 동일하게 남았다.
+
+## 리뷰 수정 2
+
+- `completeResponse`의 대상자 연결 원자 트랜잭션은 테스트 응답에만 유지했다. 실제 대상자 응답은 완료 커밋 후 `contact_targets`를 best-effort 갱신하므로 후처리 실패가 완료 응답을 rollback하지 않는다.
+- 실제 완료의 response → target 역순 잠금을 제거했다. 컨택 삭제는 target → response 순서로 명시적 unlink 후 삭제해 FK 미적용 환경에서도 dangling 참조를 남기지 않으며, hard reset의 기존 target → response 순서와 정렬된다.
+- TDD RED에서 실제 컨택 후처리 실패의 완료 reject와 hard reset 경쟁의 PostgreSQL `40P01`을 재현했다. GREEN에서 실제 delete/hard reset 경쟁이 5초 timeout 안에 모두 fulfilled되고 각 최종 승자의 안전 상태 및 참조 무결성을 검증했다.
+- 리뷰 수정 2 검증: 집중 8파일 75개, 실DB 11파일 43개, TypeScript·관련 ESLint 통과. 일반 전체 스위트는 318파일 중 317파일, 2,587개 중 2,574개 통과했으며 기존 `use-response-lifecycle.test.tsx` localStorage 환경 실패 13개만 동일하게 남았다.

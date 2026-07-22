@@ -2,7 +2,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import 'server-only';
 
 import { db } from '@/db';
-import { contactTargets, surveys } from '@/db/schema';
+import { contactTargets, surveyResponses, surveys } from '@/db/schema';
 import type { ContactColumnScheme } from '@/db/schema/schema-types';
 import { sanitizeAttrsAgainstPiiScheme } from '@/lib/contacts/scheme-helpers';
 import { upsertPiiValue } from '@/lib/crypto/contact-pii-repo';
@@ -172,6 +172,13 @@ export async function deleteContactTarget(input: DeleteContactTargetInput): Prom
   const { id, surveyId } = input;
   await db.transaction(async (tx) => {
     const { isTest } = await lockTargetInCurrentScope(tx, { id, surveyId });
+    // survey_responses.contact_target_id FK가 아직 적용되지 않은 환경에서도 dangling 참조를
+    // 남기지 않는다. target → response 순서는 hard reset과 같고, actual complete는 응답 완료
+    // 커밋 뒤 target을 best-effort 갱신하므로 역순 교착 없이 직렬화된다.
+    await tx
+      .update(surveyResponses)
+      .set({ contactTargetId: null })
+      .where(and(eq(surveyResponses.surveyId, surveyId), eq(surveyResponses.contactTargetId, id)));
     const deleted = await tx
       .delete(contactTargets)
       .where(

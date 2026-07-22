@@ -1223,7 +1223,10 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
       }
     }
 
-    if (completedResponse.contactTargetId) {
+    // 대상자 테스트 응답만 response 완료와 target 연결을 원자적으로 커밋한다.
+    // 테스트 reset/acquire와 같은 survey → target → response 잠금 순서를 보존해야 하므로
+    // lockAndAssertResponseMutation에서 target을 먼저 잠근 뒤 여기서 같은 행을 갱신한다.
+    if (completedResponse.isTest && completedResponse.contactTargetId) {
       await tx
         .update(contactTargets)
         .set({
@@ -1241,6 +1244,32 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
 
     return completedResponse;
   });
+
+  // 실제 대상자 연결은 응답 완료 커밋 이후 best-effort로 유지한다. 이를 완료 트랜잭션에
+  // 넣으면 response → target 순서가 되어, target → response 순서인 컨택 삭제/hard reset과
+  // 교착할 수 있다. 후처리 실패는 이미 커밋된 완료 응답을 rollback하지 않는다.
+  if (!result.isTest && result.contactTargetId) {
+    try {
+      await db
+        .update(contactTargets)
+        .set({
+          respondedAt: completedAt,
+          responseId: result.id,
+          updatedAt: completedAt,
+        })
+        .where(
+          and(
+            eq(contactTargets.id, result.contactTargetId),
+            eq(contactTargets.surveyId, result.surveyId),
+          ),
+        );
+    } catch (err) {
+      console.error(
+        `[completeResponse] contact_targets UPDATE 실패 — 응답 완료는 성공 (responseId=${result.id}, contactTargetId=${result.contactTargetId})`,
+        err,
+      );
+    }
+  }
 
   // revalidatePath('/analytics') 는 백엔드에서 제거 — 공개 응답이 admin /analytics
   // 캐시를 cross 무효화하던 부분으로, 소비처 통합 단계에서 query invalidation 등으로 보강.
