@@ -1,11 +1,11 @@
-import 'server-only';
-
 import { and, eq, isNull, sql } from 'drizzle-orm';
+import 'server-only';
 
 import { db } from '@/db';
 import { surveyResponses } from '@/db/schema';
 import { findContactByInviteToken } from '@/lib/duplicate-detection/invite-lookup';
 import { getSurveyControlFlags, isValidTestToken } from '@/lib/survey-control';
+import { lockAndAssertResponseMutation } from '@/lib/survey-response/test-target-attempt.server';
 
 import type {
   RecordStepVisitInput,
@@ -41,14 +41,20 @@ export async function recordStepVisit(input: RecordStepVisitInput): Promise<void
   // 단일 UPDATE: WHERE 절에서 currentStepId !== nextStepId 조건으로 멱등성 보장
   // jsonb_set은 마지막 항목의 leftAt이 NULL일 때만 갱신, 그 후 || 로 새 항목 append.
   // visible step 진척은 step 이동과 함께 갱신 (동일 step no-op 시엔 미갱신 — 마지막 이동 시점 기준).
-  const result = await db
-    .update(surveyResponses)
-    .set({
-      currentStepId: nextStepId,
-      visibleStepIndex: visibleStepIndex ?? null,
-      visibleStepTotal: visibleStepTotal ?? null,
-      lastActivityAt: new Date(),
-      pageVisits: sql`(
+  await db.transaction(async (tx) => {
+    await lockAndAssertResponseMutation(tx, {
+      responseId,
+      attemptId: input.attemptId,
+      sessionId: input.sessionId,
+    });
+    await tx
+      .update(surveyResponses)
+      .set({
+        currentStepId: nextStepId,
+        visibleStepIndex: visibleStepIndex ?? null,
+        visibleStepTotal: visibleStepTotal ?? null,
+        lastActivityAt: new Date(),
+        pageVisits: sql`(
         CASE
           WHEN jsonb_array_length(COALESCE(${surveyResponses.pageVisits}, '[]'::jsonb)) > 0
            AND (COALESCE(${surveyResponses.pageVisits}, '[]'::jsonb) -> -1 ->> 'leftAt') IS NULL
@@ -65,30 +71,15 @@ export async function recordStepVisit(input: RecordStepVisitInput): Promise<void
           'enteredAt', to_jsonb(now())
         )
       )`,
-    })
-    .where(
-      and(
-        eq(surveyResponses.id, responseId),
-        // 동일 스텝이면 UPDATE 자체를 건너뛴다 (no-op idempotency)
-        sql`COALESCE(${surveyResponses.currentStepId}, '') <> ${nextStepId}`,
-      ),
-    )
-    .returning({ id: surveyResponses.id });
-
-  if (result.length === 0) {
-    // 행이 없거나 이미 같은 스텝인 경우. 같은 스텝은 no-op이므로 통과해야 함.
-    // → 행 존재 여부를 확인해 행이 없을 때만 throw.
-    const exists = await db
-      .select({ id: surveyResponses.id })
-      .from(surveyResponses)
-      .where(eq(surveyResponses.id, responseId))
-      .limit(1);
-
-    if (exists.length === 0) {
-      throw new Error('응답을 찾을 수 없습니다.');
-    }
-    // 같은 스텝이면 그냥 통과 (no-op)
-  }
+      })
+      .where(
+        and(
+          eq(surveyResponses.id, responseId),
+          // 동일 스텝이면 UPDATE 자체를 건너뛴다 (no-op idempotency)
+          sql`COALESCE(${surveyResponses.currentStepId}, '') <> ${nextStepId}`,
+        ),
+      );
+  });
 }
 
 /**
@@ -101,52 +92,58 @@ export async function recordStepVisit(input: RecordStepVisitInput): Promise<void
  * - 둘 다 단일 UPDATE문 — 동시 hide/show 경합 시 PG 행 잠금으로 직렬화(lost update 방지).
  * - status='in_progress' 가드 — 공개 엔드포인트 IDOR 영향 제한 + 완료 후 늦은 beacon no-op.
  */
-export async function recordVisibilitySegment(
-  input: RecordVisibilitySegmentInput,
-): Promise<void> {
+export async function recordVisibilitySegment(input: RecordVisibilitySegmentInput): Promise<void> {
   const { responseId, action } = input;
 
-  if (action === 'hide') {
-    await db
-      .update(surveyResponses)
-      .set({
-        pageVisits: sql`jsonb_set(
+  await db.transaction(async (tx) => {
+    await lockAndAssertResponseMutation(tx, {
+      responseId,
+      attemptId: input.attemptId,
+      sessionId: input.sessionId,
+    });
+
+    if (action === 'hide') {
+      await tx
+        .update(surveyResponses)
+        .set({
+          pageVisits: sql`jsonb_set(
           COALESCE(${surveyResponses.pageVisits}, '[]'::jsonb),
           ARRAY[(jsonb_array_length(COALESCE(${surveyResponses.pageVisits}, '[]'::jsonb)) - 1)::text, 'leftAt'],
           to_jsonb(now())
         )`,
+        })
+        .where(
+          and(
+            eq(surveyResponses.id, responseId),
+            eq(surveyResponses.status, 'in_progress'),
+            sql`jsonb_array_length(COALESCE(${surveyResponses.pageVisits}, '[]'::jsonb)) > 0`,
+            sql`(${surveyResponses.pageVisits} -> -1 ->> 'leftAt') IS NULL`,
+          ),
+        );
+      return;
+    }
+
+    // action === 'show'
+    await tx
+      .update(surveyResponses)
+      .set({
+        lastActivityAt: new Date(),
+        pageVisits: sql`COALESCE(${surveyResponses.pageVisits}, '[]'::jsonb) || jsonb_build_array(
+        jsonb_build_object('stepId', ${surveyResponses.currentStepId}, 'enteredAt', to_jsonb(now()))
+      )`,
       })
       .where(
         and(
           eq(surveyResponses.id, responseId),
           eq(surveyResponses.status, 'in_progress'),
-          sql`jsonb_array_length(COALESCE(${surveyResponses.pageVisits}, '[]'::jsonb)) > 0`,
-          sql`(${surveyResponses.pageVisits} -> -1 ->> 'leftAt') IS NULL`,
-        ),
-      );
-    return;
-  }
-
-  // action === 'show'
-  await db
-    .update(surveyResponses)
-    .set({
-      lastActivityAt: new Date(),
-      pageVisits: sql`COALESCE(${surveyResponses.pageVisits}, '[]'::jsonb) || jsonb_build_array(
-        jsonb_build_object('stepId', ${surveyResponses.currentStepId}, 'enteredAt', to_jsonb(now()))
-      )`,
-    })
-    .where(
-      and(
-        eq(surveyResponses.id, responseId),
-        eq(surveyResponses.status, 'in_progress'),
-        sql`${surveyResponses.currentStepId} IS NOT NULL`,
-        sql`(
+          sql`${surveyResponses.currentStepId} IS NOT NULL`,
+          sql`(
           jsonb_array_length(COALESCE(${surveyResponses.pageVisits}, '[]'::jsonb)) = 0
           OR (${surveyResponses.pageVisits} -> -1 ->> 'leftAt') IS NOT NULL
         )`,
-      ),
-    );
+        ),
+      );
+  });
 }
 
 /**
@@ -189,15 +186,16 @@ export async function resumeOrCreateResponse(
     }
     // excluded 도 valid 외 = null 로 fallback (anonymous sessionId 흐름으로 자연 처리).
     // excluded race 차단은 saveResponse 시점의 checkTrackA 가 별도로 책임.
-    const target = lookup.kind === 'valid'
-      ? { id: lookup.contactTargetId }
-      : null;
+    const target = lookup.kind === 'valid' ? { id: lookup.contactTargetId } : null;
+    const isTestTarget = lookup.kind === 'valid' && lookup.isTest;
     if (target) {
       const [existingByContact] = await db
         .select({
           id: surveyResponses.id,
           status: surveyResponses.status,
           isTest: surveyResponses.isTest,
+          versionId: surveyResponses.versionId,
+          questionResponses: surveyResponses.questionResponses,
         })
         .from(surveyResponses)
         .where(
@@ -212,6 +210,20 @@ export async function resumeOrCreateResponse(
         .limit(1);
 
       if (existingByContact) {
+        if (isTestTarget) {
+          if (
+            existingByContact.status === 'in_progress' &&
+            existingByContact.versionId === flags?.currentVersionId
+          ) {
+            return {
+              id: existingByContact.id,
+              status: 'in_progress',
+              resumed: false,
+              questionResponses: existingByContact.questionResponses,
+            };
+          }
+          return null;
+        }
         const now = new Date();
         if (existingByContact.status === 'drop') {
           // 중단 모드: 행이 isTest 이거나 유효한 테스트 링크로 재진입한 경우만 예외

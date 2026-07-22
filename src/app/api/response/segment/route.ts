@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+import { RecordVisibilitySegmentInput } from '@/features/survey-response/domain/lifecycle';
 import { recordVisibilitySegment } from '@/features/survey-response/server/services/lifecycle.service';
 import { getTrustedClientIpOrNull } from '@/lib/rate-limit/client-ip';
 import { getRateLimiter } from '@/lib/rate-limit/rate-limiter';
@@ -29,21 +30,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'invalid json' }, { status: 400 });
   }
 
-  const { responseId, action } = (body ?? {}) as {
-    responseId?: unknown;
-    action?: unknown;
-  };
-
-  if (
-    typeof responseId !== 'string' ||
-    responseId.trim() === '' ||
-    (action !== 'hide' && action !== 'show')
-  ) {
+  const parsed = RecordVisibilitySegmentInput.safeParse(body);
+  if (!parsed.success || parsed.data.responseId.trim() === '') {
     return NextResponse.json({ error: 'invalid payload' }, { status: 400 });
   }
 
   try {
-    await recordVisibilitySegment({ responseId, action });
+    await recordVisibilitySegment(parsed.data);
   } catch (err) {
     console.error('[segment] 기록 실패:', err);
     return NextResponse.json({ error: 'internal' }, { status: 500 });

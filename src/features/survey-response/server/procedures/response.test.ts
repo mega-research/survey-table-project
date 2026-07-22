@@ -3,6 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
+import * as svc from '../services/response.service';
+import { response } from './response';
+
 vi.mock('../services/response.service', () => ({
   startResponse: vi.fn(),
   updateQuestionResponse: vi.fn(),
@@ -10,9 +13,6 @@ vi.mock('../services/response.service', () => ({
   createBlankResponse: vi.fn(),
   completeResponse: vi.fn(),
 }));
-
-import * as svc from '../services/response.service';
-import { response } from './response';
 
 function anonContext(): ORPCContext {
   return {
@@ -57,6 +57,28 @@ describe('surveyResponse.response procedures', () => {
     });
   });
 
+  it('updateAnswer(pub)는 대상자 테스트 attempt 식별자를 손실 없이 위임한다', async () => {
+    const attemptId = '77777777-8888-4999-8aaa-bbbbbbbbbbbb';
+    vi.mocked(svc.updateQuestionResponse).mockResolvedValue({ id: RESPONSE_ID } as never);
+    const client = createRouterClient({ response }, { context: anonContext() });
+
+    await client.response.updateAnswer({
+      responseId: RESPONSE_ID,
+      questionId: QUESTION_ID,
+      value: 'answer',
+      attemptId,
+      sessionId: 'target-test-session',
+    } as never);
+
+    expect(svc.updateQuestionResponse).toHaveBeenCalledWith({
+      responseId: RESPONSE_ID,
+      questionId: QUESTION_ID,
+      value: 'answer',
+      attemptId,
+      sessionId: 'target-test-session',
+    });
+  });
+
   it('createWithFirstAnswer(pub)는 created 분기를 통과시킨다', async () => {
     vi.mocked(svc.createResponseWithFirstAnswer).mockResolvedValue({
       kind: 'created',
@@ -76,7 +98,37 @@ describe('surveyResponse.response procedures', () => {
     });
     expect(res).toEqual({ kind: 'created', id: RESPONSE_ID, contactTargetId: CONTACT_ID });
     expect(svc.createResponseWithFirstAnswer).toHaveBeenCalledWith(
-      expect.objectContaining({ surveyId: SURVEY_ID, sessionId: 'sess-1', questionId: QUESTION_ID }),
+      expect.objectContaining({
+        surveyId: SURVEY_ID,
+        sessionId: 'sess-1',
+        questionId: QUESTION_ID,
+      }),
+    );
+  });
+
+  it('createWithFirstAnswer(pub)는 테스트 attemptId를 위임한다', async () => {
+    const attemptId = '77777777-8888-4999-8aaa-bbbbbbbbbbbb';
+    vi.mocked(svc.createResponseWithFirstAnswer).mockResolvedValue({
+      kind: 'created',
+      id: RESPONSE_ID,
+      contactTargetId: CONTACT_ID,
+    } as never);
+    const client = createRouterClient({ response }, { context: anonContext() });
+
+    await client.response.createWithFirstAnswer({
+      surveyId: SURVEY_ID,
+      sessionId: 'target-test-session',
+      versionId: VERSION_ID,
+      questionId: QUESTION_ID,
+      value: 'answer',
+      currentStepId: 'group:abc',
+      inviteToken: 'invite-token',
+      clientSignals: null,
+      attemptId,
+    } as never);
+
+    expect(svc.createResponseWithFirstAnswer).toHaveBeenCalledWith(
+      expect.objectContaining({ attemptId }),
     );
   });
 
@@ -119,6 +171,28 @@ describe('surveyResponse.response procedures', () => {
     );
   });
 
+  it('createBlank(pub)는 테스트 attemptId를 위임한다', async () => {
+    const attemptId = '77777777-8888-4999-8aaa-bbbbbbbbbbbb';
+    vi.mocked(svc.createBlankResponse).mockResolvedValue({
+      kind: 'created',
+      id: RESPONSE_ID,
+      contactTargetId: CONTACT_ID,
+    } as never);
+    const client = createRouterClient({ response }, { context: anonContext() });
+
+    await client.response.createBlank({
+      surveyId: SURVEY_ID,
+      sessionId: 'target-test-session',
+      versionId: VERSION_ID,
+      currentStepId: 'group:abc',
+      inviteToken: 'invite-token',
+      clientSignals: null,
+      attemptId,
+    } as never);
+
+    expect(svc.createBlankResponse).toHaveBeenCalledWith(expect.objectContaining({ attemptId }));
+  });
+
   it('complete(pub)는 responseId + data 를 service 에 위임한다', async () => {
     vi.mocked(svc.completeResponse).mockResolvedValue({ id: RESPONSE_ID } as never);
     const client = createRouterClient({ response }, { context: anonContext() });
@@ -145,5 +219,23 @@ describe('surveyResponse.response procedures', () => {
     const client = createRouterClient({ response }, { context: anonContext() });
     await client.response.complete({ responseId: RESPONSE_ID });
     expect(svc.completeResponse).toHaveBeenCalledWith({ responseId: RESPONSE_ID });
+  });
+
+  it('complete(pub)는 테스트 attempt 식별자를 위임한다', async () => {
+    const attemptId = '77777777-8888-4999-8aaa-bbbbbbbbbbbb';
+    vi.mocked(svc.completeResponse).mockResolvedValue({ id: RESPONSE_ID } as never);
+    const client = createRouterClient({ response }, { context: anonContext() });
+
+    await client.response.complete({
+      responseId: RESPONSE_ID,
+      attemptId,
+      sessionId: 'target-test-session',
+    } as never);
+
+    expect(svc.completeResponse).toHaveBeenCalledWith({
+      responseId: RESPONSE_ID,
+      attemptId,
+      sessionId: 'target-test-session',
+    });
   });
 });

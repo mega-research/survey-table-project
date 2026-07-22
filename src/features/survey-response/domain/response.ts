@@ -30,6 +30,15 @@ export const QuestionResponsesSchema = z.record(z.string(), z.unknown());
  */
 export const SurveyResponseRowSchema = z.custom<SurveyResponse>();
 
+export const TestAttemptIdentityFields = {
+  attemptId: z.string().uuid().optional(),
+  sessionId: z.string().optional(),
+} as const;
+export type TestAttemptIdentity = {
+  attemptId?: string;
+  sessionId?: string;
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // startResponse
 // ─────────────────────────────────────────────────────────────────────────────
@@ -49,6 +58,7 @@ export const UpdateQuestionResponseInput = z.object({
   responseId: z.string(),
   questionId: z.string(),
   value: z.unknown(),
+  ...TestAttemptIdentityFields,
 });
 export type UpdateQuestionResponseInput = z.infer<typeof UpdateQuestionResponseInput>;
 
@@ -73,10 +83,9 @@ export const CreateResponseWithFirstAnswerInput = z.object({
   honeypot: z.string().optional(),
   // 테스트 링크 토큰 — surveys.testModeEnabled + testToken 과 일치하면 isTest 세션으로 기록.
   testToken: z.string().optional(),
+  attemptId: TestAttemptIdentityFields.attemptId,
 });
-export type CreateResponseWithFirstAnswerInput = z.infer<
-  typeof CreateResponseWithFirstAnswerInput
->;
+export type CreateResponseWithFirstAnswerInput = z.infer<typeof CreateResponseWithFirstAnswerInput>;
 
 export const CreateBlankResponseInput = z.object({
   surveyId: z.string(),
@@ -89,6 +98,7 @@ export const CreateBlankResponseInput = z.object({
   honeypot: z.string().optional(),
   // 테스트 링크 토큰 — surveys.testModeEnabled + testToken 과 일치하면 isTest 세션으로 기록.
   testToken: z.string().optional(),
+  attemptId: TestAttemptIdentityFields.attemptId,
 });
 export type CreateBlankResponseInput = z.infer<typeof CreateBlankResponseInput>;
 
@@ -134,5 +144,6 @@ export const CompleteResponseInput = z.object({
       exposedRowIds: z.array(z.string()).optional(),
     })
     .optional(),
+  ...TestAttemptIdentityFields,
 });
 export type CompleteResponseInput = z.infer<typeof CompleteResponseInput>;

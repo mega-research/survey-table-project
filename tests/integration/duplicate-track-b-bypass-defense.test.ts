@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import type { ClientSignals } from '@/lib/duplicate-detection/types';
 
 beforeAll(() => {
@@ -23,36 +24,69 @@ const insertChain = {
 };
 
 vi.mock('@/db', () => ({
-  db: {
-    query: {
-      surveyResponses: { findFirst: mockFindFirst },
-      surveys: { findFirst: mockSurveysFindFirst },
-      surveyVersions: { findFirst: vi.fn(async () => null) },
-    },
-    insert: mockInsert,
-    execute: vi.fn().mockResolvedValue([{ id: null }]),
-    select: vi.fn().mockReturnValue({
+  db: (() => {
+    const surveyLockChain = {
       from: vi.fn().mockReturnValue({
         where: vi.fn().mockReturnValue({
-          // updateQuestionResponse 의 questionId 존재 검사(select().where().limit()) 종단.
-          limit: vi.fn(() => mockQuestionLimit()),
+          for: vi.fn().mockReturnValue({
+            limit: vi.fn().mockResolvedValue([{ id: 'aaaaaaaa-0003-0003-0003-000000000003' }]),
+          }),
         }),
       }),
-    }),
-    // 테스트 세션 성공 경로에서 createResponseWithFirstAnswer 가 INSERT 후
-    // updateQuestionResponse 를 호출하므로 update 체인도 모킹(progress_pct sync).
-    update: vi.fn().mockReturnValue({
-      set: vi.fn().mockReturnValue({
-        where: vi.fn().mockReturnValue({
-          returning: vi
-            .fn()
-            .mockResolvedValue([
-              { id: 'new-response-id', surveyId: 'ignored', contactTargetId: null, pageVisits: null },
-            ]),
+    };
+    const targetCountChain = {
+      from: vi.fn().mockReturnValue({
+        where: vi.fn().mockResolvedValue([{ total: 0 }]),
+      }),
+    };
+    const txSelect = vi
+      .fn()
+      .mockReturnValueOnce(surveyLockChain)
+      .mockReturnValueOnce(targetCountChain);
+    const tx = {
+      select: txSelect,
+      insert: mockInsert,
+    };
+
+    return {
+      query: {
+        surveyResponses: { findFirst: mockFindFirst },
+        surveys: { findFirst: mockSurveysFindFirst },
+        surveyVersions: { findFirst: vi.fn(async () => null) },
+      },
+      insert: mockInsert,
+      execute: vi.fn().mockResolvedValue([{ id: null }]),
+      select: vi.fn().mockReturnValue({
+        from: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            // updateQuestionResponse 의 questionId 존재 검사(select().where().limit()) 종단.
+            limit: vi.fn(() => mockQuestionLimit()),
+          }),
         }),
       }),
-    }),
-  },
+      // 테스트 세션 성공 경로에서 createResponseWithFirstAnswer 가 INSERT 후
+      // updateQuestionResponse 를 호출하므로 update 체인도 모킹(progress_pct sync).
+      update: vi.fn().mockReturnValue({
+        set: vi.fn().mockReturnValue({
+          where: vi.fn().mockReturnValue({
+            returning: vi
+              .fn()
+              .mockResolvedValue([
+                {
+                  id: 'new-response-id',
+                  surveyId: 'ignored',
+                  contactTargetId: null,
+                  pageVisits: null,
+                },
+              ]),
+          }),
+        }),
+      }),
+      transaction: vi.fn(async (callback: (transaction: typeof tx) => Promise<unknown>) =>
+        callback(tx),
+      ),
+    };
+  })(),
 }));
 
 vi.mock('next/headers', () => ({
@@ -105,7 +139,8 @@ describe('Track B bypass defense', () => {
     // 매칭되는 완료 응답이 이미 존재하는 상황 시뮬레이션
     mockFindFirst.mockResolvedValue({ id: 'prev-response' });
 
-    const { createResponseWithFirstAnswer } = await import('@/features/survey-response/server/services/response.service');
+    const { createResponseWithFirstAnswer } =
+      await import('@/features/survey-response/server/services/response.service');
     const result = await createResponseWithFirstAnswer({
       surveyId: SURVEY_ID,
       sessionId: 'fresh-session-bypass',
@@ -139,7 +174,8 @@ describe('테스트 세션(isTest) — Track B skip', () => {
     });
     mockInsert.mockReturnValue(insertChain);
 
-    const { createResponseWithFirstAnswer } = await import('@/features/survey-response/server/services/response.service');
+    const { createResponseWithFirstAnswer } =
+      await import('@/features/survey-response/server/services/response.service');
     const result = await createResponseWithFirstAnswer({
       surveyId: SURVEY_ID,
       sessionId: 'test-session-skip',
@@ -152,9 +188,7 @@ describe('테스트 세션(isTest) — Track B skip', () => {
     });
 
     expect(result.kind).toBe('created');
-    const valuesCalls = insertChain.values.mock.calls as unknown as Array<
-      [{ isTest: boolean }]
-    >;
+    const valuesCalls = insertChain.values.mock.calls as unknown as Array<[{ isTest: boolean }]>;
     const inserted = valuesCalls[0]![0];
     expect(inserted.isTest).toBe(true);
   });

@@ -1,6 +1,5 @@
-import 'server-only';
-
 import { and, eq, isNull } from 'drizzle-orm';
+import 'server-only';
 
 import { db } from '@/db';
 import { surveys } from '@/db/schema/surveys';
@@ -10,12 +9,11 @@ export interface SurveyControlFlags {
   pausedMessage: string | null;
   testModeEnabled: boolean;
   testToken: string | null;
+  currentVersionId: string | null;
 }
 
 /** 운영 제어 플래그 조회 — 스냅샷 밖 라이브 컬럼이므로 항상 surveys 행에서 읽는다. */
-export async function getSurveyControlFlags(
-  surveyId: string,
-): Promise<SurveyControlFlags | null> {
+export async function getSurveyControlFlags(surveyId: string): Promise<SurveyControlFlags | null> {
   const row = await db.query.surveys.findFirst({
     where: and(eq(surveys.id, surveyId), isNull(surveys.deletedAt)),
     columns: {
@@ -23,6 +21,7 @@ export async function getSurveyControlFlags(
       pausedMessage: true,
       testModeEnabled: true,
       testToken: true,
+      currentVersionId: true,
     },
   });
   return row ?? null;

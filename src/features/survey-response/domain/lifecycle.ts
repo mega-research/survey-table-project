@@ -1,5 +1,7 @@
 import * as z from 'zod';
 
+import { QuestionResponsesSchema, TestAttemptIdentityFields } from './response';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // recordStepVisit
 // ─────────────────────────────────────────────────────────────────────────────
@@ -14,6 +16,7 @@ export const RecordStepVisitInput = z.object({
   // 운영 콘솔 진척 표기용 visible step 진척 (클라 계산값). 미전송/구 클라 호환 위해 nullish.
   visibleStepIndex: z.number().int().nullish(),
   visibleStepTotal: z.number().int().nullish(),
+  ...TestAttemptIdentityFields,
 });
 export type RecordStepVisitInput = z.infer<typeof RecordStepVisitInput>;
 
@@ -28,6 +31,7 @@ export type RecordStepVisitInput = z.infer<typeof RecordStepVisitInput>;
 export const RecordVisibilitySegmentInput = z.object({
   responseId: z.string(),
   action: z.enum(['hide', 'show']),
+  ...TestAttemptIdentityFields,
 });
 export type RecordVisibilitySegmentInput = z.infer<typeof RecordVisibilitySegmentInput>;
 
@@ -70,6 +74,7 @@ export const ResumeOrCreateResponseOutput = z
     id: z.string(),
     status: ResumeStatusSchema,
     resumed: z.boolean(),
+    questionResponses: QuestionResponsesSchema.optional(),
   })
   .nullable();
 export type ResumeOrCreateResponseOutput = z.infer<typeof ResumeOrCreateResponseOutput>;
