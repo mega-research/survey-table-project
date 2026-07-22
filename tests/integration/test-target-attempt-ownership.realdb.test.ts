@@ -1,14 +1,18 @@
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { db } from '@/db';
+import { contactTargets, surveys } from '@/db/schema';
 import { prepareContactInsertScope } from '@/features/contacts/server/services/contact-insert-scope.service';
 import {
   recordStepVisit,
   recordVisibilitySegment,
 } from '@/features/survey-response/server/services/lifecycle.service';
-import { completeResponse } from '@/features/survey-response/server/services/response.service';
+import {
+  completeResponse,
+  saveTestTargetFirstAnswer,
+} from '@/features/survey-response/server/services/response.service';
 import {
   acquireTestTargetResponse,
   assertAnonymousTestSession,
@@ -16,6 +20,23 @@ import {
 } from '@/lib/survey-response/test-target-attempt.server';
 
 const run = process.env['RUN_REALDB'] === '1' ? describe : describe.skip;
+
+async function waitForDatabaseLock(queryFragment: string, minimumWaiters = 1): Promise<void> {
+  const deadline = Date.now() + 2_000;
+  while (Date.now() < deadline) {
+    const rows = await db.execute<{ waiting: number }>(sql`
+      SELECT count(*)::int AS waiting
+      FROM pg_stat_activity
+      WHERE pid <> pg_backend_pid()
+        AND datname = current_database()
+        AND wait_event_type = 'Lock'
+        AND query ILIKE ${`%${queryFragment}%`}
+    `);
+    if ((rows[0]?.waiting ?? 0) >= minimumWaiters) return;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  throw new Error(`${queryFragment} lock 대기를 관찰하지 못했습니다`);
+}
 
 run('조사대상자 테스트 모드 DB 제약', () => {
   const surveyId = randomUUID();
@@ -134,6 +155,353 @@ run('익명 테스트 저장과 첫 대상자 생성 경쟁', () => {
       expect(counts[0]).toEqual({ anonymous_responses: 0, targets: 1 });
     } finally {
       releaseAnonymous();
+      await db.execute(sql`DELETE FROM surveys WHERE id=${surveyId}`);
+    }
+  });
+});
+
+run('기존 attempt 재사용 식별자 검증', () => {
+  it('같은 attemptId라도 sessionId가 다르면 어떤 응답·컨택 쓰기 전 거부한다', async () => {
+    const surveyId = randomUUID();
+    const targetId = randomUUID();
+    const responseId = randomUUID();
+    const attemptId = randomUUID();
+    const originalRespondedAt = new Date('2026-07-20T00:00:00.000Z');
+    await db.execute(
+      sql`INSERT INTO surveys (id,title,test_mode_enabled) VALUES (${surveyId},'attempt-identity',true)`,
+    );
+    await db.execute(sql`
+      INSERT INTO contact_targets (id,survey_id,resid,is_test,invite_code,responded_at)
+      VALUES (${targetId},${surveyId},1,true,${randomUUID()},${originalRespondedAt.toISOString()}::timestamptz)
+    `);
+
+    try {
+      await db.execute(sql`
+        INSERT INTO survey_responses (
+          id,survey_id,question_responses,is_test,contact_target_id,session_id
+        ) VALUES (${responseId},${surveyId},'{}'::jsonb,true,${targetId},'original-session')
+      `);
+      await db.execute(
+        sql`UPDATE contact_targets SET response_id=${responseId} WHERE id=${targetId}`,
+      );
+      await db.execute(sql`
+        INSERT INTO test_response_attempts (id,response_id,session_id,status)
+        VALUES (${attemptId},${responseId},'original-session','active')
+      `);
+
+      await expect(
+        db.transaction((tx) =>
+          acquireTestTargetResponse(tx, {
+            surveyId,
+            contactTargetId: targetId,
+            sessionId: 'forged-session',
+            attemptId,
+            versionId: null,
+            currentStepId: 'forged-step',
+          }),
+        ),
+      ).rejects.toThrow('테스트 세션이 다른 화면에서 시작되었습니다');
+
+      const state = await db.execute<{
+        session_id: string | null;
+        current_step_id: string | null;
+        response_id: string | null;
+        responded_at: Date | null;
+      }>(sql`
+        SELECT sr.session_id, sr.current_step_id, ct.response_id, ct.responded_at
+        FROM survey_responses sr
+        JOIN contact_targets ct ON ct.id=sr.contact_target_id
+        WHERE sr.id=${responseId}
+      `);
+      expect(state[0]).toMatchObject({
+        session_id: 'original-session',
+        current_step_id: null,
+        response_id: responseId,
+      });
+      expect(new Date(String(state[0]?.responded_at)).toISOString()).toBe(
+        originalRespondedAt.toISOString(),
+      );
+    } finally {
+      await db.execute(sql`DELETE FROM surveys WHERE id=${surveyId}`);
+    }
+  });
+});
+
+run('대상자 테스트 응답의 서버 현재 버전 고정', () => {
+  it('caller가 null이나 이전 버전을 보내도 survey currentVersionId로 reset하고 유지한다', async () => {
+    const surveyId = randomUUID();
+    const targetId = randomUUID();
+    const responseId = randomUUID();
+    const oldVersionId = randomUUID();
+    const currentVersionId = randomUUID();
+    const firstAttemptId = randomUUID();
+    const secondAttemptId = randomUUID();
+    await db.execute(
+      sql`INSERT INTO surveys (id,title,test_mode_enabled) VALUES (${surveyId},'fixed-version',true)`,
+    );
+
+    try {
+      await db.execute(sql`
+        INSERT INTO survey_versions (id,survey_id,version_number,status,snapshot)
+        VALUES (${oldVersionId},${surveyId},1,'superseded','{"questions":[]}'::jsonb),
+               (${currentVersionId},${surveyId},2,'published','{"questions":[]}'::jsonb)
+      `);
+      await db.execute(
+        sql`UPDATE surveys SET current_version_id=${currentVersionId} WHERE id=${surveyId}`,
+      );
+      await db.execute(sql`
+        INSERT INTO contact_targets (id,survey_id,resid,is_test,invite_code)
+        VALUES (${targetId},${surveyId},1,true,${randomUUID()})
+      `);
+      await db.execute(sql`
+        INSERT INTO survey_responses (
+          id,survey_id,question_responses,is_test,contact_target_id,session_id,
+          version_id,is_completed,status,completed_at
+        ) VALUES (
+          ${responseId},${surveyId},'{}'::jsonb,true,${targetId},'old-session',
+          ${oldVersionId},true,'completed',now()
+        )
+      `);
+
+      await db.transaction((tx) =>
+        acquireTestTargetResponse(tx, {
+          surveyId,
+          contactTargetId: targetId,
+          sessionId: 'null-version-session',
+          attemptId: firstAttemptId,
+          versionId: null,
+          currentStepId: 'first-step',
+        }),
+      );
+      let versionRows = await db.execute<{ version_id: string | null }>(
+        sql`SELECT version_id FROM survey_responses WHERE id=${responseId}`,
+      );
+      expect(versionRows[0]?.version_id).toBe(currentVersionId);
+
+      await db.transaction((tx) =>
+        acquireTestTargetResponse(tx, {
+          surveyId,
+          contactTargetId: targetId,
+          sessionId: 'old-version-session',
+          attemptId: secondAttemptId,
+          versionId: oldVersionId,
+          currentStepId: 'second-step',
+        }),
+      );
+      versionRows = await db.execute<{ version_id: string | null }>(
+        sql`SELECT version_id FROM survey_responses WHERE id=${responseId}`,
+      );
+      expect(versionRows[0]?.version_id).toBe(currentVersionId);
+    } finally {
+      await db.execute(sql`DELETE FROM surveys WHERE id=${surveyId}`);
+    }
+  });
+
+  it('검증 중 publish가 끝나면 새 current 버전의 문항·PII·reset을 한 트랜잭션에서 사용한다', async () => {
+    const surveyId = randomUUID();
+    const targetId = randomUUID();
+    const responseId = randomUUID();
+    const oldVersionId = randomUUID();
+    const newVersionId = randomUUID();
+    const oldQuestionId = randomUUID();
+    const newPiiQuestionId = randomUUID();
+    const attemptId = randomUUID();
+    const inviteToken = randomUUID();
+    await db.execute(sql`
+      INSERT INTO surveys (id,title,test_mode_enabled,status)
+      VALUES (${surveyId},'publish-race',true,'published')
+    `);
+
+    let releasePublish!: () => void;
+    const publishRelease = new Promise<void>((resolve) => {
+      releasePublish = resolve;
+    });
+    let markPublishLocked!: () => void;
+    const publishLocked = new Promise<void>((resolve) => {
+      markPublishLocked = resolve;
+    });
+
+    try {
+      await db.execute(sql`
+        INSERT INTO survey_versions (id,survey_id,version_number,status,snapshot)
+        VALUES (
+          ${oldVersionId},${surveyId},1,'superseded',
+          ${JSON.stringify({ questions: [{ id: oldQuestionId, piiEncrypted: false }] })}::jsonb
+        ),(
+          ${newVersionId},${surveyId},2,'published',
+          ${JSON.stringify({ questions: [{ id: newPiiQuestionId, piiEncrypted: true }] })}::jsonb
+        )
+      `);
+      await db.execute(
+        sql`UPDATE surveys SET current_version_id=${oldVersionId} WHERE id=${surveyId}`,
+      );
+      await db.execute(sql`
+        INSERT INTO contact_targets (
+          id,survey_id,resid,is_test,invite_token,invite_code,responded_at
+        ) VALUES (${targetId},${surveyId},1,true,${inviteToken},${randomUUID()},now())
+      `);
+      await db.execute(sql`
+        INSERT INTO survey_responses (
+          id,survey_id,question_responses,is_test,contact_target_id,session_id,
+          version_id,is_completed,status,completed_at
+        ) VALUES (
+          ${responseId},${surveyId},'{}'::jsonb,true,${targetId},'old-session',
+          ${oldVersionId},true,'completed',now()
+        )
+      `);
+      await db.execute(
+        sql`UPDATE contact_targets SET response_id=${responseId} WHERE id=${targetId}`,
+      );
+
+      const publish = db.transaction(async (tx) => {
+        await tx
+          .update(surveys)
+          .set({ currentVersionId: newVersionId })
+          .where(eq(surveys.id, surveyId));
+        markPublishLocked();
+        await publishRelease;
+      });
+      await publishLocked;
+
+      const create = saveTestTargetFirstAnswer({
+        surveyId,
+        contactTargetId: targetId,
+        sessionId: 'new-current-session',
+        versionId: oldVersionId,
+        questionId: newPiiQuestionId,
+        value: '암호화할 답변',
+        currentStepId: 'new-current-step',
+        attemptId,
+      });
+      await waitForDatabaseLock('surveys');
+      releasePublish();
+
+      await expect(create).resolves.toMatchObject({ responseId });
+      await publish;
+      const rows = await db.execute<{
+        version_id: string | null;
+        question_responses: Record<string, unknown>;
+        session_id: string | null;
+      }>(sql`
+        SELECT version_id,question_responses,session_id
+        FROM survey_responses WHERE id=${responseId}
+      `);
+      expect(rows[0]).toMatchObject({
+        version_id: newVersionId,
+        session_id: 'new-current-session',
+      });
+      expect(String(rows[0]?.question_responses[newPiiQuestionId])).toMatch(/^v1:/);
+    } finally {
+      releasePublish();
+      await db.execute(sql`DELETE FROM surveys WHERE id=${surveyId}`);
+    }
+  });
+});
+
+run('대상자 테스트 완료와 새 attempt reset 경쟁', () => {
+  it('새 attempt가 먼저 target lock을 기다리면 stale 완료가 respondedAt을 되살리지 못한다', async () => {
+    const surveyId = randomUUID();
+    const targetId = randomUUID();
+    const responseId = randomUUID();
+    const staleAttemptId = randomUUID();
+    const nextAttemptId = randomUUID();
+    await db.execute(
+      sql`INSERT INTO surveys (id,title,test_mode_enabled) VALUES (${surveyId},'complete-race',true)`,
+    );
+    await db.execute(sql`
+      INSERT INTO contact_targets (id,survey_id,resid,is_test,invite_code,response_id)
+      VALUES (${targetId},${surveyId},1,true,${randomUUID()},null)
+    `);
+
+    let releaseTarget!: () => void;
+    const targetRelease = new Promise<void>((resolve) => {
+      releaseTarget = resolve;
+    });
+    let markTargetLocked!: () => void;
+    const targetLocked = new Promise<void>((resolve) => {
+      markTargetLocked = resolve;
+    });
+
+    try {
+      await db.execute(sql`
+        INSERT INTO survey_responses (
+          id,survey_id,question_responses,is_test,contact_target_id,session_id,status,is_completed
+        ) VALUES (
+          ${responseId},${surveyId},'{}'::jsonb,true,${targetId},'stale-session','in_progress',false
+        )
+      `);
+      await db.execute(
+        sql`UPDATE contact_targets SET response_id=${responseId} WHERE id=${targetId}`,
+      );
+      await db.execute(sql`
+        INSERT INTO test_response_attempts (id,response_id,session_id,status)
+        VALUES (${staleAttemptId},${responseId},'stale-session','active')
+      `);
+
+      const blocker = db.transaction(async (tx) => {
+        await tx
+          .select({ id: contactTargets.id })
+          .from(contactTargets)
+          .where(eq(contactTargets.id, targetId))
+          .for('update');
+        markTargetLocked();
+        await targetRelease;
+      });
+      await targetLocked;
+
+      const nextAcquire = db.transaction((tx) =>
+        acquireTestTargetResponse(tx, {
+          surveyId,
+          contactTargetId: targetId,
+          sessionId: 'next-session',
+          attemptId: nextAttemptId,
+          versionId: null,
+          currentStepId: 'next-step',
+        }),
+      );
+      await waitForDatabaseLock('contact_targets');
+      const staleComplete = completeResponse({
+        responseId,
+        attemptId: staleAttemptId,
+        sessionId: 'stale-session',
+      });
+      await waitForDatabaseLock('contact_targets', 2);
+      releaseTarget();
+
+      const [acquireResult, completeResult] = await Promise.allSettled([
+        nextAcquire,
+        staleComplete,
+      ]);
+      await blocker;
+      expect(acquireResult.status).toBe('fulfilled');
+      expect(completeResult).toMatchObject({
+        status: 'rejected',
+        reason: expect.objectContaining({
+          message: '테스트 세션이 다른 화면에서 시작되었습니다',
+        }),
+      });
+
+      const state = await db.execute<{
+        status: string;
+        is_completed: boolean;
+        session_id: string | null;
+        response_id: string | null;
+        responded_at: string | null;
+      }>(sql`
+        SELECT sr.status,sr.is_completed,sr.session_id,ct.response_id,ct.responded_at
+        FROM survey_responses sr
+        JOIN contact_targets ct ON ct.id=sr.contact_target_id
+        WHERE sr.id=${responseId}
+      `);
+      expect(state[0]).toMatchObject({
+        status: 'in_progress',
+        is_completed: false,
+        session_id: 'next-session',
+        response_id: responseId,
+        responded_at: null,
+      });
+    } finally {
+      releaseTarget();
       await db.execute(sql`DELETE FROM surveys WHERE id=${surveyId}`);
     }
   });

@@ -40,6 +40,9 @@ import type {
 } from '../../domain/response';
 import { replaceResponseAnswers } from './response-answers.service';
 
+type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+type ResponseQueryExecutor = Pick<DbTransaction, 'execute' | 'select'>;
+
 // ========================
 // 컨택 매칭 helper
 // ========================
@@ -347,13 +350,14 @@ async function assertQuestionBelongsToResponse(
   versionId: string | null,
   surveyId: string,
   questionId: string,
+  executor: ResponseQueryExecutor = db,
 ): Promise<{ piiEncrypted: boolean }> {
   if (versionId) {
     // 소속 검증(스냅샷 단독) + piiEncrypted 플래그(스냅샷 ∪ 라이브 questions 합집합)를 한
     // 쿼리로. 행이 없으면 미소속 → 거부. questionId 는 pub 입력이라 uuid 형식이 아닐 수
     // 있다 — 파라미터에 ::uuid 를 걸면 plan 시점 캐스트 에러(DB 500)가 나므로, 캐스트는
     // 컬럼 쪽(q.id::text)에 건다. 비정상 id 는 스냅샷 텍스트 비교에서 0행 → 정상 거부.
-    const rows = await db.execute<{ pii: boolean | null }>(sql`
+    const rows = await executor.execute<{ pii: boolean | null }>(sql`
       SELECT
         COALESCE((qe.elem->>'piiEncrypted')::boolean, false)
         OR COALESCE(
@@ -379,7 +383,7 @@ async function assertQuestionBelongsToResponse(
     return { piiEncrypted: row.pii === true };
   }
 
-  const [hit] = await db
+  const [hit] = await executor
     .select({ id: questions.id, piiEncrypted: questions.piiEncrypted })
     .from(questions)
     .where(and(eq(questions.surveyId, surveyId), eq(questions.id, questionId)))
@@ -388,6 +392,59 @@ async function assertQuestionBelongsToResponse(
     throw new Error('해당 설문에 존재하지 않는 질문입니다.');
   }
   return { piiEncrypted: hit.piiEncrypted === true };
+}
+
+async function applyQuestionResponseUpdate(
+  executor: { update: typeof db.update },
+  input: { responseId: string; questionId: string },
+  storedValue: unknown,
+): Promise<SurveyResponse> {
+  const { responseId, questionId } = input;
+  const [updated] = await executor
+    .update(surveyResponses)
+    .set({
+      questionResponses: sql`jsonb_set(
+        COALESCE(${surveyResponses.questionResponses}, '{}'::jsonb),
+        ARRAY[${questionId}],
+        ${JSON.stringify(storedValue)}::jsonb,
+        true
+      )`,
+      progressPct: sql`NULLIF(LEAST(100, GREATEST(
+        COALESCE(${surveyResponses.progressPct}, 0),
+        COALESCE((
+          SELECT ROUND((t.idx::numeric
+                        / NULLIF(jsonb_array_length(
+                            CASE WHEN jsonb_typeof(sv.snapshot->'questions') = 'array'
+                                 THEN sv.snapshot->'questions'
+                                 ELSE '[]'::jsonb
+                            END
+                          ), 0)) * 100)::int
+          FROM survey_versions sv,
+               jsonb_array_elements(
+                 CASE WHEN jsonb_typeof(sv.snapshot->'questions') = 'array'
+                      THEN sv.snapshot->'questions'
+                      ELSE '[]'::jsonb
+                 END
+               ) WITH ORDINALITY AS t(elem, idx)
+          WHERE sv.id = ${surveyResponses.versionId}
+            AND elem->>'id' = ${questionId}
+          LIMIT 1
+        ), 0)
+      ))::smallint, 0)`,
+    })
+    .where(
+      and(
+        eq(surveyResponses.id, responseId),
+        isNull(surveyResponses.deletedAt),
+        eq(surveyResponses.status, 'in_progress'),
+      ),
+    )
+    .returning();
+
+  if (!updated) {
+    throw new Error('응답을 수정할 수 없습니다.');
+  }
+  return updated;
 }
 
 /**
@@ -597,61 +654,8 @@ export async function updateQuestionResponse(
   // 가 NULL → COALESCE(0) → GREATEST 가 기존값 유지.
   // 방어: non-array snapshot 은 CASE 로 빈 배열 fallback (ERROR 방지). 최종 0 은 NULLIF
   // 로 NULL 로 변환해 "0%" 오표시 회피 (UI 가 NULL → '—' 표시).
-  const applyUpdate = async (executor: { update: typeof db.update }): Promise<SurveyResponse> => {
-    const [updated] = await executor
-      .update(surveyResponses)
-      .set({
-        questionResponses: sql`jsonb_set(
-        COALESCE(${surveyResponses.questionResponses}, '{}'::jsonb),
-        ARRAY[${questionId}],
-        ${JSON.stringify(storedValue)}::jsonb,
-        true
-      )`,
-        progressPct: sql`NULLIF(LEAST(100, GREATEST(
-        COALESCE(${surveyResponses.progressPct}, 0),
-        COALESCE((
-          SELECT ROUND((t.idx::numeric
-                        / NULLIF(jsonb_array_length(
-                            CASE WHEN jsonb_typeof(sv.snapshot->'questions') = 'array'
-                                 THEN sv.snapshot->'questions'
-                                 ELSE '[]'::jsonb
-                            END
-                          ), 0)) * 100)::int
-          FROM survey_versions sv,
-               jsonb_array_elements(
-                 CASE WHEN jsonb_typeof(sv.snapshot->'questions') = 'array'
-                      THEN sv.snapshot->'questions'
-                      ELSE '[]'::jsonb
-                 END
-               ) WITH ORDINALITY AS t(elem, idx)
-          WHERE sv.id = ${surveyResponses.versionId}
-            AND elem->>'id' = ${questionId}
-          LIMIT 1
-        ), 0)
-      ))::smallint, 0)`,
-      })
-      // #5 변조 가드 4: 완료/삭제/타상태(종결) 응답의 사후 변조 차단. soft-delete 됐거나
-      // status 가 in_progress 가 아니면 영향 0행 → throw. pub 엔드포인트는 responseId 만으로
-      // 호출 가능하므로, 지연/리플레이된 update 가 종결 응답을 되돌리지 못하게 막는다.
-      .where(
-        and(
-          eq(surveyResponses.id, responseId),
-          isNull(surveyResponses.deletedAt),
-          eq(surveyResponses.status, 'in_progress'),
-        ),
-      )
-      .returning();
-
-    if (!updated) {
-      // 행이 없거나(삭제/존재 안 함) 종결 상태면 변조 시도로 보고 거부한다.
-      throw new Error('응답을 수정할 수 없습니다.');
-    }
-
-    return updated;
-  };
-
   if (!responseRow.isTest) {
-    return applyUpdate(db);
+    return applyQuestionResponseUpdate(db, { responseId, questionId }, storedValue);
   }
 
   return db.transaction(async (tx) => {
@@ -660,7 +664,38 @@ export async function updateQuestionResponse(
       attemptId: input.attemptId,
       sessionId: input.sessionId,
     });
-    return applyUpdate(tx);
+    return applyQuestionResponseUpdate(tx, { responseId, questionId }, storedValue);
+  });
+}
+
+export async function saveTestTargetFirstAnswer(
+  input: Parameters<typeof acquireTestTargetResponse>[1] & {
+    questionId: string;
+    value: unknown;
+  },
+): Promise<{ responseId: string; reset: boolean }> {
+  return db.transaction(async (tx) => {
+    const acquired = await acquireTestTargetResponse(tx, input);
+    const [response] = await tx
+      .select({ versionId: surveyResponses.versionId })
+      .from(surveyResponses)
+      .where(eq(surveyResponses.id, acquired.responseId))
+      .limit(1);
+    if (!response) throw new Error('응답을 찾을 수 없습니다.');
+
+    const { piiEncrypted } = await assertQuestionBelongsToResponse(
+      response.versionId,
+      input.surveyId,
+      input.questionId,
+      tx,
+    );
+    const storedValue = piiEncrypted ? encryptAnswerValue(input.value) : input.value;
+    await applyQuestionResponseUpdate(
+      tx,
+      { responseId: acquired.responseId, questionId: input.questionId },
+      storedValue,
+    );
+    return acquired;
   });
 }
 
@@ -768,6 +803,32 @@ export async function createResponseWithFirstAnswer(
     return { kind: 'blocked', reason: 'invalid_test_token' };
   }
 
+  if (isTestTarget && contactTargetId && attemptId) {
+    const acquired = await saveTestTargetFirstAnswer({
+      surveyId,
+      contactTargetId,
+      sessionId,
+      attemptId,
+      versionId: versionId ?? null,
+      questionId,
+      value,
+      currentStepId,
+      visibleStepIndex,
+      visibleStepTotal,
+      userAgent,
+      ipHash: signals?.ipHash ?? null,
+      fpHash: signals?.fpHash ?? null,
+      deviceId: signals?.deviceId ?? null,
+      platform,
+      browser,
+    });
+    return {
+      kind: 'created',
+      id: acquired.responseId,
+      contactTargetId,
+    };
+  }
+
   // #24 버전 무결성: 클라 제공 versionId 가 동일 surveyId 의 유효 버전인지 검증(불일치 거부).
   // create 시점 정원은 soft(completedCount 미전달) — 잔여 race window 는 complete 하드체크가 보강.
   const version = await loadValidatedVersionGateRow(surveyId, versionId, survey.currentVersionId);
@@ -781,39 +842,6 @@ export async function createResponseWithFirstAnswer(
     questionId,
   );
   const storedValue = piiEncrypted ? encryptAnswerValue(value) : value;
-
-  if (isTestTarget && contactTargetId && attemptId) {
-    const acquired = await db.transaction((tx) =>
-      acquireTestTargetResponse(tx, {
-        surveyId,
-        contactTargetId,
-        sessionId,
-        attemptId,
-        versionId: versionId ?? null,
-        currentStepId,
-        visibleStepIndex,
-        visibleStepTotal,
-        userAgent,
-        ipHash: signals?.ipHash ?? null,
-        fpHash: signals?.fpHash ?? null,
-        deviceId: signals?.deviceId ?? null,
-        platform,
-        browser,
-      }),
-    );
-    await updateQuestionResponse({
-      responseId: acquired.responseId,
-      questionId,
-      value: storedValue,
-      attemptId,
-      sessionId,
-    });
-    return {
-      kind: 'created',
-      id: acquired.responseId,
-      contactTargetId,
-    };
-  }
 
   const firstVisit: PageVisit = {
     stepId: currentStepId,
@@ -936,11 +964,6 @@ export async function createBlankResponse(
     return { kind: 'blocked', reason: 'invalid_test_token' };
   }
 
-  // #24 버전 무결성: 클라 제공 versionId 가 동일 surveyId 의 유효 버전인지 검증(불일치 거부).
-  // create 시점 정원 soft.
-  const version = await loadValidatedVersionGateRow(surveyId, versionId, survey.currentVersionId);
-  assertSurveyAcceptingResponses(survey, version, { contactTargetId, isTest });
-
   if (isTestTarget && contactTargetId && attemptId) {
     const acquired = await db.transaction((tx) =>
       acquireTestTargetResponse(tx, {
@@ -964,6 +987,11 @@ export async function createBlankResponse(
       contactTargetId,
     };
   }
+
+  // #24 버전 무결성: 클라 제공 versionId 가 동일 surveyId 의 유효 버전인지 검증(불일치 거부).
+  // create 시점 정원 soft.
+  const version = await loadValidatedVersionGateRow(surveyId, versionId, survey.currentVersionId);
+  assertSurveyAcceptingResponses(survey, version, { contactTargetId, isTest });
 
   const firstVisit: PageVisit = {
     stepId: currentStepId,
@@ -1101,6 +1129,7 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
     }
   }
 
+  const completedAt = new Date();
   const result = await db.transaction(async (tx) => {
     if (gateRow?.isTest) {
       await lockAndAssertResponseMutation(tx, {
@@ -1114,11 +1143,11 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
       .update(surveyResponses)
       .set({
         isCompleted: true,
-        completedAt: new Date(),
+        completedAt,
         // 운영 현황 콘솔용 추적 컬럼
         status: 'completed',
         progressPct: 100,
-        lastActivityAt: new Date(),
+        lastActivityAt: completedAt,
         // 서버 클럭 기준 경과 초 (started_at부터 now()까지)
         totalSeconds: sql`EXTRACT(EPOCH FROM (now() - ${surveyResponses.startedAt}))::int`,
         // 마지막 pageVisits 항목의 leftAt이 NULL이면 now()로 백필
@@ -1157,7 +1186,8 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
       )
       .returning();
 
-    if (!updated) {
+    let completedResponse = updated;
+    if (!completedResponse) {
       // 가드에 막혀 0행 — 이미 완료된 같은 응답이면 멱등 재시도로 보고 기존 행을 그대로 반환.
       // (정상 제출 후 네트워크 응답 유실로 인한 사용자 수동 재시도 케이스 보존)
       const [existing] = await tx
@@ -1166,53 +1196,51 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
         .where(eq(surveyResponses.id, responseId))
         .limit(1);
       if (existing?.isCompleted && existing.deletedAt == null) {
-        return existing;
+        completedResponse = existing;
+      } else {
+        // 행이 없거나(삭제/존재 안 함) 종결 상태(screened_out 등)면 완료 처리를 거부한다.
+        throw new Error(
+          `completeResponse: 완료 처리 불가 행 (responseId=${responseId}, status=${existing?.status ?? 'not_found'}, deleted=${existing?.deletedAt != null})`,
+        );
       }
-      // 행이 없거나(삭제/존재 안 함) 종결 상태(screened_out 등)면 완료 처리를 거부한다.
-      throw new Error(
-        `completeResponse: 완료 처리 불가 행 (responseId=${responseId}, status=${existing?.status ?? 'not_found'}, deleted=${existing?.deletedAt != null})`,
-      );
     }
 
-    // totalSeconds 정정: pageVisits 활성시간 합으로 덮어쓴다.
-    // (UPDATE 1의 벽시계 EXTRACT는 활성 segment가 없을 때의 폴백으로 남는다.)
-    // 백필된 updated.pageVisits 기준 — 마지막 leftAt이 now()로 채워진 상태.
-    const activeSeconds = sumActiveSeconds(updated.pageVisits as PageVisit[] | null);
-    if (activeSeconds !== null) {
+    if (updated) {
+      // totalSeconds 정정: pageVisits 활성시간 합으로 덮어쓴다.
+      // (UPDATE 1의 벽시계 EXTRACT는 활성 segment가 없을 때의 폴백으로 남는다.)
+      // 백필된 updated.pageVisits 기준 — 마지막 leftAt이 now()로 채워진 상태.
+      const activeSeconds = sumActiveSeconds(updated.pageVisits as PageVisit[] | null);
+      if (activeSeconds !== null) {
+        await tx
+          .update(surveyResponses)
+          .set({ totalSeconds: activeSeconds })
+          .where(eq(surveyResponses.id, responseId));
+      }
+
+      // 2. response_answers 정규화 저장 (replaceResponseAnswers — saveAdminEdit 과 공유)
+      if (validatedResponses && Object.keys(validatedResponses).length > 0) {
+        await replaceResponseAnswers(tx, responseId, updated.surveyId, validatedResponses);
+      }
+    }
+
+    if (completedResponse.contactTargetId) {
       await tx
-        .update(surveyResponses)
-        .set({ totalSeconds: activeSeconds })
-        .where(eq(surveyResponses.id, responseId));
-    }
-
-    // 2. response_answers 정규화 저장 (replaceResponseAnswers — saveAdminEdit 과 공유)
-    if (validatedResponses && Object.keys(validatedResponses).length > 0) {
-      await replaceResponseAnswers(tx, responseId, updated.surveyId, validatedResponses);
-    }
-
-    return updated;
-  });
-
-  // 컨택 매칭 후처리: 트랜잭션 외부에서 best-effort UPDATE.
-  // 실패하더라도 응답 완료 자체는 성공으로 처리한다 (응답 완료 우선).
-  if (result?.contactTargetId) {
-    try {
-      const completedAt = new Date();
-      await db
         .update(contactTargets)
         .set({
           respondedAt: completedAt,
-          responseId: result.id,
+          responseId: completedResponse.id,
           updatedAt: completedAt,
         })
-        .where(eq(contactTargets.id, result.contactTargetId));
-    } catch (err) {
-      console.error(
-        `[completeResponse] contact_targets UPDATE 실패 — 응답 완료는 성공 (responseId=${result.id}, contactTargetId=${result.contactTargetId})`,
-        err,
-      );
+        .where(
+          and(
+            eq(contactTargets.id, completedResponse.contactTargetId),
+            eq(contactTargets.surveyId, completedResponse.surveyId),
+          ),
+        );
     }
-  }
+
+    return completedResponse;
+  });
 
   // revalidatePath('/analytics') 는 백엔드에서 제거 — 공개 응답이 admin /analytics
   // 캐시를 cross 무효화하던 부분으로, 소비처 통합 단계에서 query invalidation 등으로 보강.

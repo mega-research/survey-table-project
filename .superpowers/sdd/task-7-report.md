@@ -26,3 +26,11 @@
 ## 잔여 관찰
 
 - 전체 스위트의 유일한 실패는 범위 밖 `tests/unit/use-response-lifecycle.test.tsx` 13개다. Node/jsdom 테스트 환경에서 `window.localStorage`가 `undefined`인 채 `beforeEach` 내 `clear()`를 호출해 본문 실행 전에 모두 실패했다. Task 7 백엔드 범위 밖이므로 수정하지 않았다.
+
+## 리뷰 수정
+
+- 대상자 acquire는 survey `SHARE` 잠금에서 읽은 `currentVersionId`만 응답 버전으로 사용한다. 첫 답변은 같은 트랜잭션에서 reset 후 고정된 응답 버전으로 문항 멤버십과 PII 암호화를 검증·저장해 null/이전 caller 버전과 publish 경쟁을 제거했다.
+- 테스트 mutation 잠금 순서를 survey → target → response로 통일하고, 완료 응답과 `contact_targets.responseId/respondedAt` 연결을 한 트랜잭션으로 커밋한다. 새 attempt reset과 stale 완료의 실DB lock 대기열 경쟁에서 stale 완료가 거부되고 `respondedAt`이 null로 유지됨을 검증했다.
+- 기존 attempt 재사용은 `status=response active`, `responseId`, `sessionId`를 모두 쓰기 전에 검사하며, 세션 불일치 시 응답과 컨택 상태가 변하지 않는 실DB 회귀 테스트를 추가했다.
+- `recordStepVisit`는 트랜잭션 안에서 missing row를 다시 throw하고, 존재하는 동일 step은 기존 no-op 계약을 유지한다.
+- 리뷰 수정 검증: 집중 6파일 65개 통과, 실DB 11개 통과, TypeScript·관련 ESLint·`git diff --check` 통과. 일반 전체 스위트는 317파일 중 316파일, 2,586개 중 2,573개 통과했으며 기존 `use-response-lifecycle.test.tsx` localStorage 환경 실패 13개만 동일하게 남았다.

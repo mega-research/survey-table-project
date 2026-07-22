@@ -42,11 +42,14 @@ export async function recordStepVisit(input: RecordStepVisitInput): Promise<void
   // jsonb_set은 마지막 항목의 leftAt이 NULL일 때만 갱신, 그 후 || 로 새 항목 append.
   // visible step 진척은 step 이동과 함께 갱신 (동일 step no-op 시엔 미갱신 — 마지막 이동 시점 기준).
   await db.transaction(async (tx) => {
-    await lockAndAssertResponseMutation(tx, {
+    const response = await lockAndAssertResponseMutation(tx, {
       responseId,
       attemptId: input.attemptId,
       sessionId: input.sessionId,
     });
+    if (!response) {
+      throw new Error('응답을 찾을 수 없습니다.');
+    }
     await tx
       .update(surveyResponses)
       .set({

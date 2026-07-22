@@ -4,7 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { extractRawSql } from './_helpers/result-code-mock';
 
-const { setMock, whereMock } = vi.hoisted(() => ({
+const { selectLimitMock, setMock, whereMock } = vi.hoisted(() => ({
+  selectLimitMock: vi.fn(),
   setMock: vi.fn(),
   whereMock: vi.fn(),
 }));
@@ -22,7 +23,7 @@ vi.mock('@/db', () => {
   });
   const selectResult: Record<string, unknown> = {
     for: vi.fn(() => selectResult),
-    limit: vi.fn(async () => [{ id: 'r1', surveyId: 's1', isTest: false, contactTargetId: null }]),
+    limit: vi.fn(() => selectLimitMock()),
   };
   const selectChain: Record<string, unknown> = {
     from: vi.fn(() => selectChain),
@@ -42,6 +43,10 @@ vi.mock('@/db', () => {
 
 describe('recordVisibilitySegment — SQL 분기', () => {
   beforeEach(() => {
+    selectLimitMock.mockReset();
+    selectLimitMock.mockResolvedValue([
+      { id: 'r1', surveyId: 's1', isTest: false, contactTargetId: null },
+    ]);
     setMock.mockReset();
     whereMock.mockReset();
   });
@@ -95,6 +100,37 @@ describe('recordVisibilitySegment — SQL 분기', () => {
     const whereSql = extractRawSql(showWhereCall[0]);
     expect(whereSql).toContain('leftAt');
     expect(whereSql).toContain('IS NOT NULL');
+  });
+});
+
+describe('recordStepVisit — missing row와 동일 step 구분', () => {
+  beforeEach(() => {
+    selectLimitMock.mockReset();
+    setMock.mockReset();
+    whereMock.mockReset();
+  });
+
+  it('응답 행이 없으면 다시 throw 한다', async () => {
+    selectLimitMock.mockResolvedValue([]);
+    const { recordStepVisit } =
+      await import('@/features/survey-response/server/services/lifecycle.service');
+
+    await expect(
+      recordStepVisit({ responseId: 'missing', nextStepId: 'group:next' }),
+    ).rejects.toThrow('응답을 찾을 수 없습니다.');
+    expect(setMock).not.toHaveBeenCalled();
+  });
+
+  it('존재하는 응답의 동일 step 재기록은 정상 no-op이다', async () => {
+    selectLimitMock.mockResolvedValue([
+      { id: 'r1', surveyId: 's1', isTest: false, contactTargetId: null },
+    ]);
+    const { recordStepVisit } =
+      await import('@/features/survey-response/server/services/lifecycle.service');
+
+    await expect(
+      recordStepVisit({ responseId: 'r1', nextStepId: 'group:same' }),
+    ).resolves.toBeUndefined();
   });
 });
 
