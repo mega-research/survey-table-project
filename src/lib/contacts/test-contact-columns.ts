@@ -23,6 +23,15 @@ const DEFAULTS: readonly ContactColumnDef[] = [
   },
 ];
 
+/** 테스트 대상자 목록에도 실제 목록과 동일한 운영용 시스템 컬럼을 표시한다. */
+const TEST_SYSTEM_COLUMNS: readonly ContactColumnDef[] = [
+  { key: 'resid', label: '번호', source: 'system.resid', order: 0 },
+  { key: 'contact_result', label: '컨택결과', source: 'system.contact_result', order: 0 },
+  { key: 'email_count', label: '메일', source: 'system.email_count', order: 0 },
+  { key: 'web', label: 'web', source: 'system.web', order: 0 },
+  { key: 'contact_owner', label: '컨택원', source: 'system.contact_owner', order: 0 },
+];
+
 function isCompanyAttrsColumn(column: ContactColumnDef): boolean {
   return (
     column.source.startsWith('attrs.') &&
@@ -34,10 +43,8 @@ export function ensureTestContactColumns(
   real: ContactColumnSchemeInput | null,
   saved: ContactColumnSchemeInput | null,
 ): ContactColumnScheme {
-  if (saved) return structuredClone(saved) as ContactColumnScheme;
-
   const base = structuredClone(
-    real ?? { version: 1, headerRow: 1, columns: [] },
+    saved ?? real ?? { version: 1, headerRow: 1, columns: [] },
   ) as ContactColumnScheme;
   const hasCompany = base.columns.some(isCompanyAttrsColumn);
   const missing = DEFAULTS.filter((column) => {
@@ -57,7 +64,12 @@ export function ensureTestContactColumns(
     return !hasCompany;
   });
 
-  const columns = [...base.columns, ...missing].map((column, index) => ({
+  const existingSources = new Set(base.columns.map((column) => column.source));
+  const missingSystemColumns = TEST_SYSTEM_COLUMNS.filter(
+    (column) => !existingSources.has(column.source),
+  );
+
+  const columns = [...base.columns, ...missing, ...missingSystemColumns].map((column, index) => ({
     ...column,
     order: index + 1,
   }));

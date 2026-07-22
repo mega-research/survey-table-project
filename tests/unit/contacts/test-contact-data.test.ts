@@ -33,6 +33,15 @@ describe('테스트 대상자 기본 데이터', () => {
     expect(test.columns.some((column) => column.source === 'attrs.test_company')).toBe(true);
     expect(test.columns.some((column) => column.piiType === 'phone')).toBe(true);
     expect(test.columns.some((column) => column.piiType === 'email')).toBe(true);
+    expect(test.columns.map((column) => column.source)).toEqual(
+      expect.arrayContaining([
+        'system.resid',
+        'system.contact_result',
+        'system.email_count',
+        'system.web',
+        'system.contact_owner',
+      ]),
+    );
     expect(real.columns).toHaveLength(1);
   });
 
@@ -43,7 +52,16 @@ describe('테스트 대상자 기본 데이터', () => {
       columns: [{ key: 'custom', label: '사용자 컬럼', source: 'attrs.custom', order: 1 }],
     } as const;
     const result = ensureTestContactColumns(null, saved);
-    expect(result).toEqual(saved);
+    expect(result.columns.map((column) => column.source)).toEqual(
+      expect.arrayContaining([
+        'attrs.custom',
+        'system.resid',
+        'system.contact_result',
+        'system.email_count',
+        'system.web',
+        'system.contact_owner',
+      ]),
+    );
     expect(result).not.toBe(saved);
   });
 
