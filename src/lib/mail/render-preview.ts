@@ -8,6 +8,8 @@
  * - attrs 값은 엑셀 업로드 출처이므로 HTML escape 필수.
  */
 
+import { IMG_TAG_RE, expandImageLinkAreas } from './image-link-area';
+
 export interface PreviewSample {
   attrs: Record<string, string>;
   inviteUrl: string | null;
@@ -94,16 +96,41 @@ function renderInlineText(s: string, sample: PreviewSample | null, mode: RenderM
 /** body HTML 용 — 태그/텍스트 영역 분리 처리.
  *  anchor depth 를 추적해 텍스트 영역의 {{invite_link}} 자동 a 태그 변환이
  *  이미 사용자가 감싼 anchor 안에서 nested anchor 를 만들지 않도록 한다. */
+/**
+ * tiptap-extension-resize-image 가 이미지 wrapper 에 기본으로 심는 정렬 부산물
+ * (float + 8px 측면 패딩)을 메일 렌더에서 제거한다. 메일에서 이미지 정렬은
+ * 문단의 text-align 이 담당하므로 의미 손실이 없고, float 는 이메일
+ * 클라이언트에서 지원이 들쭉날쭉해 오히려 레이아웃을 흔든다.
+ */
+function stripImageAlignArtifacts(html: string): string {
+  if (!html.includes('<img')) return html;
+  return html.replace(IMG_TAG_RE, (tag) =>
+    tag.replace(/\bstyle="([^"]*)"/, (_m, style: string) => {
+      const cleaned = style
+        .split(';')
+        .map((d) => d.trim())
+        .filter(Boolean)
+        .filter((d) => !/^float\s*:/i.test(d) && !/^padding-(?:left|right)\s*:\s*8px$/i.test(d))
+        .join('; ');
+      return cleaned ? `style="${cleaned};"` : '';
+    }),
+  );
+}
+
 function renderBodyHtml(html: string, sample: PreviewSample | null, mode: RenderMode): string {
   if (!html) return '';
+  // 이미지 클릭 영역 → 밴드 테이블 생성. 변수 치환보다 먼저 실행해야
+  // 생성된 href="{{invite_link}}" 가 아래 치환 루프를 탄다.
+  // 밴드로 치환되지 않고 남는 img 의 정렬 부산물은 그 다음에 제거.
+  const expanded = stripImageAlignArtifacts(expandImageLinkAreas(html));
   const out: string[] = [];
   let lastIndex = 0;
   let anchorDepth = 0;
   TAG_RE.lastIndex = 0;
   let m: RegExpExecArray | null;
-  while ((m = TAG_RE.exec(html)) !== null) {
+  while ((m = TAG_RE.exec(expanded)) !== null) {
     if (m.index > lastIndex) {
-      out.push(renderTextSegment(html.slice(lastIndex, m.index), sample, mode, anchorDepth > 0));
+      out.push(renderTextSegment(expanded.slice(lastIndex, m.index), sample, mode, anchorDepth > 0));
     }
     const tag = m[0];
     out.push(renderTagSegment(tag, sample, mode));
@@ -111,8 +138,8 @@ function renderBodyHtml(html: string, sample: PreviewSample | null, mode: Render
     else if (/^<\/a\s*>/i.test(tag)) anchorDepth = Math.max(0, anchorDepth - 1);
     lastIndex = m.index + m[0].length;
   }
-  if (lastIndex < html.length) {
-    out.push(renderTextSegment(html.slice(lastIndex), sample, mode, anchorDepth > 0));
+  if (lastIndex < expanded.length) {
+    out.push(renderTextSegment(expanded.slice(lastIndex), sample, mode, anchorDepth > 0));
   }
   return out.join('');
 }

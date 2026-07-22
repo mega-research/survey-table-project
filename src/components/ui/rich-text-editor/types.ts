@@ -35,6 +35,9 @@ export interface RichTextEditorProps {
   /** 컨테이너 최소 높이 (기본 320px). compact는 80px 권장. */
   minHeight?: number;
 
+  /** 이미지 클릭 영역(이미지맵 + invite_link) 버튼 노출. 메일 템플릿 전용. 기본 false. */
+  enableImageLinkArea?: boolean;
+
   placeholder?: string;
 }
 

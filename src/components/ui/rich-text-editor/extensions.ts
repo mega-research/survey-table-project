@@ -87,7 +87,24 @@ const TableAlignDecoration = Extension.create({
 
 const ImageResizeWithProxy = ImageResize.extend({
   addAttributes() {
-    return { ...this.parent?.() };
+    return {
+      ...this.parent?.(),
+      // 이미지 클릭 영역 (메일 전용) — 0~1 상대좌표 "x,y,w,h". SoT 는 상대좌표이며
+      // 밴드 슬라이스는 템플릿 저장 시 서버가 이 값으로 생성한다.
+      linkRect: {
+        default: null as string | null,
+        parseHTML: (el: HTMLElement) => el.getAttribute('data-link-rect'),
+        renderHTML: (attrs: { linkRect?: string | null }) =>
+          attrs.linkRect ? { 'data-link-rect': attrs.linkRect } : {},
+      },
+      // 영역 지정 시점의 원본 크기 "naturalWidth,naturalHeight" — 종횡비 산출용
+      linkNatural: {
+        default: null as string | null,
+        parseHTML: (el: HTMLElement) => el.getAttribute('data-link-natural'),
+        renderHTML: (attrs: { linkNatural?: string | null }) =>
+          attrs.linkNatural ? { 'data-link-natural': attrs.linkNatural } : {},
+      },
+    };
   },
   // 베이스 ImageResize 는 renderHTML 을 override 하지 않아 단순 <img> 만 출력한다.
   // 그 결과 NodeView 의 wrapper/container DOM 이 미리보기·메일 발송 HTML 에 남지 않아

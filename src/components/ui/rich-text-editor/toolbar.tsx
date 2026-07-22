@@ -38,9 +38,10 @@ interface Props {
   onPickLink: () => void;
   onPickFile?: () => void;
   onReplaceFile?: () => void;
+  enableImageLinkArea?: boolean;
 }
 
-export function Toolbar({ editor, variableCatalog, onPickImage, onPickLink, onPickFile, onReplaceFile }: Props) {
+export function Toolbar({ editor, variableCatalog, onPickImage, onPickLink, onPickFile, onReplaceFile, enableImageLinkArea }: Props) {
   const s = useEditorState({
     editor,
     selector: ({ editor }) => {
@@ -171,7 +172,9 @@ export function Toolbar({ editor, variableCatalog, onPickImage, onPickLink, onPi
         </ToolBtn>
       </div>
 
-      {s.imageActive && <ImageContextToolbar editor={editor} />}
+      {s.imageActive && (
+        <ImageContextToolbar editor={editor} enableImageLinkArea={enableImageLinkArea ?? false} />
+      )}
       {s.tableActive && <TableContextToolbar editor={editor} />}
       {s.fileAttachmentActive && onReplaceFile && (
         <FileAttachmentContextToolbar editor={editor} onReplace={onReplaceFile} />

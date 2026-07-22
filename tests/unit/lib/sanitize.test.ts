@@ -280,3 +280,71 @@ describe('파일 첨부 노드 — sanitize allowlist', () => {
     expect(out).not.toContain('onclick');
   });
 });
+
+describe('sanitizeRichHtml - 이미지맵 (클릭 영역)', () => {
+  it('map/area/usemap 을 보존한다', () => {
+    const html =
+      '<img src="https://r2.example.com/mail/a.png" width="320" usemap="#m-link-0">' +
+      '<map name="m-link-0"><area shape="rect" coords="32,122,192,147" ' +
+      'href="https://survey.example.com/i/abc" target="_blank" rel="noopener noreferrer" ' +
+      'alt="설문 참여 링크"></map>';
+    const out = sanitizeRichHtml(html);
+    expect(out).toContain('usemap="#m-link-0"');
+    expect(out).toContain('<map name="m-link-0">');
+    expect(out).toContain('coords="32,122,192,147"');
+    expect(out).toContain('href="https://survey.example.com/i/abc"');
+  });
+
+  it('img 의 data-link-* 속성은 스트립한다', () => {
+    const html =
+      '<img src="https://r2.example.com/mail/a.png" width="320" ' +
+      'data-link-rect="0.1,0.5,0.5,0.1" data-link-natural="1700,1300" ' +
+      'data-link-coords="32,122,192,147">';
+    const out = sanitizeRichHtml(html);
+    expect(out).not.toContain('data-link-rect');
+    expect(out).not.toContain('data-link-natural');
+    expect(out).not.toContain('data-link-coords');
+    expect(out).toContain('src=');
+  });
+
+  it('area 의 javascript: href 는 제거한다', () => {
+    const html =
+      '<map name="m"><area shape="rect" coords="0,0,10,10" href="javascript:alert(1)"></map>';
+    const out = sanitizeRichHtml(html);
+    expect(out).not.toContain('javascript:');
+  });
+});
+
+describe('sanitizeRichHtml - 클릭 영역 밴드 테이블', () => {
+  const bandTable =
+    '<table class="mail-link-bands" style="width: 100%; max-width: 100%; border-collapse: collapse;">' +
+    '<tbody>' +
+    '<tr><td class="mail-link-bands" style="padding: 0;">' +
+    '<img src="https://r2.example.com/mail/link-bands/h-top.png" alt="" style="display: block; width: 100%; height: auto;">' +
+    '</td></tr>' +
+    '<tr><td class="mail-link-bands" style="padding: 0;">' +
+    '<a href="https://survey.example.com/i/abc" target="_blank" rel="noopener noreferrer">' +
+    '<img src="https://r2.example.com/mail/link-bands/h-mid.png" alt="설문 참여 링크" style="display: block; width: 100%; height: auto;">' +
+    '</a></td></tr>' +
+    '</tbody></table>';
+
+  it('밴드 테이블/셀에는 기본 표 테두리 스타일을 주입하지 않는다', () => {
+    const out = sanitizeRichHtml(bandTable);
+    expect(out).not.toContain('border:1px solid');
+    expect(out).toContain('mail-link-bands');
+    expect(out).toContain('href="https://survey.example.com/i/abc"');
+    expect(out).toContain('display:block');
+  });
+
+  it('일반 테이블은 기존처럼 테두리 스타일이 주입된다', () => {
+    const out = sanitizeRichHtml('<table><tbody><tr><td>x</td></tr></tbody></table>');
+    expect(out).toContain('border:1px solid');
+  });
+
+  it('img 의 data-link-bands 속성은 스트립한다', () => {
+    const out = sanitizeRichHtml(
+      '<img src="https://r2.example.com/mail/a.png" data-link-bands="a|b|c">',
+    );
+    expect(out).not.toContain('data-link-bands');
+  });
+});

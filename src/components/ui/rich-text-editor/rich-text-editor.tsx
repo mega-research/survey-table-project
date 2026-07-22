@@ -67,6 +67,7 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
       className,
       editorClassName,
       minHeight = 320,
+      enableImageLinkArea,
       placeholder,
     },
     ref,
@@ -237,6 +238,7 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
           onPickLink={onPickLink}
           {...(kind === 'survey' && onPickFile !== undefined ? { onPickFile } : {})}
           {...(kind === 'survey' && onReplaceFile !== undefined ? { onReplaceFile } : {})}
+          enableImageLinkArea={enableImageLinkArea ?? false}
         />
         <div
           className="flex flex-col overflow-y-auto max-h-[calc(100vh-260px)]"

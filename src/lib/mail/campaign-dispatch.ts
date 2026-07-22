@@ -161,7 +161,6 @@ export async function dispatchCampaignChunk(
           bodyHtml: rendered.bodyHtml,
           previewText: rendered.subject,
           unsubscribeUrl,
-          showTestFooter: false,
         }),
       );
 

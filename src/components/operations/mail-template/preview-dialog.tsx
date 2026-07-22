@@ -355,9 +355,8 @@ export function MailPreviewDialog({
           </div>
 
           <p className="mt-2 text-xs text-gray-500">
-            제목 앞에 <code className="rounded bg-gray-200 px-1 text-[11px]">[TEST]</code>
-            가 자동으로 붙고, 본문 내 설문 링크는 응답되지 않는 미리보기용 토큰으로
-            치환됩니다.
+            실제 발송과 동일한 제목으로 전송되며, 본문 내 설문 링크는 응답되지 않는
+            미리보기용 토큰으로 치환됩니다.
           </p>
 
           {hasUnpromotedAttachment && (

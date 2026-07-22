@@ -130,15 +130,17 @@ export function TemplateEditForm({ surveyId, fromDomain, catalog, template, curr
             templateId: template.id,
             input,
           });
-          // promote 후 영구 prefix 로 교체된 attachments 를 state 에 반영 —
-          // 저장 직후 미리보기 발송에서 stale tmp key 다운로드 race 차단.
-          setState((prev) => ({ ...prev, attachments: result.attachments }));
+          // promote 후 영구 prefix 로 교체된 attachments 와, 밴드 슬라이스가
+          // 반영된 bodyHtml 을 state 에 반영 — 저장 직후 미리보기가 실제
+          // 발송본(잘린 밴드 + 클릭 링크)과 동일하게 보이도록. 이후 에디터를
+          // 수정하면 onChange 가 다시 초안 HTML 로 덮어쓴다 (재저장 시 재생성).
+          setState((prev) => ({ ...prev, bodyHtml: result.bodyHtml, attachments: result.attachments }));
           setSavedAt(Date.now());
           // 기존 템플릿 수정 → server fetch 만 갱신, URL/페이지 그대로 유지.
           router.refresh();
         } else {
           const result = await client.mail.templates.create({ surveyId, input });
-          setState((prev) => ({ ...prev, attachments: result.attachments }));
+          setState((prev) => ({ ...prev, bodyHtml: result.bodyHtml, attachments: result.attachments }));
           setSavedAt(Date.now());
           // 신규 생성 → 새 id 의 edit URL 로 자리 잡음 (full page reload 없이 URL 만 교체).
           // 다음 저장은 update 경로로 가도록 함.
@@ -185,6 +187,7 @@ export function TemplateEditForm({ surveyId, fromDomain, catalog, template, curr
             본문<span className="ml-0.5 text-red-500">*</span>
           </Label>
           <RichTextEditor
+            enableImageLinkArea
             ref={editorRef}
             kind="mail"
             initialHtml={template?.bodyHtml ?? ''}

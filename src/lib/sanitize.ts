@@ -66,7 +66,7 @@ const RICH_CONFIG: sanitizeHtml.IOptions = {
     'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
     'ul', 'ol', 'li',
     'blockquote', 'code', 'pre',
-    'a', 'img',
+    'a', 'img', 'map', 'area',
     'table', 'thead', 'tbody', 'tr', 'th', 'td',
   ],
   allowedAttributes: {
@@ -76,7 +76,10 @@ const RICH_CONFIG: sanitizeHtml.IOptions = {
       // notice 파일 첨부 노드 marker (a[data-file-attachment])
       'data-file-attachment', 'data-key', 'data-filename', 'data-size', 'data-mime',
     ],
-    img: ['src', 'alt', 'width', 'height'],
+    img: ['src', 'alt', 'width', 'height', 'usemap'],
+    // 이미지 클릭 영역 (메일 이미지맵) — href 는 allowedSchemes(http/https)가 그대로 적용
+    map: ['name'],
+    area: ['shape', 'coords', 'href', 'target', 'rel', 'alt'],
     td: ['colspan', 'rowspan', 'colwidth'],
     th: ['colspan', 'rowspan', 'colwidth'],
   },
@@ -146,8 +149,16 @@ const RICH_CONFIG: sanitizeHtml.IOptions = {
     },
   },
   transformTags: {
-    table: (tagName, attribs) => withStyle(tagName, attribs, TABLE_STYLE),
-    td: (tagName, attribs) => withStyle(tagName, attribs, CELL_STYLE),
+    // mail-link-bands: 이미지 클릭 영역 밴드 테이블 — 표 테두리/패딩 주입 시
+    // 밴드 조각 사이에 선이 생기므로 면제 (expandImageLinkAreas 가 생성)
+    table: (tagName, attribs) =>
+      (attribs['class'] ?? '').includes('mail-link-bands')
+        ? { tagName, attribs }
+        : withStyle(tagName, attribs, TABLE_STYLE),
+    td: (tagName, attribs) =>
+      (attribs['class'] ?? '').includes('mail-link-bands')
+        ? { tagName, attribs }
+        : withStyle(tagName, attribs, CELL_STYLE),
     th: (tagName, attribs) => withStyle(tagName, attribs, TH_STYLE),
     a: (tagName, attribs) => {
       if (attribs['data-file-attachment'] === 'true') {
