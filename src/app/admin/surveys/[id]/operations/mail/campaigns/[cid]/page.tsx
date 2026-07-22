@@ -16,6 +16,7 @@ import {
   getCampaignDetail,
   listCampaignRecipients,
 } from '@/lib/operations/campaigns.server';
+import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
 
 const PAGE_SIZE = 25;
 
@@ -48,17 +49,20 @@ function parseStatus(value: string | undefined): MailRecipientStatus | 'all' {
 export default async function CampaignDetailPage({ params, searchParams }: Props) {
   const { id: surveyId, cid } = await params;
   const sp = await searchParams;
+  const scope = await getOperationsDataScope(surveyId);
   const recipPage = parsePage(sp.recipPage);
   const status = parseStatus(sp.status);
   const q = (sp.q ?? '').trim();
 
-  const campaign = await getCampaignDetail(cid);
-  if (!campaign || campaign.surveyId !== surveyId) {
+  const campaign = await getCampaignDetail(surveyId, cid, scope);
+  if (!campaign) {
     notFound();
   }
 
   const recipients = await listCampaignRecipients({
+    surveyId,
     campaignId: cid,
+    scope,
     page: recipPage,
     pageSize: PAGE_SIZE,
     status,

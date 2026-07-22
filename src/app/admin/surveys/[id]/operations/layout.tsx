@@ -2,7 +2,9 @@ import { notFound } from 'next/navigation';
 
 import { OperationsPageHeader } from '@/components/operations/operations-page-header';
 import { OperationsTabStrip } from '@/components/operations/operations-tab-strip';
+import { TestModeBanner } from '@/components/operations/test-mode-banner';
 import { getSurveyById } from '@/features/survey-builder/server/services/survey-read.service';
+import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
 import { getSurveyAccessIdentifier } from '@/lib/survey-url';
 
 interface LayoutProps {
@@ -21,6 +23,7 @@ export default async function OperationsLayout({ children, params }: LayoutProps
   const { id: surveyId } = await params;
   const survey = await getSurveyById(surveyId);
   if (!survey || survey.deletedAt) notFound();
+  const scope = await getOperationsDataScope(surveyId);
 
   const control = {
     isPaused: survey.isPaused,
@@ -34,6 +37,7 @@ export default async function OperationsLayout({ children, params }: LayoutProps
     <div className="min-h-screen bg-gray-50">
       <OperationsPageHeader surveyId={surveyId} surveyTitle={survey.title} control={control} />
       <OperationsTabStrip surveyId={surveyId} />
+      {scope === 'test' ? <TestModeBanner /> : null}
       {children}
     </div>
   );

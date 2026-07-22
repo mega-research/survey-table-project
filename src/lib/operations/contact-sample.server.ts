@@ -5,6 +5,10 @@ import { and, asc, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { contactPii, contactTargets } from '@/db/schema/contacts';
 import { decryptPii } from '@/lib/crypto/aes';
+import {
+  targetScopeCondition,
+  type OperationsDataScope,
+} from './data-scope.server';
 
 export interface FirstContactSample {
   attrs: Record<string, string>;
@@ -24,6 +28,7 @@ export interface FirstContactSample {
  */
 export async function getFirstContactSample(
   surveyId: string,
+  scope: OperationsDataScope = 'real',
 ): Promise<FirstContactSample | null> {
   const [row] = await db
     .select({
@@ -33,7 +38,7 @@ export async function getFirstContactSample(
       resid: contactTargets.resid,
     })
     .from(contactTargets)
-    .where(eq(contactTargets.surveyId, surveyId))
+    .where(and(eq(contactTargets.surveyId, surveyId), targetScopeCondition(scope)))
     .orderBy(asc(contactTargets.resid))
     .limit(1);
   if (!row) return null;

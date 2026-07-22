@@ -1,7 +1,7 @@
 import 'server-only';
 import { cache } from 'react';
 
-import { and, asc, desc, eq, inArray, sql, type AnyColumn, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, sql, type AnyColumn, type SQL } from 'drizzle-orm';
 
 import { db } from '@/db';
 import {
@@ -36,9 +36,14 @@ import {
   latestResultCodeExpr,
 } from './contacts-filter-sql';
 import { FILTER_SOURCE, type ColumnCandidateWithPii } from './filter-shared';
+import {
+  targetScopeCondition,
+  type OperationsDataScope,
+} from './data-scope.server';
 
 export interface ListContactsArgs {
   surveyId: string;
+  scope?: OperationsDataScope;
   clauses: FilterClause[];
   page: number;
   sort: ContactsSortKey;
@@ -86,6 +91,7 @@ const progressPctExpr = sql<number | null>`(
   SELECT progress_pct FROM survey_responses
   WHERE id = "contact_targets"."response_id"
     AND deleted_at IS NULL
+    AND is_test = "contact_targets"."is_test"
 )`;
 
 // 조사 대상별 최신(created_at DESC) 메일 수신 상태 1건.
@@ -93,8 +99,12 @@ const progressPctExpr = sql<number | null>`(
 // 인덱스: idx_mail_recipients_target_created (contact_target_id, created_at DESC).
 const latestMailStatusExpr = sql<MailRecipientStatus | null>`(
   SELECT status FROM mail_recipients
-  WHERE contact_target_id = "contact_targets"."id"
-  ORDER BY created_at DESC LIMIT 1
+  INNER JOIN mail_campaigns ON mail_campaigns.id = mail_recipients.campaign_id
+  WHERE mail_recipients.contact_target_id = "contact_targets"."id"
+    AND mail_recipients.archived_at IS NULL
+    AND mail_campaigns.archived_at IS NULL
+    AND mail_campaigns.is_test = "contact_targets"."is_test"
+  ORDER BY mail_recipients.created_at DESC LIMIT 1
 )`;
 
 function orderExpr(col: AnyColumn | SQL, direction: ContactsSortDir): SQL {
@@ -118,9 +128,12 @@ function orderExpr(col: AnyColumn | SQL, direction: ContactsSortDir): SQL {
 export async function listContactsForSurvey(
   args: ListContactsArgs,
 ): Promise<ListContactsResult> {
-  const { surveyId, page, pageSize, clauses, sort, dir } = args;
+  const { surveyId, scope, page, pageSize, clauses, sort, dir } = args;
 
-  const whereParts: SQL[] = [eq(contactTargets.surveyId, surveyId)];
+  const whereParts: SQL[] = [
+    eq(contactTargets.surveyId, surveyId),
+    targetScopeCondition(scope ?? 'real'),
+  ];
 
   whereParts.push(buildContactsFilterSql(clauses));
 
@@ -221,13 +234,18 @@ export async function listContactUploads(surveyId: string): Promise<ContactUploa
  * NULL 이면 null 반환 — 호출자가 디폴트 스킴 생성.
  */
 export const getContactColumnScheme = cache(
-  async (surveyId: string): Promise<ContactColumnScheme | null> => {
+  async (
+    surveyId: string,
+    scope: OperationsDataScope = 'real',
+  ): Promise<ContactColumnScheme | null> => {
     const [row] = await db
-      .select({ contactColumns: surveys.contactColumns })
+      .select({
+        scheme: scope === 'test' ? surveys.testContactColumns : surveys.contactColumns,
+      })
       .from(surveys)
       .where(eq(surveys.id, surveyId))
       .limit(1);
-    return (row?.contactColumns as ContactColumnScheme | null) ?? null;
+    return (row?.scheme as ContactColumnScheme | null) ?? null;
   },
 );
 
@@ -304,6 +322,7 @@ export interface ContactDetailResult {
  */
 export async function getContactDetailById(
   id: string,
+  scope: OperationsDataScope = 'real',
 ): Promise<ContactDetailResult | null> {
   const [contact] = await db
     .select({
@@ -322,7 +341,7 @@ export async function getContactDetailById(
       updatedAt: contactTargets.updatedAt,
     })
     .from(contactTargets)
-    .where(eq(contactTargets.id, id))
+    .where(and(eq(contactTargets.id, id), targetScopeCondition(scope)))
     .limit(1);
 
   if (!contact) return null;
@@ -390,6 +409,7 @@ export interface MailHistoryRow {
 /** 조사 대상에게 발송된 메일 수신 이력 (최근순). 캠페인 제목/회차 조인. */
 export async function getMailRecipientsForTarget(
   contactTargetId: string,
+  scope: OperationsDataScope = 'real',
 ): Promise<MailHistoryRow[]> {
   return db
     .select({
@@ -406,7 +426,16 @@ export async function getMailRecipientsForTarget(
     })
     .from(mailRecipients)
     .innerJoin(mailCampaigns, eq(mailRecipients.campaignId, mailCampaigns.id))
-    .where(eq(mailRecipients.contactTargetId, contactTargetId))
+    .innerJoin(contactTargets, eq(mailRecipients.contactTargetId, contactTargets.id))
+    .where(
+      and(
+        eq(mailRecipients.contactTargetId, contactTargetId),
+        targetScopeCondition(scope),
+        sql`${mailCampaigns.isTest} = ${contactTargets.isTest}`,
+        isNull(mailRecipients.archivedAt),
+        isNull(mailCampaigns.archivedAt),
+      ),
+    )
     .orderBy(desc(mailRecipients.createdAt));
 }
 

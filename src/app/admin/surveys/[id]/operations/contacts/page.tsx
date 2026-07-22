@@ -19,6 +19,7 @@ import {
   listContactsForSurvey,
 } from '@/lib/operations/contacts.server';
 import { parseClausesFromUrl } from '@/lib/operations/contacts-filters.server';
+import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
 
 export const metadata: Metadata = {
   title: '현황 - 조사 대상 목록',
@@ -39,6 +40,7 @@ interface PageProps {
 export default async function ContactsPage({ params, searchParams }: PageProps) {
   const { id: surveyId } = await params;
   const sp = await searchParams;
+  const scope = await getOperationsDataScope(surveyId);
 
   // page / sort / dir 파싱 — 다중 조건 필터 전환과 함께 normalizeContactListArgs 가 제거되어 인라인 처리.
   const pageRaw = Number(sp.page);
@@ -47,7 +49,7 @@ export default async function ContactsPage({ params, searchParams }: PageProps) 
 
   // 스킴 + resultCodes 병렬 로드
   const [scheme, resultCodes] = await Promise.all([
-    getContactColumnScheme(surveyId),
+    getContactColumnScheme(surveyId, scope),
     getContactResultCodes(surveyId),
   ]);
 
@@ -67,6 +69,7 @@ export default async function ContactsPage({ params, searchParams }: PageProps) 
 
   const { rows, total, page: clampedPage } = await listContactsForSurvey({
     surveyId,
+    scope,
     pageSize: CONTACTS_PAGE_SIZE,
     clauses,
     page: parsedPage,

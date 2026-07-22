@@ -16,6 +16,7 @@ import {
   getContactResultCodes,
 } from '@/lib/operations/contacts.server';
 import { parseClausesFromUrl } from '@/lib/operations/contacts-filters.server';
+import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
 
 const PAGE_SIZE = 20;
 
@@ -41,6 +42,7 @@ function parsePage(value: string | undefined): number {
 export default async function NewCampaignPage({ params, searchParams }: Props) {
   const { id: surveyId } = await params;
   const sp = await searchParams;
+  const scope = await getOperationsDataScope(surveyId);
 
   const templates = await getMailTemplatesBySurvey(surveyId);
   if (templates.length === 0) {
@@ -70,7 +72,7 @@ export default async function NewCampaignPage({ params, searchParams }: Props) {
   }
 
   const [scheme, resultCodes] = await Promise.all([
-    getContactColumnScheme(surveyId),
+    getContactColumnScheme(surveyId, scope),
     getContactResultCodes(surveyId),
   ]);
   const columnCandidates = buildColumnCandidates(scheme);
@@ -84,6 +86,7 @@ export default async function NewCampaignPage({ params, searchParams }: Props) {
 
   const candidates = await previewCampaignCandidates({
     surveyId,
+    scope,
     clauses,
     unrespondedOnly,
     sort,

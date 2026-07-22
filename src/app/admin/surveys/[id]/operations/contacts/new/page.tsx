@@ -7,6 +7,7 @@ import {
   getContactColumnScheme,
   getContactResultCodes,
 } from '@/lib/operations/contacts.server';
+import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
 
 export const metadata: Metadata = {
   title: '현황 - 조사 대상 추가',
@@ -18,9 +19,10 @@ interface PageProps {
 
 export default async function ContactNewPage({ params }: PageProps) {
   const { id: surveyId } = await params;
+  const scope = await getOperationsDataScope(surveyId);
 
   const [scheme, resultCodes] = await Promise.all([
-    getContactColumnScheme(surveyId),
+    getContactColumnScheme(surveyId, scope),
     getContactResultCodes(surveyId),
   ]);
   if (!scheme) notFound();

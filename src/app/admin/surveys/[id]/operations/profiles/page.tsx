@@ -50,7 +50,7 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
   const args = normalizeListArgs(sp);
   const scope = await getOperationsDataScope(surveyId);
 
-  const contactScheme = await getContactColumnScheme(surveyId);
+  const contactScheme = await getContactColumnScheme(surveyId, scope);
   const columnCandidates = [
     ...PROFILES_EXTRA_CANDIDATES,
     ...buildColumnCandidates(contactScheme).filter(

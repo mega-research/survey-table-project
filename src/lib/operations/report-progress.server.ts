@@ -11,6 +11,11 @@ import type { ContactColumnScheme, ProgressColumnScheme } from '@/db/schema/sche
 import type { ProgressRow, ProgressSortKey, SortDir, ProgressTotals } from './report-progress';
 import { buildFilterSql, type FilterCondition } from './progress-filters.server';
 import { buildNegativeCodeExists, getResultCodeStatuses } from './result-code-statuses.server';
+import {
+  targetScopeCondition,
+  testFlagForScope,
+  type OperationsDataScope,
+} from './data-scope.server';
 
 const EMPTY_SCHEME: ProgressColumnScheme = { version: 1, columns: [] };
 
@@ -29,7 +34,7 @@ const EMPTY_SCHEME: ProgressColumnScheme = { version: 1, columns: [] };
  *
  * notDeletedResponse 와 동일 의미 (서브쿼리 내부 raw SQL 컨텍스트라 인라인 유지).
  */
-function buildClosingFilter(positiveCodes: string[]): SQL {
+function buildClosingFilter(positiveCodes: string[], isTest: boolean): SQL {
   let positiveBranch: SQL;
   if (positiveCodes.length === 0) {
     positiveBranch = sql`FALSE`;
@@ -45,7 +50,10 @@ function buildClosingFilter(positiveCodes: string[]): SQL {
   }
   return sql`
     EXISTS (SELECT 1 FROM survey_responses sr
-            WHERE sr.contact_target_id = ct.id AND sr.is_completed = true AND sr.deleted_at IS NULL)
+            WHERE sr.contact_target_id = ct.id
+              AND sr.is_completed = true
+              AND sr.deleted_at IS NULL
+              AND sr.is_test = ${isTest})
        OR ${positiveBranch}
   `;
 }
@@ -94,7 +102,10 @@ export const getProgressColumnScheme = cache(
  *
  * `cache()` 로 RSC pass dedupe — header / 표 등 다중 RSC 동시 호출 가능성 대비.
  */
-export const getProgressGroupLabel = cache(async (surveyId: string): Promise<string> => {
+export const getProgressGroupLabel = cache(async (
+  surveyId: string,
+  scope: OperationsDataScope = 'real',
+): Promise<string> => {
   // 실제 저장된 group_value 로 attrs 키 역추론 (write-side 가 어떤 컬럼을 group 으로 썼든 일관)
   const rows = await db
     .select({
@@ -103,7 +114,9 @@ export const getProgressGroupLabel = cache(async (surveyId: string): Promise<str
     })
     .from(contactTargets)
     .where(
-      sql`${contactTargets.surveyId} = ${surveyId} AND ${contactTargets.groupValue} IS NOT NULL`,
+      sql`${contactTargets.surveyId} = ${surveyId}
+        AND ${targetScopeCondition(scope)}
+        AND ${contactTargets.groupValue} IS NOT NULL`,
     )
     .limit(1);
 
@@ -124,7 +137,9 @@ export const getProgressGroupLabel = cache(async (surveyId: string): Promise<str
 
   // contact_columns 에서 사용자 편집 라벨 lookup (라벨 표기에만 사용)
   const surveyRow = await db
-    .select({ contactColumns: surveys.contactColumns })
+    .select({
+      contactColumns: scope === 'test' ? surveys.testContactColumns : surveys.contactColumns,
+    })
     .from(surveys)
     .where(eq(surveys.id, surveyId))
     .limit(1);
@@ -133,8 +148,9 @@ export const getProgressGroupLabel = cache(async (surveyId: string): Promise<str
   return col?.label ?? groupAttrsKey;
 });
 
-interface GetProgressRowsArgs {
+export interface GetProgressRowsArgs {
   surveyId: string;
+  scope?: OperationsDataScope;
   condition: FilterCondition | null;
   page: number;
   size: number;
@@ -169,12 +185,13 @@ const SORT_COL_MAP: Record<Exclude<ProgressSortKey, `meta:${string}`>, string> =
  * 참조 (meta_0..meta_N) 만 raw 임베드 — 사용자 입력이 SQL 에 직접 박히지 않음.
  */
 export async function getProgressRows(args: GetProgressRowsArgs): Promise<ProgressRow[]> {
-  const { surveyId, condition, page, size, sort, dir, metaKeys } = args;
+  const { surveyId, scope = 'real', condition, page, size, sort, dir, metaKeys } = args;
   const offset = Math.max(0, (page - 1) * size);
+  const isTest = testFlagForScope(scope);
 
   const { positive: positiveCodes, negative: negativeCodes } =
     await getResultCodeStatuses(surveyId);
-  const closingFilter = buildClosingFilter(positiveCodes);
+  const closingFilter = buildClosingFilter(positiveCodes, isTest);
   const excludeFilter = buildExcludeFilter(negativeCodes);
 
   const metaSelectSql = metaKeys
@@ -210,6 +227,7 @@ export async function getProgressRows(args: GetProgressRowsArgs): Promise<Progre
         ${metaKeys.length > 0 ? sql`, ${metaSelectSql}` : sql``}
       FROM contact_targets ct
       WHERE ct.survey_id = ${surveyId}
+        AND ct.is_test = ${isTest}
         AND ${filterSql}
       GROUP BY ct.group_value
     ) sub
@@ -247,11 +265,15 @@ export async function getProgressRows(args: GetProgressRowsArgs): Promise<Progre
  */
 export async function getProgressTotals(
   surveyId: string,
-  condition: FilterCondition | null,
+  scopeOrCondition: OperationsDataScope | FilterCondition | null,
+  maybeCondition?: FilterCondition | null,
 ): Promise<ProgressTotals> {
+  const scope = typeof scopeOrCondition === 'string' ? scopeOrCondition : 'real';
+  const condition = typeof scopeOrCondition === 'string' ? maybeCondition ?? null : scopeOrCondition;
+  const isTest = testFlagForScope(scope);
   const { positive: positiveCodes, negative: negativeCodes } =
     await getResultCodeStatuses(surveyId);
-  const closingFilter = buildClosingFilter(positiveCodes);
+  const closingFilter = buildClosingFilter(positiveCodes, isTest);
   const excludeFilter = buildExcludeFilter(negativeCodes);
   const filterSql = buildFilterSql(condition);
   const result = await db.execute(sql`
@@ -263,6 +285,7 @@ export async function getProgressTotals(
       COUNT(*) FILTER (WHERE ${excludeFilter})::int AS excluded_total
     FROM contact_targets ct
     WHERE ct.survey_id = ${surveyId}
+      AND ct.is_test = ${isTest}
       AND ${filterSql}
   `);
   const r = (result as unknown as Array<Record<string, unknown>>)[0] ?? {};

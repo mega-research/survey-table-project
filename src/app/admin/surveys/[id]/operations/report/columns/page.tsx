@@ -5,6 +5,7 @@ import { ProgressColumnEditor } from '@/components/operations/report/progress-co
 import { Button } from '@/components/ui/button';
 import { getContactColumnScheme } from '@/lib/operations/contacts.server';
 import { getProgressColumnScheme } from '@/lib/operations/report-progress.server';
+import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,10 +25,11 @@ interface PageProps {
  */
 export default async function ReportColumnsPage({ params }: PageProps) {
   const { id: surveyId } = await params;
+  const scope = await getOperationsDataScope(surveyId);
 
   const [scheme, contactScheme] = await Promise.all([
     getProgressColumnScheme(surveyId),
-    getContactColumnScheme(surveyId),
+    getContactColumnScheme(surveyId, scope),
   ]);
 
   return (

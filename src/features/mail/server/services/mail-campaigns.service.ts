@@ -8,6 +8,7 @@ import { mailCampaigns, mailRecipients, mailTemplates } from '@/db/schema/mail';
 import type { CampaignFilterSnapshot } from '@/db/schema/schema-types';
 import { decryptPii } from '@/lib/crypto/aes';
 import { inngest } from '@/lib/inngest/client';
+import { loadOperationsDataScope } from '@/lib/operations/data-scope.server';
 
 import type {
   CancelCampaignInput,
@@ -248,9 +249,10 @@ export async function fetchCandidateIds(
     '@/lib/operations/contacts.server'
   );
   const { parseClausesFromUrl } = await import('@/lib/operations/contacts-filters.server');
+  const scope = await loadOperationsDataScope(surveyId);
 
   const [scheme, resultCodes] = await Promise.all([
-    getContactColumnScheme(surveyId),
+    getContactColumnScheme(surveyId, scope),
     getContactResultCodes(surveyId),
   ]);
   const candidates = buildColumnCandidates(scheme);
@@ -264,7 +266,7 @@ export async function fetchCandidateIds(
   );
   const unrespondedOnly = filter.unrespondedOnly ?? false;
 
-  const total = await countCampaignCandidates({ surveyId, clauses, unrespondedOnly });
+  const total = await countCampaignCandidates({ surveyId, scope, clauses, unrespondedOnly });
   const MAX_IDS = 10_000;
   if (total > MAX_IDS) {
     throw new Error(
@@ -275,6 +277,7 @@ export async function fetchCandidateIds(
   // page=1, pageSize=total 로 한 번에 전체 페치
   const result = await previewCampaignCandidates({
     surveyId,
+    scope,
     clauses,
     unrespondedOnly,
     page: 1,
@@ -296,7 +299,8 @@ export async function previewPreflight(
   const { surveyId, selectedContactIds } = input;
 
   const { preflightRecipients } = await import('@/lib/operations/campaigns.server');
-  const result = await preflightRecipients({ surveyId, selectedContactIds });
+  const scope = await loadOperationsDataScope(surveyId);
+  const result = await preflightRecipients({ surveyId, scope, selectedContactIds });
   return {
     validCount: result.validIds.length,
     unsubscribedCount: result.unsubscribedIds.length,

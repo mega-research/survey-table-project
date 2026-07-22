@@ -10,6 +10,7 @@ import { sendTestMail } from '@/lib/mail/send';
 import { MailWrapper } from '@/lib/mail/template-wrapper';
 import { buildInviteUrl } from '@/lib/survey-url';
 import { getFirstContactSample } from '@/lib/operations/contact-sample.server';
+import { loadOperationsDataScope } from '@/lib/operations/data-scope.server';
 
 import type {
   GetMailPreviewSampleInput,
@@ -27,7 +28,8 @@ import type {
 export async function getMailPreviewSample(
   input: GetMailPreviewSampleInput,
 ): Promise<GetMailPreviewSampleOutput> {
-  const sample = await getFirstContactSample(input.surveyId);
+  const scope = await loadOperationsDataScope(input.surveyId);
+  const sample = await getFirstContactSample(input.surveyId, scope);
   if (!sample) return null;
 
   // inviteUrl 은 절대 URL 이어야 한다 — NEXT_PUBLIC_APP_URL 가 없으면 relative path 가 되어
@@ -73,7 +75,8 @@ export async function sendTestTemplateMail(
   // /unsubscribe/[token] 페이지가 sandbox 토큰을 감지해 안내만 표시.
   const unsubscribeUrl = `${baseUrl}/unsubscribe/${UNSUBSCRIBE_SANDBOX_TOKEN}`;
 
-  const sample = await getFirstContactSample(input.surveyId);
+  const scope = await loadOperationsDataScope(input.surveyId);
+  const sample = await getFirstContactSample(input.surveyId, scope);
 
   const rendered = renderForTestSend({
     surveyId: input.surveyId,
