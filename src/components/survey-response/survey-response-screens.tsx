@@ -84,12 +84,10 @@ export function SurveyEmptyScreen({ onGoHome }: { onGoHome: () => void }) {
 // 완료 화면
 export function SurveyCompletedScreen({
   thankYouMessage,
-  questionCount,
   title = '응답 완료!',
   showCompletedTime = true,
 }: {
   thankYouMessage: string | null | undefined;
-  questionCount: number;
   title?: string;
   showCompletedTime?: boolean;
 }) {
@@ -102,10 +100,11 @@ export function SurveyCompletedScreen({
           <p className="mb-6 text-gray-600">
             {thankYouMessage || '설문에 참여해주셔서 감사합니다!'}
           </p>
-          <div className="space-y-2 text-sm text-gray-500">
-            <p>총 {questionCount}개 질문</p>
-            {showCompletedTime && <p>응답 완료 시간: {formatLocalDateTime(new Date())}</p>}
-          </div>
+          {showCompletedTime && (
+            <div className="space-y-2 text-sm text-gray-500">
+              <p>응답 완료 시간: {formatLocalDateTime(new Date())}</p>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

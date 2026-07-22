@@ -31,6 +31,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { client } from '@/shared/lib/rpc';
 import type { VarNameIssue } from '@/lib/spss/variable-name-guard';
 import { useErrorDialogStore } from '@/stores/error-dialog-store';
+import { CompletionMessageModal } from '@/components/survey-builder/completion-message-modal';
 import { ImportExportLibraryModal } from '@/components/survey-builder/import-export-library-modal';
 import { QuestionLibraryPanel } from '@/components/survey-builder/question-library-panel';
 import { ResponseHeaderSettingsModal } from '@/components/survey-builder/response-header-settings-modal';
@@ -576,6 +577,7 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
                       </Card>
                     );
                   })}
+                  <CompletionMessageModal />
                 </div>
 
                 <div className="mt-6 border-t border-gray-200 pt-6">

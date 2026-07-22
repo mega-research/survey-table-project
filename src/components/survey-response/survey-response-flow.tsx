@@ -674,7 +674,6 @@ export function SurveyResponseFlow({
             ? '입력 내용은 저장되지 않았습니다.'
             : loadedSurvey.settings.thankYouMessage
         }
-        questionCount={questions.length}
         showCompletedTime={!isPreview}
       />
     );
