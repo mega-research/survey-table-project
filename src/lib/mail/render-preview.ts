@@ -8,6 +8,8 @@
  * - attrs 값은 엑셀 업로드 출처이므로 HTML escape 필수.
  */
 
+import { expandImageLinkAreas } from './image-link-area';
+
 export interface PreviewSample {
   attrs: Record<string, string>;
   inviteUrl: string | null;
@@ -96,14 +98,17 @@ function renderInlineText(s: string, sample: PreviewSample | null, mode: RenderM
  *  이미 사용자가 감싼 anchor 안에서 nested anchor 를 만들지 않도록 한다. */
 function renderBodyHtml(html: string, sample: PreviewSample | null, mode: RenderMode): string {
   if (!html) return '';
+  // 이미지 클릭 영역 → usemap/<map> 생성. 변수 치환보다 먼저 실행해야
+  // 생성된 area href="{{invite_link}}" 가 아래 치환 루프를 탄다.
+  const expanded = expandImageLinkAreas(html);
   const out: string[] = [];
   let lastIndex = 0;
   let anchorDepth = 0;
   TAG_RE.lastIndex = 0;
   let m: RegExpExecArray | null;
-  while ((m = TAG_RE.exec(html)) !== null) {
+  while ((m = TAG_RE.exec(expanded)) !== null) {
     if (m.index > lastIndex) {
-      out.push(renderTextSegment(html.slice(lastIndex, m.index), sample, mode, anchorDepth > 0));
+      out.push(renderTextSegment(expanded.slice(lastIndex, m.index), sample, mode, anchorDepth > 0));
     }
     const tag = m[0];
     out.push(renderTagSegment(tag, sample, mode));
@@ -111,8 +116,8 @@ function renderBodyHtml(html: string, sample: PreviewSample | null, mode: Render
     else if (/^<\/a\s*>/i.test(tag)) anchorDepth = Math.max(0, anchorDepth - 1);
     lastIndex = m.index + m[0].length;
   }
-  if (lastIndex < html.length) {
-    out.push(renderTextSegment(html.slice(lastIndex), sample, mode, anchorDepth > 0));
+  if (lastIndex < expanded.length) {
+    out.push(renderTextSegment(expanded.slice(lastIndex), sample, mode, anchorDepth > 0));
   }
   return out.join('');
 }

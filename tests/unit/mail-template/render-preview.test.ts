@@ -96,3 +96,58 @@ describe('renderMailPreview - invite_link auto anchor', () => {
     expect(out.fromName).toBe('https://example.com/survey/abc?invite=tok-1');
   });
 });
+
+describe('renderMailPreview - 이미지 클릭 영역', () => {
+  const bodyWithLinkArea =
+    '<p><img src="https://r2.example.com/mail/a.png" width="320" ' +
+    'data-link-rect="0.1,0.5,0.5,0.1" data-link-coords="32,122,192,147"></p>';
+
+  it('send 모드에서 area href 가 실제 초대 URL 로 치환된다', () => {
+    const out = renderMailPreview({
+      subject: '제목',
+      bodyHtml: bodyWithLinkArea,
+      fromName: '발신자',
+      sample: { attrs: {}, email: null, inviteUrl: 'https://survey.example.com/i/abc' },
+      mode: 'send',
+    });
+    expect(out.bodyHtml).toContain('usemap="#m-link-0"');
+    expect(out.bodyHtml).toContain('href="https://survey.example.com/i/abc"');
+    expect(out.bodyHtml).not.toContain('{{invite_link}}');
+  });
+
+  it('preview 모드에서도 map 이 생성되고 href 가 치환된다', () => {
+    const out = renderMailPreview({
+      subject: '제목',
+      bodyHtml: bodyWithLinkArea,
+      fromName: '발신자',
+      sample: { attrs: {}, email: null, inviteUrl: 'https://survey.example.com/i/abc' },
+      mode: 'preview',
+    });
+    expect(out.bodyHtml).toContain('<map name="m-link-0">');
+    expect(out.bodyHtml).toContain('href="https://survey.example.com/i/abc"');
+  });
+
+  it('send 모드에서 sample 이 없으면 area href 는 빈 값으로 치환된다', () => {
+    const out = renderMailPreview({
+      subject: '제목',
+      bodyHtml: bodyWithLinkArea,
+      fromName: '발신자',
+      sample: null,
+      mode: 'send',
+    });
+    expect(out.bodyHtml).toContain('href=""');
+    expect(out.bodyHtml).not.toContain('{{invite_link}}');
+  });
+
+  it('클릭 영역 없는 본문은 기존과 동일하다', () => {
+    const plain = '<p><img src="https://r2.example.com/mail/a.png" width="320"></p>';
+    const out = renderMailPreview({
+      subject: '제목',
+      bodyHtml: plain,
+      fromName: '발신자',
+      sample: null,
+      mode: 'send',
+    });
+    expect(out.bodyHtml).toBe(plain);
+  });
+});
