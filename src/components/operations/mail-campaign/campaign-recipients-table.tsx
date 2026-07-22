@@ -131,7 +131,9 @@ export function CampaignRecipientsTable({
                     key={r.id}
                     className="border-b border-gray-100 text-sm last:border-b-0 hover:bg-gray-50/50"
                   >
-                    <td className="px-3 py-2 font-mono text-xs text-slate-600">#{r.contactResid}</td>
+                    <td className="px-3 py-2 font-mono text-xs text-slate-600">
+                      {r.contactResid === null ? '—' : `#${r.contactResid}`}
+                    </td>
                     <td className="px-3 py-2 text-slate-900">{r.emailMasked}</td>
                     <td className="px-3 py-2 text-slate-600">{r.contactGroupValue ?? '—'}</td>
                     <td className="px-3 py-2">

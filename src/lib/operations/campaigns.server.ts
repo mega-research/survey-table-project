@@ -226,7 +226,7 @@ export async function getCampaignDetail(cid: string): Promise<CampaignDetail | n
 export interface CampaignRecipientRow {
   id: string;
   contactTargetId: string | null;
-  contactResid: number;
+  contactResid: number | null;
   contactGroupValue: string | null;
   emailMasked: string;
   status: MailRecipientStatus;
@@ -294,7 +294,7 @@ export async function listCampaignRecipients(args: {
       complainedAt: mailRecipients.complainedAt,
     })
     .from(mailRecipients)
-    .innerJoin(contactTargets, eq(mailRecipients.contactTargetId, contactTargets.id))
+    .leftJoin(contactTargets, eq(mailRecipients.contactTargetId, contactTargets.id))
     .where(where)
     .orderBy(desc(mailRecipients.createdAt))
     .limit(pageSize)

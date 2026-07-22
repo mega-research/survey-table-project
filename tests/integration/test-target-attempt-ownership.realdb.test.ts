@@ -10,13 +10,14 @@ run('조사대상자 테스트 모드 DB 제약', () => {
   const surveyId = randomUUID();
   const targetId = randomUUID();
   const responseId = randomUUID();
+  const inviteCode = randomUUID();
 
   beforeAll(async () => {
     await db.execute(
       sql`INSERT INTO surveys (id,title,test_mode_enabled) VALUES (${surveyId},'test',true)`,
     );
     await db.execute(
-      sql`INSERT INTO contact_targets (id,survey_id,resid,is_test,invite_code) VALUES (${targetId},${surveyId},1,true,'testcode01')`,
+      sql`INSERT INTO contact_targets (id,survey_id,resid,is_test,invite_code) VALUES (${targetId},${surveyId},1,true,${inviteCode})`,
     );
     await db.execute(
       sql`INSERT INTO survey_responses (id,survey_id,question_responses,is_test,contact_target_id,session_id) VALUES (${responseId},${surveyId},'{}',true,${targetId},${randomUUID()})`,
@@ -47,5 +48,20 @@ run('조사대상자 테스트 모드 DB 제약', () => {
     );
     expect(Number(real[0]?.next_id)).toBe(1);
     expect(Number(test[0]?.next_id)).toBe(2);
+  });
+
+  it('같은 테스트 대상자의 미삭제 응답은 하나만 허용하고 삭제 후 재생성을 허용한다', async () => {
+    const replacementResponseId = randomUUID();
+    const insertReplacement = () =>
+      db.execute(
+        sql`INSERT INTO survey_responses (id,survey_id,question_responses,is_test,contact_target_id,session_id) VALUES (${replacementResponseId},${surveyId},'{}',true,${targetId},${randomUUID()})`,
+      );
+
+    await expect(insertReplacement()).rejects.toThrow();
+
+    await db.execute(
+      sql`UPDATE survey_responses SET deleted_at=now() WHERE id=${responseId}`,
+    );
+    await expect(insertReplacement()).resolves.toBeDefined();
   });
 });
