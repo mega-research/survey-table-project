@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 import { CheckCircle2 } from 'lucide-react';
 
@@ -21,7 +21,7 @@ import { buildRadioGroupBuckets, resolveRadioGroupProps } from '@/utils/table-ra
 import { isTableRowCompleted } from '@/utils/table-row-completion';
 
 import { InteractiveCell } from './cells';
-import { MobileDrilldownShell } from './mobile-drilldown-shell';
+import { MobileDrilldownShell, getSectionIdentity } from './mobile-drilldown-shell';
 import { MobileOriginalRowTable } from './mobile-original-row-table';
 
 interface MobileTableDrilldownProps {
@@ -43,6 +43,11 @@ interface MobileTableDrilldownProps {
   onSelectGroup?: (groupId: string) => void;
   /** 차단형 검증 위반 셀 (빨간 ring 하이라이트) */
   errorCellIds?: Set<string> | undefined;
+  /** 오류 배너 "위치로 이동"용 — 셀 id 목록을 받아 해당 셀이 속한 섹션/리프 상세로
+   *  드릴다운 내비를 전환한다. 어느 섹션에도 없으면 목차로 폴백. */
+  navigateToCellRef?: React.MutableRefObject<
+    ((cellIds: readonly string[]) => void) | null
+  > | undefined;
   detailMode: 'legacy' | 'original-row';
   omitLeadingAuthoredColumns: number;
   mobileDrilldownRepeatHeaderStartRow?: number | null | undefined;
@@ -64,6 +69,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
   value,
   onChange,
   errorCellIds,
+  navigateToCellRef,
   detailMode,
   omitLeadingAuthoredColumns,
   mobileDrilldownRepeatHeaderStartRow,
@@ -134,6 +140,36 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
   // 컴포넌트 로컬 상태라 새로고침 시 초기화된다(실제 입력값은 value에 보존).
   const [acknowledged, setAcknowledged] = useState<Set<string>>(new Set());
   const horizontalScrollRef = useRef(0);
+
+  // 셸 내비게이션 imperative 통로 + 셀 id → 섹션/리프 역매핑.
+  // 리프 상세는 original-row 는 항상, legacy 는 matrix 섹션만 존재한다
+  // (셸의 leafNavigation 프롭과 동일 규칙) — 그 외에는 섹션 화면으로 이동.
+  const shellNavRef = useRef<
+    ((target: { sectionId: string | null; leafId: string | null }) => void) | null
+  >(null);
+  useEffect(() => {
+    if (!navigateToCellRef) return;
+    navigateToCellRef.current = (cellIds) => {
+      for (const cellId of cellIds) {
+        for (const section of sections) {
+          for (const leaf of section.leaves) {
+            if (!leaf.inputCellIds.includes(cellId)) continue;
+            const useLeafDetail = detailMode === 'original-row' || section.kind === 'matrix';
+            shellNavRef.current?.({
+              sectionId: getSectionIdentity(section),
+              leafId: useLeafDetail ? leaf.rowId : null,
+            });
+            return;
+          }
+        }
+      }
+      // 표시 조건 등으로 셀이 어느 섹션에도 없으면 목차로
+      shellNavRef.current?.({ sectionId: null, leafId: null });
+    };
+    return () => {
+      navigateToCellRef.current = null;
+    };
+  }, [navigateToCellRef, sections, detailMode]);
   const ackCells = (cellIds: string[]) =>
     setAcknowledged((prev) => {
       const next = new Set(prev);
@@ -167,7 +203,11 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
     const cell = cellById.get(cellId);
     if (!cell) return null;
     return (
-      <div className={cn(errorCellIds?.has(cellId) && 'rounded-lg ring-2 ring-red-300')}>
+      // data-cell-id: 오류 배너 "위치로 이동"(scrollToCell)의 스크롤 타깃
+      <div
+        data-cell-id={cellId}
+        className={cn(errorCellIds?.has(cellId) && 'rounded-lg ring-2 ring-red-300')}
+      >
         <InteractiveCell
           cell={cell}
           questionId={questionId}
@@ -361,6 +401,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
         onReturnToRoot={() => {
           horizontalScrollRef.current = 0;
         }}
+        navigateRef={shellNavRef}
       />
     );
   }
@@ -384,6 +425,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
       renderLeafDetail={renderMatrixLeafDetail}
       onLeaveLeafForward={(leaf) => ackCells(leaf.inputCellIds)}
       onLeaveSection={(section) => ackCells(section.leaves.flatMap((leaf) => leaf.inputCellIds))}
+      navigateRef={shellNavRef}
     />
   );
 });

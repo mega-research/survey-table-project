@@ -388,6 +388,9 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
   );
 
   const tableContainerRef = useRef<HTMLDivElement>(null);
+  // 드릴다운 모드에서 "위치로 이동" — 위반 셀이 속한 섹션/리프 상세로 내비 전환.
+  // 드릴다운이 마운트된 동안에만 함수가 심긴다 (셸/스테퍼 모드에서는 null).
+  const drilldownNavigateRef = useRef<((cellIds: readonly string[]) => void) | null>(null);
   const headerScrollRef = useRef<HTMLDivElement>(null);
   useTablePerf(`InteractiveTable(${rows.length}×${columns.length})`);
   const isMobileView = useMobileView();
@@ -876,6 +879,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
                 <MobileTableDrilldown
                   {...mobileTableProps}
                   authoredColumns={columns}
+                  navigateToCellRef={drilldownNavigateRef}
                   detailMode={useOriginalRowDetail ? 'original-row' : 'legacy'}
                   omitLeadingAuthoredColumns={clampMobileDrilldownOmitLeadingColumns(
                     mobileDrilldownOmitLeadingColumns,
@@ -901,7 +905,20 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
                   {item.cellIds && item.cellIds.length > 0 && (
                     <button
                       type="button"
-                      onClick={() => scrollToCell(item.cellIds!)}
+                      // 드릴다운 모드는 위반 셀이 다른 섹션에 있어 DOM 에 없을 수 있다.
+                      // 먼저 해당 섹션/리프로 내비를 전환하고, 상세가 렌더된 다음
+                      // 프레임에 셀로 스크롤한다 (이미 해당 상세면 스크롤만 동작).
+                      onClick={() => {
+                        const cellIds = item.cellIds!;
+                        if (drilldownNavigateRef.current) {
+                          drilldownNavigateRef.current(cellIds);
+                          window.requestAnimationFrame(() =>
+                            window.requestAnimationFrame(() => scrollToCell(cellIds)),
+                          );
+                        } else {
+                          scrollToCell(cellIds);
+                        }
+                      }}
                       className="shrink-0 rounded border border-red-300 bg-white px-2 py-0.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-100"
                     >
                       위치로 이동

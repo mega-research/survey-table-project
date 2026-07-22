@@ -25,9 +25,14 @@ interface MobileDrilldownShellProps {
   onLeaveLeafForward?: (leaf: ClassifiedLeaf) => void;
   onLeaveSection?: (section: ClassifiedSection) => void;
   onReturnToRoot?: () => void;
+  /** 외부(오류 배너 "위치로 이동" 등)에서 특정 섹션/리프로 이동시키는 imperative 통로.
+   *  마운트 시 이동 함수를 심고 언마운트 시 비운다. */
+  navigateRef?: React.MutableRefObject<
+    ((target: { sectionId: string | null; leafId: string | null }) => void) | null
+  > | undefined;
 }
 
-function getSectionIdentity(section: ClassifiedSection): string {
+export function getSectionIdentity(section: ClassifiedSection): string {
   return section.labelSourceCellId
     ?? `${section.kind}:${section.label}`;
 }
@@ -44,11 +49,20 @@ export function MobileDrilldownShell({
   onLeaveLeafForward,
   onLeaveSection,
   onReturnToRoot,
+  navigateRef,
 }: MobileDrilldownShellProps) {
   const [nav, setNav] = useState<{ sectionId: string | null; leafId: string | null }>({
     sectionId: null,
     leafId: null,
   });
+
+  useEffect(() => {
+    if (!navigateRef) return;
+    navigateRef.current = (target) => setNav(target);
+    return () => {
+      navigateRef.current = null;
+    };
+  }, [navigateRef]);
   const sectionEntries = useMemo(
     () => sections.map((section, index) => ({ id: getSectionIdentity(section), index, section })),
     [sections],
@@ -95,14 +109,20 @@ export function MobileDrilldownShell({
   }, [leafMissing, nav.leafId, nav.sectionId, onReturnToRoot, sectionMissing]);
 
   const rootRef = useRef<HTMLDivElement>(null);
-  const isFirstNav = useRef(true);
+  // 드릴다운 내부 이동(섹션 진입/목차 복귀) 시에만 상단을 화면에 맞춘다.
+  // "첫 실행 스킵" ref 가드는 StrictMode(dev)의 이펙트 2회 실행에 뚫려
+  // 페이지 입장만으로 스크롤이 튀므로, 이전 nav 와 실제로 달라졌는지 비교한다.
+  const prevNav = useRef(nav);
   useEffect(() => {
-    if (isFirstNav.current) {
-      isFirstNav.current = false;
+    if (
+      prevNav.current.sectionId === nav.sectionId &&
+      prevNav.current.leafId === nav.leafId
+    ) {
       return;
     }
+    prevNav.current = nav;
     rootRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
-  }, [nav.sectionId, nav.leafId]);
+  }, [nav]);
 
   const requiresLeafList = (section: ClassifiedSection) =>
     section.leaves.length === 0 ||

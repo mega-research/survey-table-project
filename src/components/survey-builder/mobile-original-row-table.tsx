@@ -82,6 +82,7 @@ export function MobileOriginalRowTable(props: Props) {
       tableHeaderGrid={headerGrid}
       hideColumnLabels={hideColumnLabels}
       className="border-0 shadow-none"
+      contentClassName="p-0"
       scrollLeftRef={scrollLeftRef}
       resetScrollKey={resetScrollKey}
       errorCellIds={errorCellIds}

@@ -38,6 +38,8 @@ interface TablePreviewProps {
   rows?: TableRow[] | undefined;
   tableHeaderGrid?: HeaderCell[][] | undefined;
   className?: string | undefined;
+  /** CardContent 패딩 오버라이드 — 모바일 드릴다운 상세처럼 카드 여백 없이 붙여야 하는 곳용 */
+  contentClassName?: string | undefined;
   hideColumnLabels?: boolean | undefined;
   /** 셀 콘텐츠 렌더 오버라이드. undefined/null 반환 시 기본 PreviewCell 로 폴백. */
   renderCell?: (cell: TableCell, row: TableRow) => React.ReactNode;
@@ -64,6 +66,7 @@ export const TablePreview = React.memo(function TablePreview({
   rows = [],
   tableHeaderGrid,
   className,
+  contentClassName,
   hideColumnLabels = false,
   renderCell,
   stickyHeader = true,
@@ -211,8 +214,9 @@ export const TablePreview = React.memo(function TablePreview({
         </CardHeader>
       )}
       {/* CardContent 기본 pt-0 — 제목(CardHeader) 없는 표는 위 여백이 0이라 표가 상단에
-          붙는다. 아래(p-6)와 대칭이 되도록 제목 없을 때만 pt-6을 준다. */}
-      <CardContent className={tableTitle ? undefined : 'pt-6'}>
+          붙는다. 아래(p-6)와 대칭이 되도록 제목 없을 때만 pt-6을 준다.
+          contentClassName 은 이 기본을 덮는 호출자 오버라이드 (cn 뒤쪽 우선). */}
+      <CardContent className={cn(tableTitle ? undefined : 'pt-6', contentClassName)}>
         <div className="relative">
           <div
             role="grid"

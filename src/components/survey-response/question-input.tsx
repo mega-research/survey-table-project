@@ -23,6 +23,14 @@ import { ChoiceTableResponse } from './choice-table-response';
 import { OptionTextInput } from './option-text-input';
 import { RankingQuestion } from './ranking-question';
 
+/**
+ * 라디오·체크박스 옵션 목록의 좌우 인셋 — 질문 제목보다 옵션 블록을 안쪽으로 들여쓴다.
+ * 세로 여백은 건드리지 않는다(컨트롤의 mt-1 첫 줄 정렬 유지).
+ * 옵션 컨테이너 자체가 아니라 바깥을 감싸는 이유: getOptionsLayout 의 정렬 클래스
+ * (mx-auto / ml-auto / pr-5)와 padding·margin 이 충돌하지 않게 하기 위함.
+ */
+const OPTIONS_INSET_X = 'px-1';
+
 interface QuestionInputProps {
   question: Question;
   value: unknown;
@@ -122,20 +130,24 @@ export function QuestionInput({
 
     case 'radio':
       return (
-        <RadioQuestion
-          question={question}
-          value={(value ?? null) as SingleChoiceResponse}
-          onChange={onChange}
-        />
+        <div className={OPTIONS_INSET_X}>
+          <RadioQuestion
+            question={question}
+            value={(value ?? null) as SingleChoiceResponse}
+            onChange={onChange}
+          />
+        </div>
       );
 
     case 'checkbox':
       return (
-        <CheckboxQuestion
-          question={question}
-          value={value as MultiChoiceResponse | unknown}
-          onChange={onChange}
-        />
+        <div className={OPTIONS_INSET_X}>
+          <CheckboxQuestion
+            question={question}
+            value={value as MultiChoiceResponse | unknown}
+            onChange={onChange}
+          />
+        </div>
       );
 
     case 'select':
