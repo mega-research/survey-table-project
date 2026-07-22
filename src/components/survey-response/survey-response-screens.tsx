@@ -1,6 +1,7 @@
 'use client';
 
 import { AlertCircle, ArrowLeft, CheckCircle, Loader2, Lock } from 'lucide-react';
+import Link from 'next/link';
 
 import { formatLocalDateTime } from '@/lib/date-formatters';
 import { Button } from '@/components/ui/button';
@@ -78,6 +79,44 @@ export function SurveyEmptyScreen({ onGoHome }: { onGoHome: () => void }) {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function InvalidLinkScreen({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="flex min-h-dvh items-center justify-center bg-gray-50 px-4">
+      <Card className="w-full max-w-md">
+        <CardContent className="p-8 text-center">
+          <AlertCircle className="mx-auto mb-4 h-12 w-12 text-amber-500" />
+          <h2 className="mb-2 text-xl font-semibold text-gray-900">{title}</h2>
+          <p className="mb-6 text-gray-600">{body}</p>
+          <Button asChild>
+            <Link href="/">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              홈으로 돌아가기
+            </Link>
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+export function InvalidInviteLinkScreen() {
+  return (
+    <InvalidLinkScreen
+      title="유효하지 않은 초대 링크입니다"
+      body="초대 링크가 잘못되었거나 더 이상 사용할 수 없습니다. 설문 담당자에게 문의해주세요."
+    />
+  );
+}
+
+export function InvalidTestLinkScreen() {
+  return (
+    <InvalidLinkScreen
+      title="유효하지 않은 테스트 링크입니다"
+      body="테스트 모드가 종료되었거나 이 링크를 더 이상 사용할 수 없습니다."
+    />
   );
 }
 

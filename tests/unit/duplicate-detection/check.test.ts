@@ -51,6 +51,29 @@ describe('checkTrackA (invite_token)', () => {
     expect(r).toEqual({ blocked: false, contactTargetId: 'c1' });
   });
 
+  it('OFF인 테스트 대상자 토큰은 invalid_test_token으로 차단한다', async () => {
+    mockFindContact.mockResolvedValue({ kind: 'invalid_test' });
+    const { checkTrackA } = await import('@/lib/duplicate-detection/check');
+    const r = await checkTrackA('survey-1', 'stale-test-token');
+    expect(r).toEqual({ blocked: true, reason: 'invalid_test_token' });
+  });
+
+  it('테스트 대상자는 respondedAt이 있어도 통과하고 종류를 반환한다', async () => {
+    mockFindContact.mockResolvedValue({
+      kind: 'valid',
+      contactTargetId: 'c-test',
+      respondedAt: new Date(),
+      isTest: true,
+    });
+    const { checkTrackA } = await import('@/lib/duplicate-detection/check');
+    const r = await checkTrackA('survey-1', 'test-target-token');
+    expect(r).toEqual({
+      blocked: false,
+      contactTargetId: 'c-test',
+      isTestTarget: true,
+    });
+  });
+
   it('excluded 부정 결과코드 OR unsubscribed → excluded_from_population', async () => {
     mockFindContact.mockResolvedValue({ kind: 'excluded' });
     const { checkTrackA } = await import('@/lib/duplicate-detection/check');

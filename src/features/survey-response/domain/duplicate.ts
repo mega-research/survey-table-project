@@ -59,6 +59,7 @@ export const CheckResultSchema = z.union([
   z.object({
     blocked: z.literal(false),
     contactTargetId: z.string().optional(),
+    isTestTarget: z.boolean().optional(),
   }),
 ]);
 export type CheckResultOutput = z.infer<typeof CheckResultSchema>;

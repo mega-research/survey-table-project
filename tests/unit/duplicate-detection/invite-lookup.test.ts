@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { PgDialect } from 'drizzle-orm/pg-core';
 
 // db.execute / db.query 를 mock 해 실제 PG 연결 없이 형식 검증 분기만 검증한다.
 const { mockExecute, mockFindFirst, mockGetResultCodeStatuses } = vi.hoisted(() => ({
@@ -14,14 +15,27 @@ vi.mock('@/db', () => ({
   },
 }));
 
-vi.mock('@/db/schema', () => ({
-  contactTargets: { id: 'id' },
-}));
-
 vi.mock('@/lib/operations/result-code-statuses.server', () => ({
   getResultCodeStatuses: mockGetResultCodeStatuses,
   buildNegativeCodeExists: vi.fn(),
 }));
+
+const dialect = new PgDialect();
+const SURVEY_ID = '11111111-1111-1111-1111-111111111111';
+const TOKEN = '22222222-2222-2222-2222-222222222222';
+
+function mockLookupId(id = '33333333-3333-3333-3333-333333333333') {
+  mockExecute.mockResolvedValueOnce([{ id }]);
+}
+
+function mockTarget(overrides: Record<string, unknown> = {}) {
+  mockFindFirst.mockResolvedValue({
+    isTest: false,
+    respondedAt: null,
+    survey: { testModeEnabled: false, deletedAt: null },
+    ...overrides,
+  });
+}
 
 describe('findContactByInviteToken (UUID 형식 가드)', () => {
   beforeEach(() => {
@@ -35,7 +49,7 @@ describe('findContactByInviteToken (UUID 형식 가드)', () => {
       '@/lib/duplicate-detection/invite-lookup'
     );
     const r = await findContactByInviteToken(
-      '11111111-1111-1111-1111-111111111111',
+      SURVEY_ID,
       'test',
     );
     expect(r).toEqual({ kind: 'invalid' });
@@ -48,7 +62,7 @@ describe('findContactByInviteToken (UUID 형식 가드)', () => {
       '@/lib/duplicate-detection/invite-lookup'
     );
     const r = await findContactByInviteToken(
-      '11111111-1111-1111-1111-111111111111',
+      SURVEY_ID,
       '',
     );
     expect(r).toEqual({ kind: 'invalid' });
@@ -61,10 +75,85 @@ describe('findContactByInviteToken (UUID 형식 가드)', () => {
       '@/lib/duplicate-detection/invite-lookup'
     );
     const r = await findContactByInviteToken(
-      '11111111-1111-1111-1111-111111111111',
-      '22222222-2222-2222-2222-222222222222',
+      SURVEY_ID,
+      TOKEN,
     );
     expect(r).toEqual({ kind: 'invalid' });
     expect(mockExecute).toHaveBeenCalledTimes(1);
+  });
+
+  it('OFF인 테스트 대상자 토큰은 invalid_test이고 익명으로 폴백하지 않는다', async () => {
+    mockLookupId();
+    mockTarget({
+      isTest: true,
+      survey: { testModeEnabled: false, deletedAt: null },
+    });
+
+    const { findContactByInviteToken } = await import(
+      '@/lib/duplicate-detection/invite-lookup'
+    );
+    const result = await findContactByInviteToken(SURVEY_ID, TOKEN);
+
+    expect(result).toEqual({ kind: 'invalid_test' });
+    expect(mockGetResultCodeStatuses).not.toHaveBeenCalled();
+  });
+
+  it('ON인 테스트 대상자는 사용·제외 상태를 검사하지 않고 test target으로 반환한다', async () => {
+    mockLookupId();
+    mockTarget({
+      isTest: true,
+      respondedAt: new Date('2026-07-21T00:00:00.000Z'),
+      survey: { testModeEnabled: true, deletedAt: null },
+    });
+
+    const { findContactByInviteToken } = await import(
+      '@/lib/duplicate-detection/invite-lookup'
+    );
+    const result = await findContactByInviteToken(SURVEY_ID, TOKEN);
+
+    expect(result).toEqual({
+      kind: 'valid',
+      contactTargetId: '33333333-3333-3333-3333-333333333333',
+      respondedAt: new Date('2026-07-21T00:00:00.000Z'),
+      isTest: true,
+    });
+    expect(mockExecute).toHaveBeenCalledTimes(1);
+    expect(mockGetResultCodeStatuses).not.toHaveBeenCalled();
+  });
+
+  it('실제 대상자 토큰은 테스트 모드 ON에서도 기존 제외 정책을 유지한다', async () => {
+    mockLookupId();
+    mockTarget({
+      survey: { testModeEnabled: true, deletedAt: null },
+    });
+    mockGetResultCodeStatuses.mockResolvedValue({ negative: [] });
+    mockExecute.mockResolvedValueOnce([]);
+
+    const { findContactByInviteToken } = await import(
+      '@/lib/duplicate-detection/invite-lookup'
+    );
+    const result = await findContactByInviteToken(SURVEY_ID, TOKEN);
+
+    expect(result).toEqual({
+      kind: 'valid',
+      contactTargetId: '33333333-3333-3333-3333-333333333333',
+      respondedAt: null,
+      isTest: false,
+    });
+  });
+
+  it('보안 함수 결과를 다시 surveyId로 한정해 cross-survey 대상을 거부한다', async () => {
+    mockLookupId();
+    mockFindFirst.mockResolvedValue(undefined);
+
+    const { findContactByInviteToken } = await import(
+      '@/lib/duplicate-detection/invite-lookup'
+    );
+    await findContactByInviteToken(SURVEY_ID, TOKEN);
+
+    const query = mockFindFirst.mock.calls[0]?.[0];
+    expect(query).toBeDefined();
+    const rendered = dialect.sqlToQuery(query.where);
+    expect(rendered.params).toContain(SURVEY_ID);
   });
 });

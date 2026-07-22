@@ -43,4 +43,6 @@ export type CheckResult =
       blocked: false;
       /** Track A 통과 시 매칭된 contact id */
       contactTargetId?: string;
+      /** 서버가 inviteToken으로 판정한 테스트 대상자 여부 */
+      isTestTarget?: boolean;
     };

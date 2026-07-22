@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { contactTargets } from '@/db/schema';
@@ -11,9 +11,10 @@ import {
 import { isValidUUID } from '@/lib/utils';
 
 /**
- * inviteToken 으로 컨택 lookup. 반환 케이스 3가지:
- * - valid: 정상 ct, contactTargetId 매칭됨 (+ respondedAt 동봉 — token_already_used 판정용)
+ * inviteToken 으로 컨택 lookup. 반환 케이스 4가지:
+ * - valid: 정상 ct, contactTargetId 매칭됨 (+ respondedAt/isTest 동봉)
  * - excluded: 부정 결과코드 OR unsubscribed_at IS NOT NULL [응답 차단]
+ * - invalid_test: 테스트 대상자지만 테스트 모드 OFF [익명 폴백 금지]
  * - invalid: 토큰 자체가 무효 [익명 폴백]
  *
  * mutation 흐름에서 호출되므로 dedupe 가 의미 없어 cache 적용 안 함.
@@ -27,8 +28,9 @@ import { isValidUUID } from '@/lib/utils';
  * lib/duplicate-detection(checkTrackA) 양쪽이 공유하므로 lib 로 승격.
  */
 export type InviteTokenLookupResult =
-  | { kind: 'valid'; contactTargetId: string; respondedAt: Date | null }
+  | { kind: 'valid'; contactTargetId: string; respondedAt: Date | null; isTest: boolean }
   | { kind: 'excluded' }
+  | { kind: 'invalid_test' }
   | { kind: 'invalid' };
 
 export async function findContactByInviteToken(
@@ -45,6 +47,34 @@ export async function findContactByInviteToken(
   )) as unknown as Array<{ id: string | null }>;
   const contactTargetId = lookup[0]?.id ?? null;
   if (!contactTargetId) return { kind: 'invalid' };
+
+  // SECURITY DEFINER 함수가 반환한 id도 요청 surveyId로 다시 한정한다. 관계 행을 함께
+  // 읽어 실제 대상자는 테스트 모드와 무관하게 유지하고 테스트 대상자만 fail-closed 한다.
+  const row = await db.query.contactTargets.findFirst({
+    where: and(
+      eq(contactTargets.id, contactTargetId),
+      eq(contactTargets.surveyId, surveyId),
+    ),
+    columns: { respondedAt: true, isTest: true },
+    with: {
+      survey: {
+        columns: { testModeEnabled: true, deletedAt: true },
+      },
+    },
+  });
+  if (!row) return { kind: 'invalid' };
+  if (row.survey.deletedAt) {
+    return row.isTest ? { kind: 'invalid_test' } : { kind: 'invalid' };
+  }
+  if (row.isTest) {
+    if (!row.survey.testModeEnabled) return { kind: 'invalid_test' };
+    return {
+      kind: 'valid',
+      contactTargetId,
+      respondedAt: row.respondedAt,
+      isTest: true,
+    };
+  }
 
   const { negative: negativeCodes } = await getResultCodeStatuses(surveyId);
   const excludedRows = (await db.execute(sql`
@@ -63,10 +93,5 @@ export async function findContactByInviteToken(
     return { kind: 'excluded' };
   }
 
-  const row = await db.query.contactTargets.findFirst({
-    where: eq(contactTargets.id, contactTargetId),
-    columns: { respondedAt: true },
-  });
-
-  return { kind: 'valid', contactTargetId, respondedAt: row?.respondedAt ?? null };
+  return { kind: 'valid', contactTargetId, respondedAt: row.respondedAt, isTest: false };
 }

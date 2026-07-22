@@ -76,7 +76,15 @@ vi.mock('@/db', () => ({
     execute: vi.fn((sqlObj: unknown) => Promise.resolve(executeMock(sqlObj))),
     query: {
       contactTargets: {
-        findFirst: vi.fn(async () => null),
+        findFirst: vi.fn(async () => {
+          const contact = state.contacts[0];
+          if (!contact) return undefined;
+          return {
+            respondedAt: null,
+            isTest: false,
+            survey: { testModeEnabled: true, deletedAt: null },
+          };
+        }),
       },
     },
   },
@@ -127,6 +135,7 @@ describe('findContactByInviteToken — excluded 분기', () => {
     expect(result.kind).toBe('valid');
     if (result.kind === 'valid') {
       expect(result.contactTargetId).toBe(id);
+      expect(result.isTest).toBe(false);
     }
   });
 

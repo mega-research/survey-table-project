@@ -19,10 +19,17 @@ export async function checkTrackA(
   if (lookup.kind === 'invalid') {
     return { blocked: true, reason: 'invalid_token' };
   }
-  if (lookup.respondedAt) {
+  if (lookup.kind === 'invalid_test') {
+    return { blocked: true, reason: 'invalid_test_token' };
+  }
+  if (!lookup.isTest && lookup.respondedAt) {
     return { blocked: true, reason: 'token_already_used' };
   }
-  return { blocked: false, contactTargetId: lookup.contactTargetId };
+  return {
+    blocked: false,
+    contactTargetId: lookup.contactTargetId,
+    ...(lookup.isTest ? { isTestTarget: true } : {}),
+  };
 }
 
 export async function checkTrackB(params: {

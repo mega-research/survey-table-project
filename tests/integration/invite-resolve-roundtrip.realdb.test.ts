@@ -43,6 +43,7 @@ describe.skipIf(!isLocalDb)('resolveInviteCode round-trip (real local DB)', () =
 
     const resolved = await resolveInviteCode(inviteCode);
     expect(resolved).toEqual({
+      kind: 'valid',
       accessIdentifier: '11111111-1111-1111-1111-111111111111',
       inviteToken: '22222222-2222-2222-2222-222222222222',
     });

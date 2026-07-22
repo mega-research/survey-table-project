@@ -8,12 +8,13 @@ import { getResponseCountsGroupedBySurvey } from '@/data/responses';
 import * as libraryData from '@/data/library';
 import { getSurveyWithDetails as getSurveyWithDetailsData } from '@/data/surveys';
 import { db } from '@/db';
-import { questionGroups, questions, surveyVersions, surveys } from '@/db/schema';
+import { contactTargets, questionGroups, questions, surveyVersions, surveys } from '@/db/schema';
 import {
   getVariableCatalog,
   type VariableDef,
 } from '@/components/operations/mail-template/variable-catalog';
 import { normalizeQuestions } from '@/lib/question';
+import { findContactByInviteToken } from '@/lib/duplicate-detection/invite-lookup';
 import { isValidTestToken } from '@/lib/survey-control';
 import { normalizeResponseHeaderConfig } from '@/lib/survey/response-header-config';
 import type { QuestionGroup, Question as QuestionType, Survey as SurveyType } from '@/types/survey';
@@ -180,16 +181,42 @@ export async function getSurveyForResponse(
 
   // 응답 페이지 첫 화면 게이트용 라이브 제어값. snapshot 밖 값이므로 항상 현재
   // surveys 행에서 읽는다 — snapshot.settings 에서 가져오면 안 된다.
-  const testSession: 'none' | 'valid' | 'invalid' =
-    input.testToken == null
-      ? 'none'
-      : isValidTestToken(survey, input.testToken)
-        ? 'valid'
-        : 'invalid';
+  let testSession: 'none' | 'valid' | 'invalid' = 'none';
+  let testSessionKind: 'anonymous' | 'target' | null = null;
+
+  if (input.inviteToken != null && input.testToken != null) {
+    testSession = 'invalid';
+  } else if (input.inviteToken != null) {
+    const invite = await findContactByInviteToken(surveyId, input.inviteToken);
+    if (invite.kind === 'invalid_test') {
+      testSession = 'invalid';
+    } else if (invite.kind === 'valid' && invite.isTest) {
+      testSession = 'valid';
+      testSessionKind = 'target';
+    }
+  } else if (input.testToken != null) {
+    const tokenIsValid = isValidTestToken(survey, input.testToken);
+    const testTarget = tokenIsValid
+      ? await db.query.contactTargets.findFirst({
+          where: and(
+            eq(contactTargets.surveyId, surveyId),
+            eq(contactTargets.isTest, true),
+          ),
+          columns: { id: true },
+        })
+      : null;
+    if (tokenIsValid && !testTarget) {
+      testSession = 'valid';
+      testSessionKind = 'anonymous';
+    } else {
+      testSession = 'invalid';
+    }
+  }
   const control = {
     isPaused: survey.isPaused,
     pausedMessage: survey.pausedMessage,
     testSession,
+    testSessionKind,
   };
 
   // 배포된 버전이 있으면 스냅샷 기반으로 반환

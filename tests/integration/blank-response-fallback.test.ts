@@ -25,12 +25,14 @@ const {
   dbExecuteMock,
   insertValuesArg,
   findFirstMock,
+  contactFindFirstMock,
 } = vi.hoisted(() => ({
   insertReturningMock: vi.fn(),
   selectLimitMock: vi.fn(),
   dbExecuteMock: vi.fn(),
   insertValuesArg: vi.fn(),
   findFirstMock: vi.fn(),
+  contactFindFirstMock: vi.fn(),
 }));
 
 const insertChain = {
@@ -72,7 +74,7 @@ vi.mock('@/db', () => ({
     execute: vi.fn((...args: unknown[]) => dbExecuteMock(...args)),
     query: {
       surveyResponses: { findFirst: findFirstMock },
-      contactTargets: { findFirst: vi.fn() },
+      contactTargets: { findFirst: contactFindFirstMock },
       // 가용성 게이트(#3): published 공개 설문으로 통과시킨다.
       surveys: {
         findFirst: vi.fn(async () => ({
@@ -115,14 +117,20 @@ describe('createBlankResponse', () => {
     selectLimitMock.mockReset();
     dbExecuteMock.mockReset();
     findFirstMock.mockReset();
+    contactFindFirstMock.mockReset();
   });
 
   it('happy path: 빈 응답을 INSERT 하고 invite 매칭된 contactTargetId 와 함께 id 반환', async () => {
     // findContactByInviteToken: 1) RPC lookup 성공
     dbExecuteMock.mockResolvedValueOnce([{ id: 'contact-1' }]);
-    // findContactByInviteToken: 2) excluded EXISTS — 비어있음 (제외 아님)
+    // findContactByInviteToken: 2) 대상자 종류·설문 테스트 모드 조회
+    contactFindFirstMock.mockResolvedValue({
+      respondedAt: null,
+      isTest: false,
+      survey: { testModeEnabled: true, deletedAt: null },
+    });
+    // findContactByInviteToken: 3) excluded EXISTS — 비어있음 (제외 아님)
     dbExecuteMock.mockResolvedValueOnce([]);
-    // findContactByInviteToken: 3) db.query.contactTargets.findFirst (respondedAt) — default undefined → null 처리
     // findActiveResponseByContact: 활성 응답 없음 (insert 진행)
     selectLimitMock.mockResolvedValueOnce([]);
     insertReturningMock.mockResolvedValueOnce([
@@ -166,9 +174,14 @@ describe('createBlankResponse', () => {
   it('conflict path: ON CONFLICT DO NOTHING 으로 빈 returning 시 기존 row id 반환', async () => {
     // findContactByInviteToken: 1) RPC lookup (유효 토큰)
     dbExecuteMock.mockResolvedValueOnce([{ id: 'contact-1' }]);
-    // findContactByInviteToken: 2) excluded EXISTS — 비어있음 (제외 아님)
+    // findContactByInviteToken: 2) 대상자 종류·설문 테스트 모드 조회
+    contactFindFirstMock.mockResolvedValue({
+      respondedAt: null,
+      isTest: false,
+      survey: { testModeEnabled: true, deletedAt: null },
+    });
+    // findContactByInviteToken: 3) excluded EXISTS — 비어있음 (제외 아님)
     dbExecuteMock.mockResolvedValueOnce([]);
-    // findContactByInviteToken: 3) db.query.contactTargets.findFirst (respondedAt) — default undefined → null
     // findActiveResponseByContact: 활성 응답 없음 (insert 진행)
     selectLimitMock.mockResolvedValueOnce([]);
     // INSERT returning 비어있음 (conflict)

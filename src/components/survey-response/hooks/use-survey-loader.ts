@@ -206,6 +206,7 @@ export function useSurveyLoader({
         const result = await client.surveyBuilder.publicRead.forResponse({
           surveyId,
           ...(testToken != null ? { testToken } : {}),
+          ...(inviteToken != null ? { inviteToken } : {}),
         });
 
         if (!result) {
@@ -231,6 +232,17 @@ export function useSurveyLoader({
             try {
               attrs = await client.contacts.attrs.lookup({ surveyId, inviteToken });
             } catch (attrsError) {
+              if (
+                attrsError instanceof Error &&
+                attrsError.message.includes('INVALID_TEST_LINK')
+              ) {
+                setControl({
+                  ...result.control,
+                  testSession: 'invalid',
+                  testSessionKind: null,
+                });
+                return;
+              }
               console.error('contact attrs 조회 오류 (익명 폴백):', attrsError);
             }
             if (attrs) {
