@@ -346,6 +346,37 @@ describe('assertSurveyAcceptingResponses — createResponseWithFirstAnswer 테�
     ).rejects.toThrow(/survey_paused/);
   });
 
+  it('테스트 모드 ON 중 실제 공개 익명 응답은 isTest=false로 계속 저장된다', async () => {
+    surveyFindFirstMock.mockResolvedValue(
+      publishedSurvey({ testModeEnabled: true, testToken: 'test-token' }),
+    );
+    responseFindFirstMock
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValue({
+        id: 'r1',
+        surveyId: SURVEY_ID,
+        versionId: null,
+        isTest: false,
+        contactTargetId: null,
+      });
+
+    const { createResponseWithFirstAnswer } =
+      await import('@/features/survey-response/server/services/response.service');
+    const result = await createResponseWithFirstAnswer({
+      surveyId: SURVEY_ID,
+      sessionId: 'real-session-while-test-mode-on',
+      versionId: null,
+      questionId: 'q1',
+      value: 'actual answer',
+      currentStepId: 'step1',
+      clientSignals: VALID_SIGNALS,
+    });
+
+    expect(result).toMatchObject({ kind: 'created', id: 'r1', contactTargetId: null });
+    const valuesCalls = insertChain.values.mock.calls as unknown as Array<[{ isTest: boolean }]>;
+    expect(valuesCalls[0]![0]).toMatchObject({ isTest: false, contactTargetId: null });
+  });
+
   it('테스트 응답은 종료·중단·종료일·최대 응답·초대 요구를 우회하고 isTest=true로 기록된다', async () => {
     surveyFindFirstMock.mockResolvedValue(
       publishedSurvey({

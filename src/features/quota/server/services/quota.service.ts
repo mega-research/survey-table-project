@@ -46,6 +46,19 @@ export async function checkQuota(input: {
   const config = await getQuotaConfig(input.surveyId);
   if (!config || !config.enabled) return { blocked: false, closedMessage: null };
 
+  // 응답 행 자체가 권위 소스다. 테스트 링크는 실제 quota를 소비하거나 quotaful_out으로
+  // 전환되지 않으며, responseId와 surveyId가 섞인 pub mutation은 판정 전에 거부한다.
+  const response = await db.query.surveyResponses.findFirst({
+    where: and(
+      eq(surveyResponses.id, input.responseId),
+      eq(surveyResponses.surveyId, input.surveyId),
+      notDeletedResponse,
+    ),
+    columns: { isTest: true },
+  });
+  if (!response) throw new Error('쿼터 응답 범위가 일치하지 않습니다.');
+  if (response.isTest) return { blocked: false, closedMessage: null };
+
   const categoryIds = deriveCategoryIds(config, input.answers);
   if (!categoryIds) return { blocked: false, closedMessage: null };
 

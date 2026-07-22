@@ -57,6 +57,7 @@ const {
       startedAt: new Date('2026-07-22T00:00:00Z'),
     },
     campaignExists: true,
+    surveyTestModeEnabled: false,
     recipients: [] as RecipientState[],
     events: [] as string[],
     selectLocks: [] as string[],
@@ -132,6 +133,9 @@ function makeSelect() {
   const resolveRows = () => {
     if (tableName === 'mail_campaigns') {
       return state.campaignExists ? [{ ...state.campaign }] : [];
+    }
+    if (tableName === 'surveys') {
+      return [{ testModeEnabled: state.surveyTestModeEnabled }];
     }
     if (tableName === 'contact_targets') {
       const params = whereQuery ? compiled(whereQuery).params : [];
@@ -318,6 +322,7 @@ beforeEach(() => {
   state.campaign.isTest = false;
   state.campaign.attachmentsSnapshot = [];
   state.campaignExists = true;
+  state.surveyTestModeEnabled = false;
   state.recipients = [makeRecipient('r1')];
   state.events = [];
   state.selectLocks = [];
@@ -910,6 +915,19 @@ describe('dispatchCampaignChunk 안전 발송', () => {
     expect(html).toContain('/unsubscribe/unsubscribe-r1');
     expect(html).toContain('"testFooterKind":null');
     expect(html).not.toContain('/unsubscribe/__test__');
+  });
+
+  it('테스트 모드 ON 중에도 기존 실제 캠페인은 발송과 상태 갱신을 계속한다', async () => {
+    state.surveyTestModeEnabled = true;
+    state.campaign.isTest = false;
+
+    await expect(dispatchCampaignChunk('c1', ['r1'])).resolves.toEqual({ sent: 1, failed: 0 });
+
+    expect(sendRecipientMock).toHaveBeenCalledOnce();
+    expect(state.recipients[0]).toMatchObject({
+      status: 'sent',
+      resendMessageId: 'message-r1',
+    });
   });
 
   it('외부 발송 직전에 eligible recipient만 원자 인수한다', async () => {
