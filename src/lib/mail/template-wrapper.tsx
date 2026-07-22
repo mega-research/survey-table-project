@@ -13,8 +13,6 @@ interface Props {
   bodyHtml: string;
   /** 받은편지함 프리뷰 텍스트 (subject 옆 회색 글자). 비우면 표시 안 함. */
   previewText?: string;
-  /** 테스트 발송 footer 표시 여부 (기본 true). */
-  showTestFooter?: boolean;
   /** 수신거부 링크 URL. null 이면 footer 표시 안 함 (정책상 발송 코드에서는 항상 채움). */
   unsubscribeUrl: string | null;
 }
@@ -39,15 +37,6 @@ const content: React.CSSProperties = {
   color: '#1f2937',
 };
 
-const footer: React.CSSProperties = {
-  marginTop: '32px',
-  paddingTop: '16px',
-  borderTop: '1px solid #e5e7eb',
-  fontSize: '12px',
-  color: '#6b7280',
-  lineHeight: '1.5',
-};
-
 const unsubFooter: React.CSSProperties = {
   marginTop: '24px',
   paddingTop: '12px',
@@ -63,7 +52,7 @@ const unsubLink: React.CSSProperties = {
   fontWeight: 600,
 };
 
-export function MailWrapper({ bodyHtml, previewText, showTestFooter = true, unsubscribeUrl }: Props) {
+export function MailWrapper({ bodyHtml, previewText, unsubscribeUrl }: Props) {
   return (
     <Html lang="ko">
       <Head>
@@ -86,13 +75,6 @@ export function MailWrapper({ bodyHtml, previewText, showTestFooter = true, unsu
               <br />
               If you don&apos;t want to receive this e-mail anymore, please click the{' '}
               <a href={unsubscribeUrl} style={unsubLink}>[unsubscribe]</a>.
-            </Section>
-          ) : null}
-          {showTestFooter ? (
-            <Section style={footer}>
-              🔧 이 메일은 템플릿 테스트 발송입니다. 본문 내 설문 링크는
-              미리보기용으로 비활성화되어 있어, 클릭하셔도 실제 응답으로 기록되지
-              않습니다.
             </Section>
           ) : null}
         </Container>
