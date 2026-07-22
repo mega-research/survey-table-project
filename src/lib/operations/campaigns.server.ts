@@ -43,6 +43,7 @@ const DEFAULT_PAGE_SIZE = 20;
 export interface CampaignRow {
   id: string;
   runNumber: number;
+  isTest: boolean;
   title: string;
   status: MailCampaignStatus;
   mailTemplateId: string | null;
@@ -94,6 +95,7 @@ export async function listCampaignsForSurvey(args: {
     .select({
       id: mailCampaigns.id,
       runNumber: mailCampaigns.runNumber,
+      isTest: mailCampaigns.isTest,
       title: mailCampaigns.title,
       status: mailCampaigns.status,
       mailTemplateId: mailCampaigns.mailTemplateId,
