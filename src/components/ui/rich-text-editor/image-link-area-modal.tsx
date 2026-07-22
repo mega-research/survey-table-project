@@ -58,7 +58,7 @@ export function ImageLinkAreaModal({ editor, onClose }: Props) {
   const widthOk = pxWidth !== null && pxWidth <= IMAGE_LINK_AREA_MAX_WIDTH;
 
   const [rect, setRect] = useState<LinkRect | null>(
-    parseLinkRect(attrs['linkRect'] as string | null),
+    parseLinkRect(attrs['linkRect'] as string | null | undefined),
   );
   const [dragStart, setDragStart] = useState<Point | null>(null);
   const [natural, setNatural] = useState<{ width: number; height: number } | null>(null);

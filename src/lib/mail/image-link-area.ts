@@ -92,7 +92,7 @@ export function countOversizedLinkAreaImages(html: string): number {
   let count = 0;
   for (const tag of html.match(IMG_TAG_RE) ?? []) {
     if (!tag.includes('data-link-rect')) continue;
-    const m = tag.match(/\bwidth="(\d+(?:\.\d+)?)"/);
+    const m = tag.match(/(?<![\w-])width="(\d+(?:\.\d+)?)"/);
     const width = m?.[1] != null ? Number(m[1]) : null;
     if (width === null || width > IMAGE_LINK_AREA_MAX_WIDTH) count += 1;
   }

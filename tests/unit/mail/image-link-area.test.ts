@@ -103,4 +103,10 @@ describe('countOversizedLinkAreaImages', () => {
     expect(countOversizedLinkAreaImages('<img src="a.png" width="900">')).toBe(0);
     expect(countOversizedLinkAreaImages('')).toBe(0);
   });
+
+  it('data-width 는 width 로 오인식하지 않는다', () => {
+    const html =
+      '<img src="a.png" width="320" data-width="900" data-link-rect="0,0,1,1">';
+    expect(countOversizedLinkAreaImages(html)).toBe(0);
+  });
 });
