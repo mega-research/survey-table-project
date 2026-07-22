@@ -14,6 +14,7 @@ import {
   SurveyCompletedScreen,
   SurveyEmptyScreen,
   SurveyErrorScreen,
+  InvalidTestLinkScreen,
   SurveyLoadingScreen,
 } from '@/components/survey-response/survey-response-screens';
 import { PageStepView } from '@/components/survey-response/step-views/page-step-view';
@@ -217,6 +218,7 @@ export function SurveyResponseFlow({
 
   // 유효 테스트 세션 — 중단 게이트 우회 + 중복검사 skip + create/resume 에 testToken 전달.
   const isTestSession = control?.testSession === 'valid';
+  const isTargetTestSession = isTestSession && control?.testSessionKind === 'target';
 
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -229,6 +231,14 @@ export function SurveyResponseFlow({
   // crypto.randomUUID 기반(generateId) — 예측 가능한 session-<Date.now()> 는
   // resume→updateQuestionResponse 의 in_progress 응답 변조 윈도를 열어준다.
   const [sessionId, setSessionId] = useState<string>(() => generateId());
+  // 대상자 테스트 쓰기 소유권은 화면 마운트마다 새 attempt로 시작한다.
+  // 리렌더 동안은 안정적이고, 새 탭/새로고침은 새 attempt가 이전 화면을 supersede할 수 있다.
+  const [testAttemptId] = useState(() => crypto.randomUUID());
+  const [hasTestAttemptOwnership, setHasTestAttemptOwnership] = useState(false);
+  const testIdentity = useMemo(
+    () => (isTargetTestSession ? { attemptId: testAttemptId, sessionId } : null),
+    [isTargetTestSession, testAttemptId, sessionId],
+  );
 
   // 첫 답변 INSERT 진행 플래그(isCreatingResponse)는 useResponseLifecycle 이 소유한다.
   // 제출 시도 후 하이라이트할 질문 ID 집합
@@ -374,12 +384,14 @@ export function SurveyResponseFlow({
   // 운영 현황 콘솔(T5/세그먼트): 스텝 전환 추적 + Page Visibility 세그먼트.
   // 두 effect 를 useResponseTelemetry 로 추출 (등록 순서·deps 동일, 상태 미소유).
   useResponseTelemetry({
+    enabled: !isTargetTestSession || hasTestAttemptOwnership,
     isAdminEdit,
     isPreview,
     currentResponseId,
     currentStep,
     isCompleted,
     visibleProgressRef,
+    testIdentity,
   });
 
   // 운영 현황 콘솔(T6): localStorage 기반 응답 회복 + 회복 토스트 자동 dismiss.
@@ -394,7 +406,10 @@ export function SurveyResponseFlow({
     inviteToken,
     testToken,
     isTestSession,
+    isTargetTestSession,
+    sessionId,
     setSessionId,
+    setResponses,
     setCurrentResponseId,
     setDuplicateStatus,
     setPausedMessage: setRefetchedPausedMessage,
@@ -473,6 +488,9 @@ export function SurveyResponseFlow({
     inviteToken,
     testToken,
     isTestSession,
+    testIdentity,
+    hasTestAttemptOwnership,
+    setHasTestAttemptOwnership,
     loadedSurvey,
     currentStep,
     currentStepIndex,
@@ -601,14 +619,7 @@ export function SurveyResponseFlow({
   // 무효 테스트 링크 — 익명 폴백 없이 차단 (스펙 결정 5). control 은 public 경로에서만 채워지므로
   // admin-edit/preview 는 이 분기에 도달하지 않는다.
   if (control?.testSession === 'invalid') {
-    return (
-      <AlreadyRespondedView
-        reason="invalid_test_token"
-        surveyTitle={loadedSurvey?.title ?? ''}
-        contactEmail={loadedSurvey?.contactEmail ?? null}
-        customBody={null}
-      />
-    );
+    return <InvalidTestLinkScreen />;
   }
 
   // 중단 모드 — 테스트 세션만 통과 (스펙 결정 4)
@@ -634,6 +645,9 @@ export function SurveyResponseFlow({
 
   // 중복 응답 차단 화면
   if (duplicateStatus.kind === 'blocked') {
+    if (duplicateStatus.reason === 'invalid_test_token') {
+      return <InvalidTestLinkScreen />;
+    }
     return (
       <AlreadyRespondedView
         reason={duplicateStatus.reason}
@@ -674,7 +688,6 @@ export function SurveyResponseFlow({
             ? '입력 내용은 저장되지 않았습니다.'
             : loadedSurvey.settings.thankYouMessage
         }
-        questionCount={questions.length}
         showCompletedTime={!isPreview}
       />
     );

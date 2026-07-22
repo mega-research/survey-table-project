@@ -17,8 +17,14 @@ interface UseSessionRecoveryArgs {
   testToken: string | null;
   /** control.testSession==='valid'. 유효 테스트 세션이면 중단 게이트를 우회한다. */
   isTestSession: boolean;
+  /** invite가 테스트 대상자를 가리키는 세션. GET resume는 읽기만 하고 쓰기 소유권을 얻지 않는다. */
+  isTargetTestSession?: boolean;
+  /** 이 페이지 마운트에서 만든 세션 식별자. target은 저장 key가 없어도 resume 조회에 사용한다. */
+  sessionId?: string;
   /** 회복된 DB row 의 sessionId 로 컴포넌트 sessionId state 를 갱신 (소유권은 컴포넌트). */
   setSessionId: (sessionId: string) => void;
+  /** 같은 버전 target in_progress 응답값 복원용. */
+  setResponses?: Dispatch<SetStateAction<Record<string, unknown>>>;
   /** 회복된 응답 row id 를 응답 스토어에 반영 (Zustand 액션). */
   setCurrentResponseId: (id: string) => void;
   /** resume 이 survey_paused 로 실패하면 중단 화면으로 전환 (공통 채널, use-duplicate-guard 소유). */
@@ -42,9 +48,9 @@ interface UseSessionRecoveryResult {
  * survey-response-flow.tsx 의 응답 회복 useEffect + isRecovering/resumeMessage state 를 이관했다.
  *
  * 동작 핵심:
- * - 회복 effect 본문(localStorage 조회 → resume RPC → orphan/종결 정리 → sessionId/responseId 갱신 → show 세그먼트 → 토스트) 라인 단위 동일.
- * - 회복 effect deps = [isAdminEdit, loadedSurvey, currentResponseId, setCurrentResponseId, inviteToken] 그대로
- *   (sessionId 는 effect 내부에서 직접 set 하므로 deps 미포함 — 무한 루프 방지, 원본과 동일).
+ * - 일반 응답은 localStorage session으로 기존 회복과 show segment를 유지한다.
+ * - 대상자 테스트는 key가 없어도 현재 session으로 읽기 전용 resume를 수행하고 답만 복원한다.
+ * - target resume만으로는 쓰기 소유권이나 telemetry를 열지 않는다.
  * - 토스트 자동 dismiss 는 이 훅이 아니라 <ResumeToast> 가 자체 마운트 4초 타이머로 처리한다.
  *   (과거: 여기서 resumeMessage set 시점에 4초 타이머를 걸어, 로딩/중복확인 early-return 화면이
  *    떠 있는 동안 4초가 소진돼 메인 콘텐츠가 보일 땐 토스트가 이미 사라져 있었다.)
@@ -57,7 +63,10 @@ export function useSessionRecovery({
   inviteToken,
   testToken,
   isTestSession,
+  isTargetTestSession = false,
+  sessionId,
   setSessionId,
+  setResponses,
   setCurrentResponseId,
   setDuplicateStatus,
   setPausedMessage,
@@ -78,16 +87,17 @@ export function useSessionRecovery({
     if (isAdminEdit || isPreview) return;
     if (!loadedSurvey || currentResponseId !== null) return;
 
-    const key = sessionStorageKey(loadedSurvey.id);
+    const key = sessionStorageKey(loadedSurvey.id, inviteToken);
     const savedSessionId = window.localStorage.getItem(key);
-    if (!savedSessionId) return;
+    const recoverySessionId = savedSessionId ?? (isTargetTestSession ? sessionId : null);
+    if (!recoverySessionId) return;
 
     // 원본(survey-response-flow) 의 회복 effect 와 동일하게 진입 직후 동기 set.
     // resume RPC await 동안 isRecovering=true 로 handleResponse INSERT 가드(I-1)를 막는다.
     setIsRecovering(true);
     client.surveyResponse.lifecycle.resume({
       surveyId: loadedSurvey.id,
-      sessionId: savedSessionId,
+      sessionId: recoverySessionId,
       ...(inviteToken != null ? { inviteToken } : {}),
       ...(isTestSession && testToken != null ? { testToken } : {}),
     })
@@ -95,18 +105,21 @@ export function useSessionRecovery({
         if (!result) {
           // localStorage 키는 있는데 DB에 row 없음 — orphan, 정리
           window.localStorage.removeItem(key);
+          if (isTargetTestSession) setResponses?.({});
           return;
         }
         // 종결 상태(completed/screened/quotaful/bad)면 회복 안 시키고 새 응답 흐름 둔다
         if (result.status !== 'in_progress') {
           window.localStorage.removeItem(key);
+          if (isTargetTestSession) setResponses?.({});
           return;
         }
         // 응답 row 사용 — sessionId 를 saved 값으로 갱신해 DB row 와 일치시킨다
-        setSessionId(savedSessionId);
+        if (!isTargetTestSession) setSessionId(recoverySessionId);
         setCurrentResponseId(result.id);
+        if (isTargetTestSession) setResponses?.(result.questionResponses ?? {});
         // 회복 직후 새 visit 열기 — recordStepVisit은 동일 step 재진입 시 no-op이라 의존 불가.
-        sendVisibilitySegment(result.id, 'show');
+        if (!isTargetTestSession) sendVisibilitySegment(result.id, 'show');
         // 회복된 경우(drop → in_progress)만 토스트
         if (result.resumed) {
           setResumeMessage('이전 응답을 이어서 진행합니다');
@@ -136,7 +149,7 @@ export function useSessionRecovery({
     // sessionId 도 effect 내부에서 직접 set 하므로 deps 미포함(무한 루프 방지).
     // testToken/isTestSession 은 세션 동안 안정적이나 클로저 정합을 위해 deps 에 포함한다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAdminEdit, isPreview, loadedSurvey, currentResponseId, setCurrentResponseId, inviteToken, testToken, isTestSession]);
+  }, [isAdminEdit, isPreview, loadedSurvey, currentResponseId, setCurrentResponseId, inviteToken, testToken, isTestSession, isTargetTestSession, sessionId, setResponses]);
 
   // 토스트 dismiss 는 <ResumeToast> 가 자체 마운트 시점부터 4초 타이머로 호출한다.
   // 안정 참조라 ResumeToast 의 마운트 전용 effect deps 에서 안전하게 제외된다.

@@ -1,3 +1,5 @@
+import type { TestAttemptIdentity } from '@/features/survey-response/domain/response';
+
 /**
  * survey-response-flow 의 세션/세그먼트 헬퍼.
  *
@@ -10,8 +12,10 @@
  * localStorage 키 — 회복용 sessionId 보관.
  * 첫 답변 INSERT 성공 후 SET, completeResponse 성공 후 DELETE.
  */
-export function sessionStorageKey(surveyId: string): string {
-  return `survey-session:${surveyId}`;
+export function sessionStorageKey(surveyId: string, inviteToken?: string | null): string {
+  return inviteToken
+    ? `survey-session:${surveyId}:invite:${inviteToken}`
+    : `survey-session:${surveyId}`;
 }
 
 /**
@@ -21,20 +25,21 @@ export function sessionStorageKey(surveyId: string): string {
 export function sendVisibilitySegment(
   responseId: string,
   action: 'hide' | 'show',
+  identity: TestAttemptIdentity | null = null,
   useBeacon = false,
 ): void {
-  const payload = JSON.stringify({ responseId, action });
+  const payload = JSON.stringify({ responseId, action, ...(identity ?? {}) });
   if (useBeacon && typeof navigator !== 'undefined' && navigator.sendBeacon) {
     navigator.sendBeacon(
       '/api/response/segment',
       new Blob([payload], { type: 'application/json' }),
     );
-  } else {
-    fetch('/api/response/segment', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: payload,
-      keepalive: true,
-    }).catch(() => {});
+    return;
   }
+  fetch('/api/response/segment', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: payload,
+    keepalive: true,
+  }).catch(() => {});
 }

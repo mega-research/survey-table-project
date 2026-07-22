@@ -11,9 +11,14 @@ import type { Question, QuestionGroup, Survey } from '@/types/survey';
 import type { BranchEvalCtx } from '@/utils/branch-logic';
 import { shouldDisplayDynamicGroup, shouldDisplayQuestion, shouldDisplayRow } from '@/utils/branch-logic';
 import type { SaveAdminEditPayload } from '@/features/survey-response/domain/response-edit';
+import type { TestAttemptIdentity } from '@/features/survey-response/domain/response';
 
 import { sessionStorageKey } from './session-helpers';
-import { handlePausedMutationError, type DuplicateStatus } from './use-duplicate-guard';
+import {
+  handleInvalidTestLinkMutationError,
+  handlePausedMutationError,
+  type DuplicateStatus,
+} from './use-duplicate-guard';
 
 type ResponsesMap = Record<string, unknown>;
 
@@ -44,6 +49,11 @@ interface UseResponseLifecycleArgs {
   testToken: string | null;
   /** control.testSession==='valid'. 유효 테스트 세션이면 중단 게이트를 우회한다. */
   isTestSession: boolean;
+  /** 대상자 테스트에서만 존재하는 현재 화면의 안정적인 attempt/session 식별자. */
+  testIdentity: TestAttemptIdentity | null;
+  /** 이 화면의 attempt가 첫 실제 입력으로 서버 쓰기 소유권을 얻었는지 여부. */
+  hasTestAttemptOwnership: boolean;
+  setHasTestAttemptOwnership: Dispatch<SetStateAction<boolean>>;
 
   // 설문/스텝 파생값
   loadedSurvey: Survey | null;
@@ -129,6 +139,9 @@ export function useResponseLifecycle({
   inviteToken,
   testToken,
   isTestSession,
+  testIdentity,
+  hasTestAttemptOwnership,
+  setHasTestAttemptOwnership,
   loadedSurvey,
   currentStep,
   currentStepIndex,
@@ -164,6 +177,15 @@ export function useResponseLifecycle({
   // ref가 아닌 state라도 OK — `handleResponse` 클로저에서 캡처되는 시점이 한 번이면 충분.
   const [isCreatingResponse, setIsCreatingResponse] = useState(false);
 
+  const clearInvalidTargetTestSession = () => {
+    if (!testIdentity) return;
+    if (typeof window !== 'undefined' && loadedSurvey) {
+      window.localStorage.removeItem(sessionStorageKey(loadedSurvey.id, inviteToken));
+    }
+    resetResponseState();
+    setResponses({});
+  };
+
   const handleResponse = useCallback(
     (questionId: string, value: unknown) => {
       // UI는 즉시 반영 (로컬 응답 맵 + 펜딩 스토어 + 하이라이트 제거)
@@ -184,7 +206,7 @@ export function useResponseLifecycle({
       if (
         !isAdminEdit &&
         !isPreview &&
-        currentResponseId === null &&
+        (currentResponseId === null || (testIdentity !== null && !hasTestAttemptOwnership)) &&
         !isCreatingResponse &&
         !isRecovering &&    // I-1 fix: 회복 진행 중에는 INSERT 발사 안 함
         loadedSurvey &&
@@ -204,26 +226,44 @@ export function useResponseLifecycle({
           visibleStepTotal: visibleProgressRef.current.total,
           ...(inviteToken != null ? { inviteToken } : {}),
           ...(isTestSession && testToken != null ? { testToken } : {}),
+          ...(testIdentity ?? {}),
           clientSignals: signals,
           ...(honeypotRef.current?.value ? { honeypot: honeypotRef.current.value } : {}),
         })
           .then((result) => {
             if (result.kind === 'blocked') {
+              if (result.reason === 'invalid_test_token') clearInvalidTargetTestSession();
               setDuplicateStatus({ kind: 'blocked', reason: result.reason });
               return;
             }
             const { id, contactTargetId } = result;
             setCurrentResponseId(id);
+            if (testIdentity) setHasTestAttemptOwnership(true);
             // invite 토큰이 있었는데 contactTargetId 매칭 실패 → 무효 토큰. 익명 응답으로 폴백 알림.
             if (inviteToken && !contactTargetId) {
               setInviteIsInvalid(true);
             }
             // 회복용 sessionId localStorage 저장 — 같은 브라우저에서 재진입 시 resumeOrCreate가 이 키로 row 조회
             if (typeof window !== 'undefined' && loadedSurvey) {
-              window.localStorage.setItem(sessionStorageKey(loadedSurvey.id), sessionId);
+              window.localStorage.setItem(
+                sessionStorageKey(loadedSurvey.id, inviteToken),
+                sessionId,
+              );
             }
           })
           .catch(async (err) => {
+            if (
+              await handleInvalidTestLinkMutationError({
+                err,
+                surveyId: loadedSurvey?.id,
+                inviteToken,
+                isTargetTestSession: testIdentity !== null,
+                setDuplicateStatus,
+                onInvalid: clearInvalidTargetTestSession,
+              })
+            ) {
+              return;
+            }
             // 첫 답변 직전에 설문이 중단된 경우 → 중단 화면으로 전환 (공통 헬퍼).
             if (
               await handlePausedMutationError({
@@ -264,6 +304,8 @@ export function useResponseLifecycle({
       inviteToken,
       testToken,
       isTestSession,
+      testIdentity,
+      hasTestAttemptOwnership,
     ],
   );
 
@@ -343,7 +385,11 @@ export function useResponseLifecycle({
       // handleResponse 가 한 번도 트리거되지 않아 응답 row 가 만들어지지 않는다.
       // 그 상태로 제출이 통과하면 silent data loss 가 되므로 여기서 빈 응답을 INSERT 한다.
       let effectiveResponseId = currentResponseId;
-      if (!effectiveResponseId && loadedSurvey && currentStep) {
+      if (
+        (!effectiveResponseId || (testIdentity !== null && !hasTestAttemptOwnership)) &&
+        loadedSurvey &&
+        currentStep
+      ) {
         try {
           // signalsRef.current 가 null 이면 그대로 전달 — server action 이 신호 기반 검사 skip
           const created = await client.surveyResponse.response.createBlank({
@@ -353,21 +399,27 @@ export function useResponseLifecycle({
             currentStepId: stepIdOf(currentStep),
             ...(inviteToken != null ? { inviteToken } : {}),
             ...(isTestSession && testToken != null ? { testToken } : {}),
+            ...(testIdentity ?? {}),
             clientSignals: signals,
             ...(honeypotRef.current?.value ? { honeypot: honeypotRef.current.value } : {}),
           });
           if (created.kind === 'blocked') {
+            if (created.reason === 'invalid_test_token') clearInvalidTargetTestSession();
             setDuplicateStatus({ kind: 'blocked', reason: created.reason });
             setIsSubmitting(false);
             return;
           } else {
             effectiveResponseId = created.id;
             setCurrentResponseId(created.id);
+            if (testIdentity) setHasTestAttemptOwnership(true);
             if (inviteToken && !created.contactTargetId) {
               setInviteIsInvalid(true);
             }
             if (typeof window !== 'undefined') {
-              window.localStorage.setItem(sessionStorageKey(loadedSurvey.id), sessionId);
+              window.localStorage.setItem(
+                sessionStorageKey(loadedSurvey.id, inviteToken),
+                sessionId,
+              );
             }
           }
         } catch (err) {
@@ -441,17 +493,30 @@ export function useResponseLifecycle({
             exposedQuestionIds,
             exposedRowIds,
           },
+          ...(testIdentity ?? {}),
         });
 
         // 제출 성공 — 회복용 localStorage 키 정리 (재진입 시 새 응답 흐름)
         if (typeof window !== 'undefined' && loadedSurvey) {
-          window.localStorage.removeItem(sessionStorageKey(loadedSurvey.id));
+          window.localStorage.removeItem(sessionStorageKey(loadedSurvey.id, inviteToken));
         }
       }
 
       resetResponseState();
       setIsCompleted(true);
     } catch (error) {
+      if (
+        await handleInvalidTestLinkMutationError({
+          err: error,
+          surveyId: loadedSurvey?.id,
+          inviteToken,
+          isTargetTestSession: testIdentity !== null,
+          setDuplicateStatus,
+          onInvalid: clearInvalidTargetTestSession,
+        })
+      ) {
+        return;
+      }
       // 세션 도중 설문이 중단된 경우(blank INSERT 또는 complete 가 survey_paused throw)
       // → 일반 에러 토스트 대신 중단 화면으로 전환 (공통 헬퍼). finally 가 isSubmitting 을 해제한다.
       if (
@@ -500,6 +565,8 @@ export function useResponseLifecycle({
     visibleQuestions,
     testToken,
     isTestSession,
+    testIdentity,
+    hasTestAttemptOwnership,
   ]);
 
   return { handleResponse, handleSubmit, isCreatingResponse };
