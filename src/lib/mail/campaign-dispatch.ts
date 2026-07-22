@@ -32,6 +32,13 @@ const DELIVERY_LEASE_MS = 30_000;
 const DELIVERY_LEASE_POLL_MS = 50;
 export const IDEMPOTENCY_RECOVERY_WINDOW_MS = 23 * 60 * 60 * 1_000;
 
+function activeRecipientErrorReason(errorReason: string | null) {
+  return sql<string | null>`CASE
+    WHEN ${mailRecipients.archivedAt} IS NULL THEN ${errorReason}
+    ELSE NULL
+  END`;
+}
+
 export interface DispatchChunkResult {
   sent: number;
   failed: number;
@@ -158,7 +165,8 @@ async function claimRecipientDelivery(
         .update(mailRecipients)
         .set({
           status,
-          errorReason,
+          errorReason: activeRecipientErrorReason(errorReason),
+          sendAttemptedAt: null,
           sendLeaseToken: null,
           sendLeaseExpiresAt: null,
           sendPayloadSnapshot: null,
@@ -338,6 +346,7 @@ async function settleClaimedRecipient(
             resendMessageId: result.resendMessageId,
             sentAt: now,
             errorReason: null,
+            sendAttemptedAt: null,
             sendLeaseToken: null,
             sendLeaseExpiresAt: null,
             sendPayloadSnapshot: null,
@@ -345,7 +354,8 @@ async function settleClaimedRecipient(
           }
         : {
             status: 'failed',
-            errorReason: result.errorReason,
+            errorReason: activeRecipientErrorReason(result.errorReason),
+            sendAttemptedAt: null,
             sendLeaseToken: null,
             sendLeaseExpiresAt: null,
             sendPayloadSnapshot: null,
@@ -443,7 +453,10 @@ export async function terminalizeUnresolvedCampaignDispatch(
         .update(mailRecipients)
         .set({
           status: 'failed',
-          errorReason: '발송 작업의 최종 재시도까지 실패했습니다.',
+          errorReason: activeRecipientErrorReason(
+            '발송 작업의 최종 재시도까지 실패했습니다.',
+          ),
+          sendAttemptedAt: null,
           sendLeaseToken: null,
           sendLeaseExpiresAt: null,
           sendPayloadSnapshot: null,
@@ -480,6 +493,7 @@ export async function terminalizeUnresolvedCampaignDispatch(
           status: 'sent',
           sentAt: now,
           errorReason: null,
+          sendAttemptedAt: null,
           sendLeaseToken: null,
           sendLeaseExpiresAt: null,
           sendPayloadSnapshot: null,

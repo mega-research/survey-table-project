@@ -84,6 +84,16 @@ beforeEach(() => {
 });
 
 describe('processResendEvent', () => {
+  it('recipient가 이미 hard delete됐으면 webhook을 no-op 처리한다', async () => {
+    state.selectResults = [[]];
+
+    await expect(
+      processResendEvent('missing', 'email.delivered', '2026-07-22T01:00:00Z'),
+    ).resolves.toBeUndefined();
+
+    expect(applyMock).not.toHaveBeenCalled();
+  });
+
   it('archived recipient를 잠근 뒤 상태만 전이하도록 archive 시각을 전달한다', async () => {
     const archivedAt = new Date('2026-07-22T00:00:00Z');
     const recipient = {

@@ -7,6 +7,10 @@ import type { ContactColumnScheme } from '@/db/schema/schema-types';
 import { sanitizeAttrsAgainstPiiScheme } from '@/lib/contacts/scheme-helpers';
 import { upsertPiiValue } from '@/lib/crypto/contact-pii-repo';
 import { generateInviteCode } from '@/lib/survey-url';
+import {
+  archiveTestMailForTargets,
+  hardDeleteMailForTargets,
+} from '@/lib/mail/test-mail-archive.server';
 
 import type {
   AddContactTargetInput,
@@ -28,18 +32,8 @@ async function lockTargetInCurrentScope(
   tx: DbTransaction,
   input: { id: string; surveyId: string },
 ): Promise<{ isTest: boolean; scheme: ContactColumnScheme | null }> {
-  const [survey] = await tx
-    .select({
-      enabled: surveys.testModeEnabled,
-      contactColumns: surveys.contactColumns,
-      testContactColumns: surveys.testContactColumns,
-    })
-    .from(surveys)
-    .where(eq(surveys.id, input.surveyId))
-    .for('update');
-  if (!survey) throw new Error('NOT_FOUND');
+  const scope = await lockCurrentSurveyScope(tx, input.surveyId);
 
-  const isTest = survey.enabled;
   const [target] = await tx
     .select({ id: contactTargets.id })
     .from(contactTargets)
@@ -47,12 +41,31 @@ async function lockTargetInCurrentScope(
       and(
         eq(contactTargets.id, input.id),
         eq(contactTargets.surveyId, input.surveyId),
-        eq(contactTargets.isTest, isTest),
+        eq(contactTargets.isTest, scope.isTest),
       ),
     )
     .for('update');
   if (!target) throw new Error('NOT_FOUND');
 
+  return scope;
+}
+
+async function lockCurrentSurveyScope(
+  tx: DbTransaction,
+  surveyId: string,
+): Promise<{ isTest: boolean; scheme: ContactColumnScheme | null }> {
+  const [survey] = await tx
+    .select({
+      enabled: surveys.testModeEnabled,
+      contactColumns: surveys.contactColumns,
+      testContactColumns: surveys.testContactColumns,
+    })
+    .from(surveys)
+    .where(eq(surveys.id, surveyId))
+    .for('update');
+  if (!survey) throw new Error('NOT_FOUND');
+
+  const isTest = survey.enabled;
   return {
     isTest,
     scheme: (isTest ? survey.testContactColumns : survey.contactColumns) ?? null,
@@ -171,14 +184,40 @@ export async function updateContactTarget(input: UpdateContactTargetInput): Prom
 export async function deleteContactTarget(input: DeleteContactTargetInput): Promise<void> {
   const { id, surveyId } = input;
   await db.transaction(async (tx) => {
-    const { isTest } = await lockTargetInCurrentScope(tx, { id, surveyId });
-    // survey_responses.contact_target_id FK가 아직 적용되지 않은 환경에서도 dangling 참조를
-    // 남기지 않는다. target → response 순서는 hard reset과 같고, actual complete는 응답 완료
-    // 커밋 뒤 target을 best-effort 갱신하므로 역순 교착 없이 직렬화된다.
-    await tx
-      .update(surveyResponses)
-      .set({ contactTargetId: null })
-      .where(and(eq(surveyResponses.surveyId, surveyId), eq(surveyResponses.contactTargetId, id)));
+    const { isTest } = await lockCurrentSurveyScope(tx, surveyId);
+    const [target] = await tx
+      .select({ id: contactTargets.id })
+      .from(contactTargets)
+      .where(
+        and(
+          eq(contactTargets.id, id),
+          eq(contactTargets.surveyId, surveyId),
+          eq(contactTargets.isTest, isTest),
+        ),
+      );
+    if (!target) throw new Error('NOT_FOUND');
+
+    if (isTest) {
+      // helper가 campaign → contact → recipient 순서로 잠근다. ambiguous sending의
+      // durable payload는 webhook/23시간 terminalization까지 유지한 뒤 제거된다.
+      await archiveTestMailForTargets(tx, [id]);
+      await tx
+        .delete(surveyResponses)
+        .where(
+          and(
+            eq(surveyResponses.surveyId, surveyId),
+            eq(surveyResponses.contactTargetId, id),
+            eq(surveyResponses.isTest, true),
+          ),
+        );
+    } else {
+      await hardDeleteMailForTargets(tx, [id]);
+      // actual response는 기존 의미대로 보존하고 target 연결만 제거한다.
+      await tx
+        .update(surveyResponses)
+        .set({ contactTargetId: null })
+        .where(and(eq(surveyResponses.surveyId, surveyId), eq(surveyResponses.contactTargetId, id)));
+    }
     const deleted = await tx
       .delete(contactTargets)
       .where(

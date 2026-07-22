@@ -44,6 +44,8 @@ export interface CampaignCycleRow {
   overageCount: number;
   costKrw: number;
   averageUnitPriceKrw: number;
+  isTest: boolean;
+  archivedAt: Date | null;
 }
 
 export interface CycleSummary {
@@ -118,6 +120,8 @@ export async function computeCycleBreakdown(): Promise<BillingBreakdown> {
       status: mailCampaigns.status,
       startedAt: mailCampaigns.startedAt,
       completedAt: mailCampaigns.completedAt,
+      isTest: mailCampaigns.isTest,
+      archivedAt: mailCampaigns.archivedAt,
     })
     .from(mailCampaigns)
     .innerJoin(surveys, eq(mailCampaigns.surveyId, surveys.id))
@@ -223,6 +227,8 @@ export async function computeCycleBreakdown(): Promise<BillingBreakdown> {
           overageCount: a?.overageCount ?? 0,
           costKrw: a?.costKrw ?? 0,
           averageUnitPriceKrw: a?.averageUnitPriceKrw ?? 0,
+          isTest: c.isTest,
+          archivedAt: c.archivedAt,
         };
       })
       .sort((x, y) => x.startedAt.getTime() - y.startedAt.getTime());

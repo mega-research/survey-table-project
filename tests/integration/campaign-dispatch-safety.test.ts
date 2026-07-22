@@ -14,6 +14,7 @@ interface RecipientState {
   unsubscribedAt: Date | null;
   archivedAt: Date | null;
   status: RecipientStatus;
+  errorReason: string | null;
   resendMessageId: string | null;
   sendAttemptedAt: Date | null;
   sendLeaseToken: string | null;
@@ -196,7 +197,15 @@ function makeUpdate(table: { [key: symbol]: unknown }) {
 
     for (const row of candidates) {
       if (payload['status'] === 'sending') state.events.push(`claim:${row.id}`);
-      Object.assign(row, payload);
+      const appliedPayload = { ...payload };
+      if (
+        appliedPayload['errorReason'] !== null
+        && typeof appliedPayload['errorReason'] === 'object'
+      ) {
+        const [activeErrorReason] = compiled(appliedPayload['errorReason']).params;
+        appliedPayload['errorReason'] = row.archivedAt === null ? activeErrorReason : null;
+      }
+      Object.assign(row, appliedPayload);
     }
     result = candidates.map((row) => ({ id: row.id, archivedAt: row.archivedAt }));
     return result;
@@ -292,6 +301,7 @@ function makeRecipient(id: string, overrides: Partial<RecipientState> = {}): Rec
     unsubscribedAt: null,
     archivedAt: null,
     status: 'queued',
+    errorReason: null,
     resendMessageId: null,
     sendAttemptedAt: null,
     sendLeaseToken: null,
@@ -466,6 +476,7 @@ describe('retry exhaustion cleanup', () => {
     state.campaign.archivedAt = archivedAt;
     state.recipients = [makeRecipient('ambiguous', {
       status: 'sending',
+      archivedAt,
       sendAttemptedAt: new Date('2026-07-22T00:00:00Z'),
       sendLeaseToken: null,
       sendLeaseExpiresAt: new Date('2026-07-22T00:01:00Z'),
@@ -485,6 +496,10 @@ describe('retry exhaustion cleanup', () => {
     });
     expect(state.recipients[0]).toMatchObject({
       status: 'failed',
+      errorReason: archivedAt === null
+        ? '발송 작업의 최종 재시도까지 실패했습니다.'
+        : null,
+      sendAttemptedAt: null,
       sendLeaseToken: null,
       sendLeaseExpiresAt: null,
       sendPayloadSnapshot: null,
@@ -821,6 +836,36 @@ describe('dispatchCampaignChunk 안전 발송', () => {
     expect(state.recipients[0]!.status).toBe('sending');
   });
 
+  it('archived sending의 복구 만료는 errorReason에 PII를 다시 쓰지 않는다', async () => {
+    state.recipients = [makeRecipient('r1', {
+      status: 'sending',
+      archivedAt: new Date('2026-07-22T00:00:00Z'),
+      contactTargetId: null,
+      emailSnapshot: null,
+      sendAttemptedAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
+      sendLeaseToken: null,
+      sendLeaseExpiresAt: new Date(Date.now() - 60_000),
+      sendPayloadSnapshot: {
+        from: 'Survey <noreply@mail.example.com>',
+        replyTo: 'noreply@mail.example.com',
+        to: 'private@example.com',
+        subject: 'subject',
+        html: 'persisted html',
+        attachments: [],
+      },
+    })];
+
+    await expect(dispatchCampaignChunk('c1', ['r1'])).resolves.toEqual({
+      sent: 0,
+      failed: 1,
+    });
+    expect(state.recipients[0]).toMatchObject({
+      status: 'failed',
+      errorReason: null,
+      sendPayloadSnapshot: null,
+    });
+  });
+
   it.each<CampaignStatus>(['draft', 'completed', 'partial', 'cancelled'])(
     '%s 캠페인은 chunk에서 외부 발송하지 않는다',
     async (status) => {
@@ -926,6 +971,28 @@ describe('dispatchCampaignChunk 안전 발송', () => {
     expect(state.setPayloads.filter((payload) => (
       'queuedCount' in payload || 'sentCount' in payload || 'failedCount' in payload
     ))).toHaveLength(0);
+  });
+
+  it('claim 뒤 보관된 recipient의 provider 오류는 errorReason에 PII를 다시 쓰지 않는다', async () => {
+    sendRecipientMock.mockImplementationOnce(async () => {
+      state.recipients[0]!.archivedAt = new Date('2026-07-22T00:00:01Z');
+      state.recipients[0]!.errorReason = null;
+      return {
+        kind: 'permanent_failure',
+        errorReason: 'private@example.com 주소가 거부되었습니다.',
+      };
+    });
+
+    await expect(dispatchCampaignChunk('c1', ['r1'])).resolves.toEqual({
+      sent: 0,
+      failed: 1,
+    });
+
+    expect(state.recipients[0]).toMatchObject({
+      status: 'failed',
+      errorReason: null,
+      sendPayloadSnapshot: null,
+    });
   });
 
   it('sending 결과 전이가 중복 실행돼도 반환값과 terminal update는 한 번만 센다', async () => {

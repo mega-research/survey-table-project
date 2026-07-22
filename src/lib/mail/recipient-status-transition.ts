@@ -153,6 +153,7 @@ export async function applyRecipientTransition(
       ...buildTimestampUpdate(newStatus, eventAt),
       ...(prevStatus === 'sending'
         ? {
+            sendAttemptedAt: null,
             sendLeaseToken: null,
             sendLeaseExpiresAt: null,
             sendPayloadSnapshot: null,

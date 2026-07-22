@@ -59,6 +59,7 @@ vi.mock('@/db', () => {
       const whereResult: Record<string, unknown> = {
         limit: vi.fn(() => Promise.resolve(shiftSelect())),
         for: vi.fn(() => Promise.resolve(shiftSelect())),
+        orderBy: vi.fn(() => whereResult),
         then: (resolve: (v: unknown) => unknown) => resolve(shiftSelect()),
       };
       return whereResult;

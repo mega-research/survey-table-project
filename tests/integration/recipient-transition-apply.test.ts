@@ -73,6 +73,7 @@ describe('applyRecipientTransition', () => {
     expect(ok).toBe(true);
     expect(m.updateSet).toHaveBeenCalledWith(expect.objectContaining({
       status: 'sent',
+      sendAttemptedAt: null,
       sendLeaseToken: null,
       sendLeaseExpiresAt: null,
       sendPayloadSnapshot: null,

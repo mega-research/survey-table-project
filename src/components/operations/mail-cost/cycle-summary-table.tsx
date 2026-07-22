@@ -76,14 +76,27 @@ export function CycleSummaryTable({ cycle }: Props) {
                     {c.runNumber}
                   </td>
                   <td className="max-w-[200px] truncate px-3 py-2.5 text-gray-600">
-                    <Link
-                      href={`/admin/surveys/${c.surveyId}/operations/mail/campaigns/${c.campaignId}`}
-                      className="hover:text-blue-600 hover:underline"
-                    >
-                      {c.surveyTitle}
-                    </Link>
+                    {c.archivedAt === null ? (
+                      <Link
+                        href={`/admin/surveys/${c.surveyId}/operations/mail/campaigns/${c.campaignId}`}
+                        className="hover:text-blue-600 hover:underline"
+                      >
+                        {c.surveyTitle}
+                      </Link>
+                    ) : (
+                      <span>{c.surveyTitle}</span>
+                    )}
                   </td>
-                  <td className="max-w-[260px] truncate px-3 py-2.5 text-gray-700">{c.title}</td>
+                  <td className="max-w-[260px] px-3 py-2.5 text-gray-700">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="truncate">{c.title}</span>
+                      {c.isTest && (
+                        <span className="shrink-0 rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-700">
+                          테스트
+                        </span>
+                      )}
+                    </div>
+                  </td>
                   <td className="px-3 py-2.5 text-gray-600">
                     <LocalDateTime value={c.startedAt} format="month-day-time" />
                   </td>
