@@ -1,11 +1,15 @@
-import { createRouterClient } from '@orpc/server';
+import { createORPCClient } from '@orpc/client';
+import { RPCLink } from '@orpc/client/fetch';
+import { createRouterClient, type RouterClient } from '@orpc/server';
+import { RPCHandler } from '@orpc/server/fetch';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
-vi.mock('../services/contact-attrs.service', () => ({
-  lookupContactAttrs: vi.fn(),
-}));
+vi.mock('../services/contact-attrs.service', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../services/contact-attrs.service')>();
+  return { ...actual, lookupContactAttrs: vi.fn() };
+});
 
 import * as svc from '../services/contact-attrs.service';
 import { attrs } from './attrs';
@@ -21,6 +25,22 @@ function anonContext(): ORPCContext {
 }
 
 const VALID_TOKEN = '11111111-2222-3333-4444-555555555555';
+
+function rpcBoundaryClient(): RouterClient<{ attrs: typeof attrs }> {
+  const handler = new RPCHandler({ attrs });
+  const link = new RPCLink({
+    url: 'http://localhost/api/rpc',
+    fetch: async (request) => {
+      const { response } = await handler.handle(request, {
+        prefix: '/api/rpc',
+        context: anonContext(),
+      });
+      if (!response) throw new Error('RPC 응답이 없습니다.');
+      return response;
+    },
+  });
+  return createORPCClient(link);
+}
 
 describe('contacts.attrs procedures', () => {
   beforeEach(() => vi.clearAllMocks());
@@ -52,5 +72,16 @@ describe('contacts.attrs procedures', () => {
       inviteToken: 'not-a-uuid',
     });
     expect(res).toBeNull();
+  });
+
+  it('INVALID_TEST_LINK를 실제 RPC 경계 넘어서도 typed error로 보존한다', async () => {
+    vi.mocked(svc.lookupContactAttrs).mockRejectedValue(new svc.InvalidTestLinkError());
+
+    await expect(
+      rpcBoundaryClient().attrs.lookup({ surveyId: 's-1', inviteToken: VALID_TOKEN }),
+    ).rejects.toMatchObject({
+      defined: true,
+      code: 'INVALID_TEST_LINK',
+    });
   });
 });

@@ -18,6 +18,7 @@ import { extractRawSql } from './_helpers/result-code-mock';
 
 interface SeedContact {
   id: string;
+  surveyId: string;
   inviteToken: string;
   unsubscribedAt: Date | null;
   attempts: string[];
@@ -80,6 +81,7 @@ vi.mock('@/db', () => ({
           const contact = state.contacts[0];
           if (!contact) return undefined;
           return {
+            surveyId: contact.surveyId,
             respondedAt: null,
             isTest: false,
             survey: { testModeEnabled: true, deletedAt: null },
@@ -116,6 +118,7 @@ function seedContact(opts: SeedContactInput = {}): { id: string; inviteToken: st
   const inviteToken = randomUUID();
   state.contacts.push({
     id,
+    surveyId: SURVEY_ID,
     inviteToken,
     unsubscribedAt: opts.unsubscribed ? new Date() : null,
     attempts: opts.attempts ?? [],

@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { and, eq, sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { contactTargets } from '@/db/schema';
@@ -48,14 +48,12 @@ export async function findContactByInviteToken(
   const contactTargetId = lookup[0]?.id ?? null;
   if (!contactTargetId) return { kind: 'invalid' };
 
-  // SECURITY DEFINER 함수가 반환한 id도 요청 surveyId로 다시 한정한다. 관계 행을 함께
-  // 읽어 실제 대상자는 테스트 모드와 무관하게 유지하고 테스트 대상자만 fail-closed 한다.
+  // SECURITY DEFINER 함수가 반환한 대상의 소속 surveyId와 isTest를 먼저 보존한다.
+  // 교차 설문 토큰이라도 테스트 대상자면 invalid_test로 종류를 유지해
+  // 선택 초대 설문의 익명 폴백을 닫고, 실제 대상자는 기존 invalid 계약을 유지한다.
   const row = await db.query.contactTargets.findFirst({
-    where: and(
-      eq(contactTargets.id, contactTargetId),
-      eq(contactTargets.surveyId, surveyId),
-    ),
-    columns: { respondedAt: true, isTest: true },
+    where: eq(contactTargets.id, contactTargetId),
+    columns: { surveyId: true, respondedAt: true, isTest: true },
     with: {
       survey: {
         columns: { testModeEnabled: true, deletedAt: true },
@@ -63,6 +61,9 @@ export async function findContactByInviteToken(
     },
   });
   if (!row) return { kind: 'invalid' };
+  if (row.surveyId !== surveyId) {
+    return row.isTest ? { kind: 'invalid_test' } : { kind: 'invalid' };
+  }
   if (row.survey.deletedAt) {
     return row.isTest ? { kind: 'invalid_test' } : { kind: 'invalid' };
   }

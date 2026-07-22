@@ -33,3 +33,35 @@
 
 - 익명 test token과 테스트 대상자 수의 저장 시점 재검증·잠금은 Task 7 범위다. 이번 Task 6은 신규 진입 control만 차단하며 응답 lifecycle은 선행 구현하지 않았다.
 - hard delete된 테스트 대상자의 원래 종류는 token만으로 복원할 수 없지만, 배포된 `/i/{code}` 링크는 코드 미매칭 전용 화면에서 종료하므로 익명 설문으로 폴백하지 않는다.
+
+## 리뷰 수정
+
+### Status
+
+리뷰 4건을 모두 반영했다. Task 7의 attempt 소유권·응답 행 재사용과 Task 8 lifecycle 확장은 추가하지 않았다.
+
+### 구현
+
+- `createResponseWithFirstAnswer`, `createBlankResponse`, `resumeOrCreateResponse` 진입부에서 `inviteToken`+`testToken` 혼합을 DB 접근 전 `invalid_test_token`으로 차단했다.
+- invite lookup은 SECURITY DEFINER 조회로 얻은 대상의 `surveyId/isTest`를 보존한다. 교차 설문 테스트 대상자는 `invalid_test`, 실제 대상자는 기존 `invalid`이다.
+- attrs service의 `InvalidTestLinkError.code`를 procedure가 typed `INVALID_TEST_LINK` oRPC error로 매핑해 fetch RPC 직렬화 경계에서도 식별된다. loader는 error message가 아닌 typed code를 검사한다.
+- loader effect에 `inviteToken/testToken`을 의존성으로 추가했고, 재판정 시 attrs/invite/control 상태를 초기화했다. cleanup 플래그로 이전 토큰의 늦은 응답이 최신 control을 덮어쓰는 race도 차단했다.
+
+### TDD
+
+- RED: 혼합 토큰이 create/blank INSERT·resume invite lookup까지 진행하는 3건을 확인했다.
+- RED: 교차 설문 test target이 valid로 승격되고 actual target은 제외 조회까지 진행하는 2건을 확인했다.
+- RED: attrs 오류가 RPC 경계에서 `INTERNAL_SERVER_ERROR`로 마스킹되고, loader가 typed error·토큰 변경·stale request를 놓치는 4건을 확인했다.
+- GREEN: 최소 가드·분류·typed mapping·effect 재실행으로 집중 8파일 78건을 통과시켰다.
+
+### 검증
+
+- 집중 테스트: 8파일 78건 통과. 전체 변경 영향 fixture 2파일 7건 추가 통과.
+- `pnpm exec tsc --noEmit`: 통과. `pnpm lint`: 오류 0, 기존 경고 99건.
+- `pnpm test`: 일반 317파일 중 316파일·2,554건 통과. 기존 `tests/unit/use-response-lifecycle.test.tsx` 13건만 `window.localStorage.clear()` 환경 오류로 실패했다. 격리 flaky 파일 14건은 모두 통과했다.
+- `git diff --check`: 통과.
+
+### 우려
+
+- 전체 스위트의 localStorage 13건은 기존 환경 오류로 이번 변경 범위에서 수정하지 않았다.
+- 익명 test token과 테스트 대상자 수의 저장 시점 재검증·잠금, attempt/행 재사용은 여전히 Task 7 범위다.

@@ -644,6 +644,10 @@ export async function createResponseWithFirstAnswer(
 ): Promise<FirstAnswerResult> {
   const { surveyId, sessionId, versionId, questionId, value, currentStepId, visibleStepIndex, visibleStepTotal, inviteToken, clientSignals, honeypot, testToken } = input;
 
+  if (inviteToken != null && testToken != null) {
+    return { kind: 'blocked', reason: 'invalid_test_token' };
+  }
+
   // 봇 방어: db/헤더 접근 전에 차단. 사유는 device_already_responded 로 통일(탐지 비노출). 위치·동작 불변.
   if (isLikelyBot({ honeypot, inviteToken, clientSignals })) {
     return { kind: 'blocked', reason: 'device_already_responded' };
@@ -762,6 +766,10 @@ export async function createBlankResponse(
   input: CreateBlankResponseInput,
 ): Promise<FirstAnswerResult> {
   const { surveyId, sessionId, versionId, currentStepId, inviteToken, clientSignals, honeypot, testToken } = input;
+
+  if (inviteToken != null && testToken != null) {
+    return { kind: 'blocked', reason: 'invalid_test_token' };
+  }
 
   // 봇 방어: db/헤더 접근 전에 차단. 사유는 device_already_responded 로 통일(탐지 비노출). 위치·동작 불변.
   if (isLikelyBot({ honeypot, inviteToken, clientSignals })) {

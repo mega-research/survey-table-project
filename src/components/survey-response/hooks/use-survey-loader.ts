@@ -1,3 +1,4 @@
+import { ORPCError } from '@orpc/client';
 import { useEffect, useState } from 'react';
 
 import { client } from '@/shared/lib/rpc';
@@ -69,7 +70,7 @@ interface UseSurveyLoaderResult {
  *
  * 동작 보존 핵심:
  * - effect 본문(3-way URL 분기 + snapshot 복원 + requireInviteToken + attrs lookup) 라인 단위 동일.
- * - deps 는 [identifier, isAdminEdit] 그대로 (adminContext/inviteToken 는 원본대로 미포함, eslint-disable 유지).
+ * - public 토큰이 바뀌면 같은 설문 식별자라도 control/attrs를 초기화하고 재판정한다.
  * - admin-edit 초기 응답 prefill 은 setResponses 로 위임 (responses 소유권은 컴포넌트).
  */
 export function useSurveyLoader({
@@ -95,9 +96,14 @@ export function useSurveyLoader({
 
   // URL 식별자로 설문 조회
   useEffect(() => {
+    let cancelled = false;
+
     const loadSurvey = async () => {
       setIsLoading(true);
       setLoadError(null);
+      setContactAttrs({});
+      setShowInviteRequired(false);
+      setControl(null);
 
       try {
         // admin-edit 분기 (1/8) — survey 로드: versionSnapshot 우선, fallback DB 조회.
@@ -142,6 +148,7 @@ export function useSurveyLoader({
             const result = await client.surveyBuilder.publicRead.forResponse({
               surveyId: adminContext.surveyId,
             });
+            if (cancelled) return;
             if (!result) {
               setLoadError('요청하신 설문을 찾을 수 없습니다.');
               setLoadedSurvey(null);
@@ -178,11 +185,13 @@ export function useSurveyLoader({
         switch (type) {
           case 'slug': {
             const dbSurvey = await client.surveyBuilder.publicRead.bySlug({ slug: value });
+            if (cancelled) return;
             if (dbSurvey) surveyId = dbSurvey.id;
             break;
           }
           case 'privateToken': {
             const dbSurvey = await client.surveyBuilder.publicRead.byPrivateToken({ token: value });
+            if (cancelled) return;
             if (dbSurvey) {
               surveyId = dbSurvey.id;
             } else {
@@ -208,6 +217,7 @@ export function useSurveyLoader({
           ...(testToken != null ? { testToken } : {}),
           ...(inviteToken != null ? { inviteToken } : {}),
         });
+        if (cancelled) return;
 
         if (!result) {
           setLoadError('요청하신 설문을 찾을 수 없습니다.');
@@ -231,10 +241,12 @@ export function useSurveyLoader({
             let attrs: Record<string, string> | null = null;
             try {
               attrs = await client.contacts.attrs.lookup({ surveyId, inviteToken });
+              if (cancelled) return;
             } catch (attrsError) {
+              if (cancelled) return;
               if (
-                attrsError instanceof Error &&
-                attrsError.message.includes('INVALID_TEST_LINK')
+                attrsError instanceof ORPCError &&
+                attrsError.code === 'INVALID_TEST_LINK'
               ) {
                 setControl({
                   ...result.control,
@@ -256,18 +268,22 @@ export function useSurveyLoader({
           }
         }
       } catch (error) {
+        if (cancelled) return;
         console.error('설문 로딩 오류:', error);
         setLoadError('설문을 불러오는 중 오류가 발생했습니다.');
         setLoadedSurvey(null);
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     };
 
     loadSurvey();
+    return () => {
+      cancelled = true;
+    };
     // adminContext/previewContext 는 페이지 수명 동안 안정적 (부모에서 한 번만 생성) — deps 미포함
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [identifier, isAdminEdit, isPreview]);
+  }, [identifier, isAdminEdit, isPreview, inviteToken, testToken]);
 
   return { isLoading, loadedSurvey, loadError, contactAttrs, showInviteRequired, versionId, control };
 }

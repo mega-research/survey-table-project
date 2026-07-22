@@ -518,6 +518,29 @@ describe('survey-read.service getSurveyForResponse control', () => {
     });
   });
 
+  it('초대 선택 설문에서도 교차 설문 테스트 토큰을 익명으로 폴백하지 않는다', async () => {
+    const surveyId = 'survey-control-optional-invite';
+    surveysFindFirst.mockResolvedValue(
+      baseSurveyRow(surveyId, { requireInviteToken: false }),
+    );
+    vi.mocked(findContactByInviteToken).mockResolvedValue({ kind: 'invalid_test' });
+    mockFallbackDetails(surveyId);
+
+    const result = await getSurveyForResponse({
+      surveyId,
+      inviteToken: 'cross-survey-test-token',
+    });
+
+    expect(result).not.toBeNull();
+    expect(result?.survey.settings.requireInviteToken).toBeFalsy();
+    expect(result?.control).toEqual({
+      isPaused: false,
+      pausedMessage: null,
+      testSession: 'invalid',
+      testSessionKind: null,
+    });
+  });
+
   it('testModeEnabled=false 면 토큰이 일치해도 testSession=invalid 이다', async () => {
     const surveyId = 'survey-control-invalid-mode-off';
     surveysFindFirst.mockResolvedValue(

@@ -12,6 +12,15 @@ import type {
   LookupContactAttrsInput,
 } from '../../domain/contact-attrs';
 
+export class InvalidTestLinkError extends Error {
+  readonly code = 'INVALID_TEST_LINK' as const;
+
+  constructor() {
+    super('테스트 링크가 비활성 상태입니다.');
+    this.name = 'InvalidTestLinkError';
+  }
+}
+
 /**
  * inviteToken 으로 attrs 조회. 무효 토큰이면 null 반환 (silent fallback).
  * - lookup_contact_by_invite_token RPC 와 동일한 매칭 정책 (surveyId + inviteToken)
@@ -49,6 +58,6 @@ export async function lookupContactAttrs(
     .limit(1);
 
   if (!row) return null;
-  if (row.isTest && !row.testModeEnabled) throw new Error('INVALID_TEST_LINK');
+  if (row.isTest && !row.testModeEnabled) throw new InvalidTestLinkError();
   return row.attrs;
 }

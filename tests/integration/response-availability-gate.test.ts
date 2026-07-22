@@ -369,6 +369,31 @@ describe('assertSurveyAcceptingResponses — createResponseWithFirstAnswer 테�
     expect(result).toEqual({ kind: 'blocked', reason: 'invalid_test_token' });
   });
 
+  it('inviteToken과 testToken을 섞으면 create 진입점에서 invalid_test_token으로 차단한다', async () => {
+    surveyFindFirstMock.mockResolvedValue(
+      publishedSurvey({ testModeEnabled: true, testToken: 'tok' }),
+    );
+
+    const { createResponseWithFirstAnswer } = await import(
+      '@/features/survey-response/server/services/response.service'
+    );
+    const result = await createResponseWithFirstAnswer({
+      surveyId: SURVEY_ID,
+      sessionId: 'gate-session-mixed-token',
+      versionId: null,
+      questionId: 'q1',
+      value: 'a',
+      currentStepId: 'step1',
+      inviteToken: '11111111-2222-4333-8444-555555555555',
+      clientSignals: VALID_SIGNALS,
+      testToken: 'tok',
+    });
+
+    expect(result).toEqual({ kind: 'blocked', reason: 'invalid_test_token' });
+    expect(inviteLookupMock).not.toHaveBeenCalled();
+    expect(insertChain.values).not.toHaveBeenCalled();
+  });
+
   it('createBlankResponse: 무효 testToken 은 invalid_test_token 으로 신규 응답 생성을 차단한다 (스펙 §9)', async () => {
     surveyFindFirstMock.mockResolvedValue(publishedSurvey({ testModeEnabled: false }));
     // Track B 차단 후보가 있어도, 무효 테스트 링크는 그 전에 차단돼야 한다.
@@ -386,6 +411,29 @@ describe('assertSurveyAcceptingResponses — createResponseWithFirstAnswer 테�
 
     expect(result).toEqual({ kind: 'blocked', reason: 'invalid_test_token' });
   });
+
+  it('createBlankResponse도 inviteToken과 testToken 혼합을 invalid_test_token으로 차단한다', async () => {
+    surveyFindFirstMock.mockResolvedValue(
+      publishedSurvey({ testModeEnabled: true, testToken: 'tok' }),
+    );
+
+    const { createBlankResponse } = await import(
+      '@/features/survey-response/server/services/response.service'
+    );
+    const result = await createBlankResponse({
+      surveyId: SURVEY_ID,
+      sessionId: 'gate-session-blank-mixed-token',
+      versionId: null,
+      currentStepId: 'step1',
+      inviteToken: '11111111-2222-4333-8444-555555555555',
+      clientSignals: VALID_SIGNALS,
+      testToken: 'tok',
+    });
+
+    expect(result).toEqual({ kind: 'blocked', reason: 'invalid_test_token' });
+    expect(inviteLookupMock).not.toHaveBeenCalled();
+    expect(insertChain.values).not.toHaveBeenCalled();
+  });
 });
 
 describe('resumeOrCreateResponse — 중단 게이트 (Task 6)', () => {
@@ -397,6 +445,27 @@ describe('resumeOrCreateResponse — 중단 게이트 (Task 6)', () => {
     selectLimitMock.mockReset();
     countResultMock.mockReset();
     inviteLookupMock.mockReset();
+  });
+
+  it('inviteToken과 testToken을 섞으면 resume 진입점에서 invalid_test_token으로 차단한다', async () => {
+    surveyFindFirstMock.mockResolvedValue(
+      publishedSurvey({ testModeEnabled: true, testToken: 'tok' }),
+    );
+
+    const { resumeOrCreateResponse } = await import(
+      '@/features/survey-response/server/services/lifecycle.service'
+    );
+    await expect(
+      resumeOrCreateResponse({
+        surveyId: SURVEY_ID,
+        sessionId: 'sess-mixed-token',
+        inviteToken: '11111111-2222-4333-8444-555555555555',
+        testToken: 'tok',
+      }),
+    ).rejects.toThrow(/invalid_test_token/);
+
+    expect(surveyFindFirstMock).not.toHaveBeenCalled();
+    expect(inviteLookupMock).not.toHaveBeenCalled();
   });
 
   it('컨택 분기(inviteToken)도 isPaused 설문의 drop 회복을 survey_paused 로 거부한다', async () => {

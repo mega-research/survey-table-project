@@ -42,12 +42,12 @@ describe('테스트 대상자 공개 진입 판정', () => {
     ).resolves.toEqual({ name: '실제 대상자' });
   });
 
-  it('OFF인 테스트 대상자 attrs는 INVALID_TEST_LINK로 종료한다', async () => {
+  it('OFF인 테스트 대상자 attrs는 메시지가 아닌 식별 코드로 종료한다', async () => {
     scopeLimitMock.mockResolvedValue([{ enabled: false }]);
     attrsLimitMock.mockResolvedValue([{ attrs: { name: '테스트 대상자' }, isTest: true, testModeEnabled: false }]);
 
     await expect(
       lookupContactAttrs({ surveyId: SURVEY_ID, inviteToken: INVITE_TOKEN }),
-    ).rejects.toThrow('INVALID_TEST_LINK');
+    ).rejects.toMatchObject({ code: 'INVALID_TEST_LINK' });
   });
 });

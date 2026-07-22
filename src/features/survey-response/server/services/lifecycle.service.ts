@@ -168,6 +168,10 @@ export async function resumeOrCreateResponse(
 ): Promise<ResumeOrCreateResponseOutput> {
   const { surveyId, sessionId, inviteToken, testToken } = input;
 
+  if (inviteToken != null && testToken != null) {
+    throw new SurveyNotAcceptingResponsesError('invalid_test_token');
+  }
+
   // 중단 모드 게이트(스펙 5절): 함수 진입부에서 1회만 조회해 아래 두 분기(컨택/세션)에서
   // 재사용한다. isPaused=false 인 정상 케이스가 압도적으로 많으므로, 이 조회 자체가
   // 추가 오버헤드지만 게이트 판정에 필수라 트레이드오프로 감수한다.
