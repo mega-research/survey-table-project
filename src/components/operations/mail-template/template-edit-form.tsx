@@ -12,6 +12,7 @@ import type { MailTemplate } from '@/db/schema/mail';
 import type { MailAttachment } from '@/db/schema/schema-types';
 import { TMP_ATTACHMENT_PREFIX } from '@/lib/mail/constants';
 import { deleteMailAttachmentTmpBatch } from '@/lib/mail/mail-attachment-client';
+import { IMAGE_LINK_AREA_MAX_WIDTH, countOversizedLinkAreaImages } from '@/lib/mail/image-link-area';
 import { client } from '@/shared/lib/rpc';
 
 import { AttachmentSection } from './attachment-section';
@@ -116,6 +117,14 @@ export function TemplateEditForm({ surveyId, fromDomain, catalog, template, curr
 
   const onSave = () => {
     setError(null);
+    // 클릭 영역이 지정된 이미지의 px 고정폭 검증 — 영역 지정 후 이미지를 다시 키우거나
+    // %크기로 바꾸면 area 좌표가 어긋나므로 저장 단계에서 차단 (이중 게이트)
+    if (countOversizedLinkAreaImages(state.bodyHtml) > 0) {
+      setError(
+        `클릭 영역이 지정된 이미지는 폭 ${IMAGE_LINK_AREA_MAX_WIDTH}px 이하의 고정폭이어야 합니다. 이미지를 선택해 클릭 영역 모달에서 폭을 고정해 주세요.`,
+      );
+      return;
+    }
     startTransition(async () => {
       const input = {
         ...meta,
@@ -185,6 +194,7 @@ export function TemplateEditForm({ surveyId, fromDomain, catalog, template, curr
             본문<span className="ml-0.5 text-red-500">*</span>
           </Label>
           <RichTextEditor
+            enableImageLinkArea
             ref={editorRef}
             kind="mail"
             initialHtml={template?.bodyHtml ?? ''}
