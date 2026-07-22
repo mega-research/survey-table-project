@@ -27,6 +27,7 @@ BEGIN
     SELECT 1
     FROM pg_constraint
     WHERE conname = 'questions_mobile_table_display_mode_check'
+      AND conrelid = 'public.questions'::regclass
   ) THEN
     ALTER TABLE "questions"
       ADD CONSTRAINT "questions_mobile_table_display_mode_check"
