@@ -392,14 +392,6 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
               mobileDrilldownOmitLeadingColumns:
                 currentFormData.mobileDrilldownOmitLeadingColumns
                 ?? question?.mobileDrilldownOmitLeadingColumns,
-              mobileDrilldownRepeatHeaderStartRow:
-                currentFormData.mobileDrilldownRepeatHeaderStartRow !== undefined
-                  ? currentFormData.mobileDrilldownRepeatHeaderStartRow
-                  : question?.mobileDrilldownRepeatHeaderStartRow,
-              mobileDrilldownRepeatHeaderEndRow:
-                currentFormData.mobileDrilldownRepeatHeaderEndRow !== undefined
-                  ? currentFormData.mobileDrilldownRepeatHeaderEndRow
-                  : question?.mobileDrilldownRepeatHeaderEndRow,
               questionCode: currentFormData.questionCode || question?.questionCode,
               isCustomSpssVarName: currentFormData.isCustomSpssVarName ?? question?.isCustomSpssVarName,
               exportLabel: currentFormData.exportLabel || question?.exportLabel,

@@ -130,8 +130,6 @@ export async function getSurveyWithDetails(surveyId: string): Promise<SurveyType
         ...(q.mobileDrilldownOmitLeadingColumns != null
           ? { mobileDrilldownOmitLeadingColumns: q.mobileDrilldownOmitLeadingColumns }
           : {}),
-        mobileDrilldownRepeatHeaderStartRow: q.mobileDrilldownRepeatHeaderStartRow,
-        mobileDrilldownRepeatHeaderEndRow: q.mobileDrilldownRepeatHeaderEndRow,
         ...(q.hideTitle != null ? { hideTitle: q.hideTitle } : {}),
         ...(q.pageBreakBefore != null ? { pageBreakBefore: q.pageBreakBefore } : {}),
         ...(q.displayCondition != null ? { displayCondition: q.displayCondition as NonNullable<QuestionType['displayCondition']> } : {}),

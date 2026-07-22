@@ -265,8 +265,6 @@ export interface QuestionData {
   mobileOriginalTable?: boolean;
   mobileTableDisplayMode?: MobileTableDisplayMode;
   mobileDrilldownOmitLeadingColumns?: number;
-  mobileDrilldownRepeatHeaderStartRow?: number | null;
-  mobileDrilldownRepeatHeaderEndRow?: number | null;
   hideTitle?: boolean;
   pageBreakBefore?: boolean;
   displayCondition?: QuestionConditionGroup;

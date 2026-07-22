@@ -261,8 +261,6 @@ export async function saveSurveyDiff(
           mobileOriginalTable: question.mobileOriginalTable,
           mobileTableDisplayMode: question.mobileTableDisplayMode,
           mobileDrilldownOmitLeadingColumns: question.mobileDrilldownOmitLeadingColumns,
-          mobileDrilldownRepeatHeaderStartRow: question.mobileDrilldownRepeatHeaderStartRow,
-          mobileDrilldownRepeatHeaderEndRow: question.mobileDrilldownRepeatHeaderEndRow,
           hideTitle: question.hideTitle,
           displayCondition: question.displayCondition as NewQuestion['displayCondition'],
           questionCode: question.questionCode,
@@ -314,10 +312,6 @@ export async function saveSurveyDiff(
               mobileOriginalTable: sql`excluded.mobile_original_table`,
               mobileTableDisplayMode: sql`excluded.mobile_table_display_mode`,
               mobileDrilldownOmitLeadingColumns: sql`excluded.mobile_drilldown_omit_leading_columns`,
-              mobileDrilldownRepeatHeaderStartRow:
-                sql`excluded.mobile_drilldown_repeat_header_start_row`,
-              mobileDrilldownRepeatHeaderEndRow:
-                sql`excluded.mobile_drilldown_repeat_header_end_row`,
               hideTitle: sql`excluded.hide_title`,
               displayCondition: sql`excluded.display_condition`,
               questionCode: sql`excluded.question_code`,
@@ -613,8 +607,6 @@ export async function saveSurveyWithDetails(
           mobileOriginalTable: question.mobileOriginalTable,
           mobileTableDisplayMode: question.mobileTableDisplayMode,
           mobileDrilldownOmitLeadingColumns: question.mobileDrilldownOmitLeadingColumns,
-          mobileDrilldownRepeatHeaderStartRow: question.mobileDrilldownRepeatHeaderStartRow,
-          mobileDrilldownRepeatHeaderEndRow: question.mobileDrilldownRepeatHeaderEndRow,
           hideTitle: question.hideTitle,
           displayCondition: question.displayCondition as NewQuestion['displayCondition'],
           questionCode: question.questionCode,
@@ -666,10 +658,6 @@ export async function saveSurveyWithDetails(
               mobileOriginalTable: sql`excluded.mobile_original_table`,
               mobileTableDisplayMode: sql`excluded.mobile_table_display_mode`,
               mobileDrilldownOmitLeadingColumns: sql`excluded.mobile_drilldown_omit_leading_columns`,
-              mobileDrilldownRepeatHeaderStartRow:
-                sql`excluded.mobile_drilldown_repeat_header_start_row`,
-              mobileDrilldownRepeatHeaderEndRow:
-                sql`excluded.mobile_drilldown_repeat_header_end_row`,
               hideTitle: sql`excluded.hide_title`,
               displayCondition: sql`excluded.display_condition`,
               questionCode: sql`excluded.question_code`,

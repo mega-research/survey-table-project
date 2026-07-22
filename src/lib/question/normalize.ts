@@ -31,11 +31,6 @@ import type { QuestionVariant } from './variants';
 
 export type NormalizeMode = 'preserve' | 'strict';
 
-const SEMANTIC_NULL_FIELDS = new Set([
-  'mobileDrilldownRepeatHeaderStartRow',
-  'mobileDrilldownRepeatHeaderEndRow',
-]);
-
 export function normalizeQuestion(raw: unknown, mode: NormalizeMode = 'preserve'): QuestionVariant {
   if (mode === 'strict') {
     return QuestionVariantSchema.parse(dropNullFields(raw)) as QuestionVariant;
@@ -65,11 +60,7 @@ export function normalizeQuestions(raw: unknown[], mode: NormalizeMode = 'preser
  */
 function dropNullFields(raw: unknown): unknown {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return raw;
-  return Object.fromEntries(
-    Object.entries(raw).filter(
-      ([key, value]) => value !== null || SEMANTIC_NULL_FIELDS.has(key),
-    ),
-  );
+  return Object.fromEntries(Object.entries(raw).filter(([, value]) => value !== null));
 }
 
 function isWellFormedCandidate(raw: unknown): boolean {

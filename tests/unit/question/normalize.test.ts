@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { normalizeQuestion, normalizeQuestions } from '@/lib/question';
-import { resolveMobileDrilldownRepeatHeaderRange } from '@/utils/mobile-drilldown-repeat-header';
 
 import { makeOption, makeQuestion } from '../../helpers/question-factory';
 
@@ -279,31 +278,6 @@ describe('normalizeQuestion - strict 모드 (strip 활성화 목적지)', () => 
     ) as unknown as Record<string, unknown>;
     expect(parsed['mobileTableDisplayMode']).toBeUndefined();
     expect(parsed['mobileOriginalTable']).toBe(true);
-  });
-
-  it('strict 정규화가 반복 헤더 null/null을 보존한다', () => {
-    const parsed = normalizeQuestion({
-      ...GEN_NEW_TABLE,
-      mobileDrilldownRepeatHeaderStartRow: null,
-      mobileDrilldownRepeatHeaderEndRow: null,
-    }, 'strict') as unknown as Record<string, unknown>;
-    expect(parsed['mobileDrilldownRepeatHeaderStartRow']).toBeNull();
-    expect(parsed['mobileDrilldownRepeatHeaderEndRow']).toBeNull();
-  });
-
-  it('strict 정규화가 손상된 반복 헤더 숫자를 제거해 런타임 0 폴백을 허용한다', () => {
-    const parsed = normalizeQuestion({
-      ...GEN_NEW_TABLE,
-      mobileDrilldownRepeatHeaderStartRow: -1,
-      mobileDrilldownRepeatHeaderEndRow: 2,
-    }, 'strict') as unknown as Record<string, unknown>;
-    expect(parsed['mobileDrilldownRepeatHeaderStartRow']).toBeUndefined();
-    expect(resolveMobileDrilldownRepeatHeaderRange({
-      mobileDrilldownRepeatHeaderStartRow:
-        parsed['mobileDrilldownRepeatHeaderStartRow'],
-      mobileDrilldownRepeatHeaderEndRow:
-        parsed['mobileDrilldownRepeatHeaderEndRow'],
-    })).toEqual({ startRow: 0, endRow: 0 });
   });
 
   it('notice 픽스처에서 테이블/옵션 오염을 소거하고 공지 필드를 보존한다', () => {

@@ -46,8 +46,6 @@ export const PERSISTED_QUESTION_FIELDS = [
   'mobileOriginalTable',
   'mobileTableDisplayMode',
   'mobileDrilldownOmitLeadingColumns',
-  'mobileDrilldownRepeatHeaderStartRow',
-  'mobileDrilldownRepeatHeaderEndRow',
   'hideTitle',
   'pageBreakBefore',
   'rankingConfig',
@@ -76,7 +74,15 @@ export type CompleteQuestionWrite = Record<PersistedQuestionField, unknown> &
 export function toPersistedQuestionField(
   column: Exclude<
     keyof NewQuestion,
-    'id' | 'surveyId' | 'createdAt' | 'updatedAt' | 'imageUrl' | 'videoUrl'
+    | 'id'
+    | 'surveyId'
+    | 'createdAt'
+    | 'updatedAt'
+    | 'imageUrl'
+    | 'videoUrl'
+    // 공유 DB 스키마 동기화 전용. 모바일 반복 헤더 기능 브랜치가 영속 계약을 소유한다.
+    | 'mobileDrilldownRepeatHeaderStartRow'
+    | 'mobileDrilldownRepeatHeaderEndRow'
   >,
 ): PersistedQuestionField {
   return column;

@@ -222,15 +222,11 @@ describe('buildSurveySnapshot', () => {
         tableRowsData: [],
         mobileTableDisplayMode: 'drilldown-original-row',
         mobileDrilldownOmitLeadingColumns: 1,
-        mobileDrilldownRepeatHeaderStartRow: null,
-        mobileDrilldownRepeatHeaderEndRow: null,
       }],
     };
     const question = buildSurveySnapshot(survey).questions[0];
     expect(question?.mobileTableDisplayMode).toBe('drilldown-original-row');
     expect(question?.mobileDrilldownOmitLeadingColumns).toBe(1);
-    expect(question?.mobileDrilldownRepeatHeaderStartRow).toBeNull();
-    expect(question?.mobileDrilldownRepeatHeaderEndRow).toBeNull();
   });
 
   it('질문/그룹이 빈 배열이어도 정상 동작', () => {
