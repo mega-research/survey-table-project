@@ -67,6 +67,8 @@ const MOBILE_TABLE_DISPLAY_KEYS = [
   'mobileOriginalTable',
   'mobileTableDisplayMode',
   'mobileDrilldownOmitLeadingColumns',
+  'mobileDrilldownRepeatHeaderStartRow',
+  'mobileDrilldownRepeatHeaderEndRow',
 ];
 
 function shapeKeys(schema: { shape: Record<string, unknown> }): string[] {
