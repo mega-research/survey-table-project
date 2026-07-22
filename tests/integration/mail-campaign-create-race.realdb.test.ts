@@ -35,6 +35,13 @@ import { createCampaign } from '@/features/mail/server/services/mail-campaigns.s
 
 const run = process.env['RUN_REALDB'] === '1' ? describe : describe.skip;
 const surveyIds: string[] = [];
+const OPERATION_TIMEOUT_MS = 10_000;
+const OBSERVATION_TIMEOUT_MS = 10_000;
+const CLEANUP_SETTLE_TIMEOUT_MS = 20_000;
+const FORCE_CLEANUP_TIMEOUT_MS = 5_000;
+const TEST_TIMEOUT_MS = 90_000;
+const SQL_TIMEOUT_MS = 15_000;
+const SQL_CLOSE_TIMEOUT_SECONDS = 1;
 
 interface CampaignFixture {
   surveyId: string;
@@ -56,7 +63,11 @@ function deferred<T>(): Deferred<T> {
   return { promise, resolve };
 }
 
-async function withTimeout<T>(promise: Promise<T>, label: string, timeoutMs = 10_000): Promise<T> {
+async function withTimeout<T>(
+  promise: Promise<T>,
+  label: string,
+  timeoutMs = OPERATION_TIMEOUT_MS,
+): Promise<T> {
   let timeout: ReturnType<typeof setTimeout> | undefined;
   const timeoutPromise = new Promise<never>((_, reject) => {
     timeout = setTimeout(() => reject(new Error(`${label} 대기 시간 초과`)), timeoutMs);
@@ -89,9 +100,9 @@ function createDedicatedSql() {
     idle_timeout: 5,
     connect_timeout: 5,
     connection: {
-      statement_timeout: 15_000,
-      lock_timeout: 15_000,
-      idle_in_transaction_session_timeout: 15_000,
+      statement_timeout: SQL_TIMEOUT_MS,
+      lock_timeout: SQL_TIMEOUT_MS,
+      idle_in_transaction_session_timeout: SQL_TIMEOUT_MS,
     },
   });
 }
@@ -99,6 +110,7 @@ function createDedicatedSql() {
 function observeCreateTransactionPids() {
   const originalTransaction = db.transaction.bind(db);
   const pidSlots = [deferred<number>(), deferred<number>()] as const;
+  const capturedPids: number[] = [];
   let callIndex = 0;
   const transactionSpy = vi.spyOn(db, 'transaction');
 
@@ -110,6 +122,7 @@ function observeCreateTransactionPids() {
       const rows = await tx.execute<{ pid: number }>(sql`SELECT pg_backend_pid()::int AS pid`);
       const pid = rows[0]?.pid;
       if (!pid) throw new Error('캠페인 생성 transaction backend PID를 얻지 못했습니다.');
+      capturedPids.push(pid);
       pidSlot.resolve(pid);
       return callback(tx);
     }, config);
@@ -117,8 +130,61 @@ function observeCreateTransactionPids() {
 
   return {
     pidAt: (index: 0 | 1) => withTimeout(pidSlots[index].promise, `${index + 1}번째 캠페인 transaction PID`),
+    pids: () => [...capturedPids],
     restore: () => transactionSpy.mockRestore(),
   };
+}
+
+async function closeSqlClients(
+  clients: Array<ReturnType<typeof postgres>>,
+  label: string,
+): Promise<void> {
+  const results = await Promise.allSettled(
+    clients.map((client) => client.end({ timeout: SQL_CLOSE_TIMEOUT_SECONDS })),
+  );
+  const errors = results.flatMap((result) => result.status === 'rejected' ? [result.reason] : []);
+  if (errors.length > 0) throw new AggregateError(errors, `${label} 연결 종료에 실패했습니다.`);
+}
+
+async function settleOperations(args: {
+  operations: Array<Promise<unknown>>;
+  observer: ReturnType<typeof postgres>;
+  transactionPids: number[];
+  label: string;
+}): Promise<void> {
+  if (args.operations.length === 0) return;
+  const settlement = Promise.allSettled(args.operations);
+
+  try {
+    await withTimeout(settlement, `${args.label} cleanup`, CLEANUP_SETTLE_TIMEOUT_MS);
+  } catch (cleanupError) {
+    const terminationResults = await Promise.allSettled(
+      args.transactionPids.map(async (pid) => {
+        await args.observer`SELECT pg_terminate_backend(${pid})`;
+      }),
+    );
+    const terminationErrors = terminationResults.flatMap(
+      (result) => result.status === 'rejected' ? [result.reason] : [],
+    );
+
+    try {
+      await withTimeout(
+        settlement,
+        `${args.label} backend 종료 후 cleanup`,
+        FORCE_CLEANUP_TIMEOUT_MS,
+      );
+    } catch (forcedCleanupError) {
+      throw new AggregateError(
+        [cleanupError, forcedCleanupError, ...terminationErrors],
+        `${args.label} cleanup에 실패했습니다.`,
+      );
+    }
+
+    throw new AggregateError(
+      [cleanupError, ...terminationErrors],
+      `${args.label} cleanup timeout으로 backend를 종료했습니다.`,
+    );
+  }
 }
 
 async function waitUntilBlockedBy(
@@ -129,7 +195,7 @@ async function waitUntilBlockedBy(
     expectedLockType?: 'advisory';
   },
 ): Promise<void> {
-  const deadline = Date.now() + 10_000;
+  const deadline = Date.now() + OBSERVATION_TIMEOUT_MS;
   let lastSnapshot: unknown = null;
 
   while (Date.now() < deadline) {
@@ -260,9 +326,20 @@ run('메일 캠페인 생성 DB 경쟁', () => {
       await withTimeout(Promise.all(creations), '동시 캠페인 생성 완료');
     } finally {
       gate.release();
-      await Promise.allSettled(creations);
-      observedTransactions.restore();
-      await observer.end({ timeout: 1 });
+      try {
+        await settleOperations({
+          operations: creations,
+          observer,
+          transactionPids: observedTransactions.pids(),
+          label: '동시 캠페인 생성',
+        });
+      } finally {
+        try {
+          observedTransactions.restore();
+        } finally {
+          await closeSqlClients([observer], 'advisory lock observer');
+        }
+      }
     }
 
     await db.execute(
@@ -284,7 +361,7 @@ run('메일 캠페인 생성 DB 경쟁', () => {
       { is_test: true, run_number: 1 },
       { is_test: true, run_number: 2 },
     ]);
-  });
+  }, TEST_TIMEOUT_MS);
 
   it('모드 전환은 생성의 survey SHARE lock 뒤에 직렬화된다', async () => {
     const fixture = await seedCampaignFixture();
@@ -293,6 +370,7 @@ run('메일 캠페인 생성 DB 경쟁', () => {
     const observedTransactions = observeCreateTransactionPids();
     const gate = holdAtResultCodeLookup();
     const updaterPid = deferred<number>();
+    const operations: Array<Promise<unknown>> = [];
     let creation: Promise<unknown> | null = null;
     let modeFlip: Promise<unknown> | null = null;
     try {
@@ -300,6 +378,7 @@ run('메일 캠페인 생성 DB 경쟁', () => {
         campaignInput(fixture, fixture.testTargetId, 'locked-test'),
         randomUUID(),
       );
+      operations.push(creation);
       const creationPid = await observedTransactions.pidAt(0);
       await gate.entered();
 
@@ -310,6 +389,7 @@ run('메일 캠페인 생성 DB 경쟁', () => {
         updaterPid.resolve(pid);
         await connection`UPDATE surveys SET test_mode_enabled=false WHERE id=${fixture.surveyId}`;
       });
+      operations.push(modeFlip);
       const blockedPid = await withTimeout(updaterPid.promise, '모드 전환 backend PID');
       await waitUntilBlockedBy(observer, { blockedPid, blockingPid: creationPid });
 
@@ -317,9 +397,20 @@ run('메일 캠페인 생성 DB 경쟁', () => {
       await withTimeout(Promise.all([creation, modeFlip]), '캠페인 생성과 모드 전환 완료');
     } finally {
       gate.release();
-      await Promise.allSettled([creation, modeFlip].filter((value): value is Promise<unknown> => value !== null));
-      observedTransactions.restore();
-      await Promise.all([observer.end({ timeout: 1 }), modeFlipSql.end({ timeout: 1 })]);
+      try {
+        await settleOperations({
+          operations,
+          observer,
+          transactionPids: observedTransactions.pids(),
+          label: '캠페인 생성과 모드 전환',
+        });
+      } finally {
+        try {
+          observedTransactions.restore();
+        } finally {
+          await closeSqlClients([observer, modeFlipSql], '모드 전환 test SQL');
+        }
+      }
     }
 
     const campaigns = await db.execute<{ is_test: boolean }>(sql`
@@ -332,5 +423,5 @@ run('메일 캠페인 생성 DB 경쟁', () => {
         randomUUID(),
       ),
     ).rejects.toThrow('화면을 새로고침');
-  });
+  }, TEST_TIMEOUT_MS);
 });

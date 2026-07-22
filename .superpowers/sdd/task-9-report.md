@@ -42,3 +42,11 @@
 - 각 blocker 관찰에는 10초 timeout과 마지막 lock snapshot 오류를 두고, `finally`에서 gate 해제·진행 promise settle·spy 복구·전용 연결 종료를 수행한다. fixture는 UUID survey 단위 FK cascade 삭제로 정리한다.
 - RED: blocker 관찰 helper 미구현 오류로 두 경쟁 테스트가 각각 실패하는 것을 확인했다.
 - GREEN: 신규 경쟁 파일 단독 3회 연속 2건 통과, 전체 실DB 12파일 45건 통과, Task 9 관련 일반 테스트 4파일 18건 통과를 확인했다. 전체 `pnpm test`도 본 실행 320파일 2,620건과 격리 실행 1파일 14건이 모두 통과했다.
+
+## 최종 test harness timeout 보강
+
+- 두 실DB 경쟁 테스트에 90초 timeout을 명시했다. blocker 관찰 10초, 정상 완료 10초, cleanup 20초, backend 종료 후 cleanup 5초, 전용 SQL statement·연결 종료 예산을 모두 합친 최악 경로보다 충분히 길다.
+- cleanup의 `Promise.allSettled`는 20초로 제한한다. 시간이 초과되면 fixture에서 포착한 campaign transaction backend PID만 `pg_terminate_backend`로 종료하고 같은 settlement를 5초 동안 다시 기다린다.
+- cleanup settlement의 성공·실패와 무관하게 중첩 `finally`가 transaction spy를 복구하고 observer와 mode-flip 전용 postgres 연결을 모두 종료한다. 연결 종료는 각 client의 1초 timeout과 `Promise.allSettled`로 모든 client에 시도한다.
+- RED: DB fixture를 만들기 전 해제되지 않는 임시 대기를 두어 기존 테스트가 Vitest 기본 5,000ms timeout으로 실패함을 확인했다.
+- GREEN: 임시 대기를 제거한 최종 코드로 신규 경쟁 파일 단독 3회 연속 2건 통과, 전체 실DB 12파일 45건 통과, `pnpm exec tsc --noEmit` 및 해당 파일 ESLint 통과를 확인했다.
