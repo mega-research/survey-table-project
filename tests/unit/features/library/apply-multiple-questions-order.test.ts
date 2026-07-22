@@ -29,6 +29,7 @@ vi.mock('@/db', () => ({
 }));
 
 import { applyMultipleSavedQuestions } from '@/features/library/server/services/saved-questions.service';
+import { resolveMobileTableDisplayMode } from '@/utils/mobile-table-display-mode';
 
 describe('applyMultipleSavedQuestions 순서 보존 (L75 회귀)', () => {
   beforeEach(() => {
@@ -78,5 +79,90 @@ describe('applyMultipleSavedQuestions 순서 보존 (L75 회귀)', () => {
     expect(result[0]?.id).not.toBe('qa');
     // groupId 는 제거되어야 한다.
     expect('groupId' in (result[0] as object)).toBe(false);
+  });
+
+  it('legacy original 질문은 적용 시 canonical original을 가져 complete save와 reload에서도 유지한다', async () => {
+    findMany.mockResolvedValue([
+      {
+        id: 'legacy-original',
+        question: {
+          id: 'legacy-table',
+          type: 'table',
+          title: '과거 원본 표',
+          required: false,
+          order: 3,
+          mobileOriginalTable: true,
+          tableColumns: [],
+          tableRowsData: [],
+        },
+      },
+    ]);
+
+    const [applied] = await applyMultipleSavedQuestions(['legacy-original']);
+    expect(applied?.mobileTableDisplayMode).toBe('original');
+
+    const reloadedMode = resolveMobileTableDisplayMode({
+      mobileOriginalTable: applied?.mobileOriginalTable,
+      // complete insert의 DB default를 재현한다. canonical 값이 누락되면 auto가 legacy를 덮는다.
+      mobileTableDisplayMode: applied?.mobileTableDisplayMode ?? 'auto',
+    });
+    expect(reloadedMode).toBe('original');
+  });
+
+  it('필드가 없는 과거 모바일 표 질문은 적용 시 반복 헤더 0/0으로 canonicalize한다', async () => {
+    findMany.mockResolvedValue([{
+      id: 'legacy-repeat-header',
+      question: {
+        id: 'legacy-table',
+        type: 'table',
+        title: '과거 표',
+        required: false,
+        order: 0,
+        tableColumns: [],
+        tableRowsData: [],
+      },
+    }]);
+    const [applied] = await applyMultipleSavedQuestions(['legacy-repeat-header']);
+    expect(applied?.mobileDrilldownRepeatHeaderStartRow).toBe(0);
+    expect(applied?.mobileDrilldownRepeatHeaderEndRow).toBe(0);
+  });
+
+  it('열 제목을 숨기던 과거 모바일 표 질문은 반복 없음으로 canonicalize한다', async () => {
+    findMany.mockResolvedValue([{
+      id: 'legacy-hidden-label-repeat-header',
+      question: {
+        id: 'legacy-hidden-table',
+        type: 'table',
+        title: '과거 숨김 표',
+        required: false,
+        order: 0,
+        hideColumnLabels: true,
+        tableColumns: [],
+        tableRowsData: [],
+      },
+    }]);
+    const [applied] = await applyMultipleSavedQuestions(['legacy-hidden-label-repeat-header']);
+    expect(applied?.mobileDrilldownRepeatHeaderStartRow).toBeNull();
+    expect(applied?.mobileDrilldownRepeatHeaderEndRow).toBeNull();
+  });
+
+  it('보관 질문의 명시적 반복 없음 null/null을 유지한다', async () => {
+    findMany.mockResolvedValue([{
+      id: 'repeat-header-off',
+      question: {
+        id: 'off-table',
+        type: 'table',
+        title: '반복 없음',
+        required: false,
+        order: 0,
+        tableColumns: [],
+        tableRowsData: [],
+        mobileDrilldownRepeatHeaderStartRow: null,
+        mobileDrilldownRepeatHeaderEndRow: null,
+      },
+    }]);
+    const [applied] = await applyMultipleSavedQuestions(['repeat-header-off']);
+    expect(applied?.mobileDrilldownRepeatHeaderStartRow).toBeNull();
+    expect(applied?.mobileDrilldownRepeatHeaderEndRow).toBeNull();
   });
 });

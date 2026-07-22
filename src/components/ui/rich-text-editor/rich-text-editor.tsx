@@ -16,12 +16,14 @@ import { useEditorImageTracker } from './use-editor-image-tracker';
 import type { RichTextEditorHandle, RichTextEditorProps } from './types';
 
 // 공통 룰: 표 정렬 Decoration·이미지 정렬·셀 선택 강조 등 편집 전용 시각 — 미리보기와 무관.
-// 표 폭은 셀 콘텐츠에 맞춰 자동. prose 기본 width 100% 를 !w-auto 로 override —
+// 표 폭은 셀 콘텐츠에 맞춰 자동. prose 기본 width 100% 를 w-auto 로 override —
 // 표 정렬(TableAlignDecoration) 이 wrapper flex 로 동작하려면 table 폭이 wrapper 보다
 // 작아야 시각 효과가 보인다.
+// 주의: !w-auto (important) 금지 — 마지막 열 드래그 리사이즈 시 prosemirror-tables 가
+// table 에 인라인 width 를 쓰는데 important 가 이를 눌러 바깥 모서리 리사이즈가 죽는다.
 const COMMON_EDITOR_BASE =
   'max-w-none focus:outline-none p-6 flex-1 ' +
-  '[&_table]:!w-auto [&_table]:table-auto ' +
+  '[&_table]:w-auto [&_table]:table-auto ' +
   '[&_table_td_p]:m-0 [&_table_th_p]:m-0 ' +
   '[&_td.selectedCell]:relative [&_td.selectedCell]:bg-blue-100/60 ' +
   '[&_th.selectedCell]:relative [&_th.selectedCell]:bg-blue-100/60 ' +
@@ -67,6 +69,7 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
       className,
       editorClassName,
       minHeight = 320,
+      enableImageLinkArea,
       placeholder,
     },
     ref,
@@ -237,6 +240,7 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
           onPickLink={onPickLink}
           {...(kind === 'survey' && onPickFile !== undefined ? { onPickFile } : {})}
           {...(kind === 'survey' && onReplaceFile !== undefined ? { onReplaceFile } : {})}
+          enableImageLinkArea={enableImageLinkArea ?? false}
         />
         <div
           className="flex flex-col overflow-y-auto max-h-[calc(100vh-260px)]"

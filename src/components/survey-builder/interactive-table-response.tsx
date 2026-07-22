@@ -16,8 +16,8 @@ import { cn } from '@/lib/utils';
 import {
   DynamicRowGroupConfig,
   HeaderCell,
+  MobileTableDisplayMode,
   Question,
-  TableCell,
   TableColumn,
   TableRow,
 } from '@/types/survey';
@@ -28,6 +28,10 @@ import {
 } from '@/utils/branch-logic';
 import { decideDrilldown } from '@/utils/classify-table';
 import { expandHeaderGrid } from '@/utils/expand-header-grid';
+import {
+  clampMobileDrilldownOmitLeadingColumns,
+  resolveMobileTableDisplayMode,
+} from '@/utils/mobile-table-display-mode';
 import {
   HEADER_ROW_MIN_HEIGHT,
   STICKY_BODY_Z,
@@ -41,6 +45,7 @@ import {
   getHeaderCellStickyStyle,
 } from '@/utils/table-grid-utils';
 import { recalculateColspansForVisibleColumns } from '@/utils/table-merge-helpers';
+import { buildRadioGroupBuckets, resolveRadioGroupProps } from '@/utils/table-radio-groups';
 
 import { InteractiveCell } from './cells';
 import { DynamicRowSelectorModal } from './dynamic-row-selector-modal';
@@ -237,13 +242,7 @@ function renderRowCells({
   // Phase 5-D: 같은 행 + 같은 radioGroupName 셀들 묶음 분석.
   // 같은 그룹 셀 ≥ 2개일 때만 활성 (단일 셀 그룹은 묶을 의미 없음).
   // 같은 열에 걸친 그룹(다른 행끼리 묶음)은 이번 단계 범위 외 — 백엔드 P1 정책이 다중체크를 처리.
-  const radioGroupBuckets = new Map<string, string[]>();
-  for (const c of row.cells) {
-    if (c.type !== 'radio' || c.isHidden || !c.radioGroupName) continue;
-    const list = radioGroupBuckets.get(c.radioGroupName) ?? [];
-    list.push(c.id);
-    radioGroupBuckets.set(c.radioGroupName, list);
-  }
+  const radioGroupBuckets = buildRadioGroupBuckets(row);
 
   return row.cells.map((cell, cellIndex) => {
     if (cell.isHidden) return null;
@@ -280,7 +279,7 @@ function renderRowCells({
               ? 'bg-green-50/40'
               : 'bg-white',
           getAlignmentClasses(cell.horizontalAlign, cell.verticalAlign),
-          errorCellIds?.has(cell.id) && 'ring-2 ring-inset ring-red-300',
+          errorCellIds?.has(cell.id) && 'ring-2 ring-red-300 ring-inset',
         )}
         style={style}
         data-row-id={row.id}
@@ -301,24 +300,6 @@ function renderRowCells({
   });
 }
 
-/**
- * Phase 5-D: 같은 행 + 같은 radioGroupName 셀에 대해 HTML name + sibling 클리어 props 결정.
- * 그룹 멤버 ≥ 2 일 때만 활성 (1개면 묶을 의미 없음).
- */
-function resolveRadioGroupProps(
-  cell: TableCell,
-  rowId: string,
-  buckets: Map<string, string[]>,
-): { groupName?: string; siblingCellIds?: string[] } {
-  if (cell.type !== 'radio' || !cell.radioGroupName) return {};
-  const groupCells = buckets.get(cell.radioGroupName);
-  if (!groupCells || groupCells.length < 2) return {};
-  return {
-    groupName: `${rowId}-${cell.radioGroupName}`,
-    siblingCellIds: groupCells.filter((cid) => cid !== cell.id),
-  };
-}
-
 // ── 메인 컴포넌트 ──
 
 interface InteractiveTableResponseProps {
@@ -337,6 +318,10 @@ interface InteractiveTableResponseProps {
   hideColumnLabels?: boolean | undefined;
   /** 모바일에서도 카드/스테퍼 전환 없이 원본 표(가로 스크롤)로 렌더 */
   mobileOriginalTable?: boolean | undefined;
+  mobileTableDisplayMode?: MobileTableDisplayMode | undefined;
+  mobileDrilldownOmitLeadingColumns?: number | undefined;
+  mobileDrilldownRepeatHeaderStartRow?: number | null | undefined;
+  mobileDrilldownRepeatHeaderEndRow?: number | null | undefined;
   /** 헤더·좌측 열 sticky 동작 활성화. 기본 true. 빌더 프리뷰 등에서 끌 수 있음 */
   enableSticky?: boolean | undefined;
   /** 차단형 검증 위반 셀 (빨간 ring 하이라이트) */
@@ -361,6 +346,10 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
   dynamicRowConfigs,
   hideColumnLabels = false,
   mobileOriginalTable = false,
+  mobileTableDisplayMode,
+  mobileDrilldownOmitLeadingColumns,
+  mobileDrilldownRepeatHeaderStartRow,
+  mobileDrilldownRepeatHeaderEndRow,
   enableSticky = true,
   errorCellIds,
   errorItems,
@@ -399,9 +388,19 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
   );
 
   const tableContainerRef = useRef<HTMLDivElement>(null);
+  // 드릴다운 모드에서 "위치로 이동" — 위반 셀이 속한 섹션/리프 상세로 내비 전환.
+  // 드릴다운이 마운트된 동안에만 함수가 심긴다 (셸/스테퍼 모드에서는 null).
+  const drilldownNavigateRef = useRef<((cellIds: readonly string[]) => void) | null>(null);
   const headerScrollRef = useRef<HTMLDivElement>(null);
   useTablePerf(`InteractiveTable(${rows.length}×${columns.length})`);
   const isMobileView = useMobileView();
+  const mobileMode = resolveMobileTableDisplayMode({
+    mobileTableDisplayMode,
+    mobileOriginalTable,
+  });
+  const useOriginalRowDetail = isMobileView && mobileMode === 'drilldown-original-row';
+  const mobileUsesCards = isMobileView && mobileMode !== 'original';
+  const rendersFullOriginalTable = mobileMode === 'original';
 
   // displayCondition에서 참조하는 질문 ID만 추출 → 관련 응답만 의존
   const relevantResponseKeys = useMemo(() => {
@@ -489,7 +488,6 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
   // 필요하다(ref/disabled는 안 바뀌어 deps 없이는 effect가 재실행되지 않음).
   // 모바일은 카드 전환이라 원래 불필요하지만, 원본 표 모드는 모바일에서도
   // 표를 렌더하므로 동기화·측정을 켜야 한다.
-  const mobileUsesCards = isMobileView && !mobileOriginalTable;
   useScrollLeftSync(headerScrollRef, tableContainerRef, mobileUsesCards, [hideColumnLabels]);
 
   // Grid 관련 계산
@@ -708,7 +706,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
           className={cn(
             'sticky top-0 z-30 bg-white print:static print:z-auto',
             // 모바일 원본 표 모드는 풀블리드 해크 없이 카드 패딩 안에 좌우 대칭으로 가둔다
-            mobileOriginalTable ? 'mx-0' : '-mx-4 md:mx-0',
+            rendersFullOriginalTable ? 'mx-0' : '-mx-4 md:mx-0',
           )}
         >
           {/* 가로 스크롤 컨트롤 (버튼 + 진행도) — sticky 영역이라 항상 조작 가능 */}
@@ -721,7 +719,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
             <div className="relative">
               <div
                 ref={headerScrollRef}
-                className={cn(HEADER_SCROLL_CLASS, mobileOriginalTable && 'px-0')}
+                className={cn(HEADER_SCROLL_CLASS, rendersFullOriginalTable && 'px-0')}
               >
                 <div
                   role="rowgroup"
@@ -735,13 +733,13 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
               {canScrollRight && (
                 <div
                   aria-hidden="true"
-                  className="pointer-events-none absolute inset-y-0 z-20 transform-gpu right-0 w-12 bg-gradient-to-l from-gray-50 via-gray-50/60 to-transparent print:hidden"
+                  className="pointer-events-none absolute inset-y-0 right-0 z-20 w-12 transform-gpu bg-gradient-to-l from-gray-50 via-gray-50/60 to-transparent print:hidden"
                 />
               )}
               {canScrollLeft && (
                 <div
                   aria-hidden="true"
-                  className="pointer-events-none absolute inset-y-0 z-20 transform-gpu left-0 w-6 bg-gradient-to-r from-gray-50/80 to-transparent print:hidden"
+                  className="pointer-events-none absolute inset-y-0 left-0 z-20 w-6 transform-gpu bg-gradient-to-r from-gray-50/80 to-transparent print:hidden"
                 />
               )}
             </div>
@@ -754,7 +752,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
             페이드의 z-20 transform-gpu: iOS WebKit 은 overflow 스크롤 컨테이너를
             합성 레이어로 승격해 z-index 없는 형제 오버레이를 덮어버린다(아이폰에서
             그라데이션 미표시). 페이드도 자체 레이어 + sticky 셀(z-10) 위 z 로 강제한다. */}
-        <div className={cn('relative', mobileOriginalTable ? 'mx-0' : '-mx-4 md:mx-0')}>
+        <div className={cn('relative', rendersFullOriginalTable ? 'mx-0' : '-mx-4 md:mx-0')}>
           {/* iOS WebKit(아이패드/아이폰 크롬·사파리 공통 엔진)에서는
               -webkit-overflow-scrolling: touch + display:grid + position:sticky 좌측 고정 열
               조합이 별도 GPU 합성 레이어를 강제해, 초기 뷰포트 밖(오른쪽) 셀이 래스터되지
@@ -764,8 +762,8 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
             ref={tableContainerRef}
             className={cn(
               // 모바일은 상단 스크롤 컨트롤이 스크롤 수단 — 네이티브 가로 스크롤바 숨김
-              'overflow-x-auto pb-4 max-md:[-ms-overflow-style:none] max-md:[scrollbar-width:none] max-md:[&::-webkit-scrollbar]:hidden print:overflow-visible',
-              mobileOriginalTable ? 'px-0' : 'px-4 md:px-0',
+              'overflow-x-auto pb-4 max-md:[-ms-overflow-style:none] max-md:[scrollbar-width:none] print:overflow-visible max-md:[&::-webkit-scrollbar]:hidden',
+              rendersFullOriginalTable ? 'px-0' : 'px-4 md:px-0',
             )}
           >
             {shouldVirtualize ? (
@@ -820,13 +818,13 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
           {canScrollRight && (
             <div
               aria-hidden="true"
-              className="pointer-events-none absolute inset-y-0 z-20 transform-gpu right-0 w-12 bg-gradient-to-l from-black/10 to-transparent print:hidden"
+              className="pointer-events-none absolute inset-y-0 right-0 z-20 w-12 transform-gpu bg-gradient-to-l from-black/10 to-transparent print:hidden"
             />
           )}
           {canScrollLeft && (
             <div
               aria-hidden="true"
-              className="pointer-events-none absolute inset-y-0 z-20 transform-gpu left-0 w-6 bg-gradient-to-r from-black/10 to-transparent print:hidden"
+              className="pointer-events-none absolute inset-y-0 left-0 z-20 w-6 transform-gpu bg-gradient-to-r from-black/10 to-transparent print:hidden"
             />
           )}
         </div>
@@ -836,6 +834,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
 
   const mobileTableProps = {
     questionId,
+    authoredRows: rows,
     displayRows,
     visibleColumns,
     visibleHeaderGrid,
@@ -849,6 +848,8 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     groupConfigMap,
     onSelectGroup: handleSelectGroup,
     errorCellIds,
+    mobileDrilldownRepeatHeaderStartRow,
+    mobileDrilldownRepeatHeaderEndRow,
   };
 
   return (
@@ -859,12 +860,32 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
             <CardTitle className="text-lg font-medium">{tableTitle}</CardTitle>
           </CardHeader>
         )}
-        <CardContent className={cn(isMobileView ? 'p-3 sm:p-4' : 'p-0 sm:px-6')}>
+        {/* 모바일은 질문 제목 바로 아래에 카드가 오므로 상단 패딩을 제거해 제목과 붙인다
+            (좌우/하단 패딩은 유지). 단 tableTitle 이 있으면 CardHeader 에 하단 패딩이
+            없으므로 그 간격 역할을 하는 상단 패딩을 유지한다. 데스크탑은 기존 여백 그대로. */}
+        <CardContent
+          className={cn(
+            isMobileView
+              ? tableTitle
+                ? 'p-3 sm:p-4'
+                : 'p-3 pt-0 sm:p-4 sm:pt-1'
+              : 'p-0 sm:px-6',
+          )}
+        >
           <div className="w-full">
             {/* 모바일 원본 표 옵션이 켜진 질문은 카드/스테퍼 전환 없이 원본 표(가로 스크롤) 유지 */}
             {mobileUsesCards ? (
-              useDrilldown ? (
-                <MobileTableDrilldown {...mobileTableProps} />
+              useOriginalRowDetail || useDrilldown ? (
+                <MobileTableDrilldown
+                  {...mobileTableProps}
+                  authoredColumns={columns}
+                  navigateToCellRef={drilldownNavigateRef}
+                  detailMode={useOriginalRowDetail ? 'original-row' : 'legacy'}
+                  omitLeadingAuthoredColumns={clampMobileDrilldownOmitLeadingColumns(
+                    mobileDrilldownOmitLeadingColumns,
+                    columns.length,
+                  )}
+                />
               ) : (
                 <MobileTableStepper {...mobileTableProps} />
               )
@@ -884,7 +905,20 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
                   {item.cellIds && item.cellIds.length > 0 && (
                     <button
                       type="button"
-                      onClick={() => scrollToCell(item.cellIds!)}
+                      // 드릴다운 모드는 위반 셀이 다른 섹션에 있어 DOM 에 없을 수 있다.
+                      // 먼저 해당 섹션/리프로 내비를 전환하고, 상세가 렌더된 다음
+                      // 프레임에 셀로 스크롤한다 (이미 해당 상세면 스크롤만 동작).
+                      onClick={() => {
+                        const cellIds = item.cellIds!;
+                        if (drilldownNavigateRef.current) {
+                          drilldownNavigateRef.current(cellIds);
+                          window.requestAnimationFrame(() =>
+                            window.requestAnimationFrame(() => scrollToCell(cellIds)),
+                          );
+                        } else {
+                          scrollToCell(cellIds);
+                        }
+                      }}
                       className="shrink-0 rounded border border-red-300 bg-white px-2 py-0.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-100"
                     >
                       위치로 이동
@@ -894,7 +928,6 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
               ))}
             </div>
           )}
-
         </CardContent>
       </Card>
 

@@ -151,6 +151,8 @@ describe.skipIf(!isLocalDb)('surveyBuilder procedure round-trip (real local DB)'
       emptyDefault: 7.5,
       mobileTableDisplayMode: 'drilldown-original-row',
       mobileDrilldownOmitLeadingColumns: 2,
+      mobileDrilldownRepeatHeaderStartRow: null,
+      mobileDrilldownRepeatHeaderEndRow: null,
     });
 
     // 3. 복제 실행
@@ -174,6 +176,8 @@ describe.skipIf(!isLocalDb)('surveyBuilder procedure round-trip (real local DB)'
         emptyDefault: questionsTable.emptyDefault,
         mobileTableDisplayMode: questionsTable.mobileTableDisplayMode,
         mobileDrilldownOmitLeadingColumns: questionsTable.mobileDrilldownOmitLeadingColumns,
+        mobileDrilldownRepeatHeaderStartRow: questionsTable.mobileDrilldownRepeatHeaderStartRow,
+        mobileDrilldownRepeatHeaderEndRow: questionsTable.mobileDrilldownRepeatHeaderEndRow,
       })
       .from(questionsTable)
       .where(eq(questionsTable.surveyId, copy.id));
@@ -191,6 +195,8 @@ describe.skipIf(!isLocalDb)('surveyBuilder procedure round-trip (real local DB)'
     expect(copiedQuestion?.emptyDefault).toBe(7.5);
     expect(copiedQuestion?.mobileTableDisplayMode).toBe('drilldown-original-row');
     expect(copiedQuestion?.mobileDrilldownOmitLeadingColumns).toBe(2);
+    expect(copiedQuestion?.mobileDrilldownRepeatHeaderStartRow).toBeNull();
+    expect(copiedQuestion?.mobileDrilldownRepeatHeaderEndRow).toBeNull();
   });
 
   // 회귀: isSlugAvailable 의 excludeSurveyId 는 "자기 자신을 제외"하는 의미여야 한다(ne).

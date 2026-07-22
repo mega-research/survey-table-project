@@ -17,9 +17,11 @@ import { ImageCell } from './image-cell';
 export const PreviewCell = React.memo(function PreviewCell({
   cell,
   choiceControlType = 'checkbox',
+  disableControls = false,
 }: {
   cell: TableCell;
   choiceControlType?: 'radio' | 'checkbox';
+  disableControls?: boolean;
 }) {
   if (!cell) return <span className="text-sm text-gray-400">-</span>;
 
@@ -39,8 +41,9 @@ export const PreviewCell = React.memo(function PreviewCell({
             <div key={option.id} className="flex items-start gap-2">
               <input
                 type="checkbox"
-                checked={option.checked || false}
-                readOnly
+                checked={disableControls ? false : option.checked || false}
+                disabled={disableControls}
+                readOnly={!disableControls}
                 className="mt-0.5 h-4 w-4 shrink-0 rounded"
               />
               <span className="text-sm">{option.label}</span>
@@ -65,8 +68,9 @@ export const PreviewCell = React.memo(function PreviewCell({
               <input
                 type="radio"
                 name={`preview-${cell.id}`}
-                checked={option.selected || false}
-                readOnly
+                checked={disableControls ? false : option.selected || false}
+                disabled={disableControls}
+                readOnly={!disableControls}
                 className="mt-0.5 h-4 w-4 shrink-0"
               />
               <span className="text-sm">{option.label}</span>
@@ -106,7 +110,7 @@ export const PreviewCell = React.memo(function PreviewCell({
     case 'video':
       return cell.videoUrl ? (
         <div className="flex flex-col items-center gap-2">
-          {(cell.videoUrl.includes('youtube.com') || cell.videoUrl.includes('youtu.be')) ? (
+          {cell.videoUrl.includes('youtube.com') || cell.videoUrl.includes('youtu.be') ? (
             <div className="w-full max-w-xs">
               <div className="aspect-video">
                 <iframe
@@ -186,7 +190,7 @@ export const PreviewCell = React.memo(function PreviewCell({
             />
           )}
           {cell.content && (
-            <div className="text-sm whitespace-pre-wrap text-gray-800 [overflow-wrap:anywhere]">
+            <div className="text-sm [overflow-wrap:anywhere] whitespace-pre-wrap text-gray-800">
               {cell.content}
             </div>
           )}
@@ -197,7 +201,8 @@ export const PreviewCell = React.memo(function PreviewCell({
       // 셀 내부 랭킹 (rk) — 프리뷰에서는 간단히 안내만
       return (
         <div className="text-xs text-gray-500">
-          (순위형 셀 · {cell.rankingOptions?.length ?? 0}개 옵션 · {cell.rankingConfig?.positions ?? 3}순위)
+          (순위형 셀 · {cell.rankingOptions?.length ?? 0}개 옵션 ·{' '}
+          {cell.rankingConfig?.positions ?? 3}순위)
         </div>
       );
 
@@ -213,16 +218,14 @@ export const PreviewCell = React.memo(function PreviewCell({
             className="h-4 w-4"
             aria-label={cell.choiceLabel || '보기 선택'}
           />
-          {choiceLabelText && (
-            <span className="text-sm text-gray-700">{choiceLabelText}</span>
-          )}
+          {choiceLabelText && <span className="text-sm text-gray-700">{choiceLabelText}</span>}
         </div>
       );
     }
 
     default:
       return cell.content ? (
-        <div className="text-sm leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]">
+        <div className="text-sm leading-relaxed [overflow-wrap:anywhere] whitespace-pre-wrap">
           {cell.content}
         </div>
       ) : (

@@ -202,7 +202,8 @@ describe('classifyTable — 종사자 (MATRIX)', () => {
 
 describe('classifyTable — 숯 혼합 (MATRIX + SCALAR + SCALAR)', () => {
   it('한 표가 섹션별로 다른 kind', () => {
-    const secs = classifyTable(charcoal());
+    const input = charcoal();
+    const secs = classifyTable(input);
     expect(secs.map((s) => s.label)).toEqual([
       '1) 생산방식별 시설 용량 및 개수',
       '2) 연간 최대 생산 가능량',
@@ -223,6 +224,17 @@ describe('classifyTable — 숯 혼합 (MATRIX + SCALAR + SCALAR)', () => {
     if (!leaf3) throw new Error('sec0.leaves[3] undefined');
     expect(leaf0.subGroup).toBe('전통식 가마');
     expect(leaf3.subGroup).toBe('기계식 탄화로');
+    const traditionalAnchorId = input.tableRowsData[0]?.cells[1]?.id;
+    const machineAnchorId = input.tableRowsData[3]?.cells[1]?.id;
+    expect(sec0.leaves.slice(0, 3).map((leaf) => leaf.subGroupSourceCellId)).toEqual([
+      traditionalAnchorId,
+      traditionalAnchorId,
+      traditionalAnchorId,
+    ]);
+    expect(sec0.leaves.slice(3).map((leaf) => leaf.subGroupSourceCellId)).toEqual([
+      machineAnchorId,
+      machineAnchorId,
+    ]);
     expect(sec0.colGroups.map((g) => g.label)).toEqual(['시설 1', '시설 2']);
     expect(leaf0.inputCellIds).toEqual(['s1-heuk-1c', 's1-heuk-1q', 's1-heuk-2c', 's1-heuk-2q']);
     // scalar 섹션: 입력 1칸이 값 열 전체 colspan
@@ -285,6 +297,89 @@ describe('classifyTable — 수출 국가 (라벨 rowspan 병합)', () => {
       '수출 국가 및 비중(%)_1',
       '수출 국가 및 비중(%)_2',
       '수출 국가 및 비중(%)_3',
+    ]);
+  });
+});
+
+describe('classifyTable — 주입된 answerable 셀 타입', () => {
+  it('choice_opt를 주입한 경우 기존 rowspan section과 원본 행 leaf를 만든다', () => {
+    const input: ClassifyInput = {
+      tableColumns: [C('대분류'), C('항목'), C('선택')],
+      tableRowsData: [
+        {
+          id: 'r1',
+          label: '',
+          cells: [
+            T('유저 지표', { rs: 2 }),
+            T('활성 사용자'),
+            { id: 'o1', type: 'choice_opt', content: '' },
+          ],
+        },
+        {
+          id: 'r2',
+          label: '',
+          cells: [H(), T('재방문율'), { id: 'o2', type: 'choice_opt', content: '' }],
+        },
+      ],
+      answerableCellTypes: ['choice_opt'],
+    };
+
+    const sections = classifyTable(input);
+
+    expect(sections).toHaveLength(1);
+    expect(sections[0]?.label).toBe('유저 지표');
+    expect(sections[0]?.leaves.map((leaf) => leaf.rowId)).toEqual(['r1', 'r2']);
+  });
+
+  it('section·leaf·subgroup 라벨 provenance를 rowspan anchor identity로 보존한다', () => {
+    const sections = classifyTable({
+      tableColumns: [C('섹션'), C('하위 그룹'), C('항목'), C('응답')],
+      tableRowsData: [
+        {
+          id: 'provenance-r1',
+          label: '첫 항목',
+          cells: [
+            { id: 'section-anchor', type: 'text', content: '섹션', rowspan: 2 },
+            { id: 'subgroup-anchor', type: 'image', content: '하위 그룹', rowspan: 2 },
+            { id: 'leaf-source-1', type: 'text', content: '첫 항목' },
+            I('provenance-input-1'),
+          ],
+        },
+        {
+          id: 'provenance-r2',
+          label: '둘째 항목',
+          cells: [
+            {
+              id: 'section-continuation',
+              type: 'text',
+              content: '',
+              isHidden: true,
+              _isContinuation: true,
+            },
+            {
+              id: 'subgroup-continuation',
+              type: 'image',
+              content: '',
+              isHidden: true,
+              _isContinuation: true,
+            },
+            { id: 'leaf-source-2', type: 'video', content: '둘째 항목' },
+            I('provenance-input-2'),
+          ],
+        },
+      ],
+    });
+
+    expect(sections[0]).toMatchObject({ labelSourceCellId: 'section-anchor' });
+    expect(sections[0]?.leaves).toMatchObject([
+      {
+        labelSourceCellId: 'leaf-source-1',
+        subGroupSourceCellId: 'subgroup-anchor',
+      },
+      {
+        labelSourceCellId: 'leaf-source-2',
+        subGroupSourceCellId: 'subgroup-anchor',
+      },
     ]);
   });
 });

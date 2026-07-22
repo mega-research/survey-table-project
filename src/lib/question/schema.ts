@@ -68,6 +68,8 @@ const mobileTableDisplay = z.object({
   mobileOriginalTable: z.boolean().optional(),
   mobileTableDisplayMode: z.enum(MOBILE_TABLE_DISPLAY_MODES).optional().catch(undefined),
   mobileDrilldownOmitLeadingColumns: z.number().int().min(0).optional(),
+  mobileDrilldownRepeatHeaderStartRow: z.number().int().min(0).nullable().optional(),
+  mobileDrilldownRepeatHeaderEndRow: z.number().int().min(0).nullable().optional(),
 });
 
 export const TextQuestionSchema = base.extend({

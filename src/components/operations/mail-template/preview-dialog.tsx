@@ -54,14 +54,14 @@ const IFRAME_RESET_CSS = `
   html { background: #f9fafb; }
   html, body { margin: 0; padding: 0; }
   /* 실제 발송 메일의 컨테이너 폭을 그대로 시뮬레이션
-     (template-wrapper.tsx container: maxWidth 700px, padding 24px 16px, 흰 배경 / main: 회색 배경).
-     바깥 회색 + 가운데 700px 흰 컨테이너로 실제 받은편지함 폭감을 재현. */
+     (template-wrapper.tsx container: maxWidth 900px, padding 24px 16px, 흰 배경 / main: 회색 배경).
+     바깥 회색 + 가운데 900px 흰 컨테이너로 실제 받은편지함 폭감을 재현. */
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     font-size: 14px;
     line-height: 1.5;
     color: #1f2937;
-    max-width: 700px;
+    max-width: 900px;
     margin: 0 auto;
     padding: 24px 16px;
     background: #ffffff;
@@ -226,7 +226,8 @@ export function MailPreviewDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[90vh] max-w-3xl flex-col p-0 gap-0">
+      {/* 발송 컨테이너(900px)가 잘리지 않도록 다이얼로그를 그보다 넓게 */}
+      <DialogContent className="flex max-h-[90vh] max-w-[960px] flex-col p-0 gap-0">
         <DialogHeader className="border-b border-gray-200 px-6 pt-6 pb-4">
           <DialogTitle>받는 사람 기준 미리보기</DialogTitle>
           <DialogDescription>
@@ -355,9 +356,8 @@ export function MailPreviewDialog({
           </div>
 
           <p className="mt-2 text-xs text-gray-500">
-            제목 앞에 <code className="rounded bg-gray-200 px-1 text-[11px]">[TEST]</code>
-            가 자동으로 붙고, 본문 내 설문 링크는 응답되지 않는 미리보기용 토큰으로
-            치환됩니다.
+            실제 발송과 동일한 제목으로 전송되며, 본문 내 설문 링크는 응답되지 않는
+            미리보기용 토큰으로 치환됩니다.
           </p>
 
           {hasUnpromotedAttachment && (

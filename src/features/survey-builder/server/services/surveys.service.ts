@@ -271,6 +271,8 @@ export async function duplicateSurvey(
         mobileOriginalTable: question.mobileOriginalTable,
         mobileTableDisplayMode: question.mobileTableDisplayMode,
         mobileDrilldownOmitLeadingColumns: question.mobileDrilldownOmitLeadingColumns,
+        mobileDrilldownRepeatHeaderStartRow: question.mobileDrilldownRepeatHeaderStartRow,
+        mobileDrilldownRepeatHeaderEndRow: question.mobileDrilldownRepeatHeaderEndRow,
         hideTitle: question.hideTitle,
         pageBreakBefore: question.pageBreakBefore,
         displayCondition: question.displayCondition as NewQuestion['displayCondition'],

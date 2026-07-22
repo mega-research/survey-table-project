@@ -31,9 +31,14 @@ import type { QuestionVariant } from './variants';
 
 export type NormalizeMode = 'preserve' | 'strict';
 
+const SEMANTIC_NULL_FIELDS = new Set([
+  'mobileDrilldownRepeatHeaderStartRow',
+  'mobileDrilldownRepeatHeaderEndRow',
+]);
+
 export function normalizeQuestion(raw: unknown, mode: NormalizeMode = 'preserve'): QuestionVariant {
   if (mode === 'strict') {
-    return QuestionVariantSchema.parse(dropNullFields(raw)) as QuestionVariant;
+    return QuestionVariantSchema.parse(normalizeStrictInput(raw)) as QuestionVariant;
   }
 
   if (!isWellFormedCandidate(raw)) {
@@ -41,7 +46,9 @@ export function normalizeQuestion(raw: unknown, mode: NormalizeMode = 'preserve'
     // 관측만 남기고 그대로 흘린다 — strip 활성화 결정의 입력 데이터.
     console.warn(
       '[question/normalize] 알 수 없는 질문 형태 passthrough:',
-      raw && typeof raw === 'object' ? `type=${String((raw as { type?: unknown }).type)}` : typeof raw,
+      raw && typeof raw === 'object'
+        ? `type=${String((raw as { type?: unknown }).type)}`
+        : typeof raw,
     );
   }
 
@@ -49,7 +56,10 @@ export function normalizeQuestion(raw: unknown, mode: NormalizeMode = 'preserve'
   return raw as QuestionVariant;
 }
 
-export function normalizeQuestions(raw: unknown[], mode: NormalizeMode = 'preserve'): QuestionVariant[] {
+export function normalizeQuestions(
+  raw: unknown[],
+  mode: NormalizeMode = 'preserve',
+): QuestionVariant[] {
   return raw.map((q) => normalizeQuestion(q, mode));
 }
 
@@ -60,15 +70,56 @@ export function normalizeQuestions(raw: unknown[], mode: NormalizeMode = 'preser
  */
 function dropNullFields(raw: unknown): unknown {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return raw;
-  return Object.fromEntries(Object.entries(raw).filter(([, value]) => value !== null));
+  return Object.fromEntries(
+    Object.entries(raw).filter(([key, value]) => value !== null || SEMANTIC_NULL_FIELDS.has(key)),
+  );
+}
+
+function normalizeStrictInput(raw: unknown): unknown {
+  const normalized = dropNullFields(raw);
+  if (!normalized || typeof normalized !== 'object' || Array.isArray(normalized)) {
+    return normalized;
+  }
+
+  const record = normalized as Record<string, unknown>;
+  const startKey = 'mobileDrilldownRepeatHeaderStartRow';
+  const endKey = 'mobileDrilldownRepeatHeaderEndRow';
+  const hasStart = Object.prototype.hasOwnProperty.call(record, startKey);
+  const hasEnd = Object.prototype.hasOwnProperty.call(record, endKey);
+
+  // 두 키가 모두 없을 때만 과거 질문의 legacy 표시 의미로 남긴다. 한 키라도
+  // 직렬화 경계에 존재하면 값뿐 아니라 pair 전체의 유효성을 함께 판단한다.
+  if (!hasStart && !hasEnd) return normalized;
+
+  const start = record[startKey];
+  const end = record[endKey];
+  const isExplicitlyDisabled = hasStart && hasEnd && start === null && end === null;
+  const isValidRange =
+    hasStart &&
+    hasEnd &&
+    typeof start === 'number' &&
+    typeof end === 'number' &&
+    Number.isInteger(start) &&
+    Number.isInteger(end) &&
+    start >= 0 &&
+    end >= 0 &&
+    start <= end;
+
+  if (isExplicitlyDisabled || isValidRange) return normalized;
+
+  return {
+    ...record,
+    [startKey]: 0,
+    [endKey]: 0,
+  };
 }
 
 function isWellFormedCandidate(raw: unknown): boolean {
   if (!raw || typeof raw !== 'object') return false;
   const candidate = raw as { type?: unknown; id?: unknown };
   return (
-    typeof candidate.id === 'string'
-    && typeof candidate.type === 'string'
-    && isQuestionTypeValue(candidate.type)
+    typeof candidate.id === 'string' &&
+    typeof candidate.type === 'string' &&
+    isQuestionTypeValue(candidate.type)
   );
 }

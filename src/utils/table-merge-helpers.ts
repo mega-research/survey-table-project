@@ -191,6 +191,7 @@ export function recalculateRowspansForVisibleRows(
 
   // 변경이 필요한 셀만 추적: Map<visibleRowIndex, Map<colIdx, cellOverrides>>
   const modifications = new Map<number, Map<number, Partial<TableRow['cells'][0]>>>();
+  const replacements = new Map<number, Map<number, TableRow['cells'][0]>>();
 
   const setMod = (rowIdx: number, colIdx: number, overrides: Partial<TableRow['cells'][0]>) => {
     let rowMods = modifications.get(rowIdx);
@@ -199,6 +200,15 @@ export function recalculateRowspansForVisibleRows(
       modifications.set(rowIdx, rowMods);
     }
     rowMods.set(colIdx, { ...rowMods.get(colIdx), ...overrides });
+  };
+
+  const setReplacement = (rowIdx: number, colIdx: number, cell: TableRow['cells'][0]) => {
+    let rowReplacements = replacements.get(rowIdx);
+    if (!rowReplacements) {
+      rowReplacements = new Map();
+      replacements.set(rowIdx, rowReplacements);
+    }
+    rowReplacements.set(colIdx, cell);
   };
 
   // 각 열에 대해 병합 재계산
@@ -245,12 +255,14 @@ export function recalculateRowspansForVisibleRows(
       // 첫 번째 가시 행에 병합 시작 셀 배치
       const firstIdx = visibleInGroup[0];
       if (firstIdx === undefined) continue;
-      setMod(firstIdx, colIdx, {
+      const promotedCell = {
+        ...group.cellContent,
         isHidden: false,
-        content: group.cellContent.content,
-        type: group.cellContent.type,
         ...(visibleInGroup.length > 1 ? { rowspan: visibleInGroup.length } : {}),
-      });
+      };
+      delete promotedCell._isContinuation;
+      if (visibleInGroup.length <= 1) delete promotedCell.rowspan;
+      setReplacement(firstIdx, colIdx, promotedCell);
 
       // 나머지 가시 행의 해당 열 셀은 isHidden
       for (let i = 1; i < visibleInGroup.length; i++) {
@@ -266,12 +278,15 @@ export function recalculateRowspansForVisibleRows(
   // 변경 필요한 행만 복사, 나머지는 원본 참조 유지
   return visibleRows.map((row, rowIdx) => {
     const rowMods = modifications.get(rowIdx);
-    if (!rowMods) return row;
+    const rowReplacements = replacements.get(rowIdx);
+    if (!rowMods && !rowReplacements) return row;
 
     return {
       ...row,
       cells: row.cells.map((cell, colIdx) => {
-        const cellMod = rowMods.get(colIdx);
+        const replacement = rowReplacements?.get(colIdx);
+        if (replacement) return replacement;
+        const cellMod = rowMods?.get(colIdx);
         if (!cellMod) return cell;
         return { ...cell, ...cellMod };
       }),
@@ -300,6 +315,21 @@ export function recalculateColspansForVisibleColumns(
     if (visibleColumnIds.has(col.id)) visibleColIndices.add(idx);
   });
 
+  const headerMergeStarts = new Map<number, number>();
+  const coveredHeaderIndices = new Set<number>();
+  for (let index = 0; index < originalColumns.length; index += 1) {
+    const start = originalColumns[index];
+    if (!start || start.isHeaderHidden || (start.colspan ?? 1) <= 1) continue;
+    const coveredVisible = Array.from(
+      { length: start.colspan ?? 1 },
+      (_, offset) => index + offset,
+    ).filter((covered) => visibleColIndices.has(covered));
+    const promotedStart = coveredVisible[0];
+    if (promotedStart === undefined) continue;
+    headerMergeStarts.set(promotedStart, coveredVisible.length);
+    coveredVisible.slice(1).forEach((covered) => coveredHeaderIndices.add(covered));
+  }
+
   // 열 필터링 + 헤더 colspan 재계산
   const filteredColumns: TableColumn[] = [];
   for (let i = 0; i < originalColumns.length; i++) {
@@ -308,38 +338,49 @@ export function recalculateColspansForVisibleColumns(
     if (!origCol) continue;
     const col = { ...origCol } as TableColumn;
 
-    // 이 열이 헤더 병합 시작이면 colspan 재계산
-    if (col.colspan && col.colspan > 1) {
-      let newColspan = 0;
-      for (let j = i; j < i + col.colspan && j < originalColumns.length; j++) {
-        if (visibleColIndices.has(j)) newColspan++;
-      }
-      if (newColspan > 1) { col.colspan = newColspan; } else { delete col.colspan; }
+    const projectedColspan = headerMergeStarts.get(i);
+    if (projectedColspan !== undefined) {
+      col.isHeaderHidden = false;
+      if (projectedColspan > 1) col.colspan = projectedColspan;
+      else delete col.colspan;
+    } else if (coveredHeaderIndices.has(i)) {
+      col.isHeaderHidden = true;
+      delete col.colspan;
+    } else {
+      col.isHeaderHidden = false;
     }
-    col.isHeaderHidden = false; // 필터링 후에는 모두 표시
     filteredColumns.push(col);
   }
 
-  // 가시 병합 시작 셀이 점유하는 (row, col) 좌표 집합 계산
-  // 병합 시작 셀이 가시 열에 남아있을 때만 continuation 셀의 isHidden을 유지한다.
-  // 병합 시작 셀이 필터링되어 사라지면, 가시 열에 남은 continuation 셀은 선두 가시 셀로
-  // 승격하고 isHidden을 해제해야 한다 (미해제 시 렌더에서 if isHidden return null 로 사라짐).
+  // 가시 열로 투영된 병합 시작과 점유 (row, col) 좌표를 계산한다.
+  // 원본 시작 열이 사라지면 첫 가시 continuation을 잔여 병합의 시작으로 승격한다.
+  const projectedBodyMerges = new Map<string, { colspan: number; rowspan: number }>();
   const coveredCoords = new Set<string>();
   for (let r = 0; r < originalRows.length; r++) {
     const origRow = originalRows[r];
     if (!origRow) continue;
     for (let c = 0; c < origRow.cells.length; c++) {
-      // 병합 시작 셀의 열이 가시일 때만 점유 좌표로 인정
-      if (!visibleColIndices.has(c)) continue;
       const startCell = origRow.cells[c];
       if (!startCell || startCell.isHidden) continue;
       const rowspan = startCell.rowspan && startCell.rowspan > 1 ? startCell.rowspan : 1;
       const colspan = startCell.colspan && startCell.colspan > 1 ? startCell.colspan : 1;
       if (rowspan <= 1 && colspan <= 1) continue;
+
+      const coveredVisibleColumns = Array.from(
+        { length: colspan },
+        (_, offset) => c + offset,
+      ).filter((column) => visibleColIndices.has(column));
+      const promotedColumn = coveredVisibleColumns[0];
+      if (promotedColumn === undefined) continue;
+      projectedBodyMerges.set(`${r},${promotedColumn}`, {
+        colspan: coveredVisibleColumns.length,
+        rowspan,
+      });
+
       for (let dr = 0; dr < rowspan; dr++) {
-        for (let dc = 0; dc < colspan; dc++) {
-          if (dr === 0 && dc === 0) continue;
-          coveredCoords.add(`${r + dr},${c + dc}`);
+        for (const coveredColumn of coveredVisibleColumns) {
+          if (dr === 0 && coveredColumn === promotedColumn) continue;
+          coveredCoords.add(`${r + dr},${coveredColumn}`);
         }
       }
     }
@@ -354,15 +395,18 @@ export function recalculateColspansForVisibleColumns(
       if (!origCell) continue;
       const cell = { ...origCell };
 
-      // colspan 재계산
-      if (cell.colspan && cell.colspan > 1) {
-        let newColspan = 0;
-        for (let j = i; j < i + cell.colspan && j < row.cells.length; j++) {
-          if (visibleColIndices.has(j)) newColspan++;
-        }
-        if (newColspan > 1) { cell.colspan = newColspan; } else { delete cell.colspan; }
+      const projectedMerge = projectedBodyMerges.get(`${rowIdx},${i}`);
+      if (projectedMerge) {
         cell.isHidden = false;
-      } else if (cell.isHidden && !coveredCoords.has(`${rowIdx},${i}`)) {
+        if (projectedMerge.colspan > 1) cell.colspan = projectedMerge.colspan;
+        else delete cell.colspan;
+        if (projectedMerge.rowspan > 1) cell.rowspan = projectedMerge.rowspan;
+        else delete cell.rowspan;
+      } else if (coveredCoords.has(`${rowIdx},${i}`)) {
+        cell.isHidden = true;
+        delete cell.colspan;
+        delete cell.rowspan;
+      } else if (cell.isHidden) {
         // continuation 셀(자체 colspan 없음)인데 이를 덮던 가시 병합 시작 셀이 사라진 경우
         // → 선두 가시 셀로 승격하고 isHidden 해제
         cell.isHidden = false;

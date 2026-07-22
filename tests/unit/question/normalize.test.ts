@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { normalizeQuestion, normalizeQuestions } from '@/lib/question';
+import { resolveMobileDrilldownRepeatHeaderRange } from '@/utils/mobile-drilldown-repeat-header';
 
 import { makeOption, makeQuestion } from '../../helpers/question-factory';
 
@@ -94,7 +95,9 @@ const GEN_NEW_TABLE = {
   questionCode: 'Q4',
   tableTitle: '가구별 보유 현황',
   tableColumns: [{ id: 'col-1', label: '항목' }],
-  tableRowsData: [{ id: 'row-1', label: '행', cells: [{ id: 'c1', content: '', type: 'checkbox' }] }],
+  tableRowsData: [
+    { id: 'row-1', label: '행', cells: [{ id: 'c1', content: '', type: 'checkbox' }] },
+  ],
   tableHeaderGrid: [],
   tableValidationRules: [],
   dynamicRowConfigs: [],
@@ -203,7 +206,13 @@ describe('normalizeQuestion - preserve 모드 (기본)', () => {
 
   it('알 수 없는 type 도 throw 없이 통과시키고 관측 로그만 남긴다', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const unknown = { id: 'q-x', type: 'file-upload', title: '미래 유형', required: false, order: 1 };
+    const unknown = {
+      id: 'q-x',
+      type: 'file-upload',
+      title: '미래 유형',
+      required: false,
+      order: 1,
+    };
     const result = normalizeQuestion(unknown);
     expect(result).toBe(unknown);
     expect(warn).toHaveBeenCalledTimes(1);
@@ -231,7 +240,10 @@ describe('normalizeQuestion - strict 모드 (strip 활성화 목적지)', () => 
   });
 
   it('radio 픽스처에서 cross-type 키를 소거하고 자기 키는 값 그대로 보존한다', () => {
-    const parsed = normalizeQuestion(GEN_OLDEST_RADIO, 'strict') as unknown as Record<string, unknown>;
+    const parsed = normalizeQuestion(GEN_OLDEST_RADIO, 'strict') as unknown as Record<
+      string,
+      unknown
+    >;
     // 소거: radio variant 밖 키
     expect(parsed).not.toHaveProperty('requiresAcknowledgment');
     expect(parsed).not.toHaveProperty('selectLevels');
@@ -243,7 +255,10 @@ describe('normalizeQuestion - strict 모드 (strip 활성화 목적지)', () => 
   });
 
   it('checkbox 픽스처에서 rankingConfig/inputType/noticeContent 오염을 소거한다', () => {
-    const parsed = normalizeQuestion(GEN_NEW_CHECKBOX, 'strict') as unknown as Record<string, unknown>;
+    const parsed = normalizeQuestion(GEN_NEW_CHECKBOX, 'strict') as unknown as Record<
+      string,
+      unknown
+    >;
     expect(parsed).not.toHaveProperty('rankingConfig');
     expect(parsed).not.toHaveProperty('inputType');
     expect(parsed).not.toHaveProperty('noticeContent');
@@ -280,6 +295,90 @@ describe('normalizeQuestion - strict 모드 (strip 활성화 목적지)', () => 
     expect(parsed['mobileOriginalTable']).toBe(true);
   });
 
+  it('strict 정규화가 반복 헤더 null/null을 보존한다', () => {
+    const parsed = normalizeQuestion(
+      {
+        ...GEN_NEW_TABLE,
+        mobileDrilldownRepeatHeaderStartRow: null,
+        mobileDrilldownRepeatHeaderEndRow: null,
+      },
+      'strict',
+    ) as unknown as Record<string, unknown>;
+    expect(parsed['mobileDrilldownRepeatHeaderStartRow']).toBeNull();
+    expect(parsed['mobileDrilldownRepeatHeaderEndRow']).toBeNull();
+  });
+
+  it('strict 정규화가 둘 다 손상된 반복 헤더를 hideColumnLabels와 무관하게 0/0으로 만든다', () => {
+    const parsed = normalizeQuestion(
+      {
+        ...GEN_NEW_TABLE,
+        hideColumnLabels: true,
+        mobileDrilldownRepeatHeaderStartRow: -1,
+        mobileDrilldownRepeatHeaderEndRow: 'broken',
+      },
+      'strict',
+    ) as unknown as Record<string, unknown>;
+    expect(parsed['mobileDrilldownRepeatHeaderStartRow']).toBe(0);
+    expect(parsed['mobileDrilldownRepeatHeaderEndRow']).toBe(0);
+    expect(
+      resolveMobileDrilldownRepeatHeaderRange({
+        mobileDrilldownRepeatHeaderStartRow: parsed['mobileDrilldownRepeatHeaderStartRow'],
+        mobileDrilldownRepeatHeaderEndRow: parsed['mobileDrilldownRepeatHeaderEndRow'],
+        hideColumnLabels: parsed['hideColumnLabels'],
+      }),
+    ).toEqual({ startRow: 0, endRow: 0 });
+  });
+
+  it('strict 정규화가 손상값과 누락이 섞인 반복 헤더를 0/0으로 만든다', () => {
+    const parsed = normalizeQuestion(
+      {
+        ...GEN_NEW_TABLE,
+        hideColumnLabels: true,
+        mobileDrilldownRepeatHeaderStartRow: -1,
+      },
+      'strict',
+    ) as unknown as Record<string, unknown>;
+    expect(parsed['mobileDrilldownRepeatHeaderStartRow']).toBe(0);
+    expect(parsed['mobileDrilldownRepeatHeaderEndRow']).toBe(0);
+  });
+
+  it('strict 정규화가 진짜 두 필드 누락과 hideColumnLabels=true의 legacy null 의미를 보존한다', () => {
+    const parsed = normalizeQuestion(
+      {
+        ...GEN_NEW_TABLE,
+        hideColumnLabels: true,
+      },
+      'strict',
+    ) as unknown as Record<string, unknown>;
+    expect(parsed).not.toHaveProperty('mobileDrilldownRepeatHeaderStartRow');
+    expect(parsed).not.toHaveProperty('mobileDrilldownRepeatHeaderEndRow');
+    expect(resolveMobileDrilldownRepeatHeaderRange(parsed)).toBeNull();
+  });
+
+  it('strict 정규화가 유효 범위와 명시적 null/null을 그대로 보존한다', () => {
+    const valid = normalizeQuestion(
+      {
+        ...GEN_NEW_TABLE,
+        mobileDrilldownRepeatHeaderStartRow: 2,
+        mobileDrilldownRepeatHeaderEndRow: 3,
+      },
+      'strict',
+    ) as unknown as Record<string, unknown>;
+    expect(valid['mobileDrilldownRepeatHeaderStartRow']).toBe(2);
+    expect(valid['mobileDrilldownRepeatHeaderEndRow']).toBe(3);
+
+    const disabled = normalizeQuestion(
+      {
+        ...GEN_NEW_TABLE,
+        mobileDrilldownRepeatHeaderStartRow: null,
+        mobileDrilldownRepeatHeaderEndRow: null,
+      },
+      'strict',
+    ) as unknown as Record<string, unknown>;
+    expect(disabled['mobileDrilldownRepeatHeaderStartRow']).toBeNull();
+    expect(disabled['mobileDrilldownRepeatHeaderEndRow']).toBeNull();
+  });
+
   it('notice 픽스처에서 테이블/옵션 오염을 소거하고 공지 필드를 보존한다', () => {
     const parsed = normalizeQuestion(GEN_NOTICE, 'strict') as unknown as Record<string, unknown>;
     expect(parsed).not.toHaveProperty('tableColumns');
@@ -290,7 +389,10 @@ describe('normalizeQuestion - strict 모드 (strip 활성화 목적지)', () => 
   });
 
   it('drizzle 행의 null 컬럼을 키 부재로 수렴하고 행 잉여 키를 소거한다', () => {
-    const parsed = normalizeQuestion(GEN_DRIZZLE_ROW, 'strict') as unknown as Record<string, unknown>;
+    const parsed = normalizeQuestion(GEN_DRIZZLE_ROW, 'strict') as unknown as Record<
+      string,
+      unknown
+    >;
     // null 컬럼 → 키 부재 (undefined-세계 수렴) — variant 소유 키라도 null 이면 드랍
     expect(parsed).not.toHaveProperty('description');
     expect(parsed).not.toHaveProperty('groupId');
@@ -318,7 +420,10 @@ describe('normalizeQuestion - strict 모드 (strip 활성화 목적지)', () => 
 
   it('알 수 없는 type 은 거부한다 (preserve 와 의도적으로 다른 거동)', () => {
     expect(() =>
-      normalizeQuestion({ id: 'q-x', type: 'file-upload', title: 't', required: false, order: 1 }, 'strict'),
+      normalizeQuestion(
+        { id: 'q-x', type: 'file-upload', title: 't', required: false, order: 1 },
+        'strict',
+      ),
     ).toThrow();
   });
 });

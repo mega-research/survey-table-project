@@ -2,21 +2,33 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
-import { CheckCircle2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { CheckCircle2 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import type { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
+import { type ClassifiedLeaf, type ClassifiedSection, classifyTable } from '@/utils/classify-table';
 import {
-  classifyTable,
-  type ClassifiedLeaf,
-  type ClassifiedSection,
-} from '@/utils/classify-table';
+  excludeMobileDrilldownRepeatedRows,
+  getMobileDrilldownRepeatedBodyRowIds,
+  includesMobileDrilldownColumnHeader,
+  resolveMobileDrilldownRepeatHeaderRange,
+} from '@/utils/mobile-drilldown-repeat-header';
+import {
+  MOBILE_TABLE_COMPLETION_TYPES,
+  projectMobileOriginalRow,
+} from '@/utils/mobile-original-row';
+import { buildRadioGroupBuckets, resolveRadioGroupProps } from '@/utils/table-radio-groups';
+import { isTableRowCompleted } from '@/utils/table-row-completion';
 
 import { InteractiveCell } from './cells';
+import { MobileDrilldownShell, getSectionIdentity } from './mobile-drilldown-shell';
+import { MobileOriginalRowTable } from './mobile-original-row-table';
 
 interface MobileTableDrilldownProps {
   questionId: string;
+  authoredRows: TableRow[];
   displayRows: TableRow[];
+  authoredColumns: TableColumn[];
   visibleColumns: TableColumn[];
   visibleHeaderGrid?: HeaderCell[][] | null | undefined;
   currentResponse: Record<string, unknown>;
@@ -31,28 +43,64 @@ interface MobileTableDrilldownProps {
   onSelectGroup?: (groupId: string) => void;
   /** 차단형 검증 위반 셀 (빨간 ring 하이라이트) */
   errorCellIds?: Set<string> | undefined;
+  /** 오류 배너 "위치로 이동"용 — 셀 id 목록을 받아 해당 셀이 속한 섹션/리프 상세로
+   *  드릴다운 내비를 전환한다. 어느 섹션에도 없으면 목차로 폴백. */
+  navigateToCellRef?: React.MutableRefObject<
+    ((cellIds: readonly string[]) => void) | null
+  > | undefined;
+  detailMode: 'legacy' | 'original-row';
+  omitLeadingAuthoredColumns: number;
+  mobileDrilldownRepeatHeaderStartRow?: number | null | undefined;
+  mobileDrilldownRepeatHeaderEndRow?: number | null | undefined;
 }
 
 // ── 메인 컴포넌트 ──
 
 export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
   questionId,
+  authoredRows,
   displayRows,
+  authoredColumns,
   visibleColumns,
   visibleHeaderGrid,
+  currentResponse,
+  hideColumnLabels,
   isTestMode,
   value,
   onChange,
   errorCellIds,
+  navigateToCellRef,
+  detailMode,
+  omitLeadingAuthoredColumns,
+  mobileDrilldownRepeatHeaderStartRow,
+  mobileDrilldownRepeatHeaderEndRow,
 }: MobileTableDrilldownProps) {
-  const sections = useMemo(
+  const repeatHeaderRange = useMemo(
+    () =>
+      resolveMobileDrilldownRepeatHeaderRange({
+        mobileDrilldownRepeatHeaderStartRow,
+        mobileDrilldownRepeatHeaderEndRow,
+        hideColumnLabels,
+      }),
+    [hideColumnLabels, mobileDrilldownRepeatHeaderEndRow, mobileDrilldownRepeatHeaderStartRow],
+  );
+  const repeatedBodyRowIds = useMemo(
+    () => getMobileDrilldownRepeatedBodyRowIds(authoredRows, repeatHeaderRange),
+    [authoredRows, repeatHeaderRange],
+  );
+  const navigationRows = useMemo(
+    () => excludeMobileDrilldownRepeatedRows(displayRows, repeatedBodyRowIds),
+    [displayRows, repeatedBodyRowIds],
+  );
+  const includeColumnHeader = includesMobileDrilldownColumnHeader(repeatHeaderRange);
+  const classifiedSections = useMemo(
     () =>
       classifyTable({
         tableColumns: visibleColumns,
-        tableRowsData: displayRows,
+        tableRowsData: navigationRows,
         tableHeaderGrid: visibleHeaderGrid,
       }),
-    [visibleColumns, displayRows, visibleHeaderGrid],
+    [visibleColumns, navigationRows, visibleHeaderGrid],
   );
 
   // cell.id → TableCell (입력 셀 렌더용)
@@ -61,58 +109,73 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
     for (const row of displayRows) for (const cell of row.cells) m.set(cell.id, cell);
     return m;
   }, [displayRows]);
-
-  const [nav, setNav] = useState<{ sec: number | null; leaf: number | null }>({
-    sec: null,
-    leaf: null,
-  });
+  const sections = useMemo(
+    () =>
+      classifiedSections.map((section) => ({
+        ...section,
+        label:
+          section.labelSourceCellId &&
+          cellById.get(section.labelSourceCellId)?.mobileDisplay === 'hidden'
+            ? ''
+            : section.label,
+        leaves: section.leaves.map((leaf) => ({
+          ...leaf,
+          label:
+            leaf.labelSourceCellId &&
+            cellById.get(leaf.labelSourceCellId)?.mobileDisplay === 'hidden'
+              ? ''
+              : leaf.label,
+          subGroup:
+            leaf.subGroupSourceCellId &&
+            cellById.get(leaf.subGroupSourceCellId)?.mobileDisplay === 'hidden'
+              ? ''
+              : leaf.subGroup,
+        })),
+      })),
+    [cellById, classifiedSections],
+  );
 
   // 사용자가 거쳐가며 비워둔 입력 칸(빈 응답으로 확정) 집합.
   // 값이 없어도 이 집합에 들면 진행률·완료 표시에서 "채운 것"으로 카운트한다.
   // 컴포넌트 로컬 상태라 새로고침 시 초기화된다(실제 입력값은 value에 보존).
   const [acknowledged, setAcknowledged] = useState<Set<string>>(new Set());
+  const horizontalScrollRef = useRef(0);
+
+  // 셸 내비게이션 imperative 통로 + 셀 id → 섹션/리프 역매핑.
+  // 리프 상세는 original-row 는 항상, legacy 는 matrix 섹션만 존재한다
+  // (셸의 leafNavigation 프롭과 동일 규칙) — 그 외에는 섹션 화면으로 이동.
+  const shellNavRef = useRef<
+    ((target: { sectionId: string | null; leafId: string | null }) => void) | null
+  >(null);
+  useEffect(() => {
+    if (!navigateToCellRef) return;
+    navigateToCellRef.current = (cellIds) => {
+      for (const cellId of cellIds) {
+        for (const section of sections) {
+          for (const leaf of section.leaves) {
+            if (!leaf.inputCellIds.includes(cellId)) continue;
+            const useLeafDetail = detailMode === 'original-row' || section.kind === 'matrix';
+            shellNavRef.current?.({
+              sectionId: getSectionIdentity(section),
+              leafId: useLeafDetail ? leaf.rowId : null,
+            });
+            return;
+          }
+        }
+      }
+      // 표시 조건 등으로 셀이 어느 섹션에도 없으면 목차로
+      shellNavRef.current?.({ sectionId: null, leafId: null });
+    };
+    return () => {
+      navigateToCellRef.current = null;
+    };
+  }, [navigateToCellRef, sections, detailMode]);
   const ackCells = (cellIds: string[]) =>
     setAcknowledged((prev) => {
       const next = new Set(prev);
       for (const id of cellIds) next.add(id);
       return next;
     });
-
-  // 리프가 1개뿐인 matrix 섹션은 "리프 목록" 군더더기 단계를 건너뛰고 바로 입력 폼으로 진입한다.
-  // (scalar/list 섹션은 원래 목록 없이 바로 폼이라 leaf:null 그대로 둔다.)
-  const enterSection = (si: number) => {
-    const sec = sections[si];
-    if (!sec) return;
-    const direct = sec.kind === 'matrix' && sec.leaves.length === 1;
-    setNav({ sec: si, leaf: direct ? 0 : null });
-  };
-
-  // 섹션/리프 이동 시(다음 섹션·목차로·뒤로·진입) 본문 컨테이너 상단으로 올린다.
-  // window 최상단(설문 헤더)까지 올리지 않고, 드릴다운 root 만 화면 상단에 맞춘다.
-  const rootRef = useRef<HTMLDivElement>(null);
-  const isFirstNav = useRef(true);
-  useEffect(() => {
-    // 최초 마운트(섹션 진입 직후)에는 스크롤하지 않는다 — step 전환 시 이미 상단 정렬됨.
-    if (isFirstNav.current) {
-      isFirstNav.current = false;
-      return;
-    }
-    rootRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, [nav.sec, nav.leaf]);
-
-  // 들어갔던 섹션을 빠져나오는 순간(다음 섹션·목차로·다른 섹션 진입) 그 섹션의 모든
-  // 입력 칸을 거쳐간 것으로 확정한다. 나가는 경로와 무관하게 nav.sec 변화 한 곳에서 처리하므로
-  // "다음 섹션" 버튼이 없는 마지막 섹션도 목차로 빠져나올 때 100%까지 채워진다.
-  // 단, TOC→섹션 첫 진입(이전 sec이 null)과 뒤로 가기는 확정하지 않는다(앞으로 나아간 게 아님).
-  const prevSecRef = useRef<number | null>(null);
-  useEffect(() => {
-    const prev = prevSecRef.current;
-    if (prev !== null && prev !== nav.sec && sections[prev]) {
-      ackCells(sections[prev].leaves.flatMap((l) => l.inputCellIds));
-    }
-    prevSecRef.current = nav.sec;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nav.sec, sections]);
 
   // ── 응답 채움 계산 ──
   // emptyDefault(숫자 셀 첫 진입 시 자동 채워지는 초기값)와 동일한 값은 사용자가
@@ -128,19 +191,23 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
   };
   // 실제 입력했거나(hasValue) 거쳐가며 비워둔(acknowledged) 칸을 "채운 것"으로 본다.
   const counted = (cellId: string) => hasValue(cellId) || acknowledged.has(cellId);
-  const leafFilled = (l: ClassifiedLeaf) => l.inputCellIds.filter(counted).length;
-  const leafDone = (l: ClassifiedLeaf) =>
-    l.inputCellIds.length > 0 && leafFilled(l) === l.inputCellIds.length;
-  const secFilled = (s: ClassifiedSection) => s.leaves.reduce((a, l) => a + leafFilled(l), 0);
-  const totalInputs = sections.reduce((a, s) => a + s.totalInputs, 0);
-  const totalFilled = sections.reduce((a, s) => a + secFilled(s), 0);
-  const pct = totalInputs ? Math.round((totalFilled / totalInputs) * 100) : 0;
+  const leafFilled = (leaf: ClassifiedLeaf) => leaf.inputCellIds.filter(counted).length;
+  const leafDone = (leaf: ClassifiedLeaf) =>
+    leaf.inputCellIds.length > 0 && leafFilled(leaf) === leaf.inputCellIds.length;
+  const secFilled = (section: ClassifiedSection) =>
+    section.leaves.reduce((total, leaf) => total + leafFilled(leaf), 0);
+  const totalInputs = sections.reduce((total, section) => total + section.totalInputs, 0);
+  const totalFilled = sections.reduce((total, section) => total + secFilled(section), 0);
 
   const renderCell = (cellId: string) => {
     const cell = cellById.get(cellId);
     if (!cell) return null;
     return (
-      <div className={cn(errorCellIds?.has(cellId) && 'rounded-lg ring-2 ring-red-300')}>
+      // data-cell-id: 오류 배너 "위치로 이동"(scrollToCell)의 스크롤 타깃
+      <div
+        data-cell-id={cellId}
+        className={cn(errorCellIds?.has(cellId) && 'rounded-lg ring-2 ring-red-300')}
+      >
         <InteractiveCell
           cell={cell}
           questionId={questionId}
@@ -152,327 +219,213 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
     );
   };
 
-  const secSubText = (s: ClassifiedSection) =>
-    s.kind === 'matrix'
-      ? `세부 ${s.leaves.length}개 · 입력 ${s.totalInputs}칸`
-      : s.kind === 'list'
-        ? `항목 ${s.leaves.length}개`
-        : `입력 ${s.leaves.length}개`;
-
-  // ── breadcrumb ──
-  // 컴포넌트(<Crumb/>)가 아니라 렌더 함수로 호출한다. JSX 엘리먼트로 쓰면 부모 리렌더(셀 입력 등)
-  // 마다 함수 정체성이 새로 생겨 React가 서브트리를 remount 한다 — 직접 호출은 부모에 인라인된다.
-  const renderCrumb = ({ label, onBack }: { label: string; onBack: () => void }) => (
-    <div className="mb-3 flex items-center gap-2">
-      <button
-        type="button"
-        onClick={onBack}
-        className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-gray-100 px-3 py-2 text-sm font-semibold text-gray-600 active:bg-gray-200"
-      >
-        <ChevronLeft className="h-4 w-4" />
-        뒤로
-      </button>
-      <span className="min-w-0 truncate text-sm font-semibold text-gray-900">{label}</span>
+  const renderScalarOrListSection = (section: ClassifiedSection) => (
+    <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+      <div className="border-b bg-gray-50/80 px-4 py-3 text-sm font-semibold text-gray-700">
+        {section.label || '입력'}
+      </div>
+      <div className="divide-y divide-gray-100 px-3 py-1">
+        {section.leaves.map((leaf) => {
+          const done = leafDone(leaf);
+          return (
+            <div key={leaf.rowId} className="py-3">
+              <div className="mb-1.5 flex items-center gap-1.5">
+                <span
+                  className={cn('text-sm font-medium', done ? 'text-green-600' : 'text-gray-900')}
+                >
+                  {leaf.label}
+                </span>
+                {done && <CheckCircle2 className="h-4 w-4 shrink-0 text-green-500" />}
+              </div>
+              {leaf.inputCellIds[0] != null && renderCell(leaf.inputCellIds[0])}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 
-  // ── 진행률 바 (+ 섹션 진입 시 목차로 / 다음 섹션 네비) ──
-  // Crumb 과 동일 이유로 컴포넌트가 아닌 렌더 함수로 호출한다(remount 회피).
-  const renderProgressBar = () => {
-    const sec = nav.sec;
-    return (
-      <div className="mt-4">
-        {sec !== null && nav.leaf === null && (
-          <div className="mb-3 flex gap-2.5">
-            <button
-              type="button"
-              onClick={() => setNav({ sec: null, leaf: null })}
-              className="flex flex-1 items-center justify-center gap-1 rounded-xl border border-gray-200 bg-white py-3 text-sm font-semibold text-gray-600 active:bg-gray-50"
-            >
-              <ChevronLeft className="h-4 w-4" />
-              목차로
-            </button>
-            {sec < sections.length - 1 && (
-              <button
-                type="button"
-                onClick={() => enterSection(sec + 1)}
-                className="flex flex-1 items-center justify-center gap-1 rounded-xl border border-blue-200 bg-blue-50 py-3 text-sm font-semibold text-blue-600 active:bg-blue-100"
-              >
-                다음 섹션
-                <ChevronRight className="h-4 w-4" />
-              </button>
-            )}
-          </div>
-        )}
-        <div className="h-1.5 overflow-hidden rounded-full bg-gray-100">
-          <div
-            className="h-full rounded-full bg-blue-500 transition-all"
-            style={{ width: `${pct}%` }}
-          />
-        </div>
-        <div className="mt-1.5 flex justify-between text-xs text-gray-500">
-          <span>
-            전체 <b className="font-semibold text-gray-700">{totalFilled}</b> / {totalInputs}칸
-          </span>
-          <span className="font-semibold text-gray-700">{pct}%</span>
-        </div>
+  const renderMatrixLeafDetail = (leaf: ClassifiedLeaf, section: ClassifiedSection) => (
+    <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+      <div className="border-b bg-gray-50/80 px-4 py-3 text-sm font-semibold text-gray-700">
+        {leaf.label}
       </div>
+      <div className="space-y-4 p-4">
+        {section.colGroups.map((group, groupIndex) => (
+          <div key={groupIndex}>
+            {group.label && (
+              <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-blue-600">
+                <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+                {group.label}
+              </div>
+            )}
+            <div className="space-y-3">
+              {group.cols.map((column) => {
+                // 실제 열 인덱스(column.col)로 이 리프의 입력 셀을 찾는다. 비대칭 matrix 에서
+                // 행마다 채운 열이 달라도 셀이 올바른 열 라벨 아래 렌더된다.
+                const cellId = leaf.cellByCol[column.col];
+                if (cellId == null) return null;
+                const cell = cellById.get(cellId);
+                if (!cell) return null;
+                // 일반 테이블 카드(mobile-row-card)와 동일한 라벨 위계:
+                // 파란 점 불릿 + text-sm gray-900. 라벨이 주, 문항(cell.content)이 보조.
+                const label = cell.exportLabel?.trim() || column.label || '';
+                return (
+                  <div key={column.col} className="space-y-1">
+                    {label && (
+                      <div className="flex items-start gap-1.5">
+                        <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
+                        <span className="line-clamp-2 text-sm font-medium text-gray-900">
+                          {label}
+                        </span>
+                      </div>
+                    )}
+                    {renderCell(cellId)}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  const detailRowById = useMemo(
+    () => new Map(displayRows.map((row) => [row.id, row])),
+    [displayRows],
+  );
+  const navigationRowById = useMemo(
+    () => new Map(navigationRows.map((row) => [row.id, row])),
+    [navigationRows],
+  );
+  const answerableRowIds = useMemo(
+    () => new Set(sections.flatMap((section) => section.leaves.map((leaf) => leaf.rowId))),
+    [sections],
+  );
+  const answerableRows = navigationRows.filter((row) => answerableRowIds.has(row.id));
+  const completedRows = answerableRows.filter((row) =>
+    isTableRowCompleted(row, currentResponse, MOBILE_TABLE_COMPLETION_TYPES),
+  ).length;
+
+  const renderOriginalRowDetail = (leaf: ClassifiedLeaf) => {
+    const projection = projectMobileOriginalRow({
+      authoredColumns,
+      visibleColumns,
+      visibleHeaderGrid: visibleHeaderGrid ?? undefined,
+      displayRows,
+      selectedRowId: leaf.rowId,
+      omitLeadingAuthoredColumns,
+      repeatedRowIds: repeatedBodyRowIds,
+      includeColumnHeader,
+    });
+    if (!projection?.hasInteractiveCells) {
+      return (
+        <div className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
+          {leaf.inputCellIds.map((cellId) => (
+            <div key={cellId}>{renderCell(cellId)}</div>
+          ))}
+        </div>
+      );
+    }
+
+    // 투영 전의 source 행별로 그룹을 만든다. 일반 retained cell은 선택 행 bucket을,
+    // rowspan materialize cell은 anchor source 행 bucket을 써야 그 행의 sibling을 비운다.
+    // 두 경우 모두 제외된 선행 radio까지 sibling clear 대상에 남는다.
+    const radioBucketsByRowId = new Map<string, ReturnType<typeof buildRadioGroupBuckets>>();
+    for (const sourceRowId of new Set(projection.sourceRowIdByCellId.values())) {
+      const sourceRow = detailRowById.get(sourceRowId);
+      if (sourceRow) radioBucketsByRowId.set(sourceRowId, buildRadioGroupBuckets(sourceRow));
+    }
+    const selectedRowBuckets = buildRadioGroupBuckets(
+      detailRowById.get(leaf.rowId) ?? projection.row,
+    );
+    if (!radioBucketsByRowId.has(leaf.rowId)) {
+      radioBucketsByRowId.set(leaf.rowId, selectedRowBuckets);
+    }
+    return (
+      <MobileOriginalRowTable
+        columns={projection.columns}
+        rows={[...projection.repeatedRows, projection.row]}
+        interactiveRowId={projection.row.id}
+        headerGrid={projection.headerGrid}
+        hideColumnLabels={!projection.showColumnHeader}
+        scrollLeftRef={horizontalScrollRef}
+        errorCellIds={errorCellIds}
+        renderCell={(cell) => {
+          const sourceRowId = projection.sourceRowIdByCellId.get(cell.id) ?? leaf.rowId;
+          const radioBuckets = radioBucketsByRowId.get(sourceRowId) ?? selectedRowBuckets;
+          return (
+            <InteractiveCell
+              cell={cell}
+              questionId={questionId}
+              isTestMode={isTestMode}
+              value={value}
+              onChange={onChange}
+              {...resolveRadioGroupProps(cell, sourceRowId, radioBuckets)}
+            />
+          );
+        }}
+      />
     );
   };
 
-  // ── 루트: 섹션 목차 ──
-  if (nav.sec === null) {
+  if (detailMode === 'original-row') {
     return (
-      <div ref={rootRef}>
-        <p className="mb-3 px-1 text-sm font-medium text-gray-500">작성할 항목을 선택하세요</p>
-        <div className="space-y-2.5">
-          {sections.map((s, si) => {
-            const f = secFilled(s);
-            const full = s.totalInputs > 0 && f === s.totalInputs;
-            return (
-              <button
-                key={si}
-                type="button"
-                onClick={() => enterSection(si)}
-                className="flex w-full items-center gap-3 rounded-xl border border-gray-200 bg-white p-4 text-left active:bg-gray-50"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-semibold text-gray-900">
-                    {s.label || '항목'}
-                  </div>
-                  <div className="mt-0.5 text-xs text-gray-400">{secSubText(s)}</div>
-                </div>
-                <span
-                  className={cn(
-                    'shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold',
-                    full ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-500',
-                  )}
-                >
-                  {f}/{s.totalInputs}
-                </span>
-                <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" />
-              </button>
-            );
-          })}
-        </div>
-        {renderProgressBar()}
-      </div>
+      <MobileDrilldownShell
+        sections={sections}
+        leafNavigation="always"
+        overallStatus={{ completed: completedRows, total: answerableRows.length, unit: '개 항목' }}
+        getSectionStatus={(section) => ({
+          completed: section.leaves.filter((leaf) => {
+            const row = navigationRowById.get(leaf.rowId);
+            return row
+              ? isTableRowCompleted(row, currentResponse, MOBILE_TABLE_COMPLETION_TYPES)
+              : false;
+          }).length,
+          total: section.leaves.length,
+          unit: '개 항목',
+        })}
+        getLeafStatus={(leaf) => {
+          const row = navigationRowById.get(leaf.rowId);
+          return {
+            completed:
+              row && isTableRowCompleted(row, currentResponse, MOBILE_TABLE_COMPLETION_TYPES)
+                ? 1
+                : 0,
+            total: 1,
+            unit: '개 항목',
+          };
+        }}
+        renderLeafDetail={renderOriginalRowDetail}
+        onReturnToRoot={() => {
+          horizontalScrollRef.current = 0;
+        }}
+        navigateRef={shellNavRef}
+      />
     );
   }
 
-  const s = sections[nav.sec];
-  const backToRoot = () => setNav({ sec: null, leaf: null });
-
-  if (!s) return null;
-
-  // ── scalar / list 섹션 ──
-  if (s.kind === 'scalar' || s.kind === 'list') {
-    return (
-      <div ref={rootRef}>
-        {renderCrumb({ label: s.label || '항목', onBack: backToRoot })}
-        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
-          <div className="border-b bg-gray-50/80 px-4 py-3 text-sm font-semibold text-gray-700">
-            {s.label || '입력'}
-          </div>
-          <div className="divide-y divide-gray-100 px-3 py-1">
-            {s.leaves.map((l) => {
-              const done = leafDone(l);
-              return (
-                <div key={l.rowId} className="py-3">
-                  <div className="mb-1.5 flex items-center gap-1.5">
-                    <span
-                      className={cn(
-                        'text-sm font-medium',
-                        done ? 'text-green-600' : 'text-gray-900',
-                      )}
-                    >
-                      {l.label}
-                    </span>
-                    {done && <CheckCircle2 className="h-4 w-4 shrink-0 text-green-500" />}
-                  </div>
-                  {l.inputCellIds[0] != null && renderCell(l.inputCellIds[0])}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-        {renderProgressBar()}
-      </div>
-    );
-  }
-
-  // ── matrix 섹션 ──
-  if (nav.leaf === null) {
-    // 리프 목록 (하위 그룹 구분선)
-    let lastSub: string | null = null;
-    return (
-      <div ref={rootRef}>
-        {renderCrumb({ label: s.label || '항목', onBack: backToRoot })}
-        <div className="space-y-2.5">
-          {s.leaves.map((l, li) => {
-            const showDivider = l.subGroup !== lastSub && !!l.subGroup;
-            if (l.subGroup !== lastSub) lastSub = l.subGroup;
-            const f = leafFilled(l);
-            const full = leafDone(l);
-            return (
-              <React.Fragment key={l.rowId}>
-                {showDivider && (
-                  <div className="px-1 pt-1 text-xs font-semibold text-gray-500">{l.subGroup}</div>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setNav({ sec: nav.sec, leaf: li })}
-                  className="flex w-full items-center gap-3 rounded-xl border border-gray-200 bg-white p-4 text-left active:bg-gray-50"
-                >
-                  <span className="min-w-0 flex-1 text-sm font-semibold text-gray-900">
-                    {l.label}
-                  </span>
-                  <span
-                    className={cn(
-                      'shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold',
-                      full ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-500',
-                    )}
-                  >
-                    {f}/{l.inputCellIds.length}
-                  </span>
-                  <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" />
-                </button>
-              </React.Fragment>
-            );
-          })}
-        </div>
-        {renderProgressBar()}
-      </div>
-    );
-  }
-
-  // matrix 리프 폼 (열 그룹별 입력)
-  const leaf = s.leaves[nav.leaf];
-  if (!leaf) return null;
-  // 리프 1개 섹션은 enterSection 이 목차→폼으로 직행시킨 경우라, '뒤로'도 리프 목록이 아닌
-  // 목차로 보낸다. enterSection 의 직행 판정과 동일 기준(matrix·리프 1개)으로 맞춘다.
-  // (이 경로는 scalar/list 가 위에서 early-return 되어 항상 matrix)
-  const isSingleLeaf = s.leaves.length === 1;
-  const backToLeaves = () => (isSingleLeaf ? backToRoot() : setNav({ sec: nav.sec, leaf: null }));
-  // 하단 네비: disabled 로 죽이지 않고 위치별로 라벨·이동을 바꿔 항상 빠져나갈 길을 둔다.
-  const leafIdx = nav.leaf;
-  const secIdx = nav.sec;
-  const isFirstLeaf = leafIdx <= 0;
-  const isLastLeaf = leafIdx >= s.leaves.length - 1;
-  const hasNextSection = secIdx < sections.length - 1;
-  // 리프 1개 + 마지막 섹션: 좌·우 모두 '목차로'가 되어 중복 → 단일 버튼으로 합친다.
-  const onlyRootExit = isFirstLeaf && isLastLeaf && !hasNextSection;
-  const navGray =
-    'flex flex-1 items-center justify-center gap-1 rounded-xl border border-gray-200 bg-white py-3 text-sm font-semibold text-gray-600 active:bg-gray-50';
-  const navBlue =
-    'flex flex-1 items-center justify-center gap-1 rounded-xl border border-blue-200 bg-blue-50 py-3 text-sm font-semibold text-blue-600 active:bg-blue-100';
   return (
-    <div ref={rootRef}>
-      {renderCrumb({
-        label: isSingleLeaf
-          ? s.label || '항목'
-          : leaf.subGroup && leaf.subGroup !== leaf.label
-            ? `${leaf.subGroup} › ${leaf.label}`
-            : leaf.label,
-        onBack: backToLeaves,
+    <MobileDrilldownShell
+      sections={sections}
+      leafNavigation="matrix-only"
+      overallStatus={{ completed: totalFilled, total: totalInputs, unit: '칸' }}
+      getSectionStatus={(section) => ({
+        completed: secFilled(section),
+        total: section.totalInputs,
+        unit: '칸',
       })}
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
-        <div className="border-b bg-gray-50/80 px-4 py-3 text-sm font-semibold text-gray-700">
-          {leaf.label}
-        </div>
-        <div className="space-y-4 p-4">
-          {s.colGroups.map((g, gi) => (
-            <div key={gi}>
-              {g.label && (
-                <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-blue-600">
-                  <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
-                  {g.label}
-                </div>
-              )}
-              <div className="space-y-3">
-                {g.cols.map((c) => {
-                  // 실제 열 인덱스(c.col)로 이 리프의 입력 셀을 찾는다. 비대칭 matrix 에서
-                  // 행마다 채운 열이 달라도 셀이 올바른 열 라벨 아래 렌더된다.
-                  const cellId = leaf.cellByCol[c.col];
-                  if (cellId == null) return null;
-                  const cell = cellById.get(cellId);
-                  if (!cell) return null;
-                  // 일반 테이블 카드(mobile-row-card)와 동일한 라벨 위계:
-                  // 파란 점 불릿 + text-sm gray-900. 라벨이 주, 문항(cell.content)이 보조.
-                  const label = cell.exportLabel?.trim() || c.label || '';
-                  return (
-                    <div key={c.col} className="space-y-1">
-                      {label && (
-                        <div className="flex items-start gap-1.5">
-                          <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
-                          <span className="line-clamp-2 text-sm font-medium text-gray-900">
-                            {label}
-                          </span>
-                        </div>
-                      )}
-                      {renderCell(cellId)}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-      {onlyRootExit ? (
-        <div className="mt-3">
-          <button type="button" onClick={backToRoot} className={cn(navGray, 'w-full')}>
-            <ChevronLeft className="h-4 w-4" />
-            목차로
-          </button>
-        </div>
-      ) : (
-        <div className="mt-3 flex gap-2.5">
-          {isFirstLeaf ? (
-            <button type="button" onClick={backToRoot} className={navGray}>
-              <ChevronLeft className="h-4 w-4" />
-              목차로
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setNav({ sec: nav.sec, leaf: leafIdx - 1 })}
-              className={navGray}
-            >
-              <ChevronLeft className="h-4 w-4" />
-              이전 항목
-            </button>
-          )}
-          {!isLastLeaf ? (
-            <button
-              type="button"
-              onClick={() => {
-                ackCells(leaf.inputCellIds);
-                setNav({ sec: nav.sec, leaf: leafIdx + 1 });
-              }}
-              className={navBlue}
-            >
-              다음 항목
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          ) : hasNextSection ? (
-            <button
-              type="button"
-              onClick={() => enterSection(secIdx + 1)}
-              className={navBlue}
-            >
-              다음 섹션
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          ) : (
-            <button type="button" onClick={backToRoot} className={navBlue}>
-              목차로
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          )}
-        </div>
-      )}
-      {renderProgressBar()}
-    </div>
+      getLeafStatus={(leaf) => ({
+        completed: leafFilled(leaf),
+        total: leaf.inputCellIds.length,
+        unit: '칸',
+      })}
+      renderLegacySection={renderScalarOrListSection}
+      renderLeafDetail={renderMatrixLeafDetail}
+      onLeaveLeafForward={(leaf) => ackCells(leaf.inputCellIds)}
+      onLeaveSection={(section) => ackCells(section.leaves.flatMap((leaf) => leaf.inputCellIds))}
+      navigateRef={shellNavRef}
+    />
   );
 });

@@ -2,7 +2,7 @@
  * 서버 사이드 이미지/파일 삭제 유틸리티
  * 서버 액션에서 R2에 직접 접근하여 이미지 및 파일을 삭제합니다.
  */
-import { CopyObjectCommand, DeleteObjectCommand, GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { CopyObjectCommand, DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import * as Sentry from '@sentry/nextjs';
 
 // Cloudflare R2는 S3 호환 API를 사용합니다
@@ -189,4 +189,21 @@ export async function downloadR2Object(key: string): Promise<Buffer> {
   // AWS SDK v3 의 transformToByteArray() — Node 환경에서 Body 가 SdkStream<Readable>.
   const bytes = await resp.Body.transformToByteArray();
   return Buffer.from(bytes);
+}
+
+/**
+ * Buffer 를 R2 object 로 업로드. 동일 key 재업로드는 overwrite (idempotent).
+ * 메일 이미지 클릭 영역 밴드 슬라이스 업로드에 사용.
+ * @throws 환경 변수 미설정 또는 업로드 실패 시 throw — caller 가 일괄 abort.
+ */
+export async function uploadR2Object(
+  key: string,
+  body: Buffer,
+  contentType: string,
+): Promise<void> {
+  const bucketName = process.env['CLOUDFLARE_R2_BUCKET'];
+  if (!bucketName) throw new Error('Cloudflare R2 환경 변수가 설정되지 않았습니다.');
+  await r2Client.send(
+    new PutObjectCommand({ Bucket: bucketName, Key: key, Body: body, ContentType: contentType }),
+  );
 }

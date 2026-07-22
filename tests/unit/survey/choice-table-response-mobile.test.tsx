@@ -1,8 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { Question } from '@/types/survey';
 import { ChoiceTableResponse } from '@/components/survey-response/choice-table-response';
+import type { Question } from '@/types/survey';
 
 // 모바일 뷰 강제
 vi.mock('@/hooks/use-media-query', () => ({
@@ -17,6 +17,7 @@ function question(): Question {
     title: '보유 기술',
     required: false,
     order: 0,
+    mobileTableDisplayMode: 'auto',
     tableColumns: [
       { id: 'c0', label: '기술', width: 100 },
       { id: 'c1', label: '정의', width: 200 },

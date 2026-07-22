@@ -26,8 +26,11 @@ const main: React.CSSProperties = {
   fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
 };
 
+// 900px: 텍스트가 구워진 큰 이미지(1534px 등)의 데스크톱 축소율을 완화하기 위한 값.
+// 메일 관례(600~700px)보다 넓지만 Gmail 웹 표시 영역(~900px+)에는 안전.
+// 모바일은 이미지가 화면 폭으로 줄어들어 이 값과 무관.
 const container: React.CSSProperties = {
-  maxWidth: '700px',
+  maxWidth: '900px',
   margin: '0 auto',
   padding: '24px 16px',
   backgroundColor: '#ffffff',

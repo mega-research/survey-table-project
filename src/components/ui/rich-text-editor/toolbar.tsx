@@ -22,6 +22,7 @@ import {
 import { findTableAtSelection } from '@/lib/tiptap/find-table';
 
 import { FileAttachmentContextToolbar } from './file-attachment-context-toolbar';
+import { FONT_FAMILIES, FONT_GROUPS } from './font-family-mark';
 import { ImageContextToolbar } from './image-context-toolbar';
 import { PopoverVariableMenu } from './popover-variable-menu';
 import { TableContextToolbar } from './table-context-toolbar';
@@ -38,9 +39,10 @@ interface Props {
   onPickLink: () => void;
   onPickFile?: () => void;
   onReplaceFile?: () => void;
+  enableImageLinkArea?: boolean;
 }
 
-export function Toolbar({ editor, variableCatalog, onPickImage, onPickLink, onPickFile, onReplaceFile }: Props) {
+export function Toolbar({ editor, variableCatalog, onPickImage, onPickLink, onPickFile, onReplaceFile, enableImageLinkArea }: Props) {
   const s = useEditorState({
     editor,
     selector: ({ editor }) => {
@@ -51,6 +53,7 @@ export function Toolbar({ editor, variableCatalog, onPickImage, onPickLink, onPi
           alignLeft: true, alignCenter: false, alignRight: false, alignJustify: false,
           canUndo: false, canRedo: false,
           imageActive: false, tableActive: false, fileAttachmentActive: false,
+          fontFamily: '',
         };
       }
       return {
@@ -70,6 +73,7 @@ export function Toolbar({ editor, variableCatalog, onPickImage, onPickLink, onPi
         imageActive: editor.isActive('imageResize'),
         tableActive: findTableAtSelection(editor.state) !== null,
         fileAttachmentActive: editor.isActive('fileAttachment'),
+        fontFamily: (editor.getAttributes('fontFamily')['family'] as string | undefined) ?? '',
       };
     },
   });
@@ -88,6 +92,28 @@ export function Toolbar({ editor, variableCatalog, onPickImage, onPickLink, onPi
       <ToolBtn active={s.strike} onClick={() => editor.chain().focus().toggleStrike().run()} title="취소선">
         <Strikethrough className="h-4 w-4" />
       </ToolBtn>
+
+      <select
+        className="h-8 max-w-[110px] rounded-md border border-gray-200 bg-white px-1.5 text-xs"
+        value={s.fontFamily}
+        onChange={(e) => {
+          const v = e.target.value;
+          if (v) editor.chain().focus().setFontFamily(v).run();
+          else editor.chain().focus().unsetFontFamily().run();
+        }}
+        aria-label="폰트"
+      >
+        <option value="">기본 폰트</option>
+        {FONT_GROUPS.map((group) => (
+          <optgroup key={group} label={group}>
+            {FONT_FAMILIES.filter((f) => f.group === group).map((f) => (
+              <option key={f.label} value={f.value} style={{ fontFamily: f.value }}>
+                {f.label}
+              </option>
+            ))}
+          </optgroup>
+        ))}
+      </select>
 
       <select
         className="h-8 rounded-md border border-gray-200 bg-white px-1.5 text-xs"
@@ -171,7 +197,9 @@ export function Toolbar({ editor, variableCatalog, onPickImage, onPickLink, onPi
         </ToolBtn>
       </div>
 
-      {s.imageActive && <ImageContextToolbar editor={editor} />}
+      {s.imageActive && (
+        <ImageContextToolbar editor={editor} enableImageLinkArea={enableImageLinkArea ?? false} />
+      )}
       {s.tableActive && <TableContextToolbar editor={editor} />}
       {s.fileAttachmentActive && onReplaceFile && (
         <FileAttachmentContextToolbar editor={editor} onReplace={onReplaceFile} />

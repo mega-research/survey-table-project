@@ -1,11 +1,17 @@
 'use client';
 
-import { useEditorState, type Editor } from '@tiptap/react';
+import { useState } from 'react';
 
+import { useEditorState, type Editor } from '@tiptap/react';
+import { MousePointerClick } from 'lucide-react';
+
+import { ImageLinkAreaModal } from './image-link-area-modal';
 import { ToolBtn } from './toolbar-primitives';
 
 interface Props {
   editor: Editor;
+  /** 클릭 영역(이미지맵) 버튼 노출 — 메일 템플릿 전용 */
+  enableImageLinkArea: boolean;
 }
 
 const SIZES = [25, 50, 75, 100] as const;
@@ -32,12 +38,13 @@ function readWidthPct(wrapperStyle: string, containerStyle: string): number | nu
   return tryMatch(wrapperStyle) ?? tryMatch(containerStyle);
 }
 
-export function ImageContextToolbar({ editor }: Props) {
+export function ImageContextToolbar({ editor, enableImageLinkArea }: Props) {
+  const [linkAreaOpen, setLinkAreaOpen] = useState(false);
   const s = useEditorState({
     editor,
     selector: ({ editor }) => {
       if (!editor) {
-        return { active: false, widthPct: null as number | null };
+        return { active: false, widthPct: null as number | null, hasLinkArea: false };
       }
       const attrs = editor.getAttributes(IMAGE_NODE);
       const wrapperStyle = (attrs['wrapperStyle'] ?? '') as string;
@@ -45,6 +52,7 @@ export function ImageContextToolbar({ editor }: Props) {
       return {
         active: editor.isActive(IMAGE_NODE),
         widthPct: readWidthPct(wrapperStyle, containerStyle),
+        hasLinkArea: attrs['linkRect'] != null,
       };
     },
   });
@@ -82,6 +90,21 @@ export function ImageContextToolbar({ editor }: Props) {
           <span className="px-1 text-xs">{pct}%</span>
         </ToolBtn>
       ))}
+      {enableImageLinkArea && (
+        <>
+          <span className="mx-1 h-4 w-px bg-gray-200" />
+          <ToolBtn
+            active={s.hasLinkArea}
+            onClick={() => setLinkAreaOpen(true)}
+            title="클릭 영역 지정 - 설문 참여 링크"
+          >
+            <MousePointerClick className="h-4 w-4" />
+          </ToolBtn>
+        </>
+      )}
+      {linkAreaOpen && (
+        <ImageLinkAreaModal editor={editor} onClose={() => setLinkAreaOpen(false)} />
+      )}
     </div>
   );
 }

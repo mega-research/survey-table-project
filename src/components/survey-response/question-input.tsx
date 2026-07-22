@@ -6,23 +6,30 @@ import { InteractiveTableResponse } from '@/components/survey-builder/interactiv
 import { NoticeRenderer } from '@/components/survey-builder/notice-renderer';
 import { UserDefinedMultiLevelSelect } from '@/components/survey-builder/user-defined-multi-level-select';
 import { Input } from '@/components/ui/input';
+import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
+import { useMobileView } from '@/hooks/use-media-query';
 import { useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import type { NumericIssue } from '@/lib/survey/numeric-validation';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { Question, QuestionOption } from '@/types/survey';
+import { isChoiceTableSource } from '@/utils/choice-source';
 import {
   applyMobileOptionsGridOverride,
   computeMobileOptionsColumnsByLabels,
 } from '@/utils/mobile-card-options';
-import { isChoiceTableSource } from '@/utils/choice-source';
 import { getOptionsLayout } from '@/utils/options-layout';
-
-import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
-import { useMobileView } from '@/hooks/use-media-query';
 
 import { ChoiceTableResponse } from './choice-table-response';
 import { OptionTextInput } from './option-text-input';
 import { RankingQuestion } from './ranking-question';
+
+/**
+ * 라디오·체크박스 옵션 목록의 좌우 인셋 — 질문 제목보다 옵션 블록을 안쪽으로 들여쓴다.
+ * 세로 여백은 건드리지 않는다(컨트롤의 mt-1 첫 줄 정렬 유지).
+ * 옵션 컨테이너 자체가 아니라 바깥을 감싸는 이유: getOptionsLayout 의 정렬 클래스
+ * (mx-auto / ml-auto / pr-5)와 padding·margin 이 충돌하지 않게 하기 위함.
+ */
+const OPTIONS_INSET_X = 'px-1';
 
 interface QuestionInputProps {
   question: Question;
@@ -71,7 +78,10 @@ export function QuestionInput({
   const attrs = useContactAttrs();
 
   // choice_opt 테이블 소스 라디오/체크박스는 hooks 진입 전에 디스패처에서 분기
-  if ((question.type === 'radio' || question.type === 'checkbox') && isChoiceTableSource(question)) {
+  if (
+    (question.type === 'radio' || question.type === 'checkbox') &&
+    isChoiceTableSource(question)
+  ) {
     return (
       <ChoiceTableResponse
         question={question}
@@ -83,13 +93,16 @@ export function QuestionInput({
 
   switch (question.type) {
     case 'notice': {
-      const noticeVal = value && typeof value === 'object' && 'agreed' in (value as Record<string, unknown>)
-        ? (value as { agreed: boolean; agreedAt?: string })
-        : { agreed: typeof value === 'boolean' ? value : false };
+      const noticeVal =
+        value && typeof value === 'object' && 'agreed' in (value as Record<string, unknown>)
+          ? (value as { agreed: boolean; agreedAt?: string })
+          : { agreed: typeof value === 'boolean' ? value : false };
       return (
         <NoticeRenderer
           content={substituteTokens(question.noticeContent || '', attrs)}
-          {...(question.requiresAcknowledgment !== undefined ? { requiresAcknowledgment: question.requiresAcknowledgment } : {})}
+          {...(question.requiresAcknowledgment !== undefined
+            ? { requiresAcknowledgment: question.requiresAcknowledgment }
+            : {})}
           value={noticeVal.agreed}
           onChange={(v) =>
             onChange(v ? { agreed: true, agreedAt: new Date().toISOString() } : { agreed: false })
@@ -100,7 +113,9 @@ export function QuestionInput({
     }
 
     case 'text':
-      return <TextResponseInput question={question} value={value} onChange={onChange} attrs={attrs} />;
+      return (
+        <TextResponseInput question={question} value={value} onChange={onChange} attrs={attrs} />
+      );
 
     case 'textarea':
       return (
@@ -115,20 +130,24 @@ export function QuestionInput({
 
     case 'radio':
       return (
-        <RadioQuestion
-          question={question}
-          value={(value ?? null) as SingleChoiceResponse}
-          onChange={onChange}
-        />
+        <div className={OPTIONS_INSET_X}>
+          <RadioQuestion
+            question={question}
+            value={(value ?? null) as SingleChoiceResponse}
+            onChange={onChange}
+          />
+        </div>
       );
 
     case 'checkbox':
       return (
-        <CheckboxQuestion
-          question={question}
-          value={value as MultiChoiceResponse | unknown}
-          onChange={onChange}
-        />
+        <div className={OPTIONS_INSET_X}>
+          <CheckboxQuestion
+            question={question}
+            value={value as MultiChoiceResponse | unknown}
+            onChange={onChange}
+          />
+        </div>
       );
 
     case 'select':
@@ -153,13 +172,7 @@ export function QuestionInput({
       );
 
     case 'ranking':
-      return (
-        <RankingQuestion
-          question={question}
-          value={value}
-          onChange={(v) => onChange(v)}
-        />
-      );
+      return <RankingQuestion question={question} value={value} onChange={(v) => onChange(v)} />;
 
     case 'table':
       return question.tableColumns && question.tableRowsData ? (
@@ -168,17 +181,41 @@ export function QuestionInput({
           {...(question.tableTitle !== undefined ? { tableTitle: question.tableTitle } : {})}
           columns={question.tableColumns}
           rows={question.tableRowsData}
-          {...(question.tableHeaderGrid !== undefined ? { tableHeaderGrid: question.tableHeaderGrid } : {})}
-          {...(typeof value === 'object' && value !== null ? { value: value as Record<string, unknown> } : {})}
+          {...(question.tableHeaderGrid !== undefined
+            ? { tableHeaderGrid: question.tableHeaderGrid }
+            : {})}
+          {...(typeof value === 'object' && value !== null
+            ? { value: value as Record<string, unknown> }
+            : {})}
           onChange={onChange as (v: Record<string, unknown>) => void}
           isTestMode={false}
           className="border-0 shadow-none"
           allResponses={allResponses}
           allQuestions={allQuestions}
-          {...(question.dynamicRowConfigs !== undefined ? { dynamicRowConfigs: question.dynamicRowConfigs } : {})}
-          {...(question.hideColumnLabels !== undefined ? { hideColumnLabels: question.hideColumnLabels } : {})}
+          {...(question.dynamicRowConfigs !== undefined
+            ? { dynamicRowConfigs: question.dynamicRowConfigs }
+            : {})}
+          {...(question.hideColumnLabels !== undefined
+            ? { hideColumnLabels: question.hideColumnLabels }
+            : {})}
           {...(question.mobileOriginalTable !== undefined
             ? { mobileOriginalTable: question.mobileOriginalTable }
+            : {})}
+          {...(question.mobileTableDisplayMode !== undefined
+            ? { mobileTableDisplayMode: question.mobileTableDisplayMode }
+            : {})}
+          {...(question.mobileDrilldownOmitLeadingColumns !== undefined
+            ? {
+                mobileDrilldownOmitLeadingColumns: question.mobileDrilldownOmitLeadingColumns,
+              }
+            : {})}
+          {...(question.mobileDrilldownRepeatHeaderStartRow !== undefined
+            ? {
+                mobileDrilldownRepeatHeaderStartRow: question.mobileDrilldownRepeatHeaderStartRow,
+              }
+            : {})}
+          {...(question.mobileDrilldownRepeatHeaderEndRow !== undefined
+            ? { mobileDrilldownRepeatHeaderEndRow: question.mobileDrilldownRepeatHeaderEndRow }
             : {})}
           errorCellIds={
             numericIssues && numericIssues.length > 0
@@ -423,7 +460,7 @@ function SelectQuestion({
     : typeof value === 'string'
       ? value
       : '';
-  const legacyOtherInput = isOtherChoiceValue(value) ? value.otherValue ?? '' : '';
+  const legacyOtherInput = isOtherChoiceValue(value) ? (value.otherValue ?? '') : '';
 
   const selectedOption = question.options?.find((opt) => opt.value === selectedValue);
 
@@ -461,7 +498,7 @@ function SelectQuestion({
   };
 
   const showLegacyOtherInput = selectedOption?.id === 'other-option';
-  const showAllowTextInput = !showLegacyOtherInput && (selectedOption?.allowTextInput === true);
+  const showAllowTextInput = !showLegacyOtherInput && selectedOption?.allowTextInput === true;
 
   return (
     <div className="space-y-3">
@@ -480,11 +517,7 @@ function SelectQuestion({
 
       {/* allowTextInput 옵션 선택 시 인라인 텍스트 입력 */}
       {showAllowTextInput && selectedOption && (
-        <OptionTextInput
-          questionId={question.id}
-          option={selectedOption}
-          className="w-full"
-        />
+        <OptionTextInput questionId={question.id} option={selectedOption} className="w-full" />
       )}
 
       {/* other-option 매직 ID 호환 경로 (@deprecated) */}
@@ -565,7 +598,7 @@ function TextResponseInput({
       />
       {(unitReading || rangeViolation) && !isPrefilled && (
         <div className="mt-1 space-y-0.5 px-1">
-          {unitReading && <p className="text-xs text-muted-foreground">{unitReading}</p>}
+          {unitReading && <p className="text-muted-foreground text-xs">{unitReading}</p>}
           {rangeViolation && <p className="text-xs text-red-500">* {rangeViolation}</p>}
         </div>
       )}

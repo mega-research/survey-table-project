@@ -181,7 +181,7 @@ export const MobileRowCard = React.memo(function MobileRowCard({
         </div>
       </div>
 
-      <CardContent className="space-y-3 p-4">
+      <CardContent className="space-y-3 px-6 py-4">
         {/* 카드 범례 — 스케일 앵커 라벨(전혀/매우 등)을 입력 컨트롤 위 한 행에,
             라벨 사이는 점선 리더로 채워 양끝 대응 관계를 시각화 */}
         {decoratedLegendLabels.length > 0 && inputCells.length > 0 && (
@@ -235,8 +235,15 @@ export const MobileRowCard = React.memo(function MobileRowCard({
                     </div>
                   );
                 })()}
-                {isUnitPairStart && nextEntry ? (
-                  <div className="flex items-end gap-2 pl-3">
+                {/* pl-3: 위 라벨(점 6px+간격 6px)과 입력을 같은 선상으로 들여쓰는 값.
+                    라벨이 안 보이면 들여쓸 기준이 없어 좌우 여백만 비대칭이 되므로 라벨 표시 시에만 적용 */}
+                {(() => {
+                  const labelShown =
+                    cell.mobileDisplay !== 'hidden' &&
+                    Boolean(hideColumnLabels ? cellLabel : shortLabel);
+                  const labelIndent = labelShown ? 'pl-3' : '';
+                  return isUnitPairStart && nextEntry ? (
+                    <div className={cn('flex items-end gap-2', labelIndent)}>
                     <div
                       className={cn(
                         'flex-1',
@@ -269,7 +276,7 @@ export const MobileRowCard = React.memo(function MobileRowCard({
                 ) : (
                   <div
                     className={cn(
-                      'pl-3',
+                      labelIndent,
                       getAlignmentClasses(cell.horizontalAlign, cell.verticalAlign),
                       errorCellIds?.has(cell.id) && 'rounded-lg ring-2 ring-red-300',
                     )}
@@ -282,7 +289,8 @@ export const MobileRowCard = React.memo(function MobileRowCard({
                       onChange={onChange}
                     />
                   </div>
-                )}
+                );
+                })()}
               </div>
             </React.Fragment>
           );

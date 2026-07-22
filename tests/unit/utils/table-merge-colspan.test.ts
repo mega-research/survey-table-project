@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import type { TableCell, TableColumn, TableRow } from '@/types/survey';
-import { recalculateColspansForVisibleColumns } from '@/utils/table-merge-helpers';
+import {
+  recalculateColspansForVisibleColumns,
+  recalculateRowspansForVisibleRows,
+} from '@/utils/table-merge-helpers';
 
 // 최소 셀 팩토리 — content/type 는 TableCell 필수 필드
 function cell(id: string, overrides: Partial<TableCell> = {}): TableCell {
@@ -12,6 +15,67 @@ function col(id: string, overrides: Partial<TableColumn> = {}): TableColumn {
 }
 
 describe('recalculateColspansForVisibleColumns - 가로 병합 시작 열 필터링', () => {
+  it('가시 병합 시작 열이 남으면 isHeaderHidden continuation을 보존한다', () => {
+    const columns = [
+      col('A', { colspan: 3 }),
+      col('B', { isHeaderHidden: true }),
+      col('C', { isHeaderHidden: true }),
+    ];
+    const result = recalculateColspansForVisibleColumns(
+      columns,
+      [{ id: 'r1', label: '', cells: [cell('a'), cell('b'), cell('c')] }],
+      new Set(['A', 'C']),
+    );
+
+    expect(result.columns[0]?.colspan).toBe(2);
+    expect(result.columns[1]?.isHeaderHidden).toBe(true);
+  });
+
+  it('병합 시작 열이 빠지면 첫 가시 continuation 헤더를 승격한다', () => {
+    const columns = [
+      col('A', { colspan: 3 }),
+      col('B', { isHeaderHidden: true }),
+      col('C', { isHeaderHidden: true }),
+    ];
+    const result = recalculateColspansForVisibleColumns(
+      columns,
+      [{ id: 'r1', label: '', cells: [cell('a'), cell('b'), cell('c')] }],
+      new Set(['B', 'C']),
+    );
+
+    expect(result.columns[0]?.isHeaderHidden).toBe(false);
+    expect(result.columns[0]?.colspan).toBe(2);
+    expect(result.columns[1]?.isHeaderHidden).toBe(true);
+  });
+
+  it('병합 시작 셀이 빠지면 첫 가시 continuation 본문 셀을 잔여 colspan 시작으로 승격한다', () => {
+    const result = recalculateColspansForVisibleColumns(
+      [col('A'), col('B'), col('C')],
+      [
+        {
+          id: 'r1',
+          label: '',
+          cells: [
+            cell('a', { colspan: 3 }),
+            cell('b', { isHidden: true }),
+            cell('c', { isHidden: true }),
+          ],
+        },
+      ],
+      new Set(['B', 'C']),
+    );
+
+    expect(result.rows[0]?.cells[0]).toMatchObject({
+      id: 'b',
+      isHidden: false,
+      colspan: 2,
+    });
+    expect(result.rows[0]?.cells[1]).toMatchObject({
+      id: 'c',
+      isHidden: true,
+    });
+  });
+
   // 컬럼 [A, B, C]. A 셀이 colspan 2 로 A+B 를 가로 병합 → B 는 continuation(isHidden:true, colspan 없음).
   // A 열이 displayCondition 으로 숨겨지면 가시 열은 B, C.
   // 회귀: B(continuation)의 isHidden 이 해제되지 않아 렌더에서 if isHidden return null 로 사라지던 버그.
@@ -115,4 +179,48 @@ describe('recalculateColspansForVisibleColumns - 가로 병합 시작 열 필터
     expect(cells[0]!.isHidden).toBe(false);
     expect(cells[1]!.isHidden).toBe(true); // C 는 여전히 A 의 병합 범위 안
   });
+});
+
+describe('recalculateRowspansForVisibleRows - 조건부 anchor 승격 provenance', () => {
+  it.each(['text', 'image', 'video'] as const)(
+    'hidden %s anchor 행이 제거되면 continuation을 anchor identity와 표시 속성으로 교체한다',
+    (type) => {
+      const anchorId = `${type}-anchor`;
+      const result = recalculateRowspansForVisibleRows(
+        [
+          {
+            id: 'hidden-anchor-row',
+            label: '숨김 행',
+            cells: [cell(anchorId, {
+              type,
+              content: `${type} 숨김 라벨`,
+              rowspan: 2,
+              mobileDisplay: 'hidden',
+            })],
+          },
+          {
+            id: 'visible-continuation-row',
+            label: '공개 행',
+            cells: [cell(`${type}-continuation`, {
+              type,
+              content: '',
+              isHidden: true,
+              _isContinuation: true,
+            })],
+          },
+        ],
+        new Set(['visible-continuation-row']),
+      );
+
+      expect(result[0]?.cells[0]).toMatchObject({
+        id: anchorId,
+        type,
+        content: `${type} 숨김 라벨`,
+        mobileDisplay: 'hidden',
+        isHidden: false,
+      });
+      expect(result[0]?.cells[0]).not.toHaveProperty('_isContinuation');
+      expect(result[0]?.cells[0]?.rowspan ?? 1).toBe(1);
+    },
+  );
 });

@@ -13,6 +13,7 @@ import {
   diffOrphanImages,
   extractMailTemplateAssets,
 } from '@/lib/mail/mail-image-extractor';
+import { ensureImageLinkBandSlices } from '@/lib/mail/image-link-band-slices';
 import { promoteMailImages } from '@/lib/mail/mail-image-promote';
 import { extractVariableKeys } from '@/lib/mail/variable-extractor';
 
@@ -82,10 +83,12 @@ async function promoteAssets(
   rawBodyHtml: string,
   rawAttachments: MailAttachment[],
 ): Promise<{ bodyHtml: string; attachments: MailAttachment[] }> {
-  const [bodyHtml, attachments] = await Promise.all([
+  const [promotedBodyHtml, attachments] = await Promise.all([
     promoteMailImages(rawBodyHtml),
     promoteMailAttachments(rawAttachments),
   ]);
+  // 클릭 영역 밴드 슬라이스는 promote 이후(영구 URL 기준)에 생성해야 한다
+  const bodyHtml = await ensureImageLinkBandSlices(promotedBodyHtml);
   return { bodyHtml, attachments };
 }
 
@@ -151,7 +154,7 @@ export async function createMailTemplate(
 
   // promote 된 영구 key 를 클라이언트로 돌려줘 state 동기화 — 저장 직후 발송에서
   // stale tmp prefix 로 R2 download 시도하는 사고 차단.
-  return { id: row.id, attachments };
+  return { id: row.id, bodyHtml, attachments };
 }
 
 /**
@@ -222,7 +225,7 @@ export async function updateMailTemplate(
     extractMailTemplateAssets({ bodyHtml, attachments }),
   );
 
-  return { attachments };
+  return { bodyHtml, attachments };
 }
 
 /**
