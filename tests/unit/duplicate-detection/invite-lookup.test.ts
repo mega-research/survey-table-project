@@ -29,6 +29,7 @@ function mockLookupId(id = '33333333-3333-3333-3333-333333333333') {
 
 function mockTarget(overrides: Record<string, unknown> = {}) {
   mockFindFirst.mockResolvedValue({
+    id: '33333333-3333-3333-3333-333333333333',
     surveyId: SURVEY_ID,
     isTest: false,
     respondedAt: null,
@@ -71,6 +72,7 @@ describe('findContactByInviteToken (UUID 형식 가드)', () => {
 
   it('UUID 형식 토큰이지만 매칭 컨택 없음 → invalid (기존 동작 보존)', async () => {
     mockExecute.mockResolvedValueOnce([{ id: null }]);
+    mockFindFirst.mockResolvedValue(undefined);
     const { findContactByInviteToken } = await import(
       '@/lib/duplicate-detection/invite-lookup'
     );
@@ -143,7 +145,8 @@ describe('findContactByInviteToken (UUID 형식 가드)', () => {
   });
 
   it('교차 설문 테스트 대상자 토큰은 invalid_test로 종류를 보존한다', async () => {
-    mockLookupId();
+    // 실제 SECURITY DEFINER 함수는 survey_id를 함수 안에서 제한하므로 교차 설문이면 null이다.
+    mockExecute.mockResolvedValueOnce([{ id: null }]);
     mockTarget({
       surveyId: OTHER_SURVEY_ID,
       isTest: true,
@@ -156,11 +159,19 @@ describe('findContactByInviteToken (UUID 형식 가드)', () => {
     const result = await findContactByInviteToken(SURVEY_ID, TOKEN);
 
     expect(result).toEqual({ kind: 'invalid_test' });
+    expect(mockFindFirst).toHaveBeenCalledWith(expect.objectContaining({
+      columns: {
+        id: true,
+        surveyId: true,
+        isTest: true,
+        respondedAt: true,
+      },
+    }));
     expect(mockGetResultCodeStatuses).not.toHaveBeenCalled();
   });
 
   it('교차 설문 실제 대상자 토큰은 기존 invalid 계약을 유지한다', async () => {
-    mockLookupId();
+    mockExecute.mockResolvedValueOnce([{ id: null }]);
     mockTarget({ surveyId: OTHER_SURVEY_ID, isTest: false });
 
     const { findContactByInviteToken } = await import(
@@ -170,5 +181,24 @@ describe('findContactByInviteToken (UUID 형식 가드)', () => {
 
     expect(result).toEqual({ kind: 'invalid' });
     expect(mockGetResultCodeStatuses).not.toHaveBeenCalled();
+  });
+
+  it('삭제된 설문의 테스트 대상자 owner는 RPC null이어도 invalid_test로 보존한다', async () => {
+    mockExecute.mockResolvedValueOnce([{ id: null }]);
+    mockTarget({
+      isTest: true,
+      survey: {
+        testModeEnabled: true,
+        deletedAt: new Date('2026-07-22T01:00:00.000Z'),
+      },
+    });
+
+    const { findContactByInviteToken } = await import(
+      '@/lib/duplicate-detection/invite-lookup'
+    );
+
+    await expect(findContactByInviteToken(SURVEY_ID, TOKEN)).resolves.toEqual({
+      kind: 'invalid_test',
+    });
   });
 });

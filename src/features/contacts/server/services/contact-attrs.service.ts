@@ -5,6 +5,10 @@ import { and, eq, isNull } from 'drizzle-orm';
 import { db } from '@/db';
 import { contactTargets } from '@/db/schema/contacts';
 import { surveys } from '@/db/schema/surveys';
+import {
+  classifyInviteTokenOwner,
+  findInviteTokenOwner,
+} from '@/lib/duplicate-detection/invite-token-owner';
 import { isValidUUID } from '@/lib/utils';
 
 import type {
@@ -40,6 +44,15 @@ export async function lookupContactAttrs(
 
   if (!inviteToken || !isValidUUID(inviteToken)) return null;
 
+  const ownerClassification = classifyInviteTokenOwner(
+    await findInviteTokenOwner(inviteToken),
+    surveyId,
+  );
+  if (ownerClassification.kind === 'invalid_test') {
+    throw new InvalidTestLinkError();
+  }
+  if (ownerClassification.kind === 'invalid') return null;
+
   const [row] = await db
     .select({
       attrs: contactTargets.attrs,
@@ -57,7 +70,10 @@ export async function lookupContactAttrs(
     )
     .limit(1);
 
-  if (!row) return null;
+  if (!row) {
+    if (ownerClassification.owner.isTest) throw new InvalidTestLinkError();
+    return null;
+  }
   if (row.isTest && !row.testModeEnabled) throw new InvalidTestLinkError();
   return row.attrs;
 }

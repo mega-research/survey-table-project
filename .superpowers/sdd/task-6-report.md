@@ -65,3 +65,33 @@
 
 - 전체 스위트의 localStorage 13건은 기존 환경 오류로 이번 변경 범위에서 수정하지 않았다.
 - 익명 test token과 테스트 대상자 수의 저장 시점 재검증·잠금, attempt/행 재사용은 여전히 Task 7 범위다.
+
+## 리뷰 수정 2
+
+### Status
+
+실제 DB 함수가 교차 설문 token에 `null`을 반환하는 계약을 mock과 구현에 반영했다. Task 7/8과 migration은 변경하지 않았다.
+
+### 구현
+
+- server-only token owner helper가 attrs/PII 없이 `id/surveyId/isTest/respondedAt`과 설문 삭제·테스트 모드 상태만 조회한다.
+- invite lookup은 함수 결과가 `null`이어도 owner를 분류해 교차 설문·삭제 설문의 테스트 대상자는 `invalid_test`, 실제 대상자는 기존 `invalid`를 반환한다.
+- resume은 `invalid_test`를 즉시 `invalid_test_token`으로 종료해 익명 `sessionId` resume/touch 경로를 차단한다.
+- attrs는 같은 owner 분류를 먼저 사용해 테스트 대상자의 교차 설문·설문 삭제·모드 OFF와 owner 판정 후 삭제 race를 `InvalidTestLinkError`로 종료하며, procedure는 기존 typed `INVALID_TEST_LINK`를 보존한다.
+
+### TDD
+
+- RED: 실제 함수처럼 교차 설문 lookup을 `null`로 mock했을 때 test owner가 `invalid`로 강등되고, resume이 익명 응답을 touch하며, attrs가 교차/삭제/race owner를 `null`로 강등하는 7건을 확인했다.
+- GREEN: 공용 최소 owner 분류와 fail-closed 분기를 구현해 집중 11파일 102건을 통과시켰다.
+
+### 검증
+
+- `pnpm exec tsc --noEmit`: 통과.
+- `pnpm lint`: 오류 0, 기존 경고 99건.
+- `pnpm test`: 일반 317파일 중 316파일·2,560건 통과. 기존 `use-response-lifecycle.test.tsx`의 `localStorage.clear()` 환경 오류 13건만 실패했다.
+- 격리 flaky 파일: 1파일 14건 통과. `git diff --check`: 통과.
+
+### 우려
+
+- token owner 분류와 attrs 본문 조회는 두 SQL 문이지만, 중간 삭제 시 보존한 `isTest`로 fail-closed 한다.
+- 전체 스위트의 기존 localStorage 환경 오류는 이번 Task 6 범위에서 수정하지 않았다.

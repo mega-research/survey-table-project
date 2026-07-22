@@ -1,14 +1,18 @@
 import 'server-only';
 
-import { eq, sql } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { contactTargets } from '@/db/schema';
 import {
   buildNegativeCodeExists,
   getResultCodeStatuses,
 } from '@/lib/operations/result-code-statuses.server';
 import { isValidUUID } from '@/lib/utils';
+
+import {
+  classifyInviteTokenOwner,
+  findInviteTokenOwner,
+} from './invite-token-owner';
 
 /**
  * inviteToken 으로 컨택 lookup. 반환 케이스 4가지:
@@ -45,34 +49,27 @@ export async function findContactByInviteToken(
   const lookup = (await db.execute(
     sql`SELECT public.lookup_contact_by_invite_token(${surveyId}::uuid, ${inviteToken}::uuid) AS id`,
   )) as unknown as Array<{ id: string | null }>;
-  const contactTargetId = lookup[0]?.id ?? null;
-  if (!contactTargetId) return { kind: 'invalid' };
+  const resolvedContactTargetId = lookup[0]?.id ?? null;
 
-  // SECURITY DEFINER 함수가 반환한 대상의 소속 surveyId와 isTest를 먼저 보존한다.
-  // 교차 설문 토큰이라도 테스트 대상자면 invalid_test로 종류를 유지해
-  // 선택 초대 설문의 익명 폴백을 닫고, 실제 대상자는 기존 invalid 계약을 유지한다.
-  const row = await db.query.contactTargets.findFirst({
-    where: eq(contactTargets.id, contactTargetId),
-    columns: { surveyId: true, respondedAt: true, isTest: true },
-    with: {
-      survey: {
-        columns: { testModeEnabled: true, deletedAt: true },
-      },
-    },
-  });
-  if (!row) return { kind: 'invalid' };
-  if (row.surveyId !== surveyId) {
-    return row.isTest ? { kind: 'invalid_test' } : { kind: 'invalid' };
+  // DB 함수는 survey_id를 함수 내부에서 제한하므로 교차 설문 token이면 null이다.
+  // server-only 직접 조회로 owner 종류만 복원해 테스트 링크의 익명 강등을 막는다.
+  const classification = classifyInviteTokenOwner(
+    await findInviteTokenOwner(inviteToken),
+    surveyId,
+  );
+  if (classification.kind !== 'valid') return classification;
+
+  const { owner } = classification;
+  if (resolvedContactTargetId && resolvedContactTargetId !== owner.id) {
+    return owner.isTest ? { kind: 'invalid_test' } : { kind: 'invalid' };
   }
-  if (row.survey.deletedAt) {
-    return row.isTest ? { kind: 'invalid_test' } : { kind: 'invalid' };
-  }
-  if (row.isTest) {
-    if (!row.survey.testModeEnabled) return { kind: 'invalid_test' };
+  const contactTargetId = resolvedContactTargetId ?? owner.id;
+
+  if (owner.isTest) {
     return {
       kind: 'valid',
       contactTargetId,
-      respondedAt: row.respondedAt,
+      respondedAt: owner.respondedAt,
       isTest: true,
     };
   }
@@ -94,5 +91,10 @@ export async function findContactByInviteToken(
     return { kind: 'excluded' };
   }
 
-  return { kind: 'valid', contactTargetId, respondedAt: row.respondedAt, isTest: false };
+  return {
+    kind: 'valid',
+    contactTargetId,
+    respondedAt: owner.respondedAt,
+    isTest: false,
+  };
 }

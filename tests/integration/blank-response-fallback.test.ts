@@ -125,6 +125,7 @@ describe('createBlankResponse', () => {
     dbExecuteMock.mockResolvedValueOnce([{ id: 'contact-1' }]);
     // findContactByInviteToken: 2) 대상자 종류·설문 테스트 모드 조회
     contactFindFirstMock.mockResolvedValue({
+      id: 'contact-1',
       surveyId: '00000000-0000-4000-8000-000000000001',
       respondedAt: null,
       isTest: false,
@@ -177,6 +178,7 @@ describe('createBlankResponse', () => {
     dbExecuteMock.mockResolvedValueOnce([{ id: 'contact-1' }]);
     // findContactByInviteToken: 2) 대상자 종류·설문 테스트 모드 조회
     contactFindFirstMock.mockResolvedValue({
+      id: 'contact-1',
       surveyId: '00000000-0000-4000-8000-000000000001',
       respondedAt: null,
       isTest: false,

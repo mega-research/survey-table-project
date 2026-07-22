@@ -81,6 +81,7 @@ vi.mock('@/db', () => ({
           const contact = state.contacts[0];
           if (!contact) return undefined;
           return {
+            id: contact.id,
             surveyId: contact.surveyId,
             respondedAt: null,
             isTest: false,

@@ -468,6 +468,28 @@ describe('resumeOrCreateResponse — 중단 게이트 (Task 6)', () => {
     expect(inviteLookupMock).not.toHaveBeenCalled();
   });
 
+  it('invalid_test inviteToken은 익명 sessionId 회복과 touch로 폴백하지 않는다', async () => {
+    surveyFindFirstMock.mockResolvedValue(publishedSurvey());
+    inviteLookupMock.mockResolvedValue({ kind: 'invalid_test' });
+    selectLimitMock.mockResolvedValue([
+      { id: 'anonymous-response', status: 'in_progress', isTest: false },
+    ]);
+
+    const { resumeOrCreateResponse } = await import(
+      '@/features/survey-response/server/services/lifecycle.service'
+    );
+
+    await expect(
+      resumeOrCreateResponse({
+        surveyId: SURVEY_ID,
+        sessionId: 'anonymous-session-with-test-token',
+        inviteToken: '11111111-2222-4333-8444-555555555555',
+      }),
+    ).rejects.toThrow(/invalid_test_token/);
+
+    expect(selectLimitMock).not.toHaveBeenCalled();
+  });
+
   it('컨택 분기(inviteToken)도 isPaused 설문의 drop 회복을 survey_paused 로 거부한다', async () => {
     // 세션 분기와 대칭 — existingByContact drop 행이 비-테스트면 중단 중 재개를 막아야 한다.
     surveyFindFirstMock.mockResolvedValue(publishedSurvey({ isPaused: true }));
