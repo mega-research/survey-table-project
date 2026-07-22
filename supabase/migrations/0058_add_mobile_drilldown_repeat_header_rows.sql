@@ -1,3 +1,5 @@
+SET LOCAL lock_timeout = '3s';
+
 ALTER TABLE "questions"
   ADD COLUMN IF NOT EXISTS "mobile_drilldown_repeat_header_start_row" integer DEFAULT 0;
 
