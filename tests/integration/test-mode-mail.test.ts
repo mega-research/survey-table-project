@@ -4,11 +4,13 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 interface TargetSeed {
   id: string;
+  surveyId: string;
   isTest: boolean;
 }
 
 interface TestState {
   surveyMode: boolean;
+  templateSubject: string;
   targets: TargetSeed[];
   campaignValues: Record<string, unknown> | null;
   recipientIds: string[];
@@ -18,6 +20,7 @@ interface TestState {
 
 const state: TestState = {
   surveyMode: false,
+  templateSubject: '설문 참여',
   targets: [],
   campaignValues: null,
   recipientIds: [],
@@ -27,6 +30,35 @@ const state: TestState = {
 
 const dialect = new PgDialect();
 
+function parameterForEquality(
+  query: { sql: string; params: unknown[] },
+  column: 'survey_id' | 'is_test',
+): unknown {
+  const match = query.sql.match(
+    new RegExp(`"contact_targets"\\."${column}" = \\$(\\d+)`),
+  );
+  if (!match?.[1]) return undefined;
+  return query.params[Number(match[1]) - 1];
+}
+
+function parametersForTargetIds(query: { sql: string; params: unknown[] }): Set<unknown> | null {
+  const match = query.sql.match(/"contact_targets"\."id" in \(([^)]+)\)/i);
+  if (!match?.[1]) return null;
+  const indexes = Array.from(match[1].matchAll(/\$(\d+)/g), (entry) => Number(entry[1]) - 1);
+  return new Set(indexes.map((index) => query.params[index]));
+}
+
+function filterTargetsForQuery(rows: TargetSeed[], query: { sql: string; params: unknown[] }) {
+  const requestedSurveyId = parameterForEquality(query, 'survey_id');
+  const requestedScope = parameterForEquality(query, 'is_test');
+  const requestedIds = parametersForTargetIds(query);
+
+  return rows
+    .filter((row) => requestedSurveyId === undefined || row.surveyId === requestedSurveyId)
+    .filter((row) => requestedScope === undefined || row.isTest === requestedScope)
+    .filter((row) => requestedIds === null || requestedIds.has(row.id));
+}
+
 function queryRows(rows: () => unknown[]) {
   let resolvedRows = rows;
   const chain = {
@@ -34,12 +66,17 @@ function queryRows(rows: () => unknown[]) {
     innerJoin: () => chain,
     where: (where: unknown) => {
       const query = dialect.sqlToQuery(where as never);
-      if (query.sql.includes('contact_targets') && query.sql.includes('is_test')) {
-        const requestedScope = query.params.find((param) => typeof param === 'boolean');
-        resolvedRows = () => rows().filter((row) => {
-          if (!row || typeof row !== 'object' || !('isTest' in row)) return true;
-          return row.isTest === requestedScope;
-        });
+      if (query.sql.includes('contact_targets')) {
+        resolvedRows = () => {
+          const currentRows = rows();
+          if (!currentRows.every((row): row is TargetSeed => (
+            row != null
+            && typeof row === 'object'
+            && 'surveyId' in row
+            && 'isTest' in row
+          ))) return currentRows;
+          return filterTargetsForQuery(currentRows, query);
+        };
       }
       return chain;
     },
@@ -59,7 +96,7 @@ const tx = {
     if (!projection) {
       return queryRows(() => [{
         id: '00000000-0000-4000-8000-000000000001',
-        subject: '설문 참여',
+        subject: state.templateSubject,
         bodyHtml: '<p>body</p>',
         fromLocal: 'noreply',
         fromName: 'sender',
@@ -134,6 +171,9 @@ const SURVEY_ID = '00000000-0000-4000-8000-000000000040';
 const USER_ID = '00000000-0000-4000-8000-0000000000ff';
 const REAL_ID = '00000000-0000-4000-8000-000000000010';
 const TEST_ID = '00000000-0000-4000-8000-000000000011';
+const UNSELECTED_ID = '00000000-0000-4000-8000-000000000012';
+const OTHER_SURVEY_ID = '00000000-0000-4000-8000-000000000041';
+const OTHER_SURVEY_TARGET_ID = '00000000-0000-4000-8000-000000000013';
 
 function input(contactTargetIds: string[], title = '1차 안내') {
   return {
@@ -147,6 +187,7 @@ function input(contactTargetIds: string[], title = '1차 안내') {
 describe('테스트 모드 메일 캠페인 생성', () => {
   beforeEach(() => {
     state.surveyMode = false;
+    state.templateSubject = '설문 참여';
     state.targets = [];
     state.campaignValues = null;
     state.recipientIds = [];
@@ -157,7 +198,7 @@ describe('테스트 모드 메일 캠페인 생성', () => {
 
   it('현재 테스트 모드를 잠그고 테스트 대상자·회차·제목 스냅샷을 같은 scope로 저장한다', async () => {
     state.surveyMode = true;
-    state.targets = [{ id: TEST_ID, isTest: true }];
+    state.targets = [{ id: TEST_ID, surveyId: SURVEY_ID, isTest: true }];
 
     await createCampaign(input([TEST_ID]), USER_ID);
 
@@ -174,7 +215,7 @@ describe('테스트 모드 메일 캠페인 생성', () => {
 
   it('작성 중 테스트 모드가 꺼지면 테스트 대상을 실제 캠페인으로 강등하지 않고 거부한다', async () => {
     state.surveyMode = false;
-    state.targets = [{ id: TEST_ID, isTest: true }];
+    state.targets = [{ id: TEST_ID, surveyId: SURVEY_ID, isTest: true }];
 
     await expect(createCampaign(input([TEST_ID]), USER_ID)).rejects.toThrow('화면을 새로고침');
     expect(state.campaignValues).toBeNull();
@@ -184,8 +225,8 @@ describe('테스트 모드 메일 캠페인 생성', () => {
   it('현재 scope와 다른 대상자가 하나라도 섞이면 전체 생성을 거부한다', async () => {
     state.surveyMode = true;
     state.targets = [
-      { id: TEST_ID, isTest: true },
-      { id: REAL_ID, isTest: false },
+      { id: TEST_ID, surveyId: SURVEY_ID, isTest: true },
+      { id: REAL_ID, surveyId: SURVEY_ID, isTest: false },
     ];
 
     await expect(createCampaign(input([TEST_ID, REAL_ID]), USER_ID)).rejects.toThrow(
@@ -194,25 +235,57 @@ describe('테스트 모드 메일 캠페인 생성', () => {
     expect(state.campaignValues).toBeNull();
   });
 
-  it('실제 모드는 기존 제목을 유지하고 실제 scope 회차를 사용한다', async () => {
-    state.targets = [{ id: REAL_ID, isTest: false }];
+  it('실제 모드는 subject snapshot을 그대로 보존하고 제목만 기존처럼 trim한다', async () => {
+    state.templateSubject = '  설문 참여  ';
+    state.targets = [
+      { id: REAL_ID, surveyId: SURVEY_ID, isTest: false },
+      { id: UNSELECTED_ID, surveyId: SURVEY_ID, isTest: false },
+      { id: OTHER_SURVEY_TARGET_ID, surveyId: OTHER_SURVEY_ID, isTest: false },
+    ];
 
-    await createCampaign(input([REAL_ID]), USER_ID);
+    await createCampaign(input([REAL_ID], '  1차 안내  '), USER_ID);
 
     expect(state.executeQueries[0]?.params).toContain(false);
     expect(state.campaignValues).toMatchObject({
       isTest: false,
       title: '1차 안내',
-      subjectSnapshot: '설문 참여',
+      subjectSnapshot: '  설문 참여  ',
     });
     expect(state.recipientIds).toEqual([REAL_ID]);
   });
 
-  it('[TEST] 접두어가 이미 있으면 중복하지 않는다', async () => {
+  it('선택 query는 동일 설문·scope의 미선택 ID를 제외한다', async () => {
     state.surveyMode = true;
-    state.targets = [{ id: TEST_ID, isTest: true }];
+    state.targets = [
+      { id: TEST_ID, surveyId: SURVEY_ID, isTest: true },
+      { id: UNSELECTED_ID, surveyId: SURVEY_ID, isTest: true },
+      { id: OTHER_SURVEY_TARGET_ID, surveyId: OTHER_SURVEY_ID, isTest: true },
+    ];
 
-    await createCampaign(input([TEST_ID], ' [TEST] 1차 안내 '), USER_ID);
+    await createCampaign(input([TEST_ID]), USER_ID);
+
+    expect(state.recipientIds).toEqual([TEST_ID]);
+  });
+
+  it('다른 설문의 동일 scope ID가 선택되면 전체 생성을 거부한다', async () => {
+    state.surveyMode = true;
+    state.targets = [
+      { id: TEST_ID, surveyId: SURVEY_ID, isTest: true },
+      { id: OTHER_SURVEY_TARGET_ID, surveyId: OTHER_SURVEY_ID, isTest: true },
+    ];
+
+    await expect(
+      createCampaign(input([TEST_ID, OTHER_SURVEY_TARGET_ID]), USER_ID),
+    ).rejects.toThrow('화면을 새로고침');
+    expect(state.campaignValues).toBeNull();
+  });
+
+  it('반복된 [TEST] 접두어를 정규화해 한 번만 남긴다', async () => {
+    state.surveyMode = true;
+    state.templateSubject = ' [TEST] [TEST] 설문 참여 ';
+    state.targets = [{ id: TEST_ID, surveyId: SURVEY_ID, isTest: true }];
+
+    await createCampaign(input([TEST_ID], ' [TEST] [TEST] 1차 안내 '), USER_ID);
 
     expect(state.campaignValues?.['title']).toBe('[TEST] 1차 안내');
     expect(state.campaignValues?.['subjectSnapshot']).toBe('[TEST] 설문 참여');

@@ -1,5 +1,5 @@
 export function withTestPrefix(value: string, isTest: boolean): string {
-  const trimmed = value.trim();
-  if (!isTest || trimmed.startsWith('[TEST] ')) return trimmed;
-  return `[TEST] ${trimmed}`;
+  if (!isTest) return value;
+  const normalized = value.trim().replace(/^(?:\[TEST\]\s*)+/, '');
+  return `[TEST] ${normalized}`;
 }

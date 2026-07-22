@@ -27,3 +27,10 @@
 
 - Task 10의 footer, unsubscribe, 렌더, dispatch URL 의미론은 변경하지 않았다.
 - Task 11의 archive mutation은 구현하지 않았고, 기존 read adapter의 archived 제외 조건만 유지했다.
+
+## 리뷰 수정
+
+- 실제 캠페인은 subject snapshot 원문을 그대로 보존하고 title만 기존처럼 호출부에서 trim하도록 분리했다.
+- 테스트 값의 반복된 `[TEST] ` 접두어를 정규화해 최종 접두어가 한 번만 남게 했다.
+- in-memory DB fake가 `survey_id`·`is_test`·선택 ID 집합을 실제 SQL parameter로 적용하고, 교차 설문·미선택 동일 scope 대상을 제외하는 회귀를 추가했다.
+- RED 2건을 확인한 뒤 집중 4파일 18건, 실DB 12파일 45건, 전체 320파일 2,620건+격리 14건을 통과했다. 실DB에서 scope별 동시 회차 발번과 mode flip의 `FOR SHARE` 직렬화를 검증했고, 신규 경쟁 파일은 단독 연속 3회 통과했다.

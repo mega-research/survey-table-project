@@ -28,7 +28,7 @@ import type {
  * 흐름:
  *  1. 트랜잭션:
  *     a. 템플릿 fetch → 스냅샷 컬럼 채움
- *     b. next_campaign_run_number(surveyId) 호출 (advisory lock)
+ *     b. next_campaign_run_number(surveyId, isTest) 호출 (scope별 advisory lock)
  *     c. mail_campaigns insert (status='queued')
  *     d. 선택된 contact 재페치 (unsubscribed_at IS NULL AND email IS NOT NULL)
  *     e. valid contact → mail_recipients(status='queued') 벌크 insert
@@ -111,7 +111,7 @@ export async function createCampaign(
         isTest,
         mailTemplateId: template.id,
         runNumber,
-        title: withTestPrefix(input.title, isTest),
+        title: withTestPrefix(input.title.trim(), isTest),
         subjectSnapshot: withTestPrefix(template.subject, isTest),
         bodyHtmlSnapshot: template.bodyHtml,
         fromLocalSnapshot: template.fromLocal,
