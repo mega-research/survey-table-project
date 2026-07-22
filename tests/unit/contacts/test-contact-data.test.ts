@@ -70,4 +70,29 @@ describe('테스트 대상자 기본 데이터', () => {
       company: { columnKey: '소속' },
     });
   });
+
+  it('PII와 시스템 회사 라벨은 attrs 회사 컬럼으로 오인하지 않고 기본 컬럼을 보충한다', () => {
+    const scheme = ensureTestContactColumns(
+      {
+        version: 1,
+        headerRow: 1,
+        columns: [
+          {
+            key: '회사 담당자',
+            label: '회사 담당자',
+            source: 'pii.회사 담당자',
+            piiType: 'representative',
+            order: 1,
+          },
+          { key: '회사', label: '회사', source: 'system.contact_owner', order: 2 },
+        ],
+      },
+      null,
+    );
+
+    expect(scheme.columns.some((column) => column.source === 'attrs.test_company')).toBe(true);
+    expect(resolveTestContactFieldBindings(scheme).company).toEqual({
+      columnKey: 'test_company',
+    });
+  });
 });

@@ -53,3 +53,11 @@
 ## 우려
 
 - 전체 suite의 13건 실패는 실행 시 `localStorage is not available because --localstorage-file was not provided` 경고와 함께 재현된 기존 환경 문제다. 이번 변경 파일과 직접 관련은 없다.
+
+## 리뷰 수정
+
+- RED: `pnpm exec vitest run tests/unit/contacts/test-contact-data.test.ts`에서 PII·시스템 회사 라벨만 있는 스킴이 `attrs.test_company`를 보충하지 않아 1건 실패했다.
+- GREEN: 회사 의미 판별을 `attrs.` source 조건을 포함한 단일 helper로 통합한 뒤 같은 테스트 5건이 통과했다. resolver도 같은 helper를 사용해 보충한 `test_company` 바인딩을 해석한다.
+- raw SQL 결과의 `as unknown as` 캐스팅을 `tx.execute<SurveyScopeRow>` 및 `tx.execute<{ resid: number }>` generic으로 대체했다.
+- 검증: 집중 테스트 3파일 15건, `pnpm exec tsc --noEmit`, 변경 관련 ESLint, `git diff --check` 통과.
+- 전체 `pnpm test` 1회는 기존 `tests/unit/use-response-lifecycle.test.tsx` 13건의 `localStorage is not available because --localstorage-file was not provided` 환경 오류로 exit 1이었다.

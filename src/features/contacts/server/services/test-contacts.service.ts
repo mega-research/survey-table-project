@@ -24,9 +24,9 @@ export async function generateTestContacts(
 
     const bindings = resolveTestContactFieldBindings(prepared.scheme);
     for (const fixture of TEST_CONTACT_FIXTURES.slice(0, input.count)) {
-      const residRows = (await tx.execute(
+      const residRows = await tx.execute<{ resid: number }>(
         sql`SELECT next_contact_resid(${input.surveyId}::uuid, ${prepared.isTest}) AS resid`,
-      )) as unknown as Array<{ resid: number }>;
+      );
       const resid = residRows[0]?.resid;
       if (resid == null) throw new Error('next_contact_resid 호출 실패');
 

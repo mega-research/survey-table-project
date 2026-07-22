@@ -23,6 +23,13 @@ const DEFAULTS: readonly ContactColumnDef[] = [
   },
 ];
 
+function isCompanyAttrsColumn(column: ContactColumnDef): boolean {
+  return (
+    column.source.startsWith('attrs.') &&
+    /회사|기업|company/i.test(`${column.key} ${column.label}`)
+  );
+}
+
 export function ensureTestContactColumns(
   real: ContactColumnSchemeInput | null,
   saved: ContactColumnSchemeInput | null,
@@ -32,9 +39,7 @@ export function ensureTestContactColumns(
   const base = structuredClone(
     real ?? { version: 1, headerRow: 1, columns: [] },
   ) as ContactColumnScheme;
-  const hasCompany = base.columns.some((column) =>
-    /회사|기업|company/i.test(`${column.key} ${column.label}`),
-  );
+  const hasCompany = base.columns.some(isCompanyAttrsColumn);
   const missing = DEFAULTS.filter((column) => {
     if (column.piiType === 'name') {
       return !base.columns.some(
@@ -72,11 +77,7 @@ export function resolveTestContactFieldBindings(
   const name = scheme.columns.find(
     (column) => column.piiType === 'name' || column.piiType === 'representative',
   );
-  const company = scheme.columns.find(
-    (column) =>
-      column.source.startsWith('attrs.') &&
-      /회사|기업|company/i.test(`${column.key} ${column.label}`),
-  );
+  const company = scheme.columns.find(isCompanyAttrsColumn);
   const phone = scheme.columns.find(
     (column) => column.piiType === 'phone' || column.piiType === 'mobile',
   );

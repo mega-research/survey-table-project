@@ -9,7 +9,7 @@ import type { OperationsDataScope } from '@/lib/operations/data-scope.server';
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
-interface SurveyScopeRow {
+interface SurveyScopeRow extends Record<string, unknown> {
   id: string;
   test_mode_enabled: boolean;
   contact_columns: ContactColumnScheme | null;
@@ -31,12 +31,12 @@ export async function prepareContactInsertScope(
   tx: DbTransaction,
   input: { surveyId: string; requestedCount: number; requireEmptyTestScope: boolean },
 ): Promise<PreparedContactInsertScope> {
-  const rows = (await tx.execute(sql`
+  const rows = await tx.execute<SurveyScopeRow>(sql`
     SELECT id, test_mode_enabled, contact_columns, test_contact_columns
     FROM surveys
     WHERE id = ${input.surveyId}::uuid
     FOR UPDATE
-  `)) as unknown as SurveyScopeRow[];
+  `);
   const survey = rows[0];
   if (!survey) throw new Error('설문을 찾을 수 없습니다.');
 
