@@ -108,20 +108,20 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
       classifiedSections.map((section) => ({
         ...section,
         label:
-          section.labelSourceCellId
-          && cellById.get(section.labelSourceCellId)?.mobileDisplay === 'hidden'
+          section.labelSourceCellId &&
+          cellById.get(section.labelSourceCellId)?.mobileDisplay === 'hidden'
             ? ''
             : section.label,
         leaves: section.leaves.map((leaf) => ({
           ...leaf,
           label:
-            leaf.labelSourceCellId
-            && cellById.get(leaf.labelSourceCellId)?.mobileDisplay === 'hidden'
+            leaf.labelSourceCellId &&
+            cellById.get(leaf.labelSourceCellId)?.mobileDisplay === 'hidden'
               ? ''
               : leaf.label,
           subGroup:
-            leaf.subGroupSourceCellId
-            && cellById.get(leaf.subGroupSourceCellId)?.mobileDisplay === 'hidden'
+            leaf.subGroupSourceCellId &&
+            cellById.get(leaf.subGroupSourceCellId)?.mobileDisplay === 'hidden'
               ? ''
               : leaf.subGroup,
         })),
@@ -251,10 +251,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
     </div>
   );
 
-  const rowById = useMemo(
-    () => new Map(displayRows.map((row) => [row.id, row])),
-    [displayRows],
-  );
+  const rowById = useMemo(() => new Map(displayRows.map((row) => [row.id, row])), [displayRows]);
   const answerableRowIds = useMemo(
     () => new Set(sections.flatMap((section) => section.leaves.map((leaf) => leaf.rowId))),
     [sections],
@@ -293,9 +290,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
       const sourceRow = rowById.get(sourceRowId);
       if (sourceRow) radioBucketsByRowId.set(sourceRowId, buildRadioGroupBuckets(sourceRow));
     }
-    const selectedRowBuckets = buildRadioGroupBuckets(
-      rowById.get(leaf.rowId) ?? projection.row,
-    );
+    const selectedRowBuckets = buildRadioGroupBuckets(rowById.get(leaf.rowId) ?? projection.row);
     if (!radioBucketsByRowId.has(leaf.rowId)) {
       radioBucketsByRowId.set(leaf.rowId, selectedRowBuckets);
     }

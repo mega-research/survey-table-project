@@ -10,7 +10,14 @@ import { MobileOriginalRowTable } from '@/components/survey-builder/mobile-origi
 import { useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import type { Question, TableCell } from '@/types/survey';
+import { getGroupTypeOfCell, isGroupedChoiceQuestion } from '@/utils/choice-group-helpers';
 import { type ClassifiedLeaf, type ClassifiedSection, classifyTable } from '@/utils/classify-table';
+import {
+  excludeMobileDrilldownRepeatedRows,
+  getMobileDrilldownRepeatedBodyRowIds,
+  includesMobileDrilldownColumnHeader,
+  resolveMobileDrilldownRepeatHeaderRange,
+} from '@/utils/mobile-drilldown-repeat-header';
 import {
   getMobileOriginalRowLabelCandidate,
   projectMobileOriginalRow,
@@ -38,6 +45,28 @@ export function ChoiceTableDrilldown({
   const attrs = useContactAttrs();
   const columns = question.tableColumns ?? EMPTY_COLUMNS;
   const rows = question.tableRowsData ?? EMPTY_ROWS;
+  const repeatHeaderRange = useMemo(
+    () =>
+      resolveMobileDrilldownRepeatHeaderRange({
+        mobileDrilldownRepeatHeaderStartRow: question.mobileDrilldownRepeatHeaderStartRow,
+        mobileDrilldownRepeatHeaderEndRow: question.mobileDrilldownRepeatHeaderEndRow,
+        hideColumnLabels: question.hideColumnLabels,
+      }),
+    [
+      question.hideColumnLabels,
+      question.mobileDrilldownRepeatHeaderEndRow,
+      question.mobileDrilldownRepeatHeaderStartRow,
+    ],
+  );
+  const repeatedBodyRowIds = useMemo(
+    () => getMobileDrilldownRepeatedBodyRowIds(rows, repeatHeaderRange),
+    [repeatHeaderRange, rows],
+  );
+  const navigationRows = useMemo(
+    () => excludeMobileDrilldownRepeatedRows(rows, repeatedBodyRowIds),
+    [repeatedBodyRowIds, rows],
+  );
+  const includeColumnHeader = includesMobileDrilldownColumnHeader(repeatHeaderRange);
   const omit = clampMobileDrilldownOmitLeadingColumns(
     question.mobileDrilldownOmitLeadingColumns,
     columns.length,
@@ -51,11 +80,11 @@ export function ChoiceTableDrilldown({
     () =>
       classifyTable({
         tableColumns: columns,
-        tableRowsData: rows,
+        tableRowsData: navigationRows,
         tableHeaderGrid: question.tableHeaderGrid,
         answerableCellTypes: ['choice_opt'],
       }),
-    [columns, question.tableHeaderGrid, rows],
+    [columns, navigationRows, question.tableHeaderGrid],
   );
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const titledSections = useMemo(
@@ -70,8 +99,7 @@ export function ChoiceTableDrilldown({
             omitLeadingAuthoredColumns: omit,
             resolveChoiceLabel,
             rowLabelSourceCellId: leaf.labelSourceCellId,
-            isLabelSourceHidden: (cellId) =>
-              cellById.get(cellId)?.mobileDisplay === 'hidden',
+            isLabelSourceHidden: (cellId) => cellById.get(cellId)?.mobileDisplay === 'hidden',
           });
           const subGroupIsHidden = leaf.subGroupSourceCellId
             ? cellById.get(leaf.subGroupSourceCellId)?.mobileDisplay === 'hidden'
@@ -129,6 +157,8 @@ export function ChoiceTableDrilldown({
       displayRows: rows,
       selectedRowId: leaf.rowId,
       omitLeadingAuthoredColumns: omit,
+      repeatedRowIds: repeatedBodyRowIds,
+      includeColumnHeader,
     });
     if (!projection?.hasInteractiveCells) {
       return (
@@ -144,10 +174,18 @@ export function ChoiceTableDrilldown({
     return (
       <MobileOriginalRowTable
         columns={projection.columns}
-        row={projection.row}
+        rows={[...projection.repeatedRows, projection.row]}
+        interactiveRowId={projection.row.id}
         headerGrid={projection.headerGrid}
-        hideColumnLabels={question.hideColumnLabels ?? false}
+        hideColumnLabels={!projection.showColumnHeader}
         scrollLeftRef={horizontalScrollRef}
+        choiceControlType={(cell) =>
+          isGroupedChoiceQuestion(question)
+            ? getGroupTypeOfCell(question, cell.id)
+            : question.type === 'checkbox'
+              ? 'checkbox'
+              : 'radio'
+        }
         renderCell={renderChoiceCell}
       />
     );

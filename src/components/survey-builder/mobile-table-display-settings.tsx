@@ -32,13 +32,21 @@ interface MobileTableDisplaySettingsProps {
 }
 
 const OPTIONS: Array<{ value: MobileTableDisplayMode; label: string; description: string }> = [
-  { value: 'auto', label: '자동 카드', description: '표 구조에 따라 카드 또는 드릴다운으로 표시합니다.' },
+  {
+    value: 'auto',
+    label: '자동 카드',
+    description: '표 구조에 따라 카드 또는 드릴다운으로 표시합니다.',
+  },
   {
     value: 'drilldown-original-row',
     label: '드릴다운 후 선택 행 원본',
     description: '항목을 고른 뒤 선택한 행만 원본 열 배치로 표시합니다.',
   },
-  { value: 'original', label: '전체 원본 표', description: '모바일에서도 표 전체를 가로 스크롤로 표시합니다.' },
+  {
+    value: 'original',
+    label: '전체 원본 표',
+    description: '모바일에서도 표 전체를 가로 스크롤로 표시합니다.',
+  },
 ];
 
 export function MobileTableDisplaySettings({
@@ -61,13 +69,14 @@ export function MobileTableDisplaySettings({
     setRepeatHeaderDraft(committedText);
   }, [committedText]);
 
-  const emit = (next: Partial<MobileTableDisplaySettingsValue>) => onChange({
-    mode,
-    omitLeadingColumns: normalizedCount,
-    repeatHeaderStartRow: committedRange?.startRow ?? null,
-    repeatHeaderEndRow: committedRange?.endRow ?? null,
-    ...next,
-  });
+  const emit = (next: Partial<MobileTableDisplaySettingsValue>) =>
+    onChange({
+      mode,
+      omitLeadingColumns: normalizedCount,
+      repeatHeaderStartRow: committedRange?.startRow ?? null,
+      repeatHeaderEndRow: committedRange?.endRow ?? null,
+      ...next,
+    });
 
   const commitRepeatHeaderDraft = () => {
     const parsed = parseMobileDrilldownRepeatHeaderText(repeatHeaderDraft);
@@ -145,12 +154,14 @@ export function MobileTableDisplaySettings({
               min={0}
               max={Math.max(0, columnCount - 1)}
               value={normalizedCount}
-              onChange={(event) => emit({
-                omitLeadingColumns: clampMobileDrilldownOmitLeadingColumns(
-                  Number(event.target.value),
-                  columnCount,
-                ),
-              })}
+              onChange={(event) =>
+                emit({
+                  omitLeadingColumns: clampMobileDrilldownOmitLeadingColumns(
+                    Number(event.target.value),
+                    columnCount,
+                  ),
+                })
+              }
             />
           </div>
           <div className="space-y-1.5">

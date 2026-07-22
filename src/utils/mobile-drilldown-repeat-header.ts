@@ -74,9 +74,7 @@ export function getMobileDrilldownRepeatedBodyRowIds(
 ): Set<string> {
   if (!range) return new Set();
   const firstBodyRow = Math.max(1, range.startRow);
-  const ids = authoredRows
-    .slice(firstBodyRow - 1, range.endRow)
-    .map((row) => row.id);
+  const ids = authoredRows.slice(firstBodyRow - 1, range.endRow).map((row) => row.id);
   return new Set(ids);
 }
 

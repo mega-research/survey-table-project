@@ -15,40 +15,40 @@ import {
   Table,
   Type,
 } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 
-import { client } from '@/shared/lib/rpc';
 import { Button } from '@/components/ui/button';
-import { useEnsureSurveyInDb } from '@/hooks/use-ensure-survey-in-db';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import type { CompleteQuestionWrite } from '@/db/schema/question-persisted-fields';
+import { useEnsureSurveyInDb } from '@/hooks/use-ensure-survey-in-db';
 import { extractImageUrlsFromQuestion } from '@/lib/image-extractor';
 import { deleteImagesFromR2 } from '@/lib/image-utils';
 import { isValidUUID } from '@/lib/utils';
+import { client } from '@/shared/lib/rpc';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { useSurveyUIStore } from '@/stores/ui-store';
 import { isOptionListType } from '@/types/question-types';
-import type { CompleteQuestionWrite } from '@/db/schema/question-persisted-fields';
 import { Question } from '@/types/survey';
 import { collectChoiceOptCells, resolveChoiceOptions } from '@/utils/choice-source';
 import { collectRankingOptCells } from '@/utils/ranking-source';
-import { useShallow } from 'zustand/react/shallow';
 
 import { QuestionBasicTab } from './question-basic-tab';
 import { QuestionConditionEditor } from './question-condition-editor';
+import {
+  createAddLevelOption,
+  createAddOption,
+  createAddSelectLevel,
+  createRemoveLevelOption,
+  createRemoveOption,
+  createRemoveSelectLevel,
+  createUpdateLevelOption,
+  createUpdateOption,
+  createUpdateOptionWithParent,
+  createUpdateSelectLevel,
+} from './question-option-helpers';
 import { SumConstraintEditor } from './sum-constraint-editor';
 import { TableValidationEditor } from './table-validation-editor';
-import {
-  createAddOption,
-  createUpdateOption,
-  createRemoveOption,
-  createAddSelectLevel,
-  createUpdateSelectLevel,
-  createRemoveSelectLevel,
-  createAddLevelOption,
-  createUpdateOptionWithParent,
-  createUpdateLevelOption,
-  createRemoveLevelOption,
-} from './question-option-helpers';
 
 interface QuestionEditModalProps {
   questionId: string | null;
@@ -106,7 +106,9 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
     let originalMobileDrilldownRepeatHeaderEndRow: Question['mobileDrilldownRepeatHeaderEndRow'];
     if (isOpen && questionId) {
       setEditingQuestionId(questionId);
-      const q = useSurveyBuilderStore.getState().currentSurvey.questions.find((q) => q.id === questionId);
+      const q = useSurveyBuilderStore
+        .getState()
+        .currentSurvey.questions.find((q) => q.id === questionId);
       originalHidden = q?.hideColumnLabels ?? false;
       originalMobileTableDisplayMode = q?.mobileTableDisplayMode;
       originalMobileDrilldownOmitLeadingColumns = q?.mobileDrilldownOmitLeadingColumns;
@@ -133,17 +135,20 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
                 if (originalMobileDrilldownOmitLeadingColumns === undefined) {
                   delete restoredQuestion.mobileDrilldownOmitLeadingColumns;
                 } else {
-                  restoredQuestion.mobileDrilldownOmitLeadingColumns = originalMobileDrilldownOmitLeadingColumns;
+                  restoredQuestion.mobileDrilldownOmitLeadingColumns =
+                    originalMobileDrilldownOmitLeadingColumns;
                 }
                 if (originalMobileDrilldownRepeatHeaderStartRow === undefined) {
                   delete restoredQuestion.mobileDrilldownRepeatHeaderStartRow;
                 } else {
-                  restoredQuestion.mobileDrilldownRepeatHeaderStartRow = originalMobileDrilldownRepeatHeaderStartRow;
+                  restoredQuestion.mobileDrilldownRepeatHeaderStartRow =
+                    originalMobileDrilldownRepeatHeaderStartRow;
                 }
                 if (originalMobileDrilldownRepeatHeaderEndRow === undefined) {
                   delete restoredQuestion.mobileDrilldownRepeatHeaderEndRow;
                 } else {
-                  restoredQuestion.mobileDrilldownRepeatHeaderEndRow = originalMobileDrilldownRepeatHeaderEndRow;
+                  restoredQuestion.mobileDrilldownRepeatHeaderEndRow =
+                    originalMobileDrilldownRepeatHeaderEndRow;
                 }
                 return restoredQuestion;
               }),
@@ -153,7 +158,7 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
         useSurveyUIStore.getState().setEditingQuestionId(null);
       }
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, questionId]);
 
   useEffect(() => {
@@ -162,9 +167,7 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
       const optionsWithDeepBranchRule = question.options
         ? question.options.map((option) => ({
             ...option,
-            ...(option.branchRule !== undefined
-              ? { branchRule: { ...option.branchRule } }
-              : {}),
+            ...(option.branchRule !== undefined ? { branchRule: { ...option.branchRule } } : {}),
           }))
         : [];
 
@@ -199,7 +202,9 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
         tableValidationRules: (question as any).tableValidationRules || [],
         dynamicRowConfigs: (question as any).dynamicRowConfigs || undefined,
         hideTitle: question.hideTitle ?? false,
-        ...(question.displayCondition !== undefined ? { displayCondition: question.displayCondition } : {}),
+        ...(question.displayCondition !== undefined
+          ? { displayCondition: question.displayCondition }
+          : {}),
         spssVarType: (question as any).spssVarType,
         spssMeasure: (question as any).spssMeasure,
       });
@@ -222,11 +227,11 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
       const hasBranchRule = resolveChoiceOptions(question).some((option) => option.branchRule);
       setShowBranchSettings(hasBranchRule);
     }
-  // deps 를 question?.id 로 좁힘 — question 객체 reference 가 바뀐다고 formData 를 reset 하면
-  // 모달 안에서 편집한 열/라벨/옵션이 zustand store 의 옛 값으로 덮어씌워진다.
-  // (cell-content-modal 이 셀 저장 시 store 를 부분 갱신 → question reference 변경 → 이 effect 재발화 회귀)
-  // 모달을 닫았다 다시 같은 질문으로 열면 새로 hydrate 되도록 isOpen 도 deps 에 포함.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // deps 를 question?.id 로 좁힘 — question 객체 reference 가 바뀐다고 formData 를 reset 하면
+    // 모달 안에서 편집한 열/라벨/옵션이 zustand store 의 옛 값으로 덮어씌워진다.
+    // (cell-content-modal 이 셀 저장 시 store 를 부분 갱신 → question reference 변경 → 이 effect 재발화 회귀)
+    // 모달을 닫았다 다시 같은 질문으로 열면 새로 hydrate 되도록 isOpen 도 deps 에 포함.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [question?.id, isOpen]);
 
   // 검증 로직 (formDataRef로 최신 값 참조 — deps에서 formData 제거)
@@ -239,12 +244,10 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
       question.type === 'ranking' && currentFormData.rankingConfig?.optionsSource === 'table';
     // Case A (radio/checkbox 설명 테이블 모드) 도 manual options 검증 스킵
     const isChoiceTableSource =
-      (question.type === 'radio' || question.type === 'checkbox')
-      && collectChoiceOptCells(currentFormData.tableRowsData).length > 0;
+      (question.type === 'radio' || question.type === 'checkbox') &&
+      collectChoiceOptCells(currentFormData.tableRowsData).length > 0;
     const needsOptions =
-      isOptionListType(question.type)
-      && !isRankingTableSource
-      && !isChoiceTableSource;
+      isOptionListType(question.type) && !isRankingTableSource && !isChoiceTableSource;
     const needsSelectLevels = question.type === 'multiselect';
     const errors: Record<string, string> = {};
 
@@ -256,7 +259,10 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
       errors['options'] = '최소 하나의 선택 옵션이 필요합니다.';
     }
 
-    if (needsSelectLevels && (!currentFormData.selectLevels || currentFormData.selectLevels.length === 0)) {
+    if (
+      needsSelectLevels &&
+      (!currentFormData.selectLevels || currentFormData.selectLevels.length === 0)
+    ) {
       errors['selectLevels'] = '최소 하나의 선택 레벨이 필요합니다.';
     }
 
@@ -271,9 +277,9 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
 
     // 설명 테이블 모드(radio/checkbox)인데 choice_opt 셀이 하나도 없으면 옵션 소스가 비어있음
     const choiceTableModeButEmpty =
-      (question.type === 'radio' || question.type === 'checkbox')
-      && (currentFormData.tableColumns?.length ?? 0) > 0
-      && collectChoiceOptCells(currentFormData.tableRowsData).length === 0;
+      (question.type === 'radio' || question.type === 'checkbox') &&
+      (currentFormData.tableColumns?.length ?? 0) > 0 &&
+      collectChoiceOptCells(currentFormData.tableRowsData).length === 0;
     if (choiceTableModeButEmpty) {
       errors['options'] =
         '설명 테이블에 "보기 옵션" 셀이 최소 1개는 있어야 합니다. 선택 열 셀을 클릭 → "보기 옵션" 탭으로 저장하세요.';
@@ -299,7 +305,11 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
     const currentExportLabel = localExportLabelRef.current;
     setFormData((prev) => ({ ...prev, title: currentTitle, exportLabel: currentExportLabel }));
     // formDataRef를 직접 업데이트하여 아래 로직에서 최신 값 사용
-    formDataRef.current = { ...formDataRef.current, title: currentTitle, exportLabel: currentExportLabel };
+    formDataRef.current = {
+      ...formDataRef.current,
+      title: currentTitle,
+      exportLabel: currentExportLabel,
+    };
 
     if (!questionId || !validateForm()) return;
 
@@ -307,7 +317,8 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
     // choiceGroups(보기 옵션 그룹)도 formData 가 아닌 셀 모달의 silentUpdateQuestion 경로로
     // 스토어에만 반영되므로, 저장 페이로드(formData)가 누락해 CREATE 시 그룹이 사라진다.
     // hideColumnLabels 와 동일하게 저장 직전 스토어 값을 머지해 동기화한다.
-    const storeQuestion = useSurveyBuilderStore.getState()
+    const storeQuestion = useSurveyBuilderStore
+      .getState()
       .currentSurvey.questions.find((q) => q.id === questionId);
     const currentFormData: Partial<Question> = {
       ...formDataRef.current,
@@ -364,7 +375,9 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
           if (!isNewQuestion) {
             // 기존 질문: UPDATE 경로
             const resolvedPlaceholder =
-              currentFormData.placeholder !== undefined ? currentFormData.placeholder : question?.placeholder;
+              currentFormData.placeholder !== undefined
+                ? currentFormData.placeholder
+                : question?.placeholder;
             const updateData: Partial<Question> = { ...currentFormData };
             if (resolvedPlaceholder !== undefined) {
               updateData.placeholder = resolvedPlaceholder;
@@ -404,20 +417,27 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
               requiresAcknowledgment:
                 currentFormData.requiresAcknowledgment ?? question?.requiresAcknowledgment,
               placeholder:
-                currentFormData.placeholder !== undefined ? currentFormData.placeholder : question?.placeholder,
+                currentFormData.placeholder !== undefined
+                  ? currentFormData.placeholder
+                  : question?.placeholder,
               defaultValueTemplate:
                 currentFormData.defaultValueTemplate !== undefined
                   ? currentFormData.defaultValueTemplate
                   : question?.defaultValueTemplate,
               inputType:
-                currentFormData.inputType !== undefined ? currentFormData.inputType : question?.inputType,
+                currentFormData.inputType !== undefined
+                  ? currentFormData.inputType
+                  : question?.inputType,
               emptyDefault:
-                currentFormData.emptyDefault !== undefined ? currentFormData.emptyDefault : question?.emptyDefault,
+                currentFormData.emptyDefault !== undefined
+                  ? currentFormData.emptyDefault
+                  : question?.emptyDefault,
               piiEncrypted:
                 currentFormData.piiEncrypted !== undefined
                   ? currentFormData.piiEncrypted
                   : question?.piiEncrypted,
-              tableValidationRules: currentFormData.tableValidationRules || question?.tableValidationRules,
+              tableValidationRules:
+                currentFormData.tableValidationRules || question?.tableValidationRules,
               numberFormat:
                 currentFormData.numberFormat !== undefined
                   ? currentFormData.numberFormat
@@ -435,12 +455,13 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
               // formData 가 소유하지 않는다. currentFormData 머지값을 CREATE 에 전달해
               // 신규 질문에서 ON 토글이 default(false)로 silent drop 되는 회귀를 막는다.
               hideColumnLabels: currentFormData.hideColumnLabels ?? question?.hideColumnLabels,
-              mobileOriginalTable: currentFormData.mobileOriginalTable ?? question?.mobileOriginalTable,
+              mobileOriginalTable:
+                currentFormData.mobileOriginalTable ?? question?.mobileOriginalTable,
               mobileTableDisplayMode:
                 currentFormData.mobileTableDisplayMode ?? question?.mobileTableDisplayMode,
               mobileDrilldownOmitLeadingColumns:
-                currentFormData.mobileDrilldownOmitLeadingColumns
-                ?? question?.mobileDrilldownOmitLeadingColumns,
+                currentFormData.mobileDrilldownOmitLeadingColumns ??
+                question?.mobileDrilldownOmitLeadingColumns,
               mobileDrilldownRepeatHeaderStartRow:
                 currentFormData.mobileDrilldownRepeatHeaderStartRow !== undefined
                   ? currentFormData.mobileDrilldownRepeatHeaderStartRow
@@ -450,7 +471,8 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
                   ? currentFormData.mobileDrilldownRepeatHeaderEndRow
                   : question?.mobileDrilldownRepeatHeaderEndRow,
               questionCode: currentFormData.questionCode || question?.questionCode,
-              isCustomSpssVarName: currentFormData.isCustomSpssVarName ?? question?.isCustomSpssVarName,
+              isCustomSpssVarName:
+                currentFormData.isCustomSpssVarName ?? question?.isCustomSpssVarName,
               exportLabel: currentFormData.exportLabel || question?.exportLabel,
               spssVarType: currentFormData.spssVarType ?? question?.spssVarType,
               spssMeasure: currentFormData.spssMeasure ?? question?.spssMeasure,
@@ -459,7 +481,8 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
 
             if (createdQuestion?.id) {
               // DB에 생성 완료 → added에서 제거 (다음 모달 저장 시 UPDATE 경로 사용)
-              const { [questionId]: _, ...remainingAdded } = useSurveyBuilderStore.getState().questionChanges.added;
+              const { [questionId]: _, ...remainingAdded } =
+                useSurveyBuilderStore.getState().questionChanges.added;
               useSurveyBuilderStore.setState((state) => ({
                 questionChanges: {
                   ...state.questionChanges,
@@ -517,7 +540,7 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
     <Dialog
       open={isOpen}
       onOpenChange={(open) => {
-        // X 버튼이나 ESC만 닫기 가능 (배경 클릭은 onInteractOutside에서 막음)
+        // X 버튼으로만 닫기 가능 (배경 클릭과 Escape는 차단)
         if (!open && !isSaving) {
           onClose();
         }
@@ -637,7 +660,12 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
                   // 조건 변경 시 즉시 DB에 저장 (질문 ID가 UUID이고 이미 DB에 존재하는 경우에만)
                   const store = useSurveyBuilderStore.getState();
                   const isNewQuestion = !!store.questionChanges.added[questionId || ''];
-                  if (questionId && store.currentSurvey.id && isValidUUID(questionId) && !isNewQuestion) {
+                  if (
+                    questionId &&
+                    store.currentSurvey.id &&
+                    isValidUUID(questionId) &&
+                    !isNewQuestion
+                  ) {
                     try {
                       await client.surveyBuilder.questions.update({
                         questionId,

@@ -46,7 +46,9 @@ export function normalizeQuestion(raw: unknown, mode: NormalizeMode = 'preserve'
     // 관측만 남기고 그대로 흘린다 — strip 활성화 결정의 입력 데이터.
     console.warn(
       '[question/normalize] 알 수 없는 질문 형태 passthrough:',
-      raw && typeof raw === 'object' ? `type=${String((raw as { type?: unknown }).type)}` : typeof raw,
+      raw && typeof raw === 'object'
+        ? `type=${String((raw as { type?: unknown }).type)}`
+        : typeof raw,
     );
   }
 
@@ -54,7 +56,10 @@ export function normalizeQuestion(raw: unknown, mode: NormalizeMode = 'preserve'
   return raw as QuestionVariant;
 }
 
-export function normalizeQuestions(raw: unknown[], mode: NormalizeMode = 'preserve'): QuestionVariant[] {
+export function normalizeQuestions(
+  raw: unknown[],
+  mode: NormalizeMode = 'preserve',
+): QuestionVariant[] {
   return raw.map((q) => normalizeQuestion(q, mode));
 }
 
@@ -66,9 +71,7 @@ export function normalizeQuestions(raw: unknown[], mode: NormalizeMode = 'preser
 function dropNullFields(raw: unknown): unknown {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return raw;
   return Object.fromEntries(
-    Object.entries(raw).filter(
-      ([key, value]) => value !== null || SEMANTIC_NULL_FIELDS.has(key),
-    ),
+    Object.entries(raw).filter(([key, value]) => value !== null || SEMANTIC_NULL_FIELDS.has(key)),
   );
 }
 
@@ -76,8 +79,8 @@ function isWellFormedCandidate(raw: unknown): boolean {
   if (!raw || typeof raw !== 'object') return false;
   const candidate = raw as { type?: unknown; id?: unknown };
   return (
-    typeof candidate.id === 'string'
-    && typeof candidate.type === 'string'
-    && isQuestionTypeValue(candidate.type)
+    typeof candidate.id === 'string' &&
+    typeof candidate.type === 'string' &&
+    isQuestionTypeValue(candidate.type)
   );
 }

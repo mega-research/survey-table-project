@@ -27,11 +27,7 @@ interface Props {
   errorCellIds?: Set<string> | undefined;
 }
 
-interface LegacyProps extends Omit<Props, 'rows' | 'interactiveRowId'> {
-  row: TableRow;
-}
-
-export function MobileOriginalRowTable(props: Props | LegacyProps) {
+export function MobileOriginalRowTable(props: Props) {
   const {
     columns,
     headerGrid,
@@ -42,8 +38,7 @@ export function MobileOriginalRowTable(props: Props | LegacyProps) {
     resetScrollKey,
     errorCellIds,
   } = props;
-  const rows = 'rows' in props ? props.rows : [props.row];
-  const interactiveRowId = 'interactiveRowId' in props ? props.interactiveRowId : props.row.id;
+  const { rows, interactiveRowId } = props;
   const attrs = useContactAttrs();
 
   const resolveChoiceControlType = useCallback(
