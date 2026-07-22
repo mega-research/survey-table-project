@@ -17,6 +17,7 @@ import {
   clampMobileDrilldownOmitLeadingColumns,
   resolveMobileTableDisplayMode,
 } from '@/utils/mobile-table-display-mode';
+import { resolveMobileDrilldownRepeatHeaderRange } from '@/utils/mobile-drilldown-repeat-header';
 
 import { BulkGeneratorModal, BulkColumnDef } from './bulk-generator';
 import { CellContentModal } from './cell-content-modal';
@@ -98,6 +99,9 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
   const mobileDrilldownOmitLeadingColumns = clampMobileDrilldownOmitLeadingColumns(
     mobileTableQuestion?.mobileDrilldownOmitLeadingColumns,
     currentColumns.length,
+  );
+  const mobileDrilldownRepeatHeaderRange = resolveMobileDrilldownRepeatHeaderRange(
+    mobileTableQuestion ?? {},
   );
 
   const {
@@ -452,11 +456,20 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
               mode={mobileTableDisplayMode}
               omitLeadingColumns={mobileDrilldownOmitLeadingColumns}
               columnCount={currentColumns.length}
-              onChange={({ mode, omitLeadingColumns }) => {
+              repeatHeaderStartRow={mobileDrilldownRepeatHeaderRange?.startRow ?? null}
+              repeatHeaderEndRow={mobileDrilldownRepeatHeaderRange?.endRow ?? null}
+              onChange={({
+                mode,
+                omitLeadingColumns,
+                repeatHeaderStartRow,
+                repeatHeaderEndRow,
+              }) => {
                 if (!editingQuestionId) return;
                 silentUpdateQuestion(editingQuestionId, {
                   mobileTableDisplayMode: mode,
                   mobileDrilldownOmitLeadingColumns: omitLeadingColumns,
+                  mobileDrilldownRepeatHeaderStartRow: repeatHeaderStartRow,
+                  mobileDrilldownRepeatHeaderEndRow: repeatHeaderEndRow,
                 });
               }}
             />

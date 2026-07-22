@@ -74,14 +74,6 @@ function getQuestion() {
   return useSurveyBuilderStore.getState().currentSurvey.questions.find((question) => question.id === 'q1');
 }
 
-function createDeferred() {
-  let resolve!: () => void;
-  const promise = new Promise<void>((resolvePromise) => {
-    resolve = resolvePromise;
-  });
-  return { promise, resolve };
-}
-
 function ModalHarness() {
   const [isOpen, setIsOpen] = useState(true);
 
@@ -116,6 +108,8 @@ describe('QuestionEditModal 모바일 표시 설정 롤백', () => {
     const originalQuestion = getQuestion();
     expect(originalQuestion?.mobileTableDisplayMode).toBe('original');
     expect(originalQuestion?.mobileDrilldownOmitLeadingColumns).toBeUndefined();
+    expect(originalQuestion?.mobileDrilldownRepeatHeaderStartRow).toBeUndefined();
+    expect(originalQuestion?.mobileDrilldownRepeatHeaderEndRow).toBeUndefined();
     expect(Object.hasOwn(originalQuestion ?? {}, 'mobileDrilldownOmitLeadingColumns')).toBe(false);
 
     // DynamicTableEditor가 두 필드를 store에 즉시 쓰는 경로를 재현한다.
@@ -123,17 +117,23 @@ describe('QuestionEditModal 모바일 표시 설정 롤백', () => {
       useSurveyBuilderStore.getState().silentUpdateQuestion('q1', {
         mobileTableDisplayMode: 'drilldown-original-row',
         mobileDrilldownOmitLeadingColumns: 2,
+        mobileDrilldownRepeatHeaderStartRow: 2,
+        mobileDrilldownRepeatHeaderEndRow: 3,
       });
     });
 
     expect(getQuestion()?.mobileTableDisplayMode).toBe('drilldown-original-row');
     expect(getQuestion()?.mobileDrilldownOmitLeadingColumns).toBe(2);
+    expect(getQuestion()?.mobileDrilldownRepeatHeaderStartRow).toBe(2);
+    expect(getQuestion()?.mobileDrilldownRepeatHeaderEndRow).toBe(3);
 
     fireEvent.click(screen.getByRole('button', { name: '취소' }));
 
     const restoredQuestion = getQuestion();
     expect(restoredQuestion?.mobileTableDisplayMode).toBe('original');
     expect(restoredQuestion?.mobileDrilldownOmitLeadingColumns).toBeUndefined();
+    expect(restoredQuestion?.mobileDrilldownRepeatHeaderStartRow).toBeUndefined();
+    expect(restoredQuestion?.mobileDrilldownRepeatHeaderEndRow).toBeUndefined();
     expect(Object.hasOwn(restoredQuestion ?? {}, 'mobileDrilldownOmitLeadingColumns')).toBe(false);
   });
 
@@ -168,58 +168,34 @@ describe('QuestionEditModal 모바일 표시 설정 롤백', () => {
     expect(consoleError).toHaveBeenCalledWith('저장 중 오류가 발생했습니다:', expect.any(Error));
   });
 
-  it('저장 중 Escape를 무시하고 성공한 저장값을 유지한 채 닫는다', async () => {
-    const deferred = createDeferred();
-    ensureSurveyMock.mockReturnValue(deferred.promise);
+  it('반복 헤더를 지운 null/null을 저장 payload와 store에 유지한다', async () => {
     render(<ModalHarness />);
 
     act(() => {
       useSurveyBuilderStore.getState().silentUpdateQuestion('q1', {
-        mobileTableDisplayMode: 'drilldown-original-row',
-        mobileDrilldownOmitLeadingColumns: 2,
+        mobileDrilldownRepeatHeaderStartRow: null,
+        mobileDrilldownRepeatHeaderEndRow: null,
       });
     });
     fireEvent.click(screen.getByRole('button', { name: '저장' }));
-
-    await waitFor(() => {
-      expect(ensureSurveyMock).toHaveBeenCalledTimes(1);
-      expect(screen.getByRole('button', { name: '취소' })).toBeDisabled();
-    });
-
-    fireEvent.keyDown(document, { key: 'Escape' });
-
-    expect(screen.getByRole('button', { name: '취소' })).toBeDisabled();
-    expect(getQuestion()?.mobileTableDisplayMode).toBe('drilldown-original-row');
-    expect(getQuestion()?.mobileDrilldownOmitLeadingColumns).toBe(2);
-
-    act(() => deferred.resolve());
-
-    await waitFor(() => {
-      expect(screen.queryByRole('button', { name: '취소' })).toBeNull();
-    });
-    expect(getQuestion()?.mobileTableDisplayMode).toBe('drilldown-original-row');
-    expect(getQuestion()?.mobileDrilldownOmitLeadingColumns).toBe(2);
+    await waitFor(() => expect(updateQuestionMock).toHaveBeenCalled());
+    expect(getQuestion()?.mobileDrilldownRepeatHeaderStartRow).toBeNull();
+    expect(getQuestion()?.mobileDrilldownRepeatHeaderEndRow).toBeNull();
   });
 
-  it('저장 중 Ctrl+S를 무시해 중복 저장을 시작하지 않는다', async () => {
-    const deferred = createDeferred();
-    ensureSurveyMock.mockReturnValue(deferred.promise);
+  it('Ctrl/Cmd+S는 저장하지 않고 Escape는 모달을 닫지 않는다', () => {
     render(<ModalHarness />);
-
-    fireEvent.click(screen.getByRole('button', { name: '저장' }));
-    await waitFor(() => {
-      expect(ensureSurveyMock).toHaveBeenCalledTimes(1);
-      expect(screen.getByRole('button', { name: '저장' })).toBeDisabled();
-    });
+    expect(screen.queryByText('저장: Ctrl+S')).toBeNull();
+    expect(screen.queryByText('닫기: ESC')).toBeNull();
 
     fireEvent.keyDown(document, { key: 's', ctrlKey: true });
+    fireEvent.keyDown(document, { key: 's', metaKey: true });
 
-    expect(ensureSurveyMock).toHaveBeenCalledTimes(1);
+    expect(ensureSurveyMock).not.toHaveBeenCalled();
+    expect(updateQuestionMock).not.toHaveBeenCalled();
 
-    act(() => deferred.resolve());
-    await waitFor(() => {
-      expect(screen.queryByRole('button', { name: '취소' })).toBeNull();
-    });
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.getByRole('button', { name: '취소' })).toBeInTheDocument();
   });
 
   it('ensureSurvey 실패는 모달을 닫지 않고 취소 시 absent 모바일 필드를 정확히 복원한다', async () => {

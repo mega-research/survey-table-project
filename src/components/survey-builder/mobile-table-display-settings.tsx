@@ -1,18 +1,34 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+
 import { Check } from 'lucide-react';
 
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import type { MobileTableDisplayMode } from '@/types/mobile-table-display';
+import {
+  formatMobileDrilldownRepeatHeaderRange,
+  parseMobileDrilldownRepeatHeaderText,
+  resolveMobileDrilldownRepeatHeaderRange,
+} from '@/utils/mobile-drilldown-repeat-header';
 import { clampMobileDrilldownOmitLeadingColumns } from '@/utils/mobile-table-display-mode';
+
+interface MobileTableDisplaySettingsValue {
+  mode: MobileTableDisplayMode;
+  omitLeadingColumns: number;
+  repeatHeaderStartRow: number | null;
+  repeatHeaderEndRow: number | null;
+}
 
 interface MobileTableDisplaySettingsProps {
   mode: MobileTableDisplayMode;
   omitLeadingColumns: number;
   columnCount: number;
-  onChange: (value: { mode: MobileTableDisplayMode; omitLeadingColumns: number }) => void;
+  repeatHeaderStartRow?: number | null | undefined;
+  repeatHeaderEndRow?: number | null | undefined;
+  onChange: (value: MobileTableDisplaySettingsValue) => void;
 }
 
 const OPTIONS: Array<{ value: MobileTableDisplayMode; label: string; description: string }> = [
@@ -29,9 +45,43 @@ export function MobileTableDisplaySettings({
   mode,
   omitLeadingColumns,
   columnCount,
+  repeatHeaderStartRow,
+  repeatHeaderEndRow,
   onChange,
 }: MobileTableDisplaySettingsProps) {
   const normalizedCount = clampMobileDrilldownOmitLeadingColumns(omitLeadingColumns, columnCount);
+  const committedRange = resolveMobileDrilldownRepeatHeaderRange({
+    mobileDrilldownRepeatHeaderStartRow: repeatHeaderStartRow,
+    mobileDrilldownRepeatHeaderEndRow: repeatHeaderEndRow,
+  });
+  const committedText = formatMobileDrilldownRepeatHeaderRange(committedRange);
+  const [repeatHeaderDraft, setRepeatHeaderDraft] = useState(committedText);
+
+  useEffect(() => {
+    setRepeatHeaderDraft(committedText);
+  }, [committedText]);
+
+  const emit = (next: Partial<MobileTableDisplaySettingsValue>) => onChange({
+    mode,
+    omitLeadingColumns: normalizedCount,
+    repeatHeaderStartRow: committedRange?.startRow ?? null,
+    repeatHeaderEndRow: committedRange?.endRow ?? null,
+    ...next,
+  });
+
+  const commitRepeatHeaderDraft = () => {
+    const parsed = parseMobileDrilldownRepeatHeaderText(repeatHeaderDraft);
+    if (!parsed.ok) {
+      setRepeatHeaderDraft(committedText);
+      return;
+    }
+    const nextText = formatMobileDrilldownRepeatHeaderRange(parsed.value);
+    setRepeatHeaderDraft(nextText);
+    emit({
+      repeatHeaderStartRow: parsed.value?.startRow ?? null,
+      repeatHeaderEndRow: parsed.value?.endRow ?? null,
+    });
+  };
 
   return (
     <div className="space-y-3 rounded-lg border border-gray-200 p-4">
@@ -65,10 +115,7 @@ export function MobileTableDisplaySettings({
                 value={option.value}
                 aria-label={option.label}
                 checked={selected}
-                onChange={() => onChange({
-                  mode: option.value,
-                  omitLeadingColumns: normalizedCount,
-                })}
+                onChange={() => emit({ mode: option.value })}
                 className="sr-only"
               />
               <span className="block text-sm font-semibold text-gray-900">{option.label}</span>
@@ -89,22 +136,43 @@ export function MobileTableDisplaySettings({
         })}
       </div>
       {mode === 'drilldown-original-row' ? (
-        <div className="max-w-xs space-y-1.5">
-          <Label htmlFor="mobile-drilldown-omit-leading">상세에서 제외할 앞쪽 열 수</Label>
-          <Input
-            id="mobile-drilldown-omit-leading"
-            type="number"
-            min={0}
-            max={Math.max(0, columnCount - 1)}
-            value={normalizedCount}
-            onChange={(event) => onChange({
-              mode,
-              omitLeadingColumns: clampMobileDrilldownOmitLeadingColumns(
-                Number(event.target.value),
-                columnCount,
-              ),
-            })}
-          />
+        <div className="grid max-w-xl gap-3 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="mobile-drilldown-omit-leading">상세에서 제외할 앞쪽 열 수</Label>
+            <Input
+              id="mobile-drilldown-omit-leading"
+              type="number"
+              min={0}
+              max={Math.max(0, columnCount - 1)}
+              value={normalizedCount}
+              onChange={(event) => emit({
+                omitLeadingColumns: clampMobileDrilldownOmitLeadingColumns(
+                  Number(event.target.value),
+                  columnCount,
+                ),
+              })}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="mobile-drilldown-repeat-header">상세에서 반복할 헤더 행</Label>
+            <Input
+              id="mobile-drilldown-repeat-header"
+              type="text"
+              inputMode="text"
+              value={repeatHeaderDraft}
+              onChange={(event) => setRepeatHeaderDraft(event.target.value)}
+              onBlur={commitRepeatHeaderDraft}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  commitRepeatHeaderDraft();
+                }
+              }}
+            />
+            <p className="text-xs text-gray-500">
+              비우면 반복하지 않습니다. 0은 진짜 헤더이며, 3 또는 0-2처럼 입력합니다.
+            </p>
+          </div>
         </div>
       ) : null}
     </div>

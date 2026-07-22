@@ -102,12 +102,16 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
     let originalHidden = false;
     let originalMobileTableDisplayMode: Question['mobileTableDisplayMode'];
     let originalMobileDrilldownOmitLeadingColumns: Question['mobileDrilldownOmitLeadingColumns'];
+    let originalMobileDrilldownRepeatHeaderStartRow: Question['mobileDrilldownRepeatHeaderStartRow'];
+    let originalMobileDrilldownRepeatHeaderEndRow: Question['mobileDrilldownRepeatHeaderEndRow'];
     if (isOpen && questionId) {
       setEditingQuestionId(questionId);
       const q = useSurveyBuilderStore.getState().currentSurvey.questions.find((q) => q.id === questionId);
       originalHidden = q?.hideColumnLabels ?? false;
       originalMobileTableDisplayMode = q?.mobileTableDisplayMode;
       originalMobileDrilldownOmitLeadingColumns = q?.mobileDrilldownOmitLeadingColumns;
+      originalMobileDrilldownRepeatHeaderStartRow = q?.mobileDrilldownRepeatHeaderStartRow;
+      originalMobileDrilldownRepeatHeaderEndRow = q?.mobileDrilldownRepeatHeaderEndRow;
       didSaveRef.current = false;
     }
     return () => {
@@ -130,6 +134,16 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
                   delete restoredQuestion.mobileDrilldownOmitLeadingColumns;
                 } else {
                   restoredQuestion.mobileDrilldownOmitLeadingColumns = originalMobileDrilldownOmitLeadingColumns;
+                }
+                if (originalMobileDrilldownRepeatHeaderStartRow === undefined) {
+                  delete restoredQuestion.mobileDrilldownRepeatHeaderStartRow;
+                } else {
+                  restoredQuestion.mobileDrilldownRepeatHeaderStartRow = originalMobileDrilldownRepeatHeaderStartRow;
+                }
+                if (originalMobileDrilldownRepeatHeaderEndRow === undefined) {
+                  delete restoredQuestion.mobileDrilldownRepeatHeaderEndRow;
+                } else {
+                  restoredQuestion.mobileDrilldownRepeatHeaderEndRow = originalMobileDrilldownRepeatHeaderEndRow;
                 }
                 return restoredQuestion;
               }),
@@ -310,6 +324,12 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
       ...(storeQuestion?.mobileDrilldownOmitLeadingColumns !== undefined
         ? { mobileDrilldownOmitLeadingColumns: storeQuestion.mobileDrilldownOmitLeadingColumns }
         : {}),
+      ...(storeQuestion?.mobileDrilldownRepeatHeaderStartRow !== undefined
+        ? { mobileDrilldownRepeatHeaderStartRow: storeQuestion.mobileDrilldownRepeatHeaderStartRow }
+        : {}),
+      ...(storeQuestion?.mobileDrilldownRepeatHeaderEndRow !== undefined
+        ? { mobileDrilldownRepeatHeaderEndRow: storeQuestion.mobileDrilldownRepeatHeaderEndRow }
+        : {}),
       ...(storeQuestion?.choiceGroups !== undefined
         ? { choiceGroups: storeQuestion.choiceGroups }
         : {}),
@@ -474,31 +494,6 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
     }
   }, [ensureSurvey, questionId, validateForm, updateQuestion, onClose, question]);
 
-  // 키보드 이벤트 핸들러
-  const handleKeyDown = useCallback(
-    (e: KeyboardEvent) => {
-      const isSaveShortcut = e.key === 's' && (e.ctrlKey || e.metaKey);
-      if (isSaving && (e.key === 'Escape' || isSaveShortcut)) {
-        e.preventDefault();
-        return;
-      }
-      if (e.key === 'Escape') {
-        onClose();
-      } else if (isSaveShortcut) {
-        e.preventDefault();
-        handleSave();
-      }
-    },
-    [isSaving, onClose, handleSave],
-  );
-
-  useEffect(() => {
-    if (isOpen) {
-      document.addEventListener('keydown', handleKeyDown);
-      return () => document.removeEventListener('keydown', handleKeyDown);
-    }
-  }, [isOpen, handleKeyDown]);
-
   // Option helpers (setFormData를 바인딩, useMemo로 안정화하여 자식 리렌더 방지)
   const addOption = useMemo(() => createAddOption(setFormData), []);
   const updateOption = useMemo(() => createUpdateOption(setFormData), []);
@@ -533,6 +528,9 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
         onInteractOutside={(e) => {
           e.preventDefault();
         }}
+        onEscapeKeyDown={(event) => {
+          event.preventDefault();
+        }}
       >
         {/* 고정 헤더 */}
         <DialogHeader className="flex-shrink-0 border-b border-gray-200 px-6 py-4">
@@ -540,11 +538,6 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
             <div className="flex items-center space-x-2">
               {getQuestionTypeIcon(question.type)}
               <span>{getQuestionTypeLabel(question.type)} 편집</span>
-            </div>
-            {/* 키보드 단축키 안내 */}
-            <div className="hidden items-center space-x-4 text-xs text-gray-500 sm:flex">
-              <span>저장: Ctrl+S</span>
-              <span>닫기: ESC</span>
             </div>
           </DialogTitle>
         </DialogHeader>
