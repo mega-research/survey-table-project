@@ -11,6 +11,9 @@ describe('테스트 대상자 기본 데이터', () => {
     expect(TEST_CONTACT_FIXTURES).toHaveLength(20);
     expect(new Set(TEST_CONTACT_FIXTURES.map((row) => row.name)).size).toBe(20);
     expect(TEST_CONTACT_FIXTURES.every((row) => row.phone.startsWith('000-'))).toBe(true);
+    expect(new Set(TEST_CONTACT_FIXTURES.map((row) => row.region))).toEqual(
+      new Set(['서울', '부산', '대전', '광주']),
+    );
   });
 
   it('실제 스킴을 변경하지 않고 빠진 네 의미 컬럼만 보충한다', () => {
@@ -31,6 +34,7 @@ describe('테스트 대상자 기본 데이터', () => {
     expect(test).not.toBe(real);
     expect(test.columns.filter((column) => column.piiType === 'name')).toHaveLength(1);
     expect(test.columns.some((column) => column.source === 'attrs.test_company')).toBe(true);
+    expect(test.columns.some((column) => column.source === 'attrs.test_region')).toBe(true);
     expect(test.columns.some((column) => column.piiType === 'phone')).toBe(true);
     expect(test.columns.some((column) => column.piiType === 'email')).toBe(true);
     expect(test.columns.map((column) => column.source)).toEqual(
@@ -86,6 +90,7 @@ describe('테스트 대상자 기본 데이터', () => {
     expect(resolveTestContactFieldBindings(scheme)).toMatchObject({
       name: { columnKey: '담당자', fieldType: 'representative' },
       company: { columnKey: '소속' },
+      region: { columnKey: 'test_region' },
     });
   });
 

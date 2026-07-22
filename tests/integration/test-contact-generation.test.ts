@@ -11,6 +11,7 @@ type TargetRow = {
   surveyId: string;
   resid: number;
   isTest: boolean;
+  groupValue: string | null;
   attrs: Record<string, string>;
 };
 
@@ -248,10 +249,16 @@ describe('테스트 대상자 자동 생성', () => {
     expect(h.lockCount).toBe(1);
     expect(h.targets).toHaveLength(3);
     expect(h.targets.every((target) => target.isTest)).toBe(true);
+    expect(h.targets.map((target) => target.groupValue)).toEqual(['서울', '부산', '대전']);
     expect(h.targets.map((target) => target.attrs['소속'])).toEqual([
       '테스트기업 01',
       '테스트기업 02',
       '테스트기업 03',
+    ]);
+    expect(h.targets.map((target) => target.attrs['test_region'])).toEqual([
+      '서울',
+      '부산',
+      '대전',
     ]);
     expect(h.responses.map((response) => response.id)).toEqual(['targeted-test', 'anonymous-real']);
     const deleteQuery = dialect.sqlToQuery(h.responseDeleteWheres[0] as never);

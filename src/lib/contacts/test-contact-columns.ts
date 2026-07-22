@@ -7,6 +7,7 @@ type ContactColumnSchemeInput = Omit<ContactColumnScheme, 'columns'> & {
 const DEFAULTS: readonly ContactColumnDef[] = [
   { key: 'test_name', label: '이름', source: 'pii.test_name', piiType: 'name', order: 0 },
   { key: 'test_company', label: '회사', source: 'attrs.test_company', order: 0 },
+  { key: 'test_region', label: '지역', source: 'attrs.test_region', order: 0 },
   {
     key: 'test_phone',
     label: '전화번호',
@@ -39,6 +40,13 @@ function isCompanyAttrsColumn(column: ContactColumnDef): boolean {
   );
 }
 
+function isRegionAttrsColumn(column: ContactColumnDef): boolean {
+  return (
+    column.source.startsWith('attrs.') &&
+    /지역|region/i.test(`${column.key} ${column.label}`)
+  );
+}
+
 export function ensureTestContactColumns(
   real: ContactColumnSchemeInput | null,
   saved: ContactColumnSchemeInput | null,
@@ -47,6 +55,7 @@ export function ensureTestContactColumns(
     saved ?? real ?? { version: 1, headerRow: 1, columns: [] },
   ) as ContactColumnScheme;
   const hasCompany = base.columns.some(isCompanyAttrsColumn);
+  const hasRegion = base.columns.some(isRegionAttrsColumn);
   const missing = DEFAULTS.filter((column) => {
     if (column.piiType === 'name') {
       return !base.columns.some(
@@ -61,7 +70,9 @@ export function ensureTestContactColumns(
     if (column.piiType === 'email') {
       return !base.columns.some((candidate) => candidate.piiType === 'email');
     }
-    return !hasCompany;
+    if (column.source === 'attrs.test_company') return !hasCompany;
+    if (column.source === 'attrs.test_region') return !hasRegion;
+    return false;
   });
 
   const existingSources = new Set(base.columns.map((column) => column.source));
@@ -79,6 +90,7 @@ export function ensureTestContactColumns(
 export interface TestContactFieldBindings {
   name: { columnKey: string; fieldType: 'name' | 'representative' };
   company: { columnKey: string };
+  region: { columnKey: string };
   phone: { columnKey: string; fieldType: 'phone' | 'mobile' };
   email: { columnKey: string; fieldType: 'email' };
 }
@@ -90,6 +102,7 @@ export function resolveTestContactFieldBindings(
     (column) => column.piiType === 'name' || column.piiType === 'representative',
   );
   const company = scheme.columns.find(isCompanyAttrsColumn);
+  const region = scheme.columns.find(isRegionAttrsColumn);
   const phone = scheme.columns.find(
     (column) => column.piiType === 'phone' || column.piiType === 'mobile',
   );
@@ -99,6 +112,7 @@ export function resolveTestContactFieldBindings(
     throw new Error('테스트 이름 컬럼을 찾을 수 없습니다.');
   }
   if (!company) throw new Error('테스트 회사 컬럼을 찾을 수 없습니다.');
+  if (!region) throw new Error('테스트 지역 컬럼을 찾을 수 없습니다.');
   if (!phone || (phone.piiType !== 'phone' && phone.piiType !== 'mobile')) {
     throw new Error('테스트 전화 컬럼을 찾을 수 없습니다.');
   }
@@ -109,6 +123,7 @@ export function resolveTestContactFieldBindings(
   return {
     name: { columnKey: name.source.slice(4), fieldType: name.piiType },
     company: { columnKey: company.source.slice(6) },
+    region: { columnKey: region.source.slice(6) },
     phone: { columnKey: phone.source.slice(4), fieldType: phone.piiType },
     email: { columnKey: email.source.slice(4), fieldType: email.piiType },
   };

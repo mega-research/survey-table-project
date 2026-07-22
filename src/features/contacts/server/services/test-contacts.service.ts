@@ -36,7 +36,11 @@ export async function generateTestContacts(
           surveyId: input.surveyId,
           resid: Number(resid),
           isTest: prepared.isTest,
-          attrs: { [bindings.company.columnKey]: fixture.company },
+          groupValue: fixture.region,
+          attrs: {
+            [bindings.company.columnKey]: fixture.company,
+            [bindings.region.columnKey]: fixture.region,
+          },
           inviteCode: generateInviteCode(),
         })
         .returning({ id: contactTargets.id });
