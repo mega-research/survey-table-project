@@ -1,11 +1,12 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PgDialect } from 'drizzle-orm/pg-core';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { deleteContactTarget } from '@/features/contacts/server/services/contact-targets.service';
+import { disableTestWorkspace } from '@/features/operations/server/services/test-workspace.service';
 import {
   archiveTestMailForTargets,
   archiveTestWorkspaceMail,
 } from '@/lib/mail/test-mail-archive.server';
-import { deleteContactTarget } from '@/features/contacts/server/services/contact-targets.service';
 
 type RecipientStatus =
   | 'queued'
@@ -122,78 +123,126 @@ function filterRows(name: string, query: unknown | null): Array<Record<string, u
     return !query || includesParam(query, state.survey.id) ? [state.survey] : [];
   }
   if (name === 'mail_campaigns') {
-    return asRecords(state.campaigns.filter((row) => {
-      if (!query) return true;
-      const { sql, params } = compiled(query);
-      const campaignParams = state.campaigns.map((campaign) => campaign.id).filter((id) => params.includes(id));
-      if (campaignParams.length > 0 && !campaignParams.includes(row.id)) return false;
-      if (sql.includes('"survey_id"') && params.includes(state.survey.id) && row.surveyId !== state.survey.id) {
-        return false;
-      }
-      if (sql.includes('"is_test"')) {
-        const scope = params.find((value): value is boolean => typeof value === 'boolean');
-        if (scope !== undefined && row.isTest !== scope) return false;
-      }
-      return true;
-    }));
-  }
-  if (name === 'contact_targets') {
-    return asRecords(state.contacts.filter((row) => {
-      if (!query) return true;
-      const { sql, params } = compiled(query);
-      if (sql.includes('"contact_targets"."id"') && params.some((value) => (
-        typeof value === 'string' && state.contacts.some((contact) => contact.id === value)
-      )) && !params.includes(row.id)) return false;
-      if (sql.includes('"survey_id"') && params.includes(state.survey.id) && row.surveyId !== state.survey.id) {
-        return false;
-      }
-      if (sql.includes('"is_test"')) {
-        const scope = params.find((value): value is boolean => typeof value === 'boolean');
-        if (scope !== undefined && row.isTest !== scope) return false;
-      }
-      return true;
-    }));
-  }
-  if (name === 'survey_responses') {
-    return asRecords(state.responses.filter((row) => {
-      if (!query) return true;
-      const { sql, params } = compiled(query);
-      if (sql.includes('"survey_id"') && params.includes(state.survey.id) && row.surveyId !== state.survey.id) {
-        return false;
-      }
-      if (sql.includes('"contact_target_id"')) {
-        const targetIds = state.contacts.map((contact) => contact.id).filter((id) => params.includes(id));
-        if (targetIds.length > 0 && (row.contactTargetId === null || !targetIds.includes(row.contactTargetId))) {
+    return asRecords(
+      state.campaigns.filter((row) => {
+        if (!query) return true;
+        const { sql, params } = compiled(query);
+        const campaignParams = state.campaigns
+          .map((campaign) => campaign.id)
+          .filter((id) => params.includes(id));
+        if (campaignParams.length > 0 && !campaignParams.includes(row.id)) return false;
+        if (
+          sql.includes('"survey_id"') &&
+          params.includes(state.survey.id) &&
+          row.surveyId !== state.survey.id
+        ) {
           return false;
         }
-      }
-      if (sql.includes('"is_test"')) {
-        const scope = params.find((value): value is boolean => typeof value === 'boolean');
-        if (scope !== undefined && row.isTest !== scope) return false;
-      }
-      return true;
-    }));
+        if (sql.includes('"is_test"')) {
+          const scope = params.find((value): value is boolean => typeof value === 'boolean');
+          if (scope !== undefined && row.isTest !== scope) return false;
+        }
+        if (sql.includes('"status" in')) {
+          const statuses = params.filter(
+            (value): value is string =>
+              typeof value === 'string' &&
+              ['queued', 'sending', 'completed', 'partial', 'cancelled'].includes(value),
+          );
+          if (statuses.length > 0 && !statuses.includes(row.status)) return false;
+        }
+        if (sql.includes('"archived_at" is null') && row.archivedAt !== null) return false;
+        return true;
+      }),
+    );
+  }
+  if (name === 'contact_targets') {
+    return asRecords(
+      state.contacts.filter((row) => {
+        if (!query) return true;
+        const { sql, params } = compiled(query);
+        if (
+          sql.includes('"contact_targets"."id"') &&
+          params.some(
+            (value) =>
+              typeof value === 'string' && state.contacts.some((contact) => contact.id === value),
+          ) &&
+          !params.includes(row.id)
+        )
+          return false;
+        if (
+          sql.includes('"survey_id"') &&
+          params.includes(state.survey.id) &&
+          row.surveyId !== state.survey.id
+        ) {
+          return false;
+        }
+        if (sql.includes('"is_test"')) {
+          const scope = params.find((value): value is boolean => typeof value === 'boolean');
+          if (scope !== undefined && row.isTest !== scope) return false;
+        }
+        return true;
+      }),
+    );
+  }
+  if (name === 'survey_responses') {
+    return asRecords(
+      state.responses.filter((row) => {
+        if (!query) return true;
+        const { sql, params } = compiled(query);
+        if (
+          sql.includes('"survey_id"') &&
+          params.includes(state.survey.id) &&
+          row.surveyId !== state.survey.id
+        ) {
+          return false;
+        }
+        if (sql.includes('"contact_target_id"')) {
+          const targetIds = state.contacts
+            .map((contact) => contact.id)
+            .filter((id) => params.includes(id));
+          if (
+            targetIds.length > 0 &&
+            (row.contactTargetId === null || !targetIds.includes(row.contactTargetId))
+          ) {
+            return false;
+          }
+        }
+        if (sql.includes('"is_test"')) {
+          const scope = params.find((value): value is boolean => typeof value === 'boolean');
+          if (scope !== undefined && row.isTest !== scope) return false;
+        }
+        return true;
+      }),
+    );
   }
   if (name !== 'mail_recipients') return [];
 
-  return asRecords(state.recipients.filter((row) => {
-    if (!query) return true;
-    const { sql, params } = compiled(query);
-    if (sql.includes('"contact_target_id"') && row.contactTargetId !== null) {
-      const targetParams = state.contacts.map((contact) => contact.id).filter((id) => params.includes(id));
-      if (targetParams.length > 0 && !targetParams.includes(row.contactTargetId)) return false;
-    }
-    if (sql.includes('"campaign_id"')) {
-      const campaignParams = state.campaigns.map((campaign) => campaign.id).filter((id) => params.includes(id));
-      if (campaignParams.length > 0 && !campaignParams.includes(row.campaignId)) return false;
-    }
-    if (sql.includes('"mail_recipients"."id"')) {
-      const recipientParams = state.recipients.map((recipient) => recipient.id).filter((id) => params.includes(id));
-      if (recipientParams.length > 0 && !recipientParams.includes(row.id)) return false;
-    }
-    if (sql.includes('"archived_at" is null') && row.archivedAt !== null) return false;
-    return true;
-  }));
+  return asRecords(
+    state.recipients.filter((row) => {
+      if (!query) return true;
+      const { sql, params } = compiled(query);
+      if (sql.includes('"contact_target_id"') && row.contactTargetId !== null) {
+        const targetParams = state.contacts
+          .map((contact) => contact.id)
+          .filter((id) => params.includes(id));
+        if (targetParams.length > 0 && !targetParams.includes(row.contactTargetId)) return false;
+      }
+      if (sql.includes('"campaign_id"')) {
+        const campaignParams = state.campaigns
+          .map((campaign) => campaign.id)
+          .filter((id) => params.includes(id));
+        if (campaignParams.length > 0 && !campaignParams.includes(row.campaignId)) return false;
+      }
+      if (sql.includes('"mail_recipients"."id"')) {
+        const recipientParams = state.recipients
+          .map((recipient) => recipient.id)
+          .filter((id) => params.includes(id));
+        if (recipientParams.length > 0 && !recipientParams.includes(row.id)) return false;
+      }
+      if (sql.includes('"archived_at" is null') && row.archivedAt !== null) return false;
+      return true;
+    }),
+  );
 }
 
 function project(
@@ -201,12 +250,15 @@ function project(
   selection?: Record<string, unknown>,
 ): Array<Record<string, unknown>> {
   if (!selection) return rows.map((row) => ({ ...row }));
-  return rows.map((row) => Object.fromEntries(
-    Object.keys(selection).map((key) => [
-      key,
-      key === 'enabled' ? row['testModeEnabled'] : row[key],
-    ]),
-  ));
+  if ('total' in selection) return [{ total: rows.length }];
+  return rows.map((row) =>
+    Object.fromEntries(
+      Object.keys(selection).map((key) => [
+        key,
+        key === 'enabled' ? row['testModeEnabled'] : row[key],
+      ]),
+    ),
+  );
 }
 
 function makeTx() {
@@ -304,16 +356,15 @@ function makeTx() {
     if (!campaign) return [];
     if (compiled(query).sql.includes('SET status = CASE')) {
       if (
-        campaign.status === 'sending'
-        && campaign.archivedAt === null
-        && campaign.queuedCount === 0
-        && campaign.sentCount === 0
+        campaign.status === 'sending' &&
+        campaign.archivedAt === null &&
+        campaign.queuedCount === 0 &&
+        campaign.sentCount === 0
       ) {
-        campaign.status = (
+        campaign.status =
           campaign.bouncedCount + campaign.failedCount + campaign.complainedCount > 0
             ? 'partial'
-            : 'completed'
-        );
+            : 'completed';
       }
       state.events.push(`finalize:${campaign.id}`);
       return [];
@@ -323,14 +374,16 @@ function makeTx() {
     );
     Object.assign(campaign, {
       recipientCount: active.length,
-      queuedCount: active.filter((row) => row.status === 'queued' || row.status === 'sending').length,
+      queuedCount: active.filter((row) => row.status === 'queued' || row.status === 'sending')
+        .length,
       sentCount: active.filter((row) => row.status === 'sent').length,
       deliveredCount: active.filter((row) => row.status === 'delivered').length,
       openedCount: active.filter((row) => row.status === 'opened').length,
       bouncedCount: active.filter((row) => row.status === 'bounced').length,
       complainedCount: active.filter((row) => row.status === 'complained').length,
       failedCount: active.filter((row) => row.status === 'failed').length,
-      skippedUnsubscribedCount: active.filter((row) => row.status === 'skipped_unsubscribed').length,
+      skippedUnsubscribedCount: active.filter((row) => row.status === 'skipped_unsubscribed')
+        .length,
     });
     state.events.push(`recalculate:${campaign.id}`);
     return [];
@@ -341,9 +394,9 @@ function makeTx() {
 
 vi.mock('@/db', () => ({
   db: {
-    transaction: vi.fn(async (callback: (tx: ReturnType<typeof makeTx>) => Promise<unknown>) => (
-      callback(makeTx())
-    )),
+    transaction: vi.fn(async (callback: (tx: ReturnType<typeof makeTx>) => Promise<unknown>) =>
+      callback(makeTx()),
+    ),
   },
 }));
 
@@ -374,38 +427,42 @@ beforeEach(() => {
   state.survey.testModeEnabled = true;
   state.survey.testContactColumns = { version: 1, headerRow: 1, columns: [] };
   state.contacts = [{ id: 'target-test', surveyId: 'survey-1', isTest: true }];
-  state.responses = [{
-    id: 'response-test',
-    surveyId: 'survey-1',
-    contactTargetId: 'target-test',
-    isTest: true,
-  }];
-  state.campaigns = [{
-    id: 'campaign-test',
-    surveyId: 'survey-1',
-    isTest: true,
-    mailTemplateId: 'template-1',
-    title: '테스트 발송 원본',
-    subjectSnapshot: '개인화 제목',
-    bodyHtmlSnapshot: '<p>개인화 본문</p>',
-    fromLocalSnapshot: 'qa',
-    fromNameSnapshot: '테스트 담당자',
-    replyToSnapshot: 'qa@example.com',
-    attachmentsSnapshot: [{ key: 'private.pdf' }],
-    filterSnapshot: { targetIds: ['target-test'] },
-    createdBy: '00000000-0000-0000-0000-000000000099',
-    status: 'sending',
-    archivedAt: null,
-    recipientCount: 3,
-    queuedCount: 2,
-    sentCount: 1,
-    deliveredCount: 0,
-    openedCount: 0,
-    bouncedCount: 0,
-    complainedCount: 0,
-    failedCount: 0,
-    skippedUnsubscribedCount: 0,
-  }];
+  state.responses = [
+    {
+      id: 'response-test',
+      surveyId: 'survey-1',
+      contactTargetId: 'target-test',
+      isTest: true,
+    },
+  ];
+  state.campaigns = [
+    {
+      id: 'campaign-test',
+      surveyId: 'survey-1',
+      isTest: true,
+      mailTemplateId: 'template-1',
+      title: '테스트 발송 원본',
+      subjectSnapshot: '개인화 제목',
+      bodyHtmlSnapshot: '<p>개인화 본문</p>',
+      fromLocalSnapshot: 'qa',
+      fromNameSnapshot: '테스트 담당자',
+      replyToSnapshot: 'qa@example.com',
+      attachmentsSnapshot: [{ key: 'private.pdf' }],
+      filterSnapshot: { targetIds: ['target-test'] },
+      createdBy: '00000000-0000-0000-0000-000000000099',
+      status: 'sending',
+      archivedAt: null,
+      recipientCount: 3,
+      queuedCount: 2,
+      sentCount: 1,
+      deliveredCount: 0,
+      openedCount: 0,
+      bouncedCount: 0,
+      complainedCount: 0,
+      failedCount: 0,
+      skippedUnsubscribedCount: 0,
+    },
+  ];
   state.recipients = [
     recipient('queued', 'queued'),
     recipient('sent', 'sent', { resendMessageId: 'message-sent' }),
@@ -467,21 +524,26 @@ describe('test mail archive lifecycle', () => {
     expect(state.contacts).toEqual([]);
     expect(state.responses).toEqual([]);
     expect(state.recipients.map((row) => row.id)).toEqual(['sent', 'inflight']);
-    expect(state.recipients.every((row) => (
-      row.contactTargetId === null && row.emailSnapshot === null && row.archivedAt !== null
-    ))).toBe(true);
+    expect(
+      state.recipients.every(
+        (row) =>
+          row.contactTargetId === null && row.emailSnapshot === null && row.archivedAt !== null,
+      ),
+    ).toBe(true);
     expect(state.survey.testContactColumns).toEqual({ version: 1, headerRow: 1, columns: [] });
   });
 
   it('실제 대상자 삭제는 기존 cascade 의미대로 mail recipient를 지우고 응답은 보존한다', async () => {
     state.survey.testModeEnabled = false;
     state.contacts = [{ id: 'target-actual', surveyId: 'survey-1', isTest: false }];
-    state.responses = [{
-      id: 'response-actual',
-      surveyId: 'survey-1',
-      contactTargetId: 'target-actual',
-      isTest: false,
-    }];
+    state.responses = [
+      {
+        id: 'response-actual',
+        surveyId: 'survey-1',
+        contactTargetId: 'target-actual',
+        isTest: false,
+      },
+    ];
     state.campaigns[0]!.id = 'campaign-actual';
     state.recipients = [
       recipient('actual-sent', 'sent', {
@@ -495,11 +557,13 @@ describe('test mail archive lifecycle', () => {
 
     expect(state.contacts).toEqual([]);
     expect(state.recipients).toEqual([]);
-    expect(state.responses).toEqual([expect.objectContaining({
-      id: 'response-actual',
-      contactTargetId: null,
-      isTest: false,
-    })]);
+    expect(state.responses).toEqual([
+      expect.objectContaining({
+        id: 'response-actual',
+        contactTargetId: null,
+        isTest: false,
+      }),
+    ]);
   });
 
   it('workspace archive는 미보존 campaign을 지우고 보존 campaign snapshot을 비식별화한다', async () => {
@@ -512,9 +576,11 @@ describe('test mail archive lifecycle', () => {
       queuedCount: 1,
       sentCount: 0,
     });
-    state.recipients.push(recipient('drop-queued', 'queued', {
-      campaignId: 'campaign-drop',
-    }));
+    state.recipients.push(
+      recipient('drop-queued', 'queued', {
+        campaignId: 'campaign-drop',
+      }),
+    );
 
     await archiveTestWorkspaceMail(makeTx() as never, 'survey-1');
 
@@ -545,5 +611,104 @@ describe('test mail archive lifecycle', () => {
       archivedAt: expect.any(Date),
       sendPayloadSnapshot: { to: 'inflight@example.com', html: '<p>PII</p>' },
     });
+  });
+});
+
+describe('test workspace disable lifecycle', () => {
+  it('보관 종료는 mode와 active test campaign만 끄고 test data와 columns를 유지한다', async () => {
+    state.campaigns.push({
+      ...state.campaigns[0]!,
+      id: 'campaign-completed',
+      status: 'completed',
+      recipientCount: 0,
+      queuedCount: 0,
+      sentCount: 0,
+    });
+
+    const result = await disableTestWorkspace({ surveyId: 'survey-1', disposition: 'keep' });
+
+    expect(result).toEqual({
+      testModeEnabled: false,
+      deletedResponseCount: 0,
+      deletedTargetCount: 0,
+      remainingResponseCount: 1,
+      remainingTargetCount: 1,
+    });
+    expect(state.survey.testModeEnabled).toBe(false);
+    expect(state.contacts).toHaveLength(1);
+    expect(state.responses).toHaveLength(1);
+    expect(state.survey.testContactColumns).toEqual({ version: 1, headerRow: 1, columns: [] });
+    expect(state.campaigns.find((row) => row.id === 'campaign-test')?.status).toBe('cancelled');
+    expect(state.campaigns.find((row) => row.id === 'campaign-completed')?.status).toBe(
+      'completed',
+    );
+  });
+
+  it('삭제 종료는 test workspace만 비식별 archive 후 hard delete하고 columns를 초기화한다', async () => {
+    state.contacts.push({ id: 'target-actual', surveyId: 'survey-1', isTest: false });
+    state.responses.push({
+      id: 'response-actual',
+      surveyId: 'survey-1',
+      contactTargetId: 'target-actual',
+      isTest: false,
+    });
+    state.campaigns.push({
+      ...state.campaigns[0]!,
+      id: 'campaign-actual',
+      isTest: false,
+      title: '실제 발송',
+    });
+    state.recipients.push(
+      recipient('actual-sent', 'sent', {
+        campaignId: 'campaign-actual',
+        contactTargetId: 'target-actual',
+        resendMessageId: 'message-actual',
+      }),
+    );
+
+    const result = await disableTestWorkspace({ surveyId: 'survey-1', disposition: 'delete' });
+
+    expect(result).toEqual({
+      testModeEnabled: false,
+      deletedResponseCount: 1,
+      deletedTargetCount: 1,
+      remainingResponseCount: 0,
+      remainingTargetCount: 0,
+    });
+    expect(state.survey.testModeEnabled).toBe(false);
+    expect(state.survey.testContactColumns).toBeNull();
+    expect(state.contacts).toEqual([
+      expect.objectContaining({ id: 'target-actual', isTest: false }),
+    ]);
+    expect(state.responses).toEqual([
+      expect.objectContaining({ id: 'response-actual', isTest: false }),
+    ]);
+    expect(state.campaigns.find((row) => row.id === 'campaign-test')).toMatchObject({
+      title: '삭제된 테스트 발송',
+      status: 'cancelled',
+      archivedAt: expect.any(Date),
+    });
+    expect(state.recipients.find((row) => row.id === 'queued')).toBeUndefined();
+    expect(state.recipients.find((row) => row.id === 'sent')).toMatchObject({
+      contactTargetId: null,
+      emailSnapshot: null,
+      archivedAt: expect.any(Date),
+    });
+    expect(state.campaigns.find((row) => row.id === 'campaign-actual')?.title).toBe('실제 발송');
+    expect(state.recipients.find((row) => row.id === 'actual-sent')).toMatchObject({
+      contactTargetId: 'target-actual',
+      archivedAt: null,
+    });
+  });
+
+  it('보관 종료 뒤 도착한 stale delete는 workspace를 삭제하지 않는다', async () => {
+    await disableTestWorkspace({ surveyId: 'survey-1', disposition: 'keep' });
+
+    await expect(
+      disableTestWorkspace({ surveyId: 'survey-1', disposition: 'delete' }),
+    ).rejects.toThrow('TEST_WORKSPACE_DISABLE_STALE');
+    expect(state.contacts).toHaveLength(1);
+    expect(state.responses).toHaveLength(1);
+    expect(state.survey.testContactColumns).toEqual({ version: 1, headerRow: 1, columns: [] });
   });
 });

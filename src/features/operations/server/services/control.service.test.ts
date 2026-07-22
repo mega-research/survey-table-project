@@ -1,10 +1,9 @@
-import type { SQL } from 'drizzle-orm';
-import { PgDialect } from 'drizzle-orm/pg-core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { setPaused } from './control.service';
 
 // db.update().set().where().returning() 체인의 set 페이로드와 where 조건을 캡처하도록 stub.
 const capturedSets: Array<Record<string, unknown>> = [];
-const capturedWheres: unknown[] = [];
 let returningRows: Array<Record<string, unknown>> = [];
 
 vi.mock('@/db', () => ({
@@ -14,29 +13,19 @@ vi.mock('@/db', () => ({
         capturedSets.push(payload);
         return {
           where: vi.fn((cond: unknown) => {
-            capturedWheres.push(cond);
+            void cond;
             return { returning: vi.fn(async () => returningRows) };
           }),
         };
       }),
     })),
-    delete: vi.fn(() => ({
-      where: vi.fn((cond: unknown) => {
-        capturedWheres.push(cond);
-        return { returning: vi.fn(async () => returningRows) };
-      }),
-    })),
   },
 }));
 
-import { deleteTestResponses, setPaused } from './control.service';
-
-const dialect = new PgDialect();
 const SURVEY_ID = '11111111-1111-4111-8111-111111111111';
 
 beforeEach(() => {
   capturedSets.length = 0;
-  capturedWheres.length = 0;
   returningRows = [];
   vi.clearAllMocks();
 });
@@ -77,33 +66,5 @@ describe('setPaused pausedMessage 3분기', () => {
     expect('pausedMessage' in capturedSets[0]!).toBe(true);
     expect(capturedSets[0]!['pausedMessage']).toBeNull();
     expect(res).toEqual({ isPaused: true, pausedMessage: null });
-  });
-});
-
-describe('deleteTestResponses', () => {
-  it('db.delete 하드 딜리트 — where 에 is_test=true 만 있고 deleted_at 필터가 없다(soft delete 잔존분 포함 삭제)', async () => {
-    returningRows = [{ id: 'r1' }, { id: 'r2' }];
-
-    const res = await deleteTestResponses(SURVEY_ID);
-
-    expect(res).toEqual({ deletedCount: 2 });
-    // update(set deletedAt) 경로를 쓰지 않아야 한다 — soft delete 회귀 가드.
-    expect(capturedSets).toHaveLength(0);
-    expect(capturedWheres).toHaveLength(1);
-    // 캡처한 drizzle 조건을 실제 SQL 로 직조해 검증 (tests/unit/contacts-filter-sql.test.ts 패턴).
-    const query = dialect.sqlToQuery(capturedWheres[0] as SQL);
-    expect(query.sql).toContain('"is_test"');
-    expect(query.sql).not.toMatch(/deleted_at/i);
-    expect(query.params).toContain(true);
-    expect(query.params).toContain(SURVEY_ID);
-  });
-
-  it('삭제 대상이 없으면 deletedCount 0 을 반환한다', async () => {
-    returningRows = [];
-
-    const res = await deleteTestResponses(SURVEY_ID);
-
-    expect(res).toEqual({ deletedCount: 0 });
-    expect(capturedSets).toHaveLength(0);
   });
 });

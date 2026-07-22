@@ -1,6 +1,5 @@
-import { randomUUID } from 'node:crypto';
-
 import { eq, inArray } from 'drizzle-orm';
+import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { db } from '@/db';
@@ -13,10 +12,12 @@ import {
   testResponseAttempts,
 } from '@/db/schema';
 import { deleteContactTarget } from '@/features/contacts/server/services/contact-targets.service';
+import { getControlState } from '@/features/operations/server/services/control.service';
+import { disableTestWorkspace } from '@/features/operations/server/services/test-workspace.service';
 import { terminalizeUnresolvedCampaignDispatch } from '@/lib/mail/campaign-dispatch';
+import { processResendEvent } from '@/lib/mail/resend-webhook';
 import { archiveTestWorkspaceMail } from '@/lib/mail/test-mail-archive.server';
 import { computeCycleBreakdown } from '@/lib/operations/mail-billing.server';
-import { processResendEvent } from '@/lib/mail/resend-webhook';
 
 const dbUrl = process.env['DATABASE_URL'] ?? '';
 const isLocalDb = dbUrl.includes('127.0.0.1') || dbUrl.includes('localhost');
@@ -98,11 +99,7 @@ run('test workspace mail archive realdb', () => {
       sessionId: `attempt-${randomUUID()}`,
       status: 'active',
     });
-    await db.insert(mailCampaigns).values([
-      queuedCampaign,
-      sentCampaign,
-      sendingCampaign,
-    ]);
+    await db.insert(mailCampaigns).values([queuedCampaign, sentCampaign, sendingCampaign]);
     await db.insert(mailRecipients).values([
       {
         id: queuedRecipientId,
@@ -174,27 +171,55 @@ run('test workspace mail archive realdb', () => {
     });
 
     const [campaignCounts, responseRows, attemptRows, targetRows, surveyRows] = await Promise.all([
-      db.select({
-        id: mailCampaigns.id,
-        status: mailCampaigns.status,
-        recipientCount: mailCampaigns.recipientCount,
-        queuedCount: mailCampaigns.queuedCount,
-        sentCount: mailCampaigns.sentCount,
-      }).from(mailCampaigns).where(inArray(mailCampaigns.id, [
-        queuedCampaign.id,
-        sentCampaign.id,
-        sendingCampaign.id,
-      ])),
-      db.select({ id: surveyResponses.id }).from(surveyResponses).where(eq(surveyResponses.id, responseId)),
-      db.select({ id: testResponseAttempts.id }).from(testResponseAttempts).where(eq(testResponseAttempts.id, attemptId)),
-      db.select({ id: contactTargets.id }).from(contactTargets).where(eq(contactTargets.id, targetId)),
-      db.select({ testContactColumns: surveys.testContactColumns }).from(surveys).where(eq(surveys.id, surveyId)),
+      db
+        .select({
+          id: mailCampaigns.id,
+          status: mailCampaigns.status,
+          recipientCount: mailCampaigns.recipientCount,
+          queuedCount: mailCampaigns.queuedCount,
+          sentCount: mailCampaigns.sentCount,
+        })
+        .from(mailCampaigns)
+        .where(inArray(mailCampaigns.id, [queuedCampaign.id, sentCampaign.id, sendingCampaign.id])),
+      db
+        .select({ id: surveyResponses.id })
+        .from(surveyResponses)
+        .where(eq(surveyResponses.id, responseId)),
+      db
+        .select({ id: testResponseAttempts.id })
+        .from(testResponseAttempts)
+        .where(eq(testResponseAttempts.id, attemptId)),
+      db
+        .select({ id: contactTargets.id })
+        .from(contactTargets)
+        .where(eq(contactTargets.id, targetId)),
+      db
+        .select({ testContactColumns: surveys.testContactColumns })
+        .from(surveys)
+        .where(eq(surveys.id, surveyId)),
     ]);
-    expect(campaignCounts).toEqual(expect.arrayContaining([
-      expect.objectContaining({ status: 'completed', recipientCount: 0, queuedCount: 0, sentCount: 0 }),
-      expect.objectContaining({ status: 'completed', recipientCount: 0, queuedCount: 0, sentCount: 0 }),
-      expect.objectContaining({ status: 'completed', recipientCount: 0, queuedCount: 0, sentCount: 0 }),
-    ]));
+    expect(campaignCounts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          status: 'completed',
+          recipientCount: 0,
+          queuedCount: 0,
+          sentCount: 0,
+        }),
+        expect.objectContaining({
+          status: 'completed',
+          recipientCount: 0,
+          queuedCount: 0,
+          sentCount: 0,
+        }),
+        expect.objectContaining({
+          status: 'completed',
+          recipientCount: 0,
+          queuedCount: 0,
+          sentCount: 0,
+        }),
+      ]),
+    );
     expect(responseRows).toEqual([]);
     expect(attemptRows).toEqual([]);
     expect(targetRows).toEqual([]);
@@ -330,10 +355,7 @@ run('test workspace mail archive realdb', () => {
     });
 
     await deleteContactTarget({ surveyId, id: targetId });
-    await terminalizeUnresolvedCampaignDispatch(
-      campaign.id,
-      new Date('2026-07-23T00:00:01Z'),
-    );
+    await terminalizeUnresolvedCampaignDispatch(campaign.id, new Date('2026-07-23T00:00:01Z'));
 
     const [row] = await db
       .select({
@@ -384,5 +406,210 @@ run('test workspace mail archive realdb', () => {
       isTest: true,
       archivedAt: expect.any(Date),
     });
+  });
+});
+
+run('test workspace disable realdb', () => {
+  const surveyId = randomUUID();
+  const testTargetId = randomUUID();
+  const testInviteCode = `disable-test-${randomUUID()}`;
+  const testResponseId = randomUUID();
+  const actualTargetId = randomUUID();
+  const actualResponseId = randomUUID();
+  const activeTestCampaign = campaignValues(surveyId, 1, '진행 중 테스트 발송');
+  const retainedTestCampaign = campaignValues(surveyId, 2, '발송 완료 테스트 발송');
+  const actualCampaign = {
+    ...campaignValues(surveyId, 3, '실제 발송'),
+    isTest: false,
+    status: 'completed' as const,
+  };
+
+  beforeAll(async () => {
+    await db.insert(surveys).values({
+      id: surveyId,
+      title: '테스트 workspace 종료 실DB',
+      testModeEnabled: true,
+      testContactColumns: { version: 1, headerRow: 1, columns: [] },
+    });
+    await db.insert(contactTargets).values([
+      {
+        id: testTargetId,
+        surveyId,
+        resid: 1,
+        isTest: true,
+        inviteCode: testInviteCode,
+      },
+      {
+        id: actualTargetId,
+        surveyId,
+        resid: 2,
+        isTest: false,
+        inviteCode: `disable-actual-${randomUUID()}`,
+      },
+    ]);
+    await db.insert(surveyResponses).values([
+      {
+        id: testResponseId,
+        surveyId,
+        questionResponses: {},
+        isTest: true,
+        contactTargetId: testTargetId,
+      },
+      {
+        id: actualResponseId,
+        surveyId,
+        questionResponses: {},
+        isTest: false,
+        contactTargetId: actualTargetId,
+      },
+    ]);
+    await db
+      .insert(mailCampaigns)
+      .values([{ ...activeTestCampaign, status: 'queued' }, retainedTestCampaign, actualCampaign]);
+    await db.insert(mailRecipients).values({
+      campaignId: retainedTestCampaign.id,
+      contactTargetId: testTargetId,
+      emailSnapshot: 'test-retained@example.com',
+      status: 'delivered',
+      sentAt: new Date('2026-07-22T03:01:00Z'),
+      deliveredAt: new Date('2026-07-22T03:02:00Z'),
+    });
+  });
+
+  afterAll(async () => {
+    await db.delete(surveys).where(eq(surveys.id, surveyId));
+  });
+
+  it('keep은 mode와 진행 중 테스트 발송만 끄고 테스트 workspace를 보존한다', async () => {
+    const control = await getControlState(surveyId);
+    expect(control).toMatchObject({
+      testModeEnabled: true,
+      testResponseCount: 1,
+      testTargetCount: 1,
+      firstTestInviteCode: testInviteCode,
+    });
+
+    const result = await disableTestWorkspace({ surveyId, disposition: 'keep' });
+
+    expect(result).toEqual({
+      testModeEnabled: false,
+      deletedResponseCount: 0,
+      deletedTargetCount: 0,
+      remainingResponseCount: 1,
+      remainingTargetCount: 1,
+    });
+    const [surveyRows, targetRows, responseRows, campaignRows] = await Promise.all([
+      db
+        .select({
+          testModeEnabled: surveys.testModeEnabled,
+          testContactColumns: surveys.testContactColumns,
+        })
+        .from(surveys)
+        .where(eq(surveys.id, surveyId)),
+      db
+        .select({ id: contactTargets.id })
+        .from(contactTargets)
+        .where(inArray(contactTargets.id, [testTargetId, actualTargetId])),
+      db
+        .select({ id: surveyResponses.id })
+        .from(surveyResponses)
+        .where(inArray(surveyResponses.id, [testResponseId, actualResponseId])),
+      db
+        .select({ id: mailCampaigns.id, status: mailCampaigns.status })
+        .from(mailCampaigns)
+        .where(inArray(mailCampaigns.id, [activeTestCampaign.id, actualCampaign.id])),
+    ]);
+    expect(surveyRows[0]).toEqual({
+      testModeEnabled: false,
+      testContactColumns: { version: 1, headerRow: 1, columns: [] },
+    });
+    expect(targetRows).toHaveLength(2);
+    expect(responseRows).toHaveLength(2);
+    expect(campaignRows).toEqual(
+      expect.arrayContaining([
+        { id: activeTestCampaign.id, status: 'cancelled' },
+        { id: actualCampaign.id, status: 'completed' },
+      ]),
+    );
+
+    await expect(disableTestWorkspace({ surveyId, disposition: 'delete' })).rejects.toThrow(
+      'TEST_WORKSPACE_DISABLE_STALE',
+    );
+    const [retainedTarget] = await db
+      .select({ id: contactTargets.id })
+      .from(contactTargets)
+      .where(eq(contactTargets.id, testTargetId));
+    expect(retainedTarget).toEqual({ id: testTargetId });
+  });
+
+  it('delete는 테스트 workspace만 지우고 실제 응답·컨택·발송은 보존한다', async () => {
+    await db.update(surveys).set({ testModeEnabled: true }).where(eq(surveys.id, surveyId));
+
+    const result = await disableTestWorkspace({ surveyId, disposition: 'delete' });
+
+    expect(result).toEqual({
+      testModeEnabled: false,
+      deletedResponseCount: 1,
+      deletedTargetCount: 1,
+      remainingResponseCount: 0,
+      remainingTargetCount: 0,
+    });
+    const [
+      surveyRows,
+      testTargetRows,
+      testResponseRows,
+      actualTargetRows,
+      actualResponseRows,
+      campaignRows,
+    ] = await Promise.all([
+      db
+        .select({
+          testModeEnabled: surveys.testModeEnabled,
+          testContactColumns: surveys.testContactColumns,
+        })
+        .from(surveys)
+        .where(eq(surveys.id, surveyId)),
+      db
+        .select({ id: contactTargets.id })
+        .from(contactTargets)
+        .where(eq(contactTargets.id, testTargetId)),
+      db
+        .select({ id: surveyResponses.id })
+        .from(surveyResponses)
+        .where(eq(surveyResponses.id, testResponseId)),
+      db
+        .select({ id: contactTargets.id })
+        .from(contactTargets)
+        .where(eq(contactTargets.id, actualTargetId)),
+      db
+        .select({ id: surveyResponses.id })
+        .from(surveyResponses)
+        .where(eq(surveyResponses.id, actualResponseId)),
+      db
+        .select({
+          id: mailCampaigns.id,
+          title: mailCampaigns.title,
+          status: mailCampaigns.status,
+          archivedAt: mailCampaigns.archivedAt,
+        })
+        .from(mailCampaigns)
+        .where(inArray(mailCampaigns.id, [retainedTestCampaign.id, actualCampaign.id])),
+    ]);
+    expect(surveyRows[0]).toEqual({ testModeEnabled: false, testContactColumns: null });
+    expect(testTargetRows).toEqual([]);
+    expect(testResponseRows).toEqual([]);
+    expect(actualTargetRows).toEqual([{ id: actualTargetId }]);
+    expect(actualResponseRows).toEqual([{ id: actualResponseId }]);
+    expect(campaignRows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: retainedTestCampaign.id,
+          title: '삭제된 테스트 발송',
+          status: 'cancelled',
+          archivedAt: expect.any(Date),
+        }),
+        { id: actualCampaign.id, title: '실제 발송', status: 'completed', archivedAt: null },
+      ]),
+    );
   });
 });

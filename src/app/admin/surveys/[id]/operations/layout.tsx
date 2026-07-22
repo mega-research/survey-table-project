@@ -3,9 +3,8 @@ import { notFound } from 'next/navigation';
 import { OperationsPageHeader } from '@/components/operations/operations-page-header';
 import { OperationsTabStrip } from '@/components/operations/operations-tab-strip';
 import { TestModeBanner } from '@/components/operations/test-mode-banner';
+import { getControlState } from '@/features/operations/server/services/control.service';
 import { getSurveyById } from '@/features/survey-builder/server/services/survey-read.service';
-import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
-import { getSurveyAccessIdentifier } from '@/lib/survey-url';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -23,21 +22,13 @@ export default async function OperationsLayout({ children, params }: LayoutProps
   const { id: surveyId } = await params;
   const survey = await getSurveyById(surveyId);
   if (!survey || survey.deletedAt) notFound();
-  const scope = await getOperationsDataScope(surveyId);
-
-  const control = {
-    isPaused: survey.isPaused,
-    pausedMessage: survey.pausedMessage,
-    testModeEnabled: survey.testModeEnabled,
-    testToken: survey.testToken,
-    accessIdentifier: getSurveyAccessIdentifier(survey),
-  };
+  const control = await getControlState(surveyId);
 
   return (
     <div className="min-h-screen bg-gray-50">
       <OperationsPageHeader surveyId={surveyId} surveyTitle={survey.title} control={control} />
       <OperationsTabStrip surveyId={surveyId} />
-      {scope === 'test' ? <TestModeBanner /> : null}
+      {control.testModeEnabled ? <TestModeBanner /> : null}
       {children}
     </div>
   );

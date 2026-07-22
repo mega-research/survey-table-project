@@ -2,8 +2,8 @@ import Link from 'next/link';
 
 import { Activity, ArrowLeft, Eye, Pencil } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
 import { ContactUploadAction } from '@/components/operations/contacts/contact-upload-action';
+import { Button } from '@/components/ui/button';
 
 import { RefreshButton } from './refresh-button';
 import { SurveyControlButtons } from './survey-control-buttons';
@@ -17,6 +17,9 @@ interface Props {
     testModeEnabled: boolean;
     testToken: string | null;
     accessIdentifier: string;
+    testResponseCount: number;
+    testTargetCount: number;
+    firstTestInviteCode: string | null;
   };
 }
 
@@ -40,9 +43,7 @@ export function OperationsPageHeader({ surveyId, surveyTitle, control }: Props) 
           <div className="h-6 w-px bg-gray-300" />
           <div className="flex items-center gap-2">
             <Activity className="h-5 w-5 text-blue-500" />
-            <h1 className="max-w-md truncate text-lg font-medium text-gray-900">
-              {surveyTitle}
-            </h1>
+            <h1 className="max-w-md truncate text-lg font-medium text-gray-900">{surveyTitle}</h1>
           </div>
         </div>
 

@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 
 import { useRouter } from 'next/navigation';
+
 import { CirclePause, CirclePlay } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -40,6 +41,9 @@ interface Props {
     testModeEnabled: boolean;
     testToken: string | null;
     accessIdentifier: string;
+    testResponseCount: number;
+    testTargetCount: number;
+    firstTestInviteCode: string | null;
   };
 }
 
@@ -59,9 +63,7 @@ export function SurveyControlButtons({ surveyId, initial }: Props) {
   const [isPending, startTransition] = useTransition();
   const [pauseDialogOpen, setPauseDialogOpen] = useState(false);
   const [resumeConfirmOpen, setResumeConfirmOpen] = useState(false);
-  const [pauseMessage, setPauseMessage] = useState(
-    initial.pausedMessage ?? DEFAULT_PAUSED_MESSAGE,
-  );
+  const [pauseMessage, setPauseMessage] = useState(initial.pausedMessage ?? DEFAULT_PAUSED_MESSAGE);
 
   const pauseSurvey = () =>
     startTransition(async () => {
@@ -95,14 +97,7 @@ export function SurveyControlButtons({ surveyId, initial }: Props) {
 
   return (
     <>
-      <TestModeControl
-        surveyId={surveyId}
-        initial={{
-          testModeEnabled: initial.testModeEnabled,
-          testToken: initial.testToken,
-          accessIdentifier: initial.accessIdentifier,
-        }}
-      />
+      <TestModeControl surveyId={surveyId} initial={initial} />
 
       {state.isPaused ? (
         <Button
