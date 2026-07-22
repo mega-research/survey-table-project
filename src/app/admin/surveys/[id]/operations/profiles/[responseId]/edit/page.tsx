@@ -68,6 +68,7 @@ export default async function AdminResponseEditPage({ params, searchParams }: Pa
       ? db.query.contactTargets.findFirst({
           where: and(
             eq(contactTargets.id, response.contactTargetId),
+            eq(contactTargets.surveyId, surveyId),
             eq(contactTargets.isTest, testFlagForScope(scope)),
           ),
           columns: { attrs: true },

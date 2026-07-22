@@ -45,7 +45,7 @@ export interface ProfilesRow {
   totalSeconds: number | null;
   /** 매칭된 contact_targets.group_value (전시회명 국문 등). 익명/미매칭이면 null. */
   groupValue: string | null;
-  /** 테스트 모드 응답(survey_control) 여부. 통계에서는 항상 제외되지만 목록에는 배지로 노출한다. */
+  /** 현재 서버 scope에 속한 응답의 테스트 여부. real scope는 false, test scope는 true로 고정된다. */
   isTest: boolean;
 }
 
@@ -178,6 +178,8 @@ export async function listResponsesForProfiles(
         sql`NOT EXISTS (
           SELECT 1 FROM contact_targets ct
           WHERE ct.id = ${surveyResponses.contactTargetId}
+            AND ct.survey_id = ${surveyResponses.surveyId}
+            AND ct.is_test = ${surveyResponses.isTest}
             AND (
               ct.unsubscribed_at IS NOT NULL
               ${negativeCodeBranch}
@@ -300,6 +302,7 @@ export async function isResponseExcluded(
     WHERE sr.id = ${responseId}::uuid
       AND sr.survey_id = ${surveyId}::uuid
       AND sr.is_test = ${testFlagForScope(scope)}
+      AND ct.survey_id = sr.survey_id
       AND ct.is_test = sr.is_test
       AND (
         ct.unsubscribed_at IS NOT NULL

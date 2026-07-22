@@ -119,6 +119,7 @@ function evaluateBaseSubquery(
   surveyId: string,
   view: 'active' | 'deleted',
   hasExcludeFilter: boolean,
+  hasScopeMatchedExclusionTarget: boolean,
   isTestScope: boolean,
 ): NumberedRow[] {
   const contactById = new Map(state.contacts.map((c) => [c.id, c]));
@@ -131,6 +132,12 @@ function evaluateBaseSubquery(
       if (r.contactTargetId == null) return true;     // 익명 → NOT EXISTS true → 통과
       const ct = contactById.get(r.contactTargetId);
       if (ct == null) return true;                    // FK 깨짐 → NOT EXISTS true → 통과
+      if (
+        hasScopeMatchedExclusionTarget &&
+        (ct.surveyId !== r.surveyId || ct.isTest !== r.isTest)
+      ) {
+        return true;
+      }
       return !isExcludedContact(ct);                  // negative ct → 가림
     })
     .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
@@ -223,8 +230,16 @@ function buildSelectChain(selection: Record<string, unknown>) {
       // 실제 구현이 NOT EXISTS 한 줄 추가하면 비로소 가림 효과 발생
       const hasExcludeFilter =
         lowered.includes('not exists') && lowered.includes('contact_targets');
+      const hasScopeMatchedExclusionTarget =
+        raw.includes('ct.survey_id =') && raw.includes('ct.is_test =');
       const isTestScope = lowered.includes('true');
-      state.numberedRows = evaluateBaseSubquery(surveyId, view, hasExcludeFilter, isTestScope);
+      state.numberedRows = evaluateBaseSubquery(
+        surveyId,
+        view,
+        hasExcludeFilter,
+        hasScopeMatchedExclusionTarget,
+        isTestScope,
+      );
       return chain;
     },
     as(_alias: string): NumberedSubqueryMarker {
@@ -341,6 +356,21 @@ vi.mock('@/db', () => ({
     select: vi.fn((selection?: Record<string, unknown>) =>
       buildSelectChain(selection ?? {}),
     ),
+    execute: vi.fn((query: unknown) => {
+      const raw = extractRawSql(query);
+      const response = state.responses.find((candidate) => raw.includes(candidate.id));
+      const contact = response?.contactTargetId
+        ? state.contacts.find((candidate) => candidate.id === response.contactTargetId)
+        : null;
+      const hasScopeMatchedTarget =
+        raw.includes('ct.survey_id = sr.survey_id') && raw.includes('ct.is_test = sr.is_test');
+      const isExcluded =
+        contact != null &&
+        isExcludedContact(contact) &&
+        (!hasScopeMatchedTarget ||
+          (contact.surveyId === response?.surveyId && contact.isTest === response.isTest));
+      return Promise.resolve(isExcluded ? [{}] : []);
+    }),
   },
 }));
 
@@ -355,7 +385,10 @@ vi.mock('@/lib/operations/result-code-statuses.server', async () => {
   };
 });
 
-import { listResponsesForProfiles } from '@/lib/operations/profiles.server';
+import {
+  isResponseExcluded,
+  listResponsesForProfiles,
+} from '@/lib/operations/profiles.server';
 
 const SURVEY_ID = '00000000-0000-4000-8000-000000000040';
 const OTHER_SURVEY_ID = '00000000-0000-4000-8000-000000000041';
@@ -476,6 +509,126 @@ describe('listResponsesForProfiles — negative exclusion', () => {
     });
     expect(result.total).toBe(2);
     expect(result.rows.map((r) => r.idx).sort()).toEqual([1, 2]);
+  });
+
+  it('cross-survey negative target은 in-scope 응답을 가리지 않음', async () => {
+    const foreignContactId = randomUUID();
+    state.contacts.push({
+      id: foreignContactId,
+      surveyId: OTHER_SURVEY_ID,
+      resid: 25,
+      attrs: {},
+      unsubscribedAt: null,
+      negativeAttempts: ['수신거부'],
+      piiBlindIndexes: {},
+      isTest: false,
+    });
+    state.responses.push({
+      id: randomUUID(),
+      surveyId: SURVEY_ID,
+      contactTargetId: foreignContactId,
+      startedAt: new Date(),
+      deletedAt: null,
+      isTest: false,
+    });
+
+    const result = await listResponsesForProfiles({
+      surveyId: SURVEY_ID,
+      page: 1,
+      pageSize: 100,
+      condition: null,
+      status: 'all',
+      sort: 'startedAt',
+      dir: 'desc',
+      view: 'active',
+      scope: 'real',
+    });
+
+    expect(result.total).toBe(1);
+  });
+
+  it('cross-scope negative target은 in-scope 응답을 가리지 않음', async () => {
+    const crossScopeContactId = randomUUID();
+    state.contacts.push({
+      id: crossScopeContactId,
+      surveyId: SURVEY_ID,
+      resid: 25,
+      attrs: {},
+      unsubscribedAt: null,
+      negativeAttempts: ['수신거부'],
+      piiBlindIndexes: {},
+      isTest: true,
+    });
+    state.responses.push({
+      id: randomUUID(),
+      surveyId: SURVEY_ID,
+      contactTargetId: crossScopeContactId,
+      startedAt: new Date(),
+      deletedAt: null,
+      isTest: false,
+    });
+
+    const result = await listResponsesForProfiles({
+      surveyId: SURVEY_ID,
+      page: 1,
+      pageSize: 100,
+      condition: null,
+      status: 'all',
+      sort: 'startedAt',
+      dir: 'desc',
+      view: 'active',
+      scope: 'real',
+    });
+
+    expect(result.total).toBe(1);
+  });
+
+  it('cross-survey 또는 cross-scope negative target은 상세 제외 배너를 만들지 않음', async () => {
+    const foreignContactId = randomUUID();
+    const foreignResponseId = randomUUID();
+    state.contacts.push({
+      id: foreignContactId,
+      surveyId: OTHER_SURVEY_ID,
+      resid: 25,
+      attrs: {},
+      unsubscribedAt: null,
+      negativeAttempts: ['수신거부'],
+      piiBlindIndexes: {},
+      isTest: false,
+    });
+    state.responses.push({
+      id: foreignResponseId,
+      surveyId: SURVEY_ID,
+      contactTargetId: foreignContactId,
+      startedAt: new Date(),
+      deletedAt: null,
+      isTest: false,
+    });
+
+    await expect(isResponseExcluded(SURVEY_ID, foreignResponseId, 'real')).resolves.toBe(false);
+
+    const crossScopeContactId = randomUUID();
+    const crossScopeResponseId = randomUUID();
+    state.contacts.push({
+      id: crossScopeContactId,
+      surveyId: SURVEY_ID,
+      resid: 26,
+      attrs: {},
+      unsubscribedAt: null,
+      negativeAttempts: ['수신거부'],
+      piiBlindIndexes: {},
+      isTest: true,
+    });
+    state.responses.push({
+      id: crossScopeResponseId,
+      surveyId: SURVEY_ID,
+      contactTargetId: crossScopeContactId,
+      startedAt: new Date(),
+      deletedAt: null,
+      isTest: false,
+    });
+
+    await expect(isResponseExcluded(SURVEY_ID, crossScopeResponseId, 'real')).resolves.toBe(false);
   });
 
   it('cross-survey contactTargetId mismatch 는 ct LEFT JOIN 결과로 매칭하지 않음', async () => {
