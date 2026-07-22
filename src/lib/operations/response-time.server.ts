@@ -4,13 +4,14 @@ import { and, eq, isNotNull } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { surveyResponses } from '@/db/schema';
-import { notDeletedResponse, notTestResponse } from '@/data/response-filters';
+import { notDeletedResponse } from '@/data/response-filters';
 
 import {
   shapeResponseTime,
   type Platform,
   type ResponseTimeRow,
 } from './response-time';
+import { responseScopeCondition, type OperationsDataScope } from './data-scope.server';
 
 /**
  * 단일 설문의 응답시간 통계 4행 표를 반환한다 (서버 전용).
@@ -20,7 +21,10 @@ import {
  * - `total_seconds IS NULL` 행은 SQL 단계에서 사전 제외 (불필요한 전송 방지).
  * - 평균/트리밍/min/max 등 통계는 순수 함수 `shapeResponseTime`에 위임.
  */
-export async function getResponseTime(surveyId: string): Promise<ResponseTimeRow[]> {
+export async function getResponseTime(
+  surveyId: string,
+  scope: OperationsDataScope,
+): Promise<ResponseTimeRow[]> {
   const rows = await db
     .select({
       platform: surveyResponses.platform,
@@ -32,7 +36,7 @@ export async function getResponseTime(surveyId: string): Promise<ResponseTimeRow
         eq(surveyResponses.surveyId, surveyId),
         isNotNull(surveyResponses.totalSeconds),
         notDeletedResponse,
-        notTestResponse,
+        responseScopeCondition(scope),
       ),
     );
 

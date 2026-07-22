@@ -18,6 +18,7 @@ import {
 import { listResponsesForProfiles } from '@/lib/operations/profiles.server';
 import { getContactColumnScheme, buildColumnCandidates } from '@/lib/operations/contacts.server';
 import { parseProfilesCondition, PROFILES_EXTRA_CANDIDATES } from '@/lib/operations/profiles-filters.server';
+import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
 
 export const metadata: Metadata = {
   title: '현황 - 응답 내역',
@@ -32,7 +33,6 @@ interface PageProps {
     status?: string;
     sort?: string;
     dir?: string;
-    test?: string;
   }>;
 }
 
@@ -48,6 +48,7 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
   const sp = await searchParams;
 
   const args = normalizeListArgs(sp);
+  const scope = await getOperationsDataScope(surveyId);
 
   const contactScheme = await getContactColumnScheme(surveyId);
   const columnCandidates = [
@@ -64,6 +65,7 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
   const [{ rows, total, page: clampedPage }, qs, groups] = await Promise.all([
     listResponsesForProfiles({
       surveyId,
+      scope,
       pageSize: PROFILES_PAGE_SIZE,
       page: args.page,
       status: args.status,
@@ -71,7 +73,6 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
       dir: args.dir,
       view: args.view,
       condition,
-      test: args.test,
     }),
     db
       .select({
@@ -113,7 +114,6 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
               initialSource={args.col}
               initialValue={args.q}
               initialStatus={args.status}
-              initialTest={args.test}
               columnCandidates={columnCandidates}
             />
           </div>

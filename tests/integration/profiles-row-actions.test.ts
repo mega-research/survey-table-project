@@ -500,7 +500,7 @@ describe('profiles-row-actions', () => {
 
   describe('softDelete cross-layer impact', () => {
     // spyOn stub: h.responseStore 를 직접 집계
-    function stubAggregateStatus(surveyId: string): Promise<StatusCounts> {
+    function stubAggregateStatus(surveyId: string, _scope: 'real' | 'test'): Promise<StatusCounts> {
       const counts: StatusCounts = {
         total: 0,
         completed: 0,
@@ -570,7 +570,7 @@ describe('profiles-row-actions', () => {
         dir: 'desc' as const,
         view: 'active' as const,
         condition: null,
-        test: 'all' as const,
+        scope: 'real' as const,
       };
 
       const before = await profilesServer.listResponsesForProfiles(normalizedArgs);
@@ -598,12 +598,12 @@ describe('profiles-row-actions', () => {
 
       vi.spyOn(aggregateStatusServer, 'aggregateStatus').mockImplementation(stubAggregateStatus);
 
-      const before = await aggregateStatusServer.aggregateStatus(surveyId);
+      const before = await aggregateStatusServer.aggregateStatus(surveyId, 'real');
       expect(before.completed).toBeGreaterThanOrEqual(1);
 
       await softDeleteResponse({ surveyId, responseId });
 
-      const after = await aggregateStatusServer.aggregateStatus(surveyId);
+      const after = await aggregateStatusServer.aggregateStatus(surveyId, 'real');
       expect(after.completed).toBe(before.completed - 1);
 
       vi.restoreAllMocks();
@@ -627,7 +627,7 @@ describe('profiles-row-actions', () => {
         dir: 'desc' as const,
         view: 'active' as const,
         condition: null,
-        test: 'all' as const,
+        scope: 'real' as const,
       };
 
       // 1단계: softDelete
@@ -641,7 +641,7 @@ describe('profiles-row-actions', () => {
         ...normalizedArgs,
         view: 'deleted',
       });
-      const midCounts = await aggregateStatusServer.aggregateStatus(surveyId);
+      const midCounts = await aggregateStatusServer.aggregateStatus(surveyId, 'real');
       expect(midActive.total).toBe(0);
       expect(midDeleted.total).toBe(1);
       expect(midCounts.completed).toBe(0);
@@ -657,7 +657,7 @@ describe('profiles-row-actions', () => {
         ...normalizedArgs,
         view: 'deleted',
       });
-      const afterCounts = await aggregateStatusServer.aggregateStatus(surveyId);
+      const afterCounts = await aggregateStatusServer.aggregateStatus(surveyId, 'real');
       expect(afterActive.total).toBe(1);
       expect(afterDeleted.total).toBe(0);
       expect(afterCounts.completed).toBe(1);

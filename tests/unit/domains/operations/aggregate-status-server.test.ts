@@ -26,9 +26,9 @@ describe('aggregateStatus', () => {
     mockWhere.mockReset();
   });
 
-  it('isTest 응답을 상태 집계 모수에서 제외한다 (where 절에 is_test=false 조건 포함)', async () => {
+  it('real scope 응답만 상태 집계 모수에 포함한다 (where 절에 is_test=false 조건 포함)', async () => {
     const { aggregateStatus } = await import('@/lib/operations/aggregate-status.server');
-    await aggregateStatus('survey-1');
+    await aggregateStatus('survey-1', 'real');
 
     expect(mockWhere).toHaveBeenCalledTimes(1);
     // noUncheckedIndexedAccess 대응 — 직전 toHaveBeenCalledTimes(1) 단언이 존재를 보장한다.

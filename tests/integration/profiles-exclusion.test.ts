@@ -39,6 +39,7 @@ interface SeedContact {
   unsubscribedAt: Date | null;
   negativeAttempts: string[];
   piiBlindIndexes: Record<string, string>;
+  isTest: boolean;
 }
 
 interface FakeState {
@@ -118,11 +119,13 @@ function evaluateBaseSubquery(
   surveyId: string,
   view: 'active' | 'deleted',
   hasExcludeFilter: boolean,
+  isTestScope: boolean,
 ): NumberedRow[] {
   const contactById = new Map(state.contacts.map((c) => [c.id, c]));
   const filtered = state.responses
     .filter((r) => r.surveyId === surveyId)
     .filter((r) => (view === 'deleted' ? r.deletedAt != null : r.deletedAt == null))
+    .filter((r) => r.isTest === isTestScope)
     .filter((r) => {
       if (!hasExcludeFilter) return true;             // 구현 전 — 모두 노출
       if (r.contactTargetId == null) return true;     // 익명 → NOT EXISTS true → 통과
@@ -135,7 +138,9 @@ function evaluateBaseSubquery(
     const ct =
       r.contactTargetId == null ? null : (contactById.get(r.contactTargetId) ?? null);
     const joinedCt =
-      ct != null && (!state.hasSurveyScopedLeftJoin || ct.surveyId === r.surveyId)
+      ct != null &&
+      (!state.hasSurveyScopedLeftJoin ||
+        (ct.surveyId === r.surveyId && ct.isTest === r.isTest))
         ? ct
         : null;
     return {
@@ -218,7 +223,8 @@ function buildSelectChain(selection: Record<string, unknown>) {
       // 실제 구현이 NOT EXISTS 한 줄 추가하면 비로소 가림 효과 발생
       const hasExcludeFilter =
         lowered.includes('not exists') && lowered.includes('contact_targets');
-      state.numberedRows = evaluateBaseSubquery(surveyId, view, hasExcludeFilter);
+      const isTestScope = lowered.includes('true');
+      state.numberedRows = evaluateBaseSubquery(surveyId, view, hasExcludeFilter, isTestScope);
       return chain;
     },
     as(_alias: string): NumberedSubqueryMarker {
@@ -376,6 +382,7 @@ function seedResponseWithContact(opts: SeedResponseInput = {}): {
       unsubscribedAt: opts.unsubscribed ? new Date() : null,
       negativeAttempts: opts.negative ? ['수신거부'] : [],
       piiBlindIndexes: {},
+      isTest: opts.isTest ?? false,
     });
   }
   const responseId = randomUUID();
@@ -413,7 +420,7 @@ describe('listResponsesForProfiles — negative exclusion', () => {
       sort: 'startedAt',
       dir: 'desc',
       view: 'active',
-      test: 'all',
+      scope: 'real',
     });
     expect(result.total).toBe(1);
   });
@@ -430,7 +437,7 @@ describe('listResponsesForProfiles — negative exclusion', () => {
       sort: 'startedAt',
       dir: 'desc',
       view: 'active',
-      test: 'all',
+      scope: 'real',
     });
     expect(result.total).toBe(1);
   });
@@ -447,7 +454,7 @@ describe('listResponsesForProfiles — negative exclusion', () => {
       sort: 'startedAt',
       dir: 'desc',
       view: 'active',
-      test: 'all',
+      scope: 'real',
     });
     expect(result.total).toBe(1);
   });
@@ -465,7 +472,7 @@ describe('listResponsesForProfiles — negative exclusion', () => {
       sort: 'startedAt',
       dir: 'desc',
       view: 'active',
-      test: 'all',
+      scope: 'real',
     });
     expect(result.total).toBe(2);
     expect(result.rows.map((r) => r.idx).sort()).toEqual([1, 2]);
@@ -481,6 +488,7 @@ describe('listResponsesForProfiles — negative exclusion', () => {
       unsubscribedAt: null,
       negativeAttempts: [],
       piiBlindIndexes: {},
+      isTest: false,
     });
     state.responses.push({
       id: randomUUID(),
@@ -504,7 +512,7 @@ describe('listResponsesForProfiles — negative exclusion', () => {
       sort: 'startedAt',
       dir: 'desc',
       view: 'active',
-      test: 'all',
+      scope: 'real',
     });
 
     expect(result.total).toBe(0);
@@ -520,6 +528,7 @@ describe('listResponsesForProfiles — negative exclusion', () => {
       unsubscribedAt: null,
       negativeAttempts: [],
       piiBlindIndexes: { email: 'foreign-blind-index' },
+      isTest: false,
     });
     state.responses.push({
       id: randomUUID(),
@@ -544,14 +553,14 @@ describe('listResponsesForProfiles — negative exclusion', () => {
       sort: 'startedAt',
       dir: 'desc',
       view: 'active',
-      test: 'all',
+      scope: 'real',
     });
 
     expect(result.total).toBe(0);
   });
 });
 
-describe('listResponsesForProfiles — test 필터 (T11)', () => {
+describe('listResponsesForProfiles — 서버 데이터 scope', () => {
   beforeEach(() => {
     state.responses = [];
     state.contacts = [];
@@ -560,7 +569,7 @@ describe('listResponsesForProfiles — test 필터 (T11)', () => {
     state.numberedRows = [];
   });
 
-  it("test='all' (기본) → isTest 여부와 무관하게 전부 노출", async () => {
+  it('real scope → isTest=false 응답만 노출', async () => {
     seedResponseWithContact();
     seedResponseWithContact({ isTest: true });
     const result = await listResponsesForProfiles({
@@ -572,51 +581,28 @@ describe('listResponsesForProfiles — test 필터 (T11)', () => {
       sort: 'startedAt',
       dir: 'desc',
       view: 'active',
-      test: 'all',
-    });
-    expect(result.total).toBe(2);
-  });
-
-  it("test='only' → is_test=true 응답만 노출 (where 절에 is_test 조건 반영)", async () => {
-    seedResponseWithContact();
-    seedResponseWithContact({ isTest: true });
-    const result = await listResponsesForProfiles({
-      surveyId: SURVEY_ID,
-      page: 1,
-      pageSize: 100,
-      condition: null,
-      status: 'all',
-      sort: 'startedAt',
-      dir: 'desc',
-      view: 'active',
-      test: 'only',
-    });
-    expect(result.total).toBe(1);
-    expect(result.rows.every((r) => r.isTest)).toBe(true);
-  });
-
-  it("test='exclude' → is_test=false 응답만 노출", async () => {
-    seedResponseWithContact();
-    seedResponseWithContact({ isTest: true });
-    const result = await listResponsesForProfiles({
-      surveyId: SURVEY_ID,
-      page: 1,
-      pageSize: 100,
-      condition: null,
-      status: 'all',
-      sort: 'startedAt',
-      dir: 'desc',
-      view: 'active',
-      test: 'exclude',
+      scope: 'real',
     });
     expect(result.total).toBe(1);
     expect(result.rows.every((r) => !r.isTest)).toBe(true);
   });
 
-  // NOTE: deleted view(휴지통) 조합은 이 파일의 mock 이 view 판별에 쓰는 정규식
-  // (`/deleted_at[^a-z_]*is not null/i`) 이 실제로는 절대 매치되지 않는 기존 한계
-  // (extractRawSql 이 Column 참조의 raw 식별자 텍스트를 보존하지 못함 — 이 5개 mock
-  // 공유 helper 의 사전 제약) 때문에 여기서 신뢰성 있게 검증할 수 없다. 프로덕션 코드
-  // 자체는 test 필터를 view 와 무관하게 whereParts 에 추가하므로(profiles.server.ts)
-  // active view 커버리지로 로직은 충분히 검증된다.
+  it('test scope → isTest=true 응답만 노출', async () => {
+    seedResponseWithContact();
+    seedResponseWithContact({ isTest: true });
+    const result = await listResponsesForProfiles({
+      surveyId: SURVEY_ID,
+      page: 1,
+      pageSize: 100,
+      condition: null,
+      status: 'all',
+      sort: 'startedAt',
+      dir: 'desc',
+      view: 'active',
+      scope: 'test',
+    });
+    expect(result.total).toBe(1);
+    expect(result.rows.every((r) => r.isTest)).toBe(true);
+  });
+
 });

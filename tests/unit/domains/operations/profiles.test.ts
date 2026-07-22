@@ -211,18 +211,6 @@ describe('normalizeListArgs', () => {
     expect(normalizeListArgs({ status: 'deleted' }).view).toBe('deleted')
   })
 
-  it('test 미지정 → 기본값 all', () => {
-    expect(normalizeListArgs({}).test).toBe('all')
-  })
-
-  it('test=only/exclude → 그대로 통과', () => {
-    expect(normalizeListArgs({ test: 'only' }).test).toBe('only')
-    expect(normalizeListArgs({ test: 'exclude' }).test).toBe('exclude')
-  })
-
-  it('test 화이트리스트 밖 값 → all 폴백', () => {
-    expect(normalizeListArgs({ test: 'bogus' }).test).toBe('all')
-  })
 })
 
 describe('hasActiveFilters', () => {
@@ -242,12 +230,4 @@ describe('hasActiveFilters', () => {
     expect(hasActiveFilters({ status: 'completed' })).toBe(true)
   })
 
-  it('test != all → true', () => {
-    expect(hasActiveFilters({ test: 'only' })).toBe(true)
-    expect(hasActiveFilters({ test: 'exclude' })).toBe(true)
-  })
-
-  it('test all(기본) → false', () => {
-    expect(hasActiveFilters({ test: 'all' })).toBe(false)
-  })
 })

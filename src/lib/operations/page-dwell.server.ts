@@ -11,6 +11,7 @@ import {
   type DwellOutput,
   type DwellStats,
 } from './page-dwell';
+import { testFlagForScope, type OperationsDataScope } from './data-scope.server';
 
 /** 빈 결과 — published version이 없거나 snapshot이 비어있을 때. */
 const EMPTY_OUTPUT: DwellOutput = { pages: [] };
@@ -37,10 +38,12 @@ const TRIM = 0.025;
  *   - drop 의 마지막 visit 는 leftAt 미설정 가능 → SQL WHERE 절이 자동 skip.
  *   - SQL FILTER 조건은 page-dwell.ts 의 `trimmedStats` 와 동등:
  *     JS slice(trimCount, n - trimCount) ⇔ SQL rn > trimCount AND rn <= n - trimCount.
- *   - `sr.is_test = false` — 테스트 응답은 체류시간 모수에서 제외(notTestResponse 와 동일
- *     의미, raw SQL 컨텍스트라 인라인 유지).
  */
-export async function getPageDwell(surveyId: string): Promise<DwellOutput> {
+export async function getPageDwell(
+  surveyId: string,
+  scope: OperationsDataScope,
+): Promise<DwellOutput> {
+  const isTest = testFlagForScope(scope);
   // ── A) snapshot 로드 + 캐노니컬 step ─────────────────────────────────────
   const surveyRow = await db
     .select({ currentVersionId: surveys.currentVersionId })
@@ -64,6 +67,11 @@ export async function getPageDwell(surveyId: string): Promise<DwellOutput> {
   if (steps.length === 0) return EMPTY_OUTPUT;
 
   // ── B) SQL trimmed 통계 직접 산출 ────────────────────────────────────────
+  const scopedWhere = sql`
+    sr.survey_id = ${surveyId}::uuid
+    AND sr.is_test = ${isTest}
+    AND sr.deleted_at IS NULL
+  `;
   const rows = await db.execute(sql`
     WITH dwell AS (
       -- 응답(sr.id) × step 단위로 SUM → 한 응답이 같은 step을 여러 visit으로 가져도 1표본.
@@ -72,9 +80,8 @@ export async function getPageDwell(surveyId: string): Promise<DwellOutput> {
         SUM(EXTRACT(EPOCH FROM ((visit->>'leftAt')::timestamptz - (visit->>'enteredAt')::timestamptz))) AS seconds
       FROM survey_responses sr,
       LATERAL jsonb_array_elements(sr.page_visits) AS visit
-      WHERE sr.survey_id = ${surveyId}::uuid
+      WHERE ${scopedWhere}
         AND sr.status IN ('completed', 'drop')
-        AND sr.is_test = false
         AND jsonb_array_length(sr.page_visits) > 0
         AND visit->>'stepId' IS NOT NULL
         AND visit->>'leftAt' IS NOT NULL
