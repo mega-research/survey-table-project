@@ -4,6 +4,7 @@ import { createElement } from 'react';
 
 import { render } from '@react-email/render';
 
+import { ensureImageLinkBandSlices } from '@/lib/mail/image-link-band-slices';
 import { UNSUBSCRIBE_SANDBOX_TOKEN } from '@/lib/mail/constants';
 import { renderForTestSend } from '@/lib/mail/render-for-send';
 import { sendTestMail } from '@/lib/mail/send';
@@ -75,10 +76,21 @@ export async function sendTestTemplateMail(
 
   const sample = await getFirstContactSample(input.surveyId);
 
+  // 테스트 발송은 미저장 초안(bodyHtml)을 그대로 받으므로, 클릭 영역이 있으면
+  // 저장 전이라도 밴드 슬라이스를 여기서 생성한다 (키가 결정적이라 재실행 무해).
+  let bodyHtml: string;
+  try {
+    bodyHtml = await ensureImageLinkBandSlices(input.bodyHtml);
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : '클릭 영역 이미지 처리 중 오류가 발생했습니다.';
+    return { ok: false, error: message };
+  }
+
   const rendered = renderForTestSend({
     surveyId: input.surveyId,
     subject: input.subject,
-    bodyHtml: input.bodyHtml,
+    bodyHtml,
     fromName: input.fromName,
     sample: sample
       ? { attrs: sample.attrs, email: sample.email, inviteUrl: null }
