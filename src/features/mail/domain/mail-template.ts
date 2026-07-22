@@ -42,11 +42,15 @@ export type DeleteMailTemplateInput = z.infer<typeof DeleteMailTemplateInput>;
  */
 export const CreateMailTemplateOutput = z.object({
   id: z.string(),
+  // promote + 클릭 영역 밴드 슬라이스가 반영된 최종 저장본 — 클라이언트가
+  // state 에 동기화해 저장 직후 미리보기에 밴드 상태가 보이게 한다.
+  bodyHtml: z.string(),
   attachments: z.custom<MailAttachment[]>(),
 });
 export type CreateMailTemplateOutput = z.infer<typeof CreateMailTemplateOutput>;
 
 export const UpdateMailTemplateOutput = z.object({
+  bodyHtml: z.string(),
   attachments: z.custom<MailAttachment[]>(),
 });
 export type UpdateMailTemplateOutput = z.infer<typeof UpdateMailTemplateOutput>;

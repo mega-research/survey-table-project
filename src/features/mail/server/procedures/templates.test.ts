@@ -40,22 +40,26 @@ describe('mail.templates procedures', () => {
   it('create는 입력을 service.createMailTemplate에 위임하고 결과를 반환한다', async () => {
     vi.mocked(svc.createMailTemplate).mockResolvedValue({
       id: 'tpl-1',
+      bodyHtml: '<p>saved</p>',
       attachments: [],
     } as never);
     const client = createRouterClient({ templates }, { context: authedContext() });
     const input = { surveyId: 'sv-1', input: validInput() };
     const res = await client.templates.create(input);
     expect(svc.createMailTemplate).toHaveBeenCalledWith(input);
-    expect(res).toEqual({ id: 'tpl-1', attachments: [] });
+    expect(res).toEqual({ id: 'tpl-1', bodyHtml: '<p>saved</p>', attachments: [] });
   });
 
-  it('update는 service.updateMailTemplate에 위임하고 attachments를 반환한다', async () => {
-    vi.mocked(svc.updateMailTemplate).mockResolvedValue({ attachments: [] } as never);
+  it('update는 service.updateMailTemplate에 위임하고 저장본을 반환한다', async () => {
+    vi.mocked(svc.updateMailTemplate).mockResolvedValue({
+      bodyHtml: '<p>saved</p>',
+      attachments: [],
+    } as never);
     const client = createRouterClient({ templates }, { context: authedContext() });
     const input = { surveyId: 'sv-1', templateId: 'tpl-1', input: validInput() };
     const res = await client.templates.update(input);
     expect(svc.updateMailTemplate).toHaveBeenCalledWith(input);
-    expect(res).toEqual({ attachments: [] });
+    expect(res).toEqual({ bodyHtml: '<p>saved</p>', attachments: [] });
   });
 
   it('remove는 service.deleteMailTemplate에 위임하고 {ok:true}를 반환한다', async () => {

@@ -154,7 +154,7 @@ export async function createMailTemplate(
 
   // promote 된 영구 key 를 클라이언트로 돌려줘 state 동기화 — 저장 직후 발송에서
   // stale tmp prefix 로 R2 download 시도하는 사고 차단.
-  return { id: row.id, attachments };
+  return { id: row.id, bodyHtml, attachments };
 }
 
 /**
@@ -225,7 +225,7 @@ export async function updateMailTemplate(
     extractMailTemplateAssets({ bodyHtml, attachments }),
   );
 
-  return { attachments };
+  return { bodyHtml, attachments };
 }
 
 /**
