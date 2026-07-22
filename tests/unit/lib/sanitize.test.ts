@@ -280,3 +280,37 @@ describe('파일 첨부 노드 — sanitize allowlist', () => {
     expect(out).not.toContain('onclick');
   });
 });
+
+describe('sanitizeRichHtml - 이미지맵 (클릭 영역)', () => {
+  it('map/area/usemap 을 보존한다', () => {
+    const html =
+      '<img src="https://r2.example.com/mail/a.png" width="320" usemap="#m-link-0">' +
+      '<map name="m-link-0"><area shape="rect" coords="32,122,192,147" ' +
+      'href="https://survey.example.com/i/abc" target="_blank" rel="noopener noreferrer" ' +
+      'alt="설문 참여 링크"></map>';
+    const out = sanitizeRichHtml(html);
+    expect(out).toContain('usemap="#m-link-0"');
+    expect(out).toContain('<map name="m-link-0">');
+    expect(out).toContain('coords="32,122,192,147"');
+    expect(out).toContain('href="https://survey.example.com/i/abc"');
+  });
+
+  it('img 의 data-link-* 속성은 스트립한다', () => {
+    const html =
+      '<img src="https://r2.example.com/mail/a.png" width="320" ' +
+      'data-link-rect="0.1,0.5,0.5,0.1" data-link-natural="1700,1300" ' +
+      'data-link-coords="32,122,192,147">';
+    const out = sanitizeRichHtml(html);
+    expect(out).not.toContain('data-link-rect');
+    expect(out).not.toContain('data-link-natural');
+    expect(out).not.toContain('data-link-coords');
+    expect(out).toContain('src=');
+  });
+
+  it('area 의 javascript: href 는 제거한다', () => {
+    const html =
+      '<map name="m"><area shape="rect" coords="0,0,10,10" href="javascript:alert(1)"></map>';
+    const out = sanitizeRichHtml(html);
+    expect(out).not.toContain('javascript:');
+  });
+});

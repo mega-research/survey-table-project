@@ -66,7 +66,7 @@ const RICH_CONFIG: sanitizeHtml.IOptions = {
     'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
     'ul', 'ol', 'li',
     'blockquote', 'code', 'pre',
-    'a', 'img',
+    'a', 'img', 'map', 'area',
     'table', 'thead', 'tbody', 'tr', 'th', 'td',
   ],
   allowedAttributes: {
@@ -76,7 +76,10 @@ const RICH_CONFIG: sanitizeHtml.IOptions = {
       // notice 파일 첨부 노드 marker (a[data-file-attachment])
       'data-file-attachment', 'data-key', 'data-filename', 'data-size', 'data-mime',
     ],
-    img: ['src', 'alt', 'width', 'height'],
+    img: ['src', 'alt', 'width', 'height', 'usemap'],
+    // 이미지 클릭 영역 (메일 이미지맵) — href 는 allowedSchemes(http/https)가 그대로 적용
+    map: ['name'],
+    area: ['shape', 'coords', 'href', 'target', 'rel', 'alt'],
     td: ['colspan', 'rowspan', 'colwidth'],
     th: ['colspan', 'rowspan', 'colwidth'],
   },
