@@ -191,6 +191,12 @@ export const questions = pgTable('questions', {
     enum: MOBILE_TABLE_DISPLAY_MODES,
   }).default('auto'),
   mobileDrilldownOmitLeadingColumns: integer('mobile_drilldown_omit_leading_columns').default(1),
+  mobileDrilldownRepeatHeaderStartRow: integer(
+    'mobile_drilldown_repeat_header_start_row',
+  ).default(0),
+  mobileDrilldownRepeatHeaderEndRow: integer(
+    'mobile_drilldown_repeat_header_end_row',
+  ).default(0),
 
   // 응답 페이지에서 질문 제목 숨기기 (기본 false = 표시)
   hideTitle: boolean('hide_title').default(false),

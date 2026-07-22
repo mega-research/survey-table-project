@@ -488,6 +488,10 @@ export const useSurveyBuilderStore = create<SurveyBuilderState>()(
             tableColumns: getDefaultTableColumns(),
             tableRowsData: getDefaultTableRows(),
           }),
+          ...((type === 'radio' || type === 'checkbox' || type === 'table') && {
+            mobileDrilldownRepeatHeaderStartRow: 0,
+            mobileDrilldownRepeatHeaderEndRow: 0,
+          }),
         };
 
         set((state) => {

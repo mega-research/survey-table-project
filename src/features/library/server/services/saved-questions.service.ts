@@ -11,6 +11,7 @@ import { normalizeQuestion } from '@/lib/question';
 import { promoteSurveyImages } from '@/lib/survey/survey-image-promote';
 import { generateId } from '@/lib/utils';
 import type { Question, SavedQuestion } from '@/types/survey';
+import { resolveMobileDrilldownRepeatHeaderRange } from '@/utils/mobile-drilldown-repeat-header';
 import { resolveMobileTableDisplayMode } from '@/utils/mobile-table-display-mode';
 
 import type {
@@ -47,10 +48,15 @@ function prepareAppliedQuestion(question: Question): Question {
   const supportsMobileTableDisplay = question.type === 'radio'
     || question.type === 'checkbox'
     || question.type === 'table';
+  const repeatHeaderRange = supportsMobileTableDisplay
+    ? resolveMobileDrilldownRepeatHeaderRange(question)
+    : null;
   const canonicalQuestion = supportsMobileTableDisplay
     ? {
         ...question,
         mobileTableDisplayMode: resolveMobileTableDisplayMode(question),
+        mobileDrilldownRepeatHeaderStartRow: repeatHeaderRange?.startRow ?? null,
+        mobileDrilldownRepeatHeaderEndRow: repeatHeaderRange?.endRow ?? null,
       }
     : question;
   const { groupId: _groupId, ...questionWithoutGroup } = canonicalQuestion;
