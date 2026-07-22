@@ -1,21 +1,24 @@
 /**
- * 메일 이미지 클릭 영역(이미지맵) 지원.
+ * 메일 이미지 클릭 영역(가로 밴드 슬라이스) 지원.
  *
- * 에디터는 img 에 data-link-rect(0~1 상대좌표)·data-link-natural(원본 W,H)·
- * data-link-coords(직렬화 시 파생된 픽셀좌표)만 심는다. 발송/미리보기 직전
- * renderMailPreview 진입점에서 expandImageLinkAreas 가 usemap + <map><area> 를
- * 생성하고, href 의 {{invite_link}} 는 기존 변수 치환 파이프라인이 실제 URL 로
- * 바꾼다 (변수 치환보다 먼저 실행되어야 하는 이유).
+ * 에디터는 img 에 data-link-rect(0~1 상대좌표)·data-link-natural(원본 W,H)만
+ * 심는다. 템플릿 저장 시 서버(ensureImageLinkAreaSlices)가 원본 이미지를 영역
+ * y 범위 기준 top/mid/bottom 가로 밴드로 잘라 R2 에 올리고 data-link-bands 에
+ * 밴드 URL 을 기록한다. 발송/미리보기 직전 renderMailPreview 진입점에서
+ * expandImageLinkAreas 가 img 를 <table> 3행으로 치환하고 가운데 밴드를
+ * <a href="{{invite_link}}"> 로 감싼다 — href 는 기존 변수 치환 파이프라인이
+ * 실제 URL 로 바꾼다 (변수 치환보다 먼저 실행되어야 하는 이유).
  *
- * <area coords> 는 픽셀 고정이라 %폭 이미지는 클라이언트별 렌더폭이 달라져
- * 좌표가 어긋난다. 따라서 클릭 영역 이미지는 px 고정폭(width attr)을 강제하고,
- * 모바일 축소 어긋남 방지를 위해 IMAGE_LINK_AREA_MAX_WIDTH 이하만 허용한다.
+ * 이미지맵(<area coords>) 대신 밴드 슬라이스를 쓰는 이유: area 좌표는 렌더
+ * 픽셀 고정이라 %폭(반응형) 이미지에서 어긋나지만, 밴드는 모든 조각이 같은
+ * %로 스케일되어 어떤 클라이언트 폭에서도 비율이 유지된다. 이미지맵을
+ * 지원하지 않는 Outlook 데스크톱에서도 동작한다.
  */
 
-/** 360px 폭 기기(컨테이너 padding 32px 제외 가용폭 328px)까지 무축소로 렌더되는 안전폭 */
-export const IMAGE_LINK_AREA_MAX_WIDTH = 320;
+export const IMG_TAG_RE = /<img\b[^>]*>/g;
 
-const IMG_TAG_RE = /<img\b[^>]*>/g;
+/** sanitize transformTags 의 표 테두리 주입을 면제받기 위한 마커 클래스 */
+export const LINK_BANDS_CLASS = 'mail-link-bands';
 
 export interface LinkRect {
   x: number;
@@ -41,60 +44,81 @@ export function parseNaturalSize(
   return { width: parts[0] as number, height: parts[1] as number };
 }
 
-/** 상대좌표 rect → <area coords> 픽셀 문자열. 입력 불량 시 null. */
-export function deriveLinkCoords(
+/**
+ * 상대좌표 rect 의 y 범위 → 원본 픽셀 밴드 경계 [y1, y2).
+ * y1 == 0 이면 top 밴드 없음, y2 == height 이면 bottom 밴드 없음.
+ * 입력 불량 시 null.
+ */
+export function computeBandRows(
   rect: LinkRect,
-  naturalWidth: number,
-  naturalHeight: number,
-  displayWidth: number,
-): string | null {
-  const nums = [rect.x, rect.y, rect.w, rect.h, naturalWidth, naturalHeight, displayWidth];
-  if (!nums.every((n) => Number.isFinite(n))) return null;
-  if (naturalWidth <= 0 || naturalHeight <= 0 || displayWidth <= 0) return null;
-  if (rect.w <= 0 || rect.h <= 0) return null;
-  const w = displayWidth;
-  const h = (displayWidth * naturalHeight) / naturalWidth;
-  const x1 = Math.round(rect.x * w);
-  const y1 = Math.round(rect.y * h);
-  const x2 = Math.round((rect.x + rect.w) * w);
-  const y2 = Math.round((rect.y + rect.h) * h);
-  return `${x1},${y1},${x2},${y2}`;
+  height: number,
+): { y1: number; y2: number } | null {
+  if (!Number.isFinite(height) || height <= 0) return null;
+  if (!Number.isFinite(rect.y) || !Number.isFinite(rect.h) || rect.h <= 0) return null;
+  const y1 = Math.max(0, Math.min(height - 1, Math.round(rect.y * height)));
+  const y2 = Math.max(y1 + 1, Math.min(height, Math.round((rect.y + rect.h) * height)));
+  return { y1, y2 };
 }
 
+/** 밴드 URL 3개 → data-link-bands 값. top/bottom 은 없을 수 있다. */
+export function buildLinkBandsAttr(
+  top: string | null,
+  mid: string,
+  bottom: string | null,
+): string {
+  return `${top ?? ''}|${mid}|${bottom ?? ''}`;
+}
+
+export function parseLinkBands(
+  s: string | null | undefined,
+): { top: string | null; mid: string; bottom: string | null } | null {
+  if (!s) return null;
+  const parts = s.split('|');
+  if (parts.length !== 3) return null;
+  const [top, mid, bottom] = parts as [string, string, string];
+  if (!mid) return null;
+  return { top: top || null, mid, bottom: bottom || null };
+}
+
+/** img 태그의 style 에서 폭 선언을 추출 — 없으면 width attr(px), 그것도 없으면 100% */
+function extractWidthDecl(tag: string): string {
+  const style = tag.match(/\bstyle="([^"]*)"/)?.[1] ?? '';
+  const decl = style.match(/(?<![\w-])width:\s*(\d+(?:\.\d+)?)(px|%)/);
+  if (decl) return `width: ${decl[1]}${decl[2]}`;
+  const attr = tag.match(/(?<![\w-])width="(\d+(?:\.\d+)?)"/)?.[1];
+  if (attr) return `width: ${attr}px`;
+  return 'width: 100%';
+}
+
+const BAND_IMG_STYLE = 'display: block; width: 100%; height: auto;';
+
 /**
- * data-link-coords 를 가진 img 에 usemap 을 부여하고 바로 뒤에 <map> 형제를 생성.
+ * data-link-bands 를 가진 img 를 가로 밴드 <table> 로 치환.
+ * 가운데 밴드는 <a href="{{invite_link}}"> 로 감싼다.
  * data-link-* 속성은 여기서 제거하지 않는다 — sanitize 가 최종 스트립.
  */
 export function expandImageLinkAreas(html: string): string {
-  if (!html || !html.includes('data-link-coords')) return html;
-  let seq = 0;
+  if (!html || !html.includes('data-link-bands')) return html;
   return html.replace(IMG_TAG_RE, (tag) => {
-    const m = tag.match(/data-link-coords="([\d,\s]+)"/);
-    if (!m || m[1] === undefined) return tag;
-    const coords = m[1].trim();
-    const name = `m-link-${seq}`;
-    seq += 1;
-    const withUsemap = tag.replace(/(\s*\/?)>$/, ` usemap="#${name}"$1>`);
+    const bands = parseLinkBands(tag.match(/data-link-bands="([^"]*)"/)?.[1]);
+    if (!bands) return tag;
+    const widthDecl = extractWidthDecl(tag);
+    const row = (inner: string) =>
+      `<tr><td class="${LINK_BANDS_CLASS}" style="padding: 0;">${inner}</td></tr>`;
+    const bandImg = (src: string, alt: string) =>
+      `<img src="${src}" alt="${alt}" style="${BAND_IMG_STYLE}">`;
+    const rows = [
+      bands.top ? row(bandImg(bands.top, '')) : '',
+      row(
+        `<a href="{{invite_link}}" target="_blank" rel="noopener noreferrer">` +
+          `${bandImg(bands.mid, '설문 참여 링크')}</a>`,
+      ),
+      bands.bottom ? row(bandImg(bands.bottom, '')) : '',
+    ].join('');
     return (
-      `${withUsemap}<map name="${name}">` +
-      `<area shape="rect" coords="${coords}" href="{{invite_link}}" ` +
-      `target="_blank" rel="noopener noreferrer" alt="설문 참여 링크"></map>`
+      `<table class="${LINK_BANDS_CLASS}" ` +
+      `style="${widthDecl}; max-width: 100%; border-collapse: collapse;">` +
+      `<tbody>${rows}</tbody></table>`
     );
   });
-}
-
-/**
- * 클릭 영역(data-link-rect)이 지정됐는데 px 폭이 없거나 기준 초과인 img 개수.
- * 템플릿 저장 검증용 — 영역 지정 후 이미지를 재확대하는 우회 차단.
- */
-export function countOversizedLinkAreaImages(html: string): number {
-  if (!html || !html.includes('data-link-rect')) return 0;
-  let count = 0;
-  for (const tag of html.match(IMG_TAG_RE) ?? []) {
-    if (!tag.includes('data-link-rect')) continue;
-    const m = tag.match(/(?<![\w-])width="(\d+(?:\.\d+)?)"/);
-    const width = m?.[1] != null ? Number(m[1]) : null;
-    if (width === null || width > IMAGE_LINK_AREA_MAX_WIDTH) count += 1;
-  }
-  return count;
 }

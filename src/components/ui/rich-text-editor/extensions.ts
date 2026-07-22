@@ -14,7 +14,6 @@ import Underline from '@tiptap/extension-underline';
 import StarterKit from '@tiptap/starter-kit';
 import ImageResize from 'tiptap-extension-resize-image';
 
-import { deriveLinkCoords, parseLinkRect, parseNaturalSize } from '@/lib/mail/image-link-area';
 import { ImageTextIsolation } from '@/lib/tiptap/image-text-isolation';
 import { TableSelectOnBackspace } from '@/lib/tiptap/table-select-on-backspace';
 
@@ -91,7 +90,7 @@ const ImageResizeWithProxy = ImageResize.extend({
     return {
       ...this.parent?.(),
       // 이미지 클릭 영역 (메일 전용) — 0~1 상대좌표 "x,y,w,h". SoT 는 상대좌표이며
-      // 픽셀 coords 는 renderHTML 에서 매번 파생 (폭 변경 시 자동 재계산).
+      // 밴드 슬라이스는 템플릿 저장 시 서버가 이 값으로 생성한다.
       linkRect: {
         default: null as string | null,
         parseHTML: (el: HTMLElement) => el.getAttribute('data-link-rect'),
@@ -122,17 +121,6 @@ const ImageResizeWithProxy = ImageResize.extend({
       ? `${base}; height: auto; max-width: 100%;`
       : 'height: auto; max-width: 100%;';
     next['style'] = finalStyle;
-
-    // 클릭 영역 픽셀 coords 파생 — px 고정폭(width attr)이 있어야만 생성.
-    // 파생 실패 시 data-link-coords 를 내보내지 않아 발송 변환이 조용히 스킵된다
-    // (저장 검증 Task 6 이 이 상태를 사용자 에러로 승격).
-    const rect = parseLinkRect(next['data-link-rect'] as string | null | undefined);
-    const natural = parseNaturalSize(next['data-link-natural'] as string | null | undefined);
-    const displayWidth = Number(next['width']);
-    if (rect && natural) {
-      const coords = deriveLinkCoords(rect, natural.width, natural.height, displayWidth);
-      if (coords) next['data-link-coords'] = coords;
-    }
     return ['img', next];
   },
 });

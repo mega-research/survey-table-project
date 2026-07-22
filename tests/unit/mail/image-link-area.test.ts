@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  IMAGE_LINK_AREA_MAX_WIDTH,
-  countOversizedLinkAreaImages,
-  deriveLinkCoords,
+  buildLinkBandsAttr,
+  computeBandRows,
   expandImageLinkAreas,
+  parseLinkBands,
   parseLinkRect,
   parseNaturalSize,
 } from '@/lib/mail/image-link-area';
@@ -34,79 +34,96 @@ describe('parseNaturalSize', () => {
   });
 });
 
-describe('deriveLinkCoords', () => {
-  it('상대좌표를 표시폭 기준 픽셀 coords 로 변환한다', () => {
-    // H = 320 * 1300 / 1700 = 244.705…
-    // x1=32, y1=round(0.5*244.705)=122, x2=round(0.6*320)=192, y2=round(0.6*244.705)=147
-    const coords = deriveLinkCoords({ x: 0.1, y: 0.5, w: 0.5, h: 0.1 }, 1700, 1300, 320);
-    expect(coords).toBe('32,122,192,147');
+describe('computeBandRows', () => {
+  it('상대 y 범위를 픽셀 밴드 경계로 변환한다', () => {
+    // 1000px 높이, y=0.6376 h=0.0626 → y1=638, y2=700
+    expect(computeBandRows({ x: 0, y: 0.6376, w: 1, h: 0.0626 }, 1000)).toEqual({
+      y1: 638,
+      y2: 700,
+    });
   });
 
-  it('원본크기·표시폭·rect 크기가 0 이하이면 null', () => {
-    const rect = { x: 0.1, y: 0.1, w: 0.5, h: 0.1 };
-    expect(deriveLinkCoords(rect, 0, 1300, 320)).toBeNull();
-    expect(deriveLinkCoords(rect, 1700, 1300, 0)).toBeNull();
-    expect(deriveLinkCoords({ ...rect, w: 0 }, 1700, 1300, 320)).toBeNull();
+  it('경계 클램프 — 상단 끝 영역은 y1=0, 하단 끝 영역은 y2=height', () => {
+    expect(computeBandRows({ x: 0, y: 0, w: 1, h: 0.3 }, 100)).toEqual({ y1: 0, y2: 30 });
+    expect(computeBandRows({ x: 0, y: 0.7, w: 1, h: 0.3 }, 100)).toEqual({ y1: 70, y2: 100 });
+  });
+
+  it('아주 얇은 영역도 최소 1px 밴드를 보장한다', () => {
+    const rows = computeBandRows({ x: 0, y: 0.5, w: 1, h: 0.001 }, 100);
+    expect(rows).not.toBeNull();
+    expect(rows!.y2 - rows!.y1).toBeGreaterThanOrEqual(1);
+  });
+
+  it('height 0 이하·h 0 이하는 null', () => {
+    expect(computeBandRows({ x: 0, y: 0.5, w: 1, h: 0.1 }, 0)).toBeNull();
+    expect(computeBandRows({ x: 0, y: 0.5, w: 1, h: 0 }, 100)).toBeNull();
+  });
+});
+
+describe('buildLinkBandsAttr / parseLinkBands', () => {
+  it('3밴드 값을 직렬화·파싱한다', () => {
+    const attr = buildLinkBandsAttr('https://r2/t.png', 'https://r2/m.png', 'https://r2/b.png');
+    expect(parseLinkBands(attr)).toEqual({
+      top: 'https://r2/t.png',
+      mid: 'https://r2/m.png',
+      bottom: 'https://r2/b.png',
+    });
+  });
+
+  it('top/bottom 이 없는 경우 null 로 파싱한다', () => {
+    expect(parseLinkBands(buildLinkBandsAttr(null, 'https://r2/m.png', null))).toEqual({
+      top: null,
+      mid: 'https://r2/m.png',
+      bottom: null,
+    });
+  });
+
+  it('mid 누락·형식 불량은 null', () => {
+    expect(parseLinkBands('a||b')).toBeNull();
+    expect(parseLinkBands('only-mid')).toBeNull();
+    expect(parseLinkBands(null)).toBeNull();
   });
 });
 
 describe('expandImageLinkAreas', () => {
-  it('data-link-coords 가진 img 에 usemap 을 붙이고 형제 map 을 생성한다', () => {
-    const html = '<p><img src="https://r2/x.png" width="320" data-link-coords="32,122,192,147"></p>';
+  const bands = 'https://r2/x-top.png|https://r2/x-mid.png|https://r2/x-bottom.png';
+
+  it('data-link-bands 가진 img 를 3행 밴드 테이블로 치환한다', () => {
+    const html = `<p><img src="https://r2/x.png" style="width: 100%; height: auto;" data-link-bands="${bands}"></p>`;
     const out = expandImageLinkAreas(html);
-    expect(out).toContain('usemap="#m-link-0"');
-    expect(out).toContain('<map name="m-link-0">');
+    expect(out).toContain('<table class="mail-link-bands"');
+    expect(out).toContain('width: 100%');
+    expect((out.match(/<tr>/g) ?? []).length).toBe(3);
+    expect(out).toContain('src="https://r2/x-top.png"');
     expect(out).toContain(
-      '<area shape="rect" coords="32,122,192,147" href="{{invite_link}}"',
+      '<a href="{{invite_link}}" target="_blank" rel="noopener noreferrer">',
     );
-    // map 은 img 바로 뒤 형제
-    expect(out).toMatch(/<img[^>]*usemap="#m-link-0"[^>]*><map/);
+    expect(out).toMatch(/<a [^>]*><img src="https:\/\/r2\/x-mid\.png"/);
+    expect(out).toContain('src="https://r2/x-bottom.png"');
+    expect(out).not.toContain('<img src="https://r2/x.png"');
   });
 
-  it('이미지 여러 개면 map name 이 유일하다', () => {
-    const html =
-      '<img src="a.png" data-link-coords="0,0,10,10"><img src="b.png" data-link-coords="0,0,20,20">';
+  it('top/bottom 없는 밴드는 행을 생성하지 않는다', () => {
+    const html = `<img src="https://r2/x.png" data-link-bands="|https://r2/x-mid.png|">`;
     const out = expandImageLinkAreas(html);
-    expect(out).toContain('usemap="#m-link-0"');
-    expect(out).toContain('usemap="#m-link-1"');
+    expect((out.match(/<tr>/g) ?? []).length).toBe(1);
+    expect(out).toMatch(/<a [^>]*><img src="https:\/\/r2\/x-mid\.png"/);
   });
 
-  it('self-closing img 도 처리한다', () => {
-    const out = expandImageLinkAreas('<img src="a.png" data-link-coords="0,0,10,10" />');
-    expect(out).toContain('usemap="#m-link-0"');
-    expect(out).toContain('<map name="m-link-0">');
+  it('px 폭 이미지는 테이블에 px 폭을 적용한다', () => {
+    const html = `<img src="https://r2/x.png" width="668" data-link-bands="${bands}">`;
+    const out = expandImageLinkAreas(html);
+    expect(out).toContain('style="width: 668px; max-width: 100%;');
   });
 
-  it('data-link-coords 없는 img 와 빈 문자열은 그대로', () => {
-    const plain = '<p><img src="a.png" width="320"></p>';
+  it('폭 정보가 없으면 100% 를 기본으로 한다', () => {
+    const html = `<img src="https://r2/x.png" data-link-bands="${bands}">`;
+    expect(expandImageLinkAreas(html)).toContain('style="width: 100%; max-width: 100%;');
+  });
+
+  it('data-link-bands 없는 img 와 빈 문자열은 그대로', () => {
+    const plain = '<p><img src="a.png" width="320" data-link-rect="0.1,0.1,0.5,0.1"></p>';
     expect(expandImageLinkAreas(plain)).toBe(plain);
     expect(expandImageLinkAreas('')).toBe('');
-  });
-});
-
-describe('countOversizedLinkAreaImages', () => {
-  it('px 폭이 기준 이하인 클릭 영역 이미지는 위반 아님', () => {
-    const html = `<img src="a.png" width="${IMAGE_LINK_AREA_MAX_WIDTH}" data-link-rect="0.1,0.1,0.5,0.1">`;
-    expect(countOversizedLinkAreaImages(html)).toBe(0);
-  });
-
-  it('기준 초과·폭 없음은 위반', () => {
-    expect(
-      countOversizedLinkAreaImages('<img src="a.png" width="400" data-link-rect="0,0,1,1">'),
-    ).toBe(1);
-    expect(
-      countOversizedLinkAreaImages('<img src="a.png" data-link-rect="0,0,1,1">'),
-    ).toBe(1);
-  });
-
-  it('클릭 영역 없는 img 는 폭과 무관하게 위반 아님', () => {
-    expect(countOversizedLinkAreaImages('<img src="a.png" width="900">')).toBe(0);
-    expect(countOversizedLinkAreaImages('')).toBe(0);
-  });
-
-  it('data-width 는 width 로 오인식하지 않는다', () => {
-    const html =
-      '<img src="a.png" width="320" data-width="900" data-link-rect="0,0,1,1">';
-    expect(countOversizedLinkAreaImages(html)).toBe(0);
   });
 });

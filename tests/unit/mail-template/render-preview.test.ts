@@ -99,10 +99,13 @@ describe('renderMailPreview - invite_link auto anchor', () => {
 
 describe('renderMailPreview - 이미지 클릭 영역', () => {
   const bodyWithLinkArea =
-    '<p><img src="https://r2.example.com/mail/a.png" width="320" ' +
-    'data-link-rect="0.1,0.5,0.5,0.1" data-link-coords="32,122,192,147"></p>';
+    '<p><img src="https://r2.example.com/mail/a.png" style="width: 100%; height: auto;" ' +
+    'data-link-rect="0.1,0.5,0.5,0.1" ' +
+    'data-link-bands="https://r2.example.com/mail/link-bands/h-top.png|' +
+    'https://r2.example.com/mail/link-bands/h-mid.png|' +
+    'https://r2.example.com/mail/link-bands/h-bottom.png"></p>';
 
-  it('send 모드에서 area href 가 실제 초대 URL 로 치환된다', () => {
+  it('send 모드에서 가운데 밴드 링크가 실제 초대 URL 로 치환된다', () => {
     const out = renderMailPreview({
       subject: '제목',
       bodyHtml: bodyWithLinkArea,
@@ -110,12 +113,13 @@ describe('renderMailPreview - 이미지 클릭 영역', () => {
       sample: { attrs: {}, email: null, inviteUrl: 'https://survey.example.com/i/abc' },
       mode: 'send',
     });
-    expect(out.bodyHtml).toContain('usemap="#m-link-0"');
+    expect(out.bodyHtml).toContain('<table class="mail-link-bands"');
     expect(out.bodyHtml).toContain('href="https://survey.example.com/i/abc"');
+    expect(out.bodyHtml).toContain('link-bands/h-mid.png');
     expect(out.bodyHtml).not.toContain('{{invite_link}}');
   });
 
-  it('preview 모드에서도 map 이 생성되고 href 가 치환된다', () => {
+  it('preview 모드에서도 밴드 테이블이 생성되고 href 가 치환된다', () => {
     const out = renderMailPreview({
       subject: '제목',
       bodyHtml: bodyWithLinkArea,
@@ -123,11 +127,11 @@ describe('renderMailPreview - 이미지 클릭 영역', () => {
       sample: { attrs: {}, email: null, inviteUrl: 'https://survey.example.com/i/abc' },
       mode: 'preview',
     });
-    expect(out.bodyHtml).toContain('<map name="m-link-0">');
+    expect(out.bodyHtml).toContain('<table class="mail-link-bands"');
     expect(out.bodyHtml).toContain('href="https://survey.example.com/i/abc"');
   });
 
-  it('send 모드에서 sample 이 없으면 area href 는 빈 값으로 치환된다', () => {
+  it('send 모드에서 sample 이 없으면 밴드 링크 href 는 빈 값으로 치환된다', () => {
     const out = renderMailPreview({
       subject: '제목',
       bodyHtml: bodyWithLinkArea,
@@ -137,6 +141,19 @@ describe('renderMailPreview - 이미지 클릭 영역', () => {
     });
     expect(out.bodyHtml).toContain('href=""');
     expect(out.bodyHtml).not.toContain('{{invite_link}}');
+  });
+
+  it('밴드 미생성(미저장) 클릭 영역 이미지는 원본 그대로 유지된다', () => {
+    const unsaved =
+      '<p><img src="https://r2.example.com/mail/a.png" data-link-rect="0.1,0.5,0.5,0.1"></p>';
+    const out = renderMailPreview({
+      subject: '제목',
+      bodyHtml: unsaved,
+      fromName: '발신자',
+      sample: null,
+      mode: 'send',
+    });
+    expect(out.bodyHtml).toBe(unsaved);
   });
 
   it('클릭 영역 없는 본문은 기존과 동일하다', () => {

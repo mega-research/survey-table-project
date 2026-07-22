@@ -13,6 +13,7 @@ import {
   diffOrphanImages,
   extractMailTemplateAssets,
 } from '@/lib/mail/mail-image-extractor';
+import { ensureImageLinkBandSlices } from '@/lib/mail/image-link-band-slices';
 import { promoteMailImages } from '@/lib/mail/mail-image-promote';
 import { extractVariableKeys } from '@/lib/mail/variable-extractor';
 
@@ -82,10 +83,12 @@ async function promoteAssets(
   rawBodyHtml: string,
   rawAttachments: MailAttachment[],
 ): Promise<{ bodyHtml: string; attachments: MailAttachment[] }> {
-  const [bodyHtml, attachments] = await Promise.all([
+  const [promotedBodyHtml, attachments] = await Promise.all([
     promoteMailImages(rawBodyHtml),
     promoteMailAttachments(rawAttachments),
   ]);
+  // 클릭 영역 밴드 슬라이스는 promote 이후(영구 URL 기준)에 생성해야 한다
+  const bodyHtml = await ensureImageLinkBandSlices(promotedBodyHtml);
   return { bodyHtml, attachments };
 }
 

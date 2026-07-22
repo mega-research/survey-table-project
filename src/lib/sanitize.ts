@@ -149,8 +149,16 @@ const RICH_CONFIG: sanitizeHtml.IOptions = {
     },
   },
   transformTags: {
-    table: (tagName, attribs) => withStyle(tagName, attribs, TABLE_STYLE),
-    td: (tagName, attribs) => withStyle(tagName, attribs, CELL_STYLE),
+    // mail-link-bands: 이미지 클릭 영역 밴드 테이블 — 표 테두리/패딩 주입 시
+    // 밴드 조각 사이에 선이 생기므로 면제 (expandImageLinkAreas 가 생성)
+    table: (tagName, attribs) =>
+      (attribs['class'] ?? '').includes('mail-link-bands')
+        ? { tagName, attribs }
+        : withStyle(tagName, attribs, TABLE_STYLE),
+    td: (tagName, attribs) =>
+      (attribs['class'] ?? '').includes('mail-link-bands')
+        ? { tagName, attribs }
+        : withStyle(tagName, attribs, CELL_STYLE),
     th: (tagName, attribs) => withStyle(tagName, attribs, TH_STYLE),
     a: (tagName, attribs) => {
       if (attribs['data-file-attachment'] === 'true') {

@@ -3,18 +3,11 @@
 import { useState, type PointerEvent as ReactPointerEvent } from 'react';
 
 import type { Editor } from '@tiptap/react';
-import { AlertCircle } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import {
-  IMAGE_LINK_AREA_MAX_WIDTH,
-  parseLinkRect,
-  type LinkRect,
-} from '@/lib/mail/image-link-area';
+import { parseLinkRect, type LinkRect } from '@/lib/mail/image-link-area';
 
 const IMAGE_NODE = 'imageResize';
-// image-context-toolbar.tsx 의 WRAPPER_BASE 와 동일 값 — %width 제거된 기본 wrapper
-const WRAPPER_BASE = 'display: inline-block; vertical-align: top; box-sizing: border-box;';
 /** 드래그 최소 크기 (상대값) — 이보다 작으면 오클릭으로 보고 무시 */
 const MIN_RECT_SIZE = 0.02;
 
@@ -50,13 +43,6 @@ export function ImageLinkAreaModal({ editor, onClose }: Props) {
   const attrs = editor.getAttributes(IMAGE_NODE);
   const src = (attrs['src'] ?? '') as string;
 
-  // 폭 고정 버튼을 누르면 editor attrs 는 바뀌지만 이 컴포넌트는 구독하지 않으므로
-  // 로컬 override 로 즉시 반영한다.
-  const [widthOverride, setWidthOverride] = useState<number | null>(null);
-  const rawWidth = Number(attrs['width']);
-  const pxWidth = widthOverride ?? (Number.isFinite(rawWidth) && rawWidth > 0 ? rawWidth : null);
-  const widthOk = pxWidth !== null && pxWidth <= IMAGE_LINK_AREA_MAX_WIDTH;
-
   const [rect, setRect] = useState<LinkRect | null>(
     parseLinkRect(attrs['linkRect'] as string | null | undefined),
   );
@@ -65,28 +51,11 @@ export function ImageLinkAreaModal({ editor, onClose }: Props) {
 
   const hadRect = attrs['linkRect'] != null;
 
-  const fixWidth = () => {
-    // updateAttributes 로 NodeView 가 재생성되면 이미지 노드 선택이 풀리고,
-    // imageActive 조건부인 상위 ImageContextToolbar 가 언마운트되어 모달까지
-    // 닫혀버린다. 같은 체인에서 NodeSelection 을 복원해 모달을 유지한다.
-    // focus() 는 모달이 열린 동안 에디터로 포커스를 뺏으므로 호출하지 않는다.
-    const { from } = editor.state.selection;
-    editor
-      .chain()
-      .updateAttributes(IMAGE_NODE, {
-        width: IMAGE_LINK_AREA_MAX_WIDTH,
-        height: null,
-        wrapperStyle: WRAPPER_BASE,
-        containerStyle: 'width: 100%; height: auto;',
-      })
-      .setNodeSelection(from)
-      .run();
-    setWidthOverride(IMAGE_LINK_AREA_MAX_WIDTH);
-  };
-
   const save = () => {
-    if (!rect || !natural || !widthOk) return;
-    // 닫힌 뒤에도 이미지 컨텍스트 툴바(버튼 active 표시)가 유지되도록 선택 복원
+    if (!rect || !natural) return;
+    // 닫힌 뒤에도 이미지 컨텍스트 툴바(버튼 active 표시)가 유지되도록 선택 복원.
+    // updateAttributes 로 NodeView 가 재생성되면 노드 선택이 풀려 imageActive
+    // 조건부인 상위 ImageContextToolbar 가 언마운트되기 때문.
     const { from } = editor.state.selection;
     editor
       .chain()
@@ -114,7 +83,7 @@ export function ImageLinkAreaModal({ editor, onClose }: Props) {
   // 마우스 이벤트 대신 pointer capture 를 사용한다 — 드래그 중 포인터가 이미지
   // 밖으로 나가도 move/up 이 계속 이 요소로 전달되어 실사용 드래그가 끊기지 않는다.
   const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (!widthOk || !e.isPrimary) return;
+    if (!e.isPrimary) return;
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
     setRect(null);
@@ -139,27 +108,14 @@ export function ImageLinkAreaModal({ editor, onClose }: Props) {
           <h3 className="text-sm font-semibold text-gray-900">클릭 영역 지정</h3>
           <p className="mt-0.5 text-xs text-gray-500">
             이미지 위를 드래그해 설문 참여 버튼 영역을 지정하세요. 수신자가 이 영역을
-            누르면 개인별 초대링크로 이동합니다.
+            누르면 개인별 초대링크로 이동합니다. 저장 시 이미지가 가로 밴드로 분할되어
+            지정한 높이 구간 전체가 클릭 가능해집니다.
           </p>
         </div>
 
-        {!widthOk && (
-          <div className="flex items-start gap-2 border-b border-amber-200 bg-amber-50 px-5 py-3">
-            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-            <div className="flex-1 text-xs text-amber-800">
-              클릭 영역은 폭 {IMAGE_LINK_AREA_MAX_WIDTH}px 이하의 고정폭 이미지에만
-              지정할 수 있습니다. 퍼센트 크기나 더 큰 폭에서는 모바일에서 클릭 위치가
-              어긋납니다.
-            </div>
-            <Button size="sm" variant="outline" onClick={fixWidth}>
-              폭을 {IMAGE_LINK_AREA_MAX_WIDTH}px로 고정
-            </Button>
-          </div>
-        )}
-
         <div className="min-h-0 flex-1 overflow-auto p-5">
           <div
-            className={widthOk ? 'relative inline-block cursor-crosshair select-none touch-none' : 'relative inline-block select-none opacity-50'}
+            className="relative inline-block cursor-crosshair select-none touch-none"
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={endDrag}
@@ -180,15 +136,22 @@ export function ImageLinkAreaModal({ editor, onClose }: Props) {
               }}
             />
             {rect && (
-              <div
-                className="pointer-events-none absolute border-2 border-blue-500 bg-blue-500/20"
-                style={{
-                  left: `${rect.x * 100}%`,
-                  top: `${rect.y * 100}%`,
-                  width: `${rect.w * 100}%`,
-                  height: `${rect.h * 100}%`,
-                }}
-              />
+              <>
+                {/* 실제 클릭 가능 범위(가로 밴드 전체)를 은은하게 표시 */}
+                <div
+                  className="pointer-events-none absolute inset-x-0 bg-blue-500/10"
+                  style={{ top: `${rect.y * 100}%`, height: `${rect.h * 100}%` }}
+                />
+                <div
+                  className="pointer-events-none absolute border-2 border-blue-500 bg-blue-500/20"
+                  style={{
+                    left: `${rect.x * 100}%`,
+                    top: `${rect.y * 100}%`,
+                    width: `${rect.w * 100}%`,
+                    height: `${rect.h * 100}%`,
+                  }}
+                />
+              </>
             )}
           </div>
         </div>
@@ -205,7 +168,7 @@ export function ImageLinkAreaModal({ editor, onClose }: Props) {
             <Button size="sm" variant="outline" onClick={onClose}>
               취소
             </Button>
-            <Button size="sm" onClick={save} disabled={!widthOk || !rect || !natural}>
+            <Button size="sm" onClick={save} disabled={!rect || !natural}>
               저장
             </Button>
           </div>
