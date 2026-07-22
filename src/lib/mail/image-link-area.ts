@@ -103,8 +103,10 @@ export function expandImageLinkAreas(html: string): string {
     const bands = parseLinkBands(tag.match(/data-link-bands="([^"]*)"/)?.[1]);
     if (!bands) return tag;
     const widthDecl = extractWidthDecl(tag);
+    // font-size/line-height 0: 클라이언트가 셀 안에 공백 텍스트 노드를 만들어도
+    // 밴드 사이에 틈이 생기지 않게 하는 슬라이스 메일 표준 보정
     const row = (inner: string) =>
-      `<tr><td class="${LINK_BANDS_CLASS}" style="padding: 0;">${inner}</td></tr>`;
+      `<tr><td class="${LINK_BANDS_CLASS}" style="padding: 0; font-size: 0px; line-height: 0;">${inner}</td></tr>`;
     const bandImg = (src: string, alt: string) =>
       `<img src="${src}" alt="${alt}" style="${BAND_IMG_STYLE}">`;
     const rows = [
