@@ -557,6 +557,8 @@ export interface Question {
   mobileOriginalTable?: boolean;
   mobileTableDisplayMode?: MobileTableDisplayMode;
   mobileDrilldownOmitLeadingColumns?: number;
+  mobileDrilldownRepeatHeaderStartRow?: number | null;
+  mobileDrilldownRepeatHeaderEndRow?: number | null;
   // 응답 페이지에서 질문 제목 숨기기 (기본 false = 표시)
   hideTitle?: boolean;
   // 응답 페이지 수동 페이지 구분점 — 이 질문 앞에서 새 페이지를 시작한다

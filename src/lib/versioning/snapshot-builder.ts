@@ -66,6 +66,8 @@ interface SnapshotQuestion {
   mobileOriginalTable?: boolean | undefined;
   mobileTableDisplayMode?: MobileTableDisplayMode | undefined;
   mobileDrilldownOmitLeadingColumns?: number | undefined;
+  mobileDrilldownRepeatHeaderStartRow?: number | null | undefined;
+  mobileDrilldownRepeatHeaderEndRow?: number | null | undefined;
   hideTitle?: boolean | undefined;
   pageBreakBefore?: boolean | undefined;
   displayCondition?: Question['displayCondition'] | undefined;
@@ -138,6 +140,8 @@ export function buildSurveySnapshot(survey: Survey): SurveySnapshot {
       mobileOriginalTable: q.mobileOriginalTable,
       mobileTableDisplayMode: q.mobileTableDisplayMode,
       mobileDrilldownOmitLeadingColumns: q.mobileDrilldownOmitLeadingColumns,
+      mobileDrilldownRepeatHeaderStartRow: q.mobileDrilldownRepeatHeaderStartRow,
+      mobileDrilldownRepeatHeaderEndRow: q.mobileDrilldownRepeatHeaderEndRow,
       hideTitle: q.hideTitle,
       pageBreakBefore: q.pageBreakBefore,
       displayCondition: q.displayCondition,

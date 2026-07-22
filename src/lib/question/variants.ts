@@ -54,7 +54,11 @@ type OptionListFields = Pick<Question, 'options' | 'optionsColumns' | 'optionsAl
 /** 모바일 테이블 표시 capability — radio/checkbox/table 3유형 전용. */
 type MobileTableDisplayFields = Pick<
   Question,
-  'mobileOriginalTable' | 'mobileTableDisplayMode' | 'mobileDrilldownOmitLeadingColumns'
+  | 'mobileOriginalTable'
+  | 'mobileTableDisplayMode'
+  | 'mobileDrilldownOmitLeadingColumns'
+  | 'mobileDrilldownRepeatHeaderStartRow'
+  | 'mobileDrilldownRepeatHeaderEndRow'
 >;
 
 export interface TextQuestion
