@@ -47,7 +47,7 @@ function recalculateGlobalOrder(questions: Question[], groups: QuestionGroup[]):
 import { generatePrivateToken, generateSlugFromTitle } from '@/lib/survey-url';
 import { generateId } from '@/lib/utils';
 import { client } from '@/shared/lib/rpc';
-import { isOptionListType } from '@/types/question-types';
+import { isMobileTableDisplayType, isOptionListType } from '@/types/question-types';
 import {
   Question,
   QuestionGroup,
@@ -488,7 +488,7 @@ export const useSurveyBuilderStore = create<SurveyBuilderState>()(
             tableColumns: getDefaultTableColumns(),
             tableRowsData: getDefaultTableRows(),
           }),
-          ...((type === 'radio' || type === 'checkbox' || type === 'table') && {
+          ...(isMobileTableDisplayType(type) && {
             mobileDrilldownRepeatHeaderStartRow: 0,
             mobileDrilldownRepeatHeaderEndRow: 0,
           }),

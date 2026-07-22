@@ -37,6 +37,13 @@ export const EMBEDDED_TABLE_TYPES = [
   'table',
 ] as const satisfies readonly QuestionType[];
 
+/** 모바일 테이블 표시 모드와 드릴다운 상세 설정을 소유하는 질문 유형. */
+export const MOBILE_TABLE_DISPLAY_TYPES = [
+  'radio',
+  'checkbox',
+  'table',
+] as const satisfies readonly QuestionType[];
+
 /** choiceGroups(테이블 레벨 옵션 그룹)를 소비하는 유형 — table 은 정의만 있고 소비 경로가 없다. */
 export const CHOICE_GROUP_TYPES = [
   'radio',
@@ -67,6 +74,7 @@ export const CODED_CHOICE_TYPES = [
 ] as const satisfies readonly QuestionType[];
 
 export type EmbeddedTableType = (typeof EMBEDDED_TABLE_TYPES)[number];
+export type MobileTableDisplayType = (typeof MOBILE_TABLE_DISPLAY_TYPES)[number];
 export type ChoiceGroupType = (typeof CHOICE_GROUP_TYPES)[number];
 export type OptionListType = (typeof OPTION_LIST_TYPES)[number];
 export type CodedChoiceType = (typeof CODED_CHOICE_TYPES)[number];
@@ -77,6 +85,10 @@ export function isQuestionTypeValue(value: string): value is QuestionType {
 
 export function isEmbeddedTableType(type: QuestionType): type is EmbeddedTableType {
   return (EMBEDDED_TABLE_TYPES as readonly QuestionType[]).includes(type);
+}
+
+export function isMobileTableDisplayType(type: QuestionType): type is MobileTableDisplayType {
+  return (MOBILE_TABLE_DISPLAY_TYPES as readonly QuestionType[]).includes(type);
 }
 
 export function isChoiceGroupType(type: QuestionType): type is ChoiceGroupType {

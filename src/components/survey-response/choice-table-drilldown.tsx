@@ -71,7 +71,11 @@ export function ChoiceTableDrilldown({
     question.mobileDrilldownOmitLeadingColumns,
     columns.length,
   );
-  const rowById = useMemo(() => new Map(rows.map((row) => [row.id, row])), [rows]);
+  const detailRowById = useMemo(() => new Map(rows.map((row) => [row.id, row])), [rows]);
+  const navigationRowById = useMemo(
+    () => new Map(navigationRows.map((row) => [row.id, row])),
+    [navigationRows],
+  );
   const cellById = useMemo(
     () => new Map(rows.flatMap((row) => row.cells.map((cell) => [cell.id, cell] as const))),
     [rows],
@@ -91,7 +95,7 @@ export function ChoiceTableDrilldown({
     () =>
       sections.map((section) => {
         const leaves = section.leaves.map((leaf) => {
-          const row = rowById.get(leaf.rowId);
+          const row = detailRowById.get(leaf.rowId);
           if (!row) return leaf;
           const labelCandidate = getMobileOriginalRowLabelCandidate({
             authoredColumns: columns,
@@ -123,12 +127,12 @@ export function ChoiceTableDrilldown({
           leaves,
         };
       }),
-    [attrs, cellById, columns, omit, resolveChoiceLabel, rowById, sections],
+    [attrs, cellById, columns, detailRowById, omit, resolveChoiceLabel, sections],
   );
   const horizontalScrollRef = useRef(0);
 
   const getLeafStatus = (leaf: ClassifiedLeaf): DrilldownStatus => {
-    const choices = (rowById.get(leaf.rowId)?.cells ?? []).filter(
+    const choices = (navigationRowById.get(leaf.rowId)?.cells ?? []).filter(
       (cell) => cell.type === 'choice_opt' && !cell.isHidden && !cell._isContinuation,
     );
     return {
@@ -147,8 +151,20 @@ export function ChoiceTableDrilldown({
     };
   };
 
+  const overallStatus = titledSections.reduce<DrilldownStatus>(
+    (overall, section) => {
+      const status = getSectionStatus(section);
+      return {
+        completed: overall.completed + status.completed,
+        total: overall.total + status.total,
+        unit: '개 선택',
+      };
+    },
+    { completed: 0, total: 0, unit: '개 선택' },
+  );
+
   const renderLeafDetail = (leaf: ClassifiedLeaf) => {
-    const row = rowById.get(leaf.rowId);
+    const row = detailRowById.get(leaf.rowId);
     if (!row) return null;
     const projection = projectMobileOriginalRow({
       authoredColumns: columns,
@@ -195,6 +211,7 @@ export function ChoiceTableDrilldown({
     <MobileDrilldownShell
       sections={titledSections}
       leafNavigation="always"
+      overallStatus={overallStatus}
       getSectionStatus={getSectionStatus}
       getLeafStatus={getLeafStatus}
       renderLeafDetail={renderLeafDetail}

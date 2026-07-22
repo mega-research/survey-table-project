@@ -171,6 +171,105 @@ function ControlledChoiceTable() {
   );
 }
 
+function ControlledRepeatedChoiceRowspanAnchor() {
+  const [value, setValue] = useState<string | null>(null);
+  const question: Question = {
+    id: 'repeat-choice-anchor-question',
+    type: 'radio',
+    title: '반복 선택 승격',
+    required: false,
+    order: 0,
+    mobileTableDisplayMode: 'drilldown-original-row',
+    mobileDrilldownOmitLeadingColumns: 2,
+    mobileDrilldownRepeatHeaderStartRow: 1,
+    mobileDrilldownRepeatHeaderEndRow: 1,
+    tableColumns: [
+      { id: 'repeat-choice-anchor-section-column', label: '섹션' },
+      { id: 'repeat-choice-anchor-item-column', label: '항목' },
+      { id: 'repeat-choice-anchor-value-column', label: '선택' },
+    ],
+    tableRowsData: [
+      {
+        id: 'repeat-choice-anchor-header-row',
+        label: '반복 헤더',
+        cells: [
+          {
+            id: 'repeat-choice-anchor-section',
+            type: 'text',
+            content: '승격 선택 섹션',
+            rowspan: 3,
+          },
+          { id: 'repeat-choice-anchor-header-label', type: 'text', content: '반복 헤더' },
+          {
+            id: 'repeat-choice-anchor-option',
+            type: 'choice_opt',
+            content: '',
+            choiceLabel: '승격 선택지',
+            rowspan: 2,
+          },
+        ],
+      },
+      {
+        id: 'repeat-choice-anchor-promoted-row',
+        label: '승격 선택 항목',
+        cells: [
+          {
+            id: 'repeat-choice-anchor-section-continuation-1',
+            type: 'text',
+            content: '',
+            isHidden: true,
+            _isContinuation: true,
+          },
+          {
+            id: 'repeat-choice-anchor-promoted-label',
+            type: 'text',
+            content: '승격 선택 항목',
+          },
+          {
+            id: 'repeat-choice-anchor-option-continuation',
+            type: 'choice_opt',
+            content: '',
+            isHidden: true,
+            _isContinuation: true,
+          },
+        ],
+      },
+      {
+        id: 'repeat-choice-anchor-normal-row',
+        label: '일반 선택 항목',
+        cells: [
+          {
+            id: 'repeat-choice-anchor-section-continuation-2',
+            type: 'text',
+            content: '',
+            isHidden: true,
+            _isContinuation: true,
+          },
+          {
+            id: 'repeat-choice-anchor-normal-label',
+            type: 'text',
+            content: '일반 선택 항목',
+          },
+          {
+            id: 'repeat-choice-anchor-normal-option',
+            type: 'choice_opt',
+            content: '',
+            choiceLabel: '일반 선택지',
+          },
+        ],
+      },
+    ],
+  };
+
+  return (
+    <ChoiceTableResponse
+      question={question}
+      value={value}
+      onChange={(next) => setValue(typeof next === 'string' ? next : null)}
+    />
+  );
+}
+
 it('한 행에 choice_opt가 여러 개여도 카드는 하나이고 카드 탭은 응답을 바꾸지 않는다', () => {
   const onChange = vi.fn();
   render(
@@ -226,7 +325,7 @@ it('hidden-label checkbox도 44px label target 전체로 선택할 수 있다', 
   expect(onChange).toHaveBeenCalledWith(['choice-hidden']);
 });
 
-it('선택 후 현재 상세를 유지하고 카드 badge와 기존 min/max footer만 갱신한다', () => {
+it('선택 후 현재 상세를 유지하고 전체·카드 상태와 기존 min/max footer를 갱신한다', () => {
   render(<ControlledChoiceTable />);
   expect(screen.getByText('0/2개 선택됨')).toBeInTheDocument();
   expect(screen.getByText('최소 1개 이상 선택해주세요')).toBeInTheDocument();
@@ -236,7 +335,7 @@ it('선택 후 현재 상세를 유지하고 카드 badge와 기존 min/max foot
 
   expect(screen.getAllByRole('checkbox')).toHaveLength(2);
   expect(screen.getByText('1/2개 선택됨')).toBeInTheDocument();
-  expect(screen.queryByText(/^전체 /)).toBeNull();
+  expect(screen.getByText(/^전체 /)).toHaveTextContent('전체 1 / 2개 선택');
 
   fireEvent.click(screen.getByRole('button', { name: '목차로' }));
   expect(screen.getByRole('button', { name: /플랫폼 지표.*1\/2/ })).toBeInTheDocument();
@@ -260,6 +359,29 @@ it.each(['radio', 'checkbox'] as const)(
     expect(answerControl).toBeEnabled();
   },
 );
+
+it('choice 반복행의 interactive rowspan anchor를 승격한 행으로 전체·섹션·항목 상태를 계산한다', () => {
+  render(<ControlledRepeatedChoiceRowspanAnchor />);
+
+  const sectionButton = screen.getByRole('button', { name: /승격 선택 섹션/ });
+  expect(sectionButton).toHaveTextContent('0/2');
+  expect(screen.getByText(/전체/)).toHaveTextContent('전체 0 / 2개 선택');
+  fireEvent.click(sectionButton);
+
+  const promotedLeafButton = screen.getByRole('button', { name: /승격 선택 항목/ });
+  expect(promotedLeafButton).toHaveTextContent('0/1');
+  fireEvent.click(promotedLeafButton);
+
+  const promotedControls = screen.getAllByRole('radio', { name: '승격 선택지' });
+  expect(promotedControls).toHaveLength(2);
+  expect(promotedControls[0]).toBeDisabled();
+  expect(promotedControls[1]).toBeEnabled();
+  fireEvent.click(promotedControls[1]!);
+  expect(screen.getByText(/전체/)).toHaveTextContent('전체 1 / 2개 선택');
+
+  fireEvent.click(screen.getByRole('button', { name: '뒤로' }));
+  expect(screen.getByRole('button', { name: /승격 선택 항목/ })).toHaveTextContent('1/1');
+});
 
 it('0-2는 다단 헤더와 본문 1~2행을 같은 열 투영으로 보여준다', () => {
   const question = repeatedChoiceQuestion('checkbox', {

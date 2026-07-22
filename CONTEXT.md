@@ -90,7 +90,7 @@ _Avoid_: 레거시 호환 모드
 ### 질문 유형과 정규화
 
 **질문 유형 레지스트리 (question type registry)**:
-9개 질문 유형 리터럴의 런타임 SSOT(`src/types/question-types.ts`) — `QUESTION_TYPES`와 그룹 상수 4종(내장 테이블 / choice 그룹 / 옵션 목록 / 코드드 choice) + 멤버십 가드. 유형 멤버십 분기는 사설 Set·배열을 만들지 않고 여기를 경유한다. TS QuestionType과의 양방향 동치는 컴파일 프로브로 강제된다.
+9개 질문 유형 리터럴의 런타임 SSOT(`src/types/question-types.ts`) — `QUESTION_TYPES`와 그룹 상수 5종(내장 테이블 / 모바일 테이블 표시 / choice 그룹 / 옵션 목록 / 코드드 choice) + 멤버십 가드. 유형 멤버십 분기는 사설 Set·배열을 만들지 않고 여기를 경유한다. TS QuestionType과의 양방향 동치는 컴파일 프로브로 강제된다.
 _Avoid_: 인라인 type 배열 비교, needsOptions류 사설 분기 함수
 
 **질문 variant (QuestionVariant)**:

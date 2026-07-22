@@ -289,6 +289,92 @@ function ControlledRowspanRadioScale({
   );
 }
 
+function ControlledRepeatedRowspanAnchorScale() {
+  const [value, setValue] = useState<Record<string, unknown>>({});
+  const columns: TableColumn[] = [
+    { id: 'repeat-anchor-section-column', label: '섹션' },
+    { id: 'repeat-anchor-item-column', label: '항목' },
+    { id: 'repeat-anchor-value-column', label: '선택' },
+  ];
+  const rows: TableRow[] = [
+    {
+      id: 'repeat-anchor-header-row',
+      label: '반복 헤더',
+      cells: [
+        {
+          id: 'repeat-anchor-section',
+          type: 'text',
+          content: '승격 섹션',
+          rowspan: 3,
+        },
+        { id: 'repeat-anchor-header-label', type: 'text', content: '반복 헤더' },
+        {
+          id: 'repeat-anchor-radio',
+          type: 'radio',
+          content: '',
+          rowspan: 2,
+          radioOptions: [{ id: 'promoted', label: '승격 선택', value: 'promoted' }],
+        },
+      ],
+    },
+    {
+      id: 'repeat-anchor-promoted-row',
+      label: '승격 항목',
+      cells: [
+        {
+          id: 'repeat-anchor-section-continuation-1',
+          type: 'text',
+          content: '',
+          isHidden: true,
+          _isContinuation: true,
+        },
+        { id: 'repeat-anchor-promoted-label', type: 'text', content: '승격 항목' },
+        {
+          id: 'repeat-anchor-radio-continuation',
+          type: 'radio',
+          content: '',
+          isHidden: true,
+          _isContinuation: true,
+        },
+      ],
+    },
+    {
+      id: 'repeat-anchor-normal-row',
+      label: '일반 항목',
+      cells: [
+        {
+          id: 'repeat-anchor-section-continuation-2',
+          type: 'text',
+          content: '',
+          isHidden: true,
+          _isContinuation: true,
+        },
+        { id: 'repeat-anchor-normal-label', type: 'text', content: '일반 항목' },
+        {
+          id: 'repeat-anchor-normal-radio',
+          type: 'radio',
+          content: '',
+          radioOptions: [{ id: 'normal', label: '일반 선택', value: 'normal' }],
+        },
+      ],
+    },
+  ];
+
+  return (
+    <InteractiveTableResponse
+      questionId="repeat-anchor-question"
+      columns={columns}
+      rows={rows}
+      mobileTableDisplayMode="drilldown-original-row"
+      mobileDrilldownOmitLeadingColumns={2}
+      mobileDrilldownRepeatHeaderStartRow={1}
+      mobileDrilldownRepeatHeaderEndRow={1}
+      value={value}
+      onChange={setValue}
+    />
+  );
+}
+
 function ControlledRankingScale() {
   const [value, setValue] = useState<Record<string, unknown>>({});
   const rankingCell: TableCell = {
@@ -650,6 +736,30 @@ it('방문만으로 완료되지 않고 radio 선택 후 완료 행 수가 1 증
   expect(screen.getByText(/전체/)).toHaveTextContent('전체 0 / 2개 항목');
   fireEvent.click(screen.getByRole('radio', { name: '5점' }));
   expect(screen.getByText(/전체/)).toHaveTextContent('전체 1 / 2개 항목');
+});
+
+it('반복행의 interactive rowspan anchor를 승격한 행으로 전체·섹션·항목 완료를 계산한다', () => {
+  render(<ControlledRepeatedRowspanAnchorScale />);
+
+  expect(screen.getByText(/전체/)).toHaveTextContent('전체 0 / 2개 항목');
+  const sectionButton = screen.getByRole('button', { name: /승격 섹션/ });
+  expect(sectionButton).toHaveTextContent('0/2');
+
+  fireEvent.click(sectionButton);
+  const promotedLeafButton = screen.getByRole('button', { name: /승격 항목/ });
+  expect(promotedLeafButton).toHaveTextContent('0/1');
+  fireEvent.click(promotedLeafButton);
+
+  const promotedControls = screen.getAllByRole('radio');
+  expect(promotedControls).toHaveLength(2);
+  expect(promotedControls[0]).toBeDisabled();
+  expect(promotedControls[1]).toBeEnabled();
+  expect(promotedControls[1]).toHaveAccessibleName('승격 선택');
+  fireEvent.click(promotedControls[1]!);
+  expect(screen.getByText(/전체/)).toHaveTextContent('전체 1 / 2개 항목');
+
+  fireEvent.click(screen.getByRole('button', { name: '뒤로' }));
+  expect(screen.getByRole('button', { name: /승격 항목/ })).toHaveTextContent('1/1');
 });
 
 it('상세 unmount 후 다음 leaf에 가로 위치를 복원하고 목차 복귀 후 0으로 초기화한다', () => {

@@ -251,7 +251,14 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
     </div>
   );
 
-  const rowById = useMemo(() => new Map(displayRows.map((row) => [row.id, row])), [displayRows]);
+  const detailRowById = useMemo(
+    () => new Map(displayRows.map((row) => [row.id, row])),
+    [displayRows],
+  );
+  const navigationRowById = useMemo(
+    () => new Map(navigationRows.map((row) => [row.id, row])),
+    [navigationRows],
+  );
   const answerableRowIds = useMemo(
     () => new Set(sections.flatMap((section) => section.leaves.map((leaf) => leaf.rowId))),
     [sections],
@@ -287,10 +294,12 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
     // 두 경우 모두 제외된 선행 radio까지 sibling clear 대상에 남는다.
     const radioBucketsByRowId = new Map<string, ReturnType<typeof buildRadioGroupBuckets>>();
     for (const sourceRowId of new Set(projection.sourceRowIdByCellId.values())) {
-      const sourceRow = rowById.get(sourceRowId);
+      const sourceRow = detailRowById.get(sourceRowId);
       if (sourceRow) radioBucketsByRowId.set(sourceRowId, buildRadioGroupBuckets(sourceRow));
     }
-    const selectedRowBuckets = buildRadioGroupBuckets(rowById.get(leaf.rowId) ?? projection.row);
+    const selectedRowBuckets = buildRadioGroupBuckets(
+      detailRowById.get(leaf.rowId) ?? projection.row,
+    );
     if (!radioBucketsByRowId.has(leaf.rowId)) {
       radioBucketsByRowId.set(leaf.rowId, selectedRowBuckets);
     }
@@ -329,7 +338,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
         overallStatus={{ completed: completedRows, total: answerableRows.length, unit: '개 항목' }}
         getSectionStatus={(section) => ({
           completed: section.leaves.filter((leaf) => {
-            const row = rowById.get(leaf.rowId);
+            const row = navigationRowById.get(leaf.rowId);
             return row
               ? isTableRowCompleted(row, currentResponse, MOBILE_TABLE_COMPLETION_TYPES)
               : false;
@@ -338,7 +347,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
           unit: '개 항목',
         })}
         getLeafStatus={(leaf) => {
-          const row = rowById.get(leaf.rowId);
+          const row = navigationRowById.get(leaf.rowId);
           return {
             completed:
               row && isTableRowCompleted(row, currentResponse, MOBILE_TABLE_COMPLETION_TYPES)

@@ -27,6 +27,7 @@ import {
   toFlatQuestion,
 } from '@/lib/question';
 import type { QuestionVariant } from '@/lib/question';
+import { MOBILE_TABLE_DISPLAY_TYPES, isMobileTableDisplayType } from '@/types/question-types';
 import type { Question } from '@/types/survey';
 
 import { makeAllQuestionVariants, makeQuestion } from '../../helpers/question-factory';
@@ -172,6 +173,15 @@ describe('팩토리 산출물 roundtrip', () => {
 });
 
 describe('분류 가드', () => {
+  it('모바일 테이블 표시 설정은 radio/checkbox/table 3유형만 registry로 소유한다', () => {
+    expect(MOBILE_TABLE_DISPLAY_TYPES).toEqual(['radio', 'checkbox', 'table']);
+    expect(
+      makeAllQuestionVariants()
+        .filter((question) => isMobileTableDisplayType(question.type))
+        .map((question) => question.type),
+    ).toEqual(['radio', 'checkbox', 'table']);
+  });
+
   it('내장 테이블 capability 는 radio/checkbox/ranking/table 4유형뿐이다', () => {
     const verdicts = Object.fromEntries(
       makeAllQuestionVariants().map((q) => [q.type, isEmbeddedTableQuestion(q)]),
@@ -259,6 +269,8 @@ describe('분류 가드', () => {
       expect(classify(question.type)).toBeTruthy();
     }
     // 런타임 도달 시(타입 우회 데이터) 명시적으로 throw 한다
-    expect(() => assertNeverQuestionType('file-upload' as never)).toThrow('처리되지 않은 질문 유형');
+    expect(() => assertNeverQuestionType('file-upload' as never)).toThrow(
+      '처리되지 않은 질문 유형',
+    );
   });
 });
