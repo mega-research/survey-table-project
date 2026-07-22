@@ -1,6 +1,9 @@
 import type { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
 import { clampMobileDrilldownOmitLeadingColumns } from '@/utils/mobile-table-display-mode';
-import { recalculateColspansForVisibleColumns } from '@/utils/table-merge-helpers';
+import {
+  recalculateColspansForVisibleColumns,
+  recalculateRowspansForVisibleRows,
+} from '@/utils/table-merge-helpers';
 import { buildTableRowspanCoverage } from '@/utils/table-rowspan-coverage';
 
 export const MOBILE_ORIGINAL_ROW_INTERACTIVE_TYPES = [
@@ -33,12 +36,16 @@ export interface ProjectMobileOriginalRowInput {
   displayRows: TableRow[];
   selectedRowId: string;
   omitLeadingAuthoredColumns: number;
+  repeatedRowIds?: ReadonlySet<string> | undefined;
+  includeColumnHeader?: boolean | undefined;
 }
 
 export interface MobileOriginalRowProjection {
   columns: TableColumn[];
   row: TableRow;
+  repeatedRows: TableRow[];
   headerGrid?: HeaderCell[][] | undefined;
+  showColumnHeader: boolean;
   hasInteractiveCells: boolean;
   sourceRowIdByCellId: ReadonlyMap<string, string>;
 }
@@ -62,6 +69,21 @@ export function projectMobileOriginalRow(
   );
   const selected = projected.rows.find((row) => row.id === input.selectedRowId);
   if (!selected) return null;
+  const repeatedVisibleIds = new Set(
+    projected.rows
+      .filter((projectedRow) => input.repeatedRowIds?.has(projectedRow.id))
+      .map((projectedRow) => projectedRow.id),
+  );
+  const repeatedRows =
+    repeatedVisibleIds.size > 0
+      ? recalculateRowspansForVisibleRows(projected.rows, repeatedVisibleIds)
+      : [];
+  const includeColumnHeader = input.includeColumnHeader ?? true;
+  const hasHeaderGrid = (projected.headerGrid?.length ?? 0) > 0;
+  const hasColumnLabelFallback = projected.columns.some(
+    (column) => !column.isHeaderHidden && column.label.trim() !== '',
+  );
+  const showColumnHeader = includeColumnHeader && (hasHeaderGrid || hasColumnLabelFallback);
   const coverage = buildTableRowspanCoverage(projected.rows);
   const selectedCoverage = coverage.get(selected.id) ?? selected.cells;
   const originalSourceRowIdByCellId = new Map<string, string>();
@@ -95,7 +117,9 @@ export function projectMobileOriginalRow(
   return {
     columns: projected.columns,
     row,
-    ...(projected.headerGrid ? { headerGrid: projected.headerGrid } : {}),
+    repeatedRows,
+    showColumnHeader,
+    ...(showColumnHeader && projected.headerGrid ? { headerGrid: projected.headerGrid } : {}),
     hasInteractiveCells: row.cells.some(isMobileOriginalRowInteractiveCell),
     sourceRowIdByCellId,
   };
@@ -174,8 +198,7 @@ export function getMobileOriginalRowLabelCandidate({
         });
     const sourceCellId = rowLabelSourceCellId ?? inferredSource?.id;
     const sourceIsHidden = sourceCellId
-      ? (isLabelSourceHidden?.(sourceCellId)
-        ?? inferredSource?.mobileDisplay === 'hidden')
+      ? (isLabelSourceHidden?.(sourceCellId) ?? inferredSource?.mobileDisplay === 'hidden')
       : false;
     if (!sourceIsHidden) {
       return {

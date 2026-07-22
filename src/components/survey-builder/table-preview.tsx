@@ -40,7 +40,11 @@ interface TablePreviewProps {
   className?: string | undefined;
   hideColumnLabels?: boolean | undefined;
   /** 셀 콘텐츠 렌더 오버라이드. undefined/null 반환 시 기본 PreviewCell 로 폴백. */
-  renderCell?: (cell: TableCell) => React.ReactNode;
+  renderCell?:
+    | ((cell: TableCell, row: TableRow) => React.ReactNode)
+    | ((cell: TableCell, isSelectedRowDetail?: boolean) => React.ReactNode);
+  stickyHeader?: boolean | undefined;
+  preserveRowHeights?: boolean | undefined;
   /**
    * 보기 옵션(choice_opt) 셀의 컨트롤 종류. 질문 타입/그룹에서 내려준다. 미지정 시 checkbox.
    * - 'radio' | 'checkbox': 모든 보기 옵션 셀에 동일 적용(비그룹/단일 타입)
@@ -64,6 +68,8 @@ export const TablePreview = React.memo(function TablePreview({
   className,
   hideColumnLabels = false,
   renderCell,
+  stickyHeader = true,
+  preserveRowHeights = false,
   choiceControlType = 'checkbox',
   scrollLeftRef,
   resetScrollKey,
@@ -218,7 +224,12 @@ export const TablePreview = React.memo(function TablePreview({
             {/* 가로 스크롤 컨트롤 + (선택적) 헤더 라벨. 페이지 스크롤 기준 sticky.
                 컨트롤은 hideColumnLabels 여부와 무관하게 렌더한다 — 헤더 라벨을 숨긴
                 넓은 표도 가로 스크롤 수단이 필요하기 때문. */}
-            <div className="sticky top-0 z-30 bg-white print:static print:z-auto">
+            <div
+              className={cn(
+                'z-30 bg-white print:static print:z-auto',
+                stickyHeader && 'sticky top-0',
+              )}
+            >
               <TableScrollControls
                 scrollRef={tableContainerRef}
                 canScrollLeft={canScrollLeft}
@@ -242,13 +253,13 @@ export const TablePreview = React.memo(function TablePreview({
                   {canScrollRight && (
                     <div
                       aria-hidden="true"
-                      className="pointer-events-none absolute inset-y-0 z-20 transform-gpu right-0 w-12 bg-gradient-to-l from-gray-50 via-gray-50/60 to-transparent print:hidden"
+                      className="pointer-events-none absolute inset-y-0 right-0 z-20 w-12 transform-gpu bg-gradient-to-l from-gray-50 via-gray-50/60 to-transparent print:hidden"
                     />
                   )}
                   {canScrollLeft && (
                     <div
                       aria-hidden="true"
-                      className="pointer-events-none absolute inset-y-0 z-20 transform-gpu left-0 w-6 bg-gradient-to-r from-gray-50/80 to-transparent print:hidden"
+                      className="pointer-events-none absolute inset-y-0 left-0 z-20 w-6 transform-gpu bg-gradient-to-r from-gray-50/80 to-transparent print:hidden"
                     />
                   )}
                 </div>
@@ -271,7 +282,7 @@ export const TablePreview = React.memo(function TablePreview({
                 }}
                 // 모바일은 상단 스크롤 컨트롤이 스크롤 수단이므로 네이티브 가로
                 // 스크롤바를 숨긴다 — 표 아래 회색 띠(이중 스크롤 표시) 제거
-                className="overflow-x-auto max-md:[-ms-overflow-style:none] max-md:[scrollbar-width:none] max-md:[&::-webkit-scrollbar]:hidden print:overflow-visible"
+                className="overflow-x-auto max-md:[-ms-overflow-style:none] max-md:[scrollbar-width:none] print:overflow-visible max-md:[&::-webkit-scrollbar]:hidden"
               >
                 <div
                   role="rowgroup"
@@ -294,6 +305,12 @@ export const TablePreview = React.memo(function TablePreview({
                         gridColumn: cs > 1 ? `${col} / span ${cs}` : col,
                         ...(rs > 1 ? { gridRow: `span ${rs}` } : {}),
                       };
+                      if (preserveRowHeights) {
+                        const preservedHeight = row.height ?? row.minHeight;
+                        if (preservedHeight !== undefined) {
+                          style.minHeight = `${preservedHeight}px`;
+                        }
+                      }
                       if (isSticky && stickyInfo) {
                         style.position = 'sticky';
                         style.left = stickyInfo.leftOffsets[cellIndex];
@@ -305,11 +322,11 @@ export const TablePreview = React.memo(function TablePreview({
 
                       return (
                         <div
-                          key={cell.id}
+                          key={`${row.id}:${cell.id}`}
                           className={cn(
                             'min-w-0 border-r border-b border-gray-300 bg-white p-3',
                             getAlignmentClasses(cell.horizontalAlign, cell.verticalAlign),
-                            errorCellIds?.has(cell.id) && 'ring-2 ring-inset ring-red-300',
+                            errorCellIds?.has(cell.id) && 'ring-2 ring-red-300 ring-inset',
                           )}
                           style={style}
                           data-row-id={row.id}
@@ -318,7 +335,21 @@ export const TablePreview = React.memo(function TablePreview({
                           {...getGridCellAria('gridcell', cs, rs)}
                         >
                           {(() => {
-                            const override = renderCell?.(cell);
+                            const override = renderCell
+                              ? renderCell.length >= 2
+                                ? (
+                                    renderCell as (
+                                      cell: TableCell,
+                                      row: TableRow,
+                                    ) => React.ReactNode
+                                  )(cell, row)
+                                : (
+                                    renderCell as (
+                                      cell: TableCell,
+                                      isSelectedRowDetail?: boolean,
+                                    ) => React.ReactNode
+                                  )(cell)
+                              : undefined;
                             if (override !== undefined && override !== null) return override;
                             // choice_opt 셀만 리졸버 호출(그룹 혼합 대응). 그 외 셀은 무시.
                             const resolvedChoiceType =
@@ -341,13 +372,13 @@ export const TablePreview = React.memo(function TablePreview({
               {canScrollRight && (
                 <div
                   aria-hidden="true"
-                  className="pointer-events-none absolute inset-y-0 z-20 transform-gpu right-0 w-12 bg-gradient-to-l from-black/10 to-transparent print:hidden"
+                  className="pointer-events-none absolute inset-y-0 right-0 z-20 w-12 transform-gpu bg-gradient-to-l from-black/10 to-transparent print:hidden"
                 />
               )}
               {canScrollLeft && (
                 <div
                   aria-hidden="true"
-                  className="pointer-events-none absolute inset-y-0 z-20 transform-gpu left-0 w-6 bg-gradient-to-r from-black/10 to-transparent print:hidden"
+                  className="pointer-events-none absolute inset-y-0 left-0 z-20 w-6 transform-gpu bg-gradient-to-r from-black/10 to-transparent print:hidden"
                 />
               )}
             </div>

@@ -3,8 +3,8 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { PreviewCell } from '@/components/survey-builder/cells/preview-cell';
 import { TablePreview } from '@/components/survey-builder/table-preview';
-import { getGroupTypeOfCell } from '@/utils/choice-group-helpers';
 import type { Question, TableCell } from '@/types/survey';
+import { getGroupTypeOfCell } from '@/utils/choice-group-helpers';
 
 const choiceCell: TableCell = {
   id: 'cell-1',
@@ -56,6 +56,19 @@ describe('PreviewCell 보기 옵션 컨트롤 종류', () => {
     render(<PreviewCell cell={cell} choiceControlType="radio" />);
     expect(screen.getByText('셀 텍스트')).toBeTruthy();
     expect(screen.queryByText('옵션 라벨')).toBeNull();
+  });
+
+  it('disableControls를 지정한 경우에만 기본 radio/checkbox를 비활성화한다', () => {
+    const radioCell: TableCell = {
+      id: 'preview-radio',
+      type: 'radio',
+      content: '',
+      radioOptions: [{ id: 'r1', label: '라디오', value: 'r1' }],
+    };
+    const { rerender } = render(<PreviewCell cell={radioCell} />);
+    expect(screen.getByRole('radio')).not.toBeDisabled();
+    rerender(<PreviewCell cell={radioCell} disableControls />);
+    expect(screen.getByRole('radio')).toBeDisabled();
   });
 });
 

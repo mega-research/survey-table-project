@@ -1,9 +1,11 @@
 import type { MutableRefObject } from 'react';
+
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { InteractiveCell } from '@/components/survey-builder/cells';
 import { MobileOriginalRowTable } from '@/components/survey-builder/mobile-original-row-table';
+import { ContactAttrsProvider } from '@/lib/survey/contact-attrs-context';
 import type { TableCell, TableColumn, TableRow } from '@/types/survey';
 import { projectMobileOriginalRow } from '@/utils/mobile-original-row';
 
@@ -26,7 +28,8 @@ function renderOriginalRow({ hideColumnLabels = false } = {}) {
   return render(
     <MobileOriginalRowTable
       columns={[col('항목'), col('점수')]}
-      row={row([{ id: 'label', type: 'text', content: '직무' }, inputCell])}
+      rows={[row([{ id: 'label', type: 'text', content: '직무' }, inputCell])]}
+      interactiveRowId="r1"
       headerGrid={[[{ id: 'h', label: '묶음 헤더', colspan: 2, rowspan: 1 }]]}
       hideColumnLabels={hideColumnLabels}
       renderCell={(cell) => (
@@ -52,25 +55,22 @@ describe('MobileOriginalRowTable', () => {
     render(
       <MobileOriginalRowTable
         columns={[col('정적'), col('입력')]}
-        row={row([
-          { id: 'label', type: 'text', content: '숨길 내용', mobileDisplay: 'hidden' },
-          {
-            id: 'input',
-            type: 'input',
-            content: '숨길 라벨',
-            placeholder: '점수',
-            mobileDisplay: 'hidden',
-          },
-        ])}
+        rows={[
+          row([
+            { id: 'label', type: 'text', content: '숨길 내용', mobileDisplay: 'hidden' },
+            {
+              id: 'input',
+              type: 'input',
+              content: '숨길 라벨',
+              placeholder: '점수',
+              mobileDisplay: 'hidden',
+            },
+          ]),
+        ]}
+        interactiveRowId="r1"
         hideColumnLabels={false}
         renderCell={(cell) => (
-          <InteractiveCell
-            cell={cell}
-            questionId="q1"
-            isTestMode
-            value={{}}
-            onChange={() => {}}
-          />
+          <InteractiveCell cell={cell} questionId="q1" isTestMode value={{}} onChange={() => {}} />
         )}
       />,
     );
@@ -88,16 +88,11 @@ describe('MobileOriginalRowTable', () => {
     const { container } = render(
       <MobileOriginalRowTable
         columns={[col('점수')]}
-        row={row([{ ...inputCell, _isContinuation: true }])}
+        rows={[row([{ ...inputCell, _isContinuation: true }])]}
+        interactiveRowId="r1"
         hideColumnLabels={false}
         renderCell={(cell) => (
-          <InteractiveCell
-            cell={cell}
-            questionId="q1"
-            isTestMode
-            value={{}}
-            onChange={vi.fn()}
-          />
+          <InteractiveCell cell={cell} questionId="q1" isTestMode value={{}} onChange={vi.fn()} />
         )}
       />,
     );
@@ -114,7 +109,8 @@ describe('MobileOriginalRowTable', () => {
     const { rerender } = render(
       <MobileOriginalRowTable
         columns={[col('점수')]}
-        row={row([inputCell])}
+        rows={[row([inputCell])]}
+        interactiveRowId="r1"
         hideColumnLabels={false}
         scrollLeftRef={scrollLeftRef}
         renderCell={renderCell}
@@ -128,7 +124,8 @@ describe('MobileOriginalRowTable', () => {
     rerender(
       <MobileOriginalRowTable
         columns={[col('점수')]}
-        row={row([{ ...inputCell, id: 'input-2' }], 'r2')}
+        rows={[row([{ ...inputCell, id: 'input-2' }], 'r2')]}
+        interactiveRowId="r2"
         hideColumnLabels={false}
         scrollLeftRef={scrollLeftRef}
         renderCell={renderCell}
@@ -144,7 +141,8 @@ describe('MobileOriginalRowTable', () => {
     const { rerender } = render(
       <MobileOriginalRowTable
         columns={[col('항목'), col('점수')]}
-        row={row([{ id: 'label', type: 'text', content: '직무' }, inputCell])}
+        rows={[row([{ id: 'label', type: 'text', content: '직무' }, inputCell])]}
+        interactiveRowId="r1"
         hideColumnLabels={false}
         scrollLeftRef={scrollLeftRef}
         renderCell={renderCell}
@@ -158,7 +156,8 @@ describe('MobileOriginalRowTable', () => {
     rerender(
       <MobileOriginalRowTable
         columns={[col('항목'), col('점수')]}
-        row={row([{ id: 'label-2', type: 'text', content: '직무' }, inputCell], 'r2')}
+        rows={[row([{ id: 'label-2', type: 'text', content: '직무' }, inputCell], 'r2')]}
+        interactiveRowId="r2"
         hideColumnLabels={false}
         scrollLeftRef={scrollLeftRef}
         renderCell={renderCell}
@@ -171,7 +170,8 @@ describe('MobileOriginalRowTable', () => {
     rerender(
       <MobileOriginalRowTable
         columns={[col('점수')]}
-        row={row([{ ...inputCell, id: 'input-2' }], 'r3')}
+        rows={[row([{ ...inputCell, id: 'input-2' }], 'r3')]}
+        interactiveRowId="r3"
         hideColumnLabels={false}
         scrollLeftRef={scrollLeftRef}
         renderCell={renderCell}
@@ -188,7 +188,8 @@ describe('MobileOriginalRowTable', () => {
     const { rerender } = render(
       <MobileOriginalRowTable
         columns={[col('점수')]}
-        row={row([inputCell])}
+        rows={[row([inputCell])]}
+        interactiveRowId="r1"
         hideColumnLabels={false}
         scrollLeftRef={scrollLeftRef}
         renderCell={renderCell}
@@ -202,7 +203,8 @@ describe('MobileOriginalRowTable', () => {
     rerender(
       <MobileOriginalRowTable
         columns={[col('점수')]}
-        row={row([{ ...inputCell, id: 'input-2' }], 'r2')}
+        rows={[row([{ ...inputCell, id: 'input-2' }], 'r2')]}
+        interactiveRowId="r2"
         hideColumnLabels={false}
         scrollLeftRef={scrollLeftRef}
         renderCell={renderCell}
@@ -215,7 +217,8 @@ describe('MobileOriginalRowTable', () => {
     rerender(
       <MobileOriginalRowTable
         columns={[col('점수')]}
-        row={row([{ ...inputCell, id: 'input-2' }], 'r2')}
+        rows={[row([{ ...inputCell, id: 'input-2' }], 'r2')]}
+        interactiveRowId="r2"
         hideColumnLabels={false}
         scrollLeftRef={scrollLeftRef}
         resetScrollKey="toc"
@@ -235,11 +238,14 @@ describe('MobileOriginalRowTable', () => {
           { ...col('헤더 continuation'), isHeaderHidden: true },
           col('마지막'),
         ]}
-        row={row([
-          { id: 'merged', type: 'text', content: '병합 본문', colspan: 2, rowspan: 2 },
-          { id: 'hidden', type: 'text', content: '숨김 본문', isHidden: true },
-          inputCell,
-        ])}
+        rows={[
+          row([
+            { id: 'merged', type: 'text', content: '병합 본문', colspan: 2, rowspan: 2 },
+            { id: 'hidden', type: 'text', content: '숨김 본문', isHidden: true },
+            inputCell,
+          ]),
+        ]}
+        interactiveRowId="r1"
         hideColumnLabels={false}
         renderCell={(cell) => <span>{cell.content}</span>}
       />,
@@ -260,7 +266,8 @@ describe('MobileOriginalRowTable', () => {
     render(
       <MobileOriginalRowTable
         columns={[col('점수')]}
-        row={row([inputCell])}
+        rows={[row([inputCell])]}
+        interactiveRowId="r1"
         hideColumnLabels
         errorCellIds={new Set(['input'])}
         renderCell={(cell) => <span>{cell.id}</span>}
@@ -278,26 +285,32 @@ describe('MobileOriginalRowTable', () => {
       authoredColumns: columns,
       visibleColumns: columns,
       displayRows: [
-        row([
-          { id: 'label-1', type: 'text', content: '첫 행' },
-          {
-            id: 'shared-input-anchor',
-            type: 'input',
-            content: '',
-            placeholder: '공유 응답 입력',
-            rowspan: 2,
-          },
-        ], 'anchor-row'),
-        row([
-          { id: 'label-2', type: 'text', content: '둘째 행' },
-          {
-            id: 'shared-input-continuation',
-            type: 'input',
-            content: '',
-            isHidden: true,
-            _isContinuation: true,
-          },
-        ], 'continuation-row'),
+        row(
+          [
+            { id: 'label-1', type: 'text', content: '첫 행' },
+            {
+              id: 'shared-input-anchor',
+              type: 'input',
+              content: '',
+              placeholder: '공유 응답 입력',
+              rowspan: 2,
+            },
+          ],
+          'anchor-row',
+        ),
+        row(
+          [
+            { id: 'label-2', type: 'text', content: '둘째 행' },
+            {
+              id: 'shared-input-continuation',
+              type: 'input',
+              content: '',
+              isHidden: true,
+              _isContinuation: true,
+            },
+          ],
+          'continuation-row',
+        ),
       ],
       selectedRowId: 'continuation-row',
       omitLeadingAuthoredColumns: 1,
@@ -308,7 +321,8 @@ describe('MobileOriginalRowTable', () => {
     const { container } = render(
       <MobileOriginalRowTable
         columns={projection.columns}
-        row={projection.row}
+        rows={[projection.row]}
+        interactiveRowId={projection.row.id}
         hideColumnLabels={false}
         renderCell={(cell) => (
           <InteractiveCell
@@ -327,5 +341,113 @@ describe('MobileOriginalRowTable', () => {
       target: { value: '연속 행 응답' },
     });
     expect(onChange).toHaveBeenLastCalledWith({ 'shared-input-anchor': '연속 행 응답' });
+  });
+
+  it('반복행 입력은 disabled preview이고 선택행 입력만 응답 가능하다', () => {
+    const onChange = vi.fn();
+    render(
+      <MobileOriginalRowTable
+        columns={[col('점수')]}
+        rows={[
+          row([{ ...inputCell, id: 'repeat-input', placeholder: '반복 입력' }], 'repeat-row'),
+          row([{ ...inputCell, id: 'answer-input', placeholder: '응답 입력' }], 'answer-row'),
+        ]}
+        interactiveRowId="answer-row"
+        hideColumnLabels
+        renderCell={(cell) => (
+          <InteractiveCell
+            cell={cell}
+            questionId="q1"
+            isTestMode={false}
+            value={{}}
+            onChange={onChange}
+          />
+        )}
+      />,
+    );
+    expect(screen.getByPlaceholderText('반복 입력')).toBeDisabled();
+    expect(screen.getByPlaceholderText('응답 입력')).toBeEnabled();
+    fireEvent.change(screen.getByPlaceholderText('응답 입력'), { target: { value: '7' } });
+    expect(onChange).toHaveBeenLastCalledWith({ 'answer-input': '7' });
+  });
+
+  it('반복행 mobileDisplay hidden은 숨기고 응답행 hidden 입력 컨트롤은 유지한다', () => {
+    render(
+      <MobileOriginalRowTable
+        columns={[col('설명'), col('입력')]}
+        rows={[
+          row(
+            [
+              { id: 'repeat-static', type: 'text', content: '반복 숨김', mobileDisplay: 'hidden' },
+              {
+                ...inputCell,
+                id: 'repeat-hidden-input',
+                placeholder: '반복 숨김 입력',
+                mobileDisplay: 'hidden',
+              },
+            ],
+            'repeat-row',
+          ),
+          row(
+            [
+              { id: 'answer-static', type: 'text', content: '응답 숨김', mobileDisplay: 'hidden' },
+              {
+                ...inputCell,
+                id: 'answer-hidden-input',
+                placeholder: '응답 숨김 입력',
+                mobileDisplay: 'hidden',
+              },
+            ],
+            'answer-row',
+          ),
+        ]}
+        interactiveRowId="answer-row"
+        hideColumnLabels
+        renderCell={(cell) => (
+          <InteractiveCell cell={cell} questionId="q1" isTestMode value={{}} onChange={vi.fn()} />
+        )}
+      />,
+    );
+    expect(screen.queryByText('반복 숨김')).toBeNull();
+    expect(screen.queryByText('응답 숨김')).toBeNull();
+    expect(screen.getByPlaceholderText('반복 숨김 입력')).toBeDisabled();
+    expect(screen.getByPlaceholderText('응답 숨김 입력')).toBeEnabled();
+  });
+
+  it('상세 블록은 작성 행 높이를 보존하고 헤더 wrapper를 세로 sticky로 만들지 않는다', () => {
+    render(
+      <MobileOriginalRowTable
+        columns={[col('점수')]}
+        rows={[{ ...row([inputCell], 'answer-row'), height: 96 }]}
+        interactiveRowId="answer-row"
+        hideColumnLabels={false}
+        renderCell={(cell) => <span>{cell.id}</span>}
+      />,
+    );
+    expect(screen.getByTestId('cell-input')).toHaveStyle({ minHeight: '96px' });
+    const headerScroller = getHeaderScroller();
+    const stickyWrapper = headerScroller.parentElement?.parentElement;
+    expect(stickyWrapper).not.toHaveClass('sticky', 'top-0');
+  });
+
+  it('반복 텍스트는 컨택 속성 토큰을 치환한다', () => {
+    render(
+      <ContactAttrsProvider attrs={{ company: '메가리서치' }}>
+        <MobileOriginalRowTable
+          columns={[col('내용')]}
+          rows={[
+            row([{ id: 'repeat-token', type: 'text', content: '{{company}} 기준' }], 'repeat-row'),
+            row([inputCell], 'answer-row'),
+          ]}
+          interactiveRowId="answer-row"
+          hideColumnLabels
+          renderCell={(cell) => (
+            <InteractiveCell cell={cell} questionId="q1" isTestMode value={{}} onChange={vi.fn()} />
+          )}
+        />
+      </ContactAttrsProvider>,
+    );
+    expect(screen.getByText('메가리서치 기준')).toBeInTheDocument();
+    expect(screen.queryByText('{{company}} 기준')).toBeNull();
   });
 });

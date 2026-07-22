@@ -1,43 +1,83 @@
 'use client';
 
-import { useCallback, useMemo } from 'react';
+import { useCallback } from 'react';
 import type React from 'react';
 
+import { PreviewCell } from '@/components/survey-builder/cells/preview-cell';
 import { TablePreview } from '@/components/survey-builder/table-preview';
+import { useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import type { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
 import { isMobileOriginalRowInteractiveCell } from '@/utils/mobile-original-row';
 
 interface Props {
   columns: TableColumn[];
-  row: TableRow;
+  rows: TableRow[];
+  interactiveRowId: string;
   headerGrid?: HeaderCell[][] | undefined;
   hideColumnLabels: boolean;
   renderCell: (cell: TableCell) => React.ReactNode;
+  choiceControlType?:
+    | 'radio'
+    | 'checkbox'
+    | ((cell: TableCell) => 'radio' | 'checkbox')
+    | undefined;
   scrollLeftRef?: React.MutableRefObject<number> | undefined;
   resetScrollKey?: string | number | undefined;
   errorCellIds?: Set<string> | undefined;
 }
 
-export function MobileOriginalRowTable({
-  columns,
-  row,
-  headerGrid,
-  hideColumnLabels,
-  renderCell,
-  scrollLeftRef,
-  resetScrollKey,
-  errorCellIds,
-}: Props) {
-  const rows = useMemo(() => [row], [row]);
+interface LegacyProps extends Omit<Props, 'rows' | 'interactiveRowId'> {
+  row: TableRow;
+}
+
+export function MobileOriginalRowTable(props: Props | LegacyProps) {
+  const {
+    columns,
+    headerGrid,
+    hideColumnLabels,
+    renderCell,
+    choiceControlType,
+    scrollLeftRef,
+    resetScrollKey,
+    errorCellIds,
+  } = props;
+  const rows = 'rows' in props ? props.rows : [props.row];
+  const interactiveRowId = 'interactiveRowId' in props ? props.interactiveRowId : props.row.id;
+  const attrs = useContactAttrs();
+
+  const resolveChoiceControlType = useCallback(
+    (cell: TableCell) =>
+      typeof choiceControlType === 'function'
+        ? choiceControlType(cell)
+        : (choiceControlType ?? 'checkbox'),
+    [choiceControlType],
+  );
+
   const renderMobileCell = useCallback(
-    (cell: TableCell) => {
-      if (cell.mobileDisplay !== 'hidden') return renderCell(cell);
-      if (!isMobileOriginalRowInteractiveCell(cell)) {
-        return <span aria-hidden="true" />;
+    (cell: TableCell, row: TableRow) => {
+      const hidden = cell.mobileDisplay === 'hidden';
+      if (row.id !== interactiveRowId) {
+        if (hidden && !isMobileOriginalRowInteractiveCell(cell)) {
+          return <span aria-hidden="true" />;
+        }
+        const previewCell = {
+          ...cell,
+          content: hidden ? '' : substituteTokens(cell.content, attrs),
+        };
+        return (
+          <PreviewCell
+            cell={previewCell}
+            choiceControlType={resolveChoiceControlType(cell)}
+            disableControls
+          />
+        );
       }
+      if (!hidden) return renderCell(cell);
+      if (!isMobileOriginalRowInteractiveCell(cell)) return <span aria-hidden="true" />;
       return renderCell({ ...cell, content: '' });
     },
-    [renderCell],
+    [attrs, interactiveRowId, renderCell, resolveChoiceControlType],
   );
 
   return (
@@ -51,6 +91,9 @@ export function MobileOriginalRowTable({
       resetScrollKey={resetScrollKey}
       errorCellIds={errorCellIds}
       renderCell={renderMobileCell}
+      choiceControlType={choiceControlType}
+      stickyHeader={false}
+      preserveRowHeights
     />
   );
 }

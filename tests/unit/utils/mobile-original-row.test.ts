@@ -48,13 +48,8 @@ describe('projectMobileOriginalRow', () => {
     const projection = projectMobileOriginalRow({
       authoredColumns: columns,
       visibleColumns: columns,
-      visibleHeaderGrid: [
-        [header('h0'), header('h1', 1, 2), header('h2')],
-        [header('h3')],
-      ],
-      displayRows: [
-        row('r1', [text('label'), { ...radio('v1'), rowspan: 2 }, radio('v2')]),
-      ],
+      visibleHeaderGrid: [[header('h0'), header('h1', 1, 2), header('h2')], [header('h3')]],
+      displayRows: [row('r1', [text('label'), { ...radio('v1'), rowspan: 2 }, radio('v2')])],
       selectedRowId: 'r1',
       omitLeadingAuthoredColumns: 1,
     });
@@ -152,6 +147,60 @@ describe('projectMobileOriginalRow', () => {
     });
     expect(projection?.sourceRowIdByCellId.get('shared-input')).toBe('row-1');
     expect(projection?.hasInteractiveCells).toBe(true);
+  });
+
+  it('반복행 내부 rowspan은 유지하고 선택행 경계에서는 anchor를 다시 materialize한다', () => {
+    const columns = [col('label'), col('shared'), col('value')];
+    const projection = projectMobileOriginalRow({
+      authoredColumns: columns,
+      visibleColumns: columns,
+      displayRows: [
+        row('r1', [text('l1'), { ...text('shared', '공통'), rowspan: 3 }, radio('v1')]),
+        row('r2', [
+          text('l2'),
+          { ...text('shared-c2', ''), isHidden: true, _isContinuation: true },
+          radio('v2'),
+        ]),
+        row('r3', [
+          text('l3'),
+          { ...text('shared-c3', ''), isHidden: true, _isContinuation: true },
+          radio('v3'),
+        ]),
+      ],
+      selectedRowId: 'r3',
+      omitLeadingAuthoredColumns: 1,
+      repeatedRowIds: new Set(['r1', 'r2']),
+      includeColumnHeader: false,
+    });
+    expect(projection?.repeatedRows.map((item) => item.id)).toEqual(['r1', 'r2']);
+    expect(projection?.repeatedRows[0]?.cells[0]).toMatchObject({ id: 'shared', rowspan: 2 });
+    expect(projection?.row.cells[0]).toMatchObject({ id: 'shared', content: '공통' });
+    expect(projection?.row.cells[0]?.rowspan ?? 1).toBe(1);
+    expect(projection?.showColumnHeader).toBe(false);
+  });
+
+  it('정식 헤더 요청은 다단 헤더 전체와 단일 label 폴백을 구분한다', () => {
+    const withGrid = projectMobileOriginalRow({
+      authoredColumns: [col('c1')],
+      visibleColumns: [col('c1')],
+      visibleHeaderGrid: [[header('h1')], [header('h2')]],
+      displayRows: [row('r1', [radio('v1')])],
+      selectedRowId: 'r1',
+      omitLeadingAuthoredColumns: 0,
+      includeColumnHeader: true,
+    });
+    expect(withGrid?.showColumnHeader).toBe(true);
+    expect(withGrid?.headerGrid).toHaveLength(2);
+
+    const withoutLabels = projectMobileOriginalRow({
+      authoredColumns: [{ id: 'c1', label: '' }],
+      visibleColumns: [{ id: 'c1', label: '' }],
+      displayRows: [row('r1', [radio('v1')])],
+      selectedRowId: 'r1',
+      omitLeadingAuthoredColumns: 0,
+      includeColumnHeader: true,
+    });
+    expect(withoutLabels?.showColumnHeader).toBe(false);
   });
 });
 
