@@ -9,7 +9,6 @@ import {
   isNotNull,
   isNull,
   ne,
-  notInArray,
   sql,
   type SQL,
 } from 'drizzle-orm';
@@ -422,8 +421,9 @@ const HAS_EMAIL_PII = sql`EXISTS (
  * 그대로 쓰는" 컨택만 제외한다. 관리자가 이메일을 수정하면 대조가 어긋나 자동으로
  * 다시 발송 대상이 된다.
  *
- * 설문당 반송 컨택은 소수(수십~수백 규모)라 JS 대조 후 notInArray 로 결합한다.
+ * 설문당 반송 컨택은 소수(수십~수백 규모)라 JS 대조로 산출한다.
  * sent(미확정) 상태는 배달 시도 중일 뿐이므로 제외 대상이 아니다.
+ * 미리보기 목록에서는 제외하지 않는다 — 발송 시점(preflight·createCampaign)에만 적용.
  */
 export async function listBouncedContactIds(surveyId: string): Promise<string[]> {
   const bounced = await db
@@ -492,8 +492,10 @@ function buildNotExcludedByNegativeCode(negativeCodes: string[]): SQL {
  *   - unsubscribed_at IS NULL (수신거부)
  *   - email PII 존재 (이메일 누락 제외)
  *   - 부정 결과코드 마킹 제외
- *   - 반송 이력 제외 (listBouncedContactIds — 현재 주소 기준)
  * + clauses (buildContactsFilterSql) + "미응답자만" 토글.
+ *
+ * 반송 이력 컨택은 미리보기 명단에는 그대로 표시하고 발송 시점(preflight·
+ * createCampaign)에만 제외한다 — 목록에서 조용히 사라지면 명단 대조가 어렵다.
  *
  * clauses 의 PII blindIndex 는 호출자(page/action)의 parseClausesFromUrl 에서 이미
  * 계산되어 들어오므로 여기서는 비동기 PII 조회를 하지 않는다 → 동기 함수.
@@ -504,7 +506,6 @@ function buildCandidateWhere(
   clauses: FilterClause[],
   unrespondedOnly: boolean,
   negativeCodes: string[],
-  bouncedContactIds: readonly string[],
 ): SQL {
   const parts: SQL[] = [
     eq(contactTargets.surveyId, surveyId),
@@ -514,10 +515,6 @@ function buildCandidateWhere(
     buildNotExcludedByNegativeCode(negativeCodes),
     buildContactsFilterSql(clauses),
   ];
-
-  if (bouncedContactIds.length > 0) {
-    parts.push(notInArray(contactTargets.id, [...bouncedContactIds]));
-  }
 
   if (unrespondedOnly) {
     parts.push(isNull(contactTargets.respondedAt));
@@ -538,11 +535,12 @@ export interface CampaignExclusionCounts {
 }
 
 /**
- * 필터 base(clauses + 미응답자만) 안에서 자동 제외 정책에 걸린 인원을 사유별로 센다.
+ * 필터 base(clauses + 미응답자만) 안에서 발송 자동 제외 정책에 걸린 인원을 사유별로 센다.
  *
  * 사유는 우선순위 귀속으로 중복 없이 하나만 부여한다:
  *   수신거부 → 부정 결과코드 → 이메일 누락 → 반송 이력
- * base 가 후보 WHERE 와 동일하므로 "필터 결과 + 제외 합계 = base 전체" 가 성립한다.
+ * 수신거부·부정 결과코드·이메일 누락은 미리보기 목록에서도 빠지고, 반송 이력은
+ * 목록에는 남되 발송 시점에 제외된다 (buildCandidateWhere 주석 참조).
  */
 async function countCandidateExclusions(
   surveyId: string,
@@ -644,13 +642,13 @@ export async function previewCampaignCandidates(args: {
     getResultCodeStatuses(args.surveyId),
     listBouncedContactIds(args.surveyId),
   ]);
+  // 반송 컨택은 목록에 포함 — bouncedContactIds 는 exclusions 카운트(발송 시 제외 예고)에만 사용.
   const where = buildCandidateWhere(
     args.surveyId,
     args.scope,
     args.clauses,
     args.unrespondedOnly,
     negativeCodes,
-    bouncedContactIds,
   );
 
   const [[countRow], exclusions] = await Promise.all([
@@ -712,17 +710,13 @@ export async function countCampaignCandidates(args: {
   clauses: FilterClause[];
   unrespondedOnly: boolean;
 }): Promise<number> {
-  const [{ negative: negativeCodes }, bouncedContactIds] = await Promise.all([
-    getResultCodeStatuses(args.surveyId),
-    listBouncedContactIds(args.surveyId),
-  ]);
+  const { negative: negativeCodes } = await getResultCodeStatuses(args.surveyId);
   const where = buildCandidateWhere(
     args.surveyId,
     args.scope,
     args.clauses,
     args.unrespondedOnly,
     negativeCodes,
-    bouncedContactIds,
   );
   const [countRow] = await db
     .select({ total: sql<number>`count(*)::int` })

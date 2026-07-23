@@ -336,7 +336,7 @@ export function CampaignWizard({
             return (
               <>
                 수신거부자 {fmt(ex.unsubscribed)}명 · 부정적 컨택 결과 {fmt(ex.negativeCode)}명 ·
-                전송오류 {fmt(deliveryError)}명 — 총 {fmt(total)}명이 자동으로 제외됐습니다.
+                전송오류 {fmt(deliveryError)}명 — 총 {fmt(total)}명은 발송에서 자동 제외됩니다.
                 {ex.bounced > 0
                   ? ' 반송된 컨택은 이메일을 수정하면 다시 발송 대상이 됩니다.'
                   : ''}
