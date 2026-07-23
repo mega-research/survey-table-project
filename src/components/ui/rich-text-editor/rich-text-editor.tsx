@@ -9,6 +9,7 @@ import { createUnifiedExtensions } from './extensions';
 import { deleteTmpNoticeAttachmentKey } from './file-attachment-r2-client';
 import { FileAttachmentUploadModal } from './file-attachment-upload-modal';
 import { ImageUploadModal } from './image-upload-modal';
+import { preserveLeadingIndent } from '@/lib/tiptap/leading-indent';
 import { stripTrailingEmptyParagraph } from './trailing-node';
 import { Toolbar } from './toolbar';
 import { useEditorFileAttachmentTracker } from './use-editor-file-attachment-tracker';
@@ -92,7 +93,7 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
         },
       },
       onUpdate: ({ editor }) => {
-        const currentHtml = stripTrailingEmptyParagraph(editor.getHTML());
+        const currentHtml = preserveLeadingIndent(stripTrailingEmptyParagraph(editor.getHTML()));
         imageTracker.reconcileAfterUpdate(currentHtml);
         fileTracker.reconcileAfterUpdate(currentHtml);
         onChange(editor.isEmpty ? '' : currentHtml);
@@ -101,7 +102,11 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
 
     useEffect(() => {
       if (!editor) return;
-      const currentNormalized = stripTrailingEmptyParagraph(editor.getHTML());
+      // onUpdate 가 내보내는 값과 동일한 정규화를 거쳐야 prop 왕복(setFormData → initialHtml)에서
+      // 불일치로 인한 setContent 리셋(커서 점프)이 생기지 않는다.
+      const currentNormalized = preserveLeadingIndent(
+        stripTrailingEmptyParagraph(editor.getHTML()),
+      );
       if (initialHtml !== currentNormalized) {
         editor.commands.setContent(initialHtml, { emitUpdate: false });
         imageTracker.resetPrevious(initialHtml);
