@@ -15,6 +15,7 @@ import {
   TableValidationRule,
 } from '@/types/survey';
 import { evaluateRightOperand } from '@/lib/lookup/evaluate-lookup';
+import { resolveStepBranch, type RenderStep } from '@/lib/group-ordering';
 import { resolveChoiceOptions } from '@/utils/choice-source';
 import { isGroupedChoiceQuestion } from '@/utils/choice-group-helpers';
 import { emptyBranchEvalCtx, type BranchEvalCtx } from '@/utils/branch-eval';
@@ -992,4 +993,50 @@ function checkTableCellCondition(
 
   // checkType에 따라 조건 확인
   return { satisfied: quantifyRows(checkedRows, rowIds, checkType), checkedRows };
+}
+
+/**
+ * 현재 응답 기준으로 응답자가 실제 밟게 되는 step 경로를 첫 step 부터 시뮬레이션해,
+ * 경로상에 표시되는 질문 id 집합을 반환한다.
+ *
+ * 제출 검증은 이 집합만 대상으로 해야 한다 — 분기 규칙(end/전진 goto)으로 건너뛴
+ * 스텝의 질문은 displayCondition 상 표시 가능해도 응답자가 도달할 수 없으므로
+ * 필수·숫자 검증 대상이 아니다. step 히스토리 대신 시뮬레이션을 쓰는 이유는
+ * 새로고침 복구(재개) 시 히스토리가 비어 있어도 동일한 결과를 내기 위함이다.
+ *
+ * 순회 규칙은 응답 흐름(handleNext)과 동일하다:
+ *   - 표시 질문이 없는 step 은 건너뛴다.
+ *   - 분기 규칙은 step 내 표시 질문 순서대로 평가한다 (resolveStepBranch).
+ *   - end → 종료, 전진 goto → 해당 step 으로 점프, 그 외 → 다음 step.
+ */
+export function collectTraversedQuestionIds(
+  steps: RenderStep[],
+  allResponses: Record<string, unknown>,
+  allQuestions: Question[],
+  allGroups?: QuestionGroup[],
+  ctx?: BranchEvalCtx,
+): Set<string> {
+  const ids = new Set<string>();
+  const visited = new Set<number>();
+  let i = 0;
+  while (i >= 0 && i < steps.length && !visited.has(i)) {
+    visited.add(i);
+    const step = steps[i];
+    if (!step) break;
+
+    const displayable = step.items
+      .map((item) => item.question)
+      .filter((q) => shouldDisplayQuestion(q, allResponses, allQuestions, allGroups, ctx));
+    if (displayable.length === 0) {
+      i += 1;
+      continue;
+    }
+    for (const q of displayable) ids.add(q.id);
+
+    const rules = displayable.map((q) => getBranchRuleForResponse(q, allResponses[q.id]));
+    const outcome = resolveStepBranch(steps, i, rules);
+    if (outcome.kind === 'end') break;
+    i = outcome.kind === 'goto' ? outcome.stepIndex : i + 1;
+  }
+  return ids;
 }

@@ -54,6 +54,7 @@ import { useShallow } from 'zustand/react/shallow';
 import type { SurveyVersionSnapshot } from '@/db/schema';
 import type { Question, QuestionGroup, Survey } from '@/types/survey';
 import {
+  collectTraversedQuestionIds,
   getBranchRuleForResponse,
   shouldDisplayQuestion,
   type BranchEvalCtx,
@@ -565,14 +566,24 @@ function SurveyResponseFlowActive({
     return resolveNextStepIndex() === -1;
   }, [currentStep, resolveNextStepIndex]);
 
-  // 응답 완료 카운트 (피드백) — 전체 표시 질문 기준
+  // 응답 완료 카운트 (피드백) — 실제 경로(분기 시뮬레이션) 기준.
+  // 분기 규칙으로 건너뛰는 스텝의 질문을 세면 "필수 N개 남음"이 제출 버튼과 모순된다.
+  const traversedQuestionIds = useMemo(
+    () => collectTraversedQuestionIds(steps, responses, questions, groups, evalCtx),
+    [steps, responses, questions, groups, evalCtx],
+  );
   const answeredCount = useMemo(
-    () => visibleQuestions.filter((q) => isQuestionAnswered(q)).length,
-    [visibleQuestions, isQuestionAnswered],
+    () =>
+      visibleQuestions.filter((q) => traversedQuestionIds.has(q.id) && isQuestionAnswered(q))
+        .length,
+    [visibleQuestions, traversedQuestionIds, isQuestionAnswered],
   );
   const requiredRemaining = useMemo(
-    () => visibleQuestions.filter((q) => q.required && !isQuestionAnswered(q)).length,
-    [visibleQuestions, isQuestionAnswered],
+    () =>
+      visibleQuestions.filter(
+        (q) => traversedQuestionIds.has(q.id) && q.required && !isQuestionAnswered(q),
+      ).length,
+    [visibleQuestions, traversedQuestionIds, isQuestionAnswered],
   );
 
   // 숫자 차단형 검증 (min/합계/필수 셀) — 라이브 계산, 표시는 "다음"을 시도한 step 에서만
@@ -823,7 +834,7 @@ function SurveyResponseFlowActive({
           {isMobile && (
             <div className="mt-1.5 flex items-center justify-between text-xs text-gray-400">
               <span>
-                {answeredCount}/{visibleQuestions.length} 응답 완료
+                {answeredCount}/{traversedQuestionIds.size} 응답 완료
               </span>
               {requiredRemaining > 0 && (
                 <span className={showRequiredHighlight ? 'font-medium text-orange-500' : ''}>

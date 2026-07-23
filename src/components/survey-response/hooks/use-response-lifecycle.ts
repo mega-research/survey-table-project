@@ -9,7 +9,11 @@ import type { ClientSignals } from '@/lib/duplicate-detection/types';
 import { collectNumericIssues } from '@/lib/survey/numeric-validation';
 import type { Question, QuestionGroup, Survey } from '@/types/survey';
 import type { BranchEvalCtx } from '@/utils/branch-logic';
-import { shouldDisplayDynamicGroup, shouldDisplayQuestion, shouldDisplayRow } from '@/utils/branch-logic';
+import {
+  collectTraversedQuestionIds,
+  shouldDisplayDynamicGroup,
+  shouldDisplayRow,
+} from '@/utils/branch-logic';
 import type { SaveAdminEditPayload } from '@/features/survey-response/domain/response-edit';
 import type { TestAttemptIdentity } from '@/shared/types/test-attempt';
 
@@ -313,8 +317,18 @@ export function useResponseLifecycle({
     setIsSubmitting(true);
 
     try {
+      // 분기 규칙(end/전진 goto)으로 건너뛴 스텝의 질문은 displayCondition 상 표시
+      // 가능해도 응답자가 도달할 수 없다 — 실제 경로를 시뮬레이션해 그 안의 질문만
+      // 검증한다 (traversed ⊆ displayable 이므로 별도 표시 조건 재확인 불필요).
+      const traversedIds = collectTraversedQuestionIds(
+        steps,
+        responses,
+        questions,
+        groups,
+        evalCtx,
+      );
       const unansweredRequired = questions.filter((q) => {
-        if (!shouldDisplayQuestion(q, responses, questions, groups, evalCtx)) return false;
+        if (!traversedIds.has(q.id)) return false;
         return isQuestionRequired(q) && !isQuestionAnswered(q);
       });
 
@@ -342,9 +356,9 @@ export function useResponseLifecycle({
         return;
       }
 
-      // 숫자 차단형 검증 — 표시 중인 질문 전체 대상
+      // 숫자 차단형 검증 — 실제 경로상 질문 전체 대상
       const numericViolated = questions.filter((q) => {
-        if (!shouldDisplayQuestion(q, responses, questions, groups, evalCtx)) return false;
+        if (!traversedIds.has(q.id)) return false;
         return (
           collectNumericIssues(q, responses[q.id], {
             allResponses: responses,
