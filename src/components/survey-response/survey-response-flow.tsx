@@ -579,11 +579,14 @@ function SurveyResponseFlowActive({
   const numericIssuesByQuestion = useMemo(() => {
     const map = new Map<string, NumericIssue[]>();
     for (const q of currentStepQuestions) {
-      const issues = collectNumericIssues(q, responses[q.id]);
+      const issues = collectNumericIssues(q, responses[q.id], {
+        allResponses: responses,
+        allQuestions: questions,
+      });
       if (issues.length > 0) map.set(q.id, issues);
     }
     return map;
-  }, [currentStepQuestions, responses]);
+  }, [currentStepQuestions, responses, questions]);
   const [numericErrorStepIndex, setNumericErrorStepIndex] = useState<number | null>(null);
   const showNumericErrors = numericErrorStepIndex === currentStepIndex;
   const visibleNumericIssues = showNumericErrors ? numericIssuesByQuestion : EMPTY_ISSUES;

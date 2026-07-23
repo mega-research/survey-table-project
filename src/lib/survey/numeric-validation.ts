@@ -7,6 +7,7 @@
  */
 
 import type { Question, SumConstraint, TableCell, TableRow } from '@/types/survey';
+import { shouldDisplayColumn, shouldDisplayRow } from '@/utils/branch-logic';
 import { rangeViolationMessage } from '@/utils/number-format';
 import { parseNumericInput } from '@/utils/numeric-input';
 import { REQUIRED_CELL_TYPES } from '@/utils/serialize-cell';
@@ -19,6 +20,16 @@ export interface NumericIssue {
   cellIds?: string[];
 }
 
+/**
+ * 열/행 displayCondition 평가용 컨텍스트. 렌더러(interactive-table-response)가
+ * shouldDisplayColumn/Row 로 숨기는 열·행과 검증 대상을 일치시키기 위해 필요하다.
+ * 미전달 시 조건 평가를 생략(전부 표시로 간주) — 조건 없는 표는 동작 동일.
+ */
+export interface NumericValidationCtx {
+  allResponses: Record<string, unknown>;
+  allQuestions: Question[];
+}
+
 function flatCells(rows: TableRow[] | null | undefined): TableCell[] {
   return (rows ?? []).flatMap((row) => row.cells);
 }
@@ -28,32 +39,47 @@ function isEmptyCellValue(v: unknown): boolean {
 }
 
 /**
- * 응답자에게 실제로 "보이는" 셀 목록 — 미선택 동적 행(enabledDynamicGroupIds에 속하고
- * __selectedRowIds에 없는 행)의 셀과 isHidden 셀을 제외한다.
- * 필수 셀 검증과 합계 검증이 이 필터를 공유한다: 동적 행을 선택→입력→선택 해제하면 셀 값이
- * 응답 객체에 잔존하는데(use-dynamic-row-state 는 __selectedRowIds 만 patch), 화면에 없는
- * 그 값이 필수 판정·합계에 기여하면 안 된다.
+ * 응답자에게 실제로 "보이는" 셀 목록 — 다음을 제외한다.
+ * - 미선택 동적 행(enabledDynamicGroupIds에 속하고 __selectedRowIds에 없는 행)의 셀
+ * - isHidden 셀(병합 피복 셀)
+ * - ctx 전달 시: displayCondition 미충족으로 렌더러가 숨기는 열의 셀(위치 기반 매핑,
+ *   row.cells[i] ↔ tableColumns[i])과 행의 셀
+ * 필수 셀·범위·합계 검증이 이 필터를 공유한다: 화면에 없는 셀의 잔존 값이나 미입력이
+ * 검증에 기여하면 안 된다 (숨은 열의 필수 셀이 "다음"을 영구 차단하는 버그 방지).
  */
 function visibleCells(
-  rows: TableRow[],
+  question: Question,
   cellValues: Record<string, unknown>,
-  dynamicRowConfigs: Question['dynamicRowConfigs'],
+  ctx: NumericValidationCtx | undefined,
 ): TableCell[] {
+  const rows = question.tableRowsData ?? [];
   const enabledDynamicGroupIds = new Set(
-    (dynamicRowConfigs ?? []).filter((c) => c.enabled).map((c) => c.groupId),
+    (question.dynamicRowConfigs ?? []).filter((c) => c.enabled).map((c) => c.groupId),
   );
   const selectedRowIds = new Set(
     Array.isArray(cellValues['__selectedRowIds'])
       ? (cellValues['__selectedRowIds'] as string[])
       : [],
   );
+  const hiddenColIndices = new Set<number>();
+  if (ctx) {
+    (question.tableColumns ?? []).forEach((col, idx) => {
+      if (col.displayCondition && !shouldDisplayColumn(col, ctx.allResponses, ctx.allQuestions)) {
+        hiddenColIndices.add(idx);
+      }
+    });
+  }
   return rows
     .filter(
       (row) =>
         !(row.dynamicGroupId && enabledDynamicGroupIds.has(row.dynamicGroupId)) ||
         selectedRowIds.has(row.id),
     )
-    .flatMap((row) => row.cells)
+    .filter(
+      (row) =>
+        !ctx || !row.displayCondition || shouldDisplayRow(row, ctx.allResponses, ctx.allQuestions),
+    )
+    .flatMap((row) => row.cells.filter((_, idx) => !hiddenColIndices.has(idx)))
     .filter((c) => !c.isHidden);
 }
 
@@ -106,7 +132,11 @@ function sumConstraintMessage(constraint: SumConstraint, sum: number): string {
  * - table: 셀 min 미달, 합계 제약 위반, 필수 셀 미입력
  *   테이블 미접촉(응답 키 0개)이면 전부 스킵 — 미응답 차단은 question.required 소관.
  */
-export function collectNumericIssues(question: Question, response: unknown): NumericIssue[] {
+export function collectNumericIssues(
+  question: Question,
+  response: unknown,
+  ctx?: NumericValidationCtx,
+): NumericIssue[] {
   if (question.type === 'text' && question.inputType === 'number') {
     if (typeof response !== 'string') return [];
     const message = rangeViolationMessage(response, question.numberFormat);
@@ -123,9 +153,8 @@ export function collectNumericIssues(question: Question, response: unknown): Num
   const hasAnyCellValue = Object.keys(cellValues).some((k) => !k.startsWith('__'));
   if (!hasAnyCellValue) return [];
 
-  const rows = question.tableRowsData ?? [];
-  const cells = flatCells(rows);
-  const inputCells = cells.filter((c) => c.type === 'input' && !c.isHidden);
+  const visible = visibleCells(question, cellValues, ctx);
+  const inputCells = visible.filter((c) => c.type === 'input');
   const issues: NumericIssue[] = [];
 
   // 1) 셀 범위 위반 — min 미달 + max 초과 (max 는 타이핑 차단이 원칙이지만
@@ -144,8 +173,7 @@ export function collectNumericIssues(question: Question, response: unknown): Num
     });
   }
 
-  // 2) 합계 제약 — 합산 대상은 "보이는 셀"로 한정 (미선택 동적 행 잔존 값·isHidden 셀 제외)
-  const visible = visibleCells(rows, cellValues, question.dynamicRowConfigs);
+  // 2) 합계 제약 — 합산 대상은 "보이는 셀"로 한정 (미선택 동적 행 잔존 값·isHidden 셀·숨은 열/행 제외)
   const existingIds = new Set(visible.map((c) => c.id));
   for (const constraint of question.sumConstraints ?? []) {
     const result = evaluateSumConstraint(constraint, cellValues, existingIds);

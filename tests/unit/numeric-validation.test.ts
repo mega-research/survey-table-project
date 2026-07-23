@@ -358,3 +358,74 @@ describe('collectNumericIssues — 인터랙티브 셀 필수 (radio/checkbox/se
     expect(collectNumericIssues(interactiveQuestion(), {})).toHaveLength(0);
   });
 });
+
+describe('collectNumericIssues — 열 displayCondition (ctx 전달)', () => {
+  const srcQ = {
+    id: 'src',
+    type: 'radio',
+    title: '장르',
+    required: true,
+    order: 0,
+    options: [
+      { id: 'o1', label: 'A', value: 'A' },
+      { id: 'o2', label: 'B', value: 'B' },
+    ],
+  } as Question;
+
+  const colCondition = (value: string) => ({
+    conditions: [
+      {
+        id: `cond-${value}`,
+        sourceQuestionId: 'src',
+        conditionType: 'value-match',
+        requiredValues: [value],
+        logicType: 'AND',
+      },
+    ],
+    logicType: 'AND',
+  });
+
+  /** 열 2개(A/B) 각각 value-match displayCondition + 필수 input 셀 1개씩 */
+  function columnConditionQuestion(): Question {
+    return {
+      id: 'q1',
+      type: 'table',
+      title: '표',
+      required: true,
+      order: 1,
+      tableColumns: [
+        { id: 'colA', label: 'A', displayCondition: colCondition('A') },
+        { id: 'colB', label: 'B', displayCondition: colCondition('B') },
+      ],
+      tableRowsData: [
+        {
+          id: 'r1',
+          cells: [
+            { id: 'cA', type: 'input', content: '', inputType: 'number', required: true },
+            { id: 'cB', type: 'input', content: '', inputType: 'number', required: true },
+          ],
+        },
+      ],
+    } as unknown as Question;
+  }
+
+  it('숨은 열의 필수 셀은 제외 — 보이는 열만 채우면 통과 (장르별 열 영구 차단 회귀)', () => {
+    const q = columnConditionQuestion();
+    const ctx = { allResponses: { src: 'A' }, allQuestions: [srcQ, q] };
+    expect(collectNumericIssues(q, { cA: '10' }, ctx)).toHaveLength(0);
+  });
+
+  it('보이는 열의 필수 셀 미입력은 여전히 차단', () => {
+    const q = columnConditionQuestion();
+    const ctx = { allResponses: { src: 'A' }, allQuestions: [srcQ, q] };
+    const issues = collectNumericIssues(q, { cB: '5' }, ctx);
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toMatchObject({ kind: 'required-cells', cellIds: ['cA'] });
+  });
+
+  it('ctx 미전달이면 조건 평가 없이 기존 동작 유지', () => {
+    const q = columnConditionQuestion();
+    const issues = collectNumericIssues(q, { cA: '10' });
+    expect(issues[0]).toMatchObject({ kind: 'required-cells', cellIds: ['cB'] });
+  });
+});

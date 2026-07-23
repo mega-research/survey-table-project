@@ -345,7 +345,12 @@ export function useResponseLifecycle({
       // 숫자 차단형 검증 — 표시 중인 질문 전체 대상
       const numericViolated = questions.filter((q) => {
         if (!shouldDisplayQuestion(q, responses, questions, groups, evalCtx)) return false;
-        return collectNumericIssues(q, responses[q.id]).length > 0;
+        return (
+          collectNumericIssues(q, responses[q.id], {
+            allResponses: responses,
+            allQuestions: questions,
+          }).length > 0
+        );
       });
       if (numericViolated.length > 0) {
         const firstId = numericViolated[0]!.id;
