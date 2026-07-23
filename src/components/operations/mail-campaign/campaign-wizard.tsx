@@ -326,13 +326,23 @@ export function CampaignWizard({
         </div>
 
         <p className="text-xs text-slate-500">
-          자동 제외: 수신거부 {candidates.exclusions.unsubscribed.toLocaleString('ko-KR')}명 ·
-          부정 결과코드 {candidates.exclusions.negativeCode.toLocaleString('ko-KR')}명 ·
-          이메일 누락 {candidates.exclusions.emailMissing.toLocaleString('ko-KR')}명 ·
-          반송 이력 {candidates.exclusions.bounced.toLocaleString('ko-KR')}명
-          {candidates.exclusions.bounced > 0
-            ? ' — 반송된 컨택은 이메일을 수정하면 다시 발송 대상이 됩니다.'
-            : ''}
+          {(() => {
+            const ex = candidates.exclusions;
+            // 전송오류 = 반송 + 이메일 누락 (단체 발송 목록의 "전송오류" 용어와 통일).
+            // 발송중(sent 미확정)은 결과 확정 전이므로 제외하지 않는다.
+            const deliveryError = ex.bounced + ex.emailMissing;
+            const total = ex.unsubscribed + ex.negativeCode + deliveryError;
+            const fmt = (n: number) => n.toLocaleString('ko-KR');
+            return (
+              <>
+                수신거부자 {fmt(ex.unsubscribed)}명 · 부정적 컨택 결과 {fmt(ex.negativeCode)}명 ·
+                전송오류 {fmt(deliveryError)}명 — 총 {fmt(total)}명이 자동으로 제외됐습니다.
+                {ex.bounced > 0
+                  ? ' 반송된 컨택은 이메일을 수정하면 다시 발송 대상이 됩니다.'
+                  : ''}
+              </>
+            );
+          })()}
         </p>
       </Card>
 
