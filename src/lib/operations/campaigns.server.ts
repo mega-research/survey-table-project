@@ -1,6 +1,18 @@
 import 'server-only';
 
-import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, sql, type SQL } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  ne,
+  notInArray,
+  sql,
+  type SQL,
+} from 'drizzle-orm';
 
 import { db } from '@/db';
 import {
@@ -17,6 +29,7 @@ import type {
 } from '@/db/schema/schema-types';
 import type { MailCampaignStatus, MailRecipientStatus } from '@/db/schema/mail';
 import { decryptPii } from '@/lib/crypto/aes';
+import { blindIndex } from '@/lib/crypto/blind';
 import { maskEmail } from '@/lib/operations/contacts';
 import {
   buildNegativeCodeExists,
@@ -383,6 +396,8 @@ export interface CampaignCandidatesResult {
   rows: CampaignCandidateRow[];
   total: number;
   page: number;
+  /** 필터 base 안에서 자동 제외 정책에 걸린 인원 (사유별, 중복 없음) */
+  exclusions: CampaignExclusionCounts;
 }
 
 /** 미리보기 정렬 — 번호 / 응답여부 / 최근 결과코드. 이메일·그룹은 PII·비용 사유로 제외. */
@@ -397,6 +412,65 @@ const HAS_EMAIL_PII = sql`EXISTS (
   WHERE cp.contact_target_id = "contact_targets"."id"
     AND cp.field_type = 'email'
 )`;
+
+/**
+ * 반송 이력으로 발송에서 자동 제외할 컨택 id 목록.
+ *
+ * 반송(bounced)은 컨택이 아니라 "주소"의 속성이다 — 하드바운스 주소에 재발송하면
+ * 발신 도메인 평판이 깎이므로 기본 제외하되, 반송 당시 주소(email_snapshot)의
+ * blind index 를 컨택의 현재 email PII blind index 와 대조해 "반송된 주소를 아직
+ * 그대로 쓰는" 컨택만 제외한다. 관리자가 이메일을 수정하면 대조가 어긋나 자동으로
+ * 다시 발송 대상이 된다.
+ *
+ * 설문당 반송 컨택은 소수(수십~수백 규모)라 JS 대조 후 notInArray 로 결합한다.
+ * sent(미확정) 상태는 배달 시도 중일 뿐이므로 제외 대상이 아니다.
+ */
+export async function listBouncedContactIds(surveyId: string): Promise<string[]> {
+  const bounced = await db
+    .selectDistinct({
+      contactTargetId: mailRecipients.contactTargetId,
+      emailSnapshot: mailRecipients.emailSnapshot,
+    })
+    .from(mailRecipients)
+    .innerJoin(contactTargets, eq(mailRecipients.contactTargetId, contactTargets.id))
+    .where(
+      and(
+        eq(contactTargets.surveyId, surveyId),
+        eq(mailRecipients.status, 'bounced'),
+      ),
+    );
+  if (bounced.length === 0) return [];
+
+  // (컨택, 반송 주소 blind index) 쌍 — snapshot 이 빈 값이면 대조 불가로 건너뜀
+  const pairs: Array<{ contactId: string; blind: string }> = [];
+  for (const b of bounced) {
+    if (b.contactTargetId === null || b.emailSnapshot === null) continue;
+    const blind = blindIndex('email', b.emailSnapshot);
+    if (!blind) continue;
+    pairs.push({ contactId: b.contactTargetId, blind });
+  }
+  if (pairs.length === 0) return [];
+
+  const piiRows = await db
+    .select({
+      contactTargetId: contactPii.contactTargetId,
+      blindIndex: contactPii.blindIndex,
+    })
+    .from(contactPii)
+    .where(
+      and(
+        eq(contactPii.fieldType, 'email'),
+        inArray(contactPii.contactTargetId, [...new Set(pairs.map((p) => p.contactId))]),
+      ),
+    );
+
+  const currentPii = new Set(piiRows.map((r) => `${r.contactTargetId}:${r.blindIndex}`));
+  const excluded = new Set<string>();
+  for (const p of pairs) {
+    if (currentPii.has(`${p.contactId}:${p.blind}`)) excluded.add(p.contactId);
+  }
+  return [...excluded];
+}
 
 /**
  * 발송 가능 명단·preflight 양쪽에서 사용하는 negative 결과코드 제외 SQL.
@@ -418,6 +492,7 @@ function buildNotExcludedByNegativeCode(negativeCodes: string[]): SQL {
  *   - unsubscribed_at IS NULL (수신거부)
  *   - email PII 존재 (이메일 누락 제외)
  *   - 부정 결과코드 마킹 제외
+ *   - 반송 이력 제외 (listBouncedContactIds — 현재 주소 기준)
  * + clauses (buildContactsFilterSql) + "미응답자만" 토글.
  *
  * clauses 의 PII blindIndex 는 호출자(page/action)의 parseClausesFromUrl 에서 이미
@@ -429,6 +504,7 @@ function buildCandidateWhere(
   clauses: FilterClause[],
   unrespondedOnly: boolean,
   negativeCodes: string[],
+  bouncedContactIds: readonly string[],
 ): SQL {
   const parts: SQL[] = [
     eq(contactTargets.surveyId, surveyId),
@@ -439,11 +515,69 @@ function buildCandidateWhere(
     buildContactsFilterSql(clauses),
   ];
 
+  if (bouncedContactIds.length > 0) {
+    parts.push(notInArray(contactTargets.id, [...bouncedContactIds]));
+  }
+
   if (unrespondedOnly) {
     parts.push(isNull(contactTargets.respondedAt));
   }
 
   return and(...parts)!;
+}
+
+export interface CampaignExclusionCounts {
+  /** unsubscribed_at IS NOT NULL */
+  unsubscribed: number;
+  /** 부정 결과코드 마킹 (수신거부 아님) */
+  negativeCode: number;
+  /** email PII 부재 (위 둘 아님) */
+  emailMissing: number;
+  /** 반송 이력 — 현재 이메일이 반송 당시 주소와 동일 (위 셋 아님) */
+  bounced: number;
+}
+
+/**
+ * 필터 base(clauses + 미응답자만) 안에서 자동 제외 정책에 걸린 인원을 사유별로 센다.
+ *
+ * 사유는 우선순위 귀속으로 중복 없이 하나만 부여한다:
+ *   수신거부 → 부정 결과코드 → 이메일 누락 → 반송 이력
+ * base 가 후보 WHERE 와 동일하므로 "필터 결과 + 제외 합계 = base 전체" 가 성립한다.
+ */
+async function countCandidateExclusions(
+  surveyId: string,
+  scope: OperationsDataScope,
+  clauses: FilterClause[],
+  unrespondedOnly: boolean,
+  negativeCodes: string[],
+  bouncedContactIds: readonly string[],
+): Promise<CampaignExclusionCounts> {
+  const baseParts: SQL[] = [
+    eq(contactTargets.surveyId, surveyId),
+    targetScopeCondition(scope),
+    buildContactsFilterSql(clauses),
+  ];
+  if (unrespondedOnly) {
+    baseParts.push(isNull(contactTargets.respondedAt));
+  }
+
+  const negExists = buildNegativeCodeExists(negativeCodes, sql`"contact_targets"."id"`);
+  const bouncedCond: SQL =
+    bouncedContactIds.length > 0
+      ? inArray(contactTargets.id, [...bouncedContactIds])
+      : sql`FALSE`;
+
+  const [row] = await db
+    .select({
+      unsubscribed: sql<number>`count(*) FILTER (WHERE ${contactTargets.unsubscribedAt} IS NOT NULL)::int`,
+      negativeCode: sql<number>`count(*) FILTER (WHERE ${contactTargets.unsubscribedAt} IS NULL AND ${negExists})::int`,
+      emailMissing: sql<number>`count(*) FILTER (WHERE ${contactTargets.unsubscribedAt} IS NULL AND NOT ${negExists} AND NOT ${HAS_EMAIL_PII})::int`,
+      bounced: sql<number>`count(*) FILTER (WHERE ${contactTargets.unsubscribedAt} IS NULL AND NOT ${negExists} AND ${HAS_EMAIL_PII} AND ${bouncedCond})::int`,
+    })
+    .from(contactTargets)
+    .where(and(...baseParts)!);
+
+  return row ?? { unsubscribed: 0, negativeCode: 0, emailMissing: 0, bounced: 0 };
 }
 
 /**
@@ -506,19 +640,33 @@ export async function previewCampaignCandidates(args: {
   pageSize?: number;
 }): Promise<CampaignCandidatesResult> {
   const pageSize = args.pageSize ?? DEFAULT_PAGE_SIZE;
-  const { negative: negativeCodes } = await getResultCodeStatuses(args.surveyId);
+  const [{ negative: negativeCodes }, bouncedContactIds] = await Promise.all([
+    getResultCodeStatuses(args.surveyId),
+    listBouncedContactIds(args.surveyId),
+  ]);
   const where = buildCandidateWhere(
     args.surveyId,
     args.scope,
     args.clauses,
     args.unrespondedOnly,
     negativeCodes,
+    bouncedContactIds,
   );
 
-  const [countRow] = await db
-    .select({ total: sql<number>`count(*)::int` })
-    .from(contactTargets)
-    .where(where);
+  const [[countRow], exclusions] = await Promise.all([
+    db
+      .select({ total: sql<number>`count(*)::int` })
+      .from(contactTargets)
+      .where(where),
+    countCandidateExclusions(
+      args.surveyId,
+      args.scope,
+      args.clauses,
+      args.unrespondedOnly,
+      negativeCodes,
+      bouncedContactIds,
+    ),
+  ]);
   const total = countRow?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const clampedPage = Math.min(Math.max(1, args.page ?? 1), totalPages);
@@ -554,6 +702,7 @@ export async function previewCampaignCandidates(args: {
     })),
     total,
     page: clampedPage,
+    exclusions,
   };
 }
 
@@ -563,13 +712,17 @@ export async function countCampaignCandidates(args: {
   clauses: FilterClause[];
   unrespondedOnly: boolean;
 }): Promise<number> {
-  const { negative: negativeCodes } = await getResultCodeStatuses(args.surveyId);
+  const [{ negative: negativeCodes }, bouncedContactIds] = await Promise.all([
+    getResultCodeStatuses(args.surveyId),
+    listBouncedContactIds(args.surveyId),
+  ]);
   const where = buildCandidateWhere(
     args.surveyId,
     args.scope,
     args.clauses,
     args.unrespondedOnly,
     negativeCodes,
+    bouncedContactIds,
   );
   const [countRow] = await db
     .select({ total: sql<number>`count(*)::int` })
@@ -647,10 +800,11 @@ export async function listUnsubscribedContacts(args: {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface RecipientPreflightResult {
-  validIds: string[]; // 발송 가능 (unsubscribed=null, negative code 없음, email!=null)
+  validIds: string[]; // 발송 가능 (unsubscribed=null, negative code 없음, email!=null, 반송 이력 없음)
   unsubscribedIds: string[]; // 사용자 선택 후 unsubscribed 로 전이됨
   excludedByCodeIds: string[]; // negative result_code 마킹으로 제외
   emailMissingIds: string[]; // email 비어있음
+  bouncedIds: string[]; // 반송 이력 (현재 주소 기준) 으로 제외
   notFoundIds: string[]; // 컨택 삭제됨
 }
 
@@ -658,6 +812,8 @@ export async function preflightRecipients(args: {
   surveyId: string;
   scope: OperationsDataScope;
   selectedContactIds: string[];
+  /** listBouncedContactIds 결과 — 호출자가 계산해 주입 (createCampaign 재검증과 공유) */
+  bouncedContactIds: readonly string[];
 }): Promise<RecipientPreflightResult> {
   if (args.selectedContactIds.length === 0) {
     return {
@@ -665,6 +821,7 @@ export async function preflightRecipients(args: {
       unsubscribedIds: [],
       excludedByCodeIds: [],
       emailMissingIds: [],
+      bouncedIds: [],
       notFoundIds: [],
     };
   }
@@ -700,20 +857,24 @@ export async function preflightRecipients(args: {
   const unsubscribedIds: string[] = [];
   const excludedByCodeIds: string[] = [];
   const emailMissingIds: string[] = [];
+  const bouncedIds: string[] = [];
+  const bouncedSet = new Set(args.bouncedContactIds);
   const found = new Set<string>();
 
-  // 1차 분류 — unsubscribed / excludedByCode / contact_pii row 부재(!hasEmail) 까지.
+  // 1차 분류 — unsubscribed / excludedByCode / contact_pii row 부재(!hasEmail) / 반송 이력까지.
   // hasEmail 통과분은 cipher 복호화로 2차 검증한다 (아래 참조).
   const decryptCandidateIds: string[] = [];
   for (const r of rows) {
     found.add(r.id);
-    // 우선순위: unsubscribed → excludedByCode → !hasEmail → (복호화 검증) → valid
+    // 우선순위: unsubscribed → excludedByCode → !hasEmail → bounced → (복호화 검증) → valid
     if (r.unsubscribedAt !== null) {
       unsubscribedIds.push(r.id);
     } else if (r.excludedByCode) {
       excludedByCodeIds.push(r.id);
     } else if (!r.hasEmail) {
       emailMissingIds.push(r.id);
+    } else if (bouncedSet.has(r.id)) {
+      bouncedIds.push(r.id);
     } else {
       // contact_pii row 는 있으나 cipher 가 빈 문자열/공백으로 복호화되거나 복호화에
       // 실패하는 컨택은 createCampaign 에서 발송 대상에서 빠진다(line 137~145). preflight
@@ -736,7 +897,7 @@ export async function preflightRecipients(args: {
 
   const notFoundIds = args.selectedContactIds.filter((id) => !found.has(id));
 
-  return { validIds, unsubscribedIds, excludedByCodeIds, emailMissingIds, notFoundIds };
+  return { validIds, unsubscribedIds, excludedByCodeIds, emailMissingIds, bouncedIds, notFoundIds };
 }
 
 /**

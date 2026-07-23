@@ -29,6 +29,7 @@ import type { MailTemplate } from '@/db/schema/mail';
 import type { CampaignFilterSnapshot, ContactResultCode } from '@/db/schema/schema-types';
 import type {
   CampaignCandidateRow,
+  CampaignExclusionCounts,
   CampaignSortDir,
   CampaignSortKey,
 } from '@/lib/operations/campaigns.server';
@@ -50,6 +51,7 @@ interface Props {
     total: number;
     page: number;
     pageSize: number;
+    exclusions: CampaignExclusionCounts;
   };
   currentFilter: CampaignFilterSnapshot;
   initialTemplateId: string | null;
@@ -91,6 +93,7 @@ export function CampaignWizard({
     unsubscribed: number;
     excludedByCode: number;
     emailMissing: number;
+    bounced: number;
     notFound: number;
   } | null>(null);
 
@@ -234,6 +237,7 @@ export function CampaignWizard({
           unsubscribed: result.unsubscribedCount,
           excludedByCode: result.excludedByCodeCount,
           emailMissing: result.emailMissingCount,
+          bounced: result.bouncedCount,
           notFound: result.notFoundCount,
         });
         setConfirmOpen(true);
@@ -322,8 +326,13 @@ export function CampaignWizard({
         </div>
 
         <p className="text-xs text-slate-500">
-          수신거부자(unsubscribed_at IS NOT NULL), 부정 결과코드(예: 수신거부) 마킹된 조사 대상,
-          이메일 누락 조사 대상은 자동으로 제외됩니다.
+          자동 제외: 수신거부 {candidates.exclusions.unsubscribed.toLocaleString('ko-KR')}명 ·
+          부정 결과코드 {candidates.exclusions.negativeCode.toLocaleString('ko-KR')}명 ·
+          이메일 누락 {candidates.exclusions.emailMissing.toLocaleString('ko-KR')}명 ·
+          반송 이력 {candidates.exclusions.bounced.toLocaleString('ko-KR')}명
+          {candidates.exclusions.bounced > 0
+            ? ' — 반송된 컨택은 이메일을 수정하면 다시 발송 대상이 됩니다.'
+            : ''}
         </p>
       </Card>
 
@@ -498,6 +507,11 @@ export function CampaignWizard({
               {preflightSummary.emailMissing > 0 ? (
                 <div className="text-amber-600">
                   이메일 누락으로 제외: {preflightSummary.emailMissing.toLocaleString('ko-KR')}명
+                </div>
+              ) : null}
+              {preflightSummary.bounced > 0 ? (
+                <div className="text-amber-600">
+                  반송 이력으로 제외: {preflightSummary.bounced.toLocaleString('ko-KR')}명
                 </div>
               ) : null}
               {preflightSummary.notFound > 0 ? (

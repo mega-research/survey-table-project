@@ -132,6 +132,7 @@ export default async function NewCampaignPage({ params, searchParams }: Props) {
           total: candidates.total,
           page: candidates.page,
           pageSize: PAGE_SIZE,
+          exclusions: candidates.exclusions,
         }}
         currentFilter={currentFilter}
         initialTemplateId={sp.templateId}

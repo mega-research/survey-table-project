@@ -71,6 +71,7 @@ describe('mail.campaigns procedures', () => {
       unsubscribedCount: 0,
       excludedByCodeCount: 0,
       emailMissingCount: 0,
+      bouncedCount: 0,
       notFoundCount: 0,
     } as never);
     const client = createRouterClient({ campaigns }, { context: authedContext() });
@@ -82,6 +83,7 @@ describe('mail.campaigns procedures', () => {
       unsubscribedCount: 0,
       excludedByCodeCount: 0,
       emailMissingCount: 0,
+      bouncedCount: 0,
       notFoundCount: 0,
     });
   });

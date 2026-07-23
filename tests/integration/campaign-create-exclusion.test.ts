@@ -194,6 +194,10 @@ vi.mock('@/db', () => ({
     update: vi.fn(() => ({
       set: () => ({ where: () => Promise.resolve(undefined) }),
     })),
+    // listBouncedContactIds 의 mail_recipients 반송 조회 — 반송 없음으로 시뮬레이션
+    selectDistinct: vi.fn(() => ({
+      from: () => ({ innerJoin: () => ({ where: () => Promise.resolve([]) }) }),
+    })),
   },
 }));
 

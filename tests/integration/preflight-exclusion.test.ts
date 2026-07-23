@@ -229,6 +229,7 @@ describe('preflightRecipients — excludedByCode 분기', () => {
     const result = await preflightRecipients({
       surveyId: SURVEY_ID,
       scope: 'real',
+      bouncedContactIds: [],
       selectedContactIds: [idValid, idExcluded],
     });
     expect(result.validIds).toEqual([idValid]);
@@ -247,6 +248,7 @@ describe('preflightRecipients — excludedByCode 분기', () => {
     const result = await preflightRecipients({
       surveyId: SURVEY_ID,
       scope: 'real',
+      bouncedContactIds: [],
       selectedContactIds: [id],
     });
     expect(result.unsubscribedIds).toEqual([id]);
@@ -260,6 +262,7 @@ describe('preflightRecipients — excludedByCode 분기', () => {
     const result = await preflightRecipients({
       surveyId: SURVEY_ID,
       scope: 'real',
+      bouncedContactIds: [],
       selectedContactIds: [id],
     });
     expect(result.excludedByCodeIds).toEqual([id]);
@@ -285,6 +288,7 @@ describe('preflightRecipients — cipher 복호화 검증 (valid 과대보고 �
     const result = await preflightRecipients({
       surveyId: SURVEY_ID,
       scope: 'real',
+      bouncedContactIds: [],
       selectedContactIds: [idEmptyCipher, idOk],
     });
     expect(result.validIds).toEqual([idOk]);
@@ -299,6 +303,7 @@ describe('preflightRecipients — cipher 복호화 검증 (valid 과대보고 �
     const result = await preflightRecipients({
       surveyId: SURVEY_ID,
       scope: 'real',
+      bouncedContactIds: [],
       selectedContactIds: [idWhitespace],
     });
     expect(result.emailMissingIds).toEqual([idWhitespace]);
@@ -310,6 +315,7 @@ describe('preflightRecipients — cipher 복호화 검증 (valid 과대보고 �
     const result = await preflightRecipients({
       surveyId: SURVEY_ID,
       scope: 'real',
+      bouncedContactIds: [],
       selectedContactIds: [idCorrupt],
     });
     expect(result.emailMissingIds).toEqual([idCorrupt]);
@@ -321,6 +327,7 @@ describe('preflightRecipients — cipher 복호화 검증 (valid 과대보고 �
     const result = await preflightRecipients({
       surveyId: SURVEY_ID,
       scope: 'real',
+      bouncedContactIds: [],
       selectedContactIds: [id],
     });
     expect(result.validIds).toEqual([id]);
@@ -350,6 +357,7 @@ describe('preflightRecipients — 멀티 email 컬럼 "첫 usable 컬럼" 폴백
     const result = await preflightRecipients({
       surveyId: SURVEY_ID,
       scope: 'real',
+      bouncedContactIds: [],
       selectedContactIds: [id],
     });
     expect(result.validIds).toEqual([id]);
@@ -367,6 +375,7 @@ describe('preflightRecipients — 멀티 email 컬럼 "첫 usable 컬럼" 폴백
     const result = await preflightRecipients({
       surveyId: SURVEY_ID,
       scope: 'real',
+      bouncedContactIds: [],
       selectedContactIds: [id],
     });
     expect(result.validIds).toEqual([id]);
@@ -384,6 +393,7 @@ describe('preflightRecipients — 멀티 email 컬럼 "첫 usable 컬럼" 폴백
     const result = await preflightRecipients({
       surveyId: SURVEY_ID,
       scope: 'real',
+      bouncedContactIds: [],
       selectedContactIds: [id],
     });
     expect(result.emailMissingIds).toEqual([id]);
@@ -401,9 +411,73 @@ describe('preflightRecipients — 멀티 email 컬럼 "첫 usable 컬럼" 폴백
     const result = await preflightRecipients({
       surveyId: SURVEY_ID,
       scope: 'real',
+      bouncedContactIds: [],
       selectedContactIds: [id],
     });
     expect(result.validIds).toEqual([id]);
     expect(result.emailMissingIds).toEqual([]);
+  });
+});
+
+describe('preflightRecipients — 반송 이력(bouncedContactIds) 분기', () => {
+  beforeEach(() => {
+    state.contacts = [];
+    state.negativeCodes = ['수신거부'];
+    state.lastSelectedIds = [];
+    state.lastSurveyId = null;
+  });
+
+  it('bouncedContactIds 에 포함된 컨택은 bouncedIds 로 분류되고 valid 에서 제외', async () => {
+    const idValid = seedContact({ withEmail: true, emailPlain: 'ok@x.com' });
+    const idBounced = seedContact({ withEmail: true, emailPlain: 'dead@x.com' });
+    const result = await preflightRecipients({
+      surveyId: SURVEY_ID,
+      scope: 'real',
+      bouncedContactIds: [idBounced],
+      selectedContactIds: [idValid, idBounced],
+    });
+    expect(result.validIds).toEqual([idValid]);
+    expect(result.bouncedIds).toEqual([idBounced]);
+    expect(result.unsubscribedIds).toEqual([]);
+    expect(result.excludedByCodeIds).toEqual([]);
+    expect(result.emailMissingIds).toEqual([]);
+    expect(result.notFoundIds).toEqual([]);
+  });
+
+  it('우선순위 — unsubscribed 가 반송보다 먼저 (동시 해당 시 unsubscribed 로만 분류)', async () => {
+    const id = seedContact({ withEmail: true, unsubscribed: true });
+    const result = await preflightRecipients({
+      surveyId: SURVEY_ID,
+      scope: 'real',
+      bouncedContactIds: [id],
+      selectedContactIds: [id],
+    });
+    expect(result.unsubscribedIds).toEqual([id]);
+    expect(result.bouncedIds).toEqual([]);
+  });
+
+  it('우선순위 — negative 코드가 반송보다 먼저', async () => {
+    const id = seedContact({ withEmail: true, attempts: ['수신거부'] });
+    const result = await preflightRecipients({
+      surveyId: SURVEY_ID,
+      scope: 'real',
+      bouncedContactIds: [id],
+      selectedContactIds: [id],
+    });
+    expect(result.excludedByCodeIds).toEqual([id]);
+    expect(result.bouncedIds).toEqual([]);
+  });
+
+  it('선택 명단에 없는 bounced id 는 결과에 나타나지 않음', async () => {
+    const idSelected = seedContact({ withEmail: true, emailPlain: 'ok@x.com' });
+    const idUnrelated = seedContact({ withEmail: true, emailPlain: 'other@x.com' });
+    const result = await preflightRecipients({
+      surveyId: SURVEY_ID,
+      scope: 'real',
+      bouncedContactIds: [idUnrelated],
+      selectedContactIds: [idSelected],
+    });
+    expect(result.validIds).toEqual([idSelected]);
+    expect(result.bouncedIds).toEqual([]);
   });
 });

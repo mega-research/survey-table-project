@@ -148,6 +148,10 @@ vi.mock('@/db', () => ({
   db: {
     transaction: vi.fn(async (callback: (transaction: typeof tx) => Promise<unknown>) => callback(tx)),
     update: vi.fn(() => ({ set: () => ({ where: () => Promise.resolve(undefined) }) })),
+    // listBouncedContactIds 의 mail_recipients 반송 조회 — 반송 없음으로 시뮬레이션
+    selectDistinct: vi.fn(() => ({
+      from: () => ({ innerJoin: () => ({ where: () => Promise.resolve([]) }) }),
+    })),
   },
 }));
 
@@ -205,10 +209,11 @@ describe('테스트 모드 메일 캠페인 생성', () => {
     expect(state.surveyShareLocks).toBe(1);
     expect(state.executeQueries[0]?.sql).toContain('next_campaign_run_number');
     expect(state.executeQueries[0]?.params).toContain(true);
+    // 제목만 [TEST] 접두사 — subject snapshot 은 원본 유지 (5a73506b: 발송 메일 제목 접두사 제거)
     expect(state.campaignValues).toMatchObject({
       isTest: true,
       title: '[TEST] 1차 안내',
-      subjectSnapshot: '[TEST] 설문 참여',
+      subjectSnapshot: '설문 참여',
     });
     expect(state.recipientIds).toEqual([TEST_ID]);
   });
@@ -280,7 +285,7 @@ describe('테스트 모드 메일 캠페인 생성', () => {
     expect(state.campaignValues).toBeNull();
   });
 
-  it('반복된 [TEST] 접두어를 정규화해 한 번만 남긴다', async () => {
+  it('제목의 반복된 [TEST] 접두어는 정규화하고 subject snapshot 은 원본을 유지한다', async () => {
     state.surveyMode = true;
     state.templateSubject = ' [TEST] [TEST] 설문 참여 ';
     state.targets = [{ id: TEST_ID, surveyId: SURVEY_ID, isTest: true }];
@@ -288,7 +293,8 @@ describe('테스트 모드 메일 캠페인 생성', () => {
     await createCampaign(input([TEST_ID], ' [TEST] [TEST] 1차 안내 '), USER_ID);
 
     expect(state.campaignValues?.['title']).toBe('[TEST] 1차 안내');
-    expect(state.campaignValues?.['subjectSnapshot']).toBe('[TEST] 설문 참여');
+    // subject 는 접두사 정규화 대상이 아님 — 템플릿 원본 그대로 저장 (5a73506b)
+    expect(state.campaignValues?.['subjectSnapshot']).toBe(' [TEST] [TEST] 설문 참여 ');
   });
 });
 
