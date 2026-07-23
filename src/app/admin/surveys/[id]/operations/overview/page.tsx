@@ -104,7 +104,8 @@ export default async function OperationsOverviewPage({
       getResponseTime(surveyId, scope),
       getDropFunnel(surveyId, scope),
       getPageDwell(surveyId, scope),
-      scope === 'test' ? Promise.resolve(null) : getQuotaStatus(surveyId),
+      // 테스트 모드에서도 테스트 응답 기준으로 집계해 보여준다(표시 전용 — 집행은 실응답만).
+      getQuotaStatus(surveyId, scope),
       getSurveyById(surveyId),
     ]);
 
@@ -123,7 +124,9 @@ export default async function OperationsOverviewPage({
 
       <KpiRow counts={statusCounts} quota={quotaStatus?.summary ?? null} />
 
-      {quotaStatus && quotaStatus.cells.length > 0 && <QuotaStatusPanel status={quotaStatus} />}
+      {quotaStatus && quotaStatus.cells.length > 0 && (
+        <QuotaStatusPanel status={quotaStatus} isTestScope={scope === 'test'} />
+      )}
 
       <DailyParticipationChart
         data={dailyBuckets}

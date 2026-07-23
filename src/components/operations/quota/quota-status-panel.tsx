@@ -15,6 +15,8 @@ import { buildQuotaPivot, pivotCategoryIds, pivotColBorderClass, pivotColKey } f
 
 interface Props {
   status: QuotaStatus;
+  /** 테스트 모드 집계 여부 — 배지로 표시. 집행(quotaful_out)은 스코프와 무관하게 실응답 전용. */
+  isTestScope?: boolean | undefined;
 }
 
 /** 파스텔 톤 클래스 (목업 색: emerald/blue/amber/rose 300계열). */
@@ -72,7 +74,7 @@ function findCell(cells: QuotaCellStatus[], categoryIds: string[]): QuotaCellSta
  * 그린다. 조건이 1개이거나 4개 이상이면 매트릭스를 그릴 수 없으므로 부족 셀 순
  * 리스트로 폴백한다 — "매트릭스" 토글은 비활성화 처리.
  */
-export function QuotaStatusPanel({ status }: Props) {
+export function QuotaStatusPanel({ status, isTestScope = false }: Props) {
   // 3조건 전용 피벗 배치. 그 외 개수면 null.
   const pivot = buildQuotaPivot(status.dimensions);
   const canMatrix = status.dimensions.length === 2 || pivot !== null;
@@ -113,6 +115,11 @@ export function QuotaStatusPanel({ status }: Props) {
                   >
                     {status.enabled ? '집행 중' : '집계만'}
                   </span>
+                  {isTestScope && (
+                    <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-bold text-amber-600">
+                      테스트 응답 집계
+                    </span>
+                  )}
                 </h3>
               </button>
             </CollapsibleTrigger>
