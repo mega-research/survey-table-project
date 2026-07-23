@@ -38,7 +38,11 @@ function matchesChoice(category: QuotaCategory, answer: unknown): boolean {
   return answered.some((v) => values.includes(v));
 }
 
-/** 한 차원에서 응답이 속하는 카테고리 id. 미매칭이면 null. */
+/**
+ * 한 차원에서 응답이 속하는 카테고리 id. 미매칭이면 null.
+ * checkbox 복수 선택이 여러 카테고리에 걸치면 정의 순서상 첫 매칭 카테고리로 분류 —
+ * 응답자당 항상 1셀이라 판정(checkQuota)·현황판(tallyAll) 집계가 일관된다.
+ */
 export function resolveCategoryId(dimension: QuotaDimension, answer: unknown): string | null {
   for (const category of dimension.categories) {
     const matched =
