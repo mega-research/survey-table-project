@@ -112,7 +112,7 @@ export async function createCampaign(
         mailTemplateId: template.id,
         runNumber,
         title: withTestPrefix(input.title.trim(), isTest),
-        subjectSnapshot: withTestPrefix(template.subject, isTest),
+        subjectSnapshot: template.subject,
         bodyHtmlSnapshot: template.bodyHtml,
         fromLocalSnapshot: template.fromLocal,
         fromNameSnapshot: template.fromName,
