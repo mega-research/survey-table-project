@@ -7,6 +7,7 @@ import {
   formatWithComma,
   rangeViolationMessage,
   stripComma,
+  violatesMinStart,
 } from '@/utils/number-format';
 
 describe('formatWithComma / stripComma', () => {
@@ -32,6 +33,43 @@ describe('formatWithComma / stripComma', () => {
   it('stripComma 는 콤마만 제거한다', () => {
     expect(stripComma('1,234,567.89')).toBe('1234567.89');
     expect(stripComma('-1,000')).toBe('-1000');
+  });
+});
+
+describe('violatesMinStart', () => {
+  it('min >= 1 이면 0 시작을 차단한다', () => {
+    expect(violatesMinStart('0', 1)).toBe(true);
+    expect(violatesMinStart('0', 10)).toBe(true);
+    expect(violatesMinStart('0.5', 1)).toBe(true);
+    expect(violatesMinStart('.5', 1)).toBe(true);
+  });
+
+  it('min 도달 가능한 중간값은 허용한다 — min=10 에서 1 을 거쳐 10 입력', () => {
+    expect(violatesMinStart('1', 10)).toBe(false);
+    expect(violatesMinStart('10', 10)).toBe(false);
+    expect(violatesMinStart('5', 2)).toBe(false);
+  });
+
+  it('min >= 0 이면 음수 시작을 차단한다', () => {
+    expect(violatesMinStart('-', 0)).toBe(true);
+    expect(violatesMinStart('-5', 1)).toBe(true);
+  });
+
+  it('0 < min < 1 은 소수 입력을 위해 0 시작을 허용한다', () => {
+    expect(violatesMinStart('0', 0.5)).toBe(false);
+    expect(violatesMinStart('0.5', 0.5)).toBe(false);
+    expect(violatesMinStart('-1', 0.5)).toBe(true);
+  });
+
+  it('min 미설정·빈 문자열은 차단하지 않는다', () => {
+    expect(violatesMinStart('0', undefined)).toBe(false);
+    expect(violatesMinStart('', 1)).toBe(false);
+    expect(violatesMinStart('-1', undefined)).toBe(false);
+  });
+
+  it('음수 min 은 아무것도 차단하지 않는다', () => {
+    expect(violatesMinStart('-5', -10)).toBe(false);
+    expect(violatesMinStart('0', -1)).toBe(false);
   });
 });
 

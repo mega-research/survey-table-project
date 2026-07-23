@@ -50,6 +50,20 @@ export function formatWithComma(raw: string): string {
   return (neg ? '-' : '') + grouped + rest;
 }
 
+/**
+ * min 도달이 불가능한 "시작 입력"인지 — 타이핑 차단용.
+ * - min >= 1: '0'/'.' 시작 차단 — 이어 쳐도 0.xxx 대라 min 에 도달 불가
+ *   ('10' 처럼 도달 가능한 중간값 '1' 은 여기 걸리지 않고 그대로 허용된다)
+ * - min >= 0: '-' 시작 차단 — 음수는 자릿수를 더해도 min 미만
+ * 0 < min < 1 (예: 0.5) 은 '0.' 시작이 필요하므로 0 시작을 차단하지 않는다.
+ */
+export function violatesMinStart(raw: string, min: number | undefined): boolean {
+  if (min === undefined || raw === '') return false;
+  if (min >= 0 && raw.startsWith('-')) return true;
+  if (min >= 1 && (raw.startsWith('0') || raw.startsWith('.'))) return true;
+  return false;
+}
+
 /** 완성 숫자가 max 초과인지. 부분 입력('-', '.', '')과 max 미설정은 false. */
 export function exceedsMax(raw: string, max: number | undefined): boolean {
   if (max === undefined) return false;
