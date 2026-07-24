@@ -39,6 +39,14 @@ export const IngestContactUploadResultSchema = z.object({
   uploadedRows: z.number(),
   mergedRows: z.number(),
   errorRows: z.number(),
+  skippedRows: z.number(),
+  /** 제외 사유별 세부 (DB 미저장 — 결과 화면 표시용) */
+  skippedBreakdown: z.object({
+    policy: z.number(),
+    fileDuplicates: z.number(),
+    multiMatches: z.number(),
+    emptyKeys: z.number(),
+  }),
 });
 export type IngestContactUploadResult = z.infer<typeof IngestContactUploadResultSchema>;
 

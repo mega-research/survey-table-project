@@ -8,6 +8,7 @@ import type {
   ContactColumnDef,
   ContactColumnScheme,
   ContactUploadMapping,
+  ContactUploadMode,
 } from '@/db/schema/schema-types';
 import { parseExcelRows, previewExcel } from '@/lib/contacts/excel-parser';
 import {
@@ -15,9 +16,18 @@ import {
   countEmptyOverwrites,
   type ExistingContactKeyInfo,
 } from '@/lib/contacts/match-contacts';
-import { getSchemeRouting, type SchemeRouting } from '@/lib/contacts/scheme-helpers';
+import {
+  appendNewColumnsToScheme,
+  getSchemeRouting,
+  type SchemeRouting,
+} from '@/lib/contacts/scheme-helpers';
 import { MAX_UPLOAD_ROWS, validateXlsxFile } from '@/lib/contacts/upload-limits';
-import { buildPiiRows, insertPiiRows, type PiiInput } from '@/lib/crypto/contact-pii-repo';
+import {
+  buildPiiRows,
+  insertPiiRows,
+  upsertPiiValue,
+  type PiiInput,
+} from '@/lib/crypto/contact-pii-repo';
 import type { PiiFieldType } from '@/lib/crypto/pii-fields';
 import { generateInviteCode } from '@/lib/survey-url';
 import { loadOperationsDataScope } from '@/lib/operations/data-scope.server';
@@ -33,6 +43,7 @@ import type {
 
 interface SurveyModeRow extends Record<string, unknown> {
   test_mode_enabled: boolean;
+  contact_columns: unknown;
 }
 
 function ensureXlsx(file: File): void {
@@ -70,24 +81,31 @@ export async function parseExcelPreview(
 }
 
 /**
- * 엑셀 풀 파싱 + 통째 교체 (시나리오 B).
+ * 엑셀 풀 파싱 + 3모드 적재.
  *
- * 기존 contact_targets 를 모두 DELETE 한 뒤 신규 INSERT.
- * - survey_responses.contact_target_id 는 SET NULL (응답 본체 보존, 매칭만 끊김)
- * - contact_attempts 는 CASCADE 로 함께 삭제 (회차 기록 사라짐)
- * - 기존 invite_token 도 함께 사라짐 (발송된 메일 링크 무효화)
+ * - replace(기본, 시나리오 B): 기존 contact_targets 를 모두 DELETE 한 뒤 신규 INSERT.
+ *   survey_responses.contact_target_id 는 SET NULL(응답 보존, 매칭만 끊김),
+ *   contact_attempts/contact_pii 는 CASCADE(회차·PII 삭제), invite_token 도 함께 사라짐
+ *   (발송된 메일 링크 무효화). 클라이언트가 경고 카드로 사용자 confirm 후 호출 — 서버는 가드 없음.
+ * - merge: DELETE 없음. mergeKeys 로 기존 컨택과 매칭해 일치 행은 엑셀에 있는 컬럼만
+ *   부분 갱신(attrs 얕은 병합 + PII upsert), resid/inviteCode/uploadId/이력은 보존.
+ *   불일치 행은 unmatchedPolicy(insert|skip)를 따른다.
+ * - append: 전 행 INSERT. mergeKeys 지정 시 기존 명단과 일치하는 행만 duplicatePolicy(insert|skip).
  *
- * 클라이언트가 경고 카드로 사용자 confirm 후 호출 — 서버는 가드 없음.
+ * 매칭은 ingest 가 자체 재계산한다 (matchPreview 결과를 신뢰하지 않음 — 업로드 사이 DB 가 바뀔 수 있음).
+ * PII 라우팅: replace 는 위저드 입력만 따르고, merge/append 는 기존 스킴이 우선한다
+ * (resolveEffectiveRouting — PII 평문 유출 차단).
  *
- * 트랜잭션: 단일 트랜잭션. 행 단위 INSERT 에러는 SAVEPOINT 격리.
- * 컬럼 스킴: 매핑된 selectedAttrsKeys 기준으로 매번 재생성.
+ * 트랜잭션: 단일 트랜잭션. 행 단위 INSERT/UPDATE 에러는 SAVEPOINT 격리.
+ * 컬럼 스킴: replace 또는 기존 스킴이 없으면 전체 재생성, merge/append 는 신규 컬럼만 append.
  */
 export async function ingestContactUpload(
   input: IngestContactUploadInput,
 ): Promise<IngestContactUploadResult> {
   const { surveyId, file, mapping } = input;
+  const mode: ContactUploadMode = mapping.mode ?? 'replace';
 
-  // 클라이언트 상태를 신뢰하지 않는다. 테스트 모드에서는 실제 대상자 전체 교체가
+  // 클라이언트 상태를 신뢰하지 않는다. 테스트 모드에서는 실제 대상자 업로드가
   // 위험하므로, 파일을 읽기 전에 현재 DB 모드로 먼저 fail-closed 한다.
   if ((await loadOperationsDataScope(surveyId)) === 'test') {
     throw new Error('테스트 모드에서는 실제 조사대상자를 업로드할 수 없습니다.');
@@ -113,25 +131,15 @@ export async function ingestContactUpload(
   const groupKey =
     mapping.systemFields.group != null ? (headerKeys[mapping.systemFields.group] ?? null) : null;
 
-  // 매핑된 PII 컬럼만 추출. 헤더에 없는 키는 자동 드롭.
-  const piiEntries: Array<{ columnKey: string; fieldType: PiiFieldType }> = [];
-  const piiMapping = mapping.piiMapping ?? {};
-  for (const [columnKey, fieldType] of Object.entries(piiMapping)) {
-    if (headerKeys.includes(columnKey)) {
-      piiEntries.push({ columnKey, fieldType });
-    }
-  }
-  const piiKeySet = new Set(piiEntries.map((e) => e.columnKey));
-
   let uploadedRows = 0;
-  const mergedRows = 0;
+  let mergedRows = 0;
   let errorRows = 0;
+  const skippedBreakdown = { policy: 0, fileDuplicates: 0, multiMatches: 0, emptyKeys: 0 };
 
   const result = await db.transaction(async (tx) => {
-    // 파싱 중 모드가 바뀐 race도 삭제 직전에 다시 막는다. 설문 행을 잠가 모드 전환과
-    // 직렬화하고, 실제 대상자만 교체한다.
+    // 설문 행 잠금 — 모드 전환·동시 업로드와 직렬화. 스킴도 같은 쿼리로 확보.
     const scopeRows = await tx.execute<SurveyModeRow>(sql`
-      SELECT test_mode_enabled
+      SELECT test_mode_enabled, contact_columns
       FROM surveys
       WHERE id = ${surveyId}::uuid
       FOR UPDATE
@@ -141,12 +149,22 @@ export async function ingestContactUpload(
     if (survey.test_mode_enabled) {
       throw new Error('테스트 모드에서는 실제 조사대상자를 업로드할 수 없습니다.');
     }
+    const existingScheme = (survey.contact_columns as ContactColumnScheme | null) ?? null;
 
-    // 시나리오 B: 기존 컨택 통째 DELETE.
-    // FK 동작: survey_responses 는 SET NULL (응답 보존), contact_attempts/contact_pii 는 CASCADE.
-    await tx
-      .delete(contactTargets)
-      .where(and(eq(contactTargets.surveyId, surveyId), eq(contactTargets.isTest, false)));
+    // 유효 PII 라우팅: replace 는 위저드 입력만, merge/append 는 기존 스킴 우선
+    const schemeRouting =
+      mode === 'replace'
+        ? { piiByKey: {}, knownAttrKeys: new Set<string>() }
+        : getSchemeRouting(existingScheme);
+    const { piiEntries, piiKeySet } = resolveEffectiveRouting(schemeRouting, mapping, headerKeys);
+
+    if (mode === 'replace') {
+      // 시나리오 B: 기존 컨택 통째 DELETE.
+      // FK 동작: survey_responses 는 SET NULL (응답 보존), contact_attempts/contact_pii 는 CASCADE.
+      await tx
+        .delete(contactTargets)
+        .where(and(eq(contactTargets.surveyId, surveyId), eq(contactTargets.isTest, false)));
+    }
 
     const [upload] = await tx
       .insert(contactUploads)
@@ -156,74 +174,187 @@ export async function ingestContactUpload(
         uploadedRows: 0,
         mergedRows: 0,
         errorRows: 0,
+        skippedRows: 0,
+        mode,
         mapping,
       })
       .returning({ id: contactUploads.id });
-
     if (!upload) throw new Error('contact_uploads INSERT 실패');
+    const uploadId = upload.id;
 
-    for (const row of allRows) {
-      try {
-        await tx.transaction(async (sp) => {
-          // 빈 셀('')만 NULL 처리. '0' 등 falsy 문자열 group 라벨은 보존 (|| 사용 금지).
-          const rawGroup = groupKey ? row[groupKey] : undefined;
-          const groupValue = rawGroup != null && rawGroup !== '' ? rawGroup : null;
+    /** 행 하나를 신규 컨택으로 INSERT (SAVEPOINT 내부에서 호출) */
+    async function insertContactRow(sp: typeof tx, row: Record<string, string>): Promise<void> {
+      // 빈 셀('')만 NULL 처리. '0' 등 falsy 문자열 group 라벨은 보존 (|| 사용 금지).
+      const rawGroup = groupKey ? row[groupKey] : undefined;
+      const groupValue = rawGroup != null && rawGroup !== '' ? rawGroup : null;
 
-          // attrs 에서 PII 키 제외 — PII 는 contact_pii 사이드 테이블에만 저장
-          const cleanAttrs: Record<string, string> = {};
-          for (const [k, v] of Object.entries(row)) {
-            if (!piiKeySet.has(k)) cleanAttrs[k] = v;
-          }
+      // attrs 에서 PII 키 제외 — PII 는 contact_pii 사이드 테이블에만 저장
+      const cleanAttrs: Record<string, string> = {};
+      for (const [k, v] of Object.entries(row)) {
+        if (!piiKeySet.has(k)) cleanAttrs[k] = v;
+      }
 
-          const residRows = (await sp.execute(
-            sql`SELECT next_contact_resid(${surveyId}::uuid, false) AS resid`,
-          )) as unknown as Array<{ resid: number }>;
-          const resid = residRows[0]?.resid;
-          if (resid == null) throw new Error('next_contact_resid 호출 실패');
+      const residRows = (await sp.execute(
+        sql`SELECT next_contact_resid(${surveyId}::uuid, false) AS resid`,
+      )) as unknown as Array<{ resid: number }>;
+      const resid = residRows[0]?.resid;
+      if (resid == null) throw new Error('next_contact_resid 호출 실패');
 
-          const [target] = await sp
-            .insert(contactTargets)
-            .values({
-              surveyId,
-              resid,
-              isTest: false,
-              groupValue,
-              attrs: cleanAttrs,
-              uploadId: upload.id,
-              inviteCode: generateInviteCode(),
-            })
-            .returning({ id: contactTargets.id });
-          if (!target) throw new Error('contact_targets INSERT 실패');
+      const [target] = await sp
+        .insert(contactTargets)
+        .values({
+          surveyId,
+          resid,
+          isTest: false,
+          groupValue,
+          attrs: cleanAttrs,
+          uploadId,
+          inviteCode: generateInviteCode(),
+        })
+        .returning({ id: contactTargets.id });
+      if (!target) throw new Error('contact_targets INSERT 실패');
 
-          // PII 추출 + 암호화 저장 (buildPiiRows 가 빈 값/정규화 후 빈 값 자동 스킵)
-          if (piiEntries.length > 0) {
-            const piiInputs: PiiInput[] = piiEntries.map((e) => ({
-              columnKey: e.columnKey,
-              fieldType: e.fieldType,
-              plain: row[e.columnKey] ?? '',
-            }));
-            const piiRows = buildPiiRows(target.id, piiInputs);
-            await insertPiiRows(sp, piiRows);
-          }
-
-          uploadedRows += 1;
-        });
-      } catch (e) {
-        errorRows += 1;
-        console.error(`[ingestContactUpload] row error: ${(e as Error).message}`);
+      // PII 추출 + 암호화 저장 (buildPiiRows 가 빈 값/정규화 후 빈 값 자동 스킵)
+      if (piiEntries.length > 0) {
+        const piiInputs: PiiInput[] = piiEntries.map((e) => ({
+          columnKey: e.columnKey,
+          fieldType: e.fieldType,
+          plain: row[e.columnKey] ?? '',
+        }));
+        await insertPiiRows(sp, buildPiiRows(target.id, piiInputs));
       }
     }
 
+    /** 키 일치 행을 부분 갱신 (SAVEPOINT 내부에서 호출) */
+    async function mergeContactRow(
+      sp: typeof tx,
+      row: Record<string, string>,
+      targetId: string,
+      existingAttrs: Record<string, string>,
+    ): Promise<void> {
+      const cleanAttrs: Record<string, string> = {};
+      for (const [k, v] of Object.entries(row)) {
+        if (!piiKeySet.has(k)) cleanAttrs[k] = v;
+      }
+      // 분류 기준 컬럼이 파일에 없으면 groupValue 는 건드리지 않는다.
+      const rawGroup = groupKey ? row[groupKey] : undefined;
+      const groupPatch =
+        groupKey != null
+          ? { groupValue: rawGroup != null && rawGroup !== '' ? rawGroup : null }
+          : {};
+
+      await sp
+        .update(contactTargets)
+        .set({
+          attrs: { ...existingAttrs, ...cleanAttrs },
+          ...groupPatch,
+          updatedAt: new Date(),
+        })
+        .where(eq(contactTargets.id, targetId));
+
+      // PII 는 컬럼 단위 upsert — 빈 값이면 기존 행 삭제 (스펙: 빈 셀도 덮어씀)
+      for (const e of piiEntries) {
+        await upsertPiiValue(sp, targetId, e.columnKey, e.fieldType, row[e.columnKey] ?? '');
+      }
+    }
+
+    if (mode === 'merge') {
+      const mergeKeys = mapping.mergeKeys ?? [];
+      validateMergeKeys(mergeKeys, headerKeys, piiKeySet);
+      const unmatchedPolicy = mapping.unmatchedPolicy ?? 'skip';
+
+      const { existing, existingAttrsById } = await loadExistingContactsTx(tx, surveyId);
+      const classified = classifyRows(allRows, mergeKeys, existing);
+      skippedBreakdown.fileDuplicates = classified.fileDuplicates.length;
+      skippedBreakdown.multiMatches = classified.multiMatches.length;
+      skippedBreakdown.emptyKeys = classified.emptyKeys.length;
+
+      for (const { rowIndex, targetId } of classified.matched) {
+        const row = allRows[rowIndex];
+        if (!row) continue;
+        try {
+          await tx.transaction(async (sp) => {
+            await mergeContactRow(sp, row, targetId, existingAttrsById.get(targetId) ?? {});
+          });
+          mergedRows += 1;
+        } catch (e) {
+          errorRows += 1;
+          console.error(`[ingestContactUpload] merge row error: ${(e as Error).message}`);
+        }
+      }
+
+      for (const rowIndex of classified.unmatched) {
+        const row = allRows[rowIndex];
+        if (!row) continue;
+        if (unmatchedPolicy === 'skip') {
+          skippedBreakdown.policy += 1;
+          continue;
+        }
+        try {
+          await tx.transaction(async (sp) => insertContactRow(sp, row));
+          uploadedRows += 1;
+        } catch (e) {
+          errorRows += 1;
+          console.error(`[ingestContactUpload] insert row error: ${(e as Error).message}`);
+        }
+      }
+    } else {
+      // replace / append 공통: 전 행 INSERT. append+중복검사는 중복 행만 policy 적용.
+      let duplicateRowIndexes = new Set<number>();
+      if (mode === 'append' && (mapping.mergeKeys?.length ?? 0) > 0) {
+        const mergeKeys = mapping.mergeKeys ?? [];
+        validateMergeKeys(mergeKeys, headerKeys, piiKeySet);
+        const { existing } = await loadExistingContactsTx(tx, surveyId);
+        const classified = classifyRows(allRows, mergeKeys, existing);
+        // append 의 중복 = 기존 명단과 일치한 행 (multiMatch 포함). 파일 내 중복은 검사하지 않음.
+        duplicateRowIndexes = new Set([
+          ...classified.matched.map((m) => m.rowIndex),
+          ...classified.multiMatches,
+        ]);
+      }
+      const duplicatePolicy = mapping.duplicatePolicy ?? 'skip';
+
+      for (const [rowIndex, row] of allRows.entries()) {
+        if (duplicateRowIndexes.has(rowIndex) && duplicatePolicy === 'skip') {
+          skippedBreakdown.policy += 1;
+          continue;
+        }
+        try {
+          await tx.transaction(async (sp) => insertContactRow(sp, row));
+          uploadedRows += 1;
+        } catch (e) {
+          errorRows += 1;
+          console.error(`[ingestContactUpload] row error: ${(e as Error).message}`);
+        }
+      }
+    }
+
+    const skippedRows =
+      skippedBreakdown.policy +
+      skippedBreakdown.fileDuplicates +
+      skippedBreakdown.multiMatches +
+      skippedBreakdown.emptyKeys;
+
     await tx
       .update(contactUploads)
-      .set({ uploadedRows, mergedRows, errorRows })
+      .set({ uploadedRows, mergedRows, errorRows, skippedRows })
       .where(eq(contactUploads.id, upload.id));
 
-    // 통째 교체 후엔 컬럼 스킴도 새 매핑 기준으로 재생성.
-    const scheme = autoGenerateColumnScheme(headerKeys, mapping);
+    // 스킴 갱신: replace 는 전체 재생성, merge/append 는 신규 컬럼만 append
+    const scheme =
+      mode === 'replace' || existingScheme == null
+        ? autoGenerateColumnScheme(headerKeys, mapping)
+        : appendNewColumnsToScheme(existingScheme, headerKeys, mapping);
     await tx.update(surveys).set({ contactColumns: scheme }).where(eq(surveys.id, surveyId));
 
-    return { uploadId: upload.id, uploadedRows, mergedRows, errorRows };
+    return {
+      uploadId: upload.id,
+      uploadedRows,
+      mergedRows,
+      errorRows,
+      skippedRows,
+      skippedBreakdown,
+    };
   });
 
   return result;
@@ -326,22 +457,35 @@ function validateMergeKeys(
   }
 }
 
-/** 기존 실컨택 (id + attrs) + PII 존재 여부 로드 */
+/** 전역 db 또는 트랜잭션 핸들 겸용 타입 */
+type DbOrTx = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/** 기존 실컨택 (id + attrs) 로드 — 트랜잭션/전역 db 겸용 */
+async function loadExistingContactsTx(
+  dbc: DbOrTx,
+  surveyId: string,
+): Promise<{
+  existing: ExistingContactKeyInfo[];
+  existingAttrsById: Map<string, Record<string, string>>;
+}> {
+  const targets = await dbc
+    .select({ id: contactTargets.id, attrs: contactTargets.attrs })
+    .from(contactTargets)
+    .where(and(eq(contactTargets.surveyId, surveyId), eq(contactTargets.isTest, false)));
+  const existing: ExistingContactKeyInfo[] = targets.map((t) => ({
+    targetId: t.id,
+    attrs: t.attrs ?? {},
+  }));
+  return { existing, existingAttrsById: new Map(existing.map((e) => [e.targetId, e.attrs])) };
+}
+
+/** 기존 실컨택 (id + attrs) + PII 존재 여부 로드 (matchPreview 전용, 전역 db 사용) */
 async function loadExistingContacts(surveyId: string): Promise<{
   existing: ExistingContactKeyInfo[];
   existingAttrsById: Map<string, Record<string, string>>;
   piiPresenceById: Map<string, Set<string>>;
 }> {
-  const targets = await db
-    .select({ id: contactTargets.id, attrs: contactTargets.attrs })
-    .from(contactTargets)
-    .where(and(eq(contactTargets.surveyId, surveyId), eq(contactTargets.isTest, false)));
-
-  const existing: ExistingContactKeyInfo[] = targets.map((t) => ({
-    targetId: t.id,
-    attrs: t.attrs ?? {},
-  }));
-  const existingAttrsById = new Map(existing.map((e) => [e.targetId, e.attrs]));
+  const { existing, existingAttrsById } = await loadExistingContactsTx(db, surveyId);
 
   const piiRows = await db
     .select({ contactTargetId: contactPii.contactTargetId, columnKey: contactPii.columnKey })

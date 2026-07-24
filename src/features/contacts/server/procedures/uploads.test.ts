@@ -64,6 +64,8 @@ describe('contacts.uploads procedures', () => {
       uploadedRows: 1,
       mergedRows: 0,
       errorRows: 0,
+      skippedRows: 0,
+      skippedBreakdown: { policy: 0, fileDuplicates: 0, multiMatches: 0, emptyKeys: 0 },
     } as never);
     const client = createRouterClient({ uploads }, { context: authedContext() });
     const file = xlsxFile();
