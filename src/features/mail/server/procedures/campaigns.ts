@@ -10,8 +10,10 @@ import {
   FetchCandidateIdsResult,
   PreviewPreflightInput,
   PreviewPreflightResult,
+  SendSingleCampaignInput,
 } from '../../domain/mail-campaign';
 import * as svc from '../services/mail-campaigns.service';
+import { sendSingleCampaign } from '../services/mail-single-send.service';
 
 const create = authed
   .input(CreateCampaignInput)
@@ -36,9 +38,15 @@ const previewPreflight = authed
   .output(PreviewPreflightResult)
   .handler(({ input }) => svc.previewPreflight(input));
 
+const sendSingle = authed
+  .input(SendSingleCampaignInput)
+  .output(CreateCampaignResult)
+  .handler(({ input, context }) => sendSingleCampaign(input, context.user.id));
+
 export const campaigns = {
   create,
   cancel,
   fetchCandidateIds,
   previewPreflight,
+  sendSingle,
 };

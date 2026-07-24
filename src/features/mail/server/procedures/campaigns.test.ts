@@ -10,7 +10,12 @@ vi.mock('../services/mail-campaigns.service', () => ({
   previewPreflight: vi.fn(),
 }));
 
+vi.mock('../services/mail-single-send.service', () => ({
+  sendSingleCampaign: vi.fn(),
+}));
+
 import * as svc from '../services/mail-campaigns.service';
+import * as singleSvc from '../services/mail-single-send.service';
 import { campaigns } from './campaigns';
 
 function authedContext(): ORPCContext {
@@ -84,6 +89,23 @@ describe('mail.campaigns procedures', () => {
       emailMissingCount: 0,
       notFoundCount: 0,
     });
+  });
+
+  it('sendSingle은 input과 context.user.id를 sendSingleCampaign에 위임하고 결과를 반환한다', async () => {
+    vi.mocked(singleSvc.sendSingleCampaign).mockResolvedValue({
+      campaignId: CAMPAIGN_ID,
+      queuedCount: 1,
+      skippedCount: 0,
+    } as never);
+    const client = createRouterClient({ campaigns }, { context: authedContext() });
+    const input = {
+      surveyId: SURVEY_ID,
+      contactTargetId: CONTACT_ID,
+      mailTemplateId: TEMPLATE_ID,
+    };
+    const res = await client.campaigns.sendSingle(input);
+    expect(singleSvc.sendSingleCampaign).toHaveBeenCalledWith(input, 'admin-1');
+    expect(res).toEqual({ campaignId: CAMPAIGN_ID, queuedCount: 1, skippedCount: 0 });
   });
 
   it('인증 없으면 create가 UNAUTHORIZED로 막힌다', async () => {

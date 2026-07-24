@@ -102,3 +102,14 @@ export const PreviewPreflightResult = z.object({
   notFoundCount: z.number(),
 });
 export type PreviewPreflightResult = z.infer<typeof PreviewPreflightResult>;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 단건 발송
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const SendSingleCampaignInput = z.object({
+  surveyId: z.string().uuid(),
+  contactTargetId: z.string().uuid(),
+  mailTemplateId: z.string().uuid(),
+});
+export type SendSingleCampaignInput = z.infer<typeof SendSingleCampaignInput>;

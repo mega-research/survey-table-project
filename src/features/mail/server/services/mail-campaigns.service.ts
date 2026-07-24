@@ -4,7 +4,7 @@ import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { contactPii, contactTargets } from '@/db/schema/contacts';
-import { mailCampaigns, mailRecipients, mailTemplates } from '@/db/schema/mail';
+import { mailCampaigns, mailRecipients, mailTemplates, type MailCampaignKind } from '@/db/schema/mail';
 import { surveys } from '@/db/schema/surveys';
 import type { CampaignFilterSnapshot } from '@/db/schema/schema-types';
 import { decryptPii } from '@/lib/crypto/aes';
@@ -43,7 +43,9 @@ import type {
 export async function createCampaign(
   input: CreateCampaignInput,
   userId: string,
+  opts: { kind?: MailCampaignKind } = {},
 ): Promise<CreateCampaignResult> {
+  const kind: MailCampaignKind = opts.kind ?? 'bulk';
   const filterSnapshot: CampaignFilterSnapshot = (input.filterSnapshot ?? {}) as CampaignFilterSnapshot;
 
   // 중복 선택 ID 제거 — recipientCount/skippedCount 카운터가 중복으로 부풀려지는 것을 방지.
@@ -94,9 +96,11 @@ export async function createCampaign(
       throw new Error('선택한 메일 템플릿을 찾을 수 없습니다.');
     }
 
-    // c. scope별 next run number
+    // c. scope별 next run number — 단건은 1000001+ 대역으로 격리
     const runRows = await tx.execute<{ next_id: number }>(
-      sql`SELECT next_campaign_run_number(${input.surveyId}, ${isTest}) AS next_id`,
+      kind === 'single'
+        ? sql`SELECT next_single_send_run_number(${input.surveyId}, ${isTest}) AS next_id`
+        : sql`SELECT next_campaign_run_number(${input.surveyId}, ${isTest}) AS next_id`,
     );
     const runNumber = Number(runRows[0]?.next_id ?? 0);
     if (!runNumber) {
@@ -111,6 +115,7 @@ export async function createCampaign(
         isTest,
         mailTemplateId: template.id,
         runNumber,
+        kind,
         title: withTestPrefix(input.title.trim(), isTest),
         subjectSnapshot: template.subject,
         bodyHtmlSnapshot: template.bodyHtml,
