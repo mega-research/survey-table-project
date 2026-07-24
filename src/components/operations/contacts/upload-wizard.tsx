@@ -5,7 +5,11 @@ import { useMemo, useRef, useState, useTransition } from 'react';
 
 import { FileSpreadsheet, UploadCloud, X } from 'lucide-react';
 
-import type { ParseExcelPreviewResult } from '@/features/contacts/domain/contact-upload';
+import type {
+  IngestContactUploadResult,
+  MatchContactUploadResult,
+  ParseExcelPreviewResult,
+} from '@/features/contacts/domain/contact-upload';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -35,7 +39,9 @@ import {
 import { type PiiFieldType } from '@/lib/crypto/pii-fields';
 import { getErrorMessage } from '@/lib/get-error-message';
 import { formatBytes } from '@/lib/utils';
-import { useIngestContacts, useParseExcelPreview } from '@/hooks/queries';
+import { useIngestContacts, useMatchContacts, useParseExcelPreview } from '@/hooks/queries';
+
+import { UploadMatchStep } from './upload-match-step';
 
 type Step = 'file' | 'mapping' | 'match' | 'result';
 
@@ -93,19 +99,19 @@ export function UploadWizard({
   const [dupCheck, setDupCheck] = useState(false);
   // merge/append+중복검사 시 매칭 키로 사용할 헤더 set
   const [mergeKeys, setMergeKeys] = useState<Set<string>>(new Set());
-  // unmatchedPolicy/duplicatePolicy/matchResult 상태는 매칭 미리보기 스텝 배선(Task 8)에서
-  // 함께 도입한다 — 이 태스크에서는 미사용 상태로 noUnusedLocals 에 걸려 선언을 미룸.
-  const [result, setResult] = useState<{
-    uploadedRows: number;
-    mergedRows: number;
-    errorRows: number;
-  } | null>(null);
+  // merge: 키 불일치 행 처리 정책 / append+중복검사: 키 일치(중복) 행 처리 정책
+  const [unmatchedPolicy, setUnmatchedPolicy] = useState<'insert' | 'skip'>('skip');
+  const [duplicatePolicy, setDuplicatePolicy] = useState<'insert' | 'skip'>('skip');
+  // 매칭 미리보기(dry-run) 결과 — match 스텝 진입 시 채워짐
+  const [matchResult, setMatchResult] = useState<MatchContactUploadResult | null>(null);
+  const [result, setResult] = useState<IngestContactUploadResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [replaceConfirmed, setReplaceConfirmed] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   const parseExcelPreview = useParseExcelPreview();
   const ingestContacts = useIngestContacts();
+  const matchContacts = useMatchContacts();
 
   const schemeRouting = useMemo(() => getSchemeRouting(existingScheme), [existingScheme]);
   /** 기존 스킴에 등록된 컬럼 (잠금 대상). key → 스킴 정의 */
@@ -118,7 +124,8 @@ export function UploadWizard({
   }, [existingScheme]);
   const isLockedMode = mode !== 'replace';
   const needsKeySelection = mode === 'merge' || (mode === 'append' && dupCheck);
-  // needsMatchStep(매칭 스텝 진입 여부)은 Task 8 에서 needsKeySelection 과 함께 소비된다.
+  // merge 모드는 항상, append 모드는 중복 검사 on 일 때만 매칭 미리보기 스텝을 거친다.
+  const needsMatchStep = needsKeySelection;
 
   function selectFile(picked: File | null | undefined) {
     if (!picked) return;
@@ -165,7 +172,40 @@ export function UploadWizard({
           piiMapping: piiAuto,
         });
         setReplaceConfirmed(false);
+        setMode('replace');
+        setDupCheck(false);
+        setMergeKeys(new Set());
+        setMatchResult(null);
         setStep('mapping');
+      } catch (e) {
+        setError(getErrorMessage(e, ''));
+      }
+    });
+  }
+
+  function buildMapping(): ContactUploadMapping {
+    return {
+      systemFields: { ...(mapping.groupCol != null ? { group: mapping.groupCol } : {}) },
+      piiMapping: mapping.piiMapping,
+      selectedAttrsKeys: Array.from(mapping.selectedAttrs),
+      labelOverrides: mapping.labelOverrides,
+      headerRow,
+      sheetName,
+      mode,
+      ...(needsKeySelection ? { mergeKeys: Array.from(mergeKeys) } : {}),
+      ...(mode === 'merge' ? { unmatchedPolicy } : {}),
+      ...(mode === 'append' && dupCheck ? { duplicatePolicy } : {}),
+    };
+  }
+
+  async function handleMatchPreview() {
+    if (!file) return;
+    setError(null);
+    startTransition(async () => {
+      try {
+        const r = await matchContacts.mutateAsync({ surveyId, file, mapping: buildMapping() });
+        setMatchResult(r);
+        setStep('match');
       } catch (e) {
         setError(getErrorMessage(e, ''));
       }
@@ -181,22 +221,8 @@ export function UploadWizard({
     setError(null);
     startTransition(async () => {
       try {
-        const m: ContactUploadMapping = {
-          systemFields: {
-            ...(mapping.groupCol != null ? { group: mapping.groupCol } : {}),
-          },
-          piiMapping: mapping.piiMapping,
-          selectedAttrsKeys: Array.from(mapping.selectedAttrs),
-          labelOverrides: mapping.labelOverrides,
-          headerRow,
-          sheetName,
-        };
-        const r = await ingestContacts.mutateAsync({ surveyId, file, mapping: m });
-        setResult({
-          uploadedRows: r.uploadedRows,
-          mergedRows: r.mergedRows,
-          errorRows: r.errorRows,
-        });
+        const r = await ingestContacts.mutateAsync({ surveyId, file, mapping: buildMapping() });
+        setResult(r);
         // oRPC 전환으로 revalidatePath가 사라졌으므로, 목록 페이지의 RSC 캐시를
         // 명시적으로 무효화한다. result step에서 "목록 보기" push 시 fresh 로드 보장.
         router.refresh();
@@ -242,8 +268,20 @@ export function UploadWizard({
     <Card>
       <CardHeader>
         <CardTitle className="text-base">
-          엑셀 조사 대상 업로드 —{' '}
-          {step === 'file' ? '1/3 파일' : step === 'mapping' ? '2/3 컬럼 설정' : '3/3 결과'}
+          {(() => {
+            const total = needsMatchStep ? 4 : 3;
+            const stepNo =
+              step === 'file' ? 1 : step === 'mapping' ? 2 : step === 'match' ? 3 : total;
+            const stepLabel =
+              step === 'file'
+                ? '파일'
+                : step === 'mapping'
+                  ? '컬럼 설정'
+                  : step === 'match'
+                    ? '매칭 미리보기'
+                    : '결과';
+            return `엑셀 조사 대상 업로드 — ${stepNo}/${total} ${stepLabel}`;
+          })()}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -671,14 +709,34 @@ export function UploadWizard({
             )}
 
             <Button
-              disabled={isPending || (existingContactsCount > 0 && !replaceConfirmed)}
-              onClick={handleIngest}
+              disabled={
+                isPending ||
+                (mode === 'replace' && existingContactsCount > 0 && !replaceConfirmed) ||
+                (needsKeySelection && mergeKeys.size === 0)
+              }
+              onClick={needsMatchStep ? handleMatchPreview : handleIngest}
             >
               {isPending
-                ? '적재 중…'
-                : `${preview.totalRows.toLocaleString('ko-KR')} 행 적재 시작`}
+                ? '처리 중…'
+                : needsMatchStep
+                  ? '매칭 확인'
+                  : `${preview.totalRows.toLocaleString('ko-KR')} 행 적재 시작`}
             </Button>
           </div>
+        )}
+
+        {step === 'match' && matchResult && (mode === 'merge' || mode === 'append') && (
+          <UploadMatchStep
+            mode={mode}
+            result={matchResult}
+            unmatchedPolicy={unmatchedPolicy}
+            duplicatePolicy={duplicatePolicy}
+            onUnmatchedPolicyChange={setUnmatchedPolicy}
+            onDuplicatePolicyChange={setDuplicatePolicy}
+            onBack={() => setStep('mapping')}
+            onConfirm={handleIngest}
+            isPending={isPending}
+          />
         )}
 
         {step === 'result' && result && (
@@ -688,8 +746,19 @@ export function UploadWizard({
                 신규 적재: <strong>{result.uploadedRows.toLocaleString('ko-KR')}</strong> 행
               </div>
               <div>
-                머지 갱신: <strong>{result.mergedRows.toLocaleString('ko-KR')}</strong> 행
+                갱신: <strong>{result.mergedRows.toLocaleString('ko-KR')}</strong> 행
               </div>
+              {result.skippedRows > 0 && (
+                <div>
+                  제외: <strong>{result.skippedRows.toLocaleString('ko-KR')}</strong> 행
+                  <span className="ml-1 text-xs text-slate-500">
+                    (정책 {result.skippedBreakdown.policy} · 파일 내 중복{' '}
+                    {result.skippedBreakdown.fileDuplicates} · 다중 일치{' '}
+                    {result.skippedBreakdown.multiMatches} · 키 빈 값{' '}
+                    {result.skippedBreakdown.emptyKeys})
+                  </span>
+                </div>
+              )}
               <div>
                 에러:{' '}
                 <strong className={result.errorRows > 0 ? 'text-red-600' : ''}>
@@ -713,6 +782,10 @@ export function UploadWizard({
                   setFile(null);
                   setPreview(null);
                   setResult(null);
+                  setMatchResult(null);
+                  setMergeKeys(new Set());
+                  setMode('replace');
+                  setDupCheck(false);
                 }}
               >
                 다른 파일 업로드

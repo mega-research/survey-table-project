@@ -62,4 +62,5 @@ export {
 export {
   useParseExcelPreview,
   useIngestContacts,
+  useMatchContacts,
 } from './use-contacts';
