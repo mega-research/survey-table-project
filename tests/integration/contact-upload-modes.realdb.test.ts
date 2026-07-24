@@ -12,11 +12,15 @@
  */
 
 import ExcelJS from 'exceljs';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { db } from '@/db';
-import { contactTargets as contactTargetsTable, surveys as surveysTable } from '@/db/schema';
+import {
+  contactPii as contactPiiTable,
+  contactTargets as contactTargetsTable,
+  surveys as surveysTable,
+} from '@/db/schema';
 import type { ContactUploadMapping } from '@/db/schema/schema-types';
 import { ingestContactUpload } from '@/features/contacts/server/services/contact-uploads.service';
 
@@ -167,5 +171,113 @@ describe.skipIf(!isLocalDb)('ingestContactUpload 모드별 실 DB 왕복', () =>
       .from(contactTargetsTable)
       .where(eq(contactTargetsTable.surveyId, surveyId));
     expect(row?.attrs).toMatchObject({ 회사: 'A' });
+  });
+
+  it('append: 기존 명단을 유지한 채 신규 행을 이어서 발번한다', async () => {
+    const surveyId = await createSurvey();
+    const first = await makeXlsx(['idx', '회사'], [['1', 'A'], ['2', 'B']]);
+    await ingestContactUpload({ surveyId, file: first, mapping: mapping() });
+
+    const more = await makeXlsx(['idx', '회사'], [['3', 'C']]);
+    const result = await ingestContactUpload({
+      surveyId,
+      file: more,
+      mapping: mapping({ mode: 'append' }),
+    });
+    expect(result.uploadedRows).toBe(1);
+    expect(result.mergedRows).toBe(0);
+
+    const all = await db
+      .select()
+      .from(contactTargetsTable)
+      .where(eq(contactTargetsTable.surveyId, surveyId))
+      .orderBy(contactTargetsTable.resid);
+    expect(all).toHaveLength(3);
+    expect(all.map((r) => r.resid)).toEqual([1, 2, 3]);
+  });
+
+  it('append: 중복 검사 시 duplicatePolicy=skip 은 기존 키 일치 행을 제외한다', async () => {
+    const surveyId = await createSurvey();
+    const first = await makeXlsx(['idx', '회사'], [['1', 'A']]);
+    await ingestContactUpload({ surveyId, file: first, mapping: mapping() });
+
+    const more = await makeXlsx(['idx', '회사'], [['1', 'A'], ['2', 'B']]);
+    const result = await ingestContactUpload({
+      surveyId,
+      file: more,
+      mapping: mapping({ mode: 'append', mergeKeys: ['idx'], duplicatePolicy: 'skip' }),
+    });
+    expect(result.uploadedRows).toBe(1);
+    expect(result.skippedRows).toBe(1);
+    expect(result.skippedBreakdown.policy).toBe(1);
+
+    const all = await db
+      .select()
+      .from(contactTargetsTable)
+      .where(eq(contactTargetsTable.surveyId, surveyId));
+    expect(all).toHaveLength(2);
+  });
+
+  it('append: duplicatePolicy=insert 는 중복 행도 신규로 추가한다', async () => {
+    const surveyId = await createSurvey();
+    const first = await makeXlsx(['idx', '회사'], [['1', 'A']]);
+    await ingestContactUpload({ surveyId, file: first, mapping: mapping() });
+
+    const more = await makeXlsx(['idx', '회사'], [['1', 'A2']]);
+    const result = await ingestContactUpload({
+      surveyId,
+      file: more,
+      mapping: mapping({ mode: 'append', mergeKeys: ['idx'], duplicatePolicy: 'insert' }),
+    });
+    expect(result.uploadedRows).toBe(1);
+    const all = await db
+      .select()
+      .from(contactTargetsTable)
+      .where(eq(contactTargetsTable.surveyId, surveyId));
+    expect(all).toHaveLength(2);
+  });
+
+  it('merge: 기존 스킴 pii 컬럼은 위저드 piiMapping 미지정이어도 contact_pii 로 라우팅된다', async () => {
+    const surveyId = await createSurvey();
+    // 1차: 이메일을 PII 로 업로드 → 스킴에 pii.이메일 등재
+    const first = await makeXlsx(['idx', '이메일'], [['1', 'a@b.com']]);
+    await ingestContactUpload({
+      surveyId,
+      file: first,
+      mapping: mapping({
+        selectedAttrsKeys: ['idx', '이메일'],
+        piiMapping: { 이메일: 'email' },
+      }),
+    });
+
+    // 2차: merge — piiMapping 없이 이메일 갱신 (스킴 라우팅 강제 검증)
+    const patch = await makeXlsx(['idx', '이메일'], [['1', 'new@b.com']]);
+    await ingestContactUpload({
+      surveyId,
+      file: patch,
+      mapping: mapping({
+        selectedAttrsKeys: ['idx'],
+        mode: 'merge',
+        mergeKeys: ['idx'],
+        unmatchedPolicy: 'skip',
+      }),
+    });
+
+    const [target] = await db
+      .select()
+      .from(contactTargetsTable)
+      .where(eq(contactTargetsTable.surveyId, surveyId));
+    // attrs 에 평문 이메일이 없어야 한다
+    expect(target?.attrs?.['이메일']).toBeUndefined();
+    const piiRows = await db
+      .select()
+      .from(contactPiiTable)
+      .where(
+        and(
+          eq(contactPiiTable.contactTargetId, target?.id ?? ''),
+          eq(contactPiiTable.columnKey, '이메일'),
+        ),
+      );
+    expect(piiRows).toHaveLength(1);
   });
 });
