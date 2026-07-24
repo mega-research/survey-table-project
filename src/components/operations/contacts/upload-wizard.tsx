@@ -29,8 +29,7 @@ import type {
   ContactUploadMode,
 } from '@/db/schema/schema-types';
 import { autoDetectPiiMapping, autoDetectSystemFields } from '@/lib/contacts/auto-detect';
-import { suggestSimilarKeys } from '@/lib/contacts/match-contacts';
-import { getSchemeRouting } from '@/lib/contacts/scheme-helpers';
+import { getSchemeRouting, suggestSimilarKeys } from '@/lib/contacts/match-contacts';
 import {
   MAX_UPLOAD_BYTES,
   MAX_UPLOAD_ROWS,

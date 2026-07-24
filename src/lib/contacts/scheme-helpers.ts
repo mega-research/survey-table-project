@@ -4,8 +4,9 @@ import 'server-only';
 import { db } from '@/db';
 import { surveys } from '@/db/schema';
 import type { ContactColumnDef, ContactColumnScheme, ContactUploadMapping } from '@/db/schema/schema-types';
-import type { PiiFieldType } from '@/lib/crypto/pii-fields';
 import { piiKeyOf } from '@/lib/operations/contacts';
+
+export { getSchemeRouting, type SchemeRouting } from './match-contacts';
 
 /**
  * surveys.contactColumns 에서 PII 로 마킹된 컬럼의 column_key set 을 추출.
@@ -53,31 +54,6 @@ export async function sanitizeAttrsAgainstPii(
     .limit(1);
   const scheme = (row?.contactColumns as ContactColumnScheme | null) ?? null;
   return sanitizeAttrsAgainstPiiScheme(attrs, scheme);
-}
-
-export interface SchemeRouting {
-  /** 스킴상 pii.<key> 로 등록된 키 → PII 타입 */
-  piiByKey: Record<string, PiiFieldType>;
-  /** 스킴상 attrs.<key> 로 등록된 키 */
-  knownAttrKeys: Set<string>;
-}
-
-/**
- * 기존 컬럼 스킴에서 값 라우팅 정보 추출.
- * 병합/추가 업로드에서 기존 컬럼의 attrs/pii 라우팅은 위저드 입력이 아닌
- * 이 결과를 따른다 (PII 평문 유출 차단 — 스펙 그릴링 결정).
- */
-export function getSchemeRouting(scheme: ContactColumnScheme | null): SchemeRouting {
-  const piiByKey: Record<string, PiiFieldType> = {};
-  const knownAttrKeys = new Set<string>();
-  for (const col of scheme?.columns ?? []) {
-    if (col.source.startsWith('pii.') && col.piiType) {
-      piiByKey[col.key] = col.piiType;
-    } else if (col.source.startsWith('attrs.')) {
-      knownAttrKeys.add(col.key);
-    }
-  }
-  return { piiByKey, knownAttrKeys };
 }
 
 const OPERATION_COLUMN_SOURCES = new Set([

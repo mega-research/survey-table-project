@@ -3,6 +3,9 @@
  * 서버(matchPreview·ingest)와 클라(위저드 유사 키 제안)가 공용 — server-only import 금지.
  */
 
+import type { ContactColumnScheme } from '@/db/schema/schema-types';
+import type { PiiFieldType } from '@/lib/crypto/pii-fields';
+
 export interface ExistingContactKeyInfo {
   targetId: string;
   attrs: Record<string, string>;
@@ -132,6 +135,31 @@ export function countEmptyOverwrites(
   return headerKeys
     .filter((key) => (counts.get(key) ?? 0) > 0)
     .map((key) => ({ columnKey: key, count: counts.get(key) ?? 0, isPii: piiKeySet.has(key) }));
+}
+
+export interface SchemeRouting {
+  /** 스킴상 pii.<key> 로 등록된 키 → PII 타입 */
+  piiByKey: Record<string, PiiFieldType>;
+  /** 스킴상 attrs.<key> 로 등록된 키 */
+  knownAttrKeys: Set<string>;
+}
+
+/**
+ * 기존 컬럼 스킴에서 값 라우팅 정보 추출.
+ * 병합/추가 업로드에서 기존 컬럼의 attrs/pii 라우팅은 위저드 입력이 아닌
+ * 이 결과를 따른다 (PII 평문 유출 차단 — 스펙 그릴링 결정).
+ */
+export function getSchemeRouting(scheme: ContactColumnScheme | null): SchemeRouting {
+  const piiByKey: Record<string, PiiFieldType> = {};
+  const knownAttrKeys = new Set<string>();
+  for (const col of scheme?.columns ?? []) {
+    if (col.source.startsWith('pii.') && col.piiType) {
+      piiByKey[col.key] = col.piiType;
+    } else if (col.source.startsWith('attrs.')) {
+      knownAttrKeys.add(col.key);
+    }
+  }
+  return { piiByKey, knownAttrKeys };
 }
 
 /** 공백 제거 + 소문자 비교로 유사 키 후보 탐색 (2단계 키 선택 경고용) */
