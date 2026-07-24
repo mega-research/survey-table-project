@@ -298,6 +298,7 @@ export interface ContactDetailRow {
   inviteToken: string;
   inviteCode: string;
   respondedAt: Date | null;
+  unsubscribedAt: Date | null;
   responseId: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -336,6 +337,7 @@ export async function getContactDetailById(
       inviteToken: contactTargets.inviteToken,
       inviteCode: contactTargets.inviteCode,
       respondedAt: contactTargets.respondedAt,
+      unsubscribedAt: contactTargets.unsubscribedAt,
       responseId: contactTargets.responseId,
       createdAt: contactTargets.createdAt,
       updatedAt: contactTargets.updatedAt,

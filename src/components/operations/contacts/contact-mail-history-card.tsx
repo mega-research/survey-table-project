@@ -1,9 +1,17 @@
+import type { ReactNode } from 'react';
+
 import { RecipientStatusBadge } from '@/components/operations/mail-campaign/recipient-status-badge';
 import { LocalDateTime } from '@/components/ui/local-date-time';
 import type { MailHistoryRow } from '@/lib/operations/contacts.server';
 
 /** 조사 대상 메일 발송 이력 — 기본 접힘 collapsible. */
-export function ContactMailHistoryCard({ rows }: { rows: MailHistoryRow[] }) {
+export function ContactMailHistoryCard({
+  rows,
+  action,
+}: {
+  rows: MailHistoryRow[];
+  action?: ReactNode;
+}) {
   const latest = rows[0];
   return (
     <details className="rounded-lg border bg-white">
@@ -11,7 +19,10 @@ export function ContactMailHistoryCard({ rows }: { rows: MailHistoryRow[] }) {
         <span className="font-medium text-slate-700">
           이메일 발송 현황 ({rows.length}건)
         </span>
-        {latest ? <RecipientStatusBadge status={latest.status} /> : null}
+        <span className="flex items-center gap-2">
+          {action}
+          {latest ? <RecipientStatusBadge status={latest.status} /> : null}
+        </span>
       </summary>
       <div className="border-t px-5 py-3">
         {rows.length === 0 ? (
@@ -25,7 +36,7 @@ export function ContactMailHistoryCard({ rows }: { rows: MailHistoryRow[] }) {
               >
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-slate-700">
-                    {r.runNumber}회차 · {r.campaignTitle}
+                    {r.kind === 'single' ? '단건' : `${r.runNumber}회차`} · {r.campaignTitle}
                   </span>
                   <RecipientStatusBadge status={r.status} />
                 </div>
