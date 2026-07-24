@@ -237,6 +237,29 @@ describe.skipIf(!isLocalDb)('ingestContactUpload 모드별 실 DB 왕복', () =>
     expect(all).toHaveLength(2);
   });
 
+  it('append: 파일 내 중복이라도 기존 명단과 일치하면 duplicatePolicy=skip 이 적용된다', async () => {
+    const surveyId = await createSurvey();
+    const first = await makeXlsx(['idx', '회사'], [['1', 'A']]);
+    await ingestContactUpload({ surveyId, file: first, mapping: mapping() });
+
+    // 파일 내 'idx=1' 중복 2행 + 신규 'idx=2'
+    const more = await makeXlsx(['idx', '회사'], [['1', 'B'], ['1', 'C'], ['2', 'D']]);
+    const result = await ingestContactUpload({
+      surveyId,
+      file: more,
+      mapping: mapping({ mode: 'append', mergeKeys: ['idx'], duplicatePolicy: 'skip' }),
+    });
+    expect(result.uploadedRows).toBe(1);
+    expect(result.skippedRows).toBe(2);
+    expect(result.skippedBreakdown.policy).toBe(2);
+
+    const all = await db
+      .select()
+      .from(contactTargetsTable)
+      .where(eq(contactTargetsTable.surveyId, surveyId));
+    expect(all).toHaveLength(2); // 기존 1 + 신규 1
+  });
+
   it('merge: 기존 스킴 pii 컬럼은 위저드 piiMapping 미지정이어도 contact_pii 로 라우팅된다', async () => {
     const surveyId = await createSurvey();
     // 1차: 이메일을 PII 로 업로드 → 스킴에 pii.이메일 등재

@@ -152,6 +152,13 @@ export function UploadMatchStep({
         </div>
       )}
 
+      {!isMerge && result.fileDuplicates + result.emptyKeys > 0 && (
+        <div className="text-xs text-slate-500">
+          파일 내 키 중복·키 빈 값 행은 서로 간 중복 검사 없이 추가되며, 기존 명단과 일치하는 행은 위
+          선택을 따릅니다.
+        </div>
+      )}
+
       <SampleList title={isMerge ? '불일치 행' : '신규 행'} samples={result.unmatchedSamples} total={result.unmatched} />
       <SampleList title="파일 내 키 중복 행" samples={result.fileDuplicateSamples} total={result.fileDuplicates} />
       <SampleList title="다중 일치 행" samples={result.multiMatchSamples} total={result.multiMatches} />

@@ -12,6 +12,7 @@ import type {
 } from '@/db/schema/schema-types';
 import { parseExcelRows, previewExcel } from '@/lib/contacts/excel-parser';
 import {
+  buildKeyTuple,
   classifyRows,
   countEmptyOverwrites,
   type ExistingContactKeyInfo,
@@ -300,17 +301,25 @@ export async function ingestContactUpload(
       }
     } else {
       // replace / append 공통: 전 행 INSERT. append+중복검사는 중복 행만 policy 적용.
-      let duplicateRowIndexes = new Set<number>();
+      const duplicateRowIndexes = new Set<number>();
       if (mode === 'append' && (mapping.mergeKeys?.length ?? 0) > 0) {
         const mergeKeys = mapping.mergeKeys ?? [];
         validateMergeKeys(mergeKeys, headerKeys, piiKeySet);
         const { existing } = await loadExistingContactsTx(tx, surveyId);
-        const classified = classifyRows(allRows, mergeKeys, existing);
-        // append 의 중복 = 기존 명단과 일치한 행 (multiMatch 포함). 파일 내 중복은 검사하지 않음.
-        duplicateRowIndexes = new Set([
-          ...classified.matched.map((m) => m.rowIndex),
-          ...classified.multiMatches,
-        ]);
+        // append 의 중복 판정은 "기존 명단과의 일치" 만 기준으로 한다 (파일 내 중복 행끼리의
+        // 판정은 classifyRows 의 fileDuplicates 우선순위를 따르면 안 됨 — 파일 내 같은 키가
+        // 여러 행이어도 기존 명단에 있으면 각 행이 duplicatePolicy 를 따라야 한다).
+        const existingTuples = new Set(
+          existing
+            .map((e) => buildKeyTuple(e.attrs, mergeKeys))
+            .filter((t): t is string => t != null),
+        );
+        allRows.forEach((row, rowIndex) => {
+          const tuple = buildKeyTuple(row, mergeKeys);
+          if (tuple != null && existingTuples.has(tuple)) {
+            duplicateRowIndexes.add(rowIndex);
+          }
+        });
       }
       const duplicatePolicy = mapping.duplicatePolicy ?? 'skip';
 
