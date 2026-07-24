@@ -281,7 +281,8 @@ export async function listCampaignRecipients(args: {
   scope: OperationsDataScope;
   page?: number;
   pageSize?: number;
-  status?: MailRecipientStatus | 'all';
+  /** 필터할 status 목록. 빈 배열 또는 미지정 = 전체. */
+  statuses?: MailRecipientStatus[];
   q?: string;
 }): Promise<ListCampaignRecipientsResult> {
   const pageSize = args.pageSize ?? DEFAULT_PAGE_SIZE;
@@ -293,8 +294,8 @@ export async function listCampaignRecipients(args: {
     isNull(mailRecipients.archivedAt),
   ];
 
-  if (args.status && args.status !== 'all') {
-    whereParts.push(eq(mailRecipients.status, args.status));
+  if (args.statuses && args.statuses.length > 0) {
+    whereParts.push(inArray(mailRecipients.status, args.statuses));
   }
   const q = (args.q ?? '').trim();
   if (q) {

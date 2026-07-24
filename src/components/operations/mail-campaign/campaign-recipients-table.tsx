@@ -14,31 +14,34 @@ interface Props {
   total: number;
   page: number;
   pageSize: number;
-  currentStatus: MailRecipientStatus | 'all';
+  /** 활성 status 필터 목록. 빈 배열 = 전체. */
+  currentStatuses: MailRecipientStatus[];
   currentQuery: string;
 }
 
+// 칩 클릭 = 해당 status 토글(다중 선택). 발송 현황 카운터 클릭도 같은 ?status= 조합으로 진입한다.
 const STATUS_FILTER_CHIPS: Array<{
-  value: MailRecipientStatus | 'all';
+  value: MailRecipientStatus;
   label: string;
 }> = [
-  { value: 'all', label: '전체' },
   { value: 'queued', label: '대기' },
   { value: 'sent', label: '발송됨' },
   { value: 'delivered', label: '전달 완료' },
   { value: 'opened', label: '열람' },
   { value: 'bounced', label: '반송' },
   { value: 'failed', label: '실패' },
+  { value: 'complained', label: '신고' },
   { value: 'skipped_unsubscribed', label: '수신거부' },
 ];
 
 function buildHref(
   surveyId: string,
   campaignId: string,
-  overrides: Partial<{ status: string; q: string; recipPage: number }>,
+  overrides: Partial<{ statuses: MailRecipientStatus[]; q: string; recipPage: number }>,
 ): string {
   const params = new URLSearchParams();
-  if (overrides.status && overrides.status !== 'all') params.set('status', overrides.status);
+  if (overrides.statuses && overrides.statuses.length > 0)
+    params.set('status', overrides.statuses.join(','));
   if (overrides.q && overrides.q.trim()) params.set('q', overrides.q.trim());
   if (overrides.recipPage && overrides.recipPage > 1)
     params.set('recipPage', String(overrides.recipPage));
@@ -55,10 +58,15 @@ export function CampaignRecipientsTable({
   total,
   page,
   pageSize,
-  currentStatus,
+  currentStatuses,
   currentQuery,
 }: Props) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+  const toggledStatuses = (status: MailRecipientStatus): MailRecipientStatus[] =>
+    currentStatuses.includes(status)
+      ? currentStatuses.filter((s) => s !== status)
+      : [...currentStatuses, status];
 
   return (
     <section className="space-y-3">
@@ -75,8 +83,8 @@ export function CampaignRecipientsTable({
             placeholder="이메일 검색"
             className="rounded border border-slate-200 px-3 py-1.5 text-sm"
           />
-          {currentStatus !== 'all' ? (
-            <input type="hidden" name="status" value={currentStatus} />
+          {currentStatuses.length > 0 ? (
+            <input type="hidden" name="status" value={currentStatuses.join(',')} />
           ) : null}
           <button
             type="submit"
@@ -88,12 +96,25 @@ export function CampaignRecipientsTable({
       </div>
 
       <div className="flex flex-wrap gap-1.5">
+        <Link
+          href={buildHref(surveyId, campaignId, { statuses: [], q: currentQuery })}
+          className={`rounded-full px-3 py-1 text-xs ${
+            currentStatuses.length === 0
+              ? 'bg-blue-600 text-white'
+              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+          }`}
+        >
+          전체
+        </Link>
         {STATUS_FILTER_CHIPS.map((chip) => (
           <Link
             key={chip.value}
-            href={buildHref(surveyId, campaignId, { status: chip.value, q: currentQuery })}
+            href={buildHref(surveyId, campaignId, {
+              statuses: toggledStatuses(chip.value),
+              q: currentQuery,
+            })}
             className={`rounded-full px-3 py-1 text-xs ${
-              currentStatus === chip.value
+              currentStatuses.includes(chip.value)
                 ? 'bg-blue-600 text-white'
                 : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
             }`}
@@ -178,7 +199,7 @@ export function CampaignRecipientsTable({
             href={
               page > 1
                 ? buildHref(surveyId, campaignId, {
-                    status: currentStatus,
+                    statuses: currentStatuses,
                     q: currentQuery,
                     recipPage: page - 1,
                   })
@@ -191,7 +212,7 @@ export function CampaignRecipientsTable({
             href={
               page < totalPages
                 ? buildHref(surveyId, campaignId, {
-                    status: currentStatus,
+                    statuses: currentStatuses,
                     q: currentQuery,
                     recipPage: page + 1,
                   })

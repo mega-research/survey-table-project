@@ -39,11 +39,16 @@ function parsePage(value: string | undefined): number {
   return Number.isFinite(n) && n > 0 ? n : 1;
 }
 
-function parseStatus(value: string | undefined): MailRecipientStatus | 'all' {
-  if (!value || value === 'all') return 'all';
-  return (mailRecipientStatusValues as readonly string[]).includes(value)
-    ? (value as MailRecipientStatus)
-    : 'all';
+/** ?status=bounced,failed 처럼 쉼표 구분 다중 status 파싱. 빈 배열 = 전체. */
+function parseStatuses(value: string | undefined): MailRecipientStatus[] {
+  if (!value || value === 'all') return [];
+  const valid = value
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s): s is MailRecipientStatus =>
+      (mailRecipientStatusValues as readonly string[]).includes(s),
+    );
+  return [...new Set(valid)];
 }
 
 export default async function CampaignDetailPage({ params, searchParams }: Props) {
@@ -51,7 +56,7 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
   const sp = await searchParams;
   const scope = await getOperationsDataScope(surveyId);
   const recipPage = parsePage(sp.recipPage);
-  const status = parseStatus(sp.status);
+  const statuses = parseStatuses(sp.status);
   const q = (sp.q ?? '').trim();
 
   const campaign = await getCampaignDetail(surveyId, cid, scope);
@@ -65,7 +70,7 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
     scope,
     page: recipPage,
     pageSize: PAGE_SIZE,
-    status,
+    statuses,
     q,
   });
 
@@ -74,6 +79,12 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
   const inflight = campaign.queuedCount + campaign.sentCount;
   const statusBadge = STATUS_LABEL[campaign.status];
   const canCancel = campaign.status === 'queued' || campaign.status === 'draft';
+
+  // 카운터 클릭 → 해당 status 조합으로 수신자 목록 필터. 카운터 숫자는 캠페인 전체 기준이라 q는 미유지.
+  const recipientsHref = (statusList: MailRecipientStatus[]) => {
+    const qs = statusList.length > 0 ? `?status=${statusList.join(',')}` : '';
+    return `/admin/surveys/${surveyId}/operations/mail/campaigns/${cid}${qs}`;
+  };
 
   // "이 단체 메일 미응답자 재발송" 동선 — 같은 다중 절 필터 재현 + 미응답 강제 + 자동 전체 선택.
   // legacy 스냅샷(clauses 없음)은 필터 없이 미응답+전체선택만 적용(best-effort).
@@ -152,21 +163,46 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
         </dl>
       </Card>
 
-      {/* 카운터 카드 */}
+      {/* 카운터 카드 — 라벨은 수신자 목록 status badge 어휘와 정렬, 클릭 시 해당 status 조합으로 목록 필터 */}
       <Card className="p-6">
         <h2 className="mb-4 text-base font-semibold text-slate-900">발송 현황</h2>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
-          <Counter label="발송대상수" value={campaign.recipientCount} />
-          <Counter label="성공" value={success} tone="emerald" />
-          <Counter label="읽음" value={campaign.openedCount} />
-          <Counter label="미오픈" value={campaign.deliveredCount} />
-          <Counter label="전송오류" value={errors} tone="rose" />
-          <Counter label="발송중" value={inflight} tone="blue" />
           <Counter
-            label="수신거부"
-            value={campaign.currentUnsubscribedCount}
-            hint="단체 메일 발송 대상 중 현재 수신거부 상태인 인원 (발송 후 해지 포함)"
+            label="발송대상수"
+            value={campaign.recipientCount}
+            href={recipientsHref([])}
           />
+          <Counter
+            label="성공"
+            value={success}
+            tone="emerald"
+            href={recipientsHref(['delivered', 'opened'])}
+          />
+          <Counter
+            label="열람"
+            value={campaign.openedCount}
+            href={recipientsHref(['opened'])}
+          />
+          <Counter
+            label="미열람"
+            value={campaign.deliveredCount}
+            href={recipientsHref(['delivered'])}
+          />
+          <Counter
+            label="미전달"
+            value={errors}
+            tone="rose"
+            href={recipientsHref(['bounced', 'failed', 'complained'])}
+          />
+          <Counter
+            label="진행중"
+            value={inflight}
+            tone="blue"
+            hint="메일을 보내는 중이거나 도착 확인을 기다리고 있습니다. (대기 + 발송됨)"
+            href={recipientsHref(['queued', 'sent'])}
+          />
+          {/* 수신거부 카운터는 status 집계가 아니라 현재 수신거부 인원(발송 후 해지 포함)이라 클릭 필터 미제공 */}
+          <Counter label="수신거부" value={campaign.currentUnsubscribedCount} />
         </div>
       </Card>
 
@@ -177,7 +213,7 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
         total={recipients.total}
         page={recipients.page}
         pageSize={PAGE_SIZE}
-        currentStatus={status}
+        currentStatuses={statuses}
         currentQuery={q}
       />
     </main>
@@ -198,11 +234,13 @@ function Counter({
   value,
   tone,
   hint,
+  href,
 }: {
   label: string;
   value: number;
   tone?: 'emerald' | 'rose' | 'blue';
   hint?: string;
+  href?: string;
 }) {
   const toneClass =
     tone === 'emerald'
@@ -212,12 +250,32 @@ function Counter({
         : tone === 'blue'
           ? 'text-blue-600'
           : 'text-slate-900';
-  return (
-    <div className="rounded-lg border border-slate-200 bg-white p-3" title={hint}>
+  // 브라우저 기본 title 은 표시까지 ~1초 지연이 있어 group-hover 즉시 표시 CSS tooltip 사용
+  // (Radix tooltip 은 RSC 페이지에서 hydration mismatch 로 카드가 사라지는 문제가 있어 미사용)
+  const inner = (
+    <>
       <div className="text-xs text-slate-500">{label}</div>
       <div className={`mt-1 text-xl font-semibold tabular-nums ${toneClass}`}>
         {value.toLocaleString('ko-KR')}
       </div>
-    </div>
+      {hint ? (
+        <span className="bg-popover text-popover-foreground pointer-events-none invisible absolute top-full left-1/2 z-10 mt-1.5 w-max max-w-56 -translate-x-1/2 rounded-md border px-3 py-1.5 text-xs font-normal opacity-0 shadow-md transition-opacity duration-100 group-hover:visible group-hover:opacity-100">
+          {hint}
+        </span>
+      ) : null}
+    </>
+  );
+  if (href) {
+    return (
+      <Link
+        href={href}
+        className="group relative block rounded-lg border border-slate-200 bg-white p-3 transition-colors hover:border-slate-300 hover:bg-slate-50"
+      >
+        {inner}
+      </Link>
+    );
+  }
+  return (
+    <div className="group relative rounded-lg border border-slate-200 bg-white p-3">{inner}</div>
   );
 }

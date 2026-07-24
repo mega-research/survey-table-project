@@ -60,10 +60,10 @@ export function CampaignsList({ surveyId, rows, total, page, pageSize }: Props) 
               <th className="px-3 py-3">제목</th>
               <th className="px-3 py-3 text-right">발송대상수</th>
               <th className="px-3 py-3 text-right">성공</th>
-              <th className="px-3 py-3 text-right">읽음</th>
-              <th className="px-3 py-3 text-right">미오픈</th>
-              <th className="px-3 py-3 text-right">전송오류</th>
-              <th className="px-3 py-3 text-right">발송중</th>
+              <th className="px-3 py-3 text-right">열람</th>
+              <th className="px-3 py-3 text-right">미열람</th>
+              <th className="px-3 py-3 text-right">미전달</th>
+              <th className="px-3 py-3 text-right">진행중</th>
               <th
                 className="px-3 py-3 text-right"
                 title="발송 등록 시점에 자동 제외된 대상 수 (수신거부 + 이메일 누락 + 삭제 등)"
