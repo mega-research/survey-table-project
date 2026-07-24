@@ -4,6 +4,7 @@ import type { FirstContactSample } from '@/lib/operations/contact-sample.server'
 
 vi.mock('@/lib/operations/contact-sample.server', () => ({
   getFirstContactSample: vi.fn(),
+  getContactSampleById: vi.fn(),
 }));
 vi.mock('@/lib/operations/data-scope.server', () => ({
   loadOperationsDataScope: vi.fn(),
@@ -22,7 +23,7 @@ vi.mock('@/lib/mail/image-link-band-slices', () => ({
 
 import { ensureImageLinkBandSlices } from '@/lib/mail/image-link-band-slices';
 import { sendTestMail } from '@/lib/mail/send';
-import { getFirstContactSample } from '@/lib/operations/contact-sample.server';
+import { getContactSampleById, getFirstContactSample } from '@/lib/operations/contact-sample.server';
 import { loadOperationsDataScope } from '@/lib/operations/data-scope.server';
 import { MailWrapper } from '@/lib/mail/template-wrapper';
 
@@ -34,6 +35,9 @@ const sampleData: FirstContactSample = {
   email: 'h@example.com',
   resid: 1,
 };
+
+const SURVEY_ID = 'sv-1';
+const CONTACT_ID = '22222222-2222-4222-8222-222222222222';
 
 describe('getMailPreviewSample', () => {
   beforeEach(() => vi.clearAllMocks());
@@ -69,6 +73,22 @@ describe('getMailPreviewSample', () => {
     await expect(getMailPreviewSample({ surveyId: 'sv-1' })).rejects.toThrow(
       'NEXT_PUBLIC_APP_URL 환경변수가 설정되지 않았습니다.',
     );
+  });
+
+  it('contactTargetId 지정 시 getContactSampleById 로 해당 컨택 샘플을 쓴다', async () => {
+    vi.mocked(loadOperationsDataScope).mockResolvedValue('real');
+    vi.mocked(getContactSampleById).mockResolvedValue({
+      attrs: { IDX: '5' },
+      inviteCode: 'DktK3edZjq',
+      email: 'play@funflow.co.kr',
+      resid: 4,
+    });
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://survey.example.com');
+    const res = await getMailPreviewSample({ surveyId: SURVEY_ID, contactTargetId: CONTACT_ID });
+    expect(getContactSampleById).toHaveBeenCalledWith(SURVEY_ID, CONTACT_ID, expect.anything());
+    expect(getFirstContactSample).not.toHaveBeenCalled();
+    expect(res?.resid).toBe(4);
+    expect(res?.inviteUrl).toContain('/i/DktK3edZjq');
   });
 });
 

@@ -10,7 +10,7 @@ import { renderForTestSend } from '@/lib/mail/render-for-send';
 import { sendTestMail } from '@/lib/mail/send';
 import { MailWrapper } from '@/lib/mail/template-wrapper';
 import { buildInviteUrl } from '@/lib/survey-url';
-import { getFirstContactSample } from '@/lib/operations/contact-sample.server';
+import { getContactSampleById, getFirstContactSample } from '@/lib/operations/contact-sample.server';
 import { loadOperationsDataScope } from '@/lib/operations/data-scope.server';
 
 import type {
@@ -30,7 +30,9 @@ export async function getMailPreviewSample(
   input: GetMailPreviewSampleInput,
 ): Promise<GetMailPreviewSampleOutput> {
   const scope = await loadOperationsDataScope(input.surveyId);
-  const sample = await getFirstContactSample(input.surveyId, scope);
+  const sample = input.contactTargetId
+    ? await getContactSampleById(input.surveyId, input.contactTargetId, scope)
+    : await getFirstContactSample(input.surveyId, scope);
   if (!sample) return null;
 
   // inviteUrl 은 절대 URL 이어야 한다 — NEXT_PUBLIC_APP_URL 가 없으면 relative path 가 되어
