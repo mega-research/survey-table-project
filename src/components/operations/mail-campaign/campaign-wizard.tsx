@@ -396,7 +396,15 @@ export function CampaignWizard({
                 <th className="px-3 py-2">
                   <SortHeader label="응답" sortKey="responded" activeSort={sort} dir={dir} onSort={changeSort} />
                 </th>
-                <th className="px-3 py-2">수신 상황</th>
+                <th className="px-3 py-2">
+                  <SortHeader
+                    label="수신 상황"
+                    sortKey="mailStatus"
+                    activeSort={sort}
+                    dir={dir}
+                    onSort={changeSort}
+                  />
+                </th>
                 <th className="px-3 py-2">
                   <SortHeader
                     label="최근 결과코드"

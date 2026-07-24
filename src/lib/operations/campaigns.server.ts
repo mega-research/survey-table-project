@@ -402,11 +402,16 @@ export interface CampaignCandidatesResult {
   exclusions: CampaignExclusionCounts;
 }
 
-/** 미리보기 정렬 — 번호 / 응답여부 / 최근 결과코드. 이메일·그룹은 PII·비용 사유로 제외. */
-export type CampaignSortKey = 'resid' | 'responded' | 'resultCode';
+/** 미리보기 정렬 — 번호 / 응답여부 / 수신 상황 / 최근 결과코드. 이메일·그룹은 PII·비용 사유로 제외. */
+export type CampaignSortKey = 'resid' | 'responded' | 'mailStatus' | 'resultCode';
 export type CampaignSortDir = 'asc' | 'desc';
 
-export const CAMPAIGN_SORT_KEYS: readonly CampaignSortKey[] = ['resid', 'responded', 'resultCode'];
+export const CAMPAIGN_SORT_KEYS: readonly CampaignSortKey[] = [
+  'resid',
+  'responded',
+  'mailStatus',
+  'resultCode',
+];
 
 /**
  * 컨택별 최근 수신 status 스칼라 서브쿼리 — 미리보기 "수신 상황" 컬럼용.
@@ -424,6 +429,25 @@ function latestMailStatusExpr(scope: OperationsDataScope): SQL<MailRecipientStat
     ORDER BY mr.created_at DESC
     LIMIT 1
   )`;
+}
+
+/**
+ * 수신 상황 정렬 랭크 — 발송 파이프라인 진행 순으로 숫자화.
+ * asc = 대기→전송중→발송됨→전달→열람→수신거부스킵→반송→신고→실패,
+ * desc 는 역순(오류 계열 먼저). 발송 이력 없음(null)은 방향 무관 항상 뒤(NULLS LAST).
+ */
+function mailStatusRankExpr(scope: OperationsDataScope): SQL<number | null> {
+  return sql<number | null>`(CASE ${latestMailStatusExpr(scope)}
+    WHEN 'queued' THEN 1
+    WHEN 'sending' THEN 2
+    WHEN 'sent' THEN 3
+    WHEN 'delivered' THEN 4
+    WHEN 'opened' THEN 5
+    WHEN 'skipped_unsubscribed' THEN 6
+    WHEN 'bounced' THEN 7
+    WHEN 'complained' THEN 8
+    WHEN 'failed' THEN 9
+  END)`;
 }
 
 // "이 컨택에 email PII 가 등록돼 있나" 정확검사. NULL/'' 무관 — contact_pii row 존재 자체가 기준.
@@ -636,15 +660,24 @@ const EMAIL_DASH = '—';
  *
  * 응답여부는 미응답(respondedAt NULL) ↔ 응답완료 그룹 토글이 목적이므로 방향에 따라
  * NULL 위치를 바꾼다 — asc=미응답 먼저, desc=응답완료(최신) 먼저.
- * resid·결과코드는 NULL 을 항상 뒤로(NULLS LAST).
+ * resid·수신 상황·결과코드는 NULL(이력 없음) 을 항상 뒤로(NULLS LAST).
  */
-function buildCandidateOrderBy(sort: CampaignSortKey, dir: CampaignSortDir): SQL {
+function buildCandidateOrderBy(
+  sort: CampaignSortKey,
+  dir: CampaignSortDir,
+  scope: OperationsDataScope,
+): SQL {
   if (sort === 'responded') {
     return dir === 'asc'
       ? sql`${contactTargets.respondedAt} ASC NULLS FIRST`
       : sql`${contactTargets.respondedAt} DESC NULLS LAST`;
   }
-  const col = sort === 'resultCode' ? latestResultCodeExpr : sql`${contactTargets.resid}`;
+  const col =
+    sort === 'resultCode'
+      ? latestResultCodeExpr
+      : sort === 'mailStatus'
+        ? mailStatusRankExpr(scope)
+        : sql`${contactTargets.resid}`;
   return dir === 'asc' ? sql`${col} ASC NULLS LAST` : sql`${col} DESC NULLS LAST`;
 }
 
@@ -703,7 +736,10 @@ export async function previewCampaignCandidates(args: {
     })
     .from(contactTargets)
     .where(where)
-    .orderBy(buildCandidateOrderBy(args.sort ?? 'resid', args.dir ?? 'asc'), asc(contactTargets.id))
+    .orderBy(
+      buildCandidateOrderBy(args.sort ?? 'resid', args.dir ?? 'asc', args.scope),
+      asc(contactTargets.id),
+    )
     .limit(pageSize)
     .offset(offset);
 
