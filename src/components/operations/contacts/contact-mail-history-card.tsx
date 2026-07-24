@@ -36,7 +36,10 @@ export function ContactMailHistoryCard({
               >
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-slate-700">
-                    {r.kind === 'single' ? '단건' : `${r.runNumber}회차`} · {r.campaignTitle}
+                    {/* 단건 캠페인 제목은 이미 "단건: " 접두어를 포함 — 회차 라벨 없이 제목만 표시 */}
+                    {r.kind === 'single'
+                      ? r.campaignTitle
+                      : `${r.runNumber}회차 · ${r.campaignTitle}`}
                   </span>
                   <RecipientStatusBadge status={r.status} />
                 </div>
