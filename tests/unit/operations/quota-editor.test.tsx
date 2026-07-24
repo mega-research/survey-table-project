@@ -38,6 +38,18 @@ const ageQuestion: Question = {
   inputType: 'number',
 };
 
+const platformQuestion: Question = {
+  id: 'q-platform',
+  type: 'checkbox',
+  title: '플랫폼 유형',
+  required: false,
+  order: 3,
+  options: [
+    { id: 'opt-mobile', label: '모바일', value: 'mobile' },
+    { id: 'opt-pc', label: 'PC', value: 'pc' },
+  ],
+};
+
 const config: QuotaConfig = {
   enabled: false,
   dimensions: [
@@ -93,5 +105,47 @@ describe('QuotaEditor', () => {
     expect(within(optionList).getByText('남성')).toBeInTheDocument();
     expect(within(optionList).getByText('여성')).toBeInTheDocument();
     expect(screen.queryByText('보기가 자동으로 등록됩니다 (읽기 전용).')).not.toBeInTheDocument();
+  });
+
+  it('checkbox 문항도 조건 후보로 허용한다 — 후보 없음 안내가 뜨지 않는다', () => {
+    render(
+      <QuotaEditor
+        surveyId="survey-1"
+        initialConfig={null}
+        questions={[platformQuestion]}
+      />,
+    );
+
+    expect(screen.queryByText(/추가할 수 있는 문항이 없습니다/)).not.toBeInTheDocument();
+  });
+
+  it('checkbox 조건에는 복수 선택 분류 안내를 표시한다', () => {
+    const checkboxConfig: QuotaConfig = {
+      enabled: false,
+      dimensions: [
+        {
+          id: 'dim-platform',
+          questionId: platformQuestion.id,
+          label: platformQuestion.title,
+          kind: 'choice',
+          categories: [
+            { id: 'cat-mobile', label: '모바일', values: ['mobile'] },
+            { id: 'cat-pc', label: 'PC', values: ['pc'] },
+          ],
+        },
+      ],
+      cells: [],
+      closedMessage: null,
+    };
+
+    render(
+      <QuotaEditor
+        surveyId="survey-1"
+        initialConfig={checkboxConfig}
+        questions={[platformQuestion]}
+      />,
+    );
+
+    expect(screen.getByText('복수 선택 → 먼저 매칭되는 카테고리 1개로 분류')).toBeInTheDocument();
   });
 });
