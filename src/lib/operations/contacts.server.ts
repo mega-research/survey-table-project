@@ -16,6 +16,7 @@ import {
 import type {
   ContactColumnScheme,
   ResponseEditChange,
+  ContactUploadMode,
 } from '@/db/schema/schema-types';
 import type { MailRecipientStatus } from '@/db/schema/mail';
 import { mergeChangeLabels } from '@/lib/operations/response-edit-diff';
@@ -210,6 +211,8 @@ export interface ContactUploadRow {
   uploadedRows: number;
   mergedRows: number;
   errorRows: number;
+  mode: ContactUploadMode;
+  skippedRows: number;
   createdAt: Date;
 }
 
@@ -221,6 +224,8 @@ export async function listContactUploads(surveyId: string): Promise<ContactUploa
       uploadedRows: contactUploads.uploadedRows,
       mergedRows: contactUploads.mergedRows,
       errorRows: contactUploads.errorRows,
+      mode: contactUploads.mode,
+      skippedRows: contactUploads.skippedRows,
       createdAt: contactUploads.createdAt,
     })
     .from(contactUploads)
