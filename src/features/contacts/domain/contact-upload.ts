@@ -41,3 +41,35 @@ export const IngestContactUploadResultSchema = z.object({
   errorRows: z.number(),
 });
 export type IngestContactUploadResult = z.infer<typeof IngestContactUploadResultSchema>;
+
+export const MatchContactUploadInput = z.object({
+  surveyId: z.string(),
+  file: z.instanceof(File),
+  mapping: ContactUploadMappingSchema,
+});
+export type MatchContactUploadInput = z.infer<typeof MatchContactUploadInput>;
+
+const MatchSampleSchema = z.object({
+  /** 엑셀 실제 행 번호 (1-based, 헤더 행 이후) */
+  excelRow: z.number(),
+  /** 키 헤더명 → 셀 값 */
+  keyValues: z.record(z.string(), z.string()),
+});
+
+export const MatchContactUploadResultSchema = z.object({
+  matched: z.number(),
+  unmatched: z.number(),
+  fileDuplicates: z.number(),
+  multiMatches: z.number(),
+  emptyKeys: z.number(),
+  /** 그룹별 최대 50건 절단 (카운트는 전체 기준) */
+  unmatchedSamples: z.array(MatchSampleSchema),
+  fileDuplicateSamples: z.array(MatchSampleSchema),
+  multiMatchSamples: z.array(MatchSampleSchema),
+  emptyKeySamples: z.array(MatchSampleSchema),
+  /** 빈 값 덮어쓰기 경고 — 컬럼별 집계 */
+  emptyOverwrites: z.array(
+    z.object({ columnKey: z.string(), count: z.number(), isPii: z.boolean() }),
+  ),
+});
+export type MatchContactUploadResult = z.infer<typeof MatchContactUploadResultSchema>;

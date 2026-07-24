@@ -7,6 +7,8 @@ import { GetExistingContactsCountInput } from '../../domain/contact-column';
 import {
   IngestContactUploadInput,
   IngestContactUploadResultSchema,
+  MatchContactUploadInput,
+  MatchContactUploadResultSchema,
   ParseExcelPreviewInput,
   ParseExcelPreviewResultSchema,
 } from '../../domain/contact-upload';
@@ -23,6 +25,11 @@ const ingest = authed
   .output(IngestContactUploadResultSchema)
   .handler(({ input }) => uploadsSvc.ingestContactUpload(input));
 
+const matchPreview = authed
+  .input(MatchContactUploadInput)
+  .output(MatchContactUploadResultSchema)
+  .handler(({ input }) => uploadsSvc.matchContactUpload(input));
+
 const existingCount = authed
   .input(GetExistingContactsCountInput)
   .output(z.number())
@@ -33,5 +40,6 @@ const existingCount = authed
 export const uploads = {
   parsePreview,
   ingest,
+  matchPreview,
   existingCount,
 };

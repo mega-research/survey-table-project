@@ -7,6 +7,7 @@ import type { ORPCContext } from '@/server/context';
 vi.mock('../services/contact-uploads.service', () => ({
   parseExcelPreview: vi.fn(),
   ingestContactUpload: vi.fn(),
+  matchContactUpload: vi.fn(),
 }));
 
 vi.mock('../services/contact-columns.service', () => ({
@@ -72,6 +73,29 @@ describe('contacts.uploads procedures', () => {
     expect(arg?.file).toBeInstanceOf(File);
     expect(arg?.surveyId).toBe('sv-1');
     expect(res.uploadId).toBe('up-1');
+  });
+
+  it('matchPreview는 File + mapping을 service.matchContactUpload에 위임한다', async () => {
+    vi.mocked(uploadsSvc.matchContactUpload).mockResolvedValue({
+      matched: 1,
+      unmatched: 0,
+      fileDuplicates: 0,
+      multiMatches: 0,
+      emptyKeys: 0,
+      unmatchedSamples: [],
+      fileDuplicateSamples: [],
+      multiMatchSamples: [],
+      emptyKeySamples: [],
+      emptyOverwrites: [],
+    });
+    const client = createRouterClient({ uploads }, { context: authedContext() });
+    const res = await client.uploads.matchPreview({
+      surveyId: 'survey-1',
+      file: xlsxFile(),
+      mapping: { ...mapping, mode: 'merge', mergeKeys: ['name'] },
+    });
+    expect(uploadsSvc.matchContactUpload).toHaveBeenCalledOnce();
+    expect(res.matched).toBe(1);
   });
 
   it('existingCount는 surveyId를 service.getExistingContactsCount에 위임한다', async () => {

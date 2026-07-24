@@ -31,3 +31,13 @@ export function useIngestContacts() {
       client.contacts.uploads.ingest(input),
   });
 }
+
+/**
+ * 병합/중복검사 dry-run 매칭 미리보기
+ */
+export function useMatchContacts() {
+  return useMutation({
+    mutationFn: (input: Parameters<typeof client.contacts.uploads.matchPreview>[0]) =>
+      client.contacts.uploads.matchPreview(input),
+  });
+}

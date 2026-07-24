@@ -3,13 +3,19 @@ import 'server-only';
 import { and, eq, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { contactTargets, contactUploads, surveys } from '@/db/schema';
+import { contactPii, contactTargets, contactUploads, surveys } from '@/db/schema';
 import type {
   ContactColumnDef,
   ContactColumnScheme,
   ContactUploadMapping,
 } from '@/db/schema/schema-types';
 import { parseExcelRows, previewExcel } from '@/lib/contacts/excel-parser';
+import {
+  classifyRows,
+  countEmptyOverwrites,
+  type ExistingContactKeyInfo,
+} from '@/lib/contacts/match-contacts';
+import { getSchemeRouting, type SchemeRouting } from '@/lib/contacts/scheme-helpers';
 import { MAX_UPLOAD_ROWS, validateXlsxFile } from '@/lib/contacts/upload-limits';
 import { buildPiiRows, insertPiiRows, type PiiInput } from '@/lib/crypto/contact-pii-repo';
 import type { PiiFieldType } from '@/lib/crypto/pii-fields';
@@ -19,6 +25,8 @@ import { loadOperationsDataScope } from '@/lib/operations/data-scope.server';
 import type {
   IngestContactUploadInput,
   IngestContactUploadResult,
+  MatchContactUploadInput,
+  MatchContactUploadResult,
   ParseExcelPreviewInput,
   ParseExcelPreviewResult,
 } from '../../domain/contact-upload';
@@ -272,4 +280,151 @@ function autoGenerateColumnScheme(
   columns.push({ key: 'contact_owner', label: '컨택원', source: 'system.contact_owner', order: order++ });
 
   return { version: 1, headerRow: mapping.headerRow, columns };
+}
+
+const SAMPLE_LIMIT = 50;
+
+/**
+ * 위저드 piiMapping 과 기존 스킴 라우팅을 병합한 유효 PII 라우팅.
+ * 기존 스킴에 등록된 키는 스킴이 우선 (그릴링 결정 — attrs 평문 유출 차단).
+ * 위저드 piiMapping 은 스킴에 없는 신규 컬럼에만 적용된다.
+ */
+function resolveEffectiveRouting(
+  schemeRouting: SchemeRouting,
+  mapping: ContactUploadMapping,
+  headerKeys: string[],
+): { piiEntries: Array<{ columnKey: string; fieldType: PiiFieldType }>; piiKeySet: Set<string> } {
+  const piiEntries: Array<{ columnKey: string; fieldType: PiiFieldType }> = [];
+  const wizardPii = mapping.piiMapping ?? {};
+  for (const key of headerKeys) {
+    const schemePii = schemeRouting.piiByKey[key];
+    if (schemePii) {
+      piiEntries.push({ columnKey: key, fieldType: schemePii });
+    } else if (schemeRouting.knownAttrKeys.has(key)) {
+      // 기존 attrs 컬럼 — 위저드가 PII 로 지정해도 무시 (스킴 우선)
+    } else if (wizardPii[key]) {
+      piiEntries.push({ columnKey: key, fieldType: wizardPii[key] });
+    }
+  }
+  return { piiEntries, piiKeySet: new Set(piiEntries.map((e) => e.columnKey)) };
+}
+
+/** merge/append 공통: 매칭 키 검증. 반환값 없이 throw 만 한다. */
+function validateMergeKeys(
+  mergeKeys: string[],
+  headerKeys: string[],
+  piiKeySet: Set<string>,
+): void {
+  if (mergeKeys.length === 0) throw new Error('매칭 키를 1개 이상 선택해주세요.');
+  for (const key of mergeKeys) {
+    if (!headerKeys.includes(key)) {
+      throw new Error(`매칭 키 '${key}' 가 엑셀 헤더에 없습니다.`);
+    }
+    if (piiKeySet.has(key)) {
+      throw new Error(`개인정보 컬럼 '${key}' 은 매칭 키로 사용할 수 없습니다.`);
+    }
+  }
+}
+
+/** 기존 실컨택 (id + attrs) + PII 존재 여부 로드 */
+async function loadExistingContacts(surveyId: string): Promise<{
+  existing: ExistingContactKeyInfo[];
+  existingAttrsById: Map<string, Record<string, string>>;
+  piiPresenceById: Map<string, Set<string>>;
+}> {
+  const targets = await db
+    .select({ id: contactTargets.id, attrs: contactTargets.attrs })
+    .from(contactTargets)
+    .where(and(eq(contactTargets.surveyId, surveyId), eq(contactTargets.isTest, false)));
+
+  const existing: ExistingContactKeyInfo[] = targets.map((t) => ({
+    targetId: t.id,
+    attrs: t.attrs ?? {},
+  }));
+  const existingAttrsById = new Map(existing.map((e) => [e.targetId, e.attrs]));
+
+  const piiRows = await db
+    .select({ contactTargetId: contactPii.contactTargetId, columnKey: contactPii.columnKey })
+    .from(contactPii)
+    .innerJoin(contactTargets, eq(contactPii.contactTargetId, contactTargets.id))
+    .where(and(eq(contactTargets.surveyId, surveyId), eq(contactTargets.isTest, false)));
+
+  const piiPresenceById = new Map<string, Set<string>>();
+  for (const r of piiRows) {
+    const set = piiPresenceById.get(r.contactTargetId) ?? new Set<string>();
+    set.add(r.columnKey);
+    piiPresenceById.set(r.contactTargetId, set);
+  }
+  return { existing, existingAttrsById, piiPresenceById };
+}
+
+/**
+ * 병합/중복검사 dry-run 매칭 미리보기. DB 쓰기 없음.
+ * stateless — 적재 시 ingest 가 동일 계산을 재수행하므로 참고용 요약이다.
+ */
+export async function matchContactUpload(
+  input: MatchContactUploadInput,
+): Promise<MatchContactUploadResult> {
+  const { surveyId, file, mapping } = input;
+
+  if ((await loadOperationsDataScope(surveyId)) === 'test') {
+    throw new Error('테스트 모드에서는 실제 조사대상자를 업로드할 수 없습니다.');
+  }
+  if (mapping.mode !== 'merge' && mapping.mode !== 'append') {
+    throw new Error('매칭 미리보기는 병합 또는 추가 모드에서만 사용할 수 있습니다.');
+  }
+  ensureXlsx(file);
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const allRows = await parseExcelRows(buffer, {
+    sheetName: mapping.sheetName,
+    headerRow: mapping.headerRow,
+  });
+  if (allRows.length > MAX_UPLOAD_ROWS) {
+    throw new Error(`최대 ${MAX_UPLOAD_ROWS.toLocaleString('ko-KR')} 행까지 적재 가능합니다.`);
+  }
+
+  const firstRow = allRows[0];
+  const headerKeys = firstRow !== undefined ? Object.keys(firstRow) : [];
+
+  const [surveyRow] = await db
+    .select({ contactColumns: surveys.contactColumns })
+    .from(surveys)
+    .where(eq(surveys.id, surveyId));
+  const schemeRouting = getSchemeRouting(surveyRow?.contactColumns ?? null);
+  const { piiKeySet } = resolveEffectiveRouting(schemeRouting, mapping, headerKeys);
+
+  const mergeKeys = mapping.mergeKeys ?? [];
+  validateMergeKeys(mergeKeys, headerKeys, piiKeySet);
+
+  const { existing, existingAttrsById, piiPresenceById } = await loadExistingContacts(surveyId);
+  const classified = classifyRows(allRows, mergeKeys, existing);
+
+  const toSamples = (indices: number[]) =>
+    indices.slice(0, SAMPLE_LIMIT).map((rowIndex) => ({
+      excelRow: mapping.headerRow + 1 + rowIndex,
+      keyValues: Object.fromEntries(
+        mergeKeys.map((k) => [k, allRows[rowIndex]?.[k] ?? '']),
+      ),
+    }));
+
+  return {
+    matched: classified.matched.length,
+    unmatched: classified.unmatched.length,
+    fileDuplicates: classified.fileDuplicates.length,
+    multiMatches: classified.multiMatches.length,
+    emptyKeys: classified.emptyKeys.length,
+    unmatchedSamples: toSamples(classified.unmatched),
+    fileDuplicateSamples: toSamples(classified.fileDuplicates),
+    multiMatchSamples: toSamples(classified.multiMatches),
+    emptyKeySamples: toSamples(classified.emptyKeys),
+    emptyOverwrites: countEmptyOverwrites(
+      allRows,
+      classified.matched,
+      headerKeys,
+      existingAttrsById,
+      piiPresenceById,
+      piiKeySet,
+    ),
+  };
 }
