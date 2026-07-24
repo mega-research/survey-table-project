@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useRef, useState, useTransition } from 'react';
+import { useMemo, useRef, useState, useTransition } from 'react';
 
 import { FileSpreadsheet, UploadCloud, X } from 'lucide-react';
 
@@ -18,8 +18,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import type { ContactUploadMapping } from '@/db/schema/schema-types';
+import type {
+  ContactColumnDef,
+  ContactColumnScheme,
+  ContactUploadMapping,
+  ContactUploadMode,
+} from '@/db/schema/schema-types';
 import { autoDetectPiiMapping, autoDetectSystemFields } from '@/lib/contacts/auto-detect';
+import { suggestSimilarKeys } from '@/lib/contacts/match-contacts';
+import { getSchemeRouting } from '@/lib/contacts/scheme-helpers';
 import {
   MAX_UPLOAD_BYTES,
   MAX_UPLOAD_ROWS,
@@ -30,12 +37,14 @@ import { getErrorMessage } from '@/lib/get-error-message';
 import { formatBytes } from '@/lib/utils';
 import { useIngestContacts, useParseExcelPreview } from '@/hooks/queries';
 
-type Step = 'file' | 'mapping' | 'result';
+type Step = 'file' | 'mapping' | 'match' | 'result';
 
 interface UploadWizardProps {
   surveyId: string;
   /** 마법사 진입 시점의 기존 contact_targets 행 수. 0 이면 신규, > 0 이면 통째 교체 경고 */
   existingContactsCount: number;
+  /** 기존 컬럼 스킴 — 병합/추가 모드의 컬럼 잠금·라우팅 표시 기준 */
+  existingScheme: ContactColumnScheme | null;
 }
 
 interface MappingState {
@@ -59,7 +68,11 @@ const PII_OPTIONS: Array<{ value: PiiFieldType | '_none'; label: string }> = [
   { value: 'biz_number', label: '사업자번호' },
 ];
 
-export function UploadWizard({ surveyId, existingContactsCount }: UploadWizardProps) {
+export function UploadWizard({
+  surveyId,
+  existingContactsCount,
+  existingScheme,
+}: UploadWizardProps) {
   const router = useRouter();
   const [step, setStep] = useState<Step>('file');
   const [file, setFile] = useState<File | null>(null);
@@ -74,6 +87,14 @@ export function UploadWizard({ surveyId, existingContactsCount }: UploadWizardPr
     labelOverrides: {},
     piiMapping: {},
   });
+  // 업로드 모드: replace(전체 교체) | merge(키 일치 갱신) | append(신규 추가)
+  const [mode, setMode] = useState<ContactUploadMode>('replace');
+  // append 모드에서 기존 명단과 중복 검사 여부
+  const [dupCheck, setDupCheck] = useState(false);
+  // merge/append+중복검사 시 매칭 키로 사용할 헤더 set
+  const [mergeKeys, setMergeKeys] = useState<Set<string>>(new Set());
+  // unmatchedPolicy/duplicatePolicy/matchResult 상태는 매칭 미리보기 스텝 배선(Task 8)에서
+  // 함께 도입한다 — 이 태스크에서는 미사용 상태로 noUnusedLocals 에 걸려 선언을 미룸.
   const [result, setResult] = useState<{
     uploadedRows: number;
     mergedRows: number;
@@ -85,6 +106,19 @@ export function UploadWizard({ surveyId, existingContactsCount }: UploadWizardPr
 
   const parseExcelPreview = useParseExcelPreview();
   const ingestContacts = useIngestContacts();
+
+  const schemeRouting = useMemo(() => getSchemeRouting(existingScheme), [existingScheme]);
+  /** 기존 스킴에 등록된 컬럼 (잠금 대상). key → 스킴 정의 */
+  const lockedColumns = useMemo(() => {
+    const map = new Map<string, ContactColumnDef>();
+    for (const col of existingScheme?.columns ?? []) {
+      if (col.source.startsWith('attrs.') || col.source.startsWith('pii.')) map.set(col.key, col);
+    }
+    return map;
+  }, [existingScheme]);
+  const isLockedMode = mode !== 'replace';
+  const needsKeySelection = mode === 'merge' || (mode === 'append' && dupCheck);
+  // needsMatchStep(매칭 스텝 진입 여부)은 Task 8 에서 needsKeySelection 과 함께 소비된다.
 
   function selectFile(picked: File | null | undefined) {
     if (!picked) return;
@@ -313,6 +347,50 @@ export function UploadWizard({ surveyId, existingContactsCount }: UploadWizardPr
 
         {step === 'mapping' && preview && (
           <div className="space-y-4">
+            {existingContactsCount > 0 && (
+              <div className="space-y-2">
+                <div className="text-sm font-medium text-slate-700">업로드 방식</div>
+                <div className="grid grid-cols-3 gap-2">
+                  {(
+                    [
+                      { value: 'replace', title: '교체', desc: '기존 명단 전체 삭제 후 새로 적재' },
+                      { value: 'merge', title: '병합', desc: '키 일치 행만 갱신, 이력·링크 보존' },
+                      { value: 'append', title: '추가', desc: '기존 명단 유지, 신규 행 추가' },
+                    ] as const
+                  ).map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => {
+                        setMode(opt.value);
+                        setMergeKeys(new Set());
+                      }}
+                      className={`rounded-lg border p-3 text-left transition-colors ${
+                        mode === opt.value
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      <div className="text-sm font-semibold text-gray-900">{opt.title}</div>
+                      <div className="mt-0.5 text-xs text-gray-500">{opt.desc}</div>
+                    </button>
+                  ))}
+                </div>
+                {mode === 'append' && (
+                  <label className="flex items-center gap-2 text-sm text-slate-700">
+                    <Checkbox
+                      checked={dupCheck}
+                      onCheckedChange={(c) => {
+                        setDupCheck(c === true);
+                        setMergeKeys(new Set());
+                      }}
+                    />
+                    <span>기존 명단과 중복 검사 (키 컬럼 선택)</span>
+                  </label>
+                )}
+              </div>
+            )}
+
             {preview.sheetNames.length > 1 && (
               <div className="flex items-center gap-3">
                 <Label>시트 선택</Label>
@@ -402,6 +480,7 @@ export function UploadWizard({ surveyId, existingContactsCount }: UploadWizardPr
                     <col />
                     <col style={{ width: '170px' }} />
                     <col style={{ width: '60px' }} />
+                    {needsKeySelection && <col style={{ width: '70px' }} />}
                     <col style={{ width: '80px' }} />
                   </colgroup>
                   <thead className="bg-slate-50 text-xs text-slate-600">
@@ -418,6 +497,11 @@ export function UploadWizard({ surveyId, existingContactsCount }: UploadWizardPr
                       <th className="border-b px-3 py-2 text-center font-medium whitespace-nowrap">
                         표시
                       </th>
+                      {needsKeySelection && (
+                        <th className="border-b px-3 py-2 text-center font-medium whitespace-nowrap">
+                          매칭 키
+                        </th>
+                      )}
                       <th className="border-b px-3 py-2 text-center font-medium whitespace-nowrap">
                         분류 기준
                       </th>
@@ -429,6 +513,9 @@ export function UploadWizard({ surveyId, existingContactsCount }: UploadWizardPr
                       const labelValue = mapping.labelOverrides[h] ?? h;
                       const isGroup = mapping.groupCol === i;
                       const isShown = mapping.selectedAttrs.has(h);
+                      const lockedCol = lockedColumns.get(h);
+                      const isLocked = isLockedMode && Boolean(lockedCol);
+                      const isPiiColumn = Boolean(lockedCol?.piiType ?? mapping.piiMapping[h]);
                       return (
                         <tr key={h} className="border-t hover:bg-slate-50/50">
                           <td
@@ -440,36 +527,74 @@ export function UploadWizard({ surveyId, existingContactsCount }: UploadWizardPr
                           <td className="px-3 py-2 align-middle">
                             <input
                               type="text"
-                              value={labelValue}
+                              value={isLocked ? lockedCol!.label : labelValue}
                               onChange={(e) => updateLabel(h, e.target.value)}
-                              className="block w-full min-w-0 rounded border px-2 py-1 text-sm"
+                              disabled={isLocked}
+                              className="block w-full min-w-0 rounded border px-2 py-1 text-sm disabled:bg-slate-50 disabled:text-slate-500"
                               maxLength={100}
                               placeholder={h}
                             />
                           </td>
                           <td className="px-3 py-2 align-middle">
-                            <Select
-                              value={pii ?? '_none'}
-                              onValueChange={(v) => updatePii(h, v as PiiFieldType | '_none')}
-                            >
-                              <SelectTrigger className="w-full">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {PII_OPTIONS.map((opt) => (
-                                  <SelectItem key={opt.value} value={opt.value}>
-                                    {opt.label}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                            {isLocked ? (
+                              <div className="flex items-center gap-1.5 text-xs text-slate-600">
+                                <span>
+                                  {lockedCol!.piiType
+                                    ? (PII_OPTIONS.find((opt) => opt.value === lockedCol!.piiType)
+                                        ?.label ?? lockedCol!.piiType)
+                                    : '없음'}
+                                </span>
+                                <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">
+                                  기존 설정
+                                </span>
+                              </div>
+                            ) : (
+                              <Select
+                                value={pii ?? '_none'}
+                                onValueChange={(v) => updatePii(h, v as PiiFieldType | '_none')}
+                              >
+                                <SelectTrigger className="w-full">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {PII_OPTIONS.map((opt) => (
+                                    <SelectItem key={opt.value} value={opt.value}>
+                                      {opt.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            )}
                           </td>
                           <td className="px-3 py-2 text-center align-middle">
                             <Checkbox
-                              checked={isShown}
+                              checked={isLocked ? !lockedCol!.hidden : isShown}
+                              disabled={isLocked}
                               onCheckedChange={(checked) => toggleShown(h, checked === true)}
                             />
                           </td>
+                          {needsKeySelection && (
+                            <td className="px-3 py-2 text-center align-middle">
+                              <Checkbox
+                                checked={mergeKeys.has(h)}
+                                disabled={isPiiColumn}
+                                onCheckedChange={(c) => {
+                                  setMergeKeys((prev) => {
+                                    const next = new Set(prev);
+                                    if (c === true) next.add(h);
+                                    else next.delete(h);
+                                    return next;
+                                  });
+                                }}
+                                aria-label={`${h}을(를) 매칭 키로 사용`}
+                                title={
+                                  isPiiColumn
+                                    ? '개인정보 컬럼은 매칭 키로 사용할 수 없습니다'
+                                    : undefined
+                                }
+                              />
+                            </td>
+                          )}
                           <td className="px-3 py-2 text-center align-middle">
                             <input
                               type="radio"
@@ -506,7 +631,24 @@ export function UploadWizard({ surveyId, existingContactsCount }: UploadWizardPr
               </div>
             </div>
 
-            {existingContactsCount > 0 && (
+            {needsKeySelection &&
+              Array.from(mergeKeys)
+                .filter((k) => !schemeRouting.knownAttrKeys.has(k))
+                .map((k) => {
+                  const similar = suggestSimilarKeys(k, Array.from(schemeRouting.knownAttrKeys));
+                  return (
+                    <div
+                      key={k}
+                      role="alert"
+                      className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800"
+                    >
+                      기존 명단에 &lsquo;{k}&rsquo; 컬럼 값이 없어 전부 불일치가 될 수 있습니다.
+                      {similar.length > 0 && <> 비슷한 기존 컬럼: {similar.join(', ')}</>}
+                    </div>
+                  );
+                })}
+
+            {mode === 'replace' && existingContactsCount > 0 && (
               <div role="alert" className="rounded border border-red-300 bg-red-50 p-3 text-sm">
                 <div className="mb-2 font-semibold text-red-800">
                   ⚠ 기존 조사 대상 {existingContactsCount.toLocaleString('ko-KR')}건이 통째로 교체됩니다
