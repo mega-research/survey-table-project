@@ -43,6 +43,7 @@ import type { FilterClause } from '@/lib/operations/contacts-filters.server';
 import {
   campaignScopeCondition,
   targetScopeCondition,
+  testFlagForScope,
   type OperationsDataScope,
 } from '@/lib/operations/data-scope.server';
 
@@ -389,6 +390,8 @@ export interface CampaignCandidateRow {
   attrs: Record<string, string>;
   respondedAt: Date | null;
   latestResultCode: string | null;
+  /** 가장 최근 단체 메일에서의 수신 status. 발송 이력 없으면 null — 재전송 명단 대조용. */
+  latestMailStatus: MailRecipientStatus | null;
 }
 
 export interface CampaignCandidatesResult {
@@ -404,6 +407,24 @@ export type CampaignSortKey = 'resid' | 'responded' | 'resultCode';
 export type CampaignSortDir = 'asc' | 'desc';
 
 export const CAMPAIGN_SORT_KEYS: readonly CampaignSortKey[] = ['resid', 'responded', 'resultCode'];
+
+/**
+ * 컨택별 최근 수신 status 스칼라 서브쿼리 — 미리보기 "수신 상황" 컬럼용.
+ * 최근 = 수신자 row 생성(큐잉) 시각 기준. archived 단체 메일/수신자는 제외하고,
+ * 테스트 모드 스코프(is_test)를 맞춰 실발송·테스트 이력이 섞이지 않게 한다.
+ */
+function latestMailStatusExpr(scope: OperationsDataScope): SQL<MailRecipientStatus | null> {
+  return sql<MailRecipientStatus | null>`(
+    SELECT mr.status FROM mail_recipients mr
+    JOIN mail_campaigns mc ON mc.id = mr.campaign_id
+    WHERE mr.contact_target_id = "contact_targets"."id"
+      AND mr.archived_at IS NULL
+      AND mc.archived_at IS NULL
+      AND mc.is_test = ${testFlagForScope(scope)}
+    ORDER BY mr.created_at DESC
+    LIMIT 1
+  )`;
+}
 
 // "이 컨택에 email PII 가 등록돼 있나" 정확검사. NULL/'' 무관 — contact_pii row 존재 자체가 기준.
 const HAS_EMAIL_PII = sql`EXISTS (
@@ -678,6 +699,7 @@ export async function previewCampaignCandidates(args: {
       attrs: contactTargets.attrs,
       respondedAt: contactTargets.respondedAt,
       latestResultCode: latestResultCodeExpr.as('latest_result_code'),
+      latestMailStatus: latestMailStatusExpr(args.scope).as('latest_mail_status'),
     })
     .from(contactTargets)
     .where(where)
@@ -697,6 +719,7 @@ export async function previewCampaignCandidates(args: {
       attrs: (r.attrs ?? {}) as Record<string, string>,
       respondedAt: r.respondedAt,
       latestResultCode: r.latestResultCode,
+      latestMailStatus: r.latestMailStatus,
     })),
     total,
     page: clampedPage,

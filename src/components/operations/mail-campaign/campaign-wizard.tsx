@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ContactsFilterBar } from '@/components/operations/contacts/contacts-filter-bar';
+import { RecipientStatusBadge } from '@/components/operations/mail-campaign/recipient-status-badge';
 import type { MailTemplate } from '@/db/schema/mail';
 import type { CampaignFilterSnapshot, ContactResultCode } from '@/db/schema/schema-types';
 import type {
@@ -395,6 +396,7 @@ export function CampaignWizard({
                 <th className="px-3 py-2">
                   <SortHeader label="응답" sortKey="responded" activeSort={sort} dir={dir} onSort={changeSort} />
                 </th>
+                <th className="px-3 py-2">수신 상황</th>
                 <th className="px-3 py-2">
                   <SortHeader
                     label="최근 결과코드"
@@ -409,7 +411,7 @@ export function CampaignWizard({
             <tbody>
               {candidates.rows.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-3 py-10 text-center text-sm text-slate-500">
+                  <td colSpan={7} className="px-3 py-10 text-center text-sm text-slate-500">
                     필터에 해당하는 수신자가 없습니다.
                   </td>
                 </tr>
@@ -434,6 +436,13 @@ export function CampaignWizard({
                         <span className="text-emerald-600">응답완료</span>
                       ) : (
                         <span className="text-slate-400">미응답</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-xs">
+                      {r.latestMailStatus ? (
+                        <RecipientStatusBadge status={r.latestMailStatus} />
+                      ) : (
+                        <span className="text-slate-400">—</span>
                       )}
                     </td>
                     <td className="px-3 py-2 text-xs text-slate-600">
