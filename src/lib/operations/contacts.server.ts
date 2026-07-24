@@ -397,6 +397,8 @@ export interface MailHistoryRow {
   id: string;
   campaignTitle: string;
   runNumber: number;
+  /** 'single'이면 단건 발송 — 회차 대신 "단건" 표기 */
+  kind: 'bulk' | 'single';
   status: MailRecipientStatus;
   sentAt: Date | null;
   deliveredAt: Date | null;
@@ -416,6 +418,7 @@ export async function getMailRecipientsForTarget(
       id: mailRecipients.id,
       campaignTitle: mailCampaigns.title,
       runNumber: mailCampaigns.runNumber,
+      kind: mailCampaigns.kind,
       status: mailRecipients.status,
       sentAt: mailRecipients.sentAt,
       deliveredAt: mailRecipients.deliveredAt,

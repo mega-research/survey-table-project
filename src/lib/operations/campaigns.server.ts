@@ -78,6 +78,7 @@ export async function listCampaignsForSurvey(args: {
   const pageSize = args.pageSize ?? DEFAULT_PAGE_SIZE;
   const where = and(
     eq(mailCampaigns.surveyId, args.surveyId),
+    eq(mailCampaigns.kind, 'bulk'),
     campaignScopeCondition(args.scope),
     isNull(mailCampaigns.archivedAt),
   )!;
