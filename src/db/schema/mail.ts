@@ -56,6 +56,9 @@ export const mailCampaignStatusValues = [
 ] as const;
 export type MailCampaignStatus = (typeof mailCampaignStatusValues)[number];
 
+export const mailCampaignKindValues = ['bulk', 'single'] as const;
+export type MailCampaignKind = (typeof mailCampaignKindValues)[number];
+
 export const mailCampaigns = pgTable(
   'mail_campaigns',
   {
@@ -69,6 +72,7 @@ export const mailCampaigns = pgTable(
     runNumber: integer('run_number').notNull(),
     isTest: boolean('is_test').notNull().default(false),
     title: text('title').notNull(),
+    kind: text('kind').$type<MailCampaignKind>().notNull().default('bulk'),
 
     // 발송 시점 스냅샷
     subjectSnapshot: text('subject_snapshot').notNull(),
