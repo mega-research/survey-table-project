@@ -1,3 +1,5 @@
+import { ChevronDown } from 'lucide-react';
+
 import { LocalDateTime } from '@/components/ui/local-date-time';
 import type { ResponseEditChange } from '@/db/schema/schema-types';
 import type { ResponseEditLogRow } from '@/lib/operations/contacts.server';
@@ -19,10 +21,11 @@ interface Props {
 /** 응답 편집 audit 이력 — 기본 접힘 collapsible. */
 export function ContactEditHistoryCard({ rows, hasResponse }: Props) {
   return (
-    <details open={hasResponse} className="rounded-lg border bg-white">
+    <details open={hasResponse} className="group rounded-lg border bg-white">
       <summary className="flex cursor-pointer items-center justify-between px-5 py-3 text-sm">
-        <span className="font-medium text-slate-700">
+        <span className="flex items-center gap-1.5 font-medium text-slate-700">
           수정 / 편집 현황 ({rows.length}건)
+          <ChevronDown className="size-4 text-slate-400 transition-transform group-open:rotate-180" />
         </span>
       </summary>
       <div className="border-t px-5 py-3">

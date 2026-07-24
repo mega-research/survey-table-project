@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
 
+import { ChevronDown } from 'lucide-react';
+
 import { RecipientStatusBadge } from '@/components/operations/mail-campaign/recipient-status-badge';
 import { LocalDateTime } from '@/components/ui/local-date-time';
 import type { MailHistoryRow } from '@/lib/operations/contacts.server';
@@ -14,10 +16,11 @@ export function ContactMailHistoryCard({
 }) {
   const latest = rows[0];
   return (
-    <details className="rounded-lg border bg-white">
+    <details className="group rounded-lg border bg-white">
       <summary className="flex cursor-pointer items-center justify-between px-5 py-3 text-sm">
-        <span className="font-medium text-slate-700">
+        <span className="flex items-center gap-1.5 font-medium text-slate-700">
           이메일 발송 현황 ({rows.length}건)
+          <ChevronDown className="size-4 text-slate-400 transition-transform group-open:rotate-180" />
         </span>
         <span className="flex items-center gap-2">
           {action}
