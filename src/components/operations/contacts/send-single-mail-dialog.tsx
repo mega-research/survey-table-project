@@ -153,7 +153,7 @@ export function SendSingleMailDialog({
   const isReady = fetchState.status === 'ready';
   const sampleFetchFailed = fetchState.status === 'error';
   const toEmail = previewSample?.email ?? null;
-  const canSend = selected != null && isReady && !sampleFetchFailed && !isPending;
+  const canSend = selected != null && isReady && !sampleFetchFailed && sample != null && !isPending;
 
   function handleSend() {
     if (!selected) return;
@@ -189,9 +189,12 @@ export function SendSingleMailDialog({
           variant="outline"
           size="sm"
           onClick={(e) => {
-            // summary(details toggle) 안에 버튼이 있어 클릭이 부모로 버블링되면
-            // 다이얼로그가 열리는 동시에 접힘 카드가 토글돼 버림 — 버블링만 차단하고
-            // DialogTrigger 자체의 open 토글(같은 엘리먼트, 버블링 이전에 실행됨)은 그대로 둔다.
+            // 이 버튼은 <summary>(details toggle) 안에 렌더링된다. 스펙상 클릭의 activation
+            // target 은 가장 가까운 activatable 조상(이 button 자신)으로 해석되므로 summary
+            // 의 접힘 토글 자체는 원래 발동하지 않는다 — stopPropagation 은 그 토글을 막기
+            // 위한 것이 아니라, summary/조상에 걸릴 수 있는 다른 커스텀 클릭 핸들러(위임 등)로
+            // 이벤트가 새는 것을 막는 방어용이다. DialogTrigger 자체의 open 토글(같은 엘리먼트,
+            // 버블링 이전에 실행됨)은 그대로 둔다.
             e.stopPropagation();
           }}
         >
