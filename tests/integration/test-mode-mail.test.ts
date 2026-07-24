@@ -208,7 +208,8 @@ describe('테스트 모드 메일 캠페인 생성', () => {
     expect(state.campaignValues).toMatchObject({
       isTest: true,
       title: '[TEST] 1차 안내',
-      subjectSnapshot: '[TEST] 설문 참여',
+      // 수신자에게 보이는 메일 제목(subject)은 테스트 모드에서도 접두어 없이 원문 보존 (5a73506b)
+      subjectSnapshot: '설문 참여',
     });
     expect(state.recipientIds).toEqual([TEST_ID]);
   });
@@ -280,7 +281,7 @@ describe('테스트 모드 메일 캠페인 생성', () => {
     expect(state.campaignValues).toBeNull();
   });
 
-  it('반복된 [TEST] 접두어를 정규화해 한 번만 남긴다', async () => {
+  it('반복된 [TEST] 접두어는 관리용 제목에서만 정규화하고 메일 제목은 원문 보존한다', async () => {
     state.surveyMode = true;
     state.templateSubject = ' [TEST] [TEST] 설문 참여 ';
     state.targets = [{ id: TEST_ID, surveyId: SURVEY_ID, isTest: true }];
@@ -288,7 +289,8 @@ describe('테스트 모드 메일 캠페인 생성', () => {
     await createCampaign(input([TEST_ID], ' [TEST] [TEST] 1차 안내 '), USER_ID);
 
     expect(state.campaignValues?.['title']).toBe('[TEST] 1차 안내');
-    expect(state.campaignValues?.['subjectSnapshot']).toBe('[TEST] 설문 참여');
+    // subject는 접두어 정규화 대상이 아님 — 템플릿 원문 그대로 스냅샷 (5a73506b)
+    expect(state.campaignValues?.['subjectSnapshot']).toBe(' [TEST] [TEST] 설문 참여 ');
   });
 });
 
