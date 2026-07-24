@@ -329,6 +329,9 @@ export interface ProgressColumnDef {
   hidden?: boolean;
 }
 
+/** 컨택 업로드 모드. replace=전체 교체(기존 동작), merge=키 일치 갱신, append=신규 추가 */
+export type ContactUploadMode = 'replace' | 'merge' | 'append';
+
 /** contact_uploads.mapping — 엑셀 업로드 매핑 결과 (시나리오 B 단순화) */
 export interface ContactUploadMapping {
   /** 시스템 필드 → 엑셀 0-based 컬럼 인덱스. group 만 사용 (미지정 시 단일 명단 취급). */
@@ -348,15 +351,17 @@ export interface ContactUploadMapping {
   headerRow: number;
   /** 사용자가 선택한 시트 이름 (디폴트 첫 시트) */
   sheetName: string;
+  /** 업로드 모드. 미지정(과거 데이터)은 replace 로 간주. */
+  mode?: ContactUploadMode;
   /**
-   * @deprecated 시나리오 B 에서 머지 제거 — backward compat 용 optional.
-   * 본 슬라이스 후속에서는 무시됨.
+   * 매칭 키 — 정규화된 엑셀 헤더명 목록 (복합키 가능).
+   * merge 모드 필수, append 모드는 중복 검사 시에만. PII 매핑 컬럼은 키 불가.
    */
-  mergeKey?: 'email+biz' | 'email' | 'biz';
-  /**
-   * @deprecated 시나리오 B 에서 머지 제거 — backward compat 용 optional.
-   */
-  mergeKeyPolicy?: 'either' | 'both';
+  mergeKeys?: string[];
+  /** merge: 키 불일치 행 처리 — insert(신규 추가) | skip(제외) */
+  unmatchedPolicy?: 'insert' | 'skip';
+  /** append+중복검사: 키 일치(중복) 행 처리 — insert(그래도 추가) | skip(제외) */
+  duplicatePolicy?: 'insert' | 'skip';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
