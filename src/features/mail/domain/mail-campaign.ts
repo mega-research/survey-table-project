@@ -99,6 +99,7 @@ export const PreviewPreflightResult = z.object({
   unsubscribedCount: z.number(),
   excludedByCodeCount: z.number(),
   emailMissingCount: z.number(),
+  bouncedCount: z.number(),
   notFoundCount: z.number(),
 });
 export type PreviewPreflightResult = z.infer<typeof PreviewPreflightResult>;

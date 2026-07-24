@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, notInArray, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { contactPii, contactTargets } from '@/db/schema/contacts';
@@ -129,12 +129,17 @@ export async function createCampaign(
 
     // e. valid contact 재페치 — contact_pii 에서 email cipher 까지 같이 가져옴.
     //    한 컨택에 email 컬럼이 여러 개면 column_key 알파벳 순 첫 번째 사용 (앞에서 dedupe).
-    //    preflight(preflightRecipients) 와 동일 정책으로 부정 결과코드(연락금지) 컨택을 제외한다.
-    //    제외하지 않으면 preflight 는 제외했다고 보고하나 실제로는 발송되는 미스매치 발생.
+    //    preflight(preflightRecipients) 와 동일 정책으로 부정 결과코드(연락금지)·반송 이력
+    //    컨택을 제외한다. 제외하지 않으면 preflight 는 제외했다고 보고하나 실제로는
+    //    발송되는 미스매치 발생.
     const { buildNegativeCodeExists, getResultCodeStatuses } = await import(
       '@/lib/operations/result-code-statuses.server'
     );
-    const { negative: negativeCodes } = await getResultCodeStatuses(input.surveyId);
+    const { listBouncedContactIds } = await import('@/lib/operations/campaigns.server');
+    const [{ negative: negativeCodes }, bouncedContactIds] = await Promise.all([
+      getResultCodeStatuses(input.surveyId),
+      listBouncedContactIds(input.surveyId),
+    ]);
     const notExcludedByCode = sql`NOT ${buildNegativeCodeExists(
       negativeCodes,
       sql`"contact_targets"."id"`,
@@ -162,6 +167,9 @@ export async function createCampaign(
           inArray(contactTargets.id, uniqueTargetIds),
           isNull(contactTargets.unsubscribedAt),
           notExcludedByCode,
+          ...(bouncedContactIds.length > 0
+            ? [notInArray(contactTargets.id, bouncedContactIds)]
+            : []),
         ),
       )
       .orderBy(asc(contactTargets.id), asc(contactPii.columnKey));
@@ -328,14 +336,25 @@ export async function previewPreflight(
 ): Promise<PreviewPreflightResult> {
   const { surveyId, selectedContactIds } = input;
 
-  const { preflightRecipients } = await import('@/lib/operations/campaigns.server');
-  const scope = await loadOperationsDataScope(surveyId);
-  const result = await preflightRecipients({ surveyId, scope, selectedContactIds });
+  const { preflightRecipients, listBouncedContactIds } = await import(
+    '@/lib/operations/campaigns.server'
+  );
+  const [scope, bouncedContactIds] = await Promise.all([
+    loadOperationsDataScope(surveyId),
+    listBouncedContactIds(surveyId),
+  ]);
+  const result = await preflightRecipients({
+    surveyId,
+    scope,
+    selectedContactIds,
+    bouncedContactIds,
+  });
   return {
     validCount: result.validIds.length,
     unsubscribedCount: result.unsubscribedIds.length,
     excludedByCodeCount: result.excludedByCodeIds.length,
     emailMissingCount: result.emailMissingIds.length,
+    bouncedCount: result.bouncedIds.length,
     notFoundCount: result.notFoundIds.length,
   };
 }

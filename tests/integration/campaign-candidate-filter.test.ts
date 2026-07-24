@@ -30,7 +30,13 @@ function buildSelectChain() {
 }
 
 vi.mock('@/db', () => ({
-  db: { select: vi.fn(() => buildSelectChain()) },
+  db: {
+    select: vi.fn(() => buildSelectChain()),
+    // listBouncedContactIds 의 mail_recipients 반송 조회 — 반송 없음으로 시뮬레이션
+    selectDistinct: vi.fn(() => ({
+      from: () => ({ innerJoin: () => ({ where: () => Promise.resolve([]) }) }),
+    })),
+  },
 }));
 
 vi.mock('@/lib/operations/result-code-statuses.server', async () => {
