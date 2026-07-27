@@ -225,6 +225,7 @@ interface RenderRowCellsProps {
   onChange?: ((v: Record<string, any>) => void) | undefined;
   stickyInfo?: StickyLeftInfo | undefined;
   errorCellIds?: Set<string> | undefined;
+  applyCellBackground: boolean;
 }
 
 function renderRowCells({
@@ -237,6 +238,7 @@ function renderRowCells({
   onChange,
   stickyInfo,
   errorCellIds,
+  applyCellBackground,
 }: RenderRowCellsProps) {
   const stickyCount = stickyInfo?.stickyColCount ?? 0;
 
@@ -265,7 +267,9 @@ function renderRowCells({
         style.boxShadow = '2px 0 4px rgba(0,0,0,0.06)';
       }
     }
-    Object.assign(style, getCellBackgroundStyle(cell));
+    if (applyCellBackground) {
+      Object.assign(style, getCellBackgroundStyle(cell));
+    }
 
     return (
       <div
@@ -403,6 +407,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
   const useOriginalRowDetail = isMobileView && mobileMode === 'drilldown-original-row';
   const mobileUsesCards = isMobileView && mobileMode !== 'original';
   const rendersFullOriginalTable = mobileMode === 'original';
+  const applyCellBackground = !(isMobileView && mobileMode === 'original');
 
   // displayCondition에서 참조하는 질문 ID만 추출 → 관련 응답만 의존
   const relevantResponseKeys = useMemo(() => {
@@ -634,6 +639,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
                   onChange: mergedOnChange,
                   stickyInfo,
                   errorCellIds,
+                  applyCellBackground,
                 })}
               </React.Fragment>,
             );
@@ -659,6 +665,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
       hiddenGroupIds,
       stickyInfo,
       errorCellIds,
+      applyCellBackground,
     ],
   );
 
@@ -783,6 +790,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
                 totalWidth={totalWidth}
                 renderSelectorRows={renderSelectorRows}
                 stickyInfo={stickyInfo}
+                applyCellBackground={applyCellBackground}
               />
             ) : (
               /* 바디 전용 grid */
@@ -807,6 +815,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
                       onChange: mergedOnChange,
                       stickyInfo,
                       errorCellIds,
+                      applyCellBackground,
                     })}
                   </React.Fragment>
                 ))}
