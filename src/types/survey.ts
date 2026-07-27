@@ -85,7 +85,8 @@ export interface TableValidationRule {
   action: BranchAction;
   targetQuestionId?: string; // 기본 타겟 (targetQuestionMap이 없을 때 사용)
   targetQuestionMap?: Record<string, string>; // { "디지털 TV": "question-id-1", "UHD TV": "question-id-2" }
-  errorMessage?: string; // 조건 미충족 시 표시할 메시지
+  /** @deprecated 분기 규칙에서는 사용하지 않음. 입력 차단 메시지는 NumberFormat을 사용 */
+  errorMessage?: string;
 }
 
 // ── 숫자 입력 표시 포맷·범위 설정 (단답형 숫자 모드 + 테이블 숫자 input 셀 공용) ──
@@ -105,6 +106,7 @@ export interface NumberFormat {
   min?: number; // 미달 값은 "다음" 시점 검증 (빈 값은 검증 안 함)
   max?: number; // 초과 값은 타이핑 자체 차단
   decimalPlaces?: number; // undefined = 제한 없음, 0 = 정수만, N = 소수 N자리
+  allowedValues?: number[]; // 지정 시 목록의 값 또는 그 값으로 완성 가능한 중간 입력만 허용
 }
 
 // 테이블 숫자 input 셀 합계 제약 (질문 레벨, table 타입 전용).

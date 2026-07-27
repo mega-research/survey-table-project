@@ -861,7 +861,8 @@ describe('대상자 테스트 응답 세션', () => {
     );
 
     expect(await screen.findByDisplayValue('기존 답')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '제출' }));
+    expect(screen.queryByRole('button', { name: '제출' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '다음' }));
     await waitFor(() => expect(createBlank).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(stepVisit).toHaveBeenCalledTimes(1));
 
@@ -1081,7 +1082,8 @@ describe('대상자 테스트 응답 세션', () => {
     expect(secondCreate.attemptId).not.toBe(firstCreate.attemptId);
     expect(secondCreate.sessionId).not.toBe(firstCreate.sessionId);
 
-    fireEvent.click(screen.getByRole('button', { name: '제출' }));
+    expect(screen.queryByRole('button', { name: '제출' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '다음' }));
     await waitFor(() =>
       expect(complete).toHaveBeenCalledWith(
         expect.objectContaining({

@@ -115,6 +115,7 @@ describe('rangeViolationMessage', () => {
     expect(rangeViolationMessage('5', undefined)).toBeNull();
     expect(rangeViolationMessage('5', {})).toBeNull();
   });
+
 });
 
 describe('formatKoreanUnitReading', () => {

@@ -81,6 +81,16 @@ export function exceedsDecimalPlaces(raw: string, places: number | undefined): b
 }
 
 /**
+ * 허용값 제한이 있을 때 현재 타이핑 값을 받아들일지 판정한다.
+ * 완성값뿐 아니라 여러 자리 숫자를 입력하기 위한 접두 입력도 허용한다.
+ * 예: allowed=[10, 20]이면 '', '1', '10', '2', '20'은 허용하고 '3'은 거부.
+ */
+export function canInputAllowedValue(raw: string, allowedValues: number[] | undefined): boolean {
+  if (!allowedValues || allowedValues.length === 0 || raw === '') return true;
+  return allowedValues.some((value) => String(value).startsWith(raw));
+}
+
+/**
  * min/max 범위 위반 메시지 — blur 힌트와 "다음"/제출 차단 검증이 공유한다.
  * max 는 타이핑에서 차단되는 게 원칙이지만 emptyDefault 오설정·레거시 응답의 우회 값을 봉합한다.
  * 빈 값·부분 입력은 null (미응답 차단은 required 소관).
