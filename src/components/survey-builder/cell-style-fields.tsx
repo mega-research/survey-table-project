@@ -13,6 +13,9 @@ interface CellStyleFieldsProps {
   backgroundColor: string;
   onTextBoldChange: (value: boolean) => void;
   onBackgroundColorChange: (value: string) => void;
+  onBackgroundColorDraftChange?: ((value: string) => void) | undefined;
+  error?: string | undefined;
+  onInvalidColor?: ((raw: string) => void) | undefined;
 }
 
 export function CellStyleFields({
@@ -20,6 +23,9 @@ export function CellStyleFields({
   backgroundColor,
   onTextBoldChange,
   onBackgroundColorChange,
+  onBackgroundColorDraftChange,
+  error,
+  onInvalidColor,
 }: CellStyleFieldsProps) {
   const [draft, setDraft] = useState(backgroundColor);
 
@@ -31,8 +37,12 @@ export function CellStyleFields({
     const normalized = normalizeCellHexColor(draft);
     if (normalized) {
       setDraft(normalized);
+      onBackgroundColorDraftChange?.(normalized);
       onBackgroundColorChange(normalized);
+      return;
     }
+
+    onInvalidColor?.(draft);
   };
 
   return (
@@ -57,6 +67,7 @@ export function CellStyleFields({
             onChange={(event) => {
               const color = event.target.value.toUpperCase();
               setDraft(color);
+              onBackgroundColorDraftChange?.(color);
               onBackgroundColorChange(color);
             }}
             className="h-9 w-12 cursor-pointer rounded border border-gray-200"
@@ -64,7 +75,11 @@ export function CellStyleFields({
           <Input
             aria-label="HEX 색상"
             value={draft}
-            onChange={(event) => setDraft(event.target.value)}
+            onChange={(event) => {
+              const value = event.target.value;
+              setDraft(value);
+              onBackgroundColorDraftChange?.(value);
+            }}
             onBlur={commitDraft}
             placeholder="#AABBCC"
             className="w-32"
@@ -74,12 +89,14 @@ export function CellStyleFields({
             variant="outline"
             onClick={() => {
               setDraft('');
+              onBackgroundColorDraftChange?.('');
               onBackgroundColorChange('');
             }}
           >
             배경색 없음
           </Button>
         </div>
+        {error ? <p role="alert" className="text-sm text-red-600">{error}</p> : null}
       </div>
     </div>
   );
