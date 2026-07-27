@@ -1,4 +1,7 @@
 import type { ContactColumnScheme } from '@/db/schema/schema-types';
+import type { MailRecipientStatus } from '@/db/schema/mail';
+import { recipientStatusMeta } from '@/components/operations/mail-campaign/recipient-status-badge';
+import { buildInviteUrl } from '@/lib/survey-url';
 
 /**
  * 조사 대상 다운로드 컬럼 로직 (순수 모듈 — DB/서버 의존 없음).
@@ -73,4 +76,47 @@ export function resolveExportColumns(
     out.push({ source, label });
   }
   return out;
+}
+
+/** export 셀 포맷에 필요한 행 데이터 — listContactsForExport 결과 + 복호화 PII */
+export interface ContactExportRowData {
+  resid: number;
+  attrs: Record<string, string>;
+  /** columnKey → 복호화 평문 (복호화 실패는 빈 문자열) */
+  piiPlain: Record<string, string>;
+  latestResultCode: string | null;
+  latestAttemptNo: number | null;
+  latestMailStatus: MailRecipientStatus | null;
+  progressPct: number | null;
+  inviteCode: string;
+}
+
+/** 목록 표(contacts-table)와 동일 표기 규칙으로 셀 값 생성 */
+export function formatExportCell(
+  source: string,
+  row: ContactExportRowData,
+  inviteBaseUrl: string,
+): string | number {
+  if (source === 'system.resid') return row.resid;
+  if (source === 'system.contact_result') {
+    return row.latestResultCode
+      ? `[${row.latestAttemptNo}] ${row.latestResultCode}`
+      : '';
+  }
+  if (source === 'system.email_count') {
+    return row.latestMailStatus ? recipientStatusMeta(row.latestMailStatus).label : '';
+  }
+  if (source === 'system.web') {
+    return row.progressPct == null ? '' : `${row.progressPct}%`;
+  }
+  if (source === INVITE_URL_SOURCE) {
+    return buildInviteUrl(row.inviteCode, inviteBaseUrl);
+  }
+  if (source.startsWith('attrs.')) {
+    return row.attrs[source.slice('attrs.'.length)] ?? '';
+  }
+  if (source.startsWith('pii.')) {
+    return row.piiPlain[source.slice('pii.'.length)] ?? '';
+  }
+  return '';
 }
