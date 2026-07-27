@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   collectNumericIssues,
+  collectVisibleTableCells,
   evaluateSumConstraint,
   pruneSumConstraints,
 } from '@/lib/survey/numeric-validation';
@@ -190,6 +191,37 @@ describe('collectNumericIssues — 테이블', () => {
     // r2 선택 — c2 가 표시되므로 필수 발동
     const issues = collectNumericIssues(q, { c1: '5', __selectedRowIds: ['r2'] });
     expect(issues[0]).toMatchObject({ kind: 'required-cells', cellIds: ['c2'] });
+  });
+
+  it('연결 동적 그룹의 선택 행이 생길 때만 showWhenDynamicGroupId 행을 표시한다', () => {
+    const rows: TableRow[] = [
+      {
+        id: 'base',
+        label: '기본 행',
+        cells: [{ id: 'base-cell', type: 'input', content: '' }],
+      },
+      {
+        id: 'dynamic',
+        label: '동적 행',
+        dynamicGroupId: 'g1',
+        cells: [{ id: 'dynamic-cell', type: 'input', content: '' }],
+      },
+      {
+        id: 'subtotal',
+        label: '소계 행',
+        showWhenDynamicGroupId: 'g1',
+        cells: [{ id: 'subtotal-cell', type: 'input', content: '', required: true }],
+      },
+    ] as TableRow[];
+    const q = tableQuestion({
+      tableRowsData: rows,
+      dynamicRowConfigs: [{ groupId: 'g1', enabled: true }],
+    } as Partial<Question>);
+
+    expect(collectVisibleTableCells(q, {}, undefined).map((cell) => cell.id))
+      .toEqual(['base-cell']);
+    expect(collectVisibleTableCells(q, { __selectedRowIds: ['dynamic'] }, undefined).map((cell) => cell.id))
+      .toEqual(['base-cell', 'dynamic-cell', 'subtotal-cell']);
   });
 
   it('미선택 동적 행에 잔존한 셀 값은 합계에서 제외한다 (선택되면 포함)', () => {

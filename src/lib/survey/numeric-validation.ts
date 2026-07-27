@@ -61,6 +61,19 @@ export function collectVisibleTableCells(
       ? (cellValues['__selectedRowIds'] as string[])
       : [],
   );
+  const hasEnabledDynamicRows = rows.some(
+    (row) => row.dynamicGroupId && enabledDynamicGroupIds.has(row.dynamicGroupId),
+  );
+  const groupsWithSelections = new Set<string>();
+  for (const row of rows) {
+    if (
+      row.dynamicGroupId &&
+      enabledDynamicGroupIds.has(row.dynamicGroupId) &&
+      selectedRowIds.has(row.id)
+    ) {
+      groupsWithSelections.add(row.dynamicGroupId);
+    }
+  }
   const hiddenColIndices = new Set<number>();
   if (ctx) {
     (question.tableColumns ?? []).forEach((col, idx) => {
@@ -72,8 +85,13 @@ export function collectVisibleTableCells(
   return rows
     .filter(
       (row) =>
-        !(row.dynamicGroupId && enabledDynamicGroupIds.has(row.dynamicGroupId)) ||
-        selectedRowIds.has(row.id),
+        (!(row.dynamicGroupId && enabledDynamicGroupIds.has(row.dynamicGroupId)) ||
+          selectedRowIds.has(row.id)) &&
+        (!(
+          hasEnabledDynamicRows &&
+          row.showWhenDynamicGroupId &&
+          enabledDynamicGroupIds.has(row.showWhenDynamicGroupId)
+        ) || groupsWithSelections.has(row.showWhenDynamicGroupId)),
     )
     .filter(
       (row) =>
