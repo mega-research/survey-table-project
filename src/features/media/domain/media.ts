@@ -22,11 +22,12 @@ import { TMP_NOTICE_ATTACHMENT_PREFIX } from '@/lib/upload/attachment-policy';
 
 /**
  * 삭제가 허용되는 R2 이미지 key namespace.
- * - tmp/: 업로드 직후 임시 객체(tmp/<kind>/...).
- * - survey/: promote 후 영구 이미지(tmp/survey/ → survey/).
- * 그 외 namespace(mail/ 영구 첨부, 루트 키 등)는 deleteImages 의 대상이 아니다.
+ * deleteImages 는 취소 경로의 tmp orphan 정리 전용 — 영구 네임스페이스(survey/ 등)는
+ * 어떤 경우에도 클라이언트발 삭제 불가(2026-07-27 orphan 감사: 발행 스냅샷·복제 설문·
+ * 보관함이 같은 R2 URL 을 참조해 즉시 삭제가 소실 사고를 유발). 영구 객체 정리는
+ * 후속 GC 과제로 이관.
  */
-export const ALLOWED_IMAGE_KEY_PREFIXES = ['tmp/', 'survey/'] as const;
+export const ALLOWED_IMAGE_KEY_PREFIXES = ['tmp/'] as const;
 
 /**
  * R2 object key 가 삭제 허용 namespace 안에 있고 traversal 이 없는지 판정.
