@@ -1,6 +1,6 @@
 import * as z from 'zod';
 
-import { authed } from '@/server/orpc';
+import { assertSurveyAccess, authed, scoped } from '@/server/orpc';
 
 import {
   AddContactTargetInput,
@@ -13,15 +13,19 @@ import {
 import * as svc from '../services/contact-targets.service';
 import { generateTestContacts } from '../services/test-contacts.service';
 
-const add = authed
+const add = scoped
   .input(AddContactTargetInput)
   .output(ContactTargetRowSchema)
-  .handler(({ input }) => svc.addContactTarget(input));
+  .handler(({ context, input }) => {
+    assertSurveyAccess(context.user.id, input.surveyId);
+    return svc.addContactTarget(input);
+  });
 
-const update = authed
+const update = scoped
   .input(UpdateContactTargetInput)
   .output(z.object({ ok: z.literal(true) }))
-  .handler(async ({ input }) => {
+  .handler(async ({ context, input }) => {
+    assertSurveyAccess(context.user.id, input.surveyId);
     await svc.updateContactTarget(input);
     return { ok: true as const };
   });
