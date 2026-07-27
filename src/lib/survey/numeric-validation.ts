@@ -13,6 +13,8 @@ import { parseNumericInput } from '@/utils/numeric-input';
 import { REQUIRED_CELL_TYPES } from '@/utils/serialize-cell';
 import { isCellValuePresent } from '@/utils/table-cell-semantics';
 
+import { collectRequiredOptionTextIssues } from './required-option-text-validation';
+
 export interface NumericIssue {
   kind: 'range' | 'sum' | 'required-cells';
   message: string;
@@ -28,6 +30,7 @@ export interface NumericIssue {
 export interface NumericValidationCtx {
   allResponses: Record<string, unknown>;
   allQuestions: Question[];
+  optionTexts?: Record<string, string> | undefined;
 }
 
 function flatCells(rows: TableRow[] | null | undefined): TableCell[] {
@@ -208,14 +211,24 @@ export function collectNumericIssues(
   //    대상은 REQUIRED_CELL_TYPES(input/radio/checkbox/select/ranking). 응답됨 판정은
   //    isCellValuePresent 정본(배열 length>0, 문자열 trim, 그 외 truthy) — checkbox/ranking
   //    빈 배열을 미응답으로 본다.
-  const missingRequired = visible.filter(
+  const ordinaryMissingIds = visible
+    .filter(
     (c) => REQUIRED_CELL_TYPES.has(c.type) && c.required && !isCellValuePresent(cellValues[c.id]),
-  );
-  if (missingRequired.length > 0) {
+    )
+    .map((c) => c.id);
+  const optionTextMissingIds = collectRequiredOptionTextIssues(
+    question,
+    cellValues,
+    ctx?.optionTexts,
+    { visibleCellIds: existingIds },
+  ).cellIds;
+  const missingIds = [...new Set([...ordinaryMissingIds, ...optionTextMissingIds])]
+    .filter((id) => existingIds.has(id));
+  if (missingIds.length > 0) {
     issues.push({
       kind: 'required-cells',
       message: '필수 응답이 비어있습니다',
-      cellIds: missingRequired.map((c) => c.id),
+      cellIds: missingIds,
     });
   }
 

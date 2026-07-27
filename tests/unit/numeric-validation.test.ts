@@ -391,6 +391,215 @@ describe('collectNumericIssues — 인터랙티브 셀 필수 (radio/checkbox/se
   });
 });
 
+describe('collectNumericIssues — 테이블 필수 옵션 상세기입', () => {
+  function detailedOptionCellQuestion(overrides: Partial<Question> = {}): Question {
+    return tableQuestion({
+      tableRowsData: [
+        {
+          id: 'r1',
+          label: '행1',
+          cells: [
+            {
+              id: 'radio-cell',
+              type: 'radio',
+              content: '',
+              required: true,
+              radioOptions: [
+                {
+                  id: 'radio-other',
+                  value: 'radio-other-value',
+                  label: '기타',
+                  allowTextInput: true,
+                },
+              ],
+            },
+            {
+              id: 'checkbox-cell',
+              type: 'checkbox',
+              content: '',
+              required: true,
+              checkboxOptions: [
+                {
+                  id: 'checkbox-other',
+                  value: 'checkbox-other-value',
+                  label: '기타',
+                  allowTextInput: true,
+                },
+              ],
+            },
+            {
+              id: 'select-cell',
+              type: 'select',
+              content: '',
+              required: true,
+              selectOptions: [
+                {
+                  id: 'select-other',
+                  value: 'select-other-value',
+                  label: '기타',
+                  allowTextInput: true,
+                },
+              ],
+            },
+            {
+              id: 'ranking-cell',
+              type: 'ranking',
+              content: '',
+              required: true,
+              rankingOptions: [
+                {
+                  id: 'ranking-other',
+                  value: 'ranking-other-value',
+                  label: '기타',
+                  allowTextInput: true,
+                },
+              ],
+            },
+          ],
+        },
+      ] as TableRow[],
+      ...overrides,
+    });
+  }
+
+  it('필수 radio 셀에서 선택한 상세기입 옵션이 공백이면 required-cells 이슈다', () => {
+    const question = detailedOptionCellQuestion();
+
+    expect(
+      collectNumericIssues(
+        question,
+        {
+          'radio-cell': 'radio-other-value',
+          'checkbox-cell': ['checkbox-other-value'],
+          'select-cell': 'select-other-value',
+          'ranking-cell': [{ rank: 1, optionValue: 'ranking-other-value', optionText: '상세 내용' }],
+        },
+        {
+          allResponses: {},
+          allQuestions: [question],
+          optionTexts: {
+            'radio-other': '   ',
+            'checkbox-other': '상세 내용',
+            'select-other': '상세 내용',
+          },
+        },
+      ),
+    ).toContainEqual({
+      kind: 'required-cells',
+      message: '필수 응답이 비어있습니다',
+      cellIds: ['radio-cell'],
+    });
+  });
+
+  it('필수 checkbox·select·ranking 셀의 선택 상세기입 누락을 같은 이슈로 합친다', () => {
+    const question = detailedOptionCellQuestion();
+
+    expect(
+      collectNumericIssues(
+        question,
+        {
+          'radio-cell': 'radio-other-value',
+          'checkbox-cell': ['checkbox-other-value'],
+          'select-cell': 'select-other-value',
+          'ranking-cell': [{ rank: 1, optionValue: 'ranking-other-value', optionText: '   ' }],
+        },
+        {
+          allResponses: {},
+          allQuestions: [question],
+          optionTexts: {
+            'radio-other': '상세 내용',
+            'checkbox-other': '',
+            'select-other': ' ',
+          },
+        },
+      ),
+    ).toContainEqual({
+      kind: 'required-cells',
+      message: '필수 응답이 비어있습니다',
+      cellIds: ['checkbox-cell', 'select-cell', 'ranking-cell'],
+    });
+  });
+
+  it('유효한 상세기입과 선택 사항 셀의 빈 상세기입은 차단하지 않는다', () => {
+    const question = detailedOptionCellQuestion({
+      tableRowsData: [
+        {
+          id: 'r1',
+          label: '행1',
+          cells: [
+            {
+              id: 'required-radio',
+              type: 'radio',
+              content: '',
+              required: true,
+              radioOptions: [
+                { id: 'required-other', value: 'required-other', label: '기타', allowTextInput: true },
+              ],
+            },
+            {
+              id: 'optional-radio',
+              type: 'radio',
+              content: '',
+              required: false,
+              radioOptions: [
+                { id: 'optional-other', value: 'optional-other', label: '기타', allowTextInput: true },
+              ],
+            },
+          ],
+        },
+      ] as TableRow[],
+    });
+
+    expect(
+      collectNumericIssues(
+        question,
+        { 'required-radio': 'required-other', 'optional-radio': 'optional-other' },
+        {
+          allResponses: {},
+          allQuestions: [question],
+          optionTexts: { 'required-other': '상세 내용', 'optional-other': '   ' },
+        },
+      ),
+    ).toHaveLength(0);
+  });
+
+  it('숨은 필수 셀의 선택 상세기입 누락은 required-cells 이슈에서 제외한다', () => {
+    const question = detailedOptionCellQuestion({
+      tableRowsData: [
+        {
+          id: 'r1',
+          label: '행1',
+          cells: [
+            { id: 'visible-cell', type: 'input', content: '' },
+            {
+              id: 'hidden-radio',
+              type: 'radio',
+              content: '',
+              required: true,
+              isHidden: true,
+              radioOptions: [
+                { id: 'hidden-other', value: 'hidden-other', label: '기타', allowTextInput: true },
+              ],
+            },
+          ],
+        },
+      ] as TableRow[],
+    });
+
+    expect(
+      collectNumericIssues(
+        question,
+        { 'visible-cell': '입력', 'hidden-radio': 'hidden-other' },
+        {
+          allResponses: {},
+          allQuestions: [question],
+          optionTexts: { 'hidden-other': '' },
+        },
+      ),
+    ).toHaveLength(0);
+  });
+});
+
 describe('collectNumericIssues — 열 displayCondition (ctx 전달)', () => {
   const srcQ = {
     id: 'src',

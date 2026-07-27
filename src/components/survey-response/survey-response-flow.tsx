@@ -619,11 +619,12 @@ function SurveyResponseFlowActive({
       const issues = collectNumericIssues(q, responses[q.id], {
         allResponses: responses,
         allQuestions: questions,
+        optionTexts: optionTexts[q.id],
       });
       if (issues.length > 0) map.set(q.id, issues);
     }
     return map;
-  }, [currentStepQuestions, responses, questions]);
+  }, [currentStepQuestions, responses, questions, optionTexts]);
   const [numericErrorStepIndex, setNumericErrorStepIndex] = useState<number | null>(null);
   const showNumericErrors = numericErrorStepIndex === currentStepIndex;
   const visibleNumericIssues = showNumericErrors ? numericIssuesByQuestion : EMPTY_ISSUES;
