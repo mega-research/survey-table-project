@@ -1,6 +1,7 @@
 import { ORPCError, os } from '@orpc/server';
 
 import { isAdminUserAllowed } from '@/lib/auth/admin-allowlist';
+import { canAccessSurvey, getGuestSurveyId } from '@/lib/auth/guest-grants';
 import { getTrustedClientIpOrNull } from '@/lib/rate-limit/client-ip';
 import { getRateLimiter, type RateLimitGroup } from '@/lib/rate-limit/rate-limiter';
 
@@ -79,3 +80,29 @@ export const authed = base.use(({ context, next }) => {
   }
   return next({ context: { user: context.user } });
 });
+
+/**
+ * 설문 스코프 베이스 — 세션 필수 + (admin allowlist ∨ 게스트 grant 보유).
+ *
+ * 게스트에게 열어줄 procedure 전용. 이 베이스를 쓰는 procedure 는 반드시
+ * handler 첫 줄에서 assertSurveyAccess(context.user.id, input.surveyId) 를
+ * 호출해 설문 일치를 강제해야 한다 (유일한 예외: 입력에 surveyId 가 없는
+ * media.deleteMailAttachmentTmp — tmp 네임스페이스 검증에 의존).
+ * 나머지 전 표면은 authed(admin 전용) 유지 — 게스트는 기본 거부.
+ */
+export const scoped = base.use(({ context, next }) => {
+  if (!context.user) {
+    throw new ORPCError('UNAUTHORIZED', { message: '인증이 필요합니다.' });
+  }
+  if (!isAdminUserAllowed(context.user.id) && getGuestSurveyId(context.user.id) === null) {
+    throw new ORPCError('FORBIDDEN', { message: '접근 권한이 없습니다.' });
+  }
+  return next({ context: { user: context.user } });
+});
+
+/** 설문 접근 강제 — admin 통과, 게스트는 grant 일치 필수. 불일치 FORBIDDEN. */
+export function assertSurveyAccess(userId: string, surveyId: string): void {
+  if (!canAccessSurvey(userId, surveyId)) {
+    throw new ORPCError('FORBIDDEN', { message: '해당 설문에 대한 권한이 없습니다.' });
+  }
+}
