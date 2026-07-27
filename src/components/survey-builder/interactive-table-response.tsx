@@ -692,7 +692,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
   );
 
   // ── 빈 테이블 ──
-  if (columns.length === 0) {
+  if (columns.length === 0 || rows.length === 0) {
     return (
       <Card className={className}>
         <CardContent className="p-8">
