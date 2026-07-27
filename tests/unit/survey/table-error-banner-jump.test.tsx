@@ -235,8 +235,11 @@ describe('InteractiveTableResponse 오류 배너', () => {
 
     const buttons = screen.getAllByRole('button', { name: '위치로 이동' });
     expect(buttons).toHaveLength(2);
-    expect(screen.getByText('성별: 필수 응답이 비어있습니다')).toBeVisible();
-    expect(screen.getByText('대학 유형: 필수 응답이 비어있습니다')).toBeVisible();
+    expect(screen.getAllByText('필수 응답이 비어있습니다')).toHaveLength(2);
+    expect(screen.queryByText('성별: 필수 응답이 비어있습니다')).toBeNull();
+    expect(screen.queryByText('대학 유형: 필수 응답이 비어있습니다')).toBeNull();
+    expect(screen.getByText('성별:')).toHaveClass('hidden', 'md:inline');
+    expect(screen.getByText('대학 유형:')).toHaveClass('hidden', 'md:inline');
 
     fireEvent.click(buttons[0]!);
     expect(scrollSpy.mock.contexts.at(-1)).toHaveAttribute('data-row-id', 'gender-row');

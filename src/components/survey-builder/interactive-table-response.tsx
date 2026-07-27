@@ -338,6 +338,7 @@ interface InteractiveTableResponseProps {
   errorItems?:
     | {
         message: string;
+        labelPrefix?: string | undefined;
         cellIds?: string[] | undefined;
         detailTargetIds?: string[] | undefined;
       }[]

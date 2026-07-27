@@ -119,9 +119,8 @@ function buildTableValidationBannerItems(
       // 여러 행의 상세 입력 target은 셀과 일대일 매핑할 수 없으므로 이 경우에는
       // 각 행의 오류 셀을 카드 이동 기준으로 사용한다.
       return [...cellIdsByRow.entries()].map(([rowKey, rowCellIds]) => ({
-        message: rowLabelByKey.has(rowKey)
-          ? `${rowLabelByKey.get(rowKey)}: ${issue.message}`
-          : issue.message,
+        message: issue.message,
+        ...(rowLabelByKey.has(rowKey) ? { labelPrefix: rowLabelByKey.get(rowKey) } : {}),
         cellIds: rowCellIds,
       }));
     });
