@@ -12,6 +12,7 @@ import * as Sentry from '@sentry/nextjs';
 
 import { requireAuth } from '@/lib/auth';
 import { isAdminUserAllowed } from '@/lib/auth/admin-allowlist';
+import { getGuestSurveyId } from '@/lib/auth/guest-grants';
 import {
   MAX_ATTACHMENT_FILE_BYTES,
   TMP_ATTACHMENT_PREFIX,
@@ -43,7 +44,8 @@ export async function POST(request: NextRequest) {
   }
   // admin allowlist 가드 — oRPC authed 와 동일 정책. ADMIN_USER_IDS 로 어드민을
   // 잠갔을 때 임의 인증사용자의 R2 첨부 업로드 남용을 차단.
-  if (!isAdminUserAllowed(userId)) {
+  // 게스트도 메일 첨부 업로드 필요 — tmp 네임스페이스 한정이라 설문 스코프 없이 허용
+  if (!isAdminUserAllowed(userId) && getGuestSurveyId(userId) === null) {
     return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
   }
 

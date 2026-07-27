@@ -3,7 +3,7 @@ import { NextRequest } from 'next/server';
 
 vi.mock('@/db', () => ({ db: {} }));
 vi.mock('@/lib/auth', () => ({ requireAuth: vi.fn() }));
-vi.mock('@/lib/auth/admin-allowlist', () => ({ isAdminUserAllowed: vi.fn() }));
+vi.mock('@/lib/auth/guest-grants', () => ({ canAccessSurvey: vi.fn() }));
 vi.mock('@/lib/operations/data-scope.server', () => ({
   loadOperationsDataScope: vi.fn(),
 }));
@@ -19,7 +19,7 @@ vi.mock('@/lib/operations/contacts-export.server', async (importOriginal) => {
 });
 
 import { requireAuth } from '@/lib/auth';
-import { isAdminUserAllowed } from '@/lib/auth/admin-allowlist';
+import { canAccessSurvey } from '@/lib/auth/guest-grants';
 import { loadOperationsDataScope } from '@/lib/operations/data-scope.server';
 import {
   getContactColumnScheme,
@@ -45,7 +45,7 @@ const params = { params: Promise.resolve({ surveyId: 's1' }) };
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(requireAuth).mockResolvedValue({ id: 'u1' } as never);
-  vi.mocked(isAdminUserAllowed).mockReturnValue(true);
+  vi.mocked(canAccessSurvey).mockReturnValue(true);
   vi.mocked(loadOperationsDataScope).mockResolvedValue('real');
   vi.mocked(getContactColumnScheme).mockResolvedValue(SCHEME);
   vi.mocked(listContactsForExport).mockResolvedValue([
@@ -69,8 +69,8 @@ describe('GET /api/surveys/[surveyId]/contacts/export', () => {
     expect(res.status).toBe(401);
   });
 
-  it('allowlist 밖이면 403', async () => {
-    vi.mocked(isAdminUserAllowed).mockReturnValue(false);
+  it('접근 권한 없으면 403', async () => {
+    vi.mocked(canAccessSurvey).mockReturnValue(false);
     const res = await GET(makeRequest('?cols=system.resid'), params);
     expect(res.status).toBe(403);
   });

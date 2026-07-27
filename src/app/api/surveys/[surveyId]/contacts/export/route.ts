@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { requireAuth } from '@/lib/auth';
-import { isAdminUserAllowed } from '@/lib/auth/admin-allowlist';
+import { canAccessSurvey } from '@/lib/auth/guest-grants';
 import { resolveExportColumns } from '@/lib/operations/contacts-export';
 import {
   buildContactsExportWorkbook,
@@ -23,7 +23,7 @@ const XLSX_MIME =
 /**
  * 조사 대상 명단 엑셀 다운로드.
  * PII 를 평문으로 내보내므로 응답 export 라우트와 동일하게
- * requireAuth + isAdminUserAllowed 이중 가드를 적용한다.
+ * requireAuth + 게스트 설문 스코프 가드(canAccessSurvey)를 적용한다.
  */
 export async function GET(
   request: NextRequest,
@@ -31,11 +31,11 @@ export async function GET(
 ) {
   try {
     const user = await requireAuth();
-    if (!isAdminUserAllowed(user.id)) {
+    const { surveyId } = await params;
+    if (!canAccessSurvey(user.id, surveyId)) {
       return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
     }
 
-    const { surveyId } = await params;
     const scope = await loadOperationsDataScope(surveyId);
 
     const scheme = await getContactColumnScheme(surveyId, scope);

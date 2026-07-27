@@ -8,7 +8,7 @@ import { completedResponse, notDeletedResponse, notTestResponse } from '@/data/r
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { normalizeQuestions } from '@/lib/question';
 import { requireAuth } from '@/lib/auth';
-import { isAdminUserAllowed } from '@/lib/auth/admin-allowlist';
+import { canAccessSurvey } from '@/lib/auth/guest-grants';
 import { generateRawDataWorkbook, type RawExportResponseRow } from '@/lib/analytics/raw-workbook';
 import { buildSplitWorkbook } from '@/lib/analytics/split-workbook';
 import { planSplit } from '@/lib/analytics/split-export';
@@ -30,15 +30,15 @@ export async function GET(
   { params }: { params: Promise<{ surveyId: string }> },
 ) {
   try {
-    // 인증 + admin allowlist 가드. oRPC authed 미들웨어와 동일한 isAdminUserAllowed 를
+    // 인증 + 게스트 설문 스코프 가드. oRPC authed 미들웨어와 동일한 canAccessSurvey 를
     // 적용해, ADMIN_USER_IDS 로 어드민을 잠갔을 때 이 REST 라우트가 형제 우회 경로가
-    // 되지 않도록 한다(임의 인증사용자의 전체 응답 export 차단).
+    // 되지 않도록 한다(게스트는 grant 된 설문만, 그 외 임의 인증사용자는 전체 차단).
     const user = await requireAuth();
-    if (!isAdminUserAllowed(user.id)) {
+    const { surveyId } = await params;
+    if (!canAccessSurvey(user.id, surveyId)) {
       return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
     }
 
-    const { surveyId } = await params;
     const type = request.nextUrl.searchParams.get('type') as ExportType | null;
 
     if (!type || !ALLOWED_EXPORT_TYPES.includes(type)) {
