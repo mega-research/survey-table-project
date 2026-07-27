@@ -34,6 +34,13 @@ export function CellStyleFields({
   }, [backgroundColor]);
 
   const commitDraft = () => {
+    if (draft.trim() === '') {
+      setDraft('');
+      onBackgroundColorDraftChange?.('');
+      onBackgroundColorChange('');
+      return;
+    }
+
     const normalized = normalizeCellHexColor(draft);
     if (normalized) {
       setDraft(normalized);

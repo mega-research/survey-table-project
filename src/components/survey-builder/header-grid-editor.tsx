@@ -249,9 +249,10 @@ export function HeaderGridEditor({ headerGrid, columnCount, onChange }: HeaderGr
       }
     }
 
-    // 첫 번째 셀의 라벨 사용
+    // 첫 번째 셀의 라벨과 스타일 사용
     const firstRef = occupiedMap[minRow]?.[minCol];
-    const mergedLabel = firstRef ? (headerGrid[firstRef.rowIdx]?.[firstRef.cellIdx]?.label ?? '') : '';
+    const firstCell = firstRef ? headerGrid[firstRef.rowIdx]?.[firstRef.cellIdx] : undefined;
+    const mergedLabel = firstCell?.label ?? '';
 
     // 새 그리드 구성
     const newGrid: HeaderCell[][] = [];
@@ -273,6 +274,7 @@ export function HeaderGridEditor({ headerGrid, columnCount, onChange }: HeaderGr
           // 이 셀은 병합 영역에 속함
           if (!mergedCellInserted && rowIdx === minRow && gridCol === minCol) {
             newRow.push({
+              ...firstCell,
               id: generateId(),
               label: mergedLabel,
               colspan: mergeColspan,
@@ -338,7 +340,13 @@ export function HeaderGridEditor({ headerGrid, columnCount, onChange }: HeaderGr
       // 2. 같은 행에 빈 셀 추가
       const sameRowCells: HeaderCell[] = [];
       for (let c = 1; c < origColspan; c++) {
-        sameRowCells.push({ id: generateId(), label: '', colspan: 1, rowspan: 1 });
+        sameRowCells.push({
+          ...cell,
+          id: generateId(),
+          label: '',
+          colspan: 1,
+          rowspan: 1,
+        });
       }
       const currentRow = currentGrid[rowIdx];
       if (currentRow) currentRow.splice(cellIdx + 1, 0, ...sameRowCells);
@@ -365,7 +373,13 @@ export function HeaderGridEditor({ headerGrid, columnCount, onChange }: HeaderGr
 
         const fillCells: HeaderCell[] = [];
         for (let c = 0; c < origColspan; c++) {
-          fillCells.push({ id: generateId(), label: '', colspan: 1, rowspan: 1 });
+          fillCells.push({
+            ...cell,
+            id: generateId(),
+            label: '',
+            colspan: 1,
+            rowspan: 1,
+          });
         }
         targetRow.splice(insertPos, 0, ...fillCells);
       }
@@ -524,7 +538,10 @@ export function HeaderGridEditor({ headerGrid, columnCount, onChange }: HeaderGr
                         setEditingCell(null);
                       }
                     }}
-                    className={cn('h-7 text-center text-sm', getCellTextClassName(cell))}
+                    className={cn(
+                      'h-7 bg-transparent text-center text-sm',
+                      getCellTextClassName(cell),
+                    )}
                   />
                 ) : (
                   <span

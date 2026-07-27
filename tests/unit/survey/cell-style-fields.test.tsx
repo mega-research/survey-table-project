@@ -46,4 +46,25 @@ describe('CellStyleFields', () => {
     await user.click(screen.getByRole('button', { name: '배경색 없음' }));
     expect(onBackground).toHaveBeenCalledWith('');
   });
+
+  it('HEX 입력을 비우고 blur하면 오류 없이 배경색 제거를 전달한다', async () => {
+    const user = userEvent.setup();
+    const onBackground = vi.fn();
+    const onInvalidColor = vi.fn();
+    render(
+      <CellStyleFields
+        textBold={false}
+        backgroundColor="#112233"
+        onTextBoldChange={() => {}}
+        onBackgroundColorChange={onBackground}
+        onInvalidColor={onInvalidColor}
+      />,
+    );
+
+    await user.clear(screen.getByLabelText('HEX 색상'));
+    await user.tab();
+
+    expect(onBackground).toHaveBeenCalledWith('');
+    expect(onInvalidColor).not.toHaveBeenCalled();
+  });
 });

@@ -51,6 +51,34 @@ describe('HeaderBulkStyleDialog', () => {
     expect(onApply).not.toHaveBeenCalled();
   });
 
+  it('동일한 초기 스타일 객체로 재렌더해도 작성 중인 값과 오류를 보존한다', async () => {
+    const user = userEvent.setup();
+    const onApply = vi.fn();
+    const { rerender } = render(
+      <HeaderBulkStyleDialog
+        open
+        onOpenChange={vi.fn()}
+        initialStyle={{ textBold: false, backgroundColor: '' }}
+        onApply={onApply}
+      />,
+    );
+
+    await user.type(screen.getByRole('textbox', { name: 'HEX 색상' }), '12ZZ99');
+    await user.click(screen.getByRole('button', { name: '전체 헤더에 적용' }));
+
+    rerender(
+      <HeaderBulkStyleDialog
+        open
+        onOpenChange={vi.fn()}
+        initialStyle={{ textBold: false, backgroundColor: '' }}
+        onApply={onApply}
+      />,
+    );
+
+    expect(screen.getByRole('textbox', { name: 'HEX 색상' })).toHaveValue('12ZZ99');
+    expect(screen.getByRole('alert')).toHaveTextContent('3자리 또는 6자리 HEX 색상을 입력하세요.');
+  });
+
   it('배경색 없음과 Bold 해제를 빈 스타일로 적용한다', async () => {
     const user = userEvent.setup();
     const onApply = vi.fn();
