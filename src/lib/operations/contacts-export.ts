@@ -41,7 +41,7 @@ export interface ExportColumn {
 export function buildDownloadCandidates(
   scheme: ContactColumnScheme,
 ): DownloadColumnCandidate[] {
-  const candidates = [...(scheme.columns ?? [])]
+  const candidates: DownloadColumnCandidate[] = [...(scheme.columns ?? [])]
     .filter((c) => !EXCLUDED_SOURCES.has(c.source))
     .sort((a, b) => a.order - b.order)
     .map((c) => ({ source: c.source, label: c.label, defaultChecked: !c.hidden }));
