@@ -415,6 +415,14 @@ export function useResponseLifecycle({
         if (!firstRequired) return;
         const firstId = firstRequired.id;
         const targetIdx = findStepIndexOfQuestion(steps, firstId);
+        const hasBlockingDetailIssue = collectNumericIssues(firstRequired, responses[firstId], {
+          allResponses: responses,
+          allQuestions: questions,
+          optionTexts: optionTextsByQuestion[firstId],
+        }).some((issue) => issue.kind === 'required-detail' || issue.kind === 'required-cells');
+        if (hasBlockingDetailIssue && targetIdx !== -1) {
+          setNumericErrorStepIndex(targetIdx);
+        }
         if (targetIdx !== -1 && targetIdx !== currentStepIndex) {
           setCurrentStepIndex(targetIdx);
           window.scrollTo({ top: 0, behavior: 'smooth' });

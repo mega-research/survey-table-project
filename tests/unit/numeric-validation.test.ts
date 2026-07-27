@@ -391,6 +391,36 @@ describe('collectNumericIssues — 인터랙티브 셀 필수 (radio/checkbox/se
   });
 });
 
+describe('collectNumericIssues — 질문 상세기입', () => {
+  it('필수 radio 질문의 선택 상세기입이 공백이면 질문 이동 타깃이 있는 이슈를 반환한다', () => {
+    const question = {
+      id: 'question-detail',
+      type: 'radio',
+      title: '기타 질문',
+      required: true,
+      order: 0,
+      options: [{
+        id: 'other-option',
+        value: 'other',
+        label: '기타',
+        allowTextInput: true,
+      }],
+    } as Question;
+
+    expect(
+      collectNumericIssues(question, 'other', {
+        allResponses: { 'question-detail': 'other' },
+        allQuestions: [question],
+        optionTexts: { 'other-option': '   ' },
+      }),
+    ).toEqual([{
+      kind: 'required-detail',
+      message: '필수 응답이 비어있습니다',
+      detailTargetIds: ['question-detail:option:other-option'],
+    }]);
+  });
+});
+
 describe('collectNumericIssues — 테이블 필수 옵션 상세기입', () => {
   function detailedOptionCellQuestion(overrides: Partial<Question> = {}): Question {
     return tableQuestion({
@@ -488,6 +518,7 @@ describe('collectNumericIssues — 테이블 필수 옵션 상세기입', () => 
       kind: 'required-cells',
       message: '필수 응답이 비어있습니다',
       cellIds: ['radio-cell'],
+      detailTargetIds: ['q1:option:radio-other'],
     });
   });
 
@@ -517,6 +548,11 @@ describe('collectNumericIssues — 테이블 필수 옵션 상세기입', () => 
       kind: 'required-cells',
       message: '필수 응답이 비어있습니다',
       cellIds: ['checkbox-cell', 'select-cell', 'ranking-cell'],
+      detailTargetIds: [
+        'q1:option:checkbox-other',
+        'q1:option:select-other',
+        'ranking-cell:ranking:1:ranking-other-value',
+      ],
     });
   });
 
@@ -669,6 +705,7 @@ describe('collectNumericIssues — 테이블 필수 옵션 상세기입', () => 
       kind: 'required-cells',
       message: '필수 응답이 비어있습니다',
       cellIds: ['empty-value-radio'],
+      detailTargetIds: ['q1:option:empty-other'],
     });
   });
 
@@ -754,6 +791,7 @@ describe('collectNumericIssues — 테이블 필수 옵션 상세기입', () => 
       kind: 'required-cells',
       message: '필수 응답이 비어있습니다',
       cellIds: ['row-detail', 'column-detail'],
+      detailTargetIds: ['q1:option:row-other', 'q1:option:column-other'],
     });
   });
 
@@ -818,6 +856,7 @@ describe('collectNumericIssues — 테이블 필수 옵션 상세기입', () => 
       kind: 'required-cells',
       message: '필수 응답이 비어있습니다',
       cellIds: ['dynamic-detail', 'linked-detail'],
+      detailTargetIds: ['q1:option:dynamic-other', 'q1:option:linked-other'],
     });
   });
 
@@ -917,6 +956,10 @@ describe('collectNumericIssues — 테이블 필수 옵션 상세기입', () => 
       kind: 'required-cells',
       message: '필수 응답이 비어있습니다',
       cellIds: ['conditional-dynamic-detail', 'conditional-linked-detail'],
+      detailTargetIds: [
+        'q1:option:conditional-dynamic-other',
+        'q1:option:conditional-linked-other',
+      ],
     });
   });
 });

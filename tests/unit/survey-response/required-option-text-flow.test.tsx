@@ -63,6 +63,47 @@ function createSurvey({ required = true, hasNextPage = true } = {}): Survey {
   } as Survey;
 }
 
+function createChoiceTableSurvey(): Survey {
+  const survey = createSurvey();
+  return {
+    ...survey,
+    questions: [
+      {
+        id: 'q-required',
+        type: 'radio',
+        title: '필수 기타 질문',
+        description: '',
+        required: true,
+        order: 0,
+        tableColumns: [{ id: 'choice-column', label: '선택' }],
+        tableRowsData: [
+          {
+            id: 'choice-row',
+            label: '기타 행',
+            cells: [
+              {
+                id: 'choice-other',
+                type: 'choice_opt',
+                content: '기타',
+                allowTextInput: true,
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: 'q-next',
+        type: 'text',
+        title: '다음 페이지 질문',
+        description: '',
+        required: false,
+        order: 1,
+        pageBreakBefore: true,
+      },
+    ],
+  } as Survey;
+}
+
 function renderFlow(options?: Parameters<typeof createSurvey>[0]) {
   render(
     <SurveyResponseFlow
@@ -102,6 +143,43 @@ function renderAdminFlow(
         versionSnapshot,
         initialContactAttrs: {},
         onSubmit,
+      }}
+    />,
+  );
+}
+
+function renderMobileChoiceTableAdminFlow(optionText: string) {
+  setMobileViewport(true);
+  const survey = createChoiceTableSurvey();
+  const versionSnapshot: SurveyVersionSnapshot = {
+    title: survey.title,
+    questions: survey.questions as SurveyVersionSnapshot['questions'],
+    groups: [],
+    settings: {
+      isPublic: true,
+      allowMultipleResponses: true,
+      showProgressBar: true,
+      shuffleQuestions: false,
+      requireLogin: false,
+      thankYouMessage: '감사합니다.',
+    },
+  };
+  render(
+    <SurveyResponseFlow
+      mode="admin-edit"
+      surveyIdentifier="admin-choice-table-required-option-text"
+      adminContext={{
+        responseId: 'response-choice-table',
+        surveyId: survey.id,
+        initialResponses: {
+          'q-required': 'choice-other',
+          __optTexts__: {
+            'q-required': { 'choice-other': optionText },
+          },
+        },
+        versionSnapshot,
+        initialContactAttrs: {},
+        onSubmit: vi.fn().mockResolvedValue(undefined),
       }}
     />,
   );
@@ -218,6 +296,8 @@ describe('필수 옵션 상세기입 응답 흐름', () => {
 
     expect(screen.queryByText('다음 페이지 질문')).not.toBeInTheDocument();
     expectRequiredHighlight();
+    expect(screen.getByRole('alert')).toHaveTextContent('필수 응답이 비어있습니다');
+    expect(screen.getByRole('button', { name: '위치로 이동' })).toBeVisible();
   });
 
   it('모바일에서 공백 필수 상세기입은 완료를 차단하고 질문을 하이라이트한다', async () => {
@@ -231,6 +311,8 @@ describe('필수 옵션 상세기입 응답 흐름', () => {
 
     expect(screen.getByText('필수 기타 질문')).toBeVisible();
     expectRequiredHighlight();
+    expect(screen.getByRole('alert')).toHaveTextContent('필수 응답이 비어있습니다');
+    expect(screen.getByRole('button', { name: '위치로 이동' })).toBeVisible();
   });
 
   it('모바일에서 유효한 필수 상세기입은 다음 페이지로 이동한다', async () => {
@@ -244,6 +326,32 @@ describe('필수 옵션 상세기입 응답 흐름', () => {
 
     expect(await screen.findByText('다음 페이지 질문')).toBeVisible();
   });
+
+  it.each(['', '   '])(
+    '모바일 choice-table 초기 상세기입이 %j이면 배너를 표시하고 실제 입력으로 이동한 뒤 유효 입력 시 진행한다',
+    async (optionText) => {
+      const scrollSpy = vi.fn();
+      Element.prototype.scrollIntoView = scrollSpy;
+      renderMobileChoiceTableAdminFlow(optionText);
+      const user = userEvent.setup();
+
+      const detailInput = await screen.findByPlaceholderText('상세 기재');
+      await user.click(getMobileActionButton('다음'));
+
+      expect(screen.queryByText('다음 페이지 질문')).not.toBeInTheDocument();
+      expect(screen.getByRole('alert')).toHaveTextContent('필수 응답이 비어있습니다');
+      await user.click(screen.getByRole('button', { name: '위치로 이동' }));
+      expect(scrollSpy).toHaveBeenCalledTimes(1);
+      expect(scrollSpy.mock.contexts[0]).toBe(detailInput);
+
+      await user.clear(detailInput);
+      await user.type(detailInput, '상세 내용');
+      await user.click(getMobileActionButton('다음'));
+
+      expect(await screen.findByText('다음 페이지 질문')).toBeVisible();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    },
+  );
 
   it('관리자 응답의 저장된 루트 상세기입으로 필수 질문 검증을 통과한다', async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);

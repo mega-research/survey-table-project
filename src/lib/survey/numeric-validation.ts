@@ -1,11 +1,11 @@
 /**
- * 숫자 입력의 "다음"/제출 차단형 검증 순수 로직.
+ * "다음"/제출 차단형 검증 순수 로직.
  * - 단답형·셀 min 미달 / 합계 제약(SumConstraint) / 필수 셀(TableCell.required)
+ * - 필수 질문·셀에서 선택된 allowTextInput/랭킹 기타 상세기입 누락
  *
  * tableValidationRules(분기 전용, utils/branch-logic.ts)와 완전히 별개다.
  * 응답 shape: 단답형 = raw 숫자 문자열, 테이블 = { [cellId]: value } 평면 객체.
  */
-
 import type { Question, SumConstraint, TableCell, TableRow } from '@/types/survey';
 import {
   shouldDisplayColumn,
@@ -20,10 +20,12 @@ import { isCellValuePresent } from '@/utils/table-cell-semantics';
 import { collectRequiredOptionTextIssues } from './required-option-text-validation';
 
 export interface NumericIssue {
-  kind: 'range' | 'sum' | 'required-cells';
+  kind: 'range' | 'sum' | 'required-cells' | 'required-detail';
   message: string;
   /** 위반 셀 id (테이블 전용 — 셀 하이라이트용) */
   cellIds?: string[];
+  /** 실제 상세 입력 요소를 우선 탐색하기 위한 안정 DOM 타깃 ID */
+  detailTargetIds?: string[];
 }
 
 /**
@@ -67,11 +69,8 @@ export function collectVisibleTableCells(
     (question.dynamicRowConfigs ?? [])
       .filter(
         (config) =>
-          config.enabled
-          && (
-            !ctx
-            || shouldDisplayDynamicGroup(config, ctx.allResponses, ctx.allQuestions)
-          ),
+          config.enabled &&
+          (!ctx || shouldDisplayDynamicGroup(config, ctx.allResponses, ctx.allQuestions)),
       )
       .map((config) => config.groupId),
   );
@@ -104,21 +103,15 @@ export function collectVisibleTableCells(
   return rows
     .filter(
       (row) =>
-        (!(
-          row.dynamicGroupId
-          && enabledDynamicGroupIds.has(row.dynamicGroupId)
-        ) || (
-          visibleDynamicGroupIds.has(row.dynamicGroupId)
-          && selectedRowIds.has(row.id)
-        )) &&
+        (!(row.dynamicGroupId && enabledDynamicGroupIds.has(row.dynamicGroupId)) ||
+          (visibleDynamicGroupIds.has(row.dynamicGroupId) && selectedRowIds.has(row.id))) &&
         (!(
           hasEnabledDynamicRows &&
           row.showWhenDynamicGroupId &&
           enabledDynamicGroupIds.has(row.showWhenDynamicGroupId)
-        ) || (
-          visibleDynamicGroupIds.has(row.showWhenDynamicGroupId)
-          && groupsWithSelections.has(row.showWhenDynamicGroupId)
-        )),
+        ) ||
+          (visibleDynamicGroupIds.has(row.showWhenDynamicGroupId) &&
+            groupsWithSelections.has(row.showWhenDynamicGroupId))),
     )
     .filter(
       (row) =>
@@ -172,7 +165,7 @@ function sumConstraintMessage(constraint: SumConstraint, sum: number): string {
 }
 
 /**
- * 질문 하나의 차단형 숫자 검증 위반 목록.
+ * 질문 하나의 차단형 검증 위반 목록.
  * - 단답형(text + inputType 'number'): numberFormat.min 미달 (빈 값은 검증 안 함)
  * - table: 셀 min 미달, 합계 제약 위반, 필수 셀 미입력
  *   테이블 미접촉(응답 키 0개)이면 전부 스킵 — 미응답 차단은 question.required 소관.
@@ -188,11 +181,20 @@ export function collectNumericIssues(
     return message ? [{ kind: 'range', message }] : [];
   }
 
-  if (question.type !== 'table') return [];
+  if (question.type !== 'table') {
+    const optionTextIssues = collectRequiredOptionTextIssues(question, response, ctx?.optionTexts);
+    return optionTextIssues.questionMissing
+      ? [
+          {
+            kind: 'required-detail',
+            message: '필수 응답이 비어있습니다',
+            detailTargetIds: optionTextIssues.detailTargetIds ?? [],
+          },
+        ]
+      : [];
+  }
   const cellValues =
-    typeof response === 'object' && response !== null
-      ? (response as Record<string, unknown>)
-      : {};
+    typeof response === 'object' && response !== null ? (response as Record<string, unknown>) : {};
   // 미접촉 판정은 실제 셀 값 키 기준 — __selectedRowIds/__optTexts__ 등 사이드카 키는 세지 않는다.
   // (emptyDefault 자동 채움이 있으면 셀 키가 생겨 검증 대상이 된다 — 의도됨, Q1 그릴링 확정)
   const hasAnyCellValue = Object.keys(cellValues).some((k) => !k.startsWith('__'));
@@ -240,19 +242,27 @@ export function collectNumericIssues(
       (c) => REQUIRED_CELL_TYPES.has(c.type) && c.required && !isCellValuePresent(cellValues[c.id]),
     )
     .map((c) => c.id);
-  const optionTextMissingIds = collectRequiredOptionTextIssues(
+  const visibleOptionTextIssues = collectRequiredOptionTextIssues(
     question,
     cellValues,
     ctx?.optionTexts,
     { visibleCellIds: existingIds },
-  ).cellIds;
-  const missingIds = [...new Set([...ordinaryMissingIds, ...optionTextMissingIds])]
-    .filter((id) => existingIds.has(id));
+  );
+  const missingIds = [
+    ...new Set([
+      ...ordinaryMissingIds,
+      ...visibleOptionTextIssues.cellIds,
+      ...(visibleOptionTextIssues.detailCellIds ?? []),
+    ]),
+  ].filter((id) => existingIds.has(id));
   if (missingIds.length > 0) {
     issues.push({
       kind: 'required-cells',
       message: '필수 응답이 비어있습니다',
       cellIds: missingIds,
+      ...(visibleOptionTextIssues.detailTargetIds
+        ? { detailTargetIds: visibleOptionTextIssues.detailTargetIds }
+        : {}),
     });
   }
 

@@ -4,7 +4,8 @@ import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 
 import { ChevronDown, ChevronRight, FileText, ListChecks } from 'lucide-react';
 
-import { scrollToCell } from '@/components/survey-response/scroll-to-issue';
+import { scrollToIssue } from '@/components/survey-response/scroll-to-issue';
+import { ValidationIssueBanner } from '@/components/survey-response/validation-issue-banner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useDynamicRows } from '@/hooks/use-dynamic-rows';
 import { useElementWidth } from '@/hooks/use-element-width';
@@ -334,7 +335,13 @@ interface InteractiveTableResponseProps {
   errorCellIds?: Set<string> | undefined;
   /** 차단형 검증 에러 메시지 (테이블 아래 에러 박스) */
   /** 차단형 검증 오류 배너 항목 — cellIds 가 있으면 "위치로 이동" 버튼을 단다 */
-  errorItems?: { message: string; cellIds?: string[] | undefined }[] | undefined;
+  errorItems?:
+    | {
+        message: string;
+        cellIds?: string[] | undefined;
+        detailTargetIds?: string[] | undefined;
+      }[]
+    | undefined;
 }
 
 export const InteractiveTableResponse = React.memo(function InteractiveTableResponse({
@@ -905,40 +912,27 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
             )}
           </div>
 
-          {errorItems && errorItems.length > 0 && (
-            <div
-              role="alert"
-              className="mt-2 space-y-1 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
-            >
-              {errorItems.map((item, i) => (
-                <div key={i} className="flex items-center justify-between gap-3">
-                  <p className="min-w-0">{item.message}</p>
-                  {item.cellIds && item.cellIds.length > 0 && (
-                    <button
-                      type="button"
-                      // 드릴다운 모드는 위반 셀이 다른 섹션에 있어 DOM 에 없을 수 있다.
-                      // 먼저 해당 섹션/리프로 내비를 전환하고, 상세가 렌더된 다음
-                      // 프레임에 셀로 스크롤한다 (이미 해당 상세면 스크롤만 동작).
-                      onClick={() => {
-                        const cellIds = item.cellIds!;
-                        if (drilldownNavigateRef.current) {
-                          drilldownNavigateRef.current(cellIds);
-                          window.requestAnimationFrame(() =>
-                            window.requestAnimationFrame(() => scrollToCell(cellIds)),
-                          );
-                        } else {
-                          scrollToCell(cellIds);
-                        }
-                      }}
-                      className="shrink-0 rounded border border-red-300 bg-white px-2 py-0.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-100"
-                    >
-                      위치로 이동
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
+          <ValidationIssueBanner
+            items={errorItems}
+            onNavigate={(item) => {
+              const cellIds = item.cellIds ?? [];
+              const scroll = () =>
+                scrollToIssue({
+                  detailTargetIds: item.detailTargetIds,
+                  cellIds,
+                });
+              // 드릴다운 모드는 위반 셀이 다른 섹션에 있어 DOM 에 없을 수 있다.
+              // 먼저 해당 섹션/리프로 내비를 전환하고, 상세가 렌더된 다음 이동한다.
+              if (drilldownNavigateRef.current && cellIds.length > 0) {
+                drilldownNavigateRef.current(cellIds);
+                window.requestAnimationFrame(() =>
+                  window.requestAnimationFrame(scroll),
+                );
+              } else {
+                scroll();
+              }
+            }}
+          />
         </CardContent>
       </Card>
 

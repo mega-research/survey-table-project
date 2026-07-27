@@ -11,6 +11,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useMobileView } from '@/hooks/use-media-query';
+import { rankingTextTargetId } from '@/lib/survey/option-text-target';
 import { cn } from '@/lib/utils';
 import type { QuestionOption, RankingAnswer } from '@/types/survey';
 import { getOptionsLayout } from '@/utils/options-layout';
@@ -38,6 +39,8 @@ export interface RankingDropdownStackProps {
   compact?: boolean;
   /** 순위 드롭다운 배치 (undefined/1=세로, 0=가로, N≥2=N열 그리드). compact 와 독립. */
   columns?: number | undefined;
+  /** 순수 상세기입 검증과 DOM 이동 타깃을 맞추는 질문/그룹/셀 scope ID */
+  detailTargetScopeId?: string | undefined;
 }
 
 /**
@@ -53,6 +56,7 @@ export function RankingDropdownStack({
   onChange,
   compact = false,
   columns,
+  detailTargetScopeId,
 }: RankingDropdownStackProps) {
   const isMobile = useMobileView();
 
@@ -240,6 +244,11 @@ export function RankingDropdownStack({
                     onChange={(e) => handleOtherText(rank, e.target.value)}
                     className={`${otherInputBaseCls}${isGrid ? ' w-full' : ''}`}
                     style={isHorizontal ? { width: RANKING_HORIZONTAL_ITEM_WIDTH } : undefined}
+                    data-option-text-target-id={
+                      detailTargetScopeId
+                        ? rankingTextTargetId(detailTargetScopeId, rank, RANKING_OTHER_VALUE)
+                        : undefined
+                    }
                   />
                 </div>
               )}
@@ -251,6 +260,11 @@ export function RankingDropdownStack({
                     onChange={(e) => handleOptionText(rank, e.target.value)}
                     className={`${otherInputBaseCls}${isGrid ? ' w-full' : ''}`}
                     style={isHorizontal ? { width: RANKING_HORIZONTAL_ITEM_WIDTH } : undefined}
+                    data-option-text-target-id={
+                      detailTargetScopeId
+                        ? rankingTextTargetId(detailTargetScopeId, rank, currentValue)
+                        : undefined
+                    }
                   />
                 </div>
               )}
@@ -272,6 +286,11 @@ export function RankingDropdownStack({
                   value={otherTextAt(rank)}
                   onChange={(e) => handleOtherText(rank, e.target.value)}
                   className={`${otherInputBaseCls}${compact ? '' : ' w-full'}`}
+                  data-option-text-target-id={
+                    detailTargetScopeId
+                      ? rankingTextTargetId(detailTargetScopeId, rank, RANKING_OTHER_VALUE)
+                      : undefined
+                  }
                 />
               </div>
             )}
@@ -282,6 +301,11 @@ export function RankingDropdownStack({
                   value={optionTextAt(rank)}
                   onChange={(e) => handleOptionText(rank, e.target.value)}
                   className={`${otherInputBaseCls}${compact ? '' : ' w-full'}`}
+                  data-option-text-target-id={
+                    detailTargetScopeId
+                      ? rankingTextTargetId(detailTargetScopeId, rank, currentValue)
+                      : undefined
+                  }
                 />
               </div>
             )}

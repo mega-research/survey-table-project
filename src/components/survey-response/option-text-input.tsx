@@ -1,6 +1,7 @@
 'use client';
 
 import { Input } from '@/components/ui/input';
+import { optionTextTargetId } from '@/lib/survey/option-text-target';
 import { useSurveyResponseStore } from '@/stores/survey-response-store';
 
 // useSyncExternalStore 안정 참조 — selector 내부 `?? {}` 사용 시 무한 루프 경고 회피
@@ -33,6 +34,7 @@ export function OptionTextInput({ questionId, option, className }: OptionTextInp
       onChange={(e) => setOptionText(questionId, option.id, e.target.value)}
       placeholder={option.textInputPlaceholder || DEFAULT_PLACEHOLDER}
       className={className}
+      data-option-text-target-id={optionTextTargetId(questionId, option.id)}
     />
   );
 }
