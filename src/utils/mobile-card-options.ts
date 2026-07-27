@@ -19,6 +19,17 @@ export function computeMobileOptionsColumnsByLabels(labels: ReadonlyArray<string
 }
 
 /**
+ * 모바일 옵션 열 수 결정 — 저작자 명시값(mobileOptionsColumns)이 있으면 그 값을 강제,
+ * 없으면(null/undefined) 라벨 길이 휴리스틱으로 폴백.
+ */
+export function resolveMobileOptionsColumns(
+  explicit: number | null | undefined,
+  labels: ReadonlyArray<string | undefined>,
+): number {
+  return explicit ?? computeMobileOptionsColumnsByLabels(labels);
+}
+
+/**
  * 모바일 카드(RowCard) 안 옵션 그리드의 열 수 결정 (TableCell 입력).
  */
 export function computeMobileCardOptionsColumns(cell: TableCell): number {
@@ -43,11 +54,18 @@ export function applyMobileOptionsGridOverride(
 /**
  * 카드 안 셀의 optionsColumns 를 라벨 길이 휴리스틱으로 override.
  * 옵션이 없거나 이미 같은 값이면 원본 cell 그대로 반환 (참조 보존).
+ * 저작자가 모바일 배치를 명시했으면(mobileOptionsColumns != null) 휴리스틱·가로 한 줄 예외
+ * 모두 무시하고 강제한다.
  * "가로 한 줄"(optionsColumns === 0, flex-wrap)은 저작자 명시 레이아웃이므로
  * override 하지 않는다 — 0~10점 스케일 같은 짧은 라벨 다수가 카드 안에서도
  * 폭을 채우며 여러 줄로 wrap 되게 유지.
  */
 export function overrideCellOptionsColumnsForCard<T extends TableCell>(cell: T): T {
+  // 저작자가 모바일 배치를 명시했으면 휴리스틱·가로 한 줄 예외 모두 무시하고 강제.
+  if (cell.mobileOptionsColumns != null) {
+    if (cell.optionsColumns === cell.mobileOptionsColumns) return cell;
+    return { ...cell, optionsColumns: cell.mobileOptionsColumns };
+  }
   if (cell.optionsColumns === 0) return cell;
   const cols = computeMobileCardOptionsColumns(cell);
   if (cols === 0 || cell.optionsColumns === cols) return cell;

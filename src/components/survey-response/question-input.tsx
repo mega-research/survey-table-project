@@ -15,7 +15,7 @@ import { Question, QuestionOption } from '@/types/survey';
 import { isChoiceTableSource } from '@/utils/choice-source';
 import {
   applyMobileOptionsGridOverride,
-  computeMobileOptionsColumnsByLabels,
+  resolveMobileOptionsColumns,
 } from '@/utils/mobile-card-options';
 import { getOptionsLayout } from '@/utils/options-layout';
 
@@ -296,7 +296,10 @@ function RadioQuestion({
 
   const isMobileView = useMobileView();
   const effectiveColumns = isMobileView
-    ? computeMobileOptionsColumnsByLabels(question.options?.map((o) => o.label) ?? [])
+    ? resolveMobileOptionsColumns(
+        question.mobileOptionsColumns,
+        question.options?.map((o) => o.label) ?? [],
+      )
     : question.optionsColumns;
   const layout = getOptionsLayout(effectiveColumns, question.optionsAlign);
   const layoutStyle = isMobileView
@@ -406,7 +409,10 @@ function CheckboxQuestion({
 
   const isMobileView = useMobileView();
   const effectiveColumns = isMobileView
-    ? computeMobileOptionsColumnsByLabels(question.options?.map((o) => o.label) ?? [])
+    ? resolveMobileOptionsColumns(
+        question.mobileOptionsColumns,
+        question.options?.map((o) => o.label) ?? [],
+      )
     : question.optionsColumns;
   const layout = getOptionsLayout(effectiveColumns, question.optionsAlign);
   const layoutStyle = isMobileView
