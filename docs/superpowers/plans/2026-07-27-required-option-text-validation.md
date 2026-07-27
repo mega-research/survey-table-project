@@ -47,12 +47,14 @@
 - Create: `src/lib/survey/required-option-text-validation.ts`
 - Create: `tests/unit/required-option-text-validation.test.ts`
 - Modify: `src/lib/option-text-migration.ts`
+- Modify: `src/lib/survey/numeric-validation.ts`
 - Modify: `tests/integration/option-text-migration.test.ts`
 
 **Interfaces:**
 
 - Produces: `collectSelectedOptionIds(value, options): Set<string>`
-- Produces: `collectRequiredOptionTextIssues(question, response, optionTexts): { questionMissing: boolean; cellIds: string[] }`
+- Produces: `collectRequiredOptionTextIssues(question, response, optionTexts, context?): { questionMissing: boolean; cellIds: string[] }`
+- Produces: `collectVisibleTableCells(question, response, context): TableCell[]`
 - Consumes: `Question`, `QuestionOption`, `RankingAnswer`, `resolveChoiceOptions`, `resolveRankingOptions`, `parseRankingAnswers`
 
 - [ ] **Step 1: 선택 옵션 ID 추출 테스트를 작성한다**
@@ -89,6 +91,10 @@ export function collectSelectedOptionIds(
 ```
 
 `filterOptionTextsForSubmission`은 새 함수를 호출하고 기존 결과를 그대로 유지한다.
+
+기존 `numeric-validation.ts`의 비공개 `visibleCells`는 동작을 변경하지 않고
+`collectVisibleTableCells`로 이름을 바꿔 export한다. Task 2의 필수 테이블 질문 검증과
+Task 3의 필수 셀 검증이 같은 가시성 정본을 사용한다.
 
 - [ ] **Step 4: 선택 옵션 ID와 기존 제출 필터 테스트를 GREEN으로 확인한다**
 
@@ -157,12 +163,18 @@ export function collectRequiredOptionTextIssues(
   question: Question,
   response: unknown,
   optionTexts: Record<string, string> | undefined,
+  context?: { visibleCellIds?: ReadonlySet<string> },
 ): RequiredOptionTextIssues {
   const questionMissing = question.required === true
-    ? hasMissingSelectedOptionText(question, response, optionTexts)
+    ? hasMissingSelectedOptionText(question, response, optionTexts, context?.visibleCellIds)
     : false;
   const cellIds = question.type === 'table'
-    ? collectMissingRequiredCellOptionTexts(question, response, optionTexts)
+    ? collectMissingRequiredCellOptionTexts(
+        question,
+        response,
+        optionTexts,
+        context?.visibleCellIds,
+      )
     : [];
   return { questionMissing, cellIds };
 }
@@ -171,7 +183,8 @@ export function collectRequiredOptionTextIssues(
 일반 선택 옵션은 `collectSelectedOptionIds`와 `optionTexts[option.id]?.trim()`을 사용한다.
 순위형은 선택된 `RankingAnswer.optionValue`의 옵션을 찾아 `optionText?.trim()`을 검사한다.
 테이블 질문이 필수이면 내부 모든 선택형 셀의 선택된 상세기입 옵션도 질문 누락에 포함하고,
-셀 누락 목록은 `cell.required === true`인 표시 대상 후보만 반환한다.
+셀 누락 목록은 `cell.required === true`인 표시 대상 후보만 반환한다. `visibleCellIds`가
+전달되면 그 집합에 포함된 셀만 검사하며, 미전달 시에도 `isHidden` 셀은 제외한다.
 
 - [ ] **Step 8: 순수 검증 테스트와 타입 검사를 GREEN으로 확인한다**
 
@@ -180,7 +193,8 @@ Run:
 ```bash
 pnpm exec vitest run \
   tests/unit/required-option-text-validation.test.ts \
-  tests/integration/option-text-migration.test.ts
+  tests/integration/option-text-migration.test.ts \
+  tests/unit/numeric-validation.test.ts
 pnpm exec tsc --noEmit
 ```
 
@@ -192,6 +206,7 @@ Expected: PASS.
 git add \
   src/lib/survey/required-option-text-validation.ts \
   src/lib/option-text-migration.ts \
+  src/lib/survey/numeric-validation.ts \
   tests/unit/required-option-text-validation.test.ts \
   tests/integration/option-text-migration.test.ts
 git commit -m "feat: 옵션 상세기입 필수 검증 추가"
@@ -208,7 +223,8 @@ git commit -m "feat: 옵션 상세기입 필수 검증 추가"
 
 **Interfaces:**
 
-- Consumes: `collectRequiredOptionTextIssues(question, response, optionTexts)`
+- Consumes: `collectRequiredOptionTextIssues(question, response, optionTexts, context?)`
+- Consumes: `collectVisibleTableCells(question, cellValues, context)`
 - Consumes: `useSurveyResponseStore(state => state.optionTexts)`
 - Preserves: 기존 `isQuestionAnsweredPure`, 필수 질문 하이라이트, 분기 경로 계산
 
@@ -240,14 +256,25 @@ Expected: FAIL because current `isQuestionAnswered` only checks that the option 
 const optionTexts = useSurveyResponseStore((state) => state.optionTexts);
 
 const isQuestionAnswered = useCallback(
-  (question: Question) =>
-    isQuestionAnsweredPure(question, responses[question.id]) &&
-    !collectRequiredOptionTextIssues(
+  (question: Question) => {
+    const response = responses[question.id];
+    const visibleCellIds = question.type === 'table'
+      ? new Set(
+          collectVisibleTableCells(question, response, {
+            allResponses: responses,
+            allQuestions: questions,
+          }).map((cell) => cell.id),
+        )
+      : undefined;
+    return isQuestionAnsweredPure(question, response) &&
+      !collectRequiredOptionTextIssues(
       question,
-      responses[question.id],
+      response,
       optionTexts[question.id],
-    ).questionMissing,
-  [responses, optionTexts],
+      { visibleCellIds },
+    ).questionMissing;
+  },
+  [responses, optionTexts, questions],
 );
 ```
 
@@ -289,6 +316,7 @@ git commit -m "feat: 필수 질문 상세기입으로 진행 차단"
 
 **Interfaces:**
 
+- Consumes: `collectVisibleTableCells(question, cellValues, context): TableCell[]`
 - Extends: `NumericValidationCtx.optionTexts?: Record<string, string>`
 - Consumes: `collectRequiredOptionTextIssues(question, response, optionTexts).cellIds`
 - Produces: 기존 `NumericIssue { kind: 'required-cells'; cellIds: string[] }`
@@ -341,17 +369,21 @@ export interface NumericValidationCtx {
   optionTexts?: Record<string, string>;
 }
 
+const visible = collectVisibleTableCells(question, cellValues, ctx);
+const visibleIds = new Set(visible.map((cell) => cell.id));
 const optionTextMissingIds = collectRequiredOptionTextIssues(
   question,
   cellValues,
   ctx?.optionTexts,
+  { visibleCellIds: visibleIds },
 ).cellIds;
 const missingIds = [...new Set([...ordinaryMissingIds, ...optionTextMissingIds])]
   .filter((id) => visibleIds.has(id));
 ```
 
-미선택 동적 행, 숨은 행·열, 병합 피복 셀은 기존 `visibleCells` 결과의 ID 집합으로
-필터링한다. 동일 셀이 일반 미입력과 상세기입 누락을 동시에 위반해도 한 번만 반환한다.
+Task 1에서 공개한 `collectVisibleTableCells`를 사용하고, 미선택 동적 행, 숨은 행·열,
+병합 피복 셀은 그 결과의 ID 집합으로 필터링한다.
+동일 셀이 일반 미입력과 상세기입 누락을 동시에 위반해도 한 번만 반환한다.
 
 - [ ] **Step 4: 응답 흐름에서 질문별 옵션 텍스트를 테이블 검증에 전달한다**
 
