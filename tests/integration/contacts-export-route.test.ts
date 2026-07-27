@@ -116,4 +116,12 @@ describe('GET /api/surveys/[surveyId]/contacts/export', () => {
     const body = Buffer.from(await res.arrayBuffer());
     expect(body.length).toBeGreaterThan(0);
   });
+
+  it('설문이 없으면 404', async () => {
+    vi.mocked(loadOperationsDataScope).mockRejectedValue(
+      new Error('설문을 찾을 수 없습니다.'),
+    );
+    const res = await GET(makeRequest('?cols=system.resid'), params);
+    expect(res.status).toBe(404);
+  });
 });

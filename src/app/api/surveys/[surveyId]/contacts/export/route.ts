@@ -101,6 +101,9 @@ export async function GET(
     if (error instanceof Error && error.message === '인증이 필요합니다.') {
       return NextResponse.json({ error: '권한 없음' }, { status: 401 });
     }
+    if (error instanceof Error && error.message === '설문을 찾을 수 없습니다.') {
+      return NextResponse.json({ error: '설문을 찾을 수 없습니다.' }, { status: 404 });
+    }
     console.error('Contacts Export Error:', error);
     return NextResponse.json(
       { error: '명단 다운로드 중 오류가 발생했습니다.' },
