@@ -71,6 +71,7 @@ import {
 import { useCellForm } from './hooks/use-cell-form';
 import { CellChoiceEditor } from './cell-choice-editor';
 import { CellImageEditor } from './cell-image-editor';
+import { CellStyleFields } from './cell-style-fields';
 import { CellContentLayout } from './cells/cell-content-layout';
 import { ChoiceOptCellTab } from './choice-opt-cell-tab';
 import { NumberFormatFields } from './number-format-fields';
@@ -178,6 +179,8 @@ export function CellContentModal({
     choiceAllowTextInput,
     choiceBranchRule,
     choiceGroupId,
+    textBold,
+    backgroundColor,
     horizontalAlign,
     mobileDisplay,
     verticalAlign,
@@ -231,6 +234,8 @@ export function CellContentModal({
     setChoiceAllowTextInput,
     setChoiceBranchRule,
     setChoiceGroupId,
+    setTextBold,
+    setBackgroundColor,
     setHorizontalAlign,
     setMobileDisplay,
     setVerticalAlign,
@@ -1346,6 +1351,17 @@ export function CellContentModal({
           </div>
         )}
 
+        <div className="mt-6 border-t border-gray-200 pt-6">
+          <h3 className="mb-4 text-sm font-medium text-gray-900">셀 스타일</h3>
+          <CellStyleFields
+            key={cell.id}
+            textBold={textBold}
+            backgroundColor={backgroundColor}
+            onTextBoldChange={setTextBold}
+            onBackgroundColorChange={setBackgroundColor}
+          />
+        </div>
+
         {/* 셀 컨텐츠 정렬 설정 */}
         <div className="mt-6 border-t border-gray-200 pt-6">
           <h3 className="mb-4 text-sm font-medium text-gray-900">컨텐츠 정렬</h3>
@@ -1442,7 +1458,8 @@ export function CellContentModal({
                       : verticalAlign === 'middle'
                         ? 'items-center'
                         : 'items-end'
-                  }`}
+                  }${textBold ? ' font-bold' : ''}`}
+                  style={backgroundColor ? { backgroundColor } : undefined}
                 >
                   <div className="rounded bg-blue-500 px-4 py-2 text-sm text-white">컨텐츠</div>
                 </div>

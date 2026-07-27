@@ -1,0 +1,49 @@
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { describe, expect, it, vi } from 'vitest';
+
+import { CellStyleFields } from '@/components/survey-builder/cell-style-fields';
+
+describe('CellStyleFields', () => {
+  it('Bold를 토글하고 유효한 HEX만 canonical 값으로 전달한다', async () => {
+    const user = userEvent.setup();
+    const onBold = vi.fn();
+    const onBackground = vi.fn();
+    render(
+      <CellStyleFields
+        textBold={false}
+        backgroundColor=""
+        onTextBoldChange={onBold}
+        onBackgroundColorChange={onBackground}
+      />,
+    );
+
+    await user.click(screen.getByRole('switch', { name: '텍스트 굵게' }));
+    expect(onBold).toHaveBeenCalledWith(true);
+
+    await user.type(screen.getByLabelText('HEX 색상'), 'abc');
+    await user.tab();
+    expect(onBackground).toHaveBeenCalledWith('#AABBCC');
+  });
+
+  it('잘못된 HEX는 기존 색을 바꾸지 않고 초기화 버튼은 색을 제거한다', async () => {
+    const user = userEvent.setup();
+    const onBackground = vi.fn();
+    render(
+      <CellStyleFields
+        textBold={false}
+        backgroundColor="#112233"
+        onTextBoldChange={() => {}}
+        onBackgroundColorChange={onBackground}
+      />,
+    );
+
+    await user.clear(screen.getByLabelText('HEX 색상'));
+    await user.type(screen.getByLabelText('HEX 색상'), 'ZZZ');
+    await user.tab();
+    expect(onBackground).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: '배경색 없음' }));
+    expect(onBackground).toHaveBeenCalledWith('');
+  });
+});

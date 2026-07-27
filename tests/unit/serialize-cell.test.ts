@@ -722,3 +722,37 @@ describe('buildUpdatedCell — 인터랙티브 셀 공용 필수 응답 (cellReq
     expect(buildUpdatedCell(form, cell).required).toBe(true);
   });
 });
+
+describe('buildUpdatedCell — 개별 셀 스타일', () => {
+  it('개별 셀 Bold와 배경색을 폼으로 복원하고 저장한다', () => {
+    const styled: TableCell = {
+      ...baseCell,
+      textBold: true,
+      backgroundColor: '#AABBCC',
+    };
+    const form = cellToFormState(styled);
+
+    expect(form).toMatchObject({ textBold: true, backgroundColor: '#AABBCC' });
+    expect(buildUpdatedCell(form, styled)).toMatchObject({
+      textBold: true,
+      backgroundColor: '#AABBCC',
+    });
+  });
+
+  it('Bold 해제와 배경색 초기화는 기존 스타일 키를 제거한다', () => {
+    const styled: TableCell = {
+      ...baseCell,
+      textBold: true,
+      backgroundColor: '#AABBCC',
+    };
+    const form = {
+      ...cellToFormState(styled),
+      textBold: false,
+      backgroundColor: '',
+    };
+    const result = buildUpdatedCell(form, styled);
+
+    expect(result).not.toHaveProperty('textBold');
+    expect(result).not.toHaveProperty('backgroundColor');
+  });
+});
