@@ -2,6 +2,7 @@
 
 import React from 'react';
 
+import { cn } from '@/lib/utils';
 import type { TableCell } from '@/types/survey';
 import { getOptionsLayout } from '@/utils/options-layout';
 
@@ -24,10 +25,13 @@ interface CellOptionsContainerProps {
  */
 export function CellOptionsContainer({ cell, children, footer }: CellOptionsContainerProps) {
   const layout = getOptionsLayout(cell.optionsColumns);
+  // N열 그리드는 셀 폭을 N등분해야 하므로 shrink-to-fit 되는 flex item 래퍼를 셀 폭까지 넓힌다.
+  // 세로/가로 배치는 콘텐츠 폭 유지가 맞으므로(셀 horizontalAlign 으로 블록 정렬) 그리드 한정.
+  const isGrid = (cell.optionsColumns ?? 1) >= 2;
 
   return (
     <CellContentLayout content={cell.content} position={cell.textPosition} bold={cell.textBold}>
-      <div className="space-y-2">
+      <div className={cn('space-y-2', isGrid && 'w-full')}>
         <div className={layout.className} style={layout.style}>
           {children}
         </div>
