@@ -1,6 +1,6 @@
 import * as z from 'zod';
 
-import { authed } from '@/server/orpc';
+import { assertSurveyAccess, authed, scoped } from '@/server/orpc';
 
 import * as svc from '../services/control.service';
 
@@ -15,10 +15,13 @@ const ControlStateSchema = z.object({
   firstTestInviteCode: z.string().nullable(),
 });
 
-const get = authed
+const get = scoped
   .input(z.object({ surveyId: z.string() }))
   .output(ControlStateSchema)
-  .handler(({ input }) => svc.getControlState(input.surveyId));
+  .handler(({ input, context }) => {
+    assertSurveyAccess(context.user.id, input.surveyId);
+    return svc.getControlState(input.surveyId);
+  });
 
 const setPaused = authed
   .input(

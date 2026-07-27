@@ -1,5 +1,5 @@
 import { createRouterClient } from '@orpc/server';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
@@ -26,6 +26,7 @@ const RESPONSE_ID = '22222222-2222-4222-8222-222222222222';
 
 describe('surveyResponse.edit procedures', () => {
   beforeEach(() => vi.clearAllMocks());
+  afterEach(() => vi.unstubAllEnvs());
 
   it('saveAdminEdit는 입력을 service에 위임하고 {ok:true}를 반환한다', async () => {
     vi.mocked(svc.saveAdminEdit).mockResolvedValue({ ok: true } as never);
@@ -95,5 +96,43 @@ describe('surveyResponse.edit procedures', () => {
         questionResponses: {},
       }),
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+  });
+
+  it('게스트는 grant 설문이면 saveAdminEdit 가 위임된다', async () => {
+    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
+    vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
+    vi.mocked(svc.saveAdminEdit).mockResolvedValue({ ok: true } as never);
+    const client = createRouterClient(
+      { edit },
+      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+    );
+    const input = {
+      surveyId: SURVEY_ID,
+      responseId: RESPONSE_ID,
+      questionResponses: { q1: 'a' },
+    };
+    const res = await client.edit.saveAdminEdit(input);
+    expect(svc.saveAdminEdit).toHaveBeenCalledWith(input, {
+      id: 'guest-1',
+      email: 'g@b.com',
+    });
+    expect(res).toEqual({ ok: true });
+  });
+
+  it('게스트가 다른 설문 surveyId 로 saveAdminEdit 하면 FORBIDDEN', async () => {
+    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
+    vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
+    const client = createRouterClient(
+      { edit },
+      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+    );
+    await expect(
+      client.edit.saveAdminEdit({
+        surveyId: 'other-survey',
+        responseId: RESPONSE_ID,
+        questionResponses: {},
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(svc.saveAdminEdit).not.toHaveBeenCalled();
   });
 });

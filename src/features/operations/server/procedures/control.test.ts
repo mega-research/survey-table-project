@@ -1,5 +1,5 @@
 import { createRouterClient } from '@orpc/server';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
@@ -21,6 +21,7 @@ const SURVEY_ID = '11111111-1111-4111-8111-111111111111';
 
 describe('operations.control procedures', () => {
   beforeEach(() => vi.clearAllMocks());
+  afterEach(() => vi.unstubAllEnvs());
 
   it('get은 service.getControlState 결과를 반환한다', async () => {
     vi.mocked(svc.getControlState).mockResolvedValue({
@@ -131,5 +132,62 @@ describe('operations.control procedures', () => {
     await expect(client.control.get({ surveyId: SURVEY_ID })).rejects.toMatchObject({
       code: 'UNAUTHORIZED',
     });
+  });
+
+  it('게스트는 grant 설문이면 get 이 위임된다', async () => {
+    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
+    vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
+    vi.mocked(svc.getControlState).mockResolvedValue({
+      isPaused: false,
+      pausedMessage: null,
+      testModeEnabled: false,
+      testToken: null,
+      accessIdentifier: 'survey-1',
+      testResponseCount: 0,
+      testTargetCount: 1,
+      firstTestInviteCode: 'invite-first',
+    });
+    const client = createRouterClient(
+      { control },
+      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+    );
+    const res = await client.control.get({ surveyId: SURVEY_ID });
+    expect(svc.getControlState).toHaveBeenCalledWith(SURVEY_ID);
+    expect(res).toEqual({
+      isPaused: false,
+      pausedMessage: null,
+      testModeEnabled: false,
+      testToken: null,
+      accessIdentifier: 'survey-1',
+      testResponseCount: 0,
+      testTargetCount: 1,
+      firstTestInviteCode: 'invite-first',
+    });
+  });
+
+  it('게스트가 다른 설문 surveyId 로 get 하면 FORBIDDEN', async () => {
+    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
+    vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
+    const client = createRouterClient(
+      { control },
+      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+    );
+    await expect(client.control.get({ surveyId: 'other-survey' })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+    expect(svc.getControlState).not.toHaveBeenCalled();
+  });
+
+  it('게스트는 grant 일치 설문이어도 setPaused 는 FORBIDDEN (authed 유지)', async () => {
+    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
+    vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
+    const client = createRouterClient(
+      { control },
+      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+    );
+    await expect(
+      client.control.setPaused({ surveyId: SURVEY_ID, isPaused: true }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(svc.setPaused).not.toHaveBeenCalled();
   });
 });
