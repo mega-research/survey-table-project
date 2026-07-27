@@ -687,6 +687,15 @@ html {
    에디터에서 설정한 크기를 존중하고, 셀을 넘지 않도록만 제한
    ========================================== */
 
+/* float 정렬 이미지(리사이즈 확장의 좌/우 정렬) 옆으로 다음 문단 텍스트가
+   흐르지 않게 — 문단은 항상 float 아래로 쌓인다. 이미지-텍스트 사이 빈 문단
+   유무에 따라 배치가 달라지는 혼란 방지. 나란히 배치는 표 셀 분리가 의도된 사용법. */
+.ProseMirror p,
+.prose p,
+.prose-sm p {
+  clear: both;
+}
+
 /* 테이블 기본 스타일 - 에디터 & 렌더러 통합 */
 .ProseMirror table,
 .prose table,
@@ -841,10 +850,16 @@ a.notice-file-attachment:hover {
   .tiptap-mobile-tame col {
     display: none !important;
   }
+  /* 에디터에서 지정한 행 높이(tr inline height)도 해제 — 좁은 화면에서 내용이
+   * 더 높게 줄바꿈되는데 고정 높이 + td overflow:hidden 이 내용을 잘라낸다 */
+  .tiptap-mobile-tame tr {
+    height: auto !important;
+  }
   .tiptap-mobile-tame th,
   .tiptap-mobile-tame td {
     width: auto !important;
     min-width: 0 !important;
+    height: auto !important;
     /* body 의 keep-all 상속을 끊고 일반 줄바꿈으로 (좁은 셀에서 글자 단위 줄바꿈 허용) */
     word-break: normal;
     overflow-wrap: break-word;
