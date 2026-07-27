@@ -27,6 +27,7 @@ import {
   shouldDisplayRow,
 } from '@/utils/branch-logic';
 import { decideDrilldown } from '@/utils/classify-table';
+import { getCellBackgroundStyle } from '@/utils/cell-style';
 import { expandHeaderGrid } from '@/utils/expand-header-grid';
 import {
   clampMobileDrilldownOmitLeadingColumns,
@@ -264,6 +265,7 @@ function renderRowCells({
         style.boxShadow = '2px 0 4px rgba(0,0,0,0.06)';
       }
     }
+    Object.assign(style, getCellBackgroundStyle(cell));
 
     return (
       <div

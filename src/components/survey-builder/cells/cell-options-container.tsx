@@ -26,7 +26,7 @@ export function CellOptionsContainer({ cell, children, footer }: CellOptionsCont
   const layout = getOptionsLayout(cell.optionsColumns);
 
   return (
-    <CellContentLayout content={cell.content} position={cell.textPosition}>
+    <CellContentLayout content={cell.content} position={cell.textPosition} bold={cell.textBold}>
       <div className="space-y-2">
         <div className={layout.className} style={layout.style}>
           {children}

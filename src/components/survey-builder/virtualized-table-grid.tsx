@@ -16,6 +16,7 @@ import { useRowHeights } from '@/hooks/use-row-heights';
 import { useRowVisibility } from '@/hooks/use-row-visibility';
 import { useTablePerf } from '@/hooks/use-table-perf';
 import type { TableColumn, TableRow } from '@/types/survey';
+import { getCellBackgroundStyle } from '@/utils/cell-style';
 import {
   getAlignmentClasses,
   getGridCellAria,
@@ -89,6 +90,7 @@ const VirtualizedRow = React.memo(
               style.boxShadow = '2px 0 4px rgba(0,0,0,0.06)';
             }
           }
+          Object.assign(style, getCellBackgroundStyle(cell));
 
           return (
             <div

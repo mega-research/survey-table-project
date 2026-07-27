@@ -26,6 +26,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils';
 import { DynamicRowGroupConfig, TableCell, TableRow } from '@/types/survey';
 import { isCellSaveable } from '@/utils/cell-library-helpers';
+import { getCellBackgroundStyle, getCellTextClassName } from '@/utils/cell-style';
 import { getAlignmentClasses, getGridSpanStyle } from '@/utils/table-grid-utils';
 
 import { useDebouncedInput } from './hooks/use-debounced-input';
@@ -44,7 +45,11 @@ const EditorCellContent = React.memo(function EditorCellContent({ cell }: { cell
 
   const textContent = hasText ? (
     <div
-      className={`mb-2 w-full text-sm whitespace-pre-wrap [overflow-wrap:anywhere] ${cell.type === 'text' ? '' : 'font-medium text-gray-700'}`}
+      className={cn(
+        'mb-2 w-full text-sm whitespace-pre-wrap [overflow-wrap:anywhere]',
+        cell.type !== 'text' && 'font-medium text-gray-700',
+        getCellTextClassName(cell),
+      )}
     >
       {cell.content}
     </div>
@@ -345,16 +350,19 @@ export const EditorTableRow = React.memo(function EditorTableRow({
             data-cell-index={cellIndex}
             className={cn(
               'relative min-w-0 border-r border-b border-gray-300 bg-white p-2',
-              isSelected && 'ring-2 ring-inset ring-blue-500 bg-blue-50',
+              isSelected && 'ring-2 ring-inset ring-blue-500',
+              isSelected && !cell.backgroundColor && 'bg-blue-50',
             )}
             style={{
               ...getGridSpanStyle(colspan, rowspan),
               minHeight: rowHeight,
+              ...getCellBackgroundStyle(cell),
             }}
           >
             <div
               className={cn(
                 'group relative flex h-full cursor-pointer flex-col rounded p-2 transition-colors hover:bg-gray-50',
+                cell.backgroundColor && 'hover:bg-transparent',
                 getAlignmentClasses(cell.horizontalAlign, cell.verticalAlign),
               )}
               onClick={() => onSelectCell(row.id, cell.id)}

@@ -3,6 +3,7 @@
 import React from 'react';
 
 import type { TableCell } from '@/types/survey';
+import { cn } from '@/lib/utils';
 
 interface CellContentLayoutProps {
   content: string | undefined;
@@ -10,6 +11,8 @@ interface CellContentLayoutProps {
   children: React.ReactNode;
   /** 텍스트 라벨 div 에 추가로 적용할 className (예: 빌더 미리보기 톤 변경) */
   labelClassName?: string;
+  /** 셀 콘텐츠 라벨만 굵게 표시한다. */
+  bold?: boolean | undefined;
 }
 
 const DEFAULT_LABEL_CLASS =
@@ -29,6 +32,7 @@ export function CellContentLayout({
   position = 'top',
   children,
   labelClassName,
+  bold = false,
 }: CellContentLayoutProps) {
   const hasContent = !!content && content.trim().length > 0;
   if (!hasContent) {
@@ -36,7 +40,7 @@ export function CellContentLayout({
   }
 
   const label = (
-    <div className={labelClassName ? `${DEFAULT_LABEL_CLASS} ${labelClassName}` : DEFAULT_LABEL_CLASS}>
+    <div className={cn(DEFAULT_LABEL_CLASS, labelClassName, bold && 'font-bold')}>
       {content}
     </div>
   );

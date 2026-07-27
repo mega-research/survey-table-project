@@ -11,6 +11,7 @@ import { useScrollLeftSync } from '@/hooks/use-scroll-left-sync';
 import { cn } from '@/lib/utils';
 import { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
 import { expandHeaderGrid } from '@/utils/expand-header-grid';
+import { getCellBackgroundStyle } from '@/utils/cell-style';
 import {
   HEADER_ROW_MIN_HEIGHT,
   STICKY_BODY_Z,
@@ -321,6 +322,7 @@ export const TablePreview = React.memo(function TablePreview({
                           style.boxShadow = '2px 0 4px rgba(0,0,0,0.06)';
                         }
                       }
+                      Object.assign(style, getCellBackgroundStyle(cell));
 
                       return (
                         <div

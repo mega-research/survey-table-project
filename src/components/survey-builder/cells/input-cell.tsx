@@ -56,7 +56,7 @@ export const InputCell = React.memo(function InputCell({
   }, [cellResponse, isPrefilled, isNumberMode, cell.emptyDefault]);
 
   return (
-    <CellContentLayout content={cell.content} position={cell.textPosition}>
+    <CellContentLayout content={cell.content} position={cell.textPosition} bold={cell.textBold}>
       <div className="flex w-full flex-col space-y-1.5">
         <Input
           type="text"
