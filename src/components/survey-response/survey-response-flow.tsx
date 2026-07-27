@@ -20,7 +20,12 @@ import {
 } from '@/components/survey-response/survey-response-screens';
 import { PageStepView } from '@/components/survey-response/step-views/page-step-view';
 import { ContactAttrsProvider } from '@/lib/survey/contact-attrs-context';
-import { collectNumericIssues, type NumericIssue } from '@/lib/survey/numeric-validation';
+import {
+  collectNumericIssues,
+  collectVisibleTableCells,
+  type NumericIssue,
+} from '@/lib/survey/numeric-validation';
+import { collectRequiredOptionTextIssues } from '@/lib/survey/required-option-text-validation';
 import { Button } from '@/components/ui/button';
 
 import { useClientSignals } from '@/hooks/use-client-signals';
@@ -330,6 +335,7 @@ function SurveyResponseFlowActive({
       })),
     );
   const currentResponseId = useSurveyResponseStore((s) => s.currentResponseId);
+  const optionTexts = useSurveyResponseStore((s) => s.optionTexts);
 
   // 유효 테스트 세션 — 중단 게이트 우회 + 중복검사 skip + create/resume 에 testToken 전달.
   const isTestSession = control?.testSession === 'valid';
@@ -538,10 +544,30 @@ function SurveyResponseFlowActive({
     question.required || quotaGateIds.has(question.id);
 
   // 타입별 응답 충족 판정은 순수 함수(isQuestionAnswered)로 추출.
-  // 원본 useCallback 의 [responses] deps 를 유지해 참조 안정성(answeredCount/requiredRemaining/handleSubmit) 보존.
+  // 상세기입 필수 옵션은 선택값만으로 충족되지 않으며, 테이블은 실제 노출 셀만 검사한다.
   const isQuestionAnswered = useCallback(
-    (question: Question) => isQuestionAnsweredPure(question, responses[question.id]),
-    [responses],
+    (question: Question) => {
+      const response = responses[question.id];
+      const visibleCellIds = question.type === 'table'
+        ? new Set(
+            collectVisibleTableCells(
+              question,
+              response && typeof response === 'object'
+                ? response as Record<string, unknown>
+                : {},
+              { allResponses: responses, allQuestions: questions },
+            ).map((cell) => cell.id),
+          )
+        : undefined;
+      return isQuestionAnsweredPure(question, response) &&
+        !collectRequiredOptionTextIssues(
+          question,
+          response,
+          optionTexts[question.id],
+          visibleCellIds ? { visibleCellIds } : undefined,
+        ).questionMissing;
+    },
+    [responses, optionTexts, questions],
   );
 
   // 다음 step 결정 (step 내 분기 규칙 평가)
@@ -654,6 +680,14 @@ function SurveyResponseFlowActive({
   });
 
   const handleNext = async () => {
+    const unansweredCurrent = currentStepQuestions.filter(
+      (q) => isQuestionRequired(q) && !isQuestionAnswered(q),
+    );
+    if (unansweredCurrent.length > 0) {
+      setHighlightQuestionIds(new Set(unansweredCurrent.map((q) => q.id)));
+      return;
+    }
+
     // 숫자 차단형 검증 — 위반이 있으면 진행하지 않고 에러 배너만 표시한다.
     // 위반 셀 이동은 배너의 "위치로 이동" 버튼이 담당(자동 스크롤은 표가 커서 어중간하게 멈침).
     if (numericIssuesByQuestion.size > 0) {
@@ -893,11 +927,11 @@ function SurveyResponseFlowActive({
           </div>
 
           {isLastVisibleStep ? (
-            <Button onClick={handleNext} disabled={!canProceed() || isSubmitting}>
+            <Button onClick={handleNext} disabled={isSubmitting}>
               {isSubmitting ? submittingLabel : submitLabel}
             </Button>
           ) : (
-            <Button onClick={handleNext} disabled={!canProceed()}>
+            <Button onClick={handleNext}>
               다음
               <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
