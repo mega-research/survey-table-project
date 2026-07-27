@@ -68,6 +68,7 @@ import {
   shouldDisplayQuestion,
   type BranchEvalCtx,
 } from '@/utils/branch-logic';
+import { resolveResponseContainerWidth } from '@/utils/table-grid-utils';
 import type { SaveAdminEditPayload } from '@/features/survey-response/domain/response-edit';
 
 type ResponsesMap = Record<string, unknown>;
@@ -871,8 +872,10 @@ function SurveyResponseFlowActive({
     );
   }
 
-  // 문항 유형 무관 고정 폭 — 과거 테이블 유무로 4xl/7xl 분기했으나 일반 문항도 넓게 통일 (2026-07-27)
-  const containerMaxWidth = 'max-w-7xl';
+  // 표 문항 페이지는 표 총폭 기준 분기(718px 초과 → 1280px, 이하 → 896px), 그 외는 1280px 통일 (2026-07-27)
+  const containerMaxWidth = resolveResponseContainerWidth(
+    currentStep.items.map((i) => i.question),
+  );
   const showRequiredHighlight = highlightQuestionIds.size > 0;
   const submitLabel = isPreview ? '확인 완료' : '다음';
   const submittingLabel = isPreview ? '확인 중...' : '처리 중...';

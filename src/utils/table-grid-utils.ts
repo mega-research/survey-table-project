@@ -22,6 +22,26 @@ export function calcTotalWidth(columns: TableColumn[]): number {
   return columns.reduce((sum, col) => sum + (col.width || 150), 0);
 }
 
+// ── 응답 페이지 컨테이너 폭 판정 ──
+
+/** 표 총폭이 이 값(px)을 넘으면 응답 페이지 컨테이너를 넓게(1280px) 편다. */
+export const RESPONSE_WIDE_TABLE_THRESHOLD_PX = 718;
+
+/**
+ * 응답 페이지 현재 스텝의 컨테이너 max-width 클래스 결정.
+ * - 표 문항이 없으면 넓은 폭 유지 (전 문항 1280px 통일, 2026-07-27)
+ * - 표 문항이 있으면 가장 넓은 표 기준: 718px 초과 → max-w-7xl(1280px), 이하 → max-w-4xl(896px)
+ */
+export function resolveResponseContainerWidth(
+  questions: ReadonlyArray<{ type: string; tableColumns?: TableColumn[] | undefined }>,
+): 'max-w-7xl' | 'max-w-4xl' {
+  const tableWidths = questions
+    .filter((q) => q.type === 'table')
+    .map((q) => calcTotalWidth(q.tableColumns ?? []));
+  if (tableWidths.length === 0) return 'max-w-7xl';
+  return Math.max(...tableWidths) > RESPONSE_WIDE_TABLE_THRESHOLD_PX ? 'max-w-7xl' : 'max-w-4xl';
+}
+
 // ── 셀 grid span 스타일 ──
 
 export function getGridSpanStyle(
