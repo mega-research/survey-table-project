@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import userEvent from '@testing-library/user-event';
@@ -76,6 +76,9 @@ function TableEditorHarness({
   return (
     <>
       <output data-testid="current-row-label">{state.currentRows[0]?.label}</output>
+      <button type="button" onClick={() => actions.updateTitle('새 제목')}>
+        제목 변경
+      </button>
       <button type="button" onClick={() => actions.updateRowLabel(0, '변경된 행 라벨')}>
         행 라벨 변경
       </button>
@@ -92,6 +95,10 @@ function TableEditorHarness({
 describe('DynamicTableEditor 전체 헤더 스타일', () => {
   afterEach(() => {
     cleanup();
+    if (vi.isFakeTimers()) {
+      vi.runOnlyPendingTimers();
+      vi.useRealTimers();
+    }
     vi.clearAllMocks();
   });
 
@@ -142,17 +149,18 @@ describe('DynamicTableEditor 전체 헤더 스타일', () => {
     expect(screen.getByRole('button', { name: '헤더 일괄 스타일' })).toBeDisabled();
   });
 
-  it('보류된 제목 debounce가 스타일 저장을 이전 열 스냅샷으로 덮어쓰지 않는다', async () => {
-    const user = userEvent.setup();
+  it('보류된 제목 debounce가 스타일 저장을 이전 열 스냅샷으로 덮어쓰지 않는다', () => {
+    vi.useFakeTimers();
     const onTableChange = vi.fn();
-    renderEditor(
-      <DynamicTableEditor columns={columns} rows={rows} onTableChange={onTableChange} />,
-    );
+    render(<TableEditorHarness onTableChange={onTableChange} />);
 
-    fireEvent.change(screen.getByLabelText('테이블 제목'), { target: { value: '새 제목' } });
-    await applyBoldBlueHeaderStyle(user);
+    fireEvent.click(screen.getByRole('button', { name: '제목 변경' }));
+    expect(onTableChange).not.toHaveBeenCalled();
 
-    await new Promise((resolve) => setTimeout(resolve, 350));
+    fireEvent.click(screen.getByRole('button', { name: '헤더 스타일 적용' }));
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
 
     expect(onTableChange).toHaveBeenCalledTimes(1);
     expect(onTableChange).toHaveBeenLastCalledWith(expect.objectContaining({
