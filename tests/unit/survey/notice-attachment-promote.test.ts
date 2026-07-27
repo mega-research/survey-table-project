@@ -295,17 +295,13 @@ describe('promoteNoticeAttachments', () => {
     expect(deletedKeys).not.toContain('notice-attachment/b.pdf');
   });
 
-  it('previousQuestions 의 영구 키 중 새 HTML 에 없는 것 → deleteR2ObjectsByKey 호출', async () => {
+  it('orphan cleanup 은 제거됨 — 이전 영구 키가 새 HTML 에 없어도 deleteR2ObjectsByKey 미호출', async () => {
+    // 과거에는 2번째 인자(previousQuestions)로 이전 영구 키와 diff 해 orphan 을 R2 에서
+    // 삭제했다. 발행 스냅샷/복제 설문/보관함이 같은 영구 키를 참조할 수 있어 위험했으므로
+    // 그 기능 자체(2번째 인자 포함)를 제거했다 — 함수는 이제 questions 배열만 받는다.
     vi.mocked(moveR2Objects).mockResolvedValue({ movedKeys: [], failed: [] });
     vi.mocked(deleteR2ObjectsByKey).mockResolvedValue(true);
 
-    const previousQuestions = [
-      {
-        type: 'notice',
-        noticeContent:
-          '<a data-file-attachment="true" data-key="notice-attachment/old.pdf">old</a>',
-      },
-    ];
     const newQuestions = [
       {
         type: 'notice',
@@ -314,36 +310,7 @@ describe('promoteNoticeAttachments', () => {
       },
     ];
 
-    await promoteNoticeAttachments(newQuestions, { previousQuestions });
-
-    expect(deleteR2ObjectsByKey).toHaveBeenCalledWith(['notice-attachment/old.pdf']);
-  });
-
-  it('previousQuestions 의 영구 키가 새 HTML 에 그대로 있으면 → DELETE 호출 안 됨', async () => {
-    vi.mocked(moveR2Objects).mockResolvedValue({ movedKeys: [], failed: [] });
-    vi.mocked(deleteR2ObjectsByKey).mockResolvedValue(true);
-
-    const sameContent =
-      '<a data-file-attachment="true" data-key="notice-attachment/keep.pdf">keep</a>';
-    await promoteNoticeAttachments(
-      [{ type: 'notice', noticeContent: sameContent }],
-      { previousQuestions: [{ type: 'notice', noticeContent: sameContent }] },
-    );
-
-    expect(deleteR2ObjectsByKey).not.toHaveBeenCalled();
-  });
-
-  it('previousQuestions 미전달 시 orphan cleanup 호출 안 됨 (backward compat)', async () => {
-    vi.mocked(moveR2Objects).mockResolvedValue({ movedKeys: [], failed: [] });
-    vi.mocked(deleteR2ObjectsByKey).mockResolvedValue(true);
-
-    await promoteNoticeAttachments([
-      {
-        type: 'notice',
-        noticeContent:
-          '<a data-file-attachment="true" data-key="notice-attachment/x.pdf">x</a>',
-      },
-    ]);
+    await promoteNoticeAttachments(newQuestions);
 
     expect(deleteR2ObjectsByKey).not.toHaveBeenCalled();
   });

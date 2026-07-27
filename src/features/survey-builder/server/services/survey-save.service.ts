@@ -11,21 +11,13 @@ import {
   surveys,
 } from '@/db/schema';
 import type { CompleteQuestionWrite } from '@/db/schema/question-persisted-fields';
-import { extractImageUrlsFromQuestions } from '@/lib/image-extractor';
-import { deleteImagesFromR2Server, deleteR2ObjectsByKey } from '@/lib/image-utils-server';
 import { retentionDateToTimestamp } from '@/lib/survey/pii-retention';
 import {
   promoteSurveyImages,
   promoteSurveyResponseHeader,
 } from '@/lib/survey/survey-image-promote';
-import {
-  extractPermanentAttachmentKeysFromQuestions,
-  promoteNoticeAttachments,
-} from '@/lib/survey/notice-attachment-promote';
-import type {
-  Question,
-  Survey as SurveyType,
-} from '@/types/survey';
+import { promoteNoticeAttachments } from '@/lib/survey/notice-attachment-promote';
+import type { Survey as SurveyType } from '@/types/survey';
 import { stripOptionCodes } from '@/utils/option-code-generator';
 import { stripTableRowsData } from '@/utils/table-cell-optimizer';
 
@@ -185,43 +177,20 @@ export async function saveSurveyDiff(
 
     // 3. 질문 변경분 처리
     if (questionChanges) {
-      // 3a. 삭제
+      // 3a. 삭제 — 질문 삭제 시 R2 이미지/영구 첨부 키는 지우지 않는다. 발행 스냅샷
+      // (survey_versions, 불변·응답 페이지 서빙 중)·복제 설문·보관함(saved_questions/
+      // saved_cells)이 같은 URL·키를 참조할 수 있어 무확인 삭제가 그쪽 콘텐츠를 파괴한다.
       if (questionChanges.deleted.length > 0) {
-        const questionsToRemove = await tx.query.questions.findMany({
-          where: inArray(questions.id, questionChanges.deleted),
-        });
-        const imagesToDelete = extractImageUrlsFromQuestions(questionsToRemove as Question[]);
-        if (imagesToDelete.length > 0) {
-          deleteImagesFromR2Server(imagesToDelete).catch(console.error);
-        }
-        const attachmentKeysToDelete = extractPermanentAttachmentKeysFromQuestions(
-          questionsToRemove,
-        );
-        if (attachmentKeysToDelete.length > 0) {
-          deleteR2ObjectsByKey(attachmentKeysToDelete).catch(console.error);
-        }
         await tx.delete(questions).where(inArray(questions.id, questionChanges.deleted));
       }
 
       // 3b. Upsert (추가 + 수정)
       if (questionChanges.upserted.length > 0) {
-        // 이전 publish 의 영구 첨부 키를 orphan 검출용으로 미리 fetch
-        const upsertIds = questionChanges.upserted
-          .map((q) => q.id)
-          .filter((id): id is string => typeof id === 'string' && id.length > 0);
-        const previousQuestionRows =
-          upsertIds.length > 0
-            ? await tx.query.questions.findMany({
-                where: inArray(questions.id, upsertIds),
-                columns: { id: true, noticeContent: true, type: true },
-              })
-            : [];
-
         // tmp/survey/ 이미지를 영구 prefix로 promote (R2 move + URL 치환)
-        // tmp/notice-attachment/ 첨부도 영구 prefix로 promote + 이전 영구 키 orphan cleanup
+        // tmp/notice-attachment/ 첨부도 영구 prefix로 promote. 이전 영구 첨부 키의
+        // orphan cleanup은 제거됨 — 발행 스냅샷/복제/보관함이 계속 참조할 수 있다.
         const promotedQuestions = await promoteNoticeAttachments(
           await promoteSurveyImages(questionChanges.upserted),
-          { previousQuestions: previousQuestionRows },
         );
 
         const questionValues = promotedQuestions.map((question) => ({
@@ -543,37 +512,16 @@ export async function saveSurveyWithDetails(
         .map((q) => q.id);
 
       if (questionIdsToRemove.length > 0) {
-        const questionsToRemove = await tx.query.questions.findMany({
-          where: inArray(questions.id, questionIdsToRemove),
-        });
-        const imagesToDelete = extractImageUrlsFromQuestions(questionsToRemove as Question[]);
-        if (imagesToDelete.length > 0) {
-          deleteImagesFromR2Server(imagesToDelete).catch(console.error);
-        }
-        const attachmentKeysToDelete = extractPermanentAttachmentKeysFromQuestions(
-          questionsToRemove,
-        );
-        if (attachmentKeysToDelete.length > 0) {
-          deleteR2ObjectsByKey(attachmentKeysToDelete).catch(console.error);
-        }
-
+        // 질문 삭제 시 R2 이미지/영구 첨부 키는 지우지 않는다(사유는 saveSurveyDiff 3a 참조).
         await tx.delete(questions).where(inArray(questions.id, questionIdsToRemove));
       }
 
       if (surveyData.questions.length > 0) {
-        // 이전 영구 첨부 키 orphan 검출용으로 fetch (전체 questions 덮어쓰기 흐름)
-        const previousQuestionRows = existingSurvey
-          ? await tx.query.questions.findMany({
-              where: eq(questions.surveyId, surveyId),
-              columns: { id: true, noticeContent: true, type: true },
-            })
-          : [];
-
         // tmp/survey/ 이미지를 영구 prefix로 promote (R2 move + URL 치환)
-        // tmp/notice-attachment/ 첨부도 영구 prefix로 promote + 이전 영구 키 orphan cleanup
+        // tmp/notice-attachment/ 첨부도 영구 prefix로 promote. 이전 영구 첨부 키의
+        // orphan cleanup은 제거됨 — 발행 스냅샷/복제/보관함이 계속 참조할 수 있다.
         const promotedQuestions = await promoteNoticeAttachments(
           await promoteSurveyImages(surveyData.questions),
-          { previousQuestions: previousQuestionRows },
         );
 
         const questionValues = promotedQuestions.map((question) => ({

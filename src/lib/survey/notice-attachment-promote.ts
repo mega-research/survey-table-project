@@ -142,13 +142,13 @@ export function replaceNoticeAttachmentUrlsInQuestion<
  *
  * 실패한 move 는 tmp URL 그대로 — Cloudflare 24h lifecycle 가 청소.
  *
- * `options.previousQuestions` 전달 시: 이전 영구 첨부 키 중 새 publish 영구 키에
- * 없는 것은 orphan 으로 간주하고 R2 에서 DELETE. cleanup 실패는 Sentry 경고로
- * 흡수해 publish 자체는 진행.
+ * 과거에는 이전 영구 첨부 키 중 새 publish 영구 키에 없는 것을 orphan 으로 간주해
+ * R2 에서 DELETE 했다(2번째 인자 `options.previousQuestions`). 이 cleanup 은 제거됨 —
+ * 발행 스냅샷(survey_versions)·복제 설문·보관함이 같은 영구 키를 계속 참조할 수 있어
+ * 확인 없이 지우면 라이브 콘텐츠가 파괴된다.
  */
 export async function promoteNoticeAttachments<T extends PromotableNoticeQuestion>(
   questions: T[],
-  options?: { previousQuestions?: PromotableNoticeQuestion[] },
 ): Promise<T[]> {
   const allTmpUrls = new Set<string>();
   for (const q of questions) {
@@ -254,31 +254,8 @@ export async function promoteNoticeAttachments<T extends PromotableNoticeQuestio
     result = questions.map((q) => replaceNoticeAttachmentUrlsInQuestion(q, mapping));
   }
 
-  // orphan cleanup: 이전 영구 키 중 새 publish 영구 키에 없는 것 DELETE
-  if (options?.previousQuestions && options.previousQuestions.length > 0) {
-    const previousPermanent = new Set(
-      extractPermanentAttachmentKeysFromQuestions(options.previousQuestions),
-    );
-    const currentPermanent = new Set(
-      extractPermanentAttachmentKeysFromQuestions(result),
-    );
-    const orphans = [...previousPermanent].filter((k) => !currentPermanent.has(k));
-
-    if (orphans.length > 0) {
-      try {
-        await deleteR2ObjectsByKey(orphans);
-      } catch (err) {
-        Sentry.captureMessage(
-          `공지사항 첨부 orphan 영구 키 cleanup 실패: ${orphans.length}개`,
-          {
-            level: 'warning',
-            tags: { operation: 'notice_attachment_promote', phase: 'orphan_cleanup' },
-            extra: { orphans, error: String(err) },
-          },
-        );
-      }
-    }
-  }
-
+  // orphan cleanup(이전 영구 키 중 새 publish 에 없는 것 DELETE)은 의도적으로 제거됨.
+  // 발행 스냅샷·복제 설문·보관함이 같은 영구 첨부 키를 참조할 수 있어, 이번 publish 의
+  // diff 만 보고 지우면 다른 곳에서 여전히 유효한 첨부가 함께 사라진다.
   return result;
 }
