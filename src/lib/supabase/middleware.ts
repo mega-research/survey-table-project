@@ -2,6 +2,9 @@ import { type NextRequest, NextResponse } from 'next/server';
 
 import { createServerClient } from '@supabase/ssr';
 
+import { isAdminUserAllowed } from '@/lib/auth/admin-allowlist';
+import { getGuestSurveyId, guestPathRedirect } from '@/lib/auth/guest-grants';
+
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
     request,
@@ -55,6 +58,20 @@ export async function updateSession(request: NextRequest) {
       const url = request.nextUrl.clone();
       url.pathname = '/admin/surveys';
       return redirectWithSessionCookies(url, supabaseResponse);
+    }
+
+    // 게스트(설문 단위 grant) — 자기 설문 operations 밖은 전부 리다이렉트
+    if (user && !isLoginPage && !isAdminUserAllowed(user.id)) {
+      const guestSurveyId = getGuestSurveyId(user.id);
+      if (guestSurveyId) {
+        const dest = guestPathRedirect(request.nextUrl.pathname, guestSurveyId);
+        if (dest) {
+          const url = request.nextUrl.clone();
+          url.pathname = dest;
+          url.search = '';
+          return redirectWithSessionCookies(url, supabaseResponse);
+        }
+      }
     }
   }
 
