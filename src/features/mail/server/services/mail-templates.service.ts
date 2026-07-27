@@ -19,8 +19,10 @@ import type {
   UpdateMailTemplateOutput,
 } from '../../domain/mail-template';
 
-// AttachmentPromoteError 는 procedure 가 ORPCError 로 매핑하기 위해 재노출.
+// AttachmentPromoteError / MailImagePromoteError 는 procedure 가 ORPCError 로
+// 매핑하기 위해 재노출.
 export { AttachmentPromoteError } from '@/lib/mail/mail-attachment-promote';
+export { MailImagePromoteError } from '@/lib/mail/mail-image-promote';
 
 /** 템플릿을 찾지 못했을 때 — procedure 가 NOT_FOUND 로 매핑. */
 export class MailTemplateNotFoundError extends Error {
@@ -70,8 +72,8 @@ export const getMailTemplate = cache(
 
 /**
  * tmp/* R2 객체를 영구 prefix 로 promote — bodyHtml 이미지와 attachment 파일을 동시에.
- * 첨부 promote 가 부분 실패하면 `AttachmentPromoteError` 가 throw 되어 caller 가
- * 사용자 친화 메시지로 응답하도록 한다.
+ * 이미지 promote 가 부분 실패하면 `MailImagePromoteError`, 첨부 promote 가 부분 실패하면
+ * `AttachmentPromoteError` 가 throw 되어 caller 가 사용자 친화 메시지로 응답하도록 한다.
  */
 async function promoteAssets(
   rawBodyHtml: string,
@@ -89,7 +91,8 @@ async function promoteAssets(
 /**
  * 메일 템플릿 생성.
  * 인증은 authed 미들웨어가 담당. 캐시 갱신은 소비처 router.refresh/replace 로 대체.
- * promote 실패는 AttachmentPromoteError throw — procedure 가 사용자 메시지로 변환.
+ * promote 실패는 MailImagePromoteError/AttachmentPromoteError throw — procedure 가
+ * 사용자 메시지로 변환.
  */
 export async function createMailTemplate(
   params: CreateMailTemplateInput,

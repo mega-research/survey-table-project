@@ -84,6 +84,19 @@ describe('mail.templates procedures', () => {
     });
   });
 
+  it('MailImagePromoteError는 BAD_REQUEST 사용자 메시지로 매핑된다', async () => {
+    vi.mocked(svc.createMailTemplate).mockRejectedValue(
+      new svc.MailImagePromoteError(['k1']) as never,
+    );
+    const client = createRouterClient({ templates }, { context: authedContext() });
+    await expect(
+      client.templates.create({ surveyId: 'sv-1', input: validInput() }),
+    ).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: '본문 이미지를 저장하지 못했습니다 (1개). 잠시 후 다시 시도해 주세요.',
+    });
+  });
+
   it('MailTemplateNotFoundError는 NOT_FOUND로 매핑된다', async () => {
     vi.mocked(svc.updateMailTemplate).mockRejectedValue(
       new svc.MailTemplateNotFoundError() as never,

@@ -32,6 +32,22 @@ async function permanentObjectExists(dstKey: string): Promise<boolean> {
 }
 
 /**
+ * promote 가 최종 실패했을 때 throw 되는 에러.
+ * 저장(publish/create/update) 흐름이 이를 catch 해 트랜잭션을 abort 시키도록 한다.
+ * (notice-attachment-promote.ts 의 NoticeAttachmentPromoteError 와 동일 패턴)
+ */
+export class SurveyImagePromoteError extends Error {
+  failedKeys: string[];
+  constructor(failedKeys: string[]) {
+    super(
+      `설문 이미지 promote 실패: ${failedKeys.length}개 객체가 영구 위치로 이동되지 못함`,
+    );
+    this.failedKeys = failedKeys;
+    this.name = 'SurveyImagePromoteError';
+  }
+}
+
+/**
  * promoteSurveyImages가 처리하는 데 필요한 최소 질문 필드 형태.
  * Question / NewQuestion / Partial<Question> 모두 호환됩니다.
  */
@@ -198,10 +214,12 @@ export function replaceUrlsInResponseHeader<T extends PromotableResponseHeader>(
  *
  * 1. R2 COPY tmp/survey/X → survey/X (copy-only, 원본 미삭제 — 실패해도 tmp 원본이 남아 재시도 가능)
  * 2. 클라이언트 stale state 재시도 idempotency 복구 (영구 위치 객체 재인식)
- * 3. 실패는 Sentry warning, tmp URL은 그대로 남아 Cloudflare 24h lifecycle이 처리
+ * 3. 복구 후에도 실패가 남으면 SurveyImagePromoteError throw — caller(저장 트랜잭션)가
+ *    이를 catch 해 abort 해야 한다. tmp URL은 copy-only 라 그대로 남아 재시도 가능(무해).
  *    (tmp 잔여물은 R2 lifecycle(tmp/ 24h) 위임 — 대시보드 규칙 존재 확인 필요(키 권한으로 코드에서 미검증))
  *
- * 질문 이미지와 헤더 로고가 같은 idempotency/경고 동작을 공유하도록 분리되었습니다.
+ * 질문 이미지와 헤더 로고가 같은 idempotency/fail-closed 동작을 공유하도록 분리되었습니다
+ * (promoteSurveyImages / promoteSurveyResponseHeader 양쪽 진입점 모두 이 실패를 그대로 전파한다).
  */
 async function promoteTmpSurveyUrls(urls: Iterable<string>): Promise<Map<string, string>> {
   const mapping = new Map<string, string>();
@@ -244,14 +262,18 @@ async function promoteTmpSurveyUrls(urls: Iterable<string>): Promise<Map<string,
   }
 
   if (failed.length > 0) {
+    // copy-only 이므로 이번 호출에서 이미 영구 위치로 copy 한 객체(movedKeys)를
+    // 롤백할 필요가 없다 — tmp 원본이 그대로 남아있어 재시도하면 다시 copy 될 뿐이고,
+    // dst 삭제는 과거 "유일 사본(dst) 삭제 사고"의 원인이었으므로 의도적으로 하지 않는다.
     Sentry.captureMessage(
-      `설문 이미지 promote 부분 실패: ${failed.length}개 객체가 tmp 에 잔존`,
+      `설문 이미지 promote 최종 실패: ${failed.length}개 (tmp 원본 보존 — 재시도 가능)`,
       {
-        level: 'warning',
+        level: 'error',
         tags: { operation: 'image_promote', kind: 'survey' },
         extra: { failedKeys: failed },
       },
     );
+    throw new SurveyImagePromoteError(failed);
   }
 
   // 3. 성공한 URL만 mapping 구성 (이미 idempotency 처리됨)

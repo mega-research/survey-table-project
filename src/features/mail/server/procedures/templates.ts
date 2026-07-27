@@ -16,12 +16,18 @@ import * as svc from '../services/mail-templates.service';
 /**
  * service throw 를 사용자 친화 ORPCError 로 변환.
  * - AttachmentPromoteError: 첨부 promote 부분 실패 → 재시도 안내 메시지(원본 의미론 보존).
+ * - MailImagePromoteError: 본문 이미지 promote 부분 실패 → 재시도 안내 메시지.
  * - MailTemplateNotFoundError: 다른 설문/없는 템플릿 → NOT_FOUND.
  */
 function mapServiceError(err: unknown): never {
   if (err instanceof svc.AttachmentPromoteError) {
     throw new ORPCError('BAD_REQUEST', {
       message: `첨부 파일을 저장하지 못했습니다 (${err.failedKeys.length}개). 잠시 후 다시 시도해 주세요.`,
+    });
+  }
+  if (err instanceof svc.MailImagePromoteError) {
+    throw new ORPCError('BAD_REQUEST', {
+      message: `본문 이미지를 저장하지 못했습니다 (${err.failedKeys.length}개). 잠시 후 다시 시도해 주세요.`,
     });
   }
   if (err instanceof svc.MailTemplateNotFoundError) {

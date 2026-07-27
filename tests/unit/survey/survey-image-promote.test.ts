@@ -1,11 +1,39 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+// 파일 최상단 hoisted mock — promote 가 의존하는 R2 copier mock.
+vi.mock('@/lib/image-utils-server', () => ({
+  copyR2Objects: vi.fn(),
+}));
+
+// permanentObjectExists 가 사용하는 S3 client mock.
+// recovery 경로(이미 영구 위치에 존재) 테스트를 위해 HeadObject 응답을 제어한다.
+const headExistsKeys = new Set<string>();
+vi.mock('@aws-sdk/client-s3', () => ({
+  S3Client: class {
+    async send(cmd: { input?: { Key?: string } }) {
+      const key = cmd?.input?.Key;
+      if (key && headExistsKeys.has(key)) return {};
+      throw new Error('NotFound');
+    }
+  },
+  HeadObjectCommand: class {
+    input: { Bucket?: string; Key?: string };
+    constructor(input: { Bucket?: string; Key?: string }) {
+      this.input = input;
+    }
+  },
+}));
+
+import { copyR2Objects } from '@/lib/image-utils-server';
 import {
   extractTmpSurveyUrlsFromQuestion,
   extractTmpSurveyUrlsFromResponseHeader,
   isTmpSurveyUrl,
+  promoteSurveyImages,
+  promoteSurveyResponseHeader,
   replaceUrlsInQuestion,
   replaceUrlsInResponseHeader,
+  SurveyImagePromoteError,
   tmpToPermanentUrl,
   urlToR2Key,
 } from '@/lib/survey/survey-image-promote';
@@ -452,5 +480,88 @@ describe('responseHeader blocks promote', () => {
     expect(replaced.blocks?.[1]).toBe(header.blocks[1]); // 치환 없는 블록은 동일 참조
     const untouched = replaceUrlsInResponseHeader(header, new Map());
     expect(untouched).toBe(header); // 전체 무치환이면 동일 참조 (기존 계약)
+  });
+});
+
+// ========================
+// promoteSurveyImages / promoteSurveyResponseHeader — fail-closed
+// ========================
+
+describe('promoteSurveyImages / promoteSurveyResponseHeader — fail-closed', () => {
+  beforeEach(() => {
+    process.env['CLOUDFLARE_R2_PUBLIC_URL'] = 'https://cdn.test';
+    process.env['CLOUDFLARE_R2_BUCKET'] = 'test-bucket';
+    headExistsKeys.clear();
+    vi.mocked(copyR2Objects).mockReset();
+  });
+  afterEach(() => {
+    delete process.env['CLOUDFLARE_R2_PUBLIC_URL'];
+    delete process.env['CLOUDFLARE_R2_BUCKET'];
+    headExistsKeys.clear();
+  });
+
+  const baseQuestion: Question = {
+    id: 'q1',
+    type: 'text',
+    title: '테스트',
+    required: false,
+    order: 0,
+  };
+
+  it('copy 실패 + HEAD(permanentObjectExists) 실패 → SurveyImagePromoteError throw, 실패 URL이 결과에 도달하지 않는다', async () => {
+    vi.mocked(copyR2Objects).mockResolvedValue({
+      movedKeys: [],
+      failed: ['tmp/survey/a.webp'],
+    });
+
+    const questions: Question[] = [
+      {
+        ...baseQuestion,
+        description: '<img src="https://cdn.test/tmp/survey/a.webp">',
+      },
+    ];
+
+    await expect(promoteSurveyImages(questions)).rejects.toThrow(SurveyImagePromoteError);
+    await expect(promoteSurveyImages(questions)).rejects.toMatchObject({
+      failedKeys: ['tmp/survey/a.webp'],
+    });
+  });
+
+  it('copy 실패 + HEAD 성공(이전 promote가 이미 옮김) → throw 없이 mapping/치환이 완성된다', async () => {
+    headExistsKeys.add('survey/a.webp');
+    vi.mocked(copyR2Objects).mockResolvedValue({
+      movedKeys: [],
+      failed: ['tmp/survey/a.webp'],
+    });
+
+    const questions: Question[] = [
+      {
+        ...baseQuestion,
+        description: '<img src="https://cdn.test/tmp/survey/a.webp">',
+      },
+    ];
+
+    const result = await promoteSurveyImages(questions);
+    expect(result[0]?.description).toBe('<img src="https://cdn.test/survey/a.webp">');
+  });
+
+  it('promoteSurveyResponseHeader 경로도 복구 실패 시 SurveyImagePromoteError throw', async () => {
+    vi.mocked(copyR2Objects).mockResolvedValue({
+      movedKeys: [],
+      failed: ['tmp/survey/header-logo.webp'],
+    });
+
+    const header = {
+      style: 'plain' as const,
+      titleSize: 'auto' as const,
+      logo: {
+        imageUrl: 'https://cdn.test/tmp/survey/header-logo.webp',
+        size: 'md' as const,
+      },
+    };
+
+    await expect(promoteSurveyResponseHeader(header)).rejects.toThrow(
+      SurveyImagePromoteError,
+    );
   });
 });
