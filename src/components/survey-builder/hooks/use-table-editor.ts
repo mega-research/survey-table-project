@@ -1300,6 +1300,12 @@ export function useTableEditor({
   );
 
   const applyHeaderStyle = useCallback((style: HeaderBulkStyle) => {
+    if (pendingChangeRef.current) {
+      clearTimeout(pendingChangeRef.current);
+      pendingChangeRef.current = null;
+      pendingArgsRef.current = null;
+    }
+
     const result = applyHeaderBulkStyle(
       currentColumnsRef.current,
       headerGridRef.current,

@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import userEvent from '@testing-library/user-event';
@@ -20,6 +20,7 @@ vi.mock('@/stores/ui-store', () => ({
 }));
 
 import { DynamicTableEditor } from '@/components/survey-builder/dynamic-table-editor';
+import { HeaderBulkStyleButton } from '@/components/survey-builder/header-bulk-style-button';
 import type { HeaderCell, TableColumn, TableRow } from '@/types/survey';
 
 const columns: TableColumn[] = [
@@ -44,8 +45,7 @@ const mergedHeaderGrid: HeaderCell[][] = [
   ],
 ];
 
-async function applyBoldBlueHeaderStyle() {
-  const user = userEvent.setup();
+async function applyBoldBlueHeaderStyle(user = userEvent.setup()) {
   await user.click(screen.getByRole('button', { name: '헤더 일괄 스타일' }));
   await user.click(screen.getByRole('switch', { name: '텍스트 굵게' }));
   await user.clear(screen.getByRole('textbox', { name: 'HEX 색상' }));
@@ -105,6 +105,33 @@ describe('DynamicTableEditor 전체 헤더 스타일', () => {
       ]),
     }));
     expect(onTableChange.mock.calls.at(-1)?.[0]).not.toHaveProperty('tableHeaderGrid');
+  });
+
+  it('열이 없으면 전체 헤더 스타일 버튼을 비활성화한다', () => {
+    render(<HeaderBulkStyleButton columnCount={0} onOpen={() => {}} />);
+
+    expect(screen.getByRole('button', { name: '헤더 일괄 스타일' })).toBeDisabled();
+  });
+
+  it('보류된 제목 debounce가 스타일 저장을 이전 열 스냅샷으로 덮어쓰지 않는다', async () => {
+    const user = userEvent.setup();
+    const onTableChange = vi.fn();
+    renderEditor(
+      <DynamicTableEditor columns={columns} rows={rows} onTableChange={onTableChange} />,
+    );
+
+    fireEvent.change(screen.getByLabelText('테이블 제목'), { target: { value: '새 제목' } });
+    await applyBoldBlueHeaderStyle(user);
+
+    await new Promise((resolve) => setTimeout(resolve, 350));
+
+    expect(onTableChange).toHaveBeenCalledTimes(1);
+    expect(onTableChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      tableTitle: '새 제목',
+      tableColumns: expect.arrayContaining([
+        expect.objectContaining({ textBold: true, backgroundColor: '#DDEEFF' }),
+      ]),
+    }));
   });
 
 });

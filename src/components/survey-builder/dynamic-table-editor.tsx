@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { Clipboard, Eye, ListChecks, Palette, Plus, Undo2 } from 'lucide-react';
+import { Clipboard, Eye, ListChecks, Plus, Undo2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -25,6 +25,7 @@ import { CellContentModal } from './cell-content-modal';
 import { ConditionModal } from './condition-modal';
 import { EditorTableRow } from './editor-table-row';
 import { HeaderGridEditor } from './header-grid-editor';
+import { HeaderBulkStyleButton } from './header-bulk-style-button';
 import { HeaderBulkStyleDialog } from './header-bulk-style-dialog';
 import { useTableEditor } from './hooks/use-table-editor';
 import { LoadCellModal } from './load-cell-modal';
@@ -404,16 +405,10 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
           <div>
             <div className="flex items-center gap-2">
               <Label className="text-sm font-medium">다단계 헤더</Label>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={currentColumns.length === 0}
-                onClick={() => setHeaderStyleDialogOpen(true)}
-              >
-                <Palette className="mr-1.5 h-4 w-4" />
-                헤더 일괄 스타일
-              </Button>
+              <HeaderBulkStyleButton
+                columnCount={currentColumns.length}
+                onOpen={() => setHeaderStyleDialogOpen(true)}
+              />
             </div>
             <p className="text-xs text-gray-500">
               여러 행으로 구성된 계층적 헤더 (종사자 수 → 사무직/생산직 → 남/여 등)
