@@ -3,7 +3,7 @@ import { HeadObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import * as Sentry from '@sentry/nextjs';
 
 import { extractImageUrlsFromHtml } from '@/lib/image-extractor';
-import { moveR2Objects } from '@/lib/image-utils-server';
+import { copyR2Objects } from '@/lib/image-utils-server';
 import { getR2PublicUrl } from '@/lib/r2-env';
 
 const r2Client = new S3Client({
@@ -193,19 +193,20 @@ export function replaceUrlsInResponseHeader<T extends PromotableResponseHeader>(
 }
 
 /**
- * tmp/survey/ URL 집합을 영구 survey/ prefix로 R2 move 하고
+ * tmp/survey/ URL 집합을 영구 survey/ prefix로 R2 copy 하고
  * tmp URL → 영구 URL mapping을 반환합니다.
  *
- * 1. R2 COPY tmp/survey/X → survey/X + DELETE tmp/survey/X
+ * 1. R2 COPY tmp/survey/X → survey/X (copy-only, 원본 미삭제 — 실패해도 tmp 원본이 남아 재시도 가능)
  * 2. 클라이언트 stale state 재시도 idempotency 복구 (영구 위치 객체 재인식)
  * 3. 실패는 Sentry warning, tmp URL은 그대로 남아 Cloudflare 24h lifecycle이 처리
+ *    (tmp 잔여물은 R2 lifecycle(tmp/ 24h) 위임 — 대시보드 규칙 존재 확인 필요(키 권한으로 코드에서 미검증))
  *
  * 질문 이미지와 헤더 로고가 같은 idempotency/경고 동작을 공유하도록 분리되었습니다.
  */
 async function promoteTmpSurveyUrls(urls: Iterable<string>): Promise<Map<string, string>> {
   const mapping = new Map<string, string>();
 
-  // 1. R2 move pairs 구성
+  // 1. R2 copy pairs 구성
   const pairs = [...new Set(urls)]
     .map((url) => {
       const srcKey = urlToR2Key(url);
@@ -219,8 +220,8 @@ async function promoteTmpSurveyUrls(urls: Iterable<string>): Promise<Map<string,
 
   if (pairs.length === 0) return mapping;
 
-  // 2. R2 move 실행
-  const moveResult = await moveR2Objects(
+  // 2. R2 copy 실행 (원본은 삭제하지 않음)
+  const moveResult = await copyR2Objects(
     pairs.map(({ srcKey, dstKey }) => ({ srcKey, dstKey })),
   );
   let movedKeys = moveResult.movedKeys;

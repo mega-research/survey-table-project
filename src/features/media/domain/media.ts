@@ -13,7 +13,7 @@ import { TMP_NOTICE_ATTACHMENT_PREFIX } from '@/lib/upload/attachment-policy';
  *
  * 범위 밖(이번 마이그레이션 제외 — 컨트롤러/다른 feature 처리):
  * - upload(image/mail-attachment/notice-attachment) POST 멀티파트 라우트는 REST 유지.
- * - promote / moveR2Object 등 R2 move/promote 는 cross-cutting(lib 유지).
+ * - promote / copyR2Object 등 R2 copy/promote 는 cross-cutting(lib 유지).
  */
 
 // ========================

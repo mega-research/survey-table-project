@@ -2,7 +2,7 @@ import { HeadObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import * as Sentry from '@sentry/nextjs';
 
 import { extractImageUrlsFromHtml } from '@/lib/image-extractor';
-import { moveR2Objects } from '@/lib/image-utils-server';
+import { copyR2Objects } from '@/lib/image-utils-server';
 import { getR2PublicUrl } from '@/lib/r2-env';
 
 const r2Client = new S3Client({
@@ -65,10 +65,12 @@ export function urlToR2Key(url: string): string | null {
  * 메일 bodyHtml의 tmp/mail/ 이미지를 영구 prefix로 promote합니다.
  *
  * 1. tmp/mail/ URL 추출
- * 2. R2 COPY tmp/mail/X → mail/X + DELETE tmp/mail/X
+ * 2. R2 COPY tmp/mail/X → mail/X (copy-only, 원본 미삭제)
  * 3. bodyHtml의 URL prefix 일괄 치환 (성공한 것만)
  *
- * 실패한 항목은 tmp URL 그대로 남음 → Cloudflare 24h lifecycle이 처리.
+ * 성공/실패 관계없이 tmp 원본은 그대로 남는다(copy-only) — 실패한 항목은 tmp URL 그대로
+ * bodyHtml에 남아 재시도 가능. tmp 잔여물은 R2 lifecycle(tmp/ 24h) 위임 — 대시보드 규칙
+ * 존재 확인 필요(키 권한으로 코드에서 미검증).
  *
  * @returns 치환된 bodyHtml
  */
@@ -87,7 +89,7 @@ export async function promoteMailImages(bodyHtml: string): Promise<string> {
 
   if (pairs.length === 0) return bodyHtml;
 
-  const moveResult = await moveR2Objects(pairs);
+  const moveResult = await copyR2Objects(pairs);
   let movedKeys = moveResult.movedKeys;
   let failed = moveResult.failed;
 
