@@ -29,7 +29,7 @@ export const RESPONSE_WIDE_TABLE_THRESHOLD_PX = 718;
 
 /**
  * 응답 페이지 현재 스텝의 컨테이너 max-width 클래스 결정.
- * - 표 문항이 없으면 넓은 폭 유지 (전 문항 1280px 통일, 2026-07-27)
+ * - 표 문항이 없으면 좁은 폭(896px)
  * - 표 문항이 있으면 가장 넓은 표 기준: 718px 초과 → max-w-7xl(1280px), 이하 → max-w-4xl(896px)
  */
 export function resolveResponseContainerWidth(
@@ -38,7 +38,7 @@ export function resolveResponseContainerWidth(
   const tableWidths = questions
     .filter((q) => q.type === 'table')
     .map((q) => calcTotalWidth(q.tableColumns ?? []));
-  if (tableWidths.length === 0) return 'max-w-7xl';
+  if (tableWidths.length === 0) return 'max-w-4xl';
   return Math.max(...tableWidths) > RESPONSE_WIDE_TABLE_THRESHOLD_PX ? 'max-w-7xl' : 'max-w-4xl';
 }
 

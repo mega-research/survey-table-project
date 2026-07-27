@@ -6,13 +6,13 @@ import {
 } from '@/utils/table-grid-utils';
 
 // 응답 페이지 컨테이너 폭 분기: 표 문항 페이지는 표 총폭 기준(718px 초과 → 1280px, 이하 → 896px),
-// 표 없는 페이지는 전 문항 1280px 통일 유지.
+// 표 없는 페이지는 좁은 폭(896px).
 describe('resolveResponseContainerWidth', () => {
   const col = (width?: number) => ({ id: 'c', label: '', ...(width !== undefined ? { width } : {}) });
 
-  it('표 문항이 없으면 max-w-7xl 유지', () => {
-    expect(resolveResponseContainerWidth([{ type: 'radio' }, { type: 'text' }])).toBe('max-w-7xl');
-    expect(resolveResponseContainerWidth([])).toBe('max-w-7xl');
+  it('표 문항이 없으면 max-w-4xl', () => {
+    expect(resolveResponseContainerWidth([{ type: 'radio' }, { type: 'text' }])).toBe('max-w-4xl');
+    expect(resolveResponseContainerWidth([])).toBe('max-w-4xl');
   });
 
   it('표 총폭이 718px 이하면 max-w-4xl', () => {

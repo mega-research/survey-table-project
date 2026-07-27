@@ -872,7 +872,7 @@ function SurveyResponseFlowActive({
     );
   }
 
-  // 표 문항 페이지는 표 총폭 기준 분기(718px 초과 → 1280px, 이하 → 896px), 그 외는 1280px 통일 (2026-07-27)
+  // 표 문항 페이지는 표 총폭 기준 분기(718px 초과 → 1280px, 이하 → 896px), 표 없는 페이지는 896px (2026-07-27)
   const containerMaxWidth = resolveResponseContainerWidth(
     currentStep.items.map((i) => i.question),
   );
