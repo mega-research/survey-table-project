@@ -25,7 +25,10 @@ import {
   collectVisibleTableCells,
   type NumericIssue,
 } from '@/lib/survey/numeric-validation';
-import { collectRequiredOptionTextIssues } from '@/lib/survey/required-option-text-validation';
+import {
+  collectRequiredOptionTextIssues,
+  resolveEffectiveOptionTextsByQuestion,
+} from '@/lib/survey/required-option-text-validation';
 import { Button } from '@/components/ui/button';
 
 import { useClientSignals } from '@/hooks/use-client-signals';
@@ -336,6 +339,10 @@ function SurveyResponseFlowActive({
     );
   const currentResponseId = useSurveyResponseStore((s) => s.currentResponseId);
   const optionTexts = useSurveyResponseStore((s) => s.optionTexts);
+  const effectiveOptionTextsByQuestion = useMemo(
+    () => resolveEffectiveOptionTextsByQuestion(responses, optionTexts),
+    [responses, optionTexts],
+  );
 
   // 유효 테스트 세션 — 중단 게이트 우회 + 중복검사 skip + create/resume 에 testToken 전달.
   const isTestSession = control?.testSession === 'valid';
@@ -563,11 +570,11 @@ function SurveyResponseFlowActive({
         !collectRequiredOptionTextIssues(
           question,
           response,
-          optionTexts[question.id],
+          effectiveOptionTextsByQuestion[question.id],
           visibleCellIds ? { visibleCellIds } : undefined,
         ).questionMissing;
     },
-    [responses, optionTexts, questions],
+    [responses, effectiveOptionTextsByQuestion, questions],
   );
 
   // 다음 step 결정 (step 내 분기 규칙 평가)
@@ -619,12 +626,12 @@ function SurveyResponseFlowActive({
       const issues = collectNumericIssues(q, responses[q.id], {
         allResponses: responses,
         allQuestions: questions,
-        optionTexts: optionTexts[q.id],
+        optionTexts: effectiveOptionTextsByQuestion[q.id],
       });
       if (issues.length > 0) map.set(q.id, issues);
     }
     return map;
-  }, [currentStepQuestions, responses, questions, optionTexts]);
+  }, [currentStepQuestions, responses, questions, effectiveOptionTextsByQuestion]);
   const [numericErrorStepIndex, setNumericErrorStepIndex] = useState<number | null>(null);
   const showNumericErrors = numericErrorStepIndex === currentStepIndex;
   const visibleNumericIssues = showNumericErrors ? numericIssuesByQuestion : EMPTY_ISSUES;
@@ -668,6 +675,7 @@ function SurveyResponseFlowActive({
     resetResponseState,
     isRecovering,
     isQuestionAnswered,
+    optionTextsByQuestion: effectiveOptionTextsByQuestion,
     visibleProgressRef,
     setHighlightQuestionIds,
     setDuplicateStatus,

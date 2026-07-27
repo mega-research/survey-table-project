@@ -473,4 +473,75 @@ describe('useResponseLifecycle - handleSubmit', () => {
     expect(complete).not.toHaveBeenCalled();
     expect(args.setIsCompleted).not.toHaveBeenCalled();
   });
+
+  it('현재 단계에서 통과한 필수 셀 상세기입을 전체 제출 검증에도 전달한다', async () => {
+    const tableQuestion = {
+      id: 'q-table',
+      type: 'table',
+      title: '선택 표',
+      required: false,
+      order: 0,
+      tableRowsData: [
+        {
+          id: 'row-1',
+          label: '행',
+          cells: [
+            {
+              id: 'required-radio',
+              type: 'radio',
+              content: '',
+              required: true,
+              radioOptions: [
+                {
+                  id: 'detail-option',
+                  value: 'detail-value',
+                  label: '기타',
+                  allowTextInput: true,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    } as Question;
+    const tableStep: RenderStep = {
+      kind: 'page',
+      items: [
+        {
+          question: tableQuestion,
+          rootGroupId: null,
+          rootGroupName: null,
+          subgroupName: null,
+        },
+      ],
+    } as RenderStep;
+    const args = baseArgs({
+      currentResponseId: 'response-with-detail',
+      questions: [tableQuestion],
+      visibleQuestions: [tableQuestion],
+      steps: [tableStep],
+      currentStep: tableStep,
+      responses: {
+        'q-table': {
+          'required-radio': 'detail-value',
+        },
+      },
+    });
+    Object.assign(args, {
+      optionTextsByQuestion: {
+        'q-table': { 'detail-option': '유효한 상세기입' },
+      },
+    });
+    const { result } = renderHook(() => useResponseLifecycle(args));
+
+    await act(async () => {
+      await result.current.handleSubmit();
+    });
+
+    expect(args.setNumericErrorStepIndex).not.toHaveBeenCalled();
+    expect(complete).toHaveBeenCalledWith(
+      expect.objectContaining({ responseId: 'response-with-detail' }),
+    );
+    expect(args.setIsCompleted).toHaveBeenCalledWith(true);
+  });
 });

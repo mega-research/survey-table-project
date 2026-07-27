@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   collectRequiredOptionTextIssues,
   collectVisibleTableCells,
+  resolveEffectiveOptionTextsByQuestion,
 } from '@/lib/survey/required-option-text-validation';
 import type { Question, TableCell } from '@/types/survey';
 
@@ -15,6 +16,46 @@ function makeQuestion(overrides: Partial<Question>): Question {
     order: 0,
     ...overrides,
   } as Question;
+}
+
+function makeGroupedRankingQuestion(): Question {
+  return makeQuestion({
+    type: 'ranking',
+    required: true,
+    rankingConfig: { optionsSource: 'table', positions: 1 },
+    choiceGroups: [
+      { id: 'group-1', groupKey: 'rnk1', type: 'ranking', label: '그룹 1' },
+      { id: 'group-2', groupKey: 'rnk2', type: 'ranking', label: '그룹 2' },
+    ],
+    tableRowsData: [
+      {
+        id: 'ranking-row',
+        label: '행',
+        cells: [
+          {
+            id: 'group-1-detail',
+            type: 'ranking_opt',
+            content: '그룹 1 상세',
+            choiceGroupId: 'group-1',
+            allowTextInput: true,
+          },
+          {
+            id: 'group-1-plain',
+            type: 'ranking_opt',
+            content: '그룹 1 일반',
+            choiceGroupId: 'group-1',
+          },
+          {
+            id: 'group-2-detail',
+            type: 'ranking_opt',
+            content: '그룹 2 상세',
+            choiceGroupId: 'group-2',
+            allowTextInput: true,
+          },
+        ],
+      },
+    ],
+  });
 }
 
 describe('collectRequiredOptionTextIssues', () => {
@@ -87,6 +128,44 @@ describe('collectRequiredOptionTextIssues', () => {
         { rank: 1, optionValue: 'rank-value', optionText: '  ' },
       ], undefined),
     ).toEqual({ questionMissing: true, cellIds: [] });
+  });
+
+  it('그룹 순위형의 각 활성 그룹에서 선택한 상세기입 옵션이 공백이면 질문 누락이다', () => {
+    expect(
+      collectRequiredOptionTextIssues(
+        makeGroupedRankingQuestion(),
+        {
+          rnk1: [{ rank: 1, optionValue: 'group-1-detail', optionText: '   ' }],
+          rnk2: [{ rank: 1, optionValue: 'group-2-detail', optionText: '작성' }],
+        },
+        undefined,
+      ),
+    ).toEqual({ questionMissing: true, cellIds: [] });
+  });
+
+  it('그룹 순위형의 선택된 상세기입이 모두 유효하면 누락이 아니다', () => {
+    expect(
+      collectRequiredOptionTextIssues(
+        makeGroupedRankingQuestion(),
+        {
+          rnk1: [{ rank: 1, optionValue: 'group-1-detail', optionText: '첫 번째' }],
+          rnk2: [{ rank: 1, optionValue: 'group-2-detail', optionText: '두 번째' }],
+        },
+        undefined,
+      ),
+    ).toEqual({ questionMissing: false, cellIds: [] });
+  });
+
+  it('그룹 순위형에서 상세기입 옵션을 선택하지 않으면 빈 텍스트를 검사하지 않는다', () => {
+    expect(
+      collectRequiredOptionTextIssues(
+        makeGroupedRankingQuestion(),
+        {
+          rnk1: [{ rank: 1, optionValue: 'group-1-plain' }],
+        },
+        undefined,
+      ),
+    ).toEqual({ questionMissing: false, cellIds: [] });
   });
 
   it('필수 테이블은 선택된 상세기입이 비어 있는 radio checkbox select와 ranking 셀을 질문 누락으로 처리한다', () => {
@@ -188,5 +267,44 @@ describe('collectRequiredOptionTextIssues', () => {
       { 'hidden-opt': '', 'visible-opt': '작성' },
       { visibleCellIds: new Set(['visible']) },
     )).toEqual({ questionMissing: false, cellIds: [] });
+  });
+});
+
+describe('resolveEffectiveOptionTextsByQuestion', () => {
+  it('복구·관리자 응답의 루트 사이드카와 현재 편집값을 질문별로 합친다', () => {
+    expect(
+      resolveEffectiveOptionTextsByQuestion(
+        {
+          q1: 'selected',
+          __optTexts__: {
+            q1: { persisted: '저장값', edited: '이전값' },
+            q2: { untouched: '유지값' },
+          },
+        },
+        {
+          q1: { edited: '현재값', added: '새 값' },
+        },
+      ),
+    ).toEqual({
+      q1: { persisted: '저장값', edited: '현재값', added: '새 값' },
+      q2: { untouched: '유지값' },
+    });
+  });
+
+  it('현재 편집의 빈 문자열도 저장된 상세기입보다 우선한다', () => {
+    expect(
+      resolveEffectiveOptionTextsByQuestion(
+        {
+          __optTexts__: {
+            q1: { detail: '저장된 상세기입' },
+          },
+        },
+        {
+          q1: { detail: '' },
+        },
+      ),
+    ).toEqual({
+      q1: { detail: '' },
+    });
   });
 });

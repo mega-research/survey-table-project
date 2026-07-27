@@ -1,8 +1,9 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SurveyResponseFlow } from '@/components/survey-response/survey-response-flow';
+import type { SurveyVersionSnapshot } from '@/db/schema';
 import { useSurveyResponseStore } from '@/stores/survey-response-store';
 import type { Question, Survey } from '@/types/survey';
 
@@ -68,6 +69,40 @@ function renderFlow(options?: Parameters<typeof createSurvey>[0]) {
       mode="preview"
       surveyIdentifier="preview-required-option-text"
       previewContext={{ survey: createSurvey(options), versionId: 'version-1' }}
+    />,
+  );
+}
+
+function renderAdminFlow(
+  initialResponses: Record<string, unknown>,
+  onSubmit: (payload: { questionResponses: Record<string, unknown> }) => Promise<void>,
+) {
+  const survey = createSurvey({ hasNextPage: false });
+  const versionSnapshot: SurveyVersionSnapshot = {
+    title: survey.title,
+    questions: survey.questions as SurveyVersionSnapshot['questions'],
+    groups: [],
+    settings: {
+      isPublic: true,
+      allowMultipleResponses: true,
+      showProgressBar: true,
+      shuffleQuestions: false,
+      requireLogin: false,
+      thankYouMessage: '감사합니다.',
+    },
+  };
+  render(
+    <SurveyResponseFlow
+      mode="admin-edit"
+      surveyIdentifier="admin-required-option-text"
+      adminContext={{
+        responseId: 'response-1',
+        surveyId: survey.id,
+        initialResponses,
+        versionSnapshot,
+        initialContactAttrs: {},
+        onSubmit,
+      }}
     />,
   );
 }
@@ -208,5 +243,46 @@ describe('필수 옵션 상세기입 응답 흐름', () => {
     await user.click(getMobileActionButton('다음'));
 
     expect(await screen.findByText('다음 페이지 질문')).toBeVisible();
+  });
+
+  it('관리자 응답의 저장된 루트 상세기입으로 필수 질문 검증을 통과한다', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    renderAdminFlow(
+      {
+        'q-required': 'other',
+        __optTexts__: {
+          'q-required': { 'opt-other': '저장된 상세기입' },
+        },
+      },
+      onSubmit,
+    );
+    const user = userEvent.setup();
+
+    await screen.findByText('필수 기타 질문');
+    await user.click(screen.getByRole('button', { name: '다음' }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+  });
+
+  it('현재 편집에서 저장된 상세기입을 지우면 관리자 완료를 차단한다', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    renderAdminFlow(
+      {
+        'q-required': 'other',
+        __optTexts__: {
+          'q-required': { 'opt-other': '저장된 상세기입' },
+        },
+      },
+      onSubmit,
+    );
+    const user = userEvent.setup();
+    const detailInput = await screen.findByPlaceholderText('상세 기재');
+    await user.type(detailInput, '임시 입력');
+    await user.clear(detailInput);
+
+    await user.click(screen.getByRole('button', { name: '다음' }));
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expectRequiredHighlight();
   });
 });

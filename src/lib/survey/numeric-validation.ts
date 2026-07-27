@@ -7,7 +7,11 @@
  */
 
 import type { Question, SumConstraint, TableCell, TableRow } from '@/types/survey';
-import { shouldDisplayColumn, shouldDisplayRow } from '@/utils/branch-logic';
+import {
+  shouldDisplayColumn,
+  shouldDisplayDynamicGroup,
+  shouldDisplayRow,
+} from '@/utils/branch-logic';
 import { rangeViolationMessage } from '@/utils/number-format';
 import { parseNumericInput } from '@/utils/numeric-input';
 import { REQUIRED_CELL_TYPES } from '@/utils/serialize-cell';
@@ -59,6 +63,18 @@ export function collectVisibleTableCells(
   const enabledDynamicGroupIds = new Set(
     (question.dynamicRowConfigs ?? []).filter((c) => c.enabled).map((c) => c.groupId),
   );
+  const visibleDynamicGroupIds = new Set(
+    (question.dynamicRowConfigs ?? [])
+      .filter(
+        (config) =>
+          config.enabled
+          && (
+            !ctx
+            || shouldDisplayDynamicGroup(config, ctx.allResponses, ctx.allQuestions)
+          ),
+      )
+      .map((config) => config.groupId),
+  );
   const selectedRowIds = new Set(
     Array.isArray(cellValues['__selectedRowIds'])
       ? (cellValues['__selectedRowIds'] as string[])
@@ -71,7 +87,7 @@ export function collectVisibleTableCells(
   for (const row of rows) {
     if (
       row.dynamicGroupId &&
-      enabledDynamicGroupIds.has(row.dynamicGroupId) &&
+      visibleDynamicGroupIds.has(row.dynamicGroupId) &&
       selectedRowIds.has(row.id)
     ) {
       groupsWithSelections.add(row.dynamicGroupId);
@@ -88,13 +104,21 @@ export function collectVisibleTableCells(
   return rows
     .filter(
       (row) =>
-        (!(row.dynamicGroupId && enabledDynamicGroupIds.has(row.dynamicGroupId)) ||
-          selectedRowIds.has(row.id)) &&
+        (!(
+          row.dynamicGroupId
+          && enabledDynamicGroupIds.has(row.dynamicGroupId)
+        ) || (
+          visibleDynamicGroupIds.has(row.dynamicGroupId)
+          && selectedRowIds.has(row.id)
+        )) &&
         (!(
           hasEnabledDynamicRows &&
           row.showWhenDynamicGroupId &&
           enabledDynamicGroupIds.has(row.showWhenDynamicGroupId)
-        ) || groupsWithSelections.has(row.showWhenDynamicGroupId)),
+        ) || (
+          visibleDynamicGroupIds.has(row.showWhenDynamicGroupId)
+          && groupsWithSelections.has(row.showWhenDynamicGroupId)
+        )),
     )
     .filter(
       (row) =>

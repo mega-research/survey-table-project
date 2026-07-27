@@ -48,6 +48,10 @@ export function resolveRankingOptionsFromCells(cells: TableCell[]): QuestionOpti
         id: cell.id,
         value: RANKING_OTHER_VALUE,
         label: buildRankingOptLabel(cell, '기타 (직접 입력)'),
+        ...(cell.allowTextInput !== undefined ? { allowTextInput: cell.allowTextInput } : {}),
+        ...(cell.textInputPlaceholder !== undefined
+          ? { textInputPlaceholder: cell.textInputPlaceholder }
+          : {}),
         ...(cell.textBold ? { textBold: true } : {}),
         ...(cell.backgroundColor ? { backgroundColor: cell.backgroundColor } : {}),
       };
@@ -57,6 +61,10 @@ export function resolveRankingOptionsFromCells(cells: TableCell[]): QuestionOpti
       value: cell.id,
       label: buildRankingOptLabel(cell, '(라벨 없음)'),
       spssNumericCode: cell.spssNumericCode ?? idx + 1,
+      ...(cell.allowTextInput !== undefined ? { allowTextInput: cell.allowTextInput } : {}),
+      ...(cell.textInputPlaceholder !== undefined
+        ? { textInputPlaceholder: cell.textInputPlaceholder }
+        : {}),
       ...(cell.textBold ? { textBold: true } : {}),
       ...(cell.backgroundColor ? { backgroundColor: cell.backgroundColor } : {}),
     };

@@ -91,6 +91,8 @@ interface UseResponseLifecycleArgs {
 
   // 검증 파생값 (컴포넌트 소유)
   isQuestionAnswered: (question: Question) => boolean;
+  /** 질문별 유효 옵션 상세기입. 현재 편집값이 복구/관리자 저장값보다 우선한다. */
+  optionTextsByQuestion?: Record<string, Record<string, string>>;
 
   // 진척 미러 ref + UI 세터 (컴포넌트 소유)
   visibleProgressRef: RefObject<{ index: number; total: number }>;
@@ -168,6 +170,7 @@ export function useResponseLifecycle({
   resetResponseState,
   isRecovering,
   isQuestionAnswered,
+  optionTextsByQuestion = {},
   visibleProgressRef,
   setHighlightQuestionIds,
   setDuplicateStatus,
@@ -433,6 +436,7 @@ export function useResponseLifecycle({
           collectNumericIssues(q, responses[q.id], {
             allResponses: responses,
             allQuestions: questions,
+            optionTexts: optionTextsByQuestion[q.id],
           }).length > 0
         );
       });
@@ -641,6 +645,7 @@ export function useResponseLifecycle({
     isAdminEdit,
     isPreview,
     isQuestionAnswered,
+    optionTextsByQuestion,
     loadedSurvey,
     questions,
     resetResponseState,

@@ -820,6 +820,105 @@ describe('collectNumericIssues — 테이블 필수 옵션 상세기입', () => 
       cellIds: ['dynamic-detail', 'linked-detail'],
     });
   });
+
+  it('조건으로 숨은 동적 그룹은 잔존 선택 행과 연결 행을 제외하고, 다시 보이면 차단한다', () => {
+    const controller = {
+      id: 'dynamic-controller',
+      type: 'radio',
+      title: '동적 그룹 표시',
+      required: false,
+      order: 0,
+      options: [{ id: 'show', value: 'show', label: '표시' }],
+    } as Question;
+    const displayCondition = {
+      conditions: [
+        {
+          id: 'show-dynamic-group',
+          sourceQuestionId: controller.id,
+          conditionType: 'value-match' as const,
+          requiredValues: ['show'],
+          logicType: 'AND' as const,
+        },
+      ],
+      logicType: 'AND' as const,
+    };
+    const question = detailedOptionCellQuestion({
+      dynamicRowConfigs: [{ groupId: 'conditional-group', enabled: true, displayCondition }],
+      tableRowsData: [
+        {
+          id: 'conditional-dynamic-row',
+          label: '동적 행',
+          dynamicGroupId: 'conditional-group',
+          cells: [
+            {
+              id: 'conditional-dynamic-detail',
+              type: 'radio',
+              content: '',
+              required: true,
+              radioOptions: [
+                {
+                  id: 'conditional-dynamic-other',
+                  value: 'conditional-dynamic-other',
+                  label: '기타',
+                  allowTextInput: true,
+                },
+              ],
+            },
+          ],
+        },
+        {
+          id: 'conditional-linked-row',
+          label: '연결 행',
+          showWhenDynamicGroupId: 'conditional-group',
+          cells: [
+            {
+              id: 'conditional-linked-detail',
+              type: 'radio',
+              content: '',
+              required: true,
+              radioOptions: [
+                {
+                  id: 'conditional-linked-other',
+                  value: 'conditional-linked-other',
+                  label: '기타',
+                  allowTextInput: true,
+                },
+              ],
+            },
+          ],
+        },
+      ] as TableRow[],
+    });
+    const response = {
+      'conditional-dynamic-detail': 'conditional-dynamic-other',
+      'conditional-linked-detail': 'conditional-linked-other',
+      __selectedRowIds: ['conditional-dynamic-row'],
+    };
+    const baseCtx = {
+      allQuestions: [controller, question],
+      optionTexts: {
+        'conditional-dynamic-other': '',
+        'conditional-linked-other': '',
+      },
+    };
+
+    expect(
+      collectNumericIssues(question, response, {
+        ...baseCtx,
+        allResponses: { [controller.id]: 'hide' },
+      }),
+    ).toHaveLength(0);
+    expect(
+      collectNumericIssues(question, response, {
+        ...baseCtx,
+        allResponses: { [controller.id]: 'show' },
+      }),
+    ).toContainEqual({
+      kind: 'required-cells',
+      message: '필수 응답이 비어있습니다',
+      cellIds: ['conditional-dynamic-detail', 'conditional-linked-detail'],
+    });
+  });
 });
 
 describe('collectNumericIssues — 열 displayCondition (ctx 전달)', () => {

@@ -100,6 +100,26 @@ describe('resolveRankingOptionsFromCells', () => {
     expect(options[0]).toMatchObject({ textBold: true, backgroundColor: '#AABBCC' });
   });
 
+  it.each([false, true])(
+    'ranking_opt의 상세기입 메타데이터를 파생 옵션에 전달한다 isOther=%s',
+    (isOtherRankingCell) => {
+      const options = resolveRankingOptionsFromCells([
+        makeCell({
+          id: 'detail-rank-cell',
+          content: '상세 옵션',
+          isOtherRankingCell,
+          allowTextInput: true,
+          textInputPlaceholder: '선택 사유',
+        }),
+      ]);
+
+      expect(options[0]).toMatchObject({
+        allowTextInput: true,
+        textInputPlaceholder: '선택 사유',
+      });
+    },
+  );
+
   describe('라벨 우선순위: content > rankingLabel > "(라벨 없음)"', () => {
     it('content 가 있으면 content 사용', () => {
       const cells: TableCell[] = [makeCell({ id: 'c1', content: '내용라벨', rankingLabel: 'SPSS라벨' })];

@@ -246,7 +246,7 @@ export function RankingDropdownStack({
               {showOptionTextInput && (
                 <div className={isGrid ? 'w-full' : undefined}>
                   <Input
-                    placeholder="상세 기재"
+                    placeholder={selectedOpt?.textInputPlaceholder || '상세 기재'}
                     value={optionTextAt(rank)}
                     onChange={(e) => handleOptionText(rank, e.target.value)}
                     className={`${otherInputBaseCls}${isGrid ? ' w-full' : ''}`}
@@ -278,7 +278,7 @@ export function RankingDropdownStack({
             {showOptionTextInput && (
               <div className={otherWrapperCls}>
                 <Input
-                  placeholder="상세 기재"
+                  placeholder={selectedOpt?.textInputPlaceholder || '상세 기재'}
                   value={optionTextAt(rank)}
                   onChange={(e) => handleOptionText(rank, e.target.value)}
                   className={`${otherInputBaseCls}${compact ? '' : ' w-full'}`}

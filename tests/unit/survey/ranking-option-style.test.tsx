@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { RankingDropdownStack } from '@/components/survey-response/ranking-dropdown-stack';
 import type { QuestionOption } from '@/types/survey';
+import { resolveRankingOptionsFromCells } from '@/utils/ranking-source';
 
 vi.mock('@/hooks/use-media-query', () => ({
   useMobileView: () => false,
@@ -86,5 +87,31 @@ describe('RankingDropdownStack 옵션 스타일', () => {
     const styledOption = screen.getByRole('option', { name: '강조 옵션' });
     expect(styledOption).toHaveClass('font-bold');
     expect(styledOption).toHaveStyle({ backgroundColor: '#AABBCC' });
+  });
+
+  it('테이블 소스 상세기입 옵션을 선택하면 셀의 placeholder로 입력란을 렌더한다', () => {
+    const [detailOption] = resolveRankingOptionsFromCells([
+      {
+        id: 'table-detail',
+        type: 'ranking_opt',
+        content: '기타 사유',
+        allowTextInput: true,
+        textInputPlaceholder: '사유를 입력하세요',
+      },
+    ]);
+    if (!detailOption) throw new Error('테이블 소스 옵션 파생 실패');
+
+    render(
+      <RankingDropdownStack
+        answers={[{ rank: 1, optionValue: 'table-detail' }]}
+        options={[detailOption]}
+        positions={1}
+        allowDuplicates={false}
+        allowOther={false}
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByPlaceholderText('사유를 입력하세요')).toBeVisible();
   });
 });
