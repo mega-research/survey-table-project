@@ -1306,6 +1306,12 @@ export function useTableEditor({
       pendingArgsRef.current = null;
     }
 
+    // debounce를 취소해도 ref-only 행 편집은 화면 state까지 즉시 반영해야 한다.
+    if (pendingRowsSyncRef.current) {
+      pendingRowsSyncRef.current = false;
+      setCurrentRows(currentRowsRef.current);
+    }
+
     const result = applyHeaderBulkStyle(
       currentColumnsRef.current,
       headerGridRef.current,
