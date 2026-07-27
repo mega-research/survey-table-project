@@ -12,6 +12,9 @@ interface OptionsLayoutSelectorProps {
   /** 옵션 그룹 블록 정렬. onAlignChange 와 함께 전달된 경우에만 정렬 select 렌더. */
   align?: OptionsAlign | undefined;
   onAlignChange?: (next: OptionsAlign) => void;
+  /** 모바일 배치 명시값. null/undefined = 자동(휴리스틱). onMobileChange 전달 시에만 select 렌더. */
+  mobileValue?: number | null | undefined;
+  onMobileChange?: (next: number | null) => void;
 }
 
 /**
@@ -25,6 +28,8 @@ export function OptionsLayoutSelector({
   label = '옵션 배치:',
   align,
   onAlignChange,
+  mobileValue,
+  onMobileChange,
 }: OptionsLayoutSelectorProps) {
   const isGrid = (value ?? 1) >= 2;
   return (
@@ -56,6 +61,28 @@ export function OptionsLayoutSelector({
             <option value="left">좌측</option>
             <option value="center">중앙</option>
             <option value="right">우측</option>
+          </select>
+        </>
+      )}
+      {onMobileChange && (
+        <>
+          <Label className="text-gray-600">모바일 배치:</Label>
+          <select
+            aria-label="모바일 배치"
+            value={mobileValue == null ? 'auto' : String(mobileValue)}
+            onChange={(e) =>
+              onMobileChange(e.target.value === 'auto' ? null : parseInt(e.target.value, 10))
+            }
+            className="rounded border border-gray-300 bg-white px-2 py-1"
+          >
+            <option value="auto">자동 (기본)</option>
+            <option value="1">세로 (1열)</option>
+            <option value="0">가로 (한 줄, 자동 줄바꿈)</option>
+            <option value="2">2열 그리드</option>
+            <option value="3">3열 그리드</option>
+            <option value="4">4열 그리드</option>
+            <option value="5">5열 그리드</option>
+            <option value="6">6열 그리드</option>
           </select>
         </>
       )}
