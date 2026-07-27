@@ -723,6 +723,33 @@ describe('buildUpdatedCell — 인터랙티브 셀 공용 필수 응답 (cellReq
   });
 });
 
+describe('buildUpdatedCell — mobileOptionsColumns', () => {
+  it('radio: 폼의 모바일 배치 값이 셀에 저장된다', () => {
+    const form: CellFormState = {
+      ...baseForm('radio'),
+      radioOptions: [{ id: 'o1', label: '남', value: '1' }],
+      cellMobileOptionsColumns: 3,
+    };
+    const out = buildUpdatedCell(form, baseCell);
+    expect(out.mobileOptionsColumns).toBe(3);
+  });
+
+  it('radio: 자동(undefined)이면 기존 셀의 mobileOptionsColumns 키가 제거된다', () => {
+    const form: CellFormState = {
+      ...baseForm('radio'),
+      radioOptions: [{ id: 'o1', label: '남', value: '1' }],
+      cellMobileOptionsColumns: undefined,
+    };
+    const out = buildUpdatedCell(form, { ...baseCell, type: 'radio', mobileOptionsColumns: 3 });
+    expect('mobileOptionsColumns' in out).toBe(false);
+  });
+
+  it('cellToFormState 는 셀의 mobileOptionsColumns 를 hydrate 한다', () => {
+    const state = cellToFormState({ id: 'c1', type: 'radio', content: '', mobileOptionsColumns: 2 });
+    expect(state.cellMobileOptionsColumns).toBe(2);
+  });
+});
+
 describe('buildUpdatedCell — 개별 셀 스타일', () => {
   it('개별 셀 Bold와 배경색을 폼으로 복원하고 저장한다', () => {
     const styled: TableCell = {

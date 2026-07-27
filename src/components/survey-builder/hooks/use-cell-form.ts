@@ -47,6 +47,7 @@ export interface CellFormSetters {
   setSelectOptions: (v: CellFormState['selectOptions']) => void;
   setAllowOtherOption: (v: boolean) => void;
   setCellOptionsColumns: (v: number | undefined) => void;
+  setCellMobileOptionsColumns: (v: number | undefined) => void;
   setInputPlaceholder: (v: string) => void;
   setInputMaxLength: (v: number | '') => void;
   setInputDefaultValueTemplate: (v: string) => void;
@@ -126,6 +127,7 @@ export function useCellForm(cell: TableCell, isOpen: boolean): UseCellFormResult
       setSelectOptions: set('selectOptions'),
       setAllowOtherOption: set('allowOtherOption'),
       setCellOptionsColumns: set('cellOptionsColumns'),
+      setCellMobileOptionsColumns: set('cellMobileOptionsColumns'),
       setInputPlaceholder: set('inputPlaceholder'),
       setInputMaxLength: set('inputMaxLength'),
       setInputDefaultValueTemplate: set('inputDefaultValueTemplate'),

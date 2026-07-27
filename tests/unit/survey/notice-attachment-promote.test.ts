@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// 파일 최상단 hoisted mock — promote 가 의존하는 R2 mover / deleter mock
+// 파일 최상단 hoisted mock — promote 가 의존하는 R2 copier mock.
+// deleteR2ObjectsByKey 는 production 코드가 더 이상 import 하지 않지만, "원본/dst 롤백
+// 삭제가 다시 생기지 않는다"는 회귀 가드로 mock 은 남겨 not-called 를 단언한다.
 vi.mock('@/lib/image-utils-server', () => ({
-  moveR2Objects: vi.fn(),
+  copyR2Objects: vi.fn(),
   deleteR2ObjectsByKey: vi.fn(),
 }));
 
@@ -25,7 +27,7 @@ vi.mock('@aws-sdk/client-s3', () => ({
   },
 }));
 
-import { deleteR2ObjectsByKey, moveR2Objects } from '@/lib/image-utils-server';
+import { copyR2Objects, deleteR2ObjectsByKey } from '@/lib/image-utils-server';
 import {
   extractPermanentAttachmentKeysFromHtml,
   extractTmpNoticeAttachmentUrlsFromHtml,
@@ -131,7 +133,7 @@ describe('promoteNoticeAttachments', () => {
     process.env['CLOUDFLARE_R2_PUBLIC_URL'] = 'https://cdn.test';
     process.env['CLOUDFLARE_R2_BUCKET'] = 'test-bucket';
     headExistsKeys.clear();
-    vi.mocked(moveR2Objects).mockReset();
+    vi.mocked(copyR2Objects).mockReset();
     vi.mocked(deleteR2ObjectsByKey).mockReset();
   });
   afterEach(() => {
@@ -140,8 +142,8 @@ describe('promoteNoticeAttachments', () => {
     headExistsKeys.clear();
   });
 
-  it('R2 move 성공 시 모든 tmp URL 영구 URL 치환', async () => {
-    vi.mocked(moveR2Objects).mockImplementationOnce(async (pairs) => ({
+  it('R2 copy 성공 시 모든 tmp URL 영구 URL 치환', async () => {
+    vi.mocked(copyR2Objects).mockImplementationOnce(async (pairs) => ({
       movedKeys: pairs.map((p) => ({ srcKey: p.srcKey, dstKey: p.dstKey })),
       failed: [],
     }));
@@ -165,13 +167,13 @@ describe('promoteNoticeAttachments', () => {
     const questions = [{ type: 'notice', noticeContent: '<p>그냥 본문</p>' }];
     const out = await promoteNoticeAttachments(questions);
     expect(out).toBe(questions);
-    // moveR2Objects 호출 안 됨 early return
-    expect(vi.mocked(moveR2Objects)).not.toHaveBeenCalled();
+    // copyR2Objects 호출 안 됨 early return
+    expect(vi.mocked(copyR2Objects)).not.toHaveBeenCalled();
   });
 
-  it('R2 move 1차 실패 → retry 후 성공 시 정상 promote', async () => {
+  it('R2 copy 1차 실패 → retry 후 성공 시 정상 promote', async () => {
     let callCount = 0;
-    vi.mocked(moveR2Objects).mockImplementation(async (pairs) => {
+    vi.mocked(copyR2Objects).mockImplementation(async (pairs) => {
       callCount += 1;
       if (callCount === 1) {
         // 1차: 하나만 성공, 하나 실패
@@ -207,9 +209,9 @@ describe('promoteNoticeAttachments', () => {
     expect(callCount).toBe(2);
   });
 
-  it('R2 move 1차+retry 모두 실패 → 부분 성공분 rollback + throw', async () => {
+  it('R2 copy 1차+retry 모두 실패 → 부분 성공분(dst)도 롤백 삭제하지 않고 원본(tmp) 보존한 채 throw', async () => {
     let callCount = 0;
-    vi.mocked(moveR2Objects).mockImplementation(async (pairs) => {
+    vi.mocked(copyR2Objects).mockImplementation(async (pairs) => {
       callCount += 1;
       if (callCount === 1) {
         // 1차: a 성공, b 실패
@@ -229,7 +231,6 @@ describe('promoteNoticeAttachments', () => {
         failed: pairs.map((p) => p.srcKey),
       };
     });
-    vi.mocked(deleteR2ObjectsByKey).mockResolvedValue(true);
 
     const questions = [
       {
@@ -243,18 +244,18 @@ describe('promoteNoticeAttachments', () => {
     await expect(promoteNoticeAttachments(questions)).rejects.toThrow(
       /공지사항 첨부 promote 실패/,
     );
-    // 부분 성공분 rollback DELETE 호출 확인
-    expect(deleteR2ObjectsByKey).toHaveBeenCalledWith(['notice-attachment/a.pdf']);
+    // copy-only 이므로 이미 copy 된 a(dst)도 롤백 삭제하지 않는다 — tmp 원본도 그대로 보존.
+    expect(deleteR2ObjectsByKey).not.toHaveBeenCalled();
   });
 
-  it('최종 실패 롤백은 이번 호출이 옮긴 키만 삭제하고 recovered(이전 publish 라이브) 키는 보존', async () => {
-    // a: 이번 호출이 새로 옮김(롤백 대상)
-    // b: move 실패하지만 영구 위치에 이미 존재(이전 publish 소유 라이브 첨부 → 롤백 금지)
+  it('최종 실패해도 원본(tmp)·dst 모두 보존 — recovered(이전 publish 라이브) 키는 실패 목록에서 제외', async () => {
+    // a: 이번 호출이 새로 copy(dst 생성, 삭제되지 않고 그대로 남음)
+    // b: copy 실패하지만 영구 위치에 이미 존재(이전 publish 소유 라이브 첨부 → 정상 인식)
     // c: 진짜 실패 → 전체 promote throw 유발
     headExistsKeys.add('notice-attachment/b.pdf');
 
     let callCount = 0;
-    vi.mocked(moveR2Objects).mockImplementation(async (pairs) => {
+    vi.mocked(copyR2Objects).mockImplementation(async (pairs) => {
       callCount += 1;
       if (callCount === 1) {
         // 1차: a 성공, b/c 실패
@@ -270,7 +271,6 @@ describe('promoteNoticeAttachments', () => {
       // retry: 나머지(b, c) 여전히 실패
       return { movedKeys: [], failed: pairs.map((p) => p.srcKey) };
     });
-    vi.mocked(deleteR2ObjectsByKey).mockResolvedValue(true);
 
     const questions = [
       {
@@ -282,30 +282,24 @@ describe('promoteNoticeAttachments', () => {
       },
     ];
 
-    await expect(promoteNoticeAttachments(questions)).rejects.toThrow(
-      /공지사항 첨부 promote 실패/,
-    );
+    const promise = promoteNoticeAttachments(questions);
+    await expect(promise).rejects.toThrow(/공지사항 첨부 promote 실패/);
+    // recovered(b)는 실패 목록에서 빠지고 진짜 실패(c)만 남는다.
+    await expect(promise).rejects.toMatchObject({
+      failedKeys: ['tmp/notice-attachment/c.pdf'],
+    });
 
-    // 롤백은 이번 호출이 옮긴 a 만 삭제. recovered b 는 절대 삭제하면 안 됨.
-    expect(deleteR2ObjectsByKey).toHaveBeenCalledTimes(1);
-    expect(deleteR2ObjectsByKey).toHaveBeenCalledWith(['notice-attachment/a.pdf']);
-    const deletedKeys = vi.mocked(deleteR2ObjectsByKey).mock.calls.flatMap(
-      (call) => call[0] as string[],
-    );
-    expect(deletedKeys).not.toContain('notice-attachment/b.pdf');
+    // copy-only — a(dst)도, tmp 원본도 그 무엇도 rollback 삭제되지 않는다.
+    expect(deleteR2ObjectsByKey).not.toHaveBeenCalled();
   });
 
-  it('previousQuestions 의 영구 키 중 새 HTML 에 없는 것 → deleteR2ObjectsByKey 호출', async () => {
-    vi.mocked(moveR2Objects).mockResolvedValue({ movedKeys: [], failed: [] });
+  it('orphan cleanup 은 제거됨 — 이전 영구 키가 새 HTML 에 없어도 deleteR2ObjectsByKey 미호출', async () => {
+    // 과거에는 2번째 인자(previousQuestions)로 이전 영구 키와 diff 해 orphan 을 R2 에서
+    // 삭제했다. 발행 스냅샷/복제 설문/보관함이 같은 영구 키를 참조할 수 있어 위험했으므로
+    // 그 기능 자체(2번째 인자 포함)를 제거했다 — 함수는 이제 questions 배열만 받는다.
+    vi.mocked(copyR2Objects).mockResolvedValue({ movedKeys: [], failed: [] });
     vi.mocked(deleteR2ObjectsByKey).mockResolvedValue(true);
 
-    const previousQuestions = [
-      {
-        type: 'notice',
-        noticeContent:
-          '<a data-file-attachment="true" data-key="notice-attachment/old.pdf">old</a>',
-      },
-    ];
     const newQuestions = [
       {
         type: 'notice',
@@ -314,36 +308,7 @@ describe('promoteNoticeAttachments', () => {
       },
     ];
 
-    await promoteNoticeAttachments(newQuestions, { previousQuestions });
-
-    expect(deleteR2ObjectsByKey).toHaveBeenCalledWith(['notice-attachment/old.pdf']);
-  });
-
-  it('previousQuestions 의 영구 키가 새 HTML 에 그대로 있으면 → DELETE 호출 안 됨', async () => {
-    vi.mocked(moveR2Objects).mockResolvedValue({ movedKeys: [], failed: [] });
-    vi.mocked(deleteR2ObjectsByKey).mockResolvedValue(true);
-
-    const sameContent =
-      '<a data-file-attachment="true" data-key="notice-attachment/keep.pdf">keep</a>';
-    await promoteNoticeAttachments(
-      [{ type: 'notice', noticeContent: sameContent }],
-      { previousQuestions: [{ type: 'notice', noticeContent: sameContent }] },
-    );
-
-    expect(deleteR2ObjectsByKey).not.toHaveBeenCalled();
-  });
-
-  it('previousQuestions 미전달 시 orphan cleanup 호출 안 됨 (backward compat)', async () => {
-    vi.mocked(moveR2Objects).mockResolvedValue({ movedKeys: [], failed: [] });
-    vi.mocked(deleteR2ObjectsByKey).mockResolvedValue(true);
-
-    await promoteNoticeAttachments([
-      {
-        type: 'notice',
-        noticeContent:
-          '<a data-file-attachment="true" data-key="notice-attachment/x.pdf">x</a>',
-      },
-    ]);
+    await promoteNoticeAttachments(newQuestions);
 
     expect(deleteR2ObjectsByKey).not.toHaveBeenCalled();
   });

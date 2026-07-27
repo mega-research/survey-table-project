@@ -9,11 +9,8 @@ import {
   PERSISTED_QUESTION_FIELDS,
   type CompleteQuestionWrite,
 } from '@/db/schema/question-persisted-fields';
-import { extractImageUrlsFromQuestion } from '@/lib/image-extractor';
-import { deleteImagesFromR2Server } from '@/lib/image-utils-server';
 import { promoteSurveyImages, type PromotableQuestion } from '@/lib/survey/survey-image-promote';
 import { generateId, isValidUUID } from '@/lib/utils';
-import type { Question } from '@/types/survey';
 
 import type {
   CreateQuestionInput,
@@ -50,6 +47,7 @@ export async function createQuestion(data: CreateQuestionInput): Promise<Questio
     allowOtherOption: data.allowOtherOption,
     optionsColumns: data.optionsColumns,
     optionsAlign: data.optionsAlign,
+    mobileOptionsColumns: data.mobileOptionsColumns,
     minSelections: data.minSelections,
     maxSelections: data.maxSelections,
     noticeContent: data.noticeContent,
@@ -81,7 +79,7 @@ export async function createQuestion(data: CreateQuestionInput): Promise<Questio
     spssMeasure: data.spssMeasure,
   } satisfies CompleteQuestionWrite & NewQuestion;
 
-  // tmp/survey/ 이미지를 영구 prefix로 promote (R2 move + URL 치환)
+  // tmp/survey/ 이미지를 영구 prefix로 promote (R2 copy + URL 치환, 원본 tmp 는 lifecycle 위임)
   const [questionToInsert] = await promoteSurveyImages([newQuestion as PromotableQuestion]);
 
   const [question] = await db
@@ -118,7 +116,7 @@ export async function updateQuestion(
     }
   }
 
-  // tmp/survey/ 이미지를 영구 prefix로 promote (R2 move + URL 치환)
+  // tmp/survey/ 이미지를 영구 prefix로 promote (R2 copy + URL 치환, 원본 tmp 는 lifecycle 위임)
   const [allowedToUpdate] = await promoteSurveyImages([allowed as PromotableQuestion]);
 
   const [updated] = await db
@@ -132,30 +130,15 @@ export async function updateQuestion(
 }
 
 /**
- * 질문 삭제 — 이미지 R2 cleanup(best-effort) 후 행 삭제.
+ * 질문 삭제 — surveyId 스코프 WHERE 로 행만 삭제. 이미지는 R2 에서 지우지 않는다
+ * (발행 스냅샷·복제 설문·보관함이 같은 URL 을 참조할 수 있어 무확인 삭제 금지).
  *
- * WS-2 IDOR 봉인: 조회/삭제 모두 surveyId 스코프로 한정한다. 다른 설문 소속이면
- * 사전 조회가 0행이라 이미지 cleanup 도, 삭제도 일어나지 않는다.
+ * WS-2 IDOR 봉인: 삭제 WHERE 에 surveyId 를 함께 걸어, 다른 설문 소속이면 영향 0행.
  */
 export async function deleteQuestion(
   questionId: string,
   surveyId: string,
 ): Promise<{ ok: true }> {
-  const question = await db.query.questions.findFirst({
-    where: and(eq(questions.id, questionId), eq(questions.surveyId, surveyId)),
-  });
-
-  if (question) {
-    const images = extractImageUrlsFromQuestion(question as Question);
-    if (images.length > 0) {
-      try {
-        await deleteImagesFromR2Server(images);
-      } catch (error) {
-        console.error('질문 삭제 시 이미지 삭제 실패:', error);
-      }
-    }
-  }
-
   await db
     .delete(questions)
     .where(and(eq(questions.id, questionId), eq(questions.surveyId, surveyId)));

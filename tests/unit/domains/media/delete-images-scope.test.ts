@@ -12,15 +12,17 @@ import {
  * publicUrl substring 포함만으로 임의 영구 키(survey/<known>.webp 등)를 지우면
  * IDOR — 다른 자원의 객체를 삭제할 수 있다. 그래서 두 층에서 게이트한다.
  *
- * 1. 키 게이트(isAllowedImageDeletionKey): 의도 namespace(survey/·tmp/)만 삭제 허용,
- *    traversal('..'/'//') 거부. service 가 URL→key 추출 후 이 게이트로 재검증한다.
+ * 1. 키 게이트(isAllowedImageDeletionKey): tmp/ namespace 만 삭제 허용 — 취소 경로의
+ *    tmp orphan 정리 전용이며 영구 네임스페이스(survey/ 등)는 클라이언트발 삭제
+ *    대상이 아니다(2026-07-27 orphan 감사: 발행 스냅샷·복제·보관함이 같은 URL 을
+ *    참조). traversal('..'/'//') 도 거부. service 가 URL→key 추출 후 이 게이트로 재검증.
  * 2. 입력 refine(DeleteImagesInput): traversal URL 거부(형제 첨부 삭제와 대칭).
  *    외부(non-R2) URL 은 service 단계에서 skip 되므로 입력에서 막지 않는다.
  */
 
 describe('isAllowedImageDeletionKey — R2 키 namespace 게이트', () => {
-  it('의도 namespace(survey/) 영구 키는 허용한다', () => {
-    expect(isAllowedImageDeletionKey('survey/1234-abc.webp')).toBe(true);
+  it('영구 네임스페이스(survey/) 키는 게이트가 tmp 전용으로 축소되어 거부한다', () => {
+    expect(isAllowedImageDeletionKey('survey/1234-abc.webp')).toBe(false);
   });
 
   it('의도 namespace(tmp/) tmp 키는 허용한다', () => {

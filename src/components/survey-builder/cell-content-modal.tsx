@@ -158,6 +158,7 @@ export function CellContentModal({
     selectOptions,
     allowOtherOption,
     cellOptionsColumns,
+    cellMobileOptionsColumns,
     inputPlaceholder,
     inputMaxLength,
     inputDefaultValueTemplate,
@@ -213,6 +214,7 @@ export function CellContentModal({
     setSelectOptions,
     setAllowOtherOption,
     setCellOptionsColumns,
+    setCellMobileOptionsColumns,
     setInputPlaceholder,
     setInputMaxLength,
     setInputDefaultValueTemplate,
@@ -1029,7 +1031,14 @@ export function CellContentModal({
 
           {/* 체크박스 탭 */}
           <TabsContent value="checkbox" className="space-y-4">
-            <OptionsLayoutSelector value={cellOptionsColumns} onChange={setCellOptionsColumns} />
+            <OptionsLayoutSelector
+              value={cellOptionsColumns}
+              onChange={setCellOptionsColumns}
+              align={horizontalAlign}
+              onAlignChange={setHorizontalAlign}
+              mobileValue={cellMobileOptionsColumns}
+              onMobileChange={(next) => setCellMobileOptionsColumns(next ?? undefined)}
+            />
             <CellChoiceEditor
               cellType="checkbox"
               textContent={textContent}
@@ -1052,7 +1061,14 @@ export function CellContentModal({
 
           {/* 라디오 버튼 탭 */}
           <TabsContent value="radio" className="space-y-4">
-            <OptionsLayoutSelector value={cellOptionsColumns} onChange={setCellOptionsColumns} />
+            <OptionsLayoutSelector
+              value={cellOptionsColumns}
+              onChange={setCellOptionsColumns}
+              align={horizontalAlign}
+              onAlignChange={setHorizontalAlign}
+              mobileValue={cellMobileOptionsColumns}
+              onMobileChange={(next) => setCellMobileOptionsColumns(next ?? undefined)}
+            />
             <CellChoiceEditor
               cellType="radio"
               textContent={textContent}
@@ -1097,7 +1113,14 @@ export function CellContentModal({
 
           {/* 순위형(ranking) 탭 — Case 3 */}
           <TabsContent value="ranking" className="space-y-4">
-            <OptionsLayoutSelector value={cellOptionsColumns} onChange={setCellOptionsColumns} />
+            <OptionsLayoutSelector
+              value={cellOptionsColumns}
+              onChange={setCellOptionsColumns}
+              align={horizontalAlign}
+              onAlignChange={setHorizontalAlign}
+              mobileValue={cellMobileOptionsColumns}
+              onMobileChange={(next) => setCellMobileOptionsColumns(next ?? undefined)}
+            />
             <RankingCellTab
               cellCode={cellCode}
               rankingOptions={rankingOptions}

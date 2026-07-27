@@ -24,7 +24,7 @@ vi.mock('@/lib/survey/survey-image-promote', () => ({
 // deleteImagesFromR2Server도 R2 연결이 필요하므로 no-op stub으로 대체.
 vi.mock('@/lib/image-utils-server', () => ({
   deleteImagesFromR2Server: async () => undefined,
-  moveR2Objects: async () => ({ movedKeys: [], failed: [] }),
+  copyR2Objects: async () => ({ movedKeys: [], failed: [] }),
 }));
 
 import { db } from '@/db';

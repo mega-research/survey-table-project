@@ -6,13 +6,7 @@ import { cache } from 'react';
 import { db } from '@/db';
 import { mailTemplates, type MailTemplate } from '@/db/schema/mail';
 import type { MailAttachment } from '@/db/schema/schema-types';
-import { deleteImagesFromR2Server, deleteR2ObjectsByKey } from '@/lib/image-utils-server';
 import { promoteMailAttachments } from '@/lib/mail/mail-attachment-promote';
-import {
-  diffOrphanAttachmentKeys,
-  diffOrphanImages,
-  extractMailTemplateAssets,
-} from '@/lib/mail/mail-image-extractor';
 import { ensureImageLinkBandSlices } from '@/lib/mail/image-link-band-slices';
 import { promoteMailImages } from '@/lib/mail/mail-image-promote';
 import { extractVariableKeys } from '@/lib/mail/variable-extractor';
@@ -25,8 +19,10 @@ import type {
   UpdateMailTemplateOutput,
 } from '../../domain/mail-template';
 
-// AttachmentPromoteError 는 procedure 가 ORPCError 로 매핑하기 위해 재노출.
+// AttachmentPromoteError / MailImagePromoteError 는 procedure 가 ORPCError 로
+// 매핑하기 위해 재노출.
 export { AttachmentPromoteError } from '@/lib/mail/mail-attachment-promote';
+export { MailImagePromoteError } from '@/lib/mail/mail-image-promote';
 
 /** 템플릿을 찾지 못했을 때 — procedure 가 NOT_FOUND 로 매핑. */
 export class MailTemplateNotFoundError extends Error {
@@ -76,8 +72,8 @@ export const getMailTemplate = cache(
 
 /**
  * tmp/* R2 객체를 영구 prefix 로 promote — bodyHtml 이미지와 attachment 파일을 동시에.
- * 첨부 promote 가 부분 실패하면 `AttachmentPromoteError` 가 throw 되어 caller 가
- * 사용자 친화 메시지로 응답하도록 한다.
+ * 이미지 promote 가 부분 실패하면 `MailImagePromoteError`, 첨부 promote 가 부분 실패하면
+ * `AttachmentPromoteError` 가 throw 되어 caller 가 사용자 친화 메시지로 응답하도록 한다.
  */
 async function promoteAssets(
   rawBodyHtml: string,
@@ -93,30 +89,10 @@ async function promoteAssets(
 }
 
 /**
- * DB update 성공 후 영구 위치에서 사라진 에셋(orphan)을 R2 에서 정리.
- * cleanup 자체 실패는 사용자에게 노출 안 함 — best-effort.
- */
-function cleanupOrphans(
-  oldAssets: ReturnType<typeof extractMailTemplateAssets>,
-  newAssets: ReturnType<typeof extractMailTemplateAssets>,
-): void {
-  const orphanImageUrls = diffOrphanImages(oldAssets.imageUrls, newAssets.imageUrls);
-  const orphanAttachmentKeys = diffOrphanAttachmentKeys(
-    oldAssets.attachmentKeys,
-    newAssets.attachmentKeys,
-  );
-  if (orphanImageUrls.length > 0) {
-    deleteImagesFromR2Server(orphanImageUrls).catch(console.error);
-  }
-  if (orphanAttachmentKeys.length > 0) {
-    deleteR2ObjectsByKey(orphanAttachmentKeys).catch(console.error);
-  }
-}
-
-/**
  * 메일 템플릿 생성.
  * 인증은 authed 미들웨어가 담당. 캐시 갱신은 소비처 router.refresh/replace 로 대체.
- * promote 실패는 AttachmentPromoteError throw — procedure 가 사용자 메시지로 변환.
+ * promote 실패는 MailImagePromoteError/AttachmentPromoteError throw — procedure 가
+ * 사용자 메시지로 변환.
  */
 export async function createMailTemplate(
   params: CreateMailTemplateInput,
@@ -177,14 +153,14 @@ export async function updateMailTemplate(
     attachments: rawAttachments,
   } = input;
 
-  // R2 cleanup 을 위해 기존 템플릿 에셋 먼저 fetch.
+  // promote(R2 copy) 를 시도하기 전에 존재 여부부터 확인해 빠르게 실패시킨다.
   const oldRow = await db.query.mailTemplates.findFirst({
     where: and(
       eq(mailTemplates.id, templateId),
       eq(mailTemplates.surveyId, surveyId),
       isNull(mailTemplates.deletedAt),
     ),
-    columns: { bodyHtml: true, attachments: true },
+    columns: { id: true },
   });
 
   if (!oldRow) {
@@ -220,17 +196,16 @@ export async function updateMailTemplate(
     throw new MailTemplateNotFoundError();
   }
 
-  cleanupOrphans(
-    extractMailTemplateAssets(oldRow),
-    extractMailTemplateAssets({ bodyHtml, attachments }),
-  );
+  // 수정으로 본문/첨부에서 빠진 이전 영구 에셋은 R2 에서 지우지 않는다. 이미 발송된
+  // 캠페인 스냅샷(mail_campaigns.*Snapshot)과 수신자 메일함에 전달된 메일이 같은
+  // mail/ URL·첨부 키를 참조하므로, 템플릿을 고쳤다고 지우면 발송 완료 메일이 깨진다.
 
   return { bodyHtml, attachments };
 }
 
 /**
- * 메일 템플릿 soft delete.
- * 성공 후 모든 에셋 R2 cleanup (best-effort). 미존재 시 MailTemplateNotFoundError throw.
+ * 메일 템플릿 soft delete. R2 에셋은 지우지 않는다(사유는 아래 주석 참조).
+ * 미존재 시 MailTemplateNotFoundError throw.
  */
 export async function deleteMailTemplate(params: DeleteMailTemplateInput): Promise<void> {
   const { surveyId, templateId } = params;
@@ -241,7 +216,7 @@ export async function deleteMailTemplate(params: DeleteMailTemplateInput): Promi
       eq(mailTemplates.surveyId, surveyId),
       isNull(mailTemplates.deletedAt),
     ),
-    columns: { bodyHtml: true, attachments: true },
+    columns: { id: true },
   });
 
   if (!oldRow) {
@@ -264,12 +239,7 @@ export async function deleteMailTemplate(params: DeleteMailTemplateInput): Promi
     throw new MailTemplateNotFoundError();
   }
 
-  // soft delete 성공 후 모든 에셋 R2 cleanup (best-effort)
-  const assets = extractMailTemplateAssets(oldRow);
-  if (assets.imageUrls.length > 0) {
-    deleteImagesFromR2Server(assets.imageUrls).catch(console.error);
-  }
-  if (assets.attachmentKeys.length > 0) {
-    deleteR2ObjectsByKey(assets.attachmentKeys).catch(console.error);
-  }
+  // soft delete 이후에도 R2 에셋은 지우지 않는다. 발송된 캠페인 스냅샷과 수신자
+  // 메일함에 전달된 메일이 같은 mail/ URL·첨부 키를 참조하므로, 템플릿 삭제가
+  // 그 메일들을 파괴해서는 안 된다.
 }

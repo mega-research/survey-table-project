@@ -13,11 +13,8 @@ import {
   questions,
   surveys,
 } from '@/db/schema';
-import { extractImageUrlsFromQuestions } from '@/lib/image-extractor';
-import { deleteImagesFromR2Server } from '@/lib/image-utils-server';
 import { promoteSurveyResponseHeader } from '@/lib/survey/survey-image-promote';
 import { generateId } from '@/lib/utils';
-import type { Question } from '@/types/survey';
 import { stripOptionCodes } from '@/utils/option-code-generator';
 
 import type {
@@ -112,24 +109,10 @@ export async function updateSurvey(input: UpdateSurveyInput): Promise<SurveyRow>
   return updated;
 }
 
-// 설문 삭제
+// 설문 삭제 — 질문 이미지는 R2 에서 지우지 않는다. 복제 설문·보관함(saved_questions)이
+// 같은 URL 을 공유 참조할 수 있어 무확인 삭제가 다른 설문/보관함 콘텐츠를 파괴한다.
 export async function deleteSurvey(input: SurveyIdInput): Promise<void> {
   const { surveyId } = input;
-
-  const surveyQuestions = await db.query.questions.findMany({
-    where: eq(questions.surveyId, surveyId),
-  });
-
-  if (surveyQuestions.length > 0) {
-    const allImages = extractImageUrlsFromQuestions(surveyQuestions as Question[]);
-    if (allImages.length > 0) {
-      try {
-        await deleteImagesFromR2Server(allImages);
-      } catch (error) {
-        console.error('설문 삭제 시 이미지 삭제 실패:', error);
-      }
-    }
-  }
 
   await db.delete(surveys).where(eq(surveys.id, surveyId));
 }
@@ -247,6 +230,7 @@ export async function duplicateSurvey(
         allowOtherOption: question.allowOtherOption,
         optionsColumns: question.optionsColumns,
         optionsAlign: question.optionsAlign,
+        mobileOptionsColumns: question.mobileOptionsColumns,
         minSelections: question.minSelections,
         maxSelections: question.maxSelections,
         rankingConfig: question.rankingConfig as NewQuestion['rankingConfig'],

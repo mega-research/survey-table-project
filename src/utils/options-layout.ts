@@ -32,8 +32,9 @@ export function getOptionsLayout(
     return { className: `flex flex-col gap-2${shift}` };
   }
   // N열 그리드 — sm 이상에서만 N열, 모바일은 1열. align 은 무시.
+  // w-full: 표 셀의 flex(items-*) 래퍼 안에서도 그리드가 셀 폭을 채워 1fr 이 셀 너비를 N등분.
   return {
-    className: 'options-grid',
+    className: 'options-grid w-full',
     style: {
       ['--options-grid-cols' as string]: `repeat(${columns}, minmax(0, 1fr))`,
     } as CSSProperties,

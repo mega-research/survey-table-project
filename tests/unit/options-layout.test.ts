@@ -7,7 +7,7 @@ describe('getOptionsLayout', () => {
     expect(getOptionsLayout(0).className).toBe('flex flex-wrap gap-x-4 gap-y-2');
     expect(getOptionsLayout(1).className).toBe('flex flex-col gap-2');
     expect(getOptionsLayout(undefined).className).toBe('flex flex-col gap-2');
-    expect(getOptionsLayout(3).className).toBe('options-grid');
+    expect(getOptionsLayout(3).className).toBe('options-grid w-full');
   });
 
   it('left 는 미지정과 동일하다', () => {
@@ -29,6 +29,12 @@ describe('getOptionsLayout', () => {
     expect(getOptionsLayout(undefined, 'right').className).toBe(
       'flex flex-col gap-2 w-fit ml-auto pr-5',
     );
+  });
+
+  it('N열 그리드는 w-full 로 컨테이너(셀) 너비를 채운다', () => {
+    const { className, style } = getOptionsLayout(3);
+    expect(className).toBe('options-grid w-full');
+    expect(style).toMatchObject({ '--options-grid-cols': 'repeat(3, minmax(0, 1fr))' });
   });
 
   it('N열 그리드는 align 을 무시한다', () => {

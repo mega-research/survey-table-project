@@ -4,8 +4,6 @@ import { desc, eq, gt, ilike, inArray, or, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { NewSavedQuestion, savedQuestions } from '@/db/schema/surveys';
-import { extractImageUrlsFromQuestion } from '@/lib/image-extractor';
-import { deleteImagesFromR2Server } from '@/lib/image-utils-server';
 import { escapeLikePattern } from '@/lib/operations/filter-shared';
 import { normalizeQuestion } from '@/lib/question';
 import { promoteSurveyImages } from '@/lib/survey/survey-image-promote';
@@ -180,26 +178,11 @@ export async function updateSavedQuestion(
   return toDomainSavedQuestion(updated);
 }
 
-/** 저장된 질문 삭제 — 연결 이미지 R2에서도 삭제 시도 */
+/**
+ * 저장된 질문 삭제 — 연결 이미지는 R2 에서 지우지 않는다.
+ * 원본 설문이 같은 URL 을 계속 참조 중일 수 있다(오늘 사고와 동형 경로).
+ */
 export async function deleteSavedQuestion(id: string): Promise<void> {
-  const savedQuestion = await db.query.savedQuestions.findFirst({
-    where: eq(savedQuestions.id, id),
-  });
-
-  if (savedQuestion) {
-    const question = normalizeQuestion(savedQuestion.question);
-    const images = extractImageUrlsFromQuestion(question);
-
-    if (images.length > 0) {
-      try {
-        await deleteImagesFromR2Server(images);
-      } catch (error) {
-        console.error('라이브러리 질문 삭제 시 이미지 삭제 실패:', error);
-        // 이미지 삭제 실패해도 질문 삭제는 진행
-      }
-    }
-  }
-
   await db.delete(savedQuestions).where(eq(savedQuestions.id, id));
 }
 
