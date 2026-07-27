@@ -11,7 +11,7 @@ import { useScrollLeftSync } from '@/hooks/use-scroll-left-sync';
 import { cn } from '@/lib/utils';
 import { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
 import { expandHeaderGrid } from '@/utils/expand-header-grid';
-import { getCellBackgroundStyle } from '@/utils/cell-style';
+import { getCellBackgroundStyle, getCellTextClassName } from '@/utils/cell-style';
 import {
   HEADER_ROW_MIN_HEIGHT,
   STICKY_BODY_Z,
@@ -134,7 +134,7 @@ export const TablePreview = React.memo(function TablePreview({
     [gridTemplateCols, totalWidth],
   );
 
-  if (columns.length === 0 || rows.length === 0) {
+  if (columns.length === 0) {
     return (
       <Card className={className}>
         <CardContent className="p-8">
@@ -163,12 +163,13 @@ export const TablePreview = React.memo(function TablePreview({
             gridColumn,
             minHeight,
             ...getHeaderCellStickyStyle(startCol, colSpan, stickyInfo),
+            ...getCellBackgroundStyle(cell),
           };
 
           return (
             <div
               key={cell.id}
-              className={HEADER_CELL_CLASS}
+              className={cn(HEADER_CELL_CLASS, getCellTextClassName(cell))}
               style={style}
               {...getGridCellAria('columnheader', colSpan, rowSpan)}
             >
@@ -189,12 +190,13 @@ export const TablePreview = React.memo(function TablePreview({
         gridColumn: cs > 1 ? `${startCol} / span ${cs}` : startCol,
         minHeight,
         ...getHeaderCellStickyStyle(startCol, cs, stickyInfo),
+        ...getCellBackgroundStyle(column),
       };
 
       return (
         <div
           key={column.id}
-          className={HEADER_CELL_CLASS}
+          className={cn(HEADER_CELL_CLASS, getCellTextClassName(column))}
           style={style}
           {...getGridCellAria('columnheader', cs)}
         >

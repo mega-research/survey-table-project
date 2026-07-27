@@ -28,7 +28,7 @@ import {
   shouldDisplayRow,
 } from '@/utils/branch-logic';
 import { decideDrilldown } from '@/utils/classify-table';
-import { getCellBackgroundStyle } from '@/utils/cell-style';
+import { getCellBackgroundStyle, getCellTextClassName } from '@/utils/cell-style';
 import { expandHeaderGrid } from '@/utils/expand-header-grid';
 import {
   clampMobileDrilldownOmitLeadingColumns,
@@ -154,12 +154,13 @@ function HeaderCells({
           gridColumn,
           minHeight,
           ...getHeaderCellStickyStyle(startCol, colSpan, stickyInfo),
+          ...getCellBackgroundStyle(cell),
         };
 
         return (
           <div
             key={cell.id}
-            className={HEADER_CELL_BASE_CLASS}
+            className={cn(HEADER_CELL_BASE_CLASS, getCellTextClassName(cell))}
             style={style}
             {...getGridCellAria('columnheader', colSpan, rowSpan)}
           >
@@ -199,12 +200,13 @@ function HeaderCells({
       gridColumn: cs > 1 ? `${startCol} / span ${cs}` : startCol,
       minHeight,
       ...getHeaderCellStickyStyle(startCol, cs, stickyInfo),
+      ...getCellBackgroundStyle(column),
     };
 
     return (
       <div
         key={column.id}
-        className={HEADER_CELL_BASE_CLASS}
+        className={cn(HEADER_CELL_BASE_CLASS, getCellTextClassName(column))}
         style={style}
         {...getGridCellAria('columnheader', cs)}
       >
@@ -690,7 +692,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
   );
 
   // ── 빈 테이블 ──
-  if (columns.length === 0 || rows.length === 0) {
+  if (columns.length === 0) {
     return (
       <Card className={className}>
         <CardContent className="p-8">
