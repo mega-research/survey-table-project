@@ -831,8 +831,8 @@ function SurveyResponseFlowActive({
     );
   }
 
-  const pageHasTable = currentStep.items.some((i) => i.question.type === 'table');
-  const containerMaxWidth = pageHasTable ? 'max-w-7xl' : 'max-w-4xl';
+  // 문항 유형 무관 고정 폭 — 과거 테이블 유무로 4xl/7xl 분기했으나 일반 문항도 넓게 통일 (2026-07-27)
+  const containerMaxWidth = 'max-w-7xl';
   const showRequiredHighlight = highlightQuestionIds.size > 0;
   const submitLabel = isPreview ? '확인 완료' : '제출';
   const submittingLabel = isPreview ? '확인 중...' : '제출 중...';
