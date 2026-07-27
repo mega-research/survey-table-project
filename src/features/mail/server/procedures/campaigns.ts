@@ -1,6 +1,6 @@
 import * as z from 'zod';
 
-import { authed } from '@/server/orpc';
+import { assertSurveyAccess, scoped } from '@/server/orpc';
 
 import {
   CancelCampaignInput,
@@ -15,33 +15,46 @@ import {
 import * as svc from '../services/mail-campaigns.service';
 import { sendSingleCampaign } from '../services/mail-single-send.service';
 
-const create = authed
+const create = scoped
   .input(CreateCampaignInput)
   .output(CreateCampaignResult)
-  .handler(({ input, context }) => svc.createCampaign(input, context.user.id));
+  .handler(({ context, input }) => {
+    assertSurveyAccess(context.user.id, input.surveyId);
+    return svc.createCampaign(input, context.user.id);
+  });
 
-const cancel = authed
+const cancel = scoped
   .input(CancelCampaignInput)
   .output(z.object({ ok: z.literal(true) }))
-  .handler(async ({ input }) => {
+  .handler(async ({ context, input }) => {
+    assertSurveyAccess(context.user.id, input.surveyId);
     await svc.cancelCampaign(input);
     return { ok: true as const };
   });
 
-const fetchCandidateIds = authed
+const fetchCandidateIds = scoped
   .input(FetchCandidateIdsInput)
   .output(FetchCandidateIdsResult)
-  .handler(({ input }) => svc.fetchCandidateIds(input));
+  .handler(({ context, input }) => {
+    assertSurveyAccess(context.user.id, input.surveyId);
+    return svc.fetchCandidateIds(input);
+  });
 
-const previewPreflight = authed
+const previewPreflight = scoped
   .input(PreviewPreflightInput)
   .output(PreviewPreflightResult)
-  .handler(({ input }) => svc.previewPreflight(input));
+  .handler(({ context, input }) => {
+    assertSurveyAccess(context.user.id, input.surveyId);
+    return svc.previewPreflight(input);
+  });
 
-const sendSingle = authed
+const sendSingle = scoped
   .input(SendSingleCampaignInput)
   .output(CreateCampaignResult)
-  .handler(({ input, context }) => sendSingleCampaign(input, context.user.id));
+  .handler(({ context, input }) => {
+    assertSurveyAccess(context.user.id, input.surveyId);
+    return sendSingleCampaign(input, context.user.id);
+  });
 
 export const campaigns = {
   create,

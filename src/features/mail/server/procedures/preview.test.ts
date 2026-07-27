@@ -1,5 +1,5 @@
 import { createRouterClient } from '@orpc/server';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
@@ -30,6 +30,7 @@ function validSendInput() {
 
 describe('mail.preview procedures', () => {
   beforeEach(() => vi.clearAllMocks());
+  afterEach(() => vi.unstubAllEnvs());
 
   it('sample은 service.getMailPreviewSample에 위임하고 결과를 반환한다', async () => {
     const sampleData = {
@@ -82,5 +83,24 @@ describe('mail.preview procedures', () => {
     await expect(
       client.preview.sample({ surveyId: 'sv-1' }),
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+  });
+
+  it('게스트는 grant 설문이면 sample 이 위임된다', async () => {
+    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
+    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:sv-1');
+    const sampleData = {
+      attrs: { name: '홍길동' },
+      inviteUrl: 'https://x/survey/sv-1?invite=tok',
+      email: 'h@example.com',
+      resid: 1,
+    };
+    vi.mocked(svc.getMailPreviewSample).mockResolvedValue(sampleData as never);
+    const client = createRouterClient(
+      { preview },
+      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+    );
+    const res = await client.preview.sample({ surveyId: 'sv-1' });
+    expect(svc.getMailPreviewSample).toHaveBeenCalledWith({ surveyId: 'sv-1' });
+    expect(res).toEqual(sampleData);
   });
 });

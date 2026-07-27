@@ -1,5 +1,5 @@
 import { createRouterClient } from '@orpc/server';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
@@ -29,6 +29,7 @@ const CAMPAIGN_ID = '44444444-4444-4444-8444-444444444444';
 
 describe('mail.campaigns procedures', () => {
   beforeEach(() => vi.clearAllMocks());
+  afterEach(() => vi.unstubAllEnvs());
 
   it('create는 input과 context.user.id를 service.createCampaign에 위임하고 결과를 반환한다', async () => {
     vi.mocked(svc.createCampaign).mockResolvedValue({
@@ -121,5 +122,44 @@ describe('mail.campaigns procedures', () => {
         contactTargetIds: [CONTACT_ID],
       }),
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+  });
+
+  it('게스트는 grant 설문이면 sendSingle 이 위임된다', async () => {
+    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
+    vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
+    vi.mocked(singleSvc.sendSingleCampaign).mockResolvedValue({
+      campaignId: CAMPAIGN_ID,
+      queuedCount: 1,
+      skippedCount: 0,
+    } as never);
+    const client = createRouterClient(
+      { campaigns },
+      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+    );
+    const input = {
+      surveyId: SURVEY_ID,
+      contactTargetId: CONTACT_ID,
+      mailTemplateId: TEMPLATE_ID,
+    };
+    const res = await client.campaigns.sendSingle(input);
+    expect(singleSvc.sendSingleCampaign).toHaveBeenCalledWith(input, 'guest-1');
+    expect(res).toEqual({ campaignId: CAMPAIGN_ID, queuedCount: 1, skippedCount: 0 });
+  });
+
+  it('게스트가 다른 설문 surveyId 로 sendSingle 하면 FORBIDDEN', async () => {
+    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
+    vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
+    const client = createRouterClient(
+      { campaigns },
+      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+    );
+    await expect(
+      client.campaigns.sendSingle({
+        surveyId: '55555555-5555-4555-8555-555555555555',
+        contactTargetId: CONTACT_ID,
+        mailTemplateId: TEMPLATE_ID,
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(singleSvc.sendSingleCampaign).not.toHaveBeenCalled();
   });
 });

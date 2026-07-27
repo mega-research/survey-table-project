@@ -2,7 +2,7 @@ import * as z from 'zod';
 
 import { ORPCError } from '@orpc/server';
 
-import { authed } from '@/server/orpc';
+import { assertSurveyAccess, scoped } from '@/server/orpc';
 
 import {
   CreateMailTemplateInput,
@@ -36,10 +36,11 @@ function mapServiceError(err: unknown): never {
   throw err;
 }
 
-const create = authed
+const create = scoped
   .input(CreateMailTemplateInput)
   .output(CreateMailTemplateOutput)
-  .handler(async ({ input }) => {
+  .handler(async ({ context, input }) => {
+    assertSurveyAccess(context.user.id, input.surveyId);
     try {
       return await svc.createMailTemplate(input);
     } catch (err) {
@@ -47,10 +48,11 @@ const create = authed
     }
   });
 
-const update = authed
+const update = scoped
   .input(UpdateMailTemplateInput)
   .output(UpdateMailTemplateOutput)
-  .handler(async ({ input }) => {
+  .handler(async ({ context, input }) => {
+    assertSurveyAccess(context.user.id, input.surveyId);
     try {
       return await svc.updateMailTemplate(input);
     } catch (err) {
@@ -58,10 +60,11 @@ const update = authed
     }
   });
 
-const remove = authed
+const remove = scoped
   .input(DeleteMailTemplateInput)
   .output(z.object({ ok: z.literal(true) }))
-  .handler(async ({ input }) => {
+  .handler(async ({ context, input }) => {
+    assertSurveyAccess(context.user.id, input.surveyId);
     try {
       await svc.deleteMailTemplate(input);
       return { ok: true as const };

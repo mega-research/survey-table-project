@@ -1,5 +1,5 @@
 import { createRouterClient } from '@orpc/server';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
@@ -25,6 +25,7 @@ const validCreateInput = {
 
 describe('billing procedures', () => {
   beforeEach(() => vi.clearAllMocks());
+  afterEach(() => vi.unstubAllEnvs());
 
   it('create는 input과 user.id를 service.createBillingPeriod에 위임하고 ok를 반환한다', async () => {
     vi.mocked(svc.createBillingPeriod).mockResolvedValue(undefined as never);
@@ -84,5 +85,18 @@ describe('billing procedures', () => {
     await expect(
       client.mail.billing.deleteLatest({ id: '7231b5bc-c40e-4605-92cc-b4ded7afeff8' }),
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+  });
+
+  it('게스트는 billing.create 가 FORBIDDEN (authed 유지 확인)', async () => {
+    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
+    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:sv-1');
+    const client = createRouterClient(
+      { mail: { billing } },
+      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+    );
+    await expect(client.mail.billing.create(validCreateInput)).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+    expect(svc.createBillingPeriod).not.toHaveBeenCalled();
   });
 });

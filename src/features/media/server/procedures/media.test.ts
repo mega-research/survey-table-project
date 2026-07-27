@@ -1,5 +1,5 @@
 import { createRouterClient } from '@orpc/server';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
@@ -26,6 +26,7 @@ function anonContext(): ORPCContext {
 
 describe('media procedures', () => {
   beforeEach(() => vi.clearAllMocks());
+  afterEach(() => vi.unstubAllEnvs());
 
   it('deleteImages는 입력을 service.deleteImages에 위임한다', async () => {
     vi.mocked(svc.deleteImages).mockResolvedValue({
@@ -76,5 +77,19 @@ describe('media procedures', () => {
       client.media.deleteImages({ urls: [] }),
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
     expect(svc.deleteImages).not.toHaveBeenCalled();
+  });
+
+  it('게스트도 deleteMailAttachmentTmp 를 위임받는다 (surveyId 없어 tmp 네임스페이스 검증에만 의존)', async () => {
+    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
+    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:sv-1');
+    vi.mocked(svc.deleteMailAttachmentTmp).mockResolvedValue({ ok: true } as never);
+    const client = createRouterClient(
+      { media },
+      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+    );
+    const input = { key: 'tmp/mail-attachment/abc.pdf' };
+    const res = await client.media.deleteMailAttachmentTmp(input);
+    expect(svc.deleteMailAttachmentTmp).toHaveBeenCalledWith(input);
+    expect(res.ok).toBe(true);
   });
 });
