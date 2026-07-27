@@ -40,3 +40,16 @@ exit 0
 ## Commit
 
 `feat: 셀 스타일을 모바일과 파생 옵션에 연결`
+
+## Follow-up Review Fix
+
+- 모바일 카드의 라벨이 `mobileDisplay: 'header'` 셀에서 유래하면 Bold도 같은 header 셀에서 해석하도록 수정했다.
+- 역방향 회귀 두 건을 추가했다: Bold header + unstyled choice는 Bold, unstyled header + Bold choice는 non-Bold이다.
+- 카드 배경색 예외는 변경하지 않았다.
+
+```text
+Test Files  4 passed (4)
+Tests  41 passed (41)
+pnpm exec tsc --noEmit
+exit 0
+```

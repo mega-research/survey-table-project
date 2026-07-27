@@ -252,6 +252,7 @@ export function ChoiceTableResponse({ question, value, onChange }: ChoiceTableRe
             const cardLabel = headerText
               ? substituteTokens(headerText, attrs)
               : (option?.label ?? '(라벨 없음)');
+            const labelStyleSource = headerText && headerCell ? headerCell : (option ?? choiceCell);
             // 그룹별 선택 모드: name 을 그룹 키 단위로 분리
             const mobileInputName = isGrouped
               ? `${question.id}-${getGroupKeyOfCell(question, choiceCell.id)}`
@@ -265,7 +266,7 @@ export function ChoiceTableResponse({ question, value, onChange }: ChoiceTableRe
             return (
               <MobileOptionCard
                 key={choiceCell.id}
-                label={<span className={getCellTextClassName(option ?? choiceCell)}>{cardLabel}</span>}
+                label={<span className={getCellTextClassName(labelStyleSource)}>{cardLabel}</span>}
                 cells={row.cells}
                 selected={checked}
                 disabled={disabled}
