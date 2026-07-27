@@ -145,6 +145,8 @@ export const questions = pgTable('questions', {
   optionsColumns: integer('options_columns'),
   // 옵션 그룹 블록 정렬 (null=left, 가로/세로 배치에서만 유효)
   optionsAlign: text('options_align', { enum: ['left', 'center', 'right'] }),
+  // 모바일 옵션 배치 명시 override (null=자동 휴리스틱, 0=가로, 1=세로, N≥2=그리드)
+  mobileOptionsColumns: integer('mobile_options_columns'),
 
   // 체크박스 선택 개수 제한 (checkbox 타입 전용)
   minSelections: integer('min_selections'),

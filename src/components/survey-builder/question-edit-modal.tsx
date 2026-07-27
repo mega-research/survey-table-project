@@ -411,6 +411,8 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
               allowOtherOption: currentFormData.allowOtherOption ?? question?.allowOtherOption,
               optionsColumns: currentFormData.optionsColumns ?? question?.optionsColumns,
               optionsAlign: currentFormData.optionsAlign ?? question?.optionsAlign,
+              mobileOptionsColumns:
+                currentFormData.mobileOptionsColumns ?? question?.mobileOptionsColumns,
               minSelections: currentFormData.minSelections ?? question?.minSelections,
               maxSelections: currentFormData.maxSelections ?? question?.maxSelections,
               noticeContent: currentFormData.noticeContent || question?.noticeContent,

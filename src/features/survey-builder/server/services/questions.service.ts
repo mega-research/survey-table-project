@@ -50,6 +50,7 @@ export async function createQuestion(data: CreateQuestionInput): Promise<Questio
     allowOtherOption: data.allowOtherOption,
     optionsColumns: data.optionsColumns,
     optionsAlign: data.optionsAlign,
+    mobileOptionsColumns: data.mobileOptionsColumns,
     minSelections: data.minSelections,
     maxSelections: data.maxSelections,
     noticeContent: data.noticeContent,

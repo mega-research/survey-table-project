@@ -314,6 +314,8 @@ export interface TableCell {
   // 셀 내부 옵션 리스트 배치 (radio/checkbox/ranking 셀 공통)
   // undefined/1 = 세로 1열(기본) / 0 = 가로 한 줄(wrap) / N ≥ 2 = N열 그리드
   optionsColumns?: number;
+  // 모바일 카드에서의 옵션 배치 명시 override — 미지정이면 라벨 길이 휴리스틱
+  mobileOptionsColumns?: number;
   // input 관련 속성
   placeholder?: string; // 단문형 입력 필드 placeholder
   inputMaxLength?: number; // 단문형 입력 필드 최대 길이
@@ -526,6 +528,9 @@ export interface Question {
   // 옵션 그룹 블록 정렬 (radio/checkbox 전용). null/undefined = left.
   // 가로(0)/세로(1)에서만 유효, N열 그리드는 무시. 내부는 항상 좌측 정렬(체크박스 세로선 유지).
   optionsAlign?: OptionsAlign;
+  // 모바일 옵션 배치 명시 override (radio/checkbox 전용)
+  // null/undefined = 자동(라벨 길이 휴리스틱) / 0 = 가로 / 1 = 세로 / N ≥ 2 = N열 그리드
+  mobileOptionsColumns?: number | null;
   // 체크박스 선택 개수 제한 (checkbox 타입 전용)
   minSelections?: number; // 최소 선택 개수
   maxSelections?: number; // 최대 선택 개수

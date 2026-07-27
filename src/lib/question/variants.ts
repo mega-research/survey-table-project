@@ -49,7 +49,7 @@ type EmbeddedTableFields = Pick<
 type ChoiceGroupFields = Pick<Question, 'choiceGroups'>;
 
 /** question.options 옵션 리스트 — radio/checkbox/select/ranking(manual). */
-type OptionListFields = Pick<Question, 'options' | 'optionsColumns' | 'optionsAlign' | 'allowOtherOption'>;
+type OptionListFields = Pick<Question, 'options' | 'optionsColumns' | 'mobileOptionsColumns' | 'optionsAlign' | 'allowOtherOption'>;
 
 /** 모바일 테이블 표시 capability — radio/checkbox/table 3유형 전용. */
 type MobileTableDisplayFields = Pick<

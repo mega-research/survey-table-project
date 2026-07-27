@@ -247,6 +247,7 @@ export async function duplicateSurvey(
         allowOtherOption: question.allowOtherOption,
         optionsColumns: question.optionsColumns,
         optionsAlign: question.optionsAlign,
+        mobileOptionsColumns: question.mobileOptionsColumns,
         minSelections: question.minSelections,
         maxSelections: question.maxSelections,
         rankingConfig: question.rankingConfig as NewQuestion['rankingConfig'],

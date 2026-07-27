@@ -29,6 +29,7 @@ export const PERSISTED_QUESTION_FIELDS = [
   'allowOtherOption',
   'optionsColumns',
   'optionsAlign',
+  'mobileOptionsColumns',
   'minSelections',
   'maxSelections',
   'noticeContent',

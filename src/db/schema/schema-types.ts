@@ -255,6 +255,7 @@ export interface QuestionData {
   allowOtherOption?: boolean;
   optionsColumns?: number;
   optionsAlign?: 'left' | 'center' | 'right';
+  mobileOptionsColumns?: number | null;
   minSelections?: number;
   maxSelections?: number;
   noticeContent?: string;
