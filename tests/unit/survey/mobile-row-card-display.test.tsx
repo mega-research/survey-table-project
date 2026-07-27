@@ -70,6 +70,47 @@ describe('MobileRowCard 표시 셀', () => {
     expect(screen.queryByText('가격 설명')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /자세히/ })).toBeInTheDocument();
   });
+
+  it('header 셀의 Bold만 카드 제목에 적용하고 배경색은 적용하지 않는다', () => {
+    renderCard({
+      id: 'r1',
+      label: '폴백 제목',
+      cells: [
+        {
+          id: 'header',
+          type: 'text',
+          content: '강조 카드 제목',
+          mobileDisplay: 'header',
+          textBold: true,
+          backgroundColor: '#AABBCC',
+        } as never,
+        { id: 'input', type: 'input' } as never,
+      ],
+    } as TableRow);
+
+    expect(screen.getByText('강조 카드 제목')).toHaveClass('font-bold');
+    expect(screen.getByText('강조 카드 제목')).not.toHaveStyle({
+      backgroundColor: '#AABBCC',
+    });
+  });
+
+  it('스타일 없는 header 셀의 카드 제목에는 Bold를 추가하지 않는다', () => {
+    renderCard({
+      id: 'r1',
+      label: '폴백 제목',
+      cells: [
+        {
+          id: 'header',
+          type: 'text',
+          content: '일반 카드 제목',
+          mobileDisplay: 'header',
+        } as never,
+        { id: 'input', type: 'input' } as never,
+      ],
+    } as TableRow);
+
+    expect(screen.getByText('일반 카드 제목')).not.toHaveClass('font-bold');
+  });
 });
 
 describe('MobileRowCard 인터랙티브 셀 라벨', () => {

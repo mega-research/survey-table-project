@@ -36,8 +36,14 @@ describe('RankingDropdownStack 옵션 스타일', () => {
     const trigger = screen.getByRole('combobox', { name: '1순위 선택' });
     fireEvent.click(trigger);
 
-    expect(screen.getByRole('option', { name: '강조 옵션' })).toHaveClass('font-bold');
-    expect(screen.getByRole('option', { name: '강조 옵션' })).toHaveStyle({
+    const styledItem = screen.getByRole('option', { name: '강조 옵션' });
+    expect(styledItem).toHaveClass('font-bold');
+    expect(styledItem).toHaveClass(
+      'data-[highlighted]:ring-2',
+      'data-[highlighted]:ring-blue-500',
+      'data-[highlighted]:ring-inset',
+    );
+    expect(styledItem).toHaveStyle({
       backgroundColor: '#AABBCC',
     });
     expect(screen.getByRole('option', { name: '일반 옵션' })).not.toHaveClass('font-bold');

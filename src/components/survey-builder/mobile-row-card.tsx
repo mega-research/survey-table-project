@@ -19,7 +19,9 @@ import {
   findMobileHeaderCell,
   hasExplicitHiddenMobileHeaderCell,
   hasMobileDisplayCells,
+  type MobileLegendLabel,
 } from '@/utils/mobile-display-cells';
+import { getCellTextClassName } from '@/utils/cell-style';
 import { getAlignmentClasses } from '@/utils/table-grid-utils';
 
 import { InteractiveCell } from './cells';
@@ -42,7 +44,7 @@ interface MobileRowCardProps {
   /** 차단형 검증 위반 셀 (빨간 ring 하이라이트) */
   errorCellIds?: Set<string> | undefined;
   /** 표 전체 "카드 범례"(mobileDisplay: 'legend') 라벨 — 카드 상단 한 행에 양끝 정렬로 표시 */
-  legendLabels?: string[] | undefined;
+  legendLabels?: MobileLegendLabel[] | undefined;
 }
 
 function findPreviousSection(
@@ -93,16 +95,21 @@ export const MobileRowCard = React.memo(function MobileRowCard({
     [row.cells],
   );
 
-  const rowDesc = useMemo(() => {
+  const rowHeader = useMemo(() => {
     // 'header' 로 지정된 text 셀이 있으면 카드 제목으로 우선 사용
     const headerCell = findMobileHeaderCell(row.cells);
     const headerText = headerCell ? (headerCell.content ?? '').trim() : '';
-    if (headerText) return headerText;
-    if (hasExplicitHiddenMobileHeaderCell(row.cells)) return '';
+    if (headerText) {
+      return {
+        label: headerText,
+        ...(headerCell?.textBold ? { textBold: true } : {}),
+      };
+    }
+    if (hasExplicitHiddenMobileHeaderCell(row.cells)) return { label: '' };
     const descCell = row.cells.find(
       (c) => c.type === 'radio' && !c.isHidden && c.radioOptions?.length === 1,
     );
-    return descCell?.radioOptions?.[0]?.label || row.label;
+    return { label: descCell?.radioOptions?.[0]?.label || row.label };
   }, [row.cells, row.label]);
 
   const mobileCells = useMemo(() => {
@@ -143,10 +150,12 @@ export const MobileRowCard = React.memo(function MobileRowCard({
       : [];
     const first = opts[0]?.label?.trim();
     const last = opts.length > 1 ? opts[opts.length - 1]?.label?.trim() : undefined;
-    return legendLabels.map((label, i) => {
-      if (i === 0 && first) return `${first} ${label}`;
-      if (i === legendLabels.length - 1 && last) return `${last} ${label}`;
-      return label;
+    return legendLabels.map((legend, i) => {
+      if (i === 0 && first) return { ...legend, label: `${first} ${legend.label}` };
+      if (i === legendLabels.length - 1 && last) {
+        return { ...legend, label: `${last} ${legend.label}` };
+      }
+      return legend;
     });
   }, [legendLabels, inputCells]);
 
@@ -166,9 +175,14 @@ export const MobileRowCard = React.memo(function MobileRowCard({
       <div className={cn('border-b px-4 py-3', completed ? 'bg-green-50' : 'bg-gray-50/80')}>
         <div className="flex items-center justify-between">
           <div className="min-w-0 flex-1">
-            {rowDesc && (
-              <p className="text-sm font-semibold leading-snug text-gray-900">
-                {substituteTokens(rowDesc, attrs)}
+            {rowHeader.label && (
+              <p
+                className={cn(
+                  'text-sm font-semibold leading-snug text-gray-900',
+                  getCellTextClassName(rowHeader),
+                )}
+              >
+                {substituteTokens(rowHeader.label, attrs)}
               </p>
             )}
           </div>
@@ -186,12 +200,14 @@ export const MobileRowCard = React.memo(function MobileRowCard({
             라벨 사이는 점선 리더로 채워 양끝 대응 관계를 시각화 */}
         {decoratedLegendLabels.length > 0 && inputCells.length > 0 && (
           <div className="flex items-center gap-2 text-xs text-gray-500">
-            {decoratedLegendLabels.map((label, i) => (
+            {decoratedLegendLabels.map((legend, i) => (
               <React.Fragment key={i}>
                 {i > 0 && (
                   <span aria-hidden className="min-w-3 flex-1 border-b border-dotted border-gray-300" />
                 )}
-                <span>{substituteTokens(label, attrs)}</span>
+                <span className={getCellTextClassName(legend)}>
+                  {substituteTokens(legend.label, attrs)}
+                </span>
               </React.Fragment>
             ))}
           </div>

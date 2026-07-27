@@ -1352,7 +1352,7 @@ export function CellContentModal({
         )}
 
         <div className="mt-6 border-t border-gray-200 pt-6">
-          <h3 className="mb-4 text-sm font-medium text-gray-900">셀 스타일</h3>
+          <h3 className="mb-4 text-sm font-semibold text-gray-900">셀 스타일</h3>
           <CellStyleFields
             key={cell.id}
             textBold={textBold}

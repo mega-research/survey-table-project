@@ -5,6 +5,11 @@ export interface SplitDisplayCells {
   collapsed: TableCell[];
 }
 
+export interface MobileLegendLabel {
+  label: string;
+  textBold?: boolean;
+}
+
 const DISPLAY_CELL_TYPES = new Set<TableCell['type']>(['text', 'image', 'video']);
 
 function isMobileDisplayCell(cell: TableCell): boolean {
@@ -46,14 +51,21 @@ export function hasMobileDisplayCells(cells: TableCell[]): boolean {
  * 각 응답 카드 상단에 한 행으로 표시된다 — 스케일 표의 앵커 라벨(전혀/매우 등)용.
  * 빈 내용·isHidden·continuation 셀은 제외.
  */
-export function collectMobileLegendLabels(rows: Array<{ cells: TableCell[] }>): string[] {
-  const labels: string[] = [];
+export function collectMobileLegendLabels(
+  rows: Array<{ cells: TableCell[] }>,
+): MobileLegendLabel[] {
+  const labels: MobileLegendLabel[] = [];
   for (const row of rows) {
     for (const cell of row.cells) {
       if (cell.isHidden || cell._isContinuation) continue;
       if (cell.type !== 'text' || cell.mobileDisplay !== 'legend') continue;
       const content = (cell.content ?? '').trim();
-      if (content) labels.push(content);
+      if (content) {
+        labels.push({
+          label: content,
+          ...(cell.textBold ? { textBold: true } : {}),
+        });
+      }
     }
   }
   return labels;

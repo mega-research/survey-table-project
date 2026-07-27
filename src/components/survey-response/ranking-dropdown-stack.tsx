@@ -174,7 +174,11 @@ export function RankingDropdownStack({
         );
 
         // 옵션은 트리거 고정 너비 안에서 줄바꿈(긴 라벨이 화면 밖으로 넘치지 않게).
-        const itemCls = cn('whitespace-normal [overflow-wrap:anywhere]', isMobile && 'py-3 text-base');
+        const itemCls = cn(
+          'whitespace-normal [overflow-wrap:anywhere]',
+          'data-[highlighted]:ring-2 data-[highlighted]:ring-blue-500 data-[highlighted]:ring-inset',
+          isMobile && 'py-3 text-base',
+        );
         const radixSelectEl = (
           <Select
             value={currentValue}
