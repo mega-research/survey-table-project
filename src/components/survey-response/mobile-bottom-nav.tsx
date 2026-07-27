@@ -34,8 +34,8 @@ export function MobileBottomNav({
   hasPrevious,
   isLastStep,
   isSubmitting,
-  submitLabel = '제출',
-  submittingLabel = '제출 중...',
+  submitLabel = '다음',
+  submittingLabel = '처리 중...',
   onPrevious,
   onNext,
 }: MobileBottomNavProps) {
@@ -72,6 +72,7 @@ export function MobileBottomNav({
             className={primaryButtonCls}
           >
             {isSubmitting ? submittingLabel : submitLabel}
+            {!isSubmitting && <ChevronRight className="h-4 w-4" />}
           </button>
         ) : (
           <button

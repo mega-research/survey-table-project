@@ -358,7 +358,9 @@ describe('필수 옵션 상세기입 응답 흐름', () => {
       useSurveyResponseStore.getState().setOptionText('q-required', 'opt-other', '   ');
     });
 
-    await user.click(screen.getByRole('button', { name: '확인 완료' }));
+    const completeButton = screen.getByRole('button', { name: '확인 완료' });
+    expect(completeButton.querySelector('svg')).not.toBeNull();
+    await user.click(completeButton);
 
     expect(screen.getByText('필수 기타 질문')).toBeVisible();
     expectRequiredHighlight();
@@ -386,7 +388,9 @@ describe('필수 옵션 상세기입 응답 흐름', () => {
       useSurveyResponseStore.getState().setOptionText('q-required', 'opt-other', '   ');
     });
 
-    await user.click(getMobileActionButton('확인 완료'));
+    const completeButton = getMobileActionButton('확인 완료');
+    expect(completeButton.querySelector('svg')).not.toBeNull();
+    await user.click(completeButton);
 
     expect(screen.getByText('필수 기타 질문')).toBeVisible();
     expectRequiredHighlight();
