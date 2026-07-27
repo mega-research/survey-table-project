@@ -213,7 +213,7 @@ export function collectNumericIssues(
   //    빈 배열을 미응답으로 본다.
   const ordinaryMissingIds = visible
     .filter(
-    (c) => REQUIRED_CELL_TYPES.has(c.type) && c.required && !isCellValuePresent(cellValues[c.id]),
+      (c) => REQUIRED_CELL_TYPES.has(c.type) && c.required && !isCellValuePresent(cellValues[c.id]),
     )
     .map((c) => c.id);
   const optionTextMissingIds = collectRequiredOptionTextIssues(
