@@ -461,6 +461,8 @@ export interface TableColumn {
   id: string;
   columnCode?: string; // ✨ 엑셀 내보내기용 열 코드
   label: string;
+  textBold?: boolean;
+  backgroundColor?: string;
   width?: number; // 열 너비 (픽셀 단위)
   minWidth?: number; // 최소 너비
   // 컬럼 헤더 병합 관련 속성
@@ -473,6 +475,8 @@ export interface TableColumn {
 export interface HeaderCell {
   id: string;
   label: string;
+  textBold?: boolean;
+  backgroundColor?: string;
   colspan: number; // 가로 병합 (기본 1)
   rowspan: number; // 세로 병합 (기본 1)
 }
