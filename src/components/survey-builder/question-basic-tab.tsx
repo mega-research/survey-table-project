@@ -779,6 +779,10 @@ export function QuestionBasicTab({
               onAlignChange={(next) =>
                 setFormData((prev) => ({ ...prev, optionsAlign: next }))
               }
+              mobileValue={formData.mobileOptionsColumns}
+              onMobileChange={(next) =>
+                setFormData((prev) => ({ ...prev, mobileOptionsColumns: next }))
+              }
             />
           )}
 

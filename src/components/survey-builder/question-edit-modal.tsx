@@ -188,6 +188,7 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
         allowOtherOption: (question as any).allowOtherOption || false,
         optionsColumns: (question as any).optionsColumns,
         optionsAlign: (question as any).optionsAlign,
+        mobileOptionsColumns: (question as any).mobileOptionsColumns,
         rankingConfig: (question as any).rankingConfig,
         minSelections: (question as any).minSelections,
         maxSelections: (question as any).maxSelections,
@@ -412,7 +413,9 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
               optionsColumns: currentFormData.optionsColumns ?? question?.optionsColumns,
               optionsAlign: currentFormData.optionsAlign ?? question?.optionsAlign,
               mobileOptionsColumns:
-                currentFormData.mobileOptionsColumns ?? question?.mobileOptionsColumns,
+                currentFormData.mobileOptionsColumns !== undefined
+                  ? currentFormData.mobileOptionsColumns
+                  : question?.mobileOptionsColumns,
               minSelections: currentFormData.minSelections ?? question?.minSelections,
               maxSelections: currentFormData.maxSelections ?? question?.maxSelections,
               noticeContent: currentFormData.noticeContent || question?.noticeContent,
