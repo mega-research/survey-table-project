@@ -326,7 +326,8 @@ export function createUnifiedExtensions(options: CreateUnifiedExtensionsOptions 
     ImageTextIsolation,
     TableExtended.configure({
       resizable: true,
-      cellMinWidth: 60,
+      // 1 = 사실상 최소 너비 없음 (0/생략 시 prosemirror-tables 기본값 25 가 되살아남)
+      cellMinWidth: 1,
       lastColumnResizable: true,
       allowTableNodeSelection: true,
     }),
