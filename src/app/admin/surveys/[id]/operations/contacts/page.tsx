@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/operations/empty-state';
 import { ContactUploadAction } from '@/components/operations/contacts/contact-upload-action';
+import { ContactsDownloadDialog } from '@/components/operations/contacts/contacts-download-dialog';
 import { ContactsFilterBar } from '@/components/operations/contacts/contacts-filter-bar';
 import { ContactsPageClient } from '@/components/operations/contacts/contacts-page-client';
 import {
@@ -13,6 +14,7 @@ import {
   effectiveSortKey,
   normalizeSortKey,
 } from '@/lib/operations/contacts';
+import { buildDownloadCandidates } from '@/lib/operations/contacts-export';
 import {
   buildColumnCandidates,
   getContactColumnScheme,
@@ -113,6 +115,10 @@ export default async function ContactsPage({ params, searchParams }: PageProps) 
           <p className="text-sm text-slate-500">총 {total.toLocaleString('ko-KR')}건</p>
         </div>
         <div className="flex items-center gap-2">
+          <ContactsDownloadDialog
+            surveyId={surveyId}
+            candidates={buildDownloadCandidates(scheme)}
+          />
           <ContactUploadAction
             href={`/admin/surveys/${surveyId}/operations/contacts/upload/new`}
             label="+ 업로드"
