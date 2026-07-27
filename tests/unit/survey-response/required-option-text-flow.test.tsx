@@ -72,6 +72,22 @@ function renderFlow(options?: Parameters<typeof createSurvey>[0]) {
   );
 }
 
+function setMobileViewport(isMobile: boolean) {
+  Object.defineProperty(window, 'matchMedia', {
+    configurable: true,
+    value: vi.fn(() => ({
+      matches: isMobile,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })),
+  });
+}
+
+function renderMobileFlow(options?: Parameters<typeof createSurvey>[0]) {
+  setMobileViewport(true);
+  renderFlow(options);
+}
+
 async function selectDetailedOption() {
   const user = userEvent.setup();
   await user.click(await screen.findByLabelText('기타'));
@@ -84,16 +100,17 @@ function expectRequiredHighlight() {
   );
 }
 
+function getMobileActionButton(name: string) {
+  const button = screen
+    .getAllByRole('button', { name })
+    .find((candidate) => candidate.closest('[class~="md:hidden"]'));
+  if (!button) throw new Error(`모바일 ${name} 버튼을 찾지 못했습니다.`);
+  return button;
+}
+
 describe('필수 옵션 상세기입 응답 흐름', () => {
   beforeEach(() => {
-    Object.defineProperty(window, 'matchMedia', {
-      configurable: true,
-      value: vi.fn(() => ({
-        matches: false,
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-      })),
-    });
+    setMobileViewport(false);
     Object.defineProperty(window, 'scrollTo', { configurable: true, value: vi.fn() });
     useSurveyResponseStore.getState().resetResponseState();
   });
@@ -153,5 +170,43 @@ describe('필수 옵션 상세기입 응답 흐름', () => {
 
     expect(screen.getByText('필수 기타 질문')).toBeVisible();
     expectRequiredHighlight();
+  });
+
+  it('모바일에서 빈 필수 상세기입은 다음을 차단하고 질문을 하이라이트한다', async () => {
+    renderMobileFlow();
+    const user = await selectDetailedOption();
+    act(() => {
+      useSurveyResponseStore.getState().setOptionText('q-required', 'opt-other', '');
+    });
+
+    await user.click(getMobileActionButton('다음'));
+
+    expect(screen.queryByText('다음 페이지 질문')).not.toBeInTheDocument();
+    expectRequiredHighlight();
+  });
+
+  it('모바일에서 공백 필수 상세기입은 완료를 차단하고 질문을 하이라이트한다', async () => {
+    renderMobileFlow({ hasNextPage: false });
+    const user = await selectDetailedOption();
+    act(() => {
+      useSurveyResponseStore.getState().setOptionText('q-required', 'opt-other', '   ');
+    });
+
+    await user.click(getMobileActionButton('확인 완료'));
+
+    expect(screen.getByText('필수 기타 질문')).toBeVisible();
+    expectRequiredHighlight();
+  });
+
+  it('모바일에서 유효한 필수 상세기입은 다음 페이지로 이동한다', async () => {
+    renderMobileFlow();
+    const user = await selectDetailedOption();
+    act(() => {
+      useSurveyResponseStore.getState().setOptionText('q-required', 'opt-other', '상세 내용');
+    });
+
+    await user.click(getMobileActionButton('다음'));
+
+    expect(await screen.findByText('다음 페이지 질문')).toBeVisible();
   });
 });

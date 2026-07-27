@@ -68,7 +68,7 @@ export function MobileBottomNav({
         {isLastStep ? (
           <button
             onClick={onNext}
-            disabled={!canProceed || isSubmitting}
+            disabled={isSubmitting}
             className={primaryButtonCls}
           >
             {isSubmitting ? submittingLabel : submitLabel}
@@ -76,7 +76,7 @@ export function MobileBottomNav({
         ) : (
           <button
             onClick={onNext}
-            disabled={!canProceed}
+            disabled={isSubmitting}
             className={primaryButtonCls}
           >
             다음
