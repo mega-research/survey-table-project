@@ -4,6 +4,8 @@ import React from 'react';
 
 import { Video } from 'lucide-react';
 
+import { cn } from '@/lib/utils';
+import { getCellTextClassName } from '@/utils/cell-style';
 import { getYouTubeEmbedUrl } from '../table-cell-renderers';
 
 import type { InteractiveCellProps, PreviewCellProps } from './types';
@@ -65,7 +67,9 @@ export const VideoCell = React.memo(function VideoCell({
         </div>
       )}
       {cell.content && (
-        <div className="mt-2 text-left text-sm text-gray-700">{cell.content}</div>
+        <div className={cn('mt-2 text-left text-sm text-gray-700', getCellTextClassName(cell))}>
+          {cell.content}
+        </div>
       )}
     </div>
   );

@@ -2,6 +2,8 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { InteractiveTableResponse } from '@/components/survey-builder/interactive-table-response';
+import { InteractiveCell } from '@/components/survey-builder/cells/interactive-cell';
+import { MobileOriginalRowTable } from '@/components/survey-builder/mobile-original-row-table';
 import { TablePreview } from '@/components/survey-builder/table-preview';
 import type { TableColumn, TableRow } from '@/types/survey';
 
@@ -103,5 +105,54 @@ describe('데스크톱 표 셀 스타일 렌더링', () => {
       backgroundColor: '#DDEEFF',
     });
     expect(document.querySelector('[data-cell-id="merged-continuation"]')).not.toBeInTheDocument();
+  });
+
+  it('모바일 원본 행 표는 데스크톱 전용 셀 배경색을 적용하지 않는다', () => {
+    const rows: TableRow[] = [
+      {
+        id: 'row-1',
+        label: '',
+        cells: [
+          {
+            id: 'mobile-styled',
+            type: 'text',
+            content: '모바일 유지',
+            backgroundColor: '#AABBCC',
+          },
+        ],
+      },
+    ];
+
+    render(
+      <MobileOriginalRowTable
+        columns={[columns[0]!]}
+        rows={rows}
+        interactiveRowId="row-1"
+        hideColumnLabels={false}
+        renderCell={(cell) => <span>{cell.content}</span>}
+      />,
+    );
+
+    expect(screen.getByTestId('cell-mobile-styled')).not.toHaveStyle({
+      backgroundColor: '#AABBCC',
+    });
+  });
+
+  it.each([
+    { id: 'image-cell', type: 'image' as const, content: '이미지 설명', imageUrl: '/image.png' },
+    { id: 'video-cell', type: 'video' as const, content: '동영상 설명', videoUrl: '/video.mp4' },
+    { id: 'ranking-opt-cell', type: 'ranking_opt' as const, content: '순위 옵션 설명' },
+  ])('실제 응답 $type 셀은 콘텐츠만 굵게 표시한다', (cell) => {
+    render(
+      <InteractiveCell
+        cell={{ ...cell, textBold: true }}
+        questionId="question-1"
+        isTestMode
+        value={{}}
+        onChange={() => {}}
+      />,
+    );
+
+    expect(screen.getByText(cell.content)).toHaveClass('font-bold');
   });
 });

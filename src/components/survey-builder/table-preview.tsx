@@ -59,6 +59,8 @@ interface TablePreviewProps {
   scrollLeftRef?: React.MutableRefObject<number> | undefined;
   resetScrollKey?: string | number | undefined;
   errorCellIds?: Set<string> | undefined;
+  /** 데스크톱 표에서만 셀별 배경색을 렌더한다. 모바일 원본 표는 기존 배경을 보존한다. */
+  applyCellBackground?: boolean | undefined;
 }
 
 export const TablePreview = React.memo(function TablePreview({
@@ -76,6 +78,7 @@ export const TablePreview = React.memo(function TablePreview({
   scrollLeftRef,
   resetScrollKey,
   errorCellIds,
+  applyCellBackground = true,
 }: TablePreviewProps) {
   const totalWidth = useMemo(() => calcTotalWidth(columns), [columns]);
   const gridTemplateCols = useMemo(() => buildGridTemplateCols(columns), [columns]);
@@ -322,7 +325,9 @@ export const TablePreview = React.memo(function TablePreview({
                           style.boxShadow = '2px 0 4px rgba(0,0,0,0.06)';
                         }
                       }
-                      Object.assign(style, getCellBackgroundStyle(cell));
+                      if (applyCellBackground) {
+                        Object.assign(style, getCellBackgroundStyle(cell));
+                      }
 
                       return (
                         <div

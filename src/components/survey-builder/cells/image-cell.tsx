@@ -4,6 +4,8 @@ import React, { useState } from 'react';
 
 import { Image } from 'lucide-react';
 
+import { cn } from '@/lib/utils';
+import { getCellTextClassName } from '@/utils/cell-style';
 
 import type { InteractiveCellProps, PreviewCellProps } from './types';
 
@@ -41,7 +43,9 @@ export const ImageCell = React.memo(function ImageCell({
         )}
       </div>
       {cell.content && (
-        <div className="mt-2 text-left text-sm text-gray-700">{cell.content}</div>
+        <div className={cn('mt-2 text-left text-sm text-gray-700', getCellTextClassName(cell))}>
+          {cell.content}
+        </div>
       )}
     </div>
   );

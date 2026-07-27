@@ -313,6 +313,7 @@ export function ChoiceTableResponse({ question, value, onChange }: ChoiceTableRe
         {...(question.hideColumnLabels !== undefined
           ? { hideColumnLabels: question.hideColumnLabels }
           : {})}
+        applyCellBackground={!isMobile}
         renderCell={(cell) => renderCell(cell)}
       />
       {counter}

@@ -90,6 +90,7 @@ export function MobileOriginalRowTable(props: Props) {
       choiceControlType={choiceControlType}
       stickyHeader={false}
       preserveRowHeights
+      applyCellBackground={false}
     />
   );
 }
