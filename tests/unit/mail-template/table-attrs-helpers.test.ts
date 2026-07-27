@@ -3,6 +3,7 @@ import { describe, it, expect } from 'vitest';
 import {
   parseTableAlign,
   tableAlignStyle,
+  parseCellBorderMode,
   parseVerticalAlign,
   verticalAlignStyle,
 } from '@/components/ui/rich-text-editor/table-attrs-helpers';
@@ -63,5 +64,47 @@ describe('parseVerticalAlign', () => {
 describe('verticalAlignStyle', () => {
   it.each(['top', 'middle', 'bottom'] as const)('%s → 명시', (v) => {
     expect(verticalAlignStyle(v)).toBe(`vertical-align: ${v}`);
+  });
+});
+
+describe('parseCellBorderMode', () => {
+  it('4변 모두 solid → all', () => {
+    const el = mockElement({ borderStyle: 'solid' });
+    expect(parseCellBorderMode(el)).toBe('all');
+  });
+
+  it('좌변만 none (변별 숨김) → horizontal 아닌 all — 재표시 폴백이 mode 에 가려지면 안 됨', () => {
+    const el = mockElement({
+      borderTopStyle: 'solid',
+      borderRightStyle: 'solid',
+      borderBottomStyle: 'solid',
+      borderLeftStyle: 'none',
+    });
+    expect(parseCellBorderMode(el)).toBe('all');
+  });
+
+  it('좌+우 모두 none, 상하 solid → horizontal', () => {
+    const el = mockElement({
+      borderTopStyle: 'solid',
+      borderRightStyle: 'none',
+      borderBottomStyle: 'solid',
+      borderLeftStyle: 'none',
+    });
+    expect(parseCellBorderMode(el)).toBe('horizontal');
+  });
+
+  it('상+좌 none 이지만 우+하 solid → none 아닌 all', () => {
+    const el = mockElement({
+      borderTopStyle: 'none',
+      borderRightStyle: 'solid',
+      borderBottomStyle: 'solid',
+      borderLeftStyle: 'none',
+    });
+    expect(parseCellBorderMode(el)).toBe('all');
+  });
+
+  it('4변 모두 none → none', () => {
+    const el = mockElement({ borderStyle: 'none' });
+    expect(parseCellBorderMode(el)).toBe('none');
   });
 });

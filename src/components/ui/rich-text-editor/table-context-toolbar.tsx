@@ -408,7 +408,7 @@ export function TableContextToolbar({ editor }: Props) {
     const neighborSideIdx = side === 'right' ? 3 : 1;
     const current =
       ((cellNode.attrs['borderSideWidths'] as CellBorderSideWidths | null) ?? [])[sideIdx] ?? null;
-    const newVal: number | null = current === 0 ? null : 0;
+    const hiding = current !== 0;
 
     const { tr } = state;
     const touched = new Set<number>();
@@ -424,7 +424,15 @@ export function TableContextToolbar({ editor }: Props) {
         null,
       ];
       const next: CellBorderSideWidths = [...prev];
-      next[idx] = newVal;
+      // 재표시는 null(기본 폴백)이 원칙이지만, 노드의 mode 가 세로변을 숨기는
+      // 모드(horizontal/none)면 폴백해도 0 이라 토글이 무반응이 된다 — 그 경우
+      // base 두께를 명시해 반드시 보이게 한다 (저장 왕복으로 mode 가 오염된 기존 콘텐츠 포함).
+      const nodeMode = (node.attrs['borderMode'] as CellBorderMode | null) ?? 'all';
+      const nodeBase =
+        typeof node.attrs['borderWidth'] === 'number' && node.attrs['borderWidth'] > 0
+          ? (node.attrs['borderWidth'] as number)
+          : 1;
+      next[idx] = hiding ? 0 : nodeMode === 'all' ? null : nodeBase;
       const allNull = next.every((v) => v == null);
       tr.setNodeMarkup(tablePos + 1 + rel, undefined, {
         ...node.attrs,
