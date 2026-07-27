@@ -635,7 +635,12 @@ describe('resumeOrCreateResponse — 중단 게이트 (Task 6)', () => {
       surveyId: SURVEY_ID,
       sessionId: 'sess-paused-3',
     });
-    expect(result).toEqual({ id: 'resp-3', status: 'in_progress', resumed: true });
+    expect(result).toEqual({
+      id: 'resp-3',
+      status: 'in_progress',
+      resumed: true,
+      questionResponses: {},
+    });
   });
 
   it('같은 버전의 대상자 테스트 응답은 저장된 답변과 함께 재개한다', async () => {

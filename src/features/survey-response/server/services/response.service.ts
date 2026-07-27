@@ -34,6 +34,7 @@ import type {
   CreateBlankResponseInput,
   CreateResponseWithFirstAnswerInput,
   FirstAnswerResult,
+  SaveDraftResponseInput,
   StartResponseInput,
   SurveyResponse,
   UpdateQuestionResponseInput,
@@ -666,6 +667,24 @@ export async function updateQuestionResponse(
     });
     return applyQuestionResponseUpdate(tx, { responseId, questionId }, storedValue);
   });
+}
+
+/**
+ * 페이지 이동 체크포인트.
+ *
+ * 외부 요청은 한 번만 받되 기존 단건 저장 경로를 재사용해 문항 소속 검증, 크기 제한,
+ * PII 암호화, 테스트 attempt 소유권 검사를 모든 답에 동일하게 적용한다.
+ */
+export async function saveDraftResponse(input: SaveDraftResponseInput): Promise<void> {
+  for (const [questionId, value] of Object.entries(input.answers)) {
+    await updateQuestionResponse({
+      responseId: input.responseId,
+      questionId,
+      value,
+      ...(input.attemptId ? { attemptId: input.attemptId } : {}),
+      ...(input.sessionId ? { sessionId: input.sessionId } : {}),
+    });
+  }
 }
 
 export async function saveTestTargetFirstAnswer(

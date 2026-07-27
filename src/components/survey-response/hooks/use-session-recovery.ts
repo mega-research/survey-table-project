@@ -52,7 +52,7 @@ interface UseSessionRecoveryResult {
  * survey-response-flow.tsx 의 응답 회복 useEffect + isRecovering/resumeMessage state 를 이관했다.
  *
  * 동작 핵심:
- * - 일반 응답은 localStorage session으로 기존 회복과 show segment를 유지한다.
+ * - 일반 응답은 localStorage session으로 기존 응답값과 진행 행을 회복하고 show segment를 유지한다.
  * - 대상자 테스트는 key가 없어도 현재 session으로 읽기 전용 resume를 수행하고 답만 복원한다.
  * - target resume만으로는 쓰기 소유권이나 telemetry를 열지 않는다.
  * - 토스트 자동 dismiss 는 이 훅이 아니라 <ResumeToast> 가 자체 마운트 4초 타이머로 처리한다.
@@ -162,9 +162,9 @@ export function useSessionRecovery({
           if (isTargetTestSession) setResponses?.({});
           return;
         }
-        // 응답 row 사용 — sessionId 를 saved 값으로 갱신해 DB row 와 일치시킨다
+        // 응답 row 사용 — 일반 세션은 saved sessionId를 복구하고, 모든 세션은 저장 답을 복원한다.
         if (!isTargetTestSession) setSessionId(recoverySessionId);
-        if (isTargetTestSession) setResponses?.(result.questionResponses ?? {});
+        setResponses?.(result.questionResponses ?? {});
         // Zustand currentResponseId 갱신은 이 effect cleanup을 동기 유발할 수 있다.
         // 먼저 recovery gate를 닫아 stale finally가 무시돼도 true가 남지 않게 한다.
         setIsRecovering(false);

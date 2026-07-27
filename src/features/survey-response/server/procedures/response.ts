@@ -5,6 +5,8 @@ import {
   CreateBlankResponseInput,
   CreateResponseWithFirstAnswerInput,
   FirstAnswerResultSchema,
+  SaveDraftResponseInput,
+  SaveDraftResponseOutput,
   SurveyResponseRowSchema,
   UpdateQuestionResponseInput,
 } from '../../domain/response';
@@ -24,6 +26,17 @@ const updateAnswer = rateLimited
   .input(UpdateQuestionResponseInput)
   .output(SurveyResponseRowSchema)
   .handler(({ input }) => svc.updateQuestionResponse(input));
+
+/**
+ * 페이지 이동 전 변경 답변을 한 요청으로 저장한다.
+ */
+const saveDraft = rateLimited
+  .input(SaveDraftResponseInput)
+  .output(SaveDraftResponseOutput)
+  .handler(async ({ input }) => {
+    await svc.saveDraftResponse(input);
+    return { ok: true as const };
+  });
 
 /**
  * 첫 답변과 함께 응답 행 생성(pub). 중복 감지 재검증 후 created/blocked 반환.
@@ -51,6 +64,7 @@ const complete = rateLimited
 
 export const response = {
   updateAnswer,
+  saveDraft,
   createWithFirstAnswer,
   createBlank,
   complete,

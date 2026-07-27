@@ -25,6 +25,7 @@ const {
   attrsLookup,
   createWithFirstAnswer,
   createBlank,
+  saveDraft,
   complete,
   checkOnEntry,
 } = vi.hoisted(() => ({
@@ -36,6 +37,7 @@ const {
   attrsLookup: vi.fn(),
   createWithFirstAnswer: vi.fn(),
   createBlank: vi.fn(),
+  saveDraft: vi.fn(),
   complete: vi.fn(),
   checkOnEntry: vi.fn(),
 }));
@@ -66,6 +68,7 @@ vi.mock('@/shared/lib/rpc', () => ({
       response: {
         createWithFirstAnswer: (...args: unknown[]) => createWithFirstAnswer(...args),
         createBlank: (...args: unknown[]) => createBlank(...args),
+        saveDraft: (...args: unknown[]) => saveDraft(...args),
         complete: (...args: unknown[]) => complete(...args),
       },
       duplicate: {
@@ -159,6 +162,7 @@ describe('대상자 테스트 응답 세션', () => {
     attrsLookup.mockReset();
     createWithFirstAnswer.mockReset();
     createBlank.mockReset();
+    saveDraft.mockReset();
     complete.mockReset();
     checkOnEntry.mockReset();
   });
@@ -321,6 +325,37 @@ describe('대상자 테스트 응답 세션', () => {
     expect(setResponses).toHaveBeenCalledWith({ q1: '기존 답' });
     expect(setCurrentResponseId).toHaveBeenCalledWith('response-1');
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('일반 응답 세션도 재접속 시 저장된 답변을 복원한다', async () => {
+    window.localStorage.setItem('survey-session:survey-1', 'saved-session');
+    resume.mockResolvedValue({
+      id: 'response-1',
+      status: 'in_progress',
+      resumed: false,
+      questionResponses: { q1: '저장된 답' },
+    });
+    const setResponses = vi.fn();
+    const setCurrentResponseId = vi.fn();
+
+    const { result } = renderHook(() =>
+      useSessionRecovery({
+        isAdminEdit: false,
+        loadedSurvey: { id: 'survey-1' } as Survey,
+        currentResponseId: null,
+        inviteToken: null,
+        testToken: null,
+        isTestSession: false,
+        setSessionId: vi.fn(),
+        setResponses,
+        setCurrentResponseId,
+        setDuplicateStatus: vi.fn(),
+      }),
+    );
+
+    await waitFor(() => expect(result.current.isRecovering).toBe(false));
+    expect(setResponses).toHaveBeenCalledWith({ q1: '저장된 답' });
+    expect(setCurrentResponseId).toHaveBeenCalledWith('response-1');
   });
 
   it('회복 완료 후 제출 store reset이 되어도 정착된 결과를 다시 적용하지 않는다', async () => {

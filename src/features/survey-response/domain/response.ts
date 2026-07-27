@@ -66,6 +66,19 @@ export const UpdateQuestionResponseInput = z.object({
 export type UpdateQuestionResponseInput = z.infer<typeof UpdateQuestionResponseInput>;
 
 // ─────────────────────────────────────────────────────────────────────────────
+// saveDraftResponse
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const SaveDraftResponseInput = z.object({
+  responseId: z.string(),
+  answers: QuestionResponsesSchema,
+  ...TestAttemptIdentityFields,
+});
+export type SaveDraftResponseInput = z.infer<typeof SaveDraftResponseInput>;
+
+export const SaveDraftResponseOutput = z.object({ ok: z.literal(true) });
+
+// ─────────────────────────────────────────────────────────────────────────────
 // createResponseWithFirstAnswer / createBlankResponse
 // ─────────────────────────────────────────────────────────────────────────────
 

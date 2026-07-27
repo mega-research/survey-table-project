@@ -12,6 +12,7 @@ import type { BranchEvalCtx } from '@/utils/branch-logic';
 const createWithFirstAnswer = vi.fn();
 const createBlank = vi.fn();
 const complete = vi.fn();
+const saveDraft = vi.fn();
 
 vi.mock('@/shared/lib/rpc', () => ({
   client: {
@@ -20,6 +21,7 @@ vi.mock('@/shared/lib/rpc', () => ({
         createWithFirstAnswer: (...args: unknown[]) => createWithFirstAnswer(...args),
         createBlank: (...args: unknown[]) => createBlank(...args),
         complete: (...args: unknown[]) => complete(...args),
+        saveDraft: (...args: unknown[]) => saveDraft(...args),
       },
     },
   },
@@ -93,7 +95,9 @@ describe('useResponseLifecycle - handleResponse INSERT 가드', () => {
     createWithFirstAnswer.mockReset();
     createBlank.mockReset();
     complete.mockReset();
+    saveDraft.mockReset();
     createWithFirstAnswer.mockResolvedValue({ id: 'resp-1', contactTargetId: 'c1' });
+    saveDraft.mockResolvedValue({ ok: true });
     window.localStorage.clear();
   });
 
@@ -159,6 +163,60 @@ describe('useResponseLifecycle - handleResponse INSERT 가드', () => {
       result.current.handleResponse('q1', 'v1');
     });
     expect(createWithFirstAnswer).not.toHaveBeenCalled();
+  });
+
+  it('기존 진행 응답의 현재 페이지 답변을 체크포인트로 저장한다', async () => {
+    const args = baseArgs({ currentResponseId: 'existing' });
+    const { result } = renderHook(() => useResponseLifecycle(args));
+
+    act(() => {
+      result.current.handleResponse('q2', '두 번째 답');
+    });
+    await act(async () => {
+      await result.current.flushPendingAnswers();
+    });
+
+    expect(saveDraft).toHaveBeenCalledWith({
+      responseId: 'existing',
+      answers: { q2: '두 번째 답' },
+    });
+  });
+
+  it('첫 응답 생성 중 다음을 눌러도 생성 완료 뒤 현재 페이지 답변을 저장한다', async () => {
+    let resolveCreate!: (value: { id: string; contactTargetId: string }) => void;
+    createWithFirstAnswer.mockReturnValue(
+      new Promise((resolve) => {
+        resolveCreate = resolve;
+      }),
+    );
+    const args = baseArgs();
+    const { result } = renderHook(() => useResponseLifecycle(args));
+
+    act(() => {
+      result.current.handleResponse('q1', '첫 번째 답');
+    });
+    act(() => {
+      result.current.handleResponse('q2', '두 번째 답');
+    });
+    let flushPromise!: Promise<boolean>;
+    act(() => {
+      flushPromise = result.current.flushPendingAnswers();
+    });
+    expect(saveDraft).not.toHaveBeenCalled();
+    act(() => {
+      resolveCreate({ id: 'resp-1', contactTargetId: 'c1' });
+    });
+    await act(async () => {
+      await flushPromise;
+    });
+
+    expect(saveDraft).toHaveBeenCalledWith({
+      responseId: 'resp-1',
+      answers: {
+        q1: '첫 번째 답',
+        q2: '두 번째 답',
+      },
+    });
   });
 
   it('대상자 테스트 회복 응답은 첫 새 입력에서 attempt 소유권을 획득한다', async () => {

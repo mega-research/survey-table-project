@@ -611,7 +611,7 @@ function SurveyResponseFlowActive({
   };
 
   // isCreatingResponse 는 훅 내부 전용(첫 답변 INSERT 가드)이라 컴포넌트는 구조분해하지 않는다.
-  const { handleResponse, handleSubmit } = useResponseLifecycle({
+  const { handleResponse, flushPendingAnswers, handleSubmit } = useResponseLifecycle({
     isAdminEdit,
     isPreview,
     adminContext,
@@ -662,6 +662,12 @@ function SurveyResponseFlowActive({
     }
 
     const nextIndex = resolveNextStepIndex();
+
+    // 마지막 제출은 complete가 전체 답을 저장한다. 중간 이동은 현재 페이지 변경분을
+    // 먼저 체크포인트로 저장하고, 실패하면 페이지를 유지해 응답 유실을 막는다.
+    if (nextIndex !== -1 && !(await flushPendingAnswers())) {
+      return;
+    }
 
     // 쿼터 게이트: 인구통계 문항 전부 답변 & 미체크 & responseId 확보 시 서버 확인.
     // fail-open: 오류/미설정은 통과. 판정을 받으면(blocked 여부 무관) 재발동 방지 플래그 set.

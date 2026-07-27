@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 
 import { toast } from 'sonner';
@@ -114,6 +114,8 @@ interface UseResponseLifecycleArgs {
 
 interface UseResponseLifecycleResult {
   handleResponse: (questionId: string, value: unknown) => void;
+  /** 현재 페이지에서 바뀐 답을 저장한다. 첫 응답 생성 중이면 완료까지 기다린다. */
+  flushPendingAnswers: () => Promise<boolean>;
   handleSubmit: () => Promise<void>;
   /** 첫 답변 동시 발사 시 중복 INSERT 방어용 플래그. 이 훅이 소유. */
   isCreatingResponse: boolean;
@@ -129,7 +131,7 @@ interface UseResponseLifecycleResult {
  * - isCreatingResponse 는 이 두 콜백 전용이라 훅이 소유하고 반환한다 (원본도 동일 용도).
  * - handleResponse INSERT 발사 가드(currentResponseId === null && !isCreatingResponse && !isRecovering(I-1)
  *   && loadedSurvey && currentStep && !isAdminEdit) 와 .then/.catch/.finally 순서, 멱등 키(surveyId, sessionId)
- *   를 그대로 둔다. deps 배열도 원본과 1:1 동일.
+ *   를 유지한다. 페이지 이동 전 flushPendingAnswers가 생성 완료를 기다린 뒤 변경 답을 저장한다.
  * - handleSubmit 의 미응답 필수 하이라이트 분기, admin-edit 위임 분기(6/8), currentResponseId === null
  *   blank fallback INSERT 분기, exposedRowIds 동적 행 계산, complete() 페이로드, try/catch/finally,
  *   localStorage set/remove 타이밍을 라인 단위 그대로 둔다. deps 배열도 원본과 1:1 동일.
@@ -180,14 +182,72 @@ export function useResponseLifecycle({
   // INSERT 진행 중인지 추적 (첫 답변 동시 발사 시 중복 INSERT 방어).
   // ref가 아닌 state라도 OK — `handleResponse` 클로저에서 캡처되는 시점이 한 번이면 충분.
   const [isCreatingResponse, setIsCreatingResponse] = useState(false);
+  // 첫 답변 INSERT가 끝나기 전에 들어온 후속 답을 유실하지 않도록 응답 ID와 대기 답을 ref로 보관한다.
+  const activeResponseIdRef = useRef<string | null>(currentResponseId);
+  const pendingAnswerSavesRef = useRef(new Map<string, unknown>());
+  const responseCreationPromiseRef = useRef<Promise<string | null> | null>(null);
+  if (currentResponseId) activeResponseIdRef.current = currentResponseId;
 
   const clearInvalidTargetTestSession = () => {
     if (!testIdentity) return;
     if (typeof window !== 'undefined' && loadedSurvey) {
       window.localStorage.removeItem(sessionStorageKey(loadedSurvey.id, inviteToken));
     }
+    activeResponseIdRef.current = null;
+    pendingAnswerSavesRef.current.clear();
     resetResponseState();
     setResponses({});
+  };
+
+  const flushPendingAnswers = async (): Promise<boolean> => {
+    if (isAdminEdit || isPreview || pendingAnswerSavesRef.current.size === 0) return true;
+
+    const responseId =
+      activeResponseIdRef.current ?? (await responseCreationPromiseRef.current);
+    if (!responseId) return false;
+
+    const pendingSnapshot = Object.fromEntries(pendingAnswerSavesRef.current);
+    try {
+      await client.surveyResponse.response.saveDraft({
+        responseId,
+        answers: pendingSnapshot,
+        ...(testIdentity ?? {}),
+      });
+      for (const [questionId, savedValue] of Object.entries(pendingSnapshot)) {
+        if (Object.is(pendingAnswerSavesRef.current.get(questionId), savedValue)) {
+          pendingAnswerSavesRef.current.delete(questionId);
+        }
+      }
+      return true;
+    } catch (err) {
+      if (
+        await handleInvalidTestLinkMutationError({
+          err,
+          surveyId: loadedSurvey?.id,
+          inviteToken,
+          isTargetTestSession: testIdentity !== null,
+          setDuplicateStatus,
+          onInvalid: clearInvalidTargetTestSession,
+        })
+      ) {
+        return false;
+      }
+      if (
+        await handlePausedMutationError({
+          err,
+          surveyId: loadedSurvey?.id,
+          testToken,
+          isTestSession,
+          setDuplicateStatus,
+          setPausedMessage,
+        })
+      ) {
+        return false;
+      }
+      console.error('응답 임시 저장 오류:', err);
+      toast.error('응답 임시 저장에 실패했습니다. 잠시 후 다시 시도해주세요.');
+      return false;
+    }
   };
 
   const handleResponse = useCallback(
@@ -201,6 +261,8 @@ export function useResponseLifecycle({
         next.delete(questionId);
         return next;
       });
+
+      pendingAnswerSavesRef.current.set(questionId, value);
 
       // 운영 현황 콘솔(T5): 첫 답변 시점에 응답 행을 INSERT.
       // - currentResponseId가 null & 진행 중 INSERT가 없을 때만 트리거
@@ -219,7 +281,7 @@ export function useResponseLifecycle({
         setIsCreatingResponse(true);
         // signalsRef.current 가 null 이면 그대로 전달 — server action 이 신호 기반 검사 skip
         // (placeholder 신호로 hash 충돌 발생을 방지하기 위함)
-        client.surveyResponse.response.createWithFirstAnswer({
+        const creationRequest = client.surveyResponse.response.createWithFirstAnswer({
           surveyId: loadedSurvey.id,
           sessionId: testIdentity?.sessionId ?? sessionId,
           versionId: versionId ?? null,
@@ -233,14 +295,16 @@ export function useResponseLifecycle({
           ...(testIdentity?.attemptId ? { attemptId: testIdentity.attemptId } : {}),
           clientSignals: signals,
           ...(honeypotRef.current?.value ? { honeypot: honeypotRef.current.value } : {}),
-        })
+        });
+        const trackedCreation: Promise<string | null> = creationRequest
           .then((result) => {
             if (result.kind === 'blocked') {
               if (result.reason === 'invalid_test_token') clearInvalidTargetTestSession();
               setDuplicateStatus({ kind: 'blocked', reason: result.reason });
-              return;
+              return null;
             }
             const { id, contactTargetId } = result;
+            activeResponseIdRef.current = id;
             setCurrentResponseId(id);
             if (testIdentity) setHasTestAttemptOwnership(true);
             // invite 토큰이 있었는데 contactTargetId 매칭 실패 → 무효 토큰. 익명 응답으로 폴백 알림.
@@ -254,6 +318,7 @@ export function useResponseLifecycle({
                 sessionId,
               );
             }
+            return id;
           })
           .catch(async (err) => {
             if (
@@ -266,7 +331,7 @@ export function useResponseLifecycle({
                 onInvalid: clearInvalidTargetTestSession,
               })
             ) {
-              return;
+              return null;
             }
             // 첫 답변 직전에 설문이 중단된 경우 → 중단 화면으로 전환 (공통 헬퍼).
             if (
@@ -279,13 +344,18 @@ export function useResponseLifecycle({
                 setPausedMessage,
               })
             ) {
-              return;
+              return null;
             }
             console.error('응답 시작 오류:', err);
+            return null;
           })
           .finally(() => {
+            if (responseCreationPromiseRef.current === trackedCreation) {
+              responseCreationPromiseRef.current = null;
+            }
             setIsCreatingResponse(false);
           });
+        responseCreationPromiseRef.current = trackedCreation;
       }
     },
     // deps 는 원본 컴포넌트의 handleResponse useCallback 과 1:1 동일.
@@ -588,7 +658,7 @@ export function useResponseLifecycle({
     hasTestAttemptOwnership,
   ]);
 
-  return { handleResponse, handleSubmit, isCreatingResponse };
+  return { handleResponse, flushPendingAnswers, handleSubmit, isCreatingResponse };
 }
 
 // 타입별 응답 충족 판정과 무관한 단순 필수 여부. 원본 컴포넌트의 비메모 인라인 함수와 동등.

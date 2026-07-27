@@ -3,6 +3,7 @@ import 'server-only';
 
 import { db } from '@/db';
 import { surveyResponses } from '@/db/schema';
+import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { findContactByInviteToken } from '@/lib/duplicate-detection/invite-lookup';
 import { getSurveyControlFlags, isValidTestToken } from '@/lib/survey-control';
 import { lockAndAssertResponseMutation } from '@/lib/survey-response/test-target-attempt.server';
@@ -222,7 +223,10 @@ export async function resumeOrCreateResponse(
               id: existingByContact.id,
               status: 'in_progress',
               resumed: false,
-              questionResponses: existingByContact.questionResponses,
+              questionResponses: decryptQuestionResponses(
+                existingByContact.questionResponses ?? {},
+                { responseId: existingByContact.id },
+              ),
             };
           }
           return null;
@@ -263,6 +267,7 @@ export async function resumeOrCreateResponse(
       id: surveyResponses.id,
       status: surveyResponses.status,
       isTest: surveyResponses.isTest,
+      questionResponses: surveyResponses.questionResponses,
     })
     .from(surveyResponses)
     .where(
@@ -290,7 +295,14 @@ export async function resumeOrCreateResponse(
       .update(surveyResponses)
       .set({ status: 'in_progress', lastActivityAt: now })
       .where(eq(surveyResponses.id, existing.id));
-    return { id: existing.id, status: 'in_progress', resumed: true };
+    return {
+      id: existing.id,
+      status: 'in_progress',
+      resumed: true,
+      questionResponses: decryptQuestionResponses(existing.questionResponses ?? {}, {
+        responseId: existing.id,
+      }),
+    };
   }
 
   if (existing.status === 'in_progress') {
@@ -303,7 +315,14 @@ export async function resumeOrCreateResponse(
       .update(surveyResponses)
       .set({ lastActivityAt: now })
       .where(eq(surveyResponses.id, existing.id));
-    return { id: existing.id, status: 'in_progress', resumed: false };
+    return {
+      id: existing.id,
+      status: 'in_progress',
+      resumed: false,
+      questionResponses: decryptQuestionResponses(existing.questionResponses ?? {}, {
+        responseId: existing.id,
+      }),
+    };
   }
 
   // 종결 상태 — 알려진 값만 통과시키고 알 수 없으면 null 로 fallback

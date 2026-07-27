@@ -9,6 +9,7 @@ import { response } from './response';
 vi.mock('../services/response.service', () => ({
   startResponse: vi.fn(),
   updateQuestionResponse: vi.fn(),
+  saveDraftResponse: vi.fn(),
   createResponseWithFirstAnswer: vi.fn(),
   createBlankResponse: vi.fn(),
   completeResponse: vi.fn(),
@@ -76,6 +77,22 @@ describe('surveyResponse.response procedures', () => {
       value: 'answer',
       attemptId,
       sessionId: 'target-test-session',
+    });
+  });
+
+  it('saveDraft(pub)는 현재 페이지 답변 묶음을 service에 위임한다', async () => {
+    vi.mocked(svc.saveDraftResponse).mockResolvedValue(undefined);
+    const client = createRouterClient({ response }, { context: anonContext() });
+
+    const result = await client.response.saveDraft({
+      responseId: RESPONSE_ID,
+      answers: { q1: '첫 답', q2: '둘째 답' },
+    });
+
+    expect(result).toEqual({ ok: true });
+    expect(svc.saveDraftResponse).toHaveBeenCalledWith({
+      responseId: RESPONSE_ID,
+      answers: { q1: '첫 답', q2: '둘째 답' },
     });
   });
 
