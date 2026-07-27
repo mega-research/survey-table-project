@@ -22,7 +22,10 @@ import { getOptionsLayout } from '@/utils/options-layout';
 import { ChoiceTableResponse } from './choice-table-response';
 import { OptionTextInput } from './option-text-input';
 import { RankingQuestion } from './ranking-question';
-import { ValidationIssueBanner } from './validation-issue-banner';
+import {
+  ValidationIssueBanner,
+  type ValidationBannerItem,
+} from './validation-issue-banner';
 
 /**
  * 라디오·체크박스 옵션 목록의 좌우 인셋 — 질문 제목보다 옵션 블록을 안쪽으로 들여쓴다.
@@ -66,6 +69,64 @@ export function isOtherChoiceValue(value: unknown): value is OtherChoiceValue {
 
 export type SingleChoiceResponse = string | null | OtherChoiceValue;
 export type MultiChoiceResponse = Array<string | OtherChoiceValue>;
+
+function buildTableValidationBannerItems(
+  question: Question,
+  numericIssues: NumericIssue[] | undefined,
+): ValidationBannerItem[] | undefined {
+  const rowKeyByCellId = new Map<string, string>();
+  const rowLabelByKey = new Map<string, string>();
+  for (const row of question.tableRowsData ?? []) {
+    for (const cell of row.cells) rowKeyByCellId.set(cell.id, row.id);
+    const mobileHeader = row.cells.find(
+      (cell) =>
+        cell.type === 'text' &&
+        cell.mobileDisplay === 'header' &&
+        Boolean(cell.content?.trim()),
+    );
+    const rowLabel = mobileHeader?.content?.trim() || row.label?.trim();
+    if (rowLabel) rowLabelByKey.set(row.id, rowLabel);
+  }
+
+  const items = (numericIssues ?? [])
+    .filter((issue) => issue.kind !== 'range')
+    .flatMap((issue): ValidationBannerItem[] => {
+      const cellIds = issue.cellIds ?? [];
+      if (issue.kind !== 'required-cells' || cellIds.length < 2) {
+        return [{
+          message: issue.message,
+          cellIds,
+          ...(issue.detailTargetIds ? { detailTargetIds: issue.detailTargetIds } : {}),
+        }];
+      }
+
+      const cellIdsByRow = new Map<string, string[]>();
+      for (const cellId of cellIds) {
+        const key = rowKeyByCellId.get(cellId) ?? `cell:${cellId}`;
+        const rowCellIds = cellIdsByRow.get(key) ?? [];
+        rowCellIds.push(cellId);
+        cellIdsByRow.set(key, rowCellIds);
+      }
+      if (cellIdsByRow.size <= 1) {
+        return [{
+          message: issue.message,
+          cellIds,
+          ...(issue.detailTargetIds ? { detailTargetIds: issue.detailTargetIds } : {}),
+        }];
+      }
+
+      // 모바일 표는 행마다 카드가 되므로 필수 오류도 행별 항목으로 나눈다.
+      // 여러 행의 상세 입력 target은 셀과 일대일 매핑할 수 없으므로 이 경우에는
+      // 각 행의 오류 셀을 카드 이동 기준으로 사용한다.
+      return [...cellIdsByRow.entries()].map(([rowKey, rowCellIds]) => ({
+        message: rowLabelByKey.has(rowKey)
+          ? `${rowLabelByKey.get(rowKey)}: ${issue.message}`
+          : issue.message,
+        cellIds: rowCellIds,
+      }));
+    });
+  return items.length > 0 ? items : undefined;
+}
 
 // 질문 유형별 입력 라우터
 export function QuestionInput({ question, numericIssues, ...controlProps }: QuestionInputProps) {
@@ -244,21 +305,7 @@ function QuestionInputControl({
               ? new Set(numericIssues.flatMap((i) => i.cellIds ?? []))
               : undefined
           }
-          errorItems={
-            // 범위(range) 위반은 셀 빨간 링 + 셀 인라인 안내로만 표시 — 하단 배너 제외.
-            // cellIds 전체를 배너 "위치로 이동" 버튼에 넘긴다 — 열 displayCondition 으로
-            // 숨은(미렌더) 셀이 앞에 올 수 있어, 버튼이 렌더된 첫 셀을 골라 스크롤한다.
-            (() => {
-              const items = (numericIssues ?? [])
-                .filter((i) => i.kind !== 'range')
-                .map((i) => ({
-                  message: i.message,
-                  cellIds: i.cellIds ?? [],
-                  ...(i.detailTargetIds ? { detailTargetIds: i.detailTargetIds } : {}),
-                }));
-              return items.length > 0 ? items : undefined;
-            })()
-          }
+          errorItems={buildTableValidationBannerItems(question, numericIssues)}
         />
       ) : (
         <div className="py-4 text-center text-gray-500">테이블이 구성되지 않았습니다.</div>

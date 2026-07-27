@@ -137,6 +137,7 @@ export const MobileRowCard = React.memo(function MobileRowCard({
       };
     });
   }, [columnSectionMap, inputCells, visibleColumns]);
+  const firstErrorCellId = inputCells.find(({ cell }) => errorCellIds?.has(cell.id))?.cell.id;
 
   // 범례 첫/마지막 항목에 이 카드 옵션 셀의 첫/마지막 옵션 라벨(⓪/⑩ 등)을 자동 접두.
   const decoratedLegendLabels = useMemo(() => {
@@ -165,6 +166,8 @@ export const MobileRowCard = React.memo(function MobileRowCard({
 
   return (
     <Card
+      data-row-id={row.id}
+      {...(firstErrorCellId ? { 'data-cell-id': firstErrorCellId } : {})}
       className={cn(
         'mobile-row-card overflow-hidden transition-all duration-200',
         completed
