@@ -140,6 +140,12 @@ export function RankingDropdownStack({
         const selectedOpt = currentValue && currentValue !== RANKING_OTHER_VALUE
           ? options.find((o) => o.value === currentValue)
           : undefined;
+        const selectedStyle = selectedOpt?.backgroundColor
+          ? { backgroundColor: selectedOpt.backgroundColor }
+          : undefined;
+        const selectedBold = selectedOpt?.textBold ? 'font-bold' : undefined;
+        const triggerWidthStyle =
+          isHorizontal && !isMobile ? { width: RANKING_HORIZONTAL_ITEM_WIDTH } : undefined;
         const showOptionTextInput = !showOtherInput && selectedOpt?.allowTextInput === true;
 
         // compact(셀 컨텍스트)는 네이티브 select 유지. full(질문 레벨)은 Radix Select 로
@@ -157,6 +163,8 @@ export function RankingDropdownStack({
                 key={opt.id}
                 value={opt.value}
                 disabled={isTakenElsewhere(rank, opt.value)}
+                className={opt.textBold ? 'font-bold' : undefined}
+                style={opt.backgroundColor ? { backgroundColor: opt.backgroundColor } : undefined}
               >
                 {opt.label}
               </option>
@@ -169,7 +177,7 @@ export function RankingDropdownStack({
         const itemCls = cn('whitespace-normal [overflow-wrap:anywhere]', isMobile && 'py-3 text-base');
         const radixSelectEl = (
           <Select
-            {...(currentValue ? { value: currentValue } : {})}
+            value={currentValue}
             onValueChange={(v) => handleSelect(rank, v)}
           >
             <SelectTrigger
@@ -180,8 +188,9 @@ export function RankingDropdownStack({
                 'min-w-0',
                 // 모바일 트리거 크게(iOS 확대 방지 위해 16px 이상), 높이는 h-12.
                 isMobile ? 'h-12 text-base' : 'h-11 text-sm',
+                selectedBold,
               )}
-              style={isHorizontal && !isMobile ? { width: RANKING_HORIZONTAL_ITEM_WIDTH } : undefined}
+              style={{ ...triggerWidthStyle, ...selectedStyle }}
             >
               <SelectValue placeholder="선택하세요..." />
             </SelectTrigger>
@@ -194,7 +203,8 @@ export function RankingDropdownStack({
                   key={opt.id}
                   value={opt.value}
                   disabled={isTakenElsewhere(rank, opt.value)}
-                  className={itemCls}
+                  className={cn(itemCls, opt.textBold && 'font-bold')}
+                  style={opt.backgroundColor ? { backgroundColor: opt.backgroundColor } : undefined}
                 >
                   {opt.label}
                 </SelectItem>
