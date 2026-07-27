@@ -48,6 +48,7 @@ import { useSessionRecovery } from '@/components/survey-response/hooks/use-sessi
 import { sessionStorageKey } from '@/components/survey-response/hooks/session-helpers';
 import { useSurveyLoader } from '@/components/survey-response/hooks/use-survey-loader';
 import { ResumeToast } from '@/components/survey-response/resume-toast';
+import { scrollToIssue } from '@/components/survey-response/scroll-to-issue';
 import { generateId } from '@/lib/utils';
 import {
   collectTableQuestionOptions,
@@ -634,7 +635,17 @@ function SurveyResponseFlowActive({
   }, [currentStepQuestions, responses, questions, effectiveOptionTextsByQuestion]);
   const [numericErrorStepIndex, setNumericErrorStepIndex] = useState<number | null>(null);
   const showNumericErrors = numericErrorStepIndex === currentStepIndex;
-  const visibleNumericIssues = showNumericErrors ? numericIssuesByQuestion : EMPTY_ISSUES;
+  const focusedQuestionId = currentStepQuestions.find((q) =>
+    highlightQuestionIds.has(q.id),
+  )?.id;
+  const visibleNumericIssues = useMemo(() => {
+    if (!showNumericErrors) return EMPTY_ISSUES;
+    if (!focusedQuestionId) return numericIssuesByQuestion;
+    const focusedIssues = numericIssuesByQuestion.get(focusedQuestionId);
+    return focusedIssues
+      ? new Map([[focusedQuestionId, focusedIssues]])
+      : EMPTY_ISSUES;
+  }, [showNumericErrors, focusedQuestionId, numericIssuesByQuestion]);
 
   const canProceed = () => {
     if (!currentStep) return false;
@@ -693,16 +704,34 @@ function SurveyResponseFlowActive({
       (q) => isQuestionRequired(q) && !isQuestionAnswered(q),
     );
     if (unansweredCurrent.length > 0) {
-      setHighlightQuestionIds(new Set(unansweredCurrent.map((q) => q.id)));
-      if (unansweredCurrent.some((q) => numericIssuesByQuestion.has(q.id))) {
+      const firstUnanswered = unansweredCurrent[0];
+      if (!firstUnanswered) return;
+      setHighlightQuestionIds(new Set([firstUnanswered.id]));
+      const firstIssue = numericIssuesByQuestion.get(firstUnanswered.id)?.[0];
+      if (firstIssue) {
         setNumericErrorStepIndex(currentStepIndex);
       }
+      scrollToIssue({
+        questionId: firstUnanswered.id,
+        detailTargetIds: firstIssue?.detailTargetIds,
+        cellIds: firstIssue?.cellIds,
+      });
       return;
     }
 
     // 숫자 차단형 검증 — 위반이 있으면 진행하지 않고 에러 배너만 표시한다.
     // 위반 셀 이동은 배너의 "위치로 이동" 버튼이 담당(자동 스크롤은 표가 커서 어중간하게 멈침).
     if (numericIssuesByQuestion.size > 0) {
+      const firstViolatedQuestionId = numericIssuesByQuestion.keys().next().value;
+      if (firstViolatedQuestionId) {
+        setHighlightQuestionIds(new Set([firstViolatedQuestionId]));
+        const firstIssue = numericIssuesByQuestion.get(firstViolatedQuestionId)?.[0];
+        scrollToIssue({
+          questionId: firstViolatedQuestionId,
+          detailTargetIds: firstIssue?.detailTargetIds,
+          cellIds: firstIssue?.cellIds,
+        });
+      }
       setNumericErrorStepIndex(currentStepIndex);
       return;
     }
