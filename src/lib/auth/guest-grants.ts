@@ -6,8 +6,10 @@ import { isAdminUserAllowed } from '@/lib/auth/admin-allowlist';
  * GUEST_SURVEY_GRANTS="<userId>:<surveyId>[,...]" — 해당 유저는 그 설문의
  * operations 표면에만 접근한다. admin-allowlist 와 같은 접근제어 인프라 상수.
  *
- * 주의: ADMIN_USER_IDS 미설정(fail-open) 상태에서는 모든 인증 사용자가 admin
- * 취급이라 게스트 격리가 무의미하다. 게스트를 쓰려면 allowlist 를 반드시 설정할 것.
+ * 주의: grant 보유자는 ADMIN_USER_IDS 설정 여부와 무관하게 항상 게스트로
+ * 취급된다(canAccessSurvey grant-first). ADMIN_USER_IDS 미설정(fail-open) 이
+ * 남기는 리스크는 grant 가 없는 임의 가입자가 admin 취급되는 경우로 한정되며,
+ * 이 경우도 allowlist 를 반드시 설정해 막아야 한다.
  */
 
 const ENV_KEY = 'GUEST_SURVEY_GRANTS';
@@ -34,10 +36,11 @@ export function getGuestSurveyId(userId: string): string | null {
   return parseGuestGrants(process.env[ENV_KEY]).get(userId) ?? null;
 }
 
-/** 설문 접근 판정 — admin 은 전체, 게스트는 grant 설문만. */
+/** 설문 접근 판정 — grant 보유자는 항상 게스트(grant 설문만), 그 외는 admin allowlist 판정. */
 export function canAccessSurvey(userId: string, surveyId: string): boolean {
-  if (isAdminUserAllowed(userId)) return true;
-  return getGuestSurveyId(userId) === surveyId;
+  const granted = getGuestSurveyId(userId);
+  if (granted !== null) return granted === surveyId;
+  return isAdminUserAllowed(userId);
 }
 
 /**

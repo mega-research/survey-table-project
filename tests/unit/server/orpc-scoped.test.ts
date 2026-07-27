@@ -53,4 +53,13 @@ describe('scoped 베이스', () => {
       code: 'FORBIDDEN',
     });
   });
+
+  it('allowlist 미설정 fail-open + grant 보유 게스트가 타 설문 호출 시 FORBIDDEN', async () => {
+    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:s1');
+    const client = createRouterClient({ echo }, { context: ctx('guest-1') });
+    await expect(client.echo({ surveyId: 's1' })).resolves.toEqual({ ok: true });
+    await expect(client.echo({ surveyId: 's2' })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+  });
 });

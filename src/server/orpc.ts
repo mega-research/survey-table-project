@@ -89,12 +89,16 @@ export const authed = base.use(({ context, next }) => {
  * 호출해 설문 일치를 강제해야 한다 (유일한 예외: 입력에 surveyId 가 없는
  * media.deleteMailAttachmentTmp — tmp 네임스페이스 검증에 의존).
  * 나머지 전 표면은 authed(admin 전용) 유지 — 게스트는 기본 거부.
+ *
+ * grant-first: grant 보유자는 admin allowlist 검사 없이 통과시킨다. 이후
+ * assertSurveyAccess 가 설문 일치를 강제하므로 allowlist fail-open 여부와
+ * 무관하게 게스트는 자기 설문 밖으로 나갈 수 없어 안전하다.
  */
 export const scoped = base.use(({ context, next }) => {
   if (!context.user) {
     throw new ORPCError('UNAUTHORIZED', { message: '인증이 필요합니다.' });
   }
-  if (!isAdminUserAllowed(context.user.id) && getGuestSurveyId(context.user.id) === null) {
+  if (getGuestSurveyId(context.user.id) === null && !isAdminUserAllowed(context.user.id)) {
     throw new ORPCError('FORBIDDEN', { message: '접근 권한이 없습니다.' });
   }
   return next({ context: { user: context.user } });

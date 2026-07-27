@@ -49,6 +49,12 @@ describe('canAccessSurvey', () => {
     vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
     expect(canAccessSurvey('nobody', 'survey-a')).toBe(false);
   });
+
+  it('allowlist 미설정 fail-open 이어도 grant 보유자는 자기 설문만 접근한다', () => {
+    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:survey-a');
+    expect(canAccessSurvey('guest-1', 'survey-a')).toBe(true);
+    expect(canAccessSurvey('guest-1', 'survey-b')).toBe(false);
+  });
 });
 
 describe('guestPathRedirect', () => {
