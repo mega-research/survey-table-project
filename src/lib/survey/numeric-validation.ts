@@ -47,7 +47,7 @@ function isEmptyCellValue(v: unknown): boolean {
  * 필수 셀·범위·합계 검증이 이 필터를 공유한다: 화면에 없는 셀의 잔존 값이나 미입력이
  * 검증에 기여하면 안 된다 (숨은 열의 필수 셀이 "다음"을 영구 차단하는 버그 방지).
  */
-function visibleCells(
+export function collectVisibleTableCells(
   question: Question,
   cellValues: Record<string, unknown>,
   ctx: NumericValidationCtx | undefined,
@@ -153,7 +153,7 @@ export function collectNumericIssues(
   const hasAnyCellValue = Object.keys(cellValues).some((k) => !k.startsWith('__'));
   if (!hasAnyCellValue) return [];
 
-  const visible = visibleCells(question, cellValues, ctx);
+  const visible = collectVisibleTableCells(question, cellValues, ctx);
   const inputCells = visible.filter((c) => c.type === 'input');
   const issues: NumericIssue[] = [];
 
