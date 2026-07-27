@@ -920,6 +920,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
                 scrollToIssue({
                   detailTargetIds: item.detailTargetIds,
                   cellIds,
+                  questionId,
                 });
               // 드릴다운 모드는 위반 셀이 다른 섹션에 있어 DOM 에 없을 수 있다.
               // 먼저 해당 섹션/리프로 내비를 전환하고, 상세가 렌더된 다음 이동한다.

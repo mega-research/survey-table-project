@@ -336,6 +336,7 @@ describe('필수 옵션 상세기입 응답 흐름', () => {
       const user = userEvent.setup();
 
       const detailInput = await screen.findByPlaceholderText('상세 기재');
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
       await user.click(getMobileActionButton('다음'));
 
       expect(screen.queryByText('다음 페이지 질문')).not.toBeInTheDocument();

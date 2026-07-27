@@ -123,3 +123,28 @@ pnpm test
 
 - 기능상 미해결 사항은 없다.
 - 범위 ESLint의 기존 경고 5건과 pnpm 설정 경고는 이번 수정 범위 밖이라 유지했다.
+
+## P2 리뷰 후속 수정
+
+테이블 전용 `onNavigate`가 `scrollToIssue`에 `questionId`를 전달하지 않아,
+상세 입력과 셀이 모두 미렌더 상태이면 질문 카드 폴백도 찾지 못하는 문제를 수정했다.
+초기 렌더 재현 테스트에는 다음/완료 시도 전에는 오류 배너가 없어야 한다는 단언도 추가했다.
+
+### P2 TDD RED
+
+```bash
+pnpm exec vitest run \
+  tests/unit/survey/table-error-banner-jump.test.tsx \
+  tests/unit/survey-response/required-option-text-flow.test.tsx
+```
+
+- 테스트 파일: 1개 실패, 1개 통과
+- 테스트: 16개 중 1개 실패, 15개 통과
+- 실패: 상세 입력과 셀이 모두 미렌더일 때 질문 카드 스크롤 호출 0회
+
+### P2 GREEN 및 검증
+
+- 직접 영향 테스트: 테스트 파일 2개, 테스트 16개 통과
+- 집중 기능 스위트: 테스트 파일 51개, 테스트 516개 통과
+- `pnpm exec tsc --noEmit`: 통과
+- 범위 ESLint: 오류 0개, 기존 `no-explicit-any` 경고 4개
