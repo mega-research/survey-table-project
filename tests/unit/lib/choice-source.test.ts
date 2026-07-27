@@ -117,4 +117,25 @@ describe('choice-source', () => {
     expect(opt.allowTextInput).toBe(true);
     expect(opt.textInputPlaceholder).toBe('상세');
   });
+
+  it('choice_opt 스타일을 파생 QuestionOption에 전달한다', () => {
+    const question = q({
+      tableRowsData: [
+        row([
+          cell({
+            id: 'styled-choice',
+            type: 'choice_opt',
+            choiceLabel: '스타일 보기',
+            textBold: true,
+            backgroundColor: '#AABBCC',
+          }),
+        ]),
+      ],
+    });
+
+    expect(resolveChoiceOptions(question)[0]).toMatchObject({
+      textBold: true,
+      backgroundColor: '#AABBCC',
+    });
+  });
 });

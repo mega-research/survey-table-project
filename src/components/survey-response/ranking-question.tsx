@@ -11,6 +11,7 @@ import {
   isGroupedRankingQuestion,
 } from '@/utils/choice-group-helpers';
 import { getOptionsLayout } from '@/utils/options-layout';
+import { getCellTextClassName } from '@/utils/cell-style';
 import { parseRankingAnswers, RANKING_OTHER_VALUE } from '@/utils/ranking-shared';
 import { resolveRankingOptions, resolveRankingOptionsFromCells } from '@/utils/ranking-source';
 
@@ -52,7 +53,11 @@ function EmbeddedTableReference({ question, rawOptions, isMobile }: EmbeddedTabl
           return (
             <MobileOptionCard
               key={row.id}
-              label={opt?.label ?? optCell.content ?? optCell.rankingLabel ?? '(라벨 없음)'}
+              label={
+                <span className={getCellTextClassName(opt ?? optCell)}>
+                  {opt?.label ?? optCell.content ?? optCell.rankingLabel ?? '(라벨 없음)'}
+                </span>
+              }
               cells={row.cells}
             />
           );

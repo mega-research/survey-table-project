@@ -147,6 +147,24 @@ describe('extractRegionFromRows 직사각형 불변식', () => {
     expect(region.cells[0]![0]!.content).toBe('solo');
   });
 
+  it('영역 복사 스냅샷이 개별 셀 스타일을 보존한다', () => {
+    const region = extractRegionFromRows(0, 0, 0, 0, [
+      row([
+        cell({
+          id: 'styled-cell',
+          content: 'A',
+          textBold: true,
+          backgroundColor: '#AABBCC',
+        }),
+      ], { id: 'styled-row', label: '' }),
+    ]);
+
+    expect(region.cells[0]?.[0]).toMatchObject({
+      textBold: true,
+      backgroundColor: '#AABBCC',
+    });
+  });
+
   // 라디오 그룹 보존(M51): 같은 radioGroupName 을 공유하는 라디오 셀들을 영역 복사하면
   // 스냅샷에 원본 그룹명이 남아 있어야 붙여넣기 시 상대 그룹 관계를 복원할 수 있다.
   it('라디오 그룹명을 스냅샷에 보존한다(붙여넣기 재매핑 입력용)', () => {

@@ -8,6 +8,7 @@ import { useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import type { TableCell } from '@/types/survey';
+import { getCellTextClassName } from '@/utils/cell-style';
 import { splitMobileDisplayCells } from '@/utils/mobile-display-cells';
 
 /** text/image/video 표시 셀 1개의 읽기 전용 콘텐츠 */
@@ -36,7 +37,12 @@ function DisplayCellContent({ cell }: { cell: TableCell }) {
   if (!text) return null;
 
   return (
-    <div className="whitespace-pre-wrap text-sm leading-relaxed text-gray-600 [overflow-wrap:anywhere]">
+    <div
+      className={cn(
+        'whitespace-pre-wrap text-sm leading-relaxed text-gray-600 [overflow-wrap:anywhere]',
+        getCellTextClassName(cell),
+      )}
+    >
       {substituteTokens(text, attrs)}
     </div>
   );

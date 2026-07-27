@@ -15,6 +15,7 @@ import {
   isGroupedChoiceQuestion,
 } from '@/utils/choice-group-helpers';
 import { resolveChoiceOptions } from '@/utils/choice-source';
+import { getCellTextClassName } from '@/utils/cell-style';
 import { findMobileHeaderCell } from '@/utils/mobile-display-cells';
 import { resolveMobileTableDisplayMode } from '@/utils/mobile-table-display-mode';
 
@@ -209,7 +210,11 @@ export function ChoiceTableResponse({ question, value, onChange }: ChoiceTableRe
             readOnly={isGrouped && cellType === 'radio'}
             className="h-4 w-4"
           />
-          {labelText && <span className="text-sm text-gray-800">{labelText}</span>}
+          {labelText && (
+            <span className={cn('text-sm text-gray-800', getCellTextClassName(cell))}>
+              {labelText}
+            </span>
+          )}
         </label>
         {option?.allowTextInput && checked && (
           <OptionTextInput questionId={question.id} option={option} className="w-full" />
@@ -260,7 +265,7 @@ export function ChoiceTableResponse({ question, value, onChange }: ChoiceTableRe
             return (
               <MobileOptionCard
                 key={choiceCell.id}
-                label={cardLabel}
+                label={<span className={getCellTextClassName(option ?? choiceCell)}>{cardLabel}</span>}
                 cells={row.cells}
                 selected={checked}
                 disabled={disabled}

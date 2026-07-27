@@ -55,5 +55,7 @@ export function resolveChoiceOptions(question: Question): QuestionOption[] {
     ...(cell.branchRule !== undefined ? { branchRule: cell.branchRule } : {}),
     ...(cell.allowTextInput !== undefined ? { allowTextInput: cell.allowTextInput } : {}),
     ...(cell.textInputPlaceholder !== undefined ? { textInputPlaceholder: cell.textInputPlaceholder } : {}),
+    ...(cell.textBold ? { textBold: true } : {}),
+    ...(cell.backgroundColor ? { backgroundColor: cell.backgroundColor } : {}),
   }));
 }
