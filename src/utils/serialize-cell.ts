@@ -28,6 +28,7 @@ export interface CellFormState {
   selectOptions: QuestionOption[];
   allowOtherOption: boolean;
   cellOptionsColumns: number | undefined;
+  cellMobileOptionsColumns: number | undefined;
   inputPlaceholder: string;
   inputMaxLength: number | '';
   inputDefaultValueTemplate: string;
@@ -131,6 +132,7 @@ export function cellToFormState(cell: TableCell): CellFormState {
     selectOptions: cell.selectOptions || [],
     allowOtherOption: cell.allowOtherOption || false,
     cellOptionsColumns: cell.optionsColumns,
+    cellMobileOptionsColumns: cell.mobileOptionsColumns,
     inputPlaceholder: cell.placeholder || '',
     inputMaxLength: cell.inputMaxLength || '',
     inputDefaultValueTemplate: cell.defaultValueTemplate ?? '',
@@ -207,6 +209,7 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
     selectOptions: _selectOptions,
     allowOtherOption: _allowOtherOption,
     optionsColumns: _optionsColumns,
+    mobileOptionsColumns: _mobileOptionsColumns,
     placeholder: _placeholder,
     inputMaxLength: _inputMaxLength,
     defaultValueTemplate: _defaultValueTemplate,
@@ -257,6 +260,9 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
           allowOtherOption: form.allowOtherOption,
           ...(form.cellOptionsColumns !== undefined
             ? { optionsColumns: form.cellOptionsColumns }
+            : {}),
+          ...(form.cellMobileOptionsColumns !== undefined
+            ? { mobileOptionsColumns: form.cellMobileOptionsColumns }
             : {}),
         }
       : {}),
