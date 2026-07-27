@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { Clipboard, Eye, ListChecks, Plus, Undo2 } from 'lucide-react';
+import { Clipboard, Eye, ListChecks, Palette, Plus, Undo2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -18,12 +18,14 @@ import {
   resolveMobileTableDisplayMode,
 } from '@/utils/mobile-table-display-mode';
 import { resolveMobileDrilldownRepeatHeaderRange } from '@/utils/mobile-drilldown-repeat-header';
+import { getCommonHeaderStyle } from '@/utils/header-style';
 
 import { BulkGeneratorModal, BulkColumnDef } from './bulk-generator';
 import { CellContentModal } from './cell-content-modal';
 import { ConditionModal } from './condition-modal';
 import { EditorTableRow } from './editor-table-row';
 import { HeaderGridEditor } from './header-grid-editor';
+import { HeaderBulkStyleDialog } from './header-bulk-style-dialog';
 import { useTableEditor } from './hooks/use-table-editor';
 import { LoadCellModal } from './load-cell-modal';
 import { MobileTableDisplaySettings } from './mobile-table-display-settings';
@@ -142,6 +144,7 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
     setColumnConditionModalOpen,
     toggleMultiRowHeader,
     updateHeaderGrid,
+    applyHeaderStyle,
     // 드래그 복사
     dragCopyState,
     undoInfo,
@@ -158,6 +161,7 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
 
   // ── 행 일괄 생성 상태 ──
   const [bulkRowModalOpen, setBulkRowModalOpen] = useState(false);
+  const [headerStyleDialogOpen, setHeaderStyleDialogOpen] = useState(false);
   const [bulkRowToast, setBulkRowToast] = useState<{ count: number; visible: boolean } | null>(null);
   const bulkRowToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -398,7 +402,19 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
       <div className="space-y-3 rounded-lg border border-gray-200 p-4">
         <div className="flex items-center justify-between">
           <div>
-            <Label className="text-sm font-medium">다단계 헤더</Label>
+            <div className="flex items-center gap-2">
+              <Label className="text-sm font-medium">다단계 헤더</Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={currentColumns.length === 0}
+                onClick={() => setHeaderStyleDialogOpen(true)}
+              >
+                <Palette className="mr-1.5 h-4 w-4" />
+                헤더 일괄 스타일
+              </Button>
+            </div>
             <p className="text-xs text-gray-500">
               여러 행으로 구성된 계층적 헤더 (종사자 수 → 사무직/생산직 → 남/여 등)
             </p>
@@ -422,6 +438,13 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
           />
         )}
       </div>
+
+      <HeaderBulkStyleDialog
+        open={headerStyleDialogOpen}
+        onOpenChange={setHeaderStyleDialogOpen}
+        initialStyle={getCommonHeaderStyle(currentColumns, currentHeaderGrid)}
+        onApply={applyHeaderStyle}
+      />
 
       {/* 열 라벨 숨기기 설정 */}
       <div className="space-y-3 rounded-lg border border-gray-200 p-4">

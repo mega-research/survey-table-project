@@ -14,9 +14,11 @@ import {
 
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { cn } from '@/lib/utils';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { useSurveyUIStore } from '@/stores/ui-store';
 import { TableColumn } from '@/types/survey';
+import { getCellBackgroundStyle, getCellTextClassName } from '@/utils/cell-style';
 import { getGridSpanStyle } from '@/utils/table-grid-utils';
 
 import { useDebouncedInput } from './hooks/use-debounced-input';
@@ -110,14 +112,20 @@ const ColumnHeader = React.memo(function ColumnHeader({
   return (
     <div
       className="relative min-h-[40px] min-w-0 overflow-hidden border-r border-b border-gray-300 bg-gray-50 p-2 [overflow-wrap:anywhere]"
-      style={getGridSpanStyle(headerColspan)}
+      style={{
+        ...getGridSpanStyle(headerColspan),
+        ...getCellBackgroundStyle(column),
+      }}
     >
       {!hideColumnLabels && (
         <div className="space-y-1">
           <Input
             value={localLabel}
             onChange={(e) => setLocalLabel(e.target.value)}
-            className="h-7 w-full border border-gray-200 bg-white pr-7 text-center text-sm"
+            className={cn(
+              'h-7 w-full border border-gray-200 bg-transparent pr-7 text-center text-sm',
+              getCellTextClassName(column),
+            )}
             placeholder="열 제목"
           />
           <div className="flex items-center justify-center gap-1 text-[10px] text-gray-400">

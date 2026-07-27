@@ -21,6 +21,7 @@ import {
   buildDefaultHeaderGrid,
   reconcileHeaderGridForColumnChange,
 } from '@/utils/table-merge-helpers';
+import { applyHeaderBulkStyle, type HeaderBulkStyle } from '@/utils/header-style';
 
 import { checkCanMerge, executeMerge, executeUnmerge } from '../utils/table-cell-merge';
 import { useDragCopy } from './use-drag-copy';
@@ -1298,6 +1299,29 @@ export function useTableEditor({
     [],
   );
 
+  const applyHeaderStyle = useCallback((style: HeaderBulkStyle) => {
+    const result = applyHeaderBulkStyle(
+      currentColumnsRef.current,
+      headerGridRef.current,
+      style,
+    );
+
+    commitColumns(result.columns);
+    if (result.headerGrid !== undefined) {
+      headerGridRef.current = result.headerGrid;
+      setCurrentHeaderGrid(result.headerGrid);
+    }
+
+    onTableChangeRef.current({
+      tableTitle: currentTitleRef.current,
+      tableColumns: result.columns,
+      tableRowsData: currentRowsRef.current,
+      ...(result.headerGrid !== undefined
+        ? { tableHeaderGrid: result.headerGrid }
+        : {}),
+    });
+  }, [commitColumns]);
+
   // ── columnWidths (EditorTableRow에 안정적 참조 전달용) ──
 
   const columnWidths = useMemo(
@@ -1405,6 +1429,7 @@ export function useTableEditor({
       // 다단계 헤더
       toggleMultiRowHeader,
       updateHeaderGrid,
+      applyHeaderStyle,
       // 드래그 복사
       ...dragCopy,
     },

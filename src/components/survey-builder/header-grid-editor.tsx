@@ -6,8 +6,9 @@ import { Combine, Minus, Plus, Unlink } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { generateId } from '@/lib/utils';
+import { cn, generateId } from '@/lib/utils';
 import { HeaderCell } from '@/types/survey';
+import { getCellBackgroundStyle, getCellTextClassName } from '@/utils/cell-style';
 
 interface HeaderGridEditorProps {
   headerGrid: HeaderCell[][];
@@ -507,6 +508,7 @@ export function HeaderGridEditor({ headerGrid, columnCount, onChange }: HeaderGr
                   gridColumn: cell.colspan > 1 ? `span ${cell.colspan}` : undefined,
                   gridRow: cell.rowspan > 1 ? `span ${cell.rowspan}` : undefined,
                   cursor: isEditing ? 'text' : 'cell',
+                  ...(!isSelected ? getCellBackgroundStyle(cell) : {}),
                 }}
                 onMouseDown={(e) => handleMouseDown(rowIdx, gridCol, e)}
                 onMouseEnter={() => handleMouseEnter(rowIdx, gridCol)}
@@ -522,11 +524,14 @@ export function HeaderGridEditor({ headerGrid, columnCount, onChange }: HeaderGr
                         setEditingCell(null);
                       }
                     }}
-                    className="h-7 text-center text-sm"
+                    className={cn('h-7 text-center text-sm', getCellTextClassName(cell))}
                   />
                 ) : (
                   <span
-                    className={cell.label ? 'text-gray-800' : 'text-gray-400 italic'}
+                    className={cn(
+                      cell.label ? 'text-gray-800' : 'text-gray-400 italic',
+                      getCellTextClassName(cell),
+                    )}
                     title={isMerged ? `${cell.colspan}×${cell.rowspan} 병합` : undefined}
                   >
                     {cell.label || '(빈 셀)'}
