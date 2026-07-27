@@ -228,7 +228,7 @@ async function promoteTmpSurveyUrls(urls: Iterable<string>): Promise<Map<string,
   let failed = moveResult.failed;
 
   // 2a. 클라이언트 stale state 로 같은 publish 가 재시도된 케이스는 영구 위치에
-  // 객체가 이미 존재. tmp 객체는 첫 publish 가 옮긴 뒤 사라졌지만, dst 가
+  // 객체가 이미 존재. tmp 객체는 copy-only 라 항상 남아있지만, dst 가
   // 살아있으면 정상 promote 와 동등 — URL 만 영구로 치환해 idempotent 동작 유지.
   if (failed.length > 0) {
     const recoveredFromExisting: string[] = [];

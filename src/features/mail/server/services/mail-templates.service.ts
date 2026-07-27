@@ -150,7 +150,7 @@ export async function updateMailTemplate(
     attachments: rawAttachments,
   } = input;
 
-  // promote(R2 move) 를 시도하기 전에 존재 여부부터 확인해 빠르게 실패시킨다.
+  // promote(R2 copy) 를 시도하기 전에 존재 여부부터 확인해 빠르게 실패시킨다.
   const oldRow = await db.query.mailTemplates.findFirst({
     where: and(
       eq(mailTemplates.id, templateId),

@@ -78,7 +78,7 @@ export async function createQuestion(data: CreateQuestionInput): Promise<Questio
     spssMeasure: data.spssMeasure,
   } satisfies CompleteQuestionWrite & NewQuestion;
 
-  // tmp/survey/ 이미지를 영구 prefix로 promote (R2 move + URL 치환)
+  // tmp/survey/ 이미지를 영구 prefix로 promote (R2 copy + URL 치환, 원본 tmp 는 lifecycle 위임)
   const [questionToInsert] = await promoteSurveyImages([newQuestion as PromotableQuestion]);
 
   const [question] = await db
@@ -115,7 +115,7 @@ export async function updateQuestion(
     }
   }
 
-  // tmp/survey/ 이미지를 영구 prefix로 promote (R2 move + URL 치환)
+  // tmp/survey/ 이미지를 영구 prefix로 promote (R2 copy + URL 치환, 원본 tmp 는 lifecycle 위임)
   const [allowedToUpdate] = await promoteSurveyImages([allowed as PromotableQuestion]);
 
   const [updated] = await db

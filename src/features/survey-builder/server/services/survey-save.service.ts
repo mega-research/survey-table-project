@@ -186,7 +186,7 @@ export async function saveSurveyDiff(
 
       // 3b. Upsert (추가 + 수정)
       if (questionChanges.upserted.length > 0) {
-        // tmp/survey/ 이미지를 영구 prefix로 promote (R2 move + URL 치환)
+        // tmp/survey/ 이미지를 영구 prefix로 promote (R2 copy + URL 치환, 원본 tmp 는 lifecycle 위임)
         // tmp/notice-attachment/ 첨부도 영구 prefix로 promote. 이전 영구 첨부 키의
         // orphan cleanup은 제거됨 — 발행 스냅샷/복제/보관함이 계속 참조할 수 있다.
         const promotedQuestions = await promoteNoticeAttachments(
@@ -517,7 +517,7 @@ export async function saveSurveyWithDetails(
       }
 
       if (surveyData.questions.length > 0) {
-        // tmp/survey/ 이미지를 영구 prefix로 promote (R2 move + URL 치환)
+        // tmp/survey/ 이미지를 영구 prefix로 promote (R2 copy + URL 치환, 원본 tmp 는 lifecycle 위임)
         // tmp/notice-attachment/ 첨부도 영구 prefix로 promote. 이전 영구 첨부 키의
         // orphan cleanup은 제거됨 — 발행 스냅샷/복제/보관함이 계속 참조할 수 있다.
         const promotedQuestions = await promoteNoticeAttachments(
