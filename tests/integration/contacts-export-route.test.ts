@@ -113,6 +113,7 @@ describe('GET /api/surveys/[surveyId]/contacts/export', () => {
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     );
     expect(res.headers.get('Content-Disposition')).toContain('.xlsx');
+    expect(res.headers.get('Cache-Control')).toBe('no-store');
     const body = Buffer.from(await res.arrayBuffer());
     expect(body.length).toBeGreaterThan(0);
   });

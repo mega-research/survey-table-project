@@ -27,6 +27,7 @@ export async function decryptPiiForExport(
   const result = new Map<string, Record<string, string>>();
   if (targetIds.length === 0 || columnKeys.length === 0) return result;
 
+  let failedCount = 0;
   for (let i = 0; i < targetIds.length; i += PII_QUERY_CHUNK) {
     const chunk = targetIds.slice(i, i + PII_QUERY_CHUNK);
     const rows = await db
@@ -50,11 +51,16 @@ export async function decryptPiiForExport(
       } catch {
         // 키 로테이션 등으로 복호화 실패 — 행 전체를 죽이지 않고 빈 값 처리
         plain = '';
+        failedCount += 1;
       }
       const entry = result.get(row.contactTargetId) ?? {};
       entry[row.columnKey] = plain;
       result.set(row.contactTargetId, entry);
     }
+  }
+  if (failedCount > 0) {
+    // cipher/평문/대상 id 는 로그 금지 — 건수만 남긴다 (키 로테이션 사고 탐지용)
+    console.error(`decryptPiiForExport: 복호화 실패 ${failedCount}건`);
   }
   return result;
 }

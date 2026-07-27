@@ -95,6 +95,8 @@ export async function GET(
       headers: {
         'Content-Type': XLSX_MIME,
         'Content-Disposition': `attachment; filename="${filename}"`,
+        // PII 평문 응답 캐시 방지
+        'Cache-Control': 'no-store',
       },
     });
   } catch (error) {
