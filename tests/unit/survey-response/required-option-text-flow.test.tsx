@@ -104,12 +104,64 @@ function createChoiceTableSurvey(): Survey {
   } as Survey;
 }
 
+function createTwoRequiredQuestionsSurvey(): Survey {
+  const survey = createSurvey({ hasNextPage: true });
+  return {
+    ...survey,
+    questions: [
+      {
+        id: 'q-first-required',
+        type: 'radio',
+        title: '첫 번째 필수 질문',
+        description: '',
+        required: true,
+        order: 0,
+        options: [
+          { id: 'first-yes', value: 'yes', label: '예' },
+          { id: 'first-no', value: 'no', label: '아니오' },
+        ],
+      },
+      {
+        id: 'q-second-required',
+        type: 'radio',
+        title: '두 번째 필수 질문',
+        description: '',
+        required: true,
+        order: 1,
+        options: [
+          { id: 'second-yes', value: 'yes', label: '동의' },
+          { id: 'second-no', value: 'no', label: '비동의' },
+        ],
+      },
+      {
+        id: 'q-next',
+        type: 'text',
+        title: '다음 페이지 질문',
+        description: '',
+        required: false,
+        order: 2,
+        pageBreakBefore: true,
+      },
+    ],
+  } as Survey;
+}
+
 function renderFlow(options?: Parameters<typeof createSurvey>[0]) {
   render(
     <SurveyResponseFlow
       mode="preview"
       surveyIdentifier="preview-required-option-text"
       previewContext={{ survey: createSurvey(options), versionId: 'version-1' }}
+    />,
+  );
+}
+
+function renderTwoRequiredQuestionsFlow() {
+  render(
+    <SurveyResponseFlow
+      mode="preview"
+      surveyIdentifier="preview-two-required-questions"
+      previewContext={{ survey: createTwoRequiredQuestionsSurvey(), versionId: 'version-1' }}
     />,
   );
 }
@@ -232,6 +284,33 @@ describe('필수 옵션 상세기입 응답 흐름', () => {
     vi.restoreAllMocks();
   });
 
+  it('미입력 필수 문항은 첫 번째만 표시하고 입력 후 다음 문항으로 오류 대상을 갱신한다', async () => {
+    const scrollSpy = vi.fn();
+    Element.prototype.scrollIntoView = scrollSpy;
+    renderTwoRequiredQuestionsFlow();
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole('button', { name: '다음' }));
+
+    const firstQuestion = screen
+      .getByText('첫 번째 필수 질문')
+      .closest('[data-question-id="q-first-required"]');
+    const secondQuestion = screen
+      .getByText('두 번째 필수 질문')
+      .closest('[data-question-id="q-second-required"]');
+    expect(firstQuestion).toHaveClass('ring-red-200');
+    expect(secondQuestion).not.toHaveClass('ring-red-200');
+    expect(scrollSpy.mock.contexts.at(-1)).toBe(firstQuestion);
+
+    await user.click(screen.getByLabelText('예'));
+    await user.click(screen.getByRole('button', { name: '다음' }));
+
+    expect(firstQuestion).not.toHaveClass('ring-red-200');
+    expect(secondQuestion).toHaveClass('ring-red-200');
+    expect(scrollSpy.mock.contexts.at(-1)).toBe(secondQuestion);
+    expect(screen.queryByText('다음 페이지 질문')).not.toBeInTheDocument();
+  });
+
   it.each(['', '   '])(
     '필수 상세기입이 %j이면 다음 페이지로 이동하지 않고 질문을 하이라이트한다',
     async (optionText) => {
@@ -342,8 +421,9 @@ describe('필수 옵션 상세기입 응답 흐름', () => {
       expect(screen.queryByText('다음 페이지 질문')).not.toBeInTheDocument();
       expect(screen.getByRole('alert')).toHaveTextContent('필수 응답이 비어있습니다');
       await user.click(screen.getByRole('button', { name: '위치로 이동' }));
-      expect(scrollSpy).toHaveBeenCalledTimes(1);
+      expect(scrollSpy).toHaveBeenCalledTimes(2);
       expect(scrollSpy.mock.contexts[0]).toBe(detailInput);
+      expect(scrollSpy.mock.contexts[1]).toBe(detailInput);
 
       await user.clear(detailInput);
       await user.type(detailInput, '상세 내용');

@@ -41,17 +41,25 @@ describe('service.deleteImages — 게이트가 실제 삭제 경로를 통제�
     return firstCall[0];
   }
 
-  it('의도 namespace(survey/·tmp/) URL 만 lib 삭제 호출에 전달한다', async () => {
-    const allowed = [
-      `${PUBLIC_URL}/survey/1234-abc.webp`,
-      `${PUBLIC_URL}/tmp/cell-image/1234-abc.webp`,
-    ];
+  it('tmp/ orphan 정리 URL 만 lib 삭제 호출에 전달한다(게이트가 tmp 전용으로 축소)', async () => {
+    const allowed = [`${PUBLIC_URL}/tmp/cell-image/1234-abc.webp`];
     const res = await deleteImages({ urls: allowed });
 
     const sent = urlsSentToLib();
     expect(sent).toEqual(allowed);
-    expect(res.deleted).toBe(2);
+    expect(res.deleted).toBe(1);
     expect(res.deletedUrls).toEqual(allowed);
+  });
+
+  it('survey/ 영구 이미지 URL 은 게이트가 tmp 전용으로 축소되어 lib 삭제 호출에 도달하지 않는다(클라이언트발 즉시 삭제 차단)', async () => {
+    const permanent = `${PUBLIC_URL}/survey/1234-abc.webp`;
+    const res = await deleteImages({ urls: [permanent] });
+
+    const sent = urlsSentToLib();
+    expect(sent).not.toContain(permanent);
+    expect(sent).toEqual([]);
+    expect(res.deleted).toBe(0);
+    expect(res.deletedUrls).toEqual([]);
   });
 
   it('mail/ 영구 첨부 URL 은 lib 삭제 호출에 도달하지 않는다(IDOR 차단)', async () => {
@@ -75,18 +83,20 @@ describe('service.deleteImages — 게이트가 실제 삭제 경로를 통제�
     expect(sent).toEqual([]);
   });
 
-  it('mail/·root 공격 URL 을 정상 survey/ URL 과 섞어 보내도 정상만 전달한다', async () => {
-    const ok = `${PUBLIC_URL}/survey/keep-me.webp`;
+  it('mail/·root·survey(영구) 공격 URL 을 정상 tmp/ URL 과 섞어 보내도 정상만 전달한다', async () => {
+    const ok = `${PUBLIC_URL}/tmp/cell-image/keep-me.webp`;
     const attackMail = `${PUBLIC_URL}/mail/victim/secret.pdf`;
     const attackRoot = `${PUBLIC_URL}/another-victim.webp`;
+    const attackSurvey = `${PUBLIC_URL}/survey/permanent.webp`;
     const res = await deleteImages({
-      urls: [ok, attackMail, attackRoot],
+      urls: [ok, attackMail, attackRoot, attackSurvey],
     });
 
     const sent = urlsSentToLib();
     expect(sent).toEqual([ok]);
     expect(sent).not.toContain(attackMail);
     expect(sent).not.toContain(attackRoot);
+    expect(sent).not.toContain(attackSurvey);
     expect(res.deleted).toBe(1);
     expect(res.deletedUrls).toEqual([ok]);
   });
@@ -103,7 +113,7 @@ describe('service.deleteImages — 게이트가 실제 삭제 경로를 통제�
 
   it('lib 가 false(전체 실패) 면 게이트 통과 URL 을 failed 로 보고한다', async () => {
     deleteImagesFromR2ServerMock.mockResolvedValue(false);
-    const ok = `${PUBLIC_URL}/survey/keep-me.webp`;
+    const ok = `${PUBLIC_URL}/tmp/cell-image/keep-me.webp`;
     const res = await deleteImages({ urls: [ok] });
 
     expect(res.deleted).toBe(0);

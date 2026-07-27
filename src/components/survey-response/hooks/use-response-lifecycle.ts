@@ -406,14 +406,11 @@ export function useResponseLifecycle({
       });
 
       if (unansweredRequired.length > 0) {
-        // 미응답 필수 질문을 전부 하이라이트
-        const highlight = new Set(unansweredRequired.map((q) => q.id));
-        setHighlightQuestionIds(highlight);
-
         // 첫 번째 미응답 필수 질문이 속한 step으로 이동
         const firstRequired = unansweredRequired[0];
         if (!firstRequired) return;
         const firstId = firstRequired.id;
+        setHighlightQuestionIds(new Set([firstId]));
         const targetIdx = findStepIndexOfQuestion(steps, firstId);
         const hasBlockingDetailIssue = collectNumericIssues(firstRequired, responses[firstId], {
           allResponses: responses,
@@ -450,6 +447,7 @@ export function useResponseLifecycle({
       });
       if (numericViolated.length > 0) {
         const firstId = numericViolated[0]!.id;
+        setHighlightQuestionIds(new Set([firstId]));
         const targetIdx = findStepIndexOfQuestion(steps, firstId);
         if (targetIdx !== -1) setNumericErrorStepIndex(targetIdx);
         // 다른 step 이면 그 step 으로 전환(상단 스크롤). 같은 step 이면 배너만 —

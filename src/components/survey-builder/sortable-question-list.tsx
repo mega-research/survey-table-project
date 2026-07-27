@@ -37,7 +37,6 @@ import { useEnsureSurveyInDb } from '@/hooks/use-ensure-survey-in-db';
 import { useSyncLatestRef } from '@/hooks/use-latest-ref';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { extractImageUrlsFromQuestion } from '@/lib/image-extractor';
 import {
   getInterleavedChildren,
   toGroupDndId,
@@ -45,7 +44,6 @@ import {
   extractGroupId,
   findParentGroupId,
 } from '@/lib/group-ordering';
-import { deleteImagesFromR2 } from '@/lib/image-utils';
 import {
   ContactAttrsProvider,
   createPlaceholderAttrs,
@@ -582,21 +580,11 @@ export function SortableQuestionList({
     setEditingQuestionId(questionId);
   }, []);
 
-  const handleDelete = useCallback(async (questionId: string) => {
+  const handleDelete = useCallback((questionId: string) => {
     if (!confirm('이 질문을 삭제하시겠습니까?')) return;
 
-    const questionToDelete = questionsRef.current.find((q) => q.id === questionId);
-    if (questionToDelete) {
-      const images = extractImageUrlsFromQuestion(questionToDelete);
-      if (images.length > 0) {
-        try {
-          await deleteImagesFromR2(images);
-        } catch (error) {
-          console.error('질문 삭제 시 이미지 삭제 실패:', error);
-        }
-      }
-    }
-
+    // R2 삭제 제거 — 발행 스냅샷·복제·보관함이 같은 URL 을 참조하므로 즉시 삭제는
+    // 소실 사고를 유발 (2026-07-27 orphan 감사). 정리는 후속 GC 과제.
     deleteQuestion(questionId);
   }, [deleteQuestion]);
 

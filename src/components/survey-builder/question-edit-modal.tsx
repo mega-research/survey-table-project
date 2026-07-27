@@ -22,8 +22,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { CompleteQuestionWrite } from '@/db/schema/question-persisted-fields';
 import { useEnsureSurveyInDb } from '@/hooks/use-ensure-survey-in-db';
-import { extractImageUrlsFromQuestion } from '@/lib/image-extractor';
-import { deleteImagesFromR2 } from '@/lib/image-utils';
 import { isValidUUID } from '@/lib/utils';
 import { client } from '@/shared/lib/rpc';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
@@ -348,21 +346,8 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
     };
     setIsSaving(true);
     try {
-      const updatedQuestion = {
-        ...question,
-        ...currentFormData,
-      } as Question;
-      const usedImages = extractImageUrlsFromQuestion(updatedQuestion);
-
-      if (question) {
-        const previousImages = extractImageUrlsFromQuestion(question);
-        const unusedImages = previousImages.filter((url) => !usedImages.includes(url));
-
-        if (unusedImages.length > 0) {
-          await deleteImagesFromR2(unusedImages);
-        }
-      }
-
+      // R2 삭제 제거 — 발행 스냅샷·복제·보관함이 같은 URL 을 참조하므로 즉시 삭제는
+      // 소실 사고를 유발 (2026-07-27 orphan 감사). 정리는 후속 GC 과제.
       updateQuestion(questionId, currentFormData);
 
       const store = useSurveyBuilderStore.getState();

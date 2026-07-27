@@ -6,7 +6,7 @@ import {
   extractAttachmentHrefsFromHtml,
   extractPermanentAttachmentKeysFromHtml,
 } from '@/components/ui/rich-text-editor/file-attachment-html-utils';
-import { deleteR2ObjectsByKey, moveR2Objects } from '@/lib/image-utils-server';
+import { copyR2Objects } from '@/lib/image-utils-server';
 import { getR2PublicUrl } from '@/lib/r2-env';
 import {
   NOTICE_ATTACHMENT_PREFIX,
@@ -138,17 +138,19 @@ export function replaceNoticeAttachmentUrlsInQuestion<
 
 /**
  * 질문 배열 안 모든 tmp/notice-attachment/ URL 을 영구 prefix 로 promote.
- * survey-image-promote.ts 와 동일 패턴 (R2 move + URL split/join 치환).
+ * survey-image-promote.ts 와 동일 패턴 (R2 copy-only + URL split/join 치환).
  *
- * 실패한 move 는 tmp URL 그대로 — Cloudflare 24h lifecycle 가 청소.
+ * copy-only — 원본(tmp)은 삭제하지 않는다. 실패한 copy 는 tmp URL 그대로 남아
+ * 재시도 가능(무해) — Cloudflare 24h lifecycle 이 최종 청소.
+ * tmp 잔여물은 R2 lifecycle(tmp/ 24h) 위임 — 대시보드 규칙 존재 확인 필요(키 권한으로 코드에서 미검증).
  *
- * `options.previousQuestions` 전달 시: 이전 영구 첨부 키 중 새 publish 영구 키에
- * 없는 것은 orphan 으로 간주하고 R2 에서 DELETE. cleanup 실패는 Sentry 경고로
- * 흡수해 publish 자체는 진행.
+ * 과거에는 이전 영구 첨부 키 중 새 publish 영구 키에 없는 것을 orphan 으로 간주해
+ * R2 에서 DELETE 했다(2번째 인자 `options.previousQuestions`). 이 cleanup 은 제거됨 —
+ * 발행 스냅샷(survey_versions)·복제 설문·보관함이 같은 영구 키를 계속 참조할 수 있어
+ * 확인 없이 지우면 라이브 콘텐츠가 파괴된다.
  */
 export async function promoteNoticeAttachments<T extends PromotableNoticeQuestion>(
   questions: T[],
-  options?: { previousQuestions?: PromotableNoticeQuestion[] },
 ): Promise<T[]> {
   const allTmpUrls = new Set<string>();
   for (const q of questions) {
@@ -179,31 +181,22 @@ export async function promoteNoticeAttachments<T extends PromotableNoticeQuestio
     let allMoved = [] as Array<{ srcKey: string; dstKey: string }>;
     let stillFailed: string[] = [];
 
-    // 이번 호출이 실제로 tmp→영구로 옮긴 객체만 별도 추적.
-    // recovered(이전 publish 가 이미 옮겨둔) 객체는 여기에 포함하지 않아
-    // 롤백 시 라이브 첨부를 파괴하지 않도록 한다.
-    const newlyMoved = [] as Array<{ srcKey: string; dstKey: string }>;
-
-    const first = await moveR2Objects(movePairs);
+    const first = await copyR2Objects(movePairs);
     allMoved = first.movedKeys;
-    newlyMoved.push(...first.movedKeys);
     stillFailed = first.failed;
 
     // R2 read-after-write 일시 불일치나 transient 네트워크 케이스 대비 1회 retry
     if (stillFailed.length > 0) {
       const retryPairs = movePairs.filter((p) => stillFailed.includes(p.srcKey));
       await new Promise((resolve) => setTimeout(resolve, 500));
-      const second = await moveR2Objects(retryPairs);
+      const second = await copyR2Objects(retryPairs);
       allMoved = [...allMoved, ...second.movedKeys];
-      newlyMoved.push(...second.movedKeys);
       stillFailed = second.failed;
     }
 
     // 클라이언트 stale state 로 같은 publish 가 재시도된 케이스는 영구 위치에 객체가
-    // 이미 존재. tmp 객체는 첫 publish 가 옮긴 뒤 사라졌지만, dst 가 살아있으면
+    // 이미 존재. tmp 객체는 copy-only 라 항상 남아있지만, dst 가 이미 살아있으면
     // 정상 promote 와 동등 — URL 만 영구로 치환해 idempotent 동작 유지.
-    // 단, 이 객체는 이번 호출이 옮긴 것이 아니라 이전 publish 소유이므로
-    // newlyMoved 에는 넣지 않는다(롤백 대상에서 제외).
     if (stillFailed.length > 0) {
       const recoveredFromExisting: string[] = [];
       for (const srcKey of stillFailed) {
@@ -218,21 +211,15 @@ export async function promoteNoticeAttachments<T extends PromotableNoticeQuestio
     }
 
     if (stillFailed.length > 0) {
-      // 이미 영구 위치로 옮긴 객체는 DB 갱신이 일어나지 않으면 cleanup orchestrator 도
-      // 못 잡아내는 orphan 이 됨. 이번 호출이 새로 옮긴 부분 성공분만 즉시 폐기.
-      // recovered 객체(이전 publish 소유 라이브 첨부)는 롤백하지 않는다.
-      if (newlyMoved.length > 0) {
-        deleteR2ObjectsByKey(newlyMoved.map((p) => p.dstKey)).catch(() => undefined);
-      }
+      // copy-only 이므로 이번 호출에서 이미 영구 위치로 copy 한 객체(allMoved)를
+      // 롤백할 필요가 없다 — tmp 원본이 그대로 남아있어 재시도하면 다시 copy 될 뿐이고,
+      // dst 삭제는 과거 "유일 사본(dst) 삭제 사고"의 원인이었으므로 의도적으로 하지 않는다.
       Sentry.captureMessage(
-        `공지사항 첨부 promote 최종 실패: ${stillFailed.length}개`,
+        `공지사항 첨부 promote 최종 실패: ${stillFailed.length}개 (tmp 원본 보존 — 재시도 가능)`,
         {
           level: 'error',
           tags: { operation: 'notice_attachment_promote' },
-          extra: {
-            failedKeys: stillFailed,
-            rolledBackKeys: newlyMoved.map((p) => p.dstKey),
-          },
+          extra: { failedKeys: stillFailed },
         },
       );
       throw new NoticeAttachmentPromoteError(stillFailed);
@@ -254,31 +241,8 @@ export async function promoteNoticeAttachments<T extends PromotableNoticeQuestio
     result = questions.map((q) => replaceNoticeAttachmentUrlsInQuestion(q, mapping));
   }
 
-  // orphan cleanup: 이전 영구 키 중 새 publish 영구 키에 없는 것 DELETE
-  if (options?.previousQuestions && options.previousQuestions.length > 0) {
-    const previousPermanent = new Set(
-      extractPermanentAttachmentKeysFromQuestions(options.previousQuestions),
-    );
-    const currentPermanent = new Set(
-      extractPermanentAttachmentKeysFromQuestions(result),
-    );
-    const orphans = [...previousPermanent].filter((k) => !currentPermanent.has(k));
-
-    if (orphans.length > 0) {
-      try {
-        await deleteR2ObjectsByKey(orphans);
-      } catch (err) {
-        Sentry.captureMessage(
-          `공지사항 첨부 orphan 영구 키 cleanup 실패: ${orphans.length}개`,
-          {
-            level: 'warning',
-            tags: { operation: 'notice_attachment_promote', phase: 'orphan_cleanup' },
-            extra: { orphans, error: String(err) },
-          },
-        );
-      }
-    }
-  }
-
+  // orphan cleanup(이전 영구 키 중 새 publish 에 없는 것 DELETE)은 의도적으로 제거됨.
+  // 발행 스냅샷·복제 설문·보관함이 같은 영구 첨부 키를 참조할 수 있어, 이번 publish 의
+  // diff 만 보고 지우면 다른 곳에서 여전히 유효한 첨부가 함께 사라진다.
   return result;
 }
