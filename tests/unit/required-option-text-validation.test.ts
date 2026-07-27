@@ -6,6 +6,7 @@ import {
   resolveEffectiveOptionTextsByQuestion,
 } from '@/lib/survey/required-option-text-validation';
 import type { Question, TableCell } from '@/types/survey';
+import { RANKING_OTHER_VALUE } from '@/utils/ranking-shared';
 
 function makeQuestion(overrides: Partial<Question>): Question {
   return {
@@ -68,7 +69,11 @@ describe('collectRequiredOptionTextIssues', () => {
 
     expect(
       collectRequiredOptionTextIssues(question, 'other-value', { other: '   ' }),
-    ).toEqual({ questionMissing: true, cellIds: [] });
+    ).toEqual({
+      questionMissing: true,
+      cellIds: [],
+      detailTargetIds: ['q1:option:other'],
+    });
   });
 
   it('선택 사항 질문은 상세기입이 공백이어도 누락이 아니다', () => {
@@ -127,7 +132,57 @@ describe('collectRequiredOptionTextIssues', () => {
       collectRequiredOptionTextIssues(question, [
         { rank: 1, optionValue: 'rank-value', optionText: '  ' },
       ], undefined),
-    ).toEqual({ questionMissing: true, cellIds: [] });
+    ).toEqual({
+      questionMissing: true,
+      cellIds: [],
+      detailTargetIds: ['q1:ranking:1:rank-value'],
+    });
+  });
+
+  it.each(['', '   '])(
+    '필수 순위형의 기타 응답 otherText가 %j이면 질문 누락이며 optionText를 요구하지 않는다',
+    (otherText) => {
+      const question = makeQuestion({
+        type: 'ranking',
+        required: true,
+        allowOtherOption: true,
+        options: [{ id: 'plain', value: 'plain', label: '일반' }],
+      });
+
+      expect(
+        collectRequiredOptionTextIssues(
+          question,
+          [{
+            rank: 1,
+            optionValue: RANKING_OTHER_VALUE,
+            otherText,
+            optionText: '이 값으로 통과하면 안 됨',
+          }],
+          undefined,
+        ),
+      ).toEqual({
+        questionMissing: true,
+        cellIds: [],
+        detailTargetIds: ['q1:ranking:1:__other__'],
+      });
+    },
+  );
+
+  it('필수 순위형의 기타 otherText가 유효하면 optionText 없이 통과한다', () => {
+    const question = makeQuestion({
+      type: 'ranking',
+      required: true,
+      allowOtherOption: true,
+      options: [{ id: 'plain', value: 'plain', label: '일반' }],
+    });
+
+    expect(
+      collectRequiredOptionTextIssues(
+        question,
+        [{ rank: 1, optionValue: RANKING_OTHER_VALUE, otherText: '직접 입력' }],
+        undefined,
+      ),
+    ).toEqual({ questionMissing: false, cellIds: [] });
   });
 
   it('그룹 순위형의 각 활성 그룹에서 선택한 상세기입 옵션이 공백이면 질문 누락이다', () => {
@@ -140,7 +195,11 @@ describe('collectRequiredOptionTextIssues', () => {
         },
         undefined,
       ),
-    ).toEqual({ questionMissing: true, cellIds: [] });
+    ).toEqual({
+      questionMissing: true,
+      cellIds: [],
+      detailTargetIds: ['q1:rnk1:ranking:1:group-1-detail'],
+    });
   });
 
   it('그룹 순위형의 선택된 상세기입이 모두 유효하면 누락이 아니다', () => {
@@ -193,7 +252,17 @@ describe('collectRequiredOptionTextIssues', () => {
         ranking: [{ rank: 1, optionValue: 'ranking-value', optionText: '' }],
       },
       { 'radio-opt': '', 'checkbox-opt': '', 'select-opt': '' },
-    )).toEqual({ questionMissing: true, cellIds: [] });
+    )).toEqual({
+      questionMissing: true,
+      cellIds: [],
+      detailTargetIds: [
+        'q1:option:radio-opt',
+        'q1:option:checkbox-opt',
+        'q1:option:select-opt',
+        'ranking:ranking:1:ranking-value',
+      ],
+      detailCellIds: ['radio', 'checkbox', 'select', 'ranking'],
+    });
   });
 
   it('필수 상세기입 테이블 셀은 자신의 선택된 옵션이 비어 있으면 cellIds에 담는다', () => {
@@ -214,7 +283,68 @@ describe('collectRequiredOptionTextIssues', () => {
 
     expect(
       collectRequiredOptionTextIssues(question, { 'required-cell': 'cell-value' }, { 'cell-opt': ' ' }),
-    ).toEqual({ questionMissing: false, cellIds: ['required-cell'] });
+    ).toEqual({
+      questionMissing: false,
+      cellIds: ['required-cell'],
+      detailTargetIds: ['q1:option:cell-opt'],
+      detailCellIds: ['required-cell'],
+    });
+  });
+
+  it('필수 ranking 셀의 기타 응답은 otherText를 검사하고 실제 입력 타깃과 셀을 반환한다', () => {
+    const question = makeQuestion({
+      type: 'table',
+      tableRowsData: [{
+        id: 'row',
+        label: '행',
+        cells: [{
+          id: 'ranking-cell',
+          type: 'ranking',
+          content: '',
+          required: true,
+          rankingOptions: [{
+            id: 'ranking-other-cell',
+            value: RANKING_OTHER_VALUE,
+            label: '기타',
+            allowTextInput: true,
+          }],
+        }],
+      }],
+    });
+
+    expect(
+      collectRequiredOptionTextIssues(
+        question,
+        {
+          'ranking-cell': [{
+            rank: 1,
+            optionValue: RANKING_OTHER_VALUE,
+            otherText: ' ',
+            optionText: '검사 대상이 아님',
+          }],
+        },
+        undefined,
+      ),
+    ).toEqual({
+      questionMissing: false,
+      cellIds: ['ranking-cell'],
+      detailTargetIds: ['ranking-cell:ranking:1:__other__'],
+      detailCellIds: ['ranking-cell'],
+    });
+
+    expect(
+      collectRequiredOptionTextIssues(
+        question,
+        {
+          'ranking-cell': [{
+            rank: 1,
+            optionValue: RANKING_OTHER_VALUE,
+            otherText: '직접 입력',
+          }],
+        },
+        undefined,
+      ),
+    ).toEqual({ questionMissing: false, cellIds: [] });
   });
 
   it('테이블 소스 choice_opt와 ranking_opt의 선택된 상세기입을 검사한다', () => {
@@ -236,12 +366,20 @@ describe('collectRequiredOptionTextIssues', () => {
 
     expect(
       collectRequiredOptionTextIssues(choiceQuestion, 'choice-source', { 'choice-source': '' }),
-    ).toEqual({ questionMissing: true, cellIds: [] });
+    ).toEqual({
+      questionMissing: true,
+      cellIds: [],
+      detailTargetIds: ['q1:option:choice-source'],
+    });
     expect(
       collectRequiredOptionTextIssues(rankingQuestion, [
         { rank: 1, optionValue: 'ranking-source', optionText: ' ' },
       ], undefined),
-    ).toEqual({ questionMissing: true, cellIds: [] });
+    ).toEqual({
+      questionMissing: true,
+      cellIds: [],
+      detailTargetIds: ['q1:ranking:1:ranking-source'],
+    });
   });
 
   it('숨겨진 테이블 셀은 context와 isHidden 모두 상세기입 검증에서 제외한다', () => {

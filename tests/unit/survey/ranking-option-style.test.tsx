@@ -109,9 +109,32 @@ describe('RankingDropdownStack 옵션 스타일', () => {
         allowDuplicates={false}
         allowOther={false}
         onChange={vi.fn()}
+        detailTargetScopeId="question-1"
       />,
     );
 
-    expect(screen.getByPlaceholderText('사유를 입력하세요')).toBeVisible();
+    expect(screen.getByPlaceholderText('사유를 입력하세요')).toHaveAttribute(
+      'data-option-text-target-id',
+      'question-1:ranking:1:table-detail',
+    );
+  });
+
+  it('기타 직접 입력도 순수 검증과 같은 안정 타깃 ID를 렌더한다', () => {
+    render(
+      <RankingDropdownStack
+        answers={[{ rank: 1, optionValue: '__other__', otherText: ' ' }]}
+        options={options}
+        positions={1}
+        allowDuplicates={false}
+        allowOther
+        onChange={vi.fn()}
+        detailTargetScopeId="question-1"
+      />,
+    );
+
+    expect(screen.getByPlaceholderText('기타 내용 입력...')).toHaveAttribute(
+      'data-option-text-target-id',
+      'question-1:ranking:1:__other__',
+    );
   });
 });

@@ -94,22 +94,29 @@ describe('InteractiveTableResponse 오류 배너', () => {
     expect((scrollSpy.mock.contexts[0] as HTMLElement).getAttribute('data-cell-id')).toBe('r1c1');
   });
 
-  it('렌더된 셀이 하나도 없으면(모두 미렌더) 조용히 무시한다', () => {
+  it('상세 입력과 셀이 모두 미렌더면 질문 카드로 스크롤한다', () => {
     const scrollSpy = vi.fn();
     Element.prototype.scrollIntoView = scrollSpy;
 
     render(
-      <InteractiveTableResponse
-        questionId="q1"
-        columns={columns}
-        rows={rows}
-        onChange={() => {}}
-        errorItems={[{ message: '합계 오류', cellIds: ['nope-1', 'nope-2'] }]}
-      />,
+      <div data-question-id="q1">
+        <InteractiveTableResponse
+          questionId="q1"
+          columns={columns}
+          rows={rows}
+          onChange={() => {}}
+          errorItems={[{
+            message: '필수 응답이 비어있습니다',
+            cellIds: ['nope-1'],
+            detailTargetIds: ['detail-not-mounted'],
+          }]}
+        />
+      </div>,
     );
 
     fireEvent.click(screen.getByRole('button', { name: '위치로 이동' }));
-    expect(scrollSpy).not.toHaveBeenCalled();
+    expect(scrollSpy).toHaveBeenCalledTimes(1);
+    expect((scrollSpy.mock.contexts[0] as HTMLElement).getAttribute('data-question-id')).toBe('q1');
   });
 
   it('cellIds 가 없거나 빈 항목은 이동 버튼 없이 메시지만 표시한다', () => {

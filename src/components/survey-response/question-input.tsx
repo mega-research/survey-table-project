@@ -22,6 +22,7 @@ import { getOptionsLayout } from '@/utils/options-layout';
 import { ChoiceTableResponse } from './choice-table-response';
 import { OptionTextInput } from './option-text-input';
 import { RankingQuestion } from './ranking-question';
+import { ValidationIssueBanner } from './validation-issue-banner';
 
 /**
  * 라디오·체크박스 옵션 목록의 좌우 인셋 — 질문 제목보다 옵션 블록을 안쪽으로 들여쓴다.
@@ -67,7 +68,28 @@ export type SingleChoiceResponse = string | null | OtherChoiceValue;
 export type MultiChoiceResponse = Array<string | OtherChoiceValue>;
 
 // 질문 유형별 입력 라우터
-export function QuestionInput({
+export function QuestionInput({ question, numericIssues, ...controlProps }: QuestionInputProps) {
+  const control = (
+    <QuestionInputControl question={question} numericIssues={numericIssues} {...controlProps} />
+  );
+  if (question.type === 'table') return control;
+
+  const bannerItems = (numericIssues ?? [])
+    .filter((issue) => issue.kind !== 'range')
+    .map((issue) => ({
+      message: issue.message,
+      cellIds: issue.cellIds,
+      detailTargetIds: issue.detailTargetIds,
+    }));
+  return (
+    <>
+      {control}
+      <ValidationIssueBanner items={bannerItems} questionId={question.id} />
+    </>
+  );
+}
+
+function QuestionInputControl({
   question,
   value,
   onChange,
@@ -229,7 +251,11 @@ export function QuestionInput({
             (() => {
               const items = (numericIssues ?? [])
                 .filter((i) => i.kind !== 'range')
-                .map((i) => ({ message: i.message, cellIds: i.cellIds ?? [] }));
+                .map((i) => ({
+                  message: i.message,
+                  cellIds: i.cellIds ?? [],
+                  ...(i.detailTargetIds ? { detailTargetIds: i.detailTargetIds } : {}),
+                }));
               return items.length > 0 ? items : undefined;
             })()
           }

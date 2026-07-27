@@ -45,6 +45,7 @@ export const RankingCell = React.memo(function RankingCell({
           allowOther={false}
           onChange={(next) => onUpdateValue(next)}
           {...(cell.optionsColumns !== undefined ? { columns: cell.optionsColumns } : {})}
+          detailTargetScopeId={cell.id}
           compact
         />
         {positions < requestedPositions && (

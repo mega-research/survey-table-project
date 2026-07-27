@@ -694,6 +694,9 @@ function SurveyResponseFlowActive({
     );
     if (unansweredCurrent.length > 0) {
       setHighlightQuestionIds(new Set(unansweredCurrent.map((q) => q.id)));
+      if (unansweredCurrent.some((q) => numericIssuesByQuestion.has(q.id))) {
+        setNumericErrorStepIndex(currentStepIndex);
+      }
       return;
     }
 

@@ -179,6 +179,7 @@ export function RankingQuestion({ question, value, onChange }: RankingQuestionPr
                 allowOther={false}
                 onChange={(next) => handleGroupChange(g.groupKey, next)}
                 columns={config?.positionsColumns}
+                detailTargetScopeId={`${question.id}:${g.groupKey}`}
               />
               {groupPositions < requestedPositions && (
                 <p className="text-sm text-gray-500">
@@ -212,6 +213,7 @@ export function RankingQuestion({ question, value, onChange }: RankingQuestionPr
         allowOther={allowOther}
         onChange={onChange}
         columns={config?.positionsColumns}
+        detailTargetScopeId={question.id}
       />
 
       {positions < requestedPositions && (
