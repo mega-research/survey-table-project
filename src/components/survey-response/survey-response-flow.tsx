@@ -38,6 +38,7 @@ import { useMediaQuery } from '@/hooks/use-media-query';
 import {
   buildRenderSteps,
   resolveStepBranch,
+  stepIdOf,
   type RenderStep,
 } from '@/lib/group-ordering';
 import { isQuestionAnswered as isQuestionAnsweredPure } from '@/lib/survey/answer-validation';
@@ -445,6 +446,18 @@ function SurveyResponseFlowActive({
 
   const currentStep: RenderStep | undefined = steps[currentStepIndex];
 
+  // 재접속 회복 시 멈춘 스텝으로 초기 이동.
+  // useSessionRecovery 가 deps 미포함 안정 참조를 요구하므로 최신 steps 는 ref 로 읽는다.
+  // 재배포 등으로 스텝 id 가 현재 구조에 없으면 못 찾고(-1) 1페이지 유지.
+  const stepsForRestoreRef = useRef(steps);
+  useEffect(() => {
+    stepsForRestoreRef.current = steps;
+  }, [steps]);
+  const restoreStepFromRecovery = useCallback((stepId: string) => {
+    const idx = stepsForRestoreRef.current.findIndex((s) => stepIdOf(s) === stepId);
+    if (idx > 0) setCurrentStepIndex(idx);
+  }, []);
+
   // 현재 step 내 표시 가능한 질문들
   const currentStepQuestions = useMemo<Question[]>(
     () =>
@@ -542,6 +555,7 @@ function SurveyResponseFlowActive({
     sessionId,
     setSessionId,
     setResponses,
+    onRestoreStep: restoreStepFromRecovery,
     setCurrentResponseId,
     setDuplicateStatus,
     setPausedMessage: setRefetchedPausedMessage,

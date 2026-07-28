@@ -75,6 +75,8 @@ export const ResumeOrCreateResponseOutput = z
     status: ResumeStatusSchema,
     resumed: z.boolean(),
     questionResponses: QuestionResponsesSchema.optional(),
+    /** 마지막으로 머문 스텝 id — 재접속 시 멈춘 페이지 복원용 (in_progress 회복 경로에서만 설정). */
+    currentStepId: z.string().nullable().optional(),
   })
   .nullable();
 export type ResumeOrCreateResponseOutput = z.infer<typeof ResumeOrCreateResponseOutput>;

@@ -200,6 +200,7 @@ export async function resumeOrCreateResponse(
           isTest: surveyResponses.isTest,
           versionId: surveyResponses.versionId,
           questionResponses: surveyResponses.questionResponses,
+          currentStepId: surveyResponses.currentStepId,
         })
         .from(surveyResponses)
         .where(
@@ -227,6 +228,7 @@ export async function resumeOrCreateResponse(
                 existingByContact.questionResponses ?? {},
                 { responseId: existingByContact.id },
               ),
+              currentStepId: existingByContact.currentStepId,
             };
           }
           return null;
@@ -241,7 +243,16 @@ export async function resumeOrCreateResponse(
             .update(surveyResponses)
             .set({ status: 'in_progress', lastActivityAt: now })
             .where(eq(surveyResponses.id, existingByContact.id));
-          return { id: existingByContact.id, status: 'in_progress', resumed: true };
+          return {
+            id: existingByContact.id,
+            status: 'in_progress',
+            resumed: true,
+            questionResponses: decryptQuestionResponses(
+              existingByContact.questionResponses ?? {},
+              { responseId: existingByContact.id },
+            ),
+            currentStepId: existingByContact.currentStepId,
+          };
         }
         if (existingByContact.status === 'in_progress') {
           // 중단 모드: 행이 isTest 이거나 유효한 테스트 링크로 재진입한 경우만 예외
@@ -252,7 +263,16 @@ export async function resumeOrCreateResponse(
             .update(surveyResponses)
             .set({ lastActivityAt: now })
             .where(eq(surveyResponses.id, existingByContact.id));
-          return { id: existingByContact.id, status: 'in_progress', resumed: false };
+          return {
+            id: existingByContact.id,
+            status: 'in_progress',
+            resumed: false,
+            questionResponses: decryptQuestionResponses(
+              existingByContact.questionResponses ?? {},
+              { responseId: existingByContact.id },
+            ),
+            currentStepId: existingByContact.currentStepId,
+          };
         }
         // isCompleted=false 인데 in_progress/drop 도 아닌 알 수 없는 status → fallback
       }
@@ -268,6 +288,7 @@ export async function resumeOrCreateResponse(
       status: surveyResponses.status,
       isTest: surveyResponses.isTest,
       questionResponses: surveyResponses.questionResponses,
+      currentStepId: surveyResponses.currentStepId,
     })
     .from(surveyResponses)
     .where(
@@ -302,6 +323,7 @@ export async function resumeOrCreateResponse(
       questionResponses: decryptQuestionResponses(existing.questionResponses ?? {}, {
         responseId: existing.id,
       }),
+      currentStepId: existing.currentStepId,
     };
   }
 
@@ -322,6 +344,7 @@ export async function resumeOrCreateResponse(
       questionResponses: decryptQuestionResponses(existing.questionResponses ?? {}, {
         responseId: existing.id,
       }),
+      currentStepId: existing.currentStepId,
     };
   }
 

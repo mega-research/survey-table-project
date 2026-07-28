@@ -29,6 +29,8 @@ interface UseSessionRecoveryArgs {
   setSessionId: (sessionId: string) => void;
   /** 같은 버전 target in_progress 응답값 복원용. */
   setResponses?: Dispatch<SetStateAction<Record<string, unknown>>>;
+  /** 회복된 응답의 마지막 스텝으로 초기 이동 — 안정 참조(useCallback) 필수 (deps 미포함). */
+  onRestoreStep?: (stepId: string) => void;
   /** 회복된 응답 row id 를 응답 스토어에 반영 (Zustand 액션). */
   setCurrentResponseId: (id: string) => void;
   /** resume 이 survey_paused 로 실패하면 중단 화면으로 전환 (공통 채널, use-duplicate-guard 소유). */
@@ -73,6 +75,7 @@ export function useSessionRecovery({
   sessionId,
   setSessionId,
   setResponses,
+  onRestoreStep,
   setCurrentResponseId,
   setDuplicateStatus,
   setPausedMessage,
@@ -165,6 +168,8 @@ export function useSessionRecovery({
         // 응답 row 사용 — 일반 세션은 saved sessionId를 복구하고, 모든 세션은 저장 답을 복원한다.
         if (!isTargetTestSession) setSessionId(recoverySessionId);
         setResponses?.(result.questionResponses ?? {});
+        // 멈춘 페이지 복원 — 스텝 id 가 현재 구조에 없으면(재배포 등) 호출측에서 무시한다.
+        if (result.currentStepId) onRestoreStep?.(result.currentStepId);
         // Zustand currentResponseId 갱신은 이 effect cleanup을 동기 유발할 수 있다.
         // 먼저 recovery gate를 닫아 stale finally가 무시돼도 true가 남지 않게 한다.
         setIsRecovering(false);
