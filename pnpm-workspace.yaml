@@ -1,0 +1,85 @@
+# pnpm 11 설정 — package.json "pnpm" 필드와 .npmrc pnpm 설정의 새 위치 (2026-07-28 마이그레이션).
+# overrides 는 공급망 감사 게이트(.github/audit-gate.ts) 대응 보안 패치 강제용.
+# 의존성 설치는 반드시 packageManager 고정 버전으로: pnpm@11.8.0
+packages:
+  - '.'
+
+engineStrict: true
+autoInstallPeers: true
+dedupePeerDependents: true
+nodeLinker: isolated
+hoist: true
+
+overrides:
+  # tiptap 전 패키지 3.15.3 고정 — core/pm 만 고정하면 extension 이 3.29 로 드리프트해 API 불일치 빌드 실패
+  '@tiptap/core': '3.15.3'
+  '@tiptap/extension-blockquote': '3.15.3'
+  '@tiptap/extension-bold': '3.15.3'
+  '@tiptap/extension-bubble-menu': '3.15.3'
+  '@tiptap/extension-bullet-list': '3.15.3'
+  '@tiptap/extension-code-block': '3.15.3'
+  '@tiptap/extension-code': '3.15.3'
+  '@tiptap/extension-document': '3.15.3'
+  '@tiptap/extension-dropcursor': '3.15.3'
+  '@tiptap/extension-floating-menu': '3.15.3'
+  '@tiptap/extension-gapcursor': '3.15.3'
+  '@tiptap/extension-hard-break': '3.15.3'
+  '@tiptap/extension-heading': '3.15.3'
+  '@tiptap/extension-history': '3.15.3'
+  '@tiptap/extension-horizontal-rule': '3.15.3'
+  '@tiptap/extension-image': '3.15.3'
+  '@tiptap/extension-italic': '3.15.3'
+  '@tiptap/extension-link': '3.15.3'
+  '@tiptap/extension-list-item': '3.15.3'
+  '@tiptap/extension-list-keymap': '3.15.3'
+  '@tiptap/extension-list': '3.15.3'
+  '@tiptap/extension-ordered-list': '3.15.3'
+  '@tiptap/extension-paragraph': '3.15.3'
+  '@tiptap/extension-strike': '3.15.3'
+  '@tiptap/extension-table-cell': '3.15.3'
+  '@tiptap/extension-table-header': '3.15.3'
+  '@tiptap/extension-table-row': '3.15.3'
+  '@tiptap/extension-table': '3.15.3'
+  '@tiptap/extension-text-align': '3.15.3'
+  '@tiptap/extension-text-style': '3.15.3'
+  '@tiptap/extension-text': '3.15.3'
+  '@tiptap/extension-underline': '3.15.3'
+  '@tiptap/extensions': '3.15.3'
+  '@tiptap/pm': '3.15.3'
+  '@tiptap/react': '3.15.3'
+  '@tiptap/starter-kit': '3.15.3'
+  fast-xml-parser: '>=5.8.0'
+  ws: '>=8.21.0'
+  tar: '>=7.5.19'
+  'protobufjs@7': '7.6.1'
+  'protobufjs@8': '>=8.6.3'
+  'undici@7': '7.28.0'
+  '@chenglou/pretext': '^0.0.5'
+  linkify-it: '>=5.0.2'
+  adm-zip: '>=0.6.0'
+  'brace-expansion@1': '1.1.16'
+  'brace-expansion@2': '2.1.2'
+  'js-yaml@4': '>=4.3.0'
+  '@opentelemetry/propagator-jaeger': '>=2.9.0'
+  'fast-uri@3': '>=3.1.4'
+  'postcss@8': '>=8.5.18'
+  sharp: '>=0.35.3'
+  'minimatch@9': '>=9.0.7'
+  'flatted@3': '>=3.4.2'
+  '@grpc/grpc-js@1': '>=1.14.4'
+  'picomatch@4': '>=4.0.4'
+  'rollup@4': '>=4.59.0'
+  tmp: '>=0.2.6'
+  lodash: '>=4.18.0'
+  'serialize-javascript@6': '>=7.0.3'
+  'minimatch@3': '>=3.1.4'
+  'picomatch@2': '>=2.3.2'
+  lodash-es: '>=4.18.0'
+
+allowBuilds:
+  '@sentry/cli': true
+  esbuild: true
+  inngest-cli: true
+  msw: true
+  protobufjs: true
+  unrs-resolver: true
