@@ -48,7 +48,7 @@ export const PreviewCell = React.memo(function PreviewCell({
                 readOnly={!disableControls}
                 className="mt-0.5 h-4 w-4 shrink-0 rounded"
               />
-              <span className="text-sm">{option.label}</span>
+              <span className="whitespace-pre-line text-sm">{option.label}</span>
             </div>
           ))}
         </CellOptionsContainer>
@@ -75,7 +75,7 @@ export const PreviewCell = React.memo(function PreviewCell({
                 readOnly={!disableControls}
                 className="mt-0.5 h-4 w-4 shrink-0"
               />
-              <span className="text-sm">{option.label}</span>
+              <span className="whitespace-pre-line text-sm">{option.label}</span>
             </div>
           ))}
         </CellOptionsContainer>

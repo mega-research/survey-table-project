@@ -36,6 +36,15 @@ export function getGuestSurveyId(userId: string): string | null {
   return parseGuestGrants(process.env[ENV_KEY]).get(userId) ?? null;
 }
 
+/**
+ * admin allowlist 통과 또는 게스트 grant 보유 판정 — 게스트에게 열린 표면
+ * (scoped 베이스, 업로드 라우트)의 공용 1차 가드. 설문 일치는 별도로
+ * canAccessSurvey/assertSurveyAccess 가 강제한다.
+ */
+export function isAdminOrGuestGrantHolder(userId: string): boolean {
+  return getGuestSurveyId(userId) !== null || isAdminUserAllowed(userId);
+}
+
 /** 설문 접근 판정 — grant 보유자는 항상 게스트(grant 설문만), 그 외는 admin allowlist 판정. */
 export function canAccessSurvey(userId: string, surveyId: string): boolean {
   const granted = getGuestSurveyId(userId);
@@ -54,6 +63,20 @@ export function guestPathRedirect(
   if (pathname === '/admin/login') return null;
   const allowedPrefix = `/admin/surveys/${grantedSurveyId}/operations`;
   if (pathname === allowedPrefix || pathname.startsWith(`${allowedPrefix}/`)) {
+    // 액션 procedure 가 authed(게스트 차단)로 남는 편집 화면은 경로도 함께 차단 —
+    // 폼을 다 채운 뒤 FORBIDDEN 을 받는 반쪽 UI 를 만들지 않는다.
+    // (컨택 목록·상세·수동 추가·메일·profiles 는 게스트 허용 procedure 와 짝이라 통과.)
+    const blockedSubpaths = [
+      'contacts/upload',
+      'contacts/result-codes',
+      'contacts/columns',
+    ];
+    for (const sub of blockedSubpaths) {
+      const full = `${allowedPrefix}/${sub}`;
+      if (pathname === full || pathname.startsWith(`${full}/`)) {
+        return `${allowedPrefix}/overview`;
+      }
+    }
     return null;
   }
   return `${allowedPrefix}/overview`;

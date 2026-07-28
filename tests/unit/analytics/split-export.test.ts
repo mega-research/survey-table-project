@@ -212,6 +212,11 @@ describe('assignSplitSheetNames', () => {
     expect(result).toEqual(['제재목 원목']);
   });
 
+  it('옵션 라벨 줄바꿈은 공백 한 칸으로 정규화한다 - 통계 납품물 단일 행 규칙', () => {
+    const result = assignSplitSheetNames(['SW계열1\n(전산 등)']);
+    expect(result).toEqual(['SW계열1 (전산 등)']);
+  });
+
   it('31자를 초과하는 이름은 31자로 자른다', () => {
     const longName = 'A'.repeat(40);
     const result = assignSplitSheetNames([longName]);

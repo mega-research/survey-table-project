@@ -40,6 +40,7 @@ import { useSurveyUIStore } from '@/stores/ui-store';
 import { isOptionListType } from '@/types/question-types';
 import { Question, QuestionOption, SelectLevel } from '@/types/survey';
 
+import { OptionLabelTextarea } from './option-label-textarea';
 import { OptionPlaceholderEditor } from './option-placeholder-editor';
 import { VariableButton } from './variable-button';
 
@@ -1338,15 +1339,6 @@ function SortableOptionItem({
     id: option.id,
   });
 
-  // 라벨 textarea auto-resize: 값이 바뀔 때마다 scrollHeight에 맞춰 높이 조정 (Enter = 줄바꿈)
-  const labelRef = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => {
-    const el = labelRef.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = `${el.scrollHeight}px`;
-  }, [option.label]);
-
   const style = {
     transform: CSS.Transform.toString(transform),
     transition: isDragging ? 'none' : transition,
@@ -1370,13 +1362,11 @@ function SortableOptionItem({
 
         <div className="flex-1">
           <div className="flex items-center gap-2">
-            <textarea
-              ref={labelRef}
-              rows={1}
+            <OptionLabelTextarea
               value={option.label}
-              onChange={(e) => updateOption(option.id, { label: e.target.value })}
+              onChange={(label) => updateOption(option.id, { label })}
               placeholder={`선택지 ${index + 1}`}
-              className="w-full flex-1 resize-none overflow-hidden rounded-lg border-none bg-transparent px-0 py-1 text-base leading-6 placeholder:text-gray-500 focus:border focus:border-blue-200 focus:bg-white focus:outline-none"
+              className="flex-1 border-none bg-transparent px-0 py-1 focus-visible:border focus-visible:border-blue-200 focus-visible:bg-white focus-visible:ring-0"
             />
             {option.allowTextInput && (
               <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-700">

@@ -1,7 +1,11 @@
 import { ORPCError, os } from '@orpc/server';
 
 import { isAdminUserAllowed } from '@/lib/auth/admin-allowlist';
-import { canAccessSurvey, getGuestSurveyId } from '@/lib/auth/guest-grants';
+import {
+  canAccessSurvey,
+  getGuestSurveyId,
+  isAdminOrGuestGrantHolder,
+} from '@/lib/auth/guest-grants';
 import { getTrustedClientIpOrNull } from '@/lib/rate-limit/client-ip';
 import { getRateLimiter, type RateLimitGroup } from '@/lib/rate-limit/rate-limiter';
 
@@ -66,7 +70,9 @@ export function withRateLimit(group: RateLimitGroup) {
  * 관리자 베이스 — supabase 세션 필수 + allowlist 런타임 가드.
  *
  * 1) context.user non-null 검사(미인증이면 UNAUTHORIZED).
- * 2) ADMIN_USER_IDS allowlist 검사(미포함이면 FORBIDDEN).
+ * 2) grant-first: 게스트 grant 보유자는 항상 게스트 — allowlist fail-open 여부와
+ *    무관하게 admin 전용 표면에서 거부한다(FORBIDDEN). 게스트 허용 표면은 scoped 담당.
+ * 3) ADMIN_USER_IDS allowlist 검사(미포함이면 FORBIDDEN).
  *    allowlist 미설정이면 fail-open(통과) — isAdminUserAllowed 참조.
  *
  * 통과하면 context.user가 non-null로 좁혀진다.
@@ -74,6 +80,9 @@ export function withRateLimit(group: RateLimitGroup) {
 export const authed = base.use(({ context, next }) => {
   if (!context.user) {
     throw new ORPCError('UNAUTHORIZED', { message: '인증이 필요합니다.' });
+  }
+  if (getGuestSurveyId(context.user.id) !== null) {
+    throw new ORPCError('FORBIDDEN', { message: '접근 권한이 없습니다.' });
   }
   if (!isAdminUserAllowed(context.user.id)) {
     throw new ORPCError('FORBIDDEN', { message: '접근 권한이 없습니다.' });
@@ -98,7 +107,7 @@ export const scoped = base.use(({ context, next }) => {
   if (!context.user) {
     throw new ORPCError('UNAUTHORIZED', { message: '인증이 필요합니다.' });
   }
-  if (getGuestSurveyId(context.user.id) === null && !isAdminUserAllowed(context.user.id)) {
+  if (!isAdminOrGuestGrantHolder(context.user.id)) {
     throw new ORPCError('FORBIDDEN', { message: '접근 권한이 없습니다.' });
   }
   return next({ context: { user: context.user } });

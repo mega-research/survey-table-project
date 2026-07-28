@@ -3,7 +3,7 @@ import * as z from 'zod';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
-import { assertSurveyAccess, scoped } from '@/server/orpc';
+import { assertSurveyAccess, authed, scoped } from '@/server/orpc';
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -61,5 +61,28 @@ describe('scoped 베이스', () => {
     await expect(client.echo({ surveyId: 's2' })).rejects.toMatchObject({
       code: 'FORBIDDEN',
     });
+  });
+});
+
+const adminOnly = authed.handler(() => ({ ok: true }));
+
+describe('authed 베이스 grant-first', () => {
+  it('admin 은 통과', async () => {
+    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
+    const client = createRouterClient({ adminOnly }, { context: ctx('admin-1') });
+    await expect(client.adminOnly()).resolves.toEqual({ ok: true });
+  });
+
+  it('grant 보유자는 allowlist 설정 여부와 무관하게 admin 전용 표면에서 FORBIDDEN', async () => {
+    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
+    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:s1');
+    const client = createRouterClient({ adminOnly }, { context: ctx('guest-1') });
+    await expect(client.adminOnly()).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('allowlist 미설정 fail-open 이어도 grant 보유자는 admin 전용 표면에서 FORBIDDEN', async () => {
+    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:s1');
+    const client = createRouterClient({ adminOnly }, { context: ctx('guest-1') });
+    await expect(client.adminOnly()).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 });

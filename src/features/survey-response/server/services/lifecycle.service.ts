@@ -198,6 +198,7 @@ export async function resumeOrCreateResponse(
           id: surveyResponses.id,
           status: surveyResponses.status,
           isTest: surveyResponses.isTest,
+          sessionId: surveyResponses.sessionId,
           versionId: surveyResponses.versionId,
           questionResponses: surveyResponses.questionResponses,
           currentStepId: surveyResponses.currentStepId,
@@ -234,6 +235,23 @@ export async function resumeOrCreateResponse(
           return null;
         }
         const now = new Date();
+        // 답·스텝 복원 게이트 — 행 resume(소유권 의미론)은 기존대로 하되, 저장 답 반환은
+        // 두 조건을 모두 만족할 때만:
+        // - 세션 일치: invite 는 pub 엔드포인트라 URL 유출 시 제3자가 임의 sessionId 로
+        //   호출 가능 — 원 브라우저(세션 일치)에만 복호화 답을 내준다.
+        // - 버전 일치: 재배포로 구조가 바뀐 구버전 답을 주입하면 유령 답 영구 저장과
+        //   필수 검증 우회가 생긴다 (위 테스트 대상자 분기와 동일 게이트).
+        const restorePayload =
+          existingByContact.sessionId === sessionId &&
+          existingByContact.versionId === flags?.currentVersionId
+            ? {
+                questionResponses: decryptQuestionResponses(
+                  existingByContact.questionResponses ?? {},
+                  { responseId: existingByContact.id },
+                ),
+                currentStepId: existingByContact.currentStepId,
+              }
+            : {};
         if (existingByContact.status === 'drop') {
           // 중단 모드: 행이 isTest 이거나 유효한 테스트 링크로 재진입한 경우만 예외
           if (flags?.isPaused && !existingByContact.isTest && !isTestSession) {
@@ -247,11 +265,7 @@ export async function resumeOrCreateResponse(
             id: existingByContact.id,
             status: 'in_progress',
             resumed: true,
-            questionResponses: decryptQuestionResponses(
-              existingByContact.questionResponses ?? {},
-              { responseId: existingByContact.id },
-            ),
-            currentStepId: existingByContact.currentStepId,
+            ...restorePayload,
           };
         }
         if (existingByContact.status === 'in_progress') {
@@ -267,11 +281,7 @@ export async function resumeOrCreateResponse(
             id: existingByContact.id,
             status: 'in_progress',
             resumed: false,
-            questionResponses: decryptQuestionResponses(
-              existingByContact.questionResponses ?? {},
-              { responseId: existingByContact.id },
-            ),
-            currentStepId: existingByContact.currentStepId,
+            ...restorePayload,
           };
         }
         // isCompleted=false 인데 in_progress/drop 도 아닌 알 수 없는 status → fallback

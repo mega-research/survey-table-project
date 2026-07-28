@@ -4,6 +4,7 @@ import {
   canAccessSurvey,
   getGuestSurveyId,
   guestPathRedirect,
+  isAdminOrGuestGrantHolder,
   parseGuestGrants,
 } from '@/lib/auth/guest-grants';
 
@@ -57,6 +58,24 @@ describe('canAccessSurvey', () => {
   });
 });
 
+describe('isAdminOrGuestGrantHolder', () => {
+  it('admin allowlist 포함이면 true', () => {
+    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
+    expect(isAdminOrGuestGrantHolder('admin-1')).toBe(true);
+  });
+
+  it('allowlist 밖이라도 grant 보유자면 true - 게스트 업로드 표면 허용', () => {
+    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
+    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:survey-a');
+    expect(isAdminOrGuestGrantHolder('guest-1')).toBe(true);
+  });
+
+  it('allowlist 밖 + grant 없음이면 false', () => {
+    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
+    expect(isAdminOrGuestGrantHolder('nobody')).toBe(false);
+  });
+});
+
 describe('guestPathRedirect', () => {
   const sid = 'survey-a';
 
@@ -79,5 +98,18 @@ describe('guestPathRedirect', () => {
     expect(guestPathRedirect(`/admin/surveys/${sid}-suffix/operations`, sid)).toBe(
       `/admin/surveys/${sid}/operations/overview`,
     );
+  });
+
+  it('액션이 authed 로 막힌 편집 페이지는 경로도 차단 - 업로드 마법사·결과코드·컬럼 스킴', () => {
+    const dest = `/admin/surveys/${sid}/operations/overview`;
+    const base = `/admin/surveys/${sid}/operations`;
+    expect(guestPathRedirect(`${base}/contacts/upload`, sid)).toBe(dest);
+    expect(guestPathRedirect(`${base}/contacts/upload/new`, sid)).toBe(dest);
+    expect(guestPathRedirect(`${base}/contacts/result-codes`, sid)).toBe(dest);
+    expect(guestPathRedirect(`${base}/contacts/columns`, sid)).toBe(dest);
+    // 허용 유지 — 컨택 목록·상세·수동 추가는 게스트 허용 procedure 와 짝
+    expect(guestPathRedirect(`${base}/contacts`, sid)).toBeNull();
+    expect(guestPathRedirect(`${base}/contacts/new`, sid)).toBeNull();
+    expect(guestPathRedirect(`${base}/contacts/abc123`, sid)).toBeNull();
   });
 });

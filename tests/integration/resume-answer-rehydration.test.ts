@@ -88,7 +88,7 @@ describe('resumeOrCreateResponse 응답 복원', () => {
     ).resolves.toMatchObject({ currentStepId: 'step-3' });
   });
 
-  it('컨택 invite 경로 in_progress 회복도 저장된 답과 currentStepId를 반환한다', async () => {
+  async function mockContactRow(row: Record<string, unknown>) {
     const { findContactByInviteToken } = await import(
       '@/lib/duplicate-detection/invite-lookup'
     );
@@ -97,21 +97,26 @@ describe('resumeOrCreateResponse 응답 복원', () => {
       contactTargetId: 'contact-1',
       isTest: false,
     } as Awaited<ReturnType<typeof findContactByInviteToken>>);
-    const limitMock = vi.fn().mockResolvedValue([
-      {
-        id: 'response-1',
-        status: 'in_progress',
-        isTest: false,
-        versionId: 'version-1',
-        questionResponses: { q1: '저장된 답' },
-        currentStepId: 'step-3',
-      },
-    ]);
+    const limitMock = vi.fn().mockResolvedValue([row]);
     selectMock.mockReturnValue({
       from: vi.fn(() => ({
         where: vi.fn(() => ({ limit: limitMock })),
       })),
     });
+  }
+
+  const contactRowBase = {
+    id: 'response-1',
+    status: 'in_progress',
+    isTest: false,
+    sessionId: 'saved-session',
+    versionId: 'version-1',
+    questionResponses: { q1: '저장된 답' },
+    currentStepId: 'step-3',
+  };
+
+  it('컨택 invite 경로 in_progress 회복도 저장된 답과 currentStepId를 반환한다', async () => {
+    await mockContactRow(contactRowBase);
 
     await expect(
       resumeOrCreateResponse({
@@ -123,5 +128,31 @@ describe('resumeOrCreateResponse 응답 복원', () => {
       questionResponses: { q1: '저장된 답' },
       currentStepId: 'step-3',
     });
+  });
+
+  it('컨택 경로 세션 불일치면 답과 currentStepId를 반환하지 않는다 - invite URL 유출 방어', async () => {
+    await mockContactRow(contactRowBase);
+
+    const result = await resumeOrCreateResponse({
+      surveyId: 'survey-1',
+      sessionId: 'attacker-session',
+      inviteToken: 'invite-1',
+    });
+    expect(result).toMatchObject({ id: 'response-1', status: 'in_progress' });
+    expect(result).not.toHaveProperty('questionResponses');
+    expect(result).not.toHaveProperty('currentStepId');
+  });
+
+  it('컨택 경로 버전 불일치면 답과 currentStepId를 반환하지 않는다 - 구버전 답 주입 차단', async () => {
+    await mockContactRow({ ...contactRowBase, versionId: 'version-0' });
+
+    const result = await resumeOrCreateResponse({
+      surveyId: 'survey-1',
+      sessionId: 'saved-session',
+      inviteToken: 'invite-1',
+    });
+    expect(result).toMatchObject({ id: 'response-1', status: 'in_progress' });
+    expect(result).not.toHaveProperty('questionResponses');
+    expect(result).not.toHaveProperty('currentStepId');
   });
 });

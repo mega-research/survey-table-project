@@ -5,7 +5,7 @@ import * as Sentry from '@sentry/nextjs';
 import sharp from 'sharp';
 
 import { getCurrentUser } from '@/lib/auth';
-import { isAdminUserAllowed } from '@/lib/auth/admin-allowlist';
+import { isAdminOrGuestGrantHolder } from '@/lib/auth/guest-grants';
 import {
   imageKindToExt,
   sanitizeImageExt,
@@ -84,9 +84,10 @@ export async function POST(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
     }
-    // admin allowlist 가드 — oRPC authed 와 동일 정책. ADMIN_USER_IDS 로 어드민을
-    // 잠갔을 때 임의 인증사용자의 R2 업로드(스토리지/콘텐츠 호스팅 남용)를 차단.
-    if (!isAdminUserAllowed(user.id)) {
+    // admin 또는 게스트 grant 보유 가드 — mail-attachment 라우트와 동일 정책.
+    // 게스트도 허용 경로(메일 템플릿 등) 리치에디터에서 본문 이미지를 올린다.
+    // ADMIN_USER_IDS 로 잠갔을 때 임의 인증사용자의 R2 업로드 남용은 계속 차단.
+    if (!isAdminOrGuestGrantHolder(user.id)) {
       return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
     }
 
