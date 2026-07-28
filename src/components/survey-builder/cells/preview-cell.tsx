@@ -2,7 +2,7 @@
 
 import React from 'react';
 
-import { Image, Video } from 'lucide-react';
+import { Image as ImageIcon, Video } from 'lucide-react';
 
 import type { TableCell } from '@/types/survey';
 import { getCellTextClassName } from '@/utils/cell-style';
@@ -104,7 +104,7 @@ export const PreviewCell = React.memo(function PreviewCell({
         <ImageCell cell={cell} cellResponse={undefined} onUpdateValue={() => {}} />
       ) : (
         <div className="flex items-center gap-2 text-gray-500">
-          <Image className="h-4 w-4" />
+          <ImageIcon className="h-4 w-4" />
           <span className="text-sm">이미지 없음</span>
         </div>
       );

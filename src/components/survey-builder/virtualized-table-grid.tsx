@@ -39,8 +39,8 @@ interface VirtualizedRowProps {
   estimatedHeight: number;
   questionId: string;
   isTestMode: boolean;
-  value?: Record<string, any> | undefined;
-  onChange?: ((value: Record<string, any>) => void) | undefined;
+  value?: Record<string, unknown> | undefined;
+  onChange?: ((value: Record<string, unknown>) => void) | undefined;
   sentinelRef: (el: HTMLElement | null) => void;
   measureRef: (el: HTMLElement | null) => void;
   stickyInfo?: StickyLeftInfo | undefined;
@@ -160,8 +160,8 @@ interface VirtualizedTableGridProps {
   rowCompletionMap: Map<string, boolean>;
   rowGridMap: Map<string, number>;
   isTestMode?: boolean | undefined;
-  value?: Record<string, any> | undefined;
-  onChange?: ((value: Record<string, any>) => void) | undefined;
+  value?: Record<string, unknown> | undefined;
+  onChange?: ((value: Record<string, unknown>) => void) | undefined;
   renderSelectorRows?: (() => React.ReactNode) | undefined;
   gridTemplateCols: string;
   totalWidth: number;

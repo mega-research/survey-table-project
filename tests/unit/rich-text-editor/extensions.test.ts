@@ -1,4 +1,4 @@
-import { Editor, generateHTML, generateJSON } from '@tiptap/core';
+import { Editor, generateHTML, generateJSON, type JSONContent } from '@tiptap/core';
 import { describe, expect, it } from 'vitest';
 
 import { createUnifiedExtensions } from '@/components/ui/rich-text-editor/extensions';
@@ -24,9 +24,9 @@ describe('createUnifiedExtensions', () => {
       const j1 = generateJSON(styleOnly, exts);
       const j2 = generateJSON(dataAttr, exts);
       // table > tableRow > tableCell (plan 의 depth+1 경로는 paragraph 노드였음, 수정)
-      const findCell = (j: any) => j.content[0].content[0].content[0];
-      expect(findCell(j1).attrs.backgroundColor).toBeTruthy();
-      expect(findCell(j2).attrs.backgroundColor).toBeTruthy();
+      const findCell = (j: JSONContent) => j.content?.[0]?.content?.[0]?.content?.[0];
+      expect(findCell(j1)?.attrs?.['backgroundColor']).toBeTruthy();
+      expect(findCell(j2)?.attrs?.['backgroundColor']).toBeTruthy();
     });
 
     it('colwidth attr가 round-trip 으로 보존된다', () => {

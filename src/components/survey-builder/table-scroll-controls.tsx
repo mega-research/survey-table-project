@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
@@ -54,6 +54,8 @@ export function TableScrollControls({
   const trackRef = useRef<HTMLDivElement>(null);
   const thumbRef = useRef<HTMLDivElement>(null);
   const [needsScroll, setNeedsScroll] = useState(false);
+  // aria-controls 대상: 스크롤 컨테이너에 id가 없으면 부여
+  const scrollAreaId = useId();
 
   // 현재 가시 범위를 썸 위치·크기로 시각화 (DOM 직접 조작으로 리렌더 0)
   // 의존성에 needsScroll 포함 → false→true 전환 시점에 재실행되어
@@ -61,12 +63,18 @@ export function TableScrollControls({
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
+    if (!el.id) el.id = scrollAreaId;
 
     const update = () => {
       const { scrollLeft, scrollWidth, clientWidth } = el;
       const active = scrollWidth - clientWidth > 1;
       setNeedsScroll((prev) => (prev === active ? prev : active));
       if (!active) return;
+      // aria-valuenow도 썸과 같이 DOM 직접 갱신 (스크롤마다 리렌더 방지)
+      trackRef.current?.setAttribute(
+        'aria-valuenow',
+        String(Math.round((scrollLeft / (scrollWidth - clientWidth)) * 100)),
+      );
       const thumb = thumbRef.current;
       if (!thumb) return;
       thumb.style.width = `${(clientWidth / scrollWidth) * 100}%`;
@@ -90,7 +98,7 @@ export function TableScrollControls({
       window.removeEventListener('resize', update);
       ro.disconnect();
     };
-  }, [scrollRef, needsScroll]);
+  }, [scrollRef, needsScroll, scrollAreaId]);
 
   const scrollByStep = useCallback(
     (delta: number) => {
@@ -170,6 +178,8 @@ export function TableScrollControls({
         role="scrollbar"
         aria-orientation="horizontal"
         aria-label="가로 스크롤"
+        aria-controls={scrollAreaId}
+        aria-valuenow={0}
         onClick={handleTrackClick}
         className="relative h-1.5 flex-1 cursor-pointer rounded-full bg-gray-200"
       >

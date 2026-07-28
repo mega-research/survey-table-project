@@ -35,8 +35,8 @@ interface UseDynamicRowsParams {
   hiddenGroupIds?: Set<string> | undefined;
   dynamicRowConfigs?: DynamicRowGroupConfig[] | undefined;
   isTestMode: boolean;
-  value?: Record<string, any> | undefined;
-  onChange?: ((v: Record<string, any>) => void) | undefined;
+  value?: Record<string, unknown> | undefined;
+  onChange?: ((v: Record<string, unknown>) => void) | undefined;
   headerRowCount: number;
 }
 
@@ -49,7 +49,7 @@ interface UseDynamicRowsReturn {
   expandedGroupRows: Map<string, TableRow[]>;
   rowCompletionMap: Map<string, boolean>;
   // 응답·선택 상태
-  currentResponse: Record<string, any>;
+  currentResponse: Record<string, unknown>;
   groupConfigMap: Map<string, DynamicRowGroupConfig>;
   dynamicRows: TableRow[];
   hasDynamicRows: boolean;

@@ -537,9 +537,14 @@ export function useResponseLifecycle({
         const exposedRowIds = visibleQuestions
           .filter((q) => q.type === 'table' && q.tableRowsData)
           .flatMap((q) => {
-            const qResponse = (responses as Record<string, any>)?.[q.id];
+            // 테이블 응답은 셀 id 키의 동적 객체 — 객체 여부를 좁힌 뒤 선택 행 id 를 꺼낸다
+            const qResponseRaw = responses[q.id];
+            const qResponse =
+              typeof qResponseRaw === 'object' && qResponseRaw !== null
+                ? (qResponseRaw as Record<string, unknown>)
+                : undefined;
             const selectedDynamicIds = new Set<string>(
-              (qResponse?.__selectedRowIds as string[]) ?? [],
+              (qResponse?.['__selectedRowIds'] as string[] | undefined) ?? [],
             );
             const enabledGroupIds = new Set(
               (q.dynamicRowConfigs ?? [])

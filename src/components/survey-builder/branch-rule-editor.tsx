@@ -153,6 +153,7 @@ export function BranchRuleEditor({
                     role="combobox"
                     aria-expanded={open}
                     aria-haspopup="listbox"
+                    aria-controls="branch-rule-question-listbox"
                     aria-label={
                       targetQuestionId
                         ? `선택된 질문: ${
@@ -218,7 +219,7 @@ export function BranchRuleEditor({
                         className="border-0 bg-transparent text-sm placeholder:text-gray-500 focus:ring-0"
                       />
                     </div>
-                    <CommandList className="max-h-64">
+                    <CommandList id="branch-rule-question-listbox" className="max-h-64">
                       <CommandEmpty className="py-6 text-center text-gray-500">
                         <div className="flex flex-col items-center gap-2">
                           <ArrowRight className="h-8 w-8 text-gray-300" />

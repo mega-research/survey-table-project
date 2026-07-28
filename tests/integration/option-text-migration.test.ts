@@ -420,8 +420,8 @@ describe('migrateSnapshotQuestions', () => {
                 {
                   id: 'txt1',
                   type: 'text',
-                  allowOtherOption: true,  // legacy garbage data
-                } as any,  // text 셀에 allowOtherOption 은 비정상이지만 방어
+                  allowOtherOption: true, // legacy garbage data — text 셀에 allowOtherOption 은 비정상이지만 방어
+                },
               ],
             },
           ],

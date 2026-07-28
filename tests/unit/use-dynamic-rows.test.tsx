@@ -64,7 +64,7 @@ function setup(props: HookProps = {}) {
         dynamicRowConfigs: p.dynamicRowConfigs,
         isTestMode: p.isTestMode ?? false,
         value: p.value,
-        onChange: p.onChange as ((v: Record<string, any>) => void) | undefined,
+        onChange: p.onChange as ((v: Record<string, unknown>) => void) | undefined,
         headerRowCount: p.headerRowCount ?? 1,
       }),
     { initialProps: props },

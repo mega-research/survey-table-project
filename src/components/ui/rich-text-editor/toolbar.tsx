@@ -117,7 +117,7 @@ export function Toolbar({ editor, variableCatalog, onPickImage, onPickLink, onPi
 
       <select
         className="h-8 rounded-md border border-gray-200 bg-white px-1.5 text-xs"
-        onChange={(e) => (editor.chain().focus() as any).setFontSize(`${e.target.value}px`).run()}
+        onChange={(e) => editor.chain().focus().setFontSize(`${e.target.value}px`).run()}
         defaultValue="14"
         aria-label="폰트 크기"
       >

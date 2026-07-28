@@ -217,10 +217,6 @@ if (_isProd && process.env['SEED_ALLOW_PROD'] !== 'true') {
 }
 
 // === 쿼터 배분 계획 ===
-interface CellAssignment {
-  /** dimension 순서의 categoryIds. null 이면 쿼터 미분류(무제한 조합). */
-  categoryIds: string[];
-}
 
 /**
  * 완료 응답 수만큼 셀 배분 목록 생성.

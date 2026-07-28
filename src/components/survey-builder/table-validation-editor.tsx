@@ -459,7 +459,6 @@ export function TableValidationEditor({
                             setRules((prev) =>
                               prev.map((r) => {
                                 if (r.id !== rule.id) return r;
-                                // eslint-disable-next-line @typescript-eslint/no-unused-vars
                                 const { additionalConditions: _ac, ...rest } = r;
                                 return rest;
                               }),
@@ -579,7 +578,6 @@ export function TableValidationEditor({
                             setRules((prev) =>
                               prev.map((r) => {
                                 if (r.id !== rule.id) return r;
-                                // eslint-disable-next-line @typescript-eslint/no-unused-vars
                                 const { targetQuestionMap: _tqm, ...rest } = r;
                                 return rest;
                               }),

@@ -19,7 +19,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import {
   GripVertical,
-  Image,
+  Image as ImageIcon,
   Plus,
   Settings,
   Table,
@@ -344,7 +344,11 @@ export function QuestionBasicTab({
                   onChange={(e) =>
                     setFormData((prev) => ({
                       ...prev,
-                      spssVarType: (e.target.value || null) as any,
+                      // 빈 값(자동)은 null 로 저장해 DB 오버라이드를 해제한다.
+                      // select 옵션이 유니온 멤버로 한정되므로 좁히기 단언만 사용.
+                      spssVarType: (e.target.value || null) as NonNullable<
+                        Question['spssVarType']
+                      >,
                     }))
                   }
                   className="mt-2 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
@@ -374,7 +378,10 @@ export function QuestionBasicTab({
                   onChange={(e) =>
                     setFormData((prev) => ({
                       ...prev,
-                      spssMeasure: (e.target.value || null) as any,
+                      // 빈 값(자동)은 null 로 저장해 DB 오버라이드를 해제한다.
+                      spssMeasure: (e.target.value || null) as NonNullable<
+                        Question['spssMeasure']
+                      >,
                     }))
                   }
                   className="mt-2 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
@@ -1287,7 +1294,7 @@ export function QuestionBasicTab({
             className="flex w-full items-center justify-center space-x-1 sm:w-auto"
             disabled
           >
-            <Image className="h-4 w-4" />
+            <ImageIcon className="h-4 w-4" />
             <span>이미지 추가</span>
             <span className="ml-1 text-xs text-gray-400">(준비 중)</span>
           </Button>

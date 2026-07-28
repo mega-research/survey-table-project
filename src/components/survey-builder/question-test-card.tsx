@@ -487,7 +487,11 @@ function QuestionTestInput({
           columns={question.tableColumns}
           rows={question.tableRowsData}
           tableHeaderGrid={question.tableHeaderGrid}
-          value={typeof value === 'object' && value !== null ? value : undefined}
+          value={
+            typeof value === 'object' && value !== null
+              ? (value as Record<string, unknown>)
+              : undefined
+          }
           onChange={onChange}
           isTestMode={true}
           className="border-0 shadow-none"

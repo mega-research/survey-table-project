@@ -30,7 +30,7 @@ interface SurveyListUIState {
 
 export const useSurveyListStore = create<SurveyListUIState>()(
   devtools(
-    immer<SurveyListUIState>((set) => ({
+    immer((set) => ({
       searchQuery: '',
       selectedSurveyIds: [],
       sortBy: 'updatedAt',
@@ -100,7 +100,7 @@ export const useSurveyListStore = create<SurveyListUIState>()(
           state.sortOrder = 'desc';
           state.filterByPublic = null;
         }),
-    })) as any,
+    })),
     {
       name: 'survey-list-ui-store',
     },

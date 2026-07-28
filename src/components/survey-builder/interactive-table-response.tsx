@@ -224,8 +224,8 @@ interface RenderRowCellsProps {
   completed: boolean;
   questionId: string;
   isTestMode: boolean;
-  value?: Record<string, any> | undefined;
-  onChange?: ((v: Record<string, any>) => void) | undefined;
+  value?: Record<string, unknown> | undefined;
+  onChange?: ((v: Record<string, unknown>) => void) | undefined;
   stickyInfo?: StickyLeftInfo | undefined;
   errorCellIds?: Set<string> | undefined;
   applyCellBackground: boolean;
@@ -317,8 +317,8 @@ interface InteractiveTableResponseProps {
   columns?: TableColumn[] | undefined;
   rows?: TableRow[] | undefined;
   tableHeaderGrid?: HeaderCell[][] | undefined;
-  value?: Record<string, any> | undefined;
-  onChange?: (value: Record<string, any>) => void;
+  value?: Record<string, unknown> | undefined;
+  onChange?: (value: Record<string, unknown>) => void;
   className?: string | undefined;
   isTestMode?: boolean | undefined;
   allResponses?: Record<string, unknown> | undefined;

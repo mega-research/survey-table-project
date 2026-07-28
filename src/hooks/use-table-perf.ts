@@ -66,12 +66,16 @@ export function useScrollFps(
   const rafId = useRef<number>(0);
   const isScrolling = useRef(false);
 
-  const measureFrame = useCallback(() => {
-    frameTimestamps.current.push(performance.now());
-    if (isScrolling.current) {
-      rafId.current = requestAnimationFrame(measureFrame);
-    }
-  }, []);
+  const measureFrame = useCallback(
+    // 명명 함수 표현식: rAF 재귀 자기참조가 외부 const 선언(TDZ)에 묶이지 않도록 한다
+    function measureFrame() {
+      frameTimestamps.current.push(performance.now());
+      if (isScrolling.current) {
+        rafId.current = requestAnimationFrame(measureFrame);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!enabled) return;
@@ -153,6 +157,11 @@ export function printPerfComparison() {
 
 // 개발 콘솔에서 접근 가능하도록 전역 등록
 if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
-  (window as any).__tablePerfLog = getTablePerfLog;
-  (window as any).__tablePerfCompare = printPerfComparison;
+  // 개발용 전역 훅 — window 에 디버그 함수 두 개만 노출한다
+  const devWindow = window as Window & {
+    __tablePerfLog?: typeof getTablePerfLog;
+    __tablePerfCompare?: typeof printPerfComparison;
+  };
+  devWindow.__tablePerfLog = getTablePerfLog;
+  devWindow.__tablePerfCompare = printPerfComparison;
 }

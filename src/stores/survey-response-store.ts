@@ -53,7 +53,7 @@ interface SurveyResponseUIState {
 
 export const useSurveyResponseStore = create<SurveyResponseUIState>()(
   devtools(
-    immer<SurveyResponseUIState>((set, get) => ({
+    immer((set, get) => ({
       currentResponseId: null,
       currentQuestionIndex: 0,
       pendingResponses: {},
@@ -144,7 +144,7 @@ export const useSurveyResponseStore = create<SurveyResponseUIState>()(
           state.showValidationErrors = false;
           state.validationErrors = {};
         }),
-    })) as any,
+    })),
     {
       name: 'survey-response-ui-store',
     },

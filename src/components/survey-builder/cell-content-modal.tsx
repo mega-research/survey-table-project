@@ -16,7 +16,7 @@ import {
   CheckSquare,
   ChevronDown,
   Circle,
-  Image,
+  Image as ImageIcon,
   ListOrdered,
   PenLine,
   Tag,
@@ -740,7 +740,7 @@ export function CellContentModal({
               텍스트
             </TabsTrigger>
             <TabsTrigger value="image" className="flex items-center gap-2">
-              <Image className="h-4 w-4" />
+              <ImageIcon className="h-4 w-4" />
               이미지
             </TabsTrigger>
             <TabsTrigger value="video" className="flex items-center gap-2">

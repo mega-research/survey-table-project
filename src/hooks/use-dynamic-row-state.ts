@@ -10,12 +10,12 @@ interface UseDynamicRowStateParams {
   rows: TableRow[];
   dynamicRowConfigs?: DynamicRowGroupConfig[] | undefined;
   isTestMode: boolean;
-  value?: Record<string, any> | undefined;
-  onChange?: ((v: Record<string, any>) => void) | undefined;
+  value?: Record<string, unknown> | undefined;
+  onChange?: ((v: Record<string, unknown>) => void) | undefined;
 }
 
 interface UseDynamicRowStateReturn {
-  currentResponse: Record<string, any>;
+  currentResponse: Record<string, unknown>;
   groupConfigMap: Map<string, DynamicRowGroupConfig>;
   dynamicRows: TableRow[];
   hasDynamicRows: boolean;
@@ -53,10 +53,10 @@ export function useDynamicRowState({
   const currentResponse = useMemo(() => {
     if (isTestMode) {
       return typeof testQuestionResponse === 'object' && testQuestionResponse !== null
-        ? (testQuestionResponse as Record<string, any>)
+        ? (testQuestionResponse as Record<string, unknown>)
         : {};
     }
-    return (value || {}) as Record<string, any>;
+    return value || {};
   }, [isTestMode, testQuestionResponse, value]);
 
   const groupConfigMap = useMemo(() => {

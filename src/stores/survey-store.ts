@@ -149,13 +149,9 @@ const createDefaultSurvey = (): Survey => ({
   createdAt: new Date(),
   updatedAt: new Date(),
 });
-const withDevtools = process.env.NODE_ENV === 'development'
-  ? <T,>(fn: T) => devtools(fn as any, { name: 'survey-builder-store' })
-  : <T,>(fn: T) => fn;
-
 export const useSurveyBuilderStore = create<SurveyBuilderState>()(
-  withDevtools(
-    immer<SurveyBuilderState>((set, get) => ({
+  devtools(
+    immer((set, get) => ({
       currentSurvey: createDefaultSurvey(),
       isDirty: false,
       isSavedToDb: false,
@@ -732,8 +728,9 @@ export const useSurveyBuilderStore = create<SurveyBuilderState>()(
           if (question) Object.assign(question, updates);
         });
       },
-    })) as any,
-  ) as any,
+    })),
+    { name: 'survey-builder-store', enabled: process.env.NODE_ENV === 'development' },
+  ),
 );
 
 /**

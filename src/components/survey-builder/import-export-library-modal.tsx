@@ -94,7 +94,7 @@ export function ImportExportLibraryModal({ open, onOpenChange }: ImportExportLib
         setImportSuccess(false);
         onOpenChange(false);
       }, 1500);
-    } catch (error) {
+    } catch {
       setImportError('유효하지 않은 데이터입니다.');
     }
   };

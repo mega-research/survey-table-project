@@ -272,6 +272,7 @@ export function CellImageEditor({ imageUrl, onImageUrlChange }: CellImageEditorP
             </Button>
           </div>
           <div className="overflow-hidden rounded-lg border bg-white">
+            {/* eslint-disable-next-line @next/next/no-img-element -- R2 사용자 업로드 이미지(크기 미상), next/image 최적화 비용 회피 */}
             <img
               key={previewUrl}
               src={previewUrl || ''}
@@ -300,6 +301,7 @@ export function CellImageEditor({ imageUrl, onImageUrlChange }: CellImageEditorP
           </div>
           {previewUrl && (
             <div className="overflow-hidden rounded-lg border bg-white">
+              {/* eslint-disable-next-line @next/next/no-img-element -- R2 사용자 업로드 이미지(크기 미상), next/image 최적화 비용 회피 */}
               <img
                 key={previewUrl}
                 src={previewUrl}
@@ -345,6 +347,7 @@ export function CellImageEditor({ imageUrl, onImageUrlChange }: CellImageEditorP
                   <p className="text-sm text-red-500">이미지를 불러올 수 없습니다.</p>
                 </div>
               ) : (
+                // eslint-disable-next-line @next/next/no-img-element -- R2 사용자 업로드 이미지(크기 미상), next/image 최적화 비용 회피
                 <img
                   src={imageUrl}
                   alt="셀 내용 이미지 미리보기"

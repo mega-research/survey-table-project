@@ -32,7 +32,7 @@ interface QuestionLibraryUIState {
 
 export const useQuestionLibraryStore = create<QuestionLibraryUIState>()(
   devtools(
-    immer<QuestionLibraryUIState>((set) => ({
+    immer((set) => ({
       searchQuery: '',
       selectedCategory: null,
       selectedTag: null,
@@ -102,7 +102,7 @@ export const useQuestionLibraryStore = create<QuestionLibraryUIState>()(
           state.selectedCategory = null;
           state.selectedTag = null;
         }),
-    })) as any,
+    })),
     {
       name: 'question-library-ui-store',
     },

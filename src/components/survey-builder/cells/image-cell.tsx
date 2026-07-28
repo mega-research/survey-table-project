@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 
-import { Image } from 'lucide-react';
+import { Image as ImageIcon } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { getCellTextClassName } from '@/utils/cell-style';
@@ -18,7 +18,7 @@ export const ImageCell = React.memo(function ImageCell({
   if (!cell.imageUrl) {
     return (
       <div className="flex items-center gap-2 text-gray-500">
-        <Image className="h-4 w-4" />
+        <ImageIcon className="h-4 w-4" />
         <span className="text-sm">이미지 없음</span>
       </div>
     );
@@ -29,10 +29,11 @@ export const ImageCell = React.memo(function ImageCell({
       <div key={cell.imageUrl}>
         {failedImageUrl === cell.imageUrl ? (
           <div className="flex items-center gap-1 text-sm text-red-500">
-            <Image className="h-4 w-4" />
+            <ImageIcon className="h-4 w-4" />
             <span>이미지 오류</span>
           </div>
         ) : (
+          // eslint-disable-next-line @next/next/no-img-element -- R2 사용자 업로드 이미지(크기 미상), next/image 최적화 비용 회피
           <img
             src={cell.imageUrl}
             alt="셀 이미지"

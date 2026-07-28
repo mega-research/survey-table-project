@@ -18,7 +18,7 @@ function makeQuestion(
 }
 
 function makeSubmission(
-  questionResponses: Record<string, any>,
+  questionResponses: Record<string, unknown>,
   overrides?: Partial<SurveySubmission>,
 ): SurveySubmission {
   return {

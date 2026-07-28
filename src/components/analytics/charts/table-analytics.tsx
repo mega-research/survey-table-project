@@ -80,7 +80,7 @@ export function TableAnalyticsChart({ data }: TableAnalyticsChartProps) {
 
   // 차트 데이터 생성
   const stackChartData = data.rowSummary.map((row) => {
-    const item: Record<string, any> = {
+    const item: Record<string, string | number> = {
       name: row.rowLabel.length > 20 ? row.rowLabel.slice(0, 20) + '...' : row.rowLabel,
       fullName: row.rowLabel,
     };
@@ -117,7 +117,7 @@ export function TableAnalyticsChart({ data }: TableAnalyticsChartProps) {
   }> = [];
 
   data.cellAnalytics?.forEach((row) => {
-    row.cells.forEach((cell: any) => {
+    row.cells.forEach((cell) => {
       if (cell.textResponses && cell.textResponses.length > 0) {
         textResponseData.push({
           rowLabel: row.rowLabel,

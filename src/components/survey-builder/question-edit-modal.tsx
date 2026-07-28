@@ -174,38 +174,48 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
         ...(question.description !== undefined ? { description: question.description } : {}),
         required: question.required,
         ...(question.groupId !== undefined ? { groupId: question.groupId } : {}),
-        questionCode: (question as any).questionCode || '',
-        isCustomSpssVarName: (question as any).isCustomSpssVarName || false,
-        exportLabel: (question as any).exportLabel || '',
+        questionCode: question.questionCode || '',
+        isCustomSpssVarName: question.isCustomSpssVarName || false,
+        exportLabel: question.exportLabel || '',
         options: optionsWithDeepBranchRule,
-        selectLevels: (question as any).selectLevels ? [...(question as any).selectLevels] : [],
-        tableTitle: (question as any).tableTitle,
-        tableColumns: (question as any).tableColumns ? [...(question as any).tableColumns] : [],
-        tableRowsData: (question as any).tableRowsData ? [...(question as any).tableRowsData] : [],
-        tableHeaderGrid: (question as any).tableHeaderGrid || undefined,
-        allowOtherOption: (question as any).allowOtherOption || false,
-        optionsColumns: (question as any).optionsColumns,
-        optionsAlign: (question as any).optionsAlign,
-        mobileOptionsColumns: (question as any).mobileOptionsColumns,
-        rankingConfig: (question as any).rankingConfig,
-        minSelections: (question as any).minSelections,
-        maxSelections: (question as any).maxSelections,
-        noticeContent: (question as any).noticeContent || '',
-        requiresAcknowledgment: (question as any).requiresAcknowledgment || false,
+        selectLevels: question.selectLevels ? [...question.selectLevels] : [],
+        // exactOptionalPropertyTypes 하에서 undefined 명시 대입이 불가하므로
+        // 값이 있을 때만 키를 싣는다 (없으면 키 부재 = 기존 undefined 와 동등).
+        ...(question.tableTitle !== undefined ? { tableTitle: question.tableTitle } : {}),
+        tableColumns: question.tableColumns ? [...question.tableColumns] : [],
+        tableRowsData: question.tableRowsData ? [...question.tableRowsData] : [],
+        ...(question.tableHeaderGrid !== undefined
+          ? { tableHeaderGrid: question.tableHeaderGrid }
+          : {}),
+        allowOtherOption: question.allowOtherOption || false,
+        ...(question.optionsColumns !== undefined
+          ? { optionsColumns: question.optionsColumns }
+          : {}),
+        ...(question.optionsAlign !== undefined ? { optionsAlign: question.optionsAlign } : {}),
+        ...(question.mobileOptionsColumns !== undefined
+          ? { mobileOptionsColumns: question.mobileOptionsColumns }
+          : {}),
+        ...(question.rankingConfig !== undefined ? { rankingConfig: question.rankingConfig } : {}),
+        ...(question.minSelections !== undefined ? { minSelections: question.minSelections } : {}),
+        ...(question.maxSelections !== undefined ? { maxSelections: question.maxSelections } : {}),
+        noticeContent: question.noticeContent || '',
+        requiresAcknowledgment: question.requiresAcknowledgment || false,
         placeholder: question.placeholder || '',
         piiEncrypted: question.piiEncrypted ?? false,
         defaultValueTemplate: question.defaultValueTemplate ?? null,
         inputType: question.inputType ?? 'text',
         ...(question.emptyDefault !== undefined ? { emptyDefault: question.emptyDefault } : {}),
         ...(question.numberFormat !== undefined ? { numberFormat: question.numberFormat } : {}),
-        tableValidationRules: (question as any).tableValidationRules || [],
-        dynamicRowConfigs: (question as any).dynamicRowConfigs || undefined,
+        tableValidationRules: question.tableValidationRules || [],
+        ...(question.dynamicRowConfigs !== undefined
+          ? { dynamicRowConfigs: question.dynamicRowConfigs }
+          : {}),
         hideTitle: question.hideTitle ?? false,
         ...(question.displayCondition !== undefined
           ? { displayCondition: question.displayCondition }
           : {}),
-        spssVarType: (question as any).spssVarType,
-        spssMeasure: (question as any).spssMeasure,
+        ...(question.spssVarType !== undefined ? { spssVarType: question.spssVarType } : {}),
+        ...(question.spssMeasure !== undefined ? { spssMeasure: question.spssMeasure } : {}),
       });
 
       // 로컬 state 동기화 (이전 질문의 pending debounce 취소)
@@ -218,7 +228,7 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
         debouncedExportLabelRef.current = null;
       }
       setLocalTitle(question.title || '');
-      setLocalExportLabel((question as any).exportLabel || '');
+      setLocalExportLabel(question.exportLabel || '');
 
       // 옵션들 중 하나라도 branchRule이 있으면 조건부 분기 설정 표시
       // resolveChoiceOptions 는 manual 은 question.options, table-source 는 choice_opt 셀 파생
