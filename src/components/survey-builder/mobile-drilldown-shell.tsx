@@ -171,7 +171,13 @@ export function MobileDrilldownShell({
         <ChevronLeft className="h-4 w-4" />
         뒤로
       </button>
-      <span className="min-w-0 truncate text-sm font-semibold text-gray-900">{label}</span>
+      {/* key={label}: 라벨이 바뀔 때 리마운트되어 플래시 애니메이션 재생 — 섹션 전환 인지용 */}
+      <span
+        key={label}
+        className="min-w-0 truncate rounded-lg px-2.5 py-2.5 text-sm font-semibold text-gray-900 animate-[drilldown-crumb-flash_1s_ease-out]"
+      >
+        {label}
+      </span>
     </div>
   );
 
