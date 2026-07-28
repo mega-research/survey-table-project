@@ -101,6 +101,7 @@ export async function saveSurveyDiff(
           maxResponses: metadata.settings.maxResponses ?? null,
           thankYouMessage: metadata.settings.thankYouMessage,
           requireInviteToken: metadata.settings.requireInviteToken ?? false,
+          forceWideLayout: metadata.settings.forceWideLayout ?? false,
           responseHeader: promotedResponseHeader ?? null,
           updatedAt: new Date(),
         })
@@ -376,6 +377,7 @@ export async function saveSurveyWithDetails(
         maxResponses: surveyData.settings.maxResponses ?? null,
         thankYouMessage: surveyData.settings.thankYouMessage,
         requireInviteToken: surveyData.settings.requireInviteToken ?? false,
+        forceWideLayout: surveyData.settings.forceWideLayout ?? false,
         responseHeader: promotedResponseHeader ?? null,
         updatedAt: new Date(),
       };
@@ -417,6 +419,7 @@ export async function saveSurveyWithDetails(
         maxResponses: surveyData.settings.maxResponses ?? null,
         thankYouMessage: surveyData.settings.thankYouMessage,
         requireInviteToken: surveyData.settings.requireInviteToken ?? false,
+        forceWideLayout: surveyData.settings.forceWideLayout ?? false,
         responseHeader: promotedResponseHeader ?? null,
         lookups: surveyData.lookups ?? [],
       });

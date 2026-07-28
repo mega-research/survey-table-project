@@ -32,6 +32,7 @@ export interface SurveyVersionSnapshot {
     maxResponses?: number;
     thankYouMessage: string;
     requireInviteToken?: boolean;
+    forceWideLayout?: boolean;
     responseHeader?: SurveyResponseHeaderConfig;
   };
 }

@@ -618,6 +618,9 @@ export interface SurveySettings {
   thankYouMessage: string;
   // 컨택 attrs 토큰 — invite token 강제 (0022 마이그레이션)
   requireInviteToken?: boolean;
+  // 화면 너비 — true 면 응답 페이지 컨테이너를 표 유무와 무관하게 항상 넓게(max-w-7xl).
+  // false/미설정 = 표 총폭 기준 자동 판정 (0063 마이그레이션)
+  forceWideLayout?: boolean;
   responseHeader?: SurveyResponseHeaderConfig;
   // 개인정보 보관기한 — 'YYYY-MM-DD' 날짜 문자열(해당일 포함 보유). null/미설정 = 파기하지 않음.
   piiRetentionUntil?: string | null;

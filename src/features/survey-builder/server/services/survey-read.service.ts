@@ -242,6 +242,7 @@ export async function getSurveyForResponse(
           thankYouMessage: string;
           // publish 시점 freeze 값. 이전 publish 본은 undefined → 현재 surveys 행으로 fallback.
           requireInviteToken?: boolean;
+          forceWideLayout?: boolean;
           responseHeader?: SurveyType['settings']['responseHeader'];
         };
         // T17 이후 snapshot 에 포함. 이전 publish 본은 undefined → DB 의 현재 lookups 로 fallback.
@@ -282,6 +283,8 @@ export async function getSurveyForResponse(
           // 빌더 draft 의 invite-token 토글이 live 응답 페이지에 새지 않도록 현재 surveys 행으로
           // 덮어쓰지 않는다. snapshot 에 값이 없는 이전 publish 본만 현재 행으로 fallback.
           requireInviteToken: snapshot.settings.requireInviteToken ?? survey.requireInviteToken,
+          // snapshot 기반 원칙 동일: freeze 값 우선, 없는 이전 publish 본만 현재 행으로 fallback.
+          forceWideLayout: snapshot.settings.forceWideLayout ?? survey.forceWideLayout,
           // snapshot 기반 원칙 동일: published 응답 페이지는 freeze 된 snapshot 값을 따른다.
           // 값이 없는 이전 publish 본은 현재 surveys 행이 아니라 새 기본형으로 fallback.
           responseHeader: normalizeResponseHeaderConfig(snapshot.settings.responseHeader),

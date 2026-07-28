@@ -57,4 +57,29 @@ describe('resolveResponseContainerWidth', () => {
   it('threshold 상수는 718 이다', () => {
     expect(RESPONSE_WIDE_TABLE_THRESHOLD_PX).toBe(718);
   });
+
+  // 설문 설정 "화면 너비" 토글: on 이면 표 유무·총폭과 무관하게 항상 넓은 폭.
+  it('forceWide=true 면 표가 없어도, 좁은 표여도 항상 max-w-7xl', () => {
+    expect(resolveResponseContainerWidth([{ type: 'radio' }], { forceWide: true })).toBe(
+      'max-w-7xl',
+    );
+    expect(resolveResponseContainerWidth([], { forceWide: true })).toBe('max-w-7xl');
+    expect(
+      resolveResponseContainerWidth([{ type: 'table', tableColumns: [col(100)] }], {
+        forceWide: true,
+      }),
+    ).toBe('max-w-7xl');
+  });
+
+  it('forceWide=false/미지정이면 기존 표폭 규칙을 따른다', () => {
+    expect(resolveResponseContainerWidth([{ type: 'radio' }], { forceWide: false })).toBe(
+      'max-w-4xl',
+    );
+    expect(
+      resolveResponseContainerWidth(
+        [{ type: 'table', tableColumns: [col(400), col(400)] }],
+        { forceWide: false },
+      ),
+    ).toBe('max-w-7xl');
+  });
 });

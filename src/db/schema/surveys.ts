@@ -75,6 +75,9 @@ export const surveys = pgTable('surveys', {
   // 컨택 attrs 토큰 — invite token 강제 (0022 마이그레이션)
   requireInviteToken: boolean('require_invite_token').default(false).notNull(),
 
+  // 화면 너비 — 응답 페이지 컨테이너 항상 넓게(max-w-7xl) 강제 (0063 마이그레이션)
+  forceWideLayout: boolean('force_wide_layout').default(false).notNull(),
+
   // 버전 관리
   status: text('status').notNull().default('draft'), // 'draft' | 'published' | 'closed'
   currentVersionId: uuid('current_version_id'), // 현재 활성 배포 버전

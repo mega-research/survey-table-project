@@ -134,6 +134,19 @@ describe('buildSurveySnapshot', () => {
     expect(snapshot.settings.thankYouMessage).toBe('감사합니다!');
   });
 
+  it('forceWideLayout=true 를 스냅샷 settings 에 보존', () => {
+    const surveyWithWideLayout: Survey = {
+      ...mockSurvey,
+      settings: {
+        ...mockSurvey.settings,
+        forceWideLayout: true,
+      },
+    };
+    const snapshot = buildSurveySnapshot(surveyWithWideLayout);
+
+    expect(snapshot.settings.forceWideLayout).toBe(true);
+  });
+
   it('requireInviteToken=true 를 스냅샷 settings 에 보존', () => {
     const surveyWithInviteToken: Survey = {
       ...mockSurvey,

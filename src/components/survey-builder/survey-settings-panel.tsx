@@ -78,18 +78,24 @@ export const SurveySettingsPanel = React.memo(function SurveySettingsPanel({
                 className="rounded"
               />
             </div>
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <label className="text-sm text-gray-600">초대 링크 필수</label>
-                <p className="mt-1 text-xs text-gray-400">
-                  켜면 ?invite= 토큰 없이는 응답할 수 없습니다. 컨택리스트로 발송한 응답만 받고 싶을 때 사용하세요.
-                </p>
-              </div>
+            <div className="flex items-center justify-between">
+              <label className="text-sm text-gray-600">초대 링크 필수</label>
               <input
                 type="checkbox"
                 checked={surveySettings.requireInviteToken ?? false}
                 onChange={(e) => updateSurveySettings({ requireInviteToken: e.target.checked })}
-                className="mt-0.5 shrink-0 rounded"
+                className="rounded"
+              />
+            </div>
+            {/* 켜면 응답 페이지 컨테이너를 표 유무와 무관하게 항상 넓게(max-w-7xl),
+                끄면 표 총폭 기준 자동 판정 (기본) */}
+            <div className="flex items-center justify-between">
+              <label className="text-sm text-gray-600">화면 너비</label>
+              <input
+                type="checkbox"
+                checked={surveySettings.forceWideLayout ?? false}
+                onChange={(e) => updateSurveySettings({ forceWideLayout: e.target.checked })}
+                className="rounded"
               />
             </div>
           </div>

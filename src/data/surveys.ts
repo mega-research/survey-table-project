@@ -170,6 +170,7 @@ export async function getSurveyWithDetails(surveyId: string): Promise<SurveyType
         : {}),
       thankYouMessage: survey.thankYouMessage,
       requireInviteToken: survey.requireInviteToken,
+      forceWideLayout: survey.forceWideLayout,
       responseHeader: normalizeResponseHeaderConfig(survey.responseHeader),
     },
     lookups: survey.lookups ?? [],
