@@ -1336,11 +1336,12 @@ export function useTableEditor({
 
   // ── columnWidths (EditorTableRow에 안정적 참조 전달용) ──
 
+  // 라벨/코드 변경 시 재생성 방지: 너비만 키로 추적
+  const columnWidthsKey = currentColumns.map((col) => col.width).join(',');
   const columnWidths = useMemo(
     () => currentColumns.map((col) => col.width || 150),
-    // 라벨/코드 변경 시 재생성 방지: 너비만 추적
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [currentColumns.map((col) => col.width).join(',')],
+    [columnWidthsKey],
   );
 
   // ── selectedCellContext (CellContentModal용 useMemo) ──
