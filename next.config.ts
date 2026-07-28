@@ -54,11 +54,16 @@ const nextConfig: NextConfig = {
   // sharp 0.35.x 는 Turbopack/nft 가 libvips 공유 라이브러리(@img/sharp-libvips-*)를
   // Vercel 함수 번들에 넣지 못하는 업스트림 리그레션이 있어 런타임 dlopen 이 실패한다
   // (lovell/sharp#4567, ERR_DLOPEN_FAILED: libvips-cpp.so.8.18.3).
-  // pnpm 스토어의 @img+* 디렉토리 전체를 전 라우트에 강제 포함해 우회한다.
-  // sharp 가 /api/rpc(mail 서비스 경유)와 /admin RSC 페이지에도 번들되므로 키는 '/**'.
-  // sharp 수정 릴리스로 재현이 사라지면 이 블록은 제거할 것.
+  // libvips 패키지의 "실제" 스토어 디렉토리만 포함한다 — 와일드카드로 @img+* 전체를
+  // 잡으면 @img+sharp-linux-x64 스토어 안의 심링크 디렉토리를 통과한 경로까지 트레이스에
+  // 들어가 Vercel 패키징이 "invalid deployment package(symlinked directories)" 로 죽는다.
+  // 런타임 dlopen 은 sharp-linux-x64 스토어의 형제 심링크(RPATH $ORIGIN/../..) 를 타고
+  // 이 실제 디렉토리로 도달한다. sharp 가 /api/rpc(mail 서비스)와 /admin RSC 페이지에도
+  // 번들되므로 키는 '/**'. sharp 수정 릴리스로 재현이 사라지면 이 블록은 제거할 것.
   outputFileTracingIncludes: {
-    '/**': ['./node_modules/.pnpm/@img+*/**/*'],
+    '/**': [
+      './node_modules/.pnpm/@img+sharp-libvips-linux-x64@*/node_modules/@img/sharp-libvips-linux-x64/**/*',
+    ],
   },
 };
 
