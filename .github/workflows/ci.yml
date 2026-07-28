@@ -78,21 +78,16 @@ jobs:
       # 올라오면 해소된다.
       - name: 공급망 보안 감사 게이트
         env:
-          # 잔존 unfixable transitive high 취약점 allowlist (패키지 / 경유 상위 의존성)
-          # minimatch ReDoS: @sentry/nextjs · eslint toolchain · exceljs
-          # flatted DoS: eslint toolchain
-          # @grpc/grpc-js: inngest
-          # serialize-javascript RCE / rollup / fast-uri: @sentry/nextjs
-          # picomatch / vite / esbuild: vite·vitest·@tailwindcss/vite·@sentry/nextjs (dev toolchain)
-          # tmp: exceljs
-          # lodash: recharts · @tremor/react
+          # 잔존 unfixable transitive high 취약점 allowlist.
+          # 2026-07-28 대청소: 기존 17건은 전부 same-major 패치가 나와 package.json
+          # pnpm.overrides 로 승격(minimatch·flatted·@grpc/grpc-js·serialize-javascript·
+          # picomatch·rollup·tmp·lodash/lodash-es 등)했고, 미출현 5건은 제거. 아래 1건만 잔존.
+          #
+          # brace-expansion GHSA-mh99-v99m-4gvg: 패치가 5.0.8 뿐인데 minimatch 3/5/9 는
+          #   brace-expansion ^1/^2 요구라 강제 승격 시 런타임 파손. 각 라인 자체 ReDoS
+          #   패치(1.1.16/2.1.2, GHSA-3jxr 해결 라인)는 overrides 로 적용됨. dev/빌드 도구 경유.
           AUDIT_ALLOWLIST: >-
-            GHSA-23c5-xmqv-rm74 GHSA-25h7-pfq9-p65f GHSA-3ppc-4f35-3m26
-            GHSA-5375-pq7m-f5r2 GHSA-5c6j-r48x-rmvq GHSA-7r86-cg39-jmmj
-            GHSA-99f4-grh7-6pcq GHSA-c2c7-rcm5-vvqj GHSA-gv7w-rqvm-qjhr
-            GHSA-mw96-cpmx-2vgc GHSA-p9ff-h696-f583 GHSA-ph9p-34f9-6g65
-            GHSA-q3j6-qgpj-74h6 GHSA-r5fr-rjxr-66jc GHSA-rf6f-7fwh-wjgh
-            GHSA-v2wj-q39q-566r GHSA-v39h-62p7-jpjc
+            GHSA-mh99-v99m-4gvg
         run: |
           pnpm audit --audit-level=high --json > audit-report.json || true
           pnpm exec tsx .github/audit-gate.ts audit-report.json
