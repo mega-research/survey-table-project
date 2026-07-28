@@ -50,6 +50,16 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: false,
   },
+
+  // sharp 0.35.x 는 Turbopack/nft 가 libvips 공유 라이브러리(@img/sharp-libvips-*)를
+  // Vercel 함수 번들에 넣지 못하는 업스트림 리그레션이 있어 런타임 dlopen 이 실패한다
+  // (lovell/sharp#4567, ERR_DLOPEN_FAILED: libvips-cpp.so.8.18.3).
+  // pnpm 스토어의 @img+* 디렉토리 전체를 전 라우트에 강제 포함해 우회한다.
+  // sharp 가 /api/rpc(mail 서비스 경유)와 /admin RSC 페이지에도 번들되므로 키는 '/**'.
+  // sharp 수정 릴리스로 재현이 사라지면 이 블록은 제거할 것.
+  outputFileTracingIncludes: {
+    '/**': ['./node_modules/.pnpm/@img+*/**/*'],
+  },
 };
 
 // 4. Sentry 설정 적용 (기본값 유지)
