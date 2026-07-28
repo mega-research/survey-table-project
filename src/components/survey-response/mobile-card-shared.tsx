@@ -48,7 +48,7 @@ export function MobileOptionCard({
             {control}
           </span>
         )}
-        <div className="min-w-0 flex-1 text-[15px] font-semibold leading-snug text-gray-900">
+        <div className="min-w-0 flex-1 whitespace-pre-line text-[15px] font-semibold leading-snug text-gray-900">
           {label}
         </div>
       </div>

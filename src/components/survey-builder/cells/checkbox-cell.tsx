@@ -95,7 +95,7 @@ export const CheckboxCell = React.memo(function CheckboxCell({
               />
               <label
                 htmlFor={`${cell.id}-${option.id}`}
-                className={`text-base select-none ${
+                className={`text-base whitespace-pre-line select-none ${
                   disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
                 }`}
               >

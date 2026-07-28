@@ -42,6 +42,7 @@ import {
   isGroupedChoiceQuestion,
   isGroupedRankingQuestion,
 } from '@/utils/choice-group-helpers';
+import { toSingleLineLabel } from '@/utils/label-text';
 
 export interface SPSSExportColumn {
   spssVarName: string;
@@ -574,7 +575,30 @@ export function generateSPSSColumns(questions: QuestionVariant[]): SPSSExportCol
     }
   }
 
-  return columns;
+  // 옵션 라벨 줄바꿈은 표시 전용 — export 라벨(엑셀 헤더/코딩북 + sav radio-group
+  // value label)은 단일 행으로 정규화한다. 개별 push 지점이 아니라 여기 한 곳에서 처리.
+  return columns.map((col) => ({
+    ...col,
+    optionLabel: toSingleLineLabel(col.optionLabel),
+    ...(col.radioGroupValueLabels !== undefined
+      ? {
+          radioGroupValueLabels: Object.fromEntries(
+            Object.entries(col.radioGroupValueLabels).map(([value, label]) => [
+              value,
+              toSingleLineLabel(label),
+            ]),
+          ),
+        }
+      : {}),
+    ...(col.choiceGroupValueLabels !== undefined
+      ? {
+          choiceGroupValueLabels: col.choiceGroupValueLabels.map((vl) => ({
+            ...vl,
+            label: toSingleLineLabel(vl.label),
+          })),
+        }
+      : {}),
+  }));
 }
 
 /**

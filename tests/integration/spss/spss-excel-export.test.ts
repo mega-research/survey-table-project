@@ -126,6 +126,31 @@ describe('generateSPSSColumns', () => {
     expect(lblCol2.optionLabel).toContain('합판');
   });
 
+  it('옵션 라벨의 줄바꿈은 export 컬럼 라벨에서 공백으로 정규화된다', () => {
+    const columns = generateSPSSColumns([
+      makeQuestion({
+        type: 'radio',
+        order: 1,
+        questionCode: 'Q1',
+        options: [
+          { id: 'o1', label: 'SW계열1\n(전산ㆍ컴퓨터 등)', value: 'o1', spssNumericCode: 1 },
+        ],
+      }),
+      makeQuestion({
+        type: 'checkbox',
+        order: 2,
+        questionCode: 'Q2',
+        options: [
+          { id: 'o2', label: '자연계열\n(수리, 물리 등)', value: 'o2', spssNumericCode: 1 },
+        ],
+      }),
+    ]);
+    const [radioCol, checkboxCol] = columns;
+    if (!radioCol || !checkboxCol) throw new Error('columns 없음');
+    expect(radioCol.optionLabel).toBe('SW계열1 (전산ㆍ컴퓨터 등)');
+    expect(checkboxCol.optionLabel).toBe('자연계열 (수리, 물리 등)');
+  });
+
   it('isHidden 테이블 셀은 변수 열에서 제외한다', () => {
     const q: Question = {
       id: 'q1',

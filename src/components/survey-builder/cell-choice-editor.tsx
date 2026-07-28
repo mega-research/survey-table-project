@@ -11,6 +11,7 @@ import { getMaxSpssCode } from '@/utils/option-code-generator';
 import { CheckboxOption, Question, QuestionOption, RadioOption } from '@/types/survey';
 
 import { BranchRuleEditor } from './branch-rule-editor';
+import { OptionLabelTextarea } from './option-label-textarea';
 import { OptionPlaceholderEditor } from './option-placeholder-editor';
 import { createTextInputOption } from './question-option-helpers';
 
@@ -106,11 +107,11 @@ export function CellChoiceEditor({
                   />
                   <div className="flex-1 space-y-1">
                     <div className="flex gap-2">
-                      <Input
+                      <OptionLabelTextarea
                         value={option.label}
-                        onChange={(e) => {
+                        onChange={(label) => {
                           const updated = [...checkboxOptions];
-                          updated[index] = { ...option, label: e.target.value };
+                          updated[index] = { ...option, label };
                           onCheckboxOptionsChange(updated);
                         }}
                         placeholder="옵션 텍스트"
@@ -379,11 +380,11 @@ export function CellChoiceEditor({
                   />
                   <div className="flex-1 space-y-1">
                     <div className="flex gap-2">
-                      <Input
+                      <OptionLabelTextarea
                         value={option.label}
-                        onChange={(e) => {
+                        onChange={(label) => {
                           const updated = [...radioOptions];
-                          updated[index] = { ...option, label: e.target.value };
+                          updated[index] = { ...option, label };
                           onRadioOptionsChange(updated);
                         }}
                         placeholder="옵션 텍스트"

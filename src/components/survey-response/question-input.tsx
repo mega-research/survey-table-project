@@ -374,7 +374,7 @@ function RadioQuestion({
                 e.preventDefault();
                 handleOptionChange(option.value);
               }}
-              className="flex-1 cursor-pointer text-base text-gray-700"
+              className="flex-1 cursor-pointer whitespace-pre-line text-base text-gray-700"
             >
               {option.label}
             </label>
@@ -487,7 +487,7 @@ function CheckboxQuestion({
               />
               <label
                 htmlFor={`${question.id}-${option.id}`}
-                className={`flex-1 text-base text-gray-700 ${
+                className={`flex-1 whitespace-pre-line text-base text-gray-700 ${
                   disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
                 }`}
               >

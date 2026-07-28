@@ -211,7 +211,9 @@ export function ChoiceTableResponse({ question, value, onChange }: ChoiceTableRe
             className="h-4 w-4"
           />
           {labelText && (
-            <span className={cn('text-sm text-gray-800', getCellTextClassName(cell))}>
+            <span
+              className={cn('whitespace-pre-line text-sm text-gray-800', getCellTextClassName(cell))}
+            >
               {labelText}
             </span>
           )}

@@ -59,7 +59,7 @@ export const RadioCell = React.memo(function RadioCell({
               />
               <label
                 htmlFor={`${cell.id}-${option.id}`}
-                className="cursor-pointer text-base select-none"
+                className="cursor-pointer text-base whitespace-pre-line select-none"
               >
                 {option.label}
               </label>

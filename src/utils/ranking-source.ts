@@ -1,5 +1,6 @@
 import type { Question, QuestionOption, TableCell, TableRow } from '@/types/survey';
 
+import { toSingleLineLabel } from './label-text';
 import { RANKING_OTHER_VALUE } from './ranking-shared';
 
 /**
@@ -132,7 +133,7 @@ export function toSpssValueLabelPairs(
   return opts
     .map((opt, i) => ({
       code: opt.spssNumericCode ?? i + 1,
-      label: opt.label,
+      label: toSingleLineLabel(opt.label),
       isOther: opt.value === RANKING_OTHER_VALUE,
     }))
     .filter((p) => !p.isOther)
