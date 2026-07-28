@@ -18,6 +18,7 @@ import { ImageTextIsolation } from '@/lib/tiptap/image-text-isolation';
 import { TableSelectOnBackspace } from '@/lib/tiptap/table-select-on-backspace';
 
 import { FileAttachment } from './file-attachment-node';
+import { FontColor } from './font-color-mark';
 import { FontFamily } from './font-family-mark';
 import { FontSize } from './font-size-mark';
 import {
@@ -310,6 +311,7 @@ export function createUnifiedExtensions(options: CreateUnifiedExtensionsOptions 
     TextStyle,
     FontSize,
     FontFamily,
+    FontColor,
     TextAlign.configure({
       // ImageResize 는 NodeView 모드로 paragraph text-align 을 무시하고
       // 자체 wrapperStyle attr (float) 로 정렬을 제어한다. 이미지 정렬은 image-context-toolbar 가 담당.
