@@ -1017,12 +1017,36 @@ export function collectTraversedQuestionIds(
   ctx?: BranchEvalCtx,
 ): Set<string> {
   const ids = new Set<string>();
+  for (const { displayable } of traverseDisplayableSteps(
+    steps,
+    allResponses,
+    allQuestions,
+    allGroups,
+    ctx,
+  )) {
+    for (const q of displayable) ids.add(q.id);
+  }
+  return ids;
+}
+
+/**
+ * 첫 step 부터 순회 규칙(위 collectTraversedQuestionIds 문서 참조)대로 걸으며
+ * "응답자가 실제로 서게 되는"(표시 질문이 1개 이상인) step 을 순서대로 낸다.
+ * 표시 질문이 없는 step 은 응답 흐름에서 자동 스킵되므로 산출하지 않는다.
+ */
+function* traverseDisplayableSteps(
+  steps: RenderStep[],
+  allResponses: Record<string, unknown>,
+  allQuestions: Question[],
+  allGroups?: QuestionGroup[],
+  ctx?: BranchEvalCtx,
+): Generator<{ index: number; displayable: Question[] }> {
   const visited = new Set<number>();
   let i = 0;
   while (i >= 0 && i < steps.length && !visited.has(i)) {
     visited.add(i);
     const step = steps[i];
-    if (!step) break;
+    if (!step) return;
 
     const displayable = step.items
       .map((item) => item.question)
@@ -1031,12 +1055,46 @@ export function collectTraversedQuestionIds(
       i += 1;
       continue;
     }
-    for (const q of displayable) ids.add(q.id);
+    yield { index: i, displayable };
 
     const rules = displayable.map((q) => getBranchRuleForResponse(q, allResponses[q.id]));
     const outcome = resolveStepBranch(steps, i, rules);
-    if (outcome.kind === 'end') break;
+    if (outcome.kind === 'end') return;
     i = outcome.kind === 'goto' ? outcome.stepIndex : i + 1;
   }
-  return ids;
+}
+
+/**
+ * 임시저장 복원용 stepHistory 재구성 — 첫 step 부터 `targetStepIndex` 까지의
+ * 경로를 시뮬레이션해, 목표 step "이전"에 실제로 방문하는 step 인덱스 목록을
+ * 방문 순서대로 반환한다 (handleNext 가 쌓는 stepHistory 와 동일한 의미).
+ *
+ * 목표 step 에 도달할 수 없으면(end 조기 종료, goto 가 목표를 지나침 등 — 저장 후
+ * 재배포로 구조가 바뀐 경우) 빈 배열을 반환한다. 이때 이전 버튼은 비활성 유지가
+ * 안전하다 — 임의 경로를 만들어 응답자가 밟지 않은 페이지로 보내지 않는다.
+ */
+export function collectTraversedStepPath(
+  steps: RenderStep[],
+  targetStepIndex: number,
+  allResponses: Record<string, unknown>,
+  allQuestions: Question[],
+  allGroups?: QuestionGroup[],
+  ctx?: BranchEvalCtx,
+): number[] {
+  if (targetStepIndex <= 0) return [];
+
+  const path: number[] = [];
+  for (const { index } of traverseDisplayableSteps(
+    steps,
+    allResponses,
+    allQuestions,
+    allGroups,
+    ctx,
+  )) {
+    if (index === targetStepIndex) return path;
+    // 목표를 지나쳤다 — goto 점프 등으로 목표 step 이 경로에 없음.
+    if (index > targetStepIndex) return [];
+    path.push(index);
+  }
+  return [];
 }

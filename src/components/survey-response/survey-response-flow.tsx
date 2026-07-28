@@ -65,6 +65,7 @@ import type { SurveyVersionSnapshot } from '@/db/schema';
 import type { Question, QuestionGroup, Survey } from '@/types/survey';
 import {
   collectTraversedQuestionIds,
+  collectTraversedStepPath,
   getBranchRuleForResponse,
   shouldDisplayQuestion,
   type BranchEvalCtx,
@@ -447,16 +448,43 @@ function SurveyResponseFlowActive({
   const currentStep: RenderStep | undefined = steps[currentStepIndex];
 
   // 재접속 회복 시 멈춘 스텝으로 초기 이동.
-  // useSessionRecovery 가 deps 미포함 안정 참조를 요구하므로 최신 steps 는 ref 로 읽는다.
+  // useSessionRecovery 가 deps 미포함 안정 참조를 요구하므로 최신 값은 ref 로 읽는다.
   // 재배포 등으로 스텝 id 가 현재 구조에 없으면 못 찾고(-1) 1페이지 유지.
-  const stepsForRestoreRef = useRef(steps);
+  const restoreCtxRef = useRef({
+    steps,
+    questions,
+    groups,
+    contactAttrs,
+    lookups: loadedSurvey?.lookups ?? [],
+  });
   useEffect(() => {
-    stepsForRestoreRef.current = steps;
-  }, [steps]);
-  const restoreStepFromRecovery = useCallback((stepId: string) => {
-    const idx = stepsForRestoreRef.current.findIndex((s) => stepIdOf(s) === stepId);
-    if (idx > 0) setCurrentStepIndex(idx);
-  }, []);
+    restoreCtxRef.current = {
+      steps,
+      questions,
+      groups,
+      contactAttrs,
+      lookups: loadedSurvey?.lookups ?? [],
+    };
+  }, [steps, questions, groups, contactAttrs, loadedSurvey?.lookups]);
+  const restoreStepFromRecovery = useCallback(
+    (stepId: string, restoredResponses: ResponsesMap) => {
+      const { steps, questions, groups, contactAttrs, lookups } = restoreCtxRef.current;
+      const idx = steps.findIndex((s) => stepIdOf(s) === stepId);
+      if (idx <= 0) return;
+      setCurrentStepIndex(idx);
+      // 이전 버튼/브라우저 뒤로가기용 stepHistory 재구성 — 복원 응답 기준으로
+      // 1페이지부터 실제 경로를 시뮬레이션한다 (handleNext 가 쌓는 스택과 동일 의미).
+      // 경로상에 목표 스텝이 없으면(재배포로 구조 변경 등) 빈 스택 유지가 안전하다.
+      setStepHistory(
+        collectTraversedStepPath(steps, idx, restoredResponses, questions, groups, {
+          responses: responsesToLookupShape(restoredResponses),
+          contactAttrs,
+          lookups,
+        }),
+      );
+    },
+    [],
+  );
 
   // 현재 step 내 표시 가능한 질문들
   const currentStepQuestions = useMemo<Question[]>(
@@ -887,8 +915,10 @@ function SurveyResponseFlowActive({
   }
 
   // 표 문항 페이지는 표 총폭 기준 분기(718px 초과 → 1280px, 이하 → 896px), 표 없는 페이지는 896px (2026-07-27)
+  // 설문 설정 "화면 너비" 토글이 켜져 있으면 표 유무와 무관하게 항상 넓게 (0063)
   const containerMaxWidth = resolveResponseContainerWidth(
     currentStep.items.map((i) => i.question),
+    { forceWide: loadedSurvey.settings.forceWideLayout },
   );
   const showRequiredHighlight = highlightQuestionIds.size > 0;
   const submitLabel = isPreview ? '확인 완료' : '다음';

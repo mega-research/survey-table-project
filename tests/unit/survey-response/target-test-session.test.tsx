@@ -119,6 +119,42 @@ const targetSurvey = {
   updatedAt: new Date('2026-07-22T00:00:00.000Z'),
 } as Survey;
 
+// 임시저장 복원 stepHistory 재구성 검증용 3페이지 설문
+const multiPageSurvey = {
+  ...targetSurvey,
+  questions: [
+    {
+      id: 'q1',
+      type: 'text',
+      title: '첫 번째 질문',
+      description: '',
+      required: false,
+      order: 0,
+      placeholder: '첫 답변',
+    },
+    {
+      id: 'q2',
+      type: 'text',
+      title: '두 번째 질문',
+      description: '',
+      required: false,
+      order: 1,
+      placeholder: '둘째 답변',
+      pageBreakBefore: true,
+    },
+    {
+      id: 'q3',
+      type: 'text',
+      title: '세 번째 질문',
+      description: '',
+      required: false,
+      order: 2,
+      placeholder: '셋째 답변',
+      pageBreakBefore: true,
+    },
+  ],
+} as Survey;
+
 function readBlob(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -1132,5 +1168,49 @@ describe('대상자 테스트 응답 세션', () => {
       await screen.findByRole('heading', { name: '유효하지 않은 테스트 링크입니다' }),
     ).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '다시 테스트하기' })).not.toBeInTheDocument();
+  });
+
+  it('임시저장 복원 시 이전 버튼 경로(stepHistory)를 재구성한다', async () => {
+    bySlug.mockResolvedValue({ id: 'survey-1' });
+    forResponse.mockResolvedValue({
+      survey: multiPageSurvey,
+      versionId: 'version-1',
+      control: {
+        isPaused: false,
+        pausedMessage: null,
+        testSession: 'valid',
+        testSessionKind: 'target',
+      },
+    });
+    attrsLookup.mockResolvedValue({});
+    stepVisit.mockResolvedValue(undefined);
+    resume.mockResolvedValue({
+      id: 'response-1',
+      status: 'in_progress',
+      resumed: true,
+      questionResponses: { q1: '답1', q2: '답2' },
+      currentStepId: 'page:q3',
+    });
+
+    render(
+      <SurveyResponseFlow
+        surveyIdentifier="target-survey"
+        inviteToken="invite-a"
+        testToken={null}
+      />,
+    );
+
+    // 저장된 3페이지로 복원된다
+    expect(await screen.findByPlaceholderText('셋째 답변')).toBeInTheDocument();
+
+    // 회귀 지점: 복원이 currentStepIndex 만 되돌리고 stepHistory 를 비워 두면
+    // 이전 버튼이 영구 비활성이 된다.
+    const prevButtons = screen.getAllByRole('button', { name: '이전' });
+    for (const button of prevButtons) expect(button).toBeEnabled();
+
+    // 실제로 직전 페이지(2페이지)로 되돌아간다
+    fireEvent.click(prevButtons[0]!);
+    expect(await screen.findByPlaceholderText('둘째 답변')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('둘째 답변')).toHaveValue('답2');
   });
 });
