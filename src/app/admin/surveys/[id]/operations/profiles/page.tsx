@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 
-import { asc, eq } from 'drizzle-orm';
+import { asc, count, eq } from 'drizzle-orm';
 
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/operations/empty-state';
@@ -8,7 +8,7 @@ import { ProfilesFilterBar } from '@/components/operations/profiles/profiles-fil
 import { ProfilesTable } from '@/components/operations/profiles/profiles-table';
 import { getQuestionGroupsBySurvey } from '@/data/surveys';
 import { db } from '@/db';
-import { questions as questionsTable } from '@/db/schema';
+import { contactTargets, questions as questionsTable } from '@/db/schema';
 import {
   PROFILES_PAGE_SIZE,
   buildStepLocationMap,
@@ -62,7 +62,7 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
   ];
   const condition = parseProfilesCondition(args.col, args.q, columnCandidates);
 
-  const [{ rows, total, page: clampedPage }, qs, groups] = await Promise.all([
+  const [{ rows, total, page: clampedPage }, qs, groups, contactStats] = await Promise.all([
     listResponsesForProfiles({
       surveyId,
       scope,
@@ -90,7 +90,13 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
       .where(eq(questionsTable.surveyId, surveyId))
       .orderBy(asc(questionsTable.order), asc(questionsTable.id)),
     getQuestionGroupsBySurvey(surveyId),
+    // 번호(ID) 열 노출 판정 — 엑셀 내보내기와 동일하게 설문 설정 기준(컨택 존재 여부, 매칭 무관)
+    db
+      .select({ total: count() })
+      .from(contactTargets)
+      .where(eq(contactTargets.surveyId, surveyId)),
   ]);
+  const hasContacts = (contactStats[0]?.total ?? 0) > 0;
 
   // currentStepId(페이지 step ID) → 대표 질문 order/번호 역매핑. 진행중 응답의 N/M·Qx 표기에 사용.
   const stepLocations = Object.fromEntries(buildStepLocationMap(qs, groups));
@@ -139,6 +145,7 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
               totalSteps={totalSteps}
               surveyId={surveyId}
               view={args.view}
+              hasContacts={hasContacts}
             />
           )}
         </CardContent>
