@@ -124,6 +124,7 @@ export async function getSurveyWithDetails(surveyId: string): Promise<SurveyType
         ...(q.numberFormat != null ? { numberFormat: q.numberFormat as NonNullable<QuestionType['numberFormat']> } : {}),
         ...(q.sumConstraints != null ? { sumConstraints: q.sumConstraints as NonNullable<QuestionType['sumConstraints']> } : {}),
         ...(q.hideColumnLabels != null ? { hideColumnLabels: q.hideColumnLabels } : {}),
+        ...(q.exportCellOrder != null ? { exportCellOrder: q.exportCellOrder } : {}),
         ...(q.mobileOriginalTable != null ? { mobileOriginalTable: q.mobileOriginalTable } : {}),
         ...(q.mobileTableDisplayMode != null
           ? { mobileTableDisplayMode: q.mobileTableDisplayMode }

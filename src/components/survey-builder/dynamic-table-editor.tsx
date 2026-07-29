@@ -67,6 +67,9 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
   const hideColumnLabels = useSurveyBuilderStore(
     (s) => s.currentSurvey.questions.find((q) => q.id === editingQuestionId)?.hideColumnLabels ?? false,
   );
+  const exportCellOrder = useSurveyBuilderStore(
+    (s) => s.currentSurvey.questions.find((q) => q.id === editingQuestionId)?.exportCellOrder ?? 'row-first',
+  );
   const mobileTableQuestion = useSurveyBuilderStore(
     (state) => state.currentSurvey.questions.find((q) => q.id === editingQuestionId),
   );
@@ -465,6 +468,35 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
           </label>
         </div>
       </div>
+
+      {/* 내보내기 셀 순서 설정 — table 유형 전용 (다운로드 열 나열 축) */}
+      {mobileTableQuestion?.type === 'table' && (
+        <div className="space-y-3 rounded-lg border border-gray-200 p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <Label className="text-sm font-medium">내보내기 열 우선 정렬</Label>
+              <p className="text-xs text-gray-500">
+                Raw Data/SPSS 다운로드에서 변수 열을 표의 열 기준으로 먼저 나열합니다. 끄면 행 기준입니다.
+              </p>
+            </div>
+            <label className="relative inline-flex cursor-pointer items-center">
+              <input
+                type="checkbox"
+                checked={exportCellOrder === 'column-first'}
+                onChange={(e) => {
+                  if (editingQuestionId) {
+                    silentUpdateQuestion(editingQuestionId, {
+                      exportCellOrder: e.target.checked ? 'column-first' : 'row-first',
+                    });
+                  }
+                }}
+                className="peer sr-only"
+              />
+              <div className="peer h-5 w-9 rounded-full bg-gray-200 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-blue-600 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:outline-none" />
+            </label>
+          </div>
+        </div>
+      )}
 
       {mobileTableQuestion
         && (mobileTableQuestion.type === 'table'

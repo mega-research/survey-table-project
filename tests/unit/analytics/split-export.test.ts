@@ -2,8 +2,18 @@ import { describe, it, expect } from 'vitest';
 
 import { valueMatchSet, bucketQuestions, optionTokensForBasis, planSplit, detectSplitCandidates, assignSplitSheetNames, SPLIT_RESERVED_SHEET_NAMES, splitPlanExceedsExcelLimit, SPLIT_EXCEL_LIMIT } from '@/lib/analytics/split-export';
 import { buildSplitWorkbook } from '@/lib/analytics/split-workbook';
-import type { RawExportResponseRow } from '@/lib/analytics/raw-workbook';
+import { buildRawMetaHeaders, type RawExportContext, type RawExportResponseRow } from '@/lib/analytics/raw-workbook';
 import type { Question, QuestionConditionGroup } from '@/types/survey';
+
+// buildSplitWorkbook 메타 컬럼 삽입(11열) 이전 식별자 1열 가정 테스트의 오프셋 보정에 사용.
+const CTX: RawExportContext = {
+  appUrl: '',
+  stepLabels: new Map(),
+  hasContacts: true,
+  hasContactGroups: true,
+  questionMeta: new Map(),
+};
+const META_COUNT = buildRawMetaHeaders(CTX).length;
 
 const vm = (sourceQuestionId: string, requiredValues: string[]): QuestionConditionGroup => ({
   logicType: 'AND',
@@ -180,13 +190,14 @@ describe('buildSplitWorkbook ↔ planSplit 일관성', () => {
 
   const rows: RawExportResponseRow[] = [
     { id: 'r1', questionResponses: { Q2: 'opt1', A: 'x', B: 'y' }, groupValue: null, resid: null,
+      inviteCode: null, ipHash: null, currentStepId: null,
       platform: null, browser: null, status: 'completed', startedAt: new Date('2026-06-04T01:00:00Z'),
       completedAt: new Date('2026-06-04T01:05:00Z'), totalSeconds: 300 },
   ];
 
   it('시트 구성과 각 시트 변수 수가 planSplit과 일치한다', () => {
     const plan = planSplit(questions, 'Q2');
-    const wb = buildSplitWorkbook(questions, rows, 'Q2', 'sequence');
+    const wb = buildSplitWorkbook(questions, rows, 'Q2', CTX);
     const names = wb.worksheets.map((w) => w.name);
     expect(names[0]).toBe('응답 내역');
     expect(names[1]).toBe('공통');
@@ -194,14 +205,14 @@ describe('buildSplitWorkbook ↔ planSplit 일관성', () => {
     // 옵션 시트는 plan.sheets 순서대로 그 사이에 위치
     expect(names.slice(2, names.length - 1)).toEqual(plan.sheets.map((s) => s.name));
 
-    // 공통 시트 변수 수(헤더 1행 셀 수 - 식별자 1) == plan.common
+    // 공통 시트 변수 수(헤더 1행 셀 수 - 메타 열 11) == plan.common
     const commonWs = wb.getWorksheet('공통')!;
-    expect(commonWs.getRow(1).cellCount - 1).toBe(plan.common);
+    expect(commonWs.getRow(1).cellCount - META_COUNT).toBe(plan.common);
 
     // 각 옵션 시트 변수 수 == plan.sheets[].vars
     for (const s of plan.sheets) {
       const ws = wb.getWorksheet(s.name)!;
-      expect(ws.getRow(1).cellCount - 1).toBe(s.vars);
+      expect(ws.getRow(1).cellCount - META_COUNT).toBe(s.vars);
     }
   });
 });
@@ -291,13 +302,14 @@ describe('buildSplitWorkbook ↔ planSplit 일관성 (금지문자/장이름/중
   const edgeQuestions = [basisEdge, eOnly1, eOnly2, eOnly3, eOnly4, tableQ];
   const edgeRows: RawExportResponseRow[] = [
     { id: 'r1', questionResponses: { QE: 'tok1', E1: 'v' }, groupValue: null, resid: null,
+      inviteCode: null, ipHash: null, currentStepId: null,
       platform: null, browser: null, status: 'completed', startedAt: new Date('2026-06-04T02:00:00Z'),
       completedAt: new Date('2026-06-04T02:05:00Z'), totalSeconds: 300 },
   ];
 
   it('금지문자/장이름/중복 라벨에서도 planSplit 시트명과 워크북 시트명이 일치한다', () => {
     const plan = planSplit(edgeQuestions, 'QE');
-    const wb = buildSplitWorkbook(edgeQuestions, edgeRows, 'QE', 'sequence');
+    const wb = buildSplitWorkbook(edgeQuestions, edgeRows, 'QE', CTX);
 
     const allNames = wb.worksheets.map((w) => w.name);
     expect(allNames[0]).toBe('응답 내역');
@@ -312,8 +324,8 @@ describe('buildSplitWorkbook ↔ planSplit 일관성 (금지문자/장이름/중
     for (const s of plan.sheets) {
       const ws = wb.getWorksheet(s.name);
       expect(ws).toBeDefined();
-      // 변수 수 일치 (헤더 1행 셀 수 - 식별자 1)
-      expect(ws!.getRow(1).cellCount - 1).toBe(s.vars);
+      // 변수 수 일치 (헤더 1행 셀 수 - 메타 열 11)
+      expect(ws!.getRow(1).cellCount - META_COUNT).toBe(s.vars);
     }
 
     // 시트명이 31자 이하임을 보장
@@ -357,6 +369,7 @@ describe('buildSplitWorkbook 예약 시트명 충돌 방지', () => {
   const collideQuestions = [basisCollide, cOnly1, cOnly2, cOnly3];
   const collideRows: RawExportResponseRow[] = [
     { id: 'r1', questionResponses: { QC: 'val1', C1: 'v' }, groupValue: null, resid: null,
+      inviteCode: null, ipHash: null, currentStepId: null,
       platform: null, browser: null, status: 'completed', startedAt: new Date('2026-06-04T03:00:00Z'),
       completedAt: new Date('2026-06-04T03:05:00Z'), totalSeconds: 300 },
   ];
@@ -365,7 +378,7 @@ describe('buildSplitWorkbook 예약 시트명 충돌 방지', () => {
     const plan = planSplit(collideQuestions, 'QC');
     let wb: ReturnType<typeof buildSplitWorkbook>;
     expect(() => {
-      wb = buildSplitWorkbook(collideQuestions, collideRows, 'QC', 'sequence');
+      wb = buildSplitWorkbook(collideQuestions, collideRows, 'QC', CTX);
     }).not.toThrow();
 
     const names = wb!.worksheets.map((w) => w.name);

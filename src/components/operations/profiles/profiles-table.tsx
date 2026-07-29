@@ -55,11 +55,15 @@ interface Props {
   totalSteps: number;
   surveyId: string;
   view: ProfilesView;
+  /** 설문에 컨택 타겟이 존재하는지 — false 면 번호(ID) 열을 만들지 않는다 (엑셀 내보내기와 동일 규칙) */
+  hasContacts: boolean;
 }
 
 interface DisplayRow {
   id: string;
   idx: number;
+  /** 매칭 컨택의 resid (번호/systemID). 익명이면 null → '—' 표시 */
+  resid: number | null;
   groupValue: string | null;
   platformKo: string;
   browser: string;
@@ -76,7 +80,7 @@ const meta = (align: CellAlign, sortable: boolean): ColumnMeta => ({ align, sort
 /**
  * 응답 내역 테이블. 9 컬럼 + URL state sort/pagination + 검색 결과 EmptyState.
  */
-export function ProfilesTable({ rows, total, page, pageSize, sort, dir, stepLocations, totalSteps, surveyId, view }: Props) {
+export function ProfilesTable({ rows, total, page, pageSize, sort, dir, stepLocations, totalSteps, surveyId, view, hasContacts }: Props) {
   const pushParams = useSearchParamsMutator();
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
@@ -101,6 +105,7 @@ export function ProfilesTable({ rows, total, page, pageSize, sort, dir, stepLoca
         return {
           id: r.id,
           idx: r.idx,
+          resid: r.resid,
           groupValue: r.groupValue,
           platformKo: formatPlatformKo(r.platform),
           browser: r.browser ?? 'Other',
@@ -118,11 +123,22 @@ export function ProfilesTable({ rows, total, page, pageSize, sort, dir, stepLoca
   const columns = useMemo<ColumnDef<DisplayRow>[]>(
     () => [
       { id: 'idx', accessorKey: 'idx', header: '순번', meta: meta('right', true) },
+      // 번호(ID) 열은 컨택 있는 설문에만 — 엑셀 내보내기와 동일 규칙
+      ...(hasContacts
+        ? [
+            {
+              id: 'resid',
+              accessorFn: (r: DisplayRow) => r.resid ?? '—',
+              header: '번호(ID)',
+              meta: meta('center', true),
+            } satisfies ColumnDef<DisplayRow>,
+          ]
+        : []),
       {
         id: 'group',
         accessorFn: (r: DisplayRow) => r.groupValue ?? '공개링크',
         header: '조사 대상 그룹',
-        meta: meta('left', false),
+        meta: meta('left', true),
       },
       {
         id: 'platform',
@@ -189,7 +205,7 @@ export function ProfilesTable({ rows, total, page, pageSize, sort, dir, stepLoca
         meta: meta('center', false),
       },
     ],
-    [surveyId, view],
+    [surveyId, view, hasContacts],
   );
 
   // TanStack Table useReactTable은 React Compiler 비호환 API라 국소 예외로 둔다.

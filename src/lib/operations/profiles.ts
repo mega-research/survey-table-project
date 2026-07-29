@@ -17,6 +17,8 @@ import type { Question, QuestionGroup } from '@/types/survey';
 
 export const SORT_KEYS = [
   'idx',
+  'resid',
+  'group',
   'platform',
   'browser',
   'status',
@@ -144,7 +146,7 @@ export type StatusTone = 'green' | 'blue' | 'gray' | 'amber' | 'red'
 export interface StatusPillResult {
   label: string
   tone: StatusTone
-  /** in_progress 일 때만 채워진다: "5/50 · Q3" */
+  /** 진행중·이탈일 때 채워진다: "5/50(11) · Q3" — 이탈은 멈춘 위치 표시 */
   sub?: string
 }
 
@@ -166,32 +168,42 @@ interface MapStatusPillArgs {
  * 정의된 6종 외 값은 default fallback("기타", gray) — 향후 enum 확장 안전망.
  * `in_progress` 만 진척률 부속(`sub`)을 추가해 운영자에게 위치 단서를 준다.
  */
+/**
+ * 진척 부속 표기 — "26/28(50) · Q33": visible step 진척 / 총 visible step (전체 질문 수) · 현재 질문번호.
+ * visible 값은 응답 페이지가 저장 (구 데이터·첫 답변 전엔 NULL → '?' 폴백).
+ * 진행중·이탈 pill 이 공유한다 (이탈 = 그 위치에서 멈춘 진행중).
+ * 위치 신호가 전혀 없으면 null — 이탈은 sub 생략, 진행중은 '?' 폴백 유지(기존 동작).
+ */
+function buildProgressSub(args: MapStatusPillArgs): string | null {
+  const idx = args.visibleStepIndex ?? null
+  const total = args.visibleStepTotal ?? null
+  const totalQ = args.totalQuestions ?? null
+  const q = args.qNumber ?? null
+  if (idx === null && total === null && q === null) return null
+  const idxStr = idx === null ? '?' : String(idx)
+  const totalStr = total === null ? '?' : String(total)
+  const totalQStr = totalQ === null ? '?' : String(totalQ)
+  const qStr = q === null ? '?' : q
+  return `${idxStr}/${totalStr}(${totalQStr}) · ${qStr}`
+}
+
 export function mapStatusPill(args: MapStatusPillArgs): StatusPillResult {
   const { status } = args
   switch (status) {
     case 'completed':
       return { label: '완료', tone: 'green' }
-    case 'drop':
-      return { label: '이탈', tone: 'gray' }
+    case 'drop': {
+      const sub = buildProgressSub(args)
+      return { label: '이탈', tone: 'gray', ...(sub !== null ? { sub } : {}) }
+    }
     case 'screened_out':
       return { label: '자격 미달', tone: 'amber' }
     case 'quotaful_out':
       return { label: '쿼터마감', tone: 'amber' }
     case 'bad':
       return { label: '불량', tone: 'red' }
-    case 'in_progress': {
-      // "26/28(50) · Q33" — visible step 진척 / 총 visible step (전체 질문 수) · 현재 질문번호.
-      // visible 값은 응답 페이지가 저장 (구 데이터·첫 답변 전엔 NULL → '?' 폴백).
-      const idx = args.visibleStepIndex ?? null
-      const total = args.visibleStepTotal ?? null
-      const totalQ = args.totalQuestions ?? null
-      const q = args.qNumber ?? null
-      const idxStr = idx === null ? '?' : String(idx)
-      const totalStr = total === null ? '?' : String(total)
-      const totalQStr = totalQ === null ? '?' : String(totalQ)
-      const qStr = q === null ? '?' : q
-      return { label: '진행중', tone: 'blue', sub: `${idxStr}/${totalStr}(${totalQStr}) · ${qStr}` }
-    }
+    case 'in_progress':
+      return { label: '진행중', tone: 'blue', sub: buildProgressSub(args) ?? '?/?(?) · ?' }
     default:
       return { label: '기타', tone: 'gray' }
   }
@@ -201,7 +213,7 @@ export function mapStatusPill(args: MapStatusPillArgs): StatusPillResult {
 export interface StepLocation {
   /** 대표 질문(group step=첫 질문, table step=해당 질문)의 order. */
   order: number
-  /** 대표 질문 title 에서 파싱한 "Q3" / "Q5-1" 등. 없으면 null. */
+  /** 대표 질문의 질문코드 우선("Q3" 등), 없으면 title 에서 파싱한 Qx. 둘 다 없으면 null. */
   qNumber: string | null
 }
 
@@ -215,7 +227,9 @@ export interface StepQuestionInput {
   title: string
   type: string
   groupId?: string | null
-  pageBreakBefore?: boolean
+  pageBreakBefore?: boolean | null
+  /** 질문코드 (SPSS 변수 코드). 있으면 qNumber 로 제목 파싱보다 우선 사용된다. */
+  questionCode?: string | null
 }
 export interface StepGroupInput {
   id: string
@@ -254,11 +268,23 @@ export function buildStepLocationMap(
     order: g.order,
     ...(g.parentGroupId != null ? { parentGroupId: g.parentGroupId } : {}),
   }))
+  // 라벨은 페이지 항목 순서대로 질문코드 우선, 없으면 제목 Qx 파싱을 시도해 첫 성공값을 쓴다.
+  // 페이지 첫 항목이 코드 없는 공지여도 같은 페이지의 코드 있는 문항으로 라벨이 잡힌다.
+  // 정규화된 item.question 에는 questionCode 가 없어 원본을 역참조한다.
+  const byId = new Map(questions.map((q) => [q.id, q]))
   const map = new Map<string, StepLocation>()
   for (const step of buildRenderSteps(qs, gs)) {
     const rep = step.items[0]?.question
     if (!rep) continue
-    map.set(stepIdOf(step), { order: rep.order, qNumber: parseQuestionNumberFromTitle(rep.title) })
+    let qNumber: string | null = null
+    for (const item of step.items) {
+      qNumber =
+        byId.get(item.question.id)?.questionCode ||
+        parseQuestionNumberFromTitle(item.question.title) ||
+        null
+      if (qNumber) break
+    }
+    map.set(stepIdOf(step), { order: rep.order, qNumber })
   }
   return map
 }

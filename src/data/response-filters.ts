@@ -18,8 +18,9 @@ export const deletedResponse: SQL = isNotNull(surveyResponses.deletedAt);
 
 /**
  * 완료된 응답만 (분석 모수).
- * export(.sav/raw/raw-split)는 in_progress·drop·screened_out·quotaful_out·bad 를
- * 행 단위로 제외한다 — 이탈/진행중은 missing 값이 아니라 분석 대상 아님.
+ * SPSS .sav export 와 통계 집계가 사용한다. 이탈/진행중은 missing 값이 아니라 분석 대상 아님.
+ * Raw Data 엑셀(raw/raw-split)은 이 필터를 쓰지 않는다 — 삭제·테스트만 제외한 전 상태를
+ * 행으로 포함하고 상태 컬럼으로 구분한다 (운영 검수 용도).
  */
 export const completedResponse: SQL = eq(surveyResponses.status, 'completed');
 

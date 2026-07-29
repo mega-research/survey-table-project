@@ -229,6 +229,7 @@ export async function saveSurveyDiff(
           dynamicRowConfigs:
             question.dynamicRowConfigs as NewQuestion['dynamicRowConfigs'],
           hideColumnLabels: question.hideColumnLabels,
+          exportCellOrder: question.exportCellOrder ?? null,
           mobileOriginalTable: question.mobileOriginalTable,
           mobileTableDisplayMode: question.mobileTableDisplayMode,
           mobileDrilldownOmitLeadingColumns: question.mobileDrilldownOmitLeadingColumns,
@@ -283,6 +284,7 @@ export async function saveSurveyDiff(
               sumConstraints: sql`excluded.sum_constraints`,
               dynamicRowConfigs: sql`excluded.dynamic_row_config`,
               hideColumnLabels: sql`excluded.hide_column_labels`,
+              exportCellOrder: sql`excluded.export_cell_order`,
               mobileOriginalTable: sql`excluded.mobile_original_table`,
               mobileTableDisplayMode: sql`excluded.mobile_table_display_mode`,
               mobileDrilldownOmitLeadingColumns: sql`excluded.mobile_drilldown_omit_leading_columns`,
@@ -564,6 +566,7 @@ export async function saveSurveyWithDetails(
           dynamicRowConfigs:
             question.dynamicRowConfigs as NewQuestion['dynamicRowConfigs'],
           hideColumnLabels: question.hideColumnLabels,
+          exportCellOrder: question.exportCellOrder ?? null,
           mobileOriginalTable: question.mobileOriginalTable,
           mobileTableDisplayMode: question.mobileTableDisplayMode,
           mobileDrilldownOmitLeadingColumns: question.mobileDrilldownOmitLeadingColumns,
@@ -618,6 +621,7 @@ export async function saveSurveyWithDetails(
               sumConstraints: sql`excluded.sum_constraints`,
               dynamicRowConfigs: sql`excluded.dynamic_row_config`,
               hideColumnLabels: sql`excluded.hide_column_labels`,
+              exportCellOrder: sql`excluded.export_cell_order`,
               mobileOriginalTable: sql`excluded.mobile_original_table`,
               mobileTableDisplayMode: sql`excluded.mobile_table_display_mode`,
               mobileDrilldownOmitLeadingColumns: sql`excluded.mobile_drilldown_omit_leading_columns`,

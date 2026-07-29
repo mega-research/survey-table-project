@@ -59,6 +59,7 @@ export const PERSISTED_QUESTION_FIELDS = [
   'exportLabel',
   'spssVarType',
   'spssMeasure',
+  'exportCellOrder',
 ] as const satisfies readonly (keyof NewQuestion)[];
 
 export type PersistedQuestionField = (typeof PERSISTED_QUESTION_FIELDS)[number];

@@ -9,6 +9,7 @@ import { ProfilesTable } from '@/components/operations/profiles/profiles-table';
 import { getQuestionGroupsBySurvey } from '@/data/surveys';
 import { db } from '@/db';
 import { questions as questionsTable } from '@/db/schema';
+import { getSurveyContactStats } from '@/lib/operations/contact-stats.server';
 import {
   PROFILES_PAGE_SIZE,
   buildStepLocationMap,
@@ -62,6 +63,11 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
   ];
   const condition = parseProfilesCondition(args.col, args.q, columnCandidates);
 
+  // 번호(ID) 열 노출 판정 — 엑셀 내보내기와 조건부 규칙 공유(설문 설정 기준, 매칭 무관).
+  // 목록 쿼리보다 먼저 조회해 고아 sort(컨택 없는데 ?sort=resid 잔존 URL)를 순번 정렬로 폴백한다.
+  const { hasContacts } = await getSurveyContactStats(surveyId, scope);
+  const sort = !hasContacts && args.sort === 'resid' ? 'idx' : args.sort;
+
   const [{ rows, total, page: clampedPage }, qs, groups] = await Promise.all([
     listResponsesForProfiles({
       surveyId,
@@ -69,7 +75,7 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
       pageSize: PROFILES_PAGE_SIZE,
       page: args.page,
       status: args.status,
-      sort: args.sort,
+      sort,
       dir: args.dir,
       view: args.view,
       condition,
@@ -81,6 +87,10 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
         title: questionsTable.title,
         type: questionsTable.type,
         groupId: questionsTable.groupId,
+        questionCode: questionsTable.questionCode,
+        // 그룹 없이 pageBreakBefore 로만 페이지를 나누는 설문에서 이 필드가 빠지면
+        // buildRenderSteps 가 전체를 한 페이지로 계산해 stepLocations 매칭이 전부 미스난다
+        pageBreakBefore: questionsTable.pageBreakBefore,
       })
       .from(questionsTable)
       .where(eq(questionsTable.surveyId, surveyId))
@@ -129,12 +139,13 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
               total={total}
               page={clampedPage}
               pageSize={PROFILES_PAGE_SIZE}
-              sort={args.sort}
+              sort={sort}
               dir={args.dir}
               stepLocations={stepLocations}
               totalSteps={totalSteps}
               surveyId={surveyId}
               view={args.view}
+              hasContacts={hasContacts}
             />
           )}
         </CardContent>
