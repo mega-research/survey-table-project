@@ -390,9 +390,21 @@ export function generateSPSSColumns(questions: QuestionVariant[]): SPSSExportCol
       // 그룹 방향 자동 감지: 같은 행이면 열 단위 응답, 같은 열이면 행 단위 응답.
       const groupedCellIds = collectAndEmitRadioGroupColumns(q, columns);
 
-      // 테이블 질문: 입력 가능한 셀마다 개별 열 생성
-      for (const tRow of q.tableRowsData) {
+      // 테이블 질문: 입력 가능한 셀마다 개별 열 생성.
+      // 순회 축은 exportCellOrder — 행 우선(기본): 행 고정 후 열 순회 / 열 우선: 열 고정 후 행 순회.
+      // 변수명·응답값은 불변, 열 나열 순서만 바뀐다. radio-group 사전 스캔 emit 위치는 영향 없음.
+      const cellCoords: Array<{ tRow: TableRow; colIdx: number }> = [];
+      if (q.exportCellOrder === 'column-first') {
         for (let colIdx = 0; colIdx < q.tableColumns.length; colIdx++) {
+          for (const tRow of q.tableRowsData) cellCoords.push({ tRow, colIdx });
+        }
+      } else {
+        for (const tRow of q.tableRowsData) {
+          for (let colIdx = 0; colIdx < q.tableColumns.length; colIdx++) cellCoords.push({ tRow, colIdx });
+        }
+      }
+      for (const { tRow, colIdx } of cellCoords) {
+        {
           const cell = tRow.cells[colIdx];
           if (!cell) continue;
           // 병합(colspan/rowspan)으로 가려진 셀은 변수에서 제외 (변수명 중복 방지)
