@@ -215,7 +215,7 @@ export interface StepQuestionInput {
   title: string
   type: string
   groupId?: string | null
-  pageBreakBefore?: boolean
+  pageBreakBefore?: boolean | null
   /** 질문코드 (SPSS 변수 코드). 있으면 qNumber 로 제목 파싱보다 우선 사용된다. */
   questionCode?: string | null
 }

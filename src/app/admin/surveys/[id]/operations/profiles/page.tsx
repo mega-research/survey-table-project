@@ -82,6 +82,9 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
         type: questionsTable.type,
         groupId: questionsTable.groupId,
         questionCode: questionsTable.questionCode,
+        // 그룹 없이 pageBreakBefore 로만 페이지를 나누는 설문에서 이 필드가 빠지면
+        // buildRenderSteps 가 전체를 한 페이지로 계산해 stepLocations 매칭이 전부 미스난다
+        pageBreakBefore: questionsTable.pageBreakBefore,
       })
       .from(questionsTable)
       .where(eq(questionsTable.surveyId, surveyId))
