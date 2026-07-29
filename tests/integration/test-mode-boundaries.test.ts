@@ -63,6 +63,7 @@ vi.mock('@/lib/spss/sav-builder', () => ({
   generateSavBuffer: vi.fn(async () => Buffer.alloc(0)),
 }));
 
+import { db } from '@/db';
 import { GET as exportGet } from '@/app/api/surveys/[surveyId]/export/route';
 import { GET as splitPreviewGet } from '@/app/api/surveys/[surveyId]/export/split-preview/route';
 import { getCompletedResponses } from '@/data/responses';
@@ -131,14 +132,30 @@ describe('테스트 모드 최종 읽기 경계', () => {
     expect([sav.status, raw.status, preview.status]).toEqual([200, 200, 200]);
     expect(responseWhereArgs).toHaveLength(3);
     responseWhereArgs.forEach(expectRealOnly);
-    // raw export의 조건부 메타 열 판정(contact_targets 통계)은 응답 테이블이 아니므로
-    // 테스트 모드 경계 대상이 아니다 — 응답 대상 select만 실제 응답 조건을 검증한다.
-    expect(selectWhereArgs).toHaveLength(2);
-    const responseSelects = selectWhereArgs.filter(
-      (w) => !dialect.sqlToQuery(w as never).sql.includes('contact_targets'),
+    // select 3건 = sav count 가드 + raw count 선가드 + 컨택 통계(real 스코프).
+    // 컨택 통계도 targetScopeCondition 으로 is_test 조건을 갖게 돼 전건 검증 가능.
+    expect(selectWhereArgs).toHaveLength(3);
+    selectWhereArgs.forEach(expectRealOnly);
+  });
+
+  it('raw export 는 한도 초과 시 응답 페이로드를 물화하지 않고 413 을 반환한다', async () => {
+    // raw 경로의 첫 select(count 선가드)가 한도 초과를 보고하도록 1회 오버라이드.
+    // JSONB 전체를 findMany 로 당기기 전에 차단되는지가 검증 대상이다.
+    vi.mocked(db.select).mockImplementationOnce(() => {
+      const chain = {
+        from: () => chain,
+        where: () => Promise.resolve([{ total: 10_001 }]),
+      };
+      return chain as never;
+    });
+
+    const res = await exportGet(
+      new NextRequest(`http://localhost/api/surveys/${surveyId}/export?type=raw`),
+      { params: Promise.resolve({ surveyId }) },
     );
-    expect(responseSelects).toHaveLength(1);
-    responseSelects.forEach(expectRealOnly);
+
+    expect(res.status).toBe(413);
+    expect(responseFindManyMock).not.toHaveBeenCalled();
   });
 
   it('analytics와 공용 완료 응답 조회는 mode와 무관하게 실제 응답만 읽는다', async () => {

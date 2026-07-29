@@ -65,7 +65,7 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
 
   // 번호(ID) 열 노출 판정 — 엑셀 내보내기와 조건부 규칙 공유(설문 설정 기준, 매칭 무관).
   // 목록 쿼리보다 먼저 조회해 고아 sort(컨택 없는데 ?sort=resid 잔존 URL)를 순번 정렬로 폴백한다.
-  const { hasContacts } = await getSurveyContactStats(surveyId);
+  const { hasContacts } = await getSurveyContactStats(surveyId, scope);
   const sort = !hasContacts && args.sort === 'resid' ? 'idx' : args.sort;
 
   const [{ rows, total, page: clampedPage }, qs, groups] = await Promise.all([

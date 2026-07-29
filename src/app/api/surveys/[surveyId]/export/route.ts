@@ -243,15 +243,24 @@ export async function GET(
 async function loadRawExportRows(
   surveyId: string,
 ): Promise<RawExportResponseRow[] | 'too_many'> {
+  const rawWhere = and(
+    eq(surveyResponses.surveyId, surveyId),
+    notDeletedResponse,
+    notTestResponse,
+  );
+
+  // 한도 초과 판정은 JSONB 페이로드를 물화하기 전에 count 로 먼저 한다 (.sav 경로와 동일).
+  // 전 상태 모수 확장으로 행 수가 커질 수 있어, 초과 설문에서 413 대신 서버리스
+  // 메모리 고갈/타임아웃이 나는 것을 막는다.
+  const totalRows = await db.select({ total: count() }).from(surveyResponses).where(rawWhere);
+  if ((totalRows[0]?.total ?? 0) > MAX_EXPORT_RESPONSES) return 'too_many';
+
   const rawResponses = await db.query.surveyResponses.findMany({
-    where: and(
-      eq(surveyResponses.surveyId, surveyId),
-      notDeletedResponse,
-      notTestResponse,
-    ),
+    where: rawWhere,
     orderBy: (r, { asc }) => [asc(r.startedAt)],
   });
 
+  // count 와 fetch 사이 유입 경합 대비 벨트 (정상 경로에서는 no-op)
   if (rawResponses.length > MAX_EXPORT_RESPONSES) return 'too_many';
 
   const contactIds = rawResponses
@@ -315,7 +324,8 @@ async function buildRawExportContext(
   const groups = await getQuestionGroupsBySurvey(surveyId);
   // 조건부 메타 열 판정 — 설문 설정 기준 (응답 매칭 여부 무관):
   // 컨택 타겟이 없으면 번호(systemID) 열, 그룹값이 전무하면 조사 대상 그룹 열을 만들지 않는다.
-  const { hasContacts, hasContactGroups } = await getSurveyContactStats(surveyId);
+  // raw export 모수는 테스트 응답 제외이므로 컨택 통계도 real 스코프로 한정한다.
+  const { hasContacts, hasContactGroups } = await getSurveyContactStats(surveyId, 'real');
   const stepQs = questions.map((q) => ({
     id: q.id,
     order: q.order,
