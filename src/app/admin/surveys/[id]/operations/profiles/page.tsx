@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 
-import { asc, count, eq } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/operations/empty-state';
@@ -8,7 +8,8 @@ import { ProfilesFilterBar } from '@/components/operations/profiles/profiles-fil
 import { ProfilesTable } from '@/components/operations/profiles/profiles-table';
 import { getQuestionGroupsBySurvey } from '@/data/surveys';
 import { db } from '@/db';
-import { contactTargets, questions as questionsTable } from '@/db/schema';
+import { questions as questionsTable } from '@/db/schema';
+import { getSurveyContactStats } from '@/lib/operations/contact-stats.server';
 import {
   PROFILES_PAGE_SIZE,
   buildStepLocationMap,
@@ -62,14 +63,19 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
   ];
   const condition = parseProfilesCondition(args.col, args.q, columnCandidates);
 
-  const [{ rows, total, page: clampedPage }, qs, groups, contactStats] = await Promise.all([
+  // 번호(ID) 열 노출 판정 — 엑셀 내보내기와 조건부 규칙 공유(설문 설정 기준, 매칭 무관).
+  // 목록 쿼리보다 먼저 조회해 고아 sort(컨택 없는데 ?sort=resid 잔존 URL)를 순번 정렬로 폴백한다.
+  const { hasContacts } = await getSurveyContactStats(surveyId);
+  const sort = !hasContacts && args.sort === 'resid' ? 'idx' : args.sort;
+
+  const [{ rows, total, page: clampedPage }, qs, groups] = await Promise.all([
     listResponsesForProfiles({
       surveyId,
       scope,
       pageSize: PROFILES_PAGE_SIZE,
       page: args.page,
       status: args.status,
-      sort: args.sort,
+      sort,
       dir: args.dir,
       view: args.view,
       condition,
@@ -90,13 +96,7 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
       .where(eq(questionsTable.surveyId, surveyId))
       .orderBy(asc(questionsTable.order), asc(questionsTable.id)),
     getQuestionGroupsBySurvey(surveyId),
-    // 번호(ID) 열 노출 판정 — 엑셀 내보내기와 동일하게 설문 설정 기준(컨택 존재 여부, 매칭 무관)
-    db
-      .select({ total: count() })
-      .from(contactTargets)
-      .where(eq(contactTargets.surveyId, surveyId)),
   ]);
-  const hasContacts = (contactStats[0]?.total ?? 0) > 0;
 
   // currentStepId(페이지 step ID) → 대표 질문 order/번호 역매핑. 진행중 응답의 N/M·Qx 표기에 사용.
   const stepLocations = Object.fromEntries(buildStepLocationMap(qs, groups));
@@ -139,7 +139,7 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
               total={total}
               page={clampedPage}
               pageSize={PROFILES_PAGE_SIZE}
-              sort={args.sort}
+              sort={sort}
               dir={args.dir}
               stepLocations={stepLocations}
               totalSteps={totalSteps}

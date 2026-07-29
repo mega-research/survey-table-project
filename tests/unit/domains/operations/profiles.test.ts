@@ -243,6 +243,11 @@ describe('normalizeListArgs', () => {
     expect(normalizeListArgs({ status: 'deleted' }).view).toBe('deleted')
   })
 
+  it('신규 정렬 키 resid/group 은 화이트리스트 통과, 미지 키는 idx 폴백', () => {
+    expect(normalizeListArgs({ sort: 'resid' }).sort).toBe('resid')
+    expect(normalizeListArgs({ sort: 'group' }).sort).toBe('group')
+    expect(normalizeListArgs({ sort: 'evil' }).sort).toBe('idx')
+  })
 })
 
 describe('hasActiveFilters', () => {

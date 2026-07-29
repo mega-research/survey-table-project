@@ -5,6 +5,7 @@ import { and, count, eq, inArray } from 'drizzle-orm';
 import { db } from '@/db';
 import { contactTargets, surveyResponses, surveys } from '@/db/schema';
 import { getQuestionGroupsBySurvey } from '@/data/surveys';
+import { getSurveyContactStats } from '@/lib/operations/contact-stats.server';
 import { completedResponse, notDeletedResponse, notTestResponse } from '@/data/response-filters';
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { normalizeQuestions } from '@/lib/question';
@@ -314,10 +315,7 @@ async function buildRawExportContext(
   const groups = await getQuestionGroupsBySurvey(surveyId);
   // 조건부 메타 열 판정 — 설문 설정 기준 (응답 매칭 여부 무관):
   // 컨택 타겟이 없으면 번호(systemID) 열, 그룹값이 전무하면 조사 대상 그룹 열을 만들지 않는다.
-  const contactStats = await db
-    .select({ total: count(), withGroup: count(contactTargets.groupValue) })
-    .from(contactTargets)
-    .where(eq(contactTargets.surveyId, surveyId));
+  const { hasContacts, hasContactGroups } = await getSurveyContactStats(surveyId);
   const stepQs = questions.map((q) => ({
     id: q.id,
     order: q.order,
@@ -330,8 +328,8 @@ async function buildRawExportContext(
   return {
     appUrl: (process.env['NEXT_PUBLIC_APP_URL'] ?? '').replace(/\/+$/, ''),
     stepLabels: buildStepLabelMap(stepQs, groups),
-    hasContacts: (contactStats[0]?.total ?? 0) > 0,
-    hasContactGroups: (contactStats[0]?.withGroup ?? 0) > 0,
+    hasContacts,
+    hasContactGroups,
     questionMeta: buildQuestionMetaMap(questions),
   };
 }
