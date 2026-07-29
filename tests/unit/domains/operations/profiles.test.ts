@@ -151,6 +151,15 @@ describe('buildStepLocationMap', () => {
     expect(map.get('page:q1')).toEqual({ order: 0, qNumber: 'Q1' })
   })
 
+  it('질문코드가 있으면 제목 파싱보다 우선하고, 제목이 Q로 시작 안 해도 코드가 나온다', () => {
+    const groups = [g({ id: 'g1', order: 0, name: 'A' })]
+    const questions = [
+      q({ id: 'q1', groupId: 'g1', order: 0, title: '귀하의 성별은?', questionCode: 'SQ2' }),
+    ]
+    const map = buildStepLocationMap(questions, groups)
+    expect(map.get('page:q1')).toEqual({ order: 0, qNumber: 'SQ2' })
+  })
+
   it('table 포함 단일 페이지 — pageBreakBefore 없으면 나뉘지 않음', () => {
     const groups = [g({ id: 'g1', order: 0, name: 'A' })]
     const questions = [

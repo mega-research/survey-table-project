@@ -201,7 +201,7 @@ export function mapStatusPill(args: MapStatusPillArgs): StatusPillResult {
 export interface StepLocation {
   /** 대표 질문(group step=첫 질문, table step=해당 질문)의 order. */
   order: number
-  /** 대표 질문 title 에서 파싱한 "Q3" / "Q5-1" 등. 없으면 null. */
+  /** 대표 질문의 질문코드 우선("Q3" 등), 없으면 title 에서 파싱한 Qx. 둘 다 없으면 null. */
   qNumber: string | null
 }
 
@@ -216,6 +216,8 @@ export interface StepQuestionInput {
   type: string
   groupId?: string | null
   pageBreakBefore?: boolean
+  /** 질문코드 (SPSS 변수 코드). 있으면 qNumber 로 제목 파싱보다 우선 사용된다. */
+  questionCode?: string | null
 }
 export interface StepGroupInput {
   id: string
@@ -254,11 +256,15 @@ export function buildStepLocationMap(
     order: g.order,
     ...(g.parentGroupId != null ? { parentGroupId: g.parentGroupId } : {}),
   }))
+  // 대표 질문 라벨은 질문코드 우선 (제목이 "Q13." 패턴이 아닌 설문 대응),
+  // 코드가 없으면 제목 Qx 파싱 폴백. 정규화된 rep 에는 questionCode 가 없어 원본을 역참조한다.
+  const byId = new Map(questions.map((q) => [q.id, q]))
   const map = new Map<string, StepLocation>()
   for (const step of buildRenderSteps(qs, gs)) {
     const rep = step.items[0]?.question
     if (!rep) continue
-    map.set(stepIdOf(step), { order: rep.order, qNumber: parseQuestionNumberFromTitle(rep.title) })
+    const qNumber = byId.get(rep.id)?.questionCode || parseQuestionNumberFromTitle(rep.title) || null
+    map.set(stepIdOf(step), { order: rep.order, qNumber })
   }
   return map
 }

@@ -110,14 +110,13 @@ export function buildCodebookValueLabel(
  * 질문코드가 없으면 제목의 Qx 파싱 폴백, 둘 다 없으면 공백 — 위치 표기("{n}번째")는 쓰지 않는다.
  */
 export function buildStepLabelMap(
-  questions: Array<StepQuestionInput & { questionCode?: string | null }>,
+  questions: StepQuestionInput[],
   groups: StepGroupInput[],
 ): Map<string, string> {
+  // 질문코드 우선/제목 Qx 폴백은 buildStepLocationMap 의 qNumber 가 이미 처리한다 (운영 콘솔과 공유).
   const labels = new Map<string, string>();
   for (const [stepId, loc] of buildStepLocationMap(questions, groups)) {
-    // 대표 질문 역참조: StepLocation 은 대표 질문의 order 를 담으므로 order 로 찾는다
-    const rep = questions.find((q) => q.order === loc.order);
-    labels.set(stepId, rep?.questionCode || loc.qNumber || '');
+    labels.set(stepId, loc.qNumber ?? '');
   }
   return labels;
 }

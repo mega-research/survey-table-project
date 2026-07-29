@@ -81,6 +81,7 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
         title: questionsTable.title,
         type: questionsTable.type,
         groupId: questionsTable.groupId,
+        questionCode: questionsTable.questionCode,
       })
       .from(questionsTable)
       .where(eq(questionsTable.surveyId, surveyId))
