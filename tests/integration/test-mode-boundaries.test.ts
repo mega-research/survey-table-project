@@ -31,6 +31,8 @@ vi.mock('@/db', () => ({
       surveyResponses: {
         findMany: responseFindManyMock,
       },
+      // raw export가 buildRawExportContext → getQuestionGroupsBySurvey 로 그룹을 조회한다.
+      questionGroups: { findMany: vi.fn(async () => []) },
     },
     select: vi.fn(() => {
       const chain = {
