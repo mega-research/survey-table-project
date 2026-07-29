@@ -17,6 +17,8 @@ import type { Question, QuestionGroup } from '@/types/survey';
 
 export const SORT_KEYS = [
   'idx',
+  'resid',
+  'group',
   'platform',
   'browser',
   'status',

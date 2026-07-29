@@ -130,7 +130,7 @@ export function ProfilesTable({ rows, total, page, pageSize, sort, dir, stepLoca
               id: 'resid',
               accessorFn: (r: DisplayRow) => r.resid ?? '—',
               header: '번호(ID)',
-              meta: meta('center', false),
+              meta: meta('center', true),
             } satisfies ColumnDef<DisplayRow>,
           ]
         : []),
@@ -138,7 +138,7 @@ export function ProfilesTable({ rows, total, page, pageSize, sort, dir, stepLoca
         id: 'group',
         accessorFn: (r: DisplayRow) => r.groupValue ?? '공개링크',
         header: '조사 대상 그룹',
-        meta: meta('left', false),
+        meta: meta('left', true),
       },
       {
         id: 'platform',

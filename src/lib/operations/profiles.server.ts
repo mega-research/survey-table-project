@@ -192,6 +192,8 @@ export async function listResponsesForProfiles(
     .as('numbered');
 
   const SORT_COLUMN_MAP = {
+    resid: numbered.contactResid,
+    group: numbered.groupValue,
     platform: numbered.platform,
     browser: numbered.browser,
     status: numbered.status,
