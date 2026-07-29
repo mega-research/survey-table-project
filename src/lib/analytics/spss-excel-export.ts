@@ -404,98 +404,140 @@ export function generateSPSSColumns(questions: QuestionVariant[]): SPSSExportCol
         }
       }
       for (const { tRow, colIdx } of cellCoords) {
-        {
-          const cell = tRow.cells[colIdx];
-          if (!cell) continue;
-          // 병합(colspan/rowspan)으로 가려진 셀은 변수에서 제외 (변수명 중복 방지)
-          if (cell.isHidden) continue;
-          // radioGroup 그룹에 속한 셀은 스킵 (그룹 변수로 이미 emit됨)
-          if (groupedCellIds.has(cell.id)) continue;
-          // 입력 불가능한 셀(text, image, video, ranking_opt)은 건너뛰기
-          if (!['checkbox', 'radio', 'select', 'input', 'ranking'].includes(cell.type)) continue;
-          // 셀코드가 의도적으로 비어있으면 내보내기에서 제외 (표시용 셀)
-          if (cell.isCustomCellCode === true && !cell.cellCode) continue;
+        const cell = tRow.cells[colIdx];
+        if (!cell) continue;
+        // 병합(colspan/rowspan)으로 가려진 셀은 변수에서 제외 (변수명 중복 방지)
+        if (cell.isHidden) continue;
+        // radioGroup 그룹에 속한 셀은 스킵 (그룹 변수로 이미 emit됨)
+        if (groupedCellIds.has(cell.id)) continue;
+        // 입력 불가능한 셀(text, image, video, ranking_opt)은 건너뛰기
+        if (!['checkbox', 'radio', 'select', 'input', 'ranking'].includes(cell.type)) continue;
+        // 셀코드가 의도적으로 비어있으면 내보내기에서 제외 (표시용 셀)
+        if (cell.isCustomCellCode === true && !cell.cellCode) continue;
 
-          // 변수명: cellCode > questionCode_rowCode_colCode (폴백)
-          // exportLabel은 한국어가 포함될 수 있어 SPSS 변수명으로 부적합
-          const varName =
-            cell.cellCode ||
-            buildTableCellVarName(q, tRow, colIdx, q.tableColumns, q.tableRowsData!);
+        // 변수명: cellCode > questionCode_rowCode_colCode (폴백)
+        // exportLabel은 한국어가 포함될 수 있어 SPSS 변수명으로 부적합
+        const varName =
+          cell.cellCode ||
+          buildTableCellVarName(q, tRow, colIdx, q.tableColumns, q.tableRowsData!);
 
-          // exportLabel 미저장 셀은 questionCode_열라벨_행라벨 자동 라벨로 폴백.
-          // (빌더는 placeholder로 같은 자동값을 표시하므로 export도 동일하게 맞춘다.)
-          const autoExportLabel = buildAutoTableCellExportLabel(q, tRow, colIdx, cell);
+        // exportLabel 미저장 셀은 questionCode_열라벨_행라벨 자동 라벨로 폴백.
+        // (빌더는 placeholder로 같은 자동값을 표시하므로 export도 동일하게 맞춘다.)
+        const autoExportLabel = buildAutoTableCellExportLabel(q, tRow, colIdx, cell);
 
-          // ranking 셀 (Case 3): positions 만큼 {baseVarName}{접미사} 변수 생성.
-          // 접미사는 셀의 rankSuffixPattern (기본 '_rk{k}') 으로 결정. rankVarNames 오버라이드 우선.
-          if (cell.type === 'ranking') {
-            const rowLabel = tRow.label;
-            const colLabel = q.tableColumns[colIdx]?.label ?? '';
-            const cellOptions = cell.rankingOptions ?? [];
-            const positions = Math.max(1, cell.rankingConfig?.positions ?? 3);
-            for (let k = 1; k <= positions; k++) {
-              const rankVarName = resolveRankVarName(
-                varName,
-                cell.rankSuffixPattern,
-                cell.rankVarNames,
-                k,
-              );
+        // ranking 셀 (Case 3): positions 만큼 {baseVarName}{접미사} 변수 생성.
+        // 접미사는 셀의 rankSuffixPattern (기본 '_rk{k}') 으로 결정. rankVarNames 오버라이드 우선.
+        if (cell.type === 'ranking') {
+          const rowLabel = tRow.label;
+          const colLabel = q.tableColumns[colIdx]?.label ?? '';
+          const cellOptions = cell.rankingOptions ?? [];
+          const positions = Math.max(1, cell.rankingConfig?.positions ?? 3);
+          for (let k = 1; k <= positions; k++) {
+            const rankVarName = resolveRankVarName(
+              varName,
+              cell.rankSuffixPattern,
+              cell.rankVarNames,
+              k,
+            );
+            columns.push({
+              spssVarName: rankVarName,
+              questionText: q.title,
+              optionLabel: `${k}순위`,
+              questionId: q.id,
+              type: 'table-cell-ranking',
+              tableCellId: cell.id,
+              tableCellType: 'ranking',
+              rankIndex: k,
+              rowLabel,
+              colLabel,
+              cellOptions,
+              ...(autoExportLabel !== undefined ? { cellExportLabel: autoExportLabel } : {}),
+            });
+            if (cell.allowOtherOption) {
               columns.push({
-                spssVarName: rankVarName,
+                spssVarName: `${rankVarName}_etc`,
                 questionText: q.title,
-                optionLabel: `${k}순위`,
+                optionLabel: `${k}순위 기타 입력`,
                 questionId: q.id,
-                type: 'table-cell-ranking',
+                type: 'table-cell-ranking-other',
                 tableCellId: cell.id,
                 tableCellType: 'ranking',
                 rankIndex: k,
                 rowLabel,
                 colLabel,
-                cellOptions,
                 ...(autoExportLabel !== undefined ? { cellExportLabel: autoExportLabel } : {}),
               });
-              if (cell.allowOtherOption) {
-                columns.push({
-                  spssVarName: `${rankVarName}_etc`,
-                  questionText: q.title,
-                  optionLabel: `${k}순위 기타 입력`,
-                  questionId: q.id,
-                  type: 'table-cell-ranking-other',
-                  tableCellId: cell.id,
-                  tableCellType: 'ranking',
-                  rankIndex: k,
-                  rowLabel,
-                  colLabel,
-                  ...(autoExportLabel !== undefined ? { cellExportLabel: autoExportLabel } : {}),
-                });
-              }
             }
-            continue;
+          }
+          continue;
+        }
+
+        // checkbox 셀: checkboxOptions가 있으면 옵션별 분리 변수 생성
+        if (cell.type === 'checkbox' && cell.checkboxOptions && cell.checkboxOptions.length > 0) {
+          for (let optIdx = 0; optIdx < cell.checkboxOptions.length; optIdx++) {
+            const opt = cell.checkboxOptions[optIdx];
+            if (!opt) continue;
+            columns.push({
+              spssVarName: `${varName}_${opt.optionCode ?? String(optIdx + 1)}`,
+              questionText: q.title,
+              optionLabel: opt.label,
+              questionId: q.id,
+              type: 'table-cell',
+              tableCellId: cell.id,
+              tableCellType: 'checkbox',
+              optionIndex: optIdx,
+              optionValue: opt.value,
+              // 코딩북/value labels가 실제 spssNumericCode를 쓰도록 셀 옵션 전달
+              // (CheckboxOption은 QuestionOption과 구조 호환 — radio/select 셀과 동일 처리)
+              cellOptions: cell.checkboxOptions,
+              ...(cell.spssVarType !== undefined ? { cellSpssVarType: cell.spssVarType } : {}),
+              ...(cell.spssMeasure !== undefined ? { cellSpssMeasure: cell.spssMeasure } : {}),
+              ...(autoExportLabel !== undefined ? { cellExportLabel: autoExportLabel } : {}),
+            });
+            // allowTextInput 옵션마다 STRING 사이드카 텍스트 변수 생성
+            if (opt.allowTextInput) {
+              const varNumber = opt.optionCode ?? String(optIdx + 1);
+              columns.push({
+                spssVarName: buildOptionTextVarName(varName, varNumber),
+                questionText: q.title,
+                optionLabel: `${opt.label} (텍스트)`,
+                questionId: q.id,
+                type: 'table-cell-option-text',
+                tableCellId: cell.id,
+                optionId: opt.id,
+                ...(autoExportLabel !== undefined ? { cellExportLabel: autoExportLabel } : {}),
+              });
+            }
+          }
+        } else {
+          // radio/select/input: 기존 로직
+          let optionLabel = '';
+          const opts = cell.radioOptions || cell.selectOptions;
+          if (opts && opts.length > 0) {
+            optionLabel = opts.map((o) => o.label).join(' / ');
           }
 
-          // checkbox 셀: checkboxOptions가 있으면 옵션별 분리 변수 생성
-          if (cell.type === 'checkbox' && cell.checkboxOptions && cell.checkboxOptions.length > 0) {
-            for (let optIdx = 0; optIdx < cell.checkboxOptions.length; optIdx++) {
-              const opt = cell.checkboxOptions[optIdx];
+          columns.push({
+            spssVarName: varName,
+            questionText: q.title,
+            optionLabel: optionLabel || `${tRow.label} - ${q.tableColumns[colIdx]?.label ?? ''}`,
+            questionId: q.id,
+            type: 'table-cell',
+            tableCellId: cell.id,
+            tableCellType: cell.type,
+            ...(cell.spssVarType !== undefined ? { cellSpssVarType: cell.spssVarType } : {}),
+            ...(cell.spssMeasure !== undefined ? { cellSpssMeasure: cell.spssMeasure } : {}),
+            ...(autoExportLabel !== undefined ? { cellExportLabel: autoExportLabel } : {}),
+            // radio/select 셀의 응답값을 spssNumericCode로 매핑하기 위한 옵션.
+            // RadioOption은 QuestionOption과 구조적으로 호환되어 그대로 widening.
+            ...(opts ? { cellOptions: opts } : {}),
+          });
+
+          // radio/select 셀의 allowTextInput 옵션마다 STRING 사이드카 텍스트 변수 생성
+          if (cell.type === 'radio' && cell.radioOptions) {
+            for (let optIdx = 0; optIdx < cell.radioOptions.length; optIdx++) {
+              const opt = cell.radioOptions[optIdx];
               if (!opt) continue;
-              columns.push({
-                spssVarName: `${varName}_${opt.optionCode ?? String(optIdx + 1)}`,
-                questionText: q.title,
-                optionLabel: opt.label,
-                questionId: q.id,
-                type: 'table-cell',
-                tableCellId: cell.id,
-                tableCellType: 'checkbox',
-                optionIndex: optIdx,
-                optionValue: opt.value,
-                // 코딩북/value labels가 실제 spssNumericCode를 쓰도록 셀 옵션 전달
-                // (CheckboxOption은 QuestionOption과 구조 호환 — radio/select 셀과 동일 처리)
-                cellOptions: cell.checkboxOptions,
-                ...(cell.spssVarType !== undefined ? { cellSpssVarType: cell.spssVarType } : {}),
-                ...(cell.spssMeasure !== undefined ? { cellSpssMeasure: cell.spssMeasure } : {}),
-                ...(autoExportLabel !== undefined ? { cellExportLabel: autoExportLabel } : {}),
-              });
-              // allowTextInput 옵션마다 STRING 사이드카 텍스트 변수 생성
               if (opt.allowTextInput) {
                 const varNumber = opt.optionCode ?? String(optIdx + 1);
                 columns.push({
@@ -510,66 +552,22 @@ export function generateSPSSColumns(questions: QuestionVariant[]): SPSSExportCol
                 });
               }
             }
-          } else {
-            // radio/select/input: 기존 로직
-            let optionLabel = '';
-            const opts = cell.radioOptions || cell.selectOptions;
-            if (opts && opts.length > 0) {
-              optionLabel = opts.map((o) => o.label).join(' / ');
-            }
-
-            columns.push({
-              spssVarName: varName,
-              questionText: q.title,
-              optionLabel: optionLabel || `${tRow.label} - ${q.tableColumns[colIdx]?.label ?? ''}`,
-              questionId: q.id,
-              type: 'table-cell',
-              tableCellId: cell.id,
-              tableCellType: cell.type,
-              ...(cell.spssVarType !== undefined ? { cellSpssVarType: cell.spssVarType } : {}),
-              ...(cell.spssMeasure !== undefined ? { cellSpssMeasure: cell.spssMeasure } : {}),
-              ...(autoExportLabel !== undefined ? { cellExportLabel: autoExportLabel } : {}),
-              // radio/select 셀의 응답값을 spssNumericCode로 매핑하기 위한 옵션.
-              // RadioOption은 QuestionOption과 구조적으로 호환되어 그대로 widening.
-              ...(opts ? { cellOptions: opts } : {}),
-            });
-
-            // radio/select 셀의 allowTextInput 옵션마다 STRING 사이드카 텍스트 변수 생성
-            if (cell.type === 'radio' && cell.radioOptions) {
-              for (let optIdx = 0; optIdx < cell.radioOptions.length; optIdx++) {
-                const opt = cell.radioOptions[optIdx];
-                if (!opt) continue;
-                if (opt.allowTextInput) {
-                  const varNumber = opt.optionCode ?? String(optIdx + 1);
-                  columns.push({
-                    spssVarName: buildOptionTextVarName(varName, varNumber),
-                    questionText: q.title,
-                    optionLabel: `${opt.label} (텍스트)`,
-                    questionId: q.id,
-                    type: 'table-cell-option-text',
-                    tableCellId: cell.id,
-                    optionId: opt.id,
-                    ...(autoExportLabel !== undefined ? { cellExportLabel: autoExportLabel } : {}),
-                  });
-                }
-              }
-            } else if (cell.type === 'select' && cell.selectOptions) {
-              for (let optIdx = 0; optIdx < cell.selectOptions.length; optIdx++) {
-                const opt = cell.selectOptions[optIdx];
-                if (!opt) continue;
-                if (opt.allowTextInput) {
-                  const varNumber = opt.optionCode ?? String(optIdx + 1);
-                  columns.push({
-                    spssVarName: buildOptionTextVarName(varName, varNumber),
-                    questionText: q.title,
-                    optionLabel: `${opt.label} (텍스트)`,
-                    questionId: q.id,
-                    type: 'table-cell-option-text',
-                    tableCellId: cell.id,
-                    optionId: opt.id,
-                    ...(autoExportLabel !== undefined ? { cellExportLabel: autoExportLabel } : {}),
-                  });
-                }
+          } else if (cell.type === 'select' && cell.selectOptions) {
+            for (let optIdx = 0; optIdx < cell.selectOptions.length; optIdx++) {
+              const opt = cell.selectOptions[optIdx];
+              if (!opt) continue;
+              if (opt.allowTextInput) {
+                const varNumber = opt.optionCode ?? String(optIdx + 1);
+                columns.push({
+                  spssVarName: buildOptionTextVarName(varName, varNumber),
+                  questionText: q.title,
+                  optionLabel: `${opt.label} (텍스트)`,
+                  questionId: q.id,
+                  type: 'table-cell-option-text',
+                  tableCellId: cell.id,
+                  optionId: opt.id,
+                  ...(autoExportLabel !== undefined ? { cellExportLabel: autoExportLabel } : {}),
+                });
               }
             }
           }
