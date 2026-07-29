@@ -303,7 +303,7 @@ describe('Raw Data 시트 메타 컬럼', () => {
   it('메타 데이터 값이 규칙대로 채워진다', () => {
     const wb = generateRawDataWorkbook([radioQ], [makeRow()], TEST_CTX);
     const dr = wb.getWorksheet('Raw Data')!.getRow(4);
-    expect(dr.getCell(1).value).toBe('01234567'); // IP 해시 앞 8자리
+    expect(dr.getCell(1).value).toBe('0123456789abcdef'); // IP 해시 앞 16자리
     expect(dr.getCell(2).value).toBe(7); // 번호=resid
     expect(dr.getCell(3).value).toBe(1); // 순번
     expect(dr.getCell(4).value).toBe('전시회A');

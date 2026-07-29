@@ -93,7 +93,8 @@ interface RawMetaColumn {
  * 설문 설정(컨택 존재/그룹 사용)에 따라 조건부 생성된다.
  */
 const RAW_META_COLUMNS: RawMetaColumn[] = [
-  { header: 'IP 해시', value: (row) => (row.ipHash ? row.ipHash.slice(0, 8) : '') },
+  // sha256 전체는 64자 — 동일값 식별 목적에는 앞 16자(64비트)로 충분하고 열 너비를 지킨다
+  { header: 'IP 해시', value: (row) => (row.ipHash ? row.ipHash.slice(0, 16) : '') },
   { header: '번호(systemID)', enabled: (ctx) => ctx.hasContacts, value: (row) => row.resid ?? '' },
   { header: '순번', value: (_row, seq) => seq },
   { header: '조사 대상 그룹', enabled: (ctx) => ctx.hasContactGroups, value: (row) => row.groupValue ?? '공개링크' },
