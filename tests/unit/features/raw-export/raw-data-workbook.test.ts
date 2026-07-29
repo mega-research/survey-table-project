@@ -319,4 +319,23 @@ describe('Raw Data 시트 메타 컬럼', () => {
     expect(ws1.getRow(2).getCell(1).value).toBe(7);
     expect(ws1.getRow(2).getCell(2).value).toBe(1);
   });
+
+  it('다중 행에서 순번이 증가하고 null 메타는 폴백된다', () => {
+    const wb = generateRawDataWorkbook(
+      [radioQ],
+      [
+        makeRow(),
+        makeRow({ groupValue: null, ipHash: null, currentStepId: 'group:unknown' }),
+      ],
+      TEST_CTX,
+    );
+    const ws = wb.getWorksheet('Raw Data')!;
+    // 순번: 데이터 1행(시트 4행)=1, 데이터 2행(시트 5행)=2
+    expect(ws.getRow(4).getCell(2).value).toBe(1);
+    expect(ws.getRow(5).getCell(2).value).toBe(2);
+    // null 폴백: 그룹 → '공개링크', IP 해시 → '', stepLabels 미스 → ''
+    expect(ws.getRow(5).getCell(3).value).toBe('공개링크');
+    expect(ws.getRow(5).getCell(5).value).toBe('');
+    expect(ws.getRow(5).getCell(10).value).toBe('');
+  });
 });
