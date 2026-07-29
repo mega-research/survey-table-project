@@ -1,4 +1,9 @@
 import type { SPSSExportColumn } from '@/lib/analytics/spss-excel-export';
+import {
+  buildStepLocationMap,
+  type StepGroupInput,
+  type StepQuestionInput,
+} from '@/lib/operations/profiles';
 import type { Question, QuestionOption } from '@/types/survey';
 import { resolveChoiceOptions } from '@/utils/choice-source';
 import { resolveRankingOptions, toSpssValueLabelPairs } from '@/utils/ranking-source';
@@ -95,4 +100,22 @@ export function buildCodebookValueLabel(
       // text, textarea, multiselect, other-text, option-text, notice-date, *-other
       return '';
   }
+}
+
+/**
+ * currentStepId → 엑셀 "마지막 입력 문항" 표시 라벨 맵.
+ * 운영 콘솔과 동일하게 buildStepLocationMap(페이지 대표 질문 환산)을 재사용하고,
+ * 질문번호(Qx) 파싱 실패 시 문항 위치("{n}번째")로 폴백한다.
+ */
+export function buildStepLabelMap(
+  questions: StepQuestionInput[],
+  groups: StepGroupInput[],
+): Map<string, string> {
+  const orders = [...new Set(questions.map((q) => q.order))].sort((a, b) => a - b);
+  const labels = new Map<string, string>();
+  for (const [stepId, loc] of buildStepLocationMap(questions, groups)) {
+    const position = orders.indexOf(loc.order) + 1;
+    labels.set(stepId, loc.qNumber ?? (position > 0 ? `${position}번째` : ''));
+  }
+  return labels;
 }
