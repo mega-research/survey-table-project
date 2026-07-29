@@ -256,14 +256,22 @@ export function buildStepLocationMap(
     order: g.order,
     ...(g.parentGroupId != null ? { parentGroupId: g.parentGroupId } : {}),
   }))
-  // 대표 질문 라벨은 질문코드 우선 (제목이 "Q13." 패턴이 아닌 설문 대응),
-  // 코드가 없으면 제목 Qx 파싱 폴백. 정규화된 rep 에는 questionCode 가 없어 원본을 역참조한다.
+  // 라벨은 페이지 항목 순서대로 질문코드 우선, 없으면 제목 Qx 파싱을 시도해 첫 성공값을 쓴다.
+  // 페이지 첫 항목이 코드 없는 공지여도 같은 페이지의 코드 있는 문항으로 라벨이 잡힌다.
+  // 정규화된 item.question 에는 questionCode 가 없어 원본을 역참조한다.
   const byId = new Map(questions.map((q) => [q.id, q]))
   const map = new Map<string, StepLocation>()
   for (const step of buildRenderSteps(qs, gs)) {
     const rep = step.items[0]?.question
     if (!rep) continue
-    const qNumber = byId.get(rep.id)?.questionCode || parseQuestionNumberFromTitle(rep.title) || null
+    let qNumber: string | null = null
+    for (const item of step.items) {
+      qNumber =
+        byId.get(item.question.id)?.questionCode ||
+        parseQuestionNumberFromTitle(item.question.title) ||
+        null
+      if (qNumber) break
+    }
     map.set(stepIdOf(step), { order: rep.order, qNumber })
   }
   return map

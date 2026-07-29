@@ -160,6 +160,17 @@ describe('buildStepLocationMap', () => {
     expect(map.get('page:q1')).toEqual({ order: 0, qNumber: 'SQ2' })
   })
 
+  it('페이지 첫 항목이 코드 없는 공지면 같은 페이지의 코드 있는 문항으로 라벨을 잡는다', () => {
+    const groups = [g({ id: 'g1', order: 0, name: 'A' })]
+    const questions = [
+      q({ id: 'n1', groupId: 'g1', order: 0, type: 'notice', title: '개인정보 수집 안내' }),
+      q({ id: 'q1', groupId: 'g1', order: 1, title: '귀하의 성별은?', questionCode: 'SQ1' }),
+    ]
+    const map = buildStepLocationMap(questions, groups)
+    // order 는 여전히 페이지 첫 항목(공지) 기준, 라벨만 코드 있는 문항으로
+    expect(map.get('page:n1')).toEqual({ order: 0, qNumber: 'SQ1' })
+  })
+
   it('table 포함 단일 페이지 — pageBreakBefore 없으면 나뉘지 않음', () => {
     const groups = [g({ id: 'g1', order: 0, name: 'A' })]
     const questions = [
