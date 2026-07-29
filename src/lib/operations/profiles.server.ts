@@ -45,6 +45,8 @@ export interface ProfilesRow {
   totalSeconds: number | null;
   /** 매칭된 contact_targets.group_value (전시회명 국문 등). 익명/미매칭이면 null. */
   groupValue: string | null;
+  /** 매칭된 contact_targets.resid (번호/systemID). 익명/미매칭이면 null. */
+  resid: number | null;
   /** 현재 서버 scope에 속한 응답의 테스트 여부. real scope는 false, test scope는 true로 고정된다. */
   isTest: boolean;
 }
@@ -246,6 +248,7 @@ export async function listResponsesForProfiles(
       totalSeconds: numbered.totalSeconds,
       isTest: numbered.isTest,
       groupValue: numbered.groupValue,
+      resid: numbered.contactResid,
     })
     .from(numbered);
 
@@ -268,6 +271,7 @@ export async function listResponsesForProfiles(
     totalSeconds: r.totalSeconds,
     isTest: r.isTest,
     groupValue: r.groupValue ?? null,
+    resid: r.resid ?? null,
   }));
 
   return { rows, total, page: clampedPage };

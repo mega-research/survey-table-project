@@ -144,7 +144,7 @@ export type StatusTone = 'green' | 'blue' | 'gray' | 'amber' | 'red'
 export interface StatusPillResult {
   label: string
   tone: StatusTone
-  /** in_progress 일 때만 채워진다: "5/50 · Q3" */
+  /** 진행중·이탈일 때 채워진다: "5/50(11) · Q3" — 이탈은 멈춘 위치 표시 */
   sub?: string
 }
 
@@ -166,32 +166,42 @@ interface MapStatusPillArgs {
  * 정의된 6종 외 값은 default fallback("기타", gray) — 향후 enum 확장 안전망.
  * `in_progress` 만 진척률 부속(`sub`)을 추가해 운영자에게 위치 단서를 준다.
  */
+/**
+ * 진척 부속 표기 — "26/28(50) · Q33": visible step 진척 / 총 visible step (전체 질문 수) · 현재 질문번호.
+ * visible 값은 응답 페이지가 저장 (구 데이터·첫 답변 전엔 NULL → '?' 폴백).
+ * 진행중·이탈 pill 이 공유한다 (이탈 = 그 위치에서 멈춘 진행중).
+ * 위치 신호가 전혀 없으면 null — 이탈은 sub 생략, 진행중은 '?' 폴백 유지(기존 동작).
+ */
+function buildProgressSub(args: MapStatusPillArgs): string | null {
+  const idx = args.visibleStepIndex ?? null
+  const total = args.visibleStepTotal ?? null
+  const totalQ = args.totalQuestions ?? null
+  const q = args.qNumber ?? null
+  if (idx === null && total === null && q === null) return null
+  const idxStr = idx === null ? '?' : String(idx)
+  const totalStr = total === null ? '?' : String(total)
+  const totalQStr = totalQ === null ? '?' : String(totalQ)
+  const qStr = q === null ? '?' : q
+  return `${idxStr}/${totalStr}(${totalQStr}) · ${qStr}`
+}
+
 export function mapStatusPill(args: MapStatusPillArgs): StatusPillResult {
   const { status } = args
   switch (status) {
     case 'completed':
       return { label: '완료', tone: 'green' }
-    case 'drop':
-      return { label: '이탈', tone: 'gray' }
+    case 'drop': {
+      const sub = buildProgressSub(args)
+      return { label: '이탈', tone: 'gray', ...(sub !== null ? { sub } : {}) }
+    }
     case 'screened_out':
       return { label: '자격 미달', tone: 'amber' }
     case 'quotaful_out':
       return { label: '쿼터마감', tone: 'amber' }
     case 'bad':
       return { label: '불량', tone: 'red' }
-    case 'in_progress': {
-      // "26/28(50) · Q33" — visible step 진척 / 총 visible step (전체 질문 수) · 현재 질문번호.
-      // visible 값은 응답 페이지가 저장 (구 데이터·첫 답변 전엔 NULL → '?' 폴백).
-      const idx = args.visibleStepIndex ?? null
-      const total = args.visibleStepTotal ?? null
-      const totalQ = args.totalQuestions ?? null
-      const q = args.qNumber ?? null
-      const idxStr = idx === null ? '?' : String(idx)
-      const totalStr = total === null ? '?' : String(total)
-      const totalQStr = totalQ === null ? '?' : String(totalQ)
-      const qStr = q === null ? '?' : q
-      return { label: '진행중', tone: 'blue', sub: `${idxStr}/${totalStr}(${totalQStr}) · ${qStr}` }
-    }
+    case 'in_progress':
+      return { label: '진행중', tone: 'blue', sub: buildProgressSub(args) ?? '?/?(?) · ?' }
     default:
       return { label: '기타', tone: 'gray' }
   }

@@ -79,7 +79,8 @@ export function LocalDateTime({
       suppressHydrationWarning
       className={className}
     >
-      {date.toLocaleString(undefined, FORMAT_MAP[format])}
+      {/* 로케일 고정: 브라우저 로케일(en-US 등)이면 월/일/년으로 뒤집혀 한국식(년.월.일)으로 통일 */}
+      {date.toLocaleString('ko-KR', FORMAT_MAP[format])}
     </time>
   );
 }

@@ -75,7 +75,19 @@ describe('mapStatusPill', () => {
     expect(mapStatusPill({ status: 'completed' })).toEqual({ label: '완료', tone: 'green' })
   })
 
-  it("status='drop' → { label:'이탈', tone:'gray' }", () => {
+  it("status='drop' → 이탈 + 진행중과 동일한 위치 부속 표기", () => {
+    expect(
+      mapStatusPill({
+        status: 'drop',
+        visibleStepIndex: 2,
+        visibleStepTotal: 3,
+        totalQuestions: 11,
+        qNumber: 'Q3_1',
+      }),
+    ).toEqual({ label: '이탈', tone: 'gray', sub: '2/3(11) · Q3_1' })
+  })
+
+  it("status='drop' + 위치 정보 전무 → sub 생략 (구응답 노이즈 방지)", () => {
     expect(mapStatusPill({ status: 'drop' })).toEqual({ label: '이탈', tone: 'gray' })
   })
 

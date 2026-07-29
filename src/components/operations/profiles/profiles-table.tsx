@@ -60,6 +60,8 @@ interface Props {
 interface DisplayRow {
   id: string;
   idx: number;
+  /** 매칭 컨택의 resid (번호/systemID). 익명이면 null → '—' 표시 */
+  resid: number | null;
   groupValue: string | null;
   platformKo: string;
   browser: string;
@@ -101,6 +103,7 @@ export function ProfilesTable({ rows, total, page, pageSize, sort, dir, stepLoca
         return {
           id: r.id,
           idx: r.idx,
+          resid: r.resid,
           groupValue: r.groupValue,
           platformKo: formatPlatformKo(r.platform),
           browser: r.browser ?? 'Other',
@@ -118,6 +121,12 @@ export function ProfilesTable({ rows, total, page, pageSize, sort, dir, stepLoca
   const columns = useMemo<ColumnDef<DisplayRow>[]>(
     () => [
       { id: 'idx', accessorKey: 'idx', header: '순번', meta: meta('right', true) },
+      {
+        id: 'resid',
+        accessorFn: (r: DisplayRow) => r.resid ?? '—',
+        header: '번호(systemID)',
+        meta: meta('right', false),
+      },
       {
         id: 'group',
         accessorFn: (r: DisplayRow) => r.groupValue ?? '공개링크',
