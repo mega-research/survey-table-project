@@ -63,6 +63,7 @@ export async function createQuestion(data: CreateQuestionInput): Promise<Questio
     displayCondition: data.displayCondition as NewQuestion['displayCondition'],
     dynamicRowConfigs: data.dynamicRowConfigs as NewQuestion['dynamicRowConfigs'],
     hideColumnLabels: data.hideColumnLabels,
+    exportCellOrder: data.exportCellOrder ?? null,
     mobileOriginalTable: data.mobileOriginalTable,
     mobileTableDisplayMode: data.mobileTableDisplayMode,
     mobileDrilldownOmitLeadingColumns: data.mobileDrilldownOmitLeadingColumns,

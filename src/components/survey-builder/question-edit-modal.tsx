@@ -445,6 +445,7 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
               // formData 가 소유하지 않는다. currentFormData 머지값을 CREATE 에 전달해
               // 신규 질문에서 ON 토글이 default(false)로 silent drop 되는 회귀를 막는다.
               hideColumnLabels: currentFormData.hideColumnLabels ?? question?.hideColumnLabels,
+              exportCellOrder: currentFormData.exportCellOrder ?? question?.exportCellOrder,
               mobileOriginalTable:
                 currentFormData.mobileOriginalTable ?? question?.mobileOriginalTable,
               mobileTableDisplayMode:

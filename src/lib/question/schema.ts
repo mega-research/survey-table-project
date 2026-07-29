@@ -51,6 +51,7 @@ const embeddedTable = z.object({
   tableRowsData: z.custom<NonNullable<Question['tableRowsData']>>().optional(),
   tableHeaderGrid: z.custom<NonNullable<Question['tableHeaderGrid']>>().optional(),
   hideColumnLabels: z.boolean().optional(),
+  exportCellOrder: z.enum(['row-first', 'column-first']).optional(),
 });
 
 const choiceGroups = z.object({

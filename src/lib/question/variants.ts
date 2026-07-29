@@ -42,7 +42,7 @@ type QuestionBase = Pick<
 /** 내장 테이블 capability — radio/checkbox/ranking/table 4유형 공유. */
 type EmbeddedTableFields = Pick<
   Question,
-  'tableTitle' | 'tableColumns' | 'tableRowsData' | 'tableHeaderGrid' | 'hideColumnLabels'
+  'tableTitle' | 'tableColumns' | 'tableRowsData' | 'tableHeaderGrid' | 'hideColumnLabels' | 'exportCellOrder'
 >;
 
 /** 테이블 레벨 옵션 그룹 — radio/checkbox/ranking 전용. */

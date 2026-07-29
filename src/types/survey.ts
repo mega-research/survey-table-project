@@ -567,6 +567,8 @@ export interface Question {
   dynamicRowConfigs?: DynamicRowGroupConfig[];
   // 열 라벨 숨기기 (테이블 타입 전용, UI에서만 숨기고 데이터는 보존)
   hideColumnLabels?: boolean;
+  /** 테이블 문항 내보내기 셀 순서 — 행 우선(기본) | 열 우선. Raw·분할·코딩북·.sav 공통 적용 */
+  exportCellOrder?: 'row-first' | 'column-first';
   // 모바일에서도 원본 표 레이아웃(가로 스크롤)으로 표시 — 카드/스테퍼 전환 안 함
   // (table 타입 + 설명 테이블 소스 radio/checkbox 전용)
   // 레거시 읽기 호환 전용 — 새 데이터는 mobileTableDisplayMode 사용
