@@ -58,18 +58,16 @@ function isAnsweredValue(value: unknown): boolean {
 }
 
 /**
- * "마지막 입력 문항" 라벨 해석.
- * 1순위: 저장된 진행 위치(currentStepId) → stepLabels 매칭.
- * 폴백: 진행 위치가 없거나(추적 도입 전 구응답) 현재 문항 구조와 매칭 실패 시,
- *       응답값이 존재하는 질문 중 order 최후순 질문의 라벨. 둘 다 없으면 공백.
+ * "마지막 입력 문항" 라벨 해석 — 이름 그대로 "마지막으로 입력한 문항" 기준.
+ * 1순위: 응답값이 실제 존재하는 질문 중 order 최후순 질문의 라벨.
+ *        (진행 페이지 대표가 아니라 입력 기준 — 한 페이지에 여러 문항이 있어도 정확)
+ * 폴백: 응답이 전혀 없으면 진행 위치(currentStepId) 페이지 라벨(도달 위치라도 표시).
+ * 둘 다 없으면 공백.
  */
 export function resolveLastEnteredLabel(
   row: RawExportResponseRow,
   ctx: RawExportContext,
 ): string {
-  const stepLabel = row.currentStepId ? ctx.stepLabels.get(row.currentStepId) : undefined;
-  if (stepLabel) return stepLabel;
-
   let best: { order: number; label: string } | null = null;
   for (const [questionId, value] of Object.entries(row.questionResponses)) {
     if (!isAnsweredValue(value)) continue;
@@ -77,7 +75,9 @@ export function resolveLastEnteredLabel(
     if (!meta || !meta.label) continue;
     if (!best || meta.order > best.order) best = meta;
   }
-  return best?.label ?? '';
+  if (best) return best.label;
+
+  return row.currentStepId ? (ctx.stepLabels.get(row.currentStepId) ?? '') : '';
 }
 
 interface RawMetaColumn {
@@ -93,16 +93,16 @@ interface RawMetaColumn {
  * 설문 설정(컨택 존재/그룹 사용)에 따라 조건부 생성된다.
  */
 const RAW_META_COLUMNS: RawMetaColumn[] = [
+  { header: 'IP 해시', value: (row) => (row.ipHash ? row.ipHash.slice(0, 8) : '') },
   { header: '번호(systemID)', enabled: (ctx) => ctx.hasContacts, value: (row) => row.resid ?? '' },
   { header: '순번', value: (_row, seq) => seq },
   { header: '조사 대상 그룹', enabled: (ctx) => ctx.hasContactGroups, value: (row) => row.groupValue ?? '공개링크' },
   { header: '개별 URL', value: (row, _seq, ctx) => (row.inviteCode ? buildInviteUrl(row.inviteCode, ctx.appUrl) : '') },
-  { header: 'IP 해시', value: (row) => (row.ipHash ? row.ipHash.slice(0, 8) : '') },
   { header: '상태', value: (row) => mapStatusPill({ status: row.status }).label },
+  { header: '마지막 입력 문항', value: (row, _seq, ctx) => resolveLastEnteredLabel(row, ctx) },
   { header: '시작일시', value: (row) => formatExcelDateTime(row.startedAt) },
   { header: '종료일시', value: (row) => formatExcelDateTime(row.completedAt) },
   { header: '소요시간', value: (row) => formatTotalTime(row.totalSeconds, row.status) },
-  { header: '마지막 입력 문항', value: (row, _seq, ctx) => resolveLastEnteredLabel(row, ctx) },
   { header: '접속 단말', value: (row) => formatPlatformKo(row.platform as Platform | null) },
 ];
 

@@ -262,9 +262,19 @@ describe('Raw Data 시트 메타 컬럼', () => {
   it('왼쪽 11열 헤더가 붙고 1~3행 세로 병합된다', () => {
     const wb = generateRawDataWorkbook([radioQ], [makeRow()], TEST_CTX);
     const ws = wb.getWorksheet('Raw Data')!;
-    expect(ws.getRow(1).getCell(1).value).toBe('번호(systemID)');
-    expect(ws.getRow(1).getCell(2).value).toBe('순번');
-    expect(ws.getRow(1).getCell(11).value).toBe('접속 단말');
+    expect([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((c) => ws.getRow(1).getCell(c).value)).toEqual([
+      'IP 해시',
+      '번호(systemID)',
+      '순번',
+      '조사 대상 그룹',
+      '개별 URL',
+      '상태',
+      '마지막 입력 문항',
+      '시작일시',
+      '종료일시',
+      '소요시간',
+      '접속 단말',
+    ]);
     expect(ws.getRow(1).getCell(12).value).toBe('Q1. 성별');
   });
 
@@ -276,12 +286,13 @@ describe('Raw Data 시트 메타 컬럼', () => {
     };
     const wb = generateRawDataWorkbook([radioQ], [makeRow({ resid: null, groupValue: null })], noContactCtx);
     const ws = wb.getWorksheet('Raw Data')!;
-    // 메타 9열 (번호·그룹 생략) → 첫 열이 순번, 변수 열은 10열부터
-    expect(ws.getRow(1).getCell(1).value).toBe('순번');
-    expect(ws.getRow(1).getCell(2).value).toBe('개별 URL');
+    // 메타 9열 (번호·그룹 생략) → IP 해시/순번/개별 URL... 순, 변수 열은 10열부터
+    expect(ws.getRow(1).getCell(1).value).toBe('IP 해시');
+    expect(ws.getRow(1).getCell(2).value).toBe('순번');
+    expect(ws.getRow(1).getCell(3).value).toBe('개별 URL');
     expect(ws.getRow(1).getCell(9).value).toBe('접속 단말');
     expect(ws.getRow(1).getCell(10).value).toBe('Q1. 성별');
-    expect(ws.getRow(4).getCell(1).value).toBe(1); // 순번이 첫 열
+    expect(ws.getRow(4).getCell(2).value).toBe(1); // 순번
     // 응답 내역 시트도 동일 규칙 (7열)
     const ws1 = wb.getWorksheet('응답 내역')!;
     expect(ws1.getRow(1).getCell(1).value).toBe('순번');
@@ -292,13 +303,13 @@ describe('Raw Data 시트 메타 컬럼', () => {
   it('메타 데이터 값이 규칙대로 채워진다', () => {
     const wb = generateRawDataWorkbook([radioQ], [makeRow()], TEST_CTX);
     const dr = wb.getWorksheet('Raw Data')!.getRow(4);
-    expect(dr.getCell(1).value).toBe(7); // 번호=resid
-    expect(dr.getCell(2).value).toBe(1); // 순번
-    expect(dr.getCell(3).value).toBe('전시회A');
-    expect(dr.getCell(4).value).toBe('https://app.example.com/i/abc123defg');
-    expect(dr.getCell(5).value).toBe('01234567'); // IP 해시 앞 8자리
+    expect(dr.getCell(1).value).toBe('01234567'); // IP 해시 앞 8자리
+    expect(dr.getCell(2).value).toBe(7); // 번호=resid
+    expect(dr.getCell(3).value).toBe(1); // 순번
+    expect(dr.getCell(4).value).toBe('전시회A');
+    expect(dr.getCell(5).value).toBe('https://app.example.com/i/abc123defg');
     expect(dr.getCell(6).value).toBe('완료');
-    expect(dr.getCell(10).value).toBe('Q1'); // 마지막 입력 문항
+    expect(dr.getCell(7).value).toBe('Q1'); // 마지막 입력 문항 — 상태 바로 옆
     expect(dr.getCell(11).value).toBe('PC');
   });
 
@@ -318,11 +329,11 @@ describe('Raw Data 시트 메타 컬럼', () => {
       TEST_CTX,
     );
     const dr = wb.getWorksheet('Raw Data')!.getRow(4);
-    expect(dr.getCell(1).value).toBe('');
-    expect(dr.getCell(4).value).toBe('');
+    expect(dr.getCell(2).value).toBe(''); // 번호
+    expect(dr.getCell(5).value).toBe(''); // 개별 URL
     expect(dr.getCell(6).value).toBe('진행중');
-    expect(dr.getCell(8).value).toBe(''); // 종료일시
-    expect(dr.getCell(9).value).toBe('진행 중'); // 소요시간
+    expect(dr.getCell(9).value).toBe(''); // 종료일시
+    expect(dr.getCell(10).value).toBe('진행 중'); // 소요시간
   });
 
   it('응답 내역 시트는 컨택 설문에서 번호+순번 두 식별자를 갖는다', () => {
@@ -364,16 +375,33 @@ describe('Raw Data 시트 메타 컬럼', () => {
       ctx,
     );
     // q3 응답은 빈 객체(미입력)라 제외 → 응답값 존재 최후순은 q2 → 'Q2'
-    expect(wb.getWorksheet('Raw Data')!.getRow(4).getCell(10).value).toBe('Q2');
+    expect(wb.getWorksheet('Raw Data')!.getRow(4).getCell(7).value).toBe('Q2');
   });
 
-  it('진행 위치가 현재 문항 구조와 매칭 실패해도 응답값 폴백이 동작한다', () => {
+  it('진행 위치가 현재 문항 구조와 매칭 실패해도 응답값 기준이 동작한다', () => {
     const wb = generateRawDataWorkbook(
       [radioQ],
       [makeRow({ currentStepId: 'group:deleted', questionResponses: { q1: 'opt2' } })],
       TEST_CTX,
     );
-    expect(wb.getWorksheet('Raw Data')!.getRow(4).getCell(10).value).toBe('Q1');
+    expect(wb.getWorksheet('Raw Data')!.getRow(4).getCell(7).value).toBe('Q1');
+  });
+
+  it('진행 페이지 라벨보다 응답값 최후순 문항이 우선한다', () => {
+    // currentStepId 는 'group:g1'(라벨 Q1) 이지만 q2 까지 입력됨 — 한 페이지 다문항 케이스
+    const ctx: RawExportContext = {
+      ...TEST_CTX,
+      questionMeta: new Map([
+        ['q1', { order: 1, label: 'Q1' }],
+        ['q2', { order: 2, label: 'Q2' }],
+      ]),
+    };
+    const wb = generateRawDataWorkbook(
+      [radioQ],
+      [makeRow({ questionResponses: { q1: 'opt2', q2: '서울' } })],
+      ctx,
+    );
+    expect(wb.getWorksheet('Raw Data')!.getRow(4).getCell(7).value).toBe('Q2');
   });
 
   it('다중 행에서 순번이 증가하고 null 메타는 폴백된다', () => {
@@ -386,12 +414,12 @@ describe('Raw Data 시트 메타 컬럼', () => {
       TEST_CTX,
     );
     const ws = wb.getWorksheet('Raw Data')!;
-    // 순번: 데이터 1행(시트 4행)=1, 데이터 2행(시트 5행)=2
-    expect(ws.getRow(4).getCell(2).value).toBe(1);
-    expect(ws.getRow(5).getCell(2).value).toBe(2);
-    // null 폴백: 그룹 → '공개링크', IP 해시 → '', stepLabels 미스 → ''
-    expect(ws.getRow(5).getCell(3).value).toBe('공개링크');
-    expect(ws.getRow(5).getCell(5).value).toBe('');
-    expect(ws.getRow(5).getCell(10).value).toBe('');
+    // 순번(3열): 데이터 1행(시트 4행)=1, 데이터 2행(시트 5행)=2
+    expect(ws.getRow(4).getCell(3).value).toBe(1);
+    expect(ws.getRow(5).getCell(3).value).toBe(2);
+    // null 폴백: 그룹(4열) → '공개링크', IP 해시(1열) → '', 응답 없음+stepLabels 미스(7열) → ''
+    expect(ws.getRow(5).getCell(4).value).toBe('공개링크');
+    expect(ws.getRow(5).getCell(1).value).toBe('');
+    expect(ws.getRow(5).getCell(7).value).toBe('');
   });
 });

@@ -55,10 +55,11 @@ describe('분할 워크북 메타 컬럼', () => {
     const wb = buildSplitWorkbook([basisQ, textQ], [row], 'qb', CTX);
     for (const ws of wb.worksheets) {
       if (ws.name === '응답 내역' || ws.name === '코딩북') continue;
-      expect(ws.getRow(1).getCell(1).value).toBe('번호(systemID)');
+      expect(ws.getRow(1).getCell(1).value).toBe('IP 해시');
+      expect(ws.getRow(1).getCell(2).value).toBe('번호(systemID)');
       expect(ws.getRow(1).getCell(11).value).toBe('접속 단말');
-      expect(ws.getRow(4).getCell(1).value).toBe(3); // 번호=resid
-      expect(ws.getRow(4).getCell(2).value).toBe(1); // 순번
+      expect(ws.getRow(4).getCell(2).value).toBe(3); // 번호=resid
+      expect(ws.getRow(4).getCell(3).value).toBe(1); // 순번
     }
   });
 
