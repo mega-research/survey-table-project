@@ -104,18 +104,19 @@ export function buildCodebookValueLabel(
 
 /**
  * currentStepId → 엑셀 "마지막 입력 문항" 표시 라벨 맵.
- * 운영 콘솔과 동일하게 buildStepLocationMap(페이지 대표 질문 환산)을 재사용하고,
- * 질문번호(Qx) 파싱 실패 시 문항 위치("{n}번째")로 폴백한다.
+ * 페이지 대표 질문 환산은 운영 콘솔의 buildStepLocationMap 을 재사용하되, 라벨은
+ * 엑셀 변수명·코딩북과 동일 기준인 질문코드(questionCode, 예: Q13)를 우선한다.
+ * 질문코드가 없으면 제목의 Qx 파싱 폴백, 둘 다 없으면 공백 — 위치 표기("{n}번째")는 쓰지 않는다.
  */
 export function buildStepLabelMap(
-  questions: StepQuestionInput[],
+  questions: Array<StepQuestionInput & { questionCode?: string | null }>,
   groups: StepGroupInput[],
 ): Map<string, string> {
-  const orders = [...new Set(questions.map((q) => q.order))].sort((a, b) => a - b);
   const labels = new Map<string, string>();
   for (const [stepId, loc] of buildStepLocationMap(questions, groups)) {
-    const position = orders.indexOf(loc.order) + 1;
-    labels.set(stepId, loc.qNumber ?? (position > 0 ? `${position}번째` : ''));
+    // 대표 질문 역참조: StepLocation 은 대표 질문의 order 를 담으므로 order 로 찾는다
+    const rep = questions.find((q) => q.order === loc.order);
+    labels.set(stepId, rep?.questionCode || loc.qNumber || '');
   }
   return labels;
 }

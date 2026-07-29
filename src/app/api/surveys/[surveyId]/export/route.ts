@@ -308,6 +308,7 @@ async function buildRawExportContext(
     type: string;
     groupId: string | null;
     pageBreakBefore: boolean | null;
+    questionCode: string | null;
   }>,
 ): Promise<RawExportContext> {
   const groups = await getQuestionGroupsBySurvey(surveyId);
@@ -318,6 +319,7 @@ async function buildRawExportContext(
     type: q.type,
     groupId: q.groupId,
     pageBreakBefore: q.pageBreakBefore ?? false,
+    questionCode: q.questionCode,
   }));
   return {
     appUrl: (process.env['NEXT_PUBLIC_APP_URL'] ?? '').replace(/\/+$/, ''),

@@ -95,14 +95,25 @@ describe('buildStepLabelMap', () => {
     { id: 'g2', order: 2, name: '섹션B' },
   ];
   const questions = [
-    { id: 'q1', order: 1, title: 'Q1. 성별', type: 'radio', groupId: 'g1' },
-    { id: 'q2', order: 2, title: '거주 지역', type: 'radio', groupId: 'g2', pageBreakBefore: true },
+    { id: 'q1', order: 1, title: 'Q1. 성별', type: 'radio', groupId: 'g1', questionCode: 'Q13' },
+    { id: 'q2', order: 2, title: '거주 지역', type: 'radio', groupId: 'g2', pageBreakBefore: true, questionCode: 'Q14' },
   ];
 
-  it('대표 질문의 질문번호를 라벨로 쓰고, 파싱 실패 시 위치 폴백한다', () => {
+  it('대표 질문의 질문코드를 라벨로 쓴다 — 제목 Qx 표기보다 우선', () => {
     const labels = [...buildStepLabelMap(questions, groups).values()];
+    expect(labels).toContain('Q13');
+    expect(labels).toContain('Q14');
+  });
+
+  it('질문코드가 없으면 제목 Qx 파싱, 둘 다 없으면 공백 — 위치 표기는 쓰지 않는다', () => {
+    const noCode = [
+      { id: 'q1', order: 1, title: 'Q1. 성별', type: 'radio', groupId: 'g1', questionCode: null },
+      { id: 'q2', order: 2, title: '거주 지역', type: 'radio', groupId: 'g2', pageBreakBefore: true, questionCode: null },
+    ];
+    const labels = [...buildStepLabelMap(noCode, groups).values()];
     expect(labels).toContain('Q1');
-    expect(labels).toContain('2번째');
+    expect(labels).toContain('');
+    expect(labels.some((l) => l.includes('번째'))).toBe(false);
   });
 
   it('질문이 없으면 빈 맵', () => {
