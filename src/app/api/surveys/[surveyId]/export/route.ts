@@ -312,6 +312,12 @@ async function buildRawExportContext(
   }>,
 ): Promise<RawExportContext> {
   const groups = await getQuestionGroupsBySurvey(surveyId);
+  // 조건부 메타 열 판정 — 설문 설정 기준 (응답 매칭 여부 무관):
+  // 컨택 타겟이 없으면 번호(systemID) 열, 그룹값이 전무하면 조사 대상 그룹 열을 만들지 않는다.
+  const contactStats = await db
+    .select({ total: count(), withGroup: count(contactTargets.groupValue) })
+    .from(contactTargets)
+    .where(eq(contactTargets.surveyId, surveyId));
   const stepQs = questions.map((q) => ({
     id: q.id,
     order: q.order,
@@ -324,5 +330,7 @@ async function buildRawExportContext(
   return {
     appUrl: (process.env['NEXT_PUBLIC_APP_URL'] ?? '').replace(/\/+$/, ''),
     stepLabels: buildStepLabelMap(stepQs, groups),
+    hasContacts: (contactStats[0]?.total ?? 0) > 0,
+    hasContactGroups: (contactStats[0]?.withGroup ?? 0) > 0,
   };
 }

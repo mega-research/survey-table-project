@@ -37,41 +37,91 @@ export interface RawExportContext {
   appUrl: string;
   /** currentStepId → 표시 라벨 (buildStepLabelMap 결과) */
   stepLabels: ReadonlyMap<string, string>;
+  /** 설문에 컨택 타겟이 존재하는지 — false 면 번호(systemID) 열을 만들지 않는다 (응답 매칭 여부 무관, 설문 설정 기준) */
+  hasContacts: boolean;
+  /** 컨택 타겟에 그룹값이 하나라도 설정돼 있는지 — false 면 조사 대상 그룹 열을 만들지 않는다 */
+  hasContactGroups: boolean;
 }
 
-/** Raw Data·분할 시트 왼쪽 고정 메타 헤더. 코딩북·.sav 미포함, 헤더 1~3행 세로 병합 대상. */
-export const RAW_META_HEADERS = [
-  '번호',
-  '순번',
-  '조사 대상 그룹',
-  '개별 URL',
-  'IP 해시',
-  '상태',
-  '시작일시',
-  '종료일시',
-  '소요시간',
-  '마지막 입력 문항',
-  '접속 단말',
-] as const;
+interface RawMetaColumn {
+  header: string;
+  value: (row: RawExportResponseRow, seq: number, ctx: RawExportContext) => string | number;
+  /** 열 생성 조건 — false 반환 시 헤더·값 모두 생략. 미지정은 항상 생성. */
+  enabled?: (ctx: RawExportContext) => boolean;
+}
+
+/**
+ * Raw Data·분할 시트 왼쪽 메타 열 정의 (헤더·값·생성 조건의 단일 출처).
+ * 코딩북·.sav 미포함, 헤더 1~3행 세로 병합 대상. 번호(systemID)·조사 대상 그룹은
+ * 설문 설정(컨택 존재/그룹 사용)에 따라 조건부 생성된다.
+ */
+const RAW_META_COLUMNS: RawMetaColumn[] = [
+  { header: '번호(systemID)', enabled: (ctx) => ctx.hasContacts, value: (row) => row.resid ?? '' },
+  { header: '순번', value: (_row, seq) => seq },
+  { header: '조사 대상 그룹', enabled: (ctx) => ctx.hasContactGroups, value: (row) => row.groupValue ?? '공개링크' },
+  { header: '개별 URL', value: (row, _seq, ctx) => (row.inviteCode ? buildInviteUrl(row.inviteCode, ctx.appUrl) : '') },
+  { header: 'IP 해시', value: (row) => (row.ipHash ? row.ipHash.slice(0, 8) : '') },
+  { header: '상태', value: (row) => mapStatusPill({ status: row.status }).label },
+  { header: '시작일시', value: (row) => formatExcelDateTime(row.startedAt) },
+  { header: '종료일시', value: (row) => formatExcelDateTime(row.completedAt) },
+  { header: '소요시간', value: (row) => formatTotalTime(row.totalSeconds, row.status) },
+  { header: '마지막 입력 문항', value: (row, _seq, ctx) => (row.currentStepId ? (ctx.stepLabels.get(row.currentStepId) ?? '') : '') },
+  { header: '접속 단말', value: (row) => formatPlatformKo(row.platform as Platform | null) },
+];
+
+function activeMetaColumns(ctx: RawExportContext): RawMetaColumn[] {
+  return RAW_META_COLUMNS.filter((c) => c.enabled?.(ctx) ?? true);
+}
+
+export function buildRawMetaHeaders(ctx: RawExportContext): string[] {
+  return activeMetaColumns(ctx).map((c) => c.header);
+}
 
 export function buildRawMetaValues(
   row: RawExportResponseRow,
   seq: number,
   ctx: RawExportContext,
 ): (string | number)[] {
-  return [
-    row.resid ?? '',
-    seq,
-    row.groupValue ?? '공개링크',
-    row.inviteCode ? buildInviteUrl(row.inviteCode, ctx.appUrl) : '',
-    row.ipHash ? row.ipHash.slice(0, 8) : '',
-    mapStatusPill({ status: row.status }).label,
-    formatExcelDateTime(row.startedAt),
-    formatExcelDateTime(row.completedAt),
-    formatTotalTime(row.totalSeconds, row.status),
-    row.currentStepId ? (ctx.stepLabels.get(row.currentStepId) ?? '') : '',
-    formatPlatformKo(row.platform as Platform | null),
+  return activeMetaColumns(ctx).map((c) => c.value(row, seq, ctx));
+}
+
+/**
+ * '응답 내역' 시트 — 응답자 메타 요약 (Raw/분할 워크북 공용).
+ * 번호(systemID)·조사 대상 그룹 열은 메타 열과 동일한 조건부 생성 규칙을 따른다.
+ */
+export function addResponseListSheet(
+  workbook: ExcelJS.Workbook,
+  rows: RawExportResponseRow[],
+  ctx: RawExportContext,
+): void {
+  const ws = workbook.addWorksheet('응답 내역');
+  const headers = [
+    ...(ctx.hasContacts ? ['번호(systemID)'] : []),
+    '순번',
+    ...(ctx.hasContactGroups ? ['조사 대상 그룹'] : []),
+    '접속 단말',
+    '브라우저',
+    '상태',
+    '시작일시',
+    '종료일시',
+    '소요시간',
   ];
+  ws.addRow(headers);
+  rows.forEach((row, i) => {
+    ws.addRow([
+      ...(ctx.hasContacts ? [row.resid ?? ''] : []),
+      i + 1,
+      ...(ctx.hasContactGroups ? [row.groupValue ?? '공개링크'] : []),
+      formatPlatformKo(row.platform as Platform | null),
+      row.browser ?? 'Other',
+      mapStatusPill({ status: row.status }).label,
+      formatExcelDateTime(row.startedAt),
+      formatExcelDateTime(row.completedAt),
+      formatTotalTime(row.totalSeconds, row.status),
+    ]);
+  });
+  styleHeaderRows(ws, [1], headers.length);
+  autoFitRawColumns(ws, headers.length);
 }
 
 /**
@@ -94,31 +144,16 @@ export function generateRawDataWorkbook(
   const workbook = new ExcelJS.Workbook();
 
   // 시트 1: 응답 내역
-  const ws1 = workbook.addWorksheet('응답 내역');
-  ws1.addRow(['번호', '순번', '조사 대상 그룹', '접속 단말', '브라우저', '상태', '시작일시', '종료일시', '소요시간']);
-  rows.forEach((row, i) => {
-    ws1.addRow([
-      row.resid ?? '',
-      i + 1,
-      row.groupValue ?? '공개링크',
-      formatPlatformKo(row.platform as Platform | null),
-      row.browser ?? 'Other',
-      mapStatusPill({ status: row.status }).label,
-      formatExcelDateTime(row.startedAt),
-      formatExcelDateTime(row.completedAt),
-      formatTotalTime(row.totalSeconds, row.status),
-    ]);
-  });
-  styleHeaderRows(ws1, [1], 9);
-  autoFitRawColumns(ws1, 9);
+  addResponseListSheet(workbook, rows, ctx);
 
-  // 시트 2: Raw Data (헤더 3행 = 질문제목 / 셀라벨 / SPSS 변수명), 왼쪽 메타 11열 + 변수 열
+  // 시트 2: Raw Data (헤더 3행 = 질문제목 / 셀라벨 / SPSS 변수명), 왼쪽 메타 열 + 변수 열
   const ws2 = workbook.addWorksheet('Raw Data');
-  const metaCount = RAW_META_HEADERS.length;
+  const metaHeaders = buildRawMetaHeaders(ctx);
+  const metaCount = metaHeaders.length;
   const colCount = columns.length + metaCount;
-  ws2.addRow([...RAW_META_HEADERS, ...columns.map((c) => c.questionText)]);
-  ws2.addRow([...RAW_META_HEADERS.map(() => ''), ...columns.map((c) => row2Label(c))]);
-  ws2.addRow([...RAW_META_HEADERS.map(() => ''), ...columns.map((c) => c.spssVarName)]);
+  ws2.addRow([...metaHeaders, ...columns.map((c) => c.questionText)]);
+  ws2.addRow([...metaHeaders.map(() => ''), ...columns.map((c) => row2Label(c))]);
+  ws2.addRow([...metaHeaders.map(() => ''), ...columns.map((c) => c.spssVarName)]);
   rows.forEach((row, i) => {
     ws2.addRow([
       ...buildRawMetaValues(row, i + 1, ctx),

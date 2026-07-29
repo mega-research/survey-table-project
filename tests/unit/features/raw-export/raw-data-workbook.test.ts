@@ -125,6 +125,8 @@ const tableInputQ = {
 const TEST_CTX: RawExportContext = {
   appUrl: 'https://app.example.com',
   stepLabels: new Map([['group:g1', 'Q1']]),
+  hasContacts: true,
+  hasContactGroups: true,
 };
 
 function makeRow(over: Partial<RawExportResponseRow> = {}): RawExportResponseRow {
@@ -259,10 +261,31 @@ describe('Raw Data 시트 메타 컬럼', () => {
   it('왼쪽 11열 헤더가 붙고 1~3행 세로 병합된다', () => {
     const wb = generateRawDataWorkbook([radioQ], [makeRow()], TEST_CTX);
     const ws = wb.getWorksheet('Raw Data')!;
-    expect(ws.getRow(1).getCell(1).value).toBe('번호');
+    expect(ws.getRow(1).getCell(1).value).toBe('번호(systemID)');
     expect(ws.getRow(1).getCell(2).value).toBe('순번');
     expect(ws.getRow(1).getCell(11).value).toBe('접속 단말');
     expect(ws.getRow(1).getCell(12).value).toBe('Q1. 성별');
+  });
+
+  it('컨택 없는 설문은 번호·그룹 열을 만들지 않는다', () => {
+    const noContactCtx: RawExportContext = {
+      ...TEST_CTX,
+      hasContacts: false,
+      hasContactGroups: false,
+    };
+    const wb = generateRawDataWorkbook([radioQ], [makeRow({ resid: null, groupValue: null })], noContactCtx);
+    const ws = wb.getWorksheet('Raw Data')!;
+    // 메타 9열 (번호·그룹 생략) → 첫 열이 순번, 변수 열은 10열부터
+    expect(ws.getRow(1).getCell(1).value).toBe('순번');
+    expect(ws.getRow(1).getCell(2).value).toBe('개별 URL');
+    expect(ws.getRow(1).getCell(9).value).toBe('접속 단말');
+    expect(ws.getRow(1).getCell(10).value).toBe('Q1. 성별');
+    expect(ws.getRow(4).getCell(1).value).toBe(1); // 순번이 첫 열
+    // 응답 내역 시트도 동일 규칙 (7열)
+    const ws1 = wb.getWorksheet('응답 내역')!;
+    expect(ws1.getRow(1).getCell(1).value).toBe('순번');
+    expect(ws1.getRow(1).getCell(7).value).toBe('소요시간');
+    expect(ws1.getRow(1).getCell(8).value ?? '').toBe('');
   });
 
   it('메타 데이터 값이 규칙대로 채워진다', () => {
@@ -301,12 +324,12 @@ describe('Raw Data 시트 메타 컬럼', () => {
     expect(dr.getCell(9).value).toBe('진행 중'); // 소요시간
   });
 
-  it('응답 내역 시트는 번호+순번 두 식별자를 항상 갖는다', () => {
+  it('응답 내역 시트는 컨택 설문에서 번호+순번 두 식별자를 갖는다', () => {
     const wb = generateRawDataWorkbook([radioQ], [makeRow()], TEST_CTX);
     const ws1 = wb.getWorksheet('응답 내역')!;
     expect(ws1.getRow(1).values).toEqual([
       undefined,
-      '번호',
+      '번호(systemID)',
       '순번',
       '조사 대상 그룹',
       '접속 단말',

@@ -2,13 +2,17 @@ import { describe, it, expect } from 'vitest';
 
 import { valueMatchSet, bucketQuestions, optionTokensForBasis, planSplit, detectSplitCandidates, assignSplitSheetNames, SPLIT_RESERVED_SHEET_NAMES, splitPlanExceedsExcelLimit, SPLIT_EXCEL_LIMIT } from '@/lib/analytics/split-export';
 import { buildSplitWorkbook } from '@/lib/analytics/split-workbook';
-import { RAW_META_HEADERS, type RawExportContext, type RawExportResponseRow } from '@/lib/analytics/raw-workbook';
+import { buildRawMetaHeaders, type RawExportContext, type RawExportResponseRow } from '@/lib/analytics/raw-workbook';
 import type { Question, QuestionConditionGroup } from '@/types/survey';
 
 // buildSplitWorkbook 메타 컬럼 삽입(11열) 이전 식별자 1열 가정 테스트의 오프셋 보정에 사용.
-const META_COUNT = RAW_META_HEADERS.length;
-
-const CTX: RawExportContext = { appUrl: '', stepLabels: new Map() };
+const CTX: RawExportContext = {
+  appUrl: '',
+  stepLabels: new Map(),
+  hasContacts: true,
+  hasContactGroups: true,
+};
+const META_COUNT = buildRawMetaHeaders(CTX).length;
 
 const vm = (sourceQuestionId: string, requiredValues: string[]): QuestionConditionGroup => ({
   logicType: 'AND',

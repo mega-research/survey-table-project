@@ -131,8 +131,14 @@ describe('테스트 모드 최종 읽기 경계', () => {
     expect([sav.status, raw.status, preview.status]).toEqual([200, 200, 200]);
     expect(responseWhereArgs).toHaveLength(3);
     responseWhereArgs.forEach(expectRealOnly);
-    expect(selectWhereArgs).toHaveLength(1);
-    selectWhereArgs.forEach(expectRealOnly);
+    // raw export의 조건부 메타 열 판정(contact_targets 통계)은 응답 테이블이 아니므로
+    // 테스트 모드 경계 대상이 아니다 — 응답 대상 select만 실제 응답 조건을 검증한다.
+    expect(selectWhereArgs).toHaveLength(2);
+    const responseSelects = selectWhereArgs.filter(
+      (w) => !dialect.sqlToQuery(w as never).sql.includes('contact_targets'),
+    );
+    expect(responseSelects).toHaveLength(1);
+    responseSelects.forEach(expectRealOnly);
   });
 
   it('analytics와 공용 완료 응답 조회는 mode와 무관하게 실제 응답만 읽는다', async () => {

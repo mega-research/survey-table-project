@@ -1,18 +1,17 @@
 import ExcelJS from 'exceljs';
 
-import { buildCodebookValueLabel, formatExcelDateTime } from '@/lib/analytics/raw-export-helpers';
+import { buildCodebookValueLabel } from '@/lib/analytics/raw-export-helpers';
 import { bucketQuestions, planSplit } from '@/lib/analytics/split-export';
 import { buildDataRow, generateSPSSColumns } from '@/lib/analytics/spss-excel-export';
-import { type Platform, formatPlatformKo } from '@/lib/operations/parse-ua';
-import { formatTotalTime, mapStatusPill } from '@/lib/operations/profiles';
 import { Question, SurveySubmission } from '@/types/survey';
 
 import {
   type RawExportContext,
   type RawExportResponseRow,
-  RAW_META_HEADERS,
+  addResponseListSheet,
   autoFitRawColumnRange,
   autoFitRawColumns,
+  buildRawMetaHeaders,
   buildRawMetaValues,
   clampRawWidth,
   estimateTextWidth,
@@ -41,11 +40,12 @@ export function buildSplitWorkbook(
   const addVariableSheet = (name: string, bucketQs: Question[]) => {
     const columns = generateSPSSColumns(bucketQs);
     const ws = workbook.addWorksheet(name);
-    const metaCount = RAW_META_HEADERS.length;
+    const metaHeaders = buildRawMetaHeaders(ctx);
+    const metaCount = metaHeaders.length;
     const colCount = columns.length + metaCount;
-    ws.addRow([...RAW_META_HEADERS, ...columns.map((c) => c.questionText)]);
-    ws.addRow([...RAW_META_HEADERS.map(() => ''), ...columns.map((c) => row2Label(c))]);
-    ws.addRow([...RAW_META_HEADERS.map(() => ''), ...columns.map((c) => c.spssVarName)]);
+    ws.addRow([...metaHeaders, ...columns.map((c) => c.questionText)]);
+    ws.addRow([...metaHeaders.map(() => ''), ...columns.map((c) => row2Label(c))]);
+    ws.addRow([...metaHeaders.map(() => ''), ...columns.map((c) => c.spssVarName)]);
     // 데이터는 전체 응답자 + 이 버킷 컬럼만 (열만 분할)
     rows.forEach((row, i) => {
       ws.addRow([
@@ -70,24 +70,8 @@ export function buildSplitWorkbook(
     });
   };
 
-  // 시트 1: 응답 내역 (전체 응답자) — 고정 이름, Task 5 시트1과 동일한 9열 구조
-  const ws1 = workbook.addWorksheet('응답 내역');
-  ws1.addRow(['번호', '순번', '조사 대상 그룹', '접속 단말', '브라우저', '상태', '시작일시', '종료일시', '소요시간']);
-  rows.forEach((row, i) => {
-    ws1.addRow([
-      row.resid ?? '',
-      i + 1,
-      row.groupValue ?? '공개링크',
-      formatPlatformKo(row.platform as Platform | null),
-      row.browser ?? 'Other',
-      mapStatusPill({ status: row.status }).label,
-      formatExcelDateTime(row.startedAt),
-      formatExcelDateTime(row.completedAt),
-      formatTotalTime(row.totalSeconds, row.status),
-    ]);
-  });
-  styleHeaderRows(ws1, [1], 9);
-  autoFitRawColumns(ws1, 9);
+  // 시트 1: 응답 내역 (전체 응답자) — Raw 워크북과 공용 빌더, 조건부 열 규칙 동일
+  addResponseListSheet(workbook, rows, ctx);
 
   // 시트 2: 공통 — 고정 이름
   addVariableSheet('공통', bucketQuestions(sortedQuestions, basisQuestionId, 'common'));
