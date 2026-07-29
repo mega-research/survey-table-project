@@ -11,6 +11,7 @@ const CTX: RawExportContext = {
   stepLabels: new Map(),
   hasContacts: true,
   hasContactGroups: true,
+  questionMeta: new Map(),
 };
 const META_COUNT = buildRawMetaHeaders(CTX).length;
 

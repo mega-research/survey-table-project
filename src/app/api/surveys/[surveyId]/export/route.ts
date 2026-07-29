@@ -15,7 +15,7 @@ import {
   type RawExportContext,
   type RawExportResponseRow,
 } from '@/lib/analytics/raw-workbook';
-import { buildStepLabelMap } from '@/lib/analytics/raw-export-helpers';
+import { buildQuestionMetaMap, buildStepLabelMap } from '@/lib/analytics/raw-export-helpers';
 import { buildSplitWorkbook } from '@/lib/analytics/split-workbook';
 import { planSplit } from '@/lib/analytics/split-export';
 import { hydrateQuestionsForSpss } from '@/lib/spss/hydrate-questions';
@@ -332,5 +332,6 @@ async function buildRawExportContext(
     stepLabels: buildStepLabelMap(stepQs, groups),
     hasContacts: (contactStats[0]?.total ?? 0) > 0,
     hasContactGroups: (contactStats[0]?.withGroup ?? 0) > 0,
+    questionMeta: buildQuestionMetaMap(questions),
   };
 }

@@ -127,6 +127,7 @@ const TEST_CTX: RawExportContext = {
   stepLabels: new Map([['group:g1', 'Q1']]),
   hasContacts: true,
   hasContactGroups: true,
+  questionMeta: new Map([['q1', { order: 1, label: 'Q1' }]]),
 };
 
 function makeRow(over: Partial<RawExportResponseRow> = {}): RawExportResponseRow {
@@ -341,6 +342,38 @@ describe('Raw Data 시트 메타 컬럼', () => {
     ]);
     expect(ws1.getRow(2).getCell(1).value).toBe(7);
     expect(ws1.getRow(2).getCell(2).value).toBe(1);
+  });
+
+  it('진행 위치가 없는 구응답은 응답값 최후순 질문으로 폴백한다', () => {
+    const ctx: RawExportContext = {
+      ...TEST_CTX,
+      questionMeta: new Map([
+        ['q1', { order: 1, label: 'Q1' }],
+        ['q2', { order: 2, label: 'Q2' }],
+        ['q3', { order: 3, label: 'Q3' }],
+      ]),
+    };
+    const wb = generateRawDataWorkbook(
+      [radioQ],
+      [
+        makeRow({
+          currentStepId: null,
+          questionResponses: { q1: 'opt2', q2: ['optA'], q3: {} },
+        }),
+      ],
+      ctx,
+    );
+    // q3 응답은 빈 객체(미입력)라 제외 → 응답값 존재 최후순은 q2 → 'Q2'
+    expect(wb.getWorksheet('Raw Data')!.getRow(4).getCell(10).value).toBe('Q2');
+  });
+
+  it('진행 위치가 현재 문항 구조와 매칭 실패해도 응답값 폴백이 동작한다', () => {
+    const wb = generateRawDataWorkbook(
+      [radioQ],
+      [makeRow({ currentStepId: 'group:deleted', questionResponses: { q1: 'opt2' } })],
+      TEST_CTX,
+    );
+    expect(wb.getWorksheet('Raw Data')!.getRow(4).getCell(10).value).toBe('Q1');
   });
 
   it('다중 행에서 순번이 증가하고 null 메타는 폴백된다', () => {

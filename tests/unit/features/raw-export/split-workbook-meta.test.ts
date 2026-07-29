@@ -31,6 +31,7 @@ const CTX: RawExportContext = {
   stepLabels: new Map(),
   hasContacts: true,
   hasContactGroups: true,
+  questionMeta: new Map(),
 };
 
 const row: RawExportResponseRow = {

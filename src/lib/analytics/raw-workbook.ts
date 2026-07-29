@@ -41,6 +41,43 @@ export interface RawExportContext {
   hasContacts: boolean;
   /** 컨택 타겟에 그룹값이 하나라도 설정돼 있는지 — false 면 조사 대상 그룹 열을 만들지 않는다 */
   hasContactGroups: boolean;
+  /**
+   * 질문 id → { order, 표시 라벨 } (buildQuestionMetaMap 결과).
+   * currentStepId 미저장 구응답의 "마지막 입력 문항" 폴백 — 응답값이 존재하는 질문 중 최후순의 라벨.
+   */
+  questionMeta: ReadonlyMap<string, { order: number; label: string }>;
+}
+
+/** 응답값이 실제 입력으로 간주되는지 — 빈 문자열/빈 배열/빈 객체는 미입력. */
+function isAnsweredValue(value: unknown): boolean {
+  if (value == null) return false;
+  if (typeof value === 'string') return value.trim() !== '';
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === 'object') return Object.keys(value).length > 0;
+  return true;
+}
+
+/**
+ * "마지막 입력 문항" 라벨 해석.
+ * 1순위: 저장된 진행 위치(currentStepId) → stepLabels 매칭.
+ * 폴백: 진행 위치가 없거나(추적 도입 전 구응답) 현재 문항 구조와 매칭 실패 시,
+ *       응답값이 존재하는 질문 중 order 최후순 질문의 라벨. 둘 다 없으면 공백.
+ */
+export function resolveLastEnteredLabel(
+  row: RawExportResponseRow,
+  ctx: RawExportContext,
+): string {
+  const stepLabel = row.currentStepId ? ctx.stepLabels.get(row.currentStepId) : undefined;
+  if (stepLabel) return stepLabel;
+
+  let best: { order: number; label: string } | null = null;
+  for (const [questionId, value] of Object.entries(row.questionResponses)) {
+    if (!isAnsweredValue(value)) continue;
+    const meta = ctx.questionMeta.get(questionId);
+    if (!meta || !meta.label) continue;
+    if (!best || meta.order > best.order) best = meta;
+  }
+  return best?.label ?? '';
 }
 
 interface RawMetaColumn {
@@ -65,7 +102,7 @@ const RAW_META_COLUMNS: RawMetaColumn[] = [
   { header: '시작일시', value: (row) => formatExcelDateTime(row.startedAt) },
   { header: '종료일시', value: (row) => formatExcelDateTime(row.completedAt) },
   { header: '소요시간', value: (row) => formatTotalTime(row.totalSeconds, row.status) },
-  { header: '마지막 입력 문항', value: (row, _seq, ctx) => (row.currentStepId ? (ctx.stepLabels.get(row.currentStepId) ?? '') : '') },
+  { header: '마지막 입력 문항', value: (row, _seq, ctx) => resolveLastEnteredLabel(row, ctx) },
   { header: '접속 단말', value: (row) => formatPlatformKo(row.platform as Platform | null) },
 ];
 

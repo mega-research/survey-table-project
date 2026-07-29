@@ -1,6 +1,7 @@
 import type { SPSSExportColumn } from '@/lib/analytics/spss-excel-export';
 import {
   buildStepLocationMap,
+  parseQuestionNumberFromTitle,
   type StepGroupInput,
   type StepQuestionInput,
 } from '@/lib/operations/profiles';
@@ -119,4 +120,19 @@ export function buildStepLabelMap(
     labels.set(stepId, rep?.questionCode || loc.qNumber || '');
   }
   return labels;
+}
+
+/**
+ * 질문 id → { order, 표시 라벨(질문코드 우선, 제목 Qx 폴백) } 맵.
+ * currentStepId 가 없는 구응답의 "마지막 입력 문항" 폴백(응답값 존재 질문 중 최후순)에 쓴다.
+ */
+export function buildQuestionMetaMap(
+  questions: Array<{ id: string; order: number; title: string; questionCode?: string | null }>,
+): Map<string, { order: number; label: string }> {
+  return new Map(
+    questions.map((q) => [
+      q.id,
+      { order: q.order, label: q.questionCode || parseQuestionNumberFromTitle(q.title) || '' },
+    ]),
+  );
 }
