@@ -102,6 +102,7 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
     let originalMobileDrilldownOmitLeadingColumns: Question['mobileDrilldownOmitLeadingColumns'];
     let originalMobileDrilldownRepeatHeaderStartRow: Question['mobileDrilldownRepeatHeaderStartRow'];
     let originalMobileDrilldownRepeatHeaderEndRow: Question['mobileDrilldownRepeatHeaderEndRow'];
+    let originalExportCellOrder: Question['exportCellOrder'];
     if (isOpen && questionId) {
       setEditingQuestionId(questionId);
       const q = useSurveyBuilderStore
@@ -112,6 +113,7 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
       originalMobileDrilldownOmitLeadingColumns = q?.mobileDrilldownOmitLeadingColumns;
       originalMobileDrilldownRepeatHeaderStartRow = q?.mobileDrilldownRepeatHeaderStartRow;
       originalMobileDrilldownRepeatHeaderEndRow = q?.mobileDrilldownRepeatHeaderEndRow;
+      originalExportCellOrder = q?.exportCellOrder;
       didSaveRef.current = false;
     }
     return () => {
@@ -147,6 +149,11 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
                 } else {
                   restoredQuestion.mobileDrilldownRepeatHeaderEndRow =
                     originalMobileDrilldownRepeatHeaderEndRow;
+                }
+                if (originalExportCellOrder === undefined) {
+                  delete restoredQuestion.exportCellOrder;
+                } else {
+                  restoredQuestion.exportCellOrder = originalExportCellOrder;
                 }
                 return restoredQuestion;
               }),
@@ -323,6 +330,9 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
       ...formDataRef.current,
       ...(storeQuestion?.hideColumnLabels !== undefined
         ? { hideColumnLabels: storeQuestion.hideColumnLabels }
+        : {}),
+      ...(storeQuestion?.exportCellOrder !== undefined
+        ? { exportCellOrder: storeQuestion.exportCellOrder }
         : {}),
       // 모바일 표 표시 설정도 표 에디터의 silentUpdateQuestion 경로로 store에만 쓰인다.
       ...(storeQuestion?.mobileOriginalTable !== undefined
