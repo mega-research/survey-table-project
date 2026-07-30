@@ -76,8 +76,8 @@ pg_restore --no-owner -d "$NEW_DB_URL" backup.dump  # custom format
 - [ ] 함수 권한: `lookup_contact_by_invite_token` 의 anon/authenticated EXECUTE = false, postgres = true
 - [ ] dedup 인덱스: `idx_resp_dedup_device`, `idx_resp_dedup_fp_ip` 존재
 - [ ] 앱 부팅: `DATABASE_URL`(postgres 롤) 로 응답 수집/조회 정상
-- [ ] env: `UPSTASH_*`, `ADMIN_USER_IDS`, `CONTACT_PII_KEY`, `CONTACT_PII_HMAC_KEY`,
-      `DUPLICATE_DETECTION_SALT`, `RESEND_*`, `R2_*` 전부 설정
+- [ ] env: `UPSTASH_*`, `ADMIN_USER_IDS`, `CONTACT_PII_AES_KEY`, `CONTACT_PII_HMAC_KEY`,
+      `DUPLICATE_DETECTION_SALT`, `RESEND_*`, `CLOUDFLARE_ACCOUNT_ID`·`CLOUDFLARE_R2_*` 전부 설정
       (특히 `DUPLICATE_DETECTION_SALT`·`CONTACT_PII_HMAC_KEY` 는 회전 금지 — 회전 시
       기존 hash/blind index 전부 무효)
 

@@ -9,6 +9,10 @@ import {
   PERSISTED_QUESTION_FIELDS,
   type CompleteQuestionWrite,
 } from '@/db/schema/question-persisted-fields';
+import { registerDeletionCandidates } from '@/lib/r2-lifecycle/deletion-queue.server';
+import { extractR2KeysFromJsonbValue } from '@/lib/r2-lifecycle/key-extract';
+import { collectFieldLimitedSaveDiff } from '@/lib/r2-lifecycle/save-diff-collector.server';
+import { promoteNoticeAttachments } from '@/lib/survey/notice-attachment-promote';
 import { promoteSurveyImages, type PromotableQuestion } from '@/lib/survey/survey-image-promote';
 import { generateId, isValidUUID } from '@/lib/utils';
 
@@ -81,7 +85,10 @@ export async function createQuestion(data: CreateQuestionInput): Promise<Questio
   } satisfies CompleteQuestionWrite & NewQuestion;
 
   // tmp/survey/ 이미지를 영구 prefix로 promote (R2 copy + URL 치환, 원본 tmp 는 lifecycle 위임)
-  const [questionToInsert] = await promoteSurveyImages([newQuestion as PromotableQuestion]);
+  // tmp/notice-attachment/ 첨부도 영구 prefix로 promote (survey-save 와 동일 체이닝)
+  const [questionToInsert] = await promoteNoticeAttachments(
+    await promoteSurveyImages([newQuestion as PromotableQuestion]),
+  );
 
   const [question] = await db
     .insert(questions)
@@ -118,16 +125,38 @@ export async function updateQuestion(
   }
 
   // tmp/survey/ 이미지를 영구 prefix로 promote (R2 copy + URL 치환, 원본 tmp 는 lifecycle 위임)
-  const [allowedToUpdate] = await promoteSurveyImages([allowed as PromotableQuestion]);
+  // tmp/notice-attachment/ 첨부도 영구 prefix로 promote. 부분 patch 에서 noticeContent 가
+  // payload 에 없으면 promoteNoticeAttachments 는 tmp URL 0건으로 no-op (안전).
+  const [allowedToUpdate] = await promoteNoticeAttachments(
+    await promoteSurveyImages([allowed as PromotableQuestion]),
+  );
 
-  const [updated] = await db
-    .update(questions)
-    .set(allowedToUpdate as Partial<NewQuestion>)
-    .where(and(eq(questions.id, questionId), eq(questions.surveyId, surveyId)))
-    .returning();
+  // 저장 전 행 콘텐츠 read → write → 저장 diff 등록·부활 취소를 같은 트랜잭션으로.
+  // 비교는 payload 존재 필드에 한정 — 미포함 필드는 "빠짐"으로 오판하지 않는다.
+  return db.transaction(async (tx) => {
+    const [oldRow] = await tx
+      .select()
+      .from(questions)
+      .where(and(eq(questions.id, questionId), eq(questions.surveyId, surveyId)));
 
-  if (!updated) throw new Error('질문 업데이트에 실패했습니다.');
-  return updated as QuestionRow;
+    const [updated] = await tx
+      .update(questions)
+      .set(allowedToUpdate as Partial<NewQuestion>)
+      .where(and(eq(questions.id, questionId), eq(questions.surveyId, surveyId)))
+      .returning();
+
+    if (!updated) throw new Error('질문 업데이트에 실패했습니다.');
+
+    if (oldRow) {
+      await collectFieldLimitedSaveDiff(tx, {
+        oldRow,
+        payloadRow: allowedToUpdate as Record<string, unknown>,
+        reason: `질문 수정: ${oldRow.title || questionId}`,
+      });
+    }
+
+    return updated as QuestionRow;
+  });
 }
 
 /**
@@ -140,9 +169,23 @@ export async function deleteQuestion(
   questionId: string,
   surveyId: string,
 ): Promise<{ ok: true }> {
-  await db
-    .delete(questions)
-    .where(and(eq(questions.id, questionId), eq(questions.surveyId, surveyId)));
+  // 삭제 전 같은 트랜잭션에서 행 콘텐츠의 R2 키를 수집해 유예 삭제 큐에 등록
+  await db.transaction(async (tx) => {
+    const [row] = await tx
+      .select()
+      .from(questions)
+      .where(and(eq(questions.id, questionId), eq(questions.surveyId, surveyId)));
+    if (row) {
+      await registerDeletionCandidates(tx, {
+        keys: extractR2KeysFromJsonbValue(row),
+        source: 'question-delete',
+        reason: `질문 삭제: ${row.title || questionId}`,
+      });
+    }
+    await tx
+      .delete(questions)
+      .where(and(eq(questions.id, questionId), eq(questions.surveyId, surveyId)));
+  });
   return { ok: true as const };
 }
 

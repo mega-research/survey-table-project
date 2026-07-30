@@ -11,6 +11,8 @@ import {
   surveys,
 } from '@/db/schema';
 import type { CompleteQuestionWrite } from '@/db/schema/question-persisted-fields';
+import { extractR2KeysFromJsonbValue } from '@/lib/r2-lifecycle/key-extract';
+import { collectSaveDiffAndRevival } from '@/lib/r2-lifecycle/save-diff-collector.server';
 import { retentionDateToTimestamp } from '@/lib/survey/pii-retention';
 import {
   promoteSurveyImages,
@@ -52,6 +54,11 @@ export function normalizeSlug(slug: string | null | undefined): string | null {
 // 인증은 authed 미들웨어가 담당(requireAuth 제거). 캐시 갱신(revalidatePath)은
 // 소비처 query invalidation(use-survey-sync)으로 대체한다.
 
+// 저장 diff 수집용 — 값에서 추출한 R2 키를 집합에 누적 (두 저장 경로 공용)
+const addKeys = (set: Set<string>, value: unknown): void => {
+  for (const k of extractR2KeysFromJsonbValue(value)) set.add(k);
+};
+
 export async function saveSurveyDiff(
   payload: SurveyDiffPayloadInput,
 ): Promise<SaveResult> {
@@ -72,11 +79,31 @@ export async function saveSurveyDiff(
   }
 
   return await db.transaction(async (tx) => {
+    // 저장 diff 수집 — 비교는 payload 에 실려 온 범위(메타·삭제/업서트 질문)에
+    // 한정한다. 빠진 키는 tx 끝에서 유예 삭제 큐에 등록되고 재등장 키는 취소된다.
+    const oldContentKeys = new Set<string>();
+    const newContentKeys = new Set<string>();
+
     // 1. 메타데이터 업데이트
     if (metadata) {
+      const [oldSurveyContent] = await tx
+        .select({
+          responseHeader: surveys.responseHeader,
+          description: surveys.description,
+          thankYouMessage: surveys.thankYouMessage,
+        })
+        .from(surveys)
+        .where(eq(surveys.id, surveyId));
+      addKeys(oldContentKeys, oldSurveyContent);
+
       const promotedResponseHeader = await promoteSurveyResponseHeader(
         metadata.settings.responseHeader,
       );
+      addKeys(newContentKeys, {
+        responseHeader: promotedResponseHeader ?? null,
+        description: metadata.description,
+        thankYouMessage: metadata.settings.thankYouMessage,
+      });
       await tx
         .update(surveys)
         .set({
@@ -182,6 +209,13 @@ export async function saveSurveyDiff(
       // (survey_versions, 불변·응답 페이지 서빙 중)·복제 설문·보관함(saved_questions/
       // saved_cells)이 같은 URL·키를 참조할 수 있어 무확인 삭제가 그쪽 콘텐츠를 파괴한다.
       if (questionChanges.deleted.length > 0) {
+        // 삭제 전 행 콘텐츠를 읽어 diff 의 old 측에 넣는다 — 빠진 키는 큐 후보로만
+        // 등록되고, 집행 시 전역 재확인이 공유 참조를 거른다.
+        const deletedRows = await tx
+          .select()
+          .from(questions)
+          .where(inArray(questions.id, questionChanges.deleted));
+        addKeys(oldContentKeys, deletedRows);
         await tx.delete(questions).where(inArray(questions.id, questionChanges.deleted));
       }
 
@@ -193,6 +227,19 @@ export async function saveSurveyDiff(
         const promotedQuestions = await promoteNoticeAttachments(
           await promoteSurveyImages(questionChanges.upserted),
         );
+
+        // 업서트 대상의 이전 행을 읽어 old 측에, 새 콘텐츠를 new 측에 넣는다
+        const oldUpsertedRows = await tx
+          .select()
+          .from(questions)
+          .where(
+            inArray(
+              questions.id,
+              promotedQuestions.map((q) => q.id),
+            ),
+          );
+        addKeys(oldContentKeys, oldUpsertedRows);
+        addKeys(newContentKeys, promotedQuestions);
 
         const questionValues = promotedQuestions.map((question) => ({
           id: question.id,
@@ -325,6 +372,13 @@ export async function saveSurveyDiff(
       }
     }
 
+    // 저장 diff 마무리 — payload 범위에서 빠진 키 등록 + 재등장 키 부활 취소 (같은 tx)
+    await collectSaveDiffAndRevival(tx, {
+      oldKeys: [...oldContentKeys],
+      newKeys: [...newContentKeys],
+      reason: `설문 저장: ${surveyId}`,
+    });
+
     return { surveyId };
   });
 }
@@ -358,6 +412,22 @@ export async function saveSurveyWithDetails(
     const promotedResponseHeader = await promoteSurveyResponseHeader(
       surveyData.settings.responseHeader,
     );
+
+    // 저장 diff 수집 — 전체 저장은 콘텐츠 전량이 payload 이므로 old 전량과 비교한다
+    const oldContentKeys = new Set<string>();
+    const newContentKeys = new Set<string>();
+    if (existingSurvey) {
+      addKeys(oldContentKeys, {
+        responseHeader: existingSurvey.responseHeader,
+        description: existingSurvey.description,
+        thankYouMessage: existingSurvey.thankYouMessage,
+      });
+    }
+    addKeys(newContentKeys, {
+      responseHeader: promotedResponseHeader ?? null,
+      description: surveyData.description,
+      thankYouMessage: surveyData.settings.thankYouMessage,
+    });
 
     if (existingSurvey) {
       // lookups 는 별도 server action(보관함 자동 sync, upsertSurveyLookupAction 등)으로
@@ -509,9 +579,10 @@ export async function saveSurveyWithDetails(
       const existingQuestions = existingSurvey
         ? await tx.query.questions.findMany({
             where: eq(questions.surveyId, surveyId),
-            columns: { id: true },
           })
         : [];
+      // 전체 저장 diff 의 old 측 — 이번 저장으로 삭제되는 질문 포함 전량
+      addKeys(oldContentKeys, existingQuestions);
 
       const newQuestionIds = new Set(surveyData.questions.map((q) => q.id));
       const questionIdsToRemove = existingQuestions
@@ -530,6 +601,7 @@ export async function saveSurveyWithDetails(
         const promotedQuestions = await promoteNoticeAttachments(
           await promoteSurveyImages(surveyData.questions),
         );
+        addKeys(newContentKeys, promotedQuestions);
 
         const questionValues = promotedQuestions.map((question) => ({
           id: question.id,
@@ -646,6 +718,14 @@ export async function saveSurveyWithDetails(
           });
       }
     }
+
+    // 저장 diff 마무리 — 빠진 키 등록 + 재등장 키 부활 취소 (같은 tx).
+    // 신규 생성(existingSurvey 없음)은 old 가 비어 등록이 일어나지 않는다.
+    await collectSaveDiffAndRevival(tx, {
+      oldKeys: [...oldContentKeys],
+      newKeys: [...newContentKeys],
+      reason: `설문 전체 저장: ${surveyId}`,
+    });
 
     return { surveyId };
   });

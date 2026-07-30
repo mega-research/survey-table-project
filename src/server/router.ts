@@ -25,6 +25,7 @@ import { campaigns } from '@/features/mail/server/procedures/campaigns';
 import { preview } from '@/features/mail/server/procedures/preview';
 import { templates } from '@/features/mail/server/procedures/templates';
 import { unsubscribe } from '@/features/mail/server/procedures/unsubscribe';
+import { fileCleanup } from '@/features/media/server/procedures/file-cleanup';
 import { media } from '@/features/media/server/procedures/media';
 import { control } from '@/features/operations/server/procedures/control';
 import { progress } from '@/features/operations/server/procedures/progress';
@@ -58,7 +59,10 @@ export const router = {
     testSample,
   },
   auth,
-  media,
+  media: {
+    ...media,
+    fileCleanup,
+  },
   analytics,
   contacts: {
     targets,

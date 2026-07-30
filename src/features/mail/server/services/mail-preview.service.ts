@@ -4,8 +4,11 @@ import { createElement } from 'react';
 
 import { render } from '@react-email/render';
 
+import { db } from '@/db';
 import { ensureImageLinkBandSlices } from '@/lib/mail/image-link-band-slices';
 import { UNSUBSCRIBE_SANDBOX_TOKEN } from '@/lib/mail/constants';
+import { extractMailContentKeys } from '@/lib/r2-lifecycle/key-extract';
+import { recordSentKeys } from '@/lib/r2-lifecycle/sent-ledger.server';
 import { renderForTestSend } from '@/lib/mail/render-for-send';
 import { sendTestMail } from '@/lib/mail/send';
 import { MailWrapper } from '@/lib/mail/template-wrapper';
@@ -91,6 +94,16 @@ export async function sendTestTemplateMail(
       err instanceof Error ? err.message : '클릭 영역 이미지 처리 중 오류가 발생했습니다.';
     return { ok: false, error: message };
   }
+
+  // 발송 장부 기록 — 단건 테스트 발송도 발신 시점에 최종 본문(밴드 슬라이스
+  // 반영분)+첨부의 R2 키를 기록한다. 기록 실패는 결과객체로 삼키지 않고 throw
+  // 한다: 장부는 발송 파일 보호 장치라 기록 없이 발송하면 안 된다.
+  // isTest "캠페인" 발송은 campaign-dispatch 의 prepare 경로에서 기록되므로
+  // 여기서는 별도 처리가 불요하다. tmp/* 는 recordSentKeys 게이트가 거른다.
+  await recordSentKeys(
+    db,
+    extractMailContentKeys({ bodyHtml, attachments: input.attachments }),
+  );
 
   const rendered = renderForTestSend({
     surveyId: input.surveyId,

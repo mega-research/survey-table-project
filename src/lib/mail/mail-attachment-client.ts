@@ -75,7 +75,7 @@ export async function uploadMailAttachment(file: File): Promise<UploadResult> {
 }
 
 /**
- * tmp 첨부 객체 R2 삭제. 영구 prefix 는 cleanup orchestrator 가 처리하므로 silent skip.
+ * tmp 첨부 객체 R2 삭제. 영구 prefix 는 즉시 삭제하지 않는다 — 저장 시 diff 가 유예 삭제 큐에 등록하고 7일 유예·재확인 후 집행되므로 silent skip.
  * 네트워크 실패는 swallow — 24h R2 lifecycle 이 안전망.
  */
 export async function deleteMailAttachmentTmp(key: string): Promise<void> {
