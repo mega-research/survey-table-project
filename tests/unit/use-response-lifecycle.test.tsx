@@ -571,6 +571,7 @@ describe('이탈 시점 draft beacon', () => {
   let fetchMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
+    saveDraft.mockReset();
     sendBeacon = vi.fn(() => true);
     fetchMock = vi.fn(() => Promise.resolve(new Response(null, { status: 200 })));
     // jsdom navigator 에는 sendBeacon 이 없어 spyOn 이 불가하다.
@@ -592,6 +593,7 @@ describe('이탈 시점 draft beacon', () => {
       get: () => 'visible',
     });
     vi.unstubAllGlobals();
+    vi.clearAllMocks();
   });
 
   /** hidden 이벤트를 실제 리스너에 전달한다. */
@@ -738,5 +740,45 @@ describe('이탈 시점 draft beacon', () => {
 
     expect(sendBeacon).toHaveBeenCalledTimes(1);
     expect(await beaconBody(0)).toEqual({ responseId: 'r1', answers: { q1: 'b' } });
+  });
+
+  it('소유권 없는 대상자 테스트 세션이면 beacon 을 발사하지 않는다', async () => {
+    // 소유권 없는 상태에서도 handleResponse 는 INSERT 를 발사할 수 있다 — 노이즈 방지용 mock.
+    createWithFirstAnswer.mockResolvedValue({ id: 'resp-owned', contactTargetId: null });
+    const args = baseArgs({
+      currentResponseId: 'r1',
+      testIdentity: { attemptId: 'a1', sessionId: 's1' },
+      hasTestAttemptOwnership: false,
+    });
+    const { result } = renderHook(() => useResponseLifecycle(args));
+
+    act(() => result.current.handleResponse('q1', 'a'));
+    await waitFor(() => expect(args.setCurrentResponseId).toHaveBeenCalledWith('resp-owned'));
+    fireHidden();
+
+    expect(sendBeacon).not.toHaveBeenCalled();
+  });
+
+  it('소유권을 얻은 대상자 테스트 세션이면 beacon 을 발사하고 identity 를 병합한다', async () => {
+    const { result } = renderHook(() =>
+      useResponseLifecycle(
+        baseArgs({
+          currentResponseId: 'r1',
+          testIdentity: { attemptId: 'a1', sessionId: 's1' },
+          hasTestAttemptOwnership: true,
+        }),
+      ),
+    );
+
+    act(() => result.current.handleResponse('q1', 'a'));
+    fireHidden();
+
+    expect(sendBeacon).toHaveBeenCalledTimes(1);
+    expect(await beaconBody(0)).toEqual({
+      responseId: 'r1',
+      answers: { q1: 'a' },
+      attemptId: 'a1',
+      sessionId: 's1',
+    });
   });
 });

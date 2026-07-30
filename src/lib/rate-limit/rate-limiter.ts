@@ -7,11 +7,13 @@ import { Redis } from '@upstash/redis';
  * 무중단 조정을 위해 상수로 분리한다. 값 변경은 이 객체만 수정하면 된다.
  * - response-mutation: 응답 시작/답변/완료 등 쓰기 mutation. 30회/1분.
  * - response-segment: Page Visibility 세그먼트 beacon. 빈번하므로 60회/1분.
+ * - response-draft: 이탈 시점 임시 저장 beacon(visibilitychange/pagehide). segment 와 동급 빈도로 60회/1분.
  * - lookup: 토큰/attrs/중복 조회 등 읽기. 60회/1분.
  */
 export const RATE_LIMIT_PRESETS = {
   'response-mutation': { tokens: 30, window: '1 m' },
   'response-segment': { tokens: 60, window: '1 m' },
+  'response-draft': { tokens: 60, window: '1 m' },
   lookup: { tokens: 60, window: '1 m' },
 } as const satisfies Record<string, { tokens: number; window: Duration }>;
 

@@ -215,6 +215,8 @@ export function useResponseLifecycle({
     }
     activeResponseIdRef.current = null;
     pendingAnswerSavesRef.current.clear();
+    // 세션이 바뀌면 직전 지문은 다른 responseId 의 것이라 무효다.
+    lastBeaconSnapshotRef.current = null;
     resetResponseState();
     setResponses({});
   };

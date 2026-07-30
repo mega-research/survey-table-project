@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { SaveDraftResponseInput } from '@/features/survey-response/domain/response';
 import { saveDraftResponseIfActive } from '@/features/survey-response/server/services/response.service';
 import { getTrustedClientIpOrNull } from '@/lib/rate-limit/client-ip';
-import { getRateLimiter } from '@/lib/rate-limit/rate-limiter';
+import { getRateLimiter, type RateLimitGroup } from '@/lib/rate-limit/rate-limiter';
 
 /**
  * 한 요청에 실을 수 있는 문항 수 상한.
@@ -11,6 +11,9 @@ import { getRateLimiter } from '@/lib/rate-limit/rate-limiter';
  * DB 왕복만 선형으로 늘어난다. 문항별 값 크기는 MAX_ANSWER_VALUE_BYTES 가 따로 본다.
  */
 const MAX_DRAFT_ANSWER_KEYS = 200;
+
+/** 미등록 그룹은 limiter 에서 fail-open 되므로 타입으로 등록 여부를 컴파일 타임에 고정한다. */
+const RATE_LIMIT_GROUP: RateLimitGroup = 'response-draft';
 
 /**
  * 이탈 시점 임시 저장 수신 엔드포인트.
@@ -26,7 +29,7 @@ export async function POST(req: NextRequest) {
   if (ip === null) {
     return NextResponse.json({ error: 'rate limited' }, { status: 429 });
   }
-  const { success } = await getRateLimiter().limit(`response-draft:${ip}`);
+  const { success } = await getRateLimiter().limit(`${RATE_LIMIT_GROUP}:${ip}`);
   if (!success) {
     return NextResponse.json({ error: 'rate limited' }, { status: 429 });
   }
