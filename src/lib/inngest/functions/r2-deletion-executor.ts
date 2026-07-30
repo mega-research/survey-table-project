@@ -1,7 +1,4 @@
-import {
-  runDeletionExecutor,
-  type DeletionExecutorStep,
-} from '@/lib/r2-lifecycle/deletion-executor.server';
+import { runDeletionExecutor } from '@/lib/r2-lifecycle/deletion-executor.server';
 
 import { inngest } from '../client';
 
@@ -26,7 +23,7 @@ export const r2DeletionExecutor = inngest.createFunction(
       (inngestCtx as { logger?: Pick<Console, 'info' | 'warn' | 'error' | 'debug'> })
         .logger ?? console;
 
-    const totals = await runDeletionExecutor(step as unknown as DeletionExecutorStep);
+    const totals = await runDeletionExecutor(step);
 
     logger.info('r2 deletion executor done', totals);
     return totals;

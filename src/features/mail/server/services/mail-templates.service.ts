@@ -179,6 +179,18 @@ export async function updateMailTemplate(
   // 발송된 캠페인 스냅샷·수신함 메일이 같은 키를 참조하므로, 집행 시 전역
   // 재확인과 발송 장부가 거른다.
   await db.transaction(async (tx) => {
+    // diff 기준 old 콘텐츠는 쓰기와 같은 tx 에서 재조회한다 — 바깥 read 는
+    // promote 이전 fail-fast 용이라 그 사이의 동시 수정분을 놓칠 수 있다
+    // (다른 저장 경로들과의 read→write→등록 동일 tx 대칭).
+    const txOldRow = await tx.query.mailTemplates.findFirst({
+      where: and(
+        eq(mailTemplates.id, templateId),
+        eq(mailTemplates.surveyId, surveyId),
+        isNull(mailTemplates.deletedAt),
+      ),
+      columns: { bodyHtml: true, attachments: true },
+    });
+
     const result = await tx
       .update(mailTemplates)
       .set({
@@ -205,8 +217,9 @@ export async function updateMailTemplate(
       throw new MailTemplateNotFoundError();
     }
 
+    const diffBase = txOldRow ?? oldRow;
     await collectFieldLimitedSaveDiff(tx, {
-      oldRow: { bodyHtml: oldRow.bodyHtml, attachments: oldRow.attachments },
+      oldRow: { bodyHtml: diffBase.bodyHtml, attachments: diffBase.attachments },
       payloadRow: { bodyHtml, attachments },
       reason: `메일 템플릿 수정: ${oldRow.name || templateId}`,
     });

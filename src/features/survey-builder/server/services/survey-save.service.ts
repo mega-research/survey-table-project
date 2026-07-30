@@ -54,6 +54,11 @@ export function normalizeSlug(slug: string | null | undefined): string | null {
 // 인증은 authed 미들웨어가 담당(requireAuth 제거). 캐시 갱신(revalidatePath)은
 // 소비처 query invalidation(use-survey-sync)으로 대체한다.
 
+// 저장 diff 수집용 — 값에서 추출한 R2 키를 집합에 누적 (두 저장 경로 공용)
+const addKeys = (set: Set<string>, value: unknown): void => {
+  for (const k of extractR2KeysFromJsonbValue(value)) set.add(k);
+};
+
 export async function saveSurveyDiff(
   payload: SurveyDiffPayloadInput,
 ): Promise<SaveResult> {
@@ -78,9 +83,6 @@ export async function saveSurveyDiff(
     // 한정한다. 빠진 키는 tx 끝에서 유예 삭제 큐에 등록되고 재등장 키는 취소된다.
     const oldContentKeys = new Set<string>();
     const newContentKeys = new Set<string>();
-    const addKeys = (set: Set<string>, value: unknown) => {
-      for (const k of extractR2KeysFromJsonbValue(value)) set.add(k);
-    };
 
     // 1. 메타데이터 업데이트
     if (metadata) {
@@ -414,9 +416,6 @@ export async function saveSurveyWithDetails(
     // 저장 diff 수집 — 전체 저장은 콘텐츠 전량이 payload 이므로 old 전량과 비교한다
     const oldContentKeys = new Set<string>();
     const newContentKeys = new Set<string>();
-    const addKeys = (set: Set<string>, value: unknown) => {
-      for (const k of extractR2KeysFromJsonbValue(value)) set.add(k);
-    };
     if (existingSurvey) {
       addKeys(oldContentKeys, {
         responseHeader: existingSurvey.responseHeader,

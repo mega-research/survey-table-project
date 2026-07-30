@@ -16,7 +16,7 @@ import { pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 export const r2DeletionCandidates = pgTable('r2_deletion_candidates', {
   id: uuid('id').primaryKey().defaultRandom(),
   key: text('key').notNull(),
-  // 수집원: survey-delete | question-delete | library-delete | template-delete | save-diff | admin
+  // 수집원 — deletion-queue.server 의 R2DeletionSource 가 SoT
   source: text('source').notNull(),
   // 사람이 읽는 사유 (어떤 엔티티/저장에서 왔는지)
   reason: text('reason'),

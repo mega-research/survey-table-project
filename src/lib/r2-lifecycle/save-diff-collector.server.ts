@@ -6,6 +6,7 @@ import {
   type R2DbExecutor,
 } from '@/lib/r2-lifecycle/deletion-queue.server';
 import {
+  collectRemovedR2Keys,
   diffRemovedR2Keys,
   extractR2KeysFromJsonbValue,
 } from '@/lib/r2-lifecycle/key-extract';
@@ -49,15 +50,20 @@ export async function collectFieldLimitedSaveDiff(
 ): Promise<void> {
   const fields = Object.keys(input.payloadRow).filter((k) => input.payloadRow[k] !== undefined);
   if (fields.length === 0) return;
-  const oldKeys = new Set<string>();
+  // 빠진 키(old − new)는 unit 으로 고정된 payload 한정 diff 계약에 위임한다
+  const removed = collectRemovedR2Keys(input.oldRow, input.payloadRow);
+  if (removed.length > 0) {
+    await registerDeletionCandidates(dbc, {
+      keys: removed,
+      source: 'save-diff',
+      reason: input.reason,
+    });
+  }
   const newKeys = new Set<string>();
   for (const field of fields) {
-    for (const k of extractR2KeysFromJsonbValue(input.oldRow[field])) oldKeys.add(k);
     for (const k of extractR2KeysFromJsonbValue(input.payloadRow[field])) newKeys.add(k);
   }
-  await collectSaveDiffAndRevival(dbc, {
-    oldKeys: [...oldKeys],
-    newKeys: [...newKeys],
-    reason: input.reason,
-  });
+  if (newKeys.size > 0) {
+    await cancelPendingCandidatesByKeys(dbc, [...newKeys]);
+  }
 }

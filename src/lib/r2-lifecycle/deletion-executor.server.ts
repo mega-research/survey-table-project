@@ -69,9 +69,13 @@ export async function executeDueDeletionBatch(
   return result;
 }
 
-/** Inngest step 의 좁은 주입 interface — 테스트에서 fake step 으로 대체. */
+/**
+ * Inngest step 의 좁은 주입 interface — 테스트에서 fake step 으로 대체.
+ * 배치 결과는 JSON-플레인(숫자·불리언)이라 inngest 의 Jsonify 반환과 구조
+ * 동일 — 비제네릭 시그니처로 두면 실제 step 이 캐스트 없이 대입된다.
+ */
 export interface DeletionExecutorStep {
-  run<T>(id: string, fn: () => Promise<T>): Promise<T>;
+  run(id: string, fn: () => Promise<DeletionBatchResult>): Promise<DeletionBatchResult>;
 }
 
 export interface DeletionExecutorTotals {
