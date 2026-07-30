@@ -295,6 +295,23 @@ describe('normalizeQuestion - strict 모드 (strip 활성화 목적지)', () => 
     expect(parsed['mobileOriginalTable']).toBe(true);
   });
 
+  it('행별 원본 문항 모드와 원본 행 상세 설정을 strict 정규화에서 보존한다', () => {
+    const parsed = normalizeQuestion(
+      {
+        ...GEN_NEW_TABLE,
+        mobileTableDisplayMode: 'row-wise-original',
+        mobileDrilldownOmitLeadingColumns: 2,
+        mobileDrilldownRepeatHeaderStartRow: 0,
+        mobileDrilldownRepeatHeaderEndRow: 2,
+      },
+      'strict',
+    ) as unknown as Record<string, unknown>;
+    expect(parsed['mobileTableDisplayMode']).toBe('row-wise-original');
+    expect(parsed['mobileDrilldownOmitLeadingColumns']).toBe(2);
+    expect(parsed['mobileDrilldownRepeatHeaderStartRow']).toBe(0);
+    expect(parsed['mobileDrilldownRepeatHeaderEndRow']).toBe(2);
+  });
+
   it('strict 정규화가 반복 헤더 null/null을 보존한다', () => {
     const parsed = normalizeQuestion(
       {

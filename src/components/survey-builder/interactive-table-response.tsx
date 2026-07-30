@@ -34,6 +34,7 @@ import {
   clampMobileDrilldownOmitLeadingColumns,
   resolveMobileTableDisplayMode,
 } from '@/utils/mobile-table-display-mode';
+import { buildMobileRowWiseOriginalModel } from '@/utils/mobile-row-wise-original';
 import {
   HEADER_ROW_MIN_HEIGHT,
   STICKY_BODY_Z,
@@ -51,6 +52,7 @@ import { buildRadioGroupBuckets, resolveRadioGroupProps } from '@/utils/table-ra
 
 import { InteractiveCell } from './cells';
 import { DynamicRowSelectorModal } from './dynamic-row-selector-modal';
+import { MobileRowWiseOriginalSheet } from './mobile-row-wise-original-sheet';
 import { MobileTableDrilldown } from './mobile-table-drilldown';
 import { MobileTableStepper } from './mobile-table-stepper';
 import { HEADER_SCROLL_CLASS, TableScrollControls } from './table-scroll-controls';
@@ -341,6 +343,7 @@ interface InteractiveTableResponseProps {
     | {
         message: string;
         labelPrefix?: string | undefined;
+        rowId?: string | undefined;
         cellIds?: string[] | undefined;
         detailTargetIds?: string[] | undefined;
       }[]
@@ -690,6 +693,54 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
       }),
     [visibleColumns, displayRows, visibleHeaderGrid],
   );
+  const displayRowById = useMemo(
+    () => new Map(displayRows.map((row) => [row.id, row])),
+    [displayRows],
+  );
+  const displayCellById = useMemo(
+    () => new Map(displayRows.flatMap((row) => row.cells.map((cell) => [cell.id, cell] as const))),
+    [displayRows],
+  );
+  const rowWiseOriginalModel = useMemo(
+    () => {
+      if (!isMobileView || mobileMode !== 'row-wise-original') {
+        return { sections: [] };
+      }
+
+      return buildMobileRowWiseOriginalModel({
+        authoredColumns: columns,
+        authoredRows: rows,
+        visibleColumns,
+        ...(visibleHeaderGrid ? { visibleHeaderGrid } : {}),
+        displayRows,
+        hideColumnLabels,
+        settings: {
+          omitLeadingAuthoredColumns: clampMobileDrilldownOmitLeadingColumns(
+            mobileDrilldownOmitLeadingColumns,
+            columns.length,
+          ),
+          repeatHeaderStartRow: mobileDrilldownRepeatHeaderStartRow,
+          repeatHeaderEndRow: mobileDrilldownRepeatHeaderEndRow,
+        },
+        isLabelSourceHidden: (cellId) =>
+          displayCellById.get(cellId)?.mobileDisplay === 'hidden',
+      });
+    },
+    [
+      columns,
+      displayCellById,
+      displayRows,
+      hideColumnLabels,
+      isMobileView,
+      mobileDrilldownOmitLeadingColumns,
+      mobileDrilldownRepeatHeaderEndRow,
+      mobileDrilldownRepeatHeaderStartRow,
+      mobileMode,
+      rows,
+      visibleColumns,
+      visibleHeaderGrid,
+    ],
+  );
 
   // ── 빈 테이블 ──
   if (columns.length === 0 || rows.length === 0) {
@@ -895,7 +946,35 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
         >
           <div className="w-full">
             {/* 모바일 원본 표 옵션이 켜진 질문은 카드/스테퍼 전환 없이 원본 표(가로 스크롤) 유지 */}
-            {mobileUsesCards ? (
+            {isMobileView && mobileMode === 'row-wise-original' ? (
+              <MobileRowWiseOriginalSheet
+                model={rowWiseOriginalModel}
+                errorCellIds={errorCellIds}
+                renderCell={(cell, rowQuestion, inputIdScope, invalid) => {
+                  const sourceRowId =
+                    rowQuestion.projection.sourceRowIdByCellId.get(cell.id) ??
+                    rowQuestion.rowId;
+                  const sourceRow =
+                    displayRowById.get(sourceRowId) ?? rowQuestion.projection.row;
+                  return (
+                    <InteractiveCell
+                      cell={cell}
+                      questionId={questionId}
+                      isTestMode={isTestMode}
+                      value={value}
+                      onChange={mergedOnChange}
+                      inputIdScope={inputIdScope}
+                      ariaInvalid={invalid}
+                      {...resolveRadioGroupProps(
+                        cell,
+                        sourceRowId,
+                        buildRadioGroupBuckets(sourceRow),
+                      )}
+                    />
+                  );
+                }}
+              />
+            ) : mobileUsesCards ? (
               useOriginalRowDetail || useDrilldown ? (
                 <MobileTableDrilldown
                   {...mobileTableProps}
@@ -922,6 +1001,9 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
               const scroll = () =>
                 scrollToIssue({
                   detailTargetIds: item.detailTargetIds,
+                  cellInstanceIds: item.rowId
+                    ? cellIds.map((cellId) => `${item.rowId}:${item.rowId}:${cellId}`)
+                    : undefined,
                   cellIds,
                   questionId,
                 });

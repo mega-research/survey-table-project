@@ -6,6 +6,7 @@ export interface ValidationBannerItem {
   message: string;
   /** 데스크톱에서만 메시지 앞에 표시할 행 라벨 */
   labelPrefix?: string | undefined;
+  rowId?: string | undefined;
   cellIds?: string[] | undefined;
   detailTargetIds?: string[] | undefined;
 }

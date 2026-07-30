@@ -13,6 +13,8 @@ export const CheckboxCell = React.memo(function CheckboxCell({
   cellResponse,
   onUpdateValue,
   questionId,
+  inputIdScope,
+  ariaInvalid,
 }: InteractiveCellProps) {
   const cellResponseArray = useMemo(
     () => (Array.isArray(cellResponse) ? cellResponse : []),
@@ -78,6 +80,7 @@ export const CheckboxCell = React.memo(function CheckboxCell({
         const optionKey = option.value ?? option.id;
         const isChecked = cellResponseArray.includes(optionKey);
         const disabled = !canSelect(optionKey);
+        const inputId = `${inputIdScope ?? cell.id}-${option.id}`;
 
         return (
           <div key={option.id} className="space-y-2">
@@ -85,7 +88,8 @@ export const CheckboxCell = React.memo(function CheckboxCell({
             <div className="flex items-start gap-2">
               <input
                 type="checkbox"
-                id={`${cell.id}-${option.id}`}
+                id={inputId}
+                aria-invalid={ariaInvalid || undefined}
                 checked={isChecked}
                 disabled={disabled}
                 onChange={(e) => handleCheckboxChange(optionKey, e.target.checked)}
@@ -94,7 +98,7 @@ export const CheckboxCell = React.memo(function CheckboxCell({
                 }`}
               />
               <label
-                htmlFor={`${cell.id}-${option.id}`}
+                htmlFor={inputId}
                 className={`text-base whitespace-pre-line select-none ${
                   disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
                 }`}

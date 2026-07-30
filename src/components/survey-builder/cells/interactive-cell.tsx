@@ -24,22 +24,24 @@ const CellRouter = React.memo(function CellRouter({
   onUpdateValue,
   questionId,
   groupName,
+  inputIdScope,
+  ariaInvalid,
 }: InteractiveCellProps) {
   switch (cell.type) {
     case 'checkbox':
-      return <CheckboxCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} />;
+      return <CheckboxCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} inputIdScope={inputIdScope} ariaInvalid={ariaInvalid} />;
     case 'radio':
-      return <RadioCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} {...(groupName !== undefined ? { groupName } : {})} />;
+      return <RadioCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} inputIdScope={inputIdScope} ariaInvalid={ariaInvalid} {...(groupName !== undefined ? { groupName } : {})} />;
     case 'select':
-      return <SelectCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} />;
+      return <SelectCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} ariaInvalid={ariaInvalid} />;
     case 'input':
-      return <InputCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} />;
+      return <InputCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} ariaInvalid={ariaInvalid} />;
     case 'image':
       return <ImageCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} />;
     case 'video':
       return <VideoCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} />;
     case 'ranking':
-      return <RankingCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} />;
+      return <RankingCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} ariaInvalid={ariaInvalid} />;
     case 'ranking_opt':
       return <RankingOptCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} />;
     case 'text':
@@ -66,6 +68,8 @@ interface InteractiveCellContainerProps {
    * 이 셀이 응답될 때 sibling 셀들의 응답을 자동으로 빈값('')으로 클리어한다 (state 처리).
    */
   siblingCellIds?: string[] | undefined;
+  inputIdScope?: string | undefined;
+  ariaInvalid?: boolean | undefined;
 }
 
 export const InteractiveCell = React.memo(function InteractiveCell({
@@ -76,6 +80,8 @@ export const InteractiveCell = React.memo(function InteractiveCell({
   onChange,
   groupName,
   siblingCellIds,
+  inputIdScope,
+  ariaInvalid,
 }: InteractiveCellContainerProps) {
   const { cellResponse, updateValue } = useCellResponse(
     questionId,
@@ -92,6 +98,8 @@ export const InteractiveCell = React.memo(function InteractiveCell({
       cellResponse={cellResponse}
       onUpdateValue={updateValue}
       questionId={questionId}
+      inputIdScope={inputIdScope}
+      ariaInvalid={ariaInvalid}
       {...(groupName !== undefined ? { groupName } : {})}
     />
   );

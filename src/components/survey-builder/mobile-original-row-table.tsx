@@ -25,6 +25,7 @@ interface Props {
   scrollLeftRef?: React.MutableRefObject<number> | undefined;
   resetScrollKey?: string | number | undefined;
   errorCellIds?: Set<string> | undefined;
+  instanceScope?: string | undefined;
 }
 
 export function MobileOriginalRowTable(props: Props) {
@@ -37,6 +38,7 @@ export function MobileOriginalRowTable(props: Props) {
     scrollLeftRef,
     resetScrollKey,
     errorCellIds,
+    instanceScope,
   } = props;
   const { rows, interactiveRowId } = props;
   const attrs = useContactAttrs();
@@ -86,6 +88,11 @@ export function MobileOriginalRowTable(props: Props) {
       scrollLeftRef={scrollLeftRef}
       resetScrollKey={resetScrollKey}
       errorCellIds={errorCellIds}
+      getCellInstanceId={
+        instanceScope
+          ? (cell, row) => `${instanceScope}:${row.id}:${cell.id}`
+          : undefined
+      }
       renderCell={renderMobileCell}
       choiceControlType={choiceControlType}
       stickyHeader={false}

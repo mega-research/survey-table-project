@@ -225,7 +225,7 @@ export const questions = pgTable('questions', {
 }, (table) => [
   check(
     'questions_mobile_table_display_mode_check',
-    sql`${table.mobileTableDisplayMode} in ('auto', 'drilldown-original-row', 'original')`,
+    sql`${table.mobileTableDisplayMode} in ('auto', 'drilldown-original-row', 'row-wise-original', 'original')`,
   ),
 ]);
 

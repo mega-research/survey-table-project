@@ -3,6 +3,7 @@
 import { type ReactNode, useCallback, useMemo } from 'react';
 
 import { TablePreview } from '@/components/survey-builder/table-preview';
+import { MobileRowWiseOriginalSheet } from '@/components/survey-builder/mobile-row-wise-original-sheet';
 import { useMobileView } from '@/hooks/use-media-query';
 import { useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
@@ -16,8 +17,10 @@ import {
 } from '@/utils/choice-group-helpers';
 import { resolveChoiceOptions } from '@/utils/choice-source';
 import { getCellTextClassName } from '@/utils/cell-style';
+import { projectConditionalTableLayout } from '@/utils/conditional-table-layout';
 import { findMobileHeaderCell } from '@/utils/mobile-display-cells';
 import { resolveMobileTableDisplayMode } from '@/utils/mobile-table-display-mode';
+import { buildMobileRowWiseOriginalModel } from '@/utils/mobile-row-wise-original';
 
 import { ChoiceTableDrilldown } from './choice-table-drilldown';
 import { MobileOptionCard } from './mobile-card-shared';
@@ -31,6 +34,8 @@ interface ChoiceTableResponseProps {
    */
   value: unknown;
   onChange: (value: string | string[] | GroupedChoiceAnswer | null) => void;
+  allResponses?: Record<string, unknown> | undefined;
+  allQuestions?: Question[] | undefined;
 }
 
 /**
@@ -39,7 +44,13 @@ interface ChoiceTableResponseProps {
  * - 모바일: 행마다 MobileOptionCard (라벨 + 표시 셀 + 체크/라디오 컨트롤)
  * 응답은 일반 radio/checkbox shape(radio=cell.id | null, checkbox=cell.id[])로 저장한다.
  */
-export function ChoiceTableResponse({ question, value, onChange }: ChoiceTableResponseProps) {
+export function ChoiceTableResponse({
+  question,
+  value,
+  onChange,
+  allResponses,
+  allQuestions,
+}: ChoiceTableResponseProps) {
   const isCheckbox = question.type === 'checkbox';
   // 그룹별 선택 모드 여부 — radio 또는 checkbox 그룹이 1개 이상 정의된 경우 true.
   // isCheckbox 가드를 제거하여 checkbox 질문도 grouped 경로를 밟을 수 있게 한다.
@@ -329,9 +340,75 @@ export function ChoiceTableResponse({ question, value, onChange }: ChoiceTableRe
   );
 
   const mobileMode = resolveMobileTableDisplayMode(question);
+  const rowWiseOriginalModel = useMemo(() => {
+    if (mobileMode !== 'row-wise-original') return { sections: [] };
+    const columns = question.tableColumns ?? [];
+    const rows = question.tableRowsData ?? [];
+    const visibleLayout = projectConditionalTableLayout({
+      columns,
+      rows,
+      ...(question.tableHeaderGrid ? { headerGrid: question.tableHeaderGrid } : {}),
+      allResponses,
+      allQuestions,
+    });
+    const model = buildMobileRowWiseOriginalModel({
+      authoredColumns: columns,
+      authoredRows: rows,
+      visibleColumns: visibleLayout.columns,
+      ...(visibleLayout.headerGrid ? { visibleHeaderGrid: visibleLayout.headerGrid } : {}),
+      displayRows: visibleLayout.rows,
+      hideColumnLabels: question.hideColumnLabels ?? false,
+      settings: {
+        omitLeadingAuthoredColumns: question.mobileDrilldownOmitLeadingColumns ?? 1,
+        repeatHeaderStartRow: question.mobileDrilldownRepeatHeaderStartRow,
+        repeatHeaderEndRow: question.mobileDrilldownRepeatHeaderEndRow,
+      },
+      answerableCellTypes: ['choice_opt'],
+      resolveChoiceLabel,
+      isLabelSourceHidden: (cellId) =>
+        rows.some((row) =>
+          row.cells.some(
+            (cell) => cell.id === cellId && cell.mobileDisplay === 'hidden',
+          ),
+        ),
+    });
+    return {
+      sections: model.sections.map((section) => ({
+        ...section,
+        label: substituteTokens(section.label, attrs),
+        subgroups: section.subgroups.map((subgroup) => ({
+          ...subgroup,
+          label: substituteTokens(subgroup.label, attrs),
+          questions: subgroup.questions.map((rowQuestion) => ({
+            ...rowQuestion,
+            title: substituteTokens(rowQuestion.title, attrs),
+          })),
+        })),
+      })),
+    };
+  }, [allQuestions, allResponses, attrs, mobileMode, question, resolveChoiceLabel]);
 
   const renderSelectedRowCell = (cell: TableCell) =>
     renderCell(cell.mobileDisplay === 'hidden' ? { ...cell, content: '' } : cell, true);
+
+  if (isMobile && mobileMode === 'row-wise-original') {
+    return (
+      <div className="space-y-2">
+        <MobileRowWiseOriginalSheet
+          model={rowWiseOriginalModel}
+          choiceControlType={(cell) =>
+            isGrouped
+              ? getGroupTypeOfCell(question, cell.id)
+              : question.type === 'checkbox'
+                ? 'checkbox'
+                : 'radio'
+          }
+          renderCell={(cell) => renderSelectedRowCell(cell)}
+        />
+        {counter}
+      </div>
+    );
+  }
 
   if (isMobile && mobileMode === 'drilldown-original-row') {
     return (

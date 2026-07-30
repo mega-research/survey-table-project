@@ -104,14 +104,14 @@ describe('QuestionEditModal 모바일 표시 설정 롤백', () => {
     // DynamicTableEditor가 두 필드를 store에 즉시 쓰는 경로를 재현한다.
     act(() => {
       useSurveyBuilderStore.getState().silentUpdateQuestion('q1', {
-        mobileTableDisplayMode: 'drilldown-original-row',
+        mobileTableDisplayMode: 'row-wise-original',
         mobileDrilldownOmitLeadingColumns: 2,
         mobileDrilldownRepeatHeaderStartRow: 2,
         mobileDrilldownRepeatHeaderEndRow: 3,
       });
     });
 
-    expect(getQuestion()?.mobileTableDisplayMode).toBe('drilldown-original-row');
+    expect(getQuestion()?.mobileTableDisplayMode).toBe('row-wise-original');
     expect(getQuestion()?.mobileDrilldownOmitLeadingColumns).toBe(2);
     expect(getQuestion()?.mobileDrilldownRepeatHeaderStartRow).toBe(2);
     expect(getQuestion()?.mobileDrilldownRepeatHeaderEndRow).toBe(3);

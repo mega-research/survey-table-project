@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { computeTableEstimatedHeight } from '@/hooks/use-row-heights';
 import { useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
+import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { useTestResponseStore } from '@/stores/test-response-store';
 import { Question, SurveyLookup } from '@/types/survey';
 import { evaluateNumericComparisonV2 } from '@/utils/branch-logic';
@@ -396,10 +397,14 @@ function QuestionTestInput({
   question,
   value,
   onChange,
+  allResponses,
+  allQuestions,
 }: {
   question: Question;
   value: unknown;
   onChange: (value: unknown) => void;
+  allResponses: Record<string, unknown>;
+  allQuestions: Question[];
 }) {
   const attrs = useContactAttrs();
 
@@ -413,6 +418,8 @@ function QuestionTestInput({
         question={question}
         value={value}
         onChange={onChange as (v: unknown) => void}
+        allResponses={allResponses}
+        allQuestions={allQuestions}
       />
     );
   }
@@ -496,6 +503,8 @@ function QuestionTestInput({
           isTestMode={true}
           className="border-0 shadow-none"
           dynamicRowConfigs={question.dynamicRowConfigs}
+          allResponses={allResponses}
+          allQuestions={allQuestions}
           hideColumnLabels={question.hideColumnLabels}
           mobileOriginalTable={question.mobileOriginalTable}
           mobileTableDisplayMode={question.mobileTableDisplayMode}
@@ -549,6 +558,7 @@ export function QuestionTestBody({
   const updateTestResponse = useTestResponseStore((s) => s.updateTestResponse);
   // 디버그 패널 평가용 — 다른 질문 응답도 ctx 에 포함되도록 전체 testResponses 구독.
   const allTestResponses = useTestResponseStore((s) => s.testResponses);
+  const allQuestions = useSurveyBuilderStore((s) => s.currentSurvey.questions);
   // 토큰 치환 + 분기 조건 평가에 사용할 컨택 attrs (ContactAttrsProvider 가 주입).
   const attrs = useContactAttrs();
 
@@ -608,10 +618,22 @@ export function QuestionTestBody({
               question.tableHeaderGrid,
             )}
           >
-            <QuestionTestInput question={question} value={testResponse} onChange={handleResponse} />
+            <QuestionTestInput
+              question={question}
+              value={testResponse}
+              onChange={handleResponse}
+              allResponses={allTestResponses}
+              allQuestions={allQuestions}
+            />
           </LazyMount>
         ) : (
-          <QuestionTestInput question={question} value={testResponse} onChange={handleResponse} />
+          <QuestionTestInput
+            question={question}
+            value={testResponse}
+            onChange={handleResponse}
+            allResponses={allTestResponses}
+            allQuestions={allQuestions}
+          />
         )}
       </div>
 

@@ -19,6 +19,10 @@ const SCROLL_BUTTON_STEP = 400;
 const SCROLL_STEP_BUTTON_CLASS =
   'flex h-5 w-5 shrink-0 items-center justify-center rounded border border-gray-300 bg-white text-gray-600 shadow-sm transition-all hover:border-gray-400 hover:bg-gray-50 hover:text-gray-900 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-gray-300 disabled:hover:bg-white';
 
+function getScrollBehavior(): ScrollBehavior {
+  return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+}
+
 function ScrollStepButton({
   direction,
   disabled,
@@ -104,7 +108,7 @@ export function TableScrollControls({
     (delta: number) => {
       const el = scrollRef.current;
       if (!el) return;
-      el.scrollTo({ left: el.scrollLeft + delta, behavior: 'smooth' });
+      el.scrollTo({ left: el.scrollLeft + delta, behavior: getScrollBehavior() });
     },
     [scrollRef],
   );
@@ -120,8 +124,24 @@ export function TableScrollControls({
       const ratio = (e.clientX - rect.left) / rect.width;
       el.scrollTo({
         left: ratio * el.scrollWidth - el.clientWidth / 2,
-        behavior: 'smooth',
+        behavior: getScrollBehavior(),
       });
+    },
+    [scrollRef],
+  );
+
+  const handleTrackKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      const el = scrollRef.current;
+      if (!el) return;
+      let left: number | undefined;
+      if (event.key === 'ArrowLeft') left = el.scrollLeft - SCROLL_BUTTON_STEP;
+      if (event.key === 'ArrowRight') left = el.scrollLeft + SCROLL_BUTTON_STEP;
+      if (event.key === 'Home') left = 0;
+      if (event.key === 'End') left = Math.max(0, el.scrollWidth - el.clientWidth);
+      if (left === undefined) return;
+      event.preventDefault();
+      el.scrollTo({ left, behavior: getScrollBehavior() });
     },
     [scrollRef],
   );
@@ -179,9 +199,13 @@ export function TableScrollControls({
         aria-orientation="horizontal"
         aria-label="가로 스크롤"
         aria-controls={scrollAreaId}
+        aria-valuemin={0}
+        aria-valuemax={100}
         aria-valuenow={0}
+        tabIndex={0}
         onClick={handleTrackClick}
-        className="relative h-1.5 flex-1 cursor-pointer rounded-full bg-gray-200"
+        onKeyDown={handleTrackKeyDown}
+        className="relative h-1.5 flex-1 cursor-pointer rounded-full bg-gray-200 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:outline-none"
       >
         <div
           ref={thumbRef}

@@ -15,6 +15,7 @@ export const InputCell = React.memo(function InputCell({
   cell,
   cellResponse,
   onUpdateValue,
+  ariaInvalid,
 }: InteractiveCellProps) {
   const attrs = useContactAttrs();
   const template = cell.defaultValueTemplate ?? '';
@@ -70,6 +71,7 @@ export const InputCell = React.memo(function InputCell({
           className="w-full text-base"
           disabled={isPrefilled}
           data-prefilled={isPrefilled || undefined}
+          aria-invalid={ariaInvalid || undefined}
         />
 
         {cell.inputMaxLength && !isPrefilled && (

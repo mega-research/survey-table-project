@@ -11,9 +11,18 @@ function findDataTarget(attribute: string, ids: readonly string[]): HTMLElement 
 
 export interface IssueScrollTargets {
   detailTargetIds?: readonly string[] | undefined;
+  cellInstanceIds?: readonly string[] | undefined;
   cellIds?: readonly string[] | undefined;
   questionId?: string | undefined;
 }
+
+const FOCUSABLE_SELECTOR = [
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  'button:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',');
 
 /**
  * 실제 상세 입력 → 표 셀 → 질문 카드 순으로 첫 렌더 타깃을 찾아 이동한다.
@@ -21,15 +30,29 @@ export interface IssueScrollTargets {
  */
 export function scrollToIssue({
   detailTargetIds = [],
+  cellInstanceIds = [],
   cellIds = [],
   questionId,
 }: IssueScrollTargets): void {
   const detail = findDataTarget(OPTION_TEXT_TARGET_ATTRIBUTE, detailTargetIds);
-  const cell = detail ? null : findDataTarget('data-cell-id', cellIds);
+  const cellInstance = detail
+    ? null
+    : findDataTarget('data-cell-instance-id', cellInstanceIds);
+  const cell = detail || cellInstance ? null : findDataTarget('data-cell-id', cellIds);
   const question =
-    detail || cell || !questionId ? null : findDataTarget('data-question-id', [questionId]);
-  const target = detail ?? cell ?? question;
-  target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    detail || cellInstance || cell || !questionId
+      ? null
+      : findDataTarget('data-question-id', [questionId]);
+  const target = detail ?? cellInstance ?? cell ?? question;
+  if (!target) return;
+  const behavior = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    ? 'auto'
+    : 'smooth';
+  target.scrollIntoView({ behavior, block: 'center' });
+  const focusTarget = target.matches(FOCUSABLE_SELECTOR)
+    ? target
+    : target.querySelector<HTMLElement>(FOCUSABLE_SELECTOR);
+  focusTarget?.focus({ preventScroll: true });
 }
 
 /** 기존 표 전용 호출부 하위 호환. */

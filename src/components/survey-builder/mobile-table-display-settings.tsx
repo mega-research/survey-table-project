@@ -43,6 +43,11 @@ const OPTIONS: Array<{ value: MobileTableDisplayMode; label: string; description
     description: '항목을 고른 뒤 선택한 행만 원본 열 배치로 표시합니다.',
   },
   {
+    value: 'row-wise-original',
+    label: '행별 원본 문항',
+    description: '각 응답 행을 원본 열 배치의 문항으로 만들어 한 화면에 세로로 표시합니다.',
+  },
+  {
     value: 'original',
     label: '전체 원본 표',
     description: '모바일에서도 표 전체를 가로 스크롤로 표시합니다.',
@@ -105,7 +110,7 @@ export function MobileTableDisplaySettings({
       <div
         role="radiogroup"
         aria-labelledby="mobile-table-display-mode-label"
-        className="grid gap-2 sm:grid-cols-3"
+        className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4"
       >
         {OPTIONS.map((option) => {
           const selected = mode === option.value;
@@ -144,7 +149,7 @@ export function MobileTableDisplaySettings({
           );
         })}
       </div>
-      {mode === 'drilldown-original-row' ? (
+      {mode === 'drilldown-original-row' || mode === 'row-wise-original' ? (
         <div className="grid max-w-xl gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="mobile-drilldown-omit-leading">상세에서 제외할 앞쪽 열 수</Label>

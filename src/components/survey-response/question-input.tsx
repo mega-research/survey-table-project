@@ -93,9 +93,14 @@ function buildTableValidationBannerItems(
     .flatMap((issue): ValidationBannerItem[] => {
       const cellIds = issue.cellIds ?? [];
       if (issue.kind !== 'required-cells' || cellIds.length < 2) {
+        const rowIds = new Set(
+          cellIds.map((cellId) => rowKeyByCellId.get(cellId)).filter(Boolean),
+        );
+        const rowId = rowIds.size === 1 ? [...rowIds][0] : undefined;
         return [{
           message: issue.message,
           cellIds,
+          ...(rowId ? { rowId } : {}),
           ...(issue.detailTargetIds ? { detailTargetIds: issue.detailTargetIds } : {}),
         }];
       }
@@ -108,9 +113,11 @@ function buildTableValidationBannerItems(
         cellIdsByRow.set(key, rowCellIds);
       }
       if (cellIdsByRow.size <= 1) {
+        const rowId = [...cellIdsByRow.keys()][0];
         return [{
           message: issue.message,
           cellIds,
+          ...(rowId && !rowId.startsWith('cell:') ? { rowId } : {}),
           ...(issue.detailTargetIds ? { detailTargetIds: issue.detailTargetIds } : {}),
         }];
       }
@@ -120,6 +127,7 @@ function buildTableValidationBannerItems(
       // 각 행의 오류 셀을 카드 이동 기준으로 사용한다.
       return [...cellIdsByRow.entries()].map(([rowKey, rowCellIds]) => ({
         message: issue.message,
+        ...(!rowKey.startsWith('cell:') ? { rowId: rowKey } : {}),
         ...(rowLabelByKey.has(rowKey) ? { labelPrefix: rowLabelByKey.get(rowKey) } : {}),
         cellIds: rowCellIds,
       }));
@@ -169,6 +177,8 @@ function QuestionInputControl({
         question={question}
         value={value}
         onChange={onChange as (v: unknown) => void}
+        allResponses={allResponses}
+        allQuestions={allQuestions}
       />
     );
   }

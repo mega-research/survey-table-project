@@ -188,7 +188,7 @@ export function getMobileOriginalRowLabelCandidate({
     }
   }
 
-  const rowLabel = row.label.trim();
+  const rowLabel = row.label?.trim() ?? '';
   if (rowLabel) {
     const inferredSource = rowLabelSourceCellId
       ? undefined

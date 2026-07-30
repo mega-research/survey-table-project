@@ -1,5 +1,7 @@
 'use client';
 
+/* eslint-disable jsx-a11y/role-supports-aria-props -- aria-invalid 전역 상태를 실제 검증 입력에 연결한다. */
+
 import React, { useCallback } from 'react';
 import { flushSync } from 'react-dom';
 
@@ -15,6 +17,8 @@ export const RadioCell = React.memo(function RadioCell({
   onUpdateValue,
   questionId,
   groupName,
+  inputIdScope,
+  ariaInvalid,
 }: InteractiveCellProps) {
   const handleRadioChange = useCallback(
     (optionId: string) => {
@@ -43,6 +47,7 @@ export const RadioCell = React.memo(function RadioCell({
       {cell.radioOptions.map((option) => {
         const optionKey = option.value ?? option.id;
         const isSelected = cellResponse === optionKey;
+        const inputId = `${inputIdScope ?? cell.id}-${option.id}`;
 
         return (
           <div key={option.id} className="space-y-2">
@@ -50,15 +55,16 @@ export const RadioCell = React.memo(function RadioCell({
             <div className="flex items-start gap-2">
               <input
                 type="radio"
-                id={`${cell.id}-${option.id}`}
+                id={inputId}
                 name={groupName ?? `${cell.id}-radio`}
+                aria-invalid={ariaInvalid || undefined}
                 checked={isSelected}
                 onChange={() => {}}
                 onClick={() => handleRadioChange(optionKey)}
                 className="mt-1 h-4 w-4 shrink-0 cursor-pointer border-gray-300 text-blue-600 focus:ring-blue-500"
               />
               <label
-                htmlFor={`${cell.id}-${option.id}`}
+                htmlFor={inputId}
                 className="cursor-pointer text-base whitespace-pre-line select-none"
               >
                 {option.label}

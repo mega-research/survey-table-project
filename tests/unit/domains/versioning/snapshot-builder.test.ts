@@ -233,17 +233,17 @@ describe('buildSurveySnapshot', () => {
         order: 0,
         tableColumns: [{ id: 'c0', label: '항목' }, { id: 'c1', label: '점수' }],
         tableRowsData: [],
-        mobileTableDisplayMode: 'drilldown-original-row',
-        mobileDrilldownOmitLeadingColumns: 1,
-        mobileDrilldownRepeatHeaderStartRow: null,
-        mobileDrilldownRepeatHeaderEndRow: null,
+        mobileTableDisplayMode: 'row-wise-original',
+        mobileDrilldownOmitLeadingColumns: 2,
+        mobileDrilldownRepeatHeaderStartRow: 0,
+        mobileDrilldownRepeatHeaderEndRow: 2,
       }],
     };
     const question = buildSurveySnapshot(survey).questions[0];
-    expect(question?.mobileTableDisplayMode).toBe('drilldown-original-row');
-    expect(question?.mobileDrilldownOmitLeadingColumns).toBe(1);
-    expect(question?.mobileDrilldownRepeatHeaderStartRow).toBeNull();
-    expect(question?.mobileDrilldownRepeatHeaderEndRow).toBeNull();
+    expect(question?.mobileTableDisplayMode).toBe('row-wise-original');
+    expect(question?.mobileDrilldownOmitLeadingColumns).toBe(2);
+    expect(question?.mobileDrilldownRepeatHeaderStartRow).toBe(0);
+    expect(question?.mobileDrilldownRepeatHeaderEndRow).toBe(2);
   });
 
   it('질문/그룹이 빈 배열이어도 정상 동작', () => {

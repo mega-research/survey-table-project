@@ -59,6 +59,7 @@ interface TablePreviewProps {
   scrollLeftRef?: React.MutableRefObject<number> | undefined;
   resetScrollKey?: string | number | undefined;
   errorCellIds?: Set<string> | undefined;
+  getCellInstanceId?: ((cell: TableCell, row: TableRow) => string) | undefined;
   /** 데스크톱 표에서만 셀별 배경색을 렌더한다. 모바일 원본 표는 기존 배경을 보존한다. */
   applyCellBackground?: boolean | undefined;
 }
@@ -78,6 +79,7 @@ export const TablePreview = React.memo(function TablePreview({
   scrollLeftRef,
   resetScrollKey,
   errorCellIds,
+  getCellInstanceId,
   applyCellBackground = true,
 }: TablePreviewProps) {
   const totalWidth = useMemo(() => calcTotalWidth(columns), [columns]);
@@ -343,6 +345,7 @@ export const TablePreview = React.memo(function TablePreview({
                           data-row-id={row.id}
                           data-testid={`cell-${cell.id}`}
                           data-cell-id={cell.id}
+                          data-cell-instance-id={getCellInstanceId?.(cell, row)}
                           {...getGridCellAria('gridcell', cs, rs)}
                         >
                           {(() => {

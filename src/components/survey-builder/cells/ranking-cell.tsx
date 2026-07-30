@@ -1,5 +1,7 @@
 'use client';
 
+/* eslint-disable jsx-a11y/role-supports-aria-props -- aria-invalid 전역 상태를 복수 순위 입력의 검증 그룹에 연결한다. */
+
 import React, { useMemo } from 'react';
 
 import { RankingDropdownStack } from '@/components/survey-response/ranking-dropdown-stack';
@@ -14,6 +16,7 @@ export const RankingCell = React.memo(function RankingCell({
   cell,
   cellResponse,
   onUpdateValue,
+  ariaInvalid,
 }: InteractiveCellProps) {
   const config = cell.rankingConfig;
   const options = cell.rankingOptions ?? [];
@@ -36,7 +39,11 @@ export const RankingCell = React.memo(function RankingCell({
 
   return (
     <CellContentLayout content={cell.content} position={cell.textPosition} bold={cell.textBold}>
-      <div className="flex w-full flex-col space-y-2">
+      <div
+        className="flex w-full flex-col space-y-2"
+        role="group"
+        aria-invalid={ariaInvalid || undefined}
+      >
         <RankingDropdownStack
           answers={answers}
           options={options}

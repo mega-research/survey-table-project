@@ -53,7 +53,7 @@ const tableQuestion = {
     },
   ],
   mobileOriginalTable: true,
-  mobileTableDisplayMode: 'drilldown-original-row',
+  mobileTableDisplayMode: 'row-wise-original',
   mobileDrilldownOmitLeadingColumns: 2,
   mobileDrilldownRepeatHeaderStartRow: 0,
   mobileDrilldownRepeatHeaderEndRow: 2,
@@ -84,7 +84,7 @@ describe('모바일 테이블 표시 설정 prop 전달', () => {
 
     expect(lastCapturedProps()).toMatchObject({
       mobileOriginalTable: true,
-      mobileTableDisplayMode: 'drilldown-original-row',
+      mobileTableDisplayMode: 'row-wise-original',
       mobileDrilldownOmitLeadingColumns: 2,
       mobileDrilldownRepeatHeaderStartRow: 0,
       mobileDrilldownRepeatHeaderEndRow: 2,
@@ -97,7 +97,7 @@ describe('모바일 테이블 표시 설정 prop 전달', () => {
 
     expect(lastCapturedProps()).toMatchObject({
       mobileOriginalTable: true,
-      mobileTableDisplayMode: 'drilldown-original-row',
+      mobileTableDisplayMode: 'row-wise-original',
       mobileDrilldownOmitLeadingColumns: 2,
       mobileDrilldownRepeatHeaderStartRow: 0,
       mobileDrilldownRepeatHeaderEndRow: 2,

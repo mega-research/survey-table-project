@@ -51,7 +51,7 @@ beforeEach(() => {
 });
 
 describe('InteractiveTableResponse 오류 배너', () => {
-  it('cellIds 항목은 "위치로 이동" 버튼을 렌더하고, 클릭 시 해당 셀로 스크롤한다', () => {
+  it('cellIds 항목은 "위치로 이동" 버튼을 렌더하고, 클릭 시 해당 셀 입력으로 스크롤·포커스한다', () => {
     const scrollSpy = vi.fn();
     // jsdom 은 scrollIntoView 를 정의하지 않으므로 프로토타입에 스텁
     Element.prototype.scrollIntoView = scrollSpy;
@@ -74,6 +74,7 @@ describe('InteractiveTableResponse 오류 배너', () => {
     fireEvent.click(jumpBtn);
     expect(scrollSpy).toHaveBeenCalledTimes(1);
     expect((scrollSpy.mock.contexts[0] as HTMLElement).getAttribute('data-cell-id')).toBe('r1c1');
+    expect(screen.getByRole('textbox')).toHaveFocus();
   });
 
   it('cellIds[0] 이 미렌더(열 displayCondition 으로 숨은 열)여도 렌더된 첫 셀로 스크롤한다', () => {

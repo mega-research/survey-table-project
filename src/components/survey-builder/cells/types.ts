@@ -16,6 +16,8 @@ export interface InteractiveCellProps {
    * radio 셀에서만 의미 있음.
    */
   groupName?: string;
+  inputIdScope?: string | undefined;
+  ariaInvalid?: boolean | undefined;
 }
 
 /** 미리보기(읽기 전용) 셀 컴포넌트 공통 props */

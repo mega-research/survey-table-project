@@ -120,13 +120,19 @@ describe.skipIf(!isLocalDb)('saved-questions procedure round-trip (real local DB
     expect(recent.every((q) => q.usageCount > 0)).toBe(true);
   });
 
-  it('apply: usageCount 증가 후 새 id를 부여한 question을 반환한다', async () => {
+  it('apply: usageCount 증가 후 새 id와 행별 원본 문항 설정을 보존한 question을 반환한다', async () => {
     const question = {
       id: 'rt-src2',
-      type: 'text' as const,
+      type: 'table' as const,
       title: 'apply 테스트',
       required: false,
       order: 0,
+      tableColumns: [],
+      tableRowsData: [],
+      mobileTableDisplayMode: 'row-wise-original' as const,
+      mobileDrilldownOmitLeadingColumns: 2,
+      mobileDrilldownRepeatHeaderStartRow: 1,
+      mobileDrilldownRepeatHeaderEndRow: 3,
     };
 
     const saved = await client.savedQuestions.create({
@@ -141,6 +147,12 @@ describe.skipIf(!isLocalDb)('saved-questions procedure round-trip (real local DB
     // applySavedQuestion이 generateId()로 새 id를 부여함
     expect(applied?.id).not.toBe(saved.id);
     expect(applied?.title).toBe('apply 테스트');
+    expect(applied).toMatchObject({
+      mobileTableDisplayMode: 'row-wise-original',
+      mobileDrilldownOmitLeadingColumns: 2,
+      mobileDrilldownRepeatHeaderStartRow: 1,
+      mobileDrilldownRepeatHeaderEndRow: 3,
+    });
 
     // usageCount가 DB에서 실제로 증가했는지 직접 확인
     const [row] = await db

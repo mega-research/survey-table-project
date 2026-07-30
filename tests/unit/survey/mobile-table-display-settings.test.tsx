@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { MobileTableDisplaySettings } from '@/components/survey-builder/mobile-table-display-settings';
 
 describe('MobileTableDisplaySettings', () => {
-  it('새 모드에서만 제외 열 수 입력을 보여준다', () => {
+  it('두 원본 행 상세 모드에서 제외 열 수 입력을 보여준다', () => {
     const onChange = vi.fn();
     const { rerender } = render(
       <MobileTableDisplaySettings
@@ -22,6 +22,19 @@ describe('MobileTableDisplaySettings', () => {
     rerender(
       <MobileTableDisplaySettings
         mode="drilldown-original-row"
+        omitLeadingColumns={1}
+        columnCount={11}
+        repeatHeaderStartRow={0}
+        repeatHeaderEndRow={0}
+        onChange={onChange}
+      />,
+    );
+
+    expect(screen.getByLabelText('상세에서 제외할 앞쪽 열 수')).toHaveAttribute('max', '10');
+
+    rerender(
+      <MobileTableDisplaySettings
+        mode="row-wise-original"
         omitLeadingColumns={1}
         columnCount={11}
         repeatHeaderStartRow={0}
@@ -79,7 +92,7 @@ describe('MobileTableDisplaySettings', () => {
     });
   });
 
-  it('라벨된 radiogroup과 세 radio 및 비색상 선택 표시를 제공한다', () => {
+  it('라벨된 radiogroup과 네 radio 및 비색상 선택 표시를 제공한다', () => {
     render(
       <MobileTableDisplaySettings
         mode="auto"
@@ -92,12 +105,18 @@ describe('MobileTableDisplaySettings', () => {
     );
 
     expect(screen.getByRole('radiogroup', { name: '모바일 표시 방식' })).toBeInTheDocument();
-    expect(screen.getAllByRole('radio')).toHaveLength(3);
+    expect(screen.getAllByRole('radio')).toHaveLength(4);
     expect(screen.getByRole('radio', { name: '자동 카드' })).toBeChecked();
+    expect(screen.getByRole('radio', { name: '행별 원본 문항' })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        '각 응답 행을 원본 열 배치의 문항으로 만들어 한 화면에 세로로 표시합니다.',
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText('선택됨')).toBeInTheDocument();
   });
 
-  it('드릴다운 모드에서만 반복 헤더 입력과 도움말을 보여준다', () => {
+  it('두 원본 행 상세 모드에서 반복 헤더 입력과 도움말을 보여준다', () => {
     const props = {
       omitLeadingColumns: 1,
       columnCount: 5,
@@ -111,6 +130,8 @@ describe('MobileTableDisplaySettings', () => {
     expect(screen.getByLabelText('상세에서 반복할 헤더 행')).toHaveValue('0-2');
     expect(screen.getByText('비우면 반복하지 않습니다. 0은 진짜 헤더이며, 3 또는 0-2처럼 입력합니다.'))
       .toBeInTheDocument();
+    rerender(<MobileTableDisplaySettings mode="row-wise-original" {...props} />);
+    expect(screen.getByLabelText('상세에서 반복할 헤더 행')).toHaveValue('0-2');
   });
 
   it('Enter와 blur에서 정상 범위를 start/end로 확정한다', () => {
