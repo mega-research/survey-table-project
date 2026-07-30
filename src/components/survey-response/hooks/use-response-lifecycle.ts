@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 
 import { toast } from 'sonner';
@@ -17,7 +17,7 @@ import {
 import type { SaveAdminEditPayload } from '@/features/survey-response/domain/response-edit';
 import type { TestAttemptIdentity } from '@/shared/types/test-attempt';
 
-import { sessionStorageKey } from './session-helpers';
+import { sendDraftBeacon, sessionStorageKey } from './session-helpers';
 import {
   handleInvalidTestLinkMutationError,
   handlePausedMutationError,
@@ -25,6 +25,14 @@ import {
 } from './use-duplicate-guard';
 
 type ResponsesMap = Record<string, unknown>;
+
+/**
+ * 미저장 답변의 안정적 지문. 키 순서에 흔들리지 않도록 정렬 후 직렬화한다.
+ * 동일 내용으로 반복 발사되는 beacon 을 걸러내는 데 쓴다.
+ */
+function snapshotOfAnswers(answers: Record<string, unknown>): string {
+  return JSON.stringify(Object.keys(answers).sort().map((key) => [key, answers[key]]));
+}
 
 // DuplicateStatus 타입은 use-duplicate-guard 가 소유한다(진입 시 중복검사의 주 소유자).
 // handleResponse/handleSubmit 가 blocked 로 set 하므로 여기서 re-export 해 기존 import 경로를 유지한다.
@@ -47,6 +55,10 @@ interface UseResponseLifecycleArgs {
   // 모드/식별
   isAdminEdit: boolean;
   isPreview?: boolean;
+  /** 완료 화면 여부. 이탈 시점 draft beacon 게이트 전용 (다른 경로는 사용하지 않는다). */
+  isCompleted?: boolean;
+  /** 중복·쿼터·중단 등 terminal blocked 화면 여부. 이탈 시점 draft beacon 게이트 전용. */
+  terminalBlocked?: boolean;
   adminContext: AdminContext | undefined;
   inviteToken: string | null;
   /** ?test=<token>. isTestSession 일 때만 create/complete 게이트로 전달해 isTest 로 기록시킨다. */
@@ -143,6 +155,8 @@ interface UseResponseLifecycleResult {
 export function useResponseLifecycle({
   isAdminEdit,
   isPreview = false,
+  isCompleted = false,
+  terminalBlocked = false,
   adminContext,
   inviteToken,
   testToken,
@@ -188,6 +202,9 @@ export function useResponseLifecycle({
   // 첫 답변 INSERT가 끝나기 전에 들어온 후속 답을 유실하지 않도록 응답 ID와 대기 답을 ref로 보관한다.
   const activeResponseIdRef = useRef<string | null>(currentResponseId);
   const pendingAnswerSavesRef = useRef(new Map<string, unknown>());
+  // 직전 beacon 으로 보낸 미저장 답변의 지문. 동일 내용 반복 발사를 막는다.
+  // beacon 후에도 pending 을 비우지 않기 때문에(전송 성공 확인 불가) 이 가드가 필요하다.
+  const lastBeaconSnapshotRef = useRef<string | null>(null);
   const responseCreationPromiseRef = useRef<Promise<string | null> | null>(null);
   if (currentResponseId) activeResponseIdRef.current = currentResponseId;
 
@@ -228,6 +245,9 @@ export function useResponseLifecycle({
           pendingAnswerSavesRef.current.delete(questionId);
         }
       }
+      lastBeaconSnapshotRef.current = snapshotOfAnswers(
+        Object.fromEntries(pendingAnswerSavesRef.current),
+      );
       return true;
     } catch (err) {
       if (
@@ -393,6 +413,56 @@ export function useResponseLifecycle({
       hasTestAttemptOwnership,
     ],
   );
+
+  /**
+   * 이탈 시점 미저장 답변 flush.
+   *
+   * "다음" 클릭 시에만 saveDraft 가 나가므로, 현재 페이지에서 입력하다 탭을 닫거나
+   * 백그라운드로 보내면 그 페이지분이 메모리에서 사라진다. hidden/pagehide 에서 beacon 으로
+   * 넘겨 복원 기준을 마지막 입력까지 끌어올린다.
+   *
+   * pending 은 비우지 않는다 — sendBeacon 은 전송 성공을 반환하지 않아, 낙관적으로 비웠다가
+   * 실패하면 사용자가 돌아와 "다음"을 눌러도 올릴 것이 없다. 대신 지문 비교로 중복을 막는다.
+   *
+   * 게이트는 use-response-telemetry 의 visibility effect 와 같은 기준이다. 종결·차단 화면은
+   * 렌더 early-return 이라 훅은 계속 마운트돼 있으므로 값으로 막아야 한다.
+   */
+  useEffect(() => {
+    if (isAdminEdit || isPreview || isCompleted || terminalBlocked) return;
+    // 대상자 테스트는 쓰기 소유권을 얻기 전까지 서버에 흔적을 남기지 않는다.
+    if (testIdentity !== null && !hasTestAttemptOwnership) return;
+
+    const flushViaBeacon = () => {
+      const responseId = activeResponseIdRef.current;
+      if (!responseId) return;
+      if (pendingAnswerSavesRef.current.size === 0) return;
+      const answers = Object.fromEntries(pendingAnswerSavesRef.current);
+      const snapshot = snapshotOfAnswers(answers);
+      if (snapshot === lastBeaconSnapshotRef.current) return;
+      lastBeaconSnapshotRef.current = snapshot;
+      sendDraftBeacon(responseId, answers, testIdentity);
+    };
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') flushViaBeacon();
+    };
+
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pagehide', flushViaBeacon);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pagehide', flushViaBeacon);
+    };
+    // activeResponseIdRef / pendingAnswerSavesRef / lastBeaconSnapshotRef 는 이벤트 발생
+    // 시점에 .current 를 읽으므로 deps 에 넣지 않는다 (리스너 재등록 불필요).
+  }, [
+    isAdminEdit,
+    isPreview,
+    isCompleted,
+    terminalBlocked,
+    testIdentity,
+    hasTestAttemptOwnership,
+  ]);
 
   const handleSubmit = useCallback(async () => {
     setIsSubmitting(true);

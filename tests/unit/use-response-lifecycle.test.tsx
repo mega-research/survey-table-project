@@ -565,3 +565,144 @@ describe('useResponseLifecycle - handleSubmit', () => {
     expect(args.setIsCompleted).toHaveBeenCalledWith(true);
   });
 });
+
+describe('이탈 시점 draft beacon', () => {
+  let sendBeacon: ReturnType<typeof vi.fn>;
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    sendBeacon = vi.fn(() => true);
+    fetchMock = vi.fn(() => Promise.resolve(new Response(null, { status: 200 })));
+    // jsdom navigator 에는 sendBeacon 이 없어 spyOn 이 불가하다.
+    // navigator 전체를 stubGlobal 로 갈아끼우면 나머지 속성이 프로토타입에 있어 사라지므로
+    // 속성만 직접 정의하고 afterEach 에서 지운다.
+    Object.defineProperty(navigator, 'sendBeacon', {
+      configurable: true,
+      writable: true,
+      value: sendBeacon,
+    });
+    vi.stubGlobal('fetch', fetchMock);
+  });
+
+  afterEach(() => {
+    Reflect.deleteProperty(navigator, 'sendBeacon');
+    // 다른 테스트로 hidden 상태가 새지 않도록 되돌린다.
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'visible',
+    });
+    vi.unstubAllGlobals();
+  });
+
+  /** hidden 이벤트를 실제 리스너에 전달한다. */
+  function fireHidden() {
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'hidden',
+    });
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+  }
+
+  /** sendBeacon 에 넘어간 Blob 본문을 파싱한다. */
+  async function beaconBody(call: number) {
+    const blob = sendBeacon.mock.calls[call]?.[1] as Blob;
+    return JSON.parse(await blob.text()) as Record<string, unknown>;
+  }
+
+  it('hidden 시 미저장 답변을 /api/response/draft 로 전송한다', async () => {
+    const { result } = renderHook(() =>
+      useResponseLifecycle(baseArgs({ currentResponseId: 'r1' })),
+    );
+    act(() => result.current.handleResponse('q1', 'a'));
+    fireHidden();
+
+    expect(sendBeacon).toHaveBeenCalledTimes(1);
+    expect(sendBeacon.mock.calls[0]?.[0]).toBe('/api/response/draft');
+    expect(await beaconBody(0)).toEqual({ responseId: 'r1', answers: { q1: 'a' } });
+  });
+
+  it('같은 미저장 답변으로 다시 hidden 되면 재전송하지 않는다', () => {
+    const { result } = renderHook(() =>
+      useResponseLifecycle(baseArgs({ currentResponseId: 'r1' })),
+    );
+    act(() => result.current.handleResponse('q1', 'a'));
+    fireHidden();
+    fireHidden();
+
+    expect(sendBeacon).toHaveBeenCalledTimes(1);
+  });
+
+  it('답변이 바뀌면 다시 전송한다', () => {
+    const { result } = renderHook(() =>
+      useResponseLifecycle(baseArgs({ currentResponseId: 'r1' })),
+    );
+    act(() => result.current.handleResponse('q1', 'a'));
+    fireHidden();
+    act(() => result.current.handleResponse('q1', 'b'));
+    fireHidden();
+
+    expect(sendBeacon).toHaveBeenCalledTimes(2);
+  });
+
+  it('응답 행이 아직 없으면 전송하지 않는다', () => {
+    const { result } = renderHook(() =>
+      useResponseLifecycle(baseArgs({ currentResponseId: null })),
+    );
+    // '__' 접두 사이드카는 첫 답변 INSERT 를 유발하지 않아 응답 행이 없는 상태를 만든다.
+    act(() => result.current.handleResponse('__optTexts', { q1: 'x' }));
+    fireHidden();
+
+    expect(sendBeacon).not.toHaveBeenCalled();
+  });
+
+  it('완료 화면이면 전송하지 않는다', () => {
+    const { result } = renderHook(() =>
+      useResponseLifecycle(baseArgs({ currentResponseId: 'r1', isCompleted: true })),
+    );
+    act(() => result.current.handleResponse('q1', 'a'));
+    fireHidden();
+
+    expect(sendBeacon).not.toHaveBeenCalled();
+  });
+
+  it('중단·차단 화면이면 전송하지 않는다', () => {
+    const { result } = renderHook(() =>
+      useResponseLifecycle(baseArgs({ currentResponseId: 'r1', terminalBlocked: true })),
+    );
+    act(() => result.current.handleResponse('q1', 'a'));
+    fireHidden();
+
+    expect(sendBeacon).not.toHaveBeenCalled();
+  });
+
+  it('beacon 후에도 pending 이 남아 다음 flush 가 여전히 saveDraft 를 호출한다', async () => {
+    saveDraft.mockResolvedValue({ ok: true });
+    const { result } = renderHook(() =>
+      useResponseLifecycle(baseArgs({ currentResponseId: 'r1' })),
+    );
+    act(() => result.current.handleResponse('q1', 'a'));
+    fireHidden();
+
+    await act(async () => {
+      await result.current.flushPendingAnswers();
+    });
+
+    expect(saveDraft).toHaveBeenCalledWith({ responseId: 'r1', answers: { q1: 'a' } });
+  });
+
+  it('sendBeacon 이 false 를 반환하면 keepalive fetch 로 폴백한다', () => {
+    sendBeacon.mockReturnValue(false);
+    const { result } = renderHook(() =>
+      useResponseLifecycle(baseArgs({ currentResponseId: 'r1' })),
+    );
+    act(() => result.current.handleResponse('q1', 'a'));
+    fireHidden();
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/response/draft',
+      expect.objectContaining({ method: 'POST', keepalive: true }),
+    );
+  });
+});

@@ -705,6 +705,8 @@ function SurveyResponseFlowActive({
   const { handleResponse, flushPendingAnswers, handleSubmit } = useResponseLifecycle({
     isAdminEdit,
     isPreview,
+    isCompleted,
+    terminalBlocked: duplicateStatus.kind === 'blocked',
     adminContext,
     inviteToken,
     testToken,

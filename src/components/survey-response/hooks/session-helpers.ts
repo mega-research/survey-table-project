@@ -43,3 +43,31 @@ export function sendVisibilitySegment(
     keepalive: true,
   }).catch(() => {});
 }
+
+/**
+ * 미저장 답변을 /api/response/draft 로 전송한다(fire-and-forget).
+ *
+ * 이탈 시점(visibilitychange:hidden / pagehide)에 호출되므로 탭 종료에도 살아남는
+ * sendBeacon 을 우선 쓴다. 큐 포화나 64KB 초과로 false 가 반환되면 keepalive fetch 로
+ * 폴백한다 — 이탈 직전이라 완료 보장은 없지만 시도할 가치는 있다.
+ */
+export function sendDraftBeacon(
+  responseId: string,
+  answers: Record<string, unknown>,
+  identity: TestAttemptIdentity | null = null,
+): void {
+  const payload = JSON.stringify({ responseId, answers, ...(identity ?? {}) });
+  if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
+    const queued = navigator.sendBeacon(
+      '/api/response/draft',
+      new Blob([payload], { type: 'application/json' }),
+    );
+    if (queued) return;
+  }
+  fetch('/api/response/draft', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: payload,
+    keepalive: true,
+  }).catch(() => {});
+}
