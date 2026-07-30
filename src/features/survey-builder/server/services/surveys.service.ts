@@ -117,6 +117,43 @@ export async function deleteSurvey(input: SurveyIdInput): Promise<void> {
   await db.delete(surveys).where(eq(surveys.id, surveyId));
 }
 
+// 복제 시 질문 id 는 새로 발번되므로 JSONB 안의 질문 id 참조 — 표시조건의
+// sourceQuestionId, expression 조건의 questionId(CellRef·question operand),
+// 분기 goto 의 targetQuestionId/targetQuestionMap 값 — 를 새 id 로 치환한다.
+// 맵에 없는 id(삭제된 질문 참조 등)는 그대로 둔다. 셀 id·LUT id 는 복제 시
+// 값이 보존되므로 재매핑 대상이 아니다.
+const QUESTION_REF_KEYS = new Set(['sourceQuestionId', 'questionId', 'targetQuestionId']);
+
+function remapUnknownRefs(value: unknown, idMap: Map<string, string>): unknown {
+  if (value === null || typeof value !== 'object') return value;
+  if (value instanceof Date) return value;
+  if (Array.isArray(value)) {
+    return value.map((item) => remapUnknownRefs(item, idMap));
+  }
+  const out: Record<string, unknown> = {};
+  for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
+    if (QUESTION_REF_KEYS.has(key) && typeof v === 'string') {
+      out[key] = idMap.get(v) ?? v;
+    } else if (key === 'targetQuestionMap' && v && typeof v === 'object' && !Array.isArray(v)) {
+      out[key] = Object.fromEntries(
+        Object.entries(v as Record<string, string>).map(([label, qid]) => [
+          label,
+          idMap.get(qid) ?? qid,
+        ]),
+      );
+    } else {
+      out[key] = remapUnknownRefs(v, idMap);
+    }
+  }
+  return out;
+}
+
+// 재귀 워커는 unknown 으로만 다루고, 타입 단언은 이 wrapper 한 곳에만 둔다.
+// 재매핑은 키 치환만 하므로 입력 타입 구조가 보존된다.
+function remapQuestionIdRefs<T>(value: T, idMap: Map<string, string>): T {
+  return remapUnknownRefs(value, idMap) as T;
+}
+
 // 설문 복제
 export async function duplicateSurvey(
   input: SurveyIdInput,
@@ -152,10 +189,18 @@ export async function duplicateSurvey(
         maxResponses: original.maxResponses,
         thankYouMessage: original.thankYouMessage,
         responseHeader: original.responseHeader ?? null,
+        // LUT 사본은 질문(옵션 소스·조건)이 id 로 참조하므로 함께 복사해야 복제본이 깨지지 않는다.
+        lookups: original.lookups ?? [],
       })
       .returning();
     const newSurvey = newSurveyRows[0];
     if (!newSurvey) throw new Error('copySurvey: 새 설문 생성 실패');
+
+    // 질문 id 를 선발번해 JSONB 재매핑(그룹 표시조건 포함)에 쓸 맵을 먼저 완성한다
+    const questionIdMap = new Map<string, string>();
+    for (const question of originalQuestions) {
+      questionIdMap.set(question.id, generateId());
+    }
 
     // 그룹 정렬 (상위 그룹부터 하위 그룹 순으로)
     const sortedGroups: typeof originalGroups = [];
@@ -199,7 +244,10 @@ export async function duplicateSurvey(
         color: group.color,
         collapsed: group.collapsed,
         nameDesign: group.nameDesign as NewQuestionGroup['nameDesign'],
-        displayCondition: group.displayCondition as NewQuestionGroup['displayCondition'],
+        displayCondition: remapQuestionIdRefs(
+          group.displayCondition as NewQuestionGroup['displayCondition'],
+          questionIdMap,
+        ),
       };
     });
 
@@ -207,12 +255,11 @@ export async function duplicateSurvey(
       await tx.insert(questionGroups).values(newGroupsData);
     }
 
-    // 질문 데이터 준비
-    const questionIdMap = new Map<string, string>();
+    // 질문 데이터 준비 — id 는 선발번 맵에서 가져오고, 완성된 행 전체를 재귀 재매핑한다
     const newQuestionsData = originalQuestions.map((question) => {
-      const newQuestionId = generateId();
-      questionIdMap.set(question.id, newQuestionId);
-      return {
+      const newQuestionId = questionIdMap.get(question.id);
+      if (!newQuestionId) throw new Error('duplicateSurvey: 질문 id 매핑 누락');
+      const row = {
         id: newQuestionId,
         surveyId: newSurvey.id,
         groupId: question.groupId ? groupIdMap.get(question.groupId) : null,
@@ -262,6 +309,7 @@ export async function duplicateSurvey(
         pageBreakBefore: question.pageBreakBefore,
         displayCondition: question.displayCondition as NewQuestion['displayCondition'],
       } satisfies CompleteQuestionWrite;
+      return remapQuestionIdRefs(row, questionIdMap);
     });
 
     if (newQuestionsData.length > 0) {

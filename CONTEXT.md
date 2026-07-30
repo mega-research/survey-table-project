@@ -105,6 +105,12 @@ _Avoid_: 테이블 필드 = table 유형 전용이라는 가정, isChoiceGroupCa
 스냅샷·export 등 신뢰 불가 직렬화 데이터가 `Question[]`로 들어오는 읽기 경계의 단일 거처(`src/lib/question/normalize.ts`). preserve(판별자만 검증, 무변형 passthrough + 관측)와 strict(zod parse + cross-type 오염 키 소거) 2모드. 경계 캐스트는 이 module 안 한 곳에만 존재한다 — 새 역직렬화 지점에서 `as unknown as Question[]`을 만들지 않는다.
 _Avoid_: 역직렬화 단언, 호출처별 자가 검증
 
+### 설문 수명주기
+
+**설문 복제 (survey duplication)**:
+설문의 설계(설정·질문 그룹·질문·LUT 사본)만 물려받는 새 설문 생성. 운영 데이터(응답·컨택·메일·발행 버전)와 실사 세팅(쿼터·컨택 컬럼 스킴·결과코드·진척률 컬럼)은 물려받지 않는다. 복제본은 초안(draft)으로 시작하고 발행 이력이 비어 있어 첫 발행이 v1이다 — 원본의 발행 횟수와 무관하다. 응답 링크(slug·private token)는 새로 발번되고 선택지 옵션 코드도 재발번된다.
+_Avoid_: 설문 복사(응답까지 복사되는 어감), 스냅샷 복제
+
 ### 분석 보고서
 
 **조사 아키타입 (survey archetype)**:
