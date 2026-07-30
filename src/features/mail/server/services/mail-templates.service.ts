@@ -1,12 +1,14 @@
 import 'server-only';
 
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, isNull } from 'drizzle-orm';
 import { cache } from 'react';
 
 import { db } from '@/db';
-import { mailTemplates, type MailTemplate } from '@/db/schema/mail';
+import { mailCampaigns, mailTemplates, type MailTemplate } from '@/db/schema/mail';
 import type { MailAttachment } from '@/db/schema/schema-types';
 import { promoteMailAttachments } from '@/lib/mail/mail-attachment-promote';
+import { registerDeletionCandidates } from '@/lib/r2-lifecycle/deletion-queue.server';
+import { extractMailContentKeys } from '@/lib/r2-lifecycle/key-extract';
 import { ensureImageLinkBandSlices } from '@/lib/mail/image-link-band-slices';
 import { promoteMailImages } from '@/lib/mail/mail-image-promote';
 import { extractVariableKeys } from '@/lib/mail/variable-extractor';
@@ -210,36 +212,65 @@ export async function updateMailTemplate(
 export async function deleteMailTemplate(params: DeleteMailTemplateInput): Promise<void> {
   const { surveyId, templateId } = params;
 
-  const oldRow = await db.query.mailTemplates.findFirst({
-    where: and(
-      eq(mailTemplates.id, templateId),
-      eq(mailTemplates.surveyId, surveyId),
-      isNull(mailTemplates.deletedAt),
-    ),
-    columns: { id: true },
-  });
-
-  if (!oldRow) {
-    throw new MailTemplateNotFoundError();
-  }
-
-  const result = await db
-    .update(mailTemplates)
-    .set({ deletedAt: new Date() })
-    .where(
-      and(
+  // 메일 템플릿 삭제 이원화 (CONTEXT.md): 비테스트 캠페인 발송 시작 이력이
+  // 있으면 soft delete(캠페인 이력 보전), 없으면 hard delete(행 소멸).
+  // 어느 쪽이든 콘텐츠 키를 유예 삭제 큐에 등록한다 — 집행 시 전역 재확인과
+  // 발송 장부가 공유 참조·발송분을 거른다. soft delete 된 행은 파일 참조
+  // 자격을 잃는다(집행 재확인이 soft delete 템플릿 행을 세지 않음).
+  await db.transaction(async (tx) => {
+    const oldRow = await tx.query.mailTemplates.findFirst({
+      where: and(
         eq(mailTemplates.id, templateId),
         eq(mailTemplates.surveyId, surveyId),
         isNull(mailTemplates.deletedAt),
       ),
-    )
-    .returning({ id: mailTemplates.id });
+      columns: { id: true, name: true, bodyHtml: true, attachments: true },
+    });
 
-  if (result.length === 0) {
-    throw new MailTemplateNotFoundError();
-  }
+    if (!oldRow) {
+      throw new MailTemplateNotFoundError();
+    }
 
-  // soft delete 이후에도 R2 에셋은 지우지 않는다. 발송된 캠페인 스냅샷과 수신자
-  // 메일함에 전달된 메일이 같은 mail/ URL·첨부 키를 참조하므로, 템플릿 삭제가
-  // 그 메일들을 파괴해서는 안 된다.
+    await registerDeletionCandidates(tx, {
+      keys: extractMailContentKeys({
+        bodyHtml: oldRow.bodyHtml,
+        attachments: oldRow.attachments,
+      }),
+      source: 'template-delete',
+      reason: `메일 템플릿 삭제: ${oldRow.name || templateId}`,
+    });
+
+    const sentCampaign = await tx.query.mailCampaigns.findFirst({
+      where: and(
+        eq(mailCampaigns.mailTemplateId, templateId),
+        eq(mailCampaigns.isTest, false),
+        isNotNull(mailCampaigns.startedAt),
+      ),
+      columns: { id: true },
+    });
+
+    if (sentCampaign) {
+      const result = await tx
+        .update(mailTemplates)
+        .set({ deletedAt: new Date() })
+        .where(
+          and(
+            eq(mailTemplates.id, templateId),
+            eq(mailTemplates.surveyId, surveyId),
+            isNull(mailTemplates.deletedAt),
+          ),
+        )
+        .returning({ id: mailTemplates.id });
+      if (result.length === 0) {
+        throw new MailTemplateNotFoundError();
+      }
+    } else {
+      // 발송 이력 없음 — 행 완전 소멸. mail_campaigns.mailTemplateId 는
+      // FK SET NULL(테스트 캠페인만 남는 경우), 리더는 전부 isNull(deletedAt)
+      // 필터라 hard delete 행은 자연히 조회에서 사라진다.
+      await tx
+        .delete(mailTemplates)
+        .where(and(eq(mailTemplates.id, templateId), eq(mailTemplates.surveyId, surveyId)));
+    }
+  });
 }

@@ -6,6 +6,8 @@ import { db } from '@/db';
 import { NewSavedQuestion, savedQuestions } from '@/db/schema/surveys';
 import { escapeLikePattern } from '@/lib/operations/filter-shared';
 import { normalizeQuestion } from '@/lib/question';
+import { registerDeletionCandidates } from '@/lib/r2-lifecycle/deletion-queue.server';
+import { extractR2KeysFromJsonbValue } from '@/lib/r2-lifecycle/key-extract';
 import { promoteNoticeAttachments } from '@/lib/survey/notice-attachment-promote';
 import { promoteSurveyImages } from '@/lib/survey/survey-image-promote';
 import { generateId } from '@/lib/utils';
@@ -188,7 +190,18 @@ export async function updateSavedQuestion(
  * 원본 설문이 같은 URL 을 계속 참조 중일 수 있다(오늘 사고와 동형 경로).
  */
 export async function deleteSavedQuestion(id: string): Promise<void> {
-  await db.delete(savedQuestions).where(eq(savedQuestions.id, id));
+  // 삭제 전 같은 트랜잭션에서 질문 JSONB 의 R2 키를 수집해 유예 삭제 큐에 등록
+  await db.transaction(async (tx) => {
+    const [row] = await tx.select().from(savedQuestions).where(eq(savedQuestions.id, id));
+    if (row) {
+      await registerDeletionCandidates(tx, {
+        keys: extractR2KeysFromJsonbValue(row.question),
+        source: 'library-delete',
+        reason: `보관함 질문 삭제: ${row.name || id}`,
+      });
+    }
+    await tx.delete(savedQuestions).where(eq(savedQuestions.id, id));
+  });
 }
 
 /**

@@ -13,6 +13,8 @@ import {
   questions,
   surveys,
 } from '@/db/schema';
+import { registerDeletionCandidates } from '@/lib/r2-lifecycle/deletion-queue.server';
+import { collectSurveyContentKeys } from '@/lib/r2-lifecycle/entity-collectors.server';
 import { promoteSurveyResponseHeader } from '@/lib/survey/survey-image-promote';
 import { generateId } from '@/lib/utils';
 import { stripOptionCodes } from '@/utils/option-code-generator';
@@ -114,7 +116,17 @@ export async function updateSurvey(input: UpdateSurveyInput): Promise<SurveyRow>
 export async function deleteSurvey(input: SurveyIdInput): Promise<void> {
   const { surveyId } = input;
 
-  await db.delete(surveys).where(eq(surveys.id, surveyId));
+  // CASCADE 로 소멸될 콘텐츠 전체의 키를 삭제 전에 같은 트랜잭션에서 수집해
+  // 유예 삭제 큐에 등록한다 — 삭제 후에는 참조를 복원할 수 없다.
+  await db.transaction(async (tx) => {
+    const keys = await collectSurveyContentKeys(tx, surveyId);
+    await registerDeletionCandidates(tx, {
+      keys,
+      source: 'survey-delete',
+      reason: `설문 삭제: ${surveyId}`,
+    });
+    await tx.delete(surveys).where(eq(surveys.id, surveyId));
+  });
 }
 
 // 복제 시 질문 id 는 새로 발번되므로 JSONB 안의 질문 id 참조 — 표시조건의

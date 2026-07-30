@@ -9,6 +9,8 @@ import {
   PERSISTED_QUESTION_FIELDS,
   type CompleteQuestionWrite,
 } from '@/db/schema/question-persisted-fields';
+import { registerDeletionCandidates } from '@/lib/r2-lifecycle/deletion-queue.server';
+import { extractR2KeysFromJsonbValue } from '@/lib/r2-lifecycle/key-extract';
 import { promoteNoticeAttachments } from '@/lib/survey/notice-attachment-promote';
 import { promoteSurveyImages, type PromotableQuestion } from '@/lib/survey/survey-image-promote';
 import { generateId, isValidUUID } from '@/lib/utils';
@@ -148,9 +150,23 @@ export async function deleteQuestion(
   questionId: string,
   surveyId: string,
 ): Promise<{ ok: true }> {
-  await db
-    .delete(questions)
-    .where(and(eq(questions.id, questionId), eq(questions.surveyId, surveyId)));
+  // 삭제 전 같은 트랜잭션에서 행 콘텐츠의 R2 키를 수집해 유예 삭제 큐에 등록
+  await db.transaction(async (tx) => {
+    const [row] = await tx
+      .select()
+      .from(questions)
+      .where(and(eq(questions.id, questionId), eq(questions.surveyId, surveyId)));
+    if (row) {
+      await registerDeletionCandidates(tx, {
+        keys: extractR2KeysFromJsonbValue(row),
+        source: 'question-delete',
+        reason: `질문 삭제: ${row.title || questionId}`,
+      });
+    }
+    await tx
+      .delete(questions)
+      .where(and(eq(questions.id, questionId), eq(questions.surveyId, surveyId)));
+  });
   return { ok: true as const };
 }
 
