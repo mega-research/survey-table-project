@@ -132,4 +132,32 @@ describe('saveDraftResponseIfActive', () => {
     expect(await saveDraftResponseIfActive(INPUT)).toEqual({ saved: true });
     expect(updateCalledMock).toHaveBeenCalledTimes(1);
   });
+
+  it('게이트 통과 후 저장 직전 종결되면(0행 매치) 재조회로 concluded skip 을 반환한다', async () => {
+    arrangeActiveRow();
+    // applyQuestionResponseUpdate 의 WHERE status='in_progress' 가 0행 매치 → 평범한 Error throw.
+    returningMock.mockResolvedValueOnce([]);
+    // 저장 실패 후 재조회: 그 사이 응답이 종결됐다.
+    findFirstMock.mockResolvedValueOnce({ id: 'r1', status: 'completed', deletedAt: null });
+    const { saveDraftResponseIfActive } = await import(
+      '@/features/survey-response/server/services/response.service'
+    );
+    expect(await saveDraftResponseIfActive(INPUT)).toEqual({
+      saved: false,
+      skipped: 'concluded',
+    });
+  });
+
+  it('재조회에서도 여전히 in_progress 면 원래 에러를 그대로 재throw 한다', async () => {
+    arrangeActiveRow();
+    returningMock.mockResolvedValueOnce([]);
+    // 재조회해도 여전히 in_progress → 진짜 예외이므로 삼키지 않는다.
+    findFirstMock.mockResolvedValueOnce({ id: 'r1', status: 'in_progress', deletedAt: null });
+    const { saveDraftResponseIfActive } = await import(
+      '@/features/survey-response/server/services/response.service'
+    );
+    await expect(saveDraftResponseIfActive(INPUT)).rejects.toThrow(
+      '응답을 수정할 수 없습니다.',
+    );
+  });
 });

@@ -711,6 +711,16 @@ function toSkipReason(reason: string): SaveDraftSkipReason {
     : 'not_accepting';
 }
 
+/** 응답 행의 not_found/deleted/concluded 판정. 사전 게이트와 저장 실패 후 재조회가 공유한다. */
+function judgeRowGate(
+  row: { status: string; deletedAt: Date | null } | undefined,
+): { saved: false; skipped: 'not_found' | 'deleted' | 'concluded' } | null {
+  if (!row) return { saved: false, skipped: 'not_found' };
+  if (row.deletedAt !== null) return { saved: false, skipped: 'deleted' };
+  if (row.status !== 'in_progress') return { saved: false, skipped: 'concluded' };
+  return null;
+}
+
 /**
  * 이탈 시점 beacon 전용 draft 저장.
  *
@@ -728,9 +738,8 @@ export async function saveDraftResponseIfActive(
     where: eq(surveyResponses.id, input.responseId),
     columns: { id: true, status: true, deletedAt: true },
   });
-  if (!row) return { saved: false, skipped: 'not_found' };
-  if (row.deletedAt !== null) return { saved: false, skipped: 'deleted' };
-  if (row.status !== 'in_progress') return { saved: false, skipped: 'concluded' };
+  const gateResult = judgeRowGate(row);
+  if (gateResult) return gateResult;
 
   try {
     await saveDraftResponse(input);
@@ -738,6 +747,15 @@ export async function saveDraftResponseIfActive(
     if (err instanceof SurveyNotAcceptingResponsesError) {
       return { saved: false, skipped: toSkipReason(err.reason) };
     }
+    // 게이트 통과 후 저장 사이에 행이 종결·삭제됐을 수 있다(제출 직후 탭 닫기 등). 다시
+    // 읽어 확인되면 정상 skip 으로 접는다. 에러 메시지 문자열을 파싱하지 않는 이유는 이
+    // 래퍼의 존재 이유(정상 시나리오를 throw 문자열 매칭 없이 판정)와 같다.
+    const recheckRow = await db.query.surveyResponses.findFirst({
+      where: eq(surveyResponses.id, input.responseId),
+      columns: { id: true, status: true, deletedAt: true },
+    });
+    const recheckResult = judgeRowGate(recheckRow);
+    if (recheckResult) return recheckResult;
     throw err;
   }
   return { saved: true };
