@@ -135,10 +135,21 @@ vi.mock('@/db', () => {
     },
   });
 
+  // 질문 서비스의 read→write→수집 트랜잭션 지원 (이슈 05·06) — tx 안의
+  // before-read 는 빈 결과라 저장 diff 수집이 no-op 이고, insert/update 는
+  // 본체와 같은 기록기를 공유해 기존 단언이 유지된다.
+  const makeTx = () => ({
+    select: () => ({ from: () => ({ where: async () => [] }) }),
+    insert: (table: object) => makeInsert(table),
+    update: (table: object) => makeUpdate(table),
+    delete: () => ({ where: async () => undefined }),
+  });
+
   return {
     db: {
       insert: (table: object) => makeInsert(table),
       update: (table: object) => makeUpdate(table),
+      transaction: async (cb: (tx: unknown) => Promise<unknown>) => cb(makeTx()),
     },
   };
 });
