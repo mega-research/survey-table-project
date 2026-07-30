@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { and, asc, desc, eq, inArray, lte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, lt, lte, or, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { r2DeletionCandidates, type R2DeletionCandidate } from '@/db/schema';
@@ -98,7 +98,11 @@ export async function cancelPendingCandidatesByKeys(
   return rows.length;
 }
 
-/** 집행자 배치 조회 — 기한이 지난 '대기' 후보를 오래된 순으로. */
+/**
+ * 집행자 배치 조회 — 기한이 지난 '대기' 후보를 오래된 순으로.
+ * '실패' 후보도 다음 집행에서 자동 재시도한다 — 단 resolvedAt < now 조건으로
+ * 같은 실행(run) 안에서 방금 실패한 행을 곧바로 재집기하지 않는다.
+ */
 export async function fetchDueCandidates(
   limit: number,
   now = new Date(),
@@ -107,7 +111,16 @@ export async function fetchDueCandidates(
     .select()
     .from(r2DeletionCandidates)
     .where(
-      and(eq(r2DeletionCandidates.status, 'pending'), lte(r2DeletionCandidates.executeAfter, now)),
+      and(
+        lte(r2DeletionCandidates.executeAfter, now),
+        or(
+          eq(r2DeletionCandidates.status, 'pending'),
+          and(
+            eq(r2DeletionCandidates.status, 'failed'),
+            lt(r2DeletionCandidates.resolvedAt, now),
+          ),
+        ),
+      ),
     )
     .orderBy(asc(r2DeletionCandidates.executeAfter), asc(r2DeletionCandidates.id))
     .limit(limit);
