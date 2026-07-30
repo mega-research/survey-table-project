@@ -95,23 +95,6 @@ export function extractTmpNoticeAttachmentUrlsFromQuestion(
 }
 
 /**
- * 질문 배열에서 영구 첨부 키 모두 추출 (중복 제거).
- * deletion 흐름이나 orphan diff 비교용.
- */
-export function extractPermanentAttachmentKeysFromQuestions(
-  questions: PromotableNoticeQuestion[],
-): string[] {
-  const all = new Set<string>();
-  for (const q of questions) {
-    if (!q.noticeContent) continue;
-    for (const k of extractPermanentAttachmentKeysFromHtml(q.noticeContent)) {
-      all.add(k);
-    }
-  }
-  return [...all];
-}
-
-/**
  * noticeContent HTML 안의 URL 을 mapping 으로 치환. mapping 없는 URL 은 유지.
  * mapping 비어있으면 same reference 반환 (참조 동등성 보존).
  *
