@@ -245,9 +245,9 @@ export function useResponseLifecycle({
           pendingAnswerSavesRef.current.delete(questionId);
         }
       }
-      lastBeaconSnapshotRef.current = snapshotOfAnswers(
-        Object.fromEntries(pendingAnswerSavesRef.current),
-      );
+      // flush 성공 후 dedupe 캐시 무효화.
+      // 잔여 pending 은 서버에 없는 값이므로 다음 이탈 시점에 반드시 발사돼야 한다.
+      lastBeaconSnapshotRef.current = null;
       return true;
     } catch (err) {
       if (

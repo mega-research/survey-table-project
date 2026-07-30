@@ -705,4 +705,38 @@ describe('이탈 시점 draft beacon', () => {
       expect.objectContaining({ method: 'POST', keepalive: true }),
     );
   });
+
+  it('flush 왕복 중 값이 바뀐 잔여 pending 은 이후 이탈 시점에 다시 전송된다', async () => {
+    let resolveSaveDraft!: (value: { ok: boolean }) => void;
+    saveDraft.mockReturnValue(
+      new Promise((resolve) => {
+        resolveSaveDraft = resolve;
+      }),
+    );
+    const { result } = renderHook(() =>
+      useResponseLifecycle(baseArgs({ currentResponseId: 'r1' })),
+    );
+
+    act(() => result.current.handleResponse('q1', 'a'));
+
+    let flushPromise!: Promise<boolean>;
+    act(() => {
+      flushPromise = result.current.flushPendingAnswers();
+    });
+
+    // saveDraft 왕복 중 값이 바뀐다 — flush 요청은 이미 {q1:'a'} 스냅샷으로 나간 뒤다.
+    act(() => result.current.handleResponse('q1', 'b'));
+
+    act(() => {
+      resolveSaveDraft({ ok: true });
+    });
+    await act(async () => {
+      await flushPromise;
+    });
+
+    fireHidden();
+
+    expect(sendBeacon).toHaveBeenCalledTimes(1);
+    expect(await beaconBody(0)).toEqual({ responseId: 'r1', answers: { q1: 'b' } });
+  });
 });
