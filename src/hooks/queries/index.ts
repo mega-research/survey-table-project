@@ -64,3 +64,12 @@ export {
   useIngestContacts,
   useMatchContacts,
 } from './use-contacts';
+
+// File Cleanup Queries
+export {
+  fileCleanupKeys,
+  useDeletionPending,
+  useDeletionHistory,
+  useCancelDeletion,
+} from './use-file-cleanup';
+export type { FileCleanupHistoryStatus } from './use-file-cleanup';

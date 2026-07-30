@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { and, asc, eq, inArray, lte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, lte, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { r2DeletionCandidates, type R2DeletionCandidate } from '@/db/schema';
@@ -110,6 +110,31 @@ export async function fetchDueCandidates(
       and(eq(r2DeletionCandidates.status, 'pending'), lte(r2DeletionCandidates.executeAfter, now)),
     )
     .orderBy(asc(r2DeletionCandidates.executeAfter), asc(r2DeletionCandidates.id))
+    .limit(limit);
+}
+
+/**
+ * admin 큐 페이지 조회 — 후보 목록을 registeredAt 내림차순(동률이면 id)으로 반환한다.
+ * status 를 단일 값으로 주면 해당 상태만, 배열로 주면 상태들의 합집합, 생략하면 전체.
+ */
+export async function listDeletionCandidates(
+  input: {
+    status?: R2DeletionCandidateStatus | readonly R2DeletionCandidateStatus[];
+    limit?: number;
+  } = {},
+): Promise<R2DeletionCandidate[]> {
+  const { status, limit = 200 } = input;
+  const where =
+    status === undefined
+      ? undefined
+      : typeof status === 'string'
+        ? eq(r2DeletionCandidates.status, status)
+        : inArray(r2DeletionCandidates.status, [...status]);
+  return db
+    .select()
+    .from(r2DeletionCandidates)
+    .where(where)
+    .orderBy(desc(r2DeletionCandidates.registeredAt), desc(r2DeletionCandidates.id))
     .limit(limit);
 }
 
