@@ -9,6 +9,7 @@ import {
   PERSISTED_QUESTION_FIELDS,
   type CompleteQuestionWrite,
 } from '@/db/schema/question-persisted-fields';
+import { promoteNoticeAttachments } from '@/lib/survey/notice-attachment-promote';
 import { promoteSurveyImages, type PromotableQuestion } from '@/lib/survey/survey-image-promote';
 import { generateId, isValidUUID } from '@/lib/utils';
 
@@ -81,7 +82,10 @@ export async function createQuestion(data: CreateQuestionInput): Promise<Questio
   } satisfies CompleteQuestionWrite & NewQuestion;
 
   // tmp/survey/ 이미지를 영구 prefix로 promote (R2 copy + URL 치환, 원본 tmp 는 lifecycle 위임)
-  const [questionToInsert] = await promoteSurveyImages([newQuestion as PromotableQuestion]);
+  // tmp/notice-attachment/ 첨부도 영구 prefix로 promote (survey-save 와 동일 체이닝)
+  const [questionToInsert] = await promoteNoticeAttachments(
+    await promoteSurveyImages([newQuestion as PromotableQuestion]),
+  );
 
   const [question] = await db
     .insert(questions)
@@ -118,7 +122,11 @@ export async function updateQuestion(
   }
 
   // tmp/survey/ 이미지를 영구 prefix로 promote (R2 copy + URL 치환, 원본 tmp 는 lifecycle 위임)
-  const [allowedToUpdate] = await promoteSurveyImages([allowed as PromotableQuestion]);
+  // tmp/notice-attachment/ 첨부도 영구 prefix로 promote. 부분 patch 에서 noticeContent 가
+  // payload 에 없으면 promoteNoticeAttachments 는 tmp URL 0건으로 no-op (안전).
+  const [allowedToUpdate] = await promoteNoticeAttachments(
+    await promoteSurveyImages([allowed as PromotableQuestion]),
+  );
 
   const [updated] = await db
     .update(questions)

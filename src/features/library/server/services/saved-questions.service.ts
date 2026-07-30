@@ -6,6 +6,7 @@ import { db } from '@/db';
 import { NewSavedQuestion, savedQuestions } from '@/db/schema/surveys';
 import { escapeLikePattern } from '@/lib/operations/filter-shared';
 import { normalizeQuestion } from '@/lib/question';
+import { promoteNoticeAttachments } from '@/lib/survey/notice-attachment-promote';
 import { promoteSurveyImages } from '@/lib/survey/survey-image-promote';
 import { generateId } from '@/lib/utils';
 import type { Question, SavedQuestion } from '@/types/survey';
@@ -134,9 +135,11 @@ export async function getSavedQuestionsByTag(tag: string): Promise<SavedQuestion
 // 뮤테이션
 // ========================
 
-/** 질문 저장 — tmp/survey/ 이미지를 영구 prefix로 promote 후 insert */
+/** 질문 저장 — tmp/survey/ 이미지·tmp/notice-attachment/ 첨부를 영구 prefix로 promote 후 insert */
 export async function createSavedQuestion(input: CreateSavedQuestionInput): Promise<SavedQuestion> {
-  const [promotedQuestion] = await promoteSurveyImages([input.question]);
+  const [promotedQuestion] = await promoteNoticeAttachments(
+    await promoteSurveyImages([input.question]),
+  );
 
   const newSavedQuestion: NewSavedQuestion = {
     question: promotedQuestion as unknown as NewSavedQuestion['question'],
@@ -153,14 +156,16 @@ export async function createSavedQuestion(input: CreateSavedQuestionInput): Prom
   return toDomainSavedQuestion(saved);
 }
 
-/** 저장된 질문 업데이트 — question 포함 시 이미지 promote */
+/** 저장된 질문 업데이트 — question 포함 시 이미지·공지 첨부 promote */
 export async function updateSavedQuestion(
   id: string,
   updates: UpdateSavedQuestionInput['updates'],
 ): Promise<SavedQuestion> {
   let promotedQuestion = updates.question;
   if (updates.question) {
-    const [promoted] = await promoteSurveyImages([updates.question]);
+    const [promoted] = await promoteNoticeAttachments(
+      await promoteSurveyImages([updates.question]),
+    );
     promotedQuestion = promoted;
   }
 

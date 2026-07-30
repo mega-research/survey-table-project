@@ -498,11 +498,11 @@ SUPABASE_SERVICE_ROLE_KEY=
 DATABASE_URL=                  # postgres-js → Supabase Transaction pooler(pgBouncer, 6543). prepare:false 필수
 
 # Cloudflare R2
-R2_ACCOUNT_ID=
-R2_ACCESS_KEY_ID=
-R2_SECRET_ACCESS_KEY=
-R2_BUCKET_NAME=
-R2_PUBLIC_URL=
+CLOUDFLARE_ACCOUNT_ID=
+CLOUDFLARE_R2_ACCESS_KEY=
+CLOUDFLARE_R2_SECRET_KEY=
+CLOUDFLARE_R2_BUCKET=
+CLOUDFLARE_R2_PUBLIC_URL=
 
 # 메일 (Resend)
 RESEND_API_KEY=
@@ -513,7 +513,8 @@ INNGEST_*=
 SENTRY_*=
 
 # 컨택 PII 암호화
-CONTACT_PII_KEY=                # cipher + blind index 키
+CONTACT_PII_AES_KEY=            # cipher 키
+CONTACT_PII_HMAC_KEY=           # blind index 키
 ```
 
 > 메일/컨택 메타(발신 표시명, 수행기관 등)는 env default 금지. DB 컬럼 또는 attrs로 관리. env는 비밀+인프라 상수만.

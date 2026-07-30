@@ -11,6 +11,7 @@ import {
   savedQuestions,
 } from '@/db/schema';
 import { normalizeQuestions } from '@/lib/question';
+import { promoteNoticeAttachments } from '@/lib/survey/notice-attachment-promote';
 import { promoteSurveyImages } from '@/lib/survey/survey-image-promote';
 
 import { listSavedQuestions } from './saved-questions.service';
@@ -35,7 +36,9 @@ export async function importLibrary(json: string): Promise<void> {
       const rawQuestions = normalizeQuestions(
         data.savedQuestions.map((sq: NewSavedQuestion) => sq.question),
       );
-      const promotedQuestions = await promoteSurveyImages(rawQuestions);
+      const promotedQuestions = await promoteNoticeAttachments(
+        await promoteSurveyImages(rawQuestions),
+      );
 
       const importedQuestions: NewSavedQuestion[] = data.savedQuestions.map(
         (sq: NewSavedQuestion, i: number) => ({
