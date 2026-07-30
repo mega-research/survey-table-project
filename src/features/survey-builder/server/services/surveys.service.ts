@@ -15,6 +15,7 @@ import {
 } from '@/db/schema';
 import { registerDeletionCandidates } from '@/lib/r2-lifecycle/deletion-queue.server';
 import { collectSurveyContentKeys } from '@/lib/r2-lifecycle/entity-collectors.server';
+import { collectFieldLimitedSaveDiff } from '@/lib/r2-lifecycle/save-diff-collector.server';
 import { promoteSurveyResponseHeader } from '@/lib/survey/survey-image-promote';
 import { generateId } from '@/lib/utils';
 import { stripOptionCodes } from '@/utils/option-code-generator';
@@ -98,17 +99,31 @@ export async function updateSurvey(input: UpdateSurveyInput): Promise<SurveyRow>
           responseHeader: await promoteSurveyResponseHeader(data.responseHeader),
         };
 
-  const [updated] = await db
-    .update(surveys)
-    .set({
-      ...dataToUpdate,
-      updatedAt: new Date(),
-    })
-    .where(eq(surveys.id, surveyId))
-    .returning();
-  if (!updated) throw new Error('updateSurvey: 설문 업데이트 실패');
+  // 저장 전 행 read → write → 저장 diff 등록·부활 취소를 같은 트랜잭션으로.
+  // 로고 교체 시 빠진 키가 유예 삭제 큐 후보로 등록된다 (payload 존재 필드 한정).
+  return db.transaction(async (tx) => {
+    const [oldRow] = await tx.select().from(surveys).where(eq(surveys.id, surveyId));
 
-  return updated;
+    const [updated] = await tx
+      .update(surveys)
+      .set({
+        ...dataToUpdate,
+        updatedAt: new Date(),
+      })
+      .where(eq(surveys.id, surveyId))
+      .returning();
+    if (!updated) throw new Error('updateSurvey: 설문 업데이트 실패');
+
+    if (oldRow) {
+      await collectFieldLimitedSaveDiff(tx, {
+        oldRow,
+        payloadRow: dataToUpdate as Record<string, unknown>,
+        reason: `설문 설정 수정: ${oldRow.title || surveyId}`,
+      });
+    }
+
+    return updated;
+  });
 }
 
 // 설문 삭제 — 질문 이미지는 R2 에서 지우지 않는다. 복제 설문·보관함(saved_questions)이

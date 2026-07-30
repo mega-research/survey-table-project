@@ -9,6 +9,7 @@ import type { MailAttachment } from '@/db/schema/schema-types';
 import { promoteMailAttachments } from '@/lib/mail/mail-attachment-promote';
 import { registerDeletionCandidates } from '@/lib/r2-lifecycle/deletion-queue.server';
 import { extractMailContentKeys } from '@/lib/r2-lifecycle/key-extract';
+import { collectFieldLimitedSaveDiff } from '@/lib/r2-lifecycle/save-diff-collector.server';
 import { ensureImageLinkBandSlices } from '@/lib/mail/image-link-band-slices';
 import { promoteMailImages } from '@/lib/mail/mail-image-promote';
 import { extractVariableKeys } from '@/lib/mail/variable-extractor';
@@ -156,13 +157,14 @@ export async function updateMailTemplate(
   } = input;
 
   // promote(R2 copy) 를 시도하기 전에 존재 여부부터 확인해 빠르게 실패시킨다.
+  // 저장 diff 를 위해 이전 본문·첨부도 함께 읽는다.
   const oldRow = await db.query.mailTemplates.findFirst({
     where: and(
       eq(mailTemplates.id, templateId),
       eq(mailTemplates.surveyId, surveyId),
       isNull(mailTemplates.deletedAt),
     ),
-    columns: { id: true },
+    columns: { id: true, name: true, bodyHtml: true, attachments: true },
   });
 
   if (!oldRow) {
@@ -172,35 +174,43 @@ export async function updateMailTemplate(
   const { bodyHtml, attachments } = await promoteAssets(rawBodyHtml, rawAttachments);
   const variablesUsed = extractVariableKeys(subject, bodyHtml, fromName);
 
-  const result = await db
-    .update(mailTemplates)
-    .set({
-      name,
-      subject,
-      bodyHtml,
-      fromLocal,
-      fromName,
-      replyTo,
-      attachments,
-      variablesUsed,
-      updatedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(mailTemplates.id, templateId),
-        eq(mailTemplates.surveyId, surveyId),
-        isNull(mailTemplates.deletedAt),
-      ),
-    )
-    .returning({ id: mailTemplates.id });
+  // write → 저장 diff 등록·부활 취소를 같은 트랜잭션으로. 수정으로 본문/첨부에서
+  // 빠진 이전 영구 에셋은 즉시 지우지 않고 유예 삭제 큐 후보로만 등록한다 —
+  // 발송된 캠페인 스냅샷·수신함 메일이 같은 키를 참조하므로, 집행 시 전역
+  // 재확인과 발송 장부가 거른다.
+  await db.transaction(async (tx) => {
+    const result = await tx
+      .update(mailTemplates)
+      .set({
+        name,
+        subject,
+        bodyHtml,
+        fromLocal,
+        fromName,
+        replyTo,
+        attachments,
+        variablesUsed,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(mailTemplates.id, templateId),
+          eq(mailTemplates.surveyId, surveyId),
+          isNull(mailTemplates.deletedAt),
+        ),
+      )
+      .returning({ id: mailTemplates.id });
 
-  if (result.length === 0) {
-    throw new MailTemplateNotFoundError();
-  }
+    if (result.length === 0) {
+      throw new MailTemplateNotFoundError();
+    }
 
-  // 수정으로 본문/첨부에서 빠진 이전 영구 에셋은 R2 에서 지우지 않는다. 이미 발송된
-  // 캠페인 스냅샷(mail_campaigns.*Snapshot)과 수신자 메일함에 전달된 메일이 같은
-  // mail/ URL·첨부 키를 참조하므로, 템플릿을 고쳤다고 지우면 발송 완료 메일이 깨진다.
+    await collectFieldLimitedSaveDiff(tx, {
+      oldRow: { bodyHtml: oldRow.bodyHtml, attachments: oldRow.attachments },
+      payloadRow: { bodyHtml, attachments },
+      reason: `메일 템플릿 수정: ${oldRow.name || templateId}`,
+    });
+  });
 
   return { bodyHtml, attachments };
 }

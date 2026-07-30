@@ -8,6 +8,7 @@ import { escapeLikePattern } from '@/lib/operations/filter-shared';
 import { normalizeQuestion } from '@/lib/question';
 import { registerDeletionCandidates } from '@/lib/r2-lifecycle/deletion-queue.server';
 import { extractR2KeysFromJsonbValue } from '@/lib/r2-lifecycle/key-extract';
+import { collectFieldLimitedSaveDiff } from '@/lib/r2-lifecycle/save-diff-collector.server';
 import { promoteNoticeAttachments } from '@/lib/survey/notice-attachment-promote';
 import { promoteSurveyImages } from '@/lib/survey/survey-image-promote';
 import { generateId } from '@/lib/utils';
@@ -171,18 +172,33 @@ export async function updateSavedQuestion(
     promotedQuestion = promoted;
   }
 
-  const [updated] = await db
-    .update(savedQuestions)
-    .set({
-      ...updates,
-      question: promotedQuestion as unknown as NewSavedQuestion['question'],
-      updatedAt: new Date(),
-    })
-    .where(eq(savedQuestions.id, id))
-    .returning();
+  // 저장 전 행 콘텐츠 read → write → 저장 diff 등록·부활 취소를 같은 트랜잭션으로.
+  // question 이 payload 에 없으면(메타만 수정) diff 비교 대상이 없어 no-op.
+  return db.transaction(async (tx) => {
+    const [oldRow] = await tx.select().from(savedQuestions).where(eq(savedQuestions.id, id));
 
-  if (!updated) throw new Error('질문 수정에 실패했습니다.');
-  return toDomainSavedQuestion(updated);
+    const [updated] = await tx
+      .update(savedQuestions)
+      .set({
+        ...updates,
+        question: promotedQuestion as unknown as NewSavedQuestion['question'],
+        updatedAt: new Date(),
+      })
+      .where(eq(savedQuestions.id, id))
+      .returning();
+
+    if (!updated) throw new Error('질문 수정에 실패했습니다.');
+
+    if (oldRow && updates.question) {
+      await collectFieldLimitedSaveDiff(tx, {
+        oldRow: { question: oldRow.question },
+        payloadRow: { question: promotedQuestion },
+        reason: `보관함 질문 수정: ${oldRow.name || id}`,
+      });
+    }
+
+    return toDomainSavedQuestion(updated);
+  });
 }
 
 /**
