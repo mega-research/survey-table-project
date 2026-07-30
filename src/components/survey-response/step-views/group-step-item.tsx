@@ -12,6 +12,11 @@ import { sanitizeRichHtml } from '@/lib/sanitize';
 import { StepItem } from '@/lib/group-ordering';
 import type { NumericIssue } from '@/lib/survey/numeric-validation';
 import { Question } from '@/types/survey';
+import {
+  DYNAMIC_ROW_SELECTIONS_KEY,
+  getDynamicRowSelections,
+  updateDynamicRowSelections,
+} from '@/utils/dynamic-row-selection-sidecar';
 
 type ResponsesMap = Record<string, unknown>;
 
@@ -36,6 +41,19 @@ export function GroupStepItem({
   const onChange = useCallback(
     (value: unknown) => onResponse(q.id, value),
     [onResponse, q.id],
+  );
+  const selectedDynamicRowIds = getDynamicRowSelections(responses, q.id);
+  const onDynamicRowSelectionChange = useCallback(
+    (rowIds: string[]) =>
+      onResponse(
+        DYNAMIC_ROW_SELECTIONS_KEY,
+        updateDynamicRowSelections(
+          responses[DYNAMIC_ROW_SELECTIONS_KEY],
+          q.id,
+          rowIds,
+        ),
+      ),
+    [onResponse, q.id, responses],
   );
   const attrs = useContactAttrs();
   const titleText = useMemo(
@@ -109,6 +127,8 @@ export function GroupStepItem({
             allResponses={responses as Record<string, unknown>}
             allQuestions={questions}
             numericIssues={issues}
+            selectedDynamicRowIds={selectedDynamicRowIds}
+            onDynamicRowSelectionChange={onDynamicRowSelectionChange}
           />
         </div>
       </div>

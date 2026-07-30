@@ -19,6 +19,7 @@ interface MobileRowWiseOriginalSheetProps {
     question: MobileRowWiseOriginalQuestion,
     inputIdScope: string,
     invalid: boolean,
+    errorDescriptionId?: string | undefined,
   ) => React.ReactNode;
   choiceControlType?:
     | 'radio'
@@ -70,6 +71,7 @@ export function MobileRowWiseOriginalSheet({
                     errorCellIds?.has(cell.id),
                   );
                   const inputIdScope = question.rowId;
+                  const errorDescriptionId = hasError ? `${labelId}-error` : undefined;
 
                   return (
                     <div
@@ -88,6 +90,11 @@ export function MobileRowWiseOriginalSheet({
                       >
                         {question.title}
                       </h5>
+                      {errorDescriptionId ? (
+                        <p id={errorDescriptionId} className="sr-only">
+                          {question.title}의 응답을 확인해 주세요.
+                        </p>
+                      ) : null}
                       <MobileOriginalRowTable
                         columns={question.projection.columns}
                         rows={[
@@ -106,6 +113,7 @@ export function MobileRowWiseOriginalSheet({
                             question,
                             inputIdScope,
                             errorCellIds?.has(cell.id) ?? false,
+                            errorCellIds?.has(cell.id) ? errorDescriptionId : undefined,
                           )
                         }
                       />

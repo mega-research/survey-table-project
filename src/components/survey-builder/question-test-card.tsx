@@ -15,6 +15,11 @@ import { Question, SurveyLookup } from '@/types/survey';
 import { evaluateNumericComparisonV2 } from '@/utils/branch-logic';
 import { isChoiceTableSource } from '@/utils/choice-source';
 import { getOptionsLayout } from '@/utils/options-layout';
+import {
+  DYNAMIC_ROW_SELECTIONS_KEY,
+  getDynamicRowSelections,
+  updateDynamicRowSelections,
+} from '@/utils/dynamic-row-selection-sidecar';
 
 import { ConditionDebugPanel } from './condition-debug-panel';
 import { InteractiveTableResponse } from './interactive-table-response';
@@ -399,12 +404,16 @@ function QuestionTestInput({
   onChange,
   allResponses,
   allQuestions,
+  selectedDynamicRowIds,
+  onDynamicRowSelectionChange,
 }: {
   question: Question;
   value: unknown;
   onChange: (value: unknown) => void;
   allResponses: Record<string, unknown>;
   allQuestions: Question[];
+  selectedDynamicRowIds: string[];
+  onDynamicRowSelectionChange: (rowIds: string[]) => void;
 }) {
   const attrs = useContactAttrs();
 
@@ -420,6 +429,8 @@ function QuestionTestInput({
         onChange={onChange as (v: unknown) => void}
         allResponses={allResponses}
         allQuestions={allQuestions}
+        selectedDynamicRowIds={selectedDynamicRowIds}
+        onDynamicRowSelectionChange={onDynamicRowSelectionChange}
       />
     );
   }
@@ -559,6 +570,17 @@ export function QuestionTestBody({
   // 디버그 패널 평가용 — 다른 질문 응답도 ctx 에 포함되도록 전체 testResponses 구독.
   const allTestResponses = useTestResponseStore((s) => s.testResponses);
   const allQuestions = useSurveyBuilderStore((s) => s.currentSurvey.questions);
+  const selectedDynamicRowIds = getDynamicRowSelections(allTestResponses, question.id);
+  const handleDynamicRowSelectionChange = (rowIds: string[]) => {
+    updateTestResponse(
+      DYNAMIC_ROW_SELECTIONS_KEY,
+      updateDynamicRowSelections(
+        allTestResponses[DYNAMIC_ROW_SELECTIONS_KEY],
+        question.id,
+        rowIds,
+      ),
+    );
+  };
   // 토큰 치환 + 분기 조건 평가에 사용할 컨택 attrs (ContactAttrsProvider 가 주입).
   const attrs = useContactAttrs();
 
@@ -624,6 +646,8 @@ export function QuestionTestBody({
               onChange={handleResponse}
               allResponses={allTestResponses}
               allQuestions={allQuestions}
+              selectedDynamicRowIds={selectedDynamicRowIds}
+              onDynamicRowSelectionChange={handleDynamicRowSelectionChange}
             />
           </LazyMount>
         ) : (
@@ -633,6 +657,8 @@ export function QuestionTestBody({
             onChange={handleResponse}
             allResponses={allTestResponses}
             allQuestions={allQuestions}
+            selectedDynamicRowIds={selectedDynamicRowIds}
+            onDynamicRowSelectionChange={handleDynamicRowSelectionChange}
           />
         )}
       </div>

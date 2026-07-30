@@ -15,7 +15,9 @@ export const InputCell = React.memo(function InputCell({
   cell,
   cellResponse,
   onUpdateValue,
+  inputIdScope,
   ariaInvalid,
+  ariaDescribedBy,
 }: InteractiveCellProps) {
   const attrs = useContactAttrs();
   const template = cell.defaultValueTemplate ?? '';
@@ -60,6 +62,7 @@ export const InputCell = React.memo(function InputCell({
     <CellContentLayout content={cell.content} position={cell.textPosition} bold={cell.textBold}>
       <div className="flex w-full flex-col space-y-1.5">
         <Input
+          id={inputIdScope ? `${inputIdScope}-${cell.id}` : undefined}
           type="text"
           inputMode={isNumberMode ? 'decimal' : undefined}
           value={isPrefilled ? prefilledValue : displayValue}
@@ -72,6 +75,7 @@ export const InputCell = React.memo(function InputCell({
           disabled={isPrefilled}
           data-prefilled={isPrefilled || undefined}
           aria-invalid={ariaInvalid || undefined}
+          aria-describedby={ariaDescribedBy}
         />
 
         {cell.inputMaxLength && !isPrefilled && (

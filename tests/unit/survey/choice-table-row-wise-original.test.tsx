@@ -102,4 +102,74 @@ describe('ChoiceTableResponse row-wise-original', () => {
     expect(screen.getByRole('group', { name: '제품' })).toBeInTheDocument();
     expect(screen.queryByRole('group', { name: '연구' })).toBeNull();
   });
+
+  it('radio 그룹도 기존 groupKey 응답 shape와 그룹 name을 유지한다', () => {
+    const radioQuestion = structuredClone(question);
+    radioQuestion.type = 'radio';
+    radioQuestion.choiceGroups = [
+      { id: 'field-group', type: 'radio', groupKey: 'field', label: '분야' },
+    ];
+    for (const row of radioQuestion.tableRowsData ?? []) {
+      const choiceCell = row.cells.find((cell) => cell.type === 'choice_opt');
+      if (choiceCell) choiceCell.choiceGroupId = 'field-group';
+    }
+    const onChange = vi.fn();
+
+    render(
+      <ChoiceTableResponse
+        question={radioQuestion}
+        value={{}}
+        onChange={onChange}
+      />,
+    );
+
+    const product = screen.getByRole('radio', { name: '제품 선택' });
+    const research = screen.getByRole('radio', { name: '연구 선택' });
+    expect(product).toHaveAttribute('name', research.getAttribute('name'));
+    fireEvent.click(research);
+    expect(onChange).toHaveBeenLastCalledWith({ field: 'choice-2' });
+  });
+
+  it('choice 동적 행은 사이드카 선택만 작성 순서로 표시하고 원래 응답 shape를 유지한다', () => {
+    const dynamicQuestion = structuredClone(question);
+    dynamicQuestion.tableRowsData![1]!.dynamicGroupId = 'research';
+    dynamicQuestion.dynamicRowConfigs = [
+      { groupId: 'research', enabled: true, label: '연구 항목 선택' },
+    ];
+    const onDynamicRowsChange = vi.fn();
+    const onChange = vi.fn();
+
+    const { rerender } = render(
+      <ChoiceTableResponse
+        question={dynamicQuestion}
+        value={[]}
+        onChange={onChange}
+        selectedDynamicRowIds={[]}
+        onDynamicRowSelectionChange={onDynamicRowsChange}
+      />,
+    );
+
+    expect(screen.getByRole('group', { name: '제품' })).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: '연구' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /연구 항목 선택.*0개 선택/ }));
+    fireEvent.click(screen.getByText('연구', { selector: 'span' }));
+    fireEvent.click(screen.getByRole('button', { name: '확인 (1개)' }));
+    expect(onDynamicRowsChange).toHaveBeenLastCalledWith(['row-2']);
+    expect(onChange).not.toHaveBeenCalled();
+
+    rerender(
+      <ChoiceTableResponse
+        question={dynamicQuestion}
+        value={[]}
+        onChange={onChange}
+        selectedDynamicRowIds={['row-2']}
+        onDynamicRowSelectionChange={onDynamicRowsChange}
+      />,
+    );
+    expect(
+      [...document.querySelectorAll('[data-row-question-id]')].map((row) =>
+        row.getAttribute('data-row-question-id'),
+      ),
+    ).toEqual(['row-1', 'row-2']);
+  });
 });

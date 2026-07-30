@@ -16,7 +16,9 @@ export const RankingCell = React.memo(function RankingCell({
   cell,
   cellResponse,
   onUpdateValue,
+  inputIdScope,
   ariaInvalid,
+  ariaDescribedBy,
 }: InteractiveCellProps) {
   const config = cell.rankingConfig;
   const options = cell.rankingOptions ?? [];
@@ -40,9 +42,11 @@ export const RankingCell = React.memo(function RankingCell({
   return (
     <CellContentLayout content={cell.content} position={cell.textPosition} bold={cell.textBold}>
       <div
+        id={inputIdScope ? `${inputIdScope}-${cell.id}` : undefined}
         className="flex w-full flex-col space-y-2"
         role="group"
         aria-invalid={ariaInvalid || undefined}
+        aria-describedby={ariaDescribedBy}
       >
         <RankingDropdownStack
           answers={answers}
@@ -51,6 +55,9 @@ export const RankingCell = React.memo(function RankingCell({
           allowDuplicates={allowDuplicates}
           allowOther={false}
           onChange={(next) => onUpdateValue(next)}
+          inputIdScope={inputIdScope ? `${inputIdScope}-${cell.id}` : undefined}
+          ariaInvalid={ariaInvalid}
+          ariaDescribedBy={ariaDescribedBy}
           {...(cell.optionsColumns !== undefined ? { columns: cell.optionsColumns } : {})}
           detailTargetScopeId={cell.id}
           compact

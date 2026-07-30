@@ -3,6 +3,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { InteractiveTableResponse } from '@/components/survey-builder/interactive-table-response';
 import { QuestionInput } from '@/components/survey-response/question-input';
+import { buildRowWiseCellInstanceIds } from '@/components/survey-response/scroll-to-issue';
 import type { Question, TableColumn, TableRow } from '@/types/survey';
 
 /**
@@ -51,6 +52,10 @@ beforeEach(() => {
 });
 
 describe('InteractiveTableResponse 오류 배너', () => {
+  it('자동 이동용 셀 인스턴스 ID는 원본 작성 행과 논리 셀 ID를 함께 사용한다', () => {
+    expect(buildRowWiseCellInstanceIds(rows, ['r1c1'])).toEqual(['r1:r1:r1c1']);
+  });
+
   it('cellIds 항목은 "위치로 이동" 버튼을 렌더하고, 클릭 시 해당 셀 입력으로 스크롤·포커스한다', () => {
     const scrollSpy = vi.fn();
     // jsdom 은 scrollIntoView 를 정의하지 않으므로 프로토타입에 스텁

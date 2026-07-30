@@ -86,7 +86,14 @@ describe('InteractiveTableResponse row-wise-original', () => {
     );
 
     expect(screen.getByPlaceholderText('첫 응답')).not.toHaveAttribute('aria-invalid', 'true');
-    expect(screen.getByPlaceholderText('둘째 응답')).toHaveAttribute('aria-invalid', 'true');
+    const invalidInput = screen.getByPlaceholderText('둘째 응답');
+    expect(invalidInput).toHaveAttribute('aria-invalid', 'true');
+    expect(invalidInput).toHaveAttribute('id', 'row-2-answer-2');
+    const errorDescriptionId = invalidInput.getAttribute('aria-describedby');
+    expect(errorDescriptionId).toBeTruthy();
+    expect(document.getElementById(errorDescriptionId!)).toHaveTextContent(
+      '둘째 문항의 응답을 확인해 주세요.',
+    );
     expect(screen.getByText('첫 문항')).not.toHaveClass('text-red-700');
     expect(screen.getByText('둘째 문항')).toHaveClass('text-red-700');
   });
@@ -110,5 +117,127 @@ describe('InteractiveTableResponse row-wise-original', () => {
     expect(useTestResponseStore.getState().testResponses['table-test-question']).toEqual({
       'answer-1': '테스트 값',
     });
+  });
+
+  it('한 행의 여러 선택 셀이 같은 option id를 사용해도 입력 id를 고유하게 만든다', () => {
+    render(
+      <InteractiveTableResponse
+        questionId="choice-cell-table"
+        columns={[
+          { id: 'label', label: '문항' },
+          { id: 'answer-a', label: 'A' },
+          { id: 'answer-b', label: 'B' },
+        ] as never}
+        rows={[
+          {
+            id: 'row-1',
+            label: '선택 문항',
+            cells: [
+              { id: 'label-1', type: 'text', content: '선택 문항' },
+              {
+                id: 'radio-a',
+                type: 'radio',
+                content: '',
+                radioOptions: [{ id: 'yes', label: 'A 선택', value: 'yes' }],
+              },
+              {
+                id: 'radio-b',
+                type: 'radio',
+                content: '',
+                radioOptions: [{ id: 'yes', label: 'B 선택', value: 'yes' }],
+              },
+            ],
+          },
+        ] as never}
+        mobileTableDisplayMode="row-wise-original"
+        mobileDrilldownOmitLeadingColumns={1}
+        value={{}}
+        onChange={vi.fn()}
+      />,
+    );
+
+    const first = screen.getByRole('radio', { name: 'A 선택' });
+    const second = screen.getByRole('radio', { name: 'B 선택' });
+    expect(first.id).not.toBe(second.id);
+    expect(first.id).toContain('radio-a');
+    expect(second.id).toContain('radio-b');
+  });
+
+  it('선택된 동적 행을 작성 순서에 맞춰 나열하고 항목 선택 UI를 유지한다', () => {
+    render(
+      <InteractiveTableResponse
+        questionId="dynamic-table"
+        columns={columns as never}
+        rows={[
+          rows[0],
+          {
+            id: 'dynamic-row',
+            label: '동적 문항',
+            dynamicGroupId: 'career',
+            cells: [
+              { id: 'dynamic-label', type: 'text', content: '동적 문항' },
+              { id: 'dynamic-answer', type: 'input', content: '', placeholder: '동적 응답' },
+            ],
+          },
+          rows[1],
+        ] as never}
+        dynamicRowConfigs={[
+          { groupId: 'career', enabled: true, label: '진로 항목 선택' },
+        ]}
+        mobileTableDisplayMode="row-wise-original"
+        mobileDrilldownOmitLeadingColumns={1}
+        value={{ __selectedRowIds: ['dynamic-row'] }}
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: /진로 항목 선택.*1개 선택/ })).toBeInTheDocument();
+    const rowQuestions = document.querySelectorAll('[data-row-question-id]');
+    expect([...rowQuestions].map((row) => row.getAttribute('data-row-question-id'))).toEqual([
+      'row-1',
+      'dynamic-row',
+      'row-2',
+    ]);
+
+    fireEvent.click(screen.getByRole('button', { name: /진로 항목 선택.*1개 선택/ }));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+
+  it('ranking 셀의 실제 select에도 행 인스턴스 ID와 오류 설명을 연결한다', () => {
+    render(
+      <InteractiveTableResponse
+        questionId="ranking-cell-table"
+        columns={columns as never}
+        rows={[
+          {
+            id: 'ranking-row',
+            label: '순위 문항',
+            cells: [
+              { id: 'ranking-label', type: 'text', content: '순위 문항' },
+              {
+                id: 'ranking-answer',
+                type: 'ranking',
+                content: '',
+                rankingConfig: { positions: 1 },
+                rankingOptions: [
+                  { id: 'option-a', label: 'A', value: 'a' },
+                  { id: 'option-b', label: 'B', value: 'b' },
+                ],
+              },
+            ],
+          },
+        ] as never}
+        mobileTableDisplayMode="row-wise-original"
+        mobileDrilldownOmitLeadingColumns={1}
+        value={{}}
+        onChange={vi.fn()}
+        errorCellIds={new Set(['ranking-answer'])}
+      />,
+    );
+
+    const select = screen.getByRole('combobox');
+    expect(select).toHaveAttribute('id', 'ranking-row-ranking-answer-1');
+    expect(select).toHaveAttribute('aria-invalid', 'true');
+    expect(select.getAttribute('aria-describedby')).toBeTruthy();
   });
 });

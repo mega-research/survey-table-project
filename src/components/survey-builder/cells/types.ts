@@ -18,6 +18,7 @@ export interface InteractiveCellProps {
   groupName?: string;
   inputIdScope?: string | undefined;
   ariaInvalid?: boolean | undefined;
+  ariaDescribedBy?: string | undefined;
 }
 
 /** 미리보기(읽기 전용) 셀 컴포넌트 공통 props */

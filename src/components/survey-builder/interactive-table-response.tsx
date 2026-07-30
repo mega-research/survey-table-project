@@ -47,7 +47,10 @@ import {
   getGridCellAria,
   getHeaderCellStickyStyle,
 } from '@/utils/table-grid-utils';
-import { recalculateColspansForVisibleColumns } from '@/utils/table-merge-helpers';
+import {
+  recalculateColspansForVisibleColumns,
+  recalculateRowspansForVisibleRows,
+} from '@/utils/table-merge-helpers';
 import { buildRadioGroupBuckets, resolveRadioGroupProps } from '@/utils/table-radio-groups';
 
 import { InteractiveCell } from './cells';
@@ -568,6 +571,60 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     onChange: mergedOnChange,
     headerRowCount,
   });
+  const rowWiseDisplayRows = useMemo(() => {
+    if (!isMobileView || mobileMode !== 'row-wise-original' || !hasDynamicRows) {
+      return displayRows;
+    }
+
+    const selectedSet = new Set(selectedRowIds);
+    const selectedGroupIds = new Set<string>();
+    for (const row of columnFilteredRows) {
+      if (
+        row.dynamicGroupId &&
+        selectedSet.has(row.id) &&
+        groupConfigMap.has(row.dynamicGroupId) &&
+        !hiddenGroupIds?.has(row.dynamicGroupId)
+      ) {
+        selectedGroupIds.add(row.dynamicGroupId);
+      }
+    }
+
+    const visibleRowIds = new Set(displayRows.map((row) => row.id));
+    for (const row of columnFilteredRows) {
+      const conditionVisible =
+        conditionVisibleRowIds === null || conditionVisibleRowIds.has(row.id);
+      if (!conditionVisible) continue;
+
+      if (
+        row.dynamicGroupId &&
+        groupConfigMap.has(row.dynamicGroupId) &&
+        !hiddenGroupIds?.has(row.dynamicGroupId) &&
+        selectedSet.has(row.id)
+      ) {
+        visibleRowIds.add(row.id);
+      }
+      if (
+        row.showWhenDynamicGroupId &&
+        groupConfigMap.has(row.showWhenDynamicGroupId) &&
+        !hiddenGroupIds?.has(row.showWhenDynamicGroupId) &&
+        selectedGroupIds.has(row.showWhenDynamicGroupId)
+      ) {
+        visibleRowIds.add(row.id);
+      }
+    }
+
+    return recalculateRowspansForVisibleRows(columnFilteredRows, visibleRowIds);
+  }, [
+    columnFilteredRows,
+    conditionVisibleRowIds,
+    displayRows,
+    groupConfigMap,
+    hasDynamicRows,
+    hiddenGroupIds,
+    isMobileView,
+    mobileMode,
+    selectedRowIds,
+  ]);
 
   // 가로 스크롤 인디케이터 (좌/우 섀도우·버튼 표시 여부)
   const { canScrollLeft, canScrollRight } = useHorizontalScrollIndicators(tableContainerRef, {
@@ -694,12 +751,17 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     [visibleColumns, displayRows, visibleHeaderGrid],
   );
   const displayRowById = useMemo(
-    () => new Map(displayRows.map((row) => [row.id, row])),
-    [displayRows],
+    () => new Map(rowWiseDisplayRows.map((row) => [row.id, row])),
+    [rowWiseDisplayRows],
   );
   const displayCellById = useMemo(
-    () => new Map(displayRows.flatMap((row) => row.cells.map((cell) => [cell.id, cell] as const))),
-    [displayRows],
+    () =>
+      new Map(
+        rowWiseDisplayRows.flatMap((row) =>
+          row.cells.map((cell) => [cell.id, cell] as const),
+        ),
+      ),
+    [rowWiseDisplayRows],
   );
   const rowWiseOriginalModel = useMemo(
     () => {
@@ -712,7 +774,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
         authoredRows: rows,
         visibleColumns,
         ...(visibleHeaderGrid ? { visibleHeaderGrid } : {}),
-        displayRows,
+        displayRows: rowWiseDisplayRows,
         hideColumnLabels,
         settings: {
           omitLeadingAuthoredColumns: clampMobileDrilldownOmitLeadingColumns(
@@ -729,13 +791,13 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     [
       columns,
       displayCellById,
-      displayRows,
       hideColumnLabels,
       isMobileView,
       mobileDrilldownOmitLeadingColumns,
       mobileDrilldownRepeatHeaderEndRow,
       mobileDrilldownRepeatHeaderStartRow,
       mobileMode,
+      rowWiseDisplayRows,
       rows,
       visibleColumns,
       visibleHeaderGrid,
@@ -947,33 +1009,69 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
           <div className="w-full">
             {/* 모바일 원본 표 옵션이 켜진 질문은 카드/스테퍼 전환 없이 원본 표(가로 스크롤) 유지 */}
             {isMobileView && mobileMode === 'row-wise-original' ? (
-              <MobileRowWiseOriginalSheet
-                model={rowWiseOriginalModel}
-                errorCellIds={errorCellIds}
-                renderCell={(cell, rowQuestion, inputIdScope, invalid) => {
-                  const sourceRowId =
-                    rowQuestion.projection.sourceRowIdByCellId.get(cell.id) ??
-                    rowQuestion.rowId;
-                  const sourceRow =
-                    displayRowById.get(sourceRowId) ?? rowQuestion.projection.row;
-                  return (
-                    <InteractiveCell
-                      cell={cell}
-                      questionId={questionId}
-                      isTestMode={isTestMode}
-                      value={value}
-                      onChange={mergedOnChange}
-                      inputIdScope={inputIdScope}
-                      ariaInvalid={invalid}
-                      {...resolveRadioGroupProps(
-                        cell,
-                        sourceRowId,
-                        buildRadioGroupBuckets(sourceRow),
-                      )}
-                    />
-                  );
-                }}
-              />
+              <div className="space-y-3">
+                {hasDynamicRows ? (
+                  <div className="divide-y divide-gray-200 overflow-hidden rounded-xl border border-gray-200 bg-white">
+                    {[...groupConfigMap.entries()]
+                      .filter(
+                        ([groupId]) =>
+                          !hiddenGroupIds?.has(groupId) &&
+                          dynamicRows.some((row) => row.dynamicGroupId === groupId),
+                      )
+                      .map(([groupId, config]) => (
+                        <button
+                          key={groupId}
+                          type="button"
+                          className="flex min-h-11 w-full items-center gap-2 px-4 py-3 text-left hover:bg-gray-50"
+                          onClick={() => handleSelectGroup(groupId)}
+                        >
+                          <ListChecks className="h-4 w-4 shrink-0 text-gray-500" />
+                          <span className="flex-1 text-sm font-medium text-gray-700">
+                            {config.label || '항목 선택'}
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            {groupSelectedCountMap.get(groupId) ?? 0}개 선택
+                          </span>
+                          <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" />
+                        </button>
+                      ))}
+                  </div>
+                ) : null}
+                <MobileRowWiseOriginalSheet
+                  model={rowWiseOriginalModel}
+                  errorCellIds={errorCellIds}
+                  renderCell={(
+                    cell,
+                    rowQuestion,
+                    inputIdScope,
+                    invalid,
+                    errorDescriptionId,
+                  ) => {
+                    const sourceRowId =
+                      rowQuestion.projection.sourceRowIdByCellId.get(cell.id) ??
+                      rowQuestion.rowId;
+                    const sourceRow =
+                      displayRowById.get(sourceRowId) ?? rowQuestion.projection.row;
+                    return (
+                      <InteractiveCell
+                        cell={cell}
+                        questionId={questionId}
+                        isTestMode={isTestMode}
+                        value={value}
+                        onChange={mergedOnChange}
+                        inputIdScope={inputIdScope}
+                        ariaInvalid={invalid}
+                        ariaDescribedBy={errorDescriptionId}
+                        {...resolveRadioGroupProps(
+                          cell,
+                          sourceRowId,
+                          buildRadioGroupBuckets(sourceRow),
+                        )}
+                      />
+                    );
+                  }}
+                />
+              </div>
             ) : mobileUsesCards ? (
               useOriginalRowDetail || useDrilldown ? (
                 <MobileTableDrilldown

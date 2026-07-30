@@ -49,7 +49,10 @@ import { useSessionRecovery } from '@/components/survey-response/hooks/use-sessi
 import { sessionStorageKey } from '@/components/survey-response/hooks/session-helpers';
 import { useSurveyLoader } from '@/components/survey-response/hooks/use-survey-loader';
 import { ResumeToast } from '@/components/survey-response/resume-toast';
-import { scrollToIssue } from '@/components/survey-response/scroll-to-issue';
+import {
+  buildRowWiseCellInstanceIds,
+  scrollToIssue,
+} from '@/components/survey-response/scroll-to-issue';
 import { generateId } from '@/lib/utils';
 import {
   collectTableQuestionOptions,
@@ -757,6 +760,10 @@ function SurveyResponseFlowActive({
       scrollToIssue({
         questionId: firstUnanswered.id,
         detailTargetIds: firstIssue?.detailTargetIds,
+        cellInstanceIds: buildRowWiseCellInstanceIds(
+          firstUnanswered.tableRowsData,
+          firstIssue?.cellIds,
+        ),
         cellIds: firstIssue?.cellIds,
       });
       return;
@@ -769,9 +776,16 @@ function SurveyResponseFlowActive({
       if (firstViolatedQuestionId) {
         setHighlightQuestionIds(new Set([firstViolatedQuestionId]));
         const firstIssue = numericIssuesByQuestion.get(firstViolatedQuestionId)?.[0];
+        const violatedQuestion = questions.find(
+          (question) => question.id === firstViolatedQuestionId,
+        );
         scrollToIssue({
           questionId: firstViolatedQuestionId,
           detailTargetIds: firstIssue?.detailTargetIds,
+          cellInstanceIds: buildRowWiseCellInstanceIds(
+            violatedQuestion?.tableRowsData,
+            firstIssue?.cellIds,
+          ),
           cellIds: firstIssue?.cellIds,
         });
       }

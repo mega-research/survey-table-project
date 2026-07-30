@@ -15,7 +15,9 @@ export const SelectCell = React.memo(function SelectCell({
   cellResponse,
   onUpdateValue,
   questionId,
+  inputIdScope,
   ariaInvalid,
+  ariaDescribedBy,
 }: InteractiveCellProps) {
   const handleSelectChange = useCallback(
     (optionId: string) => {
@@ -42,8 +44,10 @@ export const SelectCell = React.memo(function SelectCell({
       <div className="flex w-full flex-col space-y-2">
         <div className="relative w-full">
           <select
+            id={inputIdScope ? `${inputIdScope}-${cell.id}` : undefined}
             value={selectedValue}
             aria-invalid={ariaInvalid || undefined}
+            aria-describedby={ariaDescribedBy}
             onChange={(e) => handleSelectChange(e.target.value)}
             className="w-full appearance-none truncate rounded border border-gray-300 bg-white py-2 pr-7 pl-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
           >

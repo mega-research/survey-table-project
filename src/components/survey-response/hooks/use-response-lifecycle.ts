@@ -207,7 +207,14 @@ export function useResponseLifecycle({
 
     const responseId =
       activeResponseIdRef.current ?? (await responseCreationPromiseRef.current);
-    if (!responseId) return false;
+    if (!responseId) {
+      const hasOnlyRootSidecars = [...pendingAnswerSavesRef.current.keys()].every((key) =>
+        key.startsWith('__'),
+      );
+      // 루트 사이드카만 바뀐 선택적 문항은 아직 실제 질문 답변이 없으므로 응답 행을
+      // 만들지 않는다. 로컬 pending은 유지해 이후 실제 첫 답변 또는 최종 complete에 합친다.
+      return hasOnlyRootSidecars;
+    }
 
     const pendingSnapshot = Object.fromEntries(pendingAnswerSavesRef.current);
     try {
@@ -273,6 +280,7 @@ export function useResponseLifecycle({
       // - 후속 답변은 별도 DB 쓰기 없음 (제출 시 completeResponse가 일괄 저장)
       // admin-edit 분기 (5/8) — 어드민 수정은 자동 저장 없음. 마지막 submit 시점에 일괄 갱신.
       if (
+        !questionId.startsWith('__') &&
         !isAdminEdit &&
         !isPreview &&
         (currentResponseId === null || (testIdentity !== null && !hasTestAttemptOwnership)) &&

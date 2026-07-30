@@ -41,6 +41,9 @@ export interface RankingDropdownStackProps {
   columns?: number | undefined;
   /** 순수 상세기입 검증과 DOM 이동 타깃을 맞추는 질문/그룹/셀 scope ID */
   detailTargetScopeId?: string | undefined;
+  inputIdScope?: string | undefined;
+  ariaInvalid?: boolean | undefined;
+  ariaDescribedBy?: string | undefined;
 }
 
 /**
@@ -57,6 +60,9 @@ export function RankingDropdownStack({
   compact = false,
   columns,
   detailTargetScopeId,
+  inputIdScope,
+  ariaInvalid,
+  ariaDescribedBy,
 }: RankingDropdownStackProps) {
   const isMobile = useMobileView();
 
@@ -156,7 +162,10 @@ export function RankingDropdownStack({
         // 교체해 모바일에서 트리거를 키우고, 열린 목록에 max-height + 스크롤을 적용한다.
         const nativeSelectEl = (
           <select
+            id={inputIdScope ? `${inputIdScope}-${rank}` : undefined}
             value={currentValue}
+            aria-invalid={ariaInvalid || undefined}
+            aria-describedby={ariaDescribedBy}
             onChange={(e) => handleSelect(rank, e.target.value)}
             className={selectCls}
             style={isHorizontal ? { width: RANKING_HORIZONTAL_ITEM_WIDTH } : undefined}
@@ -189,7 +198,10 @@ export function RankingDropdownStack({
             onValueChange={(v) => handleSelect(rank, v)}
           >
             <SelectTrigger
+              id={inputIdScope ? `${inputIdScope}-${rank}` : undefined}
               aria-label={`${rank}순위 선택`}
+              aria-invalid={ariaInvalid || undefined}
+              aria-describedby={ariaDescribedBy}
               className={cn(
                 // 모바일은 행 가득(균일 고정). 데스크톱 가로 레이아웃은 고정 px(아래 style).
                 isHorizontal && !isMobile ? '' : 'w-full',

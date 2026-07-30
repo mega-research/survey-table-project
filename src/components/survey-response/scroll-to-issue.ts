@@ -1,4 +1,5 @@
 import { OPTION_TEXT_TARGET_ATTRIBUTE } from '@/lib/survey/option-text-target';
+import type { TableRow } from '@/types/survey';
 
 function findDataTarget(attribute: string, ids: readonly string[]): HTMLElement | null {
   const candidates = document.querySelectorAll<HTMLElement>(`[${attribute}]`);
@@ -14,6 +15,24 @@ export interface IssueScrollTargets {
   cellInstanceIds?: readonly string[] | undefined;
   cellIds?: readonly string[] | undefined;
   questionId?: string | undefined;
+}
+
+export function buildRowWiseCellInstanceIds(
+  rows: readonly TableRow[] | undefined,
+  cellIds: readonly string[] | undefined,
+): string[] {
+  if (!rows || !cellIds?.length) return [];
+  const requested = new Set(cellIds);
+  const instances: string[] = [];
+  for (const row of rows) {
+    for (const cell of row.cells) {
+      if (!requested.has(cell.id)) continue;
+      instances.push(`${row.id}:${row.id}:${cell.id}`);
+      requested.delete(cell.id);
+    }
+    if (requested.size === 0) break;
+  }
+  return instances;
 }
 
 const FOCUSABLE_SELECTOR = [

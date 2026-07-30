@@ -156,6 +156,26 @@ describe('useResponseLifecycle - handleResponse INSERT 가드', () => {
     expect(createWithFirstAnswer).not.toHaveBeenCalled();
   });
 
+  it('루트 응답 사이드카만 바뀌면 첫 INSERT 없이도 중간 페이지 flush를 통과한다', async () => {
+    const args = baseArgs();
+    const { result } = renderHook(() => useResponseLifecycle(args));
+
+    act(() => {
+      result.current.handleResponse('__dynamicRowSelections__', {
+        q1: ['dynamic-row'],
+      });
+    });
+
+    expect(args.setResponses).toHaveBeenCalledTimes(1);
+    expect(args.setPendingResponse).toHaveBeenCalledWith(
+      '__dynamicRowSelections__',
+      { q1: ['dynamic-row'] },
+    );
+    expect(createWithFirstAnswer).not.toHaveBeenCalled();
+    await expect(result.current.flushPendingAnswers()).resolves.toBe(true);
+    expect(saveDraft).not.toHaveBeenCalled();
+  });
+
   it('currentResponseId 가 이미 있으면 INSERT 를 발사하지 않는다', () => {
     const args = baseArgs({ currentResponseId: 'existing' });
     const { result } = renderHook(() => useResponseLifecycle(args));

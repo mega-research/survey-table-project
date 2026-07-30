@@ -26,22 +26,23 @@ const CellRouter = React.memo(function CellRouter({
   groupName,
   inputIdScope,
   ariaInvalid,
+  ariaDescribedBy,
 }: InteractiveCellProps) {
   switch (cell.type) {
     case 'checkbox':
-      return <CheckboxCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} inputIdScope={inputIdScope} ariaInvalid={ariaInvalid} />;
+      return <CheckboxCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} inputIdScope={inputIdScope} ariaInvalid={ariaInvalid} ariaDescribedBy={ariaDescribedBy} />;
     case 'radio':
-      return <RadioCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} inputIdScope={inputIdScope} ariaInvalid={ariaInvalid} {...(groupName !== undefined ? { groupName } : {})} />;
+      return <RadioCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} inputIdScope={inputIdScope} ariaInvalid={ariaInvalid} ariaDescribedBy={ariaDescribedBy} {...(groupName !== undefined ? { groupName } : {})} />;
     case 'select':
-      return <SelectCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} ariaInvalid={ariaInvalid} />;
+      return <SelectCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} inputIdScope={inputIdScope} ariaInvalid={ariaInvalid} ariaDescribedBy={ariaDescribedBy} />;
     case 'input':
-      return <InputCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} ariaInvalid={ariaInvalid} />;
+      return <InputCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} inputIdScope={inputIdScope} ariaInvalid={ariaInvalid} ariaDescribedBy={ariaDescribedBy} />;
     case 'image':
       return <ImageCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} />;
     case 'video':
       return <VideoCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} />;
     case 'ranking':
-      return <RankingCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} ariaInvalid={ariaInvalid} />;
+      return <RankingCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} inputIdScope={inputIdScope} ariaInvalid={ariaInvalid} ariaDescribedBy={ariaDescribedBy} />;
     case 'ranking_opt':
       return <RankingOptCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} />;
     case 'text':
@@ -70,6 +71,7 @@ interface InteractiveCellContainerProps {
   siblingCellIds?: string[] | undefined;
   inputIdScope?: string | undefined;
   ariaInvalid?: boolean | undefined;
+  ariaDescribedBy?: string | undefined;
 }
 
 export const InteractiveCell = React.memo(function InteractiveCell({
@@ -82,6 +84,7 @@ export const InteractiveCell = React.memo(function InteractiveCell({
   siblingCellIds,
   inputIdScope,
   ariaInvalid,
+  ariaDescribedBy,
 }: InteractiveCellContainerProps) {
   const { cellResponse, updateValue } = useCellResponse(
     questionId,
@@ -100,6 +103,7 @@ export const InteractiveCell = React.memo(function InteractiveCell({
       questionId={questionId}
       inputIdScope={inputIdScope}
       ariaInvalid={ariaInvalid}
+      ariaDescribedBy={ariaDescribedBy}
       {...(groupName !== undefined ? { groupName } : {})}
     />
   );

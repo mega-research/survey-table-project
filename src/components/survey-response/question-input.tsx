@@ -43,6 +43,8 @@ interface QuestionInputProps {
   allQuestions?: Question[];
   /** 숫자 차단형 검증 위반 목록 — "다음"/제출 시도 후에만 채워짐(라이브 계산은 상위 소유). */
   numericIssues?: NumericIssue[] | undefined;
+  selectedDynamicRowIds?: string[] | undefined;
+  onDynamicRowSelectionChange?: ((rowIds: string[]) => void) | undefined;
 }
 
 // 타입 정의
@@ -164,6 +166,8 @@ function QuestionInputControl({
   allResponses,
   allQuestions,
   numericIssues,
+  selectedDynamicRowIds,
+  onDynamicRowSelectionChange,
 }: QuestionInputProps) {
   const attrs = useContactAttrs();
 
@@ -179,6 +183,8 @@ function QuestionInputControl({
         onChange={onChange as (v: unknown) => void}
         allResponses={allResponses}
         allQuestions={allQuestions}
+        selectedDynamicRowIds={selectedDynamicRowIds}
+        onDynamicRowSelectionChange={onDynamicRowSelectionChange}
       />
     );
   }

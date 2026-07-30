@@ -15,6 +15,7 @@ export const CheckboxCell = React.memo(function CheckboxCell({
   questionId,
   inputIdScope,
   ariaInvalid,
+  ariaDescribedBy,
 }: InteractiveCellProps) {
   const cellResponseArray = useMemo(
     () => (Array.isArray(cellResponse) ? cellResponse : []),
@@ -80,7 +81,7 @@ export const CheckboxCell = React.memo(function CheckboxCell({
         const optionKey = option.value ?? option.id;
         const isChecked = cellResponseArray.includes(optionKey);
         const disabled = !canSelect(optionKey);
-        const inputId = `${inputIdScope ?? cell.id}-${option.id}`;
+        const inputId = `${inputIdScope ? `${inputIdScope}-${cell.id}` : cell.id}-${option.id}`;
 
         return (
           <div key={option.id} className="space-y-2">
@@ -90,6 +91,7 @@ export const CheckboxCell = React.memo(function CheckboxCell({
                 type="checkbox"
                 id={inputId}
                 aria-invalid={ariaInvalid || undefined}
+                aria-describedby={ariaDescribedBy}
                 checked={isChecked}
                 disabled={disabled}
                 onChange={(e) => handleCheckboxChange(optionKey, e.target.checked)}

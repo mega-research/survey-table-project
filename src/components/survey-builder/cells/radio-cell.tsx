@@ -19,6 +19,7 @@ export const RadioCell = React.memo(function RadioCell({
   groupName,
   inputIdScope,
   ariaInvalid,
+  ariaDescribedBy,
 }: InteractiveCellProps) {
   const handleRadioChange = useCallback(
     (optionId: string) => {
@@ -47,7 +48,7 @@ export const RadioCell = React.memo(function RadioCell({
       {cell.radioOptions.map((option) => {
         const optionKey = option.value ?? option.id;
         const isSelected = cellResponse === optionKey;
-        const inputId = `${inputIdScope ?? cell.id}-${option.id}`;
+        const inputId = `${inputIdScope ? `${inputIdScope}-${cell.id}` : cell.id}-${option.id}`;
 
         return (
           <div key={option.id} className="space-y-2">
@@ -58,6 +59,7 @@ export const RadioCell = React.memo(function RadioCell({
                 id={inputId}
                 name={groupName ?? `${cell.id}-radio`}
                 aria-invalid={ariaInvalid || undefined}
+                aria-describedby={ariaDescribedBy}
                 checked={isSelected}
                 onChange={() => {}}
                 onClick={() => handleRadioChange(optionKey)}
