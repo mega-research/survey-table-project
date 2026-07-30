@@ -203,9 +203,13 @@ type VersionGateRow = { status: string } | null;
 
 /** 응답 가용성 게이트 위반 시 던지는 에러. pub 엔드포인트라 호출자에 사유를 세분 노출하지 않는다. */
 export class SurveyNotAcceptingResponsesError extends Error {
+  /** 거부 사유. 메시지 문자열 파싱 없이 호출측이 분기할 수 있게 필드로 노출한다. */
+  readonly reason: string;
+
   constructor(reason: string) {
     super(`응답을 받을 수 없는 설문입니다. (${reason})`);
     this.name = 'SurveyNotAcceptingResponsesError';
+    this.reason = reason;
   }
 }
 
@@ -685,6 +689,58 @@ export async function saveDraftResponse(input: SaveDraftResponseInput): Promise<
       ...(input.sessionId ? { sessionId: input.sessionId } : {}),
     });
   }
+}
+
+/** saveDraftResponseIfActive 가 저장을 건너뛴 사유. 서버 로그·테스트 어서션용. */
+export type SaveDraftSkipReason =
+  | 'not_found'
+  | 'deleted'
+  | 'concluded'
+  | 'survey_paused'
+  | 'answer_value_too_large'
+  | 'not_accepting';
+
+export type SaveDraftIfActiveResult =
+  | { saved: true }
+  | { saved: false; skipped: SaveDraftSkipReason };
+
+/** SurveyNotAcceptingResponsesError.reason 은 string 이라 미지의 값이 올 수 있다. union 을 닫는다. */
+function toSkipReason(reason: string): SaveDraftSkipReason {
+  return reason === 'survey_paused' || reason === 'answer_value_too_large'
+    ? reason
+    : 'not_accepting';
+}
+
+/**
+ * 이탈 시점 beacon 전용 draft 저장.
+ *
+ * saveDraftResponse 와 달리 "저장할 이유가 없는" 상태를 throw 가 아니라 skipped 로 돌려준다.
+ * beacon 은 응답을 읽지 않으므로 상태 코드가 클라이언트 동작을 바꾸지 않는다. 제출 직후 탭
+ * 닫기·중단된 설문 탭 닫기 같은 정상 시나리오를 5xx 로 올리면 Sentry 에러율만 오염된다.
+ *
+ * 상태 조회를 한 번 더 하지만 updateQuestionResponse 가 어차피 문항마다 행을 조회하므로
+ * 비중은 작다. 라우트가 throw 메시지 문자열로 분기하지 않게 하는 것이 목적이다.
+ */
+export async function saveDraftResponseIfActive(
+  input: SaveDraftResponseInput,
+): Promise<SaveDraftIfActiveResult> {
+  const row = await db.query.surveyResponses.findFirst({
+    where: eq(surveyResponses.id, input.responseId),
+    columns: { id: true, status: true, deletedAt: true },
+  });
+  if (!row) return { saved: false, skipped: 'not_found' };
+  if (row.deletedAt !== null) return { saved: false, skipped: 'deleted' };
+  if (row.status !== 'in_progress') return { saved: false, skipped: 'concluded' };
+
+  try {
+    await saveDraftResponse(input);
+  } catch (err) {
+    if (err instanceof SurveyNotAcceptingResponsesError) {
+      return { saved: false, skipped: toSkipReason(err.reason) };
+    }
+    throw err;
+  }
+  return { saved: true };
 }
 
 export async function saveTestTargetFirstAnswer(
