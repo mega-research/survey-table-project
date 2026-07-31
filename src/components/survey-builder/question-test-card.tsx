@@ -7,7 +7,7 @@ import { OptionTextInput } from '@/components/survey-response/option-text-input'
 import { RankingQuestion } from '@/components/survey-response/ranking-question';
 import { Input } from '@/components/ui/input';
 import { computeTableEstimatedHeight } from '@/hooks/use-row-heights';
-import { useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { useTestResponseStore } from '@/stores/test-response-store';
@@ -416,6 +416,7 @@ function QuestionTestInput({
   onDynamicRowSelectionChange: (rowIds: string[]) => void;
 }) {
   const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
 
   // choice_opt 테이블 소스 라디오/체크박스는 switch 진입 전에 단일 가드로 분기
   if (
@@ -536,7 +537,7 @@ function QuestionTestInput({
     case 'notice':
       return (
         <NoticeRenderer
-          content={substituteTokens(question.noticeContent || '', attrs)}
+          content={substituteTokens(question.noticeContent || '', attrs, quotes)}
           requiresAcknowledgment={question.requiresAcknowledgment}
           value={typeof value === 'boolean' ? value : false}
           onChange={onChange}

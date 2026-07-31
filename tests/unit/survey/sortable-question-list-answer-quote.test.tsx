@@ -7,6 +7,12 @@
  * 아직 응답을 안 골라서인지 구분 불가). collectAnswerQuotes 를 응답 페이지와
  * 동일하게 태워 계산하고, createPlaceholderAttrs 로 감싸 미정의 이름을
  * `[키]` 로 가시화하는 오타 진단까지 살아있는지 검증한다.
+ *
+ * Fix round 1 — 리뷰가 지적한 사실: quotes 배선만으로는 부족했다. 카드 헤더
+ * 제목(`sortable-question-list.tsx` h4)이 토큰을 전혀 치환하지 않아, 이 기능의
+ * 가장 흔한 용례("응답에 따라 뒤 질문 제목이 바뀐다")를 빌더에서 검증할 방법이
+ * 여전히 없었다. 아래 테스트는 옵션 라벨(기존 소비처)과 질문 제목(신규 소비처)을
+ * 함께 검증한다.
  */
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -47,7 +53,7 @@ function consumingMultiselectQuestion(templateName: string): Question {
   return {
     id: 'q2',
     type: 'multiselect',
-    title: '안내',
+    title: '레벨선택 질문',
     required: false,
     order: 1,
     selectLevels: [
@@ -58,6 +64,17 @@ function consumingMultiselectQuestion(templateName: string): Question {
         options: [{ id: 'lo1', value: 'lo1', label: `{{{${templateName}}}} 신청` }],
       },
     ],
+  } as unknown as Question;
+}
+
+/** 카드 헤더 제목(h4) 소비처 검증용 — 제목 자체에 인용 토큰을 심는다. */
+function titleConsumingQuestion(templateName: string): Question {
+  return {
+    id: 'q3',
+    type: 'text',
+    title: `{{{${templateName}}}} 안내`,
+    required: false,
+    order: 2,
   } as unknown as Question;
 }
 
@@ -90,17 +107,34 @@ describe('SortableQuestionList — 빌더 테스트 모드 응답 인용 배선'
   });
 
   it('아직 아무것도 선택하지 않으면 인용 이름이 존재해도 빈칸으로 렌더된다', async () => {
-    seedSurvey([radioQuoteQuestion(), consumingMultiselectQuestion('마케팅유형')]);
+    seedSurvey([
+      radioQuoteQuestion(),
+      consumingMultiselectQuestion('마케팅유형'),
+      titleConsumingQuestion('마케팅유형'),
+    ]);
 
     render(<SortableQuestionList selectedQuestionId={null} />);
 
     const option = await screen.findByRole('option', { name: '신청' });
     expect(option).toBeInTheDocument();
     expect(screen.queryByRole('option', { name: '[마케팅유형] 신청' })).not.toBeInTheDocument();
+
+    // 카드 헤더 제목 — 옵션 라벨과 같은 quotes 채널을 타므로 동일하게 빈칸이어야 한다.
+    expect(await screen.findByRole('heading', { level: 4, name: '안내' })).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { level: 4, name: '[마케팅유형] 안내' }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { level: 4, name: '{{{마케팅유형}}} 안내' }),
+    ).not.toBeInTheDocument();
   });
 
   it('앞 질문에서 옵션을 고르면 인용 문구로 바뀐다', async () => {
-    seedSurvey([radioQuoteQuestion(), consumingMultiselectQuestion('마케팅유형')]);
+    seedSurvey([
+      radioQuoteQuestion(),
+      consumingMultiselectQuestion('마케팅유형'),
+      titleConsumingQuestion('마케팅유형'),
+    ]);
 
     render(<SortableQuestionList selectedQuestionId={null} />);
 
@@ -109,15 +143,28 @@ describe('SortableQuestionList — 빌더 테스트 모드 응답 인용 배선'
 
     expect(await screen.findByRole('option', { name: '뉴스레터를 신청' })).toBeInTheDocument();
     expect(screen.queryByRole('option', { name: '신청' })).not.toBeInTheDocument();
+
+    // 카드 헤더 제목도 같은 응답으로 문구가 채워져야 한다 — 이게 이 기능의 핵심 용례다.
+    expect(
+      await screen.findByRole('heading', { level: 4, name: '뉴스레터를 안내' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 4, name: '안내' })).not.toBeInTheDocument();
   });
 
   it('소비처 질문이 존재하지 않는 인용 이름을 참조하면 [이름] 으로 오타가 드러난다', async () => {
-    seedSurvey([radioQuoteQuestion(), consumingMultiselectQuestion('마케팅유형오타')]);
+    seedSurvey([
+      radioQuoteQuestion(),
+      consumingMultiselectQuestion('마케팅유형오타'),
+      titleConsumingQuestion('마케팅유형오타'),
+    ]);
 
     render(<SortableQuestionList selectedQuestionId={null} />);
 
     expect(
       await screen.findByRole('option', { name: '[마케팅유형오타] 신청' }),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { level: 4, name: '[마케팅유형오타] 안내' }),
     ).toBeInTheDocument();
   });
 });
