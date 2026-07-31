@@ -487,6 +487,10 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
               exportLabel: currentFormData.exportLabel || question?.exportLabel,
               spssVarType: currentFormData.spssVarType ?? question?.spssVarType,
               spssMeasure: currentFormData.spssMeasure ?? question?.spssMeasure,
+              answerQuoteEnabled:
+                currentFormData.answerQuoteEnabled ?? question?.answerQuoteEnabled,
+              answerQuoteName: currentFormData.answerQuoteName ?? question?.answerQuoteName,
+              answerQuoteText: currentFormData.answerQuoteText ?? question?.answerQuoteText,
             } satisfies CompleteQuestionWrite;
             const createdQuestion = await client.surveyBuilder.questions.create(createPayload);
 

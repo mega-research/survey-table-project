@@ -335,6 +335,9 @@ export async function duplicateSurvey(
         hideTitle: question.hideTitle,
         pageBreakBefore: question.pageBreakBefore,
         displayCondition: question.displayCondition as NewQuestion['displayCondition'],
+        answerQuoteEnabled: question.answerQuoteEnabled,
+        answerQuoteName: question.answerQuoteName,
+        answerQuoteText: question.answerQuoteText,
       } satisfies CompleteQuestionWrite;
       return remapQuestionIdRefs(row, questionIdMap);
     });

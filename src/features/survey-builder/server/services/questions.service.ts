@@ -82,6 +82,9 @@ export async function createQuestion(data: CreateQuestionInput): Promise<Questio
     exportLabel: data.exportLabel,
     spssVarType: data.spssVarType,
     spssMeasure: data.spssMeasure,
+    answerQuoteEnabled: data.answerQuoteEnabled,
+    answerQuoteName: data.answerQuoteName,
+    answerQuoteText: data.answerQuoteText,
   } satisfies CompleteQuestionWrite & NewQuestion;
 
   // tmp/survey/ 이미지를 영구 prefix로 promote (R2 copy + URL 치환, 원본 tmp 는 lifecycle 위임)

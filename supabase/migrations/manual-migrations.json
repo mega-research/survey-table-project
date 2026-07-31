@@ -50,6 +50,7 @@
 "0063_add_survey_force_wide_layout",
     "0064_add_question_export_cell_order",
     "0065_r2_deletion_queue_and_sent_ledger",
-    "0066_add_row_wise_original_mobile_mode"
+    "0066_add_row_wise_original_mobile_mode",
+    "0067_add_question_answer_quote"
   ]
 }

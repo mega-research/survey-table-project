@@ -71,6 +71,9 @@ export const CreateQuestionInput = z.object({
   exportLabel: z.string().optional(),
   spssVarType: z.string().optional(),
   spssMeasure: z.string().optional(),
+  answerQuoteEnabled: z.boolean().optional(),
+  answerQuoteName: z.string().optional(),
+  answerQuoteText: z.string().optional(),
 });
 export type CreateQuestionInput = z.infer<typeof CreateQuestionInput>;
 
@@ -126,6 +129,9 @@ export const UpdateQuestionData = z.object({
   exportLabel: z.string().optional(),
   spssVarType: z.string().optional(),
   spssMeasure: z.string().optional(),
+  answerQuoteEnabled: z.boolean().optional(),
+  answerQuoteName: z.string().optional(),
+  answerQuoteText: z.string().optional(),
 });
 export type UpdateQuestionData = z.infer<typeof UpdateQuestionData>;
 

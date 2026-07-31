@@ -60,6 +60,9 @@ export const PERSISTED_QUESTION_FIELDS = [
   'spssVarType',
   'spssMeasure',
   'exportCellOrder',
+  'answerQuoteEnabled',
+  'answerQuoteName',
+  'answerQuoteText',
 ] as const satisfies readonly (keyof NewQuestion)[];
 
 export type PersistedQuestionField = (typeof PERSISTED_QUESTION_FIELDS)[number];

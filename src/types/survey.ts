@@ -275,6 +275,8 @@ export interface QuestionOption {
   hasOther?: boolean;
   // 조건부 분기
   branchRule?: BranchRule;
+  /** 응답 인용 문구. 이 항목이 선택되면 이 문구가 인용에 합류한다. 비우면 수집 제외. */
+  answerQuoteText?: string;
 }
 
 export interface TableCell {
@@ -383,6 +385,11 @@ export interface TableCell {
   mobileLabel?: string;
   // 런타임 전용: 셀렉터 경계에서 분리된 continuation 셀 마커
   _isContinuation?: boolean;
+  /**
+   * 응답 인용 문구. choice_opt/ranking_opt 셀은 "선택되면 수집, 비우면 제외",
+   * input 셀은 "값이 있으면 수집, 비우면 입력값 그대로" 로 해석된다.
+   */
+  answerQuoteText?: string;
 }
 
 export interface CheckboxOption {
@@ -405,6 +412,8 @@ export interface CheckboxOption {
   hasOther?: boolean;
   // 조건부 분기
   branchRule?: BranchRule;
+  /** 응답 인용 문구. 이 항목이 선택되면 이 문구가 인용에 합류한다. 비우면 수집 제외. */
+  answerQuoteText?: string;
 }
 
 export interface RadioOption {
@@ -427,6 +436,8 @@ export interface RadioOption {
   hasOther?: boolean;
   // 조건부 분기
   branchRule?: BranchRule;
+  /** 응답 인용 문구. 이 항목이 선택되면 이 문구가 인용에 합류한다. 비우면 수집 제외. */
+  answerQuoteText?: string;
 }
 
 export interface TableRow {
@@ -590,6 +601,12 @@ export interface Question {
   // SPSS .sav 내보내기 오버라이드 (없으면 질문 타입 기반 자동 판단)
   spssVarType?: 'Numeric' | 'String' | 'Date' | 'DateTime';
   spssMeasure?: 'Nominal' | 'Ordinal' | 'Continuous';
+  /** 응답 인용 사용 여부. 켜면 옵션마다 인용 문구 입력칸이 노출된다. */
+  answerQuoteEnabled?: boolean;
+  /** 응답 인용 토큰 이름. 다른 질문 본문에서 {{{이 값}}} 으로 참조한다. */
+  answerQuoteName?: string;
+  /** 단답형(text) 전용 인용 문구. 비우면 응답값을 그대로 사용한다. */
+  answerQuoteText?: string;
 }
 
 export interface Survey {

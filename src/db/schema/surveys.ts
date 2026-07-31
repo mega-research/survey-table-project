@@ -193,6 +193,11 @@ export const questions = pgTable('questions', {
   // 테이블 문항 내보내기 셀 순서 — 'row-first'(기본, null 동일) | 'column-first'
   exportCellOrder: text('export_cell_order').$type<'row-first' | 'column-first'>(),
 
+  // 응답 인용 — 앞 질문의 응답을 뒤 질문 본문에 {{{이름}}} 으로 끼워넣는 기능
+  answerQuoteEnabled: boolean('answer_quote_enabled'),
+  answerQuoteName: text('answer_quote_name'),
+  answerQuoteText: text('answer_quote_text'), // 단답형 전용. 옵션·셀 문구는 JSONB 안
+
   // 모바일에서도 원본 표 레이아웃(가로 스크롤)으로 표시 — 카드/스테퍼 전환 안 함
   // (테이블 타입 + 설명 테이블 소스 radio/checkbox 전용)
   mobileOriginalTable: boolean('mobile_original_table').default(false),

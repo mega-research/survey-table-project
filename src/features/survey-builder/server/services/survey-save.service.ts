@@ -294,6 +294,9 @@ export async function saveSurveyDiff(
           emptyDefault: question.emptyDefault ?? null,
           piiEncrypted: question.piiEncrypted ?? false,
           pageBreakBefore: question.pageBreakBefore,
+          answerQuoteEnabled: question.answerQuoteEnabled,
+          answerQuoteName: question.answerQuoteName,
+          answerQuoteText: question.answerQuoteText,
           updatedAt: new Date(),
         }) satisfies CompleteQuestionWrite);
 
@@ -351,6 +354,9 @@ export async function saveSurveyDiff(
               emptyDefault: sql`excluded.empty_default`,
               piiEncrypted: sql`excluded.pii_encrypted`,
               pageBreakBefore: sql`excluded.page_break_before`,
+              answerQuoteEnabled: sql`excluded.answer_quote_enabled`,
+              answerQuoteName: sql`excluded.answer_quote_name`,
+              answerQuoteText: sql`excluded.answer_quote_text`,
               updatedAt: sql`excluded.updated_at`,
             } satisfies CompleteQuestionWrite,
           });
@@ -656,6 +662,9 @@ export async function saveSurveyWithDetails(
           emptyDefault: question.emptyDefault ?? null,
           piiEncrypted: question.piiEncrypted ?? false,
           pageBreakBefore: question.pageBreakBefore,
+          answerQuoteEnabled: question.answerQuoteEnabled,
+          answerQuoteName: question.answerQuoteName,
+          answerQuoteText: question.answerQuoteText,
           updatedAt: new Date(),
         }) satisfies CompleteQuestionWrite);
 
@@ -713,6 +722,9 @@ export async function saveSurveyWithDetails(
               emptyDefault: sql`excluded.empty_default`,
               piiEncrypted: sql`excluded.pii_encrypted`,
               pageBreakBefore: sql`excluded.page_break_before`,
+              answerQuoteEnabled: sql`excluded.answer_quote_enabled`,
+              answerQuoteName: sql`excluded.answer_quote_name`,
+              answerQuoteText: sql`excluded.answer_quote_text`,
               updatedAt: sql`excluded.updated_at`,
             } satisfies CompleteQuestionWrite,
           });
