@@ -80,7 +80,11 @@ export const CheckboxCell = React.memo(function CheckboxCell({
     ) : null;
 
   return (
-    <CellOptionsContainer cell={cell} footer={footer}>
+    <CellOptionsContainer
+      cell={cell}
+      content={substituteTokens(cell.content, attrs, quotes)}
+      footer={footer}
+    >
       {cell.checkboxOptions.map((option) => {
         const optionKey = option.value ?? option.id;
         const isChecked = cellResponseArray.includes(optionKey);

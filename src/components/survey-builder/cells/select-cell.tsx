@@ -44,7 +44,11 @@ export const SelectCell = React.memo(function SelectCell({
   );
 
   return (
-    <CellContentLayout content={cell.content} position={cell.textPosition} bold={cell.textBold}>
+    <CellContentLayout
+      content={substituteTokens(cell.content, attrs, quotes)}
+      position={cell.textPosition}
+      bold={cell.textBold}
+    >
       <div className="flex w-full flex-col space-y-2">
         <div className="relative w-full">
           <select

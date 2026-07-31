@@ -6,13 +6,27 @@
  * 빠져 있었다 — "표 안 라디오는 인용이 안 붙네" 라는 혼란을 막기 위해 세 셀 모두에 동일하게 적용한다.
  */
 import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { CheckboxCell } from '@/components/survey-builder/cells/checkbox-cell';
+import { InputCell } from '@/components/survey-builder/cells/input-cell';
 import { RadioCell } from '@/components/survey-builder/cells/radio-cell';
+import { RankingCell } from '@/components/survey-builder/cells/ranking-cell';
 import { SelectCell } from '@/components/survey-builder/cells/select-cell';
 import { ContactAttrsProvider } from '@/lib/survey/contact-attrs-context';
 import type { TableCell } from '@/types/survey';
+
+// RankingCell 이 쓰는 useMobileView(useMediaQuery)가 jsdom 에 없는 matchMedia 를 부른다.
+beforeAll(() => {
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    value: () => ({
+      matches: false,
+      addEventListener() {},
+      removeEventListener() {},
+    }),
+  });
+});
 
 describe('테이블 셀 옵션 라벨 — 응답 인용 치환', () => {
   afterEach(cleanup);
@@ -78,5 +92,110 @@ describe('테이블 셀 옵션 라벨 — 응답 인용 치환', () => {
 
     // useAnswerQuotes()/useContactAttrs() 는 Provider 밖에서 {} 를 반환 — 미해결 토큰은 빈 문자열
     expect(screen.getByText('님 응답')).toBeInTheDocument();
+  });
+});
+
+/**
+ * 최종 리뷰 C1 — 셀 자체 문구(cell.content)의 응답 인용 치환.
+ *
+ * 옵션 라벨만 치환되고 컨트롤 옆 프롬프트 라벨(cell.content)은 원문 그대로 노출되던 갭.
+ * text 셀만 치환하고 input/select/radio/checkbox/ranking 셀은 CellContentLayout 에
+ * cell.content 를 그대로 넘겨 토큰이 화면에 그대로 찍혔다.
+ */
+describe('테이블 셀 문구(cell.content) — 응답 인용 치환', () => {
+  afterEach(cleanup);
+
+  const quotes = { 이름: '홍길동' };
+  const CONTENT = '{{{이름}}} 선택';
+  const SUBSTITUTED = '홍길동 선택';
+
+  it('RadioCell 셀 문구의 인용 토큰을 치환한다', () => {
+    const cell = {
+      id: 'c-radio',
+      type: 'radio',
+      content: CONTENT,
+      radioOptions: [{ id: 'o1', label: '보기1', value: '1' }],
+    } as unknown as TableCell;
+
+    render(
+      <ContactAttrsProvider attrs={{}} quotes={quotes}>
+        <RadioCell cell={cell} cellResponse="" onUpdateValue={vi.fn()} questionId="q1" />
+      </ContactAttrsProvider>,
+    );
+
+    expect(screen.getByText(SUBSTITUTED)).toBeInTheDocument();
+    expect(screen.queryByText(CONTENT)).not.toBeInTheDocument();
+  });
+
+  it('CheckboxCell 셀 문구의 인용 토큰을 치환한다', () => {
+    const cell = {
+      id: 'c-check',
+      type: 'checkbox',
+      content: CONTENT,
+      checkboxOptions: [{ id: 'o1', label: '보기1', value: '1' }],
+    } as unknown as TableCell;
+
+    render(
+      <ContactAttrsProvider attrs={{}} quotes={quotes}>
+        <CheckboxCell cell={cell} cellResponse={[]} onUpdateValue={vi.fn()} questionId="q1" />
+      </ContactAttrsProvider>,
+    );
+
+    expect(screen.getByText(SUBSTITUTED)).toBeInTheDocument();
+    expect(screen.queryByText(CONTENT)).not.toBeInTheDocument();
+  });
+
+  it('InputCell 셀 문구의 인용 토큰을 치환한다', () => {
+    const cell = {
+      id: 'c-input',
+      type: 'input',
+      content: CONTENT,
+    } as unknown as TableCell;
+
+    render(
+      <ContactAttrsProvider attrs={{}} quotes={quotes}>
+        <InputCell cell={cell} cellResponse="" onUpdateValue={vi.fn()} questionId="q1" />
+      </ContactAttrsProvider>,
+    );
+
+    expect(screen.getByText(SUBSTITUTED)).toBeInTheDocument();
+    expect(screen.queryByText(CONTENT)).not.toBeInTheDocument();
+  });
+
+  it('SelectCell 셀 문구의 인용 토큰을 치환한다', () => {
+    const cell = {
+      id: 'c-select',
+      type: 'select',
+      content: CONTENT,
+      selectOptions: [{ id: 'o1', label: '보기1', value: '1' }],
+    } as unknown as TableCell;
+
+    render(
+      <ContactAttrsProvider attrs={{}} quotes={quotes}>
+        <SelectCell cell={cell} cellResponse="" onUpdateValue={vi.fn()} questionId="q1" />
+      </ContactAttrsProvider>,
+    );
+
+    expect(screen.getByText(SUBSTITUTED)).toBeInTheDocument();
+    expect(screen.queryByText(CONTENT)).not.toBeInTheDocument();
+  });
+
+  it('RankingCell 셀 문구의 인용 토큰을 치환한다', () => {
+    const cell = {
+      id: 'c-ranking',
+      type: 'ranking',
+      content: CONTENT,
+      rankingOptions: [{ id: 'o1', label: '보기1', value: '1' }],
+      rankingConfig: { positions: 1 },
+    } as unknown as TableCell;
+
+    render(
+      <ContactAttrsProvider attrs={{}} quotes={quotes}>
+        <RankingCell cell={cell} cellResponse={[]} onUpdateValue={vi.fn()} questionId="q1" />
+      </ContactAttrsProvider>,
+    );
+
+    expect(screen.getByText(SUBSTITUTED)).toBeInTheDocument();
+    expect(screen.queryByText(CONTENT)).not.toBeInTheDocument();
   });
 });

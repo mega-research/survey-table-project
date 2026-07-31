@@ -60,7 +60,11 @@ export const InputCell = React.memo(function InputCell({
   }, [cellResponse, isPrefilled, isNumberMode, cell.emptyDefault]);
 
   return (
-    <CellContentLayout content={cell.content} position={cell.textPosition} bold={cell.textBold}>
+    <CellContentLayout
+      content={substituteTokens(cell.content, attrs, quotes)}
+      position={cell.textPosition}
+      bold={cell.textBold}
+    >
       <div className="flex w-full flex-col space-y-1.5">
         <Input
           id={inputIdScope ? `${inputIdScope}-${cell.id}` : undefined}

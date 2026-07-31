@@ -48,7 +48,7 @@ export const RadioCell = React.memo(function RadioCell({
   }
 
   return (
-    <CellOptionsContainer cell={cell}>
+    <CellOptionsContainer cell={cell} content={substituteTokens(cell.content, attrs, quotes)}>
       {cell.radioOptions.map((option) => {
         const optionKey = option.value ?? option.id;
         const isSelected = cellResponse === optionKey;
