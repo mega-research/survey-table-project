@@ -27,12 +27,15 @@ interface FakeState {
   contacts: SeedContact[];
   negativeCodes: string[];
   insertedRecipientContactIds: string[];
+  // listBouncedContactIds 2단계 시뮬레이션용 — 비어 있으면 기존과 동일하게 "반송 없음".
+  bouncedContactIds: string[];
 }
 
 const state: FakeState = {
   contacts: [],
   negativeCodes: [],
   insertedRecipientContactIds: [],
+  bouncedContactIds: [],
 };
 
 const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
@@ -63,7 +66,13 @@ function buildPiiSelectChain() {
       return chain;
     },
     orderBy() {
-      const uuids = whereRaw.match(UUID_RE) ?? [];
+      // notInArray(contactTargets.id, bouncedContactIds) 는 " not in " 리터럴 뒤에 배치되므로
+      // (createCampaign 의 and(...) 절 순서 — 반송 제외가 마지막) 그 앞/뒤로 분리해 UUID 를
+      // "선택된 id" 와 "반송 제외 id" 로 구분한다. notInArray 미포함 시(기존 케이스) split 은
+      // 1-요소 배열이라 excludedIds 는 항상 빈 Set — 기존 동작 그대로 유지.
+      const [beforeNotIn, ...afterNotInParts] = whereRaw.split(/not in/i);
+      const excludedIds = new Set(afterNotInParts.join(' ').match(UUID_RE) ?? []);
+      const uuids = (beforeNotIn ?? '').match(UUID_RE) ?? [];
       const surveyId = uuids[0] ?? null;
       const selectedIds = new Set(uuids.slice(1));
       const excludeByCode = whereExcludesByCode(whereRaw);
@@ -71,6 +80,7 @@ function buildPiiSelectChain() {
         .filter((c) => c.surveyId === surveyId && selectedIds.has(c.id))
         .filter((c) => c.unsubscribedAt === null)
         .filter((c) => !(excludeByCode && isNegativeContact(c)))
+        .filter((c) => !excludedIds.has(c.id))
         .map((c) => ({
           id: c.id,
           columnKey: 'email',
@@ -194,9 +204,26 @@ vi.mock('@/db', () => ({
     update: vi.fn(() => ({
       set: () => ({ where: () => Promise.resolve(undefined) }),
     })),
-    // listBouncedContactIds 의 mail_recipients 반송 조회 — 반송 없음으로 시뮬레이션
+    // listBouncedContactIds 1단계 — mail_recipients 반송 이메일 조회.
+    // state.bouncedContactIds 가 비어 있으면(기본값) 기존과 동일하게 "반송 없음"을
+    // 반환한다. 값을 채우면 blind index 대조용 emailSnapshot 을 흉내내 non-empty 를
+    // 시뮬레이션 — 실제 blind index 값은 2단계 select mock 이 직접 id 로 응답하므로
+    // 이 문자열 자체의 정확성은 중요하지 않다.
     selectDistinct: vi.fn(() => ({
-      from: () => ({ innerJoin: () => ({ where: () => Promise.resolve([]) }) }),
+      from: () => ({
+        innerJoin: () => ({
+          where: () =>
+            Promise.resolve(
+              state.bouncedContactIds.map((id) => ({ emailSnapshot: `bounced-${id}@example.com` })),
+            ),
+        }),
+      }),
+    })),
+    // listBouncedContactIds 2단계 — blind index 로 대조된 contact_targets.id 조회.
+    select: vi.fn(() => ({
+      from: () => ({
+        where: () => Promise.resolve(state.bouncedContactIds.map((id) => ({ id }))),
+      }),
     })),
   },
 }));
@@ -242,6 +269,7 @@ describe('createCampaign — 부정 결과코드 컨택 제외 (preflight 동기
     state.contacts = [];
     state.negativeCodes = ['수신거부'];
     state.insertedRecipientContactIds = [];
+    state.bouncedContactIds = [];
     vi.clearAllMocks();
   });
 
@@ -287,5 +315,31 @@ describe('createCampaign — 부정 결과코드 컨택 제외 (preflight 동기
     expect(state.insertedRecipientContactIds).toEqual([idValid]);
     expect(result.queuedCount).toBe(1);
     expect(result.skippedCount).toBe(0);
+  });
+
+  // 회귀: listBouncedContactIds 가 반환한 id 가 mail_recipients 재페치 WHERE 의
+  // notInArray 에 실제로 반영돼 발송에서 빠지는지 검증한다. 기존에는 db.selectDistinct
+  // 를 항상 빈 배열로 목킹해 이 분기(mail-campaigns.service.ts:170-172)가 한 번도
+  // 실행되지 않았다 — 통째로 지워도 스위트가 초록이었다.
+  it('반송 이력이 있는 컨택은 mail_recipients 에 포함되지 않는다', async () => {
+    const idValid = seedContact();
+    const idBounced = seedContact();
+    state.bouncedContactIds = [idBounced];
+
+    const result = await createCampaign(
+      {
+        surveyId: SURVEY_ID,
+        mailTemplateId: '00000000-0000-4000-8000-000000000001',
+        title: '반송 제외 캠페인',
+        contactTargetIds: [idValid, idBounced],
+      },
+      USER_ID,
+    );
+
+    // valid 1명만 큐잉, 반송 이력 1명은 skip
+    expect(state.insertedRecipientContactIds).toContain(idValid);
+    expect(state.insertedRecipientContactIds).not.toContain(idBounced);
+    expect(result.queuedCount).toBe(1);
+    expect(result.skippedCount).toBe(1);
   });
 });
