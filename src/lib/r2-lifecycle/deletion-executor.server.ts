@@ -1,5 +1,7 @@
 import 'server-only';
 
+import * as Sentry from '@sentry/nextjs';
+
 import {
   fetchDueCandidates,
   resolveCandidate,
@@ -8,8 +10,14 @@ import { deleteR2ObjectVerified } from '@/lib/r2-lifecycle/r2-object-delete.serv
 import { findReferencedKeys } from '@/lib/r2-lifecycle/reference-scan.server';
 import { getLedgeredKeys } from '@/lib/r2-lifecycle/sent-ledger.server';
 
-export const R2_EXECUTOR_BATCH_SIZE = 100;
-export const R2_EXECUTOR_MAX_BATCHES = 50;
+/**
+ * 배치 크기 — 참조 재확인 비용이 `패턴 수 × 스캔 표면 크기` 라서 키 수에
+ * 비례한다. 2026-07-31 실측: 148MB 표면 기준 100패턴 136.7초(타임아웃),
+ * 5패턴 약 18초. 버전 보존 정책·파생 인덱스 적용 후 상향 재조정 대상.
+ */
+export const R2_EXECUTOR_BATCH_SIZE = 5;
+/** run 당 처리 상한 5×200=1000건. 일일 후보 발생량이 이에 못 미치고 미처리분은 다음 run 으로 이월된다. */
+export const R2_EXECUTOR_MAX_BATCHES = 200;
 
 export interface DeletionBatchResult {
   processed: number;
@@ -17,6 +25,8 @@ export interface DeletionBatchResult {
   keptReferenced: number;
   deleted: number;
   failed: number;
+  /** 참조 재확인이 실패해 아무 후보도 종결하지 못한 배치. 후보는 pending 유지. */
+  scanFailed: boolean;
   hasMore: boolean;
 }
 
@@ -39,6 +49,7 @@ export async function executeDueDeletionBatch(
     keptReferenced: 0,
     deleted: 0,
     failed: 0,
+    scanFailed: false,
     hasMore: due.length === limit,
   };
   if (due.length === 0) return result;
@@ -46,7 +57,29 @@ export async function executeDueDeletionBatch(
   const keys = [...new Set(due.map((c) => c.key))];
   const ledgered = await getLedgeredKeys(keys);
   const toScan = keys.filter((k) => !ledgered.has(k));
-  const referenced = toScan.length > 0 ? await findReferencedKeys(toScan) : new Set<string>();
+  // 판정 불능은 보존으로 귀결한다 — 스캔이 실패하면 아무것도 삭제하지 않고
+  // 후보를 pending 으로 남긴 채 배치를 정상 종료한다. 예외를 그대로 던지면
+  // Inngest step 이 실패해 재시도까지 실패하며 집행 전체가 정지한다.
+  let referenced: Set<string>;
+  try {
+    referenced = toScan.length > 0 ? await findReferencedKeys(toScan) : new Set<string>();
+  } catch (error) {
+    console.error('r2 참조 재확인 실패 — 배치 보류:', error);
+    Sentry.captureException(error, {
+      tags: { operation: 'r2_reference_scan' },
+      extra: { keyCount: toScan.length },
+      level: 'warning',
+    });
+    return {
+      processed: 0,
+      keptLedger: 0,
+      keptReferenced: 0,
+      deleted: 0,
+      failed: 0,
+      scanFailed: true,
+      hasMore: false,
+    };
+  }
 
   for (const candidate of due) {
     if (ledgered.has(candidate.key)) {
@@ -85,6 +118,7 @@ export interface DeletionExecutorTotals {
   keptReferenced: number;
   deleted: number;
   failed: number;
+  scanFailures: number;
 }
 
 /**
@@ -105,6 +139,7 @@ export async function runDeletionExecutor(
     keptReferenced: 0,
     deleted: 0,
     failed: 0,
+    scanFailures: 0,
   };
 
   for (let i = 0; i < maxBatches; i++) {
@@ -117,6 +152,7 @@ export async function runDeletionExecutor(
     totals.keptReferenced += batch.keptReferenced;
     totals.deleted += batch.deleted;
     totals.failed += batch.failed;
+    if (batch.scanFailed) totals.scanFailures += 1;
     if (!batch.hasMore) break;
   }
   return totals;

@@ -32,6 +32,10 @@ vi.mock('@/lib/r2-lifecycle/reference-scan.server', () => ({
 vi.mock('@/lib/r2-lifecycle/r2-object-delete.server', () => ({
   deleteR2ObjectVerified: deleteMock,
 }));
+vi.mock('@sentry/nextjs', () => ({
+  captureException: vi.fn(),
+  captureMessage: vi.fn(),
+}));
 
 import {
   executeDueDeletionBatch,
@@ -143,5 +147,49 @@ describe('runDeletionExecutor — step 커서 분할', () => {
 
     expect(totals.batches).toBe(3);
     expect(fetchDueMock).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe('executeDueDeletionBatch — 스캔 실패 처리', () => {
+  it('참조 재확인이 실패하면 후보를 종결하지 않고 배치를 보류한다', async () => {
+    fetchDueMock.mockResolvedValueOnce([candidate('c1', 'mail/a.png')]);
+    referencedMock.mockRejectedValueOnce(
+      new Error('canceling statement due to statement timeout'),
+    );
+
+    const result = await executeDueDeletionBatch(10);
+
+    expect(result.scanFailed).toBe(true);
+    expect(result.processed).toBe(0);
+    expect(result.hasMore).toBe(false);
+    expect(resolveMock).not.toHaveBeenCalled();
+    expect(deleteMock).not.toHaveBeenCalled();
+  });
+
+  it('스캔이 실패해도 장부 히트 키를 삭제하지 않는다', async () => {
+    fetchDueMock.mockResolvedValueOnce([
+      candidate('c1', 'mail/ledgered.png'),
+      candidate('c2', 'mail/other.png'),
+    ]);
+    ledgerMock.mockResolvedValueOnce(new Set(['mail/ledgered.png']));
+    referencedMock.mockRejectedValueOnce(new Error('scan boom'));
+
+    const result = await executeDueDeletionBatch(10);
+
+    expect(result.scanFailed).toBe(true);
+    expect(deleteMock).not.toHaveBeenCalled();
+  });
+
+  it('스캔 실패 배치를 만나면 runDeletionExecutor 가 루프를 멈추고 집계한다', async () => {
+    fetchDueMock.mockResolvedValueOnce([candidate('c1', 'mail/a.png')]);
+    referencedMock.mockRejectedValueOnce(new Error('scan boom'));
+
+    const step = { run: (_id: string, fn: () => Promise<never>) => fn() };
+    const totals = await runDeletionExecutor(
+      step as unknown as Parameters<typeof runDeletionExecutor>[0],
+    );
+
+    expect(totals.scanFailures).toBe(1);
+    expect(totals.batches).toBe(1);
   });
 });
