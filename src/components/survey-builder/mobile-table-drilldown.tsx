@@ -4,6 +4,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 import { CheckCircle2 } from 'lucide-react';
 
+import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import type { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
 import { type ClassifiedLeaf, type ClassifiedSection, classifyTable } from '@/utils/classify-table';
@@ -76,6 +78,8 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
   mobileDrilldownRepeatHeaderStartRow,
   mobileDrilldownRepeatHeaderEndRow,
 }: MobileTableDrilldownProps) {
+  const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
   const repeatHeaderRange = useMemo(
     () =>
       resolveMobileDrilldownRepeatHeaderRange({
@@ -110,6 +114,10 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
     for (const row of displayRows) for (const cell of row.cells) m.set(cell.id, cell);
     return m;
   }, [displayRows]);
+  // 내비게이션 라벨은 전부 cell.content / tableColumns[].label 에서 나오므로 응답 인용을
+  // 치환해야 한다. 치환하지 않으면 목차·크럼브에는 {{{인용}}} 원문이, 같은 화면의 상세
+  // 패널에는 치환된 문구가 보인다. choice-table-drilldown.tsx 와 동일한 배선이다.
+  // 숨김 라벨은 치환 전에 빈 문자열로 떨어뜨린다(불필요한 치환 회피).
   const sections = useMemo(
     () =>
       classifiedSections.map((section) => ({
@@ -118,22 +126,28 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
           section.labelSourceCellId &&
           cellById.get(section.labelSourceCellId)?.mobileDisplay === 'hidden'
             ? ''
-            : section.label,
+            : substituteTokens(section.label, attrs, quotes),
+        // cols[].label 은 여기서 치환하지 않는다 — resolveMobileCellLabel 의 폴백으로만
+        // 쓰이고 그 결과를 렌더 시점에 한 번 치환한다(이중 치환 방지).
+        colGroups: section.colGroups.map((group) => ({
+          ...group,
+          label: substituteTokens(group.label, attrs, quotes),
+        })),
         leaves: section.leaves.map((leaf) => ({
           ...leaf,
           label:
             leaf.labelSourceCellId &&
             cellById.get(leaf.labelSourceCellId)?.mobileDisplay === 'hidden'
               ? ''
-              : leaf.label,
+              : substituteTokens(leaf.label, attrs, quotes),
           subGroup:
             leaf.subGroupSourceCellId &&
             cellById.get(leaf.subGroupSourceCellId)?.mobileDisplay === 'hidden'
               ? ''
-              : leaf.subGroup,
+              : substituteTokens(leaf.subGroup, attrs, quotes),
         })),
       })),
-    [cellById, classifiedSections],
+    [attrs, quotes, cellById, classifiedSections],
   );
 
   // 사용자가 거쳐가며 비워둔 입력 칸(빈 응답으로 확정) 집합.
@@ -270,7 +284,11 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
                 if (!cell) return null;
                 // 일반 테이블 카드(mobile-row-card)와 동일한 라벨 위계:
                 // 파란 점 불릿 + text-sm gray-900. 라벨이 주, 문항(cell.content)이 보조.
-                const label = resolveMobileCellLabel(cell, column.label);
+                const label = substituteTokens(
+                  resolveMobileCellLabel(cell, column.label),
+                  attrs,
+                  quotes,
+                );
                 return (
                   <div key={column.col} className="space-y-1">
                     {label && (
