@@ -22,6 +22,21 @@ function isMobileDisplayCell(cell: TableCell): boolean {
 }
 
 /**
+ * 모바일 카드/드릴다운에서 입력 컨트롤 위에 붙일 라벨을 결정한다.
+ * 우선순위: mobileLabel(셀 라벨) → exportLabel(엑셀 라벨) → fallback(호출부의 열 제목 등).
+ * mobileDisplay 'hidden' 은 저작자가 라벨을 숨긴 것이므로 무조건 빈 문자열.
+ */
+export function resolveMobileCellLabel(
+  cell: Pick<TableCell, 'mobileLabel' | 'exportLabel' | 'mobileDisplay'>,
+  fallback?: string,
+): string {
+  if (cell.mobileDisplay === 'hidden') return '';
+  return (
+    cell.mobileLabel?.trim() || cell.exportLabel?.trim() || fallback?.trim() || ''
+  );
+}
+
+/**
  * 셀 배열(보통 한 행의 cells)에서 모바일 카드에 표시할 display 셀(text/image/video)을
  * mobileDisplay 설정에 따라 분류한다.
  * - 입력 셀 타입(radio, checkbox, select, input, ranking, ranking_opt, choice_opt) / isHidden / _isContinuation 은 제외

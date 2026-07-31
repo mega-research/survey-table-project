@@ -783,3 +783,32 @@ describe('buildUpdatedCell — 개별 셀 스타일', () => {
     expect(result).not.toHaveProperty('backgroundColor');
   });
 });
+
+describe('buildUpdatedCell — 모바일 셀 라벨', () => {
+  const inputCell: TableCell = { id: 'c1', type: 'input', content: '' };
+
+  it('입력 셀의 셀 라벨을 폼으로 복원하고 저장한다', () => {
+    const labeled: TableCell = { ...inputCell, mobileLabel: '인원수' };
+    const form = cellToFormState(labeled);
+
+    expect(form).toMatchObject({ mobileLabel: '인원수' });
+    expect(buildUpdatedCell(form, labeled)).toMatchObject({ mobileLabel: '인원수' });
+  });
+
+  it('앞뒤 공백은 정리해서 저장한다', () => {
+    const form = { ...baseForm('input'), mobileLabel: '  인원수  ' };
+    expect(buildUpdatedCell(form, inputCell)).toMatchObject({ mobileLabel: '인원수' });
+  });
+
+  it('셀 라벨을 비우면 기존 키를 제거한다', () => {
+    const labeled: TableCell = { ...inputCell, mobileLabel: '인원수' };
+    const form = { ...cellToFormState(labeled), mobileLabel: '' };
+
+    expect(buildUpdatedCell(form, labeled)).not.toHaveProperty('mobileLabel');
+  });
+
+  it('표시 셀(text)에는 셀 라벨을 저장하지 않는다', () => {
+    const form = { ...baseForm('text'), mobileLabel: '인원수' };
+    expect(buildUpdatedCell(form, baseCell)).not.toHaveProperty('mobileLabel');
+  });
+});

@@ -184,6 +184,7 @@ export function CellContentModal({
     backgroundColor,
     horizontalAlign,
     mobileDisplay,
+    mobileLabel,
     verticalAlign,
     textPosition,
     isMergeEnabled,
@@ -240,6 +241,7 @@ export function CellContentModal({
     setBackgroundColor,
     setHorizontalAlign,
     setMobileDisplay,
+    setMobileLabel,
     setVerticalAlign,
     setTextPosition,
     setIsMergeEnabled,
@@ -1371,6 +1373,24 @@ export function CellContentModal({
                 </Button>
               )}
             </div>
+
+            {/* 셀 라벨 — 모바일 카드/드릴다운에서 입력칸 위에 붙는 제목 */}
+            {showInteractiveMobileLabel && mobileDisplay !== 'hidden' && (
+              <div className="mt-4 space-y-2">
+                <Label htmlFor="mobile-label">셀 라벨</Label>
+                <Input
+                  id="mobile-label"
+                  value={mobileLabel}
+                  onChange={(e) => setMobileLabel(e.target.value)}
+                  placeholder={exportLabel || columnLabel || '열 제목'}
+                  className="w-full"
+                />
+                <p className="text-xs text-gray-500">
+                  모바일 카드에서 입력칸 위에 표시되는 제목입니다. 비워두면 엑셀 라벨, 그것도
+                  없으면 열 제목이 사용됩니다.
+                </p>
+              </div>
+            )}
           </div>
         )}
 

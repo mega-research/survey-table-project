@@ -56,6 +56,8 @@ export interface CellFormState {
   backgroundColor: string;
   horizontalAlign: 'left' | 'center' | 'right';
   mobileDisplay: NonNullable<TableCell['mobileDisplay']>;
+  /** 모바일 카드/드릴다운 입력칸 위 제목. 비우면 exportLabel → 열 제목 폴백 */
+  mobileLabel: string;
   verticalAlign: 'top' | 'middle' | 'bottom';
   textPosition: NonNullable<TableCell['textPosition']>;
   isMergeEnabled: boolean;
@@ -158,6 +160,7 @@ export function cellToFormState(cell: TableCell): CellFormState {
     backgroundColor: cell.backgroundColor ?? '',
     horizontalAlign: cell.horizontalAlign || 'left',
     mobileDisplay: cell.mobileDisplay ?? (MOBILE_LABEL_CELL_TYPES.has(contentType) ? 'inline' : 'hidden'),
+    mobileLabel: cell.mobileLabel || '',
     verticalAlign: cell.verticalAlign || 'top',
     textPosition: cell.textPosition || 'top',
     isMergeEnabled:
@@ -197,6 +200,7 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
     isCustomCellCode: _isCustomCellCode,
     exportLabel: _exportLabel,
     isCustomExportLabel: _isCustomExportLabel,
+    mobileLabel: _mobileLabel,
     choiceGroupId: _choiceGroupId,
     spssVarType: _spssVarType,
     spssMeasure: _spssMeasure,
@@ -348,6 +352,10 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
     // 모바일 카드 표시 (text/image/video 셀만; 기본 'hidden' 은 저장 안 함)
     ...(MOBILE_DISPLAY_CELL_TYPES.has(contentType) && form.mobileDisplay !== 'hidden'
       ? { mobileDisplay: form.mobileDisplay }
+      : {}),
+    // 모바일 카드 셀 라벨 (입력 셀 계열만; 비어 있으면 키 자체를 저장하지 않음)
+    ...(MOBILE_LABEL_CELL_TYPES.has(contentType) && form.mobileLabel.trim()
+      ? { mobileLabel: form.mobileLabel.trim() }
       : {}),
     // 정렬 속성 추가
     ...(form.horizontalAlign !== 'left' ? { horizontalAlign: form.horizontalAlign } : {}),

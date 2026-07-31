@@ -13,6 +13,7 @@ import {
   includesMobileDrilldownColumnHeader,
   resolveMobileDrilldownRepeatHeaderRange,
 } from '@/utils/mobile-drilldown-repeat-header';
+import { resolveMobileCellLabel } from '@/utils/mobile-display-cells';
 import {
   MOBILE_TABLE_COMPLETION_TYPES,
   projectMobileOriginalRow,
@@ -269,7 +270,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
                 if (!cell) return null;
                 // 일반 테이블 카드(mobile-row-card)와 동일한 라벨 위계:
                 // 파란 점 불릿 + text-sm gray-900. 라벨이 주, 문항(cell.content)이 보조.
-                const label = cell.exportLabel?.trim() || column.label || '';
+                const label = resolveMobileCellLabel(cell, column.label);
                 return (
                   <div key={column.col} className="space-y-1">
                     {label && (

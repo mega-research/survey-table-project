@@ -19,6 +19,7 @@ import {
   findMobileHeaderCell,
   hasExplicitHiddenMobileHeaderCell,
   hasMobileDisplayCells,
+  resolveMobileCellLabel,
   type MobileLegendLabel,
 } from '@/utils/mobile-display-cells';
 import { getCellTextClassName } from '@/utils/cell-style';
@@ -120,12 +121,15 @@ export const MobileRowCard = React.memo(function MobileRowCard({
       const activeSection = section ?? previousSection;
       const sectionHeader = section && section !== previousSection ? section : null;
 
-      const cellLabel = entry.cell.exportLabel?.trim();
-      const shortLabel = cellLabel || (sectionHeader
+      // 셀 라벨(mobileLabel) → 엑셀 라벨(exportLabel) → 열 제목 순으로 폴백.
+      // hideColumnLabels 일 때는 열 제목 폴백 없이 셀 자체 라벨만 쓴다.
+      const columnFallback = sectionHeader
         ? columnLabel
         : activeSection && columnLabel.startsWith(activeSection)
           ? columnLabel.slice(activeSection.length).replace(/^[_\s·]+/, '') || columnLabel
-          : columnLabel);
+          : columnLabel;
+      const cellLabel = resolveMobileCellLabel(entry.cell);
+      const shortLabel = resolveMobileCellLabel(entry.cell, columnFallback);
 
       return {
         ...entry,

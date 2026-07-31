@@ -73,6 +73,7 @@ export interface CellFormSetters {
   setBackgroundColor: (v: string) => void;
   setHorizontalAlign: (v: 'left' | 'center' | 'right') => void;
   setMobileDisplay: (v: CellFormState['mobileDisplay']) => void;
+  setMobileLabel: (v: string) => void;
   setVerticalAlign: (v: 'top' | 'middle' | 'bottom') => void;
   setTextPosition: (v: CellFormState['textPosition']) => void;
   setIsMergeEnabled: (v: boolean) => void;
@@ -153,6 +154,7 @@ export function useCellForm(cell: TableCell, isOpen: boolean): UseCellFormResult
       setBackgroundColor: set('backgroundColor'),
       setHorizontalAlign: set('horizontalAlign'),
       setMobileDisplay: set('mobileDisplay'),
+      setMobileLabel: set('mobileLabel'),
       setVerticalAlign: set('verticalAlign'),
       setTextPosition: set('textPosition'),
       setIsMergeEnabled: set('isMergeEnabled'),
