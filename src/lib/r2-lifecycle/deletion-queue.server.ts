@@ -19,7 +19,8 @@ export type R2DeletionSource =
   | 'question-delete'
   | 'library-delete'
   | 'template-delete'
-  | 'save-diff';
+  | 'save-diff'
+  | 'version-prune';
 
 export type R2DeletionCandidateStatus = 'pending' | 'cancelled' | 'kept' | 'deleted' | 'failed';
 
