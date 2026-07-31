@@ -501,9 +501,14 @@ export async function listBouncedContactIds(surveyId: string): Promise<string[]>
   const blinds = await listBouncedEmailBlindIndexes(surveyId);
   if (blinds.length === 0) return [];
 
-  // 발송이 쓰는 주소만 대조한다 — createCampaign 은 contact_pii 를 column_key 오름차순으로
-  // 훑어 첫 email 행 하나만 발송에 쓴다(mail-campaigns.service.ts 의 asc(contactPii.columnKey)).
-  // 그 선택 규칙이 바뀌면 아래 서브쿼리의 ORDER BY 도 함께 바꿔야 한다.
+  // 발송이 쓰는 주소의 근사치를 대조한다 — createCampaign 은 contact_pii 를 column_key
+  // 오름차순으로 훑되(mail-campaigns.service.ts 의 asc(contactPii.columnKey)), 첫 email 컬럼의
+  // 복호화가 실패하거나 결과가 공백이면 다음 컬럼으로 폴백한다. 이 서브쿼리는 그 폴백을
+  // 모델링하지 않고 단순 column_key 최솟값만 본다 — 복호화 가능 여부는 SQL 술어로 표현할 수
+  // 없고, 정확히 맞추려면 설문 전체 컨택의 cipher 를 매번 복호화해야 해서 preflight 비용이
+  // 과다하기 때문이다. 그 갭 때문에 첫 컬럼이 실제로 사용 불가능해 두 번째 컬럼으로 발송된
+  // 컨택은, 그 두 번째 주소가 반송돼도 이 판정으로는 제외되지 않는다(cipher 손상·키 미스매치
+  // 등 좁은 조건에서만 발동). 발송 쪽 선택 규칙이 바뀌면 아래 서브쿼리도 함께 바꿔야 한다.
   const sendAddressBlind = sql`(
     SELECT cp.blind_index
     FROM contact_pii cp
