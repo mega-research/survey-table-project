@@ -192,7 +192,9 @@ export async function createCampaign(
     const skippedCount = uniqueTargetIds.length - validCount;
 
     if (validCount === 0) {
-      throw new Error('발송 가능한 수신자가 없습니다. 수신거부 또는 이메일 누락 확인이 필요합니다.');
+      throw new Error(
+        '발송 가능한 수신자가 없습니다. 수신거부, 반송 이력 또는 이메일 누락 확인이 필요합니다.',
+      );
     }
 
     // f. mail_recipients 벌크 insert (queued)

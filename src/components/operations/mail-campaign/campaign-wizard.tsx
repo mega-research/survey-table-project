@@ -329,17 +329,18 @@ export function CampaignWizard({
         <p className="text-xs text-slate-500">
           {(() => {
             const ex = candidates.exclusions;
-            // 전송오류 = 반송 + 이메일 누락 (단체 발송 목록의 "전송오류" 용어와 통일).
-            // 발송중(sent 미확정)은 결과 확정 전이므로 제외하지 않는다.
-            const deliveryError = ex.bounced + ex.emailMissing;
-            const total = ex.unsubscribed + ex.negativeCode + deliveryError;
+            // 아래 미리보기 목록에서 이미 빠진 인원 (수신거부·부정적 결과코드·이메일 누락).
+            // 반송 이력은 명단 대조를 위해 목록에는 그대로 표시하고 발송 시점에만 제외하므로
+            // 별도 문장으로 분리 — 세 사유와 한 숫자로 합산하지 않는다.
+            const excludedFromList = ex.unsubscribed + ex.negativeCode + ex.emailMissing;
             const fmt = (n: number) => n.toLocaleString('ko-KR');
             return (
               <>
                 수신거부자 {fmt(ex.unsubscribed)}명 · 부정적 컨택 결과 {fmt(ex.negativeCode)}명 ·
-                전송오류 {fmt(deliveryError)}명 — 총 {fmt(total)}명은 발송에서 자동 제외됩니다.
+                이메일 누락 {fmt(ex.emailMissing)}명 — 총 {fmt(excludedFromList)}명은 아래 목록에서 이미
+                제외되었습니다.
                 {ex.bounced > 0
-                  ? ' 반송된 컨택은 이메일을 수정하면 다시 발송 대상이 됩니다.'
+                  ? ` 반송 이력이 있는 ${fmt(ex.bounced)}명은 아래 목록에는 표시되지만 발송 시점에 자동 제외됩니다. 이메일을 수정하면 다시 발송 대상이 됩니다.`
                   : ''}
               </>
             );

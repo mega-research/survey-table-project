@@ -66,7 +66,7 @@ export function CampaignsList({ surveyId, rows, total, page, pageSize }: Props) 
               <th className="px-3 py-3 text-right">발송중</th>
               <th
                 className="px-3 py-3 text-right"
-                title="발송 등록 시점에 자동 제외된 대상 수 (수신거부 + 이메일 누락 + 삭제 등)"
+                title="발송 등록 시점에 자동 제외된 대상 수 (수신거부 + 반송 이력 + 이메일 누락 + 삭제 등)"
               >
                 스킵
               </th>
