@@ -68,7 +68,20 @@ export async function executeDueDeletionBatch(
   // 파생 인덱스는 사전 필터다 — '참조됨'으로 스캔을 생략시킬 수는 있으나
   // '참조 없음'으로 삭제를 결정하지는 못한다. 최종 판정은 콘텐츠 스캔이며,
   // 따라서 인덱스 드리프트는 과보존 방향으로만 작용한다 (spec 6.3).
-  const indexed = await getIndexedReferencedKeys(afterLedger);
+  // 인덱스 조회 자체가 실패해도(테이블 부재·타임아웃 등) 인덱스는 삭제 권한이
+  // 없으므로 빈 결과로 취급하고 전량 스캔으로 낮춰 진행한다 — 정지시키지 않는다.
+  let indexed: Set<string>;
+  try {
+    indexed = await getIndexedReferencedKeys(afterLedger);
+  } catch (error) {
+    console.error('r2 참조 인덱스 조회 실패 — 전량 스캔으로 대체:', error);
+    Sentry.captureException(error, {
+      tags: { operation: 'r2_key_ref_index' },
+      extra: { keyCount: afterLedger.length },
+      level: 'warning',
+    });
+    indexed = new Set<string>();
+  }
   const toScan = afterLedger.filter((k) => !indexed.has(k));
   // 판정 불능은 보존으로 귀결한다 — 스캔이 실패하면 아무것도 삭제하지 않고
   // 후보를 pending 으로 남긴 채 배치를 정상 종료한다. 예외를 그대로 던지면

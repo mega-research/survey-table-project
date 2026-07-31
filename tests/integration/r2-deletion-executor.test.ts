@@ -242,4 +242,20 @@ describe('executeDueDeletionBatch — 인덱스 사전 필터', () => {
 
     expect(indexedMock).toHaveBeenCalledWith([]);
   });
+
+  it('인덱스 조회가 실패해도 던지지 않고 전량 스캔으로 낮춰 배치를 계속한다', async () => {
+    fetchDueMock.mockResolvedValueOnce([candidate('c1', 'survey/2026/07/a.png')]);
+    indexedMock.mockRejectedValueOnce(new Error('r2_key_refs 조회 실패'));
+
+    const result = await executeDueDeletionBatch(10);
+
+    // 인덱스 실패는 스캔 실패가 아니다 — 삭제 권한이 없는 인덱스가 사라져도
+    // 콘텐츠 스캔이 그대로 최종 판정을 내리므로 배치는 멈추지 않는다.
+    expect(result.scanFailed).toBe(false);
+    // 인덱스 없음 = 빈 결과 취급이므로 장부 통과분 전체가 스캔 대상이 된다.
+    expect(referencedMock).toHaveBeenCalledWith(['survey/2026/07/a.png']);
+    // 스캔이 참조를 못 찾은 키는 정상적으로 삭제까지 진행된다 — 정지하지 않는다.
+    expect(result.deleted).toBe(1);
+    expect(deleteMock).toHaveBeenCalledWith('survey/2026/07/a.png');
+  });
 });
