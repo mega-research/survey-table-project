@@ -458,63 +458,62 @@ const HAS_EMAIL_PII = sql`EXISTS (
 )`;
 
 /**
+ * 이 설문에서 반송된 주소의 blind index 집합.
+ *
+ * 설문 스코프를 contact_targets 가 아니라 mail_campaigns.survey_id 로 잡는다 —
+ * 조사대상자 교체 업로드는 contact_targets 를 통째로 DELETE 하고
+ * mail_recipients.contact_target_id 는 ON DELETE SET NULL 이라, 컨택 기준으로 좁히면
+ * 교체 직후 반송 이력이 통째로 사라진다. email_snapshot 은 컨택 삭제와 무관하게 남으므로
+ * 주소 기준 판정은 교체를 넘어 보존된다.
+ */
+async function listBouncedEmailBlindIndexes(surveyId: string): Promise<string[]> {
+  const rows = await db
+    .selectDistinct({ emailSnapshot: mailRecipients.emailSnapshot })
+    .from(mailRecipients)
+    .innerJoin(mailCampaigns, eq(mailRecipients.campaignId, mailCampaigns.id))
+    .where(
+      and(
+        eq(mailCampaigns.surveyId, surveyId),
+        eq(mailRecipients.status, 'bounced'),
+      ),
+    );
+
+  const blinds = new Set<string>();
+  for (const r of rows) {
+    if (!r.emailSnapshot) continue; // snapshot 이 비면 대조 불가
+    const blind = blindIndex('email', r.emailSnapshot);
+    if (blind) blinds.add(blind); // 정규화 후 빈 값도 대조 불가
+  }
+  return [...blinds];
+}
+
+/**
  * 반송 이력으로 발송에서 자동 제외할 컨택 id 목록.
  *
  * 반송(bounced)은 컨택이 아니라 "주소"의 속성이다 — 하드바운스 주소에 재발송하면
- * 발신 도메인 평판이 깎이므로 기본 제외하되, 반송 당시 주소(email_snapshot)의
- * blind index 를 컨택의 현재 email PII blind index 와 대조해 "반송된 주소를 아직
- * 그대로 쓰는" 컨택만 제외한다. 관리자가 이메일을 수정하면 대조가 어긋나 자동으로
- * 다시 발송 대상이 된다.
+ * 발신 도메인 평판이 깎이므로 반송된 주소를 아직 쓰는 컨택만 제외한다. 관리자가 이메일을
+ * 수정하거나 병합 업로드로 주소가 바뀌면 대조가 어긋나 자동으로 다시 발송 대상이 된다.
  *
- * 설문당 반송 컨택은 소수(수십~수백 규모)라 JS 대조로 산출한다.
  * sent(미확정) 상태는 배달 시도 중일 뿐이므로 제외 대상이 아니다.
  * 미리보기 목록에서는 제외하지 않는다 — 발송 시점(preflight·createCampaign)에만 적용.
  */
 export async function listBouncedContactIds(surveyId: string): Promise<string[]> {
-  const bounced = await db
-    .selectDistinct({
-      contactTargetId: mailRecipients.contactTargetId,
-      emailSnapshot: mailRecipients.emailSnapshot,
-    })
-    .from(mailRecipients)
-    .innerJoin(contactTargets, eq(mailRecipients.contactTargetId, contactTargets.id))
+  const blinds = await listBouncedEmailBlindIndexes(surveyId);
+  if (blinds.length === 0) return [];
+
+  const rows = await db
+    .selectDistinct({ contactTargetId: contactPii.contactTargetId })
+    .from(contactPii)
+    .innerJoin(contactTargets, eq(contactPii.contactTargetId, contactTargets.id))
     .where(
       and(
         eq(contactTargets.surveyId, surveyId),
-        eq(mailRecipients.status, 'bounced'),
-      ),
-    );
-  if (bounced.length === 0) return [];
-
-  // (컨택, 반송 주소 blind index) 쌍 — snapshot 이 빈 값이면 대조 불가로 건너뜀
-  const pairs: Array<{ contactId: string; blind: string }> = [];
-  for (const b of bounced) {
-    if (b.contactTargetId === null || b.emailSnapshot === null) continue;
-    const blind = blindIndex('email', b.emailSnapshot);
-    if (!blind) continue;
-    pairs.push({ contactId: b.contactTargetId, blind });
-  }
-  if (pairs.length === 0) return [];
-
-  const piiRows = await db
-    .select({
-      contactTargetId: contactPii.contactTargetId,
-      blindIndex: contactPii.blindIndex,
-    })
-    .from(contactPii)
-    .where(
-      and(
         eq(contactPii.fieldType, 'email'),
-        inArray(contactPii.contactTargetId, [...new Set(pairs.map((p) => p.contactId))]),
+        inArray(contactPii.blindIndex, blinds),
       ),
     );
 
-  const currentPii = new Set(piiRows.map((r) => `${r.contactTargetId}:${r.blindIndex}`));
-  const excluded = new Set<string>();
-  for (const p of pairs) {
-    if (currentPii.has(`${p.contactId}:${p.blind}`)) excluded.add(p.contactId);
-  }
-  return [...excluded];
+  return rows.map((r) => r.contactTargetId);
 }
 
 /**
