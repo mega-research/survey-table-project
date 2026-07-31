@@ -6,7 +6,9 @@ import { GroupStepItem } from '@/components/survey-response/step-views/group-ste
 import { RootGroupNameBadge } from '@/components/survey-response/step-views/root-group-name-badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { RenderStep, StepItem } from '@/lib/group-ordering';
+import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import type { NumericIssue } from '@/lib/survey/numeric-validation';
+import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { Question, QuestionGroup } from '@/types/survey';
 import { shouldDisplayQuestion, type BranchEvalCtx } from '@/utils/branch-logic';
 
@@ -31,6 +33,8 @@ export function PageStepView({
   highlightQuestionIds: Set<string>;
   numericIssues: Map<string, NumericIssue[]>;
 }) {
+  const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
   const visibleItems: StepItem[] = useMemo(
     () =>
       step.items.filter((it) =>
@@ -55,7 +59,7 @@ export function PageStepView({
                 {showRootBadge && item.rootGroupName && (
                   <div className={idx === 0 ? 'pb-5' : 'pt-2 pb-5'}>
                     <RootGroupNameBadge
-                      name={item.rootGroupName}
+                      name={substituteTokens(item.rootGroupName, attrs, quotes)}
                       design={item.rootGroupNameDesign}
                     />
                   </div>

@@ -65,13 +65,17 @@ export function GroupStepItem({
     () => sanitizeRichHtml(substituteTokens(q.description ?? '', attrs, quotes)),
     [q.description, attrs, quotes],
   );
+  const subgroupNameText = useMemo(
+    () => (item.subgroupName ? substituteTokens(item.subgroupName, attrs, quotes) : null),
+    [item.subgroupName, attrs, quotes],
+  );
 
   return (
     // 페이지 내 문항 간 여백은 PageStepView 래퍼가 소유한다 (first/last 판정이 래퍼 형제 기준이어야 해서)
     <div>
       {showSubgroupHeading && (
         <h3 className="mb-3 text-sm font-semibold tracking-[0.12em] text-gray-500 uppercase md:text-xs">
-          {item.subgroupName}
+          {subgroupNameText}
         </h3>
       )}
       <div

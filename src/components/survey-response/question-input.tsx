@@ -342,6 +342,8 @@ function RadioQuestion({
   value: SingleChoiceResponse;
   onChange: (value: SingleChoiceResponse) => void;
 }) {
+  const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
   const isSelected = (optionValue: string) => {
     if (isOtherChoiceValue(value)) {
       return value.selectedValue === optionValue;
@@ -393,7 +395,7 @@ function RadioQuestion({
               }}
               className="flex-1 cursor-pointer whitespace-pre-line text-base text-gray-700"
             >
-              {option.label}
+              {substituteTokens(option.label, attrs, quotes)}
             </label>
           </div>
           {option.allowTextInput && isSelected(option.value) && (
@@ -417,6 +419,8 @@ function CheckboxQuestion({
   value: unknown;
   onChange: (value: MultiChoiceResponse) => void;
 }) {
+  const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
   const currentValues = useMemo<MultiChoiceResponse>(
     () => (Array.isArray(value) ? (value as MultiChoiceResponse) : []),
     [value],
@@ -508,7 +512,7 @@ function CheckboxQuestion({
                   disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
                 }`}
               >
-                {option.label}
+                {substituteTokens(option.label, attrs, quotes)}
               </label>
             </div>
             {option.allowTextInput && checked && (
@@ -549,6 +553,8 @@ function SelectQuestion({
   value: SingleChoiceResponse;
   onChange: (value: SingleChoiceResponse) => void;
 }) {
+  const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
   // OtherChoiceValue fallback: snapshot 호환 (Phase 7 cleanup 까지 유지)
   const selectedValue = isOtherChoiceValue(value)
     ? value.selectedValue
@@ -605,7 +611,7 @@ function SelectQuestion({
         <option value="">선택하세요...</option>
         {question.options?.map((option: QuestionOption) => (
           <option key={option.id} value={option.value}>
-            {option.label}
+            {substituteTokens(option.label, attrs, quotes)}
           </option>
         ))}
       </select>
