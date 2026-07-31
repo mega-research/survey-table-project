@@ -51,6 +51,7 @@
     "0064_add_question_export_cell_order",
     "0065_r2_deletion_queue_and_sent_ledger",
     "0066_add_row_wise_original_mobile_mode",
-    "0067_survey_version_snapshot_nullable"
+    "0067_survey_version_snapshot_nullable",
+    "0068_r2_key_refs"
   ]
 }
