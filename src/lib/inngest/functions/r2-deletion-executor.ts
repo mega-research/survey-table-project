@@ -1,4 +1,7 @@
+import * as Sentry from '@sentry/nextjs';
+
 import { runDeletionExecutor } from '@/lib/r2-lifecycle/deletion-executor.server';
+import { rebuildMutableKeyRefs } from '@/lib/r2-lifecycle/key-ref-index.server';
 
 import { inngest } from '../client';
 
@@ -22,6 +25,23 @@ export const r2DeletionExecutor = inngest.createFunction(
     const logger =
       (inngestCtx as { logger?: Pick<Console, 'info' | 'warn' | 'error' | 'debug'> })
         .logger ?? console;
+
+    // 집행 직전 가변 소스 인덱스를 재구축한다. 실패해도 집행을 막지 않는다 —
+    // 인덱스는 사전 필터일 뿐이고 최종 판정은 콘텐츠 스캔이라 stale 해도
+    // 과보존 방향으로만 작용한다 (spec 6.3).
+    const rebuilt = await step.run('rebuild-mutable-key-refs', async () => {
+      try {
+        return await rebuildMutableKeyRefs();
+      } catch (error) {
+        console.error('r2 참조 인덱스 리빌드 실패 — stale 인덱스로 집행 진행:', error);
+        Sentry.captureException(error, {
+          tags: { operation: 'r2_key_ref_rebuild' },
+          level: 'warning',
+        });
+        return [];
+      }
+    });
+    logger.info('r2 key ref rebuild done', { sources: rebuilt });
 
     const totals = await runDeletionExecutor(step);
 
