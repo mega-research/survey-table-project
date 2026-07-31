@@ -48,10 +48,14 @@ import {
   ContactAttrsProvider,
   createPlaceholderAttrs,
 } from '@/lib/survey/contact-attrs-context';
+import { collectAnswerQuotes } from '@/lib/survey/answer-quote';
+import { resolveEffectiveOptionTextsByQuestion } from '@/lib/survey/required-option-text-validation';
 import { generateId, isEmptyHtml } from '@/lib/utils';
 import { sanitizeRichHtml } from '@/lib/sanitize';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { useSurveyUIStore } from '@/stores/ui-store';
+import { useSurveyResponseStore } from '@/stores/survey-response-store';
+import { useTestResponseStore } from '@/stores/test-response-store';
 import { computeTableEstimatedHeight } from '@/hooks/use-row-heights';
 import { Question, QuestionGroup, SurveyLookup } from '@/types/survey';
 
@@ -406,6 +410,22 @@ export function SortableQuestionList({
   const testContactAttrs = useMemo(
     () => createPlaceholderAttrs(defaultContactAttrs),
     [defaultContactAttrs],
+  );
+
+  const testResponses = useTestResponseStore((s) => s.testResponses);
+  const optionTexts = useSurveyResponseStore((s) => s.optionTexts);
+  // 빌더 테스트 모드 인용값 — 응답 페이지와 같은 함수를 태워 계산이 갈리지 않게 한다.
+  // createPlaceholderAttrs 로 감싸 미정의 이름이 [키] 로 가시화되게 한다 (오타 진단).
+  const testAnswerQuotes = useMemo(
+    () =>
+      createPlaceholderAttrs(
+        collectAnswerQuotes(
+          questions,
+          testResponses,
+          resolveEffectiveOptionTextsByQuestion(testResponses, optionTexts),
+        ),
+      ),
+    [questions, testResponses, optionTexts],
   );
 
   // querySelector 스코프용 컨테이너 ref
@@ -885,7 +905,7 @@ export function SortableQuestionList({
   return (
     <>
       {/* 편집 목록 — 카드 미리보기가 실제 응답 렌더링이므로 토큰 치환용 attrs 컨텍스트로 감싼다 */}
-      <ContactAttrsProvider attrs={testContactAttrs}>
+      <ContactAttrsProvider attrs={testContactAttrs} quotes={testAnswerQuotes}>
         <div ref={editContainerRef}>
           <DndContext
             sensors={sensors}
