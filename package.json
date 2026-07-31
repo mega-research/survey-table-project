@@ -23,6 +23,8 @@
     "spss:rollback": "tsx scripts/rollback-spss-fields.ts",
     "spss:rollback:live": "DRY_RUN=false tsx scripts/rollback-spss-fields.ts",
     "ledger:seed": "tsx --tsconfig tsconfig.scripts.json scripts/seed-sent-ledger.ts",
+    "versions:prune": "tsx --tsconfig tsconfig.scripts.json scripts/prune-version-snapshots.ts",
+    "versions:prune:live": "DRY_RUN=false tsx --tsconfig tsconfig.scripts.json scripts/prune-version-snapshots.ts",
     "test": "vitest run && cross-env RUN_FLAKY_ISOLATED=1 vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
