@@ -44,9 +44,15 @@ function extractQuoteTokens(...sources: (string | undefined)[]): string[] {
  * substituteTokens 호출처를 훑어 도출한 표면 — question-input.tsx(title/description/
  * notice/option.label), ranking-question.tsx/ranking-dropdown-stack.tsx(ranking 옵션),
  * cells/*.tsx(표 셀 radioOptions/checkboxOptions/selectOptions/rankingOptions),
- * text-cell.tsx(표 셀 content). choice_opt/ranking_opt 셀은 resolveChoiceOptions/
- * resolveRankingOptions 가 이미 라벨을 흡수하므로 표 순회에서 건너뛴다(이중 집계 방지,
- * lib/survey/answer-quote.ts collectFromCells 와 동일 원칙).
+ * text-cell.tsx(표 셀 content), cells/input-cell.tsx(표 input 셀 defaultValueTemplate —
+ * useAnswerQuotes() 로 실제 quotes 를 받는 응답 페이지 라이브 렌더러). choice_opt/
+ * ranking_opt 셀은 resolveChoiceOptions/resolveRankingOptions 가 이미 라벨을 흡수하므로
+ * 표 순회에서 건너뛴다(이중 집계 방지, lib/survey/answer-quote.ts collectFromCells 와
+ * 동일 원칙).
+ *
+ * 질문 레벨 defaultValueTemplate(단답형 prefill)은 여기 포함하지 않는다 —
+ * question-input.tsx:651 이 attrs 만 넘기고 quotes 를 아예 전달하지 않아 치환 자체가
+ * 안 되는 자리다(경고 4 — nonSubstitutedFindings 참조).
  */
 function substitutedSourcesOf(q: Question): (string | undefined)[] {
   const sources: (string | undefined)[] = [q.title, q.description, q.noticeContent];
@@ -67,6 +73,10 @@ function substitutedSourcesOf(q: Question): (string | undefined)[] {
     for (const cell of row.cells) {
       if (cell.type === 'choice_opt' || cell.type === 'ranking_opt') continue;
       sources.push(cell.content);
+      // input 셀 prefill 템플릿 — cells/input-cell.tsx 가 useAnswerQuotes() 로 실제 quotes 를
+      // 받아 substituteTokens(template, attrs, quotes) 로 치환한다(응답 페이지 라이브 렌더러,
+      // 빌더 프리뷰 전용이 아님). 질문 레벨 defaultValueTemplate(attrs만 받음)과 반대다.
+      sources.push(cell.defaultValueTemplate);
       if (cell.type === 'radio') for (const o of cell.radioOptions ?? []) sources.push(o.label);
       if (cell.type === 'checkbox') for (const o of cell.checkboxOptions ?? []) sources.push(o.label);
       if (cell.type === 'select') for (const o of cell.selectOptions ?? []) sources.push(o.label);
@@ -120,6 +130,34 @@ interface QuoteSource {
   order: number;
   label: string;
   question: Question;
+}
+
+/**
+ * 그룹 자신 + 모든 하위 그룹(재귀)에 속한 질문들의 order 를 전부 모은다.
+ * 순서 위반 판정에 쓸 그룹의 "유효 order"(= 그 안 어딘가에 있는 질문 중 가장 이른 order)를
+ * 구하기 위함 — 직계 질문만 보면 하위그룹에만 질문이 있는 그룹(직계 질문 0개)의 위반을
+ * 놓친다. 순환 parentGroupId(잘못된 데이터)에도 무한루프에 빠지지 않도록 visited 로 가드.
+ */
+function collectDescendantQuestionOrders(
+  rootGroupId: string,
+  questions: Question[],
+  groups: QuestionGroup[],
+): number[] {
+  const orders: number[] = [];
+  const visited = new Set<string>();
+  const stack: string[] = [rootGroupId];
+  while (stack.length > 0) {
+    const groupId = stack.pop();
+    if (groupId === undefined || visited.has(groupId)) continue;
+    visited.add(groupId);
+    for (const q of questions) {
+      if (q.groupId === groupId) orders.push(q.order);
+    }
+    for (const g of groups) {
+      if (g.parentGroupId === groupId && !visited.has(g.id)) stack.push(g.id);
+    }
+  }
+  return orders;
 }
 
 function toneClasses(tone: 'amber' | 'red'): string {
@@ -211,7 +249,7 @@ export function TokenWarningPanel({ questions, groups, thankYouMessage, catalog 
     for (const g of groups) {
       const names = extractQuoteTokens(g.name);
       if (names.length === 0) continue;
-      const ownerOrders = questions.filter((q) => q.groupId === g.id).map((q) => q.order);
+      const ownerOrders = collectDescendantQuestionOrders(g.id, questions, groups);
       const ownerOrder = ownerOrders.length > 0 ? Math.min(...ownerOrders) : null;
       for (const name of names) {
         out.push({ name, order: ownerOrder, label: `그룹 "${g.name}"` });
@@ -257,6 +295,12 @@ export function TokenWarningPanel({ questions, groups, thankYouMessage, catalog 
     }
     for (const q of questions) {
       const label = q.title || '(제목 없음)';
+      // 질문 레벨 prefill 템플릿 — question-input.tsx:651 이 attrs 만 넘기고 quotes 인자를
+      // 아예 전달하지 않는다(서버 재검증도 attrs 기준, response.service.ts). 표 셀
+      // defaultValueTemplate(quotes 실제 반영, 위 substitutedSourcesOf 참조)과 반대다.
+      for (const name of extractQuoteTokens(q.defaultValueTemplate ?? undefined)) {
+        out.push({ location: `단답형 prefill 템플릿 (${label})`, name });
+      }
       for (const headerRow of q.tableHeaderGrid ?? []) {
         for (const cell of headerRow) {
           for (const name of extractQuoteTokens(cell.label)) {
@@ -351,8 +395,8 @@ export function TokenWarningPanel({ questions, groups, thankYouMessage, catalog 
             ))}
           </div>
           <div className="mt-1 text-xs">
-            완료 메시지·표 헤더 그리드·검증 오류 메시지는 응답 인용이 적용되지 않는
-            자리입니다. 토큰이 그대로 노출됩니다.
+            완료 메시지·단답형 prefill 템플릿·표 헤더 그리드·검증 오류 메시지는 응답 인용이
+            적용되지 않는 자리입니다. 토큰이 그대로 노출됩니다.
           </div>
         </WarningBox>
       )}
