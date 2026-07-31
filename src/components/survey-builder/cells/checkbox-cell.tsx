@@ -3,6 +3,8 @@
 import React, { useCallback, useMemo } from 'react';
 
 import { OptionTextInput } from '@/components/survey-response/option-text-input';
+import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { substituteTokens } from '@/lib/survey/substitute-tokens';
 
 import { CellOptionsContainer } from './cell-options-container';
 import type { InteractiveCellProps } from './types';
@@ -17,6 +19,8 @@ export const CheckboxCell = React.memo(function CheckboxCell({
   ariaInvalid,
   ariaDescribedBy,
 }: InteractiveCellProps) {
+  const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
   const cellResponseArray = useMemo(
     () => (Array.isArray(cellResponse) ? cellResponse : []),
     [cellResponse],
@@ -105,7 +109,7 @@ export const CheckboxCell = React.memo(function CheckboxCell({
                   disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
                 }`}
               >
-                {option.label}
+                {substituteTokens(option.label, attrs, quotes)}
               </label>
             </div>
             {option.allowTextInput && isChecked && (

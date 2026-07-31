@@ -4,6 +4,8 @@ import { useMemo } from 'react';
 
 import { TablePreview } from '@/components/survey-builder/table-preview';
 import { useMobileView } from '@/hooks/use-media-query';
+import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { Question, RankingAnswer, TableCell } from '@/types/survey';
 import {
   collectRankingGroups,
@@ -41,6 +43,9 @@ interface EmbeddedTableReferenceProps {
 }
 
 function EmbeddedTableReference({ question, rawOptions, isMobile }: EmbeddedTableReferenceProps) {
+  const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
+
   if (isMobile) {
     return (
       <div className="space-y-2">
@@ -50,12 +55,13 @@ function EmbeddedTableReference({ question, rawOptions, isMobile }: EmbeddedTabl
           );
           if (!optCell) return null;
           const opt = rawOptions.find((o) => o.id === optCell.id);
+          const rawLabel = opt?.label ?? optCell.content ?? optCell.rankingLabel ?? '(라벨 없음)';
           return (
             <MobileOptionCard
               key={row.id}
               label={
                 <span className={getCellTextClassName(opt ?? optCell)}>
-                  {opt?.label ?? optCell.content ?? optCell.rankingLabel ?? '(라벨 없음)'}
+                  {substituteTokens(rawLabel, attrs, quotes)}
                 </span>
               }
               cells={row.cells}
@@ -88,6 +94,8 @@ function EmbeddedTableReference({ question, rawOptions, isMobile }: EmbeddedTabl
 export function RankingQuestion({ question, value, onChange }: RankingQuestionProps) {
   const config = question.rankingConfig;
   const isMobile = useMobileView();
+  const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
   const isTableSource = config?.optionsSource === 'table';
 
   // 그룹 여부: 테이블 소스에서만 그룹이 존재 가능하다
@@ -168,7 +176,9 @@ export function RankingQuestion({ question, value, onChange }: RankingQuestionPr
           const groupAnswers = parseRankingAnswers(groupedMap[g.groupKey]);
           return (
             <div key={g.groupKey} className="space-y-2">
-              <p className="text-sm font-medium text-gray-900">{g.label || g.groupKey}</p>
+              <p className="text-sm font-medium text-gray-900">
+                {substituteTokens(g.label || g.groupKey, attrs, quotes)}
+              </p>
               <RankingDropdownStack
                 answers={groupAnswers}
                 options={groupOptions}
@@ -242,7 +252,7 @@ export function RankingQuestion({ question, value, onChange }: RankingQuestionPr
                   key={opt.id}
                   className="whitespace-pre-wrap text-gray-800 [overflow-wrap:anywhere]"
                 >
-                  {opt.label}
+                  {substituteTokens(opt.label, attrs, quotes)}
                 </div>
               ))}
             </div>

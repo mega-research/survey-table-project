@@ -11,7 +11,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useMobileView } from '@/hooks/use-media-query';
+import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { rankingTextTargetId } from '@/lib/survey/option-text-target';
+import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import type { QuestionOption, RankingAnswer } from '@/types/survey';
 import { getOptionsLayout } from '@/utils/options-layout';
@@ -65,6 +67,8 @@ export function RankingDropdownStack({
   ariaDescribedBy,
 }: RankingDropdownStackProps) {
   const isMobile = useMobileView();
+  const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
 
   const answerAt = (rank: number) => answers.find((a) => a.rank === rank);
   const selectedValueAt = (rank: number) => answerAt(rank)?.optionValue ?? '';
@@ -179,7 +183,7 @@ export function RankingDropdownStack({
                 className={opt.textBold ? 'font-bold' : undefined}
                 style={opt.backgroundColor ? { backgroundColor: opt.backgroundColor } : undefined}
               >
-                {opt.label}
+                {substituteTokens(opt.label, attrs, quotes)}
               </option>
             ))}
             {allowOther && <option value={RANKING_OTHER_VALUE}>기타 (직접 입력)</option>}
@@ -226,7 +230,7 @@ export function RankingDropdownStack({
                   className={cn(itemCls, opt.textBold && 'font-bold')}
                   style={opt.backgroundColor ? { backgroundColor: opt.backgroundColor } : undefined}
                 >
-                  {opt.label}
+                  {substituteTokens(opt.label, attrs, quotes)}
                 </SelectItem>
               ))}
               {allowOther && (

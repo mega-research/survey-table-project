@@ -6,6 +6,8 @@ import React, { useCallback } from 'react';
 import { flushSync } from 'react-dom';
 
 import { OptionTextInput } from '@/components/survey-response/option-text-input';
+import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { substituteTokens } from '@/lib/survey/substitute-tokens';
 
 import { CellOptionsContainer } from './cell-options-container';
 import type { InteractiveCellProps } from './types';
@@ -21,6 +23,8 @@ export const RadioCell = React.memo(function RadioCell({
   ariaInvalid,
   ariaDescribedBy,
 }: InteractiveCellProps) {
+  const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
   const handleRadioChange = useCallback(
     (optionId: string) => {
       const isCurrentlySelected = cellResponse === optionId;
@@ -69,7 +73,7 @@ export const RadioCell = React.memo(function RadioCell({
                 htmlFor={inputId}
                 className="cursor-pointer text-base whitespace-pre-line select-none"
               >
-                {option.label}
+                {substituteTokens(option.label, attrs, quotes)}
               </label>
             </div>
             {option.allowTextInput && isSelected && (
