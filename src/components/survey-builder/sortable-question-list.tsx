@@ -291,7 +291,7 @@ const SortableQuestion = React.memo(function SortableQuestion({
                 WebkitOverflowScrolling: 'touch',
               }}
               dangerouslySetInnerHTML={{
-                __html: sanitizeRichHtml(question.description!),
+                __html: sanitizeRichHtml(substituteTokens(question.description ?? '', attrs, quotes)),
               }}
             />
           )}

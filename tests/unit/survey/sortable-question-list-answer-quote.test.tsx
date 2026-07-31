@@ -13,6 +13,10 @@
  * 가장 흔한 용례("응답에 따라 뒤 질문 제목이 바뀐다")를 빌더에서 검증할 방법이
  * 여전히 없었다. 아래 테스트는 옵션 라벨(기존 소비처)과 질문 제목(신규 소비처)을
  * 함께 검증한다.
+ *
+ * Fix round 2 — 제목 바로 아래의 질문 설명(`question.description`, sanitizeRichHtml
+ * 로만 렌더)도 동일한 비대칭이었다. substitute 후 sanitize 순서(sanitize(substitute(x)))
+ * 로 고쳤고, 아래 테스트에 설명 소비처를 추가한다.
  */
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -78,6 +82,18 @@ function titleConsumingQuestion(templateName: string): Question {
   } as unknown as Question;
 }
 
+/** 질문 설명(question.description) 소비처 검증용 — sanitizeRichHtml 로만 렌더되던 지점. */
+function descriptionConsumingQuestion(templateName: string): Question {
+  return {
+    id: 'q4',
+    type: 'text',
+    title: '설명 소비 질문',
+    description: `<p>설명시작${'{{{' + templateName + '}}}'}설명끝</p>`,
+    required: false,
+    order: 3,
+  } as unknown as Question;
+}
+
 function seedSurvey(questions: Question[]) {
   useSurveyBuilderStore.getState().setSurvey({
     id: 's1',
@@ -111,6 +127,7 @@ describe('SortableQuestionList — 빌더 테스트 모드 응답 인용 배선'
       radioQuoteQuestion(),
       consumingMultiselectQuestion('마케팅유형'),
       titleConsumingQuestion('마케팅유형'),
+      descriptionConsumingQuestion('마케팅유형'),
     ]);
 
     render(<SortableQuestionList selectedQuestionId={null} />);
@@ -127,6 +144,11 @@ describe('SortableQuestionList — 빌더 테스트 모드 응답 인용 배선'
     expect(
       screen.queryByRole('heading', { level: 4, name: '{{{마케팅유형}}} 안내' }),
     ).not.toBeInTheDocument();
+
+    // 질문 설명 — sanitizeRichHtml 로만 렌더되던 지점도 같은 채널을 타 빈칸이어야 한다.
+    expect(await screen.findByText('설명시작설명끝')).toBeInTheDocument();
+    expect(screen.queryByText('설명시작[마케팅유형]설명끝')).not.toBeInTheDocument();
+    expect(screen.queryByText(/\{\{\{마케팅유형\}\}\}/)).not.toBeInTheDocument();
   });
 
   it('앞 질문에서 옵션을 고르면 인용 문구로 바뀐다', async () => {
@@ -134,6 +156,7 @@ describe('SortableQuestionList — 빌더 테스트 모드 응답 인용 배선'
       radioQuoteQuestion(),
       consumingMultiselectQuestion('마케팅유형'),
       titleConsumingQuestion('마케팅유형'),
+      descriptionConsumingQuestion('마케팅유형'),
     ]);
 
     render(<SortableQuestionList selectedQuestionId={null} />);
@@ -149,6 +172,10 @@ describe('SortableQuestionList — 빌더 테스트 모드 응답 인용 배선'
       await screen.findByRole('heading', { level: 4, name: '뉴스레터를 안내' }),
     ).toBeInTheDocument();
     expect(screen.queryByRole('heading', { level: 4, name: '안내' })).not.toBeInTheDocument();
+
+    // 질문 설명도 같은 응답으로 문구가 채워져야 한다.
+    expect(await screen.findByText('설명시작뉴스레터를설명끝')).toBeInTheDocument();
+    expect(screen.queryByText('설명시작설명끝')).not.toBeInTheDocument();
   });
 
   it('소비처 질문이 존재하지 않는 인용 이름을 참조하면 [이름] 으로 오타가 드러난다', async () => {
@@ -156,6 +183,7 @@ describe('SortableQuestionList — 빌더 테스트 모드 응답 인용 배선'
       radioQuoteQuestion(),
       consumingMultiselectQuestion('마케팅유형오타'),
       titleConsumingQuestion('마케팅유형오타'),
+      descriptionConsumingQuestion('마케팅유형오타'),
     ]);
 
     render(<SortableQuestionList selectedQuestionId={null} />);
@@ -166,5 +194,6 @@ describe('SortableQuestionList — 빌더 테스트 모드 응답 인용 배선'
     expect(
       await screen.findByRole('heading', { level: 4, name: '[마케팅유형오타] 안내' }),
     ).toBeInTheDocument();
+    expect(await screen.findByText('설명시작[마케팅유형오타]설명끝')).toBeInTheDocument();
   });
 });
