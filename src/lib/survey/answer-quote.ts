@@ -73,7 +73,12 @@ export function renderQuoteCandidate(
 ): string | null {
   const template = (quoteText ?? '').trim();
   if (!template) return mode === 'option' ? null : inputValue;
-  return template.replaceAll('{{입력}}', inputValue);
+  const rendered = template.replaceAll('{{입력}}', inputValue);
+  // 문구가 비어있지 않아도 렌더 결과가 빌 수 있다 — 문구가 `{{입력}}` 뿐인데
+  // 응답자가 아무것도 안 친 경우. 빈 기여를 목록에 넣으면 조립에서 조사·쉼표만
+  // 남아 "와 BBB" / "A, , C" 같은 깨진 문장이 된다. 빈 문구와 동일하게 제외한다.
+  if (!rendered) return null;
+  return rendered;
 }
 
 /** 옵션 경로 — 선택된 옵션에서 후보를 뽑는다. */
