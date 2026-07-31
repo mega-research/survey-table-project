@@ -74,13 +74,24 @@ function makeSurvey(): Survey {
   } as unknown as Survey;
 }
 
+/**
+ * db.transaction 이 실제로 생성해 콜백에 넘긴 tx 인스턴스.
+ * 각 테스트가 recordKeyRefs/findPrunableVersionIds/pruneVersionSnapshots 호출의
+ * 첫 인자가 "어떤 객체든"이 아니라 "바로 이 tx"였음을 identity 로 검증하기 위해
+ * beforeEach 에서 캡처해둔다 — module-level db 가 실수로 흘러들어가도
+ * expect.anything() 으로는 잡히지 않지만 이 방식이면 실패한다.
+ */
+let capturedTx: unknown;
+
 beforeEach(() => {
   vi.clearAllMocks();
+  capturedTx = undefined;
   findPrunableMock.mockResolvedValue([]);
   vi.mocked(getSurveyWithDetails).mockResolvedValue(makeSurvey());
-  vi.mocked(db.transaction).mockImplementation(
-    (async (cb: (tx: unknown) => Promise<unknown>) => cb(makeTx())) as typeof db.transaction,
-  );
+  vi.mocked(db.transaction).mockImplementation(async (cb) => {
+    capturedTx = makeTx();
+    return cb(capturedTx as never);
+  });
 });
 
 describe('publishSurvey — 인덱스 기록과 직전 버전 정리', () => {
@@ -88,7 +99,7 @@ describe('publishSurvey — 인덱스 기록과 직전 버전 정리', () => {
     await publishSurvey({ surveyId: SURVEY_ID });
 
     expect(recordRefsMock).toHaveBeenCalledWith(
-      expect.anything(),
+      capturedTx,
       'survey_versions',
       NEW_VERSION_ID,
       expect.arrayContaining(['survey/a.png']),
@@ -101,7 +112,7 @@ describe('publishSurvey — 인덱스 기록과 직전 버전 정리', () => {
     await publishSurvey({ surveyId: SURVEY_ID });
 
     expect(pruneMock).toHaveBeenCalledWith(
-      expect.anything(),
+      capturedTx,
       [OLD_VERSION_ID],
       expect.stringContaining('발행'),
     );
@@ -121,7 +132,7 @@ describe('publishSurvey — 인덱스 기록과 직전 버전 정리', () => {
     await publishSurvey({ surveyId: SURVEY_ID });
 
     expect(pruneMock).toHaveBeenCalledWith(
-      expect.anything(),
+      capturedTx,
       [OLD_VERSION_ID],
       expect.any(String),
     );
@@ -130,6 +141,6 @@ describe('publishSurvey — 인덱스 기록과 직전 버전 정리', () => {
   it('정리 대상 조회를 해당 설문으로 한정한다', async () => {
     await publishSurvey({ surveyId: SURVEY_ID });
 
-    expect(findPrunableMock).toHaveBeenCalledWith(expect.anything(), { surveyId: SURVEY_ID });
+    expect(findPrunableMock).toHaveBeenCalledWith(capturedTx, { surveyId: SURVEY_ID });
   });
 });
