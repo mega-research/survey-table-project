@@ -41,6 +41,7 @@ function buildRankingOptLabel(cell: TableCell, fallback: string): string {
  *   그룹별 호출 시 자연스럽게 그룹 내 순번이 된다(checkbox 그룹 컨벤션).
  * - isOtherRankingCell=true 셀: value=RANKING_OTHER_VALUE, spssNumericCode 없음.
  *   선택 시 기타 자유입력 UI 가 나타나고 `_rk{k}` 는 system-missing 으로 기록됨.
+ * - answerQuoteText: 셀의 응답 인용 문구 (표-소스 옵션의 인용 수집에 필요)
  */
 export function resolveRankingOptionsFromCells(cells: TableCell[]): QuestionOption[] {
   return cells.map((cell, idx) => {
@@ -55,6 +56,7 @@ export function resolveRankingOptionsFromCells(cells: TableCell[]): QuestionOpti
           : {}),
         ...(cell.textBold ? { textBold: true } : {}),
         ...(cell.backgroundColor ? { backgroundColor: cell.backgroundColor } : {}),
+        ...(cell.answerQuoteText !== undefined ? { answerQuoteText: cell.answerQuoteText } : {}),
       };
     }
     return {
@@ -68,6 +70,7 @@ export function resolveRankingOptionsFromCells(cells: TableCell[]): QuestionOpti
         : {}),
       ...(cell.textBold ? { textBold: true } : {}),
       ...(cell.backgroundColor ? { backgroundColor: cell.backgroundColor } : {}),
+      ...(cell.answerQuoteText !== undefined ? { answerQuoteText: cell.answerQuoteText } : {}),
     };
   });
 }

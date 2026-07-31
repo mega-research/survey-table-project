@@ -1,5 +1,6 @@
-import type { Question, QuestionOption } from '@/types/survey';
+import type { Question, QuestionOption, RankingAnswer, TableCell } from '@/types/survey';
 import { resolveChoiceOptions } from '@/utils/choice-source';
+import { resolveRankingOptions } from '@/utils/ranking-source';
 
 /**
  * 응답 인용 수집기.
@@ -100,6 +101,116 @@ function collectFromOptions(
   return parts;
 }
 
+/** 순위형 — 정의 순서가 아니라 순위 순으로 나열한다. 순서 자체가 답이므로 예외를 둔다. */
+function collectFromRanking(
+  q: Question,
+  raw: unknown,
+  optTexts: Record<string, string>,
+): string[] {
+  if (!Array.isArray(raw)) return [];
+  const answers = (raw as RankingAnswer[])
+    .filter((a) => a && typeof a.optionValue === 'string' && a.optionValue)
+    .slice()
+    .sort((a, b) => a.rank - b.rank);
+
+  // 옵션 소스(manual/table) 판정과 셀→옵션 변환은 resolveRankingOptions 가 흡수한다
+  // (ranking-source.ts — table 소스는 자신의 tableRowsData 내 ranking_opt 셀).
+  const source: QuestionOption[] = resolveRankingOptions(q);
+
+  const parts: string[] = [];
+  for (const answer of answers) {
+    const opt = source.find((o) => o.value === answer.optionValue);
+    if (!opt) continue;
+    const inputValue = answer.optionText ?? optTexts[opt.id] ?? '';
+    const rendered = renderQuoteCandidate(opt.answerQuoteText, 'option', inputValue);
+    if (rendered !== null) parts.push(rendered);
+  }
+  return parts;
+}
+
+/**
+ * 셀 경로 — tableRowsData 순회.
+ * choice_opt / ranking_opt 는 질문 레벨 옵션 소스이므로 여기서 건너뛴다.
+ * 옵션 경로(resolveChoiceOptions / collectFromRanking)가 이미 담당하며,
+ * 건너뛰지 않으면 같은 값이 두 번 잡힌다.
+ */
+function collectFromCells(
+  q: Question,
+  raw: unknown,
+  optTexts: Record<string, string>,
+): string[] {
+  const rows = q.tableRowsData;
+  if (!rows) return [];
+  const cellValues = (raw && typeof raw === 'object' && !Array.isArray(raw)
+    ? raw
+    : {}) as Record<string, unknown>;
+
+  const parts: string[] = [];
+  for (const row of rows) {
+    for (const cell of row.cells) {
+      if (cell.isHidden) continue;
+      if (cell.type === 'choice_opt' || cell.type === 'ranking_opt') continue;
+
+      const value = cellValues[cell.id];
+
+      if (cell.type === 'input') {
+        const text = typeof value === 'string' ? value : '';
+        if (!text) continue; // 빈 값만 제외. 숫자 0 은 값이다
+        const rendered = renderQuoteCandidate(cell.answerQuoteText, 'input', text);
+        if (rendered !== null) parts.push(rendered);
+        continue;
+      }
+
+      if (cell.type === 'radio' || cell.type === 'checkbox' || cell.type === 'select') {
+        const options = cellOptionsOf(cell);
+        parts.push(...collectFromOptions(options, toValueSet(value), optTexts));
+        continue;
+      }
+
+      if (cell.type === 'ranking') {
+        parts.push(...collectFromCellRanking(cell, value, optTexts));
+      }
+    }
+  }
+  return parts;
+}
+
+/** radio/checkbox/select 셀의 옵션 리스트를 QuestionOption 형태로 통일해 반환. */
+function cellOptionsOf(cell: TableCell): QuestionOption[] {
+  const raw =
+    cell.type === 'radio'
+      ? cell.radioOptions
+      : cell.type === 'checkbox'
+        ? cell.checkboxOptions
+        : cell.selectOptions;
+  return (raw ?? []) as unknown as QuestionOption[];
+}
+
+/** 셀 내부 순위형 — 순위 순으로 나열. */
+function collectFromCellRanking(
+  cell: TableCell,
+  raw: unknown,
+  optTexts: Record<string, string>,
+): string[] {
+  if (!Array.isArray(raw)) return [];
+  // rankingOptions 는 이미 QuestionOption[] 이다 (types/survey.ts:340) — 캐스팅 불필요.
+  const source = cell.rankingOptions ?? [];
+  const answers = (raw as RankingAnswer[])
+    .filter((a) => a && typeof a.optionValue === 'string' && a.optionValue)
+    .slice()
+    .sort((a, b) => a.rank - b.rank);
+
+  const parts: string[] = [];
+  for (const answer of answers) {
+    const opt = source.find((o) => o.value === answer.optionValue);
+    if (!opt) continue;
+    const inputValue = answer.optionText ?? optTexts[opt.id] ?? '';
+    const rendered = renderQuoteCandidate(opt.answerQuoteText, 'option', inputValue);
+    if (rendered !== null) parts.push(rendered);
+  }
+  return parts;
+}
+
 export function collectAnswerQuotes(
   questions: Question[],
   responses: Record<string, unknown>,
@@ -126,7 +237,24 @@ export function collectAnswerQuotes(
       parts.push(...collectFromOptions(resolveChoiceOptions(q), selected, optTexts));
     } else if (q.type === 'select') {
       parts.push(...collectFromOptions(q.options ?? [], selected, optTexts));
+    } else if (q.type === 'multiselect') {
+      for (const level of q.selectLevels ?? []) {
+        parts.push(...collectFromOptions(level.options ?? [], selected, optTexts));
+      }
+    } else if (q.type === 'ranking') {
+      parts.push(...collectFromRanking(q, raw, optTexts));
+    } else if (q.type === 'text') {
+      // 단답형은 질문 자체가 입력 단위 후보 하나. 장문형(textarea)은 인용 대상이 아니다.
+      const text = typeof raw === 'string' ? raw : '';
+      if (text) {
+        const rendered = renderQuoteCandidate(q.answerQuoteText, 'input', text);
+        if (rendered !== null) parts.push(rendered);
+      }
     }
+
+    // 경로 2 — 표 셀. 질문 유형과 무관하게 tableRowsData 가 있으면 훑는다
+    // (table-source radio 질문의 표에도 input 셀이 있을 수 있다).
+    parts.push(...collectFromCells(q, raw, optTexts));
 
     if (!byName.has(name)) byName.set(name, []);
     byName.get(name)?.push(...parts);

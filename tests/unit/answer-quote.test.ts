@@ -122,3 +122,107 @@ describe('collectAnswerQuotes - 옵션 경로', () => {
     expect(out).toEqual({ 마케팅유형: '디지털마케팅 전략과 오프라인 홍보' });
   });
 });
+
+describe('collectAnswerQuotes - 나머지 경로', () => {
+  it('다단계 선택은 문구가 적힌 단계만 인용한다', () => {
+    const q = {
+      id: 'q1', surveyId: 's1', type: 'multiselect', title: '지역',
+      required: false, order: 0,
+      answerQuoteEnabled: true, answerQuoteName: '지역',
+      selectLevels: [
+        { id: 'L1', label: '시도', options: [{ id: 'a', label: '서울', value: '서울' }] },
+        { id: 'L2', label: '구군', options: [{ id: 'b', label: '강남구', value: '강남구', answerQuoteText: '강남구' }] },
+      ],
+    } as unknown as Question;
+    expect(collectAnswerQuotes([q], { q1: ['서울', '강남구'] }, {}))
+      .toEqual({ 지역: '강남구' });
+  });
+
+  it('순위형은 정의 순서가 아니라 순위 순으로 나열한다', () => {
+    const q = {
+      id: 'q1', surveyId: 's1', type: 'ranking', title: '우선순위',
+      required: false, order: 0,
+      answerQuoteEnabled: true, answerQuoteName: '우선순위',
+      rankingConfig: { optionsSource: 'manual', maxRank: 2 },
+      options: [
+        { id: 'o1', label: '가격', value: 'v1', answerQuoteText: '가격' },
+        { id: 'o2', label: '품질', value: 'v2', answerQuoteText: '품질' },
+      ],
+    } as unknown as Question;
+    // 1위 v2(품질), 2위 v1(가격) → 정의 순서를 따르지 않는다
+    const answers = [
+      { rank: 1, optionValue: 'v2' },
+      { rank: 2, optionValue: 'v1' },
+    ];
+    expect(collectAnswerQuotes([q], { q1: answers }, {}))
+      .toEqual({ 우선순위: '품질과 가격' });
+  });
+
+  it('표 input 셀은 값이 있으면 수집하고 0도 값으로 본다', () => {
+    const q = {
+      id: 'q1', surveyId: 's1', type: 'table', title: '투입 인력',
+      required: false, order: 0,
+      answerQuoteEnabled: true, answerQuoteName: '인력',
+      tableRowsData: [
+        { id: 'r1', cells: [
+          { id: 'c1', type: 'input', answerQuoteText: '{{입력}}명' },
+          { id: 'c2', type: 'input', answerQuoteText: '{{입력}}명' },
+        ] },
+      ],
+    } as unknown as Question;
+    expect(collectAnswerQuotes([q], { q1: { c1: '0', c2: '' } }, {}))
+      .toEqual({ 인력: '0명' });
+  });
+
+  it('input 셀의 문구가 비면 입력값을 그대로 쓴다', () => {
+    const q = {
+      id: 'q1', surveyId: 's1', type: 'table', title: '기타',
+      required: false, order: 0,
+      answerQuoteEnabled: true, answerQuoteName: '기타',
+      tableRowsData: [{ id: 'r1', cells: [{ id: 'c1', type: 'input' }] }],
+    } as unknown as Question;
+    expect(collectAnswerQuotes([q], { q1: { c1: 'AR/VR' } }, {}))
+      .toEqual({ 기타: 'AR/VR' });
+  });
+
+  it('choice_opt 셀은 셀 경로에서 건너뛰어 이중 계산되지 않는다', () => {
+    const q = {
+      id: 'q1', surveyId: 's1', type: 'radio', title: '표 소스 라디오',
+      required: false, order: 0,
+      answerQuoteEnabled: true, answerQuoteName: '유형',
+      options: [],
+      tableRowsData: [
+        { id: 'r1', cells: [
+          { id: 'cellA', type: 'choice_opt', choiceLabel: '디지털', answerQuoteText: '디지털마케팅 전략' },
+        ] },
+      ],
+    } as unknown as Question;
+    // 응답값은 cell.id — 한 번만 잡혀야 한다
+    expect(collectAnswerQuotes([q], { q1: 'cellA' }, {}))
+      .toEqual({ 유형: '디지털마케팅 전략' });
+  });
+
+  it('단답형은 값이 있으면 수집한다', () => {
+    const q = {
+      id: 'q1', surveyId: 's1', type: 'text', title: '회사명',
+      required: false, order: 0,
+      answerQuoteEnabled: true, answerQuoteName: '회사명',
+      answerQuoteText: '{{입력}} 귀하',
+    } as unknown as Question;
+    expect(collectAnswerQuotes([q], { q1: '메가리서치' }, {}))
+      .toEqual({ 회사명: '메가리서치 귀하' });
+    expect(collectAnswerQuotes([q], { q1: '' }, {}))
+      .toEqual({ 회사명: '' });
+  });
+
+  it('장문형은 인용하지 않는다', () => {
+    const q = {
+      id: 'q1', surveyId: 's1', type: 'textarea', title: '의견',
+      required: false, order: 0,
+      answerQuoteEnabled: true, answerQuoteName: '의견',
+      answerQuoteText: '{{입력}}',
+    } as unknown as Question;
+    expect(collectAnswerQuotes([q], { q1: '긴 서술' }, {}))
+      .toEqual({ 의견: '' });
+  });
+});
