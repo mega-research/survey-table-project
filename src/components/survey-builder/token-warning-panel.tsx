@@ -281,7 +281,7 @@ export function TokenWarningPanel({ questions, groups, thankYouMessage, catalog 
     return out;
   }, [references, definedSources]);
 
-  // 경고 4: 치환되지 않는 자리(완료 메시지 / prefill 템플릿 / 표 헤더 그리드 /
+  // 경고 4: 치환되지 않는 자리(완료 메시지 / prefill 템플릿 / 표 제목 · 열 제목 · 헤더 그리드 /
   // 검증 오류 메시지)에 쓴 인용 토큰
   const nonSubstitutedFindings = useMemo(() => {
     const out: { location: string; name: string }[] = [];
@@ -295,6 +295,16 @@ export function TokenWarningPanel({ questions, groups, thankYouMessage, catalog 
       // 않는 파생값이라, 두 채널을 섞지 않는다(서버 재검증도 attrs 기준 — response.service.ts).
       for (const name of extractQuoteTokens(q.defaultValueTemplate ?? undefined)) {
         out.push({ location: `단답형 prefill 템플릿 (${label})`, name });
+      }
+      for (const name of extractQuoteTokens(q.tableTitle)) {
+        out.push({ location: `표 제목 (${label})`, name });
+      }
+      // 열 제목 - tableHeaderGrid 가 없으면 헤더는 tableColumns[].label 로 렌더된다
+      // (table-preview.tsx / interactive-table-response.tsx). 둘 다 치환하지 않는다.
+      for (const column of q.tableColumns ?? []) {
+        for (const name of extractQuoteTokens(column.label)) {
+          out.push({ location: `표 열 제목 (${label})`, name });
+        }
       }
       for (const headerRow of q.tableHeaderGrid ?? []) {
         for (const cell of headerRow) {
@@ -397,8 +407,8 @@ export function TokenWarningPanel({ questions, groups, thankYouMessage, catalog 
             ))}
           </div>
           <div className="mt-1 text-xs">
-            완료 메시지·prefill 템플릿(단답형·표 셀)·표 헤더 그리드·검증 오류 메시지는 응답
-            인용이 적용되지 않는 자리입니다. 토큰이 그대로 노출됩니다.
+            완료 메시지·prefill 템플릿(단답형·표 셀)·표 제목·표 열 제목·표 헤더 그리드·검증
+            오류 메시지는 응답 인용이 적용되지 않는 자리입니다. 토큰이 그대로 노출됩니다.
           </div>
         </WarningBox>
       )}

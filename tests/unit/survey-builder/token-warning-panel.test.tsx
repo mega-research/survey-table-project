@@ -507,6 +507,73 @@ describe('TokenWarningPanel - 최종 리뷰 I2: 표 셀 defaultValueTemplate 은
   });
 });
 
+describe('TokenWarningPanel - 최종 리뷰 I3: 표 제목과 열 제목도 치환되지 않는 자리다', () => {
+  it('tableHeaderGrid 없이 tableColumns 라벨에 인용 토큰이 있으면 경고 4가 뜬다', () => {
+    render(
+      <TokenWarningPanel
+        questions={[
+          q({
+            id: 'q1',
+            order: 1,
+            type: 'table',
+            title: '만족도 표',
+            tableColumns: [
+              { id: 'col1', label: '{{{항목}}} 만족도', width: 100 },
+            ],
+          }),
+        ]}
+        groups={[]}
+        thankYouMessage=""
+        catalog={[]}
+      />,
+    );
+    expect(screen.getByText(/치환되지 않는 자리에 쓴 인용 토큰/)).toBeInTheDocument();
+    expect(screen.getByText('{{{항목}}} — 표 열 제목 (만족도 표)')).toBeInTheDocument();
+  });
+
+  it('표 제목(tableTitle)에 인용 토큰이 있으면 경고 4가 뜬다', () => {
+    render(
+      <TokenWarningPanel
+        questions={[
+          q({
+            id: 'q1',
+            order: 1,
+            type: 'table',
+            title: '만족도 표',
+            tableTitle: '{{{브랜드}}} 만족도',
+          }),
+        ]}
+        groups={[]}
+        thankYouMessage=""
+        catalog={[]}
+      />,
+    );
+    expect(screen.getByText(/치환되지 않는 자리에 쓴 인용 토큰/)).toBeInTheDocument();
+    expect(screen.getByText('{{{브랜드}}} — 표 제목 (만족도 표)')).toBeInTheDocument();
+  });
+
+  it('근접 케이스: 열 제목·표 제목에 토큰이 없으면 경고 4가 뜨지 않는다', () => {
+    render(
+      <TokenWarningPanel
+        questions={[
+          q({
+            id: 'q1',
+            order: 1,
+            type: 'table',
+            title: '만족도 표',
+            tableTitle: '만족도',
+            tableColumns: [{ id: 'col1', label: '점수', width: 100 }],
+          }),
+        ]}
+        groups={[]}
+        thankYouMessage=""
+        catalog={[]}
+      />,
+    );
+    expect(screen.queryByText(/치환되지 않는 자리에 쓴 인용 토큰/)).not.toBeInTheDocument();
+  });
+});
+
 describe('TokenWarningPanel - 질문 레벨 defaultValueTemplate 은 치환되지 않는 자리다', () => {
   it('단답형 prefill 템플릿에 인용 토큰이 있으면 경고 4가 뜬다', () => {
     render(
