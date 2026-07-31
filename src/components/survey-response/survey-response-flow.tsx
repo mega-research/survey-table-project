@@ -199,6 +199,13 @@ export function SurveyResponseFlow(props: SurveyResponseFlowProps) {
     props.surveyIdentifier,
     props.inviteToken ?? '',
     props.testToken ?? '',
+    // admin-edit 은 surveyIdentifier(=surveyId)가 같은 설문의 모든 응답에서 동일하므로
+    // responseId 를 별도 축으로 포함한다. 이게 없으면 같은 마운트 트리에서 responseId 만
+    // 바뀌는 경로(예: 응답 상세의 "다음 응답" 이동)가 optionTexts/currentStepIndex 를
+    // 리셋하지 못해, 이전 응답자가 입력한 텍스트가 다음 응답자의 인용 재현에 새어 들어간다.
+    // public/preview 는 adminContext 가 항상 없어 이 항목이 상수 ''로 고정되므로 기존
+    // 키 계산에 영향이 없다.
+    props.adminContext?.responseId ?? '',
   ].join('\u0000');
 
   return <SurveyResponseIdentityBoundary key={identityKey} flowProps={props} />;
