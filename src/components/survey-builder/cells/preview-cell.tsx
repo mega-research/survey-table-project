@@ -5,6 +5,8 @@ import React from 'react';
 import { Image as ImageIcon, Video } from 'lucide-react';
 
 import type { TableCell } from '@/types/survey';
+import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { getCellTextClassName } from '@/utils/cell-style';
 import { cn } from '@/lib/utils';
 
@@ -15,16 +17,24 @@ import { ImageCell } from './image-cell';
 
 /** 미리보기용 셀 컨텐츠 (읽기 전용)
  * choiceControlType: 보기 옵션(choice_opt) 셀의 컨트롤 종류. 질문 타입(radio/checkbox)에서
- * 내려준다. 미지정 시 'checkbox' 폴백(표 질문 등 타입 컨텍스트 없는 경우). */
+ * 내려준다. 미지정 시 'checkbox' 폴백(표 질문 등 타입 컨텍스트 없는 경우).
+ * content: image/video 캡션 오버라이드. mobile-original-row-table.tsx 처럼 호출부가 이미
+ * cell.content 를 치환해 넘기는 경로에서, 이 컴포넌트가 다시 치환(이중 치환)하지 않도록
+ * 신호를 전달하는 opt-in 프롭 — cell-options-container.tsx 와 동일한 패턴. */
 export const PreviewCell = React.memo(function PreviewCell({
   cell,
+  content,
   choiceControlType = 'checkbox',
   disableControls = false,
 }: {
   cell: TableCell;
+  content?: string | undefined;
   choiceControlType?: 'radio' | 'checkbox';
   disableControls?: boolean;
 }) {
+  const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
+
   if (!cell) return <span className="text-sm text-gray-400">-</span>;
 
   switch (cell.type) {
@@ -101,7 +111,7 @@ export const PreviewCell = React.memo(function PreviewCell({
 
     case 'image':
       return cell.imageUrl ? (
-        <ImageCell cell={cell} cellResponse={undefined} onUpdateValue={() => {}} />
+        <ImageCell cell={cell} content={content} cellResponse={undefined} onUpdateValue={() => {}} />
       ) : (
         <div className="flex items-center gap-2 text-gray-500">
           <ImageIcon className="h-4 w-4" />
@@ -109,7 +119,12 @@ export const PreviewCell = React.memo(function PreviewCell({
         </div>
       );
 
-    case 'video':
+    case 'video': {
+      // 델리게이션이 아닌 인라인 렌더 — image 케이스와 달리 VideoCell 컴포넌트를 거치지
+      // 않으므로 여기서 직접 치환한다. content 오버라이드 미지정 시(직접 호출 경로)
+      // cell.content 를 치환, 지정 시(mobile-original-row-table.tsx 사전 치환 경로)
+      // 그대로 사용해 이중 치환을 피한다.
+      const caption = content ?? substituteTokens(cell.content, attrs, quotes);
       return cell.videoUrl ? (
         <div className="flex flex-col items-center gap-2">
           {cell.videoUrl.includes('youtube.com') || cell.videoUrl.includes('youtu.be') ? (
@@ -148,9 +163,9 @@ export const PreviewCell = React.memo(function PreviewCell({
               <span className="text-sm">동영상 링크 오류</span>
             </div>
           )}
-          {cell.content && (
+          {caption && (
             <div className={cn('mt-2 text-left text-sm text-gray-700', getCellTextClassName(cell))}>
-              {cell.content}
+              {caption}
             </div>
           )}
         </div>
@@ -160,6 +175,7 @@ export const PreviewCell = React.memo(function PreviewCell({
           <span className="text-sm">동영상 없음</span>
         </div>
       );
+    }
 
     case 'input':
       return (

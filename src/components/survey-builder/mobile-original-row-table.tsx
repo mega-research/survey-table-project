@@ -59,13 +59,16 @@ export function MobileOriginalRowTable(props: Props) {
         if (hidden && !isMobileOriginalRowInteractiveCell(cell)) {
           return <span aria-hidden="true" />;
         }
-        const previewCell = {
-          ...cell,
-          content: hidden ? '' : substituteTokens(cell.content, attrs, quotes),
-        };
+        const substitutedContent = hidden ? '' : substituteTokens(cell.content, attrs, quotes);
+        const previewCell = { ...cell, content: substitutedContent };
         return (
           <PreviewCell
             cell={previewCell}
+            // image/video 는 PreviewCell 이 자체적으로(또는 위임한 ImageCell/VideoCell 이)
+            // cell.content 를 다시 치환할 수 있어, 위에서 이미 치환한 값을 명시적으로
+            // 넘겨 이중 치환을 막는다(cell-options-container.tsx 의 opt-in 패턴과 동일).
+            // 다른 타입은 previewCell.content 폴백을 그대로 쓰므로 영향 없다.
+            content={substitutedContent}
             choiceControlType={resolveChoiceControlType(cell)}
             disableControls
           />
