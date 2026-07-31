@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { and, isNull, sql, type SQL } from 'drizzle-orm';
+import { and, isNotNull, isNull, sql, type SQL } from 'drizzle-orm';
 import type { PgTable } from 'drizzle-orm/pg-core';
 
 import { db } from '@/db';
@@ -27,7 +27,9 @@ import { extractR2KeysFromJsonbValue } from '@/lib/r2-lifecycle/key-extract';
 const REFERENCE_SURFACE: Array<{ table: PgTable; extraWhere?: SQL }> = [
   { table: surveys },
   { table: questions },
-  { table: surveyVersions },
+  // 보존 정책으로 정리된 버전(snapshot IS NULL)은 참조를 주장하지 않는다.
+  // 정리 시점에 그 키들을 이미 유예 큐에 등록했으므로 회계상 정합하다.
+  { table: surveyVersions, extraWhere: isNotNull(surveyVersions.snapshot) },
   { table: savedQuestions },
   { table: savedCells },
   { table: savedLookups },
