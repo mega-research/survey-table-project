@@ -6,6 +6,7 @@ import {
   fetchDueCandidates,
   resolveCandidate,
 } from '@/lib/r2-lifecycle/deletion-queue.server';
+import { getIndexedReferencedKeys } from '@/lib/r2-lifecycle/key-ref-index.server';
 import { deleteR2ObjectVerified } from '@/lib/r2-lifecycle/r2-object-delete.server';
 import { findReferencedKeys } from '@/lib/r2-lifecycle/reference-scan.server';
 import { getLedgeredKeys } from '@/lib/r2-lifecycle/sent-ledger.server';
@@ -22,9 +23,13 @@ export const R2_EXECUTOR_MAX_BATCHES = 200;
 export interface DeletionBatchResult {
   processed: number;
   keptLedger: number;
+  /** 파생 인덱스 히트로 스캔 없이 보존된 키 수 */
+  keptIndexed: number;
   keptReferenced: number;
   deleted: number;
   failed: number;
+  /** 인덱스는 '참조 없음'이라 했는데 스캔이 참조를 찾은 수 — 위험 방향 드리프트 */
+  indexMisses: number;
   /** 참조 재확인이 실패해 아무 후보도 종결하지 못한 배치. 후보는 pending 유지. */
   scanFailed: boolean;
   hasMore: boolean;
@@ -46,9 +51,11 @@ export async function executeDueDeletionBatch(
   const result: DeletionBatchResult = {
     processed: due.length,
     keptLedger: 0,
+    keptIndexed: 0,
     keptReferenced: 0,
     deleted: 0,
     failed: 0,
+    indexMisses: 0,
     scanFailed: false,
     hasMore: due.length === limit,
   };
@@ -56,7 +63,13 @@ export async function executeDueDeletionBatch(
 
   const keys = [...new Set(due.map((c) => c.key))];
   const ledgered = await getLedgeredKeys(keys);
-  const toScan = keys.filter((k) => !ledgered.has(k));
+  const afterLedger = keys.filter((k) => !ledgered.has(k));
+
+  // 파생 인덱스는 사전 필터다 — '참조됨'으로 스캔을 생략시킬 수는 있으나
+  // '참조 없음'으로 삭제를 결정하지는 못한다. 최종 판정은 콘텐츠 스캔이며,
+  // 따라서 인덱스 드리프트는 과보존 방향으로만 작용한다 (spec 6.3).
+  const indexed = await getIndexedReferencedKeys(afterLedger);
+  const toScan = afterLedger.filter((k) => !indexed.has(k));
   // 판정 불능은 보존으로 귀결한다 — 스캔이 실패하면 아무것도 삭제하지 않고
   // 후보를 pending 으로 남긴 채 배치를 정상 종료한다. 예외를 그대로 던지면
   // Inngest step 이 실패해 재시도까지 실패하며 집행 전체가 정지한다.
@@ -73,18 +86,35 @@ export async function executeDueDeletionBatch(
     return {
       processed: 0,
       keptLedger: 0,
+      keptIndexed: 0,
       keptReferenced: 0,
       deleted: 0,
       failed: 0,
+      indexMisses: 0,
       scanFailed: true,
       hasMore: false,
     };
+  }
+
+  // 스캔 대상은 인덱스가 '참조 없음'이라 한 키뿐이므로, 스캔이 찾은 것은
+  // 정의상 전부 인덱스 누락이다. 위험 방향(누락 → 삭제 가능)이라 보고한다.
+  if (referenced.size > 0) {
+    result.indexMisses = referenced.size;
+    console.warn('r2 참조 인덱스 누락 감지:', [...referenced]);
+    Sentry.captureMessage('r2 참조 인덱스 누락', {
+      level: 'warning',
+      tags: { operation: 'r2_key_ref_index' },
+      extra: { keys: [...referenced] },
+    });
   }
 
   for (const candidate of due) {
     if (ledgered.has(candidate.key)) {
       await resolveCandidate(candidate.id, 'kept', '발송 장부 보호 — 발송된 메일이 참조');
       result.keptLedger += 1;
+    } else if (indexed.has(candidate.key)) {
+      await resolveCandidate(candidate.id, 'kept', '참조 인덱스에서 참조 발견');
+      result.keptIndexed += 1;
     } else if (referenced.has(candidate.key)) {
       await resolveCandidate(candidate.id, 'kept', '전역 참조 재확인에서 참조 발견');
       result.keptReferenced += 1;
@@ -115,9 +145,11 @@ export interface DeletionExecutorTotals {
   batches: number;
   processed: number;
   keptLedger: number;
+  keptIndexed: number;
   keptReferenced: number;
   deleted: number;
   failed: number;
+  indexMisses: number;
   scanFailures: number;
 }
 
@@ -136,9 +168,11 @@ export async function runDeletionExecutor(
     batches: 0,
     processed: 0,
     keptLedger: 0,
+    keptIndexed: 0,
     keptReferenced: 0,
     deleted: 0,
     failed: 0,
+    indexMisses: 0,
     scanFailures: 0,
   };
 
@@ -149,9 +183,11 @@ export async function runDeletionExecutor(
     totals.batches += 1;
     totals.processed += batch.processed;
     totals.keptLedger += batch.keptLedger;
+    totals.keptIndexed += batch.keptIndexed;
     totals.keptReferenced += batch.keptReferenced;
     totals.deleted += batch.deleted;
     totals.failed += batch.failed;
+    totals.indexMisses += batch.indexMisses;
     if (batch.scanFailed) totals.scanFailures += 1;
     if (!batch.hasMore) break;
   }

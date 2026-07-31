@@ -9,13 +9,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { R2DeletionCandidate } from '@/db/schema';
 
-const { fetchDueMock, resolveMock, ledgerMock, referencedMock, deleteMock } = vi.hoisted(() => ({
-  fetchDueMock: vi.fn<(limit: number, now?: Date) => Promise<R2DeletionCandidate[]>>(),
-  resolveMock: vi.fn(async () => undefined),
-  ledgerMock: vi.fn(async () => new Set<string>()),
-  referencedMock: vi.fn(async () => new Set<string>()),
-  deleteMock: vi.fn(async () => ({ ok: true }) as { ok: true } | { ok: false; error: string }),
-}));
+const { fetchDueMock, resolveMock, ledgerMock, referencedMock, deleteMock, indexedMock } =
+  vi.hoisted(() => ({
+    fetchDueMock: vi.fn<(limit: number, now?: Date) => Promise<R2DeletionCandidate[]>>(),
+    resolveMock: vi.fn(async () => undefined),
+    ledgerMock: vi.fn(async () => new Set<string>()),
+    referencedMock: vi.fn(async () => new Set<string>()),
+    deleteMock: vi.fn(async () => ({ ok: true }) as { ok: true } | { ok: false; error: string }),
+    indexedMock: vi.fn(async () => new Set<string>()),
+  }));
 
 vi.mock('@/lib/r2-lifecycle/deletion-queue.server', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/r2-lifecycle/deletion-queue.server')>()),
@@ -31,6 +33,9 @@ vi.mock('@/lib/r2-lifecycle/reference-scan.server', () => ({
 }));
 vi.mock('@/lib/r2-lifecycle/r2-object-delete.server', () => ({
   deleteR2ObjectVerified: deleteMock,
+}));
+vi.mock('@/lib/r2-lifecycle/key-ref-index.server', () => ({
+  getIndexedReferencedKeys: indexedMock,
 }));
 vi.mock('@sentry/nextjs', () => ({
   captureException: vi.fn(),
@@ -61,6 +66,7 @@ beforeEach(() => {
   ledgerMock.mockResolvedValue(new Set());
   referencedMock.mockResolvedValue(new Set());
   deleteMock.mockResolvedValue({ ok: true });
+  indexedMock.mockResolvedValue(new Set());
 });
 
 describe('executeDueDeletionBatch — 키별 결정', () => {
@@ -191,5 +197,49 @@ describe('executeDueDeletionBatch — 스캔 실패 처리', () => {
 
     expect(totals.scanFailures).toBe(1);
     expect(totals.batches).toBe(1);
+  });
+});
+
+describe('executeDueDeletionBatch — 인덱스 사전 필터', () => {
+  it('인덱스 히트 키는 스캔 없이 보존된다', async () => {
+    fetchDueMock.mockResolvedValueOnce([candidate('c1', 'survey/2026/07/a.png')]);
+    indexedMock.mockResolvedValueOnce(new Set(['survey/2026/07/a.png']));
+
+    const result = await executeDueDeletionBatch(10);
+
+    expect(result.keptIndexed).toBe(1);
+    expect(referencedMock).not.toHaveBeenCalled();
+    expect(deleteMock).not.toHaveBeenCalled();
+  });
+
+  it('인덱스 미스지만 스캔이 참조를 찾으면 보존하고 누락으로 집계한다', async () => {
+    fetchDueMock.mockResolvedValueOnce([candidate('c1', 'survey/2026/07/a.png')]);
+    indexedMock.mockResolvedValueOnce(new Set());
+    referencedMock.mockResolvedValueOnce(new Set(['survey/2026/07/a.png']));
+
+    const result = await executeDueDeletionBatch(10);
+
+    expect(result.keptReferenced).toBe(1);
+    expect(result.indexMisses).toBe(1);
+    expect(deleteMock).not.toHaveBeenCalled();
+  });
+
+  it('인덱스와 스캔 모두 미스면 삭제한다', async () => {
+    fetchDueMock.mockResolvedValueOnce([candidate('c1', 'survey/2026/07/a.png')]);
+
+    const result = await executeDueDeletionBatch(10);
+
+    expect(result.deleted).toBe(1);
+    expect(result.indexMisses).toBe(0);
+    expect(deleteMock).toHaveBeenCalledWith('survey/2026/07/a.png');
+  });
+
+  it('장부 히트 키는 인덱스 조회 대상에서 빠진다', async () => {
+    fetchDueMock.mockResolvedValueOnce([candidate('c1', 'mail/ledgered.png')]);
+    ledgerMock.mockResolvedValueOnce(new Set(['mail/ledgered.png']));
+
+    await executeDueDeletionBatch(10);
+
+    expect(indexedMock).toHaveBeenCalledWith([]);
   });
 });
