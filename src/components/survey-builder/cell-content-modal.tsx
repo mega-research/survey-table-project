@@ -69,6 +69,7 @@ import {
 } from '@/utils/table-cell-code-generator';
 
 import { useCellForm } from './hooks/use-cell-form';
+import { AnswerQuoteTextField } from './answer-quote-fields';
 import { CellChoiceEditor } from './cell-choice-editor';
 import { CellImageEditor } from './cell-image-editor';
 import { CellStyleFields } from './cell-style-fields';
@@ -104,6 +105,11 @@ interface CellContentModalProps {
   rowLabel?: string | undefined;
   columnCode?: string | undefined;
   columnLabel?: string | undefined;
+  /**
+   * 질문 단위 응답 인용 토글. 켜졌을 때만 셀·옵션별 인용 문구 입력칸이 등장한다.
+   * (질문 편집 모달의 formData 에서 내려오므로 저장 전 토글도 즉시 반영된다)
+   */
+  answerQuoteEnabled?: boolean | undefined;
   /** choice_opt 탭용: 질문 레벨 옵션 그룹 목록 (표시/편집용). 없으면 그룹 기능 비활성. */
   choiceGroups?: ChoiceGroup[] | undefined;
   /** choice_opt 그룹 변경 시 부모에게 통보 (prune 후 저장은 부모 책임) */
@@ -128,6 +134,7 @@ export function CellContentModal({
   rowLabel,
   columnCode,
   columnLabel,
+  answerQuoteEnabled = false,
   choiceGroups: choiceGroupsProp,
   onChoiceGroupsChange,
   getLatestRows,
@@ -196,6 +203,7 @@ export function CellContentModal({
     isCustomExportLabel,
     spssVarType,
     spssMeasure,
+    answerQuoteText,
   } = form;
   // 순위 옵션(ranking_opt, Case 2)은 순위형 질문의 내장 테이블에서만 렌더러가 있다.
   // 테이블형 질문에서는 응답 select 가 나오지 않는 막다른 조합이 되므로 탭을 숨긴다.
@@ -253,6 +261,7 @@ export function CellContentModal({
     setIsCustomExportLabel,
     setSpssVarType,
     setSpssMeasure,
+    setAnswerQuoteText,
   } = setters;
 
   // choice_opt 탭용 로컬 그룹 편집 상태.
@@ -1009,6 +1018,16 @@ export function CellContentModal({
               )}
             </div>
 
+            {answerQuoteEnabled && (
+              <AnswerQuoteTextField
+                id="cell-answer-quote-text"
+                value={answerQuoteText}
+                onChange={setAnswerQuoteText}
+                mode="input"
+                showInputTokenHint
+              />
+            )}
+
             <div className="space-y-2">
               <Label className="text-sm font-medium">미리보기</Label>
               <div className="rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 p-4">
@@ -1044,6 +1063,7 @@ export function CellContentModal({
             <CellChoiceEditor
               cellType="checkbox"
               textContent={textContent}
+              answerQuoteEnabled={answerQuoteEnabled}
               currentQuestionId={currentQuestionId}
               questions={questions}
               checkboxOptions={checkboxOptions}
@@ -1074,6 +1094,7 @@ export function CellContentModal({
             <CellChoiceEditor
               cellType="radio"
               textContent={textContent}
+              answerQuoteEnabled={answerQuoteEnabled}
               currentQuestionId={currentQuestionId}
               questions={questions}
               checkboxOptions={checkboxOptions}
@@ -1096,6 +1117,7 @@ export function CellContentModal({
             <CellChoiceEditor
               cellType="select"
               textContent={textContent}
+              answerQuoteEnabled={answerQuoteEnabled}
               currentQuestionId={currentQuestionId}
               questions={questions}
               checkboxOptions={checkboxOptions}
@@ -1135,6 +1157,7 @@ export function CellContentModal({
               onRankSuffixPatternChange={setRankSuffixPattern}
               rankVarNames={rankVarNames}
               onRankVarNamesChange={setRankVarNames}
+              answerQuoteEnabled={answerQuoteEnabled}
             />
           </TabsContent>
 
@@ -1152,6 +1175,9 @@ export function CellContentModal({
               choiceGroupId={choiceGroupId}
               onChoiceGroupIdChange={setChoiceGroupId}
               onChoiceGroupsChange={setEditChoiceGroups}
+              answerQuoteEnabled={answerQuoteEnabled}
+              answerQuoteText={answerQuoteText}
+              onAnswerQuoteTextChange={setAnswerQuoteText}
             />
           </TabsContent>
 
@@ -1173,6 +1199,9 @@ export function CellContentModal({
               choiceGroupId={choiceGroupId}
               onChoiceGroupIdChange={setChoiceGroupId}
               onChoiceGroupsChange={setEditChoiceGroups}
+              answerQuoteEnabled={answerQuoteEnabled}
+              answerQuoteText={answerQuoteText}
+              onAnswerQuoteTextChange={setAnswerQuoteText}
             />
           </TabsContent>
         </Tabs>

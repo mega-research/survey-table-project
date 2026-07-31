@@ -85,6 +85,7 @@ export interface CellFormSetters {
   setIsCustomExportLabel: (v: boolean) => void;
   setSpssVarType: (v: CellFormState['spssVarType']) => void;
   setSpssMeasure: (v: CellFormState['spssMeasure']) => void;
+  setAnswerQuoteText: (v: string) => void;
 }
 
 export interface UseCellFormResult {
@@ -166,6 +167,7 @@ export function useCellForm(cell: TableCell, isOpen: boolean): UseCellFormResult
       setIsCustomExportLabel: set('isCustomExportLabel'),
       setSpssVarType: set('spssVarType'),
       setSpssMeasure: set('spssMeasure'),
+      setAnswerQuoteText: set('answerQuoteText'),
     };
   }, []);
 

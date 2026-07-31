@@ -69,6 +69,11 @@ export interface CellFormState {
   isCustomExportLabel: boolean;
   spssVarType: TableCell['spssVarType'];
   spssMeasure: TableCell['spssMeasure'];
+  /**
+   * 셀 단위 응답 인용 문구 (input / choice_opt / ranking_opt).
+   * radio·checkbox·select·ranking 셀은 문구를 옵션 객체가 소유하므로 이 필드를 쓰지 않는다.
+   */
+  answerQuoteText: string;
 }
 
 /** 셀 내용 편집 탭의 콘텐츠 타입 (모달 Tabs value) */
@@ -114,6 +119,16 @@ export const MOBILE_LABEL_CELL_TYPES = new Set<TableCell['type']>([
 
 /** 옵션 그룹 귀속이 가능한 셀 타입 */
 export const GROUPABLE_CELL_TYPES = new Set<TableCell['type']>(['choice_opt', 'ranking_opt']);
+
+/**
+ * 셀 자체가 응답 인용 문구를 소유하는 타입.
+ * 선택 컨트롤 셀(radio/checkbox/select/ranking)은 문구가 옵션 객체 안에 있어 제외한다.
+ */
+export const ANSWER_QUOTE_CELL_TYPES = new Set<TableCell['type']>([
+  'input',
+  'choice_opt',
+  'ranking_opt',
+]);
 
 /** cell.type → 모달 ContentType (undefined 면 'text' 로 폴백) */
 export function narrowCellType(t: TableCell['type'] | undefined): ContentType {
@@ -173,6 +188,7 @@ export function cellToFormState(cell: TableCell): CellFormState {
     isCustomExportLabel: cell.isCustomExportLabel ?? !!cell.exportLabel,
     spssVarType: cell.spssVarType,
     spssMeasure: cell.spssMeasure,
+    answerQuoteText: cell.answerQuoteText ?? '',
   };
 }
 
@@ -241,6 +257,7 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
     verticalAlign: _verticalAlign,
     textPosition: _textPosition,
     mobileDisplay: _mobileDisplay,
+    answerQuoteText: _answerQuoteText,
     ...cellBase
   } = cell;
 
@@ -377,6 +394,12 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
       : form.isCustomExportLabel
         ? { isCustomExportLabel: form.isCustomExportLabel }
         : {}),
+    // 셀 단위 응답 인용 문구 (input/choice_opt/ranking_opt 만; 비어 있으면 키 자체를 저장하지 않음).
+    // 질문 토글이 꺼져 있어도 폼이 원본값을 그대로 들고 있으므로 여기서 보존된다 — 토글 OFF 가
+    // 이미 입력해둔 문구를 지우지 않아야 한다는 요구가 이 경로로 지켜진다.
+    ...(ANSWER_QUOTE_CELL_TYPES.has(contentType) && form.answerQuoteText.trim()
+      ? { answerQuoteText: form.answerQuoteText.trim() }
+      : {}),
     // SPSS 변수 타입 / 측정 수준 (입력 셀만; 값이 있을 때만 키 추가)
     ...(INTERACTIVE_CELL_TYPES.has(contentType)
       ? {

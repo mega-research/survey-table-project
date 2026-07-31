@@ -46,6 +46,11 @@ interface DynamicTableEditorProps {
   currentQuestionId?: string | undefined;
   questionCode?: string | undefined;
   questionTitle?: string | undefined;
+  /**
+   * 질문 단위 응답 인용 토글. 셀 편집 모달의 인용 문구 입력칸 노출 여부를 결정한다.
+   * 스토어가 아니라 편집 모달의 formData 에서 내려온다 — 저장 전 토글도 즉시 반영되어야 하기 때문.
+   */
+  answerQuoteEnabled?: boolean | undefined;
   dynamicRowConfigs?: DynamicRowGroupConfig[] | undefined;
   onTableChange: (data: {
     tableTitle: string;
@@ -847,6 +852,7 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
           columnCode={selectedCellContext.columnCode}
           columnLabel={selectedCellContext.columnLabel}
           cell={selectedCellContext.cell}
+          answerQuoteEnabled={props.answerQuoteEnabled ?? false}
           getLatestRows={() => currentRowsRef.current}
           choiceGroups={currentQuestion?.choiceGroups}
           onChoiceGroupsChange={(groups: ChoiceGroup[]) => {

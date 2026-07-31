@@ -7,9 +7,13 @@ import { generateId } from '@/lib/utils';
 import { getMaxSpssCode } from '@/utils/option-code-generator';
 import type { QuestionOption } from '@/types/survey';
 
+import { AnswerQuoteTextField } from './answer-quote-fields';
+
 interface RankingOptionsEditorProps {
   options: QuestionOption[];
   onChange: (options: QuestionOption[]) => void;
+  /** 질문 단위 응답 인용 토글 — 켜졌을 때만 옵션별 인용 문구 입력칸을 노출한다. */
+  answerQuoteEnabled?: boolean | undefined;
 }
 
 /**
@@ -17,7 +21,11 @@ interface RankingOptionsEditorProps {
  * - label / spssNumericCode(응답값) / optionCode(변수번호) 만 편집
  * - '기타' 옵션은 셀의 allowOtherOption 토글로 별도 처리하므로 이 리스트에 포함하지 않음
  */
-export function RankingOptionsEditor({ options, onChange }: RankingOptionsEditorProps) {
+export function RankingOptionsEditor({
+  options,
+  onChange,
+  answerQuoteEnabled = false,
+}: RankingOptionsEditorProps) {
   const updateAt = (index: number, patch: Partial<QuestionOption>) => {
     const next = [...options];
     const current = next[index];
@@ -58,8 +66,8 @@ export function RankingOptionsEditor({ options, onChange }: RankingOptionsEditor
 
       <div className="max-h-[300px] space-y-2 overflow-y-auto pr-2">
         {options.map((option, index) => (
-          <div key={option.id} className="flex items-center gap-2 rounded-lg border border-gray-200 p-3">
-            <div className="flex-1">
+          <div key={option.id} className="flex items-start gap-2 rounded-lg border border-gray-200 p-3">
+            <div className="flex-1 space-y-2">
               <div className="flex gap-2">
                 <Input
                   value={option.label}
@@ -90,6 +98,14 @@ export function RankingOptionsEditor({ options, onChange }: RankingOptionsEditor
                   />
                 </div>
               </div>
+              {answerQuoteEnabled && (
+                <AnswerQuoteTextField
+                  id={`answer-quote-ranking-option-${option.id}`}
+                  value={option.answerQuoteText}
+                  onChange={(answerQuoteText) => updateAt(index, { answerQuoteText })}
+                  showInputTokenHint={option.allowTextInput === true}
+                />
+              )}
             </div>
             <Button
               type="button"

@@ -223,6 +223,11 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
           : {}),
         ...(question.spssVarType !== undefined ? { spssVarType: question.spssVarType } : {}),
         ...(question.spssMeasure !== undefined ? { spssMeasure: question.spssMeasure } : {}),
+        // 응답 인용 — hydrate 를 빠뜨리면 UPDATE 페이로드에서 키가 사라져 편집 화면은
+        // 멀쩡한데 재진입 시 값이 비는 formData/store 이중상태 silent drop 이 된다.
+        answerQuoteEnabled: question.answerQuoteEnabled ?? false,
+        answerQuoteName: question.answerQuoteName ?? '',
+        answerQuoteText: question.answerQuoteText ?? '',
       });
 
       // 로컬 state 동기화 (이전 질문의 pending debounce 취소)

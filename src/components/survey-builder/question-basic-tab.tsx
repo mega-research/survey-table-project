@@ -40,6 +40,11 @@ import { useSurveyUIStore } from '@/stores/ui-store';
 import { isOptionListType } from '@/types/question-types';
 import { Question, QuestionOption, SelectLevel } from '@/types/survey';
 
+import {
+  AnswerQuoteQuestionControl,
+  AnswerQuoteTextField,
+  supportsAnswerQuote,
+} from './answer-quote-fields';
 import { OptionLabelTextarea } from './option-label-textarea';
 import { OptionPlaceholderEditor } from './option-placeholder-editor';
 import { VariableButton } from './variable-button';
@@ -158,6 +163,10 @@ export function QuestionBasicTab({
 
   // 토큰 prefill(defaultValueTemplate)이 설정되면 숫자 초기값(emptyDefault)은 비활성 — prefill 우선
   const hasTokenPrefill = (formData.defaultValueTemplate ?? '').trim().length > 0;
+
+  // 응답 인용 — 기본 꺼짐. 켜졌을 때만 옵션·셀 단위 문구 입력칸이 추가로 등장한다.
+  const answerQuoteEnabled = formData.answerQuoteEnabled ?? false;
+  const showAnswerQuoteControl = supportsAnswerQuote(question.type);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -655,6 +664,28 @@ export function QuestionBasicTab({
         )}
       </div>
 
+      {/* 응답 인용 설정 — 옵션/셀 블록 위에 두어 토글과 옵션별 문구가 한눈에 이어지도록 */}
+      {showAnswerQuoteControl && (
+        <AnswerQuoteQuestionControl
+          enabled={answerQuoteEnabled}
+          onEnabledChange={(checked) =>
+            // 끌 때 옵션·셀의 문구는 지우지 않는다 — 다시 켜면 그대로 돌아와야 한다.
+            setFormData((prev) => ({ ...prev, answerQuoteEnabled: checked }))
+          }
+          name={formData.answerQuoteName ?? ''}
+          onNameChange={(name) => setFormData((prev) => ({ ...prev, answerQuoteName: name }))}
+          {...(question.type === 'text'
+            ? {
+                questionText: {
+                  value: formData.answerQuoteText,
+                  onChange: (value: string) =>
+                    setFormData((prev) => ({ ...prev, answerQuoteText: value })),
+                },
+              }
+            : {})}
+        />
+      )}
+
       {/* 순위형(ranking) 설정 — 선택 옵션 블록 위로 배치해 항상 먼저 보이도록 */}
       {question.type === 'ranking' && (
         <RankingConfigEditorForQuestion formData={formData} setFormData={setFormData} />
@@ -806,6 +837,7 @@ export function QuestionBasicTab({
                     updateOption={updateOption}
                     removeOption={removeOption}
                     showBranchSettings={showBranchSettings}
+                    answerQuoteEnabled={answerQuoteEnabled}
                     questions={questions}
                     questionId={questionId}
                   />
@@ -1103,6 +1135,21 @@ export function QuestionBasicTab({
                                       </div>
                                     </div>
                                   )}
+
+                                  {answerQuoteEnabled && (
+                                    <div className="ml-8">
+                                      <AnswerQuoteTextField
+                                        id={`answer-quote-level-option-${option.id}`}
+                                        value={option.answerQuoteText}
+                                        onChange={(answerQuoteText) =>
+                                          updateLevelOption(level.id, option.id, {
+                                            answerQuoteText,
+                                          })
+                                        }
+                                        showInputTokenHint={option.allowTextInput === true}
+                                      />
+                                    </div>
+                                  )}
                                 </div>
                               );
                             })}
@@ -1225,6 +1272,7 @@ export function QuestionBasicTab({
             currentQuestionId={questionId || ''}
             questionCode={formData.questionCode}
             questionTitle={formData.title}
+            answerQuoteEnabled={answerQuoteEnabled}
             dynamicRowConfigs={formData.dynamicRowConfigs}
             onTableChange={(data) => {
               setFormData((prev) => {
@@ -1328,6 +1376,8 @@ interface SortableOptionItemProps {
   ) => void;
   removeOption: (optionId: string) => void;
   showBranchSettings: boolean;
+  /** 질문 단위 응답 인용 토글 — 켜졌을 때만 옵션별 인용 문구 입력칸을 노출한다. */
+  answerQuoteEnabled: boolean;
   questions: Question[];
   questionId: string;
 }
@@ -1339,6 +1389,7 @@ function SortableOptionItem({
   updateOption,
   removeOption,
   showBranchSettings,
+  answerQuoteEnabled,
   questions,
   questionId,
 }: SortableOptionItemProps) {
@@ -1456,6 +1507,17 @@ function SortableOptionItem({
             } as Partial<QuestionOption>)
           }
         />
+      )}
+
+      {answerQuoteEnabled && (
+        <div className="px-3 pb-3">
+          <AnswerQuoteTextField
+            id={`answer-quote-option-${option.id}`}
+            value={option.answerQuoteText}
+            onChange={(answerQuoteText) => updateOption(option.id, { answerQuoteText })}
+            showInputTokenHint={option.allowTextInput === true}
+          />
+        </div>
       )}
 
       {showBranchSettings && (

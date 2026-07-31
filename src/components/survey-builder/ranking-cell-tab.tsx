@@ -23,6 +23,8 @@ interface RankingCellTabProps {
   onRankSuffixPatternChange: (v: string) => void;
   rankVarNames: string[];
   onRankVarNamesChange: (v: string[]) => void;
+  /** 질문 단위 응답 인용 토글 — 켜졌을 때만 옵션별 인용 문구 입력칸을 노출한다. */
+  answerQuoteEnabled?: boolean | undefined;
 }
 
 /**
@@ -41,6 +43,7 @@ export function RankingCellTab({
   onRankSuffixPatternChange,
   rankVarNames,
   onRankVarNamesChange,
+  answerQuoteEnabled = false,
 }: RankingCellTabProps) {
   const positions = Math.max(1, rankingConfig?.positions ?? 3);
   const baseVar = cellCode || 'Q1_r1_c1';
@@ -72,7 +75,11 @@ export function RankingCellTab({
         </div>
       </div>
 
-      <RankingOptionsEditor options={rankingOptions} onChange={onRankingOptionsChange} />
+      <RankingOptionsEditor
+        options={rankingOptions}
+        onChange={onRankingOptionsChange}
+        answerQuoteEnabled={answerQuoteEnabled}
+      />
 
       <div className="flex items-center justify-between gap-4 rounded-md border border-gray-200 p-3">
         <div className="space-y-0.5">

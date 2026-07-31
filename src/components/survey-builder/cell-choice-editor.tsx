@@ -10,6 +10,7 @@ import { generateId } from '@/lib/utils';
 import { getMaxSpssCode } from '@/utils/option-code-generator';
 import { CheckboxOption, Question, QuestionOption, RadioOption } from '@/types/survey';
 
+import { AnswerQuoteTextField } from './answer-quote-fields';
 import { BranchRuleEditor } from './branch-rule-editor';
 import { OptionLabelTextarea } from './option-label-textarea';
 import { OptionPlaceholderEditor } from './option-placeholder-editor';
@@ -28,6 +29,8 @@ export interface CellChoiceEditorProps {
   currentQuestionId: string;
   /** 전체 질문 목록 (분기 규칙용) */
   questions: Question[];
+  /** 질문 단위 응답 인용 토글 — 켜졌을 때만 옵션별 인용 문구 입력칸을 노출한다. */
+  answerQuoteEnabled?: boolean | undefined;
 
   // checkbox
   checkboxOptions: CheckboxOption[];
@@ -55,6 +58,7 @@ export function CellChoiceEditor({
   textContent,
   currentQuestionId,
   questions,
+  answerQuoteEnabled = false,
   checkboxOptions,
   onCheckboxOptionsChange,
   radioOptions,
@@ -173,6 +177,21 @@ export function CellChoiceEditor({
                       onCheckboxOptionsChange(updated);
                     }}
                   />
+                )}
+
+                {answerQuoteEnabled && (
+                  <div className="px-3 pb-3">
+                    <AnswerQuoteTextField
+                      id={`answer-quote-checkbox-${option.id}`}
+                      value={option.answerQuoteText}
+                      onChange={(answerQuoteText) => {
+                        const updated = [...checkboxOptions];
+                        updated[index] = { ...option, answerQuoteText };
+                        onCheckboxOptionsChange(updated);
+                      }}
+                      showInputTokenHint={option.allowTextInput === true}
+                    />
+                  </div>
                 )}
 
                 {showBranchSettings && (
@@ -448,6 +467,21 @@ export function CellChoiceEditor({
                   />
                 )}
 
+                {answerQuoteEnabled && (
+                  <div className="px-3 pb-3">
+                    <AnswerQuoteTextField
+                      id={`answer-quote-radio-${option.id}`}
+                      value={option.answerQuoteText}
+                      onChange={(answerQuoteText) => {
+                        const updated = [...radioOptions];
+                        updated[index] = { ...option, answerQuoteText };
+                        onRadioOptionsChange(updated);
+                      }}
+                      showInputTokenHint={option.allowTextInput === true}
+                    />
+                  </div>
+                )}
+
                 {showBranchSettings && (
                   <div className="px-3 pb-3">
                     <BranchRuleEditor
@@ -620,6 +654,21 @@ export function CellChoiceEditor({
                     onSelectOptionsChange(updated);
                   }}
                 />
+              )}
+
+              {answerQuoteEnabled && (
+                <div className="px-3 pb-3">
+                  <AnswerQuoteTextField
+                    id={`answer-quote-select-${option.id}`}
+                    value={option.answerQuoteText}
+                    onChange={(answerQuoteText) => {
+                      const updated = [...selectOptions];
+                      updated[index] = { ...option, answerQuoteText };
+                      onSelectOptionsChange(updated);
+                    }}
+                    showInputTokenHint={option.allowTextInput === true}
+                  />
+                </div>
               )}
 
               {showBranchSettings && (

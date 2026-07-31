@@ -812,3 +812,60 @@ describe('buildUpdatedCell — 모바일 셀 라벨', () => {
     expect(buildUpdatedCell(form, baseCell)).not.toHaveProperty('mobileLabel');
   });
 });
+
+describe('buildUpdatedCell — 셀 단위 응답 인용 문구 (answerQuoteText)', () => {
+  it('input 셀은 인용 문구를 trim 해 저장한다', () => {
+    const form = { ...baseForm('input'), answerQuoteText: '  전기차를  ' };
+    expect(buildUpdatedCell(form, baseCell)).toMatchObject({
+      type: 'input',
+      answerQuoteText: '전기차를',
+    });
+  });
+
+  it('choice_opt / ranking_opt 셀도 인용 문구를 저장한다', () => {
+    const choice = buildUpdatedCell(
+      { ...baseForm('choice_opt'), answerQuoteText: '매우 만족' },
+      baseCell,
+    );
+    expect(choice).toMatchObject({ type: 'choice_opt', answerQuoteText: '매우 만족' });
+
+    const ranking = buildUpdatedCell(
+      { ...baseForm('ranking_opt'), answerQuoteText: '1순위 브랜드' },
+      baseCell,
+    );
+    expect(ranking).toMatchObject({ type: 'ranking_opt', answerQuoteText: '1순위 브랜드' });
+  });
+
+  it('문구가 비면 키 자체를 저장하지 않는다', () => {
+    const form = { ...baseForm('input'), answerQuoteText: '   ' };
+    expect(buildUpdatedCell(form, baseCell)).not.toHaveProperty('answerQuoteText');
+  });
+
+  it('선택 컨트롤 셀(radio)은 셀 단위 문구를 저장하지 않는다 — 문구는 옵션이 소유한다', () => {
+    const form = { ...baseForm('radio'), answerQuoteText: '엉뚱한 값' };
+    expect(buildUpdatedCell(form, baseCell)).not.toHaveProperty('answerQuoteText');
+  });
+
+  it('폼이 문구를 소유하므로 원본 셀의 옛 문구가 되살아나지 않는다', () => {
+    const stale: TableCell = {
+      id: 'c1',
+      type: 'input',
+      content: '',
+      answerQuoteText: '옛 문구',
+    };
+    const form = { ...baseForm('input'), answerQuoteText: '' };
+    expect(buildUpdatedCell(form, stale)).not.toHaveProperty('answerQuoteText');
+  });
+
+  it('cellToFormState → buildUpdatedCell 왕복에서 문구가 보존된다', () => {
+    const cell: TableCell = {
+      id: 'c1',
+      type: 'input',
+      content: '',
+      answerQuoteText: '{{입력}} 지역',
+    };
+    const form = cellToFormState(cell);
+    expect(form.answerQuoteText).toBe('{{입력}} 지역');
+    expect(buildUpdatedCell(form, cell)).toMatchObject({ answerQuoteText: '{{입력}} 지역' });
+  });
+});

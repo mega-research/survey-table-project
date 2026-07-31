@@ -9,6 +9,8 @@ import { ChoiceGroup } from '@/types/survey';
 import { generateId } from '@/lib/utils';
 import { nextGroupKey } from '@/utils/choice-group-helpers';
 
+import { AnswerQuoteTextField } from './answer-quote-fields';
+
 interface RankingOptCellTabProps {
   rankingLabel: string;
   onRankingLabelChange: (v: string) => void;
@@ -24,6 +26,10 @@ interface RankingOptCellTabProps {
   choiceGroupId: string;
   onChoiceGroupIdChange: (id: string) => void;
   onChoiceGroupsChange: (groups: ChoiceGroup[]) => void;
+  /** 질문 단위 응답 인용 토글 — 켜졌을 때만 인용 문구 입력칸을 노출한다. */
+  answerQuoteEnabled?: boolean | undefined;
+  answerQuoteText: string;
+  onAnswerQuoteTextChange: (v: string) => void;
 }
 
 /**
@@ -42,6 +48,9 @@ export function RankingOptCellTab({
   choiceGroupId,
   onChoiceGroupIdChange,
   onChoiceGroupsChange,
+  answerQuoteEnabled = false,
+  answerQuoteText,
+  onAnswerQuoteTextChange,
 }: RankingOptCellTabProps) {
   const isOther = isOtherRankingCell === true;
 
@@ -183,6 +192,15 @@ export function RankingOptCellTab({
           바뀌어도 값이 유지되길 원하면 명시적으로 지정하세요.
         </p>
       </div>
+
+      {answerQuoteEnabled && (
+        <AnswerQuoteTextField
+          id="ranking-opt-answer-quote-text"
+          value={answerQuoteText}
+          onChange={onAnswerQuoteTextChange}
+          showInputTokenHint={isOther}
+        />
+      )}
     </div>
   );
 }
