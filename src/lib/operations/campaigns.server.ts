@@ -501,19 +501,29 @@ export async function listBouncedContactIds(surveyId: string): Promise<string[]>
   const blinds = await listBouncedEmailBlindIndexes(surveyId);
   if (blinds.length === 0) return [];
 
+  // 발송이 쓰는 주소만 대조한다 — createCampaign 은 contact_pii 를 column_key 오름차순으로
+  // 훑어 첫 email 행 하나만 발송에 쓴다(mail-campaigns.service.ts 의 asc(contactPii.columnKey)).
+  // 그 선택 규칙이 바뀌면 아래 서브쿼리의 ORDER BY 도 함께 바꿔야 한다.
+  const sendAddressBlind = sql`(
+    SELECT cp.blind_index
+    FROM contact_pii cp
+    WHERE cp.contact_target_id = ${contactTargets.id}
+      AND cp.field_type = 'email'
+    ORDER BY cp.column_key
+    LIMIT 1
+  )`;
+
   const rows = await db
-    .selectDistinct({ contactTargetId: contactPii.contactTargetId })
-    .from(contactPii)
-    .innerJoin(contactTargets, eq(contactPii.contactTargetId, contactTargets.id))
+    .select({ id: contactTargets.id })
+    .from(contactTargets)
     .where(
       and(
         eq(contactTargets.surveyId, surveyId),
-        eq(contactPii.fieldType, 'email'),
-        inArray(contactPii.blindIndex, blinds),
+        inArray(sendAddressBlind, blinds),
       ),
     );
 
-  return rows.map((r) => r.contactTargetId);
+  return rows.map((r) => r.id);
 }
 
 /**

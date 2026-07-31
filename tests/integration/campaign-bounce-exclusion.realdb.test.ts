@@ -122,4 +122,27 @@ run('반송 이력 제외 — 주소 단위 판정', () => {
     expect(await listBouncedContactIds(otherSurveyId)).toEqual([]);
     expect(id).toBeTruthy();
   });
+
+  it('발송에 쓰이지 않는 보조 email 컬럼이 반송된 경우 제외하지 않는다', async () => {
+    const surveyId = await newSurvey('보조 메일만 반송');
+    // 발송은 column_key 알파벳 순 첫 컬럼을 쓴다 — '1_대표메일' < '2_담당메일'
+    const id = await seedContact(surveyId, [
+      ['1_대표메일', 'primary@example.com'],
+      ['2_담당메일', 'secondary@example.com'],
+    ]);
+    await seedBounce(surveyId, id, 'secondary@example.com');
+
+    expect(await listBouncedContactIds(surveyId)).toEqual([]);
+  });
+
+  it('발송 주소인 첫 email 컬럼이 반송된 경우 제외한다', async () => {
+    const surveyId = await newSurvey('대표 메일 반송');
+    const id = await seedContact(surveyId, [
+      ['1_대표메일', 'primary-dead@example.com'],
+      ['2_담당메일', 'backup@example.com'],
+    ]);
+    await seedBounce(surveyId, id, 'primary-dead@example.com');
+
+    expect(await listBouncedContactIds(surveyId)).toEqual([id]);
+  });
 });
