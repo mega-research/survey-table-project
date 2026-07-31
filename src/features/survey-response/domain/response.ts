@@ -72,6 +72,8 @@ export type UpdateQuestionResponseInput = z.infer<typeof UpdateQuestionResponseI
 export const SaveDraftResponseInput = z.object({
   responseId: z.string(),
   answers: QuestionResponsesSchema,
+  /** 클라이언트 발급 단조 증가 순번. 지연 도착한 오래된 draft 쓰기를 서버가 무시하는 데 쓴다. */
+  seq: z.number().int().positive().optional(),
   ...TestAttemptIdentityFields,
 });
 export type SaveDraftResponseInput = z.infer<typeof SaveDraftResponseInput>;

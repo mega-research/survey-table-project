@@ -69,13 +69,18 @@ export interface DraftBeaconAttempt {
  * keepalive fetch 로 폴백한다.
  *
  * 호출부는 반환된 delivered promise 로 실제 도달 여부를 확인해 재시도 여부를 결정한다.
+ *
+ * seq 는 호출부(use-response-lifecycle)가 "다음" flush 와 공유하는 단조 증가 카운터다.
+ * 서버는 응답 행마다 마지막으로 적용한 seq 를 기억해, 지연 도착한 이 beacon 이 그 사이 더
+ * 새로운 쓰기를 덮어쓰지 않도록 순서를 보장하는 데 쓴다.
  */
 export function sendDraftBeacon(
   responseId: string,
   answers: Record<string, unknown>,
+  seq: number,
   identity: TestAttemptIdentity | null = null,
 ): DraftBeaconAttempt {
-  const payload = JSON.stringify({ responseId, answers, ...(identity ?? {}) });
+  const payload = JSON.stringify({ responseId, answers, seq, ...(identity ?? {}) });
   const byteSize = new Blob([payload]).size;
 
   if (byteSize > BEACON_MAX_BYTES) {

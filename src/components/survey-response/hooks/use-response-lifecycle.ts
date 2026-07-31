@@ -205,6 +205,10 @@ export function useResponseLifecycle({
   // 직전 beacon 으로 보낸 미저장 답변의 지문. 동일 내용 반복 발사를 막는다.
   // beacon 후에도 pending 을 비우지 않기 때문에(전송 성공 확인 불가) 이 가드가 필요하다.
   const lastBeaconSnapshotRef = useRef<string | null>(null);
+  // draft 쓰기 순서 보장용 단조 증가 카운터.
+  // "다음" flush 와 이탈 beacon 이 같은 카운터를 쓰므로, 지연 도착한 오래된 쓰기를
+  // 서버가 식별해 무시할 수 있다.
+  const draftSeqRef = useRef(0);
   const responseCreationPromiseRef = useRef<Promise<string | null> | null>(null);
   if (currentResponseId) activeResponseIdRef.current = currentResponseId;
 
@@ -240,6 +244,7 @@ export function useResponseLifecycle({
       await client.surveyResponse.response.saveDraft({
         responseId,
         answers: pendingSnapshot,
+        seq: ++draftSeqRef.current,
         ...(testIdentity ?? {}),
       });
       for (const [questionId, savedValue] of Object.entries(pendingSnapshot)) {
@@ -441,7 +446,7 @@ export function useResponseLifecycle({
       const answers = Object.fromEntries(pendingAnswerSavesRef.current);
       const snapshot = snapshotOfAnswers(answers);
       if (snapshot === lastBeaconSnapshotRef.current) return;
-      const attempt = sendDraftBeacon(responseId, answers, testIdentity);
+      const attempt = sendDraftBeacon(responseId, answers, ++draftSeqRef.current, testIdentity);
       // 낙관적으로 확정한다. 브라우저가 인수했으면 그대로 두고,
       // fetch 폴백이 실패로 확인되면 되돌려 다음 이탈 시점에 재시도되게 한다.
       lastBeaconSnapshotRef.current = snapshot;

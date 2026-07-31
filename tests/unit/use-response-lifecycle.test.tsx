@@ -199,6 +199,7 @@ describe('useResponseLifecycle - handleResponse INSERT 가드', () => {
     expect(saveDraft).toHaveBeenCalledWith({
       responseId: 'existing',
       answers: { q2: '두 번째 답' },
+      seq: expect.any(Number),
     });
   });
 
@@ -236,6 +237,7 @@ describe('useResponseLifecycle - handleResponse INSERT 가드', () => {
         q1: '첫 번째 답',
         q2: '두 번째 답',
       },
+      seq: expect.any(Number),
     });
   });
 
@@ -622,7 +624,11 @@ describe('이탈 시점 draft beacon', () => {
 
     expect(sendBeacon).toHaveBeenCalledTimes(1);
     expect(sendBeacon.mock.calls[0]?.[0]).toBe('/api/response/draft');
-    expect(await beaconBody(0)).toEqual({ responseId: 'r1', answers: { q1: 'a' } });
+    expect(await beaconBody(0)).toEqual({
+      responseId: 'r1',
+      answers: { q1: 'a' },
+      seq: expect.any(Number),
+    });
   });
 
   it('같은 미저장 답변으로 다시 hidden 되면 재전송하지 않는다', () => {
@@ -691,7 +697,11 @@ describe('이탈 시점 draft beacon', () => {
       await result.current.flushPendingAnswers();
     });
 
-    expect(saveDraft).toHaveBeenCalledWith({ responseId: 'r1', answers: { q1: 'a' } });
+    expect(saveDraft).toHaveBeenCalledWith({
+      responseId: 'r1',
+      answers: { q1: 'a' },
+      seq: expect.any(Number),
+    });
   });
 
   it('sendBeacon 이 false 를 반환하면 keepalive fetch 로 폴백한다', () => {
@@ -803,7 +813,11 @@ describe('이탈 시점 draft beacon', () => {
     fireHidden();
 
     expect(sendBeacon).toHaveBeenCalledTimes(1);
-    expect(await beaconBody(0)).toEqual({ responseId: 'r1', answers: { q1: 'b' } });
+    expect(await beaconBody(0)).toEqual({
+      responseId: 'r1',
+      answers: { q1: 'b' },
+      seq: expect.any(Number),
+    });
   });
 
   it('소유권 없는 대상자 테스트 세션이면 beacon 을 발사하지 않는다', async () => {
@@ -841,8 +855,44 @@ describe('이탈 시점 draft beacon', () => {
     expect(await beaconBody(0)).toEqual({
       responseId: 'r1',
       answers: { q1: 'a' },
+      seq: expect.any(Number),
       attemptId: 'a1',
       sessionId: 's1',
     });
+  });
+
+  it('flush 요청이 단조 증가 seq 를 실어 보낸다', async () => {
+    saveDraft.mockResolvedValue({ ok: true });
+    const args = baseArgs({ currentResponseId: 'existing' });
+    const { result } = renderHook(() => useResponseLifecycle(args));
+
+    act(() => result.current.handleResponse('q1', 'v1'));
+    await act(async () => {
+      await result.current.flushPendingAnswers();
+    });
+
+    expect(saveDraft).toHaveBeenCalledTimes(1);
+    const call = saveDraft.mock.calls[0]?.[0] as { seq: number };
+    expect(typeof call.seq).toBe('number');
+    expect(call.seq).toBeGreaterThan(0);
+  });
+
+  it('beacon 이 이전 flush 보다 큰 seq 를 실어 보낸다 — 같은 카운터를 공유한다', async () => {
+    saveDraft.mockResolvedValue({ ok: true });
+    const { result } = renderHook(() =>
+      useResponseLifecycle(baseArgs({ currentResponseId: 'r1' })),
+    );
+
+    act(() => result.current.handleResponse('q1', 'a'));
+    await act(async () => {
+      await result.current.flushPendingAnswers();
+    });
+    const flushSeq = (saveDraft.mock.calls[0]?.[0] as { seq: number }).seq;
+
+    act(() => result.current.handleResponse('q1', 'b'));
+    fireHidden();
+
+    const beaconSeq = (await beaconBody(0)).seq as number;
+    expect(beaconSeq).toBeGreaterThan(flushSeq);
   });
 });

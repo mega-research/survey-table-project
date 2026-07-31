@@ -673,13 +673,55 @@ export async function updateQuestionResponse(
   });
 }
 
+type DraftSeqClaim = 'claimed' | 'stale' | 'not_found';
+
+/**
+ * draft 쓰기 순번을 선점한다.
+ *
+ * 저장된 draftSeq 보다 큰 요청만 통과시키고 그 자리에서 값을 올린다. 단일 UPDATE 라
+ * 동시 요청에도 하나만 통과한다. 0행이면 seq 가 밀렸거나 행이 없는 것이므로 구분해서
+ * 돌려준다 — 행 부재는 기존 에러 경로를 그대로 타야 하기 때문이다.
+ */
+async function claimDraftSeq(responseId: string, seq: number): Promise<DraftSeqClaim> {
+  const claimed = await db.execute<{ id: string }>(sql`
+    UPDATE survey_responses
+    SET metadata = jsonb_set(
+      COALESCE(metadata, '{}'::jsonb),
+      ARRAY['draftSeq'],
+      to_jsonb(${seq}::bigint),
+      true
+    )
+    WHERE id = ${responseId}
+      AND COALESCE((metadata->>'draftSeq')::bigint, 0) < ${seq}
+    RETURNING id
+  `);
+  if (claimed.length > 0) return 'claimed';
+
+  const existing = await db.execute<{ id: string }>(sql`
+    SELECT id FROM survey_responses WHERE id = ${responseId} LIMIT 1
+  `);
+  return existing.length > 0 ? 'stale' : 'not_found';
+}
+
 /**
  * 페이지 이동 체크포인트.
  *
  * 외부 요청은 한 번만 받되 기존 단건 저장 경로를 재사용해 문항 소속 검증, 크기 제한,
  * PII 암호화, 테스트 attempt 소유권 검사를 모든 답에 동일하게 적용한다.
+ *
+ * seq 가 실려 있으면 요청 단위로 한 번 claim 한다(문항별 WHERE 절이 아니라 배치 단위인
+ * 이유는 claimDraftSeq 주석 참조 — 0행 매치를 문항별로 두면 정상 시나리오가 500 으로 샌다).
+ * 지연 도착한 stale 요청이면 답변을 전혀 쓰지 않고 applied:false 로 돌아간다.
  */
-export async function saveDraftResponse(input: SaveDraftResponseInput): Promise<void> {
+export async function saveDraftResponse(
+  input: SaveDraftResponseInput,
+): Promise<{ applied: boolean }> {
+  if (input.seq !== undefined) {
+    const claim = await claimDraftSeq(input.responseId, input.seq);
+    // 더 새로운 쓰기가 이미 반영됐다. 지연 도착한 이 요청을 적용하면 최신 답변을 덮는다.
+    if (claim === 'stale') return { applied: false };
+    // 'not_found' 는 그대로 진행시켜 updateQuestionResponse 의 기존 에러 경로를 타게 한다.
+  }
   for (const [questionId, value] of Object.entries(input.answers)) {
     await updateQuestionResponse({
       responseId: input.responseId,
@@ -689,6 +731,7 @@ export async function saveDraftResponse(input: SaveDraftResponseInput): Promise<
       ...(input.sessionId ? { sessionId: input.sessionId } : {}),
     });
   }
+  return { applied: true };
 }
 
 /** saveDraftResponseIfActive 가 저장을 건너뛴 사유. 서버 로그·테스트 어서션용. */
@@ -698,7 +741,8 @@ export type SaveDraftSkipReason =
   | 'concluded'
   | 'survey_paused'
   | 'answer_value_too_large'
-  | 'not_accepting';
+  | 'not_accepting'
+  | 'stale';
 
 export type SaveDraftIfActiveResult =
   | { saved: true }
@@ -742,7 +786,9 @@ export async function saveDraftResponseIfActive(
   if (gateResult) return gateResult;
 
   try {
-    await saveDraftResponse(input);
+    const result = await saveDraftResponse(input);
+    // 지연 도착한 stale beacon — 답변 쓰기 자체를 하지 않았으므로 최신 답변은 그대로 남는다.
+    if (!result.applied) return { saved: false, skipped: 'stale' };
   } catch (err) {
     if (err instanceof SurveyNotAcceptingResponsesError) {
       return { saved: false, skipped: toSkipReason(err.reason) };

@@ -81,7 +81,7 @@ describe('surveyResponse.response procedures', () => {
   });
 
   it('saveDraft(pub)는 현재 페이지 답변 묶음을 service에 위임한다', async () => {
-    vi.mocked(svc.saveDraftResponse).mockResolvedValue(undefined);
+    vi.mocked(svc.saveDraftResponse).mockResolvedValue({ applied: true });
     const client = createRouterClient({ response }, { context: anonContext() });
 
     const result = await client.response.saveDraft({

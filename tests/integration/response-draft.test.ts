@@ -1,17 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { extractRawSql } from './_helpers/result-code-mock';
+
 const {
   findFirstMock,
   selectLimitMock,
   returningMock,
   updateCalledMock,
   controlFlagsMock,
+  executeMock,
 } = vi.hoisted(() => ({
   findFirstMock: vi.fn(),
   selectLimitMock: vi.fn(),
   returningMock: vi.fn(),
   updateCalledMock: vi.fn(),
   controlFlagsMock: vi.fn(),
+  executeMock: vi.fn(),
 }));
 
 vi.mock('@/db', () => {
@@ -33,6 +37,8 @@ vi.mock('@/db', () => {
         return updateChain;
       }),
       select: vi.fn(() => selectChain),
+      // claimDraftSeq 전용. seq 없는 입력은 이 mock 을 전혀 호출하지 않아야 한다.
+      execute: (...a: unknown[]) => executeMock(...a),
     },
   };
 });
@@ -69,6 +75,7 @@ describe('saveDraftResponseIfActive', () => {
     returningMock.mockReset();
     updateCalledMock.mockReset();
     controlFlagsMock.mockReset();
+    executeMock.mockReset();
   });
 
   it('응답 행이 없으면 not_found 로 skip 하고 저장을 시도하지 않는다', async () => {
@@ -159,5 +166,69 @@ describe('saveDraftResponseIfActive', () => {
     await expect(saveDraftResponseIfActive(INPUT)).rejects.toThrow(
       '응답을 수정할 수 없습니다.',
     );
+  });
+});
+
+describe('saveDraftResponse — seq 가드(배치 claim)', () => {
+  beforeEach(() => {
+    findFirstMock.mockReset();
+    selectLimitMock.mockReset();
+    returningMock.mockReset();
+    updateCalledMock.mockReset();
+    controlFlagsMock.mockReset();
+    executeMock.mockReset();
+  });
+
+  it('seq 없는 요청은 claim 을 건너뛰고 기존대로 저장한다', async () => {
+    arrangeActiveRow();
+    const { saveDraftResponseIfActive } = await import(
+      '@/features/survey-response/server/services/response.service'
+    );
+    expect(await saveDraftResponseIfActive(INPUT)).toEqual({ saved: true });
+    expect(executeMock).not.toHaveBeenCalled();
+  });
+
+  it('더 새로운 seq 는 claim 을 통과하고 답변 쓰기가 일어난다', async () => {
+    arrangeActiveRow();
+    // claim UPDATE 가 1행을 반환 — 통과.
+    executeMock.mockResolvedValueOnce([{ id: 'r1' }]);
+    const { saveDraftResponseIfActive } = await import(
+      '@/features/survey-response/server/services/response.service'
+    );
+    expect(await saveDraftResponseIfActive({ ...INPUT, seq: 5 })).toEqual({ saved: true });
+    expect(updateCalledMock).toHaveBeenCalledTimes(1);
+
+    const claimSql = executeMock.mock.calls[0]?.[0];
+    const raw = extractRawSql(claimSql);
+    expect(raw).toContain('draftSeq');
+    expect(raw).toContain('<');
+  });
+
+  it('오래된 seq 는 stale 로 skip 되고 답변 쓰기가 일어나지 않는다', async () => {
+    // 게이트 통과용 활성 행만 준비 — claim 이 stale 이면 updateQuestionResponse 에 도달하지 않는다.
+    findFirstMock.mockResolvedValueOnce({ id: 'r1', status: 'in_progress', deletedAt: null });
+    // claim UPDATE 0행 → 존재 확인 SELECT 1행 → stale.
+    executeMock.mockResolvedValueOnce([]).mockResolvedValueOnce([{ id: 'r1' }]);
+    const { saveDraftResponseIfActive } = await import(
+      '@/features/survey-response/server/services/response.service'
+    );
+    expect(await saveDraftResponseIfActive({ ...INPUT, seq: 1 })).toEqual({
+      saved: false,
+      skipped: 'stale',
+    });
+    expect(updateCalledMock).not.toHaveBeenCalled();
+  });
+
+  it('claim 0행 + 존재 확인 0행이면 not_found 로 판단해 기존 에러 경로를 탄다', async () => {
+    // 게이트가 먼저 not_found 를 잡으므로 saveDraftResponse 를 직접 호출해 claim 내부 판단을 검증한다.
+    executeMock.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+    // updateQuestionResponse 내부 응답 행 조회 — 행 없음 → 기존 에러 경로.
+    findFirstMock.mockResolvedValueOnce(undefined);
+    const { saveDraftResponse } = await import(
+      '@/features/survey-response/server/services/response.service'
+    );
+    await expect(
+      saveDraftResponse({ responseId: 'r1', answers: { q1: 'a' }, seq: 1 }),
+    ).rejects.toThrow('응답을 찾을 수 없습니다.');
   });
 });
