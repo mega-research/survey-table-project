@@ -173,7 +173,9 @@ describe('assertSurveyAcceptingResponses — startResponse 게이트', () => {
     insertReturningMock.mockReset();
     selectLimitMock.mockReset();
     countResultMock.mockReset();
-    insertReturningMock.mockResolvedValue([{ id: 'r1', contactTargetId: null }]);
+    insertReturningMock.mockResolvedValue([
+      { id: 'r1', contactTargetId: null, status: 'in_progress' },
+    ]);
     selectLimitMock.mockResolvedValue([]);
     countResultMock.mockResolvedValue([{ total: 0 }]);
   });
@@ -309,7 +311,9 @@ describe('assertSurveyAcceptingResponses — createResponseWithFirstAnswer 테�
     headersMock.mockResolvedValue(
       new Headers({ 'x-forwarded-for': '10.0.0.9', 'user-agent': 'Chrome/120' }),
     );
-    insertReturningMock.mockResolvedValue([{ id: 'r1', contactTargetId: null }]);
+    insertReturningMock.mockResolvedValue([
+      { id: 'r1', contactTargetId: null, status: 'in_progress' },
+    ]);
     // updateQuestionResponse 의 questionId 존재 검사(select().where().limit()) 기본 hit.
     selectLimitMock
       .mockResolvedValueOnce([{ id: 'q1' }])
@@ -856,7 +860,9 @@ describe('회귀: 비공개 설문 + 유효 테스트 세션 create→complete �
     headersMock.mockResolvedValue(
       new Headers({ 'x-forwarded-for': '10.0.0.9', 'user-agent': 'Chrome/120' }),
     );
-    insertReturningMock.mockResolvedValue([{ id: 'r1', contactTargetId: null }]);
+    insertReturningMock.mockResolvedValue([
+      { id: 'r1', contactTargetId: null, status: 'in_progress' },
+    ]);
     selectLimitMock.mockResolvedValue([{ id: 'q1' }]);
     countResultMock.mockResolvedValue([{ total: 0 }]);
   });

@@ -28,6 +28,8 @@ import {
 } from '@/lib/survey-response/test-target-attempt.server';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 
+import type { BlockReason } from '../../domain/duplicate';
+import { decideResponseReuse } from '../../domain/lifecycle';
 import type {
   ClientSignals,
   CompleteResponseInput,
@@ -48,21 +50,34 @@ type ResponseQueryExecutor = Pick<DbTransaction, 'execute' | 'select'>;
 // 컨택 매칭 helper
 // ========================
 
+/** 재사용 후보 행 — status 는 decideResponseReuse 판정에 쓰인다. */
+type ReuseCandidate = {
+  id: string;
+  contactTargetId: string | null;
+  metadata: SurveyResponse['metadata'];
+  status: string;
+};
+
 /**
  * 동일 컨택의 활성 응답(미완료, soft-delete 제외) 1건 조회.
  * idx_active_response_per_contact partial unique index 가 동일 contact_target_id 의
  * 미완료 응답을 1개로 제한하므로, 재진입 시 기존 행을 재사용한다.
+ *
+ * is_completed=false 만으로는 "쓰기 가능"을 뜻하지 않는다 — sweep_stale_sessions() 가
+ * 3시간 유휴 행을 drop 으로 바꿔도 is_completed 는 false 로 남는다. status 를 함께
+ * 실어 보내 호출부가 decideResponseReuse 로 판정하게 한다.
  */
 async function findActiveResponseByContact(
   surveyId: string,
   contactTargetId: string,
-): Promise<{ id: string; contactTargetId: string | null; metadata: SurveyResponse['metadata'] } | null> {
+): Promise<ReuseCandidate | null> {
   const [row] = await db
     .select({
       id: surveyResponses.id,
       contactTargetId: surveyResponses.contactTargetId,
       // 재사용되는 행의 draftSeq 를 클라이언트에 실어 보내기 위한 컬럼 — insertResponseWithContactReuse 참조.
       metadata: surveyResponses.metadata,
+      status: surveyResponses.status,
     })
     .from(surveyResponses)
     .where(
@@ -78,6 +93,51 @@ async function findActiveResponseByContact(
 }
 
 /**
+ * drop 행을 in_progress 로 되살린다 — resumeOrCreateResponse 의 회복과 동일 의미론.
+ * 되살리기에 실패하면(경합으로 다른 status 가 됨) null 을 반환해 호출부가 차단하도록 한다.
+ */
+async function reviveDroppedResponse(responseId: string): Promise<boolean> {
+  const revived = await db
+    .update(surveyResponses)
+    .set({ status: 'in_progress', lastActivityAt: new Date() })
+    .where(
+      and(
+        eq(surveyResponses.id, responseId),
+        isNull(surveyResponses.deletedAt),
+        eq(surveyResponses.status, 'drop'),
+      ),
+    )
+    .returning({ id: surveyResponses.id });
+  return revived.length > 0;
+}
+
+/**
+ * 재사용 후보를 실제로 쓸 수 있는 상태로 만든다.
+ * - reuse: 그대로
+ * - revive: drop → in_progress 로 되살린 뒤 사용
+ * - blocked: 차단 사유 반환 (호출부가 500 대신 안내 화면으로 응답)
+ */
+async function settleReuseCandidate(
+  candidate: ReuseCandidate,
+): Promise<{ ok: true; row: ReuseCandidate } | { ok: false; reason: BlockReason }> {
+  const decision = decideResponseReuse(candidate.status, {
+    hasContact: candidate.contactTargetId != null,
+  });
+  if (decision.action === 'reuse') return { ok: true, row: candidate };
+  if (decision.action === 'revive') {
+    if (await reviveDroppedResponse(candidate.id)) {
+      return { ok: true, row: { ...candidate, status: 'in_progress' } };
+    }
+    // 되살리기 경합 — 종결 상태로 넘어갔다고 보고 차단한다.
+    return {
+      ok: false,
+      reason: candidate.contactTargetId != null ? 'token_already_used' : 'device_already_responded',
+    };
+  }
+  return { ok: false, reason: decision.reason };
+}
+
+/**
  * survey_responses 행 INSERT 의 공통 흐름.
  *
  * 처리 분기:
@@ -88,27 +148,38 @@ async function findActiveResponseByContact(
  *
  * `onReuse` 콜백이 있으면 1·3·4 의 재사용/충돌 경로에서 호출되어 첫 답변 머지 등을 수행.
  */
+type ReuseOutcome =
+  | { kind: 'ready'; row: ReuseCandidate }
+  | { kind: 'blocked'; reason: BlockReason };
+
 async function insertResponseWithContactReuse(params: {
   surveyId: string;
   sessionId: string;
   contactTargetId: string | null;
   newResponse: NewSurveyResponse;
   onReuse?: (id: string) => Promise<void>;
-}): Promise<{ id: string; contactTargetId: string | null; metadata: SurveyResponse['metadata'] }> {
+}): Promise<ReuseOutcome> {
   const { surveyId, sessionId, contactTargetId, newResponse, onReuse } = params;
+
+  // 재사용 후보를 status 로 판정한 뒤에만 onReuse 를 돌린다 — 차단 대상 행에
+  // 첫 답변을 머지하려 들면 쓰기 가드에서 0행이 되어 500 이 난다.
+  const takeover = async (candidate: ReuseCandidate): Promise<ReuseOutcome> => {
+    const settled = await settleReuseCandidate(candidate);
+    if (!settled.ok) return { kind: 'blocked', reason: settled.reason };
+    if (onReuse) await onReuse(settled.row.id);
+    return { kind: 'ready', row: settled.row };
+  };
 
   if (contactTargetId) {
     const active = await findActiveResponseByContact(surveyId, contactTargetId);
-    if (active) {
-      if (onReuse) await onReuse(active.id);
-      return active;
-    }
+    if (active) return takeover(active);
   }
 
   let inserted: Array<{
     id: string;
     contactTargetId: string | null;
     metadata: SurveyResponse['metadata'];
+    status: string;
   }>;
   try {
     inserted = await db
@@ -121,29 +192,37 @@ async function insertResponseWithContactReuse(params: {
         id: surveyResponses.id,
         contactTargetId: surveyResponses.contactTargetId,
         metadata: surveyResponses.metadata,
+        status: surveyResponses.status,
       });
   } catch (e) {
+    // idx_active_response_per_contact 경합 — 다른 요청이 방금 활성 행을 만들었다.
     if (contactTargetId) {
       const active = await findActiveResponseByContact(surveyId, contactTargetId);
-      if (active) {
-        if (onReuse) await onReuse(active.id);
-        return active;
-      }
+      if (active) return takeover(active);
     }
     throw e;
   }
 
   const firstInserted = inserted[0];
-  if (firstInserted !== undefined) return firstInserted;
+  if (firstInserted !== undefined) return { kind: 'ready', row: firstInserted };
 
+  // (surveyId, sessionId) UNIQUE 충돌 — 기존 행을 물려받는다. soft-delete 된 행은
+  // 쓰기 가드가 거부하므로 후보에서 제외하고, 종결 상태는 status 판정으로 걸러낸다.
   const [existing] = await db
     .select({
       id: surveyResponses.id,
       contactTargetId: surveyResponses.contactTargetId,
       metadata: surveyResponses.metadata,
+      status: surveyResponses.status,
     })
     .from(surveyResponses)
-    .where(and(eq(surveyResponses.surveyId, surveyId), eq(surveyResponses.sessionId, sessionId)))
+    .where(
+      and(
+        eq(surveyResponses.surveyId, surveyId),
+        eq(surveyResponses.sessionId, sessionId),
+        isNull(surveyResponses.deletedAt),
+      ),
+    )
     .limit(1);
 
   if (!existing) {
@@ -152,15 +231,14 @@ async function insertResponseWithContactReuse(params: {
     );
   }
 
-  if (onReuse) await onReuse(existing.id);
-  return existing;
+  return takeover(existing);
 }
 
 async function insertAnonymousTestResponse(
   input: { surveyId: string; sessionId: string; testToken: string },
   newResponse: NewSurveyResponse,
-): Promise<{ id: string; contactTargetId: null; metadata: null }> {
-  return db.transaction(async (tx) => {
+): Promise<ReuseOutcome> {
+  const candidate = await db.transaction(async (tx): Promise<ReuseCandidate> => {
     await assertAnonymousTestSession(tx, input);
     const [inserted] = await tx
       .insert(surveyResponses)
@@ -168,13 +246,16 @@ async function insertAnonymousTestResponse(
       .onConflictDoNothing({
         target: [surveyResponses.surveyId, surveyResponses.sessionId],
       })
-      .returning({ id: surveyResponses.id });
+      .returning({ id: surveyResponses.id, status: surveyResponses.status });
     // metadata 는 항상 null 고정: 이 재사용 분기는 동일 세션의 동시 INSERT race 뿐이라
     // (다른 기기·세션이 끼어들 여지가 없다) 물려받을 draftSeq 이력이 존재할 수 없다.
-    if (inserted) return { id: inserted.id, contactTargetId: null, metadata: null };
+    if (inserted) {
+      return { id: inserted.id, contactTargetId: null, metadata: null, status: inserted.status };
+    }
 
+    // 물려받는 기존 테스트 행도 sweep 으로 drop 이 됐을 수 있어 status 를 함께 읽는다.
     const [existing] = await tx
-      .select({ id: surveyResponses.id })
+      .select({ id: surveyResponses.id, status: surveyResponses.status })
       .from(surveyResponses)
       .where(
         and(
@@ -187,8 +268,11 @@ async function insertAnonymousTestResponse(
       )
       .limit(1);
     if (!existing) throw new Error('테스트 응답을 시작할 수 없습니다');
-    return { id: existing.id, contactTargetId: null, metadata: null };
+    return { id: existing.id, contactTargetId: null, metadata: null, status: existing.status };
   });
+
+  const settled = await settleReuseCandidate(candidate);
+  return settled.ok ? { kind: 'ready', row: settled.row } : { kind: 'blocked', reason: settled.reason };
 }
 
 // ========================
@@ -1049,17 +1133,20 @@ export async function createResponseWithFirstAnswer(
           contactTargetId,
           newResponse,
         });
+  // 종결 상태 행을 물려받으려던 경우 — 500 대신 "이미 끝난 응답" 안내로 돌려보낸다.
+  if (result.kind === 'blocked') return { kind: 'blocked', reason: result.reason };
+
   // 신규 INSERT 든 reuse 든 모두 updateQuestionResponse 로 첫 답변 머지 + progress_pct
   // 갱신을 단일화. jsonb_set 은 동일 값 덮어쓰기라 멱등이라 신규 INSERT path 의 중복 set
   // 도 안전. onReuse 콜백을 사용하지 않는 이유: progress_pct 가 신규 INSERT 에서도 필요.
-  await updateQuestionResponse({ responseId: result.id, questionId, value: storedValue });
+  await updateQuestionResponse({ responseId: result.row.id, questionId, value: storedValue });
   // 컨택 재사용으로 기존 행을 물려받았으면 그 행의 draftSeq 를 함께 실어 보낸다 — resume 이
   // 호출되지 않는 경로(localStorage 없는 재진입)에서도 draftSeqRef 를 올바르게 seed 하기 위함.
-  const draftSeq = extractDraftSeq(result.metadata);
+  const draftSeq = extractDraftSeq(result.row.metadata);
   return {
     kind: 'created',
-    id: result.id,
-    contactTargetId: result.contactTargetId,
+    id: result.row.id,
+    contactTargetId: result.row.contactTargetId,
     ...(draftSeq !== undefined ? { draftSeq } : {}),
   };
 }
@@ -1205,7 +1292,8 @@ export async function createBlankResponse(
           contactTargetId,
           newResponse,
         });
-  return { kind: 'created', id: result.id, contactTargetId: result.contactTargetId };
+  if (result.kind === 'blocked') return { kind: 'blocked', reason: result.reason };
+  return { kind: 'created', id: result.row.id, contactTargetId: result.row.contactTargetId };
 }
 
 // 응답 완료 (JSONB + response_answers 이중 쓰기)

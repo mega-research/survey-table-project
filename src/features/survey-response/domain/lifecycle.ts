@@ -1,5 +1,6 @@
 import * as z from 'zod';
 
+import type { BlockReason } from './duplicate';
 import { QuestionResponsesSchema, TestAttemptIdentityFields } from './response';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -62,6 +63,39 @@ export const ResumeStatusSchema = z.enum([
   'bad',
   'drop',
 ]);
+
+/**
+ * 이미 존재하는 응답 행을 재사용하려 할 때, 그 행의 status 로 다음 동작을 결정한다.
+ *
+ * 배경: sweep_stale_sessions() pg_cron 은 3시간 유휴 in_progress 를 drop 으로 바꾸면서
+ * is_completed 는 false 로 남긴다. 컨택 재사용 조회(findActiveResponseByContact)가
+ * is_completed=false 만 보고 drop 행을 집어오면, 쓰기(applyQuestionResponseUpdate)는
+ * status='in_progress' 를 요구하므로 0행이 되어 500 이 난다. 읽기와 쓰기가 같은 기준을
+ * 쓰도록 판정을 이 한 곳에 모은다.
+ *
+ * - in_progress: 그대로 재사용
+ * - drop: resumeOrCreateResponse 와 동일하게 in_progress 로 되살린 뒤 재사용
+ * - 종결 상태 및 알 수 없는 값: 새 답변을 받지 않고 차단 (500 대신 안내 화면)
+ */
+export type ResponseReuseDecision =
+  | { action: 'reuse' }
+  | { action: 'revive' }
+  | { action: 'blocked'; reason: BlockReason };
+
+export function decideResponseReuse(
+  status: string,
+  opts: { hasContact: boolean },
+): ResponseReuseDecision {
+  if (status === 'in_progress') return { action: 'reuse' };
+  if (status === 'drop') return { action: 'revive' };
+  if (status === 'quotaful_out') return { action: 'blocked', reason: 'quota_closed' };
+  // completed/screened_out/bad, 그리고 알 수 없는 값. 알 수 없는 값을 재사용으로 흘리면
+  // 쓰기 가드에서 다시 500 이 되므로 보수적으로 차단한다.
+  return {
+    action: 'blocked',
+    reason: opts.hasContact ? 'token_already_used' : 'device_already_responded',
+  };
+}
 
 /**
  * resumeOrCreateResponse 반환.

@@ -291,7 +291,9 @@ describe('createResponseWithFirstAnswer — 첫 답변 INSERT 전 암호화', ()
     versionFindFirstMock.mockResolvedValue({ surveyId: SURVEY_ID, status: 'published' });
     // assertQuestionBelongsToResponse (create 진입부 + 후속 updateQuestionResponse) — PII 문항.
     executeMock.mockResolvedValue([{ pii: true }]);
-    insertReturningMock.mockResolvedValue([{ id: RESPONSE_ID, contactTargetId: null }]);
+    insertReturningMock.mockResolvedValue([
+      { id: RESPONSE_ID, contactTargetId: null, status: 'in_progress' },
+    ]);
     // 후속 updateQuestionResponse 내부 경로
     responseFindFirstMock.mockResolvedValue({
       id: RESPONSE_ID,
@@ -372,7 +374,12 @@ describe('createResponseWithFirstAnswer — 컨택 재사용 draftSeq 전달', (
     // findActiveResponseByContact — 동일 컨택의 미완료 응답 행이 이미 있고, 1차 세션에서
     // draftSeq=7 까지 올라가 있다.
     selectLimitMock.mockResolvedValueOnce([
-      { id: RESPONSE_ID, contactTargetId: CONTACT_ID, metadata: { draftSeq: 7 } },
+      {
+        id: RESPONSE_ID,
+        contactTargetId: CONTACT_ID,
+        metadata: { draftSeq: 7 },
+        status: 'in_progress',
+      },
     ]);
 
     const { createResponseWithFirstAnswer } = await import(
@@ -400,6 +407,81 @@ describe('createResponseWithFirstAnswer — 컨택 재사용 draftSeq 전달', (
     expect(insertValuesLogMock).not.toHaveBeenCalled();
   });
 
+  // 회귀: sweep_stale_sessions() 가 3시간 유휴 행을 drop 으로 바꿔도 is_completed 는 false 라
+  // findActiveResponseByContact 가 그 행을 집어온다. 예전에는 곧바로 첫 답변 UPDATE 를
+  // 시도해 status='in_progress' 가드에 0행으로 걸려 '응답을 수정할 수 없습니다.' 500 이 났다.
+  it('drop 으로 쓸려간 행을 물려받으면 in_progress 로 되살려 재사용한다', async () => {
+    checkTrackAMock.mockResolvedValue({
+      blocked: false,
+      contactTargetId: CONTACT_ID,
+      isTestTarget: false,
+    });
+    selectLimitMock.mockResolvedValueOnce([
+      { id: RESPONSE_ID, contactTargetId: CONTACT_ID, metadata: null, status: 'drop' },
+    ]);
+
+    const { createResponseWithFirstAnswer } = await import(
+      '@/features/survey-response/server/services/response.service'
+    );
+    const result = await createResponseWithFirstAnswer({
+      surveyId: SURVEY_ID,
+      sessionId: 'sess-revived',
+      versionId: VERSION_ID,
+      questionId: PLAIN_QUESTION_ID,
+      value: '3시간 뒤 재진입',
+      currentStepId: 'step-1',
+      inviteToken: 'invite-1',
+      clientSignals: {
+        deviceId: 'dev-1',
+        screen: '1440x900',
+        tz: 'Asia/Seoul',
+        lang: 'ko',
+        platform: 'MacIntel',
+      },
+    });
+
+    expect(result).toMatchObject({ kind: 'created', id: RESPONSE_ID });
+    expect(insertValuesLogMock).not.toHaveBeenCalled();
+    // 첫 답변 UPDATE 이전에 status 를 in_progress 로 되돌리는 UPDATE 가 선행돼야 한다.
+    // 이 assert 가 수정 전 코드(되살림 없이 곧장 답변 UPDATE)를 잡아낸다.
+    expect(updateSetLogMock).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'in_progress' }),
+    );
+  });
+
+  it('정원 마감으로 종결된 행을 물려받으면 500 이 아니라 quota_closed 로 차단한다', async () => {
+    checkTrackAMock.mockResolvedValue({
+      blocked: false,
+      contactTargetId: CONTACT_ID,
+      isTestTarget: false,
+    });
+    selectLimitMock.mockResolvedValueOnce([
+      { id: RESPONSE_ID, contactTargetId: CONTACT_ID, metadata: null, status: 'quotaful_out' },
+    ]);
+
+    const { createResponseWithFirstAnswer } = await import(
+      '@/features/survey-response/server/services/response.service'
+    );
+    const result = await createResponseWithFirstAnswer({
+      surveyId: SURVEY_ID,
+      sessionId: 'sess-quotaful',
+      versionId: VERSION_ID,
+      questionId: PLAIN_QUESTION_ID,
+      value: '정원 마감 뒤 재진입',
+      currentStepId: 'step-1',
+      inviteToken: 'invite-1',
+      clientSignals: {
+        deviceId: 'dev-1',
+        screen: '1440x900',
+        tz: 'Asia/Seoul',
+        lang: 'ko',
+        platform: 'MacIntel',
+      },
+    });
+
+    expect(result).toEqual({ kind: 'blocked', reason: 'quota_closed' });
+  });
+
   it('신규 INSERT(재사용 아님)면 draftSeq 를 싣지 않는다', async () => {
     checkTrackAMock.mockResolvedValue({
       blocked: false,
@@ -409,7 +491,7 @@ describe('createResponseWithFirstAnswer — 컨택 재사용 draftSeq 전달', (
     // findActiveResponseByContact — 활성 응답 없음 → INSERT 진행.
     selectLimitMock.mockResolvedValueOnce([]);
     insertReturningMock.mockResolvedValue([
-      { id: RESPONSE_ID, contactTargetId: CONTACT_ID, metadata: null },
+      { id: RESPONSE_ID, contactTargetId: CONTACT_ID, metadata: null, status: 'in_progress' },
     ]);
 
     const { createResponseWithFirstAnswer } = await import(

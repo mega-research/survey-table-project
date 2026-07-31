@@ -20,7 +20,9 @@ const { mockFindFirst, mockSurveysFindFirst, mockHeaders, mockInsert, mockQuesti
 const insertChain = {
   values: vi.fn(() => insertChain),
   onConflictDoNothing: vi.fn(() => insertChain),
-  returning: vi.fn(async () => [{ id: 'new-response-id', contactTargetId: null }]),
+  returning: vi.fn(async () => [
+    { id: 'new-response-id', contactTargetId: null, status: 'in_progress' },
+  ]),
 };
 
 vi.mock('@/db', () => ({
