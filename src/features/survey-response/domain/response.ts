@@ -78,7 +78,15 @@ export const SaveDraftResponseInput = z.object({
 });
 export type SaveDraftResponseInput = z.infer<typeof SaveDraftResponseInput>;
 
-export const SaveDraftResponseOutput = z.object({ ok: z.literal(true) });
+export const SaveDraftResponseOutput = z.object({
+  ok: z.literal(true),
+  /**
+   * 실제로 답변이 쓰였는지 여부. seq 가드가 stale 로 판정하면 false — 호출측(flushPendingAnswers)
+   * 은 이 값이 false 면 pending 을 비우지 않아야 한다(그렇지 않으면 서버에 반영되지 않은 값을
+   * "저장됨" 으로 착각해 유실한다).
+   */
+  applied: z.boolean(),
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // createResponseWithFirstAnswer / createBlankResponse

@@ -76,6 +76,7 @@ function baseArgs(over: Partial<Parameters<typeof useResponseLifecycle>[0]> = {}
     setPendingResponse: vi.fn(),
     resetResponseState: vi.fn(),
     isRecovering: false,
+    recoveredDraftSeq: undefined as number | undefined,
     isQuestionAnswered: vi.fn(() => true),
     visibleProgressRef,
     setHighlightQuestionIds: vi.fn(),
@@ -97,7 +98,7 @@ describe('useResponseLifecycle - handleResponse INSERT 가드', () => {
     complete.mockReset();
     saveDraft.mockReset();
     createWithFirstAnswer.mockResolvedValue({ id: 'resp-1', contactTargetId: 'c1' });
-    saveDraft.mockResolvedValue({ ok: true });
+    saveDraft.mockResolvedValue({ ok: true, applied: true });
     window.localStorage.clear();
   });
 
@@ -686,7 +687,7 @@ describe('이탈 시점 draft beacon', () => {
   });
 
   it('beacon 후에도 pending 이 남아 다음 flush 가 여전히 saveDraft 를 호출한다', async () => {
-    saveDraft.mockResolvedValue({ ok: true });
+    saveDraft.mockResolvedValue({ ok: true, applied: true });
     const { result } = renderHook(() =>
       useResponseLifecycle(baseArgs({ currentResponseId: 'r1' })),
     );
@@ -783,7 +784,7 @@ describe('이탈 시점 draft beacon', () => {
   });
 
   it('flush 왕복 중 값이 바뀐 잔여 pending 은 이후 이탈 시점에 다시 전송된다', async () => {
-    let resolveSaveDraft!: (value: { ok: boolean }) => void;
+    let resolveSaveDraft!: (value: { ok: boolean; applied: boolean }) => void;
     saveDraft.mockReturnValue(
       new Promise((resolve) => {
         resolveSaveDraft = resolve;
@@ -804,7 +805,7 @@ describe('이탈 시점 draft beacon', () => {
     act(() => result.current.handleResponse('q1', 'b'));
 
     act(() => {
-      resolveSaveDraft({ ok: true });
+      resolveSaveDraft({ ok: true, applied: true });
     });
     await act(async () => {
       await flushPromise;
@@ -862,7 +863,7 @@ describe('이탈 시점 draft beacon', () => {
   });
 
   it('flush 요청이 단조 증가 seq 를 실어 보낸다', async () => {
-    saveDraft.mockResolvedValue({ ok: true });
+    saveDraft.mockResolvedValue({ ok: true, applied: true });
     const args = baseArgs({ currentResponseId: 'existing' });
     const { result } = renderHook(() => useResponseLifecycle(args));
 
@@ -878,7 +879,7 @@ describe('이탈 시점 draft beacon', () => {
   });
 
   it('beacon 이 이전 flush 보다 큰 seq 를 실어 보낸다 — 같은 카운터를 공유한다', async () => {
-    saveDraft.mockResolvedValue({ ok: true });
+    saveDraft.mockResolvedValue({ ok: true, applied: true });
     const { result } = renderHook(() =>
       useResponseLifecycle(baseArgs({ currentResponseId: 'r1' })),
     );
@@ -894,5 +895,100 @@ describe('이탈 시점 draft beacon', () => {
 
     const beaconSeq = (await beaconBody(0)).seq as number;
     expect(beaconSeq).toBeGreaterThan(flushSeq);
+  });
+});
+
+describe('draft seq — 이어하기 seed 및 applied 가드', () => {
+  beforeEach(() => {
+    saveDraft.mockReset();
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('resume 이 내려준 draftSeq 로 카운터를 seed 해 첫 flush 의 seq 가 그보다 크다', async () => {
+    saveDraft.mockResolvedValue({ ok: true, applied: true });
+    const args = baseArgs({ currentResponseId: 'r1', recoveredDraftSeq: 5 });
+    const { result } = renderHook(() => useResponseLifecycle(args));
+
+    act(() => result.current.handleResponse('q1', 'a'));
+    await act(async () => {
+      await result.current.flushPendingAnswers();
+    });
+
+    const seq = (saveDraft.mock.calls[0]?.[0] as { seq: number }).seq;
+    expect(seq).toBeGreaterThan(5);
+  });
+
+  it('이미 seed 된 더 큰 값을 이후 도착한 낮은 값이 덮어쓰지 않는다(내려가지 않는다)', async () => {
+    saveDraft.mockResolvedValue({ ok: true, applied: true });
+    // 먼저 높은 값(100)으로 seed 된 뒤, 레이스로 더 낮은 값(0)이 뒤늦게 도착하는 상황을 흉내낸다.
+    const args = baseArgs({ currentResponseId: 'r1', recoveredDraftSeq: 100 });
+    const { result, rerender } = renderHook(
+      (props: Parameters<typeof useResponseLifecycle>[0]) => useResponseLifecycle(props),
+      { initialProps: args },
+    );
+
+    act(() => {
+      rerender({ ...args, recoveredDraftSeq: 0 });
+    });
+
+    act(() => result.current.handleResponse('q1', 'a'));
+    await act(async () => {
+      await result.current.flushPendingAnswers();
+    });
+
+    const seq = (saveDraft.mock.calls[0]?.[0] as { seq: number }).seq;
+    // 내려갔다면(단순 덮어쓰기) seq 는 1(=0+1)이 된다 — Math.max 로 올리기만 해야 100 보다 커진다.
+    expect(seq).toBeGreaterThan(100);
+  });
+
+  it('applied:false 면 pending 이 유지되고 flushPendingAnswers 가 false 를 반환하며, 재시도는 더 큰 seq 로 같은 내용을 다시 싣는다', async () => {
+    saveDraft.mockResolvedValueOnce({ ok: true, applied: false });
+    const args = baseArgs({ currentResponseId: 'r1' });
+    const { result } = renderHook(() => useResponseLifecycle(args));
+
+    act(() => result.current.handleResponse('q1', 'a'));
+    let flushResult1: boolean | undefined;
+    await act(async () => {
+      flushResult1 = await result.current.flushPendingAnswers();
+    });
+    expect(flushResult1).toBe(false);
+    expect(saveDraft).toHaveBeenCalledTimes(1);
+    const firstCall = saveDraft.mock.calls[0]?.[0] as { seq: number };
+
+    // pending 이 유지됐다면 두 번째 flush 도 여전히 saveDraft 를 호출한다(비워졌다면
+    // pendingAnswerSavesRef.current.size === 0 이라 saveDraft 호출 없이 즉시 true 를 반환할 것).
+    saveDraft.mockResolvedValueOnce({ ok: true, applied: true });
+    let flushResult2: boolean | undefined;
+    await act(async () => {
+      flushResult2 = await result.current.flushPendingAnswers();
+    });
+    expect(flushResult2).toBe(true);
+    expect(saveDraft).toHaveBeenCalledTimes(2);
+    const secondCall = saveDraft.mock.calls[1]?.[0] as { seq: number; answers: unknown };
+    expect(secondCall.answers).toEqual({ q1: 'a' });
+    expect(secondCall.seq).toBeGreaterThan(firstCall.seq);
+  });
+
+  it('applied:true 면 pending 이 정상적으로 비워진다(회귀 방지)', async () => {
+    saveDraft.mockResolvedValue({ ok: true, applied: true });
+    const args = baseArgs({ currentResponseId: 'r1' });
+    const { result } = renderHook(() => useResponseLifecycle(args));
+
+    act(() => result.current.handleResponse('q1', 'a'));
+    await act(async () => {
+      await result.current.flushPendingAnswers();
+    });
+    expect(saveDraft).toHaveBeenCalledTimes(1);
+
+    // pending 이 비워졌다면 두 번째 flush 는 saveDraft 를 다시 호출하지 않고 즉시 true.
+    let flushResult: boolean | undefined;
+    await act(async () => {
+      flushResult = await result.current.flushPendingAnswers();
+    });
+    expect(flushResult).toBe(true);
+    expect(saveDraft).toHaveBeenCalledTimes(1);
   });
 });

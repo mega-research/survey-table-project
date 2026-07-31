@@ -16,6 +16,18 @@ import type {
 } from '../../domain/lifecycle';
 import { SurveyNotAcceptingResponsesError } from './response.service';
 
+/**
+ * metadata JSONB 의 draftSeq 를 안전하게 추출한다. response.service.ts 의 claimDraftSeq 가
+ * 쓰는 값과 동일 키 — resume 이 이 값을 클라이언트에 내려줘 draftSeqRef 를 seed 하는 데 쓴다.
+ * (2차 세션이 0 부터 다시 발급해 1차 세션의 draftSeq 보다 낮은 seq 를 보내면 claim 이 전부
+ * stale 로 막아 저장이 조용히 유실되는 회귀를 막는다.) 비정상 값은 무시하고 undefined 반환.
+ */
+function extractDraftSeq(metadata: unknown): number | undefined {
+  if (metadata == null || typeof metadata !== 'object') return undefined;
+  const raw = (metadata as Record<string, unknown>)['draftSeq'];
+  return typeof raw === 'number' && Number.isFinite(raw) && raw >= 0 ? raw : undefined;
+}
+
 // ========================
 // 응답 라이프사이클 service (pub)
 // ========================
@@ -202,6 +214,7 @@ export async function resumeOrCreateResponse(
           versionId: surveyResponses.versionId,
           questionResponses: surveyResponses.questionResponses,
           currentStepId: surveyResponses.currentStepId,
+          metadata: surveyResponses.metadata,
         })
         .from(surveyResponses)
         .where(
@@ -216,6 +229,7 @@ export async function resumeOrCreateResponse(
         .limit(1);
 
       if (existingByContact) {
+        const draftSeq = extractDraftSeq(existingByContact.metadata);
         if (isTestTarget) {
           if (
             existingByContact.status === 'in_progress' &&
@@ -230,6 +244,7 @@ export async function resumeOrCreateResponse(
                 { responseId: existingByContact.id },
               ),
               currentStepId: existingByContact.currentStepId,
+              ...(draftSeq !== undefined ? { draftSeq } : {}),
             };
           }
           return null;
@@ -266,6 +281,7 @@ export async function resumeOrCreateResponse(
             status: 'in_progress',
             resumed: true,
             ...restorePayload,
+            ...(draftSeq !== undefined ? { draftSeq } : {}),
           };
         }
         if (existingByContact.status === 'in_progress') {
@@ -282,6 +298,7 @@ export async function resumeOrCreateResponse(
             status: 'in_progress',
             resumed: false,
             ...restorePayload,
+            ...(draftSeq !== undefined ? { draftSeq } : {}),
           };
         }
         // isCompleted=false 인데 in_progress/drop 도 아닌 알 수 없는 status → fallback
@@ -299,6 +316,7 @@ export async function resumeOrCreateResponse(
       isTest: surveyResponses.isTest,
       questionResponses: surveyResponses.questionResponses,
       currentStepId: surveyResponses.currentStepId,
+      metadata: surveyResponses.metadata,
     })
     .from(surveyResponses)
     .where(
@@ -315,6 +333,7 @@ export async function resumeOrCreateResponse(
   if (!existing) return null;
 
   const now = new Date();
+  const draftSeq = extractDraftSeq(existing.metadata);
 
   if (existing.status === 'drop') {
     // 중단 모드: 행이 isTest 이거나 유효한 테스트 링크로 재진입한 경우만 예외
@@ -334,6 +353,7 @@ export async function resumeOrCreateResponse(
         responseId: existing.id,
       }),
       currentStepId: existing.currentStepId,
+      ...(draftSeq !== undefined ? { draftSeq } : {}),
     };
   }
 
@@ -355,6 +375,7 @@ export async function resumeOrCreateResponse(
         responseId: existing.id,
       }),
       currentStepId: existing.currentStepId,
+      ...(draftSeq !== undefined ? { draftSeq } : {}),
     };
   }
 

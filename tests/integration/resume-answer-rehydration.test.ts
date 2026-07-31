@@ -64,6 +64,53 @@ describe('resumeOrCreateResponse 응답 복원', () => {
     });
   });
 
+  it('일반 in_progress 세션은 저장된 draftSeq 를 반환한다 - 이어하기 seq seed 용', async () => {
+    const limitMock = vi.fn().mockResolvedValue([
+      {
+        id: 'response-1',
+        status: 'in_progress',
+        isTest: false,
+        questionResponses: { q1: '저장된 답' },
+        metadata: { draftSeq: 7 },
+      },
+    ]);
+    selectMock.mockReturnValue({
+      from: vi.fn(() => ({
+        where: vi.fn(() => ({ limit: limitMock })),
+      })),
+    });
+
+    await expect(
+      resumeOrCreateResponse({
+        surveyId: 'survey-1',
+        sessionId: 'saved-session',
+      }),
+    ).resolves.toMatchObject({ draftSeq: 7 });
+  });
+
+  it('metadata 에 draftSeq 가 없으면 draftSeq 를 생략한다', async () => {
+    const limitMock = vi.fn().mockResolvedValue([
+      {
+        id: 'response-1',
+        status: 'in_progress',
+        isTest: false,
+        questionResponses: {},
+        metadata: {},
+      },
+    ]);
+    selectMock.mockReturnValue({
+      from: vi.fn(() => ({
+        where: vi.fn(() => ({ limit: limitMock })),
+      })),
+    });
+
+    const result = await resumeOrCreateResponse({
+      surveyId: 'survey-1',
+      sessionId: 'saved-session',
+    });
+    expect(result).not.toHaveProperty('draftSeq');
+  });
+
   it('저장된 currentStepId를 반환한다 - 재접속 시 멈춘 페이지 복원용', async () => {
     const limitMock = vi.fn().mockResolvedValue([
       {

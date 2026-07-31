@@ -77,6 +77,12 @@ export const ResumeOrCreateResponseOutput = z
     questionResponses: QuestionResponsesSchema.optional(),
     /** 마지막으로 머문 스텝 id — 재접속 시 멈춘 페이지 복원용 (in_progress 회복 경로에서만 설정). */
     currentStepId: z.string().nullable().optional(),
+    /**
+     * 응답 행에 마지막으로 적용된 draft seq(survey_responses.metadata.draftSeq).
+     * 클라이언트가 draftSeqRef 를 이 값으로 seed 해 2차 세션이 0 부터 다시 발급한 낮은 seq 로
+     * claimDraftSeq 를 stale 처리시켜 저장이 조용히 유실되는 것을 막는다(in_progress 전용).
+     */
+    draftSeq: z.number().int().nonnegative().optional(),
   })
   .nullable();
 export type ResumeOrCreateResponseOutput = z.infer<typeof ResumeOrCreateResponseOutput>;

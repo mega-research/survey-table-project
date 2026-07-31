@@ -568,6 +568,12 @@ function SurveyResponseFlowActive({
     testIdentity,
   });
 
+  // 이어하기 회복이 내려준 draftSeq — useResponseLifecycle 의 draftSeqRef seed 용.
+  // onRestoreStep 과 동일하게 useSessionRecovery 콜백(onDraftSeqRecovered)으로 전달받아,
+  // useResponseLifecycle 호출 시점(아래)에 prop 으로 넘긴다. 훅 호출 순서상 useSessionRecovery
+  // 가 먼저이므로 콜백은 useResponseLifecycle 내부 값을 직접 참조하지 않고 이 state 를 경유한다.
+  const [recoveredDraftSeq, setRecoveredDraftSeq] = useState<number | undefined>(undefined);
+
   // 운영 현황 콘솔(T6): localStorage 기반 응답 회복 + 회복 토스트 자동 dismiss.
   // 회복 effect + dismiss effect 와 isRecovering/resumeMessage state 를
   // useSessionRecovery 로 추출 (두 effect 등록 순서·deps 동일, 세터 전용이라 훅이 소유).
@@ -587,6 +593,7 @@ function SurveyResponseFlowActive({
     setSessionId,
     setResponses,
     onRestoreStep: restoreStepFromRecovery,
+    onDraftSeqRecovered: setRecoveredDraftSeq,
     setCurrentResponseId,
     setDuplicateStatus,
     setPausedMessage: setRefetchedPausedMessage,
@@ -733,6 +740,7 @@ function SurveyResponseFlowActive({
     setPendingResponse,
     resetResponseState,
     isRecovering,
+    recoveredDraftSeq,
     isQuestionAnswered,
     optionTextsByQuestion: effectiveOptionTextsByQuestion,
     visibleProgressRef,

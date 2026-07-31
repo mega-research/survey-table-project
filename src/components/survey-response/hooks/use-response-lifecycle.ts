@@ -100,6 +100,13 @@ interface UseResponseLifecycleArgs {
 
   // 회복 가드 (use-session-recovery 소유)
   isRecovering: boolean;
+  /**
+   * 이어하기 세션에서 서버가 응답 행에 마지막으로 적용한 draft seq(resume 응답의 draftSeq).
+   * 매 페이지 로드마다 0 부터 다시 시작하는 draftSeqRef 를 이 값으로 올려, 2차 세션의 첫 flush
+   * 가 1차 세션이 이미 적용한 seq 보다 낮아 stale 로 막히는 것을 방지한다. 값이 오르는 방향
+   * (Math.max)으로만 반영되므로 회복 응답이 늦게 도착해도 이미 발급한 seq 를 되돌리지 않는다.
+   */
+  recoveredDraftSeq: number | undefined;
 
   // 검증 파생값 (컴포넌트 소유)
   isQuestionAnswered: (question: Question) => boolean;
@@ -183,6 +190,7 @@ export function useResponseLifecycle({
   setPendingResponse,
   resetResponseState,
   isRecovering,
+  recoveredDraftSeq,
   isQuestionAnswered,
   optionTextsByQuestion = {},
   visibleProgressRef,
@@ -210,6 +218,12 @@ export function useResponseLifecycle({
   // 서버가 식별해 무시할 수 있다.
   const draftSeqRef = useRef(0);
   const responseCreationPromiseRef = useRef<Promise<string | null> | null>(null);
+  // 이어하기 회복이 서버 draftSeq 를 늦게 내려줘도 seed 는 올리는 방향으로만 반영한다 —
+  // 이미 발급한(더 큰) seq 를 되돌리면 오히려 그 자체가 stale 로 막힌다.
+  useEffect(() => {
+    if (recoveredDraftSeq === undefined) return;
+    draftSeqRef.current = Math.max(draftSeqRef.current, recoveredDraftSeq);
+  }, [recoveredDraftSeq]);
   if (currentResponseId) activeResponseIdRef.current = currentResponseId;
 
   const clearInvalidTargetTestSession = () => {
@@ -241,12 +255,20 @@ export function useResponseLifecycle({
 
     const pendingSnapshot = Object.fromEntries(pendingAnswerSavesRef.current);
     try {
-      await client.surveyResponse.response.saveDraft({
+      const result = await client.surveyResponse.response.saveDraft({
         responseId,
         answers: pendingSnapshot,
         seq: ++draftSeqRef.current,
         ...(testIdentity ?? {}),
       });
+      if (!result.applied) {
+        // 서버가 stale seq 로 판정해 답변을 쓰지 않았다. pending 을 비우면 서버에 반영되지
+        // 않은 값을 "저장됨" 으로 착각해 유실하므로, 삭제 루프와 지문 초기화를 모두 건너뛴다.
+        // 다음 재시도는 더 큰 seq 로 나가 통과한다.
+        console.error('응답 임시 저장 오류: 서버가 stale seq 로 판정해 적용하지 않음');
+        toast.error('응답 임시 저장에 실패했습니다. 잠시 후 다시 시도해주세요.');
+        return false;
+      }
       for (const [questionId, savedValue] of Object.entries(pendingSnapshot)) {
         if (Object.is(pendingAnswerSavesRef.current.get(questionId), savedValue)) {
           pendingAnswerSavesRef.current.delete(questionId);
