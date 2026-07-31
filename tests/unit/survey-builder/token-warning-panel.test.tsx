@@ -350,8 +350,10 @@ describe('TokenWarningPanel - 그룹 이름도 참조 표면에 포함된다', (
   });
 });
 
-describe('TokenWarningPanel - Fix round 1: 표 input 셀 defaultValueTemplate 도 참조 표면이다', () => {
-  it('표 input 셀 prefill 템플릿의 미정의 인용 이름도 경고한다', () => {
+describe('TokenWarningPanel - 최종 리뷰 I2: 표 셀 defaultValueTemplate 은 치환되지 않는 자리다', () => {
+  // prefill 결과는 응답으로 저장되는 값이라 인용 채널을 붙이지 않는다(cells/input-cell.tsx).
+  // 질문 레벨 prefill 과 동일 규칙 — 참조 표면이 아니라 경고 4의 대상이다.
+  it('표 셀 prefill 템플릿에 인용 토큰이 있으면 경고 4가 뜬다', () => {
     render(
       <TokenWarningPanel
         questions={[
@@ -369,7 +371,7 @@ describe('TokenWarningPanel - Fix round 1: 표 input 셀 defaultValueTemplate �
                     id: 'c1',
                     type: 'input',
                     content: '',
-                    defaultValueTemplate: '{{{없는이름}}}',
+                    defaultValueTemplate: '{{{이름}}}',
                   },
                 ],
               },
@@ -381,11 +383,11 @@ describe('TokenWarningPanel - Fix round 1: 표 input 셀 defaultValueTemplate �
         catalog={[]}
       />,
     );
-    expect(screen.getByText(/정의되지 않은 인용 이름/)).toBeInTheDocument();
-    expect(screen.getByText('{{{없는이름}}}')).toBeInTheDocument();
+    expect(screen.getByText(/치환되지 않는 자리에 쓴 인용 토큰/)).toBeInTheDocument();
+    expect(screen.getByText('{{{이름}}} — 표 셀 prefill 템플릿 (표 질문)')).toBeInTheDocument();
   });
 
-  it('근접 케이스: 이름을 가진 질문이 앞에 있으면 경고하지 않는다', () => {
+  it('앞 질문이 그 이름을 정의하고 있어도 여전히 경고 4가 뜬다', () => {
     render(
       <TokenWarningPanel
         questions={[
@@ -395,7 +397,7 @@ describe('TokenWarningPanel - Fix round 1: 표 input 셀 defaultValueTemplate �
             type: 'radio',
             title: '나이대를 선택하세요',
             answerQuoteEnabled: true,
-            answerQuoteName: '있는이름',
+            answerQuoteName: '나이대',
             options: [{ id: 'o1', label: '20대', value: 'v1', answerQuoteText: '20대' }],
           }),
           q({
@@ -412,7 +414,7 @@ describe('TokenWarningPanel - Fix round 1: 표 input 셀 defaultValueTemplate �
                     id: 'c1',
                     type: 'input',
                     content: '',
-                    defaultValueTemplate: '{{{있는이름}}}',
+                    defaultValueTemplate: '{{{나이대}}}',
                   },
                 ],
               },
@@ -424,10 +426,11 @@ describe('TokenWarningPanel - Fix round 1: 표 input 셀 defaultValueTemplate �
         catalog={[]}
       />,
     );
-    expect(screen.queryByText(/정의되지 않은 인용 이름/)).not.toBeInTheDocument();
+    expect(screen.getByText(/치환되지 않는 자리에 쓴 인용 토큰/)).toBeInTheDocument();
+    expect(screen.getByText('{{{나이대}}} — 표 셀 prefill 템플릿 (표 질문)')).toBeInTheDocument();
   });
 
-  it('표 input 셀 prefill 템플릿이 뒤 질문을 참조하면(순서 위반) 경고한다', () => {
+  it('참조 표면이 아니므로 뒤 질문을 가리켜도 순서 위반 경고는 뜨지 않는다', () => {
     render(
       <TokenWarningPanel
         questions={[
@@ -459,48 +462,6 @@ describe('TokenWarningPanel - Fix round 1: 표 input 셀 defaultValueTemplate �
             answerQuoteEnabled: true,
             answerQuoteName: '나이대',
             options: [{ id: 'o1', label: '20대', value: 'v1', answerQuoteText: '20대' }],
-          }),
-        ]}
-        groups={[]}
-        thankYouMessage=""
-        catalog={[]}
-      />,
-    );
-    expect(screen.getByText(/뒤 질문의 응답을 인용하는 설정 오류/)).toBeInTheDocument();
-  });
-
-  it('근접 케이스: 출처가 소비처보다 앞에 있으면 순서 위반 경고가 없다', () => {
-    render(
-      <TokenWarningPanel
-        questions={[
-          q({
-            id: 'source',
-            order: 1,
-            type: 'radio',
-            title: '나이대를 선택하세요',
-            answerQuoteEnabled: true,
-            answerQuoteName: '나이대',
-            options: [{ id: 'o1', label: '20대', value: 'v1', answerQuoteText: '20대' }],
-          }),
-          q({
-            id: 'consumer',
-            order: 2,
-            type: 'table',
-            title: '표 질문(소비처)',
-            tableRowsData: [
-              {
-                id: 'r1',
-                label: '행1',
-                cells: [
-                  {
-                    id: 'c1',
-                    type: 'input',
-                    content: '',
-                    defaultValueTemplate: '{{{나이대}}}',
-                  },
-                ],
-              },
-            ],
           }),
         ]}
         groups={[]}
@@ -509,10 +470,44 @@ describe('TokenWarningPanel - Fix round 1: 표 input 셀 defaultValueTemplate �
       />,
     );
     expect(screen.queryByText(/뒤 질문의 응답을 인용하는 설정 오류/)).not.toBeInTheDocument();
+    expect(screen.getByText(/치환되지 않는 자리에 쓴 인용 토큰/)).toBeInTheDocument();
+  });
+
+  it('근접 케이스: 컨택 attrs 토큰만 쓰면 경고 4가 뜨지 않는다', () => {
+    render(
+      <TokenWarningPanel
+        questions={[
+          q({
+            id: 'q1',
+            order: 1,
+            type: 'table',
+            title: '표 질문',
+            tableRowsData: [
+              {
+                id: 'r1',
+                label: '행1',
+                cells: [
+                  {
+                    id: 'c1',
+                    type: 'input',
+                    content: '',
+                    defaultValueTemplate: '{{이름}}',
+                  },
+                ],
+              },
+            ],
+          }),
+        ]}
+        groups={[]}
+        thankYouMessage=""
+        catalog={[{ key: '이름', label: '이름', category: 'attrs' }] as never}
+      />,
+    );
+    expect(screen.queryByText(/치환되지 않는 자리에 쓴 인용 토큰/)).not.toBeInTheDocument();
   });
 });
 
-describe('TokenWarningPanel - Fix round 1: 질문 레벨 defaultValueTemplate 은 치환되지 않는 자리다', () => {
+describe('TokenWarningPanel - 질문 레벨 defaultValueTemplate 은 치환되지 않는 자리다', () => {
   it('단답형 prefill 템플릿에 인용 토큰이 있으면 경고 4가 뜬다', () => {
     render(
       <TokenWarningPanel
