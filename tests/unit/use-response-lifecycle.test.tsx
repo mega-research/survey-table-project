@@ -708,6 +708,70 @@ describe('이탈 시점 draft beacon', () => {
     );
   });
 
+  it('fetch 폴백이 실패하면 지문이 되돌아가 다음 hidden 에서 재전송된다', async () => {
+    sendBeacon.mockReturnValue(false);
+    fetchMock.mockRejectedValue(new Error('network down'));
+    const { result } = renderHook(() =>
+      useResponseLifecycle(baseArgs({ currentResponseId: 'r1' })),
+    );
+    act(() => result.current.handleResponse('q1', 'a'));
+    fireHidden();
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+    // delivered promise 가 정착(reject → catch(false))해 지문이 되돌아갈 때까지
+    // fireHidden 을 재시도하며 기다린다 — 되돌아간 뒤에는 재전송되어 호출이 2회가 된다.
+    await waitFor(() => {
+      fireHidden();
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it('fetch 폴백이 성공하면 지문이 유지돼 재전송되지 않는다', async () => {
+    sendBeacon.mockReturnValue(false);
+    fetchMock.mockResolvedValue(new Response(null, { status: 200 }));
+    const { result } = renderHook(() =>
+      useResponseLifecycle(baseArgs({ currentResponseId: 'r1' })),
+    );
+    act(() => result.current.handleResponse('q1', 'a'));
+    fireHidden();
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    // delivered promise 정착까지 대기 (성공 시 지문을 건드리지 않는다는 것을 확인하는 목적).
+    await act(async () => {});
+
+    fireHidden();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('sendBeacon 이 수락하면 fetch 를 쓰지 않고 지문이 유지된다', () => {
+    const { result } = renderHook(() =>
+      useResponseLifecycle(baseArgs({ currentResponseId: 'r1' })),
+    );
+    act(() => result.current.handleResponse('q1', 'a'));
+    fireHidden();
+    fireHidden();
+
+    expect(sendBeacon).toHaveBeenCalledTimes(1);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('64KiB 를 넘는 payload 는 sendBeacon 을 건너뛰고 keepalive 없이 fetch 로 보낸다', () => {
+    const oversized = 'x'.repeat(70_000);
+    const { result } = renderHook(() =>
+      useResponseLifecycle(baseArgs({ currentResponseId: 'r1' })),
+    );
+    act(() => result.current.handleResponse('q1', oversized));
+    fireHidden();
+
+    expect(sendBeacon).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(options.method).toBe('POST');
+    expect(options.keepalive).not.toBe(true);
+  });
+
   it('flush 왕복 중 값이 바뀐 잔여 pending 은 이후 이탈 시점에 다시 전송된다', async () => {
     let resolveSaveDraft!: (value: { ok: boolean }) => void;
     saveDraft.mockReturnValue(

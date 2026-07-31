@@ -44,30 +44,66 @@ export function sendVisibilitySegment(
   }).catch(() => {});
 }
 
+/** sendBeacon 과 keepalive fetch 가 공유하는 전송 예산. 초과하면 둘 다 거부된다. */
+const BEACON_MAX_BYTES = 64 * 1024;
+
+/** 이탈 시점 draft 전송 시도 결과. */
+export interface DraftBeaconAttempt {
+  /** 브라우저가 전송을 인수했으면 true. sendBeacon 이 수락한 경우에만 true 다. */
+  queued: boolean;
+  /**
+   * sendBeacon 을 쓰지 못해 fetch 로 보낸 경우의 도달 여부.
+   * queued 가 true 면 null (sendBeacon 은 결과를 알려주지 않는다).
+   */
+  delivered: Promise<boolean> | null;
+}
+
 /**
- * 미저장 답변을 /api/response/draft 로 전송한다(fire-and-forget).
+ * 미저장 답변을 /api/response/draft 로 전송한다.
  *
  * 이탈 시점(visibilitychange:hidden / pagehide)에 호출되므로 탭 종료에도 살아남는
- * sendBeacon 을 우선 쓴다. 큐 포화나 64KB 초과로 false 가 반환되면 keepalive fetch 로
- * 폴백한다 — 이탈 직전이라 완료 보장은 없지만 시도할 가치는 있다.
+ * sendBeacon 을 우선 쓴다. sendBeacon 과 keepalive fetch 는 같은 전송 예산(약 64KiB)을
+ * 공유하므로, 그 예산을 넘는 payload 는 sendBeacon 을 시도해도 어차피 거부된다 — 이
+ * 경우 sendBeacon 을 건너뛰고 keepalive 없이 곧장 fetch 로 보낸다(페이지가 살아있는
+ * 동안이라도 도달할 여지를 준다). 예산 이내인데도 sendBeacon 이 실패(큐 포화 등)하면
+ * keepalive fetch 로 폴백한다.
+ *
+ * 호출부는 반환된 delivered promise 로 실제 도달 여부를 확인해 재시도 여부를 결정한다.
  */
 export function sendDraftBeacon(
   responseId: string,
   answers: Record<string, unknown>,
   identity: TestAttemptIdentity | null = null,
-): void {
+): DraftBeaconAttempt {
   const payload = JSON.stringify({ responseId, answers, ...(identity ?? {}) });
+  const byteSize = new Blob([payload]).size;
+
+  if (byteSize > BEACON_MAX_BYTES) {
+    const delivered = fetch('/api/response/draft', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: payload,
+    })
+      .then((res) => res.ok)
+      .catch(() => false);
+    return { queued: false, delivered };
+  }
+
   if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
     const queued = navigator.sendBeacon(
       '/api/response/draft',
       new Blob([payload], { type: 'application/json' }),
     );
-    if (queued) return;
+    if (queued) return { queued: true, delivered: null };
   }
-  fetch('/api/response/draft', {
+
+  const delivered = fetch('/api/response/draft', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: payload,
     keepalive: true,
-  }).catch(() => {});
+  })
+    .then((res) => res.ok)
+    .catch(() => false);
+  return { queued: false, delivered };
 }

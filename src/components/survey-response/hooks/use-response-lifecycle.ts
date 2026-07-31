@@ -441,8 +441,16 @@ export function useResponseLifecycle({
       const answers = Object.fromEntries(pendingAnswerSavesRef.current);
       const snapshot = snapshotOfAnswers(answers);
       if (snapshot === lastBeaconSnapshotRef.current) return;
+      const attempt = sendDraftBeacon(responseId, answers, testIdentity);
+      // 낙관적으로 확정한다. 브라우저가 인수했으면 그대로 두고,
+      // fetch 폴백이 실패로 확인되면 되돌려 다음 이탈 시점에 재시도되게 한다.
       lastBeaconSnapshotRef.current = snapshot;
-      sendDraftBeacon(responseId, answers, testIdentity);
+      attempt.delivered?.then((ok) => {
+        // 그 사이 더 새로운 beacon 이 지문을 갱신했으면 건드리지 않는다.
+        if (!ok && lastBeaconSnapshotRef.current === snapshot) {
+          lastBeaconSnapshotRef.current = null;
+        }
+      });
     };
 
     const onVisibility = () => {
