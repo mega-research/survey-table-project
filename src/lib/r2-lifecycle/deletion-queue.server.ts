@@ -152,14 +152,53 @@ export async function listDeletionCandidates(
     .limit(limit);
 }
 
-/** 집행 결과 회계 — 집행자만 호출한다. */
+/**
+ * 집행 대상 상태 — 이 상태의 후보만 집행자가 종결할 수 있다.
+ * fetchDueCandidates 가 집는 상태와 같은 집합이어야 한다.
+ */
+const RESOLVABLE_STATUSES = ['pending', 'failed'] as const;
+
+/**
+ * 후보가 아직 집행 대상 상태인지 — R2 삭제 직전 재확인용.
+ *
+ * 배치 조회와 실제 처리 사이에는 시간이 흐른다(run 당 최대 1000건). 그 사이
+ * 저장 부활이나 관리자 취소로 'cancelled' 가 된 후보의 객체를 지워버리면
+ * 되돌릴 수 없으므로, 삭제 직전에 한 번 더 확인한다.
+ */
+export async function isCandidateResolvable(id: string): Promise<boolean> {
+  const rows = await db
+    .select({ id: r2DeletionCandidates.id })
+    .from(r2DeletionCandidates)
+    .where(
+      and(
+        eq(r2DeletionCandidates.id, id),
+        inArray(r2DeletionCandidates.status, [...RESOLVABLE_STATUSES]),
+      ),
+    );
+  return rows.length > 0;
+}
+
+/**
+ * 집행 결과 회계 — 집행자만 호출한다.
+ *
+ * 상태 가드로 pending/failed 만 전이시킨다. 배치 조회 이후 취소된 후보를
+ * 덮어쓰면 취소가 조용히 무효화된다. 전이하지 못했으면 false 를 반환하니
+ * 호출자는 "후보가 다른 상태로 옮겨감"으로 처리해야 한다.
+ */
 export async function resolveCandidate(
   id: string,
   status: Extract<R2DeletionCandidateStatus, 'kept' | 'deleted' | 'failed'>,
   resultNote: string,
-): Promise<void> {
-  await db
+): Promise<boolean> {
+  const rows = await db
     .update(r2DeletionCandidates)
     .set({ status, resolvedAt: new Date(), resultNote })
-    .where(eq(r2DeletionCandidates.id, id));
+    .where(
+      and(
+        eq(r2DeletionCandidates.id, id),
+        inArray(r2DeletionCandidates.status, [...RESOLVABLE_STATUSES]),
+      ),
+    )
+    .returning({ id: r2DeletionCandidates.id });
+  return rows.length > 0;
 }

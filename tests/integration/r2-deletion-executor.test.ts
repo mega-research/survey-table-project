@@ -3,26 +3,36 @@
  *
  * 계약: ① 장부 히트 → '보존됨'(삭제 미호출) ② 전역 참조 히트 → '보존됨'
  * ③ 통과 → 삭제+HEAD 검증 → '삭제됨' ④ 오류 → '실패'로 남아 재시도 대상
- * ⑤ step 커서 분할 — hasMore 소진까지 배치 반복, maxBatches 백스톱.
+ * ⑤ step 커서 분할 — hasMore 소진까지 배치 반복, maxBatches 백스톱
+ * ⑥ 배치 조회 이후 취소된 후보는 종결하지도 삭제하지도 않는다.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { R2DeletionCandidate } from '@/db/schema';
 
-const { fetchDueMock, resolveMock, ledgerMock, referencedMock, deleteMock, indexedMock } =
-  vi.hoisted(() => ({
-    fetchDueMock: vi.fn<(limit: number, now?: Date) => Promise<R2DeletionCandidate[]>>(),
-    resolveMock: vi.fn(async () => undefined),
-    ledgerMock: vi.fn(async () => new Set<string>()),
-    referencedMock: vi.fn(async () => new Set<string>()),
-    deleteMock: vi.fn(async () => ({ ok: true }) as { ok: true } | { ok: false; error: string }),
-    indexedMock: vi.fn(async () => new Set<string>()),
-  }));
+const {
+  fetchDueMock,
+  resolveMock,
+  resolvableMock,
+  ledgerMock,
+  referencedMock,
+  deleteMock,
+  indexedMock,
+} = vi.hoisted(() => ({
+  fetchDueMock: vi.fn<(limit: number, now?: Date) => Promise<R2DeletionCandidate[]>>(),
+  resolveMock: vi.fn(async () => true),
+  resolvableMock: vi.fn(async () => true),
+  ledgerMock: vi.fn(async () => new Set<string>()),
+  referencedMock: vi.fn(async () => new Set<string>()),
+  deleteMock: vi.fn(async () => ({ ok: true }) as { ok: true } | { ok: false; error: string }),
+  indexedMock: vi.fn(async () => new Set<string>()),
+}));
 
 vi.mock('@/lib/r2-lifecycle/deletion-queue.server', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/r2-lifecycle/deletion-queue.server')>()),
   fetchDueCandidates: fetchDueMock,
   resolveCandidate: resolveMock,
+  isCandidateResolvable: resolvableMock,
 }));
 vi.mock('@/lib/r2-lifecycle/sent-ledger.server', () => ({
   getLedgeredKeys: ledgerMock,
@@ -67,6 +77,8 @@ beforeEach(() => {
   referencedMock.mockResolvedValue(new Set());
   deleteMock.mockResolvedValue({ ok: true });
   indexedMock.mockResolvedValue(new Set());
+  resolveMock.mockResolvedValue(true);
+  resolvableMock.mockResolvedValue(true);
 });
 
 describe('executeDueDeletionBatch — 키별 결정', () => {
@@ -257,5 +269,44 @@ describe('executeDueDeletionBatch — 인덱스 사전 필터', () => {
     // 스캔이 참조를 못 찾은 키는 정상적으로 삭제까지 진행된다 — 정지하지 않는다.
     expect(result.deleted).toBe(1);
     expect(deleteMock).toHaveBeenCalledWith('survey/2026/07/a.png');
+  });
+});
+
+describe('executeDueDeletionBatch — 배치 조회 이후 상태 변경', () => {
+  it('삭제 직전 취소된 후보는 R2 삭제도 종결도 하지 않는다', async () => {
+    fetchDueMock.mockResolvedValueOnce([candidate('c1', 'survey/2026/07/a.png')]);
+    // 배치 조회와 처리 사이에 부활 취소·관리자 취소가 들어온 상황
+    resolvableMock.mockResolvedValueOnce(false);
+
+    const result = await executeDueDeletionBatch(10);
+
+    expect(deleteMock).not.toHaveBeenCalled();
+    expect(resolveMock).not.toHaveBeenCalled();
+    expect(result.skipped).toBe(1);
+    expect(result.deleted).toBe(0);
+  });
+
+  it('보존 판정 후보가 그 사이 취소되면 종결 실패를 건너뜀으로 집계한다', async () => {
+    fetchDueMock.mockResolvedValueOnce([candidate('c1', 'mail/ledgered.png')]);
+    ledgerMock.mockResolvedValueOnce(new Set(['mail/ledgered.png']));
+    // 상태 가드에 막혀 0행 갱신
+    resolveMock.mockResolvedValueOnce(false);
+
+    const result = await executeDueDeletionBatch(10);
+
+    expect(result.keptLedger).toBe(0);
+    expect(result.skipped).toBe(1);
+  });
+
+  it('건너뛴 건수는 run 합계에 누적된다', async () => {
+    fetchDueMock.mockResolvedValueOnce([candidate('c1', 'survey/2026/07/a.png')]);
+    resolvableMock.mockResolvedValueOnce(false);
+
+    const totals = await runDeletionExecutor({
+      run: <T,>(_id: string, fn: () => Promise<T>) => fn(),
+    });
+
+    expect(totals.skipped).toBe(1);
+    expect(totals.deleted).toBe(0);
   });
 });

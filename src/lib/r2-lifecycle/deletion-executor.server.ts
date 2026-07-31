@@ -4,6 +4,7 @@ import * as Sentry from '@sentry/nextjs';
 
 import {
   fetchDueCandidates,
+  isCandidateResolvable,
   resolveCandidate,
 } from '@/lib/r2-lifecycle/deletion-queue.server';
 import { getIndexedReferencedKeys } from '@/lib/r2-lifecycle/key-ref-index.server';
@@ -28,6 +29,8 @@ export interface DeletionBatchResult {
   keptReferenced: number;
   deleted: number;
   failed: number;
+  /** 배치 조회 이후 취소 등으로 상태가 바뀌어 건너뛴 후보 수 */
+  skipped: number;
   /** 인덱스는 '참조 없음'이라 했는데 스캔이 참조를 찾은 수 — 위험 방향 드리프트 */
   indexMisses: number;
   /** 참조 재확인이 실패해 아무 후보도 종결하지 못한 배치. 후보는 pending 유지. */
@@ -39,6 +42,10 @@ export interface DeletionBatchResult {
  * 기한 지난 후보 1배치 집행: ① 발송 장부 히트 → '보존됨' ② 전역 참조 재확인
  * 히트 → '보존됨' ③ 통과 → R2 삭제 + HEAD 검증 → '삭제됨', 오류는 '실패'로
  * 남겨 다음 집행에서 자동 재시도.
+ *
+ * 배치 조회와 후보 처리 사이에 부활 취소·관리자 취소가 끼어들 수 있다
+ * (run 당 최대 1000건이라 창이 분 단위다). 상태가 바뀐 후보는 종결하지 않고
+ * 건너뛰며, 삭제 분기는 R2 삭제 **전에** 확인해 취소된 객체를 지우지 않는다.
  *
  * `now` 는 실행(run) 시작 시각 — fetchDueCandidates 가 이 시각 이후 실패한
  * 행을 재집기하지 않아 같은 run 안의 즉시 재시도 루프를 막는다.
@@ -55,6 +62,7 @@ export async function executeDueDeletionBatch(
     keptReferenced: 0,
     deleted: 0,
     failed: 0,
+    skipped: 0,
     indexMisses: 0,
     scanFailed: false,
     hasMore: due.length === limit,
@@ -103,6 +111,7 @@ export async function executeDueDeletionBatch(
       keptReferenced: 0,
       deleted: 0,
       failed: 0,
+      skipped: 0,
       indexMisses: 0,
       scanFailed: true,
       hasMore: false,
@@ -121,23 +130,40 @@ export async function executeDueDeletionBatch(
     });
   }
 
+  /** 상태 가드에 막히면(= 그 사이 취소됨) 종결 대신 건너뜀으로 회계한다. */
+  const resolve = async (
+    candidateId: string,
+    status: 'kept' | 'deleted' | 'failed',
+    note: string,
+  ): Promise<boolean> => {
+    if (await resolveCandidate(candidateId, status, note)) return true;
+    result.skipped += 1;
+    return false;
+  };
+
   for (const candidate of due) {
     if (ledgered.has(candidate.key)) {
-      await resolveCandidate(candidate.id, 'kept', '발송 장부 보호 — 발송된 메일이 참조');
-      result.keptLedger += 1;
+      if (await resolve(candidate.id, 'kept', '발송 장부 보호 — 발송된 메일이 참조')) {
+        result.keptLedger += 1;
+      }
     } else if (indexed.has(candidate.key)) {
-      await resolveCandidate(candidate.id, 'kept', '참조 인덱스에서 참조 발견');
-      result.keptIndexed += 1;
+      if (await resolve(candidate.id, 'kept', '참조 인덱스에서 참조 발견')) {
+        result.keptIndexed += 1;
+      }
     } else if (referenced.has(candidate.key)) {
-      await resolveCandidate(candidate.id, 'kept', '전역 참조 재확인에서 참조 발견');
-      result.keptReferenced += 1;
+      if (await resolve(candidate.id, 'kept', '전역 참조 재확인에서 참조 발견')) {
+        result.keptReferenced += 1;
+      }
+    } else if (!(await isCandidateResolvable(candidate.id))) {
+      // 배치 조회 이후 취소된 후보 — R2 삭제는 되돌릴 수 없으므로 지우지 않는다.
+      result.skipped += 1;
     } else {
       const deletion = await deleteR2ObjectVerified(candidate.key);
       if (deletion.ok) {
-        await resolveCandidate(candidate.id, 'deleted', 'R2 삭제 후 HEAD 검증 완료');
-        result.deleted += 1;
-      } else {
-        await resolveCandidate(candidate.id, 'failed', deletion.error);
+        if (await resolve(candidate.id, 'deleted', 'R2 삭제 후 HEAD 검증 완료')) {
+          result.deleted += 1;
+        }
+      } else if (await resolve(candidate.id, 'failed', deletion.error)) {
         result.failed += 1;
       }
     }
@@ -162,6 +188,7 @@ export interface DeletionExecutorTotals {
   keptReferenced: number;
   deleted: number;
   failed: number;
+  skipped: number;
   indexMisses: number;
   scanFailures: number;
 }
@@ -185,6 +212,7 @@ export async function runDeletionExecutor(
     keptReferenced: 0,
     deleted: 0,
     failed: 0,
+    skipped: 0,
     indexMisses: 0,
     scanFailures: 0,
   };
@@ -200,6 +228,7 @@ export async function runDeletionExecutor(
     totals.keptReferenced += batch.keptReferenced;
     totals.deleted += batch.deleted;
     totals.failed += batch.failed;
+    totals.skipped += batch.skipped;
     totals.indexMisses += batch.indexMisses;
     if (batch.scanFailed) totals.scanFailures += 1;
     if (!batch.hasMore) break;
