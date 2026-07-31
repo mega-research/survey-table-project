@@ -14,19 +14,7 @@ import type {
   ResumeOrCreateResponseInput,
   ResumeOrCreateResponseOutput,
 } from '../../domain/lifecycle';
-import { SurveyNotAcceptingResponsesError } from './response.service';
-
-/**
- * metadata JSONB 의 draftSeq 를 안전하게 추출한다. response.service.ts 의 claimDraftSeq 가
- * 쓰는 값과 동일 키 — resume 이 이 값을 클라이언트에 내려줘 draftSeqRef 를 seed 하는 데 쓴다.
- * (2차 세션이 0 부터 다시 발급해 1차 세션의 draftSeq 보다 낮은 seq 를 보내면 claim 이 전부
- * stale 로 막아 저장이 조용히 유실되는 회귀를 막는다.) 비정상 값은 무시하고 undefined 반환.
- */
-function extractDraftSeq(metadata: unknown): number | undefined {
-  if (metadata == null || typeof metadata !== 'object') return undefined;
-  const raw = (metadata as Record<string, unknown>)['draftSeq'];
-  return typeof raw === 'number' && Number.isFinite(raw) && raw >= 0 ? raw : undefined;
-}
+import { extractDraftSeq, SurveyNotAcceptingResponsesError } from './response.service';
 
 // ========================
 // 응답 라이프사이클 service (pub)

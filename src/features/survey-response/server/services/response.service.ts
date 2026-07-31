@@ -56,9 +56,14 @@ type ResponseQueryExecutor = Pick<DbTransaction, 'execute' | 'select'>;
 async function findActiveResponseByContact(
   surveyId: string,
   contactTargetId: string,
-): Promise<{ id: string; contactTargetId: string | null } | null> {
+): Promise<{ id: string; contactTargetId: string | null; metadata: SurveyResponse['metadata'] } | null> {
   const [row] = await db
-    .select({ id: surveyResponses.id, contactTargetId: surveyResponses.contactTargetId })
+    .select({
+      id: surveyResponses.id,
+      contactTargetId: surveyResponses.contactTargetId,
+      // 재사용되는 행의 draftSeq 를 클라이언트에 실어 보내기 위한 컬럼 — insertResponseWithContactReuse 참조.
+      metadata: surveyResponses.metadata,
+    })
     .from(surveyResponses)
     .where(
       and(
@@ -89,7 +94,7 @@ async function insertResponseWithContactReuse(params: {
   contactTargetId: string | null;
   newResponse: NewSurveyResponse;
   onReuse?: (id: string) => Promise<void>;
-}): Promise<{ id: string; contactTargetId: string | null }> {
+}): Promise<{ id: string; contactTargetId: string | null; metadata: SurveyResponse['metadata'] }> {
   const { surveyId, sessionId, contactTargetId, newResponse, onReuse } = params;
 
   if (contactTargetId) {
@@ -100,7 +105,11 @@ async function insertResponseWithContactReuse(params: {
     }
   }
 
-  let inserted: Array<{ id: string; contactTargetId: string | null }>;
+  let inserted: Array<{
+    id: string;
+    contactTargetId: string | null;
+    metadata: SurveyResponse['metadata'];
+  }>;
   try {
     inserted = await db
       .insert(surveyResponses)
@@ -108,7 +117,11 @@ async function insertResponseWithContactReuse(params: {
       .onConflictDoNothing({
         target: [surveyResponses.surveyId, surveyResponses.sessionId],
       })
-      .returning({ id: surveyResponses.id, contactTargetId: surveyResponses.contactTargetId });
+      .returning({
+        id: surveyResponses.id,
+        contactTargetId: surveyResponses.contactTargetId,
+        metadata: surveyResponses.metadata,
+      });
   } catch (e) {
     if (contactTargetId) {
       const active = await findActiveResponseByContact(surveyId, contactTargetId);
@@ -124,7 +137,11 @@ async function insertResponseWithContactReuse(params: {
   if (firstInserted !== undefined) return firstInserted;
 
   const [existing] = await db
-    .select({ id: surveyResponses.id, contactTargetId: surveyResponses.contactTargetId })
+    .select({
+      id: surveyResponses.id,
+      contactTargetId: surveyResponses.contactTargetId,
+      metadata: surveyResponses.metadata,
+    })
     .from(surveyResponses)
     .where(and(eq(surveyResponses.surveyId, surveyId), eq(surveyResponses.sessionId, sessionId)))
     .limit(1);
@@ -142,7 +159,7 @@ async function insertResponseWithContactReuse(params: {
 async function insertAnonymousTestResponse(
   input: { surveyId: string; sessionId: string; testToken: string },
   newResponse: NewSurveyResponse,
-): Promise<{ id: string; contactTargetId: null }> {
+): Promise<{ id: string; contactTargetId: null; metadata: null }> {
   return db.transaction(async (tx) => {
     await assertAnonymousTestSession(tx, input);
     const [inserted] = await tx
@@ -152,7 +169,9 @@ async function insertAnonymousTestResponse(
         target: [surveyResponses.surveyId, surveyResponses.sessionId],
       })
       .returning({ id: surveyResponses.id });
-    if (inserted) return { id: inserted.id, contactTargetId: null };
+    // metadata 는 항상 null 고정: 이 재사용 분기는 동일 세션의 동시 INSERT race 뿐이라
+    // (다른 기기·세션이 끼어들 여지가 없다) 물려받을 draftSeq 이력이 존재할 수 없다.
+    if (inserted) return { id: inserted.id, contactTargetId: null, metadata: null };
 
     const [existing] = await tx
       .select({ id: surveyResponses.id })
@@ -168,7 +187,7 @@ async function insertAnonymousTestResponse(
       )
       .limit(1);
     if (!existing) throw new Error('테스트 응답을 시작할 수 없습니다');
-    return { id: existing.id, contactTargetId: null };
+    return { id: existing.id, contactTargetId: null, metadata: null };
   });
 }
 
@@ -676,6 +695,19 @@ export async function updateQuestionResponse(
 type DraftSeqClaim = 'claimed' | 'stale' | 'not_found';
 
 /**
+ * metadata JSONB 의 draftSeq 를 안전하게 추출한다. claimDraftSeq 가 쓰는 값과 동일 키 —
+ * 응답 행 id 를 클라이언트에 넘겨주는 모든 경로(resume, 컨택 재사용 등)가 이 값을 함께
+ * 실어 보내 draftSeqRef 를 seed 하는 데 쓴다. lifecycle.service.ts 의 resumeOrCreateResponse
+ * 도 이 헬퍼를 그대로 재사용한다(단일 소스, 사이클 방지를 위해 이쪽에 둔다). 비정상 값은
+ * 무시하고 undefined 를 반환한다.
+ */
+export function extractDraftSeq(metadata: unknown): number | undefined {
+  if (metadata == null || typeof metadata !== 'object') return undefined;
+  const raw = (metadata as Record<string, unknown>)['draftSeq'];
+  return typeof raw === 'number' && Number.isFinite(raw) && raw >= 0 ? raw : undefined;
+}
+
+/**
  * draft 쓰기 순번을 선점한다.
  *
  * 저장된 draftSeq 보다 큰 요청만 통과시키고 그 자리에서 값을 올린다. 단일 UPDATE 라
@@ -1021,7 +1053,15 @@ export async function createResponseWithFirstAnswer(
   // 갱신을 단일화. jsonb_set 은 동일 값 덮어쓰기라 멱등이라 신규 INSERT path 의 중복 set
   // 도 안전. onReuse 콜백을 사용하지 않는 이유: progress_pct 가 신규 INSERT 에서도 필요.
   await updateQuestionResponse({ responseId: result.id, questionId, value: storedValue });
-  return { kind: 'created', id: result.id, contactTargetId: result.contactTargetId };
+  // 컨택 재사용으로 기존 행을 물려받았으면 그 행의 draftSeq 를 함께 실어 보낸다 — resume 이
+  // 호출되지 않는 경로(localStorage 없는 재진입)에서도 draftSeqRef 를 올바르게 seed 하기 위함.
+  const draftSeq = extractDraftSeq(result.metadata);
+  return {
+    kind: 'created',
+    id: result.id,
+    contactTargetId: result.contactTargetId,
+    ...(draftSeq !== undefined ? { draftSeq } : {}),
+  };
 }
 
 /**

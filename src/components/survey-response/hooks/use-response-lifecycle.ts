@@ -365,6 +365,10 @@ export function useResponseLifecycle({
             }
             const { id, contactTargetId } = result;
             activeResponseIdRef.current = id;
+            // 컨택 재사용으로 기존 행을 물려받았을 수 있다(resume 이 호출되지 않는 경로 —
+            // localStorage 없는 다른 기기·시크릿창 재진입). resume seed 와 동일 의미론으로
+            // 올리는 방향으로만 반영한다.
+            draftSeqRef.current = Math.max(draftSeqRef.current, result.draftSeq ?? 0);
             setCurrentResponseId(id);
             if (testIdentity) setHasTestAttemptOwnership(true);
             // invite 토큰이 있었는데 contactTargetId 매칭 실패 → 무효 토큰. 익명 응답으로 폴백 알림.

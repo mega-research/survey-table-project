@@ -991,4 +991,43 @@ describe('draft seq — 이어하기 seed 및 applied 가드', () => {
     expect(flushResult).toBe(true);
     expect(saveDraft).toHaveBeenCalledTimes(1);
   });
+
+  it('컨택 재사용으로 생성된 응답의 draftSeq 로 카운터가 seed 된다', async () => {
+    // 컨택 재사용 경로(localStorage 없는 다른 기기·시크릿창 재진입) — 서버가 기존 행의
+    // draftSeq=9 를 창조 응답에 실어 보낸다.
+    createWithFirstAnswer.mockResolvedValue({ id: 'resp-1', contactTargetId: 'c1', draftSeq: 9 });
+    saveDraft.mockResolvedValue({ ok: true, applied: true });
+    const args = baseArgs();
+    const { result } = renderHook(() => useResponseLifecycle(args));
+
+    act(() => result.current.handleResponse('q1', 'v1'));
+    await waitFor(() => expect(args.setCurrentResponseId).toHaveBeenCalledWith('resp-1'));
+
+    await act(async () => {
+      await result.current.flushPendingAnswers();
+    });
+
+    expect(saveDraft).toHaveBeenCalledTimes(1);
+    const seq = (saveDraft.mock.calls[0]?.[0] as { seq: number }).seq;
+    expect(seq).toBeGreaterThan(9);
+  });
+
+  it('생성 응답의 draftSeq 가 이미 seed 된 더 큰 값보다 작아도 내려가지 않는다', async () => {
+    // resume 이 이미 50 까지 seed 해둔 상태에서, 컨택 재사용 창조 응답이 더 낮은 draftSeq(5)
+    // 를 돌려주는 레이스를 흉내낸다 — Math.max 로 올리기만 해야 한다.
+    createWithFirstAnswer.mockResolvedValue({ id: 'resp-1', contactTargetId: 'c1', draftSeq: 5 });
+    saveDraft.mockResolvedValue({ ok: true, applied: true });
+    const args = baseArgs({ recoveredDraftSeq: 50 });
+    const { result } = renderHook(() => useResponseLifecycle(args));
+
+    act(() => result.current.handleResponse('q1', 'v1'));
+    await waitFor(() => expect(args.setCurrentResponseId).toHaveBeenCalledWith('resp-1'));
+
+    await act(async () => {
+      await result.current.flushPendingAnswers();
+    });
+
+    const seq = (saveDraft.mock.calls[0]?.[0] as { seq: number }).seq;
+    expect(seq).toBeGreaterThan(50);
+  });
 });

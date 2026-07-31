@@ -342,6 +342,101 @@ describe('createResponseWithFirstAnswer — 첫 답변 INSERT 전 암호화', ()
   });
 });
 
+describe('createResponseWithFirstAnswer — 컨택 재사용 draftSeq 전달', () => {
+  const CONTACT_ID = '00000000-0000-4000-8000-00000000c001';
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    headersMock.mockResolvedValue({ get: vi.fn(() => 'test-agent') });
+    computeSignalsMock.mockReturnValue({ ipHash: 'ip-h', fpHash: 'fp-h', deviceId: 'dev-1' });
+    surveyFindFirstMock.mockResolvedValue(publishedSurveyRow());
+    versionFindFirstMock.mockResolvedValue({ surveyId: SURVEY_ID, status: 'published' });
+    executeMock.mockResolvedValue([{ pii: false }]);
+    responseFindFirstMock.mockResolvedValue({
+      id: RESPONSE_ID,
+      surveyId: SURVEY_ID,
+      versionId: VERSION_ID,
+      isTest: false,
+    });
+    flagsMock.mockResolvedValue({ isPaused: false });
+    updateReturningMock.mockReturnValue([{ id: RESPONSE_ID }]);
+  });
+
+  it('컨택 재사용 시 기존 행의 draftSeq 를 응답에 실어 보낸다 — resume 이 호출되지 않는 경로(다른 기기·시크릿창)의 seed 용', async () => {
+    // Track A: 초대 토큰이 활성 컨택에 매칭됐다고 판정.
+    checkTrackAMock.mockResolvedValue({
+      blocked: false,
+      contactTargetId: CONTACT_ID,
+      isTestTarget: false,
+    });
+    // findActiveResponseByContact — 동일 컨택의 미완료 응답 행이 이미 있고, 1차 세션에서
+    // draftSeq=7 까지 올라가 있다.
+    selectLimitMock.mockResolvedValueOnce([
+      { id: RESPONSE_ID, contactTargetId: CONTACT_ID, metadata: { draftSeq: 7 } },
+    ]);
+
+    const { createResponseWithFirstAnswer } = await import(
+      '@/features/survey-response/server/services/response.service'
+    );
+    const result = await createResponseWithFirstAnswer({
+      surveyId: SURVEY_ID,
+      sessionId: 'sess-new-device',
+      versionId: VERSION_ID,
+      questionId: PLAIN_QUESTION_ID,
+      value: '새 기기에서 입력',
+      currentStepId: 'step-1',
+      inviteToken: 'invite-1',
+      clientSignals: {
+        deviceId: 'dev-1',
+        screen: '1440x900',
+        tz: 'Asia/Seoul',
+        lang: 'ko',
+        platform: 'MacIntel',
+      },
+    });
+
+    expect(result).toMatchObject({ kind: 'created', id: RESPONSE_ID, draftSeq: 7 });
+    // 재사용 분기이므로 새 INSERT 는 일어나지 않는다.
+    expect(insertValuesLogMock).not.toHaveBeenCalled();
+  });
+
+  it('신규 INSERT(재사용 아님)면 draftSeq 를 싣지 않는다', async () => {
+    checkTrackAMock.mockResolvedValue({
+      blocked: false,
+      contactTargetId: CONTACT_ID,
+      isTestTarget: false,
+    });
+    // findActiveResponseByContact — 활성 응답 없음 → INSERT 진행.
+    selectLimitMock.mockResolvedValueOnce([]);
+    insertReturningMock.mockResolvedValue([
+      { id: RESPONSE_ID, contactTargetId: CONTACT_ID, metadata: null },
+    ]);
+
+    const { createResponseWithFirstAnswer } = await import(
+      '@/features/survey-response/server/services/response.service'
+    );
+    const result = await createResponseWithFirstAnswer({
+      surveyId: SURVEY_ID,
+      sessionId: 'sess-first-time',
+      versionId: VERSION_ID,
+      questionId: PLAIN_QUESTION_ID,
+      value: '첫 입력',
+      currentStepId: 'step-1',
+      inviteToken: 'invite-1',
+      clientSignals: {
+        deviceId: 'dev-1',
+        screen: '1440x900',
+        tz: 'Asia/Seoul',
+        lang: 'ko',
+        platform: 'MacIntel',
+      },
+    });
+
+    expect(result.kind).toBe('created');
+    expect(result).not.toHaveProperty('draftSeq');
+  });
+});
+
 describe('completeResponse — PII 문항만 선별 암호화', () => {
   beforeEach(() => {
     vi.clearAllMocks();

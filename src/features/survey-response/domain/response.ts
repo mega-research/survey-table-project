@@ -149,6 +149,12 @@ export const FirstAnswerResultSchema = z.discriminatedUnion('kind', [
     kind: z.literal('created'),
     id: z.string(),
     contactTargetId: z.string().nullable(),
+    /**
+     * 응답 행에 이미 적용된 draft seq(survey_responses.metadata.draftSeq) — 컨택 재사용으로
+     * 기존 행을 물려받을 때만 값이 있다. 클라이언트가 draftSeqRef 를 이 값 이상으로 seed 해,
+     * localStorage 없는 재진입(다른 기기·시크릿창)에서도 이후 flush 가 stale 로 막히지 않게 한다.
+     */
+    draftSeq: z.number().int().nonnegative().optional(),
   }),
   z.object({
     kind: z.literal('blocked'),
