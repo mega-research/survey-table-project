@@ -149,7 +149,9 @@ export function AnswerQuoteQuestionControl({
             <Input
               id="answer-quote-name"
               value={name}
-              onChange={(e) => onNameChange(e.target.value)}
+              // 중괄호가 이름에 섞이면 {{{이름}}} 토큰 파싱이 깨져 영구 미스매치가 된다
+              // (TOKEN_PATTERN 문자 클래스가 [^{}]+) — 입력 단계에서 원천 차단.
+              onChange={(e) => onNameChange(e.target.value.replace(/[{}]/g, ''))}
               placeholder="예: 마케팅유형"
               className="h-8 text-sm"
             />
@@ -184,9 +186,9 @@ export function AnswerQuoteQuestionControl({
           )}
 
           <p className="rounded bg-amber-50 p-2 text-xs leading-relaxed text-amber-800">
-            인용 결과가 비면 문장이 깨집니다. 인용을 쓰는 질문에는 &quot;이 질문에 응답이 있을
-            때만 표시&quot; 조건을 함께 걸어두세요. 앞 질문이 표시 조건으로 숨겨진 경우에도 같은
-            조건이 문장을 지켜줍니다.
+            인용 결과가 비면 문장이 깨집니다. 이 인용을 제목에 쓰는 뒤 질문에
+            &quot;이 질문에 응답이 있을 때만 표시&quot; 조건을 함께 걸어두세요.
+            이 질문이 조건으로 숨겨진 경우에도 같은 조건이 뒤 질문의 문장을 지켜줍니다.
           </p>
         </div>
       )}

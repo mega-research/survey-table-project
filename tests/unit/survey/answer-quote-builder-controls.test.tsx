@@ -110,7 +110,7 @@ describe('빌더 응답 인용 컨트롤', () => {
     expect(screen.getByLabelText('인용 이름')).toBeInTheDocument();
     // 인용 결과 없음 안내 — 빈 인용과 유령 인용을 한 문단으로 다룬다
     expect(screen.getByText(/인용 결과가 비면 문장이 깨집니다/)).toBeInTheDocument();
-    expect(screen.getByText(/표시 조건으로 숨겨진 경우에도/)).toBeInTheDocument();
+    expect(screen.getByText(/이 질문이 조건으로 숨겨진 경우에도/)).toBeInTheDocument();
     // 옵션 2개 각각에 인용 문구 입력칸
     expect(screen.getAllByLabelText('인용 문구')).toHaveLength(2);
   });

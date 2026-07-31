@@ -34,6 +34,7 @@ export const SurveySettingsPanel = React.memo(function SurveySettingsPanel({
     useShallow((s) => s.currentSurvey.contactEmail),
   );
   const questions = useSurveyBuilderStore(useShallow((s) => s.currentSurvey.questions));
+  const groups = useSurveyBuilderStore(useShallow((s) => s.currentSurvey.groups ?? []));
   const variableCatalog = useSurveyUIStore((s) => s.variableCatalog);
 
   return (
@@ -136,9 +137,12 @@ export const SurveySettingsPanel = React.memo(function SurveySettingsPanel({
         </div>
 
         {/* 토큰 경고 */}
-        {variableCatalog.length > 0 && (
-          <TokenWarningPanel questions={questions} catalog={variableCatalog} />
-        )}
+        <TokenWarningPanel
+          questions={questions}
+          groups={groups}
+          thankYouMessage={surveySettings.thankYouMessage}
+          catalog={variableCatalog}
+        />
 
         {/* 그룹 관리 */}
         <div className="border-t border-gray-200 pt-6">
