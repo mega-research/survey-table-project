@@ -5,7 +5,7 @@ import type React from 'react';
 
 import { PreviewCell } from '@/components/survey-builder/cells/preview-cell';
 import { TablePreview } from '@/components/survey-builder/table-preview';
-import { useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import type { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
 import { isMobileOriginalRowInteractiveCell } from '@/utils/mobile-original-row';
@@ -42,6 +42,7 @@ export function MobileOriginalRowTable(props: Props) {
   } = props;
   const { rows, interactiveRowId } = props;
   const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
 
   const resolveChoiceControlType = useCallback(
     (cell: TableCell) =>
@@ -60,7 +61,7 @@ export function MobileOriginalRowTable(props: Props) {
         }
         const previewCell = {
           ...cell,
-          content: hidden ? '' : substituteTokens(cell.content, attrs),
+          content: hidden ? '' : substituteTokens(cell.content, attrs, quotes),
         };
         return (
           <PreviewCell
@@ -74,7 +75,7 @@ export function MobileOriginalRowTable(props: Props) {
       if (!isMobileOriginalRowInteractiveCell(cell)) return <span aria-hidden="true" />;
       return renderCell({ ...cell, content: '' });
     },
-    [attrs, interactiveRowId, renderCell, resolveChoiceControlType],
+    [attrs, quotes, interactiveRowId, renderCell, resolveChoiceControlType],
   );
 
   return (
