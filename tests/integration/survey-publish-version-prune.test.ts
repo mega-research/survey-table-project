@@ -40,15 +40,20 @@ const SURVEY_ID = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
 const NEW_VERSION_ID = 'bbbbbbbb-cccc-4ddd-8eee-ffffffffffff';
 const OLD_VERSION_ID = 'cccccccc-dddd-4eee-8fff-000000000000';
 
-/** 발행 트랜잭션이 tx 에서 쓰는 최소 표면만 흉내낸다. */
+/**
+ * 발행 트랜잭션이 tx 에서 쓰는 최소 표면만 흉내낸다.
+ * insert().returning() 은 실제 drizzle 처럼 삽입한 값을 되돌려준다 — 인덱스
+ * 기록이 snapshot 컬럼이 아니라 행 전체를 훑는지 검증하려면 changeNote 등
+ * 나머지 컬럼도 반환 행에 있어야 한다.
+ */
 function makeTx() {
   return {
     update: () => ({ set: () => ({ where: async () => undefined }) }),
     query: { surveyVersions: { findFirst: async () => ({ versionNumber: 3 }) } },
     insert: () => ({
-      values: () => ({
+      values: (row: Record<string, unknown>) => ({
         returning: async () => [
-          { id: NEW_VERSION_ID, versionNumber: 4, surveyId: SURVEY_ID },
+          { id: NEW_VERSION_ID, versionNumber: 4, surveyId: SURVEY_ID, ...row },
         ],
       }),
     }),
@@ -103,6 +108,23 @@ describe('publishSurvey — 인덱스 기록과 직전 버전 정리', () => {
       'survey_versions',
       NEW_VERSION_ID,
       expect.arrayContaining(['survey/a.png']),
+    );
+  });
+
+  it('스냅샷 밖 컬럼(changeNote)의 R2 키도 인덱스에 기록한다', async () => {
+    // 월 1회 감사(rebuildSource)와 집행 스캔(findReferencedKeys)은 행 전체를
+    // 훑는다. 발행 경로가 snapshot 만 보면 같은 버전의 인덱스 내용이 어느
+    // 쓰기 경로를 탔는지에 따라 갈린다.
+    await publishSurvey({
+      surveyId: SURVEY_ID,
+      changeNote: '이미지 교체: https://cdn-dev.megaresearch.co.kr/survey/note.png',
+    });
+
+    expect(recordRefsMock).toHaveBeenCalledWith(
+      capturedTx,
+      'survey_versions',
+      NEW_VERSION_ID,
+      expect.arrayContaining(['survey/a.png', 'survey/note.png']),
     );
   });
 

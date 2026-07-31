@@ -15,6 +15,7 @@ import {
 } from '@/db/schema';
 import { registerDeletionCandidates } from '@/lib/r2-lifecycle/deletion-queue.server';
 import { collectSurveyContentKeys } from '@/lib/r2-lifecycle/entity-collectors.server';
+import { deleteKeyRefsBySourceIds } from '@/lib/r2-lifecycle/key-ref-index.server';
 import { collectFieldLimitedSaveDiff } from '@/lib/r2-lifecycle/save-diff-collector.server';
 import { promoteSurveyResponseHeader } from '@/lib/survey/survey-image-promote';
 import { generateId } from '@/lib/utils';
@@ -134,12 +135,17 @@ export async function deleteSurvey(input: SurveyIdInput): Promise<void> {
   // CASCADE 로 소멸될 콘텐츠 전체의 키를 삭제 전에 같은 트랜잭션에서 수집해
   // 유예 삭제 큐에 등록한다 — 삭제 후에는 참조를 복원할 수 없다.
   await db.transaction(async (tx) => {
-    const keys = await collectSurveyContentKeys(tx, surveyId);
+    const { keys, versionIds } = await collectSurveyContentKeys(tx, surveyId);
     await registerDeletionCandidates(tx, {
       keys,
       source: 'survey-delete',
       reason: `설문 삭제: ${surveyId}`,
     });
+    // r2_key_refs 에는 FK 가 없어 CASCADE 가 닿지 않는다. 남겨두면 소멸한
+    // 버전이 인덱스로 참조를 계속 주장해 방금 등록한 후보를 전부 '보존됨'
+    // 종결 상태로 닫아버린다. 가변 소스는 집행 직전 일일 리빌드가 테이블
+    // 단위로 교체하므로 불변 소스인 survey_versions 만 여기서 거둔다.
+    await deleteKeyRefsBySourceIds(tx, 'survey_versions', versionIds);
     await tx.delete(surveys).where(eq(surveys.id, surveyId));
   });
 }

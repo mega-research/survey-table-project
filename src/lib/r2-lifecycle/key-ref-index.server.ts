@@ -1,50 +1,16 @@
 import 'server-only';
 
 import { and, eq, inArray } from 'drizzle-orm';
-import type { PgTable } from 'drizzle-orm/pg-core';
 
 import { db } from '@/db';
-import {
-  mailCampaigns,
-  mailTemplates,
-  questions,
-  r2KeyRefs,
-  savedCells,
-  savedLookups,
-  savedQuestions,
-  surveys,
-  surveyVersions,
-} from '@/db/schema';
+import { r2KeyRefs } from '@/db/schema';
 import type { R2DbExecutor } from '@/lib/r2-lifecycle/deletion-queue.server';
 import { extractR2KeysFromJsonbValue, gateR2Key } from '@/lib/r2-lifecycle/key-extract';
-
-/**
- * 일일 전량 재추출 대상. 가변 소스 + 작아서 굳이 증분 처리할 이유가 없는 소스.
- * 2026-07-31 실측 전량 추출 약 5초 (mail_campaigns 는 439kB / 79ms 로 무시 가능).
- *
- * mail_campaigns 는 스냅샷 컬럼이 불변이지만 여기에 둔다 — 크기가 작아 매일
- * 다시 읽어도 비용이 없고, 캠페인 생성 경로마다 기록을 심는 것보다 누락
- * 위험이 없다. 증분 처리가 필요한 것은 survey_versions 뿐이다.
- */
-export const MUTABLE_SOURCES: Array<{ name: string; table: PgTable }> = [
-  { name: 'surveys', table: surveys },
-  { name: 'questions', table: questions },
-  { name: 'saved_questions', table: savedQuestions },
-  { name: 'saved_cells', table: savedCells },
-  { name: 'saved_lookups', table: savedLookups },
-  { name: 'mail_templates', table: mailTemplates },
-  { name: 'mail_campaigns', table: mailCampaigns },
-];
-
-/**
- * 불변 소스 — 삽입 후 참조 키가 바뀌지 않고, 크기가 커서 재추출 비용이 크다.
- * 발행 시 1회 기록하고(Task 11) 다시 읽지 않는다. 이것이 비용의 핵심이다:
- * 148MB 중 130MB 를 차지하는 대형 스냅샷을 두 번 다시 읽지 않는다.
- * 월 1회 감사에서만 전량 재추출한다.
- */
-export const IMMUTABLE_SOURCES: Array<{ name: string; table: PgTable }> = [
-  { name: 'survey_versions', table: surveyVersions },
-];
+import {
+  IMMUTABLE_SOURCES,
+  MUTABLE_SOURCES,
+  type R2ReferenceSource,
+} from '@/lib/r2-lifecycle/reference-surface.server';
 
 /**
  * 특정 source row 의 참조를 통째로 교체한다. 키가 비어도 기존 참조는 지운다
@@ -76,6 +42,31 @@ export async function recordKeyRefs(
   return inserted.length;
 }
 
+/**
+ * 소멸한 source row 들의 인덱스 참조를 지운다.
+ *
+ * 인덱스 히트는 후보를 '보존됨'(종결 상태)으로 닫는다 — fetchDueCandidates 는
+ * pending/failed 만 다시 집으므로 재시도 경로가 없다. 따라서 콘텐츠가 사라진
+ * 뒤에 남은 인덱스 행은 "과보존"이 아니라 **영구 보존 잠금**이다. 콘텐츠를
+ * 없애는 트랜잭션이 그 자리에서 인덱스도 함께 거둬야 한다.
+ *
+ * 가변 소스(questions·mail_templates 등)는 일일 리빌드가 집행 직전에 테이블
+ * 단위로 전량 교체하므로 이 호출이 필요 없다. 필요한 것은 월 1회만 재추출되는
+ * 불변 소스(survey_versions)다.
+ */
+export async function deleteKeyRefsBySourceIds(
+  dbc: R2DbExecutor,
+  sourceTable: string,
+  sourceIds: readonly string[],
+): Promise<void> {
+  if (sourceIds.length === 0) return;
+  await dbc
+    .delete(r2KeyRefs)
+    .where(
+      and(eq(r2KeyRefs.sourceTable, sourceTable), inArray(r2KeyRefs.sourceId, [...sourceIds])),
+    );
+}
+
 /** 주어진 키 중 인덱스가 "참조됨"으로 아는 것들의 집합. */
 export async function getIndexedReferencedKeys(
   keys: readonly string[],
@@ -93,12 +84,15 @@ export async function getIndexedReferencedKeys(
  * 트랜잭션 안에서 해당 source_table 행을 지우고 다시 채운다 — 재생성이지
  * 증분 유지가 아니다.
  *
+ * 표면 술어(extraWhere)를 스캔과 동일하게 적용한다 — 인덱스가 스캔보다 넓으면
+ * 스캔이라면 허용했을 삭제를 인덱스 히트가 종결 상태로 막아버린다.
+ *
  * 주의: 행 전체를 Node 메모리로 가져온다. survey_versions 는 버전 보존 정책
  * 적용 후 약 15MB 이므로 감당 가능하지만, 정리 전(148MB)에 이 경로를 돌리면
  * 안 된다 — 배포 순서상 정리가 먼저다.
  */
-async function rebuildSource(source: { name: string; table: PgTable }): Promise<number> {
-  const rows = await db.select().from(source.table);
+async function rebuildSource(source: R2ReferenceSource): Promise<number> {
+  const rows = await db.select().from(source.table).where(source.extraWhere);
   const values: Array<{ key: string; sourceTable: string; sourceId: string }> = [];
   for (const row of rows) {
     const id = (row as { id?: string }).id;

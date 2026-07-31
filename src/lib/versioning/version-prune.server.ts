@@ -8,6 +8,7 @@ import {
   type R2DbExecutor,
 } from '@/lib/r2-lifecycle/deletion-queue.server';
 import { extractR2KeysFromJsonbValue } from '@/lib/r2-lifecycle/key-extract';
+import { deleteKeyRefsBySourceIds } from '@/lib/r2-lifecycle/key-ref-index.server';
 
 export interface PruneVersionsResult {
   /** snapshot 을 실제로 비운 버전 수 */
@@ -24,6 +25,11 @@ export interface PruneVersionsResult {
  * 복원할 수 없어 R2 고아 객체가 영구히 남는다. 등록되는 키 대부분은 현재
  * 발행본과 공유되므로 집행 시 '보존됨'으로 종결될 것이다 — 등록은 회계의
  * 정확성을 위한 것이지 실제 삭제를 기대하는 것이 아니다.
+ *
+ * 같은 트랜잭션에서 해당 버전의 파생 참조 인덱스 행도 지운다. 비우기와
+ * 인덱스 해제는 한 동작이다 — 남겨두면 정리된 버전이 인덱스를 통해 참조를
+ * 계속 주장하고, 인덱스 히트는 후보를 종결 상태('보존됨')로 닫아 재시도
+ * 경로 없이 삭제를 영구히 막는다.
  */
 export async function pruneVersionSnapshots(
   dbc: R2DbExecutor,
@@ -68,6 +74,12 @@ export async function pruneVersionSnapshots(
       ),
     )
     .returning({ id: surveyVersions.id });
+
+  await deleteKeyRefsBySourceIds(
+    dbc,
+    'survey_versions',
+    updated.map((row) => row.id),
+  );
 
   return { pruned: updated.length, registeredKeys };
 }

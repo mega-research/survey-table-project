@@ -96,12 +96,18 @@ export async function publishSurvey(
       .where(eq(surveys.id, surveyId));
 
     // 불변 소스 인덱스 기록 — 발행 스냅샷은 이후 바뀌지 않으므로 이 1회
-    // 추출로 끝난다. 스냅샷이 이미 메모리에 있어 DB 재조회가 없다.
+    // 추출로 끝난다. 삽입 결과 행이 이미 메모리에 있어 DB 재조회가 없다.
+    //
+    // 추출 대상은 snapshot 컬럼이 아니라 **행 전체**다. 월 1회 감사
+    // (rebuildSource)와 집행 직전 스캔(findReferencedKeys)이 둘 다 행 전체를
+    // 훑으므로 — changeNote 같은 자유 텍스트에 들어간 R2 URL 포함 — 여기서
+    // snapshot 만 보면 같은 버전이 어느 쓰기 경로를 탔는지에 따라 인덱스
+    // 내용이 달라진다. 세 지점이 같은 표면·같은 추출 의미론을 공유한다.
     await recordKeyRefs(
       tx,
       'survey_versions',
       newVersion.id,
-      extractR2KeysFromJsonbValue(snapshot),
+      extractR2KeysFromJsonbValue(newVersion),
     );
 
     // 직전 버전 정리 — 보존 규칙(현재 발행본 OR 살아있는 비테스트 응답)에
