@@ -19,6 +19,7 @@ import {
   SurveyLoadingScreen,
 } from '@/components/survey-response/survey-response-screens';
 import { PageStepView } from '@/components/survey-response/step-views/page-step-view';
+import { collectAnswerQuotes } from '@/lib/survey/answer-quote';
 import { ContactAttrsProvider } from '@/lib/survey/contact-attrs-context';
 import {
   collectNumericIssues,
@@ -422,15 +423,22 @@ function SurveyResponseFlowActive({
   const questions = useMemo(() => loadedSurvey?.questions || [], [loadedSurvey]);
   const groups = useMemo(() => loadedSurvey?.groups || [], [loadedSurvey]);
 
+  // 응답 인용 — {{{이름}}} 채널로 소비되는 파생값. 저장하지 않는다.
+  const answerQuotes = useMemo(
+    () => collectAnswerQuotes(questions, responses, effectiveOptionTextsByQuestion),
+    [questions, responses, effectiveOptionTextsByQuestion],
+  );
+
   // 분기/표시 평가 컨텍스트 — 우변 LUT 룩업 비교가 작동하려면 lookups + contactAttrs 가 필요.
   // responses 는 cell-id 평탄화 형태로 변환 (table 응답만 의미 있음, 비-table 은 LUT 좌변이 될 수 없음).
+  // 인용값은 조건식의 attrsKey 피연산자가 채널을 구분하지 못하므로 여기서만 병합한다 (인용 우선).
   const evalCtx = useMemo<BranchEvalCtx>(
     () => ({
       responses: responsesToLookupShape(responses),
-      contactAttrs,
+      contactAttrs: { ...contactAttrs, ...answerQuotes },
       lookups: loadedSurvey?.lookups ?? [],
     }),
-    [responses, contactAttrs, loadedSurvey?.lookups],
+    [responses, contactAttrs, answerQuotes, loadedSurvey?.lookups],
   );
 
   // 상위그룹 단위 + 테이블 분리 렌더 스텝
@@ -457,7 +465,7 @@ function SurveyResponseFlowActive({
     steps,
     questions,
     groups,
-    contactAttrs,
+    contactAttrs: { ...contactAttrs, ...answerQuotes },
     lookups: loadedSurvey?.lookups ?? [],
   });
   useEffect(() => {
@@ -465,10 +473,10 @@ function SurveyResponseFlowActive({
       steps,
       questions,
       groups,
-      contactAttrs,
+      contactAttrs: { ...contactAttrs, ...answerQuotes },
       lookups: loadedSurvey?.lookups ?? [],
     };
-  }, [steps, questions, groups, contactAttrs, loadedSurvey?.lookups]);
+  }, [steps, questions, groups, contactAttrs, answerQuotes, loadedSurvey?.lookups]);
   const restoreStepFromRecovery = useCallback(
     (stepId: string, restoredResponses: ResponsesMap) => {
       const { steps, questions, groups, contactAttrs, lookups } = restoreCtxRef.current;
@@ -949,7 +957,7 @@ function SurveyResponseFlowActive({
   const submittingLabel = isPreview ? '확인 중...' : '처리 중...';
 
   return (
-    <ContactAttrsProvider attrs={contactAttrs}>
+    <ContactAttrsProvider attrs={contactAttrs} quotes={answerQuotes}>
       <div className="min-h-dvh bg-gray-50">
       {/* 봇 방어 허니팟 — 화면에 안 보이는 입력. 봇이 채우면 서버가 차단 */}
       <HoneypotField ref={honeypotRef} />

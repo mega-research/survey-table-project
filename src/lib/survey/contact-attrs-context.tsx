@@ -3,16 +3,25 @@
 import { createContext, useContext, type ReactNode } from 'react';
 
 const ContactAttrsContext = createContext<Record<string, string>>({});
+const AnswerQuotesContext = createContext<Record<string, string>>({});
+
+/** 매 렌더 새 객체가 만들어지지 않도록 quotes 생략 시 쓰는 고정 참조. */
+const EMPTY_QUOTES: Record<string, string> = {};
 
 export function ContactAttrsProvider({
   attrs,
+  quotes = EMPTY_QUOTES,
   children,
 }: {
   attrs: Record<string, string>;
+  /** 응답 인용값. {{{이름}}} 채널 전용이라 attrs 와 합치지 않고 따로 흘린다. */
+  quotes?: Record<string, string>;
   children: ReactNode;
 }) {
   return (
-    <ContactAttrsContext.Provider value={attrs}>{children}</ContactAttrsContext.Provider>
+    <ContactAttrsContext.Provider value={attrs}>
+      <AnswerQuotesContext.Provider value={quotes}>{children}</AnswerQuotesContext.Provider>
+    </ContactAttrsContext.Provider>
   );
 }
 
@@ -22,6 +31,14 @@ export function ContactAttrsProvider({
  */
 export function useContactAttrs(): Record<string, string> {
   return useContext(ContactAttrsContext);
+}
+
+/**
+ * 응답 인용값. substituteTokens 의 세 번째 인자로 넘긴다.
+ * Provider 밖에서 호출하면 빈 Record 반환 — 빌더 미리보기·레거시 안전.
+ */
+export function useAnswerQuotes(): Record<string, string> {
+  return useContext(AnswerQuotesContext);
 }
 
 /**

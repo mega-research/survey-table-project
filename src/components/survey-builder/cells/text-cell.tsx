@@ -2,7 +2,7 @@
 
 import React from 'react';
 
-import { useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { getCellTextClassName } from '@/utils/cell-style';
 import { cn } from '@/lib/utils';
@@ -14,6 +14,7 @@ export const TextCell = React.memo(function TextCell({
   cell,
 }: InteractiveCellProps | PreviewCellProps) {
   const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
 
   if (!cell.content) {
     return <span className="text-sm text-gray-400" />;
@@ -26,7 +27,7 @@ export const TextCell = React.memo(function TextCell({
         getCellTextClassName(cell),
       )}
     >
-      {substituteTokens(cell.content, attrs)}
+      {substituteTokens(cell.content, attrs, quotes)}
     </div>
   );
 });

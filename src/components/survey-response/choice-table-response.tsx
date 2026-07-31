@@ -8,7 +8,7 @@ import { DynamicRowSelectorModal } from '@/components/survey-builder/dynamic-row
 import { TablePreview } from '@/components/survey-builder/table-preview';
 import { MobileRowWiseOriginalSheet } from '@/components/survey-builder/mobile-row-wise-original-sheet';
 import { useMobileView } from '@/hooks/use-media-query';
-import { useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import type { Question, TableCell } from '@/types/survey';
@@ -66,6 +66,7 @@ export function ChoiceTableResponse({
   const isGrouped = isGroupedChoiceQuestion(question);
   const isMobile = useMobileView();
   const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
   const [activeDynamicGroupId, setActiveDynamicGroupId] = useState<string | null>(null);
   const options = useMemo(() => resolveChoiceOptions(question), [question]);
   const optionByValue = useMemo(
@@ -203,7 +204,7 @@ export function ChoiceTableResponse({
     // 모바일 카드·응답 매칭·export)로만 저장되고 데스크톱 셀에는 렌더하지 않는다.
     // 둘 다 있으면 content 만 표시. 비어 있으면(라벨이 다른 열에 있는 구성) 컨트롤만 렌더.
     const rawLabel = (cell.content ?? '').trim();
-    const labelText = rawLabel ? substituteTokens(rawLabel, attrs) : '';
+    const labelText = rawLabel ? substituteTokens(rawLabel, attrs, quotes) : '';
 
     return (
       <div className="flex flex-col items-center gap-2">
@@ -278,7 +279,7 @@ export function ChoiceTableResponse({
             const headerCell = findMobileHeaderCell(row.cells);
             const headerText = headerCell ? (headerCell.content ?? '').trim() : '';
             const cardLabel = headerText
-              ? substituteTokens(headerText, attrs)
+              ? substituteTokens(headerText, attrs, quotes)
               : (option?.label ?? '(라벨 없음)');
             const labelStyleSource = headerText && headerCell ? headerCell : (option ?? choiceCell);
             // 그룹별 선택 모드: name 을 그룹 키 단위로 분리
@@ -439,18 +440,18 @@ export function ChoiceTableResponse({
     return {
       sections: model.sections.map((section) => ({
         ...section,
-        label: substituteTokens(section.label, attrs),
+        label: substituteTokens(section.label, attrs, quotes),
         subgroups: section.subgroups.map((subgroup) => ({
           ...subgroup,
-          label: substituteTokens(subgroup.label, attrs),
+          label: substituteTokens(subgroup.label, attrs, quotes),
           questions: subgroup.questions.map((rowQuestion) => ({
             ...rowQuestion,
-            title: substituteTokens(rowQuestion.title, attrs),
+            title: substituteTokens(rowQuestion.title, attrs, quotes),
           })),
         })),
       })),
     };
-  }, [attrs, mobileMode, question, resolveChoiceLabel, rowWiseLayout]);
+  }, [attrs, quotes, mobileMode, question, resolveChoiceLabel, rowWiseLayout]);
 
   const confirmDynamicRows = (rowIds: string[]) => {
     if (!activeDynamicGroupId || !onDynamicRowSelectionChange) return;

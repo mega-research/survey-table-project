@@ -3,7 +3,7 @@
 import React, { useEffect } from 'react';
 
 import { Input } from '@/components/ui/input';
-import { useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
 
@@ -20,9 +20,10 @@ export const InputCell = React.memo(function InputCell({
   ariaDescribedBy,
 }: InteractiveCellProps) {
   const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
   const template = cell.defaultValueTemplate ?? '';
   const isPrefilled = template.trim().length > 0;
-  const prefilledValue = isPrefilled ? substituteTokens(template, attrs) : '';
+  const prefilledValue = isPrefilled ? substituteTokens(template, attrs, quotes) : '';
   const currentValue = (cellResponse as string) || '';
   const textValue = isPrefilled ? prefilledValue : currentValue;
 

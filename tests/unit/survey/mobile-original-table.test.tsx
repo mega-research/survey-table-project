@@ -19,6 +19,7 @@ vi.mock('@/hooks/use-media-query', () => ({
 }));
 vi.mock('@/lib/survey/contact-attrs-context', () => ({
   useContactAttrs: () => ({}),
+  useAnswerQuotes: () => ({}),
 }));
 // 모바일 카드 경로는 스텁으로 식별
 vi.mock('@/components/survey-builder/mobile-table-stepper', () => ({

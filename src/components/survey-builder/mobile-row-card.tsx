@@ -7,7 +7,7 @@ import { CheckCircle2 } from 'lucide-react';
 import { MobileDisplayCells } from '@/components/survey/mobile-display-cells';
 import { Card, CardContent } from '@/components/ui/card';
 import type { useColumnSectionMap } from '@/hooks/use-row-groups';
-import { useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import type { TableColumn, TableRow } from '@/types/survey';
@@ -75,6 +75,7 @@ export const MobileRowCard = React.memo(function MobileRowCard({
   legendLabels,
 }: MobileRowCardProps) {
   const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
 
   const inputCells = useMemo(
     () =>
@@ -189,7 +190,7 @@ export const MobileRowCard = React.memo(function MobileRowCard({
                   getCellTextClassName(rowHeader),
                 )}
               >
-                {substituteTokens(rowHeader.label, attrs)}
+                {substituteTokens(rowHeader.label, attrs, quotes)}
               </p>
             )}
           </div>
@@ -213,7 +214,7 @@ export const MobileRowCard = React.memo(function MobileRowCard({
                   <span aria-hidden className="min-w-3 flex-1 border-b border-dotted border-gray-300" />
                 )}
                 <span className={getCellTextClassName(legend)}>
-                  {substituteTokens(legend.label, attrs)}
+                  {substituteTokens(legend.label, attrs, quotes)}
                 </span>
               </React.Fragment>
             ))}
@@ -238,7 +239,7 @@ export const MobileRowCard = React.memo(function MobileRowCard({
                 <div className="flex items-center gap-2 pt-1 first:pt-0">
                   <div className="h-px flex-1 bg-gray-200" />
                   <span className="text-xs font-semibold text-gray-500">
-                    {substituteTokens(sectionHeader, attrs)}
+                    {substituteTokens(sectionHeader, attrs, quotes)}
                   </span>
                   <div className="h-px flex-1 bg-gray-200" />
                 </div>
@@ -253,7 +254,7 @@ export const MobileRowCard = React.memo(function MobileRowCard({
                     <div className="flex items-start gap-1.5">
                       <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
                       <span className="line-clamp-2 text-sm font-medium text-gray-900">
-                        {substituteTokens(displayLabel, attrs)}
+                        {substituteTokens(displayLabel, attrs, quotes)}
                       </span>
                     </div>
                   );

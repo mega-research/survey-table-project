@@ -4,7 +4,7 @@ import { useCallback, useMemo } from 'react';
 
 import { QuestionInput } from '@/components/survey-response/question-input';
 import { RichDescription } from '@/components/survey-response/step-views/rich-description';
-import { useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { isEmptyHtml } from '@/lib/utils';
 import { isChoiceTableSource } from '@/utils/choice-source';
@@ -56,13 +56,14 @@ export function GroupStepItem({
     [onResponse, q.id, responses],
   );
   const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
   const titleText = useMemo(
-    () => substituteTokens(q.title ?? '', attrs),
-    [q.title, attrs],
+    () => substituteTokens(q.title ?? '', attrs, quotes),
+    [q.title, attrs, quotes],
   );
   const descriptionHtml = useMemo(
-    () => sanitizeRichHtml(substituteTokens(q.description ?? '', attrs)),
-    [q.description, attrs],
+    () => sanitizeRichHtml(substituteTokens(q.description ?? '', attrs, quotes)),
+    [q.description, attrs, quotes],
   );
 
   return (

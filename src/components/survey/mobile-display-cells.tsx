@@ -4,7 +4,7 @@ import { useState } from 'react';
 
 import { ChevronDown } from 'lucide-react';
 
-import { useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import type { TableCell } from '@/types/survey';
@@ -14,6 +14,7 @@ import { splitMobileDisplayCells } from '@/utils/mobile-display-cells';
 /** text/image/video 표시 셀 1개의 읽기 전용 콘텐츠 */
 function DisplayCellContent({ cell }: { cell: TableCell }) {
   const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
 
   if (cell.type === 'image' && cell.imageUrl) {
     // eslint-disable-next-line @next/next/no-img-element
@@ -43,7 +44,7 @@ function DisplayCellContent({ cell }: { cell: TableCell }) {
         getCellTextClassName(cell),
       )}
     >
-      {substituteTokens(text, attrs)}
+      {substituteTokens(text, attrs, quotes)}
     </div>
   );
 }

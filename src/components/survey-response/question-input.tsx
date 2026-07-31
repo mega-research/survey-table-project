@@ -8,7 +8,7 @@ import { UserDefinedMultiLevelSelect } from '@/components/survey-builder/user-de
 import { Input } from '@/components/ui/input';
 import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
 import { useMobileView } from '@/hooks/use-media-query';
-import { useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import type { NumericIssue } from '@/lib/survey/numeric-validation';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { Question, QuestionOption } from '@/types/survey';
@@ -170,6 +170,7 @@ function QuestionInputControl({
   onDynamicRowSelectionChange,
 }: QuestionInputProps) {
   const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
 
   // choice_opt 테이블 소스 라디오/체크박스는 hooks 진입 전에 디스패처에서 분기
   if (
@@ -197,7 +198,7 @@ function QuestionInputControl({
           : { agreed: typeof value === 'boolean' ? value : false };
       return (
         <NoticeRenderer
-          content={substituteTokens(question.noticeContent || '', attrs)}
+          content={substituteTokens(question.noticeContent || '', attrs, quotes)}
           {...(question.requiresAcknowledgment !== undefined
             ? { requiresAcknowledgment: question.requiresAcknowledgment }
             : {})}
