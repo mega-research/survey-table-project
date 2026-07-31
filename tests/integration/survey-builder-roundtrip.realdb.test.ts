@@ -106,8 +106,8 @@ describe.skipIf(!isLocalDb)('surveyBuilder procedure round-trip (real local DB)'
       .where(eq(surveyVersionsTable.id, version.id));
     expect(versionRow?.versionNumber).toBe(1);
     expect(versionRow?.status).toBe('published');
-    expect(versionRow?.snapshot.questions.length).toBe(1);
-    expect(versionRow?.snapshot.questions[0]?.id).toBe(questionId);
+    expect(versionRow?.snapshot?.questions.length).toBe(1);
+    expect(versionRow?.snapshot?.questions[0]?.id).toBe(questionId);
 
     // 5. surveys.currentVersionId 가 새 버전을 가리키는지 검증 (불변식 C)
     const [surveyRow] = await db

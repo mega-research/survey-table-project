@@ -330,12 +330,16 @@ export const surveyVersions = pgTable('survey_versions', {
   versionNumber: integer('version_number').notNull(),
   status: text('status').notNull().default('published'), // 'published' | 'superseded' | 'closed'
 
-  // 배포 시점의 전체 설문 구조 (불변 — 수정 금지)
-  snapshot: jsonb('snapshot').notNull().$type<SurveyVersionSnapshot>(),
+  // 배포 시점의 전체 설문 구조 (불변 — 수정 금지).
+  // NULL = 버전 보존 정책으로 정리됨 (2026-07-31 spec). 읽는 쪽은 NULL 을 다뤄야 한다.
+  snapshot: jsonb('snapshot').$type<SurveyVersionSnapshot>(),
 
   changeNote: text('change_note'),
   publishedAt: timestamp('published_at', { withTimezone: true }).defaultNow().notNull(),
   closedAt: timestamp('closed_at', { withTimezone: true }),
+
+  // 보존 정책으로 snapshot 을 비운 시각. NULL = 정리되지 않음.
+  prunedAt: timestamp('pruned_at', { withTimezone: true }),
 
   // soft delete
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
