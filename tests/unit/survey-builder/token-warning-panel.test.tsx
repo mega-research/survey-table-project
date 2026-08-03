@@ -972,6 +972,45 @@ describe('TokenWarningPanel - Task 3: 셀 출처는 호스트 질문의 order �
     expect(screen.queryByText(/뒤 질문의 응답을 인용하는 설정 오류/)).not.toBeInTheDocument();
     expect(screen.queryByText(/정의되지 않은 인용 이름/)).not.toBeInTheDocument();
   });
+
+  it('표 자신의 제목이 자기 표의 셀 이름을 참조하면 경고한다(셀끼리 비교가 아니다)', () => {
+    // 이 케이스는 셀-대-셀 비교가 아니다 — 표의 title 은 응답 페이지에서 그 표의 어떤 셀보다
+    // 먼저 렌더되므로, 자기 표 셀의 인용을 참조하면 질문 레벨 자기참조와 동형으로 항상 빈
+    // 문자열이다. "같은 표 안 셀끼리는 순서 비교 불가" 예외가 questionId 만으로 걸리면 이
+    // 케이스까지 삼켜 오탐(false OK)이 되므로, fromCell 로 셀-셀 조합만 좁혀야 한다.
+    render(
+      <TokenWarningPanel
+        questions={[
+          q({
+            id: 'q1',
+            order: 1,
+            type: 'table',
+            title: '{{{유형}}} 표',
+            tableRowsData: [
+              {
+                id: 'r1',
+                label: '행1',
+                cells: [
+                  {
+                    id: 'c1',
+                    type: 'input',
+                    content: '',
+                    answerQuoteEnabled: true,
+                    answerQuoteName: '유형',
+                    answerQuoteText: '문구',
+                  },
+                ],
+              },
+            ],
+          }),
+        ]}
+        groups={[]}
+        thankYouMessage=""
+        catalog={[]}
+      />,
+    );
+    expect(screen.getByText(/뒤 질문의 응답을 인용하는 설정 오류/)).toBeInTheDocument();
+  });
 });
 
 describe('TokenWarningPanel - Fix round 1: 그룹의 유효 order 는 하위 그룹까지 재귀해야 한다', () => {

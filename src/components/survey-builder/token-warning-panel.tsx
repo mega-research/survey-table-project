@@ -42,19 +42,15 @@ function extractQuoteTokens(...sources: (string | undefined)[]): string[] {
 }
 
 /**
- * 질문 하나가 응답 페이지에서 "치환되는" 자리에 노출하는 문자열 전부.
- * substituteTokens 호출처를 훑어 도출한 표면 — question-input.tsx(title/description/
- * notice/option.label), ranking-question.tsx/ranking-dropdown-stack.tsx(ranking 옵션),
- * cells/*.tsx(표 셀 content 와 radioOptions/checkboxOptions/selectOptions/rankingOptions).
- * choice_opt/ranking_opt 셀은 resolveChoiceOptions/resolveRankingOptions 가 이미 라벨을
- * 흡수하므로 표 순회에서 건너뛴다(이중 집계 방지, lib/survey/answer-quote.ts
- * collectAnswerQuotes 의 QUESTION_LIKE_CELL_TYPES 필터와 동일 원칙).
+ * 질문 자신이 응답 페이지에서 "치환되는" 자리에 노출하는 문자열 — title/description/notice
+ * + (표가 아닌 경우) 선택형 옵션 라벨. 표 셀은 별도로 `cellSourcesOf` 가 담당한다.
  *
- * prefill 템플릿(defaultValueTemplate)은 질문 레벨이든 표 셀이든 여기 포함하지 않는다 —
- * 둘 다 attrs 만 치환한다. prefill 결과는 응답으로 저장되는데 응답 인용은 저장되지 않는
- * 파생값이라 채널을 섞지 않는다(경고 4 — nonSubstitutedFindings 참조).
+ * 질문 own 소스와 셀 소스를 분리해 두는 이유: 뒤 참조 경고(경고 3)에서 "같은 표 안 셀끼리는
+ * 순서 비교 불가"를 셀-대-셀 조합에만 적용해야 한다. 표 own 문구(제목/설명/공지)가 자신의
+ * 셀 이름을 참조하는 것은 셀끼리의 비교가 아니라 "제목이 아직 나오지 않은 자기 응답을
+ * 인용"하는 것과 같은 항상-빈 케이스라서 셀-셀 예외에 묶이면 안 된다.
  */
-function substitutedSourcesOf(q: Question): (string | undefined)[] {
+function questionOwnSourcesOf(q: Question): (string | undefined)[] {
   const sources: (string | undefined)[] = [q.title, q.description, q.noticeContent];
 
   if (q.type === 'radio' || q.type === 'checkbox') {
@@ -68,6 +64,23 @@ function substitutedSourcesOf(q: Question): (string | undefined)[] {
   } else if (q.type === 'ranking') {
     for (const opt of resolveRankingOptions(q)) sources.push(opt.label);
   }
+
+  return sources;
+}
+
+/**
+ * 표 셀이 응답 페이지에서 "치환되는" 자리에 노출하는 문자열 전부 — cells/*.tsx(표 셀 content 와
+ * radioOptions/checkboxOptions/selectOptions/rankingOptions). choice_opt/ranking_opt 셀은
+ * resolveChoiceOptions/resolveRankingOptions 가 이미 라벨을 흡수하므로 건너뛴다(이중 집계
+ * 방지, lib/survey/answer-quote.ts collectAnswerQuotes 의 QUESTION_LIKE_CELL_TYPES 필터와
+ * 동일 원칙).
+ *
+ * prefill 템플릿(defaultValueTemplate)은 질문 레벨이든 표 셀이든 여기 포함하지 않는다 —
+ * 둘 다 attrs 만 치환한다. prefill 결과는 응답으로 저장되는데 응답 인용은 저장되지 않는
+ * 파생값이라 채널을 섞지 않는다(경고 4 — nonSubstitutedFindings 참조).
+ */
+function cellSourcesOf(q: Question): (string | undefined)[] {
+  const sources: (string | undefined)[] = [];
 
   for (const row of q.tableRowsData ?? []) {
     for (const cell of row.cells) {
@@ -123,6 +136,13 @@ interface QuoteReference {
   label: string;
   /** 참조가 속한 질문 — 표 셀끼리(같은 표 안)는 순서 비교가 성립하지 않아 제외할 때만 쓴다. */
   questionId: string | null;
+  /**
+   * 이 참조가 표 셀(content/옵션 라벨)에서 나왔는지 여부. false = 질문 자신의 title/
+   * description/noticeContent/옵션 라벨(또는 그룹 이름)에서 나왔다는 뜻 — questionId 가
+   * 같아도 "셀끼리 비교"가 아니므로 같은 표 예외 대상이 아니다(표 제목이 자기 표의 셀
+   * 이름을 참조하면 항상 빈 문자열이라 여전히 경고해야 한다).
+   */
+  fromCell: boolean;
 }
 
 interface QuoteSource {
@@ -274,12 +294,18 @@ export function TokenWarningPanel({ questions, groups, thankYouMessage, catalog 
     [definedSources],
   );
 
-  // 소비처 참조 — 질문 본문 + 그룹 이름.
+  // 소비처 참조 — 질문 본문(own) + 표 셀 + 그룹 이름. own 과 셀은 따로 스캔해 fromCell 을
+  // 붙인다 — 같은 이름이 질문 own 문구와 셀 양쪽에 있어도(드문 경우) 각자 다른 예외 판정을
+  // 받아야 한다.
   const references = useMemo<QuoteReference[]>(() => {
     const out: QuoteReference[] = [];
     for (const q of questions) {
-      for (const name of extractQuoteTokens(...substitutedSourcesOf(q))) {
-        out.push({ name, order: q.order, label: q.title || '(제목 없음)', questionId: q.id });
+      const label = q.title || '(제목 없음)';
+      for (const name of extractQuoteTokens(...questionOwnSourcesOf(q))) {
+        out.push({ name, order: q.order, label, questionId: q.id, fromCell: false });
+      }
+      for (const name of extractQuoteTokens(...cellSourcesOf(q))) {
+        out.push({ name, order: q.order, label, questionId: q.id, fromCell: true });
       }
     }
     for (const g of groups) {
@@ -288,7 +314,7 @@ export function TokenWarningPanel({ questions, groups, thankYouMessage, catalog 
       const ownerOrders = collectDescendantQuestionOrders(g.id, questions, groups);
       const ownerOrder = ownerOrders.length > 0 ? Math.min(...ownerOrders) : null;
       for (const name of names) {
-        out.push({ name, order: ownerOrder, label: `그룹 "${g.name}"`, questionId: null });
+        out.push({ name, order: ownerOrder, label: `그룹 "${g.name}"`, questionId: null, fromCell: false });
       }
     }
     return out;
@@ -309,15 +335,18 @@ export function TokenWarningPanel({ questions, groups, thankYouMessage, catalog 
   }, [definedSources]);
 
   // 경고 3: 뒤를 참조하는 경우 (소비처 order < 출처 order, 자기참조 포함해 <=).
-  // 셀 출처는 호스트 질문의 order 를 쓰므로, 같은 표 안의 참조·정의는 항상 order 가 같다 —
-  // 표는 한 화면에 다 나오고 응답 순서가 정해져 있지 않으므로 이 조합은 판정하지 않는다.
+  // 셀 출처는 호스트 질문의 order 를 쓰므로, 같은 표 안의 "셀끼리" 참조·정의는 항상 order 가
+  // 같다 — 표는 한 화면에 다 나오고 응답 순서가 정해져 있지 않으므로 이 조합은 판정하지
+  // 않는다. 단, 표 자신의 title/description/notice(fromCell=false)가 자기 표의 셀 이름을
+  // 참조하는 경우는 셀끼리 비교가 아니라 "제목이 셀보다 먼저 나온다"는 자기참조와 동형이라
+  // 예외에서 제외한다 — 그 경우는 여전히 경고해야 한다.
   const backwardReferences = useMemo(() => {
     const out: { consumerLabel: string; sourceLabel: string; name: string }[] = [];
     for (const ref of references) {
       if (ref.order === null) continue;
       for (const src of definedSources) {
         if (src.name !== ref.name) continue;
-        if (src.scope === 'cell' && ref.questionId === src.questionId) continue;
+        if (src.scope === 'cell' && ref.fromCell && ref.questionId === src.questionId) continue;
         if (ref.order <= src.order) {
           out.push({ consumerLabel: ref.label, sourceLabel: src.label, name: ref.name });
         }
