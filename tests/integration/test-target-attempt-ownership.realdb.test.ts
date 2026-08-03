@@ -507,6 +507,208 @@ run('대상자 테스트 완료와 새 attempt reset 경쟁', () => {
   });
 });
 
+run('대상자 테스트 중도 이탈 행의 이어하기', () => {
+  const surveyId = randomUUID();
+  const dropTargetId = randomUUID();
+  const dropResponseId = randomUUID();
+  const staleAttemptId = randomUUID();
+  const revivedAttemptId = randomUUID();
+  const sameTabTargetId = randomUUID();
+  const sameTabResponseId = randomUUID();
+  const sameTabAttemptId = randomUUID();
+  const staleVersionTargetId = randomUUID();
+  const staleVersionResponseId = randomUUID();
+  const concludedTargetId = randomUUID();
+  const concludedResponseId = randomUUID();
+
+  async function insertTargetWithResponse(
+    targetId: string,
+    responseId: string,
+    resid: number,
+    status: string,
+    versionId: string | null,
+  ): Promise<void> {
+    await db.execute(sql`
+      INSERT INTO contact_targets (id,survey_id,resid,is_test,invite_code,response_id)
+      VALUES (${targetId},${surveyId},${resid},true,${randomUUID()},null)
+    `);
+    await db.execute(sql`
+      INSERT INTO survey_responses (
+        id,survey_id,question_responses,is_test,contact_target_id,session_id,
+        is_completed,status,version_id,current_step_id
+      ) VALUES (
+        ${responseId},${surveyId},${JSON.stringify({ q1: '이탈 전 답' })}::jsonb,true,${targetId},${`old-session-${resid}`},
+        false,${status},${versionId},'step-2'
+      )
+    `);
+    await db.execute(sql`
+      INSERT INTO response_answers (response_id,question_id,text_value,question_type)
+      VALUES (${responseId},${randomUUID()},'이탈 전 답','text')
+    `);
+    await db.execute(sql`UPDATE contact_targets SET response_id=${responseId} WHERE id=${targetId}`);
+  }
+
+  async function readRow(responseId: string) {
+    const rows = await db.execute<{
+      status: string;
+      question_responses: Record<string, unknown>;
+      current_step_id: string | null;
+      session_id: string | null;
+      version_id: string | null;
+      answers: number;
+    }>(sql`
+      SELECT r.status, r.question_responses, r.current_step_id, r.session_id, r.version_id,
+        (SELECT count(*)::int FROM response_answers WHERE response_id=r.id) AS answers
+      FROM survey_responses r WHERE r.id=${responseId}
+    `);
+    return rows[0];
+  }
+
+  beforeAll(async () => {
+    await db.execute(
+      sql`INSERT INTO surveys (id,title,test_mode_enabled) VALUES (${surveyId},'drop-resume',true)`,
+    );
+    await insertTargetWithResponse(dropTargetId, dropResponseId, 1, 'drop', null);
+    await insertTargetWithResponse(sameTabTargetId, sameTabResponseId, 2, 'drop', null);
+    await insertTargetWithResponse(
+      staleVersionTargetId,
+      staleVersionResponseId,
+      3,
+      'drop',
+      randomUUID(),
+    );
+    await insertTargetWithResponse(concludedTargetId, concludedResponseId, 4, 'bad', null);
+    await db.execute(sql`
+      INSERT INTO test_response_attempts (id,response_id,session_id,status)
+      VALUES (${sameTabAttemptId},${sameTabResponseId},'same-tab-session','active'),
+             (${staleAttemptId},${dropResponseId},'old-session-1','active')
+    `);
+  });
+
+  afterAll(async () => {
+    await db.execute(sql`DELETE FROM surveys WHERE id=${surveyId}`);
+  });
+
+  it('sweep 이 drop 으로 바꾼 행은 초기화하지 않고 in_progress 로 되살린다', async () => {
+    const acquired = await db.transaction((tx) =>
+      acquireTestTargetResponse(tx, {
+        surveyId,
+        contactTargetId: dropTargetId,
+        sessionId: 'resumed-session',
+        attemptId: revivedAttemptId,
+        versionId: null,
+        currentStepId: 'step-3',
+      }),
+    );
+
+    expect(acquired).toEqual({ responseId: dropResponseId, reset: false });
+    expect(await readRow(dropResponseId)).toMatchObject({
+      status: 'in_progress',
+      question_responses: { q1: '이탈 전 답' },
+      // 초기화가 아니므로 이전 스텝과 정규화 답변이 남는다
+      current_step_id: 'step-2',
+      session_id: 'resumed-session',
+      answers: 1,
+    });
+  });
+
+  it('되살린 행도 이전 attempt 를 superseded 로 내려 지연 beacon 을 막는다', async () => {
+    const attempts = await db.execute<{ id: string; status: string }>(
+      sql`SELECT id,status FROM test_response_attempts WHERE response_id=${dropResponseId}`,
+    );
+    expect(
+      attempts.map((row) => [row.id, row.status]).sort((a, b) => a[0]!.localeCompare(b[0]!)),
+    ).toEqual(
+      [
+        [staleAttemptId, 'superseded'],
+        [revivedAttemptId, 'active'],
+      ].sort((a, b) => a[0]!.localeCompare(b[0]!)),
+    );
+
+    await expect(
+      db.transaction((tx) =>
+        assertTestTargetAttemptOwner(tx, {
+          responseId: dropResponseId,
+          attemptId: staleAttemptId,
+          sessionId: 'old-session-1',
+        }),
+      ),
+    ).rejects.toThrow('테스트 세션이 다른 화면에서 시작되었습니다');
+    await expect(
+      db.transaction((tx) =>
+        assertTestTargetAttemptOwner(tx, {
+          responseId: dropResponseId,
+          attemptId: revivedAttemptId,
+          sessionId: 'resumed-session',
+        }),
+      ),
+    ).resolves.toBeUndefined();
+  });
+
+  it('같은 탭이 sweep 이후 이어 입력해도 새 화면을 요구하지 않는다', async () => {
+    const acquired = await db.transaction((tx) =>
+      acquireTestTargetResponse(tx, {
+        surveyId,
+        contactTargetId: sameTabTargetId,
+        sessionId: 'same-tab-session',
+        attemptId: sameTabAttemptId,
+        versionId: null,
+        currentStepId: 'step-3',
+      }),
+    );
+
+    expect(acquired).toEqual({ responseId: sameTabResponseId, reset: false });
+    expect(await readRow(sameTabResponseId)).toMatchObject({
+      status: 'in_progress',
+      question_responses: { q1: '이탈 전 답' },
+      answers: 1,
+    });
+  });
+
+  it('drop 이라도 버전이 다르면 초기화한다 - 구버전 답 주입 차단', async () => {
+    const acquired = await db.transaction((tx) =>
+      acquireTestTargetResponse(tx, {
+        surveyId,
+        contactTargetId: staleVersionTargetId,
+        sessionId: 'stale-version-session',
+        attemptId: randomUUID(),
+        versionId: null,
+        currentStepId: 'step-3',
+      }),
+    );
+
+    expect(acquired).toEqual({ responseId: staleVersionResponseId, reset: true });
+    expect(await readRow(staleVersionResponseId)).toMatchObject({
+      status: 'in_progress',
+      question_responses: {},
+      current_step_id: 'step-3',
+      version_id: null,
+      answers: 0,
+    });
+  });
+
+  it('종결 상태는 기존대로 제자리 초기화한다', async () => {
+    const acquired = await db.transaction((tx) =>
+      acquireTestTargetResponse(tx, {
+        surveyId,
+        contactTargetId: concludedTargetId,
+        sessionId: 'restart-session',
+        attemptId: randomUUID(),
+        versionId: null,
+        currentStepId: 'step-3',
+      }),
+    );
+
+    expect(acquired).toEqual({ responseId: concludedResponseId, reset: true });
+    expect(await readRow(concludedResponseId)).toMatchObject({
+      status: 'in_progress',
+      question_responses: {},
+      current_step_id: 'step-3',
+      answers: 0,
+    });
+  });
+});
+
 run('대상자 테스트 응답 재사용과 attempt 소유권', () => {
   const surveyId = randomUUID();
   const targetId = randomUUID();
