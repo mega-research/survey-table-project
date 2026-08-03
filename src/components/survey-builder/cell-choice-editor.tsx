@@ -10,7 +10,12 @@ import { generateId } from '@/lib/utils';
 import { getMaxSpssCode } from '@/utils/option-code-generator';
 import { CheckboxOption, Question, QuestionOption, RadioOption } from '@/types/survey';
 
-import { AnswerQuoteTextField } from './answer-quote-fields';
+import {
+  AnswerQuoteCellToggle,
+  AnswerQuoteNameField,
+  AnswerQuoteTextField,
+  type AnswerQuoteControlValue,
+} from './answer-quote-fields';
 import { BranchRuleEditor } from './branch-rule-editor';
 import { OptionLabelTextarea } from './option-label-textarea';
 import { OptionPlaceholderEditor } from './option-placeholder-editor';
@@ -31,6 +36,11 @@ export interface CellChoiceEditorProps {
   questions: Question[];
   /** 질문 단위 응답 인용 토글 — 켜졌을 때만 옵션별 인용 문구 입력칸을 노출한다. */
   answerQuoteEnabled?: boolean | undefined;
+  /**
+   * 셀 자신의 응답 인용 설정 — 호스트 질문이 표(table)일 때만 전달된다.
+   * 전달되면 헤더에 토글이 붙고, 옵션별 인용 문구 노출도 질문 단위 대신 이 토글이 결정한다.
+   */
+  cellAnswerQuote?: AnswerQuoteControlValue | undefined;
 
   // checkbox
   checkboxOptions: CheckboxOption[];
@@ -59,6 +69,7 @@ export function CellChoiceEditor({
   currentQuestionId,
   questions,
   answerQuoteEnabled = false,
+  cellAnswerQuote,
   checkboxOptions,
   onCheckboxOptionsChange,
   radioOptions,
@@ -75,25 +86,45 @@ export function CellChoiceEditor({
   // 조건부 분기 토글 상태 (이 컴포넌트 내부에서만 사용)
   const [showBranchSettings, setShowBranchSettings] = useState(false);
 
+  // 옵션별 인용 문구 노출 기준. 셀 단위 설정이 있으면(표 질문) 그 토글이, 없으면 질문 단위 토글이 결정한다.
+  const showOptionQuoteText = cellAnswerQuote ? cellAnswerQuote.enabled : answerQuoteEnabled;
+
   // --- checkbox ---
   if (cellType === 'checkbox') {
     return (
       <div className="space-y-4">
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-start justify-between">
             <Label>체크박스 옵션 관리</Label>
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="checkbox-show-branch"
-                checked={showBranchSettings}
-                onCheckedChange={setShowBranchSettings}
-                className="scale-75"
-              />
-              <Label htmlFor="checkbox-show-branch" className="text-xs text-gray-600">
-                조건부 분기
-              </Label>
+            <div className="flex flex-col items-end gap-1.5">
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="checkbox-show-branch"
+                  checked={showBranchSettings}
+                  onCheckedChange={setShowBranchSettings}
+                  className="scale-75"
+                />
+                <Label htmlFor="checkbox-show-branch" className="text-xs text-gray-600">
+                  조건부 분기
+                </Label>
+              </div>
+              {cellAnswerQuote && (
+                <AnswerQuoteCellToggle
+                  id="checkbox-cell-answer-quote"
+                  enabled={cellAnswerQuote.enabled}
+                  onEnabledChange={cellAnswerQuote.onEnabledChange}
+                />
+              )}
             </div>
           </div>
+
+          {cellAnswerQuote?.enabled && (
+            <AnswerQuoteNameField
+              id="checkbox-cell-answer-quote-name"
+              name={cellAnswerQuote.name}
+              onNameChange={cellAnswerQuote.onNameChange}
+            />
+          )}
 
           <div className="max-h-[300px] space-y-3 overflow-y-auto pr-2">
             {checkboxOptions.map((option, index) => (
@@ -179,7 +210,7 @@ export function CellChoiceEditor({
                   />
                 )}
 
-                {answerQuoteEnabled && (
+                {showOptionQuoteText && (
                   <div className="px-3 pb-3">
                     <AnswerQuoteTextField
                       id={`answer-quote-checkbox-${option.id}`}
@@ -364,20 +395,37 @@ export function CellChoiceEditor({
           />
         </div>
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-start justify-between">
             <Label>라디오 버튼 옵션 관리</Label>
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="radio-show-branch"
-                checked={showBranchSettings}
-                onCheckedChange={setShowBranchSettings}
-                className="scale-75"
-              />
-              <Label htmlFor="radio-show-branch" className="text-xs text-gray-600">
-                조건부 분기
-              </Label>
+            <div className="flex flex-col items-end gap-1.5">
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="radio-show-branch"
+                  checked={showBranchSettings}
+                  onCheckedChange={setShowBranchSettings}
+                  className="scale-75"
+                />
+                <Label htmlFor="radio-show-branch" className="text-xs text-gray-600">
+                  조건부 분기
+                </Label>
+              </div>
+              {cellAnswerQuote && (
+                <AnswerQuoteCellToggle
+                  id="radio-cell-answer-quote"
+                  enabled={cellAnswerQuote.enabled}
+                  onEnabledChange={cellAnswerQuote.onEnabledChange}
+                />
+              )}
             </div>
           </div>
+
+          {cellAnswerQuote?.enabled && (
+            <AnswerQuoteNameField
+              id="radio-cell-answer-quote-name"
+              name={cellAnswerQuote.name}
+              onNameChange={cellAnswerQuote.onNameChange}
+            />
+          )}
 
           <div className="max-h-[300px] space-y-3 overflow-y-auto pr-2">
             {radioOptions.map((option, index) => (
@@ -467,7 +515,7 @@ export function CellChoiceEditor({
                   />
                 )}
 
-                {answerQuoteEnabled && (
+                {showOptionQuoteText && (
                   <div className="px-3 pb-3">
                     <AnswerQuoteTextField
                       id={`answer-quote-radio-${option.id}`}
@@ -567,20 +615,37 @@ export function CellChoiceEditor({
   return (
     <div className="space-y-4">
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex items-start justify-between">
           <Label>Select 옵션 관리</Label>
-          <div className="flex items-center space-x-2">
-            <Switch
-              id="select-show-branch"
-              checked={showBranchSettings}
-              onCheckedChange={setShowBranchSettings}
-              className="scale-75"
-            />
-            <Label htmlFor="select-show-branch" className="text-xs text-gray-600">
-              조건부 분기
-            </Label>
+          <div className="flex flex-col items-end gap-1.5">
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="select-show-branch"
+                checked={showBranchSettings}
+                onCheckedChange={setShowBranchSettings}
+                className="scale-75"
+              />
+              <Label htmlFor="select-show-branch" className="text-xs text-gray-600">
+                조건부 분기
+              </Label>
+            </div>
+            {cellAnswerQuote && (
+              <AnswerQuoteCellToggle
+                id="select-cell-answer-quote"
+                enabled={cellAnswerQuote.enabled}
+                onEnabledChange={cellAnswerQuote.onEnabledChange}
+              />
+            )}
           </div>
         </div>
+
+        {cellAnswerQuote?.enabled && (
+          <AnswerQuoteNameField
+            id="select-cell-answer-quote-name"
+            name={cellAnswerQuote.name}
+            onNameChange={cellAnswerQuote.onNameChange}
+          />
+        )}
 
         <div className="max-h-[300px] space-y-3 overflow-y-auto pr-2">
           {selectOptions.map((option, index) => (
@@ -656,7 +721,7 @@ export function CellChoiceEditor({
                 />
               )}
 
-              {answerQuoteEnabled && (
+              {showOptionQuoteText && (
                 <div className="px-3 pb-3">
                   <AnswerQuoteTextField
                     id={`answer-quote-select-${option.id}`}

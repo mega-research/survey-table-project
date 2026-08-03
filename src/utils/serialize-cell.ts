@@ -74,6 +74,10 @@ export interface CellFormState {
    * radio·checkbox·select·ranking 셀은 문구를 옵션 객체가 소유하므로 이 필드를 쓰지 않는다.
    */
   answerQuoteText: string;
+  /** 셀 자신이 질문 노릇을 하는 셀의 응답 인용 사용 여부 (ANSWER_QUOTE_NAMEABLE_CELL_TYPES) */
+  answerQuoteEnabled: boolean;
+  /** 셀 단위 인용 이름 — 다른 질문에서 {{{이름}}} 으로 참조한다 */
+  answerQuoteName: string;
 }
 
 /** 셀 내용 편집 탭의 콘텐츠 타입 (모달 Tabs value) */
@@ -128,6 +132,19 @@ export const ANSWER_QUOTE_CELL_TYPES = new Set<TableCell['type']>([
   'input',
   'choice_opt',
   'ranking_opt',
+]);
+
+/**
+ * 셀 자체가 하나의 질문처럼 응답을 만들어 인용 이름을 소유할 수 있는 타입.
+ * 수집기(lib/survey/answer-quote.ts)의 QUESTION_LIKE_CELL_TYPES 와 1:1 로 맞춘다.
+ * choice_opt / ranking_opt 는 질문 레벨 선택지의 옵션이라 이름을 갖지 않는다(문구만 소유).
+ */
+export const ANSWER_QUOTE_NAMEABLE_CELL_TYPES = new Set<TableCell['type']>([
+  'radio',
+  'checkbox',
+  'select',
+  'input',
+  'ranking',
 ]);
 
 /** cell.type → 모달 ContentType (undefined 면 'text' 로 폴백) */
@@ -189,6 +206,8 @@ export function cellToFormState(cell: TableCell): CellFormState {
     spssVarType: cell.spssVarType,
     spssMeasure: cell.spssMeasure,
     answerQuoteText: cell.answerQuoteText ?? '',
+    answerQuoteEnabled: cell.answerQuoteEnabled === true,
+    answerQuoteName: cell.answerQuoteName ?? '',
   };
 }
 
@@ -258,6 +277,8 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
     textPosition: _textPosition,
     mobileDisplay: _mobileDisplay,
     answerQuoteText: _answerQuoteText,
+    answerQuoteEnabled: _answerQuoteEnabled,
+    answerQuoteName: _answerQuoteName,
     ...cellBase
   } = cell;
 
@@ -399,6 +420,15 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
     // 이미 입력해둔 문구를 지우지 않아야 한다는 요구가 이 경로로 지켜진다.
     ...(ANSWER_QUOTE_CELL_TYPES.has(contentType) && form.answerQuoteText.trim()
       ? { answerQuoteText: form.answerQuoteText.trim() }
+      : {}),
+    // 셀 단위 응답 인용 토글·이름 (radio/checkbox/select/input/ranking 만).
+    // 토글이 꺼져 있거나 이름이 비면 키 자체를 저장하지 않는다 — 지운 값이 cellBase 로 되살아나지
+    // 않도록 위 destructure 에서 빼둔 뒤 여기서만 다시 넣는다.
+    ...(ANSWER_QUOTE_NAMEABLE_CELL_TYPES.has(contentType) && form.answerQuoteEnabled
+      ? {
+          answerQuoteEnabled: true,
+          ...(form.answerQuoteName.trim() ? { answerQuoteName: form.answerQuoteName.trim() } : {}),
+        }
       : {}),
     // SPSS 변수 타입 / 측정 수준 (입력 셀만; 값이 있을 때만 키 추가)
     ...(INTERACTIVE_CELL_TYPES.has(contentType)

@@ -869,3 +869,123 @@ describe('buildUpdatedCell — 셀 단위 응답 인용 문구 (answerQuoteText)
     expect(buildUpdatedCell(form, cell)).toMatchObject({ answerQuoteText: '{{입력}} 지역' });
   });
 });
+
+describe('buildUpdatedCell — 셀 단위 응답 인용 토글·이름 (answerQuoteEnabled/Name)', () => {
+  it('토글을 켜고 이름을 입력하면 두 필드가 함께 저장된다', () => {
+    const form: CellFormState = {
+      ...baseForm('radio'),
+      answerQuoteEnabled: true,
+      answerQuoteName: '  마케팅유형  ',
+    };
+    expect(buildUpdatedCell(form, baseCell)).toMatchObject({
+      type: 'radio',
+      answerQuoteEnabled: true,
+      answerQuoteName: '마케팅유형',
+    });
+  });
+
+  it('질문 노릇을 하는 셀 타입 전부에서 저장된다 (radio/checkbox/select/input/ranking)', () => {
+    for (const type of ['radio', 'checkbox', 'select', 'input', 'ranking'] as const) {
+      const form: CellFormState = {
+        ...baseForm(type),
+        answerQuoteEnabled: true,
+        answerQuoteName: '인력',
+        // ranking 셀은 옵션이 있어야 정상 폼이지만 직렬화 자체에는 영향이 없다
+      };
+      expect(buildUpdatedCell(form, baseCell)).toMatchObject({
+        type,
+        answerQuoteEnabled: true,
+        answerQuoteName: '인력',
+      });
+    }
+  });
+
+  it('옵션 셀(choice_opt/ranking_opt)과 표시 셀(text)에는 이름을 저장하지 않는다', () => {
+    for (const type of ['choice_opt', 'ranking_opt', 'text'] as const) {
+      const form: CellFormState = {
+        ...baseForm(type),
+        answerQuoteEnabled: true,
+        answerQuoteName: '엉뚱한 이름',
+      };
+      const out = buildUpdatedCell(form, baseCell);
+      expect(out).not.toHaveProperty('answerQuoteEnabled');
+      expect(out).not.toHaveProperty('answerQuoteName');
+    }
+  });
+
+  it('이름을 지우면 이전 값이 되살아나지 않는다 (cellBase 스테일 값 방지)', () => {
+    const stale: TableCell = {
+      id: 'c1',
+      type: 'radio',
+      content: '',
+      answerQuoteEnabled: true,
+      answerQuoteName: '옛이름',
+    };
+    const form: CellFormState = {
+      ...cellToFormState(stale),
+      answerQuoteName: '   ',
+    };
+    const out = buildUpdatedCell(form, stale);
+    expect(out).not.toHaveProperty('answerQuoteName');
+    expect(out).toMatchObject({ answerQuoteEnabled: true });
+  });
+
+  it('토글을 끄면 두 키가 모두 제거된다', () => {
+    const stale: TableCell = {
+      id: 'c1',
+      type: 'radio',
+      content: '',
+      answerQuoteEnabled: true,
+      answerQuoteName: '옛이름',
+    };
+    const form: CellFormState = { ...cellToFormState(stale), answerQuoteEnabled: false };
+    const out = buildUpdatedCell(form, stale);
+    expect(out).not.toHaveProperty('answerQuoteEnabled');
+    expect(out).not.toHaveProperty('answerQuoteName');
+  });
+
+  it('토글을 껐다 켜도 옵션별 인용 문구는 그대로 남는다', () => {
+    const cell: TableCell = {
+      id: 'c1',
+      type: 'radio',
+      content: '',
+      answerQuoteEnabled: true,
+      answerQuoteName: '마케팅유형',
+      radioOptions: [
+        { id: 'o1', label: '디지털', value: '1', answerQuoteText: '디지털마케팅' },
+        { id: 'o2', label: '오프라인', value: '2', answerQuoteText: '오프라인마케팅' },
+      ],
+    };
+    const hydrated = cellToFormState(cell);
+    const off = buildUpdatedCell({ ...hydrated, answerQuoteEnabled: false }, cell);
+    expect(off.radioOptions?.map((o) => o.answerQuoteText)).toEqual([
+      '디지털마케팅',
+      '오프라인마케팅',
+    ]);
+
+    const onAgain = buildUpdatedCell({ ...cellToFormState(off), answerQuoteEnabled: true }, off);
+    expect(onAgain.radioOptions?.map((o) => o.answerQuoteText)).toEqual([
+      '디지털마케팅',
+      '오프라인마케팅',
+    ]);
+  });
+
+  it('cellToFormState → buildUpdatedCell 왕복에서 토글·이름이 보존된다', () => {
+    const cell: TableCell = {
+      id: 'c1',
+      type: 'input',
+      content: '',
+      answerQuoteEnabled: true,
+      answerQuoteName: '인력',
+      answerQuoteText: '{{입력}}명',
+    };
+    const form = cellToFormState(cell);
+    expect(form.answerQuoteEnabled).toBe(true);
+    expect(form.answerQuoteName).toBe('인력');
+    expect(buildUpdatedCell(form, cell)).toMatchObject({
+      answerQuoteEnabled: true,
+      answerQuoteName: '인력',
+      answerQuoteText: '{{입력}}명',
+    });
+  });
+});

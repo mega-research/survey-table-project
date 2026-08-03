@@ -166,7 +166,10 @@ export function QuestionBasicTab({
 
   // 응답 인용 — 기본 꺼짐. 켜졌을 때만 옵션·셀 단위 문구 입력칸이 추가로 등장한다.
   const answerQuoteEnabled = formData.answerQuoteEnabled ?? false;
-  const showAnswerQuoteControl = supportsAnswerQuote(question.type);
+  // 표 질문은 인용 이름을 셀이 소유한다(셀 모달 헤더 토글) — 질문 레벨 토글을 함께 보이면
+  // 한 기능에 토글이 둘로 보인다. supportsAnswerQuote 자체는 수집기 대상 유형과 1:1 이라
+  // 건드리지 않고, 렌더 조건만 좁힌다.
+  const showAnswerQuoteControl = supportsAnswerQuote(question.type) && question.type !== 'table';
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),

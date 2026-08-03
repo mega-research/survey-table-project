@@ -86,6 +86,8 @@ export interface CellFormSetters {
   setSpssVarType: (v: CellFormState['spssVarType']) => void;
   setSpssMeasure: (v: CellFormState['spssMeasure']) => void;
   setAnswerQuoteText: (v: string) => void;
+  setAnswerQuoteEnabled: (v: boolean) => void;
+  setAnswerQuoteName: (v: string) => void;
 }
 
 export interface UseCellFormResult {
@@ -168,6 +170,8 @@ export function useCellForm(cell: TableCell, isOpen: boolean): UseCellFormResult
       setSpssVarType: set('spssVarType'),
       setSpssMeasure: set('spssMeasure'),
       setAnswerQuoteText: set('answerQuoteText'),
+      setAnswerQuoteEnabled: set('answerQuoteEnabled'),
+      setAnswerQuoteName: set('answerQuoteName'),
     };
   }, []);
 

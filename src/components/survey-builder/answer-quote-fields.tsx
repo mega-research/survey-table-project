@@ -86,11 +86,103 @@ export function AnswerQuoteTextField({
   );
 }
 
+/**
+ * 인용 이름 편집 단위 — 토글을 소유한 쪽(질문 카드 / 셀 헤더)이 값을 넘긴다.
+ * 셀 모달의 헤더 토글과 질문 카드가 같은 모양을 공유하기 위한 공통 계약.
+ */
+export interface AnswerQuoteControlValue {
+  enabled: boolean;
+  onEnabledChange: (enabled: boolean) => void;
+  name: string;
+  onNameChange: (name: string) => void;
+}
+
+interface AnswerQuoteNameFieldProps {
+  id: string;
+  name: string;
+  onNameChange: (name: string) => void;
+}
+
+/**
+ * 인용 이름 입력칸 + 실시간 참조 토큰(클릭 복사).
+ *
+ * 중괄호 입력 차단과 토큰 표기가 질문 카드·셀 헤더 양쪽에서 동일해야 하므로 여기 한 곳에 둔다.
+ */
+export function AnswerQuoteNameField({ id, name, onNameChange }: AnswerQuoteNameFieldProps) {
+  const trimmedName = name.trim();
+  const token = answerQuoteToken(name);
+
+  const copyToken = () => {
+    if (!trimmedName) return;
+    navigator.clipboard
+      ?.writeText(token)
+      .then(() => toast.success('인용 토큰을 복사했습니다'))
+      .catch(() => toast.error('복사에 실패했습니다. 직접 선택해 복사하세요'));
+  };
+
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id} className="text-xs text-gray-600">
+        인용 이름
+      </Label>
+      <Input
+        id={id}
+        value={name}
+        // 중괄호가 이름에 섞이면 {{{이름}}} 토큰 파싱이 깨져 영구 미스매치가 된다
+        // (TOKEN_PATTERN 문자 클래스가 [^{}]+) — 입력 단계에서 원천 차단.
+        onChange={(e) => onNameChange(e.target.value.replace(/[{}]/g, ''))}
+        placeholder="예: 마케팅유형"
+        className="h-8 text-sm"
+      />
+      <p className="text-xs text-gray-500">
+        다른 질문에서{' '}
+        {trimmedName ? (
+          <button
+            type="button"
+            onClick={copyToken}
+            title="클릭하면 복사됩니다"
+            className="rounded bg-blue-50 px-1.5 py-0.5 font-mono text-xs text-blue-700 hover:bg-blue-100"
+          >
+            {token}
+          </button>
+        ) : (
+          <span className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-xs text-gray-400">
+            {'{{{인용이름}}}'}
+          </span>
+        )}{' '}
+        으로 참조합니다.
+      </p>
+    </div>
+  );
+}
+
+interface AnswerQuoteCellToggleProps {
+  id: string;
+  enabled: boolean;
+  onEnabledChange: (enabled: boolean) => void;
+}
+
+/**
+ * 셀 옵션 관리 헤더에 붙는 인라인 토글 — 바로 옆 `조건부 분기` 스위치와 같은 모양.
+ */
+export function AnswerQuoteCellToggle({ id, enabled, onEnabledChange }: AnswerQuoteCellToggleProps) {
+  return (
+    <div className="flex items-center space-x-2">
+      <Switch id={id} checked={enabled} onCheckedChange={onEnabledChange} className="scale-75" />
+      <Label htmlFor={id} className="text-xs text-gray-600">
+        응답 인용
+      </Label>
+    </div>
+  );
+}
+
 interface AnswerQuoteQuestionControlProps {
   enabled: boolean;
   onEnabledChange: (enabled: boolean) => void;
   name: string;
   onNameChange: (name: string) => void;
+  /** 같은 화면에 컨트롤이 둘 이상 있을 때 id 충돌을 피하기 위한 접두어 */
+  idPrefix?: string | undefined;
   /**
    * 단답형(text) 전용 — 옵션이 없어 질문 자체가 입력 단위 후보 하나다.
    * 넘기지 않으면 질문 단위 문구 입력칸을 렌더하지 않는다.
@@ -113,28 +205,21 @@ export function AnswerQuoteQuestionControl({
   onEnabledChange,
   name,
   onNameChange,
+  idPrefix = 'answer-quote',
   questionText,
 }: AnswerQuoteQuestionControlProps) {
-  const trimmedName = name.trim();
-  const token = answerQuoteToken(name);
-
-  const copyToken = () => {
-    if (!trimmedName) return;
-    navigator.clipboard
-      ?.writeText(token)
-      .then(() => toast.success('인용 토큰을 복사했습니다'))
-      .catch(() => toast.error('복사에 실패했습니다. 직접 선택해 복사하세요'));
-  };
-
   return (
     <div className="space-y-3 rounded-md border border-gray-200 bg-white p-3">
       <div className="flex items-center justify-between gap-4">
-        <Label htmlFor="answer-quote-enabled" className="flex items-center gap-2 text-sm font-medium">
+        <Label
+          htmlFor={`${idPrefix}-enabled`}
+          className="flex items-center gap-2 text-sm font-medium"
+        >
           <Quote className="h-4 w-4" />
           응답 인용
         </Label>
         <Switch
-          id="answer-quote-enabled"
+          id={`${idPrefix}-enabled`}
           checked={enabled}
           onCheckedChange={onEnabledChange}
         />
@@ -142,42 +227,15 @@ export function AnswerQuoteQuestionControl({
 
       {enabled && (
         <div className="space-y-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="answer-quote-name" className="text-xs text-gray-600">
-              인용 이름
-            </Label>
-            <Input
-              id="answer-quote-name"
-              value={name}
-              // 중괄호가 이름에 섞이면 {{{이름}}} 토큰 파싱이 깨져 영구 미스매치가 된다
-              // (TOKEN_PATTERN 문자 클래스가 [^{}]+) — 입력 단계에서 원천 차단.
-              onChange={(e) => onNameChange(e.target.value.replace(/[{}]/g, ''))}
-              placeholder="예: 마케팅유형"
-              className="h-8 text-sm"
-            />
-            <p className="text-xs text-gray-500">
-              다른 질문에서{' '}
-              {trimmedName ? (
-                <button
-                  type="button"
-                  onClick={copyToken}
-                  title="클릭하면 복사됩니다"
-                  className="rounded bg-blue-50 px-1.5 py-0.5 font-mono text-xs text-blue-700 hover:bg-blue-100"
-                >
-                  {token}
-                </button>
-              ) : (
-                <span className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-xs text-gray-400">
-                  {'{{{인용이름}}}'}
-                </span>
-              )}{' '}
-              으로 참조합니다.
-            </p>
-          </div>
+          <AnswerQuoteNameField
+            id={`${idPrefix}-name`}
+            name={name}
+            onNameChange={onNameChange}
+          />
 
           {questionText && (
             <AnswerQuoteTextField
-              id="answer-quote-text"
+              id={`${idPrefix}-text`}
               value={questionText.value}
               onChange={questionText.onChange}
               mode="input"

@@ -180,4 +180,12 @@ describe('빌더 응답 인용 컨트롤', () => {
 
     expect(screen.queryByLabelText('응답 인용')).not.toBeInTheDocument();
   });
+
+  it('표 질문에는 질문 레벨 컨트롤이 나타나지 않는다 — 인용 이름은 셀이 소유한다', () => {
+    const table = { ...textQuestion, id: 'q4', type: 'table' } as unknown as Question;
+    render(<Harness question={table} initial={{ title: '항목별 인원' }} />);
+
+    expect(screen.queryByLabelText('응답 인용')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('인용 이름')).not.toBeInTheDocument();
+  });
 });

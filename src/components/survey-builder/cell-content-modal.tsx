@@ -69,7 +69,7 @@ import {
 } from '@/utils/table-cell-code-generator';
 
 import { useCellForm } from './hooks/use-cell-form';
-import { AnswerQuoteTextField } from './answer-quote-fields';
+import { AnswerQuoteQuestionControl, AnswerQuoteTextField } from './answer-quote-fields';
 import { CellChoiceEditor } from './cell-choice-editor';
 import { CellImageEditor } from './cell-image-editor';
 import { CellStyleFields } from './cell-style-fields';
@@ -204,12 +204,18 @@ export function CellContentModal({
     spssVarType,
     spssMeasure,
     answerQuoteText,
+    answerQuoteEnabled: cellAnswerQuoteEnabled,
+    answerQuoteName: cellAnswerQuoteName,
   } = form;
   // 순위 옵션(ranking_opt, Case 2)은 순위형 질문의 내장 테이블에서만 렌더러가 있다.
   // 테이블형 질문에서는 응답 select 가 나오지 않는 막다른 조합이 되므로 탭을 숨긴다.
   // 단, 이미 ranking_opt 인 셀(과거 데이터)은 편집/다른 타입 전환이 가능하도록 노출 유지.
   const parentQuestionType = questions.find((q) => q.id === currentQuestionId)?.type;
   const showRankingOptTab = parentQuestionType === 'ranking' || contentType === 'ranking_opt';
+  // 셀 단위 응답 인용은 호스트 질문이 표(table)일 때만 노출한다.
+  // 표-소스 선택형 질문(radio/checkbox + choice_opt)의 다른 셀들은 응답 페이지에서 inert 라
+  // 값이 생기지 않는다 — 거기에 토글을 노출하면 켜도 아무 일이 없는 죽은 설정이 된다.
+  const showCellAnswerQuote = parentQuestionType === 'table';
   const showContentMobileDisplay = MOBILE_DISPLAY_CELL_TYPES.has(contentType);
   const showInteractiveMobileLabel = MOBILE_LABEL_CELL_TYPES.has(contentType);
   const {
@@ -262,7 +268,19 @@ export function CellContentModal({
     setSpssVarType,
     setSpssMeasure,
     setAnswerQuoteText,
+    setAnswerQuoteEnabled: setCellAnswerQuoteEnabled,
+    setAnswerQuoteName: setCellAnswerQuoteName,
   } = setters;
+
+  // 선택형 셀 헤더(조건부 분기 옆)에 붙는 셀 단위 인용 컨트롤. 표 질문이 아니면 넘기지 않는다.
+  const cellAnswerQuoteControl = showCellAnswerQuote
+    ? {
+        enabled: cellAnswerQuoteEnabled,
+        onEnabledChange: setCellAnswerQuoteEnabled,
+        name: cellAnswerQuoteName,
+        onNameChange: setCellAnswerQuoteName,
+      }
+    : undefined;
 
   // choice_opt 탭용 로컬 그룹 편집 상태.
   // 부모에서 choiceGroupsProp 를 전달받으면 그 값으로, 아니면 스토어 질문의 choiceGroups 를 사용한다.
@@ -1018,14 +1036,25 @@ export function CellContentModal({
               )}
             </div>
 
-            {answerQuoteEnabled && (
-              <AnswerQuoteTextField
-                id="cell-answer-quote-text"
-                value={answerQuoteText}
-                onChange={setAnswerQuoteText}
-                mode="input"
-                showInputTokenHint
+            {showCellAnswerQuote ? (
+              <AnswerQuoteQuestionControl
+                idPrefix="cell-answer-quote"
+                enabled={cellAnswerQuoteEnabled}
+                onEnabledChange={setCellAnswerQuoteEnabled}
+                name={cellAnswerQuoteName}
+                onNameChange={setCellAnswerQuoteName}
+                questionText={{ value: answerQuoteText, onChange: setAnswerQuoteText }}
               />
+            ) : (
+              answerQuoteEnabled && (
+                <AnswerQuoteTextField
+                  id="cell-answer-quote-text"
+                  value={answerQuoteText}
+                  onChange={setAnswerQuoteText}
+                  mode="input"
+                  showInputTokenHint
+                />
+              )
             )}
 
             <div className="space-y-2">
@@ -1064,6 +1093,7 @@ export function CellContentModal({
               cellType="checkbox"
               textContent={textContent}
               answerQuoteEnabled={answerQuoteEnabled}
+              cellAnswerQuote={cellAnswerQuoteControl}
               currentQuestionId={currentQuestionId}
               questions={questions}
               checkboxOptions={checkboxOptions}
@@ -1095,6 +1125,7 @@ export function CellContentModal({
               cellType="radio"
               textContent={textContent}
               answerQuoteEnabled={answerQuoteEnabled}
+              cellAnswerQuote={cellAnswerQuoteControl}
               currentQuestionId={currentQuestionId}
               questions={questions}
               checkboxOptions={checkboxOptions}
@@ -1118,6 +1149,7 @@ export function CellContentModal({
               cellType="select"
               textContent={textContent}
               answerQuoteEnabled={answerQuoteEnabled}
+              cellAnswerQuote={cellAnswerQuoteControl}
               currentQuestionId={currentQuestionId}
               questions={questions}
               checkboxOptions={checkboxOptions}
@@ -1145,6 +1177,15 @@ export function CellContentModal({
               mobileValue={cellMobileOptionsColumns}
               onMobileChange={(next) => setCellMobileOptionsColumns(next ?? undefined)}
             />
+            {showCellAnswerQuote && (
+              <AnswerQuoteQuestionControl
+                idPrefix="ranking-cell-answer-quote"
+                enabled={cellAnswerQuoteEnabled}
+                onEnabledChange={setCellAnswerQuoteEnabled}
+                name={cellAnswerQuoteName}
+                onNameChange={setCellAnswerQuoteName}
+              />
+            )}
             <RankingCellTab
               cellCode={cellCode}
               rankingOptions={rankingOptions}
@@ -1157,7 +1198,7 @@ export function CellContentModal({
               onRankSuffixPatternChange={setRankSuffixPattern}
               rankVarNames={rankVarNames}
               onRankVarNamesChange={setRankVarNames}
-              answerQuoteEnabled={answerQuoteEnabled}
+              answerQuoteEnabled={showCellAnswerQuote ? cellAnswerQuoteEnabled : answerQuoteEnabled}
             />
           </TabsContent>
 
