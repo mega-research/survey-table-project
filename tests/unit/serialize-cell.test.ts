@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 
+import { QUESTION_LIKE_CELL_TYPES } from '@/lib/survey/answer-quote';
 import type { BranchRule, TableCell } from '@/types/survey';
 import {
+  ANSWER_QUOTE_NAMEABLE_CELL_TYPES,
   buildUpdatedCell,
   cellToFormState,
   GROUPABLE_CELL_TYPES,
@@ -616,6 +618,22 @@ describe('buildUpdatedCell — 셀타입별 characterization', () => {
     );
 
     expect(out.mobileDisplay).toBe('hidden');
+  });
+});
+
+describe('ANSWER_QUOTE_NAMEABLE_CELL_TYPES — 수집기(answer-quote.ts)와 1:1 일치 (I-1)', () => {
+  // 직렬화(serialize-cell)와 수집(answer-quote)이 각자 셀 타입 목록을 들고 있으면 한쪽만
+  // 갱신됐을 때 조용히 갈라진다 — 이 테스트는 두 집합이 항상 같은 원소를 갖도록 고정한다.
+  // (serialize-cell.ts 는 이제 QUESTION_LIKE_CELL_TYPES 를 재수출하므로 정상 상태에서는
+  // 항상 통과하지만, 누군가 다시 별도로 정의하면 즉시 실패한다.)
+  it('두 집합의 원소가 정확히 같다', () => {
+    expect([...ANSWER_QUOTE_NAMEABLE_CELL_TYPES].sort()).toEqual(
+      [...QUESTION_LIKE_CELL_TYPES].sort(),
+    );
+  });
+
+  it('동일 참조를 재수출한다 (재정의 금지)', () => {
+    expect(ANSWER_QUOTE_NAMEABLE_CELL_TYPES).toBe(QUESTION_LIKE_CELL_TYPES);
   });
 });
 
