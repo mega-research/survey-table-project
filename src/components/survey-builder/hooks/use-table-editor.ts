@@ -816,6 +816,11 @@ export function useTableEditor({
           const cloned: TableCell = JSON.parse(JSON.stringify(cell));
           cloned.id = `cell-${newRowId}-${columns[colIndex]?.id ?? colIndex}`;
           delete cloned.rowspan;
+          // 응답 인용 이름은 설문 전역 식별자다. 그대로 복제하면 6행 표가 사실은
+          // 6개의 질문이라는 의도가 깨지고, 같은 이름을 가진 셀들이 응답 페이지에서
+          // 조용히 하나의 문구로 합쳐진다(동일 이름 병합은 의도된 동작이라 경고도 없다).
+          delete cloned.answerQuoteEnabled;
+          delete cloned.answerQuoteName;
           return cloned;
         }),
         ...(sourceRow.displayCondition
