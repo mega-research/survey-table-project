@@ -19,6 +19,15 @@ export interface TestResponseResetFields {
   versionId: string | null;
   currentStepId: string | null;
   pageVisits: PageVisit[];
+  /**
+   * 초기화 후에도 유지할 draft 순번 하한(metadata.draftSeq).
+   *
+   * metadata 를 통째로 비우면 claimDraftSeq 의 하한이 0 으로 떨어져, 직전 시도의 탭이
+   * 늦게 던진 unload beacon(seq=N)이 갓 초기화한 행에 그대로 적용된다. 순번은 단조
+   * 증가값이므로 시도가 바뀌어도 이어서 올라가야 한다. 값을 넘기지 않으면 metadata 는
+   * null 이 된다(대상자 경로 — 시도 장부로 이전 시도를 superseded 처리해 별도 보호가 있다).
+   */
+  draftSeq?: number | undefined;
   visibleStepIndex?: number | null | undefined;
   visibleStepTotal?: number | null | undefined;
   userAgent?: string | null | undefined;
@@ -67,7 +76,8 @@ export async function resetTestResponseRow(
       deviceId: fields.deviceId ?? null,
       platform: fields.platform ?? null,
       browser: fields.browser ?? null,
-      metadata: null,
+      // draftSeq 하한만 살리고 나머지 metadata(exposedQuestionIds 등 시도별 상태)는 버린다.
+      metadata: fields.draftSeq != null ? { draftSeq: fields.draftSeq } : null,
       lastEditedAt: null,
       sessionId: fields.sessionId,
     })

@@ -19,6 +19,7 @@ const {
   txInsertReturning,
   txUpdateSet,
   resetDeleteTables,
+  mockExecute,
 } = vi.hoisted(() => ({
   mockFindFirst: vi.fn(),
   mockSurveysFindFirst: vi.fn(),
@@ -28,6 +29,7 @@ const {
   txInsertReturning: vi.fn(),
   txUpdateSet: vi.fn(),
   resetDeleteTables: vi.fn(),
+  mockExecute: vi.fn(),
 }));
 
 vi.mock('@/db', () => ({
@@ -90,7 +92,8 @@ vi.mock('@/db', () => ({
         surveyVersions: { findFirst: vi.fn(async () => null) },
       },
       insert: vi.fn(),
-      execute: vi.fn().mockResolvedValue([{ id: null }]),
+      // claimDraftSeq 의 순번 claim UPDATE / 존재 확인 SELECT 종단.
+      execute: vi.fn(() => mockExecute()),
       select: vi.fn().mockReturnValue({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockReturnValue({
@@ -154,11 +157,12 @@ const SIGNALS: ClientSignals = {
  * 이후 updateQuestionResponse 의 소유권 preflight 는 나머지 필드를 읽는다
  * (isTest=false 로 두어 대상자 전용 소유권 검사 경로를 타지 않게 한다 — Task 2 영역).
  */
-function existingRow(status: string) {
+function existingRow(status: string, metadata: Record<string, unknown> | null = null) {
   return [
     {
       id: EXISTING_RESPONSE_ID,
       status,
+      metadata,
       surveyId: SURVEY_ID,
       isTest: false,
       contactTargetId: null,
@@ -205,6 +209,7 @@ beforeEach(() => {
     testToken: 'tok-valid',
   });
   mockQuestionLimit.mockResolvedValue([{ id: 'q1', piiEncrypted: false }]);
+  mockExecute.mockResolvedValue([{ id: null }]);
   // 충돌 → 물려받을 기존 행이 있다.
   txInsertReturning.mockResolvedValue([]);
   mockFindFirst.mockResolvedValue({
@@ -258,6 +263,41 @@ describe('익명 테스트 세션 재진입 — 종결 행 제자리 리셋', ()
 
     expect(result.kind).toBe('created');
     expect(resetCalls()).toHaveLength(0);
+  });
+
+  // 초기화가 metadata 를 통째로 비우면 claimDraftSeq 의 하한이 0 으로 떨어져, 직전 시도의 탭이
+  // 늦게 던진 unload beacon(seq=7)이 갓 초기화한 행에 그대로 쓰인다. 이 창은 초기화 도입으로
+  // 새로 생긴 것이다 — 예전에는 행이 completed 로 남아 concluded skip 이 beacon 을 막았고,
+  // 대상자 경로는 시도 장부(superseded)로 막지만 익명 경로에는 장부가 없다.
+  it('초기화 후에도 draft 순번 하한이 남아 직전 시도의 지연 beacon 을 막는다', async () => {
+    mockExistingStatus.mockResolvedValue(existingRow('completed', { draftSeq: 7 }));
+
+    const created = await firstAnswer();
+
+    // 하한만 남고(exposedQuestionIds 같은 시도별 상태는 버림), 클라이언트에도 실려 나가야
+    // 한다 — 새 탭이 8 부터 발급하지 않으면 이번 시도의 draft 가 전부 stale 로 떨어진다.
+    expect(resetCalls()[0]?.['metadata']).toEqual({ draftSeq: 7 });
+    expect(created).toMatchObject({ kind: 'created', draftSeq: 7 });
+
+    // 위에서 프로덕션 코드가 실제로 쓴 하한으로 claimDraftSeq 의 비교를 그대로 재현한다
+    // (WHERE COALESCE((metadata->>'draftSeq')::bigint, 0) < seq).
+    const floor = (resetCalls()[0]?.['metadata'] as { draftSeq?: number } | null)?.draftSeq ?? 0;
+    const LATE_BEACON_SEQ = 7;
+    mockExecute
+      .mockResolvedValueOnce(floor < LATE_BEACON_SEQ ? [{ id: EXISTING_RESPONSE_ID }] : [])
+      // claim 0행이면 행 존재 확인 SELECT → stale 판정.
+      .mockResolvedValueOnce([{ id: EXISTING_RESPONSE_ID }]);
+
+    const { saveDraftResponse } = await import(
+      '@/features/survey-response/server/services/response.service'
+    );
+    const late = await saveDraftResponse({
+      responseId: EXISTING_RESPONSE_ID,
+      answers: { q1: '직전 시도의 답' },
+      seq: LATE_BEACON_SEQ,
+    });
+
+    expect(late).toEqual({ applied: false });
   });
 
   it('알 수 없는 status 는 테스트 세션이어도 초기화하지 않고 차단한다', async () => {

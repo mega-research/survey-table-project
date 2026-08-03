@@ -138,10 +138,26 @@ async function settleReuseCandidate(
   if (decision.action === 'reuse') return { ok: true, row: candidate };
   if (decision.action === 'restart') {
     if (testRestart) {
+      // draft 순번 하한은 초기화 후에도 살린다 — 직전 시도의 탭이 늦게 던진 beacon 이
+      // 갓 초기화한 행에 적용되는 것을 claimDraftSeq 가 계속 막아야 한다.
+      const draftSeq = extractDraftSeq(candidate.metadata);
       // 새 행 INSERT 는 테스트 유니크 인덱스에 걸리므로 반드시 제자리 초기화한다.
-      await db.transaction((tx) => resetTestResponseRow(tx, candidate.id, testRestart));
-      // 초기화가 metadata 를 비우므로 물려받을 draftSeq 도 없다.
-      return { ok: true, row: { ...candidate, status: 'in_progress', metadata: null } };
+      await db.transaction((tx) =>
+        resetTestResponseRow(tx, candidate.id, {
+          ...testRestart,
+          ...(draftSeq !== undefined ? { draftSeq } : {}),
+        }),
+      );
+      // 남긴 하한을 그대로 실어 보내 새 탭의 draftSeqRef 를 seed 한다(0 부터 시작하면
+      // 새 시도의 draft 가 전부 stale 로 떨어진다).
+      return {
+        ok: true,
+        row: {
+          ...candidate,
+          status: 'in_progress',
+          metadata: draftSeq !== undefined ? { draftSeq } : null,
+        },
+      };
     }
     // 도달 불가(restart 판정의 전제가 testRestart 존재) — 방어적으로 차단한다.
     return {
@@ -272,15 +288,20 @@ async function insertAnonymousTestResponse(
         target: [surveyResponses.surveyId, surveyResponses.sessionId],
       })
       .returning({ id: surveyResponses.id, status: surveyResponses.status });
-    // metadata 는 항상 null 고정: 이 재사용 분기는 동일 세션의 동시 INSERT race 뿐이라
-    // (다른 기기·세션이 끼어들 여지가 없다) 물려받을 draftSeq 이력이 존재할 수 없다.
+    // 새로 만든 행은 물려받을 draftSeq 이력이 없다.
     if (inserted) {
       return { id: inserted.id, contactTargetId: null, metadata: null, status: inserted.status };
     }
 
     // 물려받는 기존 테스트 행도 sweep 으로 drop 이 됐을 수 있어 status 를 함께 읽는다.
+    // metadata 는 draft 순번 하한 때문에 필요하다 — 같은 sessionId 로 재진입한 이전 시도의
+    // draftSeq 를 초기화 후에도 이어가야 지연 도착 beacon 이 새 시도를 덮지 않는다.
     const [existing] = await tx
-      .select({ id: surveyResponses.id, status: surveyResponses.status })
+      .select({
+        id: surveyResponses.id,
+        status: surveyResponses.status,
+        metadata: surveyResponses.metadata,
+      })
       .from(surveyResponses)
       .where(
         and(
@@ -293,7 +314,12 @@ async function insertAnonymousTestResponse(
       )
       .limit(1);
     if (!existing) throw new Error('테스트 응답을 시작할 수 없습니다');
-    return { id: existing.id, contactTargetId: null, metadata: null, status: existing.status };
+    return {
+      id: existing.id,
+      contactTargetId: null,
+      metadata: existing.metadata,
+      status: existing.status,
+    };
   });
 
   // 이 함수는 정의상 유효 익명 테스트 세션에서만 호출된다(createResponseWithFirstAnswer 의
