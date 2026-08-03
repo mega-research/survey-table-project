@@ -1044,6 +1044,7 @@ export function CellContentModal({
                 name={cellAnswerQuoteName}
                 onNameChange={setCellAnswerQuoteName}
                 questionText={{ value: answerQuoteText, onChange: setAnswerQuoteText }}
+                scope="cell"
               />
             ) : (
               answerQuoteEnabled && (
@@ -1184,6 +1185,7 @@ export function CellContentModal({
                 onEnabledChange={setCellAnswerQuoteEnabled}
                 name={cellAnswerQuoteName}
                 onNameChange={setCellAnswerQuoteName}
+                scope="cell"
               />
             )}
             <RankingCellTab

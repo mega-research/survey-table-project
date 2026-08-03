@@ -6,10 +6,12 @@ import type { ReactNode } from 'react';
 import { AlertTriangle } from 'lucide-react';
 
 import { extractVariableKeys } from '@/lib/mail/variable-extractor';
+import { QUESTION_LIKE_CELL_TYPES } from '@/lib/survey/answer-quote';
+import { formatCellLabel } from '@/utils/cell-label';
 import { resolveChoiceOptions } from '@/utils/choice-source';
 import { resolveRankingOptions } from '@/utils/ranking-source';
 import type { VariableDef } from '@/components/operations/mail-template/variable-catalog';
-import type { Question, QuestionGroup } from '@/types/survey';
+import type { Question, QuestionGroup, TableCell } from '@/types/survey';
 
 interface Props {
   questions: Question[];
@@ -46,7 +48,7 @@ function extractQuoteTokens(...sources: (string | undefined)[]): string[] {
  * cells/*.tsx(표 셀 content 와 radioOptions/checkboxOptions/selectOptions/rankingOptions).
  * choice_opt/ranking_opt 셀은 resolveChoiceOptions/resolveRankingOptions 가 이미 라벨을
  * 흡수하므로 표 순회에서 건너뛴다(이중 집계 방지, lib/survey/answer-quote.ts
- * collectFromCells 와 동일 원칙).
+ * collectAnswerQuotes 의 QUESTION_LIKE_CELL_TYPES 필터와 동일 원칙).
  *
  * prefill 템플릿(defaultValueTemplate)은 질문 레벨이든 표 셀이든 여기 포함하지 않는다 —
  * 둘 다 attrs 만 치환한다. prefill 결과는 응답으로 저장되는데 응답 인용은 저장되지 않는
@@ -97,19 +99,21 @@ function hasAnyQuoteText(q: Question): boolean {
   } else if (q.type === 'ranking') {
     for (const opt of resolveRankingOptions(q)) optionTexts.push(opt.answerQuoteText);
   }
-  if (optionTexts.some((t) => (t ?? '').trim())) return true;
+  return optionTexts.some((t) => (t ?? '').trim());
+}
 
-  for (const row of q.tableRowsData ?? []) {
-    for (const cell of row.cells) {
-      if (cell.type === 'choice_opt' || cell.type === 'ranking_opt') continue; // 위 옵션 경로가 흡수
-      if (cell.type === 'input' && (cell.answerQuoteText ?? '').trim()) return true;
-      if (cell.type === 'radio' && (cell.radioOptions ?? []).some((o) => (o.answerQuoteText ?? '').trim())) return true;
-      if (cell.type === 'checkbox' && (cell.checkboxOptions ?? []).some((o) => (o.answerQuoteText ?? '').trim())) return true;
-      if (cell.type === 'select' && (cell.selectOptions ?? []).some((o) => (o.answerQuoteText ?? '').trim())) return true;
-      if (cell.type === 'ranking' && (cell.rankingOptions ?? []).some((o) => (o.answerQuoteText ?? '').trim())) return true;
-    }
-  }
-  return false;
+/**
+ * 셀 하나가 실제로 인용될 문구를 하나라도 갖고 있는지 (모두 빈 문구면 항상 빈 문자열).
+ * hasAnyQuoteText 의 셀 버전 — 셀은 자기 이름으로 독립 정의되므로 같은 표의 다른 셀에
+ * 문구가 있어도 이 셀 자신이 비어 있으면 여전히 빈 문자열로 치환된다.
+ */
+function cellHasQuoteText(cell: TableCell): boolean {
+  if (cell.type === 'input') return !!(cell.answerQuoteText ?? '').trim();
+  if (cell.type === 'radio') return (cell.radioOptions ?? []).some((o) => (o.answerQuoteText ?? '').trim());
+  if (cell.type === 'checkbox') return (cell.checkboxOptions ?? []).some((o) => (o.answerQuoteText ?? '').trim());
+  if (cell.type === 'select') return (cell.selectOptions ?? []).some((o) => (o.answerQuoteText ?? '').trim());
+  if (cell.type === 'ranking') return (cell.rankingOptions ?? []).some((o) => (o.answerQuoteText ?? '').trim());
+  return false; // choice_opt/ranking_opt — 이름을 갖지 않는 옵션 셀
 }
 
 interface QuoteReference {
@@ -117,13 +121,19 @@ interface QuoteReference {
   /** null = 순서 비교 불가(소속 질문이 없는 그룹) — 미정의 이름 경고에만 쓴다. */
   order: number | null;
   label: string;
+  /** 참조가 속한 질문 — 표 셀끼리(같은 표 안)는 순서 비교가 성립하지 않아 제외할 때만 쓴다. */
+  questionId: string | null;
 }
 
 interface QuoteSource {
   name: string;
+  /** 셀 출처는 자기 order 가 없다 — 호스트 질문의 order 를 그대로 쓴다. */
   order: number;
   label: string;
-  question: Question;
+  /** 이 이름을 정의한 질문 — 표 셀끼리(같은 표 안)는 순서 비교가 성립하지 않아 제외할 때만 쓴다. */
+  questionId: string;
+  scope: 'question' | 'cell';
+  hasText: boolean;
 }
 
 /**
@@ -215,15 +225,47 @@ export function TokenWarningPanel({ questions, groups, thankYouMessage, catalog 
     return usedKeys.filter((k) => !knownKeys.has(k));
   }, [questions, knownKeys, catalog]);
 
-  // 인용을 정의한 질문(활성 + 이름 존재) — collectAnswerQuotes 와 동일 기준.
+  // 인용을 정의한 이름 전부 — collectAnswerQuotes 와 동일 기준으로 두 경로를 합친다.
   // 비활성(answerQuoteEnabled=false)이면 아무 것도 기여하지 않으므로 "정의 없음"과 같다.
   const definedSources = useMemo<QuoteSource[]>(() => {
     const out: QuoteSource[] = [];
     for (const q of questions) {
-      if (!q.answerQuoteEnabled) continue;
-      const name = (q.answerQuoteName ?? '').trim();
-      if (!name) continue;
-      out.push({ name, order: q.order, label: q.title || '(제목 없음)', question: q });
+      // 질문 레벨 — 수집기와 동일하게 표 질문은 제외한다(answer-quote.ts:213 `q.type !==
+      // 'table'`). 표는 셀이 각자 이름을 갖고, 질문 레벨 토글은 수집기가 아예 보지 않는다 —
+      // 여기서도 정의로 치면 실제로는 항상 빈 문자열인 참조를 "정의됨"으로 오판한다.
+      if (q.type !== 'table' && q.answerQuoteEnabled) {
+        const name = (q.answerQuoteName ?? '').trim();
+        if (name) {
+          out.push({
+            name,
+            order: q.order,
+            label: q.title || '(제목 없음)',
+            questionId: q.id,
+            scope: 'question',
+            hasText: hasAnyQuoteText(q),
+          });
+        }
+      }
+
+      // 셀 레벨 — 질문 노릇을 하는 셀(QUESTION_LIKE_CELL_TYPES)마다 자기 이름으로 정의를
+      // 추가한다. choice_opt/ranking_opt 는 옵션이라 제외(질문 레벨 경로가 이미 담당).
+      for (const row of q.tableRowsData ?? []) {
+        for (const cell of row.cells) {
+          if (cell.isHidden) continue;
+          if (!QUESTION_LIKE_CELL_TYPES.has(cell.type)) continue;
+          if (!cell.answerQuoteEnabled) continue;
+          const cellName = (cell.answerQuoteName ?? '').trim();
+          if (!cellName) continue;
+          out.push({
+            name: cellName,
+            order: q.order, // 셀은 자기 order 가 없다 — 호스트 질문 order 를 그대로 쓴다
+            label: `${q.title || '(제목 없음)'} · ${formatCellLabel(cell)}`,
+            questionId: q.id,
+            scope: 'cell',
+            hasText: cellHasQuoteText(cell),
+          });
+        }
+      }
     }
     return out;
   }, [questions]);
@@ -237,7 +279,7 @@ export function TokenWarningPanel({ questions, groups, thankYouMessage, catalog 
     const out: QuoteReference[] = [];
     for (const q of questions) {
       for (const name of extractQuoteTokens(...substitutedSourcesOf(q))) {
-        out.push({ name, order: q.order, label: q.title || '(제목 없음)' });
+        out.push({ name, order: q.order, label: q.title || '(제목 없음)', questionId: q.id });
       }
     }
     for (const g of groups) {
@@ -246,7 +288,7 @@ export function TokenWarningPanel({ questions, groups, thankYouMessage, catalog 
       const ownerOrders = collectDescendantQuestionOrders(g.id, questions, groups);
       const ownerOrder = ownerOrders.length > 0 ? Math.min(...ownerOrders) : null;
       for (const name of names) {
-        out.push({ name, order: ownerOrder, label: `그룹 "${g.name}"` });
+        out.push({ name, order: ownerOrder, label: `그룹 "${g.name}"`, questionId: null });
       }
     }
     return out;
@@ -261,18 +303,21 @@ export function TokenWarningPanel({ questions, groups, thankYouMessage, catalog 
     return Array.from(set);
   }, [references, definedNames]);
 
-  // 경고 2: 인용을 켰는데 문구가 전부 빈 질문
+  // 경고 2: 인용을 켰는데 문구가 전부 빈 질문/셀
   const emptyQuoteQuestions = useMemo(() => {
-    return definedSources.filter((src) => !hasAnyQuoteText(src.question));
+    return definedSources.filter((src) => !src.hasText);
   }, [definedSources]);
 
-  // 경고 3: 뒤를 참조하는 경우 (소비처 order < 출처 order, 자기참조 포함해 <=)
+  // 경고 3: 뒤를 참조하는 경우 (소비처 order < 출처 order, 자기참조 포함해 <=).
+  // 셀 출처는 호스트 질문의 order 를 쓰므로, 같은 표 안의 참조·정의는 항상 order 가 같다 —
+  // 표는 한 화면에 다 나오고 응답 순서가 정해져 있지 않으므로 이 조합은 판정하지 않는다.
   const backwardReferences = useMemo(() => {
     const out: { consumerLabel: string; sourceLabel: string; name: string }[] = [];
     for (const ref of references) {
       if (ref.order === null) continue;
       for (const src of definedSources) {
         if (src.name !== ref.name) continue;
+        if (src.scope === 'cell' && ref.questionId === src.questionId) continue;
         if (ref.order <= src.order) {
           out.push({ consumerLabel: ref.label, sourceLabel: src.label, name: ref.name });
         }

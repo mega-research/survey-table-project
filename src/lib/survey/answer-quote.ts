@@ -128,8 +128,12 @@ function collectFromRanking(
   return parts;
 }
 
-/** 그 자체가 질문 노릇을 하는 셀 타입. choice_opt/ranking_opt 는 옵션이라 제외. */
-const QUESTION_LIKE_CELL_TYPES = new Set(['radio', 'checkbox', 'select', 'input', 'ranking']);
+/**
+ * 그 자체가 질문 노릇을 하는 셀 타입. choice_opt/ranking_opt 는 옵션이라 제외.
+ * 빌더 경고 패널(token-warning-panel.tsx definedSources)이 이 집합을 그대로 가져다 쓴다 —
+ * 두 곳이 각자 셀 타입 목록을 들고 있으면 한쪽만 갱신됐을 때 다시 벌어진다.
+ */
+export const QUESTION_LIKE_CELL_TYPES = new Set(['radio', 'checkbox', 'select', 'input', 'ranking']);
 
 /** 셀 하나에서 기여 후보를 뽑는다. 셀 단위 이름으로 묶기 위해 셀별로 분리했다. */
 function collectFromSingleCell(

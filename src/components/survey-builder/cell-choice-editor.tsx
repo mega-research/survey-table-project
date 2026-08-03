@@ -12,6 +12,7 @@ import { CheckboxOption, Question, QuestionOption, RadioOption } from '@/types/s
 
 import {
   AnswerQuoteCellToggle,
+  AnswerQuoteGuidance,
   AnswerQuoteNameField,
   AnswerQuoteTextField,
   type AnswerQuoteControlValue,
@@ -119,11 +120,14 @@ export function CellChoiceEditor({
           </div>
 
           {cellAnswerQuote?.enabled && (
-            <AnswerQuoteNameField
-              id="checkbox-cell-answer-quote-name"
-              name={cellAnswerQuote.name}
-              onNameChange={cellAnswerQuote.onNameChange}
-            />
+            <>
+              <AnswerQuoteNameField
+                id="checkbox-cell-answer-quote-name"
+                name={cellAnswerQuote.name}
+                onNameChange={cellAnswerQuote.onNameChange}
+              />
+              <AnswerQuoteGuidance scope="cell" />
+            </>
           )}
 
           <div className="max-h-[300px] space-y-3 overflow-y-auto pr-2">
@@ -420,11 +424,14 @@ export function CellChoiceEditor({
           </div>
 
           {cellAnswerQuote?.enabled && (
-            <AnswerQuoteNameField
-              id="radio-cell-answer-quote-name"
-              name={cellAnswerQuote.name}
-              onNameChange={cellAnswerQuote.onNameChange}
-            />
+            <>
+              <AnswerQuoteNameField
+                id="radio-cell-answer-quote-name"
+                name={cellAnswerQuote.name}
+                onNameChange={cellAnswerQuote.onNameChange}
+              />
+              <AnswerQuoteGuidance scope="cell" />
+            </>
           )}
 
           <div className="max-h-[300px] space-y-3 overflow-y-auto pr-2">
@@ -640,11 +647,14 @@ export function CellChoiceEditor({
         </div>
 
         {cellAnswerQuote?.enabled && (
-          <AnswerQuoteNameField
-            id="select-cell-answer-quote-name"
-            name={cellAnswerQuote.name}
-            onNameChange={cellAnswerQuote.onNameChange}
-          />
+          <>
+            <AnswerQuoteNameField
+              id="select-cell-answer-quote-name"
+              name={cellAnswerQuote.name}
+              onNameChange={cellAnswerQuote.onNameChange}
+            />
+            <AnswerQuoteGuidance scope="cell" />
+          </>
         )}
 
         <div className="max-h-[300px] space-y-3 overflow-y-auto pr-2">

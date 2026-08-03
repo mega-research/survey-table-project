@@ -617,6 +617,363 @@ describe('TokenWarningPanel - 질문 레벨 defaultValueTemplate 은 치환되�
   });
 });
 
+describe('TokenWarningPanel - Task 3: 셀 단위 인용 이름도 정의로 인정한다 (경고 1)', () => {
+  it('셀에 정의한 인용 이름을 올바르게 참조하면 경고하지 않는다', () => {
+    render(
+      <TokenWarningPanel
+        questions={[
+          q({
+            id: 'q1',
+            order: 1,
+            type: 'table',
+            title: '표 질문',
+            tableRowsData: [
+              {
+                id: 'r1',
+                label: '행1',
+                cells: [
+                  {
+                    id: 'c1',
+                    type: 'input',
+                    content: '',
+                    answerQuoteEnabled: true,
+                    answerQuoteName: '응답값',
+                    answerQuoteText: '테스트 문구',
+                  },
+                ],
+              },
+            ],
+          }),
+          q({ id: 'q2', order: 2, title: '{{{응답값}}} 님 감사합니다' }),
+        ]}
+        groups={[]}
+        thankYouMessage=""
+        catalog={[]}
+      />,
+    );
+    expect(screen.queryByText(/정의되지 않은 인용 이름/)).not.toBeInTheDocument();
+  });
+
+  it('근접 케이스: 셀 인용 이름을 오타로 참조하면 경고한다', () => {
+    render(
+      <TokenWarningPanel
+        questions={[
+          q({
+            id: 'q1',
+            order: 1,
+            type: 'table',
+            title: '표 질문',
+            tableRowsData: [
+              {
+                id: 'r1',
+                label: '행1',
+                cells: [
+                  {
+                    id: 'c1',
+                    type: 'input',
+                    content: '',
+                    answerQuoteEnabled: true,
+                    answerQuoteName: '응답값',
+                    answerQuoteText: '테스트 문구',
+                  },
+                ],
+              },
+            ],
+          }),
+          q({ id: 'q2', order: 2, title: '{{{응답갑}}} 님 감사합니다' }), // 오타: 값 → 갑
+        ]}
+        groups={[]}
+        thankYouMessage=""
+        catalog={[]}
+      />,
+    );
+    expect(screen.getByText(/정의되지 않은 인용 이름/)).toBeInTheDocument();
+    expect(screen.getByText('{{{응답갑}}}')).toBeInTheDocument();
+  });
+
+  it('표 질문의 질문 레벨 인용(레거시)은 더 이상 정의로 인정하지 않는다 — 참조는 여전히 경고한다', () => {
+    // Task 2 이후 표 질문에서는 이 토글이 UI 에서 사라졌지만, 레거시 데이터에는 남아있을 수
+    // 있다. 수집기(answer-quote.ts:213)가 표 질문의 질문 레벨 경로를 애초에 안 보므로,
+    // 이 이름을 정의로 인정하면 실제로는 항상 빈 문자열인 참조를 "정의됨"으로 오판한다.
+    render(
+      <TokenWarningPanel
+        questions={[
+          q({
+            id: 'q1',
+            order: 1,
+            type: 'table',
+            title: '레거시 표',
+            answerQuoteEnabled: true,
+            answerQuoteName: '레거시이름',
+          }),
+          q({ id: 'q2', order: 2, title: '{{{레거시이름}}} 안내' }),
+        ]}
+        groups={[]}
+        thankYouMessage=""
+        catalog={[]}
+      />,
+    );
+    expect(screen.getByText(/정의되지 않은 인용 이름/)).toBeInTheDocument();
+    expect(screen.getByText('{{{레거시이름}}}')).toBeInTheDocument();
+  });
+
+  it('근접 케이스: 표가 아닌 질문의 질문 레벨 인용은 그대로 정의로 인정한다', () => {
+    render(
+      <TokenWarningPanel
+        questions={[
+          q({
+            id: 'q1',
+            order: 1,
+            type: 'radio',
+            title: '나이대를 선택하세요',
+            answerQuoteEnabled: true,
+            answerQuoteName: '나이대',
+            options: [{ id: 'o1', label: '20대', value: 'v1', answerQuoteText: '20대' }],
+          }),
+          q({ id: 'q2', order: 2, title: '{{{나이대}}} 님 감사합니다' }),
+        ]}
+        groups={[]}
+        thankYouMessage=""
+        catalog={[]}
+      />,
+    );
+    expect(screen.queryByText(/정의되지 않은 인용 이름/)).not.toBeInTheDocument();
+  });
+});
+
+describe('TokenWarningPanel - Task 3: 셀 인용 문구가 전부 비면 경고한다 (경고 2)', () => {
+  it('셀 인용을 켰는데 옵션 문구가 모두 비어 있으면 경고한다', () => {
+    render(
+      <TokenWarningPanel
+        questions={[
+          q({
+            id: 'q1',
+            order: 1,
+            type: 'table',
+            title: '표 질문',
+            tableRowsData: [
+              {
+                id: 'r1',
+                label: '행1',
+                cells: [
+                  {
+                    id: 'c1',
+                    type: 'radio',
+                    content: '',
+                    answerQuoteEnabled: true,
+                    answerQuoteName: '유형',
+                    radioOptions: [{ id: 'o1', label: 'A', value: 'v1' }],
+                  },
+                ],
+              },
+            ],
+          }),
+        ]}
+        groups={[]}
+        thankYouMessage=""
+        catalog={[]}
+      />,
+    );
+    expect(screen.getByText(/인용 문구가 모두 비어 있는 질문/)).toBeInTheDocument();
+    expect(screen.getByText(/표 질문.*\(인용 이름: 유형\)/)).toBeInTheDocument();
+  });
+
+  it('근접 케이스: 셀 옵션에 문구가 있으면 경고하지 않는다', () => {
+    render(
+      <TokenWarningPanel
+        questions={[
+          q({
+            id: 'q1',
+            order: 1,
+            type: 'table',
+            title: '표 질문',
+            tableRowsData: [
+              {
+                id: 'r1',
+                label: '행1',
+                cells: [
+                  {
+                    id: 'c1',
+                    type: 'radio',
+                    content: '',
+                    answerQuoteEnabled: true,
+                    answerQuoteName: '유형',
+                    radioOptions: [{ id: 'o1', label: 'A', value: 'v1', answerQuoteText: '문구' }],
+                  },
+                ],
+              },
+            ],
+          }),
+        ]}
+        groups={[]}
+        thankYouMessage=""
+        catalog={[]}
+      />,
+    );
+    expect(screen.queryByText(/인용 문구가 모두 비어 있는 질문/)).not.toBeInTheDocument();
+  });
+
+  it('근접 케이스: 같은 표 안 다른 셀에 문구가 있어도 이 셀 자신이 비어 있으면 경고한다', () => {
+    // 셀은 자기 이름으로 독립 정의된다 — 표 전체를 훑어 "어딘가에 문구가 있다"로 판정하면
+    // 안 된다. 표-레벨 판정으로 되돌아가면 이 테스트가 깨진다.
+    render(
+      <TokenWarningPanel
+        questions={[
+          q({
+            id: 'q1',
+            order: 1,
+            type: 'table',
+            title: '표 질문',
+            tableRowsData: [
+              {
+                id: 'r1',
+                label: '행1',
+                cells: [
+                  {
+                    id: 'c1',
+                    type: 'input',
+                    content: '',
+                    answerQuoteEnabled: true,
+                    answerQuoteName: '빈셀',
+                    // answerQuoteText 없음 → 빈 인용
+                  },
+                  {
+                    id: 'c2',
+                    type: 'input',
+                    content: '',
+                    answerQuoteEnabled: true,
+                    answerQuoteName: '채운셀',
+                    answerQuoteText: '문구 있음',
+                  },
+                ],
+              },
+            ],
+          }),
+        ]}
+        groups={[]}
+        thankYouMessage=""
+        catalog={[]}
+      />,
+    );
+    expect(screen.getByText(/인용 문구가 모두 비어 있는 질문/)).toBeInTheDocument();
+    expect(screen.getByText(/\(인용 이름: 빈셀\)/)).toBeInTheDocument();
+    expect(screen.queryByText(/\(인용 이름: 채운셀\)/)).not.toBeInTheDocument();
+  });
+});
+
+describe('TokenWarningPanel - Task 3: 셀 출처는 호스트 질문의 order 로 순서를 판정한다 (경고 3)', () => {
+  it('표보다 앞의 질문이 셀 인용 이름을 참조하면(순서 위반) 경고한다', () => {
+    render(
+      <TokenWarningPanel
+        questions={[
+          q({ id: 'consumer', order: 1, title: '{{{유형}}} 안내' }),
+          q({
+            id: 'source',
+            order: 2,
+            type: 'table',
+            title: '표 질문',
+            tableRowsData: [
+              {
+                id: 'r1',
+                label: '행1',
+                cells: [
+                  {
+                    id: 'c1',
+                    type: 'input',
+                    content: '',
+                    answerQuoteEnabled: true,
+                    answerQuoteName: '유형',
+                    answerQuoteText: '문구',
+                  },
+                ],
+              },
+            ],
+          }),
+        ]}
+        groups={[]}
+        thankYouMessage=""
+        catalog={[]}
+      />,
+    );
+    expect(screen.getByText(/뒤 질문의 응답을 인용하는 설정 오류/)).toBeInTheDocument();
+  });
+
+  it('근접 케이스: 표보다 뒤의 질문이 셀 인용 이름을 참조하면 경고하지 않는다', () => {
+    render(
+      <TokenWarningPanel
+        questions={[
+          q({
+            id: 'source',
+            order: 1,
+            type: 'table',
+            title: '표 질문',
+            tableRowsData: [
+              {
+                id: 'r1',
+                label: '행1',
+                cells: [
+                  {
+                    id: 'c1',
+                    type: 'input',
+                    content: '',
+                    answerQuoteEnabled: true,
+                    answerQuoteName: '유형',
+                    answerQuoteText: '문구',
+                  },
+                ],
+              },
+            ],
+          }),
+          q({ id: 'consumer', order: 2, title: '{{{유형}}} 안내' }),
+        ]}
+        groups={[]}
+        thankYouMessage=""
+        catalog={[]}
+      />,
+    );
+    expect(screen.queryByText(/뒤 질문의 응답을 인용하는 설정 오류/)).not.toBeInTheDocument();
+  });
+
+  it('근접 케이스: 같은 표 안 다른 셀에서의 참조는 순서 위반으로 판정하지 않는다', () => {
+    // 표는 한 화면에 다 나오고 응답 순서가 정해져 있지 않다 — 셀은 호스트 질문의 order 를
+    // 공유하므로, 같은 표 안 참조까지 판정하면 정상적인 셀 간 참조도 전부 오탐이 된다.
+    render(
+      <TokenWarningPanel
+        questions={[
+          q({
+            id: 'q1',
+            order: 1,
+            type: 'table',
+            title: '표 질문',
+            tableRowsData: [
+              {
+                id: 'r1',
+                label: '행1',
+                cells: [
+                  {
+                    id: 'c1',
+                    type: 'input',
+                    content: '',
+                    answerQuoteEnabled: true,
+                    answerQuoteName: '유형',
+                    answerQuoteText: '문구',
+                  },
+                  { id: 'c2', type: 'text', content: '{{{유형}}} 참고' },
+                ],
+              },
+            ],
+          }),
+        ]}
+        groups={[]}
+        thankYouMessage=""
+        catalog={[]}
+      />,
+    );
+    expect(screen.queryByText(/뒤 질문의 응답을 인용하는 설정 오류/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/정의되지 않은 인용 이름/)).not.toBeInTheDocument();
+  });
+});
+
 describe('TokenWarningPanel - Fix round 1: 그룹의 유효 order 는 하위 그룹까지 재귀해야 한다', () => {
   it('직계 질문이 없는 부모 그룹도 하위 그룹의 질문까지 내려가 순서 위반을 잡는다', () => {
     // 리뷰가 제시한 실제 구조: 부모 그룹은 직계 질문이 0개이고, 그 이름이 곧 인용 참조다.

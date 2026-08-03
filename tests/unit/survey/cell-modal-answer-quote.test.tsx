@@ -209,6 +209,57 @@ describe('셀 모달 — 셀 단위 응답 인용', () => {
     expect(screen.queryByLabelText('응답 인용')).not.toBeInTheDocument();
   });
 
+  it('input 셀에서 토글을 켜면 셀 문맥 안내(이 셀에 응답이 있을 때만)가 뜬다', () => {
+    const cell: TableCell = { id: 'cellI', type: 'input', content: '인원' };
+    seedStore('table', cell);
+    renderModal(cell, vi.fn());
+
+    fireEvent.click(screen.getByLabelText('응답 인용'));
+    expect(screen.getByText(/이 셀에 응답이 있을 때만 표시/)).toBeInTheDocument();
+    // 표 전체 응답 조건은 이 셀 값이 있다는 보장이 아니므로 "이 질문" 문구는 나오면 안 된다
+    expect(screen.queryByText(/이 질문에 응답이 있을 때만 표시/)).not.toBeInTheDocument();
+  });
+
+  it('라디오 셀에서 토글을 켜면 셀 문맥 안내가 뜬다 (이전에는 안내 자체가 없었다)', () => {
+    const cell = radioCell();
+    seedStore('table', cell);
+    renderModal(cell, vi.fn());
+
+    fireEvent.click(screen.getByLabelText('응답 인용'));
+    expect(screen.getByText(/이 셀에 응답이 있을 때만 표시/)).toBeInTheDocument();
+  });
+
+  it('순위형 셀에서 토글을 켜면 셀 문맥 안내가 뜬다', () => {
+    const cell: TableCell = {
+      id: 'cellK',
+      type: 'ranking',
+      content: '',
+      rankingOptions: [{ id: 'o1', label: 'A', value: '1' }],
+    };
+    seedStore('table', cell);
+    renderModal(cell, vi.fn());
+
+    fireEvent.click(screen.getByLabelText('응답 인용'));
+    expect(screen.getByText(/이 셀에 응답이 있을 때만 표시/)).toBeInTheDocument();
+  });
+
+  it('질문 노릇을 하는 셀 타입 전부에서 토글을 켜면 셀 문맥 안내가 뜬다 (radio/checkbox/select/input/ranking)', () => {
+    const cells: TableCell[] = [
+      radioCell(),
+      { id: 'cellC', type: 'checkbox', content: '', checkboxOptions: [{ id: 'o1', label: 'A', value: '1' }] },
+      { id: 'cellS', type: 'select', content: '', selectOptions: [{ id: 'o1', label: 'A', value: '1' }] },
+      { id: 'cellI2', type: 'input', content: '' },
+      { id: 'cellK2', type: 'ranking', content: '', rankingOptions: [{ id: 'o1', label: 'A', value: '1' }] },
+    ];
+    for (const cell of cells) {
+      seedStore('table', cell);
+      renderModal(cell, vi.fn());
+      fireEvent.click(screen.getByLabelText('응답 인용'));
+      expect(screen.getByText(/이 셀에 응답이 있을 때만 표시/)).toBeInTheDocument();
+      cleanup();
+    }
+  });
+
   it('인용 이름에 중괄호를 입력해도 토큰이 깨지지 않게 걸러진다', () => {
     const cell = radioCell();
     seedStore('table', cell);

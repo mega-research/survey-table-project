@@ -176,6 +176,35 @@ export function AnswerQuoteCellToggle({ id, enabled, onEnabledChange }: AnswerQu
   );
 }
 
+/**
+ * "이 질문에 응답이 있을 때만 표시" 안내가 가리키는 대상 — 질문 단위 컨트롤(question)인지
+ * 표 셀 단위 컨트롤(cell)인지에 따라 주어가 달라진다.
+ */
+export type AnswerQuoteScope = 'question' | 'cell';
+
+interface AnswerQuoteGuidanceProps {
+  scope?: AnswerQuoteScope | undefined;
+}
+
+/**
+ * 인용 결과가 비면 문장이 깨진다는 경고 + 방지책 안내.
+ *
+ * 셀 문맥에서 "이 질문에 응답이 있을 때만"이라고 쓰면 호스트 표 질문 전체가 응답됐다는
+ * 뜻으로 읽힌다 — 표에 응답이 있어도 이 셀 자체는 비어 있을 수 있으므로 그 조건으로는
+ * 문장이 깨지는 것을 막지 못한다. 조건 스키마가 셀 타깃(`CellRef`)을 지원하므로 셀
+ * 문맥에서는 "이 셀에 응답이 있을 때만"으로 정확히 안내한다.
+ */
+export function AnswerQuoteGuidance({ scope = 'question' }: AnswerQuoteGuidanceProps) {
+  const subject = scope === 'cell' ? '이 셀' : '이 질문';
+  return (
+    <p className="rounded bg-amber-50 p-2 text-xs leading-relaxed text-amber-800">
+      인용 결과가 비면 문장이 깨집니다. 이 인용을 제목에 쓰는 뒤 질문에
+      &quot;{subject}에 응답이 있을 때만 표시&quot; 조건을 함께 걸어두세요.
+      {subject}이 조건으로 숨겨진 경우에도 같은 조건이 뒤 질문의 문장을 지켜줍니다.
+    </p>
+  );
+}
+
 interface AnswerQuoteQuestionControlProps {
   enabled: boolean;
   onEnabledChange: (enabled: boolean) => void;
@@ -193,10 +222,12 @@ interface AnswerQuoteQuestionControlProps {
         onChange: (value: string) => void;
       }
     | undefined;
+  /** 안내 문구의 주어 — 질문 카드에서 쓰면 'question'(기본), 표 셀 모달에서 쓰면 'cell'. */
+  scope?: AnswerQuoteScope | undefined;
 }
 
 /**
- * 질문 단위 응답 인용 설정 — 토글 + 인용 이름 + 참조 토큰 + 안내.
+ * 질문/셀 단위 응답 인용 설정 — 토글 + 인용 이름 + 참조 토큰 + 안내.
  *
  * 토글을 끌 때 옵션·셀에 입력된 문구는 건드리지 않는다 (다시 켜면 그대로 복귀).
  */
@@ -207,6 +238,7 @@ export function AnswerQuoteQuestionControl({
   onNameChange,
   idPrefix = 'answer-quote',
   questionText,
+  scope,
 }: AnswerQuoteQuestionControlProps) {
   return (
     <div className="space-y-3 rounded-md border border-gray-200 bg-white p-3">
@@ -243,11 +275,7 @@ export function AnswerQuoteQuestionControl({
             />
           )}
 
-          <p className="rounded bg-amber-50 p-2 text-xs leading-relaxed text-amber-800">
-            인용 결과가 비면 문장이 깨집니다. 이 인용을 제목에 쓰는 뒤 질문에
-            &quot;이 질문에 응답이 있을 때만 표시&quot; 조건을 함께 걸어두세요.
-            이 질문이 조건으로 숨겨진 경우에도 같은 조건이 뒤 질문의 문장을 지켜줍니다.
-          </p>
+          <AnswerQuoteGuidance scope={scope} />
         </div>
       )}
     </div>
