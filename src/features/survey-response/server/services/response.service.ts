@@ -21,6 +21,8 @@ import { computeSignals } from '@/lib/duplicate-detection/signals';
 import { sumActiveSeconds } from '@/lib/operations/active-seconds';
 import { parseBrowser, parsePlatform } from '@/lib/operations/parse-ua';
 import { getSurveyControlFlags, isValidTestToken } from '@/lib/survey-control';
+import type { TestResponseResetFields } from '@/lib/survey-response/reset-test-response.server';
+import { resetTestResponseRow } from '@/lib/survey-response/reset-test-response.server';
 import {
   acquireTestTargetResponse,
   assertAnonymousTestSession,
@@ -115,15 +117,38 @@ async function reviveDroppedResponse(responseId: string): Promise<boolean> {
  * 재사용 후보를 실제로 쓸 수 있는 상태로 만든다.
  * - reuse: 그대로
  * - revive: drop → in_progress 로 되살린 뒤 사용
+ * - restart: 테스트 세션 한정 — 종결된 행을 제자리에서 초기화해 처음부터 다시 응답
  * - blocked: 차단 사유 반환 (호출부가 500 대신 안내 화면으로 응답)
+ *
+ * `testRestart` 인자가 곧 "유효 테스트 세션임"의 증거이자 초기화 payload 다.
+ * 넘기는 호출부는 insertAnonymousTestResponse 하나뿐이고, 그 함수는 정의상
+ * `isAnonymousTest && testToken` 분기에서만 호출된다 — 실응답 경로
+ * (insertResponseWithContactReuse)는 이 인자를 넘기지 않으므로 완화가 샐 수 없다.
+ * 플래그와 payload 를 한 인자로 묶어 둔 이유도 "테스트 세션인데 초기화 값이 없는" 중간
+ * 상태를 만들지 않기 위함이다.
  */
 async function settleReuseCandidate(
   candidate: ReuseCandidate,
+  testRestart?: TestResponseResetFields,
 ): Promise<{ ok: true; row: ReuseCandidate } | { ok: false; reason: BlockReason }> {
   const decision = decideResponseReuse(candidate.status, {
     hasContact: candidate.contactTargetId != null,
+    isTestSession: testRestart != null,
   });
   if (decision.action === 'reuse') return { ok: true, row: candidate };
+  if (decision.action === 'restart') {
+    if (testRestart) {
+      // 새 행 INSERT 는 테스트 유니크 인덱스에 걸리므로 반드시 제자리 초기화한다.
+      await db.transaction((tx) => resetTestResponseRow(tx, candidate.id, testRestart));
+      // 초기화가 metadata 를 비우므로 물려받을 draftSeq 도 없다.
+      return { ok: true, row: { ...candidate, status: 'in_progress', metadata: null } };
+    }
+    // 도달 불가(restart 판정의 전제가 testRestart 존재) — 방어적으로 차단한다.
+    return {
+      ok: false,
+      reason: candidate.contactTargetId != null ? 'token_already_used' : 'device_already_responded',
+    };
+  }
   if (decision.action === 'revive') {
     if (await reviveDroppedResponse(candidate.id)) {
       return { ok: true, row: { ...candidate, status: 'in_progress' } };
@@ -271,8 +296,28 @@ async function insertAnonymousTestResponse(
     return { id: existing.id, contactTargetId: null, metadata: null, status: existing.status };
   });
 
-  const settled = await settleReuseCandidate(candidate);
-  return settled.ok ? { kind: 'ready', row: settled.row } : { kind: 'blocked', reason: settled.reason };
+  // 이 함수는 정의상 유효 익명 테스트 세션에서만 호출된다(createResponseWithFirstAnswer 의
+  // `isAnonymousTest && testToken` 분기 + 위 assertAnonymousTestSession 재검증). 그래서
+  // 종결 상태 재시작 payload 를 넘겨도 실응답으로 완화가 새지 않는다 —
+  // 이 조건을 넓히려면 settleReuseCandidate 주석을 먼저 읽을 것.
+  // 초기화 값은 새로 만들지 않고 방금 INSERT 하려던 행(newResponse)의 값을 그대로 쓴다.
+  const settled = await settleReuseCandidate(candidate, {
+    sessionId: input.sessionId,
+    versionId: newResponse.versionId ?? null,
+    currentStepId: newResponse.currentStepId ?? null,
+    pageVisits: newResponse.pageVisits ?? [],
+    visibleStepIndex: newResponse.visibleStepIndex,
+    visibleStepTotal: newResponse.visibleStepTotal,
+    userAgent: newResponse.userAgent,
+    ipHash: newResponse.ipHash,
+    fpHash: newResponse.fpHash,
+    deviceId: newResponse.deviceId,
+    platform: newResponse.platform,
+    browser: newResponse.browser,
+  });
+  return settled.ok
+    ? { kind: 'ready', row: settled.row }
+    : { kind: 'blocked', reason: settled.reason };
 }
 
 // ========================

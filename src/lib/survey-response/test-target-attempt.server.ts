@@ -2,15 +2,9 @@ import { and, eq, isNull, ne, sql } from 'drizzle-orm';
 import 'server-only';
 
 import { db } from '@/db';
-import {
-  contactTargets,
-  responseAnswers,
-  responseEditLogs,
-  surveyResponses,
-  surveys,
-  testResponseAttempts,
-} from '@/db/schema';
+import { contactTargets, surveyResponses, surveys, testResponseAttempts } from '@/db/schema';
 import type { PageVisit } from '@/db/schema/schema-types';
+import { resetTestResponseRow } from '@/lib/survey-response/reset-test-response.server';
 import type { TestAttemptIdentity } from '@/shared/types/test-attempt';
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -67,36 +61,21 @@ async function resetTestTargetResponse(
   input: AcquireTestTargetResponseInput,
   fixedVersionId: string | null,
 ): Promise<void> {
-  const now = new Date();
-  await tx
-    .update(surveyResponses)
-    .set({
-      questionResponses: {},
-      isCompleted: false,
-      status: 'in_progress',
-      completedAt: null,
-      startedAt: now,
-      lastActivityAt: now,
-      versionId: fixedVersionId,
-      currentStepId: input.currentStepId,
-      pageVisits: [],
-      totalSeconds: null,
-      progressPct: null,
-      visibleStepIndex: input.visibleStepIndex ?? null,
-      visibleStepTotal: input.visibleStepTotal ?? null,
-      userAgent: input.userAgent ?? null,
-      ipHash: input.ipHash ?? null,
-      fpHash: input.fpHash ?? null,
-      deviceId: input.deviceId ?? null,
-      platform: input.platform ?? null,
-      browser: input.browser ?? null,
-      metadata: null,
-      lastEditedAt: null,
-      sessionId: input.sessionId,
-    })
-    .where(eq(surveyResponses.id, responseId));
-  await tx.delete(responseAnswers).where(eq(responseAnswers.responseId, responseId));
-  await tx.delete(responseEditLogs).where(eq(responseEditLogs.responseId, responseId));
+  // 초기화 컬럼 집합은 resetTestResponseRow 가 SSOT — 익명 테스트 재시작과 공유한다.
+  await resetTestResponseRow(tx, responseId, {
+    sessionId: input.sessionId,
+    versionId: fixedVersionId,
+    currentStepId: input.currentStepId,
+    pageVisits: [],
+    visibleStepIndex: input.visibleStepIndex,
+    visibleStepTotal: input.visibleStepTotal,
+    userAgent: input.userAgent,
+    ipHash: input.ipHash,
+    fpHash: input.fpHash,
+    deviceId: input.deviceId,
+    platform: input.platform,
+    browser: input.browser,
+  });
 }
 
 export async function acquireTestTargetResponse(

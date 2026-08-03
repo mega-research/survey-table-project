@@ -76,21 +76,42 @@ export const ResumeStatusSchema = z.enum([
  * - in_progress: 그대로 재사용
  * - drop: resumeOrCreateResponse 와 동일하게 in_progress 로 되살린 뒤 재사용
  * - 종결 상태 및 알 수 없는 값: 새 답변을 받지 않고 차단 (500 대신 안내 화면)
+ *
+ * 단, 유효 테스트 세션(isTestSession)은 종결 상태에서 차단 대신 restart 로 판정한다 —
+ * 운영자가 테스트 링크로 완료한 뒤 같은 링크로 다시 들어오면 처음부터 다시 응답해야 한다.
+ * 이 완화는 호출부가 테스트 세션임을 증명했을 때만 적용되며, 알 수 없는 status 는
+ * 테스트 세션이어도 계속 차단한다.
  */
 export type ResponseReuseDecision =
   | { action: 'reuse' }
   | { action: 'revive' }
+  | { action: 'restart' }
   | { action: 'blocked'; reason: BlockReason };
+
+/**
+ * 테스트 세션에서 "처음부터 다시" 로 되돌릴 수 있는 종결 상태.
+ * 알 수 없는 값을 여기에 흘리지 않기 위해 화이트리스트로 둔다.
+ */
+const RESTARTABLE_TERMINAL_STATUSES = new Set([
+  'completed',
+  'screened_out',
+  'bad',
+  'quotaful_out',
+]);
 
 export function decideResponseReuse(
   status: string,
-  opts: { hasContact: boolean },
+  opts: { hasContact: boolean; isTestSession?: boolean },
 ): ResponseReuseDecision {
   if (status === 'in_progress') return { action: 'reuse' };
   if (status === 'drop') return { action: 'revive' };
+  // 테스트 세션 한정 완화. 옵션 미지정(기존 호출처)은 false 라 실응답 판정은 무변경.
+  if (opts.isTestSession === true && RESTARTABLE_TERMINAL_STATUSES.has(status)) {
+    return { action: 'restart' };
+  }
   if (status === 'quotaful_out') return { action: 'blocked', reason: 'quota_closed' };
   // completed/screened_out/bad, 그리고 알 수 없는 값. 알 수 없는 값을 재사용으로 흘리면
-  // 쓰기 가드에서 다시 500 이 되므로 보수적으로 차단한다.
+  // 쓰기 가드에서 다시 500 이 되므로 보수적으로 차단한다(테스트 세션도 동일).
   return {
     action: 'blocked',
     reason: opts.hasContact ? 'token_already_used' : 'device_already_responded',
