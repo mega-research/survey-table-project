@@ -386,6 +386,13 @@ export interface TableCell {
   // 런타임 전용: 셀렉터 경계에서 분리된 continuation 셀 마커
   _isContinuation?: boolean;
   /**
+   * 응답 인용 사용 여부. 그 자체가 질문 노릇을 하는 셀
+   * (radio/checkbox/select/input/ranking)에서만 의미가 있다.
+   */
+  answerQuoteEnabled?: boolean;
+  /** 응답 인용 토큰 이름. 다른 질문 본문에서 {{{이 값}}} 으로 참조한다. */
+  answerQuoteName?: string;
+  /**
    * 응답 인용 문구. choice_opt/ranking_opt 셀은 "선택되면 수집, 비우면 제외",
    * input 셀은 "값이 있으면 수집, 비우면 입력값 그대로" 로 해석된다.
    */

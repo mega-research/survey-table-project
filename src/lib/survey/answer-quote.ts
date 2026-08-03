@@ -128,51 +128,28 @@ function collectFromRanking(
   return parts;
 }
 
-/**
- * 셀 경로 — tableRowsData 순회.
- * choice_opt / ranking_opt 는 질문 레벨 옵션 소스이므로 여기서 건너뛴다.
- * 옵션 경로(resolveChoiceOptions / collectFromRanking)가 이미 담당하며,
- * 건너뛰지 않으면 같은 값이 두 번 잡힌다.
- */
-function collectFromCells(
-  q: Question,
-  raw: unknown,
+/** 그 자체가 질문 노릇을 하는 셀 타입. choice_opt/ranking_opt 는 옵션이라 제외. */
+const QUESTION_LIKE_CELL_TYPES = new Set(['radio', 'checkbox', 'select', 'input', 'ranking']);
+
+/** 셀 하나에서 기여 후보를 뽑는다. 셀 단위 이름으로 묶기 위해 셀별로 분리했다. */
+function collectFromSingleCell(
+  cell: TableCell,
+  value: unknown,
   optTexts: Record<string, string>,
 ): string[] {
-  const rows = q.tableRowsData;
-  if (!rows) return [];
-  const cellValues = (raw && typeof raw === 'object' && !Array.isArray(raw)
-    ? raw
-    : {}) as Record<string, unknown>;
-
-  const parts: string[] = [];
-  for (const row of rows) {
-    for (const cell of row.cells) {
-      if (cell.isHidden) continue;
-      if (cell.type === 'choice_opt' || cell.type === 'ranking_opt') continue;
-
-      const value = cellValues[cell.id];
-
-      if (cell.type === 'input') {
-        const text = typeof value === 'string' ? value : '';
-        if (!text) continue; // 빈 값만 제외. 숫자 0 은 값이다
-        const rendered = renderQuoteCandidate(cell.answerQuoteText, 'input', text);
-        if (rendered !== null) parts.push(rendered);
-        continue;
-      }
-
-      if (cell.type === 'radio' || cell.type === 'checkbox' || cell.type === 'select') {
-        const options = cellOptionsOf(cell);
-        parts.push(...collectFromOptions(options, toValueSet(value), optTexts));
-        continue;
-      }
-
-      if (cell.type === 'ranking') {
-        parts.push(...collectFromCellRanking(cell, value, optTexts));
-      }
-    }
+  if (cell.type === 'input') {
+    const text = typeof value === 'string' ? value : '';
+    if (!text) return []; // 빈 값만 제외. 숫자 0 은 값이다
+    const rendered = renderQuoteCandidate(cell.answerQuoteText, 'input', text);
+    return rendered === null ? [] : [rendered];
   }
-  return parts;
+  if (cell.type === 'radio' || cell.type === 'checkbox' || cell.type === 'select') {
+    return collectFromOptions(cellOptionsOf(cell), toValueSet(value), optTexts);
+  }
+  if (cell.type === 'ranking') {
+    return collectFromCellRanking(cell, value, optTexts);
+  }
+  return [];
 }
 
 /** radio/checkbox/select 셀의 옵션 리스트를 QuestionOption 형태로 통일해 반환. */
@@ -211,53 +188,73 @@ function collectFromCellRanking(
   return parts;
 }
 
+/** 이름별 목록에 후보를 쌓는다. 빈 배열이어도 키는 만든다 (미응답 시 빈 문자열을 내야
+ * 빌더의 `[오타이름]` 진단이 성립하므로, 이 함수를 거치는 이름은 항상 결과에 나타난다). */
+function pushParts(byName: Map<string, string[]>, name: string, parts: string[]): void {
+  if (!byName.has(name)) byName.set(name, []);
+  byName.get(name)?.push(...parts);
+}
+
 export function collectAnswerQuotes(
   questions: Question[],
   responses: Record<string, unknown>,
   optionTextsByQuestion: Record<string, Record<string, string>>,
 ): Record<string, string> {
-  // 이름별 목록에 쌓고 마지막에 한 번 조립한다. 여러 질문이 같은 이름을 쓰면 합쳐진다.
+  // 이름별 목록에 쌓고 마지막에 한 번 조립한다. 여러 질문/셀이 같은 이름을 쓰면 합쳐진다.
   const byName = new Map<string, string[]>();
 
   const ordered = [...questions].sort((a, b) => a.order - b.order);
 
   for (const q of ordered) {
-    if (!q.answerQuoteEnabled) continue;
-    const name = (q.answerQuoteName ?? '').trim();
-    if (!name) continue;
-
     const raw = responses[q.id];
     const optTexts = optionTextsByQuestion[q.id] ?? {};
-    const selected = toValueSet(raw);
-    const parts: string[] = [];
 
-    // 경로 1 — 옵션. radio/checkbox 는 resolveChoiceOptions 단일 진입점만 탄다
-    // (manual/table 소스 구분을 이 함수가 흡수하므로, 표 셀 순회와 이중 계산되지 않는다).
-    if (q.type === 'radio' || q.type === 'checkbox') {
-      parts.push(...collectFromOptions(resolveChoiceOptions(q), selected, optTexts));
-    } else if (q.type === 'select') {
-      parts.push(...collectFromOptions(q.options ?? [], selected, optTexts));
-    } else if (q.type === 'multiselect') {
-      for (const level of q.selectLevels ?? []) {
-        parts.push(...collectFromOptions(level.options ?? [], selected, optTexts));
-      }
-    } else if (q.type === 'ranking') {
-      parts.push(...collectFromRanking(q, raw, optTexts));
-    } else if (q.type === 'text') {
-      // 단답형은 질문 자체가 입력 단위 후보 하나. 장문형(textarea)은 인용 대상이 아니다.
-      const text = typeof raw === 'string' ? raw : '';
-      if (text) {
-        const rendered = renderQuoteCandidate(q.answerQuoteText, 'input', text);
-        if (rendered !== null) parts.push(rendered);
+    // 질문 레벨 경로 — 표 질문은 제외한다. 표는 셀이 각자 이름을 갖는다.
+    if (q.type !== 'table' && q.answerQuoteEnabled) {
+      const name = (q.answerQuoteName ?? '').trim();
+      if (name) {
+        const selected = toValueSet(raw);
+        const parts: string[] = [];
+        // radio/checkbox 는 resolveChoiceOptions 단일 진입점만 탄다
+        // (manual/table 소스 구분을 이 함수가 흡수하므로, 표 셀 순회와 이중 계산되지 않는다).
+        if (q.type === 'radio' || q.type === 'checkbox') {
+          parts.push(...collectFromOptions(resolveChoiceOptions(q), selected, optTexts));
+        } else if (q.type === 'select') {
+          parts.push(...collectFromOptions(q.options ?? [], selected, optTexts));
+        } else if (q.type === 'multiselect') {
+          for (const level of q.selectLevels ?? []) {
+            parts.push(...collectFromOptions(level.options ?? [], selected, optTexts));
+          }
+        } else if (q.type === 'ranking') {
+          parts.push(...collectFromRanking(q, raw, optTexts));
+        } else if (q.type === 'text') {
+          // 단답형은 질문 자체가 입력 단위 후보 하나. 장문형(textarea)은 인용 대상이 아니다.
+          const text = typeof raw === 'string' ? raw : '';
+          if (text) {
+            const rendered = renderQuoteCandidate(q.answerQuoteText, 'input', text);
+            if (rendered !== null) parts.push(rendered);
+          }
+        }
+        pushParts(byName, name, parts);
       }
     }
 
-    // 경로 2 — 표 셀. 질문 유형과 무관하게 tableRowsData 가 있으면 훑는다
-    // (table-source radio 질문의 표에도 input 셀이 있을 수 있다).
-    parts.push(...collectFromCells(q, raw, optTexts));
-
-    if (!byName.has(name)) byName.set(name, []);
-    byName.get(name)?.push(...parts);
+    // 셀 레벨 경로 — 질문 노릇을 하는 셀마다 자기 이름으로 묶는다.
+    // choice_opt/ranking_opt 는 질문 레벨 옵션이므로 여기서 다루지 않는다
+    // (표-소스 radio/checkbox/ranking 질문의 질문 레벨 경로가 이미 담당).
+    const cellValues = (raw && typeof raw === 'object' && !Array.isArray(raw)
+      ? raw
+      : {}) as Record<string, unknown>;
+    for (const row of q.tableRowsData ?? []) {
+      for (const cell of row.cells) {
+        if (cell.isHidden) continue;
+        if (!QUESTION_LIKE_CELL_TYPES.has(cell.type)) continue;
+        if (!cell.answerQuoteEnabled) continue;
+        const cellName = (cell.answerQuoteName ?? '').trim();
+        if (!cellName) continue;
+        pushParts(byName, cellName, collectFromSingleCell(cell, cellValues[cell.id], optTexts));
+      }
+    }
   }
 
   const out: Record<string, string> = {};

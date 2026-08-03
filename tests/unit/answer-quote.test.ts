@@ -159,14 +159,16 @@ describe('collectAnswerQuotes - 나머지 경로', () => {
   });
 
   it('표 input 셀은 값이 있으면 수집하고 0도 값으로 본다', () => {
+    // 셀 스코프 전환(task-1) 이후 표 input 셀의 인용 이름은 질문이 아니라 셀이 갖는다.
     const q = {
       id: 'q1', surveyId: 's1', type: 'table', title: '투입 인력',
       required: false, order: 0,
-      answerQuoteEnabled: true, answerQuoteName: '인력',
       tableRowsData: [
         { id: 'r1', cells: [
-          { id: 'c1', type: 'input', answerQuoteText: '{{입력}}명' },
-          { id: 'c2', type: 'input', answerQuoteText: '{{입력}}명' },
+          { id: 'c1', type: 'input', answerQuoteEnabled: true, answerQuoteName: '인력',
+            answerQuoteText: '{{입력}}명' },
+          { id: 'c2', type: 'input', answerQuoteEnabled: true, answerQuoteName: '인력',
+            answerQuoteText: '{{입력}}명' },
         ] },
       ],
     } as unknown as Question;
@@ -175,11 +177,13 @@ describe('collectAnswerQuotes - 나머지 경로', () => {
   });
 
   it('input 셀의 문구가 비면 입력값을 그대로 쓴다', () => {
+    // 셀 스코프 전환(task-1) 이후 표 input 셀의 인용 이름은 질문이 아니라 셀이 갖는다.
     const q = {
       id: 'q1', surveyId: 's1', type: 'table', title: '기타',
       required: false, order: 0,
-      answerQuoteEnabled: true, answerQuoteName: '기타',
-      tableRowsData: [{ id: 'r1', cells: [{ id: 'c1', type: 'input' }] }],
+      tableRowsData: [{ id: 'r1', cells: [
+        { id: 'c1', type: 'input', answerQuoteEnabled: true, answerQuoteName: '기타' },
+      ] }],
     } as unknown as Question;
     expect(collectAnswerQuotes([q], { q1: { c1: 'AR/VR' } }, {}))
       .toEqual({ 기타: 'AR/VR' });
@@ -224,5 +228,93 @@ describe('collectAnswerQuotes - 나머지 경로', () => {
     } as unknown as Question;
     expect(collectAnswerQuotes([q], { q1: '긴 서술' }, {}))
       .toEqual({ 의견: '' });
+  });
+});
+
+describe('collectAnswerQuotes - 셀 단위 인용 이름', () => {
+  const tableWithCellQuotes = () =>
+    ({
+      id: 'q1', surveyId: 's1', type: 'table', title: '마케팅 수행 현황',
+      required: false, order: 0,
+      tableRowsData: [
+        { id: 'r1', cells: [
+          { id: 'c1', type: 'radio', answerQuoteEnabled: true, answerQuoteName: '디지털',
+            radioOptions: [
+              { id: 'o1', label: '수행', value: 'v1', answerQuoteText: '디지털마케팅' },
+              { id: 'o2', label: '미수행', value: 'v2' },
+            ] },
+        ] },
+        { id: 'r2', cells: [
+          { id: 'c2', type: 'radio', answerQuoteEnabled: true, answerQuoteName: '오프라인',
+            radioOptions: [
+              { id: 'o3', label: '수행', value: 'v3', answerQuoteText: '오프라인 홍보' },
+            ] },
+        ] },
+      ],
+    }) as unknown as Question;
+
+  it('셀마다 자기 이름으로 따로 수집한다', () => {
+    const out = collectAnswerQuotes([tableWithCellQuotes()], { q1: { c1: 'v1', c2: 'v3' } }, {});
+    expect(out).toEqual({ 디지털: '디지털마케팅', 오프라인: '오프라인 홍보' });
+  });
+
+  it('여러 셀이 같은 이름을 쓰면 하나로 합친다', () => {
+    const q = tableWithCellQuotes();
+    q.tableRowsData![1]!.cells[0]!.answerQuoteName = '디지털';
+    const out = collectAnswerQuotes([q], { q1: { c1: 'v1', c2: 'v3' } }, {});
+    expect(out).toEqual({ 디지털: '디지털마케팅과 오프라인 홍보' });
+  });
+
+  it('셀 토글이 꺼져 있으면 수집하지 않는다', () => {
+    const q = tableWithCellQuotes();
+    q.tableRowsData![0]!.cells[0]!.answerQuoteEnabled = false;
+    const out = collectAnswerQuotes([q], { q1: { c1: 'v1', c2: 'v3' } }, {});
+    expect(out).toEqual({ 오프라인: '오프라인 홍보' });
+  });
+
+  it('셀 이름이 비어 있으면 수집하지 않는다', () => {
+    const q = tableWithCellQuotes();
+    q.tableRowsData![0]!.cells[0]!.answerQuoteName = '  ';
+    const out = collectAnswerQuotes([q], { q1: { c1: 'v1' } }, {});
+    // c2('오프라인')는 이름이 살아있는 채로 활성 상태라 응답이 없어도 빈 문자열로
+    // 키가 생긴다(미응답 인용이 빌더의 [오타이름] 진단으로 오탐되지 않게 하는 설계).
+    // 이 테스트가 검증하는 건 이름이 비워진 c1이 아예 수집되지 않는다는 것뿐이다.
+    expect(out).toEqual({ 오프라인: '' });
+  });
+
+  it('표 질문의 질문 레벨 이름은 더 이상 쓰이지 않는다', () => {
+    const q = tableWithCellQuotes();
+    q.answerQuoteEnabled = true;
+    q.answerQuoteName = '표전체';
+    const out = collectAnswerQuotes([q], { q1: { c1: 'v1' } }, {});
+    expect(out).not.toHaveProperty('표전체');
+    // c2('오프라인')는 응답이 없어도 활성+이름 있는 셀이라 빈 문자열로 키가 생긴다.
+    expect(out).toEqual({ 디지털: '디지털마케팅', 오프라인: '' });
+  });
+
+  it('input 셀도 자기 이름으로 수집한다', () => {
+    const q = {
+      id: 'q1', surveyId: 's1', type: 'table', title: '투입 인력',
+      required: false, order: 0,
+      tableRowsData: [{ id: 'r1', cells: [
+        { id: 'c1', type: 'input', answerQuoteEnabled: true, answerQuoteName: '인력',
+          answerQuoteText: '{{입력}}명' },
+      ] }],
+    } as unknown as Question;
+    expect(collectAnswerQuotes([q], { q1: { c1: '3' } }, {})).toEqual({ 인력: '3명' });
+  });
+
+  it('표-소스 선택형 질문은 질문 레벨 이름을 계속 쓴다', () => {
+    const q = {
+      id: 'q1', surveyId: 's1', type: 'radio', title: '표 소스 라디오',
+      required: false, order: 0,
+      answerQuoteEnabled: true, answerQuoteName: '유형',
+      options: [],
+      tableRowsData: [{ id: 'r1', cells: [
+        { id: 'cellA', type: 'choice_opt', choiceLabel: '디지털',
+          answerQuoteText: '디지털마케팅 전략' },
+      ] }],
+    } as unknown as Question;
+    expect(collectAnswerQuotes([q], { q1: 'cellA' }, {})).toEqual({ 유형: '디지털마케팅 전략' });
   });
 });
