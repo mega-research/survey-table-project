@@ -110,7 +110,9 @@ describe('TokenWarningPanel - 경고 2: 인용을 켰는데 문구가 전부 빈
     expect(screen.queryByText(/인용 문구가 모두 비어 있는 질문/)).not.toBeInTheDocument();
   });
 
-  it('단답형은 질문 자체의 answerQuoteText 로 판정한다', () => {
+  it('단답형은 문구가 비어도 원본 입력값을 그대로 인용하므로 경고하지 않는다', () => {
+    // renderQuoteCandidate 의 mode:'input' 계약(answer-quote.ts) — 빈 템플릿은 "항상 빈
+    // 문자열"이 아니라 응답자가 입력한 원본 값을 그대로 쓴다는 뜻이다.
     render(
       <TokenWarningPanel
         questions={[
@@ -121,7 +123,7 @@ describe('TokenWarningPanel - 경고 2: 인용을 켰는데 문구가 전부 빈
             title: '이름 입력',
             answerQuoteEnabled: true,
             answerQuoteName: '이름',
-            // answerQuoteText 미지정 → 빈 문구
+            // answerQuoteText 미지정 → 빈 문구이지만 원본 입력값을 인용한다
           }),
         ]}
         groups={[]}
@@ -129,7 +131,7 @@ describe('TokenWarningPanel - 경고 2: 인용을 켰는데 문구가 전부 빈
         catalog={[]}
       />,
     );
-    expect(screen.getByText(/인용 문구가 모두 비어 있는 질문/)).toBeInTheDocument();
+    expect(screen.queryByText(/인용 문구가 모두 비어 있는 질문/)).not.toBeInTheDocument();
   });
 });
 
@@ -816,6 +818,54 @@ describe('TokenWarningPanel - Task 3: 셀 인용 문구가 전부 비면 경고�
   it('근접 케이스: 같은 표 안 다른 셀에 문구가 있어도 이 셀 자신이 비어 있으면 경고한다', () => {
     // 셀은 자기 이름으로 독립 정의된다 — 표 전체를 훑어 "어딘가에 문구가 있다"로 판정하면
     // 안 된다. 표-레벨 판정으로 되돌아가면 이 테스트가 깨진다.
+    // radio 사용 이유: input 셀은 빈 문구가 "원본 입력값 인용"이라 항상 유효해 이 판정
+    // 자체가 성립하지 않는다(경고 2 수정 참조) — 옵션 문구를 쓰는 radio 로 판정한다.
+    render(
+      <TokenWarningPanel
+        questions={[
+          q({
+            id: 'q1',
+            order: 1,
+            type: 'table',
+            title: '표 질문',
+            tableRowsData: [
+              {
+                id: 'r1',
+                label: '행1',
+                cells: [
+                  {
+                    id: 'c1',
+                    type: 'radio',
+                    content: '',
+                    answerQuoteEnabled: true,
+                    answerQuoteName: '빈셀',
+                    radioOptions: [{ id: 'o1', label: 'A', value: 'v1' }],
+                    // 옵션 answerQuoteText 없음 → 빈 인용
+                  },
+                  {
+                    id: 'c2',
+                    type: 'radio',
+                    content: '',
+                    answerQuoteEnabled: true,
+                    answerQuoteName: '채운셀',
+                    radioOptions: [{ id: 'o1', label: 'A', value: 'v1', answerQuoteText: '문구 있음' }],
+                  },
+                ],
+              },
+            ],
+          }),
+        ]}
+        groups={[]}
+        thankYouMessage=""
+        catalog={[]}
+      />,
+    );
+    expect(screen.getByText(/인용 문구가 모두 비어 있는 질문/)).toBeInTheDocument();
+    expect(screen.getByText(/\(인용 이름: 빈셀\)/)).toBeInTheDocument();
+    expect(screen.queryByText(/\(인용 이름: 채운셀\)/)).not.toBeInTheDocument();
+  });
+
+  it('input 셀은 문구가 비어도 원본 입력값을 인용하므로 경고하지 않는다', () => {
     render(
       <TokenWarningPanel
         questions={[
@@ -834,16 +884,8 @@ describe('TokenWarningPanel - Task 3: 셀 인용 문구가 전부 비면 경고�
                     type: 'input',
                     content: '',
                     answerQuoteEnabled: true,
-                    answerQuoteName: '빈셀',
-                    // answerQuoteText 없음 → 빈 인용
-                  },
-                  {
-                    id: 'c2',
-                    type: 'input',
-                    content: '',
-                    answerQuoteEnabled: true,
-                    answerQuoteName: '채운셀',
-                    answerQuoteText: '문구 있음',
+                    answerQuoteName: '인력',
+                    // answerQuoteText 없음 → 원본 입력값을 그대로 인용
                   },
                 ],
               },
@@ -855,9 +897,7 @@ describe('TokenWarningPanel - Task 3: 셀 인용 문구가 전부 비면 경고�
         catalog={[]}
       />,
     );
-    expect(screen.getByText(/인용 문구가 모두 비어 있는 질문/)).toBeInTheDocument();
-    expect(screen.getByText(/\(인용 이름: 빈셀\)/)).toBeInTheDocument();
-    expect(screen.queryByText(/\(인용 이름: 채운셀\)/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/인용 문구가 모두 비어 있는 질문/)).not.toBeInTheDocument();
   });
 });
 

@@ -98,7 +98,9 @@ function cellSourcesOf(q: Question): (string | undefined)[] {
 
 /** 인용을 켠 질문이 실제로 인용될 문구를 하나라도 갖고 있는지 (모두 빈 문구면 항상 빈 문자열). */
 function hasAnyQuoteText(q: Question): boolean {
-  if (q.type === 'text') return !!(q.answerQuoteText ?? '').trim();
+  // 단답형은 문구가 비어도 "항상 빈 문자열"이 아니다 — renderQuoteCandidate 의 mode:'input'
+  // 계약(answer-quote.ts)상 빈 템플릿은 응답자가 입력한 원본 값을 그대로 인용하기 때문이다.
+  if (q.type === 'text') return true;
 
   const optionTexts: (string | undefined)[] = [];
   if (q.type === 'radio' || q.type === 'checkbox') {
@@ -121,7 +123,9 @@ function hasAnyQuoteText(q: Question): boolean {
  * 문구가 있어도 이 셀 자신이 비어 있으면 여전히 빈 문자열로 치환된다.
  */
 function cellHasQuoteText(cell: TableCell): boolean {
-  if (cell.type === 'input') return !!(cell.answerQuoteText ?? '').trim();
+  // input 셀도 질문 레벨 단답형과 동일한 계약을 따른다 — 빈 문구는 원본 입력값 인용을 뜻하지
+  // "항상 빈 문자열"을 뜻하지 않는다(renderQuoteCandidate mode:'input').
+  if (cell.type === 'input') return true;
   if (cell.type === 'radio') return (cell.radioOptions ?? []).some((o) => (o.answerQuoteText ?? '').trim());
   if (cell.type === 'checkbox') return (cell.checkboxOptions ?? []).some((o) => (o.answerQuoteText ?? '').trim());
   if (cell.type === 'select') return (cell.selectOptions ?? []).some((o) => (o.answerQuoteText ?? '').trim());
