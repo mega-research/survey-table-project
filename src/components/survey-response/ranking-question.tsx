@@ -80,7 +80,7 @@ function EmbeddedTableReference({ question, rawOptions, isMobile }: EmbeddedTabl
       {...(question.tableTitle !== undefined ? { tableTitle: question.tableTitle } : {})}
       {...(question.tableColumns !== undefined ? { columns: question.tableColumns } : {})}
       {...(question.tableRowsData !== undefined ? { rows: question.tableRowsData } : {})}
-      {...(question.tableHeaderGrid !== undefined ? { tableHeaderGrid: question.tableHeaderGrid } : {})}
+      {...(question.tableHeaderGrid ? { tableHeaderGrid: question.tableHeaderGrid } : {})}
       {...(question.hideColumnLabels !== undefined ? { hideColumnLabels: question.hideColumnLabels } : {})}
     />
   );

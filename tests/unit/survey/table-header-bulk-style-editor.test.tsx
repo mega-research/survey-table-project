@@ -68,7 +68,7 @@ function TableEditorHarness({
     tableTitle: string;
     tableColumns: TableColumn[];
     tableRowsData: TableRow[];
-    tableHeaderGrid?: HeaderCell[][] | undefined;
+    tableHeaderGrid: HeaderCell[][] | null;
   }) => void;
 }) {
   const { state, actions } = useTableEditor({ columns, rows, onTableChange });
@@ -140,7 +140,9 @@ describe('DynamicTableEditor 전체 헤더 스타일', () => {
         expect.objectContaining({ textBold: true, backgroundColor: '#DDEEFF' }),
       ]),
     }));
-    expect(onTableChange.mock.calls.at(-1)?.[0]).not.toHaveProperty('tableHeaderGrid');
+    // 다단계 헤더 없음은 키 생략이 아니라 명시적 null 이다 — 키를 빼면 상위
+    // 저장 경로가 "미변경"으로 읽어 해제가 유실된다.
+    expect(onTableChange.mock.calls.at(-1)?.[0].tableHeaderGrid).toBeNull();
   });
 
   it('열이 없으면 전체 헤더 스타일 버튼을 비활성화한다', () => {

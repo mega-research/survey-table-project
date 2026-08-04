@@ -42,7 +42,7 @@ interface DynamicTableEditorProps {
   tableTitle?: string | undefined;
   columns?: TableColumn[] | undefined;
   rows?: TableRow[] | undefined;
-  tableHeaderGrid?: HeaderCell[][] | undefined;
+  tableHeaderGrid?: HeaderCell[][] | null | undefined;
   currentQuestionId?: string | undefined;
   questionCode?: string | undefined;
   questionTitle?: string | undefined;
@@ -56,7 +56,8 @@ interface DynamicTableEditorProps {
     tableTitle: string;
     tableColumns: TableColumn[];
     tableRowsData: TableRow[];
-    tableHeaderGrid?: HeaderCell[][] | undefined;
+    // 해제는 명시적 null (키 생략 금지) — use-table-editor 의 계약과 동일.
+    tableHeaderGrid: HeaderCell[][] | null;
   }) => void;
   onDynamicRowConfigsChange?: (configs: DynamicRowGroupConfig[] | undefined) => void;
 }

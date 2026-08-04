@@ -36,7 +36,7 @@ interface UseTableEditorParams {
   tableTitle?: string | undefined;
   columns?: TableColumn[] | undefined;
   rows?: TableRow[] | undefined;
-  tableHeaderGrid?: HeaderCell[][] | undefined;
+  tableHeaderGrid?: HeaderCell[][] | null | undefined;
   currentQuestionId?: string | undefined;
   questionCode?: string | undefined;
   questionTitle?: string | undefined;
@@ -44,7 +44,9 @@ interface UseTableEditorParams {
     tableTitle: string;
     tableColumns: TableColumn[];
     tableRowsData: TableRow[];
-    tableHeaderGrid?: HeaderCell[][] | undefined;
+    // 항상 싣는다 — 키를 생략하면 상위 저장 경로가 "미변경"으로 읽어
+    // 다단계 헤더 해제가 유실된다. 해제는 명시적 null.
+    tableHeaderGrid: HeaderCell[][] | null;
   }) => void;
 }
 
@@ -171,7 +173,7 @@ export function useTableEditor({
 
   const [useMultiRowHeader, setUseMultiRowHeader] = useState(!!initialHeaderGrid);
   const [currentHeaderGrid, setCurrentHeaderGrid] = useState<HeaderCell[][] | undefined>(
-    initialHeaderGrid,
+    initialHeaderGrid ?? undefined,
   );
 
   // 행 조건부 표시 모달
@@ -248,7 +250,7 @@ export function useTableEditor({
         tableTitle: title,
         tableColumns: cols,
         tableRowsData: rowsData,
-        ...(headerGridRef.current !== undefined ? { tableHeaderGrid: headerGridRef.current } : {}),
+        tableHeaderGrid: headerGridRef.current ?? null,
       });
     },
     [],
@@ -280,7 +282,7 @@ export function useTableEditor({
           tableTitle: title,
           tableColumns: cols,
           tableRowsData: rowsData,
-          ...(headerGridRef.current !== undefined ? { tableHeaderGrid: headerGridRef.current } : {}),
+          tableHeaderGrid: headerGridRef.current ?? null,
         });
         pendingChangeRef.current = null;
         pendingArgsRef.current = null;
@@ -314,7 +316,7 @@ export function useTableEditor({
             tableTitle: title,
             tableColumns: cols,
             tableRowsData: rowsData,
-            ...(headerGridRef.current !== undefined ? { tableHeaderGrid: headerGridRef.current } : {}),
+            tableHeaderGrid: headerGridRef.current ?? null,
           });
         }
       }
@@ -1302,6 +1304,7 @@ export function useTableEditor({
       setUseMultiRowHeader(enabled);
       if (enabled && !headerGridRef.current) {
         const defaultGrid = buildDefaultHeaderGrid(currentColumnsRef.current);
+        headerGridRef.current = defaultGrid;
         setCurrentHeaderGrid(defaultGrid);
         onTableChangeRef.current({
           tableTitle: currentTitleRef.current,
@@ -1310,11 +1313,15 @@ export function useTableEditor({
           tableHeaderGrid: defaultGrid,
         });
       } else if (!enabled) {
+        // ref 도 즉시 비운다 — 재렌더 전에 발생하는 후속 알림이 stale grid 를
+        // 다시 실어 보내면 방금 한 해제가 되살아난다.
+        headerGridRef.current = undefined;
         setCurrentHeaderGrid(undefined);
         onTableChangeRef.current({
           tableTitle: currentTitleRef.current,
           tableColumns: currentColumnsRef.current,
           tableRowsData: currentRowsRef.current,
+          tableHeaderGrid: null,
         });
       }
     },
@@ -1323,6 +1330,7 @@ export function useTableEditor({
 
   const updateHeaderGrid = useCallback(
     (newGrid: HeaderCell[][]) => {
+      headerGridRef.current = newGrid;
       setCurrentHeaderGrid(newGrid);
       onTableChangeRef.current({
         tableTitle: currentTitleRef.current,
@@ -1363,9 +1371,7 @@ export function useTableEditor({
       tableTitle: currentTitleRef.current,
       tableColumns: result.columns,
       tableRowsData: currentRowsRef.current,
-      ...(result.headerGrid !== undefined
-        ? { tableHeaderGrid: result.headerGrid }
-        : {}),
+      tableHeaderGrid: result.headerGrid ?? null,
     });
   }, [commitColumns]);
 

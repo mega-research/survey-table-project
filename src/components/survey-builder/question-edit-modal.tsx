@@ -418,7 +418,11 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
               tableTitle: currentFormData.tableTitle || question?.tableTitle,
               tableColumns: currentFormData.tableColumns || question?.tableColumns,
               tableRowsData: currentFormData.tableRowsData || question?.tableRowsData,
-              tableHeaderGrid: currentFormData.tableHeaderGrid ?? question?.tableHeaderGrid,
+              // null = 다단계 헤더 해제 — ?? 로 폴백하면 해제가 question 값으로 되살아난다.
+              tableHeaderGrid:
+                currentFormData.tableHeaderGrid !== undefined
+                  ? currentFormData.tableHeaderGrid
+                  : question?.tableHeaderGrid,
               allowOtherOption: currentFormData.allowOtherOption ?? question?.allowOtherOption,
               optionsColumns: currentFormData.optionsColumns ?? question?.optionsColumns,
               optionsAlign: currentFormData.optionsAlign ?? question?.optionsAlign,
@@ -652,7 +656,12 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
                     constraints={formData.sumConstraints ?? question.sumConstraints ?? []}
                     tableColumns={formData.tableColumns ?? question.tableColumns ?? []}
                     tableRowsData={formData.tableRowsData ?? question.tableRowsData ?? []}
-                    tableHeaderGrid={formData.tableHeaderGrid ?? question.tableHeaderGrid}
+                    tableHeaderGrid={
+                      // null = 편집 중 해제 — question 값으로 되살리면 안 된다.
+                      (formData.tableHeaderGrid !== undefined
+                        ? formData.tableHeaderGrid
+                        : question.tableHeaderGrid) ?? undefined
+                    }
                     hideColumnLabels={formData.hideColumnLabels ?? question.hideColumnLabels}
                     onUpdate={(sumConstraints) =>
                       setFormData((prev) => ({ ...prev, sumConstraints }))

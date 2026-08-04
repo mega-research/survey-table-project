@@ -1271,7 +1271,7 @@ export function QuestionBasicTab({
             tableTitle={formData.tableTitle}
             columns={formData.tableColumns}
             rows={formData.tableRowsData}
-            tableHeaderGrid={formData.tableHeaderGrid}
+            tableHeaderGrid={formData.tableHeaderGrid ?? undefined}
             currentQuestionId={questionId || ''}
             questionCode={formData.questionCode}
             questionTitle={formData.title}
@@ -1285,11 +1285,9 @@ export function QuestionBasicTab({
                   tableColumns: data.tableColumns,
                   tableRowsData: data.tableRowsData,
                 };
-                if (data.tableHeaderGrid !== undefined) {
-                  next.tableHeaderGrid = data.tableHeaderGrid;
-                } else {
-                  delete next.tableHeaderGrid;
-                }
+                // 키를 지우면 저장 경로가 "미변경"으로 읽어 해제가 유실된다.
+                // 에디터는 그리드가 없으면 null 을 실어 보내므로 그대로 반영한다.
+                next.tableHeaderGrid = data.tableHeaderGrid;
                 return next;
               });
             }}
@@ -1314,7 +1312,7 @@ export function QuestionBasicTab({
                 tableTitle={formData.tableTitle}
                 columns={formData.tableColumns}
                 rows={formData.tableRowsData}
-                tableHeaderGrid={formData.tableHeaderGrid}
+                tableHeaderGrid={formData.tableHeaderGrid ?? undefined}
                 className="border-2 border-dashed border-gray-300"
                 hideColumnLabels={questions.find((q) => q.id === questionId)?.hideColumnLabels}
                 choiceControlType={(cell) =>

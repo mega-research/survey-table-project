@@ -551,7 +551,10 @@ export interface Question {
   tableTitle?: string;
   tableColumns?: TableColumn[];
   tableRowsData?: TableRow[];
-  tableHeaderGrid?: HeaderCell[][]; // 다단계 헤더 그리드 (없으면 tableColumns로 단일 행 폴백)
+  // 다단계 헤더 그리드 (없으면 tableColumns로 단일 행 폴백).
+  // null = 다단계 헤더 해제(명시적). undefined(키 부재) = 미변경 — 저장 경로가
+  // 부재 키를 미변경으로 읽으므로 토글 OFF 는 반드시 null 로 표현해야 한다.
+  tableHeaderGrid?: HeaderCell[][] | null;
   order: number;
   allowOtherOption?: boolean; // 기타 옵션 허용 여부 (radio, checkbox, select용)
   // 옵션 리스트 렌더 방식 (radio/checkbox/ranking 공통)
