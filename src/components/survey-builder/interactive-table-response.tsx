@@ -414,7 +414,9 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
   // 드릴다운이 마운트된 동안에만 함수가 심긴다 (셸/스테퍼 모드에서는 null).
   const drilldownNavigateRef = useRef<((cellIds: readonly string[]) => void) | null>(null);
   const headerScrollRef = useRef<HTMLDivElement>(null);
-  useTablePerf(`InteractiveTable(${rows.length}×${columns.length})`);
+  useTablePerf(`InteractiveTable(${rows.length}×${columns.length})`, {
+    containerRef: tableContainerRef,
+  });
   const isMobileView = useMobileView();
   const mobileMode = resolveMobileTableDisplayMode({
     mobileTableDisplayMode,

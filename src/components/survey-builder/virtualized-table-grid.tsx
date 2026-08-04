@@ -189,7 +189,9 @@ export const VirtualizedTableGrid = React.memo(function VirtualizedTableGrid({
   applyCellBackground,
   scrollRootRef,
 }: VirtualizedTableGridProps) {
-  useTablePerf(`VirtualizedTable(${displayRows.length}×${visibleColumns.length})`);
+  useTablePerf(`VirtualizedTable(${displayRows.length}×${visibleColumns.length})`, {
+    ...(scrollRootRef ? { containerRef: scrollRootRef } : {}),
+  });
 
   const columnWidths = useMemo(
     () => visibleColumns.map((col) => col.width ?? 150),
