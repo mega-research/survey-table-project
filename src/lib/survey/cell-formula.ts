@@ -139,3 +139,39 @@ export function evaluateCellFormula(
   if (!Number.isFinite(out)) return null;
   return roundFormulaValue(out, decimalPlaces);
 }
+
+/**
+ * 저장 페이로드에 calc 셀 값을 주입한다 (스펙 §5).
+ * 표시용은 항상 파생 계산이고, 이 함수는 저장 경계(draft flush / complete / beacon /
+ * 운영자 수정)에서만 불린다 — 키스트로크마다 쓰지 않는다.
+ */
+export function withCalcValues(
+  payloadAnswers: Record<string, unknown>,
+  ctx: FormulaEvalCtx,
+): Record<string, unknown> {
+  let out: Record<string, unknown> | null = null;
+  for (const q of ctx.questions) {
+    const calcCells = (q.tableRowsData ?? [])
+      .flatMap((row) => row.cells)
+      .filter((c) => c.type === 'calc' && !c.isHidden && c.formula);
+    if (calcCells.length === 0) continue;
+
+    const fromPayload = payloadAnswers[q.id];
+    const fromResponses = ctx.responses[q.id];
+    const base = {
+      ...(fromResponses && typeof fromResponses === 'object' && !Array.isArray(fromResponses)
+        ? (fromResponses as Record<string, unknown>)
+        : {}),
+      ...(fromPayload && typeof fromPayload === 'object' && !Array.isArray(fromPayload)
+        ? (fromPayload as Record<string, unknown>)
+        : {}),
+    };
+    for (const cell of calcCells) {
+      const value = evaluateCellFormula(cell.formula!, q.id, ctx, cell.numberFormat?.decimalPlaces);
+      base[cell.id] = value === null ? '' : String(value);
+    }
+    out ??= { ...payloadAnswers };
+    out[q.id] = base;
+  }
+  return out ?? payloadAnswers;
+}
