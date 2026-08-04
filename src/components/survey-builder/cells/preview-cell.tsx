@@ -93,7 +93,12 @@ export const PreviewCell = React.memo(function PreviewCell({
 
     case 'select':
       return cell.selectOptions && cell.selectOptions.length > 0 ? (
-        <CellContentLayout content={cell.content} position={cell.textPosition} bold={cell.textBold}>
+        <CellContentLayout
+          content={cell.content}
+          position={cell.textPosition}
+          bold={cell.textBold}
+          textColor={cell.textColor}
+        >
           <select className="w-full rounded border border-gray-300 p-2 text-sm" disabled>
             <option value="">선택하세요...</option>
             {cell.selectOptions.map((option) => (
@@ -182,7 +187,12 @@ export const PreviewCell = React.memo(function PreviewCell({
 
     case 'input':
       return (
-        <CellContentLayout content={cell.content} position={cell.textPosition} bold={cell.textBold}>
+        <CellContentLayout
+          content={cell.content}
+          position={cell.textPosition}
+          bold={cell.textBold}
+          textColor={cell.textColor}
+        >
           <div className="flex flex-col space-y-2">
             <input
               type="text"
@@ -229,7 +239,12 @@ export const PreviewCell = React.memo(function PreviewCell({
     case 'ranking':
       // 셀 내부 랭킹 (rk) — 프리뷰에서는 간단히 안내만
       return (
-        <CellContentLayout content={cell.content} position={cell.textPosition} bold={cell.textBold}>
+        <CellContentLayout
+          content={cell.content}
+          position={cell.textPosition}
+          bold={cell.textBold}
+          textColor={cell.textColor}
+        >
           <div className="text-xs text-gray-500">
             (순위형 셀 · {cell.rankingOptions?.length ?? 0}개 옵션 ·{' '}
             {cell.rankingConfig?.positions ?? 3}순위)

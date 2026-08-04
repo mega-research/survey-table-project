@@ -13,6 +13,8 @@ interface CellContentLayoutProps {
   labelClassName?: string;
   /** 셀 콘텐츠 라벨만 굵게 표시한다. */
   bold?: boolean | undefined;
+  /** 라벨 글자색. DEFAULT_LABEL_CLASS 의 text-gray-700 을 이겨야 하므로 inline style 로 얹는다. */
+  textColor?: string | undefined;
 }
 
 const DEFAULT_LABEL_CLASS =
@@ -33,6 +35,7 @@ export function CellContentLayout({
   children,
   labelClassName,
   bold = false,
+  textColor,
 }: CellContentLayoutProps) {
   const hasContent = !!content && content.trim().length > 0;
   if (!hasContent) {
@@ -40,7 +43,10 @@ export function CellContentLayout({
   }
 
   const label = (
-    <div className={cn(DEFAULT_LABEL_CLASS, labelClassName, bold && 'font-bold')}>
+    <div
+      className={cn(DEFAULT_LABEL_CLASS, labelClassName, bold && 'font-bold')}
+      style={textColor ? { color: textColor } : undefined}
+    >
       {content}
     </div>
   );

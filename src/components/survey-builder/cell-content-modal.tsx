@@ -1063,7 +1063,7 @@ export function CellContentModal({
             <div className="space-y-2">
               <Label className="text-sm font-medium">미리보기</Label>
               <div className="rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 p-4">
-                <CellContentLayout content={textContent} position={textPosition}>
+                <CellContentLayout content={textContent} position={textPosition} textColor={textColor}>
                   <div className="space-y-2">
                     <Input
                       placeholder={inputPlaceholder || '답변을 입력하세요...'}
@@ -1578,7 +1578,10 @@ export function CellContentModal({
                         ? 'items-center'
                         : 'items-end'
                   }${textBold ? ' font-bold' : ''}`}
-                  style={backgroundColor ? { backgroundColor } : undefined}
+                  style={{
+                    ...(backgroundColor ? { backgroundColor } : {}),
+                    ...(textColor ? { color: textColor } : {}),
+                  }}
                 >
                   <div className="rounded bg-blue-500 px-4 py-2 text-sm text-white">컨텐츠</div>
                 </div>

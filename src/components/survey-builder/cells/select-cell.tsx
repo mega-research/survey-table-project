@@ -48,6 +48,7 @@ export const SelectCell = React.memo(function SelectCell({
       content={substituteTokens(cell.content, attrs, quotes)}
       position={cell.textPosition}
       bold={cell.textBold}
+      textColor={cell.textColor}
     >
       <div className="flex w-full flex-col space-y-2">
         <div className="relative w-full">

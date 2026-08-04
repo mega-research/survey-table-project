@@ -45,6 +45,7 @@ export function CellOptionsContainer({
       content={content ?? cell.content}
       position={cell.textPosition}
       bold={cell.textBold}
+      textColor={cell.textColor}
     >
       <div className={cn('space-y-2', isGrid && 'w-full')}>
         <div className={layout.className} style={layout.style}>
