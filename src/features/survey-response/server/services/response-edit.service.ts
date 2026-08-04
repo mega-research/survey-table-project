@@ -3,7 +3,13 @@ import 'server-only';
 import { and, eq, isNull } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { surveyResponses, surveys, surveyVersions, responseEditLogs } from '@/db/schema';
+import {
+  surveyResponses,
+  surveys,
+  surveyVersions,
+  responseEditLogs,
+  contactTargets,
+} from '@/db/schema';
 import type { SurveyVersionSnapshot } from '@/db/schema/schema-types';
 import { replaceResponseAnswers } from './response-answers.service';
 import { calculateProgressPct } from '@/lib/operations/response-progress';
@@ -14,8 +20,10 @@ import {
 } from '@/lib/operations/response-edit-diff';
 import { SurveyOwnershipError } from '@/lib/auth/require-survey-ownership';
 import { decryptQuestionResponses, encryptResponsesForStorage } from '@/lib/crypto/response-pii';
+import { withCalcValues } from '@/lib/survey/cell-formula';
 import { loadPiiQuestionIds } from './response.service';
 
+import type { Question, SurveyLookup } from '@/types/survey';
 import type { SaveAdminEditInput } from '../../domain/response-edit';
 
 // 'Response not found' / 'Cannot edit deleted response' throw 메시지는 그대로 두고
@@ -76,6 +84,8 @@ export async function saveAdminEdit(
   );
   const changedIds = diffQuestionResponses(prevResponses, questionResponses);
   let changedQuestions: ReturnType<typeof buildChangedQuestions> = [];
+  // calc 셀 재계산(아래)에서도 재사용 — 변경이 없으면(=재계산 대상도 없음) 조회 자체를 skip.
+  let versionSnapshot: SurveyVersionSnapshot | null = null;
   if (changedIds.length > 0) {
     const [verRow] = existing.versionId
       ? await db
@@ -84,8 +94,8 @@ export async function saveAdminEdit(
           .where(eq(surveyVersions.id, existing.versionId))
           .limit(1)
       : [];
-    const snapshot = (verRow?.snapshot ?? null) as SurveyVersionSnapshot | null;
-    changedQuestions = buildChangedQuestions(changedIds, snapshot);
+    versionSnapshot = (verRow?.snapshot ?? null) as SurveyVersionSnapshot | null;
+    changedQuestions = buildChangedQuestions(changedIds, versionSnapshot);
   }
 
   // progress_pct 재계산: completed 는 100 유지, 그 외는 snapshot 기반 재계산.
@@ -101,6 +111,43 @@ export async function saveAdminEdit(
       positionMap,
       totalQuestions,
     );
+  }
+
+  // calc 셀 서버 재계산 (스펙 §5) — 클라 저장 경로(draft flush/beacon/제출)와 동일한 순수
+  // 함수 withCalcValues 를 서버에서도 다시 태운다(신뢰 경계: 클라 주입값을 그대로 믿지 않음).
+  // 반드시 평문 단계(위 diff 비교 이후, 아래 encryptResponsesForStorage 이전)에서 수행 —
+  // 암호문을 수식에 넣으면 쓰레기 값이 나온다.
+  // 재계산은 응답이 답해진 시점의 버전 스냅샷 기준이다 — 빌더가 이후 수식을 바꿔도 이미
+  // 수집된 이 응답에는 적용되지 않는다(스펙 요구사항). changedIds 가 없으면(=diff 없음)
+  // versionSnapshot 을 아예 조회하지 않았으므로 이 블록은 자연히 skip 된다.
+  // fail-safe: 스냅샷을 못 얻으면(레거시 versionId=null, 버전 행 삭제 등) 재계산을 건너뛰고
+  // 기존 값을 그대로 유지한다 — 운영자의 정당한 수정이 서버 오류로 통째로 실패해선 안 된다.
+  if (versionSnapshot) {
+    // schema-types.SurveyVersionSnapshot 은 lookups 필드를 타입에 선언하지 않지만
+    // buildSurveySnapshot(lib/versioning/snapshot-builder.ts) 이 publish 시 항상 함께
+    // freeze 해 넣는다(survey-read.service.ts 의 snapshot.lookups 사용과 동일 근거) — 안전 단언.
+    const snapshotForCalc = versionSnapshot as unknown as {
+      questions: Question[];
+      lookups?: SurveyLookup[];
+    };
+
+    let contactAttrs: Record<string, string | undefined> = {};
+    if (existing.contactTargetId) {
+      const [target] = await db
+        .select({ attrs: contactTargets.attrs })
+        .from(contactTargets)
+        .where(eq(contactTargets.id, existing.contactTargetId))
+        .limit(1);
+      contactAttrs = (target?.attrs ?? {}) as Record<string, string | undefined>;
+    }
+
+    const recomputed = withCalcValues(questionResponses, {
+      questions: snapshotForCalc.questions,
+      responses: questionResponses,
+      lookups: snapshotForCalc.lookups ?? [],
+      contactAttrs,
+    });
+    Object.assign(questionResponses, recomputed);
   }
 
   // 저장은 재암호화 — 판단 기준은 응답의 versionId 스냅샷(레거시 null 은 questions 폴백).

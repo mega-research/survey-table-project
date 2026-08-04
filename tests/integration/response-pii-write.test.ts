@@ -723,3 +723,124 @@ describe('saveAdminEdit — 복호화 diff 안정성 + 재암호화 저장', () 
     expect(answersMap[PLAIN_QUESTION_ID]).toBe('수정된 답변');
   });
 });
+
+describe('saveAdminEdit — calc 셀 서버 재계산 (Task 13)', () => {
+  const CALC_QUESTION_ID = 'q-calc-1';
+  const SOURCE_CELL_ID = `${CALC_QUESTION_ID}-a`;
+  const CALC_CELL_ID = `${CALC_QUESTION_ID}-c`;
+
+  /** withCalcValues 가 요구하는 최소 테이블 질문 스냅샷 — source 셀 값을 그대로 옮기는 calc 셀 1개. */
+  function calcTableSnapshotQuestion() {
+    return {
+      id: CALC_QUESTION_ID,
+      type: 'table',
+      title: '계산 테이블',
+      tableRowsData: [
+        {
+          id: 'r1',
+          label: 'r1',
+          cells: [
+            { id: SOURCE_CELL_ID, content: '', type: 'input', inputType: 'number' },
+            {
+              id: CALC_CELL_ID,
+              content: '',
+              type: 'calc',
+              formula: { kind: 'cell', cellId: SOURCE_CELL_ID },
+            },
+          ],
+        },
+      ],
+    };
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    surveyFindFirstMock.mockResolvedValue({ id: SURVEY_ID });
+    // status: completed → getProgressSnapshot(버전 스냅샷 재조회) 경로를 타지 않아
+    // selectLimitMock 호출을 diff 스냅샷 조회 1건으로 고정할 수 있다.
+    responseFindFirstMock.mockResolvedValue({
+      id: RESPONSE_ID,
+      surveyId: SURVEY_ID,
+      versionId: VERSION_ID,
+      deletedAt: null,
+      status: 'completed',
+      contactTargetId: null,
+      questionResponses: {
+        // 이전 저장값 — source=5, calc 도 그 시점엔 정합했던 5.
+        [CALC_QUESTION_ID]: { [SOURCE_CELL_ID]: '5', [CALC_CELL_ID]: '5' },
+      },
+    });
+    // loadPiiQuestionIds — PII 문항 없음.
+    executeMock.mockResolvedValue([]);
+    // 버전 스냅샷 조회 (diff 블록에서 changedIds.length > 0 일 때만 호출됨).
+    selectLimitMock.mockResolvedValue([{ snapshot: { questions: [calcTableSnapshotQuestion()] } }]);
+    updateReturningMock.mockReturnValue([{ id: RESPONSE_ID }]);
+  });
+
+  it('source 셀 값을 바꾸면 클라가 제출한 calc 값을 무시하고 서버가 재계산한 값을 저장한다', async () => {
+    const { saveAdminEdit } = await import(
+      '@/features/survey-response/server/services/response-edit.service'
+    );
+    await saveAdminEdit(
+      {
+        surveyId: SURVEY_ID,
+        responseId: RESPONSE_ID,
+        questionResponses: {
+          // 운영자가 source 셀을 5 → 10 으로 수정. calc 셀은 (오래된 클라 상태 등으로) 여전히
+          // 구값 5 를 담아 제출됐다고 가정 — 서버가 이걸 신뢰하지 않고 재계산해야 한다.
+          [CALC_QUESTION_ID]: { [SOURCE_CELL_ID]: '10', [CALC_CELL_ID]: '5' },
+        },
+      },
+      { id: 'admin-1', email: 'a@b.com' },
+    );
+
+    const setArg = updateSetLogMock.mock.calls[0]![0] as {
+      questionResponses: Record<string, unknown>;
+    };
+    const stored = setArg.questionResponses[CALC_QUESTION_ID] as Record<string, unknown>;
+    expect(stored[SOURCE_CELL_ID]).toBe('10');
+    // 서버 재계산 값 — 클라가 보낸 stale '5' 가 아니라 새 source 기준 '10' 이어야 한다.
+    expect(stored[CALC_CELL_ID]).toBe('10');
+
+    // response_answers 정규화 저장에도 동일하게 재계산된 값이 들어간다.
+    const answersMap = replaceResponseAnswersMock.mock.calls[0]![3] as Record<string, unknown>;
+    const storedAnswers = answersMap[CALC_QUESTION_ID] as Record<string, unknown>;
+    expect(storedAnswers[CALC_CELL_ID]).toBe('10');
+  });
+
+  it('버전 스냅샷을 못 얻으면(versionId=null) 재계산을 건너뛰고 제출값을 그대로 저장한다 (fail-safe)', async () => {
+    responseFindFirstMock.mockResolvedValue({
+      id: RESPONSE_ID,
+      surveyId: SURVEY_ID,
+      versionId: null,
+      deletedAt: null,
+      status: 'completed',
+      contactTargetId: null,
+      questionResponses: {
+        [CALC_QUESTION_ID]: { [SOURCE_CELL_ID]: '5', [CALC_CELL_ID]: '5' },
+      },
+    });
+
+    const { saveAdminEdit } = await import(
+      '@/features/survey-response/server/services/response-edit.service'
+    );
+    await saveAdminEdit(
+      {
+        surveyId: SURVEY_ID,
+        responseId: RESPONSE_ID,
+        questionResponses: {
+          [CALC_QUESTION_ID]: { [SOURCE_CELL_ID]: '10', [CALC_CELL_ID]: '5' },
+        },
+      },
+      { id: 'admin-1', email: 'a@b.com' },
+    );
+
+    // 스냅샷을 조회할 수 없으므로(versionId null) 재계산 없이 제출값 그대로 저장된다.
+    const setArg = updateSetLogMock.mock.calls[0]![0] as {
+      questionResponses: Record<string, unknown>;
+    };
+    const stored = setArg.questionResponses[CALC_QUESTION_ID] as Record<string, unknown>;
+    expect(stored[SOURCE_CELL_ID]).toBe('10');
+    expect(stored[CALC_CELL_ID]).toBe('5');
+  });
+});
