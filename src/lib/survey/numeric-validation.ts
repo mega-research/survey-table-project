@@ -6,7 +6,7 @@
  * tableValidationRules(분기 전용, utils/branch-logic.ts)와 완전히 별개다.
  * 응답 shape: 단답형 = raw 숫자 문자열, 테이블 = { [cellId]: value } 평면 객체.
  */
-import type { Question, SumConstraint, TableCell, TableRow } from '@/types/survey';
+import type { Question, SumConstraint, SurveyLookup, TableCell, TableRow } from '@/types/survey';
 import {
   shouldDisplayColumn,
   shouldDisplayDynamicGroup,
@@ -17,10 +17,11 @@ import { parseNumericInput } from '@/utils/numeric-input';
 import { REQUIRED_CELL_TYPES } from '@/utils/serialize-cell';
 import { isCellValuePresent } from '@/utils/table-cell-semantics';
 
+import { evaluateCellFormula, roundFormulaValue } from './cell-formula';
 import { collectRequiredOptionTextIssues } from './required-option-text-validation';
 
 export interface NumericIssue {
-  kind: 'range' | 'sum' | 'required-cells' | 'required-detail';
+  kind: 'range' | 'sum' | 'required-cells' | 'required-detail' | 'formula';
   message: string;
   /** 위반 셀 id (테이블 전용 — 셀 하이라이트용) */
   cellIds?: string[];
@@ -37,6 +38,9 @@ export interface NumericValidationCtx {
   allResponses: Record<string, unknown>;
   allQuestions: Question[];
   optionTexts?: Record<string, string> | undefined;
+  /** 수식 검증(evaluateCellFormula)용 — 미주입 시 수식 검증만 스킵 */
+  lookups?: SurveyLookup[];
+  contactAttrs?: Record<string, string | undefined>;
 }
 
 function flatCells(rows: TableRow[] | null | undefined): TableCell[] {
@@ -264,6 +268,39 @@ export function collectNumericIssues(
         ? { detailTargetIds: visibleOptionTextIssues.detailTargetIds }
         : {}),
     });
+  }
+
+  // 4) 수식 검증 (스펙 §7) — 입력값 vs 계산값. 빈 입력은 스킵 (입력 강제는 required 소관).
+  for (const cell of visible) {
+    if (cell.type !== 'input' || cell.inputType !== 'number' || !cell.formula) continue;
+    const raw = cellValues[cell.id];
+    if (typeof raw !== 'string' || raw.trim() === '') continue;
+    const entered = parseNumericInput(raw);
+    if (entered === null) continue;
+    if (!ctx) continue; // 컨텍스트 없으면 평가 불가 — fail-safe 통과
+    const computed = evaluateCellFormula(
+      cell.formula,
+      question.id,
+      {
+        questions: ctx.allQuestions,
+        responses: ctx.allResponses,
+        lookups: ctx.lookups ?? [],
+        contactAttrs: ctx.contactAttrs ?? {},
+      },
+      cell.numberFormat?.decimalPlaces,
+    );
+    if (computed === null) continue; // 순환·LUT 미해결 — fail-safe 통과
+    const tolerance = cell.formulaTolerance ?? 0;
+    const roundedInput = roundFormulaValue(entered, cell.numberFormat?.decimalPlaces);
+    if (Math.abs(roundedInput - computed) > tolerance) {
+      issues.push({
+        kind: 'formula',
+        message:
+          cell.formulaErrorMessage?.trim() ||
+          '입력하신 값이 앞서 입력한 값들의 계산 결과와 일치하지 않습니다.',
+        cellIds: [cell.id],
+      });
+    }
   }
 
   return issues;
