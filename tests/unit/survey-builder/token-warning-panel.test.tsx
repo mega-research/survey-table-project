@@ -26,6 +26,7 @@ describe('TokenWarningPanel - 경고 1: 정의되지 않은 인용 이름 참조
       <TokenWarningPanel
         questions={[q({ id: 'q2', order: 1, title: '{{{없는이름}}} 관련 문의' })]}
         groups={[]}
+        lookups={[]}
         thankYouMessage=""
         catalog={[]}
       />,
@@ -50,6 +51,7 @@ describe('TokenWarningPanel - 경고 1: 정의되지 않은 인용 이름 참조
           q({ id: 'q2', order: 2, title: '{{{있는이름}}} 관련 문의' }),
         ]}
         groups={[]}
+        lookups={[]}
         thankYouMessage=""
         catalog={[]}
       />,
@@ -77,6 +79,7 @@ describe('TokenWarningPanel - 경고 2: 인용을 켰는데 문구가 전부 빈
           }),
         ]}
         groups={[]}
+        lookups={[]}
         thankYouMessage=""
         catalog={[]}
       />,
@@ -103,6 +106,7 @@ describe('TokenWarningPanel - 경고 2: 인용을 켰는데 문구가 전부 빈
           }),
         ]}
         groups={[]}
+        lookups={[]}
         thankYouMessage=""
         catalog={[]}
       />,
@@ -127,6 +131,7 @@ describe('TokenWarningPanel - 경고 2: 인용을 켰는데 문구가 전부 빈
           }),
         ]}
         groups={[]}
+        lookups={[]}
         thankYouMessage=""
         catalog={[]}
       />,
@@ -152,6 +157,7 @@ describe('TokenWarningPanel - 경고 3: 뒤를 참조하는 경우', () => {
           }),
         ]}
         groups={[]}
+        lookups={[]}
         thankYouMessage=""
         catalog={[]}
       />,
@@ -181,6 +187,7 @@ describe('TokenWarningPanel - 경고 3: 뒤를 참조하는 경우', () => {
           q({ id: 'consumer', order: 2, title: '{{{나이대}}}님께 안내드립니다' }),
         ]}
         groups={[]}
+        lookups={[]}
         thankYouMessage=""
         catalog={[]}
       />,
@@ -195,6 +202,7 @@ describe('TokenWarningPanel - 경고 4: 치환되지 않는 자리에 쓴 인용
       <TokenWarningPanel
         questions={[]}
         groups={[]}
+        lookups={[]}
         thankYouMessage="{{{이름}}}님, 감사합니다"
         catalog={[]}
       />,
@@ -208,6 +216,7 @@ describe('TokenWarningPanel - 경고 4: 치환되지 않는 자리에 쓴 인용
       <TokenWarningPanel
         questions={[]}
         groups={[]}
+        lookups={[]}
         thankYouMessage="감사합니다"
         catalog={[]}
       />,
@@ -230,6 +239,7 @@ describe('TokenWarningPanel - 경고 4: 치환되지 않는 자리에 쓴 인용
           }),
         ]}
         groups={[]}
+        lookups={[]}
         thankYouMessage=""
         catalog={[]}
       />,
@@ -251,6 +261,7 @@ describe('TokenWarningPanel - 경고 4: 치환되지 않는 자리에 쓴 인용
           }),
         ]}
         groups={[]}
+        lookups={[]}
         thankYouMessage=""
         catalog={[]}
       />,
@@ -273,6 +284,7 @@ describe('TokenWarningPanel - 경고 4: 치환되지 않는 자리에 쓴 인용
           }),
         ]}
         groups={[]}
+        lookups={[]}
         thankYouMessage=""
         catalog={[]}
       />,
@@ -296,6 +308,7 @@ describe('TokenWarningPanel - 경고 4: 치환되지 않는 자리에 쓴 인용
           }),
         ]}
         groups={[]}
+        lookups={[]}
         thankYouMessage=""
         catalog={[]}
       />,
@@ -310,6 +323,7 @@ describe('TokenWarningPanel - 기존 컨택 토큰 경고 (회귀)', () => {
       <TokenWarningPanel
         questions={[q({ id: 'q1', order: 1, description: '{{모르는키}} 참고' })]}
         groups={[]}
+        lookups={[]}
         thankYouMessage=""
         catalog={[{ key: '아는키', label: '아는키', category: 'attrs' }] as never}
       />,
@@ -323,6 +337,7 @@ describe('TokenWarningPanel - 기존 컨택 토큰 경고 (회귀)', () => {
       <TokenWarningPanel
         questions={[q({ id: 'q1', order: 1, title: '평범한 질문' })]}
         groups={[]}
+        lookups={[]}
         thankYouMessage="감사합니다"
         catalog={[]}
       />,
@@ -343,6 +358,7 @@ describe('TokenWarningPanel - 그룹 이름도 참조 표면에 포함된다', (
       <TokenWarningPanel
         questions={[q({ id: 'q1', order: 1, groupId: 'g1', title: '질문' })]}
         groups={[group]}
+        lookups={[]}
         thankYouMessage=""
         catalog={[]}
       />,
@@ -381,6 +397,7 @@ describe('TokenWarningPanel - 최종 리뷰 I2: 표 셀 defaultValueTemplate 은
           }),
         ]}
         groups={[]}
+        lookups={[]}
         thankYouMessage=""
         catalog={[]}
       />,
@@ -424,6 +441,7 @@ describe('TokenWarningPanel - 최종 리뷰 I2: 표 셀 defaultValueTemplate 은
           }),
         ]}
         groups={[]}
+        lookups={[]}
         thankYouMessage=""
         catalog={[]}
       />,
@@ -467,6 +485,7 @@ describe('TokenWarningPanel - 최종 리뷰 I2: 표 셀 defaultValueTemplate 은
           }),
         ]}
         groups={[]}
+        lookups={[]}
         thankYouMessage=""
         catalog={[]}
       />,
@@ -501,6 +520,7 @@ describe('TokenWarningPanel - 최종 리뷰 I2: 표 셀 defaultValueTemplate 은
           }),
         ]}
         groups={[]}
+        lookups={[]}
         thankYouMessage=""
         catalog={[{ key: '이름', label: '이름', category: 'attrs' }] as never}
       />,
@@ -525,6 +545,7 @@ describe('TokenWarningPanel - 최종 리뷰 I3: 표 제목과 열 제목도 치�
           }),
         ]}
         groups={[]}
+        lookups={[]}
         thankYouMessage=""
         catalog={[]}
       />,
@@ -546,6 +567,7 @@ describe('TokenWarningPanel - 최종 리뷰 I3: 표 제목과 열 제목도 치�
           }),
         ]}
         groups={[]}
+        lookups={[]}
         thankYouMessage=""
         catalog={[]}
       />,
@@ -568,6 +590,7 @@ describe('TokenWarningPanel - 최종 리뷰 I3: 표 제목과 열 제목도 치�
           }),
         ]}
         groups={[]}
+        lookups={[]}
         thankYouMessage=""
         catalog={[]}
       />,
@@ -590,6 +613,7 @@ describe('TokenWarningPanel - 질문 레벨 defaultValueTemplate 은 치환되�
           }),
         ]}
         groups={[]}
+        lookups={[]}
         thankYouMessage=""
         catalog={[]}
       />,
@@ -611,6 +635,7 @@ describe('TokenWarningPanel - 질문 레벨 defaultValueTemplate 은 치환되�
           }),
         ]}
         groups={[]}
+        lookups={[]}
         thankYouMessage=""
         catalog={[]}
       />,
@@ -649,6 +674,7 @@ describe('TokenWarningPanel - Task 3: 셀 단위 인용 이름도 정의로 인�
           q({ id: 'q2', order: 2, title: '{{{응답값}}} 님 감사합니다' }),
         ]}
         groups={[]}
+        lookups={[]}
         thankYouMessage=""
         catalog={[]}
       />,
@@ -685,6 +711,7 @@ describe('TokenWarningPanel - Task 3: 셀 단위 인용 이름도 정의로 인�
           q({ id: 'q2', order: 2, title: '{{{응답갑}}} 님 감사합니다' }), // 오타: 값 → 갑
         ]}
         groups={[]}
+        lookups={[]}
         thankYouMessage=""
         catalog={[]}
       />,
@@ -711,6 +738,7 @@ describe('TokenWarningPanel - Task 3: 셀 단위 인용 이름도 정의로 인�
           q({ id: 'q2', order: 2, title: '{{{레거시이름}}} 안내' }),
         ]}
         groups={[]}
+        lookups={[]}
         thankYouMessage=""
         catalog={[]}
       />,
@@ -735,6 +763,7 @@ describe('TokenWarningPanel - Task 3: 셀 단위 인용 이름도 정의로 인�
           q({ id: 'q2', order: 2, title: '{{{나이대}}} 님 감사합니다' }),
         ]}
         groups={[]}
+        lookups={[]}
         thankYouMessage=""
         catalog={[]}
       />,
@@ -772,6 +801,7 @@ describe('TokenWarningPanel - Task 3: 셀 인용 문구가 전부 비면 경고�
           }),
         ]}
         groups={[]}
+        lookups={[]}
         thankYouMessage=""
         catalog={[]}
       />,
@@ -808,6 +838,7 @@ describe('TokenWarningPanel - Task 3: 셀 인용 문구가 전부 비면 경고�
           }),
         ]}
         groups={[]}
+        lookups={[]}
         thankYouMessage=""
         catalog={[]}
       />,
@@ -856,6 +887,7 @@ describe('TokenWarningPanel - Task 3: 셀 인용 문구가 전부 비면 경고�
           }),
         ]}
         groups={[]}
+        lookups={[]}
         thankYouMessage=""
         catalog={[]}
       />,
@@ -893,6 +925,7 @@ describe('TokenWarningPanel - Task 3: 셀 인용 문구가 전부 비면 경고�
           }),
         ]}
         groups={[]}
+        lookups={[]}
         thankYouMessage=""
         catalog={[]}
       />,
@@ -931,6 +964,7 @@ describe('TokenWarningPanel - Task 3: 셀 출처는 호스트 질문의 order �
           }),
         ]}
         groups={[]}
+        lookups={[]}
         thankYouMessage=""
         catalog={[]}
       />,
@@ -967,6 +1001,7 @@ describe('TokenWarningPanel - Task 3: 셀 출처는 호스트 질문의 order �
           q({ id: 'consumer', order: 2, title: '{{{유형}}} 안내' }),
         ]}
         groups={[]}
+        lookups={[]}
         thankYouMessage=""
         catalog={[]}
       />,
@@ -1005,6 +1040,7 @@ describe('TokenWarningPanel - Task 3: 셀 출처는 호스트 질문의 order �
           }),
         ]}
         groups={[]}
+        lookups={[]}
         thankYouMessage=""
         catalog={[]}
       />,
@@ -1045,6 +1081,7 @@ describe('TokenWarningPanel - Task 3: 셀 출처는 호스트 질문의 order �
           }),
         ]}
         groups={[]}
+        lookups={[]}
         thankYouMessage=""
         catalog={[]}
       />,
@@ -1087,6 +1124,7 @@ describe('TokenWarningPanel - Fix round 1: 그룹의 유효 order 는 하위 그
           }),
         ]}
         groups={[parentGroup, childGroup]}
+        lookups={[]}
         thankYouMessage=""
         catalog={[]}
       />,
@@ -1127,6 +1165,7 @@ describe('TokenWarningPanel - Fix round 1: 그룹의 유효 order 는 하위 그
           q({ id: 'inChild', order: 2, groupId: 'gChild2', title: '하위 그룹 질문' }),
         ]}
         groups={[parentGroup2, childGroup2]}
+        lookups={[]}
         thankYouMessage=""
         catalog={[]}
       />,
@@ -1157,6 +1196,7 @@ describe('TokenWarningPanel - Fix round 1: 그룹의 유효 order 는 하위 그
         <TokenWarningPanel
           questions={[q({ id: 'q1', order: 1, groupId: 'gA', title: '질문' })]}
           groups={[cycleA, cycleB]}
+          lookups={[]}
           thankYouMessage=""
           catalog={[]}
         />,

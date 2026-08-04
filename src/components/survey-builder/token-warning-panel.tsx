@@ -17,9 +17,10 @@ import type { Question, QuestionGroup, SurveyLookup, TableCell } from '@/types/s
 interface Props {
   questions: Question[];
   groups: QuestionGroup[];
-  /** 수식 broken-ref 판정에 쓰는 LUT 목록. 미전달 시(레거시 호출부·테스트) LUT 참조
-   *  진단만 보류되고 다른 경고는 그대로 동작한다 — collectFormulaDiagnostics 참조. */
-  lookups?: SurveyLookup[];
+  /** 수식 broken-ref 판정에 쓰는 LUT 목록. 빈 배열을 넘기면 `lookups.some(...)` 이 항상
+   *  false 가 되어 LUT 를 참조하는 수식이 전부 broken-ref(red)로 오탐된다 — 반드시 실제
+   *  설문의 `currentSurvey.lookups` 를 넘길 것. collectFormulaDiagnostics 참조. */
+  lookups: SurveyLookup[];
   thankYouMessage: string;
   catalog: VariableDef[];
 }
@@ -368,7 +369,7 @@ export function TokenWarningPanel({ questions, groups, lookups, thankYouMessage,
   // groups 는 필수 인자 — buildRenderSteps() 의 pageBreakBefore 분할로 페이지를 판정해야
   // branch-same-group-calc 를 검출한다(같은 groupId ≠ 같은 페이지, group-ordering.ts).
   const formulaDiagnostics = useMemo<FormulaDiagnostic[]>(
-    () => collectFormulaDiagnostics(questions, lookups ?? [], groups),
+    () => collectFormulaDiagnostics(questions, lookups, groups),
     [questions, lookups, groups],
   );
   // tone 배분: broken-ref/cycle 은 명백한 오류(red), 나머지(non-numeric-ref·
