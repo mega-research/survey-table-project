@@ -1032,3 +1032,82 @@ describe('draft seq — 이어하기 seed 및 applied 가드', () => {
     expect(seq).toBeGreaterThan(50);
   });
 });
+
+// calc 셀(수식 기반 계산 셀)을 가진 질문. tests/unit/cell-formula-inject.test.ts 의
+// calcTable 헬퍼와 동일 최소 구조 — 입력 셀 하나 + 그 값을 그대로 참조하는 calc 셀 하나.
+function calcTableQuestion(id: string): Question {
+  return {
+    id,
+    type: 'table',
+    title: 'T',
+    required: false,
+    order: 1,
+    tableRowsData: [
+      {
+        id: 'r1',
+        label: 'r1',
+        cells: [
+          { id: `${id}-a`, content: '', type: 'input', inputType: 'number' },
+          { id: `${id}-c`, content: '', type: 'calc', formula: { kind: 'cell', cellId: `${id}-a` } },
+        ],
+      },
+    ],
+  } as Question;
+}
+
+describe('draft flush — calc 셀 저장 주입', () => {
+  beforeEach(() => {
+    saveDraft.mockReset();
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  // 회귀 방지 대상: withCalcValues 는 calc 셀을 가진 질문에 대해 매번 새 객체를 만들어낸다
+  // (cell-formula.ts:173 out ??= {...payloadAnswers}). flushPendingAnswers 의 삭제 판정을
+  // (rawSnapshot 이 아니라) 주입된 pendingSnapshot 기준으로 했다면, 이 새 객체 참조 때문에
+  // Object.is 비교가 항상 실패해 calc 질문의 pending 항목이 영영 삭제되지 않는다 — 즉 매
+  // flush 마다 saveDraft 가 불필요하게 재호출된다. 이 테스트는 두 번째 flush 가
+  // saveDraft 를 다시 부르지 않는지(=pending 이 실제로 비워졌는지)로 그 회귀를 고정한다.
+  //
+  // 되돌림 확인: use-response-lifecycle.ts 의 flushPendingAnswers 에서
+  //   const pendingSnapshot = injectCalc(rawSnapshot);
+  //   ...
+  //   for (const [questionId, savedValue] of Object.entries(rawSnapshot)) {
+  // 를 각각
+  //   const pendingSnapshot = injectCalc(Object.fromEntries(pendingAnswerSavesRef.current));
+  //   ...
+  //   for (const [questionId, savedValue] of Object.entries(pendingSnapshot)) {
+  // 로 임시로 되돌려 실행한 결과, 아래 두 단언 모두 RED(두 번째 flush 도 saveDraft 를
+  // 재호출 — toHaveBeenCalledTimes(1) 기대가 2 로 실패)로 확인했다. 확인 후 원복했다.
+  it('calc 셀을 가진 질문도 draft flush 성공 후 pending 이 정상적으로 비워진다(회귀 방지)', async () => {
+    saveDraft.mockResolvedValue({ ok: true, applied: true });
+    const calcQuestion = calcTableQuestion('tq1');
+    const args = baseArgs({
+      currentResponseId: 'r1',
+      questions: [calcQuestion],
+      responses: { tq1: { 'tq1-a': '10' } },
+    });
+    const { result } = renderHook(() => useResponseLifecycle(args));
+
+    act(() => result.current.handleResponse('tq1', { 'tq1-a': '10' }));
+    await act(async () => {
+      await result.current.flushPendingAnswers();
+    });
+    expect(saveDraft).toHaveBeenCalledTimes(1);
+
+    // 서버로 나간 페이로드에 calc 값이 실제로 주입돼 있는지도 함께 확인한다.
+    const firstAnswers = (saveDraft.mock.calls[0]?.[0] as { answers: Record<string, unknown> })
+      .answers;
+    expect((firstAnswers['tq1'] as Record<string, unknown>)['tq1-c']).toBe('10');
+
+    // pending 이 비워졌다면 두 번째 flush 는 saveDraft 를 다시 호출하지 않고 즉시 true.
+    let flushResult: boolean | undefined;
+    await act(async () => {
+      flushResult = await result.current.flushPendingAnswers();
+    });
+    expect(flushResult).toBe(true);
+    expect(saveDraft).toHaveBeenCalledTimes(1);
+  });
+});
