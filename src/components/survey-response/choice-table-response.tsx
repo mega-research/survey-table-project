@@ -19,7 +19,7 @@ import {
   isGroupedChoiceQuestion,
 } from '@/utils/choice-group-helpers';
 import { resolveChoiceOptions } from '@/utils/choice-source';
-import { getCellTextClassName } from '@/utils/cell-style';
+import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
 import { projectConditionalTableLayout } from '@/utils/conditional-table-layout';
 import { findMobileHeaderCell } from '@/utils/mobile-display-cells';
 import { resolveMobileTableDisplayMode } from '@/utils/mobile-table-display-mode';
@@ -240,6 +240,7 @@ export function ChoiceTableResponse({
           {labelText && (
             <span
               className={cn('whitespace-pre-line text-sm text-gray-800', getCellTextClassName(cell))}
+              style={getCellTextStyle(cell)}
             >
               {labelText}
             </span>
@@ -295,7 +296,14 @@ export function ChoiceTableResponse({
             return (
               <MobileOptionCard
                 key={choiceCell.id}
-                label={<span className={getCellTextClassName(labelStyleSource)}>{cardLabel}</span>}
+                label={(
+                  <span
+                    className={getCellTextClassName(labelStyleSource)}
+                    style={getCellTextStyle(labelStyleSource)}
+                  >
+                    {cardLabel}
+                  </span>
+                )}
                 cells={row.cells}
                 selected={checked}
                 disabled={disabled}

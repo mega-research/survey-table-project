@@ -154,8 +154,13 @@ export function RankingDropdownStack({
         const selectedOpt = currentValue && currentValue !== RANKING_OTHER_VALUE
           ? options.find((o) => o.value === currentValue)
           : undefined;
-        const selectedStyle = selectedOpt?.backgroundColor
-          ? { backgroundColor: selectedOpt.backgroundColor }
+        const selectedStyle = selectedOpt?.backgroundColor || selectedOpt?.textColor
+          ? {
+              ...(selectedOpt.backgroundColor
+                ? { backgroundColor: selectedOpt.backgroundColor }
+                : {}),
+              ...(selectedOpt.textColor ? { color: selectedOpt.textColor } : {}),
+            }
           : undefined;
         const selectedBold = selectedOpt?.textBold ? 'font-bold' : undefined;
         const triggerWidthStyle =
@@ -181,7 +186,10 @@ export function RankingDropdownStack({
                 value={opt.value}
                 disabled={isTakenElsewhere(rank, opt.value)}
                 className={opt.textBold ? 'font-bold' : undefined}
-                style={opt.backgroundColor ? { backgroundColor: opt.backgroundColor } : undefined}
+                style={{
+                  ...(opt.backgroundColor ? { backgroundColor: opt.backgroundColor } : {}),
+                  ...(opt.textColor ? { color: opt.textColor } : {}),
+                }}
               >
                 {substituteTokens(opt.label, attrs, quotes)}
               </option>
@@ -228,7 +236,10 @@ export function RankingDropdownStack({
                   value={opt.value}
                   disabled={isTakenElsewhere(rank, opt.value)}
                   className={cn(itemCls, opt.textBold && 'font-bold')}
-                  style={opt.backgroundColor ? { backgroundColor: opt.backgroundColor } : undefined}
+                  style={{
+                    ...(opt.backgroundColor ? { backgroundColor: opt.backgroundColor } : {}),
+                    ...(opt.textColor ? { color: opt.textColor } : {}),
+                  }}
                 >
                   {substituteTokens(opt.label, attrs, quotes)}
                 </SelectItem>

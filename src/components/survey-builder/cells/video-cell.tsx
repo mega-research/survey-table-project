@@ -7,7 +7,7 @@ import { Video } from 'lucide-react';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
-import { getCellTextClassName } from '@/utils/cell-style';
+import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
 import { getYouTubeEmbedUrl } from '../table-cell-renderers';
 
 import type { InteractiveCellProps, PreviewCellProps } from './types';
@@ -75,7 +75,10 @@ export const VideoCell = React.memo(function VideoCell({
         </div>
       )}
       {caption && (
-        <div className={cn('mt-2 text-left text-sm text-gray-700', getCellTextClassName(cell))}>
+        <div
+          className={cn('mt-2 text-left text-sm text-gray-700', getCellTextClassName(cell))}
+          style={getCellTextStyle(cell)}
+        >
           {caption}
         </div>
       )}

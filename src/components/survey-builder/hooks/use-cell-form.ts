@@ -71,6 +71,7 @@ export interface CellFormSetters {
   setChoiceGroupId: (v: string) => void;
   setTextBold: (v: boolean) => void;
   setBackgroundColor: (v: string) => void;
+  setTextColor: (v: string) => void;
   setHorizontalAlign: (v: 'left' | 'center' | 'right') => void;
   setMobileDisplay: (v: CellFormState['mobileDisplay']) => void;
   setMobileLabel: (v: string) => void;
@@ -155,6 +156,7 @@ export function useCellForm(cell: TableCell, isOpen: boolean): UseCellFormResult
       setChoiceGroupId: set('choiceGroupId'),
       setTextBold: set('textBold'),
       setBackgroundColor: set('backgroundColor'),
+      setTextColor: set('textColor'),
       setHorizontalAlign: set('horizontalAlign'),
       setMobileDisplay: set('mobileDisplay'),
       setMobileLabel: set('mobileLabel'),

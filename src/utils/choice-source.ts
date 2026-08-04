@@ -58,6 +58,7 @@ export function resolveChoiceOptions(question: Question): QuestionOption[] {
     ...(cell.textInputPlaceholder !== undefined ? { textInputPlaceholder: cell.textInputPlaceholder } : {}),
     ...(cell.textBold ? { textBold: true } : {}),
     ...(cell.backgroundColor ? { backgroundColor: cell.backgroundColor } : {}),
+    ...(cell.textColor ? { textColor: cell.textColor } : {}),
     ...(cell.answerQuoteText !== undefined ? { answerQuoteText: cell.answerQuoteText } : {}),
   }));
 }

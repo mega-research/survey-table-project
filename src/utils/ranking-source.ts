@@ -56,6 +56,7 @@ export function resolveRankingOptionsFromCells(cells: TableCell[]): QuestionOpti
           : {}),
         ...(cell.textBold ? { textBold: true } : {}),
         ...(cell.backgroundColor ? { backgroundColor: cell.backgroundColor } : {}),
+        ...(cell.textColor ? { textColor: cell.textColor } : {}),
         ...(cell.answerQuoteText !== undefined ? { answerQuoteText: cell.answerQuoteText } : {}),
       };
     }
@@ -70,6 +71,7 @@ export function resolveRankingOptionsFromCells(cells: TableCell[]): QuestionOpti
         : {}),
       ...(cell.textBold ? { textBold: true } : {}),
       ...(cell.backgroundColor ? { backgroundColor: cell.backgroundColor } : {}),
+      ...(cell.textColor ? { textColor: cell.textColor } : {}),
       ...(cell.answerQuoteText !== undefined ? { answerQuoteText: cell.answerQuoteText } : {}),
     };
   });

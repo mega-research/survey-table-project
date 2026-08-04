@@ -49,8 +49,8 @@ const mergedHeaderGrid: HeaderCell[][] = [
 async function applyBoldBlueHeaderStyle(user = userEvent.setup()) {
   await user.click(screen.getByRole('button', { name: '헤더 일괄 스타일' }));
   await user.click(screen.getByRole('switch', { name: '텍스트 굵게' }));
-  await user.clear(screen.getByRole('textbox', { name: 'HEX 색상' }));
-  await user.type(screen.getByRole('textbox', { name: 'HEX 색상' }), '#ddeeff');
+  await user.clear(screen.getByRole('textbox', { name: '배경색 HEX' }));
+  await user.type(screen.getByRole('textbox', { name: '배경색 HEX' }), '#ddeeff');
   await user.click(screen.getByRole('button', { name: '전체 헤더에 적용' }));
 }
 
@@ -84,7 +84,7 @@ function TableEditorHarness({
       </button>
       <button
         type="button"
-        onClick={() => actions.applyHeaderStyle({ textBold: true, backgroundColor: '#DDEEFF' })}
+        onClick={() => actions.applyHeaderStyle({ textBold: true, backgroundColor: '#DDEEFF', textColor: '' })}
       >
         헤더 스타일 적용
       </button>

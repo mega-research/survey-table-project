@@ -21,7 +21,11 @@ import {
   buildDefaultHeaderGrid,
   reconcileHeaderGridForColumnChange,
 } from '@/utils/table-merge-helpers';
-import { applyHeaderBulkStyle, type HeaderBulkStyle } from '@/utils/header-style';
+import {
+  applyHeaderBulkStyle,
+  type HeaderBulkStyle,
+  withHeaderStyle,
+} from '@/utils/header-style';
 
 import { checkCanMerge, executeMerge, executeUnmerge } from '../utils/table-cell-merge';
 import { useDragCopy } from './use-drag-copy';
@@ -603,6 +607,32 @@ export function useTableEditor({
       notifyChangeDebounced(currentTitleRef.current, updatedColumns, currentRowsRef.current);
     },
     [notifyChangeDebounced],
+  );
+
+  // 스타일 변경은 타이핑이 아니므로 debounce 없이 즉시 커밋한다.
+  const updateColumnStyle = useCallback(
+    (columnIndex: number, style: HeaderBulkStyle) => {
+      // 열 코드 등 label/code debounce가 예약되어 있으면 취소한다.
+      // 취소하지 않으면 나중에 stale cols(값 캡처)가 발화해 방금 적용한 스타일을 덮어쓴다.
+      if (pendingChangeRef.current) {
+        clearTimeout(pendingChangeRef.current);
+        pendingChangeRef.current = null;
+        pendingArgsRef.current = null;
+      }
+
+      // debounce를 취소해도 ref-only 행 편집은 화면 state까지 즉시 반영해야 한다.
+      if (pendingRowsSyncRef.current) {
+        pendingRowsSyncRef.current = false;
+        setCurrentRows(currentRowsRef.current);
+      }
+
+      const updatedColumns = currentColumnsRef.current.map((col, index) => (
+        index === columnIndex ? withHeaderStyle(col, style) : col
+      ));
+      commitColumns(updatedColumns);
+      notifyChange(currentTitleRef.current, updatedColumns, currentRowsRef.current);
+    },
+    [commitColumns, notifyChange],
   );
 
   // ── 행 CRUD ──
@@ -1409,6 +1439,7 @@ export function useTableEditor({
       moveColumn,
       moveRow,
       updateColumnLabel,
+      updateColumnStyle,
       updateColumnCode,
       handleColumnWidthChange,
       setEditingColumnWidth,

@@ -7,7 +7,7 @@ import { Image as ImageIcon, Video } from 'lucide-react';
 import type { TableCell } from '@/types/survey';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
-import { getCellTextClassName } from '@/utils/cell-style';
+import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
 import { cn } from '@/lib/utils';
 
 import { getYouTubeEmbedUrl } from '../table-cell-renderers';
@@ -93,7 +93,12 @@ export const PreviewCell = React.memo(function PreviewCell({
 
     case 'select':
       return cell.selectOptions && cell.selectOptions.length > 0 ? (
-        <CellContentLayout content={cell.content} position={cell.textPosition} bold={cell.textBold}>
+        <CellContentLayout
+          content={cell.content}
+          position={cell.textPosition}
+          bold={cell.textBold}
+          textColor={cell.textColor}
+        >
           <select className="w-full rounded border border-gray-300 p-2 text-sm" disabled>
             <option value="">선택하세요...</option>
             {cell.selectOptions.map((option) => (
@@ -164,7 +169,10 @@ export const PreviewCell = React.memo(function PreviewCell({
             </div>
           )}
           {caption && (
-            <div className={cn('mt-2 text-left text-sm text-gray-700', getCellTextClassName(cell))}>
+            <div
+              className={cn('mt-2 text-left text-sm text-gray-700', getCellTextClassName(cell))}
+              style={getCellTextStyle(cell)}
+            >
               {caption}
             </div>
           )}
@@ -179,7 +187,12 @@ export const PreviewCell = React.memo(function PreviewCell({
 
     case 'input':
       return (
-        <CellContentLayout content={cell.content} position={cell.textPosition} bold={cell.textBold}>
+        <CellContentLayout
+          content={cell.content}
+          position={cell.textPosition}
+          bold={cell.textBold}
+          textColor={cell.textColor}
+        >
           <div className="flex flex-col space-y-2">
             <input
               type="text"
@@ -215,6 +228,7 @@ export const PreviewCell = React.memo(function PreviewCell({
                 'text-sm [overflow-wrap:anywhere] whitespace-pre-wrap text-gray-800',
                 getCellTextClassName(cell),
               )}
+              style={getCellTextStyle(cell)}
             >
               {cell.content}
             </div>
@@ -225,7 +239,12 @@ export const PreviewCell = React.memo(function PreviewCell({
     case 'ranking':
       // 셀 내부 랭킹 (rk) — 프리뷰에서는 간단히 안내만
       return (
-        <CellContentLayout content={cell.content} position={cell.textPosition} bold={cell.textBold}>
+        <CellContentLayout
+          content={cell.content}
+          position={cell.textPosition}
+          bold={cell.textBold}
+          textColor={cell.textColor}
+        >
           <div className="text-xs text-gray-500">
             (순위형 셀 · {cell.rankingOptions?.length ?? 0}개 옵션 ·{' '}
             {cell.rankingConfig?.positions ?? 3}순위)
@@ -246,7 +265,10 @@ export const PreviewCell = React.memo(function PreviewCell({
             aria-label={cell.choiceLabel || '보기 선택'}
           />
           {choiceLabelText && (
-            <span className={cn('text-sm text-gray-700', getCellTextClassName(cell))}>
+            <span
+              className={cn('text-sm text-gray-700', getCellTextClassName(cell))}
+              style={getCellTextStyle(cell)}
+            >
               {choiceLabelText}
             </span>
           )}
@@ -261,6 +283,7 @@ export const PreviewCell = React.memo(function PreviewCell({
             'text-sm leading-relaxed [overflow-wrap:anywhere] whitespace-pre-wrap',
             getCellTextClassName(cell),
           )}
+          style={getCellTextStyle(cell)}
         >
           {cell.content}
         </div>

@@ -70,6 +70,7 @@ export const InputCell = React.memo(function InputCell({
       content={substituteTokens(cell.content, attrs, quotes)}
       position={cell.textPosition}
       bold={cell.textBold}
+      textColor={cell.textColor}
     >
       <div className="flex w-full flex-col space-y-1.5">
         <Input

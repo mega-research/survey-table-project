@@ -2,13 +2,22 @@
 
 import React, { useCallback, useMemo, useState } from 'react';
 
-import { Combine, Minus, Plus, Unlink } from 'lucide-react';
+import { Combine, Minus, Palette, Plus, Unlink } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn, generateId } from '@/lib/utils';
 import { HeaderCell } from '@/types/survey';
-import { getCellBackgroundStyle, getCellTextClassName } from '@/utils/cell-style';
+import {
+  getCellBackgroundStyle,
+  getCellTextClassName,
+  getCellTextStyle,
+  toCellStyleFieldProps,
+} from '@/utils/cell-style';
+import { type HeaderBulkStyle, withHeaderStyle } from '@/utils/header-style';
+
+import { CellStyleFields } from './cell-style-fields';
 
 interface HeaderGridEditorProps {
   headerGrid: HeaderCell[][];
@@ -401,6 +410,17 @@ export function HeaderGridEditor({ headerGrid, columnCount, onChange }: HeaderGr
     [headerGrid, onChange],
   );
 
+  // 셀별 스타일 변경. 빈 색은 스타일 제거를 뜻하므로 withHeaderStyle 규칙에 맡긴다.
+  const updateCellStyle = useCallback(
+    (rowIdx: number, cellIdx: number, style: HeaderBulkStyle) => {
+      const newGrid = headerGrid.map((row, r) => row.map((cell, c) => (
+        r === rowIdx && c === cellIdx ? withHeaderStyle(cell, style) : { ...cell }
+      )));
+      onChange(newGrid);
+    },
+    [headerGrid, onChange],
+  );
+
   // 그리드 셀 위치 계산 (렌더링용)
   const cellPositions = useMemo(() => {
     const positions: {
@@ -511,7 +531,7 @@ export function HeaderGridEditor({ headerGrid, columnCount, onChange }: HeaderGr
             return (
               <div
                 key={cell.id}
-                className={`border-r border-b border-gray-300 p-1 text-center text-sm transition-colors ${
+                className={`group relative border-r border-b border-gray-300 p-1 text-center text-sm transition-colors ${
                   isSelected
                     ? 'bg-blue-100 ring-2 ring-inset ring-blue-400'
                     : isMerged
@@ -542,6 +562,7 @@ export function HeaderGridEditor({ headerGrid, columnCount, onChange }: HeaderGr
                       'h-7 bg-transparent text-center text-sm',
                       getCellTextClassName(cell),
                     )}
+                    style={getCellTextStyle(cell)}
                   />
                 ) : (
                   <span
@@ -549,11 +570,41 @@ export function HeaderGridEditor({ headerGrid, columnCount, onChange }: HeaderGr
                       cell.label ? 'text-gray-800' : 'text-gray-400 italic',
                       getCellTextClassName(cell),
                     )}
+                    style={getCellTextStyle(cell)}
                     title={isMerged ? `${cell.colspan}×${cell.rowspan} 병합` : undefined}
                   >
                     {cell.label || '(빈 셀)'}
                   </span>
                 )}
+
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label="헤더 셀 스타일"
+                      title="헤더 셀 스타일"
+                      // 셀 컨테이너의 onMouseDown 이 드래그 선택을 시작시키므로 반드시 차단한다
+                      onMouseDown={(e) => e.stopPropagation()}
+                      className="absolute top-0.5 right-0.5 z-10 flex h-5 w-5 items-center justify-center rounded bg-white/80 text-gray-400 opacity-0 transition-opacity hover:text-gray-700 group-hover:opacity-100 focus:opacity-100"
+                    >
+                      <Palette className="h-3 w-3" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    className="w-80"
+                    side="bottom"
+                    align="end"
+                    // PopoverContent 는 Portal 로 렌더되지만 React 합성 이벤트는 컴포넌트 트리를 따라
+                    // 버블링하므로, 막지 않으면 내부 요소의 mousedown 이 셀의 드래그 선택으로 새어나간다
+                    onMouseDown={(e) => e.stopPropagation()}
+                  >
+                    <CellStyleFields
+                      {...toCellStyleFieldProps(cell, (style) => (
+                        updateCellStyle(rowIdx, cellIdx, style)
+                      ))}
+                    />
+                  </PopoverContent>
+                </Popover>
               </div>
             );
           })}
@@ -561,8 +612,8 @@ export function HeaderGridEditor({ headerGrid, columnCount, onChange }: HeaderGr
       </div>
 
       <p className="text-xs text-gray-500">
-        셀을 드래그하여 선택 후 &quot;병합&quot; 버튼을 클릭하세요. 더블클릭으로 라벨을 편집할 수
-        있습니다.
+        셀을 드래그하여 선택 후 &quot;병합&quot; 버튼을 클릭하세요. 더블클릭으로 라벨을, 셀 우측 상단
+        팔레트 버튼으로 색상을 편집할 수 있습니다.
       </p>
     </div>
   );
