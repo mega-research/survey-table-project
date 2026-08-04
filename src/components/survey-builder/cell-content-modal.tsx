@@ -46,7 +46,7 @@ import { useEnsureSurveyInDb } from '@/hooks/use-ensure-survey-in-db';
 import { generateId } from '@/lib/utils';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { useSurveyUIStore } from '@/stores/ui-store';
-import { ChoiceGroup, TableCell, TableRow } from '@/types/survey';
+import { ChoiceGroup, Question, TableCell, TableRow } from '@/types/survey';
 import { collectChoiceOptCells } from '@/utils/choice-source';
 import { isPartialNumericInput } from '@/utils/numeric-input';
 import { getMaxSpssCode } from '@/utils/option-code-generator';
@@ -75,6 +75,7 @@ import { CellImageEditor } from './cell-image-editor';
 import { CellStyleFields } from './cell-style-fields';
 import { CellContentLayout } from './cells/cell-content-layout';
 import { ChoiceOptCellTab } from './choice-opt-cell-tab';
+import { FormulaExprEditor } from './formula/formula-expr-editor';
 import { NumberFormatFields } from './number-format-fields';
 import { OptionsLayoutSelector } from './options-layout-selector';
 import { RankingCellTab } from './ranking-cell-tab';
@@ -98,6 +99,12 @@ interface CellContentModalProps {
   onClose: () => void;
   cell: TableCell;
   onSave: (cell: TableCell) => void;
+  /**
+   * 이 셀을 소유한 질문(표) — 계산 탭·검증 토글의 FormulaExprEditor 가 같은 질문 셀 참조 픽커에
+   * 사용한다. 에디터의 실시간 편집 상태(currentQuestionAsQuestion)를 그대로 받아야
+   * 아직 저장 전인 열/행 추가도 픽커에 즉시 보인다 (store 는 저장 전까지 stale).
+   */
+  ownQuestion: Question;
   currentQuestionId?: string | undefined;
   questionCode?: string | undefined;
   questionTitle?: string | undefined;
@@ -128,6 +135,7 @@ export function CellContentModal({
   onClose,
   cell,
   onSave,
+  ownQuestion,
   currentQuestionId = '',
   questionCode,
   rowCode,
@@ -206,6 +214,10 @@ export function CellContentModal({
     answerQuoteText,
     answerQuoteEnabled: cellAnswerQuoteEnabled,
     answerQuoteName: cellAnswerQuoteName,
+    formula,
+    formulaValidationEnabled,
+    formulaToleranceRaw,
+    formulaErrorMessage,
   } = form;
   // 순위 옵션(ranking_opt, Case 2)은 순위형 질문의 내장 테이블에서만 렌더러가 있다.
   // 테이블형 질문에서는 응답 select 가 나오지 않는 막다른 조합이 되므로 탭을 숨긴다.
@@ -270,6 +282,10 @@ export function CellContentModal({
     setAnswerQuoteText,
     setAnswerQuoteEnabled: setCellAnswerQuoteEnabled,
     setAnswerQuoteName: setCellAnswerQuoteName,
+    setFormula,
+    setFormulaValidationEnabled,
+    setFormulaToleranceRaw,
+    setFormulaErrorMessage,
   } = setters;
 
   // 선택형 셀 헤더(조건부 분기 옆)에 붙는 셀 단위 인용 컨트롤. 표 질문이 아니면 넘기지 않는다.
@@ -763,7 +779,7 @@ export function CellContentModal({
             }
           }}
         >
-          <TabsList className={`grid w-full ${showRankingOptTab ? 'grid-cols-10' : 'grid-cols-9'}`}>
+          <TabsList className={`grid w-full ${showRankingOptTab ? 'grid-cols-11' : 'grid-cols-10'}`}>
             <TabsTrigger value="text" className="flex items-center gap-2">
               <Type className="h-4 w-4" />
               텍스트
@@ -806,6 +822,7 @@ export function CellContentModal({
               <Tag className="h-4 w-4" />
               보기 옵션
             </TabsTrigger>
+            <TabsTrigger value="calc">계산</TabsTrigger>
           </TabsList>
 
           {/* 텍스트 탭 */}
@@ -958,6 +975,53 @@ export function CellContentModal({
                 )}
               </div>
             </div>
+
+            {inputType === 'number' ? (
+              <div className="space-y-3 rounded border p-3">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={formulaValidationEnabled}
+                    onChange={(e) => setFormulaValidationEnabled(e.target.checked)}
+                  />
+                  계산 검증 — 입력값이 수식 계산 결과와 다르면 다음 진행을 차단
+                </label>
+                {formulaValidationEnabled ? (
+                  <>
+                    <FormulaExprEditor
+                      value={formula}
+                      onChange={setFormula}
+                      ownQuestion={ownQuestion}
+                      allQuestions={questions}
+                    />
+                    <div className="flex items-center gap-2 text-sm">
+                      <span>오차 허용 ±</span>
+                      <Input
+                        className="w-24"
+                        value={formulaToleranceRaw}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          // 오차 허용은 0 이상만 허용한다 — 음수면 Math.abs(입력 − 계산) > tolerance
+                          // 비교가 정확히 일치하는 값도 항상 위반으로 판정하는 트랩이 된다.
+                          if (v.includes('-')) return;
+                          if (isPartialNumericInput(v)) setFormulaToleranceRaw(v);
+                        }}
+                        placeholder="0"
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      음수는 입력할 수 없습니다. 오차 허용이 음수이면 값이 정확히 일치해도 항상
+                      불일치로 판정됩니다.
+                    </p>
+                    <Input
+                      value={formulaErrorMessage}
+                      onChange={(e) => setFormulaErrorMessage(e.target.value)}
+                      placeholder="불일치 시 표시할 문구 (비우면 기본 문구, 계산값 미노출)"
+                    />
+                  </>
+                ) : null}
+              </div>
+            ) : null}
 
             <div className="space-y-2">
               <Label htmlFor="input-placeholder" className="text-sm font-medium">
@@ -1246,6 +1310,20 @@ export function CellContentModal({
               answerQuoteText={answerQuoteText}
               onAnswerQuoteTextChange={setAnswerQuoteText}
             />
+          </TabsContent>
+
+          {/* 계산 셀(calc) 탭 — 다른 셀·질문 응답을 수식으로 계산해 읽기 전용 표시 */}
+          <TabsContent value="calc" className="space-y-4">
+            <div className="text-sm text-gray-600">
+              다른 셀·질문의 숫자 응답을 수식으로 계산해 읽기 전용으로 표시합니다.
+            </div>
+            <FormulaExprEditor
+              value={formula}
+              onChange={setFormula}
+              ownQuestion={ownQuestion}
+              allQuestions={questions}
+            />
+            <NumberFormatFields idPrefix="calc-nf" value={cellNumberFormat} onChange={setCellNumberFormat} />
           </TabsContent>
         </Tabs>
 

@@ -64,12 +64,23 @@ function seedStore(hostType: QuestionType, cell: TableCell) {
   } as never);
 }
 
+/** calc 탭 FormulaExprEditor 용 최소 스텁 — 이 테스트들은 계산 탭을 다루지 않는다. */
+const stubOwnQuestion: Question = {
+  id: 'q1',
+  type: 'table',
+  title: 'Q',
+  required: false,
+  order: 1,
+  tableRowsData: [],
+};
+
 function renderModal(cell: TableCell, onSave: (c: TableCell) => void) {
   return render(
     <CellContentModal
       isOpen
       onClose={vi.fn()}
       cell={cell}
+      ownQuestion={stubOwnQuestion}
       currentQuestionId="q1"
       onSave={onSave}
     />,

@@ -844,6 +844,7 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
         <CellContentModal
           isOpen={!!selectedCell}
           onClose={() => setSelectedCell(null)}
+          ownQuestion={currentQuestionAsQuestion}
           currentQuestionId={currentQuestionId}
           questionCode={questionCode}
           questionTitle={questionTitle}
