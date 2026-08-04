@@ -39,9 +39,11 @@ describe('RankingDropdownStack 옵션 스타일', () => {
 
     const styledItem = screen.getByRole('option', { name: '강조 옵션' });
     expect(styledItem).toHaveClass('font-bold');
+    // 커스텀 배경색은 인라인 스타일이라 하이라이트 배경을 덮는다. 링이 있어야 어느 항목에
+    // 커서가 있는지 보인다 — 색은 취향에 따라 바뀔 수 있으나 링 자체는 사라지면 안 된다.
     expect(styledItem).toHaveClass(
       'data-[highlighted]:ring-2',
-      'data-[highlighted]:ring-blue-500',
+      'data-[highlighted]:ring-sky-400',
       'data-[highlighted]:ring-inset',
     );
     expect(styledItem).toHaveStyle({
