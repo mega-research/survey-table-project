@@ -82,11 +82,14 @@ export async function saveAdminEdit(
     (existing.questionResponses ?? {}) as Record<string, unknown>,
     { responseId },
   );
-  const changedIds = diffQuestionResponses(prevResponses, questionResponses);
-  let changedQuestions: ReturnType<typeof buildChangedQuestions> = [];
+  // 클라 제출값 기준 diff — 아래 calc 재계산 대상 조회 여부를 결정하는 게이트로만 쓰고,
+  // audit 로 남길 최종 changedIds/changedQuestions 는 재계산 이후(아래) 다시 확정한다.
+  // (재계산이 cross-question 수식이나 payload 에 없던 calc 질문까지 값을 바꿀 수 있어
+  // 클라 diff 만으로는 "실제로 DB 값이 바뀐 질문"을 다 못 잡는다.)
+  const clientChangedIds = diffQuestionResponses(prevResponses, questionResponses);
   // calc 셀 재계산(아래)에서도 재사용 — 변경이 없으면(=재계산 대상도 없음) 조회 자체를 skip.
   let versionSnapshot: SurveyVersionSnapshot | null = null;
-  if (changedIds.length > 0) {
+  if (clientChangedIds.length > 0) {
     const [verRow] = existing.versionId
       ? await db
           .select({ snapshot: surveyVersions.snapshot })
@@ -95,7 +98,6 @@ export async function saveAdminEdit(
           .limit(1)
       : [];
     versionSnapshot = (verRow?.snapshot ?? null) as SurveyVersionSnapshot | null;
-    changedQuestions = buildChangedQuestions(changedIds, versionSnapshot);
   }
 
   // progress_pct 재계산: completed 는 100 유지, 그 외는 snapshot 기반 재계산.
@@ -118,16 +120,24 @@ export async function saveAdminEdit(
   // 반드시 평문 단계(위 diff 비교 이후, 아래 encryptResponsesForStorage 이전)에서 수행 —
   // 암호문을 수식에 넣으면 쓰레기 값이 나온다.
   // 재계산은 응답이 답해진 시점의 버전 스냅샷 기준이다 — 빌더가 이후 수식을 바꿔도 이미
-  // 수집된 이 응답에는 적용되지 않는다(스펙 요구사항). changedIds 가 없으면(=diff 없음)
+  // 수집된 이 응답에는 적용되지 않는다(스펙 요구사항). clientChangedIds 가 없으면(=diff 없음)
   // versionSnapshot 을 아예 조회하지 않았으므로 이 블록은 자연히 skip 된다.
   // fail-safe: 스냅샷을 못 얻으면(레거시 versionId=null, 버전 행 삭제 등) 재계산을 건너뛰고
   // 기존 값을 그대로 유지한다 — 운영자의 정당한 수정이 서버 오류로 통째로 실패해선 안 된다.
+  // 결과는 questionResponses 를 직접 mutate 하지 않고 finalResponses 로 따로 들고 있는다 —
+  // input.questionResponses 를 in-place 로 건드리면 이후 호출부가 원본 input 을 재사용/로깅할
+  // 때 조용히 값이 달라져 있는 사고를 유발할 수 있다.
+  let finalResponses = questionResponses;
   if (versionSnapshot) {
-    // schema-types.SurveyVersionSnapshot 은 lookups 필드를 타입에 선언하지 않지만
-    // buildSurveySnapshot(lib/versioning/snapshot-builder.ts) 이 publish 시 항상 함께
-    // freeze 해 넣는다(survey-read.service.ts 의 snapshot.lookups 사용과 동일 근거) — 안전 단언.
+    // schema-types.SurveyVersionSnapshot 은 questions/lookups 필드 값이 항상 채워져 있다는
+    // 보장이 타입 레벨엔 없다(questions 는 필수로 선언돼 있지만 손상된 스냅샷 행이 들어오면
+    // undefined/비배열일 수 있음, lookups 는 아예 타입에 없음) — buildChangedQuestions
+    // (response-edit-diff.ts:40, `snapshot?.questions ?? []`)와 동일하게 방어적으로 읽는다.
+    // lookups 는 buildSurveySnapshot(lib/versioning/snapshot-builder.ts) 이 publish 시 항상
+    // 함께 freeze 해 넣지만(survey-read.service.ts 의 snapshot.lookups 사용과 동일 근거)
+    // 타입에 없으므로 안전 단언 캐스팅.
     const snapshotForCalc = versionSnapshot as unknown as {
-      questions: Question[];
+      questions?: Question[];
       lookups?: SurveyLookup[];
     };
 
@@ -141,21 +151,33 @@ export async function saveAdminEdit(
       contactAttrs = (target?.attrs ?? {}) as Record<string, string | undefined>;
     }
 
-    const recomputed = withCalcValues(questionResponses, {
-      questions: snapshotForCalc.questions,
+    finalResponses = withCalcValues(questionResponses, {
+      questions: snapshotForCalc.questions ?? [],
       responses: questionResponses,
       lookups: snapshotForCalc.lookups ?? [],
       contactAttrs,
     });
-    Object.assign(questionResponses, recomputed);
   }
+
+  // 변경 질문 확정 (audit 용). 재계산이 실제로 일어난 경우(versionSnapshot 이 있는 경우)엔
+  // prevResponses ↔ finalResponses(재계산 이후) 를 다시 diff 한다 — withCalcValues 는
+  // ctx.questions 전체를 순회해 calc 셀이 있는 모든 질문을 다시 계산하므로, 클라가 직접
+  // 건드리지 않은 질문(다른 질문 값 변경으로 트리거된 cross-question 수식, 혹은 payload 에
+  // 아예 없다가 새로 채워진 calc 질문)도 DB 값이 바뀔 수 있다 — clientChangedIds 만 쓰면
+  // 그 변경이 edit log 에서 누락된다. finalResponses 는 클라의 명시적 변경분을 그대로 포함한
+  // 상위집합이므로 이 diff 하나로 "운영자가 고친 것" + "재계산으로 바뀐 것"을 함께 잡는다.
+  // (재계산이 없었던 경우, 즉 versionSnapshot 이 null 이면 clientChangedIds 를 그대로 쓴다.)
+  const changedIds = versionSnapshot
+    ? diffQuestionResponses(prevResponses, finalResponses)
+    : clientChangedIds;
+  const changedQuestions = buildChangedQuestions(changedIds, versionSnapshot);
 
   // 저장은 재암호화 — 판단 기준은 응답의 versionId 스냅샷(레거시 null 은 questions 폴백).
   const piiIds = await loadPiiQuestionIds(existing.versionId, surveyId);
   const storedResponses =
     piiIds.size > 0
-      ? encryptResponsesForStorage(questionResponses, piiIds)
-      : questionResponses;
+      ? encryptResponsesForStorage(finalResponses, piiIds)
+      : finalResponses;
 
   await db.transaction(async (tx) => {
     // deletedAt 검사(line 61)와 이 UPDATE 사이에 동시 softDeleteResponse 가 deletedAt 을

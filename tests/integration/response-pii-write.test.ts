@@ -843,4 +843,129 @@ describe('saveAdminEdit — calc 셀 서버 재계산 (Task 13)', () => {
     expect(stored[SOURCE_CELL_ID]).toBe('10');
     expect(stored[CALC_CELL_ID]).toBe('5');
   });
+
+  it('클라가 건드리지 않은 cross-question calc 질문도 재계산으로 값이 바뀌면 edit log 에 잡힌다', async () => {
+    // q-source-num: 숫자형 단답(kind:'question' 수식이 참조하는 원본).
+    // q-calc-cross: 그 값을 그대로 옮기는 calc 셀 1개짜리 표 — 클라는 이 질문을 전혀 건드리지
+    // 않고 이전 저장값 그대로("5") 재제출한다. 서버 재계산 없이는 이 변경이 diff 에 안 잡힌다.
+    const SOURCE_QUESTION_ID = 'q-source-num';
+    const CROSS_CALC_QUESTION_ID = 'q-calc-cross';
+    const CROSS_CALC_CELL_ID = `${CROSS_CALC_QUESTION_ID}-c`;
+
+    surveyFindFirstMock.mockResolvedValue({ id: SURVEY_ID });
+    responseFindFirstMock.mockResolvedValue({
+      id: RESPONSE_ID,
+      surveyId: SURVEY_ID,
+      versionId: VERSION_ID,
+      deletedAt: null,
+      status: 'completed',
+      contactTargetId: null,
+      questionResponses: {
+        [SOURCE_QUESTION_ID]: '5',
+        [CROSS_CALC_QUESTION_ID]: { [CROSS_CALC_CELL_ID]: '5' },
+      },
+    });
+    executeMock.mockResolvedValue([]);
+    selectLimitMock.mockResolvedValue([
+      {
+        snapshot: {
+          questions: [
+            { id: SOURCE_QUESTION_ID, type: 'text', title: '소스 질문' },
+            {
+              id: CROSS_CALC_QUESTION_ID,
+              type: 'table',
+              title: '교차 계산',
+              tableRowsData: [
+                {
+                  id: 'r1',
+                  label: 'r1',
+                  cells: [
+                    {
+                      id: CROSS_CALC_CELL_ID,
+                      content: '',
+                      type: 'calc',
+                      formula: { kind: 'question', questionId: SOURCE_QUESTION_ID },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      },
+    ]);
+    updateReturningMock.mockReturnValue([{ id: RESPONSE_ID }]);
+
+    const { saveAdminEdit } = await import(
+      '@/features/survey-response/server/services/response-edit.service'
+    );
+    await saveAdminEdit(
+      {
+        surveyId: SURVEY_ID,
+        responseId: RESPONSE_ID,
+        questionResponses: {
+          // 운영자는 source 만 5 → 20 으로 수정. cross-question calc 질문은 손대지 않고
+          // (읽기 전용이므로) 이전 값 그대로 재제출.
+          [SOURCE_QUESTION_ID]: '20',
+          [CROSS_CALC_QUESTION_ID]: { [CROSS_CALC_CELL_ID]: '5' },
+        },
+      },
+      { id: 'admin-1', email: 'a@b.com' },
+    );
+
+    // 저장값: cross-question calc 셀이 재계산으로 20 을 반영한다.
+    const setArg = updateSetLogMock.mock.calls[0]![0] as {
+      questionResponses: Record<string, unknown>;
+    };
+    const storedCross = setArg.questionResponses[CROSS_CALC_QUESTION_ID] as Record<
+      string,
+      unknown
+    >;
+    expect(storedCross[CROSS_CALC_CELL_ID]).toBe('20');
+
+    // 핵심: 클라가 diff 상 건드리지 않은 CROSS_CALC_QUESTION_ID 도 실제 DB 값이 바뀌었으므로
+    // edit log(changedQuestions) 에 포함돼야 한다 — 감사 로그 누락 방지.
+    expect(editLogValuesMock).toHaveBeenCalledTimes(1);
+    const logValues = editLogValuesMock.mock.calls[0]![0] as {
+      changedQuestions: Array<{ questionId: string }>;
+      changedCount: number;
+    };
+    const changedIds = logValues.changedQuestions.map((c) => c.questionId);
+    expect(changedIds).toContain(SOURCE_QUESTION_ID);
+    expect(changedIds).toContain(CROSS_CALC_QUESTION_ID);
+    expect(logValues.changedCount).toBe(2);
+  });
+
+  it('손상된 스냅샷(questions 필드 누락)이면 재계산에서 크래시하지 않고 제출값을 그대로 저장한다 (fail-safe)', async () => {
+    executeMock.mockResolvedValue([]);
+    // questions 필드 자체가 없는 손상된 스냅샷 — withCalcValues 의 `for (const q of ctx.questions)` 가
+    // ctx.questions 를 무방비로 순회하면 "not iterable" 로 saveAdminEdit 전체가 죽는다.
+    selectLimitMock.mockResolvedValue([{ snapshot: {} }]);
+    updateReturningMock.mockReturnValue([{ id: RESPONSE_ID }]);
+
+    const { saveAdminEdit } = await import(
+      '@/features/survey-response/server/services/response-edit.service'
+    );
+    await expect(
+      saveAdminEdit(
+        {
+          surveyId: SURVEY_ID,
+          responseId: RESPONSE_ID,
+          questionResponses: {
+            [CALC_QUESTION_ID]: { [SOURCE_CELL_ID]: '10', [CALC_CELL_ID]: '5' },
+          },
+        },
+        { id: 'admin-1', email: 'a@b.com' },
+      ),
+    ).resolves.toEqual({ ok: true });
+
+    const setArg = updateSetLogMock.mock.calls[0]![0] as {
+      questionResponses: Record<string, unknown>;
+    };
+    const stored = setArg.questionResponses[CALC_QUESTION_ID] as Record<string, unknown>;
+    // 재계산할 questions 자체가 없으므로 클라 제출값이 그대로 저장된다(재계산 시도는 하되 결과가
+    // 원본과 동일 — withCalcValues 는 calc 셀 없으면 payloadAnswers 를 그대로 반환).
+    expect(stored[SOURCE_CELL_ID]).toBe('10');
+    expect(stored[CALC_CELL_ID]).toBe('5');
+  });
 });
