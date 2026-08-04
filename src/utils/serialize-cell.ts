@@ -92,7 +92,8 @@ export type ContentType =
   | 'input'
   | 'ranking'
   | 'ranking_opt'
-  | 'choice_opt';
+  | 'choice_opt'
+  | 'calc';
 
 // textPosition 컨트롤을 표시할 셀 타입 — 텍스트 라벨과 입력/옵션 영역이 분리된 셀들만
 export const TEXT_POSITION_CELL_TYPES = new Set<ContentType>([

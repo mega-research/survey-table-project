@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 
 import {
+  Calculator,
   CheckSquare,
   ChevronDown,
   Circle,
@@ -39,6 +40,7 @@ const cellTypeIcons: Record<TableCell['type'], React.ElementType> = {
   ranking: ListOrdered,
   ranking_opt: ListOrdered,
   choice_opt: Circle,
+  calc: Calculator,
 };
 
 interface SaveCellModalProps {

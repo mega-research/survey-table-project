@@ -228,4 +228,5 @@ export const CELL_TYPE_LABELS: Record<TableCell['type'], string> = {
   ranking: '순위',
   ranking_opt: '순위 옵션',
   choice_opt: '보기 옵션',
+  calc: '계산',
 };

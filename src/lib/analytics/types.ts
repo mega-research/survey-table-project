@@ -163,6 +163,7 @@ export interface CellAnalytics {
     // 옵션 소스 셀 — analyzeTable 이 TableCell.type 원값을 그대로 보존하므로 포함
     | 'ranking_opt'
     | 'choice_opt'
+    | 'calc'
     | 'merged-horizontal'
     | 'merged-vertical'
     | 'merged-hidden';

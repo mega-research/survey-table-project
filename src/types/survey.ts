@@ -279,6 +279,22 @@ export interface QuestionOption {
   answerQuoteText?: string;
 }
 
+// 셀 수식 트리 — 계산 셀(표시)과 숫자 input 셀(검증)이 공유한다.
+// 그룹 = 연산자 1개 + 항 N개. 연산자를 섞으려면 그룹을 중첩한다 (우선순위 모호성 원천 차단).
+// lookup variant 는 분기 RightOperand.lookup 과 동일한 3필드 (evaluate-lookup 재사용).
+export type CalcExpr =
+  | { kind: 'literal'; value: number }
+  | { kind: 'cell'; questionId?: string; cellId: string } // questionId 생략 = 같은 질문
+  | { kind: 'question'; questionId: string } // 숫자형 단답(text + inputType number)
+  | {
+      kind: 'lookup';
+      surveyLookupId: string;
+      keyMapping: Array<{ lutKey: string; attrsKey: string }>;
+      valueColumn: string;
+    }
+  | { kind: 'agg'; fn: 'sum' | 'avg'; items: CalcExpr[] }
+  | { kind: 'group'; op: '+' | '-' | '*' | '/'; terms: CalcExpr[] };
+
 export interface TableCell {
   id: string;
   textBold?: boolean;
@@ -307,7 +323,8 @@ export interface TableCell {
     | 'input'
     | 'ranking' // Case 3: 셀 내부 랭킹 (셀별 옵션 + 순위 드롭다운 N개)
     | 'ranking_opt' // Case 2: 이 셀이 질문 레벨 ranking 의 옵션 소스로 사용됨
-    | 'choice_opt'; // Case A: 이 셀이 질문 레벨 radio/checkbox 의 옵션 소스로 사용됨
+    | 'choice_opt' // Case A: 이 셀이 질문 레벨 radio/checkbox 의 옵션 소스로 사용됨
+    | 'calc'; // 수식 기반 읽기 전용 계산 셀
   // 체크박스/라디오 버튼 관련 속성
   checkboxOptions?: CheckboxOption[];
   radioOptions?: RadioOption[];
@@ -397,6 +414,12 @@ export interface TableCell {
    * input 셀은 "값이 있으면 수집, 비우면 입력값 그대로" 로 해석된다.
    */
   answerQuoteText?: string;
+  // 수식 (type='calc' 표시 셀 / type='input' && inputType='number' 검증 셀 공용)
+  formula?: CalcExpr;
+  // 검증 모드 절대 오차 허용. 기본 0 = 정확 일치
+  formulaTolerance?: number;
+  // 검증 실패 메시지 커스텀. 미지정 시 기본 문구 (계산값 미노출)
+  formulaErrorMessage?: string;
 }
 
 export interface CheckboxOption {
