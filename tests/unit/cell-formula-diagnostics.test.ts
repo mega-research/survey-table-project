@@ -22,22 +22,22 @@ function calcQuestion(order: number, id: string, formulaCellRef: { questionId?: 
 describe('collectFormulaDiagnostics', () => {
   it('정상 수식은 무경고', () => {
     const q = calcQuestion(1, 'q1', { cellId: 'q1-num' });
-    expect(collectFormulaDiagnostics([q], [])).toEqual([]);
+    expect(collectFormulaDiagnostics([q], [], [])).toEqual([]);
   });
 
   it('없는 셀 참조는 broken-ref', () => {
     const q = calcQuestion(1, 'q1', { cellId: 'nope' });
-    expect(collectFormulaDiagnostics([q], []).map((d) => d.kind)).toContain('broken-ref');
+    expect(collectFormulaDiagnostics([q], [], []).map((d) => d.kind)).toContain('broken-ref');
   });
 
   it('숫자 아닌 셀 참조는 non-numeric-ref', () => {
     const q = calcQuestion(1, 'q1', { cellId: 'q1-txt' });
-    expect(collectFormulaDiagnostics([q], []).map((d) => d.kind)).toContain('non-numeric-ref');
+    expect(collectFormulaDiagnostics([q], [], []).map((d) => d.kind)).toContain('non-numeric-ref');
   });
 
   it('calc 자기 참조는 cycle', () => {
     const q = calcQuestion(1, 'q1', { cellId: 'q1-c' });
-    expect(collectFormulaDiagnostics([q], []).map((d) => d.kind)).toContain('cycle');
+    expect(collectFormulaDiagnostics([q], [], []).map((d) => d.kind)).toContain('cycle');
   });
 
   it('검증 셀이 뒤 순서 질문을 참조하면 validation-backward-ref', () => {
@@ -45,15 +45,15 @@ describe('collectFormulaDiagnostics', () => {
     const later = calcQuestion(2, 'q2', { cellId: 'q2-num' });
     const validationCell = q1.tableRowsData![0]!.cells[0]!;
     validationCell.formula = { kind: 'cell', questionId: 'q2', cellId: 'q2-num' };
-    expect(collectFormulaDiagnostics([q1, later], []).map((d) => d.kind)).toContain('validation-backward-ref');
+    expect(collectFormulaDiagnostics([q1, later], [], []).map((d) => d.kind)).toContain('validation-backward-ref');
   });
 
   // ── branch-same-group-calc ──
   //
   // "같은 페이지"는 groupId 근사가 아니라 buildRenderSteps(questions, groups) 실제 페이지
   // 분할(수동 pageBreakBefore 구분점 모델)로 판정한다 — src/lib/group-ordering.ts 참조.
-  // 세 번째 인자 groups 를 생략하면(기존 4개 테스트처럼) 이 진단은 조용히 스킵된다
-  // (오탐 방지가 최우선 — 그룹 정보 없이는 페이지를 알 수 없다).
+  // groups 는 필수 인자다 — 그룹 정보가 없는 호출은 `[]` 를 명시적으로 넘겨야 하며, 그 경우
+  // 이 진단은 조용히 스킵된다(오탐 방지가 최우선 — 그룹 정보 없이는 페이지를 알 수 없다).
 
   function displayConditionQuestion(
     order: number,
@@ -103,11 +103,11 @@ describe('collectFormulaDiagnostics', () => {
     expect(kinds).not.toContain('branch-same-group-calc');
   });
 
-  it('groups 인자를 생략하면 branch-same-group-calc 는 스킵된다 (오탐 방지)', () => {
+  it('groups 를 빈 배열로 넘기면 branch-same-group-calc 는 스킵된다 (오탐 방지)', () => {
     const calcQ = calcQuestion(1, 'q1', { cellId: 'q1-num' });
     calcQ.groupId = 'g1';
     const branchQ = displayConditionQuestion(2, 'q2', 'g1', { questionId: 'q1', cellId: 'q1-c' });
-    const kinds = collectFormulaDiagnostics([calcQ, branchQ], []).map((d) => d.kind);
+    const kinds = collectFormulaDiagnostics([calcQ, branchQ], [], []).map((d) => d.kind);
     expect(kinds).not.toContain('branch-same-group-calc');
   });
 });

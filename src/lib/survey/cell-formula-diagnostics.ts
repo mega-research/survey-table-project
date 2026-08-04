@@ -97,7 +97,7 @@ function checkFormulaOwner(
           kind: 'validation-backward-ref',
           questionId: ownerQuestion.id,
           cellId: ownerCell.id,
-          message: `검증 수식이 뒤 순서 질문을 참조합니다: ${ownerLabel} → ${formatCellLabel(targetCell)}. 아직 입력되지 않은 값은 0으로 취급되므로 응답자가 올바른 값을 입력해도 통과하지 못할 수 있습니다.`,
+          message: `검증 수식이 뒤 순서 질문을 참조합니다: ${ownerLabel} → ${formatCellLabel(targetCell)}. 아직 입력되지 않은 값은 0으로 취급되거나 계산에서 제외되어 응답자가 올바른 값을 입력해도 통과하지 못할 수 있습니다.`,
         });
       }
       return;
@@ -119,7 +119,7 @@ function checkFormulaOwner(
           kind: 'validation-backward-ref',
           questionId: ownerQuestion.id,
           cellId: ownerCell.id,
-          message: `검증 수식이 뒤 순서 질문을 참조합니다: ${ownerLabel} → ${questionLabel(targetQuestion)}. 아직 입력되지 않은 값은 0으로 취급되므로 응답자가 올바른 값을 입력해도 통과하지 못할 수 있습니다.`,
+          message: `검증 수식이 뒤 순서 질문을 참조합니다: ${ownerLabel} → ${questionLabel(targetQuestion)}. 아직 입력되지 않은 값은 0으로 취급되거나 계산에서 제외되어 응답자가 올바른 값을 입력해도 통과하지 못할 수 있습니다.`,
         });
       }
       return;
@@ -228,13 +228,15 @@ function collectCellRefsFromDisplayCondition(group: QuestionConditionGroup): Raw
  * @param lookups 설문에 복사된 LUT 목록 (broken-ref LUT id 판정용)
  * @param groups 질문 그룹 목록. branch-same-group-calc 판정 시 buildRenderSteps 로 실제
  *   응답 페이지 분할(수동 pageBreakBefore 구분점 모델)을 계산하는 데 쓴다 — "같은 groupId"는
- *   페이지 경계와 무관하므로(group-ordering.ts) 근사로 쓰지 않는다. 생략하면(기본값 `[]`)
- *   이 규칙만 조용히 스킵된다(오탐 방지 우선 — 그룹 정보 없이는 페이지를 알 수 없다).
+ *   페이지 경계와 무관하므로(group-ordering.ts) 근사로 쓰지 않는다. 필수 인자다 — 그룹 정보가
+ *   없는 호출은 `[]` 를 명시적으로 넘겨야 한다(빠뜨리면 이 규칙만 조용히 항상 빈 결과가 되는
+ *   실수를 컴파일 타임에 막기 위함. 그 경우도 오탐은 나지 않는다 — 페이지를 모르면 판정을
+ *   보류할 뿐이다).
  */
 export function collectFormulaDiagnostics(
   questions: Question[],
   lookups: SurveyLookup[],
-  groups: QuestionGroup[] = [],
+  groups: QuestionGroup[],
 ): FormulaDiagnostic[] {
   const diagnostics: FormulaDiagnostic[] = [];
 
