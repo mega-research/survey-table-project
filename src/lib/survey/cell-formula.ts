@@ -1,0 +1,141 @@
+import type { CalcExpr, Question, SurveyLookup, TableCell } from '@/types/survey';
+import { evaluateRightOperand } from '@/lib/lookup/evaluate-lookup';
+import { parseNumericInput } from '@/utils/numeric-input';
+
+/**
+ * 셀 수식 평가기.
+ *
+ * 응답 페이지·빌더 테스트 모드·차단형 검증·서버(운영자 수정 재계산)가 전부 이 모듈
+ * 하나를 부른다 — 계산이 갈리면 "빌더에서 본 값과 실제 응답 값이 다름"이 생기므로
+ * 다른 곳에 평가 로직을 복제하지 말 것 (answer-quote.ts 와 같은 규약).
+ *
+ * server-only 의존 금지 — isomorphic 유지.
+ *
+ * 3값 의미론:
+ * - number  : 정상 값
+ * - 'empty' : 빈 항 (SUM 0, AVG 분모 제외, group 항 0)
+ * - null    : 무효 — 전파된다 (순환 / LUT 런타임 미해결 / 0 나누기)
+ *
+ * 표시 조건(displayCondition)은 평가하지 않는다 — 스펙 §4 (answer-quote 와 동일 결정).
+ */
+
+export const FORMULA_DEFAULT_DECIMAL_PLACES = 2;
+
+export interface FormulaEvalCtx {
+  questions: Question[];
+  responses: Record<string, unknown>;
+  lookups: SurveyLookup[];
+  contactAttrs: Record<string, string | undefined>;
+}
+
+type TermResult = number | 'empty' | null;
+
+export function roundFormulaValue(n: number, decimalPlaces: number | undefined): number {
+  const places = decimalPlaces ?? FORMULA_DEFAULT_DECIMAL_PLACES;
+  const factor = 10 ** places;
+  return Math.round(n * factor) / factor;
+}
+
+function readCellRaw(ctx: FormulaEvalCtx, questionId: string, cellId: string): string | null {
+  const qr = ctx.responses[questionId];
+  if (!qr || typeof qr !== 'object' || Array.isArray(qr)) return null;
+  const v = (qr as Record<string, unknown>)[cellId];
+  return typeof v === 'string' ? v : null;
+}
+
+function findCell(ctx: FormulaEvalCtx, questionId: string): (cellId: string) => TableCell | undefined {
+  const q = ctx.questions.find((it) => it.id === questionId);
+  const cells = (q?.tableRowsData ?? []).flatMap((row) => row.cells);
+  return (cellId) => cells.find((c) => c.id === cellId);
+}
+
+function evalExpr(
+  expr: CalcExpr,
+  ownQuestionId: string,
+  ctx: FormulaEvalCtx,
+  visited: Set<string>,
+): TermResult {
+  switch (expr.kind) {
+    case 'literal':
+      return expr.value;
+    case 'cell': {
+      const qid = expr.questionId ?? ownQuestionId;
+      const cell = findCell(ctx, qid)(expr.cellId);
+      if (!cell) return 'empty'; // 깨진 참조 — 항만 강등 (빌더 진단이 별도 경고)
+      if (cell.type === 'calc') {
+        // 계산 체인 — 재귀. visited 로 순환 감지.
+        const key = `${qid}:${expr.cellId}`;
+        if (visited.has(key)) return null;
+        if (!cell.formula) return 'empty';
+        visited.add(key);
+        const inner = evalExpr(cell.formula, qid, ctx, visited);
+        visited.delete(key);
+        return inner;
+      }
+      const raw = readCellRaw(ctx, qid, expr.cellId);
+      if (raw === null || raw.trim() === '') return 'empty';
+      const n = parseNumericInput(raw);
+      return n === null ? 'empty' : n;
+    }
+    case 'question': {
+      const raw = ctx.responses[expr.questionId];
+      if (typeof raw !== 'string' || raw.trim() === '') return 'empty';
+      const n = parseNumericInput(raw);
+      return n === null ? 'empty' : n;
+    }
+    case 'lookup': {
+      // 분기 RightOperand.lookup 과 동일 구조 — 기존 평가기 재사용.
+      // 런타임 미해결(익명 응답 attrs 부재 등)은 항 강등이 아니라 전체 무효 —
+      // 틀린 숫자를 보여주거나 검증으로 응답자를 막지 않기 위한 fail-safe (스펙 §4).
+      const result = evaluateRightOperand(
+        { kind: 'lookup', surveyLookupId: expr.surveyLookupId, keyMapping: expr.keyMapping, valueColumn: expr.valueColumn },
+        { responses: {}, contactAttrs: ctx.contactAttrs, lookups: ctx.lookups },
+      );
+      return result.ok ? result.value : null;
+    }
+    case 'agg': {
+      let sum = 0;
+      let filled = 0;
+      for (const item of expr.items) {
+        const v = evalExpr(item, ownQuestionId, ctx, visited);
+        if (v === null) return null;
+        if (v === 'empty') continue;
+        sum += v;
+        filled += 1;
+      }
+      if (expr.fn === 'sum') return sum;
+      return filled === 0 ? null : sum / filled;
+    }
+    case 'group': {
+      let acc: number | null = null;
+      for (const term of expr.terms) {
+        const v = evalExpr(term, ownQuestionId, ctx, visited);
+        if (v === null) return null;
+        const n = v === 'empty' ? 0 : v;
+        if (acc === null) { acc = n; continue; }
+        switch (expr.op) {
+          case '+': acc += n; break;
+          case '-': acc -= n; break;
+          case '*': acc *= n; break;
+          case '/':
+            if (n === 0) return null;
+            acc /= n;
+            break;
+        }
+      }
+      return acc ?? 'empty'; // 항이 0개인 그룹은 빈 항
+    }
+  }
+}
+
+export function evaluateCellFormula(
+  expr: CalcExpr,
+  ownQuestionId: string,
+  ctx: FormulaEvalCtx,
+  decimalPlaces?: number,
+): number | null {
+  const out = evalExpr(expr, ownQuestionId, ctx, new Set());
+  if (out === null || out === 'empty') return null;
+  if (!Number.isFinite(out)) return null;
+  return roundFormulaValue(out, decimalPlaces);
+}
