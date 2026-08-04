@@ -185,6 +185,10 @@ export function transformTableCell(
     case 'radio':
     case 'select':
       return typeof value === 'number' ? value : typeof value === 'string' ? value : null;
+    case 'calc': {
+      const n = typeof value === 'string' && value.trim() !== '' ? Number(value) : null;
+      return n !== null && Number.isFinite(n) ? n : null;
+    }
     default:
       return null;
   }

@@ -164,6 +164,8 @@ export function getCellPreviewText(cell: Partial<TableCell>): string {
       return cell.content || cell.rankingLabel || '(순위 옵션 소스)';
     case 'choice_opt':
       return cell.choiceLabel || cell.content || '(보기 옵션)';
+    case 'calc':
+      return '계산 셀';
     case 'text':
     default:
       return cell.content ? cell.content.slice(0, 30) : '';

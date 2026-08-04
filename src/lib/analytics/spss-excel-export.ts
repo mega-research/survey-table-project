@@ -411,7 +411,7 @@ export function generateSPSSColumns(questions: QuestionVariant[]): SPSSExportCol
         // radioGroup 그룹에 속한 셀은 스킵 (그룹 변수로 이미 emit됨)
         if (groupedCellIds.has(cell.id)) continue;
         // 입력 불가능한 셀(text, image, video, ranking_opt)은 건너뛰기
-        if (!['checkbox', 'radio', 'select', 'input', 'ranking'].includes(cell.type)) continue;
+        if (!['checkbox', 'radio', 'select', 'input', 'ranking', 'calc'].includes(cell.type)) continue;
         // 셀코드가 의도적으로 비어있으면 내보내기에서 제외 (표시용 셀)
         if (cell.isCustomCellCode === true && !cell.cellCode) continue;
 
