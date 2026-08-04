@@ -76,6 +76,7 @@ export interface CellFormSetters {
   setMobileLabel: (v: string) => void;
   setVerticalAlign: (v: 'top' | 'middle' | 'bottom') => void;
   setTextPosition: (v: CellFormState['textPosition']) => void;
+  setInputTextAlign: (v: CellFormState['inputTextAlign']) => void;
   setIsMergeEnabled: (v: boolean) => void;
   setRowspan: (v: number | '') => void;
   setColspan: (v: number | '') => void;
@@ -164,6 +165,7 @@ export function useCellForm(cell: TableCell, isOpen: boolean): UseCellFormResult
       setMobileLabel: set('mobileLabel'),
       setVerticalAlign: set('verticalAlign'),
       setTextPosition: set('textPosition'),
+      setInputTextAlign: set('inputTextAlign'),
       setIsMergeEnabled: set('isMergeEnabled'),
       setRowspan: set('rowspan'),
       setColspan: set('colspan'),

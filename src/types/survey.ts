@@ -389,6 +389,11 @@ export interface TableCell {
   // 셀 텍스트(content) 위치 — input/checkbox/radio/select/ranking 셀에서 텍스트와 입력 영역의 상대 위치
   // 기본값(undefined)은 'top' 과 동일 — 기존 동작 유지
   textPosition?: 'top' | 'bottom' | 'left' | 'right';
+  // 입력값 자체의 가로 정렬 — input 셀의 입력 텍스트, calc 셀의 계산값 표시에 적용.
+  // 셀 블록 정렬인 horizontalAlign 과 별개다: horizontalAlign 은 셀 안 콘텐츠 덩어리의 위치이고
+  // 이 필드는 입력/값 텍스트가 칸 안에서 어느 쪽부터 채워지는지를 정한다.
+  // 미지정이면 horizontalAlign 상속(기존 동작) — 숫자는 오른쪽 정렬이 자릿수 비교에 유리하다.
+  inputTextAlign?: 'left' | 'center' | 'right';
   // 모바일 카드 표시 설정.
   // - text/image/video 표시 셀: 미지정 = hidden, header/inline/collapsed 로 콘텐츠 노출 방식 지정.
   // - input/radio/checkbox/select/ranking 계열 인터랙티브 셀: hidden 이면 모바일 엑셀라벨만 숨김.

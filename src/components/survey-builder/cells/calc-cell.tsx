@@ -4,6 +4,8 @@ import { useMemo } from 'react';
 import { evaluateCellFormula } from '@/lib/survey/cell-formula';
 import { useFormulaEvalCtx } from '@/lib/survey/formula-context';
 import { UNIT_LABELS, formatWithComma } from '@/utils/number-format';
+import { getInputTextAlignClass } from '@/utils/table-grid-utils';
+import { cn } from '@/lib/utils';
 import type { TableCell } from '@/types/survey';
 
 import { CellContentLayout } from './cell-content-layout';
@@ -40,9 +42,15 @@ export function CalcCell({ cell, questionId }: Props) {
       position={cell.textPosition}
       bold={cell.textBold}
     >
-      <div className="flex items-center gap-1 px-2 py-1.5 text-sm tabular-nums text-gray-700">
+      {/* 값과 단위는 인라인이라 블록 컨테이너의 text-align 으로 정렬이 성립한다 */}
+      <div
+        className={cn(
+          'w-full px-2 py-1.5 text-sm tabular-nums text-gray-700',
+          getInputTextAlignClass(cell.inputTextAlign),
+        )}
+      >
         <span className="font-medium">{display}</span>
-        {unitLabel ? <span className="text-gray-500">{unitLabel}</span> : null}
+        {unitLabel ? <span className="ml-1 text-gray-500">{unitLabel}</span> : null}
       </div>
     </CellContentLayout>
   );

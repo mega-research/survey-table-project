@@ -62,6 +62,8 @@ export interface CellFormState {
   mobileLabel: string;
   verticalAlign: 'top' | 'middle' | 'bottom';
   textPosition: NonNullable<TableCell['textPosition']>;
+  /** 입력값 가로 정렬. 'inherit' 은 미지정 상태 — horizontalAlign 을 따른다. */
+  inputTextAlign: NonNullable<TableCell['inputTextAlign']> | 'inherit';
   isMergeEnabled: boolean;
   rowspan: number | '';
   colspan: number | '';
@@ -113,6 +115,9 @@ export const TEXT_POSITION_CELL_TYPES = new Set<ContentType>([
   // 계산 셀도 텍스트 라벨(content)과 값 표시 영역이 분리되어 있어 위치 지정이 의미가 있다.
   'calc',
 ]);
+
+// 입력값 가로 정렬 컨트롤을 표시할 셀 타입 — 값이 칸 안에서 채워지는 방향이 의미를 갖는 셀들
+export const INPUT_TEXT_ALIGN_CELL_TYPES = new Set<ContentType>(['input', 'calc']);
 export const MOBILE_DISPLAY_CELL_TYPES = new Set<TableCell['type']>(['text', 'image', 'video']);
 
 /** 필수 응답(TableCell.required) 지정이 가능한 셀 타입 — "다음" 차단형 검증 대상 */
@@ -204,6 +209,7 @@ export function cellToFormState(cell: TableCell): CellFormState {
     mobileLabel: cell.mobileLabel || '',
     verticalAlign: cell.verticalAlign || 'top',
     textPosition: cell.textPosition || 'top',
+    inputTextAlign: cell.inputTextAlign ?? 'inherit',
     isMergeEnabled:
       (cell.rowspan && cell.rowspan > 1) || (cell.colspan && cell.colspan > 1) || false,
     rowspan: cell.rowspan || 1,
@@ -288,6 +294,7 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
     horizontalAlign: _horizontalAlign,
     verticalAlign: _verticalAlign,
     textPosition: _textPosition,
+    inputTextAlign: _inputTextAlign,
     mobileDisplay: _mobileDisplay,
     answerQuoteText: _answerQuoteText,
     answerQuoteEnabled: _answerQuoteEnabled,
@@ -435,6 +442,10 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
     ...(TEXT_POSITION_CELL_TYPES.has(contentType) && form.textPosition !== 'top'
       ? { textPosition: form.textPosition }
       : {}),
+    // 입력값 가로 정렬 — 'inherit' 은 미지정이므로 키 자체를 저장하지 않는다
+    ...(INPUT_TEXT_ALIGN_CELL_TYPES.has(contentType) && form.inputTextAlign !== 'inherit'
+      ? { inputTextAlign: form.inputTextAlign }
+      : {}),
     // 셀 코드 및 엑셀 라벨 추가
     ...(form.cellCode ? { cellCode: form.cellCode } : {}),
     ...(form.isCustomCellCode === false
@@ -511,6 +522,9 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
   }
   if (!TEXT_POSITION_CELL_TYPES.has(contentType) || form.textPosition === 'top') {
     delete (updatedCell as Partial<TableCell>).textPosition;
+  }
+  if (!INPUT_TEXT_ALIGN_CELL_TYPES.has(contentType) || form.inputTextAlign === 'inherit') {
+    delete (updatedCell as Partial<TableCell>).inputTextAlign;
   }
 
   return updatedCell;

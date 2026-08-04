@@ -58,8 +58,10 @@ import {
   MOBILE_DISPLAY_CELL_TYPES,
   REQUIRED_CELL_TYPES,
   TEXT_POSITION_CELL_TYPES,
+  INPUT_TEXT_ALIGN_CELL_TYPES,
   buildUpdatedCell,
 } from '@/utils/serialize-cell';
+import type { CellFormState } from '@/utils/serialize-cell';
 import {
   INTERACTIVE_CELL_TYPES,
   generateCellCode,
@@ -92,6 +94,18 @@ const TEXT_POSITION_OPTIONS: Array<{
   { value: 'bottom', icon: ArrowDown, label: '아래' },
   { value: 'left', icon: ArrowLeft, label: '왼쪽' },
   { value: 'right', icon: ArrowRight, label: '오른쪽' },
+];
+
+// 입력값 가로 정렬 — 'inherit' 은 미지정으로, 셀 정렬(horizontalAlign)을 따른다
+const INPUT_TEXT_ALIGN_OPTIONS: Array<{
+  value: CellFormState['inputTextAlign'];
+  icon: typeof AlignLeft | null;
+  label: string;
+}> = [
+  { value: 'inherit', icon: null, label: '셀 정렬 따름' },
+  { value: 'left', icon: AlignLeft, label: '왼쪽' },
+  { value: 'center', icon: AlignCenter, label: '가운데' },
+  { value: 'right', icon: AlignRight, label: '오른쪽' },
 ];
 
 interface CellContentModalProps {
@@ -202,6 +216,7 @@ export function CellContentModal({
     mobileLabel,
     verticalAlign,
     textPosition,
+    inputTextAlign,
     isMergeEnabled,
     rowspan,
     colspan,
@@ -270,6 +285,7 @@ export function CellContentModal({
     setMobileLabel,
     setVerticalAlign,
     setTextPosition,
+    setInputTextAlign,
     setIsMergeEnabled,
     setRowspan,
     setColspan,
@@ -600,6 +616,31 @@ export function CellContentModal({
                 </div>
                 <p className="text-xs text-gray-500">
                   왼쪽/오른쪽 선택 시 텍스트와 입력 영역이 한 줄에 배치되고 세로 가운데 정렬됩니다.
+                </p>
+              </div>
+            )}
+
+            {INPUT_TEXT_ALIGN_CELL_TYPES.has(contentType) && (
+              <div className="space-y-2 pt-1">
+                <Label className="text-sm font-medium">입력값 정렬</Label>
+                <div className="flex gap-2">
+                  {INPUT_TEXT_ALIGN_OPTIONS.map(({ value, icon: Icon, label }) => (
+                    <Button
+                      key={value}
+                      type="button"
+                      variant={inputTextAlign === value ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setInputTextAlign(value)}
+                      className="flex-1"
+                    >
+                      {Icon && <Icon className="mr-2 h-4 w-4" />}
+                      {label}
+                    </Button>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-500">
+                  값이 칸 안에서 채워지는 방향입니다. 오른쪽을 고르면 숫자가 오른쪽 끝에 붙어
+                  자릿수를 비교하기 좋습니다.
                 </p>
               </div>
             )}

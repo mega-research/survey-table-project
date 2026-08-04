@@ -6,6 +6,8 @@ import { Input } from '@/components/ui/input';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
+import { cn } from '@/lib/utils';
+import { getInputTextAlignClass } from '@/utils/table-grid-utils';
 
 import { CellContentLayout } from './cell-content-layout';
 import type { InteractiveCellProps } from './types';
@@ -82,7 +84,7 @@ export const InputCell = React.memo(function InputCell({
           onBlur={handleBlur}
           placeholder={cell.placeholder || (isNumberMode ? '숫자만 입력하세요...' : '답변을 입력하세요...')}
           maxLength={cell.inputMaxLength}
-          className="w-full text-base"
+          className={cn('w-full text-base', getInputTextAlignClass(cell.inputTextAlign))}
           disabled={isPrefilled}
           data-prefilled={isPrefilled || undefined}
           aria-invalid={ariaInvalid || undefined}

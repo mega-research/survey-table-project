@@ -88,6 +88,22 @@ export function getAlignmentClasses(
   );
 }
 
+const INPUT_TEXT_ALIGN_MAP = {
+  left: 'text-left',
+  center: 'text-center',
+  right: 'text-right',
+} as const;
+
+/**
+ * 입력값(input 셀의 입력 텍스트, calc 셀의 계산값) 가로 정렬 클래스.
+ *
+ * 미지정이면 빈 문자열을 반환한다 — 셀 래퍼의 horizontalAlign 이 만드는 text-align 상속을
+ * 그대로 두기 위함이다(기존 설문 동작 보존). 값이 있으면 그 상속을 덮어쓴다.
+ */
+export function getInputTextAlignClass(align?: 'left' | 'center' | 'right'): string {
+  return align ? INPUT_TEXT_ALIGN_MAP[align] : '';
+}
+
 // ── ARIA 속성 ──
 
 export function getGridCellAria(

@@ -8,6 +8,7 @@ import type { TableCell } from '@/types/survey';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { getCellTextClassName } from '@/utils/cell-style';
+import { getInputTextAlignClass } from '@/utils/table-grid-utils';
 import { cn } from '@/lib/utils';
 
 import { getYouTubeEmbedUrl } from '../table-cell-renderers';
@@ -186,7 +187,10 @@ export const PreviewCell = React.memo(function PreviewCell({
               placeholder={cell.placeholder || '답변을 입력하세요...'}
               maxLength={cell.inputMaxLength}
               disabled
-              className="w-full rounded border border-gray-300 bg-gray-50 p-2 text-sm"
+              className={cn(
+                'w-full rounded border border-gray-300 bg-gray-50 p-2 text-sm',
+                getInputTextAlignClass(cell.inputTextAlign),
+              )}
             />
             {cell.inputMaxLength && (
               <div className="mt-1 text-right text-xs text-gray-500">
