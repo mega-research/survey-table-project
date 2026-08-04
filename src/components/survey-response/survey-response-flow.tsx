@@ -956,6 +956,11 @@ function SurveyResponseFlowActive({
   // 표가 그려지는 페이지는 표 총폭 기준 분기(718px 초과 → 1280px, 이하 → 896px), 아니면 896px (2026-07-27)
   // 판정 대상은 type='table' 뿐 아니라 표-소스 radio/checkbox·ranking 도 포함한다 (rendersAsTable)
   // 설문 설정 "화면 너비" 토글이 켜져 있으면 표 유무와 무관하게 항상 넓게 (0063)
+  //
+  // 아래 컨테이너의 폭 전환(300ms)은 max-width 를 애니메이션하므로 매 프레임 clientWidth 가
+  // 바뀐다. 표의 useElementWidth 가 이를 그대로 setState 로 흘리면 표가 프레임마다 리렌더되어
+  // 다음 버튼이 눌린 뒤 화면이 늦게 잡힌다. 그래서 그 훅에서 측정을 코얼레싱한다
+  // (use-element-width.ts). 전환 시간을 늘릴 때 그쪽 창 크기도 함께 보라.
   const containerMaxWidth = resolveResponseContainerWidth(
     currentStep.items.map((i) => i.question),
     { forceWide: loadedSurvey.settings.forceWideLayout },
