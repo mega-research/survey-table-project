@@ -103,7 +103,10 @@ function HeaderBulkStyleForm({
       <CellStyleFields
         textBold={textBold}
         backgroundColor={backgroundColor}
-        onTextBoldChange={setTextBold}
+        onTextBoldChange={(value) => {
+          setTextBold(value);
+          setConfirming(false);
+        }}
         onBackgroundColorChange={setBackgroundColor}
         onBackgroundColorDraftChange={(value) => {
           setBackgroundColorDraft(value);
@@ -128,7 +131,7 @@ function HeaderBulkStyleForm({
       <DialogFooter className="sm:flex-col sm:items-stretch sm:gap-2">
         {confirming && (
           <p role="alert" className="text-sm text-amber-700">
-            개별 지정된 헤더 스타일 {styledCount}개가 초기화됩니다. 계속하시겠습니까?
+            스타일이 지정된 헤더 {styledCount}개가 초기화됩니다. 계속하시겠습니까?
           </p>
         )}
         <div className="flex justify-end gap-2">

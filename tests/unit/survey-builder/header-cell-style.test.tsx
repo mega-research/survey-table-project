@@ -191,8 +191,36 @@ describe('HeaderBulkStyleDialog 확인 단계', () => {
     await userEvent.click(screen.getByRole('button', { name: '전체 헤더에 적용' }));
 
     expect(screen.getByRole('alert')).toHaveTextContent(
-      '개별 지정된 헤더 스타일 3개가 초기화됩니다.',
+      '스타일이 지정된 헤더 3개가 초기화됩니다.',
     );
+    expect(onApply).not.toHaveBeenCalled();
+  });
+
+  it('확인 단계에서 굵게 스위치를 토글하면 확인 문구가 사라지고 적용 버튼으로 돌아간다', async () => {
+    const onApply = vi.fn();
+    render(
+      <HeaderBulkStyleDialog
+        open
+        onOpenChange={vi.fn()}
+        initialStyle={{
+          textBold: false,
+          backgroundColor: '',
+          isMixed: true,
+          styledCount: 3,
+        }}
+        onApply={onApply}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: '전체 헤더에 적용' }));
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      '스타일이 지정된 헤더 3개가 초기화됩니다.',
+    );
+
+    await userEvent.click(screen.getByRole('switch', { name: '텍스트 굵게' }));
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '전체 헤더에 적용' })).toBeInTheDocument();
     expect(onApply).not.toHaveBeenCalled();
   });
 

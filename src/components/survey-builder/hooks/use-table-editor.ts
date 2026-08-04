@@ -612,6 +612,20 @@ export function useTableEditor({
   // 스타일 변경은 타이핑이 아니므로 debounce 없이 즉시 커밋한다.
   const updateColumnStyle = useCallback(
     (columnIndex: number, textBold: boolean, backgroundColor: string) => {
+      // 열 코드 등 label/code debounce가 예약되어 있으면 취소한다.
+      // 취소하지 않으면 나중에 stale cols(값 캡처)가 발화해 방금 적용한 스타일을 덮어쓴다.
+      if (pendingChangeRef.current) {
+        clearTimeout(pendingChangeRef.current);
+        pendingChangeRef.current = null;
+        pendingArgsRef.current = null;
+      }
+
+      // debounce를 취소해도 ref-only 행 편집은 화면 state까지 즉시 반영해야 한다.
+      if (pendingRowsSyncRef.current) {
+        pendingRowsSyncRef.current = false;
+        setCurrentRows(currentRowsRef.current);
+      }
+
       const updatedColumns = currentColumnsRef.current.map((col, index) => (
         index === columnIndex
           ? withHeaderStyle(col, textBold, backgroundColor || undefined)
