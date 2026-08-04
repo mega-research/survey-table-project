@@ -58,6 +58,7 @@ function baseArgs(over: Partial<Parameters<typeof useResponseLifecycle>[0]> = {}
     hasTestAttemptOwnership: false,
     setHasTestAttemptOwnership: vi.fn(),
     loadedSurvey: survey,
+    contactAttrs: {} as Record<string, string | undefined>,
     currentStep: step,
     currentStepIndex: 0,
     steps: [step] as RenderStep[],

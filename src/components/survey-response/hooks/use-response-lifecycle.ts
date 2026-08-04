@@ -7,6 +7,7 @@ import { client } from '@/shared/lib/rpc';
 import { findStepIndexOfQuestion, stepIdOf, type RenderStep } from '@/lib/group-ordering';
 import type { ClientSignals } from '@/lib/duplicate-detection/types';
 import { collectNumericIssues } from '@/lib/survey/numeric-validation';
+import { withCalcValues, type FormulaEvalCtx } from '@/lib/survey/cell-formula';
 import type { Question, QuestionGroup, Survey } from '@/types/survey';
 import type { BranchEvalCtx } from '@/utils/branch-logic';
 import {
@@ -73,6 +74,8 @@ interface UseResponseLifecycleArgs {
 
   // 설문/스텝 파생값
   loadedSurvey: Survey | null;
+  /** calc 셀 수식 평가(LUT 참조)·저장 페이로드 주입용. survey-response-flow 의 formulaCtx 와 동일 소스(병합 전 원본). */
+  contactAttrs: Record<string, string | undefined>;
   currentStep: RenderStep | undefined;
   currentStepIndex: number;
   steps: RenderStep[];
@@ -172,6 +175,7 @@ export function useResponseLifecycle({
   hasTestAttemptOwnership,
   setHasTestAttemptOwnership,
   loadedSurvey,
+  contactAttrs,
   currentStep,
   currentStepIndex,
   steps,
@@ -226,6 +230,28 @@ export function useResponseLifecycle({
   }, [recoveredDraftSeq]);
   if (currentResponseId) activeResponseIdRef.current = currentResponseId;
 
+  // 저장 경계(draft flush / complete / beacon / admin-edit)에서 calc 셀 값을 페이로드에 주입.
+  // 4지점이 각자 ctx 를 조립하면 한 곳만 어긋나는 버그가 생기므로 클로저 하나로 공유한다.
+  const injectCalc = useCallback(
+    (answers: Record<string, unknown>) => {
+      const ctx: FormulaEvalCtx = {
+        questions,
+        responses,
+        lookups: loadedSurvey?.lookups ?? [],
+        contactAttrs,
+      };
+      return withCalcValues(answers, ctx);
+    },
+    [questions, responses, loadedSurvey?.lookups, contactAttrs],
+  );
+  // beacon 은 visibilitychange/pagehide 리스너 안에서 이탈 시점에 호출된다. 리스너 재등록을
+  // (isAdminEdit 등) 몇 개 값에만 묶어두려는 기존 설계를 유지하려면 questions/responses/
+  // contactAttrs 변화마다 effect 를 재실행할 수 없다 — ref 로 최신 injectCalc 를 따라가게 한다.
+  const injectCalcRef = useRef(injectCalc);
+  useEffect(() => {
+    injectCalcRef.current = injectCalc;
+  }, [injectCalc]);
+
   const clearInvalidTargetTestSession = () => {
     if (!testIdentity) return;
     if (typeof window !== 'undefined' && loadedSurvey) {
@@ -253,7 +279,14 @@ export function useResponseLifecycle({
       return hasOnlyRootSidecars;
     }
 
-    const pendingSnapshot = Object.fromEntries(pendingAnswerSavesRef.current);
+    // rawSnapshot: pending 맵의 원본 스냅샷(참조 동일성 비교용, 아래 삭제 루프 전용).
+    // pendingSnapshot: 서버로 실제 전송하는 값 — calc 셀을 가진 질문은 raw 스냅샷에 없어도
+    // withCalcValues 가 ctx.responses 와 병합해 포함시킨다(항상 최신 계산값 재주입).
+    // 삭제 루프는 반드시 rawSnapshot 기준으로 비교해야 한다 — injectCalc 는 calc 를 가진
+    // 모든 질문에 대해 매번 새 객체를 만들어내므로, pendingSnapshot 기준으로 비교하면
+    // Object.is 가 항상 실패해 calc 테이블 질문의 pending 항목이 영영 삭제되지 않는다.
+    const rawSnapshot = Object.fromEntries(pendingAnswerSavesRef.current);
+    const pendingSnapshot = injectCalc(rawSnapshot);
     try {
       const result = await client.surveyResponse.response.saveDraft({
         responseId,
@@ -269,7 +302,7 @@ export function useResponseLifecycle({
         toast.error('응답 임시 저장에 실패했습니다. 잠시 후 다시 시도해주세요.');
         return false;
       }
-      for (const [questionId, savedValue] of Object.entries(pendingSnapshot)) {
+      for (const [questionId, savedValue] of Object.entries(rawSnapshot)) {
         if (Object.is(pendingAnswerSavesRef.current.get(questionId), savedValue)) {
           pendingAnswerSavesRef.current.delete(questionId);
         }
@@ -470,9 +503,16 @@ export function useResponseLifecycle({
       if (!responseId) return;
       if (pendingAnswerSavesRef.current.size === 0) return;
       const answers = Object.fromEntries(pendingAnswerSavesRef.current);
+      // 중복 발사 방지 지문은 raw 답변 기준(사용자가 실제로 바꾼 값)으로 유지한다 —
+      // calc 주입은 매번 새 객체를 만들어내므로 지문에 넣으면 항상 새 지문이 되어 dedupe 가 무력화된다.
       const snapshot = snapshotOfAnswers(answers);
       if (snapshot === lastBeaconSnapshotRef.current) return;
-      const attempt = sendDraftBeacon(responseId, answers, ++draftSeqRef.current, testIdentity);
+      const attempt = sendDraftBeacon(
+        responseId,
+        injectCalcRef.current(answers),
+        ++draftSeqRef.current,
+        testIdentity,
+      );
       // 낙관적으로 확정한다. 브라우저가 인수했으면 그대로 두고,
       // fetch 폴백이 실패로 확인되면 되돌려 다음 이탈 시점에 재시도되게 한다.
       lastBeaconSnapshotRef.current = snapshot;
@@ -535,6 +575,8 @@ export function useResponseLifecycle({
           allResponses: responses,
           allQuestions: questions,
           optionTexts: optionTextsByQuestion[firstId],
+          lookups: loadedSurvey?.lookups ?? [],
+          contactAttrs,
         }).some((issue) => issue.kind === 'required-detail' || issue.kind === 'required-cells');
         if (hasBlockingDetailIssue && targetIdx !== -1) {
           setNumericErrorStepIndex(targetIdx);
@@ -561,6 +603,8 @@ export function useResponseLifecycle({
             allResponses: responses,
             allQuestions: questions,
             optionTexts: optionTextsByQuestion[q.id],
+            lookups: loadedSurvey?.lookups ?? [],
+            contactAttrs,
           }).length > 0
         );
       });
@@ -584,7 +628,8 @@ export function useResponseLifecycle({
       // admin-edit 분기 (6/8) — 새 응답 INSERT 없이 onSubmit 으로 위임.
       if (isAdminEdit && adminContext) {
         // 옵션 텍스트(__optTexts__) 사이드카 — 응답자 흐름과 동일하게 합쳐서 보낸다.
-        const questionResponses = buildOptTextsPayload(visibleQuestions, responses);
+        // calc 셀 값도 저장 경계에서 함께 주입한다(표시는 파생 계산이라 별도로 저장되지 않음).
+        const questionResponses = injectCalc(buildOptTextsPayload(visibleQuestions, responses));
 
         // onSubmit 안에서 router.push 처리 — 본 컴포넌트는 thank-you 화면을 띄우지 않는다.
         await adminContext.onSubmit({ questionResponses });
@@ -706,8 +751,10 @@ export function useResponseLifecycle({
               .map((row) => row.id);
           });
 
-        // 제출 직전 — 미선택 옵션의 텍스트 drop 후 questionResponses에 병합.
-        const questionResponsesWithTexts = buildOptTextsPayload(visibleQuestions, responses);
+        // 제출 직전 — 미선택 옵션의 텍스트 drop 후 questionResponses에 병합. calc 셀 값도 함께 주입.
+        const questionResponsesWithTexts = injectCalc(
+          buildOptTextsPayload(visibleQuestions, responses),
+        );
 
         await client.surveyResponse.response.complete({
           responseId: effectiveResponseId,
@@ -759,12 +806,15 @@ export function useResponseLifecycle({
     } finally {
       setIsSubmitting(false);
     }
-    // deps 는 원본 컴포넌트의 handleSubmit useCallback 과 1:1 동일.
+    // deps 는 원본 컴포넌트의 handleSubmit useCallback 과 1:1 동일 + contactAttrs(Task 7 추가).
     // 추출로 안정 세터(setHighlightQuestionIds/setCurrentStepIndex/setIsSubmitting/setIsCompleted/
     // setDuplicateStatus/setInviteIsInvalid)와 buildOptTextsPayload(module-level helper)가 props 가 되며
     // exhaustive-deps 가 추가로 경고하지만, 모두 안정 참조라 런타임 동작 불변.
+    // contactAttrs 는 injectCalc/collectNumericIssues 의 LUT 검증 컨텍스트로 새로 쓰이므로 추가했다
+    // (questions/responses/loadedSurvey 는 이미 아래 목록에 있어 injectCalc 의 나머지 의존성은 충족됨).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
+    contactAttrs,
     adminContext,
     currentResponseId,
     currentStep,

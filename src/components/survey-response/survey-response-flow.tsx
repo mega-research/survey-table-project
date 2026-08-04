@@ -710,11 +710,20 @@ function SurveyResponseFlowActive({
         allResponses: responses,
         allQuestions: questions,
         optionTexts: effectiveOptionTextsByQuestion[q.id],
+        lookups: loadedSurvey?.lookups ?? [],
+        contactAttrs,
       });
       if (issues.length > 0) map.set(q.id, issues);
     }
     return map;
-  }, [currentStepQuestions, responses, questions, effectiveOptionTextsByQuestion]);
+  }, [
+    currentStepQuestions,
+    responses,
+    questions,
+    effectiveOptionTextsByQuestion,
+    loadedSurvey?.lookups,
+    contactAttrs,
+  ]);
   const [numericErrorStepIndex, setNumericErrorStepIndex] = useState<number | null>(null);
   const showNumericErrors = numericErrorStepIndex === currentStepIndex;
   const focusedQuestionId = currentStepQuestions.find((q) =>
@@ -751,6 +760,7 @@ function SurveyResponseFlowActive({
     hasTestAttemptOwnership,
     setHasTestAttemptOwnership,
     loadedSurvey,
+    contactAttrs,
     currentStep,
     currentStepIndex,
     steps,
