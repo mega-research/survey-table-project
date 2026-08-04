@@ -74,4 +74,29 @@ describe('formatFormulaPreview', () => {
       '1행 금액 − [삭제된 셀]',
     );
   });
+
+  // 빌더에서 "다른 질문 셀 추가" 를 누르면 questionId=''(미선택) 항이 만들어진다. 빈 문자열을
+  // "전체 질문에서 검색" 으로 오해하면 우연히 같은 cellId 를 가진 셀을 찾아 미선택 상태가 정상
+  // 참조처럼 보인다 — undefined(같은 질문 생략) 와 명확히 구분해야 한다.
+  it('questionId 가 빈 문자열이면 셀이 존재해도 [삭제된 셀] 로 표시한다', () => {
+    const expr: CalcExpr = { kind: 'cell', questionId: '', cellId: 'c1' };
+
+    expect(formatFormulaPreview(expr, [tableQuestion()], { ownQuestionId: 'q1' })).toBe(
+      '[삭제된 셀]',
+    );
+  });
+
+  it('cellId 가 비어 있으면 [삭제된 셀] 로 표시한다', () => {
+    const expr: CalcExpr = { kind: 'cell', cellId: '' };
+
+    expect(formatFormulaPreview(expr, [tableQuestion()], { ownQuestionId: 'q1' })).toBe(
+      '[삭제된 셀]',
+    );
+  });
+
+  it('questionId 를 생략하면 ownQuestionId 미지정 시에도 전체 질문에서 찾는다', () => {
+    const expr: CalcExpr = { kind: 'cell', cellId: 'c2' };
+
+    expect(formatFormulaPreview(expr, [tableQuestion()])).toBe('2행 금액');
+  });
 });

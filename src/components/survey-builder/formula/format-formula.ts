@@ -49,7 +49,10 @@ function findCellRef(
   cellId: string,
   questionId: string | undefined,
 ): { question: Question; cell: TableCell } | undefined {
-  const pool = questionId ? questions.filter((q) => q.id === questionId) : questions;
+  // undefined 만 "전체 검색" 이다. 빈 문자열은 빌더의 "아직 질문 미선택" 자리표시자이므로
+  // 어떤 질문과도 매칭되지 않아야 한다 — 전체 검색으로 넘기면 우연히 같은 cellId 를 가진 셀을
+  // 찾아내 미선택 상태가 정상 참조처럼 보인다.
+  const pool = questionId !== undefined ? questions.filter((q) => q.id === questionId) : questions;
   for (const question of pool) {
     const cell = (question.tableRowsData ?? []).flatMap((row) => row.cells).find((c) => c.id === cellId);
     if (cell) return { question, cell };

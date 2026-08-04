@@ -67,9 +67,21 @@ interface CellRefPickerProps {
   /** 수식을 소유한 질문. 여기 셀을 고르면 questionId 를 생략해 저장한다. */
   ownQuestion: Question;
   allQuestions: Question[];
+  /**
+   * 고를 수 있는 셀의 조건. 기본은 수식이 값으로 참조할 수 있는 모든 셀(`isReferenceableCell`).
+   * 집계(SUM/AVG) 항처럼 더 좁은 제약이 있는 자리는 자기 필터를 넘겨야 한다 — 표 오버레이만
+   * 막고 이 픽커를 열어두면 제약이 그대로 우회된다.
+   */
+  cellFilter?: (cell: TableCell) => boolean;
 }
 
-export function CellRefPicker({ value, onChange, ownQuestion, allQuestions }: CellRefPickerProps) {
+export function CellRefPicker({
+  value,
+  onChange,
+  ownQuestion,
+  allQuestions,
+  cellFilter = isReferenceableCell,
+}: CellRefPickerProps) {
   // 자기 질문을 항상 첫 항목으로 노출 — allQuestions 에 아직 반영되지 않은 신규 질문도 고를 수 있어야 한다.
   const tableQuestions = useMemo(() => {
     const others = allQuestions.filter((q) => q.type === 'table' && q.id !== ownQuestion.id);
@@ -83,9 +95,9 @@ export function CellRefPicker({ value, onChange, ownQuestion, allQuestions }: Ce
     () =>
       (selectedQuestion?.tableRowsData ?? [])
         .flatMap((row) => row.cells)
-        .filter(isReferenceableCell)
+        .filter(cellFilter)
         .map((c) => ({ cellId: c.id, label: formatCellLabel(c) })),
-    [selectedQuestion],
+    [selectedQuestion, cellFilter],
   );
 
   return (
@@ -368,10 +380,16 @@ export function AggEditor({ value, onChange, ownQuestion, allQuestions }: AggEdi
   };
 
   // 표 체크박스로 다루지 못하는 항(다른 질문 셀 등)만 행으로 노출한다.
+  // 셀을 아직 고르지 않은 항(`!item.cellId`)은 반드시 포함해야 한다 — 체크박스는 cellId 로만
+  // 항을 잡으므로, 빈 항을 여기서 숨기면 화면 어디에도 나타나지 않는 채 items 에 영구 잔류해
+  // 미리보기의 `[삭제된 셀]` 과 broken-ref 진단만 남기고 지울 방법이 사라진다.
   const rowItems = value.items
     .map((item, index) => ({ item, index }))
     .filter(
-      ({ item }) => !isCellItem(item) || (item.questionId ?? ownQuestion.id) !== ownQuestion.id,
+      ({ item }) =>
+        !isCellItem(item) ||
+        !item.cellId ||
+        (item.questionId ?? ownQuestion.id) !== ownQuestion.id,
     );
 
   const replaceAt = (index: number, next: CalcExpr) =>
@@ -445,6 +463,8 @@ export function AggEditor({ value, onChange, ownQuestion, allQuestions }: AggEdi
               onChange={(next) => replaceAt(index, next)}
               ownQuestion={ownQuestion}
               allQuestions={allQuestions}
+              // 표 오버레이와 같은 게이트를 걸어야 한다 — 계산 셀은 이 경로로도 들어올 수 없다.
+              cellFilter={isAggregatableCell}
             />
           ) : (
             <div className="flex-1 text-xs text-gray-500">
