@@ -204,10 +204,9 @@ export function RankingDropdownStack({
           // 체크 표시 자리(pl-8, 32px)를 없앤다. 순위형은 선택값이 트리거에도 보여 체크가
           // 없어도 무엇을 골랐는지 알 수 있고, 긴 라벨이 여러 줄로 접힐 때 들여쓰기가 크다.
           'pl-3 [&>span:first-child]:hidden',
-          // 하이라이트는 연한 하늘색 배경으로. 다만 옵션에 커스텀 배경색이 깔리면 인라인
-          // 스타일이 이겨 배경이 묻히므로(c7134ac4 회귀), 링을 함께 둬 항상 보이게 한다.
-          'data-[highlighted]:bg-sky-100',
-          'data-[highlighted]:ring-2 data-[highlighted]:ring-sky-400 data-[highlighted]:ring-inset',
+          // 하이라이트는 링만. 옵션에 커스텀 배경색이 깔리면 인라인 스타일이 배경을 덮어
+          // 어느 항목에 커서가 있는지 안 보인다(c7134ac4 회귀).
+          'data-[highlighted]:ring-2 data-[highlighted]:ring-blue-500 data-[highlighted]:ring-inset',
           isMobile && 'py-3 text-base',
         );
         const radixSelectEl = (

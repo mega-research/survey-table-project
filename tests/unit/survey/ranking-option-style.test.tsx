@@ -43,7 +43,7 @@ describe('RankingDropdownStack 옵션 스타일', () => {
     // 커서가 있는지 보인다 — 색은 취향에 따라 바뀔 수 있으나 링 자체는 사라지면 안 된다.
     expect(styledItem).toHaveClass(
       'data-[highlighted]:ring-2',
-      'data-[highlighted]:ring-sky-400',
+      'data-[highlighted]:ring-blue-500',
       'data-[highlighted]:ring-inset',
     );
     expect(styledItem).toHaveStyle({
