@@ -21,7 +21,11 @@ import {
   buildDefaultHeaderGrid,
   reconcileHeaderGridForColumnChange,
 } from '@/utils/table-merge-helpers';
-import { applyHeaderBulkStyle, type HeaderBulkStyle } from '@/utils/header-style';
+import {
+  applyHeaderBulkStyle,
+  type HeaderBulkStyle,
+  withHeaderStyle,
+} from '@/utils/header-style';
 
 import { checkCanMerge, executeMerge, executeUnmerge } from '../utils/table-cell-merge';
 import { useDragCopy } from './use-drag-copy';
@@ -603,6 +607,20 @@ export function useTableEditor({
       notifyChangeDebounced(currentTitleRef.current, updatedColumns, currentRowsRef.current);
     },
     [notifyChangeDebounced],
+  );
+
+  // 스타일 변경은 타이핑이 아니므로 debounce 없이 즉시 커밋한다.
+  const updateColumnStyle = useCallback(
+    (columnIndex: number, textBold: boolean, backgroundColor: string) => {
+      const updatedColumns = currentColumnsRef.current.map((col, index) => (
+        index === columnIndex
+          ? withHeaderStyle(col, textBold, backgroundColor || undefined)
+          : col
+      ));
+      commitColumns(updatedColumns);
+      notifyChange(currentTitleRef.current, updatedColumns, currentRowsRef.current);
+    },
+    [commitColumns, notifyChange],
   );
 
   // ── 행 CRUD ──
@@ -1409,6 +1427,7 @@ export function useTableEditor({
       moveColumn,
       moveRow,
       updateColumnLabel,
+      updateColumnStyle,
       updateColumnCode,
       handleColumnWidthChange,
       setEditingColumnWidth,

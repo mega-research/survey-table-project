@@ -3,7 +3,21 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
 import { HeaderGridEditor } from '@/components/survey-builder/header-grid-editor';
-import type { HeaderCell } from '@/types/survey';
+import { TableHeaderSection } from '@/components/survey-builder/table-header-section';
+import type { HeaderCell, TableColumn } from '@/types/survey';
+
+// 통 mock 은 import 체인이 늘면 깨지므로 importOriginal 을 spread 로 보강한다 (레포 관례)
+vi.mock('@/stores/ui-store', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/stores/ui-store')>()),
+  useSurveyUIStore: (selector: (s: unknown) => unknown) =>
+    selector({ editingQuestionId: 'q1' }),
+}));
+
+vi.mock('@/stores/survey-store', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/stores/survey-store')>()),
+  useSurveyBuilderStore: (selector: (s: unknown) => unknown) =>
+    selector({ currentSurvey: { questions: [{ id: 'q1', hideColumnLabels: false }] } }),
+}));
 
 function grid(): HeaderCell[][] {
   return [
@@ -75,5 +89,62 @@ describe('HeaderGridEditor 셀별 스타일', () => {
     fireEvent.mouseDown(screen.getByText('상반기'), { detail: 1 });
 
     expect(screen.getByRole('button', { name: /분할/ })).toBeInTheDocument();
+  });
+});
+
+function noopColumnCallbacks() {
+  return {
+    onUpdateColumnLabel: vi.fn(),
+    onUpdateColumnCode: vi.fn(),
+    onMoveColumn: vi.fn(),
+    onDeleteColumn: vi.fn(),
+    onMergeColumnHeaders: vi.fn(),
+    onUnmergeColumnHeader: vi.fn(),
+    onSetEditingColumnWidth: vi.fn(),
+    onColumnWidthChange: vi.fn(),
+  };
+}
+
+describe('TableHeaderSection 열별 스타일', () => {
+  it('열 설정 팝오버에서 배경색을 지정하면 해당 열 인덱스로 전달된다', async () => {
+    const onUpdateColumnStyle = vi.fn();
+    const columns: TableColumn[] = [
+      { id: 'c1', label: '남성' },
+      { id: 'c2', label: '여성' },
+    ];
+    render(
+      <TableHeaderSection
+        columns={columns}
+        editingColumnWidth={null}
+        {...noopColumnCallbacks()}
+        onUpdateColumnStyle={onUpdateColumnStyle}
+      />,
+    );
+
+    const settingsButtons = screen.getAllByRole('button', { name: '열 설정' });
+    const second = settingsButtons[1];
+    expect(second).toBeDefined();
+    await userEvent.click(second!);
+
+    await userEvent.type(await screen.findByLabelText('HEX 색상'), 'abc');
+    await userEvent.tab();
+
+    expect(onUpdateColumnStyle).toHaveBeenCalledWith(1, false, '#AABBCC');
+  });
+
+  it('이미 지정된 스타일이 팝오버 초기값으로 나타난다', async () => {
+    render(
+      <TableHeaderSection
+        columns={[{ id: 'c1', label: '남성', backgroundColor: '#112233', textBold: true }]}
+        editingColumnWidth={null}
+        {...noopColumnCallbacks()}
+        onUpdateColumnStyle={vi.fn()}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: '열 설정' }));
+
+    expect(await screen.findByLabelText('HEX 색상')).toHaveValue('#112233');
+    expect(screen.getByLabelText('텍스트 굵게')).toBeChecked();
   });
 });

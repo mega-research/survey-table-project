@@ -18,9 +18,14 @@ import { cn } from '@/lib/utils';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { useSurveyUIStore } from '@/stores/ui-store';
 import { TableColumn } from '@/types/survey';
-import { getCellBackgroundStyle, getCellTextClassName } from '@/utils/cell-style';
+import {
+  getCellBackgroundStyle,
+  getCellTextClassName,
+  toCellStyleFieldProps,
+} from '@/utils/cell-style';
 import { getGridSpanStyle } from '@/utils/table-grid-utils';
 
+import { CellStyleFields } from './cell-style-fields';
 import { useDebouncedInput } from './hooks/use-debounced-input';
 
 // ── 공통 스타일 상수 ──
@@ -41,6 +46,7 @@ interface ColumnHeaderCallbacks {
   onUnmergeColumnHeader: (columnIndex: number) => void;
   onSetEditingColumnWidth: (value: EditingColumnWidth) => void;
   onColumnWidthChange: (columnIndex: number, width: number) => void;
+  onUpdateColumnStyle: (columnIndex: number, textBold: boolean, backgroundColor: string) => void;
   onOpenColumnConditionModal?: ((columnIndex: number) => void) | undefined;
 }
 
@@ -75,6 +81,7 @@ const ColumnHeader = React.memo(function ColumnHeader({
   onUnmergeColumnHeader,
   onSetEditingColumnWidth,
   onColumnWidthChange,
+  onUpdateColumnStyle,
   onOpenColumnConditionModal,
 }: ColumnHeaderProps) {
   const handleLabelCommit = React.useCallback(
@@ -146,7 +153,7 @@ const ColumnHeader = React.memo(function ColumnHeader({
             <Settings2 className="h-3.5 w-3.5" />
           </button>
         </PopoverTrigger>
-        <PopoverContent className="w-48 p-1" side="bottom" align="end">
+        <PopoverContent className="w-80 p-1" side="bottom" align="end">
           <div className="space-y-0.5">
             {/* 열 코드 */}
             <div className="px-2 py-1.5">
@@ -184,6 +191,18 @@ const ColumnHeader = React.memo(function ColumnHeader({
             </div>
 
             <MenuDivider />
+
+            {/* 헤더 스타일 */}
+            <div className="px-2 py-1.5">
+              <label className="mb-1.5 block text-[10px] font-medium text-gray-500">
+                헤더 스타일
+              </label>
+              <CellStyleFields
+                {...toCellStyleFieldProps(column, (textBold, backgroundColor) => (
+                  onUpdateColumnStyle(columnIndex, textBold, backgroundColor)
+                ))}
+              />
+            </div>
 
             {/* 이동 */}
             <div className="flex gap-0.5 px-1">
@@ -276,6 +295,7 @@ export const TableHeaderSection = React.memo(function TableHeaderSection({
   onUnmergeColumnHeader,
   onSetEditingColumnWidth,
   onColumnWidthChange,
+  onUpdateColumnStyle,
   onOpenColumnConditionModal,
 }: TableHeaderSectionProps) {
   const editingQuestionId = useSurveyUIStore((s) => s.editingQuestionId);
@@ -313,6 +333,7 @@ export const TableHeaderSection = React.memo(function TableHeaderSection({
             onUnmergeColumnHeader={onUnmergeColumnHeader}
             onSetEditingColumnWidth={onSetEditingColumnWidth}
             onColumnWidthChange={onColumnWidthChange}
+            onUpdateColumnStyle={onUpdateColumnStyle}
             onOpenColumnConditionModal={onOpenColumnConditionModal}
           />
         );
