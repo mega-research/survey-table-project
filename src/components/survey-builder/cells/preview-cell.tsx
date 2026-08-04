@@ -254,6 +254,10 @@ export const PreviewCell = React.memo(function PreviewCell({
       );
     }
 
+    case 'calc':
+      // 계산 셀 프리뷰 — 실제 계산값 대신 수식이 설정돼 있음을 표시 (편집기 미리보기용).
+      return <div className="px-2 py-1.5 text-xs text-blue-600">계산: {cell.content || '수식'}</div>;
+
     default:
       return cell.content ? (
         <div

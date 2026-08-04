@@ -21,6 +21,8 @@ import {
 import { PageStepView } from '@/components/survey-response/step-views/page-step-view';
 import { collectAnswerQuotes } from '@/lib/survey/answer-quote';
 import { ContactAttrsProvider } from '@/lib/survey/contact-attrs-context';
+import type { FormulaEvalCtx } from '@/lib/survey/cell-formula';
+import { FormulaEvalProvider } from '@/lib/survey/formula-context';
 import {
   collectNumericIssues,
   collectVisibleTableCells,
@@ -446,6 +448,18 @@ function SurveyResponseFlowActive({
       lookups: loadedSurvey?.lookups ?? [],
     }),
     [responses, contactAttrs, answerQuotes, loadedSurvey?.lookups],
+  );
+
+  // calc 셀 수식 평가 컨텍스트 — responses 는 원본(cell-id 미평탄화) 형태를 그대로 넘긴다
+  // (cell-formula.ts 가 questionId → cellId 중첩 객체 형태를 직접 기대함).
+  const formulaCtx = useMemo<FormulaEvalCtx>(
+    () => ({
+      questions,
+      responses,
+      lookups: loadedSurvey?.lookups ?? [],
+      contactAttrs,
+    }),
+    [questions, responses, loadedSurvey?.lookups, contactAttrs],
   );
 
   // 상위그룹 단위 + 테이블 분리 렌더 스텝
@@ -965,6 +979,7 @@ function SurveyResponseFlowActive({
 
   return (
     <ContactAttrsProvider attrs={contactAttrs} quotes={answerQuotes}>
+      <FormulaEvalProvider value={formulaCtx}>
       <div className="min-h-dvh bg-gray-50">
       {/* 봇 방어 허니팟 — 화면에 안 보이는 입력. 봇이 채우면 서버가 차단 */}
       <HoneypotField ref={honeypotRef} />
@@ -1083,6 +1098,7 @@ function SurveyResponseFlowActive({
         />
       )}
       </div>
+      </FormulaEvalProvider>
     </ContactAttrsProvider>
   );
 }

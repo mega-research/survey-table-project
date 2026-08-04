@@ -4,6 +4,7 @@ import React from 'react';
 
 import type { TableCell } from '@/types/survey';
 
+import { CalcCell } from './calc-cell';
 import { CheckboxCell } from './checkbox-cell';
 import { ImageCell } from './image-cell';
 import { InputCell } from './input-cell';
@@ -45,6 +46,8 @@ const CellRouter = React.memo(function CellRouter({
       return <RankingCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} inputIdScope={inputIdScope} ariaInvalid={ariaInvalid} ariaDescribedBy={ariaDescribedBy} />;
     case 'ranking_opt':
       return <RankingOptCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} />;
+    case 'calc':
+      return <CalcCell cell={cell} questionId={questionId} />;
     case 'text':
     default:
       return <TextCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} />;

@@ -88,6 +88,9 @@ const EditorCellContent = React.memo(function EditorCellContent({ cell }: { cell
     case 'choice_opt':
       typeContent = (<div className="flex items-center justify-center gap-2"><CheckSquare className="h-4 w-4 text-emerald-500" /><span className="truncate text-sm text-gray-600">보기 옵션{cell.choiceLabel ? `: ${cell.choiceLabel}` : ''}</span></div>);
       break;
+    case 'calc':
+      typeContent = (<div className="flex items-center gap-2"><Zap className="h-4 w-4 text-blue-600" /><span className="truncate text-sm text-gray-600">{cell.formula ? '계산 셀' : '계산 셀 (수식 미설정)'}</span></div>);
+      break;
     case 'text':
     default:
       typeContent = null;

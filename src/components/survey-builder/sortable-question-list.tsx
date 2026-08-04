@@ -51,6 +51,8 @@ import {
   useContactAttrs,
 } from '@/lib/survey/contact-attrs-context';
 import { collectAnswerQuotes } from '@/lib/survey/answer-quote';
+import type { FormulaEvalCtx } from '@/lib/survey/cell-formula';
+import { FormulaEvalProvider } from '@/lib/survey/formula-context';
 import { resolveEffectiveOptionTextsByQuestion } from '@/lib/survey/required-option-text-validation';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { generateId, isEmptyHtml } from '@/lib/utils';
@@ -434,6 +436,17 @@ export function SortableQuestionList({
         ),
       ),
     [questions, testResponses, optionTexts],
+  );
+
+  // calc 셀 수식 평가 컨텍스트 (빌더 테스트 모드) — 응답 페이지의 formulaCtx 와 동일 구성.
+  const testFormulaCtx = useMemo<FormulaEvalCtx>(
+    () => ({
+      questions,
+      responses: testResponses,
+      lookups,
+      contactAttrs: testContactAttrs,
+    }),
+    [questions, testResponses, lookups, testContactAttrs],
   );
 
   // querySelector 스코프용 컨테이너 ref
@@ -914,29 +927,31 @@ export function SortableQuestionList({
     <>
       {/* 편집 목록 — 카드 미리보기가 실제 응답 렌더링이므로 토큰 치환용 attrs 컨텍스트로 감싼다 */}
       <ContactAttrsProvider attrs={testContactAttrs} quotes={testAnswerQuotes}>
-        <div ref={editContainerRef}>
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragStart={handleDragStart}
-            onDragOver={handleDragOver}
-            onDragEnd={handleDragEnd}
-          >
-            {/* 그룹 없는 질문용 SortableContext */}
-            <SortableContext
-              items={ungroupedQuestions.map((q) => q.id)}
-              strategy={verticalListSortingStrategy}
+        <FormulaEvalProvider value={testFormulaCtx}>
+          <div ref={editContainerRef}>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragStart={handleDragStart}
+              onDragOver={handleDragOver}
+              onDragEnd={handleDragEnd}
             >
-              <div className="space-y-6">
-                {renderGroups(renderEditCard, true)}
-              </div>
-            </SortableContext>
+              {/* 그룹 없는 질문용 SortableContext */}
+              <SortableContext
+                items={ungroupedQuestions.map((q) => q.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                <div className="space-y-6">
+                  {renderGroups(renderEditCard, true)}
+                </div>
+              </SortableContext>
 
-            <DragOverlay>
-              {activeId && renderDragOverlay(activeId)}
-            </DragOverlay>
-          </DndContext>
-        </div>
+              <DragOverlay>
+                {activeId && renderDragOverlay(activeId)}
+              </DragOverlay>
+            </DndContext>
+          </div>
+        </FormulaEvalProvider>
       </ContactAttrsProvider>
 
       {/* 모달 — 양 모드 밖 */}
