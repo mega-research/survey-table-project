@@ -31,6 +31,7 @@ import {
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 
 import type { BlockReason } from '../../domain/duplicate';
+import { toGateBlockReason } from '../../domain/gate-block-reason';
 import { decideResponseReuse } from '../../domain/lifecycle';
 import type {
   ClientSignals,
@@ -374,6 +375,19 @@ type SurveyGateRow = {
 
 /** 가용성 게이트 입력 — 응답 시점 활성 버전(없으면 null). */
 type VersionGateRow = { status: string } | null;
+
+/**
+ * 가용성 게이트 위반을 응답자 화면이 이해하는 blocked 결과로 접는다.
+ *
+ * 미배포·마감 설문에 들어온 응답자에게 500 대신 안내 화면을 보여주기 위한 것이다. 500 이면
+ * 클라이언트가 차단을 인지하지 못해 답을 고를 때마다 무의미한 INSERT 를 다시 쏜다.
+ * 가용성과 무관한 사유(변조 가드 등)는 null 을 돌려받아 그대로 throw 된다.
+ */
+function toGateBlockedResult(err: unknown): { kind: 'blocked'; reason: BlockReason } | null {
+  if (!(err instanceof SurveyNotAcceptingResponsesError)) return null;
+  const reason = toGateBlockReason(err.reason);
+  return reason ? { kind: 'blocked', reason } : null;
+}
 
 /** 응답 가용성 게이트 위반 시 던지는 에러. pub 엔드포인트라 호출자에 사유를 세분 노출하지 않는다. */
 export class SurveyNotAcceptingResponsesError extends Error {
@@ -1237,6 +1251,18 @@ function isLikelyBot(args: {
 export async function createResponseWithFirstAnswer(
   input: CreateResponseWithFirstAnswerInput,
 ): Promise<FirstAnswerResult> {
+  try {
+    return await createResponseWithFirstAnswerInner(input);
+  } catch (err) {
+    const blocked = toGateBlockedResult(err);
+    if (blocked) return blocked;
+    throw err;
+  }
+}
+
+async function createResponseWithFirstAnswerInner(
+  input: CreateResponseWithFirstAnswerInput,
+): Promise<FirstAnswerResult> {
   const {
     surveyId,
     sessionId,
@@ -1416,6 +1442,18 @@ export async function createResponseWithFirstAnswer(
  * 충돌(=이미 답변이 있는 row 존재) 시 기존 row 의 id 를 그대로 반환.
  */
 export async function createBlankResponse(
+  input: CreateBlankResponseInput,
+): Promise<FirstAnswerResult> {
+  try {
+    return await createBlankResponseInner(input);
+  } catch (err) {
+    const blocked = toGateBlockedResult(err);
+    if (blocked) return blocked;
+    throw err;
+  }
+}
+
+async function createBlankResponseInner(
   input: CreateBlankResponseInput,
 ): Promise<FirstAnswerResult> {
   const {

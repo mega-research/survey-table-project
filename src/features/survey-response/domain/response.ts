@@ -142,6 +142,7 @@ export const BlockReasonSchema = z.enum([
   'quota_closed',
   'survey_paused',
   'invalid_test_token',
+  'not_accepting',
 ]);
 
 export const FirstAnswerResultSchema = z.discriminatedUnion('kind', [
