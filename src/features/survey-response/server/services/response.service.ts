@@ -1,6 +1,6 @@
 import { headers } from 'next/headers';
 
-import { and, eq, isNotNull, isNull, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import 'server-only';
 
@@ -787,25 +787,10 @@ export async function updateQuestionResponse(
   const { responseId, questionId, value } = input;
 
   // #5 변조 가드 1: value 직렬화 바이트 상한. DB UPDATE 이전에 차단해 거대 JSONB 주입을 막는다.
-  const serializedBytes = Buffer.byteLength(JSON.stringify(value ?? null), 'utf8');
-  if (serializedBytes > MAX_ANSWER_VALUE_BYTES) {
-    throw new SurveyNotAcceptingResponsesError('answer_value_too_large');
-  }
+  assertAnswerValueSize(value);
 
   // #5 변조 가드 2: 응답 행 조회 — versionId/surveyId 로 questionId 소속을 검증한다.
-  const responseRow = await db.query.surveyResponses.findFirst({
-    where: eq(surveyResponses.id, responseId),
-    columns: {
-      id: true,
-      surveyId: true,
-      versionId: true,
-      isTest: true,
-      contactTargetId: true,
-    },
-  });
-  if (!responseRow) {
-    throw new Error('응답을 찾을 수 없습니다.');
-  }
+  const responseRow = await loadResponseRowForMutation(responseId);
 
   // #5 변조 가드 3: questionId 가 해당 응답의 versionId 스냅샷(또는 surveyId 의 questions)에
   // 존재해야 한다. 미존재면 거부 — 임의 키 JSONB 주입 차단.
@@ -818,13 +803,7 @@ export async function updateQuestionResponse(
   const storedValue = piiEncrypted ? encryptAnswerValue(value) : value;
 
   // 중단 모드: 열려 있던 탭의 답변 저장 차단 (테스트 행 예외) — 스펙 5절 게이트 3.
-  // isTest 행은 flags 조회 자체를 skip해 정상 트래픽 경로의 오버헤드를 늘리지 않는다.
-  if (!responseRow.isTest) {
-    const flags = await getSurveyControlFlags(responseRow.surveyId);
-    if (flags?.isPaused) {
-      throw new SurveyNotAcceptingResponsesError('survey_paused');
-    }
-  }
+  await assertSurveyNotPaused(responseRow);
 
   // jsonb_set 으로 답변 저장 + progress_pct 동기 갱신.
   // progress_pct 는 versionId 의 snapshot 에서 questionId 의 1-based position 을 찾아
@@ -845,6 +824,170 @@ export async function updateQuestionResponse(
     });
     return applyQuestionResponseUpdate(tx, { responseId, questionId }, storedValue);
   });
+}
+
+/** 응답 변조 가드에 필요한 최소 응답 행. 단건/배치 경로가 공유한다. */
+type ResponseMutationRow = {
+  id: string;
+  surveyId: string;
+  versionId: string | null;
+  isTest: boolean;
+  contactTargetId: string | null;
+};
+
+/** #5 변조 가드 1: value 직렬화 바이트 상한. DB UPDATE 이전에 거대 JSONB 주입을 막는다. */
+function assertAnswerValueSize(value: unknown): void {
+  const serializedBytes = Buffer.byteLength(JSON.stringify(value ?? null), 'utf8');
+  if (serializedBytes > MAX_ANSWER_VALUE_BYTES) {
+    throw new SurveyNotAcceptingResponsesError('answer_value_too_large');
+  }
+}
+
+/** #5 변조 가드 2: 응답 행 조회. 미존재면 기존 에러 메시지를 그대로 던진다. */
+async function loadResponseRowForMutation(responseId: string): Promise<ResponseMutationRow> {
+  const row = await db.query.surveyResponses.findFirst({
+    where: eq(surveyResponses.id, responseId),
+    columns: {
+      id: true,
+      surveyId: true,
+      versionId: true,
+      isTest: true,
+      contactTargetId: true,
+    },
+  });
+  if (!row) {
+    throw new Error('응답을 찾을 수 없습니다.');
+  }
+  return row;
+}
+
+/** 중단 모드 게이트. isTest 행은 flags 조회 자체를 skip 해 정상 트래픽 비용을 늘리지 않는다. */
+async function assertSurveyNotPaused(row: Pick<ResponseMutationRow, 'surveyId' | 'isTest'>): Promise<void> {
+  if (row.isTest) return;
+  const flags = await getSurveyControlFlags(row.surveyId);
+  if (flags?.isPaused) {
+    throw new SurveyNotAcceptingResponsesError('survey_paused');
+  }
+}
+
+/**
+ * assertQuestionBelongsToResponse 의 배치 버전 — 소속 검증 + piiEncrypted 를 1회 쿼리로.
+ *
+ * 페이지 이동 체크포인트는 답변을 한 번에 여러 개 받는다. 문항마다 검증 쿼리를 돌리면
+ * 왕복이 답변 수에 비례해 늘어난다(10문항 페이지에서 2.3초 관측, 2026-08-04).
+ * 하나라도 소속되지 않으면 단건 경로와 동일한 메시지로 거부한다 — 부분 저장은 하지 않는다.
+ */
+async function loadQuestionPiiFlags(
+  versionId: string | null,
+  surveyId: string,
+  questionIds: string[],
+): Promise<Map<string, boolean>> {
+  const flags = new Map<string, boolean>();
+
+  if (versionId) {
+    // questionId 는 pub 입력이라 uuid 형식이 아닐 수 있다 — 캐스트는 컬럼 쪽(q.id::text)에 건다.
+    // 비정상 id 는 스냅샷 텍스트 비교에서 매치되지 않아 아래 미존재 검사로 거부된다.
+    const idList = sql.join(
+      questionIds.map((id) => sql`${id}`),
+      sql`, `,
+    );
+    const rows = await db.execute<{ id: string | null; pii: boolean | null }>(sql`
+      SELECT
+        qe.elem->>'id' AS id,
+        (COALESCE((qe.elem->>'piiEncrypted')::boolean, false)
+         OR COALESCE(q.pii_encrypted, false)) AS pii
+      FROM survey_versions sv,
+           jsonb_array_elements(
+             CASE WHEN jsonb_typeof(sv.snapshot->'questions') = 'array'
+                  THEN sv.snapshot->'questions'
+                  ELSE '[]'::jsonb
+             END
+           ) AS qe(elem)
+      LEFT JOIN questions q
+        ON q.id::text = qe.elem->>'id' AND q.survey_id = ${surveyId}::uuid
+      WHERE sv.id = ${versionId}
+        AND qe.elem->>'id' IN (${idList})
+    `);
+    for (const row of rows) {
+      if (row.id != null) flags.set(row.id, row.pii === true);
+    }
+  } else {
+    const rows = await db
+      .select({ id: questions.id, piiEncrypted: questions.piiEncrypted })
+      .from(questions)
+      .where(and(eq(questions.surveyId, surveyId), inArray(questions.id, questionIds)));
+    for (const row of rows) {
+      flags.set(row.id, row.piiEncrypted === true);
+    }
+  }
+
+  for (const questionId of questionIds) {
+    if (!flags.has(questionId)) {
+      throw new Error('해당 설문에 존재하지 않는 질문입니다.');
+    }
+  }
+  return flags;
+}
+
+/**
+ * applyQuestionResponseUpdate 의 배치 버전 — 답변 전체를 단일 UPDATE 로 반영한다.
+ *
+ * questionResponses 는 top-level 키 병합이라 `|| jsonb` 가 문항별 jsonb_set 연쇄와 동치다.
+ * progress_pct 는 배치 중 가장 뒤에 있는 문항의 위치로 계산한다(단건 경로를 답변 수만큼
+ * 반복한 결과와 동일 — GREATEST 로 단조 증가라 최대값만 남는다).
+ */
+async function applyDraftAnswersUpdate(
+  executor: { update: typeof db.update },
+  responseId: string,
+  questionIds: string[],
+  storedAnswers: Record<string, unknown>,
+): Promise<void> {
+  const idList = sql.join(
+    questionIds.map((id) => sql`${id}`),
+    sql`, `,
+  );
+  const [updated] = await executor
+    .update(surveyResponses)
+    .set({
+      questionResponses: sql`COALESCE(${surveyResponses.questionResponses}, '{}'::jsonb)
+        || ${JSON.stringify(storedAnswers)}::jsonb`,
+      progressPct: sql`NULLIF(LEAST(100, GREATEST(
+        COALESCE(${surveyResponses.progressPct}, 0),
+        COALESCE((
+          SELECT ROUND((
+            (SELECT MAX(t.idx)
+             FROM jsonb_array_elements(
+                    CASE WHEN jsonb_typeof(sv.snapshot->'questions') = 'array'
+                         THEN sv.snapshot->'questions'
+                         ELSE '[]'::jsonb
+                    END
+                  ) WITH ORDINALITY AS t(elem, idx)
+             WHERE t.elem->>'id' IN (${idList})
+            )::numeric
+            / NULLIF(jsonb_array_length(
+                CASE WHEN jsonb_typeof(sv.snapshot->'questions') = 'array'
+                     THEN sv.snapshot->'questions'
+                     ELSE '[]'::jsonb
+                END
+              ), 0)) * 100)::int
+          FROM survey_versions sv
+          WHERE sv.id = ${surveyResponses.versionId}
+          LIMIT 1
+        ), 0)
+      ))::smallint, 0)`,
+    })
+    .where(
+      and(
+        eq(surveyResponses.id, responseId),
+        isNull(surveyResponses.deletedAt),
+        eq(surveyResponses.status, 'in_progress'),
+      ),
+    )
+    .returning();
+
+  if (!updated) {
+    throw new Error('응답을 수정할 수 없습니다.');
+  }
 }
 
 type DraftSeqClaim = 'claimed' | 'stale' | 'not_found';
@@ -907,17 +1050,51 @@ export async function saveDraftResponse(
     const claim = await claimDraftSeq(input.responseId, input.seq);
     // 더 새로운 쓰기가 이미 반영됐다. 지연 도착한 이 요청을 적용하면 최신 답변을 덮는다.
     if (claim === 'stale') return { applied: false };
-    // 'not_found' 는 그대로 진행시켜 updateQuestionResponse 의 기존 에러 경로를 타게 한다.
+    // 'not_found' 는 그대로 진행시켜 아래 응답 행 조회의 기존 에러 경로를 타게 한다.
   }
-  for (const [questionId, value] of Object.entries(input.answers)) {
-    await updateQuestionResponse({
+
+  const entries = Object.entries(input.answers);
+  if (entries.length === 0) return { applied: true };
+
+  // #5 변조 가드 1: value 직렬화 바이트 상한. 답변별로 검사해 단건 경로와 동일하게 거른다.
+  for (const [, value] of entries) {
+    assertAnswerValueSize(value);
+  }
+
+  // #5 변조 가드 2: 응답 행 조회. 배치 전체가 같은 행이라 1회면 충분하다.
+  const responseRow = await loadResponseRowForMutation(input.responseId);
+
+  // #5 변조 가드 3: 소속 검증 + PII 플래그를 questionId 전체에 대해 1회 쿼리로 수집.
+  const piiFlags = await loadQuestionPiiFlags(
+    responseRow.versionId,
+    responseRow.surveyId,
+    entries.map(([questionId]) => questionId),
+  );
+
+  // 중단 모드: 열려 있던 탭의 답변 저장 차단 (테스트 행 예외) — 스펙 5절 게이트 3.
+  await assertSurveyNotPaused(responseRow);
+
+  // PII 문항이면 저장 직전 암호화. 이미 암호문이면 encryptAnswerValue 가 통과시킨다.
+  const storedAnswers: Record<string, unknown> = {};
+  for (const [questionId, value] of entries) {
+    storedAnswers[questionId] = piiFlags.get(questionId) ? encryptAnswerValue(value) : value;
+  }
+  const questionIds = entries.map(([questionId]) => questionId);
+
+  if (!responseRow.isTest) {
+    await applyDraftAnswersUpdate(db, input.responseId, questionIds, storedAnswers);
+    return { applied: true };
+  }
+
+  // 테스트 행은 시도 소유권 락을 먼저 잡는다. 락도 배치당 1회.
+  await db.transaction(async (tx) => {
+    await lockAndAssertResponseMutation(tx, {
       responseId: input.responseId,
-      questionId,
-      value,
       ...(input.attemptId ? { attemptId: input.attemptId } : {}),
       ...(input.sessionId ? { sessionId: input.sessionId } : {}),
     });
-  }
+    await applyDraftAnswersUpdate(tx, input.responseId, questionIds, storedAnswers);
+  });
   return { applied: true };
 }
 
