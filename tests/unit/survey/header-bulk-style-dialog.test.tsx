@@ -12,7 +12,7 @@ describe('HeaderBulkStyleDialog', () => {
       <HeaderBulkStyleDialog
         open
         onOpenChange={vi.fn()}
-        initialStyle={{ textBold: false, backgroundColor: '' }}
+        initialStyle={{ textBold: false, backgroundColor: '', isMixed: false, styledCount: 0 }}
         onApply={onApply}
       />,
     );
@@ -39,7 +39,7 @@ describe('HeaderBulkStyleDialog', () => {
       <HeaderBulkStyleDialog
         open
         onOpenChange={vi.fn()}
-        initialStyle={{ textBold: false, backgroundColor: '' }}
+        initialStyle={{ textBold: false, backgroundColor: '', isMixed: false, styledCount: 0 }}
         onApply={onApply}
       />,
     );
@@ -58,7 +58,7 @@ describe('HeaderBulkStyleDialog', () => {
       <HeaderBulkStyleDialog
         open
         onOpenChange={vi.fn()}
-        initialStyle={{ textBold: false, backgroundColor: '' }}
+        initialStyle={{ textBold: false, backgroundColor: '', isMixed: false, styledCount: 0 }}
         onApply={onApply}
       />,
     );
@@ -70,7 +70,7 @@ describe('HeaderBulkStyleDialog', () => {
       <HeaderBulkStyleDialog
         open
         onOpenChange={vi.fn()}
-        initialStyle={{ textBold: false, backgroundColor: '' }}
+        initialStyle={{ textBold: false, backgroundColor: '', isMixed: false, styledCount: 0 }}
         onApply={onApply}
       />,
     );
@@ -86,7 +86,7 @@ describe('HeaderBulkStyleDialog', () => {
       <HeaderBulkStyleDialog
         open
         onOpenChange={vi.fn()}
-        initialStyle={{ textBold: true, backgroundColor: '#112233' }}
+        initialStyle={{ textBold: true, backgroundColor: '#112233', isMixed: false, styledCount: 0 }}
         onApply={onApply}
       />,
     );

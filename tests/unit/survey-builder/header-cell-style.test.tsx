@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
+import { HeaderBulkStyleDialog } from '@/components/survey-builder/header-bulk-style-dialog';
 import { HeaderGridEditor } from '@/components/survey-builder/header-grid-editor';
 import { TableHeaderSection } from '@/components/survey-builder/table-header-section';
 import type { HeaderCell, TableColumn } from '@/types/survey';
@@ -146,5 +147,121 @@ describe('TableHeaderSection 열별 스타일', () => {
 
     expect(await screen.findByLabelText('HEX 색상')).toHaveValue('#112233');
     expect(screen.getByLabelText('텍스트 굵게')).toBeChecked();
+  });
+});
+
+describe('HeaderBulkStyleDialog 확인 단계', () => {
+  it('스타일이 균일하면 확인 없이 즉시 적용한다', async () => {
+    const onApply = vi.fn();
+    render(
+      <HeaderBulkStyleDialog
+        open
+        onOpenChange={vi.fn()}
+        initialStyle={{
+          textBold: false,
+          backgroundColor: '',
+          isMixed: false,
+          styledCount: 0,
+        }}
+        onApply={onApply}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: '전체 헤더에 적용' }));
+
+    expect(onApply).toHaveBeenCalledWith({ textBold: false, backgroundColor: '' });
+  });
+
+  it('스타일이 섞여 있으면 확인 문구를 먼저 띄우고 적용하지 않는다', async () => {
+    const onApply = vi.fn();
+    render(
+      <HeaderBulkStyleDialog
+        open
+        onOpenChange={vi.fn()}
+        initialStyle={{
+          textBold: false,
+          backgroundColor: '',
+          isMixed: true,
+          styledCount: 3,
+        }}
+        onApply={onApply}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: '전체 헤더에 적용' }));
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      '개별 지정된 헤더 스타일 3개가 초기화됩니다.',
+    );
+    expect(onApply).not.toHaveBeenCalled();
+  });
+
+  it('확인에서 계속을 누르면 적용한다', async () => {
+    const onApply = vi.fn();
+    render(
+      <HeaderBulkStyleDialog
+        open
+        onOpenChange={vi.fn()}
+        initialStyle={{
+          textBold: true,
+          backgroundColor: '#AABBCC',
+          isMixed: true,
+          styledCount: 3,
+        }}
+        onApply={onApply}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: '전체 헤더에 적용' }));
+    await userEvent.click(screen.getByRole('button', { name: '계속' }));
+
+    expect(onApply).toHaveBeenCalledWith({ textBold: true, backgroundColor: '#AABBCC' });
+  });
+
+  it('확인에서 취소를 누르면 적용하지 않고 다시 적용 버튼으로 돌아간다', async () => {
+    const onApply = vi.fn();
+    render(
+      <HeaderBulkStyleDialog
+        open
+        onOpenChange={vi.fn()}
+        initialStyle={{
+          textBold: false,
+          backgroundColor: '',
+          isMixed: true,
+          styledCount: 2,
+        }}
+        onApply={onApply}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: '전체 헤더에 적용' }));
+    await userEvent.click(screen.getByRole('button', { name: '취소' }));
+
+    expect(onApply).not.toHaveBeenCalled();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '전체 헤더에 적용' })).toBeInTheDocument();
+  });
+
+  it('잘못된 HEX 는 확인 단계로 넘어가지 않는다', async () => {
+    const onApply = vi.fn();
+    render(
+      <HeaderBulkStyleDialog
+        open
+        onOpenChange={vi.fn()}
+        initialStyle={{
+          textBold: false,
+          backgroundColor: '',
+          isMixed: true,
+          styledCount: 2,
+        }}
+        onApply={onApply}
+      />,
+    );
+
+    await userEvent.type(screen.getByLabelText('HEX 색상'), 'zz');
+    await userEvent.click(screen.getByRole('button', { name: '전체 헤더에 적용' }));
+
+    expect(screen.getByRole('alert')).toHaveTextContent('3자리 또는 6자리 HEX 색상을 입력하세요.');
+    expect(onApply).not.toHaveBeenCalled();
   });
 });
