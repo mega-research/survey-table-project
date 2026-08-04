@@ -953,7 +953,8 @@ function SurveyResponseFlowActive({
     );
   }
 
-  // 표 문항 페이지는 표 총폭 기준 분기(718px 초과 → 1280px, 이하 → 896px), 표 없는 페이지는 896px (2026-07-27)
+  // 표가 그려지는 페이지는 표 총폭 기준 분기(718px 초과 → 1280px, 이하 → 896px), 아니면 896px (2026-07-27)
+  // 판정 대상은 type='table' 뿐 아니라 표-소스 radio/checkbox·ranking 도 포함한다 (rendersAsTable)
   // 설문 설정 "화면 너비" 토글이 켜져 있으면 표 유무와 무관하게 항상 넓게 (0063)
   const containerMaxWidth = resolveResponseContainerWidth(
     currentStep.items.map((i) => i.question),
