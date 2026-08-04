@@ -1,8 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   getCellBackgroundStyle,
   getCellTextClassName,
   normalizeCellHexColor,
+  toCellStyleFieldProps,
 } from '@/utils/cell-style';
 
 describe('cell style', () => {
@@ -30,5 +31,41 @@ describe('cell style', () => {
       backgroundColor: '#AABBCC',
     });
     expect(getCellTextClassName({ textBold: true })).toBe('font-bold');
+  });
+});
+
+describe('toCellStyleFieldProps', () => {
+  it('빈 스타일을 CellStyleFields 가 쓰는 기본값으로 바꾼다', () => {
+    const props = toCellStyleFieldProps({}, () => {});
+
+    expect(props.textBold).toBe(false);
+    expect(props.backgroundColor).toBe('');
+  });
+
+  it('굵게를 바꾸면 기존 배경색을 유지한 채 commit 한다', () => {
+    const commit = vi.fn();
+    const props = toCellStyleFieldProps({ backgroundColor: '#AABBCC' }, commit);
+
+    props.onTextBoldChange(true);
+
+    expect(commit).toHaveBeenCalledWith(true, '#AABBCC');
+  });
+
+  it('배경색을 바꾸면 기존 굵게를 유지한 채 commit 한다', () => {
+    const commit = vi.fn();
+    const props = toCellStyleFieldProps({ textBold: true }, commit);
+
+    props.onBackgroundColorChange('#112233');
+
+    expect(commit).toHaveBeenCalledWith(true, '#112233');
+  });
+
+  it('배경색을 비우면 빈 문자열로 commit 한다', () => {
+    const commit = vi.fn();
+    const props = toCellStyleFieldProps({ backgroundColor: '#AABBCC' }, commit);
+
+    props.onBackgroundColorChange('');
+
+    expect(commit).toHaveBeenCalledWith(false, '');
   });
 });

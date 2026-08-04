@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import type { HeaderCell, TableColumn } from '@/types/survey';
-import { applyHeaderBulkStyle, getCommonHeaderStyle } from '@/utils/header-style';
+import {
+  applyHeaderBulkStyle,
+  getCommonHeaderStyle,
+  withHeaderStyle,
+} from '@/utils/header-style';
 
 const columns: TableColumn[] = [
   { id: 'c1', label: '성별' },
@@ -76,11 +80,89 @@ describe('applyHeaderBulkStyle', () => {
     expect(getCommonHeaderStyle(uniform.columns, uniform.headerGrid)).toEqual({
       textBold: true,
       backgroundColor: '#ABCDEF',
+      isMixed: false,
+      styledCount: 5,
     });
 
     expect(getCommonHeaderStyle(
       [{ ...columns[0]!, textBold: true }, columns[1]!],
       undefined,
-    )).toEqual({ textBold: false, backgroundColor: '' });
+    )).toEqual({
+      textBold: false,
+      backgroundColor: '',
+      isMixed: true,
+      styledCount: 1,
+    });
+  });
+});
+
+function col(overrides: Partial<TableColumn> = {}): TableColumn {
+  return { id: 'c', label: '열', ...overrides };
+}
+
+function hcell(overrides: Partial<HeaderCell> = {}): HeaderCell {
+  return { id: 'h', label: '헤더', colspan: 1, rowspan: 1, ...overrides };
+}
+
+describe('withHeaderStyle', () => {
+  it('빈 스타일이면 두 필드를 객체에서 제거한다', () => {
+    const styled = col({ id: 'c1', backgroundColor: '#AABBCC', textBold: true });
+
+    expect(withHeaderStyle(styled, false, undefined)).toEqual({ id: 'c1', label: '열' });
+  });
+
+  it('원본을 변형하지 않는다', () => {
+    const source = col({ id: 'c1' });
+
+    withHeaderStyle(source, true, '#112233');
+
+    expect(source).toEqual({ id: 'c1', label: '열' });
+  });
+});
+
+describe('getCommonHeaderStyle 혼합 판정', () => {
+  it('스타일이 하나도 없으면 styledCount 0, isMixed false', () => {
+    expect(getCommonHeaderStyle([col(), col()], [[hcell(), hcell()]])).toEqual({
+      textBold: false,
+      backgroundColor: '',
+      isMixed: false,
+      styledCount: 0,
+    });
+  });
+
+  it('일부만 배경색이 있으면 isMixed true', () => {
+    expect(getCommonHeaderStyle([col({ backgroundColor: '#AABBCC' }), col()], undefined)).toEqual({
+      textBold: false,
+      backgroundColor: '',
+      isMixed: true,
+      styledCount: 1,
+    });
+  });
+
+  it('textBold만 지정된 헤더도 styledCount 에 포함한다', () => {
+    expect(getCommonHeaderStyle([col({ textBold: true })], undefined)).toEqual({
+      textBold: true,
+      backgroundColor: '',
+      isMixed: false,
+      styledCount: 1,
+    });
+  });
+
+  it('headerGrid 가 undefined 면 열 헤더만 집계한다', () => {
+    expect(getCommonHeaderStyle([col({ backgroundColor: '#AABBCC' })], undefined)).toEqual({
+      textBold: false,
+      backgroundColor: '#AABBCC',
+      isMixed: false,
+      styledCount: 1,
+    });
+  });
+
+  it('헤더가 하나도 없으면 styledCount 0, isMixed false', () => {
+    expect(getCommonHeaderStyle([], undefined)).toEqual({
+      textBold: false,
+      backgroundColor: '',
+      isMixed: false,
+      styledCount: 0,
+    });
   });
 });

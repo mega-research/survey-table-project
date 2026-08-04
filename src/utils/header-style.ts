@@ -11,7 +11,14 @@ export interface AppliedHeaderStyle {
   headerGrid: HeaderCell[][] | undefined;
 }
 
-function withHeaderStyle<T extends TableColumn | HeaderCell>(
+export interface HeaderStyleState extends HeaderBulkStyle {
+  /** 헤더 간 스타일이 균일하지 않은지 */
+  isMixed: boolean;
+  /** 배경색이 있거나 textBold 인 헤더 수 */
+  styledCount: number;
+}
+
+export function withHeaderStyle<T extends TableColumn | HeaderCell>(
   value: T,
   textBold: boolean,
   backgroundColor: string | undefined,
@@ -52,13 +59,25 @@ export function applyHeaderBulkStyle(
   };
 }
 
+/**
+ * 전체 헤더의 공통 스타일과 혼합 여부를 한 번의 순회로 낸다.
+ * isMixed 는 일괄 적용이 개별 작업을 덮어쓰는지 판단하는 트리거다.
+ * 이미 일괄로 전부 같은 색을 칠해둔 상태는 잃을 개별 작업이 없으므로 isMixed 가 false 다.
+ */
 export function getCommonHeaderStyle(
   columns: TableColumn[],
   headerGrid: HeaderCell[][] | undefined,
-): HeaderBulkStyle {
+): HeaderStyleState {
   const headers = [...columns, ...(headerGrid?.flat() ?? [])];
+
+  const styledCount = headers.filter((header) => (
+    header.textBold === true || Boolean(header.backgroundColor)
+  )).length;
+
   const first = headers[0];
-  if (!first) return { textBold: false, backgroundColor: '' };
+  if (!first) {
+    return { textBold: false, backgroundColor: '', isMixed: false, styledCount };
+  }
 
   const textBold = first.textBold === true;
   const backgroundColor = first.backgroundColor ?? '';
@@ -68,6 +87,6 @@ export function getCommonHeaderStyle(
   ));
 
   return isUniform
-    ? { textBold, backgroundColor }
-    : { textBold: false, backgroundColor: '' };
+    ? { textBold, backgroundColor, isMixed: false, styledCount }
+    : { textBold: false, backgroundColor: '', isMixed: true, styledCount };
 }
