@@ -189,6 +189,7 @@ export function CellContentModal({
     choiceGroupId,
     textBold,
     backgroundColor,
+    textColor,
     horizontalAlign,
     mobileDisplay,
     mobileLabel,
@@ -253,6 +254,7 @@ export function CellContentModal({
     setChoiceGroupId,
     setTextBold,
     setBackgroundColor,
+    setTextColor,
     setHorizontalAlign,
     setMobileDisplay,
     setMobileLabel,
@@ -1472,8 +1474,10 @@ export function CellContentModal({
             key={cell.id}
             textBold={textBold}
             backgroundColor={backgroundColor}
+            textColor={textColor}
             onTextBoldChange={setTextBold}
             onBackgroundColorChange={setBackgroundColor}
+            onTextColorChange={setTextColor}
           />
         </div>
 

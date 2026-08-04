@@ -12,13 +12,13 @@ describe('HeaderBulkStyleDialog', () => {
       <HeaderBulkStyleDialog
         open
         onOpenChange={vi.fn()}
-        initialStyle={{ textBold: false, backgroundColor: '', isMixed: false, styledCount: 0 }}
+        initialStyle={{ textBold: false, backgroundColor: '', textColor: '', isMixed: false, styledCount: 0 }}
         onApply={onApply}
       />,
     );
 
     await user.click(screen.getByRole('switch', { name: '텍스트 굵게' }));
-    await user.type(screen.getByRole('textbox', { name: 'HEX 색상' }), 'abc');
+    await user.type(screen.getByRole('textbox', { name: '배경색 HEX' }), 'abc');
 
     const preview = screen.getByTestId('header-style-preview');
     expect(preview).toHaveClass('font-bold');
@@ -29,6 +29,7 @@ describe('HeaderBulkStyleDialog', () => {
     expect(onApply).toHaveBeenCalledWith({
       textBold: true,
       backgroundColor: '#AABBCC',
+      textColor: '',
     });
   });
 
@@ -39,12 +40,12 @@ describe('HeaderBulkStyleDialog', () => {
       <HeaderBulkStyleDialog
         open
         onOpenChange={vi.fn()}
-        initialStyle={{ textBold: false, backgroundColor: '', isMixed: false, styledCount: 0 }}
+        initialStyle={{ textBold: false, backgroundColor: '', textColor: '', isMixed: false, styledCount: 0 }}
         onApply={onApply}
       />,
     );
 
-    await user.type(screen.getByRole('textbox', { name: 'HEX 색상' }), '12ZZ99');
+    await user.type(screen.getByRole('textbox', { name: '배경색 HEX' }), '12ZZ99');
     await user.click(screen.getByRole('button', { name: '전체 헤더에 적용' }));
 
     expect(screen.getByRole('alert')).toHaveTextContent('3자리 또는 6자리 HEX 색상을 입력하세요.');
@@ -58,24 +59,24 @@ describe('HeaderBulkStyleDialog', () => {
       <HeaderBulkStyleDialog
         open
         onOpenChange={vi.fn()}
-        initialStyle={{ textBold: false, backgroundColor: '', isMixed: false, styledCount: 0 }}
+        initialStyle={{ textBold: false, backgroundColor: '', textColor: '', isMixed: false, styledCount: 0 }}
         onApply={onApply}
       />,
     );
 
-    await user.type(screen.getByRole('textbox', { name: 'HEX 색상' }), '12ZZ99');
+    await user.type(screen.getByRole('textbox', { name: '배경색 HEX' }), '12ZZ99');
     await user.click(screen.getByRole('button', { name: '전체 헤더에 적용' }));
 
     rerender(
       <HeaderBulkStyleDialog
         open
         onOpenChange={vi.fn()}
-        initialStyle={{ textBold: false, backgroundColor: '', isMixed: false, styledCount: 0 }}
+        initialStyle={{ textBold: false, backgroundColor: '', textColor: '', isMixed: false, styledCount: 0 }}
         onApply={onApply}
       />,
     );
 
-    expect(screen.getByRole('textbox', { name: 'HEX 색상' })).toHaveValue('12ZZ99');
+    expect(screen.getByRole('textbox', { name: '배경색 HEX' })).toHaveValue('12ZZ99');
     expect(screen.getByRole('alert')).toHaveTextContent('3자리 또는 6자리 HEX 색상을 입력하세요.');
   });
 
@@ -86,7 +87,7 @@ describe('HeaderBulkStyleDialog', () => {
       <HeaderBulkStyleDialog
         open
         onOpenChange={vi.fn()}
-        initialStyle={{ textBold: true, backgroundColor: '#112233', isMixed: false, styledCount: 0 }}
+        initialStyle={{ textBold: true, backgroundColor: '#112233', textColor: '', isMixed: false, styledCount: 0 }}
         onApply={onApply}
       />,
     );
@@ -95,6 +96,6 @@ describe('HeaderBulkStyleDialog', () => {
     await user.click(screen.getByRole('button', { name: '배경색 없음' }));
     await user.click(screen.getByRole('button', { name: '전체 헤더에 적용' }));
 
-    expect(onApply).toHaveBeenCalledWith({ textBold: false, backgroundColor: '' });
+    expect(onApply).toHaveBeenCalledWith({ textBold: false, backgroundColor: '', textColor: '' });
   });
 });

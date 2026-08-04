@@ -13,15 +13,17 @@ describe('CellStyleFields', () => {
       <CellStyleFields
         textBold={false}
         backgroundColor=""
+        textColor=""
         onTextBoldChange={onBold}
         onBackgroundColorChange={onBackground}
+        onTextColorChange={vi.fn()}
       />,
     );
 
     await user.click(screen.getByRole('switch', { name: '텍스트 굵게' }));
     expect(onBold).toHaveBeenCalledWith(true);
 
-    await user.type(screen.getByLabelText('HEX 색상'), 'abc');
+    await user.type(screen.getByLabelText('배경색 HEX'), 'abc');
     await user.tab();
     expect(onBackground).toHaveBeenCalledWith('#AABBCC');
   });
@@ -33,13 +35,15 @@ describe('CellStyleFields', () => {
       <CellStyleFields
         textBold={false}
         backgroundColor="#112233"
+        textColor=""
         onTextBoldChange={() => {}}
         onBackgroundColorChange={onBackground}
+        onTextColorChange={vi.fn()}
       />,
     );
 
-    await user.clear(screen.getByLabelText('HEX 색상'));
-    await user.type(screen.getByLabelText('HEX 색상'), 'ZZZ');
+    await user.clear(screen.getByLabelText('배경색 HEX'));
+    await user.type(screen.getByLabelText('배경색 HEX'), 'ZZZ');
     await user.tab();
     expect(onBackground).not.toHaveBeenCalled();
 
@@ -55,13 +59,15 @@ describe('CellStyleFields', () => {
       <CellStyleFields
         textBold={false}
         backgroundColor="#112233"
+        textColor=""
         onTextBoldChange={() => {}}
         onBackgroundColorChange={onBackground}
+        onTextColorChange={vi.fn()}
         onInvalidColor={onInvalidColor}
       />,
     );
 
-    await user.clear(screen.getByLabelText('HEX 색상'));
+    await user.clear(screen.getByLabelText('배경색 HEX'));
     await user.tab();
 
     expect(onBackground).toHaveBeenCalledWith('');

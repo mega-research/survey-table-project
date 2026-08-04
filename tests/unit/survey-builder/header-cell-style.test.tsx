@@ -45,7 +45,7 @@ describe('HeaderGridEditor 셀별 스타일', () => {
     expect(first).toBeDefined();
     await userEvent.click(first!);
 
-    await userEvent.type(await screen.findByLabelText('HEX 색상'), 'abc');
+    await userEvent.type(await screen.findByLabelText('배경색 HEX'), 'abc');
     await userEvent.tab();
 
     expect(onChange).toHaveBeenCalledWith([
@@ -68,6 +68,49 @@ describe('HeaderGridEditor 셀별 스타일', () => {
 
     expect(onChange).toHaveBeenCalledWith([
       [{ id: 'h1', label: '상반기', colspan: 1, rowspan: 1 }],
+    ]);
+  });
+
+  it('한 셀에 글자색을 지정하면 그 셀만 바뀐다', async () => {
+    const onChange = vi.fn();
+    render(<HeaderGridEditor headerGrid={grid()} columnCount={2} onChange={onChange} />);
+
+    const buttons = screen.getAllByRole('button', { name: '헤더 셀 스타일' });
+    const first = buttons[0];
+    expect(first).toBeDefined();
+    await userEvent.click(first!);
+
+    await userEvent.type(await screen.findByLabelText('글자색 HEX'), 'fff');
+    await userEvent.tab();
+
+    expect(onChange).toHaveBeenCalledWith([
+      [
+        { id: 'h1', label: '상반기', colspan: 1, rowspan: 1, textColor: '#FFFFFF' },
+        { id: 'h2', label: '하반기', colspan: 1, rowspan: 1 },
+      ],
+    ]);
+  });
+
+  it('배경색과 글자색은 서로를 지우지 않는다', async () => {
+    const onChange = vi.fn();
+    const styled: HeaderCell[][] = [
+      [{ id: 'h1', label: '상반기', colspan: 1, rowspan: 1, backgroundColor: '#000000' }],
+    ];
+    render(<HeaderGridEditor headerGrid={styled} columnCount={1} onChange={onChange} />);
+
+    await userEvent.click(screen.getByRole('button', { name: '헤더 셀 스타일' }));
+    await userEvent.type(await screen.findByLabelText('글자색 HEX'), 'fff');
+    await userEvent.tab();
+
+    expect(onChange).toHaveBeenCalledWith([
+      [{
+        id: 'h1',
+        label: '상반기',
+        colspan: 1,
+        rowspan: 1,
+        backgroundColor: '#000000',
+        textColor: '#FFFFFF',
+      }],
     ]);
   });
 
@@ -129,10 +172,14 @@ describe('TableHeaderSection 열별 스타일', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: '헤더 스타일' }));
 
-    await userEvent.type(await screen.findByLabelText('HEX 색상'), 'abc');
+    await userEvent.type(await screen.findByLabelText('배경색 HEX'), 'abc');
     await userEvent.tab();
 
-    expect(onUpdateColumnStyle).toHaveBeenCalledWith(1, false, '#AABBCC');
+    expect(onUpdateColumnStyle).toHaveBeenCalledWith(1, {
+      textBold: false,
+      backgroundColor: '#AABBCC',
+      textColor: '',
+    });
   });
 
   it('스타일 필드는 헤더 스타일을 누르기 전에는 열 설정 메뉴에 노출되지 않는다', async () => {
@@ -148,7 +195,7 @@ describe('TableHeaderSection 열별 스타일', () => {
     await userEvent.click(screen.getByRole('button', { name: '열 설정' }));
 
     expect(await screen.findByRole('button', { name: '헤더 스타일' })).toBeInTheDocument();
-    expect(screen.queryByLabelText('HEX 색상')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('배경색 HEX')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('텍스트 굵게')).not.toBeInTheDocument();
   });
 
@@ -165,7 +212,7 @@ describe('TableHeaderSection 열별 스타일', () => {
     await userEvent.click(screen.getByRole('button', { name: '열 설정' }));
     await userEvent.click(await screen.findByRole('button', { name: '헤더 스타일' }));
 
-    expect(await screen.findByLabelText('HEX 색상')).toHaveValue('#112233');
+    expect(await screen.findByLabelText('배경색 HEX')).toHaveValue('#112233');
     expect(screen.getByLabelText('텍스트 굵게')).toBeChecked();
   });
 });
@@ -180,6 +227,7 @@ describe('HeaderBulkStyleDialog 확인 단계', () => {
         initialStyle={{
           textBold: false,
           backgroundColor: '',
+          textColor: '',
           isMixed: false,
           styledCount: 0,
         }}
@@ -189,7 +237,7 @@ describe('HeaderBulkStyleDialog 확인 단계', () => {
 
     await userEvent.click(screen.getByRole('button', { name: '전체 헤더에 적용' }));
 
-    expect(onApply).toHaveBeenCalledWith({ textBold: false, backgroundColor: '' });
+    expect(onApply).toHaveBeenCalledWith({ textBold: false, backgroundColor: '', textColor: '' });
   });
 
   it('스타일이 섞여 있으면 확인 문구를 먼저 띄우고 적용하지 않는다', async () => {
@@ -201,6 +249,7 @@ describe('HeaderBulkStyleDialog 확인 단계', () => {
         initialStyle={{
           textBold: false,
           backgroundColor: '',
+          textColor: '',
           isMixed: true,
           styledCount: 3,
         }}
@@ -225,6 +274,7 @@ describe('HeaderBulkStyleDialog 확인 단계', () => {
         initialStyle={{
           textBold: false,
           backgroundColor: '',
+          textColor: '',
           isMixed: true,
           styledCount: 3,
         }}
@@ -253,6 +303,7 @@ describe('HeaderBulkStyleDialog 확인 단계', () => {
         initialStyle={{
           textBold: true,
           backgroundColor: '#AABBCC',
+          textColor: '',
           isMixed: true,
           styledCount: 3,
         }}
@@ -263,7 +314,11 @@ describe('HeaderBulkStyleDialog 확인 단계', () => {
     await userEvent.click(screen.getByRole('button', { name: '전체 헤더에 적용' }));
     await userEvent.click(screen.getByRole('button', { name: '계속' }));
 
-    expect(onApply).toHaveBeenCalledWith({ textBold: true, backgroundColor: '#AABBCC' });
+    expect(onApply).toHaveBeenCalledWith({
+      textBold: true,
+      backgroundColor: '#AABBCC',
+      textColor: '',
+    });
   });
 
   it('확인에서 취소를 누르면 적용하지 않고 다시 적용 버튼으로 돌아간다', async () => {
@@ -275,6 +330,7 @@ describe('HeaderBulkStyleDialog 확인 단계', () => {
         initialStyle={{
           textBold: false,
           backgroundColor: '',
+          textColor: '',
           isMixed: true,
           styledCount: 2,
         }}
@@ -299,6 +355,7 @@ describe('HeaderBulkStyleDialog 확인 단계', () => {
         initialStyle={{
           textBold: false,
           backgroundColor: '',
+          textColor: '',
           isMixed: true,
           styledCount: 2,
         }}
@@ -306,7 +363,7 @@ describe('HeaderBulkStyleDialog 확인 단계', () => {
       />,
     );
 
-    await userEvent.type(screen.getByLabelText('HEX 색상'), 'zz');
+    await userEvent.type(screen.getByLabelText('배경색 HEX'), 'zz');
     await userEvent.click(screen.getByRole('button', { name: '전체 헤더에 적용' }));
 
     expect(screen.getByRole('alert')).toHaveTextContent('3자리 또는 6자리 HEX 색상을 입력하세요.');

@@ -28,7 +28,11 @@ import {
   shouldDisplayRow,
 } from '@/utils/branch-logic';
 import { decideDrilldown } from '@/utils/classify-table';
-import { getCellBackgroundStyle, getCellTextClassName } from '@/utils/cell-style';
+import {
+  getCellBackgroundStyle,
+  getCellTextClassName,
+  getCellTextStyle,
+} from '@/utils/cell-style';
 import { expandHeaderGrid } from '@/utils/expand-header-grid';
 import {
   clampMobileDrilldownOmitLeadingColumns,
@@ -160,6 +164,7 @@ function HeaderCells({
           minHeight,
           ...getHeaderCellStickyStyle(startCol, colSpan, stickyInfo),
           ...getCellBackgroundStyle(cell),
+          ...getCellTextStyle(cell),
         };
 
         return (
@@ -206,6 +211,7 @@ function HeaderCells({
       minHeight,
       ...getHeaderCellStickyStyle(startCol, cs, stickyInfo),
       ...getCellBackgroundStyle(column),
+      ...getCellTextStyle(column),
     };
 
     return (
@@ -276,7 +282,7 @@ function renderRowCells({
       }
     }
     if (applyCellBackground) {
-      Object.assign(style, getCellBackgroundStyle(cell));
+      Object.assign(style, getCellBackgroundStyle(cell), getCellTextStyle(cell));
     }
 
     return (

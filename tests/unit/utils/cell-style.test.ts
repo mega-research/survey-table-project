@@ -35,6 +35,32 @@ describe('cell style', () => {
 });
 
 describe('toCellStyleFieldProps', () => {
+  it('글자색을 바꾸면 나머지 축의 현재 값을 유지한 채 commit 한다', () => {
+    const commit = vi.fn();
+    const props = toCellStyleFieldProps({ textBold: true, backgroundColor: '#AABBCC' }, commit);
+
+    props.onTextColorChange('#FFFFFF');
+
+    expect(commit).toHaveBeenCalledWith({
+      textBold: true,
+      backgroundColor: '#AABBCC',
+      textColor: '#FFFFFF',
+    });
+  });
+
+  it('기존 글자색은 다른 축을 바꿀 때도 실려 나간다', () => {
+    const commit = vi.fn();
+    const props = toCellStyleFieldProps({ textColor: '#FF0000' }, commit);
+
+    props.onTextBoldChange(true);
+
+    expect(commit).toHaveBeenCalledWith({
+      textBold: true,
+      backgroundColor: '',
+      textColor: '#FF0000',
+    });
+  });
+
   it('빈 스타일을 CellStyleFields 가 쓰는 기본값으로 바꾼다', () => {
     const props = toCellStyleFieldProps({}, () => {});
 
@@ -48,7 +74,11 @@ describe('toCellStyleFieldProps', () => {
 
     props.onTextBoldChange(true);
 
-    expect(commit).toHaveBeenCalledWith(true, '#AABBCC');
+    expect(commit).toHaveBeenCalledWith({
+      textBold: true,
+      backgroundColor: '#AABBCC',
+      textColor: '',
+    });
   });
 
   it('배경색을 바꾸면 기존 굵게를 유지한 채 commit 한다', () => {
@@ -57,7 +87,11 @@ describe('toCellStyleFieldProps', () => {
 
     props.onBackgroundColorChange('#112233');
 
-    expect(commit).toHaveBeenCalledWith(true, '#112233');
+    expect(commit).toHaveBeenCalledWith({
+      textBold: true,
+      backgroundColor: '#112233',
+      textColor: '',
+    });
   });
 
   it('배경색을 비우면 빈 문자열로 commit 한다', () => {
@@ -66,6 +100,10 @@ describe('toCellStyleFieldProps', () => {
 
     props.onBackgroundColorChange('');
 
-    expect(commit).toHaveBeenCalledWith(false, '');
+    expect(commit).toHaveBeenCalledWith({
+      textBold: false,
+      backgroundColor: '',
+      textColor: '',
+    });
   });
 });

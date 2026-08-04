@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils';
 import {
   getCellBackgroundStyle,
   getCellTextClassName,
+  getCellTextStyle,
   normalizeCellHexColor,
 } from '@/utils/cell-style';
 import type { HeaderBulkStyle, HeaderStyleState } from '@/utils/header-style';
@@ -35,7 +36,12 @@ export function HeaderBulkStyleDialog({
   initialStyle,
   onApply,
 }: HeaderBulkStyleDialogProps): React.ReactNode {
-  const formKey = `${open ? 'open' : 'closed'}:${initialStyle.textBold}:${initialStyle.backgroundColor}`;
+  const formKey = [
+    open ? 'open' : 'closed',
+    initialStyle.textBold,
+    initialStyle.backgroundColor,
+    initialStyle.textColor,
+  ].join(':');
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -59,25 +65,35 @@ function HeaderBulkStyleForm({
   const {
     textBold: initialTextBold,
     backgroundColor: initialBackgroundColor,
+    textColor: initialTextColor,
     isMixed,
     styledCount,
   } = initialStyle;
   const [textBold, setTextBold] = useState(initialTextBold);
   const [backgroundColor, setBackgroundColor] = useState(initialBackgroundColor);
   const [backgroundColorDraft, setBackgroundColorDraft] = useState(initialBackgroundColor);
+  const [textColor, setTextColor] = useState(initialTextColor);
+  const [textColorDraft, setTextColorDraft] = useState(initialTextColor);
   const [error, setError] = useState<string>();
   const [confirming, setConfirming] = useState(false);
 
-  const normalizedPreviewColor = backgroundColorDraft
-    ? normalizeCellHexColor(backgroundColorDraft) ?? backgroundColor
-    : '';
+  /** 미리보기는 확정 전 draft 도 보여준다. 잘못된 값이면 마지막 확정 색으로 되돌린다. */
+  const previewColor = (draft: string, committed: string) => (
+    draft ? normalizeCellHexColor(draft) ?? committed : ''
+  );
 
   const handleApply = () => {
     const normalizedBackgroundColor = backgroundColorDraft
       ? normalizeCellHexColor(backgroundColorDraft)
       : null;
+    const normalizedTextColor = textColorDraft
+      ? normalizeCellHexColor(textColorDraft)
+      : null;
 
-    if (backgroundColorDraft && !normalizedBackgroundColor) {
+    if (
+      (backgroundColorDraft && !normalizedBackgroundColor)
+      || (textColorDraft && !normalizedTextColor)
+    ) {
       setError(COLOR_ERROR);
       setConfirming(false);
       return;
@@ -90,7 +106,11 @@ function HeaderBulkStyleForm({
       return;
     }
 
-    onApply({ textBold, backgroundColor: normalizedBackgroundColor ?? '' });
+    onApply({
+      textBold,
+      backgroundColor: normalizedBackgroundColor ?? '',
+      textColor: normalizedTextColor ?? '',
+    });
     onOpenChange(false);
   };
 
@@ -103,6 +123,7 @@ function HeaderBulkStyleForm({
       <CellStyleFields
         textBold={textBold}
         backgroundColor={backgroundColor}
+        textColor={textColor}
         onTextBoldChange={(value) => {
           setTextBold(value);
           setConfirming(false);
@@ -110,6 +131,12 @@ function HeaderBulkStyleForm({
         onBackgroundColorChange={setBackgroundColor}
         onBackgroundColorDraftChange={(value) => {
           setBackgroundColorDraft(value);
+          setError(undefined);
+          setConfirming(false);
+        }}
+        onTextColorChange={setTextColor}
+        onTextColorDraftChange={(value) => {
+          setTextColorDraft(value);
           setError(undefined);
           setConfirming(false);
         }}
@@ -123,7 +150,12 @@ function HeaderBulkStyleForm({
           'rounded-md border border-gray-300 bg-gray-50 px-4 py-3 text-center',
           getCellTextClassName({ textBold }),
         )}
-        style={getCellBackgroundStyle({ backgroundColor: normalizedPreviewColor })}
+        style={{
+          ...getCellBackgroundStyle({
+            backgroundColor: previewColor(backgroundColorDraft, backgroundColor),
+          }),
+          ...getCellTextStyle({ textColor: previewColor(textColorDraft, textColor) }),
+        }}
       >
         헤더 미리보기
       </div>

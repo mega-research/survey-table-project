@@ -11,7 +11,11 @@ import { useScrollLeftSync } from '@/hooks/use-scroll-left-sync';
 import { cn } from '@/lib/utils';
 import { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
 import { expandHeaderGrid } from '@/utils/expand-header-grid';
-import { getCellBackgroundStyle, getCellTextClassName } from '@/utils/cell-style';
+import {
+  getCellBackgroundStyle,
+  getCellTextClassName,
+  getCellTextStyle,
+} from '@/utils/cell-style';
 import {
   HEADER_ROW_MIN_HEIGHT,
   STICKY_BODY_Z,
@@ -166,6 +170,7 @@ export const TablePreview = React.memo(function TablePreview({
             minHeight,
             ...getHeaderCellStickyStyle(startCol, colSpan, stickyInfo),
             ...getCellBackgroundStyle(cell),
+            ...getCellTextStyle(cell),
           };
 
           return (
@@ -193,6 +198,7 @@ export const TablePreview = React.memo(function TablePreview({
         minHeight,
         ...getHeaderCellStickyStyle(startCol, cs, stickyInfo),
         ...getCellBackgroundStyle(column),
+        ...getCellTextStyle(column),
       };
 
       return (
@@ -330,7 +336,7 @@ export const TablePreview = React.memo(function TablePreview({
                         }
                       }
                       if (applyCellBackground) {
-                        Object.assign(style, getCellBackgroundStyle(cell));
+                        Object.assign(style, getCellBackgroundStyle(cell), getCellTextStyle(cell));
                       }
 
                       return (

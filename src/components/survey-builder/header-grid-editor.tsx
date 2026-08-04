@@ -12,9 +12,10 @@ import { HeaderCell } from '@/types/survey';
 import {
   getCellBackgroundStyle,
   getCellTextClassName,
+  getCellTextStyle,
   toCellStyleFieldProps,
 } from '@/utils/cell-style';
-import { withHeaderStyle } from '@/utils/header-style';
+import { type HeaderBulkStyle, withHeaderStyle } from '@/utils/header-style';
 
 import { CellStyleFields } from './cell-style-fields';
 
@@ -409,13 +410,11 @@ export function HeaderGridEditor({ headerGrid, columnCount, onChange }: HeaderGr
     [headerGrid, onChange],
   );
 
-  // 셀별 스타일 변경. 빈 배경색은 스타일 제거를 뜻하므로 withHeaderStyle 규칙에 맡긴다.
+  // 셀별 스타일 변경. 빈 색은 스타일 제거를 뜻하므로 withHeaderStyle 규칙에 맡긴다.
   const updateCellStyle = useCallback(
-    (rowIdx: number, cellIdx: number, textBold: boolean, backgroundColor: string) => {
+    (rowIdx: number, cellIdx: number, style: HeaderBulkStyle) => {
       const newGrid = headerGrid.map((row, r) => row.map((cell, c) => (
-        r === rowIdx && c === cellIdx
-          ? withHeaderStyle(cell, textBold, backgroundColor || undefined)
-          : { ...cell }
+        r === rowIdx && c === cellIdx ? withHeaderStyle(cell, style) : { ...cell }
       )));
       onChange(newGrid);
     },
@@ -563,6 +562,7 @@ export function HeaderGridEditor({ headerGrid, columnCount, onChange }: HeaderGr
                       'h-7 bg-transparent text-center text-sm',
                       getCellTextClassName(cell),
                     )}
+                    style={getCellTextStyle(cell)}
                   />
                 ) : (
                   <span
@@ -570,6 +570,7 @@ export function HeaderGridEditor({ headerGrid, columnCount, onChange }: HeaderGr
                       cell.label ? 'text-gray-800' : 'text-gray-400 italic',
                       getCellTextClassName(cell),
                     )}
+                    style={getCellTextStyle(cell)}
                     title={isMerged ? `${cell.colspan}×${cell.rowspan} 병합` : undefined}
                   >
                     {cell.label || '(빈 셀)'}
@@ -598,8 +599,8 @@ export function HeaderGridEditor({ headerGrid, columnCount, onChange }: HeaderGr
                     onMouseDown={(e) => e.stopPropagation()}
                   >
                     <CellStyleFields
-                      {...toCellStyleFieldProps(cell, (textBold, backgroundColor) => (
-                        updateCellStyle(rowIdx, cellIdx, textBold, backgroundColor)
+                      {...toCellStyleFieldProps(cell, (style) => (
+                        updateCellStyle(rowIdx, cellIdx, style)
                       ))}
                     />
                   </PopoverContent>

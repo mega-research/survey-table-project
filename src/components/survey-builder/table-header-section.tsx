@@ -22,8 +22,10 @@ import { TableColumn } from '@/types/survey';
 import {
   getCellBackgroundStyle,
   getCellTextClassName,
+  getCellTextStyle,
   toCellStyleFieldProps,
 } from '@/utils/cell-style';
+import type { HeaderBulkStyle } from '@/utils/header-style';
 import { getGridSpanStyle } from '@/utils/table-grid-utils';
 
 import { CellStyleFields } from './cell-style-fields';
@@ -47,7 +49,7 @@ interface ColumnHeaderCallbacks {
   onUnmergeColumnHeader: (columnIndex: number) => void;
   onSetEditingColumnWidth: (value: EditingColumnWidth) => void;
   onColumnWidthChange: (columnIndex: number, width: number) => void;
-  onUpdateColumnStyle: (columnIndex: number, textBold: boolean, backgroundColor: string) => void;
+  onUpdateColumnStyle: (columnIndex: number, style: HeaderBulkStyle) => void;
   onOpenColumnConditionModal?: ((columnIndex: number) => void) | undefined;
 }
 
@@ -134,6 +136,7 @@ const ColumnHeader = React.memo(function ColumnHeader({
               'h-7 w-full border border-gray-200 bg-transparent pr-7 text-center text-sm',
               getCellTextClassName(column),
             )}
+            style={getCellTextStyle(column)}
             placeholder="열 제목"
           />
           <div className="flex items-center justify-center gap-1 text-[10px] text-gray-400">
@@ -202,19 +205,21 @@ const ColumnHeader = React.memo(function ColumnHeader({
                   className={`${MENU_BUTTON_BASE} text-gray-600 hover:bg-gray-100`}
                 >
                   <Palette className="h-3 w-3" /> 헤더 스타일
-                  {column.backgroundColor && (
+                  {(column.backgroundColor || column.textColor) && (
                     <span
                       aria-hidden
-                      className="ml-auto h-3 w-3 rounded-sm border border-gray-300"
-                      style={getCellBackgroundStyle(column)}
-                    />
+                      className="ml-auto flex h-3.5 w-3.5 items-center justify-center rounded-sm border border-gray-300 text-[8px] leading-none"
+                      style={{ ...getCellBackgroundStyle(column), ...getCellTextStyle(column) }}
+                    >
+                      가
+                    </span>
                   )}
                 </button>
               </PopoverTrigger>
               <PopoverContent className="w-80" side="right" align="start">
                 <CellStyleFields
-                  {...toCellStyleFieldProps(column, (textBold, backgroundColor) => (
-                    onUpdateColumnStyle(columnIndex, textBold, backgroundColor)
+                  {...toCellStyleFieldProps(column, (style) => (
+                    onUpdateColumnStyle(columnIndex, style)
                   ))}
                 />
               </PopoverContent>

@@ -24,6 +24,7 @@ describe('applyHeaderBulkStyle', () => {
     const result = applyHeaderBulkStyle(columns, grid, {
       textBold: true,
       backgroundColor: 'abc',
+      textColor: '',
     });
 
     expect(result.columns).not.toBe(columns);
@@ -42,16 +43,19 @@ describe('applyHeaderBulkStyle', () => {
       ...column,
       textBold: true,
       backgroundColor: '#112233',
+      textColor: '',
     }));
     const styledGrid = grid.map((row) => row.map((cell) => ({
       ...cell,
       textBold: true,
       backgroundColor: '#112233',
+      textColor: '',
     })));
 
     const result = applyHeaderBulkStyle(styledColumns, styledGrid, {
       textBold: false,
       backgroundColor: '',
+      textColor: '',
     });
 
     expect(result.columns.every((column) => (
@@ -66,6 +70,7 @@ describe('applyHeaderBulkStyle', () => {
     const result = applyHeaderBulkStyle(columns, undefined, {
       textBold: true,
       backgroundColor: '#123456',
+      textColor: '',
     });
 
     expect(result.headerGrid).toBeUndefined();
@@ -76,10 +81,12 @@ describe('applyHeaderBulkStyle', () => {
     const uniform = applyHeaderBulkStyle(columns, grid, {
       textBold: true,
       backgroundColor: '#ABCDEF',
+      textColor: '',
     });
     expect(getCommonHeaderStyle(uniform.columns, uniform.headerGrid)).toEqual({
       textBold: true,
       backgroundColor: '#ABCDEF',
+      textColor: '',
       isMixed: false,
       styledCount: 5,
     });
@@ -90,6 +97,7 @@ describe('applyHeaderBulkStyle', () => {
     )).toEqual({
       textBold: false,
       backgroundColor: '',
+      textColor: '',
       isMixed: true,
       styledCount: 1,
     });
@@ -108,13 +116,13 @@ describe('withHeaderStyle', () => {
   it('빈 스타일이면 두 필드를 객체에서 제거한다', () => {
     const styled = col({ id: 'c1', backgroundColor: '#AABBCC', textBold: true });
 
-    expect(withHeaderStyle(styled, false, undefined)).toEqual({ id: 'c1', label: '열' });
+    expect(withHeaderStyle(styled, { textBold: false, backgroundColor: '', textColor: '' })).toEqual({ id: 'c1', label: '열' });
   });
 
   it('원본을 변형하지 않는다', () => {
     const source = col({ id: 'c1' });
 
-    withHeaderStyle(source, true, '#112233');
+    withHeaderStyle(source, { textBold: true, backgroundColor: '#112233', textColor: '' });
 
     expect(source).toEqual({ id: 'c1', label: '열' });
   });
@@ -125,6 +133,7 @@ describe('getCommonHeaderStyle 혼합 판정', () => {
     expect(getCommonHeaderStyle([col(), col()], [[hcell(), hcell()]])).toEqual({
       textBold: false,
       backgroundColor: '',
+      textColor: '',
       isMixed: false,
       styledCount: 0,
     });
@@ -134,6 +143,7 @@ describe('getCommonHeaderStyle 혼합 판정', () => {
     expect(getCommonHeaderStyle([col({ backgroundColor: '#AABBCC' }), col()], undefined)).toEqual({
       textBold: false,
       backgroundColor: '',
+      textColor: '',
       isMixed: true,
       styledCount: 1,
     });
@@ -143,6 +153,7 @@ describe('getCommonHeaderStyle 혼합 판정', () => {
     expect(getCommonHeaderStyle([col({ textBold: true })], undefined)).toEqual({
       textBold: true,
       backgroundColor: '',
+      textColor: '',
       isMixed: false,
       styledCount: 1,
     });
@@ -152,6 +163,7 @@ describe('getCommonHeaderStyle 혼합 판정', () => {
     expect(getCommonHeaderStyle([col({ backgroundColor: '#AABBCC' })], undefined)).toEqual({
       textBold: false,
       backgroundColor: '#AABBCC',
+      textColor: '',
       isMixed: false,
       styledCount: 1,
     });
@@ -161,6 +173,7 @@ describe('getCommonHeaderStyle 혼합 판정', () => {
     expect(getCommonHeaderStyle([], undefined)).toEqual({
       textBold: false,
       backgroundColor: '',
+      textColor: '',
       isMixed: false,
       styledCount: 0,
     });

@@ -65,7 +65,11 @@ describe('useTableEditor.updateColumnStyle — pending debounce 취소 (M1)', ()
     // 타이머 발화 전(150ms 시점)에 스타일 적용
     act(() => {
       vi.advanceTimersByTime(150);
-      hook.result.current.actions.updateColumnStyle(0, true, '#ff0000');
+      hook.result.current.actions.updateColumnStyle(0, {
+        textBold: true,
+        backgroundColor: '#ff0000',
+        textColor: '',
+      });
     });
 
     // updateColumnStyle 은 debounce 없이 즉시 커밋하므로 onTableChange 가 바로 호출된다.

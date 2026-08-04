@@ -1,10 +1,7 @@
 import type { HeaderCell, TableColumn } from '@/types/survey';
-import { normalizeCellHexColor } from '@/utils/cell-style';
+import { type CellStyleValues, normalizeCellHexColor } from '@/utils/cell-style';
 
-export interface HeaderBulkStyle {
-  textBold: boolean;
-  backgroundColor: string;
-}
+export type HeaderBulkStyle = CellStyleValues;
 
 export interface AppliedHeaderStyle {
   columns: TableColumn[];
@@ -14,21 +11,38 @@ export interface AppliedHeaderStyle {
 export interface HeaderStyleState extends HeaderBulkStyle {
   /** 헤더 간 스타일이 균일하지 않은지 */
   isMixed: boolean;
-  /** 배경색이 있거나 textBold 인 헤더 수 */
+  /** 배경색·글자색·굵게 중 하나라도 지정된 헤더 수 */
   styledCount: number;
 }
 
+const EMPTY_STYLE: HeaderBulkStyle = {
+  textBold: false,
+  backgroundColor: '',
+  textColor: '',
+};
+
 export function withHeaderStyle<T extends TableColumn | HeaderCell>(
   value: T,
-  textBold: boolean,
-  backgroundColor: string | undefined,
+  style: HeaderBulkStyle,
 ): T {
   const next = { ...value };
-  if (textBold) next.textBold = true;
+  if (style.textBold) next.textBold = true;
   else delete next.textBold;
-  if (backgroundColor) next.backgroundColor = backgroundColor;
+  if (style.backgroundColor) next.backgroundColor = style.backgroundColor;
   else delete next.backgroundColor;
+  if (style.textColor) next.textColor = style.textColor;
+  else delete next.textColor;
   return next;
+}
+
+/** 빈 문자열은 스타일 제거를 뜻하므로 그대로 통과시키고, 값이 있으면 HEX 로 정규화한다. */
+function normalizeStyleColor(raw: string, label: string): string {
+  if (!raw) return '';
+  const normalized = normalizeCellHexColor(raw);
+  if (!normalized) {
+    throw new Error(`유효하지 않은 헤더 ${label}입니다.`);
+  }
+  return normalized;
 }
 
 export function applyHeaderBulkStyle(
@@ -36,26 +50,15 @@ export function applyHeaderBulkStyle(
   headerGrid: HeaderCell[][] | undefined,
   style: HeaderBulkStyle,
 ): AppliedHeaderStyle {
-  let backgroundColor: string | undefined;
-  if (style.backgroundColor) {
-    const normalizedColor = normalizeCellHexColor(style.backgroundColor);
-    if (!normalizedColor) {
-      throw new Error('유효하지 않은 헤더 배경색입니다.');
-    }
-    backgroundColor = normalizedColor;
-  }
+  const normalized: HeaderBulkStyle = {
+    textBold: style.textBold,
+    backgroundColor: normalizeStyleColor(style.backgroundColor, '배경색'),
+    textColor: normalizeStyleColor(style.textColor, '글자색'),
+  };
 
   return {
-    columns: columns.map((column) => withHeaderStyle(
-      column,
-      style.textBold,
-      backgroundColor,
-    )),
-    headerGrid: headerGrid?.map((row) => row.map((cell) => withHeaderStyle(
-      cell,
-      style.textBold,
-      backgroundColor,
-    ))),
+    columns: columns.map((column) => withHeaderStyle(column, normalized)),
+    headerGrid: headerGrid?.map((row) => row.map((cell) => withHeaderStyle(cell, normalized))),
   };
 }
 
@@ -71,22 +74,28 @@ export function getCommonHeaderStyle(
   const headers = [...columns, ...(headerGrid?.flat() ?? [])];
 
   const styledCount = headers.filter((header) => (
-    header.textBold === true || Boolean(header.backgroundColor)
+    header.textBold === true
+    || Boolean(header.backgroundColor)
+    || Boolean(header.textColor)
   )).length;
 
   const first = headers[0];
   if (!first) {
-    return { textBold: false, backgroundColor: '', isMixed: false, styledCount };
+    return { ...EMPTY_STYLE, isMixed: false, styledCount };
   }
 
-  const textBold = first.textBold === true;
-  const backgroundColor = first.backgroundColor ?? '';
+  const common: HeaderBulkStyle = {
+    textBold: first.textBold === true,
+    backgroundColor: first.backgroundColor ?? '',
+    textColor: first.textColor ?? '',
+  };
   const isUniform = headers.every((header) => (
-    (header.textBold === true) === textBold
-    && (header.backgroundColor ?? '') === backgroundColor
+    (header.textBold === true) === common.textBold
+    && (header.backgroundColor ?? '') === common.backgroundColor
+    && (header.textColor ?? '') === common.textColor
   ));
 
   return isUniform
-    ? { textBold, backgroundColor, isMixed: false, styledCount }
-    : { textBold: false, backgroundColor: '', isMixed: true, styledCount };
+    ? { ...common, isMixed: false, styledCount }
+    : { ...EMPTY_STYLE, isMixed: true, styledCount };
 }

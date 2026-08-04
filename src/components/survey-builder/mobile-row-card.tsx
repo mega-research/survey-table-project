@@ -22,7 +22,7 @@ import {
   resolveMobileCellLabel,
   type MobileLegendLabel,
 } from '@/utils/mobile-display-cells';
-import { getCellTextClassName } from '@/utils/cell-style';
+import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
 import { getAlignmentClasses } from '@/utils/table-grid-utils';
 
 import { InteractiveCell } from './cells';
@@ -189,6 +189,7 @@ export const MobileRowCard = React.memo(function MobileRowCard({
                   'text-sm font-semibold leading-snug text-gray-900',
                   getCellTextClassName(rowHeader),
                 )}
+                style={getCellTextStyle(rowHeader)}
               >
                 {substituteTokens(rowHeader.label, attrs, quotes)}
               </p>
@@ -213,7 +214,10 @@ export const MobileRowCard = React.memo(function MobileRowCard({
                 {i > 0 && (
                   <span aria-hidden className="min-w-3 flex-1 border-b border-dotted border-gray-300" />
                 )}
-                <span className={getCellTextClassName(legend)}>
+                <span
+                  className={getCellTextClassName(legend)}
+                  style={getCellTextStyle(legend)}
+                >
                   {substituteTokens(legend.label, attrs, quotes)}
                 </span>
               </React.Fragment>
