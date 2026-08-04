@@ -88,6 +88,10 @@ export interface CellFormSetters {
   setAnswerQuoteText: (v: string) => void;
   setAnswerQuoteEnabled: (v: boolean) => void;
   setAnswerQuoteName: (v: string) => void;
+  setFormula: (v: CellFormState['formula']) => void;
+  setFormulaValidationEnabled: (v: boolean) => void;
+  setFormulaToleranceRaw: (v: string) => void;
+  setFormulaErrorMessage: (v: string) => void;
 }
 
 export interface UseCellFormResult {
@@ -172,6 +176,10 @@ export function useCellForm(cell: TableCell, isOpen: boolean): UseCellFormResult
       setAnswerQuoteText: set('answerQuoteText'),
       setAnswerQuoteEnabled: set('answerQuoteEnabled'),
       setAnswerQuoteName: set('answerQuoteName'),
+      setFormula: set('formula'),
+      setFormulaValidationEnabled: set('formulaValidationEnabled'),
+      setFormulaToleranceRaw: set('formulaToleranceRaw'),
+      setFormulaErrorMessage: set('formulaErrorMessage'),
     };
   }, []);
 

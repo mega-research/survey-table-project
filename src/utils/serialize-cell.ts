@@ -1,5 +1,6 @@
 import {
   BranchRule,
+  CalcExpr,
   CheckboxOption,
   NumberFormat,
   QuestionOption,
@@ -79,6 +80,13 @@ export interface CellFormState {
   answerQuoteEnabled: boolean;
   /** 셀 단위 인용 이름 — 다른 질문에서 {{{이름}}} 으로 참조한다 */
   answerQuoteName: string;
+  /** 셀 수식 (calc 탭 표시 / input 탭 검증 공용) */
+  formula: CalcExpr | undefined;
+  /** input 탭 "계산 검증" 토글 — true 여야 formula 가 검증 모드로 저장된다 */
+  formulaValidationEnabled: boolean;
+  /** 검증 오차 허용 입력값(raw 문자열). 빈 문자열 = 0 */
+  formulaToleranceRaw: string;
+  formulaErrorMessage: string;
 }
 
 /** 셀 내용 편집 탭의 콘텐츠 타입 (모달 Tabs value) */
@@ -207,6 +215,10 @@ export function cellToFormState(cell: TableCell): CellFormState {
     answerQuoteText: cell.answerQuoteText ?? '',
     answerQuoteEnabled: cell.answerQuoteEnabled === true,
     answerQuoteName: cell.answerQuoteName ?? '',
+    formula: cell.formula,
+    formulaValidationEnabled: cell.type === 'input' && cell.formula !== undefined,
+    formulaToleranceRaw: cell.formulaTolerance !== undefined ? String(cell.formulaTolerance) : '',
+    formulaErrorMessage: cell.formulaErrorMessage ?? '',
   };
 }
 
@@ -278,6 +290,9 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
     answerQuoteText: _answerQuoteText,
     answerQuoteEnabled: _answerQuoteEnabled,
     answerQuoteName: _answerQuoteName,
+    formula: _formula,
+    formulaTolerance: _formulaTolerance,
+    formulaErrorMessage: _formulaErrorMessage,
     ...cellBase
   } = cell;
 
@@ -323,6 +338,23 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
           ...(form.inputType === 'number' && form.cellNumberFormat
             ? { numberFormat: form.cellNumberFormat }
             : {}),
+        }
+      : {}),
+    // calc 셀 — 수식 + 표시 포맷
+    ...(contentType === 'calc'
+      ? {
+          ...(form.formula ? { formula: form.formula } : {}),
+          ...(form.cellNumberFormat ? { numberFormat: form.cellNumberFormat } : {}),
+        }
+      : {}),
+    // 숫자 input 셀 수식 검증
+    ...(contentType === 'input' && form.inputType === 'number' && form.formulaValidationEnabled && form.formula
+      ? {
+          formula: form.formula,
+          ...(parseNumericInput(form.formulaToleranceRaw) !== null
+            ? { formulaTolerance: parseNumericInput(form.formulaToleranceRaw)! }
+            : {}),
+          ...(form.formulaErrorMessage.trim() ? { formulaErrorMessage: form.formulaErrorMessage.trim() } : {}),
         }
       : {}),
     // 필수 응답 셀 — 인터랙티브 셀 공용 (미체크·비대상 타입은 키 자체 제거)
