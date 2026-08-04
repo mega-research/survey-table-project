@@ -7,6 +7,7 @@ import {
   ArrowRight,
   Combine,
   Eye,
+  Palette,
   Settings2,
   Trash2,
   Unlink,
@@ -153,7 +154,7 @@ const ColumnHeader = React.memo(function ColumnHeader({
             <Settings2 className="h-3.5 w-3.5" />
           </button>
         </PopoverTrigger>
-        <PopoverContent className="w-80 p-1" side="bottom" align="end">
+        <PopoverContent className="w-48 p-1" side="bottom" align="end">
           <div className="space-y-0.5">
             {/* 열 코드 */}
             <div className="px-2 py-1.5">
@@ -192,17 +193,32 @@ const ColumnHeader = React.memo(function ColumnHeader({
 
             <MenuDivider />
 
-            {/* 헤더 스타일 */}
-            <div className="px-2 py-1.5">
-              <label className="mb-1.5 block text-[10px] font-medium text-gray-500">
-                헤더 스타일
-              </label>
-              <CellStyleFields
-                {...toCellStyleFieldProps(column, (textBold, backgroundColor) => (
-                  onUpdateColumnStyle(columnIndex, textBold, backgroundColor)
-                ))}
-              />
-            </div>
+            {/* 헤더 스타일 — 메뉴가 비대해지지 않도록 중첩 팝오버로 분리 */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="헤더 스타일"
+                  className={`${MENU_BUTTON_BASE} text-gray-600 hover:bg-gray-100`}
+                >
+                  <Palette className="h-3 w-3" /> 헤더 스타일
+                  {column.backgroundColor && (
+                    <span
+                      aria-hidden
+                      className="ml-auto h-3 w-3 rounded-sm border border-gray-300"
+                      style={getCellBackgroundStyle(column)}
+                    />
+                  )}
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-80" side="right" align="start">
+                <CellStyleFields
+                  {...toCellStyleFieldProps(column, (textBold, backgroundColor) => (
+                    onUpdateColumnStyle(columnIndex, textBold, backgroundColor)
+                  ))}
+                />
+              </PopoverContent>
+            </Popover>
 
             {/* 이동 */}
             <div className="flex gap-0.5 px-1">

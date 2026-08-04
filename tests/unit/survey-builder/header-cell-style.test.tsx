@@ -127,10 +127,29 @@ describe('TableHeaderSection 열별 스타일', () => {
     expect(second).toBeDefined();
     await userEvent.click(second!);
 
+    await userEvent.click(await screen.findByRole('button', { name: '헤더 스타일' }));
+
     await userEvent.type(await screen.findByLabelText('HEX 색상'), 'abc');
     await userEvent.tab();
 
     expect(onUpdateColumnStyle).toHaveBeenCalledWith(1, false, '#AABBCC');
+  });
+
+  it('스타일 필드는 헤더 스타일을 누르기 전에는 열 설정 메뉴에 노출되지 않는다', async () => {
+    render(
+      <TableHeaderSection
+        columns={[{ id: 'c1', label: '남성' }]}
+        editingColumnWidth={null}
+        {...noopColumnCallbacks()}
+        onUpdateColumnStyle={vi.fn()}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: '열 설정' }));
+
+    expect(await screen.findByRole('button', { name: '헤더 스타일' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('HEX 색상')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('텍스트 굵게')).not.toBeInTheDocument();
   });
 
   it('이미 지정된 스타일이 팝오버 초기값으로 나타난다', async () => {
@@ -144,6 +163,7 @@ describe('TableHeaderSection 열별 스타일', () => {
     );
 
     await userEvent.click(screen.getByRole('button', { name: '열 설정' }));
+    await userEvent.click(await screen.findByRole('button', { name: '헤더 스타일' }));
 
     expect(await screen.findByLabelText('HEX 색상')).toHaveValue('#112233');
     expect(screen.getByLabelText('텍스트 굵게')).toBeChecked();
