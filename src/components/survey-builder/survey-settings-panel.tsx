@@ -35,6 +35,7 @@ export const SurveySettingsPanel = React.memo(function SurveySettingsPanel({
   );
   const questions = useSurveyBuilderStore(useShallow((s) => s.currentSurvey.questions));
   const groups = useSurveyBuilderStore(useShallow((s) => s.currentSurvey.groups ?? []));
+  const lookups = useSurveyBuilderStore(useShallow((s) => s.currentSurvey.lookups ?? []));
   const variableCatalog = useSurveyUIStore((s) => s.variableCatalog);
 
   return (
@@ -140,6 +141,7 @@ export const SurveySettingsPanel = React.memo(function SurveySettingsPanel({
         <TokenWarningPanel
           questions={questions}
           groups={groups}
+          lookups={lookups}
           thankYouMessage={surveySettings.thankYouMessage}
           catalog={variableCatalog}
         />

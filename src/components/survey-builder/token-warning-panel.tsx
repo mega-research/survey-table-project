@@ -7,15 +7,19 @@ import { AlertTriangle } from 'lucide-react';
 
 import { extractVariableKeys } from '@/lib/mail/variable-extractor';
 import { QUESTION_LIKE_CELL_TYPES } from '@/lib/survey/answer-quote';
+import { collectFormulaDiagnostics, type FormulaDiagnostic } from '@/lib/survey/cell-formula-diagnostics';
 import { formatCellLabel } from '@/utils/cell-label';
 import { resolveChoiceOptions } from '@/utils/choice-source';
 import { resolveRankingOptions } from '@/utils/ranking-source';
 import type { VariableDef } from '@/components/operations/mail-template/variable-catalog';
-import type { Question, QuestionGroup, TableCell } from '@/types/survey';
+import type { Question, QuestionGroup, SurveyLookup, TableCell } from '@/types/survey';
 
 interface Props {
   questions: Question[];
   groups: QuestionGroup[];
+  /** 수식 broken-ref 판정에 쓰는 LUT 목록. 미전달 시(레거시 호출부·테스트) LUT 참조
+   *  진단만 보류되고 다른 경고는 그대로 동작한다 — collectFormulaDiagnostics 참조. */
+  lookups?: SurveyLookup[];
   thankYouMessage: string;
   catalog: VariableDef[];
 }
@@ -223,7 +227,7 @@ function WarningBox({
  * - 응답 인용 이름 중복(경고 대상 아님 — 여러 질문이 같은 이름에 합류하는 것은 의도된 동작)과
  *   컨택 컬럼명 충돌(중괄호 문법이 달라 애초에 충돌 불가능)은 여기서 다루지 않는다.
  */
-export function TokenWarningPanel({ questions, groups, thankYouMessage, catalog }: Props) {
+export function TokenWarningPanel({ questions, groups, lookups, thankYouMessage, catalog }: Props) {
   const knownKeys = useMemo(
     () => new Set(catalog.filter((v) => v.category === 'attrs').map((v) => v.key)),
     [catalog],
@@ -359,6 +363,39 @@ export function TokenWarningPanel({ questions, groups, thankYouMessage, catalog 
     return out;
   }, [references, definedSources]);
 
+  // 경고 5: 표 수식 진단(계산 셀) — Task 4 수집기. 런타임(cell-formula.ts)은 무효 수식에
+  // 관대해 조용히 '—' 로 강등하므로, 저작 실수를 저작자에게 알리는 방어선은 이 경고가 유일하다.
+  // groups 는 필수 인자 — buildRenderSteps() 의 pageBreakBefore 분할로 페이지를 판정해야
+  // branch-same-group-calc 를 검출한다(같은 groupId ≠ 같은 페이지, group-ordering.ts).
+  const formulaDiagnostics = useMemo<FormulaDiagnostic[]>(
+    () => collectFormulaDiagnostics(questions, lookups ?? [], groups),
+    [questions, lookups, groups],
+  );
+  // tone 배분: broken-ref/cycle 은 명백한 오류(red), 나머지(non-numeric-ref·
+  // validation-backward-ref·branch-same-group-calc)는 주의 환기(amber).
+  const formulaErrors = useMemo(
+    () => formulaDiagnostics.filter((d) => d.kind === 'broken-ref' || d.kind === 'cycle'),
+    [formulaDiagnostics],
+  );
+  const formulaWarnings = useMemo(
+    () => formulaDiagnostics.filter((d) => d.kind !== 'broken-ref' && d.kind !== 'cycle'),
+    [formulaDiagnostics],
+  );
+  // FormulaDiagnostic.message 는 셀 자신의 라벨(formatCellLabel)만 담고 질문 제목은 담지
+  // 않는다 — 다른 표 소속 셀끼리 이름이 겹칠 수 있어 어느 질문인지 찾아가려면 제목이
+  // 필요하다(definedSources 의 `${질문제목} · ${셀라벨}` 관행과 동일 원칙). 단
+  // branch-same-group-calc 는 예외 — 메시지 자체가 이미 소속 질문 제목을 담고 있어
+  // (cell-formula-diagnostics.ts questionLabel) 앞에 또 붙이면 제목이 중복 표시된다.
+  const questionTitleById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const q of questions) map.set(q.id, q.title || '(제목 없음)');
+    return map;
+  }, [questions]);
+  const formulaLine = (d: FormulaDiagnostic): string =>
+    d.kind === 'branch-same-group-calc'
+      ? d.message
+      : `"${questionTitleById.get(d.questionId) ?? '(제목 없음)'}" — ${d.message}`;
+
   // 경고 4: 치환되지 않는 자리(완료 메시지 / prefill 템플릿 / 표 제목 · 열 제목 · 헤더 그리드 /
   // 검증 오류 메시지)에 쓴 인용 토큰
   const nonSubstitutedFindings = useMemo(() => {
@@ -412,7 +449,9 @@ export function TokenWarningPanel({ questions, groups, thankYouMessage, catalog 
     undefinedNames.length > 0 ||
     emptyQuoteQuestions.length > 0 ||
     backwardReferences.length > 0 ||
-    nonSubstitutedFindings.length > 0;
+    nonSubstitutedFindings.length > 0 ||
+    formulaErrors.length > 0 ||
+    formulaWarnings.length > 0;
 
   if (!hasAnything) return null;
 
@@ -487,6 +526,26 @@ export function TokenWarningPanel({ questions, groups, thankYouMessage, catalog 
           <div className="mt-1 text-xs">
             완료 메시지·prefill 템플릿(단답형·표 셀)·표 제목·표 열 제목·표 헤더 그리드·검증
             오류 메시지는 응답 인용이 적용되지 않는 자리입니다. 토큰이 그대로 노출됩니다.
+          </div>
+        </WarningBox>
+      )}
+
+      {formulaErrors.length > 0 && (
+        <WarningBox tone="red" title={`표 계산 수식 오류 ${formulaErrors.length}건`}>
+          <div className="mt-1 space-y-0.5 text-xs">
+            {formulaErrors.map((d, i) => (
+              <div key={i}>{formulaLine(d)}</div>
+            ))}
+          </div>
+        </WarningBox>
+      )}
+
+      {formulaWarnings.length > 0 && (
+        <WarningBox tone="amber" title={`표 계산 수식 주의 ${formulaWarnings.length}건`}>
+          <div className="mt-1 space-y-0.5 text-xs">
+            {formulaWarnings.map((d, i) => (
+              <div key={i}>{formulaLine(d)}</div>
+            ))}
           </div>
         </WarningBox>
       )}
