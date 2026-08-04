@@ -110,6 +110,8 @@ export const TEXT_POSITION_CELL_TYPES = new Set<ContentType>([
   'radio',
   'select',
   'ranking',
+  // 계산 셀도 텍스트 라벨(content)과 값 표시 영역이 분리되어 있어 위치 지정이 의미가 있다.
+  'calc',
 ]);
 export const MOBILE_DISPLAY_CELL_TYPES = new Set<TableCell['type']>(['text', 'image', 'video']);
 

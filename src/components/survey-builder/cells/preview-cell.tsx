@@ -256,7 +256,12 @@ export const PreviewCell = React.memo(function PreviewCell({
 
     case 'calc':
       // 계산 셀 프리뷰 — 실제 계산값 대신 수식이 설정돼 있음을 표시 (편집기 미리보기용).
-      return <div className="px-2 py-1.5 text-xs text-blue-600">계산: {cell.content || '수식'}</div>;
+      // 라벨 배치는 응답 화면(CalcCell)과 같은 레이아웃을 태워 textPosition 을 그대로 보여준다.
+      return (
+        <CellContentLayout content={cell.content} position={cell.textPosition} bold={cell.textBold}>
+          <div className="px-2 py-1.5 text-xs text-blue-600">계산 값</div>
+        </CellContentLayout>
+      );
 
     default:
       return cell.content ? (

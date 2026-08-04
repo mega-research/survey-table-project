@@ -6,6 +6,8 @@ import { useFormulaEvalCtx } from '@/lib/survey/formula-context';
 import { UNIT_LABELS, formatWithComma } from '@/utils/number-format';
 import type { TableCell } from '@/types/survey';
 
+import { CellContentLayout } from './cell-content-layout';
+
 interface Props {
   cell: TableCell;
   questionId: string;
@@ -30,11 +32,18 @@ export function CalcCell({ cell, questionId }: Props) {
         ? formatWithComma(String(value))
         : String(value);
 
+  // 텍스트 라벨(content) 배치는 다른 인터랙티브 셀과 같은 CellContentLayout 을 쓴다 —
+  // 위치 규칙이 갈리면 같은 표에서 계산 셀만 다르게 정렬된다.
   return (
-    <div className="flex items-center gap-1 px-2 py-1.5 text-sm tabular-nums text-gray-700">
-      {cell.content ? <span className="text-gray-500">{cell.content}</span> : null}
-      <span className="font-medium">{display}</span>
-      {unitLabel ? <span className="text-gray-500">{unitLabel}</span> : null}
-    </div>
+    <CellContentLayout
+      content={cell.content}
+      position={cell.textPosition}
+      bold={cell.textBold}
+    >
+      <div className="flex items-center gap-1 px-2 py-1.5 text-sm tabular-nums text-gray-700">
+        <span className="font-medium">{display}</span>
+        {unitLabel ? <span className="text-gray-500">{unitLabel}</span> : null}
+      </div>
+    </CellContentLayout>
   );
 }
