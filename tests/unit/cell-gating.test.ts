@@ -54,6 +54,45 @@ describe('isCellEnabled', () => {
   });
 });
 
+describe('isCellEnabled — option 조건의 컨트롤러 옵션 해석(rowCells)', () => {
+  const controllerCell = (): TableCell =>
+    ({
+      id: 'ctrl', content: '', type: 'radio',
+      radioOptions: [
+        { id: 'o1', label: '수행', value: '1' },
+        { id: 'o2', label: '미수행', value: '2' },
+      ],
+    }) as TableCell;
+
+  it('{optionId} 래핑 응답이 옵션 value 조건과 매칭된다', () => {
+    const controller = controllerCell();
+    const target = inputCell('t', {
+      enabledWhen: { kind: 'option', controllerCellId: 'ctrl', values: ['1'] },
+    });
+    expect(isCellEnabled(target, { ctrl: { optionId: 'o1' } }, [controller, target])).toBe(true);
+    expect(isCellEnabled(target, { ctrl: { optionId: 'o2' } }, [controller, target])).toBe(false);
+  });
+
+  it('응답이 옵션 id 문자열로 저장된 경우도(id !== value) 매칭된다', () => {
+    const controller = controllerCell();
+    const target = inputCell('t', {
+      enabledWhen: { kind: 'option', controllerCellId: 'ctrl', values: ['1'] },
+    });
+    expect(isCellEnabled(target, { ctrl: 'o1' }, [controller, target])).toBe(true);
+    expect(isCellEnabled(target, { ctrl: 'o2' }, [controller, target])).toBe(false);
+  });
+
+  it('rowCells 미전달 시 flat 비교로 폴백한다 (하위호환)', () => {
+    const target = inputCell('t', {
+      enabledWhen: { kind: 'option', controllerCellId: 'ctrl', values: ['1'] },
+    });
+    // rowCells 없으면 컨트롤러 정의를 못 찾아 raw 값을 그대로 비교 — id 'o1' 은 value '1' 과 불일치
+    expect(isCellEnabled(target, { ctrl: 'o1' })).toBe(false);
+    // flat 저장이 이미 value 형태면 매칭된다 (기존 동작 보존)
+    expect(isCellEnabled(target, { ctrl: '1' })).toBe(true);
+  });
+});
+
 describe('stripDisabledCellValues', () => {
   const gatedQuestion = (): Question =>
     ({
