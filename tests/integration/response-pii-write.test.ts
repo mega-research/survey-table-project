@@ -679,6 +679,55 @@ describe('completeResponse — PII 문항만 선별 암호화', () => {
     expect(storedTable['c1']).toBe('10'); // 999 가 아니라 서버 재계산 값
   });
 
+  // 우회 차단 — 위조 calc 값을 draft 로 먼저 저장하고 data 없는 complete 를 불러도,
+  // 서버가 저장된 응답을 로드해 같은 재계산을 태워 확정값을 수식 결과로 덮어쓴다.
+  it('data 없는 complete 도 저장된 calc 값을 재계산해 확정한다', async () => {
+    const CALC_Q_ID = 'q-calc-table';
+    const calcTableQuestion = {
+      id: CALC_Q_ID,
+      type: 'table',
+      title: '계산 표',
+      required: false,
+      order: 1,
+      tableRowsData: [
+        {
+          id: 'r1',
+          label: 'r1',
+          cells: [
+            { id: 'a1', content: '', type: 'input', inputType: 'number' },
+            { id: 'c1', content: '', type: 'calc', formula: { kind: 'cell', cellId: 'a1' } },
+          ],
+        },
+      ],
+    };
+    // gateRow 조회와 저장 응답 로드가 같은 findFirst mock 을 탄다 — draft 로 저장된
+    // 위조값(c1: '999')을 questionResponses 에 실어 둔다.
+    responseFindFirstMock.mockResolvedValue({
+      surveyId: SURVEY_ID,
+      versionId: VERSION_ID,
+      contactTargetId: null,
+      isTest: false,
+      questionResponses: { [CALC_Q_ID]: { a1: '7', c1: '999' } },
+    });
+    selectLimitMock.mockResolvedValue([
+      { snapshot: { questions: [calcTableQuestion], lookups: [] } },
+    ]);
+
+    const { completeResponse } = await import(
+      '@/features/survey-response/server/services/response.service'
+    );
+    await completeResponse({ responseId: RESPONSE_ID });
+
+    const setArg = updateSetLogMock.mock.calls[0]![0] as {
+      questionResponses?: Record<string, unknown>;
+    };
+    const storedTable = (setArg.questionResponses as Record<string, unknown>)[
+      CALC_Q_ID
+    ] as Record<string, unknown>;
+    expect(storedTable['a1']).toBe('7');
+    expect(storedTable['c1']).toBe('7'); // 999 가 아니라 저장분 기준 서버 재계산 값
+  });
+
   it('버전 스냅샷이 없으면 재계산을 스킵하고 제출값을 그대로 저장한다', async () => {
     // beforeEach 의 selectLimitMock([]) 그대로 — 스냅샷 없음
     const { completeResponse } = await import(

@@ -200,6 +200,27 @@ describe('evaluateCellFormula', () => {
     expect(evaluateCellFormula(expr, 'q1', ctx)).toBe(3);
   });
 
+  it('키 매핑이 비었거나 불완전한 LUT 는 빌더 미설정 — 항만 강등된다', () => {
+    const lut = { id: 'lut1', name: 'L', columns: ['k', 'v'], rows: [{ k: 'seoul', v: 10 }] };
+    const emptyMapping: CalcExpr = {
+      kind: 'group', op: '+',
+      terms: [
+        { kind: 'literal', value: 5 },
+        { kind: 'lookup', surveyLookupId: 'lut1', keyMapping: [], valueColumn: 'v' },
+      ],
+    };
+    const partialMapping: CalcExpr = {
+      kind: 'group', op: '+',
+      terms: [
+        { kind: 'literal', value: 5 },
+        { kind: 'lookup', surveyLookupId: 'lut1', keyMapping: [{ lutKey: 'k', attrsKey: '' }], valueColumn: 'v' },
+      ],
+    };
+    const ctx = { ...baseCtx({}), lookups: [lut], contactAttrs: { region: 'seoul' } };
+    expect(evaluateCellFormula(emptyMapping, 'q1', ctx)).toBe(5);
+    expect(evaluateCellFormula(partialMapping, 'q1', ctx)).toBe(5);
+  });
+
   it('LUT 행 미매칭은 여전히 전체 null (런타임 미해결)', () => {
     const expr: CalcExpr = {
       kind: 'group', op: '+',

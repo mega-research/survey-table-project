@@ -208,7 +208,11 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
   const counted = (cellId: string) => hasValue(cellId) || acknowledged.has(cellId);
   const leafFilled = (leaf: ClassifiedLeaf) => leaf.inputCellIds.filter(counted).length;
   const leafDone = (leaf: ClassifiedLeaf) =>
-    leaf.inputCellIds.length > 0 && leafFilled(leaf) === leaf.inputCellIds.length;
+    leaf.inputCellIds.length > 0
+      ? leafFilled(leaf) === leaf.inputCellIds.length
+      : // 입력 없이 계산 셀만 있는 행(합계 표시 행 등)은 채울 것이 없으므로 완료 취급.
+        // 입력도 계산도 없는 행은 기존대로 미완료 (leaf 자체가 비정상 케이스).
+        leaf.calcCellIds.length > 0;
   const secFilled = (section: ClassifiedSection) =>
     section.leaves.reduce((total, leaf) => total + leafFilled(leaf), 0);
   const totalInputs = sections.reduce((total, section) => total + section.totalInputs, 0);

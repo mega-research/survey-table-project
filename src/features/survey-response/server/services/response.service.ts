@@ -15,7 +15,7 @@ import {
   surveys,
 } from '@/db/schema';
 import type { PageVisit } from '@/db/schema/schema-types';
-import { encryptAnswerValue, encryptResponsesForStorage } from '@/lib/crypto/response-pii';
+import { decryptQuestionResponses, encryptAnswerValue, encryptResponsesForStorage } from '@/lib/crypto/response-pii';
 import { checkTrackA, checkTrackB } from '@/lib/duplicate-detection/check';
 import { computeSignals } from '@/lib/duplicate-detection/signals';
 import { sumActiveSeconds } from '@/lib/operations/active-seconds';
@@ -1676,13 +1676,18 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
     }
   }
 
-  // calc 셀 서버 재계산 (신뢰 경계) — 클라이언트가 페이로드에 주입한 계산값을 그대로 믿지
-  // 않고, 응답 시점 버전 스냅샷의 수식으로 다시 계산해 덮어쓴다. 요청 변조나 구버전
-  // 클라이언트가 수식과 다른 값을 보내도 최종 저장 데이터(export 원천)는 수식 결과와
-  // 일치한다("수식 결과와 다른 저장값은 존재하지 않는다" — CONTEXT.md 계산 셀 불변식).
+  // calc 셀 서버 재계산 (신뢰 경계) — 클라이언트가 주입한 계산값을 그대로 믿지 않고,
+  // 응답 시점 버전 스냅샷의 수식으로 다시 계산해 덮어쓴다. 요청 변조나 구버전 클라이언트가
+  // 수식과 다른 값을 보내도 최종 저장 데이터(export 원천)는 수식 결과와 일치한다
+  // ("수식 결과와 다른 저장값은 존재하지 않는다" — CONTEXT.md 계산 셀 불변식).
+  //
+  // data 없이 complete 만 호출하는 우회도 막아야 한다: 위조값을 saveDraft/beacon 으로
+  // 먼저 저장한 뒤 빈 complete 를 부르면 저장된 JSONB 가 그대로 확정되므로, 스냅샷에
+  // calc 셀이 있으면 저장된 응답을 로드·복호화해 같은 재계산을 태운다.
+  //
   // 반드시 PII 암호화 이전 평문 단계에서 수행한다. 스냅샷 미확보(레거시 versionId null,
   // 손상 행)면 스킵 — 응답자 저장을 막지 않는 fail-safe (saveAdminEdit 와 동일 정책).
-  if (validatedResponses && gateRow?.versionId) {
+  if (gateRow?.versionId) {
     const [versionRow] = await db
       .select({ snapshot: surveyVersions.snapshot })
       .from(surveyVersions)
@@ -1695,7 +1700,25 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
     // JSONB 스키마 드리프트 방어 — 비배열이면 순회에서 크래시하므로 Array.isArray 로 거른다.
     const snapQuestions = Array.isArray(snap?.questions) ? (snap.questions as Question[]) : [];
     const snapLookups = Array.isArray(snap?.lookups) ? (snap.lookups as SurveyLookup[]) : [];
-    if (snapQuestions.length > 0) {
+    const hasCalcCells = snapQuestions.some((q) =>
+      (q.tableRowsData ?? []).some((row) => row.cells.some((c) => c.type === 'calc' && c.formula)),
+    );
+
+    if (hasCalcCells) {
+      // 페이로드가 없으면 저장된 draft 응답이 확정 대상 — 로드해서 평문화 후 같은 경로를 태운다.
+      // (표 셀 답변은 PII 암호화 대상이 아니지만, 수식이 암호화된 숫자 단답을 참조할 수 있어
+      // 복호화가 필요하다. 재계산 후 아래 PII 블록이 다시 암호화한다.)
+      if (!validatedResponses) {
+        const storedRow = await db.query.surveyResponses.findFirst({
+          where: eq(surveyResponses.id, responseId),
+          columns: { questionResponses: true },
+        });
+        validatedResponses = decryptQuestionResponses(
+          (storedRow?.questionResponses ?? {}) as Record<string, unknown>,
+          { responseId },
+        );
+      }
+
       let calcAttrs: Record<string, string | undefined> = {};
       if (gateRow.contactTargetId) {
         const [target] = await db

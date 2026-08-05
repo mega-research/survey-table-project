@@ -87,6 +87,15 @@ function evalExpr(
       // 분기 RightOperand.lookup 과 동일 구조 — 기존 평가기 재사용.
       // 런타임 미해결(익명 응답 attrs 부재 등)은 항 강등이 아니라 전체 무효 —
       // 틀린 숫자를 보여주거나 검증으로 응답자를 막지 않기 위한 fail-safe (스펙 §4).
+      // 키 매핑 자체가 비었거나 불완전하면 빌더 미설정 — 깨진 참조 계열이므로 항만 강등.
+      // (아래 attrs-key-missing 은 매핑은 온전한데 응답자 attrs 에 값이 없는 런타임 실패와
+      // 같은 reason 문자열을 쓰므로, 빌더 시점 문제는 여기서 먼저 걸러야 구분된다.)
+      if (
+        expr.keyMapping.length === 0 ||
+        expr.keyMapping.some((m) => !m.lutKey || !m.attrsKey)
+      ) {
+        return 'empty';
+      }
       const result = evaluateRightOperand(
         { kind: 'lookup', surveyLookupId: expr.surveyLookupId, keyMapping: expr.keyMapping, valueColumn: expr.valueColumn },
         { responses: {}, contactAttrs: ctx.contactAttrs, lookups: ctx.lookups },
