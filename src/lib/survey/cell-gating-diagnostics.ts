@@ -4,12 +4,13 @@ import { formatCellLabel } from '@/utils/cell-label';
 /**
  * 셀 게이팅 저작 실수 진단 수집기 (스펙 5절 — cell-formula-diagnostics 패턴).
  *
- * 런타임(cell-gating.ts)은 값만 보고 판정하므로 저작 실수에 관대하다 — 깨진 컨트롤러
- * 참조는 활성으로 폴백하고, prefill 충돌은 게이팅을 무시한다. 저작자에게 알리는
- * 방어선은 이 모듈이다. 응답값 없이 셀 구조만 정적으로 순회한다 (isomorphic).
+ * 런타임(cell-gating.ts)은 값만 보고 판정한다 — 참조가 깨져 컨트롤러 값이 영영 생길 수
+ * 없으면 그 셀은 **영구 비활성**이 된다 (prefill 충돌만 예외적으로 게이팅 무시 = 항상 활성).
+ * 저작자에게 알리는 방어선은 이 모듈이다. 응답값 없이 셀 구조만 정적으로 순회한다 (isomorphic).
  *
- * 진단 5종:
- * - gating-broken-ref: 컨트롤러 셀이 설문에 없음 (red — 런타임은 활성 폴백)
+ * 진단:
+ * - gating-broken-ref: 컨트롤러 셀이 설문에 없음 (red — 값이 없어 영구 비활성)
+ * - gating-hidden-controller: 컨트롤러가 병합으로 숨겨진 셀 (red — 응답 불가라 영구 비활성)
  * - gating-cross-row-ref: 컨트롤러가 다른 행에 있음 (red — 같은 행 값만 평가되므로 영구 비활성)
  * - gating-self-ref: 자기 자신을 컨트롤러로 지정 (red)
  * - gating-cycle: 게이팅 체인 순환 (amber — 런타임은 안정: 양쪽 빈 값이면 양쪽 비활성)
@@ -19,6 +20,7 @@ import { formatCellLabel } from '@/utils/cell-label';
 export interface GatingDiagnostic {
   kind:
     | 'gating-broken-ref'
+    | 'gating-hidden-controller'
     | 'gating-cross-row-ref'
     | 'gating-self-ref'
     | 'gating-cycle'
@@ -40,12 +42,21 @@ function checkRow(question: Question, row: TableRow, out: GatingDiagnostic[]): v
     const label = formatCellLabel(cell);
     const controllerId = cell.enabledWhen.controllerCellId;
 
+    const controllerInRow = row.cells.find((c) => c.id === controllerId);
+
     if (controllerId === cell.id) {
       out.push({
         kind: 'gating-self-ref',
         questionId: question.id,
         cellId: cell.id,
         message: `활성 조건이 자기 자신을 컨트롤러로 참조합니다: ${label}. 조건을 다시 지정하세요.`,
+      });
+    } else if (controllerInRow?.isHidden) {
+      out.push({
+        kind: 'gating-hidden-controller',
+        questionId: question.id,
+        cellId: cell.id,
+        message: `활성 조건 컨트롤러가 병합으로 숨겨진 셀입니다: ${label}. 숨겨진 셀은 응답할 수 없어 이 셀은 항상 비활성이 됩니다.`,
       });
     } else if (!rowCellIds.has(controllerId)) {
       const elsewhere = allCells.find((c) => c.id === controllerId);
@@ -61,7 +72,7 @@ function checkRow(question: Question, row: TableRow, out: GatingDiagnostic[]): v
           kind: 'gating-broken-ref',
           questionId: question.id,
           cellId: cell.id,
-          message: `활성 조건이 존재하지 않는 셀을 참조합니다: ${label}. 게이팅이 무시되고 항상 활성으로 동작합니다.`,
+          message: `활성 조건이 존재하지 않는 셀을 참조합니다: ${label}. 컨트롤러 값이 생길 수 없어 이 셀은 항상 비활성이 됩니다.`,
         });
       }
     }

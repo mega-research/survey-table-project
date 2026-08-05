@@ -15,17 +15,25 @@ const condition: CellEnableCondition = {
 
 describe('resolvePastedGating — 붙여넣기/복제 시 게이팅 참조 재해석', () => {
   it('영역 내 컨트롤러는 리매핑된 id 로 치환된다', () => {
-    const out = resolvePastedGating(condition, 'target-ctrl', new Set(['x']));
+    const out = resolvePastedGating(condition, 'target-ctrl', [{ id: 'x' }]);
     expect(out).toEqual({ kind: 'option', controllerCellId: 'target-ctrl', values: ['1'] });
   });
 
-  it('영역 밖이지만 대상 행에 있으면(같은 행 이동) 유지된다', () => {
-    const out = resolvePastedGating(condition, undefined, new Set(['src-ctrl', 'x']));
+  it('영역 밖이지만 대상 행에 보이는 셀로 있으면(같은 행 이동) 유지된다', () => {
+    const out = resolvePastedGating(condition, undefined, [{ id: 'src-ctrl' }, { id: 'x' }]);
     expect(out).toBe(condition);
   });
 
   it('다른 행의 컨트롤러는 제거된다 (undefined)', () => {
-    const out = resolvePastedGating(condition, undefined, new Set(['x', 'y']));
+    const out = resolvePastedGating(condition, undefined, [{ id: 'x' }, { id: 'y' }]);
+    expect(out).toBeUndefined();
+  });
+
+  it('대상 행의 컨트롤러가 병합으로 숨겨져 있으면 제거된다 — 숨김 셀은 응답 불가라 영구 비활성', () => {
+    const out = resolvePastedGating(condition, undefined, [
+      { id: 'src-ctrl', isHidden: true },
+      { id: 'x' },
+    ]);
     expect(out).toBeUndefined();
   });
 
@@ -36,7 +44,7 @@ describe('resolvePastedGating — 붙여넣기/복제 시 게이팅 참조 재�
       op: '>=',
       value: 3,
     };
-    const out = resolvePastedGating(numeric, 'new-ctrl', new Set());
+    const out = resolvePastedGating(numeric, 'new-ctrl', []);
     expect(out).toEqual({ kind: 'numeric', controllerCellId: 'new-ctrl', op: '>=', value: 3 });
   });
 });
@@ -89,11 +97,7 @@ describe('영역 스냅샷의 게이팅 컨트롤러 되짚기 (sourceCellIds)',
     const pos = findRegionSourceCellPos(region, pastedCondition!.controllerCellId);
     expect(pos).toEqual({ row: 0, col: 0 });
     const remappedId = targetRowCells[pos!.col]?.id;
-    const resolved = resolvePastedGating(
-      pastedCondition!,
-      remappedId,
-      new Set(targetRowCells.map((c) => c.id)),
-    );
+    const resolved = resolvePastedGating(pastedCondition!, remappedId, targetRowCells);
     expect(resolved).toEqual({ kind: 'option', controllerCellId: 't-ctrl', values: ['1'] });
   });
 });

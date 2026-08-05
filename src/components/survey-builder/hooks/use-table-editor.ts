@@ -1136,11 +1136,10 @@ export function useTableEditor({
         targetColumn?.label,
       );
 
-      // 셀 게이팅 컨트롤러 재해석 — 같은 행 안 붙여넣기면 유지, 다른 행이면 제거
-      // (게이팅은 같은 행 값만 평가하므로 깨진 참조를 남기지 않는다)
+      // 셀 게이팅 컨트롤러 재해석 — 같은 행의 보이는 셀이면 유지, 다른 행·숨김 셀이면 제거
+      // (게이팅은 같은 행 값만 평가하고, 병합 숨김 셀은 응답이 없어 영구 비활성이 된다)
       if (pastedCell.enabledWhen) {
-        const targetRowCellIds = new Set((targetRow?.cells ?? []).map((c) => c.id));
-        const resolved = resolvePastedGating(pastedCell.enabledWhen, undefined, targetRowCellIds);
+        const resolved = resolvePastedGating(pastedCell.enabledWhen, undefined, targetRow?.cells ?? []);
         if (resolved) {
           pastedCell.enabledWhen = resolved;
         } else {

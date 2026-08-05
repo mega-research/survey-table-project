@@ -238,17 +238,17 @@ export function useDragCopy({
             if (targetCell.enabledWhen) {
               // 스냅샷 셀에는 id 가 없으므로(REGION_EXCLUDED_KEYS) sourceCellIds 격자로 되짚는다.
               // 대상 셀 id 는 붙여넣기에서 보존되므로 원본 rows 기준으로 읽어도 같다.
+              // 리매핑 위치는 이번 붙여넣기가 소스의 보이는 컨트롤러 셀을 그대로 써넣는
+              // 자리라서(붙여넣기 후 recalculateHiddenCells 가 소스 병합 기하를 복원)
+              // 대상의 이전 hidden 여부와 무관하게 유효하다.
               const pos = findRegionSourceCellPos(region, targetCell.enabledWhen.controllerCellId);
               const remappedControllerId = pos
                 ? rows[targetRow + pos.row]?.cells[targetCol + pos.col]?.id
                 : undefined;
-              const targetRowCellIds = new Set(
-                (rows[absRow]?.cells ?? []).map((c) => c.id),
-              );
               const resolved = resolvePastedGating(
                 targetCell.enabledWhen,
                 remappedControllerId,
-                targetRowCellIds,
+                rows[absRow]?.cells ?? [],
               );
               if (resolved) {
                 targetCell.enabledWhen = resolved;

@@ -71,17 +71,19 @@ export function createRadioGroupRemapper(genId: () => string): (sourceName: stri
  * 붙여넣거나 복제된 셀의 게이팅(enabledWhen) 컨트롤러 참조 재해석.
  *
  * - `remappedControllerId` 가 있으면(컨트롤러가 복사 영역/복제 행 안) → 그 id 로 치환
- * - 없지만 컨트롤러가 대상 행에 존재하면(같은 행 안 이동) → 그대로 유지
- * - 그 외(다른 행의 컨트롤러) → undefined — 게이팅은 같은 행 값만 평가하므로
- *   의미가 깨진 참조를 남기지 않고 제거한다 (남기면 영구 비활성 + red 진단).
+ * - 없지만 컨트롤러가 대상 행에 **보이는 셀**로 존재하면(같은 행 안 이동) → 그대로 유지
+ * - 그 외 → undefined 로 게이팅 제거. 다른 행의 컨트롤러는 같은 행 값만 평가하는
+ *   런타임에서 의미가 없고, 병합으로 숨겨진(isHidden) 셀은 응답이 생길 수 없어
+ *   참조를 유지하면 영구 비활성이 된다 — 죽은 참조를 남기지 않는다.
  */
 export function resolvePastedGating(
   condition: CellEnableCondition,
   remappedControllerId: string | undefined,
-  targetRowCellIds: ReadonlySet<string>,
+  targetRowCells: ReadonlyArray<Pick<TableCell, 'id' | 'isHidden'>>,
 ): CellEnableCondition | undefined {
   if (remappedControllerId) return { ...condition, controllerCellId: remappedControllerId };
-  if (targetRowCellIds.has(condition.controllerCellId)) return condition;
+  const controller = targetRowCells.find((c) => c.id === condition.controllerCellId);
+  if (controller && !controller.isHidden) return condition;
   return undefined;
 }
 

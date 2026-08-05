@@ -54,6 +54,15 @@ describe('collectGatingDiagnostics — 진단 5종', () => {
     expect(out[0]!.cellId).toBe('in1');
   });
 
+  it('병합으로 숨겨진 컨트롤러 → gating-hidden-controller', () => {
+    const hiddenCtrl: TableCell = { ...ctrl, isHidden: true };
+    const q = makeQuestion([row('r1', [hiddenCtrl, gatedInput('in1', 'ctrl')])]);
+    const out = collectGatingDiagnostics([q]);
+    expect(out).toHaveLength(1);
+    expect(out[0]!.kind).toBe('gating-hidden-controller');
+    expect(out[0]!.cellId).toBe('in1');
+  });
+
   it('다른 행의 컨트롤러 → gating-cross-row-ref', () => {
     const q = makeQuestion([
       row('r1', [ctrl]),
