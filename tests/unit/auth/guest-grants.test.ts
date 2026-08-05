@@ -122,4 +122,11 @@ describe('guestPathRedirect', () => {
     expect(guestPathRedirect(`${base}/contacts/new`, sid)).toBeNull();
     expect(guestPathRedirect(`${base}/contacts/abc123`, sid)).toBeNull();
   });
+
+  it('메일 경로는 게스트에게 차단되어 overview 로 돌린다', () => {
+    const base = `/admin/surveys/${sid}/operations`;
+    expect(guestPathRedirect(`${base}/mail`, sid)).toBe(`${base}/overview`);
+    expect(guestPathRedirect(`${base}/mail/templates`, sid)).toBe(`${base}/overview`);
+    expect(guestPathRedirect(`${base}/mail/campaigns`, sid)).toBe(`${base}/overview`);
+  });
 });

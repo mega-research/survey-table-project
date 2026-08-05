@@ -32,7 +32,7 @@ export default async function OperationsLayout({ children, params }: LayoutProps
         isGuest={isGuest}
         control={control}
       />
-      <OperationsTabStrip surveyId={surveyId} />
+      <OperationsTabStrip surveyId={surveyId} isGuest={isGuest} />
       {children}
     </div>
   );

@@ -7,14 +7,10 @@ import { contactPii, contactTargets } from '@/db/schema/contacts';
 import { mailCampaigns, mailRecipients, mailTemplates, type MailCampaignKind } from '@/db/schema/mail';
 import { surveys } from '@/db/schema/surveys';
 import type { CampaignFilterSnapshot } from '@/db/schema/schema-types';
-import { isGuestViewer } from '@/lib/auth/guest-viewer';
 import { decryptPii } from '@/lib/crypto/aes';
 import { inngest } from '@/lib/inngest/client';
 import { withTestPrefix } from '@/lib/mail/test-campaign';
-import {
-  loadOperationsDataScope,
-  resolveWriteScopeIsTest,
-} from '@/lib/operations/data-scope.server';
+import { loadOperationsDataScope } from '@/lib/operations/data-scope.server';
 
 import type {
   CancelCampaignInput,
@@ -57,10 +53,6 @@ export async function createCampaign(
   // 카운터도 unique 기준으로 맞춰야 phantom skipped/recipient 가 발생하지 않는다.
   const uniqueTargetIds = Array.from(new Set(input.contactTargetIds));
 
-  // 게스트 판정은 트랜잭션(설문 행 FOR SHARE 잠금) 밖에서 미리 구한다 — 잠금 아래서
-  // auth 왕복을 하면 그 RTT 만큼 잠금이 유지되어 동시 캠페인 생성을 블록한다.
-  const isGuest = await isGuestViewer();
-
   const result = await db.transaction(async (tx) => {
     // a. 현재 운영 scope 잠금. 모드 전환과 캠페인 생성을 직렬화하고 클라이언트 값은 신뢰하지 않는다.
     const [survey] = await tx
@@ -71,7 +63,8 @@ export async function createCampaign(
     if (!survey) {
       throw new Error('설문을 찾을 수 없습니다.');
     }
-    const isTest = resolveWriteScopeIsTest(survey.enabled, isGuest);
+    // 메일은 authed 전용 표면이라 호출자가 항상 어드민이다. 게스트 쓰기 핀은 불필요.
+    const isTest = survey.enabled;
 
     // 작성 화면을 연 뒤 모드가 바뀌었거나 반대 scope ID가 섞이면 현재 scope로 강등하지 않는다.
     const selectedTargets = await tx
