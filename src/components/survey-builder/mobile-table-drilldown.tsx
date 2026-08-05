@@ -256,7 +256,12 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
                 </span>
                 {done && <CheckCircle2 className="h-4 w-4 shrink-0 text-green-500" />}
               </div>
-              {leaf.inputCellIds[0] != null && renderCell(leaf.inputCellIds[0])}
+              {leaf.inputCellIds[0] != null
+                ? renderCell(leaf.inputCellIds[0])
+                : // 계산 셀만 있는 행(합계 표시 행 등)은 계산값을 인라인으로 보여준다
+                  leaf.calcCellIds.map((cellId) => (
+                    <div key={cellId}>{renderCell(cellId)}</div>
+                  ))}
             </div>
           );
         })}

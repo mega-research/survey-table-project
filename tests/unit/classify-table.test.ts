@@ -384,6 +384,46 @@ describe('classifyTable — 주입된 answerable 셀 타입', () => {
   });
 });
 
+describe('계산 셀 leaf', () => {
+  const CALC = (id: string): TableCell => ({
+    id,
+    type: 'calc',
+    content: '',
+    formula: { kind: 'cell', cellId: 'sum-src' },
+  });
+
+  it('계산 셀만 있는 행도 leaf 로 만들어지고 calcCellIds 에 담긴다', () => {
+    const q: ClassifyInput = {
+      tableColumns: [C('항목'), C('금액')],
+      tableRowsData: [
+        { id: 'r1', label: '', cells: [T('항목 A'), I('amt-a')] },
+        { id: 'r2', label: '', cells: [T('항목 B'), I('amt-b')] },
+        { id: 'r3', label: '', cells: [T('합계'), CALC('total')] },
+      ],
+    };
+    const sections = classifyTable(q);
+    const leaves = sections.flatMap((s) => s.leaves);
+    const totalLeaf = leaves.find((l) => l.calcCellIds.includes('total'));
+    expect(totalLeaf).toBeDefined();
+    expect(totalLeaf!.inputCellIds).toEqual([]);
+    // 완료 카운트(totalInputs)에는 calc 가 섞이지 않는다
+    expect(sections.reduce((s, sec) => s + sec.totalInputs, 0)).toBe(2);
+  });
+
+  it('입력 행의 calc 셀은 같은 leaf 의 calcCellIds 로 분리된다', () => {
+    const q: ClassifyInput = {
+      tableColumns: [C('항목'), C('수량'), C('금액')],
+      tableRowsData: [
+        { id: 'r1', label: '', cells: [T('항목 A'), I('qty-a'), CALC('amt-calc')] },
+      ],
+    };
+    const leaves = classifyTable(q).flatMap((s) => s.leaves);
+    expect(leaves).toHaveLength(1);
+    expect(leaves[0]!.inputCellIds).toEqual(['qty-a']);
+    expect(leaves[0]!.calcCellIds).toEqual(['amt-calc']);
+  });
+});
+
 describe('decideDrilldown', () => {
   it('GPU(입력 5개): 15 이하 → 기존 카드 유지', () => {
     expect(decideDrilldown(gpu()).useDrilldown).toBe(false);

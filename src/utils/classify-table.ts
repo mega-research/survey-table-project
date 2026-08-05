@@ -220,7 +220,15 @@ export function classifyTable(q: ClassifyInput): ClassifiedSection[] {
         : [{ label: '', rows: sec.rows }];
     const subOf = (row: TableRow) => subGroups.find((g) => g.rows.includes(row));
 
-    const leaves: ClassifiedLeaf[] = inputRows.map((row) => {
+    // leaf 대상: 입력 행 + 계산 셀만 있는 행(합계 표시 행 등 — 입력은 없지만 드릴다운에
+    // 값이 보여야 한다). 입력도 계산도 없는 행은 기존대로 라벨/구분 행으로만 쓰인다.
+    const hasCalcCell = (row: TableRow) =>
+      row.cells.some((cell) => cell.type === 'calc' && !cell.isHidden && !cell._isContinuation);
+    const leafRows = sec.rows.filter(
+      (row) => row.cells.some((cell) => isInput(cell, types)) || hasCalcCell(row),
+    );
+
+    const leaves: ClassifiedLeaf[] = leafRows.map((row) => {
       const subGroup = subOf(row);
       const leafLabel = rightmostLabel(row, labelCols, coverage);
       const cellByCol: Record<number, string> = {};

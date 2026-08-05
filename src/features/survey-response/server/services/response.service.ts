@@ -1683,10 +1683,18 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
   //
   // data 없이 complete 만 호출하는 우회도 막아야 한다: 위조값을 saveDraft/beacon 으로
   // 먼저 저장한 뒤 빈 complete 를 부르면 저장된 JSONB 가 그대로 확정되므로, 스냅샷에
-  // calc 셀이 있으면 저장된 응답을 로드·복호화해 같은 재계산을 태운다.
+  // calc 셀이 있으면 저장된 응답을 재계산해 덮어쓴다. 이 경로의 읽기·재계산·저장은
+  // 아래 트랜잭션 안에서 row lock(FOR UPDATE) 으로 묶는다 — tx 밖에서 읽어 통째로
+  // 덮어쓰면 읽기~UPDATE 사이에 도착한 draft 답변이 유실되는 경합이 생긴다.
   //
   // 반드시 PII 암호화 이전 평문 단계에서 수행한다. 스냅샷 미확보(레거시 versionId null,
   // 손상 행)면 스킵 — 응답자 저장을 막지 않는 fail-safe (saveAdminEdit 와 동일 정책).
+  let storedRecalc: {
+    questions: Question[];
+    lookups: SurveyLookup[];
+    contactAttrs: Record<string, string | undefined>;
+    piiIds: Set<string>;
+  } | null = null;
   if (gateRow?.versionId) {
     const [versionRow] = await db
       .select({ snapshot: surveyVersions.snapshot })
@@ -1705,20 +1713,6 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
     );
 
     if (hasCalcCells) {
-      // 페이로드가 없으면 저장된 draft 응답이 확정 대상 — 로드해서 평문화 후 같은 경로를 태운다.
-      // (표 셀 답변은 PII 암호화 대상이 아니지만, 수식이 암호화된 숫자 단답을 참조할 수 있어
-      // 복호화가 필요하다. 재계산 후 아래 PII 블록이 다시 암호화한다.)
-      if (!validatedResponses) {
-        const storedRow = await db.query.surveyResponses.findFirst({
-          where: eq(surveyResponses.id, responseId),
-          columns: { questionResponses: true },
-        });
-        validatedResponses = decryptQuestionResponses(
-          (storedRow?.questionResponses ?? {}) as Record<string, unknown>,
-          { responseId },
-        );
-      }
-
       let calcAttrs: Record<string, string | undefined> = {};
       if (gateRow.contactTargetId) {
         const [target] = await db
@@ -1728,12 +1722,24 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
           .limit(1);
         calcAttrs = (target?.attrs ?? {}) as Record<string, string | undefined>;
       }
-      validatedResponses = withCalcValues(validatedResponses, {
-        questions: snapQuestions,
-        responses: validatedResponses,
-        lookups: snapLookups,
-        contactAttrs: calcAttrs,
-      });
+      if (validatedResponses) {
+        // 페이로드 경로 — 제출된 전체 응답을 재계산 (tx 밖에서 안전: 컬럼을 페이로드로
+        // 교체하는 것이 complete 의 기존 의미라 경합으로 잃을 저장분이 없다).
+        validatedResponses = withCalcValues(validatedResponses, {
+          questions: snapQuestions,
+          responses: validatedResponses,
+          lookups: snapLookups,
+          contactAttrs: calcAttrs,
+        });
+      } else {
+        // 빈 complete 경로 — 재계산 재료만 준비하고 실행은 tx 안 row lock 아래로 미룬다.
+        storedRecalc = {
+          questions: snapQuestions,
+          lookups: snapLookups,
+          contactAttrs: calcAttrs,
+          piiIds: await loadPiiQuestionIds(gateRow.versionId, gateRow.surveyId),
+        };
+      }
     }
   }
 
@@ -1753,6 +1759,31 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
         attemptId: input.attemptId,
         sessionId: input.sessionId,
       });
+    }
+    // 빈 complete 의 calc 재계산 — row lock 을 잡은 뒤 저장분을 읽어 재계산한다.
+    // 동시 draft UPDATE 는 이 lock 을 대기하므로 읽기~쓰기 사이 유실 경합이 없다.
+    let storedRecalcResponses: Record<string, unknown> | undefined;
+    if (storedRecalc) {
+      const [locked] = await tx
+        .select({ questionResponses: surveyResponses.questionResponses })
+        .from(surveyResponses)
+        .where(eq(surveyResponses.id, responseId))
+        .for('update');
+      // 수식이 암호화된 숫자 단답을 참조할 수 있으므로 평문화 후 재계산, 저장 직전 재암호화.
+      const plain = decryptQuestionResponses(
+        (locked?.questionResponses ?? {}) as Record<string, unknown>,
+        { responseId },
+      );
+      let recomputed = withCalcValues(plain, {
+        questions: storedRecalc.questions,
+        responses: plain,
+        lookups: storedRecalc.lookups,
+        contactAttrs: storedRecalc.contactAttrs,
+      });
+      if (storedRecalc.piiIds.size > 0) {
+        recomputed = encryptResponsesForStorage(recomputed, storedRecalc.piiIds);
+      }
+      storedRecalcResponses = recomputed;
     }
     // 1. 기존 JSONB 방식 저장 + 운영 현황 추적 컬럼 갱신
     const [updated] = await tx
@@ -1778,7 +1809,11 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
                )
           ELSE COALESCE(${surveyResponses.pageVisits}, '[]'::jsonb)
         END`,
-        ...(validatedResponses ? { questionResponses: validatedResponses } : {}),
+        ...(validatedResponses
+          ? { questionResponses: validatedResponses }
+          : storedRecalcResponses
+            ? { questionResponses: storedRecalcResponses }
+            : {}),
         ...(data?.exposedQuestionIds || data?.exposedRowIds
           ? {
               metadata: {
@@ -1834,8 +1869,10 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
       }
 
       // 2. response_answers 정규화 저장 (replaceResponseAnswers — saveAdminEdit 과 공유)
-      if (validatedResponses && Object.keys(validatedResponses).length > 0) {
-        await replaceResponseAnswers(tx, responseId, updated.surveyId, validatedResponses);
+      // 빈 complete 의 calc 재계산 경로도 JSONB 와 동일한 맵으로 정규화한다.
+      const normalizedSource = validatedResponses ?? storedRecalcResponses;
+      if (normalizedSource && Object.keys(normalizedSource).length > 0) {
+        await replaceResponseAnswers(tx, responseId, updated.surveyId, normalizedSource);
       }
     }
 

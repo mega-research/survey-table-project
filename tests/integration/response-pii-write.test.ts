@@ -16,6 +16,7 @@ const {
   editLogValuesMock,
   selectLimitMock,
   selectThenMock,
+  selectForUpdateMock,
   flagsMock,
   headersMock,
   computeSignalsMock,
@@ -39,6 +40,8 @@ const {
   selectLimitMock: vi.fn(),
   // select().from().where() 직접 await 종단 (countCompletedResponses 등 thenable)
   selectThenMock: vi.fn(),
+  // select().from().where().for('update') 종단 — 빈 complete 의 row lock 재계산 읽기
+  selectForUpdateMock: vi.fn(),
   flagsMock: vi.fn(),
   headersMock: vi.fn(),
   computeSignalsMock: vi.fn(),
@@ -76,6 +79,7 @@ function makeSelectChain() {
     from: vi.fn(() => ({
       where: vi.fn(() => ({
         limit: vi.fn(() => selectLimitMock()),
+        for: vi.fn(() => Promise.resolve(selectForUpdateMock())),
         then: (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) =>
           Promise.resolve(selectThenMock()).then(resolve, reject),
       })),
@@ -700,17 +704,12 @@ describe('completeResponse — PII 문항만 선별 암호화', () => {
         },
       ],
     };
-    // gateRow 조회와 저장 응답 로드가 같은 findFirst mock 을 탄다 — draft 로 저장된
-    // 위조값(c1: '999')을 questionResponses 에 실어 둔다.
-    responseFindFirstMock.mockResolvedValue({
-      surveyId: SURVEY_ID,
-      versionId: VERSION_ID,
-      contactTargetId: null,
-      isTest: false,
-      questionResponses: { [CALC_Q_ID]: { a1: '7', c1: '999' } },
-    });
     selectLimitMock.mockResolvedValue([
       { snapshot: { questions: [calcTableQuestion], lookups: [] } },
+    ]);
+    // 트랜잭션 안 row lock 읽기(FOR UPDATE)가 draft 로 저장된 위조값(c1: '999')을 반환한다.
+    selectForUpdateMock.mockResolvedValue([
+      { questionResponses: { [CALC_Q_ID]: { a1: '7', c1: '999' } } },
     ]);
 
     const { completeResponse } = await import(
