@@ -894,7 +894,7 @@ describe('이탈 시점 draft beacon', () => {
     act(() => result.current.handleResponse('q1', 'b'));
     fireHidden();
 
-    const beaconSeq = (await beaconBody(0)).seq as number;
+    const beaconSeq = (await beaconBody(0))['seq'] as number;
     expect(beaconSeq).toBeGreaterThan(flushSeq);
   });
 });
