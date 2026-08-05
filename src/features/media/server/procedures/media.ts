@@ -1,4 +1,4 @@
-import { authed } from '@/server/orpc';
+import { authed, scoped } from '@/server/orpc';
 
 import {
   DeleteAttachmentTmpResult,
@@ -18,13 +18,10 @@ const deleteImages = authed
 /**
  * 메일 첨부 tmp 키 삭제 (기존 DELETE /api/upload/mail-attachment 대체).
  *
- * 메일은 전면 authed(어드민 전용) — /operations/mail 경로 자체가 게스트에게
- * guestPathRedirect 로 막혀 있어 게스트용 메일 첨부 작성 UX 는 더 이상 없다.
- * 입력에 surveyId 가 없어 assertSurveyAccess 를 못 쓰므로 authed 로 게스트를
- * 원천 차단한다 — tmp 네임스페이스 키 검증만으로는(키 자체가 사용자별이 아니므로)
- * 다른 어드민이 스테이징한 첨부를 게스트가 지울 수 있는 사고를 막지 못한다.
+ * 게스트 메일 첨부 작성 UX 에 필요. 입력에 surveyId 가 없어 assertSurveyAccess 불가 —
+ * 도메인의 tmp 네임스페이스 키 검증(임의 키 삭제 불가)에 의존한다.
  */
-const deleteMailAttachmentTmp = authed
+const deleteMailAttachmentTmp = scoped
   .input(DeleteMailAttachmentTmpInput)
   .output(DeleteAttachmentTmpResult)
   .handler(({ input }) => svc.deleteMailAttachmentTmp(input));

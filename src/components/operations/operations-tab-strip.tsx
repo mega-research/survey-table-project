@@ -14,7 +14,7 @@ import { cn } from '@/lib/utils';
 
 interface OperationsTabStripProps {
   surveyId: string;
-  /** 게스트 세션 — 메일·쿼터 탭을 숨긴다. */
+  /** 게스트 세션 — 쿼터 탭을 숨긴다. */
   isGuest: boolean;
 }
 
@@ -142,31 +142,29 @@ export function OperationsTabStrip({ surveyId, isGuest }: OperationsTabStripProp
             </NavigationMenuContent>
           </NavigationMenuItem>
 
-          {!isGuest && (
-            <NavigationMenuItem>
-              <NavigationMenuTrigger
-                className={cn(
-                  'flex h-auto items-center gap-1 rounded-none border-b-2 bg-transparent px-4 py-3 text-sm transition-colors hover:bg-transparent data-[state=open]:bg-transparent',
-                  isMailActive
-                    ? 'border-blue-600 font-semibold text-blue-600 hover:text-blue-600'
-                    : 'border-transparent text-slate-500 hover:text-slate-900',
-                )}
-              >
-                메일
-              </NavigationMenuTrigger>
-              <NavigationMenuContent className="min-w-[180px] p-1">
-                <SubLink href={mailTemplatesHref} active={isMailTemplatesActive}>
-                  템플릿
-                </SubLink>
-                <SubLink href={mailCampaignsHref} active={isMailCampaignsActive}>
-                  단체 발송
-                </SubLink>
-                <SubLink href={mailCostHref} active={false}>
-                  비용 정산
-                </SubLink>
-              </NavigationMenuContent>
-            </NavigationMenuItem>
-          )}
+          <NavigationMenuItem>
+            <NavigationMenuTrigger
+              className={cn(
+                'flex h-auto items-center gap-1 rounded-none border-b-2 bg-transparent px-4 py-3 text-sm transition-colors hover:bg-transparent data-[state=open]:bg-transparent',
+                isMailActive
+                  ? 'border-blue-600 font-semibold text-blue-600 hover:text-blue-600'
+                  : 'border-transparent text-slate-500 hover:text-slate-900',
+              )}
+            >
+              메일
+            </NavigationMenuTrigger>
+            <NavigationMenuContent className="min-w-[180px] p-1">
+              <SubLink href={mailTemplatesHref} active={isMailTemplatesActive}>
+                템플릿
+              </SubLink>
+              <SubLink href={mailCampaignsHref} active={isMailCampaignsActive}>
+                단체 발송
+              </SubLink>
+              <SubLink href={mailCostHref} active={false}>
+                비용 정산
+              </SubLink>
+            </NavigationMenuContent>
+          </NavigationMenuItem>
 
           {!isGuest && (
             <NavigationMenuItem>

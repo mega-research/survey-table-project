@@ -45,7 +45,7 @@ describe('mail.campaigns procedures', () => {
       contactTargetIds: [CONTACT_ID],
     };
     const res = await client.campaigns.create(input);
-    expect(svc.createCampaign).toHaveBeenCalledWith(input, 'admin-1');
+    expect(svc.createCampaign).toHaveBeenCalledWith(input, 'admin-1', false);
     expect(res).toEqual({ campaignId: CAMPAIGN_ID, queuedCount: 1, skippedCount: 0 });
   });
 
@@ -105,7 +105,7 @@ describe('mail.campaigns procedures', () => {
       mailTemplateId: TEMPLATE_ID,
     };
     const res = await client.campaigns.sendSingle(input);
-    expect(singleSvc.sendSingleCampaign).toHaveBeenCalledWith(input, 'admin-1');
+    expect(singleSvc.sendSingleCampaign).toHaveBeenCalledWith(input, 'admin-1', false);
     expect(res).toEqual({ campaignId: CAMPAIGN_ID, queuedCount: 1, skippedCount: 0 });
   });
 
@@ -124,6 +124,28 @@ describe('mail.campaigns procedures', () => {
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
   });
 
+  it('게스트는 grant 설문이면 sendSingle 이 위임된다', async () => {
+    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
+    vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
+    vi.mocked(singleSvc.sendSingleCampaign).mockResolvedValue({
+      campaignId: CAMPAIGN_ID,
+      queuedCount: 1,
+      skippedCount: 0,
+    } as never);
+    const client = createRouterClient(
+      { campaigns },
+      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+    );
+    const input = {
+      surveyId: SURVEY_ID,
+      contactTargetId: CONTACT_ID,
+      mailTemplateId: TEMPLATE_ID,
+    };
+    const res = await client.campaigns.sendSingle(input);
+    expect(singleSvc.sendSingleCampaign).toHaveBeenCalledWith(input, 'guest-1', true);
+    expect(res).toEqual({ campaignId: CAMPAIGN_ID, queuedCount: 1, skippedCount: 0 });
+  });
+
   it('게스트가 다른 설문 surveyId 로 sendSingle 하면 FORBIDDEN', async () => {
     vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
     vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
@@ -139,45 +161,5 @@ describe('mail.campaigns procedures', () => {
       }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
     expect(singleSvc.sendSingleCampaign).not.toHaveBeenCalled();
-  });
-
-  it('게스트는 grant 일치 설문이어도 메일 캠페인 mutation 이 전부 FORBIDDEN', async () => {
-    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
-    vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
-    const client = createRouterClient(
-      { campaigns },
-      {
-        context: {
-          db: {} as never,
-          supabase: {} as never,
-          user: { id: 'guest-1', email: 'g@b.com' },
-        },
-      },
-    );
-
-    await expect(
-      client.campaigns.create({
-        surveyId: SURVEY_ID,
-        mailTemplateId: TEMPLATE_ID,
-        title: '5월 리마인더',
-        contactTargetIds: [CONTACT_ID],
-      }),
-    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
-    await expect(
-      client.campaigns.cancel({ surveyId: SURVEY_ID, campaignId: CAMPAIGN_ID }),
-    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
-    await expect(
-      client.campaigns.fetchCandidateIds({ surveyId: SURVEY_ID, filter: {} }),
-    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
-    await expect(
-      client.campaigns.previewPreflight({ surveyId: SURVEY_ID, selectedContactIds: [CONTACT_ID] }),
-    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
-    await expect(
-      client.campaigns.sendSingle({
-        surveyId: SURVEY_ID,
-        mailTemplateId: TEMPLATE_ID,
-        contactTargetId: CONTACT_ID,
-      }),
-    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 });

@@ -10,7 +10,10 @@ import type { CampaignFilterSnapshot } from '@/db/schema/schema-types';
 import { decryptPii } from '@/lib/crypto/aes';
 import { inngest } from '@/lib/inngest/client';
 import { withTestPrefix } from '@/lib/mail/test-campaign';
-import { loadOperationsDataScope } from '@/lib/operations/data-scope.server';
+import {
+  loadOperationsDataScope,
+  resolveWriteScopeIsTest,
+} from '@/lib/operations/data-scope.server';
 
 import type {
   CancelCampaignInput,
@@ -37,12 +40,14 @@ import type {
  *  2. 트랜잭션 commit 후 Inngest event emit `mail/campaign.queued`.
  *     실패 시 campaign status → 'draft' 보상 롤백 (비-트랜잭션 db.update).
  *
- * 인증/캐시 갱신은 procedure(authed) + 소비처 router.push 가 담당.
- * userId 는 authed context.user.id 를 procedure 가 주입.
+ * 인증/캐시 갱신은 procedure(scoped) + 소비처 router.push 가 담당.
+ * userId 는 인증된 context.user.id 를 procedure 가 주입. isGuest 도 procedure 가
+ * context.user.id 에서 파생해 주입 — 서비스는 auth 를 재조회하지 않는다.
  */
 export async function createCampaign(
   input: CreateCampaignInput,
   userId: string,
+  isGuest: boolean,
   opts: { kind?: MailCampaignKind } = {},
 ): Promise<CreateCampaignResult> {
   const kind: MailCampaignKind = opts.kind ?? 'bulk';
@@ -63,8 +68,7 @@ export async function createCampaign(
     if (!survey) {
       throw new Error('설문을 찾을 수 없습니다.');
     }
-    // 메일은 authed 전용 표면이라 호출자가 항상 어드민이다. 게스트 쓰기 핀은 불필요.
-    const isTest = survey.enabled;
+    const isTest = resolveWriteScopeIsTest(survey.enabled, isGuest);
 
     // 작성 화면을 연 뒤 모드가 바뀌었거나 반대 scope ID가 섞이면 현재 scope로 강등하지 않는다.
     const selectedTargets = await tx

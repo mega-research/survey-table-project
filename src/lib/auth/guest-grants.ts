@@ -66,15 +66,13 @@ export function guestPathRedirect(
   if (pathname === previewPath || pathname.startsWith(`${previewPath}/`)) return null;
   const allowedPrefix = `/admin/surveys/${grantedSurveyId}/operations`;
   if (pathname === allowedPrefix || pathname.startsWith(`${allowedPrefix}/`)) {
-    // 액션 procedure 가 authed(게스트 차단)로 남는 화면은 경로도 함께 차단 —
+    // 액션 procedure 가 authed(게스트 차단)로 남는 편집 화면은 경로도 함께 차단 —
     // 폼을 다 채운 뒤 FORBIDDEN 을 받는 반쪽 UI 를 만들지 않는다.
-    // 메일은 CONTEXT.md 게스트 정의상 항상 불가 표면이라 전체를 막는다.
-    // (컨택 목록·상세·수동 추가·profiles 는 게스트 허용 procedure 와 짝이라 통과.)
+    // (컨택 목록·상세·수동 추가·메일·profiles 는 게스트 허용 procedure 와 짝이라 통과.)
     const blockedSubpaths = [
       'contacts/upload',
       'contacts/result-codes',
       'contacts/columns',
-      'mail',
       'quota',
     ];
     for (const sub of blockedSubpaths) {

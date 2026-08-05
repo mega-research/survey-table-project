@@ -43,13 +43,13 @@ describe('sendSingleCampaign 가드', () => {
 
   it('컨택이 없으면 에러', async () => {
     selectResultQueue.push([]); // contact 조회 empty
-    await expect(sendSingleCampaign(INPUT, 'admin-1')).rejects.toThrow('조사 대상을 찾을 수 없습니다.');
+    await expect(sendSingleCampaign(INPUT, 'admin-1', false)).rejects.toThrow('조사 대상을 찾을 수 없습니다.');
     expect(createCampaign).not.toHaveBeenCalled();
   });
 
   it('수신거부 컨택이면 에러', async () => {
     selectResultQueue.push([{ id: 'ct-1', surveyId: 'sv-1', unsubscribedAt: new Date() }]);
-    await expect(sendSingleCampaign(INPUT, 'admin-1')).rejects.toThrow('수신거부된 조사 대상');
+    await expect(sendSingleCampaign(INPUT, 'admin-1', false)).rejects.toThrow('수신거부된 조사 대상');
     expect(createCampaign).not.toHaveBeenCalled();
   });
 
@@ -57,7 +57,7 @@ describe('sendSingleCampaign 가드', () => {
     selectResultQueue.push([{ id: 'ct-1', surveyId: 'sv-1', unsubscribedAt: null }]);
     vi.mocked(getResultCodeStatuses).mockResolvedValueOnce({ positive: [], negative: ['DNC'] });
     selectResultQueue.push([{ id: 'ct-1' }]); // 부정 결과코드 존재
-    await expect(sendSingleCampaign(INPUT, 'admin-1')).rejects.toThrow('연락금지 결과코드가 기록된');
+    await expect(sendSingleCampaign(INPUT, 'admin-1', false)).rejects.toThrow('연락금지 결과코드가 기록된');
     expect(createCampaign).not.toHaveBeenCalled();
   });
 
@@ -65,7 +65,7 @@ describe('sendSingleCampaign 가드', () => {
     selectResultQueue.push([{ id: 'ct-1', surveyId: 'sv-1', unsubscribedAt: null }]);
     selectResultQueue.push([]); // 부정 결과코드 없음
     selectResultQueue.push([]); // email pii empty
-    await expect(sendSingleCampaign(INPUT, 'admin-1')).rejects.toThrow('이메일 정보가 없는');
+    await expect(sendSingleCampaign(INPUT, 'admin-1', false)).rejects.toThrow('이메일 정보가 없는');
     expect(createCampaign).not.toHaveBeenCalled();
   });
 
@@ -74,7 +74,7 @@ describe('sendSingleCampaign 가드', () => {
     selectResultQueue.push([]); // 부정 결과코드 없음
     selectResultQueue.push([{ id: 'pii-1' }]);
     vi.mocked(getMailTemplate).mockResolvedValueOnce(null);
-    await expect(sendSingleCampaign(INPUT, 'admin-1')).rejects.toThrow('메일 템플릿을 찾을 수 없습니다.');
+    await expect(sendSingleCampaign(INPUT, 'admin-1', false)).rejects.toThrow('메일 템플릿을 찾을 수 없습니다.');
     expect(createCampaign).not.toHaveBeenCalled();
   });
 
@@ -82,7 +82,7 @@ describe('sendSingleCampaign 가드', () => {
     selectResultQueue.push([{ id: 'ct-1', surveyId: 'sv-1', unsubscribedAt: null }]);
     selectResultQueue.push([]); // 부정 결과코드 없음
     selectResultQueue.push([{ id: 'pii-1' }]);
-    const res = await sendSingleCampaign(INPUT, 'admin-1');
+    const res = await sendSingleCampaign(INPUT, 'admin-1', false);
     expect(createCampaign).toHaveBeenCalledWith(
       {
         surveyId: 'sv-1',
@@ -91,6 +91,7 @@ describe('sendSingleCampaign 가드', () => {
         contactTargetIds: ['ct-1'],
       },
       'admin-1',
+      false,
       { kind: 'single' },
     );
     expect(res).toEqual({ campaignId: 'camp-1', queuedCount: 1, skippedCount: 0 });

@@ -118,6 +118,24 @@ describe('mail.templates procedures', () => {
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
   });
 
+  it('게스트는 grant 설문이면 create 가 위임된다', async () => {
+    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
+    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:sv-1');
+    vi.mocked(svc.createMailTemplate).mockResolvedValue({
+      id: 'tpl-1',
+      bodyHtml: '<p>saved</p>',
+      attachments: [],
+    } as never);
+    const client = createRouterClient(
+      { templates },
+      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+    );
+    const input = { surveyId: 'sv-1', input: validInput() };
+    const res = await client.templates.create(input);
+    expect(svc.createMailTemplate).toHaveBeenCalledWith(input);
+    expect(res).toEqual({ id: 'tpl-1', bodyHtml: '<p>saved</p>', attachments: [] });
+  });
+
   it('게스트가 다른 설문 surveyId 로 create 하면 FORBIDDEN', async () => {
     vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
     vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:sv-1');
@@ -129,30 +147,5 @@ describe('mail.templates procedures', () => {
       client.templates.create({ surveyId: 'sv-other', input: validInput() }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
     expect(svc.createMailTemplate).not.toHaveBeenCalled();
-  });
-
-  it('게스트는 grant 일치 설문이어도 메일 템플릿 mutation 이 전부 FORBIDDEN', async () => {
-    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
-    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:sv-1');
-    const client = createRouterClient(
-      { templates },
-      {
-        context: {
-          db: {} as never,
-          supabase: {} as never,
-          user: { id: 'guest-1', email: 'g@b.com' },
-        },
-      },
-    );
-
-    await expect(
-      client.templates.create({ surveyId: 'sv-1', input: validInput() }),
-    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
-    await expect(
-      client.templates.update({ surveyId: 'sv-1', templateId: 'tpl-1', input: validInput() }),
-    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
-    await expect(
-      client.templates.remove({ surveyId: 'sv-1', templateId: 'tpl-1' }),
-    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 });
