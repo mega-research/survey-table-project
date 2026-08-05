@@ -41,35 +41,35 @@ overrides:
   '@tiptap/pm': 3.15.3
   '@tiptap/react': 3.15.3
   '@tiptap/starter-kit': 3.15.3
-  fast-xml-parser: '>=5.8.0'
-  ws: '>=8.21.0'
-  tar: '>=7.5.19'
-  protobufjs@7: 7.6.1
-  protobufjs@8: '>=8.6.3'
-  undici@7: 7.29.0
+  fast-xml-parser@5: '>=5.8.0 <6'
+  ws@8: '>=8.21.0 <9'
+  tar@7: '>=7.5.19 <8'
+  protobufjs@7: '>=7.6.1 <8'
+  protobufjs@8: '>=8.6.3 <9'
+  undici@7: '>=7.29.0 <8'
   '@chenglou/pretext': ^0.0.5
-  linkify-it: '>=5.0.2'
-  adm-zip: '>=0.6.0'
-  brace-expansion@1: 1.1.16
-  brace-expansion@2: 2.1.4
-  brace-expansion@5: 5.0.9
-  js-yaml@4: '>=4.3.0'
-  '@opentelemetry/propagator-jaeger': '>=2.9.0'
+  linkify-it@5: '>=5.0.2 <6'
+  adm-zip: '>=0.6.0 <0.7'
+  brace-expansion@1: '>=1.1.16 <2'
+  brace-expansion@2: '>=2.1.4 <3'
+  brace-expansion@5: '>=5.0.9 <6'
+  js-yaml@4: '>=4.3.0 <5'
+  '@opentelemetry/propagator-jaeger@2': '>=2.9.0 <3'
   fast-uri@3: '>=3.1.4 <4'
-  fast-uri@4: '>=4.1.2'
-  postcss@8: '>=8.5.18'
-  sharp: '>=0.35.3'
-  minimatch@9: '>=9.0.7'
-  flatted@3: '>=3.4.2'
-  '@grpc/grpc-js@1': '>=1.14.4'
-  picomatch@4: '>=4.0.4'
-  rollup@4: '>=4.59.0'
-  tmp: '>=0.2.6'
-  lodash: '>=4.18.0'
-  serialize-javascript@6: '>=7.0.3'
-  minimatch@3: '>=3.1.4'
-  picomatch@2: '>=2.3.2'
-  lodash-es: '>=4.18.0'
+  fast-uri@4: '>=4.1.2 <5'
+  postcss@8: '>=8.5.18 <9'
+  sharp: '>=0.35.3 <0.36'
+  minimatch@3: '>=3.1.4 <4'
+  minimatch@9: '>=9.0.7 <10'
+  flatted@3: '>=3.4.2 <4'
+  '@grpc/grpc-js@1': '>=1.14.4 <2'
+  picomatch@2: '>=2.3.2 <3'
+  picomatch@4: '>=4.0.4 <5'
+  rollup@4: '>=4.59.0 <5'
+  tmp@0.2: '>=0.2.6 <0.3'
+  lodash: '>=4.18.0 <5'
+  lodash-es: '>=4.18.0 <5'
+  serialize-javascript@6: '>=7.0.3 <8'
 
 importers:
 
@@ -334,7 +334,7 @@ importers:
         specifier: ^1.0.0
         version: 1.0.0
       sharp:
-        specifier: '>=0.35.3'
+        specifier: '>=0.35.3 <0.36'
         version: 0.35.3(@types/node@20.19.43)
       sonner:
         specifier: ^2.0.7
@@ -2137,7 +2137,7 @@ packages:
     resolution: {integrity: sha512-wPAZOX5I0S9fBrjSVaFBJPKM39w8S8eWE8RREYH1m64kY8afKHIdEHzeyKR1dpWexaVJRIwY3fbbghwMXUUshA==}
     peerDependencies:
       crossws: '>=0.3.4'
-      ws: '>=8.21.0'
+      ws: '>=8.21.0 <9'
     peerDependenciesMeta:
       crossws:
         optional: true
@@ -2978,7 +2978,7 @@ packages:
     resolution: {integrity: sha512-+tNWdlWKbpB3WgBN7ijjYkq9X5uhjmcvyjEght4NmH5fAU++zfQzAJ6wumLS+dNcvwEZhKx2Z+skY8m7v0wGSA==}
     engines: {node: '>=16.0.0 || 14 >= 14.17'}
     peerDependencies:
-      rollup: '>=4.59.0'
+      rollup: '>=4.59.0 <5'
     peerDependenciesMeta:
       rollup:
         optional: true
@@ -2987,7 +2987,7 @@ packages:
     resolution: {integrity: sha512-MfPp06CjRLfXQ3wY0R8vJDYBy/MvVcc9OulEfR0B8Iv9ko+GCNaRZ+EpJYFl27LhKsZK0o420sYCRHCjfCgeUg==}
     engines: {node: '>=14.0.0'}
     peerDependencies:
-      rollup: '>=4.59.0'
+      rollup: '>=4.59.0 <5'
     peerDependenciesMeta:
       rollup:
         optional: true
@@ -3156,7 +3156,7 @@ packages:
     resolution: {integrity: sha512-XWv7asJuTTUSlacROvqcIFKuNxAf3PYL/mdjMBhBwp3rJ4vMkA73jqNPjqCTm726cHs/Y4yadbbFA/OZLPWzeg==}
     engines: {node: '>= 18'}
     peerDependencies:
-      rollup: '>=4.59.0'
+      rollup: '>=4.59.0 <5'
       webpack: '>=5.0.0'
     peerDependenciesMeta:
       rollup:
@@ -5094,7 +5094,7 @@ packages:
     resolution: {integrity: sha512-tIbYtZbucOs0BRGqPJkshJUYdL+SDH7dVM8gjy+ERp3WAUjLEFJE+02kanyHtwjWOnwrKYBiwAmM0p4kLJAnXg==}
     engines: {node: '>=12.0.0'}
     peerDependencies:
-      picomatch: '>=4.0.4'
+      picomatch: '>=4.0.4 <5'
     peerDependenciesMeta:
       picomatch:
         optional: true

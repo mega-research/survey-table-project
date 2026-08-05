@@ -48,38 +48,45 @@ overrides:
   '@tiptap/pm': '3.15.3'
   '@tiptap/react': '3.15.3'
   '@tiptap/starter-kit': '3.15.3'
-  fast-xml-parser: '>=5.8.0'
-  ws: '>=8.21.0'
-  tar: '>=7.5.19'
-  'protobufjs@7': '7.6.1'
-  'protobufjs@8': '>=8.6.3'
-  'undici@7': '7.29.0'
+  # --- 보안 패치 강제 overrides ---
+  # 규칙: 값에 반드시 상한을 둔다. pnpm 은 override 값을 그대로 범위로 써서 최고
+  # 매칭 버전을 고르므로, 상한 없는 '>=x' 는 요구자가 선언한 메이저를 넘어 드리프트한다.
+  # 실제로 2026-08-05 에 fast-uri('>=3.1.4' → 4.1.1 취약), minimatch('>=3.1.4'/'>=9.0.7'
+  # → 10.2.5), js-yaml('>=4.3.0' → 5.2.2), linkify-it('>=5.0.2' → 6.1.0),
+  # picomatch('>=2.3.2' → 4.0.5) 5건이 요구자 선언 범위를 벗어나 있었다.
+  # 의도적으로 메이저를 넘기는 항목(adm-zip·serialize-javascript·sharp)은 사유를 남긴다.
+  'fast-xml-parser@5': '>=5.8.0 <6'
+  'ws@8': '>=8.21.0 <9'
+  'tar@7': '>=7.5.19 <8'
+  'protobufjs@7': '>=7.6.1 <8'
+  'protobufjs@8': '>=8.6.3 <9'
+  'undici@7': '>=7.29.0 <8'
   '@chenglou/pretext': '^0.0.5'
-  linkify-it: '>=5.0.2'
-  adm-zip: '>=0.6.0'
-  'brace-expansion@1': '1.1.16'
-  'brace-expansion@2': '2.1.4'
-  'brace-expansion@5': '5.0.9'
-  'js-yaml@4': '>=4.3.0'
-  '@opentelemetry/propagator-jaeger': '>=2.9.0'
-  # ajv 는 fast-uri ^3.0.1 을 요구하는데 상한 없는 '>=3.1.4' 가 4.1.1(취약)로
-  # 크로스메이저 드리프트했다. 3.x 선언 범위 안에 묶고, 4.x 를 직접 요구하는
-  # 패키지가 생기면 패치 라인(4.1.2+)으로 받는다.
+  'linkify-it@5': '>=5.0.2 <6'
+  # adm-zip: 0.5.x 에 패치가 없어 0.6 으로 의도적 승격(요구자 선언은 ^0.5.10)
+  adm-zip: '>=0.6.0 <0.7'
+  'brace-expansion@1': '>=1.1.16 <2'
+  'brace-expansion@2': '>=2.1.4 <3'
+  'brace-expansion@5': '>=5.0.9 <6'
+  'js-yaml@4': '>=4.3.0 <5'
+  '@opentelemetry/propagator-jaeger@2': '>=2.9.0 <3'
   'fast-uri@3': '>=3.1.4 <4'
-  'fast-uri@4': '>=4.1.2'
-  'postcss@8': '>=8.5.18'
-  sharp: '>=0.35.3'
-  'minimatch@9': '>=9.0.7'
-  'flatted@3': '>=3.4.2'
-  '@grpc/grpc-js@1': '>=1.14.4'
-  'picomatch@4': '>=4.0.4'
-  'rollup@4': '>=4.59.0'
-  tmp: '>=0.2.6'
-  lodash: '>=4.18.0'
-  'serialize-javascript@6': '>=7.0.3'
-  'minimatch@3': '>=3.1.4'
-  'picomatch@2': '>=2.3.2'
-  lodash-es: '>=4.18.0'
+  'fast-uri@4': '>=4.1.2 <5'
+  'postcss@8': '>=8.5.18 <9'
+  # sharp: Vercel libvips 이슈 우회로 0.35 라인 사용(선언은 ^0.34.5, docs 주석 참조)
+  sharp: '>=0.35.3 <0.36'
+  'minimatch@3': '>=3.1.4 <4'
+  'minimatch@9': '>=9.0.7 <10'
+  'flatted@3': '>=3.4.2 <4'
+  '@grpc/grpc-js@1': '>=1.14.4 <2'
+  'picomatch@2': '>=2.3.2 <3'
+  'picomatch@4': '>=4.0.4 <5'
+  'rollup@4': '>=4.59.0 <5'
+  'tmp@0.2': '>=0.2.6 <0.3'
+  lodash: '>=4.18.0 <5'
+  lodash-es: '>=4.18.0 <5'
+  # serialize-javascript: 6.x 에 패치가 없어 7 로 의도적 승격
+  'serialize-javascript@6': '>=7.0.3 <8'
 
 allowBuilds:
   '@sentry/cli': true
