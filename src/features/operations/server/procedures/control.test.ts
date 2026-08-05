@@ -178,6 +178,66 @@ describe('operations.control procedures', () => {
     expect(svc.getControlState).not.toHaveBeenCalled();
   });
 
+  it('게스트는 grant 설문이면 setTestMode 가 위임된다', async () => {
+    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
+    vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
+    vi.mocked(svc.setTestMode).mockResolvedValue({
+      isPaused: false,
+      pausedMessage: null,
+      testModeEnabled: true,
+      testToken: 'tok',
+      accessIdentifier: 'survey-1',
+      testResponseCount: 0,
+      testTargetCount: 0,
+      firstTestInviteCode: null,
+    });
+    const client = createRouterClient(
+      { control },
+      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+    );
+    const res = await client.control.setTestMode({ surveyId: SURVEY_ID, enabled: true });
+    expect(svc.setTestMode).toHaveBeenCalledWith({ surveyId: SURVEY_ID, enabled: true });
+    expect(res.testModeEnabled).toBe(true);
+  });
+
+  it('게스트가 다른 설문 surveyId 로 setTestMode 하면 FORBIDDEN', async () => {
+    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
+    vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
+    const client = createRouterClient(
+      { control },
+      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+    );
+    await expect(
+      client.control.setTestMode({ surveyId: 'other-survey', enabled: true }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(svc.setTestMode).not.toHaveBeenCalled();
+  });
+
+  it('게스트는 grant 설문이면 disable 이 위임되고, 다른 설문이면 FORBIDDEN', async () => {
+    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
+    vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
+    vi.mocked(svc.disableTestWorkspace).mockResolvedValue({
+      testModeEnabled: false,
+      deletedResponseCount: 0,
+      deletedTargetCount: 0,
+      remainingResponseCount: 1,
+      remainingTargetCount: 0,
+    });
+    const client = createRouterClient(
+      { control },
+      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+    );
+    const res = await client.control.disable({ surveyId: SURVEY_ID, disposition: 'keep' });
+    expect(svc.disableTestWorkspace).toHaveBeenCalledWith({
+      surveyId: SURVEY_ID,
+      disposition: 'keep',
+    });
+    expect(res.testModeEnabled).toBe(false);
+    await expect(
+      client.control.disable({ surveyId: 'other-survey', disposition: 'keep' }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
   it('게스트는 grant 일치 설문이어도 setPaused 는 FORBIDDEN (authed 유지)', async () => {
     vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
     vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);

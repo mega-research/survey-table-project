@@ -68,6 +68,8 @@ interface Props {
    * 편집 페이지처럼 모르면 생략 — 마운트 시 control.get 으로 조회한다.
    */
   initial?: TestModeState | undefined;
+  /** 게스트 세션 — 테스트 대상자 생성(authed 전용 procedure) 메뉴를 숨긴다. */
+  isGuest?: boolean;
 }
 
 /**
@@ -78,7 +80,7 @@ interface Props {
  * 클립보드에 복사하고, ON 상태에서는 amber 버튼 호버/클릭 드롭다운으로 링크 복사·끄기 제공.
  * 테스트 링크는 마지막 발행본(스냅샷) 기준 — 편집 중 미발행 내용은 반영되지 않는다.
  */
-export function TestModeControl({ surveyId, initial }: Props) {
+export function TestModeControl({ surveyId, initial, isGuest = false }: Props) {
   const router = useRouter();
   const [state, setState] = useState<TestModeState | null>(initial ?? null);
   const [isPending, startTransition] = useTransition();
@@ -335,7 +337,7 @@ export function TestModeControl({ surveyId, initial }: Props) {
               <Copy className="mr-2 h-4 w-4" />
               테스트 링크 복사
             </DropdownMenuItem>
-            {state.testTargetCount === 0 ? (
+            {state.testTargetCount === 0 && !isGuest ? (
               <DropdownMenuItem onSelect={() => setGeneratorOpen(true)}>
                 테스트 대상자 생성
               </DropdownMenuItem>

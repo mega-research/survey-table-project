@@ -35,6 +35,8 @@ import { TestModeControl } from './test-mode-control';
 
 interface Props {
   surveyId: string;
+  /** 게스트 세션 — 설문 중단(authed 전용) 버튼을 숨기고 테스트 모드만 노출한다. */
+  isGuest?: boolean;
   initial: {
     isPaused: boolean;
     pausedMessage: string | null;
@@ -54,7 +56,7 @@ interface Props {
  * - 중단: 응답자 화면에 안내 문구만 노출하고 신규 응답 접수를 막는다. ON 이면 rose 톤으로
  *   "중단 중" 을 표시하고 클릭 시 재개 확인을 받는다.
  */
-export function SurveyControlButtons({ surveyId, initial }: Props) {
+export function SurveyControlButtons({ surveyId, initial, isGuest = false }: Props) {
   const router = useRouter();
   const [state, setState] = useState({
     isPaused: initial.isPaused,
@@ -94,6 +96,11 @@ export function SurveyControlButtons({ surveyId, initial }: Props) {
         toast.error(getErrorMessage(err, '설문 재개에 실패했습니다.'));
       }
     });
+
+  // 게스트: 설문 중단 procedure(setPaused)가 authed 로 막혀 있으므로 버튼 자체를 숨긴다.
+  if (isGuest) {
+    return <TestModeControl surveyId={surveyId} initial={initial} isGuest />;
+  }
 
   return (
     <>

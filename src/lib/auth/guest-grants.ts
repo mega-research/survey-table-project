@@ -61,6 +61,9 @@ export function guestPathRedirect(
   grantedSurveyId: string,
 ): string | null {
   if (pathname === '/admin/login') return null;
+  // 설문 보기(발행 스냅샷 미리보기)는 읽기 전용 화면이라 게스트에게도 허용한다.
+  const previewPath = `/admin/surveys/${grantedSurveyId}/preview`;
+  if (pathname === previewPath || pathname.startsWith(`${previewPath}/`)) return null;
   const allowedPrefix = `/admin/surveys/${grantedSurveyId}/operations`;
   if (pathname === allowedPrefix || pathname.startsWith(`${allowedPrefix}/`)) {
     // 액션 procedure 가 authed(게스트 차단)로 남는 편집 화면은 경로도 함께 차단 —
