@@ -1,6 +1,7 @@
 import {
   BranchRule,
   CalcExpr,
+  CellEnableCondition,
   CheckboxOption,
   NumberFormat,
   QuestionOption,
@@ -40,6 +41,10 @@ export interface CellFormState {
   cellNumberFormat: NumberFormat | undefined;
   /** 필수 응답 셀 (REQUIRED_CELL_TYPES 공용 — TableCell.required 로 직렬화) */
   cellRequired: boolean;
+  /** 셀 게이팅 활성 조건 (input 셀 전용 — TableCell.enabledWhen). undefined = 항상 활성 */
+  gatingCondition: CellEnableCondition | undefined;
+  /** 활성 상태일 때 필수 (TableCell.requiredWhenEnabled 로 직렬화) */
+  gatingRequiredWhenEnabled: boolean;
   minSelections: number | undefined;
   maxSelections: number | undefined;
   rankingOptions: QuestionOption[];
@@ -193,6 +198,8 @@ export function cellToFormState(cell: TableCell): CellFormState {
     emptyDefaultRaw: cell.emptyDefault !== undefined ? String(cell.emptyDefault) : '0',
     cellNumberFormat: cell.numberFormat,
     cellRequired: cell.required ?? false,
+    gatingCondition: cell.enabledWhen,
+    gatingRequiredWhenEnabled: cell.requiredWhenEnabled === true,
     minSelections: cell.minSelections,
     maxSelections: cell.maxSelections,
     rankingOptions: cell.rankingOptions || [],
@@ -280,6 +287,8 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
     emptyDefault: _emptyDefault,
     numberFormat: _numberFormat,
     required: _required,
+    enabledWhen: _enabledWhen,
+    requiredWhenEnabled: _requiredWhenEnabled,
     minSelections: _minSelections,
     maxSelections: _maxSelections,
     rankingConfig: _rankingConfig,
@@ -375,6 +384,15 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
       : {}),
     // 필수 응답 셀 — 인터랙티브 셀 공용 (미체크·비대상 타입은 키 자체 제거)
     ...(REQUIRED_CELL_TYPES.has(contentType) && form.cellRequired ? { required: true } : {}),
+    // 셀 게이팅 (input 셀 전용) — 조건 미설정·비대상 타입은 키 자체 제거.
+    // prefill 셀은 빌더에서 섹션이 숨겨져 새로 설정할 수 없지만, 기존 데이터는 폼이 들고 있던
+    // 값을 그대로 보존한다 (런타임이 prefill 우선으로 게이팅 무시 + 진단이 경고).
+    ...(contentType === 'input' && form.gatingCondition
+      ? {
+          enabledWhen: form.gatingCondition,
+          ...(form.gatingRequiredWhenEnabled ? { requiredWhenEnabled: true } : {}),
+        }
+      : {}),
     // 체크박스 선택 개수 제한 (체크박스 타입 전용)
     ...(contentType === 'checkbox'
       ? {

@@ -1007,3 +1007,49 @@ describe('buildUpdatedCell — 셀 단위 응답 인용 토글·이름 (answerQu
     });
   });
 });
+
+describe('buildUpdatedCell — 셀 게이팅 (enabledWhen/requiredWhenEnabled)', () => {
+  const gatedCell: TableCell = {
+    id: 'c1',
+    type: 'input',
+    content: '',
+    inputType: 'number',
+    enabledWhen: { kind: 'option', controllerCellId: 'ctrl', values: ['1'] },
+    requiredWhenEnabled: true,
+  };
+
+  it('cellToFormState → buildUpdatedCell 왕복에서 게이팅 조건·조건부 필수가 보존된다', () => {
+    const form = cellToFormState(gatedCell);
+    const out = buildUpdatedCell(form, gatedCell);
+    expect(out.enabledWhen).toEqual({ kind: 'option', controllerCellId: 'ctrl', values: ['1'] });
+    expect(out.requiredWhenEnabled).toBe(true);
+  });
+
+  it('폼에서 조건을 제거하면 두 키가 모두 제거된다 (cellBase 잔존 방지)', () => {
+    const form: CellFormState = {
+      ...cellToFormState(gatedCell),
+      gatingCondition: undefined,
+      gatingRequiredWhenEnabled: false,
+    };
+    const out = buildUpdatedCell(form, gatedCell);
+    expect('enabledWhen' in out).toBe(false);
+    expect('requiredWhenEnabled' in out).toBe(false);
+  });
+
+  it('조건은 있고 조건부 필수만 끄면 requiredWhenEnabled 키만 제거된다', () => {
+    const form: CellFormState = {
+      ...cellToFormState(gatedCell),
+      gatingRequiredWhenEnabled: false,
+    };
+    const out = buildUpdatedCell(form, gatedCell);
+    expect(out.enabledWhen).toBeDefined();
+    expect('requiredWhenEnabled' in out).toBe(false);
+  });
+
+  it('input 이 아닌 타입으로 전환하면 게이팅 키가 함께 제거된다', () => {
+    const form: CellFormState = { ...cellToFormState(gatedCell), contentType: 'text' };
+    const out = buildUpdatedCell(form, gatedCell);
+    expect('enabledWhen' in out).toBe(false);
+    expect('requiredWhenEnabled' in out).toBe(false);
+  });
+});

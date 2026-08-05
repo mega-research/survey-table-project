@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   AlignCenter,
@@ -73,6 +73,7 @@ import {
 import { useCellForm } from './hooks/use-cell-form';
 import { AnswerQuoteQuestionControl, AnswerQuoteTextField } from './answer-quote-fields';
 import { CellChoiceEditor } from './cell-choice-editor';
+import { CellGatingEditor } from './cell-gating-editor';
 import { CellImageEditor } from './cell-image-editor';
 import { CellStyleFields } from './cell-style-fields';
 import { CellContentLayout } from './cells/cell-content-layout';
@@ -196,6 +197,8 @@ export function CellContentModal({
     emptyDefaultRaw,
     cellNumberFormat,
     cellRequired,
+    gatingCondition,
+    gatingRequiredWhenEnabled,
     minSelections,
     maxSelections,
     rankingOptions,
@@ -266,6 +269,8 @@ export function CellContentModal({
     setEmptyDefaultRaw,
     setCellNumberFormat,
     setCellRequired,
+    setGatingCondition,
+    setGatingRequiredWhenEnabled,
     setMinSelections,
     setMaxSelections,
     setRankingOptions,
@@ -337,6 +342,13 @@ export function CellContentModal({
   useEffect(() => {
     emptyDefaultAutoAppliedRef.current = false;
   }, [isOpen, cell?.id]);
+
+  // 게이팅 컨트롤러 픽커용 — 이 셀이 속한 행의 셀 목록.
+  // 에디터의 권위 있는 최신 행(getLatestRows)을 우선한다 (store 는 구조 편집 중 stale).
+  const gatingRowCells = useMemo(() => {
+    const rows = getLatestRows?.() ?? ownQuestion.tableRowsData;
+    return rows?.find((r) => r.cells.some((c) => c.id === cell.id))?.cells ?? [];
+  }, [getLatestRows, ownQuestion.tableRowsData, cell.id]);
 
   // 현재 질문 tableRowsData 기반으로 그룹별 멤버 셀 수를 계산한다 (표시용).
   // 아직 저장되지 않은 이번 편집 셀은 카운트에 반영되지 않아도 무방하다.
@@ -1370,8 +1382,22 @@ export function CellContentModal({
           </TabsContent>
         </Tabs>
 
-        {/* 필수 응답 셀 — 인터랙티브 셀 공용 (input/radio/checkbox/select/ranking) */}
-        {REQUIRED_CELL_TYPES.has(contentType) && (
+        {/* 셀 게이팅 활성 조건 — input 셀 전용. prefill(defaultValueTemplate) 셀은
+            서버 prefill 강제 복원과 양립 불가라 설정 금지(섹션 숨김, 스펙 5절) */}
+        {contentType === 'input' && inputDefaultValueTemplate.trim().length === 0 && (
+          <CellGatingEditor
+            cellId={cell.id}
+            rowCells={gatingRowCells}
+            condition={gatingCondition}
+            requiredWhenEnabled={gatingRequiredWhenEnabled}
+            onConditionChange={setGatingCondition}
+            onRequiredWhenEnabledChange={setGatingRequiredWhenEnabled}
+          />
+        )}
+
+        {/* 필수 응답 셀 — 인터랙티브 셀 공용 (input/radio/checkbox/select/ranking).
+            게이팅이 켜진 input 셀은 "활성화되면 필수"로 수렴하므로 이 체크박스를 숨긴다 */}
+        {REQUIRED_CELL_TYPES.has(contentType) && !(contentType === 'input' && gatingCondition) && (
           <div className="mt-6 border-t border-gray-200 pt-6">
             <div className="flex items-center gap-2 text-sm">
               <input
