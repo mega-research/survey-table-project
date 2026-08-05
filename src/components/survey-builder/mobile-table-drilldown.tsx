@@ -104,6 +104,8 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
         tableColumns: visibleColumns,
         tableRowsData: navigationRows,
         tableHeaderGrid: visibleHeaderGrid,
+        // 합계 표시 등 계산 전용 행도 상세 화면에 보여야 한다 (진행률 카운트에는 불포함)
+        includeCalcOnlyLeaves: true,
       }),
     [visibleColumns, navigationRows, visibleHeaderGrid],
   );
@@ -207,12 +209,10 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
   // 실제 입력했거나(hasValue) 거쳐가며 비워둔(acknowledged) 칸을 "채운 것"으로 본다.
   const counted = (cellId: string) => hasValue(cellId) || acknowledged.has(cellId);
   const leafFilled = (leaf: ClassifiedLeaf) => leaf.inputCellIds.filter(counted).length;
+  // 계산 셀만 있는 행은 완료/미완료 개념 밖 — done 도 아니고 미완료 카운트에도 안 들어간다.
+  // (완료 체크 아이콘·카운트 뱃지 모두 입력이 있는 행에만 붙는다.)
   const leafDone = (leaf: ClassifiedLeaf) =>
-    leaf.inputCellIds.length > 0
-      ? leafFilled(leaf) === leaf.inputCellIds.length
-      : // 입력 없이 계산 셀만 있는 행(합계 표시 행 등)은 채울 것이 없으므로 완료 취급.
-        // 입력도 계산도 없는 행은 기존대로 미완료 (leaf 자체가 비정상 케이스).
-        leaf.calcCellIds.length > 0;
+    leaf.inputCellIds.length > 0 && leafFilled(leaf) === leaf.inputCellIds.length;
   const secFilled = (section: ClassifiedSection) =>
     section.leaves.reduce((total, leaf) => total + leafFilled(leaf), 0);
   const totalInputs = sections.reduce((total, section) => total + section.totalInputs, 0);
@@ -332,8 +332,15 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
     () => new Map(navigationRows.map((row) => [row.id, row])),
     [navigationRows],
   );
+  // 진행률 분모는 입력이 있는 행만 — 계산 전용 행(합계 표시)은 채울 것이 없어
+  // 카운트에 넣으면 완료가 영구히 차지 않는다.
   const answerableRowIds = useMemo(
-    () => new Set(sections.flatMap((section) => section.leaves.map((leaf) => leaf.rowId))),
+    () =>
+      new Set(
+        sections.flatMap((section) =>
+          section.leaves.filter((leaf) => leaf.inputCellIds.length > 0).map((leaf) => leaf.rowId),
+        ),
+      ),
     [sections],
   );
   const answerableRows = navigationRows.filter((row) => answerableRowIds.has(row.id));
@@ -413,17 +420,25 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
         sections={sections}
         leafNavigation="always"
         overallStatus={{ completed: completedRows, total: answerableRows.length, unit: '개 항목' }}
-        getSectionStatus={(section) => ({
-          completed: section.leaves.filter((leaf) => {
-            const row = navigationRowById.get(leaf.rowId);
-            return row
-              ? isTableRowCompleted(row, currentResponse, MOBILE_TABLE_COMPLETION_TYPES)
-              : false;
-          }).length,
-          total: section.leaves.length,
-          unit: '개 항목',
-        })}
+        getSectionStatus={(section) => {
+          // 계산 전용 행은 카운트 대상이 아니다 (분자·분모 모두 제외)
+          const countable = section.leaves.filter((leaf) => leaf.inputCellIds.length > 0);
+          return {
+            completed: countable.filter((leaf) => {
+              const row = navigationRowById.get(leaf.rowId);
+              return row
+                ? isTableRowCompleted(row, currentResponse, MOBILE_TABLE_COMPLETION_TYPES)
+                : false;
+            }).length,
+            total: countable.length,
+            unit: '개 항목',
+          };
+        }}
         getLeafStatus={(leaf) => {
+          // 계산 전용 행은 완료 개념이 없다 — total 0 이면 shell 이 카운트 뱃지를 숨긴다
+          if (leaf.inputCellIds.length === 0) {
+            return { completed: 0, total: 0, unit: '개 항목' };
+          }
           const row = navigationRowById.get(leaf.rowId);
           return {
             completed:

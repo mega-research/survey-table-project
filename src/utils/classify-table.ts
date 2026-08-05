@@ -15,6 +15,10 @@ export interface ClassifyInput {
   tableRowsData: TableRow[];
   tableHeaderGrid?: HeaderCell[][] | null | undefined;
   answerableCellTypes?: readonly TableCell['type'][] | undefined;
+  // 계산 셀만 있는 행(합계 표시 행 등)도 leaf 로 만들지 여부. 입력 드릴다운
+  // (mobile-table-drilldown)만 켠다 — 행 선택 UI(choice-table-drilldown)가 켜면
+  // 선택 불가능한 유령 행이 목록에 생긴다.
+  includeCalcOnlyLeaves?: boolean | undefined;
 }
 
 export const DEFAULT_TABLE_ANSWERABLE_CELL_TYPES = [
@@ -220,12 +224,14 @@ export function classifyTable(q: ClassifyInput): ClassifiedSection[] {
         : [{ label: '', rows: sec.rows }];
     const subOf = (row: TableRow) => subGroups.find((g) => g.rows.includes(row));
 
-    // leaf 대상: 입력 행 + 계산 셀만 있는 행(합계 표시 행 등 — 입력은 없지만 드릴다운에
-    // 값이 보여야 한다). 입력도 계산도 없는 행은 기존대로 라벨/구분 행으로만 쓰인다.
+    // leaf 대상: 입력 행 + (opt-in 시) 계산 셀만 있는 행. 합계 표시 행은 입력은 없지만
+    // 입력 드릴다운에 값이 보여야 한다. 입력도 계산도 없는 행은 라벨/구분 행으로만 쓰인다.
     const hasCalcCell = (row: TableRow) =>
       row.cells.some((cell) => cell.type === 'calc' && !cell.isHidden && !cell._isContinuation);
     const leafRows = sec.rows.filter(
-      (row) => row.cells.some((cell) => isInput(cell, types)) || hasCalcCell(row),
+      (row) =>
+        row.cells.some((cell) => isInput(cell, types)) ||
+        (q.includeCalcOnlyLeaves === true && hasCalcCell(row)),
     );
 
     const leaves: ClassifiedLeaf[] = leafRows.map((row) => {

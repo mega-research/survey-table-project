@@ -259,14 +259,17 @@ export function MobileDrilldownShell({
                   </div>
                   <div className="mt-0.5 text-xs text-gray-400">{secSubText(section)}</div>
                 </div>
-                <span
-                  className={cn(
-                    'shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold',
-                    full ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-500',
-                  )}
-                >
-                  {status.completed}/{status.total}
-                </span>
+                {/* total 0 = 전부 표시 전용(계산 셀만 있는 섹션) — 카운트 뱃지 생략 */}
+                {status.total > 0 && (
+                  <span
+                    className={cn(
+                      'shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold',
+                      full ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-500',
+                    )}
+                  >
+                    {status.completed}/{status.total}
+                  </span>
+                )}
                 <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" />
               </button>
             );
@@ -312,14 +315,17 @@ export function MobileDrilldownShell({
                   <span className="min-w-0 flex-1 text-sm font-semibold text-gray-900">
                     {leaf.label}
                   </span>
-                  <span
-                    className={cn(
-                      'shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold',
-                      full ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-500',
-                    )}
-                  >
-                    {status.completed}/{status.total}
-                  </span>
+                  {/* total 0 = 채울 것이 없는 표시 전용 행(계산 셀만 있는 행) — 카운트 뱃지 생략 */}
+                  {status.total > 0 && (
+                    <span
+                      className={cn(
+                        'shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold',
+                        full ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-500',
+                      )}
+                    >
+                      {status.completed}/{status.total}
+                    </span>
+                  )}
                   <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" />
                 </button>
               </React.Fragment>
