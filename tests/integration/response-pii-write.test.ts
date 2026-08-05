@@ -533,6 +533,9 @@ describe('completeResponse — PII 문항만 선별 암호화', () => {
     versionFindFirstMock.mockResolvedValue({ surveyId: SURVEY_ID, status: 'published' });
     // countCompletedResponses — select().from().where() 직접 await.
     selectThenMock.mockReturnValue([{ total: 0 }]);
+    // calc 서버 재계산의 버전 스냅샷 조회(.limit(1) 종단) — 이 그룹의 기존 테스트는
+    // PII 암호화가 관심사이므로 스냅샷 없음으로 두어 재계산을 스킵시킨다.
+    selectLimitMock.mockResolvedValue([]);
     // 같은 db.execute 를 loadValidQuestionIds(전체 id)와 loadPiiQuestionIds(PII id)가
     // 순서대로 호출한다 — SQL 텍스트의 piiEncrypted IS TRUE 필터 유무로 분기해
     // 호출 순서 변화에도 깨지지 않게 한다.
@@ -614,6 +617,86 @@ describe('completeResponse — PII 문항만 선별 암호화', () => {
     expect(unionCall).toBeDefined();
     const text = sqlText(unionCall![0]);
     expect(text).toContain('pii_encrypted = true');
+  });
+
+  // calc 서버 재계산 (신뢰 경계) — 클라이언트가 조작/구버전 수식으로 보낸 계산값을
+  // 서버가 버전 스냅샷 수식으로 다시 계산해 덮어쓰는지 검증한다.
+  it('클라이언트가 보낸 calc 값을 버전 스냅샷 수식으로 재계산해 덮어쓴다', async () => {
+    const CALC_Q_ID = 'q-calc-table';
+    const calcTableQuestion = {
+      id: CALC_Q_ID,
+      type: 'table',
+      title: '계산 표',
+      required: false,
+      order: 1,
+      tableRowsData: [
+        {
+          id: 'r1',
+          label: 'r1',
+          cells: [
+            { id: 'a1', content: '', type: 'input', inputType: 'number' },
+            { id: 'c1', content: '', type: 'calc', formula: { kind: 'cell', cellId: 'a1' } },
+          ],
+        },
+      ],
+    };
+    // 멤버십 필터가 calc 질문 키를 drop 하지 않도록 유효 id 목록에 포함시킨다.
+    executeMock.mockImplementation((query: unknown) => {
+      if (sqlText(query).includes('IS TRUE')) {
+        return Promise.resolve([{ id: QUESTION_ID }]);
+      }
+      return Promise.resolve([
+        { id: QUESTION_ID },
+        { id: PLAIN_QUESTION_ID },
+        { id: CALC_Q_ID },
+      ]);
+    });
+    // 버전 스냅샷 조회가 calc 질문을 반환하게 한다.
+    selectLimitMock.mockResolvedValue([
+      { snapshot: { questions: [calcTableQuestion], lookups: [] } },
+    ]);
+
+    const { completeResponse } = await import(
+      '@/features/survey-response/server/services/response.service'
+    );
+    await completeResponse({
+      responseId: RESPONSE_ID,
+      data: {
+        questionResponses: {
+          // 클라이언트가 c1 에 수식 결과(10)와 다른 조작값을 실어 보냄
+          [CALC_Q_ID]: { a1: '10', c1: '999' },
+        },
+      },
+    });
+
+    const setArg = updateSetLogMock.mock.calls[0]![0] as {
+      questionResponses?: Record<string, unknown>;
+    };
+    const storedTable = (setArg.questionResponses as Record<string, unknown>)[
+      CALC_Q_ID
+    ] as Record<string, unknown>;
+    expect(storedTable['a1']).toBe('10');
+    expect(storedTable['c1']).toBe('10'); // 999 가 아니라 서버 재계산 값
+  });
+
+  it('버전 스냅샷이 없으면 재계산을 스킵하고 제출값을 그대로 저장한다', async () => {
+    // beforeEach 의 selectLimitMock([]) 그대로 — 스냅샷 없음
+    const { completeResponse } = await import(
+      '@/features/survey-response/server/services/response.service'
+    );
+    await completeResponse({
+      responseId: RESPONSE_ID,
+      data: {
+        questionResponses: { [PLAIN_QUESTION_ID]: '평문 답변' },
+      },
+    });
+
+    const setArg = updateSetLogMock.mock.calls[0]![0] as {
+      questionResponses?: Record<string, unknown>;
+    };
+    expect((setArg.questionResponses as Record<string, unknown>)[PLAIN_QUESTION_ID]).toBe(
+      '평문 답변',
+    );
   });
 });
 

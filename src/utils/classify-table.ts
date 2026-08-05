@@ -47,6 +47,9 @@ export interface ClassifiedLeaf {
   subGroup: string;
   subGroupSourceCellId?: string | undefined;
   inputCellIds: string[];
+  // 읽기 전용 계산 셀 id — 드릴다운에서 표시만 하고 완료 판정에는 넣지 않는다
+  // (calc 는 응답이 아니므로 inputCellIds/totalInputs 에 섞으면 완료가 영구히 안 찬다).
+  calcCellIds: string[];
   // 실제 열 인덱스 → 입력 셀 id. matrix 폼은 colGroups 의 col(실제 열 인덱스)로 셀을 찾는다.
   // inputCellIds 는 행마다 길이가 다를 수 있어(비대칭 matrix) 위치로 끼워맞추면 밀린다.
   cellByCol: Record<number, string>;
@@ -233,6 +236,9 @@ export function classifyTable(q: ClassifyInput): ClassifiedSection[] {
         subGroup: subGroup?.label ?? '',
         ...(subGroup?.sourceCellId ? { subGroupSourceCellId: subGroup.sourceCellId } : {}),
         inputCellIds: row.cells.filter((cell) => isInput(cell, types)).map((cell) => cell.id),
+        calcCellIds: row.cells
+          .filter((cell) => cell.type === 'calc' && !cell.isHidden && !cell._isContinuation)
+          .map((cell) => cell.id),
         cellByCol,
       };
     });

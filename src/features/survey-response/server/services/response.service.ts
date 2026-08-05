@@ -28,6 +28,8 @@ import {
   assertAnonymousTestSession,
   lockAndAssertResponseMutation,
 } from '@/lib/survey-response/test-target-attempt.server';
+import { withCalcValues } from '@/lib/survey/cell-formula';
+import type { Question, SurveyLookup } from '@/types/survey';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 
 import type { BlockReason } from '../../domain/duplicate';
@@ -1671,6 +1673,44 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
           validatedResponses[q.id] = expected;
         }
       }
+    }
+  }
+
+  // calc 셀 서버 재계산 (신뢰 경계) — 클라이언트가 페이로드에 주입한 계산값을 그대로 믿지
+  // 않고, 응답 시점 버전 스냅샷의 수식으로 다시 계산해 덮어쓴다. 요청 변조나 구버전
+  // 클라이언트가 수식과 다른 값을 보내도 최종 저장 데이터(export 원천)는 수식 결과와
+  // 일치한다("수식 결과와 다른 저장값은 존재하지 않는다" — CONTEXT.md 계산 셀 불변식).
+  // 반드시 PII 암호화 이전 평문 단계에서 수행한다. 스냅샷 미확보(레거시 versionId null,
+  // 손상 행)면 스킵 — 응답자 저장을 막지 않는 fail-safe (saveAdminEdit 와 동일 정책).
+  if (validatedResponses && gateRow?.versionId) {
+    const [versionRow] = await db
+      .select({ snapshot: surveyVersions.snapshot })
+      .from(surveyVersions)
+      .where(eq(surveyVersions.id, gateRow.versionId))
+      .limit(1);
+    const snap = versionRow?.snapshot as unknown as
+      | { questions?: unknown; lookups?: unknown }
+      | null
+      | undefined;
+    // JSONB 스키마 드리프트 방어 — 비배열이면 순회에서 크래시하므로 Array.isArray 로 거른다.
+    const snapQuestions = Array.isArray(snap?.questions) ? (snap.questions as Question[]) : [];
+    const snapLookups = Array.isArray(snap?.lookups) ? (snap.lookups as SurveyLookup[]) : [];
+    if (snapQuestions.length > 0) {
+      let calcAttrs: Record<string, string | undefined> = {};
+      if (gateRow.contactTargetId) {
+        const [target] = await db
+          .select({ attrs: contactTargets.attrs })
+          .from(contactTargets)
+          .where(eq(contactTargets.id, gateRow.contactTargetId))
+          .limit(1);
+        calcAttrs = (target?.attrs ?? {}) as Record<string, string | undefined>;
+      }
+      validatedResponses = withCalcValues(validatedResponses, {
+        questions: snapQuestions,
+        responses: validatedResponses,
+        lookups: snapLookups,
+        contactAttrs: calcAttrs,
+      });
     }
   }
 

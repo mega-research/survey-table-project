@@ -306,6 +306,11 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
             </div>
           </div>
         ))}
+        {/* 읽기 전용 계산 셀 — matrix 열 그룹은 입력 열만 다루므로(cellByCol) 그룹 뒤에
+            별도로 표시한다. 완료 판정에는 불포함 */}
+        {leaf.calcCellIds.map((cellId) => (
+          <div key={cellId}>{renderCell(cellId)}</div>
+        ))}
       </div>
     </div>
   );
@@ -342,6 +347,10 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
       return (
         <div className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
           {leaf.inputCellIds.map((cellId) => (
+            <div key={cellId}>{renderCell(cellId)}</div>
+          ))}
+          {/* 읽기 전용 계산 셀 — 입력 뒤에 표시. 완료 판정에는 불포함 */}
+          {leaf.calcCellIds.map((cellId) => (
             <div key={cellId}>{renderCell(cellId)}</div>
           ))}
         </div>

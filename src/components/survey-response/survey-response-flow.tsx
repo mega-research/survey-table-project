@@ -21,6 +21,7 @@ import {
 import { PageStepView } from '@/components/survey-response/step-views/page-step-view';
 import { collectAnswerQuotes } from '@/lib/survey/answer-quote';
 import { ContactAttrsProvider } from '@/lib/survey/contact-attrs-context';
+import { withCalcValues } from '@/lib/survey/cell-formula';
 import type { FormulaEvalCtx } from '@/lib/survey/cell-formula';
 import { FormulaEvalProvider } from '@/lib/survey/formula-context';
 import {
@@ -438,18 +439,6 @@ function SurveyResponseFlowActive({
     [questions, responses, effectiveOptionTextsByQuestion],
   );
 
-  // 분기/표시 평가 컨텍스트 — 우변 LUT 룩업 비교가 작동하려면 lookups + contactAttrs 가 필요.
-  // responses 는 cell-id 평탄화 형태로 변환 (table 응답만 의미 있음, 비-table 은 LUT 좌변이 될 수 없음).
-  // 인용값은 조건식의 attrsKey 피연산자가 채널을 구분하지 못하므로 여기서만 병합한다 (인용 우선).
-  const evalCtx = useMemo<BranchEvalCtx>(
-    () => ({
-      responses: responsesToLookupShape(responses),
-      contactAttrs: { ...contactAttrs, ...answerQuotes },
-      lookups: loadedSurvey?.lookups ?? [],
-    }),
-    [responses, contactAttrs, answerQuotes, loadedSurvey?.lookups],
-  );
-
   // calc 셀 수식 평가 컨텍스트 — responses 는 원본(cell-id 미평탄화) 형태를 그대로 넘긴다
   // (cell-formula.ts 가 questionId → cellId 중첩 객체 형태를 직접 기대함).
   const formulaCtx = useMemo<FormulaEvalCtx>(
@@ -460,6 +449,28 @@ function SurveyResponseFlowActive({
       contactAttrs,
     }),
     [questions, responses, loadedSurvey?.lookups, contactAttrs],
+  );
+
+  // calc 값이 주입된 응답 맵 — 분기/표시 조건 평가 전용 파생값.
+  // calc 값은 저장 경계에서만 페이로드에 주입되고 로컬 responses 상태에는 없으므로,
+  // 이것 없이 evalCtx 를 만들면 calc 셀을 참조하는 분기 조건이 항상 빈 값을 본다
+  // (스펙 §4 가 보장한 "앞 페이지 calc 셀 참조"가 깨짐). 파생 주입이므로 같은 페이지
+  // 참조도 라이브로 동작하지만, 보장 범위는 스펙대로 앞 페이지 참조다.
+  const calcAwareResponses = useMemo(
+    () => withCalcValues(responses, formulaCtx),
+    [responses, formulaCtx],
+  );
+
+  // 분기/표시 평가 컨텍스트 — 우변 LUT 룩업 비교가 작동하려면 lookups + contactAttrs 가 필요.
+  // responses 는 cell-id 평탄화 형태로 변환 (table 응답만 의미 있음, 비-table 은 LUT 좌변이 될 수 없음).
+  // 인용값은 조건식의 attrsKey 피연산자가 채널을 구분하지 못하므로 여기서만 병합한다 (인용 우선).
+  const evalCtx = useMemo<BranchEvalCtx>(
+    () => ({
+      responses: responsesToLookupShape(calcAwareResponses),
+      contactAttrs: { ...contactAttrs, ...answerQuotes },
+      lookups: loadedSurvey?.lookups ?? [],
+    }),
+    [calcAwareResponses, contactAttrs, answerQuotes, loadedSurvey?.lookups],
   );
 
   // 상위그룹 단위 + 테이블 분리 렌더 스텝
