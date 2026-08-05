@@ -54,7 +54,7 @@ describe('mail.campaigns procedures', () => {
     const client = createRouterClient({ campaigns }, { context: authedContext() });
     const input = { surveyId: SURVEY_ID, campaignId: CAMPAIGN_ID };
     const res = await client.campaigns.cancel(input);
-    expect(svc.cancelCampaign).toHaveBeenCalledWith(input);
+    expect(svc.cancelCampaign).toHaveBeenCalledWith(input, false);
     expect(res).toEqual({ ok: true });
   });
 
@@ -143,6 +143,29 @@ describe('mail.campaigns procedures', () => {
     };
     const res = await client.campaigns.sendSingle(input);
     expect(singleSvc.sendSingleCampaign).toHaveBeenCalledWith(input, 'guest-1', true);
+    expect(res).toEqual({ campaignId: CAMPAIGN_ID, queuedCount: 1, skippedCount: 0 });
+  });
+
+  it('게스트는 grant 설문이면 create 가 isGuest=true 로 위임된다', async () => {
+    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
+    vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
+    vi.mocked(svc.createCampaign).mockResolvedValue({
+      campaignId: CAMPAIGN_ID,
+      queuedCount: 1,
+      skippedCount: 0,
+    } as never);
+    const client = createRouterClient(
+      { campaigns },
+      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+    );
+    const input = {
+      surveyId: SURVEY_ID,
+      mailTemplateId: TEMPLATE_ID,
+      title: '5월 리마인더',
+      contactTargetIds: [CONTACT_ID],
+    };
+    const res = await client.campaigns.create(input);
+    expect(svc.createCampaign).toHaveBeenCalledWith(input, 'guest-1', true);
     expect(res).toEqual({ campaignId: CAMPAIGN_ID, queuedCount: 1, skippedCount: 0 });
   });
 

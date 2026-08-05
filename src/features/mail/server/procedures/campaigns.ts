@@ -30,7 +30,7 @@ const cancel = scoped
   .output(z.object({ ok: z.literal(true) }))
   .handler(async ({ context, input }) => {
     assertSurveyAccess(context.user.id, input.surveyId);
-    await svc.cancelCampaign(input);
+    await svc.cancelCampaign(input, getGuestSurveyId(context.user.id) !== null);
     return { ok: true as const };
   });
 

@@ -254,8 +254,21 @@ export async function createCampaign(
  * 단체 메일 취소 — status IN ('draft','queued') 일 때만.
  * 'sending' 진행 중 단체 메일은 Inngest dispatcher 가 status='queued' 가드로 이미
  * 발송된 row 는 그대로 두고 미발송 row 만 영향. 단순화를 위해 sending 이후는 취소 불가.
+ *
+ * isGuest 는 procedure 가 인증된 context.user.id 에서 파생해 전달한다 — 게스트는 전역
+ * 테스트 모드 플래그와 무관하게 항상 real 파티션만 쓴다. UPDATE WHERE 에 isTest 조건을
+ * 넣어, 게스트가 테스트 파티션 campaignId 를 알아내도 취소가 닿지 않게 한다 — 파티션이
+ * 안 맞으면 상태가 안 맞는 캠페인과 동일하게 처리(별도 에러 계약을 만들지 않는다).
  */
-export async function cancelCampaign(input: CancelCampaignInput): Promise<void> {
+export async function cancelCampaign(input: CancelCampaignInput, isGuest: boolean): Promise<void> {
+  // createCampaign(a단계)과 동일한 최소 조회 — 쓰기 파티션 산정을 위해서만 필요.
+  const [survey] = await db
+    .select({ enabled: surveys.testModeEnabled })
+    .from(surveys)
+    .where(eq(surveys.id, input.surveyId))
+    .limit(1);
+  const isTest = resolveWriteScopeIsTest(survey?.enabled ?? false, isGuest);
+
   const updated = await db
     .update(mailCampaigns)
     .set({ status: 'cancelled', updatedAt: new Date() })
@@ -263,6 +276,7 @@ export async function cancelCampaign(input: CancelCampaignInput): Promise<void> 
       and(
         eq(mailCampaigns.id, input.campaignId),
         eq(mailCampaigns.surveyId, input.surveyId),
+        eq(mailCampaigns.isTest, isTest),
         inArray(mailCampaigns.status, ['draft', 'queued']),
       ),
     )
