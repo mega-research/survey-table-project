@@ -57,6 +57,8 @@ interface Props {
   view: ProfilesView;
   /** 설문에 컨택 타겟이 존재하는지 — false 면 번호(ID) 열을 만들지 않는다 (엑셀 내보내기와 동일 규칙) */
   hasContacts: boolean;
+  /** 게스트 세션 — 행 액션에서 admin 전용 메뉴(삭제·초기화·복원)를 숨긴다. */
+  isGuest: boolean;
 }
 
 interface DisplayRow {
@@ -80,7 +82,7 @@ const meta = (align: CellAlign, sortable: boolean): ColumnMeta => ({ align, sort
 /**
  * 응답 내역 테이블. 9 컬럼 + URL state sort/pagination + 검색 결과 EmptyState.
  */
-export function ProfilesTable({ rows, total, page, pageSize, sort, dir, stepLocations, totalSteps, surveyId, view, hasContacts }: Props) {
+export function ProfilesTable({ rows, total, page, pageSize, sort, dir, stepLocations, totalSteps, surveyId, view, hasContacts, isGuest }: Props) {
   const pushParams = useSearchParamsMutator();
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
@@ -200,12 +202,13 @@ export function ProfilesTable({ rows, total, page, pageSize, sort, dir, stepLoca
             responseId={row.original.id}
             idx={row.original.idx}
             view={view}
+            isGuest={isGuest}
           />
         ),
         meta: meta('center', false),
       },
     ],
-    [surveyId, view, hasContacts],
+    [surveyId, view, hasContacts, isGuest],
   );
 
   // TanStack Table useReactTable은 React Compiler 비호환 API라 국소 예외로 둔다.
