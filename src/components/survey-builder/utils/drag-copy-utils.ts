@@ -1,4 +1,4 @@
-import type { TableCell, TableRow } from '@/types/survey';
+import type { CellEnableCondition, TableCell, TableRow } from '@/types/survey';
 
 // ── 타입 ──
 
@@ -59,6 +59,24 @@ export function createRadioGroupRemapper(genId: () => string): (sourceName: stri
     remap.set(sourceName, fresh);
     return fresh;
   };
+}
+
+/**
+ * 붙여넣거나 복제된 셀의 게이팅(enabledWhen) 컨트롤러 참조 재해석.
+ *
+ * - `remappedControllerId` 가 있으면(컨트롤러가 복사 영역/복제 행 안) → 그 id 로 치환
+ * - 없지만 컨트롤러가 대상 행에 존재하면(같은 행 안 이동) → 그대로 유지
+ * - 그 외(다른 행의 컨트롤러) → undefined — 게이팅은 같은 행 값만 평가하므로
+ *   의미가 깨진 참조를 남기지 않고 제거한다 (남기면 영구 비활성 + red 진단).
+ */
+export function resolvePastedGating(
+  condition: CellEnableCondition,
+  remappedControllerId: string | undefined,
+  targetRowCellIds: ReadonlySet<string>,
+): CellEnableCondition | undefined {
+  if (remappedControllerId) return { ...condition, controllerCellId: remappedControllerId };
+  if (targetRowCellIds.has(condition.controllerCellId)) return condition;
+  return undefined;
 }
 
 /**
