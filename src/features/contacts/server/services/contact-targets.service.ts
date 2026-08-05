@@ -11,7 +11,6 @@ import {
   archiveTestMailForTargets,
   hardDeleteMailForTargets,
 } from '@/lib/mail/test-mail-archive.server';
-import { isGuestViewer } from '@/lib/auth/guest-viewer';
 import { resolveWriteScopeIsTest } from '@/lib/operations/data-scope.server';
 
 import type {
@@ -82,13 +81,15 @@ async function lockCurrentSurveyScope(
  * PII 컬럼은 piiUpdates 로 별도 전달 → contact_pii 에 암호화 저장.
  *
  * 인증은 authed 미들웨어가 담당. 캐시 갱신은 소비처 router.refresh 로 대체.
+ *
+ * isGuest 는 procedure 가 이미 인증한 context.user.id 에서 파생해 전달한다 — 서비스가
+ * auth 를 재조회하면 그 실패가 fail-open(어드민 취급)으로 이어질 수 있다.
  */
-export async function addContactTarget(input: AddContactTargetInput): Promise<ContactTargetRow> {
+export async function addContactTarget(
+  input: AddContactTargetInput,
+  isGuest: boolean,
+): Promise<ContactTargetRow> {
   const { surveyId, attrs: rawAttrs, piiUpdates, memo, contactMethod, systemFieldKeys } = input;
-
-  // 게스트 판정은 트랜잭션(설문 행 잠금) 밖에서 미리 구한다 — 잠금 아래서 auth 왕복을
-  // 하면 그 RTT 만큼 잠금이 유지되어 동시 요청을 블록한다.
-  const isGuest = await isGuestViewer();
 
   const result = await db.transaction(async (tx) => {
     const prepared = await prepareContactInsertScope(tx, {
@@ -139,10 +140,11 @@ export async function addContactTarget(input: AddContactTargetInput): Promise<Co
 /**
  * 행 단위 갱신 — attrs/group/memo/contactMethod + PII 변경분 upsert.
  */
-export async function updateContactTarget(input: UpdateContactTargetInput): Promise<void> {
+export async function updateContactTarget(
+  input: UpdateContactTargetInput,
+  isGuest: boolean,
+): Promise<void> {
   const { id, surveyId, attrs: rawAttrs, piiUpdates, memo, contactMethod, systemFieldKeys } = input;
-
-  const isGuest = await isGuestViewer();
 
   await db.transaction(async (tx) => {
     const { isTest, scheme } = await lockTargetInCurrentScope(tx, { id, surveyId }, isGuest);
@@ -192,9 +194,11 @@ export async function updateContactTarget(input: UpdateContactTargetInput): Prom
  * 설문 스코프 가드: 행이 input.surveyId 소속일 때만 DELETE. CASCADE(attempts/pii 동반 삭제)는
  * 비가역적이므로 .returning() 길이로 영향 0행이면 NOT_FOUND throw 하여 사전 차단한다.
  */
-export async function deleteContactTarget(input: DeleteContactTargetInput): Promise<void> {
+export async function deleteContactTarget(
+  input: DeleteContactTargetInput,
+  isGuest: boolean,
+): Promise<void> {
   const { id, surveyId } = input;
-  const isGuest = await isGuestViewer();
   await db.transaction(async (tx) => {
     const { isTest } = await lockCurrentSurveyScope(tx, surveyId, isGuest);
     const [target] = await tx

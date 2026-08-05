@@ -8,10 +8,6 @@ import {
   archiveTestWorkspaceMail,
 } from '@/lib/mail/test-mail-archive.server';
 
-// 컨택/캠페인 서비스 진입점이 트랜잭션을 열기 전에 isGuestViewer() 를 직접 호출한다.
-// 이 스위트는 어드민 세션 로직만 검증하므로 항상 false(비게스트) 로 고정한다 (Task 4).
-vi.mock('@/lib/auth/guest-viewer', () => ({ isGuestViewer: vi.fn(async () => false) }));
-
 type RecipientStatus =
   | 'queued'
   | 'sending'
@@ -523,7 +519,7 @@ describe('test mail archive lifecycle', () => {
   });
 
   it('개별 테스트 대상자 삭제는 메일 archive 뒤 테스트 응답과 target을 hard delete한다', async () => {
-    await deleteContactTarget({ surveyId: 'survey-1', id: 'target-test' });
+    await deleteContactTarget({ surveyId: 'survey-1', id: 'target-test' }, false);
 
     expect(state.contacts).toEqual([]);
     expect(state.responses).toEqual([]);
@@ -557,7 +553,7 @@ describe('test mail archive lifecycle', () => {
       }),
     ];
 
-    await deleteContactTarget({ surveyId: 'survey-1', id: 'target-actual' });
+    await deleteContactTarget({ surveyId: 'survey-1', id: 'target-actual' }, false);
 
     expect(state.contacts).toEqual([]);
     expect(state.recipients).toEqual([]);

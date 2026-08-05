@@ -109,7 +109,7 @@ run('실제 대상자 응답 완료와 관리 작업 경쟁', () => {
     const blocker = createTargetBlocker(targetId);
     try {
       await blocker.locked;
-      const deletion = deleteContactTarget({ surveyId, id: targetId });
+      const deletion = deleteContactTarget({ surveyId, id: targetId }, false);
       await waitForTargetLockWaiters(1);
       const completion = completeResponse({ responseId });
       await waitForTargetLockWaiters(2);

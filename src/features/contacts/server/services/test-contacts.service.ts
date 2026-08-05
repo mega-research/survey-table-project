@@ -3,7 +3,6 @@ import 'server-only';
 
 import { db } from '@/db';
 import { contactTargets } from '@/db/schema';
-import { isGuestViewer } from '@/lib/auth/guest-viewer';
 import { resolveTestContactFieldBindings } from '@/lib/contacts/test-contact-columns';
 import { TEST_CONTACT_FIXTURES } from '@/lib/contacts/test-contact-fixtures';
 import { upsertPiiValue } from '@/lib/crypto/contact-pii-repo';
@@ -12,12 +11,14 @@ import { generateInviteCode } from '@/lib/survey-url';
 import type { GenerateTestContactsInput } from '../../domain/contact-target';
 import { prepareContactInsertScope } from './contact-insert-scope.service';
 
+/**
+ * isGuest 는 procedure 가 이미 인증한 context.user.id 에서 파생해 전달한다 — 서비스가
+ * auth 를 재조회하면 그 실패가 fail-open(어드민 취급)으로 이어질 수 있다.
+ */
 export async function generateTestContacts(
   input: GenerateTestContactsInput,
+  isGuest: boolean,
 ): Promise<{ createdCount: number }> {
-  // authed 전용 진입점이라도 하드코딩 false 는 넣지 않는다 — 트랜잭션 밖에서 실제로
-  // isGuestViewer() 를 호출해 SSOT(resolveWriteScopeIsTest)를 통일한다.
-  const isGuest = await isGuestViewer();
   return db.transaction(async (tx) => {
     const prepared = await prepareContactInsertScope(tx, {
       surveyId: input.surveyId,

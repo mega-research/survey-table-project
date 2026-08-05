@@ -25,7 +25,7 @@ describe('attempts procedures', () => {
     const client = createRouterClient({ contacts: { attempts } }, { context: authedContext() });
     const input = { contactTargetId: 'ct-1', surveyId: 's-1', resultCode: '1.조사완료', note: '메모' };
     const res = await client.contacts.attempts.add(input);
-    expect(svc.addAttempt).toHaveBeenCalledWith(input);
+    expect(svc.addAttempt).toHaveBeenCalledWith(input, false);
     expect(res).toEqual({ id: 'att-1', attemptNo: 1 });
   });
 
@@ -34,7 +34,7 @@ describe('attempts procedures', () => {
     const client = createRouterClient({ contacts: { attempts } }, { context: authedContext() });
     const input = { id: 'att-1', contactTargetId: 'ct-1', surveyId: 's-1', resultCode: '6.거절' };
     const res = await client.contacts.attempts.update(input);
-    expect(svc.updateAttempt).toHaveBeenCalledWith(input);
+    expect(svc.updateAttempt).toHaveBeenCalledWith(input, false);
     expect(res).toEqual({ ok: true });
   });
 
@@ -43,7 +43,7 @@ describe('attempts procedures', () => {
     const client = createRouterClient({ contacts: { attempts } }, { context: authedContext() });
     const input = { surveyId: 's-1', contactTargetId: 'ct-1', id: 'att-1' };
     const res = await client.contacts.attempts.remove(input);
-    expect(svc.deleteAttempt).toHaveBeenCalledWith(input);
+    expect(svc.deleteAttempt).toHaveBeenCalledWith(input, false);
     expect(res).toEqual({ ok: true });
   });
 
@@ -69,11 +69,13 @@ describe('attempts procedures', () => {
       { contacts: { attempts } },
       { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
     );
-    const res = await client.contacts.attempts.add({
+    const input = {
       contactTargetId: 'ct-1',
       surveyId: 's-1',
       resultCode: '1.조사완료',
-    });
+    };
+    const res = await client.contacts.attempts.add(input);
+    expect(svc.addAttempt).toHaveBeenCalledWith(input, true);
     expect(res).toEqual({ id: 'att-1', attemptNo: 1 });
   });
 

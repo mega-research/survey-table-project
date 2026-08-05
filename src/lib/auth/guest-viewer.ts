@@ -1,6 +1,6 @@
 import { cache } from 'react';
 
-import { getCurrentUser } from '@/lib/auth';
+import { requireAuth } from '@/lib/auth';
 import { getGuestSurveyId } from '@/lib/auth/guest-grants';
 
 /**
@@ -14,8 +14,11 @@ import { getGuestSurveyId } from '@/lib/auth/guest-grants';
  * supabase auth.getUser() 왕복을 요청당 1회로 줄인다.
  */
 async function loadIsGuestViewer(): Promise<boolean> {
-  const user = await getCurrentUser();
-  if (!user) return false;
+  // getCurrentUser 는 supabase 에러를 삼키고 null 을 돌려주는데, null 을 "게스트 아님"
+  // 으로 해석하면 일시적 auth 장애가 게스트를 어드민 스코프로 흘려보낸다. 호출부는
+  // 모두 미들웨어·procedure 인증을 통과한 뒤라 세션이 반드시 있으므로 fail-closed 로
+  // requireAuth 를 쓴다.
+  const user = await requireAuth();
   return getGuestSurveyId(user.id) !== null;
 }
 

@@ -4,7 +4,6 @@ import { and, eq, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { contactAttempts, contactTargets, surveys } from '@/db/schema';
-import { isGuestViewer } from '@/lib/auth/guest-viewer';
 import { resolveWriteScopeIsTest } from '@/lib/operations/data-scope.server';
 
 import type {
@@ -71,15 +70,15 @@ function isUniqueViolation(e: unknown): boolean {
  * 3회 모두 실패 시 user-facing error.
  *
  * surveyId 는 input 으로 받되 service 로직에서는 사용하지 않는다(revalidate 제거).
+ *
+ * isGuest 는 procedure 가 이미 인증한 context.user.id 에서 파생해 전달한다 — 서비스가
+ * auth 를 재조회하면 그 실패가 fail-open(어드민 취급)으로 이어질 수 있다.
  */
 export async function addAttempt(
   input: AddContactAttemptInput,
+  isGuest: boolean,
 ): Promise<{ id: string; attemptNo: number }> {
   const { contactTargetId, resultCode, note } = input;
-
-  // 게스트 판정은 재시도 루프 밖에서 한 번만 구한다 — 세션 값이라 재시도마다 바뀌지 않고,
-  // 트랜잭션(설문 행 잠금) 안에서 auth 왕복을 하면 그 RTT 만큼 잠금이 유지된다.
-  const isGuest = await isGuestViewer();
 
   const MAX_RETRIES = 3;
   let lastError: unknown = null;
@@ -128,9 +127,11 @@ export async function addAttempt(
  * 설문 스코프 가드: contactTargetId 가 surveyId 소속인지 선행 확인한 뒤,
  * attempt.id + contactTargetId 스코프로 UPDATE 한다. 영향 0행이면 NOT_FOUND throw.
  */
-export async function updateAttempt(input: UpdateContactAttemptInput): Promise<void> {
+export async function updateAttempt(
+  input: UpdateContactAttemptInput,
+  isGuest: boolean,
+): Promise<void> {
   const { id, contactTargetId, surveyId, resultCode, note } = input;
-  const isGuest = await isGuestViewer();
   await db.transaction(async (tx) => {
     await lockTargetInCurrentScope(tx, contactTargetId, surveyId, isGuest);
     const updated = await tx
@@ -147,9 +148,11 @@ export async function updateAttempt(input: UpdateContactAttemptInput): Promise<v
  * 설문 스코프 가드: contactTargetId 가 surveyId 소속인지 선행 확인한 뒤,
  * attempt.id + contactTargetId 스코프로 DELETE 한다. 영향 0행이면 NOT_FOUND throw.
  */
-export async function deleteAttempt(input: DeleteContactAttemptInput): Promise<void> {
+export async function deleteAttempt(
+  input: DeleteContactAttemptInput,
+  isGuest: boolean,
+): Promise<void> {
   const { id, contactTargetId, surveyId } = input;
-  const isGuest = await isGuestViewer();
   await db.transaction(async (tx) => {
     await lockTargetInCurrentScope(tx, contactTargetId, surveyId, isGuest);
     const deleted = await tx

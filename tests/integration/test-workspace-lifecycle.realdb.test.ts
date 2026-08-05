@@ -130,7 +130,7 @@ run('test workspace mail archive realdb', () => {
       },
     ]);
 
-    await deleteContactTarget({ surveyId, id: targetId });
+    await deleteContactTarget({ surveyId, id: targetId }, false);
 
     const recipients = await db
       .select({
@@ -354,7 +354,7 @@ run('test workspace mail archive realdb', () => {
       },
     });
 
-    await deleteContactTarget({ surveyId, id: targetId });
+    await deleteContactTarget({ surveyId, id: targetId }, false);
     await terminalizeUnresolvedCampaignDispatch(campaign.id, new Date('2026-07-23T00:00:01Z'));
 
     const [row] = await db
