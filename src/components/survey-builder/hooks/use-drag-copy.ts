@@ -365,12 +365,15 @@ export function useDragCopy({
 
     const rows = currentRowsRef.current;
     const columns = currentColumnsRef.current;
-    const restoredRows = applyPatches(rows, undoInfo.inversePatches);
+    // isHidden 은 붙여넣기 커밋 시 patch 밖(recalculateHiddenCells)에서 재계산되므로
+    // patch 복원만으로는 되돌아오지 않는다 — 예: 붙여넣은 병합 앵커가 덮었던 컨트롤러가
+    // undo 후에도 숨김으로 남는다. 복원된 스팬 기하 기준으로 다시 재계산해야 한다.
+    const restoredRows = recalculateHiddenCells(applyPatches(rows, undoInfo.inversePatches));
 
     setCurrentRows(restoredRows);
     notifyChange(currentTitleRef.current, columns, restoredRows);
     setUndoInfo(null);
-  }, [undoInfo, currentRowsRef, currentColumnsRef, setCurrentRows, notifyChange, currentTitleRef]);
+  }, [undoInfo, currentRowsRef, currentColumnsRef, setCurrentRows, notifyChange, currentTitleRef, recalculateHiddenCells]);
 
   const clearCopiedRegion = useCallback(() => {
     setCopiedRegion(null);
