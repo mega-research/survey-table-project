@@ -137,6 +137,9 @@ export const MOBILE_LABEL_CELL_TYPES = new Set<TableCell['type']>([
   'ranking',
   'ranking_opt',
   'choice_opt',
+  // 계산 셀은 읽기 전용이지만 모바일 카드에서는 값 위에 제목이 붙는 한 행으로 렌더되므로
+  // (mobile-row-card 의 inputCells → resolveMobileCellLabel 경로) 라벨 지정·숨김이 필요하다.
+  'calc',
 ]);
 
 /** 옵션 그룹 귀속이 가능한 셀 타입 */
