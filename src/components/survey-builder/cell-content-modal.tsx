@@ -1390,7 +1390,14 @@ export function CellContentModal({
             rowCells={gatingRowCells}
             condition={gatingCondition}
             requiredWhenEnabled={gatingRequiredWhenEnabled}
-            onConditionChange={setGatingCondition}
+            onConditionChange={(cond) => {
+              // 게이팅 최초 활성화 시 기존 필수 체크를 "활성화되면 필수"로 수렴
+              // (필수 체크박스가 숨겨지며 의도가 사라지지 않도록, 스펙 5절)
+              if (cond && !gatingCondition && cellRequired) {
+                setGatingRequiredWhenEnabled(true);
+              }
+              setGatingCondition(cond);
+            }}
             onRequiredWhenEnabledChange={setGatingRequiredWhenEnabled}
           />
         )}

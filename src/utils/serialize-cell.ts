@@ -199,7 +199,12 @@ export function cellToFormState(cell: TableCell): CellFormState {
     cellNumberFormat: cell.numberFormat,
     cellRequired: cell.required ?? false,
     gatingCondition: cell.enabledWhen,
-    gatingRequiredWhenEnabled: cell.requiredWhenEnabled === true,
+    // 게이팅 셀의 legacy required 는 "활성일 때 필수"와 같은 의미로 수렴한다 (스펙 5절 —
+    // 런타임 검증식이 (required || requiredWhenEnabled) && 활성 이므로). 체크박스에
+    // 수렴값을 보여줘야 UI 상태와 실제 동작이 일치하고, 끄는 것도 가능해진다.
+    gatingRequiredWhenEnabled:
+      cell.requiredWhenEnabled === true ||
+      (cell.enabledWhen !== undefined && cell.required === true),
     minSelections: cell.minSelections,
     maxSelections: cell.maxSelections,
     rankingOptions: cell.rankingOptions || [],
@@ -382,8 +387,15 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
           ...(form.formulaErrorMessage.trim() ? { formulaErrorMessage: form.formulaErrorMessage.trim() } : {}),
         }
       : {}),
-    // 필수 응답 셀 — 인터랙티브 셀 공용 (미체크·비대상 타입은 키 자체 제거)
-    ...(REQUIRED_CELL_TYPES.has(contentType) && form.cellRequired ? { required: true } : {}),
+    // 필수 응답 셀 — 인터랙티브 셀 공용 (미체크·비대상 타입은 키 자체 제거).
+    // 게이팅이 켜진 input 은 required 를 저장하지 않는다 — 필수 의미는
+    // requiredWhenEnabled 하나로 수렴하며, 숨겨진 체크박스의 stale required 가
+    // 조건부 필수를 강제해 UI 와 동작이 갈라지는 것을 막는다.
+    ...(REQUIRED_CELL_TYPES.has(contentType) &&
+    form.cellRequired &&
+    !(contentType === 'input' && form.gatingCondition)
+      ? { required: true }
+      : {}),
     // 셀 게이팅 (input 셀 전용) — 조건 미설정·비대상 타입은 키 자체 제거.
     // prefill 셀은 빌더에서 섹션이 숨겨져 새로 설정할 수 없지만, 기존 데이터는 폼이 들고 있던
     // 값을 그대로 보존한다 (런타임이 prefill 우선으로 게이팅 무시 + 진단이 경고).

@@ -7,6 +7,12 @@ export interface CopiedRegion {
   cells: (TableCell | null)[][]; // [relativeRow][relativeCol], null = hidden 위치
   width: number;
   height: number;
+  /**
+   * 원본 셀 id — cells 와 같은 [relativeRow][relativeCol] 격자, null = hidden 위치.
+   * cells 의 스냅샷은 REGION_EXCLUDED_KEYS 로 id 를 제거하므로, 게이팅 컨트롤러처럼
+   * "원본의 어느 셀을 가리켰는가"를 붙여넣기에서 되짚으려면 이 격자로만 가능하다.
+   */
+  sourceCellIds: (string | null)[][];
 }
 
 // ── 상수 ──
@@ -199,15 +205,18 @@ export function extractRegionFromRows(
   const height = maxRow - minRow + 1;
   const width = maxCol - minCol + 1;
   const cells: (TableCell | null)[][] = [];
+  const sourceCellIds: (string | null)[][] = [];
 
   for (let r = minRow; r <= maxRow; r++) {
     const rowCells: (TableCell | null)[] = [];
+    const rowSourceIds: (string | null)[] = [];
     const row = rows[r];
 
     for (let c = minCol; c <= maxCol; c++) {
       const cell = row?.cells[c];
       if (!cell || cell.isHidden) {
         rowCells.push(null);
+        rowSourceIds.push(null);
         continue;
       }
 
@@ -219,12 +228,31 @@ export function extractRegionFromRows(
         }
       }
       rowCells.push(structuredClone(cleaned) as unknown as TableCell);
+      rowSourceIds.push(cell.id);
     }
 
     cells.push(rowCells);
+    sourceCellIds.push(rowSourceIds);
   }
 
-  return { cells, width, height };
+  return { cells, width, height, sourceCellIds };
+}
+
+/**
+ * 복사 영역에서 원본 셀 id 의 상대 위치를 찾는다 (게이팅 컨트롤러 리매핑용).
+ * 스냅샷 셀(cells)에는 id 가 없으므로 sourceCellIds 격자로만 판정한다.
+ */
+export function findRegionSourceCellPos(
+  region: CopiedRegion,
+  sourceCellId: string,
+): { row: number; col: number } | undefined {
+  for (let r = 0; r < region.sourceCellIds.length; r++) {
+    const rowIds = region.sourceCellIds[r];
+    if (!rowIds) continue;
+    const c = rowIds.indexOf(sourceCellId);
+    if (c !== -1) return { row: r, col: c };
+  }
+  return undefined;
 }
 
 // ── 붙여넣기 검증 ──

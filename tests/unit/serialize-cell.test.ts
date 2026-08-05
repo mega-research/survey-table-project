@@ -1052,4 +1052,46 @@ describe('buildUpdatedCell — 셀 게이팅 (enabledWhen/requiredWhenEnabled)',
     expect('enabledWhen' in out).toBe(false);
     expect('requiredWhenEnabled' in out).toBe(false);
   });
+
+  // 필수 수렴: 게이팅 셀의 legacy required 는 "활성일 때 필수"와 동일 의미
+  // — 검증식이 (required || requiredWhenEnabled) && 활성 이므로 UI/저장 모두 한 채널로 모은다.
+  it('legacy required:true 게이팅 셀은 조건부 필수 체크박스로 수렴되어 hydrate 된다', () => {
+    const legacy: TableCell = {
+      id: 'c1',
+      type: 'input',
+      content: '',
+      required: true,
+      enabledWhen: { kind: 'option', controllerCellId: 'ctrl', values: ['1'] },
+    };
+    const form = cellToFormState(legacy);
+    expect(form.gatingRequiredWhenEnabled).toBe(true);
+
+    const out = buildUpdatedCell(form, legacy);
+    // required 는 저장하지 않고 requiredWhenEnabled 하나로 수렴
+    expect('required' in out).toBe(false);
+    expect(out.requiredWhenEnabled).toBe(true);
+  });
+
+  it('게이팅이 켜진 input 은 cellRequired 가 true 여도 required 를 저장하지 않는다', () => {
+    const form: CellFormState = {
+      ...cellToFormState(gatedCell),
+      cellRequired: true,
+      gatingRequiredWhenEnabled: false,
+    };
+    const out = buildUpdatedCell(form, gatedCell);
+    expect('required' in out).toBe(false);
+    expect('requiredWhenEnabled' in out).toBe(false);
+  });
+
+  it('게이팅이 없는 input 은 required 저장이 기존과 동일하다', () => {
+    const form: CellFormState = {
+      ...cellToFormState(gatedCell),
+      gatingCondition: undefined,
+      gatingRequiredWhenEnabled: false,
+      cellRequired: true,
+    };
+    const out = buildUpdatedCell(form, gatedCell);
+    expect(out.required).toBe(true);
+    expect('enabledWhen' in out).toBe(false);
+  });
 });
