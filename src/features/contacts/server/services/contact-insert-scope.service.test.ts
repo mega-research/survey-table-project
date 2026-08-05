@@ -1,8 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { isGuestViewer } from '@/lib/auth/guest-viewer';
-
-vi.mock('@/lib/auth/guest-viewer', () => ({ isGuestViewer: vi.fn() }));
 vi.mock('@/db', () => ({ db: {} }));
 
 import { prepareContactInsertScope } from './contact-insert-scope.service';
@@ -47,13 +44,13 @@ describe('prepareContactInsertScope 게스트 쓰기 파티션', () => {
   });
 
   it('게스트는 전역 테스트 모드 ON 이어도 real 파티션으로 준비된다', async () => {
-    vi.mocked(isGuestViewer).mockResolvedValue(true);
     const { tx, deleteCalls, updateCalls } = makeTx(TEST_MODE_ON_ROW, 0);
 
     const prepared = await prepareContactInsertScope(tx as never, {
       surveyId: SURVEY_ID,
       requestedCount: 1,
       requireEmptyTestScope: false,
+      isGuest: true,
     });
 
     expect(prepared.isTest).toBe(false);
@@ -64,13 +61,13 @@ describe('prepareContactInsertScope 게스트 쓰기 파티션', () => {
   });
 
   it('어드민은 전역 테스트 모드 ON 이면 test 파티션으로 준비된다', async () => {
-    vi.mocked(isGuestViewer).mockResolvedValue(false);
     const { tx, deleteCalls } = makeTx(TEST_MODE_ON_ROW, 0);
 
     const prepared = await prepareContactInsertScope(tx as never, {
       surveyId: SURVEY_ID,
       requestedCount: 1,
       requireEmptyTestScope: false,
+      isGuest: false,
     });
 
     expect(prepared.isTest).toBe(true);

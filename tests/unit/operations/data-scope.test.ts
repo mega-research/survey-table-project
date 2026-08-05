@@ -70,19 +70,16 @@ describe('loadOperationsDataScope', () => {
 });
 
 describe('resolveWriteScopeIsTest', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+  // 순수 동기 함수 — isGuest 는 호출부가 트랜잭션 밖에서 미리 구해 넘긴다.
+  // isGuestViewer mock 에 의존하지 않고 네 조합을 직접 인자로 검증한다.
+
+  it('어드민(비게스트) 세션은 전역 플래그를 그대로 통과시킨다', () => {
+    expect(resolveWriteScopeIsTest(true, false)).toBe(true);
+    expect(resolveWriteScopeIsTest(false, false)).toBe(false);
   });
 
-  it('어드민 세션은 전역 플래그를 그대로 통과시킨다', async () => {
-    vi.mocked(isGuestViewer).mockResolvedValue(false);
-    await expect(resolveWriteScopeIsTest(true)).resolves.toBe(true);
-    await expect(resolveWriteScopeIsTest(false)).resolves.toBe(false);
-  });
-
-  it('게스트 세션은 전역 플래그가 ON 이어도 real 파티션에 쓴다', async () => {
-    vi.mocked(isGuestViewer).mockResolvedValue(true);
-    await expect(resolveWriteScopeIsTest(true)).resolves.toBe(false);
-    await expect(resolveWriteScopeIsTest(false)).resolves.toBe(false);
+  it('게스트 세션은 전역 플래그가 ON 이어도 real 파티션에 쓴다', () => {
+    expect(resolveWriteScopeIsTest(true, true)).toBe(false);
+    expect(resolveWriteScopeIsTest(false, true)).toBe(false);
   });
 });

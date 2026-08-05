@@ -58,12 +58,16 @@ const h = vi.hoisted(() => ({
 
 const parseExcelRowsMock = vi.fn(async () => [] as Array<Record<string, string>>);
 
-vi.mock('@/lib/operations/data-scope.server', () => ({
+vi.mock('@/lib/operations/data-scope.server', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/operations/data-scope.server')>()),
   loadOperationsDataScope: vi.fn(async () => h.scope),
-  // 이 스위트는 어드민 세션 로직만 검증하므로 전역 플래그를 그대로 통과시킨다
-  // (resolveWriteScopeIsTest 는 게스트일 때만 false 로 덮어씀 — Task 4).
-  resolveWriteScopeIsTest: vi.fn(async (flagEnabled: boolean) => flagEnabled),
+  // resolveWriteScopeIsTest 는 순수 함수(Task 4 fix round)라 원본 그대로 사용한다.
 }));
+
+// addContactTarget/generateTestContacts 가 트랜잭션을 열기 전에 isGuestViewer() 를
+// 직접 호출한다. 이 스위트는 어드민 세션 로직만 검증하므로 항상 false(비게스트) 로 고정
+// — mock 없이 두면 실제 cookies() 호출로 request scope 밖 에러가 난다.
+vi.mock('@/lib/auth/guest-viewer', () => ({ isGuestViewer: vi.fn(async () => false) }));
 
 vi.mock('@/lib/contacts/excel-parser', () => ({
   parseExcelRows: (...args: unknown[]) => parseExcelRowsMock(...(args as [])),

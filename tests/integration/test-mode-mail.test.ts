@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PgDialect } from 'drizzle-orm/pg-core';
 import { renderToStaticMarkup } from 'react-dom/server';
 
-// resolveWriteScopeIsTest(data-scope.server) 가 isGuestViewer 를 호출한다. 이 스위트는
+// createCampaign 이 트랜잭션을 열기 전에 isGuestViewer() 를 직접 호출한다. 이 스위트는
 // 어드민 세션 로직만 검증하므로 항상 false(비게스트) 로 고정한다 (Task 4).
 vi.mock('@/lib/auth/guest-viewer', () => ({ isGuestViewer: vi.fn(async () => false) }));
 

@@ -134,6 +134,7 @@ run('익명 테스트 저장과 첫 대상자 생성 경쟁', () => {
           surveyId,
           requestedCount: 1,
           requireEmptyTestScope: false,
+          isGuest: false,
         });
         await tx.execute(sql`
           INSERT INTO contact_targets (id,survey_id,resid,is_test,invite_code)

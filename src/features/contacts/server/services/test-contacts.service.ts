@@ -3,6 +3,7 @@ import 'server-only';
 
 import { db } from '@/db';
 import { contactTargets } from '@/db/schema';
+import { isGuestViewer } from '@/lib/auth/guest-viewer';
 import { resolveTestContactFieldBindings } from '@/lib/contacts/test-contact-columns';
 import { TEST_CONTACT_FIXTURES } from '@/lib/contacts/test-contact-fixtures';
 import { upsertPiiValue } from '@/lib/crypto/contact-pii-repo';
@@ -14,11 +15,15 @@ import { prepareContactInsertScope } from './contact-insert-scope.service';
 export async function generateTestContacts(
   input: GenerateTestContactsInput,
 ): Promise<{ createdCount: number }> {
+  // authed 전용 진입점이라도 하드코딩 false 는 넣지 않는다 — 트랜잭션 밖에서 실제로
+  // isGuestViewer() 를 호출해 SSOT(resolveWriteScopeIsTest)를 통일한다.
+  const isGuest = await isGuestViewer();
   return db.transaction(async (tx) => {
     const prepared = await prepareContactInsertScope(tx, {
       surveyId: input.surveyId,
       requestedCount: input.count,
       requireEmptyTestScope: true,
+      isGuest,
     });
     if (!prepared.scheme) throw new Error('테스트 대상자 컬럼을 찾을 수 없습니다.');
 

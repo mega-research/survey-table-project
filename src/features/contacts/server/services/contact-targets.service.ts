@@ -11,6 +11,7 @@ import {
   archiveTestMailForTargets,
   hardDeleteMailForTargets,
 } from '@/lib/mail/test-mail-archive.server';
+import { isGuestViewer } from '@/lib/auth/guest-viewer';
 import { resolveWriteScopeIsTest } from '@/lib/operations/data-scope.server';
 
 import type {
@@ -32,8 +33,9 @@ type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 async function lockTargetInCurrentScope(
   tx: DbTransaction,
   input: { id: string; surveyId: string },
+  isGuest: boolean,
 ): Promise<{ isTest: boolean; scheme: ContactColumnScheme | null }> {
-  const scope = await lockCurrentSurveyScope(tx, input.surveyId);
+  const scope = await lockCurrentSurveyScope(tx, input.surveyId, isGuest);
 
   const [target] = await tx
     .select({ id: contactTargets.id })
@@ -54,6 +56,7 @@ async function lockTargetInCurrentScope(
 async function lockCurrentSurveyScope(
   tx: DbTransaction,
   surveyId: string,
+  isGuest: boolean,
 ): Promise<{ isTest: boolean; scheme: ContactColumnScheme | null }> {
   const [survey] = await tx
     .select({
@@ -66,7 +69,7 @@ async function lockCurrentSurveyScope(
     .for('update');
   if (!survey) throw new Error('NOT_FOUND');
 
-  const isTest = await resolveWriteScopeIsTest(survey.enabled);
+  const isTest = resolveWriteScopeIsTest(survey.enabled, isGuest);
   return {
     isTest,
     scheme: (isTest ? survey.testContactColumns : survey.contactColumns) ?? null,
@@ -83,11 +86,16 @@ async function lockCurrentSurveyScope(
 export async function addContactTarget(input: AddContactTargetInput): Promise<ContactTargetRow> {
   const { surveyId, attrs: rawAttrs, piiUpdates, memo, contactMethod, systemFieldKeys } = input;
 
+  // 게스트 판정은 트랜잭션(설문 행 잠금) 밖에서 미리 구한다 — 잠금 아래서 auth 왕복을
+  // 하면 그 RTT 만큼 잠금이 유지되어 동시 요청을 블록한다.
+  const isGuest = await isGuestViewer();
+
   const result = await db.transaction(async (tx) => {
     const prepared = await prepareContactInsertScope(tx, {
       surveyId,
       requestedCount: 1,
       requireEmptyTestScope: false,
+      isGuest,
     });
     // 잠금 뒤 읽은 현재 스코프의 스킴으로 평문 PII 누적을 차단한다.
     const attrs = sanitizeAttrsAgainstPiiScheme(rawAttrs, prepared.scheme);
@@ -134,8 +142,10 @@ export async function addContactTarget(input: AddContactTargetInput): Promise<Co
 export async function updateContactTarget(input: UpdateContactTargetInput): Promise<void> {
   const { id, surveyId, attrs: rawAttrs, piiUpdates, memo, contactMethod, systemFieldKeys } = input;
 
+  const isGuest = await isGuestViewer();
+
   await db.transaction(async (tx) => {
-    const { isTest, scheme } = await lockTargetInCurrentScope(tx, { id, surveyId });
+    const { isTest, scheme } = await lockTargetInCurrentScope(tx, { id, surveyId }, isGuest);
     // 모드·대상 소속과 같은 잠금 스냅샷에서 확정한 스킴으로 PII 평문을 제거한다.
     const attrs = sanitizeAttrsAgainstPiiScheme(rawAttrs, scheme);
 
@@ -184,8 +194,9 @@ export async function updateContactTarget(input: UpdateContactTargetInput): Prom
  */
 export async function deleteContactTarget(input: DeleteContactTargetInput): Promise<void> {
   const { id, surveyId } = input;
+  const isGuest = await isGuestViewer();
   await db.transaction(async (tx) => {
-    const { isTest } = await lockCurrentSurveyScope(tx, surveyId);
+    const { isTest } = await lockCurrentSurveyScope(tx, surveyId, isGuest);
     const [target] = await tx
       .select({ id: contactTargets.id })
       .from(contactTargets)

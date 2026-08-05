@@ -39,9 +39,14 @@ export async function loadOperationsDataScope(
  * 게스트는 읽기와 동일하게 항상 real 파티션에 쓴다. read 는 real 인데 write 만 test 로
  * 가는 비대칭을 막는 것이 목적이다 — 그 비대칭은 게스트가 자기 쓴 레코드를 못 보거나,
  * 테스트 파티션 정리 로직을 대신 트리거하는 사고로 이어진다.
+ *
+ * 순수 동기 함수로 유지한다. 게스트 판정(isGuest)은 호출부가 `db.transaction` 을 열고
+ * `FOR UPDATE`/`FOR SHARE` 로 surveys 행을 잠그기 전에 `isGuestViewer()` 로 미리 구해
+ * 인자로 넘긴다 — 잠금을 쥔 채로 Supabase auth 왕복(`auth/v1/user`)을 하면 그 네트워크
+ * RTT 만큼 행 잠금이 유지되어 동시 요청과 pgBouncer 커넥션을 블록하기 때문이다.
  */
-export async function resolveWriteScopeIsTest(flagEnabled: boolean): Promise<boolean> {
-  if (await isGuestViewer()) return false;
+export function resolveWriteScopeIsTest(flagEnabled: boolean, isGuest: boolean): boolean {
+  if (isGuest) return false;
   return flagEnabled;
 }
 

@@ -4,6 +4,7 @@ import { and, eq, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { contactAttempts, contactTargets, surveys } from '@/db/schema';
+import { isGuestViewer } from '@/lib/auth/guest-viewer';
 import { resolveWriteScopeIsTest } from '@/lib/operations/data-scope.server';
 
 import type {
@@ -20,6 +21,7 @@ async function lockTargetInCurrentScope(
   tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
   contactTargetId: string,
   surveyId: string,
+  isGuest: boolean,
 ): Promise<void> {
   const [survey] = await tx
     .select({ enabled: surveys.testModeEnabled })
@@ -27,7 +29,7 @@ async function lockTargetInCurrentScope(
     .where(eq(surveys.id, surveyId))
     .for('update');
   if (!survey) throw new Error('NOT_FOUND');
-  const isTest = await resolveWriteScopeIsTest(survey.enabled);
+  const isTest = resolveWriteScopeIsTest(survey.enabled, isGuest);
 
   const [target] = await tx
     .select({ id: contactTargets.id })
@@ -75,6 +77,10 @@ export async function addAttempt(
 ): Promise<{ id: string; attemptNo: number }> {
   const { contactTargetId, resultCode, note } = input;
 
+  // 게스트 판정은 재시도 루프 밖에서 한 번만 구한다 — 세션 값이라 재시도마다 바뀌지 않고,
+  // 트랜잭션(설문 행 잠금) 안에서 auth 왕복을 하면 그 RTT 만큼 잠금이 유지된다.
+  const isGuest = await isGuestViewer();
+
   const MAX_RETRIES = 3;
   let lastError: unknown = null;
   let result: { id: string; attemptNo: number } | null = null;
@@ -82,7 +88,7 @@ export async function addAttempt(
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
       result = await db.transaction(async (tx) => {
-        await lockTargetInCurrentScope(tx, input.contactTargetId, input.surveyId);
+        await lockTargetInCurrentScope(tx, input.contactTargetId, input.surveyId, isGuest);
         const [maxRow] = await tx
           .select({ maxNo: sql<number | null>`MAX(${contactAttempts.attemptNo})` })
           .from(contactAttempts)
@@ -124,8 +130,9 @@ export async function addAttempt(
  */
 export async function updateAttempt(input: UpdateContactAttemptInput): Promise<void> {
   const { id, contactTargetId, surveyId, resultCode, note } = input;
+  const isGuest = await isGuestViewer();
   await db.transaction(async (tx) => {
-    await lockTargetInCurrentScope(tx, contactTargetId, surveyId);
+    await lockTargetInCurrentScope(tx, contactTargetId, surveyId, isGuest);
     const updated = await tx
       .update(contactAttempts)
       .set({ resultCode, note: note ?? null })
@@ -142,8 +149,9 @@ export async function updateAttempt(input: UpdateContactAttemptInput): Promise<v
  */
 export async function deleteAttempt(input: DeleteContactAttemptInput): Promise<void> {
   const { id, contactTargetId, surveyId } = input;
+  const isGuest = await isGuestViewer();
   await db.transaction(async (tx) => {
-    await lockTargetInCurrentScope(tx, contactTargetId, surveyId);
+    await lockTargetInCurrentScope(tx, contactTargetId, surveyId, isGuest);
     const deleted = await tx
       .delete(contactAttempts)
       .where(and(eq(contactAttempts.id, id), eq(contactAttempts.contactTargetId, contactTargetId)))
