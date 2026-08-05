@@ -570,6 +570,25 @@ function SurveyResponseFlowActive({
     [steps, responses, questions, groups, evalCtx],
   );
 
+  // 스텝이 바뀌면 페이지 상단으로 이동한다.
+  //
+  // 스텝 전환 지점마다 scrollTo 를 부르지 않고 여기 한 곳으로 모은 이유:
+  // (1) 전환 지점이 handleNext·handlePrevious·자동 스킵·재접속 복원·검증 점프로 5곳인데
+  //     자동 스킵과 복원에는 호출이 아예 없어 페이지만 바뀌고 스크롤이 남아 있었다.
+  // (2) 호출 지점에서 부르면 새 페이지가 커밋되기 전에 예약되는데, iOS WebKit 계열
+  //     브라우저는 직후 DOM 이 통째로 교체되면 그 스크롤을 폐기한다. effect 는 커밋
+  //     이후에 실행되므로 새 페이지 레이아웃 기준으로 확정 적용된다.
+  //
+  // behavior 는 'instant' 여야 한다 — globals.css 의 html { scroll-behavior: smooth }
+  // 때문에 'auto' 는 즉시 이동이 아니라 스무스 애니메이션이 되고, 긴 페이지에서
+  // 출발하면 다시 같은 취소 문제에 노출된다.
+  const previousStepIndexRef = useRef(currentStepIndex);
+  useEffect(() => {
+    if (previousStepIndexRef.current === currentStepIndex) return;
+    previousStepIndexRef.current = currentStepIndex;
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }, [currentStepIndex]);
+
   // 현재 step이 전부 숨겨지면 다음 표시 가능 step으로 자동 이동
   useEffect(() => {
     if (!loadedSurvey) return;
@@ -884,7 +903,6 @@ function SurveyResponseFlowActive({
     }
 
     setCurrentStepIndex(nextIndex);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handlePrevious = useCallback(() => {
@@ -894,7 +912,6 @@ function SurveyResponseFlowActive({
     if (previousStepIndex !== undefined && steps[previousStepIndex]) {
       setCurrentStepIndex(previousStepIndex);
       setStepHistory((prev) => prev.slice(0, lastIndex));
-      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   }, [stepHistory, steps]);
 

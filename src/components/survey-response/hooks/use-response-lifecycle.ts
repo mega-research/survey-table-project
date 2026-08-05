@@ -582,8 +582,8 @@ export function useResponseLifecycle({
           setNumericErrorStepIndex(targetIdx);
         }
         if (targetIdx !== -1 && targetIdx !== currentStepIndex) {
+          // 상단 스크롤은 flow 의 스텝 변경 effect 가 커밋 이후에 일괄 처리한다.
           setCurrentStepIndex(targetIdx);
-          window.scrollTo({ top: 0, behavior: 'smooth' });
         } else {
           // 이미 해당 step이면 카드로 스크롤
           const el = document.querySelector<HTMLElement>(
@@ -616,8 +616,8 @@ export function useResponseLifecycle({
         // 다른 step 이면 그 step 으로 전환(상단 스크롤). 같은 step 이면 배너만 —
         // 위반 셀 이동은 배너의 "위치로 이동" 버튼이 담당.
         if (targetIdx !== -1 && targetIdx !== currentStepIndex) {
+          // 상단 스크롤은 flow 의 스텝 변경 effect 가 커밋 이후에 일괄 처리한다.
           setCurrentStepIndex(targetIdx);
-          window.scrollTo({ top: 0, behavior: 'smooth' });
         }
         setIsSubmitting(false);
         return;
