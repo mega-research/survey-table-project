@@ -31,6 +31,10 @@ const {
 
 const upsertPiiValueMock = vi.fn(async () => undefined);
 
+// resolveWriteScopeIsTest(data-scope.server) 가 isGuestViewer 를 호출한다. 이 스위트는
+// 어드민 세션 로직만 검증하므로 항상 false(비게스트) 로 고정한다 (Task 4).
+vi.mock('@/lib/auth/guest-viewer', () => ({ isGuestViewer: vi.fn(async () => false) }));
+
 vi.mock('@/lib/contacts/scheme-helpers', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/contacts/scheme-helpers')>();
   return {

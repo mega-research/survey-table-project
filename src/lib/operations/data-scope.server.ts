@@ -33,6 +33,18 @@ export async function loadOperationsDataScope(
   return row.enabled ? 'test' : 'real';
 }
 
+/**
+ * 잠금 아래에서 읽은 전역 테스트 모드 플래그를 세션 기준 쓰기 파티션으로 환산한다.
+ *
+ * 게스트는 읽기와 동일하게 항상 real 파티션에 쓴다. read 는 real 인데 write 만 test 로
+ * 가는 비대칭을 막는 것이 목적이다 — 그 비대칭은 게스트가 자기 쓴 레코드를 못 보거나,
+ * 테스트 파티션 정리 로직을 대신 트리거하는 사고로 이어진다.
+ */
+export async function resolveWriteScopeIsTest(flagEnabled: boolean): Promise<boolean> {
+  if (await isGuestViewer()) return false;
+  return flagEnabled;
+}
+
 export const getOperationsDataScope = cache(loadOperationsDataScope);
 
 export const responseScopeCondition = (scope: OperationsDataScope) =>

@@ -4,6 +4,7 @@ import { and, eq, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { contactAttempts, contactTargets, surveys } from '@/db/schema';
+import { resolveWriteScopeIsTest } from '@/lib/operations/data-scope.server';
 
 import type {
   AddContactAttemptInput,
@@ -26,6 +27,7 @@ async function lockTargetInCurrentScope(
     .where(eq(surveys.id, surveyId))
     .for('update');
   if (!survey) throw new Error('NOT_FOUND');
+  const isTest = await resolveWriteScopeIsTest(survey.enabled);
 
   const [target] = await tx
     .select({ id: contactTargets.id })
@@ -34,7 +36,7 @@ async function lockTargetInCurrentScope(
       and(
         eq(contactTargets.id, contactTargetId),
         eq(contactTargets.surveyId, surveyId),
-        eq(contactTargets.isTest, survey.enabled),
+        eq(contactTargets.isTest, isTest),
       ),
     )
     .for('update');

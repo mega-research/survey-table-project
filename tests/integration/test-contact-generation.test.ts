@@ -60,6 +60,9 @@ const parseExcelRowsMock = vi.fn(async () => [] as Array<Record<string, string>>
 
 vi.mock('@/lib/operations/data-scope.server', () => ({
   loadOperationsDataScope: vi.fn(async () => h.scope),
+  // 이 스위트는 어드민 세션 로직만 검증하므로 전역 플래그를 그대로 통과시킨다
+  // (resolveWriteScopeIsTest 는 게스트일 때만 false 로 덮어씀 — Task 4).
+  resolveWriteScopeIsTest: vi.fn(async (flagEnabled: boolean) => flagEnabled),
 }));
 
 vi.mock('@/lib/contacts/excel-parser', () => ({

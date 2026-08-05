@@ -4,6 +4,11 @@ vi.mock('@/lib/crypto/contact-pii-repo', () => ({
   upsertPiiValue: vi.fn(async () => undefined),
 }));
 
+// resolveWriteScopeIsTest 가 isGuestViewer 를 호출한다. 이 스위트는 어드민 세션 동작만
+// 검증하므로 항상 false(비게스트) 로 고정 — mock 없이 두면 실제 cookies() 호출로 request
+// scope 밖 에러가 난다.
+vi.mock('@/lib/auth/guest-viewer', () => ({ isGuestViewer: vi.fn(async () => false) }));
+
 // db.transaction(cb) 가 update().set().where() 체인의 set 페이로드를 캡처하도록 stub.
 const capturedSets: Array<Record<string, unknown>> = [];
 const selectResultQueue: Array<Array<Record<string, unknown>>> = [];

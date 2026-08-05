@@ -8,6 +8,10 @@ import {
   archiveTestWorkspaceMail,
 } from '@/lib/mail/test-mail-archive.server';
 
+// resolveWriteScopeIsTest(data-scope.server) 가 isGuestViewer 를 호출한다. 이 스위트는
+// 어드민 세션 로직만 검증하므로 항상 false(비게스트) 로 고정한다 (Task 4).
+vi.mock('@/lib/auth/guest-viewer', () => ({ isGuestViewer: vi.fn(async () => false) }));
+
 type RecipientStatus =
   | 'queued'
   | 'sending'

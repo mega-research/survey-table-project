@@ -11,6 +11,7 @@ import {
   archiveTestMailForTargets,
   hardDeleteMailForTargets,
 } from '@/lib/mail/test-mail-archive.server';
+import { resolveWriteScopeIsTest } from '@/lib/operations/data-scope.server';
 
 import type {
   AddContactTargetInput,
@@ -65,7 +66,7 @@ async function lockCurrentSurveyScope(
     .for('update');
   if (!survey) throw new Error('NOT_FOUND');
 
-  const isTest = survey.enabled;
+  const isTest = await resolveWriteScopeIsTest(survey.enabled);
   return {
     isTest,
     scheme: (isTest ? survey.testContactColumns : survey.contactColumns) ?? null,

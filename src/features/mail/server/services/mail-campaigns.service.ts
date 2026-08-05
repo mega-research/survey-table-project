@@ -10,7 +10,10 @@ import type { CampaignFilterSnapshot } from '@/db/schema/schema-types';
 import { decryptPii } from '@/lib/crypto/aes';
 import { inngest } from '@/lib/inngest/client';
 import { withTestPrefix } from '@/lib/mail/test-campaign';
-import { loadOperationsDataScope } from '@/lib/operations/data-scope.server';
+import {
+  loadOperationsDataScope,
+  resolveWriteScopeIsTest,
+} from '@/lib/operations/data-scope.server';
 
 import type {
   CancelCampaignInput,
@@ -63,7 +66,7 @@ export async function createCampaign(
     if (!survey) {
       throw new Error('설문을 찾을 수 없습니다.');
     }
-    const isTest = survey.enabled;
+    const isTest = await resolveWriteScopeIsTest(survey.enabled);
 
     // 작성 화면을 연 뒤 모드가 바뀌었거나 반대 scope ID가 섞이면 현재 scope로 강등하지 않는다.
     const selectedTargets = await tx

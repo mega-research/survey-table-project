@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { isGuestViewer } from '@/lib/auth/guest-viewer';
-import { loadOperationsDataScope, testFlagForScope } from '@/lib/operations/data-scope.server';
+import {
+  loadOperationsDataScope,
+  resolveWriteScopeIsTest,
+  testFlagForScope,
+} from '@/lib/operations/data-scope.server';
 
 // loadOperationsDataScope 는 db.select({...}).from(surveys).where(...).limit(1) 체인을 쓴다.
 // 실 PG 없는 vitest 환경이라 반환 행만 갈아끼워 분기를 검증한다.
@@ -62,5 +66,23 @@ describe('loadOperationsDataScope', () => {
     vi.mocked(isGuestViewer).mockResolvedValue(true);
     rows.value = [];
     await expect(loadOperationsDataScope(SURVEY_ID)).rejects.toThrow('설문을 찾을 수 없습니다.');
+  });
+});
+
+describe('resolveWriteScopeIsTest', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('어드민 세션은 전역 플래그를 그대로 통과시킨다', async () => {
+    vi.mocked(isGuestViewer).mockResolvedValue(false);
+    await expect(resolveWriteScopeIsTest(true)).resolves.toBe(true);
+    await expect(resolveWriteScopeIsTest(false)).resolves.toBe(false);
+  });
+
+  it('게스트 세션은 전역 플래그가 ON 이어도 real 파티션에 쓴다', async () => {
+    vi.mocked(isGuestViewer).mockResolvedValue(true);
+    await expect(resolveWriteScopeIsTest(true)).resolves.toBe(false);
+    await expect(resolveWriteScopeIsTest(false)).resolves.toBe(false);
   });
 });
