@@ -53,6 +53,17 @@ function isEmptyCellValue(v: unknown): boolean {
 }
 
 /**
+ * 셀 필수 판정 수렴식 — (required || requiredWhenEnabled). 게이팅되지 않은 기존 required=true
+ * 셀도 이 식으로 커버된다(requiredWhenEnabled 는 그냥 false/undefined).
+ * required-option-text-validation.ts 가 이미 이 파일의 collectVisibleTableCells 를 재사용하는
+ * 의존 방향과 일관되게, 셀 필수 판정도 여기서 export 해 공유한다(중복 정의 금지 — 두 파일이
+ * 갈리면 "검증은 필수인데 상세기입 누락 판정은 필수 아님" 불일치가 재발한다).
+ */
+export function isRequiredCell(cell: TableCell): boolean {
+  return cell.required === true || cell.requiredWhenEnabled === true;
+}
+
+/**
  * 응답자에게 실제로 "보이는" 셀 목록 — 다음을 제외한다.
  * - 미선택 동적 행(enabledDynamicGroupIds에 속하고 __selectedRowIds에 없는 행)의 셀
  * - isHidden 셀(병합 피복 셀)
@@ -253,8 +264,6 @@ export function collectNumericIssues(
   //    필수 판정은 (required || requiredWhenEnabled) 수렴식 — enabled 목록 위에서 검사하므로
   //    "&& 활성" 은 목록 필터로 이미 성립한다. 응답됨 판정은 isCellValuePresent 정본(배열
   //    length>0, 문자열 trim, 그 외 truthy) — checkbox/ranking 빈 배열을 미응답으로 본다.
-  const isRequiredCell = (c: TableCell): boolean =>
-    c.required === true || c.requiredWhenEnabled === true;
   const ordinaryMissingIds = enabled
     .filter(
       (c) =>
