@@ -1,7 +1,9 @@
 'use client';
 
-import React from 'react';
+import React, { useCallback, useEffect } from 'react';
 
+import { isCellEnabled } from '@/lib/survey/cell-gating';
+import { useTestResponseStore } from '@/stores/test-response-store';
 import type { TableCell } from '@/types/survey';
 
 import { CalcCell } from './calc-cell';
@@ -28,6 +30,7 @@ const CellRouter = React.memo(function CellRouter({
   inputIdScope,
   ariaInvalid,
   ariaDescribedBy,
+  gatingDisabled,
 }: InteractiveCellProps) {
   switch (cell.type) {
     case 'checkbox':
@@ -37,7 +40,7 @@ const CellRouter = React.memo(function CellRouter({
     case 'select':
       return <SelectCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} inputIdScope={inputIdScope} ariaInvalid={ariaInvalid} ariaDescribedBy={ariaDescribedBy} />;
     case 'input':
-      return <InputCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} inputIdScope={inputIdScope} ariaInvalid={ariaInvalid} ariaDescribedBy={ariaDescribedBy} />;
+      return <InputCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} inputIdScope={inputIdScope} ariaInvalid={ariaInvalid} ariaDescribedBy={ariaDescribedBy} gatingDisabled={gatingDisabled} />;
     case 'image':
       return <ImageCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} />;
     case 'video':
@@ -75,6 +78,13 @@ interface InteractiveCellContainerProps {
   inputIdScope?: string | undefined;
   ariaInvalid?: boolean | undefined;
   ariaDescribedBy?: string | undefined;
+  /**
+   * 셀 게이팅(CONTEXT.md "셀 게이팅") 평가용 — 같은 행의 셀 목록.
+   * option 조건의 {optionId} 래핑 응답을 컨트롤러 셀 정의 기준으로 해석하려면 필요하다.
+   * 미전달 시 isCellEnabled 가 flat 비교로 폴백해 오판정할 수 있다 — 호출처는 항상
+   * row.cells 를 내려줘야 한다.
+   */
+  rowCells?: readonly TableCell[] | undefined;
 }
 
 export const InteractiveCell = React.memo(function InteractiveCell({
@@ -88,8 +98,9 @@ export const InteractiveCell = React.memo(function InteractiveCell({
   inputIdScope,
   ariaInvalid,
   ariaDescribedBy,
+  rowCells,
 }: InteractiveCellContainerProps) {
-  const { cellResponse, updateValue } = useCellResponse(
+  const { cellResponse, updateValue, clearValue } = useCellResponse(
     questionId,
     cell.id,
     isTestMode,
@@ -97,6 +108,32 @@ export const InteractiveCell = React.memo(function InteractiveCell({
     onChange,
     siblingCellIds,
   );
+
+  // 게이팅 평가 — 같은 질문의 응답 객체가 필요하다. 실응답 모드는 value prop,
+  // 테스트 모드는 스토어의 질문 레벨 객체를 구독한다.
+  const testQuestionResponse = useTestResponseStore(
+    useCallback(
+      (state) => (isTestMode ? state.testResponses[questionId] : undefined),
+      [isTestMode, questionId],
+    ),
+  );
+  const rowValues = (isTestMode ? testQuestionResponse : value) ?? {};
+  const gatingDisabled =
+    cell.type === 'input' &&
+    !isCellEnabled(
+      cell,
+      typeof rowValues === 'object' && !Array.isArray(rowValues)
+        ? (rowValues as Record<string, unknown>)
+        : {},
+      rowCells,
+    );
+
+  // 비활성인데 값이 남아 있으면 즉시 지움 (컨트롤러 변경 직후 1회)
+  useEffect(() => {
+    if (gatingDisabled && cellResponse !== undefined && cellResponse !== '') {
+      clearValue();
+    }
+  }, [gatingDisabled, cellResponse, clearValue]);
 
   return (
     <CellRouter
@@ -107,6 +144,7 @@ export const InteractiveCell = React.memo(function InteractiveCell({
       inputIdScope={inputIdScope}
       ariaInvalid={ariaInvalid}
       ariaDescribedBy={ariaDescribedBy}
+      gatingDisabled={gatingDisabled}
       {...(groupName !== undefined ? { groupName } : {})}
     />
   );

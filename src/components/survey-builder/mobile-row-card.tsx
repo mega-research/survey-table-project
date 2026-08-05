@@ -284,6 +284,7 @@ export const MobileRowCard = React.memo(function MobileRowCard({
                         isTestMode={isTestMode}
                         value={value}
                         onChange={onChange}
+                        rowCells={row.cells}
                       />
                     </div>
                     <div
@@ -298,6 +299,7 @@ export const MobileRowCard = React.memo(function MobileRowCard({
                         isTestMode={isTestMode}
                         value={value}
                         onChange={onChange}
+                        rowCells={row.cells}
                       />
                     </div>
                   </div>
@@ -315,6 +317,7 @@ export const MobileRowCard = React.memo(function MobileRowCard({
                       isTestMode={isTestMode}
                       value={value}
                       onChange={onChange}
+                      rowCells={row.cells}
                     />
                   </div>
                 );

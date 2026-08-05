@@ -74,5 +74,13 @@ export function useCellResponse(
     [cellId, mergePatch],
   );
 
-  return { cellResponse: localResponse, updateValue };
+  // 게이팅 비활성화 시 값 지움 — 빈 문자열이 아니라 키 값 undefined(JSON 직렬화에서
+  // 탈락 = 저장상 키 삭제). emptyDefault 채움 조건(cellResponse === undefined)이
+  // 다시 성립해 재활성화 시 초기값이 자연 재채움된다.
+  const clearValue = useCallback(() => {
+    setLocalResponse(undefined);
+    mergePatch({ [cellId]: undefined });
+  }, [mergePatch, cellId]);
+
+  return { cellResponse: localResponse, updateValue, clearValue };
 }

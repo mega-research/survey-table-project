@@ -313,6 +313,7 @@ function renderRowCells({
           isTestMode={isTestMode}
           value={value}
           onChange={onChange}
+          rowCells={row.cells}
           {...resolveRadioGroupProps(cell, row.id, radioGroupBuckets)}
         />
       </div>
@@ -1070,6 +1071,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
                         inputIdScope={inputIdScope}
                         ariaInvalid={invalid}
                         ariaDescribedBy={errorDescriptionId}
+                        rowCells={sourceRow.cells}
                         {...resolveRadioGroupProps(
                           cell,
                           sourceRowId,

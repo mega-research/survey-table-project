@@ -20,6 +20,7 @@ export const InputCell = React.memo(function InputCell({
   inputIdScope,
   ariaInvalid,
   ariaDescribedBy,
+  gatingDisabled,
 }: InteractiveCellProps) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
@@ -58,6 +59,7 @@ export const InputCell = React.memo(function InputCell({
   useEffect(() => {
     if (
       !isPrefilled &&
+      !gatingDisabled && // 게이팅 비활성이면 채우지 않는다 — 지움과의 무한 루프 방지
       isNumberMode &&
       typeof cell.emptyDefault === 'number' &&
       cellResponse === undefined
@@ -65,7 +67,7 @@ export const InputCell = React.memo(function InputCell({
       onUpdateValue(String(cell.emptyDefault));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cellResponse, isPrefilled, isNumberMode, cell.emptyDefault]);
+  }, [cellResponse, isPrefilled, gatingDisabled, isNumberMode, cell.emptyDefault]);
 
   return (
     <CellContentLayout
@@ -83,10 +85,14 @@ export const InputCell = React.memo(function InputCell({
           onChange={handleChange}
           onFocus={handleFocus}
           onBlur={handleBlur}
-          placeholder={cell.placeholder || (isNumberMode ? '숫자만 입력하세요...' : '답변을 입력하세요...')}
+          placeholder={
+            gatingDisabled
+              ? '' // 비활성 셀은 안내 문구를 비워 입력 유도로 오독되지 않게 한다
+              : cell.placeholder || (isNumberMode ? '숫자만 입력하세요...' : '답변을 입력하세요...')
+          }
           maxLength={cell.inputMaxLength}
           className={cn('w-full text-base', getInputTextAlignClass(cell.inputTextAlign))}
-          disabled={isPrefilled}
+          disabled={isPrefilled || gatingDisabled}
           data-prefilled={isPrefilled || undefined}
           aria-invalid={ariaInvalid || undefined}
           aria-describedby={ariaDescribedBy}

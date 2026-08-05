@@ -116,6 +116,13 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
     for (const row of displayRows) for (const cell of row.cells) m.set(cell.id, cell);
     return m;
   }, [displayRows]);
+  // cell.id → 같은 행의 셀 목록 (셀 게이팅 평가용 rowCells — option 조건의 {optionId}
+  // 래핑 해석에 컨트롤러 셀 정의가 필요하다)
+  const rowCellsByCellId = useMemo(() => {
+    const m = new Map<string, TableCell[]>();
+    for (const row of displayRows) for (const cell of row.cells) m.set(cell.id, row.cells);
+    return m;
+  }, [displayRows]);
   // 내비게이션 라벨은 전부 cell.content / tableColumns[].label 에서 나오므로 응답 인용을
   // 치환해야 한다. 치환하지 않으면 목차·크럼브에는 {{{인용}}} 원문이, 같은 화면의 상세
   // 패널에는 치환된 문구가 보인다. choice-table-drilldown.tsx 와 동일한 배선이다.
@@ -233,6 +240,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
           isTestMode={isTestMode}
           value={value}
           onChange={onChange}
+          rowCells={rowCellsByCellId.get(cellId)}
         />
       </div>
     );
@@ -406,6 +414,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
               isTestMode={isTestMode}
               value={value}
               onChange={onChange}
+              rowCells={rowCellsByCellId.get(cell.id)}
               {...resolveRadioGroupProps(cell, sourceRowId, radioBuckets)}
             />
           );
