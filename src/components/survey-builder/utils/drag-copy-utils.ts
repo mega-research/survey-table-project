@@ -87,6 +87,76 @@ export function resolvePastedGating(
   return undefined;
 }
 
+/** 병합 스팬이 덮어 숨겨질 셀 id 집합 (앵커 자신 제외). recalculateHiddenCells 와 같은
+ *  근거를 스팬만으로 선계산한다 — isHidden 플래그 재계산 전(draft)에도 판정 가능. */
+function collectSpanCoveredCellIds(rows: readonly TableRow[]): Set<string> {
+  const covered = new Set<string>();
+  for (let r = 0; r < rows.length; r++) {
+    const row = rows[r];
+    if (!row) continue;
+    for (let c = 0; c < row.cells.length; c++) {
+      const cell = row.cells[c];
+      if (!cell) continue;
+      const rs = cell.rowspan || 1;
+      const cs = cell.colspan || 1;
+      if (rs <= 1 && cs <= 1) continue;
+      for (let rr = r; rr < Math.min(r + rs, rows.length); rr++) {
+        for (let cc = c; cc < c + cs; cc++) {
+          if (rr === r && cc === c) continue;
+          const victim = rows[rr]?.cells[cc];
+          if (victim) covered.add(victim.id);
+        }
+      }
+    }
+  }
+  return covered;
+}
+
+/**
+ * 붙여넣기 직후 게이팅 죽은 참조 정리 (붙여넣기 영향 행 한정, draft 변이).
+ *
+ * 붙여넣은 병합 앵커가 같은 행의 컨트롤러를 **새로** 덮으면, 그 컨트롤러를 참조하던
+ * 게이팅 셀은 응답이 생길 수 없는 셀을 보게 되어 영구 비활성이 된다. isHidden 재계산
+ * 전이라도 스팬 커버리지로 같은 판정을 선계산해 제거한다.
+ *
+ * - 붙여넣기 영역 **안** 셀: 조건이 방금 복사된 사본이므로 죽은 참조(컨트롤러 부재·숨김)를
+ *   모두 제거한다.
+ * - 영역 **밖** 셀: 이 붙여넣기가 새로 숨긴 컨트롤러만 제거한다 — 이전부터 죽어 있던
+ *   참조는 사용자 저작 데이터라 건드리지 않고 빌더 진단(red)에 맡긴다.
+ *
+ * immer draft 안에서 호출해야 undo(inversePatches)가 정리까지 되돌린다.
+ */
+export function pruneDeadGatingAfterPaste(
+  draft: TableRow[],
+  originalRows: readonly TableRow[],
+  area: { fromRow: number; toRow: number; fromCol: number; toCol: number },
+): void {
+  const coveredAfter = collectSpanCoveredCellIds(draft);
+  const coveredBefore = collectSpanCoveredCellIds(originalRows);
+
+  for (let r = Math.max(0, area.fromRow); r <= Math.min(area.toRow, draft.length - 1); r++) {
+    const row = draft[r];
+    if (!row) continue;
+    for (let c = 0; c < row.cells.length; c++) {
+      const cell = row.cells[c];
+      if (!cell?.enabledWhen) continue;
+      const controller = row.cells.find((c2) => c2.id === cell.enabledWhen!.controllerCellId);
+      const dead = !controller || coveredAfter.has(controller.id);
+      if (!dead) continue;
+
+      const insideArea = c >= area.fromCol && c <= area.toCol;
+      const newlyHidden =
+        controller !== undefined &&
+        coveredAfter.has(controller.id) &&
+        !coveredBefore.has(controller.id);
+      if (insideArea || newlyHidden) {
+        delete cell.enabledWhen;
+        delete cell.requiredWhenEnabled;
+      }
+    }
+  }
+}
+
 /**
  * 대상 셀에서 새 타입에 해당하지 않는 잔여 속성을 정리한다.
  * 예: checkbox → radio 복사 시, 대상의 기존 checkboxOptions 제거

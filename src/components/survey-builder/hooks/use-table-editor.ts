@@ -11,8 +11,10 @@ import {
   TableColumn,
   TableRow,
 } from '@/types/survey';
+import { produce } from 'immer';
+
 import { hasExistingOtherRankingCell } from '@/utils/ranking-source';
-import { resolvePastedGating } from '../utils/drag-copy-utils';
+import { pruneDeadGatingAfterPaste, resolvePastedGating } from '../utils/drag-copy-utils';
 import {
   generateAllCellCodes,
   generateCellCodesForRow,
@@ -1170,6 +1172,18 @@ export function useTableEditor({
             return c;
           }),
         }));
+
+        // 붙여넣은 병합 스팬이 같은 행의 컨트롤러를 새로 덮으면, 그 컨트롤러를 참조하던
+        // 게이팅이 영구 비활성 죽은 참조가 된다 — 스팬 커버리지로 선판정해 정리.
+        // (셀 객체가 원본과 공유되므로 immer 로 불변 갱신)
+        updatedRows = produce(updatedRows, (draft) => {
+          pruneDeadGatingAfterPaste(draft, rows, {
+            fromRow: rowIndex,
+            toRow: rowIndex + rowspan - 1,
+            fromCol: cellIndex,
+            toCol: cellIndex + colspan - 1,
+          });
+        });
       }
 
       const finalRows = recalculateHiddenCells(updatedRows);

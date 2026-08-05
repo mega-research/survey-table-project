@@ -3,9 +3,10 @@ import { describe, it, expect } from 'vitest';
 import {
   extractRegionFromRows,
   findRegionSourceCellPos,
+  pruneDeadGatingAfterPaste,
   resolvePastedGating,
 } from '@/components/survey-builder/utils/drag-copy-utils';
-import type { CellEnableCondition, TableRow } from '@/types/survey';
+import type { CellEnableCondition, TableCell, TableRow } from '@/types/survey';
 
 const condition: CellEnableCondition = {
   kind: 'option',
@@ -99,5 +100,81 @@ describe('영역 스냅샷의 게이팅 컨트롤러 되짚기 (sourceCellIds)',
     const remappedId = targetRowCells[pos!.col]?.id;
     const resolved = resolvePastedGating(pastedCondition!, remappedId, targetRowCells);
     expect(resolved).toEqual({ kind: 'option', controllerCellId: 't-ctrl', values: ['1'] });
+  });
+});
+
+describe('pruneDeadGatingAfterPaste — 붙여넣기가 새로 숨기는 컨트롤러 정리', () => {
+  const gatedTo = (controllerCellId: string): Partial<TableCell> => ({
+    enabledWhen: { kind: 'option', controllerCellId, values: ['1'] },
+    requiredWhenEnabled: true,
+  });
+
+  function makeRow(cells: TableCell[]): TableRow {
+    return { id: 'r0', label: '행', cells } as TableRow;
+  }
+
+  it('붙여넣은 병합 스팬이 컨트롤러를 새로 덮으면 영역 밖 게이팅 셀의 참조를 제거한다', () => {
+    const original: TableRow[] = [
+      makeRow([
+        { id: 'A', type: 'text', content: '' },
+        { id: 'B', type: 'radio', content: '', radioOptions: [{ id: 'o1', label: '수행', value: '1' }] },
+        { id: 'C', type: 'input', content: '', ...gatedTo('B') } as TableCell,
+      ]),
+    ];
+    // 붙여넣기 후: col0 에 colspan 2 앵커가 들어와 B(col1)를 덮는다. C(col2)는 영역 밖.
+    const draft: TableRow[] = [
+      makeRow([
+        { id: 'A', type: 'text', content: '병합', colspan: 2 },
+        { id: 'B', type: 'text', content: '' },
+        { id: 'C', type: 'input', content: '', ...gatedTo('B') } as TableCell,
+      ]),
+    ];
+    pruneDeadGatingAfterPaste(draft, original, { fromRow: 0, toRow: 0, fromCol: 0, toCol: 1 });
+    const c = draft[0]!.cells[2]!;
+    expect('enabledWhen' in c).toBe(false);
+    expect('requiredWhenEnabled' in c).toBe(false);
+  });
+
+  it('이전부터 덮여 있던 컨트롤러의 영역 밖 참조는 보존한다 — 사용자 저작 데이터, 진단이 담당', () => {
+    const legacyRow = makeRow([
+      { id: 'A', type: 'text', content: '병합', colspan: 2 },
+      { id: 'B', type: 'radio', content: '', isHidden: true },
+      { id: 'C', type: 'input', content: '', ...gatedTo('B') } as TableCell,
+      { id: 'D', type: 'text', content: '' },
+    ]);
+    const original: TableRow[] = [legacyRow];
+    const draft: TableRow[] = [structuredClone(legacyRow)];
+    // 무관한 위치(col3)에 붙여넣기
+    pruneDeadGatingAfterPaste(draft, original, { fromRow: 0, toRow: 0, fromCol: 3, toCol: 3 });
+    expect(draft[0]!.cells[2]!.enabledWhen).toBeDefined();
+  });
+
+  it('영역 안 셀의 죽은 참조(컨트롤러 부재)는 제거한다', () => {
+    const original: TableRow[] = [
+      makeRow([
+        { id: 'A', type: 'text', content: '' },
+        { id: 'B', type: 'input', content: '' },
+      ]),
+    ];
+    const draft: TableRow[] = [
+      makeRow([
+        { id: 'A', type: 'text', content: '' },
+        { id: 'B', type: 'input', content: '', ...gatedTo('ghost') } as TableCell,
+      ]),
+    ];
+    pruneDeadGatingAfterPaste(draft, original, { fromRow: 0, toRow: 0, fromCol: 1, toCol: 1 });
+    expect('enabledWhen' in draft[0]!.cells[1]!).toBe(false);
+  });
+
+  it('살아있는 참조는 영역 안팎 모두 유지한다', () => {
+    const row = makeRow([
+      { id: 'B', type: 'radio', content: '', radioOptions: [{ id: 'o1', label: '수행', value: '1' }] },
+      { id: 'C', type: 'input', content: '', ...gatedTo('B') } as TableCell,
+    ]);
+    const original: TableRow[] = [structuredClone(row)];
+    const draft: TableRow[] = [structuredClone(row)];
+    pruneDeadGatingAfterPaste(draft, original, { fromRow: 0, toRow: 0, fromCol: 1, toCol: 1 });
+    expect(draft[0]!.cells[1]!.enabledWhen).toBeDefined();
+    expect(draft[0]!.cells[1]!.requiredWhenEnabled).toBe(true);
   });
 });

@@ -21,6 +21,7 @@ import {
   clearStaleTypeProperties,
   createRadioGroupRemapper,
   findRegionSourceCellPos,
+  pruneDeadGatingAfterPaste,
   resolvePastedGating,
   expandSelectionForMerges,
   extractRegionFromRows,
@@ -320,6 +321,15 @@ export function useDragCopy({
             }
           }
         }
+
+        // 붙여넣은 병합 앵커가 새로 숨기는 컨트롤러의 게이팅 정리 (undo 패치에 포함되도록
+        // draft 안에서 수행 — isHidden 재계산 전이라 스팬 커버리지로 선판정한다)
+        pruneDeadGatingAfterPaste(draft, rows, {
+          fromRow: targetRow,
+          toRow: targetRow + region.height - 1,
+          fromCol: targetCol,
+          toCol: targetCol + region.width - 1,
+        });
       });
 
       // isHidden 재계산
