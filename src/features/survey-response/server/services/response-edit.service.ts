@@ -19,6 +19,7 @@ import {
   diffQuestionResponses,
 } from '@/lib/operations/response-edit-diff';
 import { SurveyOwnershipError } from '@/lib/auth/require-survey-ownership';
+import { resolveWriteScopeIsTest } from '@/lib/operations/data-scope.server';
 import { decryptQuestionResponses, encryptResponsesForStorage } from '@/lib/crypto/response-pii';
 import { withCalcValues } from '@/lib/survey/cell-formula';
 import { loadPiiQuestionIds } from './response.service';
@@ -48,24 +49,35 @@ export { SurveyOwnershipError };
  * 인증은 authed 미들웨어가 담당. 단 소유권 검증(surveys row 존재 확인)은 인증과
  * 별개이므로 service 안에 보존한다 — 없는 설문이면 SurveyOwnershipError('not_found').
  * 캐시 갱신(revalidatePath)은 소비처 router.push 로 대체한다.
+ *
+ * isGuest 는 procedure 가 이미 인증한 context.user.id 에서 파생해 전달한다(다른
+ * feature 의 scoped 절차와 동일 패턴) — 게스트는 전역 테스트 모드 플래그와 무관하게
+ * 항상 real 파티션만 읽고 쓴다. select/UPDATE 모두 resolveWriteScopeIsTest 로 확정한
+ * isTest 값으로 스코프를 좁혀, 테스트 파티션 responseId 를 알아내도 편집이 닿지 않게
+ * 한다 — 파티션이 안 맞으면 존재하지 않는 응답과 동일하게 'Response not found' 로 처리.
  */
 export async function saveAdminEdit(
   input: SaveAdminEditInput,
   editor: { id: string | null; email: string | null },
+  isGuest: boolean,
 ): Promise<{ ok: true }> {
   const { surveyId, responseId, questionResponses } = input;
 
   // 소유권 검증 — surveys row 존재 확인 (require-survey-ownership.ts 패턴 인라인 복제)
+  // testModeEnabled 도 함께 읽어 쓰기 파티션 산정에 재사용 — 별도 쿼리를 추가하지 않는다.
   const ownerRow = await db.query.surveys.findFirst({
     where: eq(surveys.id, surveyId),
-    columns: { id: true },
+    columns: { id: true, testModeEnabled: true },
   });
   if (!ownerRow) throw new SurveyOwnershipError('not_found');
+
+  const isTest = resolveWriteScopeIsTest(ownerRow.testModeEnabled, isGuest);
 
   const existing = await db.query.surveyResponses.findFirst({
     where: and(
       eq(surveyResponses.id, responseId),
       eq(surveyResponses.surveyId, surveyId),
+      eq(surveyResponses.isTest, isTest),
     ),
   });
   if (!existing) throw new Error('Response not found');
@@ -197,6 +209,7 @@ export async function saveAdminEdit(
         and(
           eq(surveyResponses.id, responseId),
           eq(surveyResponses.surveyId, surveyId),
+          eq(surveyResponses.isTest, isTest),
           isNull(surveyResponses.deletedAt),
         ),
       )

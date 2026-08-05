@@ -3,10 +3,6 @@ import { randomUUID } from 'crypto';
 
 import { extractRawSql } from './_helpers/result-code-mock';
 
-// createCampaign 이 트랜잭션을 열기 전에 isGuestViewer() 를 직접 호출한다. 이 스위트는
-// 어드민 세션 로직만 검증하므로 항상 false(비게스트) 로 고정한다 (Task 4).
-vi.mock('@/lib/auth/guest-viewer', () => ({ isGuestViewer: vi.fn(async () => false) }));
-
 // ========================
 // 회귀 테스트 — createCampaign 재페치 WHERE 가 preflight 와 동일하게
 // 부정 결과코드(연락금지) 컨택을 제외하는지 검증한다.

@@ -129,4 +129,9 @@ describe('guestPathRedirect', () => {
     expect(guestPathRedirect(`${base}/mail/templates`, sid)).toBe(`${base}/overview`);
     expect(guestPathRedirect(`${base}/mail/campaigns`, sid)).toBe(`${base}/overview`);
   });
+
+  it('쿼터 경로는 게스트에게 차단되어 overview 로 돌린다 - quota.save 가 authed', () => {
+    const base = `/admin/surveys/${sid}/operations`;
+    expect(guestPathRedirect(`${base}/quota`, sid)).toBe(`${base}/overview`);
+  });
 });

@@ -10,8 +10,9 @@ import { getGuestSurveyId } from '@/lib/auth/guest-grants';
  * 서버 렌더 분기와, 운영 콘솔 데이터 스코프 고정에 사용한다. 접근 강제는 여기가
  * 아니라 미들웨어(guestPathRedirect) + procedure(scoped/authed)가 담당한다.
  *
- * loadOperationsDataScope 가 요청당 여러 번 호출되므로 React cache 로 감싸
- * supabase auth.getUser() 왕복을 요청당 1회로 줄인다.
+ * layout.tsx, overview/profiles/preview 등 여러 RSC 가 각자 직접 호출하고
+ * loadOperationsDataScope 내부에서도 호출되어 요청당 여러 번 실행되므로 React
+ * cache 로 감싸 supabase auth.getUser() 왕복을 요청당 1회로 줄인다.
  */
 async function loadIsGuestViewer(): Promise<boolean> {
   // getCurrentUser 는 supabase 에러를 삼키고 null 을 돌려주는데, null 을 "게스트 아님"

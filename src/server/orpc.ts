@@ -95,8 +95,9 @@ export const authed = base.use(({ context, next }) => {
  *
  * 게스트에게 열어줄 procedure 전용. 이 베이스를 쓰는 procedure 는 반드시
  * handler 첫 줄에서 assertSurveyAccess(context.user.id, input.surveyId) 를
- * 호출해 설문 일치를 강제해야 한다 (유일한 예외: 입력에 surveyId 가 없는
- * media.deleteMailAttachmentTmp — tmp 네임스페이스 검증에 의존).
+ * 호출해 설문 일치를 강제해야 한다. 입력에 surveyId 가 없어 assertSurveyAccess 를
+ * 못 쓰는 procedure(예: media.deleteMailAttachmentTmp)는 scoped 대신 authed 로
+ * 두고 게스트를 원천 차단한다 — scoped 를 쓰면서 이 가드를 생략할 수 있는 예외는 없다.
  * 나머지 전 표면은 authed(admin 전용) 유지 — 게스트는 기본 거부.
  *
  * grant-first: grant 보유자는 admin allowlist 검사 없이 통과시킨다. 이후

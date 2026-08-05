@@ -670,6 +670,7 @@ describe('saveAdminEdit — 복호화 diff 안정성 + 재암호화 저장', () 
         },
       },
       { id: 'admin-1', email: 'a@b.com' },
+      false,
     );
 
     // 변경 0건 → responseEditLogs insert 미호출.
@@ -697,6 +698,7 @@ describe('saveAdminEdit — 복호화 diff 안정성 + 재암호화 저장', () 
         },
       },
       { id: 'admin-1', email: 'a@b.com' },
+      false,
     );
 
     // 변경은 비PII 문항 1건만 — PII 문항이 diff 에 끼지 않는다.
@@ -792,6 +794,7 @@ describe('saveAdminEdit — calc 셀 서버 재계산 (Task 13)', () => {
         },
       },
       { id: 'admin-1', email: 'a@b.com' },
+      false,
     );
 
     const setArg = updateSetLogMock.mock.calls[0]![0] as {
@@ -833,6 +836,7 @@ describe('saveAdminEdit — calc 셀 서버 재계산 (Task 13)', () => {
         },
       },
       { id: 'admin-1', email: 'a@b.com' },
+      false,
     );
 
     // 스냅샷을 조회할 수 없으므로(versionId null) 재계산 없이 제출값 그대로 저장된다.
@@ -911,6 +915,7 @@ describe('saveAdminEdit — calc 셀 서버 재계산 (Task 13)', () => {
         },
       },
       { id: 'admin-1', email: 'a@b.com' },
+      false,
     );
 
     // 저장값: cross-question calc 셀이 재계산으로 20 을 반영한다.
@@ -956,6 +961,7 @@ describe('saveAdminEdit — calc 셀 서버 재계산 (Task 13)', () => {
           },
         },
         { id: 'admin-1', email: 'a@b.com' },
+        false,
       ),
     ).resolves.toEqual({ ok: true });
 

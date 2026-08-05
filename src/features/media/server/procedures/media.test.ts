@@ -79,17 +79,16 @@ describe('media procedures', () => {
     expect(svc.deleteImages).not.toHaveBeenCalled();
   });
 
-  it('게스트도 deleteMailAttachmentTmp 를 위임받는다 (surveyId 없어 tmp 네임스페이스 검증에만 의존)', async () => {
+  it('게스트가 deleteMailAttachmentTmp 를 호출하면 FORBIDDEN (메일 표면은 전면 authed)', async () => {
     vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
     vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:sv-1');
-    vi.mocked(svc.deleteMailAttachmentTmp).mockResolvedValue({ ok: true } as never);
     const client = createRouterClient(
       { media },
       { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
     );
-    const input = { key: 'tmp/mail-attachment/abc.pdf' };
-    const res = await client.media.deleteMailAttachmentTmp(input);
-    expect(svc.deleteMailAttachmentTmp).toHaveBeenCalledWith(input);
-    expect(res.ok).toBe(true);
+    await expect(
+      client.media.deleteMailAttachmentTmp({ key: 'tmp/mail-attachment/abc.pdf' }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(svc.deleteMailAttachmentTmp).not.toHaveBeenCalled();
   });
 });

@@ -75,6 +75,7 @@ export function guestPathRedirect(
       'contacts/result-codes',
       'contacts/columns',
       'mail',
+      'quota',
     ];
     for (const sub of blockedSubpaths) {
       const full = `${allowedPrefix}/${sub}`;

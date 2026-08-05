@@ -37,10 +37,11 @@ describe('surveyResponse.edit procedures', () => {
       questionResponses: { q1: 'a' },
     };
     const res = await client.edit.saveAdminEdit(input);
-    expect(svc.saveAdminEdit).toHaveBeenCalledWith(input, {
-      id: 'admin-1',
-      email: 'a@b.com',
-    });
+    expect(svc.saveAdminEdit).toHaveBeenCalledWith(
+      input,
+      { id: 'admin-1', email: 'a@b.com' },
+      false,
+    );
     expect(res).toEqual({ ok: true });
   });
 
@@ -112,10 +113,11 @@ describe('surveyResponse.edit procedures', () => {
       questionResponses: { q1: 'a' },
     };
     const res = await client.edit.saveAdminEdit(input);
-    expect(svc.saveAdminEdit).toHaveBeenCalledWith(input, {
-      id: 'guest-1',
-      email: 'g@b.com',
-    });
+    expect(svc.saveAdminEdit).toHaveBeenCalledWith(
+      input,
+      { id: 'guest-1', email: 'g@b.com' },
+      true,
+    );
     expect(res).toEqual({ ok: true });
   });
 

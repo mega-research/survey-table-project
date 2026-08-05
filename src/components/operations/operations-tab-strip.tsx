@@ -14,7 +14,7 @@ import { cn } from '@/lib/utils';
 
 interface OperationsTabStripProps {
   surveyId: string;
-  /** 게스트 세션 — 메일 탭을 숨긴다. */
+  /** 게스트 세션 — 메일·쿼터 탭을 숨긴다. */
   isGuest: boolean;
 }
 
@@ -168,20 +168,22 @@ export function OperationsTabStrip({ surveyId, isGuest }: OperationsTabStripProp
             </NavigationMenuItem>
           )}
 
-          <NavigationMenuItem>
-            <Link
-              href={quotaHref}
-              aria-current={isQuotaActive ? 'page' : undefined}
-              className={cn(
-                'flex h-auto items-center gap-1 rounded-none border-b-2 bg-transparent px-4 py-3 text-sm transition-colors',
-                isQuotaActive
-                  ? 'border-blue-600 font-semibold text-blue-600 hover:text-blue-600'
-                  : 'border-transparent text-slate-500 hover:text-slate-900',
-              )}
-            >
-              쿼터
-            </Link>
-          </NavigationMenuItem>
+          {!isGuest && (
+            <NavigationMenuItem>
+              <Link
+                href={quotaHref}
+                aria-current={isQuotaActive ? 'page' : undefined}
+                className={cn(
+                  'flex h-auto items-center gap-1 rounded-none border-b-2 bg-transparent px-4 py-3 text-sm transition-colors',
+                  isQuotaActive
+                    ? 'border-blue-600 font-semibold text-blue-600 hover:text-blue-600'
+                    : 'border-transparent text-slate-500 hover:text-slate-900',
+                )}
+              >
+                쿼터
+              </Link>
+            </NavigationMenuItem>
+          )}
         </NavigationMenuList>
       </NavigationMenu>
     </div>

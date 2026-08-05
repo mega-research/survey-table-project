@@ -156,6 +156,7 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
     await saveAdminEdit(
       { surveyId: 's1', responseId: 'r1', questionResponses: { q1: 'v' } },
       { id: 'admin-1', email: 'a@b.com' },
+      false,
     );
 
     const completedCall = updateSetMock.mock.calls[0];
@@ -177,6 +178,7 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
     await saveAdminEdit(
       { surveyId: 's1', responseId: 'r1', questionResponses: {} },
       { id: 'admin-1', email: 'a@b.com' },
+      false,
     );
 
     const dropEmptyCall = updateSetMock.mock.calls[0];
@@ -207,6 +209,7 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
         questionResponses: { q1: 'a', q3: 'b' },
       },
       { id: 'admin-1', email: 'a@b.com' },
+      false,
     );
 
     const dropAnsweredCall = updateSetMock.mock.calls[0];
@@ -231,6 +234,7 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
         questionResponses: { q1: 'a' },
       },
       { id: 'admin-1', email: 'a@b.com' },
+      false,
     );
 
     const nullVersionCall = updateSetMock.mock.calls[0];
@@ -263,6 +267,7 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
       saveAdminEdit(
         { surveyId: 's1', responseId: 'r1', questionResponses: { q1: 'a' } },
         { id: 'admin-1', email: 'a@b.com' },
+        false,
       ),
     ).rejects.toThrow('Cannot edit deleted response');
 
