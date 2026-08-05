@@ -180,6 +180,9 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
         title: question.title,
         ...(question.description !== undefined ? { description: question.description } : {}),
         required: question.required,
+        ...(question.requiredMessage !== undefined
+          ? { requiredMessage: question.requiredMessage }
+          : {}),
         ...(question.groupId !== undefined ? { groupId: question.groupId } : {}),
         questionCode: question.questionCode || '',
         isCustomSpssVarName: question.isCustomSpssVarName || false,
@@ -412,6 +415,7 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
               title: currentFormData.title || question?.title || '',
               description: currentFormData.description || question?.description,
               required: currentFormData.required ?? question?.required ?? false,
+              requiredMessage: currentFormData.requiredMessage ?? question?.requiredMessage ?? null,
               order: question?.order ?? 0,
               options: currentFormData.options || question?.options,
               selectLevels: currentFormData.selectLevels || question?.selectLevels,

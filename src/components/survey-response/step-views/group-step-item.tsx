@@ -8,6 +8,7 @@ import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-con
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { isEmptyHtml } from '@/lib/utils';
 import { isChoiceTableSource } from '@/utils/choice-source';
+import { resolveRequiredMessage } from '@/utils/required-message';
 import { sanitizeRichHtml } from '@/lib/sanitize';
 import { StepItem } from '@/lib/group-ordering';
 import type { NumericIssue } from '@/lib/survey/numeric-validation';
@@ -27,6 +28,7 @@ export function GroupStepItem({
   questions,
   onResponse,
   isHighlighted,
+  showRequiredMessage,
   issues,
 }: {
   item: StepItem;
@@ -35,6 +37,8 @@ export function GroupStepItem({
   questions: Question[];
   onResponse: (questionId: string, value: unknown) => void;
   isHighlighted: boolean;
+  /** 필수 미응답 안내 문구 표시 — 질문별 requiredMessage 또는 기본 문구. */
+  showRequiredMessage: boolean;
   issues?: NumericIssue[] | undefined;
 }) {
   const q = item.question;
@@ -136,6 +140,11 @@ export function GroupStepItem({
             onDynamicRowSelectionChange={onDynamicRowSelectionChange}
           />
         </div>
+        {showRequiredMessage && (
+          <p className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {resolveRequiredMessage(q)}
+          </p>
+        )}
       </div>
     </div>
   );

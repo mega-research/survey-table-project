@@ -41,6 +41,7 @@ export async function createQuestion(data: CreateQuestionInput): Promise<Questio
     title: data.title,
     description: data.description,
     required: data.required ?? false,
+    requiredMessage: data.requiredMessage ?? null,
     order: data.order ?? maxOrder + 1,
     options: data.options as NewQuestion['options'],
     selectLevels: data.selectLevels as NewQuestion['selectLevels'],

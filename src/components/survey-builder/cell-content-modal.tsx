@@ -62,6 +62,7 @@ import {
   buildUpdatedCell,
 } from '@/utils/serialize-cell';
 import type { CellFormState } from '@/utils/serialize-cell';
+import { DEFAULT_REQUIRED_CELL_MESSAGE } from '@/utils/required-message';
 import {
   INTERACTIVE_CELL_TYPES,
   generateCellCode,
@@ -196,6 +197,7 @@ export function CellContentModal({
     emptyDefaultRaw,
     cellNumberFormat,
     cellRequired,
+    cellRequiredMessage,
     minSelections,
     maxSelections,
     rankingOptions,
@@ -266,6 +268,7 @@ export function CellContentModal({
     setEmptyDefaultRaw,
     setCellNumberFormat,
     setCellRequired,
+    setCellRequiredMessage,
     setMinSelections,
     setMaxSelections,
     setRankingOptions,
@@ -1381,12 +1384,22 @@ export function CellContentModal({
                 onChange={(e) => setCellRequired(e.target.checked)}
                 className="h-4 w-4"
               />
-              <label htmlFor="cell-required" className="cursor-pointer">
+              <label htmlFor="cell-required" className="cursor-pointer shrink-0">
                 필수 응답 셀
               </label>
-              <span className="text-xs text-gray-400">
-                지정 셀이 응답되어야 다음으로 진행됩니다
-              </span>
+              {cellRequired ? (
+                <Input
+                  id="cell-required-message"
+                  value={cellRequiredMessage}
+                  onChange={(e) => setCellRequiredMessage(e.target.value)}
+                  placeholder={DEFAULT_REQUIRED_CELL_MESSAGE}
+                  className="ml-2 h-8 flex-1 text-sm"
+                />
+              ) : (
+                <span className="text-xs text-gray-400">
+                  지정 셀이 응답되어야 다음으로 진행됩니다
+                </span>
+              )}
             </div>
           </div>
         )}

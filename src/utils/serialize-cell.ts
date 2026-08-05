@@ -40,6 +40,8 @@ export interface CellFormState {
   cellNumberFormat: NumberFormat | undefined;
   /** 필수 응답 셀 (REQUIRED_CELL_TYPES 공용 — TableCell.required 로 직렬화) */
   cellRequired: boolean;
+  /** 필수 셀 미응답 안내 문구 — 빈 문자열이면 기본 문구 (TableCell.requiredMessage) */
+  cellRequiredMessage: string;
   minSelections: number | undefined;
   maxSelections: number | undefined;
   rankingOptions: QuestionOption[];
@@ -193,6 +195,7 @@ export function cellToFormState(cell: TableCell): CellFormState {
     emptyDefaultRaw: cell.emptyDefault !== undefined ? String(cell.emptyDefault) : '0',
     cellNumberFormat: cell.numberFormat,
     cellRequired: cell.required ?? false,
+    cellRequiredMessage: cell.requiredMessage ?? '',
     minSelections: cell.minSelections,
     maxSelections: cell.maxSelections,
     rankingOptions: cell.rankingOptions || [],
@@ -374,7 +377,14 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
         }
       : {}),
     // 필수 응답 셀 — 인터랙티브 셀 공용 (미체크·비대상 타입은 키 자체 제거)
-    ...(REQUIRED_CELL_TYPES.has(contentType) && form.cellRequired ? { required: true } : {}),
+    ...(REQUIRED_CELL_TYPES.has(contentType) && form.cellRequired
+      ? {
+          required: true,
+          ...(form.cellRequiredMessage.trim()
+            ? { requiredMessage: form.cellRequiredMessage.trim() }
+            : {}),
+        }
+      : {}),
     // 체크박스 선택 개수 제한 (체크박스 타입 전용)
     ...(contentType === 'checkbox'
       ? {

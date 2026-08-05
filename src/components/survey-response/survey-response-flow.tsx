@@ -757,6 +757,17 @@ function SurveyResponseFlowActive({
       : EMPTY_ISSUES;
   }, [showNumericErrors, focusedQuestionId, numericIssuesByQuestion]);
 
+  // 하이라이트 중 "필수 미응답" 사유인 질문만 골라 안내 문구를 붙인다 — 숫자 검증
+  // 위반 하이라이트에는 필수 문구를 섞지 않고, 응답이 채워지면 문구도 즉시 사라진다.
+  const requiredMessageQuestionIds = new Set(
+    currentStepQuestions
+      .filter(
+        (q) =>
+          highlightQuestionIds.has(q.id) && isQuestionRequired(q) && !isQuestionAnswered(q),
+      )
+      .map((q) => q.id),
+  );
+
   const canProceed = () => {
     if (!currentStep) return false;
     // step 내 표시되는 필수 질문 전부가 답변되어야 함
@@ -1085,6 +1096,7 @@ function SurveyResponseFlowActive({
           evalCtx={evalCtx}
           onResponse={handleResponse}
           highlightQuestionIds={highlightQuestionIds}
+          requiredMessageQuestionIds={requiredMessageQuestionIds}
           numericIssues={visibleNumericIssues}
         />
 

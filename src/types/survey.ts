@@ -353,6 +353,8 @@ export interface TableCell {
   numberFormat?: NumberFormat;
   // input 셀 필수 여부 — 지정 셀이 채워져야 "다음" 통과. 테이블 미접촉(전 셀 빈 값) 시 스킵
   required?: boolean;
+  // 필수 셀 미응답 안내 문구 — 미지정 시 기본 문구 사용
+  requiredMessage?: string;
   // 체크박스 선택 개수 제한 (체크박스 타입 셀 전용)
   minSelections?: number; // 최소 선택 개수
   maxSelections?: number; // 최대 선택 개수
@@ -571,6 +573,7 @@ export interface Question {
   title: string;
   description?: string;
   required: boolean;
+  requiredMessage?: string | null; // 필수 미응답 안내 문구 — 미입력 시 기본 문구 사용
   groupId?: string; // 소속 그룹 ID (QuestionGroup의 id 참조)
   options?: QuestionOption[];
   selectLevels?: SelectLevel[]; // 다단계 select용

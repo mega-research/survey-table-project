@@ -15,6 +15,7 @@ import {
 import { rangeViolationMessage } from '@/utils/number-format';
 import { parseNumericInput } from '@/utils/numeric-input';
 import { REQUIRED_CELL_TYPES } from '@/utils/serialize-cell';
+import { DEFAULT_REQUIRED_CELL_MESSAGE } from '@/utils/required-message';
 import { isCellValuePresent } from '@/utils/table-cell-semantics';
 
 import { evaluateCellFormula, roundFormulaValue } from './cell-formula';
@@ -241,11 +242,24 @@ export function collectNumericIssues(
   //    대상은 REQUIRED_CELL_TYPES(input/radio/checkbox/select/ranking). 응답됨 판정은
   //    isCellValuePresent 정본(배열 length>0, 문자열 trim, 그 외 truthy) — checkbox/ranking
   //    빈 배열을 미응답으로 본다.
-  const ordinaryMissingIds = visible
-    .filter(
-      (c) => REQUIRED_CELL_TYPES.has(c.type) && c.required && !isCellValuePresent(cellValues[c.id]),
-    )
-    .map((c) => c.id);
+  const ordinaryMissingCells = visible.filter(
+    (c) => REQUIRED_CELL_TYPES.has(c.type) && c.required && !isCellValuePresent(cellValues[c.id]),
+  );
+  // 셀별 지정 문구(requiredMessage)가 있으면 문구 단위로 별도 이슈를 만든다 —
+  // 지정 문구 없는 셀들은 아래 기본 문구 통합 이슈(상세기입 포함)로 묶인다.
+  const customMessageCellIds = new Map<string, string[]>();
+  const defaultMissingIds: string[] = [];
+  for (const c of ordinaryMissingCells) {
+    const custom = c.requiredMessage?.trim();
+    if (custom) {
+      customMessageCellIds.set(custom, [...(customMessageCellIds.get(custom) ?? []), c.id]);
+    } else {
+      defaultMissingIds.push(c.id);
+    }
+  }
+  for (const [message, cellIds] of customMessageCellIds) {
+    issues.push({ kind: 'required-cells', message, cellIds });
+  }
   const visibleOptionTextIssues = collectRequiredOptionTextIssues(
     question,
     cellValues,
@@ -254,7 +268,7 @@ export function collectNumericIssues(
   );
   const missingIds = [
     ...new Set([
-      ...ordinaryMissingIds,
+      ...defaultMissingIds,
       ...visibleOptionTextIssues.cellIds,
       ...(visibleOptionTextIssues.detailCellIds ?? []),
     ]),
@@ -262,7 +276,7 @@ export function collectNumericIssues(
   if (missingIds.length > 0) {
     issues.push({
       kind: 'required-cells',
-      message: '필수 응답이 비어있습니다',
+      message: DEFAULT_REQUIRED_CELL_MESSAGE,
       cellIds: missingIds,
       ...(visibleOptionTextIssues.detailTargetIds
         ? { detailTargetIds: visibleOptionTextIssues.detailTargetIds }

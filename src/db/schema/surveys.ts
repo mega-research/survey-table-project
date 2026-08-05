@@ -122,6 +122,7 @@ export const questions = pgTable('questions', {
   title: text('title').notNull(),
   description: text('description'),
   required: boolean('required').default(false).notNull(),
+  requiredMessage: text('required_message'), // 필수 미응답 안내 문구 — null 이면 기본 문구
   order: integer('order').notNull().default(0),
 
   // 옵션들 (radio, checkbox, select용) - JSON으로 저장
