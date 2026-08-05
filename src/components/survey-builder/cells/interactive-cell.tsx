@@ -109,24 +109,39 @@ export const InteractiveCell = React.memo(function InteractiveCell({
     siblingCellIds,
   );
 
-  // 게이팅 평가 — 같은 질문의 응답 객체가 필요하다. 실응답 모드는 value prop,
-  // 테스트 모드는 스토어의 질문 레벨 객체를 구독한다.
-  const testQuestionResponse = useTestResponseStore(
+  // 게이팅 평가에 실제로 필요한 값은 컨트롤러 셀 하나뿐이다(option 조건의 옵션 id/value
+  // 해석은 정적 prop 인 rowCells 로 이미 처리). 여기서 state.testResponses[questionId]
+  // 질문 객체 전체를 구독하면, mergePatch 가 매 입력마다 만드는 새 참조 탓에 같은 표의
+  // 모든 InteractiveCell(input 뿐 아니라 checkbox/radio/text 전 타입)이 셀 하나만 바뀌어도
+  // 재렌더된다 — use-cell-response.ts:28-40 이 지키는 셀 단위 스칼라 구독 원칙을 여기서도
+  // 지켜야 한다. enabledWhen 이 없는 셀(대다수)은 controllerCellId 가 undefined 라 구독
+  // 자체가 항상 같은 값(undefined)을 반환해 재렌더를 유발하지 않는다.
+  const controllerCellId =
+    cell.type === 'input' && cell.enabledWhen ? cell.enabledWhen.controllerCellId : undefined;
+
+  const testControllerValue = useTestResponseStore(
     useCallback(
-      (state) => (isTestMode ? state.testResponses[questionId] : undefined),
-      [isTestMode, questionId],
+      (state) => {
+        if (!isTestMode || !controllerCellId) return undefined;
+        const qr = state.testResponses[questionId];
+        if (typeof qr === 'object' && qr !== null) {
+          return (qr as Record<string, unknown>)[controllerCellId];
+        }
+        return undefined;
+      },
+      [isTestMode, questionId, controllerCellId],
     ),
   );
-  const rowValues = (isTestMode ? testQuestionResponse : value) ?? {};
-  const gatingDisabled =
-    cell.type === 'input' &&
-    !isCellEnabled(
-      cell,
-      typeof rowValues === 'object' && !Array.isArray(rowValues)
-        ? (rowValues as Record<string, unknown>)
-        : {},
-      rowCells,
-    );
+
+  // 실응답 모드는 상위에서 이미 질문 단위 value prop 으로 내려오므로(재렌더 비용은 이 훅
+  // 밖 상위 컴포넌트 소관 — 이번 변경 범위 밖) 기존처럼 그대로 쓴다.
+  const gatingCellValues: Record<string, unknown> = isTestMode
+    ? controllerCellId
+      ? { [controllerCellId]: testControllerValue }
+      : {}
+    : (value ?? {});
+
+  const gatingDisabled = cell.type === 'input' && !isCellEnabled(cell, gatingCellValues, rowCells);
 
   // 비활성인데 값이 남아 있으면 즉시 지움 (컨트롤러 변경 직후 1회)
   useEffect(() => {
