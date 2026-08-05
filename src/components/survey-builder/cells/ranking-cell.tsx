@@ -48,6 +48,7 @@ export const RankingCell = React.memo(function RankingCell({
       content={substituteTokens(cell.content, attrs, quotes)}
       position={cell.textPosition}
       bold={cell.textBold}
+      textColor={cell.textColor}
     >
       <div
         id={inputIdScope ? `${inputIdScope}-${cell.id}` : undefined}

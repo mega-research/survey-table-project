@@ -41,7 +41,7 @@ export function estimateInputHeight(question: Question): number {
       return computeTableEstimatedHeight(
         question.tableColumns ?? [],
         question.tableRowsData ?? [],
-        question.tableHeaderGrid,
+        question.tableHeaderGrid ?? undefined,
       );
     case 'notice':
       return 80 + (question.requiresAcknowledgment ? 52 : 0);

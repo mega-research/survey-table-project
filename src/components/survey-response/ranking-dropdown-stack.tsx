@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment } from 'react';
+import { Fragment, type ReactNode } from 'react';
 
 import { Input } from '@/components/ui/input';
 import {
@@ -123,7 +123,6 @@ export function RankingDropdownStack({
   // 가로(wrap) 또는 N열 그리드 일 때 기타 input 을 select-block 과 별도 sibling 으로 렌더.
   // → flex-wrap 에선 select 오른쪽에 나타나고, grid 에선 다음 셀을 차지해 자연 줄바꿈 유도.
   const isInlineOther = !compact && (columns === 0 || (columns != null && columns >= 2));
-  const isGrid = !compact && columns != null && columns >= 2;
   // 스타일 프리셋 (compact: 테이블 셀 컨텍스트 / full: 질문 레벨)
   // 빌더 미리보기(question-preview.tsx)와 시각 통일 — rounded-md, border-gray-200, p-2, text-sm
   const rankLabelCls = compact
@@ -141,8 +140,30 @@ export function RankingDropdownStack({
   const otherInputBaseCls = compact
     ? 'h-8 text-xs'
     : 'h-auto rounded-md border-gray-200 px-2 py-2 text-sm';
-  const otherWrapperCls = compact ? '' : isHorizontal ? '' : 'ml-[3.5rem]';
+  // 세로 배치 들여쓰기: 라벨 w-12(48px) + gap-1.5(6px) = 54px. 3.5rem(56px)이면 select 보다
+  // 2px 밀려 왼쪽 끝이 어긋난다.
+  const otherWrapperCls = compact ? '' : isHorizontal ? '' : 'ml-[3.375rem]';
   const rowCls = compact ? 'space-y-1' : 'space-y-2';
+  // 상세/기타 입력 폭. 데스크톱 가로 배치만 고정 폭(select 와 동일)이고, 모바일은 트리거가
+  // 전체 폭으로 커지므로 입력도 따라가야 한다. 트리거의 triggerWidthStyle 과 같은 조건이다.
+  const detailInputFixedWidth = isHorizontal && !isMobile;
+  const detailInputFullWidth = !detailInputFixedWidth;
+
+  // 가로 배치에서 상세 입력은 select 의 형제로 나가므로 그대로 두면 왼쪽 끝이 순위 라벨
+  // 자리부터 시작해 select 와 어긋난다. 라벨과 같은 폭의 보이지 않는 자리를 둬 기준선을 맞춘다.
+  // 라벨 폭이 글자 수에 따라 변해도(가로 배치의 rankLabelCls 는 고정 폭이 아니다) 자동으로 맞는다.
+  const DetailInputBlock = ({ children }: { children: ReactNode }) =>
+    detailInputFullWidth ? (
+      <div className="my-1 flex w-full items-center gap-1.5">
+        <span className={cn(rankLabelCls, 'invisible')} aria-hidden data-ranking-detail-spacer>
+          1순위
+        </span>
+        <div className="min-w-0 flex-1">{children}</div>
+      </div>
+    ) : (
+      <div>{children}</div>
+    );
+
   // 컨테이너 레이아웃은 columns prop 기반. compact 는 내부 select/label 크기만 영향.
   const layout = getOptionsLayout(columns);
 
@@ -154,8 +175,13 @@ export function RankingDropdownStack({
         const selectedOpt = currentValue && currentValue !== RANKING_OTHER_VALUE
           ? options.find((o) => o.value === currentValue)
           : undefined;
-        const selectedStyle = selectedOpt?.backgroundColor
-          ? { backgroundColor: selectedOpt.backgroundColor }
+        const selectedStyle = selectedOpt?.backgroundColor || selectedOpt?.textColor
+          ? {
+              ...(selectedOpt.backgroundColor
+                ? { backgroundColor: selectedOpt.backgroundColor }
+                : {}),
+              ...(selectedOpt.textColor ? { color: selectedOpt.textColor } : {}),
+            }
           : undefined;
         const selectedBold = selectedOpt?.textBold ? 'font-bold' : undefined;
         const triggerWidthStyle =
@@ -181,7 +207,10 @@ export function RankingDropdownStack({
                 value={opt.value}
                 disabled={isTakenElsewhere(rank, opt.value)}
                 className={opt.textBold ? 'font-bold' : undefined}
-                style={opt.backgroundColor ? { backgroundColor: opt.backgroundColor } : undefined}
+                style={{
+                  ...(opt.backgroundColor ? { backgroundColor: opt.backgroundColor } : {}),
+                  ...(opt.textColor ? { color: opt.textColor } : {}),
+                }}
               >
                 {substituteTokens(opt.label, attrs, quotes)}
               </option>
@@ -193,7 +222,12 @@ export function RankingDropdownStack({
         // 옵션은 트리거 고정 너비 안에서 줄바꿈(긴 라벨이 화면 밖으로 넘치지 않게).
         const itemCls = cn(
           'whitespace-normal [overflow-wrap:anywhere]',
-          'data-[highlighted]:ring-2 data-[highlighted]:ring-blue-500 data-[highlighted]:ring-inset',
+          // 체크 표시 자리(pl-8, 32px)를 없앤다. 순위형은 선택값이 트리거에도 보여 체크가
+          // 없어도 무엇을 골랐는지 알 수 있고, 긴 라벨이 여러 줄로 접힐 때 들여쓰기가 크다.
+          'pl-3 [&>span:first-child]:hidden',
+          // 하이라이트는 링만. 옵션에 커스텀 배경색이 깔리면 인라인 스타일이 배경을 덮어
+          // 어느 항목에 커서가 있는지 안 보인다(c7134ac4 회귀).
+          'data-[highlighted]:ring-2 data-[highlighted]:ring-blue-100 data-[highlighted]:ring-inset',
           isMobile && 'py-3 text-base',
         );
         const radixSelectEl = (
@@ -212,6 +246,8 @@ export function RankingDropdownStack({
                 'min-w-0',
                 // 모바일 트리거 크게(iOS 확대 방지 위해 16px 이상), 높이는 h-12.
                 isMobile ? 'h-12 text-base' : 'h-11 text-sm',
+                // 포커스 링은 옅은 하늘색. SelectTrigger 기본 --ring(#007aff)이 진해서 덮는다.
+                'focus:border-blue-100 focus:ring-2 focus:ring-blue-100 focus:ring-offset-0',
                 selectedBold,
               )}
               style={{ ...triggerWidthStyle, ...selectedStyle }}
@@ -228,7 +264,10 @@ export function RankingDropdownStack({
                   value={opt.value}
                   disabled={isTakenElsewhere(rank, opt.value)}
                   className={cn(itemCls, opt.textBold && 'font-bold')}
-                  style={opt.backgroundColor ? { backgroundColor: opt.backgroundColor } : undefined}
+                  style={{
+                    ...(opt.backgroundColor ? { backgroundColor: opt.backgroundColor } : {}),
+                    ...(opt.textColor ? { color: opt.textColor } : {}),
+                  }}
                 >
                   {substituteTokens(opt.label, attrs, quotes)}
                 </SelectItem>
@@ -253,36 +292,40 @@ export function RankingDropdownStack({
                 {selectEl}
               </div>
               {showOtherInput && (
-                <div className={isGrid ? 'w-full' : undefined}>
+                <DetailInputBlock>
                   <Input
                     placeholder="기타 내용 입력..."
                     value={otherTextAt(rank)}
                     onChange={(e) => handleOtherText(rank, e.target.value)}
-                    className={`${otherInputBaseCls}${isGrid ? ' w-full' : ''}`}
-                    style={isHorizontal ? { width: RANKING_HORIZONTAL_ITEM_WIDTH } : undefined}
+                    className={cn(otherInputBaseCls, detailInputFullWidth && 'w-full')}
+                    {...(detailInputFixedWidth
+                      ? { style: { width: RANKING_HORIZONTAL_ITEM_WIDTH } }
+                      : {})}
                     data-option-text-target-id={
                       detailTargetScopeId
                         ? rankingTextTargetId(detailTargetScopeId, rank, RANKING_OTHER_VALUE)
                         : undefined
                     }
                   />
-                </div>
+                </DetailInputBlock>
               )}
               {showOptionTextInput && (
-                <div className={isGrid ? 'w-full' : undefined}>
+                <DetailInputBlock>
                   <Input
                     placeholder={selectedOpt?.textInputPlaceholder || '상세 기재'}
                     value={optionTextAt(rank)}
                     onChange={(e) => handleOptionText(rank, e.target.value)}
-                    className={`${otherInputBaseCls}${isGrid ? ' w-full' : ''}`}
-                    style={isHorizontal ? { width: RANKING_HORIZONTAL_ITEM_WIDTH } : undefined}
+                    className={cn(otherInputBaseCls, detailInputFullWidth && 'w-full')}
+                    {...(detailInputFixedWidth
+                      ? { style: { width: RANKING_HORIZONTAL_ITEM_WIDTH } }
+                      : {})}
                     data-option-text-target-id={
                       detailTargetScopeId
                         ? rankingTextTargetId(detailTargetScopeId, rank, currentValue)
                         : undefined
                     }
                   />
-                </div>
+                </DetailInputBlock>
               )}
             </Fragment>
           );

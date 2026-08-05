@@ -4,7 +4,7 @@ import React from 'react';
 
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
-import { getCellTextClassName } from '@/utils/cell-style';
+import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
 import { cn } from '@/lib/utils';
 
 import type { InteractiveCellProps, PreviewCellProps } from './types';
@@ -26,6 +26,7 @@ export const TextCell = React.memo(function TextCell({
         'text-base leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]',
         getCellTextClassName(cell),
       )}
+      style={getCellTextStyle(cell)}
     >
       {substituteTokens(cell.content, attrs, quotes)}
     </div>

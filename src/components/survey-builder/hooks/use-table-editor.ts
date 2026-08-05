@@ -21,7 +21,11 @@ import {
   buildDefaultHeaderGrid,
   reconcileHeaderGridForColumnChange,
 } from '@/utils/table-merge-helpers';
-import { applyHeaderBulkStyle, type HeaderBulkStyle } from '@/utils/header-style';
+import {
+  applyHeaderBulkStyle,
+  type HeaderBulkStyle,
+  withHeaderStyle,
+} from '@/utils/header-style';
 
 import { checkCanMerge, executeMerge, executeUnmerge } from '../utils/table-cell-merge';
 import { useDragCopy } from './use-drag-copy';
@@ -32,7 +36,7 @@ interface UseTableEditorParams {
   tableTitle?: string | undefined;
   columns?: TableColumn[] | undefined;
   rows?: TableRow[] | undefined;
-  tableHeaderGrid?: HeaderCell[][] | undefined;
+  tableHeaderGrid?: HeaderCell[][] | null | undefined;
   currentQuestionId?: string | undefined;
   questionCode?: string | undefined;
   questionTitle?: string | undefined;
@@ -40,7 +44,9 @@ interface UseTableEditorParams {
     tableTitle: string;
     tableColumns: TableColumn[];
     tableRowsData: TableRow[];
-    tableHeaderGrid?: HeaderCell[][] | undefined;
+    // 항상 싣는다 — 키를 생략하면 상위 저장 경로가 "미변경"으로 읽어
+    // 다단계 헤더 해제가 유실된다. 해제는 명시적 null.
+    tableHeaderGrid: HeaderCell[][] | null;
   }) => void;
 }
 
@@ -167,7 +173,7 @@ export function useTableEditor({
 
   const [useMultiRowHeader, setUseMultiRowHeader] = useState(!!initialHeaderGrid);
   const [currentHeaderGrid, setCurrentHeaderGrid] = useState<HeaderCell[][] | undefined>(
-    initialHeaderGrid,
+    initialHeaderGrid ?? undefined,
   );
 
   // 행 조건부 표시 모달
@@ -244,7 +250,7 @@ export function useTableEditor({
         tableTitle: title,
         tableColumns: cols,
         tableRowsData: rowsData,
-        ...(headerGridRef.current !== undefined ? { tableHeaderGrid: headerGridRef.current } : {}),
+        tableHeaderGrid: headerGridRef.current ?? null,
       });
     },
     [],
@@ -276,7 +282,7 @@ export function useTableEditor({
           tableTitle: title,
           tableColumns: cols,
           tableRowsData: rowsData,
-          ...(headerGridRef.current !== undefined ? { tableHeaderGrid: headerGridRef.current } : {}),
+          tableHeaderGrid: headerGridRef.current ?? null,
         });
         pendingChangeRef.current = null;
         pendingArgsRef.current = null;
@@ -310,7 +316,7 @@ export function useTableEditor({
             tableTitle: title,
             tableColumns: cols,
             tableRowsData: rowsData,
-            ...(headerGridRef.current !== undefined ? { tableHeaderGrid: headerGridRef.current } : {}),
+            tableHeaderGrid: headerGridRef.current ?? null,
           });
         }
       }
@@ -603,6 +609,32 @@ export function useTableEditor({
       notifyChangeDebounced(currentTitleRef.current, updatedColumns, currentRowsRef.current);
     },
     [notifyChangeDebounced],
+  );
+
+  // 스타일 변경은 타이핑이 아니므로 debounce 없이 즉시 커밋한다.
+  const updateColumnStyle = useCallback(
+    (columnIndex: number, style: HeaderBulkStyle) => {
+      // 열 코드 등 label/code debounce가 예약되어 있으면 취소한다.
+      // 취소하지 않으면 나중에 stale cols(값 캡처)가 발화해 방금 적용한 스타일을 덮어쓴다.
+      if (pendingChangeRef.current) {
+        clearTimeout(pendingChangeRef.current);
+        pendingChangeRef.current = null;
+        pendingArgsRef.current = null;
+      }
+
+      // debounce를 취소해도 ref-only 행 편집은 화면 state까지 즉시 반영해야 한다.
+      if (pendingRowsSyncRef.current) {
+        pendingRowsSyncRef.current = false;
+        setCurrentRows(currentRowsRef.current);
+      }
+
+      const updatedColumns = currentColumnsRef.current.map((col, index) => (
+        index === columnIndex ? withHeaderStyle(col, style) : col
+      ));
+      commitColumns(updatedColumns);
+      notifyChange(currentTitleRef.current, updatedColumns, currentRowsRef.current);
+    },
+    [commitColumns, notifyChange],
   );
 
   // ── 행 CRUD ──
@@ -1272,6 +1304,7 @@ export function useTableEditor({
       setUseMultiRowHeader(enabled);
       if (enabled && !headerGridRef.current) {
         const defaultGrid = buildDefaultHeaderGrid(currentColumnsRef.current);
+        headerGridRef.current = defaultGrid;
         setCurrentHeaderGrid(defaultGrid);
         onTableChangeRef.current({
           tableTitle: currentTitleRef.current,
@@ -1280,11 +1313,15 @@ export function useTableEditor({
           tableHeaderGrid: defaultGrid,
         });
       } else if (!enabled) {
+        // ref 도 즉시 비운다 — 재렌더 전에 발생하는 후속 알림이 stale grid 를
+        // 다시 실어 보내면 방금 한 해제가 되살아난다.
+        headerGridRef.current = undefined;
         setCurrentHeaderGrid(undefined);
         onTableChangeRef.current({
           tableTitle: currentTitleRef.current,
           tableColumns: currentColumnsRef.current,
           tableRowsData: currentRowsRef.current,
+          tableHeaderGrid: null,
         });
       }
     },
@@ -1293,6 +1330,7 @@ export function useTableEditor({
 
   const updateHeaderGrid = useCallback(
     (newGrid: HeaderCell[][]) => {
+      headerGridRef.current = newGrid;
       setCurrentHeaderGrid(newGrid);
       onTableChangeRef.current({
         tableTitle: currentTitleRef.current,
@@ -1333,9 +1371,7 @@ export function useTableEditor({
       tableTitle: currentTitleRef.current,
       tableColumns: result.columns,
       tableRowsData: currentRowsRef.current,
-      ...(result.headerGrid !== undefined
-        ? { tableHeaderGrid: result.headerGrid }
-        : {}),
+      tableHeaderGrid: result.headerGrid ?? null,
     });
   }, [commitColumns]);
 
@@ -1409,6 +1445,7 @@ export function useTableEditor({
       moveColumn,
       moveRow,
       updateColumnLabel,
+      updateColumnStyle,
       updateColumnCode,
       handleColumnWidthChange,
       setEditingColumnWidth,

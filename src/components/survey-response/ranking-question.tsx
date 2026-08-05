@@ -13,7 +13,7 @@ import {
   isGroupedRankingQuestion,
 } from '@/utils/choice-group-helpers';
 import { getOptionsLayout } from '@/utils/options-layout';
-import { getCellTextClassName } from '@/utils/cell-style';
+import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
 import { parseRankingAnswers, RANKING_OTHER_VALUE } from '@/utils/ranking-shared';
 import { resolveRankingOptions, resolveRankingOptionsFromCells } from '@/utils/ranking-source';
 
@@ -60,7 +60,10 @@ function EmbeddedTableReference({ question, rawOptions, isMobile }: EmbeddedTabl
             <MobileOptionCard
               key={row.id}
               label={
-                <span className={getCellTextClassName(opt ?? optCell)}>
+                <span
+                  className={getCellTextClassName(opt ?? optCell)}
+                  style={getCellTextStyle(opt ?? optCell)}
+                >
                   {substituteTokens(rawLabel, attrs, quotes)}
                 </span>
               }
@@ -77,7 +80,7 @@ function EmbeddedTableReference({ question, rawOptions, isMobile }: EmbeddedTabl
       {...(question.tableTitle !== undefined ? { tableTitle: question.tableTitle } : {})}
       {...(question.tableColumns !== undefined ? { columns: question.tableColumns } : {})}
       {...(question.tableRowsData !== undefined ? { rows: question.tableRowsData } : {})}
-      {...(question.tableHeaderGrid !== undefined ? { tableHeaderGrid: question.tableHeaderGrid } : {})}
+      {...(question.tableHeaderGrid ? { tableHeaderGrid: question.tableHeaderGrid } : {})}
       {...(question.hideColumnLabels !== undefined ? { hideColumnLabels: question.hideColumnLabels } : {})}
     />
   );

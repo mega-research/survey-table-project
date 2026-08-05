@@ -28,7 +28,11 @@ import {
   shouldDisplayRow,
 } from '@/utils/branch-logic';
 import { decideDrilldown } from '@/utils/classify-table';
-import { getCellBackgroundStyle, getCellTextClassName } from '@/utils/cell-style';
+import {
+  getCellBackgroundStyle,
+  getCellTextClassName,
+  getCellTextStyle,
+} from '@/utils/cell-style';
 import { expandHeaderGrid } from '@/utils/expand-header-grid';
 import {
   clampMobileDrilldownOmitLeadingColumns,
@@ -160,6 +164,7 @@ function HeaderCells({
           minHeight,
           ...getHeaderCellStickyStyle(startCol, colSpan, stickyInfo),
           ...getCellBackgroundStyle(cell),
+          ...getCellTextStyle(cell),
         };
 
         return (
@@ -206,6 +211,7 @@ function HeaderCells({
       minHeight,
       ...getHeaderCellStickyStyle(startCol, cs, stickyInfo),
       ...getCellBackgroundStyle(column),
+      ...getCellTextStyle(column),
     };
 
     return (
@@ -276,7 +282,7 @@ function renderRowCells({
       }
     }
     if (applyCellBackground) {
-      Object.assign(style, getCellBackgroundStyle(cell));
+      Object.assign(style, getCellBackgroundStyle(cell), getCellTextStyle(cell));
     }
 
     return (
@@ -414,7 +420,9 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
   // 드릴다운이 마운트된 동안에만 함수가 심긴다 (셸/스테퍼 모드에서는 null).
   const drilldownNavigateRef = useRef<((cellIds: readonly string[]) => void) | null>(null);
   const headerScrollRef = useRef<HTMLDivElement>(null);
-  useTablePerf(`InteractiveTable(${rows.length}×${columns.length})`);
+  useTablePerf(`InteractiveTable(${rows.length}×${columns.length})`, {
+    containerRef: tableContainerRef,
+  });
   const isMobileView = useMobileView();
   const mobileMode = resolveMobileTableDisplayMode({
     mobileTableDisplayMode,

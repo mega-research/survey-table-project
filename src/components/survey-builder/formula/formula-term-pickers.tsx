@@ -432,7 +432,7 @@ export function AggEditor({ value, onChange, ownQuestion, allQuestions }: AggEdi
       <TablePreview
         columns={ownQuestion.tableColumns}
         rows={ownQuestion.tableRowsData}
-        tableHeaderGrid={ownQuestion.tableHeaderGrid}
+        tableHeaderGrid={ownQuestion.tableHeaderGrid ?? undefined}
         hideColumnLabels={ownQuestion.hideColumnLabels}
         renderCell={(cell: TableCell) => {
           if (!aggregatableCellIds.has(cell.id)) return undefined; // 기본 렌더로 폴백

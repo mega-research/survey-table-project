@@ -16,7 +16,7 @@ import { useRowHeights } from '@/hooks/use-row-heights';
 import { useRowVisibility } from '@/hooks/use-row-visibility';
 import { useTablePerf } from '@/hooks/use-table-perf';
 import type { TableColumn, TableRow } from '@/types/survey';
-import { getCellBackgroundStyle } from '@/utils/cell-style';
+import { getCellBackgroundStyle, getCellTextStyle } from '@/utils/cell-style';
 import {
   getAlignmentClasses,
   getGridCellAria,
@@ -93,7 +93,7 @@ const VirtualizedRow = React.memo(
             }
           }
           if (applyCellBackground) {
-            Object.assign(style, getCellBackgroundStyle(cell));
+            Object.assign(style, getCellBackgroundStyle(cell), getCellTextStyle(cell));
           }
 
           return (
@@ -189,7 +189,9 @@ export const VirtualizedTableGrid = React.memo(function VirtualizedTableGrid({
   applyCellBackground,
   scrollRootRef,
 }: VirtualizedTableGridProps) {
-  useTablePerf(`VirtualizedTable(${displayRows.length}×${visibleColumns.length})`);
+  useTablePerf(`VirtualizedTable(${displayRows.length}×${visibleColumns.length})`, {
+    ...(scrollRootRef ? { containerRef: scrollRootRef } : {}),
+  });
 
   const columnWidths = useMemo(
     () => visibleColumns.map((col) => col.width ?? 150),

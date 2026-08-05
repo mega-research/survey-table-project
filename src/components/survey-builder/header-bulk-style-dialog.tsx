@@ -14,16 +14,17 @@ import { cn } from '@/lib/utils';
 import {
   getCellBackgroundStyle,
   getCellTextClassName,
+  getCellTextStyle,
   normalizeCellHexColor,
 } from '@/utils/cell-style';
-import type { HeaderBulkStyle } from '@/utils/header-style';
+import type { HeaderBulkStyle, HeaderStyleState } from '@/utils/header-style';
 
 import { CellStyleFields } from './cell-style-fields';
 
 interface HeaderBulkStyleDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  initialStyle: HeaderBulkStyle;
+  initialStyle: HeaderStyleState;
   onApply: (style: HeaderBulkStyle) => void;
 }
 
@@ -35,7 +36,12 @@ export function HeaderBulkStyleDialog({
   initialStyle,
   onApply,
 }: HeaderBulkStyleDialogProps): React.ReactNode {
-  const formKey = `${open ? 'open' : 'closed'}:${initialStyle.textBold}:${initialStyle.backgroundColor}`;
+  const formKey = [
+    open ? 'open' : 'closed',
+    initialStyle.textBold,
+    initialStyle.backgroundColor,
+    initialStyle.textColor,
+  ].join(':');
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -59,27 +65,52 @@ function HeaderBulkStyleForm({
   const {
     textBold: initialTextBold,
     backgroundColor: initialBackgroundColor,
+    textColor: initialTextColor,
+    isMixed,
+    styledCount,
   } = initialStyle;
   const [textBold, setTextBold] = useState(initialTextBold);
   const [backgroundColor, setBackgroundColor] = useState(initialBackgroundColor);
   const [backgroundColorDraft, setBackgroundColorDraft] = useState(initialBackgroundColor);
+  const [textColor, setTextColor] = useState(initialTextColor);
+  const [textColorDraft, setTextColorDraft] = useState(initialTextColor);
   const [error, setError] = useState<string>();
+  const [confirming, setConfirming] = useState(false);
 
-  const normalizedPreviewColor = backgroundColorDraft
-    ? normalizeCellHexColor(backgroundColorDraft) ?? backgroundColor
-    : '';
+  /** 미리보기는 확정 전 draft 도 보여준다. 잘못된 값이면 마지막 확정 색으로 되돌린다. */
+  const previewColor = (draft: string, committed: string) => (
+    draft ? normalizeCellHexColor(draft) ?? committed : ''
+  );
 
   const handleApply = () => {
     const normalizedBackgroundColor = backgroundColorDraft
       ? normalizeCellHexColor(backgroundColorDraft)
       : null;
+    const normalizedTextColor = textColorDraft
+      ? normalizeCellHexColor(textColorDraft)
+      : null;
 
-    if (backgroundColorDraft && !normalizedBackgroundColor) {
+    if (
+      (backgroundColorDraft && !normalizedBackgroundColor)
+      || (textColorDraft && !normalizedTextColor)
+    ) {
       setError(COLOR_ERROR);
+      setConfirming(false);
       return;
     }
 
-    onApply({ textBold, backgroundColor: normalizedBackgroundColor ?? '' });
+    // 개별 지정된 스타일이 섞여 있을 때만 확인을 받는다.
+    // 이미 전부 같은 색이면 잃을 개별 작업이 없으므로 그냥 적용한다.
+    if (isMixed && !confirming) {
+      setConfirming(true);
+      return;
+    }
+
+    onApply({
+      textBold,
+      backgroundColor: normalizedBackgroundColor ?? '',
+      textColor: normalizedTextColor ?? '',
+    });
     onOpenChange(false);
   };
 
@@ -92,11 +123,22 @@ function HeaderBulkStyleForm({
       <CellStyleFields
         textBold={textBold}
         backgroundColor={backgroundColor}
-        onTextBoldChange={setTextBold}
+        textColor={textColor}
+        onTextBoldChange={(value) => {
+          setTextBold(value);
+          setConfirming(false);
+        }}
         onBackgroundColorChange={setBackgroundColor}
         onBackgroundColorDraftChange={(value) => {
           setBackgroundColorDraft(value);
           setError(undefined);
+          setConfirming(false);
+        }}
+        onTextColorChange={setTextColor}
+        onTextColorDraftChange={(value) => {
+          setTextColorDraft(value);
+          setError(undefined);
+          setConfirming(false);
         }}
         error={error}
         onInvalidColor={() => setError(COLOR_ERROR)}
@@ -108,13 +150,32 @@ function HeaderBulkStyleForm({
           'rounded-md border border-gray-300 bg-gray-50 px-4 py-3 text-center',
           getCellTextClassName({ textBold }),
         )}
-        style={getCellBackgroundStyle({ backgroundColor: normalizedPreviewColor })}
+        style={{
+          ...getCellBackgroundStyle({
+            backgroundColor: previewColor(backgroundColorDraft, backgroundColor),
+          }),
+          ...getCellTextStyle({ textColor: previewColor(textColorDraft, textColor) }),
+        }}
       >
         헤더 미리보기
       </div>
 
-      <DialogFooter>
-        <Button type="button" onClick={handleApply}>전체 헤더에 적용</Button>
+      <DialogFooter className="sm:flex-col sm:items-stretch sm:gap-2">
+        {confirming && (
+          <p role="alert" className="text-sm text-amber-700">
+            스타일이 지정된 헤더 {styledCount}개가 초기화됩니다. 계속하시겠습니까?
+          </p>
+        )}
+        <div className="flex justify-end gap-2">
+          {confirming && (
+            <Button type="button" variant="outline" onClick={() => setConfirming(false)}>
+              취소
+            </Button>
+          )}
+          <Button type="button" onClick={handleApply}>
+            {confirming ? '계속' : '전체 헤더에 적용'}
+          </Button>
+        </div>
       </DialogFooter>
     </>
   );

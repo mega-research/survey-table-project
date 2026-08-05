@@ -305,7 +305,7 @@ const SortableQuestion = React.memo(function SortableQuestion({
             <LazyMount
               questionId={question.id}
 
-              estimatedHeight={computeTableEstimatedHeight(question.tableColumns ?? [], question.tableRowsData ?? [], question.tableHeaderGrid)}
+              estimatedHeight={computeTableEstimatedHeight(question.tableColumns ?? [], question.tableRowsData ?? [], question.tableHeaderGrid ?? undefined)}
               immediate={isDragOverlay}
             >
               <QuestionTestBody question={question} lookups={lookups} />

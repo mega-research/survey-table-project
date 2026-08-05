@@ -26,7 +26,11 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils';
 import { DynamicRowGroupConfig, TableCell, TableRow } from '@/types/survey';
 import { isCellSaveable } from '@/utils/cell-library-helpers';
-import { getCellBackgroundStyle, getCellTextClassName } from '@/utils/cell-style';
+import {
+  getCellBackgroundStyle,
+  getCellTextClassName,
+  getCellTextStyle,
+} from '@/utils/cell-style';
 import { getAlignmentClasses, getGridSpanStyle } from '@/utils/table-grid-utils';
 
 import { useDebouncedInput } from './hooks/use-debounced-input';
@@ -50,6 +54,7 @@ const EditorCellContent = React.memo(function EditorCellContent({ cell }: { cell
         cell.type !== 'text' && 'font-medium text-gray-700',
         getCellTextClassName(cell),
       )}
+      style={getCellTextStyle(cell)}
     >
       {cell.content}
     </div>

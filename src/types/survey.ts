@@ -258,6 +258,7 @@ export interface QuestionOption {
   value: string;
   textBold?: boolean;
   backgroundColor?: string;
+  textColor?: string;
   optionCode?: string; // 엑셀 내보내기용 옵션 코드 (예: "1", "01")
   spssNumericCode?: number; // SPSS 숫자코드 (옵션 생성 시 할당, 순서 변경해도 유지)
   isCustomOptionCode?: boolean; // 사용자가 수동 편집한 옵션코드인지 여부
@@ -299,6 +300,7 @@ export interface TableCell {
   id: string;
   textBold?: boolean;
   backgroundColor?: string;
+  textColor?: string;
   cellCode?: string; // ✨ 셀 코드 (예: "Q4-1_r1_c1") — 자동생성 또는 수동 입력
   isCustomCellCode?: boolean; // 사용자가 수동 편집한 셀코드인지 여부
   exportLabel?: string; // ✨ 엑셀 열 이름 (예: "가구TV보유_TV종류_UHD")
@@ -517,6 +519,7 @@ export interface TableColumn {
   label: string;
   textBold?: boolean;
   backgroundColor?: string;
+  textColor?: string;
   width?: number; // 열 너비 (픽셀 단위)
   minWidth?: number; // 최소 너비
   // 컬럼 헤더 병합 관련 속성
@@ -531,6 +534,7 @@ export interface HeaderCell {
   label: string;
   textBold?: boolean;
   backgroundColor?: string;
+  textColor?: string;
   colspan: number; // 가로 병합 (기본 1)
   rowspan: number; // 세로 병합 (기본 1)
 }
@@ -575,7 +579,10 @@ export interface Question {
   tableTitle?: string;
   tableColumns?: TableColumn[];
   tableRowsData?: TableRow[];
-  tableHeaderGrid?: HeaderCell[][]; // 다단계 헤더 그리드 (없으면 tableColumns로 단일 행 폴백)
+  // 다단계 헤더 그리드 (없으면 tableColumns로 단일 행 폴백).
+  // null = 다단계 헤더 해제(명시적). undefined(키 부재) = 미변경 — 저장 경로가
+  // 부재 키를 미변경으로 읽으므로 토글 OFF 는 반드시 null 로 표현해야 한다.
+  tableHeaderGrid?: HeaderCell[][] | null;
   order: number;
   allowOtherOption?: boolean; // 기타 옵션 허용 여부 (radio, checkbox, select용)
   // 옵션 리스트 렌더 방식 (radio/checkbox/ranking 공통)

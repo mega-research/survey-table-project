@@ -280,9 +280,7 @@ function QuestionInputControl({
           {...(question.tableTitle !== undefined ? { tableTitle: question.tableTitle } : {})}
           columns={question.tableColumns}
           rows={question.tableRowsData}
-          {...(question.tableHeaderGrid !== undefined
-            ? { tableHeaderGrid: question.tableHeaderGrid }
-            : {})}
+          {...(question.tableHeaderGrid ? { tableHeaderGrid: question.tableHeaderGrid } : {})}
           {...(typeof value === 'object' && value !== null
             ? { value: value as Record<string, unknown> }
             : {})}

@@ -41,6 +41,7 @@ export function CalcCell({ cell, questionId }: Props) {
       content={cell.content}
       position={cell.textPosition}
       bold={cell.textBold}
+      textColor={cell.textColor}
     >
       {/* 값과 단위는 인라인이라 블록 컨테이너의 text-align 으로 정렬이 성립한다 */}
       <div

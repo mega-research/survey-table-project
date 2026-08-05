@@ -56,6 +56,7 @@ export interface CellFormState {
   choiceGroupId: string;
   textBold: boolean;
   backgroundColor: string;
+  textColor: string;
   horizontalAlign: 'left' | 'center' | 'right';
   mobileDisplay: NonNullable<TableCell['mobileDisplay']>;
   /** 모바일 카드/드릴다운 입력칸 위 제목. 비우면 exportLabel → 열 제목 폴백 */
@@ -204,6 +205,7 @@ export function cellToFormState(cell: TableCell): CellFormState {
     choiceGroupId: cell.choiceGroupId ?? '',
     textBold: cell.textBold === true,
     backgroundColor: cell.backgroundColor ?? '',
+    textColor: cell.textColor ?? '',
     horizontalAlign: cell.horizontalAlign || 'left',
     mobileDisplay: cell.mobileDisplay ?? (MOBILE_LABEL_CELL_TYPES.has(contentType) ? 'inline' : 'hidden'),
     mobileLabel: cell.mobileLabel || '',
@@ -289,6 +291,7 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
     textInputPlaceholder: _textInputPlaceholder,
     textBold: _textBold,
     backgroundColor: _backgroundColor,
+    textColor: _textColor,
     rowspan: _rowspan,
     colspan: _colspan,
     horizontalAlign: _horizontalAlign,
@@ -312,6 +315,7 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
     content: form.textContent || '',
     ...(form.textBold ? { textBold: true } : {}),
     ...(form.backgroundColor ? { backgroundColor: form.backgroundColor } : {}),
+    ...(form.textColor ? { textColor: form.textColor } : {}),
     // optional 필드: 타입이 해당하지 않으면 키 자체를 제거(조건부 spread)
     ...(contentType === 'image' && form.imageUrl ? { imageUrl: form.imageUrl } : {}),
     ...(contentType === 'video' && form.videoUrl ? { videoUrl: form.videoUrl } : {}),

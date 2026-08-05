@@ -49,8 +49,8 @@ const mergedHeaderGrid: HeaderCell[][] = [
 async function applyBoldBlueHeaderStyle(user = userEvent.setup()) {
   await user.click(screen.getByRole('button', { name: '헤더 일괄 스타일' }));
   await user.click(screen.getByRole('switch', { name: '텍스트 굵게' }));
-  await user.clear(screen.getByRole('textbox', { name: 'HEX 색상' }));
-  await user.type(screen.getByRole('textbox', { name: 'HEX 색상' }), '#ddeeff');
+  await user.clear(screen.getByRole('textbox', { name: '배경색 HEX' }));
+  await user.type(screen.getByRole('textbox', { name: '배경색 HEX' }), '#ddeeff');
   await user.click(screen.getByRole('button', { name: '전체 헤더에 적용' }));
 }
 
@@ -68,7 +68,7 @@ function TableEditorHarness({
     tableTitle: string;
     tableColumns: TableColumn[];
     tableRowsData: TableRow[];
-    tableHeaderGrid?: HeaderCell[][] | undefined;
+    tableHeaderGrid: HeaderCell[][] | null;
   }) => void;
 }) {
   const { state, actions } = useTableEditor({ columns, rows, onTableChange });
@@ -84,7 +84,7 @@ function TableEditorHarness({
       </button>
       <button
         type="button"
-        onClick={() => actions.applyHeaderStyle({ textBold: true, backgroundColor: '#DDEEFF' })}
+        onClick={() => actions.applyHeaderStyle({ textBold: true, backgroundColor: '#DDEEFF', textColor: '' })}
       >
         헤더 스타일 적용
       </button>
@@ -140,7 +140,9 @@ describe('DynamicTableEditor 전체 헤더 스타일', () => {
         expect.objectContaining({ textBold: true, backgroundColor: '#DDEEFF' }),
       ]),
     }));
-    expect(onTableChange.mock.calls.at(-1)?.[0]).not.toHaveProperty('tableHeaderGrid');
+    // 다단계 헤더 없음은 키 생략이 아니라 명시적 null 이다 — 키를 빼면 상위
+    // 저장 경로가 "미변경"으로 읽어 해제가 유실된다.
+    expect(onTableChange.mock.calls.at(-1)?.[0].tableHeaderGrid).toBeNull();
   });
 
   it('열이 없으면 전체 헤더 스타일 버튼을 비활성화한다', () => {

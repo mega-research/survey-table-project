@@ -505,7 +505,7 @@ function QuestionTestInput({
           tableTitle={question.tableTitle}
           columns={question.tableColumns}
           rows={question.tableRowsData}
-          tableHeaderGrid={question.tableHeaderGrid}
+          tableHeaderGrid={question.tableHeaderGrid ?? undefined}
           value={
             typeof value === 'object' && value !== null
               ? (value as Record<string, unknown>)
@@ -638,7 +638,7 @@ export function QuestionTestBody({
             estimatedHeight={computeTableEstimatedHeight(
               question.tableColumns ?? [],
               question.tableRowsData ?? [],
-              question.tableHeaderGrid,
+              question.tableHeaderGrid ?? undefined,
             )}
           >
             <QuestionTestInput
