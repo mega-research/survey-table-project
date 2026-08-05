@@ -40,15 +40,12 @@ const setPaused = authed
     }),
   );
 
-const setTestMode = scoped
+const setTestMode = authed
   .input(z.object({ surveyId: z.string(), enabled: z.literal(true) }))
   .output(ControlStateSchema)
-  .handler(({ input, context }) => {
-    assertSurveyAccess(context.user.id, input.surveyId);
-    return svc.setTestMode(input);
-  });
+  .handler(({ input }) => svc.setTestMode(input));
 
-const disable = scoped
+const disable = authed
   .input(
     z.object({
       surveyId: z.string(),
@@ -64,9 +61,6 @@ const disable = scoped
       remainingTargetCount: z.number().int(),
     }),
   )
-  .handler(({ input, context }) => {
-    assertSurveyAccess(context.user.id, input.surveyId);
-    return svc.disableTestWorkspace(input);
-  });
+  .handler(({ input }) => svc.disableTestWorkspace(input));
 
 export const control = { get, setPaused, setTestMode, disable };
