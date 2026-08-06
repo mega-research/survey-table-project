@@ -91,7 +91,11 @@ export const surveys = pgTable('surveys', {
   contactEmail: text('contact_email'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-});
+}, (table) => [
+  // 0069 마이그레이션의 surveys_preview_token_unique 와 이름을 맞춘다. nullable 컬럼이라
+  // NULL 행은 제약에서 제외(다중 NULL 허용) — contact_targets.invite_code(0054)와 동일 패턴.
+  unique('surveys_preview_token_unique').on(table.previewToken),
+]);
 
 // 질문 그룹 테이블
 export const questionGroups = pgTable('question_groups', {
