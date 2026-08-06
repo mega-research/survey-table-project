@@ -3,10 +3,13 @@
 import React, { useCallback, useEffect } from 'react';
 
 import { GATABLE_CELL_TYPES, isCellEnabled } from '@/lib/survey/cell-gating';
+import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { useTestResponseStore } from '@/stores/test-response-store';
 import type { TableCell } from '@/types/survey';
 
 import { CalcCell } from './calc-cell';
+import { CellContentLayout } from './cell-content-layout';
 import { CheckboxCell } from './checkbox-cell';
 import { ImageCell } from './image-cell';
 import { InputCell } from './input-cell';
@@ -99,6 +102,9 @@ export const InteractiveCell = React.memo(function InteractiveCell({
   ariaDescribedBy,
   rowCells,
 }: InteractiveCellContainerProps) {
+  // 게이팅 숨김 상태에서도 셀 텍스트(content)는 남기므로 치환 컨텍스트가 필요하다
+  const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
   const { cellResponse, updateValue, clearValue } = useCellResponse(
     questionId,
     cell.id,
@@ -159,12 +165,22 @@ export const InteractiveCell = React.memo(function InteractiveCell({
     }
   }, [gatingDisabled, hasLeftoverValue, clearValue]);
 
-  // 게이팅 미충족 셀은 통째로 숨긴다 (회색 잠금 → 빈 셀, 2026-08-06 UX 결정).
-  // 조건 충족 순간 제자리에 나타나고, 값 지움 effect 는 위에서 이미 동작한다.
+  // 게이팅 미충족 셀은 인터랙티브 컨트롤을 숨긴다 (회색 잠금 → 숨김, 2026-08-06 UX 결정).
+  // 셀 텍스트(content)는 항목 설명이므로 남긴다 — 컨트롤만 사라져 빈 자리로 보인다.
+  // 조건 충족 순간 컨트롤이 제자리에 나타나고, 값 지움 effect 는 위에서 이미 동작한다.
   // 재마운트 시 input 의 emptyDefault prefill 이 새로 실행되는 것도 의도된 동작
   // (활성화 시 재채움 — 스펙 §7).
   if (gatingDisabled) {
-    return null;
+    return (
+      <CellContentLayout
+        content={substituteTokens(cell.content, attrs, quotes)}
+        position={cell.textPosition}
+        bold={cell.textBold}
+        textColor={cell.textColor}
+      >
+        {null}
+      </CellContentLayout>
+    );
   }
 
   return (

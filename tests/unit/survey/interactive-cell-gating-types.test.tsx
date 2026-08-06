@@ -70,6 +70,15 @@ describe('게이팅 셀 타입 확장 — 비활성 렌더 배선', () => {
     expect(container.querySelector('select')).toBeNull();
   });
 
+  it('셀 텍스트(content)가 있으면 컨트롤만 숨고 텍스트는 남는다', () => {
+    const withContent: TableCell = { ...gatedRadio, content: '항목 설명 텍스트' };
+    const { container } = render(
+      <InteractiveCell cell={withContent} questionId="q1" isTestMode rowCells={rowCells} />,
+    );
+    expect(container.querySelector('input[type="radio"]')).toBeNull();
+    expect(container.textContent).toContain('항목 설명 텍스트');
+  });
+
   it('게이팅 없는 셀은 항상 표시된다', () => {
     const plain: TableCell = { ...gatedRadio, id: 'plain' };
     delete (plain as Partial<TableCell>).enabledWhen;
