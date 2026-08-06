@@ -72,6 +72,8 @@ import {
 
 import { useCellForm } from './hooks/use-cell-form';
 import { AnswerQuoteQuestionControl, AnswerQuoteTextField } from './answer-quote-fields';
+import { GATABLE_CELL_TYPES } from '@/lib/survey/cell-gating';
+
 import { CellChoiceEditor } from './cell-choice-editor';
 import { CellGatingEditor } from './cell-gating-editor';
 import { CellImageEditor } from './cell-image-editor';
@@ -1382,9 +1384,11 @@ export function CellContentModal({
           </TabsContent>
         </Tabs>
 
-        {/* 셀 게이팅 활성 조건 — input 셀 전용. prefill(defaultValueTemplate) 셀은
-            서버 prefill 강제 복원과 양립 불가라 설정 금지(섹션 숨김, 스펙 5절) */}
-        {contentType === 'input' && inputDefaultValueTemplate.trim().length === 0 && (
+        {/* 셀 게이팅 활성 조건 — 인터랙티브 셀 전체(GATABLE_CELL_TYPES).
+            prefill(defaultValueTemplate) input 셀만 서버 prefill 강제 복원과
+            양립 불가라 설정 금지(섹션 숨김, 스펙 5절) */}
+        {GATABLE_CELL_TYPES.has(contentType) &&
+          !(contentType === 'input' && inputDefaultValueTemplate.trim().length > 0) && (
           <CellGatingEditor
             cellId={cell.id}
             rowCells={gatingRowCells}
@@ -1403,8 +1407,9 @@ export function CellContentModal({
         )}
 
         {/* 필수 응답 셀 — 인터랙티브 셀 공용 (input/radio/checkbox/select/ranking).
-            게이팅이 켜진 input 셀은 "활성화되면 필수"로 수렴하므로 이 체크박스를 숨긴다 */}
-        {REQUIRED_CELL_TYPES.has(contentType) && !(contentType === 'input' && gatingCondition) && (
+            게이팅이 켜진 셀은 "활성화되면 필수"로 수렴하므로 이 체크박스를 숨긴다 */}
+        {REQUIRED_CELL_TYPES.has(contentType) &&
+          !(GATABLE_CELL_TYPES.has(contentType) && gatingCondition) && (
           <div className="mt-6 border-t border-gray-200 pt-6">
             <div className="flex items-center gap-2 text-sm">
               <input

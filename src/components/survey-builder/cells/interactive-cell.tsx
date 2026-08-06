@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect } from 'react';
 
-import { isCellEnabled } from '@/lib/survey/cell-gating';
+import { GATABLE_CELL_TYPES, isCellEnabled } from '@/lib/survey/cell-gating';
 import { useTestResponseStore } from '@/stores/test-response-store';
 import type { TableCell } from '@/types/survey';
 
@@ -34,11 +34,11 @@ const CellRouter = React.memo(function CellRouter({
 }: InteractiveCellProps) {
   switch (cell.type) {
     case 'checkbox':
-      return <CheckboxCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} inputIdScope={inputIdScope} ariaInvalid={ariaInvalid} ariaDescribedBy={ariaDescribedBy} />;
+      return <CheckboxCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} inputIdScope={inputIdScope} ariaInvalid={ariaInvalid} ariaDescribedBy={ariaDescribedBy} gatingDisabled={gatingDisabled} />;
     case 'radio':
-      return <RadioCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} inputIdScope={inputIdScope} ariaInvalid={ariaInvalid} ariaDescribedBy={ariaDescribedBy} {...(groupName !== undefined ? { groupName } : {})} />;
+      return <RadioCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} inputIdScope={inputIdScope} ariaInvalid={ariaInvalid} ariaDescribedBy={ariaDescribedBy} gatingDisabled={gatingDisabled} {...(groupName !== undefined ? { groupName } : {})} />;
     case 'select':
-      return <SelectCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} inputIdScope={inputIdScope} ariaInvalid={ariaInvalid} ariaDescribedBy={ariaDescribedBy} />;
+      return <SelectCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} inputIdScope={inputIdScope} ariaInvalid={ariaInvalid} ariaDescribedBy={ariaDescribedBy} gatingDisabled={gatingDisabled} />;
     case 'input':
       return <InputCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} inputIdScope={inputIdScope} ariaInvalid={ariaInvalid} ariaDescribedBy={ariaDescribedBy} gatingDisabled={gatingDisabled} />;
     case 'image':
@@ -46,7 +46,7 @@ const CellRouter = React.memo(function CellRouter({
     case 'video':
       return <VideoCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} />;
     case 'ranking':
-      return <RankingCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} inputIdScope={inputIdScope} ariaInvalid={ariaInvalid} ariaDescribedBy={ariaDescribedBy} />;
+      return <RankingCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} inputIdScope={inputIdScope} ariaInvalid={ariaInvalid} ariaDescribedBy={ariaDescribedBy} gatingDisabled={gatingDisabled} />;
     case 'ranking_opt':
       return <RankingOptCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} />;
     case 'calc':
@@ -117,7 +117,9 @@ export const InteractiveCell = React.memo(function InteractiveCell({
   // 지켜야 한다. enabledWhen 이 없는 셀(대다수)은 controllerCellId 가 undefined 라 구독
   // 자체가 항상 같은 값(undefined)을 반환해 재렌더를 유발하지 않는다.
   const controllerCellId =
-    cell.type === 'input' && cell.enabledWhen ? cell.enabledWhen.controllerCellId : undefined;
+    GATABLE_CELL_TYPES.has(cell.type) && cell.enabledWhen
+      ? cell.enabledWhen.controllerCellId
+      : undefined;
 
   const testControllerValue = useTestResponseStore(
     useCallback(
@@ -141,14 +143,22 @@ export const InteractiveCell = React.memo(function InteractiveCell({
       : {}
     : (value ?? {});
 
-  const gatingDisabled = cell.type === 'input' && !isCellEnabled(cell, gatingCellValues, rowCells);
+  const gatingDisabled =
+    GATABLE_CELL_TYPES.has(cell.type) && !isCellEnabled(cell, gatingCellValues, rowCells);
 
-  // 비활성인데 값이 남아 있으면 즉시 지움 (컨트롤러 변경 직후 1회)
+  // 비활성인데 값이 남아 있으면 즉시 지움 (컨트롤러 변경 직후 1회).
+  // 타입별 응답 형태를 포괄해 잔존 판정: checkbox 는 배열, ranking 은 객체/배열,
+  // radio/select/input 은 문자열 — 빈 배열·빈 객체는 잔존값이 아니므로 재지움 루프를 막는다.
+  const hasLeftoverValue = Array.isArray(cellResponse)
+    ? cellResponse.length > 0
+    : typeof cellResponse === 'object' && cellResponse !== null
+      ? Object.keys(cellResponse).length > 0
+      : cellResponse !== undefined && cellResponse !== '';
   useEffect(() => {
-    if (gatingDisabled && cellResponse !== undefined && cellResponse !== '') {
+    if (gatingDisabled && hasLeftoverValue) {
       clearValue();
     }
-  }, [gatingDisabled, cellResponse, clearValue]);
+  }, [gatingDisabled, hasLeftoverValue, clearValue]);
 
   return (
     <CellRouter

@@ -29,6 +29,7 @@ import {
   lockAndAssertResponseMutation,
 } from '@/lib/survey-response/test-target-attempt.server';
 import { withCalcValues } from '@/lib/survey/cell-formula';
+import { stripDisabledCellValues } from '@/lib/survey/cell-gating';
 import type { Question, SurveyLookup } from '@/types/survey';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 
@@ -1711,10 +1712,20 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
     const hasCalcCells = snapQuestions.some((q) =>
       (q.tableRowsData ?? []).some((row) => row.cells.some((c) => c.type === 'calc' && c.formula)),
     );
+    const hasGatedCells = snapQuestions.some((q) =>
+      (q.tableRowsData ?? []).some((row) => row.cells.some((c) => c.enabledWhen && !c.isHidden)),
+    );
 
-    if (hasCalcCells) {
+    // 게이팅 비활성 셀 값 strip (저장 경계 보증, 스펙 §저장 경계) — 컨트롤러 변경 직후
+    // 이탈한 beacon 이 지움 전 값을 실어 보냈어도 확정 데이터에는 남지 않는다.
+    // calc 재계산(withCalcValues)보다 먼저 수행해 수식이 지워진 값 기준으로 계산되게 한다.
+    if (validatedResponses && hasGatedCells) {
+      validatedResponses = stripDisabledCellValues(snapQuestions, validatedResponses);
+    }
+
+    if (hasCalcCells || hasGatedCells) {
       let calcAttrs: Record<string, string | undefined> = {};
-      if (gateRow.contactTargetId) {
+      if (hasCalcCells && gateRow.contactTargetId) {
         const [target] = await db
           .select({ attrs: contactTargets.attrs })
           .from(contactTargets)
@@ -1725,12 +1736,15 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
       if (validatedResponses) {
         // 페이로드 경로 — 제출된 전체 응답을 재계산 (tx 밖에서 안전: 컬럼을 페이로드로
         // 교체하는 것이 complete 의 기존 의미라 경합으로 잃을 저장분이 없다).
-        validatedResponses = withCalcValues(validatedResponses, {
-          questions: snapQuestions,
-          responses: validatedResponses,
-          lookups: snapLookups,
-          contactAttrs: calcAttrs,
-        });
+        // 게이팅만 있는 설문은 위 strip 으로 충분 — calc 셀이 있을 때만 재계산한다.
+        if (hasCalcCells) {
+          validatedResponses = withCalcValues(validatedResponses, {
+            questions: snapQuestions,
+            responses: validatedResponses,
+            lookups: snapLookups,
+            contactAttrs: calcAttrs,
+          });
+        }
       } else {
         // 빈 complete 경로 — 재계산 재료만 준비하고 실행은 tx 안 row lock 아래로 미룬다.
         storedRecalc = {
@@ -1774,9 +1788,12 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
         (locked?.questionResponses ?? {}) as Record<string, unknown>,
         { responseId },
       );
-      let recomputed = withCalcValues(plain, {
+      // 게이팅 strip → calc 재계산 순서 — 비활성 셀 잔존 값을 지운 뒤 그 기준으로
+      // 수식을 계산한다 (스펙 §저장 경계. 빈 complete 우회로 저장된 값도 여기서 봉합).
+      const stripped = stripDisabledCellValues(storedRecalc.questions, plain);
+      let recomputed = withCalcValues(stripped, {
         questions: storedRecalc.questions,
-        responses: plain,
+        responses: stripped,
         lookups: storedRecalc.lookups,
         contactAttrs: storedRecalc.contactAttrs,
       });

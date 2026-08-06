@@ -10,6 +10,7 @@ import {
   TableCell,
 } from '@/types/survey';
 import { QUESTION_LIKE_CELL_TYPES } from '@/lib/survey/answer-quote';
+import { GATABLE_CELL_TYPES } from '@/lib/survey/cell-gating';
 
 import { parseNumericInput } from './numeric-input';
 import { INTERACTIVE_CELL_TYPES } from './table-cell-code-generator';
@@ -388,18 +389,18 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
         }
       : {}),
     // 필수 응답 셀 — 인터랙티브 셀 공용 (미체크·비대상 타입은 키 자체 제거).
-    // 게이팅이 켜진 input 은 required 를 저장하지 않는다 — 필수 의미는
+    // 게이팅이 켜진 셀은 required 를 저장하지 않는다 — 필수 의미는
     // requiredWhenEnabled 하나로 수렴하며, 숨겨진 체크박스의 stale required 가
     // 조건부 필수를 강제해 UI 와 동작이 갈라지는 것을 막는다.
     ...(REQUIRED_CELL_TYPES.has(contentType) &&
     form.cellRequired &&
-    !(contentType === 'input' && form.gatingCondition)
+    !(GATABLE_CELL_TYPES.has(contentType) && form.gatingCondition)
       ? { required: true }
       : {}),
-    // 셀 게이팅 (input 셀 전용) — 조건 미설정·비대상 타입은 키 자체 제거.
-    // prefill 셀은 빌더에서 섹션이 숨겨져 새로 설정할 수 없지만, 기존 데이터는 폼이 들고 있던
-    // 값을 그대로 보존한다 (런타임이 prefill 우선으로 게이팅 무시 + 진단이 경고).
-    ...(contentType === 'input' && form.gatingCondition
+    // 셀 게이팅 (인터랙티브 셀 — GATABLE_CELL_TYPES) — 조건 미설정·비대상 타입은 키 자체 제거.
+    // prefill input 셀은 빌더에서 섹션이 숨겨져 새로 설정할 수 없지만, 기존 데이터는 폼이
+    // 들고 있던 값을 그대로 보존한다 (런타임이 prefill 우선으로 게이팅 무시 + 진단이 경고).
+    ...(GATABLE_CELL_TYPES.has(contentType) && form.gatingCondition
       ? {
           enabledWhen: form.gatingCondition,
           ...(form.gatingRequiredWhenEnabled ? { requiredWhenEnabled: true } : {}),

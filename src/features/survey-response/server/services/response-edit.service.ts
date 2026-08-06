@@ -21,6 +21,7 @@ import {
 import { SurveyOwnershipError } from '@/lib/auth/require-survey-ownership';
 import { decryptQuestionResponses, encryptResponsesForStorage } from '@/lib/crypto/response-pii';
 import { withCalcValues } from '@/lib/survey/cell-formula';
+import { stripDisabledCellValues } from '@/lib/survey/cell-gating';
 import { loadPiiQuestionIds } from './response.service';
 
 import type { Question, SurveyLookup } from '@/types/survey';
@@ -162,9 +163,15 @@ export async function saveAdminEdit(
       contactAttrs = (target?.attrs ?? {}) as Record<string, string | undefined>;
     }
 
-    finalResponses = withCalcValues(questionResponses, {
+    // 게이팅 strip → calc 재계산 순서 — 운영자 수정도 응답자 플로우와 같은 신뢰 경계:
+    // 비활성 셀에 실려온 값은 저장하지 않고, 수식은 지워진 값 기준으로 계산한다.
+    const strippedResponses = stripDisabledCellValues(
+      snapshotForCalc.questions ?? [],
+      questionResponses,
+    );
+    finalResponses = withCalcValues(strippedResponses, {
       questions: snapshotForCalc.questions ?? [],
-      responses: questionResponses,
+      responses: strippedResponses,
       lookups: snapshotForCalc.lookups ?? [],
       contactAttrs,
     });

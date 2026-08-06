@@ -137,3 +137,49 @@ describe('stripDisabledCellValues', () => {
     expect((out['q1'] as Record<string, unknown>)['__selectedRowIds']).toEqual(['r1']);
   });
 });
+
+describe('stripDisabledCellValues — 인터랙티브 셀 타입 확장 (radio/checkbox/select/ranking)', () => {
+  const multiTypeQuestion = (): Question =>
+    ({
+      id: 'q1', type: 'table', title: 'T', required: false, order: 1,
+      tableRowsData: [{
+        id: 'r1', label: 'r1',
+        cells: [
+          { id: 'perf', content: '', type: 'radio', radioOptions: [
+            { id: 'o1', label: '수행', value: '1' },
+            { id: 'o2', label: '미수행', value: '2' },
+          ] },
+          { id: 'g-radio', content: '', type: 'radio',
+            radioOptions: [{ id: 'a1', label: 'A', value: 'a' }],
+            enabledWhen: { kind: 'option', controllerCellId: 'perf', values: ['1'] } },
+          { id: 'g-check', content: '', type: 'checkbox',
+            checkboxOptions: [{ id: 'b1', label: 'B', value: 'b' }],
+            enabledWhen: { kind: 'option', controllerCellId: 'perf', values: ['1'] } },
+          { id: 'g-select', content: '', type: 'select',
+            selectOptions: [{ id: 'c1', label: 'C', value: 'c' }],
+            enabledWhen: { kind: 'option', controllerCellId: 'perf', values: ['1'] } },
+        ],
+      }],
+    }) as unknown as Question;
+
+  it('비활성 radio/checkbox/select 셀 값을 모두 제거한다', () => {
+    const out = stripDisabledCellValues([multiTypeQuestion()], {
+      q1: { perf: '2', 'g-radio': 'a', 'g-check': ['b'], 'g-select': 'c' },
+    });
+    const q1 = out['q1'] as Record<string, unknown>;
+    expect(q1['perf']).toBe('2');
+    expect('g-radio' in q1).toBe(false);
+    expect('g-check' in q1).toBe(false);
+    expect('g-select' in q1).toBe(false);
+  });
+
+  it('활성 상태(수행)면 모든 타입 값을 보존한다', () => {
+    const out = stripDisabledCellValues([multiTypeQuestion()], {
+      q1: { perf: '1', 'g-radio': 'a', 'g-check': ['b'], 'g-select': 'c' },
+    });
+    const q1 = out['q1'] as Record<string, unknown>;
+    expect(q1['g-radio']).toBe('a');
+    expect(q1['g-check']).toEqual(['b']);
+    expect(q1['g-select']).toBe('c');
+  });
+});

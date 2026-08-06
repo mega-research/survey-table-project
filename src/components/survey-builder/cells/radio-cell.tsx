@@ -22,6 +22,7 @@ export const RadioCell = React.memo(function RadioCell({
   inputIdScope,
   ariaInvalid,
   ariaDescribedBy,
+  gatingDisabled,
 }: InteractiveCellProps) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
@@ -67,11 +68,16 @@ export const RadioCell = React.memo(function RadioCell({
                 checked={isSelected}
                 onChange={() => {}}
                 onClick={() => handleRadioChange(optionKey)}
-                className="mt-1 h-4 w-4 shrink-0 cursor-pointer border-gray-300 text-blue-600 focus:ring-blue-500"
+                disabled={gatingDisabled}
+                className={`mt-1 h-4 w-4 shrink-0 border-gray-300 text-blue-600 focus:ring-blue-500 ${
+                  gatingDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
+                }`}
               />
               <label
                 htmlFor={inputId}
-                className="cursor-pointer text-base whitespace-pre-line select-none"
+                className={`text-base whitespace-pre-line select-none ${
+                  gatingDisabled ? 'cursor-not-allowed text-gray-400' : 'cursor-pointer'
+                }`}
               >
                 {substituteTokens(option.label, attrs, quotes)}
               </label>

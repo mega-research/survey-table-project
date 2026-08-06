@@ -105,7 +105,7 @@ export function CellGatingEditor({
           다른 셀 값에 따라 활성화
         </label>
         <span className="text-xs text-gray-400">
-          조건이 충족될 때만 입력 가능, 미충족 시 값이 지워집니다
+          조건이 충족될 때만 응답 가능, 미충족 시 값이 지워집니다
         </span>
       </div>
 

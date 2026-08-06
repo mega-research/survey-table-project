@@ -21,6 +21,7 @@ export const RankingCell = React.memo(function RankingCell({
   inputIdScope,
   ariaInvalid,
   ariaDescribedBy,
+  gatingDisabled,
 }: InteractiveCellProps) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
@@ -50,10 +51,12 @@ export const RankingCell = React.memo(function RankingCell({
       bold={cell.textBold}
       textColor={cell.textColor}
     >
-      <div
+      {/* fieldset disabled — 게이팅 비활성 시 내부 순위 드롭다운 전체를 네이티브로 입력 차단 */}
+      <fieldset
         id={inputIdScope ? `${inputIdScope}-${cell.id}` : undefined}
-        className="flex w-full flex-col space-y-2"
+        className={`flex w-full flex-col space-y-2 ${gatingDisabled ? 'opacity-50' : ''}`}
         role="group"
+        disabled={gatingDisabled}
         aria-invalid={ariaInvalid || undefined}
         aria-describedby={ariaDescribedBy}
       >
@@ -76,7 +79,7 @@ export const RankingCell = React.memo(function RankingCell({
             선택지 {options.length}개 → 최대 {positions}순위
           </p>
         )}
-      </div>
+      </fieldset>
     </CellContentLayout>
   );
 });

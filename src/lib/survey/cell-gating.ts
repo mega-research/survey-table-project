@@ -22,6 +22,19 @@ import { resolveSelectedValues } from '@/utils/table-cell-semantics';
  *   (예: 컨트롤러가 이미 value 그대로 저장하는 legacy/테스트 데이터).
  */
 
+/**
+ * 게이팅(enabledWhen) 설정 대상 셀 타입 SSOT — 인터랙티브 셀 전부.
+ * 렌더 배선(interactive-cell)·저장 strip·빌더 모달 노출·직렬화가 모두 이 집합을 본다.
+ * choice_opt/ranking_opt 는 응답이 질문 레벨에 저장돼 셀 값 게이팅 모델과 맞지 않아 제외.
+ */
+export const GATABLE_CELL_TYPES = new Set<TableCell['type']>([
+  'input',
+  'radio',
+  'checkbox',
+  'select',
+  'ranking',
+]);
+
 function toValueSet(raw: unknown): Set<string> {
   const out = new Set<string>();
   const walk = (v: unknown): void => {
@@ -108,7 +121,7 @@ export function stripDisabledCellValues(
   for (const q of questions) {
     const rows = q.tableRowsData ?? [];
     const hasGatedCell = rows.some((row) =>
-      row.cells.some((c) => c.type === 'input' && c.enabledWhen && !c.isHidden),
+      row.cells.some((c) => GATABLE_CELL_TYPES.has(c.type) && c.enabledWhen && !c.isHidden),
     );
     if (!hasGatedCell) continue;
 
@@ -121,7 +134,7 @@ export function stripDisabledCellValues(
     const disabledIds: string[] = [];
     for (const row of rows) {
       for (const cell of row.cells) {
-        if (cell.type !== 'input' || !cell.enabledWhen || cell.isHidden) continue;
+        if (!GATABLE_CELL_TYPES.has(cell.type) || !cell.enabledWhen || cell.isHidden) continue;
         if (!(cell.id in cellValues)) continue;
         if (!isCellEnabled(cell, cellValues, row.cells)) disabledIds.push(cell.id);
       }

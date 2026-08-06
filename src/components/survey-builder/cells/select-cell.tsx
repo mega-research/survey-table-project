@@ -20,6 +20,7 @@ export const SelectCell = React.memo(function SelectCell({
   inputIdScope,
   ariaInvalid,
   ariaDescribedBy,
+  gatingDisabled,
 }: InteractiveCellProps) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
@@ -58,7 +59,10 @@ export const SelectCell = React.memo(function SelectCell({
             aria-invalid={ariaInvalid || undefined}
             aria-describedby={ariaDescribedBy}
             onChange={(e) => handleSelectChange(e.target.value)}
-            className="w-full appearance-none truncate rounded border border-gray-300 bg-white py-2 pr-7 pl-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            disabled={gatingDisabled}
+            className={`w-full appearance-none truncate rounded border border-gray-300 py-2 pr-7 pl-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none ${
+              gatingDisabled ? 'cursor-not-allowed bg-gray-100 text-gray-400' : 'bg-white'
+            }`}
           >
             <option value="">선택하세요</option>
             {cell.selectOptions.map((option) => (
