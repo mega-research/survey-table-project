@@ -308,7 +308,7 @@ describe('executeDueDeletionBatch — indexUnusable', () => {
   });
 });
 
-describe('runDeletionExecutor — indexUnusable 전달', () => {
+describe('runDeletionExecutor — indexUnusable 전달 및 취소 경합 알림', () => {
   const fakeStep = { run: <T,>(_id: string, fn: () => Promise<T>) => fn() };
 
   it('indexUnusable 옵션이 모든 배치에 그대로 전달된다', async () => {
@@ -318,6 +318,34 @@ describe('runDeletionExecutor — indexUnusable 전달', () => {
 
     expect(indexedMock).not.toHaveBeenCalled();
     expect(totals.indexUnusableBatches).toBe(totals.batches);
+  });
+
+  it('skipped 가 0 보다 크면 run 이 끝날 때 Sentry warning 을 한 번 보낸다', async () => {
+    const Sentry = await import('@sentry/nextjs');
+    fetchDueMock.mockResolvedValueOnce([candidate('c1', 'survey/2026/07/a.png')]);
+    resolvableMock.mockResolvedValueOnce(false);
+
+    const totals = await runDeletionExecutor(fakeStep);
+
+    expect(totals.skipped).toBe(1);
+    expect(Sentry.captureMessage).toHaveBeenCalledTimes(1);
+    expect(Sentry.captureMessage).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        level: 'warning',
+        extra: expect.objectContaining({ skipped: 1 }),
+      }),
+    );
+  });
+
+  it('skipped 가 0 이면 Sentry warning 을 보내지 않는다', async () => {
+    const Sentry = await import('@sentry/nextjs');
+    fetchDueMock.mockResolvedValueOnce([candidate('c1', 'mail/gone.png')]);
+
+    const totals = await runDeletionExecutor(fakeStep);
+
+    expect(totals.skipped).toBe(0);
+    expect(Sentry.captureMessage).not.toHaveBeenCalled();
   });
 });
 

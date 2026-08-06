@@ -263,5 +263,18 @@ export async function runDeletionExecutor(
     if (batch.indexUnusable) totals.indexUnusableBatches += 1;
     if (!batch.hasMore) break;
   }
+
+  // 배치 조회 이후 취소 경합으로 건너뛴 후보가 있으면 run 당 1회만 알린다
+  // (배치마다 울리면 같은 경합의 소음이 반복된다). 인덱스 누락과 같은 관례
+  // (captureMessage, warning, 태그+수치) 를 따른다.
+  if (totals.skipped > 0) {
+    console.warn('r2 삭제 후보 취소 경합 감지:', totals.skipped);
+    Sentry.captureMessage('r2 삭제 후보 취소 경합', {
+      level: 'warning',
+      tags: { operation: 'r2_deletion_candidate_race' },
+      extra: { skipped: totals.skipped },
+    });
+  }
+
   return totals;
 }
