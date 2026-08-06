@@ -885,14 +885,12 @@ function SurveyResponseFlowActive({
 
     const nextIndex = resolveNextStepIndex();
 
-    // 마지막 제출은 complete가 전체 답을 저장한다. 중간 이동은 현재 페이지 변경분을
-    // 먼저 체크포인트로 저장하고, 실패하면 페이지를 유지해 응답 유실을 막는다.
-    if (nextIndex !== -1 && !(await flushPendingAnswers())) {
-      return;
-    }
-
     // 쿼터 게이트: 인구통계 문항 전부 답변 & 미체크 & responseId 확보 시 서버 확인.
     // fail-open: 오류/미설정은 통과. 판정을 받으면(blocked 여부 무관) 재발동 방지 플래그 set.
+    // 아래 flush 와 병렬로 왕복시켜 전환 대기 시간이 직렬 2왕복이 되지 않게 한다 —
+    // check 는 페이로드의 answers 로 판정하므로 flush 선행에 의존하지 않는다.
+    let quotaPromise: Promise<{ blocked: boolean; closedMessage: string | null } | null> | null =
+      null;
     if (
       !quotaCheckedRef.current &&
       currentResponseId &&
@@ -901,21 +899,34 @@ function SurveyResponseFlowActive({
       // 재진입/중복 발동 방지 — await 완료 전에 먼저 플래그를 세워 재클릭 시에도
       // 서버 확인은 최대 1회만 시도된다.
       quotaCheckedRef.current = true;
-      try {
-        const res = await client.quota.check({
+      quotaPromise = client.quota
+        .check({
           responseId: currentResponseId,
           surveyId: loadedSurvey?.id ?? '',
           answers: responses,
+        })
+        .catch((err) => {
+          console.error('쿼터 확인 오류:', err); // fail-open: 플래그는 이미 위에서 세팅됨
+          return null;
         });
-        if (res.blocked) {
-          setQuotaClosedMessage(res.closedMessage);
-          setDuplicateStatus({ kind: 'blocked', reason: 'quota_closed' });
-          return;
-        }
-      } catch (err) {
-        console.error('쿼터 확인 오류:', err); // fail-open: 플래그는 이미 위에서 세팅됨
+    }
+
+    // 마지막 제출은 complete가 전체 답을 저장한다. 중간 이동은 현재 페이지 변경분을
+    // 먼저 체크포인트로 저장하고, 실패하면 페이지를 유지해 응답 유실을 막는다.
+    // (디바운스 자동 저장이 이미 비워둔 경우 flush 는 왕복 없이 즉시 통과한다.)
+    const flushOk = nextIndex === -1 || (await flushPendingAnswers());
+
+    if (quotaPromise) {
+      const res = await quotaPromise;
+      // 쿼터 마감은 종결 상태라 flush 성패와 무관하게 우선한다.
+      if (res?.blocked) {
+        setQuotaClosedMessage(res.closedMessage);
+        setDuplicateStatus({ kind: 'blocked', reason: 'quota_closed' });
+        return;
       }
     }
+
+    if (!flushOk) return;
 
     setStepHistory((prev) => [...prev, currentStepIndex]);
 

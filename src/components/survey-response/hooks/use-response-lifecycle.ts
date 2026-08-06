@@ -35,6 +35,13 @@ function snapshotOfAnswers(answers: Record<string, unknown>): string {
   return JSON.stringify(Object.keys(answers).sort().map((key) => [key, answers[key]]));
 }
 
+/**
+ * 답변 입력 후 이 시간 동안 추가 입력이 없으면 백그라운드로 draft 를 저장한다 (trailing).
+ * 타이핑 중에는 타이머가 계속 리셋되므로 발사 시점엔 항상 그 순간의 최신 값이 나간다.
+ * 목표는 "다음" 클릭 시점에 pending 을 비워둬 전환이 서버 왕복 없이 즉시 일어나게 하는 것.
+ */
+const DRAFT_AUTOSAVE_DEBOUNCE_MS = 800;
+
 // DuplicateStatus 타입은 use-duplicate-guard 가 소유한다(진입 시 중복검사의 주 소유자).
 // handleResponse/handleSubmit 가 blocked 로 set 하므로 여기서 re-export 해 기존 import 경로를 유지한다.
 export type { DuplicateStatus };
@@ -265,8 +272,16 @@ export function useResponseLifecycle({
     setResponses({});
   };
 
-  const flushPendingAnswers = async (): Promise<boolean> => {
+  /**
+   * 실제 flush 본체. 반드시 enqueueFlush 를 거쳐 호출된다 — 디바운스 발사와 "다음" 클릭
+   * flush 가 동시에 나가면 seq 왕복만 낭비되므로 체인으로 직렬화한다.
+   * background=true(디바운스 자동 저장)면 실패 시 토스트를 띄우지 않는다 — pending 이
+   * 유지되므로 다음 클릭 flush·이탈 beacon·최종 complete 가 안전망으로 남는다.
+   */
+  const runFlushPendingAnswers = async (background: boolean): Promise<boolean> => {
     if (isAdminEdit || isPreview || pendingAnswerSavesRef.current.size === 0) return true;
+    // 완료·차단 전환 직후 늦게 발사된 백그라운드 저장은 스킵한다 (서버는 in_progress 행만 갱신).
+    if (background && (isCompleted || terminalBlocked)) return true;
 
     const responseId =
       activeResponseIdRef.current ?? (await responseCreationPromiseRef.current);
@@ -299,7 +314,9 @@ export function useResponseLifecycle({
         // 않은 값을 "저장됨" 으로 착각해 유실하므로, 삭제 루프와 지문 초기화를 모두 건너뛴다.
         // 다음 재시도는 더 큰 seq 로 나가 통과한다.
         console.error('응답 임시 저장 오류: 서버가 stale seq 로 판정해 적용하지 않음');
-        toast.error('응답 임시 저장에 실패했습니다. 잠시 후 다시 시도해주세요.');
+        if (!background) {
+          toast.error('응답 임시 저장에 실패했습니다. 잠시 후 다시 시도해주세요.');
+        }
         return false;
       }
       for (const [questionId, savedValue] of Object.entries(rawSnapshot)) {
@@ -337,10 +354,58 @@ export function useResponseLifecycle({
         return false;
       }
       console.error('응답 임시 저장 오류:', err);
-      toast.error('응답 임시 저장에 실패했습니다. 잠시 후 다시 시도해주세요.');
+      if (!background) {
+        toast.error('응답 임시 저장에 실패했습니다. 잠시 후 다시 시도해주세요.');
+      }
       return false;
     }
   };
+
+  // 타이머 콜백이 예약 시점 렌더의 stale 클로저(isCompleted 등)를 잡지 않도록
+  // 최신 본체를 ref 로 따라간다 (injectCalcRef 와 같은 패턴).
+  const runFlushRef = useRef(runFlushPendingAnswers);
+  useEffect(() => {
+    runFlushRef.current = runFlushPendingAnswers;
+  });
+
+  // flush 직렬화 체인. 이전 flush 가 in-flight 면 완료를 기다렸다가 잔여 pending 만 이어 보낸다.
+  const flushChainRef = useRef<Promise<unknown>>(Promise.resolve());
+  const enqueueFlush = (background: boolean): Promise<boolean> => {
+    const run = flushChainRef.current.then(() => runFlushRef.current(background));
+    // runFlush 는 모든 에러를 내부에서 잡아 boolean 을 반환하지만, 체인 자체는 방어적으로
+    // 실패를 삼켜 후속 flush 가 영구히 막히지 않게 한다.
+    flushChainRef.current = run.catch(() => false);
+    return run;
+  };
+
+  const flushPendingAnswers = (): Promise<boolean> => enqueueFlush(false);
+
+  // 답변 입력 디바운스 자동 저장 타이머. 리셋은 clearTimeout + 재예약이라 동시 타이머는 항상 1개.
+  const draftAutosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearDraftAutosave = () => {
+    if (draftAutosaveTimerRef.current !== null) {
+      clearTimeout(draftAutosaveTimerRef.current);
+      draftAutosaveTimerRef.current = null;
+    }
+  };
+  const scheduleDraftAutosave = () => {
+    if (isAdminEdit || isPreview) return;
+    clearDraftAutosave();
+    draftAutosaveTimerRef.current = setTimeout(() => {
+      draftAutosaveTimerRef.current = null;
+      void enqueueFlush(true);
+    }, DRAFT_AUTOSAVE_DEBOUNCE_MS);
+  };
+
+  // 언마운트 시 예약된 백그라운드 저장 취소 — 화면을 떠난 뒤의 유령 saveDraft 를 막는다.
+  useEffect(
+    () => () => {
+      if (draftAutosaveTimerRef.current !== null) {
+        clearTimeout(draftAutosaveTimerRef.current);
+      }
+    },
+    [],
+  );
 
   const handleResponse = useCallback(
     (questionId: string, value: unknown) => {
@@ -355,6 +420,8 @@ export function useResponseLifecycle({
       });
 
       pendingAnswerSavesRef.current.set(questionId, value);
+      // 입력이 잦아들면 백그라운드로 체크포인트 저장 — "다음" 클릭 시 대기 왕복을 없앤다.
+      scheduleDraftAutosave();
 
       // 운영 현황 콘솔(T5): 첫 답변 시점에 응답 행을 INSERT.
       // - currentResponseId가 null & 진행 중 INSERT가 없을 때만 트리거
@@ -624,6 +691,10 @@ export function useResponseLifecycle({
       }
 
       setHighlightQuestionIds(new Set());
+
+      // 제출 확정 경로 진입 — 예약된 백그라운드 draft 저장은 취소한다.
+      // complete 가 전체 답을 저장하므로 늦게 발사되면 완료된 행에 saveDraft 만 실패한다.
+      clearDraftAutosave();
 
       // admin-edit 분기 (6/8) — 새 응답 INSERT 없이 onSubmit 으로 위임.
       if (isAdminEdit && adminContext) {

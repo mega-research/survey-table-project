@@ -27,6 +27,16 @@ vi.mock('@/shared/lib/rpc', () => ({
   },
 }));
 
+// 백그라운드 자동 저장은 실패해도 토스트를 띄우지 않아야 한다 — 호출 여부 검증용 모킹.
+const toastError = vi.fn();
+vi.mock('sonner', () => ({
+  toast: {
+    error: (...args: unknown[]) => toastError(...args),
+    success: vi.fn(),
+    info: vi.fn(),
+  },
+}));
+
 const survey = { id: 'survey-1', title: 't' } as unknown as Survey;
 const step: RenderStep = {
   kind: 'group',
@@ -801,6 +811,9 @@ describe('이탈 시점 draft beacon', () => {
     act(() => {
       flushPromise = result.current.flushPendingAnswers();
     });
+    // flush 는 직렬화 체인을 거쳐 microtask 뒤에 스냅샷을 뜬다 — 여기서 체인을 소진시켜
+    // saveDraft 가 {q1:'a'} 스냅샷으로 발사된(in-flight) 상태를 만든다.
+    await act(async () => {});
 
     // saveDraft 왕복 중 값이 바뀐다 — flush 요청은 이미 {q1:'a'} 스냅샷으로 나간 뒤다.
     act(() => result.current.handleResponse('q1', 'b'));
@@ -1109,5 +1122,200 @@ describe('draft flush — calc 셀 저장 주입', () => {
     });
     expect(flushResult).toBe(true);
     expect(saveDraft).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('디바운스 백그라운드 자동 저장', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    createWithFirstAnswer.mockReset();
+    createBlank.mockReset();
+    complete.mockReset();
+    saveDraft.mockReset();
+    toastError.mockReset();
+    saveDraft.mockResolvedValue({ ok: true, applied: true });
+    window.localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.clearAllMocks();
+  });
+
+  it('답변 입력 후 800ms 가 지나면 백그라운드로 saveDraft 를 발사한다', async () => {
+    const { result } = renderHook(() =>
+      useResponseLifecycle(baseArgs({ currentResponseId: 'resp-1' })),
+    );
+    act(() => {
+      result.current.handleResponse('q1', '답');
+    });
+    expect(saveDraft).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(800);
+    });
+
+    expect(saveDraft).toHaveBeenCalledTimes(1);
+    expect(saveDraft).toHaveBeenCalledWith({
+      responseId: 'resp-1',
+      answers: { q1: '답' },
+      seq: expect.any(Number),
+    });
+  });
+
+  it('연속 입력은 타이머를 리셋해 마지막 입력 후 800ms 에 최신 값으로 1회만 발사한다', async () => {
+    const { result } = renderHook(() =>
+      useResponseLifecycle(baseArgs({ currentResponseId: 'resp-1' })),
+    );
+    act(() => {
+      result.current.handleResponse('q1', '안');
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+    act(() => {
+      result.current.handleResponse('q1', '안녕');
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+    expect(saveDraft).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    expect(saveDraft).toHaveBeenCalledTimes(1);
+    expect(
+      (saveDraft.mock.calls[0]?.[0] as { answers: Record<string, unknown> }).answers,
+    ).toEqual({ q1: '안녕' });
+  });
+
+  it('백그라운드 저장 성공 후 다음 클릭 flush 는 추가 왕복 없이 통과한다', async () => {
+    const { result } = renderHook(() =>
+      useResponseLifecycle(baseArgs({ currentResponseId: 'resp-1' })),
+    );
+    act(() => {
+      result.current.handleResponse('q1', '답');
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(800);
+    });
+    expect(saveDraft).toHaveBeenCalledTimes(1);
+
+    let flushResult: boolean | undefined;
+    await act(async () => {
+      flushResult = await result.current.flushPendingAnswers();
+    });
+    expect(flushResult).toBe(true);
+    expect(saveDraft).toHaveBeenCalledTimes(1);
+  });
+
+  it('백그라운드 저장 실패는 토스트 없이 pending 을 유지해 다음 flush 가 재시도한다', async () => {
+    saveDraft.mockRejectedValueOnce(new Error('network down'));
+    const { result } = renderHook(() =>
+      useResponseLifecycle(baseArgs({ currentResponseId: 'resp-1' })),
+    );
+    act(() => {
+      result.current.handleResponse('q1', '답');
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(800);
+    });
+    expect(saveDraft).toHaveBeenCalledTimes(1);
+    expect(toastError).not.toHaveBeenCalled();
+
+    let flushResult: boolean | undefined;
+    await act(async () => {
+      flushResult = await result.current.flushPendingAnswers();
+    });
+    expect(flushResult).toBe(true);
+    expect(saveDraft).toHaveBeenCalledTimes(2);
+    expect(
+      (saveDraft.mock.calls[1]?.[0] as { answers: Record<string, unknown> }).answers,
+    ).toEqual({ q1: '답' });
+  });
+
+  it('preview 모드는 백그라운드 발사를 하지 않는다', async () => {
+    const { result } = renderHook(() =>
+      useResponseLifecycle(baseArgs({ currentResponseId: 'resp-1', isPreview: true })),
+    );
+    act(() => {
+      result.current.handleResponse('q1', '답');
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    expect(saveDraft).not.toHaveBeenCalled();
+  });
+
+  it('admin-edit 모드는 백그라운드 발사를 하지 않는다', async () => {
+    const { result } = renderHook(() =>
+      useResponseLifecycle(baseArgs({ currentResponseId: 'resp-1', isAdminEdit: true })),
+    );
+    act(() => {
+      result.current.handleResponse('q1', '답');
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    expect(saveDraft).not.toHaveBeenCalled();
+  });
+
+  it('언마운트되면 예약된 백그라운드 저장을 취소한다', async () => {
+    const { result, unmount } = renderHook(() =>
+      useResponseLifecycle(baseArgs({ currentResponseId: 'resp-1' })),
+    );
+    act(() => {
+      result.current.handleResponse('q1', '답');
+    });
+    unmount();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    expect(saveDraft).not.toHaveBeenCalled();
+  });
+
+  it('디바운스 flush 진행 중 다음 클릭 flush 는 직렬화되어 완료 후 잔여분만 보낸다', async () => {
+    let resolveFirst!: (value: unknown) => void;
+    saveDraft.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveFirst = resolve;
+        }),
+    );
+    const { result } = renderHook(() =>
+      useResponseLifecycle(baseArgs({ currentResponseId: 'resp-1' })),
+    );
+    act(() => {
+      result.current.handleResponse('q1', 'a');
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(800);
+    });
+    expect(saveDraft).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      result.current.handleResponse('q2', 'b');
+    });
+    let flushPromise!: Promise<boolean>;
+    act(() => {
+      flushPromise = result.current.flushPendingAnswers();
+    });
+    // 첫 flush 가 in-flight 인 동안 두 번째 saveDraft 는 나가지 않는다 (single-flight 직렬화).
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    expect(saveDraft).toHaveBeenCalledTimes(1);
+
+    let flushResult: boolean | undefined;
+    await act(async () => {
+      resolveFirst({ ok: true, applied: true });
+      flushResult = await flushPromise;
+    });
+    expect(flushResult).toBe(true);
+    expect(saveDraft).toHaveBeenCalledTimes(2);
+    expect(
+      (saveDraft.mock.calls[1]?.[0] as { answers: Record<string, unknown> }).answers,
+    ).toEqual({ q2: 'b' });
   });
 });
