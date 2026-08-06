@@ -1,6 +1,6 @@
 import { runDeletionExecutor } from '@/lib/r2-lifecycle/deletion-executor.server';
 
-import { inngest } from '../client';
+import { ctxLogger, inngest } from '../client';
 
 /**
  * R2 유예 삭제 집행 cron — 일 1회 (KST 04:00).
@@ -14,18 +14,18 @@ import { inngest } from '../client';
  * (누락 시 조용히 미실행), icn1 리전 상호작용 확인. (.scratch/r2-안전-삭제/
  * deploy-checklist.md)
  */
-export const r2DeletionExecutor = inngest.createFunction(
-  { id: 'r2-deletion-executor', triggers: [{ cron: 'TZ=Asia/Seoul 0 4 * * *' }], retries: 2 },
-  async ({ step, ...inngestCtx }) => {
-    // inngest 4.x 컨텍스트 타입에는 logger 가 노출되지 않지만 런타임에는
-    // 미들웨어가 주입한다 — campaign-reconciler 와 동일 관례.
-    const logger =
-      (inngestCtx as { logger?: Pick<Console, 'info' | 'warn' | 'error' | 'debug'> })
-        .logger ?? console;
+const FUNCTION_ID = 'r2-deletion-executor';
 
+export const r2DeletionExecutor = inngest.createFunction(
+  { id: FUNCTION_ID, triggers: [{ cron: 'TZ=Asia/Seoul 0 4 * * *' }], retries: 2 },
+  async (ctx) => {
+    const { step } = ctx;
+    // ctx.logger — 클라이언트 logger 옵션(pino child, source:'inngest')을 내장
+    // 미들웨어가 runID child 로 감싼 것 (client.ts 주석 참조). totals 는 건수뿐이라 통짜 바인딩 허용.
+    const logger = ctxLogger(ctx);
     const totals = await runDeletionExecutor(step);
 
-    logger.info('r2 deletion executor done', totals);
+    logger.info({ functionId: FUNCTION_ID, ...totals }, 'R2 유예 삭제 집행 완료');
     return totals;
   },
 );

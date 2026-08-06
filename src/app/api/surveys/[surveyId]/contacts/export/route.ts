@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { requireAuth } from '@/lib/auth';
-import { canAccessSurvey } from '@/lib/auth/guest-grants';
+import { canAccessSurvey, getGuestSurveyId } from '@/lib/auth/guest-grants';
+import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
 import { resolveExportColumns } from '@/lib/operations/contacts-export';
 import {
   buildContactsExportWorkbook,
@@ -25,13 +26,22 @@ const XLSX_MIME =
  * PII 를 평문으로 내보내므로 응답 export 라우트와 동일하게
  * requireAuth + 게스트 설문 스코프 가드(canAccessSurvey)를 적용한다.
  */
-export async function GET(
+async function handleContactsExport(
   request: NextRequest,
+  ctx: RouteLogContext,
   { params }: { params: Promise<{ surveyId: string }> },
 ) {
   try {
     const user = await requireAuth();
     const { surveyId } = await params;
+    // 다운로드 발생 사실 자체를 access 로그에 남긴다 — 법정 감사기록(접속기록)과는
+    // 별개의 운영 기록. PII 평문 export 경유 지점이므로 로그에는 건수(컬럼·행) 외
+    // 어떤 값·id 매핑도 싣지 않는다 (contacts-export.server.ts 의 기존 원칙과 동일).
+    ctx.bind({
+      userId: user.id,
+      role: getGuestSurveyId(user.id) ? 'guest' : 'admin',
+      surveyId,
+    });
     if (!canAccessSurvey(user.id, surveyId)) {
       return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
     }
@@ -55,6 +65,7 @@ export async function GET(
     }
 
     const sourceRows = await listContactsForExport(surveyId, scope);
+    ctx.bind({ columnCount: columns.length, rowCount: sourceRows.length });
     if (sourceRows.length > MAX_CONTACT_EXPORT_ROWS) {
       return NextResponse.json(
         {
@@ -106,10 +117,13 @@ export async function GET(
     if (error instanceof Error && error.message === '설문을 찾을 수 없습니다.') {
       return NextResponse.json({ error: '설문을 찾을 수 없습니다.' }, { status: 404 });
     }
-    console.error('Contacts Export Error:', error);
-    return NextResponse.json(
-      { error: '명단 다운로드 중 오류가 발생했습니다.' },
-      { status: 500 },
-    );
+    // 그 외 예기치 못한 에러는 로깅 래퍼가 err 기록 + 500 응답으로 처리한다.
+    throw error;
   }
 }
+
+export const GET = withRouteLogging(
+  '/api/surveys/[surveyId]/contacts/export',
+  handleContactsExport,
+  { errorMessage: '명단 다운로드 중 오류가 발생했습니다.' },
+);
