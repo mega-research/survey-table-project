@@ -1007,3 +1007,91 @@ describe('buildUpdatedCell — 셀 단위 응답 인용 토글·이름 (answerQu
     });
   });
 });
+
+describe('buildUpdatedCell — 셀 게이팅 (enabledWhen/requiredWhenEnabled)', () => {
+  const gatedCell: TableCell = {
+    id: 'c1',
+    type: 'input',
+    content: '',
+    inputType: 'number',
+    enabledWhen: { kind: 'option', controllerCellId: 'ctrl', values: ['1'] },
+    requiredWhenEnabled: true,
+  };
+
+  it('cellToFormState → buildUpdatedCell 왕복에서 게이팅 조건·조건부 필수가 보존된다', () => {
+    const form = cellToFormState(gatedCell);
+    const out = buildUpdatedCell(form, gatedCell);
+    expect(out.enabledWhen).toEqual({ kind: 'option', controllerCellId: 'ctrl', values: ['1'] });
+    expect(out.requiredWhenEnabled).toBe(true);
+  });
+
+  it('폼에서 조건을 제거하면 두 키가 모두 제거된다 (cellBase 잔존 방지)', () => {
+    const form: CellFormState = {
+      ...cellToFormState(gatedCell),
+      gatingCondition: undefined,
+      gatingRequiredWhenEnabled: false,
+    };
+    const out = buildUpdatedCell(form, gatedCell);
+    expect('enabledWhen' in out).toBe(false);
+    expect('requiredWhenEnabled' in out).toBe(false);
+  });
+
+  it('조건은 있고 조건부 필수만 끄면 requiredWhenEnabled 키만 제거된다', () => {
+    const form: CellFormState = {
+      ...cellToFormState(gatedCell),
+      gatingRequiredWhenEnabled: false,
+    };
+    const out = buildUpdatedCell(form, gatedCell);
+    expect(out.enabledWhen).toBeDefined();
+    expect('requiredWhenEnabled' in out).toBe(false);
+  });
+
+  it('input 이 아닌 타입으로 전환하면 게이팅 키가 함께 제거된다', () => {
+    const form: CellFormState = { ...cellToFormState(gatedCell), contentType: 'text' };
+    const out = buildUpdatedCell(form, gatedCell);
+    expect('enabledWhen' in out).toBe(false);
+    expect('requiredWhenEnabled' in out).toBe(false);
+  });
+
+  // 필수 수렴: 게이팅 셀의 legacy required 는 "활성일 때 필수"와 동일 의미
+  // — 검증식이 (required || requiredWhenEnabled) && 활성 이므로 UI/저장 모두 한 채널로 모은다.
+  it('legacy required:true 게이팅 셀은 조건부 필수 체크박스로 수렴되어 hydrate 된다', () => {
+    const legacy: TableCell = {
+      id: 'c1',
+      type: 'input',
+      content: '',
+      required: true,
+      enabledWhen: { kind: 'option', controllerCellId: 'ctrl', values: ['1'] },
+    };
+    const form = cellToFormState(legacy);
+    expect(form.gatingRequiredWhenEnabled).toBe(true);
+
+    const out = buildUpdatedCell(form, legacy);
+    // required 는 저장하지 않고 requiredWhenEnabled 하나로 수렴
+    expect('required' in out).toBe(false);
+    expect(out.requiredWhenEnabled).toBe(true);
+  });
+
+  it('게이팅이 켜진 input 은 cellRequired 가 true 여도 required 를 저장하지 않는다', () => {
+    const form: CellFormState = {
+      ...cellToFormState(gatedCell),
+      cellRequired: true,
+      gatingRequiredWhenEnabled: false,
+    };
+    const out = buildUpdatedCell(form, gatedCell);
+    expect('required' in out).toBe(false);
+    expect('requiredWhenEnabled' in out).toBe(false);
+  });
+
+  it('게이팅이 없는 input 은 required 저장이 기존과 동일하다', () => {
+    const form: CellFormState = {
+      ...cellToFormState(gatedCell),
+      gatingCondition: undefined,
+      gatingRequiredWhenEnabled: false,
+      cellRequired: true,
+    };
+    const out = buildUpdatedCell(form, gatedCell);
+    expect(out.required).toBe(true);
+    expect('enabledWhen' in out).toBe(false);
+  });
+});

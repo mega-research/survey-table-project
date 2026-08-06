@@ -294,6 +294,7 @@ export async function duplicateSurvey(
         title: question.title,
         description: question.description,
         required: question.required,
+        requiredMessage: question.requiredMessage,
         order: question.order,
         options: (question.options ? stripOptionCodes(question.options) : question.options) as NewQuestion['options'],
         selectLevels: question.selectLevels as NewQuestion['selectLevels'],

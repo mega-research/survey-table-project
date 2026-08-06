@@ -143,4 +143,29 @@ describe('isTableRowCompleted', () => {
       isTableRowCompleted(checkboxRow, { check: [] }, MOBILE_TABLE_COMPLETION_TYPES),
     ).toBe(true);
   });
+
+  // 게이팅 미충족 셀은 숨겨져 응답 불가 — isHidden 과 동일하게 완료 판정에서 제외
+  it('게이팅 미충족 셀은 미응답이어도 행 완료를 막지 않는다 (미수행 행 영구 미완료 방지)', () => {
+    const gatedRow = row([
+      cell({
+        id: 'perf',
+        type: 'radio',
+        radioOptions: [
+          { id: 'o1', label: '수행', value: '1' },
+          { id: 'o2', label: '미수행', value: '2' },
+        ],
+      }),
+      cell({
+        id: 'men',
+        type: 'input',
+        enabledWhen: { kind: 'option', controllerCellId: 'perf', values: ['1'] },
+      }),
+    ]);
+    // 미수행 선택 → men 은 숨겨지고 값 없음 → 행은 완료
+    expect(isTableRowCompleted(gatedRow, { perf: '2' })).toBe(true);
+    // 수행 선택 → men 활성인데 미입력 → 행은 미완료
+    expect(isTableRowCompleted(gatedRow, { perf: '1' })).toBe(false);
+    // 수행 선택 + men 입력 → 완료
+    expect(isTableRowCompleted(gatedRow, { perf: '1', men: '3' })).toBe(true);
+  });
 });

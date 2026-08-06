@@ -5,7 +5,10 @@ import { resolveChoiceOptions } from '@/utils/choice-source';
 import { RANKING_OTHER_VALUE, parseRankingAnswers } from '@/utils/ranking-shared';
 import { resolveRankingOptions } from '@/utils/ranking-source';
 
-import { collectVisibleTableCells as collectNumericVisibleTableCells } from './numeric-validation';
+import {
+  collectVisibleTableCells as collectNumericVisibleTableCells,
+  isRequiredCell,
+} from './numeric-validation';
 import { optionTextTargetId, rankingTextTargetId } from './option-text-target';
 
 export interface RequiredOptionTextIssues {
@@ -209,11 +212,11 @@ export function collectRequiredOptionTextIssues(
     questionMissing =
       question.required === true && issues.some((issue) => issue.targetIds.length > 0);
     cellIds = issues
-      .filter((issue) => issue.cell.required === true && issue.targetIds.length > 0)
+      .filter((issue) => isRequiredCell(issue.cell) && issue.targetIds.length > 0)
       .map((issue) => issue.cell.id);
     const blockingIssues = issues.filter(
       (issue) =>
-        issue.targetIds.length > 0 && (question.required === true || issue.cell.required === true),
+        issue.targetIds.length > 0 && (question.required === true || isRequiredCell(issue.cell)),
     );
     detailTargetIds = blockingIssues.flatMap((issue) => issue.targetIds);
     detailCellIds = [...new Set(blockingIssues.map((issue) => issue.cell.id))];

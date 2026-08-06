@@ -47,10 +47,11 @@
     "0060_add_mail_campaign_kind",
     "0061_contact_upload_modes",
     "0062_add_question_mobile_options_columns",
-"0063_add_survey_force_wide_layout",
+    "0063_add_survey_force_wide_layout",
     "0064_add_question_export_cell_order",
     "0065_r2_deletion_queue_and_sent_ledger",
     "0066_add_row_wise_original_mobile_mode",
-    "0067_add_question_answer_quote"
+    "0067_add_question_answer_quote",
+    "0068_add_question_required_message"
   ]
 }

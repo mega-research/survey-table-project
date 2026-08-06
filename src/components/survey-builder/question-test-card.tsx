@@ -430,6 +430,7 @@ function QuestionTestInput({
         onChange={onChange as (v: unknown) => void}
         allResponses={allResponses}
         allQuestions={allQuestions}
+        ignoreDisplayConditions
         selectedDynamicRowIds={selectedDynamicRowIds}
         onDynamicRowSelectionChange={onDynamicRowSelectionChange}
       />
@@ -517,6 +518,7 @@ function QuestionTestInput({
           dynamicRowConfigs={question.dynamicRowConfigs}
           allResponses={allResponses}
           allQuestions={allQuestions}
+          ignoreDisplayConditions
           hideColumnLabels={question.hideColumnLabels}
           mobileOriginalTable={question.mobileOriginalTable}
           mobileTableDisplayMode={question.mobileTableDisplayMode}

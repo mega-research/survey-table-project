@@ -41,6 +41,8 @@ interface ChoiceTableResponseProps {
   onChange: (value: string | string[] | GroupedChoiceAnswer | null) => void;
   allResponses?: Record<string, unknown> | undefined;
   allQuestions?: Question[] | undefined;
+  /** 열·행·동적 그룹 displayCondition 평가를 건너뛰고 전부 표시 (빌더 편집 미리보기용) */
+  ignoreDisplayConditions?: boolean | undefined;
   selectedDynamicRowIds?: string[] | undefined;
   onDynamicRowSelectionChange?: ((rowIds: string[]) => void) | undefined;
 }
@@ -57,6 +59,7 @@ export function ChoiceTableResponse({
   onChange,
   allResponses,
   allQuestions,
+  ignoreDisplayConditions = false,
   selectedDynamicRowIds = [],
   onDynamicRowSelectionChange,
 }: ChoiceTableResponseProps) {
@@ -369,13 +372,15 @@ export function ChoiceTableResponse({
       columns,
       rows,
       ...(question.tableHeaderGrid ? { headerGrid: question.tableHeaderGrid } : {}),
-      allResponses,
-      allQuestions,
+      // ignoreDisplayConditions: 빌더 편집 미리보기 — 응답 ctx 를 빼서 전 열·행 표시
+      allResponses: ignoreDisplayConditions ? undefined : allResponses,
+      allQuestions: ignoreDisplayConditions ? undefined : allQuestions,
     });
     const visibleConfigs = (question.dynamicRowConfigs ?? []).filter(
       (config) =>
         config.enabled &&
         (!config.displayCondition ||
+          ignoreDisplayConditions ||
           !allResponses ||
           !allQuestions ||
           shouldDisplayDynamicGroup(config, allResponses, allQuestions)),
@@ -417,7 +422,7 @@ export function ChoiceTableResponse({
         (row) => row.dynamicGroupId && visibleGroupIds.has(row.dynamicGroupId),
       ),
     };
-  }, [allQuestions, allResponses, question, selectedDynamicRowIds]);
+  }, [allQuestions, allResponses, question, selectedDynamicRowIds, ignoreDisplayConditions]);
   const rowWiseOriginalModel = useMemo(() => {
     if (mobileMode !== 'row-wise-original') return { sections: [] };
     const columns = question.tableColumns ?? [];

@@ -155,6 +155,43 @@ describe('collectNumericIssues — 테이블', () => {
     expect(collectNumericIssues(q, { c1: '3', c2: '5' })).toHaveLength(0);
   });
 
+  it('셀 requiredMessage 지정 시 그 문구로 별도 이슈를 만들고, 미지정 셀은 기본 문구로 묶는다', () => {
+    const rows: TableRow[] = [
+      {
+        id: 'r1',
+        cells: [
+          {
+            id: 'c1',
+            type: 'input',
+            content: '',
+            inputType: 'number',
+            required: true,
+            requiredMessage: '연령을 입력해 주세요',
+          },
+          { id: 'c2', type: 'input', content: '', inputType: 'number', required: true },
+          { id: 'c3', type: 'input', content: '', inputType: 'number' },
+        ],
+      },
+    ] as TableRow[];
+    const q = tableQuestion({ tableRowsData: rows });
+    const issues = collectNumericIssues(q, { c3: '5' });
+    expect(issues).toHaveLength(2);
+    expect(issues).toContainEqual(
+      expect.objectContaining({
+        kind: 'required-cells',
+        message: '연령을 입력해 주세요',
+        cellIds: ['c1'],
+      }),
+    );
+    expect(issues).toContainEqual(
+      expect.objectContaining({
+        kind: 'required-cells',
+        message: '필수 응답이 비어있습니다',
+        cellIds: ['c2'],
+      }),
+    );
+  });
+
   it('사이드카 키만 있는 응답은 미접촉으로 스킵한다', () => {
     const rows: TableRow[] = [
       {

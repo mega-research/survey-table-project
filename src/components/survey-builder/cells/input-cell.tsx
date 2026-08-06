@@ -56,6 +56,8 @@ export const InputCell = React.memo(function InputCell({
   // 숫자 모드 + emptyDefault 정의 + 응답값 아예 미존재(undefined) → 첫 진입 시 초기값 자동 채움.
   // 응답자가 backspace 로 빈 문자열로 만들면 cellResponse 가 '' 가 되어 재채움 되지 않음 (의도 보존).
   useEffect(() => {
+    // 게이팅 비활성 셀은 컨테이너(interactive-cell.tsx)가 언마운트로 숨기므로
+    // 이 effect 자체가 돌지 않는다 — 지움과의 무한 루프 없음. 활성화(재마운트) 시 재채움.
     if (
       !isPrefilled &&
       isNumberMode &&
@@ -83,7 +85,9 @@ export const InputCell = React.memo(function InputCell({
           onChange={handleChange}
           onFocus={handleFocus}
           onBlur={handleBlur}
-          placeholder={cell.placeholder || (isNumberMode ? '숫자만 입력하세요...' : '답변을 입력하세요...')}
+          placeholder={
+            cell.placeholder || (isNumberMode ? '숫자만 입력하세요...' : '답변을 입력하세요...')
+          }
           maxLength={cell.inputMaxLength}
           className={cn('w-full text-base', getInputTextAlignClass(cell.inputTextAlign))}
           disabled={isPrefilled}

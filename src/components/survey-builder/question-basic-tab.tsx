@@ -35,6 +35,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { generateId } from '@/lib/utils';
 import { generateOptionCode } from '@/utils/option-code-generator';
+import { DEFAULT_REQUIRED_MESSAGE } from '@/utils/required-message';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { useSurveyUIStore } from '@/stores/ui-store';
 import { isOptionListType } from '@/types/question-types';
@@ -483,7 +484,7 @@ export function QuestionBasicTab({
           </div>
         </div>
 
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center gap-2">
           <Switch
             id="required"
             checked={formData.required || false}
@@ -491,7 +492,23 @@ export function QuestionBasicTab({
               setFormData((prev) => ({ ...prev, required: checked }))
             }
           />
-          <Label htmlFor="required">필수 질문</Label>
+          <Label htmlFor="required" className="shrink-0">
+            필수 질문
+          </Label>
+          {formData.required && (
+            <Input
+              id="requiredMessage"
+              value={formData.requiredMessage ?? ''}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  requiredMessage: e.target.value || null,
+                }))
+              }
+              placeholder={DEFAULT_REQUIRED_MESSAGE}
+              className="ml-2 flex-1"
+            />
+          )}
         </div>
 
         {/* 단답형 질문용 placeholder 설정 */}

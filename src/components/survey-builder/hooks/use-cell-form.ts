@@ -56,6 +56,9 @@ export interface CellFormSetters {
   setEmptyDefaultRaw: (v: string) => void;
   setCellNumberFormat: (v: CellFormState['cellNumberFormat']) => void;
   setCellRequired: (v: boolean) => void;
+  setCellRequiredMessage: (v: string) => void;
+  setGatingCondition: (v: CellFormState['gatingCondition']) => void;
+  setGatingRequiredWhenEnabled: (v: boolean) => void;
   setMinSelections: (v: number | undefined) => void;
   setMaxSelections: (v: number | undefined) => void;
   setRankingOptions: (v: CellFormState['rankingOptions']) => void;
@@ -146,6 +149,9 @@ export function useCellForm(cell: TableCell, isOpen: boolean): UseCellFormResult
       setEmptyDefaultRaw: set('emptyDefaultRaw'),
       setCellNumberFormat: set('cellNumberFormat'),
       setCellRequired: set('cellRequired'),
+      setCellRequiredMessage: set('cellRequiredMessage'),
+      setGatingCondition: set('gatingCondition'),
+      setGatingRequiredWhenEnabled: set('gatingRequiredWhenEnabled'),
       setMinSelections: set('minSelections'),
       setMaxSelections: set('maxSelections'),
       setRankingOptions: set('rankingOptions'),

@@ -154,12 +154,21 @@ export function MobileDrilldownShell({
     enterSection(sectionIndex + 1);
   };
 
-  const secSubText = (section: ClassifiedSection) =>
-    section.kind === 'matrix'
-      ? `세부 ${section.leaves.length}개 · 입력 ${section.totalInputs}칸`
+  // 부제의 개수는 진행 뱃지·진행바와 같은 분모(입력이 있는 행)를 쓴다.
+  // 계산 전용 행(합계 표시)은 상세 화면에는 보이지만 채울 것이 아니므로 세지 않는다 —
+  // 여기 포함시키면 "입력 N개" 문구와 카운트 뱃지의 분모가 어긋난다.
+  const inputLeafCount = (section: ClassifiedSection) =>
+    section.leaves.filter((leaf) => leaf.inputCellIds.length > 0).length;
+  const secSubText = (section: ClassifiedSection) => {
+    const inputs = inputLeafCount(section);
+    // 계산 전용 섹션(합계 블록 등) — "입력 0개" 대신 표시 전용임을 그대로 알린다
+    if (inputs === 0) return `표시 ${section.leaves.length}개`;
+    return section.kind === 'matrix'
+      ? `세부 ${inputs}개 · 입력 ${section.totalInputs}칸`
       : section.kind === 'list'
-        ? `항목 ${section.leaves.length}개`
-        : `입력 ${section.leaves.length}개`;
+        ? `항목 ${inputs}개`
+        : `입력 ${inputs}개`;
+  };
 
   const renderCrumb = ({ label, onBack }: { label: string; onBack: () => void }) => (
     <div className="mb-3 flex items-center gap-2">
@@ -259,14 +268,17 @@ export function MobileDrilldownShell({
                   </div>
                   <div className="mt-0.5 text-xs text-gray-400">{secSubText(section)}</div>
                 </div>
-                <span
-                  className={cn(
-                    'shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold',
-                    full ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-500',
-                  )}
-                >
-                  {status.completed}/{status.total}
-                </span>
+                {/* total 0 = 전부 표시 전용(계산 셀만 있는 섹션) — 카운트 뱃지 생략 */}
+                {status.total > 0 && (
+                  <span
+                    className={cn(
+                      'shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold',
+                      full ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-500',
+                    )}
+                  >
+                    {status.completed}/{status.total}
+                  </span>
+                )}
                 <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" />
               </button>
             );
@@ -312,14 +324,17 @@ export function MobileDrilldownShell({
                   <span className="min-w-0 flex-1 text-sm font-semibold text-gray-900">
                     {leaf.label}
                   </span>
-                  <span
-                    className={cn(
-                      'shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold',
-                      full ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-500',
-                    )}
-                  >
-                    {status.completed}/{status.total}
-                  </span>
+                  {/* total 0 = 채울 것이 없는 표시 전용 행(계산 셀만 있는 행) — 카운트 뱃지 생략 */}
+                  {status.total > 0 && (
+                    <span
+                      className={cn(
+                        'shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold',
+                        full ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-500',
+                      )}
+                    >
+                      {status.completed}/{status.total}
+                    </span>
+                  )}
                   <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" />
                 </button>
               </React.Fragment>

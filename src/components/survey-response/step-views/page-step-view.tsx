@@ -22,6 +22,7 @@ export function PageStepView({
   evalCtx,
   onResponse,
   highlightQuestionIds,
+  requiredMessageQuestionIds,
   numericIssues,
 }: {
   step: RenderStep;
@@ -31,6 +32,8 @@ export function PageStepView({
   evalCtx: BranchEvalCtx;
   onResponse: (questionId: string, value: unknown) => void;
   highlightQuestionIds: Set<string>;
+  /** 필수 미응답 사유로 하이라이트된 질문 — 안내 문구를 함께 표시한다. */
+  requiredMessageQuestionIds: Set<string>;
   numericIssues: Map<string, NumericIssue[]>;
 }) {
   const attrs = useContactAttrs();
@@ -73,6 +76,7 @@ export function PageStepView({
                   questions={questions}
                   onResponse={onResponse}
                   isHighlighted={highlightQuestionIds.has(item.question.id)}
+                  showRequiredMessage={requiredMessageQuestionIds.has(item.question.id)}
                   issues={numericIssues.get(item.question.id)}
                 />
               </div>

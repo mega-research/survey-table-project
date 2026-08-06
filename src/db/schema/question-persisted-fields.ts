@@ -19,6 +19,7 @@ export const PERSISTED_QUESTION_FIELDS = [
   'title',
   'description',
   'required',
+  'requiredMessage',
   'order',
   'options',
   'selectLevels',

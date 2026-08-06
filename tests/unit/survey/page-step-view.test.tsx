@@ -37,6 +37,7 @@ describe('PageStepView', () => {
         evalCtx={undefined as never}
         onResponse={() => {}}
         highlightQuestionIds={new Set()}
+        requiredMessageQuestionIds={new Set()}
         numericIssues={new Map()}
       />,
     );
@@ -56,6 +57,7 @@ describe('PageStepView', () => {
         evalCtx={undefined as never}
         onResponse={() => {}}
         highlightQuestionIds={new Set()}
+        requiredMessageQuestionIds={new Set()}
         numericIssues={new Map()}
       />,
     );

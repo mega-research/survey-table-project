@@ -296,6 +296,12 @@ export type CalcExpr =
   | { kind: 'agg'; fn: 'sum' | 'avg'; items: CalcExpr[] }
   | { kind: 'group'; op: '+' | '-' | '*' | '/'; terms: CalcExpr[] };
 
+// 셀 활성 조건(게이팅) — 같은 행 컨트롤러 셀 값에 따라 input 셀의 입력 가능 여부를 제어한다.
+export type CellEnableCondition =
+  | { kind: 'option'; controllerCellId: string; values: string[] }
+  | { kind: 'filled'; controllerCellId: string }
+  | { kind: 'numeric'; controllerCellId: string; op: '>' | '>=' | '<' | '<=' | '==' | '!='; value: number };
+
 export interface TableCell {
   id: string;
   textBold?: boolean;
@@ -353,6 +359,8 @@ export interface TableCell {
   numberFormat?: NumberFormat;
   // input 셀 필수 여부 — 지정 셀이 채워져야 "다음" 통과. 테이블 미접촉(전 셀 빈 값) 시 스킵
   required?: boolean;
+  // 필수 셀 미응답 안내 문구 — 미지정 시 기본 문구 사용
+  requiredMessage?: string;
   // 체크박스 선택 개수 제한 (체크박스 타입 셀 전용)
   minSelections?: number; // 최소 선택 개수
   maxSelections?: number; // 최대 선택 개수
@@ -427,6 +435,12 @@ export interface TableCell {
   formulaTolerance?: number;
   // 검증 실패 메시지 커스텀. 미지정 시 기본 문구 (계산값 미노출)
   formulaErrorMessage?: string;
+  // 셀 활성 조건 (게이팅) — 같은 행 컨트롤러 셀 값에 따라 이 input 셀의 입력 가능 여부 제어.
+  // 미지정 = 항상 활성. 컨트롤러 미응답 = 미충족 = 비활성. 스펙 docs/superpowers/specs/2026-08-05-cell-gating-design.md
+  enabledWhen?: CellEnableCondition;
+  // 활성 상태일 때 필수. 게이팅 셀에서 기존 required 는 이 필드와 같은 의미로 수렴한다
+  // — 검증은 (required || requiredWhenEnabled) && 활성 하나다.
+  requiredWhenEnabled?: boolean;
 }
 
 export interface CheckboxOption {
@@ -571,6 +585,7 @@ export interface Question {
   title: string;
   description?: string;
   required: boolean;
+  requiredMessage?: string | null; // 필수 미응답 안내 문구 — 미입력 시 기본 문구 사용
   groupId?: string; // 소속 그룹 ID (QuestionGroup의 id 참조)
   options?: QuestionOption[];
   selectLevels?: SelectLevel[]; // 다단계 select용

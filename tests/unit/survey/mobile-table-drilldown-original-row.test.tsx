@@ -1147,6 +1147,7 @@ const leaf = (rowId: string, label: string): ClassifiedLeaf => ({
   label,
   subGroup: '',
   inputCellIds: [`${rowId}-value`],
+  calcCellIds: [],
   cellByCol: { 1: `${rowId}-value` },
 });
 
