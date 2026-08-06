@@ -232,7 +232,6 @@ function HeaderCells({
 interface RenderRowCellsProps {
   row: TableRow;
   gridRow: number | undefined;
-  completed: boolean;
   questionId: string;
   isTestMode: boolean;
   value?: Record<string, unknown> | undefined;
@@ -245,7 +244,6 @@ interface RenderRowCellsProps {
 function renderRowCells({
   row,
   gridRow,
-  completed,
   questionId,
   isTestMode,
   value,
@@ -290,14 +288,9 @@ function renderRowCells({
         key={cell.id}
         className={cn(
           'min-w-0 border-r border-b border-gray-300 p-2 [overflow-wrap:anywhere] transition-colors duration-200',
-          // sticky 셀은 뒤가 비치면 안 되므로 불투명 배경 고정
-          isSticky
-            ? completed
-              ? 'bg-green-50'
-              : 'bg-white'
-            : completed
-              ? 'bg-green-50/40'
-              : 'bg-white',
+          // 행 완료 초록 배경은 제거 (2026-08-06 피드백 — 입력 중 배경 변화가 거슬림).
+          // sticky 셀은 뒤가 비치면 안 되므로 불투명 배경은 유지한다.
+          'bg-white',
           getAlignmentClasses(cell.horizontalAlign, cell.verticalAlign),
           errorCellIds?.has(cell.id) && 'ring-2 ring-red-300 ring-inset',
         )}
@@ -711,7 +704,6 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
                 {renderRowCells({
                   row,
                   gridRow: rowGridMap.get(row.id),
-                  completed: rowCompletionMap.get(row.id) ?? false,
                   questionId,
                   isTestMode,
                   value,
@@ -736,7 +728,6 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
       toggleGroupExpanded,
       expandedGroupRows,
       rowGridMap,
-      rowCompletionMap,
       questionId,
       isTestMode,
       value,
@@ -940,7 +931,6 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
                     {renderRowCells({
                       row,
                       gridRow: rowGridMap.get(row.id),
-                      completed: rowCompletionMap.get(row.id) ?? false,
                       questionId,
                       isTestMode,
                       value,
