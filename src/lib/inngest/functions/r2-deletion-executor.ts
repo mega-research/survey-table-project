@@ -29,21 +29,35 @@ export const r2DeletionExecutor = inngest.createFunction(
     // 집행 직전 가변 소스 인덱스를 재구축한다. 실패해도 집행을 막지 않는다 —
     // 인덱스는 사전 필터일 뿐이고 최종 판정은 콘텐츠 스캔이라 stale 해도
     // 과보존 방향으로만 작용한다 (spec 6.3).
-    const rebuilt = await step.run('rebuild-mutable-key-refs', async () => {
+    //
+    // rebuildMutableKeyRefs 는 소스를 순차 순회하다 첫 실패에서 던지므로,
+    // 실패한 소스 이후는 그날 아예 갱신되지 않는다. 원인이 결정적이면(예:
+    // 행 전체를 Node 메모리로 올리는 rebuildSource 의 메모리 초과) 매일
+    // 반복돼 stale 인덱스가 후보를 '보존됨'으로 영구 종결시킬 수 있다.
+    // 그래서 실패 여부를 executor 에 명시적으로 전달해 이번 run 은 인덱스
+    // 조회를 건너뛰고 스캔에만 맡긴다 — 스캔이 유일한 삭제 권한이므로
+    // 정확도 손실 없이 스캔량만 늘어난다.
+    const rebuildOutcome = await step.run('rebuild-mutable-key-refs', async () => {
       try {
-        return await rebuildMutableKeyRefs();
+        const rebuilt = await rebuildMutableKeyRefs();
+        return { rebuilt, indexUnusable: false };
       } catch (error) {
-        console.error('r2 참조 인덱스 리빌드 실패 — stale 인덱스로 집행 진행:', error);
+        console.error('r2 참조 인덱스 리빌드 실패 — 이번 run 은 인덱스 없이 전량 스캔으로 진행:', error);
         Sentry.captureException(error, {
           tags: { operation: 'r2_key_ref_rebuild' },
           level: 'warning',
         });
-        return [];
+        return { rebuilt: [], indexUnusable: true };
       }
     });
-    logger.info('r2 key ref rebuild done', { sources: rebuilt });
+    logger.info('r2 key ref rebuild done', {
+      sources: rebuildOutcome.rebuilt,
+      indexUnusable: rebuildOutcome.indexUnusable,
+    });
 
-    const totals = await runDeletionExecutor(step);
+    const totals = await runDeletionExecutor(step, {
+      indexUnusable: rebuildOutcome.indexUnusable,
+    });
 
     logger.info('r2 deletion executor done', totals);
     return totals;

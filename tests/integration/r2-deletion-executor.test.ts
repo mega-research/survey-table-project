@@ -272,6 +272,55 @@ describe('executeDueDeletionBatch — 인덱스 사전 필터', () => {
   });
 });
 
+describe('executeDueDeletionBatch — indexUnusable', () => {
+  it('인덱스가 못 믿을 상태로 알려지면 조회를 건너뛰고 통과분 전량이 스캔에 닿는다', async () => {
+    fetchDueMock.mockResolvedValueOnce([
+      candidate('c1', 'survey/2026/07/a.png'),
+      candidate('c2', 'survey/2026/07/b.png'),
+    ]);
+
+    const result = await executeDueDeletionBatch(10, new Date(), { indexUnusable: true });
+
+    expect(indexedMock).not.toHaveBeenCalled();
+    expect(referencedMock).toHaveBeenCalledWith([
+      'survey/2026/07/a.png',
+      'survey/2026/07/b.png',
+    ]);
+    expect(result.indexUnusable).toBe(true);
+  });
+
+  it('스캔이 찾지 못한 키는 인덱스 생략 경로에서도 삭제까지 진행된다', async () => {
+    fetchDueMock.mockResolvedValueOnce([candidate('c1', 'survey/2026/07/a.png')]);
+
+    const result = await executeDueDeletionBatch(10, new Date(), { indexUnusable: true });
+
+    expect(result.deleted).toBe(1);
+    expect(deleteMock).toHaveBeenCalledWith('survey/2026/07/a.png');
+  });
+
+  it('옵션을 안 주면 기본값대로 인덱스를 그대로 조회한다', async () => {
+    fetchDueMock.mockResolvedValueOnce([candidate('c1', 'survey/2026/07/a.png')]);
+
+    const result = await executeDueDeletionBatch(10);
+
+    expect(indexedMock).toHaveBeenCalledWith(['survey/2026/07/a.png']);
+    expect(result.indexUnusable).toBe(false);
+  });
+});
+
+describe('runDeletionExecutor — indexUnusable 전달', () => {
+  const fakeStep = { run: <T,>(_id: string, fn: () => Promise<T>) => fn() };
+
+  it('indexUnusable 옵션이 모든 배치에 그대로 전달된다', async () => {
+    fetchDueMock.mockResolvedValueOnce([candidate('c1', 'survey/2026/07/a.png')]);
+
+    const totals = await runDeletionExecutor(fakeStep, { indexUnusable: true });
+
+    expect(indexedMock).not.toHaveBeenCalled();
+    expect(totals.indexUnusableBatches).toBe(totals.batches);
+  });
+});
+
 describe('executeDueDeletionBatch — 배치 조회 이후 상태 변경', () => {
   it('삭제 직전 취소된 후보는 R2 삭제도 종결도 하지 않는다', async () => {
     fetchDueMock.mockResolvedValueOnce([candidate('c1', 'survey/2026/07/a.png')]);
