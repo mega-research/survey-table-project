@@ -11,6 +11,8 @@ import {
 } from '@/features/survey-builder/server/services/survey-read.service';
 import { isGuestViewer } from '@/lib/auth/guest-viewer';
 
+import { CopyPreviewLinkButton } from './copy-preview-link-button';
+
 interface PageProps {
   params: Promise<{ id: string }>;
 }
@@ -40,14 +42,19 @@ export default async function SurveyPreviewPage({ params }: PageProps) {
                 현황으로
               </Link>
             </Button>
-            {!isGuest && (
-              <Button variant="outline" size="sm" asChild>
-                <Link href={`/admin/surveys/${surveyId}/edit`}>
-                  <Pencil className="mr-2 h-4 w-4" />
-                  설문 편집
-                </Link>
-              </Button>
-            )}
+            <div className="flex items-center gap-2">
+              {survey.privateToken && (
+                <CopyPreviewLinkButton privateToken={survey.privateToken} />
+              )}
+              {!isGuest && (
+                <Button variant="outline" size="sm" asChild>
+                  <Link href={`/admin/surveys/${surveyId}/edit`}>
+                    <Pencil className="mr-2 h-4 w-4" />
+                    설문 편집
+                  </Link>
+                </Button>
+              )}
+            </div>
           </div>
         </nav>
 
@@ -85,6 +92,7 @@ export default async function SurveyPreviewPage({ params }: PageProps) {
                 현황으로
               </Link>
             </Button>
+            {survey.privateToken && <CopyPreviewLinkButton privateToken={survey.privateToken} />}
             {!isGuest && (
               <Button variant="outline" size="sm" asChild>
                 <Link href={`/admin/surveys/${surveyId}/edit`}>
