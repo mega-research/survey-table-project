@@ -25,11 +25,6 @@ export interface InteractiveCellProps {
    * opt-in 패턴(이미 치환된 셀을 넘겨받는 PreviewCell 경로의 이중 치환 방지).
    */
   content?: string | undefined;
-  /**
-   * 셀 게이팅(CONTEXT.md "셀 게이팅") 평가 결과 — 컨트롤러 조건 미충족으로 입력 불가.
-   * input 셀 전용(다른 셀 타입은 무시). 컨테이너(interactive-cell.tsx)가 계산해 내려준다.
-   */
-  gatingDisabled?: boolean | undefined;
 }
 
 /** 미리보기(읽기 전용) 셀 컴포넌트 공통 props */

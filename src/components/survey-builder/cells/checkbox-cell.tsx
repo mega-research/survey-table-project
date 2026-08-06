@@ -18,7 +18,6 @@ export const CheckboxCell = React.memo(function CheckboxCell({
   inputIdScope,
   ariaInvalid,
   ariaDescribedBy,
-  gatingDisabled,
 }: InteractiveCellProps) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
@@ -89,7 +88,7 @@ export const CheckboxCell = React.memo(function CheckboxCell({
       {cell.checkboxOptions.map((option) => {
         const optionKey = option.value ?? option.id;
         const isChecked = cellResponseArray.includes(optionKey);
-        const disabled = gatingDisabled || !canSelect(optionKey);
+        const disabled = !canSelect(optionKey);
         const inputId = `${inputIdScope ? `${inputIdScope}-${cell.id}` : cell.id}-${option.id}`;
 
         return (

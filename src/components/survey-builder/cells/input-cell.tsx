@@ -20,7 +20,6 @@ export const InputCell = React.memo(function InputCell({
   inputIdScope,
   ariaInvalid,
   ariaDescribedBy,
-  gatingDisabled,
 }: InteractiveCellProps) {
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
@@ -57,9 +56,10 @@ export const InputCell = React.memo(function InputCell({
   // 숫자 모드 + emptyDefault 정의 + 응답값 아예 미존재(undefined) → 첫 진입 시 초기값 자동 채움.
   // 응답자가 backspace 로 빈 문자열로 만들면 cellResponse 가 '' 가 되어 재채움 되지 않음 (의도 보존).
   useEffect(() => {
+    // 게이팅 비활성 셀은 컨테이너(interactive-cell.tsx)가 언마운트로 숨기므로
+    // 이 effect 자체가 돌지 않는다 — 지움과의 무한 루프 없음. 활성화(재마운트) 시 재채움.
     if (
       !isPrefilled &&
-      !gatingDisabled && // 게이팅 비활성이면 채우지 않는다 — 지움과의 무한 루프 방지
       isNumberMode &&
       typeof cell.emptyDefault === 'number' &&
       cellResponse === undefined
@@ -67,7 +67,7 @@ export const InputCell = React.memo(function InputCell({
       onUpdateValue(String(cell.emptyDefault));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cellResponse, isPrefilled, gatingDisabled, isNumberMode, cell.emptyDefault]);
+  }, [cellResponse, isPrefilled, isNumberMode, cell.emptyDefault]);
 
   return (
     <CellContentLayout
@@ -86,13 +86,11 @@ export const InputCell = React.memo(function InputCell({
           onFocus={handleFocus}
           onBlur={handleBlur}
           placeholder={
-            gatingDisabled
-              ? '' // 비활성 셀은 안내 문구를 비워 입력 유도로 오독되지 않게 한다
-              : cell.placeholder || (isNumberMode ? '숫자만 입력하세요...' : '답변을 입력하세요...')
+            cell.placeholder || (isNumberMode ? '숫자만 입력하세요...' : '답변을 입력하세요...')
           }
           maxLength={cell.inputMaxLength}
           className={cn('w-full text-base', getInputTextAlignClass(cell.inputTextAlign))}
-          disabled={isPrefilled || gatingDisabled}
+          disabled={isPrefilled}
           data-prefilled={isPrefilled || undefined}
           aria-invalid={ariaInvalid || undefined}
           aria-describedby={ariaDescribedBy}

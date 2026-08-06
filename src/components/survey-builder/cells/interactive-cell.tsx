@@ -30,23 +30,22 @@ const CellRouter = React.memo(function CellRouter({
   inputIdScope,
   ariaInvalid,
   ariaDescribedBy,
-  gatingDisabled,
 }: InteractiveCellProps) {
   switch (cell.type) {
     case 'checkbox':
-      return <CheckboxCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} inputIdScope={inputIdScope} ariaInvalid={ariaInvalid} ariaDescribedBy={ariaDescribedBy} gatingDisabled={gatingDisabled} />;
+      return <CheckboxCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} inputIdScope={inputIdScope} ariaInvalid={ariaInvalid} ariaDescribedBy={ariaDescribedBy} />;
     case 'radio':
-      return <RadioCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} inputIdScope={inputIdScope} ariaInvalid={ariaInvalid} ariaDescribedBy={ariaDescribedBy} gatingDisabled={gatingDisabled} {...(groupName !== undefined ? { groupName } : {})} />;
+      return <RadioCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} inputIdScope={inputIdScope} ariaInvalid={ariaInvalid} ariaDescribedBy={ariaDescribedBy} {...(groupName !== undefined ? { groupName } : {})} />;
     case 'select':
-      return <SelectCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} inputIdScope={inputIdScope} ariaInvalid={ariaInvalid} ariaDescribedBy={ariaDescribedBy} gatingDisabled={gatingDisabled} />;
+      return <SelectCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} inputIdScope={inputIdScope} ariaInvalid={ariaInvalid} ariaDescribedBy={ariaDescribedBy} />;
     case 'input':
-      return <InputCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} inputIdScope={inputIdScope} ariaInvalid={ariaInvalid} ariaDescribedBy={ariaDescribedBy} gatingDisabled={gatingDisabled} />;
+      return <InputCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} inputIdScope={inputIdScope} ariaInvalid={ariaInvalid} ariaDescribedBy={ariaDescribedBy} />;
     case 'image':
       return <ImageCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} />;
     case 'video':
       return <VideoCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} />;
     case 'ranking':
-      return <RankingCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} inputIdScope={inputIdScope} ariaInvalid={ariaInvalid} ariaDescribedBy={ariaDescribedBy} gatingDisabled={gatingDisabled} />;
+      return <RankingCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} inputIdScope={inputIdScope} ariaInvalid={ariaInvalid} ariaDescribedBy={ariaDescribedBy} />;
     case 'ranking_opt':
       return <RankingOptCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} />;
     case 'calc':
@@ -160,6 +159,14 @@ export const InteractiveCell = React.memo(function InteractiveCell({
     }
   }, [gatingDisabled, hasLeftoverValue, clearValue]);
 
+  // 게이팅 미충족 셀은 통째로 숨긴다 (회색 잠금 → 빈 셀, 2026-08-06 UX 결정).
+  // 조건 충족 순간 제자리에 나타나고, 값 지움 effect 는 위에서 이미 동작한다.
+  // 재마운트 시 input 의 emptyDefault prefill 이 새로 실행되는 것도 의도된 동작
+  // (활성화 시 재채움 — 스펙 §7).
+  if (gatingDisabled) {
+    return null;
+  }
+
   return (
     <CellRouter
       cell={cell}
@@ -169,7 +176,6 @@ export const InteractiveCell = React.memo(function InteractiveCell({
       inputIdScope={inputIdScope}
       ariaInvalid={ariaInvalid}
       ariaDescribedBy={ariaDescribedBy}
-      gatingDisabled={gatingDisabled}
       {...(groupName !== undefined ? { groupName } : {})}
     />
   );

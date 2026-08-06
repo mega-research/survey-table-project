@@ -7,7 +7,7 @@ import type { TableCell } from '@/types/survey';
 
 /**
  * 게이팅 인터랙티브 셀 타입 확장 회귀 테스트 — radio/select 셀도 컨트롤러 조건
- * 미충족 시 비활성 렌더가 되어야 한다 (기존에는 input 셀만 배선됨).
+ * 미충족 시 셀이 통째로 숨겨져야 한다 (2026-08-06 UX 결정: 회색 잠금 → 숨김).
  * InteractiveCell(테스트 모드, zustand)을 통째로 태워 GATABLE 배선 전체를 검증한다.
  */
 
@@ -51,32 +51,33 @@ describe('게이팅 셀 타입 확장 — 비활성 렌더 배선', () => {
   });
   afterEach(cleanup);
 
-  it('radio 셀: 컨트롤러 미충족이면 라디오가 disabled 된다', () => {
+  it('radio 셀: 컨트롤러 미충족이면 셀이 렌더되지 않는다 (숨김)', () => {
     const { container } = renderGated(gatedRadio);
-    const input = container.querySelector('input[type="radio"]') as HTMLInputElement;
-    expect(input.disabled).toBe(true);
+    expect(container.querySelector('input[type="radio"]')).toBeNull();
+    expect(container.textContent).toBe('');
   });
 
-  it('radio 셀: 컨트롤러 충족(수행)이면 활성이다', () => {
+  it('radio 셀: 컨트롤러 충족(수행)이면 제자리에 나타난다', () => {
     useTestResponseStore.setState({ testResponses: { q1: { ctrl: '1' } } });
     const { container } = renderGated(gatedRadio);
     const input = container.querySelector('input[type="radio"]') as HTMLInputElement;
+    expect(input).not.toBeNull();
     expect(input.disabled).toBe(false);
   });
 
-  it('select 셀: 컨트롤러 미충족이면 select 가 disabled 된다', () => {
+  it('select 셀: 컨트롤러 미충족이면 셀이 렌더되지 않는다 (숨김)', () => {
     const { container } = renderGated(gatedSelect);
-    const select = container.querySelector('select') as HTMLSelectElement;
-    expect(select.disabled).toBe(true);
+    expect(container.querySelector('select')).toBeNull();
   });
 
-  it('게이팅 없는 셀은 항상 활성이다', () => {
+  it('게이팅 없는 셀은 항상 표시된다', () => {
     const plain: TableCell = { ...gatedRadio, id: 'plain' };
     delete (plain as Partial<TableCell>).enabledWhen;
     const { container } = render(
       <InteractiveCell cell={plain} questionId="q1" isTestMode rowCells={rowCells} />,
     );
     const input = container.querySelector('input[type="radio"]') as HTMLInputElement;
+    expect(input).not.toBeNull();
     expect(input.disabled).toBe(false);
   });
 });
