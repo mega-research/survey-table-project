@@ -334,6 +334,8 @@ interface InteractiveTableResponseProps {
   isTestMode?: boolean | undefined;
   allResponses?: Record<string, unknown> | undefined;
   allQuestions?: Question[] | undefined;
+  /** 열·행·동적 그룹 displayCondition 평가를 건너뛰고 전부 표시 (빌더 편집 미리보기용) */
+  ignoreDisplayConditions?: boolean | undefined;
   dynamicRowConfigs?: DynamicRowGroupConfig[] | undefined;
   hideColumnLabels?: boolean | undefined;
   /** 모바일에서도 카드/스테퍼 전환 없이 원본 표(가로 스크롤)로 렌더 */
@@ -371,6 +373,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
   isTestMode = false,
   allResponses,
   allQuestions,
+  ignoreDisplayConditions = false,
   dynamicRowConfigs,
   hideColumnLabels = false,
   mobileOriginalTable = false,
@@ -462,7 +465,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
 
   // displayCondition 기반 가시 열 필터링 + colspan 재계산
   const { visibleColumns, columnFilteredRows, visibleHeaderGrid } = useMemo(() => {
-    if (!allResponses || !allQuestions || columns.length === 0) {
+    if (ignoreDisplayConditions || !allResponses || !allQuestions || columns.length === 0) {
       return {
         visibleColumns: columns,
         columnFilteredRows: rows,
@@ -495,13 +498,13 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
       visibleHeaderGrid: result.headerGrid,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [columns, rows, tableHeaderGrid, relevantResponsesJson, allQuestions]);
+  }, [columns, rows, tableHeaderGrid, relevantResponsesJson, allQuestions, ignoreDisplayConditions]);
 
   // 행 displayCondition 평가 결과 — null 이면 조건 필터 없음.
   // 동적 행 필터링·rowspan 재계산은 useDynamicRows(동적 행 파이프라인)가 소유하고,
   // branch-logic 의존인 조건 평가만 여기(호출자) 소유로 남긴다.
   const conditionVisibleRowIds = useMemo(() => {
-    if (!allResponses || !allQuestions) return null;
+    if (ignoreDisplayConditions || !allResponses || !allQuestions) return null;
     const hasConditions = columnFilteredRows.some((row) => row.displayCondition);
     if (!hasConditions) return null;
     const ids = new Set<string>();
@@ -512,7 +515,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     }
     return ids;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [columnFilteredRows, relevantResponsesJson, allQuestions]);
+  }, [columnFilteredRows, relevantResponsesJson, allQuestions, ignoreDisplayConditions]);
 
   // 헤더-바디 scrollLeft 상호 동기화 (각각 별도 가로 스크롤 컨테이너)
   // 헤더는 hideColumnLabels=false 일 때만 마운트되므로, 토글 시 리스너 재부착이
@@ -534,7 +537,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
 
   // 그룹 조건부 표시: 숨겨야 할 그룹 ID 집합
   const hiddenGroupIds = useMemo(() => {
-    if (!allResponses || !allQuestions || !dynamicRowConfigs) return undefined;
+    if (ignoreDisplayConditions || !allResponses || !allQuestions || !dynamicRowConfigs) return undefined;
     const hidden = new Set<string>();
     for (const g of dynamicRowConfigs) {
       if (
@@ -546,7 +549,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
       }
     }
     return hidden.size > 0 ? hidden : undefined;
-  }, [dynamicRowConfigs, allResponses, allQuestions]);
+  }, [dynamicRowConfigs, allResponses, allQuestions, ignoreDisplayConditions]);
 
   // 동적 행 파이프라인 — 상태 → 가시 행 필터링 → 레이아웃 → 행 완료 맵을 한 seam 뒤로
   const {
