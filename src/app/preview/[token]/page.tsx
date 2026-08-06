@@ -73,9 +73,15 @@ export default async function PublicSurveyPreviewPage({ params }: PageProps) {
           </span>
         </div>
       </div>
+      {/*
+        surveyIdentifier 는 내부 UUID(survey.id) 대신 privateToken 을 넘긴다.
+        preview 모드는 use-survey-loader 의 isPreview 분기에서 previewContext 로
+        즉시 렌더하고 리턴하므로(parsesurveyIdentifier 재호출 없음) identifier 값은
+        재사용되지 않는다 — id 를 노출할 이유가 없다.
+      */}
       <SurveyResponseFlow
         mode="preview"
-        surveyIdentifier={survey.id}
+        surveyIdentifier={token}
         previewContext={{
           survey: preview.survey,
           versionId: preview.versionId,

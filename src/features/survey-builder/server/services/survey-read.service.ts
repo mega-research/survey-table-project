@@ -17,6 +17,7 @@ import { normalizeQuestions } from '@/lib/question';
 import { findContactByInviteToken } from '@/lib/duplicate-detection/invite-lookup';
 import { isValidTestToken } from '@/lib/survey-control';
 import { normalizeResponseHeaderConfig } from '@/lib/survey/response-header-config';
+import { isValidUUID } from '@/lib/utils';
 import type { QuestionGroup, Question as QuestionType, Survey as SurveyType } from '@/types/survey';
 import { generateAllCellCodes } from '@/utils/table-cell-code-generator';
 
@@ -160,9 +161,17 @@ export async function getSurveyBySlug(
 }
 
 // 비공개 토큰으로 설문 조회 (pub). 토큰으로 조회하되(로직 유지) 반환은 id 만 투영(I-3).
+//
+// privateToken 컬럼은 uuid 타입이라 비-UUID 값으로 조회하면 PG 가
+// 22P02(invalid input syntax for type uuid) 를 던진다. 인증 없는 공개 라우트
+// (/preview/[token] 등)에서 호출되므로 형태가 다른 값은 DB 까지 보내지 않고
+// throw 없이 undefined 로 흡수한다 — lookupContactByToken(mail-unsubscribe.service.ts)
+// 과 동일 패턴. 서비스 레벨에서 막아야 RPC 프로시저 직접 호출 경로까지 함께 보호된다.
 export async function getSurveyByPrivateToken(
   input: SurveyByPrivateTokenInput,
 ): Promise<SurveyIdRow | undefined> {
+  if (!isValidUUID(input.token)) return undefined;
+
   const survey = await db.query.surveys.findFirst({
     where: eq(surveys.privateToken, input.token),
     columns: { id: true },

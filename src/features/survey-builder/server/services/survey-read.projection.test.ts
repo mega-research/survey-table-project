@@ -53,7 +53,9 @@ describe('publicRead 프로젝션 유출 차단 (I-3)', () => {
   });
 
   it('getSurveyByPrivateToken 은 id 만 투영하고 privateToken 등을 노출하지 않는다', async () => {
-    const res = await surveySvc.getSurveyByPrivateToken({ token: 'tok-1' });
+    const res = await surveySvc.getSurveyByPrivateToken({
+      token: '11111111-2222-4333-8444-555555555555',
+    });
 
     expect(res).toEqual({ id: 's1' });
     for (const k of SENSITIVE_FIELDS) {
@@ -68,5 +70,15 @@ describe('publicRead 프로젝션 유출 차단 (I-3)', () => {
     for (const k of SENSITIVE_FIELDS) {
       expect(opts?.columns).not.toHaveProperty(k);
     }
+  });
+
+  // privateToken 컬럼은 uuid 타입 — 비-UUID 값으로 쿼리하면 PG 가
+  // 22P02(invalid input syntax for type uuid) 를 던져 RSC 가 500 으로 크래시하고
+  // Sentry 에도 잡힌다(공개 무인증 라우트라 스팸 유발). DB 까지 가지 않고 흡수해야 한다.
+  it('getSurveyByPrivateToken 은 비-UUID 토큰을 DB 조회 없이 undefined 로 흡수한다', async () => {
+    const res = await surveySvc.getSurveyByPrivateToken({ token: '11111111-2222-4333-8444-5555' });
+
+    expect(res).toBeUndefined();
+    expect(findFirstMock).not.toHaveBeenCalled();
   });
 });

@@ -104,7 +104,11 @@ describe('PublicSurveyPreviewPage (/preview/[token])', () => {
     const flow = findElementByType(result, SurveyResponseFlowStub);
     expect(flow).not.toBeNull();
     expect(flow?.props?.['mode']).toBe('preview');
-    expect(flow?.props?.['surveyIdentifier']).toBe(SURVEY_ID);
+    // surveyIdentifier 는 내부 UUID(survey.id) 가 아니라 privateToken 을 그대로 넘긴다 —
+    // preview 모드는 use-survey-loader 의 isPreview 분기가 previewContext 로 즉시 렌더/리턴
+    // 하므로 identifier 는 재사용되지 않는다(parsesurveyIdentifier 미도달). id 를 클라이언트에
+    // 노출할 이유가 없다.
+    expect(flow?.props?.['surveyIdentifier']).toBe(PRIVATE_TOKEN);
     expect(flow?.props?.['previewContext']).toEqual({ survey: previewSurvey, versionId: 'v1' });
   });
 
@@ -116,6 +120,24 @@ describe('PublicSurveyPreviewPage (/preview/[token])', () => {
     ).rejects.toThrow('NEXT_NOT_FOUND');
 
     expect(getSurveyByPrivateTokenMock).toHaveBeenCalledWith({ token: 'unknown-token' });
+    expect(getSurveyByIdMock).not.toHaveBeenCalled();
+    expect(getSurveyForResponseMock).not.toHaveBeenCalled();
+  });
+
+  it('형식이 깨진(malformed) token은 500 크래시 없이 404 처리한다', async () => {
+    // getSurveyByPrivateToken(실 서비스)은 uuid 컬럼 비교 전에 형태를 검사해 undefined 를
+    // 반환한다(DB 22P02 방지). 이 페이지 테스트는 서비스를 mock 하므로 그 흡수 로직 자체는
+    // survey-read.projection.test.ts 에서 검증하고, 여기서는 undefined 를 받았을 때 페이지가
+    // throw 없이 notFound() 로만 반응하는 계약을 확인한다(메일 클라이언트가 URL을 잘라 보내는
+    // 등으로 발생하는 truncated 토큰 케이스).
+    getSurveyByPrivateTokenMock.mockResolvedValue(undefined);
+    const malformedToken = '11111111-2222-4333-8444-5555';
+
+    await expect(
+      PublicSurveyPreviewPage({ params: Promise.resolve({ token: malformedToken }) }),
+    ).rejects.toThrow('NEXT_NOT_FOUND');
+
+    expect(getSurveyByPrivateTokenMock).toHaveBeenCalledWith({ token: malformedToken });
     expect(getSurveyByIdMock).not.toHaveBeenCalled();
     expect(getSurveyForResponseMock).not.toHaveBeenCalled();
   });
