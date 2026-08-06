@@ -313,63 +313,6 @@ describe('TestModeControl exit dialog contract', () => {
   });
 });
 
-describe('TestModeControl guest contract', () => {
-  it('게스트 + 테스트 모드 ON은 테스트 링크 복사만 노출하고 끄기/대상자 생성은 없다', async () => {
-    const user = userEvent.setup();
-    const clipboardWrite = vi.spyOn(navigator.clipboard, 'writeText');
-    render(<TestModeControl surveyId={SURVEY_ID} initial={initial()} isGuest />);
-
-    await user.hover(screen.getByRole('button', { name: '테스트 모드' }));
-    const menu = await screen.findByRole('menu');
-    expect(
-      within(menu)
-        .getAllByRole('menuitem')
-        .map((item) => item.textContent),
-    ).toEqual(['테스트 링크 복사']);
-    expect(within(menu).queryByRole('separator')).not.toBeInTheDocument();
-    expect(within(menu).queryByText('테스트 대상자 생성')).not.toBeInTheDocument();
-    expect(within(menu).queryByText('테스트 모드 끄기')).not.toBeInTheDocument();
-
-    await user.click(within(menu).getByRole('menuitem', { name: '테스트 링크 복사' }));
-    expect(clipboardWrite).toHaveBeenCalledWith(
-      'http://localhost:3000/survey/survey-one?test=anon-token',
-    );
-
-    // control.get 은 authed 전용이므로 게스트 경로에서는 초기 조회도, 폴링도 발생하지 않는다.
-    expect(controlGetMock).not.toHaveBeenCalled();
-  });
-
-  it('게스트 + 테스트 모드 OFF는 아무것도 렌더하지 않는다', () => {
-    render(
-      <TestModeControl
-        surveyId={SURVEY_ID}
-        initial={initial({ testModeEnabled: false })}
-        isGuest
-      />,
-    );
-
-    expect(screen.queryByRole('button', { name: '테스트 모드' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button')).not.toBeInTheDocument();
-    expect(controlGetMock).not.toHaveBeenCalled();
-  });
-
-  it('게스트는 10초 polling에서도 control.get을 호출하지 않는다', async () => {
-    vi.useFakeTimers();
-    try {
-      render(<TestModeControl surveyId={SURVEY_ID} initial={initial()} isGuest />);
-
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(10_000);
-      });
-
-      expect(controlGetMock).not.toHaveBeenCalled();
-      expect(refreshMock).not.toHaveBeenCalled();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-});
-
 describe('TestModeControl global state sync', () => {
   it('router refresh로 RSC initial이 바뀌면 local state도 즉시 동기화한다', async () => {
     const user = userEvent.setup();

@@ -50,9 +50,8 @@ export function OperationsPageHeader({ surveyId, surveyTitle, isGuest, control }
 
         <div className="flex items-center space-x-3">
           <RefreshButton />
-          {/* 설문 중단은 어드민 전용. 테스트 모드는 게스트도 ON 일 때 링크 복사만 가능 —
-              SurveyControlButtons 내부에서 isGuest 로 분기한다. */}
-          <SurveyControlButtons surveyId={surveyId} initial={control} isGuest={isGuest} />
+          {/* 설문 중단·테스트 모드는 어드민 전용 — 게스트에게는 렌더하지 않는다 */}
+          {!isGuest && <SurveyControlButtons surveyId={surveyId} initial={control} />}
           <Link href={`/admin/surveys/${surveyId}/preview`}>
             <Button variant="outline" size="sm">
               <Eye className="mr-2 h-4 w-4" />
