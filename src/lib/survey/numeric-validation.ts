@@ -19,6 +19,7 @@ import { DEFAULT_REQUIRED_CELL_MESSAGE } from '@/utils/required-message';
 import { isCellValuePresent } from '@/utils/table-cell-semantics';
 
 import { evaluateCellFormula, roundFormulaValue } from './cell-formula';
+import { isCellEnabled } from './cell-gating';
 import { collectRequiredOptionTextIssues } from './required-option-text-validation';
 
 export interface NumericIssue {
@@ -50,6 +51,17 @@ function flatCells(rows: TableRow[] | null | undefined): TableCell[] {
 
 function isEmptyCellValue(v: unknown): boolean {
   return v === undefined || v === null || (typeof v === 'string' && v.trim() === '');
+}
+
+/**
+ * 셀 필수 판정 수렴식 — (required || requiredWhenEnabled). 게이팅되지 않은 기존 required=true
+ * 셀도 이 식으로 커버된다(requiredWhenEnabled 는 그냥 false/undefined).
+ * required-option-text-validation.ts 가 이미 이 파일의 collectVisibleTableCells 를 재사용하는
+ * 의존 방향과 일관되게, 셀 필수 판정도 여기서 export 해 공유한다(중복 정의 금지 — 두 파일이
+ * 갈리면 "검증은 필수인데 상세기입 누락 판정은 필수 아님" 불일치가 재발한다).
+ */
+export function isRequiredCell(cell: TableCell): boolean {
+  return cell.required === true || cell.requiredWhenEnabled === true;
 }
 
 /**
@@ -206,7 +218,16 @@ export function collectNumericIssues(
   if (!hasAnyCellValue) return [];
 
   const visible = collectVisibleTableCells(question, cellValues, ctx);
-  const inputCells = visible.filter((c) => c.type === 'input');
+  // 게이팅 — 비활성 셀은 모든 차단형 검증에서 제외한다 (비활성 필수 셀이 "다음"을
+  // 영구 차단하는 것 방지). isCellEnabled 는 같은 질문의 cellValues 만 본다.
+  // rowCells(같은 행 셀 목록)를 함께 전달해야 option 조건의 {optionId} 래핑·id 저장
+  // 응답을 정확히 해석한다 — tableRowsData 에서 셀 id → row.cells 매핑을 만든다.
+  const rowOfCell = new Map<string, TableCell[]>();
+  for (const row of question.tableRowsData ?? []) {
+    for (const cell of row.cells) rowOfCell.set(cell.id, row.cells);
+  }
+  const enabled = visible.filter((c) => isCellEnabled(c, cellValues, rowOfCell.get(c.id)));
+  const inputCells = enabled.filter((c) => c.type === 'input');
   const issues: NumericIssue[] = [];
 
   // 1) 셀 범위 위반 — min 미달 + max 초과 (max 는 타이핑 차단이 원칙이지만
@@ -225,8 +246,9 @@ export function collectNumericIssues(
     });
   }
 
-  // 2) 합계 제약 — 합산 대상은 "보이는 셀"로 한정 (미선택 동적 행 잔존 값·isHidden 셀·숨은 열/행 제외)
-  const existingIds = new Set(visible.map((c) => c.id));
+  // 2) 합계 제약 — 합산 대상은 "보이고 활성인 셀"로 한정 (미선택 동적 행 잔존 값·isHidden 셀·
+  //    숨은 열/행·비활성 게이팅 셀 제외)
+  const existingIds = new Set(enabled.map((c) => c.id));
   for (const constraint of question.sumConstraints ?? []) {
     const result = evaluateSumConstraint(constraint, cellValues, existingIds);
     if (!result.skipped && !result.ok) {
@@ -238,12 +260,16 @@ export function collectNumericIssues(
     }
   }
 
-  // 3) 필수 셀 — "표시될 때만 필수": isHidden 셀과 미선택 동적 행의 셀은 제외 (영구 차단 방지)
-  //    대상은 REQUIRED_CELL_TYPES(input/radio/checkbox/select/ranking). 응답됨 판정은
-  //    isCellValuePresent 정본(배열 length>0, 문자열 trim, 그 외 truthy) — checkbox/ranking
-  //    빈 배열을 미응답으로 본다.
-  const ordinaryMissingCells = visible.filter(
-    (c) => REQUIRED_CELL_TYPES.has(c.type) && c.required && !isCellValuePresent(cellValues[c.id]),
+  // 3) 필수 셀 — "표시되고 활성일 때만 필수": isHidden 셀·미선택 동적 행의 셀·비활성 게이팅
+  //    셀은 제외 (영구 차단 방지). 대상은 REQUIRED_CELL_TYPES(input/radio/checkbox/select/ranking).
+  //    필수 판정은 (required || requiredWhenEnabled) 수렴식 — enabled 목록 위에서 검사하므로
+  //    "&& 활성" 은 목록 필터로 이미 성립한다. 응답됨 판정은 isCellValuePresent 정본(배열
+  //    length>0, 문자열 trim, 그 외 truthy) — checkbox/ranking 빈 배열을 미응답으로 본다.
+  const ordinaryMissingCells = enabled.filter(
+    (c) =>
+      REQUIRED_CELL_TYPES.has(c.type) &&
+      isRequiredCell(c) &&
+      !isCellValuePresent(cellValues[c.id]),
   );
   // 셀별 지정 문구(requiredMessage)가 있으면 문구 단위로 별도 이슈를 만든다 —
   // 지정 문구 없는 셀들은 아래 기본 문구 통합 이슈(상세기입 포함)로 묶인다.
@@ -285,7 +311,8 @@ export function collectNumericIssues(
   }
 
   // 4) 수식 검증 (스펙 §7) — 입력값 vs 계산값. 빈 입력은 스킵 (입력 강제는 required 소관).
-  for (const cell of visible) {
+  //    비활성 셀은 제외 — 지워지기 전 잔존 값이 수식 불일치로 차단하면 안 됨.
+  for (const cell of enabled) {
     if (cell.type !== 'input' || cell.inputType !== 'number' || !cell.formula) continue;
     const raw = cellValues[cell.id];
     if (typeof raw !== 'string' || raw.trim() === '') continue;

@@ -20,6 +20,9 @@ import {
   checkPasteConflict,
   clearStaleTypeProperties,
   createRadioGroupRemapper,
+  findRegionSourceCellPos,
+  pruneDeadGatingAfterPaste,
+  resolvePastedGating,
   expandSelectionForMerges,
   extractRegionFromRows,
 } from '../utils/drag-copy-utils';
@@ -231,6 +234,31 @@ export function useDragCopy({
               delete (targetCell as { radioGroupName?: string }).radioGroupName;
             }
 
+            // 셀 게이팅 컨트롤러 재해석: 영역 안이면 같은 상대 위치의 대상 셀로 리매핑,
+            // 대상 행에 있으면 유지, 그 외에는 제거 (resolvePastedGating 규약).
+            if (targetCell.enabledWhen) {
+              // 스냅샷 셀에는 id 가 없으므로(REGION_EXCLUDED_KEYS) sourceCellIds 격자로 되짚는다.
+              // 대상 셀 id 는 붙여넣기에서 보존되므로 원본 rows 기준으로 읽어도 같다.
+              // 리매핑 위치는 이번 붙여넣기가 소스의 보이는 컨트롤러 셀을 그대로 써넣는
+              // 자리라서(붙여넣기 후 recalculateHiddenCells 가 소스 병합 기하를 복원)
+              // 대상의 이전 hidden 여부와 무관하게 유효하다.
+              const pos = findRegionSourceCellPos(region, targetCell.enabledWhen.controllerCellId);
+              const remappedControllerId = pos
+                ? rows[targetRow + pos.row]?.cells[targetCol + pos.col]?.id
+                : undefined;
+              const resolved = resolvePastedGating(
+                targetCell.enabledWhen,
+                remappedControllerId,
+                rows[absRow]?.cells ?? [],
+              );
+              if (resolved) {
+                targetCell.enabledWhen = resolved;
+              } else {
+                delete (targetCell as { enabledWhen?: unknown }).enabledWhen;
+                delete (targetCell as { requiredWhenEnabled?: boolean }).requiredWhenEnabled;
+              }
+            }
+
             // cellCode/exportLabel 재생성
             const targetRowData = draft[absRow];
             if (!targetRowData) continue;
@@ -293,6 +321,15 @@ export function useDragCopy({
             }
           }
         }
+
+        // 붙여넣은 병합 앵커가 새로 숨기는 컨트롤러의 게이팅 정리 (undo 패치에 포함되도록
+        // draft 안에서 수행 — isHidden 재계산 전이라 스팬 커버리지로 선판정한다)
+        pruneDeadGatingAfterPaste(draft, rows, {
+          fromRow: targetRow,
+          toRow: targetRow + region.height - 1,
+          fromCol: targetCol,
+          toCol: targetCol + region.width - 1,
+        });
       });
 
       // isHidden 재계산
@@ -328,12 +365,15 @@ export function useDragCopy({
 
     const rows = currentRowsRef.current;
     const columns = currentColumnsRef.current;
-    const restoredRows = applyPatches(rows, undoInfo.inversePatches);
+    // isHidden 은 붙여넣기 커밋 시 patch 밖(recalculateHiddenCells)에서 재계산되므로
+    // patch 복원만으로는 되돌아오지 않는다 — 예: 붙여넣은 병합 앵커가 덮었던 컨트롤러가
+    // undo 후에도 숨김으로 남는다. 복원된 스팬 기하 기준으로 다시 재계산해야 한다.
+    const restoredRows = recalculateHiddenCells(applyPatches(rows, undoInfo.inversePatches));
 
     setCurrentRows(restoredRows);
     notifyChange(currentTitleRef.current, columns, restoredRows);
     setUndoInfo(null);
-  }, [undoInfo, currentRowsRef, currentColumnsRef, setCurrentRows, notifyChange, currentTitleRef]);
+  }, [undoInfo, currentRowsRef, currentColumnsRef, setCurrentRows, notifyChange, currentTitleRef, recalculateHiddenCells]);
 
   const clearCopiedRegion = useCallback(() => {
     setCopiedRegion(null);

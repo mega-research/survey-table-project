@@ -87,11 +87,28 @@ function evalExpr(
       // 분기 RightOperand.lookup 과 동일 구조 — 기존 평가기 재사용.
       // 런타임 미해결(익명 응답 attrs 부재 등)은 항 강등이 아니라 전체 무효 —
       // 틀린 숫자를 보여주거나 검증으로 응답자를 막지 않기 위한 fail-safe (스펙 §4).
+      // 키 매핑 자체가 비었거나 불완전하면 빌더 미설정 — 깨진 참조 계열이므로 항만 강등.
+      // (아래 attrs-key-missing 은 매핑은 온전한데 응답자 attrs 에 값이 없는 런타임 실패와
+      // 같은 reason 문자열을 쓰므로, 빌더 시점 문제는 여기서 먼저 걸러야 구분된다.)
+      if (
+        expr.keyMapping.length === 0 ||
+        expr.keyMapping.some((m) => !m.lutKey || !m.attrsKey)
+      ) {
+        return 'empty';
+      }
       const result = evaluateRightOperand(
         { kind: 'lookup', surveyLookupId: expr.surveyLookupId, keyMapping: expr.keyMapping, valueColumn: expr.valueColumn },
         { responses: {}, contactAttrs: ctx.contactAttrs, lookups: ctx.lookups },
       );
-      return result.ok ? result.value : null;
+      if (result.ok) return result.value;
+      // 실패 사유를 나눈다 (스펙 §4):
+      // - 삭제된 LUT·잘못된 값 컬럼은 빌더 시점에 판명되는 깨진 참조 — 셀 참조와 동일하게
+      //   해당 항만 빈 값으로 강등한다 (빌더 진단이 별도 경고).
+      // - attrs 부재·행 미매칭은 응답자별 런타임 미해결 — 전체 무효로 전파해
+      //   틀린 숫자 표시나 부당한 검증 차단을 막는다.
+      return result.reason === 'lookup-not-found' || result.reason === 'lookup-value-missing'
+        ? 'empty'
+        : null;
     }
     case 'agg': {
       let sum = 0;
@@ -149,6 +166,23 @@ export function withCalcValues(
   payloadAnswers: Record<string, unknown>,
   ctx: FormulaEvalCtx,
 ): Record<string, unknown> {
+  // 평가는 ctx.responses 위에 payload 를 병합한 최신 상태 기준이어야 한다.
+  // 이탈 beacon/flush 가 상태 렌더보다 먼저 실행되면 최신 입력이 payload 에만 있는데,
+  // ctx 만으로 평가하면 계산값이 한 박자 전 응답 기준으로 저장된다.
+  const mergedResponses: Record<string, unknown> = { ...ctx.responses };
+  for (const [qid, payload] of Object.entries(payloadAnswers)) {
+    const prev = mergedResponses[qid];
+    if (
+      payload && typeof payload === 'object' && !Array.isArray(payload) &&
+      prev && typeof prev === 'object' && !Array.isArray(prev)
+    ) {
+      mergedResponses[qid] = { ...(prev as Record<string, unknown>), ...(payload as Record<string, unknown>) };
+    } else {
+      mergedResponses[qid] = payload;
+    }
+  }
+  const evalCtx: FormulaEvalCtx = { ...ctx, responses: mergedResponses };
+
   let out: Record<string, unknown> | null = null;
   for (const q of ctx.questions) {
     const calcCells = (q.tableRowsData ?? [])
@@ -156,18 +190,14 @@ export function withCalcValues(
       .filter((c) => c.type === 'calc' && !c.isHidden && c.formula);
     if (calcCells.length === 0) continue;
 
-    const fromPayload = payloadAnswers[q.id];
-    const fromResponses = ctx.responses[q.id];
+    const merged = mergedResponses[q.id];
     const base = {
-      ...(fromResponses && typeof fromResponses === 'object' && !Array.isArray(fromResponses)
-        ? (fromResponses as Record<string, unknown>)
-        : {}),
-      ...(fromPayload && typeof fromPayload === 'object' && !Array.isArray(fromPayload)
-        ? (fromPayload as Record<string, unknown>)
+      ...(merged && typeof merged === 'object' && !Array.isArray(merged)
+        ? (merged as Record<string, unknown>)
         : {}),
     };
     for (const cell of calcCells) {
-      const value = evaluateCellFormula(cell.formula!, q.id, ctx, cell.numberFormat?.decimalPlaces);
+      const value = evaluateCellFormula(cell.formula!, q.id, evalCtx, cell.numberFormat?.decimalPlaces);
       base[cell.id] = value === null ? '' : String(value);
     }
     out ??= { ...payloadAnswers };

@@ -122,6 +122,7 @@ const VirtualizedRow = React.memo(
                     isTestMode={isTestMode}
                     value={value}
                     onChange={onChange}
+                    rowCells={row.cells}
                   />
                 </div>
               ) : cachedHeight != null ? (

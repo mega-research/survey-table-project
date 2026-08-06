@@ -171,4 +171,69 @@ describe('evaluateCellFormula', () => {
     };
     expect(evaluateCellFormula(expr, 'q1', baseCtx({}), 1)).toBe(0.3);
   });
+
+  it('삭제된 LUT 참조는 항만 빈 값으로 강등된다 (전체 null 아님)', () => {
+    const expr: CalcExpr = {
+      kind: 'group', op: '+',
+      terms: [
+        { kind: 'literal', value: 7 },
+        { kind: 'lookup', surveyLookupId: 'deleted-lut', keyMapping: [{ lutKey: 'k', attrsKey: 'region' }], valueColumn: 'v' },
+      ],
+    };
+    // lookups 목록에 해당 id 가 없음 = 빌더 시점에 판명되는 깨진 참조
+    expect(evaluateCellFormula(expr, 'q1', baseCtx({}))).toBe(7);
+  });
+
+  it('값 컬럼 미지정 LUT 참조도 항만 강등된다', () => {
+    const expr: CalcExpr = {
+      kind: 'group', op: '+',
+      terms: [
+        { kind: 'literal', value: 3 },
+        { kind: 'lookup', surveyLookupId: 'lut1', keyMapping: [{ lutKey: 'k', attrsKey: 'region' }], valueColumn: '' },
+      ],
+    };
+    const ctx = {
+      ...baseCtx({}),
+      lookups: [{ id: 'lut1', name: 'L', columns: ['k', 'v'], rows: [{ k: 'seoul', v: 10 }] }],
+      contactAttrs: { region: 'seoul' },
+    };
+    expect(evaluateCellFormula(expr, 'q1', ctx)).toBe(3);
+  });
+
+  it('키 매핑이 비었거나 불완전한 LUT 는 빌더 미설정 — 항만 강등된다', () => {
+    const lut = { id: 'lut1', name: 'L', columns: ['k', 'v'], rows: [{ k: 'seoul', v: 10 }] };
+    const emptyMapping: CalcExpr = {
+      kind: 'group', op: '+',
+      terms: [
+        { kind: 'literal', value: 5 },
+        { kind: 'lookup', surveyLookupId: 'lut1', keyMapping: [], valueColumn: 'v' },
+      ],
+    };
+    const partialMapping: CalcExpr = {
+      kind: 'group', op: '+',
+      terms: [
+        { kind: 'literal', value: 5 },
+        { kind: 'lookup', surveyLookupId: 'lut1', keyMapping: [{ lutKey: 'k', attrsKey: '' }], valueColumn: 'v' },
+      ],
+    };
+    const ctx = { ...baseCtx({}), lookups: [lut], contactAttrs: { region: 'seoul' } };
+    expect(evaluateCellFormula(emptyMapping, 'q1', ctx)).toBe(5);
+    expect(evaluateCellFormula(partialMapping, 'q1', ctx)).toBe(5);
+  });
+
+  it('LUT 행 미매칭은 여전히 전체 null (런타임 미해결)', () => {
+    const expr: CalcExpr = {
+      kind: 'group', op: '+',
+      terms: [
+        { kind: 'literal', value: 1 },
+        { kind: 'lookup', surveyLookupId: 'lut1', keyMapping: [{ lutKey: 'k', attrsKey: 'region' }], valueColumn: 'v' },
+      ],
+    };
+    const ctx = {
+      ...baseCtx({}),
+      lookups: [{ id: 'lut1', name: 'L', columns: ['k', 'v'], rows: [{ k: 'seoul', v: 10 }] }],
+      contactAttrs: { region: 'busan' }, // 행 없음
+    };
+    expect(evaluateCellFormula(expr, 'q1', ctx)).toBeNull();
+  });
 });

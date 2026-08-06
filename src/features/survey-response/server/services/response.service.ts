@@ -15,7 +15,7 @@ import {
   surveys,
 } from '@/db/schema';
 import type { PageVisit } from '@/db/schema/schema-types';
-import { encryptAnswerValue, encryptResponsesForStorage } from '@/lib/crypto/response-pii';
+import { decryptQuestionResponses, encryptAnswerValue, encryptResponsesForStorage } from '@/lib/crypto/response-pii';
 import { checkTrackA, checkTrackB } from '@/lib/duplicate-detection/check';
 import { computeSignals } from '@/lib/duplicate-detection/signals';
 import { sumActiveSeconds } from '@/lib/operations/active-seconds';
@@ -28,6 +28,9 @@ import {
   assertAnonymousTestSession,
   lockAndAssertResponseMutation,
 } from '@/lib/survey-response/test-target-attempt.server';
+import { withCalcValues } from '@/lib/survey/cell-formula';
+import { stripDisabledCellValues } from '@/lib/survey/cell-gating';
+import type { Question, SurveyLookup } from '@/types/survey';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 
 import type { BlockReason } from '../../domain/duplicate';
@@ -1674,6 +1677,86 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
     }
   }
 
+  // calc 셀 서버 재계산 (신뢰 경계) — 클라이언트가 주입한 계산값을 그대로 믿지 않고,
+  // 응답 시점 버전 스냅샷의 수식으로 다시 계산해 덮어쓴다. 요청 변조나 구버전 클라이언트가
+  // 수식과 다른 값을 보내도 최종 저장 데이터(export 원천)는 수식 결과와 일치한다
+  // ("수식 결과와 다른 저장값은 존재하지 않는다" — CONTEXT.md 계산 셀 불변식).
+  //
+  // data 없이 complete 만 호출하는 우회도 막아야 한다: 위조값을 saveDraft/beacon 으로
+  // 먼저 저장한 뒤 빈 complete 를 부르면 저장된 JSONB 가 그대로 확정되므로, 스냅샷에
+  // calc 셀이 있으면 저장된 응답을 재계산해 덮어쓴다. 이 경로의 읽기·재계산·저장은
+  // 아래 트랜잭션 안에서 row lock(FOR UPDATE) 으로 묶는다 — tx 밖에서 읽어 통째로
+  // 덮어쓰면 읽기~UPDATE 사이에 도착한 draft 답변이 유실되는 경합이 생긴다.
+  //
+  // 반드시 PII 암호화 이전 평문 단계에서 수행한다. 스냅샷 미확보(레거시 versionId null,
+  // 손상 행)면 스킵 — 응답자 저장을 막지 않는 fail-safe (saveAdminEdit 와 동일 정책).
+  let storedRecalc: {
+    questions: Question[];
+    lookups: SurveyLookup[];
+    contactAttrs: Record<string, string | undefined>;
+    piiIds: Set<string>;
+  } | null = null;
+  if (gateRow?.versionId) {
+    const [versionRow] = await db
+      .select({ snapshot: surveyVersions.snapshot })
+      .from(surveyVersions)
+      .where(eq(surveyVersions.id, gateRow.versionId))
+      .limit(1);
+    const snap = versionRow?.snapshot as unknown as
+      | { questions?: unknown; lookups?: unknown }
+      | null
+      | undefined;
+    // JSONB 스키마 드리프트 방어 — 비배열이면 순회에서 크래시하므로 Array.isArray 로 거른다.
+    const snapQuestions = Array.isArray(snap?.questions) ? (snap.questions as Question[]) : [];
+    const snapLookups = Array.isArray(snap?.lookups) ? (snap.lookups as SurveyLookup[]) : [];
+    const hasCalcCells = snapQuestions.some((q) =>
+      (q.tableRowsData ?? []).some((row) => row.cells.some((c) => c.type === 'calc' && c.formula)),
+    );
+    const hasGatedCells = snapQuestions.some((q) =>
+      (q.tableRowsData ?? []).some((row) => row.cells.some((c) => c.enabledWhen && !c.isHidden)),
+    );
+
+    // 게이팅 비활성 셀 값 strip (저장 경계 보증, 스펙 §저장 경계) — 컨트롤러 변경 직후
+    // 이탈한 beacon 이 지움 전 값을 실어 보냈어도 확정 데이터에는 남지 않는다.
+    // calc 재계산(withCalcValues)보다 먼저 수행해 수식이 지워진 값 기준으로 계산되게 한다.
+    if (validatedResponses && hasGatedCells) {
+      validatedResponses = stripDisabledCellValues(snapQuestions, validatedResponses);
+    }
+
+    if (hasCalcCells || hasGatedCells) {
+      let calcAttrs: Record<string, string | undefined> = {};
+      if (hasCalcCells && gateRow.contactTargetId) {
+        const [target] = await db
+          .select({ attrs: contactTargets.attrs })
+          .from(contactTargets)
+          .where(eq(contactTargets.id, gateRow.contactTargetId))
+          .limit(1);
+        calcAttrs = (target?.attrs ?? {}) as Record<string, string | undefined>;
+      }
+      if (validatedResponses) {
+        // 페이로드 경로 — 제출된 전체 응답을 재계산 (tx 밖에서 안전: 컬럼을 페이로드로
+        // 교체하는 것이 complete 의 기존 의미라 경합으로 잃을 저장분이 없다).
+        // 게이팅만 있는 설문은 위 strip 으로 충분 — calc 셀이 있을 때만 재계산한다.
+        if (hasCalcCells) {
+          validatedResponses = withCalcValues(validatedResponses, {
+            questions: snapQuestions,
+            responses: validatedResponses,
+            lookups: snapLookups,
+            contactAttrs: calcAttrs,
+          });
+        }
+      } else {
+        // 빈 complete 경로 — 재계산 재료만 준비하고 실행은 tx 안 row lock 아래로 미룬다.
+        storedRecalc = {
+          questions: snapQuestions,
+          lookups: snapLookups,
+          contactAttrs: calcAttrs,
+          piiIds: await loadPiiQuestionIds(gateRow.versionId, gateRow.surveyId),
+        };
+      }
+    }
+  }
+
   // PII 문항 암호화 — prefill 복원(평문 비교) 이후, 저장 직전에 수행한다.
   if (validatedResponses && gateRow) {
     const piiIds = await loadPiiQuestionIds(gateRow.versionId, gateRow.surveyId);
@@ -1690,6 +1773,34 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
         attemptId: input.attemptId,
         sessionId: input.sessionId,
       });
+    }
+    // 빈 complete 의 calc 재계산 — row lock 을 잡은 뒤 저장분을 읽어 재계산한다.
+    // 동시 draft UPDATE 는 이 lock 을 대기하므로 읽기~쓰기 사이 유실 경합이 없다.
+    let storedRecalcResponses: Record<string, unknown> | undefined;
+    if (storedRecalc) {
+      const [locked] = await tx
+        .select({ questionResponses: surveyResponses.questionResponses })
+        .from(surveyResponses)
+        .where(eq(surveyResponses.id, responseId))
+        .for('update');
+      // 수식이 암호화된 숫자 단답을 참조할 수 있으므로 평문화 후 재계산, 저장 직전 재암호화.
+      const plain = decryptQuestionResponses(
+        (locked?.questionResponses ?? {}) as Record<string, unknown>,
+        { responseId },
+      );
+      // 게이팅 strip → calc 재계산 순서 — 비활성 셀 잔존 값을 지운 뒤 그 기준으로
+      // 수식을 계산한다 (스펙 §저장 경계. 빈 complete 우회로 저장된 값도 여기서 봉합).
+      const stripped = stripDisabledCellValues(storedRecalc.questions, plain);
+      let recomputed = withCalcValues(stripped, {
+        questions: storedRecalc.questions,
+        responses: stripped,
+        lookups: storedRecalc.lookups,
+        contactAttrs: storedRecalc.contactAttrs,
+      });
+      if (storedRecalc.piiIds.size > 0) {
+        recomputed = encryptResponsesForStorage(recomputed, storedRecalc.piiIds);
+      }
+      storedRecalcResponses = recomputed;
     }
     // 1. 기존 JSONB 방식 저장 + 운영 현황 추적 컬럼 갱신
     const [updated] = await tx
@@ -1715,7 +1826,11 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
                )
           ELSE COALESCE(${surveyResponses.pageVisits}, '[]'::jsonb)
         END`,
-        ...(validatedResponses ? { questionResponses: validatedResponses } : {}),
+        ...(validatedResponses
+          ? { questionResponses: validatedResponses }
+          : storedRecalcResponses
+            ? { questionResponses: storedRecalcResponses }
+            : {}),
         ...(data?.exposedQuestionIds || data?.exposedRowIds
           ? {
               metadata: {
@@ -1771,8 +1886,10 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
       }
 
       // 2. response_answers 정규화 저장 (replaceResponseAnswers — saveAdminEdit 과 공유)
-      if (validatedResponses && Object.keys(validatedResponses).length > 0) {
-        await replaceResponseAnswers(tx, responseId, updated.surveyId, validatedResponses);
+      // 빈 complete 의 calc 재계산 경로도 JSONB 와 동일한 맵으로 정규화한다.
+      const normalizedSource = validatedResponses ?? storedRecalcResponses;
+      if (normalizedSource && Object.keys(normalizedSource).length > 0) {
+        await replaceResponseAnswers(tx, responseId, updated.surveyId, normalizedSource);
       }
     }
 

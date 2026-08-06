@@ -11,7 +11,10 @@ import {
   TableColumn,
   TableRow,
 } from '@/types/survey';
+import { produce } from 'immer';
+
 import { hasExistingOtherRankingCell } from '@/utils/ranking-source';
+import { pruneDeadGatingAfterPaste, resolvePastedGating } from '../utils/drag-copy-utils';
 import {
   generateAllCellCodes,
   generateCellCodesForRow,
@@ -839,6 +842,11 @@ export function useTableEditor({
       if (!sourceRow) return;
 
       const newRowId = generateId();
+      // 셀 게이팅 컨트롤러 리매핑용 — 원본 행 셀 id → 복제 행 셀 id
+      const clonedCellIdByOld = new Map<string, string>();
+      sourceRow.cells.forEach((cell, colIndex) => {
+        clonedCellIdByOld.set(cell.id, `cell-${newRowId}-${columns[colIndex]?.id ?? colIndex}`);
+      });
       const newRow: TableRow = {
         ...sourceRow,
         id: newRowId,
@@ -848,6 +856,14 @@ export function useTableEditor({
           const cloned: TableCell = JSON.parse(JSON.stringify(cell));
           cloned.id = `cell-${newRowId}-${columns[colIndex]?.id ?? colIndex}`;
           delete cloned.rowspan;
+          // 게이팅 컨트롤러가 같은 행을 가리키면 복제 행의 새 id 로 리매핑
+          // (같은 행 밖 참조는 원본 그대로 두고 진단이 잡는다)
+          if (cloned.enabledWhen) {
+            const remapped = clonedCellIdByOld.get(cloned.enabledWhen.controllerCellId);
+            if (remapped) {
+              cloned.enabledWhen = { ...cloned.enabledWhen, controllerCellId: remapped };
+            }
+          }
           // 응답 인용 이름은 설문 전역 식별자다. 그대로 복제하면 6행 표가 사실은
           // 6개의 질문이라는 의도가 깨지고, 같은 이름을 가진 셀들이 응답 페이지에서
           // 조용히 하나의 문구로 합쳐진다(동일 이름 병합은 의도된 동작이라 경고도 없다).
@@ -1122,6 +1138,18 @@ export function useTableEditor({
         targetColumn?.label,
       );
 
+      // 셀 게이팅 컨트롤러 재해석 — 같은 행의 보이는 셀이면 유지, 다른 행·숨김 셀이면 제거
+      // (게이팅은 같은 행 값만 평가하고, 병합 숨김 셀은 응답이 없어 영구 비활성이 된다)
+      if (pastedCell.enabledWhen) {
+        const resolved = resolvePastedGating(pastedCell.enabledWhen, undefined, targetRow?.cells ?? []);
+        if (resolved) {
+          pastedCell.enabledWhen = resolved;
+        } else {
+          delete pastedCell.enabledWhen;
+          delete pastedCell.requiredWhenEnabled;
+        }
+      }
+
       let updatedRows = rows.map((row, rIndex) =>
         rIndex === rowIndex
           ? { ...row, cells: row.cells.map((c, cIndex) => (cIndex === cellIndex ? pastedCell : c)) }
@@ -1144,6 +1172,18 @@ export function useTableEditor({
             return c;
           }),
         }));
+
+        // 붙여넣은 병합 스팬이 같은 행의 컨트롤러를 새로 덮으면, 그 컨트롤러를 참조하던
+        // 게이팅이 영구 비활성 죽은 참조가 된다 — 스팬 커버리지로 선판정해 정리.
+        // (셀 객체가 원본과 공유되므로 immer 로 불변 갱신)
+        updatedRows = produce(updatedRows, (draft) => {
+          pruneDeadGatingAfterPaste(draft, rows, {
+            fromRow: rowIndex,
+            toRow: rowIndex + rowspan - 1,
+            fromCol: cellIndex,
+            toCol: cellIndex + colspan - 1,
+          });
+        });
       }
 
       const finalRows = recalculateHiddenCells(updatedRows);

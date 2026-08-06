@@ -296,6 +296,12 @@ export type CalcExpr =
   | { kind: 'agg'; fn: 'sum' | 'avg'; items: CalcExpr[] }
   | { kind: 'group'; op: '+' | '-' | '*' | '/'; terms: CalcExpr[] };
 
+// 셀 활성 조건(게이팅) — 같은 행 컨트롤러 셀 값에 따라 input 셀의 입력 가능 여부를 제어한다.
+export type CellEnableCondition =
+  | { kind: 'option'; controllerCellId: string; values: string[] }
+  | { kind: 'filled'; controllerCellId: string }
+  | { kind: 'numeric'; controllerCellId: string; op: '>' | '>=' | '<' | '<=' | '==' | '!='; value: number };
+
 export interface TableCell {
   id: string;
   textBold?: boolean;
@@ -429,6 +435,12 @@ export interface TableCell {
   formulaTolerance?: number;
   // 검증 실패 메시지 커스텀. 미지정 시 기본 문구 (계산값 미노출)
   formulaErrorMessage?: string;
+  // 셀 활성 조건 (게이팅) — 같은 행 컨트롤러 셀 값에 따라 이 input 셀의 입력 가능 여부 제어.
+  // 미지정 = 항상 활성. 컨트롤러 미응답 = 미충족 = 비활성. 스펙 docs/superpowers/specs/2026-08-05-cell-gating-design.md
+  enabledWhen?: CellEnableCondition;
+  // 활성 상태일 때 필수. 게이팅 셀에서 기존 required 는 이 필드와 같은 의미로 수렴한다
+  // — 검증은 (required || requiredWhenEnabled) && 활성 하나다.
+  requiredWhenEnabled?: boolean;
 }
 
 export interface CheckboxOption {

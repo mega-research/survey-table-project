@@ -8,6 +8,7 @@ import { AlertTriangle } from 'lucide-react';
 import { extractVariableKeys } from '@/lib/mail/variable-extractor';
 import { QUESTION_LIKE_CELL_TYPES } from '@/lib/survey/answer-quote';
 import { collectFormulaDiagnostics, type FormulaDiagnostic } from '@/lib/survey/cell-formula-diagnostics';
+import { collectGatingDiagnostics, type GatingDiagnostic } from '@/lib/survey/cell-gating-diagnostics';
 import { formatCellLabel } from '@/utils/cell-label';
 import { resolveChoiceOptions } from '@/utils/choice-source';
 import { resolveRankingOptions } from '@/utils/ranking-source';
@@ -397,6 +398,30 @@ export function TokenWarningPanel({ questions, groups, lookups, thankYouMessage,
       ? d.message
       : `"${questionTitleById.get(d.questionId) ?? '(제목 없음)'}" — ${d.message}`;
 
+  // 경고 6: 셀 게이팅 진단 — 런타임(cell-gating.ts)은 깨진 참조를 활성으로 폴백하고
+  // prefill 충돌은 게이팅을 무시하므로, 저작 실수의 방어선은 이 경고다 (스펙 5절).
+  const gatingDiagnostics = useMemo<GatingDiagnostic[]>(
+    () => collectGatingDiagnostics(questions),
+    [questions],
+  );
+  // tone 배분: 참조 오류 3종(broken/cross-row/self)은 red, 순환·prefill 충돌은 amber.
+  const gatingErrors = useMemo(
+    () =>
+      gatingDiagnostics.filter(
+        (d) => d.kind !== 'gating-cycle' && d.kind !== 'gating-prefill-conflict',
+      ),
+    [gatingDiagnostics],
+  );
+  const gatingWarnings = useMemo(
+    () =>
+      gatingDiagnostics.filter(
+        (d) => d.kind === 'gating-cycle' || d.kind === 'gating-prefill-conflict',
+      ),
+    [gatingDiagnostics],
+  );
+  const gatingLine = (d: GatingDiagnostic): string =>
+    `"${questionTitleById.get(d.questionId) ?? '(제목 없음)'}" — ${d.message}`;
+
   // 경고 4: 치환되지 않는 자리(완료 메시지 / prefill 템플릿 / 표 제목 · 열 제목 · 헤더 그리드 /
   // 검증 오류 메시지)에 쓴 인용 토큰
   const nonSubstitutedFindings = useMemo(() => {
@@ -452,7 +477,9 @@ export function TokenWarningPanel({ questions, groups, lookups, thankYouMessage,
     backwardReferences.length > 0 ||
     nonSubstitutedFindings.length > 0 ||
     formulaErrors.length > 0 ||
-    formulaWarnings.length > 0;
+    formulaWarnings.length > 0 ||
+    gatingErrors.length > 0 ||
+    gatingWarnings.length > 0;
 
   if (!hasAnything) return null;
 
@@ -546,6 +573,26 @@ export function TokenWarningPanel({ questions, groups, lookups, thankYouMessage,
           <div className="mt-1 space-y-0.5 text-xs">
             {formulaWarnings.map((d, i) => (
               <div key={i}>{formulaLine(d)}</div>
+            ))}
+          </div>
+        </WarningBox>
+      )}
+
+      {gatingErrors.length > 0 && (
+        <WarningBox tone="red" title={`셀 활성 조건 오류 ${gatingErrors.length}건`}>
+          <div className="mt-1 space-y-0.5 text-xs">
+            {gatingErrors.map((d, i) => (
+              <div key={i}>{gatingLine(d)}</div>
+            ))}
+          </div>
+        </WarningBox>
+      )}
+
+      {gatingWarnings.length > 0 && (
+        <WarningBox tone="amber" title={`셀 활성 조건 주의 ${gatingWarnings.length}건`}>
+          <div className="mt-1 space-y-0.5 text-xs">
+            {gatingWarnings.map((d, i) => (
+              <div key={i}>{gatingLine(d)}</div>
             ))}
           </div>
         </WarningBox>

@@ -64,4 +64,24 @@ describe('withCalcValues', () => {
     const out = withCalcValues({}, { questions: [q], responses: {}, lookups: [], contactAttrs: {} });
     expect((out['q1'] as Record<string, unknown>)['q1-c']).toBe('4'); // 3.5 → 4
   });
+
+  it('payload 에만 있는 최신 입력이 계산에 반영된다 (stale ctx 방지)', () => {
+    const q = calcTable('q1');
+    // ctx.responses 는 이전 값 '1', payload 는 최신 값 '9'
+    const out = withCalcValues(
+      { q1: { 'q1-a': '9' } },
+      { questions: [q], responses: { q1: { 'q1-a': '1' } }, lookups: [], contactAttrs: {} },
+    );
+    expect((out['q1'] as Record<string, unknown>)['q1-c']).toBe('9');
+  });
+
+  it('payload 최신 입력이 교차 질문 참조 계산에도 반영된다', () => {
+    const q1 = calcTable('q1');
+    const q2 = calcTable('q2', 'q1'); // q2 calc 이 q1-a 참조
+    const out = withCalcValues(
+      { q1: { 'q1-a': '20' } },
+      { questions: [q1, q2], responses: { q1: { 'q1-a': '5' } }, lookups: [], contactAttrs: {} },
+    );
+    expect((out['q2'] as Record<string, unknown>)['q2-c']).toBe('20');
+  });
 });

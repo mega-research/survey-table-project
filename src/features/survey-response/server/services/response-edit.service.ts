@@ -21,6 +21,7 @@ import {
 import { SurveyOwnershipError } from '@/lib/auth/require-survey-ownership';
 import { decryptQuestionResponses, encryptResponsesForStorage } from '@/lib/crypto/response-pii';
 import { withCalcValues } from '@/lib/survey/cell-formula';
+import { stripDisabledCellValues } from '@/lib/survey/cell-gating';
 import { loadPiiQuestionIds } from './response.service';
 
 import type { Question, SurveyLookup } from '@/types/survey';
@@ -136,9 +137,20 @@ export async function saveAdminEdit(
     // lookups 는 buildSurveySnapshot(lib/versioning/snapshot-builder.ts) 이 publish 시 항상
     // 함께 freeze 해 넣지만(survey-read.service.ts 의 snapshot.lookups 사용과 동일 근거)
     // 타입에 없으므로 안전 단언 캐스팅.
-    const snapshotForCalc = versionSnapshot as unknown as {
-      questions?: Question[];
-      lookups?: SurveyLookup[];
+    const rawSnapshotForCalc = versionSnapshot as unknown as {
+      questions?: unknown;
+      lookups?: unknown;
+    };
+    // JSONB 스키마 드리프트 방어 — questions/lookups 가 비배열(객체·문자열)이면
+    // withCalcValues 순회나 lookup find 에서 크래시해 운영자 수정 전체가 실패한다.
+    // Array.isArray 로 걸러 손상 스냅샷에서도 재계산만 조용히 스킵되게 한다.
+    const snapshotForCalc = {
+      questions: Array.isArray(rawSnapshotForCalc.questions)
+        ? (rawSnapshotForCalc.questions as Question[])
+        : [],
+      lookups: Array.isArray(rawSnapshotForCalc.lookups)
+        ? (rawSnapshotForCalc.lookups as SurveyLookup[])
+        : [],
     };
 
     let contactAttrs: Record<string, string | undefined> = {};
@@ -151,9 +163,15 @@ export async function saveAdminEdit(
       contactAttrs = (target?.attrs ?? {}) as Record<string, string | undefined>;
     }
 
-    finalResponses = withCalcValues(questionResponses, {
+    // 게이팅 strip → calc 재계산 순서 — 운영자 수정도 응답자 플로우와 같은 신뢰 경계:
+    // 비활성 셀에 실려온 값은 저장하지 않고, 수식은 지워진 값 기준으로 계산한다.
+    const strippedResponses = stripDisabledCellValues(
+      snapshotForCalc.questions ?? [],
+      questionResponses,
+    );
+    finalResponses = withCalcValues(strippedResponses, {
       questions: snapshotForCalc.questions ?? [],
-      responses: questionResponses,
+      responses: strippedResponses,
       lookups: snapshotForCalc.lookups ?? [],
       contactAttrs,
     });
