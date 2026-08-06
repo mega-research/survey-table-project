@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { SaveDraftResponseInput } from '@/features/survey-response/domain/response';
 import { saveDraftResponseIfActive } from '@/features/survey-response/server/services/response.service';
+import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
 import { getTrustedClientIpOrNull } from '@/lib/rate-limit/client-ip';
 import { getRateLimiter, type RateLimitGroup } from '@/lib/rate-limit/rate-limiter';
 
@@ -23,7 +24,7 @@ const RATE_LIMIT_GROUP: RateLimitGroup = 'response-draft';
  * oRPC 는 sendBeacon 으로 호출할 수 없어(커스텀 헤더 불가, body 가 RPC 포맷) segment 와
  * 동일한 이유로 REST 를 유지한다. oRPC 미들웨어를 거치지 않으므로 진입부에서 직접 rate limit 한다.
  */
-export async function POST(req: NextRequest) {
+async function handleDraft(req: NextRequest, ctx: RouteLogContext) {
   // 신뢰 IP 추출 불가면 fail-closed. 단일 'unknown' 버킷 공유로 인한 상호 잠식 차단.
   const ip = getTrustedClientIpOrNull(req.headers);
   if (ip === null) {
@@ -45,21 +46,28 @@ export async function POST(req: NextRequest) {
   if (!parsed.success || parsed.data.responseId.trim() === '') {
     return NextResponse.json({ error: 'invalid payload' }, { status: 400 });
   }
+  // 로그에는 응답값(answers) 자체를 싣지 않는다 — 식별자·건수만 (allowlist 관례)
+  ctx.bind({
+    responseId: parsed.data.responseId,
+    answerCount: Object.keys(parsed.data.answers).length,
+  });
   if (Object.keys(parsed.data.answers).length > MAX_DRAFT_ANSWER_KEYS) {
     return NextResponse.json({ error: 'too many answers' }, { status: 400 });
   }
 
-  try {
-    const result = await saveDraftResponseIfActive(parsed.data);
-    if (!result.saved) {
-      // 제출 직후 탭 닫기 등 정상 시나리오. 에러율을 오염시키지 않도록 info 로만 남긴다.
-      console.info('[draft] 저장 skip:', result.skipped);
-      return NextResponse.json({ ok: true, skipped: result.skipped });
-    }
-  } catch (err) {
-    console.error('[draft] 저장 실패:', err);
-    return NextResponse.json({ error: 'internal' }, { status: 500 });
+  // 예기치 못한 저장 실패는 로깅 래퍼가 err 기록 + 500 응답으로 처리한다.
+  const result = await saveDraftResponseIfActive(parsed.data);
+  if (!result.saved) {
+    // 제출 직후 탭 닫기 등 정상 시나리오. 에러율을 오염시키지 않도록 info 로만 남긴다.
+    ctx.log.info({ skipped: result.skipped }, '임시 저장 skip');
+    return NextResponse.json({ ok: true, skipped: result.skipped });
   }
 
   return NextResponse.json({ ok: true });
 }
+
+export const POST = withRouteLogging('/api/response/draft', handleDraft, {
+  errorMessage: 'internal',
+  // sendBeacon 고볼륨 익명 경로 — 기존대로 Sentry 미캡처 (pino error 로그만)
+  sentry: false,
+});

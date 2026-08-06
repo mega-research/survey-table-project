@@ -10,7 +10,8 @@ import { completedResponse, notDeletedResponse, notTestResponse } from '@/data/r
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { normalizeQuestions } from '@/lib/question';
 import { requireAuth } from '@/lib/auth';
-import { canAccessSurvey } from '@/lib/auth/guest-grants';
+import { canAccessSurvey, getGuestSurveyId } from '@/lib/auth/guest-grants';
+import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
 import {
   generateRawDataWorkbook,
   type RawExportContext,
@@ -32,8 +33,9 @@ type ExportType = (typeof ALLOWED_EXPORT_TYPES)[number];
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const MAX_EXPORT_RESPONSES = 10000;
 
-export async function GET(
+async function handleExport(
   request: NextRequest,
+  ctx: RouteLogContext,
   { params }: { params: Promise<{ surveyId: string }> },
 ) {
   try {
@@ -42,11 +44,19 @@ export async function GET(
     // 되지 않도록 한다(게스트는 grant 된 설문만, 그 외 임의 인증사용자는 전체 차단).
     const user = await requireAuth();
     const { surveyId } = await params;
+    // 다운로드 발생 사실 자체를 access 로그에 남긴다 — 법정 감사기록(접속기록)과는
+    // 별개의 운영 기록. 로그에는 쿼리 파라미터·행수만 싣는다 (응답 본문 금지).
+    ctx.bind({
+      userId: user.id,
+      role: getGuestSurveyId(user.id) ? 'guest' : 'admin',
+      surveyId,
+    });
     if (!canAccessSurvey(user.id, surveyId)) {
       return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
     }
 
     const type = request.nextUrl.searchParams.get('type') as ExportType | null;
+    if (type) ctx.bind({ exportType: type });
 
     if (!type || !ALLOWED_EXPORT_TYPES.includes(type)) {
       return NextResponse.json({ error: '지원하지 않는 내보내기 형식입니다.' }, { status: 400 });
@@ -109,6 +119,7 @@ export async function GET(
           { responseId: r.id },
         ),
       }));
+      ctx.bind({ rowCount: responses.length });
     }
 
     const dateSlice = new Date().toISOString().slice(0, 10);
@@ -142,8 +153,9 @@ export async function GET(
           { status: 413 },
         );
       }
-      const ctx = await buildRawExportContext(surveyId, surveyData.questions);
-      const workbook = generateRawDataWorkbook(hydratedQuestions, rows, ctx);
+      ctx.bind({ rowCount: rows.length });
+      const exportCtx = await buildRawExportContext(surveyId, surveyData.questions);
+      const workbook = generateRawDataWorkbook(hydratedQuestions, rows, exportCtx);
       // exceljs 워크북 — 셀 스타일(헤더 색상/병합) 지원을 위해 XLSX 대신 사용.
       const buffer = await workbook.xlsx.writeBuffer();
       const filename = `${safeTitle}_RawData_${dateSlice}.xlsx`;
@@ -161,6 +173,7 @@ export async function GET(
       if (!basis) {
         return NextResponse.json({ error: '분할 기준 문항이 필요합니다.' }, { status: 400 });
       }
+      ctx.bind({ basis });
 
       const basisQuestion = hydratedQuestions.find((q) => q.id === basis);
       if (!basisQuestion) {
@@ -183,8 +196,9 @@ export async function GET(
         );
       }
 
-      const ctx = await buildRawExportContext(surveyId, surveyData.questions);
-      const workbook = buildSplitWorkbook(hydratedQuestions, rows, basis, ctx);
+      ctx.bind({ rowCount: rows.length });
+      const exportCtx = await buildRawExportContext(surveyId, surveyData.questions);
+      const workbook = buildSplitWorkbook(hydratedQuestions, rows, basis, exportCtx);
       const buffer = await workbook.xlsx.writeBuffer();
       const basisCode = basisQuestion.questionCode ?? 'split';
       // Content-Disposition 헤더는 ByteString만 허용 → 한글 리터럴/코드는 퍼센트 인코딩.
@@ -227,13 +241,14 @@ export async function GET(
         { status: 400 },
       );
     }
-    console.error('Export Error:', error);
-    return NextResponse.json(
-      { error: '데이터 내보내기 중 오류가 발생했습니다.' },
-      { status: 500 },
-    );
+    // 그 외 예기치 못한 에러는 로깅 래퍼가 err 기록 + 500 응답으로 처리한다.
+    throw error;
   }
 }
+
+export const GET = withRouteLogging('/api/surveys/[surveyId]/export', handleExport, {
+  errorMessage: '데이터 내보내기 중 오류가 발생했습니다.',
+});
 
 /**
  * raw/raw-split 공용 응답 로더.

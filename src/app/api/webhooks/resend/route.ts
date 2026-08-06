@@ -4,6 +4,7 @@ import * as Sentry from '@sentry/nextjs';
 import { NextResponse, type NextRequest } from 'next/server';
 import { Webhook } from 'svix';
 
+import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
 import { processResendWebhookEvent } from '@/lib/mail/resend-webhook';
 
 /**
@@ -33,7 +34,7 @@ interface ResendEventPayload {
   };
 }
 
-const POST_HANDLER = async (req: NextRequest): Promise<NextResponse> => {
+const POST_HANDLER = async (req: NextRequest, ctx: RouteLogContext): Promise<NextResponse> => {
   const secret = process.env['RESEND_WEBHOOK_SECRET'];
   if (!secret) {
     Sentry.captureMessage('RESEND_WEBHOOK_SECRET 환경변수 미설정', 'error');
@@ -61,6 +62,12 @@ const POST_HANDLER = async (req: NextRequest): Promise<NextResponse> => {
   }
 
   const messageId = payload.data?.email_id;
+  // 로그에는 식별자만 싣는다 — payload.data 통짜(수신자 email 포함) 금지.
+  ctx.bind({
+    svixId,
+    eventType: payload.type,
+    ...(messageId !== undefined ? { resendMessageId: messageId } : {}),
+  });
   try {
     const result = await processResendWebhookEvent({
       id: svixId,
@@ -77,6 +84,7 @@ const POST_HANDLER = async (req: NextRequest): Promise<NextResponse> => {
     }
     return NextResponse.json({ ok: true });
   } catch (err) {
+    ctx.log.error({ err }, 'resend webhook 처리 실패');
     Sentry.captureException(err, {
       tags: { operation: 'resend_webhook' },
       extra: { eventType: payload.type, messageId, svixId },
@@ -86,4 +94,6 @@ const POST_HANDLER = async (req: NextRequest): Promise<NextResponse> => {
   }
 };
 
-export { POST_HANDLER as POST };
+export const POST = withRouteLogging('/api/webhooks/resend', POST_HANDLER, {
+  source: 'resend-webhook',
+});

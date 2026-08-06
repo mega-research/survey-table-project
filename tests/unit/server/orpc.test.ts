@@ -22,11 +22,24 @@ vi.mock('@/lib/rate-limit/rate-limiter', () => ({
   }),
 }));
 
+// orpc.ts 의 fail-open 기록이 console 에서 logger 로 이전됨 — 호출 검증용 mock
+const logged = vi.hoisted(() => ({ info: vi.fn(), error: vi.fn() }));
+vi.mock('@/lib/logger', () => ({
+  logger: { info: logged.info, error: logged.error },
+  scheduleLogFlush: vi.fn(),
+  flushLogs: vi.fn(),
+  withContext: vi.fn(),
+  createLogger: vi.fn(),
+  REDACT_PATHS: [],
+}));
+
 import { base, isRateLimited, withRateLimit } from '@/server/orpc';
 
 beforeEach(() => {
   state.impl = () => Promise.resolve({ ...OK });
   state.calls = [];
+  logged.info.mockClear();
+  logged.error.mockClear();
 });
 
 describe('isRateLimited', () => {
@@ -44,10 +57,8 @@ describe('isRateLimited', () => {
   it('limiter 호출이 실패하면 fail-open 으로 false 를 반환한다', async () => {
     // Upstash 장애/자격증명 오류 등으로 .limit() 이 실패해도 응답 수집이 죽지 않아야 한다.
     state.impl = () => Promise.reject(new Error('upstash unreachable'));
-    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     await expect(isRateLimited('response-mutation', '1.2.3.4')).resolves.toBe(false);
-    expect(errSpy).toHaveBeenCalled();
-    errSpy.mockRestore();
+    expect(logged.error).toHaveBeenCalled();
   });
 });
 

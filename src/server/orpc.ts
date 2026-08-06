@@ -6,13 +6,22 @@ import {
   getGuestSurveyId,
   isAdminOrGuestGrantHolder,
 } from '@/lib/auth/guest-grants';
+import { logger } from '@/lib/logger';
 import { getTrustedClientIpOrNull } from '@/lib/rate-limit/client-ip';
 import { getRateLimiter, type RateLimitGroup } from '@/lib/rate-limit/rate-limiter';
 
 import type { ORPCContext } from './context';
+import { rpcLoggingMiddleware } from './rpc-logging';
 
-/** 모든 procedure의 뿌리. 컨텍스트 타입만 박는다. */
-export const base = os.$context<ORPCContext>();
+/** 컨텍스트 타입만 박은 원시 빌더 — 미들웨어 팩토리(withRateLimit) 전용. */
+const root = os.$context<ORPCContext>();
+
+/**
+ * 모든 procedure의 뿌리. 로깅 미들웨어가 최전방에 붙어 pub/authed/scoped 파생
+ * 전 procedure 의 성공/실패가 구조화 로그 1줄로 남는다 (rpc-logging.ts 참조).
+ * 최전방이므로 rate limit·인증 미들웨어의 거부(TOO_MANY_REQUESTS 등)도 기록된다.
+ */
+export const base = root.use(rpcLoggingMiddleware);
 
 /** 응답자(공개) 베이스 — 인증 불필요. */
 export const pub = base;
@@ -30,10 +39,7 @@ export async function isRateLimited(group: RateLimitGroup, ip: string): Promise<
     const { success } = await getRateLimiter().limit(`${group}:${ip}`);
     return !success;
   } catch (err) {
-    console.error(
-      `[rate-limit] limiter 호출 실패 — fail-open 통과 (group=${group})`,
-      err,
-    );
+    logger.error({ group, err }, '[rate-limit] limiter 호출 실패 — fail-open 통과');
     return false;
   }
 }
@@ -50,7 +56,8 @@ export async function isRateLimited(group: RateLimitGroup, ip: string): Promise<
  * 차단한다(Vercel 표준 배포는 항상 신뢰 헤더가 채워져 이 경로에 도달하지 않음).
  */
 export function withRateLimit(group: RateLimitGroup) {
-  return base.middleware(async ({ context, next }) => {
+  // base 는 로깅 미들웨어가 붙은 빌더라 .middleware() 가 없다 — 원시 root 로 만든다.
+  return root.middleware(async ({ context, next }) => {
     const ip = getTrustedClientIpOrNull(context.headers ?? new Headers());
     if (ip === null) {
       throw new ORPCError('TOO_MANY_REQUESTS', {
