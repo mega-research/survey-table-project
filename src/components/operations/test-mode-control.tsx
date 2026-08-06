@@ -68,6 +68,13 @@ interface Props {
    * 편집 페이지처럼 모르면 생략 — 마운트 시 control.get 으로 조회한다.
    */
   initial?: TestModeState | undefined;
+  /**
+   * 게스트 세션 — control.get/setTestMode/disable 이 모두 authed 전용이므로
+   * 게스트에게는 테스트 모드 ON 일 때 "테스트 링크 복사" 항목 하나만 노출하고,
+   * OFF 일 때는 아무것도 렌더하지 않는다(켜기 자체가 불가능). 켜져 있을 때도
+   * control.get 폴링/포커스 동기화는 authed 실패만 반복하므로 돌리지 않는다.
+   */
+  isGuest?: boolean;
 }
 
 /**
@@ -78,7 +85,7 @@ interface Props {
  * 클립보드에 복사하고, ON 상태에서는 amber 버튼 호버/클릭 드롭다운으로 링크 복사·끄기 제공.
  * 테스트 링크는 마지막 발행본(스냅샷) 기준 — 편집 중 미발행 내용은 반영되지 않는다.
  */
-export function TestModeControl({ surveyId, initial }: Props) {
+export function TestModeControl({ surveyId, initial, isGuest = false }: Props) {
   const router = useRouter();
   const [state, setState] = useState<TestModeState | null>(initial ?? null);
   const [isPending, startTransition] = useTransition();
@@ -97,6 +104,9 @@ export function TestModeControl({ surveyId, initial }: Props) {
       setState((current) => (hasSameTestModeState(current, next) ? current : next));
       return;
     }
+    // 게스트는 control.get 이 authed 라 조회할 수 없다 — 헤더 경로는 항상 initial 을
+    // 넘겨주므로 이 분기에 오지 않지만, 방어적으로 요청 자체를 막는다.
+    if (isGuest) return;
     let cancelled = false;
     const requestVersion = ++controlRequestVersion.current;
     client.operations.control
@@ -124,7 +134,7 @@ export function TestModeControl({ surveyId, initial }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [initial, surveyId]);
+  }, [initial, isGuest, surveyId]);
 
   useEffect(() => {
     stateRef.current = state;
@@ -132,7 +142,9 @@ export function TestModeControl({ surveyId, initial }: Props) {
 
   // 다른 관리자/탭의 전역 변경을 focus와 10초 polling으로 반영한다. 동일 snapshot이면
   // local/RSC 모두 건드리지 않아 불필요한 router refresh를 만들지 않는다.
+  // 게스트는 control.get 이 authed 라 매번 실패만 반복하므로 아예 돌리지 않는다.
   useEffect(() => {
+    if (isGuest) return;
     let cancelled = false;
     const syncControl = async () => {
       const requestVersion = ++controlRequestVersion.current;
@@ -155,7 +167,7 @@ export function TestModeControl({ surveyId, initial }: Props) {
       window.clearInterval(interval);
       window.removeEventListener('focus', syncControl);
     };
-  }, [router, surveyId]);
+  }, [isGuest, router, surveyId]);
 
   // 테스트 모드 드롭다운 — 클릭 외에 호버로도 열린다. 대각선 이동 중 닫힘을 막기 위해
   // mouseleave 후 200ms 지연 뒤 닫고, 트리거/콘텐츠 어느 쪽이든 재진입하면 취소한다.
@@ -335,18 +347,23 @@ export function TestModeControl({ surveyId, initial }: Props) {
               <Copy className="mr-2 h-4 w-4" />
               테스트 링크 복사
             </DropdownMenuItem>
-            {state.testTargetCount === 0 ? (
-              <DropdownMenuItem onSelect={() => setGeneratorOpen(true)}>
-                테스트 대상자 생성
-              </DropdownMenuItem>
-            ) : null}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem disabled={isPending} onSelect={requestDisableTestMode}>
-              테스트 모드 끄기
-            </DropdownMenuItem>
+            {/* 게스트: setTestMode/disable 이 authed 전용이라 켜기/끄기/대상자 생성은 노출하지 않는다 */}
+            {!isGuest && (
+              <>
+                {state.testTargetCount === 0 ? (
+                  <DropdownMenuItem onSelect={() => setGeneratorOpen(true)}>
+                    테스트 대상자 생성
+                  </DropdownMenuItem>
+                ) : null}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem disabled={isPending} onSelect={requestDisableTestMode}>
+                  테스트 모드 끄기
+                </DropdownMenuItem>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
-      ) : (
+      ) : isGuest ? null : (
         <Button
           type="button"
           variant="outline"
