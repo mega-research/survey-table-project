@@ -183,3 +183,51 @@ describe('stripDisabledCellValues — 인터랙티브 셀 타입 확장 (radio/c
     expect(q1['g-select']).toBe('c');
   });
 });
+
+describe('stripDisabledCellValues — 게이팅 체인 고정점 정리', () => {
+  // A(radio) → B(input, A 옵션 조건) → C(input, B filled 조건) 체인
+  const chainQuestion = (): Question =>
+    ({
+      id: 'q1', type: 'table', title: 'T', required: false, order: 1,
+      tableRowsData: [{
+        id: 'r1', label: 'r1',
+        cells: [
+          { id: 'A', content: '', type: 'radio', radioOptions: [
+            { id: 'o1', label: '수행', value: '1' },
+            { id: 'o2', label: '미수행', value: '2' },
+          ] },
+          { id: 'B', content: '', type: 'input', inputType: 'number',
+            enabledWhen: { kind: 'option', controllerCellId: 'A', values: ['1'] } },
+          { id: 'C', content: '', type: 'input', inputType: 'number',
+            enabledWhen: { kind: 'filled', controllerCellId: 'B' } },
+        ],
+      }],
+    }) as unknown as Question;
+
+  it('상류가 지워지면 그 값에 의존하던 하류도 함께 지운다 (A 미수행 → B, C 모두 제거)', () => {
+    const out = stripDisabledCellValues([chainQuestion()], {
+      q1: { A: '2', B: '5', C: '7' }, // B 잔존 값이 C 를 활성으로 오판시키면 안 됨
+    });
+    const q1 = out['q1'] as Record<string, unknown>;
+    expect('B' in q1).toBe(false);
+    expect('C' in q1).toBe(false);
+  });
+
+  it('체인 전체가 활성(A 수행, B 입력)이면 모두 보존한다', () => {
+    const out = stripDisabledCellValues([chainQuestion()], {
+      q1: { A: '1', B: '5', C: '7' },
+    });
+    const q1 = out['q1'] as Record<string, unknown>;
+    expect(q1['B']).toBe('5');
+    expect(q1['C']).toBe('7');
+  });
+
+  it('중간만 미입력이면 하류만 지운다 (A 수행, B 빈 값 → C 제거)', () => {
+    const out = stripDisabledCellValues([chainQuestion()], {
+      q1: { A: '1', C: '7' },
+    });
+    const q1 = out['q1'] as Record<string, unknown>;
+    expect(q1['A']).toBe('1');
+    expect('C' in q1).toBe(false);
+  });
+});

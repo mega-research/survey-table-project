@@ -131,19 +131,32 @@ export function stripDisabledCellValues(
 
     // 컨트롤러 옵션 id/value 래핑을 정확히 해석하려면 같은 행의 셀 목록(row.cells)이
     // 필요하다 — 행을 벗어나 통짜로 flatMap 하면 그 컨텍스트를 잃는다.
-    const disabledIds: string[] = [];
-    for (const row of rows) {
-      for (const cell of row.cells) {
-        if (!GATABLE_CELL_TYPES.has(cell.type) || !cell.enabledWhen || cell.isHidden) continue;
-        if (!(cell.id in cellValues)) continue;
-        if (!isCellEnabled(cell, cellValues, row.cells)) disabledIds.push(cell.id);
+    //
+    // 게이팅 체인(A→B→C) 정리는 고정점 수렴으로 — 한 pass 는 상류 셀의 잔존 값으로
+    // 하류를 활성으로 오판할 수 있다(B 가 지워지기 전 값으로 C 의 filled 조건이 참).
+    // 지워진 상태 기준으로 제거가 더 없을 때까지 재평가한다. 매 반복이 키를 최소
+    // 하나 지우므로 게이팅 셀 수 이내에 종료한다. (클라이언트는 useEffect 연쇄가
+    // 렌더 사이클로 같은 일을 한다 — 서버 strip 은 일회 호출이라 여기서 수렴시킨다.)
+    const next = { ...cellValues };
+    let changed = false;
+    let removedInPass = true;
+    while (removedInPass) {
+      removedInPass = false;
+      for (const row of rows) {
+        for (const cell of row.cells) {
+          if (!GATABLE_CELL_TYPES.has(cell.type) || !cell.enabledWhen || cell.isHidden) continue;
+          if (!(cell.id in next)) continue;
+          if (!isCellEnabled(cell, next, row.cells)) {
+            delete next[cell.id];
+            removedInPass = true;
+            changed = true;
+          }
+        }
       }
     }
-    if (disabledIds.length === 0) continue;
+    if (!changed) continue;
 
     out ??= { ...payloadAnswers };
-    const next = { ...cellValues };
-    for (const id of disabledIds) delete next[id];
     out[q.id] = next;
   }
   return out ?? payloadAnswers;
