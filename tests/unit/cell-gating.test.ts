@@ -230,4 +230,52 @@ describe('stripDisabledCellValues — 게이팅 체인 고정점 정리', () => 
     expect(q1['A']).toBe('1');
     expect('C' in q1).toBe(false);
   });
+
+  // 셀 id 가 Object.prototype 프로퍼티명과 겹치면 `in` 연산자는 delete 이후에도
+  // 프로토타입 체인에서 계속 true 라 고정점 루프가 영원히 돌 수 있다 — own key 판정 강제.
+  it(
+    'Object.prototype 프로퍼티명 셀 id(toString)에서도 종료하고 값을 지운다',
+    () => {
+      const q = {
+        id: 'q1', type: 'table', title: 'T', required: false, order: 1,
+        tableRowsData: [{
+          id: 'r1', label: 'r1',
+          cells: [
+            { id: 'A', content: '', type: 'radio', radioOptions: [
+              { id: 'o1', label: '수행', value: '1' },
+            ] },
+            { id: 'toString', content: '', type: 'input', inputType: 'number',
+              enabledWhen: { kind: 'option', controllerCellId: 'A', values: ['1'] } },
+          ],
+        }],
+      } as unknown as Question;
+      const out = stripDisabledCellValues([q], { q1: { toString: '5' } });
+      const q1 = out['q1'] as Record<string, unknown>;
+      expect(Object.hasOwn(q1, 'toString')).toBe(false);
+    },
+    2000,
+  );
+
+  it(
+    '페이로드에 키가 없는 프로토타입명 셀 id(constructor)도 무한 루프 없이 통과한다',
+    () => {
+      const q = {
+        id: 'q1', type: 'table', title: 'T', required: false, order: 1,
+        tableRowsData: [{
+          id: 'r1', label: 'r1',
+          cells: [
+            { id: 'A', content: '', type: 'radio', radioOptions: [
+              { id: 'o1', label: '수행', value: '1' },
+            ] },
+            { id: 'constructor', content: '', type: 'input', inputType: 'number',
+              enabledWhen: { kind: 'option', controllerCellId: 'A', values: ['1'] } },
+          ],
+        }],
+      } as unknown as Question;
+      const plain = { q1: { A: '1' } };
+      const out = stripDisabledCellValues([q], plain);
+      expect((out['q1'] as Record<string, unknown>)['A']).toBe('1');
+    },
+    2000,
+  );
 });

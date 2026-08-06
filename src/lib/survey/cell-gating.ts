@@ -137,15 +137,27 @@ export function stripDisabledCellValues(
     // 지워진 상태 기준으로 제거가 더 없을 때까지 재평가한다. 매 반복이 키를 최소
     // 하나 지우므로 게이팅 셀 수 이내에 종료한다. (클라이언트는 useEffect 연쇄가
     // 렌더 사이클로 같은 일을 한다 — 서버 strip 은 일회 호출이라 여기서 수렴시킨다.)
+    // own key 판정은 반드시 Object.hasOwn — `in` 은 프로토타입 체인까지 보므로
+    // 셀 id 가 toString/constructor 같은 Object.prototype 프로퍼티명과 겹치면
+    // delete 이후에도 계속 true 가 되어 고정점 루프가 영원히 돈다 (동기 루프라
+    // 테스트 타임아웃조차 개입 못 하는 저장 경로 행). maxPasses 는 이중 안전벨트.
     const next = { ...cellValues };
+    const gatedCellCount = rows.reduce(
+      (n, row) =>
+        n +
+        row.cells.filter(
+          (c) => GATABLE_CELL_TYPES.has(c.type) && c.enabledWhen && !c.isHidden,
+        ).length,
+      0,
+    );
     let changed = false;
     let removedInPass = true;
-    while (removedInPass) {
+    for (let pass = 0; pass <= gatedCellCount && removedInPass; pass++) {
       removedInPass = false;
       for (const row of rows) {
         for (const cell of row.cells) {
           if (!GATABLE_CELL_TYPES.has(cell.type) || !cell.enabledWhen || cell.isHidden) continue;
-          if (!(cell.id in next)) continue;
+          if (!Object.hasOwn(next, cell.id)) continue;
           if (!isCellEnabled(cell, next, row.cells)) {
             delete next[cell.id];
             removedInPass = true;
