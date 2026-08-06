@@ -13,7 +13,7 @@ vi.mock('sonner', () => ({
 
 import { CopyPreviewLinkButton } from '@/app/admin/surveys/[id]/preview/copy-preview-link-button';
 
-const PRIVATE_TOKEN = '11111111-2222-4333-8444-555555555555';
+const PREVIEW_TOKEN = '11111111-2222-4333-8444-555555555555';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -31,11 +31,11 @@ describe('CopyPreviewLinkButton', () => {
       value: { writeText: vi.fn().mockResolvedValue(undefined) },
     });
 
-    render(<CopyPreviewLinkButton privateToken={PRIVATE_TOKEN} />);
+    render(<CopyPreviewLinkButton previewToken={PREVIEW_TOKEN} />);
     await user.click(screen.getByRole('button', { name: '공개 링크 복사' }));
 
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
-      `https://example.test/preview/${PRIVATE_TOKEN}`,
+      `https://example.test/preview/${PREVIEW_TOKEN}`,
     );
     expect(toastSuccessMock).toHaveBeenCalledWith('공개 미리보기 링크를 복사했습니다.');
     expect(toastErrorMock).not.toHaveBeenCalled();
@@ -48,7 +48,7 @@ describe('CopyPreviewLinkButton', () => {
       value: { writeText: vi.fn().mockRejectedValue(new Error('denied')) },
     });
 
-    render(<CopyPreviewLinkButton privateToken={PRIVATE_TOKEN} />);
+    render(<CopyPreviewLinkButton previewToken={PREVIEW_TOKEN} />);
     await user.click(screen.getByRole('button', { name: '공개 링크 복사' }));
 
     expect(toastErrorMock).toHaveBeenCalledWith('denied');

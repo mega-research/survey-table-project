@@ -52,6 +52,7 @@
     "0065_r2_deletion_queue_and_sent_ledger",
     "0066_add_row_wise_original_mobile_mode",
     "0067_add_question_answer_quote",
-    "0068_add_question_required_message"
+    "0068_add_question_required_message",
+    "0069_add_survey_preview_token"
   ]
 }

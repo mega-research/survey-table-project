@@ -6,7 +6,7 @@ import { Eye } from 'lucide-react';
 import { SurveyResponseFlow } from '@/components/survey-response/survey-response-flow';
 import {
   getSurveyById,
-  getSurveyByPrivateToken,
+  getSurveyByPreviewToken,
   getSurveyForResponse,
 } from '@/features/survey-builder/server/services/survey-read.service';
 
@@ -25,16 +25,21 @@ export const metadata: Metadata = {
  * 로그인 없이 접근 가능한 공개 읽기 전용 설문 미리보기.
  *
  * `/admin/surveys/[id]/preview` 는 middleware 보호 + 내부 UUID(id) 노출이라 그대로
- * 공유할 수 없다. 이 라우트는 `surveys.privateToken`(설문마다 발급되는 unguessable
- * 공개 핸들, `/survey/[id]` 접근과 동일 개념)만으로 설문을 찾는다 — id/slug 로는
- * 절대 매칭하지 않는다(getSurveyByPrivateToken 은 privateToken 컬럼만 조회).
+ * 공유할 수 없다. 이 라우트는 `surveys.previewToken`(설문마다 발급되는 unguessable
+ * 공개 핸들, 미리보기 전용)만으로 설문을 찾는다 — id/slug/privateToken 으로는
+ * 절대 매칭하지 않는다(getSurveyByPreviewToken 은 previewToken 컬럼만 조회).
+ *
+ * privateToken 은 `/survey/[id]` 응답(답변 제출) 경로의 크레덴셜을 겸한다 — 이 라우트가
+ * privateToken 을 받아들이면 "미리보기 링크 공유"가 곧 "응답 제출 권한 공유"가 되어버린다
+ * (URL 을 /survey/<token> 으로 바꾸기만 하면 실제 응답이 들어감). previewToken 은 답변
+ * 크레덴셜로 전혀 사용되지 않는 별도 컬럼이라 이 문제가 없다.
  *
  * mode="preview" 라 응답을 저장하지 않으므로 인증 없이 노출해도 안전하다.
  */
 export default async function PublicSurveyPreviewPage({ params }: PageProps) {
   const { token } = await params;
 
-  const idRow = await getSurveyByPrivateToken({ token });
+  const idRow = await getSurveyByPreviewToken({ token });
   if (!idRow) notFound();
 
   const survey = await getSurveyById(idRow.id);
@@ -74,7 +79,7 @@ export default async function PublicSurveyPreviewPage({ params }: PageProps) {
         </div>
       </div>
       {/*
-        surveyIdentifier 는 내부 UUID(survey.id) 대신 privateToken 을 넘긴다.
+        surveyIdentifier 는 내부 UUID(survey.id) 대신 previewToken(경로의 token)을 넘긴다.
         preview 모드는 use-survey-loader 의 isPreview 분기에서 previewContext 로
         즉시 렌더하고 리턴하므로(parsesurveyIdentifier 재호출 없음) identifier 값은
         재사용되지 않는다 — id 를 노출할 이유가 없다.

@@ -43,8 +43,8 @@ export default async function SurveyPreviewPage({ params }: PageProps) {
               </Link>
             </Button>
             <div className="flex items-center gap-2">
-              {survey.privateToken && (
-                <CopyPreviewLinkButton privateToken={survey.privateToken} />
+              {survey.previewToken && (
+                <CopyPreviewLinkButton previewToken={survey.previewToken} />
               )}
               {!isGuest && (
                 <Button variant="outline" size="sm" asChild>
@@ -92,7 +92,7 @@ export default async function SurveyPreviewPage({ params }: PageProps) {
                 현황으로
               </Link>
             </Button>
-            {survey.privateToken && <CopyPreviewLinkButton privateToken={survey.privateToken} />}
+            {survey.previewToken && <CopyPreviewLinkButton previewToken={survey.previewToken} />}
             {!isGuest && (
               <Button variant="outline" size="sm" asChild>
                 <Link href={`/admin/surveys/${surveyId}/edit`}>

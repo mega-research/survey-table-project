@@ -34,6 +34,9 @@ export const surveys = pgTable('surveys', {
   description: text('description'),
   slug: text('slug').unique(),
   privateToken: uuid('private_token').defaultRandom(),
+  // 공개 읽기전용 미리보기 전용 토큰 — privateToken(응답 크레덴셜)과 분리해 발급.
+  // /preview/[token] 라우트만 조회한다 — /survey/[id] 응답 경로에서는 매칭하지 않는다(0069 마이그레이션).
+  previewToken: uuid('preview_token').defaultRandom(),
 
   // 설정
   isPublic: boolean('is_public').default(true).notNull(),
