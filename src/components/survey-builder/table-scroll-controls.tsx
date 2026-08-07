@@ -86,19 +86,21 @@ function getScrollBehavior(): ScrollBehavior {
 
 function ScrollStepButton({
   direction,
-  disabled,
   onClick,
+  ref,
 }: {
   direction: 'left' | 'right';
-  disabled: boolean;
   onClick: () => void;
+  ref: React.Ref<HTMLButtonElement>;
 }) {
   const Icon = direction === 'left' ? ChevronLeft : ChevronRight;
+  // disabled 는 JSX 로 선언하지 않고 update()가 DOM 으로 직접 관리한다 —
+  // 스크롤 임계 통과 순간의 상태 플립 리렌더가 iOS 터치 팬을 멈칫하게 하기 때문.
   return (
     <button
+      ref={ref}
       type="button"
       onClick={onClick}
-      disabled={disabled}
       className={SCROLL_STEP_BUTTON_CLASS}
       aria-label={direction === 'left' ? '왼쪽으로 스크롤' : '오른쪽으로 스크롤'}
     >
@@ -107,21 +109,22 @@ function ScrollStepButton({
   );
 }
 
+/** 버튼 활성/페이드와 동일한 양끝 임계값(px) */
+const SCROLL_EDGE_THRESHOLD = 10;
+
 export function TableScrollControls({
   scrollRef,
-  canScrollLeft,
-  canScrollRight,
   columnStops,
 }: {
   scrollRef: React.RefObject<HTMLElement | null>;
-  canScrollLeft: boolean;
-  canScrollRight: boolean;
   /** 열 좌측 경계 누적 px (0 시작, 마지막 = 전체 너비). 제공 시 버튼/방향키가
    *  "잘린 열 정렬" 페이징으로 동작하고, 미제공이면 뷰포트 폭 페이징 폴백. */
   columnStops?: readonly number[] | undefined;
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const thumbRef = useRef<HTMLDivElement>(null);
+  const leftBtnRef = useRef<HTMLButtonElement>(null);
+  const rightBtnRef = useRef<HTMLButtonElement>(null);
   const [needsScroll, setNeedsScroll] = useState(false);
   // aria-controls 대상: 스크롤 컨테이너에 id가 없으면 부여
   const scrollAreaId = useId();
@@ -139,6 +142,15 @@ export function TableScrollControls({
       const active = scrollWidth - clientWidth > 1;
       setNeedsScroll((prev) => (prev === active ? prev : active));
       if (!active) return;
+      // 버튼 활성화도 리렌더 없이 DOM 직접 갱신 — 임계 통과 순간의 disabled
+      // 플립이 React 리렌더를 유발하면 iOS 터치 팬이 멈칫한다 (페이드와 동일 사유)
+      if (leftBtnRef.current) {
+        leftBtnRef.current.disabled = scrollLeft <= SCROLL_EDGE_THRESHOLD;
+      }
+      if (rightBtnRef.current) {
+        rightBtnRef.current.disabled =
+          scrollLeft >= scrollWidth - clientWidth - SCROLL_EDGE_THRESHOLD;
+      }
       // aria-valuenow도 썸과 같이 DOM 직접 갱신 (스크롤마다 리렌더 방지)
       trackRef.current?.setAttribute(
         'aria-valuenow',
@@ -261,11 +273,7 @@ export function TableScrollControls({
 
   return (
     <div className="flex items-center gap-2 bg-white px-2 py-1 print:hidden">
-      <ScrollStepButton
-        direction="left"
-        disabled={!canScrollLeft}
-        onClick={() => scrollByStep(-1)}
-      />
+      <ScrollStepButton ref={leftBtnRef} direction="left" onClick={() => scrollByStep(-1)} />
       <div
         ref={trackRef}
         role="scrollbar"
@@ -286,11 +294,7 @@ export function TableScrollControls({
           className="absolute inset-y-0 cursor-grab rounded-full bg-gray-400 transition-colors hover:bg-gray-500 active:cursor-grabbing active:bg-gray-600"
         />
       </div>
-      <ScrollStepButton
-        direction="right"
-        disabled={!canScrollRight}
-        onClick={() => scrollByStep(1)}
-      />
+      <ScrollStepButton ref={rightBtnRef} direction="right" onClick={() => scrollByStep(1)} />
     </div>
   );
 }
