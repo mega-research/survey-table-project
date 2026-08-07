@@ -28,14 +28,18 @@ import {
   shouldDisplayDynamicGroup,
   shouldDisplayRow,
 } from '@/utils/branch-logic';
-import { getCellBackgroundStyle, getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
 import { decideDrilldown } from '@/utils/classify-table';
+import {
+  getCellBackgroundStyle,
+  getCellTextClassName,
+  getCellTextStyle,
+} from '@/utils/cell-style';
 import { expandHeaderGrid } from '@/utils/expand-header-grid';
-import { buildMobileRowWiseOriginalModel } from '@/utils/mobile-row-wise-original';
 import {
   clampMobileDrilldownOmitLeadingColumns,
   resolveMobileTableDisplayMode,
 } from '@/utils/mobile-table-display-mode';
+import { buildMobileRowWiseOriginalModel } from '@/utils/mobile-row-wise-original';
 import {
   HEADER_ROW_MIN_HEIGHT,
   STICKY_BODY_Z,
@@ -489,14 +493,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
       visibleHeaderGrid: result.headerGrid,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    columns,
-    rows,
-    tableHeaderGrid,
-    relevantResponsesJson,
-    allQuestions,
-    ignoreDisplayConditions,
-  ]);
+  }, [columns, rows, tableHeaderGrid, relevantResponsesJson, allQuestions, ignoreDisplayConditions]);
 
   // 행 displayCondition 평가 결과 — null 이면 조건 필터 없음.
   // 동적 행 필터링·rowspan 재계산은 useDynamicRows(동적 행 파이프라인)가 소유하고,
@@ -530,6 +527,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     return stops;
   }, [visibleColumns]);
 
+
   // 헤더 행 수 계산
   const headerRowCount = useMemo(() => {
     if (hideColumnLabels) return 0;
@@ -539,8 +537,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
 
   // 그룹 조건부 표시: 숨겨야 할 그룹 ID 집합
   const hiddenGroupIds = useMemo(() => {
-    if (ignoreDisplayConditions || !allResponses || !allQuestions || !dynamicRowConfigs)
-      return undefined;
+    if (ignoreDisplayConditions || !allResponses || !allQuestions || !dynamicRowConfigs) return undefined;
     const hidden = new Set<string>();
     for (const g of dynamicRowConfigs) {
       if (
@@ -806,46 +803,52 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
   const displayCellById = useMemo(
     () =>
       new Map(
-        rowWiseDisplayRows.flatMap((row) => row.cells.map((cell) => [cell.id, cell] as const)),
+        rowWiseDisplayRows.flatMap((row) =>
+          row.cells.map((cell) => [cell.id, cell] as const),
+        ),
       ),
     [rowWiseDisplayRows],
   );
-  const rowWiseOriginalModel = useMemo(() => {
-    if (!isMobileView || mobileMode !== 'row-wise-original') {
-      return { sections: [] };
-    }
+  const rowWiseOriginalModel = useMemo(
+    () => {
+      if (!isMobileView || mobileMode !== 'row-wise-original') {
+        return { sections: [] };
+      }
 
-    return buildMobileRowWiseOriginalModel({
-      authoredColumns: columns,
-      authoredRows: rows,
-      visibleColumns,
-      ...(visibleHeaderGrid ? { visibleHeaderGrid } : {}),
-      displayRows: rowWiseDisplayRows,
+      return buildMobileRowWiseOriginalModel({
+        authoredColumns: columns,
+        authoredRows: rows,
+        visibleColumns,
+        ...(visibleHeaderGrid ? { visibleHeaderGrid } : {}),
+        displayRows: rowWiseDisplayRows,
+        hideColumnLabels,
+        settings: {
+          omitLeadingAuthoredColumns: clampMobileDrilldownOmitLeadingColumns(
+            mobileDrilldownOmitLeadingColumns,
+            columns.length,
+          ),
+          repeatHeaderStartRow: mobileDrilldownRepeatHeaderStartRow,
+          repeatHeaderEndRow: mobileDrilldownRepeatHeaderEndRow,
+        },
+        isLabelSourceHidden: (cellId) =>
+          displayCellById.get(cellId)?.mobileDisplay === 'hidden',
+      });
+    },
+    [
+      columns,
+      displayCellById,
       hideColumnLabels,
-      settings: {
-        omitLeadingAuthoredColumns: clampMobileDrilldownOmitLeadingColumns(
-          mobileDrilldownOmitLeadingColumns,
-          columns.length,
-        ),
-        repeatHeaderStartRow: mobileDrilldownRepeatHeaderStartRow,
-        repeatHeaderEndRow: mobileDrilldownRepeatHeaderEndRow,
-      },
-      isLabelSourceHidden: (cellId) => displayCellById.get(cellId)?.mobileDisplay === 'hidden',
-    });
-  }, [
-    columns,
-    displayCellById,
-    hideColumnLabels,
-    isMobileView,
-    mobileDrilldownOmitLeadingColumns,
-    mobileDrilldownRepeatHeaderEndRow,
-    mobileDrilldownRepeatHeaderStartRow,
-    mobileMode,
-    rowWiseDisplayRows,
-    rows,
-    visibleColumns,
-    visibleHeaderGrid,
-  ]);
+      isMobileView,
+      mobileDrilldownOmitLeadingColumns,
+      mobileDrilldownRepeatHeaderEndRow,
+      mobileDrilldownRepeatHeaderStartRow,
+      mobileMode,
+      rowWiseDisplayRows,
+      rows,
+      visibleColumns,
+      visibleHeaderGrid,
+    ],
+  );
 
   // ── 빈 테이블 ──
   if (columns.length === 0 || rows.length === 0) {
@@ -908,20 +911,18 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
                 </div>
               </div>
               {/* 우측 페이드 — 오른쪽에 아직 열이 더 있다는 시각 힌트 */}
-              <div
-                aria-hidden="true"
-                className={cn(
-                  'pointer-events-none absolute inset-y-0 right-0 z-20 w-12 transform-gpu bg-gradient-to-l from-gray-50 via-gray-50/60 to-transparent transition-opacity duration-150 print:hidden',
-                  canScrollRight ? 'opacity-100' : 'opacity-0',
-                )}
-              />
-              <div
-                aria-hidden="true"
-                className={cn(
-                  'pointer-events-none absolute inset-y-0 left-0 z-20 w-6 transform-gpu bg-gradient-to-r from-gray-50/80 to-transparent transition-opacity duration-150 print:hidden',
-                  canScrollLeft ? 'opacity-100' : 'opacity-0',
-                )}
-              />
+              {canScrollRight && (
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-y-0 right-0 z-20 w-12 transform-gpu bg-gradient-to-l from-gray-50 via-gray-50/60 to-transparent print:hidden"
+                />
+              )}
+              {canScrollLeft && (
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-y-0 left-0 z-20 w-6 transform-gpu bg-gradient-to-r from-gray-50/80 to-transparent print:hidden"
+                />
+              )}
             </div>
           )}
         </div>
@@ -942,7 +943,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
             ref={tableContainerRef}
             className={cn(
               // 모바일은 상단 스크롤 컨트롤이 스크롤 수단 — 네이티브 가로 스크롤바 숨김
-              'overflow-x-auto pb-4 max-md:[scrollbar-width:none] max-md:[-ms-overflow-style:none] print:overflow-visible max-md:[&::-webkit-scrollbar]:hidden',
+              'overflow-x-auto pb-4 max-md:[-ms-overflow-style:none] max-md:[scrollbar-width:none] print:overflow-visible max-md:[&::-webkit-scrollbar]:hidden',
               rendersFullOriginalTable ? 'px-0' : 'px-4 md:px-0',
             )}
           >
@@ -1012,20 +1013,18 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
             )}
           </div>
           {/* 우측 페이드 — 잘린 셀 내용 위로 깔려 "오른쪽에 더 있다"를 알린다 */}
-          <div
-            aria-hidden="true"
-            className={cn(
-              'pointer-events-none absolute inset-y-0 right-0 z-20 w-12 transform-gpu bg-gradient-to-l from-black/10 to-transparent transition-opacity duration-150 print:hidden',
-              canScrollRight ? 'opacity-100' : 'opacity-0',
-            )}
-          />
-          <div
-            aria-hidden="true"
-            className={cn(
-              'pointer-events-none absolute inset-y-0 left-0 z-20 w-6 transform-gpu bg-gradient-to-r from-black/10 to-transparent transition-opacity duration-150 print:hidden',
-              canScrollLeft ? 'opacity-100' : 'opacity-0',
-            )}
-          />
+          {canScrollRight && (
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-y-0 right-0 z-20 w-12 transform-gpu bg-gradient-to-l from-black/10 to-transparent print:hidden"
+            />
+          )}
+          {canScrollLeft && (
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-y-0 left-0 z-20 w-6 transform-gpu bg-gradient-to-r from-black/10 to-transparent print:hidden"
+            />
+          )}
         </div>
       </div>
     </div>
@@ -1064,7 +1063,11 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
             없으므로 그 간격 역할을 하는 상단 패딩을 유지한다. 데스크탑은 기존 여백 그대로. */}
         <CardContent
           className={cn(
-            isMobileView ? (tableTitle ? 'p-3 sm:p-4' : 'p-3 pt-0 sm:p-4 sm:pt-1') : 'p-0 sm:px-6',
+            isMobileView
+              ? tableTitle
+                ? 'p-3 sm:p-4'
+                : 'p-3 pt-0 sm:p-4 sm:pt-1'
+              : 'p-0 sm:px-6',
           )}
         >
           <div className="w-full">
@@ -1101,10 +1104,18 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
                 <MobileRowWiseOriginalSheet
                   model={rowWiseOriginalModel}
                   errorCellIds={errorCellIds}
-                  renderCell={(cell, rowQuestion, inputIdScope, invalid, errorDescriptionId) => {
+                  renderCell={(
+                    cell,
+                    rowQuestion,
+                    inputIdScope,
+                    invalid,
+                    errorDescriptionId,
+                  ) => {
                     const sourceRowId =
-                      rowQuestion.projection.sourceRowIdByCellId.get(cell.id) ?? rowQuestion.rowId;
-                    const sourceRow = displayRowById.get(sourceRowId) ?? rowQuestion.projection.row;
+                      rowQuestion.projection.sourceRowIdByCellId.get(cell.id) ??
+                      rowQuestion.rowId;
+                    const sourceRow =
+                      displayRowById.get(sourceRowId) ?? rowQuestion.projection.row;
                     return (
                       <InteractiveCell
                         cell={cell}
@@ -1163,7 +1174,9 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
               // 먼저 해당 섹션/리프로 내비를 전환하고, 상세가 렌더된 다음 이동한다.
               if (drilldownNavigateRef.current && cellIds.length > 0) {
                 drilldownNavigateRef.current(cellIds);
-                window.requestAnimationFrame(() => window.requestAnimationFrame(scroll));
+                window.requestAnimationFrame(() =>
+                  window.requestAnimationFrame(scroll),
+                );
               } else {
                 scroll();
               }
