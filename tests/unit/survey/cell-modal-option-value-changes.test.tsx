@@ -17,6 +17,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('@/hooks/use-ensure-survey-in-db', () => ({
   useEnsureSurveyInDb: () => async () => {},
 }));
+// 옵션 value 리매핑이 있을 때만 호출되는 설문 저장 플로우 — 이 테스트는 셀 저장 경로만 보므로 stub.
+vi.mock('@/hooks/use-survey-sync', () => ({
+  useSurveySync: () => ({ saveSurvey: vi.fn() }),
+}));
 vi.mock('@/shared/lib/rpc', () => ({
   client: {
     surveyBuilder: {

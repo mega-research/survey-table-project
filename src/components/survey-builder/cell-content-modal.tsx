@@ -43,6 +43,7 @@ import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { useEnsureSurveyInDb } from '@/hooks/use-ensure-survey-in-db';
+import { useSurveySync } from '@/hooks/use-survey-sync';
 import { generateId } from '@/lib/utils';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { useSurveyUIStore } from '@/stores/ui-store';
@@ -173,6 +174,12 @@ export function CellContentModal({
   const questions = useSurveyBuilderStore(useShallow((s) => s.currentSurvey.questions));
   const variableCatalog = useSurveyUIStore((s) => s.variableCatalog);
   const ensureSurvey = useEnsureSurveyInDb();
+  // 셀 저장은 tableRowsData 를 DB 에 즉시 커밋하는 비가역 지점이다 — 옵션 value 가 바뀌었으면
+  // 이 표 질문을 참조하는 표시조건 리매핑과 그 영속(설문 저장)도 같은 지점에서 끝내야 한다.
+  const remapOptionValueInConditions = useSurveyBuilderStore(
+    (s) => s.remapOptionValueInConditions,
+  );
+  const { saveSurvey } = useSurveySync();
   const [isSaving, setIsSaving] = useState(false);
   const inputTemplateRef = useRef<HTMLInputElement>(null);
   const textContentRef = useRef<HTMLTextAreaElement>(null);
@@ -561,6 +568,24 @@ export function CellContentModal({
                     ),
                   },
                 }));
+              }
+            }
+
+            // 새 옵션 value 가 DB 에 커밋된 직후 — 이 표 질문을 sourceQuestionId 로 참조하는
+            // 다른 질문/그룹/행/열의 표시조건(table-cell-check expectedValues 는 셀 옵션 value
+            // 공간)을 같은 지점에서 리매핑하고 영속시킨다. 질문 편집 모달의 저장까지 미루면
+            // "셀 저장 후 질문 모달 취소" 경로에서 DB 에 신 value + 구 조건이 영구 잔류한다
+            // (질문 모달의 취소 롤백은 tableRowsData 를 되돌리지 않는다).
+            // 같은 표의 게이팅(enabledWhen)은 onSave→updateCell 이 이미 같은 커밋에 실었다.
+            if (pendingOptionValueChangesRef.current.length > 0) {
+              for (const change of pendingOptionValueChangesRef.current) {
+                remapOptionValueInConditions(currentQuestionId, change.oldValue, change.newValue);
+              }
+              pendingOptionValueChangesRef.current = [];
+              try {
+                await saveSurvey();
+              } catch (saveError) {
+                console.error('표시조건 리매핑 반영을 위한 설문 저장 실패:', saveError);
               }
             }
           } catch (error) {

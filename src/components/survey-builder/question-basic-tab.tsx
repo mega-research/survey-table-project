@@ -93,10 +93,10 @@ interface QuestionBasicTabProps {
   ) => void;
   removeOption: (optionId: string) => void;
   /**
-   * optionCode Input의 blur 커밋으로 value가 동기화되면 상위(question-edit-modal)에 통보한다.
-   * 질문 레벨 옵션뿐 아니라 표 셀 옵션(DynamicTableEditor → 셀 편집 모달) 변경도 같은 통로로 올라온다.
+   * 질문 레벨 옵션의 optionCode Input blur 커밋으로 value가 동기화되면 상위(question-edit-modal)에 통보한다.
    * 상위는 저장(Save) 시점에 이 questionId를 sourceQuestionId로 참조하는 다른 질문/그룹/
    * 행/열의 displayCondition을 remapOptionValueInConditions로 일괄 리매핑하는 데 사용한다.
+   * (표 셀 옵션은 셀 저장이 곧 DB 커밋이라 셀 모달이 직접 리매핑한다 — 이 통로를 쓰지 않는다)
    */
   onOptionValueChange?: (change: { oldValue: string; newValue: string }) => void;
   // select level helpers
@@ -1332,7 +1332,6 @@ export function QuestionBasicTab({
             questionTitle={formData.title}
             answerQuoteEnabled={answerQuoteEnabled}
             dynamicRowConfigs={formData.dynamicRowConfigs}
-            onOptionValueChange={onOptionValueChange}
             onTableChange={(data) => {
               setFormData((prev) => {
                 const next: Partial<Question> = {
