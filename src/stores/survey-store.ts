@@ -12,6 +12,7 @@ import {
   type QuestionChangeset,
 } from '@/lib/survey-builder/changeset';
 import { DEFAULT_RESPONSE_HEADER_CONFIG } from '@/lib/survey/response-header-config';
+import { remapConditionGroupValues } from '@/utils/option-value-remap';
 
 // ── 헬퍼 함수 ──
 
@@ -124,6 +125,16 @@ export interface SurveyBuilderState {
 
   // dirty/questionChanges를 건드리지 않는 질문 업데이트 (UI 전용 토글 등)
   silentUpdateQuestion: (questionId: string, updates: Partial<Question>) => void;
+
+  /**
+   * 질문 레벨 옵션의 value 가 편집(optionCode blur 커밋)으로 바뀌었을 때, 그 질문을
+   * sourceQuestionId 로 참조하는 다른 질문/그룹/행/열의 displayCondition 을 리매핑한다.
+   * questions[].displayCondition + questionGroups[].displayCondition +
+   * questions[].tableRowsData[].displayCondition + questions[].tableColumns[].displayCondition
+   * 전부를 훑는다 — 저장(스토어 커밋) 시점에만 호출해야 한다(blur 즉시 호출 금지, 편집 취소 시
+   * 리매핑이 일어나면 안 되는 원자성 요구사항).
+   */
+  remapOptionValueInConditions: (questionId: string, oldValue: string, newValue: string) => void;
 }
 
 const defaultSurveySettings: SurveySettings = {
@@ -728,6 +739,98 @@ export const useSurveyBuilderStore = create<SurveyBuilderState>()(
           if (question) Object.assign(question, updates);
         });
       },
+
+      remapOptionValueInConditions: (questionId: string, oldValue: string, newValue: string) =>
+        set((state) => {
+          let changed = false;
+
+          state.currentSurvey.questions.forEach((question) => {
+            if (question.displayCondition) {
+              const next = remapConditionGroupValues(
+                question.displayCondition,
+                questionId,
+                oldValue,
+                newValue,
+              );
+              if (next !== question.displayCondition) {
+                question.displayCondition = next;
+                changed = true;
+                if (!state.questionChanges.added[question.id]) {
+                  state.questionChanges.updated[question.id] = true;
+                }
+              }
+            }
+
+            if (question.tableRowsData) {
+              let rowsChanged = false;
+              const nextRows = question.tableRowsData.map((row) => {
+                if (!row.displayCondition) return row;
+                const next = remapConditionGroupValues(
+                  row.displayCondition,
+                  questionId,
+                  oldValue,
+                  newValue,
+                );
+                if (next === row.displayCondition) return row;
+                rowsChanged = true;
+                return { ...row, displayCondition: next };
+              });
+              if (rowsChanged) {
+                question.tableRowsData = nextRows;
+                changed = true;
+                if (!state.questionChanges.added[question.id]) {
+                  state.questionChanges.updated[question.id] = true;
+                }
+              }
+            }
+
+            if (question.tableColumns) {
+              let columnsChanged = false;
+              const nextColumns = question.tableColumns.map((column) => {
+                if (!column.displayCondition) return column;
+                const next = remapConditionGroupValues(
+                  column.displayCondition,
+                  questionId,
+                  oldValue,
+                  newValue,
+                );
+                if (next === column.displayCondition) return column;
+                columnsChanged = true;
+                return { ...column, displayCondition: next };
+              });
+              if (columnsChanged) {
+                question.tableColumns = nextColumns;
+                changed = true;
+                if (!state.questionChanges.added[question.id]) {
+                  state.questionChanges.updated[question.id] = true;
+                }
+              }
+            }
+          });
+
+          state.currentSurvey.groups?.forEach((group) => {
+            if (!group.displayCondition) return;
+            const next = remapConditionGroupValues(
+              group.displayCondition,
+              questionId,
+              oldValue,
+              newValue,
+            );
+            if (next !== group.displayCondition) {
+              group.displayCondition = next;
+              changed = true;
+              state.isMetadataDirty = true;
+            }
+          });
+
+          if (changed) {
+            state.currentSurvey.updatedAt = new Date();
+            state.isDirty = true;
+            if (state.currentSurvey.status === 'published') {
+              state.isModifiedSincePublish = true;
+            }
+          }
+        }),
     })),
     { name: 'survey-builder-store', enabled: process.env.NODE_ENV === 'development' },
   ),
