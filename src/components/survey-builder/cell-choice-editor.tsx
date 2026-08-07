@@ -6,8 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { generateId } from '@/lib/utils';
-import { getMaxSpssCode, nextUniqueOptionNumber } from '@/utils/option-code-generator';
+import { cn, generateId } from '@/lib/utils';
+import { commitOptionCode, getMaxSpssCode, nextUniqueOptionNumber } from '@/utils/option-code-generator';
 import { CheckboxOption, Question, QuestionOption, RadioOption } from '@/types/survey';
 
 import {
@@ -62,6 +62,13 @@ export interface CellChoiceEditorProps {
   onMinSelectionsChange: (v: number | undefined) => void;
   maxSelections: number | undefined;
   onMaxSelectionsChange: (v: number | undefined) => void;
+
+  /**
+   * optionCode blur 커밋 결과 value 가 동기화되면 상위에 통보한다.
+   * 상위(cell-content-modal)가 이 셀을 controllerCellId 로 참조하는 같은 표의
+   * 게이팅(enabledWhen)을 저장 시점에 함께 리매핑하는 데 사용한다.
+   */
+  onOptionValueChange?: (change: { oldValue: string; newValue: string }) => void;
 }
 
 export function CellChoiceEditor({
@@ -83,12 +90,44 @@ export function CellChoiceEditor({
   onMinSelectionsChange,
   maxSelections,
   onMaxSelectionsChange,
+  onOptionValueChange,
 }: CellChoiceEditorProps) {
   // 조건부 분기 토글 상태 (이 컴포넌트 내부에서만 사용)
   const [showBranchSettings, setShowBranchSettings] = useState(false);
 
+  // optionCode blur 커밋 후 다른 옵션과 중복되는 옵션 id 집합 (경고 표시용)
+  const [conflictOptionIds, setConflictOptionIds] = useState<Set<string>>(new Set());
+
   // 옵션별 인용 문구 노출 기준. 셀 단위 설정이 있으면(표 질문) 그 토글이, 없으면 질문 단위 토글이 결정한다.
   const showOptionQuoteText = cellAnswerQuote ? cellAnswerQuote.enabled : answerQuoteEnabled;
+
+  /**
+   * optionCode Input 의 blur 커밋 — applyCustomOptionCode 로 value 동기화를 시도한다.
+   * onChange 는 타이핑마다 optionCode 필드만 갱신(제어 컴포넌트 유지)하고, value 동기화는
+   * 여기(blur)에서만 일어난다 — 타이핑 중간값이 응답 키(value)로 새는 것을 막기 위함.
+   */
+  const commitCode = <
+    T extends { id: string; value: string; optionCode?: string; isCustomOptionCode?: boolean },
+  >(
+    options: T[],
+    index: number,
+    code: string,
+    onOptionsChange: (options: T[]) => void,
+  ) => {
+    const target = options[index];
+    const { options: next, valueChange, conflict } = commitOptionCode(options, index, code);
+    onOptionsChange(next);
+    if (target) {
+      setConflictOptionIds((prev) => {
+        if (prev.has(target.id) === conflict) return prev;
+        const nextSet = new Set(prev);
+        if (conflict) nextSet.add(target.id);
+        else nextSet.delete(target.id);
+        return nextSet;
+      });
+    }
+    if (valueChange) onOptionValueChange?.(valueChange);
+  };
 
   // --- checkbox ---
   if (cellType === 'checkbox') {
@@ -181,9 +220,22 @@ export function CellChoiceEditor({
                             updated[index] = { ...option, optionCode: e.target.value };
                             onCheckboxOptionsChange(updated);
                           }}
+                          onBlur={() =>
+                            commitCode(checkboxOptions, index, option.optionCode ?? '', onCheckboxOptionsChange)
+                          }
                           placeholder="코드"
-                          className="w-20 text-xs"
+                          aria-invalid={conflictOptionIds.has(option.id)}
+                          className={cn(
+                            'w-20 text-xs',
+                            conflictOptionIds.has(option.id) &&
+                              'border-red-500 focus-visible:ring-red-500',
+                          )}
                         />
+                        {conflictOptionIds.has(option.id) && (
+                          <p className="w-20 text-center text-[10px] text-red-500">
+                            응답값이 다른 옵션과 중복됩니다
+                          </p>
+                        )}
                       </div>
                     </div>
                     {option.id === OTHER_OPTION_ID && (
@@ -489,9 +541,22 @@ export function CellChoiceEditor({
                             updated[index] = { ...option, optionCode: e.target.value };
                             onRadioOptionsChange(updated);
                           }}
+                          onBlur={() =>
+                            commitCode(radioOptions, index, option.optionCode ?? '', onRadioOptionsChange)
+                          }
                           placeholder="코드"
-                          className="w-20 text-xs"
+                          aria-invalid={conflictOptionIds.has(option.id)}
+                          className={cn(
+                            'w-20 text-xs',
+                            conflictOptionIds.has(option.id) &&
+                              'border-red-500 focus-visible:ring-red-500',
+                          )}
                         />
+                        {conflictOptionIds.has(option.id) && (
+                          <p className="w-20 text-center text-[10px] text-red-500">
+                            응답값이 다른 옵션과 중복됩니다
+                          </p>
+                        )}
                       </div>
                     </div>
                     {option.id === OTHER_OPTION_ID && (
@@ -698,9 +763,22 @@ export function CellChoiceEditor({
                           updated[index] = { ...option, optionCode: e.target.value };
                           onSelectOptionsChange(updated);
                         }}
+                        onBlur={() =>
+                          commitCode(selectOptions, index, option.optionCode ?? '', onSelectOptionsChange)
+                        }
                         placeholder="코드"
-                        className="w-20 text-xs"
+                        aria-invalid={conflictOptionIds.has(option.id)}
+                        className={cn(
+                          'w-20 text-xs',
+                          conflictOptionIds.has(option.id) &&
+                            'border-red-500 focus-visible:ring-red-500',
+                        )}
                       />
+                      {conflictOptionIds.has(option.id) && (
+                        <p className="w-20 text-center text-[10px] text-red-500">
+                          응답값이 다른 옵션과 중복됩니다
+                        </p>
+                      )}
                     </div>
                   </div>
                   {option.id === OTHER_OPTION_ID && (

@@ -25,6 +25,8 @@ interface RankingCellTabProps {
   onRankVarNamesChange: (v: string[]) => void;
   /** 질문 단위 응답 인용 토글 — 켜졌을 때만 옵션별 인용 문구 입력칸을 노출한다. */
   answerQuoteEnabled?: boolean | undefined;
+  /** 순위 선택지 optionCode blur 커밋으로 value 가 동기화되면 상위에 통보한다. */
+  onOptionValueChange?: (change: { oldValue: string; newValue: string }) => void;
 }
 
 /**
@@ -44,6 +46,7 @@ export function RankingCellTab({
   rankVarNames,
   onRankVarNamesChange,
   answerQuoteEnabled = false,
+  onOptionValueChange,
 }: RankingCellTabProps) {
   const positions = Math.max(1, rankingConfig?.positions ?? 3);
   const baseVar = cellCode || 'Q1_r1_c1';
@@ -79,6 +82,7 @@ export function RankingCellTab({
         options={rankingOptions}
         onChange={onRankingOptionsChange}
         answerQuoteEnabled={answerQuoteEnabled}
+        onOptionValueChange={onOptionValueChange}
       />
 
       <div className="flex items-center justify-between gap-4 rounded-md border border-gray-200 p-3">

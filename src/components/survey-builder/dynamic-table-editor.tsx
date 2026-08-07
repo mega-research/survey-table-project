@@ -874,10 +874,17 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
               ...(pruned !== undefined ? { choiceGroups: pruned } : { choiceGroups: [] }),
             });
           }}
-          onSave={(cell) => {
+          onSave={(cell, valueChanges) => {
             if (selectedCellContext.rowIndex !== -1 && selectedCellContext.cellIndex !== -1) {
-              updateCell(selectedCellContext.rowIndex, selectedCellContext.cellIndex, cell);
+              updateCell(
+                selectedCellContext.rowIndex,
+                selectedCellContext.cellIndex,
+                cell,
+                valueChanges,
+              );
             }
+            // 표 밖(다른 질문/그룹/행/열)의 표시조건 리매핑은 셀 모달이 DB 커밋 직후 직접
+            // 수행한다 — 셀 저장이 이미 비가역 커밋 지점이라 질문 저장까지 미룰 수 없다.
           }}
         />
       )}
