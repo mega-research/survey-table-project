@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const updateQuestionMock = vi.hoisted(() => vi.fn());
+const saveSurveyMock = vi.hoisted(() => vi.fn());
 
 // QuestionBasicTab 자체(TipTap/DnD 등)는 별도 컴포넌트 테스트(question-basic-tab-option-code.test.tsx)로
 // 이미 검증했다. 이 테스트는 저장(handleSave) 시점의 원자성 — blur 커밋이 store 에 즉시 반영되지
@@ -43,6 +44,10 @@ vi.mock('@/components/survey-builder/table-validation-editor', () => ({
 }));
 vi.mock('@/hooks/use-ensure-survey-in-db', () => ({
   useEnsureSurveyInDb: () => async () => {},
+}));
+// 리매핑된 타 질문/그룹은 이 모달의 단일 질문 저장 밖이라, 설문 저장 플로우까지 함께 돌아야 한다.
+vi.mock('@/hooks/use-survey-sync', () => ({
+  useSurveySync: () => ({ saveSurvey: saveSurveyMock }),
 }));
 vi.mock('@/shared/lib/rpc', () => ({
   client: {
@@ -127,6 +132,7 @@ describe('QuestionEditModal 옵션 value 변경 → 저장 시점 표시조건 �
   beforeEach(() => {
     useSurveyBuilderStore.getState().resetSurvey();
     updateQuestionMock.mockResolvedValue({ id: 'qA' });
+    saveSurveyMock.mockResolvedValue({ surveyId: 's1' });
   });
 
   afterEach(() => {
@@ -155,6 +161,26 @@ describe('QuestionEditModal 옵션 value 변경 → 저장 시점 표시조건 �
 
     expect(optionValueOf('qA', 'o2')).toBe('new-value');
     expect(requiredValuesOfB()).toEqual(['new-value']);
+  });
+
+  it('리매핑이 발생하면 설문 저장 플로우까지 함께 트리거해 타 질문 변경을 DB 에 남긴다', async () => {
+    seedSurvey();
+    render(<QuestionEditModal questionId="qA" isOpen onClose={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '옵션코드 blur 커밋 시뮬레이션' }));
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+
+    await waitFor(() => expect(saveSurveyMock).toHaveBeenCalledTimes(1));
+  });
+
+  it('리매핑이 없으면 설문 저장 플로우를 트리거하지 않는다', async () => {
+    seedSurvey();
+    render(<QuestionEditModal questionId="qA" isOpen onClose={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+
+    await waitFor(() => expect(updateQuestionMock).toHaveBeenCalled());
+    expect(saveSurveyMock).not.toHaveBeenCalled();
   });
 
   it('저장 없이 모달을 닫으면(취소) 다른 질문의 표시조건은 리매핑되지 않는다', () => {

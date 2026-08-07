@@ -22,6 +22,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { CompleteQuestionWrite } from '@/db/schema/question-persisted-fields';
 import { useEnsureSurveyInDb } from '@/hooks/use-ensure-survey-in-db';
+import { useSurveySync } from '@/hooks/use-survey-sync';
 import { isValidUUID } from '@/lib/utils';
 import { client } from '@/shared/lib/rpc';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
@@ -63,6 +64,9 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
   const questions = useSurveyBuilderStore(useShallow((s) => s.currentSurvey.questions));
   const question = questions.find((q) => q.id === questionId);
   const ensureSurvey = useEnsureSurveyInDb();
+  // 옵션 value 리매핑은 편집 중인 질문 밖(다른 질문/그룹)까지 스토어를 바꾸므로,
+  // 이 모달의 단일 질문 저장만으로는 DB 에 남지 않는다 — 리매핑이 있으면 설문 저장까지 함께 돌린다.
+  const { saveSurvey } = useSurveySync();
 
   const [formData, setFormData] = useState<Partial<Question>>({});
   const [isSaving, setIsSaving] = useState(false);
@@ -393,7 +397,8 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
       // 옵션 optionCode blur 로 발생한 value 변경을 저장 시점에 한 번에 리매핑한다.
       // 이 질문 자신의 options 는 위 updateQuestion 이 이미 반영했으므로, 여기서는
       // 이 질문을 sourceQuestionId 로 참조하는 다른 질문/그룹/행/열의 표시조건만 대상.
-      if (pendingOptionValueChangesRef.current.length > 0) {
+      const hasRemap = pendingOptionValueChangesRef.current.length > 0;
+      if (hasRemap) {
         for (const change of pendingOptionValueChangesRef.current) {
           remapOptionValueInConditions(questionId, change.oldValue, change.newValue);
         }
@@ -558,6 +563,17 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
         }
       }
 
+      // 리매핑된 다른 질문/그룹은 스토어 dirty 로만 남아 있다 — 설문 저장까지 이어붙여
+      // 모달만 닫고 이탈해도 DB 가 구 value 를 참조하지 않도록 한다.
+      // (이 질문 자신의 행/열 표시조건 리매핑도 formData 스냅샷 밖이라 여기서 함께 영속된다.)
+      if (hasRemap) {
+        try {
+          await saveSurvey();
+        } catch (error) {
+          console.error('표시조건 리매핑 반영을 위한 설문 저장 실패:', error);
+        }
+      }
+
       didSaveRef.current = true;
       onClose();
     } catch (error) {
@@ -571,6 +587,7 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
     validateForm,
     updateQuestion,
     remapOptionValueInConditions,
+    saveSurvey,
     onClose,
     question,
   ]);
