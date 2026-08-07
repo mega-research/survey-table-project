@@ -116,7 +116,12 @@ interface CellContentModalProps {
   isOpen: boolean;
   onClose: () => void;
   cell: TableCell;
-  onSave: (cell: TableCell) => void;
+  /**
+   * 셀 저장 콜백. valueChanges 는 이번 편집 세션 중 옵션 optionCode 편집이 value 를
+   * 동기화시킨 변경 쌍들(순서대로) — 상위(dynamic-table-editor/use-table-editor)가
+   * 같은 커밋 안에서 이 셀을 controllerCellId 로 참조하는 게이팅을 리매핑하는 데 쓴다.
+   */
+  onSave: (cell: TableCell, valueChanges?: { oldValue: string; newValue: string }[]) => void;
   /**
    * 이 셀을 소유한 질문(표) — 계산 탭·검증 토글의 FormulaExprEditor 가 같은 질문 셀 참조 픽커에
    * 사용한다. 에디터의 실시간 편집 상태(currentQuestionAsQuestion)를 그대로 받아야
@@ -175,6 +180,10 @@ export function CellContentModal({
   // 사용자가 초기값 옵션을 끈 뒤 숫자 모드를 다시 토글해도 강제로 켜지지 않도록 한다.
   // (모달 오픈/cell.id 변경 시 리셋)
   const emptyDefaultAutoAppliedRef = useRef(false);
+  // 이번 편집 세션 중 옵션 optionCode blur 커밋이 value 를 동기화시킨 변경 쌍 누적.
+  // Save 시점에 onSave 로 함께 전달해 게이팅 리매핑을 셀 저장과 같은 커밋에 묶는다
+  // (blur 마다 즉시 리매핑하면 이후 취소 시 다른 셀의 게이팅만 남는 불일치가 생긴다).
+  const pendingOptionValueChangesRef = useRef<{ oldValue: string; newValue: string }[]>([]);
 
   // 35개 편집 필드를 단일 폼 상태로 통합. hydrate(모달 오픈/cell.id 변경)와
   // reset(취소 롤백)이 한 소스(cellToFormState)를 공유해 필드 누락 drift 가 없다.
@@ -346,6 +355,7 @@ export function CellContentModal({
   // 새 편집 세션(모달 오픈/cell.id 변경)마다 emptyDefault 자동 적용 가드를 리셋한다.
   useEffect(() => {
     emptyDefaultAutoAppliedRef.current = false;
+    pendingOptionValueChangesRef.current = [];
   }, [isOpen, cell?.id]);
 
   // 게이팅 컨트롤러 픽커용 — 이 셀이 속한 행의 셀 목록.
@@ -425,7 +435,13 @@ export function CellContentModal({
 
       // 로컬 스토어 업데이트 (셀 저장) — onChoiceGroupsChange 보다 먼저 수행해야
       // dynamic-table-editor 의 currentRowsRef 가 이미 새 셀을 포함한 상태에서 prune 이 동작한다.
-      onSave(updatedCell);
+      // 옵션 optionCode 편집으로 누적된 value 변경 쌍도 같은 커밋에 실어 게이팅을 리매핑한다.
+      onSave(
+        updatedCell,
+        pendingOptionValueChangesRef.current.length > 0
+          ? pendingOptionValueChangesRef.current
+          : undefined,
+      );
 
       // choice_opt 또는 ranking_opt 탭에서 그룹 변경이 있었으면 정리 후 부모에게 통보.
       // prune 은 updatedCell(이 셀 반영 후)의 rowsData 기준으로 계산해야 하므로
@@ -1233,6 +1249,12 @@ export function CellContentModal({
               onMinSelectionsChange={setMinSelections}
               maxSelections={maxSelections}
               onMaxSelectionsChange={setMaxSelections}
+              onOptionValueChange={(change) => {
+                pendingOptionValueChangesRef.current = [
+                  ...pendingOptionValueChangesRef.current,
+                  change,
+                ];
+              }}
             />
           </TabsContent>
 
@@ -1265,6 +1287,12 @@ export function CellContentModal({
               onMinSelectionsChange={setMinSelections}
               maxSelections={maxSelections}
               onMaxSelectionsChange={setMaxSelections}
+              onOptionValueChange={(change) => {
+                pendingOptionValueChangesRef.current = [
+                  ...pendingOptionValueChangesRef.current,
+                  change,
+                ];
+              }}
             />
           </TabsContent>
 
@@ -1289,6 +1317,12 @@ export function CellContentModal({
               onMinSelectionsChange={setMinSelections}
               maxSelections={maxSelections}
               onMaxSelectionsChange={setMaxSelections}
+              onOptionValueChange={(change) => {
+                pendingOptionValueChangesRef.current = [
+                  ...pendingOptionValueChangesRef.current,
+                  change,
+                ];
+              }}
             />
           </TabsContent>
 

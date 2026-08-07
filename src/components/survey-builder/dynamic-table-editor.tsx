@@ -874,9 +874,14 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
               ...(pruned !== undefined ? { choiceGroups: pruned } : { choiceGroups: [] }),
             });
           }}
-          onSave={(cell) => {
+          onSave={(cell, valueChanges) => {
             if (selectedCellContext.rowIndex !== -1 && selectedCellContext.cellIndex !== -1) {
-              updateCell(selectedCellContext.rowIndex, selectedCellContext.cellIndex, cell);
+              updateCell(
+                selectedCellContext.rowIndex,
+                selectedCellContext.cellIndex,
+                cell,
+                valueChanges,
+              );
             }
           }}
         />

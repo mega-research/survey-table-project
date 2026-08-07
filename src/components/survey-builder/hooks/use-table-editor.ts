@@ -14,6 +14,7 @@ import {
 import { produce } from 'immer';
 
 import { hasExistingOtherRankingCell } from '@/utils/ranking-source';
+import { remapGatingValues } from '@/utils/option-value-remap';
 import {
   pruneDeadGatingAfterPaste,
   regenerateCellOptionIds,
@@ -1206,8 +1207,20 @@ export function useTableEditor({
   // ── 셀 삭제/업데이트 ──
 
   const updateCell = useCallback(
-    (rowIndex: number, cellIndex: number, cell: TableCell) => {
-      const rows = currentRowsRef.current;
+    (
+      rowIndex: number,
+      cellIndex: number,
+      cell: TableCell,
+      valueChanges?: { oldValue: string; newValue: string }[],
+    ) => {
+      // 옵션 optionCode 편집이 value 를 동기화시킨 경우, 이 셀을 controllerCellId 로
+      // 참조하는 같은 표의 게이팅(enabledWhen)을 셀 저장과 같은 커밋에서 리매핑한다.
+      let rows = currentRowsRef.current;
+      if (valueChanges && valueChanges.length > 0) {
+        for (const { oldValue, newValue } of valueChanges) {
+          rows = remapGatingValues(rows, cell.id, oldValue, newValue);
+        }
+      }
       let updatedRows = rows.map((row, rIndex) =>
         rIndex === rowIndex
           ? { ...row, cells: row.cells.map((c, cIndex) => (cIndex === cellIndex ? cell : c)) }

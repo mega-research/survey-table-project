@@ -71,6 +71,36 @@ export function applyCustomOptionCode<
   return { options: next, valueChange: { oldValue, newValue: code } };
 }
 
+/**
+ * code가 다른 옵션(자기 자신 제외)의 optionCode 또는 value와 충돌하는지 판별한다.
+ * applyCustomOptionCode 내부의 충돌 판정과 동일 기준 — 빌더 UI의 중복 경고 표시용.
+ */
+export function hasOptionCodeConflict<T extends { value: string; optionCode?: string }>(
+  options: T[],
+  index: number,
+  code: string,
+): boolean {
+  if (code === '') return false;
+  return options.some((o, i) => i !== index && (o.optionCode === code || o.value === code));
+}
+
+/**
+ * optionCode 입력의 blur 커밋 — applyCustomOptionCode 로 value 동기화를 시도하고,
+ * UI 중복 경고에 필요한 conflict 여부를 함께 반환한다.
+ * checkbox/radio/select 셀 에디터 3곳이 공유하는 조합 로직 (순수 함수, 컴포넌트 밖에서 단위 테스트).
+ */
+export function commitOptionCode<
+  T extends { value: string; optionCode?: string; isCustomOptionCode?: boolean },
+>(options: T[], index: number, code: string): {
+  options: T[];
+  valueChange: { oldValue: string; newValue: string } | null;
+  conflict: boolean;
+} {
+  const conflict = hasOptionCodeConflict(options, index, code);
+  const { options: next, valueChange } = applyCustomOptionCode(options, index, code);
+  return { options: next, valueChange, conflict };
+}
+
 /** 기타 옵션의 코드를 구한다 (other-option의 spssNumericCode, 없으면 max + 1 fallback) */
 export function getOtherOptionCode(options?: { id?: string; spssNumericCode?: number | undefined }[]): string {
   const otherOpt = options?.find((o) => o.id === 'other-option');
