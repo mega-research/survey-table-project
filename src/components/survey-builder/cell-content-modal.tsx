@@ -179,7 +179,8 @@ export function CellContentModal({
   const remapOptionValueInConditions = useSurveyBuilderStore(
     (s) => s.remapOptionValueInConditions,
   );
-  const { saveSurvey } = useSurveySync();
+  const remapQuestionRefs = useSurveyBuilderStore((s) => s.remapQuestionRefs);
+  const { saveSurveyScoped } = useSurveySync();
   const [isSaving, setIsSaving] = useState(false);
   const inputTemplateRef = useRef<HTMLInputElement>(null);
   const textContentRef = useRef<HTMLTextAreaElement>(null);
@@ -498,6 +499,11 @@ export function CellContentModal({
           try {
             await ensureSurvey();
 
+            // 리매핑 스코프 수집 — 스코프 저장(saveSurveyScoped)의 입력.
+            // create 분기에서 id 가 스왑되면 이후 리매핑은 새 id 기준이어야 한다.
+            const remapScopes: Array<{ questionIds: string[]; groupsChanged: boolean }> = [];
+            let effectiveQuestionId = currentQuestionId;
+
             if (!isNewQuestion) {
               // 이미 DB에 저장된 질문: 업데이트
               await client.surveyBuilder.questions.update({
@@ -568,6 +574,10 @@ export function CellContentModal({
                     ),
                   },
                 }));
+                // 스왑 직후 이 질문을 참조하는 조건(sourceQuestionId·expression 피연산자·
+                // branchRule goto 대상)도 새 id 로 갱신 — 안 하면 참조가 temp id 로 끊긴다
+                effectiveQuestionId = newId;
+                remapScopes.push(remapQuestionRefs(currentQuestionId, newId));
               }
             }
 
@@ -577,15 +587,31 @@ export function CellContentModal({
             // "셀 저장 후 질문 모달 취소" 경로에서 DB 에 신 value + 구 조건이 영구 잔류한다
             // (질문 모달의 취소 롤백은 tableRowsData 를 되돌리지 않는다).
             // 같은 표의 게이팅(enabledWhen)은 onSave→updateCell 이 이미 같은 커밋에 실었다.
+            // 조건 참조는 위에서 이미 새 id 로 스왑됐을 수 있으므로 effectiveQuestionId 기준.
             if (pendingOptionValueChangesRef.current.length > 0) {
               for (const change of pendingOptionValueChangesRef.current) {
-                remapOptionValueInConditions(currentQuestionId, change.oldValue, change.newValue);
+                remapScopes.push(
+                  remapOptionValueInConditions(effectiveQuestionId, change.oldValue, change.newValue),
+                );
               }
               pendingOptionValueChangesRef.current = [];
+            }
+
+            // 리매핑이 실제 변경을 만들었으면 그 범위만 영속 — 빌더에 대기 중인 무관한
+            // pending(질문 추가/삭제, 그룹 삭제 등)은 건드리지 않는다 (saveSurveyScoped).
+            const remapQuestionIds = [...new Set(remapScopes.flatMap((s) => s.questionIds))];
+            const remapGroupsChanged = remapScopes.some((s) => s.groupsChanged);
+            if (remapQuestionIds.length > 0 || remapGroupsChanged) {
               try {
-                await saveSurvey();
+                await saveSurveyScoped({
+                  questionIds: remapQuestionIds,
+                  includeMetadata: remapGroupsChanged,
+                });
               } catch (saveError) {
                 console.error('표시조건 리매핑 반영을 위한 설문 저장 실패:', saveError);
+                toast.error(
+                  '조건 리매핑 저장에 실패했습니다. 설문 저장 버튼으로 다시 저장해 주세요.',
+                );
               }
             }
           } catch (error) {

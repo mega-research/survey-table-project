@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { toast } from 'sonner';
+
 import {
   AlertTriangle,
   CheckSquare,
@@ -60,13 +62,14 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
   const remapOptionValueInConditions = useSurveyBuilderStore(
     (s) => s.remapOptionValueInConditions,
   );
+  const remapQuestionRefs = useSurveyBuilderStore((s) => s.remapQuestionRefs);
   const setEditingQuestionId = useSurveyUIStore((s) => s.setEditingQuestionId);
   const questions = useSurveyBuilderStore(useShallow((s) => s.currentSurvey.questions));
   const question = questions.find((q) => q.id === questionId);
   const ensureSurvey = useEnsureSurveyInDb();
   // 옵션 value 리매핑은 편집 중인 질문 밖(다른 질문/그룹)까지 스토어를 바꾸므로,
   // 이 모달의 단일 질문 저장만으로는 DB 에 남지 않는다 — 리매핑이 있으면 설문 저장까지 함께 돌린다.
-  const { saveSurvey } = useSurveySync();
+  const { saveSurveyScoped } = useSurveySync();
 
   const [formData, setFormData] = useState<Partial<Question>>({});
   const [isSaving, setIsSaving] = useState(false);
@@ -397,10 +400,12 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
       // 옵션 optionCode blur 로 발생한 value 변경을 저장 시점에 한 번에 리매핑한다.
       // 이 질문 자신의 options 는 위 updateQuestion 이 이미 반영했으므로, 여기서는
       // 이 질문을 sourceQuestionId 로 참조하는 다른 질문/그룹/행/열의 표시조건만 대상.
-      const hasRemap = pendingOptionValueChangesRef.current.length > 0;
-      if (hasRemap) {
+      const remapScopes: Array<{ questionIds: string[]; groupsChanged: boolean }> = [];
+      if (pendingOptionValueChangesRef.current.length > 0) {
         for (const change of pendingOptionValueChangesRef.current) {
-          remapOptionValueInConditions(questionId, change.oldValue, change.newValue);
+          remapScopes.push(
+            remapOptionValueInConditions(questionId, change.oldValue, change.newValue),
+          );
         }
         pendingOptionValueChangesRef.current = [];
       }
@@ -555,6 +560,9 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
                   ),
                 },
               }));
+              // 스왑 직후 이 질문을 참조하는 조건(sourceQuestionId·expression 피연산자·
+              // branchRule goto 대상)도 새 id 로 갱신 — 안 하면 참조가 temp id 로 끊긴다
+              remapScopes.push(remapQuestionRefs(questionId, newId));
             }
           }
         } catch (error) {
@@ -563,14 +571,21 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
         }
       }
 
-      // 리매핑된 다른 질문/그룹은 스토어 dirty 로만 남아 있다 — 설문 저장까지 이어붙여
-      // 모달만 닫고 이탈해도 DB 가 구 value 를 참조하지 않도록 한다.
-      // (이 질문 자신의 행/열 표시조건 리매핑도 formData 스냅샷 밖이라 여기서 함께 영속된다.)
-      if (hasRemap) {
+      // 리매핑된 다른 질문/그룹은 스토어 dirty 로만 남아 있다 — 리매핑 범위만 스코프
+      // 저장으로 이어붙여, 모달만 닫고 이탈해도 DB 가 구 value/구 id 를 참조하지 않도록
+      // 한다. 빌더에 대기 중인 무관한 pending(질문 추가/삭제, 그룹 삭제 등)은 건드리지
+      // 않는다 (saveSurveyScoped).
+      const remapQuestionIds = [...new Set(remapScopes.flatMap((s) => s.questionIds))];
+      const remapGroupsChanged = remapScopes.some((s) => s.groupsChanged);
+      if (remapQuestionIds.length > 0 || remapGroupsChanged) {
         try {
-          await saveSurvey();
+          await saveSurveyScoped({
+            questionIds: remapQuestionIds,
+            includeMetadata: remapGroupsChanged,
+          });
         } catch (error) {
           console.error('표시조건 리매핑 반영을 위한 설문 저장 실패:', error);
+          toast.error('조건 리매핑 저장에 실패했습니다. 설문 저장 버튼으로 다시 저장해 주세요.');
         }
       }
 
@@ -587,7 +602,8 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
     validateForm,
     updateQuestion,
     remapOptionValueInConditions,
-    saveSurvey,
+    remapQuestionRefs,
+    saveSurveyScoped,
     onClose,
     question,
   ]);

@@ -47,7 +47,7 @@ vi.mock('@/hooks/use-ensure-survey-in-db', () => ({
 }));
 // 리매핑된 타 질문/그룹은 이 모달의 단일 질문 저장 밖이라, 설문 저장 플로우까지 함께 돌아야 한다.
 vi.mock('@/hooks/use-survey-sync', () => ({
-  useSurveySync: () => ({ saveSurvey: saveSurveyMock }),
+  useSurveySync: () => ({ saveSurveyScoped: saveSurveyMock }),
 }));
 vi.mock('@/shared/lib/rpc', () => ({
   client: {

@@ -12,7 +12,10 @@ import {
   type QuestionChangeset,
 } from '@/lib/survey-builder/changeset';
 import { DEFAULT_RESPONSE_HEADER_CONFIG } from '@/lib/survey/response-header-config';
-import { remapConditionGroupValues } from '@/utils/option-value-remap';
+import {
+  remapConditionGroupQuestionRefs,
+  remapConditionGroupValues,
+} from '@/utils/option-value-remap';
 
 // ── 헬퍼 함수 ──
 
@@ -134,7 +137,24 @@ export interface SurveyBuilderState {
    * 전부를 훑는다 — 저장(스토어 커밋) 시점에만 호출해야 한다(blur 즉시 호출 금지, 편집 취소 시
    * 리매핑이 일어나면 안 되는 원자성 요구사항).
    */
-  remapOptionValueInConditions: (questionId: string, oldValue: string, newValue: string) => void;
+  remapOptionValueInConditions: (
+    questionId: string,
+    oldValue: string,
+    newValue: string,
+  ) => ConditionRemapScope;
+  /**
+   * 질문 생성 직후 temp id 가 DB id 로 스왑될 때, 그 질문을 참조하는 조건들을 새 id 로
+   * 리매핑한다. 대상: 타 질문/그룹/행/열 displayCondition 의 sourceQuestionId 와
+   * expression 피연산자(question/cell/binop), 그리고 전 옵션 배열의
+   * branchRule.targetQuestionId(goto 분기 대상). 스왑 지점에서만 호출한다.
+   */
+  remapQuestionRefs: (oldId: string, newId: string) => ConditionRemapScope;
+}
+
+/** 조건 리매핑이 실제로 변경한 범위 — 스코프 저장(saveSurveyScoped)의 입력 */
+export interface ConditionRemapScope {
+  questionIds: string[];
+  groupsChanged: boolean;
 }
 
 const defaultSurveySettings: SurveySettings = {
@@ -740,7 +760,10 @@ export const useSurveyBuilderStore = create<SurveyBuilderState>()(
         });
       },
 
-      remapOptionValueInConditions: (questionId: string, oldValue: string, newValue: string) =>
+      remapOptionValueInConditions: (questionId: string, oldValue: string, newValue: string) => {
+        // 스코프 저장(saveSurveyScoped)이 이 결과만 영속하도록, 실제 변경 범위를 수집해 반환
+        const affectedIds = new Set<string>();
+        let groupsChanged = false;
         set((state) => {
           let changed = false;
 
@@ -755,6 +778,7 @@ export const useSurveyBuilderStore = create<SurveyBuilderState>()(
               if (next !== question.displayCondition) {
                 question.displayCondition = next;
                 changed = true;
+                affectedIds.add(question.id);
                 if (!state.questionChanges.added[question.id]) {
                   state.questionChanges.updated[question.id] = true;
                 }
@@ -778,6 +802,7 @@ export const useSurveyBuilderStore = create<SurveyBuilderState>()(
               if (rowsChanged) {
                 question.tableRowsData = nextRows;
                 changed = true;
+                affectedIds.add(question.id);
                 if (!state.questionChanges.added[question.id]) {
                   state.questionChanges.updated[question.id] = true;
                 }
@@ -801,6 +826,7 @@ export const useSurveyBuilderStore = create<SurveyBuilderState>()(
               if (columnsChanged) {
                 question.tableColumns = nextColumns;
                 changed = true;
+                affectedIds.add(question.id);
                 if (!state.questionChanges.added[question.id]) {
                   state.questionChanges.updated[question.id] = true;
                 }
@@ -819,6 +845,7 @@ export const useSurveyBuilderStore = create<SurveyBuilderState>()(
             if (next !== group.displayCondition) {
               group.displayCondition = next;
               changed = true;
+              groupsChanged = true;
               state.isMetadataDirty = true;
             }
           });
@@ -830,7 +857,148 @@ export const useSurveyBuilderStore = create<SurveyBuilderState>()(
               state.isModifiedSincePublish = true;
             }
           }
-        }),
+        });
+        return { questionIds: [...affectedIds], groupsChanged };
+      },
+
+      remapQuestionRefs: (oldId: string, newId: string) => {
+        const affectedIds = new Set<string>();
+        let groupsChanged = false;
+
+        // 옵션 배열 안의 branchRule.targetQuestionId(goto 분기 대상) 리매핑 헬퍼
+        const remapBranchTargets = <T extends { branchRule?: { targetQuestionId?: string } }>(
+          options: T[] | undefined,
+        ): T[] | undefined => {
+          if (!options) return options;
+          let optionsChanged = false;
+          const next = options.map((o) => {
+            if (o.branchRule?.targetQuestionId !== oldId) return o;
+            optionsChanged = true;
+            return { ...o, branchRule: { ...o.branchRule, targetQuestionId: newId } };
+          });
+          return optionsChanged ? next : options;
+        };
+
+        set((state) => {
+          let changed = false;
+
+          state.currentSurvey.questions.forEach((question) => {
+            let questionChanged = false;
+
+            if (question.displayCondition) {
+              const next = remapConditionGroupQuestionRefs(question.displayCondition, oldId, newId);
+              if (next !== question.displayCondition) {
+                question.displayCondition = next;
+                questionChanged = true;
+              }
+            }
+
+            if (question.tableRowsData) {
+              let rowsChanged = false;
+              const nextRows = question.tableRowsData.map((row) => {
+                let nextRow = row;
+                if (row.displayCondition) {
+                  const nextCondition = remapConditionGroupQuestionRefs(row.displayCondition, oldId, newId);
+                  if (nextCondition !== row.displayCondition) {
+                    nextRow = { ...nextRow, displayCondition: nextCondition };
+                  }
+                }
+                let cellsChanged = false;
+                const nextCells = nextRow.cells.map((cell) => {
+                  const radioOptions = remapBranchTargets(cell.radioOptions);
+                  const checkboxOptions = remapBranchTargets(cell.checkboxOptions);
+                  const selectOptions = remapBranchTargets(cell.selectOptions);
+                  const rankingOptions = remapBranchTargets(cell.rankingOptions);
+                  if (
+                    radioOptions === cell.radioOptions
+                    && checkboxOptions === cell.checkboxOptions
+                    && selectOptions === cell.selectOptions
+                    && rankingOptions === cell.rankingOptions
+                  ) {
+                    return cell;
+                  }
+                  cellsChanged = true;
+                  return {
+                    ...cell,
+                    ...(radioOptions !== undefined ? { radioOptions } : {}),
+                    ...(checkboxOptions !== undefined ? { checkboxOptions } : {}),
+                    ...(selectOptions !== undefined ? { selectOptions } : {}),
+                    ...(rankingOptions !== undefined ? { rankingOptions } : {}),
+                  };
+                });
+                if (cellsChanged) nextRow = { ...nextRow, cells: nextCells };
+                if (nextRow !== row) rowsChanged = true;
+                return nextRow;
+              });
+              if (rowsChanged) {
+                question.tableRowsData = nextRows;
+                questionChanged = true;
+              }
+            }
+
+            if (question.tableColumns) {
+              let columnsChanged = false;
+              const nextColumns = question.tableColumns.map((column) => {
+                if (!column.displayCondition) return column;
+                const next = remapConditionGroupQuestionRefs(column.displayCondition, oldId, newId);
+                if (next === column.displayCondition) return column;
+                columnsChanged = true;
+                return { ...column, displayCondition: next };
+              });
+              if (columnsChanged) {
+                question.tableColumns = nextColumns;
+                questionChanged = true;
+              }
+            }
+
+            const nextOptions = remapBranchTargets(question.options);
+            if (nextOptions !== question.options && nextOptions !== undefined) {
+              question.options = nextOptions;
+              questionChanged = true;
+            }
+            if (question.selectLevels) {
+              let levelsChanged = false;
+              const nextLevels = question.selectLevels.map((level) => {
+                const opts = remapBranchTargets(level.options);
+                if (opts === level.options) return level;
+                levelsChanged = true;
+                return { ...level, options: opts ?? level.options };
+              });
+              if (levelsChanged) {
+                question.selectLevels = nextLevels;
+                questionChanged = true;
+              }
+            }
+            if (questionChanged) {
+              changed = true;
+              affectedIds.add(question.id);
+              if (!state.questionChanges.added[question.id]) {
+                state.questionChanges.updated[question.id] = true;
+              }
+            }
+          });
+
+          state.currentSurvey.groups?.forEach((group) => {
+            if (!group.displayCondition) return;
+            const next = remapConditionGroupQuestionRefs(group.displayCondition, oldId, newId);
+            if (next !== group.displayCondition) {
+              group.displayCondition = next;
+              changed = true;
+              groupsChanged = true;
+              state.isMetadataDirty = true;
+            }
+          });
+
+          if (changed) {
+            state.currentSurvey.updatedAt = new Date();
+            state.isDirty = true;
+            if (state.currentSurvey.status === 'published') {
+              state.isModifiedSincePublish = true;
+            }
+          }
+        });
+        return { questionIds: [...affectedIds], groupsChanged };
+      },
     })),
     { name: 'survey-builder-store', enabled: process.env.NODE_ENV === 'development' },
   ),

@@ -15,11 +15,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const updateQuestionMock = vi.hoisted(() => vi.fn());
 const saveSurveyMock = vi.hoisted(() => vi.fn());
 
+const toastErrorMock = vi.hoisted(() => vi.fn());
+
+vi.mock('sonner', () => ({
+  toast: { error: toastErrorMock, success: vi.fn(), info: vi.fn() },
+}));
+
 vi.mock('@/hooks/use-ensure-survey-in-db', () => ({
   useEnsureSurveyInDb: () => async () => {},
 }));
 vi.mock('@/hooks/use-survey-sync', () => ({
-  useSurveySync: () => ({ saveSurvey: saveSurveyMock }),
+  useSurveySync: () => ({ saveSurveyScoped: saveSurveyMock }),
 }));
 vi.mock('@/shared/lib/rpc', () => ({
   client: {
@@ -155,6 +161,27 @@ describe('셀 모달 — 셀 저장 시점의 cross-question 표시조건 리매
     fireEvent.click(screen.getByRole('button', { name: '저장' }));
 
     await waitFor(() => expect(saveSurveyMock).toHaveBeenCalledTimes(1));
+    // 스코프 저장: 리매핑된 질문만 대상, 그룹 미변경이면 메타데이터 미포함
+    expect(saveSurveyMock).toHaveBeenCalledWith({
+      questionIds: ['q-other'],
+      includeMetadata: false,
+    });
+  });
+
+  it('리매핑 저장 실패 시 토스트로 사용자에게 알린다 (무음 실패 금지)', async () => {
+    toastErrorMock.mockClear();
+    saveSurveyMock.mockRejectedValueOnce(new Error('network'));
+    renderCellModal();
+
+    commitCode(1, '5');
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+
+    await waitFor(() => expect(saveSurveyMock).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(toastErrorMock).toHaveBeenCalledWith(
+        '조건 리매핑 저장에 실패했습니다. 설문 저장 버튼으로 다시 저장해 주세요.',
+      ),
+    );
   });
 
   it('value 변경이 없는 셀 저장은 리매핑도 설문 저장도 트리거하지 않는다', async () => {

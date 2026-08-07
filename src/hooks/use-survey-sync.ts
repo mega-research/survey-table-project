@@ -88,6 +88,88 @@ export function useSurveySync() {
     [markSavedSnapshotClean, queryClient],
   );
 
+  /**
+   * 조건 리매핑 결과만 영속하는 스코프 저장 — 전체 saveSurvey 와 달리 대상 질문의
+   * updated 와 (그룹 조건이 바뀐 경우에만) 메타데이터만 전송하고, 나머지 pending
+   * 변경(추가/삭제/순서/타 질문 수정)은 changeset 에 되돌려 사용자가 명시적으로
+   * 저장하기 전까지 그대로 남긴다. 옵션 value 리매핑 자동 저장이 빌더에 대기 중인
+   * 무관한 변경(예: 그룹 삭제)까지 함께 커밋해 버리는 부작용을 막는다.
+   */
+  const saveSurveyScoped = useCallback(
+    async (scope: { questionIds: string[]; includeMetadata: boolean }) => {
+      const store = useSurveyBuilderStore.getState();
+
+      if (!store.currentSurvey.id) {
+        console.error('설문 ID가 없습니다.');
+        return null;
+      }
+      if (savingRef.current) {
+        console.log('이미 저장 중입니다. 중복 저장을 방지합니다.');
+        return null;
+      }
+      if (!store.isDirty) {
+        return { surveyId: store.currentSurvey.id };
+      }
+
+      savingRef.current = true;
+      setIsSaving(true);
+      setSaveError(null);
+
+      const snapshot = store.snapshotChanges();
+
+      // 스코프 분할: in-scope 만 저장, out-of-scope 는 즉시 changeset 에 복귀
+      const scopeIds = new Set(scope.questionIds);
+      const inUpdated: Record<string, boolean> = {};
+      const outUpdated: Record<string, boolean> = {};
+      for (const id of Object.keys(snapshot.questionChanges.updated)) {
+        if (scopeIds.has(id)) inUpdated[id] = true;
+        else outUpdated[id] = true;
+      }
+      const includeMetadata = scope.includeMetadata && snapshot.isMetadataDirty;
+      const inScope = {
+        questionChanges: { added: {}, updated: inUpdated, deleted: {}, reordered: false },
+        isMetadataDirty: includeMetadata,
+      };
+      const outOfScope = {
+        questionChanges: {
+          added: snapshot.questionChanges.added,
+          updated: outUpdated,
+          deleted: snapshot.questionChanges.deleted,
+          reordered: snapshot.questionChanges.reordered,
+        },
+        isMetadataDirty: snapshot.isMetadataDirty && !includeMetadata,
+      };
+      useSurveyBuilderStore.getState().mergeChangesBack(outOfScope);
+
+      try {
+        const survey = useSurveyBuilderStore.getState().currentSurvey;
+        const payload = buildSurveyDiffPayload(survey, inScope);
+
+        if (!payload) {
+          markSavedSnapshotClean();
+          return { surveyId: survey.id };
+        }
+
+        const result = await client.surveyBuilder.save.saveDiff(payload);
+        // out-of-scope 가 남아 있으면 markSavedSnapshotClean 이 isDirty 를 유지한다
+        markSavedSnapshotClean();
+        queryClient.invalidateQueries({ queryKey: surveyKeys.detail(survey.id) });
+        queryClient.invalidateQueries({ queryKey: surveyKeys.lists() });
+        return result;
+      } catch (error) {
+        useSurveyBuilderStore.getState().mergeChangesBack(inScope);
+        const err = error instanceof Error ? error : new Error('설문 저장 실패');
+        console.error('설문 스코프 저장 실패:', err);
+        setSaveError(err);
+        throw err;
+      } finally {
+        savingRef.current = false;
+        setIsSaving(false);
+      }
+    },
+    [markSavedSnapshotClean, queryClient],
+  );
+
   // DB에서 설문 불러오기
   const loadSurvey = useCallback(async (surveyId: string) => {
     try {
@@ -140,6 +222,7 @@ export function useSurveySync() {
     isSaving,
     saveError,
     saveSurvey,
+    saveSurveyScoped,
     loadSurvey,
     createNewSurvey,
     startTransition,
