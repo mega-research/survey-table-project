@@ -9,7 +9,7 @@ import { ValidationIssueBanner } from '@/components/survey-response/validation-i
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useDynamicRows } from '@/hooks/use-dynamic-rows';
 import { useElementWidth } from '@/hooks/use-element-width';
-import { useHorizontalScrollFades } from '@/hooks/use-horizontal-scroll-fades';
+import { useHorizontalScrollIndicators } from '@/hooks/use-horizontal-scroll-indicators';
 import { useMobileView } from '@/hooks/use-media-query';
 import { usePageStickyThreshold } from '@/hooks/use-page-sticky-threshold';
 import { useScrollLeftSync } from '@/hooks/use-scroll-left-sync';
@@ -640,11 +640,10 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     selectedRowIds,
   ]);
 
-  // 가로 스크롤 좌/우 페이드 — React 상태 없이 DOM opacity 직접 갱신
-  // (hideColumnLabels·pageSticky 는 헤더 페이드의 지연 마운트 재부착 트리거)
-  useHorizontalScrollFades(tableContainerRef, {
+  // 가로 스크롤 인디케이터 (좌/우 섀도우·버튼 표시 여부)
+  const { canScrollLeft, canScrollRight } = useHorizontalScrollIndicators(tableContainerRef, {
     disabled: mobileUsesCards,
-    deps: [visibleColumns.length, displayRows.length, hideColumnLabels],
+    deps: [visibleColumns.length, displayRows.length],
   });
 
   // 스크롤 뷰포트(가로 스크롤 컨테이너) 실측 폭 — sticky 열이 화면을 다 가리지 않도록
@@ -888,7 +887,12 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
           )}
         >
           {/* 가로 스크롤 컨트롤 (버튼 + 진행도) — sticky 모드에선 항상 조작 가능 */}
-          <TableScrollControls scrollRef={tableContainerRef} columnStops={columnStops} />
+          <TableScrollControls
+            scrollRef={tableContainerRef}
+            canScrollLeft={canScrollLeft}
+            canScrollRight={canScrollRight}
+            columnStops={columnStops}
+          />
           {pageSticky && !hideColumnLabels && (
             <div className="relative">
               <div
@@ -906,13 +910,17 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
               {/* 우측 페이드 — 오른쪽에 아직 열이 더 있다는 시각 힌트 */}
               <div
                 aria-hidden="true"
-                data-scroll-fade="right"
-                className="pointer-events-none absolute inset-y-0 right-0 z-20 w-12 transform-gpu bg-gradient-to-l from-gray-50 via-gray-50/60 to-transparent opacity-0 transition-opacity duration-150 will-change-[opacity] print:hidden"
+                className={cn(
+                  'pointer-events-none absolute inset-y-0 right-0 z-20 w-12 transform-gpu bg-gradient-to-l from-gray-50 via-gray-50/60 to-transparent transition-opacity duration-150 print:hidden',
+                  canScrollRight ? 'opacity-100' : 'opacity-0',
+                )}
               />
               <div
                 aria-hidden="true"
-                data-scroll-fade="left"
-                className="pointer-events-none absolute inset-y-0 left-0 z-20 w-6 transform-gpu bg-gradient-to-r from-gray-50/80 to-transparent opacity-0 transition-opacity duration-150 will-change-[opacity] print:hidden"
+                className={cn(
+                  'pointer-events-none absolute inset-y-0 left-0 z-20 w-6 transform-gpu bg-gradient-to-r from-gray-50/80 to-transparent transition-opacity duration-150 print:hidden',
+                  canScrollLeft ? 'opacity-100' : 'opacity-0',
+                )}
               />
             </div>
           )}
@@ -1006,13 +1014,17 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
           {/* 우측 페이드 — 잘린 셀 내용 위로 깔려 "오른쪽에 더 있다"를 알린다 */}
           <div
             aria-hidden="true"
-            data-scroll-fade="right"
-            className="pointer-events-none absolute inset-y-0 right-0 z-20 w-12 transform-gpu bg-gradient-to-l from-black/10 to-transparent opacity-0 transition-opacity duration-150 will-change-[opacity] print:hidden"
+            className={cn(
+              'pointer-events-none absolute inset-y-0 right-0 z-20 w-12 transform-gpu bg-gradient-to-l from-black/10 to-transparent transition-opacity duration-150 print:hidden',
+              canScrollRight ? 'opacity-100' : 'opacity-0',
+            )}
           />
           <div
             aria-hidden="true"
-            data-scroll-fade="left"
-            className="pointer-events-none absolute inset-y-0 left-0 z-20 w-6 transform-gpu bg-gradient-to-r from-black/10 to-transparent opacity-0 transition-opacity duration-150 will-change-[opacity] print:hidden"
+            className={cn(
+              'pointer-events-none absolute inset-y-0 left-0 z-20 w-6 transform-gpu bg-gradient-to-r from-black/10 to-transparent transition-opacity duration-150 print:hidden',
+              canScrollLeft ? 'opacity-100' : 'opacity-0',
+            )}
           />
         </div>
       </div>

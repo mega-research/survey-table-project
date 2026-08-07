@@ -21,7 +21,11 @@ function renderControls() {
   render(
     <>
       <div ref={scrollRef} />
-      <TableScrollControls scrollRef={scrollRef} />
+      <TableScrollControls
+        scrollRef={scrollRef}
+        canScrollLeft
+        canScrollRight
+      />
     </>,
   );
   const element = scrollRef.current;
