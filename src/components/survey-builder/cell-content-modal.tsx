@@ -1359,6 +1359,12 @@ export function CellContentModal({
               rankVarNames={rankVarNames}
               onRankVarNamesChange={setRankVarNames}
               answerQuoteEnabled={showCellAnswerQuote ? cellAnswerQuoteEnabled : answerQuoteEnabled}
+              onOptionValueChange={(change) => {
+                pendingOptionValueChangesRef.current = [
+                  ...pendingOptionValueChangesRef.current,
+                  change,
+                ];
+              }}
             />
           </TabsContent>
 

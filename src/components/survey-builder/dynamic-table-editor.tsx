@@ -60,6 +60,14 @@ interface DynamicTableEditorProps {
     tableHeaderGrid: HeaderCell[][] | null;
   }) => void;
   onDynamicRowConfigsChange?: (configs: DynamicRowGroupConfig[] | undefined) => void;
+  /**
+   * 셀 옵션 optionCode 편집으로 value 가 동기화되면 상위(question-edit-modal)에 통보한다.
+   * 같은 표의 게이팅(enabledWhen)은 updateCell 이 셀 저장과 같은 커밋에서 처리하지만,
+   * 이 표 질문을 sourceQuestionId 로 참조하는 다른 질문/그룹/행/열의 표시조건
+   * (table-cell-check 의 expectedValues)은 셀 value 공간이라 질문 저장 시점에
+   * remapOptionValueInConditions 로 함께 리매핑되어야 한다.
+   */
+  onOptionValueChange?: ((change: { oldValue: string; newValue: string }) => void) | undefined;
 }
 
 // ── 컴포넌트 ──
@@ -882,6 +890,11 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
                 cell,
                 valueChanges,
               );
+            }
+            // 같은 표 밖(다른 질문/그룹/행/열)의 표시조건은 질문 저장 시점에 리매핑되도록
+            // 상위 pending 체인으로 올린다 — 질문 편집 취소 시 미발생 원자성 유지.
+            if (valueChanges) {
+              for (const change of valueChanges) props.onOptionValueChange?.(change);
             }
           }}
         />
