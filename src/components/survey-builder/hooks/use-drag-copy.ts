@@ -22,6 +22,7 @@ import {
   createRadioGroupRemapper,
   findRegionSourceCellPos,
   pruneDeadGatingAfterPaste,
+  regenerateCellOptionIds,
   resolvePastedGating,
   expandSelectionForMerges,
   extractRegionFromRows,
@@ -225,6 +226,9 @@ export function useDragCopy({
             const preservedId = targetCell.id;
             Object.assign(targetCell, structuredClone(sourceCell));
             targetCell.id = preservedId;
+
+            // 옵션 id 재발번 — 소스와 공유하면 optionTexts 사이드카가 충돌한다
+            regenerateCellOptionIds(targetCell, generateId);
 
             // radio 셀이면 새 groupName 발급 (원본 그룹 단위로 공유 유지),
             // radio 가 아니면 소스에서 딸려온 잔여 radioGroupName 제거.

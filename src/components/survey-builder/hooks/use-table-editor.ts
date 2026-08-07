@@ -14,7 +14,11 @@ import {
 import { produce } from 'immer';
 
 import { hasExistingOtherRankingCell } from '@/utils/ranking-source';
-import { pruneDeadGatingAfterPaste, resolvePastedGating } from '../utils/drag-copy-utils';
+import {
+  pruneDeadGatingAfterPaste,
+  regenerateCellOptionIds,
+  resolvePastedGating,
+} from '../utils/drag-copy-utils';
 import {
   generateAllCellCodes,
   generateCellCodesForRow,
@@ -869,6 +873,8 @@ export function useTableEditor({
           // 조용히 하나의 문구로 합쳐진다(동일 이름 병합은 의도된 동작이라 경고도 없다).
           delete cloned.answerQuoteEnabled;
           delete cloned.answerQuoteName;
+          // 옵션 id 재발번 — 원본 행과 공유하면 optionTexts 사이드카가 충돌한다
+          regenerateCellOptionIds(cloned, generateId);
           return cloned;
         }),
         ...(sourceRow.displayCondition
@@ -1137,6 +1143,10 @@ export function useTableEditor({
         targetColumn?.columnCode,
         targetColumn?.label,
       );
+
+      // 옵션 id 재발번 — 소스 셀과 공유하면 optionTexts 사이드카가 충돌한다
+      // (spread 복사라 옵션 배열 참조 공유도 여기서 끊는다)
+      regenerateCellOptionIds(pastedCell, generateId);
 
       // 셀 게이팅 컨트롤러 재해석 — 같은 행의 보이는 셀이면 유지, 다른 행·숨김 셀이면 제거
       // (게이팅은 같은 행 값만 평가하고, 병합 숨김 셀은 응답이 없어 영구 비활성이 된다)

@@ -175,6 +175,28 @@ export function clearStaleTypeProperties(
   }
 }
 
+/**
+ * 셀 복제·붙여넣기 후 옵션 id 를 재발번한다.
+ * 옵션 id 는 질문 안에서 유일해야 한다 — allowTextInput 사이드카 텍스트가
+ * optionTexts[questionId][option.id] 로 저장되므로(option-text-input.tsx),
+ * id 를 그대로 복사하면 두 셀의 기타 입력칸이 같은 슬롯을 공유한다.
+ * 선택 응답·게이팅 values 는 option.value 기준이라 id 재발번은 안전하다.
+ */
+export function regenerateCellOptionIds(cell: TableCell, idGen: () => string): void {
+  if (cell.radioOptions) {
+    cell.radioOptions = cell.radioOptions.map((o) => ({ ...o, id: idGen() }));
+  }
+  if (cell.checkboxOptions) {
+    cell.checkboxOptions = cell.checkboxOptions.map((o) => ({ ...o, id: idGen() }));
+  }
+  if (cell.selectOptions) {
+    cell.selectOptions = cell.selectOptions.map((o) => ({ ...o, id: idGen() }));
+  }
+  if (cell.rankingOptions) {
+    cell.rankingOptions = cell.rankingOptions.map((o) => ({ ...o, id: idGen() }));
+  }
+}
+
 // ── 영역 선택 함수 ──
 
 /**
