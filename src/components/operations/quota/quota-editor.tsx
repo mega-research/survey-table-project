@@ -48,11 +48,15 @@ const EMPTY: QuotaConfig = { enabled: false, dimensions: [], cells: [], closedMe
 const QUOTA_CLOSED_FALLBACK =
   '해당 조건의 모집이 완료되어 더 이상 참여하실 수 없습니다. 참여해 주셔서 감사합니다.';
 
-/** 문항 유형 → 조건 kind. 단답 숫자는 numeric, radio/select는 choice. 그 외는 지원 안 함(null). */
+/**
+ * 문항 유형 → 조건 kind. 단답 숫자는 numeric, radio/select/checkbox는 choice.
+ * checkbox 복수 선택 응답은 카테고리 정의 순서상 첫 매칭 카테고리로 분류된다
+ * (lib/quota/matching.ts resolveCategoryId — 응답자당 1셀 유지, 판정·현황판 동일 소스).
+ */
 function kindForQuestion(q: Question): 'choice' | 'numeric' | null {
-  if (q.type === 'radio' || q.type === 'select') return 'choice';
+  if (q.type === 'radio' || q.type === 'select' || q.type === 'checkbox') return 'choice';
   if (q.type === 'text' && q.inputType === 'number') return 'numeric';
-  return null; // v1: checkbox/multiselect/table 미지원
+  return null; // v1: multiselect/table 미지원
 }
 
 /** 선택형 문항 보기를 카테고리 초안으로 (1보기=1카테고리). */
@@ -104,7 +108,7 @@ export function QuotaEditor({ surveyId, initialConfig, questions }: Props) {
   // 다시 placeholder 로 리셋 — QuotaConfig 에는 속하지 않는 순수 위젯 상태.
   const [addDimensionValue, setAddDimensionValue] = useState('');
 
-  // 조건으로 쓸 수 있는 문항만 (단일형/단답숫자)
+  // 조건으로 쓸 수 있는 문항만 (선택형/단답숫자)
   const eligibleQuestions = useMemo(
     () => questions.filter((q) => kindForQuestion(q) !== null),
     [questions],
@@ -289,6 +293,11 @@ export function QuotaEditor({ surveyId, initialConfig, questions }: Props) {
                 {dim.kind === 'numeric' && (
                   <span className="text-xs text-slate-400">단답·숫자 → 구간 직접 생성</span>
                 )}
+                {questions.find((q) => q.id === dim.questionId)?.type === 'checkbox' && (
+                  <span className="text-xs text-slate-400">
+                    복수 선택 → 먼저 매칭되는 카테고리 1개로 분류
+                  </span>
+                )}
               </div>
               <Button
                 size="sm"
@@ -406,8 +415,8 @@ export function QuotaEditor({ surveyId, initialConfig, questions }: Props) {
           </Select>
           {addableQuestions.length === 0 && (
             <p className="mt-2 text-xs text-slate-400">
-              추가할 수 있는 문항이 없습니다. 라디오·드롭다운 단일 선택 또는 숫자 단답형 문항이
-              필요합니다.
+              추가할 수 있는 문항이 없습니다. 라디오·드롭다운·체크박스 선택형 또는 숫자 단답형
+              문항이 필요합니다.
             </p>
           )}
         </div>

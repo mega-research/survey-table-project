@@ -73,6 +73,15 @@ describe('resolveCategoryId — choice', () => {
   it('어느 카테고리에도 없으면 null', () => {
     expect(resolveCategoryId(genderDim, 'other')).toBeNull();
   });
+  it('checkbox 배열 응답 — 원소 중 하나가 values에 있으면 매칭', () => {
+    expect(resolveCategoryId(genderDim, ['other', 'female'])).toBe('c-f');
+  });
+  it('checkbox 복수 선택이 여러 카테고리에 걸치면 정의 순서상 첫 카테고리', () => {
+    expect(resolveCategoryId(genderDim, ['female', 'male'])).toBe('c-m');
+  });
+  it('checkbox 빈 배열은 null', () => {
+    expect(resolveCategoryId(genderDim, [])).toBeNull();
+  });
 });
 
 describe('resolveCategoryId — numeric (min ≤ 값 < max, 반열림)', () => {
