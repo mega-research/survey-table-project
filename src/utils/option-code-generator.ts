@@ -38,6 +38,39 @@ export function nextUniqueOptionNumber(
   return n;
 }
 
+/**
+ * 사용자가 직접 입력한 optionCode(응답값)를 반영하고, 유일하면 value도 동기화한다.
+ * value는 선택 응답의 저장 키 — 충돌 시 동기화를 보류해 응답 키 충돌(교차 선택 버그)을 막는다.
+ * 자동 발번 코드는 위치 기반이라 여기서 다루지 않는다 (빈 code 입력 = 자동 발번 복귀).
+ */
+export function applyCustomOptionCode<
+  T extends { value: string; optionCode?: string; isCustomOptionCode?: boolean },
+>(options: T[], index: number, code: string): {
+  options: T[];
+  valueChange: { oldValue: string; newValue: string } | null;
+} {
+  const target = options[index];
+  if (!target) return { options, valueChange: null };
+
+  if (code === '') {
+    const next = [...options];
+    next[index] = { ...target, optionCode: undefined, isCustomOptionCode: false };
+    return { options: next, valueChange: null };
+  }
+
+  const collides = options.some(
+    (o, i) => i !== index && (o.optionCode === code || o.value === code),
+  );
+  const next = [...options];
+  if (collides || target.value === code) {
+    next[index] = { ...target, optionCode: code, isCustomOptionCode: true };
+    return { options: next, valueChange: null };
+  }
+  const oldValue = target.value;
+  next[index] = { ...target, optionCode: code, isCustomOptionCode: true, value: code };
+  return { options: next, valueChange: { oldValue, newValue: code } };
+}
+
 /** 기타 옵션의 코드를 구한다 (other-option의 spssNumericCode, 없으면 max + 1 fallback) */
 export function getOtherOptionCode(options?: { id?: string; spssNumericCode?: number | undefined }[]): string {
   const otherOpt = options?.find((o) => o.id === 'other-option');
