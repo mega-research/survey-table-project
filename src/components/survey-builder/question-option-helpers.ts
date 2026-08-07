@@ -1,6 +1,6 @@
 import { nanoid } from 'nanoid';
 import { generateId } from '@/lib/utils';
-import { getMaxSpssCode } from '@/utils/option-code-generator';
+import { getMaxSpssCode, nextUniqueOptionNumber } from '@/utils/option-code-generator';
 import { generateOtherOptionFields } from '@/lib/option-text-migration';
 import { Question, QuestionOption, SelectLevel } from '@/types/survey';
 
@@ -11,10 +11,13 @@ import { Question, QuestionOption, SelectLevel } from '@/types/survey';
  */
 export function createTextInputOption(existingOptions: QuestionOption[]): QuestionOption {
   const fields = generateOtherOptionFields(existingOptions.length);
+  // value 는 선택 응답 키라 목록 안에서 유일해야 한다 — 중간 삭제 이력이 있으면
+  // length 기반 optionCode 가 기존 value 와 충돌할 수 있어 유일 번호로 발번.
+  const value = String(nextUniqueOptionNumber(existingOptions, ''));
   return {
     id: nanoid(10),
     label: '',
-    value: fields.optionCode,
+    value,
     optionCode: fields.optionCode,
     spssNumericCode: fields.spssNumericCode,
     allowTextInput: true,
@@ -53,10 +56,11 @@ export function createAddOption(setFormData: SetFormData) {
   return () => {
     setFormData((prev) => {
       const existingOptions = prev.options || [];
+      const optionNumber = nextUniqueOptionNumber(existingOptions, '옵션');
       const newOption: QuestionOption = {
         id: generateId(),
-        label: `옵션 ${existingOptions.length + 1}`,
-        value: `옵션${existingOptions.length + 1}`,
+        label: `옵션 ${optionNumber}`,
+        value: `옵션${optionNumber}`,
         spssNumericCode: getMaxSpssCode(existingOptions) + 1,
       };
       return {

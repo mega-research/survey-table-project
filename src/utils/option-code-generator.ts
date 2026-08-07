@@ -21,6 +21,23 @@ export function getMaxSpssCode(options?: { spssNumericCode?: number | undefined 
   );
 }
 
+/**
+ * 새 옵션의 value 번호를 발번한다 — 같은 옵션 목록 안에서 유일 보장.
+ * 선택 응답이 option.value 로 키잉되므로 value 중복은 두 옵션이 같은 선택키를
+ * 공유하는 오작동(하나를 누르면 다른 쪽이 켜짐)과 응답 병합을 일으킨다.
+ * length+1 부터 시작하되 `${prefix}${n}` 이 기존 value 와 충돌하면 다음 번호로
+ * 올린다 — 중간 삭제 이력이 있는 목록에서 length 기반 발번이 재탕되는 것을 방지.
+ */
+export function nextUniqueOptionNumber(
+  existing: Array<{ value?: string }>,
+  prefix: string,
+): number {
+  const used = new Set(existing.map((o) => o.value));
+  let n = existing.length + 1;
+  while (used.has(`${prefix}${n}`)) n++;
+  return n;
+}
+
 /** 기타 옵션의 코드를 구한다 (other-option의 spssNumericCode, 없으면 max + 1 fallback) */
 export function getOtherOptionCode(options?: { id?: string; spssNumericCode?: number | undefined }[]): string {
   const otherOpt = options?.find((o) => o.id === 'other-option');

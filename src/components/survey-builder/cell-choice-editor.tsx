@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { generateId } from '@/lib/utils';
-import { getMaxSpssCode } from '@/utils/option-code-generator';
+import { getMaxSpssCode, nextUniqueOptionNumber } from '@/utils/option-code-generator';
 import { CheckboxOption, Question, QuestionOption, RadioOption } from '@/types/survey';
 
 import {
@@ -255,7 +255,7 @@ export function CellChoiceEditor({
                 const newOption: CheckboxOption = {
                   id: generateId(),
                   label: '새 옵션',
-                  value: `option-${checkboxOptions.length + 1}`,
+                  value: `option-${nextUniqueOptionNumber(checkboxOptions, 'option-')}`,
                   checked: false,
                   spssNumericCode: getMaxSpssCode(checkboxOptions) + 1,
                 };
@@ -563,7 +563,7 @@ export function CellChoiceEditor({
                 const newOption: RadioOption = {
                   id: generateId(),
                   label: '새 옵션',
-                  value: `option-${radioOptions.length + 1}`,
+                  value: `option-${nextUniqueOptionNumber(radioOptions, 'option-')}`,
                   selected: false,
                   spssNumericCode: getMaxSpssCode(radioOptions) + 1,
                 };
@@ -772,7 +772,7 @@ export function CellChoiceEditor({
               const newOption: QuestionOption = {
                 id: generateId(),
                 label: '새 옵션',
-                value: `option-${selectOptions.length + 1}`,
+                value: `option-${nextUniqueOptionNumber(selectOptions, 'option-')}`,
                 spssNumericCode: getMaxSpssCode(selectOptions) + 1,
               };
               onSelectOptionsChange([...selectOptions, newOption]);
