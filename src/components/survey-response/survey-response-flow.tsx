@@ -835,7 +835,18 @@ function SurveyResponseFlowActive({
     setNumericErrorStepIndex,
   });
 
+  // iOS Safari 는 버튼을 탭해도 입력의 포커스를 빼앗지 않는다. 포커스가 남은
+  // 입력이 스텝 전환으로 DOM 에서 제거되면 blur 이벤트 없이 사라져 소프트
+  // 키보드가 닫히지 못하고 빈 패널로 고착된다 (레이아웃이 화면 절반에 갇히고
+  // 아래가 빈 화면으로 남는 증상). 전환 전에 명시적으로 blur 해 키보드를
+  // 정리한다 — 입력이 아직 DOM 에 있는 시점이어야 효과가 있다.
+  const blurActiveInput = () => {
+    const active = document.activeElement;
+    if (active instanceof HTMLElement) active.blur();
+  };
+
   const handleNext = async () => {
+    blurActiveInput();
     const unansweredCurrent = currentStepQuestions.filter(
       (q) => isQuestionRequired(q) && !isQuestionAnswered(q),
     );
@@ -940,6 +951,9 @@ function SurveyResponseFlowActive({
 
   const handlePrevious = useCallback(() => {
     if (stepHistory.length === 0) return;
+    // handleNext 의 blurActiveInput 과 동일 사유 — 포커스 잔류 입력의 키보드 정리
+    const active = document.activeElement;
+    if (active instanceof HTMLElement) active.blur();
     const lastIndex = stepHistory.length - 1;
     const previousStepIndex = stepHistory[lastIndex];
     if (previousStepIndex !== undefined && steps[previousStepIndex]) {
