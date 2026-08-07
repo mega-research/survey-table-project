@@ -6,13 +6,17 @@ import { FileText } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useElementWidth } from '@/hooks/use-element-width';
-import { useHorizontalScrollFades } from '@/hooks/use-horizontal-scroll-fades';
+import { useHorizontalScrollIndicators } from '@/hooks/use-horizontal-scroll-indicators';
 import { usePageStickyThreshold } from '@/hooks/use-page-sticky-threshold';
 import { useScrollLeftSync } from '@/hooks/use-scroll-left-sync';
 import { cn } from '@/lib/utils';
 import { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
-import { getCellBackgroundStyle, getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
 import { expandHeaderGrid } from '@/utils/expand-header-grid';
+import {
+  getCellBackgroundStyle,
+  getCellTextClassName,
+  getCellTextStyle,
+} from '@/utils/cell-style';
 import {
   HEADER_ROW_MIN_HEIGHT,
   STICKY_BODY_Z,
@@ -53,7 +57,10 @@ interface TablePreviewProps {
    * - (cell) => 'radio' | 'checkbox': 셀별 해석(그룹 혼합 — getGroupTypeOfCell 등)
    */
   choiceControlType?:
-    'radio' | 'checkbox' | ((cell: TableCell) => 'radio' | 'checkbox') | undefined;
+    | 'radio'
+    | 'checkbox'
+    | ((cell: TableCell) => 'radio' | 'checkbox')
+    | undefined;
   scrollLeftRef?: React.MutableRefObject<number> | undefined;
   resetScrollKey?: string | number | undefined;
   errorCellIds?: Set<string> | undefined;
@@ -117,9 +124,8 @@ export const TablePreview = React.memo(function TablePreview({
     if (headerScrollRef.current) headerScrollRef.current.scrollLeft = 0;
   }, [resetScrollKey, scrollLeftRef]);
 
-  // 가로 스크롤 좌/우 페이드 — React 상태 없이 DOM opacity 직접 갱신
-  useHorizontalScrollFades(tableContainerRef, {
-    deps: [columns.length, rows.length, hideColumnLabels],
+  const { canScrollLeft, canScrollRight } = useHorizontalScrollIndicators(tableContainerRef, {
+    deps: [columns.length, rows.length],
   });
 
   // 페이지 sticky 헤더(이중 스크롤 컨테이너) 사용 여부 — 본문이 뷰포트 대비 충분히
@@ -127,9 +133,11 @@ export const TablePreview = React.memo(function TablePreview({
   // 세로 스크롤 중 헤더 고정 턱 걸림과 가로 스크롤 헤더/본문 동기화 지연을 없앤다.
   // (interactive-table-response 와 동일 정책 — 표-소스 radio/checkbox 응답도
   //  이 컴포넌트로 렌더되므로 응답 페이지 UX 에 직접 영향)
-  const pageSticky = usePageStickyThreshold(tableContainerRef, { disabled: !stickyHeader }, [
-    columns.length === 0 || rows.length === 0,
-  ]);
+  const pageSticky = usePageStickyThreshold(
+    tableContainerRef,
+    { disabled: !stickyHeader },
+    [columns.length === 0 || rows.length === 0],
+  );
 
   // 헤더가 null이거나 단일 컨테이너 모드면 동기화 불필요
   useScrollLeftSync(headerScrollRef, tableContainerRef, hideColumnLabels || !pageSticky);
@@ -273,7 +281,12 @@ export const TablePreview = React.memo(function TablePreview({
                 pageSticky && 'sticky top-0 z-30 print:static print:z-auto',
               )}
             >
-              <TableScrollControls scrollRef={tableContainerRef} columnStops={columnStops} />
+              <TableScrollControls
+                scrollRef={tableContainerRef}
+                canScrollLeft={canScrollLeft}
+                canScrollRight={canScrollRight}
+                columnStops={columnStops}
+              />
               {pageSticky && !hideColumnLabels && (
                 <div className="relative">
                   {/* TablePreview 바디는 좌우 패딩이 없으므로 헤더도 px-0 으로 맞춘다
@@ -289,16 +302,18 @@ export const TablePreview = React.memo(function TablePreview({
                     </div>
                   </div>
                   {/* 우측 페이드 — 오른쪽에 아직 열이 더 있다는 시각 힌트 */}
-                  <div
-                    aria-hidden="true"
-                    data-scroll-fade="right"
-                    className="pointer-events-none absolute inset-y-0 right-0 z-20 w-12 transform-gpu bg-gradient-to-l from-gray-50 via-gray-50/60 to-transparent opacity-0 transition-opacity duration-150 will-change-[opacity] print:hidden"
-                  />
-                  <div
-                    aria-hidden="true"
-                    data-scroll-fade="left"
-                    className="pointer-events-none absolute inset-y-0 left-0 z-20 w-6 transform-gpu bg-gradient-to-r from-gray-50/80 to-transparent opacity-0 transition-opacity duration-150 will-change-[opacity] print:hidden"
-                  />
+                  {canScrollRight && (
+                    <div
+                      aria-hidden="true"
+                      className="pointer-events-none absolute inset-y-0 right-0 z-20 w-12 transform-gpu bg-gradient-to-l from-gray-50 via-gray-50/60 to-transparent print:hidden"
+                    />
+                  )}
+                  {canScrollLeft && (
+                    <div
+                      aria-hidden="true"
+                      className="pointer-events-none absolute inset-y-0 left-0 z-20 w-6 transform-gpu bg-gradient-to-r from-gray-50/80 to-transparent print:hidden"
+                    />
+                  )}
                 </div>
               )}
             </div>
@@ -319,7 +334,7 @@ export const TablePreview = React.memo(function TablePreview({
                 }}
                 // 모바일은 상단 스크롤 컨트롤이 스크롤 수단이므로 네이티브 가로
                 // 스크롤바를 숨긴다 — 표 아래 회색 띠(이중 스크롤 표시) 제거
-                className="overflow-x-auto max-md:[scrollbar-width:none] max-md:[-ms-overflow-style:none] print:overflow-visible max-md:[&::-webkit-scrollbar]:hidden"
+                className="overflow-x-auto max-md:[-ms-overflow-style:none] max-md:[scrollbar-width:none] print:overflow-visible max-md:[&::-webkit-scrollbar]:hidden"
               >
                 {/* 단일 컨테이너 모드(짧은 표): 헤더를 본문과 같은 스크롤 컨테이너에
                     넣어 가로 스크롤이 native 로 완전 동기된다 (sync 훅 미사용).
@@ -411,16 +426,18 @@ export const TablePreview = React.memo(function TablePreview({
                 </div>
               </div>
               {/* 우측 페이드 — 잘린 셀 내용 위로 깔려 "오른쪽에 더 있다"를 알린다 */}
-              <div
-                aria-hidden="true"
-                data-scroll-fade="right"
-                className="pointer-events-none absolute inset-y-0 right-0 z-20 w-12 transform-gpu bg-gradient-to-l from-black/10 to-transparent opacity-0 transition-opacity duration-150 will-change-[opacity] print:hidden"
-              />
-              <div
-                aria-hidden="true"
-                data-scroll-fade="left"
-                className="pointer-events-none absolute inset-y-0 left-0 z-20 w-6 transform-gpu bg-gradient-to-r from-black/10 to-transparent opacity-0 transition-opacity duration-150 will-change-[opacity] print:hidden"
-              />
+              {canScrollRight && (
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-y-0 right-0 z-20 w-12 transform-gpu bg-gradient-to-l from-black/10 to-transparent print:hidden"
+                />
+              )}
+              {canScrollLeft && (
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-y-0 left-0 z-20 w-6 transform-gpu bg-gradient-to-r from-black/10 to-transparent print:hidden"
+                />
+              )}
             </div>
           </div>
         </div>
