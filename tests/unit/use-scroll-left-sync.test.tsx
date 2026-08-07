@@ -82,6 +82,28 @@ describe('useScrollLeftSync', () => {
     expect(b.scrollLeft).toBe(200);
   });
 
+  it('대입으로 발생한 echo 이벤트는 stale 값을 원본에 되쓰지 않는다 (iOS 모멘텀 킬 회귀)', () => {
+    renderHook(() => useScrollLeftSync(makeRef(a), makeRef(b)));
+
+    // 사용자가 a(바디)를 스크롤 → b(헤더)로 전파
+    a.scrollLeft = 100;
+    a.dispatchEvent(new Event('scroll'));
+    expect(b.scrollLeft).toBe(100);
+
+    // 컴포지터가 a를 계속 진행시킴 (이벤트 지연 전달 상황 모사)
+    a.scrollLeft = 120;
+
+    // 그 사이 b의 echo 이벤트(값 100)가 늦게 도착 — 과거엔 a를 100으로 되감아
+    // 모멘텀/smooth 애니메이션을 죽였다. 이제는 echo 로 판정해 무시해야 한다.
+    b.dispatchEvent(new Event('scroll'));
+    expect(a.scrollLeft).toBe(120);
+
+    // 반대로 b를 실제로 사용자가 움직인 경우(마지막 기록값과 다름)는 전파된다
+    b.scrollLeft = 300;
+    b.dispatchEvent(new Event('scroll'));
+    expect(a.scrollLeft).toBe(300);
+  });
+
   it('deps 인자를 생략해도(기존 호출부) 기본 동작은 유지된다', () => {
     renderHook(() => {
       const aRef = useRef<HTMLElement | null>(a);

@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useLayoutEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 
 import { FileText } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useElementWidth } from '@/hooks/use-element-width';
 import { useHorizontalScrollIndicators } from '@/hooks/use-horizontal-scroll-indicators';
+import { usePageStickyThreshold } from '@/hooks/use-page-sticky-threshold';
 import { useScrollLeftSync } from '@/hooks/use-scroll-left-sync';
 import { cn } from '@/lib/utils';
 import { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
@@ -89,6 +90,17 @@ export const TablePreview = React.memo(function TablePreview({
   const totalWidth = useMemo(() => calcTotalWidth(columns), [columns]);
   const gridTemplateCols = useMemo(() => buildGridTemplateCols(columns), [columns]);
 
+  // 열 좌측 경계 누적 px — 스크롤 컨트롤의 "잘린 열 정렬" 페이징용
+  const columnStops = useMemo(() => {
+    const stops: number[] = [0];
+    let acc = 0;
+    for (const col of columns) {
+      acc += col.width || 150;
+      stops.push(acc);
+    }
+    return stops;
+  }, [columns]);
+
   // 가로 스크롤: 헤더/바디 별도 컨테이너 + 썸-버튼 컨트롤 + 좌우 그라디언트 힌트 + sticky 좌측 열
   const tableContainerRef = useRef<HTMLDivElement>(null);
   const headerScrollRef = useRef<HTMLDivElement>(null);
@@ -116,8 +128,29 @@ export const TablePreview = React.memo(function TablePreview({
     deps: [columns.length, rows.length],
   });
 
-  // 헤더가 null일 때는 동기화 불필요 (null ref 접근 방지)
-  useScrollLeftSync(headerScrollRef, tableContainerRef, hideColumnLabels);
+  // 페이지 sticky 헤더(이중 스크롤 컨테이너) 사용 여부 — 본문이 뷰포트 대비 충분히
+  // 길 때만. 짧은 표는 헤더를 본문과 같은 스크롤 컨테이너에 넣어(단일 컨테이너)
+  // 세로 스크롤 중 헤더 고정 턱 걸림과 가로 스크롤 헤더/본문 동기화 지연을 없앤다.
+  // (interactive-table-response 와 동일 정책 — 표-소스 radio/checkbox 응답도
+  //  이 컴포넌트로 렌더되므로 응답 페이지 UX 에 직접 영향)
+  const pageSticky = usePageStickyThreshold(
+    tableContainerRef,
+    { disabled: !stickyHeader },
+    [columns.length === 0 || rows.length === 0],
+  );
+
+  // 헤더가 null이거나 단일 컨테이너 모드면 동기화 불필요
+  useScrollLeftSync(headerScrollRef, tableContainerRef, hideColumnLabels || !pageSticky);
+
+  // 단일 → 이중 컨테이너 전환 시 갓 마운트된 헤더 컨테이너를 본문 위치로 정렬
+  useEffect(() => {
+    if (!pageSticky) return;
+    const header = headerScrollRef.current;
+    const body = tableContainerRef.current;
+    if (header && body && header.scrollLeft !== body.scrollLeft) {
+      header.scrollLeft = body.scrollLeft;
+    }
+  }, [pageSticky]);
 
   // 스크롤 뷰포트 실측 폭 — 좁은 화면에서 넓은 텍스트 열이 sticky로 화면을 다
   // 덮지 않도록 누적 sticky 너비 상한 계산에 사용.
@@ -237,21 +270,24 @@ export const TablePreview = React.memo(function TablePreview({
             aria-rowcount={headerRowCount + rows.length}
             aria-colcount={columns.length}
           >
-            {/* 가로 스크롤 컨트롤 + (선택적) 헤더 라벨. 페이지 스크롤 기준 sticky.
+            {/* 가로 스크롤 컨트롤 + (선택적) 헤더 라벨. pageSticky(긴 표)일 때만
+                페이지 스크롤 기준 sticky — 짧은 표는 헤더를 본문 스크롤 컨테이너
+                안에 함께 렌더한다(단일 컨테이너).
                 컨트롤은 hideColumnLabels 여부와 무관하게 렌더한다 — 헤더 라벨을 숨긴
                 넓은 표도 가로 스크롤 수단이 필요하기 때문. */}
             <div
               className={cn(
-                'z-30 bg-white print:static print:z-auto',
-                stickyHeader && 'sticky top-0',
+                'bg-white',
+                pageSticky && 'sticky top-0 z-30 print:static print:z-auto',
               )}
             >
               <TableScrollControls
                 scrollRef={tableContainerRef}
                 canScrollLeft={canScrollLeft}
                 canScrollRight={canScrollRight}
+                columnStops={columnStops}
               />
-              {!hideColumnLabels && (
+              {pageSticky && !hideColumnLabels && (
                 <div className="relative">
                   {/* TablePreview 바디는 좌우 패딩이 없으므로 헤더도 px-0 으로 맞춘다
                       (HEADER_SCROLL_CLASS 의 모바일 px-4 는 바디도 px-4 인
@@ -300,7 +336,22 @@ export const TablePreview = React.memo(function TablePreview({
                 // 스크롤바를 숨긴다 — 표 아래 회색 띠(이중 스크롤 표시) 제거
                 className="overflow-x-auto max-md:[-ms-overflow-style:none] max-md:[scrollbar-width:none] print:overflow-visible max-md:[&::-webkit-scrollbar]:hidden"
               >
+                {/* 단일 컨테이너 모드(짧은 표): 헤더를 본문과 같은 스크롤 컨테이너에
+                    넣어 가로 스크롤이 native 로 완전 동기된다 (sync 훅 미사용).
+                    key 명시: pageSticky 전환 시 React 가 헤더 div 를 본문 div 로
+                    오재사용하지 않게 한다. */}
+                {!pageSticky && !hideColumnLabels && (
+                  <div
+                    key="in-scroll-header"
+                    role="rowgroup"
+                    className="mx-auto rounded-t-md border-t border-r border-l border-gray-300 bg-gray-50 text-sm"
+                    style={gridContainerStyle}
+                  >
+                    {renderHeaderCells()}
+                  </div>
+                )}
                 <div
+                  key="table-body"
                   role="rowgroup"
                   className={cn(
                     'mx-auto rounded-b-md border-r border-l border-gray-300 bg-white text-sm',
