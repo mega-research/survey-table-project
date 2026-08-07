@@ -47,9 +47,10 @@ describe('TableScrollControls keyboard', () => {
     const scrollbar = screen.getByRole('scrollbar', { name: '가로 스크롤' });
     expect(scrollbar).toHaveAttribute('tabindex', '0');
 
+    // 스텝 = 뷰포트 폭(clientWidth) 페이징: 100 + 200 = 300
     fireEvent.keyDown(scrollbar, { key: 'ArrowRight' });
     expect(scrollTo).toHaveBeenLastCalledWith(
-      expect.objectContaining({ left: 500 }),
+      expect.objectContaining({ left: 300 }),
     );
     fireEvent.keyDown(scrollbar, { key: 'Home' });
     expect(scrollTo).toHaveBeenLastCalledWith(
