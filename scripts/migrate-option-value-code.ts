@@ -21,7 +21,9 @@ import {
   buildCellValueMaps,
   buildOrphanScope,
   buildQuestionValueMap,
+  countExpressionExposure,
   countOrphansByQuestion,
+  diffOrphanCounts,
   mergeValueMaps,
   planQuestionOptions,
   remapConditionGroup,
@@ -37,6 +39,7 @@ import {
   type QuestionOptionSource,
   type QuestionResponseSpec,
   type SkippedOptionCode,
+  type SnapshotFallbackDetail,
   type ValueMap,
 } from '../src/lib/option-value-code-migration';
 
@@ -116,12 +119,6 @@ function toSource(row: QuestionRow): QuestionOptionSource {
     rankingConfig: row.ranking_config,
     tableRowsData: row.table_rows_data,
   };
-}
-
-function sum(counts: ReadonlyMap<string, number>): number {
-  let total = 0;
-  for (const count of counts.values()) total += count;
-  return total;
 }
 
 async function inChunks<T>(items: T[], run: (item: T) => Promise<unknown>): Promise<void> {
@@ -280,6 +277,72 @@ async function main(): Promise<void> {
       }
       console.log('');
 
+      // ── expression 조건 노출 스캔 ──
+      // expression literal 은 어느 질문의 값 공간인지 구조적으로 알 수 없어 자동 리매핑하지 않는다.
+      // 후보 질문을 참조하는 expression 조건이 있으면 사람이 판단해야 하므로 리포트에 노출한다.
+      const candidateQuestionIds = new Set<string>([...byQuestion.keys(), ...byQuestionCells.keys()]);
+      let expressionTotal = 0;
+      let expressionExposed = 0;
+      const tallyExpression = (group: unknown): void => {
+        const result = countExpressionExposure(group, candidateQuestionIds);
+        expressionTotal += result.total;
+        expressionExposed += result.exposed;
+      };
+      const tallyExpressionInQuestion = (
+        displayCondition: unknown,
+        tableRowsData: unknown,
+        tableColumns: unknown,
+      ): void => {
+        tallyExpression(displayCondition);
+        if (Array.isArray(tableRowsData)) {
+          for (const row of tableRowsData) {
+            if (typeof row === 'object' && row !== null) {
+              tallyExpression((row as Record<string, unknown>)['displayCondition']);
+            }
+          }
+        }
+        if (Array.isArray(tableColumns)) {
+          for (const column of tableColumns) {
+            if (typeof column === 'object' && column !== null) {
+              tallyExpression((column as Record<string, unknown>)['displayCondition']);
+            }
+          }
+        }
+      };
+
+      for (const question of questions) {
+        tallyExpressionInQuestion(question.display_condition, question.table_rows_data, question.table_columns);
+      }
+      for (const group of groups) tallyExpression(group.display_condition);
+      for (const version of versions) {
+        const snapshot = version.snapshot;
+        if (typeof snapshot !== 'object' || snapshot === null) continue;
+        const record = snapshot as Record<string, unknown>;
+        if (Array.isArray(record['questions'])) {
+          for (const question of record['questions']) {
+            if (typeof question !== 'object' || question === null) continue;
+            const q = question as Record<string, unknown>;
+            tallyExpressionInQuestion(q['displayCondition'], q['tableRowsData'], q['tableColumns']);
+          }
+        }
+        if (Array.isArray(record['groups'])) {
+          for (const group of record['groups']) {
+            if (typeof group === 'object' && group !== null) {
+              tallyExpression((group as Record<string, unknown>)['displayCondition']);
+            }
+          }
+        }
+      }
+
+      console.log('=== 3. expression 조건 노출 검사 ===');
+      console.log(`  전체 expression 조건: ${expressionTotal}건 (questions/groups/행/열/스냅샷 전수)`);
+      if (expressionExposed === 0) {
+        console.log('  변환 후보 질문 참조: 0건 — expression 조건 노출 0건 확인 (자동 리매핑 불필요)');
+      } else {
+        console.log(`  변환 후보 질문 참조: ${expressionExposed}건 — 자동 리매핑 대상이 아니므로 수동 확인 필요`);
+      }
+      console.log('');
+
       // ── 2. orphan BEFORE ──
       const scopesBefore = new Map<string, OrphanScope>();
       for (const question of questions) scopesBefore.set(question.id, buildOrphanScope(toSource(question)));
@@ -364,7 +427,9 @@ async function main(): Promise<void> {
       let snapshotOptionConflictCount = 0;
       let snapshotConditionCount = 0;
       let snapshotGatingCount = 0;
-      const migratedSnapshots = new Map<string, unknown>();
+      const fallbackDetails: Array<
+        SnapshotFallbackDetail & { questionId: string | null; versionId: string; versionNumber: number; surveyId: string }
+      > = [];
 
       for (const version of versions) {
         const result = remapSnapshot(
@@ -374,11 +439,18 @@ async function main(): Promise<void> {
           conditionMaps,
           cellMapsGlobal,
         );
-        migratedSnapshots.set(version.id, result.snapshot);
         snapshotOptionConflictCount += result.optionConflictCount;
         if (!result.changed) continue;
         snapshotOptionCount += result.optionCount;
         snapshotOptionByValueCount += result.optionByValueCount;
+        for (const detail of result.optionByValueDetails) {
+          fallbackDetails.push({
+            ...detail,
+            versionId: version.id,
+            versionNumber: version.version_number,
+            surveyId: version.survey_id,
+          });
+        }
         snapshotConditionCount += result.conditionCount;
         snapshotGatingCount += result.gatingCount;
         versionWrites.push({ id: version.id, snapshot: result.snapshot });
@@ -451,7 +523,7 @@ async function main(): Promise<void> {
         return updateJsonbColumn(tx, 'response_answers', column, id, value);
       });
 
-      console.log('=== 3. 리매핑 대상 ===');
+      console.log('=== 4. 리매핑 대상 ===');
       console.log(`  questions 쓰기 대상: ${writtenQuestionIds.length}행`);
       console.log(`  표시조건 값 치환 (questions/행/열): ${questionConditionCount}건`);
       console.log(`  셀 게이팅 값 치환: ${questionGatingCount}건`);
@@ -467,8 +539,41 @@ async function main(): Promise<void> {
       );
       console.log('');
 
+      console.log('=== 4-1. 스냅샷 value 폴백 매칭 상세 (옵션 id 가 현행과 다른 옛 세대 사본) ===');
+      if (fallbackDetails.length === 0) {
+        console.log('  (없음)');
+      } else {
+        const grouped = new Map<string, { surveyId: string; questionId: string | null; label: string; snapshotLabel: string | null; oldValue: string; newValue: string; versions: number[] }>();
+        for (const detail of fallbackDetails) {
+          const key = [detail.surveyId, detail.questionId, detail.change.oldValue, detail.change.newValue, detail.snapshotLabel].join('|');
+          const entry = grouped.get(key) ?? {
+            surveyId: detail.surveyId,
+            questionId: detail.questionId,
+            label: detail.change.label,
+            snapshotLabel: detail.snapshotLabel,
+            oldValue: detail.change.oldValue,
+            newValue: detail.change.newValue,
+            versions: [],
+          };
+          entry.versions.push(detail.versionNumber);
+          grouped.set(key, entry);
+        }
+        for (const entry of grouped.values()) {
+          const question = entry.questionId ? questionById.get(entry.questionId) : undefined;
+          const code = question?.question_code ?? entry.questionId ?? '(질문미상)';
+          const label = entry.snapshotLabel ?? entry.label ?? '(라벨없음)';
+          const versions = [...entry.versions].sort((a, b) => a - b);
+          console.log(
+            `  [${surveyTitle.get(entry.surveyId) ?? entry.surveyId}] ${code} "${label}" ` +
+              `${entry.oldValue}->${entry.newValue} — 버전 ${versions.length}개 (v${versions.join(', v')})`,
+          );
+        }
+        console.log(`  합계 ${fallbackDetails.length}건`);
+      }
+      console.log('');
+
       // ── 8. jsonb 타입 검증 (이중 인코딩 사고 방지) ──
-      console.log('=== 4. jsonb 타입 검증 ===');
+      console.log('=== 5. jsonb 타입 검증 ===');
       const typeProblems: string[] = [];
       if (writtenQuestionIds.length > 0) {
         const bad = await tx<{ id: string; col: string; t: string | null }[]>`
@@ -491,6 +596,14 @@ async function main(): Promise<void> {
             where id in ${tx(writtenQuestionIds)} and ranking_config is not null and jsonb_typeof(ranking_config) <> 'object'
         `;
         for (const row of bad) typeProblems.push(`questions.${row.col} id=${row.id} typeof=${row.t}`);
+      }
+      if (groupWrites.length > 0) {
+        const bad = await tx<{ id: string; t: string | null }[]>`
+          select id, jsonb_typeof(display_condition) as t from question_groups
+          where id in ${tx(groupWrites.map((w) => w.id))}
+            and display_condition is not null and jsonb_typeof(display_condition) <> 'object'
+        `;
+        for (const row of bad) typeProblems.push(`question_groups.display_condition id=${row.id} typeof=${row.t}`);
       }
       if (versionWrites.length > 0) {
         const bad = await tx<{ id: string; t: string | null }[]>`
@@ -518,7 +631,11 @@ async function main(): Promise<void> {
         for (const row of bad) typeProblems.push(`response_answers.${row.col} id=${row.id} typeof=${row.t}`);
       }
       if (typeProblems.length === 0) {
-        console.log('  통과 — 쓰기 대상 전 컬럼이 기대 jsonb 타입 유지');
+        console.log(
+          `  통과 — 쓰기 대상 전 컬럼이 기대 jsonb 타입 유지 (questions ${writtenQuestionIds.length}행 / ` +
+            `question_groups ${groupWrites.length}행 / survey_versions ${versionWrites.length}행 / ` +
+            `survey_responses ${responseWrites.length}행 / response_answers ${answerIds.length}행)`,
+        );
       } else {
         failed = true;
         for (const problem of typeProblems) console.log(`  실패: ${problem}`);
@@ -536,11 +653,14 @@ async function main(): Promise<void> {
         from survey_responses where survey_id in ${tx(surveyIds)} and deleted_at is null
       `;
 
+      const versionsAfter = await tx<VersionRow[]>`
+        select id, survey_id, version_number, snapshot
+        from survey_versions where survey_id in ${tx(surveyIds)} and deleted_at is null
+      `;
+
       const scopesAfter = new Map<string, OrphanScope>();
       for (const question of questionsAfter) scopesAfter.set(question.id, buildOrphanScope(toSource(question)));
-      const snapshotScopesAfter = buildSnapshotScopes(
-        versions.map((v) => ({ ...v, snapshot: migratedSnapshots.get(v.id) ?? v.snapshot })),
-      );
+      const snapshotScopesAfter = buildSnapshotScopes(versionsAfter);
 
       const orphanLiveAfter = new Map<string, number>();
       const orphanSnapshotAfter = new Map<string, number>();
@@ -554,28 +674,23 @@ async function main(): Promise<void> {
         const question = questionById.get(questionId);
         return question ? `${question.question_code ?? '(코드없음)'}/${questionId}` : questionId;
       };
+      // 실패 판정은 총합이 아니라 질문 스코프별 증가 유무 — diffOrphanCounts 참조
       const reportOrphan = (label: string, before: Map<string, number>, after: Map<string, number>): boolean => {
-        const beforeTotal = sum(before);
-        const afterTotal = sum(after);
-        console.log(`  ${label}: before=${beforeTotal} after=${afterTotal}`);
-        const deltas: Array<[string, number]> = [];
-        for (const questionId of new Set([...before.keys(), ...after.keys()])) {
-          const delta = (after.get(questionId) ?? 0) - (before.get(questionId) ?? 0);
-          if (delta > 0) deltas.push([questionId, delta]);
-        }
-        deltas.sort((a, b) => b[1] - a[1]);
-        for (const [questionId, delta] of deltas) console.log(`    증가: ${questionLabel(questionId)} +${delta}`);
-        return afterTotal > beforeTotal;
+        const diff = diffOrphanCounts(before, after);
+        console.log(`  ${label}: before=${diff.beforeTotal} after=${diff.afterTotal}`);
+        for (const [questionId, delta] of diff.increased) console.log(`    증가: ${questionLabel(questionId)} +${delta}`);
+        for (const [questionId, delta] of diff.decreased) console.log(`    감소: ${questionLabel(questionId)} -${delta}`);
+        return diff.hasIncrease;
       };
 
-      console.log('=== 5. orphan 응답값 검증 ===');
+      console.log('=== 6. orphan 응답값 검증 ===');
       const liveIncreased = reportOrphan('현행 질문 정의 기준', orphanLiveBefore, orphanLiveAfter);
       const snapshotIncreased = reportOrphan('응답 버전 스냅샷 기준', orphanSnapshotBefore, orphanSnapshotAfter);
       if (liveIncreased || snapshotIncreased) {
         failed = true;
-        console.log('  실패: orphan 이 증가했습니다 — 리매핑 누락이 있습니다.');
+        console.log('  실패: 증가한 질문 스코프가 있습니다 — 리매핑 누락입니다 (총합 상쇄 여부와 무관).');
       } else {
-        console.log('  통과 — orphan 증가 없음');
+        console.log('  통과 — 증가한 질문 스코프 없음');
       }
       console.log('');
 

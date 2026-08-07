@@ -418,6 +418,72 @@ export function remapConditionGroup(group: unknown, maps: ConditionRemapMaps): {
   return total > 0 ? { value: { ...group, conditions: nextConditions }, count: total } : { value: group, count: 0 };
 }
 
+/**
+ * conditionType 'expression' 조건이 변환 후보 질문을 참조하는지 센다.
+ *
+ * expression 조건은 `expressionConfig.clauses[].comparison` 의 literal 피연산자에 옵션 value 가
+ * 들어갈 수 있는데, 그 literal 이 어느 질문의 값 공간인지 구조적으로 알 수 없어 안전한 자동
+ * 리매핑이 불가능하다. 따라서 이 마이그레이션은 expression 을 건드리지 않고, 후보 질문을
+ * 참조하는 expression 조건이 있으면 리포트에 노출해 사람이 판단하게 한다 (0 이면 무영향).
+ */
+export function countExpressionExposure(
+  group: unknown,
+  candidateQuestionIds: ReadonlySet<string>,
+): { total: number; exposed: number } {
+  if (!isPlainObject(group) || !Array.isArray(group['conditions'])) return { total: 0, exposed: 0 };
+
+  let total = 0;
+  let exposed = 0;
+
+  for (const condition of group['conditions'] as unknown[]) {
+    if (!isPlainObject(condition) || condition['conditionType'] !== 'expression') continue;
+    total += 1;
+
+    const referenced = new Set<string>();
+    const sourceId = asString(condition['sourceQuestionId']);
+    if (sourceId !== null) referenced.add(sourceId);
+    collectExpressionQuestionRefs(condition['expressionConfig'], referenced);
+
+    for (const questionId of referenced) {
+      if (candidateQuestionIds.has(questionId)) {
+        exposed += 1;
+        break;
+      }
+    }
+  }
+
+  return { total, exposed };
+}
+
+/** expression operand 트리에서 질문 참조(kind 'question' | 'cell')를 모은다 */
+function collectExpressionQuestionRefs(config: unknown, into: Set<string>): void {
+  if (!isPlainObject(config) || !Array.isArray(config['clauses'])) return;
+
+  const walkOperand = (operand: unknown): void => {
+    if (!isPlainObject(operand)) return;
+    const kind = operand['kind'];
+    if (kind === 'question' || kind === 'cell') {
+      const questionId = asString(operand['questionId']);
+      if (questionId !== null) into.add(questionId);
+      return;
+    }
+    if (kind === 'binop') {
+      walkOperand(operand['left']);
+      walkOperand(operand['right']);
+    }
+  };
+
+  for (const clause of config['clauses'] as unknown[]) {
+    if (!isPlainObject(clause)) continue;
+    if (clause['kind'] === 'comparison' && isPlainObject(clause['comparison'])) {
+      walkOperand(clause['comparison']['left']);
+      walkOperand(clause['comparison']['right']);
+      continue;
+    }
+    if (clause['kind'] === 'group') collectExpressionQuestionRefs(clause['group'], into);
+  }
+}
+
 /** table_columns[].displayCondition 리매핑 */
 export function remapTableColumns(columns: unknown, maps: ConditionRemapMaps): { value: unknown; count: number } {
   if (!Array.isArray(columns)) return { value: columns, count: 0 };
@@ -616,6 +682,15 @@ export type SnapshotOptionChanges = ReadonlyMap<string, ReadonlyMap<string, Opti
 /** cellId → (optionId → 변경) */
 export type SnapshotCellChanges = ReadonlyMap<string, ReadonlyMap<string, OptionValueChange>>;
 
+/** value 폴백으로 매칭한 옵션 1건의 육안 대조용 상세 */
+export interface SnapshotFallbackDetail {
+  change: OptionValueChange;
+  /** 스냅샷 사본 쪽 옵션 라벨 (현행 라벨과 다를 수 있어 별도로 남긴다) */
+  snapshotLabel: string | null;
+  /** 스냅샷 사본 쪽 옵션 id (현행과 다르기 때문에 폴백이 필요했던 것) */
+  snapshotOptionId: string | null;
+}
+
 export interface SnapshotOptionApplyResult {
   value: unknown;
   /** 옵션 id 로 매칭해 적용한 수 */
@@ -625,6 +700,7 @@ export interface SnapshotOptionApplyResult {
   /** 폴백 대상이 여럿이거나 새 value 가 이미 쓰이고 있어 적용하지 못한 수 */
   conflicts: number;
   count: number;
+  byValueDetails: SnapshotFallbackDetail[];
 }
 
 function migrateOption(option: Record<string, unknown>, change: OptionValueChange): Record<string, unknown> {
@@ -643,13 +719,14 @@ function applyOptionChanges(
   changes: ReadonlyMap<string, OptionValueChange> | undefined,
 ): SnapshotOptionApplyResult {
   if (!changes || changes.size === 0 || !Array.isArray(input)) {
-    return { value: input, byId: 0, byValue: 0, conflicts: 0, count: 0 };
+    return { value: input, byId: 0, byValue: 0, conflicts: 0, count: 0, byValueDetails: [] };
   }
 
   const options = input as unknown[];
   const next = [...options];
   const applied = new Set<number>();
   const handled = new Set<OptionValueChange>();
+  const byValueDetails: SnapshotFallbackDetail[] = [];
   let byId = 0;
   let byValue = 0;
   let conflicts = 0;
@@ -693,12 +770,17 @@ function applyOptionChanges(
     next[target] = migrateOption(option, change);
     applied.add(target);
     byValue += 1;
+    byValueDetails.push({
+      change,
+      snapshotLabel: asString(option['label']),
+      snapshotOptionId: asString(option['id']),
+    });
   }
 
   const count = byId + byValue;
   return count > 0
-    ? { value: next, byId, byValue, conflicts, count }
-    : { value: input, byId: 0, byValue: 0, conflicts, count: 0 };
+    ? { value: next, byId, byValue, conflicts, count, byValueDetails }
+    : { value: input, byId: 0, byValue: 0, conflicts, count: 0, byValueDetails: [] };
 }
 
 export interface SnapshotRemapResult {
@@ -706,6 +788,8 @@ export interface SnapshotRemapResult {
   optionCount: number;
   /** value 폴백으로 매칭한 옵션 수 (스냅샷 사본의 옵션 id 가 현행과 다른 세대) */
   optionByValueCount: number;
+  /** value 폴백 매칭 건별 상세 — DRY_RUN 육안 대조용 */
+  optionByValueDetails: Array<SnapshotFallbackDetail & { questionId: string | null }>;
   /** 폴백 충돌로 적용하지 못한 수 — 남으면 orphan 증가로 이어진다 */
   optionConflictCount: number;
   conditionCount: number;
@@ -713,14 +797,17 @@ export interface SnapshotRemapResult {
   changed: boolean;
 }
 
-const EMPTY_SNAPSHOT_COUNTS = {
-  optionCount: 0,
-  optionByValueCount: 0,
-  optionConflictCount: 0,
-  conditionCount: 0,
-  gatingCount: 0,
-  changed: false,
-} as const;
+function emptySnapshotCounts(): Omit<SnapshotRemapResult, 'snapshot'> {
+  return {
+    optionCount: 0,
+    optionByValueCount: 0,
+    optionByValueDetails: [],
+    optionConflictCount: 0,
+    conditionCount: 0,
+    gatingCount: 0,
+    changed: false,
+  };
+}
 
 /**
  * survey_versions.snapshot 안 질문 구조에 동일 변환을 적용한다.
@@ -733,8 +820,9 @@ export function remapSnapshot(
   maps: ConditionRemapMaps,
   cellMaps: ReadonlyMap<string, ValueMap>,
 ): SnapshotRemapResult {
-  if (!isPlainObject(snapshot)) return { snapshot, ...EMPTY_SNAPSHOT_COUNTS };
+  if (!isPlainObject(snapshot)) return { snapshot, ...emptySnapshotCounts() };
 
+  const optionByValueDetails: Array<SnapshotFallbackDetail & { questionId: string | null }> = [];
   let optionCount = 0;
   let optionByValueCount = 0;
   let optionConflictCount = 0;
@@ -742,10 +830,14 @@ export function remapSnapshot(
   let gatingCount = 0;
   let changed = false;
 
+  let tallyQuestionId: string | null = null;
   const tally = (result: SnapshotOptionApplyResult): void => {
     optionCount += result.count;
     optionByValueCount += result.byValue;
     optionConflictCount += result.conflicts;
+    for (const detail of result.byValueDetails) {
+      optionByValueDetails.push({ ...detail, questionId: tallyQuestionId });
+    }
   };
 
   let questions = snapshot['questions'];
@@ -757,6 +849,7 @@ export function remapSnapshot(
       let questionChanged = false;
 
       const changesForQuestion = questionId === null ? undefined : optionChanges.get(questionId);
+      tallyQuestionId = questionId;
 
       const options = applyOptionChanges(question['options'], changesForQuestion);
       tally(options);
@@ -874,11 +967,12 @@ export function remapSnapshot(
     }
   }
 
-  if (!changed) return { snapshot, ...EMPTY_SNAPSHOT_COUNTS, optionConflictCount };
+  if (!changed) return { snapshot, ...emptySnapshotCounts(), optionConflictCount };
   return {
     snapshot: { ...snapshot, questions, groups },
     optionCount,
     optionByValueCount,
+    optionByValueDetails,
     optionConflictCount,
     conditionCount,
     gatingCount,
@@ -960,6 +1054,47 @@ export function countOrphanValues(
   let total = 0;
   for (const count of countOrphansByQuestion(questionResponses, scopes).values()) total += count;
   return total;
+}
+
+export interface OrphanDiff {
+  /** [questionId, 증가량] — 하나라도 있으면 리매핑 누락이다 */
+  increased: Array<[string, number]>;
+  /** [questionId, 감소량] — 정상 (죽은 값이 살아난 경우) */
+  decreased: Array<[string, number]>;
+  beforeTotal: number;
+  afterTotal: number;
+  /** 실패 판정 — 총합이 아니라 스코프별 증가 유무로 본다 */
+  hasIncrease: boolean;
+}
+
+/**
+ * orphan 전후를 질문 스코프 단위로 비교한다.
+ *
+ * 총합 비교로 판정하면 어떤 질문의 orphan 감소(정상)가 다른 질문의 신규 orphan(사고)을
+ * 상쇄해 게이트가 뚫린다. 증가한 스코프가 하나라도 있으면 실패로 본다.
+ */
+export function diffOrphanCounts(
+  before: ReadonlyMap<string, number>,
+  after: ReadonlyMap<string, number>,
+): OrphanDiff {
+  const increased: Array<[string, number]> = [];
+  const decreased: Array<[string, number]> = [];
+  let beforeTotal = 0;
+  let afterTotal = 0;
+
+  for (const count of before.values()) beforeTotal += count;
+  for (const count of after.values()) afterTotal += count;
+
+  for (const questionId of new Set([...before.keys(), ...after.keys()])) {
+    const delta = (after.get(questionId) ?? 0) - (before.get(questionId) ?? 0);
+    if (delta > 0) increased.push([questionId, delta]);
+    if (delta < 0) decreased.push([questionId, -delta]);
+  }
+
+  increased.sort((a, b) => b[1] - a[1]);
+  decreased.sort((a, b) => b[1] - a[1]);
+
+  return { increased, decreased, beforeTotal, afterTotal, hasIncrease: increased.length > 0 };
 }
 
 /** 질문 정의(마이그레이션 전/후 어느 쪽이든)에서 orphan 판정용 옵션 value 집합을 만든다 */

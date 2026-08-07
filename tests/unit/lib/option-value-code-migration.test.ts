@@ -6,8 +6,10 @@ import {
   buildOrphanScope,
   buildQuestionValueMap,
   buildValueMap,
+  countExpressionExposure,
   countOrphansByQuestion,
   countOrphanValues,
+  diffOrphanCounts,
   mergeValueMaps,
   planOptionArrayMigration,
   planQuestionOptions,
@@ -421,10 +423,12 @@ describe('remapSnapshot', () => {
     expect(result.snapshot).toBe(snapshot);
   });
 
-  it('옵션 id 가 다른 세대 사본이면 value 로 폴백 매칭한다', () => {
+  it('옵션 id 가 다른 세대 사본이면 value 로 폴백 매칭하고 상세를 남긴다', () => {
     // 실제 데이터: 옛 스냅샷의 기타 옵션이 현행과 다른 id 로 복제되어 있다
     const snapshot = {
-      questions: [{ id: 'q1', options: [{ id: '옛날id', value: '옵션1' }, { id: 'z', value: '옵션2' }] }],
+      questions: [
+        { id: 'q1', options: [{ id: '옛날id', value: '옵션1', label: '① 옛 라벨' }, { id: 'z', value: '옵션2' }] },
+      ],
       groups: [],
     };
 
@@ -433,9 +437,19 @@ describe('remapSnapshot', () => {
     expect(result.optionCount).toBe(1);
     expect(result.optionByValueCount).toBe(1);
     expect(result.optionConflictCount).toBe(0);
+    // 육안 대조용 상세 — 어느 질문의 어떤 옵션이 폴백으로 바뀌었는지 지목 가능해야 한다
+    expect(result.optionByValueDetails).toEqual([
+      { change, snapshotLabel: '① 옛 라벨', snapshotOptionId: '옛날id', questionId: 'q1' },
+    ]);
     const options = (result.snapshot as { questions: Array<{ options: Array<Record<string, unknown>> }> })
       .questions[0]?.options;
-    expect(options?.[0]).toEqual({ id: '옛날id', value: '1', optionCode: '1', isCustomOptionCode: true });
+    expect(options?.[0]).toEqual({
+      id: '옛날id',
+      value: '1',
+      label: '① 옛 라벨',
+      optionCode: '1',
+      isCustomOptionCode: true,
+    });
   });
 
   it('폴백 대상이 여럿이거나 새 value 가 이미 쓰이면 강행하지 않고 conflicts 로 센다', () => {
@@ -562,6 +576,137 @@ describe('orphan 검증', () => {
 
     expect(countOrphanValues(responses, new Map([['q1', buildOrphanScope(before)]]))).toBe(0);
     expect(countOrphanValues(responses, new Map([['q1', buildOrphanScope(after)]]))).toBe(1);
+  });
+});
+
+describe('diffOrphanCounts', () => {
+  it('총합이 같아도 한 스코프가 증가하면 실패로 판정한다 (상쇄 게이트 우회 차단)', () => {
+    // q1 은 3 감소(정상), q2 는 3 증가(사고) — 총합은 10 으로 동일
+    const before = new Map([['q1', 5], ['q2', 5]]);
+    const after = new Map([['q1', 2], ['q2', 8]]);
+
+    const diff = diffOrphanCounts(before, after);
+
+    expect(diff.beforeTotal).toBe(10);
+    expect(diff.afterTotal).toBe(10);
+    expect(diff.hasIncrease).toBe(true);
+    expect(diff.increased).toEqual([['q2', 3]]);
+    expect(diff.decreased).toEqual([['q1', 3]]);
+  });
+
+  it('총합이 줄어도 신규 orphan 이 난 스코프가 있으면 실패로 판정한다', () => {
+    const before = new Map([['q1', 10]]);
+    const after = new Map([['q1', 1], ['q2', 2]]);
+
+    const diff = diffOrphanCounts(before, after);
+
+    expect(diff.afterTotal).toBeLessThan(diff.beforeTotal);
+    expect(diff.hasIncrease).toBe(true);
+    expect(diff.increased).toEqual([['q2', 2]]);
+  });
+
+  it('감소만 있으면 정상 통과', () => {
+    const diff = diffOrphanCounts(new Map([['q1', 5], ['q2', 3]]), new Map([['q1', 2]]));
+
+    expect(diff.hasIncrease).toBe(false);
+    expect(diff.increased).toEqual([]);
+    expect(diff.decreased).toEqual([['q1', 3], ['q2', 3]]);
+  });
+
+  it('전후 동일하면 통과', () => {
+    expect(diffOrphanCounts(new Map([['q1', 5]]), new Map([['q1', 5]])).hasIncrease).toBe(false);
+  });
+
+  it('증가량 내림차순으로 정렬해 원인 지목을 앞세운다', () => {
+    const diff = diffOrphanCounts(new Map(), new Map([['q1', 1], ['q2', 7], ['q3', 3]]));
+
+    expect(diff.increased).toEqual([['q2', 7], ['q3', 3], ['q1', 1]]);
+  });
+});
+
+describe('countExpressionExposure', () => {
+  const candidates = new Set(['q-cand']);
+
+  const expressionCondition = (config: unknown, sourceQuestionId = 'q-other') => ({
+    logicType: 'AND',
+    conditions: [
+      { id: 'c1', sourceQuestionId, conditionType: 'expression', expressionConfig: config, logicType: 'AND' },
+    ],
+  });
+
+  it('expression 이 아닌 조건은 세지 않는다', () => {
+    const group = {
+      logicType: 'AND',
+      conditions: [{ id: 'c', sourceQuestionId: 'q-cand', conditionType: 'value-match', requiredValues: ['1'], logicType: 'AND' }],
+    };
+
+    expect(countExpressionExposure(group, candidates)).toEqual({ total: 0, exposed: 0 });
+  });
+
+  it('후보 질문을 참조하지 않는 expression 은 노출 0', () => {
+    const group = expressionCondition({
+      clauses: [
+        {
+          kind: 'comparison',
+          comparison: { left: { kind: 'question', questionId: 'q-other' }, op: '==', right: { kind: 'literal', value: '옵션1' } },
+        },
+      ],
+      joinOps: [],
+    });
+
+    expect(countExpressionExposure(group, candidates)).toEqual({ total: 1, exposed: 0 });
+  });
+
+  it('kind question 으로 후보 질문을 참조하면 노출로 센다', () => {
+    const group = expressionCondition({
+      clauses: [
+        {
+          kind: 'comparison',
+          comparison: { left: { kind: 'question', questionId: 'q-cand' }, op: '==', right: { kind: 'literal', value: '옵션1' } },
+        },
+      ],
+      joinOps: [],
+    });
+
+    expect(countExpressionExposure(group, candidates)).toEqual({ total: 1, exposed: 1 });
+  });
+
+  it('중첩 group/binop 안의 cell 참조도 찾아낸다', () => {
+    const group = expressionCondition({
+      clauses: [
+        {
+          kind: 'group',
+          group: {
+            clauses: [
+              {
+                kind: 'comparison',
+                comparison: {
+                  left: {
+                    kind: 'binop',
+                    op: '+',
+                    left: { kind: 'literal', value: 1 },
+                    right: { kind: 'cell', questionId: 'q-cand', cellId: 'c1' },
+                  },
+                  op: '>',
+                  right: { kind: 'literal', value: 3 },
+                },
+              },
+            ],
+            joinOps: [],
+          },
+        },
+      ],
+      joinOps: [],
+    });
+
+    expect(countExpressionExposure(group, candidates)).toEqual({ total: 1, exposed: 1 });
+  });
+
+  it('sourceQuestionId 가 후보면 expressionConfig 가 비어도 노출로 센다', () => {
+    expect(countExpressionExposure(expressionCondition(undefined, 'q-cand'), candidates)).toEqual({
+      total: 1,
+      exposed: 1,
+    });
   });
 });
 
