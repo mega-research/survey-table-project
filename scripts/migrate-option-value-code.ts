@@ -157,9 +157,10 @@ async function main(): Promise<void> {
         select id, survey_id, version_number, snapshot
         from survey_versions where survey_id in ${tx(surveyIds)} and deleted_at is null
       `;
+      // soft-delete 응답도 리매핑 대상 — 운영 콘솔에 복구 기능이 있어 구 value 가 되살아난다.
       const responses = await tx<ResponseRow[]>`
         select id, survey_id, version_id, question_responses
-        from survey_responses where survey_id in ${tx(surveyIds)} and deleted_at is null
+        from survey_responses where survey_id in ${tx(surveyIds)}
       `;
 
       console.log(
@@ -339,7 +340,10 @@ async function main(): Promise<void> {
       if (expressionExposed === 0) {
         console.log('  변환 후보 질문 참조: 0건 — expression 조건 노출 0건 확인 (자동 리매핑 불필요)');
       } else {
-        console.log(`  변환 후보 질문 참조: ${expressionExposed}건 — 자동 리매핑 대상이 아니므로 수동 확인 필요`);
+        // expression literal 은 자동 리매핑 불가 — 노출이 하나라도 있으면 사람이 판단해야 하므로
+        // 리포트에 그치지 않고 검증 실패로 승격해 롤백한다.
+        failed = true;
+        console.log(`  실패: 변환 후보 질문 참조 ${expressionExposed}건 — 자동 리매핑 대상이 아니므로 수동 확인 필요`);
       }
       console.log('');
 
@@ -469,11 +473,9 @@ async function main(): Promise<void> {
       }
 
       const responseWrites: Array<{ id: string; value: unknown }> = [];
-      const migratedResponses = new Map<string, unknown>();
       let responseValueCount = 0;
       for (const response of responses) {
         const remapped = remapQuestionResponses(response.question_responses, responseSpecs);
-        migratedResponses.set(response.id, remapped.value);
         if (remapped.count === 0) continue;
         responseValueCount += remapped.count;
         responseWrites.push({ id: response.id, value: remapped.value });
@@ -486,11 +488,12 @@ async function main(): Promise<void> {
       const targetQuestionIds = [...responseSpecs.keys()];
       let answerRows: AnswerRow[] = [];
       if (targetQuestionIds.length > 0) {
+        // survey_responses 와 동일하게 soft-delete 응답의 정규화 행도 포함한다.
         answerRows = await tx<AnswerRow[]>`
           select a.id, a.question_id, a.text_value, a.array_value, a.object_value
           from response_answers a
           join survey_responses r on r.id = a.response_id
-          where r.deleted_at is null and a.question_id in ${tx(targetQuestionIds)}
+          where a.question_id in ${tx(targetQuestionIds)}
         `;
       }
 
@@ -648,9 +651,10 @@ async function main(): Promise<void> {
                table_rows_data, table_columns, display_condition
         from questions where survey_id in ${tx(surveyIds)}
       `;
+      // 리매핑 스코프와 대칭 — soft-delete 응답도 orphan 검증에 포함한다.
       const responsesAfter = await tx<ResponseRow[]>`
         select id, survey_id, version_id, question_responses
-        from survey_responses where survey_id in ${tx(surveyIds)} and deleted_at is null
+        from survey_responses where survey_id in ${tx(surveyIds)}
       `;
 
       const versionsAfter = await tx<VersionRow[]>`
