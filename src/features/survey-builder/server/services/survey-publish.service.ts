@@ -1,10 +1,15 @@
 import 'server-only';
 
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, ne, notExists, sql } from 'drizzle-orm';
 
 import { getSurveyWithDetails } from '@/data/surveys';
 import { db } from '@/db';
-import { surveys, surveyVersions, type SurveyVersionSnapshot } from '@/db/schema';
+import {
+  surveyResponses,
+  surveys,
+  surveyVersions,
+  type SurveyVersionSnapshot,
+} from '@/db/schema';
 import { generateSPSSColumns } from '@/lib/analytics/spss-excel-export';
 import { normalizeQuestions } from '@/lib/question';
 import { hydrateQuestionsForSpss } from '@/lib/spss/hydrate-questions';
@@ -90,6 +95,23 @@ export async function publishSurvey(
         updatedAt: new Date(),
       })
       .where(eq(surveys.id, surveyId));
+
+    // 응답이 참조하지 않는 이전 버전 스냅샷 정리 — 스냅샷(~수백 KB/개)이 publish
+    // 마다 쌓여 DB 를 잠식하는 것을 막는다. 응답이 있는 버전은 응답 수정 재계산·
+    // 운영 집계·이전 버전 진행 중 응답 검증이 스냅샷을 읽으므로 보존해야 하고,
+    // 방금 만든 버전이 항상 남으므로 versionNumber 는 재사용 없이 단조 증가한다.
+    await tx.delete(surveyVersions).where(
+      and(
+        eq(surveyVersions.surveyId, surveyId),
+        ne(surveyVersions.id, newVersion.id),
+        notExists(
+          tx
+            .select({ one: sql`1` })
+            .from(surveyResponses)
+            .where(eq(surveyResponses.versionId, surveyVersions.id)),
+        ),
+      ),
+    );
 
     return newVersion;
   });
