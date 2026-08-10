@@ -4,6 +4,7 @@ import ExcelJS from 'exceljs';
 import { and, inArray } from 'drizzle-orm';
 
 import { db } from '@/db';
+import { logger } from '@/lib/logger';
 import { contactPii } from '@/db/schema';
 import { decryptPii } from '@/lib/crypto/aes';
 
@@ -60,7 +61,7 @@ export async function decryptPiiForExport(
   }
   if (failedCount > 0) {
     // cipher/평문/대상 id 는 로그 금지 — 건수만 남긴다 (키 로테이션 사고 탐지용)
-    console.error(`decryptPiiForExport: 복호화 실패 ${failedCount}건`);
+    logger.error({ failedCount }, 'decryptPiiForExport: 복호화 실패');
   }
   return result;
 }

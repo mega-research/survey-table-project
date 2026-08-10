@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { logger } from '@/lib/logger';
 import {
   isAdminUserAllowed,
   parseAdminAllowlist,
@@ -54,7 +55,7 @@ describe('isAdminUserAllowed', () => {
   beforeEach(() => {
     resetAdminAllowlistWarningForTest();
     delete process.env[ENV_KEY];
-    warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
   });
 
   afterEach(() => {

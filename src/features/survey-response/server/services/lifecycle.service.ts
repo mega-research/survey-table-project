@@ -4,6 +4,7 @@ import 'server-only';
 import { db } from '@/db';
 import { surveyResponses } from '@/db/schema';
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
+import { logger } from '@/lib/logger';
 import { findContactByInviteToken } from '@/lib/duplicate-detection/invite-lookup';
 import { getSurveyControlFlags, isValidTestToken } from '@/lib/survey-control';
 import {
@@ -395,8 +396,9 @@ export async function resumeOrCreateResponse(
     };
   }
   // 알 수 없는 status — 호출자가 새 응답 흐름으로 가도록 null 반환
-  console.warn(
-    `[resumeOrCreateResponse] 알 수 없는 status 발견: ${existing.status} (id=${existing.id})`,
+  logger.warn(
+    { surveyId, responseId: existing.id, status: existing.status },
+    '[resumeOrCreateResponse] 알 수 없는 status 발견 — 새 응답 흐름 fallback',
   );
   return null;
 }
