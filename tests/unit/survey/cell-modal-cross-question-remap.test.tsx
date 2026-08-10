@@ -13,6 +13,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const updateQuestionMock = vi.hoisted(() => vi.fn());
+const updateGroupMock = vi.hoisted(() => vi.fn());
 const saveSurveyMock = vi.hoisted(() => vi.fn());
 
 const toastErrorMock = vi.hoisted(() => vi.fn());
@@ -31,6 +32,7 @@ vi.mock('@/shared/lib/rpc', () => ({
   client: {
     surveyBuilder: {
       questions: { create: vi.fn(), update: updateQuestionMock },
+      groups: { update: updateGroupMock },
     },
   },
 }));
@@ -161,11 +163,112 @@ describe('셀 모달 — 셀 저장 시점의 cross-question 표시조건 리매
     fireEvent.click(screen.getByRole('button', { name: '저장' }));
 
     await waitFor(() => expect(saveSurveyMock).toHaveBeenCalledTimes(1));
-    // 스코프 저장: 리매핑된 질문만 대상, 그룹 미변경이면 메타데이터 미포함
-    expect(saveSurveyMock).toHaveBeenCalledWith({
-      questionIds: ['q-other'],
-      includeMetadata: false,
+    // 스코프 저장: 리매핑된 질문만 대상 (메타데이터는 스코프 저장으로 절대 전송하지 않는다)
+    expect(saveSurveyMock).toHaveBeenCalledWith({ questionIds: ['q-other'] });
+  });
+
+  it('그룹 조건 리매핑은 그룹 전용 RPC 로 영속하고 전역 메타데이터 dirty 를 소비하지 않는다', async () => {
+    // 사용자가 아직 저장하지 않은 메타데이터 변경(제목 등)이 대기 중인 상황
+    useSurveyBuilderStore.setState((s) => ({
+      currentSurvey: {
+        ...s.currentSurvey,
+        groups: [
+          {
+            id: 'g1',
+            surveyId: 's1',
+            name: '그룹',
+            order: 0,
+            displayCondition: {
+              logicType: 'AND',
+              conditions: [
+                {
+                  id: 'cond-g',
+                  sourceQuestionId: TABLE_QUESTION_ID,
+                  conditionType: 'table-cell-check',
+                  tableConditions: {
+                    rowIds: ['r1'],
+                    cellColumnIndex: 0,
+                    checkType: 'any',
+                    expectedValues: ['option-2'],
+                  },
+                  logicType: 'AND',
+                },
+              ],
+            },
+          },
+        ],
+      },
+      isMetadataDirty: true,
+    }));
+    updateGroupMock.mockResolvedValue({ id: 'g1' });
+    renderCellModal();
+
+    commitCode(1, '5');
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+
+    await waitFor(() => expect(updateGroupMock).toHaveBeenCalledTimes(1));
+    expect(updateGroupMock).toHaveBeenCalledWith({
+      groupId: 'g1',
+      surveyId: 's1',
+      data: {
+        displayCondition: expect.objectContaining({
+          conditions: [
+            expect.objectContaining({
+              tableConditions: expect.objectContaining({ expectedValues: ['5'] }),
+            }),
+          ],
+        }),
+      },
     });
+    // 대기 중이던 무관한 메타데이터 dirty 는 소비되지 않고 그대로 남는다
+    expect(useSurveyBuilderStore.getState().isMetadataDirty).toBe(true);
+  });
+
+  it('그룹 전용 RPC 실패 시 메타데이터 dirty 로 폴백해 수동 저장으로 복구 가능하게 한다', async () => {
+    useSurveyBuilderStore.setState((s) => ({
+      currentSurvey: {
+        ...s.currentSurvey,
+        groups: [
+          {
+            id: 'g1',
+            surveyId: 's1',
+            name: '그룹',
+            order: 0,
+            displayCondition: {
+              logicType: 'AND',
+              conditions: [
+                {
+                  id: 'cond-g',
+                  sourceQuestionId: TABLE_QUESTION_ID,
+                  conditionType: 'table-cell-check',
+                  tableConditions: {
+                    rowIds: ['r1'],
+                    cellColumnIndex: 0,
+                    checkType: 'any',
+                    expectedValues: ['option-2'],
+                  },
+                  logicType: 'AND',
+                },
+              ],
+            },
+          },
+        ],
+      },
+      isMetadataDirty: false,
+    }));
+    updateGroupMock.mockRejectedValueOnce(new Error('network'));
+    renderCellModal();
+
+    commitCode(1, '5');
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+
+    await waitFor(() => expect(updateGroupMock).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(toastErrorMock).toHaveBeenCalledWith(
+        '조건 리매핑 저장에 실패했습니다. 설문 저장 버튼으로 다시 저장해 주세요.',
+      ),
+    );
+    expect(useSurveyBuilderStore.getState().isMetadataDirty).toBe(true);
   });
 
   it('리매핑 저장 실패 시 토스트로 사용자에게 알린다 (무음 실패 금지)', async () => {

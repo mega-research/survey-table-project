@@ -103,7 +103,9 @@ describe('survey-store remapOptionValueInConditions', () => {
     expect(useSurveyBuilderStore.getState().isDirty).toBe(true);
   });
 
-  it('질문 그룹의 displayCondition 도 리매핑하고 isMetadataDirty 를 세운다', () => {
+  it('질문 그룹의 displayCondition 도 리매핑하고 그룹 id 를 스코프로 반환한다', () => {
+    // 그룹 영속은 호출측의 groups.update RPC 담당 — 전역 isMetadataDirty 를 세우면
+    // 미저장 제목 변경·그룹 삭제까지 스코프 저장에 동반 커밋되므로 세우지 않는다
     const group: QuestionGroup = {
       id: 'g-target',
       surveyId: SURVEY_ID,
@@ -114,7 +116,7 @@ describe('survey-store remapOptionValueInConditions', () => {
     useSurveyBuilderStore.getState().setSurvey(makeSurvey({ groups: [group] }));
     useSurveyBuilderStore.getState().markClean();
 
-    useSurveyBuilderStore
+    const scope = useSurveyBuilderStore
       .getState()
       .remapOptionValueInConditions(SOURCE_QUESTION_ID, 'old-value', 'new-value');
 
@@ -122,7 +124,8 @@ describe('survey-store remapOptionValueInConditions', () => {
       (g) => g.id === 'g-target',
     );
     expect(updatedGroup?.displayCondition?.conditions[0]?.requiredValues).toEqual(['new-value']);
-    expect(useSurveyBuilderStore.getState().isMetadataDirty).toBe(true);
+    expect(scope.groupIds).toEqual(['g-target']);
+    expect(useSurveyBuilderStore.getState().isMetadataDirty).toBe(false);
   });
 
   it('테이블 행(tableRowsData)과 열(tableColumns)의 displayCondition 도 리매핑한다', () => {

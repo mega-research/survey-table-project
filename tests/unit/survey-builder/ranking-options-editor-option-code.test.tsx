@@ -61,6 +61,33 @@ describe('RankingOptionsEditor 응답값(변수번호) 입력 배선', () => {
     });
   });
 
+  it('중간 삭제 이력이 있어도 옵션 추가는 기존 value 와 중복되지 않게 발번한다', async () => {
+    // opt2 삭제 후 추가 시 length+1 발번이면 opt3 가 재탕되어 두 옵션이 같은 응답 키를 공유한다
+    function DeletedHarness() {
+      const [options, setOptions] = useState<QuestionOption[]>([
+        { id: 'a', label: '옵션 1', value: 'opt1' },
+        { id: 'c', label: '옵션 3', value: 'opt3' },
+      ]);
+      return (
+        <>
+          <RankingOptionsEditor options={options} onChange={setOptions} />
+          <div data-testid="options-dump">{JSON.stringify(options)}</div>
+        </>
+      );
+    }
+    render(<DeletedHarness />);
+
+    await userEvent.click(screen.getByRole('button', { name: '옵션 추가' }));
+
+    const dumped = JSON.parse(
+      screen.getByTestId('options-dump').textContent ?? '[]',
+    ) as QuestionOption[];
+    expect(dumped).toHaveLength(3);
+    const values = dumped.map((o) => o.value);
+    expect(new Set(values).size).toBe(3);
+    expect(values[2]).toBe('opt4');
+  });
+
   it('다른 옵션의 코드와 중복되면 blur 후 경고가 뜨고 value 동기화가 보류된다', async () => {
     const onOptionValueChange = vi.fn();
     render(<Harness onOptionValueChange={onOptionValueChange} />);

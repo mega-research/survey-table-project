@@ -571,6 +571,14 @@ function isSidecarKey(key: string): boolean {
   return key.startsWith('__');
 }
 
+/**
+ * 기타 옵션 응답 객체 { selectedValue, otherValue, hasOther } 판별.
+ * selectedValue 만 옵션 value 공간이고 otherValue 는 자유 텍스트다.
+ */
+function isOtherChoiceObject(value: unknown): value is Record<string, unknown> & { selectedValue: string } {
+  return isPlainObject(value) && typeof value['selectedValue'] === 'string';
+}
+
 function remapArrayItems(items: unknown[], map: ValueMap): { value: unknown[]; count: number } {
   let count = 0;
   const next = items.map((item) => {
@@ -586,6 +594,13 @@ function remapArrayItems(items: unknown[], map: ValueMap): { value: unknown[]; c
       if (mapped === undefined) return item;
       count += 1;
       return { ...item, optionValue: mapped };
+    }
+    // checkbox 배열 안의 기타 옵션 객체 — selectedValue 만 치환
+    if (isOtherChoiceObject(item)) {
+      const mapped = map.get(item.selectedValue);
+      if (mapped === undefined) return item;
+      count += 1;
+      return { ...item, selectedValue: mapped };
     }
     return item;
   });
@@ -615,6 +630,15 @@ export function remapResponseValue(value: unknown, spec: QuestionResponseSpec): 
   }
 
   if (!isPlainObject(value)) return { value, count: 0 };
+
+  // radio/select 기타 옵션 응답 { selectedValue, otherValue, hasOther }
+  if (isOtherChoiceObject(value)) {
+    if (!questionMap) return { value, count: 0 };
+    const mapped = questionMap.get(value.selectedValue);
+    return mapped === undefined
+      ? { value, count: 0 }
+      : { value: { ...value, selectedValue: mapped }, count: 1 };
+  }
 
   // response_answers.object_value 의 배열 래핑 컨테이너
   if (Array.isArray(value['__array'])) {
@@ -646,6 +670,14 @@ export function remapResponseValue(value: unknown, spec: QuestionResponseSpec): 
       if (remapped.count === 0) continue;
       next[key] = remapped.value;
       count += remapped.count;
+      continue;
+    }
+    // 셀 값의 기타 옵션 객체 — selectedValue 만 치환
+    if (isOtherChoiceObject(cellValue)) {
+      const mapped = map.get(cellValue.selectedValue);
+      if (mapped === undefined) continue;
+      next[key] = { ...cellValue, selectedValue: mapped };
+      count += 1;
     }
   }
 
@@ -737,6 +769,14 @@ function applyOptionChanges(
     if (optionId === null) return;
     const change = changes.get(optionId);
     if (!change || option['value'] !== change.oldValue) return;
+    // 이 스냅샷 세대에서 다른 옵션이 이미 newValue 를 쓰고 있으면 강행하지 않는다 —
+    // 적용 시 두 옵션이 같은 value 로 합쳐져 응답 의미가 손상된다. 여기서 적용을
+    // 건너뛰면 아래 value 폴백 경로가 newValueTaken 으로 잡아 conflicts 로 센다.
+    const newValueTakenByOther = options.some(
+      (other, i) =>
+        i !== index && isPlainObject(other) && asString(other['value']) === change.newValue,
+    );
+    if (newValueTakenByOther) return;
     next[index] = migrateOption(option, change);
     applied.add(index);
     handled.add(change);
@@ -991,6 +1031,8 @@ export interface OrphanScope {
 
 function countMissing(value: unknown, allowed: ReadonlySet<string>): number {
   if (typeof value === 'string') return allowed.has(value) ? 0 : 1;
+  // 기타 옵션 객체 { selectedValue, otherValue, hasOther } — selectedValue 만 판정
+  if (isOtherChoiceObject(value)) return allowed.has(value.selectedValue) ? 0 : 1;
   if (!Array.isArray(value)) return 0;
 
   let count = 0;
@@ -1000,6 +1042,10 @@ function countMissing(value: unknown, allowed: ReadonlySet<string>): number {
       continue;
     }
     if (isPlainObject(item) && typeof item['optionValue'] === 'string' && !allowed.has(item['optionValue'])) {
+      count += 1;
+      continue;
+    }
+    if (isOtherChoiceObject(item) && !allowed.has(item.selectedValue)) {
       count += 1;
     }
   }
@@ -1028,7 +1074,10 @@ export function countOrphansByQuestion(
     const scope = scopes.get(questionId);
     if (!scope) continue;
 
-    if (scope.optionValues && (typeof value === 'string' || Array.isArray(value))) {
+    if (
+      scope.optionValues
+      && (typeof value === 'string' || Array.isArray(value) || isOtherChoiceObject(value))
+    ) {
       add(questionId, countMissing(value, scope.optionValues));
       continue;
     }

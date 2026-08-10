@@ -96,7 +96,7 @@ export function useSurveySync() {
    * 무관한 변경(예: 그룹 삭제)까지 함께 커밋해 버리는 부작용을 막는다.
    */
   const saveSurveyScoped = useCallback(
-    async (scope: { questionIds: string[]; includeMetadata: boolean }) => {
+    async (scope: { questionIds: string[] }) => {
       const store = useSurveyBuilderStore.getState();
 
       if (!store.currentSurvey.id) {
@@ -125,10 +125,12 @@ export function useSurveySync() {
         if (scopeIds.has(id)) inUpdated[id] = true;
         else outUpdated[id] = true;
       }
-      const includeMetadata = scope.includeMetadata && snapshot.isMetadataDirty;
+      // 메타데이터(제목·설정·그룹 전체)는 스코프 저장으로 절대 전송하지 않는다 —
+      // 전역 metadata dirty 를 소비하면 미저장 제목 변경·그룹 삭제까지 동반 커밋된다.
+      // 리매핑된 그룹 조건은 호출측이 groups.update RPC 로 개별 영속한다.
       const inScope = {
         questionChanges: { added: {}, updated: inUpdated, deleted: {}, reordered: false },
-        isMetadataDirty: includeMetadata,
+        isMetadataDirty: false,
       };
       const outOfScope = {
         questionChanges: {
@@ -137,7 +139,7 @@ export function useSurveySync() {
           deleted: snapshot.questionChanges.deleted,
           reordered: snapshot.questionChanges.reordered,
         },
-        isMetadataDirty: snapshot.isMetadataDirty && !includeMetadata,
+        isMetadataDirty: snapshot.isMetadataDirty,
       };
       useSurveyBuilderStore.getState().mergeChangesBack(outOfScope);
 

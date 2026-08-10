@@ -1,54 +1,90 @@
-# Task 8 응답 클라이언트 attempt 작업 보고서
+# Task 8 리포트: 매칭 미리보기 스텝 + 적재 배선 + 결과 확장
 
-## Status
+> 이전 버전의 이 파일은 무관한 다른 작업("응답 클라이언트 attempt")의 리포트였다. 이 태스크(컨택 업로드
+> 모드 - 매칭 미리보기 스텝) 결과로 전체 덮어씀.
 
-- 대상자 테스트 flow는 화면 마운트마다 안정적인 `attemptId`와 `sessionId`를 만들고, 첫 실제 입력 또는 답 없는 제출에서만 쓰기 소유권을 획득한다.
-- create, blank, complete, step visit, visibility fetch/sendBeacon에 같은 attempt identity를 전달한다. 실제·익명 테스트 payload에는 attempt를 추가하지 않는다.
-- 같은 버전 `in_progress` 답은 읽기 전용 resume으로 복원하되 소유권 획득 전 telemetry를 쓰지 않는다. terminal·이전 버전은 저장 key를 지우고 빈 입력 화면을 유지한다.
-- invite token별 localStorage key로 대상자 세션을 격리한다. 새 flow 마운트는 새 attempt를 만들어 이전 화면을 supersede할 수 있다.
-- stale 테스트 링크는 scoped 저장 상태와 응답 store를 지우고 `InvalidTestLinkScreen`에서 종료한다. `다시 테스트하기` CTA나 테스트 대상자 전용 표시는 추가하지 않았다.
-- Task 9 메일 코드는 변경하지 않았다.
+## 상태: DONE
 
-## TDD 증거
+## 변경 파일
 
-- RED: 기존 lifecycle 13건이 Node 26의 비활성 experimental localStorage 때문에 테스트 본문 전에 전부 실패하는 것을 확인했다.
-- GREEN: 공용 jsdom 메모리 Storage를 설치하고 node test environment는 제외해 lifecycle 16건이 실제 경로를 실행하도록 복구했다.
-- RED→GREEN: 회복 응답 첫 입력 attempt 획득, blank 후 complete identity, invite별 key, sendBeacon identity, ownership 전 telemetry 차단, key 없는 target resume, flow 조합 identity, stale 링크 재확인을 각각 실패로 관찰한 뒤 수직 조각으로 구현했다.
-- 내부 `session-helpers` 모킹이 invite 인수를 버리는 반패턴을 제거하고 실제 helper interface를 통과해 검증했다.
+- 신규: `src/components/operations/contacts/upload-match-step.tsx` — 브리프 코드 그대로 작성
+- 수정: `src/components/operations/contacts/upload-wizard.tsx` — 상태 선언, buildMapping, handleMatchPreview,
+  버튼 분기, match 스텝 렌더, result 확장, 단계 표시기, 리셋 배선
+- 수정(범위 외, 컴파일 필수): `src/hooks/queries/index.ts` — `useMatchContacts` 가 Task 4 에서 훅 파일
+  (`use-contacts.ts`)에는 추가됐지만 배럴(`index.ts`)에서 재-export 되지 않아 `upload-wizard.tsx` 의
+  import 가 `TS2305` 로 실패. `useParseExcelPreview`/`useIngestContacts` 옆에 `useMatchContacts` 한 줄
+  추가로 해소. 브리프는 2파일 scoped 를 명시했으나, 이 누락은 Task 8 착수 시점에 이미 존재하던 배선
+  공백이라 같은 커밋에 포함했다(prototypes/, tmp/ 는 여전히 제외).
 
-## 검증
+## Step 1: UploadMatchStep
 
-- 집중 테스트: `target-test-session`, `use-response-lifecycle`, `response-segment` 3파일 35건 통과.
-- `pnpm exec tsc --noEmit`: 통과.
-- `pnpm lint`: 오류 0, 기존 경고 99건.
-- `pnpm test`: 본 실행 319파일 2,601건 통과, 격리 실행 1파일 14건 통과.
-- `git diff --check`: 통과.
+브리프 코드 그대로 신규 작성. 요약 카운터, 빈 값 덮어쓰기 경고, merge/append 별 정책 라디오,
+자동 제외 안내, 4종 SampleList(불일치/신규, 파일 내 키 중복, 다중 일치, 키 빈 값), 뒤로가기/적재 시작 버튼.
 
-## 사용자 변경 보존
+## Step 2: 위저드 배선
 
-- 원본 checkout의 `SurveyCompletedScreen` 변경을 worktree에 먼저 동일 적용했다.
-- `questionCount` prop과 `총 N개 질문` 표시는 제거된 상태를 유지했고, 완료 시간은 `showCompletedTime`일 때만 렌더한다. 해당 표시를 재도입하지 않았다.
+1. **상태 선언**: `unmatchedPolicy`(기본 `'skip'`), `duplicatePolicy`(기본 `'skip'`), `matchResult`
+   (`MatchContactUploadResult | null`), `result` 를 `IngestContactUploadResult | null` 로 확장.
+   `needsMatchStep = needsKeySelection` 파생값 추가 (merge 는 항상, append 는 중복검사 on 일 때만).
+2. **buildMapping()**: mapping/mergeKeys/unmatchedPolicy/duplicatePolicy 를 `ContactUploadMapping` 으로
+   조립하는 공용 헬퍼. `handleMatchPreview`/`handleIngest` 양쪽에서 사용.
+3. **handleMatchPreview**: `matchContacts.mutateAsync` 호출 → `setMatchResult` → `setStep('match')`.
+4. **버튼 분기 (이관 수정 1)**: mapping 스텝 적재 버튼 disabled 를
+   `(mode === 'replace' && existingContactsCount > 0 && !replaceConfirmed) || (needsKeySelection && mergeKeys.size === 0)`
+   로 교체. onClick 은 `needsMatchStep ? handleMatchPreview : handleIngest`.
+5. **match 스텝 렌더**: `step === 'match' && matchResult && (mode === 'merge' || mode === 'append')` 가드로
+   `UploadMatchStep` 렌더. onBack → `setStep('mapping')`, onConfirm → `handleIngest`.
+6. **handleIngest**: `buildMapping()` 사용으로 교체, `setResult(r)` 로 `IngestContactUploadResult` 전체 저장.
+7. **result 스텝**: 신규 적재/갱신/제외(skippedBreakdown 4분류: 정책·파일 내 중복·다중 일치·키 빈 값)/에러 표시.
+8. **단계 표시기**: `needsMatchStep` 이면 4단계(파일→컬럼 설정→매칭 미리보기→결과), 아니면 3단계.
+9. **리셋 (이관 수정 2)**: `handlePreview` 성공 시 `setMode('replace')`, `setDupCheck(false)`,
+   `setMergeKeys(new Set())`, `setMatchResult(null)` 추가. "다른 파일 업로드" 리셋에도 동일 4개 추가.
 
-## 우려
+## Step 3: 타입/lint
 
-- lint 경고 99건은 기존 코드베이스 경고이며 이번 변경에서 오류를 추가하지 않았다.
-- Node 26 테스트 환경의 localStorage는 jsdom에서만 표준 Storage interface의 메모리 구현으로 대체한다. node 전용 테스트에는 전역을 설치하지 않는다.
+- `npx tsc --noEmit`: 0 에러.
+- `pnpm lint`: 0 에러, 163 경고 — 전부 우리 파일과 무관한 기존 경고(`any` 사용, 기존 useCallback 의존성 등).
+  `upload-wizard.tsx`/`upload-match-step.tsx`/`hooks/queries/index.ts` 관련 warning 0건(개별 grep 확인).
 
-## 리뷰 수정
+## Step 4: 무회귀 테스트
 
-- `SurveyResponseFlow` 앞에 identity boundary와 control shell을 두어 초기 무효 링크에서 recovery·telemetry·lifecycle 훅을 mount하지 않는다. 무효 링크는 survey+invite storage key, Zustand 응답 상태, local answers를 지운 뒤 종료 화면만 렌더한다.
-- survey/invite/test identity를 React key로 삼아 같은 컴포넌트에서 token이 바뀌어도 attemptId, sessionId, ownership, currentResponseId, local answers가 함께 새 scope로 교체된다. 이전 invite response를 새 invite로 complete하지 않는 통합 테스트를 추가했다.
-- `useSessionRecovery` 요청에 generation/cancel guard를 적용하고 같은 identity의 promise를 재사용했다. deferred promise로 빠른 identity 전환의 stale then/catch/finally, StrictMode 중복 resume, unmount 후 갱신 차단을 검증했다.
-- `TestAttemptIdentity`를 `@/shared/types/test-attempt`로 옮겨 client, feature domain, server implementation이 같은 계약을 사용한다. client의 신규 feature-domain 의존은 제거했다.
-- RED는 stale `currentResponseId`에서 초기 무효 링크가 telemetry를 실행한 실패와, invite A의 지연 resume가 invite B 상태를 덮는 실패로 확인했다.
-- 검증: 집중 3파일 41건 통과, `pnpm exec tsc --noEmit` 통과, `pnpm lint` 오류 0건·기존 경고 99건, `pnpm test` 최종 통과, `git diff --check` 통과.
-- `SurveyCompletedScreen`의 `questionCount`와 `총 N개 질문` 제거를 그대로 유지했고 Task 9 메일 코드는 변경하지 않았다.
+`pnpm vitest run src/features/contacts tests/unit/contacts` → 16 test files / 89 tests 전부 통과.
 
-## 리뷰 수정 2
+## Step 4(브리프): dev 서버 수동 E2E
 
-- `useSessionRecovery` terminal interface에 `enabled`와 `terminalBlocked`를 추가해 완료·무효 링크·기타 blocked 화면에서 recovery를 시작하거나 결과를 재적용하지 않도록 했다.
-- pending resume는 identity별 promise map으로만 dedupe하고 settle 즉시 제거한다. 별도 attempted identity 집합이 같은 flow의 recovery를 최초 1회로 제한하며 identity boundary remount는 새 recovery를 허용한다.
-- RED는 recovery settle 후 완료 store reset을 모사했을 때 answers가 2회 적용되는 실패로 확인했다. GREEN은 제출 reset 후 `stepVisit` 추가 0회, invalid cleanup 후 telemetry 0회, stale complete cleanup 1회를 검증했다.
-- 집중 검증 3파일 46건, `pnpm exec tsc --noEmit`, `pnpm lint` 오류 0건·기존 경고 99건, `git diff --check`는 통과했다.
-- `pnpm test` 1회에서 본 실행 319파일 2,612건은 모두 통과했고, 이어진 격리 단계는 알려진 `profiles-row-actions` flaky 12건이 `SurveyOwnershipError: not_found`로 실패했다. 요청대로 전체 suite는 재실행하지 않았다.
-- `SurveyCompletedScreen`의 `questionCount`와 `총 N개 질문` 제거를 유지했고 actual·anonymous·target payload 계약과 Task 9 메일 코드는 변경하지 않았다.
+브리프 원문은 `pnpm dev` 수동 확인을 요구하지만, 이 태스크의 Context 지시에 "dev 서버 수동 확인은
+controller 소관 — 하지 말 것" 이 명시되어 있어 수행하지 않았다. 아래 Self-Review(로직 추적)로 대체 검증.
+
+## Self-Review (로직 추적)
+
+1. **merge + 기존명단>0 + 키 선택됨 → "매칭 확인" 활성?**
+   `mode==='merge'` 이므로 replace 절 false. `needsKeySelection` true, `mergeKeys.size>0` 이면 두 번째 절도
+   false → `disabled=false`. `onClick = handleMatchPreview` (needsMatchStep true). 활성 확인.
+   **replace 모드**는 needsKeySelection 이 항상 false 이므로 이 조건엔 영향 없고, 여전히
+   `existingContactsCount > 0 && !replaceConfirmed` 로만 게이트 — 동의 체크박스 요구 유지 확인.
+
+2. **append + dupCheck off → match 스텝 없이 바로 적재?**
+   `needsKeySelection = mode==='merge' || (mode==='append' && dupCheck)` → dupCheck false 이면 false.
+   `needsMatchStep` false → 버튼 onClick 이 `handleIngest` 직행. 확인.
+
+3. **match 스텝 뒤로가기 후 재확인 시 stale matchResult 없음?**
+   `onBack`은 `setStep('mapping')`만 수행, `matchResult` 는 유지하지만 렌더 조건이 `step==='match'` 를
+   요구해 미표시. 재클릭 시 `handleMatchPreview` 가 새 결과로 `setMatchResult` 를 덮어쓴 뒤에만
+   `setStep('match')` 호출 — 화면에 이전 값이 노출되지 않음. 확인.
+
+4. **result 화면 skippedBreakdown 4분류 표시?**
+   `result.skippedRows > 0` 일 때 정책/파일 내 중복/다중 일치/키 빈 값 4개 카운트 모두 렌더. 확인.
+
+## 커밋
+
+`b389d849` feat: 업로드 위저드 매칭 미리보기 스텝과 모드별 적재 배선 추가
+
+(3 files changed: upload-match-step.tsx 신규, upload-wizard.tsx, hooks/queries/index.ts)
+
+## 우려 사항
+
+- `useMatchContacts` 배럴 export 누락은 이 태스크에서 발견·수정했지만, 원래는 Task 4(matchPreview RPC)
+  범위의 배선 공백이었다. Task 10 전체 리뷰 시 Task 4 리포트와 대조해 인지시킬 것.
+- `.superpowers/sdd/task-4-report.md`, `task-6-report.md`, `task-7-report.md` 가 작업 시작 전부터 이미
+  워킹 트리에 수정 상태(unstaged)로 남아 있었음 — 이 태스크에서 건드리지 않았고 git add 대상에서도 제외함.
+- `prototypes/`, `tmp/` 는 세션 시작부터 untracked 상태였고 이번 커밋에 포함하지 않았다.

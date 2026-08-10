@@ -78,7 +78,7 @@ describe('survey-store remapQuestionRefs', () => {
     const questions = useSurveyBuilderStore.getState().currentSurvey.questions;
     expect(questions[0]!.displayCondition!.conditions[0]!.sourceQuestionId).toBe(NEW_ID);
     expect(questions[1]!.displayCondition!.conditions[0]!.sourceQuestionId).toBe('q-someone-else');
-    expect(scope).toEqual({ questionIds: ['q-target'], groupsChanged: false });
+    expect(scope).toEqual({ questionIds: ['q-target'], groupIds: [] });
     // dirty 추적: 리매핑된 질문만 updated 등재
     expect(useSurveyBuilderStore.getState().questionChanges.updated['q-target']).toBe(true);
     expect(useSurveyBuilderStore.getState().questionChanges.updated['q-unrelated']).toBeUndefined();
@@ -178,9 +178,12 @@ describe('survey-store remapQuestionRefs', () => {
     expect(scope.questionIds).toEqual(['q-branch']);
   });
 
-  it('그룹 displayCondition 리매핑 시 groupsChanged 와 isMetadataDirty 를 세운다', () => {
+  it('그룹 displayCondition 리매핑 시 그룹 id 를 반환하고 전역 isMetadataDirty 는 세우지 않는다', () => {
+    // 그룹 영속은 호출측의 groups.update RPC 담당 — 전역 메타 dirty 를 세우면
+    // 미저장 제목 변경·그룹 삭제까지 스코프 저장에 동반 커밋된다
     const group: QuestionGroup = {
       id: 'g-1',
+      surveyId: SURVEY_ID,
       name: '그룹',
       order: 1,
       displayCondition: makeConditionGroup(OLD_ID),
@@ -193,8 +196,8 @@ describe('survey-store remapQuestionRefs', () => {
       useSurveyBuilderStore.getState().currentSurvey.groups![0]!.displayCondition!.conditions[0]!
         .sourceQuestionId,
     ).toBe(NEW_ID);
-    expect(scope).toEqual({ questionIds: [], groupsChanged: true });
-    expect(useSurveyBuilderStore.getState().isMetadataDirty).toBe(true);
+    expect(scope).toEqual({ questionIds: [], groupIds: ['g-1'] });
+    expect(useSurveyBuilderStore.getState().isMetadataDirty).toBe(false);
   });
 
   it('참조가 전혀 없으면 아무것도 바꾸지 않고 빈 스코프를 반환한다', () => {
@@ -203,7 +206,7 @@ describe('survey-store remapQuestionRefs', () => {
 
     const scope = useSurveyBuilderStore.getState().remapQuestionRefs(OLD_ID, NEW_ID);
 
-    expect(scope).toEqual({ questionIds: [], groupsChanged: false });
+    expect(scope).toEqual({ questionIds: [], groupIds: [] });
     expect(useSurveyBuilderStore.getState().isDirty).toBe(false);
   });
 });

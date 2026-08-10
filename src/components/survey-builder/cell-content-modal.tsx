@@ -501,7 +501,7 @@ export function CellContentModal({
 
             // 리매핑 스코프 수집 — 스코프 저장(saveSurveyScoped)의 입력.
             // create 분기에서 id 가 스왑되면 이후 리매핑은 새 id 기준이어야 한다.
-            const remapScopes: Array<{ questionIds: string[]; groupsChanged: boolean }> = [];
+            const remapScopes: Array<{ questionIds: string[]; groupIds: string[] }> = [];
             let effectiveQuestionId = currentQuestionId;
 
             if (!isNewQuestion) {
@@ -589,25 +589,63 @@ export function CellContentModal({
             // 같은 표의 게이팅(enabledWhen)은 onSave→updateCell 이 이미 같은 커밋에 실었다.
             // 조건 참조는 위에서 이미 새 id 로 스왑됐을 수 있으므로 effectiveQuestionId 기준.
             if (pendingOptionValueChangesRef.current.length > 0) {
+              // 같은 표의 다른 셀이 같은 옵션 value(자동 발번 option-N)를 쓰는 것이 일상이므로,
+              // 이 셀의 행·열 좌표와 cellId 로 스코프를 좁혀 그 셀을 실제로 참조하는 조건만
+              // 리매핑한다 (무관 셀을 겨냥한 조건의 expectedValues 오염 방지).
+              const cellRow = updatedRowsData.find((row) => row.cells.some((c) => c.id === cell.id));
+              const cellScope = cellRow
+                ? {
+                    rowId: cellRow.id,
+                    columnIndex: cellRow.cells.findIndex((c) => c.id === cell.id),
+                    cellId: cell.id,
+                  }
+                : undefined;
               for (const change of pendingOptionValueChangesRef.current) {
                 remapScopes.push(
-                  remapOptionValueInConditions(effectiveQuestionId, change.oldValue, change.newValue),
+                  remapOptionValueInConditions(
+                    effectiveQuestionId,
+                    change.oldValue,
+                    change.newValue,
+                    cellScope,
+                  ),
                 );
               }
               pendingOptionValueChangesRef.current = [];
             }
 
             // 리매핑이 실제 변경을 만들었으면 그 범위만 영속 — 빌더에 대기 중인 무관한
-            // pending(질문 추가/삭제, 그룹 삭제 등)은 건드리지 않는다 (saveSurveyScoped).
+            // pending(질문 추가/삭제, 그룹 삭제 등)은 건드리지 않는다. 질문은 스코프 저장,
+            // 그룹 조건은 그룹 전용 RPC 로 개별 영속한다 (전역 메타데이터 저장에 실으면
+            // 미저장 제목 변경·그룹 삭제까지 동반 커밋된다).
             const remapQuestionIds = [...new Set(remapScopes.flatMap((s) => s.questionIds))];
-            const remapGroupsChanged = remapScopes.some((s) => s.groupsChanged);
-            if (remapQuestionIds.length > 0 || remapGroupsChanged) {
+            const remapGroupIds = [...new Set(remapScopes.flatMap((s) => s.groupIds))];
+            if (remapQuestionIds.length > 0 || remapGroupIds.length > 0) {
               try {
-                await saveSurveyScoped({
-                  questionIds: remapQuestionIds,
-                  includeMetadata: remapGroupsChanged,
-                });
+                if (remapGroupIds.length > 0) {
+                  const { currentSurvey } = useSurveyBuilderStore.getState();
+                  await Promise.all(
+                    remapGroupIds.map((groupId) => {
+                      const group = currentSurvey.groups?.find((g) => g.id === groupId);
+                      if (!group?.displayCondition) return null;
+                      return client.surveyBuilder.groups.update({
+                        groupId,
+                        surveyId: currentSurvey.id,
+                        data: { displayCondition: group.displayCondition },
+                      });
+                    }),
+                  );
+                }
+                if (remapQuestionIds.length > 0) {
+                  await saveSurveyScoped({ questionIds: remapQuestionIds });
+                } else {
+                  // 그룹만 변경: RPC 영속이 끝났으므로 남은 변경 기준으로 dirty 재계산
+                  useSurveyBuilderStore.getState().markSavedSnapshotClean();
+                }
               } catch (saveError) {
+                if (remapGroupIds.length > 0) {
+                  // 그룹 RPC 실패 폴백 — 수동 저장(메타데이터 전체)으로 복구 가능하게 한다
+                  useSurveyBuilderStore.setState({ isMetadataDirty: true, isDirty: true });
+                }
                 console.error('표시조건 리매핑 반영을 위한 설문 저장 실패:', saveError);
                 toast.error(
                   '조건 리매핑 저장에 실패했습니다. 설문 저장 버튼으로 다시 저장해 주세요.',

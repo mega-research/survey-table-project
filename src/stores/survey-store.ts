@@ -15,6 +15,7 @@ import { DEFAULT_RESPONSE_HEADER_CONFIG } from '@/lib/survey/response-header-con
 import {
   remapConditionGroupQuestionRefs,
   remapConditionGroupValues,
+  type CellRemapScope,
 } from '@/utils/option-value-remap';
 
 // ── 헬퍼 함수 ──
@@ -141,6 +142,7 @@ export interface SurveyBuilderState {
     questionId: string,
     oldValue: string,
     newValue: string,
+    cellScope?: CellRemapScope,
   ) => ConditionRemapScope;
   /**
    * 질문 생성 직후 temp id 가 DB id 로 스왑될 때, 그 질문을 참조하는 조건들을 새 id 로
@@ -151,10 +153,14 @@ export interface SurveyBuilderState {
   remapQuestionRefs: (oldId: string, newId: string) => ConditionRemapScope;
 }
 
-/** 조건 리매핑이 실제로 변경한 범위 — 스코프 저장(saveSurveyScoped)의 입력 */
+/**
+ * 조건 리매핑이 실제로 변경한 범위 — 질문은 스코프 저장(saveSurveyScoped),
+ * 그룹은 groups.update RPC 로 각각 영속한다. 그룹을 전역 isMetadataDirty 로
+ * 실어 보내면 미저장 제목 변경·그룹 삭제까지 동반 커밋되므로 금지.
+ */
 export interface ConditionRemapScope {
   questionIds: string[];
-  groupsChanged: boolean;
+  groupIds: string[];
 }
 
 const defaultSurveySettings: SurveySettings = {
@@ -760,10 +766,15 @@ export const useSurveyBuilderStore = create<SurveyBuilderState>()(
         });
       },
 
-      remapOptionValueInConditions: (questionId: string, oldValue: string, newValue: string) => {
+      remapOptionValueInConditions: (
+        questionId: string,
+        oldValue: string,
+        newValue: string,
+        cellScope?: CellRemapScope,
+      ) => {
         // 스코프 저장(saveSurveyScoped)이 이 결과만 영속하도록, 실제 변경 범위를 수집해 반환
         const affectedIds = new Set<string>();
-        let groupsChanged = false;
+        const changedGroupIds = new Set<string>();
         set((state) => {
           let changed = false;
 
@@ -774,6 +785,7 @@ export const useSurveyBuilderStore = create<SurveyBuilderState>()(
                 questionId,
                 oldValue,
                 newValue,
+                cellScope,
               );
               if (next !== question.displayCondition) {
                 question.displayCondition = next;
@@ -794,6 +806,7 @@ export const useSurveyBuilderStore = create<SurveyBuilderState>()(
                   questionId,
                   oldValue,
                   newValue,
+                  cellScope,
                 );
                 if (next === row.displayCondition) return row;
                 rowsChanged = true;
@@ -818,6 +831,7 @@ export const useSurveyBuilderStore = create<SurveyBuilderState>()(
                   questionId,
                   oldValue,
                   newValue,
+                  cellScope,
                 );
                 if (next === column.displayCondition) return column;
                 columnsChanged = true;
@@ -841,12 +855,14 @@ export const useSurveyBuilderStore = create<SurveyBuilderState>()(
               questionId,
               oldValue,
               newValue,
+              cellScope,
             );
             if (next !== group.displayCondition) {
               group.displayCondition = next;
               changed = true;
-              groupsChanged = true;
-              state.isMetadataDirty = true;
+              // 그룹 영속은 호출측의 groups.update RPC 담당 — 전역 isMetadataDirty 를
+              // 세우면 미저장 제목 변경·그룹 삭제까지 스코프 저장에 동반 커밋된다
+              changedGroupIds.add(group.id);
             }
           });
 
@@ -858,12 +874,12 @@ export const useSurveyBuilderStore = create<SurveyBuilderState>()(
             }
           }
         });
-        return { questionIds: [...affectedIds], groupsChanged };
+        return { questionIds: [...affectedIds], groupIds: [...changedGroupIds] };
       },
 
       remapQuestionRefs: (oldId: string, newId: string) => {
         const affectedIds = new Set<string>();
-        let groupsChanged = false;
+        const changedGroupIds = new Set<string>();
 
         // 옵션 배열 안의 branchRule.targetQuestionId(goto 분기 대상) 리매핑 헬퍼
         const remapBranchTargets = <T extends { branchRule?: { targetQuestionId?: string } }>(
@@ -984,8 +1000,8 @@ export const useSurveyBuilderStore = create<SurveyBuilderState>()(
             if (next !== group.displayCondition) {
               group.displayCondition = next;
               changed = true;
-              groupsChanged = true;
-              state.isMetadataDirty = true;
+              // 그룹 영속은 호출측의 groups.update RPC 담당 — 전역 isMetadataDirty 금지
+              changedGroupIds.add(group.id);
             }
           });
 
@@ -997,7 +1013,7 @@ export const useSurveyBuilderStore = create<SurveyBuilderState>()(
             }
           }
         });
-        return { questionIds: [...affectedIds], groupsChanged };
+        return { questionIds: [...affectedIds], groupIds: [...changedGroupIds] };
       },
     })),
     { name: 'survey-builder-store', enabled: process.env.NODE_ENV === 'development' },

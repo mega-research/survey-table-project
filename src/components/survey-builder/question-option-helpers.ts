@@ -185,12 +185,15 @@ export function createAddLevelOption(setFormData: SetFormData) {
       if (!level) return prev;
 
       const levelIndex = prev.selectLevels?.findIndex((l) => l.id === levelId) || 0;
-      const optionCount = level.options?.length || 0;
+      // value 는 응답 저장 키 — 중간 삭제 이력이 있는 목록에서 count+1 발번이
+      // 기존 value 를 재탕하지 않도록 유일 발번한다
+      const prefix = levelIndex === 0 ? '옵션' : '상위옵션-옵션';
+      const nextIdx = nextUniqueOptionNumber(level.options ?? [], prefix);
 
       const newOption: QuestionOption = {
         id: generateId(),
-        label: `옵션 ${optionCount + 1}`,
-        value: levelIndex === 0 ? `옵션${optionCount + 1}` : `상위옵션-옵션${optionCount + 1}`,
+        label: `옵션 ${nextIdx}`,
+        value: `${prefix}${nextIdx}`,
         spssNumericCode: getMaxSpssCode(level.options) + 1,
       };
 

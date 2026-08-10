@@ -78,7 +78,7 @@ describe('useSurveySync.saveSurveyScoped', () => {
     const { result } = renderHook(() => useSurveySync(), { wrapper });
 
     await act(async () => {
-      await result.current.saveSurveyScoped({ questionIds: ['q-in'], includeMetadata: false });
+      await result.current.saveSurveyScoped({ questionIds: ['q-in'] });
     });
 
     expect(saveDiffMock).toHaveBeenCalledTimes(1);
@@ -99,17 +99,17 @@ describe('useSurveySync.saveSurveyScoped', () => {
     expect(state.isDirty).toBe(true);
   });
 
-  it('includeMetadata=true 면 메타데이터를 함께 전송하고 메타 dirty 를 소거한다', async () => {
+  it('메타데이터는 절대 전송하지 않고 메타 dirty 를 보존한다 (제목 변경·그룹 삭제 동반 커밋 방지)', async () => {
     saveDiffMock.mockResolvedValue({ surveyId: SURVEY_ID });
     const { result } = renderHook(() => useSurveySync(), { wrapper });
 
     await act(async () => {
-      await result.current.saveSurveyScoped({ questionIds: ['q-in'], includeMetadata: true });
+      await result.current.saveSurveyScoped({ questionIds: ['q-in'] });
     });
 
     const payload = saveDiffMock.mock.calls[0]![0];
-    expect(payload.metadata).toBeDefined();
-    expect(useSurveyBuilderStore.getState().isMetadataDirty).toBe(false);
+    expect(payload.metadata).toBeUndefined();
+    expect(useSurveyBuilderStore.getState().isMetadataDirty).toBe(true);
   });
 
   it('저장 실패 시 스코프 변경을 changeset 에 되돌리고 throw 한다', async () => {
@@ -118,7 +118,7 @@ describe('useSurveySync.saveSurveyScoped', () => {
 
     await expect(
       act(async () => {
-        await result.current.saveSurveyScoped({ questionIds: ['q-in'], includeMetadata: false });
+        await result.current.saveSurveyScoped({ questionIds: ['q-in'] });
       }),
     ).rejects.toThrow('network');
 

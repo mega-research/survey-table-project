@@ -358,6 +358,41 @@ describe('remapResponseValue', () => {
     expect(result).toEqual({ value: { __array: ['1', { rank: 1, optionValue: '9' }] }, count: 2 });
   });
 
+  it('기타 옵션 객체 응답의 selectedValue 를 치환한다', () => {
+    const result = remapResponseValue(
+      { selectedValue: '옵션1', otherValue: '직접입력', hasOther: true },
+      questionSpec,
+    );
+    expect(result).toEqual({
+      value: { selectedValue: '1', otherValue: '직접입력', hasOther: true },
+      count: 1,
+    });
+  });
+
+  it('checkbox 배열 안의 기타 객체 selectedValue 도 치환한다', () => {
+    const result = remapResponseValue(
+      ['옵션2', { selectedValue: '옵션1', otherValue: 'x', hasOther: true }],
+      questionSpec,
+    );
+    expect(result.count).toBe(1);
+    expect(result.value).toEqual(['옵션2', { selectedValue: '1', otherValue: 'x', hasOther: true }]);
+  });
+
+  it('table 셀 값의 기타 객체 selectedValue 도 cellMaps 로 치환한다', () => {
+    const spec = {
+      questionMap: null,
+      cellMaps: new Map([['cell-radio', new Map([['option-1', '1']])]]),
+    };
+    const result = remapResponseValue(
+      { 'cell-radio': { selectedValue: 'option-1', otherValue: 'y', hasOther: true } },
+      spec,
+    );
+    expect(result.count).toBe(1);
+    expect(result.value).toEqual({
+      'cell-radio': { selectedValue: '1', otherValue: 'y', hasOther: true },
+    });
+  });
+
   it('변경이 없으면 원본 참조를 유지한다', () => {
     const value = { 'cell-x': 'y' };
     expect(remapResponseValue(value, { questionMap: null, cellMaps: new Map() }).value).toBe(value);
@@ -452,6 +487,21 @@ describe('remapSnapshot', () => {
     });
   });
 
+  it('id 매칭이어도 스냅샷의 다른 옵션이 새 value 를 쓰고 있으면 강행하지 않고 conflicts 로 센다', () => {
+    // 과거 스냅샷에서는 다른 옵션이 이미 '1' 을 value 로 쓰던 세대가 존재할 수 있다.
+    // 이때 강행하면 두 옵션이 같은 value 로 합쳐지고 응답 의미가 손상된다.
+    const snapshot = {
+      questions: [{ id: 'q1', options: [{ id: 'a', value: '옵션1' }, { id: 'y', value: '1' }] }],
+      groups: [],
+    };
+
+    const result = remapSnapshot(snapshot, new Map([['q1', new Map([['a', change]])]]), new Map(), noMaps, new Map());
+
+    expect(result.changed).toBe(false);
+    expect(result.optionCount).toBe(0);
+    expect(result.optionConflictCount).toBe(1);
+  });
+
   it('폴백 대상이 여럿이거나 새 value 가 이미 쓰이면 강행하지 않고 conflicts 로 센다', () => {
     const taken = {
       questions: [{ id: 'q1', options: [{ id: 'x', value: '옵션1' }, { id: 'y', value: '1' }] }],
@@ -531,6 +581,15 @@ describe('orphan 검증', () => {
 
     expect(countOrphanValues({ q1: { cell1: 'option-1', 'cell-input': '자유 텍스트' } }, scopes)).toBe(0);
     expect(countOrphanValues({ q1: { cell1: 'option-9' } }, scopes)).toBe(1);
+  });
+
+  it('기타 옵션 객체 응답의 selectedValue 도 orphan 판정에 포함한다', () => {
+    const scopes = new Map([['q1', buildOrphanScope(source)]]);
+
+    expect(countOrphanValues({ q1: { selectedValue: '옵션1', hasOther: true } }, scopes)).toBe(0);
+    expect(countOrphanValues({ q1: { selectedValue: '없는값', hasOther: true } }, scopes)).toBe(1);
+    expect(countOrphanValues({ q1: ['옵션1', { selectedValue: '없는값' }] }, scopes)).toBe(1);
+    expect(countOrphanValues({ q1: { cell1: { selectedValue: 'option-9' } } }, scopes)).toBe(1);
   });
 
   it('마이그레이션 전후 orphan 수가 보존된다 (응답까지 함께 리매핑한 경우)', () => {

@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn, generateId } from '@/lib/utils';
-import { commitOptionCode, getMaxSpssCode } from '@/utils/option-code-generator';
+import { commitOptionCode, getMaxSpssCode, nextUniqueOptionNumber } from '@/utils/option-code-generator';
 import type { QuestionOption } from '@/types/survey';
 
 import { AnswerQuoteTextField } from './answer-quote-fields';
@@ -72,7 +72,9 @@ export function RankingOptionsEditor({
   };
 
   const addOption = () => {
-    const nextIdx = options.length + 1;
+    // value 는 응답 저장 키 — 중간 삭제 이력이 있는 목록에서 length+1 발번이
+    // 기존 value 를 재탕하지 않도록 유일 발번한다
+    const nextIdx = nextUniqueOptionNumber(options, 'opt');
     onChange([
       ...options,
       {
