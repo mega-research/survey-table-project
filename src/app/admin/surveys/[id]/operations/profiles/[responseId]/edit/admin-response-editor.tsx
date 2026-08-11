@@ -36,6 +36,7 @@ export function AdminResponseEditor({
     <div>
       <div className="border-b border-amber-200 bg-amber-50 px-6 py-3 text-sm text-amber-900">
         어드민 수정 모드 — 응답 {idx === null ? '' : `#${idx} `}· 응답자 흐름과 동일하게 보입니다.
+        중간에 나가면 저장되지 않으며, 마지막 제출까지 끝내야 수정이 반영됩니다.
       </div>
       <SurveyResponseFlow
         mode="admin-edit"
