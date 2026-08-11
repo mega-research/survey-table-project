@@ -4,7 +4,11 @@ import { and, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import 'server-only';
 
-import { notTestResponse } from '@/data/response-filters';
+import {
+  completedResponse as completedResponseFilter,
+  notDeletedResponse,
+  notTestResponse,
+} from '@/data/response-filters';
 import { db } from '@/db';
 import { logger } from '@/lib/logger';
 import {
@@ -21,6 +25,7 @@ import { checkTrackA, checkTrackB } from '@/lib/duplicate-detection/check';
 import { computeSignals } from '@/lib/duplicate-detection/signals';
 import { sumActiveSeconds } from '@/lib/operations/active-seconds';
 import { parseBrowser, parsePlatform } from '@/lib/operations/parse-ua';
+import { countCell, deriveCategoryIds, findTarget } from '@/lib/quota/matching';
 import { getSurveyControlFlags, isValidTestToken } from '@/lib/survey-control';
 import type { TestResponseResetFields } from '@/lib/survey-response/reset-test-response.server';
 import { resetTestResponseRow } from '@/lib/survey-response/reset-test-response.server';
@@ -1586,6 +1591,53 @@ async function createBlankResponseInner(
   return { kind: 'created', id: result.row.id, contactTargetId: result.row.contactTargetId };
 }
 
+/**
+ * soft quota 초과 감지 — 완료 직전 셀 충족 여부를 재판정한다 (집행 아님).
+ *
+ * 게이트 판정(quota.check)과 완료 사이의 race(같은 셀 동시 진행자가 먼저 완료) 또는
+ * 게이트 판정이 fail-open 으로 스킵된 완료를 식별한다. 정책(2026-08-11): 완주자는
+ * 정상 완료로 수용하고 metadata.quotaOverflow 플래그만 남긴다 — 운영/데이터 처리에서
+ * 식별·제외할 수 있게 한다. 카운트 소스는 quota.service.checkQuota 와 동일
+ * (완료 응답 로드 후 lib/quota 순수 함수). 판정 실패는 fail-open — 완료를 막지 않는다.
+ */
+async function detectQuotaOverflow(
+  surveyId: string,
+  plainAnswers: Record<string, unknown>,
+): Promise<boolean> {
+  try {
+    const surveyRow = await db.query.surveys.findFirst({
+      where: eq(surveys.id, surveyId),
+      columns: { quotaConfig: true },
+    });
+    const config = surveyRow?.quotaConfig;
+    if (!config?.enabled) return false;
+
+    const categoryIds = deriveCategoryIds(config, plainAnswers);
+    if (!categoryIds) return false;
+    const target = findTarget(config, categoryIds);
+    if (target === null) return false;
+
+    const rows = await db
+      .select({ questionResponses: surveyResponses.questionResponses })
+      .from(surveyResponses)
+      .where(
+        and(
+          eq(surveyResponses.surveyId, surveyId),
+          completedResponseFilter,
+          notDeletedResponse,
+          notTestResponse,
+        ),
+      );
+    const answersList = rows.map((row) =>
+      decryptQuestionResponses((row.questionResponses ?? {}) as Record<string, unknown>),
+    );
+    return countCell(config, categoryIds, answersList) >= target;
+  } catch (err) {
+    logger.error({ surveyId, err }, '[quota] 완료 시점 초과 감지 실패 — fail-open 통과');
+    return false;
+  }
+}
+
 // 응답 완료 (JSONB + response_answers 이중 쓰기)
 // 읽기: response_answers 우선 (getResponsesWithAnswers), JSONB fallback
 // JSONB 쓰기는 마이그레이션 완료 + 모든 읽기 경로 전환 후 제거 예정
@@ -1758,6 +1810,15 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
     }
   }
 
+  // soft quota 초과 감지 — 게이트 통과~완료 사이 race 로 셀이 먼저 찬 완료를 식별한다.
+  // 쿼터 차원 매칭은 평문 답변 기준이므로 PII 암호화보다 먼저 판정한다.
+  // 빈 complete 경로(페이로드 없음)는 생략 — 이 플래그는 통계 식별용이지 집행이 아니고,
+  // 해당 경로는 notice-only 등 쿼터 게이트가 없는 흐름이다.
+  let quotaOverflow = false;
+  if (validatedResponses && gateRow && !gateRow.isTest) {
+    quotaOverflow = await detectQuotaOverflow(gateRow.surveyId, validatedResponses);
+  }
+
   // PII 문항 암호화 — prefill 복원(평문 비교) 이후, 저장 직전에 수행한다.
   if (validatedResponses && gateRow) {
     const piiIds = await loadPiiQuestionIds(gateRow.versionId, gateRow.surveyId);
@@ -1832,13 +1893,15 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
           : storedRecalcResponses
             ? { questionResponses: storedRecalcResponses }
             : {}),
-        ...(data?.exposedQuestionIds || data?.exposedRowIds
+        ...(data?.exposedQuestionIds || data?.exposedRowIds || quotaOverflow
           ? {
               metadata: {
                 ...(data?.exposedQuestionIds
                   ? { exposedQuestionIds: data.exposedQuestionIds }
                   : {}),
                 ...(data?.exposedRowIds ? { exposedRowIds: data.exposedRowIds } : {}),
+                // soft quota: 초과 완료 식별 플래그 (위 detectQuotaOverflow 판정 결과)
+                ...(quotaOverflow ? { quotaOverflow: true } : {}),
               },
             }
           : {}),
