@@ -112,7 +112,7 @@ export async function createMailTemplate(
   } = input;
 
   const { bodyHtml, attachments } = await promoteAssets(rawBodyHtml, rawAttachments);
-  const variablesUsed = extractVariableKeys(subject, bodyHtml, fromName);
+  const variablesUsed = extractVariableKeys([subject, bodyHtml, fromName]);
 
   const insertedRows = await db
     .insert(mailTemplates)
@@ -172,7 +172,7 @@ export async function updateMailTemplate(
   }
 
   const { bodyHtml, attachments } = await promoteAssets(rawBodyHtml, rawAttachments);
-  const variablesUsed = extractVariableKeys(subject, bodyHtml, fromName);
+  const variablesUsed = extractVariableKeys([subject, bodyHtml, fromName]);
 
   // write → 저장 diff 등록·부활 취소를 같은 트랜잭션으로. 수정으로 본문/첨부에서
   // 빠진 이전 영구 에셋은 즉시 지우지 않고 유예 삭제 큐 후보로만 등록한다 —
