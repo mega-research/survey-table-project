@@ -10,6 +10,8 @@ import {
   FetchCandidateIdsResult,
   PreviewPreflightInput,
   PreviewPreflightResult,
+  ResyncCampaignInput,
+  ResyncCampaignResult,
   SendSingleCampaignInput,
 } from '../../domain/mail-campaign';
 import * as svc from '../services/mail-campaigns.service';
@@ -30,6 +32,14 @@ const cancel = scoped
     assertSurveyAccess(context.user.id, input.surveyId);
     await svc.cancelCampaign(input);
     return { ok: true as const };
+  });
+
+const resync = scoped
+  .input(ResyncCampaignInput)
+  .output(ResyncCampaignResult)
+  .handler(({ context, input }) => {
+    assertSurveyAccess(context.user.id, input.surveyId);
+    return svc.resyncCampaign(input);
   });
 
 const fetchCandidateIds = scoped
@@ -59,6 +69,7 @@ const sendSingle = scoped
 export const campaigns = {
   create,
   cancel,
+  resync,
   fetchCandidateIds,
   previewPreflight,
   sendSingle,

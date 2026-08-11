@@ -20,6 +20,8 @@ import type {
   FetchCandidateIdsResult,
   PreviewPreflightInput,
   PreviewPreflightResult,
+  ResyncCampaignInput,
+  ResyncCampaignResult,
 } from '../../domain/mail-campaign';
 
 /**
@@ -266,6 +268,35 @@ export async function cancelCampaign(input: CancelCampaignInput): Promise<void> 
   if (updated.length === 0) {
     throw new Error('발송 시작 후에는 취소할 수 없습니다.');
   }
+}
+
+/**
+ * 발송 후 멈춘 수신자 상태를 Resend 실제 상태로 재조회한다 (수동 reconcile).
+ *
+ * Inngest 자동 reconcile 은 발송 후 1m/5m/30m 3회뿐이라, 그 이후 도착한 webhook 이
+ * 유실되면 수신자가 영구히 queued/sending/sent 에 남는다. 그 잔여분을 운영자가
+ * 직접 회수하기 위한 진입점 — 내부 로직은 자동 reconcile 과 완전히 동일하다.
+ *
+ * 다른 설문의 캠페인 id 를 넘겨 남의 데이터를 건드리는 것을 막기 위해 surveyId 소유를 먼저 확인한다.
+ */
+export async function resyncCampaign(
+  input: ResyncCampaignInput,
+): Promise<ResyncCampaignResult> {
+  const [campaign] = await db
+    .select({ id: mailCampaigns.id })
+    .from(mailCampaigns)
+    .where(
+      and(
+        eq(mailCampaigns.id, input.campaignId),
+        eq(mailCampaigns.surveyId, input.surveyId),
+      ),
+    )
+    .limit(1);
+
+  if (!campaign) throw new Error('단체 메일을 찾을 수 없습니다.');
+
+  const { reconcileCampaignRecipients } = await import('@/lib/mail/campaign-reconcile');
+  return reconcileCampaignRecipients(input.campaignId);
 }
 
 /**
