@@ -245,6 +245,14 @@ export function useResponseLifecycle({
   // 서버가 식별해 무시할 수 있다.
   const draftSeqRef = useRef(0);
   const responseCreationPromiseRef = useRef<Promise<string | null> | null>(null);
+  // 클라이언트 신호는 마운트 직후 비동기로 수집된다(useClientSignals). handleResponse 는
+  // deps 가 하나도 안 바뀐 첫 페이지에서 발사될 수 있어 prop 클로저 캡처로는 마운트 시점
+  // null 이 그대로 나간다 — 익명(비초대) 첫 답변이 서버 봇 가드(isLikelyBot)에
+  // device_already_responded 로 오차단되는 원인(2026-08-11). ref 로 항상 최신 신호를 읽는다.
+  const signalsRef = useRef(signals);
+  useEffect(() => {
+    signalsRef.current = signals;
+  }, [signals]);
   // 이어하기 회복이 서버 draftSeq 를 늦게 내려줘도 seed 는 올리는 방향으로만 반영한다 —
   // 이미 발급한(더 큰) seq 를 되돌리면 오히려 그 자체가 stale 로 막힌다.
   useEffect(() => {
@@ -487,7 +495,7 @@ export function useResponseLifecycle({
           ...(inviteToken != null ? { inviteToken } : {}),
           ...(isTestSession && testToken != null ? { testToken } : {}),
           ...(testIdentity?.attemptId ? { attemptId: testIdentity.attemptId } : {}),
-          clientSignals: signals,
+          clientSignals: signalsRef.current,
           ...(honeypotRef.current?.value ? { honeypot: honeypotRef.current.value } : {}),
         });
         const trackedCreation: Promise<string | null> = creationRequest
@@ -561,7 +569,8 @@ export function useResponseLifecycle({
       }
     },
     // deps 는 원본 컴포넌트의 handleResponse useCallback 과 1:1 동일.
-    // signals 는 원본에서도 의도적으로 제외돼 있었다(첫 답변 시점의 최신 신호를 클로저로 읽는 의미론).
+    // signals 는 deps 대상이 아니다 — 클로저 캡처가 아니라 signalsRef 로 발사 시점 최신값을 읽는다
+    // (prop 캡처는 deps 미변경 첫 페이지에서 마운트 시점 null 이 그대로 나가는 스테일 클로저였다).
     // 추출로 안정 세터/ref(setResponses/setHighlightQuestionIds/setDuplicateStatus/setInviteIsInvalid/
     // visibleProgressRef)가 props 가 되며 exhaustive-deps 가 추가로 경고하지만, 모두 안정 참조라 런타임 동작 불변.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -773,7 +782,7 @@ export function useResponseLifecycle({
             ...(inviteToken != null ? { inviteToken } : {}),
             ...(isTestSession && testToken != null ? { testToken } : {}),
             ...(testIdentity?.attemptId ? { attemptId: testIdentity.attemptId } : {}),
-            clientSignals: signals,
+            clientSignals: signalsRef.current,
             ...(honeypotRef.current?.value ? { honeypot: honeypotRef.current.value } : {}),
           });
           if (created.kind === 'blocked') {
@@ -946,7 +955,6 @@ export function useResponseLifecycle({
     sessionId,
     setCurrentResponseId,
     setNumericErrorStepIndex,
-    signals,
     steps,
     versionId,
     onVersionRebase,
