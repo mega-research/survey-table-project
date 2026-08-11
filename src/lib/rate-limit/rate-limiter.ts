@@ -25,7 +25,10 @@ import { Redis } from '@upstash/redis';
  *   이론상 최대 12회/1분 — 재시도/멀티탭 여유 포함).
  * - *-ip: 위 그룹들의 IP 전체 가드. 같은 NAT(사무실/전시장/CGNAT)의 동시 응답자 수를
  *   고려해 세션 한도의 10배.
- * - lookup: 토큰/attrs/중복/쿼터 조회 등 읽기. IP 당 60회/1분 (클라이언트 축 없음 —
+ * - quota-check: 쿼터 판정 조회. 응답당 30회/1분. 읽기지만 lookup 과 분리 — 공유
+ *   lookup 버킷이 NAT 진입 트래픽(resume/attrs/duplicate)으로 소진되면 쿼터 판정이
+ *   fail-open 으로 조용히 스킵되는 품질 문제가 있어 전용 예산을 준다.
+ * - lookup: 토큰/attrs/중복 조회 등 읽기. IP 당 60회/1분 (클라이언트 축 없음 —
  *   IP 가드 없이 축을 주면 회전 우회 표면만 생긴다).
  */
 export const RATE_LIMIT_PRESETS = {
@@ -35,6 +38,8 @@ export const RATE_LIMIT_PRESETS = {
   'response-segment-ip': { tokens: 600, window: '1 m' },
   'response-draft': { tokens: 60, window: '1 m' },
   'response-draft-ip': { tokens: 600, window: '1 m' },
+  'quota-check': { tokens: 30, window: '1 m' },
+  'quota-check-ip': { tokens: 300, window: '1 m' },
   lookup: { tokens: 60, window: '1 m' },
 } as const satisfies Record<string, { tokens: number; window: Duration }>;
 
@@ -48,6 +53,7 @@ export const IP_WIDE_GROUPS = {
   'response-mutation': 'response-mutation-ip',
   'response-segment': 'response-segment-ip',
   'response-draft': 'response-draft-ip',
+  'quota-check': 'quota-check-ip',
 } as const satisfies Partial<Record<RateLimitGroup, RateLimitGroup>>;
 
 export interface RateLimitResult {
@@ -150,8 +156,53 @@ export function getRateLimiter(): RateLimiter {
   return cached;
 }
 
+/** 그룹의 IP 전체 가드 그룹 조회. 미등재면 undefined. */
+function ipWideGroupOf(group: RateLimitGroup): RateLimitGroup | undefined {
+  return (IP_WIDE_GROUPS as Partial<Record<RateLimitGroup, RateLimitGroup>>)[group];
+}
+
+/** fine 버킷 키 조합 — IP 가드가 있는 그룹만 클라이언트 축을 붙인다 (회전 우회 방지). */
+function fineKeyOf(group: RateLimitGroup, ip: string, clientId: string | null): string {
+  return ipWideGroupOf(group) !== undefined && clientId !== null
+    ? `${group}:${ip}:${clientId}`
+    : `${group}:${ip}`;
+}
+
 /**
- * 2단 rate limit 판정 — 한도 초과면 true.
+ * 키 목록 병렬 판정 코어 — 판정 가능한(fulfilled) 결과 중 하나라도 거부면 true.
+ *
+ * allSettled 를 쓰는 이유: Promise.all 이면 한 tier 의 reject 가 다른 tier 의 명시적
+ * 거부(success=false)까지 삼켜 fail-open 이 된다. 부분 장애에서도 살아있는 tier 의
+ * 거부는 반드시 존중하고, 실패한 tier 만 개별 fail-open 한다.
+ *
+ * 외부 의존성(Upstash) 호출 실패는 fail-open: 응답 수집 전체가 죽지 않게 한다.
+ * env 미설정 시 noop 으로 fail-open 하는 정책(getRateLimiter)과 같은 계열. 한도 초과
+ * (success=false)는 정상 거부로 유지하고, 호출 실패만 통과로 흡수한다.
+ */
+async function isRateLimitedKeys(group: RateLimitGroup, keys: string[]): Promise<boolean> {
+  try {
+    const limiter = getRateLimiter();
+    const results = await Promise.allSettled(keys.map((key) => limiter.limit(key)));
+    let limited = false;
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        if (!result.value.success) limited = true;
+      } else {
+        logger.error(
+          { group, key: keys[index], err: result.reason },
+          '[rate-limit] limiter 호출 실패 — 해당 tier fail-open',
+        );
+      }
+    });
+    return limited;
+  } catch (err) {
+    logger.error({ group, err }, '[rate-limit] limiter 호출 실패 — fail-open 통과');
+    return false;
+  }
+}
+
+/**
+ * 2단 rate limit 판정 — 한도 초과면 true. oRPC withRateLimit 미들웨어용.
  *
  * fine 버킷과 IP 전체 가드 버킷을 병렬 판정해 어느 한쪽이라도 초과면 차단한다.
  * - IP_WIDE_GROUPS 등재 그룹 + clientId 존재: fine 키 = `group:ip:clientId`,
@@ -159,36 +210,45 @@ export function getRateLimiter(): RateLimiter {
  * - clientId 부재: fine 키가 `group:ip` 로 내려간다 (가드는 그대로).
  * - 미등재 그룹(lookup 등): clientId 를 무시하고 `group:ip` 단일 판정 —
  *   IP 가드 없는 그룹에 클라이언트 축을 주면 식별자 회전 우회가 되기 때문.
- *
- * 외부 의존성(Upstash) 호출은 fail-open: 장애/자격증명 오류 등으로 .limit() 이 throw 해도
- * false(통과)로 흡수해 응답 수집 전체가 죽지 않게 한다. env 미설정 시 noop 으로 fail-open
- * 하는 정책(getRateLimiter)과 같은 계열. 한도 초과(success=false)는 정상 거부로 유지하고,
- * throw 만 통과로 흡수한다.
  */
 export async function isRateLimitedTwoTier(
   group: RateLimitGroup,
   ip: string,
   clientId: string | null,
 ): Promise<boolean> {
-  const ipWideGroup = (IP_WIDE_GROUPS as Partial<Record<RateLimitGroup, RateLimitGroup>>)[
-    group
-  ];
-  const fineKey =
-    ipWideGroup !== undefined && clientId !== null
-      ? `${group}:${ip}:${clientId}`
-      : `${group}:${ip}`;
-  try {
-    const limiter = getRateLimiter();
-    const checks = [limiter.limit(fineKey)];
-    if (ipWideGroup !== undefined) {
-      checks.push(limiter.limit(`${ipWideGroup}:${ip}`));
-    }
-    const results = await Promise.all(checks);
-    return results.some((result) => !result.success);
-  } catch (err) {
-    logger.error({ group, err }, '[rate-limit] limiter 호출 실패 — fail-open 통과');
-    return false;
+  const ipWideGroup = ipWideGroupOf(group);
+  const keys = [fineKeyOf(group, ip, clientId)];
+  if (ipWideGroup !== undefined) {
+    keys.push(`${ipWideGroup}:${ip}`);
   }
+  return isRateLimitedKeys(group, keys);
+}
+
+/**
+ * 1단계: IP 전체 가드만 판정. REST beacon 라우트가 본문을 읽기 전에 호출한다 —
+ * malformed/스키마 불일치 요청도 예산을 소비하게 해, 무인증 공개 경로에서 파싱
+ * CPU 를 공짜로 증폭시키는 것을 막는다. IP 가드가 없는 그룹은 판정 없이 통과
+ * (이 헬퍼는 IP_WIDE_GROUPS 등재 그룹 전용 — 2단계 fine 판정이 남아 있다).
+ */
+export async function isRateLimitedIpGuardTier(
+  group: RateLimitGroup,
+  ip: string,
+): Promise<boolean> {
+  const ipWideGroup = ipWideGroupOf(group);
+  if (ipWideGroup === undefined) return false;
+  return isRateLimitedKeys(group, [`${ipWideGroup}:${ip}`]);
+}
+
+/**
+ * 2단계: fine 버킷만 판정. REST beacon 라우트가 본문 검증 후 검증된 responseId 로
+ * 호출한다. IP 가드는 1단계에서 이미 소비했으므로 여기서 다시 보지 않는다.
+ */
+export async function isRateLimitedFineTier(
+  group: RateLimitGroup,
+  ip: string,
+  clientId: string | null,
+): Promise<boolean> {
+  return isRateLimitedKeys(group, [fineKeyOf(group, ip, clientId)]);
 }
 
 /**

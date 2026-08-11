@@ -4,7 +4,10 @@ import { RecordVisibilitySegmentInput } from '@/features/survey-response/domain/
 import { recordVisibilitySegment } from '@/features/survey-response/server/services/lifecycle.service';
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
 import { getTrustedClientIpOrNull } from '@/lib/rate-limit/client-ip';
-import { isRateLimitedTwoTier } from '@/lib/rate-limit/rate-limiter';
+import {
+  isRateLimitedFineTier,
+  isRateLimitedIpGuardTier,
+} from '@/lib/rate-limit/rate-limiter';
 
 /**
  * Page Visibility 세그먼트 수신 엔드포인트.
@@ -20,7 +23,12 @@ async function handleSegment(req: NextRequest, ctx: RouteLogContext) {
     return NextResponse.json({ error: 'rate limited' }, { status: 429 });
   }
 
-  // fine 키에 responseId(클라이언트 축)를 쓰기 위해 파싱을 rate limit 앞에 둔다 (draft 와 동일).
+  // 1단계: 본문을 읽기 전에 IP 전체 가드를 먼저 소비한다 (draft 라우트와 동일한 이유 —
+  // malformed 요청의 공짜 파싱 증폭 차단).
+  if (await isRateLimitedIpGuardTier('response-segment', ip)) {
+    return NextResponse.json({ error: 'rate limited' }, { status: 429 });
+  }
+
   let body: unknown;
   try {
     body = await req.json();
@@ -34,8 +42,8 @@ async function handleSegment(req: NextRequest, ctx: RouteLogContext) {
   }
   ctx.bind({ responseId: parsed.data.responseId, action: parsed.data.action });
 
-  // 2단 판정 — 응답 단위 격리(`group:ip:responseId`) + IP 전체 가드.
-  if (await isRateLimitedTwoTier('response-segment', ip, parsed.data.responseId)) {
+  // 2단계: 검증된 responseId 를 클라이언트 축으로 fine 버킷 판정 (응답 단위 격리).
+  if (await isRateLimitedFineTier('response-segment', ip, parsed.data.responseId)) {
     return NextResponse.json({ error: 'rate limited' }, { status: 429 });
   }
 

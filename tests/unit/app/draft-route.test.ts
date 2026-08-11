@@ -2,9 +2,10 @@ import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // service / rate limiter 모킹. 라우트 진입부 가드와 에러 정책만 검증한다.
-const { saveMock, twoTierMock } = vi.hoisted(() => ({
+const { saveMock, guardMock, fineMock } = vi.hoisted(() => ({
   saveMock: vi.fn(),
-  twoTierMock: vi.fn(),
+  guardMock: vi.fn(),
+  fineMock: vi.fn(),
 }));
 
 vi.mock('@/features/survey-response/server/services/response.service', () => ({
@@ -12,7 +13,8 @@ vi.mock('@/features/survey-response/server/services/response.service', () => ({
 }));
 
 vi.mock('@/lib/rate-limit/rate-limiter', () => ({
-  isRateLimitedTwoTier: twoTierMock,
+  isRateLimitedIpGuardTier: guardMock,
+  isRateLimitedFineTier: fineMock,
 }));
 
 import { POST } from '@/app/api/response/draft/route';
@@ -35,18 +37,21 @@ const IP = { 'x-real-ip': '203.0.113.7' };
 describe('POST /api/response/draft', () => {
   beforeEach(() => {
     saveMock.mockReset();
-    twoTierMock.mockReset();
+    guardMock.mockReset();
+    fineMock.mockReset();
     saveMock.mockResolvedValue({ saved: true });
-    twoTierMock.mockResolvedValue(false);
+    guardMock.mockResolvedValue(false);
+    fineMock.mockResolvedValue(false);
     vi.spyOn(console, 'info').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
   afterEach(() => vi.restoreAllMocks());
 
-  it('신뢰 IP + responseId 클라이언트 축으로 2단 rate limit 판정한다', async () => {
+  it('파싱 전 IP 가드 → 검증 후 responseId fine 버킷의 2단계로 판정한다', async () => {
     const res = await POST(draftRequest(IP));
-    expect(twoTierMock).toHaveBeenCalledWith('response-draft', '203.0.113.7', RESPONSE_ID);
+    expect(guardMock).toHaveBeenCalledWith('response-draft', '203.0.113.7');
+    expect(fineMock).toHaveBeenCalledWith('response-draft', '203.0.113.7', RESPONSE_ID);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true });
     expect(saveMock).toHaveBeenCalledWith({
@@ -55,8 +60,16 @@ describe('POST /api/response/draft', () => {
     });
   });
 
-  it('한도 초과 시 429 를 반환하고 service 를 호출하지 않는다', async () => {
-    twoTierMock.mockResolvedValue(true);
+  it('IP 가드 초과 시 본문 검증 없이 429 를 반환한다', async () => {
+    guardMock.mockResolvedValue(true);
+    const res = await POST(draftRequest(IP));
+    expect(res.status).toBe(429);
+    expect(fineMock).not.toHaveBeenCalled();
+    expect(saveMock).not.toHaveBeenCalled();
+  });
+
+  it('fine 버킷 초과 시 429 를 반환하고 service 를 호출하지 않는다', async () => {
+    fineMock.mockResolvedValue(true);
     const res = await POST(draftRequest(IP));
     expect(res.status).toBe(429);
     expect(saveMock).not.toHaveBeenCalled();
@@ -65,14 +78,23 @@ describe('POST /api/response/draft', () => {
   it('신뢰 IP 추출 불가면 limiter 호출 전에 429 로 fail-closed 한다', async () => {
     const res = await POST(draftRequest({}));
     expect(res.status).toBe(429);
-    expect(twoTierMock).not.toHaveBeenCalled();
+    expect(guardMock).not.toHaveBeenCalled();
+    expect(fineMock).not.toHaveBeenCalled();
     expect(saveMock).not.toHaveBeenCalled();
   });
 
-  it('json 파싱 실패면 limiter 호출 없이 400 을 반환한다', async () => {
+  it('json 파싱 실패도 IP 가드 예산은 소비하고 400 을 반환한다', async () => {
     const res = await POST(draftRequest(IP, 'not-json'));
     expect(res.status).toBe(400);
-    expect(twoTierMock).not.toHaveBeenCalled();
+    expect(guardMock).toHaveBeenCalledTimes(1);
+    expect(fineMock).not.toHaveBeenCalled();
+    expect(saveMock).not.toHaveBeenCalled();
+  });
+
+  it('responseId 가 128자를 넘으면 400 으로 거부한다', async () => {
+    const res = await POST(draftRequest(IP, { responseId: 'x'.repeat(129), answers: {} }));
+    expect(res.status).toBe(400);
+    expect(fineMock).not.toHaveBeenCalled();
     expect(saveMock).not.toHaveBeenCalled();
   });
 
