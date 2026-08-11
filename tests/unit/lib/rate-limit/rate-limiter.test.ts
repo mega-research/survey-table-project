@@ -29,6 +29,7 @@ vi.mock('@upstash/redis', () => {
   return { Redis };
 });
 
+import { logger } from '@/lib/logger';
 import { getRateLimiter, resetRateLimiterForTest } from '@/lib/rate-limit/rate-limiter';
 
 const ENV_URL = 'UPSTASH_REDIS_REST_URL';
@@ -45,7 +46,7 @@ describe('getRateLimiter', () => {
     slidingWindowMock.mockClear();
     delete process.env[ENV_URL];
     delete process.env[ENV_TOKEN];
-    warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
   });
 
   afterEach(() => {

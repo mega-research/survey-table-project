@@ -44,6 +44,8 @@ export function normalizeQuestion(raw: unknown, mode: NormalizeMode = 'preserve'
   if (!isWellFormedCandidate(raw)) {
     // 거동 보존: 기존 'as unknown as Question' 단언도 이런 데이터를 통과시켰다.
     // 관측만 남기고 그대로 흘린다 — strip 활성화 결정의 입력 데이터.
+    // 클라·서버 양쪽에서 실행되는 shared 코드라 pino(server-only) 사용 불가 — console 유지.
+    // eslint-disable-next-line no-console
     console.warn(
       '[question/normalize] 알 수 없는 질문 형태 passthrough:',
       raw && typeof raw === 'object'

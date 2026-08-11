@@ -5,6 +5,8 @@
 import { CopyObjectCommand, DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import * as Sentry from '@sentry/nextjs';
 
+import { logger } from '@/lib/logger';
+
 // Cloudflare R2는 S3 호환 API를 사용합니다
 const r2Client = new S3Client({
   region: 'auto',
@@ -28,13 +30,13 @@ export async function deleteImagesFromR2Server(urls: string[]): Promise<boolean>
   // 환경 변수 확인
   const bucketName = process.env['CLOUDFLARE_R2_BUCKET'];
   if (!bucketName) {
-    console.error('Cloudflare R2 환경 변수가 설정되지 않았습니다.');
+    logger.error('Cloudflare R2 환경 변수가 설정되지 않았습니다.');
     return false;
   }
 
   const publicUrl = process.env['CLOUDFLARE_R2_PUBLIC_URL'];
   if (!publicUrl) {
-    console.error('Cloudflare R2 공개 URL이 설정되지 않았습니다.');
+    logger.error('Cloudflare R2 공개 URL이 설정되지 않았습니다.');
     return false;
   }
 
@@ -64,7 +66,7 @@ export async function deleteImagesFromR2Server(urls: string[]): Promise<boolean>
       await r2Client.send(command);
       deletedUrls.push(url);
     } catch (error) {
-      console.error(`이미지 삭제 실패 (${url}):`, error);
+      logger.error({ url, err: error }, '이미지 삭제 실패');
       failedUrls.push(url);
     }
   }
@@ -72,7 +74,7 @@ export async function deleteImagesFromR2Server(urls: string[]): Promise<boolean>
   // 일부라도 성공했거나 모두 외부 URL이었으면 성공으로 간주
   if (deletedUrls.length > 0 || failedUrls.length === 0) {
     if (failedUrls.length > 0) {
-      console.warn(`일부 이미지 삭제 실패: ${failedUrls.length}개`);
+      logger.warn({ failedCount: failedUrls.length }, '일부 이미지 삭제 실패');
     }
     return true;
   }
@@ -102,7 +104,7 @@ export async function copyR2Object(srcKey: string, dstKey: string): Promise<bool
     );
     return true;
   } catch (error) {
-    console.error(`R2 copy 실패 ${srcKey} → ${dstKey}:`, error);
+    logger.error({ srcKey, dstKey, err: error }, 'R2 copy 실패');
     Sentry.captureException(error, {
       tags: { operation: 'r2_copy' },
       extra: { srcKey, dstKey },
@@ -144,7 +146,7 @@ export async function deleteR2ObjectsByKey(keys: string[]): Promise<boolean> {
 
   const bucketName = process.env['CLOUDFLARE_R2_BUCKET'];
   if (!bucketName) {
-    console.error('Cloudflare R2 환경 변수가 설정되지 않았습니다.');
+    logger.error('Cloudflare R2 환경 변수가 설정되지 않았습니다.');
     return false;
   }
 
@@ -158,13 +160,13 @@ export async function deleteR2ObjectsByKey(keys: string[]): Promise<boolean> {
       });
       await r2Client.send(command);
     } catch (error) {
-      console.error(`R2 파일 삭제 실패 (key: ${key}):`, error);
+      logger.error({ key, err: error }, 'R2 파일 삭제 실패');
       failedKeys.push(key);
     }
   }
 
   if (failedKeys.length > 0) {
-    console.warn(`일부 R2 파일 삭제 실패: ${failedKeys.length}개`);
+    logger.warn({ failedCount: failedKeys.length }, '일부 R2 파일 삭제 실패');
   }
 
   return true; // partial failure는 허용 — caller는 어쨌든 success 처리

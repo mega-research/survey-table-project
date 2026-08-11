@@ -33,6 +33,8 @@ export function getAxiomOrNull(): { client: Axiom; dataset: string } | null {
     client = new Axiom({
       token,
       // 전송 실패는 throw 하지 않고 stdout(Vercel 로그)에만 남긴다 — 로깅이 앱을 죽이면 안 됨.
+      // 로거 자신의 장애라 pino 로 보내면 재귀 위험 — 최후 보루로 console 유지.
+      // eslint-disable-next-line no-console
       onError: (err) => console.error('[axiom] ingest 실패', err),
     });
     // 배치 ingest 가 ContentEncoding.Auto 를 하드코딩하므로(클라이언트 옵션 부재)
@@ -50,6 +52,8 @@ export async function flushAxiom(): Promise<void> {
   try {
     await client.flush();
   } catch (err) {
+    // 상동 — 로거 자신의 장애는 console 이 최후 보루.
+    // eslint-disable-next-line no-console
     console.error('[axiom] flush 실패', err);
   }
 }

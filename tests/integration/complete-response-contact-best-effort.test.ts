@@ -105,7 +105,8 @@ describe('completeResponse 실제 대상자 후처리', () => {
   });
 
   it('컨택 연결 갱신 실패가 이미 완료된 응답을 rollback하지 않는다', async () => {
-    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { logger } = await import('@/lib/logger');
+    const errorLog = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
     const { completeResponse } =
       await import('@/features/survey-response/server/services/response.service');
 
@@ -115,8 +116,8 @@ describe('completeResponse 실제 대상자 후처리', () => {
     });
     expect(transactionCommitted()).toBe(true);
     expect(errorLog).toHaveBeenCalledWith(
+      expect.objectContaining({ responseId: completedResponse.id, err: contactUpdateError }),
       expect.stringContaining('contact_targets UPDATE 실패'),
-      contactUpdateError,
     );
   });
 });

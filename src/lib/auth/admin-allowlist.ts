@@ -9,6 +9,8 @@
  * 동작을 보존하고, 최초 1회만 경고를 출력한다.
  */
 
+import { logger } from '@/lib/logger';
+
 const ENV_KEY = 'ADMIN_USER_IDS';
 
 /**
@@ -29,7 +31,7 @@ let warnedEmpty = false;
 /**
  * 주어진 user.id 가 admin allowlist 에 포함되는지 검사한다.
  *
- * - ADMIN_USER_IDS 미설정/빈 값: fail-open(true) + 최초 1회 console.warn.
+ * - ADMIN_USER_IDS 미설정/빈 값: fail-open(true) + 최초 1회 경고 로그.
  * - 설정됨: Set 멤버십 결과(true/false)를 반환한다.
  */
 export function isAdminUserAllowed(userId: string): boolean {
@@ -37,7 +39,7 @@ export function isAdminUserAllowed(userId: string): boolean {
   if (allowlist.size === 0) {
     if (!warnedEmpty) {
       warnedEmpty = true;
-      console.warn('ADMIN_USER_IDS 미설정 — admin allowlist 가드 비활성');
+      logger.warn('ADMIN_USER_IDS 미설정 — admin allowlist 가드 비활성');
     }
     return true;
   }

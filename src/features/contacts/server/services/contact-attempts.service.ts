@@ -3,6 +3,7 @@ import 'server-only';
 import { and, eq, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
+import { logger } from '@/lib/logger';
 import { contactAttempts, contactTargets, surveys } from '@/db/schema';
 import { resolveWriteScopeIsTest } from '@/lib/operations/data-scope.server';
 
@@ -115,7 +116,7 @@ export async function addAttempt(
   }
 
   if (result == null) {
-    console.error('[addAttempt] race retry exhausted:', lastError);
+    logger.error({ contactTargetId, err: lastError }, '[addAttempt] race retry 소진');
     throw new Error('동시 편집 충돌이 발생했습니다. 다시 시도해주세요.');
   }
 
