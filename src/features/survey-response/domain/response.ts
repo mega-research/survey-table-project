@@ -159,6 +159,13 @@ export const FirstAnswerResultSchema = z.discriminatedUnion('kind', [
      * localStorage 없는 재진입(다른 기기·시크릿창)에서도 이후 flush 가 stale 로 막히지 않게 한다.
      */
     draftSeq: z.number().int().nonnegative().optional(),
+    /**
+     * 실제 행에 기록된 versionId (무중단 갈아타기 — 티켓 04).
+     * 배포 전 열린 탭이 구버전 versionId 로 첫 답변을 보내면 서버가 현재 버전으로 재핀해
+     * 행을 만든다. 클라이언트는 이 값이 자신이 알던 versionId 와 다르면 재핀을 감지해
+     * 최신 스냅샷을 재취득한다. optional 인 이유는 구 클라이언트/스키마 호환.
+     */
+    versionId: z.string().nullable().optional(),
   }),
   z.object({
     kind: z.literal('blocked'),

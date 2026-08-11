@@ -68,6 +68,8 @@ type ReuseCandidate = {
   contactTargetId: string | null;
   metadata: SurveyResponse['metadata'];
   status: string;
+  // 행에 실제 기록된 versionId — create 결과에 실어 보내 클라이언트가 재핀(티켓 04)을 감지한다.
+  versionId: string | null;
 };
 
 /**
@@ -90,6 +92,7 @@ async function findActiveResponseByContact(
       // 재사용되는 행의 draftSeq 를 클라이언트에 실어 보내기 위한 컬럼 — insertResponseWithContactReuse 참조.
       metadata: surveyResponses.metadata,
       status: surveyResponses.status,
+      versionId: surveyResponses.versionId,
     })
     .from(surveyResponses)
     .where(
@@ -166,6 +169,8 @@ async function settleReuseCandidate(
           ...candidate,
           status: 'in_progress',
           metadata: draftSeq !== undefined ? { draftSeq } : null,
+          // 제자리 초기화가 versionId 도 새 시도 값으로 덮으므로 반환 행에도 반영한다.
+          versionId: testRestart.versionId,
         },
       };
     }
@@ -231,6 +236,7 @@ async function insertResponseWithContactReuse(params: {
     contactTargetId: string | null;
     metadata: SurveyResponse['metadata'];
     status: string;
+    versionId: string | null;
   }>;
   try {
     inserted = await db
@@ -244,6 +250,7 @@ async function insertResponseWithContactReuse(params: {
         contactTargetId: surveyResponses.contactTargetId,
         metadata: surveyResponses.metadata,
         status: surveyResponses.status,
+        versionId: surveyResponses.versionId,
       });
   } catch (e) {
     // idx_active_response_per_contact 경합 — 다른 요청이 방금 활성 행을 만들었다.
@@ -265,6 +272,7 @@ async function insertResponseWithContactReuse(params: {
       contactTargetId: surveyResponses.contactTargetId,
       metadata: surveyResponses.metadata,
       status: surveyResponses.status,
+      versionId: surveyResponses.versionId,
     })
     .from(surveyResponses)
     .where(
@@ -297,10 +305,20 @@ async function insertAnonymousTestResponse(
       .onConflictDoNothing({
         target: [surveyResponses.surveyId, surveyResponses.sessionId],
       })
-      .returning({ id: surveyResponses.id, status: surveyResponses.status });
+      .returning({
+        id: surveyResponses.id,
+        status: surveyResponses.status,
+        versionId: surveyResponses.versionId,
+      });
     // 새로 만든 행은 물려받을 draftSeq 이력이 없다.
     if (inserted) {
-      return { id: inserted.id, contactTargetId: null, metadata: null, status: inserted.status };
+      return {
+        id: inserted.id,
+        contactTargetId: null,
+        metadata: null,
+        status: inserted.status,
+        versionId: inserted.versionId,
+      };
     }
 
     // 물려받는 기존 테스트 행도 sweep 으로 drop 이 됐을 수 있어 status 를 함께 읽는다.
@@ -311,6 +329,7 @@ async function insertAnonymousTestResponse(
         id: surveyResponses.id,
         status: surveyResponses.status,
         metadata: surveyResponses.metadata,
+        versionId: surveyResponses.versionId,
       })
       .from(surveyResponses)
       .where(
@@ -329,6 +348,7 @@ async function insertAnonymousTestResponse(
       contactTargetId: null,
       metadata: existing.metadata,
       status: existing.status,
+      versionId: existing.versionId,
     };
   });
 
@@ -502,23 +522,31 @@ async function loadVersionGateRow(versionId: string | null | undefined): Promise
 }
 
 /**
- * #24 버전 무결성 가드 — 클라 제공 versionId 의 소속/유효성 검증.
+ * #24 버전 무결성 가드 — 클라 제공 versionId 의 소속/유효성 검증 + 무중단 갈아타기(티켓 04).
  *
  * 응답 행 생성 시점(startResponse/create*)에 클라이언트가 보내는 versionId 는 신뢰할 수 없다.
- * - versionId 가 null/undefined 면 레거시/버전 미연결 경로 — 검증 skip, null 반환(기존 동작 보존).
- * - versionId 가 있으면 그 행이 (a) 동일 surveyId 에 속하고 (b) 유효(published 또는 surveys.
- *   currentVersionId 와 일치하는 현재 활성 버전)해야 한다. 위반 시 throw 로 거부한다.
- *   타 설문의 versionId / 미존재 / 비published 비활성 버전 주입으로 응답이 엉뚱한 스냅샷에
- *   바인딩되는 것을 차단한다.
+ * - versionId 가 null/undefined 면 레거시/버전 미연결 경로 — 검증 skip,
+ *   effectiveVersionId=null 반환(기존 동작 보존).
+ * - versionId 가 있으면 그 행이 반드시 동일 surveyId 에 속해야 한다. 미존재/타 설문 소속은
+ *   version_mismatch 로 거부한다 — 타 설문 versionId 주입으로 응답이 엉뚱한 스냅샷에
+ *   바인딩되는 것을 차단한다(불변).
+ * - 같은 설문 소속이 확인된 구버전(비published 비활성 — 배포 전에 열어둔 탭)은 거부하지 않고
+ *   현재 버전(currentVersionId)으로 재핀한다. 재핀 목적지가 없으면(currentVersionId=null)
+ *   기존대로 version_not_active 거부.
  *
- * 반환값은 downstream assertSurveyAcceptingResponses 의 VersionGateRow 입력으로 그대로 쓴다.
+ * 재핀 시 version gate row 는 현재 버전 행으로 다시 조회하지 않는다 — 설문이 published 면
+ * assertSurveyAcceptingResponses 의 status 검사(surveyPublished)로 통과하고, 설문 자체가
+ * 비활성이면 어차피 거부되어야 하므로 구버전 행의 status 를 그대로 넘긴다.
+ *
+ * @returns version — assertSurveyAcceptingResponses 의 VersionGateRow 입력.
+ *          effectiveVersionId — 이후 행 INSERT / 첫 답변 멤버십 검증이 써야 하는 versionId.
  */
 async function loadValidatedVersionGateRow(
   surveyId: string,
   versionId: string | null | undefined,
   currentVersionId: string | null,
-): Promise<VersionGateRow> {
-  if (!versionId) return null;
+): Promise<{ version: VersionGateRow; effectiveVersionId: string | null }> {
+  if (!versionId) return { version: null, effectiveVersionId: null };
   const row = await db.query.surveyVersions.findFirst({
     where: and(eq(surveyVersions.id, versionId), isNull(surveyVersions.deletedAt)),
     columns: { surveyId: true, status: true },
@@ -527,13 +555,17 @@ async function loadValidatedVersionGateRow(
   if (!row || row.surveyId !== surveyId) {
     throw new SurveyNotAcceptingResponsesError('version_mismatch');
   }
-  // 유효성: published 이거나 설문의 현재 활성 버전(currentVersionId)이어야 한다.
+  // 유효성: published 이거나 설문의 현재 활성 버전(currentVersionId)이면 그대로 사용.
   const isPublished = row.status === 'published';
   const isCurrent = currentVersionId != null && currentVersionId === versionId;
   if (!isPublished && !isCurrent) {
-    throw new SurveyNotAcceptingResponsesError('version_not_active');
+    // 무중단 갈아타기: 소속이 확인된 구버전이면 현재 버전으로 재핀. 목적지가 없으면 기존 거부.
+    if (currentVersionId == null) {
+      throw new SurveyNotAcceptingResponsesError('version_not_active');
+    }
+    return { version: { status: row.status }, effectiveVersionId: currentVersionId };
   }
-  return { status: row.status };
+  return { version: { status: row.status }, effectiveVersionId: versionId };
 }
 
 /**
@@ -781,8 +813,12 @@ export async function startResponse(input: StartResponseInput): Promise<SurveyRe
   // 가용성 게이트: 마감/draft/closed/비공개 설문에 응답 행이 생성되지 않도록 진입부에서 차단.
   // startResponse 는 inviteToken 을 받지 않으므로 비공개/토큰강제 설문이면 contactTargetId=null 로 거부된다.
   const survey = await loadSurveyGateRow(surveyId);
-  // #24 버전 무결성: 클라 제공 versionId 가 동일 surveyId 의 유효 버전인지 검증(불일치 거부).
-  const version = await loadValidatedVersionGateRow(surveyId, versionId, survey.currentVersionId);
+  // #24 버전 무결성: 클라 제공 versionId 검증(타 설문 거부) + 구버전이면 현재 버전으로 재핀.
+  const { version, effectiveVersionId } = await loadValidatedVersionGateRow(
+    surveyId,
+    versionId,
+    survey.currentVersionId,
+  );
   // startResponse 는 테스트 전용 유지 함수(#402 주석 참조)라 isTest 판정 없이 고정한다.
   assertSurveyAcceptingResponses(survey, version, { contactTargetId: null, isTest: false });
 
@@ -793,7 +829,7 @@ export async function startResponse(input: StartResponseInput): Promise<SurveyRe
     // 예측 가능한 session-<밀리초> 폴백 금지 — pub(무인증) start 로 도달 가능해
     // resume→updateQuestionResponse 응답 변조 윈도를 연다. crypto.randomUUID 로 생성.
     sessionId: sessionId || randomUUID(),
-    versionId: versionId || null,
+    versionId: effectiveVersionId,
   };
 
   const [response] = await db.insert(surveyResponses).values(newResponse).returning();
@@ -1364,18 +1400,28 @@ async function createResponseWithFirstAnswerInner(
       kind: 'created',
       id: acquired.responseId,
       contactTargetId,
+      // 대상자 테스트 경로는 버전 게이트를 타지 않는다 — 행에 기록되는 값(입력 그대로)을 반환.
+      versionId: versionId ?? null,
     };
   }
 
-  // #24 버전 무결성: 클라 제공 versionId 가 동일 surveyId 의 유효 버전인지 검증(불일치 거부).
+  // #24 버전 무결성: 클라 제공 versionId 검증(타 설문 거부) + 무중단 갈아타기(티켓 04) —
+  // 배포 전 열린 탭의 구버전 versionId 는 거부 대신 현재 버전으로 재핀된다(effectiveVersionId).
   // create 시점 정원은 soft(completedCount 미전달) — 잔여 race window 는 complete 하드체크가 보강.
-  const version = await loadValidatedVersionGateRow(surveyId, versionId, survey.currentVersionId);
+  const { version, effectiveVersionId } = await loadValidatedVersionGateRow(
+    surveyId,
+    versionId,
+    survey.currentVersionId,
+  );
   assertSurveyAcceptingResponses(survey, version, { contactTargetId, isTest });
 
   // PII 문항이면 INSERT 전에 암호화 — 평문이 순간이라도 DB(WAL 포함)에 닿지 않게 한다.
   // 이후 updateQuestionResponse 재호출은 이미 암호문이라 이중 암호화되지 않는다.
+  // 재핀된 경우 멤버십 검증도 현재 스냅샷(effectiveVersionId) 기준 — 첫 답변 질문이 현재
+  // 스냅샷에 없으면(관리자가 배포 직전에 바로 그 질문을 삭제한 좁은 엣지) 기존 멤버십 에러
+  // ('해당 설문에 존재하지 않는 질문입니다')가 그대로 발생한다. 허용되는 엣지로 둔다.
   const { piiEncrypted } = await assertQuestionBelongsToResponse(
-    versionId ?? null,
+    effectiveVersionId,
     surveyId,
     questionId,
   );
@@ -1389,7 +1435,7 @@ async function createResponseWithFirstAnswerInner(
   const newResponse: NewSurveyResponse = {
     surveyId,
     sessionId,
-    versionId: versionId ?? null,
+    versionId: effectiveVersionId,
     questionResponses: { [questionId]: storedValue },
     isCompleted: false,
     status: 'in_progress',
@@ -1431,6 +1477,8 @@ async function createResponseWithFirstAnswerInner(
     id: result.row.id,
     contactTargetId: result.row.contactTargetId,
     ...(draftSeq !== undefined ? { draftSeq } : {}),
+    // 행에 실제 기록된 versionId — 클라이언트가 자신이 알던 값과 비교해 재핀(티켓 04)을 감지한다.
+    versionId: result.row.versionId,
   };
 }
 
@@ -1546,12 +1594,19 @@ async function createBlankResponseInner(
       kind: 'created',
       id: acquired.responseId,
       contactTargetId,
+      // 대상자 테스트 경로는 버전 게이트를 타지 않는다 — 행에 기록되는 값(입력 그대로)을 반환.
+      versionId: versionId ?? null,
     };
   }
 
-  // #24 버전 무결성: 클라 제공 versionId 가 동일 surveyId 의 유효 버전인지 검증(불일치 거부).
+  // #24 버전 무결성: 클라 제공 versionId 검증(타 설문 거부) + 무중단 갈아타기(티켓 04) —
+  // 배포 전 열린 탭의 구버전 versionId 는 거부 대신 현재 버전으로 재핀된다(effectiveVersionId).
   // create 시점 정원 soft.
-  const version = await loadValidatedVersionGateRow(surveyId, versionId, survey.currentVersionId);
+  const { version, effectiveVersionId } = await loadValidatedVersionGateRow(
+    surveyId,
+    versionId,
+    survey.currentVersionId,
+  );
   assertSurveyAcceptingResponses(survey, version, { contactTargetId, isTest });
 
   const firstVisit: PageVisit = {
@@ -1562,7 +1617,7 @@ async function createBlankResponseInner(
   const newResponse: NewSurveyResponse = {
     surveyId,
     sessionId,
-    versionId: versionId ?? null,
+    versionId: effectiveVersionId,
     questionResponses: {},
     isCompleted: false,
     status: 'in_progress',
@@ -1588,7 +1643,13 @@ async function createBlankResponseInner(
           newResponse,
         });
   if (result.kind === 'blocked') return { kind: 'blocked', reason: result.reason };
-  return { kind: 'created', id: result.row.id, contactTargetId: result.row.contactTargetId };
+  return {
+    kind: 'created',
+    id: result.row.id,
+    contactTargetId: result.row.contactTargetId,
+    // 행에 실제 기록된 versionId — 클라이언트가 자신이 알던 값과 비교해 재핀(티켓 04)을 감지한다.
+    versionId: result.row.versionId,
+  };
 }
 
 /**
