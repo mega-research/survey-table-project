@@ -21,8 +21,15 @@ export interface StructuralSurvivalResult {
   affectedQuestionIds: string[];
 }
 
-/** questionResponses 최상위의 질문 ID 가 아닌 예약 키 — 무조건 통과 */
-const RESERVED_TOP_LEVEL_KEYS = new Set(['__optTexts__']);
+/**
+ * 사이드카 키 판정 — 코드베이스 관례(use-response-lifecycle, numeric-validation 등)와
+ * 동일하게 `__` 접두 키는 질문/셀 답변이 아니라 예약 사이드카다.
+ * 최상위(__optTexts__ 등)와 테이블 답 내부(__selectedRowIds — 동적 행 선택) 양쪽에
+ * 나타나며, 종류를 몰라도 무조건 통과시킨다 (구조 판정 대상이 아님).
+ */
+function isSidecarKey(key: string): boolean {
+  return key.startsWith('__');
+}
 
 /** 저장값이 옵션 실존 판정 가능한 plain string 인가 (빈 문자열은 미응답 취급 — 판정 제외) */
 function isJudgeableString(value: unknown): value is string {
@@ -154,8 +161,8 @@ function judgeTableAnswer(
   const surviving: Record<string, unknown> = {};
   let changed = false;
   for (const [key, cellValue] of Object.entries(value)) {
-    // 레거시 사이드카(질문 객체 내 optionTexts)는 셀 키가 아니다 — 통과
-    if (key === 'optionTexts') {
+    // 사이드카는 셀 키가 아니다 — __selectedRowIds(동적 행)·레거시 optionTexts 통과
+    if (isSidecarKey(key) || key === 'optionTexts') {
       surviving[key] = cellValue;
       continue;
     }
@@ -260,7 +267,7 @@ export function applyStructuralSurvival(
   const affected: string[] = [];
 
   for (const [key, value] of Object.entries(responses)) {
-    if (RESERVED_TOP_LEVEL_KEYS.has(key)) {
+    if (isSidecarKey(key)) {
       surviving[key] = value;
       continue;
     }

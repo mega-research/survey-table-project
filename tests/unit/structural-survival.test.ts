@@ -277,6 +277,33 @@ describe('applyStructuralSurvival — 테이블-소스 choice 와 테이블 셀'
 });
 
 describe('applyStructuralSurvival — 예약 키·기타 보존', () => {
+  it('테이블 답 안의 __selectedRowIds(동적 행 사이드카)는 셀 키가 아니어도 보존한다', () => {
+    const selectedRowIds = ['r1', 'r2'];
+    const result = applyStructuralSurvival(
+      { t1: { __selectedRowIds: selectedRowIds, 'c-input': '42' } },
+      [
+        q({
+          id: 't1',
+          type: 'table',
+          tableRowsData: [row('r1', [cell({ id: 'c-input', type: 'input' })])],
+        }),
+      ],
+    );
+    expect(result.survivingResponses['t1']).toEqual({
+      __selectedRowIds: selectedRowIds,
+      'c-input': '42',
+    });
+    expect(result.affectedQuestionIds).toEqual([]);
+  });
+
+  it('최상위의 __ 접두 사이드카 키는 종류를 몰라도 전부 통과한다', () => {
+    const result = applyStructuralSurvival({ __futureSidecar__: { any: 1 }, q1: '1' }, [
+      q({ id: 'q1', type: 'radio', options: [{ id: 'o1', label: 'A', value: '1' }] }),
+    ]);
+    expect(result.survivingResponses['__futureSidecar__']).toEqual({ any: 1 });
+    expect(result.affectedQuestionIds).toEqual([]);
+  });
+
   it('__optTexts__ 사이드카는 그대로 통과한다', () => {
     const optTexts = { q1: { o1: '직접 입력' } };
     const result = applyStructuralSurvival({ __optTexts__: optTexts, q1: '1' }, [
