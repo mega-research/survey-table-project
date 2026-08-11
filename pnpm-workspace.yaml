@@ -65,7 +65,8 @@ overrides:
   'linkify-it@5': '>=5.0.2 <6'
   # adm-zip: 0.5.x 에 패치가 없어 0.6 으로 의도적 승격(요구자 선언은 ^0.5.10)
   adm-zip: '>=0.6.0 <0.7'
-  'brace-expansion@1': '>=1.1.16 <2'
+  # brace-expansion 1.x: GHSA-mh99-v99m-4gvg(<1.1.17)·GHSA-rgw5-rvv9-x895(<1.1.18) ReDoS
+  'brace-expansion@1': '>=1.1.18 <2'
   'brace-expansion@2': '>=2.1.4 <3'
   'brace-expansion@5': '>=5.0.9 <6'
   'js-yaml@4': '>=4.3.0 <5'
@@ -75,6 +76,8 @@ overrides:
   'postcss@8': '>=8.5.18 <9'
   # sharp: Vercel libvips 이슈 우회로 0.35 라인 사용(선언은 ^0.34.5, docs 주석 참조)
   sharp: '>=0.35.3 <0.36'
+  # nanoid 3.x(postcss 경유 transitive): GHSA-2v37-7h3g-55p8 (<3.3.17). 직접 의존 5.x 는 비해당.
+  'nanoid@3': '>=3.3.17 <4'
   'minimatch@3': '>=3.1.4 <4'
   'minimatch@9': '>=9.0.7 <10'
   'flatted@3': '>=3.4.2 <4'
