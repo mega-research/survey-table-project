@@ -9,6 +9,11 @@ vi.mock('./response.service', () => ({
   loadPiiQuestionIds: vi.fn(async () => new Set<string>()),
 }));
 
+// in_progress 경로의 progress 재계산이 실 snapshot 조회로 가지 않도록 고정한다.
+vi.mock('@/lib/operations/response-progress.server', () => ({
+  getProgressSnapshot: vi.fn(async () => ({ positionMap: new Map(), totalQuestions: 0 })),
+}));
+
 // db 는 실 PG 없이 drizzle where 절을 그대로 파싱해 파티션 매칭을 재현한다.
 // eq()/and() 가 만드는 SQL 트리를 걷어 Param 인스턴스(encoder.name = 컬럼 SQL 명)만
 // 추출한다 — where 절에 is_test 조건이 실제로 실렸는지를 (모킹이 아니라) 검증하는
@@ -46,6 +51,10 @@ interface FakeResponse {
   versionId: string | null;
   contactTargetId: string | null;
   questionResponses: Record<string, unknown>;
+  // 이탈→완료 전환 검증용 — UPDATE payload 의 Object.assign 으로 채워진다.
+  isCompleted?: boolean;
+  completedAt?: Date | null;
+  progressPct?: number | null;
 }
 
 const h = vi.hoisted(() => ({
@@ -183,5 +192,74 @@ describe('saveAdminEdit 파티션 가드', () => {
         false,
       ),
     ).resolves.toEqual({ ok: true });
+  });
+});
+
+describe('saveAdminEdit 이탈 응답 완료 전환', () => {
+  beforeEach(() => {
+    h.surveys.length = 0;
+    h.responses.length = 0;
+    vi.clearAllMocks();
+    h.surveys.push({ id: SURVEY_ID, testModeEnabled: false });
+  });
+
+  function pushResponse(status: string) {
+    h.responses.push({
+      id: RESPONSE_ID,
+      surveyId: SURVEY_ID,
+      isTest: false,
+      deletedAt: null,
+      status,
+      versionId: null,
+      contactTargetId: null,
+      questionResponses: {},
+    });
+  }
+
+  it('drop 응답은 수정 저장 시 completed 로 전환된다', async () => {
+    pushResponse('drop');
+
+    await expect(
+      saveAdminEdit(
+        { surveyId: SURVEY_ID, responseId: RESPONSE_ID, questionResponses: { q1: '답' } },
+        EDITOR,
+        false,
+      ),
+    ).resolves.toEqual({ ok: true });
+
+    const row = h.responses[0]!;
+    expect(row.status).toBe('completed');
+    expect(row.isCompleted).toBe(true);
+    expect(row.completedAt).toBeInstanceOf(Date);
+    expect(row.progressPct).toBe(100);
+  });
+
+  it('completed 응답 수정은 상태를 건드리지 않는다', async () => {
+    pushResponse('completed');
+
+    await saveAdminEdit(
+      { surveyId: SURVEY_ID, responseId: RESPONSE_ID, questionResponses: { q1: '답' } },
+      EDITOR,
+      false,
+    );
+
+    const row = h.responses[0]!;
+    expect(row.status).toBe('completed');
+    // 전환 경로가 아니므로 completedAt 을 새로 쓰지 않는다 (기존 값 보존 의미론).
+    expect(row.completedAt).toBeUndefined();
+  });
+
+  it('in_progress 응답은 완료로 전환하지 않는다 (응답자 세션 보호)', async () => {
+    pushResponse('in_progress');
+
+    await saveAdminEdit(
+      { surveyId: SURVEY_ID, responseId: RESPONSE_ID, questionResponses: { q1: '답' } },
+      EDITOR,
+      false,
+    );
+
+    const row = h.responses[0]!;
+    expect(row.status).toBe('in_progress');
+    expect(row.isCompleted).toBeUndefined();
   });
 });

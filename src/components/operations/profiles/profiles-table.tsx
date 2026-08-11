@@ -69,6 +69,8 @@ interface DisplayRow {
   groupValue: string | null;
   platformKo: string;
   browser: string;
+  /** 원본 status — 액션 메뉴의 이탈 응답 안내(수정 시 완료 전환) 분기용. pill 은 표시 전용. */
+  status: string;
   pill: StatusPillResult;
   startedAt: Date;
   completedAt: Date | null;
@@ -111,6 +113,7 @@ export function ProfilesTable({ rows, total, page, pageSize, sort, dir, stepLoca
           groupValue: r.groupValue,
           platformKo: formatPlatformKo(r.platform),
           browser: r.browser ?? 'Other',
+          status: r.status,
           pill,
           startedAt: r.startedAt,
           completedAt: r.completedAt,
@@ -203,6 +206,7 @@ export function ProfilesTable({ rows, total, page, pageSize, sort, dir, stepLoca
             idx={row.original.idx}
             view={view}
             isGuest={isGuest}
+            status={row.original.status}
           />
         ),
         meta: meta('center', false),
