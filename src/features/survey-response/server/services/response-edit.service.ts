@@ -3,6 +3,7 @@ import 'server-only';
 import { and, eq, isNull } from 'drizzle-orm';
 
 import { db } from '@/db';
+import { logger } from '@/lib/logger';
 import {
   surveyResponses,
   surveys,
@@ -37,6 +38,10 @@ export { SurveyOwnershipError };
  *
  * - questionResponses (JSONB) 와 response_answers 정규화 행을 일괄 갱신.
  * - completedAt / status / startedAt / totalSeconds 는 명시적으로 set 하지 않아 보존됨.
+ *   예외(2026-08-11): 이탈(drop) 응답은 저장 시 completed 로 전환한다 — drop 은 sweep 이
+ *   비활동으로 자동 부여한 상태라 응답자 확정 종결이 아니고, 운영자가 수정 화면에서 채워
+ *   제출하는 행위가 곧 완료 확정이다. completed 재수정은 답만 갱신(상태 불변),
+ *   in_progress 는 응답자 세션을 방해하지 않도록 전환하지 않는다.
  * - lastEditedAt / lastActivityAt 은 갱신, currentStepId 는 null 로 초기화.
  * - 삭제(soft delete)된 응답은 거부. 트랜잭션 안 UPDATE WHERE 에 isNull(deletedAt) 가드를
  *   둬서 사전 검사 이후 동시 soft delete 가 끼어드는 TOCTOU 도 차단한다.
@@ -113,11 +118,15 @@ export async function saveAdminEdit(
     versionSnapshot = (verRow?.snapshot ?? null) as SurveyVersionSnapshot | null;
   }
 
-  // progress_pct 재계산: completed 는 100 유지, 그 외는 snapshot 기반 재계산.
+  // 이탈(drop) 완료 전환 여부 — 아래 UPDATE set 과 progress 분기, 컨택 후처리가 공유한다.
+  const completesDrop = existing.status === 'drop';
+
+  // progress_pct 재계산: completed(및 이번 저장으로 완료 전환되는 drop)는 100,
+  // 그 외는 snapshot 기반 재계산.
   // status 기준 분기 (progressPct === 100 가 아님) — 99% drop 이 우연히 100 으로 반올림된 경우를
   // completed 로 오분류하지 않기 위해.
   let nextProgressPct: number | null;
-  if (existing.status === 'completed') {
+  if (existing.status === 'completed' || completesDrop) {
     nextProgressPct = 100;
   } else {
     const { positionMap, totalQuestions } = await getProgressSnapshot(existing.versionId);
@@ -222,6 +231,10 @@ export async function saveAdminEdit(
         lastActivityAt: now,
         currentStepId: null,
         progressPct: nextProgressPct,
+        // 이탈 응답 완료 전환 (상단 docstring 예외 참조) — 그 외 상태는 보존.
+        ...(completesDrop
+          ? { status: 'completed' as const, isCompleted: true, completedAt: now }
+          : {}),
       })
       .where(
         and(
@@ -255,6 +268,30 @@ export async function saveAdminEdit(
       });
     }
   });
+
+  // 이탈→완료 전환 시 컨택 매칭 후처리 — completeResponse 의 실데이터 경로와 동일하게
+  // 트랜잭션 밖 best-effort 로 유지한다 (response → target 순서를 tx 에 넣으면
+  // target → response 순서인 컨택 삭제/hard reset 과 교착 가능). 실패해도 완료 전환은
+  // 이미 커밋됐으므로 롤백하지 않는다. 테스트 파티션 행은 대상자 테스트 잠금 순서
+  // 의미론이 별도라 건드리지 않는다.
+  if (completesDrop && existing.contactTargetId && !existing.isTest) {
+    try {
+      await db
+        .update(contactTargets)
+        .set({ respondedAt: now, responseId, updatedAt: now })
+        .where(
+          and(
+            eq(contactTargets.id, existing.contactTargetId),
+            eq(contactTargets.surveyId, surveyId),
+          ),
+        );
+    } catch (err) {
+      logger.error(
+        { surveyId, responseId, contactTargetId: existing.contactTargetId, err },
+        '[saveAdminEdit] contact_targets UPDATE 실패 — 이탈→완료 전환은 성공',
+      );
+    }
+  }
 
   return { ok: true as const };
 }
