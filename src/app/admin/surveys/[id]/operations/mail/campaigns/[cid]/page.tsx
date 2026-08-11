@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation';
 
 import { CancelCampaignButton } from '@/components/operations/mail-campaign/cancel-campaign-button';
 import { CampaignRecipientsTable } from '@/components/operations/mail-campaign/campaign-recipients-table';
+import { ResyncCampaignButton } from '@/components/operations/mail-campaign/resync-campaign-button';
 import { Card } from '@/components/ui/card';
 import { LocalDateTime } from '@/components/ui/local-date-time';
 import {
@@ -145,6 +146,10 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
           <div className="flex flex-wrap items-center gap-2">
             {canCancel ? (
               <CancelCampaignButton surveyId={surveyId} campaignId={cid} />
+            ) : null}
+            {/* 자동 reconcile(1m/5m/30m)이 끝난 뒤에도 진행중이 남아 있을 때만 노출 */}
+            {inflight > 0 ? (
+              <ResyncCampaignButton surveyId={surveyId} campaignId={cid} />
             ) : null}
             <Link
               href={reuseHref}
