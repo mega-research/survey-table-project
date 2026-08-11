@@ -1,5 +1,6 @@
 import * as z from 'zod';
 
+import { getGuestSurveyId } from '@/lib/auth/guest-grants';
 import { assertSurveyAccess, scoped } from '@/server/orpc';
 
 import {
@@ -15,7 +16,8 @@ const add = scoped
   .output(AttemptResultSchema)
   .handler(({ context, input }) => {
     assertSurveyAccess(context.user.id, input.surveyId);
-    return svc.addAttempt(input);
+    // 인증된 context 에서 1회 파생 — 서비스가 auth 를 재조회하지 않는다.
+    return svc.addAttempt(input, getGuestSurveyId(context.user.id) !== null);
   });
 
 const update = scoped
@@ -23,7 +25,7 @@ const update = scoped
   .output(z.object({ ok: z.literal(true) }))
   .handler(async ({ context, input }) => {
     assertSurveyAccess(context.user.id, input.surveyId);
-    await svc.updateAttempt(input);
+    await svc.updateAttempt(input, getGuestSurveyId(context.user.id) !== null);
     return { ok: true as const };
   });
 
@@ -32,7 +34,7 @@ const remove = scoped
   .output(z.object({ ok: z.literal(true) }))
   .handler(async ({ context, input }) => {
     assertSurveyAccess(context.user.id, input.surveyId);
-    await svc.deleteAttempt(input);
+    await svc.deleteAttempt(input, getGuestSurveyId(context.user.id) !== null);
     return { ok: true as const };
   });
 

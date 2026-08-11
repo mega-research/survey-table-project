@@ -41,6 +41,7 @@ export async function createQuestion(data: CreateQuestionInput): Promise<Questio
     title: data.title,
     description: data.description,
     required: data.required ?? false,
+    requiredMessage: data.requiredMessage ?? null,
     order: data.order ?? maxOrder + 1,
     options: data.options as NewQuestion['options'],
     selectLevels: data.selectLevels as NewQuestion['selectLevels'],
@@ -82,6 +83,9 @@ export async function createQuestion(data: CreateQuestionInput): Promise<Questio
     exportLabel: data.exportLabel,
     spssVarType: data.spssVarType,
     spssMeasure: data.spssMeasure,
+    answerQuoteEnabled: data.answerQuoteEnabled,
+    answerQuoteName: data.answerQuoteName,
+    answerQuoteText: data.answerQuoteText,
   } satisfies CompleteQuestionWrite & NewQuestion;
 
   // tmp/survey/ 이미지를 영구 prefix로 promote (R2 copy + URL 치환, 원본 tmp 는 lifecycle 위임)

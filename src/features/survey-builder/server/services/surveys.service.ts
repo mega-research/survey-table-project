@@ -300,6 +300,7 @@ export async function duplicateSurvey(
         title: question.title,
         description: question.description,
         required: question.required,
+        requiredMessage: question.requiredMessage,
         order: question.order,
         options: (question.options ? stripOptionCodes(question.options) : question.options) as NewQuestion['options'],
         selectLevels: question.selectLevels as NewQuestion['selectLevels'],
@@ -341,6 +342,9 @@ export async function duplicateSurvey(
         hideTitle: question.hideTitle,
         pageBreakBefore: question.pageBreakBefore,
         displayCondition: question.displayCondition as NewQuestion['displayCondition'],
+        answerQuoteEnabled: question.answerQuoteEnabled,
+        answerQuoteName: question.answerQuoteName,
+        answerQuoteText: question.answerQuoteText,
       } satisfies CompleteQuestionWrite;
       return remapQuestionIdRefs(row, questionIdMap);
     });

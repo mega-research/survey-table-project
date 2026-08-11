@@ -134,48 +134,61 @@ describe('operations.control procedures', () => {
     });
   });
 
-  it('게스트는 grant 설문이면 get 이 위임된다', async () => {
-    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
-    vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
-    vi.mocked(svc.getControlState).mockResolvedValue({
-      isPaused: false,
-      pausedMessage: null,
-      testModeEnabled: false,
-      testToken: null,
-      accessIdentifier: 'survey-1',
-      testResponseCount: 0,
-      testTargetCount: 1,
-      firstTestInviteCode: 'invite-first',
-    });
-    const client = createRouterClient(
-      { control },
-      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
-    );
-    const res = await client.control.get({ surveyId: SURVEY_ID });
-    expect(svc.getControlState).toHaveBeenCalledWith(SURVEY_ID);
-    expect(res).toEqual({
-      isPaused: false,
-      pausedMessage: null,
-      testModeEnabled: false,
-      testToken: null,
-      accessIdentifier: 'survey-1',
-      testResponseCount: 0,
-      testTargetCount: 1,
-      firstTestInviteCode: 'invite-first',
-    });
-  });
-
-  it('게스트가 다른 설문 surveyId 로 get 하면 FORBIDDEN', async () => {
+  it('게스트는 grant 일치 설문이어도 get 은 FORBIDDEN (테스트 토큰 노출 차단)', async () => {
     vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
     vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
     const client = createRouterClient(
       { control },
-      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+      {
+        context: {
+          db: {} as never,
+          supabase: {} as never,
+          user: { id: 'guest-1', email: 'g@b.com' },
+        },
+      },
     );
-    await expect(client.control.get({ surveyId: 'other-survey' })).rejects.toMatchObject({
+    await expect(client.control.get({ surveyId: SURVEY_ID })).rejects.toMatchObject({
       code: 'FORBIDDEN',
     });
     expect(svc.getControlState).not.toHaveBeenCalled();
+  });
+
+  it('게스트는 grant 일치 설문이어도 setTestMode 는 FORBIDDEN (authed 유지)', async () => {
+    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
+    vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
+    const client = createRouterClient(
+      { control },
+      {
+        context: {
+          db: {} as never,
+          supabase: {} as never,
+          user: { id: 'guest-1', email: 'g@b.com' },
+        },
+      },
+    );
+    await expect(
+      client.control.setTestMode({ surveyId: SURVEY_ID, enabled: true }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(svc.setTestMode).not.toHaveBeenCalled();
+  });
+
+  it('게스트는 grant 일치 설문이어도 disable 은 FORBIDDEN (테스트 데이터 삭제 차단)', async () => {
+    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
+    vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
+    const client = createRouterClient(
+      { control },
+      {
+        context: {
+          db: {} as never,
+          supabase: {} as never,
+          user: { id: 'guest-1', email: 'g@b.com' },
+        },
+      },
+    );
+    await expect(
+      client.control.disable({ surveyId: SURVEY_ID, disposition: 'delete' }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(svc.disableTestWorkspace).not.toHaveBeenCalled();
   });
 
   it('게스트는 grant 일치 설문이어도 setPaused 는 FORBIDDEN (authed 유지)', async () => {

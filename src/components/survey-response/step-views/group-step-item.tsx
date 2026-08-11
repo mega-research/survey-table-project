@@ -4,10 +4,11 @@ import { useCallback, useMemo } from 'react';
 
 import { QuestionInput } from '@/components/survey-response/question-input';
 import { RichDescription } from '@/components/survey-response/step-views/rich-description';
-import { useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { isEmptyHtml } from '@/lib/utils';
 import { isChoiceTableSource } from '@/utils/choice-source';
+import { resolveRequiredMessage } from '@/utils/required-message';
 import { sanitizeRichHtml } from '@/lib/sanitize';
 import { StepItem } from '@/lib/group-ordering';
 import type { NumericIssue } from '@/lib/survey/numeric-validation';
@@ -27,6 +28,7 @@ export function GroupStepItem({
   questions,
   onResponse,
   isHighlighted,
+  showRequiredMessage,
   issues,
 }: {
   item: StepItem;
@@ -35,6 +37,8 @@ export function GroupStepItem({
   questions: Question[];
   onResponse: (questionId: string, value: unknown) => void;
   isHighlighted: boolean;
+  /** 필수 미응답 안내 문구 표시 — 질문별 requiredMessage 또는 기본 문구. */
+  showRequiredMessage: boolean;
   issues?: NumericIssue[] | undefined;
 }) {
   const q = item.question;
@@ -56,13 +60,18 @@ export function GroupStepItem({
     [onResponse, q.id, responses],
   );
   const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
   const titleText = useMemo(
-    () => substituteTokens(q.title ?? '', attrs),
-    [q.title, attrs],
+    () => substituteTokens(q.title ?? '', attrs, quotes),
+    [q.title, attrs, quotes],
   );
   const descriptionHtml = useMemo(
-    () => sanitizeRichHtml(substituteTokens(q.description ?? '', attrs)),
-    [q.description, attrs],
+    () => sanitizeRichHtml(substituteTokens(q.description ?? '', attrs, quotes)),
+    [q.description, attrs, quotes],
+  );
+  const subgroupNameText = useMemo(
+    () => (item.subgroupName ? substituteTokens(item.subgroupName, attrs, quotes) : null),
+    [item.subgroupName, attrs, quotes],
   );
 
   return (
@@ -70,7 +79,7 @@ export function GroupStepItem({
     <div>
       {showSubgroupHeading && (
         <h3 className="mb-3 text-sm font-semibold tracking-[0.12em] text-gray-500 uppercase md:text-xs">
-          {item.subgroupName}
+          {subgroupNameText}
         </h3>
       )}
       <div
@@ -131,6 +140,11 @@ export function GroupStepItem({
             onDynamicRowSelectionChange={onDynamicRowSelectionChange}
           />
         </div>
+        {showRequiredMessage && (
+          <p className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {resolveRequiredMessage(q)}
+          </p>
+        )}
       </div>
     </div>
   );

@@ -49,7 +49,7 @@ export function QuestionPreview({ question }: { question: Question }) {
             tableTitle={question.tableTitle}
             columns={question.tableColumns}
             rows={question.tableRowsData}
-            tableHeaderGrid={question.tableHeaderGrid}
+            tableHeaderGrid={question.tableHeaderGrid ?? undefined}
             className="border-0 shadow-none"
             hideColumnLabels={question.hideColumnLabels}
             choiceControlType={(cell) => getGroupTypeOfCell(question, cell.id)}
@@ -102,7 +102,7 @@ export function QuestionPreview({ question }: { question: Question }) {
           tableTitle={question.tableTitle}
           columns={question.tableColumns}
           rows={question.tableRowsData}
-          tableHeaderGrid={question.tableHeaderGrid}
+          tableHeaderGrid={question.tableHeaderGrid ?? undefined}
           className="border-0 shadow-none"
           hideColumnLabels={question.hideColumnLabels}
         />
@@ -201,7 +201,7 @@ function RankingPreview({ question }: { question: Question }) {
             tableTitle={question.tableTitle}
             columns={question.tableColumns}
             rows={question.tableRowsData}
-            tableHeaderGrid={question.tableHeaderGrid}
+            tableHeaderGrid={question.tableHeaderGrid ?? undefined}
             className="border-0 shadow-none"
             hideColumnLabels={question.hideColumnLabels}
           />
@@ -247,7 +247,7 @@ function RankingPreview({ question }: { question: Question }) {
           tableTitle={question.tableTitle}
           columns={question.tableColumns}
           rows={question.tableRowsData}
-          tableHeaderGrid={question.tableHeaderGrid}
+          tableHeaderGrid={question.tableHeaderGrid ?? undefined}
           className="border-0 shadow-none"
           hideColumnLabels={question.hideColumnLabels}
         />

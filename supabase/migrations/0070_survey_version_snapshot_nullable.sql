@@ -1,4 +1,4 @@
--- 0067: survey_versions.snapshot nullable + pruned_at
+-- 0070: survey_versions.snapshot nullable + pruned_at
 --
 -- 버전 보존 정책(2026-07-31 spec). 응답이 가리키지 않는 버전의 snapshot 을
 -- NULL 로 비워 스캔 표면과 저장 용량을 회수한다. 행 자체는 남긴다 —

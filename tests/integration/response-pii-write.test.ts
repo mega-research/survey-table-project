@@ -16,6 +16,7 @@ const {
   editLogValuesMock,
   selectLimitMock,
   selectThenMock,
+  selectForUpdateMock,
   flagsMock,
   headersMock,
   computeSignalsMock,
@@ -39,6 +40,8 @@ const {
   selectLimitMock: vi.fn(),
   // select().from().where() 직접 await 종단 (countCompletedResponses 등 thenable)
   selectThenMock: vi.fn(),
+  // select().from().where().for('update') 종단 — 빈 complete 의 row lock 재계산 읽기
+  selectForUpdateMock: vi.fn(),
   flagsMock: vi.fn(),
   headersMock: vi.fn(),
   computeSignalsMock: vi.fn(),
@@ -76,6 +79,7 @@ function makeSelectChain() {
     from: vi.fn(() => ({
       where: vi.fn(() => ({
         limit: vi.fn(() => selectLimitMock()),
+        for: vi.fn(() => Promise.resolve(selectForUpdateMock())),
         then: (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) =>
           Promise.resolve(selectThenMock()).then(resolve, reject),
       })),
@@ -291,7 +295,9 @@ describe('createResponseWithFirstAnswer — 첫 답변 INSERT 전 암호화', ()
     versionFindFirstMock.mockResolvedValue({ surveyId: SURVEY_ID, status: 'published' });
     // assertQuestionBelongsToResponse (create 진입부 + 후속 updateQuestionResponse) — PII 문항.
     executeMock.mockResolvedValue([{ pii: true }]);
-    insertReturningMock.mockResolvedValue([{ id: RESPONSE_ID, contactTargetId: null }]);
+    insertReturningMock.mockResolvedValue([
+      { id: RESPONSE_ID, contactTargetId: null, status: 'in_progress' },
+    ]);
     // 후속 updateQuestionResponse 내부 경로
     responseFindFirstMock.mockResolvedValue({
       id: RESPONSE_ID,
@@ -342,6 +348,181 @@ describe('createResponseWithFirstAnswer — 첫 답변 INSERT 전 암호화', ()
   });
 });
 
+describe('createResponseWithFirstAnswer — 컨택 재사용 draftSeq 전달', () => {
+  const CONTACT_ID = '00000000-0000-4000-8000-00000000c001';
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    headersMock.mockResolvedValue({ get: vi.fn(() => 'test-agent') });
+    computeSignalsMock.mockReturnValue({ ipHash: 'ip-h', fpHash: 'fp-h', deviceId: 'dev-1' });
+    surveyFindFirstMock.mockResolvedValue(publishedSurveyRow());
+    versionFindFirstMock.mockResolvedValue({ surveyId: SURVEY_ID, status: 'published' });
+    executeMock.mockResolvedValue([{ pii: false }]);
+    responseFindFirstMock.mockResolvedValue({
+      id: RESPONSE_ID,
+      surveyId: SURVEY_ID,
+      versionId: VERSION_ID,
+      isTest: false,
+    });
+    flagsMock.mockResolvedValue({ isPaused: false });
+    updateReturningMock.mockReturnValue([{ id: RESPONSE_ID }]);
+  });
+
+  it('컨택 재사용 시 기존 행의 draftSeq 를 응답에 실어 보낸다 — resume 이 호출되지 않는 경로(다른 기기·시크릿창)의 seed 용', async () => {
+    // Track A: 초대 토큰이 활성 컨택에 매칭됐다고 판정.
+    checkTrackAMock.mockResolvedValue({
+      blocked: false,
+      contactTargetId: CONTACT_ID,
+      isTestTarget: false,
+    });
+    // findActiveResponseByContact — 동일 컨택의 미완료 응답 행이 이미 있고, 1차 세션에서
+    // draftSeq=7 까지 올라가 있다.
+    selectLimitMock.mockResolvedValueOnce([
+      {
+        id: RESPONSE_ID,
+        contactTargetId: CONTACT_ID,
+        metadata: { draftSeq: 7 },
+        status: 'in_progress',
+      },
+    ]);
+
+    const { createResponseWithFirstAnswer } = await import(
+      '@/features/survey-response/server/services/response.service'
+    );
+    const result = await createResponseWithFirstAnswer({
+      surveyId: SURVEY_ID,
+      sessionId: 'sess-new-device',
+      versionId: VERSION_ID,
+      questionId: PLAIN_QUESTION_ID,
+      value: '새 기기에서 입력',
+      currentStepId: 'step-1',
+      inviteToken: 'invite-1',
+      clientSignals: {
+        deviceId: 'dev-1',
+        screen: '1440x900',
+        tz: 'Asia/Seoul',
+        lang: 'ko',
+        platform: 'MacIntel',
+      },
+    });
+
+    expect(result).toMatchObject({ kind: 'created', id: RESPONSE_ID, draftSeq: 7 });
+    // 재사용 분기이므로 새 INSERT 는 일어나지 않는다.
+    expect(insertValuesLogMock).not.toHaveBeenCalled();
+  });
+
+  // 회귀: sweep_stale_sessions() 가 3시간 유휴 행을 drop 으로 바꿔도 is_completed 는 false 라
+  // findActiveResponseByContact 가 그 행을 집어온다. 예전에는 곧바로 첫 답변 UPDATE 를
+  // 시도해 status='in_progress' 가드에 0행으로 걸려 '응답을 수정할 수 없습니다.' 500 이 났다.
+  it('drop 으로 쓸려간 행을 물려받으면 in_progress 로 되살려 재사용한다', async () => {
+    checkTrackAMock.mockResolvedValue({
+      blocked: false,
+      contactTargetId: CONTACT_ID,
+      isTestTarget: false,
+    });
+    selectLimitMock.mockResolvedValueOnce([
+      { id: RESPONSE_ID, contactTargetId: CONTACT_ID, metadata: null, status: 'drop' },
+    ]);
+
+    const { createResponseWithFirstAnswer } = await import(
+      '@/features/survey-response/server/services/response.service'
+    );
+    const result = await createResponseWithFirstAnswer({
+      surveyId: SURVEY_ID,
+      sessionId: 'sess-revived',
+      versionId: VERSION_ID,
+      questionId: PLAIN_QUESTION_ID,
+      value: '3시간 뒤 재진입',
+      currentStepId: 'step-1',
+      inviteToken: 'invite-1',
+      clientSignals: {
+        deviceId: 'dev-1',
+        screen: '1440x900',
+        tz: 'Asia/Seoul',
+        lang: 'ko',
+        platform: 'MacIntel',
+      },
+    });
+
+    expect(result).toMatchObject({ kind: 'created', id: RESPONSE_ID });
+    expect(insertValuesLogMock).not.toHaveBeenCalled();
+    // 첫 답변 UPDATE 이전에 status 를 in_progress 로 되돌리는 UPDATE 가 선행돼야 한다.
+    // 이 assert 가 수정 전 코드(되살림 없이 곧장 답변 UPDATE)를 잡아낸다.
+    expect(updateSetLogMock).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'in_progress' }),
+    );
+  });
+
+  it('정원 마감으로 종결된 행을 물려받으면 500 이 아니라 quota_closed 로 차단한다', async () => {
+    checkTrackAMock.mockResolvedValue({
+      blocked: false,
+      contactTargetId: CONTACT_ID,
+      isTestTarget: false,
+    });
+    selectLimitMock.mockResolvedValueOnce([
+      { id: RESPONSE_ID, contactTargetId: CONTACT_ID, metadata: null, status: 'quotaful_out' },
+    ]);
+
+    const { createResponseWithFirstAnswer } = await import(
+      '@/features/survey-response/server/services/response.service'
+    );
+    const result = await createResponseWithFirstAnswer({
+      surveyId: SURVEY_ID,
+      sessionId: 'sess-quotaful',
+      versionId: VERSION_ID,
+      questionId: PLAIN_QUESTION_ID,
+      value: '정원 마감 뒤 재진입',
+      currentStepId: 'step-1',
+      inviteToken: 'invite-1',
+      clientSignals: {
+        deviceId: 'dev-1',
+        screen: '1440x900',
+        tz: 'Asia/Seoul',
+        lang: 'ko',
+        platform: 'MacIntel',
+      },
+    });
+
+    expect(result).toEqual({ kind: 'blocked', reason: 'quota_closed' });
+  });
+
+  it('신규 INSERT(재사용 아님)면 draftSeq 를 싣지 않는다', async () => {
+    checkTrackAMock.mockResolvedValue({
+      blocked: false,
+      contactTargetId: CONTACT_ID,
+      isTestTarget: false,
+    });
+    // findActiveResponseByContact — 활성 응답 없음 → INSERT 진행.
+    selectLimitMock.mockResolvedValueOnce([]);
+    insertReturningMock.mockResolvedValue([
+      { id: RESPONSE_ID, contactTargetId: CONTACT_ID, metadata: null, status: 'in_progress' },
+    ]);
+
+    const { createResponseWithFirstAnswer } = await import(
+      '@/features/survey-response/server/services/response.service'
+    );
+    const result = await createResponseWithFirstAnswer({
+      surveyId: SURVEY_ID,
+      sessionId: 'sess-first-time',
+      versionId: VERSION_ID,
+      questionId: PLAIN_QUESTION_ID,
+      value: '첫 입력',
+      currentStepId: 'step-1',
+      inviteToken: 'invite-1',
+      clientSignals: {
+        deviceId: 'dev-1',
+        screen: '1440x900',
+        tz: 'Asia/Seoul',
+        lang: 'ko',
+        platform: 'MacIntel',
+      },
+    });
+
+    expect(result.kind).toBe('created');
+    expect(result).not.toHaveProperty('draftSeq');
+  });
+});
+
 describe('completeResponse — PII 문항만 선별 암호화', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -356,6 +537,9 @@ describe('completeResponse — PII 문항만 선별 암호화', () => {
     versionFindFirstMock.mockResolvedValue({ surveyId: SURVEY_ID, status: 'published' });
     // countCompletedResponses — select().from().where() 직접 await.
     selectThenMock.mockReturnValue([{ total: 0 }]);
+    // calc 서버 재계산의 버전 스냅샷 조회(.limit(1) 종단) — 이 그룹의 기존 테스트는
+    // PII 암호화가 관심사이므로 스냅샷 없음으로 두어 재계산을 스킵시킨다.
+    selectLimitMock.mockResolvedValue([]);
     // 같은 db.execute 를 loadValidQuestionIds(전체 id)와 loadPiiQuestionIds(PII id)가
     // 순서대로 호출한다 — SQL 텍스트의 piiEncrypted IS TRUE 필터 유무로 분기해
     // 호출 순서 변화에도 깨지지 않게 한다.
@@ -438,6 +622,130 @@ describe('completeResponse — PII 문항만 선별 암호화', () => {
     const text = sqlText(unionCall![0]);
     expect(text).toContain('pii_encrypted = true');
   });
+
+  // calc 서버 재계산 (신뢰 경계) — 클라이언트가 조작/구버전 수식으로 보낸 계산값을
+  // 서버가 버전 스냅샷 수식으로 다시 계산해 덮어쓰는지 검증한다.
+  it('클라이언트가 보낸 calc 값을 버전 스냅샷 수식으로 재계산해 덮어쓴다', async () => {
+    const CALC_Q_ID = 'q-calc-table';
+    const calcTableQuestion = {
+      id: CALC_Q_ID,
+      type: 'table',
+      title: '계산 표',
+      required: false,
+      order: 1,
+      tableRowsData: [
+        {
+          id: 'r1',
+          label: 'r1',
+          cells: [
+            { id: 'a1', content: '', type: 'input', inputType: 'number' },
+            { id: 'c1', content: '', type: 'calc', formula: { kind: 'cell', cellId: 'a1' } },
+          ],
+        },
+      ],
+    };
+    // 멤버십 필터가 calc 질문 키를 drop 하지 않도록 유효 id 목록에 포함시킨다.
+    executeMock.mockImplementation((query: unknown) => {
+      if (sqlText(query).includes('IS TRUE')) {
+        return Promise.resolve([{ id: QUESTION_ID }]);
+      }
+      return Promise.resolve([
+        { id: QUESTION_ID },
+        { id: PLAIN_QUESTION_ID },
+        { id: CALC_Q_ID },
+      ]);
+    });
+    // 버전 스냅샷 조회가 calc 질문을 반환하게 한다.
+    selectLimitMock.mockResolvedValue([
+      { snapshot: { questions: [calcTableQuestion], lookups: [] } },
+    ]);
+
+    const { completeResponse } = await import(
+      '@/features/survey-response/server/services/response.service'
+    );
+    await completeResponse({
+      responseId: RESPONSE_ID,
+      data: {
+        questionResponses: {
+          // 클라이언트가 c1 에 수식 결과(10)와 다른 조작값을 실어 보냄
+          [CALC_Q_ID]: { a1: '10', c1: '999' },
+        },
+      },
+    });
+
+    const setArg = updateSetLogMock.mock.calls[0]![0] as {
+      questionResponses?: Record<string, unknown>;
+    };
+    const storedTable = (setArg.questionResponses as Record<string, unknown>)[
+      CALC_Q_ID
+    ] as Record<string, unknown>;
+    expect(storedTable['a1']).toBe('10');
+    expect(storedTable['c1']).toBe('10'); // 999 가 아니라 서버 재계산 값
+  });
+
+  // 우회 차단 — 위조 calc 값을 draft 로 먼저 저장하고 data 없는 complete 를 불러도,
+  // 서버가 저장된 응답을 로드해 같은 재계산을 태워 확정값을 수식 결과로 덮어쓴다.
+  it('data 없는 complete 도 저장된 calc 값을 재계산해 확정한다', async () => {
+    const CALC_Q_ID = 'q-calc-table';
+    const calcTableQuestion = {
+      id: CALC_Q_ID,
+      type: 'table',
+      title: '계산 표',
+      required: false,
+      order: 1,
+      tableRowsData: [
+        {
+          id: 'r1',
+          label: 'r1',
+          cells: [
+            { id: 'a1', content: '', type: 'input', inputType: 'number' },
+            { id: 'c1', content: '', type: 'calc', formula: { kind: 'cell', cellId: 'a1' } },
+          ],
+        },
+      ],
+    };
+    selectLimitMock.mockResolvedValue([
+      { snapshot: { questions: [calcTableQuestion], lookups: [] } },
+    ]);
+    // 트랜잭션 안 row lock 읽기(FOR UPDATE)가 draft 로 저장된 위조값(c1: '999')을 반환한다.
+    selectForUpdateMock.mockResolvedValue([
+      { questionResponses: { [CALC_Q_ID]: { a1: '7', c1: '999' } } },
+    ]);
+
+    const { completeResponse } = await import(
+      '@/features/survey-response/server/services/response.service'
+    );
+    await completeResponse({ responseId: RESPONSE_ID });
+
+    const setArg = updateSetLogMock.mock.calls[0]![0] as {
+      questionResponses?: Record<string, unknown>;
+    };
+    const storedTable = (setArg.questionResponses as Record<string, unknown>)[
+      CALC_Q_ID
+    ] as Record<string, unknown>;
+    expect(storedTable['a1']).toBe('7');
+    expect(storedTable['c1']).toBe('7'); // 999 가 아니라 저장분 기준 서버 재계산 값
+  });
+
+  it('버전 스냅샷이 없으면 재계산을 스킵하고 제출값을 그대로 저장한다', async () => {
+    // beforeEach 의 selectLimitMock([]) 그대로 — 스냅샷 없음
+    const { completeResponse } = await import(
+      '@/features/survey-response/server/services/response.service'
+    );
+    await completeResponse({
+      responseId: RESPONSE_ID,
+      data: {
+        questionResponses: { [PLAIN_QUESTION_ID]: '평문 답변' },
+      },
+    });
+
+    const setArg = updateSetLogMock.mock.calls[0]![0] as {
+      questionResponses?: Record<string, unknown>;
+    };
+    expect((setArg.questionResponses as Record<string, unknown>)[PLAIN_QUESTION_ID]).toBe(
+      '평문 답변',
+    );
+  });
 });
 
 describe('saveAdminEdit — 복호화 diff 안정성 + 재암호화 저장', () => {
@@ -493,6 +801,7 @@ describe('saveAdminEdit — 복호화 diff 안정성 + 재암호화 저장', () 
         },
       },
       { id: 'admin-1', email: 'a@b.com' },
+      false,
     );
 
     // 변경 0건 → responseEditLogs insert 미호출.
@@ -520,6 +829,7 @@ describe('saveAdminEdit — 복호화 diff 안정성 + 재암호화 저장', () 
         },
       },
       { id: 'admin-1', email: 'a@b.com' },
+      false,
     );
 
     // 변경은 비PII 문항 1건만 — PII 문항이 diff 에 끼지 않는다.
@@ -544,5 +854,255 @@ describe('saveAdminEdit — 복호화 diff 안정성 + 재암호화 저장', () 
     const answersMap = replaceResponseAnswersMock.mock.calls[0]![3] as Record<string, unknown>;
     expect(String(answersMap[QUESTION_ID])).toMatch(/^v\d+:/);
     expect(answersMap[PLAIN_QUESTION_ID]).toBe('수정된 답변');
+  });
+});
+
+describe('saveAdminEdit — calc 셀 서버 재계산 (Task 13)', () => {
+  const CALC_QUESTION_ID = 'q-calc-1';
+  const SOURCE_CELL_ID = `${CALC_QUESTION_ID}-a`;
+  const CALC_CELL_ID = `${CALC_QUESTION_ID}-c`;
+
+  /** withCalcValues 가 요구하는 최소 테이블 질문 스냅샷 — source 셀 값을 그대로 옮기는 calc 셀 1개. */
+  function calcTableSnapshotQuestion() {
+    return {
+      id: CALC_QUESTION_ID,
+      type: 'table',
+      title: '계산 테이블',
+      tableRowsData: [
+        {
+          id: 'r1',
+          label: 'r1',
+          cells: [
+            { id: SOURCE_CELL_ID, content: '', type: 'input', inputType: 'number' },
+            {
+              id: CALC_CELL_ID,
+              content: '',
+              type: 'calc',
+              formula: { kind: 'cell', cellId: SOURCE_CELL_ID },
+            },
+          ],
+        },
+      ],
+    };
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    surveyFindFirstMock.mockResolvedValue({ id: SURVEY_ID });
+    // status: completed → getProgressSnapshot(버전 스냅샷 재조회) 경로를 타지 않아
+    // selectLimitMock 호출을 diff 스냅샷 조회 1건으로 고정할 수 있다.
+    responseFindFirstMock.mockResolvedValue({
+      id: RESPONSE_ID,
+      surveyId: SURVEY_ID,
+      versionId: VERSION_ID,
+      deletedAt: null,
+      status: 'completed',
+      contactTargetId: null,
+      questionResponses: {
+        // 이전 저장값 — source=5, calc 도 그 시점엔 정합했던 5.
+        [CALC_QUESTION_ID]: { [SOURCE_CELL_ID]: '5', [CALC_CELL_ID]: '5' },
+      },
+    });
+    // loadPiiQuestionIds — PII 문항 없음.
+    executeMock.mockResolvedValue([]);
+    // 버전 스냅샷 조회 (diff 블록에서 changedIds.length > 0 일 때만 호출됨).
+    selectLimitMock.mockResolvedValue([{ snapshot: { questions: [calcTableSnapshotQuestion()] } }]);
+    updateReturningMock.mockReturnValue([{ id: RESPONSE_ID }]);
+  });
+
+  it('source 셀 값을 바꾸면 클라가 제출한 calc 값을 무시하고 서버가 재계산한 값을 저장한다', async () => {
+    const { saveAdminEdit } = await import(
+      '@/features/survey-response/server/services/response-edit.service'
+    );
+    await saveAdminEdit(
+      {
+        surveyId: SURVEY_ID,
+        responseId: RESPONSE_ID,
+        questionResponses: {
+          // 운영자가 source 셀을 5 → 10 으로 수정. calc 셀은 (오래된 클라 상태 등으로) 여전히
+          // 구값 5 를 담아 제출됐다고 가정 — 서버가 이걸 신뢰하지 않고 재계산해야 한다.
+          [CALC_QUESTION_ID]: { [SOURCE_CELL_ID]: '10', [CALC_CELL_ID]: '5' },
+        },
+      },
+      { id: 'admin-1', email: 'a@b.com' },
+      false,
+    );
+
+    const setArg = updateSetLogMock.mock.calls[0]![0] as {
+      questionResponses: Record<string, unknown>;
+    };
+    const stored = setArg.questionResponses[CALC_QUESTION_ID] as Record<string, unknown>;
+    expect(stored[SOURCE_CELL_ID]).toBe('10');
+    // 서버 재계산 값 — 클라가 보낸 stale '5' 가 아니라 새 source 기준 '10' 이어야 한다.
+    expect(stored[CALC_CELL_ID]).toBe('10');
+
+    // response_answers 정규화 저장에도 동일하게 재계산된 값이 들어간다.
+    const answersMap = replaceResponseAnswersMock.mock.calls[0]![3] as Record<string, unknown>;
+    const storedAnswers = answersMap[CALC_QUESTION_ID] as Record<string, unknown>;
+    expect(storedAnswers[CALC_CELL_ID]).toBe('10');
+  });
+
+  it('버전 스냅샷을 못 얻으면(versionId=null) 재계산을 건너뛰고 제출값을 그대로 저장한다 (fail-safe)', async () => {
+    responseFindFirstMock.mockResolvedValue({
+      id: RESPONSE_ID,
+      surveyId: SURVEY_ID,
+      versionId: null,
+      deletedAt: null,
+      status: 'completed',
+      contactTargetId: null,
+      questionResponses: {
+        [CALC_QUESTION_ID]: { [SOURCE_CELL_ID]: '5', [CALC_CELL_ID]: '5' },
+      },
+    });
+
+    const { saveAdminEdit } = await import(
+      '@/features/survey-response/server/services/response-edit.service'
+    );
+    await saveAdminEdit(
+      {
+        surveyId: SURVEY_ID,
+        responseId: RESPONSE_ID,
+        questionResponses: {
+          [CALC_QUESTION_ID]: { [SOURCE_CELL_ID]: '10', [CALC_CELL_ID]: '5' },
+        },
+      },
+      { id: 'admin-1', email: 'a@b.com' },
+      false,
+    );
+
+    // 스냅샷을 조회할 수 없으므로(versionId null) 재계산 없이 제출값 그대로 저장된다.
+    const setArg = updateSetLogMock.mock.calls[0]![0] as {
+      questionResponses: Record<string, unknown>;
+    };
+    const stored = setArg.questionResponses[CALC_QUESTION_ID] as Record<string, unknown>;
+    expect(stored[SOURCE_CELL_ID]).toBe('10');
+    expect(stored[CALC_CELL_ID]).toBe('5');
+  });
+
+  it('클라가 건드리지 않은 cross-question calc 질문도 재계산으로 값이 바뀌면 edit log 에 잡힌다', async () => {
+    // q-source-num: 숫자형 단답(kind:'question' 수식이 참조하는 원본).
+    // q-calc-cross: 그 값을 그대로 옮기는 calc 셀 1개짜리 표 — 클라는 이 질문을 전혀 건드리지
+    // 않고 이전 저장값 그대로("5") 재제출한다. 서버 재계산 없이는 이 변경이 diff 에 안 잡힌다.
+    const SOURCE_QUESTION_ID = 'q-source-num';
+    const CROSS_CALC_QUESTION_ID = 'q-calc-cross';
+    const CROSS_CALC_CELL_ID = `${CROSS_CALC_QUESTION_ID}-c`;
+
+    surveyFindFirstMock.mockResolvedValue({ id: SURVEY_ID });
+    responseFindFirstMock.mockResolvedValue({
+      id: RESPONSE_ID,
+      surveyId: SURVEY_ID,
+      versionId: VERSION_ID,
+      deletedAt: null,
+      status: 'completed',
+      contactTargetId: null,
+      questionResponses: {
+        [SOURCE_QUESTION_ID]: '5',
+        [CROSS_CALC_QUESTION_ID]: { [CROSS_CALC_CELL_ID]: '5' },
+      },
+    });
+    executeMock.mockResolvedValue([]);
+    selectLimitMock.mockResolvedValue([
+      {
+        snapshot: {
+          questions: [
+            { id: SOURCE_QUESTION_ID, type: 'text', title: '소스 질문' },
+            {
+              id: CROSS_CALC_QUESTION_ID,
+              type: 'table',
+              title: '교차 계산',
+              tableRowsData: [
+                {
+                  id: 'r1',
+                  label: 'r1',
+                  cells: [
+                    {
+                      id: CROSS_CALC_CELL_ID,
+                      content: '',
+                      type: 'calc',
+                      formula: { kind: 'question', questionId: SOURCE_QUESTION_ID },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      },
+    ]);
+    updateReturningMock.mockReturnValue([{ id: RESPONSE_ID }]);
+
+    const { saveAdminEdit } = await import(
+      '@/features/survey-response/server/services/response-edit.service'
+    );
+    await saveAdminEdit(
+      {
+        surveyId: SURVEY_ID,
+        responseId: RESPONSE_ID,
+        questionResponses: {
+          // 운영자는 source 만 5 → 20 으로 수정. cross-question calc 질문은 손대지 않고
+          // (읽기 전용이므로) 이전 값 그대로 재제출.
+          [SOURCE_QUESTION_ID]: '20',
+          [CROSS_CALC_QUESTION_ID]: { [CROSS_CALC_CELL_ID]: '5' },
+        },
+      },
+      { id: 'admin-1', email: 'a@b.com' },
+      false,
+    );
+
+    // 저장값: cross-question calc 셀이 재계산으로 20 을 반영한다.
+    const setArg = updateSetLogMock.mock.calls[0]![0] as {
+      questionResponses: Record<string, unknown>;
+    };
+    const storedCross = setArg.questionResponses[CROSS_CALC_QUESTION_ID] as Record<
+      string,
+      unknown
+    >;
+    expect(storedCross[CROSS_CALC_CELL_ID]).toBe('20');
+
+    // 핵심: 클라가 diff 상 건드리지 않은 CROSS_CALC_QUESTION_ID 도 실제 DB 값이 바뀌었으므로
+    // edit log(changedQuestions) 에 포함돼야 한다 — 감사 로그 누락 방지.
+    expect(editLogValuesMock).toHaveBeenCalledTimes(1);
+    const logValues = editLogValuesMock.mock.calls[0]![0] as {
+      changedQuestions: Array<{ questionId: string }>;
+      changedCount: number;
+    };
+    const changedIds = logValues.changedQuestions.map((c) => c.questionId);
+    expect(changedIds).toContain(SOURCE_QUESTION_ID);
+    expect(changedIds).toContain(CROSS_CALC_QUESTION_ID);
+    expect(logValues.changedCount).toBe(2);
+  });
+
+  it('손상된 스냅샷(questions 필드 누락)이면 재계산에서 크래시하지 않고 제출값을 그대로 저장한다 (fail-safe)', async () => {
+    executeMock.mockResolvedValue([]);
+    // questions 필드 자체가 없는 손상된 스냅샷 — withCalcValues 의 `for (const q of ctx.questions)` 가
+    // ctx.questions 를 무방비로 순회하면 "not iterable" 로 saveAdminEdit 전체가 죽는다.
+    selectLimitMock.mockResolvedValue([{ snapshot: {} }]);
+    updateReturningMock.mockReturnValue([{ id: RESPONSE_ID }]);
+
+    const { saveAdminEdit } = await import(
+      '@/features/survey-response/server/services/response-edit.service'
+    );
+    await expect(
+      saveAdminEdit(
+        {
+          surveyId: SURVEY_ID,
+          responseId: RESPONSE_ID,
+          questionResponses: {
+            [CALC_QUESTION_ID]: { [SOURCE_CELL_ID]: '10', [CALC_CELL_ID]: '5' },
+          },
+        },
+        { id: 'admin-1', email: 'a@b.com' },
+        false,
+      ),
+    ).resolves.toEqual({ ok: true });
+
+    const setArg = updateSetLogMock.mock.calls[0]![0] as {
+      questionResponses: Record<string, unknown>;
+    };
+    const stored = setArg.questionResponses[CALC_QUESTION_ID] as Record<string, unknown>;
+    // 재계산할 questions 자체가 없으므로 클라 제출값이 그대로 저장된다(재계산 시도는 하되 결과가
+    // 원본과 동일 — withCalcValues 는 calc 셀 없으면 payloadAnswers 를 그대로 반환).
+    expect(stored[SOURCE_CELL_ID]).toBe('10');
+    expect(stored[CALC_CELL_ID]).toBe('5');
   });
 });

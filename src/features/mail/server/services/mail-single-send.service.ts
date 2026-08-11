@@ -19,6 +19,7 @@ import { getMailTemplate } from './mail-templates.service';
 export async function sendSingleCampaign(
   input: SendSingleCampaignInput,
   userId: string,
+  isGuest: boolean,
 ): Promise<CreateCampaignResult> {
   const [contact] = await db
     .select({
@@ -78,6 +79,7 @@ export async function sendSingleCampaign(
       contactTargetIds: [input.contactTargetId],
     },
     userId,
+    isGuest,
     { kind: 'single' },
   );
 }

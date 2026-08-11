@@ -30,6 +30,7 @@ export const CreateQuestionInput = z.object({
   title: z.string(),
   description: z.string().optional(),
   required: z.boolean().optional(),
+  requiredMessage: z.string().nullable().optional(),
   order: z.number().optional(),
   options: z.custom<QuestionType['options']>().optional(),
   selectLevels: z.custom<QuestionType['selectLevels']>().optional(),
@@ -71,6 +72,9 @@ export const CreateQuestionInput = z.object({
   exportLabel: z.string().optional(),
   spssVarType: z.string().optional(),
   spssMeasure: z.string().optional(),
+  answerQuoteEnabled: z.boolean().optional(),
+  answerQuoteName: z.string().optional(),
+  answerQuoteText: z.string().optional(),
 });
 export type CreateQuestionInput = z.infer<typeof CreateQuestionInput>;
 
@@ -85,6 +89,7 @@ export const UpdateQuestionData = z.object({
   title: z.string().optional(),
   description: z.string().optional(),
   required: z.boolean().optional(),
+  requiredMessage: z.string().nullable().optional(),
   order: z.number().optional(),
   options: z.custom<QuestionType['options']>().optional(),
   selectLevels: z.custom<QuestionType['selectLevels']>().optional(),
@@ -126,6 +131,9 @@ export const UpdateQuestionData = z.object({
   exportLabel: z.string().optional(),
   spssVarType: z.string().optional(),
   spssMeasure: z.string().optional(),
+  answerQuoteEnabled: z.boolean().optional(),
+  answerQuoteName: z.string().optional(),
+  answerQuoteText: z.string().optional(),
 });
 export type UpdateQuestionData = z.infer<typeof UpdateQuestionData>;
 

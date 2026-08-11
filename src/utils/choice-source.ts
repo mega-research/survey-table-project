@@ -41,6 +41,7 @@ export function isChoiceTableSource(question: Question): boolean {
  *   - optionCode: TableCell 에는 optionCode 필드가 없으므로 항상 undefined
  *   - spssNumericCode: cell.spssNumericCode 우선, 없으면 수집 순서 1-based 인덱스
  *   - branchRule / allowTextInput / textInputPlaceholder: 셀에서 전달
+ *   - answerQuoteText: 셀의 응답 인용 문구 (표-소스 옵션의 인용 수집에 필요)
  */
 export function resolveChoiceOptions(question: Question): QuestionOption[] {
   const cells = collectChoiceOptCells(question.tableRowsData);
@@ -57,5 +58,7 @@ export function resolveChoiceOptions(question: Question): QuestionOption[] {
     ...(cell.textInputPlaceholder !== undefined ? { textInputPlaceholder: cell.textInputPlaceholder } : {}),
     ...(cell.textBold ? { textBold: true } : {}),
     ...(cell.backgroundColor ? { backgroundColor: cell.backgroundColor } : {}),
+    ...(cell.textColor ? { textColor: cell.textColor } : {}),
+    ...(cell.answerQuoteText !== undefined ? { answerQuoteText: cell.answerQuoteText } : {}),
   }));
 }

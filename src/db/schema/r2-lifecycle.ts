@@ -43,7 +43,7 @@ export const r2SentKeys = pgTable('r2_sent_keys', {
  * 삽입 시 1회 기록하고, 가변 소스는 주기적으로 전량 재추출한다.
  * 집행 판정에서 이 인덱스는 사전 필터일 뿐 삭제 권한이 없다 (spec §6.3).
  *
- * 인덱스는 수동 마이그레이션(0068) 소관:
+ * 인덱스는 수동 마이그레이션 0071 소관:
  * - r2_key_refs_pk: (key, source_table, source_id) PK — key 선두라 키 조회를 커버
  * - r2_key_refs_source_idx: (source_table, source_id) — 행 단위 교체용
  */

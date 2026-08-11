@@ -11,6 +11,7 @@ import { useDynamicRows } from '@/hooks/use-dynamic-rows';
 import { useElementWidth } from '@/hooks/use-element-width';
 import { useHorizontalScrollIndicators } from '@/hooks/use-horizontal-scroll-indicators';
 import { useMobileView } from '@/hooks/use-media-query';
+import { usePageStickyThreshold } from '@/hooks/use-page-sticky-threshold';
 import { useScrollLeftSync } from '@/hooks/use-scroll-left-sync';
 import { useTablePerf } from '@/hooks/use-table-perf';
 import { cn } from '@/lib/utils';
@@ -28,7 +29,11 @@ import {
   shouldDisplayRow,
 } from '@/utils/branch-logic';
 import { decideDrilldown } from '@/utils/classify-table';
-import { getCellBackgroundStyle, getCellTextClassName } from '@/utils/cell-style';
+import {
+  getCellBackgroundStyle,
+  getCellTextClassName,
+  getCellTextStyle,
+} from '@/utils/cell-style';
 import { expandHeaderGrid } from '@/utils/expand-header-grid';
 import {
   clampMobileDrilldownOmitLeadingColumns,
@@ -160,6 +165,7 @@ function HeaderCells({
           minHeight,
           ...getHeaderCellStickyStyle(startCol, colSpan, stickyInfo),
           ...getCellBackgroundStyle(cell),
+          ...getCellTextStyle(cell),
         };
 
         return (
@@ -206,6 +212,7 @@ function HeaderCells({
       minHeight,
       ...getHeaderCellStickyStyle(startCol, cs, stickyInfo),
       ...getCellBackgroundStyle(column),
+      ...getCellTextStyle(column),
     };
 
     return (
@@ -226,7 +233,6 @@ function HeaderCells({
 interface RenderRowCellsProps {
   row: TableRow;
   gridRow: number | undefined;
-  completed: boolean;
   questionId: string;
   isTestMode: boolean;
   value?: Record<string, unknown> | undefined;
@@ -239,7 +245,6 @@ interface RenderRowCellsProps {
 function renderRowCells({
   row,
   gridRow,
-  completed,
   questionId,
   isTestMode,
   value,
@@ -276,7 +281,7 @@ function renderRowCells({
       }
     }
     if (applyCellBackground) {
-      Object.assign(style, getCellBackgroundStyle(cell));
+      Object.assign(style, getCellBackgroundStyle(cell), getCellTextStyle(cell));
     }
 
     return (
@@ -284,14 +289,9 @@ function renderRowCells({
         key={cell.id}
         className={cn(
           'min-w-0 border-r border-b border-gray-300 p-2 [overflow-wrap:anywhere] transition-colors duration-200',
-          // sticky 셀은 뒤가 비치면 안 되므로 불투명 배경 고정
-          isSticky
-            ? completed
-              ? 'bg-green-50'
-              : 'bg-white'
-            : completed
-              ? 'bg-green-50/40'
-              : 'bg-white',
+          // 행 완료 초록 배경은 제거 (2026-08-06 피드백 — 입력 중 배경 변화가 거슬림).
+          // sticky 셀은 뒤가 비치면 안 되므로 불투명 배경은 유지한다.
+          'bg-white',
           getAlignmentClasses(cell.horizontalAlign, cell.verticalAlign),
           errorCellIds?.has(cell.id) && 'ring-2 ring-red-300 ring-inset',
         )}
@@ -307,6 +307,7 @@ function renderRowCells({
           isTestMode={isTestMode}
           value={value}
           onChange={onChange}
+          rowCells={row.cells}
           {...resolveRadioGroupProps(cell, row.id, radioGroupBuckets)}
         />
       </div>
@@ -328,6 +329,8 @@ interface InteractiveTableResponseProps {
   isTestMode?: boolean | undefined;
   allResponses?: Record<string, unknown> | undefined;
   allQuestions?: Question[] | undefined;
+  /** 열·행·동적 그룹 displayCondition 평가를 건너뛰고 전부 표시 (빌더 편집 미리보기용) */
+  ignoreDisplayConditions?: boolean | undefined;
   dynamicRowConfigs?: DynamicRowGroupConfig[] | undefined;
   hideColumnLabels?: boolean | undefined;
   /** 모바일에서도 카드/스테퍼 전환 없이 원본 표(가로 스크롤)로 렌더 */
@@ -365,6 +368,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
   isTestMode = false,
   allResponses,
   allQuestions,
+  ignoreDisplayConditions = false,
   dynamicRowConfigs,
   hideColumnLabels = false,
   mobileOriginalTable = false,
@@ -414,7 +418,9 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
   // 드릴다운이 마운트된 동안에만 함수가 심긴다 (셸/스테퍼 모드에서는 null).
   const drilldownNavigateRef = useRef<((cellIds: readonly string[]) => void) | null>(null);
   const headerScrollRef = useRef<HTMLDivElement>(null);
-  useTablePerf(`InteractiveTable(${rows.length}×${columns.length})`);
+  useTablePerf(`InteractiveTable(${rows.length}×${columns.length})`, {
+    containerRef: tableContainerRef,
+  });
   const isMobileView = useMobileView();
   const mobileMode = resolveMobileTableDisplayMode({
     mobileTableDisplayMode,
@@ -454,7 +460,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
 
   // displayCondition 기반 가시 열 필터링 + colspan 재계산
   const { visibleColumns, columnFilteredRows, visibleHeaderGrid } = useMemo(() => {
-    if (!allResponses || !allQuestions || columns.length === 0) {
+    if (ignoreDisplayConditions || !allResponses || !allQuestions || columns.length === 0) {
       return {
         visibleColumns: columns,
         columnFilteredRows: rows,
@@ -487,13 +493,13 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
       visibleHeaderGrid: result.headerGrid,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [columns, rows, tableHeaderGrid, relevantResponsesJson, allQuestions]);
+  }, [columns, rows, tableHeaderGrid, relevantResponsesJson, allQuestions, ignoreDisplayConditions]);
 
   // 행 displayCondition 평가 결과 — null 이면 조건 필터 없음.
   // 동적 행 필터링·rowspan 재계산은 useDynamicRows(동적 행 파이프라인)가 소유하고,
   // branch-logic 의존인 조건 평가만 여기(호출자) 소유로 남긴다.
   const conditionVisibleRowIds = useMemo(() => {
-    if (!allResponses || !allQuestions) return null;
+    if (ignoreDisplayConditions || !allResponses || !allQuestions) return null;
     const hasConditions = columnFilteredRows.some((row) => row.displayCondition);
     if (!hasConditions) return null;
     const ids = new Set<string>();
@@ -504,18 +510,23 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     }
     return ids;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [columnFilteredRows, relevantResponsesJson, allQuestions]);
-
-  // 헤더-바디 scrollLeft 상호 동기화 (각각 별도 가로 스크롤 컨테이너)
-  // 헤더는 hideColumnLabels=false 일 때만 마운트되므로, 토글 시 리스너 재부착이
-  // 필요하다(ref/disabled는 안 바뀌어 deps 없이는 effect가 재실행되지 않음).
-  // 모바일은 카드 전환이라 원래 불필요하지만, 원본 표 모드는 모바일에서도
-  // 표를 렌더하므로 동기화·측정을 켜야 한다.
-  useScrollLeftSync(headerScrollRef, tableContainerRef, mobileUsesCards, [hideColumnLabels]);
+  }, [columnFilteredRows, relevantResponsesJson, allQuestions, ignoreDisplayConditions]);
 
   // Grid 관련 계산
   const totalWidth = useMemo(() => calcTotalWidth(visibleColumns), [visibleColumns]);
   const gridTemplateCols = useMemo(() => buildGridTemplateCols(visibleColumns), [visibleColumns]);
+
+  // 열 좌측 경계 누적 px — 스크롤 컨트롤의 "잘린 열 정렬" 페이징용
+  const columnStops = useMemo(() => {
+    const stops: number[] = [0];
+    let acc = 0;
+    for (const col of visibleColumns) {
+      acc += col.width || 150;
+      stops.push(acc);
+    }
+    return stops;
+  }, [visibleColumns]);
+
 
   // 헤더 행 수 계산
   const headerRowCount = useMemo(() => {
@@ -526,7 +537,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
 
   // 그룹 조건부 표시: 숨겨야 할 그룹 ID 집합
   const hiddenGroupIds = useMemo(() => {
-    if (!allResponses || !allQuestions || !dynamicRowConfigs) return undefined;
+    if (ignoreDisplayConditions || !allResponses || !allQuestions || !dynamicRowConfigs) return undefined;
     const hidden = new Set<string>();
     for (const g of dynamicRowConfigs) {
       if (
@@ -538,7 +549,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
       }
     }
     return hidden.size > 0 ? hidden : undefined;
-  }, [dynamicRowConfigs, allResponses, allQuestions]);
+  }, [dynamicRowConfigs, allResponses, allQuestions, ignoreDisplayConditions]);
 
   // 동적 행 파이프라인 — 상태 → 가시 행 필터링 → 레이아웃 → 행 완료 맵을 한 seam 뒤로
   const {
@@ -646,6 +657,43 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     return computeStickyLeftColumns(visibleColumns, displayRows, maxStickyWidth);
   }, [enableSticky, mobileUsesCards, visibleColumns, displayRows, scrollViewportWidth]);
 
+  // ── 가상화 여부 (hooks-rules: 빈 테이블 early return 이전에 계산) ──
+  const shouldVirtualize = displayRows.length >= VIRTUALIZATION_THRESHOLD;
+
+  // 페이지 sticky 헤더(이중 스크롤 컨테이너) 사용 여부.
+  // 본문이 뷰포트 대비 충분히 길 때만 켠다 — 짧은 표는 헤더를 본문과 같은
+  // 스크롤 컨테이너에 넣어(단일 컨테이너) 세로 스크롤 중 헤더 고정 턱 걸림과
+  // 모바일 가로 스크롤 헤더/본문 동기화 지연을 원천 제거한다.
+  // deps: 빈 표(early return, 컨테이너 미마운트) → 행 채워짐 전환 시 effect 를
+  // 재실행해 갓 마운트된 컨테이너에 관찰을 붙인다.
+  const pageSticky = usePageStickyThreshold(
+    tableContainerRef,
+    {
+      disabled: mobileUsesCards || !enableSticky,
+      forced: shouldVirtualize,
+    },
+    [columns.length === 0 || rows.length === 0],
+  );
+
+  // 헤더-바디 scrollLeft 상호 동기화 — pageSticky(이중 컨테이너) 모드 전용.
+  // 단일 컨테이너 모드는 헤더가 같은 컨테이너 안이라 동기화 자체가 불필요.
+  // 헤더는 hideColumnLabels=false 일 때만 마운트되므로, 토글 시 리스너 재부착이
+  // 필요하다(ref는 안 바뀌어 deps 없이는 effect가 재실행되지 않음).
+  useScrollLeftSync(headerScrollRef, tableContainerRef, mobileUsesCards || !pageSticky, [
+    hideColumnLabels,
+  ]);
+
+  // 단일 → 이중 컨테이너 전환 시(동적 행 확장 등으로 sticky 진입) 갓 마운트된
+  // 헤더 컨테이너는 scrollLeft=0 이므로 본문 위치로 정렬한다 (이후는 sync 훅이 유지).
+  useEffect(() => {
+    if (!pageSticky) return;
+    const header = headerScrollRef.current;
+    const body = tableContainerRef.current;
+    if (header && body && header.scrollLeft !== body.scrollLeft) {
+      header.scrollLeft = body.scrollLeft;
+    }
+  }, [pageSticky]);
+
   // 헤더/바디 grid 컨테이너 공용 스타일 (가로 폭·템플릿 동일하게 정렬)
   const gridContainerStyle = useMemo<React.CSSProperties>(
     () => ({
@@ -702,7 +750,6 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
                 {renderRowCells({
                   row,
                   gridRow: rowGridMap.get(row.id),
-                  completed: rowCompletionMap.get(row.id) ?? false,
                   questionId,
                   isTestMode,
                   value,
@@ -727,7 +774,6 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
       toggleGroupExpanded,
       expandedGroupRows,
       rowGridMap,
-      rowCompletionMap,
       questionId,
       isTestMode,
       value,
@@ -818,9 +864,6 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     );
   }
 
-  // ── 가상화 여부 판단 ──
-  const shouldVirtualize = displayRows.length >= VIRTUALIZATION_THRESHOLD;
-
   // ── 데스크톱 Grid 뷰 ──
   const renderTableView = () => (
     <div className="relative">
@@ -830,24 +873,30 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
         aria-rowcount={headerRowCount + displayRows.length}
         aria-colcount={visibleColumns.length}
       >
-        {/* 가로 스크롤 컨트롤 + (선택적) 헤더 라벨. 페이지 스크롤 기준 sticky 래퍼.
+        {/* 가로 스크롤 컨트롤 + (선택적) 헤더 라벨.
+            pageSticky(긴 표)일 때만 페이지 스크롤 기준 sticky — 짧은 표에서
+            무조건 sticky 를 걸면 스크롤 중 이 블록이 뷰포트 상단에 잠깐
+            얼어붙었다 튕겨 나가는 턱 걸림이 생긴다. 짧은 표의 헤더 라벨은
+            아래 본문 스크롤 컨테이너 안에서 함께 렌더된다(단일 컨테이너).
             컨트롤은 hideColumnLabels 여부와 무관하게 렌더한다 — 헤더 라벨을 숨긴
             테이블도 넓으면 가로 스크롤 수단이 필요한데, 과거엔 이 컨트롤이 헤더
             블록 안에 갇혀 hideColumnLabels=true 시 함께 사라지는 버그가 있었다. */}
         <div
           className={cn(
-            'sticky top-0 z-30 bg-white print:static print:z-auto',
+            'bg-white',
+            pageSticky && 'sticky top-0 z-30 print:static print:z-auto',
             // 모바일 원본 표 모드는 풀블리드 해크 없이 카드 패딩 안에 좌우 대칭으로 가둔다
             rendersFullOriginalTable ? 'mx-0' : '-mx-4 md:mx-0',
           )}
         >
-          {/* 가로 스크롤 컨트롤 (버튼 + 진행도) — sticky 영역이라 항상 조작 가능 */}
+          {/* 가로 스크롤 컨트롤 (버튼 + 진행도) — sticky 모드에선 항상 조작 가능 */}
           <TableScrollControls
             scrollRef={tableContainerRef}
             canScrollLeft={canScrollLeft}
             canScrollRight={canScrollRight}
+            columnStops={columnStops}
           />
-          {!hideColumnLabels && (
+          {pageSticky && !hideColumnLabels && (
             <div className="relative">
               <div
                 ref={headerScrollRef}
@@ -898,9 +947,24 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
               rendersFullOriginalTable ? 'px-0' : 'px-4 md:px-0',
             )}
           >
+            {/* 단일 컨테이너 모드(짧은 표): 헤더를 본문과 같은 스크롤 컨테이너에
+                넣어 가로 스크롤이 native 로 완전 동기된다 (sync 훅 미사용).
+                key 명시: pageSticky 전환 시 React 가 헤더 div 를 본문 div 로
+                오재사용하지 않게 한다. */}
+            {!pageSticky && !hideColumnLabels && (
+              <div
+                key="in-scroll-header"
+                role="rowgroup"
+                className="mx-auto rounded-t-md border-t border-r border-l border-gray-300 bg-gray-50 text-sm"
+                style={gridContainerStyle}
+              >
+                {renderHeaderCells()}
+              </div>
+            )}
             {shouldVirtualize ? (
               /* 가상화: 바디만 렌더 */
               <VirtualizedTableGrid
+                key="table-body"
                 questionId={questionId}
                 displayRows={displayRows}
                 visibleColumns={visibleColumns}
@@ -918,6 +982,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
             ) : (
               /* 바디 전용 grid */
               <div
+                key="table-body"
                 role="rowgroup"
                 className={cn(
                   'mx-auto rounded-b-md border-r border-l border-gray-300 bg-white text-sm',
@@ -931,7 +996,6 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
                     {renderRowCells({
                       row,
                       gridRow: rowGridMap.get(row.id),
-                      completed: rowCompletionMap.get(row.id) ?? false,
                       questionId,
                       isTestMode,
                       value,
@@ -1062,6 +1126,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
                         inputIdScope={inputIdScope}
                         ariaInvalid={invalid}
                         ariaDescribedBy={errorDescriptionId}
+                        rowCells={sourceRow.cells}
                         {...resolveRadioGroupProps(
                           cell,
                           sourceRowId,

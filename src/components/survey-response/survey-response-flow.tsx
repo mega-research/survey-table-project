@@ -19,7 +19,11 @@ import {
   SurveyLoadingScreen,
 } from '@/components/survey-response/survey-response-screens';
 import { PageStepView } from '@/components/survey-response/step-views/page-step-view';
+import { collectAnswerQuotes } from '@/lib/survey/answer-quote';
 import { ContactAttrsProvider } from '@/lib/survey/contact-attrs-context';
+import { withCalcValues } from '@/lib/survey/cell-formula';
+import type { FormulaEvalCtx } from '@/lib/survey/cell-formula';
+import { FormulaEvalProvider } from '@/lib/survey/formula-context';
 import {
   collectNumericIssues,
   collectVisibleTableCells,
@@ -198,6 +202,13 @@ export function SurveyResponseFlow(props: SurveyResponseFlowProps) {
     props.surveyIdentifier,
     props.inviteToken ?? '',
     props.testToken ?? '',
+    // admin-edit 은 surveyIdentifier(=surveyId)가 같은 설문의 모든 응답에서 동일하므로
+    // responseId 를 별도 축으로 포함한다. 이게 없으면 같은 마운트 트리에서 responseId 만
+    // 바뀌는 경로(예: 응답 상세의 "다음 응답" 이동)가 optionTexts/currentStepIndex 를
+    // 리셋하지 못해, 이전 응답자가 입력한 텍스트가 다음 응답자의 인용 재현에 새어 들어간다.
+    // public/preview 는 adminContext 가 항상 없어 이 항목이 상수 ''로 고정되므로 기존
+    // 키 계산에 영향이 없다.
+    props.adminContext?.responseId ?? '',
   ].join('\u0000');
 
   return <SurveyResponseIdentityBoundary key={identityKey} flowProps={props} />;
@@ -422,15 +433,44 @@ function SurveyResponseFlowActive({
   const questions = useMemo(() => loadedSurvey?.questions || [], [loadedSurvey]);
   const groups = useMemo(() => loadedSurvey?.groups || [], [loadedSurvey]);
 
+  // 응답 인용 — {{{이름}}} 채널로 소비되는 파생값. 저장하지 않는다.
+  const answerQuotes = useMemo(
+    () => collectAnswerQuotes(questions, responses, effectiveOptionTextsByQuestion),
+    [questions, responses, effectiveOptionTextsByQuestion],
+  );
+
+  // calc 셀 수식 평가 컨텍스트 — responses 는 원본(cell-id 미평탄화) 형태를 그대로 넘긴다
+  // (cell-formula.ts 가 questionId → cellId 중첩 객체 형태를 직접 기대함).
+  const formulaCtx = useMemo<FormulaEvalCtx>(
+    () => ({
+      questions,
+      responses,
+      lookups: loadedSurvey?.lookups ?? [],
+      contactAttrs,
+    }),
+    [questions, responses, loadedSurvey?.lookups, contactAttrs],
+  );
+
+  // calc 값이 주입된 응답 맵 — 분기/표시 조건 평가 전용 파생값.
+  // calc 값은 저장 경계에서만 페이로드에 주입되고 로컬 responses 상태에는 없으므로,
+  // 이것 없이 evalCtx 를 만들면 calc 셀을 참조하는 분기 조건이 항상 빈 값을 본다
+  // (스펙 §4 가 보장한 "앞 페이지 calc 셀 참조"가 깨짐). 파생 주입이므로 같은 페이지
+  // 참조도 라이브로 동작하지만, 보장 범위는 스펙대로 앞 페이지 참조다.
+  const calcAwareResponses = useMemo(
+    () => withCalcValues(responses, formulaCtx),
+    [responses, formulaCtx],
+  );
+
   // 분기/표시 평가 컨텍스트 — 우변 LUT 룩업 비교가 작동하려면 lookups + contactAttrs 가 필요.
   // responses 는 cell-id 평탄화 형태로 변환 (table 응답만 의미 있음, 비-table 은 LUT 좌변이 될 수 없음).
+  // 인용값은 조건식의 attrsKey 피연산자가 채널을 구분하지 못하므로 여기서만 병합한다 (인용 우선).
   const evalCtx = useMemo<BranchEvalCtx>(
     () => ({
-      responses: responsesToLookupShape(responses),
-      contactAttrs,
+      responses: responsesToLookupShape(calcAwareResponses),
+      contactAttrs: { ...contactAttrs, ...answerQuotes },
       lookups: loadedSurvey?.lookups ?? [],
     }),
-    [responses, contactAttrs, loadedSurvey?.lookups],
+    [calcAwareResponses, contactAttrs, answerQuotes, loadedSurvey?.lookups],
   );
 
   // 상위그룹 단위 + 테이블 분리 렌더 스텝
@@ -457,7 +497,7 @@ function SurveyResponseFlowActive({
     steps,
     questions,
     groups,
-    contactAttrs,
+    contactAttrs: { ...contactAttrs, ...answerQuotes },
     lookups: loadedSurvey?.lookups ?? [],
   });
   useEffect(() => {
@@ -465,10 +505,10 @@ function SurveyResponseFlowActive({
       steps,
       questions,
       groups,
-      contactAttrs,
+      contactAttrs: { ...contactAttrs, ...answerQuotes },
       lookups: loadedSurvey?.lookups ?? [],
     };
-  }, [steps, questions, groups, contactAttrs, loadedSurvey?.lookups]);
+  }, [steps, questions, groups, contactAttrs, answerQuotes, loadedSurvey?.lookups]);
   const restoreStepFromRecovery = useCallback(
     (stepId: string, restoredResponses: ResponsesMap) => {
       const { steps, questions, groups, contactAttrs, lookups } = restoreCtxRef.current;
@@ -541,6 +581,25 @@ function SurveyResponseFlowActive({
     [steps, responses, questions, groups, evalCtx],
   );
 
+  // 스텝이 바뀌면 페이지 상단으로 이동한다.
+  //
+  // 스텝 전환 지점마다 scrollTo 를 부르지 않고 여기 한 곳으로 모은 이유:
+  // (1) 전환 지점이 handleNext·handlePrevious·자동 스킵·재접속 복원·검증 점프로 5곳인데
+  //     자동 스킵과 복원에는 호출이 아예 없어 페이지만 바뀌고 스크롤이 남아 있었다.
+  // (2) 호출 지점에서 부르면 새 페이지가 커밋되기 전에 예약되는데, iOS WebKit 계열
+  //     브라우저는 직후 DOM 이 통째로 교체되면 그 스크롤을 폐기한다. effect 는 커밋
+  //     이후에 실행되므로 새 페이지 레이아웃 기준으로 확정 적용된다.
+  //
+  // behavior 는 'instant' 여야 한다 — globals.css 의 html { scroll-behavior: smooth }
+  // 때문에 'auto' 는 즉시 이동이 아니라 스무스 애니메이션이 되고, 긴 페이지에서
+  // 출발하면 다시 같은 취소 문제에 노출된다.
+  const previousStepIndexRef = useRef(currentStepIndex);
+  useEffect(() => {
+    if (previousStepIndexRef.current === currentStepIndex) return;
+    previousStepIndexRef.current = currentStepIndex;
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }, [currentStepIndex]);
+
   // 현재 step이 전부 숨겨지면 다음 표시 가능 step으로 자동 이동
   useEffect(() => {
     if (!loadedSurvey) return;
@@ -568,6 +627,12 @@ function SurveyResponseFlowActive({
     testIdentity,
   });
 
+  // 이어하기 회복이 내려준 draftSeq — useResponseLifecycle 의 draftSeqRef seed 용.
+  // onRestoreStep 과 동일하게 useSessionRecovery 콜백(onDraftSeqRecovered)으로 전달받아,
+  // useResponseLifecycle 호출 시점(아래)에 prop 으로 넘긴다. 훅 호출 순서상 useSessionRecovery
+  // 가 먼저이므로 콜백은 useResponseLifecycle 내부 값을 직접 참조하지 않고 이 state 를 경유한다.
+  const [recoveredDraftSeq, setRecoveredDraftSeq] = useState<number | undefined>(undefined);
+
   // 운영 현황 콘솔(T6): localStorage 기반 응답 회복 + 회복 토스트 자동 dismiss.
   // 회복 effect + dismiss effect 와 isRecovering/resumeMessage state 를
   // useSessionRecovery 로 추출 (두 effect 등록 순서·deps 동일, 세터 전용이라 훅이 소유).
@@ -587,6 +652,7 @@ function SurveyResponseFlowActive({
     setSessionId,
     setResponses,
     onRestoreStep: restoreStepFromRecovery,
+    onDraftSeqRecovered: setRecoveredDraftSeq,
     setCurrentResponseId,
     setDuplicateStatus,
     setPausedMessage: setRefetchedPausedMessage,
@@ -674,11 +740,20 @@ function SurveyResponseFlowActive({
         allResponses: responses,
         allQuestions: questions,
         optionTexts: effectiveOptionTextsByQuestion[q.id],
+        lookups: loadedSurvey?.lookups ?? [],
+        contactAttrs,
       });
       if (issues.length > 0) map.set(q.id, issues);
     }
     return map;
-  }, [currentStepQuestions, responses, questions, effectiveOptionTextsByQuestion]);
+  }, [
+    currentStepQuestions,
+    responses,
+    questions,
+    effectiveOptionTextsByQuestion,
+    loadedSurvey?.lookups,
+    contactAttrs,
+  ]);
   const [numericErrorStepIndex, setNumericErrorStepIndex] = useState<number | null>(null);
   const showNumericErrors = numericErrorStepIndex === currentStepIndex;
   const focusedQuestionId = currentStepQuestions.find((q) =>
@@ -693,6 +768,17 @@ function SurveyResponseFlowActive({
       : EMPTY_ISSUES;
   }, [showNumericErrors, focusedQuestionId, numericIssuesByQuestion]);
 
+  // 하이라이트 중 "필수 미응답" 사유인 질문만 골라 안내 문구를 붙인다 — 숫자 검증
+  // 위반 하이라이트에는 필수 문구를 섞지 않고, 응답이 채워지면 문구도 즉시 사라진다.
+  const requiredMessageQuestionIds = new Set(
+    currentStepQuestions
+      .filter(
+        (q) =>
+          highlightQuestionIds.has(q.id) && isQuestionRequired(q) && !isQuestionAnswered(q),
+      )
+      .map((q) => q.id),
+  );
+
   const canProceed = () => {
     if (!currentStep) return false;
     // step 내 표시되는 필수 질문 전부가 답변되어야 함
@@ -705,6 +791,8 @@ function SurveyResponseFlowActive({
   const { handleResponse, flushPendingAnswers, handleSubmit } = useResponseLifecycle({
     isAdminEdit,
     isPreview,
+    isCompleted,
+    terminalBlocked: duplicateStatus.kind === 'blocked',
     adminContext,
     inviteToken,
     testToken,
@@ -713,6 +801,7 @@ function SurveyResponseFlowActive({
     hasTestAttemptOwnership,
     setHasTestAttemptOwnership,
     loadedSurvey,
+    contactAttrs,
     currentStep,
     currentStepIndex,
     steps,
@@ -731,6 +820,7 @@ function SurveyResponseFlowActive({
     setPendingResponse,
     resetResponseState,
     isRecovering,
+    recoveredDraftSeq,
     isQuestionAnswered,
     optionTextsByQuestion: effectiveOptionTextsByQuestion,
     visibleProgressRef,
@@ -745,7 +835,18 @@ function SurveyResponseFlowActive({
     setNumericErrorStepIndex,
   });
 
+  // iOS Safari 는 버튼을 탭해도 입력의 포커스를 빼앗지 않는다. 포커스가 남은
+  // 입력이 스텝 전환으로 DOM 에서 제거되면 blur 이벤트 없이 사라져 소프트
+  // 키보드가 닫히지 못하고 빈 패널로 고착된다 (레이아웃이 화면 절반에 갇히고
+  // 아래가 빈 화면으로 남는 증상). 전환 전에 명시적으로 blur 해 키보드를
+  // 정리한다 — 입력이 아직 DOM 에 있는 시점이어야 효과가 있다.
+  const blurActiveInput = () => {
+    const active = document.activeElement;
+    if (active instanceof HTMLElement) active.blur();
+  };
+
   const handleNext = async () => {
+    blurActiveInput();
     const unansweredCurrent = currentStepQuestions.filter(
       (q) => isQuestionRequired(q) && !isQuestionAnswered(q),
     );
@@ -795,14 +896,12 @@ function SurveyResponseFlowActive({
 
     const nextIndex = resolveNextStepIndex();
 
-    // 마지막 제출은 complete가 전체 답을 저장한다. 중간 이동은 현재 페이지 변경분을
-    // 먼저 체크포인트로 저장하고, 실패하면 페이지를 유지해 응답 유실을 막는다.
-    if (nextIndex !== -1 && !(await flushPendingAnswers())) {
-      return;
-    }
-
     // 쿼터 게이트: 인구통계 문항 전부 답변 & 미체크 & responseId 확보 시 서버 확인.
     // fail-open: 오류/미설정은 통과. 판정을 받으면(blocked 여부 무관) 재발동 방지 플래그 set.
+    // 아래 flush 와 병렬로 왕복시켜 전환 대기 시간이 직렬 2왕복이 되지 않게 한다 —
+    // check 는 페이로드의 answers 로 판정하므로 flush 선행에 의존하지 않는다.
+    let quotaPromise: Promise<{ blocked: boolean; closedMessage: string | null } | null> | null =
+      null;
     if (
       !quotaCheckedRef.current &&
       currentResponseId &&
@@ -811,21 +910,34 @@ function SurveyResponseFlowActive({
       // 재진입/중복 발동 방지 — await 완료 전에 먼저 플래그를 세워 재클릭 시에도
       // 서버 확인은 최대 1회만 시도된다.
       quotaCheckedRef.current = true;
-      try {
-        const res = await client.quota.check({
+      quotaPromise = client.quota
+        .check({
           responseId: currentResponseId,
           surveyId: loadedSurvey?.id ?? '',
           answers: responses,
+        })
+        .catch((err) => {
+          console.error('쿼터 확인 오류:', err); // fail-open: 플래그는 이미 위에서 세팅됨
+          return null;
         });
-        if (res.blocked) {
-          setQuotaClosedMessage(res.closedMessage);
-          setDuplicateStatus({ kind: 'blocked', reason: 'quota_closed' });
-          return;
-        }
-      } catch (err) {
-        console.error('쿼터 확인 오류:', err); // fail-open: 플래그는 이미 위에서 세팅됨
+    }
+
+    // 마지막 제출은 complete가 전체 답을 저장한다. 중간 이동은 현재 페이지 변경분을
+    // 먼저 체크포인트로 저장하고, 실패하면 페이지를 유지해 응답 유실을 막는다.
+    // (디바운스 자동 저장이 이미 비워둔 경우 flush 는 왕복 없이 즉시 통과한다.)
+    const flushOk = nextIndex === -1 || (await flushPendingAnswers());
+
+    if (quotaPromise) {
+      const res = await quotaPromise;
+      // 쿼터 마감은 종결 상태라 flush 성패와 무관하게 우선한다.
+      if (res?.blocked) {
+        setQuotaClosedMessage(res.closedMessage);
+        setDuplicateStatus({ kind: 'blocked', reason: 'quota_closed' });
+        return;
       }
     }
+
+    if (!flushOk) return;
 
     setStepHistory((prev) => [...prev, currentStepIndex]);
 
@@ -835,17 +947,18 @@ function SurveyResponseFlowActive({
     }
 
     setCurrentStepIndex(nextIndex);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handlePrevious = useCallback(() => {
     if (stepHistory.length === 0) return;
+    // handleNext 의 blurActiveInput 과 동일 사유 — 포커스 잔류 입력의 키보드 정리
+    const active = document.activeElement;
+    if (active instanceof HTMLElement) active.blur();
     const lastIndex = stepHistory.length - 1;
     const previousStepIndex = stepHistory[lastIndex];
     if (previousStepIndex !== undefined && steps[previousStepIndex]) {
       setCurrentStepIndex(previousStepIndex);
       setStepHistory((prev) => prev.slice(0, lastIndex));
-      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   }, [stepHistory, steps]);
 
@@ -928,8 +1041,14 @@ function SurveyResponseFlowActive({
     );
   }
 
-  // 표 문항 페이지는 표 총폭 기준 분기(718px 초과 → 1280px, 이하 → 896px), 표 없는 페이지는 896px (2026-07-27)
+  // 표가 그려지는 페이지는 표 총폭 기준 분기(718px 초과 → 1280px, 이하 → 896px), 아니면 896px (2026-07-27)
+  // 판정 대상은 type='table' 뿐 아니라 표-소스 radio/checkbox·ranking 도 포함한다 (rendersAsTable)
   // 설문 설정 "화면 너비" 토글이 켜져 있으면 표 유무와 무관하게 항상 넓게 (0063)
+  //
+  // 아래 컨테이너의 폭 전환(300ms)은 max-width 를 애니메이션하므로 매 프레임 clientWidth 가
+  // 바뀐다. 표의 useElementWidth 가 이를 그대로 setState 로 흘리면 표가 프레임마다 리렌더되어
+  // 다음 버튼이 눌린 뒤 화면이 늦게 잡힌다. 그래서 그 훅에서 측정을 코얼레싱한다
+  // (use-element-width.ts). 전환 시간을 늘릴 때 그쪽 창 크기도 함께 보라.
   const containerMaxWidth = resolveResponseContainerWidth(
     currentStep.items.map((i) => i.question),
     { forceWide: loadedSurvey.settings.forceWideLayout },
@@ -939,7 +1058,8 @@ function SurveyResponseFlowActive({
   const submittingLabel = isPreview ? '확인 중...' : '처리 중...';
 
   return (
-    <ContactAttrsProvider attrs={contactAttrs}>
+    <ContactAttrsProvider attrs={contactAttrs} quotes={answerQuotes}>
+      <FormulaEvalProvider value={formulaCtx}>
       <div className="min-h-dvh bg-gray-50">
       {/* 봇 방어 허니팟 — 화면에 안 보이는 입력. 봇이 채우면 서버가 차단 */}
       <HoneypotField ref={honeypotRef} />
@@ -1012,6 +1132,7 @@ function SurveyResponseFlowActive({
           evalCtx={evalCtx}
           onResponse={handleResponse}
           highlightQuestionIds={highlightQuestionIds}
+          requiredMessageQuestionIds={requiredMessageQuestionIds}
           numericIssues={visibleNumericIssues}
         />
 
@@ -1058,6 +1179,7 @@ function SurveyResponseFlowActive({
         />
       )}
       </div>
+      </FormulaEvalProvider>
     </ContactAttrsProvider>
   );
 }

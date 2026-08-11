@@ -8,7 +8,7 @@ import { UserDefinedMultiLevelSelect } from '@/components/survey-builder/user-de
 import { Input } from '@/components/ui/input';
 import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
 import { useMobileView } from '@/hooks/use-media-query';
-import { useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import type { NumericIssue } from '@/lib/survey/numeric-validation';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { Question, QuestionOption } from '@/types/survey';
@@ -170,6 +170,7 @@ function QuestionInputControl({
   onDynamicRowSelectionChange,
 }: QuestionInputProps) {
   const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
 
   // choice_opt 테이블 소스 라디오/체크박스는 hooks 진입 전에 디스패처에서 분기
   if (
@@ -197,7 +198,7 @@ function QuestionInputControl({
           : { agreed: typeof value === 'boolean' ? value : false };
       return (
         <NoticeRenderer
-          content={substituteTokens(question.noticeContent || '', attrs)}
+          content={substituteTokens(question.noticeContent || '', attrs, quotes)}
           {...(question.requiresAcknowledgment !== undefined
             ? { requiresAcknowledgment: question.requiresAcknowledgment }
             : {})}
@@ -279,9 +280,7 @@ function QuestionInputControl({
           {...(question.tableTitle !== undefined ? { tableTitle: question.tableTitle } : {})}
           columns={question.tableColumns}
           rows={question.tableRowsData}
-          {...(question.tableHeaderGrid !== undefined
-            ? { tableHeaderGrid: question.tableHeaderGrid }
-            : {})}
+          {...(question.tableHeaderGrid ? { tableHeaderGrid: question.tableHeaderGrid } : {})}
           {...(typeof value === 'object' && value !== null
             ? { value: value as Record<string, unknown> }
             : {})}
@@ -341,6 +340,8 @@ function RadioQuestion({
   value: SingleChoiceResponse;
   onChange: (value: SingleChoiceResponse) => void;
 }) {
+  const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
   const isSelected = (optionValue: string) => {
     if (isOtherChoiceValue(value)) {
       return value.selectedValue === optionValue;
@@ -392,7 +393,7 @@ function RadioQuestion({
               }}
               className="flex-1 cursor-pointer whitespace-pre-line text-base text-gray-700"
             >
-              {option.label}
+              {substituteTokens(option.label, attrs, quotes)}
             </label>
           </div>
           {option.allowTextInput && isSelected(option.value) && (
@@ -416,6 +417,8 @@ function CheckboxQuestion({
   value: unknown;
   onChange: (value: MultiChoiceResponse) => void;
 }) {
+  const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
   const currentValues = useMemo<MultiChoiceResponse>(
     () => (Array.isArray(value) ? (value as MultiChoiceResponse) : []),
     [value],
@@ -507,7 +510,7 @@ function CheckboxQuestion({
                   disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
                 }`}
               >
-                {option.label}
+                {substituteTokens(option.label, attrs, quotes)}
               </label>
             </div>
             {option.allowTextInput && checked && (
@@ -548,6 +551,8 @@ function SelectQuestion({
   value: SingleChoiceResponse;
   onChange: (value: SingleChoiceResponse) => void;
 }) {
+  const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
   // OtherChoiceValue fallback: snapshot 호환 (Phase 7 cleanup 까지 유지)
   const selectedValue = isOtherChoiceValue(value)
     ? value.selectedValue
@@ -604,7 +609,7 @@ function SelectQuestion({
         <option value="">선택하세요...</option>
         {question.options?.map((option: QuestionOption) => (
           <option key={option.id} value={option.value}>
-            {option.label}
+            {substituteTokens(option.label, attrs, quotes)}
           </option>
         ))}
       </select>

@@ -1,4 +1,4 @@
-import type { TableCell, TableRow } from '@/types/survey';
+import type { CellEnableCondition, TableCell, TableRow } from '@/types/survey';
 
 // ── 타입 ──
 
@@ -7,6 +7,12 @@ export interface CopiedRegion {
   cells: (TableCell | null)[][]; // [relativeRow][relativeCol], null = hidden 위치
   width: number;
   height: number;
+  /**
+   * 원본 셀 id — cells 와 같은 [relativeRow][relativeCol] 격자, null = hidden 위치.
+   * cells 의 스냅샷은 REGION_EXCLUDED_KEYS 로 id 를 제거하므로, 게이팅 컨트롤러처럼
+   * "원본의 어느 셀을 가리켰는가"를 붙여넣기에서 되짚으려면 이 격자로만 가능하다.
+   */
+  sourceCellIds: (string | null)[][];
 }
 
 // ── 상수 ──
@@ -62,6 +68,96 @@ export function createRadioGroupRemapper(genId: () => string): (sourceName: stri
 }
 
 /**
+ * 붙여넣거나 복제된 셀의 게이팅(enabledWhen) 컨트롤러 참조 재해석.
+ *
+ * - `remappedControllerId` 가 있으면(컨트롤러가 복사 영역/복제 행 안) → 그 id 로 치환
+ * - 없지만 컨트롤러가 대상 행에 **보이는 셀**로 존재하면(같은 행 안 이동) → 그대로 유지
+ * - 그 외 → undefined 로 게이팅 제거. 다른 행의 컨트롤러는 같은 행 값만 평가하는
+ *   런타임에서 의미가 없고, 병합으로 숨겨진(isHidden) 셀은 응답이 생길 수 없어
+ *   참조를 유지하면 영구 비활성이 된다 — 죽은 참조를 남기지 않는다.
+ */
+export function resolvePastedGating(
+  condition: CellEnableCondition,
+  remappedControllerId: string | undefined,
+  targetRowCells: ReadonlyArray<Pick<TableCell, 'id' | 'isHidden'>>,
+): CellEnableCondition | undefined {
+  if (remappedControllerId) return { ...condition, controllerCellId: remappedControllerId };
+  const controller = targetRowCells.find((c) => c.id === condition.controllerCellId);
+  if (controller && !controller.isHidden) return condition;
+  return undefined;
+}
+
+/** 병합 스팬이 덮어 숨겨질 셀 id 집합 (앵커 자신 제외). recalculateHiddenCells 와 같은
+ *  근거를 스팬만으로 선계산한다 — isHidden 플래그 재계산 전(draft)에도 판정 가능. */
+function collectSpanCoveredCellIds(rows: readonly TableRow[]): Set<string> {
+  const covered = new Set<string>();
+  for (let r = 0; r < rows.length; r++) {
+    const row = rows[r];
+    if (!row) continue;
+    for (let c = 0; c < row.cells.length; c++) {
+      const cell = row.cells[c];
+      if (!cell) continue;
+      const rs = cell.rowspan || 1;
+      const cs = cell.colspan || 1;
+      if (rs <= 1 && cs <= 1) continue;
+      for (let rr = r; rr < Math.min(r + rs, rows.length); rr++) {
+        for (let cc = c; cc < c + cs; cc++) {
+          if (rr === r && cc === c) continue;
+          const victim = rows[rr]?.cells[cc];
+          if (victim) covered.add(victim.id);
+        }
+      }
+    }
+  }
+  return covered;
+}
+
+/**
+ * 붙여넣기 직후 게이팅 죽은 참조 정리 (붙여넣기 영향 행 한정, draft 변이).
+ *
+ * 붙여넣은 병합 앵커가 같은 행의 컨트롤러를 **새로** 덮으면, 그 컨트롤러를 참조하던
+ * 게이팅 셀은 응답이 생길 수 없는 셀을 보게 되어 영구 비활성이 된다. isHidden 재계산
+ * 전이라도 스팬 커버리지로 같은 판정을 선계산해 제거한다.
+ *
+ * - 붙여넣기 영역 **안** 셀: 조건이 방금 복사된 사본이므로 죽은 참조(컨트롤러 부재·숨김)를
+ *   모두 제거한다.
+ * - 영역 **밖** 셀: 이 붙여넣기가 새로 숨긴 컨트롤러만 제거한다 — 이전부터 죽어 있던
+ *   참조는 사용자 저작 데이터라 건드리지 않고 빌더 진단(red)에 맡긴다.
+ *
+ * immer draft 안에서 호출해야 undo(inversePatches)가 정리까지 되돌린다.
+ */
+export function pruneDeadGatingAfterPaste(
+  draft: TableRow[],
+  originalRows: readonly TableRow[],
+  area: { fromRow: number; toRow: number; fromCol: number; toCol: number },
+): void {
+  const coveredAfter = collectSpanCoveredCellIds(draft);
+  const coveredBefore = collectSpanCoveredCellIds(originalRows);
+
+  for (let r = Math.max(0, area.fromRow); r <= Math.min(area.toRow, draft.length - 1); r++) {
+    const row = draft[r];
+    if (!row) continue;
+    for (let c = 0; c < row.cells.length; c++) {
+      const cell = row.cells[c];
+      if (!cell?.enabledWhen) continue;
+      const controller = row.cells.find((c2) => c2.id === cell.enabledWhen!.controllerCellId);
+      const dead = !controller || coveredAfter.has(controller.id);
+      if (!dead) continue;
+
+      const insideArea = c >= area.fromCol && c <= area.toCol;
+      const newlyHidden =
+        controller !== undefined &&
+        coveredAfter.has(controller.id) &&
+        !coveredBefore.has(controller.id);
+      if (insideArea || newlyHidden) {
+        delete cell.enabledWhen;
+        delete cell.requiredWhenEnabled;
+      }
+    }
+  }
+}
+
+/**
  * 대상 셀에서 새 타입에 해당하지 않는 잔여 속성을 정리한다.
  * 예: checkbox → radio 복사 시, 대상의 기존 checkboxOptions 제거
  */
@@ -76,6 +172,28 @@ export function clearStaleTypeProperties(
         targetCell[key] = undefined;
       }
     }
+  }
+}
+
+/**
+ * 셀 복제·붙여넣기 후 옵션 id 를 재발번한다.
+ * 옵션 id 는 질문 안에서 유일해야 한다 — allowTextInput 사이드카 텍스트가
+ * optionTexts[questionId][option.id] 로 저장되므로(option-text-input.tsx),
+ * id 를 그대로 복사하면 두 셀의 기타 입력칸이 같은 슬롯을 공유한다.
+ * 선택 응답·게이팅 values 는 option.value 기준이라 id 재발번은 안전하다.
+ */
+export function regenerateCellOptionIds(cell: TableCell, idGen: () => string): void {
+  if (cell.radioOptions) {
+    cell.radioOptions = cell.radioOptions.map((o) => ({ ...o, id: idGen() }));
+  }
+  if (cell.checkboxOptions) {
+    cell.checkboxOptions = cell.checkboxOptions.map((o) => ({ ...o, id: idGen() }));
+  }
+  if (cell.selectOptions) {
+    cell.selectOptions = cell.selectOptions.map((o) => ({ ...o, id: idGen() }));
+  }
+  if (cell.rankingOptions) {
+    cell.rankingOptions = cell.rankingOptions.map((o) => ({ ...o, id: idGen() }));
   }
 }
 
@@ -181,15 +299,18 @@ export function extractRegionFromRows(
   const height = maxRow - minRow + 1;
   const width = maxCol - minCol + 1;
   const cells: (TableCell | null)[][] = [];
+  const sourceCellIds: (string | null)[][] = [];
 
   for (let r = minRow; r <= maxRow; r++) {
     const rowCells: (TableCell | null)[] = [];
+    const rowSourceIds: (string | null)[] = [];
     const row = rows[r];
 
     for (let c = minCol; c <= maxCol; c++) {
       const cell = row?.cells[c];
       if (!cell || cell.isHidden) {
         rowCells.push(null);
+        rowSourceIds.push(null);
         continue;
       }
 
@@ -201,12 +322,31 @@ export function extractRegionFromRows(
         }
       }
       rowCells.push(structuredClone(cleaned) as unknown as TableCell);
+      rowSourceIds.push(cell.id);
     }
 
     cells.push(rowCells);
+    sourceCellIds.push(rowSourceIds);
   }
 
-  return { cells, width, height };
+  return { cells, width, height, sourceCellIds };
+}
+
+/**
+ * 복사 영역에서 원본 셀 id 의 상대 위치를 찾는다 (게이팅 컨트롤러 리매핑용).
+ * 스냅샷 셀(cells)에는 id 가 없으므로 sourceCellIds 격자로만 판정한다.
+ */
+export function findRegionSourceCellPos(
+  region: CopiedRegion,
+  sourceCellId: string,
+): { row: number; col: number } | undefined {
+  for (let r = 0; r < region.sourceCellIds.length; r++) {
+    const rowIds = region.sourceCellIds[r];
+    if (!rowIds) continue;
+    const c = rowIds.indexOf(sourceCellId);
+    if (c !== -1) return { row: r, col: c };
+  }
+  return undefined;
 }
 
 // ── 붙여넣기 검증 ──

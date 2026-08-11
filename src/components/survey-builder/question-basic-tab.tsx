@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   DndContext,
@@ -33,13 +33,19 @@ import { getGroupTypeOfCell } from '@/utils/choice-group-helpers';
 import { isPartialNumericInput, parseNumericInput } from '@/utils/numeric-input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { generateId } from '@/lib/utils';
-import { generateOptionCode } from '@/utils/option-code-generator';
+import { cn, generateId } from '@/lib/utils';
+import { commitOptionCode, generateOptionCode } from '@/utils/option-code-generator';
+import { DEFAULT_REQUIRED_MESSAGE } from '@/utils/required-message';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { useSurveyUIStore } from '@/stores/ui-store';
 import { isOptionListType } from '@/types/question-types';
 import { Question, QuestionOption, SelectLevel } from '@/types/survey';
 
+import {
+  AnswerQuoteQuestionControl,
+  AnswerQuoteTextField,
+  supportsAnswerQuote,
+} from './answer-quote-fields';
 import { OptionLabelTextarea } from './option-label-textarea';
 import { OptionPlaceholderEditor } from './option-placeholder-editor';
 import { VariableButton } from './variable-button';
@@ -86,6 +92,13 @@ interface QuestionBasicTabProps {
     clear?: OptionalOptionKey[],
   ) => void;
   removeOption: (optionId: string) => void;
+  /**
+   * 질문 레벨 옵션의 optionCode Input blur 커밋으로 value가 동기화되면 상위(question-edit-modal)에 통보한다.
+   * 상위는 저장(Save) 시점에 이 questionId를 sourceQuestionId로 참조하는 다른 질문/그룹/
+   * 행/열의 displayCondition을 remapOptionValueInConditions로 일괄 리매핑하는 데 사용한다.
+   * (표 셀 옵션은 셀 저장이 곧 DB 커밋이라 셀 모달이 직접 리매핑한다 — 이 통로를 쓰지 않는다)
+   */
+  onOptionValueChange?: (change: { oldValue: string; newValue: string }) => void;
   // select level helpers
   addSelectLevel: () => void;
   updateSelectLevel: (levelId: string, updates: Partial<SelectLevel>) => void;
@@ -115,6 +128,7 @@ export function QuestionBasicTab({
   addOption,
   updateOption,
   removeOption,
+  onOptionValueChange,
   addSelectLevel,
   updateSelectLevel,
   removeSelectLevel,
@@ -129,6 +143,34 @@ export function QuestionBasicTab({
   const titleRef = useRef<HTMLInputElement>(null);
   // 공지사항 RichTextEditor ref — unmount 시 미사용 첨부·이미지 정리에 사용
   const noticeEditorRef = useRef<RichTextEditorHandle>(null);
+
+  // optionCode Input의 blur 커밋 후 다른 옵션과 응답값이 중복되는 옵션 id 집합 (경고 표시용)
+  const [conflictOptionIds, setConflictOptionIds] = useState<Set<string>>(new Set());
+
+  /**
+   * "변수번호"(optionCode) Input의 blur 커밋 — commitOptionCode 로 value 동기화를 시도한다.
+   * onChange 는 타이핑마다 optionCode 필드만 갱신(제어 컴포넌트 유지)하고, value 동기화는
+   * 여기(blur)에서만 일어난다 — 타이핑 중간값이 응답 키(value)로 새는 것을 막기 위함.
+   * cell-choice-editor.tsx 의 commitCode 와 동일 패턴(Task 3).
+   */
+  const commitOptionCodeAt = useCallback(
+    (index: number, code: string) => {
+      const options = formData.options ?? [];
+      const target = options[index];
+      if (!target) return;
+      const { options: next, valueChange, conflict } = commitOptionCode(options, index, code);
+      setFormData((prev) => ({ ...prev, options: next }));
+      setConflictOptionIds((prev) => {
+        if (prev.has(target.id) === conflict) return prev;
+        const nextSet = new Set(prev);
+        if (conflict) nextSet.add(target.id);
+        else nextSet.delete(target.id);
+        return nextSet;
+      });
+      if (valueChange) onOptionValueChange?.(valueChange);
+    },
+    [formData.options, setFormData, onOptionValueChange],
+  );
 
   // 모달 close (취소·저장) 또는 다른 질문 선택으로 unmount 될 때
   // tmp 위치에 남은 미사용 첨부·이미지를 폐기. 저장 흐름에서는 publish 단계의
@@ -158,6 +200,13 @@ export function QuestionBasicTab({
 
   // 토큰 prefill(defaultValueTemplate)이 설정되면 숫자 초기값(emptyDefault)은 비활성 — prefill 우선
   const hasTokenPrefill = (formData.defaultValueTemplate ?? '').trim().length > 0;
+
+  // 응답 인용 — 기본 꺼짐. 켜졌을 때만 옵션·셀 단위 문구 입력칸이 추가로 등장한다.
+  const answerQuoteEnabled = formData.answerQuoteEnabled ?? false;
+  // 표 질문은 인용 이름을 셀이 소유한다(셀 모달 헤더 토글) — 질문 레벨 토글을 함께 보이면
+  // 한 기능에 토글이 둘로 보인다. supportsAnswerQuote 자체는 수집기 대상 유형과 1:1 이라
+  // 건드리지 않고, 렌더 조건만 좁힌다.
+  const showAnswerQuoteControl = supportsAnswerQuote(question.type) && question.type !== 'table';
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -471,7 +520,7 @@ export function QuestionBasicTab({
           </div>
         </div>
 
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center gap-2">
           <Switch
             id="required"
             checked={formData.required || false}
@@ -479,7 +528,23 @@ export function QuestionBasicTab({
               setFormData((prev) => ({ ...prev, required: checked }))
             }
           />
-          <Label htmlFor="required">필수 질문</Label>
+          <Label htmlFor="required" className="shrink-0">
+            필수 질문
+          </Label>
+          {formData.required && (
+            <Input
+              id="requiredMessage"
+              value={formData.requiredMessage ?? ''}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  requiredMessage: e.target.value || null,
+                }))
+              }
+              placeholder={DEFAULT_REQUIRED_MESSAGE}
+              className="ml-2 flex-1"
+            />
+          )}
         </div>
 
         {/* 단답형 질문용 placeholder 설정 */}
@@ -655,6 +720,28 @@ export function QuestionBasicTab({
         )}
       </div>
 
+      {/* 응답 인용 설정 — 옵션/셀 블록 위에 두어 토글과 옵션별 문구가 한눈에 이어지도록 */}
+      {showAnswerQuoteControl && (
+        <AnswerQuoteQuestionControl
+          enabled={answerQuoteEnabled}
+          onEnabledChange={(checked) =>
+            // 끌 때 옵션·셀의 문구는 지우지 않는다 — 다시 켜면 그대로 돌아와야 한다.
+            setFormData((prev) => ({ ...prev, answerQuoteEnabled: checked }))
+          }
+          name={formData.answerQuoteName ?? ''}
+          onNameChange={(name) => setFormData((prev) => ({ ...prev, answerQuoteName: name }))}
+          {...(question.type === 'text'
+            ? {
+                questionText: {
+                  value: formData.answerQuoteText,
+                  onChange: (value: string) =>
+                    setFormData((prev) => ({ ...prev, answerQuoteText: value })),
+                },
+              }
+            : {})}
+        />
+      )}
+
       {/* 순위형(ranking) 설정 — 선택 옵션 블록 위로 배치해 항상 먼저 보이도록 */}
       {question.type === 'ranking' && (
         <RankingConfigEditorForQuestion formData={formData} setFormData={setFormData} />
@@ -805,7 +892,10 @@ export function QuestionBasicTab({
                     totalCount={formData.options?.length ?? 0}
                     updateOption={updateOption}
                     removeOption={removeOption}
+                    onCommitCode={commitOptionCodeAt}
+                    hasConflict={conflictOptionIds.has(option.id)}
                     showBranchSettings={showBranchSettings}
+                    answerQuoteEnabled={answerQuoteEnabled}
                     questions={questions}
                     questionId={questionId}
                   />
@@ -1103,6 +1193,21 @@ export function QuestionBasicTab({
                                       </div>
                                     </div>
                                   )}
+
+                                  {answerQuoteEnabled && (
+                                    <div className="ml-8">
+                                      <AnswerQuoteTextField
+                                        id={`answer-quote-level-option-${option.id}`}
+                                        value={option.answerQuoteText}
+                                        onChange={(answerQuoteText) =>
+                                          updateLevelOption(level.id, option.id, {
+                                            answerQuoteText,
+                                          })
+                                        }
+                                        showInputTokenHint={option.allowTextInput === true}
+                                      />
+                                    </div>
+                                  )}
                                 </div>
                               );
                             })}
@@ -1221,10 +1326,11 @@ export function QuestionBasicTab({
             tableTitle={formData.tableTitle}
             columns={formData.tableColumns}
             rows={formData.tableRowsData}
-            tableHeaderGrid={formData.tableHeaderGrid}
+            tableHeaderGrid={formData.tableHeaderGrid ?? undefined}
             currentQuestionId={questionId || ''}
             questionCode={formData.questionCode}
             questionTitle={formData.title}
+            answerQuoteEnabled={answerQuoteEnabled}
             dynamicRowConfigs={formData.dynamicRowConfigs}
             onTableChange={(data) => {
               setFormData((prev) => {
@@ -1234,11 +1340,9 @@ export function QuestionBasicTab({
                   tableColumns: data.tableColumns,
                   tableRowsData: data.tableRowsData,
                 };
-                if (data.tableHeaderGrid !== undefined) {
-                  next.tableHeaderGrid = data.tableHeaderGrid;
-                } else {
-                  delete next.tableHeaderGrid;
-                }
+                // 키를 지우면 저장 경로가 "미변경"으로 읽어 해제가 유실된다.
+                // 에디터는 그리드가 없으면 null 을 실어 보내므로 그대로 반영한다.
+                next.tableHeaderGrid = data.tableHeaderGrid;
                 return next;
               });
             }}
@@ -1263,7 +1367,7 @@ export function QuestionBasicTab({
                 tableTitle={formData.tableTitle}
                 columns={formData.tableColumns}
                 rows={formData.tableRowsData}
-                tableHeaderGrid={formData.tableHeaderGrid}
+                tableHeaderGrid={formData.tableHeaderGrid ?? undefined}
                 className="border-2 border-dashed border-gray-300"
                 hideColumnLabels={questions.find((q) => q.id === questionId)?.hideColumnLabels}
                 choiceControlType={(cell) =>
@@ -1327,7 +1431,13 @@ interface SortableOptionItemProps {
     clear?: OptionalOptionKey[],
   ) => void;
   removeOption: (optionId: string) => void;
+  /** optionCode Input의 blur 커밋 — value 동기화를 시도하고 중복 경고 state 를 갱신한다. */
+  onCommitCode: (index: number, code: string) => void;
+  /** blur 커밋 결과 이 옵션의 응답값이 다른 옵션과 중복되는지 여부 (경고 표시용). */
+  hasConflict: boolean;
   showBranchSettings: boolean;
+  /** 질문 단위 응답 인용 토글 — 켜졌을 때만 옵션별 인용 문구 입력칸을 노출한다. */
+  answerQuoteEnabled: boolean;
   questions: Question[];
   questionId: string;
 }
@@ -1338,7 +1448,10 @@ function SortableOptionItem({
   totalCount,
   updateOption,
   removeOption,
+  onCommitCode,
+  hasConflict,
   showBranchSettings,
+  answerQuoteEnabled,
   questions,
   questionId,
 }: SortableOptionItemProps) {
@@ -1411,13 +1524,24 @@ function SortableOptionItem({
         <div className="flex flex-col items-center gap-0.5">
           <span className="text-[10px] text-gray-400">변수번호</span>
           <Input
+            aria-label="변수번호"
             value={option.optionCode ?? generateOptionCode(index, totalCount)}
             onChange={(e) => updateOption(option.id, {
               optionCode: e.target.value,
               isCustomOptionCode: true,
             } as Partial<QuestionOption>)}
-            className="h-8 w-16 text-center text-xs"
+            onBlur={() => onCommitCode(index, option.optionCode ?? '')}
+            aria-invalid={hasConflict}
+            className={cn(
+              'h-8 w-16 text-center text-xs',
+              hasConflict && 'border-red-500 focus-visible:ring-red-500',
+            )}
           />
+          {hasConflict && (
+            <p className="w-24 text-center text-[10px] text-red-500">
+              응답값이 다른 옵션과 중복됩니다
+            </p>
+          )}
         </div>
         {option.isCustomOptionCode && (
           <Button
@@ -1456,6 +1580,17 @@ function SortableOptionItem({
             } as Partial<QuestionOption>)
           }
         />
+      )}
+
+      {answerQuoteEnabled && (
+        <div className="px-3 pb-3">
+          <AnswerQuoteTextField
+            id={`answer-quote-option-${option.id}`}
+            value={option.answerQuoteText}
+            onChange={(answerQuoteText) => updateOption(option.id, { answerQuoteText })}
+            showInputTokenHint={option.allowTextInput === true}
+          />
+        </div>
       )}
 
       {showBranchSettings && (

@@ -11,6 +11,7 @@ export const INTERACTIVE_CELL_TYPES = new Set([
   'input',
   'ranking_opt',
   'choice_opt',
+  'calc',
 ]);
 
 /**
@@ -144,6 +145,8 @@ export function inferSpssVarType(cellType: TableCell['type']): TableCell['spssVa
       return 'Numeric';
     case 'input':
       return 'String';
+    case 'calc':
+      return 'Numeric';
     default:
       return undefined;
   }
@@ -157,6 +160,8 @@ export function inferSpssMeasure(cellType: TableCell['type']): TableCell['spssMe
     case 'select':
       return 'Nominal';
     case 'input':
+      return 'Continuous';
+    case 'calc':
       return 'Continuous';
     default:
       return undefined;

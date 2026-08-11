@@ -249,6 +249,7 @@ export async function saveSurveyDiff(
           title: question.title,
           description: question.description,
           required: question.required,
+          requiredMessage: question.requiredMessage ?? null,
           order: question.order,
           options: (question.options ? stripOptionCodes(question.options) : question.options) as NewQuestion['options'],
           selectLevels: question.selectLevels as NewQuestion['selectLevels'],
@@ -294,6 +295,9 @@ export async function saveSurveyDiff(
           emptyDefault: question.emptyDefault ?? null,
           piiEncrypted: question.piiEncrypted ?? false,
           pageBreakBefore: question.pageBreakBefore,
+          answerQuoteEnabled: question.answerQuoteEnabled,
+          answerQuoteName: question.answerQuoteName,
+          answerQuoteText: question.answerQuoteText,
           updatedAt: new Date(),
         }) satisfies CompleteQuestionWrite);
 
@@ -308,6 +312,7 @@ export async function saveSurveyDiff(
               title: sql`excluded.title`,
               description: sql`excluded.description`,
               required: sql`excluded.required`,
+              requiredMessage: sql`excluded.required_message`,
               order: sql`excluded.order`,
               options: sql`excluded.options`,
               selectLevels: sql`excluded.select_levels`,
@@ -351,6 +356,9 @@ export async function saveSurveyDiff(
               emptyDefault: sql`excluded.empty_default`,
               piiEncrypted: sql`excluded.pii_encrypted`,
               pageBreakBefore: sql`excluded.page_break_before`,
+              answerQuoteEnabled: sql`excluded.answer_quote_enabled`,
+              answerQuoteName: sql`excluded.answer_quote_name`,
+              answerQuoteText: sql`excluded.answer_quote_text`,
               updatedAt: sql`excluded.updated_at`,
             } satisfies CompleteQuestionWrite,
           });
@@ -611,6 +619,7 @@ export async function saveSurveyWithDetails(
           title: question.title,
           description: question.description,
           required: question.required,
+          requiredMessage: question.requiredMessage ?? null,
           order: question.order,
           options: (question.options ? stripOptionCodes(question.options) : question.options) as NewQuestion['options'],
           selectLevels: question.selectLevels as NewQuestion['selectLevels'],
@@ -656,6 +665,9 @@ export async function saveSurveyWithDetails(
           emptyDefault: question.emptyDefault ?? null,
           piiEncrypted: question.piiEncrypted ?? false,
           pageBreakBefore: question.pageBreakBefore,
+          answerQuoteEnabled: question.answerQuoteEnabled,
+          answerQuoteName: question.answerQuoteName,
+          answerQuoteText: question.answerQuoteText,
           updatedAt: new Date(),
         }) satisfies CompleteQuestionWrite);
 
@@ -670,6 +682,7 @@ export async function saveSurveyWithDetails(
               title: sql`excluded.title`,
               description: sql`excluded.description`,
               required: sql`excluded.required`,
+              requiredMessage: sql`excluded.required_message`,
               order: sql`excluded.order`,
               options: sql`excluded.options`,
               selectLevels: sql`excluded.select_levels`,
@@ -713,6 +726,9 @@ export async function saveSurveyWithDetails(
               emptyDefault: sql`excluded.empty_default`,
               piiEncrypted: sql`excluded.pii_encrypted`,
               pageBreakBefore: sql`excluded.page_break_before`,
+              answerQuoteEnabled: sql`excluded.answer_quote_enabled`,
+              answerQuoteName: sql`excluded.answer_quote_name`,
+              answerQuoteText: sql`excluded.answer_quote_text`,
               updatedAt: sql`excluded.updated_at`,
             } satisfies CompleteQuestionWrite,
           });

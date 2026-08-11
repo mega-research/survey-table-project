@@ -54,6 +54,72 @@ describe('resolveResponseContainerWidth', () => {
     ).toBe('max-w-7xl');
   });
 
+  // 화면에 표가 그려지는 문항은 type='table' 뿐이 아니다 (rendersAsTable 기준).
+  describe('표-소스 문항', () => {
+    const choiceRow = {
+      id: 'r1',
+      label: '',
+      cells: [{ id: 'cell-1', content: '', type: 'choice_opt' as const }],
+    };
+
+    it('표-소스 radio 도 표 총폭 기준으로 판정한다', () => {
+      expect(
+        resolveResponseContainerWidth([
+          { type: 'radio', tableColumns: [col(319), col(400)], tableRowsData: [choiceRow] },
+        ]),
+      ).toBe('max-w-7xl');
+      expect(
+        resolveResponseContainerWidth([
+          { type: 'radio', tableColumns: [col(318), col(400)], tableRowsData: [choiceRow] },
+        ]),
+      ).toBe('max-w-4xl');
+    });
+
+    it('표-소스 checkbox 의 넓은 표도 max-w-7xl', () => {
+      expect(
+        resolveResponseContainerWidth([
+          { type: 'checkbox', tableColumns: [col(500), col(500)], tableRowsData: [choiceRow] },
+        ]),
+      ).toBe('max-w-7xl');
+    });
+
+    it('표-소스 ranking 의 넓은 내장 표도 max-w-7xl', () => {
+      expect(
+        resolveResponseContainerWidth([
+          {
+            type: 'ranking',
+            rankingConfig: { positions: 3, optionsSource: 'table' },
+            tableColumns: [col(500), col(500)],
+            tableRowsData: [
+              { id: 'r1', label: '', cells: [{ id: 'c1', content: '', type: 'ranking_opt' }] },
+            ],
+          },
+        ]),
+      ).toBe('max-w-7xl');
+    });
+
+    it('choice_opt 셀 없이 tableColumns 잔재만 있는 radio 는 넓히지 않는다', () => {
+      expect(
+        resolveResponseContainerWidth([
+          {
+            type: 'radio',
+            tableColumns: [col(500), col(500)],
+            tableRowsData: [{ id: 'r1', label: '', cells: [{ id: 'c1', content: '', type: 'text' }] }],
+          },
+        ]),
+      ).toBe('max-w-4xl');
+    });
+
+    it('표 문항과 표-소스 문항이 섞이면 가장 넓은 표 기준', () => {
+      expect(
+        resolveResponseContainerWidth([
+          { type: 'table', tableColumns: [col(200)] },
+          { type: 'radio', tableColumns: [col(500), col(500)], tableRowsData: [choiceRow] },
+        ]),
+      ).toBe('max-w-7xl');
+    });
+  });
+
   it('threshold 상수는 718 이다', () => {
     expect(RESPONSE_WIDE_TABLE_THRESHOLD_PX).toBe(718);
   });

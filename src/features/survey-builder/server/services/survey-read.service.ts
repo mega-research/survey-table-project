@@ -17,12 +17,14 @@ import { normalizeQuestions } from '@/lib/question';
 import { findContactByInviteToken } from '@/lib/duplicate-detection/invite-lookup';
 import { isValidTestToken } from '@/lib/survey-control';
 import { normalizeResponseHeaderConfig } from '@/lib/survey/response-header-config';
+import { isValidUUID } from '@/lib/utils';
 import type { QuestionGroup, Question as QuestionType, Survey as SurveyType } from '@/types/survey';
 import { generateAllCellCodes } from '@/utils/table-cell-code-generator';
 
 import type {
   SlugAvailableInput,
   SurveyBySlugInput,
+  SurveyByPreviewTokenInput,
   SurveyByPrivateTokenInput,
   SurveyForResponseInput,
   SurveyForResponseResult,
@@ -160,11 +162,39 @@ export async function getSurveyBySlug(
 }
 
 // 비공개 토큰으로 설문 조회 (pub). 토큰으로 조회하되(로직 유지) 반환은 id 만 투영(I-3).
+//
+// privateToken 컬럼은 uuid 타입이라 비-UUID 값으로 조회하면 PG 가
+// 22P02(invalid input syntax for type uuid) 를 던진다. 인증 없는 공개 라우트
+// (/preview/[token] 등)에서 호출되므로 형태가 다른 값은 DB 까지 보내지 않고
+// throw 없이 undefined 로 흡수한다 — lookupContactByToken(mail-unsubscribe.service.ts)
+// 과 동일 패턴. 서비스 레벨에서 막아야 RPC 프로시저 직접 호출 경로까지 함께 보호된다.
 export async function getSurveyByPrivateToken(
   input: SurveyByPrivateTokenInput,
 ): Promise<SurveyIdRow | undefined> {
+  if (!isValidUUID(input.token)) return undefined;
+
   const survey = await db.query.surveys.findFirst({
     where: eq(surveys.privateToken, input.token),
+    columns: { id: true },
+  });
+  return survey;
+}
+
+// 공개 읽기전용 미리보기 토큰으로 설문 조회 (인증 없음, /preview/[token] 전용).
+// privateToken(응답 크레덴셜)과 완전히 분리된 컬럼만 조회한다 — id/slug/privateToken 으로는
+// 절대 매칭하지 않는다(previewToken 이 답변 크레덴셜로 오용되는 것을 막는 핵심 불변식).
+// 반환은 getSurveyByPrivateToken 과 동일하게 id 만 투영(I-3).
+//
+// previewToken 컬럼도 uuid 타입이라 비-UUID 값으로 조회하면 PG 가
+// 22P02(invalid input syntax for type uuid) 를 던진다. getSurveyByPrivateToken 과 동일한
+// 이유로 형태가 다른 값은 DB 까지 보내지 않고 throw 없이 undefined 로 흡수한다.
+export async function getSurveyByPreviewToken(
+  input: SurveyByPreviewTokenInput,
+): Promise<SurveyIdRow | undefined> {
+  if (!isValidUUID(input.token)) return undefined;
+
+  const survey = await db.query.surveys.findFirst({
+    where: eq(surveys.previewToken, input.token),
     columns: { id: true },
   });
   return survey;

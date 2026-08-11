@@ -9,6 +9,7 @@ import type {
 
 vi.mock('@/lib/survey/contact-attrs-context', () => ({
   useContactAttrs: () => ({}),
+  useAnswerQuotes: () => ({}),
 }));
 
 beforeAll(() => {

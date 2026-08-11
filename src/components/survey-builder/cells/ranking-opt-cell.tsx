@@ -3,7 +3,7 @@
 import React from 'react';
 
 import { cn } from '@/lib/utils';
-import { getCellTextClassName } from '@/utils/cell-style';
+import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
 import type { InteractiveCellProps, PreviewCellProps } from './types';
 
 /**
@@ -35,6 +35,7 @@ export const RankingOptCell = React.memo(function RankingOptCell({
             'text-sm whitespace-pre-wrap text-gray-800 [overflow-wrap:anywhere]',
             getCellTextClassName(cell),
           )}
+          style={getCellTextStyle(cell)}
         >
           {cell.content}
         </div>

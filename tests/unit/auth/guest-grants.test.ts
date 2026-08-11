@@ -85,6 +85,16 @@ describe('guestPathRedirect', () => {
     expect(guestPathRedirect('/admin/login', sid)).toBeNull();
   });
 
+  it('grant 설문의 설문 보기(preview)는 허용, 다른 설문 preview 는 차단', () => {
+    expect(guestPathRedirect(`/admin/surveys/${sid}/preview`, sid)).toBeNull();
+    expect(guestPathRedirect(`/admin/surveys/other/preview`, sid)).toBe(
+      `/admin/surveys/${sid}/operations/overview`,
+    );
+    expect(guestPathRedirect(`/admin/surveys/${sid}-suffix/preview`, sid)).toBe(
+      `/admin/surveys/${sid}/operations/overview`,
+    );
+  });
+
   it('차단 경로는 overview 로 리다이렉트', () => {
     const dest = `/admin/surveys/${sid}/operations/overview`;
     expect(guestPathRedirect('/admin/surveys', sid)).toBe(dest);
@@ -111,5 +121,10 @@ describe('guestPathRedirect', () => {
     expect(guestPathRedirect(`${base}/contacts`, sid)).toBeNull();
     expect(guestPathRedirect(`${base}/contacts/new`, sid)).toBeNull();
     expect(guestPathRedirect(`${base}/contacts/abc123`, sid)).toBeNull();
+  });
+
+  it('쿼터 경로는 게스트에게 차단되어 overview 로 돌린다 - quota.save 가 authed', () => {
+    const base = `/admin/surveys/${sid}/operations`;
+    expect(guestPathRedirect(`${base}/quota`, sid)).toBe(`${base}/overview`);
   });
 });

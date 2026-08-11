@@ -42,16 +42,22 @@ interface DynamicTableEditorProps {
   tableTitle?: string | undefined;
   columns?: TableColumn[] | undefined;
   rows?: TableRow[] | undefined;
-  tableHeaderGrid?: HeaderCell[][] | undefined;
+  tableHeaderGrid?: HeaderCell[][] | null | undefined;
   currentQuestionId?: string | undefined;
   questionCode?: string | undefined;
   questionTitle?: string | undefined;
+  /**
+   * 질문 단위 응답 인용 토글. 셀 편집 모달의 인용 문구 입력칸 노출 여부를 결정한다.
+   * 스토어가 아니라 편집 모달의 formData 에서 내려온다 — 저장 전 토글도 즉시 반영되어야 하기 때문.
+   */
+  answerQuoteEnabled?: boolean | undefined;
   dynamicRowConfigs?: DynamicRowGroupConfig[] | undefined;
   onTableChange: (data: {
     tableTitle: string;
     tableColumns: TableColumn[];
     tableRowsData: TableRow[];
-    tableHeaderGrid?: HeaderCell[][] | undefined;
+    // 해제는 명시적 null (키 생략 금지) — use-table-editor 의 계약과 동일.
+    tableHeaderGrid: HeaderCell[][] | null;
   }) => void;
   onDynamicRowConfigsChange?: (configs: DynamicRowGroupConfig[] | undefined) => void;
 }
@@ -116,6 +122,7 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
     deleteColumn,
     moveColumn,
     updateColumnLabel,
+    updateColumnStyle,
     updateColumnCode,
     handleColumnWidthChange,
     setEditingColumnWidth,
@@ -598,6 +605,7 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
                 editingColumnWidth={editingColumnWidth}
                 hasQuestions={hasQuestions}
                 onUpdateColumnLabel={updateColumnLabel}
+                onUpdateColumnStyle={updateColumnStyle}
                 onUpdateColumnCode={updateColumnCode}
                 onMoveColumn={moveColumn}
                 onDeleteColumn={deleteColumn}
@@ -839,6 +847,7 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
         <CellContentModal
           isOpen={!!selectedCell}
           onClose={() => setSelectedCell(null)}
+          ownQuestion={currentQuestionAsQuestion}
           currentQuestionId={currentQuestionId}
           questionCode={questionCode}
           questionTitle={questionTitle}
@@ -847,6 +856,7 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
           columnCode={selectedCellContext.columnCode}
           columnLabel={selectedCellContext.columnLabel}
           cell={selectedCellContext.cell}
+          answerQuoteEnabled={props.answerQuoteEnabled ?? false}
           getLatestRows={() => currentRowsRef.current}
           choiceGroups={currentQuestion?.choiceGroups}
           onChoiceGroupsChange={(groups: ChoiceGroup[]) => {
@@ -864,10 +874,17 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
               ...(pruned !== undefined ? { choiceGroups: pruned } : { choiceGroups: [] }),
             });
           }}
-          onSave={(cell) => {
+          onSave={(cell, valueChanges) => {
             if (selectedCellContext.rowIndex !== -1 && selectedCellContext.cellIndex !== -1) {
-              updateCell(selectedCellContext.rowIndex, selectedCellContext.cellIndex, cell);
+              updateCell(
+                selectedCellContext.rowIndex,
+                selectedCellContext.cellIndex,
+                cell,
+                valueChanges,
+              );
             }
+            // 표 밖(다른 질문/그룹/행/열)의 표시조건 리매핑은 셀 모달이 DB 커밋 직후 직접
+            // 수행한다 — 셀 저장이 이미 비가역 커밋 지점이라 질문 저장까지 미룰 수 없다.
           }}
         />
       )}

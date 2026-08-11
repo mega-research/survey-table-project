@@ -18,6 +18,7 @@ vi.mock('@/hooks/use-media-query', () => ({
 }));
 vi.mock('@/lib/survey/contact-attrs-context', () => ({
   useContactAttrs: () => contactAttrs.current,
+  useAnswerQuotes: () => ({}),
 }));
 
 beforeAll(() => {

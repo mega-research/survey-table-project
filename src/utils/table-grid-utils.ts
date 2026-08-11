@@ -3,6 +3,8 @@ import type { CSSProperties } from 'react';
 import { cn } from '@/lib/utils';
 import type { TableColumn, TableRow } from '@/types/survey';
 
+import { type TableRenderableQuestion, rendersAsTable } from './renders-as-table';
+
 // ── grid-template-columns 생성 ──
 
 export function buildGridTemplateCols(columns: TableColumn[]): string {
@@ -30,16 +32,18 @@ export const RESPONSE_WIDE_TABLE_THRESHOLD_PX = 718;
 /**
  * 응답 페이지 현재 스텝의 컨테이너 max-width 클래스 결정.
  * - forceWide(설문 설정 "화면 너비" 토글)가 켜져 있으면 표 유무와 무관하게 항상 max-w-7xl
- * - 표 문항이 없으면 좁은 폭(896px)
- * - 표 문항이 있으면 가장 넓은 표 기준: 718px 초과 → max-w-7xl(1280px), 이하 → max-w-4xl(896px)
+ * - 표가 그려지는 문항이 없으면 좁은 폭(896px)
+ * - 있으면 가장 넓은 표 기준: 718px 초과 → max-w-7xl(1280px), 이하 → max-w-4xl(896px)
+ *
+ * 판정 대상은 type='table' 뿐 아니라 표-소스 radio/checkbox·ranking 을 포함한다 (rendersAsTable).
  */
 export function resolveResponseContainerWidth(
-  questions: ReadonlyArray<{ type: string; tableColumns?: TableColumn[] | undefined }>,
+  questions: ReadonlyArray<TableRenderableQuestion>,
   opts?: { forceWide?: boolean | undefined },
 ): 'max-w-7xl' | 'max-w-4xl' {
   if (opts?.forceWide) return 'max-w-7xl';
   const tableWidths = questions
-    .filter((q) => q.type === 'table')
+    .filter(rendersAsTable)
     .map((q) => calcTotalWidth(q.tableColumns ?? []));
   if (tableWidths.length === 0) return 'max-w-4xl';
   return Math.max(...tableWidths) > RESPONSE_WIDE_TABLE_THRESHOLD_PX ? 'max-w-7xl' : 'max-w-4xl';
@@ -86,6 +90,22 @@ export function getAlignmentClasses(
     V_JUSTIFY_MAP[verticalAlign || 'top'],
     H_ITEMS_MAP[horizontalAlign || 'left'],
   );
+}
+
+const INPUT_TEXT_ALIGN_MAP = {
+  left: 'text-left',
+  center: 'text-center',
+  right: 'text-right',
+} as const;
+
+/**
+ * 입력값(input 셀의 입력 텍스트, calc 셀의 계산값) 가로 정렬 클래스.
+ *
+ * 미지정이면 빈 문자열을 반환한다 — 셀 래퍼의 horizontalAlign 이 만드는 text-align 상속을
+ * 그대로 두기 위함이다(기존 설문 동작 보존). 값이 있으면 그 상속을 덮어쓴다.
+ */
+export function getInputTextAlignClass(align?: 'left' | 'center' | 'right'): string {
+  return align ? INPUT_TEXT_ALIGN_MAP[align] : '';
 }
 
 // ── ARIA 속성 ──

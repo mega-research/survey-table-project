@@ -30,7 +30,7 @@ describe('contacts.targets procedures', () => {
     const client = createRouterClient({ targets }, { context: authedContext() });
     const input = { surveyId: 'sv-1', attrs: { name: '홍길동' } };
     const res = await client.targets.add(input);
-    expect(svc.addContactTarget).toHaveBeenCalledWith(input);
+    expect(svc.addContactTarget).toHaveBeenCalledWith(input, false);
     expect(res).toEqual({ id: 'ct-1', resid: 42 });
   });
 
@@ -39,7 +39,7 @@ describe('contacts.targets procedures', () => {
     const client = createRouterClient({ targets }, { context: authedContext() });
     const input = { id: 'ct-1', surveyId: 'sv-1', attrs: { name: '수정' } };
     const res = await client.targets.update(input);
-    expect(svc.updateContactTarget).toHaveBeenCalledWith(input);
+    expect(svc.updateContactTarget).toHaveBeenCalledWith(input, false);
     expect(res).toEqual({ ok: true });
   });
 
@@ -47,7 +47,7 @@ describe('contacts.targets procedures', () => {
     vi.mocked(svc.deleteContactTarget).mockResolvedValue(undefined as never);
     const client = createRouterClient({ targets }, { context: authedContext() });
     const res = await client.targets.remove({ surveyId: 'sv-1', id: 'ct-9' });
-    expect(svc.deleteContactTarget).toHaveBeenCalledWith({ surveyId: 'sv-1', id: 'ct-9' });
+    expect(svc.deleteContactTarget).toHaveBeenCalledWith({ surveyId: 'sv-1', id: 'ct-9' }, false);
     expect(res).toEqual({ ok: true });
   });
 
@@ -62,7 +62,7 @@ describe('contacts.targets procedures', () => {
 
     const result = await client.targets.generateTest(input);
 
-    expect(generateTestContacts).toHaveBeenCalledWith(input);
+    expect(generateTestContacts).toHaveBeenCalledWith(input, false);
     expect(result).toEqual({ createdCount: 3 });
   });
 
@@ -86,6 +86,7 @@ describe('contacts.targets procedures', () => {
     );
     const input = { surveyId: 'sv-1', attrs: { name: '홍길동' } };
     const res = await client.targets.add(input);
+    expect(svc.addContactTarget).toHaveBeenCalledWith(input, true);
     expect(res).toEqual({ id: 'ct-1', resid: 42 });
   });
 

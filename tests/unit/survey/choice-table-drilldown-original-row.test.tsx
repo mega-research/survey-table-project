@@ -10,7 +10,10 @@ vi.mock('@/hooks/use-media-query', () => ({
   useMobileView: () => true,
   useMediaQuery: () => true,
 }));
-vi.mock('@/lib/survey/contact-attrs-context', () => ({ useContactAttrs: () => ({}) }));
+vi.mock('@/lib/survey/contact-attrs-context', () => ({
+  useContactAttrs: () => ({}),
+  useAnswerQuotes: () => ({}),
+}));
 
 beforeAll(() => {
   vi.stubGlobal(

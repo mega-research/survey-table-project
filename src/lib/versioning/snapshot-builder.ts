@@ -44,6 +44,7 @@ interface SnapshotQuestion {
   title: string;
   description?: string | undefined;
   required: boolean;
+  requiredMessage?: string | null | undefined;
   groupId?: string | undefined;
   options?: Question['options'] | undefined;
   selectLevels?: Question['selectLevels'] | undefined;
@@ -81,6 +82,9 @@ interface SnapshotQuestion {
   piiEncrypted?: boolean | undefined;
   numberFormat?: Question['numberFormat'] | undefined;
   sumConstraints?: Question['sumConstraints'] | undefined;
+  answerQuoteEnabled?: boolean | undefined;
+  answerQuoteName?: string | undefined;
+  answerQuoteText?: string | undefined;
 }
 
 interface SnapshotGroup {
@@ -117,6 +121,7 @@ export function buildSurveySnapshot(survey: Survey): SurveySnapshot {
       title: q.title,
       description: q.description,
       required: q.required,
+      requiredMessage: q.requiredMessage,
       groupId: q.groupId,
       options: q.options,
       selectLevels: q.selectLevels,
@@ -156,6 +161,9 @@ export function buildSurveySnapshot(survey: Survey): SurveySnapshot {
       piiEncrypted: q.piiEncrypted,
       numberFormat: q.numberFormat,
       sumConstraints: q.sumConstraints,
+      answerQuoteEnabled: q.answerQuoteEnabled,
+      answerQuoteName: q.answerQuoteName,
+      answerQuoteText: q.answerQuoteText,
     })),
     groups: sortedGroups.map((g) => ({
       id: g.id,

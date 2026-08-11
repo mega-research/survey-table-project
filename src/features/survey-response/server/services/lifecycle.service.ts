@@ -6,7 +6,10 @@ import { surveyResponses } from '@/db/schema';
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { findContactByInviteToken } from '@/lib/duplicate-detection/invite-lookup';
 import { getSurveyControlFlags, isValidTestToken } from '@/lib/survey-control';
-import { lockAndAssertResponseMutation } from '@/lib/survey-response/test-target-attempt.server';
+import {
+  isResumableTestStatus,
+  lockAndAssertResponseMutation,
+} from '@/lib/survey-response/test-target-attempt.server';
 
 import type {
   RecordStepVisitInput,
@@ -14,7 +17,7 @@ import type {
   ResumeOrCreateResponseInput,
   ResumeOrCreateResponseOutput,
 } from '../../domain/lifecycle';
-import { SurveyNotAcceptingResponsesError } from './response.service';
+import { extractDraftSeq, SurveyNotAcceptingResponsesError } from './response.service';
 
 // ========================
 // 응답 라이프사이클 service (pub)
@@ -202,6 +205,7 @@ export async function resumeOrCreateResponse(
           versionId: surveyResponses.versionId,
           questionResponses: surveyResponses.questionResponses,
           currentStepId: surveyResponses.currentStepId,
+          metadata: surveyResponses.metadata,
         })
         .from(surveyResponses)
         .where(
@@ -216,23 +220,39 @@ export async function resumeOrCreateResponse(
         .limit(1);
 
       if (existingByContact) {
+        const draftSeq = extractDraftSeq(existingByContact.metadata);
         if (isTestTarget) {
-          if (
-            existingByContact.status === 'in_progress' &&
-            existingByContact.versionId === flags?.currentVersionId
-          ) {
-            return {
-              id: existingByContact.id,
-              status: 'in_progress',
-              resumed: false,
-              questionResponses: decryptQuestionResponses(
-                existingByContact.questionResponses ?? {},
-                { responseId: existingByContact.id },
-              ),
-              currentStepId: existingByContact.currentStepId,
-            };
+          // 대상자 테스트 판정표 — in_progress·drop 은 이어하기, 그 외(종결·알 수 없는 값)는
+          // null 을 돌려주고 첫 입력의 acquireTestTargetResponse 가 제자리 초기화한다.
+          // 두 지점이 같은 판정 함수(isResumableTestStatus)를 쓴다 — 갈라지면 진입에서 복원한 답을
+          // 첫 입력이 지우는 조용한 유실이 된다.
+          //
+          // 버전 불일치는 이탈 여부와 무관한 별개의 안전장치다 — 재배포로 구조가 바뀐 구버전 답을
+          // 주입하면 유령 답과 필수 검증 우회가 생기므로 status 와 무관하게 복원하지 않는다.
+          const versionMatched = existingByContact.versionId === flags?.currentVersionId;
+          if (!versionMatched || !isResumableTestStatus(existingByContact.status)) return null;
+
+          const restored = {
+            id: existingByContact.id,
+            status: 'in_progress' as const,
+            questionResponses: decryptQuestionResponses(
+              existingByContact.questionResponses ?? {},
+              { responseId: existingByContact.id },
+            ),
+            currentStepId: existingByContact.currentStepId,
+            ...(draftSeq !== undefined ? { draftSeq } : {}),
+          };
+          if (existingByContact.status === 'drop') {
+            // 중도 이탈 되살리기 — 아래 비-테스트 컨택 경로와 동일한 UPDATE.
+            // 중단 모드 게이트는 두지 않는다: 이 분기의 행은 isTest 라 비-테스트 경로에서도
+            // 게이트 예외 대상이며, 운영자 QA 를 막지 않는 것이 기존 동작이다.
+            await db
+              .update(surveyResponses)
+              .set({ status: 'in_progress', lastActivityAt: new Date() })
+              .where(eq(surveyResponses.id, existingByContact.id));
+            return { ...restored, resumed: true };
           }
-          return null;
+          return { ...restored, resumed: false };
         }
         const now = new Date();
         // 답·스텝 복원 게이트 — 행 resume(소유권 의미론)은 기존대로 하되, 저장 답 반환은
@@ -266,6 +286,7 @@ export async function resumeOrCreateResponse(
             status: 'in_progress',
             resumed: true,
             ...restorePayload,
+            ...(draftSeq !== undefined ? { draftSeq } : {}),
           };
         }
         if (existingByContact.status === 'in_progress') {
@@ -282,6 +303,7 @@ export async function resumeOrCreateResponse(
             status: 'in_progress',
             resumed: false,
             ...restorePayload,
+            ...(draftSeq !== undefined ? { draftSeq } : {}),
           };
         }
         // isCompleted=false 인데 in_progress/drop 도 아닌 알 수 없는 status → fallback
@@ -299,6 +321,7 @@ export async function resumeOrCreateResponse(
       isTest: surveyResponses.isTest,
       questionResponses: surveyResponses.questionResponses,
       currentStepId: surveyResponses.currentStepId,
+      metadata: surveyResponses.metadata,
     })
     .from(surveyResponses)
     .where(
@@ -315,6 +338,7 @@ export async function resumeOrCreateResponse(
   if (!existing) return null;
 
   const now = new Date();
+  const draftSeq = extractDraftSeq(existing.metadata);
 
   if (existing.status === 'drop') {
     // 중단 모드: 행이 isTest 이거나 유효한 테스트 링크로 재진입한 경우만 예외
@@ -334,6 +358,7 @@ export async function resumeOrCreateResponse(
         responseId: existing.id,
       }),
       currentStepId: existing.currentStepId,
+      ...(draftSeq !== undefined ? { draftSeq } : {}),
     };
   }
 
@@ -355,6 +380,7 @@ export async function resumeOrCreateResponse(
         responseId: existing.id,
       }),
       currentStepId: existing.currentStepId,
+      ...(draftSeq !== undefined ? { draftSeq } : {}),
     };
   }
 

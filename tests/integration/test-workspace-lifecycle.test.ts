@@ -519,7 +519,7 @@ describe('test mail archive lifecycle', () => {
   });
 
   it('개별 테스트 대상자 삭제는 메일 archive 뒤 테스트 응답과 target을 hard delete한다', async () => {
-    await deleteContactTarget({ surveyId: 'survey-1', id: 'target-test' });
+    await deleteContactTarget({ surveyId: 'survey-1', id: 'target-test' }, false);
 
     expect(state.contacts).toEqual([]);
     expect(state.responses).toEqual([]);
@@ -553,7 +553,7 @@ describe('test mail archive lifecycle', () => {
       }),
     ];
 
-    await deleteContactTarget({ surveyId: 'survey-1', id: 'target-actual' });
+    await deleteContactTarget({ surveyId: 'survey-1', id: 'target-actual' }, false);
 
     expect(state.contacts).toEqual([]);
     expect(state.recipients).toEqual([]);

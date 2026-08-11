@@ -1,0 +1,283 @@
+'use client';
+
+import { Quote } from 'lucide-react';
+import { toast } from 'sonner';
+
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import type { QuestionType } from '@/types/survey';
+
+/**
+ * 응답 인용(answer quote) 빌더 컨트롤 모음.
+ *
+ * 수집기(lib/survey/answer-quote.ts)가 읽는 필드를 그대로 편집한다 —
+ * 질문 단위 `answerQuoteEnabled`/`answerQuoteName`/`answerQuoteText`,
+ * 옵션·셀 단위 `answerQuoteText`.
+ */
+
+/** 인용을 수집할 수 있는 질문 유형 — 수집기의 분기와 1:1 (textarea/notice 는 대상 아님). */
+const ANSWER_QUOTE_QUESTION_TYPES: readonly QuestionType[] = [
+  'text',
+  'radio',
+  'checkbox',
+  'select',
+  'multiselect',
+  'ranking',
+  'table',
+];
+
+export function supportsAnswerQuote(type: QuestionType): boolean {
+  return ANSWER_QUOTE_QUESTION_TYPES.includes(type);
+}
+
+/** `{{입력}}` 치환 힌트 — 주관식 옵션·입력 셀·단답형에서만 노출한다. */
+export const ANSWER_QUOTE_INPUT_TOKEN_HINT =
+  '{{입력}} 을 쓰면 응답자가 입력한 값이 들어갑니다';
+
+/** 인용 이름을 실제 참조 토큰 문자열로 만든다. */
+export function answerQuoteToken(name: string): string {
+  return `{{{${name.trim()}}}}`;
+}
+
+interface AnswerQuoteTextFieldProps {
+  value: string | undefined;
+  onChange: (value: string) => void;
+  /**
+   * 'option' — 옵션이 선택돼야 수집되고, 문구가 비면 인용에서 제외된다.
+   * 'input'  — 값이 있으면 수집되고, 문구가 비면 응답자 입력값을 그대로 쓴다.
+   */
+  mode?: 'option' | 'input';
+  /** `{{입력}}` 치환이 가능한 자리인지 (주관식 옵션 / 입력 셀 / 단답형) */
+  showInputTokenHint?: boolean | undefined;
+  id?: string | undefined;
+  className?: string | undefined;
+}
+
+/** 옵션·셀·단답형 한 칸의 인용 문구 입력칸. */
+export function AnswerQuoteTextField({
+  value,
+  onChange,
+  mode = 'option',
+  showInputTokenHint,
+  id,
+  className,
+}: AnswerQuoteTextFieldProps) {
+  return (
+    <div className={`space-y-1 ${className ?? ''}`}>
+      <Label htmlFor={id} className="text-xs text-gray-600">
+        인용 문구
+      </Label>
+      <Input
+        id={id}
+        value={value ?? ''}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={
+          mode === 'input'
+            ? '비우면 응답자가 입력한 값이 그대로 들어갑니다'
+            : '비우면 이 선택지는 인용되지 않습니다'
+        }
+        className="h-8 text-xs"
+      />
+      {showInputTokenHint && (
+        <p className="text-[11px] text-gray-500">{ANSWER_QUOTE_INPUT_TOKEN_HINT}</p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * 인용 이름 편집 단위 — 토글을 소유한 쪽(질문 카드 / 셀 헤더)이 값을 넘긴다.
+ * 셀 모달의 헤더 토글과 질문 카드가 같은 모양을 공유하기 위한 공통 계약.
+ */
+export interface AnswerQuoteControlValue {
+  enabled: boolean;
+  onEnabledChange: (enabled: boolean) => void;
+  name: string;
+  onNameChange: (name: string) => void;
+}
+
+interface AnswerQuoteNameFieldProps {
+  id: string;
+  name: string;
+  onNameChange: (name: string) => void;
+}
+
+/**
+ * 인용 이름 입력칸 + 실시간 참조 토큰(클릭 복사).
+ *
+ * 중괄호 입력 차단과 토큰 표기가 질문 카드·셀 헤더 양쪽에서 동일해야 하므로 여기 한 곳에 둔다.
+ */
+export function AnswerQuoteNameField({ id, name, onNameChange }: AnswerQuoteNameFieldProps) {
+  const trimmedName = name.trim();
+  const token = answerQuoteToken(name);
+
+  const copyToken = () => {
+    if (!trimmedName) return;
+    navigator.clipboard
+      ?.writeText(token)
+      .then(() => toast.success('인용 토큰을 복사했습니다'))
+      .catch(() => toast.error('복사에 실패했습니다. 직접 선택해 복사하세요'));
+  };
+
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id} className="text-xs text-gray-600">
+        인용 이름
+      </Label>
+      <Input
+        id={id}
+        value={name}
+        // 중괄호가 이름에 섞이면 {{{이름}}} 토큰 파싱이 깨져 영구 미스매치가 된다
+        // (TOKEN_PATTERN 문자 클래스가 [^{}]+) — 입력 단계에서 원천 차단.
+        onChange={(e) => onNameChange(e.target.value.replace(/[{}]/g, ''))}
+        placeholder="예: 마케팅유형"
+        className="h-8 text-sm"
+      />
+      <p className="text-xs text-gray-500">
+        다른 질문에서{' '}
+        {trimmedName ? (
+          <button
+            type="button"
+            onClick={copyToken}
+            title="클릭하면 복사됩니다"
+            className="rounded bg-blue-50 px-1.5 py-0.5 font-mono text-xs text-blue-700 hover:bg-blue-100"
+          >
+            {token}
+          </button>
+        ) : (
+          <span className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-xs text-gray-400">
+            {'{{{인용이름}}}'}
+          </span>
+        )}{' '}
+        으로 참조합니다.
+      </p>
+    </div>
+  );
+}
+
+interface AnswerQuoteCellToggleProps {
+  id: string;
+  enabled: boolean;
+  onEnabledChange: (enabled: boolean) => void;
+}
+
+/**
+ * 셀 옵션 관리 헤더에 붙는 인라인 토글 — 바로 옆 `조건부 분기` 스위치와 같은 모양.
+ */
+export function AnswerQuoteCellToggle({ id, enabled, onEnabledChange }: AnswerQuoteCellToggleProps) {
+  return (
+    <div className="flex items-center space-x-2">
+      <Switch id={id} checked={enabled} onCheckedChange={onEnabledChange} className="scale-75" />
+      <Label htmlFor={id} className="text-xs text-gray-600">
+        응답 인용
+      </Label>
+    </div>
+  );
+}
+
+/**
+ * "이 질문에 응답이 있을 때만 표시" 안내가 가리키는 대상 — 질문 단위 컨트롤(question)인지
+ * 표 셀 단위 컨트롤(cell)인지에 따라 주어가 달라진다.
+ */
+export type AnswerQuoteScope = 'question' | 'cell';
+
+interface AnswerQuoteGuidanceProps {
+  scope?: AnswerQuoteScope | undefined;
+}
+
+/**
+ * 인용 결과가 비면 문장이 깨진다는 경고 + 방지책 안내.
+ *
+ * 셀 문맥에서 "이 질문에 응답이 있을 때만"이라고 쓰면 호스트 표 질문 전체가 응답됐다는
+ * 뜻으로 읽힌다 — 표에 응답이 있어도 이 셀 자체는 비어 있을 수 있으므로 그 조건으로는
+ * 문장이 깨지는 것을 막지 못한다. 조건 스키마가 셀 타깃(`CellRef`)을 지원하므로 셀
+ * 문맥에서는 "이 셀에 응답이 있을 때만"으로 정확히 안내한다.
+ */
+export function AnswerQuoteGuidance({ scope = 'question' }: AnswerQuoteGuidanceProps) {
+  const subject = scope === 'cell' ? '이 셀' : '이 질문';
+  return (
+    <p className="rounded bg-amber-50 p-2 text-xs leading-relaxed text-amber-800">
+      인용 결과가 비면 문장이 깨집니다. 이 인용을 제목에 쓰는 뒤 질문에
+      &quot;{subject}에 응답이 있을 때만 표시&quot; 조건을 함께 걸어두세요.
+      {subject}이 조건으로 숨겨진 경우에도 같은 조건이 뒤 질문의 문장을 지켜줍니다.
+    </p>
+  );
+}
+
+interface AnswerQuoteQuestionControlProps {
+  enabled: boolean;
+  onEnabledChange: (enabled: boolean) => void;
+  name: string;
+  onNameChange: (name: string) => void;
+  /** 같은 화면에 컨트롤이 둘 이상 있을 때 id 충돌을 피하기 위한 접두어 */
+  idPrefix?: string | undefined;
+  /**
+   * 단답형(text) 전용 — 옵션이 없어 질문 자체가 입력 단위 후보 하나다.
+   * 넘기지 않으면 질문 단위 문구 입력칸을 렌더하지 않는다.
+   */
+  questionText?:
+    | {
+        value: string | undefined;
+        onChange: (value: string) => void;
+      }
+    | undefined;
+  /** 안내 문구의 주어 — 질문 카드에서 쓰면 'question'(기본), 표 셀 모달에서 쓰면 'cell'. */
+  scope?: AnswerQuoteScope | undefined;
+}
+
+/**
+ * 질문/셀 단위 응답 인용 설정 — 토글 + 인용 이름 + 참조 토큰 + 안내.
+ *
+ * 토글을 끌 때 옵션·셀에 입력된 문구는 건드리지 않는다 (다시 켜면 그대로 복귀).
+ */
+export function AnswerQuoteQuestionControl({
+  enabled,
+  onEnabledChange,
+  name,
+  onNameChange,
+  idPrefix = 'answer-quote',
+  questionText,
+  scope,
+}: AnswerQuoteQuestionControlProps) {
+  return (
+    <div className="space-y-3 rounded-md border border-gray-200 bg-white p-3">
+      <div className="flex items-center justify-between gap-4">
+        <Label
+          htmlFor={`${idPrefix}-enabled`}
+          className="flex items-center gap-2 text-sm font-medium"
+        >
+          <Quote className="h-4 w-4" />
+          응답 인용
+        </Label>
+        <Switch
+          id={`${idPrefix}-enabled`}
+          checked={enabled}
+          onCheckedChange={onEnabledChange}
+        />
+      </div>
+
+      {enabled && (
+        <div className="space-y-3">
+          <AnswerQuoteNameField
+            id={`${idPrefix}-name`}
+            name={name}
+            onNameChange={onNameChange}
+          />
+
+          {questionText && (
+            <AnswerQuoteTextField
+              id={`${idPrefix}-text`}
+              value={questionText.value}
+              onChange={questionText.onChange}
+              mode="input"
+              showInputTokenHint
+            />
+          )}
+
+          <AnswerQuoteGuidance scope={scope} />
+        </div>
+      )}
+    </div>
+  );
+}

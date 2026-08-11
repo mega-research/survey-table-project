@@ -72,11 +72,21 @@ export type UpdateQuestionResponseInput = z.infer<typeof UpdateQuestionResponseI
 export const SaveDraftResponseInput = z.object({
   responseId: z.string(),
   answers: QuestionResponsesSchema,
+  /** 클라이언트 발급 단조 증가 순번. 지연 도착한 오래된 draft 쓰기를 서버가 무시하는 데 쓴다. */
+  seq: z.number().int().positive().optional(),
   ...TestAttemptIdentityFields,
 });
 export type SaveDraftResponseInput = z.infer<typeof SaveDraftResponseInput>;
 
-export const SaveDraftResponseOutput = z.object({ ok: z.literal(true) });
+export const SaveDraftResponseOutput = z.object({
+  ok: z.literal(true),
+  /**
+   * 실제로 답변이 쓰였는지 여부. seq 가드가 stale 로 판정하면 false — 호출측(flushPendingAnswers)
+   * 은 이 값이 false 면 pending 을 비우지 않아야 한다(그렇지 않으면 서버에 반영되지 않은 값을
+   * "저장됨" 으로 착각해 유실한다).
+   */
+  applied: z.boolean(),
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // createResponseWithFirstAnswer / createBlankResponse
@@ -132,6 +142,7 @@ export const BlockReasonSchema = z.enum([
   'quota_closed',
   'survey_paused',
   'invalid_test_token',
+  'not_accepting',
 ]);
 
 export const FirstAnswerResultSchema = z.discriminatedUnion('kind', [
@@ -139,6 +150,12 @@ export const FirstAnswerResultSchema = z.discriminatedUnion('kind', [
     kind: z.literal('created'),
     id: z.string(),
     contactTargetId: z.string().nullable(),
+    /**
+     * 응답 행에 이미 적용된 draft seq(survey_responses.metadata.draftSeq) — 컨택 재사용으로
+     * 기존 행을 물려받을 때만 값이 있다. 클라이언트가 draftSeqRef 를 이 값 이상으로 seed 해,
+     * localStorage 없는 재진입(다른 기기·시크릿창)에서도 이후 flush 가 stale 로 막히지 않게 한다.
+     */
+    draftSeq: z.number().int().nonnegative().optional(),
   }),
   z.object({
     kind: z.literal('blocked'),

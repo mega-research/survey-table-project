@@ -1,5 +1,6 @@
 import * as z from 'zod';
 
+import { getGuestSurveyId } from '@/lib/auth/guest-grants';
 import { assertSurveyAccess, scoped } from '@/server/orpc';
 
 import {
@@ -20,7 +21,8 @@ const create = scoped
   .output(CreateCampaignResult)
   .handler(({ context, input }) => {
     assertSurveyAccess(context.user.id, input.surveyId);
-    return svc.createCampaign(input, context.user.id);
+    // 인증된 context 에서 1회 파생 — 서비스가 auth 를 재조회하지 않는다.
+    return svc.createCampaign(input, context.user.id, getGuestSurveyId(context.user.id) !== null);
   });
 
 const cancel = scoped
@@ -28,7 +30,7 @@ const cancel = scoped
   .output(z.object({ ok: z.literal(true) }))
   .handler(async ({ context, input }) => {
     assertSurveyAccess(context.user.id, input.surveyId);
-    await svc.cancelCampaign(input);
+    await svc.cancelCampaign(input, getGuestSurveyId(context.user.id) !== null);
     return { ok: true as const };
   });
 
@@ -53,7 +55,7 @@ const sendSingle = scoped
   .output(CreateCampaignResult)
   .handler(({ context, input }) => {
     assertSurveyAccess(context.user.id, input.surveyId);
-    return sendSingleCampaign(input, context.user.id);
+    return sendSingleCampaign(input, context.user.id, getGuestSurveyId(context.user.id) !== null);
   });
 
 export const campaigns = {

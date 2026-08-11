@@ -19,9 +19,17 @@ export interface InteractiveCellProps {
   inputIdScope?: string | undefined;
   ariaInvalid?: boolean | undefined;
   ariaDescribedBy?: string | undefined;
+  /**
+   * 캡션 오버라이드(image/video 셀 전용). 호출부가 토큰 치환을 끝낸 문구를 넘긴다.
+   * 미지정 시 cell.content 를 셀이 직접 치환 — cell-options-container.tsx 와 동일한
+   * opt-in 패턴(이미 치환된 셀을 넘겨받는 PreviewCell 경로의 이중 치환 방지).
+   */
+  content?: string | undefined;
 }
 
 /** 미리보기(읽기 전용) 셀 컴포넌트 공통 props */
 export interface PreviewCellProps {
   cell: TableCell;
+  /** 캡션 오버라이드(image/video 셀 전용). InteractiveCellProps.content 참조. */
+  content?: string | undefined;
 }

@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 
 import { toast } from 'sonner';
@@ -7,6 +7,7 @@ import { client } from '@/shared/lib/rpc';
 import { findStepIndexOfQuestion, stepIdOf, type RenderStep } from '@/lib/group-ordering';
 import type { ClientSignals } from '@/lib/duplicate-detection/types';
 import { collectNumericIssues } from '@/lib/survey/numeric-validation';
+import { withCalcValues, type FormulaEvalCtx } from '@/lib/survey/cell-formula';
 import type { Question, QuestionGroup, Survey } from '@/types/survey';
 import type { BranchEvalCtx } from '@/utils/branch-logic';
 import {
@@ -17,7 +18,7 @@ import {
 import type { SaveAdminEditPayload } from '@/features/survey-response/domain/response-edit';
 import type { TestAttemptIdentity } from '@/shared/types/test-attempt';
 
-import { sessionStorageKey } from './session-helpers';
+import { sendDraftBeacon, sessionStorageKey } from './session-helpers';
 import {
   handleInvalidTestLinkMutationError,
   handlePausedMutationError,
@@ -25,6 +26,21 @@ import {
 } from './use-duplicate-guard';
 
 type ResponsesMap = Record<string, unknown>;
+
+/**
+ * 미저장 답변의 안정적 지문. 키 순서에 흔들리지 않도록 정렬 후 직렬화한다.
+ * 동일 내용으로 반복 발사되는 beacon 을 걸러내는 데 쓴다.
+ */
+function snapshotOfAnswers(answers: Record<string, unknown>): string {
+  return JSON.stringify(Object.keys(answers).sort().map((key) => [key, answers[key]]));
+}
+
+/**
+ * 답변 입력 후 이 시간 동안 추가 입력이 없으면 백그라운드로 draft 를 저장한다 (trailing).
+ * 타이핑 중에는 타이머가 계속 리셋되므로 발사 시점엔 항상 그 순간의 최신 값이 나간다.
+ * 목표는 "다음" 클릭 시점에 pending 을 비워둬 전환이 서버 왕복 없이 즉시 일어나게 하는 것.
+ */
+const DRAFT_AUTOSAVE_DEBOUNCE_MS = 800;
 
 // DuplicateStatus 타입은 use-duplicate-guard 가 소유한다(진입 시 중복검사의 주 소유자).
 // handleResponse/handleSubmit 가 blocked 로 set 하므로 여기서 re-export 해 기존 import 경로를 유지한다.
@@ -47,6 +63,10 @@ interface UseResponseLifecycleArgs {
   // 모드/식별
   isAdminEdit: boolean;
   isPreview?: boolean;
+  /** 완료 화면 여부. 이탈 시점 draft beacon 게이트 전용 (다른 경로는 사용하지 않는다). */
+  isCompleted?: boolean;
+  /** 중복·쿼터·중단 등 terminal blocked 화면 여부. 이탈 시점 draft beacon 게이트 전용. */
+  terminalBlocked?: boolean;
   adminContext: AdminContext | undefined;
   inviteToken: string | null;
   /** ?test=<token>. isTestSession 일 때만 create/complete 게이트로 전달해 isTest 로 기록시킨다. */
@@ -61,6 +81,8 @@ interface UseResponseLifecycleArgs {
 
   // 설문/스텝 파생값
   loadedSurvey: Survey | null;
+  /** calc 셀 수식 평가(LUT 참조)·저장 페이로드 주입용. survey-response-flow 의 formulaCtx 와 동일 소스(병합 전 원본). */
+  contactAttrs: Record<string, string | undefined>;
   currentStep: RenderStep | undefined;
   currentStepIndex: number;
   steps: RenderStep[];
@@ -88,6 +110,13 @@ interface UseResponseLifecycleArgs {
 
   // 회복 가드 (use-session-recovery 소유)
   isRecovering: boolean;
+  /**
+   * 이어하기 세션에서 서버가 응답 행에 마지막으로 적용한 draft seq(resume 응답의 draftSeq).
+   * 매 페이지 로드마다 0 부터 다시 시작하는 draftSeqRef 를 이 값으로 올려, 2차 세션의 첫 flush
+   * 가 1차 세션이 이미 적용한 seq 보다 낮아 stale 로 막히는 것을 방지한다. 값이 오르는 방향
+   * (Math.max)으로만 반영되므로 회복 응답이 늦게 도착해도 이미 발급한 seq 를 되돌리지 않는다.
+   */
+  recoveredDraftSeq: number | undefined;
 
   // 검증 파생값 (컴포넌트 소유)
   isQuestionAnswered: (question: Question) => boolean;
@@ -143,6 +172,8 @@ interface UseResponseLifecycleResult {
 export function useResponseLifecycle({
   isAdminEdit,
   isPreview = false,
+  isCompleted = false,
+  terminalBlocked = false,
   adminContext,
   inviteToken,
   testToken,
@@ -151,6 +182,7 @@ export function useResponseLifecycle({
   hasTestAttemptOwnership,
   setHasTestAttemptOwnership,
   loadedSurvey,
+  contactAttrs,
   currentStep,
   currentStepIndex,
   steps,
@@ -169,6 +201,7 @@ export function useResponseLifecycle({
   setPendingResponse,
   resetResponseState,
   isRecovering,
+  recoveredDraftSeq,
   isQuestionAnswered,
   optionTextsByQuestion = {},
   visibleProgressRef,
@@ -188,8 +221,43 @@ export function useResponseLifecycle({
   // 첫 답변 INSERT가 끝나기 전에 들어온 후속 답을 유실하지 않도록 응답 ID와 대기 답을 ref로 보관한다.
   const activeResponseIdRef = useRef<string | null>(currentResponseId);
   const pendingAnswerSavesRef = useRef(new Map<string, unknown>());
+  // 직전 beacon 으로 보낸 미저장 답변의 지문. 동일 내용 반복 발사를 막는다.
+  // beacon 후에도 pending 을 비우지 않기 때문에(전송 성공 확인 불가) 이 가드가 필요하다.
+  const lastBeaconSnapshotRef = useRef<string | null>(null);
+  // draft 쓰기 순서 보장용 단조 증가 카운터.
+  // "다음" flush 와 이탈 beacon 이 같은 카운터를 쓰므로, 지연 도착한 오래된 쓰기를
+  // 서버가 식별해 무시할 수 있다.
+  const draftSeqRef = useRef(0);
   const responseCreationPromiseRef = useRef<Promise<string | null> | null>(null);
+  // 이어하기 회복이 서버 draftSeq 를 늦게 내려줘도 seed 는 올리는 방향으로만 반영한다 —
+  // 이미 발급한(더 큰) seq 를 되돌리면 오히려 그 자체가 stale 로 막힌다.
+  useEffect(() => {
+    if (recoveredDraftSeq === undefined) return;
+    draftSeqRef.current = Math.max(draftSeqRef.current, recoveredDraftSeq);
+  }, [recoveredDraftSeq]);
   if (currentResponseId) activeResponseIdRef.current = currentResponseId;
+
+  // 저장 경계(draft flush / complete / beacon / admin-edit)에서 calc 셀 값을 페이로드에 주입.
+  // 4지점이 각자 ctx 를 조립하면 한 곳만 어긋나는 버그가 생기므로 클로저 하나로 공유한다.
+  const injectCalc = useCallback(
+    (answers: Record<string, unknown>) => {
+      const ctx: FormulaEvalCtx = {
+        questions,
+        responses,
+        lookups: loadedSurvey?.lookups ?? [],
+        contactAttrs,
+      };
+      return withCalcValues(answers, ctx);
+    },
+    [questions, responses, loadedSurvey?.lookups, contactAttrs],
+  );
+  // beacon 은 visibilitychange/pagehide 리스너 안에서 이탈 시점에 호출된다. 리스너 재등록을
+  // (isAdminEdit 등) 몇 개 값에만 묶어두려는 기존 설계를 유지하려면 questions/responses/
+  // contactAttrs 변화마다 effect 를 재실행할 수 없다 — ref 로 최신 injectCalc 를 따라가게 한다.
+  const injectCalcRef = useRef(injectCalc);
+  useEffect(() => {
+    injectCalcRef.current = injectCalc;
+  }, [injectCalc]);
 
   const clearInvalidTargetTestSession = () => {
     if (!testIdentity) return;
@@ -198,12 +266,22 @@ export function useResponseLifecycle({
     }
     activeResponseIdRef.current = null;
     pendingAnswerSavesRef.current.clear();
+    // 세션이 바뀌면 직전 지문은 다른 responseId 의 것이라 무효다.
+    lastBeaconSnapshotRef.current = null;
     resetResponseState();
     setResponses({});
   };
 
-  const flushPendingAnswers = async (): Promise<boolean> => {
+  /**
+   * 실제 flush 본체. 반드시 enqueueFlush 를 거쳐 호출된다 — 디바운스 발사와 "다음" 클릭
+   * flush 가 동시에 나가면 seq 왕복만 낭비되므로 체인으로 직렬화한다.
+   * background=true(디바운스 자동 저장)면 실패 시 토스트를 띄우지 않는다 — pending 이
+   * 유지되므로 다음 클릭 flush·이탈 beacon·최종 complete 가 안전망으로 남는다.
+   */
+  const runFlushPendingAnswers = async (background: boolean): Promise<boolean> => {
     if (isAdminEdit || isPreview || pendingAnswerSavesRef.current.size === 0) return true;
+    // 완료·차단 전환 직후 늦게 발사된 백그라운드 저장은 스킵한다 (서버는 in_progress 행만 갱신).
+    if (background && (isCompleted || terminalBlocked)) return true;
 
     const responseId =
       activeResponseIdRef.current ?? (await responseCreationPromiseRef.current);
@@ -216,18 +294,39 @@ export function useResponseLifecycle({
       return hasOnlyRootSidecars;
     }
 
-    const pendingSnapshot = Object.fromEntries(pendingAnswerSavesRef.current);
+    // rawSnapshot: pending 맵의 원본 스냅샷(참조 동일성 비교용, 아래 삭제 루프 전용).
+    // pendingSnapshot: 서버로 실제 전송하는 값 — calc 셀을 가진 질문은 raw 스냅샷에 없어도
+    // withCalcValues 가 ctx.responses 와 병합해 포함시킨다(항상 최신 계산값 재주입).
+    // 삭제 루프는 반드시 rawSnapshot 기준으로 비교해야 한다 — injectCalc 는 calc 를 가진
+    // 모든 질문에 대해 매번 새 객체를 만들어내므로, pendingSnapshot 기준으로 비교하면
+    // Object.is 가 항상 실패해 calc 테이블 질문의 pending 항목이 영영 삭제되지 않는다.
+    const rawSnapshot = Object.fromEntries(pendingAnswerSavesRef.current);
+    const pendingSnapshot = injectCalc(rawSnapshot);
     try {
-      await client.surveyResponse.response.saveDraft({
+      const result = await client.surveyResponse.response.saveDraft({
         responseId,
         answers: pendingSnapshot,
+        seq: ++draftSeqRef.current,
         ...(testIdentity ?? {}),
       });
-      for (const [questionId, savedValue] of Object.entries(pendingSnapshot)) {
+      if (!result.applied) {
+        // 서버가 stale seq 로 판정해 답변을 쓰지 않았다. pending 을 비우면 서버에 반영되지
+        // 않은 값을 "저장됨" 으로 착각해 유실하므로, 삭제 루프와 지문 초기화를 모두 건너뛴다.
+        // 다음 재시도는 더 큰 seq 로 나가 통과한다.
+        console.error('응답 임시 저장 오류: 서버가 stale seq 로 판정해 적용하지 않음');
+        if (!background) {
+          toast.error('응답 임시 저장에 실패했습니다. 잠시 후 다시 시도해주세요.');
+        }
+        return false;
+      }
+      for (const [questionId, savedValue] of Object.entries(rawSnapshot)) {
         if (Object.is(pendingAnswerSavesRef.current.get(questionId), savedValue)) {
           pendingAnswerSavesRef.current.delete(questionId);
         }
       }
+      // flush 성공 후 dedupe 캐시 무효화.
+      // 잔여 pending 은 서버에 없는 값이므로 다음 이탈 시점에 반드시 발사돼야 한다.
+      lastBeaconSnapshotRef.current = null;
       return true;
     } catch (err) {
       if (
@@ -255,10 +354,58 @@ export function useResponseLifecycle({
         return false;
       }
       console.error('응답 임시 저장 오류:', err);
-      toast.error('응답 임시 저장에 실패했습니다. 잠시 후 다시 시도해주세요.');
+      if (!background) {
+        toast.error('응답 임시 저장에 실패했습니다. 잠시 후 다시 시도해주세요.');
+      }
       return false;
     }
   };
+
+  // 타이머 콜백이 예약 시점 렌더의 stale 클로저(isCompleted 등)를 잡지 않도록
+  // 최신 본체를 ref 로 따라간다 (injectCalcRef 와 같은 패턴).
+  const runFlushRef = useRef(runFlushPendingAnswers);
+  useEffect(() => {
+    runFlushRef.current = runFlushPendingAnswers;
+  });
+
+  // flush 직렬화 체인. 이전 flush 가 in-flight 면 완료를 기다렸다가 잔여 pending 만 이어 보낸다.
+  const flushChainRef = useRef<Promise<unknown>>(Promise.resolve());
+  const enqueueFlush = (background: boolean): Promise<boolean> => {
+    const run = flushChainRef.current.then(() => runFlushRef.current(background));
+    // runFlush 는 모든 에러를 내부에서 잡아 boolean 을 반환하지만, 체인 자체는 방어적으로
+    // 실패를 삼켜 후속 flush 가 영구히 막히지 않게 한다.
+    flushChainRef.current = run.catch(() => false);
+    return run;
+  };
+
+  const flushPendingAnswers = (): Promise<boolean> => enqueueFlush(false);
+
+  // 답변 입력 디바운스 자동 저장 타이머. 리셋은 clearTimeout + 재예약이라 동시 타이머는 항상 1개.
+  const draftAutosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearDraftAutosave = () => {
+    if (draftAutosaveTimerRef.current !== null) {
+      clearTimeout(draftAutosaveTimerRef.current);
+      draftAutosaveTimerRef.current = null;
+    }
+  };
+  const scheduleDraftAutosave = () => {
+    if (isAdminEdit || isPreview) return;
+    clearDraftAutosave();
+    draftAutosaveTimerRef.current = setTimeout(() => {
+      draftAutosaveTimerRef.current = null;
+      void enqueueFlush(true);
+    }, DRAFT_AUTOSAVE_DEBOUNCE_MS);
+  };
+
+  // 언마운트 시 예약된 백그라운드 저장 취소 — 화면을 떠난 뒤의 유령 saveDraft 를 막는다.
+  useEffect(
+    () => () => {
+      if (draftAutosaveTimerRef.current !== null) {
+        clearTimeout(draftAutosaveTimerRef.current);
+      }
+    },
+    [],
+  );
 
   const handleResponse = useCallback(
     (questionId: string, value: unknown) => {
@@ -273,6 +420,8 @@ export function useResponseLifecycle({
       });
 
       pendingAnswerSavesRef.current.set(questionId, value);
+      // 입력이 잦아들면 백그라운드로 체크포인트 저장 — "다음" 클릭 시 대기 왕복을 없앤다.
+      scheduleDraftAutosave();
 
       // 운영 현황 콘솔(T5): 첫 답변 시점에 응답 행을 INSERT.
       // - currentResponseId가 null & 진행 중 INSERT가 없을 때만 트리거
@@ -316,6 +465,10 @@ export function useResponseLifecycle({
             }
             const { id, contactTargetId } = result;
             activeResponseIdRef.current = id;
+            // 컨택 재사용으로 기존 행을 물려받았을 수 있다(resume 이 호출되지 않는 경로 —
+            // localStorage 없는 다른 기기·시크릿창 재진입). resume seed 와 동일 의미론으로
+            // 올리는 방향으로만 반영한다.
+            draftSeqRef.current = Math.max(draftSeqRef.current, result.draftSeq ?? 0);
             setCurrentResponseId(id);
             if (testIdentity) setHasTestAttemptOwnership(true);
             // invite 토큰이 있었는데 contactTargetId 매칭 실패 → 무효 토큰. 익명 응답으로 폴백 알림.
@@ -394,6 +547,71 @@ export function useResponseLifecycle({
     ],
   );
 
+  /**
+   * 이탈 시점 미저장 답변 flush.
+   *
+   * "다음" 클릭 시에만 saveDraft 가 나가므로, 현재 페이지에서 입력하다 탭을 닫거나
+   * 백그라운드로 보내면 그 페이지분이 메모리에서 사라진다. hidden/pagehide 에서 beacon 으로
+   * 넘겨 복원 기준을 마지막 입력까지 끌어올린다.
+   *
+   * pending 은 비우지 않는다 — sendBeacon 은 전송 성공을 반환하지 않아, 낙관적으로 비웠다가
+   * 실패하면 사용자가 돌아와 "다음"을 눌러도 올릴 것이 없다. 대신 지문 비교로 중복을 막는다.
+   *
+   * 게이트는 use-response-telemetry 의 visibility effect 와 같은 기준이다. 종결·차단 화면은
+   * 렌더 early-return 이라 훅은 계속 마운트돼 있으므로 값으로 막아야 한다.
+   */
+  useEffect(() => {
+    if (isAdminEdit || isPreview || isCompleted || terminalBlocked) return;
+    // 대상자 테스트는 쓰기 소유권을 얻기 전까지 서버에 흔적을 남기지 않는다.
+    if (testIdentity !== null && !hasTestAttemptOwnership) return;
+
+    const flushViaBeacon = () => {
+      const responseId = activeResponseIdRef.current;
+      if (!responseId) return;
+      if (pendingAnswerSavesRef.current.size === 0) return;
+      const answers = Object.fromEntries(pendingAnswerSavesRef.current);
+      // 중복 발사 방지 지문은 raw 답변 기준(사용자가 실제로 바꾼 값)으로 유지한다 —
+      // calc 주입은 매번 새 객체를 만들어내므로 지문에 넣으면 항상 새 지문이 되어 dedupe 가 무력화된다.
+      const snapshot = snapshotOfAnswers(answers);
+      if (snapshot === lastBeaconSnapshotRef.current) return;
+      const attempt = sendDraftBeacon(
+        responseId,
+        injectCalcRef.current(answers),
+        ++draftSeqRef.current,
+        testIdentity,
+      );
+      // 낙관적으로 확정한다. 브라우저가 인수했으면 그대로 두고,
+      // fetch 폴백이 실패로 확인되면 되돌려 다음 이탈 시점에 재시도되게 한다.
+      lastBeaconSnapshotRef.current = snapshot;
+      attempt.delivered?.then((ok) => {
+        // 그 사이 더 새로운 beacon 이 지문을 갱신했으면 건드리지 않는다.
+        if (!ok && lastBeaconSnapshotRef.current === snapshot) {
+          lastBeaconSnapshotRef.current = null;
+        }
+      });
+    };
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') flushViaBeacon();
+    };
+
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pagehide', flushViaBeacon);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pagehide', flushViaBeacon);
+    };
+    // activeResponseIdRef / pendingAnswerSavesRef / lastBeaconSnapshotRef 는 이벤트 발생
+    // 시점에 .current 를 읽으므로 deps 에 넣지 않는다 (리스너 재등록 불필요).
+  }, [
+    isAdminEdit,
+    isPreview,
+    isCompleted,
+    terminalBlocked,
+    testIdentity,
+    hasTestAttemptOwnership,
+  ]);
+
   const handleSubmit = useCallback(async () => {
     setIsSubmitting(true);
 
@@ -424,13 +642,15 @@ export function useResponseLifecycle({
           allResponses: responses,
           allQuestions: questions,
           optionTexts: optionTextsByQuestion[firstId],
+          lookups: loadedSurvey?.lookups ?? [],
+          contactAttrs,
         }).some((issue) => issue.kind === 'required-detail' || issue.kind === 'required-cells');
         if (hasBlockingDetailIssue && targetIdx !== -1) {
           setNumericErrorStepIndex(targetIdx);
         }
         if (targetIdx !== -1 && targetIdx !== currentStepIndex) {
+          // 상단 스크롤은 flow 의 스텝 변경 effect 가 커밋 이후에 일괄 처리한다.
           setCurrentStepIndex(targetIdx);
-          window.scrollTo({ top: 0, behavior: 'smooth' });
         } else {
           // 이미 해당 step이면 카드로 스크롤
           const el = document.querySelector<HTMLElement>(
@@ -450,6 +670,8 @@ export function useResponseLifecycle({
             allResponses: responses,
             allQuestions: questions,
             optionTexts: optionTextsByQuestion[q.id],
+            lookups: loadedSurvey?.lookups ?? [],
+            contactAttrs,
           }).length > 0
         );
       });
@@ -461,8 +683,8 @@ export function useResponseLifecycle({
         // 다른 step 이면 그 step 으로 전환(상단 스크롤). 같은 step 이면 배너만 —
         // 위반 셀 이동은 배너의 "위치로 이동" 버튼이 담당.
         if (targetIdx !== -1 && targetIdx !== currentStepIndex) {
+          // 상단 스크롤은 flow 의 스텝 변경 effect 가 커밋 이후에 일괄 처리한다.
           setCurrentStepIndex(targetIdx);
-          window.scrollTo({ top: 0, behavior: 'smooth' });
         }
         setIsSubmitting(false);
         return;
@@ -470,10 +692,15 @@ export function useResponseLifecycle({
 
       setHighlightQuestionIds(new Set());
 
+      // 제출 확정 경로 진입 — 예약된 백그라운드 draft 저장은 취소한다.
+      // complete 가 전체 답을 저장하므로 늦게 발사되면 완료된 행에 saveDraft 만 실패한다.
+      clearDraftAutosave();
+
       // admin-edit 분기 (6/8) — 새 응답 INSERT 없이 onSubmit 으로 위임.
       if (isAdminEdit && adminContext) {
         // 옵션 텍스트(__optTexts__) 사이드카 — 응답자 흐름과 동일하게 합쳐서 보낸다.
-        const questionResponses = buildOptTextsPayload(visibleQuestions, responses);
+        // calc 셀 값도 저장 경계에서 함께 주입한다(표시는 파생 계산이라 별도로 저장되지 않음).
+        const questionResponses = injectCalc(buildOptTextsPayload(visibleQuestions, responses));
 
         // onSubmit 안에서 router.push 처리 — 본 컴포넌트는 thank-you 화면을 띄우지 않는다.
         await adminContext.onSubmit({ questionResponses });
@@ -595,8 +822,10 @@ export function useResponseLifecycle({
               .map((row) => row.id);
           });
 
-        // 제출 직전 — 미선택 옵션의 텍스트 drop 후 questionResponses에 병합.
-        const questionResponsesWithTexts = buildOptTextsPayload(visibleQuestions, responses);
+        // 제출 직전 — 미선택 옵션의 텍스트 drop 후 questionResponses에 병합. calc 셀 값도 함께 주입.
+        const questionResponsesWithTexts = injectCalc(
+          buildOptTextsPayload(visibleQuestions, responses),
+        );
 
         await client.surveyResponse.response.complete({
           responseId: effectiveResponseId,
@@ -648,12 +877,15 @@ export function useResponseLifecycle({
     } finally {
       setIsSubmitting(false);
     }
-    // deps 는 원본 컴포넌트의 handleSubmit useCallback 과 1:1 동일.
+    // deps 는 원본 컴포넌트의 handleSubmit useCallback 과 1:1 동일 + contactAttrs(Task 7 추가).
     // 추출로 안정 세터(setHighlightQuestionIds/setCurrentStepIndex/setIsSubmitting/setIsCompleted/
     // setDuplicateStatus/setInviteIsInvalid)와 buildOptTextsPayload(module-level helper)가 props 가 되며
     // exhaustive-deps 가 추가로 경고하지만, 모두 안정 참조라 런타임 동작 불변.
+    // contactAttrs 는 injectCalc/collectNumericIssues 의 LUT 검증 컨텍스트로 새로 쓰이므로 추가했다
+    // (questions/responses/loadedSurvey 는 이미 아래 목록에 있어 injectCalc 의 나머지 의존성은 충족됨).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
+    contactAttrs,
     adminContext,
     currentResponseId,
     currentStep,

@@ -1,6 +1,6 @@
 import { headers } from 'next/headers';
 
-import { and, eq, isNotNull, isNull, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import 'server-only';
 
@@ -15,19 +15,27 @@ import {
   surveys,
 } from '@/db/schema';
 import type { PageVisit } from '@/db/schema/schema-types';
-import { encryptAnswerValue, encryptResponsesForStorage } from '@/lib/crypto/response-pii';
+import { decryptQuestionResponses, encryptAnswerValue, encryptResponsesForStorage } from '@/lib/crypto/response-pii';
 import { checkTrackA, checkTrackB } from '@/lib/duplicate-detection/check';
 import { computeSignals } from '@/lib/duplicate-detection/signals';
 import { sumActiveSeconds } from '@/lib/operations/active-seconds';
 import { parseBrowser, parsePlatform } from '@/lib/operations/parse-ua';
 import { getSurveyControlFlags, isValidTestToken } from '@/lib/survey-control';
+import type { TestResponseResetFields } from '@/lib/survey-response/reset-test-response.server';
+import { resetTestResponseRow } from '@/lib/survey-response/reset-test-response.server';
 import {
   acquireTestTargetResponse,
   assertAnonymousTestSession,
   lockAndAssertResponseMutation,
 } from '@/lib/survey-response/test-target-attempt.server';
+import { withCalcValues } from '@/lib/survey/cell-formula';
+import { stripDisabledCellValues } from '@/lib/survey/cell-gating';
+import type { Question, SurveyLookup } from '@/types/survey';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 
+import type { BlockReason } from '../../domain/duplicate';
+import { toGateBlockReason } from '../../domain/gate-block-reason';
+import { decideResponseReuse } from '../../domain/lifecycle';
 import type {
   ClientSignals,
   CompleteResponseInput,
@@ -48,17 +56,35 @@ type ResponseQueryExecutor = Pick<DbTransaction, 'execute' | 'select'>;
 // 컨택 매칭 helper
 // ========================
 
+/** 재사용 후보 행 — status 는 decideResponseReuse 판정에 쓰인다. */
+type ReuseCandidate = {
+  id: string;
+  contactTargetId: string | null;
+  metadata: SurveyResponse['metadata'];
+  status: string;
+};
+
 /**
  * 동일 컨택의 활성 응답(미완료, soft-delete 제외) 1건 조회.
  * idx_active_response_per_contact partial unique index 가 동일 contact_target_id 의
  * 미완료 응답을 1개로 제한하므로, 재진입 시 기존 행을 재사용한다.
+ *
+ * is_completed=false 만으로는 "쓰기 가능"을 뜻하지 않는다 — sweep_stale_sessions() 가
+ * 3시간 유휴 행을 drop 으로 바꿔도 is_completed 는 false 로 남는다. status 를 함께
+ * 실어 보내 호출부가 decideResponseReuse 로 판정하게 한다.
  */
 async function findActiveResponseByContact(
   surveyId: string,
   contactTargetId: string,
-): Promise<{ id: string; contactTargetId: string | null } | null> {
+): Promise<ReuseCandidate | null> {
   const [row] = await db
-    .select({ id: surveyResponses.id, contactTargetId: surveyResponses.contactTargetId })
+    .select({
+      id: surveyResponses.id,
+      contactTargetId: surveyResponses.contactTargetId,
+      // 재사용되는 행의 draftSeq 를 클라이언트에 실어 보내기 위한 컬럼 — insertResponseWithContactReuse 참조.
+      metadata: surveyResponses.metadata,
+      status: surveyResponses.status,
+    })
     .from(surveyResponses)
     .where(
       and(
@@ -73,6 +99,90 @@ async function findActiveResponseByContact(
 }
 
 /**
+ * drop 행을 in_progress 로 되살린다 — resumeOrCreateResponse 의 회복과 동일 의미론.
+ * 되살리기에 실패하면(경합으로 다른 status 가 됨) null 을 반환해 호출부가 차단하도록 한다.
+ */
+async function reviveDroppedResponse(responseId: string): Promise<boolean> {
+  const revived = await db
+    .update(surveyResponses)
+    .set({ status: 'in_progress', lastActivityAt: new Date() })
+    .where(
+      and(
+        eq(surveyResponses.id, responseId),
+        isNull(surveyResponses.deletedAt),
+        eq(surveyResponses.status, 'drop'),
+      ),
+    )
+    .returning({ id: surveyResponses.id });
+  return revived.length > 0;
+}
+
+/**
+ * 재사용 후보를 실제로 쓸 수 있는 상태로 만든다.
+ * - reuse: 그대로
+ * - revive: drop → in_progress 로 되살린 뒤 사용
+ * - restart: 테스트 세션 한정 — 종결된 행을 제자리에서 초기화해 처음부터 다시 응답
+ * - blocked: 차단 사유 반환 (호출부가 500 대신 안내 화면으로 응답)
+ *
+ * `testRestart` 인자가 곧 "유효 테스트 세션임"의 증거이자 초기화 payload 다.
+ * 넘기는 호출부는 insertAnonymousTestResponse 하나뿐이고, 그 함수는 정의상
+ * `isAnonymousTest && testToken` 분기에서만 호출된다 — 실응답 경로
+ * (insertResponseWithContactReuse)는 이 인자를 넘기지 않으므로 완화가 샐 수 없다.
+ * 플래그와 payload 를 한 인자로 묶어 둔 이유도 "테스트 세션인데 초기화 값이 없는" 중간
+ * 상태를 만들지 않기 위함이다.
+ */
+async function settleReuseCandidate(
+  candidate: ReuseCandidate,
+  testRestart?: TestResponseResetFields,
+): Promise<{ ok: true; row: ReuseCandidate } | { ok: false; reason: BlockReason }> {
+  const decision = decideResponseReuse(candidate.status, {
+    hasContact: candidate.contactTargetId != null,
+    isTestSession: testRestart != null,
+  });
+  if (decision.action === 'reuse') return { ok: true, row: candidate };
+  if (decision.action === 'restart') {
+    if (testRestart) {
+      // draft 순번 하한은 초기화 후에도 살린다 — 직전 시도의 탭이 늦게 던진 beacon 이
+      // 갓 초기화한 행에 적용되는 것을 claimDraftSeq 가 계속 막아야 한다.
+      const draftSeq = extractDraftSeq(candidate.metadata);
+      // 새 행 INSERT 는 테스트 유니크 인덱스에 걸리므로 반드시 제자리 초기화한다.
+      await db.transaction((tx) =>
+        resetTestResponseRow(tx, candidate.id, {
+          ...testRestart,
+          ...(draftSeq !== undefined ? { draftSeq } : {}),
+        }),
+      );
+      // 남긴 하한을 그대로 실어 보내 새 탭의 draftSeqRef 를 seed 한다(0 부터 시작하면
+      // 새 시도의 draft 가 전부 stale 로 떨어진다).
+      return {
+        ok: true,
+        row: {
+          ...candidate,
+          status: 'in_progress',
+          metadata: draftSeq !== undefined ? { draftSeq } : null,
+        },
+      };
+    }
+    // 도달 불가(restart 판정의 전제가 testRestart 존재) — 방어적으로 차단한다.
+    return {
+      ok: false,
+      reason: candidate.contactTargetId != null ? 'token_already_used' : 'device_already_responded',
+    };
+  }
+  if (decision.action === 'revive') {
+    if (await reviveDroppedResponse(candidate.id)) {
+      return { ok: true, row: { ...candidate, status: 'in_progress' } };
+    }
+    // 되살리기 경합 — 종결 상태로 넘어갔다고 보고 차단한다.
+    return {
+      ok: false,
+      reason: candidate.contactTargetId != null ? 'token_already_used' : 'device_already_responded',
+    };
+  }
+  return { ok: false, reason: decision.reason };
+}
+
+/**
  * survey_responses 행 INSERT 의 공통 흐름.
  *
  * 처리 분기:
@@ -83,24 +193,39 @@ async function findActiveResponseByContact(
  *
  * `onReuse` 콜백이 있으면 1·3·4 의 재사용/충돌 경로에서 호출되어 첫 답변 머지 등을 수행.
  */
+type ReuseOutcome =
+  | { kind: 'ready'; row: ReuseCandidate }
+  | { kind: 'blocked'; reason: BlockReason };
+
 async function insertResponseWithContactReuse(params: {
   surveyId: string;
   sessionId: string;
   contactTargetId: string | null;
   newResponse: NewSurveyResponse;
   onReuse?: (id: string) => Promise<void>;
-}): Promise<{ id: string; contactTargetId: string | null }> {
+}): Promise<ReuseOutcome> {
   const { surveyId, sessionId, contactTargetId, newResponse, onReuse } = params;
+
+  // 재사용 후보를 status 로 판정한 뒤에만 onReuse 를 돌린다 — 차단 대상 행에
+  // 첫 답변을 머지하려 들면 쓰기 가드에서 0행이 되어 500 이 난다.
+  const takeover = async (candidate: ReuseCandidate): Promise<ReuseOutcome> => {
+    const settled = await settleReuseCandidate(candidate);
+    if (!settled.ok) return { kind: 'blocked', reason: settled.reason };
+    if (onReuse) await onReuse(settled.row.id);
+    return { kind: 'ready', row: settled.row };
+  };
 
   if (contactTargetId) {
     const active = await findActiveResponseByContact(surveyId, contactTargetId);
-    if (active) {
-      if (onReuse) await onReuse(active.id);
-      return active;
-    }
+    if (active) return takeover(active);
   }
 
-  let inserted: Array<{ id: string; contactTargetId: string | null }>;
+  let inserted: Array<{
+    id: string;
+    contactTargetId: string | null;
+    metadata: SurveyResponse['metadata'];
+    status: string;
+  }>;
   try {
     inserted = await db
       .insert(surveyResponses)
@@ -108,25 +233,41 @@ async function insertResponseWithContactReuse(params: {
       .onConflictDoNothing({
         target: [surveyResponses.surveyId, surveyResponses.sessionId],
       })
-      .returning({ id: surveyResponses.id, contactTargetId: surveyResponses.contactTargetId });
+      .returning({
+        id: surveyResponses.id,
+        contactTargetId: surveyResponses.contactTargetId,
+        metadata: surveyResponses.metadata,
+        status: surveyResponses.status,
+      });
   } catch (e) {
+    // idx_active_response_per_contact 경합 — 다른 요청이 방금 활성 행을 만들었다.
     if (contactTargetId) {
       const active = await findActiveResponseByContact(surveyId, contactTargetId);
-      if (active) {
-        if (onReuse) await onReuse(active.id);
-        return active;
-      }
+      if (active) return takeover(active);
     }
     throw e;
   }
 
   const firstInserted = inserted[0];
-  if (firstInserted !== undefined) return firstInserted;
+  if (firstInserted !== undefined) return { kind: 'ready', row: firstInserted };
 
+  // (surveyId, sessionId) UNIQUE 충돌 — 기존 행을 물려받는다. soft-delete 된 행은
+  // 쓰기 가드가 거부하므로 후보에서 제외하고, 종결 상태는 status 판정으로 걸러낸다.
   const [existing] = await db
-    .select({ id: surveyResponses.id, contactTargetId: surveyResponses.contactTargetId })
+    .select({
+      id: surveyResponses.id,
+      contactTargetId: surveyResponses.contactTargetId,
+      metadata: surveyResponses.metadata,
+      status: surveyResponses.status,
+    })
     .from(surveyResponses)
-    .where(and(eq(surveyResponses.surveyId, surveyId), eq(surveyResponses.sessionId, sessionId)))
+    .where(
+      and(
+        eq(surveyResponses.surveyId, surveyId),
+        eq(surveyResponses.sessionId, sessionId),
+        isNull(surveyResponses.deletedAt),
+      ),
+    )
     .limit(1);
 
   if (!existing) {
@@ -135,15 +276,14 @@ async function insertResponseWithContactReuse(params: {
     );
   }
 
-  if (onReuse) await onReuse(existing.id);
-  return existing;
+  return takeover(existing);
 }
 
 async function insertAnonymousTestResponse(
   input: { surveyId: string; sessionId: string; testToken: string },
   newResponse: NewSurveyResponse,
-): Promise<{ id: string; contactTargetId: null }> {
-  return db.transaction(async (tx) => {
+): Promise<ReuseOutcome> {
+  const candidate = await db.transaction(async (tx): Promise<ReuseCandidate> => {
     await assertAnonymousTestSession(tx, input);
     const [inserted] = await tx
       .insert(surveyResponses)
@@ -151,11 +291,21 @@ async function insertAnonymousTestResponse(
       .onConflictDoNothing({
         target: [surveyResponses.surveyId, surveyResponses.sessionId],
       })
-      .returning({ id: surveyResponses.id });
-    if (inserted) return { id: inserted.id, contactTargetId: null };
+      .returning({ id: surveyResponses.id, status: surveyResponses.status });
+    // 새로 만든 행은 물려받을 draftSeq 이력이 없다.
+    if (inserted) {
+      return { id: inserted.id, contactTargetId: null, metadata: null, status: inserted.status };
+    }
 
+    // 물려받는 기존 테스트 행도 sweep 으로 drop 이 됐을 수 있어 status 를 함께 읽는다.
+    // metadata 는 draft 순번 하한 때문에 필요하다 — 같은 sessionId 로 재진입한 이전 시도의
+    // draftSeq 를 초기화 후에도 이어가야 지연 도착 beacon 이 새 시도를 덮지 않는다.
     const [existing] = await tx
-      .select({ id: surveyResponses.id })
+      .select({
+        id: surveyResponses.id,
+        status: surveyResponses.status,
+        metadata: surveyResponses.metadata,
+      })
       .from(surveyResponses)
       .where(
         and(
@@ -168,8 +318,36 @@ async function insertAnonymousTestResponse(
       )
       .limit(1);
     if (!existing) throw new Error('테스트 응답을 시작할 수 없습니다');
-    return { id: existing.id, contactTargetId: null };
+    return {
+      id: existing.id,
+      contactTargetId: null,
+      metadata: existing.metadata,
+      status: existing.status,
+    };
   });
+
+  // 이 함수는 정의상 유효 익명 테스트 세션에서만 호출된다(createResponseWithFirstAnswer 의
+  // `isAnonymousTest && testToken` 분기 + 위 assertAnonymousTestSession 재검증). 그래서
+  // 종결 상태 재시작 payload 를 넘겨도 실응답으로 완화가 새지 않는다 —
+  // 이 조건을 넓히려면 settleReuseCandidate 주석을 먼저 읽을 것.
+  // 초기화 값은 새로 만들지 않고 방금 INSERT 하려던 행(newResponse)의 값을 그대로 쓴다.
+  const settled = await settleReuseCandidate(candidate, {
+    sessionId: input.sessionId,
+    versionId: newResponse.versionId ?? null,
+    currentStepId: newResponse.currentStepId ?? null,
+    pageVisits: newResponse.pageVisits ?? [],
+    visibleStepIndex: newResponse.visibleStepIndex,
+    visibleStepTotal: newResponse.visibleStepTotal,
+    userAgent: newResponse.userAgent,
+    ipHash: newResponse.ipHash,
+    fpHash: newResponse.fpHash,
+    deviceId: newResponse.deviceId,
+    platform: newResponse.platform,
+    browser: newResponse.browser,
+  });
+  return settled.ok
+    ? { kind: 'ready', row: settled.row }
+    : { kind: 'blocked', reason: settled.reason };
 }
 
 // ========================
@@ -201,11 +379,28 @@ type SurveyGateRow = {
 /** 가용성 게이트 입력 — 응답 시점 활성 버전(없으면 null). */
 type VersionGateRow = { status: string } | null;
 
+/**
+ * 가용성 게이트 위반을 응답자 화면이 이해하는 blocked 결과로 접는다.
+ *
+ * 미배포·마감 설문에 들어온 응답자에게 500 대신 안내 화면을 보여주기 위한 것이다. 500 이면
+ * 클라이언트가 차단을 인지하지 못해 답을 고를 때마다 무의미한 INSERT 를 다시 쏜다.
+ * 가용성과 무관한 사유(변조 가드 등)는 null 을 돌려받아 그대로 throw 된다.
+ */
+function toGateBlockedResult(err: unknown): { kind: 'blocked'; reason: BlockReason } | null {
+  if (!(err instanceof SurveyNotAcceptingResponsesError)) return null;
+  const reason = toGateBlockReason(err.reason);
+  return reason ? { kind: 'blocked', reason } : null;
+}
+
 /** 응답 가용성 게이트 위반 시 던지는 에러. pub 엔드포인트라 호출자에 사유를 세분 노출하지 않는다. */
 export class SurveyNotAcceptingResponsesError extends Error {
+  /** 거부 사유. 메시지 문자열 파싱 없이 호출측이 분기할 수 있게 필드로 노출한다. */
+  readonly reason: string;
+
   constructor(reason: string) {
     super(`응답을 받을 수 없는 설문입니다. (${reason})`);
     this.name = 'SurveyNotAcceptingResponsesError';
+    this.reason = reason;
   }
 }
 
@@ -609,25 +804,10 @@ export async function updateQuestionResponse(
   const { responseId, questionId, value } = input;
 
   // #5 변조 가드 1: value 직렬화 바이트 상한. DB UPDATE 이전에 차단해 거대 JSONB 주입을 막는다.
-  const serializedBytes = Buffer.byteLength(JSON.stringify(value ?? null), 'utf8');
-  if (serializedBytes > MAX_ANSWER_VALUE_BYTES) {
-    throw new SurveyNotAcceptingResponsesError('answer_value_too_large');
-  }
+  assertAnswerValueSize(value);
 
   // #5 변조 가드 2: 응답 행 조회 — versionId/surveyId 로 questionId 소속을 검증한다.
-  const responseRow = await db.query.surveyResponses.findFirst({
-    where: eq(surveyResponses.id, responseId),
-    columns: {
-      id: true,
-      surveyId: true,
-      versionId: true,
-      isTest: true,
-      contactTargetId: true,
-    },
-  });
-  if (!responseRow) {
-    throw new Error('응답을 찾을 수 없습니다.');
-  }
+  const responseRow = await loadResponseRowForMutation(responseId);
 
   // #5 변조 가드 3: questionId 가 해당 응답의 versionId 스냅샷(또는 surveyId 의 questions)에
   // 존재해야 한다. 미존재면 거부 — 임의 키 JSONB 주입 차단.
@@ -640,13 +820,7 @@ export async function updateQuestionResponse(
   const storedValue = piiEncrypted ? encryptAnswerValue(value) : value;
 
   // 중단 모드: 열려 있던 탭의 답변 저장 차단 (테스트 행 예외) — 스펙 5절 게이트 3.
-  // isTest 행은 flags 조회 자체를 skip해 정상 트래픽 경로의 오버헤드를 늘리지 않는다.
-  if (!responseRow.isTest) {
-    const flags = await getSurveyControlFlags(responseRow.surveyId);
-    if (flags?.isPaused) {
-      throw new SurveyNotAcceptingResponsesError('survey_paused');
-    }
-  }
+  await assertSurveyNotPaused(responseRow);
 
   // jsonb_set 으로 답변 저장 + progress_pct 동기 갱신.
   // progress_pct 는 versionId 의 snapshot 에서 questionId 의 1-based position 을 찾아
@@ -669,22 +843,349 @@ export async function updateQuestionResponse(
   });
 }
 
+/** 응답 변조 가드에 필요한 최소 응답 행. 단건/배치 경로가 공유한다. */
+type ResponseMutationRow = {
+  id: string;
+  surveyId: string;
+  versionId: string | null;
+  isTest: boolean;
+  contactTargetId: string | null;
+};
+
+/** #5 변조 가드 1: value 직렬화 바이트 상한. DB UPDATE 이전에 거대 JSONB 주입을 막는다. */
+function assertAnswerValueSize(value: unknown): void {
+  const serializedBytes = Buffer.byteLength(JSON.stringify(value ?? null), 'utf8');
+  if (serializedBytes > MAX_ANSWER_VALUE_BYTES) {
+    throw new SurveyNotAcceptingResponsesError('answer_value_too_large');
+  }
+}
+
+/** #5 변조 가드 2: 응답 행 조회. 미존재면 기존 에러 메시지를 그대로 던진다. */
+async function loadResponseRowForMutation(responseId: string): Promise<ResponseMutationRow> {
+  const row = await db.query.surveyResponses.findFirst({
+    where: eq(surveyResponses.id, responseId),
+    columns: {
+      id: true,
+      surveyId: true,
+      versionId: true,
+      isTest: true,
+      contactTargetId: true,
+    },
+  });
+  if (!row) {
+    throw new Error('응답을 찾을 수 없습니다.');
+  }
+  return row;
+}
+
+/** 중단 모드 게이트. isTest 행은 flags 조회 자체를 skip 해 정상 트래픽 비용을 늘리지 않는다. */
+async function assertSurveyNotPaused(row: Pick<ResponseMutationRow, 'surveyId' | 'isTest'>): Promise<void> {
+  if (row.isTest) return;
+  const flags = await getSurveyControlFlags(row.surveyId);
+  if (flags?.isPaused) {
+    throw new SurveyNotAcceptingResponsesError('survey_paused');
+  }
+}
+
+/**
+ * assertQuestionBelongsToResponse 의 배치 버전 — 소속 검증 + piiEncrypted 를 1회 쿼리로.
+ *
+ * 페이지 이동 체크포인트는 답변을 한 번에 여러 개 받는다. 문항마다 검증 쿼리를 돌리면
+ * 왕복이 답변 수에 비례해 늘어난다(10문항 페이지에서 2.3초 관측, 2026-08-04).
+ * 하나라도 소속되지 않으면 단건 경로와 동일한 메시지로 거부한다 — 부분 저장은 하지 않는다.
+ */
+async function loadQuestionPiiFlags(
+  versionId: string | null,
+  surveyId: string,
+  questionIds: string[],
+): Promise<Map<string, boolean>> {
+  const flags = new Map<string, boolean>();
+
+  if (versionId) {
+    // questionId 는 pub 입력이라 uuid 형식이 아닐 수 있다 — 캐스트는 컬럼 쪽(q.id::text)에 건다.
+    // 비정상 id 는 스냅샷 텍스트 비교에서 매치되지 않아 아래 미존재 검사로 거부된다.
+    const idList = sql.join(
+      questionIds.map((id) => sql`${id}`),
+      sql`, `,
+    );
+    const rows = await db.execute<{ id: string | null; pii: boolean | null }>(sql`
+      SELECT
+        qe.elem->>'id' AS id,
+        (COALESCE((qe.elem->>'piiEncrypted')::boolean, false)
+         OR COALESCE(q.pii_encrypted, false)) AS pii
+      FROM survey_versions sv,
+           jsonb_array_elements(
+             CASE WHEN jsonb_typeof(sv.snapshot->'questions') = 'array'
+                  THEN sv.snapshot->'questions'
+                  ELSE '[]'::jsonb
+             END
+           ) AS qe(elem)
+      LEFT JOIN questions q
+        ON q.id::text = qe.elem->>'id' AND q.survey_id = ${surveyId}::uuid
+      WHERE sv.id = ${versionId}
+        AND qe.elem->>'id' IN (${idList})
+    `);
+    for (const row of rows) {
+      if (row.id != null) flags.set(row.id, row.pii === true);
+    }
+  } else {
+    const rows = await db
+      .select({ id: questions.id, piiEncrypted: questions.piiEncrypted })
+      .from(questions)
+      .where(and(eq(questions.surveyId, surveyId), inArray(questions.id, questionIds)));
+    for (const row of rows) {
+      flags.set(row.id, row.piiEncrypted === true);
+    }
+  }
+
+  for (const questionId of questionIds) {
+    if (!flags.has(questionId)) {
+      throw new Error('해당 설문에 존재하지 않는 질문입니다.');
+    }
+  }
+  return flags;
+}
+
+/**
+ * applyQuestionResponseUpdate 의 배치 버전 — 답변 전체를 단일 UPDATE 로 반영한다.
+ *
+ * questionResponses 는 top-level 키 병합이라 `|| jsonb` 가 문항별 jsonb_set 연쇄와 동치다.
+ * progress_pct 는 배치 중 가장 뒤에 있는 문항의 위치로 계산한다(단건 경로를 답변 수만큼
+ * 반복한 결과와 동일 — GREATEST 로 단조 증가라 최대값만 남는다).
+ */
+async function applyDraftAnswersUpdate(
+  executor: { update: typeof db.update },
+  responseId: string,
+  questionIds: string[],
+  storedAnswers: Record<string, unknown>,
+): Promise<void> {
+  const idList = sql.join(
+    questionIds.map((id) => sql`${id}`),
+    sql`, `,
+  );
+  const [updated] = await executor
+    .update(surveyResponses)
+    .set({
+      questionResponses: sql`COALESCE(${surveyResponses.questionResponses}, '{}'::jsonb)
+        || ${JSON.stringify(storedAnswers)}::jsonb`,
+      progressPct: sql`NULLIF(LEAST(100, GREATEST(
+        COALESCE(${surveyResponses.progressPct}, 0),
+        COALESCE((
+          SELECT ROUND((
+            (SELECT MAX(t.idx)
+             FROM jsonb_array_elements(
+                    CASE WHEN jsonb_typeof(sv.snapshot->'questions') = 'array'
+                         THEN sv.snapshot->'questions'
+                         ELSE '[]'::jsonb
+                    END
+                  ) WITH ORDINALITY AS t(elem, idx)
+             WHERE t.elem->>'id' IN (${idList})
+            )::numeric
+            / NULLIF(jsonb_array_length(
+                CASE WHEN jsonb_typeof(sv.snapshot->'questions') = 'array'
+                     THEN sv.snapshot->'questions'
+                     ELSE '[]'::jsonb
+                END
+              ), 0)) * 100)::int
+          FROM survey_versions sv
+          WHERE sv.id = ${surveyResponses.versionId}
+          LIMIT 1
+        ), 0)
+      ))::smallint, 0)`,
+    })
+    .where(
+      and(
+        eq(surveyResponses.id, responseId),
+        isNull(surveyResponses.deletedAt),
+        eq(surveyResponses.status, 'in_progress'),
+      ),
+    )
+    .returning();
+
+  if (!updated) {
+    throw new Error('응답을 수정할 수 없습니다.');
+  }
+}
+
+type DraftSeqClaim = 'claimed' | 'stale' | 'not_found';
+
+/**
+ * metadata JSONB 의 draftSeq 를 안전하게 추출한다. claimDraftSeq 가 쓰는 값과 동일 키 —
+ * 응답 행 id 를 클라이언트에 넘겨주는 모든 경로(resume, 컨택 재사용 등)가 이 값을 함께
+ * 실어 보내 draftSeqRef 를 seed 하는 데 쓴다. lifecycle.service.ts 의 resumeOrCreateResponse
+ * 도 이 헬퍼를 그대로 재사용한다(단일 소스, 사이클 방지를 위해 이쪽에 둔다). 비정상 값은
+ * 무시하고 undefined 를 반환한다.
+ */
+export function extractDraftSeq(metadata: unknown): number | undefined {
+  if (metadata == null || typeof metadata !== 'object') return undefined;
+  const raw = (metadata as Record<string, unknown>)['draftSeq'];
+  return typeof raw === 'number' && Number.isFinite(raw) && raw >= 0 ? raw : undefined;
+}
+
+/**
+ * draft 쓰기 순번을 선점한다.
+ *
+ * 저장된 draftSeq 보다 큰 요청만 통과시키고 그 자리에서 값을 올린다. 단일 UPDATE 라
+ * 동시 요청에도 하나만 통과한다. 0행이면 seq 가 밀렸거나 행이 없는 것이므로 구분해서
+ * 돌려준다 — 행 부재는 기존 에러 경로를 그대로 타야 하기 때문이다.
+ */
+async function claimDraftSeq(responseId: string, seq: number): Promise<DraftSeqClaim> {
+  const claimed = await db.execute<{ id: string }>(sql`
+    UPDATE survey_responses
+    SET metadata = jsonb_set(
+      COALESCE(metadata, '{}'::jsonb),
+      ARRAY['draftSeq'],
+      to_jsonb(${seq}::bigint),
+      true
+    )
+    WHERE id = ${responseId}
+      AND COALESCE((metadata->>'draftSeq')::bigint, 0) < ${seq}
+    RETURNING id
+  `);
+  if (claimed.length > 0) return 'claimed';
+
+  const existing = await db.execute<{ id: string }>(sql`
+    SELECT id FROM survey_responses WHERE id = ${responseId} LIMIT 1
+  `);
+  return existing.length > 0 ? 'stale' : 'not_found';
+}
+
 /**
  * 페이지 이동 체크포인트.
  *
  * 외부 요청은 한 번만 받되 기존 단건 저장 경로를 재사용해 문항 소속 검증, 크기 제한,
  * PII 암호화, 테스트 attempt 소유권 검사를 모든 답에 동일하게 적용한다.
+ *
+ * seq 가 실려 있으면 요청 단위로 한 번 claim 한다(문항별 WHERE 절이 아니라 배치 단위인
+ * 이유는 claimDraftSeq 주석 참조 — 0행 매치를 문항별로 두면 정상 시나리오가 500 으로 샌다).
+ * 지연 도착한 stale 요청이면 답변을 전혀 쓰지 않고 applied:false 로 돌아간다.
  */
-export async function saveDraftResponse(input: SaveDraftResponseInput): Promise<void> {
-  for (const [questionId, value] of Object.entries(input.answers)) {
-    await updateQuestionResponse({
+export async function saveDraftResponse(
+  input: SaveDraftResponseInput,
+): Promise<{ applied: boolean }> {
+  if (input.seq !== undefined) {
+    const claim = await claimDraftSeq(input.responseId, input.seq);
+    // 더 새로운 쓰기가 이미 반영됐다. 지연 도착한 이 요청을 적용하면 최신 답변을 덮는다.
+    if (claim === 'stale') return { applied: false };
+    // 'not_found' 는 그대로 진행시켜 아래 응답 행 조회의 기존 에러 경로를 타게 한다.
+  }
+
+  const entries = Object.entries(input.answers);
+  if (entries.length === 0) return { applied: true };
+
+  // #5 변조 가드 1: value 직렬화 바이트 상한. 답변별로 검사해 단건 경로와 동일하게 거른다.
+  for (const [, value] of entries) {
+    assertAnswerValueSize(value);
+  }
+
+  // #5 변조 가드 2: 응답 행 조회. 배치 전체가 같은 행이라 1회면 충분하다.
+  const responseRow = await loadResponseRowForMutation(input.responseId);
+
+  // #5 변조 가드 3: 소속 검증 + PII 플래그를 questionId 전체에 대해 1회 쿼리로 수집.
+  const piiFlags = await loadQuestionPiiFlags(
+    responseRow.versionId,
+    responseRow.surveyId,
+    entries.map(([questionId]) => questionId),
+  );
+
+  // 중단 모드: 열려 있던 탭의 답변 저장 차단 (테스트 행 예외) — 스펙 5절 게이트 3.
+  await assertSurveyNotPaused(responseRow);
+
+  // PII 문항이면 저장 직전 암호화. 이미 암호문이면 encryptAnswerValue 가 통과시킨다.
+  const storedAnswers: Record<string, unknown> = {};
+  for (const [questionId, value] of entries) {
+    storedAnswers[questionId] = piiFlags.get(questionId) ? encryptAnswerValue(value) : value;
+  }
+  const questionIds = entries.map(([questionId]) => questionId);
+
+  if (!responseRow.isTest) {
+    await applyDraftAnswersUpdate(db, input.responseId, questionIds, storedAnswers);
+    return { applied: true };
+  }
+
+  // 테스트 행은 시도 소유권 락을 먼저 잡는다. 락도 배치당 1회.
+  await db.transaction(async (tx) => {
+    await lockAndAssertResponseMutation(tx, {
       responseId: input.responseId,
-      questionId,
-      value,
       ...(input.attemptId ? { attemptId: input.attemptId } : {}),
       ...(input.sessionId ? { sessionId: input.sessionId } : {}),
     });
+    await applyDraftAnswersUpdate(tx, input.responseId, questionIds, storedAnswers);
+  });
+  return { applied: true };
+}
+
+/** saveDraftResponseIfActive 가 저장을 건너뛴 사유. 서버 로그·테스트 어서션용. */
+export type SaveDraftSkipReason =
+  | 'not_found'
+  | 'deleted'
+  | 'concluded'
+  | 'survey_paused'
+  | 'answer_value_too_large'
+  | 'not_accepting'
+  | 'stale';
+
+export type SaveDraftIfActiveResult =
+  | { saved: true }
+  | { saved: false; skipped: SaveDraftSkipReason };
+
+/** SurveyNotAcceptingResponsesError.reason 은 string 이라 미지의 값이 올 수 있다. union 을 닫는다. */
+function toSkipReason(reason: string): SaveDraftSkipReason {
+  return reason === 'survey_paused' || reason === 'answer_value_too_large'
+    ? reason
+    : 'not_accepting';
+}
+
+/** 응답 행의 not_found/deleted/concluded 판정. 사전 게이트와 저장 실패 후 재조회가 공유한다. */
+function judgeRowGate(
+  row: { status: string; deletedAt: Date | null } | undefined,
+): { saved: false; skipped: 'not_found' | 'deleted' | 'concluded' } | null {
+  if (!row) return { saved: false, skipped: 'not_found' };
+  if (row.deletedAt !== null) return { saved: false, skipped: 'deleted' };
+  if (row.status !== 'in_progress') return { saved: false, skipped: 'concluded' };
+  return null;
+}
+
+/**
+ * 이탈 시점 beacon 전용 draft 저장.
+ *
+ * saveDraftResponse 와 달리 "저장할 이유가 없는" 상태를 throw 가 아니라 skipped 로 돌려준다.
+ * beacon 은 응답을 읽지 않으므로 상태 코드가 클라이언트 동작을 바꾸지 않는다. 제출 직후 탭
+ * 닫기·중단된 설문 탭 닫기 같은 정상 시나리오를 5xx 로 올리면 Sentry 에러율만 오염된다.
+ *
+ * 상태 조회를 한 번 더 하지만 updateQuestionResponse 가 어차피 문항마다 행을 조회하므로
+ * 비중은 작다. 라우트가 throw 메시지 문자열로 분기하지 않게 하는 것이 목적이다.
+ */
+export async function saveDraftResponseIfActive(
+  input: SaveDraftResponseInput,
+): Promise<SaveDraftIfActiveResult> {
+  const row = await db.query.surveyResponses.findFirst({
+    where: eq(surveyResponses.id, input.responseId),
+    columns: { id: true, status: true, deletedAt: true },
+  });
+  const gateResult = judgeRowGate(row);
+  if (gateResult) return gateResult;
+
+  try {
+    const result = await saveDraftResponse(input);
+    // 지연 도착한 stale beacon — 답변 쓰기 자체를 하지 않았으므로 최신 답변은 그대로 남는다.
+    if (!result.applied) return { saved: false, skipped: 'stale' };
+  } catch (err) {
+    if (err instanceof SurveyNotAcceptingResponsesError) {
+      return { saved: false, skipped: toSkipReason(err.reason) };
+    }
+    // 게이트 통과 후 저장 사이에 행이 종결·삭제됐을 수 있다(제출 직후 탭 닫기 등). 다시
+    // 읽어 확인되면 정상 skip 으로 접는다. 에러 메시지 문자열을 파싱하지 않는 이유는 이
+    // 래퍼의 존재 이유(정상 시나리오를 throw 문자열 매칭 없이 판정)와 같다.
+    const recheckRow = await db.query.surveyResponses.findFirst({
+      where: eq(surveyResponses.id, input.responseId),
+      columns: { id: true, status: true, deletedAt: true },
+    });
+    const recheckResult = judgeRowGate(recheckRow);
+    if (recheckResult) return recheckResult;
+    throw err;
   }
+  return { saved: true };
 }
 
 export async function saveTestTargetFirstAnswer(
@@ -751,6 +1252,18 @@ function isLikelyBot(args: {
  * @returns created (생성/기존 행 id) 또는 blocked (중복 감지)
  */
 export async function createResponseWithFirstAnswer(
+  input: CreateResponseWithFirstAnswerInput,
+): Promise<FirstAnswerResult> {
+  try {
+    return await createResponseWithFirstAnswerInner(input);
+  } catch (err) {
+    const blocked = toGateBlockedResult(err);
+    if (blocked) return blocked;
+    throw err;
+  }
+}
+
+async function createResponseWithFirstAnswerInner(
   input: CreateResponseWithFirstAnswerInput,
 ): Promise<FirstAnswerResult> {
   const {
@@ -897,11 +1410,22 @@ export async function createResponseWithFirstAnswer(
           contactTargetId,
           newResponse,
         });
+  // 종결 상태 행을 물려받으려던 경우 — 500 대신 "이미 끝난 응답" 안내로 돌려보낸다.
+  if (result.kind === 'blocked') return { kind: 'blocked', reason: result.reason };
+
   // 신규 INSERT 든 reuse 든 모두 updateQuestionResponse 로 첫 답변 머지 + progress_pct
   // 갱신을 단일화. jsonb_set 은 동일 값 덮어쓰기라 멱등이라 신규 INSERT path 의 중복 set
   // 도 안전. onReuse 콜백을 사용하지 않는 이유: progress_pct 가 신규 INSERT 에서도 필요.
-  await updateQuestionResponse({ responseId: result.id, questionId, value: storedValue });
-  return { kind: 'created', id: result.id, contactTargetId: result.contactTargetId };
+  await updateQuestionResponse({ responseId: result.row.id, questionId, value: storedValue });
+  // 컨택 재사용으로 기존 행을 물려받았으면 그 행의 draftSeq 를 함께 실어 보낸다 — resume 이
+  // 호출되지 않는 경로(localStorage 없는 재진입)에서도 draftSeqRef 를 올바르게 seed 하기 위함.
+  const draftSeq = extractDraftSeq(result.row.metadata);
+  return {
+    kind: 'created',
+    id: result.row.id,
+    contactTargetId: result.row.contactTargetId,
+    ...(draftSeq !== undefined ? { draftSeq } : {}),
+  };
 }
 
 /**
@@ -921,6 +1445,18 @@ export async function createResponseWithFirstAnswer(
  * 충돌(=이미 답변이 있는 row 존재) 시 기존 row 의 id 를 그대로 반환.
  */
 export async function createBlankResponse(
+  input: CreateBlankResponseInput,
+): Promise<FirstAnswerResult> {
+  try {
+    return await createBlankResponseInner(input);
+  } catch (err) {
+    const blocked = toGateBlockedResult(err);
+    if (blocked) return blocked;
+    throw err;
+  }
+}
+
+async function createBlankResponseInner(
   input: CreateBlankResponseInput,
 ): Promise<FirstAnswerResult> {
   const {
@@ -1045,7 +1581,8 @@ export async function createBlankResponse(
           contactTargetId,
           newResponse,
         });
-  return { kind: 'created', id: result.id, contactTargetId: result.contactTargetId };
+  if (result.kind === 'blocked') return { kind: 'blocked', reason: result.reason };
+  return { kind: 'created', id: result.row.id, contactTargetId: result.row.contactTargetId };
 }
 
 // 응답 완료 (JSONB + response_answers 이중 쓰기)
@@ -1140,6 +1677,86 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
     }
   }
 
+  // calc 셀 서버 재계산 (신뢰 경계) — 클라이언트가 주입한 계산값을 그대로 믿지 않고,
+  // 응답 시점 버전 스냅샷의 수식으로 다시 계산해 덮어쓴다. 요청 변조나 구버전 클라이언트가
+  // 수식과 다른 값을 보내도 최종 저장 데이터(export 원천)는 수식 결과와 일치한다
+  // ("수식 결과와 다른 저장값은 존재하지 않는다" — CONTEXT.md 계산 셀 불변식).
+  //
+  // data 없이 complete 만 호출하는 우회도 막아야 한다: 위조값을 saveDraft/beacon 으로
+  // 먼저 저장한 뒤 빈 complete 를 부르면 저장된 JSONB 가 그대로 확정되므로, 스냅샷에
+  // calc 셀이 있으면 저장된 응답을 재계산해 덮어쓴다. 이 경로의 읽기·재계산·저장은
+  // 아래 트랜잭션 안에서 row lock(FOR UPDATE) 으로 묶는다 — tx 밖에서 읽어 통째로
+  // 덮어쓰면 읽기~UPDATE 사이에 도착한 draft 답변이 유실되는 경합이 생긴다.
+  //
+  // 반드시 PII 암호화 이전 평문 단계에서 수행한다. 스냅샷 미확보(레거시 versionId null,
+  // 손상 행)면 스킵 — 응답자 저장을 막지 않는 fail-safe (saveAdminEdit 와 동일 정책).
+  let storedRecalc: {
+    questions: Question[];
+    lookups: SurveyLookup[];
+    contactAttrs: Record<string, string | undefined>;
+    piiIds: Set<string>;
+  } | null = null;
+  if (gateRow?.versionId) {
+    const [versionRow] = await db
+      .select({ snapshot: surveyVersions.snapshot })
+      .from(surveyVersions)
+      .where(eq(surveyVersions.id, gateRow.versionId))
+      .limit(1);
+    const snap = versionRow?.snapshot as unknown as
+      | { questions?: unknown; lookups?: unknown }
+      | null
+      | undefined;
+    // JSONB 스키마 드리프트 방어 — 비배열이면 순회에서 크래시하므로 Array.isArray 로 거른다.
+    const snapQuestions = Array.isArray(snap?.questions) ? (snap.questions as Question[]) : [];
+    const snapLookups = Array.isArray(snap?.lookups) ? (snap.lookups as SurveyLookup[]) : [];
+    const hasCalcCells = snapQuestions.some((q) =>
+      (q.tableRowsData ?? []).some((row) => row.cells.some((c) => c.type === 'calc' && c.formula)),
+    );
+    const hasGatedCells = snapQuestions.some((q) =>
+      (q.tableRowsData ?? []).some((row) => row.cells.some((c) => c.enabledWhen && !c.isHidden)),
+    );
+
+    // 게이팅 비활성 셀 값 strip (저장 경계 보증, 스펙 §저장 경계) — 컨트롤러 변경 직후
+    // 이탈한 beacon 이 지움 전 값을 실어 보냈어도 확정 데이터에는 남지 않는다.
+    // calc 재계산(withCalcValues)보다 먼저 수행해 수식이 지워진 값 기준으로 계산되게 한다.
+    if (validatedResponses && hasGatedCells) {
+      validatedResponses = stripDisabledCellValues(snapQuestions, validatedResponses);
+    }
+
+    if (hasCalcCells || hasGatedCells) {
+      let calcAttrs: Record<string, string | undefined> = {};
+      if (hasCalcCells && gateRow.contactTargetId) {
+        const [target] = await db
+          .select({ attrs: contactTargets.attrs })
+          .from(contactTargets)
+          .where(eq(contactTargets.id, gateRow.contactTargetId))
+          .limit(1);
+        calcAttrs = (target?.attrs ?? {}) as Record<string, string | undefined>;
+      }
+      if (validatedResponses) {
+        // 페이로드 경로 — 제출된 전체 응답을 재계산 (tx 밖에서 안전: 컬럼을 페이로드로
+        // 교체하는 것이 complete 의 기존 의미라 경합으로 잃을 저장분이 없다).
+        // 게이팅만 있는 설문은 위 strip 으로 충분 — calc 셀이 있을 때만 재계산한다.
+        if (hasCalcCells) {
+          validatedResponses = withCalcValues(validatedResponses, {
+            questions: snapQuestions,
+            responses: validatedResponses,
+            lookups: snapLookups,
+            contactAttrs: calcAttrs,
+          });
+        }
+      } else {
+        // 빈 complete 경로 — 재계산 재료만 준비하고 실행은 tx 안 row lock 아래로 미룬다.
+        storedRecalc = {
+          questions: snapQuestions,
+          lookups: snapLookups,
+          contactAttrs: calcAttrs,
+          piiIds: await loadPiiQuestionIds(gateRow.versionId, gateRow.surveyId),
+        };
+      }
+    }
+  }
+
   // PII 문항 암호화 — prefill 복원(평문 비교) 이후, 저장 직전에 수행한다.
   if (validatedResponses && gateRow) {
     const piiIds = await loadPiiQuestionIds(gateRow.versionId, gateRow.surveyId);
@@ -1156,6 +1773,34 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
         attemptId: input.attemptId,
         sessionId: input.sessionId,
       });
+    }
+    // 빈 complete 의 calc 재계산 — row lock 을 잡은 뒤 저장분을 읽어 재계산한다.
+    // 동시 draft UPDATE 는 이 lock 을 대기하므로 읽기~쓰기 사이 유실 경합이 없다.
+    let storedRecalcResponses: Record<string, unknown> | undefined;
+    if (storedRecalc) {
+      const [locked] = await tx
+        .select({ questionResponses: surveyResponses.questionResponses })
+        .from(surveyResponses)
+        .where(eq(surveyResponses.id, responseId))
+        .for('update');
+      // 수식이 암호화된 숫자 단답을 참조할 수 있으므로 평문화 후 재계산, 저장 직전 재암호화.
+      const plain = decryptQuestionResponses(
+        (locked?.questionResponses ?? {}) as Record<string, unknown>,
+        { responseId },
+      );
+      // 게이팅 strip → calc 재계산 순서 — 비활성 셀 잔존 값을 지운 뒤 그 기준으로
+      // 수식을 계산한다 (스펙 §저장 경계. 빈 complete 우회로 저장된 값도 여기서 봉합).
+      const stripped = stripDisabledCellValues(storedRecalc.questions, plain);
+      let recomputed = withCalcValues(stripped, {
+        questions: storedRecalc.questions,
+        responses: stripped,
+        lookups: storedRecalc.lookups,
+        contactAttrs: storedRecalc.contactAttrs,
+      });
+      if (storedRecalc.piiIds.size > 0) {
+        recomputed = encryptResponsesForStorage(recomputed, storedRecalc.piiIds);
+      }
+      storedRecalcResponses = recomputed;
     }
     // 1. 기존 JSONB 방식 저장 + 운영 현황 추적 컬럼 갱신
     const [updated] = await tx
@@ -1181,7 +1826,11 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
                )
           ELSE COALESCE(${surveyResponses.pageVisits}, '[]'::jsonb)
         END`,
-        ...(validatedResponses ? { questionResponses: validatedResponses } : {}),
+        ...(validatedResponses
+          ? { questionResponses: validatedResponses }
+          : storedRecalcResponses
+            ? { questionResponses: storedRecalcResponses }
+            : {}),
         ...(data?.exposedQuestionIds || data?.exposedRowIds
           ? {
               metadata: {
@@ -1237,8 +1886,10 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
       }
 
       // 2. response_answers 정규화 저장 (replaceResponseAnswers — saveAdminEdit 과 공유)
-      if (validatedResponses && Object.keys(validatedResponses).length > 0) {
-        await replaceResponseAnswers(tx, responseId, updated.surveyId, validatedResponses);
+      // 빈 complete 의 calc 재계산 경로도 JSONB 와 동일한 맵으로 정규화한다.
+      const normalizedSource = validatedResponses ?? storedRecalcResponses;
+      if (normalizedSource && Object.keys(normalizedSource).length > 0) {
+        await replaceResponseAnswers(tx, responseId, updated.surveyId, normalizedSource);
       }
     }
 

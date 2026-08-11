@@ -73,21 +73,18 @@ jobs:
       # 빠져 있으면 fail-closed(exit 1) 한다(tests/unit/ci/audit-gate.test.ts 로 검증).
       #
       # 참고(설계 부수효과): protobufjs 7.x 라인 보존(@grpc/proto-loader 경유)으로
-      # GHSA-jggg-4jg4-v7c6 moderate 1건이 7.5.7 에 잔존한다. moderate 라
-      # --audit-level=high 게이트에 걸리지 않으며, 상위가 protobufjs 7.5.8+/8.x 로
-      # 올라오면 해소된다.
+      # moderate 2건(GHSA-f38q-mgvj-vph7·GHSA-j3f2-48v5-ccww)이 7.6.1 에 잔존한다.
+      # esbuild 0.18.20·uuid 8.3.2 moderate 도 마찬가지로 상위 릴리스 대기 중이다.
+      # 모두 moderate 라 --audit-level=high 게이트에 걸리지 않는다.
       - name: 공급망 보안 감사 게이트
         env:
-          # 잔존 unfixable transitive high 취약점 allowlist.
-          # 2026-07-28 대청소: 기존 17건은 전부 same-major 패치가 나와 package.json
-          # pnpm.overrides 로 승격(minimatch·flatted·@grpc/grpc-js·serialize-javascript·
-          # picomatch·rollup·tmp·lodash/lodash-es 등)했고, 미출현 5건은 제거. 아래 1건만 잔존.
-          #
-          # brace-expansion GHSA-mh99-v99m-4gvg: 패치가 5.0.8 뿐인데 minimatch 3/5/9 는
-          #   brace-expansion ^1/^2 요구라 강제 승격 시 런타임 파손. 각 라인 자체 ReDoS
-          #   패치(1.1.16/2.1.2, GHSA-3jxr 해결 라인)는 overrides 로 적용됨. dev/빌드 도구 경유.
-          AUDIT_ALLOWLIST: >-
-            GHSA-mh99-v99m-4gvg
+          # 잔존 unfixable transitive high 취약점 allowlist — 현재 0건.
+          # 2026-07-28 대청소로 17건을 overrides 승격, 2026-08-05 에 마지막 1건
+          # (brace-expansion GHSA-mh99-v99m-4gvg)도 2.x 자체 패치(2.1.3+)가 나와
+          # 'brace-expansion@2': '2.1.4' 승격으로 해소했다.
+          # 신규 high 가 뜨면 먼저 pnpm-workspace.yaml overrides 로 패치를 시도하고,
+          # 정말 불가능할 때만 사유와 함께 여기에 GHSA id 를 추가한다.
+          AUDIT_ALLOWLIST: ''
         run: |
           pnpm audit --audit-level=high --json > audit-report.json || true
           pnpm exec tsx .github/audit-gate.ts audit-report.json

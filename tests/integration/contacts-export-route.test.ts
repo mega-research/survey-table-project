@@ -3,7 +3,11 @@ import { NextRequest } from 'next/server';
 
 vi.mock('@/db', () => ({ db: {} }));
 vi.mock('@/lib/auth', () => ({ requireAuth: vi.fn() }));
-vi.mock('@/lib/auth/guest-grants', () => ({ canAccessSurvey: vi.fn() }));
+// 통 mock 은 import 체인 확장에 깨지므로 원본 spread 위에 필요한 것만 덮는다.
+vi.mock('@/lib/auth/guest-grants', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/auth/guest-grants')>()),
+  canAccessSurvey: vi.fn(),
+}));
 vi.mock('@/lib/operations/data-scope.server', () => ({
   loadOperationsDataScope: vi.fn(),
 }));

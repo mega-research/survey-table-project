@@ -7,7 +7,7 @@ import {
   MobileDrilldownShell,
 } from '@/components/survey-builder/mobile-drilldown-shell';
 import { MobileOriginalRowTable } from '@/components/survey-builder/mobile-original-row-table';
-import { useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import type { Question, TableCell } from '@/types/survey';
 import { getGroupTypeOfCell, isGroupedChoiceQuestion } from '@/utils/choice-group-helpers';
@@ -43,6 +43,7 @@ export function ChoiceTableDrilldown({
   counter,
 }: ChoiceTableDrilldownProps) {
   const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
   const columns = question.tableColumns ?? EMPTY_COLUMNS;
   const rows = question.tableRowsData ?? EMPTY_ROWS;
   const repeatHeaderRange = useMemo(
@@ -110,24 +111,26 @@ export function ChoiceTableDrilldown({
             : false;
           return {
             ...leaf,
-            label: substituteTokens(labelCandidate.label, attrs),
+            label: substituteTokens(labelCandidate.label, attrs, quotes),
             subGroup:
               leaf.subGroup.trim() && !subGroupIsHidden
-                ? substituteTokens(leaf.subGroup.trim(), attrs)
+                ? substituteTokens(leaf.subGroup.trim(), attrs, quotes)
                 : '',
           };
         });
         const sectionLabelIsHidden = section.labelSourceCellId
           ? cellById.get(section.labelSourceCellId)?.mobileDisplay === 'hidden'
           : false;
-        const sectionLabel = sectionLabelIsHidden ? '' : substituteTokens(section.label, attrs);
+        const sectionLabel = sectionLabelIsHidden
+          ? ''
+          : substituteTokens(section.label, attrs, quotes);
         return {
           ...section,
           label: leaves.length === 1 ? (leaves[0]?.label ?? '') : sectionLabel,
           leaves,
         };
       }),
-    [attrs, cellById, columns, detailRowById, omit, resolveChoiceLabel, sections],
+    [attrs, quotes, cellById, columns, detailRowById, omit, resolveChoiceLabel, sections],
   );
   const horizontalScrollRef = useRef(0);
 

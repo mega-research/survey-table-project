@@ -5,7 +5,10 @@ import { db } from '@/db';
 import { contactTargets, surveyResponses, surveys } from '@/db/schema';
 import type { ContactColumnScheme } from '@/db/schema/schema-types';
 import { ensureTestContactColumns } from '@/lib/contacts/test-contact-columns';
-import type { OperationsDataScope } from '@/lib/operations/data-scope.server';
+import {
+  resolveWriteScopeIsTest,
+  type OperationsDataScope,
+} from '@/lib/operations/data-scope.server';
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -29,7 +32,12 @@ export interface PreparedContactInsertScope {
  */
 export async function prepareContactInsertScope(
   tx: DbTransaction,
-  input: { surveyId: string; requestedCount: number; requireEmptyTestScope: boolean },
+  input: {
+    surveyId: string;
+    requestedCount: number;
+    requireEmptyTestScope: boolean;
+    isGuest: boolean;
+  },
 ): Promise<PreparedContactInsertScope> {
   const rows = await tx.execute<SurveyScopeRow>(sql`
     SELECT id, test_mode_enabled, contact_columns, test_contact_columns
@@ -40,7 +48,7 @@ export async function prepareContactInsertScope(
   const survey = rows[0];
   if (!survey) throw new Error('설문을 찾을 수 없습니다.');
 
-  const isTest = survey.test_mode_enabled;
+  const isTest = resolveWriteScopeIsTest(survey.test_mode_enabled, input.isGuest);
   const scope: OperationsDataScope = isTest ? 'test' : 'real';
   const [countRow] = await tx
     .select({ total: sql<number>`count(*)::int` })

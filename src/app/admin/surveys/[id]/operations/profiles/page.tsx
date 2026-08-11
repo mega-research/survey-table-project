@@ -20,6 +20,7 @@ import { listResponsesForProfiles } from '@/lib/operations/profiles.server';
 import { getContactColumnScheme, buildColumnCandidates } from '@/lib/operations/contacts.server';
 import { parseProfilesCondition, PROFILES_EXTRA_CANDIDATES } from '@/lib/operations/profiles-filters.server';
 import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
+import { isGuestViewer } from '@/lib/auth/guest-viewer';
 
 export const metadata: Metadata = {
   title: '현황 - 응답 내역',
@@ -49,7 +50,7 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
   const sp = await searchParams;
 
   const args = normalizeListArgs(sp);
-  const scope = await getOperationsDataScope(surveyId);
+  const [scope, isGuest] = await Promise.all([getOperationsDataScope(surveyId), isGuestViewer()]);
 
   const contactScheme = await getContactColumnScheme(surveyId, scope);
   const columnCandidates = [
@@ -146,6 +147,7 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
               surveyId={surveyId}
               view={args.view}
               hasContacts={hasContacts}
+              isGuest={isGuest}
             />
           )}
         </CardContent>

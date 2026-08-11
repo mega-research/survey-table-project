@@ -136,7 +136,7 @@ describe('createBlankResponse', () => {
     // findActiveResponseByContact: 활성 응답 없음 (insert 진행)
     selectLimitMock.mockResolvedValueOnce([]);
     insertReturningMock.mockResolvedValueOnce([
-      { id: 'response-1', contactTargetId: 'contact-1' },
+      { id: 'response-1', contactTargetId: 'contact-1', status: 'in_progress' },
     ]);
 
     const result = await createBlankResponse({
@@ -192,7 +192,7 @@ describe('createBlankResponse', () => {
     insertReturningMock.mockResolvedValueOnce([]);
     // SELECT 기존 행 조회 (sessionId 충돌 lookup)
     selectLimitMock.mockResolvedValueOnce([
-      { id: 'response-existing', contactTargetId: 'contact-1' },
+      { id: 'response-existing', contactTargetId: 'contact-1', status: 'in_progress' },
     ]);
 
     const result = await createBlankResponse({

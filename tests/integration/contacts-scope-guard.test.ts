@@ -143,15 +143,18 @@ describe('updateContactTarget 설문 스코프', () => {
     );
     updateReturningQueue.push([{ id: 'ct-1' }]);
 
-    await updateContactTarget({
-      id: 'ct-1',
-      surveyId: 'sv-1',
-      attrs: {
-        실제담당자: '실제 스킴 키',
-        테스트담당자: '평문 유출',
-        회사명: '아크미',
+    await updateContactTarget(
+      {
+        id: 'ct-1',
+        surveyId: 'sv-1',
+        attrs: {
+          실제담당자: '실제 스킴 키',
+          테스트담당자: '평문 유출',
+          회사명: '아크미',
+        },
       },
-    });
+      false,
+    );
 
     expect(capturedSets[0]?.['attrs']).toEqual({
       실제담당자: '실제 스킴 키',
@@ -165,11 +168,14 @@ describe('updateContactTarget 설문 스코프', () => {
     updateReturningQueue.push([{ id: 'ct-1' }]);
 
     await expect(
-      updateContactTarget({
-        id: 'ct-1',
-        surveyId: 'sv-1',
-        attrs: { name: '홍길동' },
-      }),
+      updateContactTarget(
+        {
+          id: 'ct-1',
+          surveyId: 'sv-1',
+          attrs: { name: '홍길동' },
+        },
+        false,
+      ),
     ).rejects.toThrow('NOT_FOUND');
   });
 
@@ -177,12 +183,15 @@ describe('updateContactTarget 설문 스코프', () => {
     selectResultQueue.push([{ enabled: false }], [{ id: 'ct-1' }]);
     updateReturningQueue.push([]); // 0행 영향
     await expect(
-      updateContactTarget({
-        id: 'ct-1',
-        surveyId: 'other-survey',
-        attrs: { name: '홍길동' },
-        piiUpdates: [{ columnKey: 'phone', fieldType: 'phone', plain: '01000000000' }],
-      }),
+      updateContactTarget(
+        {
+          id: 'ct-1',
+          surveyId: 'other-survey',
+          attrs: { name: '홍길동' },
+          piiUpdates: [{ columnKey: 'phone', fieldType: 'phone', plain: '01000000000' }],
+        },
+        false,
+      ),
     ).rejects.toThrow('NOT_FOUND');
     // 소속 확정 전이므로 PII 재암호화는 호출되지 않아야 한다.
     expect(upsertPiiValueMock).not.toHaveBeenCalled();
@@ -191,12 +200,15 @@ describe('updateContactTarget 설문 스코프', () => {
   it('정상 설문이면(1행 영향) 성공하고 PII upsert 가 소속 확정 후 호출된다', async () => {
     selectResultQueue.push([{ enabled: false }], [{ id: 'ct-1' }]);
     updateReturningQueue.push([{ id: 'ct-1' }]); // 1행 영향
-    await updateContactTarget({
-      id: 'ct-1',
-      surveyId: 'sv-1',
-      attrs: { name: '홍길동' },
-      piiUpdates: [{ columnKey: 'phone', fieldType: 'phone', plain: '01000000000' }],
-    });
+    await updateContactTarget(
+      {
+        id: 'ct-1',
+        surveyId: 'sv-1',
+        attrs: { name: '홍길동' },
+        piiUpdates: [{ columnKey: 'phone', fieldType: 'phone', plain: '01000000000' }],
+      },
+      false,
+    );
     expect(upsertPiiValueMock).toHaveBeenCalledTimes(1);
   });
 });
@@ -206,7 +218,7 @@ describe('deleteContactTarget 설문 스코프', () => {
     selectResultQueue.push([{ enabled: false }], [{ id: 'ct-1' }]);
     deleteReturningQueue.push([]); // 0행 영향
     await expect(
-      deleteContactTarget({ id: 'ct-1', surveyId: 'other-survey' }),
+      deleteContactTarget({ id: 'ct-1', surveyId: 'other-survey' }, false),
     ).rejects.toThrow('NOT_FOUND');
   });
 
@@ -214,7 +226,7 @@ describe('deleteContactTarget 설문 스코프', () => {
     selectResultQueue.push([{ enabled: false }], [{ id: 'ct-1' }]);
     deleteReturningQueue.push([{ id: 'ct-1' }]); // 1행 영향
     await expect(
-      deleteContactTarget({ id: 'ct-1', surveyId: 'sv-1' }),
+      deleteContactTarget({ id: 'ct-1', surveyId: 'sv-1' }, false),
     ).resolves.toBeUndefined();
   });
 });
@@ -225,24 +237,30 @@ describe('updateAttempt 소속 스코프', () => {
     updateReturningQueue.push([{ id: 'att-1' }]);
 
     await expect(
-      updateAttempt({
-        id: 'att-1',
-        contactTargetId: 'ct-1',
-        surveyId: 'sv-1',
-        resultCode: '6.거절',
-      }),
+      updateAttempt(
+        {
+          id: 'att-1',
+          contactTargetId: 'ct-1',
+          surveyId: 'sv-1',
+          resultCode: '6.거절',
+        },
+        false,
+      ),
     ).rejects.toThrow('NOT_FOUND');
   });
 
   it('contactTarget 이 설문에 없으면 NOT_FOUND throw', async () => {
     selectResultQueue.push([{ enabled: false }], []); // current scope 대상자 0행
     await expect(
-      updateAttempt({
-        id: 'att-1',
-        contactTargetId: 'ct-1',
-        surveyId: 'other-survey',
-        resultCode: '6.거절',
-      }),
+      updateAttempt(
+        {
+          id: 'att-1',
+          contactTargetId: 'ct-1',
+          surveyId: 'other-survey',
+          resultCode: '6.거절',
+        },
+        false,
+      ),
     ).rejects.toThrow('NOT_FOUND');
   });
 
@@ -250,12 +268,15 @@ describe('updateAttempt 소속 스코프', () => {
     selectResultQueue.push([{ enabled: false }], [{ id: 'ct-1' }]); // current scope 대상자
     updateReturningQueue.push([]); // attempt 영향 0행 (contactTargetId 불일치)
     await expect(
-      updateAttempt({
-        id: 'att-1',
-        contactTargetId: 'ct-1',
-        surveyId: 'sv-1',
-        resultCode: '6.거절',
-      }),
+      updateAttempt(
+        {
+          id: 'att-1',
+          contactTargetId: 'ct-1',
+          surveyId: 'sv-1',
+          resultCode: '6.거절',
+        },
+        false,
+      ),
     ).rejects.toThrow('NOT_FOUND');
   });
 
@@ -263,12 +284,15 @@ describe('updateAttempt 소속 스코프', () => {
     selectResultQueue.push([{ enabled: false }], [{ id: 'ct-1' }]); // current scope 대상자
     updateReturningQueue.push([{ id: 'att-1' }]); // attempt 1행 영향
     await expect(
-      updateAttempt({
-        id: 'att-1',
-        contactTargetId: 'ct-1',
-        surveyId: 'sv-1',
-        resultCode: '6.거절',
-      }),
+      updateAttempt(
+        {
+          id: 'att-1',
+          contactTargetId: 'ct-1',
+          surveyId: 'sv-1',
+          resultCode: '6.거절',
+        },
+        false,
+      ),
     ).resolves.toBeUndefined();
   });
 });
@@ -277,7 +301,7 @@ describe('deleteAttempt 소속 스코프', () => {
   it('contactTarget 이 설문에 없으면 NOT_FOUND throw', async () => {
     selectResultQueue.push([{ enabled: false }], []); // current scope 대상자 0행
     await expect(
-      deleteAttempt({ id: 'att-1', contactTargetId: 'ct-1', surveyId: 'other-survey' }),
+      deleteAttempt({ id: 'att-1', contactTargetId: 'ct-1', surveyId: 'other-survey' }, false),
     ).rejects.toThrow('NOT_FOUND');
   });
 
@@ -285,7 +309,7 @@ describe('deleteAttempt 소속 스코프', () => {
     selectResultQueue.push([{ enabled: false }], [{ id: 'ct-1' }]);
     deleteReturningQueue.push([]); // attempt 영향 0행
     await expect(
-      deleteAttempt({ id: 'att-1', contactTargetId: 'ct-1', surveyId: 'sv-1' }),
+      deleteAttempt({ id: 'att-1', contactTargetId: 'ct-1', surveyId: 'sv-1' }, false),
     ).rejects.toThrow('NOT_FOUND');
   });
 
@@ -293,7 +317,7 @@ describe('deleteAttempt 소속 스코프', () => {
     selectResultQueue.push([{ enabled: false }], [{ id: 'ct-1' }]);
     deleteReturningQueue.push([{ id: 'att-1' }]);
     await expect(
-      deleteAttempt({ id: 'att-1', contactTargetId: 'ct-1', surveyId: 'sv-1' }),
+      deleteAttempt({ id: 'att-1', contactTargetId: 'ct-1', surveyId: 'sv-1' }, false),
     ).resolves.toBeUndefined();
   });
 });

@@ -2,7 +2,7 @@
  * 보존 규칙 SQL 실DB 검증 (2026-07-31 spec 10).
  * 규칙: keep = 현재 발행본 OR 살아있는 비테스트 응답 보유
  *
- * 실행: pnpm test:integration (로컬 supabase 54322 + 0067 마이그레이션 적용 필요)
+ * 실행: pnpm test:integration (로컬 supabase 54322 + 0070 마이그레이션 적용 필요)
  */
 import { eq } from 'drizzle-orm';
 import { afterAll, describe, expect, it } from 'vitest';

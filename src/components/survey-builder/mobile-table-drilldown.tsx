@@ -4,6 +4,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 import { CheckCircle2 } from 'lucide-react';
 
+import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import type { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
 import { type ClassifiedLeaf, type ClassifiedSection, classifyTable } from '@/utils/classify-table';
@@ -13,6 +15,7 @@ import {
   includesMobileDrilldownColumnHeader,
   resolveMobileDrilldownRepeatHeaderRange,
 } from '@/utils/mobile-drilldown-repeat-header';
+import { resolveMobileCellLabel } from '@/utils/mobile-display-cells';
 import {
   MOBILE_TABLE_COMPLETION_TYPES,
   projectMobileOriginalRow,
@@ -75,6 +78,8 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
   mobileDrilldownRepeatHeaderStartRow,
   mobileDrilldownRepeatHeaderEndRow,
 }: MobileTableDrilldownProps) {
+  const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
   const repeatHeaderRange = useMemo(
     () =>
       resolveMobileDrilldownRepeatHeaderRange({
@@ -99,6 +104,8 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
         tableColumns: visibleColumns,
         tableRowsData: navigationRows,
         tableHeaderGrid: visibleHeaderGrid,
+        // 합계 표시 등 계산 전용 행도 상세 화면에 보여야 한다 (진행률 카운트에는 불포함)
+        includeCalcOnlyLeaves: true,
       }),
     [visibleColumns, navigationRows, visibleHeaderGrid],
   );
@@ -109,6 +116,17 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
     for (const row of displayRows) for (const cell of row.cells) m.set(cell.id, cell);
     return m;
   }, [displayRows]);
+  // cell.id → 같은 행의 셀 목록 (셀 게이팅 평가용 rowCells — option 조건의 {optionId}
+  // 래핑 해석에 컨트롤러 셀 정의가 필요하다)
+  const rowCellsByCellId = useMemo(() => {
+    const m = new Map<string, TableCell[]>();
+    for (const row of displayRows) for (const cell of row.cells) m.set(cell.id, row.cells);
+    return m;
+  }, [displayRows]);
+  // 내비게이션 라벨은 전부 cell.content / tableColumns[].label 에서 나오므로 응답 인용을
+  // 치환해야 한다. 치환하지 않으면 목차·크럼브에는 {{{인용}}} 원문이, 같은 화면의 상세
+  // 패널에는 치환된 문구가 보인다. choice-table-drilldown.tsx 와 동일한 배선이다.
+  // 숨김 라벨은 치환 전에 빈 문자열로 떨어뜨린다(불필요한 치환 회피).
   const sections = useMemo(
     () =>
       classifiedSections.map((section) => ({
@@ -117,22 +135,28 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
           section.labelSourceCellId &&
           cellById.get(section.labelSourceCellId)?.mobileDisplay === 'hidden'
             ? ''
-            : section.label,
+            : substituteTokens(section.label, attrs, quotes),
+        // cols[].label 은 여기서 치환하지 않는다 — resolveMobileCellLabel 의 폴백으로만
+        // 쓰이고 그 결과를 렌더 시점에 한 번 치환한다(이중 치환 방지).
+        colGroups: section.colGroups.map((group) => ({
+          ...group,
+          label: substituteTokens(group.label, attrs, quotes),
+        })),
         leaves: section.leaves.map((leaf) => ({
           ...leaf,
           label:
             leaf.labelSourceCellId &&
             cellById.get(leaf.labelSourceCellId)?.mobileDisplay === 'hidden'
               ? ''
-              : leaf.label,
+              : substituteTokens(leaf.label, attrs, quotes),
           subGroup:
             leaf.subGroupSourceCellId &&
             cellById.get(leaf.subGroupSourceCellId)?.mobileDisplay === 'hidden'
               ? ''
-              : leaf.subGroup,
+              : substituteTokens(leaf.subGroup, attrs, quotes),
         })),
       })),
-    [cellById, classifiedSections],
+    [attrs, quotes, cellById, classifiedSections],
   );
 
   // 사용자가 거쳐가며 비워둔 입력 칸(빈 응답으로 확정) 집합.
@@ -192,6 +216,8 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
   // 실제 입력했거나(hasValue) 거쳐가며 비워둔(acknowledged) 칸을 "채운 것"으로 본다.
   const counted = (cellId: string) => hasValue(cellId) || acknowledged.has(cellId);
   const leafFilled = (leaf: ClassifiedLeaf) => leaf.inputCellIds.filter(counted).length;
+  // 계산 셀만 있는 행은 완료/미완료 개념 밖 — done 도 아니고 미완료 카운트에도 안 들어간다.
+  // (완료 체크 아이콘·카운트 뱃지 모두 입력이 있는 행에만 붙는다.)
   const leafDone = (leaf: ClassifiedLeaf) =>
     leaf.inputCellIds.length > 0 && leafFilled(leaf) === leaf.inputCellIds.length;
   const secFilled = (section: ClassifiedSection) =>
@@ -214,6 +240,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
           isTestMode={isTestMode}
           value={value}
           onChange={onChange}
+          rowCells={rowCellsByCellId.get(cellId)}
         />
       </div>
     );
@@ -237,7 +264,12 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
                 </span>
                 {done && <CheckCircle2 className="h-4 w-4 shrink-0 text-green-500" />}
               </div>
-              {leaf.inputCellIds[0] != null && renderCell(leaf.inputCellIds[0])}
+              {leaf.inputCellIds[0] != null
+                ? renderCell(leaf.inputCellIds[0])
+                : // 계산 셀만 있는 행(합계 표시 행 등)은 계산값을 인라인으로 보여준다
+                  leaf.calcCellIds.map((cellId) => (
+                    <div key={cellId}>{renderCell(cellId)}</div>
+                  ))}
             </div>
           );
         })}
@@ -269,7 +301,11 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
                 if (!cell) return null;
                 // 일반 테이블 카드(mobile-row-card)와 동일한 라벨 위계:
                 // 파란 점 불릿 + text-sm gray-900. 라벨이 주, 문항(cell.content)이 보조.
-                const label = cell.exportLabel?.trim() || column.label || '';
+                const label = substituteTokens(
+                  resolveMobileCellLabel(cell, column.label),
+                  attrs,
+                  quotes,
+                );
                 return (
                   <div key={column.col} className="space-y-1">
                     {label && (
@@ -287,6 +323,11 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
             </div>
           </div>
         ))}
+        {/* 읽기 전용 계산 셀 — matrix 열 그룹은 입력 열만 다루므로(cellByCol) 그룹 뒤에
+            별도로 표시한다. 완료 판정에는 불포함 */}
+        {leaf.calcCellIds.map((cellId) => (
+          <div key={cellId}>{renderCell(cellId)}</div>
+        ))}
       </div>
     </div>
   );
@@ -299,8 +340,15 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
     () => new Map(navigationRows.map((row) => [row.id, row])),
     [navigationRows],
   );
+  // 진행률 분모는 입력이 있는 행만 — 계산 전용 행(합계 표시)은 채울 것이 없어
+  // 카운트에 넣으면 완료가 영구히 차지 않는다.
   const answerableRowIds = useMemo(
-    () => new Set(sections.flatMap((section) => section.leaves.map((leaf) => leaf.rowId))),
+    () =>
+      new Set(
+        sections.flatMap((section) =>
+          section.leaves.filter((leaf) => leaf.inputCellIds.length > 0).map((leaf) => leaf.rowId),
+        ),
+      ),
     [sections],
   );
   const answerableRows = navigationRows.filter((row) => answerableRowIds.has(row.id));
@@ -323,6 +371,10 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
       return (
         <div className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
           {leaf.inputCellIds.map((cellId) => (
+            <div key={cellId}>{renderCell(cellId)}</div>
+          ))}
+          {/* 읽기 전용 계산 셀 — 입력 뒤에 표시. 완료 판정에는 불포함 */}
+          {leaf.calcCellIds.map((cellId) => (
             <div key={cellId}>{renderCell(cellId)}</div>
           ))}
         </div>
@@ -362,6 +414,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
               isTestMode={isTestMode}
               value={value}
               onChange={onChange}
+              rowCells={rowCellsByCellId.get(cell.id)}
               {...resolveRadioGroupProps(cell, sourceRowId, radioBuckets)}
             />
           );
@@ -376,17 +429,25 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
         sections={sections}
         leafNavigation="always"
         overallStatus={{ completed: completedRows, total: answerableRows.length, unit: '개 항목' }}
-        getSectionStatus={(section) => ({
-          completed: section.leaves.filter((leaf) => {
-            const row = navigationRowById.get(leaf.rowId);
-            return row
-              ? isTableRowCompleted(row, currentResponse, MOBILE_TABLE_COMPLETION_TYPES)
-              : false;
-          }).length,
-          total: section.leaves.length,
-          unit: '개 항목',
-        })}
+        getSectionStatus={(section) => {
+          // 계산 전용 행은 카운트 대상이 아니다 (분자·분모 모두 제외)
+          const countable = section.leaves.filter((leaf) => leaf.inputCellIds.length > 0);
+          return {
+            completed: countable.filter((leaf) => {
+              const row = navigationRowById.get(leaf.rowId);
+              return row
+                ? isTableRowCompleted(row, currentResponse, MOBILE_TABLE_COMPLETION_TYPES)
+                : false;
+            }).length,
+            total: countable.length,
+            unit: '개 항목',
+          };
+        }}
         getLeafStatus={(leaf) => {
+          // 계산 전용 행은 완료 개념이 없다 — total 0 이면 shell 이 카운트 뱃지를 숨긴다
+          if (leaf.inputCellIds.length === 0) {
+            return { completed: 0, total: 0, unit: '개 항목' };
+          }
           const row = navigationRowById.get(leaf.rowId);
           return {
             completed:

@@ -15,7 +15,7 @@
  * 함께 검증: 설문 hard delete 가 소멸하는 버전의 인덱스 행을 같은 트랜잭션에서
  * 거두는지 (r2_key_refs 에는 FK 가 없어 CASCADE 가 닿지 않는다).
  *
- * 실행: pnpm test:integration (로컬 supabase 54322 + 0067·0068 적용 필요)
+ * 실행: pnpm test:integration (로컬 supabase 54322 + 0070·0071 적용 필요)
  */
 import { and, eq, inArray } from 'drizzle-orm';
 import { afterAll, describe, expect, it } from 'vitest';

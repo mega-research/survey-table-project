@@ -47,11 +47,20 @@ import {
 import {
   ContactAttrsProvider,
   createPlaceholderAttrs,
+  useAnswerQuotes,
+  useContactAttrs,
 } from '@/lib/survey/contact-attrs-context';
+import { collectAnswerQuotes } from '@/lib/survey/answer-quote';
+import type { FormulaEvalCtx } from '@/lib/survey/cell-formula';
+import { FormulaEvalProvider } from '@/lib/survey/formula-context';
+import { resolveEffectiveOptionTextsByQuestion } from '@/lib/survey/required-option-text-validation';
+import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { generateId, isEmptyHtml } from '@/lib/utils';
 import { sanitizeRichHtml } from '@/lib/sanitize';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { useSurveyUIStore } from '@/stores/ui-store';
+import { useSurveyResponseStore } from '@/stores/survey-response-store';
+import { useTestResponseStore } from '@/stores/test-response-store';
 import { computeTableEstimatedHeight } from '@/hooks/use-row-heights';
 import { Question, QuestionGroup, SurveyLookup } from '@/types/survey';
 
@@ -150,6 +159,11 @@ const SortableQuestion = React.memo(function SortableQuestion({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: question.id,
   });
+
+  // 카드 헤더 제목 표시 전용 — 편집 인풋(QuestionEditModal)은 원문 {{{이름}}} 를 그대로 다룬다.
+  const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
+  const displayTitle = substituteTokens(question.title, attrs, quotes);
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -271,7 +285,7 @@ const SortableQuestion = React.memo(function SortableQuestion({
 
         {/* Question content */}
         <div className="mb-4">
-          <h4 className="mb-2 text-base font-medium text-gray-900">{question.title}</h4>
+          <h4 className="mb-2 text-base font-medium text-gray-900">{displayTitle}</h4>
           {!isEmptyHtml(question.description) && (
             <div
               className="prose prose-sm mb-3 max-w-none overflow-x-auto text-sm text-gray-600 [&_p]:min-h-[1.6em] [&_table]:my-2 [&_table]:w-full [&_table]:table-fixed [&_table]:border-collapse [&_table]:border-2 [&_table]:border-gray-300 [&_table_p]:m-0 [&_table_td]:border [&_table_td]:border-gray-300 [&_table_td]:px-3 [&_table_td]:py-2 [&_table_th]:border [&_table_th]:border-gray-300 [&_table_th]:bg-transparent [&_table_th]:px-3 [&_table_th]:py-2 [&_table_th]:font-normal"
@@ -279,7 +293,7 @@ const SortableQuestion = React.memo(function SortableQuestion({
                 WebkitOverflowScrolling: 'touch',
               }}
               dangerouslySetInnerHTML={{
-                __html: sanitizeRichHtml(question.description!),
+                __html: sanitizeRichHtml(substituteTokens(question.description ?? '', attrs, quotes)),
               }}
             />
           )}
@@ -291,7 +305,7 @@ const SortableQuestion = React.memo(function SortableQuestion({
             <LazyMount
               questionId={question.id}
 
-              estimatedHeight={computeTableEstimatedHeight(question.tableColumns ?? [], question.tableRowsData ?? [], question.tableHeaderGrid)}
+              estimatedHeight={computeTableEstimatedHeight(question.tableColumns ?? [], question.tableRowsData ?? [], question.tableHeaderGrid ?? undefined)}
               immediate={isDragOverlay}
             >
               <QuestionTestBody question={question} lookups={lookups} />
@@ -406,6 +420,33 @@ export function SortableQuestionList({
   const testContactAttrs = useMemo(
     () => createPlaceholderAttrs(defaultContactAttrs),
     [defaultContactAttrs],
+  );
+
+  const testResponses = useTestResponseStore((s) => s.testResponses);
+  const optionTexts = useSurveyResponseStore((s) => s.optionTexts);
+  // 빌더 테스트 모드 인용값 — 응답 페이지와 같은 함수를 태워 계산이 갈리지 않게 한다.
+  // createPlaceholderAttrs 로 감싸 미정의 이름이 [키] 로 가시화되게 한다 (오타 진단).
+  const testAnswerQuotes = useMemo(
+    () =>
+      createPlaceholderAttrs(
+        collectAnswerQuotes(
+          questions,
+          testResponses,
+          resolveEffectiveOptionTextsByQuestion(testResponses, optionTexts),
+        ),
+      ),
+    [questions, testResponses, optionTexts],
+  );
+
+  // calc 셀 수식 평가 컨텍스트 (빌더 테스트 모드) — 응답 페이지의 formulaCtx 와 동일 구성.
+  const testFormulaCtx = useMemo<FormulaEvalCtx>(
+    () => ({
+      questions,
+      responses: testResponses,
+      lookups,
+      contactAttrs: testContactAttrs,
+    }),
+    [questions, testResponses, lookups, testContactAttrs],
   );
 
   // querySelector 스코프용 컨테이너 ref
@@ -885,30 +926,32 @@ export function SortableQuestionList({
   return (
     <>
       {/* 편집 목록 — 카드 미리보기가 실제 응답 렌더링이므로 토큰 치환용 attrs 컨텍스트로 감싼다 */}
-      <ContactAttrsProvider attrs={testContactAttrs}>
-        <div ref={editContainerRef}>
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragStart={handleDragStart}
-            onDragOver={handleDragOver}
-            onDragEnd={handleDragEnd}
-          >
-            {/* 그룹 없는 질문용 SortableContext */}
-            <SortableContext
-              items={ungroupedQuestions.map((q) => q.id)}
-              strategy={verticalListSortingStrategy}
+      <ContactAttrsProvider attrs={testContactAttrs} quotes={testAnswerQuotes}>
+        <FormulaEvalProvider value={testFormulaCtx}>
+          <div ref={editContainerRef}>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragStart={handleDragStart}
+              onDragOver={handleDragOver}
+              onDragEnd={handleDragEnd}
             >
-              <div className="space-y-6">
-                {renderGroups(renderEditCard, true)}
-              </div>
-            </SortableContext>
+              {/* 그룹 없는 질문용 SortableContext */}
+              <SortableContext
+                items={ungroupedQuestions.map((q) => q.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                <div className="space-y-6">
+                  {renderGroups(renderEditCard, true)}
+                </div>
+              </SortableContext>
 
-            <DragOverlay>
-              {activeId && renderDragOverlay(activeId)}
-            </DragOverlay>
-          </DndContext>
-        </div>
+              <DragOverlay>
+                {activeId && renderDragOverlay(activeId)}
+              </DragOverlay>
+            </DndContext>
+          </div>
+        </FormulaEvalProvider>
       </ContactAttrsProvider>
 
       {/* 모달 — 양 모드 밖 */}

@@ -81,7 +81,7 @@ describe('surveyResponse.response procedures', () => {
   });
 
   it('saveDraft(pub)는 현재 페이지 답변 묶음을 service에 위임한다', async () => {
-    vi.mocked(svc.saveDraftResponse).mockResolvedValue(undefined);
+    vi.mocked(svc.saveDraftResponse).mockResolvedValue({ applied: true });
     const client = createRouterClient({ response }, { context: anonContext() });
 
     const result = await client.response.saveDraft({
@@ -89,11 +89,24 @@ describe('surveyResponse.response procedures', () => {
       answers: { q1: '첫 답', q2: '둘째 답' },
     });
 
-    expect(result).toEqual({ ok: true });
+    expect(result).toEqual({ ok: true, applied: true });
     expect(svc.saveDraftResponse).toHaveBeenCalledWith({
       responseId: RESPONSE_ID,
       answers: { q1: '첫 답', q2: '둘째 답' },
     });
+  });
+
+  it('saveDraft(pub)는 service 가 stale 로 판정하면 applied:false 를 그대로 실어 보낸다', async () => {
+    vi.mocked(svc.saveDraftResponse).mockResolvedValue({ applied: false });
+    const client = createRouterClient({ response }, { context: anonContext() });
+
+    const result = await client.response.saveDraft({
+      responseId: RESPONSE_ID,
+      answers: { q1: '첫 답' },
+      seq: 1,
+    });
+
+    expect(result).toEqual({ ok: true, applied: false });
   });
 
   it('createWithFirstAnswer(pub)는 created 분기를 통과시킨다', async () => {

@@ -5,6 +5,8 @@ import React, { useCallback } from 'react';
 import { ChevronDown } from 'lucide-react';
 
 import { OptionTextInput } from '@/components/survey-response/option-text-input';
+import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { substituteTokens } from '@/lib/survey/substitute-tokens';
 
 import { CellContentLayout } from './cell-content-layout';
 import type { InteractiveCellProps } from './types';
@@ -19,6 +21,8 @@ export const SelectCell = React.memo(function SelectCell({
   ariaInvalid,
   ariaDescribedBy,
 }: InteractiveCellProps) {
+  const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
   const handleSelectChange = useCallback(
     (optionId: string) => {
       onUpdateValue(optionId);
@@ -40,7 +44,12 @@ export const SelectCell = React.memo(function SelectCell({
   );
 
   return (
-    <CellContentLayout content={cell.content} position={cell.textPosition} bold={cell.textBold}>
+    <CellContentLayout
+      content={substituteTokens(cell.content, attrs, quotes)}
+      position={cell.textPosition}
+      bold={cell.textBold}
+      textColor={cell.textColor}
+    >
       <div className="flex w-full flex-col space-y-2">
         <div className="relative w-full">
           <select
@@ -54,7 +63,7 @@ export const SelectCell = React.memo(function SelectCell({
             <option value="">선택하세요</option>
             {cell.selectOptions.map((option) => (
               <option key={option.id} value={option.value ?? option.id}>
-                {option.label}
+                {substituteTokens(option.label, attrs, quotes)}
               </option>
             ))}
           </select>

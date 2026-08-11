@@ -12,6 +12,11 @@ import {
   type QuestionChangeset,
 } from '@/lib/survey-builder/changeset';
 import { DEFAULT_RESPONSE_HEADER_CONFIG } from '@/lib/survey/response-header-config';
+import {
+  remapConditionGroupQuestionRefs,
+  remapConditionGroupValues,
+  type CellRemapScope,
+} from '@/utils/option-value-remap';
 
 // ── 헬퍼 함수 ──
 
@@ -124,6 +129,38 @@ export interface SurveyBuilderState {
 
   // dirty/questionChanges를 건드리지 않는 질문 업데이트 (UI 전용 토글 등)
   silentUpdateQuestion: (questionId: string, updates: Partial<Question>) => void;
+
+  /**
+   * 질문 레벨 옵션의 value 가 편집(optionCode blur 커밋)으로 바뀌었을 때, 그 질문을
+   * sourceQuestionId 로 참조하는 다른 질문/그룹/행/열의 displayCondition 을 리매핑한다.
+   * questions[].displayCondition + questionGroups[].displayCondition +
+   * questions[].tableRowsData[].displayCondition + questions[].tableColumns[].displayCondition
+   * 전부를 훑는다 — 저장(스토어 커밋) 시점에만 호출해야 한다(blur 즉시 호출 금지, 편집 취소 시
+   * 리매핑이 일어나면 안 되는 원자성 요구사항).
+   */
+  remapOptionValueInConditions: (
+    questionId: string,
+    oldValue: string,
+    newValue: string,
+    cellScope?: CellRemapScope,
+  ) => ConditionRemapScope;
+  /**
+   * 질문 생성 직후 temp id 가 DB id 로 스왑될 때, 그 질문을 참조하는 조건들을 새 id 로
+   * 리매핑한다. 대상: 타 질문/그룹/행/열 displayCondition 의 sourceQuestionId 와
+   * expression 피연산자(question/cell/binop), 그리고 전 옵션 배열의
+   * branchRule.targetQuestionId(goto 분기 대상). 스왑 지점에서만 호출한다.
+   */
+  remapQuestionRefs: (oldId: string, newId: string) => ConditionRemapScope;
+}
+
+/**
+ * 조건 리매핑이 실제로 변경한 범위 — 질문은 스코프 저장(saveSurveyScoped),
+ * 그룹은 groups.update RPC 로 각각 영속한다. 그룹을 전역 isMetadataDirty 로
+ * 실어 보내면 미저장 제목 변경·그룹 삭제까지 동반 커밋되므로 금지.
+ */
+export interface ConditionRemapScope {
+  questionIds: string[];
+  groupIds: string[];
 }
 
 const defaultSurveySettings: SurveySettings = {
@@ -727,6 +764,256 @@ export const useSurveyBuilderStore = create<SurveyBuilderState>()(
           const question = state.currentSurvey.questions.find((q) => q.id === questionId);
           if (question) Object.assign(question, updates);
         });
+      },
+
+      remapOptionValueInConditions: (
+        questionId: string,
+        oldValue: string,
+        newValue: string,
+        cellScope?: CellRemapScope,
+      ) => {
+        // 스코프 저장(saveSurveyScoped)이 이 결과만 영속하도록, 실제 변경 범위를 수집해 반환
+        const affectedIds = new Set<string>();
+        const changedGroupIds = new Set<string>();
+        set((state) => {
+          let changed = false;
+
+          state.currentSurvey.questions.forEach((question) => {
+            if (question.displayCondition) {
+              const next = remapConditionGroupValues(
+                question.displayCondition,
+                questionId,
+                oldValue,
+                newValue,
+                cellScope,
+              );
+              if (next !== question.displayCondition) {
+                question.displayCondition = next;
+                changed = true;
+                affectedIds.add(question.id);
+                if (!state.questionChanges.added[question.id]) {
+                  state.questionChanges.updated[question.id] = true;
+                }
+              }
+            }
+
+            if (question.tableRowsData) {
+              let rowsChanged = false;
+              const nextRows = question.tableRowsData.map((row) => {
+                if (!row.displayCondition) return row;
+                const next = remapConditionGroupValues(
+                  row.displayCondition,
+                  questionId,
+                  oldValue,
+                  newValue,
+                  cellScope,
+                );
+                if (next === row.displayCondition) return row;
+                rowsChanged = true;
+                return { ...row, displayCondition: next };
+              });
+              if (rowsChanged) {
+                question.tableRowsData = nextRows;
+                changed = true;
+                affectedIds.add(question.id);
+                if (!state.questionChanges.added[question.id]) {
+                  state.questionChanges.updated[question.id] = true;
+                }
+              }
+            }
+
+            if (question.tableColumns) {
+              let columnsChanged = false;
+              const nextColumns = question.tableColumns.map((column) => {
+                if (!column.displayCondition) return column;
+                const next = remapConditionGroupValues(
+                  column.displayCondition,
+                  questionId,
+                  oldValue,
+                  newValue,
+                  cellScope,
+                );
+                if (next === column.displayCondition) return column;
+                columnsChanged = true;
+                return { ...column, displayCondition: next };
+              });
+              if (columnsChanged) {
+                question.tableColumns = nextColumns;
+                changed = true;
+                affectedIds.add(question.id);
+                if (!state.questionChanges.added[question.id]) {
+                  state.questionChanges.updated[question.id] = true;
+                }
+              }
+            }
+          });
+
+          state.currentSurvey.groups?.forEach((group) => {
+            if (!group.displayCondition) return;
+            const next = remapConditionGroupValues(
+              group.displayCondition,
+              questionId,
+              oldValue,
+              newValue,
+              cellScope,
+            );
+            if (next !== group.displayCondition) {
+              group.displayCondition = next;
+              changed = true;
+              // 그룹 영속은 호출측의 groups.update RPC 담당 — 전역 isMetadataDirty 를
+              // 세우면 미저장 제목 변경·그룹 삭제까지 스코프 저장에 동반 커밋된다
+              changedGroupIds.add(group.id);
+            }
+          });
+
+          if (changed) {
+            state.currentSurvey.updatedAt = new Date();
+            state.isDirty = true;
+            if (state.currentSurvey.status === 'published') {
+              state.isModifiedSincePublish = true;
+            }
+          }
+        });
+        return { questionIds: [...affectedIds], groupIds: [...changedGroupIds] };
+      },
+
+      remapQuestionRefs: (oldId: string, newId: string) => {
+        const affectedIds = new Set<string>();
+        const changedGroupIds = new Set<string>();
+
+        // 옵션 배열 안의 branchRule.targetQuestionId(goto 분기 대상) 리매핑 헬퍼
+        const remapBranchTargets = <T extends { branchRule?: { targetQuestionId?: string } }>(
+          options: T[] | undefined,
+        ): T[] | undefined => {
+          if (!options) return options;
+          let optionsChanged = false;
+          const next = options.map((o) => {
+            if (o.branchRule?.targetQuestionId !== oldId) return o;
+            optionsChanged = true;
+            return { ...o, branchRule: { ...o.branchRule, targetQuestionId: newId } };
+          });
+          return optionsChanged ? next : options;
+        };
+
+        set((state) => {
+          let changed = false;
+
+          state.currentSurvey.questions.forEach((question) => {
+            let questionChanged = false;
+
+            if (question.displayCondition) {
+              const next = remapConditionGroupQuestionRefs(question.displayCondition, oldId, newId);
+              if (next !== question.displayCondition) {
+                question.displayCondition = next;
+                questionChanged = true;
+              }
+            }
+
+            if (question.tableRowsData) {
+              let rowsChanged = false;
+              const nextRows = question.tableRowsData.map((row) => {
+                let nextRow = row;
+                if (row.displayCondition) {
+                  const nextCondition = remapConditionGroupQuestionRefs(row.displayCondition, oldId, newId);
+                  if (nextCondition !== row.displayCondition) {
+                    nextRow = { ...nextRow, displayCondition: nextCondition };
+                  }
+                }
+                let cellsChanged = false;
+                const nextCells = nextRow.cells.map((cell) => {
+                  const radioOptions = remapBranchTargets(cell.radioOptions);
+                  const checkboxOptions = remapBranchTargets(cell.checkboxOptions);
+                  const selectOptions = remapBranchTargets(cell.selectOptions);
+                  const rankingOptions = remapBranchTargets(cell.rankingOptions);
+                  if (
+                    radioOptions === cell.radioOptions
+                    && checkboxOptions === cell.checkboxOptions
+                    && selectOptions === cell.selectOptions
+                    && rankingOptions === cell.rankingOptions
+                  ) {
+                    return cell;
+                  }
+                  cellsChanged = true;
+                  return {
+                    ...cell,
+                    ...(radioOptions !== undefined ? { radioOptions } : {}),
+                    ...(checkboxOptions !== undefined ? { checkboxOptions } : {}),
+                    ...(selectOptions !== undefined ? { selectOptions } : {}),
+                    ...(rankingOptions !== undefined ? { rankingOptions } : {}),
+                  };
+                });
+                if (cellsChanged) nextRow = { ...nextRow, cells: nextCells };
+                if (nextRow !== row) rowsChanged = true;
+                return nextRow;
+              });
+              if (rowsChanged) {
+                question.tableRowsData = nextRows;
+                questionChanged = true;
+              }
+            }
+
+            if (question.tableColumns) {
+              let columnsChanged = false;
+              const nextColumns = question.tableColumns.map((column) => {
+                if (!column.displayCondition) return column;
+                const next = remapConditionGroupQuestionRefs(column.displayCondition, oldId, newId);
+                if (next === column.displayCondition) return column;
+                columnsChanged = true;
+                return { ...column, displayCondition: next };
+              });
+              if (columnsChanged) {
+                question.tableColumns = nextColumns;
+                questionChanged = true;
+              }
+            }
+
+            const nextOptions = remapBranchTargets(question.options);
+            if (nextOptions !== question.options && nextOptions !== undefined) {
+              question.options = nextOptions;
+              questionChanged = true;
+            }
+            if (question.selectLevels) {
+              let levelsChanged = false;
+              const nextLevels = question.selectLevels.map((level) => {
+                const opts = remapBranchTargets(level.options);
+                if (opts === level.options) return level;
+                levelsChanged = true;
+                return { ...level, options: opts ?? level.options };
+              });
+              if (levelsChanged) {
+                question.selectLevels = nextLevels;
+                questionChanged = true;
+              }
+            }
+            if (questionChanged) {
+              changed = true;
+              affectedIds.add(question.id);
+              if (!state.questionChanges.added[question.id]) {
+                state.questionChanges.updated[question.id] = true;
+              }
+            }
+          });
+
+          state.currentSurvey.groups?.forEach((group) => {
+            if (!group.displayCondition) return;
+            const next = remapConditionGroupQuestionRefs(group.displayCondition, oldId, newId);
+            if (next !== group.displayCondition) {
+              group.displayCondition = next;
+              changed = true;
+              // 그룹 영속은 호출측의 groups.update RPC 담당 — 전역 isMetadataDirty 금지
+              changedGroupIds.add(group.id);
+            }
+          });
+
+          if (changed) {
+            state.currentSurvey.updatedAt = new Date();
+            state.isDirty = true;
+            if (state.currentSurvey.status === 'published') {
+              state.isModifiedSincePublish = true;
+            }
+          }
+        });
+        return { questionIds: [...affectedIds], groupIds: [...changedGroupIds] };
       },
     })),
     { name: 'survey-builder-store', enabled: process.env.NODE_ENV === 'development' },

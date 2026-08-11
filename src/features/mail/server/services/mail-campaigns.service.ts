@@ -10,7 +10,10 @@ import type { CampaignFilterSnapshot } from '@/db/schema/schema-types';
 import { decryptPii } from '@/lib/crypto/aes';
 import { inngest } from '@/lib/inngest/client';
 import { withTestPrefix } from '@/lib/mail/test-campaign';
-import { loadOperationsDataScope } from '@/lib/operations/data-scope.server';
+import {
+  loadOperationsDataScope,
+  resolveWriteScopeIsTest,
+} from '@/lib/operations/data-scope.server';
 
 import type {
   CancelCampaignInput,
@@ -37,12 +40,14 @@ import type {
  *  2. 트랜잭션 commit 후 Inngest event emit `mail/campaign.queued`.
  *     실패 시 campaign status → 'draft' 보상 롤백 (비-트랜잭션 db.update).
  *
- * 인증/캐시 갱신은 procedure(authed) + 소비처 router.push 가 담당.
- * userId 는 authed context.user.id 를 procedure 가 주입.
+ * 인증/캐시 갱신은 procedure(scoped) + 소비처 router.push 가 담당.
+ * userId 는 인증된 context.user.id 를 procedure 가 주입. isGuest 도 procedure 가
+ * context.user.id 에서 파생해 주입 — 서비스는 auth 를 재조회하지 않는다.
  */
 export async function createCampaign(
   input: CreateCampaignInput,
   userId: string,
+  isGuest: boolean,
   opts: { kind?: MailCampaignKind } = {},
 ): Promise<CreateCampaignResult> {
   const kind: MailCampaignKind = opts.kind ?? 'bulk';
@@ -63,7 +68,7 @@ export async function createCampaign(
     if (!survey) {
       throw new Error('설문을 찾을 수 없습니다.');
     }
-    const isTest = survey.enabled;
+    const isTest = resolveWriteScopeIsTest(survey.enabled, isGuest);
 
     // 작성 화면을 연 뒤 모드가 바뀌었거나 반대 scope ID가 섞이면 현재 scope로 강등하지 않는다.
     const selectedTargets = await tx
@@ -249,8 +254,21 @@ export async function createCampaign(
  * 단체 메일 취소 — status IN ('draft','queued') 일 때만.
  * 'sending' 진행 중 단체 메일은 Inngest dispatcher 가 status='queued' 가드로 이미
  * 발송된 row 는 그대로 두고 미발송 row 만 영향. 단순화를 위해 sending 이후는 취소 불가.
+ *
+ * isGuest 는 procedure 가 인증된 context.user.id 에서 파생해 전달한다 — 게스트는 전역
+ * 테스트 모드 플래그와 무관하게 항상 real 파티션만 쓴다. UPDATE WHERE 에 isTest 조건을
+ * 넣어, 게스트가 테스트 파티션 campaignId 를 알아내도 취소가 닿지 않게 한다 — 파티션이
+ * 안 맞으면 상태가 안 맞는 캠페인과 동일하게 처리(별도 에러 계약을 만들지 않는다).
  */
-export async function cancelCampaign(input: CancelCampaignInput): Promise<void> {
+export async function cancelCampaign(input: CancelCampaignInput, isGuest: boolean): Promise<void> {
+  // createCampaign(a단계)과 동일한 최소 조회 — 쓰기 파티션 산정을 위해서만 필요.
+  const [survey] = await db
+    .select({ enabled: surveys.testModeEnabled })
+    .from(surveys)
+    .where(eq(surveys.id, input.surveyId))
+    .limit(1);
+  const isTest = resolveWriteScopeIsTest(survey?.enabled ?? false, isGuest);
+
   const updated = await db
     .update(mailCampaigns)
     .set({ status: 'cancelled', updatedAt: new Date() })
@@ -258,6 +276,7 @@ export async function cancelCampaign(input: CancelCampaignInput): Promise<void> 
       and(
         eq(mailCampaigns.id, input.campaignId),
         eq(mailCampaigns.surveyId, input.surveyId),
+        eq(mailCampaigns.isTest, isTest),
         inArray(mailCampaigns.status, ['draft', 'queued']),
       ),
     )

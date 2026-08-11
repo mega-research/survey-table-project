@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { RecordVisibilitySegmentInput } from '@/features/survey-response/domain/lifecycle';
 import { recordVisibilitySegment } from '@/features/survey-response/server/services/lifecycle.service';
+import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
 import { getTrustedClientIpOrNull } from '@/lib/rate-limit/client-ip';
 import { getRateLimiter } from '@/lib/rate-limit/rate-limiter';
 
@@ -12,7 +13,7 @@ import { getRateLimiter } from '@/lib/rate-limit/rate-limiter';
  *
  * REST 엔드포인트라 oRPC 미들웨어를 거치지 않으므로 진입부에서 직접 rate limit 한다.
  */
-export async function POST(req: NextRequest) {
+async function handleSegment(req: NextRequest, ctx: RouteLogContext) {
   // 신뢰 IP 추출 불가면 fail-closed. 단일 'unknown' 버킷 공유로 인한 상호 잠식/약 DoS 차단.
   const ip = getTrustedClientIpOrNull(req.headers);
   if (ip === null) {
@@ -34,13 +35,16 @@ export async function POST(req: NextRequest) {
   if (!parsed.success || parsed.data.responseId.trim() === '') {
     return NextResponse.json({ error: 'invalid payload' }, { status: 400 });
   }
+  ctx.bind({ responseId: parsed.data.responseId, action: parsed.data.action });
 
-  try {
-    await recordVisibilitySegment(parsed.data);
-  } catch (err) {
-    console.error('[segment] 기록 실패:', err);
-    return NextResponse.json({ error: 'internal' }, { status: 500 });
-  }
+  // 예기치 못한 기록 실패는 로깅 래퍼가 err 기록 + 500 응답으로 처리한다.
+  await recordVisibilitySegment(parsed.data);
 
   return NextResponse.json({ ok: true });
 }
+
+export const POST = withRouteLogging('/api/response/segment', handleSegment, {
+  errorMessage: 'internal',
+  // sendBeacon 고볼륨 익명 경로 — 기존대로 Sentry 미캡처 (pino error 로그만)
+  sentry: false,
+});

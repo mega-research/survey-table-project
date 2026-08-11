@@ -34,6 +34,9 @@ export const surveys = pgTable('surveys', {
   description: text('description'),
   slug: text('slug').unique(),
   privateToken: uuid('private_token').defaultRandom(),
+  // 공개 읽기전용 미리보기 전용 토큰 — privateToken(응답 크레덴셜)과 분리해 발급.
+  // /preview/[token] 라우트만 조회한다 — /survey/[id] 응답 경로에서는 매칭하지 않는다(0069 마이그레이션).
+  previewToken: uuid('preview_token').defaultRandom(),
 
   // 설정
   isPublic: boolean('is_public').default(true).notNull(),
@@ -88,7 +91,11 @@ export const surveys = pgTable('surveys', {
   contactEmail: text('contact_email'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-});
+}, (table) => [
+  // 0069 마이그레이션의 surveys_preview_token_unique 와 이름을 맞춘다. nullable 컬럼이라
+  // NULL 행은 제약에서 제외(다중 NULL 허용) — contact_targets.invite_code(0054)와 동일 패턴.
+  unique('surveys_preview_token_unique').on(table.previewToken),
+]);
 
 // 질문 그룹 테이블
 export const questionGroups = pgTable('question_groups', {
@@ -122,6 +129,7 @@ export const questions = pgTable('questions', {
   title: text('title').notNull(),
   description: text('description'),
   required: boolean('required').default(false).notNull(),
+  requiredMessage: text('required_message'), // 필수 미응답 안내 문구 — null 이면 기본 문구
   order: integer('order').notNull().default(0),
 
   // 옵션들 (radio, checkbox, select용) - JSON으로 저장
@@ -192,6 +200,11 @@ export const questions = pgTable('questions', {
 
   // 테이블 문항 내보내기 셀 순서 — 'row-first'(기본, null 동일) | 'column-first'
   exportCellOrder: text('export_cell_order').$type<'row-first' | 'column-first'>(),
+
+  // 응답 인용 — 앞 질문의 응답을 뒤 질문 본문에 {{{이름}}} 으로 끼워넣는 기능
+  answerQuoteEnabled: boolean('answer_quote_enabled'),
+  answerQuoteName: text('answer_quote_name'),
+  answerQuoteText: text('answer_quote_text'), // 단답형 전용. 옵션·셀 문구는 JSONB 안
 
   // 모바일에서도 원본 표 레이아웃(가로 스크롤)으로 표시 — 카드/스테퍼 전환 안 함
   // (테이블 타입 + 설명 테이블 소스 radio/checkbox 전용)

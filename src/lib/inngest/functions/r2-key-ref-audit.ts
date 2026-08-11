@@ -2,7 +2,7 @@ import * as Sentry from '@sentry/nextjs';
 
 import { rebuildAllKeyRefs } from '@/lib/r2-lifecycle/key-ref-index.server';
 
-import { inngest } from '../client';
+import { ctxLogger, inngest } from '../client';
 
 /**
  * R2 참조 인덱스 전량 감사 cron — 월 1회 (KST 매월 1일 03:00).
@@ -16,12 +16,13 @@ import { inngest } from '../client';
  *
  * 운영: Inngest 자동 sync 가 끊겨 있어 배포 후 대시보드 수동 Resync 필수.
  */
+const FUNCTION_ID = 'r2-key-ref-audit';
+
 export const r2KeyRefAudit = inngest.createFunction(
-  { id: 'r2-key-ref-audit', triggers: [{ cron: 'TZ=Asia/Seoul 0 3 1 * *' }], retries: 2 },
-  async ({ step, ...inngestCtx }) => {
-    const logger =
-      (inngestCtx as { logger?: Pick<Console, 'info' | 'warn' | 'error' | 'debug'> }).logger ??
-      console;
+  { id: FUNCTION_ID, triggers: [{ cron: 'TZ=Asia/Seoul 0 3 1 * *' }], retries: 2 },
+  async (ctx) => {
+    const { step } = ctx;
+    const logger = ctxLogger(ctx);
 
     const results = await step.run('rebuild-all-key-refs', async () => {
       try {
@@ -35,7 +36,7 @@ export const r2KeyRefAudit = inngest.createFunction(
       }
     });
 
-    logger.info('r2 key ref audit done', { sources: results });
+    logger.info({ functionId: FUNCTION_ID, sources: results }, 'R2 참조 인덱스 전량 감사 완료');
     return { sources: results };
   },
 );

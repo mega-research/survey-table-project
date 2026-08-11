@@ -5,6 +5,7 @@ export { InteractiveCell } from './interactive-cell';
 export { PreviewCell } from './preview-cell';
 
 // 개별 셀 타입 (직접 사용 필요 시)
+export { CalcCell } from './calc-cell';
 export { CheckboxCell } from './checkbox-cell';
 export { RadioCell } from './radio-cell';
 export { SelectCell } from './select-cell';

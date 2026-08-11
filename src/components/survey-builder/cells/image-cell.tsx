@@ -4,16 +4,24 @@ import React, { useState } from 'react';
 
 import { Image as ImageIcon } from 'lucide-react';
 
+import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
-import { getCellTextClassName } from '@/utils/cell-style';
+import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
 
 import type { InteractiveCellProps, PreviewCellProps } from './types';
 
 /** 이미지 셀 (인터랙티브 / 미리보기 동일) */
 export const ImageCell = React.memo(function ImageCell({
   cell,
+  content,
 }: InteractiveCellProps | PreviewCellProps) {
   const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
+  const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
+  // content 오버라이드 미지정 시 직접 치환(단일 패스). PreviewCell 이 이미 치환된 캡션을
+  // 넘길 때는 override 로 전달하므로 여기서 다시 치환하지 않는다.
+  const caption = content ?? substituteTokens(cell.content, attrs, quotes);
 
   if (!cell.imageUrl) {
     return (
@@ -43,9 +51,12 @@ export const ImageCell = React.memo(function ImageCell({
           />
         )}
       </div>
-      {cell.content && (
-        <div className={cn('mt-2 text-left text-sm text-gray-700', getCellTextClassName(cell))}>
-          {cell.content}
+      {caption && (
+        <div
+          className={cn('mt-2 text-left text-sm text-gray-700', getCellTextClassName(cell))}
+          style={getCellTextStyle(cell)}
+        >
+          {caption}
         </div>
       )}
     </div>

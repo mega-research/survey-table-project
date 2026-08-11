@@ -11,6 +11,7 @@ import {
   archiveTestMailForTargets,
   hardDeleteMailForTargets,
 } from '@/lib/mail/test-mail-archive.server';
+import { resolveWriteScopeIsTest } from '@/lib/operations/data-scope.server';
 
 import type {
   AddContactTargetInput,
@@ -31,8 +32,9 @@ type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 async function lockTargetInCurrentScope(
   tx: DbTransaction,
   input: { id: string; surveyId: string },
+  isGuest: boolean,
 ): Promise<{ isTest: boolean; scheme: ContactColumnScheme | null }> {
-  const scope = await lockCurrentSurveyScope(tx, input.surveyId);
+  const scope = await lockCurrentSurveyScope(tx, input.surveyId, isGuest);
 
   const [target] = await tx
     .select({ id: contactTargets.id })
@@ -53,6 +55,7 @@ async function lockTargetInCurrentScope(
 async function lockCurrentSurveyScope(
   tx: DbTransaction,
   surveyId: string,
+  isGuest: boolean,
 ): Promise<{ isTest: boolean; scheme: ContactColumnScheme | null }> {
   const [survey] = await tx
     .select({
@@ -65,7 +68,7 @@ async function lockCurrentSurveyScope(
     .for('update');
   if (!survey) throw new Error('NOT_FOUND');
 
-  const isTest = survey.enabled;
+  const isTest = resolveWriteScopeIsTest(survey.enabled, isGuest);
   return {
     isTest,
     scheme: (isTest ? survey.testContactColumns : survey.contactColumns) ?? null,
@@ -78,8 +81,14 @@ async function lockCurrentSurveyScope(
  * PII 컬럼은 piiUpdates 로 별도 전달 → contact_pii 에 암호화 저장.
  *
  * 인증은 authed 미들웨어가 담당. 캐시 갱신은 소비처 router.refresh 로 대체.
+ *
+ * isGuest 는 procedure 가 이미 인증한 context.user.id 에서 파생해 전달한다 — 서비스가
+ * auth 를 재조회하면 그 실패가 fail-open(어드민 취급)으로 이어질 수 있다.
  */
-export async function addContactTarget(input: AddContactTargetInput): Promise<ContactTargetRow> {
+export async function addContactTarget(
+  input: AddContactTargetInput,
+  isGuest: boolean,
+): Promise<ContactTargetRow> {
   const { surveyId, attrs: rawAttrs, piiUpdates, memo, contactMethod, systemFieldKeys } = input;
 
   const result = await db.transaction(async (tx) => {
@@ -87,6 +96,7 @@ export async function addContactTarget(input: AddContactTargetInput): Promise<Co
       surveyId,
       requestedCount: 1,
       requireEmptyTestScope: false,
+      isGuest,
     });
     // 잠금 뒤 읽은 현재 스코프의 스킴으로 평문 PII 누적을 차단한다.
     const attrs = sanitizeAttrsAgainstPiiScheme(rawAttrs, prepared.scheme);
@@ -130,11 +140,14 @@ export async function addContactTarget(input: AddContactTargetInput): Promise<Co
 /**
  * 행 단위 갱신 — attrs/group/memo/contactMethod + PII 변경분 upsert.
  */
-export async function updateContactTarget(input: UpdateContactTargetInput): Promise<void> {
+export async function updateContactTarget(
+  input: UpdateContactTargetInput,
+  isGuest: boolean,
+): Promise<void> {
   const { id, surveyId, attrs: rawAttrs, piiUpdates, memo, contactMethod, systemFieldKeys } = input;
 
   await db.transaction(async (tx) => {
-    const { isTest, scheme } = await lockTargetInCurrentScope(tx, { id, surveyId });
+    const { isTest, scheme } = await lockTargetInCurrentScope(tx, { id, surveyId }, isGuest);
     // 모드·대상 소속과 같은 잠금 스냅샷에서 확정한 스킴으로 PII 평문을 제거한다.
     const attrs = sanitizeAttrsAgainstPiiScheme(rawAttrs, scheme);
 
@@ -181,10 +194,13 @@ export async function updateContactTarget(input: UpdateContactTargetInput): Prom
  * 설문 스코프 가드: 행이 input.surveyId 소속일 때만 DELETE. CASCADE(attempts/pii 동반 삭제)는
  * 비가역적이므로 .returning() 길이로 영향 0행이면 NOT_FOUND throw 하여 사전 차단한다.
  */
-export async function deleteContactTarget(input: DeleteContactTargetInput): Promise<void> {
+export async function deleteContactTarget(
+  input: DeleteContactTargetInput,
+  isGuest: boolean,
+): Promise<void> {
   const { id, surveyId } = input;
   await db.transaction(async (tx) => {
-    const { isTest } = await lockCurrentSurveyScope(tx, surveyId);
+    const { isTest } = await lockCurrentSurveyScope(tx, surveyId, isGuest);
     const [target] = await tx
       .select({ id: contactTargets.id })
       .from(contactTargets)

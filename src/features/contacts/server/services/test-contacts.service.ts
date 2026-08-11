@@ -11,14 +11,20 @@ import { generateInviteCode } from '@/lib/survey-url';
 import type { GenerateTestContactsInput } from '../../domain/contact-target';
 import { prepareContactInsertScope } from './contact-insert-scope.service';
 
+/**
+ * isGuest 는 procedure 가 이미 인증한 context.user.id 에서 파생해 전달한다 — 서비스가
+ * auth 를 재조회하면 그 실패가 fail-open(어드민 취급)으로 이어질 수 있다.
+ */
 export async function generateTestContacts(
   input: GenerateTestContactsInput,
+  isGuest: boolean,
 ): Promise<{ createdCount: number }> {
   return db.transaction(async (tx) => {
     const prepared = await prepareContactInsertScope(tx, {
       surveyId: input.surveyId,
       requestedCount: input.count,
       requireEmptyTestScope: true,
+      isGuest,
     });
     if (!prepared.scheme) throw new Error('테스트 대상자 컬럼을 찾을 수 없습니다.');
 

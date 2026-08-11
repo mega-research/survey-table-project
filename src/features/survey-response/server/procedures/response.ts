@@ -34,8 +34,8 @@ const saveDraft = rateLimited
   .input(SaveDraftResponseInput)
   .output(SaveDraftResponseOutput)
   .handler(async ({ input }) => {
-    await svc.saveDraftResponse(input);
-    return { ok: true as const };
+    const result = await svc.saveDraftResponse(input);
+    return { ok: true as const, applied: result.applied };
   });
 
 /**

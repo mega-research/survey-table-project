@@ -5,6 +5,8 @@
 import React, { useMemo } from 'react';
 
 import { RankingDropdownStack } from '@/components/survey-response/ranking-dropdown-stack';
+import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import type { RankingAnswer } from '@/types/survey';
 import { parseRankingAnswers } from '@/utils/ranking-shared';
 
@@ -20,6 +22,8 @@ export const RankingCell = React.memo(function RankingCell({
   ariaInvalid,
   ariaDescribedBy,
 }: InteractiveCellProps) {
+  const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
   const config = cell.rankingConfig;
   const options = cell.rankingOptions ?? [];
   const requestedPositions = Math.max(1, config?.positions ?? 3);
@@ -40,7 +44,12 @@ export const RankingCell = React.memo(function RankingCell({
   }
 
   return (
-    <CellContentLayout content={cell.content} position={cell.textPosition} bold={cell.textBold}>
+    <CellContentLayout
+      content={substituteTokens(cell.content, attrs, quotes)}
+      position={cell.textPosition}
+      bold={cell.textBold}
+      textColor={cell.textColor}
+    >
       <div
         id={inputIdScope ? `${inputIdScope}-${cell.id}` : undefined}
         className="flex w-full flex-col space-y-2"

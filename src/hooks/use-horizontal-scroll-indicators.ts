@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type RefObject } from 'react';
+import { type RefObject, useCallback, useEffect, useRef, useState } from 'react';
 
 interface Options {
   /** 양 끝 임계값(px). 이 값 이내로 스크롤되면 해당 측 섀도우를 숨긴다. */
@@ -21,8 +21,13 @@ export function useHorizontalScrollIndicators(
 ): { canScrollLeft: boolean; canScrollRight: boolean } {
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
+  const isTouchingRef = useRef(false);
+  const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const measure = useCallback(() => {
+    // iOS WebKit은 진행 중인 touch pan에서 페이드 레이어가 마운트되거나
+    // 합성 상태가 바뀌면 현재 제스처의 모멘텀을 취소할 수 있다.
+    if (isTouchingRef.current) return;
     const el = containerRef.current;
     if (!el) return;
     const { scrollLeft, scrollWidth, clientWidth } = el;
@@ -30,12 +35,40 @@ export function useHorizontalScrollIndicators(
     setCanScrollRight(scrollLeft < scrollWidth - clientWidth - threshold);
   }, [containerRef, threshold]);
 
+  const cancelSettledMeasure = useCallback(() => {
+    if (settleTimerRef.current === null) return;
+    clearTimeout(settleTimerRef.current);
+    settleTimerRef.current = null;
+  }, []);
+
+  const measureAfterScrollSettles = useCallback(() => {
+    cancelSettledMeasure();
+    if (isTouchingRef.current) return;
+    settleTimerRef.current = setTimeout(() => {
+      settleTimerRef.current = null;
+      measure();
+    }, 100);
+  }, [cancelSettledMeasure, measure]);
+
   useEffect(() => {
     if (disabled) return;
     const el = containerRef.current;
     if (!el) return;
     measure();
-    el.addEventListener('scroll', measure, { passive: true });
+    const handleTouchStart = () => {
+      isTouchingRef.current = true;
+      cancelSettledMeasure();
+    };
+    const handleTouchEnd = () => {
+      isTouchingRef.current = false;
+      measureAfterScrollSettles();
+    };
+    el.addEventListener('touchstart', handleTouchStart, { passive: true });
+    el.addEventListener('touchend', handleTouchEnd, { passive: true });
+    el.addEventListener('touchcancel', handleTouchEnd, { passive: true });
+    // 터치 종료 뒤에도 관성 스크롤 이벤트가 이어질 수 있으므로 마지막 이벤트에서
+    // 100ms 동안 조용해진 뒤 한 번만 상태를 반영한다.
+    el.addEventListener('scroll', measureAfterScrollSettles, { passive: true });
     window.addEventListener('resize', measure);
 
     // 마운트 직후 measure() 1회로는 첫 페인트 시점의 레이아웃이 아직
@@ -47,20 +80,24 @@ export function useHorizontalScrollIndicators(
     if (el.firstElementChild) ro.observe(el.firstElementChild);
 
     return () => {
-      el.removeEventListener('scroll', measure);
+      el.removeEventListener('touchstart', handleTouchStart);
+      el.removeEventListener('touchend', handleTouchEnd);
+      el.removeEventListener('touchcancel', handleTouchEnd);
+      el.removeEventListener('scroll', measureAfterScrollSettles);
       window.removeEventListener('resize', measure);
       ro.disconnect();
+      cancelSettledMeasure();
     };
-  }, [measure, disabled, containerRef]);
+  }, [cancelSettledMeasure, containerRef, disabled, measure, measureAfterScrollSettles]);
 
   // 콘텐츠 크기 변경(행/열 추가·삭제) 후 재측정
   useEffect(() => {
     if (disabled) return;
     measure();
-    const id = setTimeout(measure, 100);
-    return () => clearTimeout(id);
+    measureAfterScrollSettles();
+    return cancelSettledMeasure;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [measure, disabled, ...deps]);
+  }, [measure, measureAfterScrollSettles, cancelSettledMeasure, disabled, ...deps]);
 
   return { canScrollLeft, canScrollRight };
 }

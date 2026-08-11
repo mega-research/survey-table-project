@@ -97,6 +97,7 @@ export async function getSurveyWithDetails(surveyId: string): Promise<SurveyType
         title: q.title,
         ...(q.description != null ? { description: q.description } : {}),
         required: q.required,
+        ...(q.requiredMessage != null ? { requiredMessage: q.requiredMessage } : {}),
         ...(q.groupId != null ? { groupId: q.groupId } : {}),
         ...(q.options != null ? { options: q.options as NonNullable<QuestionType['options']> } : {}),
         ...(q.selectLevels != null ? { selectLevels: q.selectLevels as NonNullable<QuestionType['selectLevels']> } : {}),

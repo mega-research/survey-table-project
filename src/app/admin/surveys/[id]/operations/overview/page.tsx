@@ -20,6 +20,7 @@ import { getPageDwell } from '@/lib/operations/page-dwell.server';
 import { getQuotaStatus } from '@/lib/operations/quota-status.server';
 import { getResponseTime } from '@/lib/operations/response-time.server';
 import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
+import { isGuestViewer } from '@/lib/auth/guest-viewer';
 import { getSurveyById } from '@/features/survey-builder/server/services/survey-read.service';
 
 /**
@@ -89,7 +90,7 @@ export default async function OperationsOverviewPage({
 
   // hour 모드 진입 시 date 미지정이면 응답이 있는 가장 최근 일자, 응답 자체가 없으면 KST 오늘로
   // fallback. 어댑터가 effectiveDate 없는 hour 모드에서 throw 하지 않도록 보장.
-  const scope = await getOperationsDataScope(surveyId);
+  const [scope, isGuest] = await Promise.all([getOperationsDataScope(surveyId), isGuestViewer()]);
   const availableDates = await aggregateDailyAvailableDates(surveyId, scope);
   const latestAvailable =
     availableDates.length > 0 ? availableDates[availableDates.length - 1] : undefined;
@@ -118,8 +119,8 @@ export default async function OperationsOverviewPage({
             응답자 진행 현황 · 일자별 추이 · 응답시간 통계 · 이탈 위치 분석
           </p>
         </div>
-        {/* analytics 대시보드와 동일한 내보내기 모달 — RawData·SPSS·분할 다운로드 */}
-        <ExportDataModal surveyId={surveyId} surveyTitle={survey?.title ?? '설문'} />
+        {/* analytics 대시보드와 동일한 내보내기 모달 — RawData·SPSS·분할 다운로드. 게스트에게는 숨김 */}
+        {!isGuest && <ExportDataModal surveyId={surveyId} surveyTitle={survey?.title ?? '설문'} />}
       </div>
 
       <KpiRow counts={statusCounts} quota={quotaStatus?.summary ?? null} />
