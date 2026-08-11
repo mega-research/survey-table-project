@@ -33,7 +33,9 @@ interface Props {
  */
 const QUOTE_TOKEN_PATTERN = /\{\{\{([^{}]+)\}\}\}/g;
 
-function extractQuoteTokens(...sources: (string | undefined)[]): string[] {
+// 소스 목록은 배열 하나로 받는다 — spread 호출은 대형 설문(수만 소스)에서 V8 인자
+// 상한 RangeError 를 낸다 (extractVariableKeys 와 동일 결정, Sentry 7665334735).
+function extractQuoteTokens(sources: readonly (string | undefined)[]): string[] {
   const set = new Set<string>();
   for (const s of sources) {
     if (!s) continue;
@@ -251,7 +253,8 @@ export function TokenWarningPanel({ questions, groups, lookups, thankYouMessage,
         }
       }
     }
-    const usedKeys = extractVariableKeys(...sources);
+    // 설문 전체 텍스트(수만 소스 가능)라 spread 금지 — 배열 그대로 전달 (Sentry 7665334735)
+    const usedKeys = extractVariableKeys(sources);
     return usedKeys.filter((k) => !knownKeys.has(k));
   }, [questions, knownKeys, catalog]);
 
@@ -311,15 +314,15 @@ export function TokenWarningPanel({ questions, groups, lookups, thankYouMessage,
     const out: QuoteReference[] = [];
     for (const q of questions) {
       const label = q.title || '(제목 없음)';
-      for (const name of extractQuoteTokens(...questionOwnSourcesOf(q))) {
+      for (const name of extractQuoteTokens(questionOwnSourcesOf(q))) {
         out.push({ name, order: q.order, label, questionId: q.id, fromCell: false });
       }
-      for (const name of extractQuoteTokens(...cellSourcesOf(q))) {
+      for (const name of extractQuoteTokens(cellSourcesOf(q))) {
         out.push({ name, order: q.order, label, questionId: q.id, fromCell: true });
       }
     }
     for (const g of groups) {
-      const names = extractQuoteTokens(g.name);
+      const names = extractQuoteTokens([g.name]);
       if (names.length === 0) continue;
       const ownerOrders = collectDescendantQuestionOrders(g.id, questions, groups);
       const ownerOrder = ownerOrders.length > 0 ? Math.min(...ownerOrders) : null;
@@ -426,7 +429,7 @@ export function TokenWarningPanel({ questions, groups, lookups, thankYouMessage,
   // 검증 오류 메시지)에 쓴 인용 토큰
   const nonSubstitutedFindings = useMemo(() => {
     const out: { location: string; name: string }[] = [];
-    for (const name of extractQuoteTokens(thankYouMessage)) {
+    for (const name of extractQuoteTokens([thankYouMessage])) {
       out.push({ location: '완료 메시지', name });
     }
     for (const q of questions) {
@@ -434,34 +437,34 @@ export function TokenWarningPanel({ questions, groups, lookups, thankYouMessage,
       // prefill 템플릿은 질문 레벨(question-input.tsx)·표 셀(cells/input-cell.tsx) 모두
       // attrs 만 치환한다. prefill 결과는 응답으로 저장되는 값이고 응답 인용은 저장되지
       // 않는 파생값이라, 두 채널을 섞지 않는다(서버 재검증도 attrs 기준 — response.service.ts).
-      for (const name of extractQuoteTokens(q.defaultValueTemplate ?? undefined)) {
+      for (const name of extractQuoteTokens([q.defaultValueTemplate ?? undefined])) {
         out.push({ location: `단답형 prefill 템플릿 (${label})`, name });
       }
-      for (const name of extractQuoteTokens(q.tableTitle)) {
+      for (const name of extractQuoteTokens([q.tableTitle])) {
         out.push({ location: `표 제목 (${label})`, name });
       }
       // 열 제목 - tableHeaderGrid 가 없으면 헤더는 tableColumns[].label 로 렌더된다
       // (table-preview.tsx / interactive-table-response.tsx). 둘 다 치환하지 않는다.
       for (const column of q.tableColumns ?? []) {
-        for (const name of extractQuoteTokens(column.label)) {
+        for (const name of extractQuoteTokens([column.label])) {
           out.push({ location: `표 열 제목 (${label})`, name });
         }
       }
       for (const headerRow of q.tableHeaderGrid ?? []) {
         for (const cell of headerRow) {
-          for (const name of extractQuoteTokens(cell.label)) {
+          for (const name of extractQuoteTokens([cell.label])) {
             out.push({ location: `표 헤더 그리드 (${label})`, name });
           }
         }
       }
       for (const constraint of q.sumConstraints ?? []) {
-        for (const name of extractQuoteTokens(constraint.errorMessage)) {
+        for (const name of extractQuoteTokens([constraint.errorMessage])) {
           out.push({ location: `검증 오류 메시지 (${label})`, name });
         }
       }
       for (const row of q.tableRowsData ?? []) {
         for (const cell of row.cells) {
-          for (const name of extractQuoteTokens(cell.defaultValueTemplate)) {
+          for (const name of extractQuoteTokens([cell.defaultValueTemplate])) {
             out.push({ location: `표 셀 prefill 템플릿 (${label})`, name });
           }
         }
