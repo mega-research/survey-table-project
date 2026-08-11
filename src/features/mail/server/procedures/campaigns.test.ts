@@ -6,6 +6,7 @@ import type { ORPCContext } from '@/server/context';
 vi.mock('../services/mail-campaigns.service', () => ({
   createCampaign: vi.fn(),
   cancelCampaign: vi.fn(),
+  resyncCampaign: vi.fn(),
   fetchCandidateIds: vi.fn(),
   previewPreflight: vi.fn(),
 }));
@@ -56,6 +57,15 @@ describe('mail.campaigns procedures', () => {
     const res = await client.campaigns.cancel(input);
     expect(svc.cancelCampaign).toHaveBeenCalledWith(input, false);
     expect(res).toEqual({ ok: true });
+  });
+
+  it('resync는 service.resyncCampaign에 위임하고 checked/updated를 반환한다', async () => {
+    vi.mocked(svc.resyncCampaign).mockResolvedValue({ checked: 11, updated: 9 } as never);
+    const client = createRouterClient({ campaigns }, { context: authedContext() });
+    const input = { surveyId: SURVEY_ID, campaignId: CAMPAIGN_ID };
+    const res = await client.campaigns.resync(input);
+    expect(svc.resyncCampaign).toHaveBeenCalledWith(input);
+    expect(res).toEqual({ checked: 11, updated: 9 });
   });
 
   it('fetchCandidateIds는 service에 위임하고 결과를 반환한다', async () => {
