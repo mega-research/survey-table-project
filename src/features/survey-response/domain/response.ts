@@ -70,7 +70,10 @@ export type UpdateQuestionResponseInput = z.infer<typeof UpdateQuestionResponseI
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const SaveDraftResponseInput = z.object({
-  responseId: z.string(),
+  // 상한 128: REST beacon 경로에서 이 값이 그대로 rate limit Redis 키가 되므로
+  // 임의 길이 문자열을 막는다 (실값은 UUID 36자). oRPC 경로의 클라이언트 축 추출기
+  // (extractRateLimitClientId)와 같은 상한.
+  responseId: z.string().max(128),
   answers: QuestionResponsesSchema,
   /** 클라이언트 발급 단조 증가 순번. 지연 도착한 오래된 draft 쓰기를 서버가 무시하는 데 쓴다. */
   seq: z.number().int().positive().optional(),

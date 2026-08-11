@@ -30,7 +30,9 @@ export type RecordStepVisitInput = z.infer<typeof RecordStepVisitInput>;
  * action 은 'hide' | 'show' 두 값만 허용.
  */
 export const RecordVisibilitySegmentInput = z.object({
-  responseId: z.string(),
+  // 상한 128: REST beacon 경로에서 rate limit Redis 키로 쓰이므로 임의 길이를 막는다
+  // (실값은 UUID 36자, SaveDraftResponseInput 과 동일 관례).
+  responseId: z.string().max(128),
   action: z.enum(['hide', 'show']),
   ...TestAttemptIdentityFields,
 });
