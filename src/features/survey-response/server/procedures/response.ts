@@ -12,8 +12,11 @@ import {
 } from '../../domain/response';
 import * as svc from '../services/response.service';
 
-// 응답 쓰기 mutation 은 모두 response-mutation 그룹으로 IP 당 rate limit 한다.
+// 회당 소수 호출 쓰기(생성/완료/updateAnswer)는 response-mutation 그룹으로 IP 당 rate limit 한다.
+// saveDraft 는 고빈도 체크포인트라 별도 response-draft 버킷을 쓴다 — 같은 버킷이면
+// 표 문항 연속 입력의 draft 폭주가 complete 예산을 소진해 제출까지 429 로 전멸한다.
 const rateLimited = pub.use(withRateLimit('response-mutation'));
+const draftRateLimited = pub.use(withRateLimit('response-draft'));
 
 // 주의: response.start 는 제거됨(봇 방어). clientSignals/honeypot 을 받지 않는 무인증 빈 행
 // 생성 경로라 봇 우회 표면이었고, 정상 클라이언트는 createWithFirstAnswer/createBlank 만 쓴다.
@@ -30,7 +33,7 @@ const updateAnswer = rateLimited
 /**
  * 페이지 이동 전 변경 답변을 한 요청으로 저장한다.
  */
-const saveDraft = rateLimited
+const saveDraft = draftRateLimited
   .input(SaveDraftResponseInput)
   .output(SaveDraftResponseOutput)
   .handler(async ({ input }) => {

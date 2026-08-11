@@ -4,7 +4,7 @@ import { RecordVisibilitySegmentInput } from '@/features/survey-response/domain/
 import { recordVisibilitySegment } from '@/features/survey-response/server/services/lifecycle.service';
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
 import { getTrustedClientIpOrNull } from '@/lib/rate-limit/client-ip';
-import { getRateLimiter } from '@/lib/rate-limit/rate-limiter';
+import { isRateLimitedTwoTier } from '@/lib/rate-limit/rate-limiter';
 
 /**
  * Page Visibility 세그먼트 수신 엔드포인트.
@@ -19,11 +19,8 @@ async function handleSegment(req: NextRequest, ctx: RouteLogContext) {
   if (ip === null) {
     return NextResponse.json({ error: 'rate limited' }, { status: 429 });
   }
-  const { success } = await getRateLimiter().limit(`response-segment:${ip}`);
-  if (!success) {
-    return NextResponse.json({ error: 'rate limited' }, { status: 429 });
-  }
 
+  // fine 키에 responseId(클라이언트 축)를 쓰기 위해 파싱을 rate limit 앞에 둔다 (draft 와 동일).
   let body: unknown;
   try {
     body = await req.json();
@@ -36,6 +33,11 @@ async function handleSegment(req: NextRequest, ctx: RouteLogContext) {
     return NextResponse.json({ error: 'invalid payload' }, { status: 400 });
   }
   ctx.bind({ responseId: parsed.data.responseId, action: parsed.data.action });
+
+  // 2단 판정 — 응답 단위 격리(`group:ip:responseId`) + IP 전체 가드.
+  if (await isRateLimitedTwoTier('response-segment', ip, parsed.data.responseId)) {
+    return NextResponse.json({ error: 'rate limited' }, { status: 429 });
+  }
 
   // 예기치 못한 기록 실패는 로깅 래퍼가 err 기록 + 500 응답으로 처리한다.
   await recordVisibilitySegment(parsed.data);

@@ -1142,7 +1142,7 @@ describe('디바운스 백그라운드 자동 저장', () => {
     vi.clearAllMocks();
   });
 
-  it('답변 입력 후 800ms 가 지나면 백그라운드로 saveDraft 를 발사한다', async () => {
+  it('답변 입력 후 5초가 지나면 백그라운드로 saveDraft 를 발사한다', async () => {
     const { result } = renderHook(() =>
       useResponseLifecycle(baseArgs({ currentResponseId: 'resp-1' })),
     );
@@ -1152,7 +1152,7 @@ describe('디바운스 백그라운드 자동 저장', () => {
     expect(saveDraft).not.toHaveBeenCalled();
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(800);
+      await vi.advanceTimersByTimeAsync(5000);
     });
 
     expect(saveDraft).toHaveBeenCalledTimes(1);
@@ -1163,7 +1163,7 @@ describe('디바운스 백그라운드 자동 저장', () => {
     });
   });
 
-  it('연속 입력은 타이머를 리셋해 마지막 입력 후 800ms 에 최신 값으로 1회만 발사한다', async () => {
+  it('연속 입력은 타이머를 리셋해 마지막 입력 후 5초에 최신 값으로 1회만 발사한다', async () => {
     const { result } = renderHook(() =>
       useResponseLifecycle(baseArgs({ currentResponseId: 'resp-1' })),
     );
@@ -1171,23 +1171,52 @@ describe('디바운스 백그라운드 자동 저장', () => {
       result.current.handleResponse('q1', '안');
     });
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(500);
+      await vi.advanceTimersByTimeAsync(3000);
     });
     act(() => {
       result.current.handleResponse('q1', '안녕');
     });
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(500);
+      await vi.advanceTimersByTimeAsync(3000);
     });
     expect(saveDraft).not.toHaveBeenCalled();
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(300);
+      await vi.advanceTimersByTimeAsync(16000);
     });
     expect(saveDraft).toHaveBeenCalledTimes(1);
     expect(
       (saveDraft.mock.calls[0]?.[0] as { answers: Record<string, unknown> }).answers,
     ).toEqual({ q1: '안녕' });
+  });
+
+  it('입력이 계속 이어져도 maxWait 15초에 한 번은 발사한다', async () => {
+    const { result } = renderHook(() =>
+      useResponseLifecycle(baseArgs({ currentResponseId: 'resp-1' })),
+    );
+    // 표 문항 연속 클릭 시나리오 — 4초 간격 입력은 트레일링 디바운스(5초)를 계속 리셋한다.
+    act(() => {
+      result.current.handleResponse('q1', '1');
+    });
+    for (const value of ['12', '123', '1234']) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(4000);
+      });
+      act(() => {
+        result.current.handleResponse('q1', value);
+      });
+    }
+    // 첫 입력 후 12초 — 디바운스만 있었다면 아직 무발사.
+    expect(saveDraft).not.toHaveBeenCalled();
+
+    // 첫 입력 + 15초 시점에 maxWait 이 최신 값으로 발사한다.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000);
+    });
+    expect(saveDraft).toHaveBeenCalledTimes(1);
+    expect(
+      (saveDraft.mock.calls[0]?.[0] as { answers: Record<string, unknown> }).answers,
+    ).toEqual({ q1: '1234' });
   });
 
   it('백그라운드 저장 성공 후 다음 클릭 flush 는 추가 왕복 없이 통과한다', async () => {
@@ -1198,7 +1227,7 @@ describe('디바운스 백그라운드 자동 저장', () => {
       result.current.handleResponse('q1', '답');
     });
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(800);
+      await vi.advanceTimersByTimeAsync(5000);
     });
     expect(saveDraft).toHaveBeenCalledTimes(1);
 
@@ -1219,7 +1248,7 @@ describe('디바운스 백그라운드 자동 저장', () => {
       result.current.handleResponse('q1', '답');
     });
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(800);
+      await vi.advanceTimersByTimeAsync(5000);
     });
     expect(saveDraft).toHaveBeenCalledTimes(1);
     expect(toastError).not.toHaveBeenCalled();
@@ -1243,7 +1272,7 @@ describe('디바운스 백그라운드 자동 저장', () => {
       result.current.handleResponse('q1', '답');
     });
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(2000);
+      await vi.advanceTimersByTimeAsync(16000);
     });
     expect(saveDraft).not.toHaveBeenCalled();
   });
@@ -1256,7 +1285,7 @@ describe('디바운스 백그라운드 자동 저장', () => {
       result.current.handleResponse('q1', '답');
     });
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(2000);
+      await vi.advanceTimersByTimeAsync(16000);
     });
     expect(saveDraft).not.toHaveBeenCalled();
   });
@@ -1270,7 +1299,7 @@ describe('디바운스 백그라운드 자동 저장', () => {
     });
     unmount();
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(2000);
+      await vi.advanceTimersByTimeAsync(16000);
     });
     expect(saveDraft).not.toHaveBeenCalled();
   });
@@ -1290,7 +1319,7 @@ describe('디바운스 백그라운드 자동 저장', () => {
       result.current.handleResponse('q1', 'a');
     });
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(800);
+      await vi.advanceTimersByTimeAsync(5000);
     });
     expect(saveDraft).toHaveBeenCalledTimes(1);
 

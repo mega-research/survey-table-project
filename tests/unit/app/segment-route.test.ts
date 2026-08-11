@@ -2,9 +2,9 @@ import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // lifecycle service / rate limiter 모킹. route 핸들러 진입부 rate limit 과 fail-closed 검증.
-const { recordMock, limitMock } = vi.hoisted(() => ({
+const { recordMock, twoTierMock } = vi.hoisted(() => ({
   recordMock: vi.fn(),
-  limitMock: vi.fn(),
+  twoTierMock: vi.fn(),
 }));
 
 vi.mock('@/features/survey-response/server/services/lifecycle.service', () => ({
@@ -12,7 +12,7 @@ vi.mock('@/features/survey-response/server/services/lifecycle.service', () => ({
 }));
 
 vi.mock('@/lib/rate-limit/rate-limiter', () => ({
-  getRateLimiter: () => ({ limit: limitMock }),
+  isRateLimitedTwoTier: twoTierMock,
 }));
 
 import { POST } from '@/app/api/response/segment/route';
@@ -30,22 +30,22 @@ function segmentRequest(headers: Record<string, string>): NextRequest {
 describe('POST /api/response/segment', () => {
   beforeEach(() => {
     recordMock.mockReset();
-    limitMock.mockReset();
+    twoTierMock.mockReset();
     recordMock.mockResolvedValue(undefined);
-    limitMock.mockResolvedValue({ success: true, remaining: 59, resetMs: 0 });
+    twoTierMock.mockResolvedValue(false);
   });
 
   afterEach(() => vi.clearAllMocks());
 
-  it('신뢰 IP 로 response-segment 그룹 키를 만들어 rate limit 한다', async () => {
+  it('신뢰 IP + responseId 클라이언트 축으로 2단 rate limit 판정한다', async () => {
     const res = await POST(segmentRequest({ 'x-real-ip': '203.0.113.7' }));
-    expect(limitMock).toHaveBeenCalledWith('response-segment:203.0.113.7');
+    expect(twoTierMock).toHaveBeenCalledWith('response-segment', '203.0.113.7', RESPONSE_ID);
     expect(res.status).toBe(200);
     expect(recordMock).toHaveBeenCalledWith({ responseId: RESPONSE_ID, action: 'hide' });
   });
 
   it('한도 초과 시 429 를 반환하고 service 를 호출하지 않는다', async () => {
-    limitMock.mockResolvedValue({ success: false, remaining: 0, resetMs: 0 });
+    twoTierMock.mockResolvedValue(true);
     const res = await POST(segmentRequest({ 'x-real-ip': '203.0.113.7' }));
     expect(res.status).toBe(429);
     expect(recordMock).not.toHaveBeenCalled();
@@ -54,7 +54,7 @@ describe('POST /api/response/segment', () => {
   it('신뢰 IP 추출 불가(헤더 부재)면 limiter 호출 전에 429 로 fail-closed 한다', async () => {
     const res = await POST(segmentRequest({}));
     expect(res.status).toBe(429);
-    expect(limitMock).not.toHaveBeenCalled();
+    expect(twoTierMock).not.toHaveBeenCalled();
     expect(recordMock).not.toHaveBeenCalled();
   });
 
@@ -65,6 +65,6 @@ describe('POST /api/response/segment', () => {
         'x-real-ip': '203.0.113.7',
       }),
     );
-    expect(limitMock).toHaveBeenCalledWith('response-segment:203.0.113.7');
+    expect(twoTierMock).toHaveBeenCalledWith('response-segment', '203.0.113.7', RESPONSE_ID);
   });
 });
