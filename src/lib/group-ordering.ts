@@ -294,6 +294,28 @@ export function findStepIndexOfQuestion(steps: RenderStep[], questionId: string)
   return steps.findIndex((s) => s.items.some((it) => it.question.id === questionId));
 }
 
+/**
+ * 재개 위치 해석 (응답 버전 이관, ADR-0014).
+ *
+ * 답이 폐기·제거된 질문(affectedQuestionIds)이 있으면 그중 신버전에 실존하는
+ * 가장 앞 페이지와 저장된 진행 위치 중 앞선 쪽을 고른다 — 응답자가 빈 답을
+ * 모른 채 지나치지 않게 한다. 신버전에서 삭제된 영향 질문은 다시 답할 대상이
+ * 없으므로 무시한다. 둘 다 해석 불능이면 -1 (호출자가 1페이지 시작 처리).
+ */
+export function resolveRestoreStepIndex(
+  steps: RenderStep[],
+  savedStepId: string,
+  affectedQuestionIds: readonly string[] = [],
+): number {
+  const savedIdx = steps.findIndex((s) => stepIdOf(s) === savedStepId);
+  const affectedIndices = affectedQuestionIds
+    .map((qid) => findStepIndexOfQuestion(steps, qid))
+    .filter((idx) => idx >= 0);
+  if (affectedIndices.length === 0) return savedIdx;
+  const earliestAffected = Math.min(...affectedIndices);
+  return savedIdx < 0 ? earliestAffected : Math.min(savedIdx, earliestAffected);
+}
+
 export type StepBranchOutcome =
   | { kind: 'end' }
   | { kind: 'goto'; stepIndex: number }

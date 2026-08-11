@@ -41,8 +41,8 @@ import { useKeyboardOpen } from '@/hooks/use-keyboard-open';
 import { useMediaQuery } from '@/hooks/use-media-query';
 import {
   buildRenderSteps,
+  resolveRestoreStepIndex,
   resolveStepBranch,
-  stepIdOf,
   type RenderStep,
 } from '@/lib/group-ordering';
 import { isQuestionAnswered as isQuestionAnsweredPure } from '@/lib/survey/answer-validation';
@@ -510,9 +510,10 @@ function SurveyResponseFlowActive({
     };
   }, [steps, questions, groups, contactAttrs, answerQuotes, loadedSurvey?.lookups]);
   const restoreStepFromRecovery = useCallback(
-    (stepId: string, restoredResponses: ResponsesMap) => {
+    (stepId: string, restoredResponses: ResponsesMap, affectedQuestionIds?: string[]) => {
       const { steps, questions, groups, contactAttrs, lookups } = restoreCtxRef.current;
-      const idx = steps.findIndex((s) => stepIdOf(s) === stepId);
+      // 응답 버전 이관(ADR-0014): 답이 폐기·제거된 질문이 있으면 그 가장 앞 페이지로 되돌린다
+      const idx = resolveRestoreStepIndex(steps, stepId, affectedQuestionIds ?? []);
       if (idx <= 0) return;
       setCurrentStepIndex(idx);
       // 이전 버튼/브라우저 뒤로가기용 stepHistory 재구성 — 복원 응답 기준으로

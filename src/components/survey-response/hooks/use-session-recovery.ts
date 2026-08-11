@@ -33,7 +33,11 @@ interface UseSessionRecoveryArgs {
    * 회복된 응답의 마지막 스텝으로 초기 이동 — 안정 참조(useCallback) 필수 (deps 미포함).
    * 복원 응답값을 함께 넘겨 호출측이 stepHistory(이전 버튼 경로)를 재구성할 수 있게 한다.
    */
-  onRestoreStep?: (stepId: string, questionResponses: Record<string, unknown>) => void;
+  onRestoreStep?: (
+    stepId: string,
+    questionResponses: Record<string, unknown>,
+    affectedQuestionIds?: string[],
+  ) => void;
   /**
    * 회복된 응답의 draftSeq(서버가 마지막으로 적용한 draft 쓰기 순번)를 호출측에 전달 —
    * 안정 참조 필수(onRestoreStep 과 동일 패턴). use-response-lifecycle 의 draftSeqRef seed 용.
@@ -178,8 +182,14 @@ export function useSessionRecovery({
         if (!isTargetTestSession) setSessionId(recoverySessionId);
         setResponses?.(result.questionResponses ?? {});
         // 멈춘 페이지 복원 — 스텝 id 가 현재 구조에 없으면(재배포 등) 호출측에서 무시한다.
+        // 응답 버전 이관(ADR-0014) 시 affectedQuestionIds 를 함께 전달해 답이 폐기·제거된
+        // 가장 앞 페이지로 재개 위치를 되돌린다.
         if (result.currentStepId) {
-          onRestoreStep?.(result.currentStepId, result.questionResponses ?? {});
+          onRestoreStep?.(
+            result.currentStepId,
+            result.questionResponses ?? {},
+            result.affectedQuestionIds,
+          );
         }
         // draft seq seed — 2차 세션이 0 부터 다시 발급해 1차 세션의 draftSeq 보다 낮은 값을
         // 보내면 claimDraftSeq 가 stale 로 막아 저장이 조용히 유실된다(회귀 방지).
