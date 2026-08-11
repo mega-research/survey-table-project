@@ -145,6 +145,36 @@ describe('useResponseLifecycle - handleResponse INSERT 가드', () => {
     await waitFor(() => expect(args.setCurrentResponseId).toHaveBeenCalledWith('resp-1'));
   });
 
+  it('마운트 후 수집된 signals 를 첫 답변 INSERT 에 싣는다 (스테일 클로저 회귀 방지)', async () => {
+    // 시나리오: signals=null 로 마운트 → 신호 수집 완료로 signals 만 채워진 리렌더 →
+    // 다른 deps 는 전부 동일 참조 유지(실제 첫 페이지 상황) → 첫 답변 발사.
+    // 클로저가 마운트 시점 null 을 캡처하면 서버 봇 가드가 익명 첫 답변을
+    // device_already_responded 로 오차단한다 (2026-08-11 목재이용실태조사 테스트모드 사고).
+    const initial = baseArgs();
+    const collected = {
+      deviceId: 'dev-collected',
+      screen: '1512x982',
+      tz: 'Asia/Seoul',
+      lang: 'ko-KR',
+      platform: 'MacIntel',
+    };
+    const { result, rerender } = renderHook((props) => useResponseLifecycle(props), {
+      initialProps: initial,
+    });
+
+    // signals 외 모든 필드는 동일 참조 — deps 미변경 상태를 재현한다.
+    rerender({ ...initial, signals: collected });
+
+    act(() => {
+      result.current.handleResponse('q1', 'v1');
+    });
+
+    await waitFor(() => expect(createWithFirstAnswer).toHaveBeenCalledTimes(1));
+    expect(createWithFirstAnswer).toHaveBeenCalledWith(
+      expect.objectContaining({ clientSignals: collected }),
+    );
+  });
+
   it('admin-edit 모드면 INSERT 를 발사하지 않는다 (분기 5/8)', () => {
     const args = baseArgs({ isAdminEdit: true });
     const { result } = renderHook(() => useResponseLifecycle(args));
@@ -374,6 +404,30 @@ describe('useResponseLifecycle - handleSubmit', () => {
     expect(complete).toHaveBeenCalledTimes(1);
     expect(complete).toHaveBeenCalledWith(expect.objectContaining({ responseId: 'blank-1' }));
     expect(args.setIsCompleted).toHaveBeenCalledWith(true);
+  });
+
+  it('마운트 후 수집된 signals 를 blank fallback INSERT 에 싣는다 (스테일 클로저 회귀 방지)', async () => {
+    createBlank.mockResolvedValue({ id: 'blank-2', contactTargetId: null });
+    const initial = baseArgs({ currentResponseId: null });
+    const collected = {
+      deviceId: 'dev-collected',
+      screen: '1512x982',
+      tz: 'Asia/Seoul',
+      lang: 'ko-KR',
+      platform: 'MacIntel',
+    };
+    const { result, rerender } = renderHook((props) => useResponseLifecycle(props), {
+      initialProps: initial,
+    });
+    rerender({ ...initial, signals: collected });
+
+    await act(async () => {
+      await result.current.handleSubmit();
+    });
+
+    expect(createBlank).toHaveBeenCalledWith(
+      expect.objectContaining({ clientSignals: collected }),
+    );
   });
 
   it('currentResponseId 가 이미 있으면 blank INSERT 없이 바로 complete 한다', async () => {

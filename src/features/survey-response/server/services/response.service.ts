@@ -1275,10 +1275,14 @@ export async function saveTestTargetFirstAnswer(
 function isLikelyBot(args: {
   honeypot: string | undefined;
   inviteToken: string | undefined;
+  testToken: string | undefined;
   clientSignals: ClientSignals | null;
 }): boolean {
   if (args.honeypot && args.honeypot.trim().length > 0) return true;
-  if (!args.inviteToken && !args.clientSignals) return true;
+  // testToken 면제: 테스트 세션은 신호 기반 검사 대상이 아니고, 무효 토큰은 바로 뒤의
+  // isValidTestToken 게이트가 invalid_test_token 으로 차단하므로 봇 우회 구멍이 생기지 않는다.
+  // 면제 없이는 유효 테스트 링크의 첫 답변(신호 수집 전)이 봇으로 오차단된다.
+  if (!args.inviteToken && !args.testToken && !args.clientSignals) return true;
   return false;
 }
 
@@ -1329,7 +1333,7 @@ async function createResponseWithFirstAnswerInner(
   }
 
   // 봇 방어: db/헤더 접근 전에 차단. 사유는 device_already_responded 로 통일(탐지 비노출). 위치·동작 불변.
-  if (isLikelyBot({ honeypot, inviteToken, clientSignals })) {
+  if (isLikelyBot({ honeypot, inviteToken, testToken, clientSignals })) {
     return { kind: 'blocked', reason: 'device_already_responded' };
   }
 
@@ -1530,7 +1534,7 @@ async function createBlankResponseInner(
   }
 
   // 봇 방어: db/헤더 접근 전에 차단. 사유는 device_already_responded 로 통일(탐지 비노출). 위치·동작 불변.
-  if (isLikelyBot({ honeypot, inviteToken, clientSignals })) {
+  if (isLikelyBot({ honeypot, inviteToken, testToken, clientSignals })) {
     return { kind: 'blocked', reason: 'device_already_responded' };
   }
 
