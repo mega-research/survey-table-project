@@ -41,8 +41,8 @@ import { useKeyboardOpen } from '@/hooks/use-keyboard-open';
 import { useMediaQuery } from '@/hooks/use-media-query';
 import {
   buildRenderSteps,
+  resolveRestoreStepIndex,
   resolveStepBranch,
-  stepIdOf,
   type RenderStep,
 } from '@/lib/group-ordering';
 import { isQuestionAnswered as isQuestionAnsweredPure } from '@/lib/survey/answer-validation';
@@ -63,6 +63,7 @@ import {
   filterOptionTextsForSubmission,
 } from '@/lib/option-text-migration';
 import { allQuotaQuestionsAnswered } from '@/lib/quota/gate';
+import { applyStructuralSurvival } from '@/lib/survey-response/structural-survival';
 import { client } from '@/shared/lib/rpc';
 import { DEFAULT_PAUSED_MESSAGE } from '@/shared/lib/survey-control';
 
@@ -335,6 +336,7 @@ function SurveyResponseFlowActive({
     contactAttrs,
     versionId,
     control,
+    refetchSnapshot,
   },
   responses,
   setResponses,
@@ -402,6 +404,9 @@ function SurveyResponseFlowActive({
   // 세션 도중 중단 감지 시 재조회한 최신 중단 문구 (handlePausedMutationError 가 승격).
   // 화면 폴백 체인: 재조회 문구 → 로드 시점 control.pausedMessage → DEFAULT_PAUSED_MESSAGE.
   const [refetchedPausedMessage, setRefetchedPausedMessage] = useState<string | null>(null);
+  // 무중단 갈아타기(티켓 04) 안내 문구 — 서버가 응답 행을 현재 버전으로 재핀한 것을 감지해
+  // 최신 스냅샷 재취득이 끝난 뒤 한 줄 표시한다 (resume 토스트와 동일 패턴).
+  const [rebaseMessage, setRebaseMessage] = useState<string | null>(null);
 
   const keyboardOpen = useKeyboardOpen();
 
@@ -510,9 +515,10 @@ function SurveyResponseFlowActive({
     };
   }, [steps, questions, groups, contactAttrs, answerQuotes, loadedSurvey?.lookups]);
   const restoreStepFromRecovery = useCallback(
-    (stepId: string, restoredResponses: ResponsesMap) => {
+    (stepId: string, restoredResponses: ResponsesMap, affectedQuestionIds?: string[]) => {
       const { steps, questions, groups, contactAttrs, lookups } = restoreCtxRef.current;
-      const idx = steps.findIndex((s) => stepIdOf(s) === stepId);
+      // 응답 버전 이관(ADR-0014): 답이 폐기·제거된 질문이 있으면 그 가장 앞 페이지로 되돌린다
+      const idx = resolveRestoreStepIndex(steps, stepId, affectedQuestionIds ?? []);
       if (idx <= 0) return;
       setCurrentStepIndex(idx);
       // 이전 버튼/브라우저 뒤로가기용 stepHistory 재구성 — 복원 응답 기준으로
@@ -787,6 +793,21 @@ function SurveyResponseFlowActive({
     );
   };
 
+  // 무중단 갈아타기(티켓 04): create 결과의 versionId 가 알던 값과 다르면(서버 재핀) 호출된다.
+  // 최신 스냅샷을 재취득하고(steps 는 loadedSurvey 파생이라 자동 재계산), 메모리의 응답 맵을
+  // 구조 생존 판정(티켓 01)으로 걸러 신버전 구조와 비양립인 답만 버린 뒤 안내 문구를 띄운다.
+  // 신버전 질문 목록은 state 커밋을 기다리지 않고 refetchSnapshot 의 반환값을 직접 쓴다.
+  const handleVersionRebase = useCallback(() => {
+    void (async () => {
+      const refetched = await refetchSnapshot();
+      if (!refetched) return; // 재취득 실패 — 기존 화면 유지 (fail-open, refetchSnapshot 이 로깅)
+      setResponses(
+        (prev) => applyStructuralSurvival(prev, refetched.survey.questions).survivingResponses,
+      );
+      setRebaseMessage('설문이 업데이트되어 최신 버전으로 이어집니다');
+    })();
+  }, [refetchSnapshot, setResponses]);
+
   // isCreatingResponse 는 훅 내부 전용(첫 답변 INSERT 가드)이라 컴포넌트는 구조분해하지 않는다.
   const { handleResponse, flushPendingAnswers, handleSubmit } = useResponseLifecycle({
     isAdminEdit,
@@ -813,6 +834,7 @@ function SurveyResponseFlowActive({
     setResponses,
     sessionId,
     versionId,
+    onVersionRebase: handleVersionRebase,
     signals,
     honeypotRef,
     currentResponseId,
@@ -1115,6 +1137,9 @@ function SurveyResponseFlowActive({
         }`}
       >
         {resumeMessage && <ResumeToast message={resumeMessage} onDismiss={dismissResume} />}
+        {rebaseMessage && (
+          <ResumeToast message={rebaseMessage} onDismiss={() => setRebaseMessage(null)} />
+        )}
         {inviteIsInvalid && (
           <div
             role="alert"

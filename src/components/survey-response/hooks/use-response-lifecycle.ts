@@ -7,6 +7,7 @@ import { client } from '@/shared/lib/rpc';
 import { findStepIndexOfQuestion, stepIdOf, type RenderStep } from '@/lib/group-ordering';
 import type { ClientSignals } from '@/lib/duplicate-detection/types';
 import { collectNumericIssues } from '@/lib/survey/numeric-validation';
+import { resolveRebasedVersionId } from '@/lib/survey-response/version-rebase';
 import { withCalcValues, type FormulaEvalCtx } from '@/lib/survey/cell-formula';
 import type { Question, QuestionGroup, Survey } from '@/types/survey';
 import type { BranchEvalCtx } from '@/utils/branch-logic';
@@ -107,6 +108,11 @@ interface UseResponseLifecycleArgs {
   // 세션/버전/신호
   sessionId: string;
   versionId: string | null;
+  /**
+   * 무중단 갈아타기(티켓 04) — create 결과의 versionId 가 알던 값과 다르면(서버 재핀) 호출된다.
+   * 컴포넌트가 최신 스냅샷 재취득 + 구조 생존 필터 + 안내 문구 표시를 수행한다.
+   */
+  onVersionRebase?: (newVersionId: string) => void;
   signals: ClientSignals | null;
   // 봇 방어 허니팟 입력 ref — create 시점에 .value 를 읽어 서버로 전달(봇이 채우면 차단).
   honeypotRef: RefObject<HTMLInputElement | null>;
@@ -203,6 +209,7 @@ export function useResponseLifecycle({
   setResponses,
   sessionId,
   versionId,
+  onVersionRebase,
   signals,
   honeypotRef,
   currentResponseId,
@@ -491,6 +498,10 @@ export function useResponseLifecycle({
               return null;
             }
             const { id, contactTargetId } = result;
+            // 무중단 갈아타기(티켓 04): 서버가 구버전 versionId 를 현재 버전으로 재핀했으면
+            // 결과 versionId 가 알던 값과 다르다 — 최신 스냅샷 재취득을 트리거한다.
+            const rebasedVersionId = resolveRebasedVersionId(result.versionId, versionId);
+            if (rebasedVersionId && onVersionRebase) onVersionRebase(rebasedVersionId);
             activeResponseIdRef.current = id;
             // 컨택 재사용으로 기존 행을 물려받았을 수 있다(resume 이 호출되지 않는 경로 —
             // localStorage 없는 다른 기기·시크릿창 재진입). resume seed 와 동일 의미론으로
@@ -565,6 +576,7 @@ export function useResponseLifecycle({
       currentStep,
       sessionId,
       versionId,
+      onVersionRebase,
       setCurrentResponseId,
       inviteToken,
       testToken,
@@ -770,6 +782,9 @@ export function useResponseLifecycle({
             setIsSubmitting(false);
             return;
           } else {
+            // 무중단 갈아타기(티켓 04): blank INSERT 경로도 재핀 감지를 동일하게 처리한다.
+            const rebasedVersionId = resolveRebasedVersionId(created.versionId, versionId);
+            if (rebasedVersionId && onVersionRebase) onVersionRebase(rebasedVersionId);
             effectiveResponseId = created.id;
             setCurrentResponseId(created.id);
             if (testIdentity) setHasTestAttemptOwnership(true);
@@ -934,6 +949,7 @@ export function useResponseLifecycle({
     signals,
     steps,
     versionId,
+    onVersionRebase,
     visibleQuestions,
     testToken,
     isTestSession,

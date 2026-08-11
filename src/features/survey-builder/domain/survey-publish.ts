@@ -17,3 +17,14 @@ export const PublishSurveyInput = z.object({
 export type PublishSurveyInput = z.infer<typeof PublishSurveyInput>;
 
 export const SurveyVersionRowSchema = z.custom<SurveyVersion>();
+
+/** 배포 확인 안내용 이관 대상 응답 수 집계 (ADR-0014) */
+export const MigratableCountInput = z.object({
+  surveyId: z.string(),
+});
+export type MigratableCountInput = z.infer<typeof MigratableCountInput>;
+
+export const MigratableCountOutput = z.object({
+  count: z.number().int().nonnegative(),
+});
+export type MigratableCountOutput = z.infer<typeof MigratableCountOutput>;

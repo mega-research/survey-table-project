@@ -1,10 +1,10 @@
 import 'server-only';
 
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 
 import { getSurveyWithDetails } from '@/data/surveys';
 import { db } from '@/db';
-import { surveys, surveyVersions, type SurveyVersionSnapshot } from '@/db/schema';
+import { surveyResponses, surveys, surveyVersions, type SurveyVersionSnapshot } from '@/db/schema';
 import { generateSPSSColumns } from '@/lib/analytics/spss-excel-export';
 import { normalizeQuestions } from '@/lib/question';
 import { extractR2KeysFromJsonbValue } from '@/lib/r2-lifecycle/key-extract';
@@ -124,4 +124,28 @@ export async function publishSurvey(
 
     return newVersion;
   });
+}
+
+/**
+ * 배포 확인 안내용 이관 대상 응답 수 (ADR-0014).
+ *
+ * "진행 중 응답 N건이 새 버전으로 이어집니다" 문구의 N — 해당 설문의
+ * 미완료(in_progress·drop) 비테스트·비삭제 응답 수. 재개 시점 이관의 잠재
+ * 대상 집계이며, 실제 이관은 응답자 재방문 시점에 일어난다.
+ */
+export async function countMigratableResponses(input: {
+  surveyId: string;
+}): Promise<{ count: number }> {
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(surveyResponses)
+    .where(
+      and(
+        eq(surveyResponses.surveyId, input.surveyId),
+        inArray(surveyResponses.status, ['in_progress', 'drop']),
+        eq(surveyResponses.isTest, false),
+        isNull(surveyResponses.deletedAt),
+      ),
+    );
+  return { count: row?.count ?? 0 };
 }

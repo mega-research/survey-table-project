@@ -189,7 +189,11 @@ describe('resumeOrCreateResponse 응답 복원', () => {
     expect(result).not.toHaveProperty('currentStepId');
   });
 
-  it('컨택 경로 버전 불일치면 답과 currentStepId를 반환하지 않는다 - 구버전 답 주입 차단', async () => {
+  it('컨택 경로 버전 불일치 + 이관 불능이면 답과 currentStepId를 반환하지 않는다 - 구버전 답 주입 차단 폴백', async () => {
+    // 버전 불일치는 원래 응답 버전 이관(ADR-0014) 대상이지만, 이 mock 은 스냅샷 조회가
+    // 응답 행을 돌려줘 questions 비배열(훼손)로 판정되므로 이관이 보류된다 — 그 폴백
+    // (복원 안 함 = 기존 주입 차단 동작)을 핀한다. 이관 성공 경로는
+    // resume-version-migration.test.ts 가 커버한다.
     await mockContactRow({ ...contactRowBase, versionId: 'version-0' });
 
     const result = await resumeOrCreateResponse({

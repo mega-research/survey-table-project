@@ -349,8 +349,20 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
   const handlePublishSurvey = async () => {
     if (!surveyId) return;
 
+    // 배포 안내 N건 (ADR-0014) — 진행중·이탈 응답이 새 버전으로 이어짐을 고지.
+    // 집계 실패는 배포를 막지 않는다 (안내는 부가 정보).
+    let migratableLine = '';
+    try {
+      const { count } = await client.surveyBuilder.publish.migratableCount({ surveyId });
+      if (count > 0) {
+        migratableLine = `\n진행 중 응답 ${count}건이 새 버전으로 이어집니다.`;
+      }
+    } catch {
+      // 집계 실패 무시 — 안내 없이 진행
+    }
+
     const confirmed = window.confirm(
-      '설문을 배포하시겠습니까?\n배포하면 현재 설문 상태가 스냅샷으로 저장되고, 응답자는 배포된 버전으로 응답하게 됩니다.'
+      `설문을 배포하시겠습니까?\n배포하면 현재 설문 상태가 스냅샷으로 저장되고, 응답자는 배포된 버전으로 응답하게 됩니다.${migratableLine}`
     );
     if (!confirmed) return;
 

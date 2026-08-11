@@ -2,11 +2,14 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 import 'server-only';
 
 import { db } from '@/db';
-import { surveyResponses } from '@/db/schema';
+import { surveyResponses, surveyVersions } from '@/db/schema';
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { logger } from '@/lib/logger';
 import { findContactByInviteToken } from '@/lib/duplicate-detection/invite-lookup';
+import { normalizeQuestions } from '@/lib/question/normalize';
+import { toFlatQuestion } from '@/lib/question/variants';
 import { getSurveyControlFlags, isValidTestToken } from '@/lib/survey-control';
+import { applyStructuralSurvival } from '@/lib/survey-response/structural-survival';
 import {
   isResumableTestStatus,
   lockAndAssertResponseMutation,
@@ -28,6 +31,78 @@ import { extractDraftSeq, SurveyNotAcceptingResponsesError } from './response.se
 // - recordStepVisit
 // - recordVisibilitySegment
 // - resumeOrCreateResponse
+
+interface ResumedRowMigration {
+  /** 구조 생존 판정을 통과해 저장된 답변 맵 (저장 형태 — PII 는 암호문 그대로) */
+  survivingResponses: Record<string, unknown>;
+  /** 답이 폐기·부분 제거된 질문 ID — 클라이언트 재개 위치 롤백의 입력 */
+  affectedQuestionIds: string[];
+}
+
+/**
+ * 응답 버전 이관 (response version migration, ADR-0014) — 재개 시점의 versionId 재고정.
+ *
+ * 구버전에 고정된 미완료 응답을 현재 발행 버전으로 재고정하고, 기존 답변을
+ * 구조 생존 판정으로 걸러 얹는다. 원 버전은 metadata.migratedFromVersionId 로
+ * 보존한다 (jsonb_set 부분 갱신 — draftSeq 등 기존 키 불변, 최초 이관 출처 우선).
+ *
+ * 이관하지 않는 경우(null 반환 — 호출자는 기존 재개 동작 유지):
+ * - versionId 미연결(레거시) 행 또는 현재 버전과 일치
+ * - 현재 버전 스냅샷 부재·훼손(questions 비배열) — 응답자를 막지 않는다
+ * - UPDATE 경합 0행 (동시 이관·재핀) — 이번 재개는 기존 동작으로 폴백
+ *
+ * 주의: questionResponses 는 통 교체다. 재개는 페이지 로드 직후라 이 세션의 draft 와
+ * 경합하지 않지만, 타 탭 draft 가 SELECT~UPDATE 사이에 끼면 그 배치는 유실될 수 있는
+ * 잔여 window 다 (WHERE version_id 낙관 가드는 동시 "이관"만 차단).
+ */
+async function migrateResumedRowIfStale(input: {
+  responseId: string;
+  rowVersionId: string | null | undefined;
+  currentVersionId: string | null | undefined;
+  storedResponses: Record<string, unknown>;
+  reviveFromDrop: boolean;
+  now: Date;
+}): Promise<ResumedRowMigration | null> {
+  const { responseId, rowVersionId, currentVersionId, storedResponses, reviveFromDrop, now } = input;
+  if (rowVersionId == null || currentVersionId == null || rowVersionId === currentVersionId) {
+    return null;
+  }
+
+  const [versionRow] = await db
+    .select({ snapshot: surveyVersions.snapshot })
+    .from(surveyVersions)
+    .where(eq(surveyVersions.id, currentVersionId))
+    .limit(1);
+  const snap = versionRow?.snapshot as { questions?: unknown } | null | undefined;
+  if (!Array.isArray(snap?.questions)) return null;
+
+  const questions = normalizeQuestions(snap.questions, 'preserve').map(toFlatQuestion);
+  const survival = applyStructuralSurvival(storedResponses, questions);
+
+  const [updated] = await db
+    .update(surveyResponses)
+    .set({
+      versionId: currentVersionId,
+      // jsonb 컬럼 — 객체 그대로 바인딩 (JSON.stringify 금지: 이중 인코딩)
+      questionResponses: survival.survivingResponses,
+      metadata: sql`jsonb_set(
+        COALESCE(${surveyResponses.metadata}, '{}'::jsonb),
+        '{migratedFromVersionId}',
+        COALESCE(${surveyResponses.metadata}->'migratedFromVersionId', to_jsonb(${rowVersionId}::text)),
+        true
+      )`,
+      lastActivityAt: now,
+      ...(reviveFromDrop ? { status: 'in_progress' } : {}),
+    })
+    .where(and(eq(surveyResponses.id, responseId), eq(surveyResponses.versionId, rowVersionId)))
+    .returning({ id: surveyResponses.id });
+  if (!updated) return null;
+
+  return {
+    survivingResponses: survival.survivingResponses,
+    affectedQuestionIds: survival.affectedQuestionIds,
+  };
+}
 
 /**
  * 페이지 이동(스텝 전환) 기록.
@@ -256,53 +331,63 @@ export async function resumeOrCreateResponse(
           return { ...restored, resumed: false };
         }
         const now = new Date();
-        // 답·스텝 복원 게이트 — 행 resume(소유권 의미론)은 기존대로 하되, 저장 답 반환은
-        // 두 조건을 모두 만족할 때만:
-        // - 세션 일치: invite 는 pub 엔드포인트라 URL 유출 시 제3자가 임의 sessionId 로
-        //   호출 가능 — 원 브라우저(세션 일치)에만 복호화 답을 내준다.
-        // - 버전 일치: 재배포로 구조가 바뀐 구버전 답을 주입하면 유령 답 영구 저장과
-        //   필수 검증 우회가 생긴다 (위 테스트 대상자 분기와 동일 게이트).
-        const restorePayload =
-          existingByContact.sessionId === sessionId &&
-          existingByContact.versionId === flags?.currentVersionId
-            ? {
-                questionResponses: decryptQuestionResponses(
-                  existingByContact.questionResponses ?? {},
-                  { responseId: existingByContact.id },
-                ),
-                currentStepId: existingByContact.currentStepId,
-              }
-            : {};
-        if (existingByContact.status === 'drop') {
+        if (
+          existingByContact.status === 'drop' ||
+          existingByContact.status === 'in_progress'
+        ) {
           // 중단 모드: 행이 isTest 이거나 유효한 테스트 링크로 재진입한 경우만 예외
           if (flags?.isPaused && !existingByContact.isTest && !isTestSession) {
             throw new SurveyNotAcceptingResponsesError('survey_paused');
           }
-          await db
-            .update(surveyResponses)
-            .set({ status: 'in_progress', lastActivityAt: now })
-            .where(eq(surveyResponses.id, existingByContact.id));
-          return {
-            id: existingByContact.id,
-            status: 'in_progress',
-            resumed: true,
-            ...restorePayload,
-            ...(draftSeq !== undefined ? { draftSeq } : {}),
-          };
-        }
-        if (existingByContact.status === 'in_progress') {
-          // 중단 모드: 행이 isTest 이거나 유효한 테스트 링크로 재진입한 경우만 예외
-          if (flags?.isPaused && !existingByContact.isTest && !isTestSession) {
-            throw new SurveyNotAcceptingResponsesError('survey_paused');
+          const reviveFromDrop = existingByContact.status === 'drop';
+          // 답·스텝 복원 게이트 — 행 resume(소유권 의미론)은 기존대로 하되:
+          // - 세션 일치: invite 는 pub 엔드포인트라 URL 유출 시 제3자가 임의 sessionId 로
+          //   호출 가능 — 원 브라우저(세션 일치)에만 복호화 답을 내주고, 이관(행 변형)도
+          //   원 브라우저에서만 수행한다.
+          // - 버전 불일치: 과거에는 복원을 조용히 비웠다(빈 폼 + 제출 시 덮어쓰기 유실).
+          //   이제 응답 버전 이관으로 현재 버전에 얹어 복원한다. 이관 불능(현재 스냅샷
+          //   훼손·경합)이면 기존 동작(복원 안 함)을 유지한다 — 구버전 답을 신버전 UI 에
+          //   그대로 주입하는 유령 답 문제를 되살리지 않기 위함.
+          const sessionMatches = existingByContact.sessionId === sessionId;
+          const versionMatches = existingByContact.versionId === flags?.currentVersionId;
+          const migration =
+            sessionMatches && !versionMatches
+              ? await migrateResumedRowIfStale({
+                  responseId: existingByContact.id,
+                  rowVersionId: existingByContact.versionId,
+                  currentVersionId: flags?.currentVersionId,
+                  storedResponses: existingByContact.questionResponses ?? {},
+                  reviveFromDrop,
+                  now,
+                })
+              : null;
+          if (!migration) {
+            await db
+              .update(surveyResponses)
+              .set(
+                reviveFromDrop
+                  ? { status: 'in_progress', lastActivityAt: now }
+                  : { lastActivityAt: now },
+              )
+              .where(eq(surveyResponses.id, existingByContact.id));
           }
-          await db
-            .update(surveyResponses)
-            .set({ lastActivityAt: now })
-            .where(eq(surveyResponses.id, existingByContact.id));
+          const restorePayload =
+            sessionMatches && (versionMatches || migration)
+              ? {
+                  questionResponses: decryptQuestionResponses(
+                    migration?.survivingResponses ?? existingByContact.questionResponses ?? {},
+                    { responseId: existingByContact.id },
+                  ),
+                  currentStepId: existingByContact.currentStepId,
+                  ...(migration && migration.affectedQuestionIds.length > 0
+                    ? { affectedQuestionIds: migration.affectedQuestionIds }
+                    : {}),
+                }
+              : {};
           return {
             id: existingByContact.id,
             status: 'in_progress',
-            resumed: false,
+            resumed: reviveFromDrop,
             ...restorePayload,
             ...(draftSeq !== undefined ? { draftSeq } : {}),
           };
@@ -320,6 +405,7 @@ export async function resumeOrCreateResponse(
       id: surveyResponses.id,
       status: surveyResponses.status,
       isTest: surveyResponses.isTest,
+      versionId: surveyResponses.versionId,
       questionResponses: surveyResponses.questionResponses,
       currentStepId: surveyResponses.currentStepId,
       metadata: surveyResponses.metadata,
@@ -341,46 +427,38 @@ export async function resumeOrCreateResponse(
   const now = new Date();
   const draftSeq = extractDraftSeq(existing.metadata);
 
-  if (existing.status === 'drop') {
+  if (existing.status === 'drop' || existing.status === 'in_progress') {
     // 중단 모드: 행이 isTest 이거나 유효한 테스트 링크로 재진입한 경우만 예외
     if (flags?.isPaused && !existing.isTest && !isTestSession) {
       throw new SurveyNotAcceptingResponsesError('survey_paused');
     }
-    // 회복 — drop → in_progress, lastActivityAt 새로 박는다
-    await db
-      .update(surveyResponses)
-      .set({ status: 'in_progress', lastActivityAt: now })
-      .where(eq(surveyResponses.id, existing.id));
-    return {
-      id: existing.id,
-      status: 'in_progress',
-      resumed: true,
-      questionResponses: decryptQuestionResponses(existing.questionResponses ?? {}, {
-        responseId: existing.id,
-      }),
-      currentStepId: existing.currentStepId,
-      ...(draftSeq !== undefined ? { draftSeq } : {}),
-    };
-  }
-
-  if (existing.status === 'in_progress') {
-    // 중단 모드: 행이 isTest 이거나 유효한 테스트 링크로 재진입한 경우만 예외
-    if (flags?.isPaused && !existing.isTest && !isTestSession) {
-      throw new SurveyNotAcceptingResponsesError('survey_paused');
+    const reviveFromDrop = existing.status === 'drop';
+    // 응답 버전 이관 — 구버전 행이면 현재 버전으로 재고정 (실패·불필요 시 null → 기존 동작)
+    const migration = await migrateResumedRowIfStale({
+      responseId: existing.id,
+      rowVersionId: existing.versionId,
+      currentVersionId: flags?.currentVersionId,
+      storedResponses: existing.questionResponses ?? {},
+      reviveFromDrop,
+      now,
+    });
+    if (!migration) {
+      // 기존 동작: drop 회복(status 전환) 또는 stale 방지용 lastActivityAt 터치
+      await db
+        .update(surveyResponses)
+        .set(reviveFromDrop ? { status: 'in_progress', lastActivityAt: now } : { lastActivityAt: now })
+        .where(eq(surveyResponses.id, existing.id));
     }
-    // stale 방지용 lastActivityAt 터치
-    await db
-      .update(surveyResponses)
-      .set({ lastActivityAt: now })
-      .where(eq(surveyResponses.id, existing.id));
+    const rawResponses = migration?.survivingResponses ?? existing.questionResponses ?? {};
     return {
       id: existing.id,
       status: 'in_progress',
-      resumed: false,
-      questionResponses: decryptQuestionResponses(existing.questionResponses ?? {}, {
-        responseId: existing.id,
-      }),
+      resumed: reviveFromDrop,
+      questionResponses: decryptQuestionResponses(rawResponses, { responseId: existing.id }),
       currentStepId: existing.currentStepId,
+      ...(migration && migration.affectedQuestionIds.length > 0
+        ? { affectedQuestionIds: migration.affectedQuestionIds }
+        : {}),
       ...(draftSeq !== undefined ? { draftSeq } : {}),
     };
   }
