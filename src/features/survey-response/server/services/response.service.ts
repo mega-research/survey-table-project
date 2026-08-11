@@ -1675,6 +1675,34 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
   let validatedResponses: Record<string, unknown> | undefined = data?.questionResponses;
   if (data?.questionResponses && gateRow) {
     const validIds = await loadValidQuestionIds(gateRow.versionId, gateRow.surveyId);
+    // 프루닝 스냅샷 가드: 테스트·soft delete 응답은 버전 스냅샷 프루닝을 보호하지
+    // 않으므로, 스냅샷이 비워진 버전을 참조하는 응답이 여기 도달할 수 있다. 그 경우
+    // validIds 가 빈 집합이 되어 아래 멤버십 필터가 제출 답변 전체를 걸러 {} 를
+    // 저장하며 성공으로 보고한다 — 조용한 전량 유실. 빈 집합일 때만 스냅샷 상태를
+    // 확인해 유실 대신 명시적 에러로 전환한다. 존재 여부(IS NOT NULL)만으로는 부족하다
+    // — non-null 이지만 questions 가 없거나 비배열인 드리프트 스냅샷(이 함수 뒤의
+    // Array.isArray 방어가 예견하는 상태)과 항목에 id 가 없는 훼손 배열도 같은 유실을
+    // 일으키므로, 빈 집합을 허용하는 유일한 상태는 "검증된 빈 배열(질문 0개 설문)"이다.
+    // IS DISTINCT FROM 은 questions 키 부재(jsonb_typeof NULL)를 malformed 로 흡수한다.
+    // 응답은 in_progress 로 남고, 에러는 RPC 핸들러의 Sentry 캡처로 보고된다.
+    if (gateRow.versionId && validIds.size === 0) {
+      const [versionRow] = await db
+        .select({
+          questionsState: sql<string>`
+            CASE
+              WHEN ${surveyVersions.snapshot} IS NULL THEN 'missing'
+              WHEN jsonb_typeof(${surveyVersions.snapshot}->'questions') IS DISTINCT FROM 'array' THEN 'malformed'
+              WHEN jsonb_array_length(${surveyVersions.snapshot}->'questions') > 0 THEN 'ids-unreadable'
+              ELSE 'empty'
+            END`,
+        })
+        .from(surveyVersions)
+        .where(eq(surveyVersions.id, gateRow.versionId))
+        .limit(1);
+      if (versionRow?.questionsState !== 'empty') {
+        throw new Error('응답 버전의 설문 스냅샷이 유실되어 완료할 수 없습니다.');
+      }
+    }
     const filtered: Record<string, unknown> = {};
     for (const [qid, value] of Object.entries(data.questionResponses)) {
       // 멤버십 필터: 설문(버전 스냅샷/라이브 questions)에 없는 키는 drop.
