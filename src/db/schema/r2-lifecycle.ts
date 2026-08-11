@@ -37,7 +37,26 @@ export const r2SentKeys = pgTable('r2_sent_keys', {
   firstSentAt: timestamp('first_sent_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
+/**
+ * 파생 참조 인덱스 — 콘텐츠에서 추출한 R2 키 참조의 캐시.
+ * 유지가 아니라 재생성하는 구조다: 불변 소스(survey_versions, 캠페인 스냅샷)는
+ * 삽입 시 1회 기록하고, 가변 소스는 주기적으로 전량 재추출한다.
+ * 집행 판정에서 이 인덱스는 사전 필터일 뿐 삭제 권한이 없다 (spec §6.3).
+ *
+ * 인덱스는 수동 마이그레이션 0071 소관:
+ * - r2_key_refs_pk: (key, source_table, source_id) PK — key 선두라 키 조회를 커버
+ * - r2_key_refs_source_idx: (source_table, source_id) — 행 단위 교체용
+ */
+export const r2KeyRefs = pgTable('r2_key_refs', {
+  key: text('key').notNull(),
+  sourceTable: text('source_table').notNull(),
+  sourceId: uuid('source_id').notNull(),
+  extractedAt: timestamp('extracted_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
 export type R2DeletionCandidate = typeof r2DeletionCandidates.$inferSelect;
 export type NewR2DeletionCandidate = typeof r2DeletionCandidates.$inferInsert;
 export type R2SentKey = typeof r2SentKeys.$inferSelect;
 export type NewR2SentKey = typeof r2SentKeys.$inferInsert;
+export type R2KeyRef = typeof r2KeyRefs.$inferSelect;
+export type NewR2KeyRef = typeof r2KeyRefs.$inferInsert;

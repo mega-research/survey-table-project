@@ -34,6 +34,7 @@ const SOURCE_LABEL: Record<string, string> = {
   'library-delete': '보관함 삭제',
   'template-delete': '템플릿 삭제',
   'save-diff': '저장 정리',
+  'version-prune': '버전 정리',
 };
 
 const HISTORY_FILTERS: { value: FileCleanupHistoryStatus | undefined; label: string }[] = [

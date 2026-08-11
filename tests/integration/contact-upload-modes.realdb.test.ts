@@ -13,7 +13,15 @@
 
 import ExcelJS from 'exceljs';
 import { and, eq, sql } from 'drizzle-orm';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+
+// ingestContactUpload -> loadOperationsDataScope -> isGuestViewer 는 요청 컨텍스트의
+// supabase 세션(cookies)을 fail-closed 로 요구한다. realdb 테스트에는 Next 요청
+// 스코프가 없어 cookies() 가 던지므로, 어드민 세션(게스트 아님)으로 정체성을 고정한다.
+// 접근 강제는 procedure(scoped/authed) 계층 책임이라 서비스 왕복 검증과 무관하다.
+vi.mock('@/lib/auth/guest-viewer', () => ({
+  isGuestViewer: () => Promise.resolve(false),
+}));
 
 import { db } from '@/db';
 import {

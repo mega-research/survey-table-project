@@ -53,6 +53,8 @@
     "0066_add_row_wise_original_mobile_mode",
     "0067_add_question_answer_quote",
     "0068_add_question_required_message",
-    "0069_add_survey_preview_token"
+    "0069_add_survey_preview_token",
+    "0070_survey_version_snapshot_nullable",
+    "0071_r2_key_refs"
   ]
 }

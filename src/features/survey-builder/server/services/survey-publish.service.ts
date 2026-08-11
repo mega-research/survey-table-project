@@ -1,20 +1,19 @@
 import 'server-only';
 
-import { and, desc, eq, ne, notExists, sql } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 
 import { getSurveyWithDetails } from '@/data/surveys';
 import { db } from '@/db';
-import {
-  surveyResponses,
-  surveys,
-  surveyVersions,
-  type SurveyVersionSnapshot,
-} from '@/db/schema';
+import { surveys, surveyVersions, type SurveyVersionSnapshot } from '@/db/schema';
 import { generateSPSSColumns } from '@/lib/analytics/spss-excel-export';
 import { normalizeQuestions } from '@/lib/question';
+import { extractR2KeysFromJsonbValue } from '@/lib/r2-lifecycle/key-extract';
+import { recordKeyRefs } from '@/lib/r2-lifecycle/key-ref-index.server';
 import { hydrateQuestionsForSpss } from '@/lib/spss/hydrate-questions';
 import { assertValidSpssVarNames } from '@/lib/spss/variable-name-guard';
 import { buildSurveySnapshot } from '@/lib/versioning/snapshot-builder';
+import { pruneVersionSnapshots } from '@/lib/versioning/version-prune.server';
+import { findPrunableVersionIds } from '@/lib/versioning/version-retention.server';
 
 import type {
   PublishSurveyInput,
@@ -96,22 +95,32 @@ export async function publishSurvey(
       })
       .where(eq(surveys.id, surveyId));
 
-    // 응답이 참조하지 않는 이전 버전 스냅샷 정리 — 스냅샷(~수백 KB/개)이 publish
-    // 마다 쌓여 DB 를 잠식하는 것을 막는다. 응답이 있는 버전은 응답 수정 재계산·
-    // 운영 집계·이전 버전 진행 중 응답 검증이 스냅샷을 읽으므로 보존해야 하고,
-    // 방금 만든 버전이 항상 남으므로 versionNumber 는 재사용 없이 단조 증가한다.
-    await tx.delete(surveyVersions).where(
-      and(
-        eq(surveyVersions.surveyId, surveyId),
-        ne(surveyVersions.id, newVersion.id),
-        notExists(
-          tx
-            .select({ one: sql`1` })
-            .from(surveyResponses)
-            .where(eq(surveyResponses.versionId, surveyVersions.id)),
-        ),
-      ),
+    // 불변 소스 인덱스 기록 — 발행 스냅샷은 이후 바뀌지 않으므로 이 1회
+    // 추출로 끝난다. 삽입 결과 행이 이미 메모리에 있어 DB 재조회가 없다.
+    //
+    // 추출 대상은 snapshot 컬럼이 아니라 **행 전체**다. 월 1회 감사
+    // (rebuildSource)와 집행 직전 스캔(findReferencedKeys)이 둘 다 행 전체를
+    // 훑으므로 — changeNote 같은 자유 텍스트에 들어간 R2 URL 포함 — 여기서
+    // snapshot 만 보면 같은 버전이 어느 쓰기 경로를 탔는지에 따라 인덱스
+    // 내용이 달라진다. 세 지점이 같은 표면·같은 추출 의미론을 공유한다.
+    await recordKeyRefs(
+      tx,
+      'survey_versions',
+      newVersion.id,
+      extractR2KeysFromJsonbValue(newVersion),
     );
+
+    // 직전 버전 정리 — 보존 규칙(현재 발행본 OR 살아있는 비테스트 응답)에
+    // 미달하는 버전의 snapshot 을 비운다. 이 지점이 있어야 survey_versions
+    // 크기가 영구히 묶인다 (일회성 정리만 하면 원위치한다).
+    // currentVersionId 갱신을 위에서 이미 했으므로 새 버전은 규칙상 제외되지만,
+    // 순서 변경에 견디도록 방어적으로 한 번 더 걸러낸다.
+    const prunable = (await findPrunableVersionIds(tx, { surveyId })).filter(
+      (id) => id !== newVersion.id,
+    );
+    if (prunable.length > 0) {
+      await pruneVersionSnapshots(tx, prunable, `버전 ${nextVersionNumber} 발행에 따른 정리`);
+    }
 
     return newVersion;
   });

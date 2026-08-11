@@ -1,39 +1,16 @@
 import 'server-only';
 
-import { and, isNull, sql, type SQL } from 'drizzle-orm';
-import type { PgTable } from 'drizzle-orm/pg-core';
+import { and, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
-import {
-  mailCampaigns,
-  mailTemplates,
-  questions,
-  savedCells,
-  savedLookups,
-  savedQuestions,
-  surveys,
-  surveyVersions,
-} from '@/db/schema';
 import { extractR2KeysFromJsonbValue } from '@/lib/r2-lifecycle/key-extract';
+import { REFERENCE_SURFACE } from '@/lib/r2-lifecycle/reference-surface.server';
 
 /**
- * 집행 직전 전역 참조 재확인의 스캔 표면 — 라이브 행 전체 + 발행 스냅샷 +
- * 보관함 + 캠페인 스냅샷. soft-delete 된 mail_templates 행만 제외한다
- * (soft delete 행은 파일 참조 자격을 잃는다 — CONTEXT.md).
- *
- * mail_recipients.sendPayloadSnapshot 은 캠페인 스냅샷과 키 집합이 동일하고
- * (수신자별 토큰 치환만 다름) 발송분 보호는 발송 장부 소관이라 스캔하지 않는다.
+ * 집행 직전 전역 참조 재확인의 스캔 표면은 reference-surface.server 의
+ * REFERENCE_SURFACE 단일 정의를 그대로 쓴다 — 파생 인덱스 재구축과 표면·술어가
+ * 갈리면 인덱스가 스캔보다 넓어져 삭제가 영구히 막힌다.
  */
-const REFERENCE_SURFACE: Array<{ table: PgTable; extraWhere?: SQL }> = [
-  { table: surveys },
-  { table: questions },
-  { table: surveyVersions },
-  { table: savedQuestions },
-  { table: savedCells },
-  { table: savedLookups },
-  { table: mailTemplates, extraWhere: isNull(mailTemplates.deletedAt) },
-  { table: mailCampaigns },
-];
 
 function escapeLikePattern(key: string): string {
   return key.replace(/[\\%_]/g, (m) => `\\${m}`);

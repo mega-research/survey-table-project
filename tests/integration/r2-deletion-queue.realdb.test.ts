@@ -5,6 +5,8 @@
  * - 등록: 3중 게이트 거부 키(tmp/외부/네임스페이스 밖)는 등록되지 않는다
  * - 등록: 같은 키의 '대기' 후보 중복 등록은 partial unique 로 흡수된다
  * - 취소: '대기' 후보만 '취소됨'으로 전이된다
+ * - 종결: 집행자는 '대기'·'실패' 후보만 종결한다 — 배치 조회 이후 취소된
+ *   후보를 덮어쓰면 취소가 조용히 무효화된다
  * - 장부: append-only — 중복 기록은 무시되고 최초 발송 시각이 보존된다
  *
  * 실행: pnpm test:integration (로컬 supabase 54322 + 0065 마이그레이션 적용 필요)
@@ -18,7 +20,9 @@ import {
   R2_DELETION_GRACE_MS,
   cancelDeletionCandidate,
   cancelPendingCandidatesByKeys,
+  isCandidateResolvable,
   registerDeletionCandidates,
+  resolveCandidate,
 } from '@/lib/r2-lifecycle/deletion-queue.server';
 import { getLedgeredKeys, recordSentKeys } from '@/lib/r2-lifecycle/sent-ledger.server';
 
@@ -99,6 +103,50 @@ describe.skipIf(!isLocalDb)('유예 삭제 큐·발송 장부 실DB 왕복', () 
     expect(after?.resolvedAt).not.toBeNull();
 
     expect(await cancelDeletionCandidate(row.id)).toBe(false);
+  });
+
+  it('종결: 취소된 후보는 집행 대상이 아니며 종결로 덮어써지지 않는다', async () => {
+    const key = track(testKey('mail'));
+    await registerDeletionCandidates(db, { keys: [key], source: 'save-diff' });
+    const [row] = await db
+      .select()
+      .from(r2DeletionCandidates)
+      .where(inArray(r2DeletionCandidates.key, [key]));
+    if (!row) throw new Error('등록된 후보를 찾지 못했다');
+
+    expect(await isCandidateResolvable(row.id)).toBe(true);
+
+    // 배치 조회 이후 부활·관리자 취소가 들어온 상황
+    expect(await cancelDeletionCandidate(row.id)).toBe(true);
+
+    expect(await isCandidateResolvable(row.id)).toBe(false);
+    expect(await resolveCandidate(row.id, 'deleted', 'R2 삭제 후 HEAD 검증 완료')).toBe(false);
+
+    const [after] = await db
+      .select()
+      .from(r2DeletionCandidates)
+      .where(inArray(r2DeletionCandidates.key, [key]));
+    expect(after?.status).toBe('cancelled');
+  });
+
+  it('종결: 실패 후보는 다음 집행에서 다시 종결할 수 있다', async () => {
+    const key = track(testKey('mail'));
+    await registerDeletionCandidates(db, { keys: [key], source: 'save-diff' });
+    const [row] = await db
+      .select()
+      .from(r2DeletionCandidates)
+      .where(inArray(r2DeletionCandidates.key, [key]));
+    if (!row) throw new Error('등록된 후보를 찾지 못했다');
+
+    expect(await resolveCandidate(row.id, 'failed', 'HEAD 검증 실패')).toBe(true);
+    expect(await isCandidateResolvable(row.id)).toBe(true);
+    expect(await resolveCandidate(row.id, 'deleted', '재시도 성공')).toBe(true);
+
+    const [after] = await db
+      .select()
+      .from(r2DeletionCandidates)
+      .where(inArray(r2DeletionCandidates.key, [key]));
+    expect(after?.status).toBe('deleted');
   });
 
   it('부활 취소: 키 목록으로 대기 후보를 일괄 취소한다', async () => {

@@ -4,7 +4,7 @@
  * 발행 스냅샷·보관함·복제본(다른 설문의 동일 URL)·라이브 템플릿의 참조가
  * 발견되고, soft-delete 된 메일 템플릿 행의 참조는 세지 않는다.
  */
-import { inArray } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { afterAll, describe, expect, it } from 'vitest';
 
 import { db } from '@/db';
@@ -112,5 +112,48 @@ describe.skipIf(!isLocalDb)('전역 참조 재확인 실DB 왕복', () => {
     expect(referenced.has(liveTplKey), '라이브 템플릿 참조').toBe(true);
     expect(referenced.has(softDeletedTplKey), 'soft-delete 템플릿은 제외').toBe(false);
     expect(referenced.has(unreferencedKey), '무참조 키').toBe(false);
+  });
+
+  it('정리된 버전의 스냅샷 키는 참조로 잡히지 않는다', async () => {
+    const key = `survey/rt-${uid()}.png`;
+    const url = `${CDN}/${key}`;
+
+    const [survey] = await db
+      .insert(surveysTable)
+      .values({ title: '정리 버전 스캔 제외 테스트' })
+      .returning({ id: surveysTable.id });
+    if (!survey) throw new Error('설문 시드 실패');
+    createdSurveyIds.push(survey.id);
+
+    // changeNote 에도 같은 URL 을 심어둔다 — snapshot 을 비운 뒤에도 행
+    // 자체는 LIKE prefilter 를 통과하도록 만들어, "행이 prefilter 를
+    // 통과하느냐"가 아니라 "extraWhere(snapshot IS NOT NULL) 가 실제로
+    // 그 행을 걸러내느냐"를 검증한다. changeNote 까지 함께 비우면 prefilter
+    // 자체가 행을 떨어뜨려 extraWhere 유무와 무관하게 항상 통과하므로
+    // 무의미한 테스트가 된다.
+    const [version] = await db
+      .insert(surveyVersions)
+      .values({
+        surveyId: survey.id,
+        versionNumber: 1,
+        status: 'superseded',
+        snapshot: { questions: [{ imageUrl: url }] } as never,
+        changeNote: `정리 전 스냅샷 참조 기록용 ${url}`,
+      })
+      .returning({ id: surveyVersions.id });
+    if (!version) throw new Error('버전 시드 실패');
+
+    // 비우기 전에는 참조로 잡힌다
+    expect((await findReferencedKeys([key])).has(key), '정리 전에는 참조').toBe(true);
+
+    await db
+      .update(surveyVersions)
+      .set({ snapshot: null, prunedAt: new Date() })
+      .where(eq(surveyVersions.id, version.id));
+
+    // snapshot 은 비웠지만 changeNote 는 그대로라 행 자체는 여전히
+    // LIKE prefilter 를 통과한다 — 그럼에도 extraWhere(snapshot IS NOT NULL)
+    // 가 행을 걸러내 스캔 표면에서 제외됨을 검증한다.
+    expect((await findReferencedKeys([key])).has(key), '정리 후에는 제외').toBe(false);
   });
 });
