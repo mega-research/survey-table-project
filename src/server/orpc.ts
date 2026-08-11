@@ -6,9 +6,8 @@ import {
   getGuestSurveyId,
   isAdminOrGuestGrantHolder,
 } from '@/lib/auth/guest-grants';
-import { logger } from '@/lib/logger';
 import { getTrustedClientIpOrNull } from '@/lib/rate-limit/client-ip';
-import { getRateLimiter, type RateLimitGroup } from '@/lib/rate-limit/rate-limiter';
+import { isRateLimitedTwoTier, type RateLimitGroup } from '@/lib/rate-limit/rate-limiter';
 
 import type { ORPCContext } from './context';
 import { rpcLoggingMiddleware } from './rpc-logging';
@@ -27,29 +26,33 @@ export const base = root.use(rpcLoggingMiddleware);
 export const pub = base;
 
 /**
- * rate limiter 판정 — 한도 초과면 true.
+ * 검증 전 입력에서 rate limit 클라이언트 축 식별자를 추출한다.
  *
- * 외부 의존성(Upstash) 호출은 fail-open: 장애/자격증명 오류 등으로 .limit() 이 throw 해도
- * false(통과)로 흡수해 응답 수집 전체가 죽지 않게 한다. env 미설정 시 noop 으로 fail-open
- * 하는 정책(getRateLimiter)을 "설정됐으나 호출 실패" 케이스로 확장한 것. 한도 초과
- * (success=false)는 정상 거부로 유지하고, throw 만 통과로 흡수한다.
+ * sessionId(응답 생성 계열) 우선, 없으면 responseId(saveDraft/complete 계열).
+ * 최상위 string 키 외에는 접근하지 않는다 (rpc-logging 의 surveyId 추출과 같은 관례).
+ * 클라이언트 임의 값이므로 길이 상한으로 Redis 키 폭주를 막는다 — 식별자 회전 남용은
+ * isRateLimitedTwoTier 의 IP 전체 가드가 담당하므로 여기서 진위를 검증하지 않는다.
  */
-export async function isRateLimited(group: RateLimitGroup, ip: string): Promise<boolean> {
-  try {
-    const { success } = await getRateLimiter().limit(`${group}:${ip}`);
-    return !success;
-  } catch (err) {
-    logger.error({ group, err }, '[rate-limit] limiter 호출 실패 — fail-open 통과');
-    return false;
+function extractRateLimitClientId(input: unknown): string | null {
+  if (typeof input !== 'object' || input === null || Array.isArray(input)) return null;
+  const record = input as Record<string, unknown>;
+  for (const key of ['sessionId', 'responseId'] as const) {
+    const value = record[key];
+    if (typeof value === 'string' && value.length > 0 && value.length <= 128) {
+      return value;
+    }
   }
+  return null;
 }
 
 /**
  * rate limit 미들웨어 팩토리. pub 프로시저에 .use(withRateLimit(group)) 로 부착한다.
  *
- * 키 = group + ':' + 신뢰 클라이언트 IP. 한도 초과 시 TOO_MANY_REQUESTS.
- * Upstash env 미설정이면 limiter 가 no-op(항상 통과)이라 가용성에 영향 없음. limiter 호출이
- * 실패하면 isRateLimited 가 fail-open 으로 흡수한다.
+ * 판정은 2단(isRateLimitedTwoTier): 입력의 sessionId/responseId 를 클라이언트 축으로
+ * 삼아 같은 NAT IP 뒤의 정상 응답자들을 서로 격리하고(`group:ip:clientId`), IP 전체
+ * 가드(`group-ip:ip`)가 식별자 회전 남용을 막는다. 한도 초과 시 TOO_MANY_REQUESTS.
+ * Upstash env 미설정이면 limiter 가 no-op(항상 통과)이라 가용성에 영향 없음. limiter
+ * 호출이 실패하면 isRateLimitedTwoTier 가 fail-open 으로 흡수한다.
  *
  * 신뢰 IP 추출 불가(헤더 부재)면 fail-closed 로 거부한다. 식별 불가한 익명 요청들이
  * 단일 'unknown' 버킷을 공유하면 상호 한도 잠식/약 DoS 가 되므로, 공유 버킷 대신
@@ -57,14 +60,14 @@ export async function isRateLimited(group: RateLimitGroup, ip: string): Promise<
  */
 export function withRateLimit(group: RateLimitGroup) {
   // base 는 로깅 미들웨어가 붙은 빌더라 .middleware() 가 없다 — 원시 root 로 만든다.
-  return root.middleware(async ({ context, next }) => {
+  return root.middleware(async ({ context, next }, input: unknown) => {
     const ip = getTrustedClientIpOrNull(context.headers ?? new Headers());
     if (ip === null) {
       throw new ORPCError('TOO_MANY_REQUESTS', {
         message: '요청을 식별할 수 없습니다. 잠시 후 다시 시도해 주세요.',
       });
     }
-    if (await isRateLimited(group, ip)) {
+    if (await isRateLimitedTwoTier(group, ip, extractRateLimitClientId(input))) {
       throw new ORPCError('TOO_MANY_REQUESTS', {
         message: '요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.',
       });

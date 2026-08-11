@@ -39,8 +39,17 @@ function snapshotOfAnswers(answers: Record<string, unknown>): string {
  * 답변 입력 후 이 시간 동안 추가 입력이 없으면 백그라운드로 draft 를 저장한다 (trailing).
  * 타이핑 중에는 타이머가 계속 리셋되므로 발사 시점엔 항상 그 순간의 최신 값이 나간다.
  * 목표는 "다음" 클릭 시점에 pending 을 비워둬 전환이 서버 왕복 없이 즉시 일어나게 하는 것.
+ *
+ * 800ms 였을 때 표 문항(라디오 그리드)의 자연스러운 클릭 간격(1~2초)이 매 클릭을
+ * saveDraft 1건으로 변환해 응답자 한 명이 분당 수십 건을 발사했다(8/10 리미터 사고).
+ * 5초로 늘려 한 문항 안의 연속 입력을 한 요청으로 뭉친다. 입력이 계속 이어져 트레일링이
+ * 영영 밀리는 경우를 대비해 MAX_WAIT 을 상한으로 둔다 — 어떤 입력 패턴에서도 세션당
+ * 요청은 최대 12회/분(디바운스), 지속 입력 중에도 15초마다 1회 체크포인트가 보장된다.
  */
-const DRAFT_AUTOSAVE_DEBOUNCE_MS = 800;
+const DRAFT_AUTOSAVE_DEBOUNCE_MS = 5000;
+
+/** 첫 미저장 입력 이후 이 시간이 지나면 입력이 계속돼도 draft 를 발사한다 (maxWait). */
+const DRAFT_AUTOSAVE_MAX_WAIT_MS = 15000;
 
 // DuplicateStatus 타입은 use-duplicate-guard 가 소유한다(진입 시 중복검사의 주 소유자).
 // handleResponse/handleSubmit 가 blocked 로 set 하므로 여기서 re-export 해 기존 import 경로를 유지한다.
@@ -382,19 +391,37 @@ export function useResponseLifecycle({
 
   // 답변 입력 디바운스 자동 저장 타이머. 리셋은 clearTimeout + 재예약이라 동시 타이머는 항상 1개.
   const draftAutosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // maxWait 마감 시각. 저장이 한 번도 안 나간 미저장 입력 구간의 시작 + MAX_WAIT.
+  // 발사(또는 의도적 취소) 시 null 로 돌아가 다음 입력 구간에서 새로 시작한다.
+  const draftAutosaveDeadlineRef = useRef<number | null>(null);
   const clearDraftAutosave = () => {
     if (draftAutosaveTimerRef.current !== null) {
       clearTimeout(draftAutosaveTimerRef.current);
       draftAutosaveTimerRef.current = null;
     }
+    draftAutosaveDeadlineRef.current = null;
   };
   const scheduleDraftAutosave = () => {
     if (isAdminEdit || isPreview) return;
-    clearDraftAutosave();
+    // 재예약 시 타이머만 리셋한다 — 마감(deadline)까지 리셋하면 입력이 이어지는 동안
+    // maxWait 이 함께 밀려 상한이 무의미해진다.
+    if (draftAutosaveTimerRef.current !== null) {
+      clearTimeout(draftAutosaveTimerRef.current);
+      draftAutosaveTimerRef.current = null;
+    }
+    const now = Date.now();
+    if (draftAutosaveDeadlineRef.current === null) {
+      draftAutosaveDeadlineRef.current = now + DRAFT_AUTOSAVE_MAX_WAIT_MS;
+    }
+    const delay = Math.max(
+      0,
+      Math.min(DRAFT_AUTOSAVE_DEBOUNCE_MS, draftAutosaveDeadlineRef.current - now),
+    );
     draftAutosaveTimerRef.current = setTimeout(() => {
       draftAutosaveTimerRef.current = null;
+      draftAutosaveDeadlineRef.current = null;
       void enqueueFlush(true);
-    }, DRAFT_AUTOSAVE_DEBOUNCE_MS);
+    }, delay);
   };
 
   // 언마운트 시 예약된 백그라운드 저장 취소 — 화면을 떠난 뒤의 유령 saveDraft 를 막는다.

@@ -19,6 +19,15 @@ vi.mock('@/lib/rate-limit/rate-limiter', async (importOriginal) => {
   return {
     ...actual,
     getRateLimiter: () => ({ limit: limitMock }),
+    // withRateLimit 은 isRateLimitedTwoTier 를 호출하는데, 실제 구현은 모듈 내부의
+    // getRateLimiter 참조를 쓰므로 위 override 가 닿지 않는다(env 부재 → noop fail-open).
+    // group:ip 단순 키의 limitMock 위임으로 교체한다 — 이 파일의 관심사는 "어느 procedure
+    // 에 어느 그룹이 붙었고 한도 초과가 거부로 전파되는가"뿐이고, 2단 키 조합 자체는
+    // rate-limiter.test.ts 의 isRateLimitedTwoTier 단위 테스트가 담당한다.
+    isRateLimitedTwoTier: async (group: string, ip: string, _clientId: string | null) => {
+      const { success } = await limitMock(`${group}:${ip}`);
+      return !success;
+    },
   };
 });
 
