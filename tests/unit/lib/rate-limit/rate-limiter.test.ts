@@ -32,6 +32,8 @@ vi.mock('@upstash/redis', () => {
 import { logger } from '@/lib/logger';
 import {
   getRateLimiter,
+  isRateLimitedFineTier,
+  isRateLimitedIpGuardTier,
   isRateLimitedTwoTier,
   resetRateLimiterForTest,
 } from '@/lib/rate-limit/rate-limiter';
@@ -179,5 +181,41 @@ describe('isRateLimitedTwoTier', () => {
       false,
     );
     expect(errorSpy).toHaveBeenCalled();
+  });
+
+  it('한 tier 가 실패해도 다른 tier 의 명시적 거부는 차단으로 존중한다', async () => {
+    // 부분 장애: fine 버킷은 success=false 로 판정했는데 IP 가드 호출만 throw.
+    // Promise.all 이면 전체가 fail-open 되던 회귀 케이스 — allSettled 로 거부를 지킨다.
+    limitMock.mockImplementation((key: string) => {
+      if (key.startsWith('response-draft-ip:')) {
+        throw new Error('upstash timeout');
+      }
+      return Promise.resolve({ success: false, remaining: 0, reset: 0 });
+    });
+    await expect(isRateLimitedTwoTier('response-draft', '1.2.3.4', 'sess-1')).resolves.toBe(
+      true,
+    );
+    expect(errorSpy).toHaveBeenCalled();
+  });
+
+  it('isRateLimitedIpGuardTier 는 IP 가드 키만 판정한다', async () => {
+    await expect(isRateLimitedIpGuardTier('response-draft', '1.2.3.4')).resolves.toBe(false);
+    expect(limitMock.mock.calls.map((call) => call[0])).toEqual([
+      'response-draft-ip:1.2.3.4',
+    ]);
+  });
+
+  it('isRateLimitedIpGuardTier 는 가드 없는 그룹이면 판정 없이 통과한다', async () => {
+    await expect(isRateLimitedIpGuardTier('lookup', '1.2.3.4')).resolves.toBe(false);
+    expect(limitMock).not.toHaveBeenCalled();
+  });
+
+  it('isRateLimitedFineTier 는 fine 키만 판정한다', async () => {
+    await expect(isRateLimitedFineTier('response-draft', '1.2.3.4', 'resp-1')).resolves.toBe(
+      false,
+    );
+    expect(limitMock.mock.calls.map((call) => call[0])).toEqual([
+      'response-draft:1.2.3.4:resp-1',
+    ]);
   });
 });

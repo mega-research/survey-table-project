@@ -4,7 +4,11 @@ import { SaveDraftResponseInput } from '@/features/survey-response/domain/respon
 import { saveDraftResponseIfActive } from '@/features/survey-response/server/services/response.service';
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
 import { getTrustedClientIpOrNull } from '@/lib/rate-limit/client-ip';
-import { isRateLimitedTwoTier, type RateLimitGroup } from '@/lib/rate-limit/rate-limiter';
+import {
+  isRateLimitedFineTier,
+  isRateLimitedIpGuardTier,
+  type RateLimitGroup,
+} from '@/lib/rate-limit/rate-limiter';
 
 /**
  * 한 요청에 실을 수 있는 문항 수 상한.
@@ -31,8 +35,12 @@ async function handleDraft(req: NextRequest, ctx: RouteLogContext) {
     return NextResponse.json({ error: 'rate limited' }, { status: 429 });
   }
 
-  // fine 키에 responseId(클라이언트 축)를 쓰기 위해 파싱을 rate limit 앞에 둔다.
-  // JSON 파싱은 CPU 경량이라, NAT 공유 IP 의 응답자 상호 격리 이득이 순서 비용을 상회한다.
+  // 1단계: 본문을 읽기 전에 IP 전체 가드를 먼저 소비한다 — malformed/스키마 불일치
+  // 요청도 예산을 소비해야 무인증 공개 경로에서 파싱 CPU 를 공짜로 증폭시킬 수 없다.
+  if (await isRateLimitedIpGuardTier(RATE_LIMIT_GROUP, ip)) {
+    return NextResponse.json({ error: 'rate limited' }, { status: 429 });
+  }
+
   let body: unknown;
   try {
     body = await req.json();
@@ -50,9 +58,10 @@ async function handleDraft(req: NextRequest, ctx: RouteLogContext) {
     answerCount: Object.keys(parsed.data.answers).length,
   });
 
-  // 2단 판정 — 응답 단위 격리(`group:ip:responseId`) + IP 전체 가드. RPC saveDraft 와
-  // 같은 response-draft 버킷을 공유한다 (같은 성격의 쓰기이므로 예산도 함께 본다).
-  if (await isRateLimitedTwoTier(RATE_LIMIT_GROUP, ip, parsed.data.responseId)) {
+  // 2단계: 검증된 responseId 를 클라이언트 축으로 fine 버킷 판정 — 같은 NAT IP 의
+  // 응답자 상호 격리. RPC saveDraft 와 같은 response-draft 버킷을 공유한다
+  // (같은 성격의 쓰기이므로 예산도 함께 본다).
+  if (await isRateLimitedFineTier(RATE_LIMIT_GROUP, ip, parsed.data.responseId)) {
     return NextResponse.json({ error: 'rate limited' }, { status: 429 });
   }
   if (Object.keys(parsed.data.answers).length > MAX_DRAFT_ANSWER_KEYS) {
