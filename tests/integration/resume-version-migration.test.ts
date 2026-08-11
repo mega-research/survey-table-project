@@ -202,3 +202,94 @@ describe('resumeOrCreateResponse — 익명 재개 이관', () => {
     expect(result).not.toHaveProperty('affectedQuestionIds');
   });
 });
+
+describe('resumeOrCreateResponse — 초대(컨택) 재개 이관 (티켓 03)', () => {
+  beforeEach(async () => {
+    selectQueue.length = 0;
+    updateSetCalls.length = 0;
+    selectMock.mockClear();
+    updateReturningMock.mockReset();
+    updateReturningMock.mockResolvedValue([{ id: 'response-1' }]);
+    const { findContactByInviteToken } = await import('@/lib/duplicate-detection/invite-lookup');
+    vi.mocked(findContactByInviteToken).mockResolvedValue({
+      kind: 'valid',
+      contactTargetId: 'contact-1',
+      isTest: false,
+    } as Awaited<ReturnType<typeof findContactByInviteToken>>);
+  });
+
+  const CONTACT_ROW = {
+    ...ROW_BASE,
+    sessionId: 'saved-session',
+  };
+
+  const resumeInvite = (sessionId = 'saved-session') =>
+    resumeOrCreateResponse({ surveyId: 'survey-1', sessionId, inviteToken: 'invite-1' });
+
+  it('세션 일치 + 버전 불일치면 조용히 빈 폼 대신 이관 후 답변·진행 위치를 복원한다', async () => {
+    selectQueue.push([CONTACT_ROW], [{ snapshot: CURRENT_SNAPSHOT }]);
+
+    const result = await resumeInvite();
+
+    expect(result).toMatchObject({
+      id: 'response-1',
+      status: 'in_progress',
+      resumed: false,
+      questionResponses: { 'q-text': '유지되는 답' },
+      currentStepId: 'page:q-text',
+      affectedQuestionIds: ['q-radio'],
+    });
+    expect(migrationSet()?.['versionId']).toBe('v-current');
+  });
+
+  it('컨택 drop(이탈) 행은 이관과 동시에 되살려 복원한다', async () => {
+    selectQueue.push([{ ...CONTACT_ROW, status: 'drop' }], [{ snapshot: CURRENT_SNAPSHOT }]);
+
+    const result = await resumeInvite();
+
+    expect(result).toMatchObject({
+      status: 'in_progress',
+      resumed: true,
+      questionResponses: { 'q-text': '유지되는 답' },
+      affectedQuestionIds: ['q-radio'],
+    });
+    expect(migrationSet()?.['status']).toBe('in_progress');
+  });
+
+  it('세션 불일치면 이관도 복원도 하지 않는다 — invite URL 유출 방어 불변', async () => {
+    selectQueue.push([CONTACT_ROW]);
+
+    const result = await resumeInvite('attacker-session');
+
+    expect(result).toMatchObject({ id: 'response-1', status: 'in_progress' });
+    expect(result).not.toHaveProperty('questionResponses');
+    expect(result).not.toHaveProperty('affectedQuestionIds');
+    expect(migrationSet()).toBeUndefined();
+    // 스냅샷 조회 없음 — 응답 행 조회 1회뿐
+    expect(selectMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('이관 실패(현재 스냅샷 훼손) 시 기존 동작 유지 — 답변을 복원하지 않는다', async () => {
+    selectQueue.push([CONTACT_ROW], [{ snapshot: {} }]);
+
+    const result = await resumeInvite();
+
+    expect(result).toMatchObject({ id: 'response-1', status: 'in_progress' });
+    expect(result).not.toHaveProperty('questionResponses');
+    expect(result).not.toHaveProperty('affectedQuestionIds');
+    expect(migrationSet()).toBeUndefined();
+  });
+
+  it('세션 일치 + 버전 일치는 기존대로 이관 없이 복원한다', async () => {
+    selectQueue.push([{ ...CONTACT_ROW, versionId: 'v-current' }]);
+
+    const result = await resumeInvite();
+
+    expect(result).toMatchObject({
+      questionResponses: { 'q-radio': 'ghost-value', 'q-text': '유지되는 답' },
+      currentStepId: 'page:q-text',
+    });
+    expect(result).not.toHaveProperty('affectedQuestionIds');
+    expect(migrationSet()).toBeUndefined();
+  });
+});

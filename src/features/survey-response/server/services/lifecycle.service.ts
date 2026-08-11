@@ -331,53 +331,63 @@ export async function resumeOrCreateResponse(
           return { ...restored, resumed: false };
         }
         const now = new Date();
-        // 답·스텝 복원 게이트 — 행 resume(소유권 의미론)은 기존대로 하되, 저장 답 반환은
-        // 두 조건을 모두 만족할 때만:
-        // - 세션 일치: invite 는 pub 엔드포인트라 URL 유출 시 제3자가 임의 sessionId 로
-        //   호출 가능 — 원 브라우저(세션 일치)에만 복호화 답을 내준다.
-        // - 버전 일치: 재배포로 구조가 바뀐 구버전 답을 주입하면 유령 답 영구 저장과
-        //   필수 검증 우회가 생긴다 (위 테스트 대상자 분기와 동일 게이트).
-        const restorePayload =
-          existingByContact.sessionId === sessionId &&
-          existingByContact.versionId === flags?.currentVersionId
-            ? {
-                questionResponses: decryptQuestionResponses(
-                  existingByContact.questionResponses ?? {},
-                  { responseId: existingByContact.id },
-                ),
-                currentStepId: existingByContact.currentStepId,
-              }
-            : {};
-        if (existingByContact.status === 'drop') {
+        if (
+          existingByContact.status === 'drop' ||
+          existingByContact.status === 'in_progress'
+        ) {
           // 중단 모드: 행이 isTest 이거나 유효한 테스트 링크로 재진입한 경우만 예외
           if (flags?.isPaused && !existingByContact.isTest && !isTestSession) {
             throw new SurveyNotAcceptingResponsesError('survey_paused');
           }
-          await db
-            .update(surveyResponses)
-            .set({ status: 'in_progress', lastActivityAt: now })
-            .where(eq(surveyResponses.id, existingByContact.id));
-          return {
-            id: existingByContact.id,
-            status: 'in_progress',
-            resumed: true,
-            ...restorePayload,
-            ...(draftSeq !== undefined ? { draftSeq } : {}),
-          };
-        }
-        if (existingByContact.status === 'in_progress') {
-          // 중단 모드: 행이 isTest 이거나 유효한 테스트 링크로 재진입한 경우만 예외
-          if (flags?.isPaused && !existingByContact.isTest && !isTestSession) {
-            throw new SurveyNotAcceptingResponsesError('survey_paused');
+          const reviveFromDrop = existingByContact.status === 'drop';
+          // 답·스텝 복원 게이트 — 행 resume(소유권 의미론)은 기존대로 하되:
+          // - 세션 일치: invite 는 pub 엔드포인트라 URL 유출 시 제3자가 임의 sessionId 로
+          //   호출 가능 — 원 브라우저(세션 일치)에만 복호화 답을 내주고, 이관(행 변형)도
+          //   원 브라우저에서만 수행한다.
+          // - 버전 불일치: 과거에는 복원을 조용히 비웠다(빈 폼 + 제출 시 덮어쓰기 유실).
+          //   이제 응답 버전 이관으로 현재 버전에 얹어 복원한다. 이관 불능(현재 스냅샷
+          //   훼손·경합)이면 기존 동작(복원 안 함)을 유지한다 — 구버전 답을 신버전 UI 에
+          //   그대로 주입하는 유령 답 문제를 되살리지 않기 위함.
+          const sessionMatches = existingByContact.sessionId === sessionId;
+          const versionMatches = existingByContact.versionId === flags?.currentVersionId;
+          const migration =
+            sessionMatches && !versionMatches
+              ? await migrateResumedRowIfStale({
+                  responseId: existingByContact.id,
+                  rowVersionId: existingByContact.versionId,
+                  currentVersionId: flags?.currentVersionId,
+                  storedResponses: existingByContact.questionResponses ?? {},
+                  reviveFromDrop,
+                  now,
+                })
+              : null;
+          if (!migration) {
+            await db
+              .update(surveyResponses)
+              .set(
+                reviveFromDrop
+                  ? { status: 'in_progress', lastActivityAt: now }
+                  : { lastActivityAt: now },
+              )
+              .where(eq(surveyResponses.id, existingByContact.id));
           }
-          await db
-            .update(surveyResponses)
-            .set({ lastActivityAt: now })
-            .where(eq(surveyResponses.id, existingByContact.id));
+          const restorePayload =
+            sessionMatches && (versionMatches || migration)
+              ? {
+                  questionResponses: decryptQuestionResponses(
+                    migration?.survivingResponses ?? existingByContact.questionResponses ?? {},
+                    { responseId: existingByContact.id },
+                  ),
+                  currentStepId: existingByContact.currentStepId,
+                  ...(migration && migration.affectedQuestionIds.length > 0
+                    ? { affectedQuestionIds: migration.affectedQuestionIds }
+                    : {}),
+                }
+              : {};
           return {
             id: existingByContact.id,
             status: 'in_progress',
-            resumed: false,
+            resumed: reviveFromDrop,
             ...restorePayload,
             ...(draftSeq !== undefined ? { draftSeq } : {}),
           };
