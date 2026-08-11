@@ -2,6 +2,8 @@ import 'server-only';
 
 import * as Sentry from '@sentry/nextjs';
 
+import { logger } from '@/lib/logger';
+
 import {
   fetchDueCandidates,
   isCandidateResolvable,
@@ -99,7 +101,7 @@ export async function executeDueDeletionBatch(
     try {
       indexed = await getIndexedReferencedKeys(afterLedger);
     } catch (error) {
-      console.error('r2 참조 인덱스 조회 실패 — 전량 스캔으로 대체:', error);
+      logger.error({ err: error }, 'r2 참조 인덱스 조회 실패 — 전량 스캔으로 대체');
       Sentry.captureException(error, {
         tags: { operation: 'r2_key_ref_index' },
         extra: { keyCount: afterLedger.length },
@@ -116,7 +118,7 @@ export async function executeDueDeletionBatch(
   try {
     referenced = toScan.length > 0 ? await findReferencedKeys(toScan) : new Set<string>();
   } catch (error) {
-    console.error('r2 참조 재확인 실패 — 배치 보류:', error);
+    logger.error({ err: error }, 'r2 참조 재확인 실패 — 배치 보류');
     Sentry.captureException(error, {
       tags: { operation: 'r2_reference_scan' },
       extra: { keyCount: toScan.length },
@@ -141,7 +143,7 @@ export async function executeDueDeletionBatch(
   // 정의상 전부 인덱스 누락이다. 위험 방향(누락 → 삭제 가능)이라 보고한다.
   if (referenced.size > 0) {
     result.indexMisses = referenced.size;
-    console.warn('r2 참조 인덱스 누락 감지:', [...referenced]);
+    logger.warn({ keys: [...referenced] }, 'r2 참조 인덱스 누락 감지');
     Sentry.captureMessage('r2 참조 인덱스 누락', {
       level: 'warning',
       tags: { operation: 'r2_key_ref_index' },
@@ -268,7 +270,7 @@ export async function runDeletionExecutor(
   // (배치마다 울리면 같은 경합의 소음이 반복된다). 인덱스 누락과 같은 관례
   // (captureMessage, warning, 태그+수치) 를 따른다.
   if (totals.skipped > 0) {
-    console.warn('r2 삭제 후보 취소 경합 감지:', totals.skipped);
+    logger.warn({ skipped: totals.skipped }, 'r2 삭제 후보 취소 경합 감지');
     Sentry.captureMessage('r2 삭제 후보 취소 경합', {
       level: 'warning',
       tags: { operation: 'r2_deletion_candidate_race' },
