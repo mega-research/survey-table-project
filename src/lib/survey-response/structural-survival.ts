@@ -1,6 +1,6 @@
 import type { Question, QuestionOption, TableCell } from '@/types/survey';
 import { resolveChoiceOptions } from '@/utils/choice-source';
-import { unwrapOptionId } from '@/utils/table-cell-semantics';
+import { findOptionByStored, unwrapOptionId } from '@/utils/table-cell-semantics';
 
 /**
  * 구조 생존 판정 (structural survival) — CONTEXT.md 용어, ADR-0014.
@@ -30,14 +30,14 @@ function isJudgeableString(value: unknown): value is string {
 }
 
 /**
- * 저장값으로 옵션 실존 판정 — table-cell-semantics.findOptionByStored 와 동일 정책:
- * 인터랙티브 컨트롤은 `option.value ?? option.id` 를 저장하므로 id/value 둘 다로 찾는다.
+ * 저장값으로 옵션 실존 판정 — 매칭 정책은 셀 의미론 소유의 findOptionByStored 재사용
+ * (id/value 양쪽 매칭, CONTEXT.md 테이블 셀 의미론).
  */
 function optionExists(
   options: ReadonlyArray<{ id: string; value?: string }>,
   stored: string,
 ): boolean {
-  return options.some((opt) => opt.id === stored || (opt.value != null && opt.value === stored));
+  return findOptionByStored(options, stored) !== undefined;
 }
 
 /** 질문의 모든 테이블 셀 (isHidden 포함 — 구조 실존 판정이므로 표시 여부와 무관) */

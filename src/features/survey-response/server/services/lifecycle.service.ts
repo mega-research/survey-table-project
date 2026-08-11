@@ -32,17 +32,6 @@ import { extractDraftSeq, SurveyNotAcceptingResponsesError } from './response.se
 // - recordVisibilitySegment
 // - resumeOrCreateResponse
 
-/**
- * 페이지 이동(스텝 전환) 기록.
- *
- * - 동일 stepId면 no-op (React 더블 이펙트, 네비게이션 레이스 방어)
- * - 그 외 단일 UPDATE로 원자적 처리:
- *   - 이전 마지막 pageVisits 항목의 leftAt을 now()로 (NULL일 때만 — 뒤로갔다 앞으로 시 기존 leftAt 보존)
- *   - 새 항목을 pageVisits 끝에 append
- *   - currentStepId, lastActivityAt 갱신
- *
- * @throws 행이 없으면 에러 — 호출자(T5)는 catch & log하되 사용자 흐름은 막지 않는다
- */
 interface ResumedRowMigration {
   /** 구조 생존 판정을 통과해 저장된 답변 맵 (저장 형태 — PII 는 암호문 그대로) */
   survivingResponses: Record<string, unknown>;
@@ -115,6 +104,17 @@ async function migrateResumedRowIfStale(input: {
   };
 }
 
+/**
+ * 페이지 이동(스텝 전환) 기록.
+ *
+ * - 동일 stepId면 no-op (React 더블 이펙트, 네비게이션 레이스 방어)
+ * - 그 외 단일 UPDATE로 원자적 처리:
+ *   - 이전 마지막 pageVisits 항목의 leftAt을 now()로 (NULL일 때만 — 뒤로갔다 앞으로 시 기존 leftAt 보존)
+ *   - 새 항목을 pageVisits 끝에 append
+ *   - currentStepId, lastActivityAt 갱신
+ *
+ * @throws 행이 없으면 에러 — 호출자(T5)는 catch & log하되 사용자 흐름은 막지 않는다
+ */
 export async function recordStepVisit(input: RecordStepVisitInput): Promise<void> {
   const { responseId, nextStepId, visibleStepIndex, visibleStepTotal } = input;
 

@@ -190,6 +190,24 @@ describe('resumeOrCreateResponse — 익명 재개 이관', () => {
     expect(migrationSet()?.['versionId']).toBe('v-current');
   });
 
+  it('완료·판정 종료 상태는 버전이 달라도 이관 경로를 타지 않는다', async () => {
+    for (const status of ['completed', 'screened_out', 'quotaful_out', 'bad'] as const) {
+      selectQueue.length = 0;
+      updateSetCalls.length = 0;
+      selectMock.mockClear();
+      selectQueue.push([{ ...ROW_BASE, status }]);
+
+      const result = await resume();
+
+      expect(result).toEqual({ id: 'response-1', status, resumed: false });
+      expect(result).not.toHaveProperty('questionResponses');
+      expect(migrationSet()).toBeUndefined();
+      // 스냅샷 조회도, 행 UPDATE 도 없다 — 확정 데이터 불간섭
+      expect(selectMock).toHaveBeenCalledTimes(1);
+      expect(updateSetCalls).toHaveLength(0);
+    }
+  });
+
   it('이관 UPDATE 가 경합으로 0행이면(동시 이관) 기존 동작으로 폴백한다', async () => {
     updateReturningMock.mockResolvedValue([]);
     selectQueue.push([ROW_BASE], [{ snapshot: CURRENT_SNAPSHOT }]);

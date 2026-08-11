@@ -148,8 +148,11 @@ interface CellTypeSemantics {
  * flat string `option.value ?? option.id` 를 저장하므로 id 와 value 둘 다로 찾는다.
  * (id 매칭은 value 미지정 옵션 및 legacy { optionId } 저장 호환용 —
  * branch-logic getBranchRuleForTable 의 matchesOption 과 동일 정책.)
+ *
+ * export: 구조 생존 판정(structural-survival, ADR-0014)이 같은 매칭 정책으로
+ * 옵션 실존을 판정한다 — 정책의 단일 거처는 이 함수다.
  */
-function findOptionByStored(
+export function findOptionByStored(
   options: ReadonlyArray<{ id: string; value?: string }>,
   stored: string,
 ): { id: string; value?: string } | undefined {
