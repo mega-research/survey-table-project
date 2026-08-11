@@ -36,11 +36,20 @@ interface Props {
   view: ProfilesView;
   /** 게스트 세션 — manage.* (authed 전용) 액션인 삭제·초기화·복원 메뉴를 숨긴다. */
   isGuest?: boolean;
+  /** 응답 status — 이탈(drop) 응답의 수정 다이얼로그에 완료 전환 안내를 띄운다. */
+  status?: string;
 }
 
 type Dialog = null | 'edit' | 'delete' | 'reset';
 
-export function ProfilesRowActions({ surveyId, responseId, idx, view, isGuest = false }: Props) {
+export function ProfilesRowActions({
+  surveyId,
+  responseId,
+  idx,
+  view,
+  isGuest = false,
+  status,
+}: Props) {
   const router = useRouter();
   const [dialog, setDialog] = useState<Dialog>(null);
   const [isPending, startTransition] = useTransition();
@@ -117,6 +126,9 @@ export function ProfilesRowActions({ surveyId, responseId, idx, view, isGuest = 
             <AlertDialogDescription>
               새 탭의 수정 화면에서 응답 내용을 바꿔 저장하면 기존 응답이 갱신됩니다. 시작·종료일시는
               그대로 유지되고 수정 시각이 따로 기록되며, 통계와 기록에도 수정된 내용이 반영됩니다.
+              {status === 'drop'
+                ? ' 이탈 상태의 응답은 수정 내용을 저장하면 완료 상태로 전환됩니다.'
+                : null}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
