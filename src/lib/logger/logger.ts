@@ -51,6 +51,8 @@ function createAxiomStream(): pino.DestinationStream | null {
           ...rest,
         });
       } catch (err) {
+        // 로거 자신의 장애 — pino 로 보내면 재귀 위험, 최후 보루로 console 유지.
+        // eslint-disable-next-line no-console
         console.error('[axiom stream] 라인 처리 실패', err);
       }
     },

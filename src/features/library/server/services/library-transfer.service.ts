@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm';
 
 import { getAllCategories } from '@/data/library';
 import { db } from '@/db';
+import { logger } from '@/lib/logger';
 import {
   NewQuestionCategory,
   NewSavedQuestion,
@@ -64,7 +65,7 @@ export async function importLibrary(json: string): Promise<void> {
       }
     }
   } catch (error) {
-    console.error('Failed to import library:', error);
+    logger.error({ err: error }, '라이브러리 import 실패');
     throw error;
   }
 }

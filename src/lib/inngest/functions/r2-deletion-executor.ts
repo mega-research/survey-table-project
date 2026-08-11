@@ -1,5 +1,7 @@
 import * as Sentry from '@sentry/nextjs';
 
+import { logger as baseLogger } from '@/lib/logger';
+
 import { runDeletionExecutor } from '@/lib/r2-lifecycle/deletion-executor.server';
 import { rebuildMutableKeyRefs } from '@/lib/r2-lifecycle/key-ref-index.server';
 
@@ -43,7 +45,7 @@ export const r2DeletionExecutor = inngest.createFunction(
         const rebuilt = await rebuildMutableKeyRefs();
         return { rebuilt, indexUnusable: false };
       } catch (error) {
-        console.error('r2 참조 인덱스 리빌드 실패 — 이번 run 은 인덱스 없이 전량 스캔으로 진행:', error);
+        baseLogger.error({ err: error }, 'r2 참조 인덱스 리빌드 실패 — 이번 run 은 인덱스 없이 전량 스캔으로 진행');
         Sentry.captureException(error, {
           tags: { operation: 'r2_key_ref_rebuild' },
           level: 'warning',

@@ -3,6 +3,7 @@ import 'server-only';
 import { and, eq, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
+import { logger } from '@/lib/logger';
 import { contactPii, contactTargets, contactUploads, surveys } from '@/db/schema';
 import type {
   ContactColumnDef,
@@ -280,7 +281,11 @@ export async function ingestContactUpload(
           mergedRows += 1;
         } catch (e) {
           errorRows += 1;
-          console.error(`[ingestContactUpload] merge row error: ${(e as Error).message}`);
+          // attrs/PII 값 로그 금지 — 식별자와 err 만 (err serializer 가 쿼리 params 차단)
+          logger.error(
+            { surveyId, uploadId, rowIndex, err: e },
+            '[ingestContactUpload] merge row 실패',
+          );
         }
       }
 
@@ -296,7 +301,10 @@ export async function ingestContactUpload(
           uploadedRows += 1;
         } catch (e) {
           errorRows += 1;
-          console.error(`[ingestContactUpload] insert row error: ${(e as Error).message}`);
+          logger.error(
+            { surveyId, uploadId, rowIndex, err: e },
+            '[ingestContactUpload] insert row 실패',
+          );
         }
       }
     } else {
@@ -333,7 +341,10 @@ export async function ingestContactUpload(
           uploadedRows += 1;
         } catch (e) {
           errorRows += 1;
-          console.error(`[ingestContactUpload] row error: ${(e as Error).message}`);
+          logger.error(
+            { surveyId, uploadId, rowIndex, err: e },
+            '[ingestContactUpload] row 실패',
+          );
         }
       }
     }

@@ -6,6 +6,7 @@ import 'server-only';
 
 import { notTestResponse } from '@/data/response-filters';
 import { db } from '@/db';
+import { logger } from '@/lib/logger';
 import {
   NewSurveyResponse,
   contactTargets,
@@ -1934,9 +1935,14 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
           ),
         );
     } catch (err) {
-      console.error(
-        `[completeResponse] contact_targets UPDATE 실패 — 응답 완료는 성공 (responseId=${result.id}, contactTargetId=${result.contactTargetId})`,
-        err,
+      logger.error(
+        {
+          surveyId: result.surveyId,
+          responseId: result.id,
+          contactTargetId: result.contactTargetId,
+          err,
+        },
+        '[completeResponse] contact_targets UPDATE 실패 — 응답 완료는 성공',
       );
     }
   }

@@ -36,6 +36,26 @@ const eslintConfig = [
     },
   },
   {
+    // 서버 코드 no-console — pino 로거(@/lib/logger) 사용 강제.
+    // 클라이언트(브라우저) 코드는 pino 대상이 아니므로 범위에서 제외한다 (티켓 07 정책).
+    // src/lib 는 서버/클라 혼재 — 클라이언트 전용 파일만 ignores 로 명시 제외.
+    files: [
+      "src/server/**/*.{ts,tsx}",
+      "src/app/api/**/*.{ts,tsx}",
+      "src/features/*/server/**/*.{ts,tsx}",
+      "src/actions/**/*.{ts,tsx}",
+      "src/data/**/*.{ts,tsx}",
+      "src/lib/**/*.{ts,tsx}",
+    ],
+    ignores: [
+      "src/lib/image-utils.ts",
+      "src/lib/mail/mail-attachment-client.ts",
+    ],
+    rules: {
+      "no-console": "error",
+    },
+  },
+  {
     files: ["src/features/**/*.{ts,tsx}"],
     rules: {
       "no-restricted-imports": [
