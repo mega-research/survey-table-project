@@ -1076,8 +1076,10 @@ function SurveyResponseFlowActive({
     { forceWide: loadedSurvey.settings.forceWideLayout },
   );
   const showRequiredHighlight = highlightQuestionIds.size > 0;
-  const submitLabel = isPreview ? '확인 완료' : '다음';
-  const submittingLabel = isPreview ? '확인 중...' : '처리 중...';
+  // 미리보기도 '다음'으로 통일 — '확인 완료' 라벨은 마지막 페이지에서만 나타나
+  // 버튼이 바뀐 것처럼 보이는 혼란만 줬다 (2026-08-12 피드백).
+  const submitLabel = '다음';
+  const submittingLabel = '처리 중...';
 
   return (
     <ContactAttrsProvider attrs={contactAttrs} quotes={answerQuotes}>
@@ -1099,9 +1101,8 @@ function SurveyResponseFlowActive({
 
       {/* 진행 현황 — 헤더 밖 회색 영역(콘텐츠 컨테이너 위) */}
       <div className={`${containerMaxWidth} mx-auto px-4 pt-1 transition-all duration-300 md:px-6`}>
-        <div className="hidden items-center justify-end text-sm text-gray-500 md:flex">
+        <div className="hidden items-center justify-end pr-2 text-sm text-gray-500 md:flex">
           {currentVisibleStepNumber || 1} / {Math.max(totalVisibleStepCount, 1)}
-          <span className="ml-2 text-xs text-gray-400">(전체 {questions.length}개 질문)</span>
         </div>
         {/* 연속형 프로그레스바 */}
         <div className="mt-2">
