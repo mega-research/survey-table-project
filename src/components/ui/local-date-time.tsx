@@ -1,11 +1,14 @@
 'use client';
 
-// Server Component 안에서 사용자 브라우저 timezone 으로 날짜를 표시하기 위한 client wrapper.
-// SSR HTML 은 서버 호스트 timezone(보통 UTC)으로 박히지만 hydration 후 클라이언트에서
-// toLocaleString 이 다시 실행되며 사용자 timezone 으로 교체된다. mismatch 는
-// suppressHydrationWarning 으로 무시한다.
+// 날짜·시각 표시 client wrapper — 한국시(Asia/Seoul) 고정 (2026-08-12 변경).
+// 이전에는 브라우저 timezone 에 위임했으나, SSR HTML 이 서버 호스트 timezone(UTC)으로
+// 박힌 뒤 suppressHydrationWarning 때문에 hydration 이 텍스트를 패치하지 않아 배포
+// 환경에서 재렌더 전까지 UTC 가 그대로 노출됐다. KST 고정으로 서버/클라이언트가 항상
+// 같은 문자열을 그린다. suppressHydrationWarning 은 Node/브라우저 ICU 버전 차이로 인한
+// 미세 표기 차이 대비 안전판으로만 유지.
 
 const DATETIME_OPTIONS: Intl.DateTimeFormatOptions = {
+  timeZone: 'Asia/Seoul',
   year: 'numeric',
   month: '2-digit',
   day: '2-digit',
@@ -15,12 +18,14 @@ const DATETIME_OPTIONS: Intl.DateTimeFormatOptions = {
 };
 
 const DATE_OPTIONS: Intl.DateTimeFormatOptions = {
+  timeZone: 'Asia/Seoul',
   year: 'numeric',
   month: '2-digit',
   day: '2-digit',
 };
 
 const MONTH_DAY_TIME_OPTIONS: Intl.DateTimeFormatOptions = {
+  timeZone: 'Asia/Seoul',
   month: '2-digit',
   day: '2-digit',
   hour: '2-digit',
@@ -29,11 +34,13 @@ const MONTH_DAY_TIME_OPTIONS: Intl.DateTimeFormatOptions = {
 };
 
 const SHORT_MONTH_DAY_OPTIONS: Intl.DateTimeFormatOptions = {
+  timeZone: 'Asia/Seoul',
   month: 'short',
   day: 'numeric',
 };
 
 const SHORT_MONTH_DAY_TIME_OPTIONS: Intl.DateTimeFormatOptions = {
+  timeZone: 'Asia/Seoul',
   month: 'short',
   day: 'numeric',
   hour: '2-digit',
