@@ -42,6 +42,7 @@ function normalize(nf: NumberFormat): NumberFormat | undefined {
   const isEmpty =
     !nf.thousandSeparator &&
     nf.unit === undefined &&
+    nf.unitSuffix === undefined &&
     nf.min === undefined &&
     nf.max === undefined &&
     nf.decimalPlaces === undefined &&
@@ -80,6 +81,17 @@ export function NumberFormatFields({ value, onChange, idPrefix }: Props) {
       if (next.min === undefined) next.min = 0;
     }
     emit(next);
+  };
+
+  // 단위 어절(원, kg, t 등) — 환산 읽기 끝에 붙는 자유 텍스트. 빈 값이면 키 제거.
+  const handleUnitSuffixChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value;
+    if (raw.trim() === '') {
+      const { unitSuffix: _drop, ...rest } = nf;
+      emit(rest);
+      return;
+    }
+    emit({ ...nf, unitSuffix: raw });
   };
 
   const handleDecimalPlacesChange = (e: ChangeEvent<HTMLSelectElement>) => {
@@ -177,6 +189,17 @@ export function NumberFormatFields({ value, onChange, idPrefix }: Props) {
               </option>
             ))}
           </select>
+        </label>
+        <label className="flex items-center gap-1.5">
+          <span className="text-xs text-gray-600">단위 어절</span>
+          <Input
+            type="text"
+            value={nf.unitSuffix ?? ''}
+            onChange={handleUnitSuffixChange}
+            placeholder="원, kg, t"
+            className="h-8 w-24"
+            aria-label="단위 어절"
+          />
         </label>
         {numberField('min', '최소')}
         {numberField('max', '최대')}

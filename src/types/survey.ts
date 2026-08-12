@@ -103,6 +103,7 @@ export type NumberUnit =
 export interface NumberFormat {
   thousandSeparator?: boolean; // 천단위 콤마 표시 (화면 전용)
   unit?: NumberUnit; // 미지정 = 기본 (배수 1, 환산 표시 없음)
+  unitSuffix?: string; // 환산 읽기 끝에 붙는 단위 어절 (원, kg, t 등 자유 입력, 화면 전용)
   min?: number; // 미달 값은 "다음" 시점 검증 (빈 값은 검증 안 함)
   max?: number; // 초과 값은 타이핑 자체 차단
   decimalPlaces?: number; // undefined = 제한 없음, 0 = 정수만, N = 소수 N자리
