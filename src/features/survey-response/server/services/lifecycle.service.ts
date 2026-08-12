@@ -277,7 +277,6 @@ export async function resumeOrCreateResponse(
           id: surveyResponses.id,
           status: surveyResponses.status,
           isTest: surveyResponses.isTest,
-          sessionId: surveyResponses.sessionId,
           versionId: surveyResponses.versionId,
           questionResponses: surveyResponses.questionResponses,
           currentStepId: surveyResponses.currentStepId,
@@ -340,18 +339,17 @@ export async function resumeOrCreateResponse(
             throw new SurveyNotAcceptingResponsesError('survey_paused');
           }
           const reviveFromDrop = existingByContact.status === 'drop';
-          // 답·스텝 복원 게이트 — 행 resume(소유권 의미론)은 기존대로 하되:
-          // - 세션 일치: invite 는 pub 엔드포인트라 URL 유출 시 제3자가 임의 sessionId 로
-          //   호출 가능 — 원 브라우저(세션 일치)에만 복호화 답을 내주고, 이관(행 변형)도
-          //   원 브라우저에서만 수행한다.
-          // - 버전 불일치: 과거에는 복원을 조용히 비웠다(빈 폼 + 제출 시 덮어쓰기 유실).
-          //   이제 응답 버전 이관으로 현재 버전에 얹어 복원한다. 이관 불능(현재 스냅샷
-          //   훼손·경합)이면 기존 동작(복원 안 함)을 유지한다 — 구버전 답을 신버전 UI 에
-          //   그대로 주입하는 유령 답 문제를 되살리지 않기 위함.
-          const sessionMatches = existingByContact.sessionId === sessionId;
+          // 답·스텝 복원 — invite 토큰 소지 = 이어가기 권한 (2026-08-12 제품 결정):
+          // 초대 링크는 컨택별 개인 발송이므로 토큰 소지 자체를 소유 증명으로 보고,
+          // 다른 기기·시크릿탭 재진입에도 복호화 답과 진행 위치를 복원한다. 링크 유출 시
+          // 제3자가 입력된 답을 열람할 수 있는 트레이드오프는 명시적으로 수용했다 —
+          // 과거의 세션 일치 가드(원 브라우저에만 복원)는 이 결정으로 제거됨.
+          // - 버전 불일치: 응답 버전 이관으로 현재 버전에 얹어 복원한다. 이관 불능(현재
+          //   스냅샷 훼손·경합)이면 복원하지 않는다 — 구버전 답을 신버전 UI 에 그대로
+          //   주입하는 유령 답 문제를 되살리지 않기 위함.
           const versionMatches = existingByContact.versionId === flags?.currentVersionId;
           const migration =
-            sessionMatches && !versionMatches
+            !versionMatches
               ? await migrateResumedRowIfStale({
                   responseId: existingByContact.id,
                   rowVersionId: existingByContact.versionId,
@@ -372,7 +370,7 @@ export async function resumeOrCreateResponse(
               .where(eq(surveyResponses.id, existingByContact.id));
           }
           const restorePayload =
-            sessionMatches && (versionMatches || migration)
+            versionMatches || migration
               ? {
                   questionResponses: decryptQuestionResponses(
                     migration?.survivingResponses ?? existingByContact.questionResponses ?? {},

@@ -176,17 +176,20 @@ describe('resumeOrCreateResponse 응답 복원', () => {
     });
   });
 
-  it('컨택 경로 세션 불일치면 답과 currentStepId를 반환하지 않는다 - invite URL 유출 방어', async () => {
+  it('컨택 경로는 세션이 달라도 답과 currentStepId를 복원한다 - invite 소지 = 이어가기 권한 (2026-08-12 제품 결정)', async () => {
     await mockContactRow(contactRowBase);
 
     const result = await resumeOrCreateResponse({
       surveyId: 'survey-1',
-      sessionId: 'attacker-session',
+      sessionId: 'other-device-session',
       inviteToken: 'invite-1',
     });
-    expect(result).toMatchObject({ id: 'response-1', status: 'in_progress' });
-    expect(result).not.toHaveProperty('questionResponses');
-    expect(result).not.toHaveProperty('currentStepId');
+    expect(result).toMatchObject({
+      id: 'response-1',
+      status: 'in_progress',
+      questionResponses: { q1: '저장된 답' },
+      currentStepId: 'step-3',
+    });
   });
 
   it('컨택 경로 버전 불일치 + 이관 불능이면 답과 currentStepId를 반환하지 않는다 - 구버전 답 주입 차단 폴백', async () => {

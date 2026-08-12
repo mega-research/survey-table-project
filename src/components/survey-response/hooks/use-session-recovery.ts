@@ -105,6 +105,9 @@ export function useSessionRecovery({
   // 운영 현황 콘솔(T6): localStorage 기반 응답 회복.
   // - 진입 시 1회 실행 (loadedSurvey 로드 완료 + currentResponseId 가 아직 null 일 때)
   // - localStorage에 saved sessionId 가 있으면 resumeOrCreateResponse 호출
+  // - invite 토큰이 있으면 saved sessionId 가 없어도 호출한다 (2026-08-12 제품 결정:
+  //   초대 링크 소지 = 이어가기 권한 — 다른 기기·시크릿탭 재진입도 컨택 기준으로 복원.
+  //   서버 lifecycle.service 의 컨택 분기가 sessionId 와 무관하게 행·답을 돌려준다.)
   // - drop → in_progress 회복 시 sessionId/currentResponseId 갱신 + 토스트
   // - 종결 상태이거나 orphan(DB row 없음)이면 키 정리
   // - dep array에 sessionId 자체는 넣지 않는다 (saved 값을 effect 내부에서 직접 set → 무한 루프 방지)
@@ -120,7 +123,9 @@ export function useSessionRecovery({
 
     const key = sessionStorageKey(loadedSurvey.id, inviteToken);
     const savedSessionId = window.localStorage.getItem(key);
-    const recoverySessionId = savedSessionId ?? (isTargetTestSession ? sessionId : null);
+    const recoverySessionId =
+      savedSessionId ??
+      (isTargetTestSession || inviteToken != null ? sessionId : null);
     if (!recoverySessionId) return;
 
     const requestKey = JSON.stringify([
@@ -179,7 +184,13 @@ export function useSessionRecovery({
           return;
         }
         // 응답 row 사용 — 일반 세션은 saved sessionId를 복구하고, 모든 세션은 저장 답을 복원한다.
-        if (!isTargetTestSession) setSessionId(recoverySessionId);
+        if (!isTargetTestSession) {
+          setSessionId(recoverySessionId);
+          // invite 크로스 기기 회복(saved 키 없이 진입)도 이후 이 브라우저 재진입이
+          // saved-session 경로를 타도록 키를 저장한다. saved 키가 있던 경우는 같은 값
+          // 재기록이라 무해하다.
+          window.localStorage.setItem(key, recoverySessionId);
+        }
         setResponses?.(result.questionResponses ?? {});
         // 멈춘 페이지 복원 — 스텝 id 가 현재 구조에 없으면(재배포 등) 호출측에서 무시한다.
         // 응답 버전 이관(ADR-0014) 시 affectedQuestionIds 를 함께 전달해 답이 폐기·제거된

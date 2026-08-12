@@ -274,17 +274,19 @@ describe('resumeOrCreateResponse — 초대(컨택) 재개 이관 (티켓 03)', 
     expect(migrationSet()?.['status']).toBe('in_progress');
   });
 
-  it('세션 불일치면 이관도 복원도 하지 않는다 — invite URL 유출 방어 불변', async () => {
-    selectQueue.push([CONTACT_ROW]);
+  it('세션이 달라도 이관·복원한다 — invite 소지 = 이어가기 권한 (2026-08-12 제품 결정)', async () => {
+    selectQueue.push([CONTACT_ROW], [{ snapshot: CURRENT_SNAPSHOT }]);
 
-    const result = await resumeInvite('attacker-session');
+    const result = await resumeInvite('other-device-session');
 
-    expect(result).toMatchObject({ id: 'response-1', status: 'in_progress' });
-    expect(result).not.toHaveProperty('questionResponses');
-    expect(result).not.toHaveProperty('affectedQuestionIds');
-    expect(migrationSet()).toBeUndefined();
-    // 스냅샷 조회 없음 — 응답 행 조회 1회뿐
-    expect(selectMock).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({
+      id: 'response-1',
+      status: 'in_progress',
+      questionResponses: { 'q-text': '유지되는 답' },
+      currentStepId: 'page:q-text',
+      affectedQuestionIds: ['q-radio'],
+    });
+    expect(migrationSet()?.['versionId']).toBe('v-current');
   });
 
   it('이관 실패(현재 스냅샷 훼손) 시 기존 동작 유지 — 답변을 복원하지 않는다', async () => {
