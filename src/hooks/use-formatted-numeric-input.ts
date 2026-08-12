@@ -87,7 +87,9 @@ export function useFormattedNumericInput({
     [enabled, useComma, allowedValues, decimalPlaces, max, min, onRawChange],
   );
 
-  const unitReading = enabled ? formatKoreanUnitReading(rawValue, numberFormat?.unit) : null;
+  const unitReading = enabled
+    ? formatKoreanUnitReading(rawValue, numberFormat?.unit, numberFormat?.unitSuffix)
+    : null;
 
   // 범위 힌트 — 포커스 중 숨김. min 은 이 힌트가 1차 피드백이고,
   // max 는 타이핑 차단이 1차·이 힌트는 우회 값(prefill 오설정 등) 봉합용.

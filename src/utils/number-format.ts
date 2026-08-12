@@ -137,12 +137,25 @@ function readGroup(n: number): string {
  * 만/억/조 그룹 내부는 천/백 분해(readGroup), 만 미만 잔여는 콤마 숫자로 표기한다.
  * percent·기본(undefined) 단위, 부분 입력, 0 은 null.
  * 일(one) 단위는 만 미만 값이면 입력 숫자 재표기일 뿐이라 null (표시하지 않음).
+ *
+ * suffix(단위 어절 — 원, kg, t 등)가 있으면 읽기 끝에 그대로 이어 붙인다
+ * (예: unit='million', raw='123.45', suffix='원' → "1억 2천 3백 45만원").
+ * 어절만 있고 환산 읽기가 없는 경우(기본 단위, 일 단위 만 미만)에는 콤마 숫자 + 어절로
+ * 표기해 단위 어절이 항상 보이게 한다. percent 는 어절 대상이 아니다.
  */
 export function formatKoreanUnitReading(
   raw: string,
   unit: NumberUnit | undefined,
+  suffix?: string | undefined,
 ): string | null {
-  if (!unit) return null;
+  const sfx = (suffix ?? '').trim();
+  const commaWithSuffix = (): string | null => {
+    if (!sfx) return null;
+    const parsed = parseNumericInput(raw);
+    if (parsed === null || parsed === 0) return null;
+    return formatWithComma(raw) + sfx;
+  };
+  if (!unit) return commaWithSuffix();
   const multiplier = UNIT_MULTIPLIERS[unit];
   if (multiplier === null) return null;
   const n = parseNumericInput(raw);
@@ -150,7 +163,7 @@ export function formatKoreanUnitReading(
 
   const neg = n < 0;
   const total = Math.abs(n) * multiplier;
-  if (unit === 'one' && total < 1e4) return null;
+  if (unit === 'one' && total < 1e4) return commaWithSuffix();
   let intPart = Math.floor(total);
   const frac = total - intPart;
 
@@ -167,5 +180,5 @@ export function formatKoreanUnitReading(
     parts.push(formatWithComma(String(intPart)));
   }
   if (parts.length === 0) return null;
-  return (neg ? '-' : '') + parts.join(' ');
+  return (neg ? '-' : '') + parts.join(' ') + sfx;
 }

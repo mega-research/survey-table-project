@@ -153,4 +153,24 @@ describe('formatKoreanUnitReading', () => {
     expect(formatKoreanUnitReading('50', 'percent')).toBeNull();
     expect(formatKoreanUnitReading('50', undefined)).toBeNull();
   });
+
+  it('단위 어절은 읽기 끝에 그대로 이어 붙는다', () => {
+    // 스펙 예시: 단위 백만 + 소수 2자리 + 어절 '원' → 123.45 = 1억 2천 3백 45만원
+    expect(formatKoreanUnitReading('123.45', 'million', '원')).toBe('1억 2천 3백 45만원');
+    expect(formatKoreanUnitReading('123', 'tenMillion', 'kg')).toBe('12억 3천만kg');
+    expect(formatKoreanUnitReading('-3', 'tenMillion', 't')).toBe('-3천만t');
+    // 어절 양끝 공백은 정리한다
+    expect(formatKoreanUnitReading('1', 'tenMillion', ' 원 ')).toBe('1천만원');
+  });
+
+  it('어절만 있고 환산 읽기가 없으면 콤마 숫자 + 어절', () => {
+    expect(formatKoreanUnitReading('1234567', undefined, '원')).toBe('1,234,567원');
+    expect(formatKoreanUnitReading('123', 'one', 'kg')).toBe('123kg');
+    // 0·빈 값·부분 입력은 어절이 있어도 null
+    expect(formatKoreanUnitReading('0', undefined, '원')).toBeNull();
+    expect(formatKoreanUnitReading('', undefined, '원')).toBeNull();
+    expect(formatKoreanUnitReading('-', undefined, '원')).toBeNull();
+    // percent 는 어절 대상이 아니다
+    expect(formatKoreanUnitReading('50', 'percent', '%')).toBeNull();
+  });
 });
