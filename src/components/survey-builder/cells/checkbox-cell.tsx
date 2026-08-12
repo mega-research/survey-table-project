@@ -2,9 +2,10 @@
 
 import React, { useCallback, useMemo } from 'react';
 
-import { OptionTextInput } from '@/components/survey-response/option-text-input';
+import { OptionTextInputStack } from '@/components/survey-response/option-text-input-stack';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
+import type { CheckboxOption } from '@/types/survey';
 
 import { CellOptionsContainer } from './cell-options-container';
 import type { InteractiveCellProps } from './types';
@@ -64,7 +65,7 @@ export const CheckboxCell = React.memo(function CheckboxCell({
     );
   }
 
-  const footer =
+  const selectionCounter =
     maxSelections !== undefined || minSelections !== undefined ? (
       <div className="mt-2 border-t border-gray-200 pt-2">
         <div className="flex items-center justify-between text-xs">
@@ -77,6 +78,29 @@ export const CheckboxCell = React.memo(function CheckboxCell({
           {isMaxReached && <span className="text-blue-600">최대 도달</span>}
         </div>
       </div>
+    ) : null;
+
+  // 기타 입력란(1d): 선택한 allowTextInput 옵션의 입력란을 옵션 그리드 아래
+  // [옵션 라벨 칩 | 풀폭 입력란] 행으로 선택 순서(cellResponse 배열 순서)대로 쌓는다.
+  // 셀 안(footer 슬롯)에 렌더하므로 테이블 그리드/폭에는 영향 없음.
+  const textInputEntries = cellResponseArray
+    .map((key) =>
+      cell.checkboxOptions?.find(
+        (option) => option.allowTextInput && (option.value ?? option.id) === key,
+      ),
+    )
+    .filter((option): option is CheckboxOption => Boolean(option))
+    .map((option) => ({
+      option,
+      label: substituteTokens(option.label, attrs, quotes).trim() || '(라벨 없음)',
+    }));
+
+  const footer =
+    textInputEntries.length > 0 || selectionCounter ? (
+      <>
+        <OptionTextInputStack questionId={questionId} entries={textInputEntries} />
+        {selectionCounter}
+      </>
     ) : null;
 
   return (
@@ -92,38 +116,28 @@ export const CheckboxCell = React.memo(function CheckboxCell({
         const inputId = `${inputIdScope ? `${inputIdScope}-${cell.id}` : cell.id}-${option.id}`;
 
         return (
-          <div key={option.id} className="space-y-2">
-            {/* items-start + mt-1: 라벨이 2줄로 감겨도 체크박스가 첫 줄 중앙에 고정 (한 줄일 때 위치 동일) */}
-            <div className="flex items-start gap-2">
-              <input
-                type="checkbox"
-                id={inputId}
-                aria-invalid={ariaInvalid || undefined}
-                aria-describedby={ariaDescribedBy}
-                checked={isChecked}
-                disabled={disabled}
-                onChange={(e) => handleCheckboxChange(optionKey, e.target.checked)}
-                className={`mt-1 h-4 w-4 shrink-0 rounded border-gray-300 text-blue-600 focus:ring-blue-500 ${
-                  disabled ? 'cursor-not-allowed opacity-50' : ''
-                }`}
-              />
-              <label
-                htmlFor={inputId}
-                className={`text-base whitespace-pre-line select-none ${
-                  disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
-                }`}
-              >
-                {substituteTokens(option.label, attrs, quotes)}
-              </label>
-            </div>
-            {option.allowTextInput && isChecked && (
-              <div className="pl-6">
-                <OptionTextInput
-                  questionId={questionId}
-                  option={option}
-                />
-              </div>
-            )}
+          // items-start + mt-1: 라벨이 2줄로 감겨도 체크박스가 첫 줄 중앙에 고정 (한 줄일 때 위치 동일)
+          <div key={option.id} className="flex items-start gap-2">
+            <input
+              type="checkbox"
+              id={inputId}
+              aria-invalid={ariaInvalid || undefined}
+              aria-describedby={ariaDescribedBy}
+              checked={isChecked}
+              disabled={disabled}
+              onChange={(e) => handleCheckboxChange(optionKey, e.target.checked)}
+              className={`mt-1 h-4 w-4 shrink-0 rounded border-gray-300 text-blue-600 focus:ring-blue-500 ${
+                disabled ? 'cursor-not-allowed opacity-50' : ''
+              }`}
+            />
+            <label
+              htmlFor={inputId}
+              className={`text-base whitespace-pre-line select-none ${
+                disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
+              }`}
+            >
+              {substituteTokens(option.label, attrs, quotes)}
+            </label>
           </div>
         );
       })}

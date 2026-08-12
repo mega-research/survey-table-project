@@ -21,6 +21,7 @@ import { getOptionsLayout } from '@/utils/options-layout';
 
 import { ChoiceTableResponse } from './choice-table-response';
 import { OptionTextInput } from './option-text-input';
+import { OptionTextInputStack } from './option-text-input-stack';
 import { RankingQuestion } from './ranking-question';
 import {
   ValidationIssueBanner,
@@ -369,12 +370,18 @@ function RadioQuestion({
     ? applyMobileOptionsGridOverride(layout.style, effectiveColumns)
     : layout.style;
 
+  // 기타 입력란(1d): 선택한 allowTextInput 옵션의 입력란을 옵션 그리드 아래
+  // [옵션 라벨 칩 | 풀폭 입력란] 행으로 렌더 (테이블 셀과 동일 패턴).
+  const selectedTextOption = question.options?.find(
+    (option) => option.allowTextInput && isSelected(option.value),
+  );
+
   return (
-    <div className={layout.className} style={layoutStyle}>
-      {question.options?.map((option: QuestionOption) => (
-        <div key={option.id} className="space-y-2">
-          {/* items-start + mt-1: 라벨이 2줄로 감겨도 라디오가 첫 줄 중앙에 고정 (한 줄일 때 위치 동일) */}
-          <div className="flex items-start space-x-3">
+    <div className="space-y-3">
+      <div className={layout.className} style={layoutStyle}>
+        {question.options?.map((option: QuestionOption) => (
+          // items-start + mt-1: 라벨이 2줄로 감겨도 라디오가 첫 줄 중앙에 고정 (한 줄일 때 위치 동일)
+          <div key={option.id} className="flex items-start space-x-3">
             <input
               type="radio"
               id={`${question.id}-${option.id}`}
@@ -396,13 +403,21 @@ function RadioQuestion({
               {substituteTokens(option.label, attrs, quotes)}
             </label>
           </div>
-          {option.allowTextInput && isSelected(option.value) && (
-            <div className="pl-7">
-              <OptionTextInput questionId={question.id} option={option} className="w-full" />
-            </div>
-          )}
-        </div>
-      ))}
+        ))}
+      </div>
+      {selectedTextOption && (
+        <OptionTextInputStack
+          questionId={question.id}
+          entries={[
+            {
+              option: selectedTextOption,
+              label:
+                substituteTokens(selectedTextOption.label, attrs, quotes).trim() ||
+                '(라벨 없음)',
+            },
+          ]}
+        />
+      )}
     </div>
   );
 }
@@ -484,16 +499,30 @@ function CheckboxQuestion({
     ? applyMobileOptionsGridOverride(layout.style, effectiveColumns)
     : layout.style;
 
-  return (
-    <div className={layout.className} style={layoutStyle}>
-      {question.options?.map((option: QuestionOption) => {
-        const checked = isChecked(option.value);
-        const disabled = !canSelect(option.value);
+  // 기타 입력란(1d): 선택한 allowTextInput 옵션들의 입력란을 옵션 그리드 아래
+  // 선택 순서(currentValues 순서)대로 [옵션 라벨 칩 | 풀폭 입력란] 행으로 쌓는다.
+  const textInputEntries = currentValues
+    .map((val) => (isOtherChoiceValue(val) ? val.selectedValue : val))
+    .filter((val): val is string => typeof val === 'string')
+    .map((val) =>
+      question.options?.find((option) => option.allowTextInput && option.value === val),
+    )
+    .filter((option): option is QuestionOption => Boolean(option))
+    .map((option) => ({
+      option,
+      label: substituteTokens(option.label, attrs, quotes).trim() || '(라벨 없음)',
+    }));
 
-        return (
-          <div key={option.id} className="space-y-2">
-            {/* items-start + mt-1: 라벨이 2줄로 감겨도 체크박스가 첫 줄 중앙에 고정 (한 줄일 때 위치 동일) */}
-            <div className="flex items-start space-x-3">
+  return (
+    <div className="space-y-3">
+      <div className={layout.className} style={layoutStyle}>
+        {question.options?.map((option: QuestionOption) => {
+          const checked = isChecked(option.value);
+          const disabled = !canSelect(option.value);
+
+          return (
+            // items-start + mt-1: 라벨이 2줄로 감겨도 체크박스가 첫 줄 중앙에 고정 (한 줄일 때 위치 동일)
+            <div key={option.id} className="flex items-start space-x-3">
               <input
                 type="checkbox"
                 id={`${question.id}-${option.id}`}
@@ -513,14 +542,11 @@ function CheckboxQuestion({
                 {substituteTokens(option.label, attrs, quotes)}
               </label>
             </div>
-            {option.allowTextInput && checked && (
-              <div className="pl-7">
-                <OptionTextInput questionId={question.id} option={option} className="w-full" />
-              </div>
-            )}
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
+
+      <OptionTextInputStack questionId={question.id} entries={textInputEntries} />
 
       {(maxSelections !== undefined || minSelections !== undefined) && (
         <div className="border-t border-gray-200 pt-2">
