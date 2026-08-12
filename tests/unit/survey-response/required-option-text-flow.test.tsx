@@ -358,7 +358,8 @@ describe('필수 옵션 상세기입 응답 흐름', () => {
       useSurveyResponseStore.getState().setOptionText('q-required', 'opt-other', '   ');
     });
 
-    const completeButton = screen.getByRole('button', { name: '확인 완료' });
+    // 2026-08-12 미리보기 마지막 페이지 라벨도 '다음'으로 통일 (8a7fba50)
+    const completeButton = screen.getByRole('button', { name: '다음' });
     expect(completeButton.querySelector('svg')).not.toBeNull();
     await user.click(completeButton);
 
@@ -388,7 +389,8 @@ describe('필수 옵션 상세기입 응답 흐름', () => {
       useSurveyResponseStore.getState().setOptionText('q-required', 'opt-other', '   ');
     });
 
-    const completeButton = getMobileActionButton('확인 완료');
+    // 2026-08-12 미리보기 마지막 페이지 라벨도 '다음'으로 통일 (8a7fba50)
+    const completeButton = getMobileActionButton('다음');
     expect(completeButton.querySelector('svg')).not.toBeNull();
     await user.click(completeButton);
 
