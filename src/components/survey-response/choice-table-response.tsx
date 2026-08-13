@@ -242,7 +242,7 @@ export function ChoiceTableResponse({
           />
           {labelText && (
             <span
-              className={cn('whitespace-pre-line text-sm text-gray-800', getCellTextClassName(cell))}
+              className={cn('whitespace-pre-line text-base text-gray-800', getCellTextClassName(cell))}
               style={getCellTextStyle(cell)}
             >
               {labelText}

@@ -58,7 +58,7 @@ export const SelectCell = React.memo(function SelectCell({
             aria-invalid={ariaInvalid || undefined}
             aria-describedby={ariaDescribedBy}
             onChange={(e) => handleSelectChange(e.target.value)}
-            className="w-full appearance-none truncate rounded border border-gray-300 bg-white py-2 pr-7 pl-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            className="w-full appearance-none truncate rounded border border-gray-300 bg-white py-2 pr-7 pl-2 text-base focus:ring-2 focus:ring-blue-500 focus:outline-none"
           >
             <option value="">선택하세요</option>
             {cell.selectOptions.map((option) => (

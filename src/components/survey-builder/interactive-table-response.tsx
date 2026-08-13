@@ -68,8 +68,9 @@ import { VirtualizedTableGrid } from './virtualized-table-grid';
 
 const VIRTUALIZATION_THRESHOLD = 100;
 
+// text-base: 헤더는 척도 라벨 등 응답 판단 정보가 실리므로 16px 고정 (TablePreview 와 동일)
 const HEADER_CELL_BASE_CLASS =
-  'flex min-w-0 items-center justify-center border-r border-b border-gray-300 bg-gray-50 px-3 py-2 text-center font-semibold text-gray-800 [overflow-wrap:anywhere]';
+  'flex min-w-0 items-center justify-center border-r border-b border-gray-300 bg-gray-50 px-3 py-2 text-center text-base font-semibold text-gray-800 [overflow-wrap:anywhere]';
 
 // ── 셀렉터 행 (동적 행 선택 버튼) ──
 
@@ -904,7 +905,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
               >
                 <div
                   role="rowgroup"
-                  className="mx-auto rounded-t-md border-t border-r border-l border-gray-300 bg-gray-50 text-sm"
+                  className="mx-auto rounded-t-md border-t border-r border-l border-gray-300 bg-gray-50 text-base"
                   style={gridContainerStyle}
                 >
                   {renderHeaderCells()}
@@ -955,7 +956,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
               <div
                 key="in-scroll-header"
                 role="rowgroup"
-                className="mx-auto rounded-t-md border-t border-r border-l border-gray-300 bg-gray-50 text-sm"
+                className="mx-auto rounded-t-md border-t border-r border-l border-gray-300 bg-gray-50 text-base"
                 style={gridContainerStyle}
               >
                 {renderHeaderCells()}
@@ -985,7 +986,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
                 key="table-body"
                 role="rowgroup"
                 className={cn(
-                  'mx-auto rounded-b-md border-r border-l border-gray-300 bg-white text-sm',
+                  'mx-auto rounded-b-md border-r border-l border-gray-300 bg-white text-base',
                   hideColumnLabels && 'rounded-t-md border-t',
                 )}
                 style={gridContainerStyle}

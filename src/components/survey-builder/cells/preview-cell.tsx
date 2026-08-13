@@ -50,7 +50,7 @@ export const PreviewCell = React.memo(function PreviewCell({
       return (
         <CellOptionsContainer cell={cell}>
           {cell.checkboxOptions.map((option) => (
-            // items-start + mt-0.5: 라벨(text-sm)이 2줄로 감겨도 체크박스가 첫 줄 중앙에 고정
+            // items-start + mt-0.5: 라벨(text-base)이 2줄로 감겨도 체크박스가 첫 줄 중앙에 고정
             <div key={option.id} className="flex items-start gap-2">
               <input
                 type="checkbox"
@@ -59,7 +59,7 @@ export const PreviewCell = React.memo(function PreviewCell({
                 readOnly={!disableControls}
                 className="mt-0.5 h-4 w-4 shrink-0 rounded"
               />
-              <span className="whitespace-pre-line text-sm">{option.label}</span>
+              <span className="whitespace-pre-line text-base">{option.label}</span>
             </div>
           ))}
         </CellOptionsContainer>
@@ -76,7 +76,7 @@ export const PreviewCell = React.memo(function PreviewCell({
       return (
         <CellOptionsContainer cell={cell}>
           {cell.radioOptions.map((option) => (
-            // items-start + mt-0.5: 라벨(text-sm)이 2줄로 감겨도 라디오가 첫 줄 중앙에 고정
+            // items-start + mt-0.5: 라벨(text-base)이 2줄로 감겨도 라디오가 첫 줄 중앙에 고정
             <div key={option.id} className="flex items-start gap-2">
               <input
                 type="radio"
@@ -86,7 +86,7 @@ export const PreviewCell = React.memo(function PreviewCell({
                 readOnly={!disableControls}
                 className="mt-0.5 h-4 w-4 shrink-0"
               />
-              <span className="whitespace-pre-line text-sm">{option.label}</span>
+              <span className="whitespace-pre-line text-base">{option.label}</span>
             </div>
           ))}
         </CellOptionsContainer>
@@ -100,7 +100,7 @@ export const PreviewCell = React.memo(function PreviewCell({
           bold={cell.textBold}
           textColor={cell.textColor}
         >
-          <select className="w-full rounded border border-gray-300 p-2 text-sm" disabled>
+          <select className="w-full rounded border border-gray-300 p-2 text-base" disabled>
             <option value="">선택하세요...</option>
             {cell.selectOptions.map((option) => (
               <option key={option.id} value={option.value}>
@@ -171,7 +171,7 @@ export const PreviewCell = React.memo(function PreviewCell({
           )}
           {caption && (
             <div
-              className={cn('mt-2 text-left text-sm text-gray-700', getCellTextClassName(cell))}
+              className={cn('mt-2 text-left text-base text-gray-700', getCellTextClassName(cell))}
               style={getCellTextStyle(cell)}
             >
               {caption}
@@ -201,7 +201,7 @@ export const PreviewCell = React.memo(function PreviewCell({
               maxLength={cell.inputMaxLength}
               disabled
               className={cn(
-                'w-full rounded border border-gray-300 bg-gray-50 p-2 text-sm',
+                'w-full rounded border border-gray-300 bg-gray-50 p-2 text-base',
                 getInputTextAlignClass(cell.inputTextAlign),
               )}
             />
@@ -229,7 +229,7 @@ export const PreviewCell = React.memo(function PreviewCell({
           {cell.content && (
             <div
               className={cn(
-                'text-sm [overflow-wrap:anywhere] whitespace-pre-wrap text-gray-800',
+                'text-base [overflow-wrap:anywhere] whitespace-pre-wrap text-gray-800',
                 getCellTextClassName(cell),
               )}
               style={getCellTextStyle(cell)}
@@ -270,7 +270,7 @@ export const PreviewCell = React.memo(function PreviewCell({
           />
           {choiceLabelText && (
             <span
-              className={cn('text-sm text-gray-700', getCellTextClassName(cell))}
+              className={cn('text-base text-gray-700', getCellTextClassName(cell))}
               style={getCellTextStyle(cell)}
             >
               {choiceLabelText}
@@ -298,7 +298,7 @@ export const PreviewCell = React.memo(function PreviewCell({
       return cell.content ? (
         <div
           className={cn(
-            'text-sm leading-relaxed [overflow-wrap:anywhere] whitespace-pre-wrap',
+            'text-base leading-relaxed [overflow-wrap:anywhere] whitespace-pre-wrap',
             getCellTextClassName(cell),
           )}
           style={getCellTextStyle(cell)}

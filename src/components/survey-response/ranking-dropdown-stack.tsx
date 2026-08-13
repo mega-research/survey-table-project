@@ -122,7 +122,7 @@ export function RankingDropdownStack({
   // 세로 모드에선 라벨 고정폭으로 정렬.
   const isHorizontal = columns === 0 && !compact;
   // 스타일 프리셋 (compact: 테이블 셀 컨텍스트 / full: 질문 레벨)
-  // 빌더 미리보기(question-preview.tsx)와 시각 통일 — rounded-md, border-gray-200, p-2, text-sm
+  // 셀 컨텍스트 select 는 표 본문과 같은 16px(text-base) — 테이블 셀 본문 고정 크기 규칙
   const rankLabelCls = compact
     ? 'w-10 shrink-0 text-xs font-medium text-gray-600'
     : isHorizontal
@@ -131,7 +131,7 @@ export function RankingDropdownStack({
   // truncate: 긴 옵션 라벨이 select 폭을 밀어내지 않고 "..." 으로 잘림.
   // 가로 모드에서는 w-full 제거 — 행 자체가 content-width 이므로 select 는 inline-style 로 고정.
   const selectCls = compact
-    ? 'w-full appearance-none truncate rounded border border-gray-300 bg-white py-2 pr-2 pl-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none'
+    ? 'w-full appearance-none truncate rounded border border-gray-300 bg-white py-2 pr-2 pl-2 text-base focus:ring-2 focus:ring-blue-500 focus:outline-none'
     : `${isHorizontal ? '' : 'w-full '}${RANKING_SELECT_BASE_CLS} ${RANKING_SELECT_FOCUS_CLS}`;
   // 기타/상세 입력 — OptionTextRow(라벨 칩 + 맨몸 input) 셸 사용. compact 는 셀 내부용 축소.
   const bareInputCls = cn(OPTION_TEXT_BARE_INPUT_CLS, compact && 'h-6 text-xs');

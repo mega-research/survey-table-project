@@ -18,7 +18,7 @@ interface CellContentLayoutProps {
 }
 
 const DEFAULT_LABEL_CLASS =
-  'text-sm font-medium whitespace-pre-wrap [overflow-wrap:anywhere] text-gray-700 shrink-0';
+  'text-base font-medium whitespace-pre-wrap [overflow-wrap:anywhere] text-gray-700 shrink-0';
 
 /**
  * 인터랙티브 셀의 텍스트(content) 위치 레이아웃.

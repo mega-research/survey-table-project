@@ -76,7 +76,7 @@ export const VideoCell = React.memo(function VideoCell({
       )}
       {caption && (
         <div
-          className={cn('mt-2 text-left text-sm text-gray-700', getCellTextClassName(cell))}
+          className={cn('mt-2 text-left text-base text-gray-700', getCellTextClassName(cell))}
           style={getCellTextStyle(cell)}
         >
           {caption}

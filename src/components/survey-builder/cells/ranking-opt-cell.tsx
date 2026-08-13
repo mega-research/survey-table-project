@@ -32,7 +32,7 @@ export const RankingOptCell = React.memo(function RankingOptCell({
       {cell.content && (
         <div
           className={cn(
-            'text-sm whitespace-pre-wrap text-gray-800 [overflow-wrap:anywhere]',
+            'text-base whitespace-pre-wrap text-gray-800 [overflow-wrap:anywhere]',
             getCellTextClassName(cell),
           )}
           style={getCellTextStyle(cell)}

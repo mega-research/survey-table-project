@@ -46,7 +46,7 @@ export function CalcCell({ cell, questionId }: Props) {
       {/* 값과 단위는 인라인이라 블록 컨테이너의 text-align 으로 정렬이 성립한다 */}
       <div
         className={cn(
-          'w-full px-2 py-1.5 text-sm tabular-nums text-gray-700',
+          'w-full px-2 py-1.5 text-base tabular-nums text-gray-700',
           getInputTextAlignClass(cell.inputTextAlign),
         )}
       >

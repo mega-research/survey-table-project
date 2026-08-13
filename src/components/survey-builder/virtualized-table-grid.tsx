@@ -206,7 +206,7 @@ export const VirtualizedTableGrid = React.memo(function VirtualizedTableGrid({
   return (
     <div
       role="rowgroup"
-      className="mx-auto rounded-b-md border-l border-r border-gray-300 bg-white text-sm"
+      className="mx-auto rounded-b-md border-l border-r border-gray-300 bg-white text-base"
       style={{
         display: 'grid',
         gridTemplateColumns: gridTemplateCols,
