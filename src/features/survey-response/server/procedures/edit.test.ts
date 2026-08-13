@@ -35,6 +35,7 @@ describe('surveyResponse.edit procedures', () => {
       surveyId: SURVEY_ID,
       responseId: RESPONSE_ID,
       questionResponses: { q1: 'a' },
+      versionId: null,
     };
     const res = await client.edit.saveAdminEdit(input);
     expect(svc.saveAdminEdit).toHaveBeenCalledWith(
@@ -55,6 +56,7 @@ describe('surveyResponse.edit procedures', () => {
         surveyId: SURVEY_ID,
         responseId: RESPONSE_ID,
         questionResponses: {},
+        versionId: null,
       }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
@@ -67,6 +69,7 @@ describe('surveyResponse.edit procedures', () => {
         surveyId: SURVEY_ID,
         responseId: RESPONSE_ID,
         questionResponses: {},
+        versionId: null,
       }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
@@ -81,6 +84,7 @@ describe('surveyResponse.edit procedures', () => {
         surveyId: SURVEY_ID,
         responseId: RESPONSE_ID,
         questionResponses: {},
+        versionId: null,
       }),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
   });
@@ -95,6 +99,7 @@ describe('surveyResponse.edit procedures', () => {
         surveyId: SURVEY_ID,
         responseId: RESPONSE_ID,
         questionResponses: {},
+        versionId: null,
       }),
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
   });
@@ -111,6 +116,7 @@ describe('surveyResponse.edit procedures', () => {
       surveyId: SURVEY_ID,
       responseId: RESPONSE_ID,
       questionResponses: { q1: 'a' },
+      versionId: null,
     };
     const res = await client.edit.saveAdminEdit(input);
     expect(svc.saveAdminEdit).toHaveBeenCalledWith(
@@ -133,8 +139,39 @@ describe('surveyResponse.edit procedures', () => {
         surveyId: 'other-survey',
         responseId: RESPONSE_ID,
         questionResponses: {},
+        versionId: null,
       }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
     expect(svc.saveAdminEdit).not.toHaveBeenCalled();
+  });
+
+  it('versionId 를 service 입력으로 그대로 전달한다', async () => {
+    vi.mocked(svc.saveAdminEdit).mockResolvedValue({ ok: true } as never);
+    const client = createRouterClient({ edit }, { context: authedContext() });
+    const input = {
+      surveyId: SURVEY_ID,
+      responseId: RESPONSE_ID,
+      questionResponses: {},
+      versionId: 'v-latest',
+    };
+    await client.edit.saveAdminEdit(input);
+    expect(vi.mocked(svc.saveAdminEdit)).toHaveBeenCalledWith(
+      expect.objectContaining({ versionId: 'v-latest' }),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it('Version conflict 에러를 CONFLICT ORPCError 로 매핑한다', async () => {
+    vi.mocked(svc.saveAdminEdit).mockRejectedValue(new Error('Version conflict') as never);
+    const client = createRouterClient({ edit }, { context: authedContext() });
+    await expect(
+      client.edit.saveAdminEdit({
+        surveyId: SURVEY_ID,
+        responseId: RESPONSE_ID,
+        questionResponses: {},
+        versionId: 'v-old',
+      }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
   });
 });

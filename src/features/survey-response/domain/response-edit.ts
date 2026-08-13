@@ -12,6 +12,9 @@ export const SaveAdminEditInput = z.object({
   surveyId: z.string(),
   responseId: z.string(),
   questionResponses: z.custom<Record<string, unknown>>(),
+  // 클라이언트가 렌더한 배포 버전. 저장 시점 currentVersionId 와 다르면 저장 거부(스펙 결정 4).
+  // 미배포 설문(스냅샷 fallback)이면 null.
+  versionId: z.string().nullable(),
 });
 export type SaveAdminEditInput = z.infer<typeof SaveAdminEditInput>;
 

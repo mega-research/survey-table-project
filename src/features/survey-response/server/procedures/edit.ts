@@ -10,6 +10,7 @@ import * as svc from '../services/response-edit.service';
  * service throw 를 사용자 친화 ORPCError 로 변환.
  * - SurveyOwnershipError('not_found') / 'Response not found' → NOT_FOUND.
  * - 'Cannot edit deleted response' → BAD_REQUEST.
+ * - 'Version conflict' → CONFLICT.
  */
 function mapServiceError(err: unknown): never {
   if (err instanceof svc.SurveyOwnershipError) {
@@ -20,6 +21,11 @@ function mapServiceError(err: unknown): never {
   }
   if (err instanceof Error && err.message === 'Cannot edit deleted response') {
     throw new ORPCError('BAD_REQUEST', { message: '삭제된 응답은 수정할 수 없습니다' });
+  }
+  if (err instanceof Error && err.message === 'Version conflict') {
+    throw new ORPCError('CONFLICT', {
+      message: '수정 중 새 버전이 배포되었습니다. 새로고침 후 다시 수정해 주세요.',
+    });
   }
   throw err;
 }
