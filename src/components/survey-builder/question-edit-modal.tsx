@@ -757,6 +757,12 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
                         : question.tableHeaderGrid) ?? undefined
                     }
                     hideColumnLabels={formData.hideColumnLabels ?? question.hideColumnLabels}
+                    ownQuestion={{
+                      ...question,
+                      tableColumns: formData.tableColumns ?? question.tableColumns ?? [],
+                      tableRowsData: formData.tableRowsData ?? question.tableRowsData ?? [],
+                    }}
+                    allQuestions={questions}
                     onUpdate={(sumConstraints) =>
                       setFormData((prev) => ({ ...prev, sumConstraints }))
                     }
