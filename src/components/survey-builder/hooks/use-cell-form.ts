@@ -97,6 +97,11 @@ export interface CellFormSetters {
   setFormulaValidationEnabled: (v: boolean) => void;
   setFormulaToleranceRaw: (v: string) => void;
   setFormulaErrorMessage: (v: string) => void;
+  setCalcValidationEnabled: (v: boolean) => void;
+  setCalcValidationOperator: (v: CellFormState['calcValidationOperator']) => void;
+  setCalcValidationTarget: (v: CellFormState['calcValidationTarget']) => void;
+  setCalcValidationToleranceRaw: (v: string) => void;
+  setCalcValidationErrorMessage: (v: string) => void;
 }
 
 export interface UseCellFormResult {
@@ -190,6 +195,11 @@ export function useCellForm(cell: TableCell, isOpen: boolean): UseCellFormResult
       setFormulaValidationEnabled: set('formulaValidationEnabled'),
       setFormulaToleranceRaw: set('formulaToleranceRaw'),
       setFormulaErrorMessage: set('formulaErrorMessage'),
+      setCalcValidationEnabled: set('calcValidationEnabled'),
+      setCalcValidationOperator: set('calcValidationOperator'),
+      setCalcValidationTarget: set('calcValidationTarget'),
+      setCalcValidationToleranceRaw: set('calcValidationToleranceRaw'),
+      setCalcValidationErrorMessage: set('calcValidationErrorMessage'),
     };
   }, []);
 
