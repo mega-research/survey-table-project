@@ -31,6 +31,7 @@ vi.mock('@/lib/operations/profiles.server', () => ({
 vi.mock('@/db', () => ({
   db: {
     query: {
+      surveys: { findFirst: vi.fn(async () => ({ currentVersionId: null })) },
       surveyVersions: { findFirst: vi.fn(async () => null) },
       contactTargets: {
         findFirst: vi.fn(async ({ where }: { where: unknown }) => {
@@ -53,20 +54,22 @@ vi.mock(
 import AdminResponseEditPage from '@/app/admin/surveys/[id]/operations/profiles/[responseId]/edit/page';
 
 describe('AdminResponseEditPage contact scope', () => {
-  function findInitialContactAttrs(node: unknown): Record<string, unknown> | null {
+  // AdminResponseEditor 로 전달되는 props 전체를 찾는다 — initialContactAttrs 는
+  // 이 컴포넌트에만 있는 고유 prop 이라 이 컴포넌트 노드 식별자로도 재사용한다.
+  function findEditorProps(node: unknown): Record<string, unknown> | null {
     if (Array.isArray(node)) {
       for (const child of node) {
-        const attrs = findInitialContactAttrs(child);
-        if (attrs) return attrs;
+        const props = findEditorProps(child);
+        if (props) return props;
       }
       return null;
     }
     if (node == null || typeof node !== 'object' || !('props' in node)) return null;
     const props = (node as { props: Record<string, unknown> }).props;
     if ('initialContactAttrs' in props) {
-      return props['initialContactAttrs'] as Record<string, unknown>;
+      return props;
     }
-    return findInitialContactAttrs(props['children']);
+    return findEditorProps(props['children']);
   }
 
   it('같은 test scope라도 다른 설문의 contact attrs를 응답 편집기에 전달하지 않는다', async () => {
@@ -75,6 +78,10 @@ describe('AdminResponseEditPage contact scope', () => {
       searchParams: Promise.resolve({}),
     });
 
-    expect(findInitialContactAttrs(rendered)).toEqual({});
+    const props = findEditorProps(rendered);
+    expect(props?.['initialContactAttrs']).toEqual({});
+    // 미배포 설문(surveys.currentVersionId=null, mock 기본값) — 이관 대상 아님.
+    expect(props?.['renderedVersionId']).toBeNull();
+    expect(props?.['migratedFromOldVersion']).toBe(false);
   });
 });
