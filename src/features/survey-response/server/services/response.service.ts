@@ -1957,6 +1957,16 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
       }
       storedRecalcResponses = recomputed;
     }
+    // metadata 에 이번 완료로 새로 얹을 키만 모은다 (exposedQuestionIds/exposedRowIds/quotaOverflow).
+    // 아래 UPDATE 는 이 값을 객체 리터럴로 통째 대입하지 않고 jsonb `||` 병합으로 반영한다 —
+    // 관리자 수정이 남긴 adminEditRollback/migratedFromVersionId, draftSeq 등 기존 키가
+    // in_progress 재진입 완료 시 이 UPDATE 에 지워지는 걸 막기 위함 (whole-branch 리뷰 I-1).
+    const newMetadataKeys: Record<string, unknown> = {
+      ...(data?.exposedQuestionIds ? { exposedQuestionIds: data.exposedQuestionIds } : {}),
+      ...(data?.exposedRowIds ? { exposedRowIds: data.exposedRowIds } : {}),
+      // soft quota: 초과 완료 식별 플래그 (위 detectQuotaOverflow 판정 결과)
+      ...(quotaOverflow ? { quotaOverflow: true } : {}),
+    };
     // 1. 기존 JSONB 방식 저장 + 운영 현황 추적 컬럼 갱신
     const [updated] = await tx
       .update(surveyResponses)
@@ -1986,16 +1996,11 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
           : storedRecalcResponses
             ? { questionResponses: storedRecalcResponses }
             : {}),
-        ...(data?.exposedQuestionIds || data?.exposedRowIds || quotaOverflow
+        ...(Object.keys(newMetadataKeys).length > 0
           ? {
-              metadata: {
-                ...(data?.exposedQuestionIds
-                  ? { exposedQuestionIds: data.exposedQuestionIds }
-                  : {}),
-                ...(data?.exposedRowIds ? { exposedRowIds: data.exposedRowIds } : {}),
-                // soft quota: 초과 완료 식별 플래그 (위 detectQuotaOverflow 판정 결과)
-                ...(quotaOverflow ? { quotaOverflow: true } : {}),
-              },
+              // 기존 metadata 와 병합 — 객체 리터럴 통째 대입 금지(jsonb 컬럼에
+              // JSON.stringify 직접 바인딩도 금지, ::jsonb 텍스트 캐스트만 허용하는 레포 관례).
+              metadata: sql`COALESCE(${surveyResponses.metadata}, '{}'::jsonb) || ${JSON.stringify(newMetadataKeys)}::jsonb`,
             }
           : {}),
       })
