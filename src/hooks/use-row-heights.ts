@@ -139,7 +139,7 @@ export function useRowHeights({
 }
 
 // ── 헤더/행 합산 상수 ──
-const HEADER_ROW_HEIGHT = 45; // py-3 + font + border
+const HEADER_ROW_HEIGHT = 49; // py-3(24) + text-base 한 줄(24) + border(1)
 const TABLE_CARD_PADDING = 32; // CardContent padding + border
 
 /**
