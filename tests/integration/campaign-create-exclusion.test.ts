@@ -336,6 +336,7 @@ describe('createCampaign — 부정 결과코드 컨택 제외 (preflight 동기
         contactTargetIds: [idValid, idBounced],
       },
       USER_ID,
+      false,
     );
 
     // valid 1명만 큐잉, 반송 이력 1명은 skip
