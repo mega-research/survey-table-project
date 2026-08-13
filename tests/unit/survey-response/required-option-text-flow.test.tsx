@@ -434,7 +434,7 @@ describe('필수 옵션 상세기입 응답 흐름', () => {
       // admin-edit 은 첫 클릭에서 빈 필수를 앰버 경고로 알리고 위치로 이동 버튼을 유지한다
       // (2026-08-13 재결정 — 결정 6, 경고 1회 후 재클릭 시 통과).
       expect(screen.getByRole('alert')).toHaveTextContent(
-        '빈 필수 응답 1개 — 한 번 더 누르면 그대로 넘어갑니다',
+        "빈 필수 응답 1개 — '다음 →' 한 번 더 누르면 그대로 넘어갑니다",
       );
       expect(screen.queryByText('필수 응답이 비어있습니다')).not.toBeInTheDocument();
       await user.click(screen.getByRole('button', { name: '위치로 이동' }));
@@ -510,7 +510,7 @@ describe('필수 옵션 상세기입 응답 흐름', () => {
 
       expect(onSubmit).not.toHaveBeenCalled();
       expect(screen.getByRole('alert')).toHaveTextContent(
-        '빈 필수 응답 1개 — 한 번 더 누르면 그대로 넘어갑니다',
+        "빈 필수 응답 1개 — '다음 →' 한 번 더 누르면 그대로 넘어갑니다",
       );
       expectRequiredHighlight();
 
@@ -531,7 +531,7 @@ describe('필수 옵션 상세기입 응답 흐름', () => {
       // 1차 클릭 — 경고.
       await user.click(nextButton());
       expect(screen.getByRole('alert')).toHaveTextContent(
-        '빈 필수 응답 1개 — 한 번 더 누르면 그대로 넘어갑니다',
+        "빈 필수 응답 1개 — '다음 →' 한 번 더 누르면 그대로 넘어갑니다",
       );
 
       // 옵션만 선택하고 상세기입은 비워둔다 — 여전히 빈 필수(required-detail)지만
@@ -542,7 +542,7 @@ describe('필수 옵션 상세기입 응답 흐름', () => {
       await user.click(nextButton());
       expect(onSubmit).not.toHaveBeenCalled();
       expect(screen.getByRole('alert')).toHaveTextContent(
-        '빈 필수 응답 1개 — 한 번 더 누르면 그대로 넘어갑니다',
+        "빈 필수 응답 1개 — '다음 →' 한 번 더 누르면 그대로 넘어갑니다",
       );
 
       // 값 변경 없는 다음 클릭(3차) — 이번엔 통과한다.

@@ -129,7 +129,7 @@ describe('snapshotStepResponses', () => {
 describe('buildAdminEmptyRequiredWarningMessage', () => {
   it('개수를 포함한 안내 문구를 만든다', () => {
     expect(buildAdminEmptyRequiredWarningMessage(3)).toBe(
-      '빈 필수 응답 3개 — 한 번 더 누르면 그대로 넘어갑니다',
+      "빈 필수 응답 3개 — '다음 →' 한 번 더 누르면 그대로 넘어갑니다",
     );
   });
 });

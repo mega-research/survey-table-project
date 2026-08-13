@@ -80,5 +80,5 @@ export function snapshotStepResponses(
 
 /** admin-edit 경고 배너 문구. */
 export function buildAdminEmptyRequiredWarningMessage(count: number): string {
-  return `빈 필수 응답 ${count}개 — 한 번 더 누르면 그대로 넘어갑니다`;
+  return `빈 필수 응답 ${count}개 — '다음 →' 한 번 더 누르면 그대로 넘어갑니다`;
 }
