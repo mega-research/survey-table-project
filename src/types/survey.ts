@@ -110,13 +110,18 @@ export interface NumberFormat {
   allowedValues?: number[]; // 지정 시 목록의 값 또는 그 값으로 완성 가능한 중간 입력만 허용
 }
 
-// 테이블 숫자 input 셀 합계 제약 (질문 레벨, table 타입 전용).
+// 테이블 숫자 input 셀 비교 제약 (질문 레벨, table 타입 전용).
 // tableValidationRules(분기 전용)와 별개 — 이쪽은 "다음"/제출 차단형 검증이다.
+// 레거시(cellIds 합계 vs target 리터럴)에 leftExpr/targetExpr 를 optional 로 얹은
+// 하위호환 확장 — 기존 저장 데이터는 필드 그대로 유효하다.
 export interface SumConstraint {
   id: string;
-  cellIds: string[]; // 합산 대상 셀 (inputType 'number' input 셀). 존재하지 않는 id는 평가 시 무시
-  operator: 'eq' | 'lte' | 'gte'; // 정확히 / 이하 / 이상
-  target: number; // 기본 100
+  cellIds: string[]; // leftExpr 없을 때 좌변 = 선택 셀 합계. 존재하지 않는 id는 평가 시 무시
+  leftExpr?: CalcExpr; // 있으면 좌변 = 이 수식 (cellIds 무시)
+  operator: 'eq' | 'ne' | 'gte' | 'lte' | 'gt' | 'lt'; // 같음/다름/이상/이하/초과/미만
+  target: number; // targetExpr 없을 때 우변 리터럴. 기본 100
+  targetExpr?: CalcExpr; // 있으면 우변 = 이 수식 (셀/질문응답/attrs/LUT/복합)
+  tolerance?: number; // eq/ne 전용 절대 오차. 기본 0 — 부등호 연산자는 무시
   errorMessage?: string; // 미지정 시 자동 생성 메시지 사용
 }
 

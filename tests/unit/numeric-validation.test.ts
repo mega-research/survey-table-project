@@ -77,6 +77,102 @@ describe('evaluateSumConstraint', () => {
     const dangling: SumConstraint = { id: 's3', cellIds: ['ghost'], operator: 'eq', target: 100 };
     expect(evaluateSumConstraint(dangling, { c1: '50' }, ids).skipped).toBe(true);
   });
+
+  it('신규 연산자 ne/gt/lt', () => {
+    const ne = { ...eq100, operator: 'ne' as const };
+    const gt = { ...eq100, operator: 'gt' as const };
+    const lt = { ...eq100, operator: 'lt' as const };
+    expect(evaluateSumConstraint(ne, { c1: '60', c2: '30' }, ids).ok).toBe(true);
+    expect(evaluateSumConstraint(ne, { c1: '60', c2: '40' }, ids).ok).toBe(false);
+    expect(evaluateSumConstraint(gt, { c1: '60', c2: '41' }, ids).ok).toBe(true);
+    expect(evaluateSumConstraint(gt, { c1: '60', c2: '40' }, ids).ok).toBe(false); // 경계: 같으면 false
+    expect(evaluateSumConstraint(lt, { c1: '60', c2: '39' }, ids).ok).toBe(true);
+    expect(evaluateSumConstraint(lt, { c1: '60', c2: '40' }, ids).ok).toBe(false);
+  });
+
+  it('tolerance 는 eq/ne 에만 적용되고 부등호는 무시한다', () => {
+    const eqTol = { ...eq100, tolerance: 5 };
+    expect(evaluateSumConstraint(eqTol, { c1: '60', c2: '36' }, ids).ok).toBe(true); // |96-100|<=5
+    expect(evaluateSumConstraint(eqTol, { c1: '60', c2: '30' }, ids).ok).toBe(false);
+    const neTol = { ...eq100, operator: 'ne' as const, tolerance: 5 };
+    expect(evaluateSumConstraint(neTol, { c1: '60', c2: '36' }, ids).ok).toBe(false); // 밴드 안 = 같음 취급
+    expect(evaluateSumConstraint(neTol, { c1: '60', c2: '30' }, ids).ok).toBe(true);
+    const gteTol = { ...eq100, operator: 'gte' as const, tolerance: 5 };
+    expect(evaluateSumConstraint(gteTol, { c1: '60', c2: '36' }, ids).ok).toBe(false); // 96 >= 100 아님 — tolerance 무시
+  });
+
+  describe('leftExpr / targetExpr 확장', () => {
+    // q1 셀 c1,c2 픽스처(tableQuestion) + 숫자 단답 q2 를 ctx 로 구성
+    const numQ = {
+      id: 'q2', type: 'text', title: '예산', required: false, order: 1, inputType: 'number',
+    } as Question;
+    const mkCtx = (responses: Record<string, unknown>, contactAttrs: Record<string, string> = {}) => ({
+      allResponses: responses,
+      allQuestions: [tableQuestion(), numQ],
+      lookups: [],
+      contactAttrs,
+    });
+    const evalOpts = (ctx: ReturnType<typeof mkCtx>) => ({ ownQuestionId: 'q1', ctx });
+
+    it('targetExpr: 셀 합계를 다른 질문 응답과 비교한다', () => {
+      const c: SumConstraint = {
+        id: 's4', cellIds: ['c1', 'c2'], operator: 'eq', target: 0,
+        targetExpr: { kind: 'question', questionId: 'q2' },
+      };
+      const ctx = mkCtx({ q1: { c1: '60', c2: '40' }, q2: '100' });
+      expect(evaluateSumConstraint(c, { c1: '60', c2: '40' }, ids, evalOpts(ctx)).ok).toBe(true);
+      const ctxBad = mkCtx({ q1: { c1: '60', c2: '40' }, q2: '90' });
+      expect(evaluateSumConstraint(c, { c1: '60', c2: '40' }, ids, evalOpts(ctxBad)).ok).toBe(false);
+    });
+
+    it('targetExpr: 컨택 attrs 와 비교한다', () => {
+      const c: SumConstraint = {
+        id: 's5', cellIds: ['c1', 'c2'], operator: 'lte', target: 0,
+        targetExpr: { kind: 'attr', attrsKey: '예산' },
+      };
+      const ctx = mkCtx({ q1: { c1: '60', c2: '40' } }, { 예산: '120' });
+      expect(evaluateSumConstraint(c, { c1: '60', c2: '40' }, ids, evalOpts(ctx)).ok).toBe(true);
+    });
+
+    it('targetExpr 평가 불능이면 skipped — fail-safe', () => {
+      const c: SumConstraint = {
+        id: 's6', cellIds: ['c1', 'c2'], operator: 'eq', target: 0,
+        targetExpr: { kind: 'attr', attrsKey: '예산' },
+      };
+      const ctx = mkCtx({ q1: { c1: '60', c2: '40' } }, {}); // attrs 없음
+      expect(evaluateSumConstraint(c, { c1: '60', c2: '40' }, ids, evalOpts(ctx)).skipped).toBe(true);
+    });
+
+    it('targetExpr 있는데 evalOpts 미전달이면 skipped — fail-safe', () => {
+      const c: SumConstraint = {
+        id: 's7', cellIds: ['c1', 'c2'], operator: 'eq', target: 0,
+        targetExpr: { kind: 'question', questionId: 'q2' },
+      };
+      expect(evaluateSumConstraint(c, { c1: '60', c2: '40' }, ids).skipped).toBe(true);
+    });
+
+    it('leftExpr: 좌변을 수식으로 평가하고 cellIds 는 무시한다', () => {
+      const c: SumConstraint = {
+        id: 's8', cellIds: [], operator: 'gte', target: 50,
+        leftExpr: {
+          kind: 'group', op: '*',
+          terms: [{ kind: 'cell', cellId: 'c1' }, { kind: 'literal', value: 2 }],
+        },
+      };
+      const ctx = mkCtx({ q1: { c1: '30' } });
+      const r = evaluateSumConstraint(c, { c1: '30' }, ids, evalOpts(ctx));
+      expect(r).toMatchObject({ skipped: false, ok: true, sum: 60 });
+    });
+
+    it('leftExpr 평가 불능이면 skipped — fail-safe', () => {
+      const c: SumConstraint = {
+        id: 's9', cellIds: [], operator: 'eq', target: 100,
+        leftExpr: { kind: 'attr', attrsKey: '없는키' },
+      };
+      const ctx = mkCtx({ q1: { c1: '30' } });
+      expect(evaluateSumConstraint(c, { c1: '30' }, ids, evalOpts(ctx)).skipped).toBe(true);
+    });
+  });
 });
 
 describe('collectNumericIssues — 단답형 범위', () => {
@@ -340,6 +436,40 @@ describe('collectNumericIssues — 테이블', () => {
     expect(collectNumericIssues(q, { c1: '500' })[0]).toMatchObject({ kind: 'range', cellIds: ['c1'] });
     expect(collectNumericIssues(q, { c1: '10' })).toHaveLength(0);
     expect(collectNumericIssues(q, { c1: '' })).toHaveLength(0);
+  });
+
+  it('targetExpr 규칙: ctx 를 통해 평가되고 위반 메시지는 기준값을 노출하지 않는다', () => {
+    const q = tableQuestion({
+      sumConstraints: [{
+        id: 's10', cellIds: ['c1', 'c2'], operator: 'eq', target: 0,
+        targetExpr: { kind: 'question', questionId: 'q2' },
+      }],
+    });
+    const numQ = {
+      id: 'q2', type: 'text', title: '예산', required: false, order: 1, inputType: 'number',
+    } as Question;
+    const ctx = {
+      allResponses: { q1: { c1: '60', c2: '30' }, q2: '100' },
+      allQuestions: [q, numQ],
+    };
+    const issues = collectNumericIssues(q, { c1: '60', c2: '30' }, ctx);
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toMatchObject({ kind: 'sum' });
+    expect(issues[0]!.message).toContain('기준값');
+    expect(issues[0]!.message).not.toContain('100');
+  });
+
+  it('leftExpr 규칙 위반 issue 는 cellIds 없이 메시지만 담는다', () => {
+    const q = tableQuestion({
+      sumConstraints: [{
+        id: 's11', cellIds: [], operator: 'gte', target: 100,
+        leftExpr: { kind: 'cell', cellId: 'c1' },
+      }],
+    });
+    const ctx = { allResponses: { q1: { c1: '50' } }, allQuestions: [q] };
+    const issues = collectNumericIssues(q, { c1: '50' }, ctx);
+    expect(issues).toHaveLength(1);
+    expect(issues[0]!.cellIds).toBeUndefined();
   });
 });
 

@@ -138,8 +138,48 @@ export function collectVisibleTableCells(
     .filter((c) => !c.isHidden);
 }
 
+/** 비교 판정 공통 헬퍼 — 반올림 완료된 좌/우값. tolerance 는 eq/ne 에만 의미가 있다. */
+function compareValues(
+  left: number,
+  right: number,
+  op: SumConstraint['operator'],
+  tolerance: number,
+): boolean {
+  switch (op) {
+    case 'eq':
+      return Math.abs(left - right) <= tolerance;
+    case 'ne':
+      return Math.abs(left - right) > tolerance;
+    case 'gte':
+      return left >= right;
+    case 'lte':
+      return left <= right;
+    case 'gt':
+      return left > right;
+    case 'lt':
+      return left < right;
+  }
+}
+
+/** leftExpr/targetExpr 평가용 옵션 — 미전달 시 확장 규칙은 skipped(fail-safe) */
+export interface SumConstraintEvalOpts {
+  ownQuestionId: string;
+  ctx: NumericValidationCtx;
+}
+
+function toFormulaCtx(ctx: NumericValidationCtx) {
+  return {
+    questions: ctx.allQuestions,
+    responses: ctx.allResponses,
+    lookups: ctx.lookups ?? [],
+    contactAttrs: ctx.contactAttrs ?? {},
+  };
+}
+
 /**
- * 합계 평가 — 빈 셀은 0, 전부 빈 값이거나 유효 셀 0개면 skipped. 소수 9자리 반올림 후 비교.
+ * 비교 제약 평가 — 좌변은 cellIds 합계(레거시) 또는 leftExpr 수식, 우변은 target 리터럴
+ * 또는 targetExpr 수식. 어느 변이든 평가 불능(null)이면 skipped — fail-safe 통과.
+ * 레거시 경로: 빈 셀은 0, 전부 빈 값이거나 유효 셀 0개면 skipped. 소수 9자리 반올림 후 비교.
  * @param existingCellIds 합산 대상으로 유효한(=보이는) 셀 id 집합. 호출부가 미선택 동적 행·isHidden
  *   셀을 미리 걸러 넘긴다 — 화면에 없는 잔존 값이 합계에 기여하지 않도록.
  */
@@ -147,37 +187,61 @@ export function evaluateSumConstraint(
   constraint: SumConstraint,
   cellValues: Record<string, unknown>,
   existingCellIds: Set<string>,
+  evalOpts?: SumConstraintEvalOpts,
 ): { skipped: boolean; ok: boolean; sum: number } {
-  const targetIds = constraint.cellIds.filter((id) => existingCellIds.has(id));
-  if (targetIds.length === 0) return { skipped: true, ok: true, sum: 0 };
-  if (targetIds.every((id) => isEmptyCellValue(cellValues[id]))) {
-    return { skipped: true, ok: true, sum: 0 };
+  // 좌변
+  let left: number;
+  if (constraint.leftExpr) {
+    if (!evalOpts) return { skipped: true, ok: true, sum: 0 };
+    const v = evaluateCellFormula(constraint.leftExpr, evalOpts.ownQuestionId, toFormulaCtx(evalOpts.ctx));
+    if (v === null) return { skipped: true, ok: true, sum: 0 };
+    left = v;
+  } else {
+    const targetIds = constraint.cellIds.filter((id) => existingCellIds.has(id));
+    if (targetIds.length === 0) return { skipped: true, ok: true, sum: 0 };
+    if (targetIds.every((id) => isEmptyCellValue(cellValues[id]))) {
+      return { skipped: true, ok: true, sum: 0 };
+    }
+    const sum = targetIds.reduce((acc, id) => {
+      const v = cellValues[id];
+      const n = typeof v === 'string' ? parseNumericInput(v) : null;
+      return acc + (n ?? 0);
+    }, 0);
+    left = Math.round(sum * 1e9) / 1e9;
   }
-  const sum = targetIds.reduce((acc, id) => {
-    const v = cellValues[id];
-    const n = typeof v === 'string' ? parseNumericInput(v) : null;
-    return acc + (n ?? 0);
-  }, 0);
-  const rounded = Math.round(sum * 1e9) / 1e9;
-  const ok =
-    constraint.operator === 'eq'
-      ? rounded === constraint.target
-      : constraint.operator === 'lte'
-        ? rounded <= constraint.target
-        : rounded >= constraint.target;
-  return { skipped: false, ok, sum: rounded };
+
+  // 우변
+  let right: number;
+  if (constraint.targetExpr) {
+    if (!evalOpts) return { skipped: true, ok: true, sum: left };
+    const v = evaluateCellFormula(constraint.targetExpr, evalOpts.ownQuestionId, toFormulaCtx(evalOpts.ctx));
+    if (v === null) return { skipped: true, ok: true, sum: left };
+    right = v;
+  } else {
+    right = constraint.target;
+  }
+
+  const ok = compareValues(left, right, constraint.operator, constraint.tolerance ?? 0);
+  return { skipped: false, ok, sum: left };
 }
 
 const SUM_OPERATOR_PHRASES: Record<SumConstraint['operator'], string> = {
   eq: '이 되어야 합니다',
+  ne: '와(과) 달라야 합니다',
   lte: ' 이하여야 합니다',
   gte: ' 이상이어야 합니다',
+  lt: ' 미만이어야 합니다',
+  gt: ' 초과여야 합니다',
 };
 
+// 우변이 수식(targetExpr)이면 값을 노출하지 않는다 — 이전 응답·attrs 기반 기준값은
+// 응답자에게 힌트가 되므로 "기준값" 으로만 지칭 (셀 수식 검증의 계산값 미노출 원칙과 동일).
 function sumConstraintMessage(constraint: SumConstraint, sum: number): string {
+  const subject = constraint.leftExpr ? '계산 값' : '선택된 셀 합계';
+  const target = constraint.targetExpr ? '기준값' : String(constraint.target);
   const base =
     constraint.errorMessage?.trim() ||
-    `선택된 셀 합계가 ${constraint.target}${SUM_OPERATOR_PHRASES[constraint.operator]}`;
+    `${subject}가 ${target}${SUM_OPERATOR_PHRASES[constraint.operator]}`;
   return `${base} (현재 ${sum})`;
 }
 
@@ -250,12 +314,21 @@ export function collectNumericIssues(
   //    숨은 열/행·비활성 게이팅 셀 제외)
   const existingIds = new Set(enabled.map((c) => c.id));
   for (const constraint of question.sumConstraints ?? []) {
-    const result = evaluateSumConstraint(constraint, cellValues, existingIds);
+    const result = evaluateSumConstraint(
+      constraint,
+      cellValues,
+      existingIds,
+      ctx ? { ownQuestionId: question.id, ctx } : undefined,
+    );
     if (!result.skipped && !result.ok) {
+      // leftExpr 규칙은 하이라이트할 선택 셀이 없다 — cellIds 를 싣지 않는다.
+      const highlightIds = constraint.leftExpr
+        ? []
+        : constraint.cellIds.filter((id) => existingIds.has(id));
       issues.push({
         kind: 'sum',
         message: sumConstraintMessage(constraint, result.sum),
-        cellIds: constraint.cellIds.filter((id) => existingIds.has(id)),
+        ...(highlightIds.length > 0 ? { cellIds: highlightIds } : {}),
       });
     }
   }
