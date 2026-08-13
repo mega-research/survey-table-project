@@ -35,6 +35,7 @@ export type QuestionExpr = Extract<CalcExpr, { kind: 'question' }>;
 export type LiteralExpr = Extract<CalcExpr, { kind: 'literal' }>;
 export type LookupExpr = Extract<CalcExpr, { kind: 'lookup' }>;
 export type AggExpr = Extract<CalcExpr, { kind: 'agg' }>;
+export type AttrExpr = Extract<CalcExpr, { kind: 'attr' }>;
 
 /** 수식이 값으로 참조할 수 있는 셀 — 숫자 input 셀과 계산 셀. 병합으로 가려진 셀은 값을 가질 수 없다. */
 export function isReferenceableCell(cell: TableCell): boolean {
@@ -495,5 +496,41 @@ export function AggEditor({ value, onChange, ownQuestion, allQuestions }: AggEdi
         다른 질문 셀 추가
       </Button>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 컨택 메타데이터 (attrs)
+// ---------------------------------------------------------------------------
+
+interface AttrTermEditorProps {
+  value: AttrExpr;
+  onChange: (next: AttrExpr) => void;
+}
+
+/** attrs 키 픽커. 후보는 설문 컨택 컬럼 스킴 — 표시 조건의 AttrPickerSub 와 같은 소스다. */
+export function AttrTermEditor({ value, onChange }: AttrTermEditorProps) {
+  const contactColumns = useSurveyBuilderStore((s) => s.currentSurvey.contactColumns?.columns);
+  const attrKeys = useMemo(() => (contactColumns ?? []).map((c) => c.key), [contactColumns]);
+
+  return (
+    <Select
+      value={value.attrsKey}
+      onValueChange={(k) => onChange({ kind: 'attr', attrsKey: k })}
+    >
+      <SelectTrigger className="h-8 w-52 text-sm" aria-label="컨택 속성 선택">
+        <SelectValue placeholder="컨택 속성 선택" />
+      </SelectTrigger>
+      <SelectContent className="max-h-64">
+        {attrKeys.length === 0 && (
+          <div className="p-2 text-xs text-slate-500">설문에 컨택 컬럼이 정의되지 않았습니다</div>
+        )}
+        {attrKeys.map((k) => (
+          <SelectItem key={k} value={k}>
+            {k}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }

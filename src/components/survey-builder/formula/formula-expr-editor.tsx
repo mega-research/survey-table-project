@@ -25,6 +25,7 @@ import { EMPTY_LOOKUPS } from '../lookup-shared';
 import { type CalcOperator, formatFormulaPreview } from './format-formula';
 import {
   AggEditor,
+  AttrTermEditor,
   CellRefPicker,
   LiteralInput,
   LookupTermEditor,
@@ -57,6 +58,7 @@ const TERM_KIND_LABELS: Record<CalcExpr['kind'], string> = {
   question: '질문 응답',
   literal: '상수',
   lookup: '외부 데이터 (LUT)',
+  attr: '컨택 메타데이터',
   agg: 'SUM · AVG',
   group: '하위 그룹',
 };
@@ -67,6 +69,7 @@ const ADD_TERM_KINDS: Array<CalcExpr['kind']> = [
   'question',
   'literal',
   'lookup',
+  'attr',
   'agg',
   'group',
 ];
@@ -83,6 +86,8 @@ function makeTerm(kind: CalcExpr['kind']): CalcExpr {
       return { kind: 'literal', value: 0 };
     case 'lookup':
       return { kind: 'lookup', surveyLookupId: '', keyMapping: [], valueColumn: '' };
+    case 'attr':
+      return { kind: 'attr', attrsKey: '' };
     case 'agg':
       return { kind: 'agg', fn: 'sum', items: [] };
     case 'group':
@@ -335,6 +340,8 @@ function TermEditor({ term, onChange, ownQuestion, allQuestions }: TermEditorPro
       return <LiteralInput value={term} onChange={onChange} />;
     case 'lookup':
       return <LookupTermEditor value={term} onChange={onChange} />;
+    case 'attr':
+      return <AttrTermEditor value={term} onChange={onChange} />;
     case 'agg':
       return (
         <AggEditor
