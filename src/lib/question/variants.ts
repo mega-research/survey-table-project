@@ -42,14 +42,14 @@ type QuestionBase = Pick<
 /** 내장 테이블 capability — radio/checkbox/ranking/table 4유형 공유. */
 type EmbeddedTableFields = Pick<
   Question,
-  'tableTitle' | 'tableColumns' | 'tableRowsData' | 'tableHeaderGrid' | 'hideColumnLabels'
+  'tableTitle' | 'tableColumns' | 'tableRowsData' | 'tableHeaderGrid' | 'hideColumnLabels' | 'exportCellOrder'
 >;
 
 /** 테이블 레벨 옵션 그룹 — radio/checkbox/ranking 전용. */
 type ChoiceGroupFields = Pick<Question, 'choiceGroups'>;
 
 /** question.options 옵션 리스트 — radio/checkbox/select/ranking(manual). */
-type OptionListFields = Pick<Question, 'options' | 'optionsColumns' | 'optionsAlign' | 'allowOtherOption'>;
+type OptionListFields = Pick<Question, 'options' | 'optionsColumns' | 'mobileOptionsColumns' | 'optionsAlign' | 'allowOtherOption'>;
 
 /** 모바일 테이블 표시 capability — radio/checkbox/table 3유형 전용. */
 type MobileTableDisplayFields = Pick<

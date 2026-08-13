@@ -8,20 +8,25 @@ import { UserDefinedMultiLevelSelect } from '@/components/survey-builder/user-de
 import { Input } from '@/components/ui/input';
 import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
 import { useMobileView } from '@/hooks/use-media-query';
-import { useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import type { NumericIssue } from '@/lib/survey/numeric-validation';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { Question, QuestionOption } from '@/types/survey';
 import { isChoiceTableSource } from '@/utils/choice-source';
 import {
   applyMobileOptionsGridOverride,
-  computeMobileOptionsColumnsByLabels,
+  resolveMobileOptionsColumns,
 } from '@/utils/mobile-card-options';
 import { getOptionsLayout } from '@/utils/options-layout';
 
 import { ChoiceTableResponse } from './choice-table-response';
 import { OptionTextInput } from './option-text-input';
+import { OptionTextInputStack } from './option-text-input-stack';
 import { RankingQuestion } from './ranking-question';
+import {
+  ValidationIssueBanner,
+  type ValidationBannerItem,
+} from './validation-issue-banner';
 
 /**
  * 라디오·체크박스 옵션 목록의 좌우 인셋 — 질문 제목보다 옵션 블록을 안쪽으로 들여쓴다.
@@ -39,6 +44,8 @@ interface QuestionInputProps {
   allQuestions?: Question[];
   /** 숫자 차단형 검증 위반 목록 — "다음"/제출 시도 후에만 채워짐(라이브 계산은 상위 소유). */
   numericIssues?: NumericIssue[] | undefined;
+  selectedDynamicRowIds?: string[] | undefined;
+  onDynamicRowSelectionChange?: ((rowIds: string[]) => void) | undefined;
 }
 
 // 타입 정의
@@ -66,16 +73,105 @@ export function isOtherChoiceValue(value: unknown): value is OtherChoiceValue {
 export type SingleChoiceResponse = string | null | OtherChoiceValue;
 export type MultiChoiceResponse = Array<string | OtherChoiceValue>;
 
+function buildTableValidationBannerItems(
+  question: Question,
+  numericIssues: NumericIssue[] | undefined,
+): ValidationBannerItem[] | undefined {
+  const rowKeyByCellId = new Map<string, string>();
+  const rowLabelByKey = new Map<string, string>();
+  for (const row of question.tableRowsData ?? []) {
+    for (const cell of row.cells) rowKeyByCellId.set(cell.id, row.id);
+    const mobileHeader = row.cells.find(
+      (cell) =>
+        cell.type === 'text' &&
+        cell.mobileDisplay === 'header' &&
+        Boolean(cell.content?.trim()),
+    );
+    const rowLabel = mobileHeader?.content?.trim() || row.label?.trim();
+    if (rowLabel) rowLabelByKey.set(row.id, rowLabel);
+  }
+
+  const items = (numericIssues ?? [])
+    .filter((issue) => issue.kind !== 'range')
+    .flatMap((issue): ValidationBannerItem[] => {
+      const cellIds = issue.cellIds ?? [];
+      if (issue.kind !== 'required-cells' || cellIds.length < 2) {
+        const rowIds = new Set(
+          cellIds.map((cellId) => rowKeyByCellId.get(cellId)).filter(Boolean),
+        );
+        const rowId = rowIds.size === 1 ? [...rowIds][0] : undefined;
+        return [{
+          message: issue.message,
+          cellIds,
+          ...(rowId ? { rowId } : {}),
+          ...(issue.detailTargetIds ? { detailTargetIds: issue.detailTargetIds } : {}),
+        }];
+      }
+
+      const cellIdsByRow = new Map<string, string[]>();
+      for (const cellId of cellIds) {
+        const key = rowKeyByCellId.get(cellId) ?? `cell:${cellId}`;
+        const rowCellIds = cellIdsByRow.get(key) ?? [];
+        rowCellIds.push(cellId);
+        cellIdsByRow.set(key, rowCellIds);
+      }
+      if (cellIdsByRow.size <= 1) {
+        const rowId = [...cellIdsByRow.keys()][0];
+        return [{
+          message: issue.message,
+          cellIds,
+          ...(rowId && !rowId.startsWith('cell:') ? { rowId } : {}),
+          ...(issue.detailTargetIds ? { detailTargetIds: issue.detailTargetIds } : {}),
+        }];
+      }
+
+      // 모바일 표는 행마다 카드가 되므로 필수 오류도 행별 항목으로 나눈다.
+      // 여러 행의 상세 입력 target은 셀과 일대일 매핑할 수 없으므로 이 경우에는
+      // 각 행의 오류 셀을 카드 이동 기준으로 사용한다.
+      return [...cellIdsByRow.entries()].map(([rowKey, rowCellIds]) => ({
+        message: issue.message,
+        ...(!rowKey.startsWith('cell:') ? { rowId: rowKey } : {}),
+        ...(rowLabelByKey.has(rowKey) ? { labelPrefix: rowLabelByKey.get(rowKey) } : {}),
+        cellIds: rowCellIds,
+      }));
+    });
+  return items.length > 0 ? items : undefined;
+}
+
 // 질문 유형별 입력 라우터
-export function QuestionInput({
+export function QuestionInput({ question, numericIssues, ...controlProps }: QuestionInputProps) {
+  const control = (
+    <QuestionInputControl question={question} numericIssues={numericIssues} {...controlProps} />
+  );
+  if (question.type === 'table') return control;
+
+  const bannerItems = (numericIssues ?? [])
+    .filter((issue) => issue.kind !== 'range')
+    .map((issue) => ({
+      message: issue.message,
+      cellIds: issue.cellIds,
+      detailTargetIds: issue.detailTargetIds,
+    }));
+  return (
+    <>
+      {control}
+      <ValidationIssueBanner items={bannerItems} questionId={question.id} />
+    </>
+  );
+}
+
+function QuestionInputControl({
   question,
   value,
   onChange,
   allResponses,
   allQuestions,
   numericIssues,
+  selectedDynamicRowIds,
+  onDynamicRowSelectionChange,
 }: QuestionInputProps) {
   const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
 
   // choice_opt 테이블 소스 라디오/체크박스는 hooks 진입 전에 디스패처에서 분기
   if (
@@ -87,6 +183,10 @@ export function QuestionInput({
         question={question}
         value={value}
         onChange={onChange as (v: unknown) => void}
+        allResponses={allResponses}
+        allQuestions={allQuestions}
+        selectedDynamicRowIds={selectedDynamicRowIds}
+        onDynamicRowSelectionChange={onDynamicRowSelectionChange}
       />
     );
   }
@@ -99,7 +199,7 @@ export function QuestionInput({
           : { agreed: typeof value === 'boolean' ? value : false };
       return (
         <NoticeRenderer
-          content={substituteTokens(question.noticeContent || '', attrs)}
+          content={substituteTokens(question.noticeContent || '', attrs, quotes)}
           {...(question.requiresAcknowledgment !== undefined
             ? { requiresAcknowledgment: question.requiresAcknowledgment }
             : {})}
@@ -181,9 +281,7 @@ export function QuestionInput({
           {...(question.tableTitle !== undefined ? { tableTitle: question.tableTitle } : {})}
           columns={question.tableColumns}
           rows={question.tableRowsData}
-          {...(question.tableHeaderGrid !== undefined
-            ? { tableHeaderGrid: question.tableHeaderGrid }
-            : {})}
+          {...(question.tableHeaderGrid ? { tableHeaderGrid: question.tableHeaderGrid } : {})}
           {...(typeof value === 'object' && value !== null
             ? { value: value as Record<string, unknown> }
             : {})}
@@ -222,17 +320,7 @@ export function QuestionInput({
               ? new Set(numericIssues.flatMap((i) => i.cellIds ?? []))
               : undefined
           }
-          errorItems={
-            // 범위(range) 위반은 셀 빨간 링 + 셀 인라인 안내로만 표시 — 하단 배너 제외.
-            // cellIds 전체를 배너 "위치로 이동" 버튼에 넘긴다 — 열 displayCondition 으로
-            // 숨은(미렌더) 셀이 앞에 올 수 있어, 버튼이 렌더된 첫 셀을 골라 스크롤한다.
-            (() => {
-              const items = (numericIssues ?? [])
-                .filter((i) => i.kind !== 'range')
-                .map((i) => ({ message: i.message, cellIds: i.cellIds ?? [] }));
-              return items.length > 0 ? items : undefined;
-            })()
-          }
+          errorItems={buildTableValidationBannerItems(question, numericIssues)}
         />
       ) : (
         <div className="py-4 text-center text-gray-500">테이블이 구성되지 않았습니다.</div>
@@ -253,6 +341,8 @@ function RadioQuestion({
   value: SingleChoiceResponse;
   onChange: (value: SingleChoiceResponse) => void;
 }) {
+  const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
   const isSelected = (optionValue: string) => {
     if (isOtherChoiceValue(value)) {
       return value.selectedValue === optionValue;
@@ -270,19 +360,28 @@ function RadioQuestion({
 
   const isMobileView = useMobileView();
   const effectiveColumns = isMobileView
-    ? computeMobileOptionsColumnsByLabels(question.options?.map((o) => o.label) ?? [])
+    ? resolveMobileOptionsColumns(
+        question.mobileOptionsColumns,
+        question.options?.map((o) => o.label) ?? [],
+      )
     : question.optionsColumns;
   const layout = getOptionsLayout(effectiveColumns, question.optionsAlign);
   const layoutStyle = isMobileView
     ? applyMobileOptionsGridOverride(layout.style, effectiveColumns)
     : layout.style;
 
+  // 기타 입력란(1d): 선택한 allowTextInput 옵션의 입력란을 옵션 그리드 아래
+  // [옵션 라벨 칩 | 풀폭 입력란] 행으로 렌더 (테이블 셀과 동일 패턴).
+  const selectedTextOption = question.options?.find(
+    (option) => option.allowTextInput && isSelected(option.value),
+  );
+
   return (
-    <div className={layout.className} style={layoutStyle}>
-      {question.options?.map((option: QuestionOption) => (
-        <div key={option.id} className="space-y-2">
-          {/* items-start + mt-1: 라벨이 2줄로 감겨도 라디오가 첫 줄 중앙에 고정 (한 줄일 때 위치 동일) */}
-          <div className="flex items-start space-x-3">
+    <div className="space-y-3">
+      <div className={layout.className} style={layoutStyle}>
+        {question.options?.map((option: QuestionOption) => (
+          // items-start + mt-1: 라벨이 2줄로 감겨도 라디오가 첫 줄 중앙에 고정 (한 줄일 때 위치 동일)
+          <div key={option.id} className="flex items-start space-x-3">
             <input
               type="radio"
               id={`${question.id}-${option.id}`}
@@ -299,18 +398,26 @@ function RadioQuestion({
                 e.preventDefault();
                 handleOptionChange(option.value);
               }}
-              className="flex-1 cursor-pointer text-base text-gray-700"
+              className="flex-1 cursor-pointer whitespace-pre-line text-base text-gray-700"
             >
-              {option.label}
+              {substituteTokens(option.label, attrs, quotes)}
             </label>
           </div>
-          {option.allowTextInput && isSelected(option.value) && (
-            <div className="pl-7">
-              <OptionTextInput questionId={question.id} option={option} className="w-full" />
-            </div>
-          )}
-        </div>
-      ))}
+        ))}
+      </div>
+      {selectedTextOption && (
+        <OptionTextInputStack
+          questionId={question.id}
+          entries={[
+            {
+              option: selectedTextOption,
+              label:
+                substituteTokens(selectedTextOption.label, attrs, quotes).trim() ||
+                '(라벨 없음)',
+            },
+          ]}
+        />
+      )}
     </div>
   );
 }
@@ -325,6 +432,8 @@ function CheckboxQuestion({
   value: unknown;
   onChange: (value: MultiChoiceResponse) => void;
 }) {
+  const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
   const currentValues = useMemo<MultiChoiceResponse>(
     () => (Array.isArray(value) ? (value as MultiChoiceResponse) : []),
     [value],
@@ -380,23 +489,40 @@ function CheckboxQuestion({
 
   const isMobileView = useMobileView();
   const effectiveColumns = isMobileView
-    ? computeMobileOptionsColumnsByLabels(question.options?.map((o) => o.label) ?? [])
+    ? resolveMobileOptionsColumns(
+        question.mobileOptionsColumns,
+        question.options?.map((o) => o.label) ?? [],
+      )
     : question.optionsColumns;
   const layout = getOptionsLayout(effectiveColumns, question.optionsAlign);
   const layoutStyle = isMobileView
     ? applyMobileOptionsGridOverride(layout.style, effectiveColumns)
     : layout.style;
 
-  return (
-    <div className={layout.className} style={layoutStyle}>
-      {question.options?.map((option: QuestionOption) => {
-        const checked = isChecked(option.value);
-        const disabled = !canSelect(option.value);
+  // 기타 입력란(1d): 선택한 allowTextInput 옵션들의 입력란을 옵션 그리드 아래
+  // 선택 순서(currentValues 순서)대로 [옵션 라벨 칩 | 풀폭 입력란] 행으로 쌓는다.
+  const textInputEntries = currentValues
+    .map((val) => (isOtherChoiceValue(val) ? val.selectedValue : val))
+    .filter((val): val is string => typeof val === 'string')
+    .map((val) =>
+      question.options?.find((option) => option.allowTextInput && option.value === val),
+    )
+    .filter((option): option is QuestionOption => Boolean(option))
+    .map((option) => ({
+      option,
+      label: substituteTokens(option.label, attrs, quotes).trim() || '(라벨 없음)',
+    }));
 
-        return (
-          <div key={option.id} className="space-y-2">
-            {/* items-start + mt-1: 라벨이 2줄로 감겨도 체크박스가 첫 줄 중앙에 고정 (한 줄일 때 위치 동일) */}
-            <div className="flex items-start space-x-3">
+  return (
+    <div className="space-y-3">
+      <div className={layout.className} style={layoutStyle}>
+        {question.options?.map((option: QuestionOption) => {
+          const checked = isChecked(option.value);
+          const disabled = !canSelect(option.value);
+
+          return (
+            // items-start + mt-1: 라벨이 2줄로 감겨도 체크박스가 첫 줄 중앙에 고정 (한 줄일 때 위치 동일)
+            <div key={option.id} className="flex items-start space-x-3">
               <input
                 type="checkbox"
                 id={`${question.id}-${option.id}`}
@@ -409,21 +535,18 @@ function CheckboxQuestion({
               />
               <label
                 htmlFor={`${question.id}-${option.id}`}
-                className={`flex-1 text-base text-gray-700 ${
+                className={`flex-1 whitespace-pre-line text-base text-gray-700 ${
                   disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
                 }`}
               >
-                {option.label}
+                {substituteTokens(option.label, attrs, quotes)}
               </label>
             </div>
-            {option.allowTextInput && checked && (
-              <div className="pl-7">
-                <OptionTextInput questionId={question.id} option={option} className="w-full" />
-              </div>
-            )}
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
+
+      <OptionTextInputStack questionId={question.id} entries={textInputEntries} />
 
       {(maxSelections !== undefined || minSelections !== undefined) && (
         <div className="border-t border-gray-200 pt-2">
@@ -454,6 +577,8 @@ function SelectQuestion({
   value: SingleChoiceResponse;
   onChange: (value: SingleChoiceResponse) => void;
 }) {
+  const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
   // OtherChoiceValue fallback: snapshot 호환 (Phase 7 cleanup 까지 유지)
   const selectedValue = isOtherChoiceValue(value)
     ? value.selectedValue
@@ -510,7 +635,7 @@ function SelectQuestion({
         <option value="">선택하세요...</option>
         {question.options?.map((option: QuestionOption) => (
           <option key={option.id} value={option.value}>
-            {option.label}
+            {substituteTokens(option.label, attrs, quotes)}
           </option>
         ))}
       </select>

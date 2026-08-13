@@ -4,6 +4,7 @@ import { OperationsPageHeader } from '@/components/operations/operations-page-he
 import { OperationsTabStrip } from '@/components/operations/operations-tab-strip';
 import { getControlState } from '@/features/operations/server/services/control.service';
 import { getSurveyById } from '@/features/survey-builder/server/services/survey-read.service';
+import { isGuestViewer } from '@/lib/auth/guest-viewer';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -21,12 +22,17 @@ export default async function OperationsLayout({ children, params }: LayoutProps
   const { id: surveyId } = await params;
   const survey = await getSurveyById(surveyId);
   if (!survey || survey.deletedAt) notFound();
-  const control = await getControlState(surveyId);
+  const [control, isGuest] = await Promise.all([getControlState(surveyId), isGuestViewer()]);
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <OperationsPageHeader surveyId={surveyId} surveyTitle={survey.title} control={control} />
-      <OperationsTabStrip surveyId={surveyId} />
+      <OperationsPageHeader
+        surveyId={surveyId}
+        surveyTitle={survey.title}
+        isGuest={isGuest}
+        control={control}
+      />
+      <OperationsTabStrip surveyId={surveyId} isGuest={isGuest} />
       {children}
     </div>
   );

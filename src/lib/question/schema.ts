@@ -51,6 +51,7 @@ const embeddedTable = z.object({
   tableRowsData: z.custom<NonNullable<Question['tableRowsData']>>().optional(),
   tableHeaderGrid: z.custom<NonNullable<Question['tableHeaderGrid']>>().optional(),
   hideColumnLabels: z.boolean().optional(),
+  exportCellOrder: z.enum(['row-first', 'column-first']).optional(),
 });
 
 const choiceGroups = z.object({
@@ -60,6 +61,7 @@ const choiceGroups = z.object({
 const optionList = z.object({
   options: z.custom<NonNullable<Question['options']>>().optional(),
   optionsColumns: z.number().optional(),
+  mobileOptionsColumns: z.number().nullable().optional(),
   optionsAlign: z.enum(['left', 'center', 'right']).optional(),
   allowOtherOption: z.boolean().optional(),
 });

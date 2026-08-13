@@ -5,12 +5,16 @@ import { beforeAll, expect, it, vi } from 'vitest';
 
 import { ChoiceTableResponse } from '@/components/survey-response/choice-table-response';
 import type { Question } from '@/types/survey';
+import type { GroupedChoiceAnswer } from '@/utils/choice-group-helpers';
 
 vi.mock('@/hooks/use-media-query', () => ({
   useMobileView: () => true,
   useMediaQuery: () => true,
 }));
-vi.mock('@/lib/survey/contact-attrs-context', () => ({ useContactAttrs: () => ({}) }));
+vi.mock('@/lib/survey/contact-attrs-context', () => ({
+  useContactAttrs: () => ({}),
+  useAnswerQuotes: () => ({}),
+}));
 
 beforeAll(() => {
   vi.stubGlobal(
@@ -335,7 +339,8 @@ it('선택 후 현재 상세를 유지하고 전체·카드 상태와 기존 min
 
   expect(screen.getAllByRole('checkbox')).toHaveLength(2);
   expect(screen.getByText('1/2개 선택됨')).toBeInTheDocument();
-  expect(screen.getByText(/^전체 /)).toHaveTextContent('전체 1 / 2개 선택');
+  // minSelections=1 — 전체 진행바 분모는 요구 선택 수(1)로 잡힌다 (2026-08-13)
+  expect(screen.getByText(/^전체 /)).toHaveTextContent('전체 1 / 1개 선택');
 
   fireEvent.click(screen.getByRole('button', { name: '목차로' }));
   expect(screen.getByRole('button', { name: /플랫폼 지표.*1\/2/ })).toBeInTheDocument();
@@ -363,9 +368,10 @@ it.each(['radio', 'checkbox'] as const)(
 it('choice 반복행의 interactive rowspan anchor를 승격한 행으로 전체·섹션·항목 상태를 계산한다', () => {
   render(<ControlledRepeatedChoiceRowspanAnchor />);
 
+  // 비그룹 radio 는 표 전체가 단일 선택 — 분모는 셀 수(2)가 아니라 요구 선택 수(1)
   const sectionButton = screen.getByRole('button', { name: /승격 선택 섹션/ });
-  expect(sectionButton).toHaveTextContent('0/2');
-  expect(screen.getByText(/전체/)).toHaveTextContent('전체 0 / 2개 선택');
+  expect(sectionButton).toHaveTextContent('0/1');
+  expect(screen.getByText(/전체/)).toHaveTextContent('전체 0 / 1개 선택');
   fireEvent.click(sectionButton);
 
   const promotedLeafButton = screen.getByRole('button', { name: /승격 선택 항목/ });
@@ -377,10 +383,168 @@ it('choice 반복행의 interactive rowspan anchor를 승격한 행으로 전체
   expect(promotedControls[0]).toBeDisabled();
   expect(promotedControls[1]).toBeEnabled();
   fireEvent.click(promotedControls[1]!);
-  expect(screen.getByText(/전체/)).toHaveTextContent('전체 1 / 2개 선택');
+  expect(screen.getByText(/전체/)).toHaveTextContent('전체 1 / 1개 선택');
 
   fireEvent.click(screen.getByRole('button', { name: '뒤로' }));
   expect(screen.getByRole('button', { name: /승격 선택 항목/ })).toHaveTextContent('1/1');
+});
+
+function groupedRadioRowQuestion(): Question {
+  return {
+    id: 'q-grouped-rad',
+    type: 'radio',
+    title: '업무 수행 빈도',
+    required: false,
+    order: 0,
+    mobileTableDisplayMode: 'drilldown-original-row',
+    mobileDrilldownOmitLeadingColumns: 1,
+    choiceGroups: [
+      { id: 'rad-group-1', type: 'radio', groupKey: 'rad1', label: '' },
+      { id: 'rad-group-2', type: 'radio', groupKey: 'rad2', label: '' },
+    ],
+    tableColumns: [
+      { id: 'gr-c0', label: '항목' },
+      { id: 'gr-c1', label: '안함' },
+      { id: 'gr-c2', label: '가끔' },
+      { id: 'gr-c3', label: '자주' },
+    ],
+    tableRowsData: [
+      {
+        id: 'gr-r1',
+        label: '',
+        cells: [
+          { id: 'gr-r1-label', type: 'text', content: '시장 조사' },
+          {
+            id: 'gr-r1-o1',
+            type: 'choice_opt',
+            content: '',
+            choiceLabel: '조사 안함',
+            choiceGroupId: 'rad-group-1',
+          },
+          {
+            id: 'gr-r1-o2',
+            type: 'choice_opt',
+            content: '',
+            choiceLabel: '조사 가끔',
+            choiceGroupId: 'rad-group-1',
+          },
+          {
+            id: 'gr-r1-o3',
+            type: 'choice_opt',
+            content: '',
+            choiceLabel: '조사 자주',
+            choiceGroupId: 'rad-group-1',
+          },
+        ],
+      },
+      {
+        id: 'gr-r2',
+        label: '',
+        cells: [
+          { id: 'gr-r2-label', type: 'text', content: '마케팅 전략' },
+          {
+            id: 'gr-r2-o1',
+            type: 'choice_opt',
+            content: '',
+            choiceLabel: '전략 안함',
+            choiceGroupId: 'rad-group-2',
+          },
+          {
+            id: 'gr-r2-o2',
+            type: 'choice_opt',
+            content: '',
+            choiceLabel: '전략 가끔',
+            choiceGroupId: 'rad-group-2',
+          },
+          {
+            id: 'gr-r2-o3',
+            type: 'choice_opt',
+            content: '',
+            choiceLabel: '전략 자주',
+            choiceGroupId: 'rad-group-2',
+          },
+        ],
+      },
+    ],
+  };
+}
+
+function ControlledGroupedRadioTable() {
+  const [value, setValue] = useState<GroupedChoiceAnswer>({});
+  return (
+    <ChoiceTableResponse
+      question={groupedRadioRowQuestion()}
+      value={value}
+      onChange={(next) =>
+        setValue(
+          next && typeof next === 'object' && !Array.isArray(next)
+            ? (next as GroupedChoiceAnswer)
+            : {},
+        )
+      }
+    />
+  );
+}
+
+function ControlledMinSelectionsChoiceTable() {
+  const [value, setValue] = useState<string[]>([]);
+  const question: Question = {
+    ...multiChoiceRowQuestion(),
+    minSelections: 2,
+    maxSelections: 2,
+    tableRowsData: [
+      {
+        id: 'r1',
+        label: '',
+        cells: [
+          { id: 'label', type: 'text', content: '플랫폼 지표' },
+          { id: 'choice-active', type: 'choice_opt', content: '', choiceLabel: '활성 사용자' },
+          { id: 'choice-return', type: 'choice_opt', content: '', choiceLabel: '재방문 사용자' },
+          { id: 'choice-new', type: 'choice_opt', content: '', choiceLabel: '신규 사용자' },
+        ],
+      },
+    ],
+  };
+  return (
+    <ChoiceTableResponse
+      question={question}
+      value={value}
+      onChange={(next) => setValue(Array.isArray(next) ? next : [])}
+    />
+  );
+}
+
+it('비그룹 checkbox 의 전체 진행바는 선택지 수가 아니라 minSelections 를 분모로 쓴다', () => {
+  render(<ControlledMinSelectionsChoiceTable />);
+  expect(screen.getByText(/^전체 /)).toHaveTextContent('전체 0 / 2개 선택');
+
+  enterRow('플랫폼 지표');
+  fireEvent.click(screen.getByLabelText('활성 사용자'));
+  fireEvent.click(screen.getByLabelText('재방문 사용자'));
+
+  // min(2) 충족 — 선택지 3개 중 2개여도 진행바는 2/2, 카드 뱃지는 선택 현황(2/3) 유지
+  expect(screen.getByText(/^전체 /)).toHaveTextContent('전체 2 / 2개 선택');
+  fireEvent.click(screen.getByRole('button', { name: '목차로' }));
+  expect(screen.getByRole('button', { name: /플랫폼 지표.*2\/3/ })).toBeInTheDocument();
+});
+
+it('radio 그룹 표는 셀 수가 아니라 그룹당 1개 선택으로 진행도를 센다', () => {
+  render(<ControlledGroupedRadioTable />);
+
+  // 그룹 2개 = 요구 선택 2개 (셀 6개가 아님)
+  expect(screen.getByText(/전체/)).toHaveTextContent('전체 0 / 2개 선택');
+  const firstSection = screen.getByRole('button', { name: /시장 조사/ });
+  expect(firstSection).toHaveTextContent('0/1');
+  // 부제도 "입력 3칸"이 아니라 선택지 개수로 표기한다
+  expect(firstSection).toHaveTextContent('선택지 3개');
+
+  fireEvent.click(firstSection);
+  fireEvent.click(screen.getByRole('radio', { name: '조사 가끔' }));
+  expect(screen.getByText(/전체/)).toHaveTextContent('전체 1 / 2개 선택');
+
+  fireEvent.click(screen.getByRole('button', { name: '목차로' }));
+  expect(screen.getByRole('button', { name: /시장 조사/ })).toHaveTextContent('1/1');
+  expect(screen.getByRole('button', { name: /마케팅 전략/ })).toHaveTextContent('0/1');
 });
 
 it('0-2는 다단 헤더와 본문 1~2행을 같은 열 투영으로 보여준다', () => {

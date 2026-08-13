@@ -14,11 +14,15 @@ vi.mock('@/db', () => ({
   },
 }));
 
-vi.mock('@/db/schema/surveys', () => ({
+vi.mock('@/db/schema/surveys', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/db/schema/surveys')>()),
   savedQuestions: { name: 'name', description: 'description', updatedAt: 'updatedAt' },
 }));
 
-vi.mock('drizzle-orm', () => ({
+// 서비스가 r2-lifecycle(저장 diff 수집)을 import 하면서 스키마 체인의 relations
+// 등 추가 export 가 필요해짐 — 원본을 spread 하고 캡처 대상만 덮는다.
+vi.mock('drizzle-orm', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('drizzle-orm')>()),
   desc: (c: unknown) => c,
   eq: () => ({}),
   gt: () => ({}),

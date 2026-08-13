@@ -4,14 +4,20 @@ import { useCallback, useMemo } from 'react';
 
 import { QuestionInput } from '@/components/survey-response/question-input';
 import { RichDescription } from '@/components/survey-response/step-views/rich-description';
-import { useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { isEmptyHtml } from '@/lib/utils';
 import { isChoiceTableSource } from '@/utils/choice-source';
+import { DEFAULT_REQUIRED_CELL_MESSAGE, resolveRequiredMessage } from '@/utils/required-message';
 import { sanitizeRichHtml } from '@/lib/sanitize';
 import { StepItem } from '@/lib/group-ordering';
 import type { NumericIssue } from '@/lib/survey/numeric-validation';
 import { Question } from '@/types/survey';
+import {
+  DYNAMIC_ROW_SELECTIONS_KEY,
+  getDynamicRowSelections,
+  updateDynamicRowSelections,
+} from '@/utils/dynamic-row-selection-sidecar';
 
 type ResponsesMap = Record<string, unknown>;
 
@@ -22,6 +28,7 @@ export function GroupStepItem({
   questions,
   onResponse,
   isHighlighted,
+  showRequiredMessage,
   issues,
 }: {
   item: StepItem;
@@ -30,6 +37,8 @@ export function GroupStepItem({
   questions: Question[];
   onResponse: (questionId: string, value: unknown) => void;
   isHighlighted: boolean;
+  /** 필수 미응답 안내 문구 표시 — 질문별 requiredMessage 또는 기본 문구. */
+  showRequiredMessage: boolean;
   issues?: NumericIssue[] | undefined;
 }) {
   const q = item.question;
@@ -37,22 +46,59 @@ export function GroupStepItem({
     (value: unknown) => onResponse(q.id, value),
     [onResponse, q.id],
   );
+  const selectedDynamicRowIds = getDynamicRowSelections(responses, q.id);
+  const onDynamicRowSelectionChange = useCallback(
+    (rowIds: string[]) =>
+      onResponse(
+        DYNAMIC_ROW_SELECTIONS_KEY,
+        updateDynamicRowSelections(
+          responses[DYNAMIC_ROW_SELECTIONS_KEY],
+          q.id,
+          rowIds,
+        ),
+      ),
+    [onResponse, q.id, responses],
+  );
   const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
   const titleText = useMemo(
-    () => substituteTokens(q.title ?? '', attrs),
-    [q.title, attrs],
+    () => substituteTokens(q.title ?? '', attrs, quotes),
+    [q.title, attrs, quotes],
   );
   const descriptionHtml = useMemo(
-    () => sanitizeRichHtml(substituteTokens(q.description ?? '', attrs)),
-    [q.description, attrs],
+    () => sanitizeRichHtml(substituteTokens(q.description ?? '', attrs, quotes)),
+    [q.description, attrs, quotes],
   );
+  const subgroupNameText = useMemo(
+    () => (item.subgroupName ? substituteTokens(item.subgroupName, attrs, quotes) : null),
+    [item.subgroupName, attrs, quotes],
+  );
+  // 필수 미응답 안내가 이미 뜨는 질문에서 기본 문구의 필수 셀/상세 이슈는 같은 원인을
+  // 두 번 알리므로 문구를 필수 안내 하나로 합친다 — 배너의 "위치로 이동"(셀/상세 타깃)은
+  // 유지하고, 아래 별도 필수 문구 <p> 를 생략한다 (2026-08-13 결정).
+  // 셀별 지정 문구와 범위/합계/수식 위반은 별개 정보이므로 그대로 둔다.
+  const { visibleIssues, requiredMessageInBanner } = useMemo(() => {
+    if (!showRequiredMessage || !issues?.length) {
+      return { visibleIssues: issues, requiredMessageInBanner: false };
+    }
+    let merged = false;
+    const next = issues.map((issue) => {
+      const isDefaultRequiredIssue =
+        (issue.kind === 'required-cells' || issue.kind === 'required-detail') &&
+        issue.message === DEFAULT_REQUIRED_CELL_MESSAGE;
+      if (!isDefaultRequiredIssue) return issue;
+      merged = true;
+      return { ...issue, message: resolveRequiredMessage(q) };
+    });
+    return { visibleIssues: next, requiredMessageInBanner: merged };
+  }, [issues, showRequiredMessage, q]);
 
   return (
     // 페이지 내 문항 간 여백은 PageStepView 래퍼가 소유한다 (first/last 판정이 래퍼 형제 기준이어야 해서)
     <div>
       {showSubgroupHeading && (
         <h3 className="mb-3 text-sm font-semibold tracking-[0.12em] text-gray-500 uppercase md:text-xs">
-          {item.subgroupName}
+          {subgroupNameText}
         </h3>
       )}
       <div
@@ -65,9 +111,7 @@ export function GroupStepItem({
           <div className="flex items-start">
             <div
               id={`q-label-${q.id}`}
-              className={`px-1 text-lg leading-snug font-semibold break-keep ${
-                isHighlighted ? 'text-red-700' : 'text-gray-900'
-              }`}
+              className="px-1 text-lg leading-snug font-semibold break-keep text-gray-900"
             >
               {titleText}
               {q.required && (
@@ -110,9 +154,16 @@ export function GroupStepItem({
             onChange={onChange}
             allResponses={responses as Record<string, unknown>}
             allQuestions={questions}
-            numericIssues={issues}
+            numericIssues={visibleIssues}
+            selectedDynamicRowIds={selectedDynamicRowIds}
+            onDynamicRowSelectionChange={onDynamicRowSelectionChange}
           />
         </div>
+        {showRequiredMessage && !requiredMessageInBanner && (
+          <p className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {resolveRequiredMessage(q)}
+          </p>
+        )}
       </div>
     </div>
   );

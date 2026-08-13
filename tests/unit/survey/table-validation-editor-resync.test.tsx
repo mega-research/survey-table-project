@@ -1,4 +1,5 @@
-import { render, cleanup, fireEvent } from '@testing-library/react';
+import { render, cleanup, fireEvent, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 // TableOptionSelector 는 실제 옵션 셀 파생에 의존하므로 stub 처리한다.
@@ -115,5 +116,36 @@ describe('TableValidationEditor in-place 질문 전환 재동기화', () => {
     // (재동기화가 잘못 발화하면 onUpdate 가 호출되거나 규칙 수가 1로 줄어든다)
     const newRule = getByText(/규칙 2/);
     expect(newRule).not.toBeNull();
+  });
+
+  it('입력 필드 기대값을 쉼표로 구분해 연속 입력할 수 있다', async () => {
+    const inputRule: TableValidationRule = {
+      ...ruleWith('rule-input', '숫자값 분기'),
+      type: 'any-of',
+      conditions: {
+        checkType: 'input',
+        rowIds: ['r1'],
+        cellColumnIndex: 0,
+      },
+    };
+    const question = makeQuestion('q-input', [inputRule]);
+    const onUpdate = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <TableValidationEditor
+        question={question}
+        onUpdate={onUpdate}
+        allQuestions={[question]}
+      />,
+    );
+
+    await user.click(screen.getByText(/숫자값 분기/));
+    const input = screen.getByLabelText('기대하는 값들 (선택사항)');
+    await user.type(input, '2, 8');
+
+    expect(input).toHaveValue('2, 8');
+    const latestRules = onUpdate.mock.calls.at(-1)?.[0] as TableValidationRule[];
+    expect(latestRules[0]?.conditions.expectedValues).toEqual(['2', '8']);
   });
 });

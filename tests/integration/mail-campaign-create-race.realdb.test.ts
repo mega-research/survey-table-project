@@ -544,6 +544,7 @@ run('메일 캠페인 생성 DB 경쟁', () => {
         const firstCreation = trackOperation(createCampaign(
           campaignInput(fixture, fixture.testTargetId, 'test-a'),
           randomUUID(),
+          false,
         ));
         creations.push(firstCreation);
         const firstIdentity = await observedTransactions.identityAt(0);
@@ -552,6 +553,7 @@ run('메일 캠페인 생성 DB 경쟁', () => {
         const secondCreation = trackOperation(createCampaign(
           campaignInput(fixture, fixture.testTargetId, 'test-b'),
           randomUUID(),
+          false,
         ));
         creations.push(secondCreation);
         const secondIdentity = await observedTransactions.identityAt(1);
@@ -590,6 +592,7 @@ run('메일 캠페인 생성 DB 경쟁', () => {
           const realCreation = trackOperation(createCampaign(
             campaignInput(fixture, fixture.realTargetId, 'real-a'),
             randomUUID(),
+            false,
           ));
           await withTimeout(
             realCreation,
@@ -639,6 +642,7 @@ run('메일 캠페인 생성 DB 경쟁', () => {
         creation = trackOperation(createCampaign(
           campaignInput(fixture, fixture.testTargetId, 'locked-test'),
           randomUUID(),
+          false,
         ));
         operations.push(creation);
         const creationIdentity = await observedTransactions.identityAt(0);
@@ -703,6 +707,7 @@ run('메일 캠페인 생성 DB 경쟁', () => {
           const staleCreation = trackOperation(createCampaign(
             campaignInput(fixture, fixture.testTargetId, 'stale-test'),
             randomUUID(),
+            false,
           ));
           await withTimeout(
             expect(staleCreation).rejects.toThrow('화면을 새로고침'),

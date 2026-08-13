@@ -14,6 +14,10 @@ import { ContactEditHistoryCard } from '@/components/operations/contacts/contact
 import { ContactInfoCard } from '@/components/operations/contacts/contact-info-card';
 import { ContactMailHistoryCard } from '@/components/operations/contacts/contact-mail-history-card';
 import { CopyInviteUrlButton } from '@/components/operations/contacts/copy-invite-url-button';
+import {
+  SendSingleMailDialog,
+  type MailTemplateOption,
+} from '@/components/operations/contacts/send-single-mail-dialog';
 import type {
   ContactColumnScheme,
   ContactMethod,
@@ -53,6 +57,8 @@ interface ContactDetailFormProps {
   mailHistory?: MailHistoryRow[];
   /** 응답 편집 audit 이력 (편집 모드에서만 의미). */
   editLogs?: ResponseEditLogRow[];
+  /** 단건 메일 발송 다이얼로그용 (편집 모드에서만 의미). */
+  mailSend?: { templates: MailTemplateOption[]; disabledReason: string | null };
 }
 
 export function ContactDetailForm({
@@ -63,6 +69,7 @@ export function ContactDetailForm({
   initial,
   mailHistory = [],
   editLogs = [],
+  mailSend,
 }: ContactDetailFormProps) {
   const router = useRouter();
   const isEdit = initial != null;
@@ -343,7 +350,19 @@ export function ContactDetailForm({
                 attempts={initial.attempts}
                 resultCodes={resultCodes}
               />
-              <ContactMailHistoryCard rows={mailHistory} />
+              <ContactMailHistoryCard
+                rows={mailHistory}
+                action={
+                  mailSend ? (
+                    <SendSingleMailDialog
+                      surveyId={surveyId}
+                      contactTargetId={initial.id}
+                      templates={mailSend.templates}
+                      disabledReason={mailSend.disabledReason}
+                    />
+                  ) : undefined
+                }
+              />
               <ContactEditHistoryCard
                 rows={editLogs}
                 hasResponse={initial.responseId != null}

@@ -7,7 +7,7 @@ import { CheckCircle2 } from 'lucide-react';
 import { MobileDisplayCells } from '@/components/survey/mobile-display-cells';
 import { Card, CardContent } from '@/components/ui/card';
 import type { useColumnSectionMap } from '@/hooks/use-row-groups';
-import { useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import type { TableColumn, TableRow } from '@/types/survey';
@@ -19,7 +19,10 @@ import {
   findMobileHeaderCell,
   hasExplicitHiddenMobileHeaderCell,
   hasMobileDisplayCells,
+  resolveMobileCellLabel,
+  type MobileLegendLabel,
 } from '@/utils/mobile-display-cells';
+import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
 import { getAlignmentClasses } from '@/utils/table-grid-utils';
 
 import { InteractiveCell } from './cells';
@@ -42,7 +45,7 @@ interface MobileRowCardProps {
   /** 차단형 검증 위반 셀 (빨간 ring 하이라이트) */
   errorCellIds?: Set<string> | undefined;
   /** 표 전체 "카드 범례"(mobileDisplay: 'legend') 라벨 — 카드 상단 한 행에 양끝 정렬로 표시 */
-  legendLabels?: string[] | undefined;
+  legendLabels?: MobileLegendLabel[] | undefined;
 }
 
 function findPreviousSection(
@@ -72,6 +75,7 @@ export const MobileRowCard = React.memo(function MobileRowCard({
   legendLabels,
 }: MobileRowCardProps) {
   const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
 
   const inputCells = useMemo(
     () =>
@@ -93,16 +97,21 @@ export const MobileRowCard = React.memo(function MobileRowCard({
     [row.cells],
   );
 
-  const rowDesc = useMemo(() => {
+  const rowHeader = useMemo(() => {
     // 'header' 로 지정된 text 셀이 있으면 카드 제목으로 우선 사용
     const headerCell = findMobileHeaderCell(row.cells);
     const headerText = headerCell ? (headerCell.content ?? '').trim() : '';
-    if (headerText) return headerText;
-    if (hasExplicitHiddenMobileHeaderCell(row.cells)) return '';
+    if (headerText) {
+      return {
+        label: headerText,
+        ...(headerCell?.textBold ? { textBold: true } : {}),
+      };
+    }
+    if (hasExplicitHiddenMobileHeaderCell(row.cells)) return { label: '' };
     const descCell = row.cells.find(
       (c) => c.type === 'radio' && !c.isHidden && c.radioOptions?.length === 1,
     );
-    return descCell?.radioOptions?.[0]?.label || row.label;
+    return { label: descCell?.radioOptions?.[0]?.label || row.label };
   }, [row.cells, row.label]);
 
   const mobileCells = useMemo(() => {
@@ -113,12 +122,15 @@ export const MobileRowCard = React.memo(function MobileRowCard({
       const activeSection = section ?? previousSection;
       const sectionHeader = section && section !== previousSection ? section : null;
 
-      const cellLabel = entry.cell.exportLabel?.trim();
-      const shortLabel = cellLabel || (sectionHeader
+      // 셀 라벨(mobileLabel) → 엑셀 라벨(exportLabel) → 열 제목 순으로 폴백.
+      // hideColumnLabels 일 때는 열 제목 폴백 없이 셀 자체 라벨만 쓴다.
+      const columnFallback = sectionHeader
         ? columnLabel
         : activeSection && columnLabel.startsWith(activeSection)
           ? columnLabel.slice(activeSection.length).replace(/^[_\s·]+/, '') || columnLabel
-          : columnLabel);
+          : columnLabel;
+      const cellLabel = resolveMobileCellLabel(entry.cell);
+      const shortLabel = resolveMobileCellLabel(entry.cell, columnFallback);
 
       return {
         ...entry,
@@ -130,6 +142,7 @@ export const MobileRowCard = React.memo(function MobileRowCard({
       };
     });
   }, [columnSectionMap, inputCells, visibleColumns]);
+  const firstErrorCellId = inputCells.find(({ cell }) => errorCellIds?.has(cell.id))?.cell.id;
 
   // 범례 첫/마지막 항목에 이 카드 옵션 셀의 첫/마지막 옵션 라벨(⓪/⑩ 등)을 자동 접두.
   const decoratedLegendLabels = useMemo(() => {
@@ -143,10 +156,12 @@ export const MobileRowCard = React.memo(function MobileRowCard({
       : [];
     const first = opts[0]?.label?.trim();
     const last = opts.length > 1 ? opts[opts.length - 1]?.label?.trim() : undefined;
-    return legendLabels.map((label, i) => {
-      if (i === 0 && first) return `${first} ${label}`;
-      if (i === legendLabels.length - 1 && last) return `${last} ${label}`;
-      return label;
+    return legendLabels.map((legend, i) => {
+      if (i === 0 && first) return { ...legend, label: `${first} ${legend.label}` };
+      if (i === legendLabels.length - 1 && last) {
+        return { ...legend, label: `${last} ${legend.label}` };
+      }
+      return legend;
     });
   }, [legendLabels, inputCells]);
 
@@ -156,6 +171,8 @@ export const MobileRowCard = React.memo(function MobileRowCard({
 
   return (
     <Card
+      data-row-id={row.id}
+      {...(firstErrorCellId ? { 'data-cell-id': firstErrorCellId } : {})}
       className={cn(
         'mobile-row-card overflow-hidden transition-all duration-200',
         completed
@@ -166,9 +183,15 @@ export const MobileRowCard = React.memo(function MobileRowCard({
       <div className={cn('border-b px-4 py-3', completed ? 'bg-green-50' : 'bg-gray-50/80')}>
         <div className="flex items-center justify-between">
           <div className="min-w-0 flex-1">
-            {rowDesc && (
-              <p className="text-sm font-semibold leading-snug text-gray-900">
-                {substituteTokens(rowDesc, attrs)}
+            {rowHeader.label && (
+              <p
+                className={cn(
+                  'text-sm font-semibold leading-snug text-gray-900',
+                  getCellTextClassName(rowHeader),
+                )}
+                style={getCellTextStyle(rowHeader)}
+              >
+                {substituteTokens(rowHeader.label, attrs, quotes)}
               </p>
             )}
           </div>
@@ -186,12 +209,17 @@ export const MobileRowCard = React.memo(function MobileRowCard({
             라벨 사이는 점선 리더로 채워 양끝 대응 관계를 시각화 */}
         {decoratedLegendLabels.length > 0 && inputCells.length > 0 && (
           <div className="flex items-center gap-2 text-xs text-gray-500">
-            {decoratedLegendLabels.map((label, i) => (
+            {decoratedLegendLabels.map((legend, i) => (
               <React.Fragment key={i}>
                 {i > 0 && (
                   <span aria-hidden className="min-w-3 flex-1 border-b border-dotted border-gray-300" />
                 )}
-                <span>{substituteTokens(label, attrs)}</span>
+                <span
+                  className={getCellTextClassName(legend)}
+                  style={getCellTextStyle(legend)}
+                >
+                  {substituteTokens(legend.label, attrs, quotes)}
+                </span>
               </React.Fragment>
             ))}
           </div>
@@ -215,7 +243,7 @@ export const MobileRowCard = React.memo(function MobileRowCard({
                 <div className="flex items-center gap-2 pt-1 first:pt-0">
                   <div className="h-px flex-1 bg-gray-200" />
                   <span className="text-xs font-semibold text-gray-500">
-                    {substituteTokens(sectionHeader, attrs)}
+                    {substituteTokens(sectionHeader, attrs, quotes)}
                   </span>
                   <div className="h-px flex-1 bg-gray-200" />
                 </div>
@@ -230,7 +258,7 @@ export const MobileRowCard = React.memo(function MobileRowCard({
                     <div className="flex items-start gap-1.5">
                       <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
                       <span className="line-clamp-2 text-sm font-medium text-gray-900">
-                        {substituteTokens(displayLabel, attrs)}
+                        {substituteTokens(displayLabel, attrs, quotes)}
                       </span>
                     </div>
                   );
@@ -256,6 +284,7 @@ export const MobileRowCard = React.memo(function MobileRowCard({
                         isTestMode={isTestMode}
                         value={value}
                         onChange={onChange}
+                        rowCells={row.cells}
                       />
                     </div>
                     <div
@@ -270,6 +299,7 @@ export const MobileRowCard = React.memo(function MobileRowCard({
                         isTestMode={isTestMode}
                         value={value}
                         onChange={onChange}
+                        rowCells={row.cells}
                       />
                     </div>
                   </div>
@@ -287,6 +317,7 @@ export const MobileRowCard = React.memo(function MobileRowCard({
                       isTestMode={isTestMode}
                       value={value}
                       onChange={onChange}
+                      rowCells={row.cells}
                     />
                   </div>
                 );

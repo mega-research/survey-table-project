@@ -440,6 +440,7 @@ POST   /api/upload/notice-attachment           # 공지 첨부 업로드 (삭제
 GET    /api/surveys/[surveyId]/export          # SPSS(.sav)/엑셀 export (인증 필요, 파일 스트림)
 GET    /api/surveys/[surveyId]/export/split-preview  # 분할 export 미리보기
 POST   /api/response/segment                   # 구간 응답 저장 (sendBeacon — REST 유지)
+POST   /api/response/draft                     # 이탈 시점 임시 저장 (sendBeacon — REST 유지)
 *      /api/inngest                            # Inngest 핸들러
 POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
 ```
@@ -500,11 +501,11 @@ SUPABASE_SERVICE_ROLE_KEY=
 DATABASE_URL=                  # postgres-js → Supabase Transaction pooler(pgBouncer, 6543). prepare:false 필수
 
 # Cloudflare R2
-R2_ACCOUNT_ID=
-R2_ACCESS_KEY_ID=
-R2_SECRET_ACCESS_KEY=
-R2_BUCKET_NAME=
-R2_PUBLIC_URL=
+CLOUDFLARE_ACCOUNT_ID=
+CLOUDFLARE_R2_ACCESS_KEY=
+CLOUDFLARE_R2_SECRET_KEY=
+CLOUDFLARE_R2_BUCKET=
+CLOUDFLARE_R2_PUBLIC_URL=
 
 # 메일 (Resend)
 RESEND_API_KEY=

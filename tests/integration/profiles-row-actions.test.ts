@@ -687,6 +687,7 @@ describe('profiles-row-actions', () => {
           questionResponses: { [qid]: 'new' },
         },
         { id: 'admin-1', email: 'a@b.com' },
+        false,
       );
 
       const after = h.responseStore.get(responseId);
@@ -708,6 +709,7 @@ describe('profiles-row-actions', () => {
         saveAdminEdit(
           { surveyId, responseId, questionResponses: {} },
           { id: 'admin-1', email: 'a@b.com' },
+          false,
         ),
       ).rejects.toThrow('Cannot edit deleted response');
     });
@@ -737,6 +739,7 @@ describe('profiles-row-actions', () => {
           questionResponses: { [newQid]: 'NEW_ANS' },
         },
         { id: 'admin-1', email: 'a@b.com' },
+        false,
       );
 
       const remaining = Array.from(h.answerStore.values()).filter(
@@ -755,6 +758,7 @@ describe('profiles-row-actions', () => {
         saveAdminEdit(
           { surveyId, responseId: 'nonexistent-id', questionResponses: {} },
           { id: 'admin-1', email: 'a@b.com' },
+          false,
         ),
       ).rejects.toThrow('Response not found');
     });

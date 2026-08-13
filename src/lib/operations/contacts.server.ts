@@ -16,6 +16,7 @@ import {
 import type {
   ContactColumnScheme,
   ResponseEditChange,
+  ContactUploadMode,
 } from '@/db/schema/schema-types';
 import type { MailRecipientStatus } from '@/db/schema/mail';
 import { mergeChangeLabels } from '@/lib/operations/response-edit-diff';
@@ -204,12 +205,59 @@ export async function listContactsForSurvey(
   return { rows, total, page: clampedPage };
 }
 
+/** 다운로드 상한 — 초과 시 라우트가 400 반환 */
+export const MAX_CONTACT_EXPORT_ROWS = 50000;
+
+export interface ContactExportSourceRow {
+  id: string;
+  resid: number;
+  attrs: Record<string, string>;
+  inviteCode: string;
+  latestResultCode: string | null;
+  latestAttemptNo: number | null;
+  progressPct: number | null;
+  latestMailStatus: MailRecipientStatus | null;
+}
+
+/**
+ * 조사 대상 엑셀 다운로드용 전체 조회 — listContactsForSurvey 와 동일한
+ * 최신 회차/진행율/메일 상태 표현식 재사용, 페이지네이션 없이 resid 오름차순.
+ * 상한 초과 감지를 위해 MAX_CONTACT_EXPORT_ROWS + 1 건까지 읽는다.
+ */
+export async function listContactsForExport(
+  surveyId: string,
+  scope: OperationsDataScope,
+): Promise<ContactExportSourceRow[]> {
+  const rows = await db
+    .select({
+      id: contactTargets.id,
+      resid: contactTargets.resid,
+      attrs: contactTargets.attrs,
+      inviteCode: contactTargets.inviteCode,
+      latestResultCode: latestResultCodeExpr.as('latest_result_code'),
+      latestAttemptNo: latestAttemptNoExpr.as('latest_attempt_no'),
+      progressPct: progressPctExpr.as('progress_pct'),
+      latestMailStatus: latestMailStatusExpr.as('latest_mail_status'),
+    })
+    .from(contactTargets)
+    .where(and(eq(contactTargets.surveyId, surveyId), targetScopeCondition(scope)))
+    .orderBy(asc(contactTargets.resid))
+    .limit(MAX_CONTACT_EXPORT_ROWS + 1);
+
+  return rows.map((r) => ({
+    ...r,
+    attrs: (r.attrs ?? {}) as Record<string, string>,
+  }));
+}
+
 export interface ContactUploadRow {
   id: string;
   filename: string;
   uploadedRows: number;
   mergedRows: number;
   errorRows: number;
+  mode: ContactUploadMode;
+  skippedRows: number;
   createdAt: Date;
 }
 
@@ -221,6 +269,8 @@ export async function listContactUploads(surveyId: string): Promise<ContactUploa
       uploadedRows: contactUploads.uploadedRows,
       mergedRows: contactUploads.mergedRows,
       errorRows: contactUploads.errorRows,
+      mode: contactUploads.mode,
+      skippedRows: contactUploads.skippedRows,
       createdAt: contactUploads.createdAt,
     })
     .from(contactUploads)
@@ -298,6 +348,7 @@ export interface ContactDetailRow {
   inviteToken: string;
   inviteCode: string;
   respondedAt: Date | null;
+  unsubscribedAt: Date | null;
   responseId: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -336,6 +387,7 @@ export async function getContactDetailById(
       inviteToken: contactTargets.inviteToken,
       inviteCode: contactTargets.inviteCode,
       respondedAt: contactTargets.respondedAt,
+      unsubscribedAt: contactTargets.unsubscribedAt,
       responseId: contactTargets.responseId,
       createdAt: contactTargets.createdAt,
       updatedAt: contactTargets.updatedAt,
@@ -397,6 +449,8 @@ export interface MailHistoryRow {
   id: string;
   campaignTitle: string;
   runNumber: number;
+  /** 'single'이면 단건 발송 — 회차 대신 "단건" 표기 */
+  kind: 'bulk' | 'single';
   status: MailRecipientStatus;
   sentAt: Date | null;
   deliveredAt: Date | null;
@@ -416,6 +470,7 @@ export async function getMailRecipientsForTarget(
       id: mailRecipients.id,
       campaignTitle: mailCampaigns.title,
       runNumber: mailCampaigns.runNumber,
+      kind: mailCampaigns.kind,
       status: mailRecipients.status,
       sentAt: mailRecipients.sentAt,
       deliveredAt: mailRecipients.deliveredAt,

@@ -1,6 +1,7 @@
 import * as z from 'zod';
 
-import { authed } from '@/server/orpc';
+import { getGuestSurveyId } from '@/lib/auth/guest-grants';
+import { assertSurveyAccess, scoped } from '@/server/orpc';
 
 import {
   AddContactAttemptInput,
@@ -10,24 +11,30 @@ import {
 } from '../../domain/contact-attempt';
 import * as svc from '../services/contact-attempts.service';
 
-const add = authed
+const add = scoped
   .input(AddContactAttemptInput)
   .output(AttemptResultSchema)
-  .handler(({ input }) => svc.addAttempt(input));
+  .handler(({ context, input }) => {
+    assertSurveyAccess(context.user.id, input.surveyId);
+    // 인증된 context 에서 1회 파생 — 서비스가 auth 를 재조회하지 않는다.
+    return svc.addAttempt(input, getGuestSurveyId(context.user.id) !== null);
+  });
 
-const update = authed
+const update = scoped
   .input(UpdateContactAttemptInput)
   .output(z.object({ ok: z.literal(true) }))
-  .handler(async ({ input }) => {
-    await svc.updateAttempt(input);
+  .handler(async ({ context, input }) => {
+    assertSurveyAccess(context.user.id, input.surveyId);
+    await svc.updateAttempt(input, getGuestSurveyId(context.user.id) !== null);
     return { ok: true as const };
   });
 
-const remove = authed
+const remove = scoped
   .input(DeleteContactAttemptInput)
   .output(z.object({ ok: z.literal(true) }))
-  .handler(async ({ input }) => {
-    await svc.deleteAttempt(input);
+  .handler(async ({ context, input }) => {
+    assertSurveyAccess(context.user.id, input.surveyId);
+    await svc.deleteAttempt(input, getGuestSurveyId(context.user.id) !== null);
     return { ok: true as const };
   });
 

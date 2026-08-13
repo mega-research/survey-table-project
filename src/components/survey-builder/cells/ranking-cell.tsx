@@ -1,8 +1,12 @@
 'use client';
 
+/* eslint-disable jsx-a11y/role-supports-aria-props -- aria-invalid 전역 상태를 복수 순위 입력의 검증 그룹에 연결한다. */
+
 import React, { useMemo } from 'react';
 
 import { RankingDropdownStack } from '@/components/survey-response/ranking-dropdown-stack';
+import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import type { RankingAnswer } from '@/types/survey';
 import { parseRankingAnswers } from '@/utils/ranking-shared';
 
@@ -14,7 +18,12 @@ export const RankingCell = React.memo(function RankingCell({
   cell,
   cellResponse,
   onUpdateValue,
+  inputIdScope,
+  ariaInvalid,
+  ariaDescribedBy,
 }: InteractiveCellProps) {
+  const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
   const config = cell.rankingConfig;
   const options = cell.rankingOptions ?? [];
   const requestedPositions = Math.max(1, config?.positions ?? 3);
@@ -35,8 +44,19 @@ export const RankingCell = React.memo(function RankingCell({
   }
 
   return (
-    <CellContentLayout content={cell.content} position={cell.textPosition}>
-      <div className="flex w-full flex-col space-y-2">
+    <CellContentLayout
+      content={substituteTokens(cell.content, attrs, quotes)}
+      position={cell.textPosition}
+      bold={cell.textBold}
+      textColor={cell.textColor}
+    >
+      <div
+        id={inputIdScope ? `${inputIdScope}-${cell.id}` : undefined}
+        className="flex w-full flex-col space-y-2"
+        role="group"
+        aria-invalid={ariaInvalid || undefined}
+        aria-describedby={ariaDescribedBy}
+      >
         <RankingDropdownStack
           answers={answers}
           options={options}
@@ -44,7 +64,11 @@ export const RankingCell = React.memo(function RankingCell({
           allowDuplicates={allowDuplicates}
           allowOther={false}
           onChange={(next) => onUpdateValue(next)}
+          inputIdScope={inputIdScope ? `${inputIdScope}-${cell.id}` : undefined}
+          ariaInvalid={ariaInvalid}
+          ariaDescribedBy={ariaDescribedBy}
           {...(cell.optionsColumns !== undefined ? { columns: cell.optionsColumns } : {})}
+          detailTargetScopeId={cell.id}
           compact
         />
         {positions < requestedPositions && (

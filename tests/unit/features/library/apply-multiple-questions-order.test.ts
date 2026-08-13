@@ -109,6 +109,36 @@ describe('applyMultipleSavedQuestions 순서 보존 (L75 회귀)', () => {
     expect(reloadedMode).toBe('original');
   });
 
+  it('행별 원본 문항 설정과 상세 범위를 보관함 적용 뒤에도 보존한다', async () => {
+    findMany.mockResolvedValue([
+      {
+        id: 'row-wise-original',
+        question: {
+          id: 'row-wise-table',
+          type: 'table',
+          title: '행별 원본 문항',
+          required: false,
+          order: 3,
+          mobileTableDisplayMode: 'row-wise-original',
+          mobileDrilldownOmitLeadingColumns: 2,
+          mobileDrilldownRepeatHeaderStartRow: 1,
+          mobileDrilldownRepeatHeaderEndRow: 3,
+          tableColumns: [],
+          tableRowsData: [],
+        },
+      },
+    ]);
+
+    const [applied] = await applyMultipleSavedQuestions(['row-wise-original']);
+
+    expect(applied).toMatchObject({
+      mobileTableDisplayMode: 'row-wise-original',
+      mobileDrilldownOmitLeadingColumns: 2,
+      mobileDrilldownRepeatHeaderStartRow: 1,
+      mobileDrilldownRepeatHeaderEndRow: 3,
+    });
+  });
+
   it('필드가 없는 과거 모바일 표 질문은 적용 시 반복 헤더 0/0으로 canonicalize한다', async () => {
     findMany.mockResolvedValue([{
       id: 'legacy-repeat-header',

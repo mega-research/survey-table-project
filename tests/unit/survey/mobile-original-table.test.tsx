@@ -19,6 +19,7 @@ vi.mock('@/hooks/use-media-query', () => ({
 }));
 vi.mock('@/lib/survey/contact-attrs-context', () => ({
   useContactAttrs: () => ({}),
+  useAnswerQuotes: () => ({}),
 }));
 // 모바일 카드 경로는 스텁으로 식별
 vi.mock('@/components/survey-builder/mobile-table-stepper', () => ({
@@ -106,6 +107,61 @@ describe('InteractiveTableResponse — 모바일 원본 표 분기', () => {
     expect(screen.queryByTestId('mobile-stepper')).toBeNull();
     expect(screen.queryByTestId('mobile-drilldown')).toBeNull();
     expect(screen.getByText('점수')).toBeInTheDocument();
+  });
+
+  it('mobileTableDisplayMode original 이면 셀 배경색은 기존 모바일 배경을 유지한다', () => {
+    const styledRows = [
+      {
+        ...rows[0],
+        cells: [
+          { ...rows[0]!.cells[0], backgroundColor: '#AABBCC' },
+          rows[0]!.cells[1],
+        ],
+      },
+    ];
+
+    render(
+      <InteractiveTableResponse
+        questionId="q1"
+        columns={columns as never}
+        rows={styledRows as never}
+        onChange={() => {}}
+        mobileTableDisplayMode="original"
+      />,
+    );
+
+    expect(document.querySelector('[data-cell-id="r1c0"]')).not.toHaveStyle({
+      backgroundColor: '#AABBCC',
+    });
+  });
+
+  it('모바일 original 가상화 표도 셀 배경색을 적용하지 않는다', () => {
+    const virtualizedRows = Array.from({ length: 100 }, (_, index) => ({
+      id: `virtual-row-${index}`,
+      label: '',
+      cells: [
+        {
+          id: `virtual-cell-${index}`,
+          type: 'input' as const,
+          content: `행 ${index + 1}`,
+          ...(index === 0 ? { backgroundColor: '#AABBCC' } : {}),
+        },
+      ],
+    }));
+
+    render(
+      <InteractiveTableResponse
+        questionId="q1"
+        columns={[columns[0]] as never}
+        rows={virtualizedRows as never}
+        onChange={() => {}}
+        mobileTableDisplayMode="original"
+      />,
+    );
+
+    expect(document.querySelector('[data-cell-id="virtual-cell-0"]')).not.toHaveStyle({
+      backgroundColor: '#AABBCC',
+    });
   });
 });
 

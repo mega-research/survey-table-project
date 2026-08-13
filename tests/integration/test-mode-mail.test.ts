@@ -204,7 +204,7 @@ describe('테스트 모드 메일 캠페인 생성', () => {
     state.surveyMode = true;
     state.targets = [{ id: TEST_ID, surveyId: SURVEY_ID, isTest: true }];
 
-    await createCampaign(input([TEST_ID]), USER_ID);
+    await createCampaign(input([TEST_ID]), USER_ID, false);
 
     expect(state.surveyShareLocks).toBe(1);
     expect(state.executeQueries[0]?.sql).toContain('next_campaign_run_number');
@@ -213,6 +213,7 @@ describe('테스트 모드 메일 캠페인 생성', () => {
     expect(state.campaignValues).toMatchObject({
       isTest: true,
       title: '[TEST] 1차 안내',
+      // 수신자에게 보이는 메일 제목(subject)은 테스트 모드에서도 접두어 없이 원문 보존 (5a73506b)
       subjectSnapshot: '설문 참여',
     });
     expect(state.recipientIds).toEqual([TEST_ID]);
@@ -222,7 +223,7 @@ describe('테스트 모드 메일 캠페인 생성', () => {
     state.surveyMode = false;
     state.targets = [{ id: TEST_ID, surveyId: SURVEY_ID, isTest: true }];
 
-    await expect(createCampaign(input([TEST_ID]), USER_ID)).rejects.toThrow('화면을 새로고침');
+    await expect(createCampaign(input([TEST_ID]), USER_ID, false)).rejects.toThrow('화면을 새로고침');
     expect(state.campaignValues).toBeNull();
     expect(state.recipientIds).toEqual([]);
   });
@@ -234,7 +235,7 @@ describe('테스트 모드 메일 캠페인 생성', () => {
       { id: REAL_ID, surveyId: SURVEY_ID, isTest: false },
     ];
 
-    await expect(createCampaign(input([TEST_ID, REAL_ID]), USER_ID)).rejects.toThrow(
+    await expect(createCampaign(input([TEST_ID, REAL_ID]), USER_ID, false)).rejects.toThrow(
       '화면을 새로고침',
     );
     expect(state.campaignValues).toBeNull();
@@ -248,7 +249,7 @@ describe('테스트 모드 메일 캠페인 생성', () => {
       { id: OTHER_SURVEY_TARGET_ID, surveyId: OTHER_SURVEY_ID, isTest: false },
     ];
 
-    await createCampaign(input([REAL_ID], '  1차 안내  '), USER_ID);
+    await createCampaign(input([REAL_ID], '  1차 안내  '), USER_ID, false);
 
     expect(state.executeQueries[0]?.params).toContain(false);
     expect(state.campaignValues).toMatchObject({
@@ -267,7 +268,7 @@ describe('테스트 모드 메일 캠페인 생성', () => {
       { id: OTHER_SURVEY_TARGET_ID, surveyId: OTHER_SURVEY_ID, isTest: true },
     ];
 
-    await createCampaign(input([TEST_ID]), USER_ID);
+    await createCampaign(input([TEST_ID]), USER_ID, false);
 
     expect(state.recipientIds).toEqual([TEST_ID]);
   });
@@ -280,20 +281,20 @@ describe('테스트 모드 메일 캠페인 생성', () => {
     ];
 
     await expect(
-      createCampaign(input([TEST_ID, OTHER_SURVEY_TARGET_ID]), USER_ID),
+      createCampaign(input([TEST_ID, OTHER_SURVEY_TARGET_ID]), USER_ID, false),
     ).rejects.toThrow('화면을 새로고침');
     expect(state.campaignValues).toBeNull();
   });
 
-  it('제목의 반복된 [TEST] 접두어는 정규화하고 subject snapshot 은 원본을 유지한다', async () => {
+  it('반복된 [TEST] 접두어는 관리용 제목에서만 정규화하고 메일 제목은 원문 보존한다', async () => {
     state.surveyMode = true;
     state.templateSubject = ' [TEST] [TEST] 설문 참여 ';
     state.targets = [{ id: TEST_ID, surveyId: SURVEY_ID, isTest: true }];
 
-    await createCampaign(input([TEST_ID], ' [TEST] [TEST] 1차 안내 '), USER_ID);
+    await createCampaign(input([TEST_ID], ' [TEST] [TEST] 1차 안내 '), USER_ID, false);
 
     expect(state.campaignValues?.['title']).toBe('[TEST] 1차 안내');
-    // subject 는 접두사 정규화 대상이 아님 — 템플릿 원본 그대로 저장 (5a73506b)
+    // subject는 접두어 정규화 대상이 아님 — 템플릿 원문 그대로 스냅샷 (5a73506b)
     expect(state.campaignValues?.['subjectSnapshot']).toBe(' [TEST] [TEST] 설문 참여 ');
   });
 });

@@ -3,7 +3,12 @@ import { ORPCError } from '@orpc/server';
 import { isSpssVarNameError } from '@/lib/spss/variable-name-guard';
 import { authed } from '@/server/orpc';
 
-import { PublishSurveyInput, SurveyVersionRowSchema } from '../../domain/survey-publish';
+import {
+  MigratableCountInput,
+  MigratableCountOutput,
+  PublishSurveyInput,
+  SurveyVersionRowSchema,
+} from '../../domain/survey-publish';
 import * as svc from '../services/survey-publish.service';
 
 /**
@@ -29,6 +34,16 @@ const publishSurvey = authed
     }
   });
 
+/**
+ * 배포 확인 안내용 이관 대상 응답 수 (ADR-0014).
+ * "진행 중 응답 N건이 새 버전으로 이어집니다" 문구의 N.
+ */
+const migratableCount = authed
+  .input(MigratableCountInput)
+  .output(MigratableCountOutput)
+  .handler(({ input }) => svc.countMigratableResponses(input));
+
 export const publish = {
   publish: publishSurvey,
+  migratableCount,
 };

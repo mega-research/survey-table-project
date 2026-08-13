@@ -1,5 +1,5 @@
 import { createRouterClient } from '@orpc/server';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
@@ -36,6 +36,7 @@ function validInput() {
 
 describe('mail.templates procedures', () => {
   beforeEach(() => vi.clearAllMocks());
+  afterEach(() => vi.unstubAllEnvs());
 
   it('create는 입력을 service.createMailTemplate에 위임하고 결과를 반환한다', async () => {
     vi.mocked(svc.createMailTemplate).mockResolvedValue({
@@ -84,6 +85,19 @@ describe('mail.templates procedures', () => {
     });
   });
 
+  it('MailImagePromoteError는 BAD_REQUEST 사용자 메시지로 매핑된다', async () => {
+    vi.mocked(svc.createMailTemplate).mockRejectedValue(
+      new svc.MailImagePromoteError(['k1']) as never,
+    );
+    const client = createRouterClient({ templates }, { context: authedContext() });
+    await expect(
+      client.templates.create({ surveyId: 'sv-1', input: validInput() }),
+    ).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: '본문 이미지를 저장하지 못했습니다 (1개). 잠시 후 다시 시도해 주세요.',
+    });
+  });
+
   it('MailTemplateNotFoundError는 NOT_FOUND로 매핑된다', async () => {
     vi.mocked(svc.updateMailTemplate).mockRejectedValue(
       new svc.MailTemplateNotFoundError() as never,
@@ -102,5 +116,36 @@ describe('mail.templates procedures', () => {
     await expect(
       client.templates.create({ surveyId: 'sv-1', input: validInput() }),
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+  });
+
+  it('게스트는 grant 설문이면 create 가 위임된다', async () => {
+    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
+    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:sv-1');
+    vi.mocked(svc.createMailTemplate).mockResolvedValue({
+      id: 'tpl-1',
+      bodyHtml: '<p>saved</p>',
+      attachments: [],
+    } as never);
+    const client = createRouterClient(
+      { templates },
+      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+    );
+    const input = { surveyId: 'sv-1', input: validInput() };
+    const res = await client.templates.create(input);
+    expect(svc.createMailTemplate).toHaveBeenCalledWith(input);
+    expect(res).toEqual({ id: 'tpl-1', bodyHtml: '<p>saved</p>', attachments: [] });
+  });
+
+  it('게스트가 다른 설문 surveyId 로 create 하면 FORBIDDEN', async () => {
+    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
+    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:sv-1');
+    const client = createRouterClient(
+      { templates },
+      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+    );
+    await expect(
+      client.templates.create({ surveyId: 'sv-other', input: validInput() }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(svc.createMailTemplate).not.toHaveBeenCalled();
   });
 });

@@ -16,6 +16,7 @@ import { useRowHeights } from '@/hooks/use-row-heights';
 import { useRowVisibility } from '@/hooks/use-row-visibility';
 import { useTablePerf } from '@/hooks/use-table-perf';
 import type { TableColumn, TableRow } from '@/types/survey';
+import { getCellBackgroundStyle, getCellTextStyle } from '@/utils/cell-style';
 import {
   getAlignmentClasses,
   getGridCellAria,
@@ -38,11 +39,12 @@ interface VirtualizedRowProps {
   estimatedHeight: number;
   questionId: string;
   isTestMode: boolean;
-  value?: Record<string, any> | undefined;
-  onChange?: ((value: Record<string, any>) => void) | undefined;
+  value?: Record<string, unknown> | undefined;
+  onChange?: ((value: Record<string, unknown>) => void) | undefined;
   sentinelRef: (el: HTMLElement | null) => void;
   measureRef: (el: HTMLElement | null) => void;
   stickyInfo?: StickyLeftInfo | undefined;
+  applyCellBackground: boolean;
 }
 
 const VirtualizedRow = React.memo(
@@ -60,6 +62,7 @@ const VirtualizedRow = React.memo(
     sentinelRef,
     measureRef,
     stickyInfo,
+    applyCellBackground,
   }: VirtualizedRowProps) {
     const stickyCount = stickyInfo?.stickyColCount ?? 0;
     return (
@@ -89,6 +92,9 @@ const VirtualizedRow = React.memo(
               style.boxShadow = '2px 0 4px rgba(0,0,0,0.06)';
             }
           }
+          if (applyCellBackground) {
+            Object.assign(style, getCellBackgroundStyle(cell), getCellTextStyle(cell));
+          }
 
           return (
             <div
@@ -103,6 +109,7 @@ const VirtualizedRow = React.memo(
               )}
               style={style}
               data-row-id={row.id}
+              data-cell-id={cell.id}
               data-grid-cell
               {...getGridCellAria('gridcell', cs, rs)}
             >
@@ -115,6 +122,7 @@ const VirtualizedRow = React.memo(
                     isTestMode={isTestMode}
                     value={value}
                     onChange={onChange}
+                    rowCells={row.cells}
                   />
                 </div>
               ) : cachedHeight != null ? (
@@ -140,7 +148,8 @@ const VirtualizedRow = React.memo(
     prev.gridRow === next.gridRow &&
     prev.cachedHeight === next.cachedHeight &&
     prev.value === next.value &&
-    prev.stickyInfo === next.stickyInfo,
+    prev.stickyInfo === next.stickyInfo &&
+    prev.applyCellBackground === next.applyCellBackground,
 );
 
 // ── Props ──
@@ -152,12 +161,13 @@ interface VirtualizedTableGridProps {
   rowCompletionMap: Map<string, boolean>;
   rowGridMap: Map<string, number>;
   isTestMode?: boolean | undefined;
-  value?: Record<string, any> | undefined;
-  onChange?: ((value: Record<string, any>) => void) | undefined;
+  value?: Record<string, unknown> | undefined;
+  onChange?: ((value: Record<string, unknown>) => void) | undefined;
   renderSelectorRows?: (() => React.ReactNode) | undefined;
   gridTemplateCols: string;
   totalWidth: number;
   stickyInfo?: StickyLeftInfo | undefined;
+  applyCellBackground: boolean;
   // 컨테이너가 내부 세로 스크롤 영역일 때 IntersectionObserver root로 사용 (미지정 시 뷰포트)
   scrollRootRef?: React.RefObject<HTMLElement | null> | undefined;
 }
@@ -177,9 +187,12 @@ export const VirtualizedTableGrid = React.memo(function VirtualizedTableGrid({
   gridTemplateCols,
   totalWidth,
   stickyInfo,
+  applyCellBackground,
   scrollRootRef,
 }: VirtualizedTableGridProps) {
-  useTablePerf(`VirtualizedTable(${displayRows.length}×${visibleColumns.length})`);
+  useTablePerf(`VirtualizedTable(${displayRows.length}×${visibleColumns.length})`, {
+    ...(scrollRootRef ? { containerRef: scrollRootRef } : {}),
+  });
 
   const columnWidths = useMemo(
     () => visibleColumns.map((col) => col.width ?? 150),
@@ -193,7 +206,7 @@ export const VirtualizedTableGrid = React.memo(function VirtualizedTableGrid({
   return (
     <div
       role="rowgroup"
-      className="mx-auto rounded-b-md border-l border-r border-gray-300 bg-white text-sm"
+      className="mx-auto rounded-b-md border-l border-r border-gray-300 bg-white text-base"
       style={{
         display: 'grid',
         gridTemplateColumns: gridTemplateCols,
@@ -218,6 +231,7 @@ export const VirtualizedTableGrid = React.memo(function VirtualizedTableGrid({
           sentinelRef={sentinelRef(rowIdx)}
           measureRef={heightCache.measureRef(row.id)}
           stickyInfo={stickyInfo}
+          applyCellBackground={applyCellBackground}
         />
       ))}
 

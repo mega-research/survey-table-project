@@ -8,7 +8,8 @@ import { completedResponse, notDeletedResponse, notTestResponse } from '@/data/r
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { normalizeQuestions } from '@/lib/question';
 import { requireAuth } from '@/lib/auth';
-import { isAdminUserAllowed } from '@/lib/auth/admin-allowlist';
+import { canAccessSurvey, getGuestSurveyId } from '@/lib/auth/guest-grants';
+import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
 import {
   detectSplitCandidates,
   planSplit,
@@ -20,19 +21,26 @@ import { hydrateQuestionsForSpss } from '@/lib/spss/hydrate-questions';
 
 export const maxDuration = 30;
 
-export async function GET(
+async function handleSplitPreview(
   request: NextRequest,
+  ctx: RouteLogContext,
   { params }: { params: Promise<{ surveyId: string }> },
 ) {
   try {
-    // 인증 + admin allowlist 가드(export/route.ts 와 동일 정책). 설문 구조·응답 집계를
-    // 노출하므로 임의 인증사용자의 형제 우회를 차단한다.
+    // 인증 + 게스트 설문 스코프 가드(export/route.ts 와 동일 정책). 설문 구조·응답 집계를
+    // 노출하므로 게스트는 grant 된 설문만, 그 외 임의 인증사용자는 형제 우회를 차단한다.
     const user = await requireAuth();
-    if (!isAdminUserAllowed(user.id)) {
+    const { surveyId } = await params;
+    ctx.bind({
+      userId: user.id,
+      role: getGuestSurveyId(user.id) ? 'guest' : 'admin',
+      surveyId,
+    });
+    if (!canAccessSurvey(user.id, surveyId)) {
       return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
     }
-    const { surveyId } = await params;
     const basis = request.nextUrl.searchParams.get('basis');
+    if (basis) ctx.bind({ basis });
 
     // questions 는 order 오름차순 고정 (export/route.ts 와 동일 — 변수 순서를 문항 순서에 고정).
     const surveyData = await db.query.surveys.findFirst({
@@ -82,7 +90,16 @@ export async function GET(
 
     return NextResponse.json({ plan: planSplit(questions, basis, respCounts) });
   } catch (error) {
-    console.error('split-preview error:', error);
-    return NextResponse.json({ error: '미리보기 생성 중 오류가 발생했습니다.' }, { status: 500 });
+    if (error instanceof Error && error.message === '인증이 필요합니다.') {
+      return NextResponse.json({ error: '권한 없음' }, { status: 401 });
+    }
+    // 그 외 예기치 못한 에러는 로깅 래퍼가 err 기록 + 500 응답으로 처리한다.
+    throw error;
   }
 }
+
+export const GET = withRouteLogging(
+  '/api/surveys/[surveyId]/export/split-preview',
+  handleSplitPreview,
+  { errorMessage: '미리보기 생성 중 오류가 발생했습니다.' },
+);

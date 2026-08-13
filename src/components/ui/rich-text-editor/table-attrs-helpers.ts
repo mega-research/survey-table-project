@@ -115,10 +115,16 @@ export function parseCellBorderWidth(el: HTMLElement): number | null {
 }
 
 export function parseCellBorderMode(el: HTMLElement): CellBorderMode {
-  const top = el.style.borderTopStyle || el.style.borderStyle;
-  const left = el.style.borderLeftStyle || el.style.borderStyle;
-  if (top === 'none' && left === 'none') return 'none';
-  if (left === 'none') return 'horizontal';
+  const side = (name: 'Top' | 'Right' | 'Bottom' | 'Left') =>
+    (el.style as unknown as Record<string, string>)[`border${name}Style`] || el.style.borderStyle;
+  const top = side('Top');
+  const right = side('Right');
+  const bottom = side('Bottom');
+  const left = side('Left');
+  // 변별 숨김(예: 좌변만 none)과 모드를 혼동하면 안 된다 — 일부 변만 none 인 상태를
+  // horizontal/none 으로 오분류하면 이후 변 재표시(null 폴백)가 모드에 가려 무시된다.
+  if (top === 'none' && right === 'none' && bottom === 'none' && left === 'none') return 'none';
+  if (left === 'none' && right === 'none') return 'horizontal';
   return 'all';
 }
 

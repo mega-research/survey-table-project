@@ -1,19 +1,80 @@
-/**
- * 차단형 검증 위반 셀(data-cell-id)로 스크롤한다.
- * 응답 페이지 표의 오류 배너 "위치로 이동" 버튼이 호출한다 — 자동 스크롤 대신
- * 사용자가 명시적으로 눌러 위반 셀을 화면 중앙으로 가져오게 한다.
- *
- * cellIds 는 위반 제약의 셀 목록이다. 그중 일부는 열 displayCondition 으로 숨겨져
- * DOM 에 렌더되지 않을 수 있다(합계 검증은 allResponses 접근이 없어 숨은 열 셀을
- * 못 거르므로 cellIds[0] 이 숨은 열일 수 있다). 따라서 순서대로 훑어 실제로 렌더된
- * 첫 셀로 스크롤한다.
- */
-export function scrollToCell(cellIds: readonly string[]): void {
-  for (const id of cellIds) {
-    const el = document.querySelector<HTMLElement>(`[data-cell-id="${id}"]`);
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      return;
-    }
+import { OPTION_TEXT_TARGET_ATTRIBUTE } from '@/lib/survey/option-text-target';
+import type { TableRow } from '@/types/survey';
+
+function findDataTarget(attribute: string, ids: readonly string[]): HTMLElement | null {
+  const candidates = document.querySelectorAll<HTMLElement>(`[${attribute}]`);
+  for (const id of ids) {
+    const match = [...candidates].find((candidate) => candidate.getAttribute(attribute) === id);
+    if (match) return match;
   }
+  return null;
+}
+
+export interface IssueScrollTargets {
+  detailTargetIds?: readonly string[] | undefined;
+  cellInstanceIds?: readonly string[] | undefined;
+  cellIds?: readonly string[] | undefined;
+  questionId?: string | undefined;
+}
+
+export function buildRowWiseCellInstanceIds(
+  rows: readonly TableRow[] | undefined,
+  cellIds: readonly string[] | undefined,
+): string[] {
+  if (!rows || !cellIds?.length) return [];
+  const requested = new Set(cellIds);
+  const instances: string[] = [];
+  for (const row of rows) {
+    for (const cell of row.cells) {
+      if (!requested.has(cell.id)) continue;
+      instances.push(`${row.id}:${row.id}:${cell.id}`);
+      requested.delete(cell.id);
+    }
+    if (requested.size === 0) break;
+  }
+  return instances;
+}
+
+const FOCUSABLE_SELECTOR = [
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  'button:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',');
+
+/**
+ * 실제 상세 입력 → 표 셀 → 질문 카드 순으로 첫 렌더 타깃을 찾아 이동한다.
+ * attribute 값을 직접 비교해 UUID 외 임의 문자열도 CSS escape 없이 안전하게 처리한다.
+ */
+export function scrollToIssue({
+  detailTargetIds = [],
+  cellInstanceIds = [],
+  cellIds = [],
+  questionId,
+}: IssueScrollTargets): void {
+  const detail = findDataTarget(OPTION_TEXT_TARGET_ATTRIBUTE, detailTargetIds);
+  const cellInstance = detail
+    ? null
+    : findDataTarget('data-cell-instance-id', cellInstanceIds);
+  const cell = detail || cellInstance ? null : findDataTarget('data-cell-id', cellIds);
+  const question =
+    detail || cellInstance || cell || !questionId
+      ? null
+      : findDataTarget('data-question-id', [questionId]);
+  const target = detail ?? cellInstance ?? cell ?? question;
+  if (!target) return;
+  const behavior = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    ? 'auto'
+    : 'smooth';
+  target.scrollIntoView({ behavior, block: 'center' });
+  const focusTarget = target.matches(FOCUSABLE_SELECTOR)
+    ? target
+    : target.querySelector<HTMLElement>(FOCUSABLE_SELECTOR);
+  focusTarget?.focus({ preventScroll: true });
+}
+
+/** 기존 표 전용 호출부 하위 호환. */
+export function scrollToCell(cellIds: readonly string[]): void {
+  scrollToIssue({ cellIds });
 }

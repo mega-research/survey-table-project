@@ -285,6 +285,7 @@ describe('createCampaign — 부정 결과코드 컨택 제외 (preflight 동기
         contactTargetIds: [idValid, idExcluded],
       },
       USER_ID,
+      false,
     );
 
     // valid 1명만 큐잉, negative 1명은 skip
@@ -309,6 +310,7 @@ describe('createCampaign — 부정 결과코드 컨택 제외 (preflight 동기
         contactTargetIds: [idValid, idValid],
       },
       USER_ID,
+      false,
     );
 
     // recipient 행은 1개만, skip 은 0 (phantom 없음)

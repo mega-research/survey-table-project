@@ -11,12 +11,14 @@ describe('resolveMobileTableDisplayMode', () => {
     expect(MOBILE_TABLE_DISPLAY_MODES).toEqual([
       'auto',
       'drilldown-original-row',
+      'row-wise-original',
       'original',
     ]);
   });
   it.each([
     ['auto', 'auto'],
     ['drilldown-original-row', 'drilldown-original-row'],
+    ['row-wise-original', 'row-wise-original'],
     ['original', 'original'],
   ] as const)('유효 enum %s를 정본으로 사용', (input, expected) => {
     expect(resolveMobileTableDisplayMode({ mobileTableDisplayMode: input, mobileOriginalTable: true }))

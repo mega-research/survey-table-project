@@ -5,6 +5,11 @@ export interface SplitDisplayCells {
   collapsed: TableCell[];
 }
 
+export interface MobileLegendLabel {
+  label: string;
+  textBold?: boolean;
+}
+
 const DISPLAY_CELL_TYPES = new Set<TableCell['type']>(['text', 'image', 'video']);
 
 function isMobileDisplayCell(cell: TableCell): boolean {
@@ -13,6 +18,21 @@ function isMobileDisplayCell(cell: TableCell): boolean {
     !cell._isContinuation &&
     DISPLAY_CELL_TYPES.has(cell.type) &&
     (cell.mobileDisplay === 'inline' || cell.mobileDisplay === 'collapsed')
+  );
+}
+
+/**
+ * 모바일 카드/드릴다운에서 입력 컨트롤 위에 붙일 라벨을 결정한다.
+ * 우선순위: mobileLabel(셀 라벨) → exportLabel(엑셀 라벨) → fallback(호출부의 열 제목 등).
+ * mobileDisplay 'hidden' 은 저작자가 라벨을 숨긴 것이므로 무조건 빈 문자열.
+ */
+export function resolveMobileCellLabel(
+  cell: Pick<TableCell, 'mobileLabel' | 'exportLabel' | 'mobileDisplay'>,
+  fallback?: string,
+): string {
+  if (cell.mobileDisplay === 'hidden') return '';
+  return (
+    cell.mobileLabel?.trim() || cell.exportLabel?.trim() || fallback?.trim() || ''
   );
 }
 
@@ -46,14 +66,21 @@ export function hasMobileDisplayCells(cells: TableCell[]): boolean {
  * 각 응답 카드 상단에 한 행으로 표시된다 — 스케일 표의 앵커 라벨(전혀/매우 등)용.
  * 빈 내용·isHidden·continuation 셀은 제외.
  */
-export function collectMobileLegendLabels(rows: Array<{ cells: TableCell[] }>): string[] {
-  const labels: string[] = [];
+export function collectMobileLegendLabels(
+  rows: Array<{ cells: TableCell[] }>,
+): MobileLegendLabel[] {
+  const labels: MobileLegendLabel[] = [];
   for (const row of rows) {
     for (const cell of row.cells) {
       if (cell.isHidden || cell._isContinuation) continue;
       if (cell.type !== 'text' || cell.mobileDisplay !== 'legend') continue;
       const content = (cell.content ?? '').trim();
-      if (content) labels.push(content);
+      if (content) {
+        labels.push({
+          label: content,
+          ...(cell.textBold ? { textBold: true } : {}),
+        });
+      }
     }
   }
   return labels;

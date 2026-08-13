@@ -1,4 +1,4 @@
-import { Editor, generateHTML, generateJSON } from '@tiptap/core';
+import { Editor, generateHTML, generateJSON, type JSONContent } from '@tiptap/core';
 import { describe, expect, it } from 'vitest';
 
 import { createUnifiedExtensions } from '@/components/ui/rich-text-editor/extensions';
@@ -24,9 +24,9 @@ describe('createUnifiedExtensions', () => {
       const j1 = generateJSON(styleOnly, exts);
       const j2 = generateJSON(dataAttr, exts);
       // table > tableRow > tableCell (plan 의 depth+1 경로는 paragraph 노드였음, 수정)
-      const findCell = (j: any) => j.content[0].content[0].content[0];
-      expect(findCell(j1).attrs.backgroundColor).toBeTruthy();
-      expect(findCell(j2).attrs.backgroundColor).toBeTruthy();
+      const findCell = (j: JSONContent) => j.content?.[0]?.content?.[0]?.content?.[0];
+      expect(findCell(j1)?.attrs?.['backgroundColor']).toBeTruthy();
+      expect(findCell(j2)?.attrs?.['backgroundColor']).toBeTruthy();
     });
 
     it('colwidth attr가 round-trip 으로 보존된다', () => {
@@ -87,6 +87,33 @@ describe('createUnifiedExtensions', () => {
       const json = generateJSON(html, exts);
       const out = generateHTML(json, exts);
       expect(out).toMatch(/<s>|<del>/);
+    });
+
+    // jsdom/브라우저 CSSOM 은 직렬화 시 hex 를 rgb() 로 재표기하므로 HTML 문자열이 아닌
+    // 파싱된 mark attrs(#rrggbb 정규화)로 단언한다. rgb() 도 sanitize color 화이트리스트 통과.
+    const fontColorOf = (html: string): string | undefined => {
+      const json = generateJSON(html, exts) as JSONContent;
+      const marks = json.content?.[0]?.content?.[0]?.marks as
+        | Array<{ type: string; attrs?: { color?: string } }>
+        | undefined;
+      return marks?.find((m) => m.type === 'fontColor')?.attrs?.color;
+    };
+
+    it('FontColor mark 가 hex 로 정규화되어 파싱·보존된다', () => {
+      expect(fontColorOf('<p><span style="color: #ef4444">빨강</span></p>')).toBe('#ef4444');
+
+      const out = generateHTML(
+        generateJSON('<p><span style="color: #ef4444">빨강</span></p>', exts),
+        exts,
+      );
+      expect(out).toMatch(/color:\s*(#ef4444|rgb\(239,\s*68,\s*68\))/);
+    });
+
+    it('FontColor 는 rgb/축약 hex 표기를 6자리 hex 로 정규화해 파싱한다', () => {
+      expect(fontColorOf('<p><span style="color: rgb(239, 68, 68)">빨강</span></p>')).toBe(
+        '#ef4444',
+      );
+      expect(fontColorOf('<p><span style="color: #f00">빨강</span></p>')).toBe('#ff0000');
     });
 
     it('TextAlign style 이 보존된다', () => {

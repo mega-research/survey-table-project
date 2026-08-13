@@ -47,6 +47,7 @@ export interface CellFormSetters {
   setSelectOptions: (v: CellFormState['selectOptions']) => void;
   setAllowOtherOption: (v: boolean) => void;
   setCellOptionsColumns: (v: number | undefined) => void;
+  setCellMobileOptionsColumns: (v: number | undefined) => void;
   setInputPlaceholder: (v: string) => void;
   setInputMaxLength: (v: number | '') => void;
   setInputDefaultValueTemplate: (v: string) => void;
@@ -55,6 +56,9 @@ export interface CellFormSetters {
   setEmptyDefaultRaw: (v: string) => void;
   setCellNumberFormat: (v: CellFormState['cellNumberFormat']) => void;
   setCellRequired: (v: boolean) => void;
+  setCellRequiredMessage: (v: string) => void;
+  setGatingCondition: (v: CellFormState['gatingCondition']) => void;
+  setGatingRequiredWhenEnabled: (v: boolean) => void;
   setMinSelections: (v: number | undefined) => void;
   setMaxSelections: (v: number | undefined) => void;
   setRankingOptions: (v: CellFormState['rankingOptions']) => void;
@@ -68,10 +72,15 @@ export interface CellFormSetters {
   setChoiceAllowTextInput: (v: boolean) => void;
   setChoiceBranchRule: (v: CellFormState['choiceBranchRule']) => void;
   setChoiceGroupId: (v: string) => void;
+  setTextBold: (v: boolean) => void;
+  setBackgroundColor: (v: string) => void;
+  setTextColor: (v: string) => void;
   setHorizontalAlign: (v: 'left' | 'center' | 'right') => void;
   setMobileDisplay: (v: CellFormState['mobileDisplay']) => void;
+  setMobileLabel: (v: string) => void;
   setVerticalAlign: (v: 'top' | 'middle' | 'bottom') => void;
   setTextPosition: (v: CellFormState['textPosition']) => void;
+  setInputTextAlign: (v: CellFormState['inputTextAlign']) => void;
   setIsMergeEnabled: (v: boolean) => void;
   setRowspan: (v: number | '') => void;
   setColspan: (v: number | '') => void;
@@ -81,6 +90,13 @@ export interface CellFormSetters {
   setIsCustomExportLabel: (v: boolean) => void;
   setSpssVarType: (v: CellFormState['spssVarType']) => void;
   setSpssMeasure: (v: CellFormState['spssMeasure']) => void;
+  setAnswerQuoteText: (v: string) => void;
+  setAnswerQuoteEnabled: (v: boolean) => void;
+  setAnswerQuoteName: (v: string) => void;
+  setFormula: (v: CellFormState['formula']) => void;
+  setFormulaValidationEnabled: (v: boolean) => void;
+  setFormulaToleranceRaw: (v: string) => void;
+  setFormulaErrorMessage: (v: string) => void;
 }
 
 export interface UseCellFormResult {
@@ -124,6 +140,7 @@ export function useCellForm(cell: TableCell, isOpen: boolean): UseCellFormResult
       setSelectOptions: set('selectOptions'),
       setAllowOtherOption: set('allowOtherOption'),
       setCellOptionsColumns: set('cellOptionsColumns'),
+      setCellMobileOptionsColumns: set('cellMobileOptionsColumns'),
       setInputPlaceholder: set('inputPlaceholder'),
       setInputMaxLength: set('inputMaxLength'),
       setInputDefaultValueTemplate: set('inputDefaultValueTemplate'),
@@ -132,6 +149,9 @@ export function useCellForm(cell: TableCell, isOpen: boolean): UseCellFormResult
       setEmptyDefaultRaw: set('emptyDefaultRaw'),
       setCellNumberFormat: set('cellNumberFormat'),
       setCellRequired: set('cellRequired'),
+      setCellRequiredMessage: set('cellRequiredMessage'),
+      setGatingCondition: set('gatingCondition'),
+      setGatingRequiredWhenEnabled: set('gatingRequiredWhenEnabled'),
       setMinSelections: set('minSelections'),
       setMaxSelections: set('maxSelections'),
       setRankingOptions: set('rankingOptions'),
@@ -145,10 +165,15 @@ export function useCellForm(cell: TableCell, isOpen: boolean): UseCellFormResult
       setChoiceAllowTextInput: set('choiceAllowTextInput'),
       setChoiceBranchRule: set('choiceBranchRule'),
       setChoiceGroupId: set('choiceGroupId'),
+      setTextBold: set('textBold'),
+      setBackgroundColor: set('backgroundColor'),
+      setTextColor: set('textColor'),
       setHorizontalAlign: set('horizontalAlign'),
       setMobileDisplay: set('mobileDisplay'),
+      setMobileLabel: set('mobileLabel'),
       setVerticalAlign: set('verticalAlign'),
       setTextPosition: set('textPosition'),
+      setInputTextAlign: set('inputTextAlign'),
       setIsMergeEnabled: set('isMergeEnabled'),
       setRowspan: set('rowspan'),
       setColspan: set('colspan'),
@@ -158,6 +183,13 @@ export function useCellForm(cell: TableCell, isOpen: boolean): UseCellFormResult
       setIsCustomExportLabel: set('isCustomExportLabel'),
       setSpssVarType: set('spssVarType'),
       setSpssMeasure: set('spssMeasure'),
+      setAnswerQuoteText: set('answerQuoteText'),
+      setAnswerQuoteEnabled: set('answerQuoteEnabled'),
+      setAnswerQuoteName: set('answerQuoteName'),
+      setFormula: set('formula'),
+      setFormulaValidationEnabled: set('formulaValidationEnabled'),
+      setFormulaToleranceRaw: set('formulaToleranceRaw'),
+      setFormulaErrorMessage: set('formulaErrorMessage'),
     };
   }, []);
 

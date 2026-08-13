@@ -2,8 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { RecordVisibilitySegmentInput } from '@/features/survey-response/domain/lifecycle';
 import { recordVisibilitySegment } from '@/features/survey-response/server/services/lifecycle.service';
+import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
 import { getTrustedClientIpOrNull } from '@/lib/rate-limit/client-ip';
-import { getRateLimiter } from '@/lib/rate-limit/rate-limiter';
+import {
+  isRateLimitedFineTier,
+  isRateLimitedIpGuardTier,
+} from '@/lib/rate-limit/rate-limiter';
 
 /**
  * Page Visibility 세그먼트 수신 엔드포인트.
@@ -12,14 +16,16 @@ import { getRateLimiter } from '@/lib/rate-limit/rate-limiter';
  *
  * REST 엔드포인트라 oRPC 미들웨어를 거치지 않으므로 진입부에서 직접 rate limit 한다.
  */
-export async function POST(req: NextRequest) {
+async function handleSegment(req: NextRequest, ctx: RouteLogContext) {
   // 신뢰 IP 추출 불가면 fail-closed. 단일 'unknown' 버킷 공유로 인한 상호 잠식/약 DoS 차단.
   const ip = getTrustedClientIpOrNull(req.headers);
   if (ip === null) {
     return NextResponse.json({ error: 'rate limited' }, { status: 429 });
   }
-  const { success } = await getRateLimiter().limit(`response-segment:${ip}`);
-  if (!success) {
+
+  // 1단계: 본문을 읽기 전에 IP 전체 가드를 먼저 소비한다 (draft 라우트와 동일한 이유 —
+  // malformed 요청의 공짜 파싱 증폭 차단).
+  if (await isRateLimitedIpGuardTier('response-segment', ip)) {
     return NextResponse.json({ error: 'rate limited' }, { status: 429 });
   }
 
@@ -34,13 +40,21 @@ export async function POST(req: NextRequest) {
   if (!parsed.success || parsed.data.responseId.trim() === '') {
     return NextResponse.json({ error: 'invalid payload' }, { status: 400 });
   }
+  ctx.bind({ responseId: parsed.data.responseId, action: parsed.data.action });
 
-  try {
-    await recordVisibilitySegment(parsed.data);
-  } catch (err) {
-    console.error('[segment] 기록 실패:', err);
-    return NextResponse.json({ error: 'internal' }, { status: 500 });
+  // 2단계: 검증된 responseId 를 클라이언트 축으로 fine 버킷 판정 (응답 단위 격리).
+  if (await isRateLimitedFineTier('response-segment', ip, parsed.data.responseId)) {
+    return NextResponse.json({ error: 'rate limited' }, { status: 429 });
   }
+
+  // 예기치 못한 기록 실패는 로깅 래퍼가 err 기록 + 500 응답으로 처리한다.
+  await recordVisibilitySegment(parsed.data);
 
   return NextResponse.json({ ok: true });
 }
+
+export const POST = withRouteLogging('/api/response/segment', handleSegment, {
+  errorMessage: 'internal',
+  // sendBeacon 고볼륨 익명 경로 — 기존대로 Sentry 미캡처 (pino error 로그만)
+  sentry: false,
+});

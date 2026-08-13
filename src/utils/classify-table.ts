@@ -15,6 +15,10 @@ export interface ClassifyInput {
   tableRowsData: TableRow[];
   tableHeaderGrid?: HeaderCell[][] | null | undefined;
   answerableCellTypes?: readonly TableCell['type'][] | undefined;
+  // 계산 셀만 있는 행(합계 표시 행 등)도 leaf 로 만들지 여부. 입력 드릴다운
+  // (mobile-table-drilldown)만 켠다 — 행 선택 UI(choice-table-drilldown)가 켜면
+  // 선택 불가능한 유령 행이 목록에 생긴다.
+  includeCalcOnlyLeaves?: boolean | undefined;
 }
 
 export const DEFAULT_TABLE_ANSWERABLE_CELL_TYPES = [
@@ -47,6 +51,9 @@ export interface ClassifiedLeaf {
   subGroup: string;
   subGroupSourceCellId?: string | undefined;
   inputCellIds: string[];
+  // 읽기 전용 계산 셀 id — 드릴다운에서 표시만 하고 완료 판정에는 넣지 않는다
+  // (calc 는 응답이 아니므로 inputCellIds/totalInputs 에 섞으면 완료가 영구히 안 찬다).
+  calcCellIds: string[];
   // 실제 열 인덱스 → 입력 셀 id. matrix 폼은 colGroups 의 col(실제 열 인덱스)로 셀을 찾는다.
   // inputCellIds 는 행마다 길이가 다를 수 있어(비대칭 matrix) 위치로 끼워맞추면 밀린다.
   cellByCol: Record<number, string>;
@@ -217,7 +224,17 @@ export function classifyTable(q: ClassifyInput): ClassifiedSection[] {
         : [{ label: '', rows: sec.rows }];
     const subOf = (row: TableRow) => subGroups.find((g) => g.rows.includes(row));
 
-    const leaves: ClassifiedLeaf[] = inputRows.map((row) => {
+    // leaf 대상: 입력 행 + (opt-in 시) 계산 셀만 있는 행. 합계 표시 행은 입력은 없지만
+    // 입력 드릴다운에 값이 보여야 한다. 입력도 계산도 없는 행은 라벨/구분 행으로만 쓰인다.
+    const hasCalcCell = (row: TableRow) =>
+      row.cells.some((cell) => cell.type === 'calc' && !cell.isHidden && !cell._isContinuation);
+    const leafRows = sec.rows.filter(
+      (row) =>
+        row.cells.some((cell) => isInput(cell, types)) ||
+        (q.includeCalcOnlyLeaves === true && hasCalcCell(row)),
+    );
+
+    const leaves: ClassifiedLeaf[] = leafRows.map((row) => {
       const subGroup = subOf(row);
       const leafLabel = rightmostLabel(row, labelCols, coverage);
       const cellByCol: Record<number, string> = {};
@@ -233,6 +250,9 @@ export function classifyTable(q: ClassifyInput): ClassifiedSection[] {
         subGroup: subGroup?.label ?? '',
         ...(subGroup?.sourceCellId ? { subGroupSourceCellId: subGroup.sourceCellId } : {}),
         inputCellIds: row.cells.filter((cell) => isInput(cell, types)).map((cell) => cell.id),
+        calcCellIds: row.cells
+          .filter((cell) => cell.type === 'calc' && !cell.isHidden && !cell._isContinuation)
+          .map((cell) => cell.id),
         cellByCol,
       };
     });

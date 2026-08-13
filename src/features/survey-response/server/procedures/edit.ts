@@ -1,6 +1,7 @@
 import { ORPCError } from '@orpc/server';
 
-import { authed } from '@/server/orpc';
+import { getGuestSurveyId } from '@/lib/auth/guest-grants';
+import { assertSurveyAccess, scoped } from '@/server/orpc';
 
 import { SaveAdminEditInput, SaveAdminEditOutput } from '../../domain/response-edit';
 import * as svc from '../services/response-edit.service';
@@ -23,15 +24,21 @@ function mapServiceError(err: unknown): never {
   throw err;
 }
 
-const saveAdminEdit = authed
+const saveAdminEdit = scoped
   .input(SaveAdminEditInput)
   .output(SaveAdminEditOutput)
   .handler(async ({ input, context }) => {
+    assertSurveyAccess(context.user.id, input.surveyId);
     try {
-      return await svc.saveAdminEdit(input, {
-        id: context.user?.id ?? null,
-        email: context.user?.email ?? null,
-      });
+      return await svc.saveAdminEdit(
+        input,
+        {
+          id: context.user?.id ?? null,
+          email: context.user?.email ?? null,
+        },
+        // 인증된 context 에서 1회 파생 — 서비스가 auth 를 재조회하지 않는다.
+        getGuestSurveyId(context.user.id) !== null,
+      );
     } catch (err) {
       mapServiceError(err);
     }

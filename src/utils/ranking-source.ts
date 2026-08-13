@@ -1,5 +1,6 @@
 import type { Question, QuestionOption, TableCell, TableRow } from '@/types/survey';
 
+import { toSingleLineLabel } from './label-text';
 import { RANKING_OTHER_VALUE } from './ranking-shared';
 
 /**
@@ -40,6 +41,7 @@ function buildRankingOptLabel(cell: TableCell, fallback: string): string {
  *   그룹별 호출 시 자연스럽게 그룹 내 순번이 된다(checkbox 그룹 컨벤션).
  * - isOtherRankingCell=true 셀: value=RANKING_OTHER_VALUE, spssNumericCode 없음.
  *   선택 시 기타 자유입력 UI 가 나타나고 `_rk{k}` 는 system-missing 으로 기록됨.
+ * - answerQuoteText: 셀의 응답 인용 문구 (표-소스 옵션의 인용 수집에 필요)
  */
 export function resolveRankingOptionsFromCells(cells: TableCell[]): QuestionOption[] {
   return cells.map((cell, idx) => {
@@ -48,6 +50,14 @@ export function resolveRankingOptionsFromCells(cells: TableCell[]): QuestionOpti
         id: cell.id,
         value: RANKING_OTHER_VALUE,
         label: buildRankingOptLabel(cell, '기타 (직접 입력)'),
+        ...(cell.allowTextInput !== undefined ? { allowTextInput: cell.allowTextInput } : {}),
+        ...(cell.textInputPlaceholder !== undefined
+          ? { textInputPlaceholder: cell.textInputPlaceholder }
+          : {}),
+        ...(cell.textBold ? { textBold: true } : {}),
+        ...(cell.backgroundColor ? { backgroundColor: cell.backgroundColor } : {}),
+        ...(cell.textColor ? { textColor: cell.textColor } : {}),
+        ...(cell.answerQuoteText !== undefined ? { answerQuoteText: cell.answerQuoteText } : {}),
       };
     }
     return {
@@ -55,6 +65,14 @@ export function resolveRankingOptionsFromCells(cells: TableCell[]): QuestionOpti
       value: cell.id,
       label: buildRankingOptLabel(cell, '(라벨 없음)'),
       spssNumericCode: cell.spssNumericCode ?? idx + 1,
+      ...(cell.allowTextInput !== undefined ? { allowTextInput: cell.allowTextInput } : {}),
+      ...(cell.textInputPlaceholder !== undefined
+        ? { textInputPlaceholder: cell.textInputPlaceholder }
+        : {}),
+      ...(cell.textBold ? { textBold: true } : {}),
+      ...(cell.backgroundColor ? { backgroundColor: cell.backgroundColor } : {}),
+      ...(cell.textColor ? { textColor: cell.textColor } : {}),
+      ...(cell.answerQuoteText !== undefined ? { answerQuoteText: cell.answerQuoteText } : {}),
     };
   });
 }
@@ -120,7 +138,7 @@ export function toSpssValueLabelPairs(
   return opts
     .map((opt, i) => ({
       code: opt.spssNumericCode ?? i + 1,
-      label: opt.label,
+      label: toSingleLineLabel(opt.label),
       isOther: opt.value === RANKING_OTHER_VALUE,
     }))
     .filter((p) => !p.isOther)

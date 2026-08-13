@@ -1,0 +1,151 @@
+import { describe, expect, it } from 'vitest';
+
+import {
+  RESPONSE_WIDE_TABLE_THRESHOLD_PX,
+  resolveResponseContainerWidth,
+} from '@/utils/table-grid-utils';
+
+// 응답 페이지 컨테이너 폭 분기: 표 문항 페이지는 표 총폭 기준(718px 초과 → 1280px, 이하 → 896px),
+// 표 없는 페이지는 좁은 폭(896px).
+describe('resolveResponseContainerWidth', () => {
+  const col = (width?: number) => ({ id: 'c', label: '', ...(width !== undefined ? { width } : {}) });
+
+  it('표 문항이 없으면 max-w-4xl', () => {
+    expect(resolveResponseContainerWidth([{ type: 'radio' }, { type: 'text' }])).toBe('max-w-4xl');
+    expect(resolveResponseContainerWidth([])).toBe('max-w-4xl');
+  });
+
+  it('표 총폭이 718px 이하면 max-w-4xl', () => {
+    expect(
+      resolveResponseContainerWidth([{ type: 'table', tableColumns: [col(300), col(400)] }]),
+    ).toBe('max-w-4xl');
+    // 정확히 718px 도 이하로 취급
+    expect(
+      resolveResponseContainerWidth([{ type: 'table', tableColumns: [col(318), col(400)] }]),
+    ).toBe('max-w-4xl');
+  });
+
+  it('표 총폭이 718px 초과면 max-w-7xl', () => {
+    expect(
+      resolveResponseContainerWidth([{ type: 'table', tableColumns: [col(319), col(400)] }]),
+    ).toBe('max-w-7xl');
+  });
+
+  it('여러 표가 섞이면 가장 넓은 표 기준으로 판정한다', () => {
+    expect(
+      resolveResponseContainerWidth([
+        { type: 'table', tableColumns: [col(200)] },
+        { type: 'table', tableColumns: [col(500), col(500)] },
+        { type: 'radio' },
+      ]),
+    ).toBe('max-w-7xl');
+  });
+
+  it('width 미지정 컬럼은 150px 로 계산한다 (calcTotalWidth 규칙)', () => {
+    // 150*4 = 600 ≤ 718 → 좁게
+    expect(
+      resolveResponseContainerWidth([{ type: 'table', tableColumns: [col(), col(), col(), col()] }]),
+    ).toBe('max-w-4xl');
+    // 150*5 = 750 > 718 → 넓게
+    expect(
+      resolveResponseContainerWidth([
+        { type: 'table', tableColumns: [col(), col(), col(), col(), col()] },
+      ]),
+    ).toBe('max-w-7xl');
+  });
+
+  // 화면에 표가 그려지는 문항은 type='table' 뿐이 아니다 (rendersAsTable 기준).
+  describe('표-소스 문항', () => {
+    const choiceRow = {
+      id: 'r1',
+      label: '',
+      cells: [{ id: 'cell-1', content: '', type: 'choice_opt' as const }],
+    };
+
+    it('표-소스 radio 도 표 총폭 기준으로 판정한다', () => {
+      expect(
+        resolveResponseContainerWidth([
+          { type: 'radio', tableColumns: [col(319), col(400)], tableRowsData: [choiceRow] },
+        ]),
+      ).toBe('max-w-7xl');
+      expect(
+        resolveResponseContainerWidth([
+          { type: 'radio', tableColumns: [col(318), col(400)], tableRowsData: [choiceRow] },
+        ]),
+      ).toBe('max-w-4xl');
+    });
+
+    it('표-소스 checkbox 의 넓은 표도 max-w-7xl', () => {
+      expect(
+        resolveResponseContainerWidth([
+          { type: 'checkbox', tableColumns: [col(500), col(500)], tableRowsData: [choiceRow] },
+        ]),
+      ).toBe('max-w-7xl');
+    });
+
+    it('표-소스 ranking 의 넓은 내장 표도 max-w-7xl', () => {
+      expect(
+        resolveResponseContainerWidth([
+          {
+            type: 'ranking',
+            rankingConfig: { positions: 3, optionsSource: 'table' },
+            tableColumns: [col(500), col(500)],
+            tableRowsData: [
+              { id: 'r1', label: '', cells: [{ id: 'c1', content: '', type: 'ranking_opt' }] },
+            ],
+          },
+        ]),
+      ).toBe('max-w-7xl');
+    });
+
+    it('choice_opt 셀 없이 tableColumns 잔재만 있는 radio 는 넓히지 않는다', () => {
+      expect(
+        resolveResponseContainerWidth([
+          {
+            type: 'radio',
+            tableColumns: [col(500), col(500)],
+            tableRowsData: [{ id: 'r1', label: '', cells: [{ id: 'c1', content: '', type: 'text' }] }],
+          },
+        ]),
+      ).toBe('max-w-4xl');
+    });
+
+    it('표 문항과 표-소스 문항이 섞이면 가장 넓은 표 기준', () => {
+      expect(
+        resolveResponseContainerWidth([
+          { type: 'table', tableColumns: [col(200)] },
+          { type: 'radio', tableColumns: [col(500), col(500)], tableRowsData: [choiceRow] },
+        ]),
+      ).toBe('max-w-7xl');
+    });
+  });
+
+  it('threshold 상수는 718 이다', () => {
+    expect(RESPONSE_WIDE_TABLE_THRESHOLD_PX).toBe(718);
+  });
+
+  // 설문 설정 "화면 너비" 토글: on 이면 표 유무·총폭과 무관하게 항상 넓은 폭.
+  it('forceWide=true 면 표가 없어도, 좁은 표여도 항상 max-w-7xl', () => {
+    expect(resolveResponseContainerWidth([{ type: 'radio' }], { forceWide: true })).toBe(
+      'max-w-7xl',
+    );
+    expect(resolveResponseContainerWidth([], { forceWide: true })).toBe('max-w-7xl');
+    expect(
+      resolveResponseContainerWidth([{ type: 'table', tableColumns: [col(100)] }], {
+        forceWide: true,
+      }),
+    ).toBe('max-w-7xl');
+  });
+
+  it('forceWide=false/미지정이면 기존 표폭 규칙을 따른다', () => {
+    expect(resolveResponseContainerWidth([{ type: 'radio' }], { forceWide: false })).toBe(
+      'max-w-4xl',
+    );
+    expect(
+      resolveResponseContainerWidth(
+        [{ type: 'table', tableColumns: [col(400), col(400)] }],
+        { forceWide: false },
+      ),
+    ).toBe('max-w-7xl');
+  });
+});

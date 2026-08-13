@@ -1,6 +1,7 @@
 export const MOBILE_TABLE_DISPLAY_MODES = [
   'auto',
   'drilldown-original-row',
+  'row-wise-original',
   'original',
 ] as const;
 

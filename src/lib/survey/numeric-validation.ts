@@ -1,23 +1,34 @@
 /**
- * 숫자 입력의 "다음"/제출 차단형 검증 순수 로직.
+ * "다음"/제출 차단형 검증 순수 로직.
  * - 단답형·셀 min 미달 / 합계 제약(SumConstraint) / 필수 셀(TableCell.required)
+ * - 필수 질문·셀에서 선택된 allowTextInput/랭킹 기타 상세기입 누락
  *
  * tableValidationRules(분기 전용, utils/branch-logic.ts)와 완전히 별개다.
  * 응답 shape: 단답형 = raw 숫자 문자열, 테이블 = { [cellId]: value } 평면 객체.
  */
-
-import type { Question, SumConstraint, TableCell, TableRow } from '@/types/survey';
-import { shouldDisplayColumn, shouldDisplayRow } from '@/utils/branch-logic';
+import type { Question, SumConstraint, SurveyLookup, TableCell, TableRow } from '@/types/survey';
+import {
+  shouldDisplayColumn,
+  shouldDisplayDynamicGroup,
+  shouldDisplayRow,
+} from '@/utils/branch-logic';
 import { rangeViolationMessage } from '@/utils/number-format';
 import { parseNumericInput } from '@/utils/numeric-input';
 import { REQUIRED_CELL_TYPES } from '@/utils/serialize-cell';
+import { DEFAULT_REQUIRED_CELL_MESSAGE } from '@/utils/required-message';
 import { isCellValuePresent } from '@/utils/table-cell-semantics';
 
+import { evaluateCellFormula, roundFormulaValue } from './cell-formula';
+import { isCellEnabled } from './cell-gating';
+import { collectRequiredOptionTextIssues } from './required-option-text-validation';
+
 export interface NumericIssue {
-  kind: 'range' | 'sum' | 'required-cells';
+  kind: 'range' | 'sum' | 'required-cells' | 'required-detail' | 'formula';
   message: string;
   /** 위반 셀 id (테이블 전용 — 셀 하이라이트용) */
   cellIds?: string[];
+  /** 실제 상세 입력 요소를 우선 탐색하기 위한 안정 DOM 타깃 ID */
+  detailTargetIds?: string[];
 }
 
 /**
@@ -28,6 +39,10 @@ export interface NumericIssue {
 export interface NumericValidationCtx {
   allResponses: Record<string, unknown>;
   allQuestions: Question[];
+  optionTexts?: Record<string, string> | undefined;
+  /** 수식 검증(evaluateCellFormula)용 — 미주입 시 수식 검증만 스킵 */
+  lookups?: SurveyLookup[];
+  contactAttrs?: Record<string, string | undefined>;
 }
 
 function flatCells(rows: TableRow[] | null | undefined): TableCell[] {
@@ -39,6 +54,17 @@ function isEmptyCellValue(v: unknown): boolean {
 }
 
 /**
+ * 셀 필수 판정 수렴식 — (required || requiredWhenEnabled). 게이팅되지 않은 기존 required=true
+ * 셀도 이 식으로 커버된다(requiredWhenEnabled 는 그냥 false/undefined).
+ * required-option-text-validation.ts 가 이미 이 파일의 collectVisibleTableCells 를 재사용하는
+ * 의존 방향과 일관되게, 셀 필수 판정도 여기서 export 해 공유한다(중복 정의 금지 — 두 파일이
+ * 갈리면 "검증은 필수인데 상세기입 누락 판정은 필수 아님" 불일치가 재발한다).
+ */
+export function isRequiredCell(cell: TableCell): boolean {
+  return cell.required === true || cell.requiredWhenEnabled === true;
+}
+
+/**
  * 응답자에게 실제로 "보이는" 셀 목록 — 다음을 제외한다.
  * - 미선택 동적 행(enabledDynamicGroupIds에 속하고 __selectedRowIds에 없는 행)의 셀
  * - isHidden 셀(병합 피복 셀)
@@ -47,7 +73,7 @@ function isEmptyCellValue(v: unknown): boolean {
  * 필수 셀·범위·합계 검증이 이 필터를 공유한다: 화면에 없는 셀의 잔존 값이나 미입력이
  * 검증에 기여하면 안 된다 (숨은 열의 필수 셀이 "다음"을 영구 차단하는 버그 방지).
  */
-function visibleCells(
+export function collectVisibleTableCells(
   question: Question,
   cellValues: Record<string, unknown>,
   ctx: NumericValidationCtx | undefined,
@@ -56,11 +82,33 @@ function visibleCells(
   const enabledDynamicGroupIds = new Set(
     (question.dynamicRowConfigs ?? []).filter((c) => c.enabled).map((c) => c.groupId),
   );
+  const visibleDynamicGroupIds = new Set(
+    (question.dynamicRowConfigs ?? [])
+      .filter(
+        (config) =>
+          config.enabled &&
+          (!ctx || shouldDisplayDynamicGroup(config, ctx.allResponses, ctx.allQuestions)),
+      )
+      .map((config) => config.groupId),
+  );
   const selectedRowIds = new Set(
     Array.isArray(cellValues['__selectedRowIds'])
       ? (cellValues['__selectedRowIds'] as string[])
       : [],
   );
+  const hasEnabledDynamicRows = rows.some(
+    (row) => row.dynamicGroupId && enabledDynamicGroupIds.has(row.dynamicGroupId),
+  );
+  const groupsWithSelections = new Set<string>();
+  for (const row of rows) {
+    if (
+      row.dynamicGroupId &&
+      visibleDynamicGroupIds.has(row.dynamicGroupId) &&
+      selectedRowIds.has(row.id)
+    ) {
+      groupsWithSelections.add(row.dynamicGroupId);
+    }
+  }
   const hiddenColIndices = new Set<number>();
   if (ctx) {
     (question.tableColumns ?? []).forEach((col, idx) => {
@@ -72,8 +120,15 @@ function visibleCells(
   return rows
     .filter(
       (row) =>
-        !(row.dynamicGroupId && enabledDynamicGroupIds.has(row.dynamicGroupId)) ||
-        selectedRowIds.has(row.id),
+        (!(row.dynamicGroupId && enabledDynamicGroupIds.has(row.dynamicGroupId)) ||
+          (visibleDynamicGroupIds.has(row.dynamicGroupId) && selectedRowIds.has(row.id))) &&
+        (!(
+          hasEnabledDynamicRows &&
+          row.showWhenDynamicGroupId &&
+          enabledDynamicGroupIds.has(row.showWhenDynamicGroupId)
+        ) ||
+          (visibleDynamicGroupIds.has(row.showWhenDynamicGroupId) &&
+            groupsWithSelections.has(row.showWhenDynamicGroupId))),
     )
     .filter(
       (row) =>
@@ -127,7 +182,7 @@ function sumConstraintMessage(constraint: SumConstraint, sum: number): string {
 }
 
 /**
- * 질문 하나의 차단형 숫자 검증 위반 목록.
+ * 질문 하나의 차단형 검증 위반 목록.
  * - 단답형(text + inputType 'number'): numberFormat.min 미달 (빈 값은 검증 안 함)
  * - table: 셀 min 미달, 합계 제약 위반, 필수 셀 미입력
  *   테이블 미접촉(응답 키 0개)이면 전부 스킵 — 미응답 차단은 question.required 소관.
@@ -143,18 +198,36 @@ export function collectNumericIssues(
     return message ? [{ kind: 'range', message }] : [];
   }
 
-  if (question.type !== 'table') return [];
+  if (question.type !== 'table') {
+    const optionTextIssues = collectRequiredOptionTextIssues(question, response, ctx?.optionTexts);
+    return optionTextIssues.questionMissing
+      ? [
+          {
+            kind: 'required-detail',
+            message: DEFAULT_REQUIRED_CELL_MESSAGE,
+            detailTargetIds: optionTextIssues.detailTargetIds ?? [],
+          },
+        ]
+      : [];
+  }
   const cellValues =
-    typeof response === 'object' && response !== null
-      ? (response as Record<string, unknown>)
-      : {};
+    typeof response === 'object' && response !== null ? (response as Record<string, unknown>) : {};
   // 미접촉 판정은 실제 셀 값 키 기준 — __selectedRowIds/__optTexts__ 등 사이드카 키는 세지 않는다.
   // (emptyDefault 자동 채움이 있으면 셀 키가 생겨 검증 대상이 된다 — 의도됨, Q1 그릴링 확정)
   const hasAnyCellValue = Object.keys(cellValues).some((k) => !k.startsWith('__'));
   if (!hasAnyCellValue) return [];
 
-  const visible = visibleCells(question, cellValues, ctx);
-  const inputCells = visible.filter((c) => c.type === 'input');
+  const visible = collectVisibleTableCells(question, cellValues, ctx);
+  // 게이팅 — 비활성 셀은 모든 차단형 검증에서 제외한다 (비활성 필수 셀이 "다음"을
+  // 영구 차단하는 것 방지). isCellEnabled 는 같은 질문의 cellValues 만 본다.
+  // rowCells(같은 행 셀 목록)를 함께 전달해야 option 조건의 {optionId} 래핑·id 저장
+  // 응답을 정확히 해석한다 — tableRowsData 에서 셀 id → row.cells 매핑을 만든다.
+  const rowOfCell = new Map<string, TableCell[]>();
+  for (const row of question.tableRowsData ?? []) {
+    for (const cell of row.cells) rowOfCell.set(cell.id, row.cells);
+  }
+  const enabled = visible.filter((c) => isCellEnabled(c, cellValues, rowOfCell.get(c.id)));
+  const inputCells = enabled.filter((c) => c.type === 'input');
   const issues: NumericIssue[] = [];
 
   // 1) 셀 범위 위반 — min 미달 + max 초과 (max 는 타이핑 차단이 원칙이지만
@@ -173,8 +246,9 @@ export function collectNumericIssues(
     });
   }
 
-  // 2) 합계 제약 — 합산 대상은 "보이는 셀"로 한정 (미선택 동적 행 잔존 값·isHidden 셀·숨은 열/행 제외)
-  const existingIds = new Set(visible.map((c) => c.id));
+  // 2) 합계 제약 — 합산 대상은 "보이고 활성인 셀"로 한정 (미선택 동적 행 잔존 값·isHidden 셀·
+  //    숨은 열/행·비활성 게이팅 셀 제외)
+  const existingIds = new Set(enabled.map((c) => c.id));
   for (const constraint of question.sumConstraints ?? []) {
     const result = evaluateSumConstraint(constraint, cellValues, existingIds);
     if (!result.skipped && !result.ok) {
@@ -186,19 +260,88 @@ export function collectNumericIssues(
     }
   }
 
-  // 3) 필수 셀 — "표시될 때만 필수": isHidden 셀과 미선택 동적 행의 셀은 제외 (영구 차단 방지)
-  //    대상은 REQUIRED_CELL_TYPES(input/radio/checkbox/select/ranking). 응답됨 판정은
-  //    isCellValuePresent 정본(배열 length>0, 문자열 trim, 그 외 truthy) — checkbox/ranking
-  //    빈 배열을 미응답으로 본다.
-  const missingRequired = visible.filter(
-    (c) => REQUIRED_CELL_TYPES.has(c.type) && c.required && !isCellValuePresent(cellValues[c.id]),
+  // 3) 필수 셀 — "표시되고 활성일 때만 필수": isHidden 셀·미선택 동적 행의 셀·비활성 게이팅
+  //    셀은 제외 (영구 차단 방지). 대상은 REQUIRED_CELL_TYPES(input/radio/checkbox/select/ranking).
+  //    필수 판정은 (required || requiredWhenEnabled) 수렴식 — enabled 목록 위에서 검사하므로
+  //    "&& 활성" 은 목록 필터로 이미 성립한다. 응답됨 판정은 isCellValuePresent 정본(배열
+  //    length>0, 문자열 trim, 그 외 truthy) — checkbox/ranking 빈 배열을 미응답으로 본다.
+  const ordinaryMissingCells = enabled.filter(
+    (c) =>
+      REQUIRED_CELL_TYPES.has(c.type) &&
+      isRequiredCell(c) &&
+      !isCellValuePresent(cellValues[c.id]),
   );
-  if (missingRequired.length > 0) {
+  // 셀별 지정 문구(requiredMessage)가 있으면 문구 단위로 별도 이슈를 만든다 —
+  // 지정 문구 없는 셀들은 아래 기본 문구 통합 이슈(상세기입 포함)로 묶인다.
+  const customMessageCellIds = new Map<string, string[]>();
+  const defaultMissingIds: string[] = [];
+  for (const c of ordinaryMissingCells) {
+    const custom = c.requiredMessage?.trim();
+    if (custom) {
+      customMessageCellIds.set(custom, [...(customMessageCellIds.get(custom) ?? []), c.id]);
+    } else {
+      defaultMissingIds.push(c.id);
+    }
+  }
+  for (const [message, cellIds] of customMessageCellIds) {
+    issues.push({ kind: 'required-cells', message, cellIds });
+  }
+  const visibleOptionTextIssues = collectRequiredOptionTextIssues(
+    question,
+    cellValues,
+    ctx?.optionTexts,
+    { visibleCellIds: existingIds },
+  );
+  const missingIds = [
+    ...new Set([
+      ...defaultMissingIds,
+      ...visibleOptionTextIssues.cellIds,
+      ...(visibleOptionTextIssues.detailCellIds ?? []),
+    ]),
+  ].filter((id) => existingIds.has(id));
+  if (missingIds.length > 0) {
     issues.push({
       kind: 'required-cells',
-      message: '필수 응답이 비어있습니다',
-      cellIds: missingRequired.map((c) => c.id),
+      message: DEFAULT_REQUIRED_CELL_MESSAGE,
+      cellIds: missingIds,
+      ...(visibleOptionTextIssues.detailTargetIds
+        ? { detailTargetIds: visibleOptionTextIssues.detailTargetIds }
+        : {}),
     });
+  }
+
+  // 4) 수식 검증 (스펙 §7) — 입력값 vs 계산값. 빈 입력은 스킵 (입력 강제는 required 소관).
+  //    비활성 셀은 제외 — 지워지기 전 잔존 값이 수식 불일치로 차단하면 안 됨.
+  for (const cell of enabled) {
+    if (cell.type !== 'input' || cell.inputType !== 'number' || !cell.formula) continue;
+    const raw = cellValues[cell.id];
+    if (typeof raw !== 'string' || raw.trim() === '') continue;
+    const entered = parseNumericInput(raw);
+    if (entered === null) continue;
+    if (!ctx) continue; // 컨텍스트 없으면 평가 불가 — fail-safe 통과
+    const computed = evaluateCellFormula(
+      cell.formula,
+      question.id,
+      {
+        questions: ctx.allQuestions,
+        responses: ctx.allResponses,
+        lookups: ctx.lookups ?? [],
+        contactAttrs: ctx.contactAttrs ?? {},
+      },
+      cell.numberFormat?.decimalPlaces,
+    );
+    if (computed === null) continue; // 순환·LUT 미해결 — fail-safe 통과
+    const tolerance = cell.formulaTolerance ?? 0;
+    const roundedInput = roundFormulaValue(entered, cell.numberFormat?.decimalPlaces);
+    if (Math.abs(roundedInput - computed) > tolerance) {
+      issues.push({
+        kind: 'formula',
+        message:
+          cell.formulaErrorMessage?.trim() ||
+          '입력하신 값이 앞서 입력한 값들의 계산 결과와 일치하지 않습니다.',
+        cellIds: [cell.id],
+      });
+    }
   }
 
   return issues;

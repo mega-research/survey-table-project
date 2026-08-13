@@ -18,31 +18,18 @@ export interface FirstContactSample {
   resid: number;
 }
 
-/**
- * 메일 미리보기용 — `resid ASC` 정렬 첫 컨택 1건.
- * 가장 먼저 업로드된 row 로 미리보기를 채운다.
- * 컨택이 0건이면 null.
- *
- * email 은 contact_pii 사이드 테이블에서 복호화 — 한 컨택에 여러 email 컬럼이 있으면
- * column_key 알파벳 순 첫 번째 사용.
- */
-export async function getFirstContactSample(
-  surveyId: string,
-  scope: OperationsDataScope,
-): Promise<FirstContactSample | null> {
-  const [row] = await db
-    .select({
-      id: contactTargets.id,
-      attrs: contactTargets.attrs,
-      inviteCode: contactTargets.inviteCode,
-      resid: contactTargets.resid,
-    })
-    .from(contactTargets)
-    .where(and(eq(contactTargets.surveyId, surveyId), targetScopeCondition(scope)))
-    .orderBy(asc(contactTargets.resid))
-    .limit(1);
-  if (!row) return null;
+interface ContactSampleRow {
+  id: string;
+  attrs: unknown;
+  inviteCode: string;
+  resid: number;
+}
 
+/**
+ * email 복호화 블록 — `getFirstContactSample` / `getContactSampleById` 공유.
+ * 한 컨택에 여러 email 컬럼이 있으면 column_key 알파벳 순 첫 번째 사용.
+ */
+async function withDecryptedEmail(row: ContactSampleRow): Promise<FirstContactSample> {
   const [emailRow] = await db
     .select({ cipher: contactPii.cipher })
     .from(contactPii)
@@ -70,4 +57,60 @@ export async function getFirstContactSample(
     email,
     resid: row.resid,
   };
+}
+
+/**
+ * 메일 미리보기용 — `resid ASC` 정렬 첫 컨택 1건.
+ * 가장 먼저 업로드된 row 로 미리보기를 채운다.
+ * 컨택이 0건이면 null.
+ *
+ * email 은 contact_pii 사이드 테이블에서 복호화 — 한 컨택에 여러 email 컬럼이 있으면
+ * column_key 알파벳 순 첫 번째 사용.
+ */
+export async function getFirstContactSample(
+  surveyId: string,
+  scope: OperationsDataScope,
+): Promise<FirstContactSample | null> {
+  const [row] = await db
+    .select({
+      id: contactTargets.id,
+      attrs: contactTargets.attrs,
+      inviteCode: contactTargets.inviteCode,
+      resid: contactTargets.resid,
+    })
+    .from(contactTargets)
+    .where(and(eq(contactTargets.surveyId, surveyId), targetScopeCondition(scope)))
+    .orderBy(asc(contactTargets.resid))
+    .limit(1);
+  if (!row) return null;
+
+  return withDecryptedEmail(row);
+}
+
+/**
+ * 특정 컨택 1건 샘플 — 단건 발송 미리보기용. 스코프 불일치/미존재면 null.
+ */
+export async function getContactSampleById(
+  surveyId: string,
+  contactTargetId: string,
+  scope: OperationsDataScope,
+): Promise<FirstContactSample | null> {
+  const [row] = await db
+    .select({
+      id: contactTargets.id,
+      attrs: contactTargets.attrs,
+      inviteCode: contactTargets.inviteCode,
+      resid: contactTargets.resid,
+    })
+    .from(contactTargets)
+    .where(
+      and(
+        eq(contactTargets.id, contactTargetId),
+        eq(contactTargets.surveyId, surveyId),
+        targetScopeCondition(scope),
+      ),
+    )
+    .limit(1);
+  if (!row) return null;
+  return withDecryptedEmail(row);
 }

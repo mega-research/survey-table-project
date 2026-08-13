@@ -6,11 +6,19 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { generateId } from '@/lib/utils';
-import { getMaxSpssCode } from '@/utils/option-code-generator';
+import { cn, generateId } from '@/lib/utils';
+import { commitOptionCode, getMaxSpssCode, nextUniqueOptionNumber } from '@/utils/option-code-generator';
 import { CheckboxOption, Question, QuestionOption, RadioOption } from '@/types/survey';
 
+import {
+  AnswerQuoteCellToggle,
+  AnswerQuoteGuidance,
+  AnswerQuoteNameField,
+  AnswerQuoteTextField,
+  type AnswerQuoteControlValue,
+} from './answer-quote-fields';
 import { BranchRuleEditor } from './branch-rule-editor';
+import { OptionLabelTextarea } from './option-label-textarea';
 import { OptionPlaceholderEditor } from './option-placeholder-editor';
 import { createTextInputOption } from './question-option-helpers';
 
@@ -27,6 +35,13 @@ export interface CellChoiceEditorProps {
   currentQuestionId: string;
   /** 전체 질문 목록 (분기 규칙용) */
   questions: Question[];
+  /** 질문 단위 응답 인용 토글 — 켜졌을 때만 옵션별 인용 문구 입력칸을 노출한다. */
+  answerQuoteEnabled?: boolean | undefined;
+  /**
+   * 셀 자신의 응답 인용 설정 — 호스트 질문이 표(table)일 때만 전달된다.
+   * 전달되면 헤더에 토글이 붙고, 옵션별 인용 문구 노출도 질문 단위 대신 이 토글이 결정한다.
+   */
+  cellAnswerQuote?: AnswerQuoteControlValue | undefined;
 
   // checkbox
   checkboxOptions: CheckboxOption[];
@@ -47,6 +62,13 @@ export interface CellChoiceEditorProps {
   onMinSelectionsChange: (v: number | undefined) => void;
   maxSelections: number | undefined;
   onMaxSelectionsChange: (v: number | undefined) => void;
+
+  /**
+   * optionCode blur 커밋 결과 value 가 동기화되면 상위에 통보한다.
+   * 상위(cell-content-modal)가 이 셀을 controllerCellId 로 참조하는 같은 표의
+   * 게이팅(enabledWhen)을 저장 시점에 함께 리매핑하는 데 사용한다.
+   */
+  onOptionValueChange?: (change: { oldValue: string; newValue: string }) => void;
 }
 
 export function CellChoiceEditor({
@@ -54,6 +76,8 @@ export function CellChoiceEditor({
   textContent,
   currentQuestionId,
   questions,
+  answerQuoteEnabled = false,
+  cellAnswerQuote,
   checkboxOptions,
   onCheckboxOptionsChange,
   radioOptions,
@@ -66,29 +90,84 @@ export function CellChoiceEditor({
   onMinSelectionsChange,
   maxSelections,
   onMaxSelectionsChange,
+  onOptionValueChange,
 }: CellChoiceEditorProps) {
   // 조건부 분기 토글 상태 (이 컴포넌트 내부에서만 사용)
   const [showBranchSettings, setShowBranchSettings] = useState(false);
+
+  // optionCode blur 커밋 후 다른 옵션과 중복되는 옵션 id 집합 (경고 표시용)
+  const [conflictOptionIds, setConflictOptionIds] = useState<Set<string>>(new Set());
+
+  // 옵션별 인용 문구 노출 기준. 셀 단위 설정이 있으면(표 질문) 그 토글이, 없으면 질문 단위 토글이 결정한다.
+  const showOptionQuoteText = cellAnswerQuote ? cellAnswerQuote.enabled : answerQuoteEnabled;
+
+  /**
+   * optionCode Input 의 blur 커밋 — applyCustomOptionCode 로 value 동기화를 시도한다.
+   * onChange 는 타이핑마다 optionCode 필드만 갱신(제어 컴포넌트 유지)하고, value 동기화는
+   * 여기(blur)에서만 일어난다 — 타이핑 중간값이 응답 키(value)로 새는 것을 막기 위함.
+   */
+  const commitCode = <
+    T extends { id: string; value: string; optionCode?: string; isCustomOptionCode?: boolean },
+  >(
+    options: T[],
+    index: number,
+    code: string,
+    onOptionsChange: (options: T[]) => void,
+  ) => {
+    const target = options[index];
+    const { options: next, valueChange, conflict } = commitOptionCode(options, index, code);
+    onOptionsChange(next);
+    if (target) {
+      setConflictOptionIds((prev) => {
+        if (prev.has(target.id) === conflict) return prev;
+        const nextSet = new Set(prev);
+        if (conflict) nextSet.add(target.id);
+        else nextSet.delete(target.id);
+        return nextSet;
+      });
+    }
+    if (valueChange) onOptionValueChange?.(valueChange);
+  };
 
   // --- checkbox ---
   if (cellType === 'checkbox') {
     return (
       <div className="space-y-4">
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-start justify-between">
             <Label>체크박스 옵션 관리</Label>
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="checkbox-show-branch"
-                checked={showBranchSettings}
-                onCheckedChange={setShowBranchSettings}
-                className="scale-75"
-              />
-              <Label htmlFor="checkbox-show-branch" className="text-xs text-gray-600">
-                조건부 분기
-              </Label>
+            <div className="flex flex-col items-end gap-1.5">
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="checkbox-show-branch"
+                  checked={showBranchSettings}
+                  onCheckedChange={setShowBranchSettings}
+                  className="scale-75"
+                />
+                <Label htmlFor="checkbox-show-branch" className="text-xs text-gray-600">
+                  조건부 분기
+                </Label>
+              </div>
+              {cellAnswerQuote && (
+                <AnswerQuoteCellToggle
+                  id="checkbox-cell-answer-quote"
+                  enabled={cellAnswerQuote.enabled}
+                  onEnabledChange={cellAnswerQuote.onEnabledChange}
+                />
+              )}
             </div>
           </div>
+
+          {cellAnswerQuote?.enabled && (
+            <>
+              <AnswerQuoteNameField
+                id="checkbox-cell-answer-quote-name"
+                name={cellAnswerQuote.name}
+                onNameChange={cellAnswerQuote.onNameChange}
+              />
+              <AnswerQuoteGuidance scope="cell" />
+            </>
+          )}
 
           <div className="max-h-[300px] space-y-3 overflow-y-auto pr-2">
             {checkboxOptions.map((option, index) => (
@@ -106,11 +185,11 @@ export function CellChoiceEditor({
                   />
                   <div className="flex-1 space-y-1">
                     <div className="flex gap-2">
-                      <Input
+                      <OptionLabelTextarea
                         value={option.label}
-                        onChange={(e) => {
+                        onChange={(label) => {
                           const updated = [...checkboxOptions];
-                          updated[index] = { ...option, label: e.target.value };
+                          updated[index] = { ...option, label };
                           onCheckboxOptionsChange(updated);
                         }}
                         placeholder="옵션 텍스트"
@@ -141,9 +220,22 @@ export function CellChoiceEditor({
                             updated[index] = { ...option, optionCode: e.target.value };
                             onCheckboxOptionsChange(updated);
                           }}
+                          onBlur={() =>
+                            commitCode(checkboxOptions, index, option.optionCode ?? '', onCheckboxOptionsChange)
+                          }
                           placeholder="코드"
-                          className="w-20 text-xs"
+                          aria-invalid={conflictOptionIds.has(option.id)}
+                          className={cn(
+                            'w-20 text-xs',
+                            conflictOptionIds.has(option.id) &&
+                              'border-red-500 focus-visible:ring-red-500',
+                          )}
                         />
+                        {conflictOptionIds.has(option.id) && (
+                          <p className="w-20 text-center text-[10px] text-red-500">
+                            응답값이 다른 옵션과 중복됩니다
+                          </p>
+                        )}
                       </div>
                     </div>
                     {option.id === OTHER_OPTION_ID && (
@@ -174,6 +266,21 @@ export function CellChoiceEditor({
                   />
                 )}
 
+                {showOptionQuoteText && (
+                  <div className="px-3 pb-3">
+                    <AnswerQuoteTextField
+                      id={`answer-quote-checkbox-${option.id}`}
+                      value={option.answerQuoteText}
+                      onChange={(answerQuoteText) => {
+                        const updated = [...checkboxOptions];
+                        updated[index] = { ...option, answerQuoteText };
+                        onCheckboxOptionsChange(updated);
+                      }}
+                      showInputTokenHint={option.allowTextInput === true}
+                    />
+                  </div>
+                )}
+
                 {showBranchSettings && (
                   <div className="px-3 pb-3">
                     <BranchRuleEditor
@@ -200,7 +307,7 @@ export function CellChoiceEditor({
                 const newOption: CheckboxOption = {
                   id: generateId(),
                   label: '새 옵션',
-                  value: `option-${checkboxOptions.length + 1}`,
+                  value: `option-${nextUniqueOptionNumber(checkboxOptions, 'option-')}`,
                   checked: false,
                   spssNumericCode: getMaxSpssCode(checkboxOptions) + 1,
                 };
@@ -344,20 +451,40 @@ export function CellChoiceEditor({
           />
         </div>
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-start justify-between">
             <Label>라디오 버튼 옵션 관리</Label>
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="radio-show-branch"
-                checked={showBranchSettings}
-                onCheckedChange={setShowBranchSettings}
-                className="scale-75"
-              />
-              <Label htmlFor="radio-show-branch" className="text-xs text-gray-600">
-                조건부 분기
-              </Label>
+            <div className="flex flex-col items-end gap-1.5">
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="radio-show-branch"
+                  checked={showBranchSettings}
+                  onCheckedChange={setShowBranchSettings}
+                  className="scale-75"
+                />
+                <Label htmlFor="radio-show-branch" className="text-xs text-gray-600">
+                  조건부 분기
+                </Label>
+              </div>
+              {cellAnswerQuote && (
+                <AnswerQuoteCellToggle
+                  id="radio-cell-answer-quote"
+                  enabled={cellAnswerQuote.enabled}
+                  onEnabledChange={cellAnswerQuote.onEnabledChange}
+                />
+              )}
             </div>
           </div>
+
+          {cellAnswerQuote?.enabled && (
+            <>
+              <AnswerQuoteNameField
+                id="radio-cell-answer-quote-name"
+                name={cellAnswerQuote.name}
+                onNameChange={cellAnswerQuote.onNameChange}
+              />
+              <AnswerQuoteGuidance scope="cell" />
+            </>
+          )}
 
           <div className="max-h-[300px] space-y-3 overflow-y-auto pr-2">
             {radioOptions.map((option, index) => (
@@ -379,11 +506,11 @@ export function CellChoiceEditor({
                   />
                   <div className="flex-1 space-y-1">
                     <div className="flex gap-2">
-                      <Input
+                      <OptionLabelTextarea
                         value={option.label}
-                        onChange={(e) => {
+                        onChange={(label) => {
                           const updated = [...radioOptions];
-                          updated[index] = { ...option, label: e.target.value };
+                          updated[index] = { ...option, label };
                           onRadioOptionsChange(updated);
                         }}
                         placeholder="옵션 텍스트"
@@ -414,9 +541,22 @@ export function CellChoiceEditor({
                             updated[index] = { ...option, optionCode: e.target.value };
                             onRadioOptionsChange(updated);
                           }}
+                          onBlur={() =>
+                            commitCode(radioOptions, index, option.optionCode ?? '', onRadioOptionsChange)
+                          }
                           placeholder="코드"
-                          className="w-20 text-xs"
+                          aria-invalid={conflictOptionIds.has(option.id)}
+                          className={cn(
+                            'w-20 text-xs',
+                            conflictOptionIds.has(option.id) &&
+                              'border-red-500 focus-visible:ring-red-500',
+                          )}
                         />
+                        {conflictOptionIds.has(option.id) && (
+                          <p className="w-20 text-center text-[10px] text-red-500">
+                            응답값이 다른 옵션과 중복됩니다
+                          </p>
+                        )}
                       </div>
                     </div>
                     {option.id === OTHER_OPTION_ID && (
@@ -447,6 +587,21 @@ export function CellChoiceEditor({
                   />
                 )}
 
+                {showOptionQuoteText && (
+                  <div className="px-3 pb-3">
+                    <AnswerQuoteTextField
+                      id={`answer-quote-radio-${option.id}`}
+                      value={option.answerQuoteText}
+                      onChange={(answerQuoteText) => {
+                        const updated = [...radioOptions];
+                        updated[index] = { ...option, answerQuoteText };
+                        onRadioOptionsChange(updated);
+                      }}
+                      showInputTokenHint={option.allowTextInput === true}
+                    />
+                  </div>
+                )}
+
                 {showBranchSettings && (
                   <div className="px-3 pb-3">
                     <BranchRuleEditor
@@ -473,7 +628,7 @@ export function CellChoiceEditor({
                 const newOption: RadioOption = {
                   id: generateId(),
                   label: '새 옵션',
-                  value: `option-${radioOptions.length + 1}`,
+                  value: `option-${nextUniqueOptionNumber(radioOptions, 'option-')}`,
                   selected: false,
                   spssNumericCode: getMaxSpssCode(radioOptions) + 1,
                 };
@@ -532,20 +687,40 @@ export function CellChoiceEditor({
   return (
     <div className="space-y-4">
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex items-start justify-between">
           <Label>Select 옵션 관리</Label>
-          <div className="flex items-center space-x-2">
-            <Switch
-              id="select-show-branch"
-              checked={showBranchSettings}
-              onCheckedChange={setShowBranchSettings}
-              className="scale-75"
-            />
-            <Label htmlFor="select-show-branch" className="text-xs text-gray-600">
-              조건부 분기
-            </Label>
+          <div className="flex flex-col items-end gap-1.5">
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="select-show-branch"
+                checked={showBranchSettings}
+                onCheckedChange={setShowBranchSettings}
+                className="scale-75"
+              />
+              <Label htmlFor="select-show-branch" className="text-xs text-gray-600">
+                조건부 분기
+              </Label>
+            </div>
+            {cellAnswerQuote && (
+              <AnswerQuoteCellToggle
+                id="select-cell-answer-quote"
+                enabled={cellAnswerQuote.enabled}
+                onEnabledChange={cellAnswerQuote.onEnabledChange}
+              />
+            )}
           </div>
         </div>
+
+        {cellAnswerQuote?.enabled && (
+          <>
+            <AnswerQuoteNameField
+              id="select-cell-answer-quote-name"
+              name={cellAnswerQuote.name}
+              onNameChange={cellAnswerQuote.onNameChange}
+            />
+            <AnswerQuoteGuidance scope="cell" />
+          </>
+        )}
 
         <div className="max-h-[300px] space-y-3 overflow-y-auto pr-2">
           {selectOptions.map((option, index) => (
@@ -588,9 +763,22 @@ export function CellChoiceEditor({
                           updated[index] = { ...option, optionCode: e.target.value };
                           onSelectOptionsChange(updated);
                         }}
+                        onBlur={() =>
+                          commitCode(selectOptions, index, option.optionCode ?? '', onSelectOptionsChange)
+                        }
                         placeholder="코드"
-                        className="w-20 text-xs"
+                        aria-invalid={conflictOptionIds.has(option.id)}
+                        className={cn(
+                          'w-20 text-xs',
+                          conflictOptionIds.has(option.id) &&
+                            'border-red-500 focus-visible:ring-red-500',
+                        )}
                       />
+                      {conflictOptionIds.has(option.id) && (
+                        <p className="w-20 text-center text-[10px] text-red-500">
+                          응답값이 다른 옵션과 중복됩니다
+                        </p>
+                      )}
                     </div>
                   </div>
                   {option.id === OTHER_OPTION_ID && (
@@ -621,6 +809,21 @@ export function CellChoiceEditor({
                 />
               )}
 
+              {showOptionQuoteText && (
+                <div className="px-3 pb-3">
+                  <AnswerQuoteTextField
+                    id={`answer-quote-select-${option.id}`}
+                    value={option.answerQuoteText}
+                    onChange={(answerQuoteText) => {
+                      const updated = [...selectOptions];
+                      updated[index] = { ...option, answerQuoteText };
+                      onSelectOptionsChange(updated);
+                    }}
+                    showInputTokenHint={option.allowTextInput === true}
+                  />
+                </div>
+              )}
+
               {showBranchSettings && (
                 <div className="px-3 pb-3">
                   <BranchRuleEditor
@@ -647,7 +850,7 @@ export function CellChoiceEditor({
               const newOption: QuestionOption = {
                 id: generateId(),
                 label: '새 옵션',
-                value: `option-${selectOptions.length + 1}`,
+                value: `option-${nextUniqueOptionNumber(selectOptions, 'option-')}`,
                 spssNumericCode: getMaxSpssCode(selectOptions) + 1,
               };
               onSelectOptionsChange([...selectOptions, newOption]);

@@ -1,0 +1,12 @@
+{
+  // scripts/ 를 tsx 로 실행할 때 쓰는 설정 — tsc --noEmit 대상이 아니다.
+  // `server-only` 마커 패키지는 Next 번들러가 alias 하는 가상 모듈이라 tsx 가
+  // resolve 하지 못한다. vitest 와 동일하게 빈 스텁으로 매핑해 통과시킨다.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./src/*"],
+      "server-only": ["./tests/stubs/server-only.ts"]
+    }
+  }
+}

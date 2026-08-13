@@ -34,6 +34,9 @@ export const surveys = pgTable('surveys', {
   description: text('description'),
   slug: text('slug').unique(),
   privateToken: uuid('private_token').defaultRandom(),
+  // 공개 읽기전용 미리보기 전용 토큰 — privateToken(응답 크레덴셜)과 분리해 발급.
+  // /preview/[token] 라우트만 조회한다 — /survey/[id] 응답 경로에서는 매칭하지 않는다(0069 마이그레이션).
+  previewToken: uuid('preview_token').defaultRandom(),
 
   // 설정
   isPublic: boolean('is_public').default(true).notNull(),
@@ -75,6 +78,9 @@ export const surveys = pgTable('surveys', {
   // 컨택 attrs 토큰 — invite token 강제 (0022 마이그레이션)
   requireInviteToken: boolean('require_invite_token').default(false).notNull(),
 
+  // 화면 너비 — 응답 페이지 컨테이너 항상 넓게(max-w-7xl) 강제 (0063 마이그레이션)
+  forceWideLayout: boolean('force_wide_layout').default(false).notNull(),
+
   // 버전 관리
   status: text('status').notNull().default('draft'), // 'draft' | 'published' | 'closed'
   currentVersionId: uuid('current_version_id'), // 현재 활성 배포 버전
@@ -85,7 +91,11 @@ export const surveys = pgTable('surveys', {
   contactEmail: text('contact_email'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-});
+}, (table) => [
+  // 0069 마이그레이션의 surveys_preview_token_unique 와 이름을 맞춘다. nullable 컬럼이라
+  // NULL 행은 제약에서 제외(다중 NULL 허용) — contact_targets.invite_code(0054)와 동일 패턴.
+  unique('surveys_preview_token_unique').on(table.previewToken),
+]);
 
 // 질문 그룹 테이블
 export const questionGroups = pgTable('question_groups', {
@@ -119,6 +129,7 @@ export const questions = pgTable('questions', {
   title: text('title').notNull(),
   description: text('description'),
   required: boolean('required').default(false).notNull(),
+  requiredMessage: text('required_message'), // 필수 미응답 안내 문구 — null 이면 기본 문구
   order: integer('order').notNull().default(0),
 
   // 옵션들 (radio, checkbox, select용) - JSON으로 저장
@@ -145,6 +156,8 @@ export const questions = pgTable('questions', {
   optionsColumns: integer('options_columns'),
   // 옵션 그룹 블록 정렬 (null=left, 가로/세로 배치에서만 유효)
   optionsAlign: text('options_align', { enum: ['left', 'center', 'right'] }),
+  // 모바일 옵션 배치 명시 override (null=자동 휴리스틱, 0=가로, 1=세로, N≥2=그리드)
+  mobileOptionsColumns: integer('mobile_options_columns'),
 
   // 체크박스 선택 개수 제한 (checkbox 타입 전용)
   minSelections: integer('min_selections'),
@@ -185,6 +198,14 @@ export const questions = pgTable('questions', {
   // 열 라벨 숨기기 (테이블 타입 전용)
   hideColumnLabels: boolean('hide_column_labels').default(false),
 
+  // 테이블 문항 내보내기 셀 순서 — 'row-first'(기본, null 동일) | 'column-first'
+  exportCellOrder: text('export_cell_order').$type<'row-first' | 'column-first'>(),
+
+  // 응답 인용 — 앞 질문의 응답을 뒤 질문 본문에 {{{이름}}} 으로 끼워넣는 기능
+  answerQuoteEnabled: boolean('answer_quote_enabled'),
+  answerQuoteName: text('answer_quote_name'),
+  answerQuoteText: text('answer_quote_text'), // 단답형 전용. 옵션·셀 문구는 JSONB 안
+
   // 모바일에서도 원본 표 레이아웃(가로 스크롤)으로 표시 — 카드/스테퍼 전환 안 함
   // (테이블 타입 + 설명 테이블 소스 radio/checkbox 전용)
   mobileOriginalTable: boolean('mobile_original_table').default(false),
@@ -217,7 +238,7 @@ export const questions = pgTable('questions', {
 }, (table) => [
   check(
     'questions_mobile_table_display_mode_check',
-    sql`${table.mobileTableDisplayMode} in ('auto', 'drilldown-original-row', 'original')`,
+    sql`${table.mobileTableDisplayMode} in ('auto', 'drilldown-original-row', 'row-wise-original', 'original')`,
   ),
 ]);
 
@@ -322,12 +343,16 @@ export const surveyVersions = pgTable('survey_versions', {
   versionNumber: integer('version_number').notNull(),
   status: text('status').notNull().default('published'), // 'published' | 'superseded' | 'closed'
 
-  // 배포 시점의 전체 설문 구조 (불변 — 수정 금지)
-  snapshot: jsonb('snapshot').notNull().$type<SurveyVersionSnapshot>(),
+  // 배포 시점의 전체 설문 구조 (불변 — 수정 금지).
+  // NULL = 버전 보존 정책으로 정리됨 (2026-07-31 spec). 읽는 쪽은 NULL 을 다뤄야 한다.
+  snapshot: jsonb('snapshot').$type<SurveyVersionSnapshot>(),
 
   changeNote: text('change_note'),
   publishedAt: timestamp('published_at', { withTimezone: true }).defaultNow().notNull(),
   closedAt: timestamp('closed_at', { withTimezone: true }),
+
+  // 보존 정책으로 snapshot 을 비운 시각. NULL = 정리되지 않음.
+  prunedAt: timestamp('pruned_at', { withTimezone: true }),
 
   // soft delete
   deletedAt: timestamp('deleted_at', { withTimezone: true }),

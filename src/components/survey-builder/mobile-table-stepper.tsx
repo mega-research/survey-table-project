@@ -5,6 +5,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Check, ChevronLeft, ChevronRight, ListChecks } from 'lucide-react';
 
 import { useColumnSectionMap, useRowGroups } from '@/hooks/use-row-groups';
+import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import type { HeaderCell, TableColumn, TableRow } from '@/types/survey';
 import { collectMobileLegendLabels } from '@/utils/mobile-display-cells';
@@ -42,7 +44,8 @@ interface MobileTableStepperProps {
 
 // ── 유틸 ──
 
-function getRowShortLabel(row: TableRow, idx: number): string {
+/** substitutedLabel: 응답 인용이 이미 치환된 row.label — 호출부에서 한 번만 치환해 넘긴다. */
+function getRowShortLabel(row: TableRow, idx: number, substitutedLabel?: string): string {
   const radioCell = row.cells.find(
     (c) => c.type === 'radio' && !c.isHidden && c.radioOptions?.length === 1,
   );
@@ -51,8 +54,8 @@ function getRowShortLabel(row: TableRow, idx: number): string {
     const match = label.match(/^[①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳]/);
     return match ? match[0] : `${idx + 1}`;
   }
-  if (row.label) {
-    return row.label.length > 12 ? row.label.slice(0, 12) + '…' : row.label;
+  if (substitutedLabel) {
+    return substitutedLabel.length > 12 ? substitutedLabel.slice(0, 12) + '…' : substitutedLabel;
   }
   return `${idx + 1}`;
 }
@@ -76,10 +79,35 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
   errorCellIds,
 }: MobileTableStepperProps) {
   // ── 내부에서 훅으로 계산 (props drilling 제거) ──
+  const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
   const rowGroups = useRowGroups(displayRows);
   // 표 전체 "카드 범례" 라벨 — 모든 응답 카드 상단에 공통 표시
   const legendLabels = useMemo(() => collectMobileLegendLabels(displayRows), [displayRows]);
   const columnSectionMap = useColumnSectionMap(visibleHeaderGrid);
+
+  // 그룹/행 헤더 라벨은 이 컴포넌트 자체(사전선택 phase·pill·현재 그룹 헤더)에서 직접
+  // 렌더하므로 응답 인용 치환이 필요하다. MobileRowCard 는 자체적으로 row.label 을
+  // 치환하므로(mobile-row-card.tsx) 그 쪽에 넘기는 row 객체는 건드리지 않고, 여기서만
+  // 쓰는 표시용 라벨을 별도로 메모이즈한다 — 렌더마다 다시 치환하지 않도록
+  // mobile-table-drilldown.tsx 의 sections 메모와 동일한 방식.
+  // 그룹은 startIndex, 행은 id 로 조회(그룹 선택 phase 는 rowGroups 를 필터링해
+  // 배열 인덱스가 어긋나므로 안정적인 키가 필요하다).
+  const groupLabelByStart = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const group of rowGroups) {
+      map.set(group.startIndex, substituteTokens(group.label, attrs, quotes));
+    }
+    return map;
+  }, [rowGroups, attrs, quotes]);
+
+  const rowLabelById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const row of displayRows) {
+      if (row.label) map.set(row.id, substituteTokens(row.label, attrs, quotes));
+    }
+    return map;
+  }, [displayRows, attrs, quotes]);
 
   const rowCompletionMap = useMemo(() => {
     const map = new Map<string, boolean>();
@@ -96,7 +124,6 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
 
   // ── 인덱스 clamp ──
   // displayRows 리렌더 직후 stale 인덱스를 즉시 보정해야 모바일 스테퍼가 빈 상태를 거치지 않는다.
-  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (rowGroups.length === 0) return;
     if (currentGroupIdx >= rowGroups.length) {
@@ -110,7 +137,6 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
       setCurrentRowInGroup(group.rows.length - 1);
     }
   }, [rowGroups, currentGroupIdx, currentRowInGroup]);
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   // ── pill 자동 스크롤 ──
   useEffect(() => {
@@ -173,7 +199,6 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
   // 이 컴포넌트를 리렌더(리마운트 아님)하므로 선행 질문 응답으로 displayRows 가
   // 바뀌면 stale 상태가 남는다(예: 분류가 detail↔group-select 로 뒤집히거나,
   // 사라진 행 id 가 preSelectedRowIds 에 남아 filteredRows 가 빈 집합이 됨).
-  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     // 더 이상 존재하지 않는 행 id 를 사전선택 집합에서 제거
     const rowIdSet = new Set(displayRows.map((r) => r.id));
@@ -207,7 +232,6 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
       return prev;
     });
   }, [displayRows, rowGroups, needsPreSelect, skipGroupSelect, preSelectedRowIds]);
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   const toggleGroupIndex = useCallback((idx: number) => {
     setPreSelectedGroupIndices((prev) => {
@@ -286,7 +310,9 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
               onChange={() => toggleGroupIndex(idx)}
               className="h-5 w-5 rounded border-gray-300 text-blue-600"
             />
-            <span className="flex-1 text-sm font-medium text-gray-900">{group.label}</span>
+            <span className="flex-1 text-sm font-medium text-gray-900">
+              {groupLabelByStart.get(group.startIndex) ?? group.label}
+            </span>
             <span className="text-xs text-gray-400">{group.rows.length}개</span>
           </label>
         ))}
@@ -315,11 +341,13 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
           // 두 rowspan 섹션 간 충돌 가능(중복 key → React reconciliation 오류)
           <div key={group.startIndex}>
             {!skipGroupSelect && (
-              <h3 className="mb-1.5 text-xs font-semibold text-gray-500">{group.label}</h3>
+              <h3 className="mb-1.5 text-xs font-semibold text-gray-500">
+                {groupLabelByStart.get(group.startIndex) ?? group.label}
+              </h3>
             )}
             <div className="space-y-1.5">
               {group.rows.map((row) => {
-                const label = row.label || row.cells.find((c) => c.type === 'text' && !c.isHidden)?.content || row.id;
+                const label = rowLabelById.get(row.id) || row.cells.find((c) => c.type === 'text' && !c.isHidden)?.content || row.id;
                 return (
                   <label
                     key={row.id}
@@ -480,7 +508,9 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
                 )}
               >
                 {allDone && !isActive && <Check className="h-3 w-3" />}
-                <span className="max-w-[180px] truncate">{group.label}</span>
+                <span className="max-w-[180px] truncate">
+                  {groupLabelByStart.get(group.startIndex) ?? group.label}
+                </span>
               </button>
             );
           })}
@@ -496,7 +526,7 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
           {currentGroup.rows.map((row, idx) => {
             const isActive = idx === currentRowInGroup;
             const isDone = rowCompletionMap.get(row.id) ?? false;
-            const rowLabel = getRowShortLabel(row, idx);
+            const rowLabel = getRowShortLabel(row, idx, rowLabelById.get(row.id));
             return (
               <button
                 key={row.id}
@@ -520,7 +550,11 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
 
       <div className="flex items-center justify-between text-xs text-gray-400">
         <span>
-          {hasGroups && <span className="font-medium text-gray-600">{currentGroup.label}</span>}
+          {hasGroups && (
+            <span className="font-medium text-gray-600">
+              {groupLabelByStart.get(currentGroup.startIndex) ?? currentGroup.label}
+            </span>
+          )}
           {hasGroups && ' · '}
           {currentRowInGroup + 1} / {currentGroup.rows.length}
         </span>

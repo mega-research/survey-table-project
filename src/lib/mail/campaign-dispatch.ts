@@ -11,6 +11,8 @@ import { contactTargets } from '@/db/schema/contacts';
 import { mailCampaigns, mailRecipients } from '@/db/schema/mail';
 import type { MailRecipientSendPayloadSnapshot } from '@/db/schema/schema-types';
 import { buildInviteUrl } from '@/lib/survey-url';
+import { extractMailContentKeys } from '@/lib/r2-lifecycle/key-extract';
+import { recordSentKeys } from '@/lib/r2-lifecycle/sent-ledger.server';
 import { createCampaignProviderRateLimiter } from '@/lib/mail/campaign-send-rate-limit';
 import { finalizeCampaignIfDone } from '@/lib/mail/recipient-status-transition';
 import { renderForCampaignSend } from '@/lib/mail/render-for-send';
@@ -591,6 +593,19 @@ export async function prepareCampaignDispatch(
       )
       .returning({ id: mailCampaigns.id });
     if (activated.length === 0) return null;
+
+    // 발송 장부 기록 — 발신 콘텐츠(캠페인 스냅샷)의 R2 키를 dispatch 활성화와
+    // 같은 트랜잭션에서 기록한다. 기록 실패는 throw 로 발송을 중단한다: 장부는
+    // 발송 파일 보호 장치라 기록 없이 발송이 진행되면 안 된다 (같은 흐름의 DB
+    // 오류와 동일 취급). isTest 캠페인도 이 경로를 타므로 별도 처리는 불요.
+    // tmp/* 등 게이트 불통과 키는 recordSentKeys 내장 게이트가 거른다.
+    await recordSentKeys(
+      tx,
+      extractMailContentKeys({
+        bodyHtml: campaign.bodyHtmlSnapshot,
+        attachments: campaign.attachmentsSnapshot,
+      }),
+    );
 
     const dispatchable = await tx
       .select({ id: mailRecipients.id })

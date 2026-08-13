@@ -5,7 +5,7 @@ import type React from 'react';
 
 import { PreviewCell } from '@/components/survey-builder/cells/preview-cell';
 import { TablePreview } from '@/components/survey-builder/table-preview';
-import { useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import type { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
 import { isMobileOriginalRowInteractiveCell } from '@/utils/mobile-original-row';
@@ -25,6 +25,7 @@ interface Props {
   scrollLeftRef?: React.MutableRefObject<number> | undefined;
   resetScrollKey?: string | number | undefined;
   errorCellIds?: Set<string> | undefined;
+  instanceScope?: string | undefined;
 }
 
 export function MobileOriginalRowTable(props: Props) {
@@ -37,9 +38,11 @@ export function MobileOriginalRowTable(props: Props) {
     scrollLeftRef,
     resetScrollKey,
     errorCellIds,
+    instanceScope,
   } = props;
   const { rows, interactiveRowId } = props;
   const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
 
   const resolveChoiceControlType = useCallback(
     (cell: TableCell) =>
@@ -56,13 +59,16 @@ export function MobileOriginalRowTable(props: Props) {
         if (hidden && !isMobileOriginalRowInteractiveCell(cell)) {
           return <span aria-hidden="true" />;
         }
-        const previewCell = {
-          ...cell,
-          content: hidden ? '' : substituteTokens(cell.content, attrs),
-        };
+        const substitutedContent = hidden ? '' : substituteTokens(cell.content, attrs, quotes);
+        const previewCell = { ...cell, content: substitutedContent };
         return (
           <PreviewCell
             cell={previewCell}
+            // image/video 는 PreviewCell 이 자체적으로(또는 위임한 ImageCell/VideoCell 이)
+            // cell.content 를 다시 치환할 수 있어, 위에서 이미 치환한 값을 명시적으로
+            // 넘겨 이중 치환을 막는다(cell-options-container.tsx 의 opt-in 패턴과 동일).
+            // 다른 타입은 previewCell.content 폴백을 그대로 쓰므로 영향 없다.
+            content={substitutedContent}
             choiceControlType={resolveChoiceControlType(cell)}
             disableControls
           />
@@ -72,7 +78,7 @@ export function MobileOriginalRowTable(props: Props) {
       if (!isMobileOriginalRowInteractiveCell(cell)) return <span aria-hidden="true" />;
       return renderCell({ ...cell, content: '' });
     },
-    [attrs, interactiveRowId, renderCell, resolveChoiceControlType],
+    [attrs, quotes, interactiveRowId, renderCell, resolveChoiceControlType],
   );
 
   return (
@@ -86,10 +92,16 @@ export function MobileOriginalRowTable(props: Props) {
       scrollLeftRef={scrollLeftRef}
       resetScrollKey={resetScrollKey}
       errorCellIds={errorCellIds}
+      getCellInstanceId={
+        instanceScope
+          ? (cell, row) => `${instanceScope}:${row.id}:${cell.id}`
+          : undefined
+      }
       renderCell={renderMobileCell}
       choiceControlType={choiceControlType}
       stickyHeader={false}
       preserveRowHeights
+      applyCellBackground={false}
     />
   );
 }

@@ -43,6 +43,18 @@
     "0056_add_mobile_table_display_mode",
     "0057_survey_target_test_mode",
     "0058_add_mobile_drilldown_repeat_header_rows",
-    "0059_add_mail_recipient_dispatch_lease"
+    "0059_add_mail_recipient_dispatch_lease",
+    "0060_add_mail_campaign_kind",
+    "0061_contact_upload_modes",
+    "0062_add_question_mobile_options_columns",
+    "0063_add_survey_force_wide_layout",
+    "0064_add_question_export_cell_order",
+    "0065_r2_deletion_queue_and_sent_ledger",
+    "0066_add_row_wise_original_mobile_mode",
+    "0067_add_question_answer_quote",
+    "0068_add_question_required_message",
+    "0069_add_survey_preview_token",
+    "0070_survey_version_snapshot_nullable",
+    "0071_r2_key_refs"
   ]
 }

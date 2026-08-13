@@ -18,12 +18,15 @@ import {
   resolveMobileTableDisplayMode,
 } from '@/utils/mobile-table-display-mode';
 import { resolveMobileDrilldownRepeatHeaderRange } from '@/utils/mobile-drilldown-repeat-header';
+import { getCommonHeaderStyle } from '@/utils/header-style';
 
 import { BulkGeneratorModal, BulkColumnDef } from './bulk-generator';
 import { CellContentModal } from './cell-content-modal';
 import { ConditionModal } from './condition-modal';
 import { EditorTableRow } from './editor-table-row';
 import { HeaderGridEditor } from './header-grid-editor';
+import { HeaderBulkStyleButton } from './header-bulk-style-button';
+import { HeaderBulkStyleDialog } from './header-bulk-style-dialog';
 import { useTableEditor } from './hooks/use-table-editor';
 import { LoadCellModal } from './load-cell-modal';
 import { MobileTableDisplaySettings } from './mobile-table-display-settings';
@@ -39,16 +42,22 @@ interface DynamicTableEditorProps {
   tableTitle?: string | undefined;
   columns?: TableColumn[] | undefined;
   rows?: TableRow[] | undefined;
-  tableHeaderGrid?: HeaderCell[][] | undefined;
+  tableHeaderGrid?: HeaderCell[][] | null | undefined;
   currentQuestionId?: string | undefined;
   questionCode?: string | undefined;
   questionTitle?: string | undefined;
+  /**
+   * 질문 단위 응답 인용 토글. 셀 편집 모달의 인용 문구 입력칸 노출 여부를 결정한다.
+   * 스토어가 아니라 편집 모달의 formData 에서 내려온다 — 저장 전 토글도 즉시 반영되어야 하기 때문.
+   */
+  answerQuoteEnabled?: boolean | undefined;
   dynamicRowConfigs?: DynamicRowGroupConfig[] | undefined;
   onTableChange: (data: {
     tableTitle: string;
     tableColumns: TableColumn[];
     tableRowsData: TableRow[];
-    tableHeaderGrid?: HeaderCell[][] | undefined;
+    // 해제는 명시적 null (키 생략 금지) — use-table-editor 의 계약과 동일.
+    tableHeaderGrid: HeaderCell[][] | null;
   }) => void;
   onDynamicRowConfigsChange?: (configs: DynamicRowGroupConfig[] | undefined) => void;
 }
@@ -63,6 +72,9 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
   const editingQuestionId = useSurveyUIStore((s) => s.editingQuestionId);
   const hideColumnLabels = useSurveyBuilderStore(
     (s) => s.currentSurvey.questions.find((q) => q.id === editingQuestionId)?.hideColumnLabels ?? false,
+  );
+  const exportCellOrder = useSurveyBuilderStore(
+    (s) => s.currentSurvey.questions.find((q) => q.id === editingQuestionId)?.exportCellOrder ?? 'row-first',
   );
   const mobileTableQuestion = useSurveyBuilderStore(
     (state) => state.currentSurvey.questions.find((q) => q.id === editingQuestionId),
@@ -110,6 +122,7 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
     deleteColumn,
     moveColumn,
     updateColumnLabel,
+    updateColumnStyle,
     updateColumnCode,
     handleColumnWidthChange,
     setEditingColumnWidth,
@@ -142,6 +155,7 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
     setColumnConditionModalOpen,
     toggleMultiRowHeader,
     updateHeaderGrid,
+    applyHeaderStyle,
     // 드래그 복사
     dragCopyState,
     undoInfo,
@@ -158,6 +172,7 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
 
   // ── 행 일괄 생성 상태 ──
   const [bulkRowModalOpen, setBulkRowModalOpen] = useState(false);
+  const [headerStyleDialogOpen, setHeaderStyleDialogOpen] = useState(false);
   const [bulkRowToast, setBulkRowToast] = useState<{ count: number; visible: boolean } | null>(null);
   const bulkRowToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -398,7 +413,13 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
       <div className="space-y-3 rounded-lg border border-gray-200 p-4">
         <div className="flex items-center justify-between">
           <div>
-            <Label className="text-sm font-medium">다단계 헤더</Label>
+            <div className="flex items-center gap-2">
+              <Label className="text-sm font-medium">다단계 헤더</Label>
+              <HeaderBulkStyleButton
+                columnCount={currentColumns.length}
+                onOpen={() => setHeaderStyleDialogOpen(true)}
+              />
+            </div>
             <p className="text-xs text-gray-500">
               여러 행으로 구성된 계층적 헤더 (종사자 수 → 사무직/생산직 → 남/여 등)
             </p>
@@ -422,6 +443,13 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
           />
         )}
       </div>
+
+      <HeaderBulkStyleDialog
+        open={headerStyleDialogOpen}
+        onOpenChange={setHeaderStyleDialogOpen}
+        initialStyle={getCommonHeaderStyle(currentColumns, currentHeaderGrid)}
+        onApply={applyHeaderStyle}
+      />
 
       {/* 열 라벨 숨기기 설정 */}
       <div className="space-y-3 rounded-lg border border-gray-200 p-4">
@@ -447,6 +475,35 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
           </label>
         </div>
       </div>
+
+      {/* 내보내기 셀 순서 설정 — table 유형 전용 (다운로드 열 나열 축) */}
+      {mobileTableQuestion?.type === 'table' && (
+        <div className="space-y-3 rounded-lg border border-gray-200 p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <Label className="text-sm font-medium">내보내기 열 우선 정렬</Label>
+              <p className="text-xs text-gray-500">
+                Raw Data/SPSS 다운로드에서 변수 열을 표의 열 기준으로 먼저 나열합니다. 끄면 행 기준입니다.
+              </p>
+            </div>
+            <label className="relative inline-flex cursor-pointer items-center">
+              <input
+                type="checkbox"
+                checked={exportCellOrder === 'column-first'}
+                onChange={(e) => {
+                  if (editingQuestionId) {
+                    silentUpdateQuestion(editingQuestionId, {
+                      exportCellOrder: e.target.checked ? 'column-first' : 'row-first',
+                    });
+                  }
+                }}
+                className="peer sr-only"
+              />
+              <div className="peer h-5 w-9 rounded-full bg-gray-200 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-blue-600 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:outline-none" />
+            </label>
+          </div>
+        </div>
+      )}
 
       {mobileTableQuestion
         && (mobileTableQuestion.type === 'table'
@@ -548,6 +605,7 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
                 editingColumnWidth={editingColumnWidth}
                 hasQuestions={hasQuestions}
                 onUpdateColumnLabel={updateColumnLabel}
+                onUpdateColumnStyle={updateColumnStyle}
                 onUpdateColumnCode={updateColumnCode}
                 onMoveColumn={moveColumn}
                 onDeleteColumn={deleteColumn}
@@ -789,6 +847,7 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
         <CellContentModal
           isOpen={!!selectedCell}
           onClose={() => setSelectedCell(null)}
+          ownQuestion={currentQuestionAsQuestion}
           currentQuestionId={currentQuestionId}
           questionCode={questionCode}
           questionTitle={questionTitle}
@@ -797,6 +856,7 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
           columnCode={selectedCellContext.columnCode}
           columnLabel={selectedCellContext.columnLabel}
           cell={selectedCellContext.cell}
+          answerQuoteEnabled={props.answerQuoteEnabled ?? false}
           getLatestRows={() => currentRowsRef.current}
           choiceGroups={currentQuestion?.choiceGroups}
           onChoiceGroupsChange={(groups: ChoiceGroup[]) => {
@@ -814,10 +874,17 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
               ...(pruned !== undefined ? { choiceGroups: pruned } : { choiceGroups: [] }),
             });
           }}
-          onSave={(cell) => {
+          onSave={(cell, valueChanges) => {
             if (selectedCellContext.rowIndex !== -1 && selectedCellContext.cellIndex !== -1) {
-              updateCell(selectedCellContext.rowIndex, selectedCellContext.cellIndex, cell);
+              updateCell(
+                selectedCellContext.rowIndex,
+                selectedCellContext.cellIndex,
+                cell,
+                valueChanges,
+              );
             }
+            // 표 밖(다른 질문/그룹/행/열)의 표시조건 리매핑은 셀 모달이 DB 커밋 직후 직접
+            // 수행한다 — 셀 저장이 이미 비가역 커밋 지점이라 질문 저장까지 미룰 수 없다.
           }}
         />
       )}

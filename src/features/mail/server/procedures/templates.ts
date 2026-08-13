@@ -2,7 +2,7 @@ import * as z from 'zod';
 
 import { ORPCError } from '@orpc/server';
 
-import { authed } from '@/server/orpc';
+import { assertSurveyAccess, scoped } from '@/server/orpc';
 
 import {
   CreateMailTemplateInput,
@@ -16,6 +16,7 @@ import * as svc from '../services/mail-templates.service';
 /**
  * service throw 를 사용자 친화 ORPCError 로 변환.
  * - AttachmentPromoteError: 첨부 promote 부분 실패 → 재시도 안내 메시지(원본 의미론 보존).
+ * - MailImagePromoteError: 본문 이미지 promote 부분 실패 → 재시도 안내 메시지.
  * - MailTemplateNotFoundError: 다른 설문/없는 템플릿 → NOT_FOUND.
  */
 function mapServiceError(err: unknown): never {
@@ -24,16 +25,22 @@ function mapServiceError(err: unknown): never {
       message: `첨부 파일을 저장하지 못했습니다 (${err.failedKeys.length}개). 잠시 후 다시 시도해 주세요.`,
     });
   }
+  if (err instanceof svc.MailImagePromoteError) {
+    throw new ORPCError('BAD_REQUEST', {
+      message: `본문 이미지를 저장하지 못했습니다 (${err.failedKeys.length}개). 잠시 후 다시 시도해 주세요.`,
+    });
+  }
   if (err instanceof svc.MailTemplateNotFoundError) {
     throw new ORPCError('NOT_FOUND', { message: '템플릿을 찾을 수 없습니다' });
   }
   throw err;
 }
 
-const create = authed
+const create = scoped
   .input(CreateMailTemplateInput)
   .output(CreateMailTemplateOutput)
-  .handler(async ({ input }) => {
+  .handler(async ({ context, input }) => {
+    assertSurveyAccess(context.user.id, input.surveyId);
     try {
       return await svc.createMailTemplate(input);
     } catch (err) {
@@ -41,10 +48,11 @@ const create = authed
     }
   });
 
-const update = authed
+const update = scoped
   .input(UpdateMailTemplateInput)
   .output(UpdateMailTemplateOutput)
-  .handler(async ({ input }) => {
+  .handler(async ({ context, input }) => {
+    assertSurveyAccess(context.user.id, input.surveyId);
     try {
       return await svc.updateMailTemplate(input);
     } catch (err) {
@@ -52,10 +60,11 @@ const update = authed
     }
   });
 
-const remove = authed
+const remove = scoped
   .input(DeleteMailTemplateInput)
   .output(z.object({ ok: z.literal(true) }))
-  .handler(async ({ input }) => {
+  .handler(async ({ context, input }) => {
+    assertSurveyAccess(context.user.id, input.surveyId);
     try {
       await svc.deleteMailTemplate(input);
       return { ok: true as const };

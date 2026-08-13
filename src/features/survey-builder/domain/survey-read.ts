@@ -156,11 +156,15 @@ export type SurveyBySlugInput = z.infer<typeof SurveyBySlugInput>;
 export const SurveyByPrivateTokenInput = z.object({ token: z.string() });
 export type SurveyByPrivateTokenInput = z.infer<typeof SurveyByPrivateTokenInput>;
 
+/** byPreviewToken(getSurveyByPreviewToken) — 공개 읽기전용 미리보기 라우트(/preview/[token]) 전용. */
+export const SurveyByPreviewTokenInput = z.object({ token: z.string() });
+export type SurveyByPreviewTokenInput = z.infer<typeof SurveyByPreviewTokenInput>;
+
 /**
- * bySlug / byPrivateToken 반환. 두 pub 절차는 익명 응답자에게 노출되므로 full row 를
- * 반환하면 testToken/testModeEnabled/isPaused/pausedMessage/privateToken 같은 라이브
- * 제어·비밀 컬럼이 유출된다(I-3). 호출자(응답 로더 use-survey-loader)는 id 만 소비하므로
- * id 만 투영해 반환한다. findFirst 미스 시 undefined → nullable.
+ * bySlug / byPrivateToken / byPreviewToken 반환. 세 pub 절차는 익명 응답자에게 노출되므로
+ * full row 를 반환하면 testToken/testModeEnabled/isPaused/pausedMessage/privateToken 같은
+ * 라이브 제어·비밀 컬럼이 유출된다(I-3). 호출자(응답 로더 use-survey-loader, 미리보기 라우트)는
+ * id 만 소비하므로 id 만 투영해 반환한다. findFirst 미스 시 undefined → nullable.
  */
 export type SurveyIdRow = { id: string };
 export const SurveyIdRowOutput = z.custom<SurveyIdRow | null | undefined>();

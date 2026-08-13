@@ -4,6 +4,10 @@ import React from 'react';
 
 import { Video } from 'lucide-react';
 
+import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { substituteTokens } from '@/lib/survey/substitute-tokens';
+import { cn } from '@/lib/utils';
+import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
 import { getYouTubeEmbedUrl } from '../table-cell-renderers';
 
 import type { InteractiveCellProps, PreviewCellProps } from './types';
@@ -11,7 +15,13 @@ import type { InteractiveCellProps, PreviewCellProps } from './types';
 /** 비디오 셀 (인터랙티브 / 미리보기 동일) */
 export const VideoCell = React.memo(function VideoCell({
   cell,
+  content,
 }: InteractiveCellProps | PreviewCellProps) {
+  const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
+  // content 오버라이드 미지정 시 직접 치환(단일 패스) — image-cell.tsx 와 동일한 패턴.
+  const caption = content ?? substituteTokens(cell.content, attrs, quotes);
+
   if (!cell.videoUrl) {
     return (
       <div className="flex items-center gap-2 text-gray-500">
@@ -64,8 +74,13 @@ export const VideoCell = React.memo(function VideoCell({
           <span className="text-sm">동영상 링크 오류</span>
         </div>
       )}
-      {cell.content && (
-        <div className="mt-2 text-left text-sm text-gray-700">{cell.content}</div>
+      {caption && (
+        <div
+          className={cn('mt-2 text-left text-base text-gray-700', getCellTextClassName(cell))}
+          style={getCellTextStyle(cell)}
+        >
+          {caption}
+        </div>
       )}
     </div>
   );

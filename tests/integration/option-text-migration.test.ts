@@ -4,9 +4,22 @@ import {
   migrateResponseValue,
   migrateSnapshotQuestions,
   generateOtherOptionFields,
+  collectSelectedOptionIds,
   type LegacyQuestionShape,
   type LegacyResponseShape,
 } from '@/lib/option-text-migration';
+
+describe('collectSelectedOptionIds', () => {
+  it('응답 value를 옵션 id로 변환하고 그룹 응답도 펼친다', () => {
+    const options = [
+      { id: 'id-a', value: 'value-a' },
+      { id: 'id-b', value: 'value-b' },
+    ];
+
+    expect([...collectSelectedOptionIds({ g1: 'value-a', g2: ['value-b'] }, options)])
+      .toEqual(['id-a', 'id-b']);
+  });
+});
 
 describe('migrateQuestionOptions', () => {
   it('appends 기타 option when allowOtherOption=true and 5 options exist', () => {
@@ -407,8 +420,8 @@ describe('migrateSnapshotQuestions', () => {
                 {
                   id: 'txt1',
                   type: 'text',
-                  allowOtherOption: true,  // legacy garbage data
-                } as any,  // text 셀에 allowOtherOption 은 비정상이지만 방어
+                  allowOtherOption: true, // legacy garbage data — text 셀에 allowOtherOption 은 비정상이지만 방어
+                },
               ],
             },
           ],

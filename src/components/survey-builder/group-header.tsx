@@ -4,6 +4,8 @@ import type { DraggableAttributes } from '@dnd-kit/core';
 import type { SyntheticListenerMap } from '@dnd-kit/core/dist/hooks/utilities';
 import { ChevronDown, ChevronRight, FolderOpen, GripVertical } from 'lucide-react';
 
+import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { QuestionGroup } from '@/types/survey';
 
@@ -27,6 +29,10 @@ export function GroupHeader({
   dragHandleProps,
 }: GroupHeaderProps) {
   const { toggleGroupCollapse } = useSurveyBuilderStore();
+  // 헤더 표시 전용 — 그룹 이름 편집 인풋은 원문 {{{이름}}} 를 그대로 다룬다.
+  const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
+  const displayName = substituteTokens(group.name, attrs, quotes);
 
   const handleToggle = () => {
     toggleGroupCollapse(group.id);
@@ -62,7 +68,7 @@ export function GroupHeader({
         </div>
         <FolderOpen className="h-5 w-5 text-blue-600" />
         <div className="flex-1">
-          <h3 className="text-base font-semibold text-gray-900">{group.name}</h3>
+          <h3 className="text-base font-semibold text-gray-900">{displayName}</h3>
           {group.description && <p className="mt-0.5 text-xs text-gray-600">{group.description}</p>}
         </div>
       </div>

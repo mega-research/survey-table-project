@@ -73,7 +73,7 @@ export function CycleSummaryTable({ cycle }: Props) {
                   className="border-b border-gray-50 last:border-b-0 hover:bg-gray-50/40"
                 >
                   <td className="px-3 py-2.5 font-medium tabular-nums text-gray-900">
-                    {c.runNumber}
+                    {c.kind === 'single' ? '단건' : c.runNumber}
                   </td>
                   <td className="max-w-[200px] truncate px-3 py-2.5 text-gray-600">
                     {c.archivedAt === null ? (

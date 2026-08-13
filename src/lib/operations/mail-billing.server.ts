@@ -4,7 +4,7 @@ import { and, asc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { mailBillingPeriods, mailCampaigns, mailRecipients, surveys } from '@/db/schema';
-import type { MailCampaignStatus, MailRecipientStatus } from '@/db/schema/mail';
+import type { MailCampaignKind, MailCampaignStatus, MailRecipientStatus } from '@/db/schema/mail';
 import { allocateCycleCosts, type AllocatorInputCampaign } from '@/lib/mail/billing-allocator';
 import {
   cycleStartFor,
@@ -35,6 +35,7 @@ export interface CampaignCycleRow {
   surveyId: string;
   surveyTitle: string;
   runNumber: number;
+  kind: MailCampaignKind;
   title: string;
   status: MailCampaignStatus;
   startedAt: Date;
@@ -116,6 +117,7 @@ export async function computeCycleBreakdown(): Promise<BillingBreakdown> {
       surveyId: mailCampaigns.surveyId,
       surveyTitle: surveys.title,
       runNumber: mailCampaigns.runNumber,
+      kind: mailCampaigns.kind,
       title: mailCampaigns.title,
       status: mailCampaigns.status,
       startedAt: mailCampaigns.startedAt,
@@ -218,6 +220,7 @@ export async function computeCycleBreakdown(): Promise<BillingBreakdown> {
           surveyId: c.surveyId,
           surveyTitle: c.surveyTitle,
           runNumber: c.runNumber,
+          kind: c.kind,
           title: c.title,
           status: c.status as MailCampaignStatus,
           startedAt: c.startedAt!,

@@ -30,6 +30,7 @@ export const CreateQuestionInput = z.object({
   title: z.string(),
   description: z.string().optional(),
   required: z.boolean().optional(),
+  requiredMessage: z.string().nullable().optional(),
   order: z.number().optional(),
   options: z.custom<QuestionType['options']>().optional(),
   selectLevels: z.custom<QuestionType['selectLevels']>().optional(),
@@ -40,6 +41,7 @@ export const CreateQuestionInput = z.object({
   allowOtherOption: z.boolean().optional(),
   optionsColumns: z.number().optional(),
   optionsAlign: z.enum(['left', 'center', 'right']).optional(),
+  mobileOptionsColumns: z.number().nullable().optional(),
   minSelections: z.number().optional(),
   maxSelections: z.number().optional(),
   noticeContent: z.string().optional(),
@@ -55,6 +57,7 @@ export const CreateQuestionInput = z.object({
   displayCondition: z.custom<QuestionType['displayCondition']>().optional(),
   dynamicRowConfigs: z.custom<QuestionType['dynamicRowConfigs']>().optional(),
   hideColumnLabels: z.boolean().optional(),
+  exportCellOrder: z.enum(['row-first', 'column-first']).optional(),
   mobileOriginalTable: z.boolean().optional(),
   mobileTableDisplayMode: z.enum(MOBILE_TABLE_DISPLAY_MODES).optional(),
   mobileDrilldownOmitLeadingColumns: z.number().int().min(0).optional(),
@@ -69,6 +72,9 @@ export const CreateQuestionInput = z.object({
   exportLabel: z.string().optional(),
   spssVarType: z.string().optional(),
   spssMeasure: z.string().optional(),
+  answerQuoteEnabled: z.boolean().optional(),
+  answerQuoteName: z.string().optional(),
+  answerQuoteText: z.string().optional(),
 });
 export type CreateQuestionInput = z.infer<typeof CreateQuestionInput>;
 
@@ -83,6 +89,7 @@ export const UpdateQuestionData = z.object({
   title: z.string().optional(),
   description: z.string().optional(),
   required: z.boolean().optional(),
+  requiredMessage: z.string().nullable().optional(),
   order: z.number().optional(),
   options: z.custom<QuestionType['options']>().optional(),
   selectLevels: z.custom<QuestionType['selectLevels']>().optional(),
@@ -93,6 +100,7 @@ export const UpdateQuestionData = z.object({
   allowOtherOption: z.boolean().optional(),
   optionsColumns: z.number().optional(),
   optionsAlign: z.enum(['left', 'center', 'right']).optional(),
+  mobileOptionsColumns: z.number().nullable().optional(),
   minSelections: z.number().optional(),
   maxSelections: z.number().optional(),
   noticeContent: z.string().optional(),
@@ -107,6 +115,7 @@ export const UpdateQuestionData = z.object({
   sumConstraints: z.custom<QuestionType['sumConstraints']>().optional(),
   dynamicRowConfigs: z.custom<QuestionType['dynamicRowConfigs']>().optional(),
   hideColumnLabels: z.boolean().optional(),
+  exportCellOrder: z.enum(['row-first', 'column-first']).optional(),
   mobileOriginalTable: z.boolean().optional(),
   mobileTableDisplayMode: z.enum(MOBILE_TABLE_DISPLAY_MODES).optional(),
   mobileDrilldownOmitLeadingColumns: z.number().int().min(0).optional(),
@@ -122,6 +131,9 @@ export const UpdateQuestionData = z.object({
   exportLabel: z.string().optional(),
   spssVarType: z.string().optional(),
   spssMeasure: z.string().optional(),
+  answerQuoteEnabled: z.boolean().optional(),
+  answerQuoteName: z.string().optional(),
+  answerQuoteText: z.string().optional(),
 });
 export type UpdateQuestionData = z.infer<typeof UpdateQuestionData>;
 

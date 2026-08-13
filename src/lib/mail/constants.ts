@@ -13,7 +13,8 @@ export const MAX_ATTACHMENT_TOTAL_BYTES = 30 * 1024 * 1024;
 /**
  * 첨부 파일 R2 prefix.
  * - tmp: 업로드 직후 임시 위치. 저장 안 하고 떠나면 24h R2 lifecycle 청소.
- * - permanent: 저장 시 promote 되는 영구 위치. cleanup orchestrator 가 diff 로 청소.
+ * - permanent: 저장 시 promote 되는 영구 위치. 삭제는 유예 삭제 큐 경유 —
+ *   저장 diff 가 후보를 등록하고 7일 유예·전역 재확인 후 집행된다.
  */
 export const TMP_ATTACHMENT_PREFIX = 'tmp/mail-attachment/';
 export const PERMANENT_ATTACHMENT_PREFIX = 'mail-attachment/';

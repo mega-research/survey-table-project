@@ -16,7 +16,7 @@ interface TestResponseState {
 
 export const useTestResponseStore = create<TestResponseState>()(
   devtools(
-    immer<TestResponseState>((set) => ({
+    immer((set) => ({
       testResponses: {},
 
       updateTestResponse: (questionId, value) =>
@@ -32,5 +32,5 @@ export const useTestResponseStore = create<TestResponseState>()(
     {
       name: 'test-response-store',
     },
-  ) as any,
+  ),
 );

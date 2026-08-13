@@ -173,7 +173,9 @@ describe('assertSurveyAcceptingResponses — startResponse 게이트', () => {
     insertReturningMock.mockReset();
     selectLimitMock.mockReset();
     countResultMock.mockReset();
-    insertReturningMock.mockResolvedValue([{ id: 'r1', contactTargetId: null }]);
+    insertReturningMock.mockResolvedValue([
+      { id: 'r1', contactTargetId: null, status: 'in_progress' },
+    ]);
     selectLimitMock.mockResolvedValue([]);
     countResultMock.mockResolvedValue([{ total: 0 }]);
   });
@@ -309,7 +311,9 @@ describe('assertSurveyAcceptingResponses — createResponseWithFirstAnswer 테�
     headersMock.mockResolvedValue(
       new Headers({ 'x-forwarded-for': '10.0.0.9', 'user-agent': 'Chrome/120' }),
     );
-    insertReturningMock.mockResolvedValue([{ id: 'r1', contactTargetId: null }]);
+    insertReturningMock.mockResolvedValue([
+      { id: 'r1', contactTargetId: null, status: 'in_progress' },
+    ]);
     // updateQuestionResponse 의 questionId 존재 검사(select().where().limit()) 기본 hit.
     selectLimitMock
       .mockResolvedValueOnce([{ id: 'q1' }])
@@ -326,15 +330,17 @@ describe('assertSurveyAcceptingResponses — createResponseWithFirstAnswer 테�
     countResultMock.mockResolvedValue([{ total: 0 }]);
   });
 
-  it('isPaused 설문은 create 를 survey_paused 로 거부한다', async () => {
+  // 게이트 위반은 예상 가능한 도메인 상태다. throw 하면 500 으로 새어 응답자가 이유를 알 수
+  // 없고, 클라이언트가 차단을 인지하지 못해 답을 고를 때마다 무의미한 INSERT 를 다시 쏜다.
+  it('isPaused 설문은 create 를 survey_paused blocked 로 돌려준다', async () => {
     surveyFindFirstMock.mockResolvedValue(publishedSurvey({ isPaused: true }));
     // Track B: 매칭되는 완료 응답 없음 → 통과 후 paused 게이트에서 거부되는지 확인.
     responseFindFirstMock.mockResolvedValue(undefined);
 
     const { createResponseWithFirstAnswer } =
       await import('@/features/survey-response/server/services/response.service');
-    await expect(
-      createResponseWithFirstAnswer({
+    expect(
+      await createResponseWithFirstAnswer({
         surveyId: SURVEY_ID,
         sessionId: 'gate-session-paused',
         versionId: null,
@@ -343,7 +349,26 @@ describe('assertSurveyAcceptingResponses — createResponseWithFirstAnswer 테�
         currentStepId: 'step1',
         clientSignals: VALID_SIGNALS,
       }),
-    ).rejects.toThrow(/survey_paused/);
+    ).toEqual({ kind: 'blocked', reason: 'survey_paused' });
+  });
+
+  it('미배포 설문은 create 를 not_accepting blocked 로 돌려준다', async () => {
+    surveyFindFirstMock.mockResolvedValue(publishedSurvey({ status: 'draft' }));
+    responseFindFirstMock.mockResolvedValue(undefined);
+
+    const { createResponseWithFirstAnswer } =
+      await import('@/features/survey-response/server/services/response.service');
+    expect(
+      await createResponseWithFirstAnswer({
+        surveyId: SURVEY_ID,
+        sessionId: 'gate-session-draft',
+        versionId: null,
+        questionId: 'q1',
+        value: 'a',
+        currentStepId: 'step1',
+        clientSignals: VALID_SIGNALS,
+      }),
+    ).toEqual({ kind: 'blocked', reason: 'not_accepting' });
   });
 
   it('테스트 모드 ON 중 실제 공개 익명 응답은 isTest=false로 계속 저장된다', async () => {
@@ -635,7 +660,12 @@ describe('resumeOrCreateResponse — 중단 게이트 (Task 6)', () => {
       surveyId: SURVEY_ID,
       sessionId: 'sess-paused-3',
     });
-    expect(result).toEqual({ id: 'resp-3', status: 'in_progress', resumed: true });
+    expect(result).toEqual({
+      id: 'resp-3',
+      status: 'in_progress',
+      resumed: true,
+      questionResponses: {},
+    });
   });
 
   it('같은 버전의 대상자 테스트 응답은 저장된 답변과 함께 재개한다', async () => {
@@ -851,7 +881,9 @@ describe('회귀: 비공개 설문 + 유효 테스트 세션 create→complete �
     headersMock.mockResolvedValue(
       new Headers({ 'x-forwarded-for': '10.0.0.9', 'user-agent': 'Chrome/120' }),
     );
-    insertReturningMock.mockResolvedValue([{ id: 'r1', contactTargetId: null }]);
+    insertReturningMock.mockResolvedValue([
+      { id: 'r1', contactTargetId: null, status: 'in_progress' },
+    ]);
     selectLimitMock.mockResolvedValue([{ id: 'q1' }]);
     countResultMock.mockResolvedValue([{ total: 0 }]);
   });

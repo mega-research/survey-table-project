@@ -26,6 +26,7 @@ const cycle: CycleSummary = {
     surveyId: 'survey-1',
     surveyTitle: '정산 설문',
     runNumber: 3,
+    kind: 'bulk',
     title: '삭제된 테스트 발송',
     status: 'cancelled',
     startedAt: new Date('2026-07-22T00:00:00Z'),
@@ -48,5 +49,16 @@ describe('CycleSummaryTable archived test campaign', () => {
     expect(screen.getByText('삭제된 테스트 발송')).toBeInTheDocument();
     expect(screen.getByText('정산 설문')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: '정산 설문' })).not.toBeInTheDocument();
+  });
+
+  it('kind=single 캠페인은 내부 회차번호 대신 단건으로 표시한다', () => {
+    const singleCycle: CycleSummary = {
+      ...cycle,
+      campaigns: [{ ...cycle.campaigns[0]!, kind: 'single', runNumber: 1000001 }],
+    };
+    render(<CycleSummaryTable cycle={singleCycle} />);
+
+    expect(screen.getByText('단건')).toBeInTheDocument();
+    expect(screen.queryByText('1000001')).not.toBeInTheDocument();
   });
 });

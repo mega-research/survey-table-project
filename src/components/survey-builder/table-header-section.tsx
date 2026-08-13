@@ -7,6 +7,7 @@ import {
   ArrowRight,
   Combine,
   Eye,
+  Palette,
   Settings2,
   Trash2,
   Unlink,
@@ -14,11 +15,20 @@ import {
 
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { cn } from '@/lib/utils';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { useSurveyUIStore } from '@/stores/ui-store';
 import { TableColumn } from '@/types/survey';
+import {
+  getCellBackgroundStyle,
+  getCellTextClassName,
+  getCellTextStyle,
+  toCellStyleFieldProps,
+} from '@/utils/cell-style';
+import type { HeaderBulkStyle } from '@/utils/header-style';
 import { getGridSpanStyle } from '@/utils/table-grid-utils';
 
+import { CellStyleFields } from './cell-style-fields';
 import { useDebouncedInput } from './hooks/use-debounced-input';
 
 // ── 공통 스타일 상수 ──
@@ -39,6 +49,7 @@ interface ColumnHeaderCallbacks {
   onUnmergeColumnHeader: (columnIndex: number) => void;
   onSetEditingColumnWidth: (value: EditingColumnWidth) => void;
   onColumnWidthChange: (columnIndex: number, width: number) => void;
+  onUpdateColumnStyle: (columnIndex: number, style: HeaderBulkStyle) => void;
   onOpenColumnConditionModal?: ((columnIndex: number) => void) | undefined;
 }
 
@@ -73,6 +84,7 @@ const ColumnHeader = React.memo(function ColumnHeader({
   onUnmergeColumnHeader,
   onSetEditingColumnWidth,
   onColumnWidthChange,
+  onUpdateColumnStyle,
   onOpenColumnConditionModal,
 }: ColumnHeaderProps) {
   const handleLabelCommit = React.useCallback(
@@ -110,14 +122,21 @@ const ColumnHeader = React.memo(function ColumnHeader({
   return (
     <div
       className="relative min-h-[40px] min-w-0 overflow-hidden border-r border-b border-gray-300 bg-gray-50 p-2 [overflow-wrap:anywhere]"
-      style={getGridSpanStyle(headerColspan)}
+      style={{
+        ...getGridSpanStyle(headerColspan),
+        ...getCellBackgroundStyle(column),
+      }}
     >
       {!hideColumnLabels && (
         <div className="space-y-1">
           <Input
             value={localLabel}
             onChange={(e) => setLocalLabel(e.target.value)}
-            className="h-7 w-full border border-gray-200 bg-white pr-7 text-center text-sm"
+            className={cn(
+              'h-7 w-full border border-gray-200 bg-transparent pr-7 text-center text-sm',
+              getCellTextClassName(column),
+            )}
+            style={getCellTextStyle(column)}
             placeholder="열 제목"
           />
           <div className="flex items-center justify-center gap-1 text-[10px] text-gray-400">
@@ -176,6 +195,35 @@ const ColumnHeader = React.memo(function ColumnHeader({
             </div>
 
             <MenuDivider />
+
+            {/* 헤더 스타일 — 메뉴가 비대해지지 않도록 중첩 팝오버로 분리 */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="헤더 스타일"
+                  className={`${MENU_BUTTON_BASE} text-gray-600 hover:bg-gray-100`}
+                >
+                  <Palette className="h-3 w-3" /> 헤더 스타일
+                  {(column.backgroundColor || column.textColor) && (
+                    <span
+                      aria-hidden
+                      className="ml-auto flex h-3.5 w-3.5 items-center justify-center rounded-sm border border-gray-300 text-[8px] leading-none"
+                      style={{ ...getCellBackgroundStyle(column), ...getCellTextStyle(column) }}
+                    >
+                      가
+                    </span>
+                  )}
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-80" side="right" align="start">
+                <CellStyleFields
+                  {...toCellStyleFieldProps(column, (style) => (
+                    onUpdateColumnStyle(columnIndex, style)
+                  ))}
+                />
+              </PopoverContent>
+            </Popover>
 
             {/* 이동 */}
             <div className="flex gap-0.5 px-1">
@@ -268,6 +316,7 @@ export const TableHeaderSection = React.memo(function TableHeaderSection({
   onUnmergeColumnHeader,
   onSetEditingColumnWidth,
   onColumnWidthChange,
+  onUpdateColumnStyle,
   onOpenColumnConditionModal,
 }: TableHeaderSectionProps) {
   const editingQuestionId = useSurveyUIStore((s) => s.editingQuestionId);
@@ -305,6 +354,7 @@ export const TableHeaderSection = React.memo(function TableHeaderSection({
             onUnmergeColumnHeader={onUnmergeColumnHeader}
             onSetEditingColumnWidth={onSetEditingColumnWidth}
             onColumnWidthChange={onColumnWidthChange}
+            onUpdateColumnStyle={onUpdateColumnStyle}
             onOpenColumnConditionModal={onOpenColumnConditionModal}
           />
         );

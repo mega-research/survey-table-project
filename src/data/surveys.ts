@@ -97,6 +97,7 @@ export async function getSurveyWithDetails(surveyId: string): Promise<SurveyType
         title: q.title,
         ...(q.description != null ? { description: q.description } : {}),
         required: q.required,
+        ...(q.requiredMessage != null ? { requiredMessage: q.requiredMessage } : {}),
         ...(q.groupId != null ? { groupId: q.groupId } : {}),
         ...(q.options != null ? { options: q.options as NonNullable<QuestionType['options']> } : {}),
         ...(q.selectLevels != null ? { selectLevels: q.selectLevels as NonNullable<QuestionType['selectLevels']> } : {}),
@@ -108,6 +109,7 @@ export async function getSurveyWithDetails(surveyId: string): Promise<SurveyType
         ...(q.allowOtherOption != null ? { allowOtherOption: q.allowOtherOption } : {}),
         ...(q.optionsColumns != null ? { optionsColumns: q.optionsColumns } : {}),
         ...(q.optionsAlign != null ? { optionsAlign: q.optionsAlign } : {}),
+        ...(q.mobileOptionsColumns != null ? { mobileOptionsColumns: q.mobileOptionsColumns } : {}),
         ...(q.rankingConfig != null ? { rankingConfig: q.rankingConfig } : {}),
         ...(q.choiceGroups != null ? { choiceGroups: q.choiceGroups } : {}),
         ...(q.minSelections != null ? { minSelections: q.minSelections } : {}),
@@ -123,6 +125,7 @@ export async function getSurveyWithDetails(surveyId: string): Promise<SurveyType
         ...(q.numberFormat != null ? { numberFormat: q.numberFormat as NonNullable<QuestionType['numberFormat']> } : {}),
         ...(q.sumConstraints != null ? { sumConstraints: q.sumConstraints as NonNullable<QuestionType['sumConstraints']> } : {}),
         ...(q.hideColumnLabels != null ? { hideColumnLabels: q.hideColumnLabels } : {}),
+        ...(q.exportCellOrder != null ? { exportCellOrder: q.exportCellOrder } : {}),
         ...(q.mobileOriginalTable != null ? { mobileOriginalTable: q.mobileOriginalTable } : {}),
         ...(q.mobileTableDisplayMode != null
           ? { mobileTableDisplayMode: q.mobileTableDisplayMode }
@@ -169,6 +172,7 @@ export async function getSurveyWithDetails(surveyId: string): Promise<SurveyType
         : {}),
       thankYouMessage: survey.thankYouMessage,
       requireInviteToken: survey.requireInviteToken,
+      forceWideLayout: survey.forceWideLayout,
       responseHeader: normalizeResponseHeaderConfig(survey.responseHeader),
     },
     lookups: survey.lookups ?? [],

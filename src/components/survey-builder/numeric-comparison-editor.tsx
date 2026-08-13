@@ -131,7 +131,6 @@ export function NumericComparisonEditor({
   const emit = useCallback(
     (patch: Partial<NumericComparison>) => {
       // comparand는 하위 호환 필드이므로 새로 저장 시 키 자체를 제거 (exactOptionalPropertyTypes 준수)
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { comparand: _removed, ...nextBase } = { operator, left, right, ...patch } as NumericComparison & { comparand?: unknown };
       const next: NumericComparison = nextBase;
       onChange(next);

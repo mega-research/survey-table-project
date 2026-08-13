@@ -156,6 +156,7 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
     await saveAdminEdit(
       { surveyId: 's1', responseId: 'r1', questionResponses: { q1: 'v' } },
       { id: 'admin-1', email: 'a@b.com' },
+      false,
     );
 
     const completedCall = updateSetMock.mock.calls[0];
@@ -164,10 +165,13 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
     expect(setArg['progressPct']).toBe(100);
   });
 
-  it('status=drop + questionResponses 비어있음 → progressPct=null', async () => {
+  // 참고: drop 은 2026-08-11 부터 저장 시 completed 로 전환되어 100 고정이다
+  // (response-edit.service.test.ts 의 이탈 완료 전환 스위트가 커버). 재계산 경로는
+  // in_progress 픽스처로 검증한다.
+  it('status=in_progress + questionResponses 비어있음 → progressPct=null', async () => {
     findFirstMock.mockResolvedValue({
       id: 'r1',
-      status: 'drop',
+      status: 'in_progress',
       versionId: 'v1',
       deletedAt: null,
     });
@@ -177,6 +181,7 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
     await saveAdminEdit(
       { surveyId: 's1', responseId: 'r1', questionResponses: {} },
       { id: 'admin-1', email: 'a@b.com' },
+      false,
     );
 
     const dropEmptyCall = updateSetMock.mock.calls[0];
@@ -185,10 +190,10 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
     expect(setArg['progressPct']).toBeNull();
   });
 
-  it('status=drop + 답변 있음 → snapshot position 기반 % 계산', async () => {
+  it('status=in_progress + 답변 있음 → snapshot position 기반 % 계산', async () => {
     findFirstMock.mockResolvedValue({
       id: 'r1',
-      status: 'drop',
+      status: 'in_progress',
       versionId: 'v1',
       deletedAt: null,
     });
@@ -207,6 +212,7 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
         questionResponses: { q1: 'a', q3: 'b' },
       },
       { id: 'admin-1', email: 'a@b.com' },
+      false,
     );
 
     const dropAnsweredCall = updateSetMock.mock.calls[0];
@@ -219,7 +225,7 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
   it('versionId=null → progressPct=null', async () => {
     findFirstMock.mockResolvedValue({
       id: 'r1',
-      status: 'drop',
+      status: 'in_progress',
       versionId: null,
       deletedAt: null,
     });
@@ -231,6 +237,7 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
         questionResponses: { q1: 'a' },
       },
       { id: 'admin-1', email: 'a@b.com' },
+      false,
     );
 
     const nullVersionCall = updateSetMock.mock.calls[0];
@@ -263,6 +270,7 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
       saveAdminEdit(
         { surveyId: 's1', responseId: 'r1', questionResponses: { q1: 'a' } },
         { id: 'admin-1', email: 'a@b.com' },
+        false,
       ),
     ).rejects.toThrow('Cannot edit deleted response');
 

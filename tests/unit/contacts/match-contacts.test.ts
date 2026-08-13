@@ -1,0 +1,107 @@
+import { describe, expect, it } from 'vitest';
+
+import {
+  buildKeyTuple,
+  classifyRows,
+  countEmptyOverwrites,
+  suggestSimilarKeys,
+  type ExistingContactKeyInfo,
+} from '@/lib/contacts/match-contacts';
+
+const existing: ExistingContactKeyInfo[] = [
+  { targetId: 't1', attrs: { idx: '1', 전시회: 'A', 부스: '10' } },
+  { targetId: 't2', attrs: { idx: '2', 전시회: 'A', 부스: '20' } },
+  { targetId: 't3', attrs: { idx: '2', 전시회: 'B', 부스: '30' } },
+];
+
+describe('buildKeyTuple', () => {
+  it('키 값을 trim 후 결합하고, 하나라도 비면 null', () => {
+    expect(buildKeyTuple({ idx: ' 1 ', 전시회: 'A' }, ['idx', '전시회'])).toBe('1\u0000A');
+    expect(buildKeyTuple({ idx: '1', 전시회: '' }, ['idx', '전시회'])).toBeNull();
+    expect(buildKeyTuple({ idx: '1' }, ['idx', '전시회'])).toBeNull();
+  });
+
+  it('NUL 분리자로 복합키 충돌 방지', () => {
+    const r1 = buildKeyTuple({ col1: 'a b', col2: 'c' }, ['col1', 'col2']);
+    const r2 = buildKeyTuple({ col1: 'a', col2: 'b c' }, ['col1', 'col2']);
+    expect(r1).not.toBe(r2);
+  });
+});
+
+describe('classifyRows', () => {
+  it('단일키: 일치/불일치를 분류한다', () => {
+    const rows = [{ idx: '1' }, { idx: '999' }];
+    const r = classifyRows(rows, ['idx'], existing);
+    expect(r.matched).toEqual([{ rowIndex: 0, targetId: 't1' }]);
+    expect(r.unmatched).toEqual([1]);
+    expect(r.fileDuplicates).toEqual([]);
+    expect(r.multiMatches).toEqual([]);
+    expect(r.emptyKeys).toEqual([]);
+  });
+
+  it('복합키: 모든 키가 일치해야 매칭된다', () => {
+    const rows = [{ idx: '2', 전시회: 'B' }];
+    const r = classifyRows(rows, ['idx', '전시회'], existing);
+    expect(r.matched).toEqual([{ rowIndex: 0, targetId: 't3' }]);
+  });
+
+  it('DB 다중 일치 행은 multiMatches 로 분류 (갱신 대상 모호)', () => {
+    const rows = [{ idx: '2' }];
+    const r = classifyRows(rows, ['idx'], existing);
+    expect(r.matched).toEqual([]);
+    expect(r.multiMatches).toEqual([0]);
+  });
+
+  it('파일 내 키 중복은 해당 키의 모든 행을 fileDuplicates 로 분류', () => {
+    const rows = [{ idx: '1' }, { idx: '1' }, { idx: '999' }];
+    const r = classifyRows(rows, ['idx'], existing);
+    expect(r.fileDuplicates).toEqual([0, 1]);
+    expect(r.matched).toEqual([]);
+    expect(r.unmatched).toEqual([2]);
+  });
+
+  it('키 값 빈 행은 emptyKeys 로 분류', () => {
+    const rows = [{ idx: '' }, { 전시회: 'A' }];
+    const r = classifyRows(rows, ['idx'], existing);
+    expect(r.emptyKeys).toEqual([0, 1]);
+  });
+});
+
+describe('countEmptyOverwrites', () => {
+  it('기존 값 있음 + 파일 셀 빈 값인 케이스를 컬럼별 집계한다', () => {
+    const rows = [{ idx: '1', 부스: '', 이메일: '' }];
+    const matched = [{ rowIndex: 0, targetId: 't1' }];
+    const existingAttrsById = new Map([['t1', { idx: '1', 전시회: 'A', 부스: '10' }]]);
+    const piiPresenceById = new Map([['t1', new Set(['이메일'])]]);
+    const stats = countEmptyOverwrites(
+      rows,
+      matched,
+      ['idx', '부스', '이메일'],
+      existingAttrsById,
+      piiPresenceById,
+      new Set(['이메일']),
+    );
+    expect(stats).toEqual([
+      { columnKey: '부스', count: 1, isPii: false },
+      { columnKey: '이메일', count: 1, isPii: true },
+    ]);
+  });
+
+  it('파일에 없는 컬럼·기존에 값 없는 컬럼은 집계하지 않는다', () => {
+    const rows = [{ idx: '1', 부스: '' }];
+    const matched = [{ rowIndex: 0, targetId: 't2' }];
+    const existingAttrsById = new Map([['t2', { idx: '2' }]]);
+    const stats = countEmptyOverwrites(
+      rows, matched, ['idx', '부스'], existingAttrsById, new Map(), new Set(),
+    );
+    expect(stats).toEqual([]);
+  });
+});
+
+describe('suggestSimilarKeys', () => {
+  it('공백·대소문자 무시 비교로 유사 후보를 찾는다', () => {
+    expect(suggestSimilarKeys('부스 번호', ['부스번호', '전시회'])).toEqual(['부스번호']);
+    expect(suggestSimilarKeys('IDX', ['idx', 'name'])).toEqual(['idx']);
+    expect(suggestSimilarKeys('완전다름', ['idx'])).toEqual([]);
+  });
+});

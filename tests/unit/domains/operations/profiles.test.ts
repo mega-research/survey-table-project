@@ -75,7 +75,19 @@ describe('mapStatusPill', () => {
     expect(mapStatusPill({ status: 'completed' })).toEqual({ label: '완료', tone: 'green' })
   })
 
-  it("status='drop' → { label:'이탈', tone:'gray' }", () => {
+  it("status='drop' → 이탈 + 진행중과 동일한 위치 부속 표기", () => {
+    expect(
+      mapStatusPill({
+        status: 'drop',
+        visibleStepIndex: 2,
+        visibleStepTotal: 3,
+        totalQuestions: 11,
+        qNumber: 'Q3_1',
+      }),
+    ).toEqual({ label: '이탈', tone: 'gray', sub: '2/3(11) · Q3_1' })
+  })
+
+  it("status='drop' + 위치 정보 전무 → sub 생략 (구응답 노이즈 방지)", () => {
     expect(mapStatusPill({ status: 'drop' })).toEqual({ label: '이탈', tone: 'gray' })
   })
 
@@ -151,6 +163,26 @@ describe('buildStepLocationMap', () => {
     expect(map.get('page:q1')).toEqual({ order: 0, qNumber: 'Q1' })
   })
 
+  it('질문코드가 있으면 제목 파싱보다 우선하고, 제목이 Q로 시작 안 해도 코드가 나온다', () => {
+    const groups = [g({ id: 'g1', order: 0, name: 'A' })]
+    const questions = [
+      q({ id: 'q1', groupId: 'g1', order: 0, title: '귀하의 성별은?', questionCode: 'SQ2' }),
+    ]
+    const map = buildStepLocationMap(questions, groups)
+    expect(map.get('page:q1')).toEqual({ order: 0, qNumber: 'SQ2' })
+  })
+
+  it('페이지 첫 항목이 코드 없는 공지면 같은 페이지의 코드 있는 문항으로 라벨을 잡는다', () => {
+    const groups = [g({ id: 'g1', order: 0, name: 'A' })]
+    const questions = [
+      q({ id: 'n1', groupId: 'g1', order: 0, type: 'notice', title: '개인정보 수집 안내' }),
+      q({ id: 'q1', groupId: 'g1', order: 1, title: '귀하의 성별은?', questionCode: 'SQ1' }),
+    ]
+    const map = buildStepLocationMap(questions, groups)
+    // order 는 여전히 페이지 첫 항목(공지) 기준, 라벨만 코드 있는 문항으로
+    expect(map.get('page:n1')).toEqual({ order: 0, qNumber: 'SQ1' })
+  })
+
   it('table 포함 단일 페이지 — pageBreakBefore 없으면 나뉘지 않음', () => {
     const groups = [g({ id: 'g1', order: 0, name: 'A' })]
     const questions = [
@@ -211,6 +243,11 @@ describe('normalizeListArgs', () => {
     expect(normalizeListArgs({ status: 'deleted' }).view).toBe('deleted')
   })
 
+  it('신규 정렬 키 resid/group 은 화이트리스트 통과, 미지 키는 idx 폴백', () => {
+    expect(normalizeListArgs({ sort: 'resid' }).sort).toBe('resid')
+    expect(normalizeListArgs({ sort: 'group' }).sort).toBe('group')
+    expect(normalizeListArgs({ sort: 'evil' }).sort).toBe('idx')
+  })
 })
 
 describe('hasActiveFilters', () => {

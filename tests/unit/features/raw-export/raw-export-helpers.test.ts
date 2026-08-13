@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatExcelDateTime, buildCodebookValueLabel } from '@/lib/analytics/raw-export-helpers';
+import { formatExcelDateTime, buildCodebookValueLabel, buildStepLabelMap } from '@/lib/analytics/raw-export-helpers';
 import { generateSPSSColumns } from '@/lib/analytics/spss-excel-export';
 import type { SPSSExportColumn } from '@/lib/analytics/spss-excel-export';
 import type { Question } from '@/types/survey';
@@ -86,5 +86,37 @@ describe('테이블 checkbox 셀 코딩북 값 라벨 - spssNumericCode 반영',
     const questionMap = new Map([[question.id, question]]);
     // 수정 전 버그: cellOptions 미세팅이라 optionIndex+1=1로 오기재된다
     expect(buildCodebookValueLabel(checkboxCol!, questionMap)).toBe('빈값=비선택, 7=선택');
+  });
+});
+
+describe('buildStepLabelMap', () => {
+  const groups = [
+    { id: 'g1', order: 1, name: '섹션A' },
+    { id: 'g2', order: 2, name: '섹션B' },
+  ];
+  const questions = [
+    { id: 'q1', order: 1, title: 'Q1. 성별', type: 'radio', groupId: 'g1', questionCode: 'Q13' },
+    { id: 'q2', order: 2, title: '거주 지역', type: 'radio', groupId: 'g2', pageBreakBefore: true, questionCode: 'Q14' },
+  ];
+
+  it('대표 질문의 질문코드를 라벨로 쓴다 — 제목 Qx 표기보다 우선', () => {
+    const labels = [...buildStepLabelMap(questions, groups).values()];
+    expect(labels).toContain('Q13');
+    expect(labels).toContain('Q14');
+  });
+
+  it('질문코드가 없으면 제목 Qx 파싱, 둘 다 없으면 공백 — 위치 표기는 쓰지 않는다', () => {
+    const noCode = [
+      { id: 'q1', order: 1, title: 'Q1. 성별', type: 'radio', groupId: 'g1', questionCode: null },
+      { id: 'q2', order: 2, title: '거주 지역', type: 'radio', groupId: 'g2', pageBreakBefore: true, questionCode: null },
+    ];
+    const labels = [...buildStepLabelMap(noCode, groups).values()];
+    expect(labels).toContain('Q1');
+    expect(labels).toContain('');
+    expect(labels.some((l) => l.includes('번째'))).toBe(false);
+  });
+
+  it('질문이 없으면 빈 맵', () => {
+    expect(buildStepLabelMap([], []).size).toBe(0);
   });
 });

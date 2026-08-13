@@ -71,6 +71,24 @@ vi.mock('@/db', () => {
     findMany: vi.fn(() => Promise.resolve(findManyQueue.shift() ?? [])),
   };
 
+  // tx 안의 before-read(select)는 큐를 소비하지 않도록 항상 빈 결과 —
+  // old row 부재 시 저장 diff 수집이 no-op 이라 기존 단언이 유지된다.
+  const txStub = {
+    select: vi.fn(() => ({
+      from: vi.fn(() => ({
+        where: vi.fn(() => Promise.resolve([])),
+      })),
+    })),
+    update: vi.fn(() => makeUpdateChain()),
+    delete: vi.fn(() => makeDeleteChain()),
+    insert: vi.fn(() => ({
+      values: vi.fn(() => ({
+        onConflictDoNothing: vi.fn(() => ({ returning: vi.fn(() => Promise.resolve([])) })),
+        returning: vi.fn(() => Promise.resolve([])),
+      })),
+    })),
+  };
+
   return {
     db: {
       update: vi.fn(() => makeUpdateChain()),
@@ -79,6 +97,8 @@ vi.mock('@/db', () => {
       insert: vi.fn(() => ({
         values: vi.fn(() => ({ returning: vi.fn(() => Promise.resolve([])) })),
       })),
+      // 질문 서비스의 read→write→수집 트랜잭션 지원 (이슈 05·06)
+      transaction: vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => cb(txStub)),
       query: {
         questions: queryStub,
         questionGroups: queryStub,

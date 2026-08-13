@@ -63,6 +63,13 @@ const MESSAGES: Record<BlockReason, MessageDef> = {
     body: '테스트 모드가 꺼져 있거나 링크가 잘못되었습니다. 운영 콘솔에서 테스트 링크를 다시 복사해 주세요.',
     tone: 'error',
   },
+  not_accepting: {
+    // 미배포·마감·정원·버전 불일치를 하나로 접은 사유. 응답자에게 내부 상태를 세분해
+    // 알리지 않는다 — 어느 쪽이든 지금 응답할 수 없다는 사실은 같다.
+    title: '지금은 응답을 받고 있지 않습니다',
+    body: '이 설문은 현재 응답을 받지 않습니다. 링크가 맞는지 확인하시거나 운영자에게 문의해 주세요.',
+    tone: 'info',
+  },
 };
 
 export function AlreadyRespondedView({ reason, surveyTitle, contactEmail, customBody }: Props) {

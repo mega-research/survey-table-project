@@ -6,6 +6,13 @@ import { LocalDateTime } from '@/components/ui/local-date-time';
 import { EmptyState } from '@/components/operations/empty-state';
 import type { ContactUploadRow } from '@/lib/operations/contacts.server';
 
+const MODE_LABEL: Record<string, string> = { replace: '교체', merge: '병합', append: '추가' };
+const MODE_TONE: Record<string, string> = {
+  replace: 'bg-red-50 text-red-700',
+  merge: 'bg-blue-50 text-blue-700',
+  append: 'bg-emerald-50 text-emerald-700',
+};
+
 interface UploadHistoryTableProps {
   surveyId: string;
   rows: ContactUploadRow[];
@@ -40,8 +47,10 @@ export function UploadHistoryTable({ surveyId, rows }: UploadHistoryTableProps) 
             <thead className="bg-slate-50 text-xs uppercase text-slate-600">
               <tr>
                 <th className="px-3 py-2 text-left">파일명</th>
+                <th className="px-3 py-2 text-left">방식</th>
                 <th className="px-3 py-2 text-right">신규</th>
-                <th className="px-3 py-2 text-right">머지</th>
+                <th className="px-3 py-2 text-right">갱신</th>
+                <th className="px-3 py-2 text-right">제외</th>
                 <th className="px-3 py-2 text-right">에러</th>
                 <th className="px-3 py-2 text-right">업로드 일시</th>
               </tr>
@@ -50,12 +59,18 @@ export function UploadHistoryTable({ surveyId, rows }: UploadHistoryTableProps) 
               {rows.map((r) => (
                 <tr key={r.id} className="border-t">
                   <td className="px-3 py-2">{r.filename}</td>
+                  <td className="px-3 py-2">
+                    <span className={`rounded px-1.5 py-0.5 text-xs ${MODE_TONE[r.mode] ?? 'bg-slate-100 text-slate-600'}`}>
+                      {MODE_LABEL[r.mode] ?? r.mode}
+                    </span>
+                  </td>
                   <td className="px-3 py-2 text-right tabular-nums">
                     {r.uploadedRows.toLocaleString('ko-KR')}
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">
                     {r.mergedRows.toLocaleString('ko-KR')}
                   </td>
+                  <td className="px-3 py-2 text-right tabular-nums">{r.skippedRows.toLocaleString('ko-KR')}</td>
                   <td
                     className={`px-3 py-2 text-right tabular-nums ${
                       r.errorRows > 0 ? 'text-red-600' : ''

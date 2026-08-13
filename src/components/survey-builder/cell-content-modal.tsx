@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   AlignCenter,
@@ -16,7 +16,7 @@ import {
   CheckSquare,
   ChevronDown,
   Circle,
-  Image,
+  Image as ImageIcon,
   ListOrdered,
   PenLine,
   Tag,
@@ -43,10 +43,11 @@ import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { useEnsureSurveyInDb } from '@/hooks/use-ensure-survey-in-db';
+import { useSurveySync } from '@/hooks/use-survey-sync';
 import { generateId } from '@/lib/utils';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { useSurveyUIStore } from '@/stores/ui-store';
-import { ChoiceGroup, TableCell, TableRow } from '@/types/survey';
+import { ChoiceGroup, Question, TableCell, TableRow } from '@/types/survey';
 import { collectChoiceOptCells } from '@/utils/choice-source';
 import { isPartialNumericInput } from '@/utils/numeric-input';
 import { getMaxSpssCode } from '@/utils/option-code-generator';
@@ -58,8 +59,11 @@ import {
   MOBILE_DISPLAY_CELL_TYPES,
   REQUIRED_CELL_TYPES,
   TEXT_POSITION_CELL_TYPES,
+  INPUT_TEXT_ALIGN_CELL_TYPES,
   buildUpdatedCell,
 } from '@/utils/serialize-cell';
+import type { CellFormState } from '@/utils/serialize-cell';
+import { DEFAULT_REQUIRED_CELL_MESSAGE } from '@/utils/required-message';
 import {
   INTERACTIVE_CELL_TYPES,
   generateCellCode,
@@ -69,10 +73,16 @@ import {
 } from '@/utils/table-cell-code-generator';
 
 import { useCellForm } from './hooks/use-cell-form';
+import { AnswerQuoteQuestionControl, AnswerQuoteTextField } from './answer-quote-fields';
+import { GATABLE_CELL_TYPES } from '@/lib/survey/cell-gating';
+
 import { CellChoiceEditor } from './cell-choice-editor';
+import { CellGatingEditor } from './cell-gating-editor';
 import { CellImageEditor } from './cell-image-editor';
+import { CellStyleFields } from './cell-style-fields';
 import { CellContentLayout } from './cells/cell-content-layout';
 import { ChoiceOptCellTab } from './choice-opt-cell-tab';
+import { FormulaExprEditor } from './formula/formula-expr-editor';
 import { NumberFormatFields } from './number-format-fields';
 import { OptionsLayoutSelector } from './options-layout-selector';
 import { RankingCellTab } from './ranking-cell-tab';
@@ -91,11 +101,34 @@ const TEXT_POSITION_OPTIONS: Array<{
   { value: 'right', icon: ArrowRight, label: '오른쪽' },
 ];
 
+// 입력값 가로 정렬 — 'inherit' 은 미지정으로, 셀 정렬(horizontalAlign)을 따른다
+const INPUT_TEXT_ALIGN_OPTIONS: Array<{
+  value: CellFormState['inputTextAlign'];
+  icon: typeof AlignLeft | null;
+  label: string;
+}> = [
+  { value: 'inherit', icon: null, label: '셀 정렬 따름' },
+  { value: 'left', icon: AlignLeft, label: '왼쪽' },
+  { value: 'center', icon: AlignCenter, label: '가운데' },
+  { value: 'right', icon: AlignRight, label: '오른쪽' },
+];
+
 interface CellContentModalProps {
   isOpen: boolean;
   onClose: () => void;
   cell: TableCell;
-  onSave: (cell: TableCell) => void;
+  /**
+   * 셀 저장 콜백. valueChanges 는 이번 편집 세션 중 옵션 optionCode 편집이 value 를
+   * 동기화시킨 변경 쌍들(순서대로) — 상위(dynamic-table-editor/use-table-editor)가
+   * 같은 커밋 안에서 이 셀을 controllerCellId 로 참조하는 게이팅을 리매핑하는 데 쓴다.
+   */
+  onSave: (cell: TableCell, valueChanges?: { oldValue: string; newValue: string }[]) => void;
+  /**
+   * 이 셀을 소유한 질문(표) — 계산 탭·검증 토글의 FormulaExprEditor 가 같은 질문 셀 참조 픽커에
+   * 사용한다. 에디터의 실시간 편집 상태(currentQuestionAsQuestion)를 그대로 받아야
+   * 아직 저장 전인 열/행 추가도 픽커에 즉시 보인다 (store 는 저장 전까지 stale).
+   */
+  ownQuestion: Question;
   currentQuestionId?: string | undefined;
   questionCode?: string | undefined;
   questionTitle?: string | undefined;
@@ -103,6 +136,11 @@ interface CellContentModalProps {
   rowLabel?: string | undefined;
   columnCode?: string | undefined;
   columnLabel?: string | undefined;
+  /**
+   * 질문 단위 응답 인용 토글. 켜졌을 때만 셀·옵션별 인용 문구 입력칸이 등장한다.
+   * (질문 편집 모달의 formData 에서 내려오므로 저장 전 토글도 즉시 반영된다)
+   */
+  answerQuoteEnabled?: boolean | undefined;
   /** choice_opt 탭용: 질문 레벨 옵션 그룹 목록 (표시/편집용). 없으면 그룹 기능 비활성. */
   choiceGroups?: ChoiceGroup[] | undefined;
   /** choice_opt 그룹 변경 시 부모에게 통보 (prune 후 저장은 부모 책임) */
@@ -121,12 +159,14 @@ export function CellContentModal({
   onClose,
   cell,
   onSave,
+  ownQuestion,
   currentQuestionId = '',
   questionCode,
   rowCode,
   rowLabel,
   columnCode,
   columnLabel,
+  answerQuoteEnabled = false,
   choiceGroups: choiceGroupsProp,
   onChoiceGroupsChange,
   getLatestRows,
@@ -134,6 +174,13 @@ export function CellContentModal({
   const questions = useSurveyBuilderStore(useShallow((s) => s.currentSurvey.questions));
   const variableCatalog = useSurveyUIStore((s) => s.variableCatalog);
   const ensureSurvey = useEnsureSurveyInDb();
+  // 셀 저장은 tableRowsData 를 DB 에 즉시 커밋하는 비가역 지점이다 — 옵션 value 가 바뀌었으면
+  // 이 표 질문을 참조하는 표시조건 리매핑과 그 영속(설문 저장)도 같은 지점에서 끝내야 한다.
+  const remapOptionValueInConditions = useSurveyBuilderStore(
+    (s) => s.remapOptionValueInConditions,
+  );
+  const remapQuestionRefs = useSurveyBuilderStore((s) => s.remapQuestionRefs);
+  const { saveSurveyScoped } = useSurveySync();
   const [isSaving, setIsSaving] = useState(false);
   const inputTemplateRef = useRef<HTMLInputElement>(null);
   const textContentRef = useRef<HTMLTextAreaElement>(null);
@@ -141,6 +188,10 @@ export function CellContentModal({
   // 사용자가 초기값 옵션을 끈 뒤 숫자 모드를 다시 토글해도 강제로 켜지지 않도록 한다.
   // (모달 오픈/cell.id 변경 시 리셋)
   const emptyDefaultAutoAppliedRef = useRef(false);
+  // 이번 편집 세션 중 옵션 optionCode blur 커밋이 value 를 동기화시킨 변경 쌍 누적.
+  // Save 시점에 onSave 로 함께 전달해 게이팅 리매핑을 셀 저장과 같은 커밋에 묶는다
+  // (blur 마다 즉시 리매핑하면 이후 취소 시 다른 셀의 게이팅만 남는 불일치가 생긴다).
+  const pendingOptionValueChangesRef = useRef<{ oldValue: string; newValue: string }[]>([]);
 
   // 35개 편집 필드를 단일 폼 상태로 통합. hydrate(모달 오픈/cell.id 변경)와
   // reset(취소 롤백)이 한 소스(cellToFormState)를 공유해 필드 누락 drift 가 없다.
@@ -157,6 +208,7 @@ export function CellContentModal({
     selectOptions,
     allowOtherOption,
     cellOptionsColumns,
+    cellMobileOptionsColumns,
     inputPlaceholder,
     inputMaxLength,
     inputDefaultValueTemplate,
@@ -165,6 +217,9 @@ export function CellContentModal({
     emptyDefaultRaw,
     cellNumberFormat,
     cellRequired,
+    cellRequiredMessage,
+    gatingCondition,
+    gatingRequiredWhenEnabled,
     minSelections,
     maxSelections,
     rankingOptions,
@@ -178,10 +233,15 @@ export function CellContentModal({
     choiceAllowTextInput,
     choiceBranchRule,
     choiceGroupId,
+    textBold,
+    backgroundColor,
+    textColor,
     horizontalAlign,
     mobileDisplay,
+    mobileLabel,
     verticalAlign,
     textPosition,
+    inputTextAlign,
     isMergeEnabled,
     rowspan,
     colspan,
@@ -191,12 +251,23 @@ export function CellContentModal({
     isCustomExportLabel,
     spssVarType,
     spssMeasure,
+    answerQuoteText,
+    answerQuoteEnabled: cellAnswerQuoteEnabled,
+    answerQuoteName: cellAnswerQuoteName,
+    formula,
+    formulaValidationEnabled,
+    formulaToleranceRaw,
+    formulaErrorMessage,
   } = form;
   // 순위 옵션(ranking_opt, Case 2)은 순위형 질문의 내장 테이블에서만 렌더러가 있다.
   // 테이블형 질문에서는 응답 select 가 나오지 않는 막다른 조합이 되므로 탭을 숨긴다.
   // 단, 이미 ranking_opt 인 셀(과거 데이터)은 편집/다른 타입 전환이 가능하도록 노출 유지.
   const parentQuestionType = questions.find((q) => q.id === currentQuestionId)?.type;
   const showRankingOptTab = parentQuestionType === 'ranking' || contentType === 'ranking_opt';
+  // 셀 단위 응답 인용은 호스트 질문이 표(table)일 때만 노출한다.
+  // 표-소스 선택형 질문(radio/checkbox + choice_opt)의 다른 셀들은 응답 페이지에서 inert 라
+  // 값이 생기지 않는다 — 거기에 토글을 노출하면 켜도 아무 일이 없는 죽은 설정이 된다.
+  const showCellAnswerQuote = parentQuestionType === 'table';
   const showContentMobileDisplay = MOBILE_DISPLAY_CELL_TYPES.has(contentType);
   const showInteractiveMobileLabel = MOBILE_LABEL_CELL_TYPES.has(contentType);
   const {
@@ -210,6 +281,7 @@ export function CellContentModal({
     setSelectOptions,
     setAllowOtherOption,
     setCellOptionsColumns,
+    setCellMobileOptionsColumns,
     setInputPlaceholder,
     setInputMaxLength,
     setInputDefaultValueTemplate,
@@ -218,6 +290,9 @@ export function CellContentModal({
     setEmptyDefaultRaw,
     setCellNumberFormat,
     setCellRequired,
+    setCellRequiredMessage,
+    setGatingCondition,
+    setGatingRequiredWhenEnabled,
     setMinSelections,
     setMaxSelections,
     setRankingOptions,
@@ -231,10 +306,15 @@ export function CellContentModal({
     setChoiceAllowTextInput,
     setChoiceBranchRule,
     setChoiceGroupId,
+    setTextBold,
+    setBackgroundColor,
+    setTextColor,
     setHorizontalAlign,
     setMobileDisplay,
+    setMobileLabel,
     setVerticalAlign,
     setTextPosition,
+    setInputTextAlign,
     setIsMergeEnabled,
     setRowspan,
     setColspan,
@@ -244,7 +324,24 @@ export function CellContentModal({
     setIsCustomExportLabel,
     setSpssVarType,
     setSpssMeasure,
+    setAnswerQuoteText,
+    setAnswerQuoteEnabled: setCellAnswerQuoteEnabled,
+    setAnswerQuoteName: setCellAnswerQuoteName,
+    setFormula,
+    setFormulaValidationEnabled,
+    setFormulaToleranceRaw,
+    setFormulaErrorMessage,
   } = setters;
+
+  // 선택형 셀 헤더(조건부 분기 옆)에 붙는 셀 단위 인용 컨트롤. 표 질문이 아니면 넘기지 않는다.
+  const cellAnswerQuoteControl = showCellAnswerQuote
+    ? {
+        enabled: cellAnswerQuoteEnabled,
+        onEnabledChange: setCellAnswerQuoteEnabled,
+        name: cellAnswerQuoteName,
+        onNameChange: setCellAnswerQuoteName,
+      }
+    : undefined;
 
   // choice_opt 탭용 로컬 그룹 편집 상태.
   // 부모에서 choiceGroupsProp 를 전달받으면 그 값으로, 아니면 스토어 질문의 choiceGroups 를 사용한다.
@@ -266,7 +363,15 @@ export function CellContentModal({
   // 새 편집 세션(모달 오픈/cell.id 변경)마다 emptyDefault 자동 적용 가드를 리셋한다.
   useEffect(() => {
     emptyDefaultAutoAppliedRef.current = false;
+    pendingOptionValueChangesRef.current = [];
   }, [isOpen, cell?.id]);
+
+  // 게이팅 컨트롤러 픽커용 — 이 셀이 속한 행의 셀 목록.
+  // 에디터의 권위 있는 최신 행(getLatestRows)을 우선한다 (store 는 구조 편집 중 stale).
+  const gatingRowCells = useMemo(() => {
+    const rows = getLatestRows?.() ?? ownQuestion.tableRowsData;
+    return rows?.find((r) => r.cells.some((c) => c.id === cell.id))?.cells ?? [];
+  }, [getLatestRows, ownQuestion.tableRowsData, cell.id]);
 
   // 현재 질문 tableRowsData 기반으로 그룹별 멤버 셀 수를 계산한다 (표시용).
   // 아직 저장되지 않은 이번 편집 셀은 카운트에 반영되지 않아도 무방하다.
@@ -338,7 +443,13 @@ export function CellContentModal({
 
       // 로컬 스토어 업데이트 (셀 저장) — onChoiceGroupsChange 보다 먼저 수행해야
       // dynamic-table-editor 의 currentRowsRef 가 이미 새 셀을 포함한 상태에서 prune 이 동작한다.
-      onSave(updatedCell);
+      // 옵션 optionCode 편집으로 누적된 value 변경 쌍도 같은 커밋에 실어 게이팅을 리매핑한다.
+      onSave(
+        updatedCell,
+        pendingOptionValueChangesRef.current.length > 0
+          ? pendingOptionValueChangesRef.current
+          : undefined,
+      );
 
       // choice_opt 또는 ranking_opt 탭에서 그룹 변경이 있었으면 정리 후 부모에게 통보.
       // prune 은 updatedCell(이 셀 반영 후)의 rowsData 기준으로 계산해야 하므로
@@ -387,6 +498,11 @@ export function CellContentModal({
 
           try {
             await ensureSurvey();
+
+            // 리매핑 스코프 수집 — 스코프 저장(saveSurveyScoped)의 입력.
+            // create 분기에서 id 가 스왑되면 이후 리매핑은 새 id 기준이어야 한다.
+            const remapScopes: Array<{ questionIds: string[]; groupIds: string[] }> = [];
+            let effectiveQuestionId = currentQuestionId;
 
             if (!isNewQuestion) {
               // 이미 DB에 저장된 질문: 업데이트
@@ -458,6 +574,82 @@ export function CellContentModal({
                     ),
                   },
                 }));
+                // 스왑 직후 이 질문을 참조하는 조건(sourceQuestionId·expression 피연산자·
+                // branchRule goto 대상)도 새 id 로 갱신 — 안 하면 참조가 temp id 로 끊긴다
+                effectiveQuestionId = newId;
+                remapScopes.push(remapQuestionRefs(currentQuestionId, newId));
+              }
+            }
+
+            // 새 옵션 value 가 DB 에 커밋된 직후 — 이 표 질문을 sourceQuestionId 로 참조하는
+            // 다른 질문/그룹/행/열의 표시조건(table-cell-check expectedValues 는 셀 옵션 value
+            // 공간)을 같은 지점에서 리매핑하고 영속시킨다. 질문 편집 모달의 저장까지 미루면
+            // "셀 저장 후 질문 모달 취소" 경로에서 DB 에 신 value + 구 조건이 영구 잔류한다
+            // (질문 모달의 취소 롤백은 tableRowsData 를 되돌리지 않는다).
+            // 같은 표의 게이팅(enabledWhen)은 onSave→updateCell 이 이미 같은 커밋에 실었다.
+            // 조건 참조는 위에서 이미 새 id 로 스왑됐을 수 있으므로 effectiveQuestionId 기준.
+            if (pendingOptionValueChangesRef.current.length > 0) {
+              // 같은 표의 다른 셀이 같은 옵션 value(자동 발번 option-N)를 쓰는 것이 일상이므로,
+              // 이 셀의 행·열 좌표와 cellId 로 스코프를 좁혀 그 셀을 실제로 참조하는 조건만
+              // 리매핑한다 (무관 셀을 겨냥한 조건의 expectedValues 오염 방지).
+              const cellRow = updatedRowsData.find((row) => row.cells.some((c) => c.id === cell.id));
+              const cellScope = cellRow
+                ? {
+                    rowId: cellRow.id,
+                    columnIndex: cellRow.cells.findIndex((c) => c.id === cell.id),
+                    cellId: cell.id,
+                  }
+                : undefined;
+              for (const change of pendingOptionValueChangesRef.current) {
+                remapScopes.push(
+                  remapOptionValueInConditions(
+                    effectiveQuestionId,
+                    change.oldValue,
+                    change.newValue,
+                    cellScope,
+                  ),
+                );
+              }
+              pendingOptionValueChangesRef.current = [];
+            }
+
+            // 리매핑이 실제 변경을 만들었으면 그 범위만 영속 — 빌더에 대기 중인 무관한
+            // pending(질문 추가/삭제, 그룹 삭제 등)은 건드리지 않는다. 질문은 스코프 저장,
+            // 그룹 조건은 그룹 전용 RPC 로 개별 영속한다 (전역 메타데이터 저장에 실으면
+            // 미저장 제목 변경·그룹 삭제까지 동반 커밋된다).
+            const remapQuestionIds = [...new Set(remapScopes.flatMap((s) => s.questionIds))];
+            const remapGroupIds = [...new Set(remapScopes.flatMap((s) => s.groupIds))];
+            if (remapQuestionIds.length > 0 || remapGroupIds.length > 0) {
+              try {
+                if (remapGroupIds.length > 0) {
+                  const { currentSurvey } = useSurveyBuilderStore.getState();
+                  await Promise.all(
+                    remapGroupIds.map((groupId) => {
+                      const group = currentSurvey.groups?.find((g) => g.id === groupId);
+                      if (!group?.displayCondition) return null;
+                      return client.surveyBuilder.groups.update({
+                        groupId,
+                        surveyId: currentSurvey.id,
+                        data: { displayCondition: group.displayCondition },
+                      });
+                    }),
+                  );
+                }
+                if (remapQuestionIds.length > 0) {
+                  await saveSurveyScoped({ questionIds: remapQuestionIds });
+                } else {
+                  // 그룹만 변경: RPC 영속이 끝났으므로 남은 변경 기준으로 dirty 재계산
+                  useSurveyBuilderStore.getState().markSavedSnapshotClean();
+                }
+              } catch (saveError) {
+                if (remapGroupIds.length > 0) {
+                  // 그룹 RPC 실패 폴백 — 수동 저장(메타데이터 전체)으로 복구 가능하게 한다
+                  useSurveyBuilderStore.setState({ isMetadataDirty: true, isDirty: true });
+                }
+                console.error('표시조건 리매핑 반영을 위한 설문 저장 실패:', saveError);
+                toast.error(
+                  '조건 리매핑 저장에 실패했습니다. 설문 저장 버튼으로 다시 저장해 주세요.',
+                );
               }
             }
           } catch (error) {
@@ -548,6 +740,31 @@ export function CellContentModal({
                 </div>
                 <p className="text-xs text-gray-500">
                   왼쪽/오른쪽 선택 시 텍스트와 입력 영역이 한 줄에 배치되고 세로 가운데 정렬됩니다.
+                </p>
+              </div>
+            )}
+
+            {INPUT_TEXT_ALIGN_CELL_TYPES.has(contentType) && (
+              <div className="space-y-2 pt-1">
+                <Label className="text-sm font-medium">입력값 정렬</Label>
+                <div className="flex gap-2">
+                  {INPUT_TEXT_ALIGN_OPTIONS.map(({ value, icon: Icon, label }) => (
+                    <Button
+                      key={value}
+                      type="button"
+                      variant={inputTextAlign === value ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setInputTextAlign(value)}
+                      className="flex-1"
+                    >
+                      {Icon && <Icon className="mr-2 h-4 w-4" />}
+                      {label}
+                    </Button>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-500">
+                  값이 칸 안에서 채워지는 방향입니다. 오른쪽을 고르면 숫자가 오른쪽 끝에 붙어
+                  자릿수를 비교하기 좋습니다.
                 </p>
               </div>
             )}
@@ -727,13 +944,13 @@ export function CellContentModal({
             }
           }}
         >
-          <TabsList className={`grid w-full ${showRankingOptTab ? 'grid-cols-10' : 'grid-cols-9'}`}>
+          <TabsList className={`grid w-full ${showRankingOptTab ? 'grid-cols-11' : 'grid-cols-10'}`}>
             <TabsTrigger value="text" className="flex items-center gap-2">
               <Type className="h-4 w-4" />
               텍스트
             </TabsTrigger>
             <TabsTrigger value="image" className="flex items-center gap-2">
-              <Image className="h-4 w-4" />
+              <ImageIcon className="h-4 w-4" />
               이미지
             </TabsTrigger>
             <TabsTrigger value="video" className="flex items-center gap-2">
@@ -770,6 +987,7 @@ export function CellContentModal({
               <Tag className="h-4 w-4" />
               보기 옵션
             </TabsTrigger>
+            <TabsTrigger value="calc">계산</TabsTrigger>
           </TabsList>
 
           {/* 텍스트 탭 */}
@@ -923,6 +1141,53 @@ export function CellContentModal({
               </div>
             </div>
 
+            {inputType === 'number' ? (
+              <div className="space-y-3 rounded border p-3">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={formulaValidationEnabled}
+                    onChange={(e) => setFormulaValidationEnabled(e.target.checked)}
+                  />
+                  계산 검증 — 입력값이 수식 계산 결과와 다르면 다음 진행을 차단
+                </label>
+                {formulaValidationEnabled ? (
+                  <>
+                    <FormulaExprEditor
+                      value={formula}
+                      onChange={setFormula}
+                      ownQuestion={ownQuestion}
+                      allQuestions={questions}
+                    />
+                    <div className="flex items-center gap-2 text-sm">
+                      <span>오차 허용 ±</span>
+                      <Input
+                        className="w-24"
+                        value={formulaToleranceRaw}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          // 오차 허용은 0 이상만 허용한다 — 음수면 Math.abs(입력 − 계산) > tolerance
+                          // 비교가 정확히 일치하는 값도 항상 위반으로 판정하는 트랩이 된다.
+                          if (v.includes('-')) return;
+                          if (isPartialNumericInput(v)) setFormulaToleranceRaw(v);
+                        }}
+                        placeholder="0"
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      음수는 입력할 수 없습니다. 오차 허용이 음수이면 값이 정확히 일치해도 항상
+                      불일치로 판정됩니다.
+                    </p>
+                    <Input
+                      value={formulaErrorMessage}
+                      onChange={(e) => setFormulaErrorMessage(e.target.value)}
+                      placeholder="불일치 시 표시할 문구 (비우면 기본 문구, 계산값 미노출)"
+                    />
+                  </>
+                ) : null}
+              </div>
+            ) : null}
+
             <div className="space-y-2">
               <Label htmlFor="input-placeholder" className="text-sm font-medium">
                 안내 문구 (Placeholder)
@@ -1000,10 +1265,32 @@ export function CellContentModal({
               )}
             </div>
 
+            {showCellAnswerQuote ? (
+              <AnswerQuoteQuestionControl
+                idPrefix="cell-answer-quote"
+                enabled={cellAnswerQuoteEnabled}
+                onEnabledChange={setCellAnswerQuoteEnabled}
+                name={cellAnswerQuoteName}
+                onNameChange={setCellAnswerQuoteName}
+                questionText={{ value: answerQuoteText, onChange: setAnswerQuoteText }}
+                scope="cell"
+              />
+            ) : (
+              answerQuoteEnabled && (
+                <AnswerQuoteTextField
+                  id="cell-answer-quote-text"
+                  value={answerQuoteText}
+                  onChange={setAnswerQuoteText}
+                  mode="input"
+                  showInputTokenHint
+                />
+              )
+            )}
+
             <div className="space-y-2">
               <Label className="text-sm font-medium">미리보기</Label>
               <div className="rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 p-4">
-                <CellContentLayout content={textContent} position={textPosition}>
+                <CellContentLayout content={textContent} position={textPosition} textColor={textColor}>
                   <div className="space-y-2">
                     <Input
                       placeholder={inputPlaceholder || '답변을 입력하세요...'}
@@ -1024,10 +1311,19 @@ export function CellContentModal({
 
           {/* 체크박스 탭 */}
           <TabsContent value="checkbox" className="space-y-4">
-            <OptionsLayoutSelector value={cellOptionsColumns} onChange={setCellOptionsColumns} />
+            <OptionsLayoutSelector
+              value={cellOptionsColumns}
+              onChange={setCellOptionsColumns}
+              align={horizontalAlign}
+              onAlignChange={setHorizontalAlign}
+              mobileValue={cellMobileOptionsColumns}
+              onMobileChange={(next) => setCellMobileOptionsColumns(next ?? undefined)}
+            />
             <CellChoiceEditor
               cellType="checkbox"
               textContent={textContent}
+              answerQuoteEnabled={answerQuoteEnabled}
+              cellAnswerQuote={cellAnswerQuoteControl}
               currentQuestionId={currentQuestionId}
               questions={questions}
               checkboxOptions={checkboxOptions}
@@ -1042,15 +1338,30 @@ export function CellContentModal({
               onMinSelectionsChange={setMinSelections}
               maxSelections={maxSelections}
               onMaxSelectionsChange={setMaxSelections}
+              onOptionValueChange={(change) => {
+                pendingOptionValueChangesRef.current = [
+                  ...pendingOptionValueChangesRef.current,
+                  change,
+                ];
+              }}
             />
           </TabsContent>
 
           {/* 라디오 버튼 탭 */}
           <TabsContent value="radio" className="space-y-4">
-            <OptionsLayoutSelector value={cellOptionsColumns} onChange={setCellOptionsColumns} />
+            <OptionsLayoutSelector
+              value={cellOptionsColumns}
+              onChange={setCellOptionsColumns}
+              align={horizontalAlign}
+              onAlignChange={setHorizontalAlign}
+              mobileValue={cellMobileOptionsColumns}
+              onMobileChange={(next) => setCellMobileOptionsColumns(next ?? undefined)}
+            />
             <CellChoiceEditor
               cellType="radio"
               textContent={textContent}
+              answerQuoteEnabled={answerQuoteEnabled}
+              cellAnswerQuote={cellAnswerQuoteControl}
               currentQuestionId={currentQuestionId}
               questions={questions}
               checkboxOptions={checkboxOptions}
@@ -1065,6 +1376,12 @@ export function CellContentModal({
               onMinSelectionsChange={setMinSelections}
               maxSelections={maxSelections}
               onMaxSelectionsChange={setMaxSelections}
+              onOptionValueChange={(change) => {
+                pendingOptionValueChangesRef.current = [
+                  ...pendingOptionValueChangesRef.current,
+                  change,
+                ];
+              }}
             />
           </TabsContent>
 
@@ -1073,6 +1390,8 @@ export function CellContentModal({
             <CellChoiceEditor
               cellType="select"
               textContent={textContent}
+              answerQuoteEnabled={answerQuoteEnabled}
+              cellAnswerQuote={cellAnswerQuoteControl}
               currentQuestionId={currentQuestionId}
               questions={questions}
               checkboxOptions={checkboxOptions}
@@ -1087,12 +1406,35 @@ export function CellContentModal({
               onMinSelectionsChange={setMinSelections}
               maxSelections={maxSelections}
               onMaxSelectionsChange={setMaxSelections}
+              onOptionValueChange={(change) => {
+                pendingOptionValueChangesRef.current = [
+                  ...pendingOptionValueChangesRef.current,
+                  change,
+                ];
+              }}
             />
           </TabsContent>
 
           {/* 순위형(ranking) 탭 — Case 3 */}
           <TabsContent value="ranking" className="space-y-4">
-            <OptionsLayoutSelector value={cellOptionsColumns} onChange={setCellOptionsColumns} />
+            <OptionsLayoutSelector
+              value={cellOptionsColumns}
+              onChange={setCellOptionsColumns}
+              align={horizontalAlign}
+              onAlignChange={setHorizontalAlign}
+              mobileValue={cellMobileOptionsColumns}
+              onMobileChange={(next) => setCellMobileOptionsColumns(next ?? undefined)}
+            />
+            {showCellAnswerQuote && (
+              <AnswerQuoteQuestionControl
+                idPrefix="ranking-cell-answer-quote"
+                enabled={cellAnswerQuoteEnabled}
+                onEnabledChange={setCellAnswerQuoteEnabled}
+                name={cellAnswerQuoteName}
+                onNameChange={setCellAnswerQuoteName}
+                scope="cell"
+              />
+            )}
             <RankingCellTab
               cellCode={cellCode}
               rankingOptions={rankingOptions}
@@ -1105,6 +1447,13 @@ export function CellContentModal({
               onRankSuffixPatternChange={setRankSuffixPattern}
               rankVarNames={rankVarNames}
               onRankVarNamesChange={setRankVarNames}
+              answerQuoteEnabled={showCellAnswerQuote ? cellAnswerQuoteEnabled : answerQuoteEnabled}
+              onOptionValueChange={(change) => {
+                pendingOptionValueChangesRef.current = [
+                  ...pendingOptionValueChangesRef.current,
+                  change,
+                ];
+              }}
             />
           </TabsContent>
 
@@ -1122,6 +1471,9 @@ export function CellContentModal({
               choiceGroupId={choiceGroupId}
               onChoiceGroupIdChange={setChoiceGroupId}
               onChoiceGroupsChange={setEditChoiceGroups}
+              answerQuoteEnabled={answerQuoteEnabled}
+              answerQuoteText={answerQuoteText}
+              onAnswerQuoteTextChange={setAnswerQuoteText}
             />
           </TabsContent>
 
@@ -1143,12 +1495,53 @@ export function CellContentModal({
               choiceGroupId={choiceGroupId}
               onChoiceGroupIdChange={setChoiceGroupId}
               onChoiceGroupsChange={setEditChoiceGroups}
+              answerQuoteEnabled={answerQuoteEnabled}
+              answerQuoteText={answerQuoteText}
+              onAnswerQuoteTextChange={setAnswerQuoteText}
             />
+          </TabsContent>
+
+          {/* 계산 셀(calc) 탭 — 다른 셀·질문 응답을 수식으로 계산해 읽기 전용 표시 */}
+          <TabsContent value="calc" className="space-y-4">
+            <div className="text-sm text-gray-600">
+              다른 셀·질문의 숫자 응답을 수식으로 계산해 읽기 전용으로 표시합니다.
+            </div>
+            <FormulaExprEditor
+              value={formula}
+              onChange={setFormula}
+              ownQuestion={ownQuestion}
+              allQuestions={questions}
+            />
+            <NumberFormatFields idPrefix="calc-nf" value={cellNumberFormat} onChange={setCellNumberFormat} />
           </TabsContent>
         </Tabs>
 
-        {/* 필수 응답 셀 — 인터랙티브 셀 공용 (input/radio/checkbox/select/ranking) */}
-        {REQUIRED_CELL_TYPES.has(contentType) && (
+        {/* 셀 게이팅 활성 조건 — 인터랙티브 셀 전체(GATABLE_CELL_TYPES).
+            prefill(defaultValueTemplate) input 셀만 서버 prefill 강제 복원과
+            양립 불가라 설정 금지(섹션 숨김, 스펙 5절) */}
+        {GATABLE_CELL_TYPES.has(contentType) &&
+          !(contentType === 'input' && inputDefaultValueTemplate.trim().length > 0) && (
+          <CellGatingEditor
+            cellId={cell.id}
+            rowCells={gatingRowCells}
+            condition={gatingCondition}
+            requiredWhenEnabled={gatingRequiredWhenEnabled}
+            onConditionChange={(cond) => {
+              // 게이팅 최초 활성화 시 기존 필수 체크를 "활성화되면 필수"로 수렴
+              // (필수 체크박스가 숨겨지며 의도가 사라지지 않도록, 스펙 5절)
+              if (cond && !gatingCondition && cellRequired) {
+                setGatingRequiredWhenEnabled(true);
+              }
+              setGatingCondition(cond);
+            }}
+            onRequiredWhenEnabledChange={setGatingRequiredWhenEnabled}
+          />
+        )}
+
+        {/* 필수 응답 셀 — 인터랙티브 셀 공용 (input/radio/checkbox/select/ranking).
+            게이팅이 켜진 셀은 "활성화되면 필수"로 수렴하므로 이 체크박스를 숨긴다 */}
+        {REQUIRED_CELL_TYPES.has(contentType) &&
+          !(GATABLE_CELL_TYPES.has(contentType) && gatingCondition) && (
           <div className="mt-6 border-t border-gray-200 pt-6">
             <div className="flex items-center gap-2 text-sm">
               <input
@@ -1158,12 +1551,22 @@ export function CellContentModal({
                 onChange={(e) => setCellRequired(e.target.checked)}
                 className="h-4 w-4"
               />
-              <label htmlFor="cell-required" className="cursor-pointer">
+              <label htmlFor="cell-required" className="cursor-pointer shrink-0">
                 필수 응답 셀
               </label>
-              <span className="text-xs text-gray-400">
-                지정 셀이 응답되어야 다음으로 진행됩니다
-              </span>
+              {cellRequired ? (
+                <Input
+                  id="cell-required-message"
+                  value={cellRequiredMessage}
+                  onChange={(e) => setCellRequiredMessage(e.target.value)}
+                  placeholder={DEFAULT_REQUIRED_CELL_MESSAGE}
+                  className="ml-2 h-8 flex-1 text-sm"
+                />
+              ) : (
+                <span className="text-xs text-gray-400">
+                  지정 셀이 응답되어야 다음으로 진행됩니다
+                </span>
+              )}
             </div>
           </div>
         )}
@@ -1343,8 +1746,39 @@ export function CellContentModal({
                 </Button>
               )}
             </div>
+
+            {/* 셀 라벨 — 모바일 카드/드릴다운에서 입력칸 위에 붙는 제목 */}
+            {showInteractiveMobileLabel && mobileDisplay !== 'hidden' && (
+              <div className="mt-4 space-y-2">
+                <Label htmlFor="mobile-label">셀 라벨</Label>
+                <Input
+                  id="mobile-label"
+                  value={mobileLabel}
+                  onChange={(e) => setMobileLabel(e.target.value)}
+                  placeholder={exportLabel || columnLabel || '열 제목'}
+                  className="w-full"
+                />
+                <p className="text-xs text-gray-500">
+                  모바일 카드에서 입력칸 위에 표시되는 제목입니다. 비워두면 엑셀 라벨, 그것도
+                  없으면 열 제목이 사용됩니다.
+                </p>
+              </div>
+            )}
           </div>
         )}
+
+        <div className="mt-6 border-t border-gray-200 pt-6">
+          <h3 className="mb-4 text-sm font-semibold text-gray-900">셀 스타일</h3>
+          <CellStyleFields
+            key={cell.id}
+            textBold={textBold}
+            backgroundColor={backgroundColor}
+            textColor={textColor}
+            onTextBoldChange={setTextBold}
+            onBackgroundColorChange={setBackgroundColor}
+            onTextColorChange={setTextColor}
+          />
+        </div>
 
         {/* 셀 컨텐츠 정렬 설정 */}
         <div className="mt-6 border-t border-gray-200 pt-6">
@@ -1442,7 +1876,11 @@ export function CellContentModal({
                       : verticalAlign === 'middle'
                         ? 'items-center'
                         : 'items-end'
-                  }`}
+                  }${textBold ? ' font-bold' : ''}`}
+                  style={{
+                    ...(backgroundColor ? { backgroundColor } : {}),
+                    ...(textColor ? { color: textColor } : {}),
+                  }}
                 >
                   <div className="rounded bg-blue-500 px-4 py-2 text-sm text-white">컨텐츠</div>
                 </div>

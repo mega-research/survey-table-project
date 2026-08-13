@@ -7,10 +7,15 @@ import {
   MobileDrilldownShell,
 } from '@/components/survey-builder/mobile-drilldown-shell';
 import { MobileOriginalRowTable } from '@/components/survey-builder/mobile-original-row-table';
-import { useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import type { Question, TableCell } from '@/types/survey';
-import { getGroupTypeOfCell, isGroupedChoiceQuestion } from '@/utils/choice-group-helpers';
+import {
+  DEFAULT_GROUP_KEY,
+  collectChoiceGroups,
+  getGroupTypeOfCell,
+  isGroupedChoiceQuestion,
+} from '@/utils/choice-group-helpers';
 import { type ClassifiedLeaf, type ClassifiedSection, classifyTable } from '@/utils/classify-table';
 import {
   excludeMobileDrilldownRepeatedRows,
@@ -43,6 +48,7 @@ export function ChoiceTableDrilldown({
   counter,
 }: ChoiceTableDrilldownProps) {
   const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
   const columns = question.tableColumns ?? EMPTY_COLUMNS;
   const rows = question.tableRowsData ?? EMPTY_ROWS;
   const repeatHeaderRange = useMemo(
@@ -110,58 +116,92 @@ export function ChoiceTableDrilldown({
             : false;
           return {
             ...leaf,
-            label: substituteTokens(labelCandidate.label, attrs),
+            label: substituteTokens(labelCandidate.label, attrs, quotes),
             subGroup:
               leaf.subGroup.trim() && !subGroupIsHidden
-                ? substituteTokens(leaf.subGroup.trim(), attrs)
+                ? substituteTokens(leaf.subGroup.trim(), attrs, quotes)
                 : '',
           };
         });
         const sectionLabelIsHidden = section.labelSourceCellId
           ? cellById.get(section.labelSourceCellId)?.mobileDisplay === 'hidden'
           : false;
-        const sectionLabel = sectionLabelIsHidden ? '' : substituteTokens(section.label, attrs);
+        const sectionLabel = sectionLabelIsHidden
+          ? ''
+          : substituteTokens(section.label, attrs, quotes);
         return {
           ...section,
           label: leaves.length === 1 ? (leaves[0]?.label ?? '') : sectionLabel,
           leaves,
         };
       }),
-    [attrs, cellById, columns, detailRowById, omit, resolveChoiceLabel, sections],
+    [attrs, quotes, cellById, columns, detailRowById, omit, resolveChoiceLabel, sections],
   );
   const horizontalScrollRef = useRef(0);
 
-  const getLeafStatus = (leaf: ClassifiedLeaf): DrilldownStatus => {
-    const choices = (navigationRowById.get(leaf.rowId)?.cells ?? []).filter(
+  // 진행 카운트의 분모는 셀 개수가 아니라 "요구되는 선택 수"다 (answer-validation 과 동일 기준).
+  // - radio/checkbox 그룹 정의가 있으면 그룹당 1 (모든 그룹에 1개 이상 선택하면 충족)
+  // - 비그룹 radio 는 표 전체가 단일 선택이므로 전체 1 (모든 셀이 DEFAULT_GROUP_KEY 폴백)
+  // - 비그룹 checkbox 는 null → 셀 단위 카운트 유지 (선택 개수 자체가 정보)
+  const groupKeyByCellId = useMemo(() => {
+    if (isGroupedChoiceQuestion(question)) {
+      const map = new Map<string, string>();
+      for (const group of collectChoiceGroups(question)) {
+        for (const cell of group.cells) map.set(cell.id, group.groupKey);
+      }
+      return map;
+    }
+    return question.type === 'checkbox' ? null : new Map<string, string>();
+  }, [question]);
+  const answeredGroupKeys = useMemo(() => {
+    if (!groupKeyByCellId) return null;
+    return new Set(selectedIds.map((id) => groupKeyByCellId.get(id) ?? DEFAULT_GROUP_KEY));
+  }, [groupKeyByCellId, selectedIds]);
+
+  const visibleChoiceCells = (leaf: ClassifiedLeaf): TableCell[] =>
+    (navigationRowById.get(leaf.rowId)?.cells ?? []).filter(
       (cell) => cell.type === 'choice_opt' && !cell.isHidden && !cell._isContinuation,
     );
-    return {
-      completed: choices.filter((cell) => selectedIdSet.has(cell.id)).length,
-      total: choices.length,
-      unit: '개 선택',
-    };
-  };
-
-  const getSectionStatus = (section: ClassifiedSection): DrilldownStatus => {
-    const statuses = section.leaves.map(getLeafStatus);
-    return {
-      completed: statuses.reduce((sum, status) => sum + status.completed, 0),
-      total: statuses.reduce((sum, status) => sum + status.total, 0),
-      unit: '개 선택',
-    };
-  };
-
-  const overallStatus = titledSections.reduce<DrilldownStatus>(
-    (overall, section) => {
-      const status = getSectionStatus(section);
+  const statusFromCells = (cells: TableCell[]): DrilldownStatus => {
+    if (!groupKeyByCellId || !answeredGroupKeys) {
       return {
-        completed: overall.completed + status.completed,
-        total: overall.total + status.total,
+        completed: cells.filter((cell) => selectedIdSet.has(cell.id)).length,
+        total: cells.length,
         unit: '개 선택',
       };
-    },
-    { completed: 0, total: 0, unit: '개 선택' },
+    }
+    const keys = new Set(cells.map((cell) => groupKeyByCellId.get(cell.id) ?? DEFAULT_GROUP_KEY));
+    let completed = 0;
+    for (const key of keys) if (answeredGroupKeys.has(key)) completed += 1;
+    return { completed, total: keys.size, unit: '개 선택' };
+  };
+
+  const getLeafStatus = (leaf: ClassifiedLeaf): DrilldownStatus =>
+    statusFromCells(visibleChoiceCells(leaf));
+
+  // 그룹은 리프/섹션 경계를 넘을 수 있으므로(rowspan 승격 등) 상위 집계는 리프 상태 합산이
+  // 아니라 셀 집합에서 다시 계산한다 — 합산이면 걸친 그룹이 중복 카운트된다.
+  const getSectionStatus = (section: ClassifiedSection): DrilldownStatus =>
+    statusFromCells(section.leaves.flatMap(visibleChoiceCells));
+
+  const allVisibleChoiceCells = titledSections.flatMap((section) =>
+    section.leaves.flatMap(visibleChoiceCells),
   );
+  const cellBasedOverall = statusFromCells(allVisibleChoiceCells);
+  // 비그룹 checkbox 에 minSelections 가 있으면 전체 진행바 분모는 요구 선택 수(min)다 —
+  // 검증(answer-validation)이 min 충족 시 통과하는데 분모가 전체 선택지 수면 진행률이
+  // 영구히 100%에 못 미친다. 리프/섹션 뱃지는 선택 현황 정보라 셀 기준을 유지한다.
+  const minSelections =
+    !groupKeyByCellId && typeof question.minSelections === 'number' && question.minSelections > 0
+      ? Math.min(question.minSelections, cellBasedOverall.total)
+      : null;
+  const overallStatus: DrilldownStatus = minSelections
+    ? {
+        completed: Math.min(cellBasedOverall.completed, minSelections),
+        total: minSelections,
+        unit: '개 선택',
+      }
+    : cellBasedOverall;
 
   const renderLeafDetail = (leaf: ClassifiedLeaf) => {
     const row = detailRowById.get(leaf.rowId);

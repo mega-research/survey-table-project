@@ -6,9 +6,10 @@ import {
   type DispatchChunkResult,
 } from '@/lib/mail/campaign-dispatch';
 
-import { inngest, type MailCampaignQueuedData } from '../client';
+import { ctxLogger, inngest, type MailCampaignQueuedData } from '../client';
 
 const CHUNK_SIZE = 50;
+const FUNCTION_ID = 'campaign-dispatcher';
 
 interface DispatchCleanupStep {
   sendEvent: (
@@ -120,7 +121,7 @@ export async function finishCampaignDispatch(
  */
 export const campaignDispatcher = inngest.createFunction(
   {
-    id: 'campaign-dispatcher',
+    id: FUNCTION_ID,
     triggers: [{ event: 'mail/campaign.queued' }],
     concurrency: { limit: 1 },
     retries: 2,
@@ -133,35 +134,38 @@ export const campaignDispatcher = inngest.createFunction(
       );
     },
   },
-  async ({ event, step, ...inngestCtx }) => {
-    // inngest 4.x triggers-API 컨텍스트 타입에는 logger 가 노출되지 않지만,
-    // 런타임에는 미들웨어가 ctx.logger 를 주입한다. console 과 호환되는 좁은 형태로 단언.
-    const logger =
-      (inngestCtx as { logger?: Pick<Console, 'info' | 'warn' | 'error' | 'debug'> })
-        .logger ?? console;
+  async (fnCtx) => {
+    const { event, step } = fnCtx;
+    // ctx.logger — 클라이언트 logger 옵션(pino child, source:'inngest')을 내장
+    // 미들웨어가 runID·eventName child 로 감싼 것. campaignId 등 식별자만 바인딩한다
+    // (수신자 email·event data 통짜 금지 — client.ts 주석 참조).
+    const logger = ctxLogger(fnCtx);
     const data = event.data as MailCampaignQueuedData;
-    const { campaignId } = data;
+    const { campaignId, surveyId } = data;
 
     const ctx = await step.run('prepare', () => prepareCampaignDispatch(campaignId));
     if (!ctx) {
-      logger.info('campaign skipped (not found / cancelled / completed)', { campaignId });
+      logger.info(
+        { functionId: FUNCTION_ID, campaignId },
+        '캠페인 발송 건너뜀 (없음/취소/완료)',
+      );
       return { skipped: true, campaignId };
     }
     if (ctx.requiresCleanup) {
       const cleanup = await finishCampaignDispatch(
         campaignId,
-        data.surveyId,
+        surveyId,
         true,
         step as DispatchCleanupStep,
       );
-      logger.info('inactive campaign ambiguous dispatch cleanup completed', {
-        campaignId,
-        cleanup,
-      });
+      logger.info(
+        { functionId: FUNCTION_ID, campaignId, cleanup },
+        '비활성 캠페인 ambiguous 발송 정리 완료',
+      );
       return { skipped: true, campaignId, cleanup };
     }
     if (ctx.recipientIds.length === 0) {
-      logger.info('no queued recipients', { campaignId });
+      logger.info({ functionId: FUNCTION_ID, campaignId }, '대기 수신자 없음');
       return { ok: true, total: 0 };
     }
 
@@ -176,9 +180,22 @@ export const campaignDispatcher = inngest.createFunction(
 
     const cleanup = await finishCampaignDispatch(
       campaignId,
-      data.surveyId,
+      surveyId,
       totals.cancelled,
       step as DispatchCleanupStep,
+    );
+
+    logger.info(
+      {
+        functionId: FUNCTION_ID,
+        campaignId,
+        surveyId,
+        total: ctx.recipientIds.length,
+        sent: totals.sent,
+        failed: totals.failed,
+        cancelled: totals.cancelled,
+      },
+      '캠페인 발송 처리 완료',
     );
 
     return {

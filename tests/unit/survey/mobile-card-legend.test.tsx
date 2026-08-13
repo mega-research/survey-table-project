@@ -35,7 +35,9 @@ const inputRow = {
   ],
 } as unknown as TableRow;
 
-function renderCard(legendLabels?: string[]) {
+function renderCard(
+  legendLabels?: Array<{ label: string; textBold?: boolean; backgroundColor?: string }>,
+) {
   return render(
     <MobileRowCard
       row={inputRow}
@@ -57,7 +59,14 @@ describe('collectMobileLegendLabels', () => {
       label: '헤더행',
       cells: [
         { id: 'h0', type: 'text', content: '항목', mobileDisplay: 'hidden' },
-        { id: 'h1', type: 'text', content: '전혀 도움 안 됨', mobileDisplay: 'legend' },
+        {
+          id: 'h1',
+          type: 'text',
+          content: '전혀 도움 안 됨',
+          mobileDisplay: 'legend',
+          textBold: true,
+          backgroundColor: '#AABBCC',
+        },
         { id: 'h2', type: 'text', content: '.....', mobileDisplay: 'hidden' },
         { id: 'h3', type: 'text', content: '매우 도움 됨', mobileDisplay: 'legend' },
         { id: 'h4', type: 'text', content: '  ', mobileDisplay: 'legend' },
@@ -69,7 +78,10 @@ describe('collectMobileLegendLabels', () => {
   ] as unknown as TableRow[];
 
   it('legend 지정 text 셀 내용을 순서대로 수집한다 (빈 내용·isHidden 제외)', () => {
-    expect(collectMobileLegendLabels(rows)).toEqual(['전혀 도움 안 됨', '매우 도움 됨']);
+    expect(collectMobileLegendLabels(rows)).toEqual([
+      { label: '전혀 도움 안 됨', textBold: true },
+      { label: '매우 도움 됨' },
+    ]);
   });
 
   it('legend 셀은 display 셀(inline/collapsed)로 집계되지 않는다', () => {
@@ -86,13 +98,13 @@ describe('collectMobileLegendLabels', () => {
 
 describe('MobileRowCard 범례 표시', () => {
   it('첫/마지막 범례에 카드 옵션의 첫/마지막 라벨이 자동 접두된다', () => {
-    renderCard(['전혀 도움 안 됨', '매우 도움 됨']);
+    renderCard([{ label: '전혀 도움 안 됨' }, { label: '매우 도움 됨' }]);
     expect(screen.getByText('⓪ 전혀 도움 안 됨')).toBeInTheDocument();
     expect(screen.getByText('⑩ 매우 도움 됨')).toBeInTheDocument();
   });
 
   it('범례 라벨 사이에 점선 리더가 채워지고 전체가 한 행의 형제로 렌더된다', () => {
-    renderCard(['전혀 도움 안 됨', '매우 도움 됨']);
+    renderCard([{ label: '전혀 도움 안 됨' }, { label: '매우 도움 됨' }]);
     const first = screen.getByText('⓪ 전혀 도움 안 됨');
     const second = screen.getByText('⑩ 매우 도움 됨');
     expect(first.parentElement).toBe(second.parentElement);
@@ -116,7 +128,7 @@ describe('MobileRowCard 범례 표시', () => {
         hideColumnLabels={false}
         questionId="q1"
         isTestMode={false}
-        legendLabels={['전혀 도움 안 됨', '매우 도움 됨']}
+        legendLabels={[{ label: '전혀 도움 안 됨' }, { label: '매우 도움 됨' }]}
       />,
     );
     expect(screen.getByText('전혀 도움 안 됨')).toBeInTheDocument();
@@ -126,5 +138,18 @@ describe('MobileRowCard 범례 표시', () => {
   it('legendLabels 미지정이면 범례 없이 기존과 동일하다', () => {
     renderCard(undefined);
     expect(screen.queryByText(/전혀 도움 안 됨/)).not.toBeInTheDocument();
+  });
+
+  it('legend 셀의 Bold만 범례에 적용하고 배경색은 적용하지 않는다', () => {
+    renderCard([
+      { label: '강조 범례', textBold: true, backgroundColor: '#AABBCC' },
+      { label: '일반 범례' },
+    ]);
+
+    expect(screen.getByText('⓪ 강조 범례')).toHaveClass('font-bold');
+    expect(screen.getByText('⓪ 강조 범례')).not.toHaveStyle({
+      backgroundColor: '#AABBCC',
+    });
+    expect(screen.getByText('⑩ 일반 범례')).not.toHaveClass('font-bold');
   });
 });

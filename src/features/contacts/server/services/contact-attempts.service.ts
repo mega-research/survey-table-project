@@ -3,7 +3,9 @@ import 'server-only';
 import { and, eq, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
+import { logger } from '@/lib/logger';
 import { contactAttempts, contactTargets, surveys } from '@/db/schema';
+import { resolveWriteScopeIsTest } from '@/lib/operations/data-scope.server';
 
 import type {
   AddContactAttemptInput,
@@ -19,6 +21,7 @@ async function lockTargetInCurrentScope(
   tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
   contactTargetId: string,
   surveyId: string,
+  isGuest: boolean,
 ): Promise<void> {
   const [survey] = await tx
     .select({ enabled: surveys.testModeEnabled })
@@ -26,6 +29,7 @@ async function lockTargetInCurrentScope(
     .where(eq(surveys.id, surveyId))
     .for('update');
   if (!survey) throw new Error('NOT_FOUND');
+  const isTest = resolveWriteScopeIsTest(survey.enabled, isGuest);
 
   const [target] = await tx
     .select({ id: contactTargets.id })
@@ -34,7 +38,7 @@ async function lockTargetInCurrentScope(
       and(
         eq(contactTargets.id, contactTargetId),
         eq(contactTargets.surveyId, surveyId),
-        eq(contactTargets.isTest, survey.enabled),
+        eq(contactTargets.isTest, isTest),
       ),
     )
     .for('update');
@@ -67,9 +71,13 @@ function isUniqueViolation(e: unknown): boolean {
  * 3회 모두 실패 시 user-facing error.
  *
  * surveyId 는 input 으로 받되 service 로직에서는 사용하지 않는다(revalidate 제거).
+ *
+ * isGuest 는 procedure 가 이미 인증한 context.user.id 에서 파생해 전달한다 — 서비스가
+ * auth 를 재조회하면 그 실패가 fail-open(어드민 취급)으로 이어질 수 있다.
  */
 export async function addAttempt(
   input: AddContactAttemptInput,
+  isGuest: boolean,
 ): Promise<{ id: string; attemptNo: number }> {
   const { contactTargetId, resultCode, note } = input;
 
@@ -80,7 +88,7 @@ export async function addAttempt(
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
       result = await db.transaction(async (tx) => {
-        await lockTargetInCurrentScope(tx, input.contactTargetId, input.surveyId);
+        await lockTargetInCurrentScope(tx, input.contactTargetId, input.surveyId, isGuest);
         const [maxRow] = await tx
           .select({ maxNo: sql<number | null>`MAX(${contactAttempts.attemptNo})` })
           .from(contactAttempts)
@@ -108,7 +116,7 @@ export async function addAttempt(
   }
 
   if (result == null) {
-    console.error('[addAttempt] race retry exhausted:', lastError);
+    logger.error({ contactTargetId, err: lastError }, '[addAttempt] race retry 소진');
     throw new Error('동시 편집 충돌이 발생했습니다. 다시 시도해주세요.');
   }
 
@@ -120,10 +128,13 @@ export async function addAttempt(
  * 설문 스코프 가드: contactTargetId 가 surveyId 소속인지 선행 확인한 뒤,
  * attempt.id + contactTargetId 스코프로 UPDATE 한다. 영향 0행이면 NOT_FOUND throw.
  */
-export async function updateAttempt(input: UpdateContactAttemptInput): Promise<void> {
+export async function updateAttempt(
+  input: UpdateContactAttemptInput,
+  isGuest: boolean,
+): Promise<void> {
   const { id, contactTargetId, surveyId, resultCode, note } = input;
   await db.transaction(async (tx) => {
-    await lockTargetInCurrentScope(tx, contactTargetId, surveyId);
+    await lockTargetInCurrentScope(tx, contactTargetId, surveyId, isGuest);
     const updated = await tx
       .update(contactAttempts)
       .set({ resultCode, note: note ?? null })
@@ -138,10 +149,13 @@ export async function updateAttempt(input: UpdateContactAttemptInput): Promise<v
  * 설문 스코프 가드: contactTargetId 가 surveyId 소속인지 선행 확인한 뒤,
  * attempt.id + contactTargetId 스코프로 DELETE 한다. 영향 0행이면 NOT_FOUND throw.
  */
-export async function deleteAttempt(input: DeleteContactAttemptInput): Promise<void> {
+export async function deleteAttempt(
+  input: DeleteContactAttemptInput,
+  isGuest: boolean,
+): Promise<void> {
   const { id, contactTargetId, surveyId } = input;
   await db.transaction(async (tx) => {
-    await lockTargetInCurrentScope(tx, contactTargetId, surveyId);
+    await lockTargetInCurrentScope(tx, contactTargetId, surveyId, isGuest);
     const deleted = await tx
       .delete(contactAttempts)
       .where(and(eq(contactAttempts.id, id), eq(contactAttempts.contactTargetId, contactTargetId)))

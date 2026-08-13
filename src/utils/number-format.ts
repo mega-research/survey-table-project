@@ -81,6 +81,16 @@ export function exceedsDecimalPlaces(raw: string, places: number | undefined): b
 }
 
 /**
+ * 허용값 제한이 있을 때 현재 타이핑 값을 받아들일지 판정한다.
+ * 완성값뿐 아니라 여러 자리 숫자를 입력하기 위한 접두 입력도 허용한다.
+ * 예: allowed=[10, 20]이면 '', '1', '10', '2', '20'은 허용하고 '3'은 거부.
+ */
+export function canInputAllowedValue(raw: string, allowedValues: number[] | undefined): boolean {
+  if (!allowedValues || allowedValues.length === 0 || raw === '') return true;
+  return allowedValues.some((value) => String(value).startsWith(raw));
+}
+
+/**
  * min/max 범위 위반 메시지 — blur 힌트와 "다음"/제출 차단 검증이 공유한다.
  * max 는 타이핑에서 차단되는 게 원칙이지만 emptyDefault 오설정·레거시 응답의 우회 값을 봉합한다.
  * 빈 값·부분 입력은 null (미응답 차단은 required 소관).
@@ -127,12 +137,25 @@ function readGroup(n: number): string {
  * 만/억/조 그룹 내부는 천/백 분해(readGroup), 만 미만 잔여는 콤마 숫자로 표기한다.
  * percent·기본(undefined) 단위, 부분 입력, 0 은 null.
  * 일(one) 단위는 만 미만 값이면 입력 숫자 재표기일 뿐이라 null (표시하지 않음).
+ *
+ * suffix(단위 어절 — 원, kg, t 등)가 있으면 읽기 끝에 그대로 이어 붙인다
+ * (예: unit='million', raw='123.45', suffix='원' → "1억 2천 3백 45만원").
+ * 어절만 있고 환산 읽기가 없는 경우(기본 단위, 일 단위 만 미만)에는 콤마 숫자 + 어절로
+ * 표기해 단위 어절이 항상 보이게 한다. percent 는 어절 대상이 아니다.
  */
 export function formatKoreanUnitReading(
   raw: string,
   unit: NumberUnit | undefined,
+  suffix?: string | undefined,
 ): string | null {
-  if (!unit) return null;
+  const sfx = (suffix ?? '').trim();
+  const commaWithSuffix = (): string | null => {
+    if (!sfx) return null;
+    const parsed = parseNumericInput(raw);
+    if (parsed === null || parsed === 0) return null;
+    return formatWithComma(raw) + sfx;
+  };
+  if (!unit) return commaWithSuffix();
   const multiplier = UNIT_MULTIPLIERS[unit];
   if (multiplier === null) return null;
   const n = parseNumericInput(raw);
@@ -140,7 +163,7 @@ export function formatKoreanUnitReading(
 
   const neg = n < 0;
   const total = Math.abs(n) * multiplier;
-  if (unit === 'one' && total < 1e4) return null;
+  if (unit === 'one' && total < 1e4) return commaWithSuffix();
   let intPart = Math.floor(total);
   const frac = total - intPart;
 
@@ -157,5 +180,5 @@ export function formatKoreanUnitReading(
     parts.push(formatWithComma(String(intPart)));
   }
   if (parts.length === 0) return null;
-  return (neg ? '-' : '') + parts.join(' ');
+  return (neg ? '-' : '') + parts.join(' ') + sfx;
 }

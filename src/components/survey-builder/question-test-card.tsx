@@ -7,13 +7,19 @@ import { OptionTextInput } from '@/components/survey-response/option-text-input'
 import { RankingQuestion } from '@/components/survey-response/ranking-question';
 import { Input } from '@/components/ui/input';
 import { computeTableEstimatedHeight } from '@/hooks/use-row-heights';
-import { useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
+import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { useTestResponseStore } from '@/stores/test-response-store';
 import { Question, SurveyLookup } from '@/types/survey';
 import { evaluateNumericComparisonV2 } from '@/utils/branch-logic';
 import { isChoiceTableSource } from '@/utils/choice-source';
 import { getOptionsLayout } from '@/utils/options-layout';
+import {
+  DYNAMIC_ROW_SELECTIONS_KEY,
+  getDynamicRowSelections,
+  updateDynamicRowSelections,
+} from '@/utils/dynamic-row-selection-sidecar';
 
 import { ConditionDebugPanel } from './condition-debug-panel';
 import { InteractiveTableResponse } from './interactive-table-response';
@@ -115,7 +121,7 @@ function RadioTestInput({
                 e.preventDefault();
                 handleOptionChange(option.value, option.id);
               }}
-              className="flex-1 cursor-pointer text-sm text-gray-700"
+              className="flex-1 cursor-pointer whitespace-pre-line text-sm text-gray-700"
             >
               {option.label}
             </label>
@@ -260,7 +266,7 @@ function CheckboxTestInput({
               />
               <label
                 htmlFor={`${question.id}-${option.id}`}
-                className={`flex-1 text-sm text-gray-700 ${
+                className={`flex-1 whitespace-pre-line text-sm text-gray-700 ${
                   disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
                 }`}
               >
@@ -396,12 +402,21 @@ function QuestionTestInput({
   question,
   value,
   onChange,
+  allResponses,
+  allQuestions,
+  selectedDynamicRowIds,
+  onDynamicRowSelectionChange,
 }: {
   question: Question;
   value: unknown;
   onChange: (value: unknown) => void;
+  allResponses: Record<string, unknown>;
+  allQuestions: Question[];
+  selectedDynamicRowIds: string[];
+  onDynamicRowSelectionChange: (rowIds: string[]) => void;
 }) {
   const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
 
   // choice_opt 테이블 소스 라디오/체크박스는 switch 진입 전에 단일 가드로 분기
   if (
@@ -413,6 +428,11 @@ function QuestionTestInput({
         question={question}
         value={value}
         onChange={onChange as (v: unknown) => void}
+        allResponses={allResponses}
+        allQuestions={allQuestions}
+        ignoreDisplayConditions
+        selectedDynamicRowIds={selectedDynamicRowIds}
+        onDynamicRowSelectionChange={onDynamicRowSelectionChange}
       />
     );
   }
@@ -486,12 +506,19 @@ function QuestionTestInput({
           tableTitle={question.tableTitle}
           columns={question.tableColumns}
           rows={question.tableRowsData}
-          tableHeaderGrid={question.tableHeaderGrid}
-          value={typeof value === 'object' && value !== null ? value : undefined}
+          tableHeaderGrid={question.tableHeaderGrid ?? undefined}
+          value={
+            typeof value === 'object' && value !== null
+              ? (value as Record<string, unknown>)
+              : undefined
+          }
           onChange={onChange}
           isTestMode={true}
           className="border-0 shadow-none"
           dynamicRowConfigs={question.dynamicRowConfigs}
+          allResponses={allResponses}
+          allQuestions={allQuestions}
+          ignoreDisplayConditions
           hideColumnLabels={question.hideColumnLabels}
           mobileOriginalTable={question.mobileOriginalTable}
           mobileTableDisplayMode={question.mobileTableDisplayMode}
@@ -512,7 +539,7 @@ function QuestionTestInput({
     case 'notice':
       return (
         <NoticeRenderer
-          content={substituteTokens(question.noticeContent || '', attrs)}
+          content={substituteTokens(question.noticeContent || '', attrs, quotes)}
           requiresAcknowledgment={question.requiresAcknowledgment}
           value={typeof value === 'boolean' ? value : false}
           onChange={onChange}
@@ -545,6 +572,18 @@ export function QuestionTestBody({
   const updateTestResponse = useTestResponseStore((s) => s.updateTestResponse);
   // 디버그 패널 평가용 — 다른 질문 응답도 ctx 에 포함되도록 전체 testResponses 구독.
   const allTestResponses = useTestResponseStore((s) => s.testResponses);
+  const allQuestions = useSurveyBuilderStore((s) => s.currentSurvey.questions);
+  const selectedDynamicRowIds = getDynamicRowSelections(allTestResponses, question.id);
+  const handleDynamicRowSelectionChange = (rowIds: string[]) => {
+    updateTestResponse(
+      DYNAMIC_ROW_SELECTIONS_KEY,
+      updateDynamicRowSelections(
+        allTestResponses[DYNAMIC_ROW_SELECTIONS_KEY],
+        question.id,
+        rowIds,
+      ),
+    );
+  };
   // 토큰 치환 + 분기 조건 평가에 사용할 컨택 attrs (ContactAttrsProvider 가 주입).
   const attrs = useContactAttrs();
 
@@ -601,13 +640,29 @@ export function QuestionTestBody({
             estimatedHeight={computeTableEstimatedHeight(
               question.tableColumns ?? [],
               question.tableRowsData ?? [],
-              question.tableHeaderGrid,
+              question.tableHeaderGrid ?? undefined,
             )}
           >
-            <QuestionTestInput question={question} value={testResponse} onChange={handleResponse} />
+            <QuestionTestInput
+              question={question}
+              value={testResponse}
+              onChange={handleResponse}
+              allResponses={allTestResponses}
+              allQuestions={allQuestions}
+              selectedDynamicRowIds={selectedDynamicRowIds}
+              onDynamicRowSelectionChange={handleDynamicRowSelectionChange}
+            />
           </LazyMount>
         ) : (
-          <QuestionTestInput question={question} value={testResponse} onChange={handleResponse} />
+          <QuestionTestInput
+            question={question}
+            value={testResponse}
+            onChange={handleResponse}
+            allResponses={allTestResponses}
+            allQuestions={allQuestions}
+            selectedDynamicRowIds={selectedDynamicRowIds}
+            onDynamicRowSelectionChange={handleDynamicRowSelectionChange}
+          />
         )}
       </div>
 

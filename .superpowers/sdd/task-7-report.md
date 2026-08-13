@@ -1,43 +1,87 @@
-# Task 7 백엔드 작업 보고서
+# Task 7 Report: 업로드 위저드 — 모드 선택·매칭 키 선택·기존 컬럼 잠금 UI
 
-## 결과
+## Status: DONE
 
-- 대상자 테스트 응답은 동일 `survey_responses` 행을 재사용하고, 종결 상태나 이전 버전이면 해당 행과 정규화/편집 파생 데이터를 정확히 초기화한다.
-- `test_response_attempts` 활성 attempt를 신규 세션으로 교체하고, 이전 attempt의 답변/스텝/가시성/완료 mutation을 행 잠금 후 차단한다.
-- 테스트 모드 OFF 전환은 현재 attempt도 즉시 무효화한다.
-- 대상자가 없는 익명 테스트 INSERT와 첫 대상자 생성을 survey 잠금으로 직렬화해 익명 응답 잔류 race를 차단한다.
-- 동일 대상자의 동시 acquire는 partial unique 제약과 잠금 순서로 응답 1건·활성 attempt 1건만 남긴다.
-- 같은 현재 버전의 대상자 `in_progress` resume은 저장된 `questionResponses`를 반환하며 행을 갱신하지 않는다. 이전 버전은 resume하지 않는다.
+## Commit
 
-## TDD 증거
+`80e5122a` feat: 업로드 위저드 모드 선택과 매칭 키 선택 UI 추가
 
-1. 동일 버전 resume의 답변 누락, 이전 버전 오복구, procedure의 attempt identity strip을 각각 실패 테스트로 재현했다.
-2. 종결 응답 재사용, 구 attempt 차단, OFF 차단, 동시 acquire, 익명 INSERT/대상자 생성 race를 실DB 테스트로 작성했다.
-3. 처음 동시 acquire에서 deadlock을 재현한 뒤 잠금 순서를 survey SHARE → target UPDATE → response UPDATE로 통일했다.
+## Files changed
 
-## 검증
+- `src/app/admin/surveys/[id]/operations/contacts/upload/new/page.tsx`
+- `src/components/operations/contacts/upload-wizard.tsx`
 
-- 집중 테스트: 6개 파일, 63개 통과
-- 실DB: `test-target-attempt-ownership.realdb.test.ts` 7개 통과
-- TypeScript: `pnpm exec tsc --noEmit` 통과
-- 관련 파일 ESLint 통과, `git diff --check` 통과
-- 전체 스위트: 317개 파일 중 316개 통과, 2,584개 테스트 중 2,571개 통과
+## What was done
 
-## 잔여 관찰
+1. **page.tsx**: `getContactColumnScheme(surveyId, scope)` (`@/lib/operations/contacts.server`)
+   호출을 추가해 `existingScheme`을 로드하고 `UploadWizard`에 prop으로 전달.
 
-- 전체 스위트의 유일한 실패는 범위 밖 `tests/unit/use-response-lifecycle.test.tsx` 13개다. Node/jsdom 테스트 환경에서 `window.localStorage`가 `undefined`인 채 `beforeEach` 내 `clear()`를 호출해 본문 실행 전에 모두 실패했다. Task 7 백엔드 범위 밖이므로 수정하지 않았다.
+2. **upload-wizard.tsx**:
+   - `UploadWizardProps`에 `existingScheme: ContactColumnScheme | null` 추가.
+   - `Step` 타입에 `'match'` 추가 (렌더링은 Task 8).
+   - 상태 추가: `mode`(ContactUploadMode, 기본 'replace'), `dupCheck`, `mergeKeys`.
+   - 파생값: `schemeRouting`(`getSchemeRouting`), `lockedColumns`(Map<key, ContactColumnDef>),
+     `isLockedMode`, `needsKeySelection`.
+   - mapping 스텝 상단에 `existingContactsCount > 0`일 때만 모드 카드 3종(교체/병합/추가) +
+     append 모드 전용 중복검사 토글 렌더. 모드 전환 시 `mergeKeys` 리셋.
+   - 헤더 매트릭스에 `needsKeySelection`일 때 "매칭 키" 열 추가 (분류 기준 열 앞).
+     PII 컬럼(`isPiiColumn = Boolean(lockedCol?.piiType ?? mapping.piiMapping[h])`)은
+     체크박스 disabled + title 툴팁으로 사유 안내.
+   - 기존 컬럼 잠금: `isLockedMode && lockedColumns.has(h)`인 행에서 라벨 input disabled(스킴
+     라벨 표시), PII Select → 정적 텍스트 + "기존 설정" 배지, 표시 Checkbox disabled
+     (`checked = !hidden`).
+   - 매트릭스 아래에 유사 키 amber 경고: `mergeKeys` 중 `schemeRouting.knownAttrKeys`에 없는
+     키만 대상으로 `suggestSimilarKeys` 결과 표시.
+   - 기존 교체 경고 카드는 `mode === 'replace' && existingContactsCount > 0` 조건으로 변경 —
+     replace 모드에서는 기존 동작·시각 그대로 유지.
 
-## 리뷰 수정
+## Task 8로 미룬 선언 (브리프 Step 3 명시 근거)
 
-- 대상자 acquire는 survey `SHARE` 잠금에서 읽은 `currentVersionId`만 응답 버전으로 사용한다. 첫 답변은 같은 트랜잭션에서 reset 후 고정된 응답 버전으로 문항 멤버십과 PII 암호화를 검증·저장해 null/이전 caller 버전과 publish 경쟁을 제거했다.
-- 테스트 mutation 잠금 순서를 survey → target → response로 통일하고, 완료 응답과 `contact_targets.responseId/respondedAt` 연결을 한 트랜잭션으로 커밋한다. 새 attempt reset과 stale 완료의 실DB lock 대기열 경쟁에서 stale 완료가 거부되고 `respondedAt`이 null로 유지됨을 검증했다.
-- 기존 attempt 재사용은 `status=response active`, `responseId`, `sessionId`를 모두 쓰기 전에 검사하며, 세션 불일치 시 응답과 컨택 상태가 변하지 않는 실DB 회귀 테스트를 추가했다.
-- `recordStepVisit`는 트랜잭션 안에서 missing row를 다시 throw하고, 존재하는 동일 step은 기존 no-op 계약을 유지한다.
-- 리뷰 수정 검증: 집중 6파일 65개 통과, 실DB 11개 통과, TypeScript·관련 ESLint·`git diff --check` 통과. 일반 전체 스위트는 317파일 중 316파일, 2,586개 중 2,573개 통과했으며 기존 `use-response-lifecycle.test.tsx` localStorage 환경 실패 13개만 동일하게 남았다.
+`tsconfig.json`의 `noUnusedLocals: true`로 인해 `npx tsc --noEmit`이 미사용 로컬 변수를
+**에러**로 잡는다 (eslint의 `no-unused-vars`는 "warn"이라 무해했겠지만 tsc가 먼저 막음).
+브리프 Step 3 지시("lint 에러가 나면 해당 선언만 Task 8로 미룰 것")에 따라 다음을 이번
+태스크에서 제외했다:
 
-## 리뷰 수정 2
+- `unmatchedPolicy` / `setUnmatchedPolicy` (`useState<'insert' | 'skip'>('skip')`)
+- `duplicatePolicy` / `setDuplicatePolicy` (`useState<'insert' | 'skip'>('skip')`)
+- `matchResult` / `setMatchResult` (`useState<MatchContactUploadResult | null>(null)`) —
+  모드 카드 onClick의 `setMatchResult(null)` 리셋 호출도 함께 제외.
+- `needsMatchStep` 파생값 (`needsKeySelection`과 동일 정의, 매칭 스텝 게이팅용)
 
-- `completeResponse`의 대상자 연결 원자 트랜잭션은 테스트 응답에만 유지했다. 실제 대상자 응답은 완료 커밋 후 `contact_targets`를 best-effort 갱신하므로 후처리 실패가 완료 응답을 rollback하지 않는다.
-- 실제 완료의 response → target 역순 잠금을 제거했다. 컨택 삭제는 target → response 순서로 명시적 unlink 후 삭제해 FK 미적용 환경에서도 dangling 참조를 남기지 않으며, hard reset의 기존 target → response 순서와 정렬된다.
-- TDD RED에서 실제 컨택 후처리 실패의 완료 reject와 hard reset 경쟁의 PostgreSQL `40P01`을 재현했다. GREEN에서 실제 delete/hard reset 경쟁이 5초 timeout 안에 모두 fulfilled되고 각 최종 승자의 안전 상태 및 참조 무결성을 검증했다.
-- 리뷰 수정 2 검증: 집중 8파일 75개, 실DB 11파일 43개, TypeScript·관련 ESLint 통과. 일반 전체 스위트는 318파일 중 317파일, 2,587개 중 2,574개 통과했으며 기존 `use-response-lifecycle.test.tsx` localStorage 환경 실패 13개만 동일하게 남았다.
+이 4개는 모두 이 태스크의 렌더 트리에서 전혀 읽히지 않아 (Task 8이 매칭 미리보기 스텝을
+배선할 때 비로소 소비) tsc가 "declared but its value is never read"로 에러 처리했다.
+`mode`, `dupCheck`, `mergeKeys`, `schemeRouting`, `lockedColumns`, `isLockedMode`,
+`needsKeySelection`은 이번 태스크 UI에서 실제로 읽히므로 정상 유지했다. Task 8에서 매칭
+미리보기 스텝을 렌더링하며 위 4개 선언과 `setMatchResult(null)` 리셋 호출을 함께
+재도입해야 한다.
+
+또한 `lockedColumns.get(h)`가 `ContactColumnDef | undefined`를 반환해 `isLocked` boolean
+플래그만으로는 TS 타입 좁히기가 되지 않아(`TS18048`), `isLocked` 분기 안에서 `lockedCol!`
+non-null assertion을 사용했다 (boolean 가드로 실질적으로 안전함이 보장됨).
+
+## Verification
+
+- `npx tsc --noEmit`: 에러 0
+- `pnpm lint`: 163 warnings, 0 errors — 수정 전(같은 두 파일을 stash 후 측정) 기준선과
+  **동일**(163 warnings, 0 errors). 두 수정 파일 자체에는 신규 warning 없음.
+- `pnpm vitest run src/features/contacts tests/unit/contacts`: 16 test files, 89 tests,
+  전부 통과 (무회귀).
+- `UploadWizard`를 참조하는 테스트 파일 없음 (컴포넌트 직접 테스트 부재 확인).
+
+## Self-review
+
+- replace 모드(`mode==='replace'`, 기본값)에서: `isLockedMode=false`→잠금 UI 미노출,
+  `needsKeySelection=false`→매칭 키 열·amber 경고 미노출, 교체 경고 카드는 그대로
+  `existingContactsCount > 0`일 때 노출·`replaceConfirmed` 게이트 유지 — 기존 플로우와
+  시각·동작 동일. 신규 모드 카드 3종은 `existingContactsCount > 0`일 때 추가로 보이는 것이
+  브리프 의도(기존엔 모드 선택 UI 자체가 없었음).
+- 모드 카드 클릭 및 dupCheck 토글 시 `mergeKeys`를 `new Set()`으로 리셋함을 코드로 확인.
+- PII 컬럼 매칭 키 체크박스: `disabled={isPiiColumn}` + `title="개인정보 컬럼은 매칭
+  키로 사용할 수 없습니다"` (isPiiColumn일 때만) 확인.
+- 유사 키 경고: `mergeKeys`를 `schemeRouting.knownAttrKeys`로 필터링해 스킴에 등록된 attrs
+  키는 경고 대상에서 제외됨을 확인.
+
+## Concerns
+
+없음. dev 서버 수동 확인(Step 4)은 브리프상 controller 소관이라 수행하지 않음. 브랜치
+이동 없이 `feat/contact-upload-modes`에서 작업.

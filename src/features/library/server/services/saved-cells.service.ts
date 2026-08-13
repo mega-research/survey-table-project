@@ -5,6 +5,8 @@ import { desc, eq, ilike, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { NewSavedCell, savedCells } from '@/db/schema/surveys';
 import { escapeLikePattern } from '@/lib/operations/filter-shared';
+import { registerDeletionCandidates } from '@/lib/r2-lifecycle/deletion-queue.server';
+import { extractR2KeysFromJsonbValue } from '@/lib/r2-lifecycle/key-extract';
 import type { SavedCell, TableCell } from '@/types/survey';
 import { sanitizeCellForLibrary } from '@/utils/cell-library-helpers';
 
@@ -69,7 +71,18 @@ export async function createSavedCell(input: CreateSavedCellInput): Promise<Save
 
 /** 저장된 셀 삭제 */
 export async function deleteSavedCell(id: string): Promise<void> {
-  await db.delete(savedCells).where(eq(savedCells.id, id));
+  // 삭제 전 같은 트랜잭션에서 셀 JSONB 의 R2 키를 수집해 유예 삭제 큐에 등록
+  await db.transaction(async (tx) => {
+    const [row] = await tx.select().from(savedCells).where(eq(savedCells.id, id));
+    if (row) {
+      await registerDeletionCandidates(tx, {
+        keys: extractR2KeysFromJsonbValue(row.cell),
+        source: 'library-delete',
+        reason: `보관함 셀 삭제: ${row.name || id}`,
+      });
+    }
+    await tx.delete(savedCells).where(eq(savedCells.id, id));
+  });
 }
 
 /**

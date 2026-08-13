@@ -1,10 +1,14 @@
 'use client';
 
-import { type ReactNode, useCallback, useMemo } from 'react';
+import { type ReactNode, useCallback, useMemo, useState } from 'react';
 
+import { ChevronRight, ListChecks } from 'lucide-react';
+
+import { DynamicRowSelectorModal } from '@/components/survey-builder/dynamic-row-selector-modal';
 import { TablePreview } from '@/components/survey-builder/table-preview';
+import { MobileRowWiseOriginalSheet } from '@/components/survey-builder/mobile-row-wise-original-sheet';
 import { useMobileView } from '@/hooks/use-media-query';
-import { useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import type { Question, TableCell } from '@/types/survey';
@@ -15,8 +19,13 @@ import {
   isGroupedChoiceQuestion,
 } from '@/utils/choice-group-helpers';
 import { resolveChoiceOptions } from '@/utils/choice-source';
+import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
+import { projectConditionalTableLayout } from '@/utils/conditional-table-layout';
 import { findMobileHeaderCell } from '@/utils/mobile-display-cells';
 import { resolveMobileTableDisplayMode } from '@/utils/mobile-table-display-mode';
+import { buildMobileRowWiseOriginalModel } from '@/utils/mobile-row-wise-original';
+import { shouldDisplayDynamicGroup } from '@/utils/branch-logic';
+import { recalculateRowspansForVisibleRows } from '@/utils/table-merge-helpers';
 
 import { ChoiceTableDrilldown } from './choice-table-drilldown';
 import { MobileOptionCard } from './mobile-card-shared';
@@ -30,6 +39,12 @@ interface ChoiceTableResponseProps {
    */
   value: unknown;
   onChange: (value: string | string[] | GroupedChoiceAnswer | null) => void;
+  allResponses?: Record<string, unknown> | undefined;
+  allQuestions?: Question[] | undefined;
+  /** 열·행·동적 그룹 displayCondition 평가를 건너뛰고 전부 표시 (빌더 편집 미리보기용) */
+  ignoreDisplayConditions?: boolean | undefined;
+  selectedDynamicRowIds?: string[] | undefined;
+  onDynamicRowSelectionChange?: ((rowIds: string[]) => void) | undefined;
 }
 
 /**
@@ -38,13 +53,24 @@ interface ChoiceTableResponseProps {
  * - 모바일: 행마다 MobileOptionCard (라벨 + 표시 셀 + 체크/라디오 컨트롤)
  * 응답은 일반 radio/checkbox shape(radio=cell.id | null, checkbox=cell.id[])로 저장한다.
  */
-export function ChoiceTableResponse({ question, value, onChange }: ChoiceTableResponseProps) {
+export function ChoiceTableResponse({
+  question,
+  value,
+  onChange,
+  allResponses,
+  allQuestions,
+  ignoreDisplayConditions = false,
+  selectedDynamicRowIds = [],
+  onDynamicRowSelectionChange,
+}: ChoiceTableResponseProps) {
   const isCheckbox = question.type === 'checkbox';
   // 그룹별 선택 모드 여부 — radio 또는 checkbox 그룹이 1개 이상 정의된 경우 true.
   // isCheckbox 가드를 제거하여 checkbox 질문도 grouped 경로를 밟을 수 있게 한다.
   const isGrouped = isGroupedChoiceQuestion(question);
   const isMobile = useMobileView();
   const attrs = useContactAttrs();
+  const quotes = useAnswerQuotes();
+  const [activeDynamicGroupId, setActiveDynamicGroupId] = useState<string | null>(null);
   const options = useMemo(() => resolveChoiceOptions(question), [question]);
   const optionByValue = useMemo(
     () => new Map(options.map((option) => [option.value, option])),
@@ -157,7 +183,11 @@ export function ChoiceTableResponse({ question, value, onChange }: ChoiceTableRe
     };
   };
 
-  const renderCell = (cell: TableCell, isSelectedRowDetail = false): ReactNode => {
+  const renderCell = (
+    cell: TableCell,
+    isSelectedRowDetail = false,
+    inputIdScope?: string,
+  ): ReactNode => {
     if (cell.type !== 'choice_opt' || cell.isHidden) return undefined;
     const { checked, disabled, option } = getChoiceCellState(cell);
     // 그룹별 선택 모드: name 을 그룹 키 단위로 분리해야 브라우저가 그룹 간 선택을 지우지 않는다.
@@ -177,7 +207,7 @@ export function ChoiceTableResponse({ question, value, onChange }: ChoiceTableRe
     // 모바일 카드·응답 매칭·export)로만 저장되고 데스크톱 셀에는 렌더하지 않는다.
     // 둘 다 있으면 content 만 표시. 비어 있으면(라벨이 다른 열에 있는 구성) 컨트롤만 렌더.
     const rawLabel = (cell.content ?? '').trim();
-    const labelText = rawLabel ? substituteTokens(rawLabel, attrs) : '';
+    const labelText = rawLabel ? substituteTokens(rawLabel, attrs, quotes) : '';
 
     return (
       <div className="flex flex-col items-center gap-2">
@@ -188,6 +218,7 @@ export function ChoiceTableResponse({ question, value, onChange }: ChoiceTableRe
           )}
         >
           <input
+            id={inputIdScope ? `${inputIdScope}-${cell.id}` : undefined}
             type={cellType === 'checkbox' ? 'checkbox' : 'radio'}
             name={inputName}
             aria-label={option?.label ?? '선택'}
@@ -209,7 +240,14 @@ export function ChoiceTableResponse({ question, value, onChange }: ChoiceTableRe
             readOnly={isGrouped && cellType === 'radio'}
             className="h-4 w-4"
           />
-          {labelText && <span className="text-sm text-gray-800">{labelText}</span>}
+          {labelText && (
+            <span
+              className={cn('whitespace-pre-line text-base text-gray-800', getCellTextClassName(cell))}
+              style={getCellTextStyle(cell)}
+            >
+              {labelText}
+            </span>
+          )}
         </label>
         {option?.allowTextInput && checked && (
           <OptionTextInput questionId={question.id} option={option} className="w-full" />
@@ -245,8 +283,9 @@ export function ChoiceTableResponse({ question, value, onChange }: ChoiceTableRe
             const headerCell = findMobileHeaderCell(row.cells);
             const headerText = headerCell ? (headerCell.content ?? '').trim() : '';
             const cardLabel = headerText
-              ? substituteTokens(headerText, attrs)
+              ? substituteTokens(headerText, attrs, quotes)
               : (option?.label ?? '(라벨 없음)');
+            const labelStyleSource = headerText && headerCell ? headerCell : (option ?? choiceCell);
             // 그룹별 선택 모드: name 을 그룹 키 단위로 분리
             const mobileInputName = isGrouped
               ? `${question.id}-${getGroupKeyOfCell(question, choiceCell.id)}`
@@ -260,7 +299,14 @@ export function ChoiceTableResponse({ question, value, onChange }: ChoiceTableRe
             return (
               <MobileOptionCard
                 key={choiceCell.id}
-                label={cardLabel}
+                label={(
+                  <span
+                    className={getCellTextClassName(labelStyleSource)}
+                    style={getCellTextStyle(labelStyleSource)}
+                  >
+                    {cardLabel}
+                  </span>
+                )}
                 cells={row.cells}
                 selected={checked}
                 disabled={disabled}
@@ -307,12 +353,11 @@ export function ChoiceTableResponse({ question, value, onChange }: ChoiceTableRe
         {...(question.tableTitle !== undefined ? { tableTitle: question.tableTitle } : {})}
         {...(question.tableColumns !== undefined ? { columns: question.tableColumns } : {})}
         {...(question.tableRowsData !== undefined ? { rows: question.tableRowsData } : {})}
-        {...(question.tableHeaderGrid !== undefined
-          ? { tableHeaderGrid: question.tableHeaderGrid }
-          : {})}
+        {...(question.tableHeaderGrid ? { tableHeaderGrid: question.tableHeaderGrid } : {})}
         {...(question.hideColumnLabels !== undefined
           ? { hideColumnLabels: question.hideColumnLabels }
           : {})}
+        applyCellBackground={!isMobile}
         renderCell={(cell) => renderCell(cell)}
       />
       {counter}
@@ -320,9 +365,192 @@ export function ChoiceTableResponse({ question, value, onChange }: ChoiceTableRe
   );
 
   const mobileMode = resolveMobileTableDisplayMode(question);
+  const rowWiseLayout = useMemo(() => {
+    const columns = question.tableColumns ?? [];
+    const rows = question.tableRowsData ?? [];
+    const conditionalLayout = projectConditionalTableLayout({
+      columns,
+      rows,
+      ...(question.tableHeaderGrid ? { headerGrid: question.tableHeaderGrid } : {}),
+      // ignoreDisplayConditions: 빌더 편집 미리보기 — 응답 ctx 를 빼서 전 열·행 표시
+      allResponses: ignoreDisplayConditions ? undefined : allResponses,
+      allQuestions: ignoreDisplayConditions ? undefined : allQuestions,
+    });
+    const visibleConfigs = (question.dynamicRowConfigs ?? []).filter(
+      (config) =>
+        config.enabled &&
+        (!config.displayCondition ||
+          ignoreDisplayConditions ||
+          !allResponses ||
+          !allQuestions ||
+          shouldDisplayDynamicGroup(config, allResponses, allQuestions)),
+    );
+    const visibleGroupIds = new Set(visibleConfigs.map((config) => config.groupId));
+    const selectedSet = new Set(selectedDynamicRowIds);
+    const selectedGroupIds = new Set<string>();
+    for (const row of conditionalLayout.rows) {
+      if (
+        row.dynamicGroupId &&
+        visibleGroupIds.has(row.dynamicGroupId) &&
+        selectedSet.has(row.id)
+      ) {
+        selectedGroupIds.add(row.dynamicGroupId);
+      }
+    }
+    const visibleRowIds = new Set(
+      conditionalLayout.rows
+        .filter((row) => {
+          if (row.dynamicGroupId && visibleGroupIds.has(row.dynamicGroupId)) {
+            return selectedSet.has(row.id);
+          }
+          if (
+            row.showWhenDynamicGroupId &&
+            visibleGroupIds.has(row.showWhenDynamicGroupId)
+          ) {
+            return selectedGroupIds.has(row.showWhenDynamicGroupId);
+          }
+          return true;
+        })
+        .map((row) => row.id),
+    );
+    return {
+      columns: conditionalLayout.columns,
+      rows: recalculateRowspansForVisibleRows(conditionalLayout.rows, visibleRowIds),
+      headerGrid: conditionalLayout.headerGrid,
+      configs: visibleConfigs,
+      dynamicRows: conditionalLayout.rows.filter(
+        (row) => row.dynamicGroupId && visibleGroupIds.has(row.dynamicGroupId),
+      ),
+    };
+  }, [allQuestions, allResponses, question, selectedDynamicRowIds, ignoreDisplayConditions]);
+  const rowWiseOriginalModel = useMemo(() => {
+    if (mobileMode !== 'row-wise-original') return { sections: [] };
+    const columns = question.tableColumns ?? [];
+    const rows = question.tableRowsData ?? [];
+    const model = buildMobileRowWiseOriginalModel({
+      authoredColumns: columns,
+      authoredRows: rows,
+      visibleColumns: rowWiseLayout.columns,
+      ...(rowWiseLayout.headerGrid ? { visibleHeaderGrid: rowWiseLayout.headerGrid } : {}),
+      displayRows: rowWiseLayout.rows,
+      hideColumnLabels: question.hideColumnLabels ?? false,
+      settings: {
+        omitLeadingAuthoredColumns: question.mobileDrilldownOmitLeadingColumns ?? 1,
+        repeatHeaderStartRow: question.mobileDrilldownRepeatHeaderStartRow,
+        repeatHeaderEndRow: question.mobileDrilldownRepeatHeaderEndRow,
+      },
+      answerableCellTypes: ['choice_opt'],
+      resolveChoiceLabel,
+      isLabelSourceHidden: (cellId) =>
+        rows.some((row) =>
+          row.cells.some(
+            (cell) => cell.id === cellId && cell.mobileDisplay === 'hidden',
+          ),
+        ),
+    });
+    return {
+      sections: model.sections.map((section) => ({
+        ...section,
+        label: substituteTokens(section.label, attrs, quotes),
+        subgroups: section.subgroups.map((subgroup) => ({
+          ...subgroup,
+          label: substituteTokens(subgroup.label, attrs, quotes),
+          questions: subgroup.questions.map((rowQuestion) => ({
+            ...rowQuestion,
+            title: substituteTokens(rowQuestion.title, attrs, quotes),
+          })),
+        })),
+      })),
+    };
+  }, [attrs, quotes, mobileMode, question, resolveChoiceLabel, rowWiseLayout]);
 
-  const renderSelectedRowCell = (cell: TableCell) =>
-    renderCell(cell.mobileDisplay === 'hidden' ? { ...cell, content: '' } : cell, true);
+  const confirmDynamicRows = (rowIds: string[]) => {
+    if (!activeDynamicGroupId || !onDynamicRowSelectionChange) return;
+    const groupRowIds = new Set(
+      (question.tableRowsData ?? [])
+        .filter((row) => row.dynamicGroupId === activeDynamicGroupId)
+        .map((row) => row.id),
+    );
+    const otherSelections = selectedDynamicRowIds.filter((rowId) => !groupRowIds.has(rowId));
+    onDynamicRowSelectionChange([...new Set([...otherSelections, ...rowIds])]);
+  };
+
+  const renderSelectedRowCell = (cell: TableCell, inputIdScope?: string) =>
+    renderCell(
+      cell.mobileDisplay === 'hidden' ? { ...cell, content: '' } : cell,
+      true,
+      inputIdScope,
+    );
+
+  if (isMobile && mobileMode === 'row-wise-original') {
+    return (
+      <div className="space-y-2">
+        {rowWiseLayout.configs.length > 0 && onDynamicRowSelectionChange ? (
+          <div className="divide-y divide-gray-200 overflow-hidden rounded-xl border border-gray-200 bg-white">
+            {rowWiseLayout.configs.map((config) => {
+              const selectedCount = selectedDynamicRowIds.filter((rowId) =>
+                rowWiseLayout.dynamicRows.some(
+                  (row) => row.id === rowId && row.dynamicGroupId === config.groupId,
+                ),
+              ).length;
+              return (
+                <button
+                  key={config.groupId}
+                  type="button"
+                  className="flex min-h-11 w-full items-center gap-2 px-4 py-3 text-left hover:bg-gray-50"
+                  onClick={() => setActiveDynamicGroupId(config.groupId)}
+                >
+                  <ListChecks className="h-4 w-4 shrink-0 text-gray-500" />
+                  <span className="flex-1 text-sm font-medium text-gray-700">
+                    {config.label || '항목 선택'}
+                  </span>
+                  <span className="text-xs text-gray-500">{selectedCount}개 선택</span>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" />
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+        <MobileRowWiseOriginalSheet
+          model={rowWiseOriginalModel}
+          choiceControlType={(cell) =>
+            isGrouped
+              ? getGroupTypeOfCell(question, cell.id)
+              : question.type === 'checkbox'
+                ? 'checkbox'
+                : 'radio'
+          }
+          renderCell={(cell, _question, inputIdScope) =>
+            renderSelectedRowCell(cell, inputIdScope)
+          }
+        />
+        {counter}
+        {activeDynamicGroupId ? (
+          <DynamicRowSelectorModal
+            open
+            onOpenChange={(open) => {
+              if (!open) setActiveDynamicGroupId(null);
+            }}
+            dynamicRows={rowWiseLayout.dynamicRows.filter(
+              (row) => row.dynamicGroupId === activeDynamicGroupId,
+            )}
+            selectedRowIds={selectedDynamicRowIds.filter((rowId) =>
+              rowWiseLayout.dynamicRows.some(
+                (row) =>
+                  row.id === rowId && row.dynamicGroupId === activeDynamicGroupId,
+              ),
+            )}
+            label={
+              rowWiseLayout.configs.find(
+                (config) => config.groupId === activeDynamicGroupId,
+              )?.label
+            }
+            onConfirm={confirmDynamicRows}
+          />
+        ) : null}
+      </div>
+    );
+  }
 
   if (isMobile && mobileMode === 'drilldown-original-row') {
     return (

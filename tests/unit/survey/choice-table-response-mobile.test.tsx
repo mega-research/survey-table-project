@@ -126,4 +126,47 @@ describe('ChoiceTableResponse (mobile)', () => {
     expect(screen.queryByText('쓰이면 안 되는_엑셀라벨')).not.toBeInTheDocument();
     expect(screen.queryByText('(라벨 없음)')).not.toBeInTheDocument();
   });
+
+  it('choice_opt 스타일은 모바일 라벨 Bold만 적용하고 카드 배경은 유지한다', () => {
+    const styledQuestion = question();
+    const styledCell = styledQuestion.tableRowsData?.[0]?.cells[2];
+    if (!styledCell) throw new Error('스타일 대상 choice_opt 셀이 없습니다');
+    styledCell.textBold = true;
+    styledCell.backgroundColor = '#AABBCC';
+
+    render(<ChoiceTableResponse question={styledQuestion} value={[]} onChange={vi.fn()} />);
+
+    const label = screen.getByText('① 컴퓨터 비전');
+    expect(label).toHaveClass('font-bold');
+    const card = label.closest('.bg-white');
+    expect(card).toHaveClass('bg-white');
+    expect(card).not.toHaveStyle({ backgroundColor: '#AABBCC' });
+  });
+
+  it('header 셀에서 온 카드 라벨은 header 셀의 Bold를 따른다', () => {
+    const headerQuestion = question();
+    const headerCell = headerQuestion.tableRowsData?.[0]?.cells[0];
+    const choiceCell = headerQuestion.tableRowsData?.[0]?.cells[2];
+    if (!headerCell || !choiceCell) throw new Error('스타일 대상 셀이 없습니다');
+    headerCell.mobileDisplay = 'header';
+    headerCell.textBold = true;
+    choiceCell.textBold = false;
+
+    render(<ChoiceTableResponse question={headerQuestion} value={[]} onChange={vi.fn()} />);
+
+    expect(screen.getByText('① 컴퓨터 비전')).toHaveClass('font-bold');
+  });
+
+  it('unstyled header 셀에서 온 카드 라벨은 choice_opt Bold를 받지 않는다', () => {
+    const headerQuestion = question();
+    const headerCell = headerQuestion.tableRowsData?.[0]?.cells[0];
+    const choiceCell = headerQuestion.tableRowsData?.[0]?.cells[2];
+    if (!headerCell || !choiceCell) throw new Error('스타일 대상 셀이 없습니다');
+    headerCell.mobileDisplay = 'header';
+    choiceCell.textBold = true;
+
+    render(<ChoiceTableResponse question={headerQuestion} value={[]} onChange={vi.fn()} />);
+
+    expect(screen.getByText('① 컴퓨터 비전')).not.toHaveClass('font-bold');
+  });
 });

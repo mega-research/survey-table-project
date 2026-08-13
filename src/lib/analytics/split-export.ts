@@ -1,4 +1,5 @@
 import type { Question, QuestionConditionGroup } from '@/types/survey';
+import { toSingleLineLabel } from '@/utils/label-text';
 
 import { generateSPSSColumns } from './spss-excel-export';
 
@@ -165,8 +166,9 @@ export function planSplit(
 export function assignSplitSheetNames(rawNames: string[], reserved: string[] = []): string[] {
   const used = new Set<string>(reserved);
   return rawNames.map((raw) => {
+    // 줄바꿈 정규화(옵션 라벨 줄바꿈은 표시 전용 — 시트명도 단일 행) 후 Excel 금지 문자 치환
     const base =
-      (raw || '')
+      toSingleLineLabel(raw || '')
         .replace(/[[\]:*?/\\]/g, ' ')
         .trim()
         .slice(0, 31) || '시트';

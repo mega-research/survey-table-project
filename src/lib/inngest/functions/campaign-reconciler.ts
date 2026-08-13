@@ -1,6 +1,6 @@
 import { reconcileCampaignRecipients } from '@/lib/mail/campaign-reconcile';
 
-import { inngest, type MailCampaignDispatchedData } from '../client';
+import { ctxLogger, inngest, type MailCampaignDispatchedData } from '../client';
 
 /**
  * 발송 직후 recipient 상태 reconcile.
@@ -12,14 +12,15 @@ import { inngest, type MailCampaignDispatchedData } from '../client';
  * dispatcher 와 분리한 이유: step.sleep 이 dispatcher 의 function-global concurrency=1
  * 슬롯을 30분 점유해 모든 캠페인의 다음 발송을 막는 것을 회피.
  */
+const FUNCTION_ID = 'campaign-reconciler';
+
 export const campaignReconciler = inngest.createFunction(
-  { id: 'campaign-reconciler', triggers: [{ event: 'mail/campaign.dispatched' }], retries: 2 },
-  async ({ event, step, ...inngestCtx }) => {
-    // inngest 4.x triggers-API 컨텍스트 타입에는 logger 가 노출되지 않지만,
-    // 런타임에는 미들웨어가 ctx.logger 를 주입한다. console 과 호환되는 좁은 형태로 단언.
-    const logger =
-      (inngestCtx as { logger?: Pick<Console, 'info' | 'warn' | 'error' | 'debug'> })
-        .logger ?? console;
+  { id: FUNCTION_ID, triggers: [{ event: 'mail/campaign.dispatched' }], retries: 2 },
+  async (ctx) => {
+    const { event, step } = ctx;
+    // ctx.logger — 클라이언트 logger 옵션(pino child, source:'inngest')을 내장
+    // 미들웨어가 runID·eventName child 로 감싼 것 (client.ts 주석 참조).
+    const logger = ctxLogger(ctx);
     const { campaignId } = event.data as MailCampaignDispatchedData;
 
     await step.sleep('wait-1m', '1m');
@@ -31,7 +32,10 @@ export const campaignReconciler = inngest.createFunction(
     await step.sleep('wait-25m', '25m'); // 누적 30분
     const r3 = await step.run('reconcile-3', () => reconcileCampaignRecipients(campaignId));
 
-    logger.info('campaign reconcile done', { campaignId, r1, r2, r3 });
+    logger.info(
+      { functionId: FUNCTION_ID, campaignId, r1, r2, r3 },
+      '캠페인 reconcile 완료',
+    );
     return { campaignId, rounds: [r1, r2, r3] };
   },
 );

@@ -17,13 +17,16 @@ const OPTION_HEIGHT = 28; // 체크박스/라디오 한 줄 높이
 const SELECT_HEIGHT = 36; // 드롭다운 높이
 const IMAGE_HEIGHT = 120; // 기본 이미지 높이
 const VIDEO_HEIGHT = 80; // 비디오 링크 높이
-const LINE_HEIGHT = 20; // 텍스트 라인 높이
+// 텍스트 셀 렌더(text-cell.tsx)의 text-base(16px) + leading-relaxed(1.625) = 26px 와 동기화.
+// 여기가 렌더보다 작으면 placeholder 가 실제 행보다 낮게 잡혀 마운트 시 스크롤이 밀린다.
+const LINE_HEIGHT = 26; // 텍스트 라인 높이
 
 // 프로젝트 폰트 (globals.css --font-sans와 일치)
 // pretext는 canvas font 엔진을 ground truth로 쓰므로 실제 로드된 폰트명과 정확히 일치해야 함.
 // layout.tsx에서 "Wanted Sans Variable" 웹폰트를 로드하고 globals.css --font-sans도 동일.
 // (이전 'Pretendard'는 미로드 폰트 → 브라우저 폴백 대체 → 측정값이 렌더 높이와 어긋남)
-const TABLE_FONT = '14px "Wanted Sans Variable"';
+// 크기는 표 셀 본문 고정 16px(text-base) 기준 — 셀 렌더 크기와 함께 움직여야 한다.
+const TABLE_FONT = '16px "Wanted Sans Variable"';
 
 /**
  * 셀 타입에 따른 높이 계산
@@ -136,7 +139,7 @@ export function useRowHeights({
 }
 
 // ── 헤더/행 합산 상수 ──
-const HEADER_ROW_HEIGHT = 45; // py-3 + font + border
+const HEADER_ROW_HEIGHT = 49; // py-3(24) + text-base 한 줄(24) + border(1)
 const TABLE_CARD_PADDING = 32; // CardContent padding + border
 
 /**

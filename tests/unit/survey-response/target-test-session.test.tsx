@@ -25,6 +25,7 @@ const {
   attrsLookup,
   createWithFirstAnswer,
   createBlank,
+  saveDraft,
   complete,
   checkOnEntry,
 } = vi.hoisted(() => ({
@@ -36,6 +37,7 @@ const {
   attrsLookup: vi.fn(),
   createWithFirstAnswer: vi.fn(),
   createBlank: vi.fn(),
+  saveDraft: vi.fn(),
   complete: vi.fn(),
   checkOnEntry: vi.fn(),
 }));
@@ -66,6 +68,7 @@ vi.mock('@/shared/lib/rpc', () => ({
       response: {
         createWithFirstAnswer: (...args: unknown[]) => createWithFirstAnswer(...args),
         createBlank: (...args: unknown[]) => createBlank(...args),
+        saveDraft: (...args: unknown[]) => saveDraft(...args),
         complete: (...args: unknown[]) => complete(...args),
       },
       duplicate: {
@@ -116,6 +119,42 @@ const targetSurvey = {
   updatedAt: new Date('2026-07-22T00:00:00.000Z'),
 } as Survey;
 
+// 임시저장 복원 stepHistory 재구성 검증용 3페이지 설문
+const multiPageSurvey = {
+  ...targetSurvey,
+  questions: [
+    {
+      id: 'q1',
+      type: 'text',
+      title: '첫 번째 질문',
+      description: '',
+      required: false,
+      order: 0,
+      placeholder: '첫 답변',
+    },
+    {
+      id: 'q2',
+      type: 'text',
+      title: '두 번째 질문',
+      description: '',
+      required: false,
+      order: 1,
+      placeholder: '둘째 답변',
+      pageBreakBefore: true,
+    },
+    {
+      id: 'q3',
+      type: 'text',
+      title: '세 번째 질문',
+      description: '',
+      required: false,
+      order: 2,
+      placeholder: '셋째 답변',
+      pageBreakBefore: true,
+    },
+  ],
+} as Survey;
+
 function readBlob(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -159,6 +198,7 @@ describe('대상자 테스트 응답 세션', () => {
     attrsLookup.mockReset();
     createWithFirstAnswer.mockReset();
     createBlank.mockReset();
+    saveDraft.mockReset();
     complete.mockReset();
     checkOnEntry.mockReset();
   });
@@ -321,6 +361,37 @@ describe('대상자 테스트 응답 세션', () => {
     expect(setResponses).toHaveBeenCalledWith({ q1: '기존 답' });
     expect(setCurrentResponseId).toHaveBeenCalledWith('response-1');
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('일반 응답 세션도 재접속 시 저장된 답변을 복원한다', async () => {
+    window.localStorage.setItem('survey-session:survey-1', 'saved-session');
+    resume.mockResolvedValue({
+      id: 'response-1',
+      status: 'in_progress',
+      resumed: false,
+      questionResponses: { q1: '저장된 답' },
+    });
+    const setResponses = vi.fn();
+    const setCurrentResponseId = vi.fn();
+
+    const { result } = renderHook(() =>
+      useSessionRecovery({
+        isAdminEdit: false,
+        loadedSurvey: { id: 'survey-1' } as Survey,
+        currentResponseId: null,
+        inviteToken: null,
+        testToken: null,
+        isTestSession: false,
+        setSessionId: vi.fn(),
+        setResponses,
+        setCurrentResponseId,
+        setDuplicateStatus: vi.fn(),
+      }),
+    );
+
+    await waitFor(() => expect(result.current.isRecovering).toBe(false));
+    expect(setResponses).toHaveBeenCalledWith({ q1: '저장된 답' });
+    expect(setCurrentResponseId).toHaveBeenCalledWith('response-1');
   });
 
   it('회복 완료 후 제출 store reset이 되어도 정착된 결과를 다시 적용하지 않는다', async () => {
@@ -826,7 +897,8 @@ describe('대상자 테스트 응답 세션', () => {
     );
 
     expect(await screen.findByDisplayValue('기존 답')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '제출' }));
+    expect(screen.queryByRole('button', { name: '제출' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '다음' }));
     await waitFor(() => expect(createBlank).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(stepVisit).toHaveBeenCalledTimes(1));
 
@@ -1046,7 +1118,8 @@ describe('대상자 테스트 응답 세션', () => {
     expect(secondCreate.attemptId).not.toBe(firstCreate.attemptId);
     expect(secondCreate.sessionId).not.toBe(firstCreate.sessionId);
 
-    fireEvent.click(screen.getByRole('button', { name: '제출' }));
+    expect(screen.queryByRole('button', { name: '제출' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '다음' }));
     await waitFor(() =>
       expect(complete).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1095,5 +1168,49 @@ describe('대상자 테스트 응답 세션', () => {
       await screen.findByRole('heading', { name: '유효하지 않은 테스트 링크입니다' }),
     ).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '다시 테스트하기' })).not.toBeInTheDocument();
+  });
+
+  it('임시저장 복원 시 이전 버튼 경로(stepHistory)를 재구성한다', async () => {
+    bySlug.mockResolvedValue({ id: 'survey-1' });
+    forResponse.mockResolvedValue({
+      survey: multiPageSurvey,
+      versionId: 'version-1',
+      control: {
+        isPaused: false,
+        pausedMessage: null,
+        testSession: 'valid',
+        testSessionKind: 'target',
+      },
+    });
+    attrsLookup.mockResolvedValue({});
+    stepVisit.mockResolvedValue(undefined);
+    resume.mockResolvedValue({
+      id: 'response-1',
+      status: 'in_progress',
+      resumed: true,
+      questionResponses: { q1: '답1', q2: '답2' },
+      currentStepId: 'page:q3',
+    });
+
+    render(
+      <SurveyResponseFlow
+        surveyIdentifier="target-survey"
+        inviteToken="invite-a"
+        testToken={null}
+      />,
+    );
+
+    // 저장된 3페이지로 복원된다
+    expect(await screen.findByPlaceholderText('셋째 답변')).toBeInTheDocument();
+
+    // 회귀 지점: 복원이 currentStepIndex 만 되돌리고 stepHistory 를 비워 두면
+    // 이전 버튼이 영구 비활성이 된다.
+    const prevButtons = screen.getAllByRole('button', { name: '이전' });
+    for (const button of prevButtons) expect(button).toBeEnabled();
+
+    // 실제로 직전 페이지(2페이지)로 되돌아간다
+    fireEvent.click(prevButtons[0]!);
+    expect(await screen.findByPlaceholderText('둘째 답변')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('둘째 답변')).toHaveValue('답2');
   });
 });

@@ -1,16 +1,22 @@
 import { createRouterClient } from '@orpc/server';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
 vi.mock('../services/mail-campaigns.service', () => ({
   createCampaign: vi.fn(),
   cancelCampaign: vi.fn(),
+  resyncCampaign: vi.fn(),
   fetchCandidateIds: vi.fn(),
   previewPreflight: vi.fn(),
 }));
 
+vi.mock('../services/mail-single-send.service', () => ({
+  sendSingleCampaign: vi.fn(),
+}));
+
 import * as svc from '../services/mail-campaigns.service';
+import * as singleSvc from '../services/mail-single-send.service';
 import { campaigns } from './campaigns';
 
 function authedContext(): ORPCContext {
@@ -24,6 +30,7 @@ const CAMPAIGN_ID = '44444444-4444-4444-8444-444444444444';
 
 describe('mail.campaigns procedures', () => {
   beforeEach(() => vi.clearAllMocks());
+  afterEach(() => vi.unstubAllEnvs());
 
   it('create는 input과 context.user.id를 service.createCampaign에 위임하고 결과를 반환한다', async () => {
     vi.mocked(svc.createCampaign).mockResolvedValue({
@@ -39,7 +46,7 @@ describe('mail.campaigns procedures', () => {
       contactTargetIds: [CONTACT_ID],
     };
     const res = await client.campaigns.create(input);
-    expect(svc.createCampaign).toHaveBeenCalledWith(input, 'admin-1');
+    expect(svc.createCampaign).toHaveBeenCalledWith(input, 'admin-1', false);
     expect(res).toEqual({ campaignId: CAMPAIGN_ID, queuedCount: 1, skippedCount: 0 });
   });
 
@@ -48,8 +55,17 @@ describe('mail.campaigns procedures', () => {
     const client = createRouterClient({ campaigns }, { context: authedContext() });
     const input = { surveyId: SURVEY_ID, campaignId: CAMPAIGN_ID };
     const res = await client.campaigns.cancel(input);
-    expect(svc.cancelCampaign).toHaveBeenCalledWith(input);
+    expect(svc.cancelCampaign).toHaveBeenCalledWith(input, false);
     expect(res).toEqual({ ok: true });
+  });
+
+  it('resync는 service.resyncCampaign에 위임하고 checked/updated를 반환한다', async () => {
+    vi.mocked(svc.resyncCampaign).mockResolvedValue({ checked: 11, updated: 9 } as never);
+    const client = createRouterClient({ campaigns }, { context: authedContext() });
+    const input = { surveyId: SURVEY_ID, campaignId: CAMPAIGN_ID };
+    const res = await client.campaigns.resync(input);
+    expect(svc.resyncCampaign).toHaveBeenCalledWith(input);
+    expect(res).toEqual({ checked: 11, updated: 9 });
   });
 
   it('fetchCandidateIds는 service에 위임하고 결과를 반환한다', async () => {
@@ -88,6 +104,23 @@ describe('mail.campaigns procedures', () => {
     });
   });
 
+  it('sendSingle은 input과 context.user.id를 sendSingleCampaign에 위임하고 결과를 반환한다', async () => {
+    vi.mocked(singleSvc.sendSingleCampaign).mockResolvedValue({
+      campaignId: CAMPAIGN_ID,
+      queuedCount: 1,
+      skippedCount: 0,
+    } as never);
+    const client = createRouterClient({ campaigns }, { context: authedContext() });
+    const input = {
+      surveyId: SURVEY_ID,
+      contactTargetId: CONTACT_ID,
+      mailTemplateId: TEMPLATE_ID,
+    };
+    const res = await client.campaigns.sendSingle(input);
+    expect(singleSvc.sendSingleCampaign).toHaveBeenCalledWith(input, 'admin-1', false);
+    expect(res).toEqual({ campaignId: CAMPAIGN_ID, queuedCount: 1, skippedCount: 0 });
+  });
+
   it('인증 없으면 create가 UNAUTHORIZED로 막힌다', async () => {
     const client = createRouterClient(
       { campaigns },
@@ -101,5 +134,67 @@ describe('mail.campaigns procedures', () => {
         contactTargetIds: [CONTACT_ID],
       }),
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+  });
+
+  it('게스트는 grant 설문이면 sendSingle 이 위임된다', async () => {
+    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
+    vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
+    vi.mocked(singleSvc.sendSingleCampaign).mockResolvedValue({
+      campaignId: CAMPAIGN_ID,
+      queuedCount: 1,
+      skippedCount: 0,
+    } as never);
+    const client = createRouterClient(
+      { campaigns },
+      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+    );
+    const input = {
+      surveyId: SURVEY_ID,
+      contactTargetId: CONTACT_ID,
+      mailTemplateId: TEMPLATE_ID,
+    };
+    const res = await client.campaigns.sendSingle(input);
+    expect(singleSvc.sendSingleCampaign).toHaveBeenCalledWith(input, 'guest-1', true);
+    expect(res).toEqual({ campaignId: CAMPAIGN_ID, queuedCount: 1, skippedCount: 0 });
+  });
+
+  it('게스트는 grant 설문이면 create 가 isGuest=true 로 위임된다', async () => {
+    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
+    vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
+    vi.mocked(svc.createCampaign).mockResolvedValue({
+      campaignId: CAMPAIGN_ID,
+      queuedCount: 1,
+      skippedCount: 0,
+    } as never);
+    const client = createRouterClient(
+      { campaigns },
+      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+    );
+    const input = {
+      surveyId: SURVEY_ID,
+      mailTemplateId: TEMPLATE_ID,
+      title: '5월 리마인더',
+      contactTargetIds: [CONTACT_ID],
+    };
+    const res = await client.campaigns.create(input);
+    expect(svc.createCampaign).toHaveBeenCalledWith(input, 'guest-1', true);
+    expect(res).toEqual({ campaignId: CAMPAIGN_ID, queuedCount: 1, skippedCount: 0 });
+  });
+
+  it('게스트가 다른 설문 surveyId 로 sendSingle 하면 FORBIDDEN', async () => {
+    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
+    vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
+    const client = createRouterClient(
+      { campaigns },
+      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+    );
+    await expect(
+      client.campaigns.sendSingle({
+        surveyId: '55555555-5555-4555-8555-555555555555',
+        contactTargetId: CONTACT_ID,
+        mailTemplateId: TEMPLATE_ID,
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(singleSvc.sendSingleCampaign).not.toHaveBeenCalled();
   });
 });

@@ -19,6 +19,7 @@ export const PERSISTED_QUESTION_FIELDS = [
   'title',
   'description',
   'required',
+  'requiredMessage',
   'order',
   'options',
   'selectLevels',
@@ -29,6 +30,7 @@ export const PERSISTED_QUESTION_FIELDS = [
   'allowOtherOption',
   'optionsColumns',
   'optionsAlign',
+  'mobileOptionsColumns',
   'minSelections',
   'maxSelections',
   'noticeContent',
@@ -58,6 +60,10 @@ export const PERSISTED_QUESTION_FIELDS = [
   'exportLabel',
   'spssVarType',
   'spssMeasure',
+  'exportCellOrder',
+  'answerQuoteEnabled',
+  'answerQuoteName',
+  'answerQuoteText',
 ] as const satisfies readonly (keyof NewQuestion)[];
 
 export type PersistedQuestionField = (typeof PERSISTED_QUESTION_FIELDS)[number];

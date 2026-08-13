@@ -5,6 +5,8 @@
 import { CopyObjectCommand, DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import * as Sentry from '@sentry/nextjs';
 
+import { logger } from '@/lib/logger';
+
 // Cloudflare R2는 S3 호환 API를 사용합니다
 const r2Client = new S3Client({
   region: 'auto',
@@ -28,13 +30,13 @@ export async function deleteImagesFromR2Server(urls: string[]): Promise<boolean>
   // 환경 변수 확인
   const bucketName = process.env['CLOUDFLARE_R2_BUCKET'];
   if (!bucketName) {
-    console.error('Cloudflare R2 환경 변수가 설정되지 않았습니다.');
+    logger.error('Cloudflare R2 환경 변수가 설정되지 않았습니다.');
     return false;
   }
 
   const publicUrl = process.env['CLOUDFLARE_R2_PUBLIC_URL'];
   if (!publicUrl) {
-    console.error('Cloudflare R2 공개 URL이 설정되지 않았습니다.');
+    logger.error('Cloudflare R2 공개 URL이 설정되지 않았습니다.');
     return false;
   }
 
@@ -64,7 +66,7 @@ export async function deleteImagesFromR2Server(urls: string[]): Promise<boolean>
       await r2Client.send(command);
       deletedUrls.push(url);
     } catch (error) {
-      console.error(`이미지 삭제 실패 (${url}):`, error);
+      logger.error({ url, err: error }, '이미지 삭제 실패');
       failedUrls.push(url);
     }
   }
@@ -72,7 +74,7 @@ export async function deleteImagesFromR2Server(urls: string[]): Promise<boolean>
   // 일부라도 성공했거나 모두 외부 URL이었으면 성공으로 간주
   if (deletedUrls.length > 0 || failedUrls.length === 0) {
     if (failedUrls.length > 0) {
-      console.warn(`일부 이미지 삭제 실패: ${failedUrls.length}개`);
+      logger.warn({ failedCount: failedUrls.length }, '일부 이미지 삭제 실패');
     }
     return true;
   }
@@ -81,11 +83,14 @@ export async function deleteImagesFromR2Server(urls: string[]): Promise<boolean>
 }
 
 /**
- * R2 객체를 한 key에서 다른 key로 복사 + 원본 삭제 (move 동작).
- * 단일 작업이라 트랜잭션 아님 — COPY 성공 후 DELETE 실패 시 원본 객체 남음 (lifecycle이 처리).
+ * R2 객체를 한 key에서 다른 key로 복사합니다 (copy-only, 원본 미삭제).
+ * 과거에는 COPY + DELETE(move) 였으나, 부분 실패 롤백이나 후속 DB 갱신 실패 시
+ * 원본이 이미 사라져 콘텐츠가 참조하는 유일 사본을 잃는 사고가 있었다 — 이제 원본(srcKey)은
+ * 절대 삭제하지 않는다. 실패의 최악 결과는 "tmp 잔존(무해)"이 된다.
+ * tmp 잔여물은 R2 lifecycle(tmp/ 24h) 위임 — 대시보드 규칙 존재 확인 필요(키 권한으로 코드에서 미검증).
  * @returns 성공 시 true, 실패 시 false
  */
-export async function moveR2Object(srcKey: string, dstKey: string): Promise<boolean> {
+export async function copyR2Object(srcKey: string, dstKey: string): Promise<boolean> {
   const bucketName = process.env['CLOUDFLARE_R2_BUCKET'];
   if (!bucketName) return false;
 
@@ -97,16 +102,11 @@ export async function moveR2Object(srcKey: string, dstKey: string): Promise<bool
         Key: dstKey,
       }),
     );
-    await r2Client
-      .send(new DeleteObjectCommand({ Bucket: bucketName, Key: srcKey }))
-      .catch(() => {
-        // DELETE 실패해도 COPY는 됐으니 OK. tmp/ lifecycle이 처리.
-      });
     return true;
   } catch (error) {
-    console.error(`R2 move 실패 ${srcKey} → ${dstKey}:`, error);
+    logger.error({ srcKey, dstKey, err: error }, 'R2 copy 실패');
     Sentry.captureException(error, {
-      tags: { operation: 'r2_move' },
+      tags: { operation: 'r2_copy' },
       extra: { srcKey, dstKey },
       level: 'warning',
     });
@@ -115,17 +115,17 @@ export async function moveR2Object(srcKey: string, dstKey: string): Promise<bool
 }
 
 /**
- * 여러 R2 객체 batch move.
- * 실패한 src는 그대로 두고 (lifecycle 처리), 성공/실패 분리해 반환.
+ * 여러 R2 객체 batch copy (원본 미삭제).
+ * 실패한 src는 그대로 두고 (재시도 또는 lifecycle 처리), 성공/실패 분리해 반환.
  */
-export async function moveR2Objects(
+export async function copyR2Objects(
   pairs: Array<{ srcKey: string; dstKey: string }>,
 ): Promise<{ movedKeys: Array<{ srcKey: string; dstKey: string }>; failed: string[] }> {
   const movedKeys: Array<{ srcKey: string; dstKey: string }> = [];
   const failed: string[] = [];
 
   for (const pair of pairs) {
-    const ok = await moveR2Object(pair.srcKey, pair.dstKey);
+    const ok = await copyR2Object(pair.srcKey, pair.dstKey);
     if (ok) movedKeys.push(pair);
     else failed.push(pair.srcKey);
   }
@@ -146,7 +146,7 @@ export async function deleteR2ObjectsByKey(keys: string[]): Promise<boolean> {
 
   const bucketName = process.env['CLOUDFLARE_R2_BUCKET'];
   if (!bucketName) {
-    console.error('Cloudflare R2 환경 변수가 설정되지 않았습니다.');
+    logger.error('Cloudflare R2 환경 변수가 설정되지 않았습니다.');
     return false;
   }
 
@@ -160,13 +160,13 @@ export async function deleteR2ObjectsByKey(keys: string[]): Promise<boolean> {
       });
       await r2Client.send(command);
     } catch (error) {
-      console.error(`R2 파일 삭제 실패 (key: ${key}):`, error);
+      logger.error({ key, err: error }, 'R2 파일 삭제 실패');
       failedKeys.push(key);
     }
   }
 
   if (failedKeys.length > 0) {
-    console.warn(`일부 R2 파일 삭제 실패: ${failedKeys.length}개`);
+    logger.warn({ failedCount: failedKeys.length }, '일부 R2 파일 삭제 실패');
   }
 
   return true; // partial failure는 허용 — caller는 어쨌든 success 처리

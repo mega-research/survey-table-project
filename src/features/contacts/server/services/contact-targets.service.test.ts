@@ -48,12 +48,15 @@ describe('updateContactTarget groupValue 보존', () => {
   });
 
   it('systemFieldKeys 가 없으면 group_value 를 set 하지 않아 기존 분류값이 보존된다', async () => {
-    await updateContactTarget({
-      id: 'ct-1',
-      surveyId: 'sv-1',
-      attrs: { 회사명: '아크미' },
-      memo: '메모만 수정',
-    });
+    await updateContactTarget(
+      {
+        id: 'ct-1',
+        surveyId: 'sv-1',
+        attrs: { 회사명: '아크미' },
+        memo: '메모만 수정',
+      },
+      false,
+    );
 
     expect(capturedSets).toHaveLength(1);
     const payload = capturedSets[0];
@@ -63,36 +66,45 @@ describe('updateContactTarget groupValue 보존', () => {
   });
 
   it('systemFieldKeys.group 이 있으면 attrs 에서 계산한 group_value 를 set 한다', async () => {
-    await updateContactTarget({
-      id: 'ct-2',
-      surveyId: 'sv-1',
-      attrs: { 전시회: 'A관', 회사명: '아크미' },
-      systemFieldKeys: { group: '전시회' },
-    });
+    await updateContactTarget(
+      {
+        id: 'ct-2',
+        surveyId: 'sv-1',
+        attrs: { 전시회: 'A관', 회사명: '아크미' },
+        systemFieldKeys: { group: '전시회' },
+      },
+      false,
+    );
 
     expect(capturedSets).toHaveLength(1);
     expect(capturedSets[0]).toMatchObject({ groupValue: 'A관' });
   });
 
   it('systemFieldKeys.group 키의 attrs 값이 비면 group_value 를 null 로 set 한다', async () => {
-    await updateContactTarget({
-      id: 'ct-3',
-      surveyId: 'sv-1',
-      attrs: { 전시회: '', 회사명: '아크미' },
-      systemFieldKeys: { group: '전시회' },
-    });
+    await updateContactTarget(
+      {
+        id: 'ct-3',
+        surveyId: 'sv-1',
+        attrs: { 전시회: '', 회사명: '아크미' },
+        systemFieldKeys: { group: '전시회' },
+      },
+      false,
+    );
 
     expect(capturedSets).toHaveLength(1);
     expect(capturedSets[0]).toHaveProperty('groupValue', null);
   });
 
   it("group 라벨이 falsy 문자열 '0' 이어도 null 로 무너지지 않고 보존한다", async () => {
-    await updateContactTarget({
-      id: 'ct-4',
-      surveyId: 'sv-1',
-      attrs: { 전시회: '0', 회사명: '아크미' },
-      systemFieldKeys: { group: '전시회' },
-    });
+    await updateContactTarget(
+      {
+        id: 'ct-4',
+        surveyId: 'sv-1',
+        attrs: { 전시회: '0', 회사명: '아크미' },
+        systemFieldKeys: { group: '전시회' },
+      },
+      false,
+    );
 
     expect(capturedSets).toHaveLength(1);
     expect(capturedSets[0]).toMatchObject({ groupValue: '0' });

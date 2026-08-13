@@ -31,6 +31,57 @@ function makeQuestion(overrides: Record<string, unknown>): Question {
 // ── resolveRankingOptionsFromCells ─────────────────────────────────────
 
 describe('resolveRankingOptionsFromCells', () => {
+  // 스타일 축이 늘 때 이 투영을 빠뜨리면 표-소스 옵션만 색을 잃는다.
+  // backgroundColor 는 유지되고 textColor 만 사라지면 어두운 배경에서 글씨가 안 보인다.
+  it('셀의 세 스타일 축을 모두 옵션으로 옮긴다', () => {
+    const cells: TableCell[] = [
+      makeCell({
+        id: 'c1',
+        content: '옵션A',
+        textBold: true,
+        backgroundColor: '#000000',
+        textColor: '#FFFFFF',
+      }),
+    ];
+
+    const opts = resolveRankingOptionsFromCells(cells);
+
+    expect(opts[0]).toMatchObject({
+      textBold: true,
+      backgroundColor: '#000000',
+      textColor: '#FFFFFF',
+    });
+  });
+
+  it('기타 셀도 세 스타일 축을 모두 옮긴다', () => {
+    const cells: TableCell[] = [
+      makeCell({
+        id: 'c1',
+        content: '기타',
+        isOtherRankingCell: true,
+        textBold: true,
+        backgroundColor: '#000000',
+        textColor: '#FFFFFF',
+      }),
+    ];
+
+    const opts = resolveRankingOptionsFromCells(cells);
+
+    expect(opts[0]).toMatchObject({
+      value: RANKING_OTHER_VALUE,
+      textBold: true,
+      backgroundColor: '#000000',
+      textColor: '#FFFFFF',
+    });
+  });
+
+  it('스타일이 없으면 키 자체를 만들지 않는다', () => {
+    const opts = resolveRankingOptionsFromCells([makeCell({ id: 'c1', content: '옵션A' })]);
+
+    expect(opts[0]).not.toHaveProperty('textColor');
+    expect(opts[0]).not.toHaveProperty('backgroundColor');
+  });
+
   it('코드 미지정 셀 2개: spssNumericCode 가 배열 내 1-based 순번(1, 2)이 된다', () => {
     const cells: TableCell[] = [
       makeCell({ id: 'c1', content: '옵션A' }),
@@ -72,6 +123,53 @@ describe('resolveRankingOptionsFromCells', () => {
     expect(opts[0]!.value).toBe('c1');
     expect(opts[0]!.id).toBe('c1');
   });
+
+  it('ranking_opt 스타일을 파생 QuestionOption에 전달한다', () => {
+    const options = resolveRankingOptionsFromCells([
+      makeCell({
+        id: 'rank-cell',
+        content: '항목',
+        textBold: true,
+        backgroundColor: '#AABBCC',
+      }),
+    ]);
+
+    expect(options[0]).toMatchObject({ textBold: true, backgroundColor: '#AABBCC' });
+  });
+
+  it('기타 ranking_opt도 스타일을 파생 QuestionOption에 전달한다', () => {
+    const options = resolveRankingOptionsFromCells([
+      makeCell({
+        id: 'other-rank-cell',
+        content: '기타',
+        isOtherRankingCell: true,
+        textBold: true,
+        backgroundColor: '#AABBCC',
+      }),
+    ]);
+
+    expect(options[0]).toMatchObject({ textBold: true, backgroundColor: '#AABBCC' });
+  });
+
+  it.each([false, true])(
+    'ranking_opt의 상세기입 메타데이터를 파생 옵션에 전달한다 isOther=%s',
+    (isOtherRankingCell) => {
+      const options = resolveRankingOptionsFromCells([
+        makeCell({
+          id: 'detail-rank-cell',
+          content: '상세 옵션',
+          isOtherRankingCell,
+          allowTextInput: true,
+          textInputPlaceholder: '선택 사유',
+        }),
+      ]);
+
+      expect(options[0]).toMatchObject({
+        allowTextInput: true,
+        textInputPlaceholder: '선택 사유',
+      });
+    },
+  );
 
   describe('라벨 우선순위: content > rankingLabel > "(라벨 없음)"', () => {
     it('content 가 있으면 content 사용', () => {

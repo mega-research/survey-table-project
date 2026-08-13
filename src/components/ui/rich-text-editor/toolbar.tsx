@@ -1,11 +1,14 @@
 'use client';
 
+import { useState } from 'react';
+
 import { useEditorState, type Editor } from '@tiptap/react';
 import {
   AlignCenter,
   AlignJustify,
   AlignLeft,
   AlignRight,
+  Baseline,
   Bold,
   Image as ImageIcon,
   Italic,
@@ -17,9 +20,11 @@ import {
   Strikethrough,
   Underline,
   Undo,
+  X,
 } from 'lucide-react';
 
 import { findTableAtSelection } from '@/lib/tiptap/find-table';
+import { normalizeCellHexColor } from '@/utils/cell-style';
 
 import { FileAttachmentContextToolbar } from './file-attachment-context-toolbar';
 import { FONT_FAMILIES, FONT_GROUPS } from './font-family-mark';
@@ -42,6 +47,78 @@ interface Props {
   enableImageLinkArea?: boolean;
 }
 
+/**
+ * 글자 색 컨트롤 — 셀 배경색 UI(CellStyleFields) 패턴 재활용:
+ * 색상 스포이드 + HEX 직접 입력(blur/Enter 커밋, normalizeCellHexColor 정규화) + 제거 버튼.
+ */
+function FontColorControl({ editor, fontColor }: { editor: Editor; fontColor: string }) {
+  const [draft, setDraft] = useState(fontColor);
+
+  // 커서 이동 등으로 현재 선택의 색이 바뀌면 입력칸도 동기화 (렌더 중 상태 조정 패턴)
+  const [lastFontColor, setLastFontColor] = useState(fontColor);
+  if (fontColor !== lastFontColor) {
+    setLastFontColor(fontColor);
+    setDraft(fontColor);
+  }
+
+  const commitDraft = () => {
+    if (draft.trim() === '') {
+      editor.chain().focus().unsetFontColor().run();
+      return;
+    }
+    const normalized = normalizeCellHexColor(draft);
+    if (normalized) {
+      setDraft(normalized);
+      editor.chain().focus().setFontColor(normalized).run();
+      return;
+    }
+    // 잘못된 값은 현재 색으로 되돌린다
+    setDraft(fontColor);
+  };
+
+  return (
+    <>
+      <label
+        className="flex h-8 cursor-pointer items-center gap-1 rounded-md border border-gray-200 bg-white px-1.5"
+        title="글자 색"
+      >
+        <Baseline className="h-4 w-4 text-gray-600" />
+        <input
+          type="color"
+          value={fontColor || '#000000'}
+          onChange={(e) => {
+            const color = e.target.value.toUpperCase();
+            setDraft(color);
+            editor.chain().focus().setFontColor(color).run();
+          }}
+          className="h-5 w-6 cursor-pointer border-0 bg-transparent p-0"
+          aria-label="글자 색 선택"
+        />
+      </label>
+      <input
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commitDraft}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            commitDraft();
+          }
+        }}
+        placeholder="#AABBCC"
+        className="h-8 w-[76px] rounded-md border border-gray-200 bg-white px-1.5 text-xs"
+        aria-label="글자 색 HEX"
+      />
+      <ToolBtn onClick={() => editor.chain().focus().unsetFontColor().run()} title="글자 색 제거">
+        <div className="relative">
+          <Baseline className="h-4 w-4 text-red-600" />
+          <X className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 text-red-600" />
+        </div>
+      </ToolBtn>
+    </>
+  );
+}
+
 export function Toolbar({ editor, variableCatalog, onPickImage, onPickLink, onPickFile, onReplaceFile, enableImageLinkArea }: Props) {
   const s = useEditorState({
     editor,
@@ -53,7 +130,7 @@ export function Toolbar({ editor, variableCatalog, onPickImage, onPickLink, onPi
           alignLeft: true, alignCenter: false, alignRight: false, alignJustify: false,
           canUndo: false, canRedo: false,
           imageActive: false, tableActive: false, fileAttachmentActive: false,
-          fontFamily: '',
+          fontFamily: '', fontColor: '',
         };
       }
       return {
@@ -74,6 +151,7 @@ export function Toolbar({ editor, variableCatalog, onPickImage, onPickLink, onPi
         tableActive: findTableAtSelection(editor.state) !== null,
         fileAttachmentActive: editor.isActive('fileAttachment'),
         fontFamily: (editor.getAttributes('fontFamily')['family'] as string | undefined) ?? '',
+        fontColor: (editor.getAttributes('fontColor')['color'] as string | undefined) ?? '',
       };
     },
   });
@@ -117,12 +195,14 @@ export function Toolbar({ editor, variableCatalog, onPickImage, onPickLink, onPi
 
       <select
         className="h-8 rounded-md border border-gray-200 bg-white px-1.5 text-xs"
-        onChange={(e) => (editor.chain().focus() as any).setFontSize(`${e.target.value}px`).run()}
+        onChange={(e) => editor.chain().focus().setFontSize(`${e.target.value}px`).run()}
         defaultValue="14"
         aria-label="폰트 크기"
       >
         {FONT_SIZES.map((sz) => <option key={sz} value={sz}>{sz}px</option>)}
       </select>
+
+      <FontColorControl editor={editor} fontColor={s.fontColor} />
 
       <Sep />
 

@@ -2,7 +2,7 @@ import { relations } from 'drizzle-orm';
 import { boolean, integer, jsonb, pgTable, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
 
 import { surveys, surveyResponses } from './surveys';
-import type { ContactUploadMapping } from './schema-types';
+import type { ContactUploadMapping, ContactUploadMode } from './schema-types';
 
 export const contactUploads = pgTable('contact_uploads', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -13,6 +13,8 @@ export const contactUploads = pgTable('contact_uploads', {
   uploadedRows: integer('uploaded_rows').notNull().default(0),
   mergedRows: integer('merged_rows').notNull().default(0),
   errorRows: integer('error_rows').notNull().default(0),
+  mode: text('mode').notNull().default('replace').$type<ContactUploadMode>(),
+  skippedRows: integer('skipped_rows').notNull().default(0),
   mapping: jsonb('mapping').$type<ContactUploadMapping>().notNull(),
   uploadedBy: uuid('uploaded_by'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),

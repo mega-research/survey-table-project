@@ -8,6 +8,7 @@ import { RANKING_OTHER_VALUE } from '@/utils/ranking-shared';
 
 import type {
   AnalyticsResult,
+  CellAnalytics,
   CellAnalyticsRow,
   MultiSelectAnalytics,
   MultipleChoiceAnalytics,
@@ -454,7 +455,7 @@ function analyzeTable(
   // [1] 세로 병합 상태 추적 배열 (셀 분석용)
   const cellMergeState = new Array(columns.length).fill(null).map(() => ({
     rowsLeft: 0,
-    inheritedAnalytics: null as any, // 상속받을 데이터
+    inheritedAnalytics: null as CellAnalytics | null, // 상속받을 데이터
   }));
 
   const cellAnalytics: CellAnalyticsRow[] = rows.map((row) => {
@@ -466,14 +467,14 @@ function analyzeTable(
     const rowExposedCount = validRespondents.length;
 
     // [2] 가로 병합 상태 추적 변수 (행마다 초기화)
-    let activeHorizontalAnalytics: any = null;
+    let activeHorizontalAnalytics: CellAnalytics | null = null;
     let activeHorizontalMergesLeft = 0;
 
     return {
       rowId: row.id,
       rowLabel: row.label,
       cells: row.cells.map((cell, colIndex) => {
-        let currentAnalytics: any = null;
+        let currentAnalytics: CellAnalytics | null = null;
 
         // ---------------------------------------------------------
         // CASE A: 가로 병합(Colspan) 중인가?
@@ -509,11 +510,11 @@ function analyzeTable(
               cellId: cell.id,
               columnLabel: columns[colIndex]?.label || `열 ${colIndex + 1}`,
               cellType: 'merged-hidden',
-            } as any;
+            };
           }
 
           // --- 데이터 계산 로직 (validRespondents만 사용) ---
-          const analytics: any = {
+          const analytics: CellAnalytics = {
             cellId: cell.id,
             columnLabel: columns[colIndex]?.label || `열 ${colIndex + 1}`,
             cellType: cell.type,

@@ -237,6 +237,40 @@ export function migrateSnapshotQuestions(snapshot: {
   return { questions: migrated, otherIdMappings, cellOtherIdMappings };
 }
 
+/** 응답 value에서 선택된 option id 집합을 수집한다. */
+export function collectSelectedOptionIds(
+  value: unknown,
+  options?: { id: string; value: string }[],
+): Set<string> {
+  const selectedValues = new Set<string>();
+
+  const collect = (candidate: unknown) => {
+    if (typeof candidate === 'string') {
+      selectedValues.add(candidate);
+    } else if (Array.isArray(candidate)) {
+      candidate.forEach(collect);
+    } else if (candidate && typeof candidate === 'object') {
+      if ('optionValue' in candidate && typeof candidate.optionValue === 'string') {
+        selectedValues.add(candidate.optionValue);
+      } else {
+        Object.entries(candidate).forEach(([key, entry]) => {
+          if (key !== '__optTexts__') collect(entry);
+        });
+      }
+    }
+  };
+
+  collect(value);
+
+  if (!options || options.length === 0) return selectedValues;
+
+  const selectedIds = new Set<string>();
+  for (const option of options) {
+    if (selectedValues.has(option.value)) selectedIds.add(option.id);
+  }
+  return selectedIds;
+}
+
 /**
  * 제출 시점 helper -- 선택된 옵션의 텍스트만 남기고 미선택 텍스트는 drop.
  * 빌더에서 "선택 해제 시 텍스트 유지" 정책을 따르므로, 클라이언트 상태에서는 보존되고
@@ -255,45 +289,7 @@ export function filterOptionTextsForSubmission(
   options?: { id: string; value: string }[],
 ): Record<string, string> | undefined {
   if (!optionTexts) return undefined;
-
-  // value 에서 선택된 option.value 집합을 추출
-  const selectedValues = new Set<string>();
-  if (typeof value === 'string') {
-    selectedValues.add(value);
-  } else if (Array.isArray(value)) {
-    for (const v of value) {
-      if (typeof v === 'string') {
-        selectedValues.add(v);
-      } else if (v && typeof v === 'object' && 'optionValue' in v) {
-        selectedValues.add((v as { optionValue: string }).optionValue);
-      }
-    }
-  } else if (value && typeof value === 'object') {
-    // 테이블 질문: { [cellId]: string | string[] }. 각 셀 응답을 펼쳐 동일 규칙 적용.
-    for (const cellVal of Object.values(value as Record<string, unknown>)) {
-      if (typeof cellVal === 'string') {
-        selectedValues.add(cellVal);
-      } else if (Array.isArray(cellVal)) {
-        for (const v of cellVal) {
-          if (typeof v === 'string') selectedValues.add(v);
-        }
-      }
-    }
-  }
-
-  // options 배열이 있으면 option.value → option.id 맵을 빌드
-  // 없으면 value 를 그대로 key 로 사용 (하위 호환)
-  let selectedIds: Set<string>;
-  if (options && options.length > 0) {
-    selectedIds = new Set<string>();
-    for (const opt of options) {
-      if (selectedValues.has(opt.value)) {
-        selectedIds.add(opt.id);
-      }
-    }
-  } else {
-    selectedIds = selectedValues;
-  }
+  const selectedIds = collectSelectedOptionIds(value, options);
 
   const filtered: Record<string, string> = {};
   for (const [optionId, text] of Object.entries(optionTexts)) {

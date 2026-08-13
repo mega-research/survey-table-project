@@ -30,6 +30,8 @@ export interface SurveySnapshot {
     thankYouMessage: string;
     // 컨택 attrs invite token 강제 — 스냅샷에 freeze (schema-types.ts SurveyVersionSnapshot.settings 와 정렬)
     requireInviteToken?: boolean | undefined;
+    // 화면 너비 강제 — 스냅샷에 freeze
+    forceWideLayout?: boolean | undefined;
     responseHeader?: SurveyResponseHeaderConfig | undefined;
   };
   // 외부 데이터 LUT 사본 — publish 시점 freeze. 응답 페이지가 분기 조건 우변 룩업을 평가할 때 사용.
@@ -42,6 +44,7 @@ interface SnapshotQuestion {
   title: string;
   description?: string | undefined;
   required: boolean;
+  requiredMessage?: string | null | undefined;
   groupId?: string | undefined;
   options?: Question['options'] | undefined;
   selectLevels?: Question['selectLevels'] | undefined;
@@ -53,6 +56,7 @@ interface SnapshotQuestion {
   allowOtherOption?: boolean | undefined;
   optionsColumns?: number | undefined;
   optionsAlign?: Question['optionsAlign'] | undefined;
+  mobileOptionsColumns?: Question['mobileOptionsColumns'] | undefined;
   rankingConfig?: Question['rankingConfig'] | undefined;
   choiceGroups?: Question['choiceGroups'] | undefined;
   minSelections?: number | undefined;
@@ -78,6 +82,9 @@ interface SnapshotQuestion {
   piiEncrypted?: boolean | undefined;
   numberFormat?: Question['numberFormat'] | undefined;
   sumConstraints?: Question['sumConstraints'] | undefined;
+  answerQuoteEnabled?: boolean | undefined;
+  answerQuoteName?: string | undefined;
+  answerQuoteText?: string | undefined;
 }
 
 interface SnapshotGroup {
@@ -114,6 +121,7 @@ export function buildSurveySnapshot(survey: Survey): SurveySnapshot {
       title: q.title,
       description: q.description,
       required: q.required,
+      requiredMessage: q.requiredMessage,
       groupId: q.groupId,
       options: q.options,
       selectLevels: q.selectLevels,
@@ -127,6 +135,7 @@ export function buildSurveySnapshot(survey: Survey): SurveySnapshot {
       allowOtherOption: q.allowOtherOption,
       optionsColumns: q.optionsColumns,
       optionsAlign: q.optionsAlign,
+      mobileOptionsColumns: q.mobileOptionsColumns,
       rankingConfig: q.rankingConfig,
       choiceGroups: q.choiceGroups,
       minSelections: q.minSelections,
@@ -152,6 +161,9 @@ export function buildSurveySnapshot(survey: Survey): SurveySnapshot {
       piiEncrypted: q.piiEncrypted,
       numberFormat: q.numberFormat,
       sumConstraints: q.sumConstraints,
+      answerQuoteEnabled: q.answerQuoteEnabled,
+      answerQuoteName: q.answerQuoteName,
+      answerQuoteText: q.answerQuoteText,
     })),
     groups: sortedGroups.map((g) => ({
       id: g.id,
@@ -178,6 +190,7 @@ export function buildSurveySnapshot(survey: Survey): SurveySnapshot {
       maxResponses: survey.settings.maxResponses,
       thankYouMessage: survey.settings.thankYouMessage,
       requireInviteToken: survey.settings.requireInviteToken,
+      forceWideLayout: survey.settings.forceWideLayout,
       responseHeader: survey.settings.responseHeader,
     },
     lookups: survey.lookups ?? [],

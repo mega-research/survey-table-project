@@ -1,5 +1,13 @@
 import { useEffect, useState, type RefObject } from 'react';
 
+import { createTrailingCoalescer } from '@/utils/trailing-coalescer';
+
+/**
+ * 측정 코얼레싱 창(ms). 응답 페이지 컨테이너의 max-width 전환(300ms)처럼 레이아웃이
+ * 프레임마다 바뀌는 구간에서 프레임당 setState 가 나가는 것을 막는다.
+ */
+const MEASURE_COALESCE_MS = 100;
+
 /**
  * 요소의 clientWidth(보이는 가로 폭)를 ResizeObserver로 추적한다.
  *
@@ -25,9 +33,15 @@ export function useElementWidth(
     const measure = () => setWidth(el.clientWidth);
     measure();
 
-    const ro = new ResizeObserver(measure);
+    // 폭 전환 중에는 ResizeObserver 가 프레임마다 발화한다. 그대로 흘리면 이 값을 쓰는
+    // 표가 매 프레임 리렌더된다. 첫 값은 즉시, 이후는 창당 1회로 접는다.
+    const coalescer = createTrailingCoalescer(measure, MEASURE_COALESCE_MS);
+    const ro = new ResizeObserver(() => coalescer.notify());
     ro.observe(el);
-    return () => ro.disconnect();
+    return () => {
+      ro.disconnect();
+      coalescer.cancel();
+    };
   }, [ref, disabled]);
 
   return width;

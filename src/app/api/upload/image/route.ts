@@ -6,6 +6,8 @@ import sharp from 'sharp';
 
 import { getCurrentUser } from '@/lib/auth';
 import { isAdminUserAllowed } from '@/lib/auth/admin-allowlist';
+import { getGuestSurveyId, isAdminOrGuestGrantHolder } from '@/lib/auth/guest-grants';
+import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
 import {
   imageKindToExt,
   sanitizeImageExt,
@@ -78,165 +80,177 @@ const MAIL_CONVERTIBLE_TYPES = [
   'image/webp',
 ];
 
-export async function POST(request: NextRequest) {
-  try {
-    const user = await getCurrentUser();
-    if (!user) {
-      return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
-    }
-    // admin allowlist 가드 — oRPC authed 와 동일 정책. ADMIN_USER_IDS 로 어드민을
-    // 잠갔을 때 임의 인증사용자의 R2 업로드(스토리지/콘텐츠 호스팅 남용)를 차단.
-    if (!isAdminUserAllowed(user.id)) {
-      return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
-    }
+// 예기치 못한 에러의 err 로깅·Sentry 캡처·500 응답은 로깅 래퍼(withRouteLogging)가 담당한다.
+async function handleImageUpload(request: NextRequest, ctx: RouteLogContext) {
+  const user = await getCurrentUser();
+  if (!user) {
+    return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
+  }
+  // 권한 검사보다 먼저 바인딩 — 403 거부 로그에도 행위자(userId·role)가 남아야
+  // 업로드 남용·권한 설정 오류 추적이 가능하다. 거부되는 일반 인증 계정은 'user'.
+  ctx.bind({
+    userId: user.id,
+    role: getGuestSurveyId(user.id) ? 'guest' : isAdminUserAllowed(user.id) ? 'admin' : 'user',
+  });
+  // admin 또는 게스트 grant 보유 가드 — mail-attachment 라우트와 동일 정책.
+  // 게스트도 허용 경로(메일 템플릿 등) 리치에디터에서 본문 이미지를 올린다.
+  // ADMIN_USER_IDS 로 잠갔을 때 임의 인증사용자의 R2 업로드 남용은 계속 차단.
+  if (!isAdminOrGuestGrantHolder(user.id)) {
+    return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
+  }
 
-    const formData = await request.formData();
-    const file = formData.get('file') as File;
+  const formData = await request.formData();
+  const file = formData.get('file') as File;
 
-    if (!file) {
-      return NextResponse.json({ error: '파일이 제공되지 않았습니다.' }, { status: 400 });
-    }
+  if (!file) {
+    return NextResponse.json({ error: '파일이 제공되지 않았습니다.' }, { status: 400 });
+  }
+  // 로그에는 파일 메타만 싣는다 (본문 금지)
+  ctx.bind({ filename: file.name, size: file.size, contentType: file.type });
 
-    // 이미지 파일만 허용 (BMP 추가)
-    const allowedTypes = [
-      'image/jpeg',
-      'image/jpg',
-      'image/png',
-      'image/gif',
-      'image/webp',
-      'image/svg+xml',
-      'image/bmp',
-    ];
-    if (!allowedTypes.includes(file.type)) {
+  // 이미지 파일만 허용 (BMP 추가)
+  const allowedTypes = [
+    'image/jpeg',
+    'image/jpg',
+    'image/png',
+    'image/gif',
+    'image/webp',
+    'image/svg+xml',
+    'image/bmp',
+  ];
+  if (!allowedTypes.includes(file.type)) {
+    return NextResponse.json(
+      {
+        error:
+          '지원하지 않는 파일 형식입니다. JPG, PNG, GIF, WebP, SVG, BMP만 업로드 가능합니다.',
+      },
+      { status: 400 },
+    );
+  }
+
+  // MIME 헤더 외에 실제 바이트로 형식 확인 (defense in depth)
+  const headerBuffer = Buffer.from(await file.slice(0, 16).arrayBuffer());
+  const detectedKind = detectImageKind(headerBuffer);
+  if (!detectedKind || !allowedTypes.includes(detectedKind)) {
+    return NextResponse.json(
+      { error: '파일 내용이 이미지 형식과 일치하지 않습니다.' },
+      { status: 400 },
+    );
+  }
+
+  // 파일 크기 제한 (10MB)
+  const maxSize = 10 * 1024 * 1024; // 10MB
+  if (file.size > maxSize) {
+    return NextResponse.json({ error: '파일 크기는 10MB 이하여야 합니다.' }, { status: 400 });
+  }
+
+  // 파일명 위생 검증 — mail/notice 첨부 라우트와 대칭 (path traversal·특수문자 차단)
+  const filenameError = validateFilename(file.name);
+  if (filenameError) {
+    return NextResponse.json({ error: filenameError }, { status: 400 });
+  }
+
+  // 환경 변수 확인
+  const bucketName = process.env['CLOUDFLARE_R2_BUCKET'];
+  const publicUrl = process.env['CLOUDFLARE_R2_PUBLIC_URL'];
+
+  if (!bucketName || !publicUrl) {
+    const error = new Error('Cloudflare R2 환경 변수가 설정되지 않았습니다.');
+    ctx.log.error({ err: error }, 'R2 환경 변수 미설정');
+    Sentry.captureException(error);
+    return NextResponse.json({ error: '서버 설정 오류' }, { status: 500 });
+  }
+
+  // kind 파라미터 검증 (mail | survey) — 변환 분기에 필요하므로 먼저 읽음
+  const KIND_VALUES = new Set(['mail', 'survey']);
+  const kindRaw = formData.get('kind');
+  const kind = typeof kindRaw === 'string' && KIND_VALUES.has(kindRaw) ? kindRaw : null;
+  if (!kind) {
+    return NextResponse.json(
+      { error: '잘못된 또는 누락된 kind 파라미터 (mail | survey)' },
+      { status: 400 },
+    );
+  }
+  ctx.bind({ kind });
+
+  // 파일을 ArrayBuffer로 변환
+  const arrayBuffer = await file.arrayBuffer();
+  let buffer = Buffer.from(arrayBuffer);
+  let contentType = file.type;
+  let fileExtension: string;
+
+  // SVG 본문 가드: <script>, on*= 이벤트 핸들러, javascript: URL 등 차단.
+  // 앞 256KB 만 검사하면 SVG 최대 10MB 의 뒷부분에 숨긴 스크립트를 놓치므로 전체 본문을 검사한다.
+  if (detectedKind === 'image/svg+xml') {
+    if (svgBodyHasScript(buffer)) {
       return NextResponse.json(
-        {
-          error:
-            '지원하지 않는 파일 형식입니다. JPG, PNG, GIF, WebP, SVG, BMP만 업로드 가능합니다.',
-        },
+        { error: 'SVG 파일에 허용되지 않는 요소가 포함되어 있습니다.' },
         { status: 400 },
       );
     }
+  }
 
-    // MIME 헤더 외에 실제 바이트로 형식 확인 (defense in depth)
-    const headerBuffer = Buffer.from(await file.slice(0, 16).arrayBuffer());
-    const detectedKind = detectImageKind(headerBuffer);
-    if (!detectedKind || !allowedTypes.includes(detectedKind)) {
-      return NextResponse.json(
-        { error: '파일 내용이 이미지 형식과 일치하지 않습니다.' },
-        { status: 400 },
-      );
-    }
+  // 변환 분기: 메일은 PNG (Outlook 호환), 설문은 WebP (브라우저 최적화).
+  // GIF/SVG 는 양쪽 모두 원본 유지 (애니메이션/벡터).
+  const shouldConvert =
+    kind === 'mail'
+      ? MAIL_CONVERTIBLE_TYPES.includes(file.type)
+      : SURVEY_CONVERTIBLE_TYPES.includes(file.type);
 
-    // 파일 크기 제한 (10MB)
-    const maxSize = 10 * 1024 * 1024; // 10MB
-    if (file.size > maxSize) {
-      return NextResponse.json({ error: '파일 크기는 10MB 이하여야 합니다.' }, { status: 400 });
-    }
-
-    // 파일명 위생 검증 — mail/notice 첨부 라우트와 대칭 (path traversal·특수문자 차단)
-    const filenameError = validateFilename(file.name);
-    if (filenameError) {
-      return NextResponse.json({ error: filenameError }, { status: 400 });
-    }
-
-    // 환경 변수 확인
-    const bucketName = process.env['CLOUDFLARE_R2_BUCKET'];
-    const publicUrl = process.env['CLOUDFLARE_R2_PUBLIC_URL'];
-
-    if (!bucketName || !publicUrl) {
-      const error = new Error('Cloudflare R2 환경 변수가 설정되지 않았습니다.');
-      console.error(error.message);
-      Sentry.captureException(error);
-      return NextResponse.json({ error: '서버 설정 오류' }, { status: 500 });
-    }
-
-    // kind 파라미터 검증 (mail | survey) — 변환 분기에 필요하므로 먼저 읽음
-    const KIND_VALUES = new Set(['mail', 'survey']);
-    const kindRaw = formData.get('kind');
-    const kind = typeof kindRaw === 'string' && KIND_VALUES.has(kindRaw) ? kindRaw : null;
-    if (!kind) {
-      return NextResponse.json(
-        { error: '잘못된 또는 누락된 kind 파라미터 (mail | survey)' },
-        { status: 400 },
-      );
-    }
-
-    // 파일을 ArrayBuffer로 변환
-    const arrayBuffer = await file.arrayBuffer();
-    let buffer = Buffer.from(arrayBuffer);
-    let contentType = file.type;
-    let fileExtension: string;
-
-    // SVG 본문 가드: <script>, on*= 이벤트 핸들러, javascript: URL 등 차단.
-    // 앞 256KB 만 검사하면 SVG 최대 10MB 의 뒷부분에 숨긴 스크립트를 놓치므로 전체 본문을 검사한다.
-    if (detectedKind === 'image/svg+xml') {
-      if (svgBodyHasScript(buffer)) {
-        return NextResponse.json(
-          { error: 'SVG 파일에 허용되지 않는 요소가 포함되어 있습니다.' },
-          { status: 400 },
-        );
+  let converted = false;
+  if (shouldConvert) {
+    try {
+      if (kind === 'mail') {
+        buffer = await sharp(buffer).png({ compressionLevel: 9 }).toBuffer();
+        contentType = 'image/png';
+        fileExtension = 'png';
+      } else {
+        buffer = await sharp(buffer).webp({ quality: 85 }).toBuffer();
+        contentType = 'image/webp';
+        fileExtension = 'webp';
       }
-    }
-
-    // 변환 분기: 메일은 PNG (Outlook 호환), 설문은 WebP (브라우저 최적화).
-    // GIF/SVG 는 양쪽 모두 원본 유지 (애니메이션/벡터).
-    const shouldConvert =
-      kind === 'mail'
-        ? MAIL_CONVERTIBLE_TYPES.includes(file.type)
-        : SURVEY_CONVERTIBLE_TYPES.includes(file.type);
-
-    if (shouldConvert) {
-      try {
-        if (kind === 'mail') {
-          buffer = await sharp(buffer).png({ compressionLevel: 9 }).toBuffer();
-          contentType = 'image/png';
-          fileExtension = 'png';
-        } else {
-          buffer = await sharp(buffer).webp({ quality: 85 }).toBuffer();
-          contentType = 'image/webp';
-          fileExtension = 'webp';
-        }
-      } catch (conversionError) {
-        console.error('이미지 변환 실패, 원본 저장:', conversionError);
-        Sentry.captureException(conversionError, {
-          tags: { operation: 'image_conversion', kind },
-          level: 'warning',
-        });
-        // 변환 실패 시 원본 저장 — 감지된 형식 우선, 폴백은 파일명 확장자 sanitize
-        fileExtension = imageKindToExt(detectedKind) ?? sanitizeImageExt(getFileExt(file.name));
-      }
-    } else {
-      // 변환 대상 아님 (mail: GIF/SVG / survey: GIF/SVG/WebP/PNG) — 원본 유지.
-      // 감지된 형식으로 확장자 결정 (파일명 의존 제거), 폴백은 파일명 확장자 sanitize
+      converted = true;
+    } catch (conversionError) {
+      ctx.log.error({ err: conversionError }, '이미지 변환 실패 — 원본 저장 폴백');
+      Sentry.captureException(conversionError, {
+        tags: { operation: 'image_conversion', kind },
+        level: 'warning',
+      });
+      // 변환 실패 시 원본 저장 — 감지된 형식 우선, 폴백은 파일명 확장자 sanitize
       fileExtension = imageKindToExt(detectedKind) ?? sanitizeImageExt(getFileExt(file.name));
     }
-
-    // 파일 이름 생성 (타임스탬프 + 랜덤 문자열)
-    const timestamp = Date.now();
-    const randomString = Math.random().toString(36).substring(2, 15);
-    const fileName = `tmp/${kind}/${timestamp}-${randomString}.${fileExtension}`;
-
-    // R2에 업로드.
-    // SVG 는 본문 가드를 통과했더라도 인라인 렌더 시 스크립트 실행 위험이 남으므로
-    // attachment disposition 으로 강제 다운로드시켜 inline 실행을 차단한다 (defense in depth).
-    const command = new PutObjectCommand({
-      Bucket: bucketName,
-      Key: fileName,
-      Body: buffer,
-      ContentType: contentType,
-      ...(contentType === 'image/svg+xml' ? { ContentDisposition: 'attachment' } : {}),
-    });
-
-    await r2Client.send(command);
-
-    // 공개 URL 반환
-    const imageUrl = `${publicUrl}/${fileName}`;
-    return NextResponse.json({ url: imageUrl });
-  } catch (error) {
-    console.error('이미지 업로드 오류:', error);
-    Sentry.captureException(error, {
-      tags: { operation: 'image_upload' },
-    });
-    return NextResponse.json({ error: '이미지 업로드 중 오류가 발생했습니다.' }, { status: 500 });
+  } else {
+    // 변환 대상 아님 (mail: GIF/SVG / survey: GIF/SVG/WebP/PNG) — 원본 유지.
+    // 감지된 형식으로 확장자 결정 (파일명 의존 제거), 폴백은 파일명 확장자 sanitize
+    fileExtension = imageKindToExt(detectedKind) ?? sanitizeImageExt(getFileExt(file.name));
   }
+  ctx.bind({ converted });
+
+  // 파일 이름 생성 (타임스탬프 + 랜덤 문자열)
+  const timestamp = Date.now();
+  const randomString = Math.random().toString(36).substring(2, 15);
+  const fileName = `tmp/${kind}/${timestamp}-${randomString}.${fileExtension}`;
+
+  // R2에 업로드.
+  // SVG 는 본문 가드를 통과했더라도 인라인 렌더 시 스크립트 실행 위험이 남으므로
+  // attachment disposition 으로 강제 다운로드시켜 inline 실행을 차단한다 (defense in depth).
+  const command = new PutObjectCommand({
+    Bucket: bucketName,
+    Key: fileName,
+    Body: buffer,
+    ContentType: contentType,
+    ...(contentType === 'image/svg+xml' ? { ContentDisposition: 'attachment' } : {}),
+  });
+
+  await r2Client.send(command);
+
+  // 공개 URL 반환
+  const imageUrl = `${publicUrl}/${fileName}`;
+  return NextResponse.json({ url: imageUrl });
 }
+
+export const POST = withRouteLogging('/api/upload/image', handleImageUpload, {
+  errorMessage: '이미지 업로드 중 오류가 발생했습니다.',
+  // 기존 최외곽 catch 의 Sentry 태그 유지 (태그 기준 알림/필터 호환)
+  sentryTags: { operation: 'image_upload' },
+});

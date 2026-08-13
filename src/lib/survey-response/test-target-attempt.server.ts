@@ -2,15 +2,9 @@ import { and, eq, isNull, ne, sql } from 'drizzle-orm';
 import 'server-only';
 
 import { db } from '@/db';
-import {
-  contactTargets,
-  responseAnswers,
-  responseEditLogs,
-  surveyResponses,
-  surveys,
-  testResponseAttempts,
-} from '@/db/schema';
+import { contactTargets, surveyResponses, surveys, testResponseAttempts } from '@/db/schema';
 import type { PageVisit } from '@/db/schema/schema-types';
+import { resetTestResponseRow } from '@/lib/survey-response/reset-test-response.server';
 import type { TestAttemptIdentity } from '@/shared/types/test-attempt';
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -61,42 +55,44 @@ export async function assertAnonymousTestSession(
   }
 }
 
+/**
+ * 이어하기가 가능한 status — 종결이 아닌 상태의 화이트리스트.
+ *
+ * `drop` 은 종결이 아니다. `sweep_stale_sessions()` 가 3시간 유휴 행을 `drop` 으로 바꾸면서
+ * `is_completed` 는 false 로 남기므로, `drop` 을 종결로 보면 잠시 자리를 비운 테스터의 답이
+ * 첫 입력 시점에 통째로 지워진다. 되살리기(status → in_progress)로 처리한다.
+ *
+ * 목록 밖의 값(completed·screened_out·bad·quotaful_out, 그리고 알 수 없는 값)은 초기화 대상이다 —
+ * 모르는 상태를 이어하기로 흘리면 쓰기 가드에서 예기치 않은 실패가 된다.
+ *
+ * 판정의 SSOT — 진입 시점(resumeOrCreateResponse 의 isTestTarget 분기)이 이 함수를 그대로 쓴다.
+ * 두 지점이 갈리면 진입에서 복원한 답을 첫 입력이 지우거나 그 반대가 되므로 분기하지 말 것.
+ */
+export function isResumableTestStatus(status: string): boolean {
+  return status === 'in_progress' || status === 'drop';
+}
+
 async function resetTestTargetResponse(
   tx: DbTransaction,
   responseId: string,
   input: AcquireTestTargetResponseInput,
   fixedVersionId: string | null,
 ): Promise<void> {
-  const now = new Date();
-  await tx
-    .update(surveyResponses)
-    .set({
-      questionResponses: {},
-      isCompleted: false,
-      status: 'in_progress',
-      completedAt: null,
-      startedAt: now,
-      lastActivityAt: now,
-      versionId: fixedVersionId,
-      currentStepId: input.currentStepId,
-      pageVisits: [],
-      totalSeconds: null,
-      progressPct: null,
-      visibleStepIndex: input.visibleStepIndex ?? null,
-      visibleStepTotal: input.visibleStepTotal ?? null,
-      userAgent: input.userAgent ?? null,
-      ipHash: input.ipHash ?? null,
-      fpHash: input.fpHash ?? null,
-      deviceId: input.deviceId ?? null,
-      platform: input.platform ?? null,
-      browser: input.browser ?? null,
-      metadata: null,
-      lastEditedAt: null,
-      sessionId: input.sessionId,
-    })
-    .where(eq(surveyResponses.id, responseId));
-  await tx.delete(responseAnswers).where(eq(responseAnswers.responseId, responseId));
-  await tx.delete(responseEditLogs).where(eq(responseEditLogs.responseId, responseId));
+  // 초기화 컬럼 집합은 resetTestResponseRow 가 SSOT — 익명 테스트 재시작과 공유한다.
+  await resetTestResponseRow(tx, responseId, {
+    sessionId: input.sessionId,
+    versionId: fixedVersionId,
+    currentStepId: input.currentStepId,
+    pageVisits: [],
+    visibleStepIndex: input.visibleStepIndex,
+    visibleStepTotal: input.visibleStepTotal,
+    userAgent: input.userAgent,
+    ipHash: input.ipHash,
+    fpHash: input.fpHash,
+    deviceId: input.deviceId,
+    platform: input.platform,
+    browser: input.browser,
+  });
 }
 
 export async function acquireTestTargetResponse(
@@ -203,8 +199,12 @@ export async function acquireTestTargetResponse(
   }
   if (!response) throw new Error('테스트 응답을 시작할 수 없습니다');
 
+  // 버전 불일치는 이탈 여부와 무관한 별개의 안전장치 — 재배포로 구조가 바뀐 구버전 답을
+  // 주입하면 유령 답과 필수 검증 우회가 생기므로 status 와 무관하게 항상 초기화한다.
   const reset =
-    response.status !== 'in_progress' || response.versionId !== survey.currentVersionId;
+    !isResumableTestStatus(response.status) || response.versionId !== survey.currentVersionId;
+  // 중도 이탈 행을 이어받는 경우 — 답은 그대로 두고 status 만 되살린다.
+  const revive = !reset && response.status === 'drop';
   if (reset) {
     if (priorAttempt) {
       throw new Error('새로 연 테스트 화면에서 다시 입력해주세요');
@@ -233,7 +233,11 @@ export async function acquireTestTargetResponse(
   }
   await tx
     .update(surveyResponses)
-    .set({ sessionId: input.sessionId })
+    .set({
+      sessionId: input.sessionId,
+      // 되살리기는 답을 보존하므로 초기화와 달리 status·활동시각만 갱신한다.
+      ...(revive ? { status: 'in_progress' as const, lastActivityAt: now } : {}),
+    })
     .where(eq(surveyResponses.id, response.id));
   await tx
     .update(contactTargets)

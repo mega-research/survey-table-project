@@ -43,6 +43,46 @@ describe('useFormattedNumericInput', () => {
     expect(onRawChange).toHaveBeenCalledWith('100');
   });
 
+  it('허용값이 2와 8이면 다른 숫자 입력과 붙여넣기를 거부한다', () => {
+    const onRawChange = vi.fn();
+    const { result } = renderHook(() =>
+      useFormattedNumericInput({
+        rawValue: '',
+        onRawChange,
+        numberFormat: { allowedValues: [2, 8] },
+        enabled: true,
+      }),
+    );
+
+    act(() => result.current.handleChange(changeEvent('5')));
+    act(() => result.current.handleChange(changeEvent('28')));
+    expect(onRawChange).not.toHaveBeenCalled();
+
+    act(() => result.current.handleChange(changeEvent('2')));
+    act(() => result.current.handleChange(changeEvent('8')));
+    expect(onRawChange).toHaveBeenNthCalledWith(1, '2');
+    expect(onRawChange).toHaveBeenNthCalledWith(2, '8');
+  });
+
+  it('여러 자리 허용값은 완성 가능한 중간 입력을 허용한다', () => {
+    const onRawChange = vi.fn();
+    const { result } = renderHook(() =>
+      useFormattedNumericInput({
+        rawValue: '',
+        onRawChange,
+        numberFormat: { allowedValues: [10, 20] },
+        enabled: true,
+      }),
+    );
+
+    act(() => result.current.handleChange(changeEvent('1')));
+    act(() => result.current.handleChange(changeEvent('10')));
+    act(() => result.current.handleChange(changeEvent('3')));
+    expect(onRawChange).toHaveBeenNthCalledWith(1, '1');
+    expect(onRawChange).toHaveBeenNthCalledWith(2, '10');
+    expect(onRawChange).toHaveBeenCalledTimes(2);
+  });
+
   it('환산 표시와 min 힌트 — min 힌트는 포커스 중 숨기고 blur 후 표시', () => {
     const { result } = renderHook(() =>
       useFormattedNumericInput({

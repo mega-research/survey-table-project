@@ -20,7 +20,10 @@ const SelectTrigger = React.forwardRef<
   <SelectPrimitive.Trigger
     ref={ref}
     className={cn(
-      'border-input bg-background ring-offset-background data-[placeholder]:text-muted-foreground focus:ring-ring flex h-10 w-full items-center justify-between rounded-md border px-3 py-2 text-sm focus:ring-2 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1',
+      // text-left 필수: button 의 UA 기본 스타일이 text-align:center 라, line-clamp 로 잘린
+      // 값이 span 안에서 가운데 정렬되어 좌우로 여백이 반씩 갈린다. 라벨마다 잘리는 양이
+      // 달라 글자 시작 위치가 제각각으로 보인다.
+      'border-input bg-background ring-offset-background data-[placeholder]:text-muted-foreground focus:ring-ring flex h-10 w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm focus:ring-2 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1',
       className,
     )}
     {...props}

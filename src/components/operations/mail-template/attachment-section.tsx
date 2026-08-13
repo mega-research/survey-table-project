@@ -139,7 +139,7 @@ export function AttachmentSection({ attachments, onChange, onUploadingChange }: 
 
   const handleRemove = (att: MailAttachment) => {
     onChange((prev) => prev.filter((a) => a.key !== att.key));
-    // tmp 만 즉시 R2 삭제 — 영구 위치는 저장 시 orchestrator 가 처리.
+    // tmp 만 즉시 R2 삭제 — 영구 위치는 저장 diff 가 유예 삭제 큐에 등록해 처리.
     void deleteMailAttachmentTmp(att.key);
   };
 

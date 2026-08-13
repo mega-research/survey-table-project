@@ -49,7 +49,7 @@ export function QuestionPreview({ question }: { question: Question }) {
             tableTitle={question.tableTitle}
             columns={question.tableColumns}
             rows={question.tableRowsData}
-            tableHeaderGrid={question.tableHeaderGrid}
+            tableHeaderGrid={question.tableHeaderGrid ?? undefined}
             className="border-0 shadow-none"
             hideColumnLabels={question.hideColumnLabels}
             choiceControlType={(cell) => getGroupTypeOfCell(question, cell.id)}
@@ -60,9 +60,15 @@ export function QuestionPreview({ question }: { question: Question }) {
       return (
         <div className={layout.className} style={layout.style}>
           {question.options?.map((option) => (
-            <div key={option.id} className="flex items-center space-x-2">
-              <input type={question.type} name={question.id} disabled className="text-blue-500" />
-              <label className="text-sm text-gray-700">{option.label}</label>
+            // items-start + mt-0.5: 여러 줄 라벨에서 컨트롤을 첫 줄 중앙에 고정
+            <div key={option.id} className="flex items-start space-x-2">
+              <input
+                type={question.type}
+                name={question.id}
+                disabled
+                className="mt-0.5 shrink-0 text-blue-500"
+              />
+              <label className="whitespace-pre-line text-sm text-gray-700">{option.label}</label>
             </div>
           ))}
         </div>
@@ -96,7 +102,7 @@ export function QuestionPreview({ question }: { question: Question }) {
           tableTitle={question.tableTitle}
           columns={question.tableColumns}
           rows={question.tableRowsData}
-          tableHeaderGrid={question.tableHeaderGrid}
+          tableHeaderGrid={question.tableHeaderGrid ?? undefined}
           className="border-0 shadow-none"
           hideColumnLabels={question.hideColumnLabels}
         />
@@ -195,7 +201,7 @@ function RankingPreview({ question }: { question: Question }) {
             tableTitle={question.tableTitle}
             columns={question.tableColumns}
             rows={question.tableRowsData}
-            tableHeaderGrid={question.tableHeaderGrid}
+            tableHeaderGrid={question.tableHeaderGrid ?? undefined}
             className="border-0 shadow-none"
             hideColumnLabels={question.hideColumnLabels}
           />
@@ -241,7 +247,7 @@ function RankingPreview({ question }: { question: Question }) {
           tableTitle={question.tableTitle}
           columns={question.tableColumns}
           rows={question.tableRowsData}
-          tableHeaderGrid={question.tableHeaderGrid}
+          tableHeaderGrid={question.tableHeaderGrid ?? undefined}
           className="border-0 shadow-none"
           hideColumnLabels={question.hideColumnLabels}
         />

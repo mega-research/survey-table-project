@@ -14,9 +14,10 @@ export const MailPreviewSampleSchema = z.object({
 });
 export type MailPreviewSample = z.infer<typeof MailPreviewSampleSchema>;
 
-/** 미리보기 샘플 입력 */
+/** 미리보기 샘플 입력. contactTargetId 지정 시 첫 컨택 대신 해당 컨택 기준 샘플. */
 export const GetMailPreviewSampleInput = z.object({
   surveyId: z.string(),
+  contactTargetId: z.string().uuid().optional(),
 });
 export type GetMailPreviewSampleInput = z.infer<typeof GetMailPreviewSampleInput>;
 

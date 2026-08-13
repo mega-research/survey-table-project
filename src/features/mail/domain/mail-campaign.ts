@@ -68,6 +68,24 @@ export const CancelCampaignInput = z.object({
 export type CancelCampaignInput = z.infer<typeof CancelCampaignInput>;
 
 // ─────────────────────────────────────────────────────────────────────────────
+// resyncCampaign
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const ResyncCampaignInput = z.object({
+  surveyId: z.string().uuid(),
+  campaignId: z.string().uuid(),
+});
+export type ResyncCampaignInput = z.infer<typeof ResyncCampaignInput>;
+
+export const ResyncCampaignResult = z.object({
+  /** Resend 에 상태를 되물은 수신자 수 (message id 보유 + 미종결 상태) */
+  checked: z.number(),
+  /** 실제로 상태가 전이된 수신자 수 */
+  updated: z.number(),
+});
+export type ResyncCampaignResult = z.infer<typeof ResyncCampaignResult>;
+
+// ─────────────────────────────────────────────────────────────────────────────
 // fetchCandidateIds
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -103,3 +121,14 @@ export const PreviewPreflightResult = z.object({
   notFoundCount: z.number(),
 });
 export type PreviewPreflightResult = z.infer<typeof PreviewPreflightResult>;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 단건 발송
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const SendSingleCampaignInput = z.object({
+  surveyId: z.string().uuid(),
+  contactTargetId: z.string().uuid(),
+  mailTemplateId: z.string().uuid(),
+});
+export type SendSingleCampaignInput = z.infer<typeof SendSingleCampaignInput>;

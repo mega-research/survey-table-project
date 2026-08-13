@@ -66,6 +66,32 @@ export const UpdateQuestionResponseInput = z.object({
 export type UpdateQuestionResponseInput = z.infer<typeof UpdateQuestionResponseInput>;
 
 // ─────────────────────────────────────────────────────────────────────────────
+// saveDraftResponse
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const SaveDraftResponseInput = z.object({
+  // 상한 128: REST beacon 경로에서 이 값이 그대로 rate limit Redis 키가 되므로
+  // 임의 길이 문자열을 막는다 (실값은 UUID 36자). oRPC 경로의 클라이언트 축 추출기
+  // (extractRateLimitClientId)와 같은 상한.
+  responseId: z.string().max(128),
+  answers: QuestionResponsesSchema,
+  /** 클라이언트 발급 단조 증가 순번. 지연 도착한 오래된 draft 쓰기를 서버가 무시하는 데 쓴다. */
+  seq: z.number().int().positive().optional(),
+  ...TestAttemptIdentityFields,
+});
+export type SaveDraftResponseInput = z.infer<typeof SaveDraftResponseInput>;
+
+export const SaveDraftResponseOutput = z.object({
+  ok: z.literal(true),
+  /**
+   * 실제로 답변이 쓰였는지 여부. seq 가드가 stale 로 판정하면 false — 호출측(flushPendingAnswers)
+   * 은 이 값이 false 면 pending 을 비우지 않아야 한다(그렇지 않으면 서버에 반영되지 않은 값을
+   * "저장됨" 으로 착각해 유실한다).
+   */
+  applied: z.boolean(),
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // createResponseWithFirstAnswer / createBlankResponse
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -119,6 +145,7 @@ export const BlockReasonSchema = z.enum([
   'quota_closed',
   'survey_paused',
   'invalid_test_token',
+  'not_accepting',
 ]);
 
 export const FirstAnswerResultSchema = z.discriminatedUnion('kind', [
@@ -126,6 +153,19 @@ export const FirstAnswerResultSchema = z.discriminatedUnion('kind', [
     kind: z.literal('created'),
     id: z.string(),
     contactTargetId: z.string().nullable(),
+    /**
+     * 응답 행에 이미 적용된 draft seq(survey_responses.metadata.draftSeq) — 컨택 재사용으로
+     * 기존 행을 물려받을 때만 값이 있다. 클라이언트가 draftSeqRef 를 이 값 이상으로 seed 해,
+     * localStorage 없는 재진입(다른 기기·시크릿창)에서도 이후 flush 가 stale 로 막히지 않게 한다.
+     */
+    draftSeq: z.number().int().nonnegative().optional(),
+    /**
+     * 실제 행에 기록된 versionId (무중단 갈아타기 — 티켓 04).
+     * 배포 전 열린 탭이 구버전 versionId 로 첫 답변을 보내면 서버가 현재 버전으로 재핀해
+     * 행을 만든다. 클라이언트는 이 값이 자신이 알던 versionId 와 다르면 재핀을 감지해
+     * 최신 스냅샷을 재취득한다. optional 인 이유는 구 클라이언트/스키마 호환.
+     */
+    versionId: z.string().nullable().optional(),
   }),
   z.object({
     kind: z.literal('blocked'),

@@ -22,6 +22,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 
 import { db } from '@/db';
 import {
+  questionGroups as questionGroupsTable,
   questions as questionsTable,
   surveys as surveysTable,
   surveyVersions as surveyVersionsTable,
@@ -105,8 +106,8 @@ describe.skipIf(!isLocalDb)('surveyBuilder procedure round-trip (real local DB)'
       .where(eq(surveyVersionsTable.id, version.id));
     expect(versionRow?.versionNumber).toBe(1);
     expect(versionRow?.status).toBe('published');
-    expect(versionRow?.snapshot.questions.length).toBe(1);
-    expect(versionRow?.snapshot.questions[0]?.id).toBe(questionId);
+    expect(versionRow?.snapshot?.questions.length).toBe(1);
+    expect(versionRow?.snapshot?.questions[0]?.id).toBe(questionId);
 
     // 5. surveys.currentVersionId 가 새 버전을 가리키는지 검증 (불변식 C)
     const [surveyRow] = await db
@@ -149,10 +150,10 @@ describe.skipIf(!isLocalDb)('surveyBuilder procedure round-trip (real local DB)'
       defaultValueTemplate: '{{attrs_name}}',
       inputType: 'number',
       emptyDefault: 7.5,
-      mobileTableDisplayMode: 'drilldown-original-row',
+      mobileTableDisplayMode: 'row-wise-original',
       mobileDrilldownOmitLeadingColumns: 2,
-      mobileDrilldownRepeatHeaderStartRow: null,
-      mobileDrilldownRepeatHeaderEndRow: null,
+      mobileDrilldownRepeatHeaderStartRow: 0,
+      mobileDrilldownRepeatHeaderEndRow: 2,
     });
 
     // 3. 복제 실행
@@ -193,10 +194,10 @@ describe.skipIf(!isLocalDb)('surveyBuilder procedure round-trip (real local DB)'
     expect(copiedQuestion?.defaultValueTemplate).toBe('{{attrs_name}}');
     expect(copiedQuestion?.inputType).toBe('number');
     expect(copiedQuestion?.emptyDefault).toBe(7.5);
-    expect(copiedQuestion?.mobileTableDisplayMode).toBe('drilldown-original-row');
+    expect(copiedQuestion?.mobileTableDisplayMode).toBe('row-wise-original');
     expect(copiedQuestion?.mobileDrilldownOmitLeadingColumns).toBe(2);
-    expect(copiedQuestion?.mobileDrilldownRepeatHeaderStartRow).toBeNull();
-    expect(copiedQuestion?.mobileDrilldownRepeatHeaderEndRow).toBeNull();
+    expect(copiedQuestion?.mobileDrilldownRepeatHeaderStartRow).toBe(0);
+    expect(copiedQuestion?.mobileDrilldownRepeatHeaderEndRow).toBe(2);
   });
 
   // 회귀: isSlugAvailable 의 excludeSurveyId 는 "자기 자신을 제외"하는 의미여야 한다(ne).
@@ -265,5 +266,201 @@ describe.skipIf(!isLocalDb)('surveyBuilder procedure round-trip (real local DB)'
       .where(eq(surveysTable.id, surveyId));
     expect(after?.privateToken).toBe(newToken);
     expect(after?.privateToken).not.toBe(oldToken);
+  });
+
+  // 복제 계약: 설문에 복사된 LUT 사본(lookups)은 LUT id 보존 상태로 복제본에 복사되어야 한다.
+  // LUT 를 옵션 소스로 참조하는 질문이 복제본에서 옵션을 잃지 않기 위한 무결성 계약.
+  it('duplicate: lookups(LUT 사본)가 LUT id 보존 상태로 복제본에 복사된다', async () => {
+    const original = await client.surveys.create({ title: '복제-LUT보존-원본' });
+    createdSurveyIds.push(original.id);
+
+    const lookups = [
+      {
+        id: 'lut-dup-contract',
+        name: '지역 코드',
+        columns: ['지역', '코드'],
+        rows: [
+          { 지역: '서울', 코드: 1 },
+          { 지역: '부산', 코드: 2 },
+        ],
+      },
+    ];
+    await db.update(surveysTable).set({ lookups }).where(eq(surveysTable.id, original.id));
+
+    const copy = await client.surveys.duplicate({ surveyId: original.id });
+    expect(copy).not.toBeNull();
+    if (!copy) throw new Error('duplicate 가 null 을 반환했다');
+    createdSurveyIds.push(copy.id);
+
+    const [copiedSurvey] = await db
+      .select({ lookups: surveysTable.lookups })
+      .from(surveysTable)
+      .where(eq(surveysTable.id, copy.id));
+    expect(copiedSurvey?.lookups).toEqual(lookups);
+  });
+
+  // 복제 계약(스냅샷 횟수 초기화): 복제본은 발행 이력 없이 draft 로 시작하고,
+  // 원본의 발행 횟수와 무관하게 복제본의 첫 발행이 v1 이어야 한다.
+  it('duplicate: 복제본은 발행 이력 0개·draft 로 시작하고 첫 발행이 v1 이다', async () => {
+    // 1. 원본 생성 + 질문 1개 + 발행 (원본 v1)
+    const original = await client.surveys.create({ title: '복제-버전초기화-원본' });
+    createdSurveyIds.push(original.id);
+    await client.save.saveDiff({
+      surveyId: original.id,
+      questionChanges: {
+        upserted: [
+          {
+            id: crypto.randomUUID(),
+            type: 'text',
+            title: '버전 초기화 검증 질문',
+            required: false,
+            order: 1,
+          },
+        ] as never,
+        deleted: [],
+      },
+    });
+    const originalVersion = await client.publish.publish({
+      surveyId: original.id,
+      changeNote: '원본 첫 배포',
+    });
+    expect(originalVersion.versionNumber).toBe(1);
+
+    // 2. 복제 — 발행 이력은 넘어오지 않아야 한다
+    const copy = await client.surveys.duplicate({ surveyId: original.id });
+    expect(copy).not.toBeNull();
+    if (!copy) throw new Error('duplicate 가 null 을 반환했다');
+    createdSurveyIds.push(copy.id);
+
+    expect(copy.status).toBe('draft');
+    expect(copy.currentVersionId).toBeNull();
+
+    const copyVersions = await db
+      .select({ id: surveyVersionsTable.id })
+      .from(surveyVersionsTable)
+      .where(eq(surveyVersionsTable.surveyId, copy.id));
+    expect(copyVersions.length).toBe(0);
+
+    // 3. 복제본 첫 발행은 원본 발행 횟수와 무관하게 v1
+    const copyVersion = await client.publish.publish({
+      surveyId: copy.id,
+      changeNote: '복제본 첫 배포',
+    });
+    expect(copyVersion.versionNumber).toBe(1);
+  });
+
+  // 회귀(이슈 01): 복제는 질문 id 를 새로 발번하므로, JSONB 안의 질문 id 참조
+  // (표시조건 sourceQuestionId, 분기 goto targetQuestionId/targetQuestionMap,
+  // 그룹 표시조건)도 복제본 질문 id 로 재매핑되어야 한다. 과거 questionIdMap 을
+  // 만들기만 하고 사용하지 않아 복제본 조건·분기가 원본 id 를 참조하던 버그.
+  it('duplicate: 표시조건·분기 타겟의 질문 id 참조가 복제본 질문 id 로 재매핑된다', async () => {
+    const original = await client.surveys.create({ title: '복제-id재매핑-원본' });
+    createdSurveyIds.push(original.id);
+
+    const q1Id = crypto.randomUUID();
+    const q2Id = crypto.randomUUID();
+    const q3Id = crypto.randomUUID();
+    const groupId = crypto.randomUUID();
+
+    await db.insert(questionGroupsTable).values({
+      id: groupId,
+      surveyId: original.id,
+      name: '조건 걸린 그룹',
+      order: 1,
+      displayCondition: {
+        logicType: 'AND',
+        conditions: [
+          {
+            id: 'g-cond-1',
+            sourceQuestionId: q1Id,
+            conditionType: 'value-match',
+            requiredValues: ['yes'],
+            logicType: 'AND',
+          },
+        ],
+      },
+    });
+
+    await db.insert(questionsTable).values([
+      {
+        id: q1Id,
+        surveyId: original.id,
+        type: 'radio',
+        title: '조건 소스 질문',
+        order: 1,
+        options: [{ id: 'opt-yes', label: '예', value: 'yes' }],
+      },
+      {
+        id: q2Id,
+        surveyId: original.id,
+        type: 'text',
+        title: '조건 걸린 질문',
+        order: 2,
+        displayCondition: {
+          logicType: 'AND',
+          conditions: [
+            {
+              id: 'cond-1',
+              sourceQuestionId: q1Id,
+              conditionType: 'value-match',
+              requiredValues: ['yes'],
+              logicType: 'AND',
+            },
+          ],
+        },
+      },
+      {
+        id: q3Id,
+        surveyId: original.id,
+        type: 'table',
+        title: '분기 타겟 질문',
+        order: 3,
+        tableValidationRules: [
+          {
+            id: 'rule-1',
+            type: 'exclusive-check',
+            conditions: { checkType: 'checkbox', rowIds: ['row-1'] },
+            action: 'goto',
+            targetQuestionId: q1Id,
+            targetQuestionMap: { 'TV': q2Id },
+          },
+        ] as never,
+      },
+    ]);
+
+    const copy = await client.surveys.duplicate({ surveyId: original.id });
+    expect(copy).not.toBeNull();
+    if (!copy) throw new Error('duplicate 가 null 을 반환했다');
+    createdSurveyIds.push(copy.id);
+
+    const copiedQuestions = await db
+      .select({
+        id: questionsTable.id,
+        title: questionsTable.title,
+        displayCondition: questionsTable.displayCondition,
+        tableValidationRules: questionsTable.tableValidationRules,
+      })
+      .from(questionsTable)
+      .where(eq(questionsTable.surveyId, copy.id));
+
+    const copiedQ1 = copiedQuestions.find((q) => q.title === '조건 소스 질문');
+    const copiedQ2 = copiedQuestions.find((q) => q.title === '조건 걸린 질문');
+    const copiedQ3 = copiedQuestions.find((q) => q.title === '분기 타겟 질문');
+    if (!copiedQ1 || !copiedQ2 || !copiedQ3) throw new Error('복제본 질문을 찾지 못했다');
+
+    // 1. 질문 표시조건: 복제본 q1 을 가리켜야 한다 (원본 q1 아님)
+    expect(copiedQ2.displayCondition?.conditions[0]?.sourceQuestionId).toBe(copiedQ1.id);
+
+    // 2. 분기 goto 타겟: targetQuestionId·targetQuestionMap 값 모두 재매핑
+    const copiedRule = copiedQ3.tableValidationRules?.[0];
+    expect(copiedRule?.targetQuestionId).toBe(copiedQ1.id);
+    expect(copiedRule?.targetQuestionMap?.['TV']).toBe(copiedQ2.id);
+
+    // 3. 그룹 표시조건도 재매핑
+    const [copiedGroup] = await db
+      .select({ displayCondition: questionGroupsTable.displayCondition })
+      .from(questionGroupsTable)
+      .where(eq(questionGroupsTable.surveyId, copy.id));
+    expect(copiedGroup?.displayCondition?.conditions[0]?.sourceQuestionId).toBe(copiedQ1.id);
   });
 });

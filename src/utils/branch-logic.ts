@@ -15,6 +15,7 @@ import {
   TableValidationRule,
 } from '@/types/survey';
 import { evaluateRightOperand } from '@/lib/lookup/evaluate-lookup';
+import { resolveStepBranch, type RenderStep } from '@/lib/group-ordering';
 import { resolveChoiceOptions } from '@/utils/choice-source';
 import { isGroupedChoiceQuestion } from '@/utils/choice-group-helpers';
 import { emptyBranchEvalCtx, type BranchEvalCtx } from '@/utils/branch-eval';
@@ -992,4 +993,108 @@ function checkTableCellCondition(
 
   // checkType에 따라 조건 확인
   return { satisfied: quantifyRows(checkedRows, rowIds, checkType), checkedRows };
+}
+
+/**
+ * 현재 응답 기준으로 응답자가 실제 밟게 되는 step 경로를 첫 step 부터 시뮬레이션해,
+ * 경로상에 표시되는 질문 id 집합을 반환한다.
+ *
+ * 제출 검증은 이 집합만 대상으로 해야 한다 — 분기 규칙(end/전진 goto)으로 건너뛴
+ * 스텝의 질문은 displayCondition 상 표시 가능해도 응답자가 도달할 수 없으므로
+ * 필수·숫자 검증 대상이 아니다. step 히스토리 대신 시뮬레이션을 쓰는 이유는
+ * 새로고침 복구(재개) 시 히스토리가 비어 있어도 동일한 결과를 내기 위함이다.
+ *
+ * 순회 규칙은 응답 흐름(handleNext)과 동일하다:
+ *   - 표시 질문이 없는 step 은 건너뛴다.
+ *   - 분기 규칙은 step 내 표시 질문 순서대로 평가한다 (resolveStepBranch).
+ *   - end → 종료, 전진 goto → 해당 step 으로 점프, 그 외 → 다음 step.
+ */
+export function collectTraversedQuestionIds(
+  steps: RenderStep[],
+  allResponses: Record<string, unknown>,
+  allQuestions: Question[],
+  allGroups?: QuestionGroup[],
+  ctx?: BranchEvalCtx,
+): Set<string> {
+  const ids = new Set<string>();
+  for (const { displayable } of traverseDisplayableSteps(
+    steps,
+    allResponses,
+    allQuestions,
+    allGroups,
+    ctx,
+  )) {
+    for (const q of displayable) ids.add(q.id);
+  }
+  return ids;
+}
+
+/**
+ * 첫 step 부터 순회 규칙(위 collectTraversedQuestionIds 문서 참조)대로 걸으며
+ * "응답자가 실제로 서게 되는"(표시 질문이 1개 이상인) step 을 순서대로 낸다.
+ * 표시 질문이 없는 step 은 응답 흐름에서 자동 스킵되므로 산출하지 않는다.
+ */
+function* traverseDisplayableSteps(
+  steps: RenderStep[],
+  allResponses: Record<string, unknown>,
+  allQuestions: Question[],
+  allGroups?: QuestionGroup[],
+  ctx?: BranchEvalCtx,
+): Generator<{ index: number; displayable: Question[] }> {
+  const visited = new Set<number>();
+  let i = 0;
+  while (i >= 0 && i < steps.length && !visited.has(i)) {
+    visited.add(i);
+    const step = steps[i];
+    if (!step) return;
+
+    const displayable = step.items
+      .map((item) => item.question)
+      .filter((q) => shouldDisplayQuestion(q, allResponses, allQuestions, allGroups, ctx));
+    if (displayable.length === 0) {
+      i += 1;
+      continue;
+    }
+    yield { index: i, displayable };
+
+    const rules = displayable.map((q) => getBranchRuleForResponse(q, allResponses[q.id]));
+    const outcome = resolveStepBranch(steps, i, rules);
+    if (outcome.kind === 'end') return;
+    i = outcome.kind === 'goto' ? outcome.stepIndex : i + 1;
+  }
+}
+
+/**
+ * 임시저장 복원용 stepHistory 재구성 — 첫 step 부터 `targetStepIndex` 까지의
+ * 경로를 시뮬레이션해, 목표 step "이전"에 실제로 방문하는 step 인덱스 목록을
+ * 방문 순서대로 반환한다 (handleNext 가 쌓는 stepHistory 와 동일한 의미).
+ *
+ * 목표 step 에 도달할 수 없으면(end 조기 종료, goto 가 목표를 지나침 등 — 저장 후
+ * 재배포로 구조가 바뀐 경우) 빈 배열을 반환한다. 이때 이전 버튼은 비활성 유지가
+ * 안전하다 — 임의 경로를 만들어 응답자가 밟지 않은 페이지로 보내지 않는다.
+ */
+export function collectTraversedStepPath(
+  steps: RenderStep[],
+  targetStepIndex: number,
+  allResponses: Record<string, unknown>,
+  allQuestions: Question[],
+  allGroups?: QuestionGroup[],
+  ctx?: BranchEvalCtx,
+): number[] {
+  if (targetStepIndex <= 0) return [];
+
+  const path: number[] = [];
+  for (const { index } of traverseDisplayableSteps(
+    steps,
+    allResponses,
+    allQuestions,
+    allGroups,
+    ctx,
+  )) {
+    if (index === targetStepIndex) return path;
+    // 목표를 지나쳤다 — goto 점프 등으로 목표 step 이 경로에 없음.
+    if (index > targetStepIndex) return [];
+    path.push(index);
+  }
+  return [];
 }

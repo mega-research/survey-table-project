@@ -29,7 +29,12 @@ export interface PreviewResult {
  */
 export type RenderMode = 'preview' | 'send';
 
-const TOKEN_RE = /\{\{([^}]+)\}\}/g;
+// {{{...}}} 는 응답 인용 채널이라 메일에서는 값이 없다 (발송 시점엔 응답이 없음).
+// [^}]+ 이면 여는 중괄호를 삼켜 "[{X]}" 로 훼손되므로 문자 클래스를 [^{}]+ 로 좁힌다.
+// 그것만으로는 부족하다 — {{{X}}} 는 안쪽 {{X}} 만 이 정규식에 걸려 바깥쪽 중괄호 한 겹만
+// 남긴 채 부분 치환되므로, 앞뒤에 여분의 { / } 가 붙어있지 않은 이중괄호만 매치하도록
+// lookbehind/lookahead 로 감싸 삼중괄호 전체를 원문 그대로 통과시킨다.
+const TOKEN_RE = /(?<!\{)\{\{([^{}]+)\}\}(?!\})/g;
 const TAG_RE = /<[^>]+>/g;
 
 type Resolved =

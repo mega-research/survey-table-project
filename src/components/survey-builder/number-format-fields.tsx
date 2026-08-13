@@ -9,7 +9,7 @@
  * `{ key: undefined }` 대신 구조분해로 키 자체를 제거한 뒤(rest) 스프레드한다.
  */
 
-import type { ChangeEvent } from 'react';
+import { useState, type ChangeEvent } from 'react';
 
 import { Input } from '@/components/ui/input';
 import type { NumberFormat, NumberUnit } from '@/types/survey';
@@ -42,15 +42,21 @@ function normalize(nf: NumberFormat): NumberFormat | undefined {
   const isEmpty =
     !nf.thousandSeparator &&
     nf.unit === undefined &&
+    nf.unitSuffix === undefined &&
     nf.min === undefined &&
     nf.max === undefined &&
-    nf.decimalPlaces === undefined;
+    nf.decimalPlaces === undefined &&
+    (!nf.allowedValues || nf.allowedValues.length === 0);
   return isEmpty ? undefined : nf;
 }
 
 export function NumberFormatFields({ value, onChange, idPrefix }: Props) {
   const nf: NumberFormat = value ?? {};
   const emit = (next: NumberFormat) => onChange(normalize(next));
+  const [allowedValuesDraft, setAllowedValuesDraft] = useState(
+    () => nf.allowedValues?.join(', ') ?? '',
+  );
+  const [editingAllowedValues, setEditingAllowedValues] = useState(false);
 
   const handleThousandSeparatorChange = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {
@@ -77,6 +83,17 @@ export function NumberFormatFields({ value, onChange, idPrefix }: Props) {
     emit(next);
   };
 
+  // 단위 어절(원, kg, t 등) — 환산 읽기 끝에 붙는 자유 텍스트. 빈 값이면 키 제거.
+  const handleUnitSuffixChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value;
+    if (raw.trim() === '') {
+      const { unitSuffix: _drop, ...rest } = nf;
+      emit(rest);
+      return;
+    }
+    emit({ ...nf, unitSuffix: raw });
+  };
+
   const handleDecimalPlacesChange = (e: ChangeEvent<HTMLSelectElement>) => {
     const v = e.target.value;
     if (v === '') {
@@ -85,6 +102,25 @@ export function NumberFormatFields({ value, onChange, idPrefix }: Props) {
       return;
     }
     emit({ ...nf, decimalPlaces: Number(v) });
+  };
+
+  const handleAllowedValuesChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value;
+    setAllowedValuesDraft(raw);
+    const allowedValues = [
+      ...new Set(
+        raw
+          .split(',')
+          .map((part) => parseNumericInput(part.trim()))
+          .filter((item): item is number => item !== null),
+      ),
+    ];
+    if (allowedValues.length === 0) {
+      const { allowedValues: _allowedValues, ...rest } = nf;
+      emit(rest);
+      return;
+    }
+    emit({ ...nf, allowedValues });
   };
 
   // min/max 입력: 빈 값 = 해제, 완성 숫자만 커밋 (emptyDefault 입력과 동일 관례)
@@ -154,6 +190,17 @@ export function NumberFormatFields({ value, onChange, idPrefix }: Props) {
             ))}
           </select>
         </label>
+        <label className="flex items-center gap-1.5">
+          <span className="text-xs text-gray-600">단위 어절</span>
+          <Input
+            type="text"
+            value={nf.unitSuffix ?? ''}
+            onChange={handleUnitSuffixChange}
+            placeholder="원, kg, t"
+            className="h-8 w-24"
+            aria-label="단위 어절"
+          />
+        </label>
         {numberField('min', '최소')}
         {numberField('max', '최대')}
         <label className="flex items-center gap-1.5">
@@ -172,6 +219,31 @@ export function NumberFormatFields({ value, onChange, idPrefix }: Props) {
           </select>
         </label>
       </div>
+
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="flex min-w-52 flex-1 flex-col gap-1">
+          <span className="text-xs text-gray-600">허용값</span>
+          <Input
+            type="text"
+            inputMode="decimal"
+            value={
+              editingAllowedValues ? allowedValuesDraft : (nf.allowedValues?.join(', ') ?? '')
+            }
+            onFocus={() => {
+              setAllowedValuesDraft(nf.allowedValues?.join(', ') ?? '');
+              setEditingAllowedValues(true);
+            }}
+            onChange={handleAllowedValuesChange}
+            onBlur={() => setEditingAllowedValues(false)}
+            placeholder="예: 2, 8 (쉼표로 구분)"
+            className="h-8"
+            aria-label="허용값"
+          />
+        </label>
+      </div>
+      <p className="text-xs text-gray-400">
+        입력한 값 외의 숫자는 입력 단계에서 차단합니다. 비워두면 최소·최대 범위만 적용됩니다.
+      </p>
     </div>
   );
 }

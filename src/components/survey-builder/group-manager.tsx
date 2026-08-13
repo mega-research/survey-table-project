@@ -145,7 +145,8 @@ export function GroupManager({ className }: GroupManagerProps) {
 
   // 재귀적으로 그룹과 모든 하위 그룹의 질문 개수 합계 계산 (메모이제이션)
   const getTotalQuestionCount = useCallback(
-    (groupId: string): number => {
+    // 명명 함수 표현식: 재귀 자기참조가 외부 const 선언(TDZ)에 묶이지 않도록 한다
+    function getTotalQuestionCount(groupId: string): number {
       const directCount = questionCountMap.get(groupId) || 0;
       const subGroups = getSubGroups(groupId);
       const subGroupsCount = subGroups.reduce((sum, subGroup) => {

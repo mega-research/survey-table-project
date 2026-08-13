@@ -501,4 +501,25 @@ describe('MobileOriginalRowTable', () => {
     expect(screen.getByText('메가리서치 기준')).toBeInTheDocument();
     expect(screen.queryByText('{{company}} 기준')).toBeNull();
   });
+
+  it('반복 텍스트는 응답 인용 토큰도 치환한다 (quotes 누락 시 빈칸으로 렌더되던 회귀)', () => {
+    render(
+      <ContactAttrsProvider attrs={{}} quotes={{ 이름: '홍길동' }}>
+        <MobileOriginalRowTable
+          columns={[col('내용')]}
+          rows={[
+            row([{ id: 'quote-token', type: 'text', content: '{{{이름}}}님 반가워요' }], 'repeat-row'),
+            row([inputCell], 'answer-row'),
+          ]}
+          interactiveRowId="answer-row"
+          hideColumnLabels
+          renderCell={(cell) => (
+            <InteractiveCell cell={cell} questionId="q1" isTestMode value={{}} onChange={vi.fn()} />
+          )}
+        />
+      </ContactAttrsProvider>,
+    );
+    expect(screen.getByText('홍길동님 반가워요')).toBeInTheDocument();
+    expect(screen.queryByText('님 반가워요')).toBeNull();
+  });
 });

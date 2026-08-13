@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   collectNumericIssues,
+  collectVisibleTableCells,
   evaluateSumConstraint,
   pruneSumConstraints,
 } from '@/lib/survey/numeric-validation';
@@ -154,6 +155,43 @@ describe('collectNumericIssues — 테이블', () => {
     expect(collectNumericIssues(q, { c1: '3', c2: '5' })).toHaveLength(0);
   });
 
+  it('셀 requiredMessage 지정 시 그 문구로 별도 이슈를 만들고, 미지정 셀은 기본 문구로 묶는다', () => {
+    const rows: TableRow[] = [
+      {
+        id: 'r1',
+        cells: [
+          {
+            id: 'c1',
+            type: 'input',
+            content: '',
+            inputType: 'number',
+            required: true,
+            requiredMessage: '연령을 입력해 주세요',
+          },
+          { id: 'c2', type: 'input', content: '', inputType: 'number', required: true },
+          { id: 'c3', type: 'input', content: '', inputType: 'number' },
+        ],
+      },
+    ] as TableRow[];
+    const q = tableQuestion({ tableRowsData: rows });
+    const issues = collectNumericIssues(q, { c3: '5' });
+    expect(issues).toHaveLength(2);
+    expect(issues).toContainEqual(
+      expect.objectContaining({
+        kind: 'required-cells',
+        message: '연령을 입력해 주세요',
+        cellIds: ['c1'],
+      }),
+    );
+    expect(issues).toContainEqual(
+      expect.objectContaining({
+        kind: 'required-cells',
+        message: '필수 응답이 비어있습니다',
+        cellIds: ['c2'],
+      }),
+    );
+  });
+
   it('사이드카 키만 있는 응답은 미접촉으로 스킵한다', () => {
     const rows: TableRow[] = [
       {
@@ -190,6 +228,37 @@ describe('collectNumericIssues — 테이블', () => {
     // r2 선택 — c2 가 표시되므로 필수 발동
     const issues = collectNumericIssues(q, { c1: '5', __selectedRowIds: ['r2'] });
     expect(issues[0]).toMatchObject({ kind: 'required-cells', cellIds: ['c2'] });
+  });
+
+  it('연결 동적 그룹의 선택 행이 생길 때만 showWhenDynamicGroupId 행을 표시한다', () => {
+    const rows: TableRow[] = [
+      {
+        id: 'base',
+        label: '기본 행',
+        cells: [{ id: 'base-cell', type: 'input', content: '' }],
+      },
+      {
+        id: 'dynamic',
+        label: '동적 행',
+        dynamicGroupId: 'g1',
+        cells: [{ id: 'dynamic-cell', type: 'input', content: '' }],
+      },
+      {
+        id: 'subtotal',
+        label: '소계 행',
+        showWhenDynamicGroupId: 'g1',
+        cells: [{ id: 'subtotal-cell', type: 'input', content: '', required: true }],
+      },
+    ] as TableRow[];
+    const q = tableQuestion({
+      tableRowsData: rows,
+      dynamicRowConfigs: [{ groupId: 'g1', enabled: true }],
+    } as Partial<Question>);
+
+    expect(collectVisibleTableCells(q, {}, undefined).map((cell) => cell.id))
+      .toEqual(['base-cell']);
+    expect(collectVisibleTableCells(q, { __selectedRowIds: ['dynamic'] }, undefined).map((cell) => cell.id))
+      .toEqual(['base-cell', 'dynamic-cell', 'subtotal-cell']);
   });
 
   it('미선택 동적 행에 잔존한 셀 값은 합계에서 제외한다 (선택되면 포함)', () => {
@@ -356,6 +425,579 @@ describe('collectNumericIssues — 인터랙티브 셀 필수 (radio/checkbox/se
 
   it('테이블 미접촉이면 인터랙티브 필수 셀도 스킵한다', () => {
     expect(collectNumericIssues(interactiveQuestion(), {})).toHaveLength(0);
+  });
+});
+
+describe('collectNumericIssues — 질문 상세기입', () => {
+  it('필수 radio 질문의 선택 상세기입이 공백이면 질문 이동 타깃이 있는 이슈를 반환한다', () => {
+    const question = {
+      id: 'question-detail',
+      type: 'radio',
+      title: '기타 질문',
+      required: true,
+      order: 0,
+      options: [{
+        id: 'other-option',
+        value: 'other',
+        label: '기타',
+        allowTextInput: true,
+      }],
+    } as Question;
+
+    expect(
+      collectNumericIssues(question, 'other', {
+        allResponses: { 'question-detail': 'other' },
+        allQuestions: [question],
+        optionTexts: { 'other-option': '   ' },
+      }),
+    ).toEqual([{
+      kind: 'required-detail',
+      message: '필수 응답이 비어있습니다',
+      detailTargetIds: ['question-detail:option:other-option'],
+    }]);
+  });
+});
+
+describe('collectNumericIssues — 테이블 필수 옵션 상세기입', () => {
+  function detailedOptionCellQuestion(overrides: Partial<Question> = {}): Question {
+    return tableQuestion({
+      tableRowsData: [
+        {
+          id: 'r1',
+          label: '행1',
+          cells: [
+            {
+              id: 'radio-cell',
+              type: 'radio',
+              content: '',
+              required: true,
+              radioOptions: [
+                {
+                  id: 'radio-other',
+                  value: 'radio-other-value',
+                  label: '기타',
+                  allowTextInput: true,
+                },
+              ],
+            },
+            {
+              id: 'checkbox-cell',
+              type: 'checkbox',
+              content: '',
+              required: true,
+              checkboxOptions: [
+                {
+                  id: 'checkbox-other',
+                  value: 'checkbox-other-value',
+                  label: '기타',
+                  allowTextInput: true,
+                },
+              ],
+            },
+            {
+              id: 'select-cell',
+              type: 'select',
+              content: '',
+              required: true,
+              selectOptions: [
+                {
+                  id: 'select-other',
+                  value: 'select-other-value',
+                  label: '기타',
+                  allowTextInput: true,
+                },
+              ],
+            },
+            {
+              id: 'ranking-cell',
+              type: 'ranking',
+              content: '',
+              required: true,
+              rankingOptions: [
+                {
+                  id: 'ranking-other',
+                  value: 'ranking-other-value',
+                  label: '기타',
+                  allowTextInput: true,
+                },
+              ],
+            },
+          ],
+        },
+      ] as TableRow[],
+      ...overrides,
+    });
+  }
+
+  it('필수 radio 셀에서 선택한 상세기입 옵션이 공백이면 required-cells 이슈다', () => {
+    const question = detailedOptionCellQuestion();
+
+    expect(
+      collectNumericIssues(
+        question,
+        {
+          'radio-cell': 'radio-other-value',
+          'checkbox-cell': ['checkbox-other-value'],
+          'select-cell': 'select-other-value',
+          'ranking-cell': [{ rank: 1, optionValue: 'ranking-other-value', optionText: '상세 내용' }],
+        },
+        {
+          allResponses: {},
+          allQuestions: [question],
+          optionTexts: {
+            'radio-other': '   ',
+            'checkbox-other': '상세 내용',
+            'select-other': '상세 내용',
+          },
+        },
+      ),
+    ).toContainEqual({
+      kind: 'required-cells',
+      message: '필수 응답이 비어있습니다',
+      cellIds: ['radio-cell'],
+      detailTargetIds: ['q1:option:radio-other'],
+    });
+  });
+
+  it('필수 checkbox·select·ranking 셀의 선택 상세기입 누락을 같은 이슈로 합친다', () => {
+    const question = detailedOptionCellQuestion();
+
+    expect(
+      collectNumericIssues(
+        question,
+        {
+          'radio-cell': 'radio-other-value',
+          'checkbox-cell': ['checkbox-other-value'],
+          'select-cell': 'select-other-value',
+          'ranking-cell': [{ rank: 1, optionValue: 'ranking-other-value', optionText: '   ' }],
+        },
+        {
+          allResponses: {},
+          allQuestions: [question],
+          optionTexts: {
+            'radio-other': '상세 내용',
+            'checkbox-other': '',
+            'select-other': ' ',
+          },
+        },
+      ),
+    ).toContainEqual({
+      kind: 'required-cells',
+      message: '필수 응답이 비어있습니다',
+      cellIds: ['checkbox-cell', 'select-cell', 'ranking-cell'],
+      detailTargetIds: [
+        'q1:option:checkbox-other',
+        'q1:option:select-other',
+        'ranking-cell:ranking:1:ranking-other-value',
+      ],
+    });
+  });
+
+  it('유효한 상세기입과 선택 사항 셀의 빈 상세기입은 차단하지 않는다', () => {
+    const question = detailedOptionCellQuestion({
+      tableRowsData: [
+        {
+          id: 'r1',
+          label: '행1',
+          cells: [
+            {
+              id: 'required-radio',
+              type: 'radio',
+              content: '',
+              required: true,
+              radioOptions: [
+                { id: 'required-other', value: 'required-other', label: '기타', allowTextInput: true },
+              ],
+            },
+            {
+              id: 'optional-radio',
+              type: 'radio',
+              content: '',
+              required: false,
+              radioOptions: [
+                { id: 'optional-other', value: 'optional-other', label: '기타', allowTextInput: true },
+              ],
+            },
+          ],
+        },
+      ] as TableRow[],
+    });
+
+    expect(
+      collectNumericIssues(
+        question,
+        { 'required-radio': 'required-other', 'optional-radio': 'optional-other' },
+        {
+          allResponses: {},
+          allQuestions: [question],
+          optionTexts: { 'required-other': '상세 내용', 'optional-other': '   ' },
+        },
+      ),
+    ).toHaveLength(0);
+  });
+
+  it('숨은 필수 셀의 선택 상세기입 누락은 required-cells 이슈에서 제외한다', () => {
+    const question = detailedOptionCellQuestion({
+      tableRowsData: [
+        {
+          id: 'r1',
+          label: '행1',
+          cells: [
+            { id: 'visible-cell', type: 'input', content: '' },
+            {
+              id: 'hidden-radio',
+              type: 'radio',
+              content: '',
+              required: true,
+              isHidden: true,
+              radioOptions: [
+                { id: 'hidden-other', value: 'hidden-other', label: '기타', allowTextInput: true },
+              ],
+            },
+          ],
+        },
+      ] as TableRow[],
+    });
+
+    expect(
+      collectNumericIssues(
+        question,
+        { 'visible-cell': '입력', 'hidden-radio': 'hidden-other' },
+        {
+          allResponses: {},
+          allQuestions: [question],
+          optionTexts: { 'hidden-other': '' },
+        },
+      ),
+    ).toHaveLength(0);
+  });
+
+  it('상세기입 옵션을 선택하지 않으면 빈 텍스트가 남아도 차단하지 않는다', () => {
+    const question = detailedOptionCellQuestion({
+      tableRowsData: [
+        {
+          id: 'r1',
+          label: '행1',
+          cells: [
+            {
+              id: 'radio-cell',
+              type: 'radio',
+              content: '',
+              required: true,
+              radioOptions: [
+                { id: 'normal', value: 'normal', label: '일반' },
+                { id: 'other', value: 'other', label: '기타', allowTextInput: true },
+              ],
+            },
+          ],
+        },
+      ] as TableRow[],
+    });
+
+    expect(
+      collectNumericIssues(
+        question,
+        { 'radio-cell': 'normal' },
+        {
+          allResponses: {},
+          allQuestions: [question],
+          optionTexts: { other: '   ' },
+        },
+      ),
+    ).toHaveLength(0);
+  });
+
+  it('일반 필수 미입력과 상세기입 누락이 겹쳐도 셀 ID는 한 번만 반환한다', () => {
+    const question = detailedOptionCellQuestion({
+      tableRowsData: [
+        {
+          id: 'r1',
+          label: '행1',
+          cells: [
+            {
+              id: 'empty-value-radio',
+              type: 'radio',
+              content: '',
+              required: true,
+              radioOptions: [
+                { id: 'empty-other', value: '', label: '기타', allowTextInput: true },
+              ],
+            },
+          ],
+        },
+      ] as TableRow[],
+    });
+
+    expect(
+      collectNumericIssues(
+        question,
+        { 'empty-value-radio': '' },
+        {
+          allResponses: {},
+          allQuestions: [question],
+          optionTexts: { 'empty-other': '' },
+        },
+      ),
+    ).toContainEqual({
+      kind: 'required-cells',
+      message: '필수 응답이 비어있습니다',
+      cellIds: ['empty-value-radio'],
+      detailTargetIds: ['q1:option:empty-other'],
+    });
+  });
+
+  it('조건부 행·열의 숨은 상세기입 셀은 잔존 선택값이 있어도 제외하고, 보이면 차단한다', () => {
+    const controller = {
+      id: 'controller',
+      type: 'radio',
+      title: '표시 제어',
+      required: false,
+      order: 0,
+      options: [{ id: 'show', value: 'show', label: '표시' }],
+    } as Question;
+    const showWhenController = {
+      conditions: [
+        {
+          id: 'show-controller',
+          sourceQuestionId: controller.id,
+          conditionType: 'value-match' as const,
+          requiredValues: ['show'],
+          logicType: 'AND' as const,
+        },
+      ],
+      logicType: 'AND' as const,
+    };
+    const question = detailedOptionCellQuestion({
+      tableColumns: [
+        { id: 'always-column', label: '항상 표시' },
+        { id: 'conditional-column', label: '조건부 열', displayCondition: showWhenController },
+      ],
+      tableRowsData: [
+        {
+          id: 'conditional-row',
+          label: '조건부 행',
+          displayCondition: showWhenController,
+          cells: [
+            {
+              id: 'row-detail',
+              type: 'radio',
+              content: '',
+              required: true,
+              radioOptions: [{ id: 'row-other', value: 'row-other', label: '기타', allowTextInput: true }],
+            },
+            { id: 'row-filler', type: 'input', content: '' },
+          ],
+        },
+        {
+          id: 'column-row',
+          label: '열 조건 행',
+          cells: [
+            { id: 'column-support', type: 'input', content: '' },
+            {
+              id: 'column-detail',
+              type: 'radio',
+              content: '',
+              required: true,
+              radioOptions: [{ id: 'column-other', value: 'column-other', label: '기타', allowTextInput: true }],
+            },
+          ],
+        },
+      ] as TableRow[],
+    });
+    const response = {
+      'row-detail': 'row-other',
+      'column-support': '입력',
+      'column-detail': 'column-other',
+    };
+    const optionTexts = { 'row-other': '', 'column-other': '' };
+
+    expect(
+      collectNumericIssues(question, response, {
+        allResponses: { [controller.id]: 'hide' },
+        allQuestions: [controller, question],
+        optionTexts,
+      }),
+    ).toHaveLength(0);
+    expect(
+      collectNumericIssues(question, response, {
+        allResponses: { [controller.id]: 'show' },
+        allQuestions: [controller, question],
+        optionTexts,
+      }),
+    ).toContainEqual({
+      kind: 'required-cells',
+      message: '필수 응답이 비어있습니다',
+      cellIds: ['row-detail', 'column-detail'],
+      detailTargetIds: ['q1:option:row-other', 'q1:option:column-other'],
+    });
+  });
+
+  it('미선택 동적 행과 연결 행의 상세기입은 제외하고, 그룹을 선택하면 차단한다', () => {
+    const question = detailedOptionCellQuestion({
+      dynamicRowConfigs: [{ groupId: 'g1', enabled: true }],
+      tableRowsData: [
+        {
+          id: 'dynamic-row',
+          label: '동적 행',
+          dynamicGroupId: 'g1',
+          cells: [
+            {
+              id: 'dynamic-detail',
+              type: 'radio',
+              content: '',
+              required: true,
+              radioOptions: [{ id: 'dynamic-other', value: 'dynamic-other', label: '기타', allowTextInput: true }],
+            },
+          ],
+        },
+        {
+          id: 'linked-row',
+          label: '연결 행',
+          showWhenDynamicGroupId: 'g1',
+          cells: [
+            {
+              id: 'linked-detail',
+              type: 'radio',
+              content: '',
+              required: true,
+              radioOptions: [{ id: 'linked-other', value: 'linked-other', label: '기타', allowTextInput: true }],
+            },
+          ],
+        },
+      ] as TableRow[],
+    });
+    const ctx = {
+      allResponses: {},
+      allQuestions: [question],
+      optionTexts: { 'dynamic-other': '', 'linked-other': '' },
+    };
+
+    expect(
+      collectNumericIssues(
+        question,
+        { 'dynamic-detail': 'dynamic-other', 'linked-detail': 'linked-other' },
+        ctx,
+      ),
+    ).toHaveLength(0);
+    expect(
+      collectNumericIssues(
+        question,
+        {
+          'dynamic-detail': 'dynamic-other',
+          'linked-detail': 'linked-other',
+          __selectedRowIds: ['dynamic-row'],
+        },
+        ctx,
+      ),
+    ).toContainEqual({
+      kind: 'required-cells',
+      message: '필수 응답이 비어있습니다',
+      cellIds: ['dynamic-detail', 'linked-detail'],
+      detailTargetIds: ['q1:option:dynamic-other', 'q1:option:linked-other'],
+    });
+  });
+
+  it('조건으로 숨은 동적 그룹은 잔존 선택 행과 연결 행을 제외하고, 다시 보이면 차단한다', () => {
+    const controller = {
+      id: 'dynamic-controller',
+      type: 'radio',
+      title: '동적 그룹 표시',
+      required: false,
+      order: 0,
+      options: [{ id: 'show', value: 'show', label: '표시' }],
+    } as Question;
+    const displayCondition = {
+      conditions: [
+        {
+          id: 'show-dynamic-group',
+          sourceQuestionId: controller.id,
+          conditionType: 'value-match' as const,
+          requiredValues: ['show'],
+          logicType: 'AND' as const,
+        },
+      ],
+      logicType: 'AND' as const,
+    };
+    const question = detailedOptionCellQuestion({
+      dynamicRowConfigs: [{ groupId: 'conditional-group', enabled: true, displayCondition }],
+      tableRowsData: [
+        {
+          id: 'conditional-dynamic-row',
+          label: '동적 행',
+          dynamicGroupId: 'conditional-group',
+          cells: [
+            {
+              id: 'conditional-dynamic-detail',
+              type: 'radio',
+              content: '',
+              required: true,
+              radioOptions: [
+                {
+                  id: 'conditional-dynamic-other',
+                  value: 'conditional-dynamic-other',
+                  label: '기타',
+                  allowTextInput: true,
+                },
+              ],
+            },
+          ],
+        },
+        {
+          id: 'conditional-linked-row',
+          label: '연결 행',
+          showWhenDynamicGroupId: 'conditional-group',
+          cells: [
+            {
+              id: 'conditional-linked-detail',
+              type: 'radio',
+              content: '',
+              required: true,
+              radioOptions: [
+                {
+                  id: 'conditional-linked-other',
+                  value: 'conditional-linked-other',
+                  label: '기타',
+                  allowTextInput: true,
+                },
+              ],
+            },
+          ],
+        },
+      ] as TableRow[],
+    });
+    const response = {
+      'conditional-dynamic-detail': 'conditional-dynamic-other',
+      'conditional-linked-detail': 'conditional-linked-other',
+      __selectedRowIds: ['conditional-dynamic-row'],
+    };
+    const baseCtx = {
+      allQuestions: [controller, question],
+      optionTexts: {
+        'conditional-dynamic-other': '',
+        'conditional-linked-other': '',
+      },
+    };
+
+    expect(
+      collectNumericIssues(question, response, {
+        ...baseCtx,
+        allResponses: { [controller.id]: 'hide' },
+      }),
+    ).toHaveLength(0);
+    expect(
+      collectNumericIssues(question, response, {
+        ...baseCtx,
+        allResponses: { [controller.id]: 'show' },
+      }),
+    ).toContainEqual({
+      kind: 'required-cells',
+      message: '필수 응답이 비어있습니다',
+      cellIds: ['conditional-dynamic-detail', 'conditional-linked-detail'],
+      detailTargetIds: [
+        'q1:option:conditional-dynamic-other',
+        'q1:option:conditional-linked-other',
+      ],
+    });
   });
 });
 

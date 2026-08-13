@@ -12,6 +12,8 @@ import * as Sentry from '@sentry/nextjs';
 
 import { requireAuth } from '@/lib/auth';
 import { isAdminUserAllowed } from '@/lib/auth/admin-allowlist';
+import { getGuestSurveyId, isAdminOrGuestGrantHolder } from '@/lib/auth/guest-grants';
+import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
 import {
   MAX_ATTACHMENT_FILE_BYTES,
   TMP_ATTACHMENT_PREFIX,
@@ -33,7 +35,7 @@ const r2Client = new S3Client({
   },
 });
 
-export async function POST(request: NextRequest) {
+async function handleMailAttachmentUpload(request: NextRequest, ctx: RouteLogContext) {
   let userId: string;
   try {
     const user = await requireAuth();
@@ -41,16 +43,23 @@ export async function POST(request: NextRequest) {
   } catch {
     return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
   }
-  // admin allowlist 가드 — oRPC authed 와 동일 정책. ADMIN_USER_IDS 로 어드민을
-  // 잠갔을 때 임의 인증사용자의 R2 첨부 업로드 남용을 차단.
-  if (!isAdminUserAllowed(userId)) {
+  // 권한 검사보다 먼저 바인딩 — 403 거부 로그에도 행위자(userId·role)가 남아야
+  // 업로드 남용·권한 설정 오류 추적이 가능하다. 거부되는 일반 인증 계정은 'user'.
+  ctx.bind({
+    userId,
+    role: getGuestSurveyId(userId) ? 'guest' : isAdminUserAllowed(userId) ? 'admin' : 'user',
+  });
+  // admin 또는 게스트 grant 보유 가드 — ADMIN_USER_IDS 로 어드민을 잠갔을 때
+  // 임의 인증사용자의 R2 첨부 업로드 남용을 차단.
+  // 게스트도 메일 첨부 업로드 필요 — tmp 네임스페이스 한정이라 설문 스코프 없이 허용
+  if (!isAdminOrGuestGrantHolder(userId)) {
     return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
   }
 
   const bucketName = process.env['CLOUDFLARE_R2_BUCKET'];
   if (!bucketName) {
     const error = new Error('Cloudflare R2 환경 변수가 설정되지 않았습니다.');
-    console.error(error.message);
+    ctx.log.error({ err: error }, 'R2 환경 변수 미설정');
     Sentry.captureException(error, { tags: { operation: 'mail_attachment_upload' } });
     return NextResponse.json({ error: '서버 설정 오류 (R2 미구성)' }, { status: 500 });
   }
@@ -101,8 +110,10 @@ export async function POST(request: NextRequest) {
     const ext = getFileExt(file.name);
     const safeExt = ext.replace(/[^a-zA-Z0-9]/g, '').slice(0, 16) || 'bin';
     key = `${TMP_ATTACHMENT_PREFIX}${randomUUID()}.${safeExt}`;
+    // 로그에는 파일 메타·키만 싣는다 (본문 금지)
+    ctx.bind({ filename: file.name, size: file.size, key });
   } catch (error) {
-    console.error('메일 첨부 업로드 — 입력 파싱 실패:', error);
+    ctx.log.error({ err: error, phase: 'parse' }, '메일 첨부 업로드 — 입력 파싱 실패');
     Sentry.captureException(error, {
       tags: { operation: 'mail_attachment_upload', phase: 'parse' },
     });
@@ -116,7 +127,7 @@ export async function POST(request: NextRequest) {
   try {
     buffer = Buffer.from(await file.arrayBuffer());
   } catch (error) {
-    console.error('메일 첨부 업로드 — 파일 read 실패:', error);
+    ctx.log.error({ err: error, phase: 'read' }, '메일 첨부 업로드 — 파일 read 실패');
     Sentry.captureException(error, {
       tags: { operation: 'mail_attachment_upload', phase: 'read' },
       extra: { filename: file.name, size: file.size },
@@ -152,7 +163,7 @@ export async function POST(request: NextRequest) {
       }),
     );
   } catch (error) {
-    console.error('메일 첨부 업로드 — R2 PUT 실패:', error);
+    ctx.log.error({ err: error, phase: 'put' }, '메일 첨부 업로드 — R2 PUT 실패');
     Sentry.captureException(error, {
       tags: { operation: 'mail_attachment_upload', phase: 'put' },
       extra: { key, filename: file.name, size: file.size },
@@ -169,7 +180,7 @@ export async function POST(request: NextRequest) {
   try {
     await r2Client.send(new HeadObjectCommand({ Bucket: bucketName, Key: key }));
   } catch (error) {
-    console.error('메일 첨부 업로드 — R2 HEAD 실패:', error);
+    ctx.log.error({ err: error, phase: 'verify' }, '메일 첨부 업로드 — R2 HEAD 실패');
     Sentry.captureException(error, {
       tags: { operation: 'mail_attachment_upload', phase: 'verify' },
       extra: { key, filename: file.name },
@@ -191,3 +202,7 @@ export async function POST(request: NextRequest) {
     mime: resolvedMime,
   });
 }
+
+export const POST = withRouteLogging('/api/upload/mail-attachment', handleMailAttachmentUpload, {
+  errorMessage: '첨부 업로드 중 오류가 발생했습니다.',
+});

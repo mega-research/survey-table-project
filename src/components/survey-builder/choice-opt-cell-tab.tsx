@@ -9,6 +9,7 @@ import { BranchRule, ChoiceGroup, Question } from '@/types/survey';
 import { generateId } from '@/lib/utils';
 import { nextGroupKey } from '@/utils/choice-group-helpers';
 
+import { AnswerQuoteTextField } from './answer-quote-fields';
 import { BranchRuleEditor } from './branch-rule-editor';
 
 interface ChoiceOptCellTabProps {
@@ -33,6 +34,10 @@ interface ChoiceOptCellTabProps {
   choiceGroupId: string;
   onChoiceGroupIdChange: (id: string) => void;
   onChoiceGroupsChange: (groups: ChoiceGroup[]) => void;
+  /** 질문 단위 응답 인용 토글 — 켜졌을 때만 인용 문구 입력칸을 노출한다. */
+  answerQuoteEnabled?: boolean | undefined;
+  answerQuoteText: string;
+  onAnswerQuoteTextChange: (v: string) => void;
 }
 
 /**
@@ -55,6 +60,9 @@ export function ChoiceOptCellTab({
   choiceGroupId,
   onChoiceGroupIdChange,
   onChoiceGroupsChange,
+  answerQuoteEnabled = false,
+  answerQuoteText,
+  onAnswerQuoteTextChange,
 }: ChoiceOptCellTabProps) {
   // 현재 셀이 소속된 그룹의 type을 초기값으로 사용하고, 미소속이면 '라디오' 기본값
   const currentGroupType =
@@ -215,6 +223,15 @@ export function ChoiceOptCellTab({
           </div>
         </div>
       </div>
+
+      {answerQuoteEnabled && (
+        <AnswerQuoteTextField
+          id="choice-opt-answer-quote-text"
+          value={answerQuoteText}
+          onChange={onAnswerQuoteTextChange}
+          showInputTokenHint={allowTextInput}
+        />
+      )}
 
       <BranchRuleEditor
         {...(branchRule !== undefined ? { branchRule } : {})}

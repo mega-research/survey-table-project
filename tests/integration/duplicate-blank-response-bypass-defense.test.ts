@@ -105,9 +105,10 @@ describe('createBlankResponse bypass defense', () => {
 });
 
 describe('clientSignals null 익명 제출 — create 는 봇 차단, checkOnEntry 는 통과(advisory)', () => {
-  // 보안 변경(봇 방어): 익명(invite 없음) 제출에 clientSignals 가 없으면 봇으로 차단한다.
-  // 실제 클라이언트는 응답 페이지 렌더 게이트상 signals 수집 완료 후에만 답변이 가능하므로
-  // create 시점 clientSignals 는 항상 non-null. null 은 Track B 우회용 직접 RPC 호출 봇뿐이다.
+  // 보안 변경(봇 방어): 익명(invite 없음·test 없음) 제출에 clientSignals 가 없으면 봇으로 차단한다.
+  // 정상 클라이언트는 신호를 ref 로 최신 유지해 create 시점에 non-null 로 보낸다
+  // (use-response-lifecycle 스테일 클로저 회귀 시 첫 답변이 null 로 나가 전원 오차단됐던
+  // 2026-08-11 사고 참조). null 은 Track B 우회용 직접 RPC 호출 봇으로 간주한다.
   it('createResponseWithFirstAnswer: 익명 + clientSignals null → 봇 차단(INSERT 없음)', async () => {
     const { createResponseWithFirstAnswer } = await import('@/features/survey-response/server/services/response.service');
     const result = await createResponseWithFirstAnswer({
@@ -135,6 +136,42 @@ describe('clientSignals null 익명 제출 — create 는 봇 차단, checkOnEnt
     });
 
     expect(result).toEqual({ kind: 'blocked', reason: 'device_already_responded' });
+    expect(mockInsert).not.toHaveBeenCalled();
+  });
+
+  it('createResponseWithFirstAnswer: testToken 동반 + clientSignals null → 봇 가드 대신 토큰 검증으로 진행한다', async () => {
+    // 테스트 세션은 신호 기반 검사 대상이 아니다 — 봇 가드가 testToken 을 면제하지 않으면
+    // 유효 테스트 링크의 첫 답변이 device_already_responded 로 오차단된다.
+    // 이 mock 의 surveys.findFirst 는 test_mode 필드가 없어 무효 토큰 판정(invalid_test_token)
+    // 까지 도달하는 것 자체가 봇 가드 통과의 증거다.
+    const { createResponseWithFirstAnswer } = await import('@/features/survey-response/server/services/response.service');
+    const result = await createResponseWithFirstAnswer({
+      surveyId: SURVEY_ID,
+      sessionId: 'session-test-token-null-signals',
+      versionId: null,
+      questionId: 'q1',
+      value: 'answer',
+      currentStepId: 'group:z',
+      clientSignals: null,
+      testToken: 'test-token-1',
+    });
+
+    expect(result).toEqual({ kind: 'blocked', reason: 'invalid_test_token' });
+    expect(mockInsert).not.toHaveBeenCalled();
+  });
+
+  it('createBlankResponse: testToken 동반 + clientSignals null → 봇 가드 대신 토큰 검증으로 진행한다', async () => {
+    const { createBlankResponse } = await import('@/features/survey-response/server/services/response.service');
+    const result = await createBlankResponse({
+      surveyId: SURVEY_ID,
+      sessionId: 'session-blank-test-token-null-signals',
+      versionId: null,
+      currentStepId: 'group:z',
+      clientSignals: null,
+      testToken: 'test-token-1',
+    });
+
+    expect(result).toEqual({ kind: 'blocked', reason: 'invalid_test_token' });
     expect(mockInsert).not.toHaveBeenCalled();
   });
 

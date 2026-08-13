@@ -1,17 +1,31 @@
+import type { ReactNode } from 'react';
+
+import { ChevronDown } from 'lucide-react';
+
 import { RecipientStatusBadge } from '@/components/operations/mail-campaign/recipient-status-badge';
 import { LocalDateTime } from '@/components/ui/local-date-time';
 import type { MailHistoryRow } from '@/lib/operations/contacts.server';
 
 /** 조사 대상 메일 발송 이력 — 기본 접힘 collapsible. */
-export function ContactMailHistoryCard({ rows }: { rows: MailHistoryRow[] }) {
+export function ContactMailHistoryCard({
+  rows,
+  action,
+}: {
+  rows: MailHistoryRow[];
+  action?: ReactNode;
+}) {
   const latest = rows[0];
   return (
-    <details className="rounded-lg border bg-white">
+    <details className="group rounded-lg border bg-white">
       <summary className="flex cursor-pointer items-center justify-between px-5 py-3 text-sm">
-        <span className="font-medium text-slate-700">
+        <span className="flex items-center gap-1.5 font-medium text-slate-700">
           이메일 발송 현황 ({rows.length}건)
+          <ChevronDown className="size-4 text-slate-400 transition-transform group-open:rotate-180" />
         </span>
-        {latest ? <RecipientStatusBadge status={latest.status} /> : null}
+        <span className="flex items-center gap-2">
+          {action}
+          {latest ? <RecipientStatusBadge status={latest.status} /> : null}
+        </span>
       </summary>
       <div className="border-t px-5 py-3">
         {rows.length === 0 ? (
@@ -25,7 +39,10 @@ export function ContactMailHistoryCard({ rows }: { rows: MailHistoryRow[] }) {
               >
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-slate-700">
-                    {r.runNumber}회차 · {r.campaignTitle}
+                    {/* 단건 캠페인 제목은 이미 "단건: " 접두어를 포함 — 회차 라벨 없이 제목만 표시 */}
+                    {r.kind === 'single'
+                      ? r.campaignTitle
+                      : `${r.runNumber}회차 · ${r.campaignTitle}`}
                   </span>
                   <RecipientStatusBadge status={r.status} />
                 </div>

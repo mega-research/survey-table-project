@@ -58,8 +58,10 @@ const h = vi.hoisted(() => ({
 
 const parseExcelRowsMock = vi.fn(async () => [] as Array<Record<string, string>>);
 
-vi.mock('@/lib/operations/data-scope.server', () => ({
+vi.mock('@/lib/operations/data-scope.server', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/operations/data-scope.server')>()),
   loadOperationsDataScope: vi.fn(async () => h.scope),
+  // resolveWriteScopeIsTest 는 순수 함수(Task 4 fix round)라 원본 그대로 사용한다.
 }));
 
 vi.mock('@/lib/contacts/excel-parser', () => ({
@@ -243,7 +245,7 @@ describe('테스트 대상자 자동 생성', () => {
     );
 
     await expect(
-      generateTestContacts({ surveyId: SURVEY_ID, count: 3, recipientEmail: 'qa@example.com' }),
+      generateTestContacts({ surveyId: SURVEY_ID, count: 3, recipientEmail: 'qa@example.com' }, false),
     ).resolves.toEqual({ createdCount: 3 });
 
     expect(h.lockCount).toBe(1);
@@ -277,22 +279,34 @@ describe('테스트 대상자 자동 생성', () => {
   });
 
   it('자동 생성 재호출은 기존 테스트 대상자를 변경하지 않고 거부한다', async () => {
-    await generateTestContacts({
-      surveyId: SURVEY_ID,
-      count: 1,
-      recipientEmail: 'qa@example.com',
-    });
+    await generateTestContacts(
+      {
+        surveyId: SURVEY_ID,
+        count: 1,
+        recipientEmail: 'qa@example.com',
+      },
+      false,
+    );
 
     await expect(
-      generateTestContacts({ surveyId: SURVEY_ID, count: 1, recipientEmail: 'qa@example.com' }),
+      generateTestContacts(
+        { surveyId: SURVEY_ID, count: 1, recipientEmail: 'qa@example.com' },
+        false,
+      ),
     ).rejects.toThrow('TEST_TARGET_GENERATION_STALE');
     expect(h.targets).toHaveLength(1);
   });
 
   it('동시 자동 생성도 설문 잠금 뒤 재검증하여 20명을 넘지 않는다', async () => {
     const results = await Promise.allSettled([
-      generateTestContacts({ surveyId: SURVEY_ID, count: 12, recipientEmail: 'qa@example.com' }),
-      generateTestContacts({ surveyId: SURVEY_ID, count: 12, recipientEmail: 'qa@example.com' }),
+      generateTestContacts(
+        { surveyId: SURVEY_ID, count: 12, recipientEmail: 'qa@example.com' },
+        false,
+      ),
+      generateTestContacts(
+        { surveyId: SURVEY_ID, count: 12, recipientEmail: 'qa@example.com' },
+        false,
+      ),
     ]);
 
     expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
@@ -306,7 +320,7 @@ describe('수동 대상자 생성 스코프', () => {
   it('서버가 현재 실제 모드이면 isTest=false로 저장한다', async () => {
     h.survey.testModeEnabled = false;
 
-    await addContactTarget({ surveyId: SURVEY_ID, attrs: { 소속: '실제 회사' } });
+    await addContactTarget({ surveyId: SURVEY_ID, attrs: { 소속: '실제 회사' } }, false);
 
     expect(h.targets).toHaveLength(1);
     expect(h.targets[0]?.isTest).toBe(false);
@@ -314,29 +328,35 @@ describe('수동 대상자 생성 스코프', () => {
   });
 
   it('자동과 수동 합계가 20명이면 추가 수동 생성을 거부한다', async () => {
-    await generateTestContacts({
-      surveyId: SURVEY_ID,
-      count: 19,
-      recipientEmail: 'qa@example.com',
-    });
-    await addContactTarget({ surveyId: SURVEY_ID, attrs: { 소속: '수동 테스트기업' } });
+    await generateTestContacts(
+      {
+        surveyId: SURVEY_ID,
+        count: 19,
+        recipientEmail: 'qa@example.com',
+      },
+      false,
+    );
+    await addContactTarget({ surveyId: SURVEY_ID, attrs: { 소속: '수동 테스트기업' } }, false);
 
     await expect(
-      addContactTarget({ surveyId: SURVEY_ID, attrs: { 소속: '한도 초과' } }),
+      addContactTarget({ surveyId: SURVEY_ID, attrs: { 소속: '한도 초과' } }, false),
     ).rejects.toThrow('TEST_TARGET_LIMIT');
     expect(h.targets).toHaveLength(20);
   });
 
   it('19명에서 동시 수동 추가 요청도 하나만 저장한다', async () => {
-    await generateTestContacts({
-      surveyId: SURVEY_ID,
-      count: 19,
-      recipientEmail: 'qa@example.com',
-    });
+    await generateTestContacts(
+      {
+        surveyId: SURVEY_ID,
+        count: 19,
+        recipientEmail: 'qa@example.com',
+      },
+      false,
+    );
 
     const results = await Promise.allSettled([
-      addContactTarget({ surveyId: SURVEY_ID, attrs: { 소속: '수동 A' } }),
-      addContactTarget({ surveyId: SURVEY_ID, attrs: { 소속: '수동 B' } }),
+      addContactTarget({ surveyId: SURVEY_ID, attrs: { 소속: '수동 A' } }, false),
+      addContactTarget({ surveyId: SURVEY_ID, attrs: { 소속: '수동 B' } }, false),
     ]);
 
     expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);

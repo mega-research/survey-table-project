@@ -60,9 +60,10 @@ const EMBEDDED_TABLE_KEYS = [
   'tableRowsData',
   'tableHeaderGrid',
   'hideColumnLabels',
+  'exportCellOrder',
 ];
 
-const OPTION_LIST_KEYS = ['options', 'optionsColumns', 'optionsAlign', 'allowOtherOption'];
+const OPTION_LIST_KEYS = ['options', 'optionsColumns', 'mobileOptionsColumns', 'optionsAlign', 'allowOtherOption'];
 
 const MOBILE_TABLE_DISPLAY_KEYS = [
   'mobileOriginalTable',

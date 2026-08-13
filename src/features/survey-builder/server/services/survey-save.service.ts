@@ -11,21 +11,15 @@ import {
   surveys,
 } from '@/db/schema';
 import type { CompleteQuestionWrite } from '@/db/schema/question-persisted-fields';
-import { extractImageUrlsFromQuestions } from '@/lib/image-extractor';
-import { deleteImagesFromR2Server, deleteR2ObjectsByKey } from '@/lib/image-utils-server';
+import { extractR2KeysFromJsonbValue } from '@/lib/r2-lifecycle/key-extract';
+import { collectSaveDiffAndRevival } from '@/lib/r2-lifecycle/save-diff-collector.server';
 import { retentionDateToTimestamp } from '@/lib/survey/pii-retention';
 import {
   promoteSurveyImages,
   promoteSurveyResponseHeader,
 } from '@/lib/survey/survey-image-promote';
-import {
-  extractPermanentAttachmentKeysFromQuestions,
-  promoteNoticeAttachments,
-} from '@/lib/survey/notice-attachment-promote';
-import type {
-  Question,
-  Survey as SurveyType,
-} from '@/types/survey';
+import { promoteNoticeAttachments } from '@/lib/survey/notice-attachment-promote';
+import type { Survey as SurveyType } from '@/types/survey';
 import { stripOptionCodes } from '@/utils/option-code-generator';
 import { stripTableRowsData } from '@/utils/table-cell-optimizer';
 
@@ -60,6 +54,11 @@ export function normalizeSlug(slug: string | null | undefined): string | null {
 // 인증은 authed 미들웨어가 담당(requireAuth 제거). 캐시 갱신(revalidatePath)은
 // 소비처 query invalidation(use-survey-sync)으로 대체한다.
 
+// 저장 diff 수집용 — 값에서 추출한 R2 키를 집합에 누적 (두 저장 경로 공용)
+const addKeys = (set: Set<string>, value: unknown): void => {
+  for (const k of extractR2KeysFromJsonbValue(value)) set.add(k);
+};
+
 export async function saveSurveyDiff(
   payload: SurveyDiffPayloadInput,
 ): Promise<SaveResult> {
@@ -80,11 +79,31 @@ export async function saveSurveyDiff(
   }
 
   return await db.transaction(async (tx) => {
+    // 저장 diff 수집 — 비교는 payload 에 실려 온 범위(메타·삭제/업서트 질문)에
+    // 한정한다. 빠진 키는 tx 끝에서 유예 삭제 큐에 등록되고 재등장 키는 취소된다.
+    const oldContentKeys = new Set<string>();
+    const newContentKeys = new Set<string>();
+
     // 1. 메타데이터 업데이트
     if (metadata) {
+      const [oldSurveyContent] = await tx
+        .select({
+          responseHeader: surveys.responseHeader,
+          description: surveys.description,
+          thankYouMessage: surveys.thankYouMessage,
+        })
+        .from(surveys)
+        .where(eq(surveys.id, surveyId));
+      addKeys(oldContentKeys, oldSurveyContent);
+
       const promotedResponseHeader = await promoteSurveyResponseHeader(
         metadata.settings.responseHeader,
       );
+      addKeys(newContentKeys, {
+        responseHeader: promotedResponseHeader ?? null,
+        description: metadata.description,
+        thankYouMessage: metadata.settings.thankYouMessage,
+      });
       await tx
         .update(surveys)
         .set({
@@ -109,6 +128,7 @@ export async function saveSurveyDiff(
           maxResponses: metadata.settings.maxResponses ?? null,
           thankYouMessage: metadata.settings.thankYouMessage,
           requireInviteToken: metadata.settings.requireInviteToken ?? false,
+          forceWideLayout: metadata.settings.forceWideLayout ?? false,
           responseHeader: promotedResponseHeader ?? null,
           updatedAt: new Date(),
         })
@@ -185,44 +205,41 @@ export async function saveSurveyDiff(
 
     // 3. 질문 변경분 처리
     if (questionChanges) {
-      // 3a. 삭제
+      // 3a. 삭제 — 질문 삭제 시 R2 이미지/영구 첨부 키는 지우지 않는다. 발행 스냅샷
+      // (survey_versions, 불변·응답 페이지 서빙 중)·복제 설문·보관함(saved_questions/
+      // saved_cells)이 같은 URL·키를 참조할 수 있어 무확인 삭제가 그쪽 콘텐츠를 파괴한다.
       if (questionChanges.deleted.length > 0) {
-        const questionsToRemove = await tx.query.questions.findMany({
-          where: inArray(questions.id, questionChanges.deleted),
-        });
-        const imagesToDelete = extractImageUrlsFromQuestions(questionsToRemove as Question[]);
-        if (imagesToDelete.length > 0) {
-          deleteImagesFromR2Server(imagesToDelete).catch(console.error);
-        }
-        const attachmentKeysToDelete = extractPermanentAttachmentKeysFromQuestions(
-          questionsToRemove,
-        );
-        if (attachmentKeysToDelete.length > 0) {
-          deleteR2ObjectsByKey(attachmentKeysToDelete).catch(console.error);
-        }
+        // 삭제 전 행 콘텐츠를 읽어 diff 의 old 측에 넣는다 — 빠진 키는 큐 후보로만
+        // 등록되고, 집행 시 전역 재확인이 공유 참조를 거른다.
+        const deletedRows = await tx
+          .select()
+          .from(questions)
+          .where(inArray(questions.id, questionChanges.deleted));
+        addKeys(oldContentKeys, deletedRows);
         await tx.delete(questions).where(inArray(questions.id, questionChanges.deleted));
       }
 
       // 3b. Upsert (추가 + 수정)
       if (questionChanges.upserted.length > 0) {
-        // 이전 publish 의 영구 첨부 키를 orphan 검출용으로 미리 fetch
-        const upsertIds = questionChanges.upserted
-          .map((q) => q.id)
-          .filter((id): id is string => typeof id === 'string' && id.length > 0);
-        const previousQuestionRows =
-          upsertIds.length > 0
-            ? await tx.query.questions.findMany({
-                where: inArray(questions.id, upsertIds),
-                columns: { id: true, noticeContent: true, type: true },
-              })
-            : [];
-
-        // tmp/survey/ 이미지를 영구 prefix로 promote (R2 move + URL 치환)
-        // tmp/notice-attachment/ 첨부도 영구 prefix로 promote + 이전 영구 키 orphan cleanup
+        // tmp/survey/ 이미지를 영구 prefix로 promote (R2 copy + URL 치환, 원본 tmp 는 lifecycle 위임)
+        // tmp/notice-attachment/ 첨부도 영구 prefix로 promote. 이전 영구 첨부 키의
+        // orphan cleanup은 제거됨 — 발행 스냅샷/복제/보관함이 계속 참조할 수 있다.
         const promotedQuestions = await promoteNoticeAttachments(
           await promoteSurveyImages(questionChanges.upserted),
-          { previousQuestions: previousQuestionRows },
         );
+
+        // 업서트 대상의 이전 행을 읽어 old 측에, 새 콘텐츠를 new 측에 넣는다
+        const oldUpsertedRows = await tx
+          .select()
+          .from(questions)
+          .where(
+            inArray(
+              questions.id,
+              promotedQuestions.map((q) => q.id),
+            ),
+          );
+        addKeys(oldContentKeys, oldUpsertedRows);
+        addKeys(newContentKeys, promotedQuestions);
 
         const questionValues = promotedQuestions.map((question) => ({
           id: question.id,
@@ -232,6 +249,7 @@ export async function saveSurveyDiff(
           title: question.title,
           description: question.description,
           required: question.required,
+          requiredMessage: question.requiredMessage ?? null,
           order: question.order,
           options: (question.options ? stripOptionCodes(question.options) : question.options) as NewQuestion['options'],
           selectLevels: question.selectLevels as NewQuestion['selectLevels'],
@@ -244,6 +262,7 @@ export async function saveSurveyDiff(
           allowOtherOption: question.allowOtherOption,
           optionsColumns: question.optionsColumns,
           optionsAlign: question.optionsAlign,
+          mobileOptionsColumns: question.mobileOptionsColumns,
           rankingConfig: question.rankingConfig as NewQuestion['rankingConfig'],
           choiceGroups: question.choiceGroups as NewQuestion['choiceGroups'],
           minSelections: question.minSelections,
@@ -258,6 +277,7 @@ export async function saveSurveyDiff(
           dynamicRowConfigs:
             question.dynamicRowConfigs as NewQuestion['dynamicRowConfigs'],
           hideColumnLabels: question.hideColumnLabels,
+          exportCellOrder: question.exportCellOrder ?? null,
           mobileOriginalTable: question.mobileOriginalTable,
           mobileTableDisplayMode: question.mobileTableDisplayMode,
           mobileDrilldownOmitLeadingColumns: question.mobileDrilldownOmitLeadingColumns,
@@ -275,6 +295,9 @@ export async function saveSurveyDiff(
           emptyDefault: question.emptyDefault ?? null,
           piiEncrypted: question.piiEncrypted ?? false,
           pageBreakBefore: question.pageBreakBefore,
+          answerQuoteEnabled: question.answerQuoteEnabled,
+          answerQuoteName: question.answerQuoteName,
+          answerQuoteText: question.answerQuoteText,
           updatedAt: new Date(),
         }) satisfies CompleteQuestionWrite);
 
@@ -289,6 +312,7 @@ export async function saveSurveyDiff(
               title: sql`excluded.title`,
               description: sql`excluded.description`,
               required: sql`excluded.required`,
+              requiredMessage: sql`excluded.required_message`,
               order: sql`excluded.order`,
               options: sql`excluded.options`,
               selectLevels: sql`excluded.select_levels`,
@@ -299,6 +323,7 @@ export async function saveSurveyDiff(
               allowOtherOption: sql`excluded.allow_other_option`,
               optionsColumns: sql`excluded.options_columns`,
               optionsAlign: sql`excluded.options_align`,
+              mobileOptionsColumns: sql`excluded.mobile_options_columns`,
               rankingConfig: sql`excluded.ranking_config`,
               choiceGroups: sql`excluded.choice_groups`,
               minSelections: sql`excluded.min_selections`,
@@ -311,6 +336,7 @@ export async function saveSurveyDiff(
               sumConstraints: sql`excluded.sum_constraints`,
               dynamicRowConfigs: sql`excluded.dynamic_row_config`,
               hideColumnLabels: sql`excluded.hide_column_labels`,
+              exportCellOrder: sql`excluded.export_cell_order`,
               mobileOriginalTable: sql`excluded.mobile_original_table`,
               mobileTableDisplayMode: sql`excluded.mobile_table_display_mode`,
               mobileDrilldownOmitLeadingColumns: sql`excluded.mobile_drilldown_omit_leading_columns`,
@@ -330,6 +356,9 @@ export async function saveSurveyDiff(
               emptyDefault: sql`excluded.empty_default`,
               piiEncrypted: sql`excluded.pii_encrypted`,
               pageBreakBefore: sql`excluded.page_break_before`,
+              answerQuoteEnabled: sql`excluded.answer_quote_enabled`,
+              answerQuoteName: sql`excluded.answer_quote_name`,
+              answerQuoteText: sql`excluded.answer_quote_text`,
               updatedAt: sql`excluded.updated_at`,
             } satisfies CompleteQuestionWrite,
           });
@@ -350,6 +379,13 @@ export async function saveSurveyDiff(
         }
       }
     }
+
+    // 저장 diff 마무리 — payload 범위에서 빠진 키 등록 + 재등장 키 부활 취소 (같은 tx)
+    await collectSaveDiffAndRevival(tx, {
+      oldKeys: [...oldContentKeys],
+      newKeys: [...newContentKeys],
+      reason: `설문 저장: ${surveyId}`,
+    });
 
     return { surveyId };
   });
@@ -385,6 +421,22 @@ export async function saveSurveyWithDetails(
       surveyData.settings.responseHeader,
     );
 
+    // 저장 diff 수집 — 전체 저장은 콘텐츠 전량이 payload 이므로 old 전량과 비교한다
+    const oldContentKeys = new Set<string>();
+    const newContentKeys = new Set<string>();
+    if (existingSurvey) {
+      addKeys(oldContentKeys, {
+        responseHeader: existingSurvey.responseHeader,
+        description: existingSurvey.description,
+        thankYouMessage: existingSurvey.thankYouMessage,
+      });
+    }
+    addKeys(newContentKeys, {
+      responseHeader: promotedResponseHeader ?? null,
+      description: surveyData.description,
+      thankYouMessage: surveyData.settings.thankYouMessage,
+    });
+
     if (existingSurvey) {
       // lookups 는 별도 server action(보관함 자동 sync, upsertSurveyLookupAction 등)으로
       // 갱신될 수 있어 빌더 store 가 stale 일 수 있다. surveyData.lookups 가 undefined 면
@@ -405,6 +457,7 @@ export async function saveSurveyWithDetails(
         maxResponses: surveyData.settings.maxResponses ?? null,
         thankYouMessage: surveyData.settings.thankYouMessage,
         requireInviteToken: surveyData.settings.requireInviteToken ?? false,
+        forceWideLayout: surveyData.settings.forceWideLayout ?? false,
         responseHeader: promotedResponseHeader ?? null,
         updatedAt: new Date(),
       };
@@ -446,6 +499,7 @@ export async function saveSurveyWithDetails(
         maxResponses: surveyData.settings.maxResponses ?? null,
         thankYouMessage: surveyData.settings.thankYouMessage,
         requireInviteToken: surveyData.settings.requireInviteToken ?? false,
+        forceWideLayout: surveyData.settings.forceWideLayout ?? false,
         responseHeader: promotedResponseHeader ?? null,
         lookups: surveyData.lookups ?? [],
       });
@@ -533,9 +587,10 @@ export async function saveSurveyWithDetails(
       const existingQuestions = existingSurvey
         ? await tx.query.questions.findMany({
             where: eq(questions.surveyId, surveyId),
-            columns: { id: true },
           })
         : [];
+      // 전체 저장 diff 의 old 측 — 이번 저장으로 삭제되는 질문 포함 전량
+      addKeys(oldContentKeys, existingQuestions);
 
       const newQuestionIds = new Set(surveyData.questions.map((q) => q.id));
       const questionIdsToRemove = existingQuestions
@@ -543,38 +598,18 @@ export async function saveSurveyWithDetails(
         .map((q) => q.id);
 
       if (questionIdsToRemove.length > 0) {
-        const questionsToRemove = await tx.query.questions.findMany({
-          where: inArray(questions.id, questionIdsToRemove),
-        });
-        const imagesToDelete = extractImageUrlsFromQuestions(questionsToRemove as Question[]);
-        if (imagesToDelete.length > 0) {
-          deleteImagesFromR2Server(imagesToDelete).catch(console.error);
-        }
-        const attachmentKeysToDelete = extractPermanentAttachmentKeysFromQuestions(
-          questionsToRemove,
-        );
-        if (attachmentKeysToDelete.length > 0) {
-          deleteR2ObjectsByKey(attachmentKeysToDelete).catch(console.error);
-        }
-
+        // 질문 삭제 시 R2 이미지/영구 첨부 키는 지우지 않는다(사유는 saveSurveyDiff 3a 참조).
         await tx.delete(questions).where(inArray(questions.id, questionIdsToRemove));
       }
 
       if (surveyData.questions.length > 0) {
-        // 이전 영구 첨부 키 orphan 검출용으로 fetch (전체 questions 덮어쓰기 흐름)
-        const previousQuestionRows = existingSurvey
-          ? await tx.query.questions.findMany({
-              where: eq(questions.surveyId, surveyId),
-              columns: { id: true, noticeContent: true, type: true },
-            })
-          : [];
-
-        // tmp/survey/ 이미지를 영구 prefix로 promote (R2 move + URL 치환)
-        // tmp/notice-attachment/ 첨부도 영구 prefix로 promote + 이전 영구 키 orphan cleanup
+        // tmp/survey/ 이미지를 영구 prefix로 promote (R2 copy + URL 치환, 원본 tmp 는 lifecycle 위임)
+        // tmp/notice-attachment/ 첨부도 영구 prefix로 promote. 이전 영구 첨부 키의
+        // orphan cleanup은 제거됨 — 발행 스냅샷/복제/보관함이 계속 참조할 수 있다.
         const promotedQuestions = await promoteNoticeAttachments(
           await promoteSurveyImages(surveyData.questions),
-          { previousQuestions: previousQuestionRows },
         );
+        addKeys(newContentKeys, promotedQuestions);
 
         const questionValues = promotedQuestions.map((question) => ({
           id: question.id,
@@ -584,6 +619,7 @@ export async function saveSurveyWithDetails(
           title: question.title,
           description: question.description,
           required: question.required,
+          requiredMessage: question.requiredMessage ?? null,
           order: question.order,
           options: (question.options ? stripOptionCodes(question.options) : question.options) as NewQuestion['options'],
           selectLevels: question.selectLevels as NewQuestion['selectLevels'],
@@ -596,6 +632,7 @@ export async function saveSurveyWithDetails(
           allowOtherOption: question.allowOtherOption,
           optionsColumns: question.optionsColumns,
           optionsAlign: question.optionsAlign,
+          mobileOptionsColumns: question.mobileOptionsColumns,
           rankingConfig: question.rankingConfig as NewQuestion['rankingConfig'],
           choiceGroups: question.choiceGroups as NewQuestion['choiceGroups'],
           minSelections: question.minSelections,
@@ -610,6 +647,7 @@ export async function saveSurveyWithDetails(
           dynamicRowConfigs:
             question.dynamicRowConfigs as NewQuestion['dynamicRowConfigs'],
           hideColumnLabels: question.hideColumnLabels,
+          exportCellOrder: question.exportCellOrder ?? null,
           mobileOriginalTable: question.mobileOriginalTable,
           mobileTableDisplayMode: question.mobileTableDisplayMode,
           mobileDrilldownOmitLeadingColumns: question.mobileDrilldownOmitLeadingColumns,
@@ -627,6 +665,9 @@ export async function saveSurveyWithDetails(
           emptyDefault: question.emptyDefault ?? null,
           piiEncrypted: question.piiEncrypted ?? false,
           pageBreakBefore: question.pageBreakBefore,
+          answerQuoteEnabled: question.answerQuoteEnabled,
+          answerQuoteName: question.answerQuoteName,
+          answerQuoteText: question.answerQuoteText,
           updatedAt: new Date(),
         }) satisfies CompleteQuestionWrite);
 
@@ -641,6 +682,7 @@ export async function saveSurveyWithDetails(
               title: sql`excluded.title`,
               description: sql`excluded.description`,
               required: sql`excluded.required`,
+              requiredMessage: sql`excluded.required_message`,
               order: sql`excluded.order`,
               options: sql`excluded.options`,
               selectLevels: sql`excluded.select_levels`,
@@ -651,6 +693,7 @@ export async function saveSurveyWithDetails(
               allowOtherOption: sql`excluded.allow_other_option`,
               optionsColumns: sql`excluded.options_columns`,
               optionsAlign: sql`excluded.options_align`,
+              mobileOptionsColumns: sql`excluded.mobile_options_columns`,
               rankingConfig: sql`excluded.ranking_config`,
               choiceGroups: sql`excluded.choice_groups`,
               minSelections: sql`excluded.min_selections`,
@@ -663,6 +706,7 @@ export async function saveSurveyWithDetails(
               sumConstraints: sql`excluded.sum_constraints`,
               dynamicRowConfigs: sql`excluded.dynamic_row_config`,
               hideColumnLabels: sql`excluded.hide_column_labels`,
+              exportCellOrder: sql`excluded.export_cell_order`,
               mobileOriginalTable: sql`excluded.mobile_original_table`,
               mobileTableDisplayMode: sql`excluded.mobile_table_display_mode`,
               mobileDrilldownOmitLeadingColumns: sql`excluded.mobile_drilldown_omit_leading_columns`,
@@ -682,11 +726,22 @@ export async function saveSurveyWithDetails(
               emptyDefault: sql`excluded.empty_default`,
               piiEncrypted: sql`excluded.pii_encrypted`,
               pageBreakBefore: sql`excluded.page_break_before`,
+              answerQuoteEnabled: sql`excluded.answer_quote_enabled`,
+              answerQuoteName: sql`excluded.answer_quote_name`,
+              answerQuoteText: sql`excluded.answer_quote_text`,
               updatedAt: sql`excluded.updated_at`,
             } satisfies CompleteQuestionWrite,
           });
       }
     }
+
+    // 저장 diff 마무리 — 빠진 키 등록 + 재등장 키 부활 취소 (같은 tx).
+    // 신규 생성(existingSurvey 없음)은 old 가 비어 등록이 일어나지 않는다.
+    await collectSaveDiffAndRevival(tx, {
+      oldKeys: [...oldContentKeys],
+      newKeys: [...newContentKeys],
+      reason: `설문 전체 저장: ${surveyId}`,
+    });
 
     return { surveyId };
   });

@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { MoreHorizontal } from 'lucide-react';
 
 import { client } from '@/shared/lib/rpc';
+import { getErrorMessage } from '@/lib/get-error-message';
 import type { ProfilesView } from '@/lib/operations/profiles';
 import {
   AlertDialog,
@@ -33,11 +34,22 @@ interface Props {
   responseId: string;
   idx: number;
   view: ProfilesView;
+  /** 게스트 세션 — manage.* (authed 전용) 액션인 삭제·초기화·복원 메뉴를 숨긴다. */
+  isGuest?: boolean;
+  /** 응답 status — 이탈(drop) 응답의 수정 다이얼로그에 완료 전환 안내를 띄운다. */
+  status?: string;
 }
 
 type Dialog = null | 'edit' | 'delete' | 'reset';
 
-export function ProfilesRowActions({ surveyId, responseId, idx, view }: Props) {
+export function ProfilesRowActions({
+  surveyId,
+  responseId,
+  idx,
+  view,
+  isGuest = false,
+  status,
+}: Props) {
   const router = useRouter();
   const [dialog, setDialog] = useState<Dialog>(null);
   const [isPending, startTransition] = useTransition();
@@ -52,8 +64,9 @@ export function ProfilesRowActions({ surveyId, responseId, idx, view }: Props) {
         await fn({ surveyId, responseId });
         setDialog(null);
         router.refresh();
-      } catch {
-        toast.error('응답 처리에 실패했습니다. 다시 시도해 주세요.');
+      } catch (err) {
+        // 서버 메시지(권한 없음 등)를 우선 노출하고, 없으면 일반 안내로 폴백
+        toast.error(getErrorMessage(err, '응답 처리에 실패했습니다. 다시 시도해 주세요.'));
         // dialog 유지 — 사용자 재시도 가능
       }
     });
@@ -65,6 +78,9 @@ export function ProfilesRowActions({ surveyId, responseId, idx, view }: Props) {
     window.open(editHref, '_blank', 'noopener,noreferrer');
     setDialog(null);
   };
+
+  // 게스트: 휴지통 뷰의 유일한 액션(복원)이 authed 전용이라 메뉴 자체를 감춘다.
+  if (isGuest && view !== 'active') return null;
 
   return (
     <>
@@ -78,14 +94,18 @@ export function ProfilesRowActions({ surveyId, responseId, idx, view }: Props) {
           {view === 'active' ? (
             <>
               <DropdownMenuItem onSelect={() => setDialog('edit')}>수정</DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setDialog('delete')}>삭제</DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onSelect={() => setDialog('reset')}
-                className="text-red-600 focus:text-red-700"
-              >
-                초기화
-              </DropdownMenuItem>
+              {!isGuest && (
+                <>
+                  <DropdownMenuItem onSelect={() => setDialog('delete')}>삭제</DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onSelect={() => setDialog('reset')}
+                    className="text-red-600 focus:text-red-700"
+                  >
+                    초기화
+                  </DropdownMenuItem>
+                </>
+              )}
             </>
           ) : (
             <DropdownMenuItem
@@ -106,6 +126,9 @@ export function ProfilesRowActions({ surveyId, responseId, idx, view }: Props) {
             <AlertDialogDescription>
               새 탭의 수정 화면에서 응답 내용을 바꿔 저장하면 기존 응답이 갱신됩니다. 시작·종료일시는
               그대로 유지되고 수정 시각이 따로 기록되며, 통계와 기록에도 수정된 내용이 반영됩니다.
+              {status === 'drop'
+                ? ' 이탈 상태의 응답은 수정 내용을 저장하면 완료 상태로 전환됩니다.'
+                : null}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

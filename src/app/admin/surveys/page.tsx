@@ -9,6 +9,7 @@ import {
   ArrowLeft,
   BarChart3,
   Copy,
+  CopyPlus,
   Edit,
   ExternalLink,
   FileText,
@@ -28,13 +29,14 @@ import { logout } from '@/actions/auth-actions';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { useDeleteSurvey, useSurveys } from '@/hooks/queries';
+import { useDeleteSurvey, useDuplicateSurvey, useSurveys } from '@/hooks/queries';
 import { formatLocalDate } from '@/lib/date-formatters';
 import { getSurveyAccessUrl } from '@/lib/survey-url';
 
 export default function SurveyListPage() {
   const { data: surveys, isLoading, error } = useSurveys();
   const { mutate: deleteSurvey } = useDeleteSurvey();
+  const { mutate: duplicateSurvey, isPending: isDuplicating } = useDuplicateSurvey();
   const [searchQuery, setSearchQuery] = useState('');
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
@@ -77,6 +79,19 @@ export default function SurveyListPage() {
       deleteSurvey(surveyId);
       setOpenMenuId(null);
     }
+  };
+
+  const handleDuplicateSurvey = (surveyId: string) => {
+    if (isDuplicating) return;
+    duplicateSurvey(surveyId, {
+      // duplicate 는 원본 미존재 시 null 을 반환하므로 성공 콜백에서도 분기한다.
+      onSuccess: (copy) => {
+        if (copy) toast.success('설문이 복제되었습니다');
+        else toast.error('설문 복제에 실패했습니다');
+      },
+      onError: () => toast.error('설문 복제에 실패했습니다'),
+    });
+    setOpenMenuId(null);
   };
 
   const handleCopyLink = (survey: (typeof surveyList)[0]) => {
@@ -246,6 +261,18 @@ export default function SurveyListPage() {
                             <ExternalLink className="mr-2 h-4 w-4" />
                             설문 열기
                           </Link>
+                          <button
+                            onClick={() => handleDuplicateSurvey(survey.id)}
+                            disabled={isDuplicating}
+                            className="flex w-full items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:pointer-events-none disabled:opacity-50"
+                          >
+                            {isDuplicating ? (
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                              <CopyPlus className="mr-2 h-4 w-4" />
+                            )}
+                            복제
+                          </button>
                           <hr className="my-1" />
                           <button
                             onClick={() => handleDeleteSurvey(survey.id)}

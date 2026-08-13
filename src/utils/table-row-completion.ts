@@ -1,3 +1,4 @@
+import { isCellEnabled } from '@/lib/survey/cell-gating';
 import type { TableCell, TableRow } from '@/types/survey';
 import { parseRankingAnswers } from '@/utils/ranking-shared';
 import { buildRadioGroupBuckets } from '@/utils/table-radio-groups';
@@ -50,6 +51,9 @@ export function isTableRowCompleted(
     // buildRadioGroupBuckets 도 isHidden 을 제외하므로 완료 판정도 동일하게 제외해 정합을 맞춘다.
     // (colspan 병합으로 숨겨진 answerable 셀이 미응답으로 남아 행을 영구 미완료로 만드는 비대칭 방지.)
     if (cell.isHidden) return true;
+    // 게이팅 미충족 셀은 숨겨져 응답이 불가능하다 — isHidden 과 동일하게 완료 판정에서 제외.
+    // (미수행 행의 게이팅 인력 칸이 미응답으로 남아 행을 영구 미완료로 만드는 비대칭 방지)
+    if (cell.enabledWhen && !isCellEnabled(cell, response, row.cells)) return true;
     if (!answerable.has(cell.type)) return true;
     // single-select radio 그룹 멤버는 그룹 단위로 판정
     const groupName = cellGroupName.get(cell.id);

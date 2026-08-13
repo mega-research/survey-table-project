@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { toast } from 'sonner';
+
 import {
   AlertTriangle,
   CheckSquare,
@@ -22,8 +24,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { CompleteQuestionWrite } from '@/db/schema/question-persisted-fields';
 import { useEnsureSurveyInDb } from '@/hooks/use-ensure-survey-in-db';
-import { extractImageUrlsFromQuestion } from '@/lib/image-extractor';
-import { deleteImagesFromR2 } from '@/lib/image-utils';
+import { useSurveySync } from '@/hooks/use-survey-sync';
 import { isValidUUID } from '@/lib/utils';
 import { client } from '@/shared/lib/rpc';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
@@ -58,10 +59,17 @@ interface QuestionEditModalProps {
 
 export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditModalProps) {
   const updateQuestion = useSurveyBuilderStore((s) => s.updateQuestion);
+  const remapOptionValueInConditions = useSurveyBuilderStore(
+    (s) => s.remapOptionValueInConditions,
+  );
+  const remapQuestionRefs = useSurveyBuilderStore((s) => s.remapQuestionRefs);
   const setEditingQuestionId = useSurveyUIStore((s) => s.setEditingQuestionId);
   const questions = useSurveyBuilderStore(useShallow((s) => s.currentSurvey.questions));
   const question = questions.find((q) => q.id === questionId);
   const ensureSurvey = useEnsureSurveyInDb();
+  // 옵션 value 리매핑은 편집 중인 질문 밖(다른 질문/그룹)까지 스토어를 바꾸므로,
+  // 이 모달의 단일 질문 저장만으로는 DB 에 남지 않는다 — 리매핑이 있으면 설문 저장까지 함께 돌린다.
+  const { saveSurveyScoped } = useSurveySync();
 
   const [formData, setFormData] = useState<Partial<Question>>({});
   const [isSaving, setIsSaving] = useState(false);
@@ -85,6 +93,12 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
   const formDataRef = useRef(formData);
   formDataRef.current = formData;
 
+  // 질문 레벨 옵션의 optionCode blur 커밋으로 발생한 value 변경(oldValue→newValue) 누적.
+  // 저장(handleSave) 시점에 한 번에 remapOptionValueInConditions 로 다른 질문/그룹/행/열의
+  // 표시조건에 반영한다 — blur 즉시 반영하면 모달을 "취소"했을 때도 다른 질문의 표시조건이
+  // 이미 새 값을 참조해 불일치가 생긴다(Task 3과 동일한 원자성 원칙).
+  const pendingOptionValueChangesRef = useRef<{ oldValue: string; newValue: string }[]>([]);
+
   // 모달 닫힐 때 debounce 타이머 cleanup
   useEffect(() => {
     return () => {
@@ -104,6 +118,7 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
     let originalMobileDrilldownOmitLeadingColumns: Question['mobileDrilldownOmitLeadingColumns'];
     let originalMobileDrilldownRepeatHeaderStartRow: Question['mobileDrilldownRepeatHeaderStartRow'];
     let originalMobileDrilldownRepeatHeaderEndRow: Question['mobileDrilldownRepeatHeaderEndRow'];
+    let originalExportCellOrder: Question['exportCellOrder'];
     if (isOpen && questionId) {
       setEditingQuestionId(questionId);
       const q = useSurveyBuilderStore
@@ -114,6 +129,7 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
       originalMobileDrilldownOmitLeadingColumns = q?.mobileDrilldownOmitLeadingColumns;
       originalMobileDrilldownRepeatHeaderStartRow = q?.mobileDrilldownRepeatHeaderStartRow;
       originalMobileDrilldownRepeatHeaderEndRow = q?.mobileDrilldownRepeatHeaderEndRow;
+      originalExportCellOrder = q?.exportCellOrder;
       didSaveRef.current = false;
     }
     return () => {
@@ -150,6 +166,11 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
                   restoredQuestion.mobileDrilldownRepeatHeaderEndRow =
                     originalMobileDrilldownRepeatHeaderEndRow;
                 }
+                if (originalExportCellOrder === undefined) {
+                  delete restoredQuestion.exportCellOrder;
+                } else {
+                  restoredQuestion.exportCellOrder = originalExportCellOrder;
+                }
                 return restoredQuestion;
               }),
             },
@@ -175,39 +196,61 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
         title: question.title,
         ...(question.description !== undefined ? { description: question.description } : {}),
         required: question.required,
+        ...(question.requiredMessage !== undefined
+          ? { requiredMessage: question.requiredMessage }
+          : {}),
         ...(question.groupId !== undefined ? { groupId: question.groupId } : {}),
-        questionCode: (question as any).questionCode || '',
-        isCustomSpssVarName: (question as any).isCustomSpssVarName || false,
-        exportLabel: (question as any).exportLabel || '',
+        questionCode: question.questionCode || '',
+        isCustomSpssVarName: question.isCustomSpssVarName || false,
+        exportLabel: question.exportLabel || '',
         options: optionsWithDeepBranchRule,
-        selectLevels: (question as any).selectLevels ? [...(question as any).selectLevels] : [],
-        tableTitle: (question as any).tableTitle,
-        tableColumns: (question as any).tableColumns ? [...(question as any).tableColumns] : [],
-        tableRowsData: (question as any).tableRowsData ? [...(question as any).tableRowsData] : [],
-        tableHeaderGrid: (question as any).tableHeaderGrid || undefined,
-        allowOtherOption: (question as any).allowOtherOption || false,
-        optionsColumns: (question as any).optionsColumns,
-        optionsAlign: (question as any).optionsAlign,
-        rankingConfig: (question as any).rankingConfig,
-        minSelections: (question as any).minSelections,
-        maxSelections: (question as any).maxSelections,
-        noticeContent: (question as any).noticeContent || '',
-        requiresAcknowledgment: (question as any).requiresAcknowledgment || false,
+        selectLevels: question.selectLevels ? [...question.selectLevels] : [],
+        // exactOptionalPropertyTypes 하에서 undefined 명시 대입이 불가하므로
+        // 값이 있을 때만 키를 싣는다 (없으면 키 부재 = 기존 undefined 와 동등).
+        ...(question.tableTitle !== undefined ? { tableTitle: question.tableTitle } : {}),
+        tableColumns: question.tableColumns ? [...question.tableColumns] : [],
+        tableRowsData: question.tableRowsData ? [...question.tableRowsData] : [],
+        ...(question.tableHeaderGrid !== undefined
+          ? { tableHeaderGrid: question.tableHeaderGrid }
+          : {}),
+        allowOtherOption: question.allowOtherOption || false,
+        ...(question.optionsColumns !== undefined
+          ? { optionsColumns: question.optionsColumns }
+          : {}),
+        ...(question.optionsAlign !== undefined ? { optionsAlign: question.optionsAlign } : {}),
+        ...(question.mobileOptionsColumns !== undefined
+          ? { mobileOptionsColumns: question.mobileOptionsColumns }
+          : {}),
+        ...(question.rankingConfig !== undefined ? { rankingConfig: question.rankingConfig } : {}),
+        ...(question.minSelections !== undefined ? { minSelections: question.minSelections } : {}),
+        ...(question.maxSelections !== undefined ? { maxSelections: question.maxSelections } : {}),
+        noticeContent: question.noticeContent || '',
+        requiresAcknowledgment: question.requiresAcknowledgment || false,
         placeholder: question.placeholder || '',
         piiEncrypted: question.piiEncrypted ?? false,
         defaultValueTemplate: question.defaultValueTemplate ?? null,
         inputType: question.inputType ?? 'text',
         ...(question.emptyDefault !== undefined ? { emptyDefault: question.emptyDefault } : {}),
         ...(question.numberFormat !== undefined ? { numberFormat: question.numberFormat } : {}),
-        tableValidationRules: (question as any).tableValidationRules || [],
-        dynamicRowConfigs: (question as any).dynamicRowConfigs || undefined,
+        tableValidationRules: question.tableValidationRules || [],
+        ...(question.dynamicRowConfigs !== undefined
+          ? { dynamicRowConfigs: question.dynamicRowConfigs }
+          : {}),
         hideTitle: question.hideTitle ?? false,
         ...(question.displayCondition !== undefined
           ? { displayCondition: question.displayCondition }
           : {}),
-        spssVarType: (question as any).spssVarType,
-        spssMeasure: (question as any).spssMeasure,
+        ...(question.spssVarType !== undefined ? { spssVarType: question.spssVarType } : {}),
+        ...(question.spssMeasure !== undefined ? { spssMeasure: question.spssMeasure } : {}),
+        // 응답 인용 — hydrate 를 빠뜨리면 UPDATE 페이로드에서 키가 사라져 편집 화면은
+        // 멀쩡한데 재진입 시 값이 비는 formData/store 이중상태 silent drop 이 된다.
+        answerQuoteEnabled: question.answerQuoteEnabled ?? false,
+        answerQuoteName: question.answerQuoteName ?? '',
+        answerQuoteText: question.answerQuoteText ?? '',
       });
+
+      // 이전 질문(또는 저장 없이 닫힌 이전 세션)의 pending value 변경이 새 세션으로 새지 않게 리셋.
+      pendingOptionValueChangesRef.current = [];
 
       // 로컬 state 동기화 (이전 질문의 pending debounce 취소)
       if (debouncedTitleRef.current) {
@@ -219,7 +262,7 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
         debouncedExportLabelRef.current = null;
       }
       setLocalTitle(question.title || '');
-      setLocalExportLabel((question as any).exportLabel || '');
+      setLocalExportLabel(question.exportLabel || '');
 
       // 옵션들 중 하나라도 branchRule이 있으면 조건부 분기 설정 표시
       // resolveChoiceOptions 는 manual 은 question.options, table-source 는 choice_opt 셀 파생
@@ -325,6 +368,9 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
       ...(storeQuestion?.hideColumnLabels !== undefined
         ? { hideColumnLabels: storeQuestion.hideColumnLabels }
         : {}),
+      ...(storeQuestion?.exportCellOrder !== undefined
+        ? { exportCellOrder: storeQuestion.exportCellOrder }
+        : {}),
       // 모바일 표 표시 설정도 표 에디터의 silentUpdateQuestion 경로로 store에만 쓰인다.
       ...(storeQuestion?.mobileOriginalTable !== undefined
         ? { mobileOriginalTable: storeQuestion.mobileOriginalTable }
@@ -347,22 +393,22 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
     };
     setIsSaving(true);
     try {
-      const updatedQuestion = {
-        ...question,
-        ...currentFormData,
-      } as Question;
-      const usedImages = extractImageUrlsFromQuestion(updatedQuestion);
-
-      if (question) {
-        const previousImages = extractImageUrlsFromQuestion(question);
-        const unusedImages = previousImages.filter((url) => !usedImages.includes(url));
-
-        if (unusedImages.length > 0) {
-          await deleteImagesFromR2(unusedImages);
-        }
-      }
-
+      // R2 삭제 제거 — 발행 스냅샷·복제·보관함이 같은 URL 을 참조하므로 즉시 삭제는
+      // 소실 사고를 유발 (2026-07-27 orphan 감사). 정리는 후속 GC 과제.
       updateQuestion(questionId, currentFormData);
+
+      // 옵션 optionCode blur 로 발생한 value 변경을 저장 시점에 한 번에 리매핑한다.
+      // 이 질문 자신의 options 는 위 updateQuestion 이 이미 반영했으므로, 여기서는
+      // 이 질문을 sourceQuestionId 로 참조하는 다른 질문/그룹/행/열의 표시조건만 대상.
+      const remapScopes: Array<{ questionIds: string[]; groupIds: string[] }> = [];
+      if (pendingOptionValueChangesRef.current.length > 0) {
+        for (const change of pendingOptionValueChangesRef.current) {
+          remapScopes.push(
+            remapOptionValueInConditions(questionId, change.oldValue, change.newValue),
+          );
+        }
+        pendingOptionValueChangesRef.current = [];
+      }
 
       const store = useSurveyBuilderStore.getState();
       if (store.currentSurvey.id && questionId) {
@@ -401,16 +447,25 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
               title: currentFormData.title || question?.title || '',
               description: currentFormData.description || question?.description,
               required: currentFormData.required ?? question?.required ?? false,
+              requiredMessage: currentFormData.requiredMessage ?? question?.requiredMessage ?? null,
               order: question?.order ?? 0,
               options: currentFormData.options || question?.options,
               selectLevels: currentFormData.selectLevels || question?.selectLevels,
               tableTitle: currentFormData.tableTitle || question?.tableTitle,
               tableColumns: currentFormData.tableColumns || question?.tableColumns,
               tableRowsData: currentFormData.tableRowsData || question?.tableRowsData,
-              tableHeaderGrid: currentFormData.tableHeaderGrid ?? question?.tableHeaderGrid,
+              // null = 다단계 헤더 해제 — ?? 로 폴백하면 해제가 question 값으로 되살아난다.
+              tableHeaderGrid:
+                currentFormData.tableHeaderGrid !== undefined
+                  ? currentFormData.tableHeaderGrid
+                  : question?.tableHeaderGrid,
               allowOtherOption: currentFormData.allowOtherOption ?? question?.allowOtherOption,
               optionsColumns: currentFormData.optionsColumns ?? question?.optionsColumns,
               optionsAlign: currentFormData.optionsAlign ?? question?.optionsAlign,
+              mobileOptionsColumns:
+                currentFormData.mobileOptionsColumns !== undefined
+                  ? currentFormData.mobileOptionsColumns
+                  : question?.mobileOptionsColumns,
               minSelections: currentFormData.minSelections ?? question?.minSelections,
               maxSelections: currentFormData.maxSelections ?? question?.maxSelections,
               noticeContent: currentFormData.noticeContent || question?.noticeContent,
@@ -455,6 +510,7 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
               // formData 가 소유하지 않는다. currentFormData 머지값을 CREATE 에 전달해
               // 신규 질문에서 ON 토글이 default(false)로 silent drop 되는 회귀를 막는다.
               hideColumnLabels: currentFormData.hideColumnLabels ?? question?.hideColumnLabels,
+              exportCellOrder: currentFormData.exportCellOrder ?? question?.exportCellOrder,
               mobileOriginalTable:
                 currentFormData.mobileOriginalTable ?? question?.mobileOriginalTable,
               mobileTableDisplayMode:
@@ -476,6 +532,10 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
               exportLabel: currentFormData.exportLabel || question?.exportLabel,
               spssVarType: currentFormData.spssVarType ?? question?.spssVarType,
               spssMeasure: currentFormData.spssMeasure ?? question?.spssMeasure,
+              answerQuoteEnabled:
+                currentFormData.answerQuoteEnabled ?? question?.answerQuoteEnabled,
+              answerQuoteName: currentFormData.answerQuoteName ?? question?.answerQuoteName,
+              answerQuoteText: currentFormData.answerQuoteText ?? question?.answerQuoteText,
             } satisfies CompleteQuestionWrite;
             const createdQuestion = await client.surveyBuilder.questions.create(createPayload);
 
@@ -500,11 +560,53 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
                   ),
                 },
               }));
+              // 스왑 직후 이 질문을 참조하는 조건(sourceQuestionId·expression 피연산자·
+              // branchRule goto 대상)도 새 id 로 갱신 — 안 하면 참조가 temp id 로 끊긴다
+              remapScopes.push(remapQuestionRefs(questionId, newId));
             }
           }
         } catch (error) {
           console.error('질문 저장/업데이트 실패:', error);
           throw error;
+        }
+      }
+
+      // 리매핑된 다른 질문/그룹은 스토어 dirty 로만 남아 있다 — 리매핑 범위만 영속해,
+      // 모달만 닫고 이탈해도 DB 가 구 value/구 id 를 참조하지 않도록 한다. 질문은 스코프
+      // 저장, 그룹 조건은 그룹 전용 RPC 로 개별 영속한다 (전역 메타데이터 저장에 실으면
+      // 미저장 제목 변경·그룹 삭제까지 동반 커밋된다). 빌더에 대기 중인 무관한 pending 은
+      // 건드리지 않는다.
+      const remapQuestionIds = [...new Set(remapScopes.flatMap((s) => s.questionIds))];
+      const remapGroupIds = [...new Set(remapScopes.flatMap((s) => s.groupIds))];
+      if (remapQuestionIds.length > 0 || remapGroupIds.length > 0) {
+        try {
+          if (remapGroupIds.length > 0) {
+            const { currentSurvey } = useSurveyBuilderStore.getState();
+            await Promise.all(
+              remapGroupIds.map((groupId) => {
+                const group = currentSurvey.groups?.find((g) => g.id === groupId);
+                if (!group?.displayCondition) return null;
+                return client.surveyBuilder.groups.update({
+                  groupId,
+                  surveyId: currentSurvey.id,
+                  data: { displayCondition: group.displayCondition },
+                });
+              }),
+            );
+          }
+          if (remapQuestionIds.length > 0) {
+            await saveSurveyScoped({ questionIds: remapQuestionIds });
+          } else {
+            // 그룹만 변경: RPC 영속이 끝났으므로 남은 변경 기준으로 dirty 재계산
+            useSurveyBuilderStore.getState().markSavedSnapshotClean();
+          }
+        } catch (error) {
+          if (remapGroupIds.length > 0) {
+            // 그룹 RPC 실패 폴백 — 수동 저장(메타데이터 전체)으로 복구 가능하게 한다
+            useSurveyBuilderStore.setState({ isMetadataDirty: true, isDirty: true });
+          }
+          console.error('표시조건 리매핑 반영을 위한 설문 저장 실패:', error);
+          toast.error('조건 리매핑 저장에 실패했습니다. 설문 저장 버튼으로 다시 저장해 주세요.');
         }
       }
 
@@ -515,7 +617,17 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
     } finally {
       setIsSaving(false);
     }
-  }, [ensureSurvey, questionId, validateForm, updateQuestion, onClose, question]);
+  }, [
+    ensureSurvey,
+    questionId,
+    validateForm,
+    updateQuestion,
+    remapOptionValueInConditions,
+    remapQuestionRefs,
+    saveSurveyScoped,
+    onClose,
+    question,
+  ]);
 
   // Option helpers (setFormData를 바인딩, useMemo로 안정화하여 자식 리렌더 방지)
   const addOption = useMemo(() => createAddOption(setFormData), []);
@@ -606,6 +718,12 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
                 addOption={addOption}
                 updateOption={updateOption}
                 removeOption={removeOption}
+                onOptionValueChange={(change) => {
+                  pendingOptionValueChangesRef.current = [
+                    ...pendingOptionValueChangesRef.current,
+                    change,
+                  ];
+                }}
                 addSelectLevel={addSelectLevel}
                 updateSelectLevel={updateSelectLevel}
                 removeSelectLevel={removeSelectLevel}
@@ -632,7 +750,12 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
                     constraints={formData.sumConstraints ?? question.sumConstraints ?? []}
                     tableColumns={formData.tableColumns ?? question.tableColumns ?? []}
                     tableRowsData={formData.tableRowsData ?? question.tableRowsData ?? []}
-                    tableHeaderGrid={formData.tableHeaderGrid ?? question.tableHeaderGrid}
+                    tableHeaderGrid={
+                      // null = 편집 중 해제 — question 값으로 되살리면 안 된다.
+                      (formData.tableHeaderGrid !== undefined
+                        ? formData.tableHeaderGrid
+                        : question.tableHeaderGrid) ?? undefined
+                    }
                     hideColumnLabels={formData.hideColumnLabels ?? question.hideColumnLabels}
                     onUpdate={(sumConstraints) =>
                       setFormData((prev) => ({ ...prev, sumConstraints }))

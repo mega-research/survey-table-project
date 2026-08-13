@@ -2,6 +2,7 @@ import {
   Question,
   QuestionOption,
   Survey,
+  TableRow,
 } from '@/types/survey';
 import {
   shouldDisplayQuestion,
@@ -19,14 +20,33 @@ import {
  */
 export const OPT_TEXTS_KEY = '__optTexts__';
 
+/** 표 radio/select/checkbox 셀 응답의 정본 형태 — table-cell-semantics.unwrapOptionId 가 인정하는 { optionId } */
+interface FakeOptionRef {
+  optionId: string;
+}
+
+/** 표 셀 하나의 mock 응답 값 (input 셀은 문자열) */
+type FakeTableCellValue = string | FakeOptionRef | FakeOptionRef[];
+
+/** 표 질문 전체의 mock 응답 (cellId → 값) */
+type FakeTableResponse = Record<string, FakeTableCellValue>;
+
+/** 질문 하나의 mock 응답 값 */
+type FakeAnswerValue = string | string[] | FakeTableResponse;
+
+/** __optTexts__ 사이드카 구조: questionId → optionId → text */
+type FakeOptTexts = Record<string, Record<string, string>>;
+
 /** allowTextInput 옵션에 채울 기본 mock 텍스트 — 시드 스크립트에서 시맨틱 텍스트로 교체 가능 */
 function fakeOptionText(opt: { textInputPlaceholder?: string }): string {
   const base = opt.textInputPlaceholder?.trim() || '기타 응답';
   return `${base} ${Math.floor(Math.random() * 100) + 1}`;
 }
 
-export function generateFakeSurveyResponse(survey: Survey): Record<string, any> {
-  const responses: Record<string, any> = {};
+export function generateFakeSurveyResponse(
+  survey: Survey,
+): Record<string, FakeAnswerValue | FakeOptTexts> {
+  const responses: Record<string, FakeAnswerValue | FakeOptTexts> = {};
   const optTexts: Record<string, Record<string, string>> = {};
   const questions = survey.questions;
   let currentIndex = 0;
@@ -96,9 +116,9 @@ export function generateFakeSurveyResponse(survey: Survey): Record<string, any> 
  */
 function generateRandomValueForQuestion(
   question: Question,
-  allResponses: Record<string, any>,
+  allResponses: Record<string, unknown>,
   collectOptionText: (opt: QuestionOption | null | undefined) => void
-): any {
+): FakeAnswerValue | null {
   switch (question.type) {
     case 'radio':
     case 'select': { // 단일 선택
@@ -161,12 +181,12 @@ function pickRandomMultipleOptions(options?: QuestionOption[]): QuestionOption[]
  */
 function generateRandomTableResponse(
   question: Question,
-  _allResponses: Record<string, any>,
+  _allResponses: Record<string, unknown>,
   collectOptionText: (opt: QuestionOption | null | undefined) => void
-): Record<string, any> {
+): FakeTableResponse {
   if (!question.tableRowsData) return {};
 
-  const tableResponse: Record<string, any> = {};
+  const tableResponse: FakeTableResponse = {};
   const rows = question.tableRowsData;
   const validationRules = question.tableValidationRules || [];
 
@@ -227,23 +247,26 @@ function generateRandomTableResponse(
 }
 
 function fillRowCells(
-  row: any,
-  tableResponse: Record<string, any>,
+  row: TableRow,
+  tableResponse: FakeTableResponse,
   mustPick: boolean,
-  collectOptionText: (opt: any) => void
+  collectOptionText: (opt: QuestionOption | null | undefined) => void
 ) {
   for (const cell of row.cells ?? []) {
     if (['text', 'image', 'video'].includes(cell.type)) continue;
 
-    let value: any = null;
+    let value: FakeTableCellValue | null = null;
 
     if (cell.type === 'radio') {
       // 라디오 그리드: 보이는 행은 항상 하나 선택 (완료 응답 가정)
       if (cell.radioOptions && cell.radioOptions.length > 0) {
+        // 인덱스는 항상 length 미만이므로 opt 는 실제로 항상 존재 (noUncheckedIndexedAccess 대응 좁히기)
         const opt = cell.radioOptions[Math.floor(Math.random() * cell.radioOptions.length)];
-        // 표 radio/select 응답의 정본 형태 — table-cell-semantics.unwrapOptionId 가 인정하는 { optionId }
-        value = { optionId: opt.id };
-        collectOptionText(opt);
+        if (opt) {
+          // 표 radio/select 응답의 정본 형태 — table-cell-semantics.unwrapOptionId 가 인정하는 { optionId }
+          value = { optionId: opt.id };
+          collectOptionText(opt);
+        }
       }
     } else if (cell.type === 'checkbox') {
       // 체크박스 그리드가 과밀해지지 않도록, 필수 행이 아니면 절반 정도만 체크 행으로 남긴다
@@ -251,14 +274,17 @@ function fillRowCells(
         const count = Math.floor(Math.random() * cell.checkboxOptions.length) + 1;
         const shuffled = [...cell.checkboxOptions].sort(() => 0.5 - Math.random());
         const selected = shuffled.slice(0, count);
-        value = selected.map((opt: any) => ({ optionId: opt.id }));
+        value = selected.map((opt) => ({ optionId: opt.id }));
         selected.forEach(collectOptionText);
       }
     } else if (cell.type === 'select') {
       if (cell.selectOptions && cell.selectOptions.length > 0) {
+        // 인덱스는 항상 length 미만이므로 opt 는 실제로 항상 존재 (noUncheckedIndexedAccess 대응 좁히기)
         const opt = cell.selectOptions[Math.floor(Math.random() * cell.selectOptions.length)];
-        value = { optionId: opt.id };
-        collectOptionText(opt);
+        if (opt) {
+          value = { optionId: opt.id };
+          collectOptionText(opt);
+        }
       }
     } else if (cell.type === 'input') {
       value = cell.inputType === 'number'
@@ -277,10 +303,10 @@ function fillRowCells(
  * __optTexts__ 사이드카도 허용된 질문 것만 남긴다 — 시드 스크립트의 drop/in_progress 절단용.
  */
 export function truncateFakeResponses(
-  responses: Record<string, any>,
+  responses: Record<string, unknown>,
   allowedQuestionIds: Set<string>,
-): Record<string, any> {
-  const truncated: Record<string, any> = Object.fromEntries(
+): Record<string, unknown> {
+  const truncated: Record<string, unknown> = Object.fromEntries(
     Object.entries(responses).filter(
       ([qid]) => qid !== OPT_TEXTS_KEY && allowedQuestionIds.has(qid),
     ),

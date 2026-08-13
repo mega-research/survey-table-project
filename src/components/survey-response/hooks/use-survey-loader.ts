@@ -1,5 +1,5 @@
 import { ORPCError } from '@orpc/client';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { client } from '@/shared/lib/rpc';
 import { normalizeQuestions } from '@/lib/question';
@@ -59,6 +59,13 @@ interface UseSurveyLoaderResult {
    * admin-edit/preview 모드는 null(중단/무효 링크 게이트 비대상). Survey 타입 밖 값이라 별도 반환.
    */
   control: SurveyControl | null;
+  /**
+   * 최신 스냅샷 재취득(무중단 갈아타기 — 티켓 04). public 응답 경로에서 서버가 응답 행을
+   * 현재 버전으로 재핀했을 때 호출한다. loadedSurvey/versionId state 를 갱신하고, 호출자가
+   * state 커밋을 기다리지 않고 즉시 신버전 질문 목록을 쓸 수 있도록 결과를 반환한다.
+   * 설문 미로드/조회 실패 시 null (기존 화면 유지 — fail-open).
+   */
+  refetchSnapshot: () => Promise<{ survey: Survey; versionId: string | null } | null>;
 }
 
 /**
@@ -135,6 +142,7 @@ export function useSurveyLoader({
                 ...(snapshot.settings.maxResponses !== undefined ? { maxResponses: snapshot.settings.maxResponses } : {}),
                 thankYouMessage: snapshot.settings.thankYouMessage,
                 ...(snapshot.settings.requireInviteToken !== undefined ? { requireInviteToken: snapshot.settings.requireInviteToken } : {}),
+                ...(snapshot.settings.forceWideLayout !== undefined ? { forceWideLayout: snapshot.settings.forceWideLayout } : {}),
                 responseHeader: normalizeResponseHeaderConfig(snapshot.settings.responseHeader),
               },
               lookups: (snapshot as { lookups?: Survey['lookups'] }).lookups ?? [],
@@ -285,5 +293,40 @@ export function useSurveyLoader({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [identifier, isAdminEdit, isPreview, inviteToken, testToken]);
 
-  return { isLoading, loadedSurvey, loadError, contactAttrs, showInviteRequired, versionId, control };
+  // 최신 스냅샷 재취득(무중단 갈아타기 — 티켓 04). public 경로의 forResponse 호출과 동일한
+  // 로직으로 loadedSurvey/versionId 만 갱신한다 — invite/requireInviteToken/attrs 재판정은
+  // 하지 않는다(이미 세션이 진행 중이며 토큰 상태는 바뀌지 않았다). 기존 로딩 effect 불변.
+  const loadedSurveyId = loadedSurvey?.id ?? null;
+  const refetchSnapshot = useCallback(async (): Promise<{
+    survey: Survey;
+    versionId: string | null;
+  } | null> => {
+    if (!loadedSurveyId) return null;
+    try {
+      const result = await client.surveyBuilder.publicRead.forResponse({
+        surveyId: loadedSurveyId,
+        ...(testToken != null ? { testToken } : {}),
+        ...(inviteToken != null ? { inviteToken } : {}),
+      });
+      if (!result) return null;
+      setLoadedSurvey(result.survey);
+      setVersionId(result.versionId);
+      return { survey: result.survey, versionId: result.versionId };
+    } catch (error) {
+      // 재취득 실패는 fail-open — 기존 화면(구 스냅샷)을 유지하고 응답 흐름을 막지 않는다.
+      console.error('설문 스냅샷 재취득 오류:', error);
+      return null;
+    }
+  }, [loadedSurveyId, inviteToken, testToken]);
+
+  return {
+    isLoading,
+    loadedSurvey,
+    loadError,
+    contactAttrs,
+    showInviteRequired,
+    versionId,
+    control,
+    refetchSnapshot,
+  };
 }

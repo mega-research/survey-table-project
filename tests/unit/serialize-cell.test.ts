@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 
+import { QUESTION_LIKE_CELL_TYPES } from '@/lib/survey/answer-quote';
 import type { BranchRule, TableCell } from '@/types/survey';
 import {
+  ANSWER_QUOTE_NAMEABLE_CELL_TYPES,
   buildUpdatedCell,
   cellToFormState,
   GROUPABLE_CELL_TYPES,
@@ -619,6 +621,22 @@ describe('buildUpdatedCell — 셀타입별 characterization', () => {
   });
 });
 
+describe('ANSWER_QUOTE_NAMEABLE_CELL_TYPES — 수집기(answer-quote.ts)와 1:1 일치 (I-1)', () => {
+  // 직렬화(serialize-cell)와 수집(answer-quote)이 각자 셀 타입 목록을 들고 있으면 한쪽만
+  // 갱신됐을 때 조용히 갈라진다 — 이 테스트는 두 집합이 항상 같은 원소를 갖도록 고정한다.
+  // (serialize-cell.ts 는 이제 QUESTION_LIKE_CELL_TYPES 를 재수출하므로 정상 상태에서는
+  // 항상 통과하지만, 누군가 다시 별도로 정의하면 즉시 실패한다.)
+  it('두 집합의 원소가 정확히 같다', () => {
+    expect([...ANSWER_QUOTE_NAMEABLE_CELL_TYPES].sort()).toEqual(
+      [...QUESTION_LIKE_CELL_TYPES].sort(),
+    );
+  });
+
+  it('동일 참조를 재수출한다 (재정의 금지)', () => {
+    expect(ANSWER_QUOTE_NAMEABLE_CELL_TYPES).toBe(QUESTION_LIKE_CELL_TYPES);
+  });
+});
+
 describe('GROUPABLE_CELL_TYPES', () => {
   it('choice_opt 와 ranking_opt 를 포함하고 다른 타입은 포함하지 않는다', () => {
     expect(GROUPABLE_CELL_TYPES.has('choice_opt')).toBe(true);
@@ -720,5 +738,360 @@ describe('buildUpdatedCell — 인터랙티브 셀 공용 필수 응답 (cellReq
     const form = cellToFormState(cell);
     expect(form.cellRequired).toBe(true);
     expect(buildUpdatedCell(form, cell).required).toBe(true);
+  });
+});
+
+describe('buildUpdatedCell — mobileOptionsColumns', () => {
+  it('radio: 폼의 모바일 배치 값이 셀에 저장된다', () => {
+    const form: CellFormState = {
+      ...baseForm('radio'),
+      radioOptions: [{ id: 'o1', label: '남', value: '1' }],
+      cellMobileOptionsColumns: 3,
+    };
+    const out = buildUpdatedCell(form, baseCell);
+    expect(out.mobileOptionsColumns).toBe(3);
+  });
+
+  it('radio: 자동(undefined)이면 기존 셀의 mobileOptionsColumns 키가 제거된다', () => {
+    const form: CellFormState = {
+      ...baseForm('radio'),
+      radioOptions: [{ id: 'o1', label: '남', value: '1' }],
+      cellMobileOptionsColumns: undefined,
+    };
+    const out = buildUpdatedCell(form, { ...baseCell, type: 'radio', mobileOptionsColumns: 3 });
+    expect('mobileOptionsColumns' in out).toBe(false);
+  });
+
+  it('cellToFormState 는 셀의 mobileOptionsColumns 를 hydrate 한다', () => {
+    const state = cellToFormState({ id: 'c1', type: 'radio', content: '', mobileOptionsColumns: 2 });
+    expect(state.cellMobileOptionsColumns).toBe(2);
+  });
+});
+
+describe('buildUpdatedCell — 개별 셀 스타일', () => {
+  it('개별 셀 Bold와 배경색을 폼으로 복원하고 저장한다', () => {
+    const styled: TableCell = {
+      ...baseCell,
+      textBold: true,
+      backgroundColor: '#AABBCC',
+    };
+    const form = cellToFormState(styled);
+
+    expect(form).toMatchObject({ textBold: true, backgroundColor: '#AABBCC' });
+    expect(buildUpdatedCell(form, styled)).toMatchObject({
+      textBold: true,
+      backgroundColor: '#AABBCC',
+    });
+  });
+
+  it('Bold 해제와 배경색 초기화는 기존 스타일 키를 제거한다', () => {
+    const styled: TableCell = {
+      ...baseCell,
+      textBold: true,
+      backgroundColor: '#AABBCC',
+    };
+    const form = {
+      ...cellToFormState(styled),
+      textBold: false,
+      backgroundColor: '',
+    };
+    const result = buildUpdatedCell(form, styled);
+
+    expect(result).not.toHaveProperty('textBold');
+    expect(result).not.toHaveProperty('backgroundColor');
+  });
+});
+
+describe('buildUpdatedCell — 모바일 셀 라벨', () => {
+  const inputCell: TableCell = { id: 'c1', type: 'input', content: '' };
+
+  it('입력 셀의 셀 라벨을 폼으로 복원하고 저장한다', () => {
+    const labeled: TableCell = { ...inputCell, mobileLabel: '인원수' };
+    const form = cellToFormState(labeled);
+
+    expect(form).toMatchObject({ mobileLabel: '인원수' });
+    expect(buildUpdatedCell(form, labeled)).toMatchObject({ mobileLabel: '인원수' });
+  });
+
+  it('앞뒤 공백은 정리해서 저장한다', () => {
+    const form = { ...baseForm('input'), mobileLabel: '  인원수  ' };
+    expect(buildUpdatedCell(form, inputCell)).toMatchObject({ mobileLabel: '인원수' });
+  });
+
+  it('셀 라벨을 비우면 기존 키를 제거한다', () => {
+    const labeled: TableCell = { ...inputCell, mobileLabel: '인원수' };
+    const form = { ...cellToFormState(labeled), mobileLabel: '' };
+
+    expect(buildUpdatedCell(form, labeled)).not.toHaveProperty('mobileLabel');
+  });
+
+  it('표시 셀(text)에는 셀 라벨을 저장하지 않는다', () => {
+    const form = { ...baseForm('text'), mobileLabel: '인원수' };
+    expect(buildUpdatedCell(form, baseCell)).not.toHaveProperty('mobileLabel');
+  });
+});
+
+describe('buildUpdatedCell — 셀 단위 응답 인용 문구 (answerQuoteText)', () => {
+  it('input 셀은 인용 문구를 trim 해 저장한다', () => {
+    const form = { ...baseForm('input'), answerQuoteText: '  전기차를  ' };
+    expect(buildUpdatedCell(form, baseCell)).toMatchObject({
+      type: 'input',
+      answerQuoteText: '전기차를',
+    });
+  });
+
+  it('choice_opt / ranking_opt 셀도 인용 문구를 저장한다', () => {
+    const choice = buildUpdatedCell(
+      { ...baseForm('choice_opt'), answerQuoteText: '매우 만족' },
+      baseCell,
+    );
+    expect(choice).toMatchObject({ type: 'choice_opt', answerQuoteText: '매우 만족' });
+
+    const ranking = buildUpdatedCell(
+      { ...baseForm('ranking_opt'), answerQuoteText: '1순위 브랜드' },
+      baseCell,
+    );
+    expect(ranking).toMatchObject({ type: 'ranking_opt', answerQuoteText: '1순위 브랜드' });
+  });
+
+  it('문구가 비면 키 자체를 저장하지 않는다', () => {
+    const form = { ...baseForm('input'), answerQuoteText: '   ' };
+    expect(buildUpdatedCell(form, baseCell)).not.toHaveProperty('answerQuoteText');
+  });
+
+  it('선택 컨트롤 셀(radio)은 셀 단위 문구를 저장하지 않는다 — 문구는 옵션이 소유한다', () => {
+    const form = { ...baseForm('radio'), answerQuoteText: '엉뚱한 값' };
+    expect(buildUpdatedCell(form, baseCell)).not.toHaveProperty('answerQuoteText');
+  });
+
+  it('폼이 문구를 소유하므로 원본 셀의 옛 문구가 되살아나지 않는다', () => {
+    const stale: TableCell = {
+      id: 'c1',
+      type: 'input',
+      content: '',
+      answerQuoteText: '옛 문구',
+    };
+    const form = { ...baseForm('input'), answerQuoteText: '' };
+    expect(buildUpdatedCell(form, stale)).not.toHaveProperty('answerQuoteText');
+  });
+
+  it('cellToFormState → buildUpdatedCell 왕복에서 문구가 보존된다', () => {
+    const cell: TableCell = {
+      id: 'c1',
+      type: 'input',
+      content: '',
+      answerQuoteText: '{{입력}} 지역',
+    };
+    const form = cellToFormState(cell);
+    expect(form.answerQuoteText).toBe('{{입력}} 지역');
+    expect(buildUpdatedCell(form, cell)).toMatchObject({ answerQuoteText: '{{입력}} 지역' });
+  });
+});
+
+describe('buildUpdatedCell — 셀 단위 응답 인용 토글·이름 (answerQuoteEnabled/Name)', () => {
+  it('토글을 켜고 이름을 입력하면 두 필드가 함께 저장된다', () => {
+    const form: CellFormState = {
+      ...baseForm('radio'),
+      answerQuoteEnabled: true,
+      answerQuoteName: '  마케팅유형  ',
+    };
+    expect(buildUpdatedCell(form, baseCell)).toMatchObject({
+      type: 'radio',
+      answerQuoteEnabled: true,
+      answerQuoteName: '마케팅유형',
+    });
+  });
+
+  it('질문 노릇을 하는 셀 타입 전부에서 저장된다 (radio/checkbox/select/input/ranking)', () => {
+    for (const type of ['radio', 'checkbox', 'select', 'input', 'ranking'] as const) {
+      const form: CellFormState = {
+        ...baseForm(type),
+        answerQuoteEnabled: true,
+        answerQuoteName: '인력',
+        // ranking 셀은 옵션이 있어야 정상 폼이지만 직렬화 자체에는 영향이 없다
+      };
+      expect(buildUpdatedCell(form, baseCell)).toMatchObject({
+        type,
+        answerQuoteEnabled: true,
+        answerQuoteName: '인력',
+      });
+    }
+  });
+
+  it('옵션 셀(choice_opt/ranking_opt)과 표시 셀(text)에는 이름을 저장하지 않는다', () => {
+    for (const type of ['choice_opt', 'ranking_opt', 'text'] as const) {
+      const form: CellFormState = {
+        ...baseForm(type),
+        answerQuoteEnabled: true,
+        answerQuoteName: '엉뚱한 이름',
+      };
+      const out = buildUpdatedCell(form, baseCell);
+      expect(out).not.toHaveProperty('answerQuoteEnabled');
+      expect(out).not.toHaveProperty('answerQuoteName');
+    }
+  });
+
+  it('이름을 지우면 이전 값이 되살아나지 않는다 (cellBase 스테일 값 방지)', () => {
+    const stale: TableCell = {
+      id: 'c1',
+      type: 'radio',
+      content: '',
+      answerQuoteEnabled: true,
+      answerQuoteName: '옛이름',
+    };
+    const form: CellFormState = {
+      ...cellToFormState(stale),
+      answerQuoteName: '   ',
+    };
+    const out = buildUpdatedCell(form, stale);
+    expect(out).not.toHaveProperty('answerQuoteName');
+    expect(out).toMatchObject({ answerQuoteEnabled: true });
+  });
+
+  it('토글을 끄면 두 키가 모두 제거된다', () => {
+    const stale: TableCell = {
+      id: 'c1',
+      type: 'radio',
+      content: '',
+      answerQuoteEnabled: true,
+      answerQuoteName: '옛이름',
+    };
+    const form: CellFormState = { ...cellToFormState(stale), answerQuoteEnabled: false };
+    const out = buildUpdatedCell(form, stale);
+    expect(out).not.toHaveProperty('answerQuoteEnabled');
+    expect(out).not.toHaveProperty('answerQuoteName');
+  });
+
+  it('토글을 껐다 켜도 옵션별 인용 문구는 그대로 남는다', () => {
+    const cell: TableCell = {
+      id: 'c1',
+      type: 'radio',
+      content: '',
+      answerQuoteEnabled: true,
+      answerQuoteName: '마케팅유형',
+      radioOptions: [
+        { id: 'o1', label: '디지털', value: '1', answerQuoteText: '디지털마케팅' },
+        { id: 'o2', label: '오프라인', value: '2', answerQuoteText: '오프라인마케팅' },
+      ],
+    };
+    const hydrated = cellToFormState(cell);
+    const off = buildUpdatedCell({ ...hydrated, answerQuoteEnabled: false }, cell);
+    expect(off.radioOptions?.map((o) => o.answerQuoteText)).toEqual([
+      '디지털마케팅',
+      '오프라인마케팅',
+    ]);
+
+    const onAgain = buildUpdatedCell({ ...cellToFormState(off), answerQuoteEnabled: true }, off);
+    expect(onAgain.radioOptions?.map((o) => o.answerQuoteText)).toEqual([
+      '디지털마케팅',
+      '오프라인마케팅',
+    ]);
+  });
+
+  it('cellToFormState → buildUpdatedCell 왕복에서 토글·이름이 보존된다', () => {
+    const cell: TableCell = {
+      id: 'c1',
+      type: 'input',
+      content: '',
+      answerQuoteEnabled: true,
+      answerQuoteName: '인력',
+      answerQuoteText: '{{입력}}명',
+    };
+    const form = cellToFormState(cell);
+    expect(form.answerQuoteEnabled).toBe(true);
+    expect(form.answerQuoteName).toBe('인력');
+    expect(buildUpdatedCell(form, cell)).toMatchObject({
+      answerQuoteEnabled: true,
+      answerQuoteName: '인력',
+      answerQuoteText: '{{입력}}명',
+    });
+  });
+});
+
+describe('buildUpdatedCell — 셀 게이팅 (enabledWhen/requiredWhenEnabled)', () => {
+  const gatedCell: TableCell = {
+    id: 'c1',
+    type: 'input',
+    content: '',
+    inputType: 'number',
+    enabledWhen: { kind: 'option', controllerCellId: 'ctrl', values: ['1'] },
+    requiredWhenEnabled: true,
+  };
+
+  it('cellToFormState → buildUpdatedCell 왕복에서 게이팅 조건·조건부 필수가 보존된다', () => {
+    const form = cellToFormState(gatedCell);
+    const out = buildUpdatedCell(form, gatedCell);
+    expect(out.enabledWhen).toEqual({ kind: 'option', controllerCellId: 'ctrl', values: ['1'] });
+    expect(out.requiredWhenEnabled).toBe(true);
+  });
+
+  it('폼에서 조건을 제거하면 두 키가 모두 제거된다 (cellBase 잔존 방지)', () => {
+    const form: CellFormState = {
+      ...cellToFormState(gatedCell),
+      gatingCondition: undefined,
+      gatingRequiredWhenEnabled: false,
+    };
+    const out = buildUpdatedCell(form, gatedCell);
+    expect('enabledWhen' in out).toBe(false);
+    expect('requiredWhenEnabled' in out).toBe(false);
+  });
+
+  it('조건은 있고 조건부 필수만 끄면 requiredWhenEnabled 키만 제거된다', () => {
+    const form: CellFormState = {
+      ...cellToFormState(gatedCell),
+      gatingRequiredWhenEnabled: false,
+    };
+    const out = buildUpdatedCell(form, gatedCell);
+    expect(out.enabledWhen).toBeDefined();
+    expect('requiredWhenEnabled' in out).toBe(false);
+  });
+
+  it('input 이 아닌 타입으로 전환하면 게이팅 키가 함께 제거된다', () => {
+    const form: CellFormState = { ...cellToFormState(gatedCell), contentType: 'text' };
+    const out = buildUpdatedCell(form, gatedCell);
+    expect('enabledWhen' in out).toBe(false);
+    expect('requiredWhenEnabled' in out).toBe(false);
+  });
+
+  // 필수 수렴: 게이팅 셀의 legacy required 는 "활성일 때 필수"와 동일 의미
+  // — 검증식이 (required || requiredWhenEnabled) && 활성 이므로 UI/저장 모두 한 채널로 모은다.
+  it('legacy required:true 게이팅 셀은 조건부 필수 체크박스로 수렴되어 hydrate 된다', () => {
+    const legacy: TableCell = {
+      id: 'c1',
+      type: 'input',
+      content: '',
+      required: true,
+      enabledWhen: { kind: 'option', controllerCellId: 'ctrl', values: ['1'] },
+    };
+    const form = cellToFormState(legacy);
+    expect(form.gatingRequiredWhenEnabled).toBe(true);
+
+    const out = buildUpdatedCell(form, legacy);
+    // required 는 저장하지 않고 requiredWhenEnabled 하나로 수렴
+    expect('required' in out).toBe(false);
+    expect(out.requiredWhenEnabled).toBe(true);
+  });
+
+  it('게이팅이 켜진 input 은 cellRequired 가 true 여도 required 를 저장하지 않는다', () => {
+    const form: CellFormState = {
+      ...cellToFormState(gatedCell),
+      cellRequired: true,
+      gatingRequiredWhenEnabled: false,
+    };
+    const out = buildUpdatedCell(form, gatedCell);
+    expect('required' in out).toBe(false);
+    expect('requiredWhenEnabled' in out).toBe(false);
+  });
+
+  it('게이팅이 없는 input 은 required 저장이 기존과 동일하다', () => {
+    const form: CellFormState = {
+      ...cellToFormState(gatedCell),
+      gatingCondition: undefined,
+      gatingRequiredWhenEnabled: false,
+      cellRequired: true,
+    };
+    const out = buildUpdatedCell(form, gatedCell);
+    expect(out.required).toBe(true);
+    expect('enabledWhen' in out).toBe(false);
   });
 });

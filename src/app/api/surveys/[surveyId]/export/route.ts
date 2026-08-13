@@ -4,12 +4,20 @@ import { and, count, eq, inArray } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { contactTargets, surveyResponses, surveys } from '@/db/schema';
+import { getQuestionGroupsBySurvey } from '@/data/surveys';
+import { getSurveyContactStats } from '@/lib/operations/contact-stats.server';
 import { completedResponse, notDeletedResponse, notTestResponse } from '@/data/response-filters';
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { normalizeQuestions } from '@/lib/question';
 import { requireAuth } from '@/lib/auth';
-import { isAdminUserAllowed } from '@/lib/auth/admin-allowlist';
-import { generateRawDataWorkbook, type RawExportResponseRow } from '@/lib/analytics/raw-workbook';
+import { canAccessSurvey, getGuestSurveyId } from '@/lib/auth/guest-grants';
+import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
+import {
+  generateRawDataWorkbook,
+  type RawExportContext,
+  type RawExportResponseRow,
+} from '@/lib/analytics/raw-workbook';
+import { buildQuestionMetaMap, buildStepLabelMap } from '@/lib/analytics/raw-export-helpers';
 import { buildSplitWorkbook } from '@/lib/analytics/split-workbook';
 import { planSplit } from '@/lib/analytics/split-export';
 import { hydrateQuestionsForSpss } from '@/lib/spss/hydrate-questions';
@@ -25,21 +33,30 @@ type ExportType = (typeof ALLOWED_EXPORT_TYPES)[number];
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const MAX_EXPORT_RESPONSES = 10000;
 
-export async function GET(
+async function handleExport(
   request: NextRequest,
+  ctx: RouteLogContext,
   { params }: { params: Promise<{ surveyId: string }> },
 ) {
   try {
-    // 인증 + admin allowlist 가드. oRPC authed 미들웨어와 동일한 isAdminUserAllowed 를
+    // 인증 + 게스트 설문 스코프 가드. oRPC authed 미들웨어와 동일한 canAccessSurvey 를
     // 적용해, ADMIN_USER_IDS 로 어드민을 잠갔을 때 이 REST 라우트가 형제 우회 경로가
-    // 되지 않도록 한다(임의 인증사용자의 전체 응답 export 차단).
+    // 되지 않도록 한다(게스트는 grant 된 설문만, 그 외 임의 인증사용자는 전체 차단).
     const user = await requireAuth();
-    if (!isAdminUserAllowed(user.id)) {
+    const { surveyId } = await params;
+    // 다운로드 발생 사실 자체를 access 로그에 남긴다 — 법정 감사기록(접속기록)과는
+    // 별개의 운영 기록. 로그에는 쿼리 파라미터·행수만 싣는다 (응답 본문 금지).
+    ctx.bind({
+      userId: user.id,
+      role: getGuestSurveyId(user.id) ? 'guest' : 'admin',
+      surveyId,
+    });
+    if (!canAccessSurvey(user.id, surveyId)) {
       return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
     }
 
-    const { surveyId } = await params;
     const type = request.nextUrl.searchParams.get('type') as ExportType | null;
+    if (type) ctx.bind({ exportType: type });
 
     if (!type || !ALLOWED_EXPORT_TYPES.includes(type)) {
       return NextResponse.json({ error: '지원하지 않는 내보내기 형식입니다.' }, { status: 400 });
@@ -102,6 +119,7 @@ export async function GET(
           { responseId: r.id },
         ),
       }));
+      ctx.bind({ rowCount: responses.length });
     }
 
     const dateSlice = new Date().toISOString().slice(0, 10);
@@ -128,63 +146,16 @@ export async function GET(
 
     // 3. Raw Data xlsx
     if (type === 'raw') {
-      // raw 전용 모수: deleted 제외 + completed만 + 테스트 응답 제외 (행 포함 정책 통일)
-      const rawResponses = await db.query.surveyResponses.findMany({
-        where: and(
-          eq(surveyResponses.surveyId, surveyId),
-          notDeletedResponse,
-          completedResponse,
-          notTestResponse,
-        ),
-        orderBy: (r, { asc }) => [asc(r.startedAt)],
-      });
-
-      if (rawResponses.length > MAX_EXPORT_RESPONSES) {
+      const rows = await loadRawExportRows(surveyId);
+      if (rows === 'too_many') {
         return NextResponse.json(
           { error: `응답이 ${MAX_EXPORT_RESPONSES.toLocaleString()}건을 초과하여 내보내기할 수 없습니다.` },
           { status: 413 },
         );
       }
-
-      // resid / groupValue 매핑 (컨택 매칭 응답만)
-      const contactIds = rawResponses
-        .map((r) => r.contactTargetId)
-        .filter((v): v is string => !!v);
-      const contactMap = new Map<string, { resid: number; groupValue: string | null }>();
-      if (contactIds.length > 0) {
-        const targets = await db
-          .select({ id: contactTargets.id, resid: contactTargets.resid, groupValue: contactTargets.groupValue })
-          .from(contactTargets)
-          .where(inArray(contactTargets.id, contactIds));
-        for (const t of targets) contactMap.set(t.id, { resid: t.resid, groupValue: t.groupValue });
-      }
-
-      const identifierMode = surveyData.requireInviteToken ? 'systemId' : 'sequence';
-
-      const rows: RawExportResponseRow[] = rawResponses.map((r) => {
-        const c = r.contactTargetId ? contactMap.get(r.contactTargetId) : undefined;
-        return {
-          id: r.id,
-          questionResponses: decryptQuestionResponses(
-            (r.questionResponses ?? {}) as Record<string, unknown>,
-            { responseId: r.id },
-          ),
-          groupValue: c?.groupValue ?? null,
-          resid: c?.resid ?? null,
-          platform: r.platform,
-          browser: r.browser,
-          status: r.status,
-          startedAt: r.startedAt,
-          completedAt: r.completedAt,
-          totalSeconds: r.totalSeconds,
-        };
-      });
-
-      const workbook = generateRawDataWorkbook(
-        hydratedQuestions,
-        rows,
-        identifierMode,
-      );
+      ctx.bind({ rowCount: rows.length });
+      const exportCtx = await buildRawExportContext(surveyId, surveyData.questions);
+      const workbook = generateRawDataWorkbook(hydratedQuestions, rows, exportCtx);
       // exceljs 워크북 — 셀 스타일(헤더 색상/병합) 지원을 위해 XLSX 대신 사용.
       const buffer = await workbook.xlsx.writeBuffer();
       const filename = `${safeTitle}_RawData_${dateSlice}.xlsx`;
@@ -202,61 +173,20 @@ export async function GET(
       if (!basis) {
         return NextResponse.json({ error: '분할 기준 문항이 필요합니다.' }, { status: 400 });
       }
+      ctx.bind({ basis });
 
       const basisQuestion = hydratedQuestions.find((q) => q.id === basis);
       if (!basisQuestion) {
         return NextResponse.json({ error: '유효하지 않은 분할 기준 문항입니다.' }, { status: 400 });
       }
 
-      const rawResponses = await db.query.surveyResponses.findMany({
-        where: and(
-          eq(surveyResponses.surveyId, surveyId),
-          notDeletedResponse,
-          completedResponse,
-          notTestResponse,
-        ),
-        orderBy: (r, { asc }) => [asc(r.startedAt)],
-      });
-
-      if (rawResponses.length > MAX_EXPORT_RESPONSES) {
+      const rows = await loadRawExportRows(surveyId);
+      if (rows === 'too_many') {
         return NextResponse.json(
           { error: `응답이 ${MAX_EXPORT_RESPONSES.toLocaleString()}건을 초과하여 내보내기할 수 없습니다.` },
           { status: 413 },
         );
       }
-
-      const contactIds = rawResponses
-        .map((r) => r.contactTargetId)
-        .filter((v): v is string => !!v);
-      const contactMap = new Map<string, { resid: number; groupValue: string | null }>();
-      if (contactIds.length > 0) {
-        const targets = await db
-          .select({ id: contactTargets.id, resid: contactTargets.resid, groupValue: contactTargets.groupValue })
-          .from(contactTargets)
-          .where(inArray(contactTargets.id, contactIds));
-        for (const t of targets) contactMap.set(t.id, { resid: t.resid, groupValue: t.groupValue });
-      }
-
-      const identifierMode = surveyData.requireInviteToken ? 'systemId' : 'sequence';
-
-      const rows: RawExportResponseRow[] = rawResponses.map((r) => {
-        const c = r.contactTargetId ? contactMap.get(r.contactTargetId) : undefined;
-        return {
-          id: r.id,
-          questionResponses: decryptQuestionResponses(
-            (r.questionResponses ?? {}) as Record<string, unknown>,
-            { responseId: r.id },
-          ),
-          groupValue: c?.groupValue ?? null,
-          resid: c?.resid ?? null,
-          platform: r.platform,
-          browser: r.browser,
-          status: r.status,
-          startedAt: r.startedAt,
-          completedAt: r.completedAt,
-          totalSeconds: r.totalSeconds,
-        };
-      });
 
       const plan = planSplit(hydratedQuestions, basis);
       if (plan.exceedsExcelLimit) {
@@ -266,12 +196,9 @@ export async function GET(
         );
       }
 
-      const workbook = buildSplitWorkbook(
-        hydratedQuestions,
-        rows,
-        basis,
-        identifierMode,
-      );
+      ctx.bind({ rowCount: rows.length });
+      const exportCtx = await buildRawExportContext(surveyId, surveyData.questions);
+      const workbook = buildSplitWorkbook(hydratedQuestions, rows, basis, exportCtx);
       const buffer = await workbook.xlsx.writeBuffer();
       const basisCode = basisQuestion.questionCode ?? 'split';
       // Content-Disposition 헤더는 ByteString만 허용 → 한글 리터럴/코드는 퍼센트 인코딩.
@@ -314,10 +241,120 @@ export async function GET(
         { status: 400 },
       );
     }
-    console.error('Export Error:', error);
-    return NextResponse.json(
-      { error: '데이터 내보내기 중 오류가 발생했습니다.' },
-      { status: 500 },
-    );
+    // 그 외 예기치 못한 에러는 로깅 래퍼가 err 기록 + 500 응답으로 처리한다.
+    throw error;
   }
+}
+
+export const GET = withRouteLogging('/api/surveys/[surveyId]/export', handleExport, {
+  errorMessage: '데이터 내보내기 중 오류가 발생했습니다.',
+});
+
+/**
+ * raw/raw-split 공용 응답 로더.
+ * 모수: 삭제·테스트 제외 전 상태 (진행중·이탈 포함 — 상태 컬럼으로 구분).
+ * .sav 의 완료 전용 모수와 다름 (response-filters.ts 참조).
+ */
+async function loadRawExportRows(
+  surveyId: string,
+): Promise<RawExportResponseRow[] | 'too_many'> {
+  const rawWhere = and(
+    eq(surveyResponses.surveyId, surveyId),
+    notDeletedResponse,
+    notTestResponse,
+  );
+
+  // 한도 초과 판정은 JSONB 페이로드를 물화하기 전에 count 로 먼저 한다 (.sav 경로와 동일).
+  // 전 상태 모수 확장으로 행 수가 커질 수 있어, 초과 설문에서 413 대신 서버리스
+  // 메모리 고갈/타임아웃이 나는 것을 막는다.
+  const totalRows = await db.select({ total: count() }).from(surveyResponses).where(rawWhere);
+  if ((totalRows[0]?.total ?? 0) > MAX_EXPORT_RESPONSES) return 'too_many';
+
+  const rawResponses = await db.query.surveyResponses.findMany({
+    where: rawWhere,
+    orderBy: (r, { asc }) => [asc(r.startedAt)],
+  });
+
+  // count 와 fetch 사이 유입 경합 대비 벨트 (정상 경로에서는 no-op)
+  if (rawResponses.length > MAX_EXPORT_RESPONSES) return 'too_many';
+
+  const contactIds = rawResponses
+    .map((r) => r.contactTargetId)
+    .filter((v): v is string => !!v);
+  const contactMap = new Map<
+    string,
+    { resid: number; groupValue: string | null; inviteCode: string | null }
+  >();
+  if (contactIds.length > 0) {
+    const targets = await db
+      .select({
+        id: contactTargets.id,
+        resid: contactTargets.resid,
+        groupValue: contactTargets.groupValue,
+        inviteCode: contactTargets.inviteCode,
+      })
+      .from(contactTargets)
+      .where(inArray(contactTargets.id, contactIds));
+    for (const t of targets) {
+      contactMap.set(t.id, { resid: t.resid, groupValue: t.groupValue, inviteCode: t.inviteCode });
+    }
+  }
+
+  return rawResponses.map((r) => {
+    const c = r.contactTargetId ? contactMap.get(r.contactTargetId) : undefined;
+    return {
+      id: r.id,
+      questionResponses: decryptQuestionResponses(
+        (r.questionResponses ?? {}) as Record<string, unknown>,
+        { responseId: r.id },
+      ),
+      groupValue: c?.groupValue ?? null,
+      resid: c?.resid ?? null,
+      inviteCode: c?.inviteCode ?? null,
+      ipHash: r.ipHash,
+      currentStepId: r.currentStepId,
+      platform: r.platform,
+      browser: r.browser,
+      status: r.status,
+      startedAt: r.startedAt,
+      completedAt: r.completedAt,
+      totalSeconds: r.totalSeconds,
+    };
+  });
+}
+
+/** 메타 컬럼 렌더 컨텍스트 — 개별 URL 베이스와 마지막 입력 문항 라벨 맵. */
+async function buildRawExportContext(
+  surveyId: string,
+  questions: Array<{
+    id: string;
+    order: number;
+    title: string;
+    type: string;
+    groupId: string | null;
+    pageBreakBefore: boolean | null;
+    questionCode: string | null;
+  }>,
+): Promise<RawExportContext> {
+  const groups = await getQuestionGroupsBySurvey(surveyId);
+  // 조건부 메타 열 판정 — 설문 설정 기준 (응답 매칭 여부 무관):
+  // 컨택 타겟이 없으면 번호(systemID) 열, 그룹값이 전무하면 조사 대상 그룹 열을 만들지 않는다.
+  // raw export 모수는 테스트 응답 제외이므로 컨택 통계도 real 스코프로 한정한다.
+  const { hasContacts, hasContactGroups } = await getSurveyContactStats(surveyId, 'real');
+  const stepQs = questions.map((q) => ({
+    id: q.id,
+    order: q.order,
+    title: q.title,
+    type: q.type,
+    groupId: q.groupId,
+    pageBreakBefore: q.pageBreakBefore ?? false,
+    questionCode: q.questionCode,
+  }));
+  return {
+    appUrl: (process.env['NEXT_PUBLIC_APP_URL'] ?? '').replace(/\/+$/, ''),
+    stepLabels: buildStepLabelMap(stepQs, groups),
+    hasContacts,
+    hasContactGroups,
+    questionMeta: buildQuestionMetaMap(questions),
+  };
 }

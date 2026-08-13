@@ -11,7 +11,15 @@ import {
   TableColumn,
   TableRow,
 } from '@/types/survey';
+import { produce } from 'immer';
+
 import { hasExistingOtherRankingCell } from '@/utils/ranking-source';
+import { remapGatingValues } from '@/utils/option-value-remap';
+import {
+  pruneDeadGatingAfterPaste,
+  regenerateCellOptionIds,
+  resolvePastedGating,
+} from '../utils/drag-copy-utils';
 import {
   generateAllCellCodes,
   generateCellCodesForRow,
@@ -21,6 +29,11 @@ import {
   buildDefaultHeaderGrid,
   reconcileHeaderGridForColumnChange,
 } from '@/utils/table-merge-helpers';
+import {
+  applyHeaderBulkStyle,
+  type HeaderBulkStyle,
+  withHeaderStyle,
+} from '@/utils/header-style';
 
 import { checkCanMerge, executeMerge, executeUnmerge } from '../utils/table-cell-merge';
 import { useDragCopy } from './use-drag-copy';
@@ -31,7 +44,7 @@ interface UseTableEditorParams {
   tableTitle?: string | undefined;
   columns?: TableColumn[] | undefined;
   rows?: TableRow[] | undefined;
-  tableHeaderGrid?: HeaderCell[][] | undefined;
+  tableHeaderGrid?: HeaderCell[][] | null | undefined;
   currentQuestionId?: string | undefined;
   questionCode?: string | undefined;
   questionTitle?: string | undefined;
@@ -39,7 +52,9 @@ interface UseTableEditorParams {
     tableTitle: string;
     tableColumns: TableColumn[];
     tableRowsData: TableRow[];
-    tableHeaderGrid?: HeaderCell[][] | undefined;
+    // 항상 싣는다 — 키를 생략하면 상위 저장 경로가 "미변경"으로 읽어
+    // 다단계 헤더 해제가 유실된다. 해제는 명시적 null.
+    tableHeaderGrid: HeaderCell[][] | null;
   }) => void;
 }
 
@@ -166,7 +181,7 @@ export function useTableEditor({
 
   const [useMultiRowHeader, setUseMultiRowHeader] = useState(!!initialHeaderGrid);
   const [currentHeaderGrid, setCurrentHeaderGrid] = useState<HeaderCell[][] | undefined>(
-    initialHeaderGrid,
+    initialHeaderGrid ?? undefined,
   );
 
   // 행 조건부 표시 모달
@@ -243,7 +258,7 @@ export function useTableEditor({
         tableTitle: title,
         tableColumns: cols,
         tableRowsData: rowsData,
-        ...(headerGridRef.current !== undefined ? { tableHeaderGrid: headerGridRef.current } : {}),
+        tableHeaderGrid: headerGridRef.current ?? null,
       });
     },
     [],
@@ -275,7 +290,7 @@ export function useTableEditor({
           tableTitle: title,
           tableColumns: cols,
           tableRowsData: rowsData,
-          ...(headerGridRef.current !== undefined ? { tableHeaderGrid: headerGridRef.current } : {}),
+          tableHeaderGrid: headerGridRef.current ?? null,
         });
         pendingChangeRef.current = null;
         pendingArgsRef.current = null;
@@ -309,7 +324,7 @@ export function useTableEditor({
             tableTitle: title,
             tableColumns: cols,
             tableRowsData: rowsData,
-            ...(headerGridRef.current !== undefined ? { tableHeaderGrid: headerGridRef.current } : {}),
+            tableHeaderGrid: headerGridRef.current ?? null,
           });
         }
       }
@@ -604,6 +619,32 @@ export function useTableEditor({
     [notifyChangeDebounced],
   );
 
+  // 스타일 변경은 타이핑이 아니므로 debounce 없이 즉시 커밋한다.
+  const updateColumnStyle = useCallback(
+    (columnIndex: number, style: HeaderBulkStyle) => {
+      // 열 코드 등 label/code debounce가 예약되어 있으면 취소한다.
+      // 취소하지 않으면 나중에 stale cols(값 캡처)가 발화해 방금 적용한 스타일을 덮어쓴다.
+      if (pendingChangeRef.current) {
+        clearTimeout(pendingChangeRef.current);
+        pendingChangeRef.current = null;
+        pendingArgsRef.current = null;
+      }
+
+      // debounce를 취소해도 ref-only 행 편집은 화면 state까지 즉시 반영해야 한다.
+      if (pendingRowsSyncRef.current) {
+        pendingRowsSyncRef.current = false;
+        setCurrentRows(currentRowsRef.current);
+      }
+
+      const updatedColumns = currentColumnsRef.current.map((col, index) => (
+        index === columnIndex ? withHeaderStyle(col, style) : col
+      ));
+      commitColumns(updatedColumns);
+      notifyChange(currentTitleRef.current, updatedColumns, currentRowsRef.current);
+    },
+    [commitColumns, notifyChange],
+  );
+
   // ── 행 CRUD ──
 
   const addRow = useCallback(() => {
@@ -806,6 +847,11 @@ export function useTableEditor({
       if (!sourceRow) return;
 
       const newRowId = generateId();
+      // 셀 게이팅 컨트롤러 리매핑용 — 원본 행 셀 id → 복제 행 셀 id
+      const clonedCellIdByOld = new Map<string, string>();
+      sourceRow.cells.forEach((cell, colIndex) => {
+        clonedCellIdByOld.set(cell.id, `cell-${newRowId}-${columns[colIndex]?.id ?? colIndex}`);
+      });
       const newRow: TableRow = {
         ...sourceRow,
         id: newRowId,
@@ -815,6 +861,21 @@ export function useTableEditor({
           const cloned: TableCell = JSON.parse(JSON.stringify(cell));
           cloned.id = `cell-${newRowId}-${columns[colIndex]?.id ?? colIndex}`;
           delete cloned.rowspan;
+          // 게이팅 컨트롤러가 같은 행을 가리키면 복제 행의 새 id 로 리매핑
+          // (같은 행 밖 참조는 원본 그대로 두고 진단이 잡는다)
+          if (cloned.enabledWhen) {
+            const remapped = clonedCellIdByOld.get(cloned.enabledWhen.controllerCellId);
+            if (remapped) {
+              cloned.enabledWhen = { ...cloned.enabledWhen, controllerCellId: remapped };
+            }
+          }
+          // 응답 인용 이름은 설문 전역 식별자다. 그대로 복제하면 6행 표가 사실은
+          // 6개의 질문이라는 의도가 깨지고, 같은 이름을 가진 셀들이 응답 페이지에서
+          // 조용히 하나의 문구로 합쳐진다(동일 이름 병합은 의도된 동작이라 경고도 없다).
+          delete cloned.answerQuoteEnabled;
+          delete cloned.answerQuoteName;
+          // 옵션 id 재발번 — 원본 행과 공유하면 optionTexts 사이드카가 충돌한다
+          regenerateCellOptionIds(cloned, generateId);
           return cloned;
         }),
         ...(sourceRow.displayCondition
@@ -1084,6 +1145,22 @@ export function useTableEditor({
         targetColumn?.label,
       );
 
+      // 옵션 id 재발번 — 소스 셀과 공유하면 optionTexts 사이드카가 충돌한다
+      // (spread 복사라 옵션 배열 참조 공유도 여기서 끊는다)
+      regenerateCellOptionIds(pastedCell, generateId);
+
+      // 셀 게이팅 컨트롤러 재해석 — 같은 행의 보이는 셀이면 유지, 다른 행·숨김 셀이면 제거
+      // (게이팅은 같은 행 값만 평가하고, 병합 숨김 셀은 응답이 없어 영구 비활성이 된다)
+      if (pastedCell.enabledWhen) {
+        const resolved = resolvePastedGating(pastedCell.enabledWhen, undefined, targetRow?.cells ?? []);
+        if (resolved) {
+          pastedCell.enabledWhen = resolved;
+        } else {
+          delete pastedCell.enabledWhen;
+          delete pastedCell.requiredWhenEnabled;
+        }
+      }
+
       let updatedRows = rows.map((row, rIndex) =>
         rIndex === rowIndex
           ? { ...row, cells: row.cells.map((c, cIndex) => (cIndex === cellIndex ? pastedCell : c)) }
@@ -1106,6 +1183,18 @@ export function useTableEditor({
             return c;
           }),
         }));
+
+        // 붙여넣은 병합 스팬이 같은 행의 컨트롤러를 새로 덮으면, 그 컨트롤러를 참조하던
+        // 게이팅이 영구 비활성 죽은 참조가 된다 — 스팬 커버리지로 선판정해 정리.
+        // (셀 객체가 원본과 공유되므로 immer 로 불변 갱신)
+        updatedRows = produce(updatedRows, (draft) => {
+          pruneDeadGatingAfterPaste(draft, rows, {
+            fromRow: rowIndex,
+            toRow: rowIndex + rowspan - 1,
+            fromCol: cellIndex,
+            toCol: cellIndex + colspan - 1,
+          });
+        });
       }
 
       const finalRows = recalculateHiddenCells(updatedRows);
@@ -1118,8 +1207,20 @@ export function useTableEditor({
   // ── 셀 삭제/업데이트 ──
 
   const updateCell = useCallback(
-    (rowIndex: number, cellIndex: number, cell: TableCell) => {
-      const rows = currentRowsRef.current;
+    (
+      rowIndex: number,
+      cellIndex: number,
+      cell: TableCell,
+      valueChanges?: { oldValue: string; newValue: string }[],
+    ) => {
+      // 옵션 optionCode 편집이 value 를 동기화시킨 경우, 이 셀을 controllerCellId 로
+      // 참조하는 같은 표의 게이팅(enabledWhen)을 셀 저장과 같은 커밋에서 리매핑한다.
+      let rows = currentRowsRef.current;
+      if (valueChanges && valueChanges.length > 0) {
+        for (const { oldValue, newValue } of valueChanges) {
+          rows = remapGatingValues(rows, cell.id, oldValue, newValue);
+        }
+      }
       let updatedRows = rows.map((row, rIndex) =>
         rIndex === rowIndex
           ? { ...row, cells: row.cells.map((c, cIndex) => (cIndex === cellIndex ? cell : c)) }
@@ -1266,6 +1367,7 @@ export function useTableEditor({
       setUseMultiRowHeader(enabled);
       if (enabled && !headerGridRef.current) {
         const defaultGrid = buildDefaultHeaderGrid(currentColumnsRef.current);
+        headerGridRef.current = defaultGrid;
         setCurrentHeaderGrid(defaultGrid);
         onTableChangeRef.current({
           tableTitle: currentTitleRef.current,
@@ -1274,11 +1376,15 @@ export function useTableEditor({
           tableHeaderGrid: defaultGrid,
         });
       } else if (!enabled) {
+        // ref 도 즉시 비운다 — 재렌더 전에 발생하는 후속 알림이 stale grid 를
+        // 다시 실어 보내면 방금 한 해제가 되살아난다.
+        headerGridRef.current = undefined;
         setCurrentHeaderGrid(undefined);
         onTableChangeRef.current({
           tableTitle: currentTitleRef.current,
           tableColumns: currentColumnsRef.current,
           tableRowsData: currentRowsRef.current,
+          tableHeaderGrid: null,
         });
       }
     },
@@ -1287,6 +1393,7 @@ export function useTableEditor({
 
   const updateHeaderGrid = useCallback(
     (newGrid: HeaderCell[][]) => {
+      headerGridRef.current = newGrid;
       setCurrentHeaderGrid(newGrid);
       onTableChangeRef.current({
         tableTitle: currentTitleRef.current,
@@ -1298,13 +1405,47 @@ export function useTableEditor({
     [],
   );
 
+  const applyHeaderStyle = useCallback((style: HeaderBulkStyle) => {
+    if (pendingChangeRef.current) {
+      clearTimeout(pendingChangeRef.current);
+      pendingChangeRef.current = null;
+      pendingArgsRef.current = null;
+    }
+
+    // debounce를 취소해도 ref-only 행 편집은 화면 state까지 즉시 반영해야 한다.
+    if (pendingRowsSyncRef.current) {
+      pendingRowsSyncRef.current = false;
+      setCurrentRows(currentRowsRef.current);
+    }
+
+    const result = applyHeaderBulkStyle(
+      currentColumnsRef.current,
+      headerGridRef.current,
+      style,
+    );
+
+    commitColumns(result.columns);
+    if (result.headerGrid !== undefined) {
+      headerGridRef.current = result.headerGrid;
+      setCurrentHeaderGrid(result.headerGrid);
+    }
+
+    onTableChangeRef.current({
+      tableTitle: currentTitleRef.current,
+      tableColumns: result.columns,
+      tableRowsData: currentRowsRef.current,
+      tableHeaderGrid: result.headerGrid ?? null,
+    });
+  }, [commitColumns]);
+
   // ── columnWidths (EditorTableRow에 안정적 참조 전달용) ──
 
+  // 라벨/코드 변경 시 재생성 방지: 너비만 키로 추적
+  const columnWidthsKey = currentColumns.map((col) => col.width).join(',');
   const columnWidths = useMemo(
     () => currentColumns.map((col) => col.width || 150),
-    // 라벨/코드 변경 시 재생성 방지: 너비만 추적
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [currentColumns.map((col) => col.width).join(',')],
+    [columnWidthsKey],
   );
 
   // ── selectedCellContext (CellContentModal용 useMemo) ──
@@ -1367,6 +1508,7 @@ export function useTableEditor({
       moveColumn,
       moveRow,
       updateColumnLabel,
+      updateColumnStyle,
       updateColumnCode,
       handleColumnWidthChange,
       setEditingColumnWidth,
@@ -1405,6 +1547,7 @@ export function useTableEditor({
       // 다단계 헤더
       toggleMultiRowHeader,
       updateHeaderGrid,
+      applyHeaderStyle,
       // 드래그 복사
       ...dragCopy,
     },

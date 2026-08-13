@@ -22,6 +22,41 @@ interface TableValidationEditorProps {
   allQuestions: Question[];
 }
 
+function ExpectedValuesInput({
+  id,
+  values,
+  onChange,
+}: {
+  id: string;
+  values: string[] | undefined;
+  onChange: (values: string[] | undefined) => void;
+}) {
+  const [draft, setDraft] = useState(() => values?.join(', ') ?? '');
+  const [isEditing, setIsEditing] = useState(false);
+
+  return (
+    <Input
+      id={id}
+      value={isEditing ? draft : (values?.join(', ') ?? '')}
+      onFocus={() => {
+        setDraft(values?.join(', ') ?? '');
+        setIsEditing(true);
+      }}
+      onChange={(e) => {
+        const raw = e.target.value;
+        setDraft(raw);
+        const parsed = raw
+          .split(',')
+          .map((value) => value.trim())
+          .filter(Boolean);
+        onChange(parsed.length > 0 ? parsed : undefined);
+      }}
+      onBlur={() => setIsEditing(false)}
+      placeholder="예: 5, 10, 15 (쉼표로 구분)"
+    />
+  );
+}
+
 export function TableValidationEditor({
   question,
   onUpdate,
@@ -147,9 +182,13 @@ export function TableValidationEditor({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-semibold">테이블 검증 규칙</h3>
+          <h3 className="text-lg font-semibold">테이블 분기 규칙</h3>
           <p className="text-sm text-gray-600">
-            특정 조건 만족 시 설문 중단 또는 다른 질문으로 이동
+            특정 조건 만족 시 설문을 종료하거나 다른 질문으로 이동합니다.
+          </p>
+          <p className="mt-1 text-xs text-gray-500">
+            숫자 입력 오류로 다음 진행을 막으려면 해당 셀의 숫자만 입력 설정에서 허용값을
+            지정하세요.
           </p>
         </div>
         <Button onClick={addRule} size="sm">
@@ -354,22 +393,17 @@ export function TableValidationEditor({
                         <Label htmlFor={`expected-values-${rule.id}`}>
                           기대하는 값들 (선택사항)
                         </Label>
-                        <Input
+                        <ExpectedValuesInput
                           id={`expected-values-${rule.id}`}
-                          value={(rule.conditions.expectedValues || []).join(', ')}
-                          onChange={(e) => {
-                            const values = e.target.value
-                              .split(',')
-                              .map((v) => v.trim())
-                              .filter((v) => v);
+                          values={rule.conditions.expectedValues}
+                          onChange={(values) => {
                             updateRule(rule.id, {
                               conditions: (() => {
                                 const { expectedValues: _ev, ...rest } = rule.conditions;
-                                return values.length > 0 ? { ...rest, expectedValues: values } : rest;
+                                return values ? { ...rest, expectedValues: values } : rest;
                               })(),
                             });
                           }}
-                          placeholder="예: 5, 10, 15 (쉼표로 구분)"
                         />
                         <p className="text-xs text-gray-500">
                           입력 필드에 이 값들 중 하나가 입력되었는지 확인합니다. 비워두면 값이
@@ -425,7 +459,6 @@ export function TableValidationEditor({
                             setRules((prev) =>
                               prev.map((r) => {
                                 if (r.id !== rule.id) return r;
-                                // eslint-disable-next-line @typescript-eslint/no-unused-vars
                                 const { additionalConditions: _ac, ...rest } = r;
                                 return rest;
                               }),
@@ -545,7 +578,6 @@ export function TableValidationEditor({
                             setRules((prev) =>
                               prev.map((r) => {
                                 if (r.id !== rule.id) return r;
-                                // eslint-disable-next-line @typescript-eslint/no-unused-vars
                                 const { targetQuestionMap: _tqm, ...rest } = r;
                                 return rest;
                               }),
@@ -679,16 +711,6 @@ export function TableValidationEditor({
                     </div>
                   )}
 
-                  {/* 오류 메시지 (선택) */}
-                  <div className="space-y-2">
-                    <Label htmlFor={`error-${rule.id}`}>오류 메시지 (선택)</Label>
-                    <Input
-                      id={`error-${rule.id}`}
-                      value={rule.errorMessage || ''}
-                      onChange={(e) => updateRule(rule.id, { errorMessage: e.target.value })}
-                      placeholder="조건 불만족 시 표시할 메시지"
-                    />
-                  </div>
                 </CardContent>
               </CollapsibleContent>
             </Collapsible>

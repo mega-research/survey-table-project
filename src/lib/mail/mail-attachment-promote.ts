@@ -1,7 +1,7 @@
 import * as Sentry from '@sentry/nextjs';
 
 import type { MailAttachment } from '@/db/schema/schema-types';
-import { deleteR2ObjectsByKey, moveR2Objects } from '@/lib/image-utils-server';
+import { copyR2Objects } from '@/lib/image-utils-server';
 
 import {
   PERMANENT_ATTACHMENT_PREFIX,
@@ -22,10 +22,14 @@ export class AttachmentPromoteError extends Error {
  * promote 한다.
  *
  * 1. tmp/mail-attachment/ prefix 만 추출
- * 2. R2 COPY + DELETE (1차 시도 + 실패분 1회 retry)
+ * 2. R2 COPY-only (1차 시도 + 실패분 1회 retry) — 원본(tmp)은 삭제하지 않는다
  * 3. 모두 성공이면 영구 key 로 교체된 새 배열 반환
- * 4. 1개라도 실패하면 — 이미 옮긴 영구 orphan 을 cleanup 후 AttachmentPromoteError throw.
- *    DB 갱신이 일어나지 않으므로 영구 orphan 은 cleanup orchestrator 가 못 잡아낸다.
+ * 4. 1개라도 실패하면 AttachmentPromoteError throw. 이번 호출이 이미 영구 위치로 copy 한
+ *    객체는 롤백하지 않는다 — tmp 원본이 그대로 남아있어 재시도하면 다시 copy 될 뿐이다.
+ *    (과거엔 move 라 이 시점에 유일 사본이던 dst 를 롤백 삭제해 방금 업로드한 파일이
+ *    영구 소실되는 사고가 있었다. copy-only 전환으로 그 롤백 자체를 제거했다.)
+ *
+ * tmp 잔여물은 R2 lifecycle(tmp/ 24h) 위임 — 대시보드 규칙 존재 확인 필요(키 권한으로 코드에서 미검증).
  */
 export async function promoteMailAttachments(
   attachments: MailAttachment[],
@@ -45,7 +49,7 @@ export async function promoteMailAttachments(
   let allMoved = [] as Array<{ srcKey: string; dstKey: string }>;
   let stillFailed: string[] = [];
 
-  const first = await moveR2Objects(initialPairs);
+  const first = await copyR2Objects(initialPairs);
   allMoved = first.movedKeys;
   stillFailed = first.failed;
 
@@ -53,26 +57,21 @@ export async function promoteMailAttachments(
   if (stillFailed.length > 0) {
     const retryPairs = initialPairs.filter((p) => stillFailed.includes(p.srcKey));
     await new Promise((resolve) => setTimeout(resolve, 500));
-    const second = await moveR2Objects(retryPairs);
+    const second = await copyR2Objects(retryPairs);
     allMoved = [...allMoved, ...second.movedKeys];
     stillFailed = second.failed;
   }
 
   if (stillFailed.length > 0) {
-    // 이미 영구 위치로 옮긴 객체는 DB 갱신이 일어나지 않아 cleanup orchestrator 도
-    // 못 잡아내는 orphan 이 됨. 같은 batch 의 부분 성공분을 즉시 폐기.
-    if (allMoved.length > 0) {
-      deleteR2ObjectsByKey(allMoved.map((p) => p.dstKey)).catch(() => undefined);
-    }
+    // copy-only 이므로 이번 호출에서 이미 영구 위치로 copy 한 객체(allMoved)를
+    // 롤백하지 않는다 — tmp 원본이 그대로 남아있어 재시도하면 다시 copy 될 뿐이고,
+    // dst 삭제는 과거 "유일 사본(dst) 삭제 사고"의 원인이었으므로 의도적으로 하지 않는다.
     Sentry.captureMessage(
-      `메일 첨부 promote 최종 실패: ${stillFailed.length}개`,
+      `메일 첨부 promote 최종 실패: ${stillFailed.length}개 (tmp 원본 보존 — 재시도 가능)`,
       {
         level: 'error',
         tags: { operation: 'attachment_promote', kind: 'mail' },
-        extra: {
-          failedKeys: stillFailed,
-          rolledBackKeys: allMoved.map((p) => p.dstKey),
-        },
+        extra: { failedKeys: stillFailed },
       },
     );
     throw new AttachmentPromoteError(stillFailed);

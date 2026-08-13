@@ -4,10 +4,12 @@ import { desc, eq, gt, ilike, inArray, or, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { NewSavedQuestion, savedQuestions } from '@/db/schema/surveys';
-import { extractImageUrlsFromQuestion } from '@/lib/image-extractor';
-import { deleteImagesFromR2Server } from '@/lib/image-utils-server';
 import { escapeLikePattern } from '@/lib/operations/filter-shared';
 import { normalizeQuestion } from '@/lib/question';
+import { registerDeletionCandidates } from '@/lib/r2-lifecycle/deletion-queue.server';
+import { extractR2KeysFromJsonbValue } from '@/lib/r2-lifecycle/key-extract';
+import { collectFieldLimitedSaveDiff } from '@/lib/r2-lifecycle/save-diff-collector.server';
+import { promoteNoticeAttachments } from '@/lib/survey/notice-attachment-promote';
 import { promoteSurveyImages } from '@/lib/survey/survey-image-promote';
 import { generateId } from '@/lib/utils';
 import type { Question, SavedQuestion } from '@/types/survey';
@@ -136,9 +138,11 @@ export async function getSavedQuestionsByTag(tag: string): Promise<SavedQuestion
 // 뮤테이션
 // ========================
 
-/** 질문 저장 — tmp/survey/ 이미지를 영구 prefix로 promote 후 insert */
+/** 질문 저장 — tmp/survey/ 이미지·tmp/notice-attachment/ 첨부를 영구 prefix로 promote 후 insert */
 export async function createSavedQuestion(input: CreateSavedQuestionInput): Promise<SavedQuestion> {
-  const [promotedQuestion] = await promoteSurveyImages([input.question]);
+  const [promotedQuestion] = await promoteNoticeAttachments(
+    await promoteSurveyImages([input.question]),
+  );
 
   const newSavedQuestion: NewSavedQuestion = {
     question: promotedQuestion as unknown as NewSavedQuestion['question'],
@@ -155,52 +159,65 @@ export async function createSavedQuestion(input: CreateSavedQuestionInput): Prom
   return toDomainSavedQuestion(saved);
 }
 
-/** 저장된 질문 업데이트 — question 포함 시 이미지 promote */
+/** 저장된 질문 업데이트 — question 포함 시 이미지·공지 첨부 promote */
 export async function updateSavedQuestion(
   id: string,
   updates: UpdateSavedQuestionInput['updates'],
 ): Promise<SavedQuestion> {
   let promotedQuestion = updates.question;
   if (updates.question) {
-    const [promoted] = await promoteSurveyImages([updates.question]);
+    const [promoted] = await promoteNoticeAttachments(
+      await promoteSurveyImages([updates.question]),
+    );
     promotedQuestion = promoted;
   }
 
-  const [updated] = await db
-    .update(savedQuestions)
-    .set({
-      ...updates,
-      question: promotedQuestion as unknown as NewSavedQuestion['question'],
-      updatedAt: new Date(),
-    })
-    .where(eq(savedQuestions.id, id))
-    .returning();
+  // 저장 전 행 콘텐츠 read → write → 저장 diff 등록·부활 취소를 같은 트랜잭션으로.
+  // question 이 payload 에 없으면(메타만 수정) diff 비교 대상이 없어 no-op.
+  return db.transaction(async (tx) => {
+    const [oldRow] = await tx.select().from(savedQuestions).where(eq(savedQuestions.id, id));
 
-  if (!updated) throw new Error('질문 수정에 실패했습니다.');
-  return toDomainSavedQuestion(updated);
+    const [updated] = await tx
+      .update(savedQuestions)
+      .set({
+        ...updates,
+        question: promotedQuestion as unknown as NewSavedQuestion['question'],
+        updatedAt: new Date(),
+      })
+      .where(eq(savedQuestions.id, id))
+      .returning();
+
+    if (!updated) throw new Error('질문 수정에 실패했습니다.');
+
+    if (oldRow && updates.question) {
+      await collectFieldLimitedSaveDiff(tx, {
+        oldRow: { question: oldRow.question },
+        payloadRow: { question: promotedQuestion },
+        reason: `보관함 질문 수정: ${oldRow.name || id}`,
+      });
+    }
+
+    return toDomainSavedQuestion(updated);
+  });
 }
 
-/** 저장된 질문 삭제 — 연결 이미지 R2에서도 삭제 시도 */
+/**
+ * 저장된 질문 삭제 — 연결 이미지는 R2 에서 지우지 않는다.
+ * 원본 설문이 같은 URL 을 계속 참조 중일 수 있다(오늘 사고와 동형 경로).
+ */
 export async function deleteSavedQuestion(id: string): Promise<void> {
-  const savedQuestion = await db.query.savedQuestions.findFirst({
-    where: eq(savedQuestions.id, id),
-  });
-
-  if (savedQuestion) {
-    const question = normalizeQuestion(savedQuestion.question);
-    const images = extractImageUrlsFromQuestion(question);
-
-    if (images.length > 0) {
-      try {
-        await deleteImagesFromR2Server(images);
-      } catch (error) {
-        console.error('라이브러리 질문 삭제 시 이미지 삭제 실패:', error);
-        // 이미지 삭제 실패해도 질문 삭제는 진행
-      }
+  // 삭제 전 같은 트랜잭션에서 질문 JSONB 의 R2 키를 수집해 유예 삭제 큐에 등록
+  await db.transaction(async (tx) => {
+    const [row] = await tx.select().from(savedQuestions).where(eq(savedQuestions.id, id));
+    if (row) {
+      await registerDeletionCandidates(tx, {
+        keys: extractR2KeysFromJsonbValue(row.question),
+        source: 'library-delete',
+        reason: `보관함 질문 삭제: ${row.name || id}`,
+      });
     }
-  }
-
-  await db.delete(savedQuestions).where(eq(savedQuestions.id, id));
+    await tx.delete(savedQuestions).where(eq(savedQuestions.id, id));
+  });
 }
 
 /**

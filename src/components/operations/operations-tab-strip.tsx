@@ -14,6 +14,8 @@ import { cn } from '@/lib/utils';
 
 interface OperationsTabStripProps {
   surveyId: string;
+  /** 게스트 세션 — 쿼터 탭을 숨긴다. */
+  isGuest: boolean;
 }
 
 /**
@@ -27,7 +29,7 @@ interface OperationsTabStripProps {
  * - shadcn NavigationMenu primitive 가 hover/click/키보드 표준을 처리하며
  *   Trigger 의 ChevronDown 이 내장돼 있어 caret 마크업은 별도로 그리지 않는다.
  */
-export function OperationsTabStrip({ surveyId }: OperationsTabStripProps) {
+export function OperationsTabStrip({ surveyId, isGuest }: OperationsTabStripProps) {
   const pathname = usePathname() ?? '';
   const operationsBase = `/admin/surveys/${surveyId}/operations`;
   const overviewHref = `${operationsBase}/overview`;
@@ -164,20 +166,22 @@ export function OperationsTabStrip({ surveyId }: OperationsTabStripProps) {
             </NavigationMenuContent>
           </NavigationMenuItem>
 
-          <NavigationMenuItem>
-            <Link
-              href={quotaHref}
-              aria-current={isQuotaActive ? 'page' : undefined}
-              className={cn(
-                'flex h-auto items-center gap-1 rounded-none border-b-2 bg-transparent px-4 py-3 text-sm transition-colors',
-                isQuotaActive
-                  ? 'border-blue-600 font-semibold text-blue-600 hover:text-blue-600'
-                  : 'border-transparent text-slate-500 hover:text-slate-900',
-              )}
-            >
-              쿼터
-            </Link>
-          </NavigationMenuItem>
+          {!isGuest && (
+            <NavigationMenuItem>
+              <Link
+                href={quotaHref}
+                aria-current={isQuotaActive ? 'page' : undefined}
+                className={cn(
+                  'flex h-auto items-center gap-1 rounded-none border-b-2 bg-transparent px-4 py-3 text-sm transition-colors',
+                  isQuotaActive
+                    ? 'border-blue-600 font-semibold text-blue-600 hover:text-blue-600'
+                    : 'border-transparent text-slate-500 hover:text-slate-900',
+                )}
+              >
+                쿼터
+              </Link>
+            </NavigationMenuItem>
+          )}
         </NavigationMenuList>
       </NavigationMenu>
     </div>

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 
-import { Image } from 'lucide-react';
+import { Image as ImageIcon } from 'lucide-react';
 
 
 /**
@@ -29,10 +29,11 @@ export function ImageCell({ imageUrl, content }: { imageUrl: string; content?: s
       <div key={imageUrl}>
         {failedImageUrl === imageUrl ? (
           <div className="flex items-center gap-1 text-sm text-red-500">
-            <Image className="h-4 w-4" />
+            <ImageIcon className="h-4 w-4" />
             <span>이미지 오류</span>
           </div>
         ) : (
+          // eslint-disable-next-line @next/next/no-img-element -- R2 사용자 업로드 이미지(크기 미상), next/image 최적화 비용 회피
           <img
             src={imageUrl}
             alt="셀 이미지"

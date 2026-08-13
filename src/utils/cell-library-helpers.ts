@@ -30,6 +30,10 @@ export function sanitizeCellForLibrary(cell: TableCell): Partial<TableCell> {
     radioGroupName: _radioGroupName,
     // 제거 대상: 순위별 수동 SPSS 변수명 (원본 셀 전용, 다른 위치에 로드되면 충돌)
     rankVarNames: _rankVarNames,
+    // 제거 대상: 응답 인용 토글·이름 (설문 전역 식별자 — 다른 위치/설문에 로드되면
+    // 의도치 않은 이름 충돌·병합이 생긴다)
+    answerQuoteEnabled: _answerQuoteEnabled,
+    answerQuoteName: _answerQuoteName,
     // 보존 대상
     ...rest
   } = cell;
@@ -160,6 +164,8 @@ export function getCellPreviewText(cell: Partial<TableCell>): string {
       return cell.content || cell.rankingLabel || '(순위 옵션 소스)';
     case 'choice_opt':
       return cell.choiceLabel || cell.content || '(보기 옵션)';
+    case 'calc':
+      return '계산 셀';
     case 'text':
     default:
       return cell.content ? cell.content.slice(0, 30) : '';
@@ -224,4 +230,5 @@ export const CELL_TYPE_LABELS: Record<TableCell['type'], string> = {
   ranking: '순위',
   ranking_opt: '순위 옵션',
   choice_opt: '보기 옵션',
+  calc: '계산',
 };

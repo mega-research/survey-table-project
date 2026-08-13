@@ -11,6 +11,7 @@ import { useCallback, useState } from 'react';
 
 import type { NumberFormat } from '@/types/survey';
 import {
+  canInputAllowedValue,
   exceedsDecimalPlaces,
   exceedsMax,
   formatKoreanUnitReading,
@@ -47,6 +48,7 @@ export function useFormattedNumericInput({
   const decimalPlaces = numberFormat?.decimalPlaces;
   const max = numberFormat?.max;
   const min = numberFormat?.min;
+  const allowedValues = numberFormat?.allowedValues;
 
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -54,6 +56,7 @@ export function useFormattedNumericInput({
       const raw = useComma ? stripComma(displayNext) : displayNext;
       if (enabled) {
         if (!isPartialNumericInput(raw)) return;
+        if (!canInputAllowedValue(raw, allowedValues)) return;
         if (exceedsDecimalPlaces(raw, decimalPlaces)) return;
         if (exceedsMax(raw, max)) return;
         // min 도달 불가 시작(min>=1 의 0/'.' 시작, min>=0 의 음수 시작)은 타이핑에서 차단.
@@ -81,10 +84,12 @@ export function useFormattedNumericInput({
       }
       onRawChange(raw);
     },
-    [enabled, useComma, decimalPlaces, max, onRawChange],
+    [enabled, useComma, allowedValues, decimalPlaces, max, min, onRawChange],
   );
 
-  const unitReading = enabled ? formatKoreanUnitReading(rawValue, numberFormat?.unit) : null;
+  const unitReading = enabled
+    ? formatKoreanUnitReading(rawValue, numberFormat?.unit, numberFormat?.unitSuffix)
+    : null;
 
   // 범위 힌트 — 포커스 중 숨김. min 은 이 힌트가 1차 피드백이고,
   // max 는 타이핑 차단이 1차·이 힌트는 우회 값(prefill 오설정 등) 봉합용.

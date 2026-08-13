@@ -85,7 +85,8 @@ export interface TableValidationRule {
   action: BranchAction;
   targetQuestionId?: string; // 기본 타겟 (targetQuestionMap이 없을 때 사용)
   targetQuestionMap?: Record<string, string>; // { "디지털 TV": "question-id-1", "UHD TV": "question-id-2" }
-  errorMessage?: string; // 조건 미충족 시 표시할 메시지
+  /** @deprecated 분기 규칙에서는 사용하지 않음. 입력 차단 메시지는 NumberFormat을 사용 */
+  errorMessage?: string;
 }
 
 // ── 숫자 입력 표시 포맷·범위 설정 (단답형 숫자 모드 + 테이블 숫자 input 셀 공용) ──
@@ -102,9 +103,11 @@ export type NumberUnit =
 export interface NumberFormat {
   thousandSeparator?: boolean; // 천단위 콤마 표시 (화면 전용)
   unit?: NumberUnit; // 미지정 = 기본 (배수 1, 환산 표시 없음)
+  unitSuffix?: string; // 환산 읽기 끝에 붙는 단위 어절 (원, kg, t 등 자유 입력, 화면 전용)
   min?: number; // 미달 값은 "다음" 시점 검증 (빈 값은 검증 안 함)
   max?: number; // 초과 값은 타이핑 자체 차단
   decimalPlaces?: number; // undefined = 제한 없음, 0 = 정수만, N = 소수 N자리
+  allowedValues?: number[]; // 지정 시 목록의 값 또는 그 값으로 완성 가능한 중간 입력만 허용
 }
 
 // 테이블 숫자 input 셀 합계 제약 (질문 레벨, table 타입 전용).
@@ -254,6 +257,9 @@ export interface QuestionOption {
   id: string;
   label: string;
   value: string;
+  textBold?: boolean;
+  backgroundColor?: string;
+  textColor?: string;
   optionCode?: string; // 엑셀 내보내기용 옵션 코드 (예: "1", "01")
   spssNumericCode?: number; // SPSS 숫자코드 (옵션 생성 시 할당, 순서 변경해도 유지)
   isCustomOptionCode?: boolean; // 사용자가 수동 편집한 옵션코드인지 여부
@@ -271,10 +277,37 @@ export interface QuestionOption {
   hasOther?: boolean;
   // 조건부 분기
   branchRule?: BranchRule;
+  /** 응답 인용 문구. 이 항목이 선택되면 이 문구가 인용에 합류한다. 비우면 수집 제외. */
+  answerQuoteText?: string;
 }
+
+// 셀 수식 트리 — 계산 셀(표시)과 숫자 input 셀(검증)이 공유한다.
+// 그룹 = 연산자 1개 + 항 N개. 연산자를 섞으려면 그룹을 중첩한다 (우선순위 모호성 원천 차단).
+// lookup variant 는 분기 RightOperand.lookup 과 동일한 3필드 (evaluate-lookup 재사용).
+export type CalcExpr =
+  | { kind: 'literal'; value: number }
+  | { kind: 'cell'; questionId?: string; cellId: string } // questionId 생략 = 같은 질문
+  | { kind: 'question'; questionId: string } // 숫자형 단답(text + inputType number)
+  | {
+      kind: 'lookup';
+      surveyLookupId: string;
+      keyMapping: Array<{ lutKey: string; attrsKey: string }>;
+      valueColumn: string;
+    }
+  | { kind: 'agg'; fn: 'sum' | 'avg'; items: CalcExpr[] }
+  | { kind: 'group'; op: '+' | '-' | '*' | '/'; terms: CalcExpr[] };
+
+// 셀 활성 조건(게이팅) — 같은 행 컨트롤러 셀 값에 따라 input 셀의 입력 가능 여부를 제어한다.
+export type CellEnableCondition =
+  | { kind: 'option'; controllerCellId: string; values: string[] }
+  | { kind: 'filled'; controllerCellId: string }
+  | { kind: 'numeric'; controllerCellId: string; op: '>' | '>=' | '<' | '<=' | '==' | '!='; value: number };
 
 export interface TableCell {
   id: string;
+  textBold?: boolean;
+  backgroundColor?: string;
+  textColor?: string;
   cellCode?: string; // ✨ 셀 코드 (예: "Q4-1_r1_c1") — 자동생성 또는 수동 입력
   isCustomCellCode?: boolean; // 사용자가 수동 편집한 셀코드인지 여부
   exportLabel?: string; // ✨ 엑셀 열 이름 (예: "가구TV보유_TV종류_UHD")
@@ -299,7 +332,8 @@ export interface TableCell {
     | 'input'
     | 'ranking' // Case 3: 셀 내부 랭킹 (셀별 옵션 + 순위 드롭다운 N개)
     | 'ranking_opt' // Case 2: 이 셀이 질문 레벨 ranking 의 옵션 소스로 사용됨
-    | 'choice_opt'; // Case A: 이 셀이 질문 레벨 radio/checkbox 의 옵션 소스로 사용됨
+    | 'choice_opt' // Case A: 이 셀이 질문 레벨 radio/checkbox 의 옵션 소스로 사용됨
+    | 'calc'; // 수식 기반 읽기 전용 계산 셀
   // 체크박스/라디오 버튼 관련 속성
   checkboxOptions?: CheckboxOption[];
   radioOptions?: RadioOption[];
@@ -310,6 +344,8 @@ export interface TableCell {
   // 셀 내부 옵션 리스트 배치 (radio/checkbox/ranking 셀 공통)
   // undefined/1 = 세로 1열(기본) / 0 = 가로 한 줄(wrap) / N ≥ 2 = N열 그리드
   optionsColumns?: number;
+  // 모바일 카드에서의 옵션 배치 명시 override — 미지정이면 라벨 길이 휴리스틱
+  mobileOptionsColumns?: number;
   // input 관련 속성
   placeholder?: string; // 단문형 입력 필드 placeholder
   inputMaxLength?: number; // 단문형 입력 필드 최대 길이
@@ -324,6 +360,8 @@ export interface TableCell {
   numberFormat?: NumberFormat;
   // input 셀 필수 여부 — 지정 셀이 채워져야 "다음" 통과. 테이블 미접촉(전 셀 빈 값) 시 스킵
   required?: boolean;
+  // 필수 셀 미응답 안내 문구 — 미지정 시 기본 문구 사용
+  requiredMessage?: string;
   // 체크박스 선택 개수 제한 (체크박스 타입 셀 전용)
   minSelections?: number; // 최소 선택 개수
   maxSelections?: number; // 최대 선택 개수
@@ -362,6 +400,11 @@ export interface TableCell {
   // 셀 텍스트(content) 위치 — input/checkbox/radio/select/ranking 셀에서 텍스트와 입력 영역의 상대 위치
   // 기본값(undefined)은 'top' 과 동일 — 기존 동작 유지
   textPosition?: 'top' | 'bottom' | 'left' | 'right';
+  // 입력값 자체의 가로 정렬 — input 셀의 입력 텍스트, calc 셀의 계산값 표시에 적용.
+  // 셀 블록 정렬인 horizontalAlign 과 별개다: horizontalAlign 은 셀 안 콘텐츠 덩어리의 위치이고
+  // 이 필드는 입력/값 텍스트가 칸 안에서 어느 쪽부터 채워지는지를 정한다.
+  // 미지정이면 horizontalAlign 상속(기존 동작) — 숫자는 오른쪽 정렬이 자릿수 비교에 유리하다.
+  inputTextAlign?: 'left' | 'center' | 'right';
   // 모바일 카드 표시 설정.
   // - text/image/video 표시 셀: 미지정 = hidden, header/inline/collapsed 로 콘텐츠 노출 방식 지정.
   // - input/radio/checkbox/select/ranking 계열 인터랙티브 셀: hidden 이면 모바일 엑셀라벨만 숨김.
@@ -369,8 +412,36 @@ export interface TableCell {
   //   'legend' 는 text 셀 전용 — 셀 내용이 이 표의 "모든" 응답 카드 상단에 한 행
   //   (양끝 정렬) 범례로 표시된다. 스케일 표의 앵커 라벨(전혀/매우 등)용.
   mobileDisplay?: 'hidden' | 'header' | 'inline' | 'collapsed' | 'legend';
+  // 모바일 카드/드릴다운에서 입력 컨트롤 위에 표시할 제목. 입력 셀 계열 전용.
+  // 비어 있으면 exportLabel(엑셀 라벨) → 열 제목 순으로 폴백한다.
+  // 순수 표시용 — SPSS/엑셀 export 라벨에는 관여하지 않는다.
+  mobileLabel?: string;
   // 런타임 전용: 셀렉터 경계에서 분리된 continuation 셀 마커
   _isContinuation?: boolean;
+  /**
+   * 응답 인용 사용 여부. 그 자체가 질문 노릇을 하는 셀
+   * (radio/checkbox/select/input/ranking)에서만 의미가 있다.
+   */
+  answerQuoteEnabled?: boolean;
+  /** 응답 인용 토큰 이름. 다른 질문 본문에서 {{{이 값}}} 으로 참조한다. */
+  answerQuoteName?: string;
+  /**
+   * 응답 인용 문구. choice_opt/ranking_opt 셀은 "선택되면 수집, 비우면 제외",
+   * input 셀은 "값이 있으면 수집, 비우면 입력값 그대로" 로 해석된다.
+   */
+  answerQuoteText?: string;
+  // 수식 (type='calc' 표시 셀 / type='input' && inputType='number' 검증 셀 공용)
+  formula?: CalcExpr;
+  // 검증 모드 절대 오차 허용. 기본 0 = 정확 일치
+  formulaTolerance?: number;
+  // 검증 실패 메시지 커스텀. 미지정 시 기본 문구 (계산값 미노출)
+  formulaErrorMessage?: string;
+  // 셀 활성 조건 (게이팅) — 같은 행 컨트롤러 셀 값에 따라 이 input 셀의 입력 가능 여부 제어.
+  // 미지정 = 항상 활성. 컨트롤러 미응답 = 미충족 = 비활성. 스펙 docs/superpowers/specs/2026-08-05-cell-gating-design.md
+  enabledWhen?: CellEnableCondition;
+  // 활성 상태일 때 필수. 게이팅 셀에서 기존 required 는 이 필드와 같은 의미로 수렴한다
+  // — 검증은 (required || requiredWhenEnabled) && 활성 하나다.
+  requiredWhenEnabled?: boolean;
 }
 
 export interface CheckboxOption {
@@ -393,6 +464,8 @@ export interface CheckboxOption {
   hasOther?: boolean;
   // 조건부 분기
   branchRule?: BranchRule;
+  /** 응답 인용 문구. 이 항목이 선택되면 이 문구가 인용에 합류한다. 비우면 수집 제외. */
+  answerQuoteText?: string;
 }
 
 export interface RadioOption {
@@ -415,6 +488,8 @@ export interface RadioOption {
   hasOther?: boolean;
   // 조건부 분기
   branchRule?: BranchRule;
+  /** 응답 인용 문구. 이 항목이 선택되면 이 문구가 인용에 합류한다. 비우면 수집 제외. */
+  answerQuoteText?: string;
 }
 
 export interface TableRow {
@@ -457,6 +532,9 @@ export interface TableColumn {
   id: string;
   columnCode?: string; // ✨ 엑셀 내보내기용 열 코드
   label: string;
+  textBold?: boolean;
+  backgroundColor?: string;
+  textColor?: string;
   width?: number; // 열 너비 (픽셀 단위)
   minWidth?: number; // 최소 너비
   // 컬럼 헤더 병합 관련 속성
@@ -469,6 +547,9 @@ export interface TableColumn {
 export interface HeaderCell {
   id: string;
   label: string;
+  textBold?: boolean;
+  backgroundColor?: string;
+  textColor?: string;
   colspan: number; // 가로 병합 (기본 1)
   rowspan: number; // 세로 병합 (기본 1)
 }
@@ -505,6 +586,7 @@ export interface Question {
   title: string;
   description?: string;
   required: boolean;
+  requiredMessage?: string | null; // 필수 미응답 안내 문구 — 미입력 시 기본 문구 사용
   groupId?: string; // 소속 그룹 ID (QuestionGroup의 id 참조)
   options?: QuestionOption[];
   selectLevels?: SelectLevel[]; // 다단계 select용
@@ -513,7 +595,10 @@ export interface Question {
   tableTitle?: string;
   tableColumns?: TableColumn[];
   tableRowsData?: TableRow[];
-  tableHeaderGrid?: HeaderCell[][]; // 다단계 헤더 그리드 (없으면 tableColumns로 단일 행 폴백)
+  // 다단계 헤더 그리드 (없으면 tableColumns로 단일 행 폴백).
+  // null = 다단계 헤더 해제(명시적). undefined(키 부재) = 미변경 — 저장 경로가
+  // 부재 키를 미변경으로 읽으므로 토글 OFF 는 반드시 null 로 표현해야 한다.
+  tableHeaderGrid?: HeaderCell[][] | null;
   order: number;
   allowOtherOption?: boolean; // 기타 옵션 허용 여부 (radio, checkbox, select용)
   // 옵션 리스트 렌더 방식 (radio/checkbox/ranking 공통)
@@ -522,6 +607,9 @@ export interface Question {
   // 옵션 그룹 블록 정렬 (radio/checkbox 전용). null/undefined = left.
   // 가로(0)/세로(1)에서만 유효, N열 그리드는 무시. 내부는 항상 좌측 정렬(체크박스 세로선 유지).
   optionsAlign?: OptionsAlign;
+  // 모바일 옵션 배치 명시 override (radio/checkbox 전용)
+  // null/undefined = 자동(라벨 길이 휴리스틱) / 0 = 가로 / 1 = 세로 / N ≥ 2 = N열 그리드
+  mobileOptionsColumns?: number | null;
   // 체크박스 선택 개수 제한 (checkbox 타입 전용)
   minSelections?: number; // 최소 선택 개수
   maxSelections?: number; // 최대 선택 개수
@@ -552,6 +640,8 @@ export interface Question {
   dynamicRowConfigs?: DynamicRowGroupConfig[];
   // 열 라벨 숨기기 (테이블 타입 전용, UI에서만 숨기고 데이터는 보존)
   hideColumnLabels?: boolean;
+  /** 테이블 문항 내보내기 셀 순서 — 행 우선(기본) | 열 우선. Raw·분할·코딩북·.sav 공통 적용 */
+  exportCellOrder?: 'row-first' | 'column-first';
   // 모바일에서도 원본 표 레이아웃(가로 스크롤)으로 표시 — 카드/스테퍼 전환 안 함
   // (table 타입 + 설명 테이블 소스 radio/checkbox 전용)
   // 레거시 읽기 호환 전용 — 새 데이터는 mobileTableDisplayMode 사용
@@ -569,6 +659,12 @@ export interface Question {
   // SPSS .sav 내보내기 오버라이드 (없으면 질문 타입 기반 자동 판단)
   spssVarType?: 'Numeric' | 'String' | 'Date' | 'DateTime';
   spssMeasure?: 'Nominal' | 'Ordinal' | 'Continuous';
+  /** 응답 인용 사용 여부. 켜면 옵션마다 인용 문구 입력칸이 노출된다. */
+  answerQuoteEnabled?: boolean;
+  /** 응답 인용 토큰 이름. 다른 질문 본문에서 {{{이 값}}} 으로 참조한다. */
+  answerQuoteName?: string;
+  /** 단답형(text) 전용 인용 문구. 비우면 응답값을 그대로 사용한다. */
+  answerQuoteText?: string;
 }
 
 export interface Survey {
@@ -603,6 +699,9 @@ export interface SurveySettings {
   thankYouMessage: string;
   // 컨택 attrs 토큰 — invite token 강제 (0022 마이그레이션)
   requireInviteToken?: boolean;
+  // 화면 너비 — true 면 응답 페이지 컨테이너를 표 유무와 무관하게 항상 넓게(max-w-7xl).
+  // false/미설정 = 표 총폭 기준 자동 판정 (0063 마이그레이션)
+  forceWideLayout?: boolean;
   responseHeader?: SurveyResponseHeaderConfig;
   // 개인정보 보관기한 — 'YYYY-MM-DD' 날짜 문자열(해당일 포함 보유). null/미설정 = 파기하지 않음.
   piiRetentionUntil?: string | null;
@@ -637,7 +736,7 @@ export interface SurveySubmission {
   completedAt?: Date | null;
   isCompleted: boolean;
   currentGroupOrder: number;
-  questionResponses: Record<string, any>; // JSON 저장된 응답들 (questionId -> value)
+  questionResponses: Record<string, unknown>; // JSON 저장된 응답들 (questionId -> value)
   userAgent?: string | null;
   updatedAt: Date;
 }
