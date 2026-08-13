@@ -498,6 +498,8 @@ async function listBouncedEmailBlindIndexes(surveyId: string): Promise<string[]>
  *
  * sent(미확정) 상태는 배달 시도 중일 뿐이므로 제외 대상이 아니다.
  * 미리보기 목록에서는 제외하지 않는다 — 발송 시점(preflight·createCampaign)에만 적용.
+ * 단건 발송(sendSingleCampaign)에는 적용하지 않는다 — 관리자가 특정 컨택을 지목한
+ * 의도적 발송이므로 반송 주소여도 허용한다 (2026-08-13 결정).
  */
 export async function listBouncedContactIds(surveyId: string): Promise<string[]> {
   const blinds = await listBouncedEmailBlindIndexes(surveyId);
