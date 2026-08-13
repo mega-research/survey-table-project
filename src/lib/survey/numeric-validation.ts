@@ -227,7 +227,7 @@ export function evaluateSumConstraint(
 
 const SUM_OPERATOR_PHRASES: Record<SumConstraint['operator'], string> = {
   eq: '이 되어야 합니다',
-  ne: '와(과) 달라야 합니다',
+  ne: '이 아니어야 합니다',
   lte: ' 이하여야 합니다',
   gte: ' 이상이어야 합니다',
   lt: ' 미만이어야 합니다',

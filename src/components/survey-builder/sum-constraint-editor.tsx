@@ -120,6 +120,9 @@ export function SumConstraintEditor({
   };
 
   // 모드는 leftExpr/targetExpr 존재 여부에서 파생한다 — 로컬 state 이중화 금지.
+  // 주의: 셀 선택 합계 모드는 대상 셀이 전부 빈 값이면 검증 자체를 건너뛰지만(evaluateSumConstraint
+  // skipped), 수식 모드는 빈 셀을 0으로 계산해 비교를 그대로 실행한다 — 토글이 완전 등가 변환은
+  // 아니다(계산 셀(calc cell)과 동일 의미론이라 의도된 차이).
   const setLeftMode = (index: number, mode: 'cells' | 'expr') => {
     const current = constraints[index];
     if (!current) return;
