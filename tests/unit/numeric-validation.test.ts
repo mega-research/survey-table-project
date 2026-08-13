@@ -6,7 +6,7 @@ import {
   evaluateSumConstraint,
   pruneSumConstraints,
 } from '@/lib/survey/numeric-validation';
-import type { Question, SumConstraint, TableRow } from '@/types/survey';
+import type { CalcCellValidation, Question, SumConstraint, TableRow } from '@/types/survey';
 
 /** 숫자 input 셀 2개(c1, c2)를 가진 최소 테이블 질문 픽스처 */
 function tableQuestion(overrides: Partial<Question> = {}): Question {
@@ -1199,5 +1199,80 @@ describe('collectNumericIssues — 열 displayCondition (ctx 전달)', () => {
     const q = columnConditionQuestion();
     const issues = collectNumericIssues(q, { cA: '10' });
     expect(issues[0]).toMatchObject({ kind: 'required-cells', cellIds: ['cB'] });
+  });
+});
+
+describe('collectNumericIssues — 계산 셀 비교 검증', () => {
+  // c1 입력 셀 + k1 = c1 × 2 계산 셀 픽스처
+  const calcQ = (calcValidation: CalcCellValidation): Question =>
+    ({
+      id: 'q1', type: 'table', title: '표', required: false, order: 0,
+      tableRowsData: [
+        {
+          id: 'r1',
+          cells: [
+            { id: 'c1', type: 'input', content: '', inputType: 'number' },
+            {
+              id: 'k1', type: 'calc', content: '',
+              formula: {
+                kind: 'group', op: '*',
+                terms: [{ kind: 'cell', cellId: 'c1' }, { kind: 'literal', value: 2 }],
+              },
+              calcValidation,
+            },
+          ],
+        },
+      ],
+    }) as unknown as Question;
+  const numQ = {
+    id: 'q2', type: 'text', title: '예산', required: false, order: 1, inputType: 'number',
+  } as Question;
+  const ctxOf = (
+    q: Question,
+    responses: Record<string, unknown>,
+    contactAttrs: Record<string, string> = {},
+  ) => ({ allResponses: responses, allQuestions: [q, numQ], contactAttrs });
+
+  it('계산값이 기준 수식을 위반하면 formula issue + 계산 셀 하이라이트', () => {
+    const q = calcQ({ operator: 'lte', target: { kind: 'question', questionId: 'q2' } });
+    const ctx = ctxOf(q, { q1: { c1: '60' }, q2: '100' }); // 120 <= 100 위반
+    const issues = collectNumericIssues(q, { c1: '60' }, ctx);
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toMatchObject({ kind: 'formula', cellIds: ['k1'] });
+    expect(issues[0]!.message).toContain('기준값');
+  });
+
+  it('충족하면 issue 없음', () => {
+    const q = calcQ({ operator: 'lte', target: { kind: 'question', questionId: 'q2' } });
+    const ctx = ctxOf(q, { q1: { c1: '40' }, q2: '100' }); // 80 <= 100
+    expect(collectNumericIssues(q, { c1: '40' }, ctx)).toHaveLength(0);
+  });
+
+  it('errorMessage 지정 시 그 문구 사용', () => {
+    const q = calcQ({
+      operator: 'lte', target: { kind: 'question', questionId: 'q2' },
+      errorMessage: '합계가 예산을 초과했습니다',
+    });
+    const ctx = ctxOf(q, { q1: { c1: '60' }, q2: '100' });
+    expect(collectNumericIssues(q, { c1: '60' }, ctx)[0]!.message).toContain('합계가 예산을 초과했습니다');
+  });
+
+  it('tolerance 는 eq 에서 밴드로 적용된다', () => {
+    const q = calcQ({ operator: 'eq', target: { kind: 'question', questionId: 'q2' }, tolerance: 5 });
+    const okCtx = ctxOf(q, { q1: { c1: '49' }, q2: '100' }); // 98, |98-100|<=5
+    expect(collectNumericIssues(q, { c1: '49' }, okCtx)).toHaveLength(0);
+    const badCtx = ctxOf(q, { q1: { c1: '45' }, q2: '100' }); // 90
+    expect(collectNumericIssues(q, { c1: '45' }, badCtx)).toHaveLength(1);
+  });
+
+  it('기준 수식 평가 불능이면 통과 — fail-safe', () => {
+    const q = calcQ({ operator: 'eq', target: { kind: 'attr', attrsKey: '없는키' } });
+    const ctx = ctxOf(q, { q1: { c1: '60' } });
+    expect(collectNumericIssues(q, { c1: '60' }, ctx)).toHaveLength(0);
+  });
+
+  it('ctx 미전달이면 통과 — fail-safe', () => {
+    const q = calcQ({ operator: 'lte', target: { kind: 'question', questionId: 'q2' } });
+    expect(collectNumericIssues(q, { c1: '60' })).toHaveLength(0);
   });
 });

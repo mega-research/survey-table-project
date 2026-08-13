@@ -273,6 +273,23 @@ export function collectFormulaDiagnostics(
   for (const question of questions) {
     for (const row of question.tableRowsData ?? []) {
       for (const cell of row.cells) {
+        // 계산 셀 비교 검증의 기준 수식 — 차단형 검증이므로 뒤 순서 참조도 경고. cell.formula
+        // 유무와 무관하게 검사해야 하므로 아래 `!cell.formula continue` 보다 먼저 수행한다.
+        if (cell.calcValidation) {
+          checkExprRefs(
+            cell.calcValidation.target,
+            {
+              ownerQuestion: question,
+              diagCellId: cell.id,
+              ownerLabel: `${formatCellLabel(cell)} 검증 기준`,
+              isValidation: true,
+            },
+            questions,
+            lookups,
+            diagnostics,
+          );
+        }
+
         if (!cell.formula) continue;
         checkFormulaOwner(question, cell, questions, lookups, diagnostics);
         if (cell.type === 'calc' && hasCycleFromCalcCell(questions, question.id, cell.id)) {

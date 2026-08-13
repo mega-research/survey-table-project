@@ -157,4 +157,24 @@ describe('합계 제약 수식 진단', () => {
     const out = collectFormulaDiagnostics([q], [], []);
     expect(out.some((d) => d.kind === 'broken-ref' && d.cellId === 's3')).toBe(true);
   });
+
+  it('계산 셀 calcValidation.target 이 삭제된 셀을 참조하면 broken-ref', () => {
+    const q = {
+      id: 'q1', type: 'table', title: '표', required: false, order: 1,
+      tableRowsData: [
+        {
+          id: 'r1',
+          cells: [
+            {
+              id: 'k1', content: '', type: 'calc',
+              formula: { kind: 'literal', value: 1 },
+              calcValidation: { operator: 'eq', target: { kind: 'cell', cellId: 'ghost' } },
+            },
+          ],
+        },
+      ],
+    } as Question;
+    const out = collectFormulaDiagnostics([q], [], []);
+    expect(out.some((d) => d.kind === 'broken-ref' && d.cellId === 'k1')).toBe(true);
+  });
 });

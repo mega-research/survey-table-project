@@ -303,6 +303,15 @@ export type CalcExpr =
   | { kind: 'agg'; fn: 'sum' | 'avg'; items: CalcExpr[] }
   | { kind: 'group'; op: '+' | '-' | '*' | '/'; terms: CalcExpr[] };
 
+// 계산 셀 표시값 비교 검증 — 계산 결과가 기준 수식(이전 질문 응답·컨택 attrs·LUT 등)을
+// 만족하지 않으면 다음/제출을 차단한다. 셀 필드라 tableRowsData 에 실려 저장된다.
+export interface CalcCellValidation {
+  operator: SumConstraint['operator']; // 같음/다름/이상/이하/초과/미만
+  target: CalcExpr; // 기준값 수식
+  tolerance?: number; // eq/ne 전용 절대 오차. 기본 0
+  errorMessage?: string; // 미지정 시 연산자별 기본 문구
+}
+
 // 셀 활성 조건(게이팅) — 같은 행 컨트롤러 셀 값에 따라 input 셀의 입력 가능 여부를 제어한다.
 export type CellEnableCondition =
   | { kind: 'option'; controllerCellId: string; values: string[] }
@@ -442,6 +451,8 @@ export interface TableCell {
   formulaTolerance?: number;
   // 검증 실패 메시지 커스텀. 미지정 시 기본 문구 (계산값 미노출)
   formulaErrorMessage?: string;
+  // 계산 셀(type='calc') 전용 — 표시된 계산값의 비교 검증. input 셀 검증(formula 3필드)과 별개.
+  calcValidation?: CalcCellValidation;
   // 셀 활성 조건 (게이팅) — 같은 행 컨트롤러 셀 값에 따라 이 input 셀의 입력 가능 여부 제어.
   // 미지정 = 항상 활성. 컨트롤러 미응답 = 미충족 = 비활성. 스펙 docs/superpowers/specs/2026-08-05-cell-gating-design.md
   enabledWhen?: CellEnableCondition;

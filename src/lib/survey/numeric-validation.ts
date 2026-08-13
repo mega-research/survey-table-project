@@ -417,6 +417,29 @@ export function collectNumericIssues(
     }
   }
 
+  // 5) 계산 셀 비교 검증 — 표시된 계산값이 기준 수식을 만족해야 진행. fail-safe 계약은
+  //    수식 검증과 동일: ctx 없음·계산/기준 평가 불능이면 통과. 미접촉 표 스킵은 상단
+  //    hasAnyCellValue 가드를 그대로 따른다 (계산 소스가 표 밖이어도 동일 — 기존 계약).
+  for (const cell of enabled) {
+    if (cell.type !== 'calc' || !cell.formula || !cell.calcValidation) continue;
+    if (!ctx) continue;
+    const fCtx = toFormulaCtx(ctx);
+    const computed = evaluateCellFormula(cell.formula, question.id, fCtx, cell.numberFormat?.decimalPlaces);
+    if (computed === null) continue;
+    const target = evaluateCellFormula(cell.calcValidation.target, question.id, fCtx, cell.numberFormat?.decimalPlaces);
+    if (target === null) continue;
+    const v = cell.calcValidation;
+    if (!compareValues(computed, target, v.operator, v.tolerance ?? 0)) {
+      issues.push({
+        kind: 'formula',
+        message:
+          v.errorMessage?.trim() ||
+          `계산 결과가 기준값${SUM_OPERATOR_PHRASES[v.operator]} (현재 ${computed})`,
+        cellIds: [cell.id],
+      });
+    }
+  }
+
   return issues;
 }
 
