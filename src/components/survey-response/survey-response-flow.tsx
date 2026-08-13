@@ -62,7 +62,6 @@ import {
   buildRowWiseCellInstanceIds,
   scrollToIssue,
 } from '@/components/survey-response/scroll-to-issue';
-import { ValidationIssueBanner } from '@/components/survey-response/validation-issue-banner';
 import { generateId } from '@/lib/utils';
 import {
   collectTableQuestionOptions,
@@ -1257,35 +1256,6 @@ function SurveyResponseFlowActive({
             <div>초대 링크가 유효하지 않아 익명 응답으로 진행됩니다.</div>
           </div>
         )}
-        {showAdminEmptyRequiredWarning && adminStepClassification && (
-          <ValidationIssueBanner
-            tone="amber"
-            questionId={adminFirstEmptyRequiredTarget?.questionId}
-            items={[
-              {
-                message: buildAdminEmptyRequiredWarningMessage(
-                  adminStepClassification.emptyRequiredCount,
-                ),
-                cellIds: adminFirstEmptyRequiredTarget?.issue?.cellIds,
-                detailTargetIds: adminFirstEmptyRequiredTarget?.issue?.detailTargetIds,
-              },
-            ]}
-            onNavigate={() => {
-              if (!adminFirstEmptyRequiredTarget) return;
-              const { questionId: targetQuestionId, issue: targetIssue } =
-                adminFirstEmptyRequiredTarget;
-              scrollToIssue({
-                questionId: targetQuestionId,
-                detailTargetIds: targetIssue?.detailTargetIds,
-                cellInstanceIds: buildRowWiseCellInstanceIds(
-                  questions.find((q) => q.id === targetQuestionId)?.tableRowsData,
-                  targetIssue?.cellIds,
-                ),
-                cellIds: targetIssue?.cellIds,
-              });
-            }}
-          />
-        )}
         <PageStepView
           step={currentStep}
           responses={responses}
@@ -1305,9 +1275,42 @@ function SurveyResponseFlowActive({
             이전
           </Button>
 
-          <div className="text-sm text-gray-500">
-            {!canProceed() && (
-              <span className="text-red-500">* 필수 질문에 답변해주세요</span>
+          {/* 가운데 슬롯 — admin-edit 경고 1회 상태에선 빈 필수 통과 안내가 우선한다.
+              상단 배너는 시야에서 벗어나 인지되지 않아(2026-08-14) 버튼 사이로 이동. */}
+          <div className="px-4 text-sm text-gray-500" role={showAdminEmptyRequiredWarning ? 'alert' : undefined}>
+            {showAdminEmptyRequiredWarning && adminStepClassification ? (
+              <span className="flex flex-wrap items-center justify-center gap-2 text-amber-700">
+                <span>
+                  {buildAdminEmptyRequiredWarningMessage(
+                    adminStepClassification.emptyRequiredCount,
+                  )}
+                </span>
+                {adminFirstEmptyRequiredTarget && (
+                  <button
+                    type="button"
+                    className="shrink-0 rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs text-amber-900 hover:bg-amber-100"
+                    onClick={() => {
+                      const { questionId: targetQuestionId, issue: targetIssue } =
+                        adminFirstEmptyRequiredTarget;
+                      scrollToIssue({
+                        questionId: targetQuestionId,
+                        detailTargetIds: targetIssue?.detailTargetIds,
+                        cellInstanceIds: buildRowWiseCellInstanceIds(
+                          questions.find((q) => q.id === targetQuestionId)?.tableRowsData,
+                          targetIssue?.cellIds,
+                        ),
+                        cellIds: targetIssue?.cellIds,
+                      });
+                    }}
+                  >
+                    위치로 이동
+                  </button>
+                )}
+              </span>
+            ) : (
+              !canProceed() && (
+                <span className="text-red-500">* 필수 질문에 답변해주세요</span>
+              )
             )}
           </div>
 
