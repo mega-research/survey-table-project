@@ -431,9 +431,11 @@ describe('필수 옵션 상세기입 응답 흐름', () => {
       await user.click(getMobileActionButton('다음'));
 
       expect(screen.queryByText('다음 페이지 질문')).not.toBeInTheDocument();
-      // 문구는 필수 안내 하나로 합치고 위치로 이동 버튼은 유지한다 (2026-08-13)
-      expect(screen.getByRole('alert')).toHaveTextContent('필수 질문에 답변해주세요.');
-      expect(screen.getAllByText('필수 질문에 답변해주세요.')).toHaveLength(1);
+      // admin-edit 은 첫 클릭에서 빈 필수를 앰버 경고로 알리고 위치로 이동 버튼을 유지한다
+      // (2026-08-13 재결정 — 결정 6, 경고 1회 후 재클릭 시 통과).
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        '빈 필수 응답 1개 — 한 번 더 누르면 그대로 넘어갑니다',
+      );
       expect(screen.queryByText('필수 응답이 비어있습니다')).not.toBeInTheDocument();
       await user.click(screen.getByRole('button', { name: '위치로 이동' }));
       expect(scrollSpy).toHaveBeenCalledTimes(2);
