@@ -99,4 +99,12 @@ describe('formatFormulaPreview', () => {
 
     expect(formatFormulaPreview(expr, [tableQuestion()])).toBe('2행 금액');
   });
+
+  it('attr 항은 attrs.키 로 표기하고 미설정 키는 자리표시자를 쓴다', () => {
+    const expr: CalcExpr = {
+      kind: 'group', op: '+',
+      terms: [{ kind: 'attr', attrsKey: '예산' }, { kind: 'attr', attrsKey: '' }],
+    };
+    expect(formatFormulaPreview(expr, [])).toBe('attrs.예산 + attrs.[키 미지정]');
+  });
 });
