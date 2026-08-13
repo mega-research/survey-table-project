@@ -491,4 +491,63 @@ describe('필수 옵션 상세기입 응답 흐름', () => {
     expect(onSubmit).not.toHaveBeenCalled();
     expectRequiredHighlight();
   });
+
+  // 2026-08-13 재결정(결정 6) — admin-edit 전용 "빈 필수 경고 1회 후 통과" 상태 머신을
+  // handleNext/handleSubmit 직접 호출이 아니라 실제 컴포넌트 클릭으로 구동해 검증한다.
+  describe('admin-edit — 빈 필수 경고 1회 후 통과(결정 6)', () => {
+    it('빈 필수는 첫 클릭에서 경고만 하고, 값 변경 없는 두 번째 클릭에서 통과해 저장한다', async () => {
+      const onSubmit = vi.fn().mockResolvedValue(undefined);
+      // q-required 를 전혀 응답하지 않은 상태(initialResponses={}) — 단일 페이지라
+      // "다음" 버튼이 곧 최종 제출이다.
+      renderAdminFlow({}, onSubmit);
+      const user = userEvent.setup();
+
+      await screen.findByText('필수 기타 질문');
+      const nextButton = () => screen.getByRole('button', { name: '다음' });
+
+      // 첫 클릭 — 진행을 막고 앰버 경고 배너만 표시한다.
+      await user.click(nextButton());
+
+      expect(onSubmit).not.toHaveBeenCalled();
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        '빈 필수 응답 1개 — 한 번 더 누르면 그대로 넘어갑니다',
+      );
+      expectRequiredHighlight();
+
+      // 같은 페이지, 값 변경 없이 연속 두 번째 클릭 — 완화하고 저장을 진행한다.
+      await user.click(nextButton());
+
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    });
+
+    it('경고 후 값이 바뀌면(여전히 빈 필수) 경고 상태가 리셋되어 다시 첫 클릭이 경고가 된다', async () => {
+      const onSubmit = vi.fn().mockResolvedValue(undefined);
+      renderAdminFlow({}, onSubmit);
+      const user = userEvent.setup();
+
+      await screen.findByText('필수 기타 질문');
+      const nextButton = () => screen.getByRole('button', { name: '다음' });
+
+      // 1차 클릭 — 경고.
+      await user.click(nextButton());
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        '빈 필수 응답 1개 — 한 번 더 누르면 그대로 넘어갑니다',
+      );
+
+      // 옵션만 선택하고 상세기입은 비워둔다 — 여전히 빈 필수(required-detail)지만
+      // 응답값 자체는 바뀌었으므로 스냅샷이 달라져 경고 상태가 리셋되어야 한다.
+      await user.click(await screen.findByLabelText('기타'));
+
+      // 값이 바뀐 뒤의 재클릭 — 리셋되어 "첫 클릭"으로 취급, 다시 경고만 하고 통과시키지 않는다.
+      await user.click(nextButton());
+      expect(onSubmit).not.toHaveBeenCalled();
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        '빈 필수 응답 1개 — 한 번 더 누르면 그대로 넘어갑니다',
+      );
+
+      // 값 변경 없는 다음 클릭(3차) — 이번엔 통과한다.
+      await user.click(nextButton());
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    });
+  });
 });
