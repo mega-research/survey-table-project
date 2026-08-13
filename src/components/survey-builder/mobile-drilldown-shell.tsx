@@ -159,12 +159,16 @@ export function MobileDrilldownShell({
   // 여기 포함시키면 "입력 N개" 문구와 카운트 뱃지의 분모가 어긋난다.
   const inputLeafCount = (section: ClassifiedSection) =>
     section.leaves.filter((leaf) => leaf.inputCellIds.length > 0).length;
-  const secSubText = (section: ClassifiedSection) => {
+  const secSubText = (section: ClassifiedSection, status: DrilldownStatus) => {
     const inputs = inputLeafCount(section);
     // 계산 전용 섹션(합계 블록 등) — "입력 0개" 대신 표시 전용임을 그대로 알린다
     if (inputs === 0) return `표시 ${section.leaves.length}개`;
     return section.kind === 'matrix'
-      ? `세부 ${inputs}개 · 입력 ${section.totalInputs}칸`
+      ? // 선택형(choice) 테이블은 셀이 입력 칸이 아니라 선택지다 — "입력 6칸"으로 쓰면
+        // 그룹당 1개만 고르면 되는 rad 그룹에서 6개를 다 채워야 하는 것처럼 읽힌다
+        status.unit === '개 선택'
+        ? `세부 ${inputs}개 · 선택지 ${section.totalInputs}개`
+        : `세부 ${inputs}개 · 입력 ${section.totalInputs}칸`
       : section.kind === 'list'
         ? `항목 ${inputs}개`
         : `입력 ${inputs}개`;
@@ -266,7 +270,7 @@ export function MobileDrilldownShell({
                   <div className="truncate text-sm font-semibold text-gray-900">
                     {section.label || '항목'}
                   </div>
-                  <div className="mt-0.5 text-xs text-gray-400">{secSubText(section)}</div>
+                  <div className="mt-0.5 text-xs text-gray-400">{secSubText(section, status)}</div>
                 </div>
                 {/* total 0 = 전부 표시 전용(계산 셀만 있는 섹션) — 카운트 뱃지 생략 */}
                 {status.total > 0 && (
