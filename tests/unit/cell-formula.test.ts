@@ -236,4 +236,38 @@ describe('evaluateCellFormula', () => {
     };
     expect(evaluateCellFormula(expr, 'q1', ctx)).toBeNull();
   });
+
+  describe('attr 항 — 컨택 attrs 참조', () => {
+    const attrCtx = (contactAttrs: Record<string, string | undefined>) => ({
+      ...baseCtx({}),
+      contactAttrs,
+    });
+    const expr: CalcExpr = {
+      kind: 'group', op: '+',
+      terms: [{ kind: 'attr', attrsKey: '예산' }, { kind: 'literal', value: 10 }],
+    };
+
+    it('attrs 값을 숫자로 읽는다', () => {
+      expect(evaluateCellFormula(expr, 'q1', attrCtx({ 예산: '90' }))).toBe(100);
+    });
+
+    it('키가 attrs 에 없으면 null — 무효 전파', () => {
+      expect(evaluateCellFormula(expr, 'q1', attrCtx({}))).toBeNull();
+    });
+
+    it('빈 문자열·비숫자 값도 null — 무효 전파', () => {
+      expect(evaluateCellFormula(expr, 'q1', attrCtx({ 예산: '' }))).toBeNull();
+      expect(evaluateCellFormula(expr, 'q1', attrCtx({ 예산: '많음' }))).toBeNull();
+      // 빌더 테스트 모드 placeholder attrs 는 '[예산]' 형태 — 비숫자로서 null
+      expect(evaluateCellFormula(expr, 'q1', attrCtx({ 예산: '[예산]' }))).toBeNull();
+    });
+
+    it('attrsKey 미설정은 빌더 미완성 — 항만 강등(empty)', () => {
+      const unset: CalcExpr = {
+        kind: 'group', op: '+',
+        terms: [{ kind: 'attr', attrsKey: '' }, { kind: 'literal', value: 10 }],
+      };
+      expect(evaluateCellFormula(unset, 'q1', attrCtx({}))).toBe(10);
+    });
+  });
 });

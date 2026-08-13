@@ -294,6 +294,7 @@ export type CalcExpr =
       keyMapping: Array<{ lutKey: string; attrsKey: string }>;
       valueColumn: string;
     }
+  | { kind: 'attr'; attrsKey: string } // 컨택 attrs 값 (숫자 해석). 키 미설정은 빈 항, 런타임 미해결은 무효 전파
   | { kind: 'agg'; fn: 'sum' | 'avg'; items: CalcExpr[] }
   | { kind: 'group'; op: '+' | '-' | '*' | '/'; terms: CalcExpr[] };
 

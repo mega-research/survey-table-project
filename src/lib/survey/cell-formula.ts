@@ -110,6 +110,16 @@ function evalExpr(
         ? 'empty'
         : null;
     }
+    case 'attr': {
+      // 키 미설정은 빌더 미완성 — 깨진 참조 계열이므로 항만 강등 (lookup 의 keyMapping 미설정과 동일 결).
+      if (!expr.attrsKey) return 'empty';
+      // 응답자 attrs 에 값이 없거나 숫자가 아니면 런타임 미해결 — 무효 전파 (lookup 의
+      // attrs-key-missing 과 동일 결: 틀린 숫자 표시·부당한 검증 차단 방지).
+      const raw = ctx.contactAttrs[expr.attrsKey];
+      if (raw === undefined || raw.trim() === '') return null;
+      const n = parseNumericInput(raw.trim());
+      return n === null ? null : n;
+    }
     case 'agg': {
       let sum = 0;
       let filled = 0;
