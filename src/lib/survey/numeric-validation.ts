@@ -204,7 +204,7 @@ export function collectNumericIssues(
       ? [
           {
             kind: 'required-detail',
-            message: '필수 응답이 비어있습니다',
+            message: DEFAULT_REQUIRED_CELL_MESSAGE,
             detailTargetIds: optionTextIssues.detailTargetIds ?? [],
           },
         ]

@@ -378,7 +378,10 @@ describe('필수 옵션 상세기입 응답 흐름', () => {
 
     expect(screen.queryByText('다음 페이지 질문')).not.toBeInTheDocument();
     expectRequiredHighlight();
-    expect(screen.getByRole('alert')).toHaveTextContent('필수 응답이 비어있습니다');
+    // 문구는 필수 안내 하나로 합치고 배너의 위치로 이동 버튼은 유지한다 (2026-08-13)
+    expect(screen.getByRole('alert')).toHaveTextContent('필수 질문에 답변해주세요.');
+    expect(screen.getAllByText('필수 질문에 답변해주세요.')).toHaveLength(1);
+    expect(screen.queryByText('필수 응답이 비어있습니다')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '위치로 이동' })).toBeVisible();
   });
 
@@ -396,7 +399,10 @@ describe('필수 옵션 상세기입 응답 흐름', () => {
 
     expect(screen.getByText('필수 기타 질문')).toBeVisible();
     expectRequiredHighlight();
-    expect(screen.getByRole('alert')).toHaveTextContent('필수 응답이 비어있습니다');
+    // 문구는 필수 안내 하나로 합치고 배너의 위치로 이동 버튼은 유지한다 (2026-08-13)
+    expect(screen.getByRole('alert')).toHaveTextContent('필수 질문에 답변해주세요.');
+    expect(screen.getAllByText('필수 질문에 답변해주세요.')).toHaveLength(1);
+    expect(screen.queryByText('필수 응답이 비어있습니다')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '위치로 이동' })).toBeVisible();
   });
 
@@ -425,7 +431,10 @@ describe('필수 옵션 상세기입 응답 흐름', () => {
       await user.click(getMobileActionButton('다음'));
 
       expect(screen.queryByText('다음 페이지 질문')).not.toBeInTheDocument();
-      expect(screen.getByRole('alert')).toHaveTextContent('필수 응답이 비어있습니다');
+      // 문구는 필수 안내 하나로 합치고 위치로 이동 버튼은 유지한다 (2026-08-13)
+      expect(screen.getByRole('alert')).toHaveTextContent('필수 질문에 답변해주세요.');
+      expect(screen.getAllByText('필수 질문에 답변해주세요.')).toHaveLength(1);
+      expect(screen.queryByText('필수 응답이 비어있습니다')).not.toBeInTheDocument();
       await user.click(screen.getByRole('button', { name: '위치로 이동' }));
       expect(scrollSpy).toHaveBeenCalledTimes(2);
       expect(scrollSpy.mock.contexts[0]).toBe(detailInput);

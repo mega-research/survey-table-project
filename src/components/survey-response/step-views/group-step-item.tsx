@@ -8,7 +8,7 @@ import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-con
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { isEmptyHtml } from '@/lib/utils';
 import { isChoiceTableSource } from '@/utils/choice-source';
-import { resolveRequiredMessage } from '@/utils/required-message';
+import { DEFAULT_REQUIRED_CELL_MESSAGE, resolveRequiredMessage } from '@/utils/required-message';
 import { sanitizeRichHtml } from '@/lib/sanitize';
 import { StepItem } from '@/lib/group-ordering';
 import type { NumericIssue } from '@/lib/survey/numeric-validation';
@@ -73,6 +73,25 @@ export function GroupStepItem({
     () => (item.subgroupName ? substituteTokens(item.subgroupName, attrs, quotes) : null),
     [item.subgroupName, attrs, quotes],
   );
+  // 필수 미응답 안내가 이미 뜨는 질문에서 기본 문구의 필수 셀/상세 이슈는 같은 원인을
+  // 두 번 알리므로 문구를 필수 안내 하나로 합친다 — 배너의 "위치로 이동"(셀/상세 타깃)은
+  // 유지하고, 아래 별도 필수 문구 <p> 를 생략한다 (2026-08-13 결정).
+  // 셀별 지정 문구와 범위/합계/수식 위반은 별개 정보이므로 그대로 둔다.
+  const { visibleIssues, requiredMessageInBanner } = useMemo(() => {
+    if (!showRequiredMessage || !issues?.length) {
+      return { visibleIssues: issues, requiredMessageInBanner: false };
+    }
+    let merged = false;
+    const next = issues.map((issue) => {
+      const isDefaultRequiredIssue =
+        (issue.kind === 'required-cells' || issue.kind === 'required-detail') &&
+        issue.message === DEFAULT_REQUIRED_CELL_MESSAGE;
+      if (!isDefaultRequiredIssue) return issue;
+      merged = true;
+      return { ...issue, message: resolveRequiredMessage(q) };
+    });
+    return { visibleIssues: next, requiredMessageInBanner: merged };
+  }, [issues, showRequiredMessage, q]);
 
   return (
     // 페이지 내 문항 간 여백은 PageStepView 래퍼가 소유한다 (first/last 판정이 래퍼 형제 기준이어야 해서)
@@ -135,12 +154,12 @@ export function GroupStepItem({
             onChange={onChange}
             allResponses={responses as Record<string, unknown>}
             allQuestions={questions}
-            numericIssues={issues}
+            numericIssues={visibleIssues}
             selectedDynamicRowIds={selectedDynamicRowIds}
             onDynamicRowSelectionChange={onDynamicRowSelectionChange}
           />
         </div>
-        {showRequiredMessage && (
+        {showRequiredMessage && !requiredMessageInBanner && (
           <p className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
             {resolveRequiredMessage(q)}
           </p>
