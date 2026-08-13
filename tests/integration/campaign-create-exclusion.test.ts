@@ -345,4 +345,28 @@ describe('createCampaign — 부정 결과코드 컨택 제외 (preflight 동기
     expect(result.queuedCount).toBe(1);
     expect(result.skippedCount).toBe(1);
   });
+
+  // 정책(2026-08-13): 단건 발송은 관리자가 특정 컨택을 지목한 의도적 발송이므로
+  // 반송 이력이 있어도 허용한다. kind='single' 이 반송 제외를 건너뛰지 않으면
+  // validCount 0 으로 단건 발송 자체가 실패하는 회귀가 된다.
+  it('kind=single 은 반송 이력이 있어도 발송을 허용한다', async () => {
+    const idBounced = seedContact();
+    state.bouncedContactIds = [idBounced];
+
+    const result = await createCampaign(
+      {
+        surveyId: SURVEY_ID,
+        mailTemplateId: '00000000-0000-4000-8000-000000000001',
+        title: '단건: 반송 주소 재발송',
+        contactTargetIds: [idBounced],
+      },
+      USER_ID,
+      false,
+      { kind: 'single' },
+    );
+
+    expect(state.insertedRecipientContactIds).toContain(idBounced);
+    expect(result.queuedCount).toBe(1);
+    expect(result.skippedCount).toBe(0);
+  });
 });

@@ -144,13 +144,16 @@ export async function createCampaign(
     //    preflight(preflightRecipients) 와 동일 정책으로 부정 결과코드(연락금지)·반송 이력
     //    컨택을 제외한다. 제외하지 않으면 preflight 는 제외했다고 보고하나 실제로는
     //    발송되는 미스매치 발생.
+    //    반송 제외는 bulk 전용 — 단건(kind='single')은 관리자가 특정 컨택을 지목한 의도적
+    //    발송이므로 반송 주소여도 허용한다 (2026-08-13 결정). 여기서 거르면 validCount 0
+    //    으로 단건 발송 자체가 실패한다.
     const { buildNegativeCodeExists, getResultCodeStatuses } = await import(
       '@/lib/operations/result-code-statuses.server'
     );
     const { listBouncedContactIds } = await import('@/lib/operations/campaigns.server');
     const [{ negative: negativeCodes }, bouncedContactIds] = await Promise.all([
       getResultCodeStatuses(input.surveyId),
-      listBouncedContactIds(input.surveyId),
+      kind === 'single' ? Promise.resolve([]) : listBouncedContactIds(input.surveyId),
     ]);
     const notExcludedByCode = sql`NOT ${buildNegativeCodeExists(
       negativeCodes,
