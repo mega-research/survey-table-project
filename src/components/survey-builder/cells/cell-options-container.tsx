@@ -38,6 +38,8 @@ export function CellOptionsContainer({
   const layout = getOptionsLayout(cell.optionsColumns);
   // N열 그리드는 셀 폭을 N등분해야 하므로 shrink-to-fit 되는 flex item 래퍼를 셀 폭까지 넓힌다.
   // 세로/가로 배치는 콘텐츠 폭 유지가 맞으므로(셀 horizontalAlign 으로 블록 정렬) 그리드 한정.
+  // footer(기타 상세 입력란 등)가 있으면 함께 넓힌다 — 콘텐츠 폭 래퍼 안에서는 입력 행이
+  // 옵션 폭 기준으로 잡혀 셀 밖으로 넘칠 수 있다 (행 내부는 라벨 칩 truncate 로 수납).
   const isGrid = (cell.optionsColumns ?? 1) >= 2;
 
   return (
@@ -47,7 +49,7 @@ export function CellOptionsContainer({
       bold={cell.textBold}
       textColor={cell.textColor}
     >
-      <div className={cn('space-y-2', isGrid && 'w-full')}>
+      <div className={cn('space-y-2', (isGrid || footer != null) && 'w-full min-w-0')}>
         <div className={layout.className} style={layout.style}>
           {children}
         </div>

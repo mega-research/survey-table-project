@@ -30,20 +30,24 @@ interface OptionTextRowProps {
  */
 export function OptionTextRow({ label, compact, className, style, children }: OptionTextRowProps) {
   return (
+    // w-full min-w-0: 표 셀처럼 좁고 고정된 컨테이너 안에서 행이 셀 폭을 넘지 않게
+    // 부모 폭에 맞춘다 — 넘치는 몫은 아래 라벨 칩이 truncate 로 흡수한다.
     <label
       style={style}
       className={cn(
-        'flex min-h-10 cursor-text items-center gap-2 rounded-[10px] border border-gray-200 bg-white pr-0.5 pl-1 transition-colors hover:border-gray-300 focus-within:border-blue-400 focus-within:hover:border-blue-400',
+        'flex min-h-10 w-full min-w-0 cursor-text items-center gap-2 rounded-[10px] border border-gray-200 bg-white pr-0.5 pl-1 transition-colors hover:border-gray-300 focus-within:border-blue-400 focus-within:hover:border-blue-400',
         compact && 'min-h-8 gap-1.5',
         className,
       )}
     >
       {/* 옵션 라벨 필 — 필드 안 토큰 태그. max-w + truncate 로 입력 폭 침식 방지
-          (전체 문구는 title 툴팁과 입력란 aria-label 이 보존) */}
+          (전체 문구는 title 툴팁과 입력란 aria-label 이 보존).
+          shrink 허용 + min-w-8: 폭이 모자라면 입력란 대신 칩이 "공장/지…" 로 줄어든다
+          (input 은 flex-basis 0 이라 음수 여유 공간의 수축이 칩에 몰린다). */}
       <span
         title={label}
         className={cn(
-          'max-w-[40%] shrink-0 truncate rounded-md bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600',
+          'min-w-8 max-w-[40%] truncate rounded-md bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600',
           compact && 'px-1.5 py-0.5 text-[11px]',
         )}
       >
