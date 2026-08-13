@@ -339,7 +339,8 @@ it('선택 후 현재 상세를 유지하고 전체·카드 상태와 기존 min
 
   expect(screen.getAllByRole('checkbox')).toHaveLength(2);
   expect(screen.getByText('1/2개 선택됨')).toBeInTheDocument();
-  expect(screen.getByText(/^전체 /)).toHaveTextContent('전체 1 / 2개 선택');
+  // minSelections=1 — 전체 진행바 분모는 요구 선택 수(1)로 잡힌다 (2026-08-13)
+  expect(screen.getByText(/^전체 /)).toHaveTextContent('전체 1 / 1개 선택');
 
   fireEvent.click(screen.getByRole('button', { name: '목차로' }));
   expect(screen.getByRole('button', { name: /플랫폼 지표.*1\/2/ })).toBeInTheDocument();
@@ -484,6 +485,48 @@ function ControlledGroupedRadioTable() {
     />
   );
 }
+
+function ControlledMinSelectionsChoiceTable() {
+  const [value, setValue] = useState<string[]>([]);
+  const question: Question = {
+    ...multiChoiceRowQuestion(),
+    minSelections: 2,
+    maxSelections: 2,
+    tableRowsData: [
+      {
+        id: 'r1',
+        label: '',
+        cells: [
+          { id: 'label', type: 'text', content: '플랫폼 지표' },
+          { id: 'choice-active', type: 'choice_opt', content: '', choiceLabel: '활성 사용자' },
+          { id: 'choice-return', type: 'choice_opt', content: '', choiceLabel: '재방문 사용자' },
+          { id: 'choice-new', type: 'choice_opt', content: '', choiceLabel: '신규 사용자' },
+        ],
+      },
+    ],
+  };
+  return (
+    <ChoiceTableResponse
+      question={question}
+      value={value}
+      onChange={(next) => setValue(Array.isArray(next) ? next : [])}
+    />
+  );
+}
+
+it('비그룹 checkbox 의 전체 진행바는 선택지 수가 아니라 minSelections 를 분모로 쓴다', () => {
+  render(<ControlledMinSelectionsChoiceTable />);
+  expect(screen.getByText(/^전체 /)).toHaveTextContent('전체 0 / 2개 선택');
+
+  enterRow('플랫폼 지표');
+  fireEvent.click(screen.getByLabelText('활성 사용자'));
+  fireEvent.click(screen.getByLabelText('재방문 사용자'));
+
+  // min(2) 충족 — 선택지 3개 중 2개여도 진행바는 2/2, 카드 뱃지는 선택 현황(2/3) 유지
+  expect(screen.getByText(/^전체 /)).toHaveTextContent('전체 2 / 2개 선택');
+  fireEvent.click(screen.getByRole('button', { name: '목차로' }));
+  expect(screen.getByRole('button', { name: /플랫폼 지표.*2\/3/ })).toBeInTheDocument();
+});
 
 it('radio 그룹 표는 셀 수가 아니라 그룹당 1개 선택으로 진행도를 센다', () => {
   render(<ControlledGroupedRadioTable />);

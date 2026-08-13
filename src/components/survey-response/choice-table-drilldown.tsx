@@ -184,9 +184,24 @@ export function ChoiceTableDrilldown({
   const getSectionStatus = (section: ClassifiedSection): DrilldownStatus =>
     statusFromCells(section.leaves.flatMap(visibleChoiceCells));
 
-  const overallStatus = statusFromCells(
-    titledSections.flatMap((section) => section.leaves.flatMap(visibleChoiceCells)),
+  const allVisibleChoiceCells = titledSections.flatMap((section) =>
+    section.leaves.flatMap(visibleChoiceCells),
   );
+  const cellBasedOverall = statusFromCells(allVisibleChoiceCells);
+  // 비그룹 checkbox 에 minSelections 가 있으면 전체 진행바 분모는 요구 선택 수(min)다 —
+  // 검증(answer-validation)이 min 충족 시 통과하는데 분모가 전체 선택지 수면 진행률이
+  // 영구히 100%에 못 미친다. 리프/섹션 뱃지는 선택 현황 정보라 셀 기준을 유지한다.
+  const minSelections =
+    !groupKeyByCellId && typeof question.minSelections === 'number' && question.minSelections > 0
+      ? Math.min(question.minSelections, cellBasedOverall.total)
+      : null;
+  const overallStatus: DrilldownStatus = minSelections
+    ? {
+        completed: Math.min(cellBasedOverall.completed, minSelections),
+        total: minSelections,
+        unit: '개 선택',
+      }
+    : cellBasedOverall;
 
   const renderLeafDetail = (leaf: ClassifiedLeaf) => {
     const row = detailRowById.get(leaf.rowId);
