@@ -64,9 +64,11 @@ vi.mock('@/db', () => {
     surveyResponses: {
       findFirst: (...args: unknown[]) => findFirstMock(...args),
     },
-    // saveAdminEdit service 의 소유권 검증(db.query.surveys.findFirst) — 항상 존재로 통과
+    // saveAdminEdit service 의 소유권 검증(db.query.surveys.findFirst) — 항상 존재로 통과.
+    // currentVersionId: null 고정 — 이 스위트는 progress_pct 재계산이 관심사이고 버전
+    // 가드/이관은 response-edit.service.test.ts 의 '버전 가드와 이관' 스위트가 전담한다.
     surveys: {
-      findFirst: vi.fn(async () => ({ id: 's1' })),
+      findFirst: vi.fn(async () => ({ id: 's1', currentVersionId: null })),
     },
   };
   return { db: chainable };
@@ -154,7 +156,7 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
     });
     const { saveAdminEdit } = await import('@/features/survey-response/server/services/response-edit.service');
     await saveAdminEdit(
-      { surveyId: 's1', responseId: 'r1', questionResponses: { q1: 'v' } },
+      { surveyId: 's1', responseId: 'r1', questionResponses: { q1: 'v' }, versionId: null },
       { id: 'admin-1', email: 'a@b.com' },
       false,
     );
@@ -179,7 +181,7 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
     selectLimitMock.mockResolvedValue([{ snapshot: { questions: [] } }]);
     const { saveAdminEdit } = await import('@/features/survey-response/server/services/response-edit.service');
     await saveAdminEdit(
-      { surveyId: 's1', responseId: 'r1', questionResponses: {} },
+      { surveyId: 's1', responseId: 'r1', questionResponses: {}, versionId: null },
       { id: 'admin-1', email: 'a@b.com' },
       false,
     );
@@ -210,6 +212,7 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
         surveyId: 's1',
         responseId: 'r1',
         questionResponses: { q1: 'a', q3: 'b' },
+        versionId: null,
       },
       { id: 'admin-1', email: 'a@b.com' },
       false,
@@ -235,6 +238,7 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
         surveyId: 's1',
         responseId: 'r1',
         questionResponses: { q1: 'a' },
+        versionId: null,
       },
       { id: 'admin-1', email: 'a@b.com' },
       false,
@@ -268,7 +272,7 @@ describe('saveAdminEdit — progress_pct 재계산', () => {
     const { saveAdminEdit } = await import('@/features/survey-response/server/services/response-edit.service');
     await expect(
       saveAdminEdit(
-        { surveyId: 's1', responseId: 'r1', questionResponses: { q1: 'a' } },
+        { surveyId: 's1', responseId: 'r1', questionResponses: { q1: 'a' }, versionId: null },
         { id: 'admin-1', email: 'a@b.com' },
         false,
       ),

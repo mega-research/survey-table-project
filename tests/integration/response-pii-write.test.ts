@@ -755,8 +755,10 @@ describe('saveAdminEdit — 복호화 diff 안정성 + 재암호화 저장', () 
     const { encryptAnswerValue } = await import('@/lib/crypto/response-pii');
     const prevCipher = encryptAnswerValue(PII_PLAINTEXT);
 
-    // 소유권 검증 (db.query.surveys.findFirst)
-    surveyFindFirstMock.mockResolvedValue({ id: SURVEY_ID });
+    // 소유권 검증 (db.query.surveys.findFirst) — currentVersionId 는 버전 가드용,
+    // 아래 saveAdminEdit 호출의 versionId 입력과 일치시켜 이 스위트의 관심사(복호화
+    // diff/재암호화)와 무관한 버전 가드/이관 분기를 타지 않게 한다.
+    surveyFindFirstMock.mockResolvedValue({ id: SURVEY_ID, currentVersionId: VERSION_ID });
     // 기존 응답 행 — status=completed 라 progress 재계산(getProgressSnapshot)은 타지 않는다.
     responseFindFirstMock.mockResolvedValue({
       id: RESPONSE_ID,
@@ -799,6 +801,7 @@ describe('saveAdminEdit — 복호화 diff 안정성 + 재암호화 저장', () 
           [QUESTION_ID]: PII_PLAINTEXT,
           [PLAIN_QUESTION_ID]: '기존 답변',
         },
+        versionId: VERSION_ID,
       },
       { id: 'admin-1', email: 'a@b.com' },
       false,
@@ -827,6 +830,7 @@ describe('saveAdminEdit — 복호화 diff 안정성 + 재암호화 저장', () 
           [QUESTION_ID]: PII_PLAINTEXT,
           [PLAIN_QUESTION_ID]: '수정된 답변',
         },
+        versionId: VERSION_ID,
       },
       { id: 'admin-1', email: 'a@b.com' },
       false,
@@ -888,7 +892,7 @@ describe('saveAdminEdit — calc 셀 서버 재계산 (Task 13)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    surveyFindFirstMock.mockResolvedValue({ id: SURVEY_ID });
+    surveyFindFirstMock.mockResolvedValue({ id: SURVEY_ID, currentVersionId: VERSION_ID });
     // status: completed → getProgressSnapshot(버전 스냅샷 재조회) 경로를 타지 않아
     // selectLimitMock 호출을 diff 스냅샷 조회 1건으로 고정할 수 있다.
     responseFindFirstMock.mockResolvedValue({
@@ -923,6 +927,7 @@ describe('saveAdminEdit — calc 셀 서버 재계산 (Task 13)', () => {
           // 구값 5 를 담아 제출됐다고 가정 — 서버가 이걸 신뢰하지 않고 재계산해야 한다.
           [CALC_QUESTION_ID]: { [SOURCE_CELL_ID]: '10', [CALC_CELL_ID]: '5' },
         },
+        versionId: VERSION_ID,
       },
       { id: 'admin-1', email: 'a@b.com' },
       false,
@@ -943,6 +948,10 @@ describe('saveAdminEdit — calc 셀 서버 재계산 (Task 13)', () => {
   });
 
   it('버전 스냅샷을 못 얻으면(versionId=null) 재계산을 건너뛰고 제출값을 그대로 저장한다 (fail-safe)', async () => {
+    // 미배포 설문(currentVersionId=null) 시나리오로 고정 — effectiveVersionId 는
+    // input.versionId(null) ?? existing.versionId(null) 이라 결국 null 이 되어야
+    // 기존 fail-safe 의도(스냅샷 조회 자체를 skip)가 그대로 재현된다.
+    surveyFindFirstMock.mockResolvedValue({ id: SURVEY_ID, currentVersionId: null });
     responseFindFirstMock.mockResolvedValue({
       id: RESPONSE_ID,
       surveyId: SURVEY_ID,
@@ -965,6 +974,7 @@ describe('saveAdminEdit — calc 셀 서버 재계산 (Task 13)', () => {
         questionResponses: {
           [CALC_QUESTION_ID]: { [SOURCE_CELL_ID]: '10', [CALC_CELL_ID]: '5' },
         },
+        versionId: null,
       },
       { id: 'admin-1', email: 'a@b.com' },
       false,
@@ -987,7 +997,7 @@ describe('saveAdminEdit — calc 셀 서버 재계산 (Task 13)', () => {
     const CROSS_CALC_QUESTION_ID = 'q-calc-cross';
     const CROSS_CALC_CELL_ID = `${CROSS_CALC_QUESTION_ID}-c`;
 
-    surveyFindFirstMock.mockResolvedValue({ id: SURVEY_ID });
+    surveyFindFirstMock.mockResolvedValue({ id: SURVEY_ID, currentVersionId: VERSION_ID });
     responseFindFirstMock.mockResolvedValue({
       id: RESPONSE_ID,
       surveyId: SURVEY_ID,
@@ -1044,6 +1054,7 @@ describe('saveAdminEdit — calc 셀 서버 재계산 (Task 13)', () => {
           [SOURCE_QUESTION_ID]: '20',
           [CROSS_CALC_QUESTION_ID]: { [CROSS_CALC_CELL_ID]: '5' },
         },
+        versionId: VERSION_ID,
       },
       { id: 'admin-1', email: 'a@b.com' },
       false,
@@ -1090,6 +1101,7 @@ describe('saveAdminEdit — calc 셀 서버 재계산 (Task 13)', () => {
           questionResponses: {
             [CALC_QUESTION_ID]: { [SOURCE_CELL_ID]: '10', [CALC_CELL_ID]: '5' },
           },
+          versionId: VERSION_ID,
         },
         { id: 'admin-1', email: 'a@b.com' },
         false,
