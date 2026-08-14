@@ -212,7 +212,15 @@ export function ContactInfoCard({
           </div>
           {inviteCode && inviteUrl && (
             <div className="mt-1 break-all text-sm text-slate-900">
-              초대 링크: {inviteUrl}
+              초대 링크:{' '}
+              <a
+                href={inviteUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-blue-600 underline underline-offset-2 hover:text-blue-700"
+              >
+                {inviteUrl}
+              </a>
             </div>
           )}
         </div>
