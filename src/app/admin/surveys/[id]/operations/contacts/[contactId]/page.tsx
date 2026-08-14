@@ -14,6 +14,7 @@ import {
   getResponseEditLogs,
 } from '@/lib/operations/contacts.server';
 import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
+import { isGuestViewer } from '@/lib/auth/guest-viewer';
 
 export const metadata: Metadata = {
   title: '현황 - 조사 대상 단건 편집',
@@ -40,7 +41,7 @@ export default async function ContactDetailPage({ params }: PageProps) {
     getContactColumnScheme(surveyId, scope),
     getContactResultCodes(surveyId),
     getMailRecipientsForTarget(detail.contact.id, scope),
-    getResponseEditLogs(editableResponseId),
+    getResponseEditLogs(editableResponseId, detail.contact.id),
     getMailTemplatesBySurvey(surveyId),
   ]);
   if (!scheme) notFound();
@@ -86,6 +87,7 @@ export default async function ContactDetailPage({ params }: PageProps) {
         mailHistory={mailHistory}
         editLogs={editLogs}
         mailSend={{ templates: mailTemplateOptions, disabledReason: mailSendDisabledReason }}
+        canReset={!(await isGuestViewer())}
         initial={{
           id: detail.contact.id,
           resid: detail.contact.resid,

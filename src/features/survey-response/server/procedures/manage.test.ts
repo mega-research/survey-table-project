@@ -12,6 +12,7 @@ vi.mock('../services/response-manage.service', async () => {
     softDeleteResponse: vi.fn(),
     restoreResponse: vi.fn(),
     hardResetResponse: vi.fn(),
+    allowReeditResponse: vi.fn(),
   };
 });
 
@@ -46,13 +47,41 @@ describe('surveyResponse.manage procedures', () => {
     expect(res).toEqual({ ok: true });
   });
 
-  it('hardReset는 service.hardResetResponse에 위임하고 {ok:true}를 반환한다', async () => {
+  it('hardReset는 service.hardResetResponse에 편집자 스냅샷과 함께 위임하고 {ok:true}를 반환한다', async () => {
     vi.mocked(svc.hardResetResponse).mockResolvedValue({ ok: true } as never);
     const client = createRouterClient({ manage }, { context: authedContext() });
     const input = { surveyId: SURVEY_ID, responseId: RESPONSE_ID };
     const res = await client.manage.hardReset(input);
-    expect(svc.hardResetResponse).toHaveBeenCalledWith(input);
+    expect(svc.hardResetResponse).toHaveBeenCalledWith(input, {
+      id: 'admin-1',
+      email: 'a@b.com',
+    });
     expect(res).toEqual({ ok: true });
+  });
+
+  it('allowReedit는 service.allowReeditResponse에 편집자 스냅샷과 함께 위임하고 {ok:true}를 반환한다', async () => {
+    vi.mocked(svc.allowReeditResponse).mockResolvedValue({ ok: true } as never);
+    const client = createRouterClient({ manage }, { context: authedContext() });
+    const input = { surveyId: SURVEY_ID, responseId: RESPONSE_ID };
+    const res = await client.manage.allowReedit(input);
+    expect(svc.allowReeditResponse).toHaveBeenCalledWith(input, {
+      id: 'admin-1',
+      email: 'a@b.com',
+    });
+    expect(res).toEqual({ ok: true });
+  });
+
+  it('allowReedit는 ReeditUnavailableError를 사유별 안내가 담긴 BAD_REQUEST로 매핑한다', async () => {
+    vi.mocked(svc.allowReeditResponse).mockRejectedValue(
+      new svc.ReeditUnavailableError('survey_paused') as never,
+    );
+    const client = createRouterClient({ manage }, { context: authedContext() });
+    await expect(
+      client.manage.allowReedit({ surveyId: SURVEY_ID, responseId: RESPONSE_ID }),
+    ).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: expect.stringContaining('중단 상태'),
+    });
   });
 
   it('SurveyOwnershipError는 NOT_FOUND로 매핑된다', async () => {

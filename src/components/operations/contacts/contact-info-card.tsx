@@ -1,7 +1,23 @@
 'use client';
 
+import { useState, useTransition } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
+import { toast } from 'sonner';
+
+import { client } from '@/shared/lib/rpc';
+import { getErrorMessage } from '@/lib/get-error-message';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
@@ -31,6 +47,8 @@ interface ContactInfoCardProps {
   respondedAt: Date | null;
   responseId: string | null;
   inviteCode: string | null;
+  /** 응답 초기화(hard reset) 버튼 노출 — authed 전용이라 게스트는 false. */
+  canReset?: boolean;
   /** 헤더 토글 변경 시 호출 — 컬럼 스킴 hidden 갱신. 신규 모드는 undefined. */
   onColumnToggle?: (key: string, hidden: boolean) => void;
   /** attrs 입력 변경 */
@@ -57,12 +75,48 @@ export function ContactInfoCard({
   respondedAt,
   responseId,
   inviteCode,
+  canReset = false,
   onColumnToggle,
   onAttrsChange,
   onPiiChange,
   onMemoChange,
   onContactMethodChange,
 }: ContactInfoCardProps) {
+  const router = useRouter();
+  const [resetOpen, setResetOpen] = useState(false);
+  const [reeditOpen, setReeditOpen] = useState(false);
+  const [isResetting, startReset] = useTransition();
+
+  const runReset = () => {
+    if (!responseId) return;
+    startReset(async () => {
+      try {
+        await client.surveyResponse.manage.hardReset({ surveyId, responseId });
+        setResetOpen(false);
+        toast.success('응답 내역을 초기화했습니다.');
+        router.refresh();
+      } catch (err) {
+        toast.error(getErrorMessage(err, '응답 초기화에 실패했습니다. 다시 시도해 주세요.'));
+      }
+    });
+  };
+
+  const runAllowReedit = () => {
+    if (!responseId) return;
+    startReset(async () => {
+      try {
+        await client.surveyResponse.manage.allowReedit({ surveyId, responseId });
+        setReeditOpen(false);
+        toast.success(
+          '재응답을 허용했습니다. 응답자가 초대 링크로 다시 들어가면 기존 답변을 수정할 수 있습니다.',
+        );
+        router.refresh();
+      } catch (err) {
+        toast.error(getErrorMessage(err, '재응답 허용에 실패했습니다. 다시 시도해 주세요.'));
+      }
+    });
+  };
+
   const inputDefs: InputDef[] = scheme.columns
     .flatMap<InputDef>((c) => {
       const ak = attrsKeyOf(c.source);
@@ -191,11 +245,18 @@ export function ContactInfoCard({
             ) : (
               <span className="text-xs text-slate-400">미응답</span>
             )}
-            <Button size="sm" variant="outline" disabled title="후속 슬라이스 (메일발송)">
+            {/* 한 줄 유지 — 버튼 5개가 들어가야 하므로 컴팩트 사이즈 통일 */}
+            <Button
+              size="sm"
+              variant="outline"
+              disabled
+              title="후속 슬라이스 (메일발송)"
+              className="h-7 px-2 text-xs"
+            >
               QR
             </Button>
             {responseId ? (
-              <Button asChild size="sm" variant="outline">
+              <Button asChild size="sm" variant="outline" className="h-7 px-2 text-xs">
                 <Link
                   href={`/admin/surveys/${surveyId}/operations/profiles/${responseId}/edit`}
                   target="_blank"
@@ -205,11 +266,80 @@ export function ContactInfoCard({
                 </Link>
               </Button>
             ) : (
-              <Button size="sm" variant="outline" disabled title="응답이 아직 없습니다.">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled
+                title="응답이 아직 없습니다."
+                className="h-7 px-2 text-xs"
+              >
                 응답 수정
               </Button>
             )}
+            {canReset && responseId && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 border-red-200 px-2 text-xs text-red-600 hover:bg-red-50 hover:text-red-700"
+                onClick={() => setResetOpen(true)}
+              >
+                응답 초기화
+              </Button>
+            )}
+            {canReset && responseId && respondedAt && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 border-blue-200 px-2 text-xs text-blue-600 hover:bg-blue-50 hover:text-blue-700"
+                onClick={() => setReeditOpen(true)}
+              >
+                재응답 허용
+              </Button>
+            )}
           </div>
+          {/* 재응답 허용 — 완료 응답을 진행중으로 되돌려 응답자 본인이 수정·재제출 */}
+          <AlertDialog open={reeditOpen} onOpenChange={setReeditOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>재응답을 허용합니다</AlertDialogTitle>
+                <AlertDialogDescription>
+                  완료된 응답이 진행중 상태로 전환됩니다. 응답자가 기존 초대 링크로
+                  다시 들어가면 지금까지의 답변이 채워진 채 수정할 수 있고, 다시
+                  제출하면 완료로 기록됩니다. 전환 동안에는 완료 통계에서 잠시
+                  제외되며, 수정/편집 현황에 허용 기록이 남습니다.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>취소</AlertDialogCancel>
+                <AlertDialogAction disabled={isResetting} onClick={runAllowReedit}>
+                  재응답 허용
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+          {/* 초기화 — 응답 완전 제거, 복구 불가 (profiles hardReset 과 동일 RPC) */}
+          <AlertDialog open={resetOpen} onOpenChange={setResetOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>응답 내역을 초기화합니다</AlertDialogTitle>
+                <AlertDialogDescription>
+                  이 조사 대상의 응답이 통계와 기록에서 완전히 삭제되며 복구할 수
+                  없습니다. 응답 상태는 미응답으로 돌아가고, 수정/편집 현황에 초기화
+                  기록이 남습니다.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>취소</AlertDialogCancel>
+                <AlertDialogAction
+                  disabled={isResetting}
+                  onClick={runReset}
+                  className="bg-red-600 hover:bg-red-700"
+                >
+                  초기화
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
           {inviteCode && inviteUrl && (
             <div className="mt-1 break-all text-sm text-slate-900">
               초대 링크:{' '}

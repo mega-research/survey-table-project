@@ -18,10 +18,13 @@ interface Props {
   hasResponse: boolean;
 }
 
-/** 응답 편집 audit 이력 — 기본 접힘 collapsible. */
+/** 응답 편집 audit 이력 — 기본 접힘 collapsible. 초기화 마커는 응답이 삭제된 뒤에도 남는다. */
 export function ContactEditHistoryCard({ rows, hasResponse }: Props) {
   return (
-    <details open={hasResponse} className="group rounded-lg border bg-white">
+    <details
+      open={hasResponse || rows.length > 0}
+      className="group rounded-lg border bg-white"
+    >
       <summary className="flex cursor-pointer items-center justify-between px-5 py-3 text-sm">
         <span className="flex items-center gap-1.5 font-medium text-slate-700">
           수정 / 편집 현황 ({rows.length}건)
@@ -29,10 +32,10 @@ export function ContactEditHistoryCard({ rows, hasResponse }: Props) {
         </span>
       </summary>
       <div className="border-t px-5 py-3">
-        {!hasResponse ? (
-          <p className="text-sm text-slate-400">매칭된 응답이 없습니다.</p>
-        ) : rows.length === 0 ? (
-          <p className="text-sm text-slate-400">수정 이력이 없습니다.</p>
+        {rows.length === 0 ? (
+          <p className="text-sm text-slate-400">
+            {hasResponse ? '수정 이력이 없습니다.' : '매칭된 응답이 없습니다.'}
+          </p>
         ) : (
           <ul className="space-y-2">
             {rows.map((r) => (
@@ -43,7 +46,17 @@ export function ContactEditHistoryCard({ rows, hasResponse }: Props) {
                 <div className="text-sm text-slate-700">{r.editorEmail ?? '관리자'}</div>
                 <div className="text-xs text-slate-500">
                   <LocalDateTime value={r.createdAt} /> ·{' '}
-                  {summarizeChanges(r.changedQuestions, r.changedCount)}
+                  {r.action === 'reset' ? (
+                    <span className="font-medium text-red-600">
+                      응답 내역 초기화 (복구 불가 삭제)
+                    </span>
+                  ) : r.action === 'reedit_allow' ? (
+                    <span className="font-medium text-blue-600">
+                      재응답 허용 (완료 응답을 진행중으로 전환)
+                    </span>
+                  ) : (
+                    summarizeChanges(r.changedQuestions, r.changedCount)
+                  )}
                 </div>
               </li>
             ))}

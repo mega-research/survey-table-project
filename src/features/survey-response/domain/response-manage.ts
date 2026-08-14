@@ -26,6 +26,12 @@ export const HardResetResponseInput = z.object({
 });
 export type HardResetResponseInput = z.infer<typeof HardResetResponseInput>;
 
+export const AllowReeditResponseInput = z.object({
+  surveyId: z.string(),
+  responseId: z.string(),
+});
+export type AllowReeditResponseInput = z.infer<typeof AllowReeditResponseInput>;
+
 /** 세 관리 동작 공통 출력 */
 export const ResponseManageOutput = z.object({ ok: z.literal(true) });
 export type ResponseManageOutput = z.infer<typeof ResponseManageOutput>;

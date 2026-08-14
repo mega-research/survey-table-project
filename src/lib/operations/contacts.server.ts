@@ -1,7 +1,7 @@
 import 'server-only';
 import { cache } from 'react';
 
-import { and, asc, desc, eq, inArray, isNull, sql, type AnyColumn, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, or, sql, type AnyColumn, type SQL } from 'drizzle-orm';
 
 import { db } from '@/db';
 import {
@@ -524,20 +524,30 @@ export async function getMailRecipientsForTarget(
 
 export interface ResponseEditLogRow {
   id: string;
+  action: 'edit' | 'reset' | 'reedit_allow';
   editorEmail: string | null;
   changedQuestions: ResponseEditChange[];
   changedCount: number;
   createdAt: Date;
 }
 
-/** 응답 편집 audit 이력 (최근순). responseId 없으면 빈 배열. */
+/**
+ * 응답 편집 audit 이력 (최근순).
+ * 일반 수정 로그는 responseId, 초기화 마커(action:'reset')는 응답 삭제 후에도
+ * 남도록 contactTargetId 로 연결된다 — 둘 다 있으면 OR 로 합쳐 조회한다.
+ */
 export async function getResponseEditLogs(
   responseId: string | null,
+  contactTargetId?: string | null,
 ): Promise<ResponseEditLogRow[]> {
-  if (!responseId) return [];
+  const conds: SQL[] = [];
+  if (responseId) conds.push(eq(responseEditLogs.responseId, responseId));
+  if (contactTargetId) conds.push(eq(responseEditLogs.contactTargetId, contactTargetId));
+  if (conds.length === 0) return [];
   const rows = await db
     .select({
       id: responseEditLogs.id,
+      action: responseEditLogs.action,
       surveyId: responseEditLogs.surveyId,
       editorEmail: responseEditLogs.editorEmail,
       changedQuestions: responseEditLogs.changedQuestions,
@@ -545,7 +555,7 @@ export async function getResponseEditLogs(
       createdAt: responseEditLogs.createdAt,
     })
     .from(responseEditLogs)
-    .where(eq(responseEditLogs.responseId, responseId))
+    .where(or(...conds))
     .orderBy(desc(responseEditLogs.createdAt));
   if (rows.length === 0) return [];
 
@@ -566,6 +576,7 @@ export async function getResponseEditLogs(
 
   return rows.map((r) => ({
     id: r.id,
+    action: r.action,
     editorEmail: r.editorEmail,
     changedQuestions: mergeChangeLabels(r.changedQuestions, labelMap),
     changedCount: r.changedCount,
