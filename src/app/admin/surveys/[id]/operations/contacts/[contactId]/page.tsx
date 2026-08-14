@@ -9,6 +9,7 @@ import {
   getContactColumnScheme,
   getContactDetailById,
   getContactResultCodes,
+  getEditableResponseIdForTarget,
   getMailRecipientsForTarget,
   getResponseEditLogs,
 } from '@/lib/operations/contacts.server';
@@ -29,11 +30,17 @@ export default async function ContactDetailPage({ params }: PageProps) {
   const detail = await getContactDetailById(contactId, scope);
   if (!detail || detail.contact.surveyId !== surveyId) notFound();
 
+  // 완료·진행중·이탈 통틀어 최신 응답이 수정 대상. contactTargetId 미링크
+  // 레거시 완료 건만 contact_targets.responseId 로 폴백한다.
+  const editableResponseId =
+    (await getEditableResponseIdForTarget(detail.contact.id, scope)) ??
+    detail.contact.responseId;
+
   const [scheme, resultCodes, mailHistory, editLogs, mailTemplates] = await Promise.all([
     getContactColumnScheme(surveyId, scope),
     getContactResultCodes(surveyId),
     getMailRecipientsForTarget(detail.contact.id, scope),
-    getResponseEditLogs(detail.contact.responseId),
+    getResponseEditLogs(editableResponseId),
     getMailTemplatesBySurvey(surveyId),
   ]);
   if (!scheme) notFound();
@@ -89,7 +96,7 @@ export default async function ContactDetailPage({ params }: PageProps) {
           respondedAt: detail.contact.respondedAt,
           inviteToken: detail.contact.inviteToken,
           inviteCode: detail.contact.inviteCode,
-          responseId: detail.contact.responseId,
+          responseId: editableResponseId,
           attempts: detail.attempts,
         }}
       />

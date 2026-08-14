@@ -201,12 +201,12 @@ export function ContactInfoCard({
                   target="_blank"
                   rel="noreferrer"
                 >
-                  응답 보기
+                  응답 수정
                 </Link>
               </Button>
             ) : (
               <Button size="sm" variant="outline" disabled title="응답이 아직 없습니다.">
-                응답 보기
+                응답 수정
               </Button>
             )}
           </div>

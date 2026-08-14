@@ -8,6 +8,7 @@ import {
   contactTargets,
   contactUploads,
   surveys,
+  surveyResponses,
   questions,
   mailRecipients,
   mailCampaigns,
@@ -38,6 +39,7 @@ import {
 } from './contacts-filter-sql';
 import { FILTER_SOURCE, type ColumnCandidateWithPii } from './filter-shared';
 import {
+  responseScopeCondition,
   targetScopeCondition,
   type OperationsDataScope,
 } from './data-scope.server';
@@ -422,6 +424,32 @@ export async function getContactDetailById(
     },
     attempts,
   };
+}
+
+/**
+ * 컨택의 수정 가능 응답 id — 완료·진행중·이탈 응답 중 가장 최근 건을 돌려준다.
+ * contact_targets.responseId(완료 시에만 링크)에 의존하지 않아, 완료 후 다시
+ * 진입한 진행중 응답이 있으면 그 최신 건이 열린다. 조사 대상 단건 편집의
+ * "응답 수정" 버튼용 (미응답·자격미달·불량은 대상 아님).
+ */
+export async function getEditableResponseIdForTarget(
+  contactTargetId: string,
+  scope: OperationsDataScope,
+): Promise<string | null> {
+  const [row] = await db
+    .select({ id: surveyResponses.id })
+    .from(surveyResponses)
+    .where(
+      and(
+        eq(surveyResponses.contactTargetId, contactTargetId),
+        inArray(surveyResponses.status, ['completed', 'in_progress', 'drop']),
+        isNull(surveyResponses.deletedAt),
+        responseScopeCondition(scope),
+      ),
+    )
+    .orderBy(desc(surveyResponses.createdAt))
+    .limit(1);
+  return row?.id ?? null;
 }
 
 /**
