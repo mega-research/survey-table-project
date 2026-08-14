@@ -155,6 +155,45 @@ function evalExpr(
   }
 }
 
+/**
+ * 검증 전용 — 수식의 데이터 참조 항(cell/question/attr/lookup)이 1개 이상 있고
+ * 전부 빈 값/미해소이면 true. literal 전용 수식은 false(비교 실행).
+ * group/SUM 이 빈 항을 0으로 접는 표시 의미론과 달리, 검증 기준값이 "무응답 → 0"으로
+ * 둔갑해 응답자를 오차단하는 것을 막는다 (레거시 합계 제약의 "전부 빈 값이면 skipped"와 동일 결).
+ * evalExpr 의 평가 의미론은 건드리지 않는다 — 참조 항 각각을 단독 평가해 판정만 한다.
+ */
+export function areAllFormulaRefsEmpty(
+  expr: CalcExpr,
+  ownQuestionId: string,
+  ctx: FormulaEvalCtx,
+): boolean {
+  const refs: CalcExpr[] = [];
+  const walk = (e: CalcExpr): void => {
+    switch (e.kind) {
+      case 'cell':
+      case 'question':
+      case 'attr':
+      case 'lookup':
+        refs.push(e);
+        return;
+      case 'agg':
+        e.items.forEach(walk);
+        return;
+      case 'group':
+        e.terms.forEach(walk);
+        return;
+      case 'literal':
+        return;
+    }
+  };
+  walk(expr);
+  if (refs.length === 0) return false;
+  return refs.every((ref) => {
+    const v = evalExpr(ref, ownQuestionId, ctx, new Set());
+    return v === 'empty' || v === null;
+  });
+}
+
 export function evaluateCellFormula(
   expr: CalcExpr,
   ownQuestionId: string,

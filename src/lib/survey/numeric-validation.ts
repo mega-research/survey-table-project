@@ -18,7 +18,7 @@ import { REQUIRED_CELL_TYPES } from '@/utils/serialize-cell';
 import { DEFAULT_REQUIRED_CELL_MESSAGE } from '@/utils/required-message';
 import { isCellValuePresent } from '@/utils/table-cell-semantics';
 
-import { evaluateCellFormula, roundFormulaValue } from './cell-formula';
+import { areAllFormulaRefsEmpty, evaluateCellFormula, roundFormulaValue } from './cell-formula';
 import { isCellEnabled } from './cell-gating';
 import { collectRequiredOptionTextIssues } from './required-option-text-validation';
 
@@ -193,7 +193,13 @@ export function evaluateSumConstraint(
   let left: number;
   if (constraint.leftExpr) {
     if (!evalOpts) return { skipped: true, ok: true, sum: 0 };
-    const v = evaluateCellFormula(constraint.leftExpr, evalOpts.ownQuestionId, toFormulaCtx(evalOpts.ctx));
+    const fCtx = toFormulaCtx(evalOpts.ctx);
+    // 참조 항이 전부 빈 값이면(group/SUM 이 0으로 접기 전) skipped — 레거시 cellIds 모드의
+    // "전부 빈 값이면 skipped" 와 동일 의미론.
+    if (areAllFormulaRefsEmpty(constraint.leftExpr, evalOpts.ownQuestionId, fCtx)) {
+      return { skipped: true, ok: true, sum: 0 };
+    }
+    const v = evaluateCellFormula(constraint.leftExpr, evalOpts.ownQuestionId, fCtx);
     if (v === null) return { skipped: true, ok: true, sum: 0 };
     left = v;
   } else {
@@ -214,7 +220,12 @@ export function evaluateSumConstraint(
   let right: number;
   if (constraint.targetExpr) {
     if (!evalOpts) return { skipped: true, ok: true, sum: left };
-    const v = evaluateCellFormula(constraint.targetExpr, evalOpts.ownQuestionId, toFormulaCtx(evalOpts.ctx));
+    const fCtx = toFormulaCtx(evalOpts.ctx);
+    // 좌변과 동일 의미론 — 기준값 수식의 참조가 전부 빈 값이면 skipped.
+    if (areAllFormulaRefsEmpty(constraint.targetExpr, evalOpts.ownQuestionId, fCtx)) {
+      return { skipped: true, ok: true, sum: left };
+    }
+    const v = evaluateCellFormula(constraint.targetExpr, evalOpts.ownQuestionId, fCtx);
     if (v === null) return { skipped: true, ok: true, sum: left };
     right = v;
   } else {
@@ -279,7 +290,6 @@ export function collectNumericIssues(
   // 미접촉 판정은 실제 셀 값 키 기준 — __selectedRowIds/__optTexts__ 등 사이드카 키는 세지 않는다.
   // (emptyDefault 자동 채움이 있으면 셀 키가 생겨 검증 대상이 된다 — 의도됨, Q1 그릴링 확정)
   const hasAnyCellValue = Object.keys(cellValues).some((k) => !k.startsWith('__'));
-  if (!hasAnyCellValue) return [];
 
   const visible = collectVisibleTableCells(question, cellValues, ctx);
   // 게이팅 — 비활성 셀은 모든 차단형 검증에서 제외한다 (비활성 필수 셀이 "다음"을
@@ -291,141 +301,152 @@ export function collectNumericIssues(
     for (const cell of row.cells) rowOfCell.set(cell.id, row.cells);
   }
   const enabled = visible.filter((c) => isCellEnabled(c, cellValues, rowOfCell.get(c.id)));
-  const inputCells = enabled.filter((c) => c.type === 'input');
   const issues: NumericIssue[] = [];
 
-  // 1) 셀 범위 위반 — min 미달 + max 초과 (max 는 타이핑 차단이 원칙이지만
-  //    emptyDefault 오설정·레거시 응답의 우회 값을 다음/제출에서 봉합한다)
-  const rangeViolations = inputCells.filter((c) => {
-    if (c.inputType !== 'number') return false;
-    const v = cellValues[c.id];
-    if (typeof v !== 'string') return false;
-    return rangeViolationMessage(v, c.numberFormat) !== null;
-  });
-  if (rangeViolations.length > 0) {
-    issues.push({
-      kind: 'range',
-      message: '허용 범위를 벗어난 값이 입력된 셀이 있습니다',
-      cellIds: rangeViolations.map((c) => c.id),
-    });
-  }
+  // 미접촉 표는 입력 기반 검증(1~4)만 스킵 — 계산 셀 비교 검증(5)은 표시값이
+  // 존재하므로 항상 평가한다 (미응답 데이터 참조는 group/SUM 이 0으로 접어 표시되고,
+  // 그 표시값이 기준 수식과 어긋나면 표를 통째로 건너뛴 것과 무관하게 차단돼야 한다).
+  if (hasAnyCellValue) {
+    const inputCells = enabled.filter((c) => c.type === 'input');
 
-  // 2) 합계 제약 — 합산 대상은 "보이고 활성인 셀"로 한정 (미선택 동적 행 잔존 값·isHidden 셀·
-  //    숨은 열/행·비활성 게이팅 셀 제외)
-  const existingIds = new Set(enabled.map((c) => c.id));
-  for (const constraint of question.sumConstraints ?? []) {
-    const result = evaluateSumConstraint(
-      constraint,
+    // 1) 셀 범위 위반 — min 미달 + max 초과 (max 는 타이핑 차단이 원칙이지만
+    //    emptyDefault 오설정·레거시 응답의 우회 값을 다음/제출에서 봉합한다)
+    const rangeViolations = inputCells.filter((c) => {
+      if (c.inputType !== 'number') return false;
+      const v = cellValues[c.id];
+      if (typeof v !== 'string') return false;
+      return rangeViolationMessage(v, c.numberFormat) !== null;
+    });
+    if (rangeViolations.length > 0) {
+      issues.push({
+        kind: 'range',
+        message: '허용 범위를 벗어난 값이 입력된 셀이 있습니다',
+        cellIds: rangeViolations.map((c) => c.id),
+      });
+    }
+
+    // 2) 합계 제약 — 합산 대상은 "보이고 활성인 셀"로 한정 (미선택 동적 행 잔존 값·isHidden 셀·
+    //    숨은 열/행·비활성 게이팅 셀 제외)
+    const existingIds = new Set(enabled.map((c) => c.id));
+    for (const constraint of question.sumConstraints ?? []) {
+      const result = evaluateSumConstraint(
+        constraint,
+        cellValues,
+        existingIds,
+        ctx ? { ownQuestionId: question.id, ctx } : undefined,
+      );
+      if (!result.skipped && !result.ok) {
+        // leftExpr 규칙은 하이라이트할 선택 셀이 없다 — cellIds 를 싣지 않는다.
+        const highlightIds = constraint.leftExpr
+          ? []
+          : constraint.cellIds.filter((id) => existingIds.has(id));
+        issues.push({
+          kind: 'sum',
+          message: sumConstraintMessage(constraint, result.sum),
+          ...(highlightIds.length > 0 ? { cellIds: highlightIds } : {}),
+        });
+      }
+    }
+
+    // 3) 필수 셀 — "표시되고 활성일 때만 필수": isHidden 셀·미선택 동적 행의 셀·비활성 게이팅
+    //    셀은 제외 (영구 차단 방지). 대상은 REQUIRED_CELL_TYPES(input/radio/checkbox/select/ranking).
+    //    필수 판정은 (required || requiredWhenEnabled) 수렴식 — enabled 목록 위에서 검사하므로
+    //    "&& 활성" 은 목록 필터로 이미 성립한다. 응답됨 판정은 isCellValuePresent 정본(배열
+    //    length>0, 문자열 trim, 그 외 truthy) — checkbox/ranking 빈 배열을 미응답으로 본다.
+    const ordinaryMissingCells = enabled.filter(
+      (c) =>
+        REQUIRED_CELL_TYPES.has(c.type) &&
+        isRequiredCell(c) &&
+        !isCellValuePresent(cellValues[c.id]),
+    );
+    // 셀별 지정 문구(requiredMessage)가 있으면 문구 단위로 별도 이슈를 만든다 —
+    // 지정 문구 없는 셀들은 아래 기본 문구 통합 이슈(상세기입 포함)로 묶인다.
+    const customMessageCellIds = new Map<string, string[]>();
+    const defaultMissingIds: string[] = [];
+    for (const c of ordinaryMissingCells) {
+      const custom = c.requiredMessage?.trim();
+      if (custom) {
+        customMessageCellIds.set(custom, [...(customMessageCellIds.get(custom) ?? []), c.id]);
+      } else {
+        defaultMissingIds.push(c.id);
+      }
+    }
+    for (const [message, cellIds] of customMessageCellIds) {
+      issues.push({ kind: 'required-cells', message, cellIds });
+    }
+    const visibleOptionTextIssues = collectRequiredOptionTextIssues(
+      question,
       cellValues,
-      existingIds,
-      ctx ? { ownQuestionId: question.id, ctx } : undefined,
+      ctx?.optionTexts,
+      { visibleCellIds: existingIds },
     );
-    if (!result.skipped && !result.ok) {
-      // leftExpr 규칙은 하이라이트할 선택 셀이 없다 — cellIds 를 싣지 않는다.
-      const highlightIds = constraint.leftExpr
-        ? []
-        : constraint.cellIds.filter((id) => existingIds.has(id));
+    const missingIds = [
+      ...new Set([
+        ...defaultMissingIds,
+        ...visibleOptionTextIssues.cellIds,
+        ...(visibleOptionTextIssues.detailCellIds ?? []),
+      ]),
+    ].filter((id) => existingIds.has(id));
+    if (missingIds.length > 0) {
       issues.push({
-        kind: 'sum',
-        message: sumConstraintMessage(constraint, result.sum),
-        ...(highlightIds.length > 0 ? { cellIds: highlightIds } : {}),
+        kind: 'required-cells',
+        message: DEFAULT_REQUIRED_CELL_MESSAGE,
+        cellIds: missingIds,
+        ...(visibleOptionTextIssues.detailTargetIds
+          ? { detailTargetIds: visibleOptionTextIssues.detailTargetIds }
+          : {}),
       });
     }
-  }
 
-  // 3) 필수 셀 — "표시되고 활성일 때만 필수": isHidden 셀·미선택 동적 행의 셀·비활성 게이팅
-  //    셀은 제외 (영구 차단 방지). 대상은 REQUIRED_CELL_TYPES(input/radio/checkbox/select/ranking).
-  //    필수 판정은 (required || requiredWhenEnabled) 수렴식 — enabled 목록 위에서 검사하므로
-  //    "&& 활성" 은 목록 필터로 이미 성립한다. 응답됨 판정은 isCellValuePresent 정본(배열
-  //    length>0, 문자열 trim, 그 외 truthy) — checkbox/ranking 빈 배열을 미응답으로 본다.
-  const ordinaryMissingCells = enabled.filter(
-    (c) =>
-      REQUIRED_CELL_TYPES.has(c.type) &&
-      isRequiredCell(c) &&
-      !isCellValuePresent(cellValues[c.id]),
-  );
-  // 셀별 지정 문구(requiredMessage)가 있으면 문구 단위로 별도 이슈를 만든다 —
-  // 지정 문구 없는 셀들은 아래 기본 문구 통합 이슈(상세기입 포함)로 묶인다.
-  const customMessageCellIds = new Map<string, string[]>();
-  const defaultMissingIds: string[] = [];
-  for (const c of ordinaryMissingCells) {
-    const custom = c.requiredMessage?.trim();
-    if (custom) {
-      customMessageCellIds.set(custom, [...(customMessageCellIds.get(custom) ?? []), c.id]);
-    } else {
-      defaultMissingIds.push(c.id);
-    }
-  }
-  for (const [message, cellIds] of customMessageCellIds) {
-    issues.push({ kind: 'required-cells', message, cellIds });
-  }
-  const visibleOptionTextIssues = collectRequiredOptionTextIssues(
-    question,
-    cellValues,
-    ctx?.optionTexts,
-    { visibleCellIds: existingIds },
-  );
-  const missingIds = [
-    ...new Set([
-      ...defaultMissingIds,
-      ...visibleOptionTextIssues.cellIds,
-      ...(visibleOptionTextIssues.detailCellIds ?? []),
-    ]),
-  ].filter((id) => existingIds.has(id));
-  if (missingIds.length > 0) {
-    issues.push({
-      kind: 'required-cells',
-      message: DEFAULT_REQUIRED_CELL_MESSAGE,
-      cellIds: missingIds,
-      ...(visibleOptionTextIssues.detailTargetIds
-        ? { detailTargetIds: visibleOptionTextIssues.detailTargetIds }
-        : {}),
-    });
-  }
-
-  // 4) 수식 검증 (스펙 §7) — 입력값 vs 계산값. 빈 입력은 스킵 (입력 강제는 required 소관).
-  //    비활성 셀은 제외 — 지워지기 전 잔존 값이 수식 불일치로 차단하면 안 됨.
-  for (const cell of enabled) {
-    if (cell.type !== 'input' || cell.inputType !== 'number' || !cell.formula) continue;
-    const raw = cellValues[cell.id];
-    if (typeof raw !== 'string' || raw.trim() === '') continue;
-    const entered = parseNumericInput(raw);
-    if (entered === null) continue;
-    if (!ctx) continue; // 컨텍스트 없으면 평가 불가 — fail-safe 통과
-    const computed = evaluateCellFormula(
-      cell.formula,
-      question.id,
-      {
-        questions: ctx.allQuestions,
-        responses: ctx.allResponses,
-        lookups: ctx.lookups ?? [],
-        contactAttrs: ctx.contactAttrs ?? {},
-      },
-      cell.numberFormat?.decimalPlaces,
-    );
-    if (computed === null) continue; // 순환·LUT 미해결 — fail-safe 통과
-    const tolerance = cell.formulaTolerance ?? 0;
-    const roundedInput = roundFormulaValue(entered, cell.numberFormat?.decimalPlaces);
-    if (Math.abs(roundedInput - computed) > tolerance) {
-      issues.push({
-        kind: 'formula',
-        message:
-          cell.formulaErrorMessage?.trim() ||
-          '입력하신 값이 앞서 입력한 값들의 계산 결과와 일치하지 않습니다.',
-        cellIds: [cell.id],
-      });
+    // 4) 수식 검증 (스펙 §7) — 입력값 vs 계산값. 빈 입력은 스킵 (입력 강제는 required 소관).
+    //    비활성 셀은 제외 — 지워지기 전 잔존 값이 수식 불일치로 차단하면 안 됨.
+    for (const cell of enabled) {
+      if (cell.type !== 'input' || cell.inputType !== 'number' || !cell.formula) continue;
+      const raw = cellValues[cell.id];
+      if (typeof raw !== 'string' || raw.trim() === '') continue;
+      const entered = parseNumericInput(raw);
+      if (entered === null) continue;
+      if (!ctx) continue; // 컨텍스트 없으면 평가 불가 — fail-safe 통과
+      const computed = evaluateCellFormula(
+        cell.formula,
+        question.id,
+        {
+          questions: ctx.allQuestions,
+          responses: ctx.allResponses,
+          lookups: ctx.lookups ?? [],
+          contactAttrs: ctx.contactAttrs ?? {},
+        },
+        cell.numberFormat?.decimalPlaces,
+      );
+      if (computed === null) continue; // 순환·LUT 미해결 — fail-safe 통과
+      const tolerance = cell.formulaTolerance ?? 0;
+      const roundedInput = roundFormulaValue(entered, cell.numberFormat?.decimalPlaces);
+      if (Math.abs(roundedInput - computed) > tolerance) {
+        issues.push({
+          kind: 'formula',
+          message:
+            cell.formulaErrorMessage?.trim() ||
+            '입력하신 값이 앞서 입력한 값들의 계산 결과와 일치하지 않습니다.',
+          cellIds: [cell.id],
+        });
+      }
     }
   }
 
   // 5) 계산 셀 비교 검증 — 표시된 계산값이 기준 수식을 만족해야 진행. fail-safe 계약은
-  //    수식 검증과 동일: ctx 없음·계산/기준 평가 불능이면 통과. 미접촉 표 스킵은 상단
-  //    hasAnyCellValue 가드를 그대로 따른다 (계산 소스가 표 밖이어도 동일 — 기존 계약).
+  //    수식 검증과 동일: ctx 없음·계산/기준 평가 불능이면 통과. 미접촉 표라도 실행한다 —
+  //    계산 셀은 표시값이 항상 존재하므로(group/SUM 의 빈 항 0 처리) 표를 건너뛴 것과
+  //    무관하게 기준 위반을 잡아야 한다 (위 hasAnyCellValue 가드는 1~4 단계 전용).
+  //    단, 기준값(target) 수식의 참조가 전부 빈 값이면 skipped — group 이 무응답을 0으로
+  //    접어 "0과 비교"로 오차단하는 것을 방지한다. 계산 수식(cell.formula) 쪽에는 적용하지
+  //    않는다 — 셀에 표시되는 값 자체가 비교 대상이라는 것이 이 검증의 의미이기 때문.
   for (const cell of enabled) {
     if (cell.type !== 'calc' || !cell.formula || !cell.calcValidation) continue;
     if (!ctx) continue;
     const fCtx = toFormulaCtx(ctx);
     const computed = evaluateCellFormula(cell.formula, question.id, fCtx, cell.numberFormat?.decimalPlaces);
     if (computed === null) continue;
+    if (areAllFormulaRefsEmpty(cell.calcValidation.target, question.id, fCtx)) continue;
     const target = evaluateCellFormula(cell.calcValidation.target, question.id, fCtx, cell.numberFormat?.decimalPlaces);
     if (target === null) continue;
     const v = cell.calcValidation;
