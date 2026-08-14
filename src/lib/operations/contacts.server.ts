@@ -561,10 +561,13 @@ export async function getResponseEditLogs(
 
   // 라벨 보강: 기록 시점에 version_id 부재로 questionId 로 폴백된 라벨을
   // 현재 questions 테이블의 code/title 로 복구. 삭제된 질문은 저장값 유지.
+  // uuid 형식이 아닌 키(__optTexts__ 사이드카 등)는 uuid 컬럼 조회에 넣으면
+  // invalid input syntax 로 500 이 나므로 제외한다 — 라벨은 mergeChangeLabels 가 처리.
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const surveyId = rows[0]!.surveyId;
   const questionIds = [
     ...new Set(rows.flatMap((r) => r.changedQuestions.map((c) => c.questionId))),
-  ];
+  ].filter((id) => UUID_RE.test(id));
   const labelMap = new Map<string, { code: string | null; title: string }>();
   if (questionIds.length > 0) {
     const qs = await db
