@@ -924,6 +924,19 @@ function SurveyResponseFlowActive({
     setNumericErrorStepIndex,
   });
 
+  // 기타/상세 기재(store.optionTexts)를 draft 파이프라인에 동기화한다.
+  // 이게 없으면 사이드카는 최종 제출에만 실려, 제출 전 이탈 시 서버에 남지 않아
+  // 재진입 복원(seedOptionTexts)이 되살릴 것이 없다. handleResponse('__optTexts__')는
+  // 일반 답변과 같은 디바운스 draft·이탈 beacon 에 합류하고, '__' 키라 첫 답변
+  // INSERT 트리거는 되지 않는다 (preview/admin-edit 은 flush 계층이 이미 걸러낸다).
+  const lastSyncedOptionTextsRef = useRef(optionTexts);
+  useEffect(() => {
+    if (lastSyncedOptionTextsRef.current === optionTexts) return;
+    lastSyncedOptionTextsRef.current = optionTexts;
+    if (Object.keys(optionTexts).length === 0) return;
+    handleResponse('__optTexts__', optionTexts);
+  }, [optionTexts, handleResponse]);
+
   // iOS Safari 는 버튼을 탭해도 입력의 포커스를 빼앗지 않는다. 포커스가 남은
   // 입력이 스텝 전환으로 DOM 에서 제거되면 blur 이벤트 없이 사라져 소프트
   // 키보드가 닫히지 못하고 빈 패널로 고착된다 (레이아웃이 화면 절반에 갇히고

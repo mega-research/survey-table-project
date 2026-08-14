@@ -53,6 +53,7 @@ import type {
   SurveyResponse,
   UpdateQuestionResponseInput,
 } from '../../domain/response';
+import { readOptTextsSidecar } from '@/lib/option-text-read';
 import { replaceResponseAnswers } from './response-answers.service';
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -1001,6 +1002,26 @@ async function applyDraftAnswersUpdate(
   questionIds: string[],
   storedAnswers: Record<string, unknown>,
 ): Promise<void> {
+  // 사이드카(__optTexts__)만 실려 온 배치 — 실존 문항이 없어 진척률 계산 불가.
+  // jsonb 병합만 수행한다 (빈 idList 를 IN () 으로 흘리면 SQL 오류).
+  if (questionIds.length === 0) {
+    const [updated] = await executor
+      .update(surveyResponses)
+      .set({
+        questionResponses: sql`COALESCE(${surveyResponses.questionResponses}, '{}'::jsonb)
+          || ${JSON.stringify(storedAnswers)}::jsonb`,
+      })
+      .where(
+        and(
+          eq(surveyResponses.id, responseId),
+          isNull(surveyResponses.deletedAt),
+          eq(surveyResponses.status, 'in_progress'),
+        ),
+      )
+      .returning();
+    if (!updated) throw new Error('응답을 수정할 수 없습니다.');
+    return;
+  }
   const idList = sql.join(
     questionIds.map((id) => sql`${id}`),
     sql`, `,
@@ -1120,25 +1141,37 @@ export async function saveDraftResponse(
     assertAnswerValueSize(value);
   }
 
+  // 기타/상세 기재 사이드카(__optTexts__)는 실존 질문이 아니므로 소속 검증에서 분리한다.
+  // 제출 전 이탈에도 텍스트가 남도록 draft 에 실려 오며, 형태 정제 후 통째로 병합한다.
+  // 그 외 '__' 키는 기존대로 소속 검증에서 거부된다.
+  const sidecarEntry = entries.find(([key]) => key === '__optTexts__');
+  const answerEntries = entries.filter(([key]) => key !== '__optTexts__');
+
   // #5 변조 가드 2: 응답 행 조회. 배치 전체가 같은 행이라 1회면 충분하다.
   const responseRow = await loadResponseRowForMutation(input.responseId);
 
   // #5 변조 가드 3: 소속 검증 + PII 플래그를 questionId 전체에 대해 1회 쿼리로 수집.
-  const piiFlags = await loadQuestionPiiFlags(
-    responseRow.versionId,
-    responseRow.surveyId,
-    entries.map(([questionId]) => questionId),
-  );
+  const piiFlags =
+    answerEntries.length > 0
+      ? await loadQuestionPiiFlags(
+          responseRow.versionId,
+          responseRow.surveyId,
+          answerEntries.map(([questionId]) => questionId),
+        )
+      : new Map<string, boolean>();
 
   // 중단 모드: 열려 있던 탭의 답변 저장 차단 (테스트 행 예외) — 스펙 5절 게이트 3.
   await assertSurveyNotPaused(responseRow);
 
   // PII 문항이면 저장 직전 암호화. 이미 암호문이면 encryptAnswerValue 가 통과시킨다.
   const storedAnswers: Record<string, unknown> = {};
-  for (const [questionId, value] of entries) {
+  for (const [questionId, value] of answerEntries) {
     storedAnswers[questionId] = piiFlags.get(questionId) ? encryptAnswerValue(value) : value;
   }
-  const questionIds = entries.map(([questionId]) => questionId);
+  if (sidecarEntry) {
+    storedAnswers['__optTexts__'] = readOptTextsSidecar({ __optTexts__: sidecarEntry[1] });
+  }
+  const questionIds = answerEntries.map(([questionId]) => questionId);
 
   if (!responseRow.isTest) {
     await applyDraftAnswersUpdate(db, input.responseId, questionIds, storedAnswers);
