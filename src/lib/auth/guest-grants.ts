@@ -52,15 +52,26 @@ export function canAccessSurvey(userId: string, surveyId: string): boolean {
   return isAdminUserAllowed(userId);
 }
 
+/** 게스트가 남의 설문 URL 을 눌렀을 때 보내는 계정 안내 페이지. */
+export const GUEST_NO_ACCESS_PATH = '/admin/no-access';
+
+/** 다른 설문의 operations/preview 경로 판정 — grant 불일치 시 계정 안내 대상. */
+const SURVEY_CONSOLE_PATH = /^\/admin\/surveys\/[^/]+\/(operations|preview)(\/|$)/;
+
 /**
  * 미들웨어용 게스트 경로 판정 (순수 함수).
  * 허용 경로면 null, 차단이면 리다이렉트 목적지 pathname 반환.
+ *
+ * 다른 설문의 operations/preview 는 자기 overview 로 조용히 돌리지 않고
+ * 계정 안내 페이지로 보낸다 — 담당자가 "링크가 깨졌다"고 오해하지 않도록
+ * 로그아웃 후 해당 설문 계정으로 로그인하라는 안내를 명시한다.
  */
 export function guestPathRedirect(
   pathname: string,
   grantedSurveyId: string,
 ): string | null {
   if (pathname === '/admin/login') return null;
+  if (pathname === GUEST_NO_ACCESS_PATH) return null;
   // 설문 보기(발행 스냅샷 미리보기)는 읽기 전용 화면이라 게스트에게도 허용한다.
   const previewPath = `/admin/surveys/${grantedSurveyId}/preview`;
   if (pathname === previewPath || pathname.startsWith(`${previewPath}/`)) return null;
@@ -83,5 +94,7 @@ export function guestPathRedirect(
     }
     return null;
   }
+  // 남의 설문 콘솔 경로 — 계정 전환 안내 (자기 설문 경로는 위에서 이미 통과/차단됨)
+  if (SURVEY_CONSOLE_PATH.test(pathname)) return GUEST_NO_ACCESS_PATH;
   return `${allowedPrefix}/overview`;
 }

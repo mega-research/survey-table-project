@@ -79,34 +79,37 @@ describe('isAdminOrGuestGrantHolder', () => {
 describe('guestPathRedirect', () => {
   const sid = 'survey-a';
 
-  it('허용 경로는 null (operations prefix + 로그인)', () => {
+  it('허용 경로는 null (operations prefix + 로그인 + 계정 안내 페이지)', () => {
     expect(guestPathRedirect(`/admin/surveys/${sid}/operations`, sid)).toBeNull();
     expect(guestPathRedirect(`/admin/surveys/${sid}/operations/contacts`, sid)).toBeNull();
     expect(guestPathRedirect('/admin/login', sid)).toBeNull();
+    expect(guestPathRedirect('/admin/no-access', sid)).toBeNull();
   });
 
-  it('grant 설문의 설문 보기(preview)는 허용, 다른 설문 preview 는 차단', () => {
+  it('grant 설문의 설문 보기(preview)는 허용, 다른 설문 preview 는 계정 안내로', () => {
     expect(guestPathRedirect(`/admin/surveys/${sid}/preview`, sid)).toBeNull();
-    expect(guestPathRedirect(`/admin/surveys/other/preview`, sid)).toBe(
-      `/admin/surveys/${sid}/operations/overview`,
-    );
+    expect(guestPathRedirect(`/admin/surveys/other/preview`, sid)).toBe('/admin/no-access');
     expect(guestPathRedirect(`/admin/surveys/${sid}-suffix/preview`, sid)).toBe(
-      `/admin/surveys/${sid}/operations/overview`,
+      '/admin/no-access',
     );
   });
 
-  it('차단 경로는 overview 로 리다이렉트', () => {
+  it('설문 콘솔 외 차단 경로는 overview 로 리다이렉트', () => {
     const dest = `/admin/surveys/${sid}/operations/overview`;
     expect(guestPathRedirect('/admin/surveys', sid)).toBe(dest);
     expect(guestPathRedirect(`/admin/surveys/${sid}/edit`, sid)).toBe(dest);
-    expect(guestPathRedirect('/admin/surveys/other/operations', sid)).toBe(dest);
     expect(guestPathRedirect('/analytics', sid)).toBe(dest);
     expect(guestPathRedirect('/admin/billing/mail-cost', sid)).toBe(dest);
   });
 
-  it('operations 로 시작하지만 다른 설문이면 차단 - prefix 오탐 방지', () => {
+  it('다른 설문의 operations 는 계정 안내 페이지로 보낸다', () => {
+    expect(guestPathRedirect('/admin/surveys/other/operations', sid)).toBe('/admin/no-access');
+    expect(guestPathRedirect('/admin/surveys/other/operations/contacts', sid)).toBe(
+      '/admin/no-access',
+    );
+    // prefix 오탐 방지 — granted id 로 시작하는 다른 설문 id
     expect(guestPathRedirect(`/admin/surveys/${sid}-suffix/operations`, sid)).toBe(
-      `/admin/surveys/${sid}/operations/overview`,
+      '/admin/no-access',
     );
   });
 
