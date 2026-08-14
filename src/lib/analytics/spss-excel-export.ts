@@ -365,6 +365,8 @@ export function generateSPSSColumns(questions: QuestionVariant[]): SPSSExportCol
                 questionId: q.id,
                 type: 'ranking-option-text',
                 rankIndex: k,
+                // 선택된 옵션이 allowTextInput 인지 검증하기 위해 그룹 옵션 목록을 주입
+                cellOptions: groupOptions,
                 choiceGroupKey: g.groupKey,
                 soleRankingGroup: groups.length === 1,
               });
@@ -409,6 +411,8 @@ export function generateSPSSColumns(questions: QuestionVariant[]): SPSSExportCol
               questionId: q.id,
               type: 'ranking-option-text',
               rankIndex: k,
+              // 선택된 옵션이 allowTextInput 인지 검증하기 위해 resolved 옵션 목록을 주입
+              cellOptions: resolvedOptions,
             });
           }
         }
@@ -511,6 +515,8 @@ export function generateSPSSColumns(questions: QuestionVariant[]): SPSSExportCol
                 rankIndex: k,
                 rowLabel,
                 colLabel,
+                // 선택된 옵션이 allowTextInput 인지 검증하기 위해 셀 옵션 목록을 주입
+                cellOptions,
                 ...(autoExportLabel !== undefined ? { cellExportLabel: autoExportLabel } : {}),
               });
             }
@@ -1020,7 +1026,8 @@ export function buildDataRow(
 
       case 'ranking-option-text':
         if (col.rankIndex == null) return null;
-        return transformRankingOptionText(resolveGroupedRankingValue(col, rawValue), col.rankIndex);
+        return transformRankingOptionText(
+          col.cellOptions, resolveGroupedRankingValue(col, rawValue), col.rankIndex);
 
       case 'table-cell-ranking': {
         if (col.rankIndex == null || !col.tableCellId) return null;
@@ -1043,7 +1050,7 @@ export function buildDataRow(
         if (!rawValue || typeof rawValue !== 'object') return null;
         const tableAnswer = rawValue as Record<string, unknown>;
         const cellVal = tableAnswer[col.tableCellId];
-        return transformRankingOptionText(cellVal, col.rankIndex);
+        return transformRankingOptionText(col.cellOptions, cellVal, col.rankIndex);
       }
 
       case 'option-text': {

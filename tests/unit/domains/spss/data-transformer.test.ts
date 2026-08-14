@@ -232,38 +232,56 @@ describe('transformTableChoiceCell', () => {
 });
 
 describe('transformRankingOptionText', () => {
+  const options: QuestionOption[] = [
+    makeOption({ id: 'opt1', label: '기타 브랜드', value: 'opt1', allowTextInput: true }),
+    makeOption({ id: 'opt2', label: '브랜드B', value: 'opt2' }),
+  ];
+
   it('해당 rank의 allowTextInput 옵션 상세 기재 텍스트를 반환한다', () => {
     const value = [
       { rank: 1, optionValue: 'opt1', optionText: '직접입력값' },
       { rank: 2, optionValue: 'opt2' },
     ];
-    expect(transformRankingOptionText(value, 1)).toBe('직접입력값');
+    expect(transformRankingOptionText(options, value, 1)).toBe('직접입력값');
   });
 
   it('해당 rank에 optionText가 없으면 null', () => {
     const value = [{ rank: 1, optionValue: 'opt1' }];
-    expect(transformRankingOptionText(value, 1)).toBeNull();
+    expect(transformRankingOptionText(options, value, 1)).toBeNull();
   });
 
   it('해당 rank가 없으면 null', () => {
     const value = [{ rank: 1, optionValue: 'opt1', optionText: '값' }];
-    expect(transformRankingOptionText(value, 2)).toBeNull();
+    expect(transformRankingOptionText(options, value, 2)).toBeNull();
   });
 
   it('기타(__other__) 선택인 rank는 null — otherText 전용 경로와 독립', () => {
     const value = [{ rank: 1, optionValue: '__other__', otherText: '기타텍스트', optionText: '섞임값' }];
-    expect(transformRankingOptionText(value, 1)).toBeNull();
+    expect(transformRankingOptionText(options, value, 1)).toBeNull();
   });
 
   it('공백만 있는 optionText는 null', () => {
     const value = [{ rank: 1, optionValue: 'opt1', optionText: '   ' }];
-    expect(transformRankingOptionText(value, 1)).toBeNull();
+    expect(transformRankingOptionText(options, value, 1)).toBeNull();
   });
 
   it('배열이 아니면 null', () => {
-    expect(transformRankingOptionText(null, 1)).toBeNull();
-    expect(transformRankingOptionText(undefined, 1)).toBeNull();
-    expect(transformRankingOptionText('not-array', 1)).toBeNull();
+    expect(transformRankingOptionText(options, null, 1)).toBeNull();
+    expect(transformRankingOptionText(options, undefined, 1)).toBeNull();
+    expect(transformRankingOptionText(options, 'not-array', 1)).toBeNull();
+  });
+
+  it('허용 텍스트 옵션에서 일반 옵션으로 전환된 잔존 optionText는 null — 오염 export 방지', () => {
+    // ranking-dropdown-stack.tsx handleSelect: 옵션 전환 시 이전 optionText 를 보존한다.
+    // 그래서 opt1(allowTextInput)에 입력 후 opt2(allowTextInput 없음)로 바꾸면
+    // { optionValue: 'opt2', optionText: '나이키' } 처럼 잔존 텍스트가 남을 수 있다.
+    const value = [{ rank: 1, optionValue: 'opt2', optionText: '나이키' }];
+    expect(transformRankingOptionText(options, value, 1)).toBeNull();
+  });
+
+  it('옵션 목록이 없으면(undefined) 항상 null', () => {
+    const value = [{ rank: 1, optionValue: 'opt1', optionText: '값' }];
+    expect(transformRankingOptionText(undefined, value, 1)).toBeNull();
   });
 });
 

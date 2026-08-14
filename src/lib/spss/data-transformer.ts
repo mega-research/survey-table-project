@@ -153,8 +153,15 @@ export function transformRankingOtherText(
  * 사용자가 입력한 상세 기재 텍스트를 반환한다.
  * Case 1(질문 레벨) / Case 2(테이블 소스) / Case 3(셀 레벨) 공통.
  * `_etc`(기타) 경로의 otherText 와 독립 — 기타 선택(optionValue='__other__')은 null.
+ *
+ * ranking-dropdown-stack.tsx의 handleSelect 는 옵션 전환 시(허용 텍스트 옵션 → 일반 옵션)
+ * 이전 optionText 를 엔트리에 그대로 보존한다(선택 해제 시에도 값 보존). 따라서 optionText
+ * 존재만으로 신뢰하면 잔존 텍스트가 무관한 옵션에 오염 export될 수 있다 — 반드시 현재
+ * 선택된 optionValue 에 해당하는 옵션이 allowTextInput===true 일 때만 신뢰한다
+ * (required-option-text-validation.ts 의 검증 패턴과 동일).
  */
 export function transformRankingOptionText(
+  options: QuestionOption[] | undefined,
   value: unknown,
   rank: number,
 ): string | null {
@@ -165,6 +172,8 @@ export function transformRankingOptionText(
   );
   if (!entry) return null;
   if (entry.optionValue === RANKING_OTHER_VALUE) return null;
+  const option = options?.find((o) => o.value === entry.optionValue || o.id === entry.optionValue);
+  if (option?.allowTextInput !== true) return null;
   const text = entry.optionText?.trim();
   return text && text.length > 0 ? text : null;
 }

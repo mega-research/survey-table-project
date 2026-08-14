@@ -92,6 +92,20 @@ describe('standalone ranking — buildDataRows 값 매핑', () => {
     expect(row[idx]).toBeNull();
   });
 
+  it('allowTextInput 옵션에서 일반 옵션(o2)으로 전환된 잔존 optionText는 null — 오염 export 방지', () => {
+    // ranking-dropdown-stack.tsx handleSelect 는 옵션 전환 시 이전 optionText 를 보존한다.
+    // o1(allowTextInput)에 '나이키' 입력 후 o2(allowTextInput 없음)로 바꾸면
+    // { optionValue: 'o2', optionText: '나이키' } 처럼 잔존 텍스트가 남을 수 있다 — 신뢰 금지.
+    const cols = generateSPSSColumns([standaloneQuestion]);
+    const sub = makeSubmission({
+      q1: [{ rank: 1, optionValue: 'o2', optionText: '나이키' }],
+    });
+    const rows = buildDataRows(cols, [standaloneQuestion], [sub]);
+    const row = rows[0]!;
+    const idx = cols.findIndex((c) => c.spssVarName === 'Q1_rk1_text');
+    expect(row[idx]).toBeNull();
+  });
+
   it('_etc(allowOtherOption) 컬럼과 독립적으로 공존한다', () => {
     const withBoth = {
       ...standaloneQuestion,
@@ -223,6 +237,18 @@ describe('grouped ranking — buildDataRows 값 매핑', () => {
     const idx = cols.findIndex((c) => c.spssVarName === 'Q9_rnk1_rk1_text');
     expect(row[idx]).toBe('삼성 노트북');
   });
+
+  it('allowTextInput 없는 멤버(cellB)로 전환된 잔존 optionText는 null — 오염 export 방지', () => {
+    // cellA(allowTextInput) 선택 후 cellB(allowTextInput 없음)로 바꿔도 optionText 가 남을 수 있다.
+    const cols = generateSPSSColumns([groupedQuestion]);
+    const sub = makeSubmission({
+      qg: { rnk1: [{ rank: 1, optionValue: 'cellB', optionText: '삼성 노트북' }] },
+    });
+    const rows = buildDataRows(cols, [groupedQuestion], [sub]);
+    const row = rows[0]!;
+    const idx = cols.findIndex((c) => c.spssVarName === 'Q9_rnk1_rk1_text');
+    expect(row[idx]).toBeNull();
+  });
 });
 
 // ────────────────────────────────────────────────────────────
@@ -321,6 +347,18 @@ describe('표 안 ranking 셀 — buildDataRows 값 매핑', () => {
   it('응답 없음 → null', () => {
     const cols = generateSPSSColumns([tableRankingQuestion]);
     const sub = makeSubmission({ qt: null });
+    const rows = buildDataRows(cols, [tableRankingQuestion], [sub]);
+    const row = rows[0]!;
+    const idx = cols.findIndex((c) => c.spssVarName === 'QT_row1_col1_rk1_text');
+    expect(row[idx]).toBeNull();
+  });
+
+  it('allowTextInput 없는 옵션(ro2)으로 전환된 잔존 optionText는 null — 오염 export 방지', () => {
+    // ro1(allowTextInput) 선택 후 ro2(allowTextInput 없음)로 바꿔도 optionText 가 남을 수 있다.
+    const cols = generateSPSSColumns([tableRankingQuestion]);
+    const sub = makeSubmission({
+      qt: { cellR: [{ rank: 1, optionValue: 'ro2', optionText: '상세내용' }] },
+    });
     const rows = buildDataRows(cols, [tableRankingQuestion], [sub]);
     const row = rows[0]!;
     const idx = cols.findIndex((c) => c.spssVarName === 'QT_row1_col1_rk1_text');

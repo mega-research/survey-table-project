@@ -45,9 +45,11 @@ export function resolveVarType(col: SPSSExportColumn, question: Question | undef
 
     case 'other-text':
     case 'ranking-other':
+    case 'ranking-option-text':
     case 'multiselect':
     case 'notice-date':
     case 'table-cell-ranking-other':
+    case 'table-cell-ranking-option-text':
       return VariableType.String;
 
     case 'table-cell':
@@ -95,6 +97,11 @@ export function resolveMeasure(col: SPSSExportColumn, question: Question | undef
 
   // choice-group-item (checkbox 그룹 기반 보기별 counted 변수) — 명목척도
   if (col.type === 'choice-group-item') {
+    return VariableMeasure.Nominal;
+  }
+
+  // 상세 기재 텍스트(String) — option-text 와 동일하게 명목척도 (의미상 척도 없음)
+  if (col.type === 'ranking-option-text' || col.type === 'table-cell-ranking-option-text') {
     return VariableMeasure.Nominal;
   }
 
