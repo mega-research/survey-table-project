@@ -648,7 +648,7 @@ function SurveyResponseFlowActive({
   // 회복 effect + dismiss effect 와 isRecovering/resumeMessage state 를
   // useSessionRecovery 로 추출 (두 effect 등록 순서·deps 동일, 세터 전용이라 훅이 소유).
   // isRecovering 은 handleResponse 의 INSERT 가드(I-1)에서 참조한다.
-  const { isRecovering, resumeMessage, dismissResume } = useSessionRecovery({
+  const { isRecovering, resumeMessage, dismissResume, reeditNotice } = useSessionRecovery({
     enabled: !isCompleted,
     terminalBlocked: duplicateStatus.kind === 'blocked',
     isAdminEdit,
@@ -1243,6 +1243,18 @@ function SurveyResponseFlowActive({
           isMobile ? 'pb-28' : 'pb-16 md:pb-24'
         }`}
       >
+        {reeditNotice && (
+          <div
+            role="status"
+            className="mb-4 flex items-start gap-2 rounded border border-blue-300 bg-blue-50 px-3 py-2 text-sm text-blue-900"
+          >
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            <div>
+              재응답이 허용된 설문입니다. 답변을 수정한 뒤 <strong>끝까지 진행해 제출</strong>
+              해야 완료로 반영됩니다. 제출하지 않고 나가면 완료 처리되지 않습니다.
+            </div>
+          </div>
+        )}
         {resumeMessage && <ResumeToast message={resumeMessage} onDismiss={dismissResume} />}
         {rebaseMessage && (
           <ResumeToast message={rebaseMessage} onDismiss={() => setRebaseMessage(null)} />

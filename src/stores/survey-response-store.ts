@@ -37,6 +37,7 @@ interface SurveyResponseUIState {
   setOptionText: (questionId: string, optionId: string, text: string) => void;
   getOptionText: (questionId: string, optionId: string) => string | undefined;
   clearOptionTexts: (questionId: string) => void;
+  seedOptionTexts: (byQuestion: Record<string, Record<string, string>>) => void;
 
   // 유효성 검사
   setValidationError: (questionId: string, error: string) => void;
@@ -107,6 +108,18 @@ export const useSurveyResponseStore = create<SurveyResponseUIState>()(
       clearOptionTexts: (questionId) =>
         set((state) => {
           delete state.optionTexts[questionId];
+        }),
+
+      // 저장된 __optTexts__ 사이드카를 스토어로 되살린다 (이어가기·admin 편집 시드).
+      // 이미 타이핑 중인 현재 편집값이 저장값보다 우선하도록 질문 단위로 병합한다.
+      seedOptionTexts: (byQuestion) =>
+        set((state) => {
+          for (const [questionId, texts] of Object.entries(byQuestion)) {
+            state.optionTexts[questionId] = {
+              ...texts,
+              ...state.optionTexts[questionId],
+            };
+          }
         }),
 
       setValidationError: (questionId, error) =>

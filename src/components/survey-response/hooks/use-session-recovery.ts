@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 
 import { client } from '@/shared/lib/rpc';
+import { readOptTextsSidecar } from '@/lib/option-text-read';
+import { useSurveyResponseStore } from '@/stores/survey-response-store';
 import type { Survey } from '@/types/survey';
 
 import { sendVisibilitySegment, sessionStorageKey } from './session-helpers';
@@ -58,6 +60,8 @@ interface UseSessionRecoveryResult {
   resumeMessage: string | null;
   /** 토스트 dismiss. <ResumeToast> 가 자체 마운트 4초 타이머에서 호출한다. */
   dismissResume: () => void;
+  /** 재응답 허용 세션 — 상단에 "끝까지 제출해야 완료 반영" 배너를 상시 표시. */
+  reeditNotice: boolean;
 }
 
 /**
@@ -97,6 +101,7 @@ export function useSessionRecovery({
   // handleResponse 의 INSERT 가드에서 참조해 recovery 완료 전 신규 INSERT 발사를 차단한다 (I-1).
   const [isRecovering, setIsRecovering] = useState(false);
   const [resumeMessage, setResumeMessage] = useState<string | null>(null);
+  const [reeditNotice, setReeditNotice] = useState(false);
   type ResumeResult = Awaited<ReturnType<typeof client.surveyResponse.lifecycle.resume>>;
   const pendingResumeRequestsRef = useRef(new Map<string, Promise<ResumeResult>>());
   const attemptedRecoveryKeysRef = useRef(new Set<string>());
@@ -192,6 +197,12 @@ export function useSessionRecovery({
           window.localStorage.setItem(key, recoverySessionId);
         }
         setResponses?.(result.questionResponses ?? {});
+        // 저장된 기타/상세 기재(__optTexts__)를 입력란 스토어로 되살린다 — 없으면
+        // 재진입 화면에서 빈칸으로 보이고, 재제출 시 사이드카가 스토어 내용으로
+        // 통째로 교체되며 다른 질문의 텍스트까지 소실된다.
+        useSurveyResponseStore
+          .getState()
+          .seedOptionTexts(readOptTextsSidecar(result.questionResponses));
         // 멈춘 페이지 복원 — 스텝 id 가 현재 구조에 없으면(재배포 등) 호출측에서 무시한다.
         // 응답 버전 이관(ADR-0014) 시 affectedQuestionIds 를 함께 전달해 답이 폐기·제거된
         // 가장 앞 페이지로 재개 위치를 되돌린다.
@@ -217,6 +228,8 @@ export function useSessionRecovery({
         if (result.resumed) {
           setResumeMessage('이전 응답을 이어서 진행합니다');
         }
+        // 재응답 허용 세션 — 토스트와 달리 사라지지 않는 상단 배너로 안내한다.
+        if (result.reeditPending) setReeditNotice(true);
       })
       .catch(async (err) => {
         if (!isCurrentRequest()) return;
@@ -261,5 +274,5 @@ export function useSessionRecovery({
   // 안정 참조라 ResumeToast 의 마운트 전용 effect deps 에서 안전하게 제외된다.
   const dismissResume = useCallback(() => setResumeMessage(null), []);
 
-  return { isRecovering, resumeMessage, dismissResume };
+  return { isRecovering, resumeMessage, dismissResume, reeditNotice };
 }

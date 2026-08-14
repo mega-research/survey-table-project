@@ -7,6 +7,26 @@
  * 마이그레이션 호환(레거시):
  *   questionResponses[questionId].optionTexts[optionId]
  */
+/**
+ * questionResponses 루트의 __optTexts__ 사이드카 전체를 안전하게 추출한다.
+ * 이어가기/admin 편집 시드에서 Zustand optionTexts 로 되살릴 때 사용 (없으면 빈 객체).
+ */
+export function readOptTextsSidecar(
+  qResponses: Record<string, unknown> | null | undefined,
+): Record<string, Record<string, string>> {
+  const sidecar = qResponses?.['__optTexts__'];
+  if (!sidecar || typeof sidecar !== 'object' || Array.isArray(sidecar)) return {};
+  const out: Record<string, Record<string, string>> = {};
+  for (const [questionId, texts] of Object.entries(sidecar as Record<string, unknown>)) {
+    if (!texts || typeof texts !== 'object' || Array.isArray(texts)) continue;
+    const entries = Object.entries(texts as Record<string, unknown>).filter(
+      (entry): entry is [string, string] => typeof entry[1] === 'string',
+    );
+    if (entries.length > 0) out[questionId] = Object.fromEntries(entries);
+  }
+  return out;
+}
+
 export function getOptionText(
   qResponses: Record<string, unknown> | null | undefined,
   questionId: string,

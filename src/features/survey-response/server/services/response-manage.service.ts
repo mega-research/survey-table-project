@@ -199,6 +199,7 @@ export async function allowReeditResponse(
         contactTargetId: surveyResponses.contactTargetId,
         isCompleted: surveyResponses.isCompleted,
         isTest: surveyResponses.isTest,
+        metadata: surveyResponses.metadata,
       })
       .from(surveyResponses)
       .where(
@@ -270,6 +271,9 @@ export async function allowReeditResponse(
         // 레거시(역방향만 연결) 행은 여기서 정방향 링크를 백필해야 재진입 시
         // findActiveResponseByContact 가 이 행을 찾아 이어가기로 재사용한다.
         contactTargetId: anchorId ?? row.contactTargetId,
+        // 재응답 세션 표식 — 재진입 화면 상단 배너("끝까지 제출해야 완료 반영")용.
+        // 재제출 후에도 남지만 완료 응답은 resume 자체가 없어 배너가 잘못 뜰 일이 없다.
+        metadata: { ...(row.metadata ?? {}), reeditPendingSince: now.toISOString() },
       })
       .where(
         and(
