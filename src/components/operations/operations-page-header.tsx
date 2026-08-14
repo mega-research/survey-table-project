@@ -1,7 +1,8 @@
 import Link from 'next/link';
 
-import { Activity, ArrowLeft, Eye, Pencil } from 'lucide-react';
+import { Activity, ArrowLeft, Eye, LogOut, Pencil } from 'lucide-react';
 
+import { logout } from '@/actions/auth-actions';
 import { Button } from '@/components/ui/button';
 
 import { RefreshButton } from './refresh-button';
@@ -66,6 +67,16 @@ export function OperationsPageHeader({ surveyId, surveyTitle, isGuest, control }
               </Button>
             </Link>
           )}
+          <form action={logout}>
+            <Button
+              variant="ghost"
+              size="icon"
+              title="로그아웃"
+              className="text-red-500 hover:bg-red-50 hover:text-red-600"
+            >
+              <LogOut className="h-5 w-5" />
+            </Button>
+          </form>
         </div>
       </div>
     </nav>
