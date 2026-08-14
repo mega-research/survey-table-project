@@ -269,6 +269,16 @@ describe('evaluateCellFormula', () => {
       };
       expect(evaluateCellFormula(unset, 'q1', attrCtx({}))).toBe(10);
     });
+
+    it('상속 프로퍼티 키는 크래시 없이 null — fail-safe', () => {
+      for (const key of ['toString', 'constructor', '__proto__', 'hasOwnProperty']) {
+        const e: CalcExpr = {
+          kind: 'group', op: '+',
+          terms: [{ kind: 'attr', attrsKey: key }, { kind: 'literal', value: 1 }],
+        };
+        expect(evaluateCellFormula(e, 'q1', attrCtx({}))).toBeNull();
+      }
+    });
   });
 });
 

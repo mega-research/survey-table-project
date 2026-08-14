@@ -519,7 +519,14 @@ const CUSTOM_ATTR_SENTINEL = '__customAttrKey__';
  */
 export function AttrTermEditor({ value, onChange }: AttrTermEditorProps) {
   const contactColumns = useSurveyBuilderStore((s) => s.currentSurvey.contactColumns?.columns);
-  const attrKeys = useMemo(() => (contactColumns ?? []).map((c) => c.key), [contactColumns]);
+  const attrKeys = useMemo(
+    () =>
+      (contactColumns ?? [])
+        // pii.*/system.* 소스는 응답 런타임 contactAttrs 에 값이 오지 않는다 — attrs 소스만 후보로
+        .filter((c) => c.source.startsWith('attrs.'))
+        .map((c) => c.key),
+    [contactColumns],
+  );
 
   // 사용자가 "직접 입력…"을 고른 직후(값이 아직 비어 있어 스킴 미포함 판정만으로는 못 잡는 순간)를
   // 위한 최소 로컬 state. SoT 는 여전히 value.attrsKey.

@@ -115,8 +115,10 @@ function evalExpr(
       if (!expr.attrsKey) return 'empty';
       // 응답자 attrs 에 값이 없거나 숫자가 아니면 런타임 미해결 — 무효 전파 (lookup 의
       // attrs-key-missing 과 동일 결: 틀린 숫자 표시·부당한 검증 차단 방지).
+      // 상속 프로퍼티(toString 등)가 함수로 반환되어 크래시하는 것 방지 — 자기 소유 문자열 값만 인정.
+      if (!Object.hasOwn(ctx.contactAttrs, expr.attrsKey)) return null;
       const raw = ctx.contactAttrs[expr.attrsKey];
-      if (raw === undefined || raw.trim() === '') return null;
+      if (typeof raw !== 'string' || raw.trim() === '') return null;
       const n = parseNumericInput(raw.trim());
       return n === null ? null : n;
     }
