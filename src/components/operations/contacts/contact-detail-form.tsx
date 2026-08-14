@@ -51,6 +51,8 @@ interface ContactDetailFormProps {
     inviteToken: string;
     inviteCode: string;
     responseId: string | null;
+    /** 수정 대상 응답이 완료 상태인지 — 재응답 허용 버튼 노출 판정 (respondedAt 링크 누락 대비). */
+    responseCompleted?: boolean;
     attempts: ContactAttemptRow[];
   };
   /** 메일 발송 이력 (편집 모드에서만 의미, 신규 모드는 빈 배열). */
@@ -307,6 +309,7 @@ export function ContactDetailForm({
             contactMethod={contactMethod}
             respondedAt={initial?.respondedAt ?? null}
             responseId={initial?.responseId ?? null}
+            responseCompleted={initial?.responseCompleted ?? false}
             inviteCode={initial?.inviteCode ?? null}
             canReset={canReset && isEdit}
             {...(isEdit && onColumnToggle !== undefined ? { onColumnToggle } : {})}

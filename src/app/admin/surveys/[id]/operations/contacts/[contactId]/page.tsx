@@ -32,10 +32,13 @@ export default async function ContactDetailPage({ params }: PageProps) {
   if (!detail || detail.contact.surveyId !== surveyId) notFound();
 
   // 완료·진행중·이탈 통틀어 최신 응답이 수정 대상. contactTargetId 미링크
-  // 레거시 완료 건만 contact_targets.responseId 로 폴백한다.
-  const editableResponseId =
-    (await getEditableResponseIdForTarget(detail.contact.id, scope)) ??
-    detail.contact.responseId;
+  // 레거시 완료 건만 contact_targets.responseId 로 폴백한다 (레거시 링크는
+  // 완료 시점에만 생기므로 completed 로 간주).
+  const editable = await getEditableResponseIdForTarget(detail.contact.id, scope);
+  const editableResponseId = editable?.id ?? detail.contact.responseId;
+  const editableResponseCompleted = editable
+    ? editable.status === 'completed'
+    : detail.contact.responseId != null;
 
   const [scheme, resultCodes, mailHistory, editLogs, mailTemplates] = await Promise.all([
     getContactColumnScheme(surveyId, scope),
@@ -99,6 +102,7 @@ export default async function ContactDetailPage({ params }: PageProps) {
           inviteToken: detail.contact.inviteToken,
           inviteCode: detail.contact.inviteCode,
           responseId: editableResponseId,
+          responseCompleted: editableResponseCompleted,
           attempts: detail.attempts,
         }}
       />

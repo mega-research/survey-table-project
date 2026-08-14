@@ -427,17 +427,18 @@ export async function getContactDetailById(
 }
 
 /**
- * 컨택의 수정 가능 응답 id — 완료·진행중·이탈 응답 중 가장 최근 건을 돌려준다.
+ * 컨택의 수정 가능 응답 — 완료·진행중·이탈 응답 중 가장 최근 건의 id 와 status.
  * contact_targets.responseId(완료 시에만 링크)에 의존하지 않아, 완료 후 다시
  * 진입한 진행중 응답이 있으면 그 최신 건이 열린다. 조사 대상 단건 편집의
- * "응답 수정" 버튼용 (미응답·자격미달·불량은 대상 아님).
+ * "응답 수정" 버튼용이며, status 는 "재응답 허용" 버튼 노출 판정에 쓴다 —
+ * 컨택의 respondedAt(best-effort 링크라 누락 가능)이 아닌 실제 응답 상태 기준.
  */
 export async function getEditableResponseIdForTarget(
   contactTargetId: string,
   scope: OperationsDataScope,
-): Promise<string | null> {
+): Promise<{ id: string; status: string } | null> {
   const [row] = await db
-    .select({ id: surveyResponses.id })
+    .select({ id: surveyResponses.id, status: surveyResponses.status })
     .from(surveyResponses)
     .where(
       and(
@@ -449,7 +450,7 @@ export async function getEditableResponseIdForTarget(
     )
     .orderBy(desc(surveyResponses.createdAt))
     .limit(1);
-  return row?.id ?? null;
+  return row ?? null;
 }
 
 /**

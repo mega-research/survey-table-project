@@ -46,6 +46,8 @@ interface ContactInfoCardProps {
   contactMethod: ContactMethod | null;
   respondedAt: Date | null;
   responseId: string | null;
+  /** 수정 대상 응답이 완료 상태인지 — 재응답 허용 버튼 노출 (respondedAt 링크 누락 대비). */
+  responseCompleted?: boolean;
   inviteCode: string | null;
   /** 응답 초기화(hard reset) 버튼 노출 — authed 전용이라 게스트는 false. */
   canReset?: boolean;
@@ -74,6 +76,7 @@ export function ContactInfoCard({
   contactMethod,
   respondedAt,
   responseId,
+  responseCompleted = false,
   inviteCode,
   canReset = false,
   onColumnToggle,
@@ -286,7 +289,7 @@ export function ContactInfoCard({
                 응답 초기화
               </Button>
             )}
-            {canReset && responseId && respondedAt && (
+            {canReset && responseId && responseCompleted && (
               <Button
                 size="sm"
                 variant="outline"

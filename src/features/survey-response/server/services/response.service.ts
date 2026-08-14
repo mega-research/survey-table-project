@@ -1803,12 +1803,28 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
     }
     const filtered: Record<string, unknown> = {};
     for (const [qid, value] of Object.entries(data.questionResponses)) {
+      // 기타 상세 기재 사이드카 — 질문 id 가 아니므로 멤버십 필터 대상이 아니다.
+      // 아래에서 별도 정제 후 보존한다 (여기서 drop 하면 제출 순간 기타 텍스트가
+      // 조용히 소실된다 — 2026-08-14 프로덕션에서 확인된 실사고).
+      if (qid === '__optTexts__') continue;
       // 멤버십 필터: 설문(버전 스냅샷/라이브 questions)에 없는 키는 drop.
       if (!validIds.has(qid)) continue;
       // 바이트 필터: 단일 키 직렬화 256KB 초과면 그 키만 drop.
       const serializedBytes = Buffer.byteLength(JSON.stringify(value ?? null), 'utf8');
       if (serializedBytes > MAX_ANSWER_VALUE_BYTES) continue;
       filtered[qid] = value;
+    }
+    // 사이드카 정제: 형태 검증(readOptTextsSidecar) + 실존 질문 키만 + 바이트 상한.
+    const sidecar = readOptTextsSidecar(data.questionResponses);
+    const keptSidecar: Record<string, Record<string, string>> = {};
+    for (const [qid, texts] of Object.entries(sidecar)) {
+      if (validIds.has(qid)) keptSidecar[qid] = texts;
+    }
+    if (Object.keys(keptSidecar).length > 0) {
+      const sidecarBytes = Buffer.byteLength(JSON.stringify(keptSidecar), 'utf8');
+      if (sidecarBytes <= MAX_ANSWER_VALUE_BYTES) {
+        filtered['__optTexts__'] = keptSidecar;
+      }
     }
     validatedResponses = filtered;
   }
