@@ -1318,19 +1318,31 @@ describe('collectNumericIssues — 계산 셀 비교 검증', () => {
     expect(collectNumericIssues(q, { c1: '30' }, ctx)).toHaveLength(0);
   });
 
-  it('기준값 참조가 일부만 비어 있으면 기존대로 0 취급으로 비교한다', () => {
+  it('기준값 참조가 일부만 비어 있으면 스킵하지 않고 0 취급으로 비교한다', () => {
+    // q2 무응답 + q3 응답 30 — 참조가 하나라도 해소되면 스킵 없이 q2=0 취급으로 비교한다.
+    // literal 은 areAllFormulaRefsEmpty 의 refs 에 안 잡히므로 refs=[q2] 뿐인 이전 픽스처는
+    // skip 경로와 비교 경로가 같은 값(60=60)으로 수렴해 Fix 2 를 제거해도 통과하는 무의미한
+    // 단언이었다 — refs=[q2, q3] 로 갈아끼워 두 경로가 실제로 갈리게 한다.
     const q = calcQ({
       operator: 'eq',
       target: {
         kind: 'group', op: '+',
         terms: [
           { kind: 'question', questionId: 'q2' },
-          { kind: 'literal', value: 60 },
+          { kind: 'question', questionId: 'q3' },
         ],
       },
     });
-    // q2 무응답이지만 literal 60 이 있어 기준값 60 — computed 60 과 일치 → 통과
-    const ctx = ctxOf(q, { q1: { c1: '30' } });
-    expect(collectNumericIssues(q, { c1: '30' }, ctx)).toHaveLength(0);
+    const q3 = {
+      id: 'q3', type: 'text', title: '', required: false, order: 2, inputType: 'number',
+    } as Question;
+    const ctx = {
+      allResponses: { q1: { c1: '30' }, q3: '30' }, // computed 60, 기준값 0(q2 무응답)+30 = 30 — 위반
+      allQuestions: [q, numQ, q3],
+      contactAttrs: {},
+    };
+    const issues = collectNumericIssues(q, { c1: '30' }, ctx);
+    expect(issues).toHaveLength(1); // 스킵됐다면 0건 — skip 경로와 비교 경로가 실제로 갈리는 단언
+    expect(issues[0]).toMatchObject({ kind: 'formula', cellIds: ['k1'] });
   });
 });
