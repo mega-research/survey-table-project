@@ -313,10 +313,12 @@ export function row2Label(c: SPSSExportColumn): string {
     c.type === 'choice-group-item' ||
     c.type === 'ranking-rank' ||
     c.type === 'ranking-other' ||
+    c.type === 'ranking-option-text' ||
     c.type === 'option-text' ||
     c.type === 'other-text' ||
     c.type === 'table-cell-option-text' ||
-    c.type === 'table-cell-ranking-other'
+    c.type === 'table-cell-ranking-other' ||
+    c.type === 'table-cell-ranking-option-text'
   ) {
     return c.optionLabel ?? '';
   }

@@ -149,6 +149,27 @@ export function transformRankingOtherText(
 }
 
 /**
+ * 순위형(ranking) 응답에서 특정 rank 에 allowTextInput 옵션이 선택된 경우
+ * 사용자가 입력한 상세 기재 텍스트를 반환한다.
+ * Case 1(질문 레벨) / Case 2(테이블 소스) / Case 3(셀 레벨) 공통.
+ * `_etc`(기타) 경로의 otherText 와 독립 — 기타 선택(optionValue='__other__')은 null.
+ */
+export function transformRankingOptionText(
+  value: unknown,
+  rank: number,
+): string | null {
+  if (!Array.isArray(value)) return null;
+  const entry = (value as unknown[]).find(
+    (a): a is RankingAnswer =>
+      !!a && typeof a === 'object' && (a as RankingAnswer).rank === rank,
+  );
+  if (!entry) return null;
+  if (entry.optionValue === RANKING_OTHER_VALUE) return null;
+  const text = entry.optionText?.trim();
+  return text && text.length > 0 ? text : null;
+}
+
+/**
  * 테이블 radio/select 셀 응답을 셀 옵션의 spssNumericCode로 변환한다.
  * 옵션이 없으면(자유 입력 등) 기존 transformTableCell 동작으로 폴백.
  */

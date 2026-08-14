@@ -131,6 +131,10 @@ export function buildLabel(col: SPSSExportColumn): string {
       return col.optionLabel && col.optionLabel !== `${col.rankIndex}순위 기타 입력`
         ? `${col.questionText} - ${col.optionLabel}`
         : `${col.questionText} - ${col.rankIndex}순위 기타 입력`;
+    case 'ranking-option-text':
+      return col.optionLabel && col.optionLabel !== `${col.rankIndex}순위 상세 기재`
+        ? `${col.questionText} - ${col.optionLabel}`
+        : `${col.questionText} - ${col.rankIndex}순위 상세 기재`;
     case 'table-cell-ranking': {
       const loc = col.rowLabel && col.colLabel
         ? `${col.rowLabel} > ${col.colLabel}`
@@ -146,6 +150,14 @@ export function buildLabel(col: SPSSExportColumn): string {
       return loc
         ? `${col.questionText} - ${loc} - ${col.rankIndex}순위 기타 입력`
         : `${col.questionText} - ${col.rankIndex}순위 기타 입력`;
+    }
+    case 'table-cell-ranking-option-text': {
+      const loc = col.rowLabel && col.colLabel
+        ? `${col.rowLabel} > ${col.colLabel}`
+        : col.optionLabel;
+      return loc
+        ? `${col.questionText} - ${loc} - ${col.rankIndex}순위 상세 기재`
+        : `${col.questionText} - ${col.rankIndex}순위 상세 기재`;
     }
     case 'table-cell':
       return col.optionLabel

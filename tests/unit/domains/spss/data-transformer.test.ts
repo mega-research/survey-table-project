@@ -10,6 +10,7 @@ import {
   transformMultiselect,
   transformOtherOption,
   transformTableChoiceCell,
+  transformRankingOptionText,
 } from '@/lib/spss/data-transformer';
 
 // 옵션 헬퍼
@@ -227,6 +228,42 @@ describe('transformTableChoiceCell', () => {
 
   it('옵션이 없으면(자유 입력 등) input 폴백 동작', () => {
     expect(transformTableChoiceCell('input', '텍스트', undefined)).toBe('텍스트');
+  });
+});
+
+describe('transformRankingOptionText', () => {
+  it('해당 rank의 allowTextInput 옵션 상세 기재 텍스트를 반환한다', () => {
+    const value = [
+      { rank: 1, optionValue: 'opt1', optionText: '직접입력값' },
+      { rank: 2, optionValue: 'opt2' },
+    ];
+    expect(transformRankingOptionText(value, 1)).toBe('직접입력값');
+  });
+
+  it('해당 rank에 optionText가 없으면 null', () => {
+    const value = [{ rank: 1, optionValue: 'opt1' }];
+    expect(transformRankingOptionText(value, 1)).toBeNull();
+  });
+
+  it('해당 rank가 없으면 null', () => {
+    const value = [{ rank: 1, optionValue: 'opt1', optionText: '값' }];
+    expect(transformRankingOptionText(value, 2)).toBeNull();
+  });
+
+  it('기타(__other__) 선택인 rank는 null — otherText 전용 경로와 독립', () => {
+    const value = [{ rank: 1, optionValue: '__other__', otherText: '기타텍스트', optionText: '섞임값' }];
+    expect(transformRankingOptionText(value, 1)).toBeNull();
+  });
+
+  it('공백만 있는 optionText는 null', () => {
+    const value = [{ rank: 1, optionValue: 'opt1', optionText: '   ' }];
+    expect(transformRankingOptionText(value, 1)).toBeNull();
+  });
+
+  it('배열이 아니면 null', () => {
+    expect(transformRankingOptionText(null, 1)).toBeNull();
+    expect(transformRankingOptionText(undefined, 1)).toBeNull();
+    expect(transformRankingOptionText('not-array', 1)).toBeNull();
   });
 });
 
