@@ -245,6 +245,7 @@ export function ContactsTable({
           totalPages={totalPages}
           onPrev={() => handlePageChange(page - 1)}
           onNext={() => handlePageChange(page + 1)}
+          onPage={handlePageChange}
         />
       )}
     </div>

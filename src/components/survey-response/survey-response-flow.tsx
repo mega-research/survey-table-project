@@ -648,7 +648,7 @@ function SurveyResponseFlowActive({
   // 회복 effect + dismiss effect 와 isRecovering/resumeMessage state 를
   // useSessionRecovery 로 추출 (두 effect 등록 순서·deps 동일, 세터 전용이라 훅이 소유).
   // isRecovering 은 handleResponse 의 INSERT 가드(I-1)에서 참조한다.
-  const { isRecovering, resumeMessage, dismissResume } = useSessionRecovery({
+  const { isRecovering, resumeMessage, dismissResume, reeditNotice } = useSessionRecovery({
     enabled: !isCompleted,
     terminalBlocked: duplicateStatus.kind === 'blocked',
     isAdminEdit,
@@ -923,6 +923,19 @@ function SurveyResponseFlowActive({
     buildOptTextsPayload,
     setNumericErrorStepIndex,
   });
+
+  // 기타/상세 기재(store.optionTexts)를 draft 파이프라인에 동기화한다.
+  // 이게 없으면 사이드카는 최종 제출에만 실려, 제출 전 이탈 시 서버에 남지 않아
+  // 재진입 복원(seedOptionTexts)이 되살릴 것이 없다. handleResponse('__optTexts__')는
+  // 일반 답변과 같은 디바운스 draft·이탈 beacon 에 합류하고, '__' 키라 첫 답변
+  // INSERT 트리거는 되지 않는다 (preview/admin-edit 은 flush 계층이 이미 걸러낸다).
+  const lastSyncedOptionTextsRef = useRef(optionTexts);
+  useEffect(() => {
+    if (lastSyncedOptionTextsRef.current === optionTexts) return;
+    lastSyncedOptionTextsRef.current = optionTexts;
+    if (Object.keys(optionTexts).length === 0) return;
+    handleResponse('__optTexts__', optionTexts);
+  }, [optionTexts, handleResponse]);
 
   // iOS Safari 는 버튼을 탭해도 입력의 포커스를 빼앗지 않는다. 포커스가 남은
   // 입력이 스텝 전환으로 DOM 에서 제거되면 blur 이벤트 없이 사라져 소프트
@@ -1243,6 +1256,18 @@ function SurveyResponseFlowActive({
           isMobile ? 'pb-28' : 'pb-16 md:pb-24'
         }`}
       >
+        {reeditNotice && (
+          <div
+            role="status"
+            className="mb-4 flex items-start gap-2 rounded border border-blue-300 bg-blue-50 px-3 py-2 text-sm text-blue-900"
+          >
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            <div>
+              재응답이 허용된 설문입니다. 답변을 수정한 뒤 <strong>끝까지 진행해 제출</strong>
+              해야 완료로 반영됩니다. 제출하지 않고 나가면 완료 처리되지 않습니다.
+            </div>
+          </div>
+        )}
         {resumeMessage && <ResumeToast message={resumeMessage} onDismiss={dismissResume} />}
         {rebaseMessage && (
           <ResumeToast message={rebaseMessage} onDismiss={() => setRebaseMessage(null)} />

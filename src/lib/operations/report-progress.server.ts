@@ -157,9 +157,51 @@ export interface GetProgressRowsArgs {
   sort: ProgressSortKey;
   dir: SortDir;
   metaKeys: string[];
+  /**
+   * 분류 기준 attrs 키 목록 (순서 = 표 컬럼 순서, 최대 4개). 빈 배열/미지정이면
+   * 기본 group_value 기준. 호출부(page RSC)에서 contactColumns 의 groupBy 컬럼
+   * 목록으로 검증된 값만 전달.
+   */
+  groupByKeys?: string[];
 }
 
-const SORT_COL_MAP: Record<Exclude<ProgressSortKey, `meta:${string}`>, string> = {
+/** 그룹 키 개수 — 기본(group_value) 모드는 1. */
+function groupKeyCount(groupByKeys: string[] | undefined): number {
+  return groupByKeys && groupByKeys.length > 0 ? groupByKeys.length : 1;
+}
+
+/**
+ * 그룹 키를 한 번만 계산해 group_key_0..N 컬럼으로 노출하는 base 서브쿼리.
+ *
+ * COALESCE(expr)·GROUP BY expr 에 같은 파라미터를 두 번 바인딩하면 PG 가
+ * $1/$2 를 다른 expression 으로 취급해 GROUP BY 오류가 나므로, 서브쿼리에서
+ * 별칭 컬럼으로 만든 뒤 바깥에서는 bare column 으로만 참조한다.
+ * 별칭을 ct 로 유지해 기존 filter/EXISTS SQL (`ct.*` 참조)이 그대로 동작한다.
+ */
+function buildGroupedBase(groupByKeys: string[] | undefined): SQL {
+  // attrs 값이 빈 문자열이면 미분류 취급 (NULLIF). 기본 group_value 는 기존 동작 유지.
+  const exprs =
+    groupByKeys && groupByKeys.length > 0
+      ? groupByKeys.map(
+          (k, i) => sql`NULLIF(ctt.attrs->>${k}, '') AS ${sql.identifier(`group_key_${i}`)}`,
+        )
+      : [sql`ctt.group_value AS ${sql.identifier('group_key_0')}`];
+  const joined = exprs.reduce((acc, cur) => sql`${acc}, ${cur}`);
+  return sql`(SELECT ctt.*, ${joined} FROM contact_targets ctt) ct`;
+}
+
+/** GROUP BY 절 — ct.group_key_0[, ct.group_key_1 ...] */
+function buildGroupByClause(count: number): SQL {
+  const cols = Array.from({ length: count }, (_, i) =>
+    sql`ct.${sql.identifier(`group_key_${i}`)}`,
+  );
+  return cols.reduce((acc, cur) => sql`${acc}, ${cur}`);
+}
+
+const SORT_COL_MAP: Record<
+  Exclude<ProgressSortKey, `meta:${string}` | `group:${string}`>,
+  string
+> = {
   firstResid: 'first_resid',
   groupLabel: 'group_label',
   listCount: 'list_count',
@@ -185,9 +227,10 @@ const SORT_COL_MAP: Record<Exclude<ProgressSortKey, `meta:${string}`>, string> =
  * 참조 (meta_0..meta_N) 만 raw 임베드 — 사용자 입력이 SQL 에 직접 박히지 않음.
  */
 export async function getProgressRows(args: GetProgressRowsArgs): Promise<ProgressRow[]> {
-  const { surveyId, scope, condition, page, size, sort, dir, metaKeys } = args;
+  const { surveyId, scope, condition, page, size, sort, dir, metaKeys, groupByKeys } = args;
   const offset = Math.max(0, (page - 1) * size);
   const isTest = testFlagForScope(scope);
+  const keyCount = groupKeyCount(groupByKeys);
 
   const { positive: positiveCodes, negative: negativeCodes } =
     await getResultCodeStatuses(surveyId);
@@ -207,31 +250,52 @@ export async function getProgressRows(args: GetProgressRowsArgs): Promise<Progre
     const idx = metaKeys.indexOf(key);
     sortExpr =
       idx >= 0 ? sql.raw(`meta_${idx}`) : sql.raw(SORT_COL_MAP.responseRate);
+  } else if (sort.startsWith('group:')) {
+    // group:<attrs키> — 활성 기준 키를 인덱스로 해석 후 inner alias 만 raw 임베드.
+    // 사용자 입력(키)은 SQL 에 직접 박히지 않는다.
+    const idx = (groupByKeys ?? []).indexOf(sort.slice(6));
+    sortExpr =
+      idx >= 0 && idx < keyCount
+        ? sql.raw(`group_raw_${idx}`)
+        : sql.raw(SORT_COL_MAP.responseRate);
   } else {
-    const mapped = SORT_COL_MAP[sort as Exclude<ProgressSortKey, `meta:${string}`>];
+    const mapped =
+      SORT_COL_MAP[sort as Exclude<ProgressSortKey, `meta:${string}` | `group:${string}`>];
     sortExpr = sql.raw(mapped ?? SORT_COL_MAP.responseRate);
   }
   const dirSql = dir === 'asc' ? sql.raw('ASC') : sql.raw('DESC');
 
   const filterSql = buildFilterSql(condition);
 
+  // 그룹 값 SELECT (group_raw_0..N) + 라벨 concat + GROUP BY 절
+  const groupRawSelect = Array.from({ length: keyCount }, (_, i) =>
+    sql`ct.${sql.identifier(`group_key_${i}`)} AS ${sql.identifier(`group_raw_${i}`)}`,
+  ).reduce((acc, cur) => sql`${acc}, ${cur}`);
+  const groupLabelParts = Array.from({ length: keyCount }, (_, i) =>
+    sql`COALESCE(ct.${sql.identifier(`group_key_${i}`)}, '(미분류)')`,
+  ).reduce((acc, cur) => sql`${acc}, ${cur}`);
+  // ORDER BY 안정 tiebreaker — 그룹 값 컬럼 전체 (동률 시 결정적 순서)
+  const tiebreaker = Array.from({ length: keyCount }, (_, i) =>
+    sql.raw(`group_raw_${i} NULLS LAST`),
+  ).reduce((acc, cur) => sql`${acc}, ${cur}`);
+
   const result = await db.execute(sql`
     SELECT * FROM (
       SELECT
-        COALESCE(ct.group_value, '(미분류)') AS group_label,
-        ct.group_value AS group_value_raw,
+        concat_ws(' / ', ${groupLabelParts}) AS group_label,
+        ${groupRawSelect},
         MIN(ct.resid)::int AS first_resid,
         COUNT(*) FILTER (WHERE ${excludeFilter})::int AS excluded_count,
         COUNT(*) FILTER (WHERE NOT (${excludeFilter}))::int AS list_count,
         COUNT(*) FILTER (WHERE (${closingFilter}) AND NOT (${excludeFilter}))::int AS completed_count
         ${metaKeys.length > 0 ? sql`, ${metaSelectSql}` : sql``}
-      FROM contact_targets ct
+      FROM ${buildGroupedBase(groupByKeys)}
       WHERE ct.survey_id = ${surveyId}
         AND ct.is_test = ${isTest}
         AND ${filterSql}
-        GROUP BY ct.group_value
+        GROUP BY ${buildGroupByClause(keyCount)}
     ) sub
-    ORDER BY ${sortExpr} ${dirSql} NULLS LAST, group_value_raw NULLS LAST
+    ORDER BY ${sortExpr} ${dirSql} NULLS LAST, ${tiebreaker}
     LIMIT ${size} OFFSET ${offset}
   `);
 
@@ -241,9 +305,18 @@ export async function getProgressRows(args: GetProgressRowsArgs): Promise<Progre
       const v = r[`meta_${i}`];
       meta[k] = typeof v === 'string' && v.length > 0 ? v : null;
     });
+    const groupValues = Array.from({ length: keyCount }, (_, i) => {
+      const v = r[`group_raw_${i}`];
+      return v == null ? null : String(v);
+    });
+    // 조합 행 식별 키 — 값에 못 나오는 unit separator(0x1f) 조인. 전부 null 이면 null.
+    const groupValueRaw = groupValues.every((v) => v == null)
+      ? null
+      : groupValues.map((v) => v ?? '').join('');
     return {
       groupLabel: String(r['group_label']),
-      groupValueRaw: r['group_value_raw'] == null ? null : String(r['group_value_raw']),
+      groupValueRaw,
+      groupValues,
       firstResid: r['first_resid'] == null ? null : Number(r['first_resid']),
       listCount: Number(r['list_count']),
       completedCount: Number(r['completed_count']),
@@ -256,19 +329,21 @@ export async function getProgressRows(args: GetProgressRowsArgs): Promise<Progre
 /**
  * 페이지네이션 무시 합계 — "총 N개 그룹 · 리스트 합계 X / 완료 Y".
  *
- * group_count 는 `getProgressRows` 의 `GROUP BY ct.group_value` (raw 컬럼) 과
- * 정확히 일치해야 한다 (footer "총 N개 그룹" + 페이지네이션 total 근거).
+ * group_count 는 `getProgressRows` 의 `GROUP BY group_key_0..N` 와 정확히 일치해야
+ * 한다 (footer "총 N개 그룹" + 페이지네이션 total 근거). 같은 groupByKeys 를 전달할 것.
  *
- * COUNT(DISTINCT ct.group_value) (NULL 제외)에 미지정 그룹이 있으면 1개를 더한다.
- * COALESCE(...,'(미분류)') 를 DISTINCT 안에서 쓰면 리터럴 '(미분류)'와 NULL이
- * 합쳐지므로 사용하지 않는다.
+ * 조합 그룹 수는 스칼라 서브쿼리의 GROUP BY 를 세는 방식 — COUNT(DISTINCT) 는
+ * NULL 그룹 처리와 다중 키 조합에서 의미가 달라 사용하지 않는다. 서브쿼리의
+ * ct alias 는 자체 스코프라 바깥 ct 와 충돌하지 않는다.
  */
 export async function getProgressTotals(
   surveyId: string,
   scope: OperationsDataScope,
   condition: FilterCondition | null,
+  groupByKeys?: string[],
 ): Promise<ProgressTotals> {
   const isTest = testFlagForScope(scope);
+  const keyCount = groupKeyCount(groupByKeys);
   const { positive: positiveCodes, negative: negativeCodes } =
     await getResultCodeStatuses(surveyId);
   const closingFilter = buildClosingFilter(positiveCodes, isTest);
@@ -276,8 +351,13 @@ export async function getProgressTotals(
   const filterSql = buildFilterSql(condition);
   const result = await db.execute(sql`
     SELECT
-      (COUNT(DISTINCT ct.group_value)
-        + (CASE WHEN COUNT(*) FILTER (WHERE ct.group_value IS NULL) > 0 THEN 1 ELSE 0 END))::int AS group_count,
+      (SELECT COUNT(*)::int FROM (
+        SELECT 1 FROM ${buildGroupedBase(groupByKeys)}
+        WHERE ct.survey_id = ${surveyId}
+          AND ct.is_test = ${isTest}
+          AND ${filterSql}
+        GROUP BY ${buildGroupByClause(keyCount)}
+      ) grouped) AS group_count,
       COUNT(*) FILTER (WHERE NOT (${excludeFilter}))::int AS list_total,
       COUNT(*) FILTER (WHERE (${closingFilter}) AND NOT (${excludeFilter}))::int AS completed_total,
       COUNT(*) FILTER (WHERE ${excludeFilter})::int AS excluded_total

@@ -55,6 +55,7 @@
     "0068_add_question_required_message",
     "0069_add_survey_preview_token",
     "0070_survey_version_snapshot_nullable",
-    "0071_r2_key_refs"
+    "0071_r2_key_refs",
+    "0072_response_edit_logs_reset"
   ]
 }

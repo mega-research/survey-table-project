@@ -93,4 +93,12 @@ describe('mergeChangeLabels', () => {
       { questionId: 'q5', code: 'Q5', title: '성과' },
     ]);
   });
+
+  it('__optTexts__ 사이드카는 질문 조회 없이 고정 라벨로 교정한다', () => {
+    // 과거 title='__optTexts__' 폴백으로 저장된 행 (프로덕션 500 회귀 방지)
+    const changes = [{ questionId: '__optTexts__', code: null, title: '__optTexts__' }];
+    expect(mergeChangeLabels(changes, new Map())).toEqual([
+      { questionId: '__optTexts__', code: null, title: '기타 상세 기재' },
+    ]);
+  });
 });

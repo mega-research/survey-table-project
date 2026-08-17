@@ -14,6 +14,7 @@ import {
   getResponseEditLogs,
 } from '@/lib/operations/contacts.server';
 import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
+import { isGuestViewer } from '@/lib/auth/guest-viewer';
 
 export const metadata: Metadata = {
   title: '현황 - 조사 대상 단건 편집',
@@ -31,16 +32,19 @@ export default async function ContactDetailPage({ params }: PageProps) {
   if (!detail || detail.contact.surveyId !== surveyId) notFound();
 
   // 완료·진행중·이탈 통틀어 최신 응답이 수정 대상. contactTargetId 미링크
-  // 레거시 완료 건만 contact_targets.responseId 로 폴백한다.
-  const editableResponseId =
-    (await getEditableResponseIdForTarget(detail.contact.id, scope)) ??
-    detail.contact.responseId;
+  // 레거시 완료 건만 contact_targets.responseId 로 폴백한다 (레거시 링크는
+  // 완료 시점에만 생기므로 completed 로 간주).
+  const editable = await getEditableResponseIdForTarget(detail.contact.id, scope);
+  const editableResponseId = editable?.id ?? detail.contact.responseId;
+  const editableResponseCompleted = editable
+    ? editable.status === 'completed'
+    : detail.contact.responseId != null;
 
   const [scheme, resultCodes, mailHistory, editLogs, mailTemplates] = await Promise.all([
     getContactColumnScheme(surveyId, scope),
     getContactResultCodes(surveyId),
     getMailRecipientsForTarget(detail.contact.id, scope),
-    getResponseEditLogs(editableResponseId),
+    getResponseEditLogs(editableResponseId, detail.contact.id),
     getMailTemplatesBySurvey(surveyId),
   ]);
   if (!scheme) notFound();
@@ -86,6 +90,7 @@ export default async function ContactDetailPage({ params }: PageProps) {
         mailHistory={mailHistory}
         editLogs={editLogs}
         mailSend={{ templates: mailTemplateOptions, disabledReason: mailSendDisabledReason }}
+        canReset={!(await isGuestViewer())}
         initial={{
           id: detail.contact.id,
           resid: detail.contact.resid,
@@ -97,6 +102,7 @@ export default async function ContactDetailPage({ params }: PageProps) {
           inviteToken: detail.contact.inviteToken,
           inviteCode: detail.contact.inviteCode,
           responseId: editableResponseId,
+          responseCompleted: editableResponseCompleted,
           attempts: detail.attempts,
         }}
       />

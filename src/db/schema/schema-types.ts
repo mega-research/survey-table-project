@@ -314,6 +314,18 @@ export interface ContactColumnDef {
    * 암호화 저장되고, attrs 에는 저장되지 않는다. 사후 변경 불가 — 재업로드 필요.
    */
   piiType?: import('@/lib/crypto/pii-fields').PiiFieldType;
+  /**
+   * @deprecated groupLevel 로 대체 (2026-08-17). 과거 저장분 읽기 호환용으로만 유지 —
+   * resolveGroupCriteria 가 컬럼 순서대로 레벨 1..4 로 해석한다. 신규 저장 금지.
+   */
+  groupBy?: boolean;
+  /**
+   * 진척보고 분류 기준 레벨 슬롯. 1=대분류, 2=중분류, 3=소분류, 4=세부분류.
+   * attrs.* 소스 전용, 레벨당 컬럼 1개 (UI + 서비스 이중 가드).
+   * 임의 컬럼을 슬롯에 배정하는 모델 — 예: '산업 분류' 컬럼에 1(대분류),
+   * '종사자 구간' 컬럼에 2(중분류). 진척보고는 레벨 순서대로 조합 집계한다.
+   */
+  groupLevel?: 1 | 2 | 3 | 4;
 }
 
 /** surveys.progress_columns — 진척률 표 (Report 탭) 그룹 메타 컬럼 픽커 */
@@ -347,6 +359,12 @@ export interface ContactUploadMapping {
   piiMapping?: Record<string, import('@/lib/crypto/pii-fields').PiiFieldType>;
   /** 사용자가 컨택리스트에 표시하기로 토글한 attrs 키 (헤더명) 목록. 나머지는 hidden 으로 자동 등록. */
   selectedAttrsKeys: string[];
+  /**
+   * 분류 기준 레벨 배정 (헤더명 → 1..4). replace 업로드 시 생성되는 컬럼 스킴의
+   * groupLevel 로 반영된다. 레벨 1(대분류) 헤더는 group_value 소스(systemFields.group)와
+   * 일치해야 한다 — 마법사가 동기화.
+   */
+  groupLevels?: Record<string, number>;
   /** 사용자가 편집한 표시 라벨 (헤더명 → 라벨). 미지정 헤더는 헤더명 그대로. */
   labelOverrides?: Record<string, string>;
   /** 1-based, 디폴트 1 */

@@ -1,7 +1,7 @@
 import 'server-only';
 import { cache } from 'react';
 
-import { and, asc, desc, eq, inArray, isNull, sql, type AnyColumn, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, or, sql, type AnyColumn, type SQL } from 'drizzle-orm';
 
 import { db } from '@/db';
 import {
@@ -427,17 +427,18 @@ export async function getContactDetailById(
 }
 
 /**
- * 컨택의 수정 가능 응답 id — 완료·진행중·이탈 응답 중 가장 최근 건을 돌려준다.
+ * 컨택의 수정 가능 응답 — 완료·진행중·이탈 응답 중 가장 최근 건의 id 와 status.
  * contact_targets.responseId(완료 시에만 링크)에 의존하지 않아, 완료 후 다시
  * 진입한 진행중 응답이 있으면 그 최신 건이 열린다. 조사 대상 단건 편집의
- * "응답 수정" 버튼용 (미응답·자격미달·불량은 대상 아님).
+ * "응답 수정" 버튼용이며, status 는 "재응답 허용" 버튼 노출 판정에 쓴다 —
+ * 컨택의 respondedAt(best-effort 링크라 누락 가능)이 아닌 실제 응답 상태 기준.
  */
 export async function getEditableResponseIdForTarget(
   contactTargetId: string,
   scope: OperationsDataScope,
-): Promise<string | null> {
+): Promise<{ id: string; status: string } | null> {
   const [row] = await db
-    .select({ id: surveyResponses.id })
+    .select({ id: surveyResponses.id, status: surveyResponses.status })
     .from(surveyResponses)
     .where(
       and(
@@ -449,7 +450,7 @@ export async function getEditableResponseIdForTarget(
     )
     .orderBy(desc(surveyResponses.createdAt))
     .limit(1);
-  return row?.id ?? null;
+  return row ?? null;
 }
 
 /**
@@ -524,20 +525,30 @@ export async function getMailRecipientsForTarget(
 
 export interface ResponseEditLogRow {
   id: string;
+  action: 'edit' | 'reset' | 'reedit_allow';
   editorEmail: string | null;
   changedQuestions: ResponseEditChange[];
   changedCount: number;
   createdAt: Date;
 }
 
-/** 응답 편집 audit 이력 (최근순). responseId 없으면 빈 배열. */
+/**
+ * 응답 편집 audit 이력 (최근순).
+ * 일반 수정 로그는 responseId, 초기화 마커(action:'reset')는 응답 삭제 후에도
+ * 남도록 contactTargetId 로 연결된다 — 둘 다 있으면 OR 로 합쳐 조회한다.
+ */
 export async function getResponseEditLogs(
   responseId: string | null,
+  contactTargetId?: string | null,
 ): Promise<ResponseEditLogRow[]> {
-  if (!responseId) return [];
+  const conds: SQL[] = [];
+  if (responseId) conds.push(eq(responseEditLogs.responseId, responseId));
+  if (contactTargetId) conds.push(eq(responseEditLogs.contactTargetId, contactTargetId));
+  if (conds.length === 0) return [];
   const rows = await db
     .select({
       id: responseEditLogs.id,
+      action: responseEditLogs.action,
       surveyId: responseEditLogs.surveyId,
       editorEmail: responseEditLogs.editorEmail,
       changedQuestions: responseEditLogs.changedQuestions,
@@ -545,16 +556,19 @@ export async function getResponseEditLogs(
       createdAt: responseEditLogs.createdAt,
     })
     .from(responseEditLogs)
-    .where(eq(responseEditLogs.responseId, responseId))
+    .where(or(...conds))
     .orderBy(desc(responseEditLogs.createdAt));
   if (rows.length === 0) return [];
 
   // 라벨 보강: 기록 시점에 version_id 부재로 questionId 로 폴백된 라벨을
   // 현재 questions 테이블의 code/title 로 복구. 삭제된 질문은 저장값 유지.
+  // uuid 형식이 아닌 키(__optTexts__ 사이드카 등)는 uuid 컬럼 조회에 넣으면
+  // invalid input syntax 로 500 이 나므로 제외한다 — 라벨은 mergeChangeLabels 가 처리.
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const surveyId = rows[0]!.surveyId;
   const questionIds = [
     ...new Set(rows.flatMap((r) => r.changedQuestions.map((c) => c.questionId))),
-  ];
+  ].filter((id) => UUID_RE.test(id));
   const labelMap = new Map<string, { code: string | null; title: string }>();
   if (questionIds.length > 0) {
     const qs = await db
@@ -566,6 +580,7 @@ export async function getResponseEditLogs(
 
   return rows.map((r) => ({
     id: r.id,
+    action: r.action,
     editorEmail: r.editorEmail,
     changedQuestions: mergeChangeLabels(r.changedQuestions, labelMap),
     changedCount: r.changedCount,
