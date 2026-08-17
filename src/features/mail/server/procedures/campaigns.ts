@@ -1,6 +1,6 @@
 import * as z from 'zod';
 
-import { getGuestSurveyId } from '@/lib/auth/guest-grants';
+import { isGuestUser } from '@/lib/auth/guest-grants';
 import { assertSurveyAccess, scoped } from '@/server/orpc';
 
 import {
@@ -24,7 +24,7 @@ const create = scoped
   .handler(({ context, input }) => {
     assertSurveyAccess(context.user.id, input.surveyId);
     // 인증된 context 에서 1회 파생 — 서비스가 auth 를 재조회하지 않는다.
-    return svc.createCampaign(input, context.user.id, getGuestSurveyId(context.user.id) !== null);
+    return svc.createCampaign(input, context.user.id, isGuestUser(context.user.id));
   });
 
 const cancel = scoped
@@ -32,7 +32,7 @@ const cancel = scoped
   .output(z.object({ ok: z.literal(true) }))
   .handler(async ({ context, input }) => {
     assertSurveyAccess(context.user.id, input.surveyId);
-    await svc.cancelCampaign(input, getGuestSurveyId(context.user.id) !== null);
+    await svc.cancelCampaign(input, isGuestUser(context.user.id));
     return { ok: true as const };
   });
 
@@ -65,7 +65,7 @@ const sendSingle = scoped
   .output(CreateCampaignResult)
   .handler(({ context, input }) => {
     assertSurveyAccess(context.user.id, input.surveyId);
-    return sendSingleCampaign(input, context.user.id, getGuestSurveyId(context.user.id) !== null);
+    return sendSingleCampaign(input, context.user.id, isGuestUser(context.user.id));
   });
 
 export const campaigns = {

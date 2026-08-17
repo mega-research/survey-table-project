@@ -1,6 +1,6 @@
 import { ORPCError } from '@orpc/server';
 
-import { getGuestSurveyId } from '@/lib/auth/guest-grants';
+import { isGuestUser } from '@/lib/auth/guest-grants';
 import { assertSurveyAccess, scoped } from '@/server/orpc';
 
 import { SaveAdminEditInput, SaveAdminEditOutput } from '../../domain/response-edit';
@@ -43,7 +43,7 @@ const saveAdminEdit = scoped
           email: context.user?.email ?? null,
         },
         // 인증된 context 에서 1회 파생 — 서비스가 auth 를 재조회하지 않는다.
-        getGuestSurveyId(context.user.id) !== null,
+        isGuestUser(context.user.id),
       );
     } catch (err) {
       mapServiceError(err);

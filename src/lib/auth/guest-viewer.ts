@@ -1,7 +1,7 @@
 import { cache } from 'react';
 
 import { requireAuth } from '@/lib/auth';
-import { getGuestSurveyId } from '@/lib/auth/guest-grants';
+import { isGuestUser } from '@/lib/auth/guest-grants';
 
 /**
  * 현재 세션이 설문 단위 게스트(grant 보유자)인지 판정하는 서버 전용 헬퍼.
@@ -20,7 +20,7 @@ async function loadIsGuestViewer(): Promise<boolean> {
   // 모두 미들웨어·procedure 인증을 통과한 뒤라 세션이 반드시 있으므로 fail-closed 로
   // requireAuth 를 쓴다.
   const user = await requireAuth();
-  return getGuestSurveyId(user.id) !== null;
+  return isGuestUser(user.id);
 }
 
 export const isGuestViewer = cache(loadIsGuestViewer);

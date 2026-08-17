@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 
 import { createServerClient } from '@supabase/ssr';
 
-import { getGuestSurveyId, guestPathRedirect } from '@/lib/auth/guest-grants';
+import { getGuestSurveyIds, guestPathRedirect } from '@/lib/auth/guest-grants';
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -62,9 +62,9 @@ export async function updateSession(request: NextRequest) {
     // 게스트(설문 단위 grant) — grant 보유자는 allowlist fail-open 과 무관하게 항상
     // 게스트 취급, 자기 설문 operations 밖은 전부 리다이렉트
     if (user && !isLoginPage) {
-      const guestSurveyId = getGuestSurveyId(user.id);
-      if (guestSurveyId) {
-        const dest = guestPathRedirect(request.nextUrl.pathname, guestSurveyId);
+      const guestSurveyIds = getGuestSurveyIds(user.id);
+      if (guestSurveyIds.length > 0) {
+        const dest = guestPathRedirect(request.nextUrl.pathname, guestSurveyIds);
         if (dest) {
           const url = request.nextUrl.clone();
           url.pathname = dest;
