@@ -205,6 +205,21 @@ describe('buildContactsFilterSql — any 모드 (전체 컬럼 검색)', () => {
   });
 });
 
+describe('responseStatusRankExpr — web 컬럼 상태 순위 정렬', () => {
+  it('완료(1) → 진행중(2) → 이탈(3) 순위 CASE, 응답 없으면 NULL(항상 마지막)', async () => {
+    const { responseStatusRankExpr } = await import('@/lib/operations/contacts-filter-sql');
+    const query = dialect.sqlToQuery(responseStatusRankExpr);
+    expect(query.sql).toContain('CASE');
+    // 순위가 라벨 순서를 따르는지 — completed 가 in_progress 보다, in_progress 가 drop 보다 앞
+    const pos = (s: string) => query.sql.indexOf(s);
+    expect(pos("'completed'")).toBeGreaterThan(-1);
+    expect(pos("'completed'")).toBeLessThan(pos("'in_progress'"));
+    expect(pos("'in_progress'")).toBeLessThan(pos("'drop'"));
+    // 응답 없음은 서브쿼리 무행 → NULL (CASE ELSE 로 null 을 순위화하지 않아야 함)
+    expect(query.sql).toContain('survey_responses');
+  });
+});
+
 describe('attrsNaturalSortExprs — attrs 자연 정렬 표현식', () => {
   it('숫자 CASE 캐스트 표현식 + 텍스트 표현식 순서쌍을 반환한다', async () => {
     const { attrsNaturalSortExprs } = await import('@/lib/operations/contacts-filter-sql');

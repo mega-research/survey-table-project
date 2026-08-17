@@ -37,6 +37,7 @@ import {
   attrsNaturalSortExprs,
   buildContactsFilterSql,
   latestResultCodeExpr,
+  responseStatusRankExpr,
 } from './contacts-filter-sql';
 import { FILTER_SOURCE, type ColumnCandidateWithPii } from './filter-shared';
 import {
@@ -173,13 +174,13 @@ export async function listContactsForSurvey(
   } as const;
 
   // attrs 정렬은 자연 정렬 — 숫자 값(NO 등)은 숫자순, 비숫자는 뒤에 텍스트순.
-  // progress 정렬은 web 컬럼의 표시값(진행률) 기준 — 응답 없는 행은 NULL(항상 뒤),
-  // 같은 진행률(예: 완료 100%) 안에서는 완료 시각으로 2차 정렬.
+  // progress 정렬은 web 컬럼의 상태 순위(완료 → 진행중 → 이탈 → 기타) 기준 —
+  // 같은 상태 안에서는 진행률, 그 다음 완료 시각. 응답 없음은 항상 마지막.
   const attrsKey = attrsSortKey(sort);
   const orderCols: Array<AnyColumn | SQL> = attrsKey
     ? attrsNaturalSortExprs(attrsKey)
     : sort === 'progress'
-      ? [progressPctExpr, contactTargets.respondedAt]
+      ? [responseStatusRankExpr, progressPctExpr, contactTargets.respondedAt]
       : [SYSTEM_SORT_MAP[sort as keyof typeof SYSTEM_SORT_MAP] ?? contactTargets.resid];
 
   const dataRows = await db

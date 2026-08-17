@@ -103,6 +103,27 @@ export function buildClauseSql(cond: FilterCondition): SQL {
 }
 
 /**
+ * web 컬럼 상태 순위 정렬 표현식 — 완료(1) → 진행중(2) → 이탈(3) → 기타 종료(4~) 순.
+ * 응답이 없으면 서브쿼리가 무행 → NULL 이 되어 NULLS LAST 로 항상 마지막.
+ * 표시(StatusPill 라벨)와 같은 상태 축으로 정렬하기 위한 것 — 진행률 숫자 정렬은
+ * 완료만 있는 명단에서 완료 시각순으로 퇴화하는 문제가 있었다.
+ */
+export const responseStatusRankExpr = sql<number | null>`(
+  SELECT CASE status
+    WHEN 'completed' THEN 1
+    WHEN 'in_progress' THEN 2
+    WHEN 'drop' THEN 3
+    WHEN 'screened_out' THEN 4
+    WHEN 'quotaful_out' THEN 5
+    WHEN 'bad' THEN 6
+    ELSE 7 END
+  FROM survey_responses
+  WHERE id = "contact_targets"."response_id"
+    AND deleted_at IS NULL
+    AND is_test = "contact_targets"."is_test"
+)`;
+
+/**
  * attrs 컬럼 자연 정렬 표현식 쌍 — [숫자 CASE 캐스트, 텍스트 원본].
  *
  * 숫자로만 된 값은 numeric 으로 먼저 정렬되고(비숫자는 NULL → NULLS LAST 로 뒤),
