@@ -1,6 +1,6 @@
 import * as z from 'zod';
 
-import { getGuestSurveyId } from '@/lib/auth/guest-grants';
+import { isGuestUser } from '@/lib/auth/guest-grants';
 import { assertSurveyAccess, authed, scoped } from '@/server/orpc';
 
 import {
@@ -20,7 +20,7 @@ const add = scoped
   .handler(({ context, input }) => {
     assertSurveyAccess(context.user.id, input.surveyId);
     // 인증된 context 에서 1회 파생 — 서비스가 auth 를 재조회하지 않는다.
-    return svc.addContactTarget(input, getGuestSurveyId(context.user.id) !== null);
+    return svc.addContactTarget(input, isGuestUser(context.user.id));
   });
 
 const update = scoped
@@ -28,7 +28,7 @@ const update = scoped
   .output(z.object({ ok: z.literal(true) }))
   .handler(async ({ context, input }) => {
     assertSurveyAccess(context.user.id, input.surveyId);
-    await svc.updateContactTarget(input, getGuestSurveyId(context.user.id) !== null);
+    await svc.updateContactTarget(input, isGuestUser(context.user.id));
     return { ok: true as const };
   });
 
@@ -36,7 +36,7 @@ const remove = authed
   .input(DeleteContactTargetInput)
   .output(z.object({ ok: z.literal(true) }))
   .handler(async ({ context, input }) => {
-    await svc.deleteContactTarget(input, getGuestSurveyId(context.user.id) !== null);
+    await svc.deleteContactTarget(input, isGuestUser(context.user.id));
     return { ok: true as const };
   });
 
@@ -44,7 +44,7 @@ const generateTest = authed
   .input(GenerateTestContactsInput)
   .output(GenerateTestContactsResult)
   .handler(({ context, input }) =>
-    generateTestContacts(input, getGuestSurveyId(context.user.id) !== null),
+    generateTestContacts(input, isGuestUser(context.user.id)),
   );
 
 export const targets = {

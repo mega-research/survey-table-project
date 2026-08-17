@@ -10,7 +10,7 @@ import { completedResponse, notDeletedResponse, notTestResponse } from '@/data/r
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { normalizeQuestions } from '@/lib/question';
 import { requireAuth } from '@/lib/auth';
-import { canAccessSurvey, getGuestSurveyId } from '@/lib/auth/guest-grants';
+import { canAccessSurvey, isGuestUser } from '@/lib/auth/guest-grants';
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
 import {
   generateRawDataWorkbook,
@@ -48,7 +48,7 @@ async function handleExport(
     // 별개의 운영 기록. 로그에는 쿼리 파라미터·행수만 싣는다 (응답 본문 금지).
     ctx.bind({
       userId: user.id,
-      role: getGuestSurveyId(user.id) ? 'guest' : 'admin',
+      role: isGuestUser(user.id) ? 'guest' : 'admin',
       surveyId,
     });
     if (!canAccessSurvey(user.id, surveyId)) {

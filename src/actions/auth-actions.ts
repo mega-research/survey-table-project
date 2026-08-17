@@ -43,7 +43,9 @@ export async function login(formData: FormData) {
 
 export async function logout() {
   const supabase = await createClient();
-  await supabase.auth.signOut();
+  // scope 'local': 현재 브라우저 세션만 종료 — 기본 global 은 전 기기 refresh
+  // token 을 폐기해 공유 게스트 계정의 다른 실사 인력까지 튕긴다.
+  await supabase.auth.signOut({ scope: 'local' });
   revalidatePath('/', 'layout');
   redirect('/admin/login');
 }

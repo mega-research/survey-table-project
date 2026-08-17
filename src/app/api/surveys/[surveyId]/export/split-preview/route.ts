@@ -8,7 +8,7 @@ import { completedResponse, notDeletedResponse, notTestResponse } from '@/data/r
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { normalizeQuestions } from '@/lib/question';
 import { requireAuth } from '@/lib/auth';
-import { canAccessSurvey, getGuestSurveyId } from '@/lib/auth/guest-grants';
+import { canAccessSurvey, isGuestUser } from '@/lib/auth/guest-grants';
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
 import {
   detectSplitCandidates,
@@ -33,7 +33,7 @@ async function handleSplitPreview(
     const { surveyId } = await params;
     ctx.bind({
       userId: user.id,
-      role: getGuestSurveyId(user.id) ? 'guest' : 'admin',
+      role: isGuestUser(user.id) ? 'guest' : 'admin',
       surveyId,
     });
     if (!canAccessSurvey(user.id, surveyId)) {
