@@ -174,14 +174,20 @@ export async function listContactsForSurvey(
   } as const;
 
   // attrs 정렬은 자연 정렬 — 숫자 값(NO 등)은 숫자순, 비숫자는 뒤에 텍스트순.
-  // progress 정렬은 web 컬럼의 상태 순위(완료 → 진행중 → 이탈 → 기타) 기준 —
-  // 같은 상태 안에서는 진행률, 그 다음 완료 시각. 응답 없음은 항상 마지막.
+  // progress 정렬은 web 컬럼의 상태 순위(완료 → 진행중 → 이탈 → 기타) 축만 dir 을
+  // 따르고, 같은 상태 안은 방향과 무관하게 기본 순서(시스템ID 오름차순) 유지.
+  // 응답 없음은 항상 마지막(NULLS LAST).
   const attrsKey = attrsSortKey(sort);
-  const orderCols: Array<AnyColumn | SQL> = attrsKey
-    ? attrsNaturalSortExprs(attrsKey)
+  const orderExprs: SQL[] = attrsKey
+    ? attrsNaturalSortExprs(attrsKey).map((c) => orderExpr(c, dir))
     : sort === 'progress'
-      ? [responseStatusRankExpr, progressPctExpr, contactTargets.respondedAt]
-      : [SYSTEM_SORT_MAP[sort as keyof typeof SYSTEM_SORT_MAP] ?? contactTargets.resid];
+      ? [orderExpr(responseStatusRankExpr, dir), asc(contactTargets.resid)]
+      : [
+          orderExpr(
+            SYSTEM_SORT_MAP[sort as keyof typeof SYSTEM_SORT_MAP] ?? contactTargets.resid,
+            dir,
+          ),
+        ];
 
   const dataRows = await db
     .select({
@@ -200,7 +206,7 @@ export async function listContactsForSurvey(
     })
     .from(contactTargets)
     .where(whereClause)
-    .orderBy(...orderCols.map((c) => orderExpr(c, dir)), asc(contactTargets.id))
+    .orderBy(...orderExprs, asc(contactTargets.id))
     .limit(pageSize)
     .offset(offset);
 
