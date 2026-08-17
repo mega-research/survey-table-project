@@ -42,10 +42,10 @@ describe('toneFromRate', () => {
 });
 
 const fixture: ProgressRow[] = [
-  { groupLabel: 'A 전시회', groupValueRaw: 'A 전시회', firstResid: 1, listCount: 10, completedCount: 5, excludedCount: 0, meta: { '월': '03' } },
-  { groupLabel: 'B 전시회', groupValueRaw: 'B 전시회', firstResid: 11, listCount: 20, completedCount: 18, excludedCount: 0, meta: { '월': '01' } },
-  { groupLabel: '(미분류)', groupValueRaw: null, firstResid: null, listCount: 5, completedCount: 0, excludedCount: 0, meta: { '월': null } },
-  { groupLabel: 'C 전시회', groupValueRaw: 'C 전시회', firstResid: 31, listCount: 0, completedCount: 0, excludedCount: 0, meta: { '월': '04' } },
+  { groupLabel: 'A 전시회', groupValueRaw: 'A 전시회', groupValues: ['A 전시회'], firstResid: 1, listCount: 10, completedCount: 5, excludedCount: 0, meta: { '월': '03' } },
+  { groupLabel: 'B 전시회', groupValueRaw: 'B 전시회', groupValues: ['B 전시회'], firstResid: 11, listCount: 20, completedCount: 18, excludedCount: 0, meta: { '월': '01' } },
+  { groupLabel: '(미분류)', groupValueRaw: null, groupValues: [null], firstResid: null, listCount: 5, completedCount: 0, excludedCount: 0, meta: { '월': null } },
+  { groupLabel: 'C 전시회', groupValueRaw: 'C 전시회', groupValues: ['C 전시회'], firstResid: 31, listCount: 0, completedCount: 0, excludedCount: 0, meta: { '월': '04' } },
 ];
 
 describe('sortGroupRows', () => {
@@ -70,6 +70,17 @@ describe('sortGroupRows', () => {
   it('meta:월 desc 는 04 > 03 > 01 > NULL', () => {
     const sorted = sortGroupRows(fixture, 'meta:월', 'desc');
     expect(sorted.map((r) => r.meta['월'])).toEqual(['04', '03', '01', null]);
+  });
+  it('group:<attrs키> 정렬은 groupKeys 순서로 인덱스를 해석한다', () => {
+    const rows: ProgressRow[] = [
+      { groupLabel: 'A / x', groupValueRaw: 'A', groupValues: ['A', 'x'], firstResid: 1, listCount: 1, completedCount: 0, excludedCount: 0, meta: {} },
+      { groupLabel: 'B / y', groupValueRaw: 'B', groupValues: ['B', 'y'], firstResid: 2, listCount: 1, completedCount: 0, excludedCount: 0, meta: {} },
+    ];
+    const sorted = sortGroupRows(rows, 'group:종사자', 'desc', ['대분류', '종사자']);
+    expect(sorted.map((r) => r.groupValues[1])).toEqual(['y', 'x']);
+    // 활성 키 목록에 없는 키는 null 취급 — 순서 유지
+    const unknown = sortGroupRows(rows, 'group:없는키', 'asc', ['대분류', '종사자']);
+    expect(unknown.map((r) => r.groupLabel)).toEqual(['A / x', 'B / y']);
   });
 });
 

@@ -24,6 +24,12 @@ interface Props {
   metaColumns: ProgressColumnDef[];
   /** system.resid 컬럼 헤더 라벨 (contactColumns 에서 가져옴). 폴백 '번호'. */
   residLabel: string;
+  /**
+   * 분류 기준(groupBy) 활성 시 기준 값 컬럼들 (key=attrs 키 — 정렬 식별자,
+   * label=컬럼 설정 라벨). 순서는 row.groupValues 와 일치. 빈 배열이면 기존과
+   * 동일 — 그룹 라벨 컬럼을 자동 노출하지 않고 번호(firstResid) 컬럼을 표시한다.
+   */
+  groupColumns?: Array<{ key: string; label: string }>;
   page: number;
   size: number;
   sort: ProgressSortKey;
@@ -56,11 +62,13 @@ export function ProgressTable({
   totals,
   metaColumns,
   residLabel,
+  groupColumns = [],
   page,
   size,
   sort,
   dir,
 }: Props) {
+  const groupByActive = groupColumns.length > 0;
   const pushParams = useSearchParamsMutator();
   const totalPages = Math.max(1, Math.ceil(totals.groupCount / size));
 
@@ -80,17 +88,31 @@ export function ProgressTable({
     });
   };
 
-  // 1 # + N meta + 3 fixed (리스트수/완료/응답률)
-  const colSpan = 1 + metaColumns.length + 3;
+  // (# 또는 그룹 값 컬럼 N개) + N meta + 3 fixed (리스트수/완료/응답률)
+  const colSpan = (groupByActive ? groupColumns.length : 1) + metaColumns.length + 3;
 
   return (
     <div className="overflow-hidden rounded border border-slate-200 bg-white">
       <table className="w-full text-sm">
         <thead className="bg-slate-50 text-slate-700">
           <tr>
-            <Th sort={sort} dir={dir} colKey="firstResid" align="right" onClick={handleSortClick}>
-              {residLabel}
-            </Th>
+            {!groupByActive && (
+              <Th sort={sort} dir={dir} colKey="firstResid" align="right" onClick={handleSortClick}>
+                {residLabel}
+              </Th>
+            )}
+            {groupColumns.map((c) => (
+              <Th
+                key={`group-${c.key}`}
+                sort={sort}
+                dir={dir}
+                colKey={`group:${c.key}` as ProgressSortKey}
+                align="left"
+                onClick={handleSortClick}
+              >
+                {c.label}
+              </Th>
+            ))}
             {metaColumns.map((c) => (
               <Th
                 key={c.key}
@@ -139,9 +161,23 @@ export function ProgressTable({
             const rate = formatRate(r.completedCount, r.listCount);
             return (
               <tr key={r.groupValueRaw ?? '__null__'} className="hover:bg-slate-50">
-                <td className={cn(ALIGN_CLASS.right, 'px-3 py-2 tabular-nums text-slate-500')}>
-                  {r.firstResid ?? <span className="text-slate-300">—</span>}
-                </td>
+                {!groupByActive && (
+                  <td className={cn(ALIGN_CLASS.right, 'px-3 py-2 tabular-nums text-slate-500')}>
+                    {r.firstResid ?? <span className="text-slate-300">—</span>}
+                  </td>
+                )}
+                {groupColumns.map((c, i) => {
+                  const v = r.groupValues[i] ?? null;
+                  return (
+                    <td
+                      key={`group-${c.key}`}
+                      className="max-w-[240px] truncate whitespace-nowrap px-3 py-2 font-medium text-slate-800"
+                      title={v ?? undefined}
+                    >
+                      {v ?? <span className="font-normal text-slate-400">(미분류)</span>}
+                    </td>
+                  );
+                })}
                 {metaColumns.map((c) => {
                   const v = r.meta[c.key];
                   return (
@@ -188,6 +224,7 @@ export function ProgressTable({
           totalPages={totalPages}
           onPrev={() => handlePageChange(page - 1)}
           onNext={() => handlePageChange(page + 1)}
+          onPage={handlePageChange}
         />
       )}
     </div>
