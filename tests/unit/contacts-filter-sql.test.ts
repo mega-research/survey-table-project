@@ -206,7 +206,7 @@ describe('buildContactsFilterSql — any 모드 (전체 컬럼 검색)', () => {
 });
 
 describe('responseStatusRankExpr — web 컬럼 상태 순위 정렬', () => {
-  it('완료(1) → 진행중(2) → 이탈(3) 순위 CASE, 응답 없으면 NULL(항상 마지막)', async () => {
+  it('완료(1) → 진행중(2) → 이탈(3) … 응답없음(COALESCE 8)까지 하나의 순위 축', async () => {
     const { responseStatusRankExpr } = await import('@/lib/operations/contacts-filter-sql');
     const query = dialect.sqlToQuery(responseStatusRankExpr);
     expect(query.sql).toContain('CASE');
@@ -215,7 +215,9 @@ describe('responseStatusRankExpr — web 컬럼 상태 순위 정렬', () => {
     expect(pos("'completed'")).toBeGreaterThan(-1);
     expect(pos("'completed'")).toBeLessThan(pos("'in_progress'"));
     expect(pos("'in_progress'")).toBeLessThan(pos("'drop'"));
-    // 응답 없음은 서브쿼리 무행 → NULL (CASE ELSE 로 null 을 순위화하지 않아야 함)
+    // 응답 없음도 순위(COALESCE)로 축에 포함 — NULLS LAST 로 빼면 응답이 완료뿐인
+    // 명단에서 오름/내림이 똑같아 보인다 (내림차순 = 응답없음부터).
+    expect(query.sql).toContain('COALESCE');
     expect(query.sql).toContain('survey_responses');
   });
 });

@@ -174,9 +174,9 @@ export async function listContactsForSurvey(
   } as const;
 
   // attrs 정렬은 자연 정렬 — 숫자 값(NO 등)은 숫자순, 비숫자는 뒤에 텍스트순.
-  // progress 정렬은 web 컬럼의 상태 순위(완료 → 진행중 → 이탈 → 기타) 축만 dir 을
-  // 따르고, 같은 상태 안은 방향과 무관하게 기본 순서(시스템ID 오름차순) 유지.
-  // 응답 없음은 항상 마지막(NULLS LAST).
+  // progress 정렬은 web 컬럼의 상태 순위(완료 → 진행중 → 이탈 → 기타 → 응답없음)
+  // 축만 dir 을 따르고 — 내림차순이면 응답없음부터 역순 — 같은 상태 안은 방향과
+  // 무관하게 기본 순서(시스템ID 오름차순) 유지.
   const attrsKey = attrsSortKey(sort);
   const orderExprs: SQL[] = attrsKey
     ? attrsNaturalSortExprs(attrsKey).map((c) => orderExpr(c, dir))
