@@ -68,4 +68,36 @@ describe('contacts.attrValues procedures', () => {
       client.attrValues.list({ surveyId: SURVEY_ID, attrsKey: '기업유형' }),
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
   });
+
+  it('게스트는 grant 설문이면 distinct 조회가 위임된다 — 헤더 필터는 게스트 콘솔 표면', async () => {
+    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
+    vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
+    vi.mocked(loadOperationsDataScope).mockResolvedValue('real');
+    vi.mocked(svc.listContactAttrValues).mockResolvedValue({ values: ['상장'], truncated: false });
+
+    const client = createRouterClient(
+      { attrValues },
+      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+    );
+    const res = await client.attrValues.list({ surveyId: SURVEY_ID, attrsKey: '기업유형' });
+
+    expect(res).toEqual({ values: ['상장'], truncated: false });
+  });
+
+  it('게스트가 다른 설문 surveyId 로 조회하면 FORBIDDEN', async () => {
+    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
+    vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
+
+    const client = createRouterClient(
+      { attrValues },
+      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+    );
+    await expect(
+      client.attrValues.list({
+        surveyId: '00000000-0000-4000-8000-000000000099',
+        attrsKey: '기업유형',
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(svc.listContactAttrValues).not.toHaveBeenCalled();
+  });
 });

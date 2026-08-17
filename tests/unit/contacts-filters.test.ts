@@ -271,6 +271,34 @@ describe('parseClausesFromUrl - source 분기', () => {
     expect((c0.condition.subConditions ?? []).every((s) => s.mode !== 'idlist')).toBe(true);
   });
 
+  it('system.all — 범위 × 컬럼 총량이 상한을 넘으면 idlist 전개를 생략하고 텍스트만 유지', () => {
+    // 안전밸브: postgres 바인드 파라미터 한계(65,535) 보호. 정상 사용에선 미발동.
+    const manyColumns: ColumnCandidate[] = Array.from({ length: 51 }, (_, i) => ({
+      source: `attrs.컬럼${i}`,
+      label: `컬럼${i}`,
+    }));
+    const hundredTokens = Array.from({ length: 100 }, (_, i) => String(i + 1)).join(',');
+
+    // 51 컬럼 × 100 토큰 = 5,100 > 5,000 → idlist 생략
+    const over = parseClausesFromUrl(['system.all'], [hundredTokens], [''], manyColumns, resultCodes);
+    const o0 = over[0];
+    if (!o0) throw new Error('expected over[0]');
+    expect((o0.condition.subConditions ?? []).some((s) => s.mode === 'idlist')).toBe(false);
+    expect((o0.condition.subConditions ?? []).some((s) => s.mode === 'text')).toBe(true);
+
+    // 50 컬럼 × 100 토큰 = 5,000 → 전개 유지
+    const under = parseClausesFromUrl(
+      ['system.all'],
+      [hundredTokens],
+      [''],
+      manyColumns.slice(0, 50),
+      resultCodes,
+    );
+    const u0 = under[0];
+    if (!u0) throw new Error('expected under[0]');
+    expect((u0.condition.subConditions ?? []).some((s) => s.mode === 'idlist')).toBe(true);
+  });
+
   it('system.all — 숨긴 컬럼은 전개에서 제외 (숨긴 숫자 컬럼이 범위 검색을 오염시키지 않음)', () => {
     const result = parseClausesFromUrl(['system.all'], ['1-10'], [''], candidates, resultCodes);
     const c0 = result[0];
@@ -490,6 +518,21 @@ describe('parseHeaderFiltersFromUrl', () => {
     expect(result).toEqual([
       { op: null, condition: { source: 'system.web', mode: 'in', value: '', values: ['true'] } },
     ]);
+  });
+
+  it('in 값의 선행·후행 공백은 원형 보존 — distinct 가 보여준 값과 정확 일치해야 함', () => {
+    // 엑셀 적재는 셀 값을 trim 하지 않으므로 DB 에 "서울 " 이 실존할 수 있다.
+    // 드롭다운이 보여준 원형을 서버가 trim 해버리면 IN 비교가 0건이 되는 왕복 불일치.
+    const result = parseHeaderFiltersFromUrl(
+      ['attrs.지역'],
+      ['in'],
+      [`서울 ${SEP}부산`],
+      candidates,
+      resultCodes,
+    );
+    const c0 = result[0];
+    if (!c0) throw new Error('expected result[0]');
+    expect(c0.condition.values).toEqual(['서울 ', '부산']);
   });
 
   it('source-mode 불일치 조합은 drop — attrs+exact, pii+in, pii+text', () => {

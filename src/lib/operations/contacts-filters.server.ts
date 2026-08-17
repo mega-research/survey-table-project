@@ -40,6 +40,12 @@ export function placeholderFor(source: string): string {
   return sharedPlaceholderFor(source);
 }
 
+/**
+ * 전체 검색 idlist 전개 상한 — 범위 토큰 수 × 표시 attrs 컬럼 수.
+ * 조건당 바인드 파라미터 ~4개 기준으로 65,535 한계 대비 충분한 여유.
+ */
+const MAX_ALL_RANGE_EXPANSION = 5000;
+
 function toArray(v: string[] | string | undefined): string[] {
   if (v === undefined) return [];
   return Array.isArray(v) ? v : [v];
@@ -185,12 +191,13 @@ function attrsTextOrIdlistCondition(col: string, trimmed: string): FilterConditi
   return { source: col, mode: 'text', value: trimmed };
 }
 
-/** 구분자 조인 값 목록 → 공백 트림 + 빈 토큰 제거. */
+/**
+ * 구분자 조인 값 목록 → 공백뿐인 토큰만 제거, 값은 원형 보존.
+ * 엑셀 적재가 셀 값을 trim 하지 않으므로 "서울 " 같은 값이 DB 에 실존한다 —
+ * distinct 가 보여준 원형을 trim 하면 IN 비교가 0건이 되는 왕복 불일치가 생긴다.
+ */
 function splitHeaderValues(hv: string): string[] {
-  return hv
-    .split(HEADER_FILTER_VALUE_SEPARATOR)
-    .map((v) => v.trim())
-    .filter((v) => v.length > 0);
+  return hv.split(HEADER_FILTER_VALUE_SEPARATOR).filter((v) => v.trim().length > 0);
 }
 
 function buildClause(
@@ -210,7 +217,17 @@ function buildClause(
   if (col === FILTER_SOURCE.ALL) {
     // 전체가 기본값이라 범위 입력(1-10)도 여기로 들어온다 — 범위 문법이면
     // attrs 컬럼별 숫자 범위 매칭(idlist)을 텍스트 부분검색과 함께 OR 로 건다.
-    const allRanges = /[-,]/.test(trimmed) ? parseIdListInput(trimmed) : null;
+    let allRanges = /[-,]/.test(trimmed) ? parseIdListInput(trimmed) : null;
+    // 안전밸브: 범위 × 표시 attrs 컬럼 총량 상한 — postgres 바인드 파라미터
+    // 한계(65,535) 보호. 초과하는 병리적 입력은 idlist 전개만 생략(텍스트 유지).
+    if (allRanges !== null) {
+      const attrsColCount = candidates.filter(
+        (c) => !c.hidden && c.source.startsWith(FILTER_SOURCE.ATTRS_PREFIX),
+      ).length;
+      if (allRanges.length * attrsColCount > MAX_ALL_RANGE_EXPANSION) {
+        allRanges = null;
+      }
+    }
     const subConditions: FilterCondition[] = [];
     for (const c of candidates) {
       // 숨긴 컬럼 제외 — 보이지 않는 컬럼의 매칭은 결과를 설명 불가능하게 만든다.
