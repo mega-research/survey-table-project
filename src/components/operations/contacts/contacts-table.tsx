@@ -7,6 +7,8 @@ import {
   recipientStatusMeta,
 } from '@/components/operations/mail-campaign/recipient-status-badge';
 import { HeaderFilterPopover } from '@/components/operations/contacts/header-filter-popover';
+import { StatusPill } from '@/components/operations/profiles/status-pill';
+import { mapStatusPill, type StatusPillResult } from '@/lib/operations/profiles';
 import { SortIndicator, TablePagerFooter } from '@/components/operations/table-primitives';
 import type { ContactColumnDef, ContactColumnScheme, ContactResultCode } from '@/db/schema/schema-types';
 import { useSearchParamsMutator } from '@/hooks/use-search-params-mutator';
@@ -50,7 +52,9 @@ function sortKeyOf(source: string): ContactsSortKey | null {
     case 'system.resid':
       return 'resid';
     case 'system.web':
-      return 'respondedAt';
+      // 표시값(진행률 %) 기준 정렬 — respondedAt 은 미완료 행이 전부 NULL 이라
+      // 100% 완료 행만 정렬되는 문제가 있다.
+      return 'progress';
     default:
       return null;
   }
@@ -110,25 +114,30 @@ function computeCell(col: ContactColumnDef, row: ContactsRow): {
           }
         : { display: '—', plain: undefined };
     case 'system.web': {
-      if (row.progressPct == null) {
+      if (row.responseStatus == null) {
         return {
           display: <span className="text-slate-400">—</span>,
           plain: undefined,
         };
       }
-      const text = `${row.progressPct}%`;
+      // 응답 내역과 같은 상태 어휘(mapStatusPill) 재사용 — 부속 정보만 다르다:
+      // 응답 내역은 스텝 상세, 여기(컨택 운영)는 진행률 %.
+      const base = mapStatusPill({ status: row.responseStatus });
+      const pill: StatusPillResult = {
+        label: base.label,
+        tone: base.tone,
+        ...(row.responseStatus !== 'completed' && row.progressPct != null
+          ? { sub: `${row.progressPct}%` }
+          : {}),
+      };
       const title = row.respondedAt
         ? `응답 ${formatLocalMonthDayTime(row.respondedAt)}`
-        : '진행 중';
+        : undefined;
       return {
         // formatLocalMonthDayTime 은 브라우저 locale/tz 의존(Client 전용)이라
-        // SSR HTML 의 title 과 hydration 결과가 어긋난다. suppressHydrationWarning.
-        display: (
-          <span className="tabular-nums" suppressHydrationWarning>
-            {text}
-          </span>
-        ),
-        plain: title,
+        // SSR HTML 의 title 과 hydration 결과가 어긋난다. td 의 suppressHydrationWarning 의존.
+        display: <StatusPill pill={pill} />,
+        plain: title ?? pill.label,
       };
     }
     case 'system.contact_owner':

@@ -23,6 +23,9 @@ export const CONTACTS_SORT_KEYS = [
   'respondedAt',
   'createdAt',
   'group',
+  // web 컬럼 헤더 정렬 — 표시값인 진행률(progressPct) 기준.
+  // respondedAt 정렬은 미완료 행이 전부 NULL 이라 진행률 순서가 생기지 않는다.
+  'progress',
 ] as const;
 export type ContactsSystemSortKey = (typeof CONTACTS_SORT_KEYS)[number];
 

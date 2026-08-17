@@ -60,6 +60,9 @@ describe('whitelist exports', () => {
     expect(CONTACTS_SORT_KEYS).toContain('resid');
     expect(CONTACTS_SORT_KEYS).toContain('respondedAt');
   });
+  it("web 컬럼 정렬용 'progress' 키 — 진행률 기준 정렬 (완료 시각만으론 미완료 행이 정렬 안 됨)", () => {
+    expect(CONTACTS_SORT_KEYS).toContain('progress');
+  });
   it('CONTACTS_PAGE_SIZE = 20', () => {
     expect(CONTACTS_PAGE_SIZE).toBe(20);
   });

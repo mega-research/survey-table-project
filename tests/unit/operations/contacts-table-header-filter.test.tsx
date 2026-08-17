@@ -1,9 +1,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
+const pushMock = vi.fn();
+
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: pushMock }),
   usePathname: () => '/admin/surveys/sv-1/operations/contacts',
   useSearchParams: () => new URLSearchParams(),
 }));
@@ -24,6 +26,7 @@ const scheme: ContactColumnScheme = {
     { key: 'c2', label: '전화번호', source: 'pii.mobile', order: 3, piiType: 'mobile' },
     { key: 'c3', label: '컨택결과', source: 'system.contact_result', order: 4 },
     { key: 'c4', label: '메일', source: 'system.email_count', order: 5 },
+    { key: 'c5', label: 'web', source: 'system.web', order: 6 },
   ],
 };
 
@@ -47,6 +50,21 @@ function renderTable() {
 }
 
 describe('ContactsTable 헤더 필터 트리거', () => {
+  it('web 컬럼 헤더 클릭은 progress(진행률) 정렬로 이동한다', () => {
+    pushMock.mockClear();
+    renderTable();
+    // web 필터 트리거가 아닌 정렬 버튼 (라벨 텍스트로 시작하는 버튼)
+    const webSortButton = screen
+      .getAllByRole('button')
+      .find((b) => b.textContent === 'web');
+    if (!webSortButton) throw new Error('web 정렬 버튼 없음');
+    fireEvent.click(webSortButton);
+    // respondedAt 정렬은 미완료 행의 진행률을 정렬하지 못함 → progress 로 매핑되어야 한다.
+    expect(pushMock).toHaveBeenCalled();
+    const url = String(pushMock.mock.calls.at(-1)?.[0]);
+    expect(url).toContain('sort=progress');
+  });
+
   it('필터 가능 컬럼(attrs/pii/결과코드)에만 필터 버튼을 렌더한다', () => {
     renderTable();
     expect(screen.getByRole('button', { name: '기업유형 필터' })).toBeInTheDocument();

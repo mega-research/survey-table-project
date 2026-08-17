@@ -69,6 +69,8 @@ export interface ContactsRow {
   respondedAt: Date | null;
   /** 응답 진행률 0~100. 응답 없거나 첫 답변 전 / soft-delete 면 null */
   progressPct: number | null;
+  /** 매칭 응답의 status (completed/in_progress/drop 등). 응답 없으면 null */
+  responseStatus: string | null;
   /** 최신(created_at DESC) 메일 수신 상태. 발송 이력 없으면 null */
   latestMailStatus: MailRecipientStatus | null;
   inviteToken: string;
@@ -93,6 +95,14 @@ const latestAttemptNoExpr = sql<number | null>`(
 
 const progressPctExpr = sql<number | null>`(
   SELECT progress_pct FROM survey_responses
+  WHERE id = "contact_targets"."response_id"
+    AND deleted_at IS NULL
+    AND is_test = "contact_targets"."is_test"
+)`;
+
+// web 컬럼 상태 배지용 — 매칭 응답의 status (completed/in_progress/drop 등).
+const responseStatusExpr = sql<string | null>`(
+  SELECT status FROM survey_responses
   WHERE id = "contact_targets"."response_id"
     AND deleted_at IS NULL
     AND is_test = "contact_targets"."is_test"
@@ -163,10 +173,14 @@ export async function listContactsForSurvey(
   } as const;
 
   // attrs 정렬은 자연 정렬 — 숫자 값(NO 등)은 숫자순, 비숫자는 뒤에 텍스트순.
+  // progress 정렬은 web 컬럼의 표시값(진행률) 기준 — 응답 없는 행은 NULL(항상 뒤),
+  // 같은 진행률(예: 완료 100%) 안에서는 완료 시각으로 2차 정렬.
   const attrsKey = attrsSortKey(sort);
   const orderCols: Array<AnyColumn | SQL> = attrsKey
     ? attrsNaturalSortExprs(attrsKey)
-    : [SYSTEM_SORT_MAP[sort as keyof typeof SYSTEM_SORT_MAP] ?? contactTargets.resid];
+    : sort === 'progress'
+      ? [progressPctExpr, contactTargets.respondedAt]
+      : [SYSTEM_SORT_MAP[sort as keyof typeof SYSTEM_SORT_MAP] ?? contactTargets.resid];
 
   const dataRows = await db
     .select({
@@ -180,6 +194,7 @@ export async function listContactsForSurvey(
       latestResultCode: latestResultCodeExpr.as('latest_result_code'),
       latestAttemptNo: latestAttemptNoExpr.as('latest_attempt_no'),
       progressPct: progressPctExpr.as('progress_pct'),
+      responseStatus: responseStatusExpr.as('response_status'),
       latestMailStatus: latestMailStatusExpr.as('latest_mail_status'),
     })
     .from(contactTargets)
@@ -201,6 +216,7 @@ export async function listContactsForSurvey(
     latestAttemptNo: r.latestAttemptNo,
     respondedAt: r.respondedAt,
     progressPct: r.progressPct,
+    responseStatus: r.responseStatus,
     latestMailStatus: r.latestMailStatus,
     inviteToken: r.inviteToken,
     createdAt: r.createdAt,
