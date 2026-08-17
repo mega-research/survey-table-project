@@ -326,6 +326,7 @@ export function ProfilesTable({ rows, total, page, pageSize, sort, dir, stepLoca
           totalPages={totalPages}
           onPrev={() => handlePageChange(page - 1)}
           onNext={() => handlePageChange(page + 1)}
+          onPage={handlePageChange}
         />
       )}
     </div>
