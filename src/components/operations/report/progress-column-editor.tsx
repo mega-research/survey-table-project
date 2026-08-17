@@ -80,6 +80,10 @@ export function ProgressColumnEditor({ surveyId, initialScheme, contactScheme }:
   );
 
   const [columns, setColumns] = useState<ProgressColumnDef[]>(hydratedColumns);
+  // 시스템ID(firstResid) 컬럼 표시 여부 — 진척률 표 전용, 조사 대상 목록 표시와 독립.
+  const [showResid, setShowResid] = useState<boolean>(initialScheme.showResid ?? true);
+  const residLabel =
+    contactScheme?.columns.find((c) => c.source === 'system.resid')?.label?.trim() || '시스템ID';
   // 분류 기준 레벨 (attrs key → 레벨) — 조사대상목록 컬럼 설정과 같은
   // contactColumns.groupLevel 을 편집한다 (저장 시 contacts.columns.update 동시 호출).
   const [levels, setLevels] = useState<Record<string, GroupLevel>>(() =>
@@ -128,7 +132,7 @@ export function ProgressColumnEditor({ surveyId, initialScheme, contactScheme }:
       try {
         const result = await client.operations.progress.updateColumns({
           surveyId,
-          scheme: { version: 1, columns },
+          scheme: { version: 1, columns, showResid },
         });
         if (!result.ok) {
           setError(result.error ?? '저장에 실패했습니다.');
@@ -167,6 +171,19 @@ export function ProgressColumnEditor({ surveyId, initialScheme, contactScheme }:
             </tr>
           </thead>
           <tbody>
+            <tr className="border-t bg-slate-50/50">
+              <td className="px-3 py-2 text-xs text-slate-400">고정</td>
+              <td className="px-3 py-2 text-sm text-slate-700">{residLabel}</td>
+              <td className="px-3 py-2 font-mono text-xs text-slate-500">system.resid</td>
+              <td className="px-3 py-2 text-center text-slate-300">—</td>
+              <td className="px-3 py-2 text-center">
+                <Checkbox
+                  aria-label={`${residLabel} 표시`}
+                  checked={showResid}
+                  onCheckedChange={(checked) => setShowResid(checked === true)}
+                />
+              </td>
+            </tr>
             {columns.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-4 py-6 text-center text-slate-400">

@@ -320,7 +320,12 @@ export function buildColumnCandidates(
         c.source.startsWith(FILTER_SOURCE.ATTRS_PREFIX) ||
         c.source.startsWith(FILTER_SOURCE.PII_PREFIX),
     )
-    .map((c) => ({ source: c.source, label: c.label, ...(c.piiType !== undefined ? { piiType: c.piiType } : {}) }));
+    .map((c) => ({
+      source: c.source,
+      label: c.label,
+      ...(c.piiType !== undefined ? { piiType: c.piiType } : {}),
+      ...(c.hidden !== undefined ? { hidden: c.hidden } : {}),
+    }));
   if (columns.length === 0) return columns;
   return [{ source: FILTER_SOURCE.ALL, label: '전체' }, ...columns];
 }

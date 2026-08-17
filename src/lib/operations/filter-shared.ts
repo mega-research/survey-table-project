@@ -54,6 +54,12 @@ export function placeholderFor(
 export interface ColumnCandidate {
   source: string;
   label: string;
+  /**
+   * 컬럼 스킴에서 숨김 처리된 컬럼. 드롭다운에서 명시 선택하면 검색 가능하지만
+   * 전체(system.all) 검색 전개에서는 제외 — 보이지 않는 컬럼에서의 매칭은
+   * 사용자가 이유를 알 수 없기 때문.
+   */
+  hidden?: boolean;
 }
 
 /** 서버 모듈에서 pii blindIndex 계산을 위해 piiType 포함. */

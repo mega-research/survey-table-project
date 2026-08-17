@@ -332,6 +332,8 @@ export interface ContactColumnDef {
 export interface ProgressColumnScheme {
   version: number;
   columns: ProgressColumnDef[];
+  /** 진척률 표의 시스템ID(firstResid) 컬럼 표시 여부. 미지정(구 스킴)은 true. */
+  showResid?: boolean;
 }
 
 export interface ProgressColumnDef {

@@ -12,6 +12,7 @@ import type {
   ContactUploadMode,
 } from '@/db/schema/schema-types';
 import { isGroupLevel, type GroupLevel } from '@/lib/contacts/group-levels';
+import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts';
 import { parseExcelRows, previewExcel } from '@/lib/contacts/excel-parser';
 import {
   buildKeyTuple,
@@ -425,7 +426,7 @@ function autoGenerateColumnScheme(
   let order = 1;
 
   // 시스템 컬럼 (resid 항상 1번, 표시 필수)
-  columns.push({ key: 'resid', label: '번호', source: 'system.resid', order: order++ });
+  columns.push({ key: 'resid', label: RESID_DEFAULT_LABEL, source: 'system.resid', order: order++ });
 
   // 모든 헤더 키를 컬럼으로 등록.
   // - piiMapping 에 매핑된 헤더 → source 'pii.<key>' + piiType 명시 → contact_pii 테이블 조인 후 표시

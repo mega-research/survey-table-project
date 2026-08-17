@@ -42,7 +42,7 @@ export function UnsubscribedSegment({ surveyId, rows, total, page, pageSize }: P
             <table className="w-full min-w-[600px]">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50/50 text-left text-xs font-medium tracking-wide text-gray-500 uppercase">
-                  <th className="px-4 py-3">번호</th>
+                  <th className="px-4 py-3">시스템ID</th>
                   <th className="px-4 py-3">이메일</th>
                   <th className="px-4 py-3">그룹</th>
                   <th className="px-4 py-3">해지 시각</th>

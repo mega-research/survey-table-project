@@ -338,7 +338,7 @@ async function buildRawExportContext(
 ): Promise<RawExportContext> {
   const groups = await getQuestionGroupsBySurvey(surveyId);
   // 조건부 메타 열 판정 — 설문 설정 기준 (응답 매칭 여부 무관):
-  // 컨택 타겟이 없으면 번호(systemID) 열, 그룹값이 전무하면 조사 대상 그룹 열을 만들지 않는다.
+  // 컨택 타겟이 없으면 시스템ID 열, 그룹값이 전무하면 조사 대상 그룹 열을 만들지 않는다.
   // raw export 모수는 테스트 응답 제외이므로 컨택 통계도 real 스코프로 한정한다.
   const { hasContacts, hasContactGroups } = await getSurveyContactStats(surveyId, 'real');
   const stepQs = questions.map((q) => ({

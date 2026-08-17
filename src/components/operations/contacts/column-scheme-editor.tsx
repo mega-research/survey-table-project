@@ -122,7 +122,6 @@ export function ColumnSchemeEditor({ surveyId, scheme }: ColumnSchemeEditorProps
           </thead>
           <tbody>
             {columns.map((col, i) => {
-              const isResid = col.source === 'system.resid';
               const canGroupBy = col.source.startsWith('attrs.');
               return (
                 <tr key={col.key} className="border-t">
@@ -178,12 +177,7 @@ export function ColumnSchemeEditor({ surveyId, scheme }: ColumnSchemeEditorProps
                     )}
                   </td>
                   <td className="px-3 py-2 text-center">
-                    <Switch
-                      checked={!col.hidden}
-                      disabled={isResid}
-                      onCheckedChange={() => toggleHide(i)}
-                    />
-                    {isResid && <div className="text-[10px] text-slate-400">필수</div>}
+                    <Switch checked={!col.hidden} onCheckedChange={() => toggleHide(i)} />
                   </td>
                 </tr>
               );

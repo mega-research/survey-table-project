@@ -135,7 +135,7 @@ describe.skipIf(!isLocalDb)('contacts.targets/columns procedure round-trip (real
     expect(second.resid).toBe(2);
   });
 
-  it('columns.update: resid 컬럼 hidden이면 거부, 정상 스킴은 surveys.contactColumns에 저장된다', async () => {
+  it('columns.update: resid hidden 스킴도 저장되고, 정상 스킴은 surveys.contactColumns에 저장된다', async () => {
     const [survey] = await db
       .insert(surveysTable)
       .values({ title: '컨택-컬럼스킴-테스트' })
@@ -143,15 +143,23 @@ describe.skipIf(!isLocalDb)('contacts.targets/columns procedure round-trip (real
     if (!survey) throw new Error('survey 삽입 실패');
     createdSurveyIds.push(survey.id);
 
-    // resid hidden 가드: 거부되어야 함
-    const badScheme: ContactColumnScheme = {
+    // resid hidden 허용 — 고객 NO/ID 컬럼이 식별자 역할을 대신하는 운용.
+    // 저장 성공 + DB round-trip 으로 hidden 플래그가 보존되는지 검증한다.
+    const hiddenScheme: ContactColumnScheme = {
       version: 1,
       headerRow: 1,
-      columns: [{ key: 'resid', label: '번호', source: 'system.resid', order: 1, hidden: true }],
+      columns: [
+        { key: 'resid', label: '시스템ID', source: 'system.resid', order: 1, hidden: true },
+        { key: 'name', label: '이름', source: 'attrs.name', order: 2 },
+      ],
     };
-    await expect(
-      client.columns.update({ surveyId: survey.id, scheme: badScheme }),
-    ).rejects.toThrow();
+    const hiddenRes = await client.columns.update({ surveyId: survey.id, scheme: hiddenScheme });
+    expect(hiddenRes).toEqual({ ok: true });
+    const [afterHidden] = await db
+      .select({ contactColumns: surveysTable.contactColumns })
+      .from(surveysTable)
+      .where(eq(surveysTable.id, survey.id));
+    expect(afterHidden?.contactColumns).toEqual(hiddenScheme);
 
     // 정상 스킴: 저장되어야 함
     const goodScheme: ContactColumnScheme = {

@@ -8,6 +8,7 @@ import {
   generateSPSSColumns,
 } from '@/lib/analytics/spss-excel-export';
 import { type Platform, formatPlatformKo } from '@/lib/operations/parse-ua';
+import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts';
 import { formatTotalTime, mapStatusPill } from '@/lib/operations/profiles';
 import { buildInviteUrl } from '@/lib/survey-url';
 import { Question, SurveySubmission } from '@/types/survey';
@@ -37,7 +38,7 @@ export interface RawExportContext {
   appUrl: string;
   /** currentStepId → 표시 라벨 (buildStepLabelMap 결과) */
   stepLabels: ReadonlyMap<string, string>;
-  /** 설문에 컨택 타겟이 존재하는지 — false 면 번호(systemID) 열을 만들지 않는다 (응답 매칭 여부 무관, 설문 설정 기준) */
+  /** 설문에 컨택 타겟이 존재하는지 — false 면 시스템ID 열을 만들지 않는다 (응답 매칭 여부 무관, 설문 설정 기준) */
   hasContacts: boolean;
   /** 컨택 타겟에 그룹값이 하나라도 설정돼 있는지 — false 면 조사 대상 그룹 열을 만들지 않는다 */
   hasContactGroups: boolean;
@@ -89,13 +90,13 @@ interface RawMetaColumn {
 
 /**
  * Raw Data·분할 시트 왼쪽 메타 열 정의 (헤더·값·생성 조건의 단일 출처).
- * 코딩북·.sav 미포함, 헤더 1~3행 세로 병합 대상. 번호(systemID)·조사 대상 그룹은
+ * 코딩북·.sav 미포함, 헤더 1~3행 세로 병합 대상. 시스템ID·조사 대상 그룹은
  * 설문 설정(컨택 존재/그룹 사용)에 따라 조건부 생성된다.
  */
 const RAW_META_COLUMNS: RawMetaColumn[] = [
   // sha256 전체는 64자 — 동일값 식별 목적에는 앞 16자(64비트)로 충분하고 열 너비를 지킨다
   { header: 'IP 해시', value: (row) => (row.ipHash ? row.ipHash.slice(0, 16) : '') },
-  { header: '번호(systemID)', enabled: (ctx) => ctx.hasContacts, value: (row) => row.resid ?? '' },
+  { header: RESID_DEFAULT_LABEL, enabled: (ctx) => ctx.hasContacts, value: (row) => row.resid ?? '' },
   { header: '순번', value: (_row, seq) => seq },
   { header: '조사 대상 그룹', enabled: (ctx) => ctx.hasContactGroups, value: (row) => row.groupValue ?? '공개링크' },
   { header: '개별 URL', value: (row, _seq, ctx) => (row.inviteCode ? buildInviteUrl(row.inviteCode, ctx.appUrl) : '') },
@@ -125,7 +126,7 @@ export function buildRawMetaValues(
 
 /**
  * '응답 내역' 시트 — 응답자 메타 요약 (Raw/분할 워크북 공용).
- * 번호(systemID)·조사 대상 그룹 열은 메타 열과 동일한 조건부 생성 규칙을 따른다.
+ * 시스템ID·조사 대상 그룹 열은 메타 열과 동일한 조건부 생성 규칙을 따른다.
  */
 export function addResponseListSheet(
   workbook: ExcelJS.Workbook,
@@ -134,7 +135,7 @@ export function addResponseListSheet(
 ): void {
   const ws = workbook.addWorksheet('응답 내역');
   const headers = [
-    ...(ctx.hasContacts ? ['번호(systemID)'] : []),
+    ...(ctx.hasContacts ? [RESID_DEFAULT_LABEL] : []),
     '순번',
     ...(ctx.hasContactGroups ? ['조사 대상 그룹'] : []),
     '접속 단말',

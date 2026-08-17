@@ -208,10 +208,18 @@ function buildClause(
   // 전체 컬럼 검색 — candidates 화이트리스트 안의 attrs/pii 로만 전개하므로
   // whitelist 조회 없이 자체 처리 (전개 자체가 화이트리스트 검증).
   if (col === FILTER_SOURCE.ALL) {
+    // 전체가 기본값이라 범위 입력(1-10)도 여기로 들어온다 — 범위 문법이면
+    // attrs 컬럼별 숫자 범위 매칭(idlist)을 텍스트 부분검색과 함께 OR 로 건다.
+    const allRanges = /[-,]/.test(trimmed) ? parseIdListInput(trimmed) : null;
     const subConditions: FilterCondition[] = [];
     for (const c of candidates) {
+      // 숨긴 컬럼 제외 — 보이지 않는 컬럼의 매칭은 결과를 설명 불가능하게 만든다.
+      if (c.hidden) continue;
       if (c.source.startsWith(FILTER_SOURCE.ATTRS_PREFIX)) {
         subConditions.push({ source: c.source, mode: 'text', value: trimmed });
+        if (allRanges !== null) {
+          subConditions.push({ source: c.source, mode: 'idlist', value: trimmed, ranges: allRanges });
+        }
       } else if (c.source.startsWith(FILTER_SOURCE.PII_PREFIX) && c.piiType) {
         const bi = blindIndex(c.piiType, trimmed);
         if (bi) {

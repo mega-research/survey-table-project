@@ -36,6 +36,8 @@ const candidates: ColumnCandidate[] = [
   { source: 'system.web', label: '응답' },
   { source: 'attrs.전시회명', label: '전시회명' },
   { source: 'attrs.지역', label: '지역' },
+  // 숨긴 컬럼 — 명시 선택으로는 검색 가능하지만 전체(system.all) 전개에선 제외.
+  { source: 'attrs.종사자수', label: '종사자수', hidden: true },
   { source: 'pii.email', label: '이메일', piiType: 'email' },
 ];
 
@@ -248,13 +250,38 @@ describe('parseClausesFromUrl - source 분기', () => {
     expect(/^[0-9a-f]{64}$/.test(piiSub.blindIndex ?? '')).toBe(true);
   });
 
-  it('system.all — 범위 문법도 전체 모드에선 일반 텍스트로 취급', () => {
+  it('system.all + 범위 문법 → attrs 숫자 범위 매칭(idlist)도 OR 에 포함', () => {
+    // 전체가 기본값이라 사용자는 여기에 1-10 같은 범위를 입력한다 —
+    // 텍스트 부분검색과 함께 attrs 컬럼별 숫자 범위 매칭을 OR 로 함께 건다.
     const result = parseClausesFromUrl(['system.all'], ['10-13'], [''], candidates, resultCodes);
     const c0 = result[0];
     if (!c0) throw new Error('expected result[0]');
     const subs = c0.condition.subConditions ?? [];
-    expect(subs.length).toBeGreaterThan(0);
-    expect(subs.every((s) => s.mode === 'text')).toBe(true);
+    const idlists = subs.filter((s) => s.mode === 'idlist');
+    expect(idlists.map((s) => s.source)).toEqual(['attrs.전시회명', 'attrs.지역']);
+    expect(idlists[0]?.ranges).toEqual([{ from: 10, to: 13 }]);
+    // 텍스트 부분검색도 함께 유지 (범위처럼 생긴 리터럴 값 검색 가능성)
+    expect(subs.some((s) => s.mode === 'text')).toBe(true);
+  });
+
+  it('system.all + 단일 숫자는 부분검색만 (범위 문법 아님)', () => {
+    const result = parseClausesFromUrl(['system.all'], ['15'], [''], candidates, resultCodes);
+    const c0 = result[0];
+    if (!c0) throw new Error('expected result[0]');
+    expect((c0.condition.subConditions ?? []).every((s) => s.mode !== 'idlist')).toBe(true);
+  });
+
+  it('system.all — 숨긴 컬럼은 전개에서 제외 (숨긴 숫자 컬럼이 범위 검색을 오염시키지 않음)', () => {
+    const result = parseClausesFromUrl(['system.all'], ['1-10'], [''], candidates, resultCodes);
+    const c0 = result[0];
+    if (!c0) throw new Error('expected result[0]');
+    const sources = (c0.condition.subConditions ?? []).map((s) => s.source);
+    expect(sources).not.toContain('attrs.종사자수');
+  });
+
+  it('숨긴 컬럼도 명시적으로 선택하면 검색 가능 (전체 전개 제외와 별개)', () => {
+    const result = parseClausesFromUrl(['attrs.종사자수'], ['5'], [''], candidates, resultCodes);
+    expect(result).toHaveLength(1);
   });
 
   it('빈 q → drop', () => {

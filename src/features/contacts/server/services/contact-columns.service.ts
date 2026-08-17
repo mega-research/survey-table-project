@@ -14,17 +14,13 @@ import type {
 
 /**
  * 컨택리스트 표시 컬럼 스킴(surveys.contactColumns) 갱신.
- * resid 컬럼은 hide 불가 가드(spec 엣지케이스 #28).
+ * resid hide 불가 가드(spec 엣지케이스 #28)는 제거됨 — 고객 엑셀의 NO/ID 컬럼이
+ * 식별자 역할을 대신하는 운용을 허용한다. 기본 정렬·컨택 상세·초대링크는
+ * resid 표시 여부와 무관하게 동작한다.
  * 인증은 authed 미들웨어, 캐시 갱신은 소비처 router.refresh/push 로 대체.
  */
 export async function updateContactColumns(input: UpdateContactColumnsInput): Promise<void> {
   const { surveyId, scheme } = input;
-  // resid 는 hide 불가 가드
-  for (const c of scheme.columns) {
-    if (c.source === 'system.resid' && c.hidden) {
-      throw new Error('resid 컬럼은 숨길 수 없습니다.');
-    }
-  }
   // 분류 기준 레벨 가드 — attrs.* 전용, 레벨 1..4, 레벨당 컬럼 1개
   const leveled = scheme.columns.filter((c) => c.groupLevel != null);
   if (leveled.some((c) => !c.source.startsWith('attrs.'))) {

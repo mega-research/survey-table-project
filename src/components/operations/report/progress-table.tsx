@@ -22,8 +22,10 @@ interface Props {
   rows: ProgressRow[];
   totals: ProgressTotals;
   metaColumns: ProgressColumnDef[];
-  /** system.resid 컬럼 헤더 라벨 (contactColumns 에서 가져옴). 폴백 '번호'. */
+  /** system.resid 컬럼 헤더 라벨 (contactColumns 에서 가져옴). */
   residLabel: string;
+  /** 시스템ID(firstResid) 컬럼 표시 여부 (progressColumns.showResid). 기본 true. */
+  showResid?: boolean;
   /**
    * 분류 기준(groupBy) 활성 시 기준 값 컬럼들 (key=attrs 키 — 정렬 식별자,
    * label=컬럼 설정 라벨). 순서는 row.groupValues 와 일치. 빈 배열이면 기존과
@@ -62,6 +64,7 @@ export function ProgressTable({
   totals,
   metaColumns,
   residLabel,
+  showResid = true,
   groupColumns = [],
   page,
   size,
@@ -69,6 +72,8 @@ export function ProgressTable({
   dir,
 }: Props) {
   const groupByActive = groupColumns.length > 0;
+  // 시스템ID 컬럼은 groupBy 비활성 + showResid 일 때만.
+  const residVisible = !groupByActive && showResid;
   const pushParams = useSearchParamsMutator();
   const totalPages = Math.max(1, Math.ceil(totals.groupCount / size));
 
@@ -89,14 +94,15 @@ export function ProgressTable({
   };
 
   // (# 또는 그룹 값 컬럼 N개) + N meta + 3 fixed (리스트수/완료/응답률)
-  const colSpan = (groupByActive ? groupColumns.length : 1) + metaColumns.length + 3;
+  const colSpan =
+    (groupByActive ? groupColumns.length : residVisible ? 1 : 0) + metaColumns.length + 3;
 
   return (
     <div className="overflow-hidden rounded border border-slate-200 bg-white">
       <table className="w-full text-sm">
         <thead className="bg-slate-50 text-slate-700">
           <tr>
-            {!groupByActive && (
+            {residVisible && (
               <Th sort={sort} dir={dir} colKey="firstResid" align="right" onClick={handleSortClick}>
                 {residLabel}
               </Th>
@@ -161,7 +167,7 @@ export function ProgressTable({
             const rate = formatRate(r.completedCount, r.listCount);
             return (
               <tr key={r.groupValueRaw ?? '__null__'} className="hover:bg-slate-50">
-                {!groupByActive && (
+                {residVisible && (
                   <td className={cn(ALIGN_CLASS.right, 'px-3 py-2 tabular-nums text-slate-500')}>
                     {r.firstResid ?? <span className="text-slate-300">—</span>}
                   </td>

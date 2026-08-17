@@ -8,6 +8,13 @@
  */
 
 /**
+ * system.resid 컬럼의 기본 표시 라벨.
+ * 고객 엑셀의 NO/ID 류 컬럼과 구분하기 위해 '번호' 대신 '시스템ID' 사용
+ * (기존 설문 스킴은 0073 수동 마이그레이션으로 일괄 갱신, 커스텀 라벨은 보존).
+ */
+export const RESID_DEFAULT_LABEL = '시스템ID';
+
+/**
  * 사전 정의된 시스템 정렬 키. attrs.* 정렬은 별도로 `attrs.<key>` 형태로 받음
  * (`isAttrsSortKey` / `attrsSortKey` helper).
  */

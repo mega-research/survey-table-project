@@ -11,6 +11,7 @@ import {
 import { ProgressTable } from '@/components/operations/report/progress-table';
 import { db } from '@/db';
 import { contactTargets } from '@/db/schema';
+import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts';
 import { getContactColumnScheme } from '@/lib/operations/contacts.server';
 import type { ProgressSortKey, SortDir } from '@/lib/operations/report-progress';
 import {
@@ -143,12 +144,16 @@ export default async function ReportProgressPage({ params, searchParams }: PageP
   const activeKeys = activeCriteria.map((c) => c.key);
   const titleLabel =
     activeCriteria.length > 0 ? activeCriteria.map((c) => c.label).join('·') : groupLabel;
-  const sort = parseSort(sp.sort, metaKeys, activeKeys);
+  const parsedSort = parseSort(sp.sort, metaKeys, activeKeys);
+  // 시스템ID 컬럼 비표시 시 firstResid 정렬은 보이지 않는 컬럼 정렬이 되므로 기본값 폴백.
+  const showResid = scheme.showResid ?? true;
+  const sort = !showResid && parsedSort === 'firstResid' ? 'responseRate' : parsedSort;
 
   // ProgressTable 의 # 컬럼 헤더 — contactColumns 의 system.resid 라벨 사용.
-  // 스킴에 없거나 라벨이 비어있으면 '번호' 폴백.
+  // 스킴에 없거나 라벨이 비어있으면 기본 라벨 폴백.
   const residLabel =
-    contactScheme?.columns.find((c) => c.source === FILTER_SOURCE.RESID)?.label?.trim() || '번호';
+    contactScheme?.columns.find((c) => c.source === FILTER_SOURCE.RESID)?.label?.trim() ||
+    RESID_DEFAULT_LABEL;
 
   // 조사 대상 0건 빠른 검출 — getProgressTotals 보다 훨씬 가벼움.
   const countRows = await db
@@ -202,6 +207,7 @@ export default async function ReportProgressPage({ params, searchParams }: PageP
             totals={totals}
             metaColumns={visibleColumns}
             residLabel={residLabel}
+            showResid={showResid}
             groupColumns={activeCriteria.map((c) => ({ key: c.key, label: c.label }))}
             page={page}
             size={size}

@@ -138,7 +138,7 @@ export function CampaignRecipientsTable({
           <table className="w-full min-w-[800px]">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/50 text-left text-xs font-medium tracking-wide text-gray-500 uppercase">
-                <th className="px-3 py-2">번호</th>
+                <th className="px-3 py-2">시스템ID</th>
                 <th className="px-3 py-2">이메일</th>
                 <th className="px-3 py-2">그룹</th>
                 <th className="px-3 py-2">상태</th>

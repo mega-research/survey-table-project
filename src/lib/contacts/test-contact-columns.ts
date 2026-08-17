@@ -1,4 +1,5 @@
 import type { ContactColumnDef, ContactColumnScheme } from '@/db/schema/schema-types';
+import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts';
 
 type ContactColumnSchemeInput = Omit<ContactColumnScheme, 'columns'> & {
   readonly columns: readonly ContactColumnDef[];
@@ -26,7 +27,7 @@ const DEFAULTS: readonly ContactColumnDef[] = [
 
 /** 테스트 대상자 목록에도 실제 목록과 동일한 운영용 시스템 컬럼을 표시한다. */
 const TEST_SYSTEM_COLUMNS: readonly ContactColumnDef[] = [
-  { key: 'resid', label: '번호', source: 'system.resid', order: 0 },
+  { key: 'resid', label: RESID_DEFAULT_LABEL, source: 'system.resid', order: 0 },
   { key: 'contact_result', label: '컨택결과', source: 'system.contact_result', order: 0 },
   { key: 'email_count', label: '메일', source: 'system.email_count', order: 0 },
   { key: 'web', label: 'web', source: 'system.web', order: 0 },

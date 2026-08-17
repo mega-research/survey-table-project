@@ -13,6 +13,7 @@ import { LocalDateTime } from '@/components/ui/local-date-time';
 import { useSearchParamsMutator } from '@/hooks/use-search-params-mutator';
 import { cn } from '@/lib/utils';
 import { formatPlatformKo } from '@/lib/operations/parse-ua';
+import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts';
 import {
   formatTotalTime,
   mapStatusPill,
@@ -55,7 +56,7 @@ interface Props {
   totalSteps: number;
   surveyId: string;
   view: ProfilesView;
-  /** 설문에 컨택 타겟이 존재하는지 — false 면 번호(ID) 열을 만들지 않는다 (엑셀 내보내기와 동일 규칙) */
+  /** 설문에 컨택 타겟이 존재하는지 — false 면 시스템ID 열을 만들지 않는다 (엑셀 내보내기와 동일 규칙) */
   hasContacts: boolean;
   /** 게스트 세션 — 행 액션에서 admin 전용 메뉴(삭제·초기화·복원)를 숨긴다. */
   isGuest: boolean;
@@ -128,13 +129,13 @@ export function ProfilesTable({ rows, total, page, pageSize, sort, dir, stepLoca
   const columns = useMemo<ColumnDef<DisplayRow>[]>(
     () => [
       { id: 'idx', accessorKey: 'idx', header: '순번', meta: meta('right', true) },
-      // 번호(ID) 열은 컨택 있는 설문에만 — 엑셀 내보내기와 동일 규칙
+      // 시스템ID 열은 컨택 있는 설문에만 — 엑셀 내보내기와 동일 규칙
       ...(hasContacts
         ? [
             {
               id: 'resid',
               accessorFn: (r: DisplayRow) => r.resid ?? '—',
-              header: '번호(ID)',
+              header: RESID_DEFAULT_LABEL,
               meta: meta('center', true),
             } satisfies ColumnDef<DisplayRow>,
           ]

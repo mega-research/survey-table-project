@@ -56,7 +56,7 @@ describe('분할 워크북 메타 컬럼', () => {
     for (const ws of wb.worksheets) {
       if (ws.name === '응답 내역' || ws.name === '코딩북') continue;
       expect(ws.getRow(1).getCell(1).value).toBe('IP 해시');
-      expect(ws.getRow(1).getCell(2).value).toBe('번호(systemID)');
+      expect(ws.getRow(1).getCell(2).value).toBe('시스템ID');
       expect(ws.getRow(1).getCell(11).value).toBe('접속 단말');
       expect(ws.getRow(4).getCell(2).value).toBe(3); // 번호=resid
       expect(ws.getRow(4).getCell(3).value).toBe(1); // 순번
@@ -66,7 +66,7 @@ describe('분할 워크북 메타 컬럼', () => {
   it('응답 내역 시트는 번호+순번 9열 구조다', () => {
     const wb = buildSplitWorkbook([basisQ, textQ], [row], 'qb', CTX);
     const ws1 = wb.getWorksheet('응답 내역')!;
-    expect(ws1.getRow(1).getCell(1).value).toBe('번호(systemID)');
+    expect(ws1.getRow(1).getCell(1).value).toBe('시스템ID');
     expect(ws1.getRow(1).getCell(2).value).toBe('순번');
   });
 });

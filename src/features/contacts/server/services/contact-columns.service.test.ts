@@ -44,4 +44,19 @@ describe('updateContactColumns 현재 스코프', () => {
 
     expect(capturedSets).toEqual([{ testContactColumns: scheme }]);
   });
+
+  it('resid 컬럼 숨김도 허용된다 — 고객 NO 컬럼이 식별자 역할을 대신할 수 있음', async () => {
+    const scheme = {
+      version: 1,
+      headerRow: 1,
+      columns: [
+        { key: 'resid', label: '시스템ID', source: 'system.resid' as const, order: 1, hidden: true },
+        { key: 'c1', label: 'NO', source: 'attrs.NO' as const, order: 2 },
+      ],
+    };
+
+    await updateContactColumns({ surveyId: 'sv-1', scheme });
+
+    expect(capturedSets).toEqual([{ testContactColumns: scheme }]);
+  });
 });

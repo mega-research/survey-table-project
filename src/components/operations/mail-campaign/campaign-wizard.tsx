@@ -28,6 +28,7 @@ import { ContactsFilterBar } from '@/components/operations/contacts/contacts-fil
 import { RecipientStatusBadge } from '@/components/operations/mail-campaign/recipient-status-badge';
 import { PagerJump } from '@/components/operations/pager-jump';
 import { buildPageItems } from '@/components/operations/table-primitives';
+import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts';
 import type { MailTemplate } from '@/db/schema/mail';
 import type { CampaignFilterSnapshot, ContactResultCode } from '@/db/schema/schema-types';
 import type {
@@ -392,7 +393,7 @@ export function CampaignWizard({
                   />
                 </th>
                 <th className="px-3 py-2">
-                  <SortHeader label="번호" sortKey="resid" activeSort={sort} dir={dir} onSort={changeSort} />
+                  <SortHeader label={RESID_DEFAULT_LABEL} sortKey="resid" activeSort={sort} dir={dir} onSort={changeSort} />
                 </th>
                 <th className="px-3 py-2">이메일</th>
                 <th className="px-3 py-2">그룹</th>
