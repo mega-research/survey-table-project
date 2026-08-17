@@ -34,6 +34,7 @@ import {
 } from './contacts';
 import type { FilterClause } from './contacts-filters.server';
 import {
+  attrsNaturalSortExprs,
   buildContactsFilterSql,
   latestResultCodeExpr,
 } from './contacts-filter-sql';
@@ -161,10 +162,11 @@ export async function listContactsForSurvey(
     group: contactTargets.groupValue,
   } as const;
 
+  // attrs 정렬은 자연 정렬 — 숫자 값(NO 등)은 숫자순, 비숫자는 뒤에 텍스트순.
   const attrsKey = attrsSortKey(sort);
-  const orderCol: AnyColumn | SQL = attrsKey
-    ? sql`${contactTargets.attrs} ->> ${attrsKey}`
-    : SYSTEM_SORT_MAP[sort as keyof typeof SYSTEM_SORT_MAP] ?? contactTargets.resid;
+  const orderCols: Array<AnyColumn | SQL> = attrsKey
+    ? attrsNaturalSortExprs(attrsKey)
+    : [SYSTEM_SORT_MAP[sort as keyof typeof SYSTEM_SORT_MAP] ?? contactTargets.resid];
 
   const dataRows = await db
     .select({
@@ -182,7 +184,7 @@ export async function listContactsForSurvey(
     })
     .from(contactTargets)
     .where(whereClause)
-    .orderBy(orderExpr(orderCol, dir), asc(contactTargets.id))
+    .orderBy(...orderCols.map((c) => orderExpr(c, dir)), asc(contactTargets.id))
     .limit(pageSize)
     .offset(offset);
 
@@ -303,13 +305,13 @@ export const getContactColumnScheme = cache(
 
 /**
  * 필터 컬럼 후보 생성 — 조사대상목록·단체 메일 마법사 공유.
- * system.resid / system.contact_result / system.web + attrs.* + pii.* 만 후보.
+ * 맨 앞 "전체"(system.all) + system.resid / contact_result / web + attrs.* + pii.*.
  * placeholder 전용 컬럼(system.email_count / system.contact_owner)은 제외.
  */
 export function buildColumnCandidates(
   scheme: ContactColumnScheme | null,
 ): ColumnCandidateWithPii[] {
-  return (scheme?.columns ?? [])
+  const columns = (scheme?.columns ?? [])
     .filter(
       (c) =>
         c.source === FILTER_SOURCE.RESID ||
@@ -319,6 +321,8 @@ export function buildColumnCandidates(
         c.source.startsWith(FILTER_SOURCE.PII_PREFIX),
     )
     .map((c) => ({ source: c.source, label: c.label, ...(c.piiType !== undefined ? { piiType: c.piiType } : {}) }));
+  if (columns.length === 0) return columns;
+  return [{ source: FILTER_SOURCE.ALL, label: '전체' }, ...columns];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

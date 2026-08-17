@@ -21,7 +21,11 @@ import {
   getContactResultCodes,
   listContactsForSurvey,
 } from '@/lib/operations/contacts.server';
-import { parseClausesFromUrl } from '@/lib/operations/contacts-filters.server';
+import {
+  parseClausesFromUrl,
+  parseHeaderFiltersFromUrl,
+  type FilterClause,
+} from '@/lib/operations/contacts-filters.server';
 import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
 
 export const metadata: Metadata = {
@@ -34,6 +38,9 @@ interface PageProps {
     col?: string | string[];
     q?: string | string[];
     op?: string | string[];
+    hcol?: string | string[];
+    hm?: string | string[];
+    hv?: string | string[];
     page?: string;
     sort?: string;
     dir?: string;
@@ -68,7 +75,23 @@ export default async function ContactsPage({ params, searchParams }: PageProps) 
 
   const columnCandidates = buildColumnCandidates(scheme);
 
-  const clauses = parseClausesFromUrl(sp.col, sp.q, sp.op, columnCandidates, resultCodes);
+  const builderClauses = parseClausesFromUrl(sp.col, sp.q, sp.op, columnCandidates, resultCodes);
+  const headerClauses = parseHeaderFiltersFromUrl(
+    sp.hcol,
+    sp.hm,
+    sp.hv,
+    columnCandidates,
+    resultCodes,
+  );
+  // UI 가 상호배타를 강제하므로 정상 흐름에선 한쪽만 존재.
+  // URL 직접 조작으로 둘 다 있으면 AND 결합으로 무해하게 처리.
+  const clauses: FilterClause[] = [
+    ...builderClauses,
+    ...headerClauses.map((c, i) => ({
+      condition: c.condition,
+      op: builderClauses.length === 0 && i === 0 ? null : ('AND' as const),
+    })),
+  ];
 
   const { rows, total, page: clampedPage } = await listContactsForSurvey({
     surveyId,
@@ -134,7 +157,7 @@ export default async function ContactsPage({ params, searchParams }: PageProps) 
         <CardContent className="px-5 py-4 space-y-4">
           <ContactsFilterBar
             surveyId={surveyId}
-            initialClauses={clauses.map((c) => ({
+            initialClauses={builderClauses.map((c) => ({
               op: c.op,
               source: c.condition.source,
               value: c.condition.value,
@@ -158,6 +181,7 @@ export default async function ContactsPage({ params, searchParams }: PageProps) 
               surveyId={surveyId}
               sort={safeSort}
               dir={dir}
+              resultCodeOptions={resultCodes}
             />
           )}
         </CardContent>

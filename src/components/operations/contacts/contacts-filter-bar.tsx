@@ -1,8 +1,19 @@
 'use client';
 
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useEffect, useState, useTransition } from 'react';
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -15,6 +26,10 @@ import {
 import { useSearchParamsMutator } from '@/hooks/use-search-params-mutator';
 import type { ContactResultCode } from '@/db/schema/schema-types';
 import { FILTER_SOURCE, type ColumnCandidate } from '@/lib/operations/filter-shared';
+import {
+  clearHeaderFilterParams,
+  hasHeaderFilterParams,
+} from '@/lib/operations/header-filter-url';
 
 import { PiiExactMarker } from '@/components/operations/filter-pii-marker';
 
@@ -64,28 +79,30 @@ export function ContactsFilterBar({
     value: c.value,
   });
 
+  // 첫 절 컬럼 기본값은 전체 컬럼 — 컬럼을 고르지 않고 바로 검색 가능.
   const [firstSource, setFirstSource] = useState<string>(
-    initialClauses[0]?.source ?? '',
+    initialClauses[0]?.source ?? FILTER_SOURCE.ALL,
   );
   const [firstValue, setFirstValue] = useState<string>(initialClauses[0]?.value ?? '');
   const [extraClauses, setExtraClauses] = useState<ClauseRowValue[]>(
     initialClauses.slice(1).map(toExtraRow),
   );
   const [advancedOpen, setAdvancedOpen] = useState(initialClauses.length >= 2);
+  const [exclusionConfirmOpen, setExclusionConfirmOpen] = useState(false);
   const [, startTransition] = useTransition();
   const pushParams = useSearchParamsMutator();
+  const searchParams = useSearchParams();
 
   // 브라우저 뒤로/앞으로 가기 시 동기화.
   useEffect(() => {
-    setFirstSource(initialClauses[0]?.source ?? '');
+    setFirstSource(initialClauses[0]?.source ?? FILTER_SOURCE.ALL);
     setFirstValue(initialClauses[0]?.value ?? '');
     setExtraClauses(initialClauses.slice(1).map(toExtraRow));
     setAdvancedOpen(initialClauses.length >= 2);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(initialClauses)]);
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
+  const runSearch = () => {
     const cols: string[] = [];
     const qs: string[] = [];
     const ops: string[] = [];
@@ -108,9 +125,21 @@ export function ContactsFilterBar({
         cols.forEach((c) => p.append('col', c));
         qs.forEach((q) => p.append('q', q));
         ops.forEach((o) => p.append('op', o));
+        // 필터 모드 상호배타 — 빌더 검색 시 헤더 필터는 항상 해제.
+        clearHeaderFilterParams(p);
         p.delete('page');
       });
     });
+  };
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    // 헤더 필터가 활성이면 경고 후 진행 (확인 시 헤더 필터 폐기).
+    if (hasHeaderFilterParams(new URLSearchParams(searchParams.toString()))) {
+      setExclusionConfirmOpen(true);
+      return;
+    }
+    runSearch();
   };
 
   const addClause = () => {
@@ -227,6 +256,29 @@ export function ContactsFilterBar({
           </Button>
         </div>
       )}
+
+      <AlertDialog open={exclusionConfirmOpen} onOpenChange={setExclusionConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>헤더 필터가 해제됩니다</AlertDialogTitle>
+            <AlertDialogDescription>
+              컬럼 헤더에 걸어둔 필터와 검색 조건은 동시에 사용할 수 없습니다. 계속하면
+              헤더 필터가 해제되고 검색 조건만 적용됩니다.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>취소</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setExclusionConfirmOpen(false);
+                runSearch();
+              }}
+            >
+              검색 실행
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </form>
   );
 }

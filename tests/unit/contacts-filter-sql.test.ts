@@ -79,3 +79,142 @@ describe('buildContactsFilterSql', () => {
     expect(hasTokenOutsideOuterParens(trimmed)).toBe(false);
   });
 });
+
+describe('buildContactsFilterSql — in 모드 (헤더 체크박스 필터)', () => {
+  function inClause(source: string, values: string[]): FilterClause {
+    return {
+      op: null,
+      condition: { source, mode: 'in', value: '', values },
+    };
+  }
+
+  it('attrs.* in — 값 목록이 parameter binding 된 IN 절을 만든다', () => {
+    const query = dialect.sqlToQuery(
+      buildContactsFilterSql([inClause('attrs.기업유형', ['상장', '코스닥'])]),
+    );
+    expect(query.sql).toContain('"contact_targets".attrs');
+    expect(query.sql).toContain(' IN ');
+    // 인라인 문자열 금지 — 값은 반드시 파라미터로 진입 (ANY 언랩 함정 회피 포함).
+    expect(query.sql).not.toContain('상장');
+    expect(query.params).toContain('상장');
+    expect(query.params).toContain('코스닥');
+    expect(query.params).toContain('기업유형');
+  });
+
+  it('attrs.* in — 빈 값 목록은 FALSE', () => {
+    const query = dialect.sqlToQuery(buildContactsFilterSql([inClause('attrs.기업유형', [])]));
+    expect(query.sql).toContain('FALSE');
+  });
+
+  it('system.contact_result in — 최신 회차 result_code IN 절', () => {
+    const query = dialect.sqlToQuery(
+      buildContactsFilterSql([inClause('system.contact_result', ['완료', '거절'])]),
+    );
+    expect(query.sql).toContain('result_code');
+    expect(query.sql).toContain(' IN ');
+    expect(query.params).toContain('완료');
+    expect(query.params).toContain('거절');
+  });
+
+  it('system.web in — true 만 선택 시 responded_at IS NOT NULL', () => {
+    const query = dialect.sqlToQuery(buildContactsFilterSql([inClause('system.web', ['true'])]));
+    expect(query.sql).toContain('responded_at IS NOT NULL');
+  });
+
+  it('system.web in — false 만 선택 시 responded_at IS NULL', () => {
+    const query = dialect.sqlToQuery(buildContactsFilterSql([inClause('system.web', ['false'])]));
+    expect(query.sql).toContain('responded_at IS NULL');
+    expect(query.sql).not.toContain('IS NOT NULL');
+  });
+
+  it('system.web in — 양쪽 다 선택 시 TRUE (필터 없음과 동일)', () => {
+    const query = dialect.sqlToQuery(
+      buildContactsFilterSql([inClause('system.web', ['true', 'false'])]),
+    );
+    expect(query.sql).toContain('TRUE');
+  });
+
+  it('in 모드 미지원 source (pii.*) 는 FALSE', () => {
+    const query = dialect.sqlToQuery(buildContactsFilterSql([inClause('pii.전화번호', ['x'])]));
+    expect(query.sql).toContain('FALSE');
+  });
+});
+
+describe('buildContactsFilterSql — attrs idlist (NO 범위 검색)', () => {
+  function attrsIdlist(key: string, ranges: Array<{ from: number; to: number }>): FilterClause {
+    return {
+      op: null,
+      condition: { source: `attrs.${key}`, mode: 'idlist', value: '', ranges },
+    };
+  }
+
+  it('범위+단일 혼합 — CASE 숫자 가드 후 BETWEEN/= 비교', () => {
+    const query = dialect.sqlToQuery(
+      buildContactsFilterSql([
+        attrsIdlist('NO', [
+          { from: 10, to: 13 },
+          { from: 15, to: 15 },
+        ]),
+      ]),
+    );
+    // 숫자 가드는 CASE 로 강제 — AND 평가 순서에 기대면 planner 재배열 시 cast 에러.
+    expect(query.sql).toContain('CASE WHEN');
+    expect(query.sql).toContain('::numeric');
+    expect(query.sql).toContain('BETWEEN');
+    expect(query.params).toContain(10);
+    expect(query.params).toContain(13);
+    expect(query.params).toContain(15);
+    expect(query.params).toContain('NO');
+  });
+
+  it('빈 ranges → FALSE', () => {
+    const query = dialect.sqlToQuery(buildContactsFilterSql([attrsIdlist('NO', [])]));
+    expect(query.sql).toContain('FALSE');
+  });
+});
+
+describe('buildContactsFilterSql — any 모드 (전체 컬럼 검색)', () => {
+  it('subConditions 를 OR 로 묶어 괄호 안에 조립한다', () => {
+    const clause: FilterClause = {
+      op: null,
+      condition: {
+        source: 'system.all',
+        mode: 'any',
+        value: '핵심',
+        subConditions: [
+          { source: 'attrs.전시회명', mode: 'text', value: '핵심' },
+          { source: 'attrs.지역', mode: 'text', value: '핵심' },
+        ],
+      },
+    };
+    const query = dialect.sqlToQuery(buildContactsFilterSql([clause]));
+    expect(query.sql).toContain(' OR ');
+    expect(query.sql).toContain('ILIKE');
+    expect(query.params).toContain('전시회명');
+    expect(query.params).toContain('지역');
+    expect(hasTokenOutsideOuterParens(query.sql.trim())).toBe(false);
+  });
+
+  it('빈 subConditions → FALSE', () => {
+    const clause: FilterClause = {
+      op: null,
+      condition: { source: 'system.all', mode: 'any', value: 'x', subConditions: [] },
+    };
+    const query = dialect.sqlToQuery(buildContactsFilterSql([clause]));
+    expect(query.sql).toContain('FALSE');
+  });
+});
+
+describe('attrsNaturalSortExprs — attrs 자연 정렬 표현식', () => {
+  it('숫자 CASE 캐스트 표현식 + 텍스트 표현식 순서쌍을 반환한다', async () => {
+    const { attrsNaturalSortExprs } = await import('@/lib/operations/contacts-filter-sql');
+    const [numeric, text] = attrsNaturalSortExprs('NO');
+    const numQ = dialect.sqlToQuery(numeric);
+    expect(numQ.sql).toContain('CASE WHEN');
+    expect(numQ.sql).toContain('::numeric');
+    expect(numQ.params).toContain('NO');
+    const textQ = dialect.sqlToQuery(text);
+    expect(textQ.sql).toContain('"contact_targets".attrs');
+    expect(textQ.sql).not.toContain('::numeric');
+  });
+});

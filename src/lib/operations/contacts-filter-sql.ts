@@ -45,6 +45,17 @@ export function buildClauseSql(cond: FilterCondition): SQL {
     return sql`FALSE`;
   }
 
+  if (cond.mode === 'in') {
+    return buildInClauseSql(cond);
+  }
+
+  if (cond.mode === 'any') {
+    // 전체 컬럼 검색 — 하위 조건 OR 전개. 자체 괄호로 외부 AND 결합에 안전.
+    const subs = (cond.subConditions ?? []).map(buildClauseSql);
+    if (subs.length === 0) return sql`FALSE`;
+    return sql`(${sql.join(subs, sql` OR `)})`;
+  }
+
   if (cond.source === FILTER_SOURCE.CONTACT_RESULT && cond.mode === 'enum') {
     return sql`${latestResultCodeExpr} = ${cond.value}`;
   }
@@ -53,6 +64,21 @@ export function buildClauseSql(cond: FilterCondition): SQL {
     return cond.value === 'true'
       ? sql`"contact_targets".responded_at IS NOT NULL`
       : sql`"contact_targets".responded_at IS NULL`;
+  }
+
+  if (cond.source.startsWith(FILTER_SOURCE.ATTRS_PREFIX) && cond.mode === 'idlist') {
+    // NO 같은 숫자 attrs 컬럼의 범위 검색 (예: "10-13, 15").
+    if (!cond.ranges || cond.ranges.length === 0) return sql`FALSE`;
+    const key = cond.source.slice(FILTER_SOURCE.ATTRS_PREFIX.length);
+    // 숫자 가드는 반드시 CASE — `regex AND cast` 는 planner 가 AND 평가 순서를
+    // 보장하지 않아 비숫자 값에서 cast 에러가 날 수 있다.
+    const numExpr = sql`(CASE WHEN "contact_targets".attrs->>${key} ~ '^[0-9]+$' THEN ("contact_targets".attrs->>${key})::numeric END)`;
+    const conds = cond.ranges.map((r) =>
+      r.from === r.to
+        ? sql`${numExpr} = ${r.from}`
+        : sql`${numExpr} BETWEEN ${r.from} AND ${r.to}`,
+    );
+    return sql`(${sql.join(conds, sql` OR `)})`;
   }
 
   if (cond.source.startsWith(FILTER_SOURCE.ATTRS_PREFIX) && cond.mode === 'text') {
@@ -73,6 +99,56 @@ export function buildClauseSql(cond: FilterCondition): SQL {
     )`;
   }
 
+  return sql`FALSE`;
+}
+
+/**
+ * attrs 컬럼 자연 정렬 표현식 쌍 — [숫자 CASE 캐스트, 텍스트 원본].
+ *
+ * 숫자로만 된 값은 numeric 으로 먼저 정렬되고(비숫자는 NULL → NULLS LAST 로 뒤),
+ * 이어서 텍스트 사전순으로 정렬된다. NO 처럼 숫자인 attrs 컬럼이
+ * 1, 10, 100, 11 사전순으로 꼬이는 문제를 해결한다.
+ */
+export function attrsNaturalSortExprs(attrsKey: string): [SQL, SQL] {
+  const textExpr = sql`"contact_targets".attrs->>${attrsKey}`;
+  const numericExpr = sql`(CASE WHEN "contact_targets".attrs->>${attrsKey} ~ '^[0-9]+(\\.[0-9]+)?$' THEN ("contact_targets".attrs->>${attrsKey})::numeric END)`;
+  return [numericExpr, textExpr];
+}
+
+/**
+ * mode === 'in' (헤더 체크박스 필터) 절 SQL. 컬럼 내 OR = IN 목록.
+ *
+ * 값은 전부 parameter binding — `ANY(${arr})` 는 length=1 silent unwrap 함정이
+ * 있어 sql.join 으로 IN (...) 을 직접 조립한다.
+ */
+function buildInClauseSql(cond: FilterCondition): SQL {
+  const values = cond.values ?? [];
+  if (values.length === 0) return sql`FALSE`;
+
+  if (cond.source === FILTER_SOURCE.WEB) {
+    const hasTrue = values.includes('true');
+    const hasFalse = values.includes('false');
+    if (hasTrue && hasFalse) return sql`TRUE`;
+    if (hasTrue) return sql`"contact_targets".responded_at IS NOT NULL`;
+    if (hasFalse) return sql`"contact_targets".responded_at IS NULL`;
+    return sql`FALSE`;
+  }
+
+  const inList = sql.join(
+    values.map((v) => sql`${v}`),
+    sql`, `,
+  );
+
+  if (cond.source === FILTER_SOURCE.CONTACT_RESULT) {
+    return sql`${latestResultCodeExpr} IN (${inList})`;
+  }
+
+  if (cond.source.startsWith(FILTER_SOURCE.ATTRS_PREFIX)) {
+    const key = cond.source.slice(FILTER_SOURCE.ATTRS_PREFIX.length);
+    return sql`"contact_targets".attrs->>${key} IN (${inList})`;
+  }
+
+  // pii.* 등 in 미지원 source — distinct 열거 자체가 불가하므로 절 성립 불가.
   return sql`FALSE`;
 }
 

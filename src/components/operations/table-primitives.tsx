@@ -17,15 +17,11 @@ interface SortIndicatorProps {
  * 헤더 텍스트가 흔들리지 않도록 한다.
  */
 export function SortIndicator({ direction }: SortIndicatorProps) {
-  if (direction === false) {
-    return (
-      <span aria-hidden="true" className="inline-block w-2 text-transparent">
-        ▲
-      </span>
-    );
-  }
+  // 비활성 시 미렌더 — 투명 placeholder 로 공간을 예약하지 않고,
+  // 정렬 활성 시에만 생성되어 라벨을 자연스럽게 밀어낸다.
+  if (direction === false) return null;
   return (
-    <span aria-hidden="true" className="text-slate-400">
+    <span aria-hidden="true" className="text-slate-500">
       {direction === 'asc' ? '▲' : '▼'}
     </span>
   );

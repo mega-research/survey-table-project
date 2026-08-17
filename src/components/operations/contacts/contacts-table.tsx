@@ -6,12 +6,14 @@ import {
   RecipientStatusBadge,
   recipientStatusMeta,
 } from '@/components/operations/mail-campaign/recipient-status-badge';
+import { HeaderFilterPopover } from '@/components/operations/contacts/header-filter-popover';
 import { SortIndicator, TablePagerFooter } from '@/components/operations/table-primitives';
-import type { ContactColumnDef, ContactColumnScheme } from '@/db/schema/schema-types';
+import type { ContactColumnDef, ContactColumnScheme, ContactResultCode } from '@/db/schema/schema-types';
 import { useSearchParamsMutator } from '@/hooks/use-search-params-mutator';
 import { formatLocalMonthDayTime } from '@/lib/date-formatters';
 import { attrsKeyOf, piiKeyOf, type ContactsSortDir, type ContactsSortKey } from '@/lib/operations/contacts';
 import type { ContactsRow } from '@/lib/operations/contacts.server';
+import { FILTER_SOURCE } from '@/lib/operations/filter-shared';
 
 interface ContactsTableProps {
   rows: ContactsRow[];
@@ -23,8 +25,22 @@ interface ContactsTableProps {
   sort: ContactsSortKey;
   /** 현재 정렬 방향 */
   dir: ContactsSortDir;
+  /** 헤더 필터 드롭다운의 distinct RPC 호출용 */
+  surveyId: string;
+  /** system.contact_result 헤더 필터 체크박스 옵션 */
+  resultCodeOptions: ContactResultCode[];
   /** 행 클릭 시 호출 — 단건 편집 라우트로 push */
   onRowClick?: (row: ContactsRow) => void;
+}
+
+/** 헤더 필터 드롭다운을 붙일 수 있는 source 인지 — HeaderFilterPopover 분기와 일치. */
+function isHeaderFilterable(source: string): boolean {
+  return (
+    source.startsWith(FILTER_SOURCE.ATTRS_PREFIX) ||
+    source.startsWith(FILTER_SOURCE.PII_PREFIX) ||
+    source === FILTER_SOURCE.CONTACT_RESULT ||
+    source === FILTER_SOURCE.WEB
+  );
 }
 
 /** ContactColumnDef.source → sort key 매핑. system.* 중 정렬 가능한 것만 매핑. */
@@ -141,6 +157,8 @@ export function ContactsTable({
   scheme,
   sort,
   dir,
+  surveyId,
+  resultCodeOptions,
   onRowClick,
 }: ContactsTableProps) {
   const pushParams = useSearchParamsMutator();
@@ -192,18 +210,29 @@ export function ContactsTable({
                     key={col.key}
                     className="border-b px-3 py-2 text-left whitespace-nowrap"
                   >
-                    {sortKey ? (
-                      <button
-                        type="button"
-                        onClick={() => toggleSort(sortKey)}
-                        className="inline-flex items-center gap-1 hover:text-slate-900"
-                      >
-                        {col.label}
-                        <SortIndicator direction={isActive ? dir : false} />
-                      </button>
-                    ) : (
-                      col.label
-                    )}
+                    <span className="inline-flex items-center gap-1">
+                      {sortKey ? (
+                        <button
+                          type="button"
+                          onClick={() => toggleSort(sortKey)}
+                          className="inline-flex items-center gap-1 hover:text-slate-900"
+                        >
+                          {col.label}
+                          <SortIndicator direction={isActive ? dir : false} />
+                        </button>
+                      ) : (
+                        col.label
+                      )}
+                      {isHeaderFilterable(col.source) && (
+                        <HeaderFilterPopover
+                          surveyId={surveyId}
+                          source={col.source}
+                          label={col.label}
+                          {...(col.piiType !== undefined ? { piiType: col.piiType } : {})}
+                          resultCodeOptions={resultCodeOptions}
+                        />
+                      )}
+                    </span>
                   </th>
                 );
               })}

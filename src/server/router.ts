@@ -2,6 +2,7 @@ import { analytics } from '@/features/analytics/server/procedures/analytics';
 import { auth } from '@/features/auth/server/procedures/auth';
 import { attempts } from '@/features/contacts/server/procedures/attempts';
 import { attrs } from '@/features/contacts/server/procedures/attrs';
+import { attrValues } from '@/features/contacts/server/procedures/attr-values';
 import { columns } from '@/features/contacts/server/procedures/columns';
 import { resultCodes } from '@/features/contacts/server/procedures/result-codes';
 import { targets } from '@/features/contacts/server/procedures/targets';
@@ -71,6 +72,7 @@ export const router = {
     attempts,
     resultCodes,
     attrs,
+    attrValues,
   },
   mail: {
     templates,
