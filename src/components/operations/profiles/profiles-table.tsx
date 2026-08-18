@@ -281,7 +281,7 @@ export function ProfilesTable({ rows, total, page, pageSize, sort, dir, stepLoca
       ...columnScheme.map(buildColumn).filter((c): c is ColumnDef<DisplayRow> => c !== null),
       {
         id: 'actions',
-        header: '',
+        header: '편집',
         cell: ({ row }) => (
           <ProfilesRowActions
             surveyId={surveyId}
