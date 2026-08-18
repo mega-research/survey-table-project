@@ -26,7 +26,10 @@ export const SORT_KEYS = [
   'completedAt',
   'totalSeconds',
 ] as const;
-export type SortKey = (typeof SORT_KEYS)[number];
+export type ProfilesSystemSortKey = (typeof SORT_KEYS)[number];
+
+/** 시스템 키 또는 'attrs.<key>' (컨택 attrs 자연 정렬 — 조사 대상과 동일 축). */
+export type SortKey = ProfilesSystemSortKey | `attrs.${string}`;
 
 export type SortDir = 'asc' | 'desc';
 
@@ -83,7 +86,11 @@ export function normalizeListArgs(input: {
     q: (input.q ?? '').slice(0, 200),
     col: (input.col ?? '').slice(0, 100),
     status,
-    sort: pickFromWhitelist(input.sort, SORT_KEYS, 'idx'),
+    // attrs.<key> 는 표시 스킴 검증(고아 URL 가드)을 page 에서 수행 — 여기선 형태만 수용.
+    sort:
+      input.sort?.startsWith('attrs.') && input.sort.length <= 200
+        ? (input.sort as SortKey)
+        : pickFromWhitelist(input.sort, SORT_KEYS, 'idx'),
     dir: input.dir === 'asc' ? 'asc' : 'desc',
     view,
   };

@@ -173,8 +173,9 @@ export function ProfilesTable({ rows, total, page, pageSize, sort, dir, stepLoca
           id: c.key,
           accessorFn: (r: DisplayRow) => r.attrs?.[attrKey] ?? '—',
           header: c.label,
-          // 자유 텍스트 — wrap 허용해 정형 컬럼 대신 남는 폭을 흡수
-          meta: { ...meta('left', false, false), filterSource: c.key },
+          // 자유 텍스트 — wrap 허용해 정형 컬럼 대신 남는 폭을 흡수.
+          // 정렬은 조사 대상과 같은 attrs 자연 정렬 (숫자 값은 숫자순).
+          meta: { ...meta('left', true, false), filterSource: c.key },
         };
       }
       if (c.key.startsWith('pii.')) {

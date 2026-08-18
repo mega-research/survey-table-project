@@ -9,10 +9,12 @@ import { deletedResponse, notDeletedResponse } from '@/data/response-filters';
 import type { Platform } from './parse-ua';
 import {
   type NormalizedListArgs,
+  type ProfilesSystemSortKey,
   type SortDir,
-  type SortKey,
 } from './profiles';
+import { attrsSortKey } from './contacts';
 import type { FilterClause } from './contacts-filters.server';
+import { attrsNaturalSortExprs } from './contacts-filter-sql';
 import { buildProfilesFilterSql } from './profiles-filters.server';
 import { buildNegativeCodeExists, getResultCodeStatuses } from './result-code-statuses.server';
 import {
@@ -163,7 +165,7 @@ export async function listResponsesForProfiles(
     startedAt: numbered.startedAt,
     completedAt: numbered.completedAt,
     totalSeconds: numbered.totalSeconds,
-  } as const satisfies Record<Exclude<SortKey, 'idx'>, AnyColumn>;
+  } as const satisfies Record<Exclude<ProfilesSystemSortKey, 'idx'>, AnyColumn>;
 
   const whereParts: SQL[] = [];
 
@@ -211,12 +213,18 @@ export async function listResponsesForProfiles(
     ELSE 7 END`;
 
   // idx = startedAt asc 기준 접수 순번이므로 방향 그대로 startedAt 에 매핑.
-  const orderClause =
-    sort === 'idx'
-      ? orderExpr(numbered.startedAt, dir)
-      : sort === 'status'
-        ? orderExpr(statusRankExpr, dir)
-        : orderExpr(SORT_COLUMN_MAP[sort], dir);
+  // attrs.<key> 는 조사 대상과 같은 자연 정렬 — 숫자 값(NO 등)은 숫자순, 비숫자는 뒤에 텍스트순.
+  const attrsKey = attrsSortKey(sort);
+  const orderClauses: SQL[] =
+    attrsKey != null
+      ? attrsNaturalSortExprs(attrsKey, sql`${numbered.contactAttrs}`).map((c) =>
+          orderExpr(c, dir),
+        )
+      : sort === 'idx'
+        ? [orderExpr(numbered.startedAt, dir)]
+        : sort === 'status'
+          ? [orderExpr(statusRankExpr, dir)]
+          : [orderExpr(SORT_COLUMN_MAP[sort as keyof typeof SORT_COLUMN_MAP], dir)];
 
   const dataQuery = db
     .select({
@@ -241,7 +249,7 @@ export async function listResponsesForProfiles(
     .from(numbered);
 
   const dataRows = await (whereClause ? dataQuery.where(whereClause) : dataQuery)
-    .orderBy(orderClause, asc(numbered.id))
+    .orderBy(...orderClauses, asc(numbered.id))
     .limit(pageSize)
     .offset(offset);
 

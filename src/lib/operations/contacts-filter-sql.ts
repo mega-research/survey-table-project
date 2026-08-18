@@ -183,9 +183,13 @@ function webStatusCondSql(value: string): SQL {
  * 이어서 텍스트 사전순으로 정렬된다. NO 처럼 숫자인 attrs 컬럼이
  * 1, 10, 100, 11 사전순으로 꼬이는 문제를 해결한다.
  */
-export function attrsNaturalSortExprs(attrsKey: string): [SQL, SQL] {
-  const textExpr = sql`"contact_targets".attrs->>${attrsKey}`;
-  const numericExpr = sql`(CASE WHEN "contact_targets".attrs->>${attrsKey} ~ '^[0-9]+(\\.[0-9]+)?$' THEN ("contact_targets".attrs->>${attrsKey})::numeric END)`;
+export function attrsNaturalSortExprs(
+  attrsKey: string,
+  // 응답 내역은 numbered subquery 의 컨택 LEFT JOIN 컬럼을 주입 (기본값 = 조사 대상).
+  attrsRef: SQL = sql`"contact_targets".attrs`,
+): [SQL, SQL] {
+  const textExpr = sql`${attrsRef}->>${attrsKey}`;
+  const numericExpr = sql`(CASE WHEN ${attrsRef}->>${attrsKey} ~ '^[0-9]+(\\.[0-9]+)?$' THEN (${attrsRef}->>${attrsKey})::numeric END)`;
   return [numericExpr, textExpr];
 }
 
