@@ -36,7 +36,9 @@ import type { FilterClause } from './contacts-filters.server';
 import {
   attrsNaturalSortExprs,
   buildContactsFilterSql,
+  latestMailStatusExpr,
   latestResultCodeExpr,
+  mailStatusRankExpr,
   matchedResponseSubquery,
 } from './contacts-filter-sql';
 import { FILTER_SOURCE, type ColumnCandidateWithPii } from './filter-shared';
@@ -112,18 +114,7 @@ const responseActivityAtExpr = matchedResponseSubquery(
 // web 컬럼 상태 배지용 — 매칭 응답의 status (completed/in_progress/drop 등).
 const responseStatusExpr = matchedResponseFieldExpr<string | null>('status');
 
-// 조사 대상별 최신(created_at DESC) 메일 수신 상태 1건.
-// outer correlation 은 명시적 qualifier 필수 (latestAttemptNoExpr 주석 참고).
-// 인덱스: idx_mail_recipients_target_created (contact_target_id, created_at DESC).
-const latestMailStatusExpr = sql<MailRecipientStatus | null>`(
-  SELECT mail_recipients.status FROM mail_recipients
-  INNER JOIN mail_campaigns ON mail_campaigns.id = mail_recipients.campaign_id
-  WHERE mail_recipients.contact_target_id = "contact_targets"."id"
-    AND mail_recipients.archived_at IS NULL
-    AND mail_campaigns.archived_at IS NULL
-    AND mail_campaigns.is_test = "contact_targets"."is_test"
-  ORDER BY mail_recipients.created_at DESC LIMIT 1
-)`;
+// 최신 메일 수신 상태 표현식은 contacts-filter-sql 로 이관 — 필터·정렬과 공유.
 
 function orderExpr(col: AnyColumn | SQL, direction: ContactsSortDir): SQL {
   return direction === 'asc'
@@ -185,7 +176,11 @@ export async function listContactsForSurvey(
     ? attrsNaturalSortExprs(attrsKey).map((c) => orderExpr(c, dir))
     : sort === 'webActivity'
       ? [orderExpr(responseActivityAtExpr, dir), asc(contactTargets.resid)]
-      : [
+      : sort === 'mailStatus'
+        ? // 메일 상태 순위 축 — 오름차순 열람 → 전달 완료 → … → 실패,
+          // 발송 이력 없음(NULL)은 방향 무관 항상 마지막. 같은 상태 안은 시스템ID 순.
+          [orderExpr(mailStatusRankExpr, dir), asc(contactTargets.resid)]
+        : [
           orderExpr(
             SYSTEM_SORT_MAP[sort as keyof typeof SYSTEM_SORT_MAP] ?? contactTargets.resid,
             dir,
@@ -345,6 +340,7 @@ export function buildColumnCandidates(
         c.source === FILTER_SOURCE.RESID ||
         c.source === FILTER_SOURCE.CONTACT_RESULT ||
         c.source === FILTER_SOURCE.WEB ||
+        c.source === FILTER_SOURCE.EMAIL ||
         c.source.startsWith(FILTER_SOURCE.ATTRS_PREFIX) ||
         c.source.startsWith(FILTER_SOURCE.PII_PREFIX),
     )

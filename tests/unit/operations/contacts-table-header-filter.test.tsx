@@ -67,13 +67,14 @@ describe('ContactsTable 헤더 필터 트리거', () => {
     expect(url).toContain('dir=desc');
   });
 
-  it('필터 가능 컬럼(attrs/pii/결과코드)에만 필터 버튼을 렌더한다', () => {
+  it('필터 가능 컬럼(attrs/pii/결과코드/메일)에만 필터 버튼을 렌더한다', () => {
     renderTable();
     expect(screen.getByRole('button', { name: '기업유형 필터' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '전화번호 필터' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '컨택결과 필터' })).toBeInTheDocument();
-    // 시스템 placeholder 컬럼과 resid 는 필터 트리거 없음.
-    expect(screen.queryByRole('button', { name: '메일 필터' })).toBeNull();
+    // 메일 컬럼은 최신 수신 상태 고정 옵션 깔때기
+    expect(screen.getByRole('button', { name: '메일 필터' })).toBeInTheDocument();
+    // resid 는 필터 트리거 없음.
     expect(screen.queryByRole('button', { name: '번호 필터' })).toBeNull();
   });
 });

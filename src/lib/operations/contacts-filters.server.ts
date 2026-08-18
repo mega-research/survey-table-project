@@ -6,6 +6,7 @@ import {
   FILTER_SOURCE,
   HEADER_FILTER_MODES,
   HEADER_FILTER_VALUE_SEPARATOR,
+  MAIL_FILTER_VALUES,
   WEB_FILTER_VALUES,
   placeholderFor as sharedPlaceholderFor,
   type ColumnCandidateWithPii,
@@ -190,6 +191,13 @@ function buildHeaderCondition(
     return { source: col, mode: 'in', value: '', values };
   }
 
+  if (col === FILTER_SOURCE.EMAIL) {
+    if (mode !== 'in') return null;
+    const values = splitHeaderValues(hv).filter((v) => MAIL_FILTER_VALUES.has(v));
+    if (values.length === 0) return null;
+    return { source: col, mode: 'in', value: '', values };
+  }
+
   return null;
 }
 
@@ -296,6 +304,11 @@ function buildClause(
   if (col === FILTER_SOURCE.WEB) {
     if (!WEB_FILTER_VALUES.has(trimmed)) return null;
     return { op, condition: { source: 'system.web', mode: 'boolean', value: trimmed } };
+  }
+
+  if (col === FILTER_SOURCE.EMAIL) {
+    if (!MAIL_FILTER_VALUES.has(trimmed)) return null;
+    return { op, condition: { source: FILTER_SOURCE.EMAIL, mode: 'boolean', value: trimmed } };
   }
 
   if (col.startsWith(FILTER_SOURCE.ATTRS_PREFIX)) {

@@ -8,9 +8,11 @@ import {
 } from '@/lib/operations/contacts-filters.server';
 import {
   HEADER_FILTER_VALUE_SEPARATOR as SEP,
+  MAIL_FILTER_OPTIONS,
   WEB_FILTER_OPTIONS,
   webFilterOptionsFor,
 } from '@/lib/operations/filter-shared';
+import { STATUS_LABEL } from '@/components/operations/mail-campaign/recipient-status-badge';
 import type { ContactResultCode } from '@/db/schema/schema-types';
 
 describe('webFilterOptionsFor — web 필터 선택지 + 레거시 값 노출', () => {
@@ -41,6 +43,20 @@ describe('webFilterOptionsFor — web 필터 선택지 + 레거시 값 노출', 
   });
 });
 
+describe('MAIL_FILTER_OPTIONS — 메일 필터 어휘', () => {
+  it('라벨이 badge(STATUS_LABEL)와 동기화돼 있다 — 복제 어긋남 방지', () => {
+    for (const o of MAIL_FILTER_OPTIONS) {
+      if (o.value === 'none') continue;
+      expect(STATUS_LABEL[o.value as keyof typeof STATUS_LABEL]?.label).toBe(o.label);
+    }
+  });
+
+  it('모든 수신 상태를 빠짐없이 포함한다 (+ none)', () => {
+    const values = MAIL_FILTER_OPTIONS.map((o) => o.value);
+    expect(new Set(values)).toEqual(new Set([...Object.keys(STATUS_LABEL), 'none']));
+  });
+});
+
 describe('placeholderFor', () => {
   it('returns id range hint for system.resid', () => {
     expect(placeholderFor('system.resid')).toBe('예: 1-30, 45');
@@ -66,6 +82,7 @@ const candidates: ColumnCandidate[] = [
   { source: 'system.resid', label: '번호' },
   { source: 'system.contact_result', label: '결과코드' },
   { source: 'system.web', label: '응답' },
+  { source: 'system.email_count', label: '메일' },
   { source: 'attrs.전시회명', label: '전시회명' },
   { source: 'attrs.지역', label: '지역' },
   // 숨긴 컬럼 — 명시 선택으로는 검색 가능하지만 전체(system.all) 전개에선 제외.
@@ -153,6 +170,18 @@ describe('parseClausesFromUrl - source 분기', () => {
   it('system.web + 상태 값(drop 등) → boolean 조건으로 수용', () => {
     const d = parseClausesFromUrl(['system.web'], ['drop'], [''], candidates, resultCodes);
     expect(d[0]?.condition).toEqual({ source: 'system.web', mode: 'boolean', value: 'drop' });
+  });
+
+  it('system.email_count + 상태 값 → boolean 조건, 어휘 외 값은 drop', () => {
+    const d = parseClausesFromUrl(['system.email_count'], ['bounced'], [''], candidates, resultCodes);
+    expect(d[0]?.condition).toEqual({
+      source: 'system.email_count',
+      mode: 'boolean',
+      value: 'bounced',
+    });
+    expect(
+      parseClausesFromUrl(['system.email_count'], ['yes'], [''], candidates, resultCodes),
+    ).toEqual([]);
   });
 
   it('system.web + 외 값 → drop', () => {

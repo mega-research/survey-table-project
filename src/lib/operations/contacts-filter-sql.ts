@@ -1,5 +1,6 @@
 import { sql, type SQL } from 'drizzle-orm';
 
+import type { MailRecipientStatus } from '@/db/schema/mail';
 import type { FilterClause, FilterCondition } from './contacts-filters.server';
 import { FILTER_SOURCE, escapeLikePattern } from './filter-shared';
 
@@ -20,6 +21,47 @@ export const latestResultCodeExpr = sql<string | null>`(
   WHERE contact_target_id = "contact_targets"."id"
   ORDER BY attempt_no DESC LIMIT 1
 )`;
+
+// 조사 대상별 최신(created_at DESC) 메일 수신 상태 1건 — SELECT(메일 컬럼 표시)와
+// 필터(mailStatusCondSql)·정렬(mailStatusRankExpr)이 공유.
+// outer correlation 은 명시적 qualifier 필수 (latestResultCodeExpr 주석 참고).
+// 인덱스: idx_mail_recipients_target_created (contact_target_id, created_at DESC).
+export const latestMailStatusExpr = sql<MailRecipientStatus | null>`(
+  SELECT mail_recipients.status FROM mail_recipients
+  INNER JOIN mail_campaigns ON mail_campaigns.id = mail_recipients.campaign_id
+  WHERE mail_recipients.contact_target_id = "contact_targets"."id"
+    AND mail_recipients.archived_at IS NULL
+    AND mail_campaigns.archived_at IS NULL
+    AND mail_campaigns.is_test = "contact_targets"."is_test"
+  ORDER BY mail_recipients.created_at DESC LIMIT 1
+)`;
+
+/**
+ * 메일 필터 값 1개 → SQL 조건. 'none' 은 발송 이력 없음(IS NULL), 그 외는
+ * 최신 수신 상태 일치. 값 검증(MAIL_FILTER_VALUES)은 파서 책임.
+ */
+function mailStatusCondSql(value: string): SQL {
+  return value === 'none'
+    ? sql`${latestMailStatusExpr} IS NULL`
+    : sql`${latestMailStatusExpr} = ${value}`;
+}
+
+/**
+ * 메일 컬럼 상태 순위 정렬 표현식 — MAIL_FILTER_OPTIONS 순서(잘된 순: 열람 →
+ * 전달 완료 → … → 실패)와 동일 축. 발송 이력 없음은 NULL 로 축 밖 — orderExpr 의
+ * NULLS LAST 가 방향과 무관하게 항상 마지막에 고정한다 (web 정렬과 같은 규칙).
+ */
+export const mailStatusRankExpr = sql<number | null>`(CASE ${latestMailStatusExpr}
+  WHEN 'opened' THEN 1
+  WHEN 'delivered' THEN 2
+  WHEN 'sent' THEN 3
+  WHEN 'sending' THEN 4
+  WHEN 'queued' THEN 5
+  WHEN 'skipped_unsubscribed' THEN 6
+  WHEN 'bounced' THEN 7
+  WHEN 'complained' THEN 8
+  WHEN 'failed' THEN 9
+  ELSE NULL END)`;
 
 /**
  * 절 SQL 이 참조하는 컬럼 주입 — 조사 대상은 `contact_targets` 실컬럼(기본값),
@@ -96,6 +138,10 @@ export function buildClauseSql(
 
   if (cond.source === FILTER_SOURCE.WEB && cond.mode === 'boolean') {
     return webStatusCondSql(cond.value);
+  }
+
+  if (cond.source === FILTER_SOURCE.EMAIL && cond.mode === 'boolean') {
+    return mailStatusCondSql(cond.value);
   }
 
   if (cond.source.startsWith(FILTER_SOURCE.ATTRS_PREFIX) && cond.mode === 'idlist') {
@@ -206,6 +252,12 @@ function buildInClauseSql(cond: FilterCondition, refs: ClauseColumnRefs): SQL {
   if (cond.source === FILTER_SOURCE.WEB) {
     // 다중 선택은 상태 조건 OR 전개 — 자체 괄호로 외부 AND 결합에 안전.
     const conds = values.map(webStatusCondSql);
+    return sql`(${sql.join(conds, sql` OR `)})`;
+  }
+
+  if (cond.source === FILTER_SOURCE.EMAIL) {
+    // 'none'(IS NULL) 이 섞일 수 있어 IN 목록 대신 조건 OR 전개.
+    const conds = values.map(mailStatusCondSql);
     return sql`(${sql.join(conds, sql` OR `)})`;
   }
 

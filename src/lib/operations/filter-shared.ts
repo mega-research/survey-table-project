@@ -10,6 +10,7 @@ export const FILTER_SOURCE = {
   RESID: 'system.resid',
   CONTACT_RESULT: 'system.contact_result',
   WEB: 'system.web',
+  EMAIL: 'system.email_count',
   ATTRS_PREFIX: 'attrs.',
   PII_PREFIX: 'pii.',
 } as const;
@@ -33,6 +34,30 @@ export const WEB_FILTER_VALUES: ReadonlySet<string> = new Set([
   'true',
   'false',
 ]);
+
+/**
+ * 메일(최신 수신 상태) 필터 값 어휘 — 순서가 곧 정렬 순위 축(잘된 순).
+ * 라벨은 recipientStatusMeta(STATUS_LABEL)와 동일해야 한다 — 동기화는
+ * 단위 테스트로 고정 (컴포넌트 → lib 역방향 import 를 피하기 위한 복제).
+ * 'none' 은 발송 이력 없음 (latestMailStatus IS NULL).
+ */
+export const MAIL_FILTER_OPTIONS = [
+  { value: 'opened', label: '열람' },
+  { value: 'delivered', label: '전달 완료' },
+  { value: 'sent', label: '발송됨' },
+  { value: 'sending', label: '전송중' },
+  { value: 'queued', label: '대기' },
+  { value: 'skipped_unsubscribed', label: '수신거부' },
+  { value: 'bounced', label: '반송' },
+  { value: 'complained', label: '신고' },
+  { value: 'failed', label: '실패' },
+  { value: 'none', label: '메일 없음' },
+] as const;
+
+/** 메일 필터로 수용 가능한 전체 값. */
+export const MAIL_FILTER_VALUES: ReadonlySet<string> = new Set(
+  MAIL_FILTER_OPTIONS.map((o) => o.value),
+);
 
 /**
  * 현재 걸린 값 기준 web 필터 선택지 — 레거시 값('true'/'false', 구 URL·캠페인

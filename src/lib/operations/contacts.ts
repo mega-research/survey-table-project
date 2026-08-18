@@ -27,6 +27,9 @@ export const CONTACTS_SORT_KEYS = [
   // 활동 시각) 기준. respondedAt 정렬은 미완료(진행중·이탈) 행이 전부 NULL 이라
   // 순서가 생기지 않는다. 상태별 골라보기는 정렬이 아니라 web 필터 소관.
   'webActivity',
+  // 메일 컬럼 헤더 정렬 — 최신 수신 상태 순위(열람 → 전달 완료 → … → 실패),
+  // 발송 이력 없음은 항상 마지막.
+  'mailStatus',
 ] as const;
 export type ContactsSystemSortKey = (typeof CONTACTS_SORT_KEYS)[number];
 

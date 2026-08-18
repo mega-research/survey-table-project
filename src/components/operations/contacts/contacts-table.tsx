@@ -15,7 +15,7 @@ import { useSearchParamsMutator } from '@/hooks/use-search-params-mutator';
 import { formatLocalMonthDayTime } from '@/lib/date-formatters';
 import { attrsKeyOf, piiKeyOf, type ContactsSortDir, type ContactsSortKey } from '@/lib/operations/contacts';
 import type { ContactsRow } from '@/lib/operations/contacts.server';
-import { FILTER_SOURCE } from '@/lib/operations/filter-shared';
+import { FILTER_SOURCE, MAIL_FILTER_OPTIONS } from '@/lib/operations/filter-shared';
 
 interface ContactsTableProps {
   rows: ContactsRow[];
@@ -41,7 +41,8 @@ function isHeaderFilterable(source: string): boolean {
     source.startsWith(FILTER_SOURCE.ATTRS_PREFIX) ||
     source.startsWith(FILTER_SOURCE.PII_PREFIX) ||
     source === FILTER_SOURCE.CONTACT_RESULT ||
-    source === FILTER_SOURCE.WEB
+    source === FILTER_SOURCE.WEB ||
+    source === FILTER_SOURCE.EMAIL
   );
 }
 
@@ -55,6 +56,9 @@ function sortKeyOf(source: string): ContactsSortKey | null {
       // 매칭 응답의 활동 시각 기준 — respondedAt 은 미완료(진행중·이탈) 행이
       // 전부 NULL 이라 순서가 생기지 않는다.
       return 'webActivity';
+    case 'system.email_count':
+      // 최신 메일 수신 상태 순위 기준 (열람 → 전달 완료 → … → 실패, 없음 마지막).
+      return 'mailStatus';
     default:
       return null;
   }
@@ -240,6 +244,14 @@ export function ContactsTable({
                           source={col.source}
                           label={col.label}
                           {...(col.piiType !== undefined ? { piiType: col.piiType } : {})}
+                          {...(col.source === FILTER_SOURCE.EMAIL
+                            ? {
+                                fixedOptions: MAIL_FILTER_OPTIONS.map((o) => ({
+                                  value: o.value,
+                                  label: o.label,
+                                })),
+                              }
+                            : {})}
                           resultCodeOptions={resultCodeOptions}
                         />
                       )}

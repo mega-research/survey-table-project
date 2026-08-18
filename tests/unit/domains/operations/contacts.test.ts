@@ -63,6 +63,9 @@ describe('whitelist exports', () => {
   it("web 컬럼 정렬용 'webActivity' 키 — 매칭 응답 활동 시각 기준 (respondedAt 만으론 미완료 행이 정렬 안 됨)", () => {
     expect(CONTACTS_SORT_KEYS).toContain('webActivity');
   });
+  it("메일 컬럼 정렬용 'mailStatus' 키 — 최신 수신 상태 순위 기준", () => {
+    expect(CONTACTS_SORT_KEYS).toContain('mailStatus');
+  });
   it('CONTACTS_PAGE_SIZE = 20', () => {
     expect(CONTACTS_PAGE_SIZE).toBe(20);
   });

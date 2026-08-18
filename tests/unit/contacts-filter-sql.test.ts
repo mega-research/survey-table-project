@@ -145,6 +145,27 @@ describe('buildContactsFilterSql — in 모드 (헤더 체크박스 필터)', ()
     expect(query.sql).toContain('IS NULL');
   });
 
+  it('system.email_count in — 최신 수신 상태 조건 OR 전개, none 은 발송 이력 없음', () => {
+    const query = dialect.sqlToQuery(
+      buildContactsFilterSql([inClause('system.email_count', ['bounced', 'none'])]),
+    );
+    expect(query.sql).toContain('mail_recipients');
+    expect(query.sql).toContain(' OR ');
+    expect(query.sql).toContain('IS NULL');
+    expect(query.params).toContain('bounced');
+  });
+
+  it('mailStatusRankExpr — 열람이 전달 완료보다 앞, 발송 이력 없음은 NULL(축 밖)', async () => {
+    const { mailStatusRankExpr } = await import('@/lib/operations/contacts-filter-sql');
+    const query = dialect.sqlToQuery(mailStatusRankExpr);
+    const pos = (s: string) => query.sql.indexOf(s);
+    expect(pos("'opened'")).toBeGreaterThan(-1);
+    expect(pos("'opened'")).toBeLessThan(pos("'delivered'"));
+    expect(pos("'delivered'")).toBeLessThan(pos("'bounced'"));
+    // 없음은 순위 폴백 없이 NULL — orderExpr 의 NULLS LAST 가 맨 뒤 고정 (web 과 동일 규칙)
+    expect(query.sql).toContain('ELSE NULL');
+  });
+
   it('in 모드 미지원 source (pii.*) 는 FALSE', () => {
     const query = dialect.sqlToQuery(buildContactsFilterSql([inClause('pii.전화번호', ['x'])]));
     expect(query.sql).toContain('FALSE');

@@ -9,7 +9,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import type { ContactResultCode } from '@/db/schema/schema-types';
-import { FILTER_SOURCE, placeholderFor, webFilterOptionsFor } from '@/lib/operations/filter-shared';
+import {
+  FILTER_SOURCE,
+  MAIL_FILTER_OPTIONS,
+  placeholderFor,
+  webFilterOptionsFor,
+} from '@/lib/operations/filter-shared';
 
 interface Props {
   source: string;
@@ -36,6 +41,23 @@ export function ValueWidget({ source, value, onChange, resultCodeOptions, inputI
           {resultCodeOptions.map((rc) => (
             <SelectItem key={rc.code} value={rc.code}>
               {rc.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    );
+  }
+
+  if (source === FILTER_SOURCE.EMAIL) {
+    return (
+      <Select value={value || 'delivered'} onValueChange={onChange}>
+        <SelectTrigger id={inputId} className="w-[260px] h-10">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {MAIL_FILTER_OPTIONS.map((o) => (
+            <SelectItem key={o.value} value={o.value}>
+              {o.label}
             </SelectItem>
           ))}
         </SelectContent>
