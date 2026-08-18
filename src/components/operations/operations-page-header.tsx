@@ -36,13 +36,18 @@ export function OperationsPageHeader({ surveyId, surveyTitle, isGuest, control }
     <nav className="border-b border-gray-200 bg-white px-6 py-4">
       <div className="mx-auto flex max-w-7xl items-center justify-between">
         <div className="flex items-center space-x-4">
-          <Link href="/admin/surveys">
-            <Button variant="ghost" size="sm">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              목록으로
-            </Button>
-          </Link>
-          <div className="h-6 w-px bg-gray-300" />
+          {/* 설문 목록은 어드민 전용 — 게스트가 누르면 강제 로그아웃되므로 숨긴다 */}
+          {!isGuest && (
+            <>
+              <Link href="/admin/surveys">
+                <Button variant="ghost" size="sm">
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  목록으로
+                </Button>
+              </Link>
+              <div className="h-6 w-px bg-gray-300" />
+            </>
+          )}
           <div className="flex items-center gap-2">
             <Activity className="h-5 w-5 text-blue-500" />
             <h1 className="max-w-md truncate text-lg font-medium text-gray-900">{surveyTitle}</h1>

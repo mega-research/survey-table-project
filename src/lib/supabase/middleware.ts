@@ -2,7 +2,11 @@ import { type NextRequest, NextResponse } from 'next/server';
 
 import { createServerClient } from '@supabase/ssr';
 
-import { getGuestSurveyIds, guestPathRedirect } from '@/lib/auth/guest-grants';
+import {
+  GUEST_FORCE_LOGOUT_PATH,
+  getGuestSurveyIds,
+  guestPathRedirect,
+} from '@/lib/auth/guest-grants';
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -52,25 +56,37 @@ export async function updateSession(request: NextRequest) {
       return redirectWithSessionCookies(url, supabaseResponse);
     }
 
-    // 이미 로그인되어 있고 로그인 페이지에 접근하는 경우
-    if (user && isLoginPage) {
-      const url = request.nextUrl.clone();
-      url.pathname = '/admin/surveys';
-      return redirectWithSessionCookies(url, supabaseResponse);
-    }
-
-    // 게스트(설문 단위 grant) — grant 보유자는 allowlist fail-open 과 무관하게 항상
-    // 게스트 취급, 자기 설문 operations 밖은 전부 리다이렉트
-    if (user && !isLoginPage) {
+    if (user) {
       const guestSurveyIds = getGuestSurveyIds(user.id);
+
+      // 게스트(설문 단위 grant) — grant 보유자는 allowlist fail-open 과 무관하게
+      // 항상 게스트 취급. 자기 설문 operations 밖은 전부 강제 로그아웃으로
+      // 리다이렉트하고, 로그인 페이지는 로그인된 상태라도 그대로 보여준다
+      // (재로그인 시 로그인 액션이 자기 grant 설문으로 보낸다).
       if (guestSurveyIds.length > 0) {
         const dest = guestPathRedirect(request.nextUrl.pathname, guestSurveyIds);
         if (dest) {
           const url = request.nextUrl.clone();
           url.pathname = dest;
           url.search = '';
+          // 강제 로그아웃엔 원래 목적지를 실어 로그인창까지 전달 — 다른 계정으로
+          // 재로그인 시 그 설문으로 복귀시키거나 무권한 안내를 띄우는 근거.
+          if (dest === GUEST_FORCE_LOGOUT_PATH) {
+            // 링크 prefetch 는 로그아웃 라우트로 보내지 않는다 — prefetch 가
+            // 리다이렉트를 따라가 세션을 지우는 사고 방지. 로그인으로 직행.
+            const isPrefetch =
+              request.headers.get('next-router-prefetch') !== null ||
+              request.headers.get('purpose') === 'prefetch';
+            if (isPrefetch) url.pathname = '/admin/login';
+            url.searchParams.set('redirect', request.nextUrl.pathname + request.nextUrl.search);
+          }
           return redirectWithSessionCookies(url, supabaseResponse);
         }
+      } else if (isLoginPage) {
+        // 이미 로그인된 관리자가 로그인 페이지에 접근하는 경우
+        const url = request.nextUrl.clone();
+        url.pathname = '/admin/surveys';
+        return redirectWithSessionCookies(url, supabaseResponse);
       }
     }
   }

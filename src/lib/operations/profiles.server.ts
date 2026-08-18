@@ -47,6 +47,12 @@ export interface ProfilesRow {
   groupValue: string | null;
   /** 매칭된 contact_targets.resid (번호/systemID). 익명/미매칭이면 null. */
   resid: number | null;
+  /** 매칭된 contact_targets.attrs — 컬럼 스킴의 attrs.* 표시용. 익명/미매칭이면 null. */
+  attrs: Record<string, string> | null;
+  /** 매칭된 contact_targets.id — pii.* 컬럼 복호화 조인 키. 익명/미매칭이면 null. */
+  contactTargetId: string | null;
+  /** 중복 감지용 ipHash. 표시는 formatIpHash 로 앞 8자만 노출한다. */
+  ipHash: string | null;
   /** 현재 서버 scope에 속한 응답의 테스트 여부. real scope는 false, test scope는 true로 고정된다. */
   isTest: boolean;
 }
@@ -152,6 +158,7 @@ export async function listResponsesForProfiles(
       startedAt: surveyResponses.startedAt,
       completedAt: surveyResponses.completedAt,
       totalSeconds: surveyResponses.totalSeconds,
+      ipHash: surveyResponses.ipHash,
       isTest: surveyResponses.isTest,
       groupValue: contactTargets.groupValue,
       contactResid: contactTargets.resid,
@@ -248,9 +255,12 @@ export async function listResponsesForProfiles(
       startedAt: numbered.startedAt,
       completedAt: numbered.completedAt,
       totalSeconds: numbered.totalSeconds,
+      ipHash: numbered.ipHash,
       isTest: numbered.isTest,
       groupValue: numbered.groupValue,
       resid: numbered.contactResid,
+      attrs: numbered.contactAttrs,
+      contactTargetId: numbered.contactTargetId,
     })
     .from(numbered);
 
@@ -274,6 +284,9 @@ export async function listResponsesForProfiles(
     isTest: r.isTest,
     groupValue: r.groupValue ?? null,
     resid: r.resid ?? null,
+    attrs: (r.attrs ?? null) as Record<string, string> | null,
+    contactTargetId: r.contactTargetId ?? null,
+    ipHash: r.ipHash ?? null,
   }));
 
   return { rows, total, page: clampedPage };
