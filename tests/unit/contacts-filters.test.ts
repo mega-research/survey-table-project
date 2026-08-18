@@ -6,8 +6,40 @@ import {
   placeholderFor,
   type ColumnCandidate,
 } from '@/lib/operations/contacts-filters.server';
-import { HEADER_FILTER_VALUE_SEPARATOR as SEP } from '@/lib/operations/filter-shared';
+import {
+  HEADER_FILTER_VALUE_SEPARATOR as SEP,
+  WEB_FILTER_OPTIONS,
+  webFilterOptionsFor,
+} from '@/lib/operations/filter-shared';
 import type { ContactResultCode } from '@/db/schema/schema-types';
+
+describe('webFilterOptionsFor — web 필터 선택지 + 레거시 값 노출', () => {
+  it('평상시에는 상태 4옵션만 — 레거시 항목 미노출', () => {
+    expect(webFilterOptionsFor([])).toEqual(
+      WEB_FILTER_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+    );
+    expect(webFilterOptionsFor(['completed'])).toEqual(
+      WEB_FILTER_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+    );
+  });
+
+  it("레거시 'false' 는 실제 서버 의미(미완료 전체) 라벨로 노출 — '미응답' 위장 금지", () => {
+    // 구 URL·캠페인 스냅샷 재발송으로 'false' 가 걸린 상태에서 '미응답'으로
+    // 위장 표시하면, 화면을 믿은 운영자가 진행중·이탈 포함 대상에게 발송하게 된다.
+    const options = webFilterOptionsFor(['false']);
+    const legacy = options.find((o) => o.value === 'false');
+    expect(legacy?.label).toContain('구필터');
+    expect(legacy?.label).toContain('진행중·이탈 포함');
+    expect(legacy?.label).not.toBe('미응답');
+  });
+
+  it("레거시 'true' 는 응답 완료 구필터 라벨로 노출", () => {
+    const options = webFilterOptionsFor(['true', 'drop']);
+    expect(options.find((o) => o.value === 'true')?.label).toContain('구필터');
+    // 새 상태 옵션은 그대로 유지
+    expect(options.find((o) => o.value === 'drop')?.label).toBe('이탈');
+  });
+});
 
 describe('placeholderFor', () => {
   it('returns id range hint for system.resid', () => {

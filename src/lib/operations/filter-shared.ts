@@ -35,6 +35,26 @@ export const WEB_FILTER_VALUES: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * 현재 걸린 값 기준 web 필터 선택지 — 레거시 값('true'/'false', 구 URL·캠페인
+ * 스냅샷 재발송 경유)이 있으면 실제 서버 의미 그대로 라벨링해 함께 노출한다.
+ * 레거시를 새 옵션('미응답' 등)으로 위장 표시하면 화면과 실제 대상 집합이
+ * 어긋난다 — 'false' 는 미완료 전체(진행중·이탈 포함)라 '미응답'보다 넓다.
+ * 검색바(value-widget)와 헤더 필터(header-filter-popover)가 공유.
+ */
+export function webFilterOptionsFor(
+  current: Iterable<string>,
+): Array<{ value: string; label: string }> {
+  const cur = new Set(current);
+  return [
+    ...(cur.has('true') ? [{ value: 'true', label: '응답 완료 · 구필터' }] : []),
+    ...(cur.has('false')
+      ? [{ value: 'false', label: '미완료 · 구필터 — 진행중·이탈 포함' }]
+      : []),
+    ...WEB_FILTER_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+  ];
+}
+
+/**
  * 헤더 필터(hv 파라미터)에서 in 모드 값 목록을 조인하는 구분자.
  * unit separator — 엑셀 셀 텍스트에 등장할 가능성이 사실상 없는 제어 문자.
  * 클라이언트(드롭다운 직렬화)와 서버(parseHeaderFiltersFromUrl)가 공유한다.

@@ -22,7 +22,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import type { ContactResultCode } from '@/db/schema/schema-types';
 import type { PiiFieldType } from '@/lib/crypto/pii-fields';
 import { useSearchParamsMutator } from '@/hooks/use-search-params-mutator';
-import { FILTER_SOURCE, WEB_FILTER_OPTIONS, placeholderFor } from '@/lib/operations/filter-shared';
+import { FILTER_SOURCE, placeholderFor, webFilterOptionsFor } from '@/lib/operations/filter-shared';
 import {
   hasBuilderFilterParams,
   joinHeaderValues,
@@ -104,7 +104,8 @@ export function HeaderFilterPopover({
     kind === 'result'
       ? resultCodeOptions.map((rc) => ({ value: rc.code, optionLabel: rc.label }))
       : kind === 'web'
-        ? WEB_FILTER_OPTIONS.map((o) => ({ value: o.value, optionLabel: o.label }))
+        ? // 레거시 값 노출 규칙은 webFilterOptionsFor 주석 참조.
+          webFilterOptionsFor(selected).map((o) => ({ value: o.value, optionLabel: o.label }))
         : (data?.values ?? []).map((v) => ({ value: v, optionLabel: v }));
 
   const handleOpenChange = (next: boolean) => {
