@@ -64,6 +64,33 @@ export function canAccessSurvey(userId: string, surveyId: string): boolean {
 /** 게스트가 무권한 설문 URL 을 눌렀을 때 보내는 강제 로그아웃 라우트. */
 export const GUEST_FORCE_LOGOUT_PATH = '/admin/logout';
 
+/** 설문 콘솔(operations/preview) 경로에서 설문 id 캡처. */
+const SURVEY_CONSOLE_PATH = /^\/admin\/surveys\/([^/]+)\/(?:operations|preview)(?:\/|$)/;
+
+/**
+ * 경로가 grant 밖 다른 설문의 콘솔(operations/preview)인지 판정.
+ * 로그인 시 "이 계정 담당 설문이 아님" 안내의 근거 — 특정 설문을 향한
+ * 접근일 때만 true 고, /admin 등 설문 의도가 없는 경로는 false.
+ */
+export function isForeignSurveyConsolePath(
+  pathname: string,
+  grantedSurveyIds: readonly string[],
+): boolean {
+  const surveyId = SURVEY_CONSOLE_PATH.exec(pathname)?.[1];
+  return surveyId !== undefined && !grantedSurveyIds.includes(surveyId);
+}
+
+/**
+ * open redirect 방지 — 같은 출처 내부 절대경로만 통과, 그 외 null.
+ * ('//', '/\\' 는 protocol-relative 외부 URL 우회 차단)
+ */
+export function sanitizeInternalPath(raw: string | null | undefined): string | null {
+  if (!raw || !raw.startsWith('/') || raw.startsWith('//') || raw.startsWith('/\\')) {
+    return null;
+  }
+  return raw;
+}
+
 /**
  * 미들웨어용 게스트 경로 판정 (순수 함수).
  * 허용 경로면 null, 차단이면 리다이렉트 목적지 pathname 반환.

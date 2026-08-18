@@ -20,7 +20,7 @@ beforeEach(() => {
 });
 
 describe('GET /admin/logout (게스트 강제 로그아웃)', () => {
-  const req = () => new Request('https://example.com/admin/logout');
+  const req = (search = '') => new Request(`https://example.com/admin/logout${search}`);
 
   it('게스트는 현재 브라우저만 로그아웃(local scope)하고 로그인으로 보낸다', async () => {
     vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:survey-a');
@@ -30,6 +30,57 @@ describe('GET /admin/logout (게스트 강제 로그아웃)', () => {
 
     expect(signOut).toHaveBeenCalledWith({ scope: 'local' });
     expect(res.headers.get('location')).toBe('https://example.com/admin/login');
+  });
+
+  it('redirect 파라미터를 로그인창까지 전달한다 - 재로그인 시 무권한 안내 근거', async () => {
+    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:survey-a');
+    getUser.mockResolvedValue({ data: { user: { id: 'guest-1' } } });
+
+    const res = await GET(req('?redirect=%2Fadmin%2Fsurveys%2Fother%2Foperations%2Foverview'));
+
+    expect(res.headers.get('location')).toBe(
+      'https://example.com/admin/login?redirect=%2Fadmin%2Fsurveys%2Fother%2Foperations%2Foverview',
+    );
+  });
+
+  it('내비게이션이 아닌 요청(prefetch 등)은 signOut 없이 로그인으로만 보낸다', async () => {
+    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:survey-a');
+    getUser.mockResolvedValue({ data: { user: { id: 'guest-1' } } });
+
+    const res = await GET(
+      new Request('https://example.com/admin/logout?redirect=%2Fadmin%2Fsurveys', {
+        headers: { 'sec-fetch-mode': 'cors' },
+      }),
+    );
+
+    expect(signOut).not.toHaveBeenCalled();
+    expect(res.headers.get('location')).toBe(
+      'https://example.com/admin/login?redirect=%2Fadmin%2Fsurveys',
+    );
+  });
+
+  it('sec-fetch-mode: navigate 는 정상 로그아웃한다', async () => {
+    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:survey-a');
+    getUser.mockResolvedValue({ data: { user: { id: 'guest-1' } } });
+
+    const res = await GET(
+      new Request('https://example.com/admin/logout', {
+        headers: { 'sec-fetch-mode': 'navigate' },
+      }),
+    );
+
+    expect(signOut).toHaveBeenCalledWith({ scope: 'local' });
+    expect(res.headers.get('location')).toBe('https://example.com/admin/login');
+  });
+
+  it('내부 절대경로가 아닌 redirect 는 버린다 - open redirect 차단', async () => {
+    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:survey-a');
+    getUser.mockResolvedValue({ data: { user: { id: 'guest-1' } } });
+
+    for (const bad of ['https://evil.example', '//evil.example', '/\\evil.example']) {
+      const res = await GET(req(`?redirect=${encodeURIComponent(bad)}`));
+      expect(res.headers.get('location')).toBe('https://example.com/admin/login');
+    }
   });
 
   it('게스트가 아닌 인증 사용자는 로그아웃 없이 콘솔로 돌려보낸다 - 로그아웃 CSRF 차단', async () => {
