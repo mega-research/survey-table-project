@@ -22,7 +22,9 @@ export function applyExportRowExclusions(
   surveyId: string,
   questions: QuestionVariant[],
 ): QuestionVariant[] {
-  const surveyExclusions = EXPORT_ROW_EXCLUSIONS[surveyId];
+  // URL 경로에서 온 surveyId 는 대문자 UUID 표기여도 DB 조회는 통과하므로,
+  // 목록 키(소문자 정규형)와 어긋나 제외가 조용히 비켜가지 않도록 정규화한다.
+  const surveyExclusions = EXPORT_ROW_EXCLUSIONS[surveyId.toLowerCase()];
   if (!surveyExclusions) return questions;
 
   return questions.map((question) => {

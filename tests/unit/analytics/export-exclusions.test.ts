@@ -54,6 +54,19 @@ describe('applyExportRowExclusions', () => {
     expect(rowCodes).toEqual(['r10', 'r17', 'r16']);
   });
 
+  it('대문자 UUID로 요청해도 동일하게 제외한다', () => {
+    // Postgres UUID 조회는 대소문자 무관하므로, URL에 대문자 UUID를 넣으면 설문은
+    // 조회되면서 제외 목록만 비켜가는 우회가 가능했다 — 정규화로 차단 (Codex 리뷰)
+    const question = makeTableQuestion('Q3_2', [makeRow('r10'), makeRow('r11')]);
+
+    const [result] = applyExportRowExclusions(TARGET_SURVEY_ID.toUpperCase(), [question]);
+
+    const rowCodes = (result as { tableRowsData?: TableRow[] }).tableRowsData?.map(
+      (r) => r.rowCode,
+    );
+    expect(rowCodes).toEqual(['r10']);
+  });
+
   it('대상 설문이라도 제외 목록에 없는 questionCode는 손대지 않는다', () => {
     // Q3_1(모바일)은 같은 rowCode r11~r15 를 갖지만 제외 대상이 아님
     const question = makeTableQuestion('Q3_1', [makeRow('r10'), makeRow('r11'), makeRow('r15')]);
