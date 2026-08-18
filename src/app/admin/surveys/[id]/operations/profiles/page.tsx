@@ -32,6 +32,7 @@ import {
   PROFILES_EXTRA_CANDIDATES,
 } from '@/lib/operations/profiles-filters.server';
 import type { FilterClause } from '@/lib/operations/contacts-filters.server';
+import { FILTER_SOURCE } from '@/lib/operations/filter-shared';
 import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
 import { isGuestViewer } from '@/lib/auth/guest-viewer';
 
@@ -83,7 +84,10 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
   const displayColumns = visibleProfileColumns(
     hydrateProfileColumns(contactScheme, profileScheme),
   );
+  // 전체(system.all) 는 컨택 유무와 무관하게 상시 노출 — 컨택 없는 설문에서도
+  // 브라우저 부분일치 전개(파서 훅)로 유효하다.
   const columnCandidates = [
+    { source: FILTER_SOURCE.ALL, label: '전체' },
     ...PROFILES_EXTRA_CANDIDATES,
     ...buildColumnCandidates(contactScheme).filter(
       (c) =>
@@ -183,8 +187,11 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
         <CardContent className="px-5 py-4">
           <div className="mb-4">
             <ProfilesFilterBar
-              initialSource={args.col}
-              initialValue={args.q}
+              initialClauses={builderClauses.map((c) => ({
+                op: c.op,
+                source: c.condition.source,
+                value: c.condition.value,
+              }))}
               initialStatus={args.status}
               columnCandidates={columnCandidates}
             />

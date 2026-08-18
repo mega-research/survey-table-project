@@ -8,12 +8,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import type { ContactResultCode } from '@/db/schema/schema-types';
-import { FILTER_SOURCE, type ColumnCandidate } from '@/lib/operations/filter-shared';
+import { type ColumnCandidate } from '@/lib/operations/filter-shared';
 
 import { PiiExactMarker } from '@/components/operations/filter-pii-marker';
 
-import { ValueWidget } from './value-widget';
+import type { RenderValueWidget } from './filter-bar-core';
 
 export interface ClauseRowValue {
   /** 안정 key — 행 제거·재추가 시 React 가 다른 행과 state 를 혼동하지 않도록 id 부여. */
@@ -26,7 +25,9 @@ export interface ClauseRowValue {
 interface Props {
   clause: ClauseRowValue;
   columnCandidates: ColumnCandidate[];
-  resultCodeOptions: ContactResultCode[];
+  renderValueWidget: RenderValueWidget;
+  /** source 변경 시 초기 value (예: 조사 대상 web 은 'completed'). 기본 ''. */
+  defaultValueForSource: (source: string) => string;
   onChange: (next: ClauseRowValue) => void;
   onRemove: () => void;
   index: number;
@@ -35,7 +36,8 @@ interface Props {
 export function ClauseRow({
   clause,
   columnCandidates,
-  resultCodeOptions,
+  renderValueWidget,
+  defaultValueForSource,
   onChange,
   onRemove,
   index,
@@ -61,9 +63,8 @@ export function ClauseRow({
       <Select
         value={clause.source}
         onValueChange={(s) =>
-          // system.web 은 상태 dropdown 의 기본값 'completed' 로 초기화 (빈 value 면
-          // silent drop 함정). 레거시 'true' 는 구 URL 복원 전용.
-          onChange({ ...clause, source: s, value: s === FILTER_SOURCE.WEB ? 'completed' : '' })
+          // source 변경 시 이전 mode 의 value 는 의미 없음 — 페이지별 기본값으로 초기화.
+          onChange({ ...clause, source: s, value: defaultValueForSource(s) })
         }
       >
         <SelectTrigger className="h-10 w-[180px]">
@@ -78,12 +79,11 @@ export function ClauseRow({
           ))}
         </SelectContent>
       </Select>
-      <ValueWidget
-        source={clause.source}
-        value={clause.value}
-        onChange={(v) => onChange({ ...clause, value: v })}
-        resultCodeOptions={resultCodeOptions}
-      />
+      {renderValueWidget({
+        source: clause.source,
+        value: clause.value,
+        onChange: (v) => onChange({ ...clause, value: v }),
+      })}
       <Button type="button" variant="ghost" size="sm" onClick={onRemove}>
         ×
       </Button>
