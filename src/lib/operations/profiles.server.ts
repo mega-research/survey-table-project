@@ -171,7 +171,11 @@ export async function listResponsesForProfiles(
 
   // deleted view 는 base subquery 가 이미 deletedAt IS NOT NULL 로 걸러냄.
   // status 필터는 active view 일 때만 적용 (deleted view 는 전체 노출).
-  if (view === 'active' && status !== 'all') {
+  // 절에 status 깔때기가 있으면 상단 status 조건은 무시 — 두 상태 축이 동시에
+  // 걸리면 모순 AND(예: completed AND IN drop)로 0건이 된다. UI 는 깔때기 적용
+  // 시 status 파라미터를 지우지만, URL 직접 조작·구 링크까지 여기서 방어한다.
+  const hasStatusClause = clauses.some((c) => c.condition.source === 'status');
+  if (view === 'active' && status !== 'all' && !hasStatusClause) {
     whereParts.push(eq(numbered.status, status));
   }
 

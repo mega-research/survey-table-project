@@ -379,7 +379,14 @@ export function ProfilesTable({ rows, total, page, pageSize, sort, dir, stepLoca
                           source={m.filterSource}
                           label={String(header.column.columnDef.header ?? '')}
                           {...(m.filterSource === 'status'
-                            ? { fixedOptions: STATUS_FUNNEL_OPTIONS }
+                            ? {
+                                fixedOptions: STATUS_FUNNEL_OPTIONS,
+                                // 상단 상태 select 와 모순 AND 방지 — 깔때기 적용이 이긴다.
+                                // 단 status=deleted 는 삭제 뷰 선택이므로 보존.
+                                onApplyParams: (p: URLSearchParams) => {
+                                  if (p.get('status') !== 'deleted') p.delete('status');
+                                },
+                              }
                             : {})}
                         />
                       )}

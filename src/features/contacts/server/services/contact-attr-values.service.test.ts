@@ -126,10 +126,34 @@ describe('listContactAttrValues', () => {
 
   it('hidden 컬럼 → ForbiddenAttrColumnError (URL 직접 조작 가드)', async () => {
     selectResults.push([{ scheme: visibleScheme }]);
+    // 응답 내역 스킴 조회 — 미저장(null)이면 attrs 는 hidden 시작이라 허용 축이 안 된다.
+    selectResults.push([]);
 
     await expect(
       listContactAttrValues({ surveyId: 'sv-1', attrsKey: '숨김컬럼', scope: 'real' }),
     ).rejects.toBeInstanceOf(ForbiddenAttrColumnError);
+  });
+
+  it('조사 대상에선 hidden 이어도 응답 내역 표시 스킴에 보이면 허용', async () => {
+    // 회귀: 응답 내역 컬럼 설정은 조사 대상과 독립 — 조사 대상에서 숨기고
+    // 응답 내역에서만 표시한 컬럼의 깔때기 distinct 조회가 403 나면 안 된다.
+    selectResults.push([{ scheme: visibleScheme }]);
+    selectResults.push([
+      {
+        scheme: {
+          version: 1,
+          columns: [{ key: 'attrs.숨김컬럼', label: '숨김컬럼', order: 1 }],
+        },
+      },
+    ]);
+    selectResults.push([{ v: 'A' }, { v: 'B' }]);
+
+    const result = await listContactAttrValues({
+      surveyId: 'sv-1',
+      attrsKey: '숨김컬럼',
+      scope: 'real',
+    });
+    expect(result.values).toEqual(['A', 'B']);
   });
 
   it('스킴 자체가 없으면 ForbiddenAttrColumnError', async () => {

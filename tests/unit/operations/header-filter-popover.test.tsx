@@ -96,6 +96,29 @@ describe('HeaderFilterPopover', () => {
     expect(p.getAll('hv')).toEqual(['drop']);
   });
 
+  it('onApplyParams — 적용 시 페이지 전용 파라미터 정리 (응답 내역 상태 select 모순 방지)', async () => {
+    // status=completed 상태에서 상태 깔때기로 이탈을 걸면 상단 select 파라미터를
+    // 지워야 completed AND IN drop 모순 0건이 안 난다. deleted(삭제 뷰)는 보존.
+    currentParams = new URLSearchParams('status=completed');
+    const user = userEvent.setup();
+    renderPopover({
+      source: 'status',
+      label: '상태',
+      fixedOptions: [{ value: 'drop', label: '이탈' }],
+      onApplyParams: (p) => {
+        if (p.get('status') !== 'deleted') p.delete('status');
+      },
+    });
+
+    await user.click(screen.getByRole('button', { name: '상태 필터' }));
+    await user.click(screen.getByLabelText('이탈'));
+    await user.click(screen.getByRole('button', { name: '적용' }));
+
+    const p = pushedParams();
+    expect(p.getAll('hcol')).toEqual(['status']);
+    expect(p.get('status')).toBeNull();
+  });
+
   it('attrs 고카디널리티(truncated) — 부분검색 입력으로 폴백, 적용 시 hm=text', async () => {
     listMock.mockResolvedValue({ values: [], truncated: true });
     const user = userEvent.setup();

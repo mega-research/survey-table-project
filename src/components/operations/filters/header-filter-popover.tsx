@@ -47,6 +47,11 @@ interface Props {
    * 지정하면 source 형태와 무관하게 in 모드 체크박스로 동작한다.
    */
   fixedOptions?: Array<{ value: string; label: string }>;
+  /**
+   * 적용 시 URL 파라미터 추가 조작 (예: 응답 내역 status 깔때기 적용 시 상단
+   * 상태 select 의 'status' 제거 — 남겨두면 모순 AND 로 0건이 된다).
+   */
+  onApplyParams?: (p: URLSearchParams) => void;
 }
 
 type Kind = 'attrs' | 'pii' | 'result' | 'web' | 'fixed';
@@ -78,6 +83,7 @@ export function HeaderFilterPopover({
   label,
   resultCodeOptions = [],
   fixedOptions,
+  onApplyParams,
 }: Props) {
   const kind = kindOf(source, fixedOptions != null && fixedOptions.length > 0);
   const searchParams = useSearchParams();
@@ -156,8 +162,12 @@ export function HeaderFilterPopover({
 
   const commit = (entry: HeaderFilterEntry | null) => {
     pushParams((p) => {
-      if (entry) upsertHeaderFilter(p, entry);
-      else removeHeaderFilter(p, source);
+      if (entry) {
+        upsertHeaderFilter(p, entry);
+        onApplyParams?.(p);
+      } else {
+        removeHeaderFilter(p, source);
+      }
     });
     setConfirmEntry(null);
     setOpen(false);
