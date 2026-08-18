@@ -2,7 +2,11 @@ import { type NextRequest, NextResponse } from 'next/server';
 
 import { createServerClient } from '@supabase/ssr';
 
-import { getGuestSurveyIds, guestPathRedirect } from '@/lib/auth/guest-grants';
+import {
+  GUEST_FORCE_LOGOUT_PATH,
+  getGuestSurveyIds,
+  guestPathRedirect,
+} from '@/lib/auth/guest-grants';
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -65,6 +69,11 @@ export async function updateSession(request: NextRequest) {
           const url = request.nextUrl.clone();
           url.pathname = dest;
           url.search = '';
+          // 강제 로그아웃엔 원래 목적지를 실어 로그인창까지 전달 — 다른 계정으로
+          // 재로그인 시 그 설문으로 복귀시키거나 무권한 안내를 띄우는 근거.
+          if (dest === GUEST_FORCE_LOGOUT_PATH) {
+            url.searchParams.set('redirect', request.nextUrl.pathname + request.nextUrl.search);
+          }
           return redirectWithSessionCookies(url, supabaseResponse);
         }
       } else if (isLoginPage) {
