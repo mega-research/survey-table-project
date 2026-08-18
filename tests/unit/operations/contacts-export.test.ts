@@ -104,6 +104,7 @@ function makeRow(overrides: Partial<ContactExportRowData> = {}): ContactExportRo
     latestAttemptNo: null,
     latestMailStatus: null,
     progressPct: null,
+    responseStatus: null,
     inviteCode: 'abc123',
     ...overrides,
   };
@@ -138,9 +139,20 @@ describe('formatExportCell', () => {
     expect(formatExportCell('system.email_count', makeRow(), base)).toBe('');
   });
 
-  it('진행율은 NN% 형태이고 0도 표기, 없으면 빈 문자열', () => {
-    expect(formatExportCell('system.web', makeRow({ progressPct: 45 }), base)).toBe('45%');
-    expect(formatExportCell('system.web', makeRow({ progressPct: 0 }), base)).toBe('0%');
+  it('web 은 목록 표와 같은 상태 어휘 — 완료는 라벨만, 미완료는 진행율 부속, 응답없음은 빈 문자열', () => {
+    expect(
+      formatExportCell('system.web', makeRow({ responseStatus: 'completed', progressPct: 100 }), base),
+    ).toBe('완료');
+    expect(
+      formatExportCell('system.web', makeRow({ responseStatus: 'in_progress', progressPct: 45 }), base),
+    ).toBe('진행중 45%');
+    expect(
+      formatExportCell('system.web', makeRow({ responseStatus: 'drop', progressPct: 0 }), base),
+    ).toBe('이탈 0%');
+    // 첫 답변 전이라 진행율이 아직 없는 미완료 행은 라벨만
+    expect(
+      formatExportCell('system.web', makeRow({ responseStatus: 'drop' }), base),
+    ).toBe('이탈');
     expect(formatExportCell('system.web', makeRow(), base)).toBe('');
   });
 

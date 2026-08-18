@@ -246,12 +246,13 @@ export interface ContactExportSourceRow {
   latestResultCode: string | null;
   latestAttemptNo: number | null;
   progressPct: number | null;
+  responseStatus: string | null;
   latestMailStatus: MailRecipientStatus | null;
 }
 
 /**
  * 조사 대상 엑셀 다운로드용 전체 조회 — listContactsForSurvey 와 동일한
- * 최신 회차/진행율/메일 상태 표현식 재사용, 페이지네이션 없이 resid 오름차순.
+ * 최신 회차/응답 상태/진행율/메일 상태 표현식 재사용, 페이지네이션 없이 resid 오름차순.
  * 상한 초과 감지를 위해 MAX_CONTACT_EXPORT_ROWS + 1 건까지 읽는다.
  */
 export async function listContactsForExport(
@@ -267,6 +268,7 @@ export async function listContactsForExport(
       latestResultCode: latestResultCodeExpr.as('latest_result_code'),
       latestAttemptNo: latestAttemptNoExpr.as('latest_attempt_no'),
       progressPct: progressPctExpr.as('progress_pct'),
+      responseStatus: responseStatusExpr.as('response_status'),
       latestMailStatus: latestMailStatusExpr.as('latest_mail_status'),
     })
     .from(contactTargets)
