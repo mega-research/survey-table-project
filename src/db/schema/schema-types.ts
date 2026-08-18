@@ -345,6 +345,26 @@ export interface ProgressColumnDef {
   hidden?: boolean;
 }
 
+/** surveys.profile_columns — 응답 내역(profiles) 표시 컬럼 픽커. NULL = 기본 스킴(기존 9컬럼). */
+export interface ProfileColumnScheme {
+  version: number;
+  columns: ProfileColumnDef[];
+}
+
+export interface ProfileColumnDef {
+  /**
+   * 컬럼 식별자.
+   * - `sys.<id>`: 시스템 컬럼 (idx/resid/group/platform/browser/status/startedAt/completedAt/totalSeconds/ipHash)
+   * - `attrs.<key>`: 컨택 attrs 값
+   * - `pii.<key>`: 컨택 PII (목록 렌더 시 복호화 표시)
+   */
+  key: string;
+  /** 표 헤더 라벨 (사용자 편집 가능). 컨택리스트 라벨과 별도. */
+  label: string;
+  order: number;
+  hidden?: boolean;
+}
+
 /** 컨택 업로드 모드. replace=전체 교체(기존 동작), merge=키 일치 갱신, append=신규 추가 */
 export type ContactUploadMode = 'replace' | 'merge' | 'append';
 

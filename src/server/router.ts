@@ -29,6 +29,7 @@ import { unsubscribe } from '@/features/mail/server/procedures/unsubscribe';
 import { fileCleanup } from '@/features/media/server/procedures/file-cleanup';
 import { media } from '@/features/media/server/procedures/media';
 import { control } from '@/features/operations/server/procedures/control';
+import { profileColumns } from '@/features/operations/server/procedures/profile-columns';
 import { progress } from '@/features/operations/server/procedures/progress';
 import { quota } from '@/features/quota/server/procedures/quota';
 import { duplicate } from '@/features/survey-response/server/procedures/duplicate';
@@ -90,6 +91,7 @@ export const router = {
   },
   operations: {
     progress,
+    profileColumns,
     control,
   },
   quota,

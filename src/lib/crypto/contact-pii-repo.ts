@@ -85,6 +85,47 @@ export async function getMaskHintsForTargets(
   return result;
 }
 
+/**
+ * 여러 contact 의 지정 columnKey PII 만 일괄 복호화 — 응답 내역 목록 표시용.
+ * 페이지 단위 targetIds 로만 호출할 것 (복호화 비용). 복호화 실패 항목은 결과에서 제외
+ * (목록은 '—' 폴백 — 상세 페이지의 failed readonly 처리와 달리 편집 경로가 아니므로 안전).
+ * 반환: targetId → columnKey → 평문
+ */
+export async function decryptPiiForTargets(
+  targetIds: readonly string[],
+  columnKeys: readonly string[],
+): Promise<Map<string, Record<string, string>>> {
+  const result = new Map<string, Record<string, string>>();
+  if (targetIds.length === 0 || columnKeys.length === 0) return result;
+
+  const rows = await db
+    .select({
+      contactTargetId: contactPii.contactTargetId,
+      columnKey: contactPii.columnKey,
+      cipher: contactPii.cipher,
+    })
+    .from(contactPii)
+    .where(
+      and(
+        inArray(contactPii.contactTargetId, [...targetIds]),
+        inArray(contactPii.columnKey, [...columnKeys]),
+      ),
+    );
+
+  for (const r of rows) {
+    let plain: string;
+    try {
+      plain = decryptPii(r.cipher);
+    } catch {
+      continue;
+    }
+    const existing = result.get(r.contactTargetId) ?? {};
+    existing[r.columnKey] = plain;
+    result.set(r.contactTargetId, existing);
+  }
+  return result;
+}
+
 export interface DecryptedPii {
   fieldType: PiiFieldType;
   /** 복호화 성공 시 평문, 실패 시 빈 문자열 (UI 가 failed 플래그를 보고 처리해야 함). */

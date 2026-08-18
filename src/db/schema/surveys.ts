@@ -11,6 +11,7 @@ import type {
   GroupNameDesign,
   HeaderCell,
   PageVisit,
+  ProfileColumnScheme,
   ProgressColumnScheme,
   QuestionConditionGroup,
   QuestionData,
@@ -65,6 +66,9 @@ export const surveys = pgTable('surveys', {
 
   // 진척률 표 표시 컬럼 픽커 (NULL = 4개 고정 컬럼만, slice 4 — 0017 마이그레이션)
   progressColumns: jsonb('progress_columns').$type<ProgressColumnScheme>(),
+
+  // 응답 내역 표시 컬럼 픽커 (NULL = 기본 스킴, 0074 마이그레이션)
+  profileColumns: jsonb('profile_columns').$type<ProfileColumnScheme>(),
 
   // 쿼터 플랜 (NULL = 쿼터 없음, 스냅샷 밖 라이브 편집 — 0045 마이그레이션)
   quotaConfig: jsonb('quota_config').$type<QuotaConfig>(),
