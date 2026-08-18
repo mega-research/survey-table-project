@@ -170,7 +170,8 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
   const hasFilter = clauses.length > 0 || hasActiveFilters({ status: args.status });
 
   return (
-    <main className="mx-auto max-w-7xl px-6 py-8">
+    // 응답 내역은 컬럼 설정으로 열이 늘 수 있어 다른 운영 탭(max-w-7xl)보다 넓게 쓴다
+    <main className="mx-auto max-w-[1440px] px-6 py-8">
       <div className="mb-4 flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold text-gray-900">
