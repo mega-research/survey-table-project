@@ -24,6 +24,14 @@ export async function GET(request: Request) {
   const loginUrl = new URL('/admin/login', request.url);
   if (redirectParam) loginUrl.searchParams.set('redirect', redirectParam);
 
+  // 실제 사용자 내비게이션이 아닌 요청(링크 prefetch, 백그라운드 fetch)은 상태
+  // 변경 없이 돌려보낸다 — 미들웨어의 로그아웃 리다이렉트를 prefetch 가 따라와
+  // 세션을 몰래 지우는 사고 방지 (헤더 없는 구형 브라우저는 내비게이션 취급).
+  const secFetchMode = request.headers.get('sec-fetch-mode');
+  if (secFetchMode !== null && secFetchMode !== 'navigate') {
+    return NextResponse.redirect(loginUrl);
+  }
+
   const supabase = await createClient();
   const {
     data: { user },

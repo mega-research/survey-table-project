@@ -72,6 +72,12 @@ export async function updateSession(request: NextRequest) {
           // 강제 로그아웃엔 원래 목적지를 실어 로그인창까지 전달 — 다른 계정으로
           // 재로그인 시 그 설문으로 복귀시키거나 무권한 안내를 띄우는 근거.
           if (dest === GUEST_FORCE_LOGOUT_PATH) {
+            // 링크 prefetch 는 로그아웃 라우트로 보내지 않는다 — prefetch 가
+            // 리다이렉트를 따라가 세션을 지우는 사고 방지. 로그인으로 직행.
+            const isPrefetch =
+              request.headers.get('next-router-prefetch') !== null ||
+              request.headers.get('purpose') === 'prefetch';
+            if (isPrefetch) url.pathname = '/admin/login';
             url.searchParams.set('redirect', request.nextUrl.pathname + request.nextUrl.search);
           }
           return redirectWithSessionCookies(url, supabaseResponse);
