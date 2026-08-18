@@ -1,21 +1,21 @@
 import 'server-only';
 
-import {
-  parseConditionFromUrl,
-  type ColumnCandidate,
-  type FilterCondition,
-} from './progress-filters.server';
-import { parseIdListInput, type NumRange } from './range-list';
+import { sql, type SQL } from 'drizzle-orm';
 
-/**
- * 응답 내역 필터 조건. 진척률 FilterCondition(resid/attrs/pii) + 응답 자체 컬럼 2종.
- *  - idx: survey_responses row_number (응답 순번). 범위/리스트 매치.
- *  - browser: survey_responses.browser. ilike 부분일치.
- */
-export type ProfilesCondition =
-  | { source: 'idx'; mode: 'idx'; ranges: NumRange[] }
-  | { source: 'browser'; mode: 'text'; value: string }
-  | FilterCondition;
+import type { ContactResultCode } from '@/db/schema/schema-types';
+import {
+  parseClausesFromUrl,
+  parseHeaderFiltersFromUrl,
+  splitHeaderValues,
+  type FilterClause,
+  type FilterCondition as ClauseFilterCondition,
+  type ParseExtraHooks,
+} from './contacts-filters.server';
+import { buildContactsFilterSql, type ClauseColumnRefs } from './contacts-filter-sql';
+import { escapeLikePattern } from './filter-shared';
+import { STATUS_FILTERS } from './profiles';
+import { type ColumnCandidate } from './progress-filters.server';
+import { parseIdListInput } from './range-list';
 
 /** 응답 전용 추가 컬럼 후보 — 명단 후보 앞에 노출. */
 export const PROFILES_EXTRA_CANDIDATES: ColumnCandidate[] = [
@@ -23,29 +23,126 @@ export const PROFILES_EXTRA_CANDIDATES: ColumnCandidate[] = [
   { source: 'browser', label: '브라우저' },
 ];
 
-/**
- * col/q → ProfilesCondition. idx/browser 는 응답 전용 분기, 그 외는 진척률 파서 위임.
+/* ============================================================================
+ * 다중 조건 필터 (조사 대상 절 파이프라인 재사용)
  *
- * idx 비숫자/빈 입력은 ranges=[] 으로 반환한다. SQL 변환에서 FALSE 가 되어
- * 0건 — "순번으로 검색했으나 숫자가 아님 → 결과 없음" 의미를 명시적으로 표현(전체 노출 방지).
- */
-export function parseProfilesCondition(
-  col: string | null,
-  q: string | null,
+ * 검색바(col/q/op)·헤더 깔때기(hcol/hm/hv) URL 어휘와 절 결합 규칙(AND/OR,
+ * 괄호 그룹화)은 contacts-filters.server / contacts-filter-sql 을 그대로 쓰고,
+ * 응답 내역 전용 source(idx/browser/status)만 훅으로 끼운다.
+ * ==========================================================================*/
+
+/** 응답 내역엔 결과코드 컬럼이 없다 — 공용 파서의 resultCodes 자리 채움용. */
+const NO_RESULT_CODES: ContactResultCode[] = [];
+
+/** 헤더 status 깔때기에 허용되는 값 — 'all' 제외한 실제 상태 어휘. */
+const PROFILES_STATUS_VALUES: ReadonlySet<string> = new Set(
+  STATUS_FILTERS.filter((s) => s !== 'all'),
+);
+
+const profilesParseHooks: ParseExtraHooks = {
+  clause: (col, trimmed) => {
+    if (col === 'idx') {
+      // 비숫자 입력은 ranges=[] → SQL FALSE (0건) — 전체 노출 방지 의미 유지.
+      return {
+        source: 'idx',
+        mode: 'idlist',
+        value: trimmed,
+        ranges: parseIdListInput(trimmed) ?? [],
+      };
+    }
+    if (col === 'browser') return { source: 'browser', mode: 'text', value: trimmed };
+    return null;
+  },
+  // 전체(system.all) 검색은 attrs/pii 전개(공용)에 브라우저 부분일치를 덧붙인다.
+  allSubConditions: (trimmed) => [{ source: 'browser', mode: 'text', value: trimmed }],
+  header: (col, mode, hv) => {
+    if (col === 'status') {
+      if (mode !== 'in') return null;
+      const values = splitHeaderValues(hv).filter((v) => PROFILES_STATUS_VALUES.has(v));
+      if (values.length === 0) return null;
+      return { source: 'status', mode: 'in', value: '', values };
+    }
+    if (col === 'idx' || col === 'browser') {
+      if (mode !== 'text') return null;
+      const trimmed = hv.trim();
+      if (trimmed.length === 0) return null;
+      return col === 'idx'
+        ? {
+            source: 'idx',
+            mode: 'idlist',
+            value: trimmed,
+            ranges: parseIdListInput(trimmed) ?? [],
+          }
+        : { source: 'browser', mode: 'text', value: trimmed };
+    }
+    return null;
+  },
+};
+
+export function parseProfilesClausesFromUrl(
+  cols: string[] | string | undefined,
+  qs: string[] | string | undefined,
+  ops: string[] | string | undefined,
   candidates: ColumnCandidate[],
-): ProfilesCondition | null {
-  if (!col) return null;
-  const trimmed = (q ?? '').trim();
+): FilterClause[] {
+  return parseClausesFromUrl(cols, qs, ops, candidates, NO_RESULT_CODES, profilesParseHooks);
+}
 
-  if (col === 'idx') {
-    return { source: 'idx', mode: 'idx', ranges: parseIdListInput(trimmed) ?? [] };
+export function parseProfilesHeaderFiltersFromUrl(
+  hcols: string[] | string | undefined,
+  hms: string[] | string | undefined,
+  hvs: string[] | string | undefined,
+  candidates: ColumnCandidate[],
+): FilterClause[] {
+  return parseHeaderFiltersFromUrl(hcols, hms, hvs, candidates, NO_RESULT_CODES, profilesParseHooks);
+}
+
+/** 절 SQL 이 참조할 numbered subquery 컬럼 — listResponsesForProfiles 가 주입. */
+export interface ProfilesClauseCols {
+  idx: SQL;
+  browser: SQL;
+  status: SQL;
+  contactResid: SQL;
+  contactAttrs: SQL;
+  contactTargetId: SQL;
+}
+
+function profilesExtraCondSql(cond: ClauseFilterCondition, cols: ProfilesClauseCols): SQL | null {
+  if (cond.source === 'idx' && cond.mode === 'idlist') {
+    if (!cond.ranges || cond.ranges.length === 0) return sql`FALSE`;
+    const conds = cond.ranges.map((r) =>
+      r.from === r.to
+        ? sql`${cols.idx} = ${r.from}`
+        : sql`${cols.idx} BETWEEN ${r.from} AND ${r.to}`,
+    );
+    return sql`(${sql.join(conds, sql` OR `)})`;
   }
-
-  if (trimmed.length === 0) return null;
-
-  if (col === 'browser') {
-    return { source: 'browser', mode: 'text', value: trimmed };
+  if (cond.source === 'browser' && cond.mode === 'text') {
+    const escaped = escapeLikePattern(cond.value);
+    return sql`${cols.browser} ILIKE '%' || ${escaped} || '%'`;
   }
+  if (cond.source === 'status' && cond.mode === 'in') {
+    const values = cond.values ?? [];
+    if (values.length === 0) return sql`FALSE`;
+    const inList = sql.join(
+      values.map((v) => sql`${v}`),
+      sql`, `,
+    );
+    return sql`${cols.status} IN (${inList})`;
+  }
+  return null;
+}
 
-  return parseConditionFromUrl(col, q, candidates);
+/** 절 배열 → WHERE SQL. 빈 배열은 TRUE (공용 결합 규칙 그대로). */
+export function buildProfilesFilterSql(
+  clauses: FilterClause[],
+  cols: ProfilesClauseCols,
+): SQL {
+  const refs: ClauseColumnRefs = {
+    resid: cols.contactResid,
+    attrs: cols.contactAttrs,
+    contactId: cols.contactTargetId,
+    extra: (cond) => profilesExtraCondSql(cond, cols),
+  };
+  return buildContactsFilterSql(clauses, refs);
 }

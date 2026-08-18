@@ -6,15 +6,14 @@ import { db } from '@/db';
 import { surveyResponses, contactTargets } from '@/db/schema';
 import { deletedResponse, notDeletedResponse } from '@/data/response-filters';
 
-import { escapeLikePattern } from './filter-shared';
 import type { Platform } from './parse-ua';
 import {
   type NormalizedListArgs,
   type SortDir,
   type SortKey,
 } from './profiles';
-import { buildFilterSql } from './progress-filters.server';
-import type { ProfilesCondition } from './profiles-filters.server';
+import type { FilterClause } from './contacts-filters.server';
+import { buildProfilesFilterSql } from './profiles-filters.server';
 import { buildNegativeCodeExists, getResultCodeStatuses } from './result-code-statuses.server';
 import {
   responseScopeCondition,
@@ -26,7 +25,8 @@ export type ListProfilesArgs = Omit<NormalizedListArgs, 'q' | 'col'> & {
   surveyId: string;
   scope: OperationsDataScope;
   pageSize: number;
-  condition: ProfilesCondition | null;
+  /** 다중 조건 필터 (검색바 + 헤더 깔때기, 조사 대상과 동일 절 파이프라인) */
+  clauses: FilterClause[];
 };
 
 export interface ProfilesRow {
@@ -71,50 +71,6 @@ function orderExpr(col: AnyColumn | SQL, direction: SortDir): SQL {
     : sql`${col} DESC NULLS LAST`;
 }
 
-/** condition WHERE 절에 참조할 numbered subquery 컬럼들 (정확한 alias 타입 대신 SQL 조각으로 주입). */
-interface ProfilesConditionCols {
-  idx: SQL;
-  browser: SQL;
-  contactResid: SQL;
-  contactAttrs: SQL;
-  contactTargetId: SQL;
-}
-
-/**
- * ProfilesCondition → outer WHERE SQL. null 이면 null (필터 없음).
- *
- * - idx: 범위/리스트 매치 (row_number 기준)
- * - browser: ilike 부분일치
- * - resid / attrs / pii: buildFilterSql 위임 (numbered subquery alias 를 cols 로 주입)
- */
-function profilesConditionToSql(
-  condition: ProfilesCondition | null,
-  cols: ProfilesConditionCols,
-): SQL | null {
-  if (!condition) return null;
-
-  if (condition.source === 'idx') {
-    if (condition.ranges.length === 0) return sql`FALSE`;
-    const conds = condition.ranges.map((r) =>
-      r.from === r.to
-        ? sql`${cols.idx} = ${r.from}`
-        : sql`${cols.idx} BETWEEN ${r.from} AND ${r.to}`,
-    );
-    return sql`(${sql.join(conds, sql` OR `)})`;
-  }
-
-  if (condition.source === 'browser') {
-    const escaped = escapeLikePattern(condition.value);
-    return sql`${cols.browser} ILIKE '%' || ${escaped} || '%'`;
-  }
-
-  return buildFilterSql(condition, {
-    resid: cols.contactResid,
-    attrs: cols.contactAttrs,
-    contactId: cols.contactTargetId,
-  });
-}
-
 /**
  * 응답 내역 페이지의 메인 어댑터.
  *
@@ -132,7 +88,7 @@ function profilesConditionToSql(
 export async function listResponsesForProfiles(
   args: ListProfilesArgs,
 ): Promise<ListProfilesResult> {
-  const { surveyId, scope, page, pageSize, status, sort, dir, view, condition } = args;
+  const { surveyId, scope, page, pageSize, status, sort, dir, view, clauses } = args;
 
   // negative result codes — base subquery WHERE 의 NOT EXISTS 분기에 사용.
   // 빈 배열이면 unsubscribed_at 만 검사 (negative code 분기는 SQL 차원에서 생략).
@@ -217,14 +173,20 @@ export async function listResponsesForProfiles(
     whereParts.push(eq(numbered.status, status));
   }
 
-  const conditionSql = profilesConditionToSql(condition, {
-    idx: sql`${numbered.idx}`,
-    browser: sql`${numbered.browser}`,
-    contactResid: sql`${numbered.contactResid}`,
-    contactAttrs: sql`${numbered.contactAttrs}`,
-    contactTargetId: sql`${numbered.contactTargetId}`,
-  });
-  if (conditionSql) whereParts.push(conditionSql);
+  // 다중 조건 필터 — 검색바 + 헤더 깔때기 절을 조사 대상과 같은 결합 규칙으로 평가.
+  // 빈 배열이면 TRUE 라 whereParts 오염 없음(스킵).
+  if (clauses.length > 0) {
+    whereParts.push(
+      buildProfilesFilterSql(clauses, {
+        idx: sql`${numbered.idx}`,
+        browser: sql`${numbered.browser}`,
+        status: sql`${numbered.status}`,
+        contactResid: sql`${numbered.contactResid}`,
+        contactAttrs: sql`${numbered.contactAttrs}`,
+        contactTargetId: sql`${numbered.contactTargetId}`,
+      }),
+    );
+  }
 
   const whereClause = whereParts.length > 0 ? and(...whereParts) : undefined;
 

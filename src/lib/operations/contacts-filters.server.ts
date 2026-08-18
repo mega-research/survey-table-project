@@ -52,12 +52,26 @@ function toArray(v: string[] | string | undefined): string[] {
   return Array.isArray(v) ? v : [v];
 }
 
+/**
+ * 페이지 전용 source 확장 훅 — 응답 내역(idx/browser/status)처럼 컨택 밖 컬럼을
+ * 같은 절 파이프라인에 태우기 위한 이음새. SQL 쪽 짝은 ClauseColumnRefs.extra.
+ */
+export interface ParseExtraHooks {
+  /** 검색바 절 — condition 반환 시 그 절로 확정, null 이면 공용 분기 진행. */
+  clause?: (col: string, trimmed: string) => FilterCondition | null;
+  /** 전체(system.all) 전개에 덧붙일 페이지 전용 하위 조건. */
+  allSubConditions?: (trimmed: string) => FilterCondition[];
+  /** 헤더 필터 절 — condition 반환 시 그 절로 확정, null 이면 공용 분기 진행. */
+  header?: (col: string, mode: HeaderFilterMode, hv: string) => FilterCondition | null;
+}
+
 export function parseClausesFromUrl(
   cols: string[] | string | undefined,
   qs: string[] | string | undefined,
   ops: string[] | string | undefined,
   candidates: ColumnCandidate[],
   resultCodes: ContactResultCode[],
+  extra?: ParseExtraHooks,
 ): FilterClause[] {
   const colsArr = toArray(cols);
   const qsArr = toArray(qs);
@@ -69,7 +83,7 @@ export function parseClausesFromUrl(
     const col = colsArr[i];
     const q = qsArr[i];
     if (col === undefined || q === undefined) continue;
-    const clause = buildClause(col, q, opsArr[i] ?? '', candidates, resultCodes);
+    const clause = buildClause(col, q, opsArr[i] ?? '', candidates, resultCodes, extra);
     if (!clause) continue;
     // 출력 첫 절은 항상 op=null (URL 첫 절이 drop 되어도 invariant 보장).
     clauses.push({
@@ -97,6 +111,7 @@ export function parseHeaderFiltersFromUrl(
   hvs: string[] | string | undefined,
   candidates: ColumnCandidate[],
   resultCodes: ContactResultCode[],
+  extra?: ParseExtraHooks,
 ): FilterClause[] {
   const colsArr = toArray(hcols);
   const modesArr = toArray(hms);
@@ -112,7 +127,10 @@ export function parseHeaderFiltersFromUrl(
     const hv = valuesArr[i];
     if (col === undefined || modeRaw === undefined || hv === undefined) continue;
     if (!(HEADER_FILTER_MODES as readonly string[]).includes(modeRaw)) continue;
-    const condition = buildHeaderCondition(col, modeRaw as HeaderFilterMode, hv, candidates, resultCodes);
+    const mode = modeRaw as HeaderFilterMode;
+    const condition =
+      extra?.header?.(col, mode, hv) ??
+      buildHeaderCondition(col, mode, hv, candidates, resultCodes);
     if (!condition) continue;
     bySource.set(col, condition);
   }
@@ -197,7 +215,7 @@ function attrsTextOrIdlistCondition(col: string, trimmed: string): FilterConditi
  * 엑셀 적재가 셀 값을 trim 하지 않으므로 "서울 " 같은 값이 DB 에 실존한다 —
  * distinct 가 보여준 원형을 trim 하면 IN 비교가 0건이 되는 왕복 불일치가 생긴다.
  */
-function splitHeaderValues(hv: string): string[] {
+export function splitHeaderValues(hv: string): string[] {
   return hv.split(HEADER_FILTER_VALUE_SEPARATOR).filter((v) => v.trim().length > 0);
 }
 
@@ -207,11 +225,15 @@ function buildClause(
   opRaw: string,
   candidates: ColumnCandidate[],
   resultCodes: ContactResultCode[],
+  extra?: ParseExtraHooks,
 ): FilterClause | null {
   const trimmed = q.trim();
   if (trimmed.length === 0) return null;
   // op 는 AND/OR 만 결정 — 출력 첫 절 null 강제는 호출자가 담당 (통과 절 순서 기준).
   const op: CombineOp = opRaw === 'OR' ? 'OR' : 'AND';
+
+  const extraCondition = extra?.clause?.(col, trimmed) ?? null;
+  if (extraCondition) return { op, condition: extraCondition };
 
   // 전체 컬럼 검색 — candidates 화이트리스트 안의 attrs/pii 로만 전개하므로
   // whitelist 조회 없이 자체 처리 (전개 자체가 화이트리스트 검증).
@@ -245,6 +267,7 @@ function buildClause(
         }
       }
     }
+    subConditions.push(...(extra?.allSubConditions?.(trimmed) ?? []));
     if (subConditions.length === 0) return null;
     return {
       op,

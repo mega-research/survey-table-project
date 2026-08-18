@@ -22,21 +22,55 @@ export const latestResultCodeExpr = sql<string | null>`(
 )`;
 
 /**
+ * 절 SQL 이 참조하는 컬럼 주입 — 조사 대상은 `contact_targets` 실컬럼(기본값),
+ * 응답 내역은 numbered subquery 의 컨택 LEFT JOIN 컬럼을 넘긴다. attrs/pii/resid
+ * 절 로직을 페이지별로 복제하지 않기 위한 이음새.
+ */
+export interface ClauseColumnRefs {
+  /** 시스템ID 정수 컬럼 */
+  resid: SQL;
+  /** 컨택 attrs JSONB 컬럼 */
+  attrs: SQL;
+  /** contact_pii 상관용 컨택 id */
+  contactId: SQL;
+  /**
+   * 페이지 전용 source 의 절 빌더 (예: 응답 내역의 idx/browser/status).
+   * SQL 을 반환하면 그 절로 확정, null 이면 공용 분기로 계속 진행한다.
+   */
+  extra?: (cond: FilterCondition) => SQL | null;
+}
+
+const CONTACT_TARGET_REFS: ClauseColumnRefs = {
+  resid: sql`"contact_targets".resid`,
+  attrs: sql`"contact_targets".attrs`,
+  // contact_pii 도 id 컬럼이 있어 unquoted id 는 pp.id 로 해석된다 — 반드시 큰따옴표 사용.
+  contactId: sql`"contact_targets"."id"`,
+};
+
+/**
  * 단일 절 SQL. cond.source 와 mode 별로 분기.
  *
  * SECURITY: cond.source 는 호출자에서 contactColumns 화이트리스트 검증 끝난 값만
  * 전달된다고 가정. value/from/to/blindIndex/key 모두 parameter binding 으로 안전.
  *
  * pii.* 평문 미노출 (사전 계산된 blindIndex 만 SQL 에 진입).
+ * system.contact_result / system.web 은 contact_targets 전용 상관 서브쿼리라
+ * refs 주입과 무관하게 조사 대상 절에서만 유효하다 (응답 내역 파서는 미생성).
  */
-export function buildClauseSql(cond: FilterCondition): SQL {
+export function buildClauseSql(
+  cond: FilterCondition,
+  refs: ClauseColumnRefs = CONTACT_TARGET_REFS,
+): SQL {
+  const extraSql = refs.extra?.(cond) ?? null;
+  if (extraSql) return extraSql;
+
   if (cond.source === FILTER_SOURCE.RESID) {
     if (cond.mode === 'idlist') {
       if (!cond.ranges || cond.ranges.length === 0) return sql`FALSE`;
       const conds = cond.ranges.map((r) =>
         r.from === r.to
-          ? sql`"contact_targets".resid = ${r.from}`
-          : sql`"contact_targets".resid BETWEEN ${r.from} AND ${r.to}`,
+          ? sql`${refs.resid} = ${r.from}`
+          : sql`${refs.resid} BETWEEN ${r.from} AND ${r.to}`,
       );
       // 자체 괄호 — 외부 AND 결합 (eq(surveyId) 또는 다중 절) 시 PG AND>OR 우선순위로
       // 인한 cross-survey 누락/누출 방지.
@@ -46,12 +80,12 @@ export function buildClauseSql(cond: FilterCondition): SQL {
   }
 
   if (cond.mode === 'in') {
-    return buildInClauseSql(cond);
+    return buildInClauseSql(cond, refs);
   }
 
   if (cond.mode === 'any') {
     // 전체 컬럼 검색 — 하위 조건 OR 전개. 자체 괄호로 외부 AND 결합에 안전.
-    const subs = (cond.subConditions ?? []).map(buildClauseSql);
+    const subs = (cond.subConditions ?? []).map((c) => buildClauseSql(c, refs));
     if (subs.length === 0) return sql`FALSE`;
     return sql`(${sql.join(subs, sql` OR `)})`;
   }
@@ -70,7 +104,7 @@ export function buildClauseSql(cond: FilterCondition): SQL {
     const key = cond.source.slice(FILTER_SOURCE.ATTRS_PREFIX.length);
     // 숫자 가드는 반드시 CASE — `regex AND cast` 는 planner 가 AND 평가 순서를
     // 보장하지 않아 비숫자 값에서 cast 에러가 날 수 있다.
-    const numExpr = sql`(CASE WHEN "contact_targets".attrs->>${key} ~ '^[0-9]+$' THEN ("contact_targets".attrs->>${key})::numeric END)`;
+    const numExpr = sql`(CASE WHEN ${refs.attrs}->>${key} ~ '^[0-9]+$' THEN (${refs.attrs}->>${key})::numeric END)`;
     const conds = cond.ranges.map((r) =>
       r.from === r.to
         ? sql`${numExpr} = ${r.from}`
@@ -82,16 +116,15 @@ export function buildClauseSql(cond: FilterCondition): SQL {
   if (cond.source.startsWith(FILTER_SOURCE.ATTRS_PREFIX) && cond.mode === 'text') {
     const key = cond.source.slice(FILTER_SOURCE.ATTRS_PREFIX.length);
     const escaped = escapeLikePattern(cond.value);
-    return sql`"contact_targets".attrs->>${key} ILIKE '%' || ${escaped} || '%'`;
+    return sql`${refs.attrs}->>${key} ILIKE '%' || ${escaped} || '%'`;
   }
 
   if (cond.source.startsWith(FILTER_SOURCE.PII_PREFIX) && cond.mode === 'exact') {
     if (!cond.blindIndex) return sql`FALSE`;
     const columnKey = cond.source.slice(FILTER_SOURCE.PII_PREFIX.length);
-    // contact_pii 도 id 컬럼이 있어 unquoted id 는 pp.id 로 해석된다 — 반드시 큰따옴표 사용.
     return sql`EXISTS (
       SELECT 1 FROM contact_pii pp
-      WHERE pp.contact_target_id = "contact_targets"."id"
+      WHERE pp.contact_target_id = ${refs.contactId}
         AND pp.column_key = ${columnKey}
         AND pp.blind_index = ${cond.blindIndex}
     )`;
@@ -162,7 +195,7 @@ export function attrsNaturalSortExprs(attrsKey: string): [SQL, SQL] {
  * 값은 전부 parameter binding — `ANY(${arr})` 는 length=1 silent unwrap 함정이
  * 있어 sql.join 으로 IN (...) 을 직접 조립한다.
  */
-function buildInClauseSql(cond: FilterCondition): SQL {
+function buildInClauseSql(cond: FilterCondition, refs: ClauseColumnRefs): SQL {
   const values = cond.values ?? [];
   if (values.length === 0) return sql`FALSE`;
 
@@ -183,7 +216,7 @@ function buildInClauseSql(cond: FilterCondition): SQL {
 
   if (cond.source.startsWith(FILTER_SOURCE.ATTRS_PREFIX)) {
     const key = cond.source.slice(FILTER_SOURCE.ATTRS_PREFIX.length);
-    return sql`"contact_targets".attrs->>${key} IN (${inList})`;
+    return sql`${refs.attrs}->>${key} IN (${inList})`;
   }
 
   // pii.* 등 in 미지원 source — distinct 열거 자체가 불가하므로 절 성립 불가.
@@ -201,16 +234,19 @@ function buildInClauseSql(cond: FilterCondition): SQL {
  *
  * 빈 배열 → TRUE (전체 조회).
  */
-export function buildContactsFilterSql(clauses: FilterClause[]): SQL {
+export function buildContactsFilterSql(
+  clauses: FilterClause[],
+  refs: ClauseColumnRefs = CONTACT_TARGET_REFS,
+): SQL {
   if (clauses.length === 0) return sql`TRUE`;
   const first = clauses[0];
   if (!first) return sql`TRUE`;
   // 첫 절도 괄호로 감싸 buildClauseSql 의 결과가 내부 OR 체인이어도 외부 AND 와 안전하게 결합.
-  let expr: SQL = sql`(${buildClauseSql(first.condition)})`;
+  let expr: SQL = sql`(${buildClauseSql(first.condition, refs)})`;
   for (let i = 1; i < clauses.length; i++) {
     const clause = clauses[i];
     if (!clause) continue;
-    const next = buildClauseSql(clause.condition);
+    const next = buildClauseSql(clause.condition, refs);
     const op = clause.op === 'OR' ? sql.raw('OR') : sql.raw('AND');
     // 누적 결합마다 (...) 로 그룹화 — PG AND>OR 우선순위가 좌→우 평가를 뒤엎지 못하게 한다.
     expr = sql`(${expr} ${op} (${next}))`;
