@@ -18,8 +18,13 @@ import { eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { db } from '@/db';
-import { contactTargets as contactTargetsTable, surveys as surveysTable } from '@/db/schema';
+import {
+  contactTargets as contactTargetsTable,
+  surveyResponses as surveyResponsesTable,
+  surveys as surveysTable,
+} from '@/db/schema';
 import type { ContactColumnScheme } from '@/db/schema/schema-types';
+import { listContactsForSurvey } from '@/lib/operations/contacts.server';
 import type { ORPCContext } from '@/server/context';
 
 import { columns } from '@/features/contacts/server/procedures/columns';
@@ -67,6 +72,7 @@ describe.skipIf(!isLocalDb)('contacts.targets/columns procedure round-trip (real
   afterAll(async () => {
     // survey 삭제 시 contact_targets는 FK cascade로 함께 정리되지만 명시적으로도 비운다.
     for (const id of createdSurveyIds) {
+      await db.delete(surveyResponsesTable).where(eq(surveyResponsesTable.surveyId, id));
       await db.delete(contactTargetsTable).where(eq(contactTargetsTable.surveyId, id));
       await db.delete(surveysTable).where(eq(surveysTable.id, id));
     }
@@ -133,6 +139,57 @@ describe.skipIf(!isLocalDb)('contacts.targets/columns procedure round-trip (real
     const second = await client.targets.add({ surveyId: survey.id, attrs: { name: 'B' } });
     expect(first.resid).toBe(1);
     expect(second.resid).toBe(2);
+  });
+
+  it('web 상태: 진행중·이탈 응답은 response_id 확정 전에도 responseStatus/progressPct로 잡힌다', async () => {
+    // 회귀 배경: contact_targets.response_id 는 completeResponse(완료 시점)에만 채워진다.
+    // 매칭 서브쿼리가 response_id 만 보면 진행중/이탈 응답이 web 컬럼에서 영영 미응답 처리된다.
+    const [survey] = await db
+      .insert(surveysTable)
+      .values({ title: '컨택-web-상태-테스트' })
+      .returning({ id: surveysTable.id });
+    if (!survey) throw new Error('survey 삽입 실패');
+    createdSurveyIds.push(survey.id);
+
+    const inProgress = await client.targets.add({ surveyId: survey.id, attrs: { name: '진행중' } });
+    const dropped = await client.targets.add({ surveyId: survey.id, attrs: { name: '이탈' } });
+
+    // 응답 시작 시점의 실제 상태 재현: survey_responses.contact_target_id 만 연결,
+    // contact_targets.response_id 는 NULL 그대로.
+    await db.insert(surveyResponsesTable).values([
+      {
+        surveyId: survey.id,
+        questionResponses: {},
+        sessionId: `web-status-inprogress-${inProgress.id}`,
+        status: 'in_progress',
+        contactTargetId: inProgress.id,
+        progressPct: 40,
+      },
+      {
+        surveyId: survey.id,
+        questionResponses: {},
+        sessionId: `web-status-drop-${dropped.id}`,
+        status: 'drop',
+        contactTargetId: dropped.id,
+        progressPct: 70,
+      },
+    ]);
+
+    const result = await listContactsForSurvey({
+      surveyId: survey.id,
+      scope: 'real',
+      clauses: [],
+      page: 1,
+      pageSize: 20,
+      sort: 'resid',
+      dir: 'asc',
+    });
+    const rowInProgress = result.rows.find((r) => r.id === inProgress.id);
+    const rowDropped = result.rows.find((r) => r.id === dropped.id);
+    expect(rowInProgress?.responseStatus).toBe('in_progress');
+    expect(rowInProgress?.progressPct).toBe(40);
+    expect(rowDropped?.responseStatus).toBe('drop');
+    expect(rowDropped?.progressPct).toBe(70);
   });
 
   it('columns.update: resid hidden 스킴도 저장되고, 정상 스킴은 surveys.contactColumns에 저장된다', async () => {

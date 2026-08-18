@@ -93,6 +93,7 @@ async function handleContactsExport(
       latestAttemptNo: r.latestAttemptNo,
       latestMailStatus: r.latestMailStatus,
       progressPct: r.progressPct,
+      responseStatus: r.responseStatus,
       inviteCode: r.inviteCode,
     }));
 

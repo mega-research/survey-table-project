@@ -61,6 +61,7 @@ beforeEach(() => {
       latestResultCode: null,
       latestAttemptNo: null,
       progressPct: null,
+      responseStatus: null,
       latestMailStatus: null,
     },
   ]);
@@ -100,6 +101,7 @@ describe('GET /api/surveys/[surveyId]/contacts/export', () => {
         latestResultCode: null,
         latestAttemptNo: null,
         progressPct: null,
+        responseStatus: null,
         latestMailStatus: null,
       })),
     );

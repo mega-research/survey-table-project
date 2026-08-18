@@ -9,7 +9,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import type { ContactResultCode } from '@/db/schema/schema-types';
-import { FILTER_SOURCE, placeholderFor } from '@/lib/operations/filter-shared';
+import {
+  FILTER_SOURCE,
+  MAIL_FILTER_OPTIONS,
+  placeholderFor,
+  webFilterOptionsFor,
+} from '@/lib/operations/filter-shared';
 
 interface Props {
   source: string;
@@ -43,15 +48,37 @@ export function ValueWidget({ source, value, onChange, resultCodeOptions, inputI
     );
   }
 
-  if (source === FILTER_SOURCE.WEB) {
+  if (source === FILTER_SOURCE.EMAIL) {
     return (
-      <Select value={value || 'true'} onValueChange={onChange}>
+      <Select value={value || 'delivered'} onValueChange={onChange}>
         <SelectTrigger id={inputId} className="w-[260px] h-10">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="true">응답 완료</SelectItem>
-          <SelectItem value="false">미응답</SelectItem>
+          {MAIL_FILTER_OPTIONS.map((o) => (
+            <SelectItem key={o.value} value={o.value}>
+              {o.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    );
+  }
+
+  if (source === FILTER_SOURCE.WEB) {
+    // 레거시 값 노출 규칙은 webFilterOptionsFor 주석 참조. 사용자가 새 옵션을
+    // 고르는 순간부터 레거시 항목은 목록에서 사라진다.
+    return (
+      <Select value={value || 'completed'} onValueChange={onChange}>
+        <SelectTrigger id={inputId} className="w-[260px] h-10">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {webFilterOptionsFor(value ? [value] : []).map((o) => (
+            <SelectItem key={o.value} value={o.value}>
+              {o.label}
+            </SelectItem>
+          ))}
         </SelectContent>
       </Select>
     );

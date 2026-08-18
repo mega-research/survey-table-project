@@ -6,8 +6,56 @@ import {
   placeholderFor,
   type ColumnCandidate,
 } from '@/lib/operations/contacts-filters.server';
-import { HEADER_FILTER_VALUE_SEPARATOR as SEP } from '@/lib/operations/filter-shared';
+import {
+  HEADER_FILTER_VALUE_SEPARATOR as SEP,
+  MAIL_FILTER_OPTIONS,
+  WEB_FILTER_OPTIONS,
+  webFilterOptionsFor,
+} from '@/lib/operations/filter-shared';
+import { STATUS_LABEL } from '@/components/operations/mail-campaign/recipient-status-badge';
 import type { ContactResultCode } from '@/db/schema/schema-types';
+
+describe('webFilterOptionsFor — web 필터 선택지 + 레거시 값 노출', () => {
+  it('평상시에는 상태 4옵션만 — 레거시 항목 미노출', () => {
+    expect(webFilterOptionsFor([])).toEqual(
+      WEB_FILTER_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+    );
+    expect(webFilterOptionsFor(['completed'])).toEqual(
+      WEB_FILTER_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+    );
+  });
+
+  it("레거시 'false' 는 실제 서버 의미(미완료 전체) 라벨로 노출 — '미응답' 위장 금지", () => {
+    // 구 URL·캠페인 스냅샷 재발송으로 'false' 가 걸린 상태에서 '미응답'으로
+    // 위장 표시하면, 화면을 믿은 운영자가 진행중·이탈 포함 대상에게 발송하게 된다.
+    const options = webFilterOptionsFor(['false']);
+    const legacy = options.find((o) => o.value === 'false');
+    expect(legacy?.label).toContain('구필터');
+    expect(legacy?.label).toContain('진행중·이탈 포함');
+    expect(legacy?.label).not.toBe('미응답');
+  });
+
+  it("레거시 'true' 는 응답 완료 구필터 라벨로 노출", () => {
+    const options = webFilterOptionsFor(['true', 'drop']);
+    expect(options.find((o) => o.value === 'true')?.label).toContain('구필터');
+    // 새 상태 옵션은 그대로 유지
+    expect(options.find((o) => o.value === 'drop')?.label).toBe('이탈');
+  });
+});
+
+describe('MAIL_FILTER_OPTIONS — 메일 필터 어휘', () => {
+  it('라벨이 badge(STATUS_LABEL)와 동기화돼 있다 — 복제 어긋남 방지', () => {
+    for (const o of MAIL_FILTER_OPTIONS) {
+      if (o.value === 'none') continue;
+      expect(STATUS_LABEL[o.value as keyof typeof STATUS_LABEL]?.label).toBe(o.label);
+    }
+  });
+
+  it('모든 수신 상태를 빠짐없이 포함한다 (+ none)', () => {
+    const values = MAIL_FILTER_OPTIONS.map((o) => o.value);
+    expect(new Set(values)).toEqual(new Set([...Object.keys(STATUS_LABEL), 'none']));
+  });
+});
 
 describe('placeholderFor', () => {
   it('returns id range hint for system.resid', () => {
@@ -34,6 +82,7 @@ const candidates: ColumnCandidate[] = [
   { source: 'system.resid', label: '번호' },
   { source: 'system.contact_result', label: '결과코드' },
   { source: 'system.web', label: '응답' },
+  { source: 'system.email_count', label: '메일' },
   { source: 'attrs.전시회명', label: '전시회명' },
   { source: 'attrs.지역', label: '지역' },
   // 숨긴 컬럼 — 명시 선택으로는 검색 가능하지만 전체(system.all) 전개에선 제외.
@@ -116,6 +165,23 @@ describe('parseClausesFromUrl - source 분기', () => {
     const f0 = f[0];
     if (!f0) throw new Error('expected f[0]');
     expect(f0.condition).toEqual({ source: 'system.web', mode: 'boolean', value: 'false' });
+  });
+
+  it('system.web + 상태 값(drop 등) → boolean 조건으로 수용', () => {
+    const d = parseClausesFromUrl(['system.web'], ['drop'], [''], candidates, resultCodes);
+    expect(d[0]?.condition).toEqual({ source: 'system.web', mode: 'boolean', value: 'drop' });
+  });
+
+  it('system.email_count + 상태 값 → boolean 조건, 어휘 외 값은 drop', () => {
+    const d = parseClausesFromUrl(['system.email_count'], ['bounced'], [''], candidates, resultCodes);
+    expect(d[0]?.condition).toEqual({
+      source: 'system.email_count',
+      mode: 'boolean',
+      value: 'bounced',
+    });
+    expect(
+      parseClausesFromUrl(['system.email_count'], ['yes'], [''], candidates, resultCodes),
+    ).toEqual([]);
   });
 
   it('system.web + 외 값 → drop', () => {
@@ -507,16 +573,19 @@ describe('parseHeaderFiltersFromUrl', () => {
     ).toEqual([]);
   });
 
-  it('system.web in — true/false 외 값 필터링', () => {
+  it('system.web in — 어휘 외 값 필터링, 상태 값과 레거시 true/false 는 수용', () => {
     const result = parseHeaderFiltersFromUrl(
       ['system.web'],
       ['in'],
-      [`true${SEP}maybe`],
+      [`true${SEP}drop${SEP}maybe`],
       candidates,
       resultCodes,
     );
     expect(result).toEqual([
-      { op: null, condition: { source: 'system.web', mode: 'in', value: '', values: ['true'] } },
+      {
+        op: null,
+        condition: { source: 'system.web', mode: 'in', value: '', values: ['true', 'drop'] },
+      },
     ]);
   });
 

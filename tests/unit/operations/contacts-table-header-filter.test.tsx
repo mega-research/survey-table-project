@@ -50,7 +50,7 @@ function renderTable() {
 }
 
 describe('ContactsTable 헤더 필터 트리거', () => {
-  it('web 컬럼 헤더 클릭은 progress(진행률) 정렬로 이동한다', () => {
+  it('web 컬럼 헤더 첫 클릭은 webActivity 정렬 + desc(최근 응답 순)로 이동한다', () => {
     pushMock.mockClear();
     renderTable();
     // web 필터 트리거가 아닌 정렬 버튼 (라벨 텍스트로 시작하는 버튼)
@@ -59,19 +59,22 @@ describe('ContactsTable 헤더 필터 트리거', () => {
       .find((b) => b.textContent === 'web');
     if (!webSortButton) throw new Error('web 정렬 버튼 없음');
     fireEvent.click(webSortButton);
-    // respondedAt 정렬은 미완료 행의 진행률을 정렬하지 못함 → progress 로 매핑되어야 한다.
+    // respondedAt 정렬은 미완료(진행중·이탈) 행을 정렬하지 못함 → 매칭 응답 활동
+    // 시각(webActivity) 매핑. 시간축은 첫 클릭이 최근 순(desc)이 자연스럽다.
     expect(pushMock).toHaveBeenCalled();
     const url = String(pushMock.mock.calls.at(-1)?.[0]);
-    expect(url).toContain('sort=progress');
+    expect(url).toContain('sort=webActivity');
+    expect(url).toContain('dir=desc');
   });
 
-  it('필터 가능 컬럼(attrs/pii/결과코드)에만 필터 버튼을 렌더한다', () => {
+  it('필터 가능 컬럼(attrs/pii/결과코드/메일)에만 필터 버튼을 렌더한다', () => {
     renderTable();
     expect(screen.getByRole('button', { name: '기업유형 필터' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '전화번호 필터' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '컨택결과 필터' })).toBeInTheDocument();
-    // 시스템 placeholder 컬럼과 resid 는 필터 트리거 없음.
-    expect(screen.queryByRole('button', { name: '메일 필터' })).toBeNull();
+    // 메일 컬럼은 최신 수신 상태 고정 옵션 깔때기
+    expect(screen.getByRole('button', { name: '메일 필터' })).toBeInTheDocument();
+    // resid 는 필터 트리거 없음.
     expect(screen.queryByRole('button', { name: '번호 필터' })).toBeNull();
   });
 });
