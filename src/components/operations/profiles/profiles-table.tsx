@@ -27,6 +27,7 @@ import {
 import type { ProfilesRow } from '@/lib/operations/profiles.server';
 
 import { EmptyState } from '../empty-state';
+import { HeaderFilterPopover } from '../filters/header-filter-popover';
 import {
   ALIGN_CLASS,
   SortIndicator,
@@ -44,7 +45,19 @@ interface ColumnMeta {
    * true(기본) = 정형 값(날짜·숫자·상태 등) — 내용 폭 그대로. 모든 셀은 한 줄 고정.
    */
   nowrap?: boolean;
+  /** 있으면 헤더에 깔때기 필터(HeaderFilterPopover)를 단다 — hcol 파라미터의 source. */
+  filterSource?: string;
 }
+
+/** status 헤더 깔때기 고정 옵션 — StatusPill 라벨과 같은 상태 어휘. */
+const STATUS_FUNNEL_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: 'completed', label: '완료' },
+  { value: 'in_progress', label: '진행중' },
+  { value: 'drop', label: '이탈' },
+  { value: 'screened_out', label: '자격 미달' },
+  { value: 'quotaful_out', label: '쿼터마감' },
+  { value: 'bad', label: '불량' },
+];
 
 interface Props {
   rows: ProfilesRow[];
@@ -161,7 +174,7 @@ export function ProfilesTable({ rows, total, page, pageSize, sort, dir, stepLoca
           accessorFn: (r: DisplayRow) => r.attrs?.[attrKey] ?? '—',
           header: c.label,
           // 자유 텍스트 — wrap 허용해 정형 컬럼 대신 남는 폭을 흡수
-          meta: meta('left', false, false),
+          meta: { ...meta('left', false, false), filterSource: c.key },
         };
       }
       if (c.key.startsWith('pii.')) {
@@ -171,7 +184,7 @@ export function ProfilesTable({ rows, total, page, pageSize, sort, dir, stepLoca
           accessorFn: (r: DisplayRow) =>
             (r.contactTargetId && piiByTarget[r.contactTargetId]?.[piiKey]) || '—',
           header: c.label,
-          meta: meta('left', false, false),
+          meta: { ...meta('left', false, false), filterSource: c.key },
         };
       }
       switch (c.key) {
@@ -220,7 +233,7 @@ export function ProfilesTable({ rows, total, page, pageSize, sort, dir, stepLoca
                 )}
               </div>
             ),
-            meta: meta('center', true),
+            meta: { ...meta('center', true), filterSource: 'status' },
           };
         case 'sys.startedAt':
           return {
@@ -343,21 +356,33 @@ export function ProfilesTable({ rows, total, page, pageSize, sort, dir, stepLoca
                       ALIGN_CLASS[align],
                     )}
                   >
-                    {sortable ? (
-                      <button
-                        type="button"
-                        onClick={() => handleSortClick(header.column.id)}
-                        className={cn(
-                          'inline-flex items-center gap-1 select-none rounded hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400',
-                          align === 'right' ? 'flex-row-reverse' : '',
-                        )}
-                      >
-                        {flexRender(header.column.columnDef.header, header.getContext())}
-                        <SortIndicator direction={isActive ? dir : false} />
-                      </button>
-                    ) : (
-                      flexRender(header.column.columnDef.header, header.getContext())
-                    )}
+                    <span className="inline-flex items-center gap-1">
+                      {sortable ? (
+                        <button
+                          type="button"
+                          onClick={() => handleSortClick(header.column.id)}
+                          className={cn(
+                            'inline-flex items-center gap-1 select-none rounded hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400',
+                            align === 'right' ? 'flex-row-reverse' : '',
+                          )}
+                        >
+                          {flexRender(header.column.columnDef.header, header.getContext())}
+                          <SortIndicator direction={isActive ? dir : false} />
+                        </button>
+                      ) : (
+                        flexRender(header.column.columnDef.header, header.getContext())
+                      )}
+                      {m?.filterSource && (
+                        <HeaderFilterPopover
+                          surveyId={surveyId}
+                          source={m.filterSource}
+                          label={String(header.column.columnDef.header ?? '')}
+                          {...(m.filterSource === 'status'
+                            ? { fixedOptions: STATUS_FUNNEL_OPTIONS }
+                            : {})}
+                        />
+                      )}
+                    </span>
                   </th>
                 );
               })}

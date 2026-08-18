@@ -36,16 +36,23 @@ import { client } from '@/shared/lib/rpc';
 
 interface Props {
   surveyId: string;
-  /** attrs.* | pii.* | system.contact_result | system.web */
+  /** attrs.* | pii.* | system.contact_result | system.web | fixedOptions 지정 source */
   source: string;
   label: string;
   piiType?: PiiFieldType;
-  resultCodeOptions: ContactResultCode[];
+  /** system.contact_result 체크박스 옵션 — 조사 대상 전용. */
+  resultCodeOptions?: ContactResultCode[];
+  /**
+   * 페이지 전용 source 의 고정 옵션 체크박스 (예: 응답 내역 status).
+   * 지정하면 source 형태와 무관하게 in 모드 체크박스로 동작한다.
+   */
+  fixedOptions?: Array<{ value: string; label: string }>;
 }
 
-type Kind = 'attrs' | 'pii' | 'result' | 'web';
+type Kind = 'attrs' | 'pii' | 'result' | 'web' | 'fixed';
 
-function kindOf(source: string): Kind | null {
+function kindOf(source: string, hasFixedOptions: boolean): Kind | null {
+  if (hasFixedOptions) return 'fixed';
   if (source.startsWith(FILTER_SOURCE.ATTRS_PREFIX)) return 'attrs';
   if (source.startsWith(FILTER_SOURCE.PII_PREFIX)) return 'pii';
   if (source === FILTER_SOURCE.CONTACT_RESULT) return 'result';
@@ -69,9 +76,10 @@ export function HeaderFilterPopover({
   surveyId,
   source,
   label,
-  resultCodeOptions,
+  resultCodeOptions = [],
+  fixedOptions,
 }: Props) {
-  const kind = kindOf(source);
+  const kind = kindOf(source, fixedOptions != null && fixedOptions.length > 0);
   const searchParams = useSearchParams();
   const pushParams = useSearchParamsMutator();
 
@@ -97,16 +105,21 @@ export function HeaderFilterPopover({
   if (kind == null) return null;
 
   const isCheckboxKind =
-    kind === 'result' || kind === 'web' || (kind === 'attrs' && data != null && !data.truncated);
+    kind === 'result' ||
+    kind === 'web' ||
+    kind === 'fixed' ||
+    (kind === 'attrs' && data != null && !data.truncated);
   const isTextKind = kind === 'pii' || (kind === 'attrs' && data?.truncated === true);
 
   const checkboxOptions: Array<{ value: string; optionLabel: string }> =
-    kind === 'result'
-      ? resultCodeOptions.map((rc) => ({ value: rc.code, optionLabel: rc.label }))
-      : kind === 'web'
-        ? // 레거시 값 노출 규칙은 webFilterOptionsFor 주석 참조.
-          webFilterOptionsFor(selected).map((o) => ({ value: o.value, optionLabel: o.label }))
-        : (data?.values ?? []).map((v) => ({ value: v, optionLabel: v }));
+    kind === 'fixed'
+      ? (fixedOptions ?? []).map((o) => ({ value: o.value, optionLabel: o.label }))
+      : kind === 'result'
+        ? resultCodeOptions.map((rc) => ({ value: rc.code, optionLabel: rc.label }))
+        : kind === 'web'
+          ? // 레거시 값 노출 규칙은 webFilterOptionsFor 주석 참조.
+            webFilterOptionsFor(selected).map((o) => ({ value: o.value, optionLabel: o.label }))
+          : (data?.values ?? []).map((v) => ({ value: v, optionLabel: v }));
 
   const handleOpenChange = (next: boolean) => {
     setOpen(next);

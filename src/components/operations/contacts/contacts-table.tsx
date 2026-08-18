@@ -6,7 +6,7 @@ import {
   RecipientStatusBadge,
   recipientStatusMeta,
 } from '@/components/operations/mail-campaign/recipient-status-badge';
-import { HeaderFilterPopover } from '@/components/operations/contacts/header-filter-popover';
+import { HeaderFilterPopover } from '@/components/operations/filters/header-filter-popover';
 import { StatusPill } from '@/components/operations/profiles/status-pill';
 import { mapStatusPill, type StatusPillResult } from '@/lib/operations/profiles';
 import { SortIndicator, TablePagerFooter } from '@/components/operations/table-primitives';

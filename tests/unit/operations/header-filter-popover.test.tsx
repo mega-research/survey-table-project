@@ -23,7 +23,7 @@ vi.mock('@/shared/lib/rpc', () => ({
 }));
 
 import { client } from '@/shared/lib/rpc';
-import { HeaderFilterPopover } from '@/components/operations/contacts/header-filter-popover';
+import { HeaderFilterPopover } from '@/components/operations/filters/header-filter-popover';
 
 const listMock = vi.mocked(client.contacts.attrValues.list);
 
@@ -71,6 +71,29 @@ describe('HeaderFilterPopover', () => {
     expect(p.getAll('hcol')).toEqual(['attrs.기업유형']);
     expect(p.getAll('hm')).toEqual(['in']);
     expect(p.getAll('hv')).toEqual(['상장']);
+  });
+
+  it('fixedOptions — distinct 조회 없이 고정 옵션 체크박스, 적용 시 hcol/hm/hv 로 push', async () => {
+    // 응답 내역 status 깔때기처럼 페이지 전용 source 를 고정 옵션으로 필터링하는 경로.
+    const user = userEvent.setup();
+    renderPopover({
+      source: 'status',
+      label: '상태',
+      fixedOptions: [
+        { value: 'completed', label: '완료' },
+        { value: 'drop', label: '이탈' },
+      ],
+    });
+
+    await user.click(screen.getByRole('button', { name: '상태 필터' }));
+    await user.click(screen.getByLabelText('이탈'));
+    await user.click(screen.getByRole('button', { name: '적용' }));
+
+    expect(listMock).not.toHaveBeenCalled();
+    const p = pushedParams();
+    expect(p.getAll('hcol')).toEqual(['status']);
+    expect(p.getAll('hm')).toEqual(['in']);
+    expect(p.getAll('hv')).toEqual(['drop']);
   });
 
   it('attrs 고카디널리티(truncated) — 부분검색 입력으로 폴백, 적용 시 hm=text', async () => {
