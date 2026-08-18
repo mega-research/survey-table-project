@@ -6,6 +6,7 @@ import {
   guestPathRedirect,
   guestPostLoginRedirect,
   isAdminOrGuestGrantHolder,
+  isForeignSurveyConsolePath,
   isGuestUser,
   parseGuestGrants,
 } from '@/lib/auth/guest-grants';
@@ -178,5 +179,33 @@ describe('guestPostLoginRedirect', () => {
   it('로그인·로그아웃 라우트가 대상이면 첫 grant 설문 overview 로', () => {
     expect(guestPostLoginRedirect('/admin/login', grants)).toBe(home);
     expect(guestPostLoginRedirect('/admin/logout', grants)).toBe(home);
+  });
+});
+
+describe('isForeignSurveyConsolePath', () => {
+  const grants = ['survey-a', 'survey-b'];
+
+  it('grant 밖 설문의 operations/preview 경로면 true', () => {
+    expect(isForeignSurveyConsolePath('/admin/surveys/other/operations/overview', grants)).toBe(
+      true,
+    );
+    expect(isForeignSurveyConsolePath('/admin/surveys/other/preview', grants)).toBe(true);
+    // prefix 오탐 방지 — granted id 로 시작하는 다른 설문 id
+    expect(isForeignSurveyConsolePath('/admin/surveys/survey-a-suffix/operations', grants)).toBe(
+      true,
+    );
+  });
+
+  it('grant 설문의 콘솔 경로는 false', () => {
+    expect(isForeignSurveyConsolePath('/admin/surveys/survey-a/operations/overview', grants)).toBe(
+      false,
+    );
+    expect(isForeignSurveyConsolePath('/admin/surveys/survey-b/preview', grants)).toBe(false);
+  });
+
+  it('설문 콘솔이 아닌 경로는 false - 특정 설문 의도가 없는 접근', () => {
+    expect(isForeignSurveyConsolePath('/admin', grants)).toBe(false);
+    expect(isForeignSurveyConsolePath('/admin/surveys', grants)).toBe(false);
+    expect(isForeignSurveyConsolePath('/admin/surveys/other/edit', grants)).toBe(false);
   });
 });

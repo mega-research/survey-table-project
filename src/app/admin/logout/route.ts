@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { isGuestUser } from '@/lib/auth/guest-grants';
+import { isGuestUser, sanitizeInternalPath } from '@/lib/auth/guest-grants';
 import { createClient } from '@/lib/supabase/server';
 
 /**
@@ -18,16 +18,22 @@ import { createClient } from '@/lib/supabase/server';
  * refresh token 폐기).
  */
 export async function GET(request: Request) {
+  // 미들웨어가 실어 보낸 원래 목적지를 로그인창까지 전달 — 재로그인 시 그
+  // 설문으로 복귀시키거나 담당 계정이 아니라는 안내를 띄우는 근거가 된다.
+  const redirectParam = sanitizeInternalPath(new URL(request.url).searchParams.get('redirect'));
+  const loginUrl = new URL('/admin/login', request.url);
+  if (redirectParam) loginUrl.searchParams.set('redirect', redirectParam);
+
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) {
-    return NextResponse.redirect(new URL('/admin/login', request.url));
+    return NextResponse.redirect(loginUrl);
   }
   if (!isGuestUser(user.id)) {
     return NextResponse.redirect(new URL('/admin/surveys', request.url));
   }
   await supabase.auth.signOut({ scope: 'local' });
-  return NextResponse.redirect(new URL('/admin/login', request.url));
+  return NextResponse.redirect(loginUrl);
 }
