@@ -236,11 +236,25 @@ export async function listResponsesForProfiles(
   const clampedPage = Math.min(Math.max(1, page), totalPages);
   const offset = (clampedPage - 1) * pageSize;
 
+  // 상태 정렬은 원문 텍스트 알파벳순(bad < completed < drop …)이 아니라 상태 순위 축 —
+  // 오름차순 완료(1) → 진행중(2) → 이탈(3) → 자격미달 → 쿼터마감 → 불량, 내림차순은
+  // 역순(문제 있는 순). 조사 대상 web 컬럼과 같은 어휘(contacts-filter-sql 의 rank CASE).
+  const statusRankExpr = sql`CASE ${numbered.status}
+    WHEN 'completed' THEN 1
+    WHEN 'in_progress' THEN 2
+    WHEN 'drop' THEN 3
+    WHEN 'screened_out' THEN 4
+    WHEN 'quotaful_out' THEN 5
+    WHEN 'bad' THEN 6
+    ELSE 7 END`;
+
   // idx = startedAt asc 기준 접수 순번이므로 방향 그대로 startedAt 에 매핑.
   const orderClause =
     sort === 'idx'
       ? orderExpr(numbered.startedAt, dir)
-      : orderExpr(SORT_COLUMN_MAP[sort], dir);
+      : sort === 'status'
+        ? orderExpr(statusRankExpr, dir)
+        : orderExpr(SORT_COLUMN_MAP[sort], dir);
 
   const dataQuery = db
     .select({
