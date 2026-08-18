@@ -569,7 +569,7 @@ describe('profiles-row-actions', () => {
         sort: 'idx' as const,
         dir: 'desc' as const,
         view: 'active' as const,
-        condition: null,
+        clauses: [],
         scope: 'real' as const,
       };
 
@@ -626,7 +626,7 @@ describe('profiles-row-actions', () => {
         sort: 'idx' as const,
         dir: 'desc' as const,
         view: 'active' as const,
-        condition: null,
+        clauses: [],
         scope: 'real' as const,
       };
 

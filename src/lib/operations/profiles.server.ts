@@ -6,15 +6,16 @@ import { db } from '@/db';
 import { surveyResponses, contactTargets } from '@/db/schema';
 import { deletedResponse, notDeletedResponse } from '@/data/response-filters';
 
-import { escapeLikePattern } from './filter-shared';
 import type { Platform } from './parse-ua';
 import {
   type NormalizedListArgs,
+  type ProfilesSystemSortKey,
   type SortDir,
-  type SortKey,
 } from './profiles';
-import { buildFilterSql } from './progress-filters.server';
-import type { ProfilesCondition } from './profiles-filters.server';
+import { attrsSortKey } from './contacts';
+import type { FilterClause } from './contacts-filters.server';
+import { attrsNaturalSortExprs } from './contacts-filter-sql';
+import { buildProfilesFilterSql } from './profiles-filters.server';
 import { buildNegativeCodeExists, getResultCodeStatuses } from './result-code-statuses.server';
 import {
   responseScopeCondition,
@@ -26,7 +27,8 @@ export type ListProfilesArgs = Omit<NormalizedListArgs, 'q' | 'col'> & {
   surveyId: string;
   scope: OperationsDataScope;
   pageSize: number;
-  condition: ProfilesCondition | null;
+  /** 다중 조건 필터 (검색바 + 헤더 깔때기, 조사 대상과 동일 절 파이프라인) */
+  clauses: FilterClause[];
 };
 
 export interface ProfilesRow {
@@ -71,50 +73,6 @@ function orderExpr(col: AnyColumn | SQL, direction: SortDir): SQL {
     : sql`${col} DESC NULLS LAST`;
 }
 
-/** condition WHERE 절에 참조할 numbered subquery 컬럼들 (정확한 alias 타입 대신 SQL 조각으로 주입). */
-interface ProfilesConditionCols {
-  idx: SQL;
-  browser: SQL;
-  contactResid: SQL;
-  contactAttrs: SQL;
-  contactTargetId: SQL;
-}
-
-/**
- * ProfilesCondition → outer WHERE SQL. null 이면 null (필터 없음).
- *
- * - idx: 범위/리스트 매치 (row_number 기준)
- * - browser: ilike 부분일치
- * - resid / attrs / pii: buildFilterSql 위임 (numbered subquery alias 를 cols 로 주입)
- */
-function profilesConditionToSql(
-  condition: ProfilesCondition | null,
-  cols: ProfilesConditionCols,
-): SQL | null {
-  if (!condition) return null;
-
-  if (condition.source === 'idx') {
-    if (condition.ranges.length === 0) return sql`FALSE`;
-    const conds = condition.ranges.map((r) =>
-      r.from === r.to
-        ? sql`${cols.idx} = ${r.from}`
-        : sql`${cols.idx} BETWEEN ${r.from} AND ${r.to}`,
-    );
-    return sql`(${sql.join(conds, sql` OR `)})`;
-  }
-
-  if (condition.source === 'browser') {
-    const escaped = escapeLikePattern(condition.value);
-    return sql`${cols.browser} ILIKE '%' || ${escaped} || '%'`;
-  }
-
-  return buildFilterSql(condition, {
-    resid: cols.contactResid,
-    attrs: cols.contactAttrs,
-    contactId: cols.contactTargetId,
-  });
-}
-
 /**
  * 응답 내역 페이지의 메인 어댑터.
  *
@@ -132,7 +90,7 @@ function profilesConditionToSql(
 export async function listResponsesForProfiles(
   args: ListProfilesArgs,
 ): Promise<ListProfilesResult> {
-  const { surveyId, scope, page, pageSize, status, sort, dir, view, condition } = args;
+  const { surveyId, scope, page, pageSize, status, sort, dir, view, clauses } = args;
 
   // negative result codes — base subquery WHERE 의 NOT EXISTS 분기에 사용.
   // 빈 배열이면 unsubscribed_at 만 검사 (negative code 분기는 SQL 차원에서 생략).
@@ -207,24 +165,34 @@ export async function listResponsesForProfiles(
     startedAt: numbered.startedAt,
     completedAt: numbered.completedAt,
     totalSeconds: numbered.totalSeconds,
-  } as const satisfies Record<Exclude<SortKey, 'idx'>, AnyColumn>;
+  } as const satisfies Record<Exclude<ProfilesSystemSortKey, 'idx'>, AnyColumn>;
 
   const whereParts: SQL[] = [];
 
   // deleted view 는 base subquery 가 이미 deletedAt IS NOT NULL 로 걸러냄.
   // status 필터는 active view 일 때만 적용 (deleted view 는 전체 노출).
-  if (view === 'active' && status !== 'all') {
+  // 절에 status 깔때기가 있으면 상단 status 조건은 무시 — 두 상태 축이 동시에
+  // 걸리면 모순 AND(예: completed AND IN drop)로 0건이 된다. UI 는 깔때기 적용
+  // 시 status 파라미터를 지우지만, URL 직접 조작·구 링크까지 여기서 방어한다.
+  const hasStatusClause = clauses.some((c) => c.condition.source === 'status');
+  if (view === 'active' && status !== 'all' && !hasStatusClause) {
     whereParts.push(eq(numbered.status, status));
   }
 
-  const conditionSql = profilesConditionToSql(condition, {
-    idx: sql`${numbered.idx}`,
-    browser: sql`${numbered.browser}`,
-    contactResid: sql`${numbered.contactResid}`,
-    contactAttrs: sql`${numbered.contactAttrs}`,
-    contactTargetId: sql`${numbered.contactTargetId}`,
-  });
-  if (conditionSql) whereParts.push(conditionSql);
+  // 다중 조건 필터 — 검색바 + 헤더 깔때기 절을 조사 대상과 같은 결합 규칙으로 평가.
+  // 빈 배열이면 TRUE 라 whereParts 오염 없음(스킵).
+  if (clauses.length > 0) {
+    whereParts.push(
+      buildProfilesFilterSql(clauses, {
+        idx: sql`${numbered.idx}`,
+        browser: sql`${numbered.browser}`,
+        status: sql`${numbered.status}`,
+        contactResid: sql`${numbered.contactResid}`,
+        contactAttrs: sql`${numbered.contactAttrs}`,
+        contactTargetId: sql`${numbered.contactTargetId}`,
+      }),
+    );
+  }
 
   const whereClause = whereParts.length > 0 ? and(...whereParts) : undefined;
 
@@ -236,11 +204,31 @@ export async function listResponsesForProfiles(
   const clampedPage = Math.min(Math.max(1, page), totalPages);
   const offset = (clampedPage - 1) * pageSize;
 
+  // 상태 정렬은 원문 텍스트 알파벳순(bad < completed < drop …)이 아니라 상태 순위 축 —
+  // 오름차순 완료(1) → 진행중(2) → 이탈(3) → 자격미달 → 쿼터마감 → 불량, 내림차순은
+  // 역순(문제 있는 순). 조사 대상 web 컬럼과 같은 어휘(contacts-filter-sql 의 rank CASE).
+  const statusRankExpr = sql`CASE ${numbered.status}
+    WHEN 'completed' THEN 1
+    WHEN 'in_progress' THEN 2
+    WHEN 'drop' THEN 3
+    WHEN 'screened_out' THEN 4
+    WHEN 'quotaful_out' THEN 5
+    WHEN 'bad' THEN 6
+    ELSE 7 END`;
+
   // idx = startedAt asc 기준 접수 순번이므로 방향 그대로 startedAt 에 매핑.
-  const orderClause =
-    sort === 'idx'
-      ? orderExpr(numbered.startedAt, dir)
-      : orderExpr(SORT_COLUMN_MAP[sort], dir);
+  // attrs.<key> 는 조사 대상과 같은 자연 정렬 — 숫자 값(NO 등)은 숫자순, 비숫자는 뒤에 텍스트순.
+  const attrsKey = attrsSortKey(sort);
+  const orderClauses: SQL[] =
+    attrsKey != null
+      ? attrsNaturalSortExprs(attrsKey, sql`${numbered.contactAttrs}`).map((c) =>
+          orderExpr(c, dir),
+        )
+      : sort === 'idx'
+        ? [orderExpr(numbered.startedAt, dir)]
+        : sort === 'status'
+          ? [orderExpr(statusRankExpr, dir)]
+          : [orderExpr(SORT_COLUMN_MAP[sort as keyof typeof SORT_COLUMN_MAP], dir)];
 
   const dataQuery = db
     .select({
@@ -265,7 +253,7 @@ export async function listResponsesForProfiles(
     .from(numbered);
 
   const dataRows = await (whereClause ? dataQuery.where(whereClause) : dataQuery)
-    .orderBy(orderClause, asc(numbered.id))
+    .orderBy(...orderClauses, asc(numbered.id))
     .limit(pageSize)
     .offset(offset);
 

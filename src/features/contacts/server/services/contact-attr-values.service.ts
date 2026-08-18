@@ -10,6 +10,8 @@ import {
   type OperationsDataScope,
 } from '@/lib/operations/data-scope.server';
 import { FILTER_SOURCE } from '@/lib/operations/filter-shared';
+import { hydrateProfileColumns } from '@/lib/operations/profile-columns';
+import { getProfileColumnScheme } from '@/lib/operations/profile-columns.server';
 
 /**
  * 헤더 필터 드롭다운의 체크박스 표시 상한.
@@ -60,7 +62,16 @@ export async function listContactAttrValues(
 
   const scheme = (schemeRow?.scheme as ContactColumnScheme | null) ?? null;
   const source = `${FILTER_SOURCE.ATTRS_PREFIX}${attrsKey}`;
-  const allowed = scheme?.columns.some((c) => c.source === source && !c.hidden) ?? false;
+  let allowed = scheme?.columns.some((c) => c.source === source && !c.hidden) ?? false;
+  if (!allowed) {
+    // 응답 내역 표시 스킴은 조사 대상 스킴과 독립적으로 attrs 컬럼을 표시할 수 있다 —
+    // 조사 대상에선 숨기고 응답 내역에서만 표시한 컬럼의 깔때기 distinct 조회를
+    // 거부하지 않도록 응답 내역 표시 여부도 허용 축으로 인정한다.
+    const profileScheme = await getProfileColumnScheme(surveyId);
+    allowed = hydrateProfileColumns(scheme, profileScheme).some(
+      (c) => c.key === source && !c.hidden,
+    );
+  }
   if (!allowed) throw new ForbiddenAttrColumnError(attrsKey);
 
   const valueExpr = sql<string>`${contactTargets.attrs} ->> ${attrsKey}`;

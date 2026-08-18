@@ -26,7 +26,13 @@ import {
 import { getProfileColumnScheme } from '@/lib/operations/profile-columns.server';
 import { decryptPiiForTargets } from '@/lib/crypto/contact-pii-repo';
 import { getContactColumnScheme, buildColumnCandidates } from '@/lib/operations/contacts.server';
-import { parseProfilesCondition, PROFILES_EXTRA_CANDIDATES } from '@/lib/operations/profiles-filters.server';
+import {
+  parseProfilesClausesFromUrl,
+  parseProfilesHeaderFiltersFromUrl,
+  PROFILES_EXTRA_CANDIDATES,
+} from '@/lib/operations/profiles-filters.server';
+import type { FilterClause } from '@/lib/operations/contacts-filters.server';
+import { FILTER_SOURCE } from '@/lib/operations/filter-shared';
 import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
 import { isGuestViewer } from '@/lib/auth/guest-viewer';
 
@@ -38,8 +44,12 @@ interface PageProps {
   params: Promise<{ id: string }>;
   searchParams: Promise<{
     page?: string;
-    q?: string;
-    col?: string;
+    q?: string | string[];
+    col?: string | string[];
+    op?: string | string[];
+    hcol?: string | string[];
+    hm?: string | string[];
+    hv?: string | string[];
     status?: string;
     sort?: string;
     dir?: string;
@@ -57,7 +67,13 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
   const { id: surveyId } = await params;
   const sp = await searchParams;
 
-  const args = normalizeListArgs(sp);
+  // col/q 는 다중 조건 필터로 전환돼 배열일 수 있다 — normalize 는 스칼라 파라미터만 받는다.
+  const args = normalizeListArgs({
+    ...(sp.page !== undefined ? { page: sp.page } : {}),
+    ...(sp.status !== undefined ? { status: sp.status } : {}),
+    ...(sp.sort !== undefined ? { sort: sp.sort } : {}),
+    ...(sp.dir !== undefined ? { dir: sp.dir } : {}),
+  });
   const [scope, isGuest] = await Promise.all([getOperationsDataScope(surveyId), isGuestViewer()]);
 
   const [contactScheme, profileScheme] = await Promise.all([
@@ -68,7 +84,10 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
   const displayColumns = visibleProfileColumns(
     hydrateProfileColumns(contactScheme, profileScheme),
   );
+  // 전체(system.all) 는 컨택 유무와 무관하게 상시 노출 — 컨택 없는 설문에서도
+  // 브라우저 부분일치 전개(파서 훅)로 유효하다.
   const columnCandidates = [
+    { source: FILTER_SOURCE.ALL, label: '전체' },
     ...PROFILES_EXTRA_CANDIDATES,
     ...buildColumnCandidates(contactScheme).filter(
       (c) =>
@@ -77,12 +96,30 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
         c.source.startsWith('pii.'),
     ),
   ];
-  const condition = parseProfilesCondition(args.col, args.q, columnCandidates);
+  const builderClauses = parseProfilesClausesFromUrl(sp.col, sp.q, sp.op, columnCandidates);
+  const headerClauses = parseProfilesHeaderFiltersFromUrl(sp.hcol, sp.hm, sp.hv, columnCandidates);
+  // UI 가 상호배타를 강제하므로 정상 흐름에선 한쪽만 존재.
+  // URL 직접 조작으로 둘 다 있으면 AND 결합으로 무해하게 처리 (조사 대상과 동일).
+  const clauses: FilterClause[] = [
+    ...builderClauses,
+    ...headerClauses.map((c, i) => ({
+      condition: c.condition,
+      op: builderClauses.length === 0 && i === 0 ? null : ('AND' as const),
+    })),
+  ];
 
   // 번호(ID) 열 노출 판정 — 엑셀 내보내기와 조건부 규칙 공유(설문 설정 기준, 매칭 무관).
   // 목록 쿼리보다 먼저 조회해 고아 sort(컨택 없는데 ?sort=resid 잔존 URL)를 순번 정렬로 폴백한다.
+  // attrs.<key> 정렬은 표시 스킴에 있는 컬럼만 허용 (URL 직접 조작 가드) — 없으면 순번 폴백.
   const { hasContacts } = await getSurveyContactStats(surveyId, scope);
-  const sort = !hasContacts && args.sort === 'resid' ? 'idx' : args.sort;
+  const visibleAttrsSortKeys = new Set(
+    displayColumns.map((c) => c.key).filter((k) => k.startsWith('attrs.')),
+  );
+  const sort =
+    (!hasContacts && args.sort === 'resid') ||
+    (args.sort.startsWith('attrs.') && !visibleAttrsSortKeys.has(args.sort))
+      ? 'idx'
+      : args.sort;
 
   const [{ rows, total, page: clampedPage }, qs, groups] = await Promise.all([
     listResponsesForProfiles({
@@ -94,7 +131,7 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
       sort,
       dir: args.dir,
       view: args.view,
-      condition,
+      clauses,
     }),
     db
       .select({
@@ -130,7 +167,7 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
   const stepLocations = Object.fromEntries(buildStepLocationMap(qs, groups));
   const totalSteps = qs.length;
 
-  const hasFilter = hasActiveFilters(sp);
+  const hasFilter = clauses.length > 0 || hasActiveFilters({ status: args.status });
 
   return (
     <main className="mx-auto max-w-7xl px-6 py-8">
@@ -158,8 +195,11 @@ export default async function ProfilesPage({ params, searchParams }: PageProps) 
         <CardContent className="px-5 py-4">
           <div className="mb-4">
             <ProfilesFilterBar
-              initialSource={args.col}
-              initialValue={args.q}
+              initialClauses={builderClauses.map((c) => ({
+                op: c.op,
+                source: c.condition.source,
+                value: c.condition.value,
+              }))}
               initialStatus={args.status}
               columnCandidates={columnCandidates}
             />

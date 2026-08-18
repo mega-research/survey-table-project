@@ -22,7 +22,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import type { ContactResultCode } from '@/db/schema/schema-types';
 import type { PiiFieldType } from '@/lib/crypto/pii-fields';
 import { useSearchParamsMutator } from '@/hooks/use-search-params-mutator';
-import { FILTER_SOURCE, placeholderFor } from '@/lib/operations/filter-shared';
+import { FILTER_SOURCE, placeholderFor, webFilterOptionsFor } from '@/lib/operations/filter-shared';
 import {
   hasBuilderFilterParams,
   joinHeaderValues,
@@ -36,16 +36,28 @@ import { client } from '@/shared/lib/rpc';
 
 interface Props {
   surveyId: string;
-  /** attrs.* | pii.* | system.contact_result | system.web */
+  /** attrs.* | pii.* | system.contact_result | system.web | fixedOptions 지정 source */
   source: string;
   label: string;
   piiType?: PiiFieldType;
-  resultCodeOptions: ContactResultCode[];
+  /** system.contact_result 체크박스 옵션 — 조사 대상 전용. */
+  resultCodeOptions?: ContactResultCode[];
+  /**
+   * 페이지 전용 source 의 고정 옵션 체크박스 (예: 응답 내역 status).
+   * 지정하면 source 형태와 무관하게 in 모드 체크박스로 동작한다.
+   */
+  fixedOptions?: Array<{ value: string; label: string }>;
+  /**
+   * 적용 시 URL 파라미터 추가 조작 (예: 응답 내역 status 깔때기 적용 시 상단
+   * 상태 select 의 'status' 제거 — 남겨두면 모순 AND 로 0건이 된다).
+   */
+  onApplyParams?: (p: URLSearchParams) => void;
 }
 
-type Kind = 'attrs' | 'pii' | 'result' | 'web';
+type Kind = 'attrs' | 'pii' | 'result' | 'web' | 'fixed';
 
-function kindOf(source: string): Kind | null {
+function kindOf(source: string, hasFixedOptions: boolean): Kind | null {
+  if (hasFixedOptions) return 'fixed';
   if (source.startsWith(FILTER_SOURCE.ATTRS_PREFIX)) return 'attrs';
   if (source.startsWith(FILTER_SOURCE.PII_PREFIX)) return 'pii';
   if (source === FILTER_SOURCE.CONTACT_RESULT) return 'result';
@@ -69,9 +81,11 @@ export function HeaderFilterPopover({
   surveyId,
   source,
   label,
-  resultCodeOptions,
+  resultCodeOptions = [],
+  fixedOptions,
+  onApplyParams,
 }: Props) {
-  const kind = kindOf(source);
+  const kind = kindOf(source, fixedOptions != null && fixedOptions.length > 0);
   const searchParams = useSearchParams();
   const pushParams = useSearchParamsMutator();
 
@@ -97,18 +111,21 @@ export function HeaderFilterPopover({
   if (kind == null) return null;
 
   const isCheckboxKind =
-    kind === 'result' || kind === 'web' || (kind === 'attrs' && data != null && !data.truncated);
+    kind === 'result' ||
+    kind === 'web' ||
+    kind === 'fixed' ||
+    (kind === 'attrs' && data != null && !data.truncated);
   const isTextKind = kind === 'pii' || (kind === 'attrs' && data?.truncated === true);
 
   const checkboxOptions: Array<{ value: string; optionLabel: string }> =
-    kind === 'result'
-      ? resultCodeOptions.map((rc) => ({ value: rc.code, optionLabel: rc.label }))
-      : kind === 'web'
-        ? [
-            { value: 'true', optionLabel: '응답완료' },
-            { value: 'false', optionLabel: '미응답' },
-          ]
-        : (data?.values ?? []).map((v) => ({ value: v, optionLabel: v }));
+    kind === 'fixed'
+      ? (fixedOptions ?? []).map((o) => ({ value: o.value, optionLabel: o.label }))
+      : kind === 'result'
+        ? resultCodeOptions.map((rc) => ({ value: rc.code, optionLabel: rc.label }))
+        : kind === 'web'
+          ? // 레거시 값 노출 규칙은 webFilterOptionsFor 주석 참조.
+            webFilterOptionsFor(selected).map((o) => ({ value: o.value, optionLabel: o.label }))
+          : (data?.values ?? []).map((v) => ({ value: v, optionLabel: v }));
 
   const handleOpenChange = (next: boolean) => {
     setOpen(next);
@@ -145,8 +162,12 @@ export function HeaderFilterPopover({
 
   const commit = (entry: HeaderFilterEntry | null) => {
     pushParams((p) => {
-      if (entry) upsertHeaderFilter(p, entry);
-      else removeHeaderFilter(p, source);
+      if (entry) {
+        upsertHeaderFilter(p, entry);
+        onApplyParams?.(p);
+      } else {
+        removeHeaderFilter(p, source);
+      }
     });
     setConfirmEntry(null);
     setOpen(false);

@@ -1,6 +1,7 @@
 import type { ContactColumnScheme } from '@/db/schema/schema-types';
 import type { MailRecipientStatus } from '@/db/schema/mail';
 import { recipientStatusMeta } from '@/components/operations/mail-campaign/recipient-status-badge';
+import { mapStatusPill } from '@/lib/operations/profiles';
 import { buildInviteUrl } from '@/lib/survey-url';
 
 /**
@@ -15,7 +16,7 @@ export const INVITE_URL_SOURCE = 'system.invite_url';
 const EXTRA_SOURCE_LABELS: Record<string, string> = {
   'system.contact_result': '컨택결과',
   'system.email_count': '메일 상태',
-  'system.web': '설문 진행율',
+  'system.web': '응답 상태',
   [INVITE_URL_SOURCE]: '초대링크',
 };
 
@@ -88,6 +89,8 @@ export interface ContactExportRowData {
   latestAttemptNo: number | null;
   latestMailStatus: MailRecipientStatus | null;
   progressPct: number | null;
+  /** 매칭 응답 status (completed/in_progress/drop 등). 응답 없으면 null */
+  responseStatus: string | null;
   inviteCode: string;
 }
 
@@ -107,7 +110,13 @@ export function formatExportCell(
     return row.latestMailStatus ? recipientStatusMeta(row.latestMailStatus).label : '';
   }
   if (source === 'system.web') {
-    return row.progressPct == null ? '' : `${row.progressPct}%`;
+    // 목록 표의 StatusPill 과 같은 상태 어휘 — 완료는 라벨만, 미완료(진행중·이탈 등)는
+    // 진행율 % 부속 표기. 응답 없으면 빈 문자열.
+    if (row.responseStatus == null) return '';
+    const label = mapStatusPill({ status: row.responseStatus }).label;
+    return row.responseStatus !== 'completed' && row.progressPct != null
+      ? `${label} ${row.progressPct}%`
+      : label;
   }
   if (source === INVITE_URL_SOURCE) {
     return buildInviteUrl(row.inviteCode, inviteBaseUrl);

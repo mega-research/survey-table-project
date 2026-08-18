@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { sql as sqlTag } from 'drizzle-orm';
 import { PgDialect } from 'drizzle-orm/pg-core';
 
 import { buildContactsFilterSql } from '@/lib/operations/contacts-filter-sql';
@@ -116,22 +117,53 @@ describe('buildContactsFilterSql — in 모드 (헤더 체크박스 필터)', ()
     expect(query.params).toContain('거절');
   });
 
-  it('system.web in — true 만 선택 시 responded_at IS NOT NULL', () => {
+  it('system.web in — 레거시 true 는 responded_at IS NOT NULL 유지 (구 URL 호환)', () => {
     const query = dialect.sqlToQuery(buildContactsFilterSql([inClause('system.web', ['true'])]));
     expect(query.sql).toContain('responded_at IS NOT NULL');
   });
 
-  it('system.web in — false 만 선택 시 responded_at IS NULL', () => {
+  it('system.web in — 레거시 false 는 responded_at IS NULL 유지 (구 URL 호환)', () => {
     const query = dialect.sqlToQuery(buildContactsFilterSql([inClause('system.web', ['false'])]));
     expect(query.sql).toContain('responded_at IS NULL');
     expect(query.sql).not.toContain('IS NOT NULL');
   });
 
-  it('system.web in — 양쪽 다 선택 시 TRUE (필터 없음과 동일)', () => {
+  it('system.web in — 상태 값(completed/drop)은 매칭 응답 status 조건 OR 전개', () => {
     const query = dialect.sqlToQuery(
-      buildContactsFilterSql([inClause('system.web', ['true', 'false'])]),
+      buildContactsFilterSql([inClause('system.web', ['completed', 'drop'])]),
     );
-    expect(query.sql).toContain('TRUE');
+    // 표시/정렬과 같은 매칭(역참조) 기준
+    expect(query.sql).toContain('contact_target_id = "contact_targets"."id"');
+    expect(query.sql).toContain(' OR ');
+    expect(query.params).toContain('completed');
+    expect(query.params).toContain('drop');
+  });
+
+  it('system.web in — none 은 매칭 응답 없음 (status IS NULL)', () => {
+    const query = dialect.sqlToQuery(buildContactsFilterSql([inClause('system.web', ['none'])]));
+    expect(query.sql).toContain('contact_target_id = "contact_targets"."id"');
+    expect(query.sql).toContain('IS NULL');
+  });
+
+  it('system.email_count in — 최신 수신 상태 조건 OR 전개, none 은 발송 이력 없음', () => {
+    const query = dialect.sqlToQuery(
+      buildContactsFilterSql([inClause('system.email_count', ['bounced', 'none'])]),
+    );
+    expect(query.sql).toContain('mail_recipients');
+    expect(query.sql).toContain(' OR ');
+    expect(query.sql).toContain('IS NULL');
+    expect(query.params).toContain('bounced');
+  });
+
+  it('mailStatusRankExpr — 열람이 전달 완료보다 앞, 발송 이력 없음은 NULL(축 밖)', async () => {
+    const { mailStatusRankExpr } = await import('@/lib/operations/contacts-filter-sql');
+    const query = dialect.sqlToQuery(mailStatusRankExpr);
+    const pos = (s: string) => query.sql.indexOf(s);
+    expect(pos("'opened'")).toBeGreaterThan(-1);
+    expect(pos("'opened'")).toBeLessThan(pos("'delivered'"));
+    expect(pos("'delivered'")).toBeLessThan(pos("'bounced'"));
+    // 없음은 순위 폴백 없이 NULL — orderExpr 의 NULLS LAST 가 맨 뒤 고정 (web 과 동일 규칙)
+    expect(query.sql).toContain('ELSE NULL');
   });
 
   it('in 모드 미지원 source (pii.*) 는 FALSE', () => {
@@ -205,20 +237,15 @@ describe('buildContactsFilterSql — any 모드 (전체 컬럼 검색)', () => {
   });
 });
 
-describe('responseStatusRankExpr — web 컬럼 상태 순위 정렬', () => {
-  it('완료(1) → 진행중(2) → 이탈(3) … 응답없음(COALESCE 8)까지 하나의 순위 축', async () => {
-    const { responseStatusRankExpr } = await import('@/lib/operations/contacts-filter-sql');
-    const query = dialect.sqlToQuery(responseStatusRankExpr);
-    expect(query.sql).toContain('CASE');
-    // 순위가 라벨 순서를 따르는지 — completed 가 in_progress 보다, in_progress 가 drop 보다 앞
-    const pos = (s: string) => query.sql.indexOf(s);
-    expect(pos("'completed'")).toBeGreaterThan(-1);
-    expect(pos("'completed'")).toBeLessThan(pos("'in_progress'"));
-    expect(pos("'in_progress'")).toBeLessThan(pos("'drop'"));
-    // 응답 없음도 순위(COALESCE)로 축에 포함 — NULLS LAST 로 빼면 응답이 완료뿐인
-    // 명단에서 오름/내림이 똑같아 보인다 (내림차순 = 응답없음부터).
-    expect(query.sql).toContain('COALESCE');
+describe('matchedResponseSubquery — web 컬럼 매칭 응답 서브쿼리 (표시·정렬·필터 공유)', () => {
+  it('매칭은 contact_target_id 역참조 — response_id(완료 시점에만 기록)만 보면 진행중·이탈이 응답없음 취급된다', async () => {
+    const { matchedResponseSubquery } = await import('@/lib/operations/contacts-filter-sql');
+    const query = dialect.sqlToQuery(matchedResponseSubquery(sqlTag`status`));
     expect(query.sql).toContain('survey_responses');
+    expect(query.sql).toContain('contact_target_id = "contact_targets"."id"');
+    // 확정 링크가 있으면 그 행 우선, 없으면 최신 활동 행
+    expect(query.sql).toContain('(id = "contact_targets"."response_id") DESC NULLS LAST');
+    expect(query.sql).toContain('last_activity_at DESC NULLS LAST');
   });
 });
 
