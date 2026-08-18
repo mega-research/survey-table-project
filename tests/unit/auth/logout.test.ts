@@ -43,6 +43,36 @@ describe('GET /admin/logout (게스트 강제 로그아웃)', () => {
     );
   });
 
+  it('내비게이션이 아닌 요청(prefetch 등)은 signOut 없이 로그인으로만 보낸다', async () => {
+    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:survey-a');
+    getUser.mockResolvedValue({ data: { user: { id: 'guest-1' } } });
+
+    const res = await GET(
+      new Request('https://example.com/admin/logout?redirect=%2Fadmin%2Fsurveys', {
+        headers: { 'sec-fetch-mode': 'cors' },
+      }),
+    );
+
+    expect(signOut).not.toHaveBeenCalled();
+    expect(res.headers.get('location')).toBe(
+      'https://example.com/admin/login?redirect=%2Fadmin%2Fsurveys',
+    );
+  });
+
+  it('sec-fetch-mode: navigate 는 정상 로그아웃한다', async () => {
+    vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:survey-a');
+    getUser.mockResolvedValue({ data: { user: { id: 'guest-1' } } });
+
+    const res = await GET(
+      new Request('https://example.com/admin/logout', {
+        headers: { 'sec-fetch-mode': 'navigate' },
+      }),
+    );
+
+    expect(signOut).toHaveBeenCalledWith({ scope: 'local' });
+    expect(res.headers.get('location')).toBe('https://example.com/admin/login');
+  });
+
   it('내부 절대경로가 아닌 redirect 는 버린다 - open redirect 차단', async () => {
     vi.stubEnv('GUEST_SURVEY_GRANTS', 'guest-1:survey-a');
     getUser.mockResolvedValue({ data: { user: { id: 'guest-1' } } });
