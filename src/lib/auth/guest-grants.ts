@@ -64,17 +64,15 @@ export function canAccessSurvey(userId: string, surveyId: string): boolean {
 /** 게스트가 무권한 설문 URL 을 눌렀을 때 보내는 강제 로그아웃 라우트. */
 export const GUEST_FORCE_LOGOUT_PATH = '/admin/logout';
 
-/** 설문 콘솔(operations/preview) 경로 판정 — grant 불일치 시 강제 로그아웃 대상. */
-const SURVEY_CONSOLE_PATH = /^\/admin\/surveys\/[^/]+\/(operations|preview)(\/|$)/;
-
 /**
  * 미들웨어용 게스트 경로 판정 (순수 함수).
  * 허용 경로면 null, 차단이면 리다이렉트 목적지 pathname 반환.
  *
- * grant 된 설문들의 operations/preview 는 전부 허용한다. grant 밖 설문의
- * 콘솔은 자기 overview 로 조용히 돌리지 않고 즉시 로그아웃시켜 로그인
- * 화면으로 보낸다 — 그 설문 담당 계정으로 다시 로그인해야 한다는 운영
- * 결정(2026-08-14, 안내 페이지 대체).
+ * grant 된 설문들의 operations/preview 는 전부 허용한다. 그 밖의 admin 경로는
+ * 설문 콘솔이든 아니든 전부 즉시 로그아웃시켜 로그인 화면으로 보낸다 — 자기
+ * 설문으로 조용히 돌리면 실사 인력이 버그·중복 로그인으로 착각하는 문제가
+ * 있어, "권한 없는 URL = 로그아웃 + 재로그인" 으로 단일화한 운영 결정
+ * (2026-08-18, grant 설문 안의 차단 편집 화면만 예외로 해당 overview 복귀).
  */
 export function guestPathRedirect(
   pathname: string,
@@ -107,7 +105,30 @@ export function guestPathRedirect(
       return null;
     }
   }
-  // grant 밖 설문 콘솔 경로 — 즉시 로그아웃 (grant 설문 경로는 위에서 이미 통과/차단됨)
-  if (SURVEY_CONSOLE_PATH.test(pathname)) return GUEST_FORCE_LOGOUT_PATH;
+  // grant 밖 경로 전부 — 즉시 로그아웃 (grant 설문 경로는 위에서 이미 통과/차단됨)
+  return GUEST_FORCE_LOGOUT_PATH;
+}
+
+/**
+ * 게스트 로그인 직후 목적지 해석 (순수 함수). target 은 로그인 폼의 redirect
+ * 파라미터를 resolveRedirect 로 정제한 내부 경로(쿼리 포함 가능).
+ *
+ * 자기 설문의 허용 경로면 그대로 복귀시키고, 그 외(무권한 설문·기본 목적지
+ * /admin/surveys 등)는 첫 grant 설문 overview 로 보낸다 — guestPathRedirect
+ * 폴백이 강제 로그아웃이라 여기서 걸러주지 않으면 로그인 직후 다시 로그아웃
+ * 되는 루프가 된다.
+ */
+export function guestPostLoginRedirect(
+  target: string,
+  grantedSurveyIds: readonly string[],
+): string {
+  const path = target.split(/[?#]/)[0] ?? target;
+  const dest = guestPathRedirect(path, grantedSurveyIds);
+  // 허용 경로 — 단 로그인·로그아웃 라우트는 로그인 직후 목적지로 무의미
+  if (dest === null && path !== '/admin/login' && path !== GUEST_FORCE_LOGOUT_PATH) {
+    return target;
+  }
+  // grant 설문 안의 차단 편집 화면 — 해당 설문 overview 로
+  if (dest !== null && dest !== GUEST_FORCE_LOGOUT_PATH) return dest;
   return `/admin/surveys/${grantedSurveyIds[0]}/operations/overview`;
 }
