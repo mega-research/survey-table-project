@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 
+import { getGuestSurveyIds, guestPostLoginRedirect } from '@/lib/auth/guest-grants';
 import { createClient } from '@/lib/supabase/server';
 
 const DEFAULT_REDIRECT = '/admin/surveys';
@@ -31,14 +32,20 @@ export async function login(formData: FormData) {
     password: formData.get('password') as string,
   };
 
-  const { error } = await supabase.auth.signInWithPassword(data);
+  const { data: signIn, error } = await supabase.auth.signInWithPassword(data);
 
   if (error) {
     return { error: error.message };
   }
 
   revalidatePath('/', 'layout');
-  redirect(resolveRedirect(formData.get('redirect')));
+  const target = resolveRedirect(formData.get('redirect'));
+  // 게스트는 기본 목적지(/admin/surveys)·무권한 경로가 강제 로그아웃 루프가
+  // 되므로 자기 grant 설문으로 정착시킨다.
+  const grantedSurveyIds = signIn.user ? getGuestSurveyIds(signIn.user.id) : [];
+  redirect(
+    grantedSurveyIds.length > 0 ? guestPostLoginRedirect(target, grantedSurveyIds) : target,
+  );
 }
 
 export async function logout() {
