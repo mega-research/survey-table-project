@@ -110,6 +110,18 @@ function evalExpr(
         ? 'empty'
         : null;
     }
+    case 'attr': {
+      // 키 미설정은 빌더 미완성 — 깨진 참조 계열이므로 항만 강등 (lookup 의 keyMapping 미설정과 동일 결).
+      if (!expr.attrsKey) return 'empty';
+      // 응답자 attrs 에 값이 없거나 숫자가 아니면 런타임 미해결 — 무효 전파 (lookup 의
+      // attrs-key-missing 과 동일 결: 틀린 숫자 표시·부당한 검증 차단 방지).
+      // 상속 프로퍼티(toString 등)가 함수로 반환되어 크래시하는 것 방지 — 자기 소유 문자열 값만 인정.
+      if (!Object.hasOwn(ctx.contactAttrs, expr.attrsKey)) return null;
+      const raw = ctx.contactAttrs[expr.attrsKey];
+      if (typeof raw !== 'string' || raw.trim() === '') return null;
+      const n = parseNumericInput(raw.trim());
+      return n === null ? null : n;
+    }
     case 'agg': {
       let sum = 0;
       let filled = 0;
@@ -143,6 +155,45 @@ function evalExpr(
       return acc ?? 'empty'; // 항이 0개인 그룹은 빈 항
     }
   }
+}
+
+/**
+ * 검증 전용 — 수식의 데이터 참조 항(cell/question/attr/lookup)이 1개 이상 있고
+ * 전부 빈 값/미해소이면 true. literal 전용 수식은 false(비교 실행).
+ * group/SUM 이 빈 항을 0으로 접는 표시 의미론과 달리, 검증 기준값이 "무응답 → 0"으로
+ * 둔갑해 응답자를 오차단하는 것을 막는다 (레거시 합계 제약의 "전부 빈 값이면 skipped"와 동일 결).
+ * evalExpr 의 평가 의미론은 건드리지 않는다 — 참조 항 각각을 단독 평가해 판정만 한다.
+ */
+export function areAllFormulaRefsEmpty(
+  expr: CalcExpr,
+  ownQuestionId: string,
+  ctx: FormulaEvalCtx,
+): boolean {
+  const refs: CalcExpr[] = [];
+  const walk = (e: CalcExpr): void => {
+    switch (e.kind) {
+      case 'cell':
+      case 'question':
+      case 'attr':
+      case 'lookup':
+        refs.push(e);
+        return;
+      case 'agg':
+        e.items.forEach(walk);
+        return;
+      case 'group':
+        e.terms.forEach(walk);
+        return;
+      case 'literal':
+        return;
+    }
+  };
+  walk(expr);
+  if (refs.length === 0) return false;
+  return refs.every((ref) => {
+    const v = evalExpr(ref, ownQuestionId, ctx, new Set());
+    return v === 'empty' || v === null;
+  });
 }
 
 export function evaluateCellFormula(

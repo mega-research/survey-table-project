@@ -13,7 +13,11 @@ describe('버전 스냅샷 — 숫자 검증 신규 필드 관통', () => {
       order: 0,
       inputType: 'number',
       numberFormat: { thousandSeparator: true, unit: 'tenMillion', max: 100 },
-      sumConstraints: [{ id: 's1', cellIds: ['c1'], operator: 'eq', target: 100 }],
+      sumConstraints: [{
+        id: 's1', cellIds: ['c1'], operator: 'ne', target: 100, tolerance: 5,
+        leftExpr: { kind: 'cell', cellId: 'c1' },
+        targetExpr: { kind: 'attr', attrsKey: '예산' },
+      }],
     } as Question;
     const survey = {
       id: 'sv1',
@@ -33,5 +37,11 @@ describe('버전 스냅샷 — 숫자 검증 신규 필드 관통', () => {
     const snapshot = buildSurveySnapshot(survey);
     expect(snapshot.questions[0]!.numberFormat).toMatchObject({ unit: 'tenMillion' });
     expect(snapshot.questions[0]!.sumConstraints).toHaveLength(1);
+    expect(snapshot.questions[0]!.sumConstraints?.[0]).toMatchObject({
+      operator: 'ne',
+      tolerance: 5,
+      leftExpr: { kind: 'cell' },
+      targetExpr: { kind: 'attr' },
+    });
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { evaluateCellFormula, roundFormulaValue } from '@/lib/survey/cell-formula';
+import { areAllFormulaRefsEmpty, evaluateCellFormula, roundFormulaValue } from '@/lib/survey/cell-formula';
 import type { CalcExpr, Question } from '@/types/survey';
 
 // 최소 표 질문 헬퍼 — 숫자 input 셀 2개(a1, a2) + calc 셀(c1)
@@ -235,5 +235,75 @@ describe('evaluateCellFormula', () => {
       contactAttrs: { region: 'busan' }, // 행 없음
     };
     expect(evaluateCellFormula(expr, 'q1', ctx)).toBeNull();
+  });
+
+  describe('attr 항 — 컨택 attrs 참조', () => {
+    const attrCtx = (contactAttrs: Record<string, string | undefined>) => ({
+      ...baseCtx({}),
+      contactAttrs,
+    });
+    const expr: CalcExpr = {
+      kind: 'group', op: '+',
+      terms: [{ kind: 'attr', attrsKey: '예산' }, { kind: 'literal', value: 10 }],
+    };
+
+    it('attrs 값을 숫자로 읽는다', () => {
+      expect(evaluateCellFormula(expr, 'q1', attrCtx({ 예산: '90' }))).toBe(100);
+    });
+
+    it('키가 attrs 에 없으면 null — 무효 전파', () => {
+      expect(evaluateCellFormula(expr, 'q1', attrCtx({}))).toBeNull();
+    });
+
+    it('빈 문자열·비숫자 값도 null — 무효 전파', () => {
+      expect(evaluateCellFormula(expr, 'q1', attrCtx({ 예산: '' }))).toBeNull();
+      expect(evaluateCellFormula(expr, 'q1', attrCtx({ 예산: '많음' }))).toBeNull();
+      // 빌더 테스트 모드 placeholder attrs 는 '[예산]' 형태 — 비숫자로서 null
+      expect(evaluateCellFormula(expr, 'q1', attrCtx({ 예산: '[예산]' }))).toBeNull();
+    });
+
+    it('attrsKey 미설정은 빌더 미완성 — 항만 강등(empty)', () => {
+      const unset: CalcExpr = {
+        kind: 'group', op: '+',
+        terms: [{ kind: 'attr', attrsKey: '' }, { kind: 'literal', value: 10 }],
+      };
+      expect(evaluateCellFormula(unset, 'q1', attrCtx({}))).toBe(10);
+    });
+
+    it('상속 프로퍼티 키는 크래시 없이 null — fail-safe', () => {
+      for (const key of ['toString', 'constructor', '__proto__', 'hasOwnProperty']) {
+        const e: CalcExpr = {
+          kind: 'group', op: '+',
+          terms: [{ kind: 'attr', attrsKey: key }, { kind: 'literal', value: 1 }],
+        };
+        expect(evaluateCellFormula(e, 'q1', attrCtx({}))).toBeNull();
+      }
+    });
+  });
+});
+
+describe('areAllFormulaRefsEmpty', () => {
+  it('literal 전용 수식은 false — 참조 항이 없으므로 비교 실행', () => {
+    const expr: CalcExpr = { kind: 'literal', value: 42 };
+    expect(areAllFormulaRefsEmpty(expr, 'q1', baseCtx({}))).toBe(false);
+  });
+
+  it('참조 항이 전부 빈 값이면 true', () => {
+    const expr: CalcExpr = {
+      kind: 'group', op: '+',
+      terms: [{ kind: 'question', questionId: 'q2' }],
+    };
+    expect(areAllFormulaRefsEmpty(expr, 'q1', baseCtx({}))).toBe(true);
+  });
+
+  it('참조 항이 일부만 해소되면 false', () => {
+    const expr: CalcExpr = {
+      kind: 'group', op: '+',
+      terms: [
+        { kind: 'question', questionId: 'q2' },
+        { kind: 'question', questionId: 'q3' },
+      ],
+    };
+    expect(areAllFormulaRefsEmpty(expr, 'q1', baseCtx({ q2: '10' }))).toBe(false);
   });
 });

@@ -1,5 +1,6 @@
 import {
   BranchRule,
+  CalcCellValidation,
   CalcExpr,
   CellEnableCondition,
   CheckboxOption,
@@ -98,6 +99,14 @@ export interface CellFormState {
   /** 검증 오차 허용 입력값(raw 문자열). 빈 문자열 = 0 */
   formulaToleranceRaw: string;
   formulaErrorMessage: string;
+  /** calc 탭 "계산 결과 검증" 토글 */
+  calcValidationEnabled: boolean;
+  calcValidationOperator: CalcCellValidation['operator'];
+  /** 검증 기준값 수식 */
+  calcValidationTarget: CalcExpr | undefined;
+  /** eq/ne 전용 오차 허용 raw 문자열. 빈 문자열 = 0 */
+  calcValidationToleranceRaw: string;
+  calcValidationErrorMessage: string;
 }
 
 /** 셀 내용 편집 탭의 콘텐츠 타입 (모달 Tabs value) */
@@ -248,6 +257,12 @@ export function cellToFormState(cell: TableCell): CellFormState {
     formulaValidationEnabled: cell.type === 'input' && cell.formula !== undefined,
     formulaToleranceRaw: cell.formulaTolerance !== undefined ? String(cell.formulaTolerance) : '',
     formulaErrorMessage: cell.formulaErrorMessage ?? '',
+    calcValidationEnabled: cell.type === 'calc' && cell.calcValidation !== undefined,
+    calcValidationOperator: cell.calcValidation?.operator ?? 'eq',
+    calcValidationTarget: cell.calcValidation?.target,
+    calcValidationToleranceRaw:
+      cell.calcValidation?.tolerance !== undefined ? String(cell.calcValidation.tolerance) : '',
+    calcValidationErrorMessage: cell.calcValidation?.errorMessage ?? '',
   };
 }
 
@@ -326,6 +341,7 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
     formula: _formula,
     formulaTolerance: _formulaTolerance,
     formulaErrorMessage: _formulaErrorMessage,
+    calcValidation: _calcValidation,
     ...cellBase
   } = cell;
 
@@ -374,11 +390,25 @@ export function buildUpdatedCell(form: CellFormState, cell: TableCell): TableCel
             : {}),
         }
       : {}),
-    // calc 셀 — 수식 + 표시 포맷
+    // calc 셀 — 수식 + 표시 포맷 + 표시값 비교 검증
     ...(contentType === 'calc'
       ? {
           ...(form.formula ? { formula: form.formula } : {}),
           ...(form.cellNumberFormat ? { numberFormat: form.cellNumberFormat } : {}),
+          ...(form.calcValidationEnabled && form.calcValidationTarget
+            ? {
+                calcValidation: {
+                  operator: form.calcValidationOperator,
+                  target: form.calcValidationTarget,
+                  ...(parseNumericInput(form.calcValidationToleranceRaw) !== null
+                    ? { tolerance: parseNumericInput(form.calcValidationToleranceRaw)! }
+                    : {}),
+                  ...(form.calcValidationErrorMessage.trim()
+                    ? { errorMessage: form.calcValidationErrorMessage.trim() }
+                    : {}),
+                },
+              }
+            : {}),
         }
       : {}),
     // 숫자 input 셀 수식 검증

@@ -110,13 +110,18 @@ export interface NumberFormat {
   allowedValues?: number[]; // 지정 시 목록의 값 또는 그 값으로 완성 가능한 중간 입력만 허용
 }
 
-// 테이블 숫자 input 셀 합계 제약 (질문 레벨, table 타입 전용).
+// 테이블 숫자 input 셀 비교 제약 (질문 레벨, table 타입 전용).
 // tableValidationRules(분기 전용)와 별개 — 이쪽은 "다음"/제출 차단형 검증이다.
+// 레거시(cellIds 합계 vs target 리터럴)에 leftExpr/targetExpr 를 optional 로 얹은
+// 하위호환 확장 — 기존 저장 데이터는 필드 그대로 유효하다.
 export interface SumConstraint {
   id: string;
-  cellIds: string[]; // 합산 대상 셀 (inputType 'number' input 셀). 존재하지 않는 id는 평가 시 무시
-  operator: 'eq' | 'lte' | 'gte'; // 정확히 / 이하 / 이상
-  target: number; // 기본 100
+  cellIds: string[]; // leftExpr 없을 때 좌변 = 선택 셀 합계. 존재하지 않는 id는 평가 시 무시
+  leftExpr?: CalcExpr; // 있으면 좌변 = 이 수식 (cellIds 무시)
+  operator: 'eq' | 'ne' | 'gte' | 'lte' | 'gt' | 'lt'; // 같음/다름/이상/이하/초과/미만
+  target: number; // targetExpr 없을 때 우변 리터럴. 기본 100
+  targetExpr?: CalcExpr; // 있으면 우변 = 이 수식 (셀/질문응답/attrs/LUT/복합)
+  tolerance?: number; // eq/ne 전용 절대 오차. 기본 0 — 부등호 연산자는 무시
   errorMessage?: string; // 미지정 시 자동 생성 메시지 사용
 }
 
@@ -294,8 +299,18 @@ export type CalcExpr =
       keyMapping: Array<{ lutKey: string; attrsKey: string }>;
       valueColumn: string;
     }
+  | { kind: 'attr'; attrsKey: string } // 컨택 attrs 값 (숫자 해석). 키 미설정은 빈 항, 런타임 미해결은 무효 전파
   | { kind: 'agg'; fn: 'sum' | 'avg'; items: CalcExpr[] }
   | { kind: 'group'; op: '+' | '-' | '*' | '/'; terms: CalcExpr[] };
+
+// 계산 셀 표시값 비교 검증 — 계산 결과가 기준 수식(이전 질문 응답·컨택 attrs·LUT 등)을
+// 만족하지 않으면 다음/제출을 차단한다. 셀 필드라 tableRowsData 에 실려 저장된다.
+export interface CalcCellValidation {
+  operator: SumConstraint['operator']; // 같음/다름/이상/이하/초과/미만
+  target: CalcExpr; // 기준값 수식
+  tolerance?: number; // eq/ne 전용 절대 오차. 기본 0
+  errorMessage?: string; // 미지정 시 연산자별 기본 문구
+}
 
 // 셀 활성 조건(게이팅) — 같은 행 컨트롤러 셀 값에 따라 input 셀의 입력 가능 여부를 제어한다.
 export type CellEnableCondition =
@@ -436,6 +451,8 @@ export interface TableCell {
   formulaTolerance?: number;
   // 검증 실패 메시지 커스텀. 미지정 시 기본 문구 (계산값 미노출)
   formulaErrorMessage?: string;
+  // 계산 셀(type='calc') 전용 — 표시된 계산값의 비교 검증. input 셀 검증(formula 3필드)과 별개.
+  calcValidation?: CalcCellValidation;
   // 셀 활성 조건 (게이팅) — 같은 행 컨트롤러 셀 값에 따라 이 input 셀의 입력 가능 여부 제어.
   // 미지정 = 항상 활성. 컨트롤러 미응답 = 미충족 = 비활성. 스펙 docs/superpowers/specs/2026-08-05-cell-gating-design.md
   enabledWhen?: CellEnableCondition;

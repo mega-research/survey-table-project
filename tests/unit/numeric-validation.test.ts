@@ -6,7 +6,7 @@ import {
   evaluateSumConstraint,
   pruneSumConstraints,
 } from '@/lib/survey/numeric-validation';
-import type { Question, SumConstraint, TableRow } from '@/types/survey';
+import type { CalcCellValidation, CalcExpr, Question, SumConstraint, TableRow } from '@/types/survey';
 
 /** 숫자 input 셀 2개(c1, c2)를 가진 최소 테이블 질문 픽스처 */
 function tableQuestion(overrides: Partial<Question> = {}): Question {
@@ -77,6 +77,119 @@ describe('evaluateSumConstraint', () => {
     const dangling: SumConstraint = { id: 's3', cellIds: ['ghost'], operator: 'eq', target: 100 };
     expect(evaluateSumConstraint(dangling, { c1: '50' }, ids).skipped).toBe(true);
   });
+
+  it('신규 연산자 ne/gt/lt', () => {
+    const ne = { ...eq100, operator: 'ne' as const };
+    const gt = { ...eq100, operator: 'gt' as const };
+    const lt = { ...eq100, operator: 'lt' as const };
+    expect(evaluateSumConstraint(ne, { c1: '60', c2: '30' }, ids).ok).toBe(true);
+    expect(evaluateSumConstraint(ne, { c1: '60', c2: '40' }, ids).ok).toBe(false);
+    expect(evaluateSumConstraint(gt, { c1: '60', c2: '41' }, ids).ok).toBe(true);
+    expect(evaluateSumConstraint(gt, { c1: '60', c2: '40' }, ids).ok).toBe(false); // 경계: 같으면 false
+    expect(evaluateSumConstraint(lt, { c1: '60', c2: '39' }, ids).ok).toBe(true);
+    expect(evaluateSumConstraint(lt, { c1: '60', c2: '40' }, ids).ok).toBe(false);
+  });
+
+  it('tolerance 는 eq/ne 에만 적용되고 부등호는 무시한다', () => {
+    const eqTol = { ...eq100, tolerance: 5 };
+    expect(evaluateSumConstraint(eqTol, { c1: '60', c2: '36' }, ids).ok).toBe(true); // |96-100|<=5
+    expect(evaluateSumConstraint(eqTol, { c1: '60', c2: '30' }, ids).ok).toBe(false);
+    const neTol = { ...eq100, operator: 'ne' as const, tolerance: 5 };
+    expect(evaluateSumConstraint(neTol, { c1: '60', c2: '36' }, ids).ok).toBe(false); // 밴드 안 = 같음 취급
+    expect(evaluateSumConstraint(neTol, { c1: '60', c2: '30' }, ids).ok).toBe(true);
+    const gteTol = { ...eq100, operator: 'gte' as const, tolerance: 5 };
+    expect(evaluateSumConstraint(gteTol, { c1: '60', c2: '36' }, ids).ok).toBe(false); // 96 >= 100 아님 — tolerance 무시
+  });
+
+  describe('leftExpr / targetExpr 확장', () => {
+    // q1 셀 c1,c2 픽스처(tableQuestion) + 숫자 단답 q2 를 ctx 로 구성
+    const numQ = {
+      id: 'q2', type: 'text', title: '예산', required: false, order: 1, inputType: 'number',
+    } as Question;
+    const mkCtx = (responses: Record<string, unknown>, contactAttrs: Record<string, string> = {}) => ({
+      allResponses: responses,
+      allQuestions: [tableQuestion(), numQ],
+      lookups: [],
+      contactAttrs,
+    });
+    const evalOpts = (ctx: ReturnType<typeof mkCtx>) => ({ ownQuestionId: 'q1', ctx });
+
+    it('targetExpr: 셀 합계를 다른 질문 응답과 비교한다', () => {
+      const c: SumConstraint = {
+        id: 's4', cellIds: ['c1', 'c2'], operator: 'eq', target: 0,
+        targetExpr: { kind: 'question', questionId: 'q2' },
+      };
+      const ctx = mkCtx({ q1: { c1: '60', c2: '40' }, q2: '100' });
+      expect(evaluateSumConstraint(c, { c1: '60', c2: '40' }, ids, evalOpts(ctx)).ok).toBe(true);
+      const ctxBad = mkCtx({ q1: { c1: '60', c2: '40' }, q2: '90' });
+      expect(evaluateSumConstraint(c, { c1: '60', c2: '40' }, ids, evalOpts(ctxBad)).ok).toBe(false);
+    });
+
+    it('targetExpr: 컨택 attrs 와 비교한다', () => {
+      const c: SumConstraint = {
+        id: 's5', cellIds: ['c1', 'c2'], operator: 'lte', target: 0,
+        targetExpr: { kind: 'attr', attrsKey: '예산' },
+      };
+      const ctx = mkCtx({ q1: { c1: '60', c2: '40' } }, { 예산: '120' });
+      expect(evaluateSumConstraint(c, { c1: '60', c2: '40' }, ids, evalOpts(ctx)).ok).toBe(true);
+    });
+
+    it('targetExpr 평가 불능이면 skipped — fail-safe', () => {
+      const c: SumConstraint = {
+        id: 's6', cellIds: ['c1', 'c2'], operator: 'eq', target: 0,
+        targetExpr: { kind: 'attr', attrsKey: '예산' },
+      };
+      const ctx = mkCtx({ q1: { c1: '60', c2: '40' } }, {}); // attrs 없음
+      expect(evaluateSumConstraint(c, { c1: '60', c2: '40' }, ids, evalOpts(ctx)).skipped).toBe(true);
+    });
+
+    it('targetExpr 있는데 evalOpts 미전달이면 skipped — fail-safe', () => {
+      const c: SumConstraint = {
+        id: 's7', cellIds: ['c1', 'c2'], operator: 'eq', target: 0,
+        targetExpr: { kind: 'question', questionId: 'q2' },
+      };
+      expect(evaluateSumConstraint(c, { c1: '60', c2: '40' }, ids).skipped).toBe(true);
+    });
+
+    it('leftExpr: 좌변을 수식으로 평가하고 cellIds 는 무시한다', () => {
+      const c: SumConstraint = {
+        id: 's8', cellIds: [], operator: 'gte', target: 50,
+        leftExpr: {
+          kind: 'group', op: '*',
+          terms: [{ kind: 'cell', cellId: 'c1' }, { kind: 'literal', value: 2 }],
+        },
+      };
+      const ctx = mkCtx({ q1: { c1: '30' } });
+      const r = evaluateSumConstraint(c, { c1: '30' }, ids, evalOpts(ctx));
+      expect(r).toMatchObject({ skipped: false, ok: true, sum: 60 });
+    });
+
+    it('leftExpr 평가 불능이면 skipped — fail-safe', () => {
+      const c: SumConstraint = {
+        id: 's9', cellIds: [], operator: 'eq', target: 100,
+        leftExpr: { kind: 'attr', attrsKey: '없는키' },
+      };
+      const ctx = mkCtx({ q1: { c1: '30' } });
+      expect(evaluateSumConstraint(c, { c1: '30' }, ids, evalOpts(ctx)).skipped).toBe(true);
+    });
+
+    it('leftExpr/targetExpr 의 전부-빈-참조도 skipped', () => {
+      const gEmpty: CalcExpr = {
+        kind: 'group', op: '+', terms: [{ kind: 'question', questionId: 'q2' }],
+      };
+      const cLeft: SumConstraint = { id: 'sx1', cellIds: [], operator: 'eq', target: 100, leftExpr: gEmpty };
+      const cTarget: SumConstraint = { id: 'sx2', cellIds: ['c1', 'c2'], operator: 'eq', target: 0, targetExpr: gEmpty };
+      const q = tableQuestion();
+      const numQ = { id: 'q2', type: 'text', title: '', required: false, order: 1, inputType: 'number' } as Question;
+      const opts = {
+        ownQuestionId: 'q1',
+        ctx: { allResponses: { q1: { c1: '60', c2: '40' } }, allQuestions: [q, numQ] },
+      };
+      const ids = new Set(['c1', 'c2']);
+      expect(evaluateSumConstraint(cLeft, { c1: '60', c2: '40' }, ids, opts).skipped).toBe(true);
+      expect(evaluateSumConstraint(cTarget, { c1: '60', c2: '40' }, ids, opts).skipped).toBe(true);
+    });
+  });
 });
 
 describe('collectNumericIssues — 단답형 범위', () => {
@@ -134,6 +247,12 @@ describe('collectNumericIssues — 테이블', () => {
       },
     ] as TableRow[];
     const q = tableQuestion({ tableRowsData: rows, sumConstraints: [eq100] });
+    expect(collectNumericIssues(q, undefined)).toHaveLength(0);
+    expect(collectNumericIssues(q, {})).toHaveLength(0);
+  });
+
+  it('미접촉 표의 입력 기반 검증(합계 등)은 여전히 스킵된다', () => {
+    const q = tableQuestion({ sumConstraints: [eq100] });
     expect(collectNumericIssues(q, undefined)).toHaveLength(0);
     expect(collectNumericIssues(q, {})).toHaveLength(0);
   });
@@ -340,6 +459,40 @@ describe('collectNumericIssues — 테이블', () => {
     expect(collectNumericIssues(q, { c1: '500' })[0]).toMatchObject({ kind: 'range', cellIds: ['c1'] });
     expect(collectNumericIssues(q, { c1: '10' })).toHaveLength(0);
     expect(collectNumericIssues(q, { c1: '' })).toHaveLength(0);
+  });
+
+  it('targetExpr 규칙: ctx 를 통해 평가되고 위반 메시지는 기준값을 노출하지 않는다', () => {
+    const q = tableQuestion({
+      sumConstraints: [{
+        id: 's10', cellIds: ['c1', 'c2'], operator: 'eq', target: 0,
+        targetExpr: { kind: 'question', questionId: 'q2' },
+      }],
+    });
+    const numQ = {
+      id: 'q2', type: 'text', title: '예산', required: false, order: 1, inputType: 'number',
+    } as Question;
+    const ctx = {
+      allResponses: { q1: { c1: '60', c2: '30' }, q2: '100' },
+      allQuestions: [q, numQ],
+    };
+    const issues = collectNumericIssues(q, { c1: '60', c2: '30' }, ctx);
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toMatchObject({ kind: 'sum' });
+    expect(issues[0]!.message).toContain('기준값');
+    expect(issues[0]!.message).not.toContain('100');
+  });
+
+  it('leftExpr 규칙 위반 issue 는 cellIds 없이 메시지만 담는다', () => {
+    const q = tableQuestion({
+      sumConstraints: [{
+        id: 's11', cellIds: [], operator: 'gte', target: 100,
+        leftExpr: { kind: 'cell', cellId: 'c1' },
+      }],
+    });
+    const ctx = { allResponses: { q1: { c1: '50' } }, allQuestions: [q] };
+    const issues = collectNumericIssues(q, { c1: '50' }, ctx);
+    expect(issues).toHaveLength(1);
+    expect(issues[0]!.cellIds).toBeUndefined();
   });
 });
 
@@ -1069,5 +1222,127 @@ describe('collectNumericIssues — 열 displayCondition (ctx 전달)', () => {
     const q = columnConditionQuestion();
     const issues = collectNumericIssues(q, { cA: '10' });
     expect(issues[0]).toMatchObject({ kind: 'required-cells', cellIds: ['cB'] });
+  });
+});
+
+describe('collectNumericIssues — 계산 셀 비교 검증', () => {
+  // c1 입력 셀 + k1 = c1 × 2 계산 셀 픽스처
+  const calcQ = (calcValidation: CalcCellValidation): Question =>
+    ({
+      id: 'q1', type: 'table', title: '표', required: false, order: 0,
+      tableRowsData: [
+        {
+          id: 'r1',
+          cells: [
+            { id: 'c1', type: 'input', content: '', inputType: 'number' },
+            {
+              id: 'k1', type: 'calc', content: '',
+              formula: {
+                kind: 'group', op: '*',
+                terms: [{ kind: 'cell', cellId: 'c1' }, { kind: 'literal', value: 2 }],
+              },
+              calcValidation,
+            },
+          ],
+        },
+      ],
+    }) as unknown as Question;
+  const numQ = {
+    id: 'q2', type: 'text', title: '예산', required: false, order: 1, inputType: 'number',
+  } as Question;
+  const ctxOf = (
+    q: Question,
+    responses: Record<string, unknown>,
+    contactAttrs: Record<string, string> = {},
+  ) => ({ allResponses: responses, allQuestions: [q, numQ], contactAttrs });
+
+  it('계산값이 기준 수식을 위반하면 formula issue + 계산 셀 하이라이트', () => {
+    const q = calcQ({ operator: 'lte', target: { kind: 'question', questionId: 'q2' } });
+    const ctx = ctxOf(q, { q1: { c1: '60' }, q2: '100' }); // 120 <= 100 위반
+    const issues = collectNumericIssues(q, { c1: '60' }, ctx);
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toMatchObject({ kind: 'formula', cellIds: ['k1'] });
+    expect(issues[0]!.message).toContain('기준값');
+  });
+
+  it('충족하면 issue 없음', () => {
+    const q = calcQ({ operator: 'lte', target: { kind: 'question', questionId: 'q2' } });
+    const ctx = ctxOf(q, { q1: { c1: '40' }, q2: '100' }); // 80 <= 100
+    expect(collectNumericIssues(q, { c1: '40' }, ctx)).toHaveLength(0);
+  });
+
+  it('errorMessage 지정 시 그 문구 사용', () => {
+    const q = calcQ({
+      operator: 'lte', target: { kind: 'question', questionId: 'q2' },
+      errorMessage: '합계가 예산을 초과했습니다',
+    });
+    const ctx = ctxOf(q, { q1: { c1: '60' }, q2: '100' });
+    expect(collectNumericIssues(q, { c1: '60' }, ctx)[0]!.message).toContain('합계가 예산을 초과했습니다');
+  });
+
+  it('tolerance 는 eq 에서 밴드로 적용된다', () => {
+    const q = calcQ({ operator: 'eq', target: { kind: 'question', questionId: 'q2' }, tolerance: 5 });
+    const okCtx = ctxOf(q, { q1: { c1: '49' }, q2: '100' }); // 98, |98-100|<=5
+    expect(collectNumericIssues(q, { c1: '49' }, okCtx)).toHaveLength(0);
+    const badCtx = ctxOf(q, { q1: { c1: '45' }, q2: '100' }); // 90
+    expect(collectNumericIssues(q, { c1: '45' }, badCtx)).toHaveLength(1);
+  });
+
+  it('기준 수식 평가 불능이면 통과 — fail-safe', () => {
+    const q = calcQ({ operator: 'eq', target: { kind: 'attr', attrsKey: '없는키' } });
+    const ctx = ctxOf(q, { q1: { c1: '60' } });
+    expect(collectNumericIssues(q, { c1: '60' }, ctx)).toHaveLength(0);
+  });
+
+  it('ctx 미전달이면 통과 — fail-safe', () => {
+    const q = calcQ({ operator: 'lte', target: { kind: 'question', questionId: 'q2' } });
+    expect(collectNumericIssues(q, { c1: '60' })).toHaveLength(0);
+  });
+
+  it('미접촉 표에서도 계산 셀 검증은 실행된다 — 우회 봉합', () => {
+    // Q17 표를 통째로 건너뛴 응답자: SUM 은 0으로 표시되고 Q16=1 과 불일치 → 차단
+    const q = calcQ({ operator: 'eq', target: { kind: 'question', questionId: 'q2' } });
+    const ctx = ctxOf(q, { q2: '1' }); // q1 응답 없음
+    const issues = collectNumericIssues(q, undefined, ctx);
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toMatchObject({ kind: 'formula', cellIds: ['k1'] });
+  });
+
+  it('기준값 수식의 참조가 전부 빈 값이면 스킵 — group 래핑 무응답 오차단 방지', () => {
+    // 에디터가 만드는 형태: group(+, [question]) — 무응답이면 0이 아니라 스킵이어야 한다
+    const q = calcQ({
+      operator: 'eq',
+      target: { kind: 'group', op: '+', terms: [{ kind: 'question', questionId: 'q2' }] },
+    });
+    const ctx = ctxOf(q, { q1: { c1: '30' } }); // q2 무응답 — computed 60 vs 0 비교가 아니라 스킵
+    expect(collectNumericIssues(q, { c1: '30' }, ctx)).toHaveLength(0);
+  });
+
+  it('기준값 참조가 일부만 비어 있으면 스킵하지 않고 0 취급으로 비교한다', () => {
+    // q2 무응답 + q3 응답 30 — 참조가 하나라도 해소되면 스킵 없이 q2=0 취급으로 비교한다.
+    // literal 은 areAllFormulaRefsEmpty 의 refs 에 안 잡히므로 refs=[q2] 뿐인 이전 픽스처는
+    // skip 경로와 비교 경로가 같은 값(60=60)으로 수렴해 Fix 2 를 제거해도 통과하는 무의미한
+    // 단언이었다 — refs=[q2, q3] 로 갈아끼워 두 경로가 실제로 갈리게 한다.
+    const q = calcQ({
+      operator: 'eq',
+      target: {
+        kind: 'group', op: '+',
+        terms: [
+          { kind: 'question', questionId: 'q2' },
+          { kind: 'question', questionId: 'q3' },
+        ],
+      },
+    });
+    const q3 = {
+      id: 'q3', type: 'text', title: '', required: false, order: 2, inputType: 'number',
+    } as Question;
+    const ctx = {
+      allResponses: { q1: { c1: '30' }, q3: '30' }, // computed 60, 기준값 0(q2 무응답)+30 = 30 — 위반
+      allQuestions: [q, numQ, q3],
+      contactAttrs: {},
+    };
+    const issues = collectNumericIssues(q, { c1: '30' }, ctx);
+    expect(issues).toHaveLength(1); // 스킵됐다면 0건 — skip 경로와 비교 경로가 실제로 갈리는 단언
+    expect(issues[0]).toMatchObject({ kind: 'formula', cellIds: ['k1'] });
   });
 });

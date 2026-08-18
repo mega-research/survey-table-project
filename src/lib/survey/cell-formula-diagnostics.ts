@@ -54,30 +54,36 @@ function questionLabel(question: Question): string {
 // ── 규칙 1/3/4: broken-ref, non-numeric-ref, validation-backward-ref ──
 // 수식을 가진 셀(calc + 검증 input) 하나의 formula 트리를 순회하며 세 규칙을 함께 판정한다.
 
-function checkFormulaOwner(
-  ownerQuestion: Question,
-  ownerCell: TableCell,
+interface ExprRefOwner {
+  ownerQuestion: Question;
+  /** FormulaDiagnostic.cellId 로 실을 값 — 셀 수식이면 cell.id, 합계 제약이면 constraint.id */
+  diagCellId: string;
+  /** 메시지에 쓸 소유자 라벨 */
+  ownerLabel: string;
+  /** true 면 뒤 순서 질문 참조를 validation-backward-ref 로 경고한다 */
+  isValidation: boolean;
+}
+
+/** 수식 트리 하나의 참조 진단 — 셀 수식(checkFormulaOwner)과 합계 제약 수식이 공유한다. */
+function checkExprRefs(
+  expr: CalcExpr,
+  owner: ExprRefOwner,
   questions: Question[],
   lookups: SurveyLookup[],
   out: FormulaDiagnostic[],
 ): void {
-  if (!ownerCell.formula) return;
-  const ownerLabel = formatCellLabel(ownerCell);
-  // 검증 셀(입력 셀 + formula)만 뒤 순서 질문 참조가 문제다. 표시용 calc 셀은
-  // 값이 늦게 채워져도 무해하다 — 검증 셀은 빈 값을 0으로 취급해 응답자를 차단할 수 있다.
-  const isValidationCell = ownerCell.type === 'input';
-
-  walkExpr(ownerCell.formula, (expr) => {
-    if (expr.kind === 'cell') {
-      const targetQuestionId = expr.questionId ?? ownerQuestion.id;
+  const { ownerQuestion, diagCellId, ownerLabel, isValidation } = owner;
+  walkExpr(expr, (node) => {
+    if (node.kind === 'cell') {
+      const targetQuestionId = node.questionId ?? ownerQuestion.id;
       const targetQuestion = questions.find((q) => q.id === targetQuestionId);
-      const targetCell = targetQuestion ? findCell(questions, targetQuestionId, expr.cellId) : undefined;
+      const targetCell = targetQuestion ? findCell(questions, targetQuestionId, node.cellId) : undefined;
 
       if (!targetQuestion || !targetCell) {
         out.push({
           kind: 'broken-ref',
           questionId: ownerQuestion.id,
-          cellId: ownerCell.id,
+          cellId: diagCellId,
           message: `수식이 존재하지 않는 셀을 참조합니다: ${ownerLabel}`,
         });
         return;
@@ -87,56 +93,80 @@ function checkFormulaOwner(
         out.push({
           kind: 'non-numeric-ref',
           questionId: ownerQuestion.id,
-          cellId: ownerCell.id,
+          cellId: diagCellId,
           message: `수식이 숫자 셀이 아닌 셀을 참조합니다: ${ownerLabel} → ${formatCellLabel(targetCell)}. 계산에 포함되지 않고 빈 항으로 처리됩니다.`,
         });
       }
 
-      if (isValidationCell && targetQuestion.id !== ownerQuestion.id && targetQuestion.order > ownerQuestion.order) {
+      if (isValidation && targetQuestion.id !== ownerQuestion.id && targetQuestion.order > ownerQuestion.order) {
         out.push({
           kind: 'validation-backward-ref',
           questionId: ownerQuestion.id,
-          cellId: ownerCell.id,
+          cellId: diagCellId,
           message: `검증 수식이 뒤 순서 질문을 참조합니다: ${ownerLabel} → ${formatCellLabel(targetCell)}. 아직 입력되지 않은 값은 0으로 취급되거나 계산에서 제외되어 응답자가 올바른 값을 입력해도 통과하지 못할 수 있습니다.`,
         });
       }
       return;
     }
 
-    if (expr.kind === 'question') {
-      const targetQuestion = questions.find((q) => q.id === expr.questionId);
+    if (node.kind === 'question') {
+      const targetQuestion = questions.find((q) => q.id === node.questionId);
       if (!targetQuestion) {
         out.push({
           kind: 'broken-ref',
           questionId: ownerQuestion.id,
-          cellId: ownerCell.id,
+          cellId: diagCellId,
           message: `수식이 존재하지 않는 질문을 참조합니다: ${ownerLabel}`,
         });
         return;
       }
-      if (isValidationCell && targetQuestion.id !== ownerQuestion.id && targetQuestion.order > ownerQuestion.order) {
+      if (isValidation && targetQuestion.id !== ownerQuestion.id && targetQuestion.order > ownerQuestion.order) {
         out.push({
           kind: 'validation-backward-ref',
           questionId: ownerQuestion.id,
-          cellId: ownerCell.id,
+          cellId: diagCellId,
           message: `검증 수식이 뒤 순서 질문을 참조합니다: ${ownerLabel} → ${questionLabel(targetQuestion)}. 아직 입력되지 않은 값은 0으로 취급되거나 계산에서 제외되어 응답자가 올바른 값을 입력해도 통과하지 못할 수 있습니다.`,
         });
       }
       return;
     }
 
-    if (expr.kind === 'lookup') {
-      const found = lookups.some((l) => l.id === expr.surveyLookupId);
+    if (node.kind === 'lookup') {
+      const found = lookups.some((l) => l.id === node.surveyLookupId);
       if (!found) {
         out.push({
           kind: 'broken-ref',
           questionId: ownerQuestion.id,
-          cellId: ownerCell.id,
+          cellId: diagCellId,
           message: `수식이 존재하지 않는 LUT를 참조합니다: ${ownerLabel}`,
         });
       }
     }
   });
+}
+
+function checkFormulaOwner(
+  ownerQuestion: Question,
+  ownerCell: TableCell,
+  questions: Question[],
+  lookups: SurveyLookup[],
+  out: FormulaDiagnostic[],
+): void {
+  if (!ownerCell.formula) return;
+  // 검증 셀(입력 셀 + formula)만 뒤 순서 질문 참조가 문제다. 표시용 calc 셀은
+  // 값이 늦게 채워져도 무해하다 — 검증 셀은 빈 값을 0으로 취급해 응답자를 차단할 수 있다.
+  checkExprRefs(
+    ownerCell.formula,
+    {
+      ownerQuestion,
+      diagCellId: ownerCell.id,
+      ownerLabel: formatCellLabel(ownerCell),
+      isValidation: ownerCell.type === 'input',
+    },
+    questions,
+    lookups,
+    out,
+  );
 }
 
 // ── 규칙 2: cycle (calc→calc 간선만, 정적 DFS) ──
@@ -243,6 +273,23 @@ export function collectFormulaDiagnostics(
   for (const question of questions) {
     for (const row of question.tableRowsData ?? []) {
       for (const cell of row.cells) {
+        // 계산 셀 비교 검증의 기준 수식 — 차단형 검증이므로 뒤 순서 참조도 경고. cell.formula
+        // 유무와 무관하게 검사해야 하므로 아래 `!cell.formula continue` 보다 먼저 수행한다.
+        if (cell.calcValidation) {
+          checkExprRefs(
+            cell.calcValidation.target,
+            {
+              ownerQuestion: question,
+              diagCellId: cell.id,
+              ownerLabel: `${formatCellLabel(cell)} 검증 기준`,
+              isValidation: true,
+            },
+            questions,
+            lookups,
+            diagnostics,
+          );
+        }
+
         if (!cell.formula) continue;
         checkFormulaOwner(question, cell, questions, lookups, diagnostics);
         if (cell.type === 'calc' && hasCycleFromCalcCell(questions, question.id, cell.id)) {
@@ -253,6 +300,29 @@ export function collectFormulaDiagnostics(
             message: `계산 셀 수식이 순환 참조를 포함합니다: ${formatCellLabel(cell)}. 항상 빈 값(—)으로 표시됩니다.`,
           });
         }
+      }
+    }
+
+    // 합계 제약의 좌/우변 수식 — 차단형 검증이므로 뒤 순서 참조도 경고 대상이다.
+    for (const constraint of question.sumConstraints ?? []) {
+      const sides = [
+        { label: '좌변', expr: constraint.leftExpr },
+        { label: '우변', expr: constraint.targetExpr },
+      ];
+      for (const side of sides) {
+        if (!side.expr) continue;
+        checkExprRefs(
+          side.expr,
+          {
+            ownerQuestion: question,
+            diagCellId: constraint.id,
+            ownerLabel: `합계 검증 규칙 ${side.label}`,
+            isValidation: true,
+          },
+          questions,
+          lookups,
+          diagnostics,
+        );
       }
     }
   }

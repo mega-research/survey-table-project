@@ -111,3 +111,70 @@ describe('collectFormulaDiagnostics', () => {
     expect(kinds).not.toContain('branch-same-group-calc');
   });
 });
+
+describe('합계 제약 수식 진단', () => {
+  const tableQ = (overrides: Partial<Question> = {}): Question =>
+    ({
+      id: 'q1', type: 'table', title: '표', required: false, order: 1,
+      tableRowsData: [
+        { id: 'r1', cells: [{ id: 'a1', content: '', type: 'input', inputType: 'number' }] },
+      ],
+      ...overrides,
+    }) as Question;
+
+  it('targetExpr 가 삭제된 셀을 참조하면 broken-ref', () => {
+    const q = tableQ({
+      sumConstraints: [{
+        id: 's1', cellIds: ['a1'], operator: 'eq', target: 0,
+        targetExpr: { kind: 'cell', cellId: 'ghost' },
+      }],
+    });
+    const out = collectFormulaDiagnostics([q], [], []);
+    expect(out.some((d) => d.kind === 'broken-ref' && d.cellId === 's1')).toBe(true);
+  });
+
+  it('targetExpr 가 뒤 순서 질문을 참조하면 validation-backward-ref', () => {
+    const later = {
+      id: 'q9', type: 'text', title: '뒤 질문', required: false, order: 9, inputType: 'number',
+    } as Question;
+    const q = tableQ({
+      sumConstraints: [{
+        id: 's2', cellIds: ['a1'], operator: 'eq', target: 0,
+        targetExpr: { kind: 'question', questionId: 'q9' },
+      }],
+    });
+    const out = collectFormulaDiagnostics([q, later], [], []);
+    expect(out.some((d) => d.kind === 'validation-backward-ref' && d.cellId === 's2')).toBe(true);
+  });
+
+  it('leftExpr 도 동일하게 순회한다', () => {
+    const q = tableQ({
+      sumConstraints: [{
+        id: 's3', cellIds: [], operator: 'eq', target: 0,
+        leftExpr: { kind: 'cell', cellId: 'ghost' },
+      }],
+    });
+    const out = collectFormulaDiagnostics([q], [], []);
+    expect(out.some((d) => d.kind === 'broken-ref' && d.cellId === 's3')).toBe(true);
+  });
+
+  it('계산 셀 calcValidation.target 이 삭제된 셀을 참조하면 broken-ref', () => {
+    const q = {
+      id: 'q1', type: 'table', title: '표', required: false, order: 1,
+      tableRowsData: [
+        {
+          id: 'r1',
+          cells: [
+            {
+              id: 'k1', content: '', type: 'calc',
+              formula: { kind: 'literal', value: 1 },
+              calcValidation: { operator: 'eq', target: { kind: 'cell', cellId: 'ghost' } },
+            },
+          ],
+        },
+      ],
+    } as Question;
+    const out = collectFormulaDiagnostics([q], [], []);
+    expect(out.some((d) => d.kind === 'broken-ref' && d.cellId === 'k1')).toBe(true);
+  });
+});
