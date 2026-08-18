@@ -1,7 +1,7 @@
 import { ORPCError, os } from '@orpc/server';
 
 import { isAdminUserAllowed } from '@/lib/auth/admin-allowlist';
-import { getGuestSurveyId } from '@/lib/auth/guest-grants';
+import { isGuestUser } from '@/lib/auth/guest-grants';
 import { logger } from '@/lib/logger';
 import { getTrustedClientIpOrNull } from '@/lib/rate-limit/client-ip';
 
@@ -32,7 +32,7 @@ import type { ORPCContext } from './context';
  */
 function resolveLogRole(userId: string | undefined): string {
   if (!userId) return 'anonymous';
-  if (getGuestSurveyId(userId) !== null) return 'guest';
+  if (isGuestUser(userId)) return 'guest';
   if (isAdminUserAllowed(userId)) return 'admin';
   return 'user';
 }

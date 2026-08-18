@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 
 import { ContactsTable } from '@/components/operations/contacts/contacts-table';
-import type { ContactColumnScheme } from '@/db/schema/schema-types';
+import type { ContactColumnScheme, ContactResultCode } from '@/db/schema/schema-types';
 import type { ContactsSortDir, ContactsSortKey } from '@/lib/operations/contacts';
 import type { ContactsRow } from '@/lib/operations/contacts.server';
 
@@ -16,6 +16,7 @@ interface ContactsPageClientProps {
   pageSize: number;
   sort: ContactsSortKey;
   dir: ContactsSortDir;
+  resultCodeOptions: ContactResultCode[];
 }
 
 /**
@@ -30,6 +31,7 @@ export function ContactsPageClient({
   pageSize,
   sort,
   dir,
+  resultCodeOptions,
 }: ContactsPageClientProps) {
   const router = useRouter();
 
@@ -42,6 +44,8 @@ export function ContactsPageClient({
       scheme={scheme}
       sort={sort}
       dir={dir}
+      surveyId={surveyId}
+      resultCodeOptions={resultCodeOptions}
       onRowClick={(row) =>
         router.push(`/admin/surveys/${surveyId}/operations/contacts/${row.id}`)
       }

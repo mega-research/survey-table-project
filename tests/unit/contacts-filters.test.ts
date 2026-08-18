@@ -2,10 +2,60 @@ import { describe, it, expect } from 'vitest';
 
 import {
   parseClausesFromUrl,
+  parseHeaderFiltersFromUrl,
   placeholderFor,
   type ColumnCandidate,
 } from '@/lib/operations/contacts-filters.server';
+import {
+  HEADER_FILTER_VALUE_SEPARATOR as SEP,
+  MAIL_FILTER_OPTIONS,
+  WEB_FILTER_OPTIONS,
+  webFilterOptionsFor,
+} from '@/lib/operations/filter-shared';
+import { STATUS_LABEL } from '@/components/operations/mail-campaign/recipient-status-badge';
 import type { ContactResultCode } from '@/db/schema/schema-types';
+
+describe('webFilterOptionsFor — web 필터 선택지 + 레거시 값 노출', () => {
+  it('평상시에는 상태 4옵션만 — 레거시 항목 미노출', () => {
+    expect(webFilterOptionsFor([])).toEqual(
+      WEB_FILTER_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+    );
+    expect(webFilterOptionsFor(['completed'])).toEqual(
+      WEB_FILTER_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+    );
+  });
+
+  it("레거시 'false' 는 실제 서버 의미(미완료 전체) 라벨로 노출 — '미응답' 위장 금지", () => {
+    // 구 URL·캠페인 스냅샷 재발송으로 'false' 가 걸린 상태에서 '미응답'으로
+    // 위장 표시하면, 화면을 믿은 운영자가 진행중·이탈 포함 대상에게 발송하게 된다.
+    const options = webFilterOptionsFor(['false']);
+    const legacy = options.find((o) => o.value === 'false');
+    expect(legacy?.label).toContain('구필터');
+    expect(legacy?.label).toContain('진행중·이탈 포함');
+    expect(legacy?.label).not.toBe('미응답');
+  });
+
+  it("레거시 'true' 는 응답 완료 구필터 라벨로 노출", () => {
+    const options = webFilterOptionsFor(['true', 'drop']);
+    expect(options.find((o) => o.value === 'true')?.label).toContain('구필터');
+    // 새 상태 옵션은 그대로 유지
+    expect(options.find((o) => o.value === 'drop')?.label).toBe('이탈');
+  });
+});
+
+describe('MAIL_FILTER_OPTIONS — 메일 필터 어휘', () => {
+  it('라벨이 badge(STATUS_LABEL)와 동기화돼 있다 — 복제 어긋남 방지', () => {
+    for (const o of MAIL_FILTER_OPTIONS) {
+      if (o.value === 'none') continue;
+      expect(STATUS_LABEL[o.value as keyof typeof STATUS_LABEL]?.label).toBe(o.label);
+    }
+  });
+
+  it('모든 수신 상태를 빠짐없이 포함한다 (+ none)', () => {
+    const values = MAIL_FILTER_OPTIONS.map((o) => o.value);
+    expect(new Set(values)).toEqual(new Set([...Object.keys(STATUS_LABEL), 'none']));
+  });
+});
 
 describe('placeholderFor', () => {
   it('returns id range hint for system.resid', () => {
@@ -17,10 +67,14 @@ describe('placeholderFor', () => {
     expect(placeholderFor('pii.mobile')).toBe('정확한 값 입력 (부분 검색 불가)');
   });
 
-  it('returns generic 검색어 for the rest', () => {
-    expect(placeholderFor('attrs.전시회명')).toBe('검색어');
-    expect(placeholderFor('system.contact_result')).toBe('검색어');
-    expect(placeholderFor('system.web')).toBe('검색어');
+  it('attrs 는 범위 검색 힌트 포함, 나머지는 검색어 계열', () => {
+    expect(placeholderFor('attrs.전시회명')).toBe('검색어 또는 범위 (예: 10-13)');
+    expect(placeholderFor('system.contact_result')).toBe('검색어 또는 범위 (예: 10-13)');
+    expect(placeholderFor('system.web')).toBe('검색어 또는 범위 (예: 10-13)');
+  });
+
+  it('system.all 은 전체 검색 안내', () => {
+    expect(placeholderFor('system.all')).toBe('전체 검색 (암호화 컬럼은 전문 일치)');
   });
 });
 
@@ -28,8 +82,11 @@ const candidates: ColumnCandidate[] = [
   { source: 'system.resid', label: '번호' },
   { source: 'system.contact_result', label: '결과코드' },
   { source: 'system.web', label: '응답' },
+  { source: 'system.email_count', label: '메일' },
   { source: 'attrs.전시회명', label: '전시회명' },
   { source: 'attrs.지역', label: '지역' },
+  // 숨긴 컬럼 — 명시 선택으로는 검색 가능하지만 전체(system.all) 전개에선 제외.
+  { source: 'attrs.종사자수', label: '종사자수', hidden: true },
   { source: 'pii.email', label: '이메일', piiType: 'email' },
 ];
 
@@ -110,6 +167,23 @@ describe('parseClausesFromUrl - source 분기', () => {
     expect(f0.condition).toEqual({ source: 'system.web', mode: 'boolean', value: 'false' });
   });
 
+  it('system.web + 상태 값(drop 등) → boolean 조건으로 수용', () => {
+    const d = parseClausesFromUrl(['system.web'], ['drop'], [''], candidates, resultCodes);
+    expect(d[0]?.condition).toEqual({ source: 'system.web', mode: 'boolean', value: 'drop' });
+  });
+
+  it('system.email_count + 상태 값 → boolean 조건, 어휘 외 값은 drop', () => {
+    const d = parseClausesFromUrl(['system.email_count'], ['bounced'], [''], candidates, resultCodes);
+    expect(d[0]?.condition).toEqual({
+      source: 'system.email_count',
+      mode: 'boolean',
+      value: 'bounced',
+    });
+    expect(
+      parseClausesFromUrl(['system.email_count'], ['yes'], [''], candidates, resultCodes),
+    ).toEqual([]);
+  });
+
   it('system.web + 외 값 → drop', () => {
     expect(parseClausesFromUrl(['system.web'], ['yes'], [''], candidates, resultCodes)).toEqual([]);
   });
@@ -125,6 +199,48 @@ describe('parseClausesFromUrl - source 분기', () => {
     expect(result).toEqual([
       { op: null, condition: { source: 'attrs.전시회명', mode: 'text', value: '핵심' } },
     ]);
+  });
+
+  it('attrs.* + 범위 문법 → idlist (NO 범위 검색)', () => {
+    const result = parseClausesFromUrl(
+      ['attrs.지역'],
+      ['10-13, 15'],
+      [''],
+      candidates,
+      resultCodes,
+    );
+    expect(result).toEqual([
+      {
+        op: null,
+        condition: {
+          source: 'attrs.지역',
+          mode: 'idlist',
+          value: '10-13, 15',
+          ranges: [
+            { from: 10, to: 13 },
+            { from: 15, to: 15 },
+          ],
+        },
+      },
+    ]);
+  });
+
+  it('attrs.* + 단일 숫자는 부분검색 유지 (범위 문법 - , 있어야 idlist)', () => {
+    const single = parseClausesFromUrl(['attrs.지역'], ['15'], [''], candidates, resultCodes);
+    const s0 = single[0];
+    if (!s0) throw new Error('expected single[0]');
+    expect(s0.condition.mode).toBe('text');
+    // 숫자가 아닌 하이픈 문자열도 text 유지
+    const textDash = parseClausesFromUrl(
+      ['attrs.지역'],
+      ['서울-강남'],
+      [''],
+      candidates,
+      resultCodes,
+    );
+    const t0 = textDash[0];
+    if (!t0) throw new Error('expected textDash[0]');
+    expect(t0.condition.mode).toBe('text');
   });
 
   it('pii.email + 유효 이메일 → exact + blindIndex', () => {
@@ -170,6 +286,96 @@ describe('parseClausesFromUrl - source 분기', () => {
     expect(parseClausesFromUrl(['attrs.unknown'], ['x'], [''], candidates, resultCodes)).toEqual(
       [],
     );
+  });
+
+  it('system.all + 일반 텍스트 → attrs 전체를 text OR 로 전개 (pii 는 정규화 실패로 제외)', () => {
+    const result = parseClausesFromUrl(['system.all'], ['핵심'], [''], candidates, resultCodes);
+    expect(result).toHaveLength(1);
+    const c0 = result[0];
+    if (!c0) throw new Error('expected result[0]');
+    expect(c0.condition.mode).toBe('any');
+    expect(c0.condition.subConditions).toEqual([
+      { source: 'attrs.전시회명', mode: 'text', value: '핵심' },
+      { source: 'attrs.지역', mode: 'text', value: '핵심' },
+    ]);
+  });
+
+  it('system.all + 유효 이메일 → pii exact(blindIndex 포함)도 OR 에 포함', () => {
+    const result = parseClausesFromUrl(
+      ['system.all'],
+      ['user@example.com'],
+      [''],
+      candidates,
+      resultCodes,
+    );
+    const c0 = result[0];
+    if (!c0) throw new Error('expected result[0]');
+    const piiSub = (c0.condition.subConditions ?? []).find((s) => s.source === 'pii.email');
+    if (!piiSub) throw new Error('expected pii.email subcondition');
+    expect(piiSub.mode).toBe('exact');
+    expect(/^[0-9a-f]{64}$/.test(piiSub.blindIndex ?? '')).toBe(true);
+  });
+
+  it('system.all + 범위 문법 → attrs 숫자 범위 매칭(idlist)도 OR 에 포함', () => {
+    // 전체가 기본값이라 사용자는 여기에 1-10 같은 범위를 입력한다 —
+    // 텍스트 부분검색과 함께 attrs 컬럼별 숫자 범위 매칭을 OR 로 함께 건다.
+    const result = parseClausesFromUrl(['system.all'], ['10-13'], [''], candidates, resultCodes);
+    const c0 = result[0];
+    if (!c0) throw new Error('expected result[0]');
+    const subs = c0.condition.subConditions ?? [];
+    const idlists = subs.filter((s) => s.mode === 'idlist');
+    expect(idlists.map((s) => s.source)).toEqual(['attrs.전시회명', 'attrs.지역']);
+    expect(idlists[0]?.ranges).toEqual([{ from: 10, to: 13 }]);
+    // 텍스트 부분검색도 함께 유지 (범위처럼 생긴 리터럴 값 검색 가능성)
+    expect(subs.some((s) => s.mode === 'text')).toBe(true);
+  });
+
+  it('system.all + 단일 숫자는 부분검색만 (범위 문법 아님)', () => {
+    const result = parseClausesFromUrl(['system.all'], ['15'], [''], candidates, resultCodes);
+    const c0 = result[0];
+    if (!c0) throw new Error('expected result[0]');
+    expect((c0.condition.subConditions ?? []).every((s) => s.mode !== 'idlist')).toBe(true);
+  });
+
+  it('system.all — 범위 × 컬럼 총량이 상한을 넘으면 idlist 전개를 생략하고 텍스트만 유지', () => {
+    // 안전밸브: postgres 바인드 파라미터 한계(65,535) 보호. 정상 사용에선 미발동.
+    const manyColumns: ColumnCandidate[] = Array.from({ length: 51 }, (_, i) => ({
+      source: `attrs.컬럼${i}`,
+      label: `컬럼${i}`,
+    }));
+    const hundredTokens = Array.from({ length: 100 }, (_, i) => String(i + 1)).join(',');
+
+    // 51 컬럼 × 100 토큰 = 5,100 > 5,000 → idlist 생략
+    const over = parseClausesFromUrl(['system.all'], [hundredTokens], [''], manyColumns, resultCodes);
+    const o0 = over[0];
+    if (!o0) throw new Error('expected over[0]');
+    expect((o0.condition.subConditions ?? []).some((s) => s.mode === 'idlist')).toBe(false);
+    expect((o0.condition.subConditions ?? []).some((s) => s.mode === 'text')).toBe(true);
+
+    // 50 컬럼 × 100 토큰 = 5,000 → 전개 유지
+    const under = parseClausesFromUrl(
+      ['system.all'],
+      [hundredTokens],
+      [''],
+      manyColumns.slice(0, 50),
+      resultCodes,
+    );
+    const u0 = under[0];
+    if (!u0) throw new Error('expected under[0]');
+    expect((u0.condition.subConditions ?? []).some((s) => s.mode === 'idlist')).toBe(true);
+  });
+
+  it('system.all — 숨긴 컬럼은 전개에서 제외 (숨긴 숫자 컬럼이 범위 검색을 오염시키지 않음)', () => {
+    const result = parseClausesFromUrl(['system.all'], ['1-10'], [''], candidates, resultCodes);
+    const c0 = result[0];
+    if (!c0) throw new Error('expected result[0]');
+    const sources = (c0.condition.subConditions ?? []).map((s) => s.source);
+    expect(sources).not.toContain('attrs.종사자수');
+  });
+
+  it('숨긴 컬럼도 명시적으로 선택하면 검색 가능 (전체 전개 제외와 별개)', () => {
+    const result = parseClausesFromUrl(['attrs.종사자수'], ['5'], [''], candidates, resultCodes);
+    expect(result).toHaveLength(1);
   });
 
   it('빈 q → drop', () => {
@@ -263,5 +469,173 @@ describe('parseClausesFromUrl - 다중 조건', () => {
     if (!dropped0) throw new Error('expected result[0]');
     expect(dropped0.op).toBeNull();
     expect(dropped0.condition.source).toBe('attrs.지역');
+  });
+});
+
+describe('parseHeaderFiltersFromUrl', () => {
+  it('빈 입력 → 빈 배열', () => {
+    expect(parseHeaderFiltersFromUrl(undefined, undefined, undefined, candidates, resultCodes)).toEqual([]);
+  });
+
+  it('attrs in — 구분자 조인 값 목록을 in 절로 파싱, 전부 AND 결합', () => {
+    const result = parseHeaderFiltersFromUrl(
+      ['attrs.지역', 'attrs.전시회명'],
+      ['in', 'in'],
+      [`서울${SEP}부산`, '핵심'],
+      candidates,
+      resultCodes,
+    );
+    expect(result).toEqual([
+      {
+        op: null,
+        condition: { source: 'attrs.지역', mode: 'in', value: '', values: ['서울', '부산'] },
+      },
+      {
+        op: 'AND',
+        condition: { source: 'attrs.전시회명', mode: 'in', value: '', values: ['핵심'] },
+      },
+    ]);
+  });
+
+  it('attrs text — 고카디널리티 폴백 부분검색', () => {
+    const result = parseHeaderFiltersFromUrl(
+      ['attrs.전시회명'],
+      ['text'],
+      ['핵심'],
+      candidates,
+      resultCodes,
+    );
+    expect(result).toEqual([
+      { op: null, condition: { source: 'attrs.전시회명', mode: 'text', value: '핵심' } },
+    ]);
+  });
+
+  it('attrs text — 범위 문법 입력은 idlist 로 승격 (헤더 필터에서도 NO 범위 검색)', () => {
+    const result = parseHeaderFiltersFromUrl(
+      ['attrs.지역'],
+      ['text'],
+      ['10-13, 15'],
+      candidates,
+      resultCodes,
+    );
+    expect(result).toEqual([
+      {
+        op: null,
+        condition: {
+          source: 'attrs.지역',
+          mode: 'idlist',
+          value: '10-13, 15',
+          ranges: [
+            { from: 10, to: 13 },
+            { from: 15, to: 15 },
+          ],
+        },
+      },
+    ]);
+  });
+
+  it('pii exact — blindIndex 계산 포함', () => {
+    const result = parseHeaderFiltersFromUrl(
+      ['pii.email'],
+      ['exact'],
+      ['user@example.com'],
+      candidates,
+      resultCodes,
+    );
+    expect(result).toHaveLength(1);
+    const c0 = result[0];
+    if (!c0) throw new Error('expected result[0]');
+    expect(c0.condition.mode).toBe('exact');
+    expect(/^[0-9a-f]{64}$/.test(c0.condition.blindIndex ?? '')).toBe(true);
+  });
+
+  it('system.contact_result in — 유효 코드만 통과, 전부 무효면 drop', () => {
+    const result = parseHeaderFiltersFromUrl(
+      ['system.contact_result'],
+      ['in'],
+      [`1.조사완료${SEP}없는코드`],
+      candidates,
+      resultCodes,
+    );
+    expect(result).toEqual([
+      {
+        op: null,
+        condition: {
+          source: 'system.contact_result',
+          mode: 'in',
+          value: '',
+          values: ['1.조사완료'],
+        },
+      },
+    ]);
+    expect(
+      parseHeaderFiltersFromUrl(['system.contact_result'], ['in'], ['없는코드'], candidates, resultCodes),
+    ).toEqual([]);
+  });
+
+  it('system.web in — 어휘 외 값 필터링, 상태 값과 레거시 true/false 는 수용', () => {
+    const result = parseHeaderFiltersFromUrl(
+      ['system.web'],
+      ['in'],
+      [`true${SEP}drop${SEP}maybe`],
+      candidates,
+      resultCodes,
+    );
+    expect(result).toEqual([
+      {
+        op: null,
+        condition: { source: 'system.web', mode: 'in', value: '', values: ['true', 'drop'] },
+      },
+    ]);
+  });
+
+  it('in 값의 선행·후행 공백은 원형 보존 — distinct 가 보여준 값과 정확 일치해야 함', () => {
+    // 엑셀 적재는 셀 값을 trim 하지 않으므로 DB 에 "서울 " 이 실존할 수 있다.
+    // 드롭다운이 보여준 원형을 서버가 trim 해버리면 IN 비교가 0건이 되는 왕복 불일치.
+    const result = parseHeaderFiltersFromUrl(
+      ['attrs.지역'],
+      ['in'],
+      [`서울 ${SEP}부산`],
+      candidates,
+      resultCodes,
+    );
+    const c0 = result[0];
+    if (!c0) throw new Error('expected result[0]');
+    expect(c0.condition.values).toEqual(['서울 ', '부산']);
+  });
+
+  it('source-mode 불일치 조합은 drop — attrs+exact, pii+in, pii+text', () => {
+    expect(
+      parseHeaderFiltersFromUrl(['attrs.지역'], ['exact'], ['서울'], candidates, resultCodes),
+    ).toEqual([]);
+    expect(
+      parseHeaderFiltersFromUrl(['pii.email'], ['in'], ['user@example.com'], candidates, resultCodes),
+    ).toEqual([]);
+    expect(
+      parseHeaderFiltersFromUrl(['pii.email'], ['text'], ['user'], candidates, resultCodes),
+    ).toEqual([]);
+  });
+
+  it('화이트리스트 위반·빈 값·중복 컬럼 처리', () => {
+    // 화이트리스트 위반 drop
+    expect(
+      parseHeaderFiltersFromUrl(['attrs.unknown'], ['in'], ['x'], candidates, resultCodes),
+    ).toEqual([]);
+    // 빈 값 토큰만 있으면 drop
+    expect(
+      parseHeaderFiltersFromUrl(['attrs.지역'], ['in'], [`${SEP}`], candidates, resultCodes),
+    ).toEqual([]);
+    // 같은 컬럼 중복 등장 시 뒤 항목이 이김 (드롭다운 재적용 시나리오)
+    const dup = parseHeaderFiltersFromUrl(
+      ['attrs.지역', 'attrs.지역'],
+      ['in', 'in'],
+      ['서울', '부산'],
+      candidates,
+      resultCodes,
+    );
+    expect(dup).toHaveLength(1);
+    const d0 = dup[0];
+    if (!d0) throw new Error('expected dup[0]');
+    expect(d0.condition.values).toEqual(['부산']);
   });
 });

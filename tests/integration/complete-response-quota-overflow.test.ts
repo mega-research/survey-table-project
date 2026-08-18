@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { Param } from 'drizzle-orm';
 
 // ========================
 // 모듈 모킹
@@ -139,6 +140,39 @@ function mainSet(): Record<string, unknown> {
   return found;
 }
 
+// metadata 는 이제 jsonb `||` 병합 raw sql 조각(COALESCE(...) || '{...}'::jsonb) 이라
+// set['metadata'] 가 평범한 객체가 아니다. 실 SQL 을 실행하지 않고도 조각 안에 박힌
+// 리터럴/파라미터 문자열을 모아 문자열 포함 검사로 확인한다 — response-edit.service.test.ts
+// 의 collectStrings 패턴과 동일.
+function collectStrings(node: unknown, out: string[] = [], seen = new Set<unknown>()): string[] {
+  if (node == null) return out;
+  if (typeof node === 'string') {
+    out.push(node);
+    return out;
+  }
+  if (typeof node !== 'object') return out;
+  if (seen.has(node)) return out;
+  seen.add(node);
+  if (node instanceof Param) {
+    const value = (node as unknown as { value: unknown }).value;
+    if (typeof value === 'string') out.push(value);
+    return out;
+  }
+  if (Array.isArray(node)) {
+    for (const item of node) collectStrings(item, out, seen);
+    return out;
+  }
+  const chunkValue = (node as { value?: unknown }).value;
+  if (Array.isArray(chunkValue)) {
+    for (const v of chunkValue) collectStrings(v, out, seen);
+  }
+  const chunks = (node as { queryChunks?: unknown[] }).queryChunks;
+  if (Array.isArray(chunks)) {
+    for (const chunk of chunks) collectStrings(chunk, out, seen);
+  }
+  return out;
+}
+
 describe('completeResponse — soft quota 초과 플래그', () => {
   beforeEach(() => {
     capturedUpdateSets.length = 0;
@@ -165,7 +199,37 @@ describe('completeResponse — soft quota 초과 플래그', () => {
     const set = mainSet();
     // 완료 자체는 그대로 수용된다 (strict 거부/전환 아님).
     expect(set['status']).toBe('completed');
-    expect((set['metadata'] as Record<string, unknown>)['quotaOverflow']).toBe(true);
+    const metadataText = collectStrings(set['metadata']).join('\n');
+    expect(metadataText).toContain('"quotaOverflow":true');
+  });
+
+  it('metadata 는 통짜 객체 대입이 아니라 기존 값 보존 병합으로 반영한다 (whole-branch 리뷰 I-1)', async () => {
+    // in_progress 재진입 완료 시나리오 — 관리자 수정이 남긴 adminEditRollback/
+    // migratedFromVersionId, draftSeq 등 기존 metadata 키가 이 UPDATE 에 지워지면 안 된다.
+    // 이 테스트는 mock db 라 실제 jsonb 컬럼 병합 결과까지는 검증할 수 없으므로,
+    // 대신 UPDATE set 이 plain object 리터럴이 아니라 COALESCE(metadata, ...) || 새키
+    // 형태의 raw sql 조각(드리즐 SQL 객체 = queryChunks 보유)인지로 병합 의도를 검증한다 —
+    // plain object 대입이었다면 이 조각은 기존 컬럼값을 전혀 참조하지 않아 DB 레벨에서
+    // adminEditRollback 등 기존 키가 통째로 사라진다.
+    queueSelects([{ [GATE_QID]: '남' }, { [GATE_QID]: '남' }]);
+
+    const { completeResponse } =
+      await import('@/features/survey-response/server/services/response.service');
+
+    await completeResponse({
+      responseId: RESPONSE_ID,
+      data: { questionResponses: { [GATE_QID]: '남' } },
+    });
+
+    const set = mainSet();
+    const metadata = set['metadata'];
+    // plain object 였다면 queryChunks 가 없다 — raw sql 조각임을 구조적으로 확인.
+    expect(metadata).toHaveProperty('queryChunks');
+    const metadataText = collectStrings(metadata).join('');
+    // COALESCE(기존 metadata, '{}') 를 베이스로 새 키만 || 로 얹는 병합 형태여야 한다.
+    expect(metadataText).toContain('COALESCE(');
+    expect(metadataText).toContain('{}');
+    expect(metadataText).toContain('"quotaOverflow":true');
   });
 
   it('셀에 여유가 있으면 플래그를 남기지 않는다', async () => {

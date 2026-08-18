@@ -58,4 +58,11 @@ describe('parseIdListInput', () => {
     expect(parseIdListInput('0-5')).toBeNull();
     expect(parseIdListInput('5-0')).toBeNull();
   });
+
+  it('토큰 200개까지 허용, 초과는 null — 전체 검색 컬럼 곱연산 SQL 폭증 상한', () => {
+    const ok = Array.from({ length: 200 }, (_, i) => String(i + 1)).join(',');
+    expect(parseIdListInput(ok)).toHaveLength(200);
+    const over = Array.from({ length: 201 }, (_, i) => String(i + 1)).join(',');
+    expect(parseIdListInput(over)).toBeNull();
+  });
 });

@@ -388,6 +388,10 @@ export async function resumeOrCreateResponse(
             resumed: reviveFromDrop,
             ...restorePayload,
             ...(draftSeq !== undefined ? { draftSeq } : {}),
+            // 재응답 허용으로 되돌린 행 — 상단 안내 배너("끝까지 제출해야 반영") 트리거.
+            ...(existingByContact.metadata?.['reeditPendingSince']
+              ? { reeditPending: true }
+              : {}),
           };
         }
         // isCompleted=false 인데 in_progress/drop 도 아닌 알 수 없는 status → fallback

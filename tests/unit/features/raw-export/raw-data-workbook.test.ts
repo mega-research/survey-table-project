@@ -264,7 +264,7 @@ describe('Raw Data 시트 메타 컬럼', () => {
     const ws = wb.getWorksheet('Raw Data')!;
     expect([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((c) => ws.getRow(1).getCell(c).value)).toEqual([
       'IP 해시',
-      '번호(systemID)',
+      '시스템ID',
       '순번',
       '조사 대상 그룹',
       '개별 URL',
@@ -341,7 +341,7 @@ describe('Raw Data 시트 메타 컬럼', () => {
     const ws1 = wb.getWorksheet('응답 내역')!;
     expect(ws1.getRow(1).values).toEqual([
       undefined,
-      '번호(systemID)',
+      '시스템ID',
       '순번',
       '조사 대상 그룹',
       '접속 단말',

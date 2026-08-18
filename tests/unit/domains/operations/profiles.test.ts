@@ -248,6 +248,12 @@ describe('normalizeListArgs', () => {
     expect(normalizeListArgs({ sort: 'group' }).sort).toBe('group')
     expect(normalizeListArgs({ sort: 'evil' }).sort).toBe('idx')
   })
+
+  it('attrs.<key> 정렬은 형태 수용 (표시 스킴 검증은 page 가드) — 조사 대상과 같은 자연 정렬 축', () => {
+    expect(normalizeListArgs({ sort: 'attrs.NO' }).sort).toBe('attrs.NO')
+    // 과도한 길이는 폴백
+    expect(normalizeListArgs({ sort: `attrs.${'x'.repeat(300)}` }).sort).toBe('idx')
+  })
 })
 
 describe('hasActiveFilters', () => {

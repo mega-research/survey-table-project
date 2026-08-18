@@ -7,6 +7,7 @@ import { client } from '@/shared/lib/rpc';
 import { findStepIndexOfQuestion, stepIdOf, type RenderStep } from '@/lib/group-ordering';
 import type { ClientSignals } from '@/lib/duplicate-detection/types';
 import { collectNumericIssues } from '@/lib/survey/numeric-validation';
+import { isRelaxableRequiredIssueKind } from '@/lib/survey/admin-edit-required-relax';
 import { resolveRebasedVersionId } from '@/lib/survey-response/version-rebase';
 import { withCalcValues, type FormulaEvalCtx } from '@/lib/survey/cell-formula';
 import type { Question, QuestionGroup, Survey } from '@/types/survey';
@@ -674,54 +675,64 @@ export function useResponseLifecycle({
         groups,
         evalCtx,
       );
-      const unansweredRequired = questions.filter((q) => {
-        if (!traversedIds.has(q.id)) return false;
-        return isQuestionRequired(q) && !isQuestionAnswered(q);
-      });
+      // admin-edit(요구 5/6) — "빈 필수"는 이미 handleNext 가 페이지 단위로 경고 1회 후
+      // 통과시켰으므로 여기서 다시 막지 않는다(응답자 흐름은 traversedIds 전체를 그대로
+      // 검사 — 무변경). 이관으로 비워진 신규 필수 셀은 관리자가 값을 알 수 없어 채울
+      // 수 없다(설계 결정 6) — 다른 스텝에 남아있어도 최종 저장을 막지 않는다.
+      if (!isAdminEdit) {
+        const unansweredRequired = questions.filter((q) => {
+          if (!traversedIds.has(q.id)) return false;
+          return isQuestionRequired(q) && !isQuestionAnswered(q);
+        });
 
-      if (unansweredRequired.length > 0) {
-        // 첫 번째 미응답 필수 질문이 속한 step으로 이동
-        const firstRequired = unansweredRequired[0];
-        if (!firstRequired) return;
-        const firstId = firstRequired.id;
-        setHighlightQuestionIds(new Set([firstId]));
-        const targetIdx = findStepIndexOfQuestion(steps, firstId);
-        const hasBlockingDetailIssue = collectNumericIssues(firstRequired, responses[firstId], {
-          allResponses: responses,
-          allQuestions: questions,
-          optionTexts: optionTextsByQuestion[firstId],
-          lookups: loadedSurvey?.lookups ?? [],
-          contactAttrs,
-        }).some((issue) => issue.kind === 'required-detail' || issue.kind === 'required-cells');
-        if (hasBlockingDetailIssue && targetIdx !== -1) {
-          setNumericErrorStepIndex(targetIdx);
-        }
-        if (targetIdx !== -1 && targetIdx !== currentStepIndex) {
-          // 상단 스크롤은 flow 의 스텝 변경 effect 가 커밋 이후에 일괄 처리한다.
-          setCurrentStepIndex(targetIdx);
-        } else {
-          // 이미 해당 step이면 카드로 스크롤
-          const el = document.querySelector<HTMLElement>(
-            `[data-question-id="${firstId}"]`,
-          );
-          el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-        setIsSubmitting(false);
-        return;
-      }
-
-      // 숫자 차단형 검증 — 실제 경로상 질문 전체 대상
-      const numericViolated = questions.filter((q) => {
-        if (!traversedIds.has(q.id)) return false;
-        return (
-          collectNumericIssues(q, responses[q.id], {
+        if (unansweredRequired.length > 0) {
+          // 첫 번째 미응답 필수 질문이 속한 step으로 이동
+          const firstRequired = unansweredRequired[0];
+          if (!firstRequired) return;
+          const firstId = firstRequired.id;
+          setHighlightQuestionIds(new Set([firstId]));
+          const targetIdx = findStepIndexOfQuestion(steps, firstId);
+          const hasBlockingDetailIssue = collectNumericIssues(firstRequired, responses[firstId], {
             allResponses: responses,
             allQuestions: questions,
-            optionTexts: optionTextsByQuestion[q.id],
+            optionTexts: optionTextsByQuestion[firstId],
             lookups: loadedSurvey?.lookups ?? [],
             contactAttrs,
-          }).length > 0
-        );
+          }).some((issue) => issue.kind === 'required-detail' || issue.kind === 'required-cells');
+          if (hasBlockingDetailIssue && targetIdx !== -1) {
+            setNumericErrorStepIndex(targetIdx);
+          }
+          if (targetIdx !== -1 && targetIdx !== currentStepIndex) {
+            // 상단 스크롤은 flow 의 스텝 변경 effect 가 커밋 이후에 일괄 처리한다.
+            setCurrentStepIndex(targetIdx);
+          } else {
+            // 이미 해당 step이면 카드로 스크롤
+            const el = document.querySelector<HTMLElement>(
+              `[data-question-id="${firstId}"]`,
+            );
+            el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+          setIsSubmitting(false);
+          return;
+        }
+      }
+
+      // 숫자 차단형 검증 — 실제 경로상 질문 전체 대상.
+      // admin-edit 은 값이 들어간 칸의 차단형 위반(range/sum/formula)만 다시 확인한다 —
+      // "빈 필수"(required-cells/required-detail)는 위에서 이미 의도적으로 건너뛰었다.
+      // 응답자 흐름은 collectNumericIssues 의 모든 kind 를 그대로 차단(무변경).
+      const numericViolated = questions.filter((q) => {
+        if (!traversedIds.has(q.id)) return false;
+        const issues = collectNumericIssues(q, responses[q.id], {
+          allResponses: responses,
+          allQuestions: questions,
+          optionTexts: optionTextsByQuestion[q.id],
+          lookups: loadedSurvey?.lookups ?? [],
+          contactAttrs,
+        });
+        return isAdminEdit
+          ? issues.some((issue) => !isRelaxableRequiredIssueKind(issue.kind))
+          : issues.length > 0;
       });
       if (numericViolated.length > 0) {
         const firstId = numericViolated[0]!.id;

@@ -10,13 +10,14 @@ import { completedResponse, notDeletedResponse, notTestResponse } from '@/data/r
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { normalizeQuestions } from '@/lib/question';
 import { requireAuth } from '@/lib/auth';
-import { canAccessSurvey, getGuestSurveyId } from '@/lib/auth/guest-grants';
+import { canAccessSurvey, isGuestUser } from '@/lib/auth/guest-grants';
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
 import {
   generateRawDataWorkbook,
   type RawExportContext,
   type RawExportResponseRow,
 } from '@/lib/analytics/raw-workbook';
+import { applyExportRowExclusions } from '@/lib/analytics/export-exclusions';
 import { buildQuestionMetaMap, buildStepLabelMap } from '@/lib/analytics/raw-export-helpers';
 import { buildSplitWorkbook } from '@/lib/analytics/split-workbook';
 import { planSplit } from '@/lib/analytics/split-export';
@@ -48,7 +49,7 @@ async function handleExport(
     // 별개의 운영 기록. 로그에는 쿼리 파라미터·행수만 싣는다 (응답 본문 금지).
     ctx.bind({
       userId: user.id,
-      role: getGuestSurveyId(user.id) ? 'guest' : 'admin',
+      role: isGuestUser(user.id) ? 'guest' : 'admin',
       surveyId,
     });
     if (!canAccessSurvey(user.id, surveyId)) {
@@ -76,7 +77,11 @@ async function handleExport(
     }
 
     // strip된 셀/옵션 파생 필드 hydrate (cellCode, exportLabel, optionCode 복원)
-    const hydratedQuestions = hydrateQuestionsForSpss(normalizeQuestions(surveyData.questions));
+    // 이후 일회성 export 행 제외 적용 — 등재된 설문 외에는 원본 그대로 통과
+    const hydratedQuestions = applyExportRowExclusions(
+      surveyId,
+      hydrateQuestionsForSpss(normalizeQuestions(surveyData.questions)),
+    );
 
     // 2. 응답 데이터 조회 (sav 전용 공용 블록)
     // raw/raw-split는 자체 모수와 가드를 별도로 가지므로 이 블록을 건너뛴다.
@@ -338,7 +343,7 @@ async function buildRawExportContext(
 ): Promise<RawExportContext> {
   const groups = await getQuestionGroupsBySurvey(surveyId);
   // 조건부 메타 열 판정 — 설문 설정 기준 (응답 매칭 여부 무관):
-  // 컨택 타겟이 없으면 번호(systemID) 열, 그룹값이 전무하면 조사 대상 그룹 열을 만들지 않는다.
+  // 컨택 타겟이 없으면 시스템ID 열, 그룹값이 전무하면 조사 대상 그룹 열을 만들지 않는다.
   // raw export 모수는 테스트 응답 제외이므로 컨택 통계도 real 스코프로 한정한다.
   const { hasContacts, hasContactGroups } = await getSurveyContactStats(surveyId, 'real');
   const stepQs = questions.map((q) => ({

@@ -43,6 +43,10 @@ export function buildChangedQuestions(
     map.set(q.id, { code, title: q.title });
   }
   return changedIds.map((id) => {
+    // 루트 사이드카(기타 상세 기재)는 질문이 아니다 — 스냅샷에 없으므로 고정 라벨.
+    if (id === '__optTexts__') {
+      return { questionId: id, code: null, title: '기타 상세 기재' };
+    }
     const meta = map.get(id);
     return { questionId: id, code: meta?.code ?? null, title: meta?.title ?? id };
   });
@@ -60,6 +64,10 @@ export function mergeChangeLabels(
   labelMap: Map<string, { code: string | null; title: string }>,
 ): ResponseEditChange[] {
   return changes.map((c) => {
+    // 과거에 title='__optTexts__' 폴백으로 저장된 행도 읽기 시점에 라벨을 교정한다.
+    if (c.questionId === '__optTexts__') {
+      return { questionId: c.questionId, code: null, title: '기타 상세 기재' };
+    }
     const live = labelMap.get(c.questionId);
     if (!live) return c;
     return { questionId: c.questionId, code: live.code, title: live.title };

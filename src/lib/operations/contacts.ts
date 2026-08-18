@@ -8,6 +8,13 @@
  */
 
 /**
+ * system.resid 컬럼의 기본 표시 라벨.
+ * 고객 엑셀의 NO/ID 류 컬럼과 구분하기 위해 '번호' 대신 '시스템ID' 사용
+ * (기존 설문 스킴은 0073 수동 마이그레이션으로 일괄 갱신, 커스텀 라벨은 보존).
+ */
+export const RESID_DEFAULT_LABEL = '시스템ID';
+
+/**
  * 사전 정의된 시스템 정렬 키. attrs.* 정렬은 별도로 `attrs.<key>` 형태로 받음
  * (`isAttrsSortKey` / `attrsSortKey` helper).
  */
@@ -16,6 +23,13 @@ export const CONTACTS_SORT_KEYS = [
   'respondedAt',
   'createdAt',
   'group',
+  // web 컬럼 헤더 정렬 — 매칭 응답의 활동 시각(완료면 완료 시각, 미완료면 마지막
+  // 활동 시각) 기준. respondedAt 정렬은 미완료(진행중·이탈) 행이 전부 NULL 이라
+  // 순서가 생기지 않는다. 상태별 골라보기는 정렬이 아니라 web 필터 소관.
+  'webActivity',
+  // 메일 컬럼 헤더 정렬 — 최신 수신 상태 순위(열람 → 전달 완료 → … → 실패),
+  // 발송 이력 없음은 항상 마지막.
+  'mailStatus',
 ] as const;
 export type ContactsSystemSortKey = (typeof CONTACTS_SORT_KEYS)[number];
 

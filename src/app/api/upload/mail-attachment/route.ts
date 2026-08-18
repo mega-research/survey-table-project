@@ -12,7 +12,7 @@ import * as Sentry from '@sentry/nextjs';
 
 import { requireAuth } from '@/lib/auth';
 import { isAdminUserAllowed } from '@/lib/auth/admin-allowlist';
-import { getGuestSurveyId, isAdminOrGuestGrantHolder } from '@/lib/auth/guest-grants';
+import { isAdminOrGuestGrantHolder, isGuestUser } from '@/lib/auth/guest-grants';
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
 import {
   MAX_ATTACHMENT_FILE_BYTES,
@@ -47,7 +47,7 @@ async function handleMailAttachmentUpload(request: NextRequest, ctx: RouteLogCon
   // 업로드 남용·권한 설정 오류 추적이 가능하다. 거부되는 일반 인증 계정은 'user'.
   ctx.bind({
     userId,
-    role: getGuestSurveyId(userId) ? 'guest' : isAdminUserAllowed(userId) ? 'admin' : 'user',
+    role: isGuestUser(userId) ? 'guest' : isAdminUserAllowed(userId) ? 'admin' : 'user',
   });
   // admin 또는 게스트 grant 보유 가드 — ADMIN_USER_IDS 로 어드민을 잠갔을 때
   // 임의 인증사용자의 R2 첨부 업로드 남용을 차단.

@@ -11,6 +11,7 @@ import type {
   GroupNameDesign,
   HeaderCell,
   PageVisit,
+  ProfileColumnScheme,
   ProgressColumnScheme,
   QuestionConditionGroup,
   QuestionData,
@@ -65,6 +66,9 @@ export const surveys = pgTable('surveys', {
 
   // 진척률 표 표시 컬럼 픽커 (NULL = 4개 고정 컬럼만, slice 4 — 0017 마이그레이션)
   progressColumns: jsonb('progress_columns').$type<ProgressColumnScheme>(),
+
+  // 응답 내역 표시 컬럼 픽커 (NULL = 기본 스킴, 0074 마이그레이션)
+  profileColumns: jsonb('profile_columns').$type<ProfileColumnScheme>(),
 
   // 쿼터 플랜 (NULL = 쿼터 없음, 스냅샷 밖 라이브 편집 — 0045 마이그레이션)
   quotaConfig: jsonb('quota_config').$type<QuotaConfig>(),
@@ -362,11 +366,19 @@ export const surveyVersions = pgTable('survey_versions', {
 
 // 관리자 응답 수정 audit 이력 (단건 편집 수정/편집 현황 카드용).
 // survey_responses 1:N. 관리자 saveAdminEdit 1회당 행 1개.
+// 초기화(action:'reset') 마커는 응답 물리 삭제와 함께 남기므로 responseId 가
+// null 이고 contactTargetId 로만 연결된다 (0072).
 export const responseEditLogs = pgTable('response_edit_logs', {
   id: uuid('id').primaryKey().defaultRandom(),
-  responseId: uuid('response_id')
+  responseId: uuid('response_id').references(() => surveyResponses.id, {
+    onDelete: 'cascade',
+  }),
+  // FK 는 순환 import 회피로 마이그레이션 ALTER 로만 생성 (contact_targets cascade)
+  contactTargetId: uuid('contact_target_id'),
+  action: text('action')
+    .$type<'edit' | 'reset' | 'reedit_allow'>()
     .notNull()
-    .references(() => surveyResponses.id, { onDelete: 'cascade' }),
+    .default('edit'),
   surveyId: uuid('survey_id')
     .notNull()
     .references(() => surveys.id, { onDelete: 'cascade' }),

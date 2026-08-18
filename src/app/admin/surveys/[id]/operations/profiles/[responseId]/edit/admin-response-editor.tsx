@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 
 import { SurveyResponseFlow } from '@/components/survey-response/survey-response-flow';
 import { client } from '@/shared/lib/rpc';
@@ -13,6 +14,8 @@ interface Props {
   versionSnapshot: SurveyVersionSnapshot | null;
   initialContactAttrs: Record<string, string>;
   idx: number | null;
+  renderedVersionId: string | null;
+  migratedFromOldVersion: boolean;
 }
 
 /**
@@ -29,6 +32,8 @@ export function AdminResponseEditor({
   versionSnapshot,
   initialContactAttrs,
   idx,
+  renderedVersionId,
+  migratedFromOldVersion,
 }: Props) {
   const router = useRouter();
 
@@ -38,6 +43,12 @@ export function AdminResponseEditor({
         어드민 수정 모드 — 응답 {idx === null ? '' : `#${idx} `}· 응답자 흐름과 동일하게 보입니다.
         중간에 나가면 저장되지 않으며, 마지막 제출까지 끝내야 수정이 반영됩니다.
       </div>
+      {migratedFromOldVersion && (
+        <div className="border-b border-blue-200 bg-blue-50 px-6 py-3 text-sm text-blue-900">
+          구버전 형식으로 작성된 응답입니다. 최신 배포 형식으로 수정 중이며, 구조가 달라진
+          답변은 비워져 있습니다. 저장하면 이 응답은 최신 버전으로 이관됩니다.
+        </div>
+      )}
       <SurveyResponseFlow
         mode="admin-edit"
         surveyIdentifier={surveyId}
@@ -48,11 +59,19 @@ export function AdminResponseEditor({
           versionSnapshot,
           initialContactAttrs,
           onSubmit: async (payload) => {
-            await client.surveyResponse.edit.saveAdminEdit({
-              surveyId,
-              responseId,
-              questionResponses: payload.questionResponses,
-            });
+            try {
+              await client.surveyResponse.edit.saveAdminEdit({
+                surveyId,
+                responseId,
+                questionResponses: payload.questionResponses,
+                versionId: renderedVersionId,
+              });
+            } catch (err) {
+              // 저장 중 새 버전 배포(CONFLICT) 등 — 서버 메시지를 그대로 노출하고
+              // 제출 상태 복구를 위해 rethrow (flow 가 isSubmitting 을 되돌린다).
+              toast.error(err instanceof Error ? err.message : '저장에 실패했습니다.');
+              throw err;
+            }
             router.push(`/admin/surveys/${surveyId}/operations/profiles`);
           },
         }}

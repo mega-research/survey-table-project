@@ -141,6 +141,11 @@ export const ResumeOrCreateResponseOutput = z
      */
     draftSeq: z.number().int().nonnegative().optional(),
     /**
+     * 재응답 허용(metadata.reeditPendingSince) 세션 표식 — 클라이언트가 상단에
+     * "끝까지 제출해야 완료로 반영" 배너를 띄운다.
+     */
+    reeditPending: z.boolean().optional(),
+    /**
      * 응답 버전 이관(ADR-0014)에서 답이 폐기·부분 제거된 질문 ID 목록.
      * 클라이언트는 이 중 신버전에 실존하는 가장 앞 페이지로 재개 위치를 되돌린다.
      * 이관이 없었거나 영향 질문이 없으면 생략.

@@ -30,6 +30,11 @@ import {
   type NumericIssue,
 } from '@/lib/survey/numeric-validation';
 import {
+  buildAdminEmptyRequiredWarningMessage,
+  classifyStepIssues,
+  snapshotStepResponses,
+} from '@/lib/survey/admin-edit-required-relax';
+import {
   collectRequiredOptionTextIssues,
   resolveEffectiveOptionTextsByQuestion,
 } from '@/lib/survey/required-option-text-validation';
@@ -643,7 +648,7 @@ function SurveyResponseFlowActive({
   // 회복 effect + dismiss effect 와 isRecovering/resumeMessage state 를
   // useSessionRecovery 로 추출 (두 effect 등록 순서·deps 동일, 세터 전용이라 훅이 소유).
   // isRecovering 은 handleResponse 의 INSERT 가드(I-1)에서 참조한다.
-  const { isRecovering, resumeMessage, dismissResume } = useSessionRecovery({
+  const { isRecovering, resumeMessage, dismissResume, reeditNotice } = useSessionRecovery({
     enabled: !isCompleted,
     terminalBlocked: duplicateStatus.kind === 'blocked',
     isAdminEdit,
@@ -793,6 +798,68 @@ function SurveyResponseFlowActive({
     );
   };
 
+  // admin-edit 전용 — "빈 필수" 완화(경고 1회 후 통과). 응답자/미리보기/테스트 흐름은
+  // isAdminEdit=false 라 아래 값들이 전혀 쓰이지 않는다(handleNext 분기에서 무시).
+  //
+  // 스텝의 질문 응답값 스냅샷 — 페이지(스텝) 이동 또는 값 변경 시 자연히 달라지므로
+  // "경고 상태 리셋"(요구 4)은 이 스냅샷 불일치 자체로 성립한다. "스텝 이동" 케이스만
+  // 별도 처리가 필요하다 — 같은 스텝으로 되돌아오면 스냅샷이 우연히 같아져 리셋 없이
+  // 재클릭 한 번에 통과해버릴 수 있어서다. useEffect 대신 렌더 중 상태 조정(React 공식
+  // 권장 "Adjusting state when a prop changes" 패턴)으로 처리 — setState-in-effect 경고 회피.
+  const currentStepResponseSnapshot = useMemo(
+    () => snapshotStepResponses(currentStepQuestions.map((q) => q.id), responses),
+    [currentStepQuestions, responses],
+  );
+  const [adminWarnedSnapshot, setAdminWarnedSnapshot] = useState<string | null>(null);
+  const [adminWarnStepIndex, setAdminWarnStepIndex] = useState<number | null>(null);
+  if (isAdminEdit && adminWarnStepIndex !== currentStepIndex) {
+    setAdminWarnStepIndex(currentStepIndex);
+    if (adminWarnedSnapshot !== null) setAdminWarnedSnapshot(null);
+  }
+  const adminStepClassification = useMemo(() => {
+    if (!isAdminEdit) return null;
+    const unansweredIds = currentStepQuestions
+      .filter((q) => isQuestionRequired(q) && !isQuestionAnswered(q))
+      .map((q) => q.id);
+    return classifyStepIssues(unansweredIds, numericIssuesByQuestion);
+    // isQuestionRequired 는 quotaGateIds 를 닫는 비메모 인라인 함수라 quotaGateIds 를 직접 dep 로 둔다
+    // (canProceed 등 기존 코드와 동일 패턴).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdminEdit, numericIssuesByQuestion, currentStepQuestions, isQuestionAnswered, quotaGateIds]);
+  // 경고 배너 표시 조건: "방금 첫 클릭으로 경고했고, 그 이후 값/스텝이 그대로인 상태"
+  // — 이 조건이 참인 동안에만 다음 클릭이 통과(bypass)로 이어진다(handleNext 참고).
+  const showAdminEmptyRequiredWarning =
+    isAdminEdit &&
+    adminWarnedSnapshot !== null &&
+    adminWarnedSnapshot === currentStepResponseSnapshot &&
+    !!adminStepClassification &&
+    !adminStepClassification.hasBlockingIssue &&
+    adminStepClassification.emptyRequiredCount > 0;
+  // 경고 배너의 "위치로 이동" 대상 — 첫 미응답 질문(전무) 우선, 없으면 첫 셀/상세 이슈.
+  // handleNext 의 첫 클릭 자동 스크롤과 배너 클릭 스크롤이 같은 대상을 가리키도록 공유한다.
+  const adminFirstEmptyRequiredTarget = useMemo(() => {
+    if (!isAdminEdit) return null;
+    const firstUnanswered = currentStepQuestions.find(
+      (q) => isQuestionRequired(q) && !isQuestionAnswered(q),
+    );
+    // 비-테이블 상세기입 누락은 firstUnanswered(질문 단위)와 numericIssuesByQuestion(같은
+    // 질문의 required-detail 이슈) 양쪽에 동시에 잡힌다 — 있으면 detailTargetIds 를 붙여
+    // 질문 카드가 아니라 실제 입력란으로 정확히 스크롤한다(기존 Gate A 의 firstIssue 동일 패턴).
+    if (firstUnanswered) {
+      return {
+        questionId: firstUnanswered.id,
+        issue: numericIssuesByQuestion.get(firstUnanswered.id)?.[0],
+      };
+    }
+    const firstViolatedQuestionId = numericIssuesByQuestion.keys().next().value;
+    if (!firstViolatedQuestionId) return null;
+    return {
+      questionId: firstViolatedQuestionId,
+      issue: numericIssuesByQuestion.get(firstViolatedQuestionId)?.[0],
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdminEdit, numericIssuesByQuestion, currentStepQuestions, isQuestionAnswered, quotaGateIds]);
+
   // 무중단 갈아타기(티켓 04): create 결과의 versionId 가 알던 값과 다르면(서버 재핀) 호출된다.
   // 최신 스냅샷을 재취득하고(steps 는 loadedSurvey 파생이라 자동 재계산), 메모리의 응답 맵을
   // 구조 생존 판정(티켓 01)으로 걸러 신버전 구조와 비양립인 답만 버린 뒤 안내 문구를 띄운다.
@@ -857,6 +924,19 @@ function SurveyResponseFlowActive({
     setNumericErrorStepIndex,
   });
 
+  // 기타/상세 기재(store.optionTexts)를 draft 파이프라인에 동기화한다.
+  // 이게 없으면 사이드카는 최종 제출에만 실려, 제출 전 이탈 시 서버에 남지 않아
+  // 재진입 복원(seedOptionTexts)이 되살릴 것이 없다. handleResponse('__optTexts__')는
+  // 일반 답변과 같은 디바운스 draft·이탈 beacon 에 합류하고, '__' 키라 첫 답변
+  // INSERT 트리거는 되지 않는다 (preview/admin-edit 은 flush 계층이 이미 걸러낸다).
+  const lastSyncedOptionTextsRef = useRef(optionTexts);
+  useEffect(() => {
+    if (lastSyncedOptionTextsRef.current === optionTexts) return;
+    lastSyncedOptionTextsRef.current = optionTexts;
+    if (Object.keys(optionTexts).length === 0) return;
+    handleResponse('__optTexts__', optionTexts);
+  }, [optionTexts, handleResponse]);
+
   // iOS Safari 는 버튼을 탭해도 입력의 포커스를 빼앗지 않는다. 포커스가 남은
   // 입력이 스텝 전환으로 DOM 에서 제거되면 blur 이벤트 없이 사라져 소프트
   // 키보드가 닫히지 못하고 빈 패널로 고착된다 (레이아웃이 화면 절반에 갇히고
@@ -872,7 +952,46 @@ function SurveyResponseFlowActive({
     const unansweredCurrent = currentStepQuestions.filter(
       (q) => isQuestionRequired(q) && !isQuestionAnswered(q),
     );
-    if (unansweredCurrent.length > 0) {
+
+    // admin-edit 전용(요구 1~4/6) — 빈 필수만 있고(차단형 위반 없음) 있으면 경고 1회 후
+    // 통과시킨다. isAdminEdit=false 인 응답자/미리보기/테스트 흐름은 이 블록이 항상
+    // 스킵되어 아래 기존 Gate A/B 가 그대로(무변경) 적용된다.
+    let bypassEmptyRequired = false;
+    if (
+      isAdminEdit &&
+      adminStepClassification &&
+      !adminStepClassification.hasBlockingIssue &&
+      adminStepClassification.emptyRequiredCount > 0
+    ) {
+      if (adminWarnedSnapshot === currentStepResponseSnapshot) {
+        // 같은 페이지, 값 변경 없이 연속 두 번째 클릭 — 완화하고 진행.
+        bypassEmptyRequired = true;
+        setAdminWarnedSnapshot(null);
+      } else {
+        // 첫 클릭(또는 스텝 이동·값 변경 뒤 재클릭) — 경고만 하고 막는다.
+        setAdminWarnedSnapshot(currentStepResponseSnapshot);
+        if (adminFirstEmptyRequiredTarget) {
+          const { questionId: targetQuestionId, issue: targetIssue } =
+            adminFirstEmptyRequiredTarget;
+          setHighlightQuestionIds(new Set([targetQuestionId]));
+          scrollToIssue({
+            questionId: targetQuestionId,
+            detailTargetIds: targetIssue?.detailTargetIds,
+            cellInstanceIds: buildRowWiseCellInstanceIds(
+              questions.find((question) => question.id === targetQuestionId)?.tableRowsData,
+              targetIssue?.cellIds,
+            ),
+            cellIds: targetIssue?.cellIds,
+          });
+        }
+        return;
+      }
+    } else if (isAdminEdit && adminWarnedSnapshot !== null) {
+      // 차단형 위반이 새로 생겼거나 이슈가 모두 해소됨 — 경고 상태 정리.
+      setAdminWarnedSnapshot(null);
+    }
+
+    if (!bypassEmptyRequired && unansweredCurrent.length > 0) {
       const firstUnanswered = unansweredCurrent[0];
       if (!firstUnanswered) return;
       setHighlightQuestionIds(new Set([firstUnanswered.id]));
@@ -894,7 +1013,7 @@ function SurveyResponseFlowActive({
 
     // 숫자 차단형 검증 — 위반이 있으면 진행하지 않고 에러 배너만 표시한다.
     // 위반 셀 이동은 배너의 "위치로 이동" 버튼이 담당(자동 스크롤은 표가 커서 어중간하게 멈침).
-    if (numericIssuesByQuestion.size > 0) {
+    if (!bypassEmptyRequired && numericIssuesByQuestion.size > 0) {
       const firstViolatedQuestionId = numericIssuesByQuestion.keys().next().value;
       if (firstViolatedQuestionId) {
         setHighlightQuestionIds(new Set([firstViolatedQuestionId]));
@@ -1137,6 +1256,18 @@ function SurveyResponseFlowActive({
           isMobile ? 'pb-28' : 'pb-16 md:pb-24'
         }`}
       >
+        {reeditNotice && (
+          <div
+            role="status"
+            className="mb-4 flex items-start gap-2 rounded border border-blue-300 bg-blue-50 px-3 py-2 text-sm text-blue-900"
+          >
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            <div>
+              재응답이 허용된 설문입니다. 답변을 수정한 뒤 <strong>끝까지 진행해 제출</strong>
+              해야 완료로 반영됩니다. 제출하지 않고 나가면 완료 처리되지 않습니다.
+            </div>
+          </div>
+        )}
         {resumeMessage && <ResumeToast message={resumeMessage} onDismiss={dismissResume} />}
         {rebaseMessage && (
           <ResumeToast message={rebaseMessage} onDismiss={() => setRebaseMessage(null)} />
@@ -1169,9 +1300,42 @@ function SurveyResponseFlowActive({
             이전
           </Button>
 
-          <div className="text-sm text-gray-500">
-            {!canProceed() && (
-              <span className="text-red-500">* 필수 질문에 답변해주세요</span>
+          {/* 가운데 슬롯 — admin-edit 경고 1회 상태에선 빈 필수 통과 안내가 우선한다.
+              상단 배너는 시야에서 벗어나 인지되지 않아(2026-08-14) 버튼 사이로 이동. */}
+          <div className="px-4 text-sm text-gray-500" role={showAdminEmptyRequiredWarning ? 'alert' : undefined}>
+            {showAdminEmptyRequiredWarning && adminStepClassification ? (
+              <span className="flex flex-wrap items-center justify-center gap-2 text-amber-700">
+                <span>
+                  {buildAdminEmptyRequiredWarningMessage(
+                    adminStepClassification.emptyRequiredCount,
+                  )}
+                </span>
+                {adminFirstEmptyRequiredTarget && (
+                  <button
+                    type="button"
+                    className="shrink-0 rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs text-amber-900 hover:bg-amber-100"
+                    onClick={() => {
+                      const { questionId: targetQuestionId, issue: targetIssue } =
+                        adminFirstEmptyRequiredTarget;
+                      scrollToIssue({
+                        questionId: targetQuestionId,
+                        detailTargetIds: targetIssue?.detailTargetIds,
+                        cellInstanceIds: buildRowWiseCellInstanceIds(
+                          questions.find((q) => q.id === targetQuestionId)?.tableRowsData,
+                          targetIssue?.cellIds,
+                        ),
+                        cellIds: targetIssue?.cellIds,
+                      });
+                    }}
+                  >
+                    위치로 이동
+                  </button>
+                )}
+              </span>
+            ) : (
+              !canProceed() && (
+                <span className="text-red-500">* 필수 질문에 답변해주세요</span>
+              )
             )}
           </div>
 

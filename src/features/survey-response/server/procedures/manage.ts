@@ -3,6 +3,7 @@ import { ORPCError } from '@orpc/server';
 import { authed } from '@/server/orpc';
 
 import {
+  AllowReeditResponseInput,
   HardResetResponseInput,
   ResponseManageOutput,
   RestoreResponseInput,
@@ -17,6 +18,12 @@ function mapServiceError(err: unknown): never {
   }
   throw err;
 }
+
+const REEDIT_UNAVAILABLE_MESSAGE: Record<string, string> = {
+  status_not_published: '설문이 배포(published) 상태가 아니라 재응답을 허용할 수 없습니다.',
+  survey_paused: '설문이 중단 상태라 재응답을 허용할 수 없습니다. 중단을 해제한 뒤 다시 시도하세요.',
+  end_date_passed: '설문 마감일이 지나 재응답을 허용할 수 없습니다.',
+};
 
 const softDelete = authed
   .input(SoftDeleteResponseInput)
@@ -43,10 +50,35 @@ const restore = authed
 const hardReset = authed
   .input(HardResetResponseInput)
   .output(ResponseManageOutput)
-  .handler(async ({ input }) => {
+  .handler(async ({ input, context }) => {
     try {
-      return await svc.hardResetResponse(input);
+      // 초기화 마커(수정/편집 현황)에 누가 실행했는지 스냅샷으로 남긴다.
+      return await svc.hardResetResponse(input, {
+        id: context.user.id,
+        email: context.user.email ?? null,
+      });
     } catch (err) {
+      mapServiceError(err);
+    }
+  });
+
+const allowReedit = authed
+  .input(AllowReeditResponseInput)
+  .output(ResponseManageOutput)
+  .handler(async ({ input, context }) => {
+    try {
+      // 재응답 허용 마커(수정/편집 현황)에 누가 실행했는지 스냅샷으로 남긴다.
+      return await svc.allowReeditResponse(input, {
+        id: context.user.id,
+        email: context.user.email ?? null,
+      });
+    } catch (err) {
+      // 설문이 응답을 받을 수 없는 상태 — 사유별 안내 메시지로 매핑
+      if (err instanceof svc.ReeditUnavailableError) {
+        throw new ORPCError('BAD_REQUEST', {
+          message: REEDIT_UNAVAILABLE_MESSAGE[err.reason] ?? '재응답을 허용할 수 없습니다.',
+        });
+      }
       mapServiceError(err);
     }
   });
@@ -55,4 +87,5 @@ export const manage = {
   softDelete,
   restore,
   hardReset,
+  allowReedit,
 };

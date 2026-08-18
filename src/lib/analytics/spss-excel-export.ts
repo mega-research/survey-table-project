@@ -13,6 +13,7 @@ import type { QuestionVariant } from '@/lib/question';
 import {
   transformMultiselect,
   transformNumericText,
+  transformRankingOptionText,
   transformRankingOtherText,
   transformRankingWithOptions,
   transformSingleChoice,
@@ -60,9 +61,11 @@ export interface SPSSExportColumn {
     | 'notice-date'
     | 'ranking-rank'
     | 'ranking-other'
+    | 'ranking-option-text'
     | 'radio-group'
     | 'table-cell-ranking'
     | 'table-cell-ranking-other'
+    | 'table-cell-ranking-option-text'
     | 'option-text'
     | 'table-cell-option-text'
     | 'choice-group'
@@ -328,6 +331,8 @@ export function generateSPSSColumns(questions: QuestionVariant[]): SPSSExportCol
             : `${q.questionCode}_${g.groupKey}`;
           // _etc 는 기타 셀이 속한 그룹에만. 질문 레벨 allowOtherOption synthetic 은 grouped 에서 비활성(렌더러와 동일 규칙).
           const needsOther = g.cells.some((c) => c.isOtherRankingCell === true);
+          // _text 는 그룹 멤버 옵션 중 allowTextInput 이 하나라도 있으면 (isOtherRankingCell 과 독립)
+          const needsOptionText = groupOptions.some((o) => o.allowTextInput === true);
           for (let k = 1; k <= positions; k++) {
             columns.push({
               spssVarName: `${prefix}_rk${k}`,
@@ -352,6 +357,20 @@ export function generateSPSSColumns(questions: QuestionVariant[]): SPSSExportCol
                 soleRankingGroup: groups.length === 1,
               });
             }
+            if (needsOptionText) {
+              columns.push({
+                spssVarName: `${prefix}_rk${k}_text`,
+                questionText: q.title,
+                optionLabel: g.label ? `${g.label} - ${k}순위 상세 기재` : `${k}순위 상세 기재`,
+                questionId: q.id,
+                type: 'ranking-option-text',
+                rankIndex: k,
+                // 선택된 옵션이 allowTextInput 인지 검증하기 위해 그룹 옵션 목록을 주입
+                cellOptions: groupOptions,
+                choiceGroupKey: g.groupKey,
+                soleRankingGroup: groups.length === 1,
+              });
+            }
           }
         }
       } else {
@@ -361,6 +380,8 @@ export function generateSPSSColumns(questions: QuestionVariant[]): SPSSExportCol
         const positions = Math.max(1, q.rankingConfig?.positions ?? 3);
         // 기타 응답값 저장용 _etc 컬럼은 질문-레벨 토글 OR 셀-레벨 isOtherRankingCell 둘 중 하나라도 있으면 emit
         const needsOtherColumn = q.allowOtherOption || hasOtherRankingCell(q);
+        // 상세 기재 텍스트용 _text 컬럼은 resolved 옵션 중 allowTextInput 이 하나라도 있으면 emit (_etc 와 독립)
+        const needsOptionTextColumn = resolvedOptions.some((o) => o.allowTextInput === true);
         for (let k = 1; k <= positions; k++) {
           columns.push({
             spssVarName: `${q.questionCode}_rk${k}`,
@@ -380,6 +401,18 @@ export function generateSPSSColumns(questions: QuestionVariant[]): SPSSExportCol
               questionId: q.id,
               type: 'ranking-other',
               rankIndex: k,
+            });
+          }
+          if (needsOptionTextColumn) {
+            columns.push({
+              spssVarName: `${q.questionCode}_rk${k}_text`,
+              questionText: q.title,
+              optionLabel: `${k}순위 상세 기재`,
+              questionId: q.id,
+              type: 'ranking-option-text',
+              rankIndex: k,
+              // 선택된 옵션이 allowTextInput 인지 검증하기 위해 resolved 옵션 목록을 주입
+              cellOptions: resolvedOptions,
             });
           }
         }
@@ -432,6 +465,8 @@ export function generateSPSSColumns(questions: QuestionVariant[]): SPSSExportCol
           const colLabel = q.tableColumns[colIdx]?.label ?? '';
           const cellOptions = cell.rankingOptions ?? [];
           const positions = Math.max(1, cell.rankingConfig?.positions ?? 3);
+          // 상세 기재 텍스트용 _text 컬럼은 cell.rankingOptions 중 allowTextInput 이 하나라도 있으면 emit (_etc 와 독립)
+          const needsCellOptionText = cellOptions.some((o) => o.allowTextInput === true);
           for (let k = 1; k <= positions; k++) {
             const rankVarName = resolveRankVarName(
               varName,
@@ -465,6 +500,23 @@ export function generateSPSSColumns(questions: QuestionVariant[]): SPSSExportCol
                 rankIndex: k,
                 rowLabel,
                 colLabel,
+                ...(autoExportLabel !== undefined ? { cellExportLabel: autoExportLabel } : {}),
+              });
+            }
+            if (needsCellOptionText) {
+              columns.push({
+                spssVarName: `${rankVarName}_text`,
+                questionText: q.title,
+                optionLabel: `${k}순위 상세 기재`,
+                questionId: q.id,
+                type: 'table-cell-ranking-option-text',
+                tableCellId: cell.id,
+                tableCellType: 'ranking',
+                rankIndex: k,
+                rowLabel,
+                colLabel,
+                // 선택된 옵션이 allowTextInput 인지 검증하기 위해 셀 옵션 목록을 주입
+                cellOptions,
                 ...(autoExportLabel !== undefined ? { cellExportLabel: autoExportLabel } : {}),
               });
             }
@@ -972,6 +1024,11 @@ export function buildDataRow(
         if (col.rankIndex == null) return null;
         return transformRankingOtherText(resolveGroupedRankingValue(col, rawValue), col.rankIndex);
 
+      case 'ranking-option-text':
+        if (col.rankIndex == null) return null;
+        return transformRankingOptionText(
+          col.cellOptions, resolveGroupedRankingValue(col, rawValue), col.rankIndex);
+
       case 'table-cell-ranking': {
         if (col.rankIndex == null || !col.tableCellId) return null;
         if (!rawValue || typeof rawValue !== 'object') return null;
@@ -986,6 +1043,14 @@ export function buildDataRow(
         const tableAnswer = rawValue as Record<string, unknown>;
         const cellVal = tableAnswer[col.tableCellId];
         return transformRankingOtherText(cellVal, col.rankIndex);
+      }
+
+      case 'table-cell-ranking-option-text': {
+        if (col.rankIndex == null || !col.tableCellId) return null;
+        if (!rawValue || typeof rawValue !== 'object') return null;
+        const tableAnswer = rawValue as Record<string, unknown>;
+        const cellVal = tableAnswer[col.tableCellId];
+        return transformRankingOptionText(col.cellOptions, cellVal, col.rankIndex);
       }
 
       case 'option-text': {

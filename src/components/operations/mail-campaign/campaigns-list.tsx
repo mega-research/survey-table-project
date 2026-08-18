@@ -4,6 +4,8 @@ import { Send } from 'lucide-react';
 
 import { Card } from '@/components/ui/card';
 import { LocalDateTime } from '@/components/ui/local-date-time';
+import { PagerJump } from '@/components/operations/pager-jump';
+import { buildPageItems } from '@/components/operations/table-primitives';
 import type { CampaignRow } from '@/lib/operations/campaigns.server';
 
 interface Props {
@@ -176,16 +178,39 @@ export function CampaignsList({ surveyId, rows, total, page, pageSize }: Props) 
       </Card>
 
       {totalPages > 1 ? (
-        <div className="flex items-center justify-end gap-2 text-sm">
-          <span className="text-slate-500">
+        <div className="flex items-center justify-end gap-1 text-sm">
+          <span className="mr-1 text-slate-500">
             {page} / {totalPages}
           </span>
           <PageLink surveyId={surveyId} page={page - 1} disabled={page <= 1}>
             이전
           </PageLink>
+          {buildPageItems(page, totalPages).map((item, i) =>
+            item === 'ellipsis' ? (
+              <span key={`ellipsis-${i}`} className="px-1 text-slate-400">
+                …
+              </span>
+            ) : item === page ? (
+              <span
+                key={item}
+                aria-current="page"
+                className="rounded border border-blue-500 bg-blue-500 px-2 py-1 font-medium text-white"
+              >
+                {item}
+              </span>
+            ) : (
+              <PageLink key={item} surveyId={surveyId} page={item} disabled={false}>
+                {item}
+              </PageLink>
+            ),
+          )}
           <PageLink surveyId={surveyId} page={page + 1} disabled={page >= totalPages}>
             다음
           </PageLink>
+          <PagerJump
+            totalPages={totalPages}
+            hrefTemplate={`/admin/surveys/${surveyId}/operations/mail/campaigns?page=__PAGE__`}
+          />
         </div>
       ) : null}
     </div>

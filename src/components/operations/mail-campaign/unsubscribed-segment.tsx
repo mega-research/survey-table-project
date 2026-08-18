@@ -2,6 +2,8 @@ import Link from 'next/link';
 
 import { Card } from '@/components/ui/card';
 import { LocalDateTime } from '@/components/ui/local-date-time';
+import { PagerJump } from '@/components/operations/pager-jump';
+import { buildPageItems } from '@/components/operations/table-primitives';
 import type { UnsubscribedContactRow } from '@/lib/operations/campaigns.server';
 
 import { UnsubscribedRevertButton } from './unsubscribed-revert-button';
@@ -40,7 +42,7 @@ export function UnsubscribedSegment({ surveyId, rows, total, page, pageSize }: P
             <table className="w-full min-w-[600px]">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50/50 text-left text-xs font-medium tracking-wide text-gray-500 uppercase">
-                  <th className="px-4 py-3">번호</th>
+                  <th className="px-4 py-3">시스템ID</th>
                   <th className="px-4 py-3">이메일</th>
                   <th className="px-4 py-3">그룹</th>
                   <th className="px-4 py-3">해지 시각</th>
@@ -72,16 +74,39 @@ export function UnsubscribedSegment({ surveyId, rows, total, page, pageSize }: P
             </table>
           </Card>
           {totalPages > 1 ? (
-            <div className="flex items-center justify-end gap-2 text-sm">
-              <span className="text-slate-500">
+            <div className="flex items-center justify-end gap-1 text-sm">
+              <span className="mr-1 text-slate-500">
                 {page} / {totalPages}
               </span>
               <SegPageLink surveyId={surveyId} page={page - 1} disabled={page <= 1}>
                 이전
               </SegPageLink>
+              {buildPageItems(page, totalPages).map((item, i) =>
+                item === 'ellipsis' ? (
+                  <span key={`ellipsis-${i}`} className="px-1 text-slate-400">
+                    …
+                  </span>
+                ) : item === page ? (
+                  <span
+                    key={item}
+                    aria-current="page"
+                    className="rounded border border-blue-500 bg-blue-500 px-2 py-1 font-medium text-white"
+                  >
+                    {item}
+                  </span>
+                ) : (
+                  <SegPageLink key={item} surveyId={surveyId} page={item} disabled={false}>
+                    {item}
+                  </SegPageLink>
+                ),
+              )}
               <SegPageLink surveyId={surveyId} page={page + 1} disabled={page >= totalPages}>
                 다음
               </SegPageLink>
+              <PagerJump
+                totalPages={totalPages}
+                hrefTemplate={`/admin/surveys/${surveyId}/operations/mail/campaigns?unsubPage=__PAGE__#unsubscribed`}
+              />
             </div>
           ) : null}
         </>

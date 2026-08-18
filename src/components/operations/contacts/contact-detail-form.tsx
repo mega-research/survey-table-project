@@ -51,6 +51,8 @@ interface ContactDetailFormProps {
     inviteToken: string;
     inviteCode: string;
     responseId: string | null;
+    /** 수정 대상 응답이 완료 상태인지 — 재응답 허용 버튼 노출 판정 (respondedAt 링크 누락 대비). */
+    responseCompleted?: boolean;
     attempts: ContactAttemptRow[];
   };
   /** 메일 발송 이력 (편집 모드에서만 의미, 신규 모드는 빈 배열). */
@@ -59,6 +61,8 @@ interface ContactDetailFormProps {
   editLogs?: ResponseEditLogRow[];
   /** 단건 메일 발송 다이얼로그용 (편집 모드에서만 의미). */
   mailSend?: { templates: MailTemplateOption[]; disabledReason: string | null };
+  /** 응답 초기화 버튼 노출 — authed 전용 RPC 라 게스트는 false. */
+  canReset?: boolean;
 }
 
 export function ContactDetailForm({
@@ -70,6 +74,7 @@ export function ContactDetailForm({
   mailHistory = [],
   editLogs = [],
   mailSend,
+  canReset = false,
 }: ContactDetailFormProps) {
   const router = useRouter();
   const isEdit = initial != null;
@@ -304,7 +309,9 @@ export function ContactDetailForm({
             contactMethod={contactMethod}
             respondedAt={initial?.respondedAt ?? null}
             responseId={initial?.responseId ?? null}
+            responseCompleted={initial?.responseCompleted ?? false}
             inviteCode={initial?.inviteCode ?? null}
+            canReset={canReset && isEdit}
             {...(isEdit && onColumnToggle !== undefined ? { onColumnToggle } : {})}
             onAttrsChange={setAttrs}
             onPiiChange={(k, v) => setPiiValues((prev) => ({ ...prev, [k]: v }))}

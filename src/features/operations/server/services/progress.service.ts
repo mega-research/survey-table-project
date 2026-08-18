@@ -40,7 +40,10 @@ export async function updateProgressColumns(
     return { ok: false, error: '라벨이 비어있는 컬럼이 있습니다.' };
   }
 
-  const persisted = scheme.columns.length === 0 ? null : scheme;
+  // 빈 columns 는 기본적으로 NULL(미설정) 저장이지만, showResid=false 는 사용자가
+  // 명시한 설정이므로 빈 스킴이라도 보존한다 (시스템ID 숨김 유실 방지).
+  const persisted =
+    scheme.columns.length === 0 && scheme.showResid !== false ? null : scheme;
   await db.update(surveys).set({ progressColumns: persisted }).where(eq(surveys.id, surveyId));
 
   return { ok: true };

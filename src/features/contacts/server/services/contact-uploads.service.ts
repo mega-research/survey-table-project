@@ -11,6 +11,8 @@ import type {
   ContactUploadMapping,
   ContactUploadMode,
 } from '@/db/schema/schema-types';
+import { isGroupLevel, type GroupLevel } from '@/lib/contacts/group-levels';
+import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts';
 import { parseExcelRows, previewExcel } from '@/lib/contacts/excel-parser';
 import {
   buildKeyTuple,
@@ -129,9 +131,19 @@ export async function ingestContactUpload(
 
   const firstRow = allRows[0];
   const headerKeys = firstRow !== undefined ? Object.keys(firstRow) : [];
-  // 분류 기준은 선택사항 — 미지정 시 모든 행의 group_value = NULL
-  const groupKey =
-    mapping.systemFields.group != null ? (headerKeys[mapping.systemFields.group] ?? null) : null;
+  // 분류 기준은 선택사항 — 미지정 시 모든 행의 group_value = NULL.
+  // 레벨 배정(groupLevels)의 대분류(1) 헤더가 group_value 소스 — systemFields.group
+  // (마법사가 동기화해 보내는 레거시 인덱스)보다 우선한다.
+  // 후보만 여기서 정하고, 확정은 tx 안에서 유효 PII 라우팅(piiKeySet) 계산 후 —
+  // PII 컬럼 값이 group_value 에 평문 저장되는 경로 차단 (UI 가드 우회 방어 포함).
+  const level1Key =
+    Object.entries(mapping.groupLevels ?? {}).find(([, l]) => l === 1)?.[0] ?? null;
+  const groupKeyCandidate =
+    (level1Key != null && headerKeys.includes(level1Key) ? level1Key : null) ??
+    (mapping.systemFields.group != null
+      ? (headerKeys[mapping.systemFields.group] ?? null)
+      : null);
+  let groupKey: string | null = null;
 
   let uploadedRows = 0;
   let mergedRows = 0;
@@ -159,6 +171,9 @@ export async function ingestContactUpload(
         ? { piiByKey: {}, knownAttrKeys: new Set<string>() }
         : getSchemeRouting(existingScheme);
     const { piiEntries, piiKeySet } = resolveEffectiveRouting(schemeRouting, mapping, headerKeys);
+    // groupKey 확정 — 유효 PII 컬럼은 분류 기준이 될 수 없다 (평문 노출 차단)
+    groupKey =
+      groupKeyCandidate != null && !piiKeySet.has(groupKeyCandidate) ? groupKeyCandidate : null;
 
     if (mode === 'replace') {
       // 시나리오 B: 기존 컨택 통째 DELETE.
@@ -363,7 +378,7 @@ export async function ingestContactUpload(
     // 스킴 갱신: replace 는 전체 재생성, merge/append 는 신규 컬럼만 append
     const scheme =
       mode === 'replace' || existingScheme == null
-        ? autoGenerateColumnScheme(headerKeys, mapping)
+        ? autoGenerateColumnScheme(headerKeys, mapping, piiKeySet)
         : appendNewColumnsToScheme(existingScheme, headerKeys, mapping);
     await tx.update(surveys).set({ contactColumns: scheme }).where(eq(surveys.id, surveyId));
 
@@ -383,15 +398,35 @@ export async function ingestContactUpload(
 /**
  * 매핑 + 헤더키 → 컬럼 스킴 순수 변환. ingestContactUpload 전용 module-private 헬퍼.
  */
+/**
+ * 마법사가 보낸 레벨 배정 정리 — 유효 PII 컬럼(piiKeySet: 위저드 매핑 + 기존 스킴 잠금
+ * 포함) 제외, 유효 레벨(1..4)만, 레벨당 헤더 1개. (UI 가드 우회 API 호출 방어)
+ */
+function sanitizeGroupLevels(
+  groupLevels: Record<string, number> | undefined,
+  piiKeySet: ReadonlySet<string>,
+): Map<string, GroupLevel> {
+  const byLevel = new Map<GroupLevel, string>();
+  for (const [key, level] of Object.entries(groupLevels ?? {})) {
+    if (piiKeySet.has(key)) continue;
+    if (!isGroupLevel(level)) continue;
+    if (!byLevel.has(level)) byLevel.set(level, key);
+  }
+  const byKey = new Map<string, GroupLevel>();
+  for (const [level, key] of byLevel.entries()) byKey.set(key, level);
+  return byKey;
+}
+
 function autoGenerateColumnScheme(
   headerKeys: string[],
   mapping: ContactUploadMapping,
+  piiKeySet: ReadonlySet<string>,
 ): ContactColumnScheme {
   const columns: ContactColumnDef[] = [];
   let order = 1;
 
   // 시스템 컬럼 (resid 항상 1번, 표시 필수)
-  columns.push({ key: 'resid', label: '번호', source: 'system.resid', order: order++ });
+  columns.push({ key: 'resid', label: RESID_DEFAULT_LABEL, source: 'system.resid', order: order++ });
 
   // 모든 헤더 키를 컬럼으로 등록.
   // - piiMapping 에 매핑된 헤더 → source 'pii.<key>' + piiType 명시 → contact_pii 테이블 조인 후 표시
@@ -400,6 +435,7 @@ function autoGenerateColumnScheme(
   const selected = new Set(mapping.selectedAttrsKeys);
   const piiMapping = mapping.piiMapping ?? {};
   const labelOverrides = mapping.labelOverrides ?? {};
+  const groupLevels = sanitizeGroupLevels(mapping.groupLevels, piiKeySet);
 
   for (const key of headerKeys) {
     const piiType = piiMapping[key];
@@ -414,12 +450,14 @@ function autoGenerateColumnScheme(
         piiType,
       });
     } else {
+      const level = groupLevels.get(key);
       columns.push({
         key,
         label,
         source: `attrs.${key}`,
         order: order++,
         hidden: !selected.has(key),
+        ...(level != null ? { groupLevel: level } : {}),
       });
     }
   }

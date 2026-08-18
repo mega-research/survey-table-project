@@ -6,7 +6,7 @@ import sharp from 'sharp';
 
 import { getCurrentUser } from '@/lib/auth';
 import { isAdminUserAllowed } from '@/lib/auth/admin-allowlist';
-import { getGuestSurveyId, isAdminOrGuestGrantHolder } from '@/lib/auth/guest-grants';
+import { isAdminOrGuestGrantHolder, isGuestUser } from '@/lib/auth/guest-grants';
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
 import {
   imageKindToExt,
@@ -90,7 +90,7 @@ async function handleImageUpload(request: NextRequest, ctx: RouteLogContext) {
   // 업로드 남용·권한 설정 오류 추적이 가능하다. 거부되는 일반 인증 계정은 'user'.
   ctx.bind({
     userId: user.id,
-    role: getGuestSurveyId(user.id) ? 'guest' : isAdminUserAllowed(user.id) ? 'admin' : 'user',
+    role: isGuestUser(user.id) ? 'guest' : isAdminUserAllowed(user.id) ? 'admin' : 'user',
   });
   // admin 또는 게스트 grant 보유 가드 — mail-attachment 라우트와 동일 정책.
   // 게스트도 허용 경로(메일 템플릿 등) 리치에디터에서 본문 이미지를 올린다.

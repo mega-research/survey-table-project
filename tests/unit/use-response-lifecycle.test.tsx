@@ -632,6 +632,125 @@ describe('useResponseLifecycle - handleSubmit', () => {
     );
     expect(args.setIsCompleted).toHaveBeenCalledWith(true);
   });
+
+  describe('admin-edit — 빈 필수 완화(요구 5/6)', () => {
+    function adminArgs(over: Partial<Parameters<typeof useResponseLifecycle>[0]> = {}) {
+      const onSubmit = vi.fn().mockResolvedValue(undefined);
+      const adminContext = {
+        responseId: 'r',
+        surveyId: 's',
+        initialResponses: {},
+        versionSnapshot: null,
+        initialContactAttrs: {},
+        onSubmit,
+      };
+      return { args: baseArgs({ isAdminEdit: true, adminContext, ...over }), onSubmit };
+    }
+
+    it('완전 미응답 필수 질문이 있어도 차단하지 않고 onSubmit 을 호출한다 (다른 스텝에 남은 빈 필수는 handleNext 가 이미 페이지 단위로 경고했다고 전제)', async () => {
+      const requiredQ = {
+        id: 'q-required',
+        type: 'text',
+        title: '이름',
+        required: true,
+        order: 0,
+      } as unknown as Question;
+      const requiredStep: RenderStep = {
+        kind: 'page',
+        items: [{ question: requiredQ, rootGroupId: null, rootGroupName: null, subgroupName: null }],
+      } as unknown as RenderStep;
+      const { args, onSubmit } = adminArgs({
+        questions: [requiredQ],
+        visibleQuestions: [requiredQ],
+        steps: [requiredStep],
+        currentStep: requiredStep,
+        responses: {},
+        isQuestionAnswered: vi.fn(() => false),
+      });
+      const { result } = renderHook(() => useResponseLifecycle(args));
+
+      await act(async () => {
+        await result.current.handleSubmit();
+      });
+
+      expect(args.setNumericErrorStepIndex).not.toHaveBeenCalled();
+      expect(args.setCurrentStepIndex).not.toHaveBeenCalled();
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+    });
+
+    it('필수 셀 누락(required-cells)만 있어도 차단하지 않고 onSubmit 을 호출한다', async () => {
+      const tableQuestion = {
+        id: 'q-table',
+        type: 'table',
+        title: '표',
+        required: false,
+        order: 0,
+        tableRowsData: [
+          {
+            id: 'row-1',
+            label: '행',
+            cells: [{ id: 'required-radio', type: 'radio', content: '', required: true }],
+          },
+        ],
+      } as Question;
+      const tableStep: RenderStep = {
+        kind: 'page',
+        items: [
+          { question: tableQuestion, rootGroupId: null, rootGroupName: null, subgroupName: null },
+        ],
+      } as RenderStep;
+      const { args, onSubmit } = adminArgs({
+        questions: [tableQuestion],
+        visibleQuestions: [tableQuestion],
+        steps: [tableStep],
+        currentStep: tableStep,
+        // required-radio 미입력 — required-cells 이슈만 발생, 차단형 아님
+        responses: { 'q-table': {} },
+      });
+      const { result } = renderHook(() => useResponseLifecycle(args));
+
+      await act(async () => {
+        await result.current.handleSubmit();
+      });
+
+      expect(args.setNumericErrorStepIndex).not.toHaveBeenCalled();
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+    });
+
+    it('차단형 위반(range)은 admin-edit 이어도 계속 막고 onSubmit 을 호출하지 않는다', async () => {
+      const numQ = {
+        id: 'q-num',
+        type: 'text',
+        title: '숫자',
+        required: false,
+        order: 0,
+        inputType: 'number',
+        numberFormat: { min: 10 },
+      } as unknown as Question;
+      const numStep: RenderStep = {
+        kind: 'page',
+        items: [{ question: numQ, rootGroupId: null, rootGroupName: null, subgroupName: null }],
+      } as unknown as RenderStep;
+      const { args, onSubmit } = adminArgs({
+        questions: [numQ],
+        visibleQuestions: [numQ],
+        steps: [numStep],
+        currentStep: numStep,
+        currentStepIndex: 0,
+        // min 10 미달 — collectNumericIssues 가 range 위반을 반환한다(차단형, 완화 불가)
+        responses: { 'q-num': '5' },
+      });
+      const { result } = renderHook(() => useResponseLifecycle(args));
+
+      await act(async () => {
+        await result.current.handleSubmit();
+      });
+
+      expect(args.setNumericErrorStepIndex).toHaveBeenCalledWith(0);
+      expect(onSubmit).not.toHaveBeenCalled();
+      expect(args.setIsCompleted).not.toHaveBeenCalled();
+    });
+  });
 });
 
 describe('이탈 시점 draft beacon', () => {

@@ -26,6 +26,9 @@ import {
 } from '@/components/ui/select';
 import { ContactsFilterBar } from '@/components/operations/contacts/contacts-filter-bar';
 import { RecipientStatusBadge } from '@/components/operations/mail-campaign/recipient-status-badge';
+import { PagerJump } from '@/components/operations/pager-jump';
+import { buildPageItems } from '@/components/operations/table-primitives';
+import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts';
 import type { MailTemplate } from '@/db/schema/mail';
 import type { CampaignFilterSnapshot, ContactResultCode } from '@/db/schema/schema-types';
 import type {
@@ -390,7 +393,7 @@ export function CampaignWizard({
                   />
                 </th>
                 <th className="px-3 py-2">
-                  <SortHeader label="번호" sortKey="resid" activeSort={sort} dir={dir} onSort={changeSort} />
+                  <SortHeader label={RESID_DEFAULT_LABEL} sortKey="resid" activeSort={sort} dir={dir} onSort={changeSort} />
                 </th>
                 <th className="px-3 py-2">이메일</th>
                 <th className="px-3 py-2">그룹</th>
@@ -465,8 +468,8 @@ export function CampaignWizard({
         </div>
 
         {totalPages > 1 ? (
-          <div className="flex items-center justify-end gap-2 text-sm">
-            <span className="text-slate-500">
+          <div className="flex items-center justify-end gap-1 text-sm">
+            <span className="mr-1 text-slate-500">
               {candidates.page} / {totalPages}
             </span>
             <Button
@@ -477,6 +480,24 @@ export function CampaignWizard({
             >
               이전
             </Button>
+            {buildPageItems(candidates.page, totalPages).map((item, i) =>
+              item === 'ellipsis' ? (
+                <span key={`ellipsis-${i}`} className="px-1 text-slate-400">
+                  …
+                </span>
+              ) : (
+                <Button
+                  key={item}
+                  variant={item === candidates.page ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => changePage(item)}
+                  aria-current={item === candidates.page ? 'page' : undefined}
+                  className={item === candidates.page ? 'pointer-events-none' : undefined}
+                >
+                  {item}
+                </Button>
+              ),
+            )}
             <Button
               variant="outline"
               size="sm"
@@ -485,6 +506,7 @@ export function CampaignWizard({
             >
               다음
             </Button>
+            <PagerJump totalPages={totalPages} onJump={changePage} />
           </div>
         ) : null}
       </Card>

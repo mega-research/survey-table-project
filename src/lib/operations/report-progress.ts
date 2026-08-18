@@ -33,10 +33,15 @@ export function toneFromRate(completedCount: number, listCount: number): Progres
 
 /** 진척률 표 한 행 (그룹 1개) — SQL 결과를 클라이언트 형태로 변환한 것. */
 export interface ProgressRow {
-  /** 표시 라벨 — group_value=NULL 인 경우 '(미분류)' */
+  /** 표시 라벨 — group_value=NULL 인 경우 '(미분류)'. 다중 기준이면 ' / ' 조인. */
   groupLabel: string;
-  /** 원본 group_value (NULL 식별용) */
+  /** 원본 group_value (NULL 식별용). 다중 기준이면 조합 키(progressCellKey). */
   groupValueRaw: string | null;
+  /**
+   * 활성 분류 기준 키 순서대로의 그룹 값. 기본(group_value) 모드면 길이 1.
+   * null = 해당 기준 값 미분류.
+   */
+  groupValues: (string | null)[];
   /** 그룹 내 MIN(resid) — 표 첫 컬럼 '#' 에 표시. */
   firstResid: number | null;
   /** 분모 — excludeFilter 적용 후. 응답률 계산에 사용. */
@@ -55,22 +60,26 @@ export type ProgressSortKey =
   | 'listCount'
   | 'completedCount'
   | 'responseRate'
-  | `meta:${string}`;
+  | `meta:${string}`
+  // group:<attrs키> — 배열 인덱스가 아닌 안정 식별자 (칩 on/off 재인덱싱에 불변)
+  | `group:${string}`;
 
 export type SortDir = 'asc' | 'desc';
 
 /**
  * NULLS LAST 정렬. server SQL 의 ORDER BY 와 일관.
  * 메타 키 'meta:<key>' 는 row.meta[key] 비교.
+ * 'group:<attrs키>' 는 groupKeys(활성 기준 키 순서)로 인덱스를 해석 — 미전달 시 null 취급.
  */
 export function sortGroupRows(
   rows: ProgressRow[],
   sort: ProgressSortKey,
   dir: SortDir,
+  groupKeys: string[] = [],
 ): ProgressRow[] {
   const cmp = (a: ProgressRow, b: ProgressRow): number => {
-    const av = sortValue(a, sort);
-    const bv = sortValue(b, sort);
+    const av = sortValue(a, sort, groupKeys);
+    const bv = sortValue(b, sort, groupKeys);
     // NULLS LAST: null/undefined 는 항상 큼 (asc/desc 와 무관)
     if (av == null && bv == null) return 0;
     if (av == null) return 1;
@@ -85,7 +94,11 @@ export function sortGroupRows(
   return [...rows].sort(cmp);
 }
 
-function sortValue(row: ProgressRow, sort: ProgressSortKey): number | string | null {
+function sortValue(
+  row: ProgressRow,
+  sort: ProgressSortKey,
+  groupKeys: string[],
+): number | string | null {
   if (sort === 'firstResid') return row.firstResid;
   if (sort === 'groupLabel') return row.groupLabel;
   if (sort === 'listCount') return row.listCount;
@@ -97,6 +110,11 @@ function sortValue(row: ProgressRow, sort: ProgressSortKey): number | string | n
   if (sort.startsWith('meta:')) {
     const key = sort.slice(5);
     return row.meta[key] ?? null;
+  }
+  if (sort.startsWith('group:')) {
+    const idx = groupKeys.indexOf(sort.slice(6));
+    if (idx < 0) return null;
+    return row.groupValues[idx] ?? null;
   }
   return null;
 }

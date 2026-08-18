@@ -569,7 +569,7 @@ describe('profiles-row-actions', () => {
         sort: 'idx' as const,
         dir: 'desc' as const,
         view: 'active' as const,
-        condition: null,
+        clauses: [],
         scope: 'real' as const,
       };
 
@@ -626,7 +626,7 @@ describe('profiles-row-actions', () => {
         sort: 'idx' as const,
         dir: 'desc' as const,
         view: 'active' as const,
-        condition: null,
+        clauses: [],
         scope: 'real' as const,
       };
 
@@ -685,6 +685,7 @@ describe('profiles-row-actions', () => {
           surveyId,
           responseId,
           questionResponses: { [qid]: 'new' },
+          versionId: null,
         },
         { id: 'admin-1', email: 'a@b.com' },
         false,
@@ -707,7 +708,7 @@ describe('profiles-row-actions', () => {
 
       await expect(
         saveAdminEdit(
-          { surveyId, responseId, questionResponses: {} },
+          { surveyId, responseId, questionResponses: {}, versionId: null },
           { id: 'admin-1', email: 'a@b.com' },
           false,
         ),
@@ -737,6 +738,7 @@ describe('profiles-row-actions', () => {
           surveyId,
           responseId,
           questionResponses: { [newQid]: 'NEW_ANS' },
+          versionId: null,
         },
         { id: 'admin-1', email: 'a@b.com' },
         false,
@@ -756,7 +758,7 @@ describe('profiles-row-actions', () => {
       const surveyId = createTestSurvey();
       await expect(
         saveAdminEdit(
-          { surveyId, responseId: 'nonexistent-id', questionResponses: {} },
+          { surveyId, responseId: 'nonexistent-id', questionResponses: {}, versionId: null },
           { id: 'admin-1', email: 'a@b.com' },
           false,
         ),

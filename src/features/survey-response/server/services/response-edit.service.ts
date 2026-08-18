@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { logger } from '@/lib/logger';
@@ -32,6 +32,25 @@ import type { SaveAdminEditInput } from '../../domain/response-edit';
 // 'Response not found' / 'Cannot edit deleted response' throw 메시지는 그대로 두고
 // procedure 가 ORPCError 로 매핑한다.
 export { SurveyOwnershipError };
+
+/** 이관 시 metadata 갱신 sql 조각 — adminEditRollback 1회 백업 (+ 출처 버전 기록) */
+function buildMigrationMetadataSql(
+  rollback: { versionId: string | null; questionResponses: unknown; savedAt: string },
+) {
+  const withRollback = sql`jsonb_set(
+    COALESCE(${surveyResponses.metadata}, '{}'::jsonb),
+    '{adminEditRollback}',
+    COALESCE(${surveyResponses.metadata}->'adminEditRollback', ${JSON.stringify(rollback)}::jsonb),
+    true
+  )`;
+  if (rollback.versionId === null) return withRollback;
+  return sql`jsonb_set(
+    ${withRollback},
+    '{migratedFromVersionId}',
+    COALESCE(${surveyResponses.metadata}->'migratedFromVersionId', to_jsonb(${rollback.versionId}::text)),
+    true
+  )`;
+}
 
 /**
  * 어드민 응답 수정 저장.
@@ -73,9 +92,16 @@ export async function saveAdminEdit(
   // testModeEnabled 도 함께 읽어 쓰기 파티션 산정에 재사용 — 별도 쿼리를 추가하지 않는다.
   const ownerRow = await db.query.surveys.findFirst({
     where: eq(surveys.id, surveyId),
-    columns: { id: true, testModeEnabled: true },
+    columns: { id: true, testModeEnabled: true, currentVersionId: true },
   });
   if (!ownerRow) throw new SurveyOwnershipError('not_found');
+
+  // 낙관 버전 가드 (스펙 결정 4) — 클라이언트가 렌더한 버전이 저장 시점의 현재 배포
+  // 버전과 다르면 저장을 거부한다. 입력 구조와 저장 버전의 불일치를 원천 차단하는 게
+  // 목적이므로, 입력값 보존 없이 새로고침 재진입을 요구한다.
+  if (input.versionId !== (ownerRow.currentVersionId ?? null)) {
+    throw new Error('Version conflict');
+  }
 
   const isTest = resolveWriteScopeIsTest(ownerRow.testModeEnabled, isGuest);
 
@@ -90,6 +116,11 @@ export async function saveAdminEdit(
   if (existing.deletedAt !== null) {
     throw new Error('Cannot edit deleted response');
   }
+
+  // 이번 저장이 기준으로 삼는 버전 — 렌더 버전(=현재 배포 버전). 미배포 설문(null)만
+  // 응답 자신의 버전으로 폴백해 기존 동작을 유지한다.
+  const effectiveVersionId = input.versionId ?? existing.versionId;
+  const migrating = input.versionId !== null && existing.versionId !== input.versionId;
 
   const now = new Date();
 
@@ -108,11 +139,11 @@ export async function saveAdminEdit(
   // calc 셀 재계산(아래)에서도 재사용 — 변경이 없으면(=재계산 대상도 없음) 조회 자체를 skip.
   let versionSnapshot: SurveyVersionSnapshot | null = null;
   if (clientChangedIds.length > 0) {
-    const [verRow] = existing.versionId
+    const [verRow] = effectiveVersionId
       ? await db
           .select({ snapshot: surveyVersions.snapshot })
           .from(surveyVersions)
-          .where(eq(surveyVersions.id, existing.versionId))
+          .where(eq(surveyVersions.id, effectiveVersionId))
           .limit(1)
       : [];
     versionSnapshot = (verRow?.snapshot ?? null) as SurveyVersionSnapshot | null;
@@ -129,7 +160,7 @@ export async function saveAdminEdit(
   if (existing.status === 'completed' || completesDrop) {
     nextProgressPct = 100;
   } else {
-    const { positionMap, totalQuestions } = await getProgressSnapshot(existing.versionId);
+    const { positionMap, totalQuestions } = await getProgressSnapshot(effectiveVersionId);
     nextProgressPct = calculateProgressPct(
       Object.keys(questionResponses),
       positionMap,
@@ -141,8 +172,9 @@ export async function saveAdminEdit(
   // 함수 withCalcValues 를 서버에서도 다시 태운다(신뢰 경계: 클라 주입값을 그대로 믿지 않음).
   // 반드시 평문 단계(위 diff 비교 이후, 아래 encryptResponsesForStorage 이전)에서 수행 —
   // 암호문을 수식에 넣으면 쓰레기 값이 나온다.
-  // 재계산은 응답이 답해진 시점의 버전 스냅샷 기준이다 — 빌더가 이후 수식을 바꿔도 이미
-  // 수집된 이 응답에는 적용되지 않는다(스펙 요구사항). clientChangedIds 가 없으면(=diff 없음)
+  // 재계산은 이번 저장이 기준 삼는 버전(렌더 버전, 미배포만 응답 버전 폴백) 스냅샷 기준이다 —
+  // 빌더가 이후 수식을 바꿔도 이미 수집된 이 응답에는 적용되지 않는다(스펙 요구사항).
+  // clientChangedIds 가 없으면(=diff 없음)
   // versionSnapshot 을 아예 조회하지 않았으므로 이 블록은 자연히 skip 된다.
   // fail-safe: 스냅샷을 못 얻으면(레거시 versionId=null, 버전 행 삭제 등) 재계산을 건너뛰고
   // 기존 값을 그대로 유지한다 — 운영자의 정당한 수정이 서버 오류로 통째로 실패해선 안 된다.
@@ -212,7 +244,7 @@ export async function saveAdminEdit(
   const changedQuestions = buildChangedQuestions(changedIds, versionSnapshot);
 
   // 저장은 재암호화 — 판단 기준은 응답의 versionId 스냅샷(레거시 null 은 questions 폴백).
-  const piiIds = await loadPiiQuestionIds(existing.versionId, surveyId);
+  const piiIds = await loadPiiQuestionIds(effectiveVersionId, surveyId);
   const storedResponses =
     piiIds.size > 0
       ? encryptResponsesForStorage(finalResponses, piiIds)
@@ -234,6 +266,20 @@ export async function saveAdminEdit(
         // 이탈 응답 완료 전환 (상단 docstring 예외 참조) — 그 외 상태는 보존.
         ...(completesDrop
           ? { status: 'completed' as const, isCompleted: true, completedAt: now }
+          : {}),
+        // 구버전 응답 이관 (스펙 결정 5) — versionId 재고정 + 원본 1회 백업.
+        // adminEditRollback/migratedFromVersionId 는 COALESCE 로 최초 이관 값을 보존한다
+        // (재수정해도 원본 유지). 백업의 questionResponses 는 DB 암호문 그대로 —
+        // 평문 PII 를 metadata 에 남기지 않는다.
+        ...(migrating
+          ? {
+              versionId: input.versionId,
+              metadata: buildMigrationMetadataSql({
+                versionId: existing.versionId,
+                questionResponses: existing.questionResponses ?? {},
+                savedAt: now.toISOString(),
+              }),
+            }
           : {}),
       })
       .where(

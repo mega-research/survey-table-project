@@ -53,6 +53,7 @@ import type {
   SurveyResponse,
   UpdateQuestionResponseInput,
 } from '../../domain/response';
+import { readOptTextsSidecar } from '@/lib/option-text-read';
 import { replaceResponseAnswers } from './response-answers.service';
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -1001,6 +1002,26 @@ async function applyDraftAnswersUpdate(
   questionIds: string[],
   storedAnswers: Record<string, unknown>,
 ): Promise<void> {
+  // 사이드카(__optTexts__)만 실려 온 배치 — 실존 문항이 없어 진척률 계산 불가.
+  // jsonb 병합만 수행한다 (빈 idList 를 IN () 으로 흘리면 SQL 오류).
+  if (questionIds.length === 0) {
+    const [updated] = await executor
+      .update(surveyResponses)
+      .set({
+        questionResponses: sql`COALESCE(${surveyResponses.questionResponses}, '{}'::jsonb)
+          || ${JSON.stringify(storedAnswers)}::jsonb`,
+      })
+      .where(
+        and(
+          eq(surveyResponses.id, responseId),
+          isNull(surveyResponses.deletedAt),
+          eq(surveyResponses.status, 'in_progress'),
+        ),
+      )
+      .returning();
+    if (!updated) throw new Error('응답을 수정할 수 없습니다.');
+    return;
+  }
   const idList = sql.join(
     questionIds.map((id) => sql`${id}`),
     sql`, `,
@@ -1120,25 +1141,37 @@ export async function saveDraftResponse(
     assertAnswerValueSize(value);
   }
 
+  // 기타/상세 기재 사이드카(__optTexts__)는 실존 질문이 아니므로 소속 검증에서 분리한다.
+  // 제출 전 이탈에도 텍스트가 남도록 draft 에 실려 오며, 형태 정제 후 통째로 병합한다.
+  // 그 외 '__' 키는 기존대로 소속 검증에서 거부된다.
+  const sidecarEntry = entries.find(([key]) => key === '__optTexts__');
+  const answerEntries = entries.filter(([key]) => key !== '__optTexts__');
+
   // #5 변조 가드 2: 응답 행 조회. 배치 전체가 같은 행이라 1회면 충분하다.
   const responseRow = await loadResponseRowForMutation(input.responseId);
 
   // #5 변조 가드 3: 소속 검증 + PII 플래그를 questionId 전체에 대해 1회 쿼리로 수집.
-  const piiFlags = await loadQuestionPiiFlags(
-    responseRow.versionId,
-    responseRow.surveyId,
-    entries.map(([questionId]) => questionId),
-  );
+  const piiFlags =
+    answerEntries.length > 0
+      ? await loadQuestionPiiFlags(
+          responseRow.versionId,
+          responseRow.surveyId,
+          answerEntries.map(([questionId]) => questionId),
+        )
+      : new Map<string, boolean>();
 
   // 중단 모드: 열려 있던 탭의 답변 저장 차단 (테스트 행 예외) — 스펙 5절 게이트 3.
   await assertSurveyNotPaused(responseRow);
 
   // PII 문항이면 저장 직전 암호화. 이미 암호문이면 encryptAnswerValue 가 통과시킨다.
   const storedAnswers: Record<string, unknown> = {};
-  for (const [questionId, value] of entries) {
+  for (const [questionId, value] of answerEntries) {
     storedAnswers[questionId] = piiFlags.get(questionId) ? encryptAnswerValue(value) : value;
   }
-  const questionIds = entries.map(([questionId]) => questionId);
+  if (sidecarEntry) {
+    storedAnswers['__optTexts__'] = readOptTextsSidecar({ __optTexts__: sidecarEntry[1] });
+  }
+  const questionIds = answerEntries.map(([questionId]) => questionId);
 
   if (!responseRow.isTest) {
     await applyDraftAnswersUpdate(db, input.responseId, questionIds, storedAnswers);
@@ -1770,12 +1803,28 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
     }
     const filtered: Record<string, unknown> = {};
     for (const [qid, value] of Object.entries(data.questionResponses)) {
+      // 기타 상세 기재 사이드카 — 질문 id 가 아니므로 멤버십 필터 대상이 아니다.
+      // 아래에서 별도 정제 후 보존한다 (여기서 drop 하면 제출 순간 기타 텍스트가
+      // 조용히 소실된다 — 2026-08-14 프로덕션에서 확인된 실사고).
+      if (qid === '__optTexts__') continue;
       // 멤버십 필터: 설문(버전 스냅샷/라이브 questions)에 없는 키는 drop.
       if (!validIds.has(qid)) continue;
       // 바이트 필터: 단일 키 직렬화 256KB 초과면 그 키만 drop.
       const serializedBytes = Buffer.byteLength(JSON.stringify(value ?? null), 'utf8');
       if (serializedBytes > MAX_ANSWER_VALUE_BYTES) continue;
       filtered[qid] = value;
+    }
+    // 사이드카 정제: 형태 검증(readOptTextsSidecar) + 실존 질문 키만 + 바이트 상한.
+    const sidecar = readOptTextsSidecar(data.questionResponses);
+    const keptSidecar: Record<string, Record<string, string>> = {};
+    for (const [qid, texts] of Object.entries(sidecar)) {
+      if (validIds.has(qid)) keptSidecar[qid] = texts;
+    }
+    if (Object.keys(keptSidecar).length > 0) {
+      const sidecarBytes = Buffer.byteLength(JSON.stringify(keptSidecar), 'utf8');
+      if (sidecarBytes <= MAX_ANSWER_VALUE_BYTES) {
+        filtered['__optTexts__'] = keptSidecar;
+      }
     }
     validatedResponses = filtered;
   }
@@ -1957,6 +2006,16 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
       }
       storedRecalcResponses = recomputed;
     }
+    // metadata 에 이번 완료로 새로 얹을 키만 모은다 (exposedQuestionIds/exposedRowIds/quotaOverflow).
+    // 아래 UPDATE 는 이 값을 객체 리터럴로 통째 대입하지 않고 jsonb `||` 병합으로 반영한다 —
+    // 관리자 수정이 남긴 adminEditRollback/migratedFromVersionId, draftSeq 등 기존 키가
+    // in_progress 재진입 완료 시 이 UPDATE 에 지워지는 걸 막기 위함 (whole-branch 리뷰 I-1).
+    const newMetadataKeys: Record<string, unknown> = {
+      ...(data?.exposedQuestionIds ? { exposedQuestionIds: data.exposedQuestionIds } : {}),
+      ...(data?.exposedRowIds ? { exposedRowIds: data.exposedRowIds } : {}),
+      // soft quota: 초과 완료 식별 플래그 (위 detectQuotaOverflow 판정 결과)
+      ...(quotaOverflow ? { quotaOverflow: true } : {}),
+    };
     // 1. 기존 JSONB 방식 저장 + 운영 현황 추적 컬럼 갱신
     const [updated] = await tx
       .update(surveyResponses)
@@ -1986,16 +2045,11 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
           : storedRecalcResponses
             ? { questionResponses: storedRecalcResponses }
             : {}),
-        ...(data?.exposedQuestionIds || data?.exposedRowIds || quotaOverflow
+        ...(Object.keys(newMetadataKeys).length > 0
           ? {
-              metadata: {
-                ...(data?.exposedQuestionIds
-                  ? { exposedQuestionIds: data.exposedQuestionIds }
-                  : {}),
-                ...(data?.exposedRowIds ? { exposedRowIds: data.exposedRowIds } : {}),
-                // soft quota: 초과 완료 식별 플래그 (위 detectQuotaOverflow 판정 결과)
-                ...(quotaOverflow ? { quotaOverflow: true } : {}),
-              },
+              // 기존 metadata 와 병합 — 객체 리터럴 통째 대입 금지(jsonb 컬럼에
+              // JSON.stringify 직접 바인딩도 금지, ::jsonb 텍스트 캐스트만 허용하는 레포 관례).
+              metadata: sql`COALESCE(${surveyResponses.metadata}, '{}'::jsonb) || ${JSON.stringify(newMetadataKeys)}::jsonb`,
             }
           : {}),
       })

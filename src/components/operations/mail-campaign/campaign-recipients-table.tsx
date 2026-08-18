@@ -2,6 +2,8 @@ import Link from 'next/link';
 
 import { Card } from '@/components/ui/card';
 import { LocalDateTime } from '@/components/ui/local-date-time';
+import { PagerJump } from '@/components/operations/pager-jump';
+import { buildPageItems } from '@/components/operations/table-primitives';
 import type { MailRecipientStatus } from '@/db/schema/mail';
 import type { CampaignRecipientRow } from '@/lib/operations/campaigns.server';
 
@@ -37,13 +39,14 @@ const STATUS_FILTER_CHIPS: Array<{
 function buildHref(
   surveyId: string,
   campaignId: string,
-  overrides: Partial<{ statuses: MailRecipientStatus[]; q: string; recipPage: number }>,
+  // recipPage 에 '__PAGE__' 토큰 문자열을 넘기면 PagerJump 용 href 템플릿이 된다.
+  overrides: Partial<{ statuses: MailRecipientStatus[]; q: string; recipPage: number | string }>,
 ): string {
   const params = new URLSearchParams();
   if (overrides.statuses && overrides.statuses.length > 0)
     params.set('status', overrides.statuses.join(','));
   if (overrides.q && overrides.q.trim()) params.set('q', overrides.q.trim());
-  if (overrides.recipPage && overrides.recipPage > 1)
+  if (overrides.recipPage && overrides.recipPage !== 1)
     params.set('recipPage', String(overrides.recipPage));
   const qs = params.toString();
   return `/admin/surveys/${surveyId}/operations/mail/campaigns/${campaignId}${
@@ -135,7 +138,7 @@ export function CampaignRecipientsTable({
           <table className="w-full min-w-[800px]">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/50 text-left text-xs font-medium tracking-wide text-gray-500 uppercase">
-                <th className="px-3 py-2">번호</th>
+                <th className="px-3 py-2">시스템ID</th>
                 <th className="px-3 py-2">이메일</th>
                 <th className="px-3 py-2">그룹</th>
                 <th className="px-3 py-2">상태</th>
@@ -191,8 +194,8 @@ export function CampaignRecipientsTable({
       )}
 
       {totalPages > 1 ? (
-        <div className="flex items-center justify-end gap-2 text-sm">
-          <span className="text-slate-500">
+        <div className="flex items-center justify-end gap-1 text-sm">
+          <span className="mr-1 text-slate-500">
             {page} / {totalPages}
           </span>
           <PageLink
@@ -208,6 +211,32 @@ export function CampaignRecipientsTable({
           >
             이전
           </PageLink>
+          {buildPageItems(page, totalPages).map((item, i) =>
+            item === 'ellipsis' ? (
+              <span key={`ellipsis-${i}`} className="px-1 text-slate-400">
+                …
+              </span>
+            ) : item === page ? (
+              <span
+                key={item}
+                aria-current="page"
+                className="rounded border border-blue-500 bg-blue-500 px-2 py-1 font-medium text-white"
+              >
+                {item}
+              </span>
+            ) : (
+              <PageLink
+                key={item}
+                href={buildHref(surveyId, campaignId, {
+                  statuses: currentStatuses,
+                  q: currentQuery,
+                  recipPage: item,
+                })}
+              >
+                {item}
+              </PageLink>
+            ),
+          )}
           <PageLink
             href={
               page < totalPages
@@ -221,6 +250,14 @@ export function CampaignRecipientsTable({
           >
             다음
           </PageLink>
+          <PagerJump
+            totalPages={totalPages}
+            hrefTemplate={buildHref(surveyId, campaignId, {
+              statuses: currentStatuses,
+              q: currentQuery,
+              recipPage: '__PAGE__',
+            })}
+          />
         </div>
       ) : null}
     </section>

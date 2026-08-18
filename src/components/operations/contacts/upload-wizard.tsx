@@ -29,6 +29,12 @@ import type {
   ContactUploadMode,
 } from '@/db/schema/schema-types';
 import { autoDetectPiiMapping, autoDetectSystemFields } from '@/lib/contacts/auto-detect';
+import {
+  GROUP_LEVELS,
+  GROUP_LEVEL_LABELS,
+  resolveGroupCriteria,
+  type GroupLevel,
+} from '@/lib/contacts/group-levels';
 import { getSchemeRouting, suggestSimilarKeys } from '@/lib/contacts/match-contacts';
 import {
   MAX_UPLOAD_BYTES,
@@ -53,8 +59,11 @@ interface UploadWizardProps {
 }
 
 interface MappingState {
-  /** 분류 기준 컬럼 인덱스 (선택사항 — null 가능) */
-  groupCol: number | null;
+  /**
+   * 분류 기준 레벨 배정 (헤더명 → 1=대분류..4=세부분류). 레벨당 헤더 1개.
+   * 대분류(1) 헤더가 group_value 소스를 겸한다 (buildMapping 에서 인덱스 동기화).
+   */
+  groupLevels: Record<string, GroupLevel>;
   /** 조사 대상 목록에 표시할 헤더 set */
   selectedAttrs: Set<string>;
   /** 사용자 편집 라벨 (헤더명 → 라벨) */
@@ -87,7 +96,7 @@ export function UploadWizard({
   const [sheetName, setSheetName] = useState<string>('');
   const [preview, setPreview] = useState<ParseExcelPreviewResult | null>(null);
   const [mapping, setMapping] = useState<MappingState>({
-    groupCol: null,
+    groupLevels: {},
     selectedAttrs: new Set(),
     labelOverrides: {},
     piiMapping: {},
@@ -122,6 +131,11 @@ export function UploadWizard({
     return map;
   }, [existingScheme]);
   const isLockedMode = mode !== 'replace';
+  /** 기존 스킴의 레벨 배정 (legacy groupBy 포함 해석) — 잠금 모드 표시·제출용 */
+  const existingLevelByKey = useMemo(
+    () => new Map(resolveGroupCriteria(existingScheme).map((c) => [c.key, c.level])),
+    [existingScheme],
+  );
   const needsKeySelection = mode === 'merge' || (mode === 'append' && dupCheck);
   // merge 모드는 항상, append 모드는 중복 검사 on 일 때만 매칭 미리보기 스텝을 거친다.
   const needsMatchStep = needsKeySelection;
@@ -164,8 +178,22 @@ export function UploadWizard({
           ...r.headers.filter((h) => !piiHeaders.has(h) && h !== groupHeader).slice(0, 3),
         ]);
 
+        // 레벨 초기값: 기존 스킴 배정 우선 (merge/append 재업로드), 없으면 자동 감지
+        // 그룹 헤더를 대분류(1)로.
+        const existingLevels = Object.fromEntries(
+          resolveGroupCriteria(existingScheme)
+            .filter((c) => r.headers.includes(c.key))
+            .map((c) => [c.key, c.level]),
+        );
+        const initialLevels: Record<string, GroupLevel> =
+          Object.keys(existingLevels).length > 0
+            ? existingLevels
+            : groupHeader
+              ? { [groupHeader]: 1 }
+              : {};
+
         setMapping({
-          groupCol: detected.group ?? null,
+          groupLevels: initialLevels,
           selectedAttrs: defaultShown,
           labelOverrides: {}, // 사용자가 편집한 라벨만. 미편집은 헤더명 그대로 사용.
           piiMapping: piiAuto,
@@ -183,8 +211,24 @@ export function UploadWizard({
   }
 
   function buildMapping(): ContactUploadMapping {
+    // 레벨 배정 확정:
+    // - replace: 마법사 select 상태 그대로.
+    // - merge/append(잠금): 기존 스킴 배정을 파일 헤더 교집합으로 재구성 — UI 잠금과
+    //   무관하게 상태 드리프트(모드 전환 등)가 스킴·group_value 를 갈라놓지 못하게 한다.
+    const effectiveLevels: Record<string, GroupLevel> = isLockedMode
+      ? Object.fromEntries(
+          Array.from(existingLevelByKey.entries()).filter(([key]) =>
+            preview ? preview.headers.includes(key) : false,
+          ),
+        )
+      : mapping.groupLevels;
+    // 대분류(1) 헤더 = group_value 소스 — 레거시 systemFields.group 인덱스로 동기화
+    const level1Header = Object.entries(effectiveLevels).find(([, l]) => l === 1)?.[0];
+    const groupIdx =
+      level1Header != null && preview ? preview.headers.indexOf(level1Header) : -1;
     return {
-      systemFields: { ...(mapping.groupCol != null ? { group: mapping.groupCol } : {}) },
+      systemFields: { ...(groupIdx >= 0 ? { group: groupIdx } : {}) },
+      ...(Object.keys(effectiveLevels).length > 0 ? { groupLevels: effectiveLevels } : {}),
       piiMapping: mapping.piiMapping,
       selectedAttrsKeys: Array.from(mapping.selectedAttrs),
       labelOverrides: mapping.labelOverrides,
@@ -237,7 +281,10 @@ export function UploadWizard({
       const next = { ...m.piiMapping };
       if (value === '_none') delete next[header];
       else next[header] = value;
-      return { ...m, piiMapping: next };
+      // PII 컬럼은 분류 기준 불가 — 남아있는 레벨 배정을 함께 제거 (숨은 상태 방지)
+      const nextLevels = { ...m.groupLevels };
+      if (value !== '_none') delete nextLevels[header];
+      return { ...m, piiMapping: next, groupLevels: nextLevels };
     });
   }
 
@@ -259,8 +306,18 @@ export function UploadWizard({
     });
   }
 
-  function setGroupCol(idx: number | null) {
-    setMapping((m) => ({ ...m, groupCol: idx }));
+  /** 레벨 배정 — 레벨당 헤더 1개 (이미 쓰인 레벨을 고르면 기존 헤더에서 해제). */
+  function setHeaderGroupLevel(header: string, level: GroupLevel | null) {
+    setMapping((m) => {
+      const next: Record<string, GroupLevel> = {};
+      for (const [h, l] of Object.entries(m.groupLevels)) {
+        if (h === header) continue;
+        if (level != null && l === level) continue;
+        next[h] = l;
+      }
+      if (level != null) next[header] = level;
+      return { ...m, groupLevels: next };
+    });
   }
 
   return (
@@ -518,7 +575,7 @@ export function UploadWizard({
                     <col style={{ width: '170px' }} />
                     <col style={{ width: '60px' }} />
                     {needsKeySelection && <col style={{ width: '70px' }} />}
-                    <col style={{ width: '80px' }} />
+                    <col style={{ width: '130px' }} />
                   </colgroup>
                   <thead className="bg-slate-50 text-xs text-slate-600">
                     <tr>
@@ -545,10 +602,9 @@ export function UploadWizard({
                     </tr>
                   </thead>
                   <tbody>
-                    {preview.headers.map((h, i) => {
+                    {preview.headers.map((h) => {
                       const pii = mapping.piiMapping[h];
                       const labelValue = mapping.labelOverrides[h] ?? h;
-                      const isGroup = mapping.groupCol === i;
                       const isShown = mapping.selectedAttrs.has(h);
                       const lockedCol = lockedColumns.get(h);
                       const isLocked = isLockedMode && Boolean(lockedCol);
@@ -633,14 +689,55 @@ export function UploadWizard({
                             </td>
                           )}
                           <td className="px-3 py-2 text-center align-middle">
-                            <input
-                              type="radio"
-                              name="group-col"
-                              checked={isGroup}
-                              onChange={() => setGroupCol(i)}
-                              className="h-4 w-4 cursor-pointer"
-                              aria-label={`${h}을(를) 분류 기준으로 사용`}
-                            />
+                            {isLockedMode ? (
+                              // merge/append 는 레벨 변경 불가 — 기존 배정 표시만.
+                              // (변경은 업로드 후 컬럼 설정에서)
+                              <div
+                                className="text-xs text-slate-600"
+                                title="병합·추가 업로드에서는 분류 기준을 바꿀 수 없습니다. 업로드 후 컬럼 설정에서 변경하세요."
+                              >
+                                {(() => {
+                                  const lv = existingLevelByKey.get(h);
+                                  return lv != null ? GROUP_LEVEL_LABELS[lv] : '—';
+                                })()}
+                              </div>
+                            ) : isPiiColumn ? (
+                              <span
+                                className="text-slate-300"
+                                title="개인정보 컬럼은 분류 기준으로 사용할 수 없습니다"
+                              >
+                                —
+                              </span>
+                            ) : (
+                              <Select
+                                value={
+                                  mapping.groupLevels[h] != null
+                                    ? String(mapping.groupLevels[h])
+                                    : '_none'
+                                }
+                                onValueChange={(v) =>
+                                  setHeaderGroupLevel(
+                                    h,
+                                    v === '_none' ? null : (Number(v) as GroupLevel),
+                                  )
+                                }
+                              >
+                                <SelectTrigger
+                                  className="w-full"
+                                  aria-label={`${h} 분류 기준 레벨`}
+                                >
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="_none">없음</SelectItem>
+                                  {GROUP_LEVELS.map((l) => (
+                                    <SelectItem key={l} value={String(l)}>
+                                      {GROUP_LEVEL_LABELS[l]}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            )}
                           </td>
                         </tr>
                       );
@@ -651,19 +748,9 @@ export function UploadWizard({
               <div className="mt-2 space-y-1 text-xs text-slate-500">
                 <div>개인정보로 지정된 컬럼은 암호화되어 별도 테이블에 저장됩니다.</div>
                 <div>
-                  분류 기준: 같은 값을 가진 행끼리 그룹으로 묶입니다 (예: 전시회명·단체 메일).
-                  {mapping.groupCol != null && (
-                    <>
-                      {' '}
-                      <button
-                        type="button"
-                        onClick={() => setGroupCol(null)}
-                        className="text-blue-600 hover:underline"
-                      >
-                        선택 해제
-                      </button>
-                    </>
-                  )}
+                  분류 기준: 컬럼을 대·중·소·세부분류 레벨에 배정하면 진척보고가 그 순서대로
+                  조합 집계합니다 (레벨당 컬럼 1개, 1~2개만 배정해도 됩니다). 업로드 후
+                  컬럼 설정에서 언제든 변경할 수 있습니다.
                 </div>
               </div>
             </div>

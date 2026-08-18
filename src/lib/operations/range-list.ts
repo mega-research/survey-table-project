@@ -1,5 +1,10 @@
 const INT32_MAX = 2147483647;
 const ID_LIST_REGEX = /^\s*\d+(\s*-\s*\d+)?(\s*,\s*\d+(\s*-\s*\d+)?)*\s*$/;
+/**
+ * 토큰 수 상한 — 전체 검색이 범위 목록을 표시 컬럼마다 복제하므로
+ * (토큰 수 × 컬럼 수) SQL 술어 폭증을 여기서 차단한다. 초과는 null(문법 불일치와 동일).
+ */
+const MAX_ID_LIST_TOKENS = 200;
 
 export interface NumRange {
   from: number;
@@ -19,6 +24,7 @@ export interface NumRange {
 export function parseIdListInput(input: string): NumRange[] | null {
   if (!ID_LIST_REGEX.test(input)) return null;
   const tokens = input.split(',').map((t) => t.trim());
+  if (tokens.length > MAX_ID_LIST_TOKENS) return null;
   const ranges: NumRange[] = [];
   for (const token of tokens) {
     if (token.length === 0) return null;

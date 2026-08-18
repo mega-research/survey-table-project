@@ -2,6 +2,8 @@ import { ORPCError } from '@orpc/client';
 import { useCallback, useEffect, useState } from 'react';
 
 import { client } from '@/shared/lib/rpc';
+import { readOptTextsSidecar } from '@/lib/option-text-read';
+import { useSurveyResponseStore } from '@/stores/survey-response-store';
 import { normalizeQuestions } from '@/lib/question';
 import { normalizeResponseHeaderConfig } from '@/lib/survey/response-header-config';
 import { parsesurveyIdentifier } from '@/lib/survey-url';
@@ -167,6 +169,11 @@ export function useSurveyLoader({
           }
           // 초기 응답값 prefill — DB INSERT 없이 state 만 세팅.
           setResponses(adminContext.initialResponses);
+          // 저장된 기타/상세 기재(__optTexts__) 복원 — 입력란은 스토어만 읽으므로
+          // 시드하지 않으면 빈칸으로 보이고 저장 시 교체-소실된다.
+          useSurveyResponseStore
+            .getState()
+            .seedOptionTexts(readOptTextsSidecar(adminContext.initialResponses));
           // 응답 당시 contact attrs 복원 — 조건/토큰 표시 평가에 사용.
           setContactAttrs(adminContext.initialContactAttrs ?? {});
           return;

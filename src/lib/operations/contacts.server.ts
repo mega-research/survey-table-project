@@ -1,13 +1,14 @@
 import 'server-only';
 import { cache } from 'react';
 
-import { and, asc, desc, eq, inArray, isNull, sql, type AnyColumn, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, or, sql, type AnyColumn, type SQL } from 'drizzle-orm';
 
 import { db } from '@/db';
 import {
   contactTargets,
   contactUploads,
   surveys,
+  surveyResponses,
   questions,
   mailRecipients,
   mailCampaigns,
@@ -33,11 +34,16 @@ import {
 } from './contacts';
 import type { FilterClause } from './contacts-filters.server';
 import {
+  attrsNaturalSortExprs,
   buildContactsFilterSql,
+  latestMailStatusExpr,
   latestResultCodeExpr,
+  mailStatusRankExpr,
+  matchedResponseSubquery,
 } from './contacts-filter-sql';
 import { FILTER_SOURCE, type ColumnCandidateWithPii } from './filter-shared';
 import {
+  responseScopeCondition,
   targetScopeCondition,
   type OperationsDataScope,
 } from './data-scope.server';
@@ -66,6 +72,8 @@ export interface ContactsRow {
   respondedAt: Date | null;
   /** 응답 진행률 0~100. 응답 없거나 첫 답변 전 / soft-delete 면 null */
   progressPct: number | null;
+  /** 매칭 응답의 status (completed/in_progress/drop 등). 응답 없으면 null */
+  responseStatus: string | null;
   /** 최신(created_at DESC) 메일 수신 상태. 발송 이력 없으면 null */
   latestMailStatus: MailRecipientStatus | null;
   inviteToken: string;
@@ -88,25 +96,25 @@ const latestAttemptNoExpr = sql<number | null>`(
   ORDER BY attempt_no DESC LIMIT 1
 )`;
 
-const progressPctExpr = sql<number | null>`(
-  SELECT progress_pct FROM survey_responses
-  WHERE id = "contact_targets"."response_id"
-    AND deleted_at IS NULL
-    AND is_test = "contact_targets"."is_test"
-)`;
+// web 컬럼용 매칭 응답 1건 — 매칭 규칙(역참조 + 확정 링크 우선)은 정렬
+// (responseStatusRankExpr)과 공유하는 matchedResponseSubquery 주석 참조.
+// 인덱스: idx_survey_responses_contact (contact_target_id, partial NOT NULL).
+const matchedResponseFieldExpr = <T>(field: 'progress_pct' | 'status') =>
+  sql<T>`${matchedResponseSubquery(sql.raw(field))}`;
 
-// 조사 대상별 최신(created_at DESC) 메일 수신 상태 1건.
-// outer correlation 은 명시적 qualifier 필수 (latestAttemptNoExpr 주석 참고).
-// 인덱스: idx_mail_recipients_target_created (contact_target_id, created_at DESC).
-const latestMailStatusExpr = sql<MailRecipientStatus | null>`(
-  SELECT mail_recipients.status FROM mail_recipients
-  INNER JOIN mail_campaigns ON mail_campaigns.id = mail_recipients.campaign_id
-  WHERE mail_recipients.contact_target_id = "contact_targets"."id"
-    AND mail_recipients.archived_at IS NULL
-    AND mail_campaigns.archived_at IS NULL
-    AND mail_campaigns.is_test = "contact_targets"."is_test"
-  ORDER BY mail_recipients.created_at DESC LIMIT 1
-)`;
+const progressPctExpr = matchedResponseFieldExpr<number | null>('progress_pct');
+
+// web 컬럼 정렬 축 — 매칭 응답의 활동 시각. 완료면 완료 시각, 미완료(진행중·이탈)면
+// 마지막 활동 시각. 응답없음은 NULL(NULLS LAST) 이라 방향과 무관하게 항상 마지막.
+// 상태별 골라보기는 web 필터(WEB_FILTER_OPTIONS) 소관 — 정렬은 시간축만 맡는다.
+const responseActivityAtExpr = matchedResponseSubquery(
+  sql`COALESCE(completed_at, last_activity_at)`,
+);
+
+// web 컬럼 상태 배지용 — 매칭 응답의 status (completed/in_progress/drop 등).
+const responseStatusExpr = matchedResponseFieldExpr<string | null>('status');
+
+// 최신 메일 수신 상태 표현식은 contacts-filter-sql 로 이관 — 필터·정렬과 공유.
 
 function orderExpr(col: AnyColumn | SQL, direction: ContactsSortDir): SQL {
   return direction === 'asc'
@@ -159,10 +167,25 @@ export async function listContactsForSurvey(
     group: contactTargets.groupValue,
   } as const;
 
+  // attrs 정렬은 자연 정렬 — 숫자 값(NO 등)은 숫자순, 비숫자는 뒤에 텍스트순.
+  // webActivity 정렬은 매칭 응답 활동 시각 축 — 내림차순 = 최근 응답 순,
+  // 오름차순 = 처음 응답 순. 응답없음은 NULL(NULLS LAST) 이라 방향과 무관하게
+  // 항상 마지막. 같은 시각(응답없음 블록 등)은 기본 순서(시스템ID 오름차순) 유지.
   const attrsKey = attrsSortKey(sort);
-  const orderCol: AnyColumn | SQL = attrsKey
-    ? sql`${contactTargets.attrs} ->> ${attrsKey}`
-    : SYSTEM_SORT_MAP[sort as keyof typeof SYSTEM_SORT_MAP] ?? contactTargets.resid;
+  const orderExprs: SQL[] = attrsKey
+    ? attrsNaturalSortExprs(attrsKey).map((c) => orderExpr(c, dir))
+    : sort === 'webActivity'
+      ? [orderExpr(responseActivityAtExpr, dir), asc(contactTargets.resid)]
+      : sort === 'mailStatus'
+        ? // 메일 상태 순위 축 — 오름차순 열람 → 전달 완료 → … → 실패,
+          // 발송 이력 없음(NULL)은 방향 무관 항상 마지막. 같은 상태 안은 시스템ID 순.
+          [orderExpr(mailStatusRankExpr, dir), asc(contactTargets.resid)]
+        : [
+          orderExpr(
+            SYSTEM_SORT_MAP[sort as keyof typeof SYSTEM_SORT_MAP] ?? contactTargets.resid,
+            dir,
+          ),
+        ];
 
   const dataRows = await db
     .select({
@@ -176,11 +199,12 @@ export async function listContactsForSurvey(
       latestResultCode: latestResultCodeExpr.as('latest_result_code'),
       latestAttemptNo: latestAttemptNoExpr.as('latest_attempt_no'),
       progressPct: progressPctExpr.as('progress_pct'),
+      responseStatus: responseStatusExpr.as('response_status'),
       latestMailStatus: latestMailStatusExpr.as('latest_mail_status'),
     })
     .from(contactTargets)
     .where(whereClause)
-    .orderBy(orderExpr(orderCol, dir), asc(contactTargets.id))
+    .orderBy(...orderExprs, asc(contactTargets.id))
     .limit(pageSize)
     .offset(offset);
 
@@ -197,6 +221,7 @@ export async function listContactsForSurvey(
     latestAttemptNo: r.latestAttemptNo,
     respondedAt: r.respondedAt,
     progressPct: r.progressPct,
+    responseStatus: r.responseStatus,
     latestMailStatus: r.latestMailStatus,
     inviteToken: r.inviteToken,
     createdAt: r.createdAt,
@@ -216,12 +241,13 @@ export interface ContactExportSourceRow {
   latestResultCode: string | null;
   latestAttemptNo: number | null;
   progressPct: number | null;
+  responseStatus: string | null;
   latestMailStatus: MailRecipientStatus | null;
 }
 
 /**
  * 조사 대상 엑셀 다운로드용 전체 조회 — listContactsForSurvey 와 동일한
- * 최신 회차/진행율/메일 상태 표현식 재사용, 페이지네이션 없이 resid 오름차순.
+ * 최신 회차/응답 상태/진행율/메일 상태 표현식 재사용, 페이지네이션 없이 resid 오름차순.
  * 상한 초과 감지를 위해 MAX_CONTACT_EXPORT_ROWS + 1 건까지 읽는다.
  */
 export async function listContactsForExport(
@@ -237,6 +263,7 @@ export async function listContactsForExport(
       latestResultCode: latestResultCodeExpr.as('latest_result_code'),
       latestAttemptNo: latestAttemptNoExpr.as('latest_attempt_no'),
       progressPct: progressPctExpr.as('progress_pct'),
+      responseStatus: responseStatusExpr.as('response_status'),
       latestMailStatus: latestMailStatusExpr.as('latest_mail_status'),
     })
     .from(contactTargets)
@@ -301,22 +328,30 @@ export const getContactColumnScheme = cache(
 
 /**
  * 필터 컬럼 후보 생성 — 조사대상목록·단체 메일 마법사 공유.
- * system.resid / system.contact_result / system.web + attrs.* + pii.* 만 후보.
+ * 맨 앞 "전체"(system.all) + system.resid / contact_result / web + attrs.* + pii.*.
  * placeholder 전용 컬럼(system.email_count / system.contact_owner)은 제외.
  */
 export function buildColumnCandidates(
   scheme: ContactColumnScheme | null,
 ): ColumnCandidateWithPii[] {
-  return (scheme?.columns ?? [])
+  const columns = (scheme?.columns ?? [])
     .filter(
       (c) =>
         c.source === FILTER_SOURCE.RESID ||
         c.source === FILTER_SOURCE.CONTACT_RESULT ||
         c.source === FILTER_SOURCE.WEB ||
+        c.source === FILTER_SOURCE.EMAIL ||
         c.source.startsWith(FILTER_SOURCE.ATTRS_PREFIX) ||
         c.source.startsWith(FILTER_SOURCE.PII_PREFIX),
     )
-    .map((c) => ({ source: c.source, label: c.label, ...(c.piiType !== undefined ? { piiType: c.piiType } : {}) }));
+    .map((c) => ({
+      source: c.source,
+      label: c.label,
+      ...(c.piiType !== undefined ? { piiType: c.piiType } : {}),
+      ...(c.hidden !== undefined ? { hidden: c.hidden } : {}),
+    }));
+  if (columns.length === 0) return columns;
+  return [{ source: FILTER_SOURCE.ALL, label: '전체' }, ...columns];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -425,6 +460,33 @@ export async function getContactDetailById(
 }
 
 /**
+ * 컨택의 수정 가능 응답 — 완료·진행중·이탈 응답 중 가장 최근 건의 id 와 status.
+ * contact_targets.responseId(완료 시에만 링크)에 의존하지 않아, 완료 후 다시
+ * 진입한 진행중 응답이 있으면 그 최신 건이 열린다. 조사 대상 단건 편집의
+ * "응답 수정" 버튼용이며, status 는 "재응답 허용" 버튼 노출 판정에 쓴다 —
+ * 컨택의 respondedAt(best-effort 링크라 누락 가능)이 아닌 실제 응답 상태 기준.
+ */
+export async function getEditableResponseIdForTarget(
+  contactTargetId: string,
+  scope: OperationsDataScope,
+): Promise<{ id: string; status: string } | null> {
+  const [row] = await db
+    .select({ id: surveyResponses.id, status: surveyResponses.status })
+    .from(surveyResponses)
+    .where(
+      and(
+        eq(surveyResponses.contactTargetId, contactTargetId),
+        inArray(surveyResponses.status, ['completed', 'in_progress', 'drop']),
+        isNull(surveyResponses.deletedAt),
+        responseScopeCondition(scope),
+      ),
+    )
+    .orderBy(desc(surveyResponses.createdAt))
+    .limit(1);
+  return row ?? null;
+}
+
+/**
  * 결과코드 조회 — surveys.contact_result_codes 가 NULL 이면 DEFAULT_RESULT_CODES 반환.
  * RSC dedupe 위해 React.cache 적용.
  */
@@ -496,20 +558,30 @@ export async function getMailRecipientsForTarget(
 
 export interface ResponseEditLogRow {
   id: string;
+  action: 'edit' | 'reset' | 'reedit_allow';
   editorEmail: string | null;
   changedQuestions: ResponseEditChange[];
   changedCount: number;
   createdAt: Date;
 }
 
-/** 응답 편집 audit 이력 (최근순). responseId 없으면 빈 배열. */
+/**
+ * 응답 편집 audit 이력 (최근순).
+ * 일반 수정 로그는 responseId, 초기화 마커(action:'reset')는 응답 삭제 후에도
+ * 남도록 contactTargetId 로 연결된다 — 둘 다 있으면 OR 로 합쳐 조회한다.
+ */
 export async function getResponseEditLogs(
   responseId: string | null,
+  contactTargetId?: string | null,
 ): Promise<ResponseEditLogRow[]> {
-  if (!responseId) return [];
+  const conds: SQL[] = [];
+  if (responseId) conds.push(eq(responseEditLogs.responseId, responseId));
+  if (contactTargetId) conds.push(eq(responseEditLogs.contactTargetId, contactTargetId));
+  if (conds.length === 0) return [];
   const rows = await db
     .select({
       id: responseEditLogs.id,
+      action: responseEditLogs.action,
       surveyId: responseEditLogs.surveyId,
       editorEmail: responseEditLogs.editorEmail,
       changedQuestions: responseEditLogs.changedQuestions,
@@ -517,16 +589,19 @@ export async function getResponseEditLogs(
       createdAt: responseEditLogs.createdAt,
     })
     .from(responseEditLogs)
-    .where(eq(responseEditLogs.responseId, responseId))
+    .where(or(...conds))
     .orderBy(desc(responseEditLogs.createdAt));
   if (rows.length === 0) return [];
 
   // 라벨 보강: 기록 시점에 version_id 부재로 questionId 로 폴백된 라벨을
   // 현재 questions 테이블의 code/title 로 복구. 삭제된 질문은 저장값 유지.
+  // uuid 형식이 아닌 키(__optTexts__ 사이드카 등)는 uuid 컬럼 조회에 넣으면
+  // invalid input syntax 로 500 이 나므로 제외한다 — 라벨은 mergeChangeLabels 가 처리.
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const surveyId = rows[0]!.surveyId;
   const questionIds = [
     ...new Set(rows.flatMap((r) => r.changedQuestions.map((c) => c.questionId))),
-  ];
+  ].filter((id) => UUID_RE.test(id));
   const labelMap = new Map<string, { code: string | null; title: string }>();
   if (questionIds.length > 0) {
     const qs = await db
@@ -538,6 +613,7 @@ export async function getResponseEditLogs(
 
   return rows.map((r) => ({
     id: r.id,
+    action: r.action,
     editorEmail: r.editorEmail,
     changedQuestions: mergeChangeLabels(r.changedQuestions, labelMap),
     changedCount: r.changedCount,

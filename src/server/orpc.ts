@@ -3,8 +3,8 @@ import { ORPCError, os } from '@orpc/server';
 import { isAdminUserAllowed } from '@/lib/auth/admin-allowlist';
 import {
   canAccessSurvey,
-  getGuestSurveyId,
   isAdminOrGuestGrantHolder,
+  isGuestUser,
 } from '@/lib/auth/guest-grants';
 import { getTrustedClientIpOrNull } from '@/lib/rate-limit/client-ip';
 import { isRateLimitedTwoTier, type RateLimitGroup } from '@/lib/rate-limit/rate-limiter';
@@ -91,7 +91,7 @@ export const authed = base.use(({ context, next }) => {
   if (!context.user) {
     throw new ORPCError('UNAUTHORIZED', { message: '인증이 필요합니다.' });
   }
-  if (getGuestSurveyId(context.user.id) !== null) {
+  if (isGuestUser(context.user.id)) {
     throw new ORPCError('FORBIDDEN', { message: '접근 권한이 없습니다.' });
   }
   if (!isAdminUserAllowed(context.user.id)) {

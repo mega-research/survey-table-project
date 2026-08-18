@@ -3,8 +3,10 @@ import { isAdminUserAllowed } from '@/lib/auth/admin-allowlist';
 /**
  * 설문 단위 게스트 grant.
  *
- * GUEST_SURVEY_GRANTS="<userId>:<surveyId>[,...]" — 해당 유저는 그 설문의
- * operations 표면에만 접근한다. admin-allowlist 와 같은 접근제어 인프라 상수.
+ * GUEST_SURVEY_GRANTS="<userId>:<surveyId>[,...]" — 해당 유저는 grant 된
+ * 설문들의 operations 표면에만 접근한다. 같은 userId 를 반복 등재하면 설문
+ * 여러 개를 가질 수 있다 (guest1:s1,guest1:s2). admin-allowlist 와 같은
+ * 접근제어 인프라 상수.
  *
  * 주의: grant 보유자는 ADMIN_USER_IDS 설정 여부와 무관하게 항상 게스트로
  * 취급된다(canAccessSurvey grant-first). ADMIN_USER_IDS 미설정(fail-open) 이
@@ -14,9 +16,9 @@ import { isAdminUserAllowed } from '@/lib/auth/admin-allowlist';
 
 const ENV_KEY = 'GUEST_SURVEY_GRANTS';
 
-/** 콤마 분리 "userId:surveyId" 목록 파싱. 형식 불량 항목은 무시. */
-export function parseGuestGrants(raw?: string): Map<string, string> {
-  const map = new Map<string, string>();
+/** 콤마 분리 "userId:surveyId" 목록 파싱 — 같은 userId 는 누적. 형식 불량 항목은 무시. */
+export function parseGuestGrants(raw?: string): Map<string, string[]> {
+  const map = new Map<string, string[]>();
   if (!raw) return map;
   for (const entry of raw.split(',')) {
     const trimmed = entry.trim();
@@ -26,14 +28,21 @@ export function parseGuestGrants(raw?: string): Map<string, string> {
     const userId = trimmed.slice(0, sep).trim();
     const surveyId = trimmed.slice(sep + 1).trim();
     if (!userId || !surveyId) continue;
-    map.set(userId, surveyId);
+    const list = map.get(userId) ?? [];
+    if (!list.includes(surveyId)) list.push(surveyId);
+    map.set(userId, list);
   }
   return map;
 }
 
-/** 게스트 grant 조회 — 없으면 null. */
-export function getGuestSurveyId(userId: string): string | null {
-  return parseGuestGrants(process.env[ENV_KEY]).get(userId) ?? null;
+/** 게스트 grant 설문 목록 조회 — 없으면 빈 배열. */
+export function getGuestSurveyIds(userId: string): string[] {
+  return parseGuestGrants(process.env[ENV_KEY]).get(userId) ?? [];
+}
+
+/** 게스트(설문 단위 grant 보유자) 여부. */
+export function isGuestUser(userId: string): boolean {
+  return getGuestSurveyIds(userId).length > 0;
 }
 
 /**
@@ -42,46 +51,111 @@ export function getGuestSurveyId(userId: string): string | null {
  * canAccessSurvey/assertSurveyAccess 가 강제한다.
  */
 export function isAdminOrGuestGrantHolder(userId: string): boolean {
-  return getGuestSurveyId(userId) !== null || isAdminUserAllowed(userId);
+  return isGuestUser(userId) || isAdminUserAllowed(userId);
 }
 
-/** 설문 접근 판정 — grant 보유자는 항상 게스트(grant 설문만), 그 외는 admin allowlist 판정. */
+/** 설문 접근 판정 — grant 보유자는 항상 게스트(grant 설문들만), 그 외는 admin allowlist 판정. */
 export function canAccessSurvey(userId: string, surveyId: string): boolean {
-  const granted = getGuestSurveyId(userId);
-  if (granted !== null) return granted === surveyId;
+  const granted = getGuestSurveyIds(userId);
+  if (granted.length > 0) return granted.includes(surveyId);
   return isAdminUserAllowed(userId);
+}
+
+/** 게스트가 무권한 설문 URL 을 눌렀을 때 보내는 강제 로그아웃 라우트. */
+export const GUEST_FORCE_LOGOUT_PATH = '/admin/logout';
+
+/** 설문 콘솔(operations/preview) 경로에서 설문 id 캡처. */
+const SURVEY_CONSOLE_PATH = /^\/admin\/surveys\/([^/]+)\/(?:operations|preview)(?:\/|$)/;
+
+/**
+ * 경로가 grant 밖 다른 설문의 콘솔(operations/preview)인지 판정.
+ * 로그인 시 "이 계정 담당 설문이 아님" 안내의 근거 — 특정 설문을 향한
+ * 접근일 때만 true 고, /admin 등 설문 의도가 없는 경로는 false.
+ */
+export function isForeignSurveyConsolePath(
+  pathname: string,
+  grantedSurveyIds: readonly string[],
+): boolean {
+  const surveyId = SURVEY_CONSOLE_PATH.exec(pathname)?.[1];
+  return surveyId !== undefined && !grantedSurveyIds.includes(surveyId);
+}
+
+/**
+ * open redirect 방지 — 같은 출처 내부 절대경로만 통과, 그 외 null.
+ * ('//', '/\\' 는 protocol-relative 외부 URL 우회 차단)
+ */
+export function sanitizeInternalPath(raw: string | null | undefined): string | null {
+  if (!raw || !raw.startsWith('/') || raw.startsWith('//') || raw.startsWith('/\\')) {
+    return null;
+  }
+  return raw;
 }
 
 /**
  * 미들웨어용 게스트 경로 판정 (순수 함수).
  * 허용 경로면 null, 차단이면 리다이렉트 목적지 pathname 반환.
+ *
+ * grant 된 설문들의 operations/preview 는 전부 허용한다. 그 밖의 admin 경로는
+ * 설문 콘솔이든 아니든 전부 즉시 로그아웃시켜 로그인 화면으로 보낸다 — 자기
+ * 설문으로 조용히 돌리면 실사 인력이 버그·중복 로그인으로 착각하는 문제가
+ * 있어, "권한 없는 URL = 로그아웃 + 재로그인" 으로 단일화한 운영 결정
+ * (2026-08-18, grant 설문 안의 차단 편집 화면만 예외로 해당 overview 복귀).
  */
 export function guestPathRedirect(
   pathname: string,
-  grantedSurveyId: string,
+  grantedSurveyIds: readonly string[],
 ): string | null {
   if (pathname === '/admin/login') return null;
-  // 설문 보기(발행 스냅샷 미리보기)는 읽기 전용 화면이라 게스트에게도 허용한다.
-  const previewPath = `/admin/surveys/${grantedSurveyId}/preview`;
-  if (pathname === previewPath || pathname.startsWith(`${previewPath}/`)) return null;
-  const allowedPrefix = `/admin/surveys/${grantedSurveyId}/operations`;
-  if (pathname === allowedPrefix || pathname.startsWith(`${allowedPrefix}/`)) {
-    // 액션 procedure 가 authed(게스트 차단)로 남는 편집 화면은 경로도 함께 차단 —
-    // 폼을 다 채운 뒤 FORBIDDEN 을 받는 반쪽 UI 를 만들지 않는다.
-    // (컨택 목록·상세·수동 추가·메일·profiles 는 게스트 허용 procedure 와 짝이라 통과.)
-    const blockedSubpaths = [
-      'contacts/upload',
-      'contacts/result-codes',
-      'contacts/columns',
-      'quota',
-    ];
-    for (const sub of blockedSubpaths) {
-      const full = `${allowedPrefix}/${sub}`;
-      if (pathname === full || pathname.startsWith(`${full}/`)) {
-        return `${allowedPrefix}/overview`;
+  // 강제 로그아웃 라우트 자신은 통과 — 리다이렉트 루프 방지.
+  if (pathname === GUEST_FORCE_LOGOUT_PATH) return null;
+  for (const grantedSurveyId of grantedSurveyIds) {
+    // 설문 보기(발행 스냅샷 미리보기)는 읽기 전용 화면이라 게스트에게도 허용한다.
+    const previewPath = `/admin/surveys/${grantedSurveyId}/preview`;
+    if (pathname === previewPath || pathname.startsWith(`${previewPath}/`)) return null;
+    const allowedPrefix = `/admin/surveys/${grantedSurveyId}/operations`;
+    if (pathname === allowedPrefix || pathname.startsWith(`${allowedPrefix}/`)) {
+      // 액션 procedure 가 authed(게스트 차단)로 남는 편집 화면은 경로도 함께 차단 —
+      // 폼을 다 채운 뒤 FORBIDDEN 을 받는 반쪽 UI 를 만들지 않는다.
+      // (컨택 목록·상세·수동 추가·메일·profiles 는 게스트 허용 procedure 와 짝이라 통과.)
+      const blockedSubpaths = [
+        'contacts/upload',
+        'contacts/result-codes',
+        'contacts/columns',
+        'quota',
+      ];
+      for (const sub of blockedSubpaths) {
+        const full = `${allowedPrefix}/${sub}`;
+        if (pathname === full || pathname.startsWith(`${full}/`)) {
+          return `${allowedPrefix}/overview`;
+        }
       }
+      return null;
     }
-    return null;
   }
-  return `${allowedPrefix}/overview`;
+  // grant 밖 경로 전부 — 즉시 로그아웃 (grant 설문 경로는 위에서 이미 통과/차단됨)
+  return GUEST_FORCE_LOGOUT_PATH;
+}
+
+/**
+ * 게스트 로그인 직후 목적지 해석 (순수 함수). target 은 로그인 폼의 redirect
+ * 파라미터를 resolveRedirect 로 정제한 내부 경로(쿼리 포함 가능).
+ *
+ * 자기 설문의 허용 경로면 그대로 복귀시키고, 그 외(무권한 설문·기본 목적지
+ * /admin/surveys 등)는 첫 grant 설문 overview 로 보낸다 — guestPathRedirect
+ * 폴백이 강제 로그아웃이라 여기서 걸러주지 않으면 로그인 직후 다시 로그아웃
+ * 되는 루프가 된다.
+ */
+export function guestPostLoginRedirect(
+  target: string,
+  grantedSurveyIds: readonly string[],
+): string {
+  const path = target.split(/[?#]/)[0] ?? target;
+  const dest = guestPathRedirect(path, grantedSurveyIds);
+  // 허용 경로 — 단 로그인·로그아웃 라우트는 로그인 직후 목적지로 무의미
+  if (dest === null && path !== '/admin/login' && path !== GUEST_FORCE_LOGOUT_PATH) {
+    return target;
+  }
+  // grant 설문 안의 차단 편집 화면 — 해당 설문 overview 로
+  if (dest !== null && dest !== GUEST_FORCE_LOGOUT_PATH) return dest;
+  return `/admin/surveys/${grantedSurveyIds[0]}/operations/overview`;
 }

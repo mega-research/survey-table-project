@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { requireAuth } from '@/lib/auth';
-import { canAccessSurvey, getGuestSurveyId } from '@/lib/auth/guest-grants';
+import { canAccessSurvey, isGuestUser } from '@/lib/auth/guest-grants';
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
 import { resolveExportColumns } from '@/lib/operations/contacts-export';
 import {
@@ -39,7 +39,7 @@ async function handleContactsExport(
     // 어떤 값·id 매핑도 싣지 않는다 (contacts-export.server.ts 의 기존 원칙과 동일).
     ctx.bind({
       userId: user.id,
-      role: getGuestSurveyId(user.id) ? 'guest' : 'admin',
+      role: isGuestUser(user.id) ? 'guest' : 'admin',
       surveyId,
     });
     if (!canAccessSurvey(user.id, surveyId)) {
@@ -93,6 +93,7 @@ async function handleContactsExport(
       latestAttemptNo: r.latestAttemptNo,
       latestMailStatus: r.latestMailStatus,
       progressPct: r.progressPct,
+      responseStatus: r.responseStatus,
       inviteCode: r.inviteCode,
     }));
 

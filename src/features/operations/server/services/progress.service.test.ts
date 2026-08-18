@@ -72,6 +72,20 @@ describe('updateProgressColumns columns 방어', () => {
     });
   });
 
+  it('빈 columns 라도 showResid=false 면 스킴을 저장한다 — 시스템ID 숨김 유실 방지', async () => {
+    const input = {
+      surveyId: SURVEY_ID,
+      scheme: { version: 1, columns: [], showResid: false },
+    } as UpdateProgressColumnsInput;
+
+    const res = await updateProgressColumns(input);
+
+    expect(res).toEqual({ ok: true });
+    expect(capturedSets[0]).toMatchObject({
+      progressColumns: { version: 1, columns: [], showResid: false },
+    });
+  });
+
   it('빈 columns 배열은 progressColumns 를 null 로 set 한다', async () => {
     const input: UpdateProgressColumnsInput = {
       surveyId: SURVEY_ID,

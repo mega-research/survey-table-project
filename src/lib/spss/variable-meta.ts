@@ -45,9 +45,11 @@ export function resolveVarType(col: SPSSExportColumn, question: Question | undef
 
     case 'other-text':
     case 'ranking-other':
+    case 'ranking-option-text':
     case 'multiselect':
     case 'notice-date':
     case 'table-cell-ranking-other':
+    case 'table-cell-ranking-option-text':
       return VariableType.String;
 
     case 'table-cell':
@@ -98,6 +100,11 @@ export function resolveMeasure(col: SPSSExportColumn, question: Question | undef
     return VariableMeasure.Nominal;
   }
 
+  // 상세 기재 텍스트(String) — option-text 와 동일하게 명목척도 (의미상 척도 없음)
+  if (col.type === 'ranking-option-text' || col.type === 'table-cell-ranking-option-text') {
+    return VariableMeasure.Nominal;
+  }
+
   // 숫자 단답형(numericText) 은 척도(Continuous)
   if (col.type === 'text' && col.numericText) {
     return VariableMeasure.Continuous;
@@ -131,6 +138,10 @@ export function buildLabel(col: SPSSExportColumn): string {
       return col.optionLabel && col.optionLabel !== `${col.rankIndex}순위 기타 입력`
         ? `${col.questionText} - ${col.optionLabel}`
         : `${col.questionText} - ${col.rankIndex}순위 기타 입력`;
+    case 'ranking-option-text':
+      return col.optionLabel && col.optionLabel !== `${col.rankIndex}순위 상세 기재`
+        ? `${col.questionText} - ${col.optionLabel}`
+        : `${col.questionText} - ${col.rankIndex}순위 상세 기재`;
     case 'table-cell-ranking': {
       const loc = col.rowLabel && col.colLabel
         ? `${col.rowLabel} > ${col.colLabel}`
@@ -146,6 +157,14 @@ export function buildLabel(col: SPSSExportColumn): string {
       return loc
         ? `${col.questionText} - ${loc} - ${col.rankIndex}순위 기타 입력`
         : `${col.questionText} - ${col.rankIndex}순위 기타 입력`;
+    }
+    case 'table-cell-ranking-option-text': {
+      const loc = col.rowLabel && col.colLabel
+        ? `${col.rowLabel} > ${col.colLabel}`
+        : col.optionLabel;
+      return loc
+        ? `${col.questionText} - ${loc} - ${col.rankIndex}순위 상세 기재`
+        : `${col.questionText} - ${col.rankIndex}순위 상세 기재`;
     }
     case 'table-cell':
       return col.optionLabel
