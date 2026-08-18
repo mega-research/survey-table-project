@@ -9,7 +9,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import type { ContactResultCode } from '@/db/schema/schema-types';
-import { FILTER_SOURCE, placeholderFor } from '@/lib/operations/filter-shared';
+import { FILTER_SOURCE, WEB_FILTER_OPTIONS, placeholderFor } from '@/lib/operations/filter-shared';
 
 interface Props {
   source: string;
@@ -44,14 +44,21 @@ export function ValueWidget({ source, value, onChange, resultCodeOptions, inputI
   }
 
   if (source === FILTER_SOURCE.WEB) {
+    // 레거시 URL 값 표시 정규화 — 'true'(응답완료)는 completed, 'false'(미완료 전체)는
+    // 가장 가까운 none 으로 보이게 한다. 재적용 시점부터 새 상태 의미로 검색된다.
+    const normalized =
+      value === 'true' ? 'completed' : value === 'false' ? 'none' : value;
     return (
-      <Select value={value || 'true'} onValueChange={onChange}>
+      <Select value={normalized || 'completed'} onValueChange={onChange}>
         <SelectTrigger id={inputId} className="w-[260px] h-10">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="true">응답 완료</SelectItem>
-          <SelectItem value="false">미응답</SelectItem>
+          {WEB_FILTER_OPTIONS.map((o) => (
+            <SelectItem key={o.value} value={o.value}>
+              {o.label}
+            </SelectItem>
+          ))}
         </SelectContent>
       </Select>
     );

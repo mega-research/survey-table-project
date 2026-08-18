@@ -15,6 +15,26 @@ export const FILTER_SOURCE = {
 } as const;
 
 /**
+ * web(응답 상태) 필터 값 어휘 — 표시(StatusPill)·정렬(responseStatusRankExpr)과 같은
+ * 상태 축. 검색바 dropdown(value-widget)과 헤더 필터(header-filter-popover)가 공유.
+ * 구 URL 의 'true'/'false'(respondedAt 이진)는 WEB_FILTER_VALUES 로만 계속 수용하고
+ * UI 옵션에는 노출하지 않는다.
+ */
+export const WEB_FILTER_OPTIONS = [
+  { value: 'completed', label: '응답 완료' },
+  { value: 'in_progress', label: '진행 중' },
+  { value: 'drop', label: '이탈' },
+  { value: 'none', label: '미응답' },
+] as const;
+
+/** web 필터로 수용 가능한 전체 값 (신규 상태 어휘 + 레거시 'true'/'false'). */
+export const WEB_FILTER_VALUES: ReadonlySet<string> = new Set([
+  ...WEB_FILTER_OPTIONS.map((o) => o.value),
+  'true',
+  'false',
+]);
+
+/**
  * 헤더 필터(hv 파라미터)에서 in 모드 값 목록을 조인하는 구분자.
  * unit separator — 엑셀 셀 텍스트에 등장할 가능성이 사실상 없는 제어 문자.
  * 클라이언트(드롭다운 직렬화)와 서버(parseHeaderFiltersFromUrl)가 공유한다.

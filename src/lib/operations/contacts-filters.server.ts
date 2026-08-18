@@ -6,6 +6,7 @@ import {
   FILTER_SOURCE,
   HEADER_FILTER_MODES,
   HEADER_FILTER_VALUE_SEPARATOR,
+  WEB_FILTER_VALUES,
   placeholderFor as sharedPlaceholderFor,
   type ColumnCandidateWithPii,
   type HeaderFilterMode,
@@ -166,7 +167,7 @@ function buildHeaderCondition(
 
   if (col === FILTER_SOURCE.WEB) {
     if (mode !== 'in') return null;
-    const values = splitHeaderValues(hv).filter((v) => v === 'true' || v === 'false');
+    const values = splitHeaderValues(hv).filter((v) => WEB_FILTER_VALUES.has(v));
     if (values.length === 0) return null;
     return { source: col, mode: 'in', value: '', values };
   }
@@ -270,7 +271,7 @@ function buildClause(
   }
 
   if (col === FILTER_SOURCE.WEB) {
-    if (trimmed !== 'true' && trimmed !== 'false') return null;
+    if (!WEB_FILTER_VALUES.has(trimmed)) return null;
     return { op, condition: { source: 'system.web', mode: 'boolean', value: trimmed } };
   }
 

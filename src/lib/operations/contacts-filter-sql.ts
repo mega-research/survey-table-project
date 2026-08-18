@@ -61,9 +61,7 @@ export function buildClauseSql(cond: FilterCondition): SQL {
   }
 
   if (cond.source === FILTER_SOURCE.WEB && cond.mode === 'boolean') {
-    return cond.value === 'true'
-      ? sql`"contact_targets".responded_at IS NOT NULL`
-      : sql`"contact_targets".responded_at IS NULL`;
+    return webStatusCondSql(cond.value);
   }
 
   if (cond.source.startsWith(FILTER_SOURCE.ATTRS_PREFIX) && cond.mode === 'idlist') {
@@ -103,26 +101,47 @@ export function buildClauseSql(cond: FilterCondition): SQL {
 }
 
 /**
- * web 컬럼 상태 순위 정렬 표현식 — 완료(1) → 진행중(2) → 이탈(3) → 기타 종료(4~)
- * → 응답없음(8) 을 하나의 순위 축으로 취급한다 (COALESCE — 응답 없으면 서브쿼리 무행).
- * 응답없음을 NULLS LAST 로 축 밖에 두면 응답이 완료뿐인 명단에서 오름/내림이
- * 똑같아 보인다 — 내림차순은 응답없음부터 시작해야 방향이 체감된다.
- * 표시(StatusPill 라벨)와 같은 상태 축으로 정렬하기 위한 것.
+ * web 컬럼용 매칭 응답 서브쿼리 — contact_targets.response_id 는 completeResponse
+ * (완료 시점)에만 채워지므로 역참조(survey_responses.contact_target_id — 응답 시작
+ * 시점부터 존재)로 찾는다. 확정 링크(response_id)가 있으면 그 행 우선, 없으면
+ * 최신 활동 행. 표시(contacts.server 의 status/progress SELECT)·정렬(활동 시각
+ * responseActivityAtExpr)·필터(webStatusCondSql)가 반드시 같은 매칭을 공유해야
+ * 한다 — 갈라지면 화면엔 진행중으로 보이는 행이 필터·정렬에서 응답없음으로
+ * 취급되는 어긋남이 생긴다.
  */
-export const responseStatusRankExpr = sql<number>`COALESCE((
-  SELECT CASE status
-    WHEN 'completed' THEN 1
-    WHEN 'in_progress' THEN 2
-    WHEN 'drop' THEN 3
-    WHEN 'screened_out' THEN 4
-    WHEN 'quotaful_out' THEN 5
-    WHEN 'bad' THEN 6
-    ELSE 7 END
-  FROM survey_responses
-  WHERE id = "contact_targets"."response_id"
+export const matchedResponseSubquery = (selectExpr: SQL): SQL => sql`(
+  SELECT ${selectExpr} FROM survey_responses
+  WHERE contact_target_id = "contact_targets"."id"
     AND deleted_at IS NULL
     AND is_test = "contact_targets"."is_test"
-), 8)`;
+  ORDER BY (id = "contact_targets"."response_id") DESC NULLS LAST,
+           last_activity_at DESC NULLS LAST,
+           created_at DESC
+  LIMIT 1
+)`;
+
+/**
+ * web 필터 값 1개 → SQL 조건. 상태 어휘(WEB_FILTER_OPTIONS)는 표시/정렬과 같은
+ * 매칭(matchedResponseSubquery) 기준, 'none' 은 매칭 응답 없음.
+ * 레거시 'true'/'false'(구 URL) 는 기존 respondedAt 이진 의미를 그대로 보존한다 —
+ * 'false' 는 미완료 전체(진행중·이탈·미응답)라 'none' 과 다르다.
+ */
+function webStatusCondSql(value: string): SQL {
+  switch (value) {
+    case 'completed':
+    case 'in_progress':
+    case 'drop':
+      return sql`${matchedResponseSubquery(sql`status`)} = ${value}`;
+    case 'none':
+      return sql`${matchedResponseSubquery(sql`status`)} IS NULL`;
+    case 'true':
+      return sql`"contact_targets".responded_at IS NOT NULL`;
+    case 'false':
+      return sql`"contact_targets".responded_at IS NULL`;
+    default:
+      return sql`FALSE`;
+  }
+}
 
 /**
  * attrs 컬럼 자연 정렬 표현식 쌍 — [숫자 CASE 캐스트, 텍스트 원본].
@@ -148,12 +167,9 @@ function buildInClauseSql(cond: FilterCondition): SQL {
   if (values.length === 0) return sql`FALSE`;
 
   if (cond.source === FILTER_SOURCE.WEB) {
-    const hasTrue = values.includes('true');
-    const hasFalse = values.includes('false');
-    if (hasTrue && hasFalse) return sql`TRUE`;
-    if (hasTrue) return sql`"contact_targets".responded_at IS NOT NULL`;
-    if (hasFalse) return sql`"contact_targets".responded_at IS NULL`;
-    return sql`FALSE`;
+    // 다중 선택은 상태 조건 OR 전개 — 자체 괄호로 외부 AND 결합에 안전.
+    const conds = values.map(webStatusCondSql);
+    return sql`(${sql.join(conds, sql` OR `)})`;
   }
 
   const inList = sql.join(

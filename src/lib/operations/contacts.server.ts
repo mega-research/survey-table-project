@@ -37,7 +37,7 @@ import {
   attrsNaturalSortExprs,
   buildContactsFilterSql,
   latestResultCodeExpr,
-  responseStatusRankExpr,
+  matchedResponseSubquery,
 } from './contacts-filter-sql';
 import { FILTER_SOURCE, type ColumnCandidateWithPii } from './filter-shared';
 import {
@@ -94,20 +94,23 @@ const latestAttemptNoExpr = sql<number | null>`(
   ORDER BY attempt_no DESC LIMIT 1
 )`;
 
-const progressPctExpr = sql<number | null>`(
-  SELECT progress_pct FROM survey_responses
-  WHERE id = "contact_targets"."response_id"
-    AND deleted_at IS NULL
-    AND is_test = "contact_targets"."is_test"
-)`;
+// web 컬럼용 매칭 응답 1건 — 매칭 규칙(역참조 + 확정 링크 우선)은 정렬
+// (responseStatusRankExpr)과 공유하는 matchedResponseSubquery 주석 참조.
+// 인덱스: idx_survey_responses_contact (contact_target_id, partial NOT NULL).
+const matchedResponseFieldExpr = <T>(field: 'progress_pct' | 'status') =>
+  sql<T>`${matchedResponseSubquery(sql.raw(field))}`;
+
+const progressPctExpr = matchedResponseFieldExpr<number | null>('progress_pct');
+
+// web 컬럼 정렬 축 — 매칭 응답의 활동 시각. 완료면 완료 시각, 미완료(진행중·이탈)면
+// 마지막 활동 시각. 응답없음은 NULL(NULLS LAST) 이라 방향과 무관하게 항상 마지막.
+// 상태별 골라보기는 web 필터(WEB_FILTER_OPTIONS) 소관 — 정렬은 시간축만 맡는다.
+const responseActivityAtExpr = matchedResponseSubquery(
+  sql`COALESCE(completed_at, last_activity_at)`,
+);
 
 // web 컬럼 상태 배지용 — 매칭 응답의 status (completed/in_progress/drop 등).
-const responseStatusExpr = sql<string | null>`(
-  SELECT status FROM survey_responses
-  WHERE id = "contact_targets"."response_id"
-    AND deleted_at IS NULL
-    AND is_test = "contact_targets"."is_test"
-)`;
+const responseStatusExpr = matchedResponseFieldExpr<string | null>('status');
 
 // 조사 대상별 최신(created_at DESC) 메일 수신 상태 1건.
 // outer correlation 은 명시적 qualifier 필수 (latestAttemptNoExpr 주석 참고).
@@ -174,14 +177,14 @@ export async function listContactsForSurvey(
   } as const;
 
   // attrs 정렬은 자연 정렬 — 숫자 값(NO 등)은 숫자순, 비숫자는 뒤에 텍스트순.
-  // progress 정렬은 web 컬럼의 상태 순위(완료 → 진행중 → 이탈 → 기타 → 응답없음)
-  // 축만 dir 을 따르고 — 내림차순이면 응답없음부터 역순 — 같은 상태 안은 방향과
-  // 무관하게 기본 순서(시스템ID 오름차순) 유지.
+  // webActivity 정렬은 매칭 응답 활동 시각 축 — 내림차순 = 최근 응답 순,
+  // 오름차순 = 처음 응답 순. 응답없음은 NULL(NULLS LAST) 이라 방향과 무관하게
+  // 항상 마지막. 같은 시각(응답없음 블록 등)은 기본 순서(시스템ID 오름차순) 유지.
   const attrsKey = attrsSortKey(sort);
   const orderExprs: SQL[] = attrsKey
     ? attrsNaturalSortExprs(attrsKey).map((c) => orderExpr(c, dir))
-    : sort === 'progress'
-      ? [orderExpr(responseStatusRankExpr, dir), asc(contactTargets.resid)]
+    : sort === 'webActivity'
+      ? [orderExpr(responseActivityAtExpr, dir), asc(contactTargets.resid)]
       : [
           orderExpr(
             SYSTEM_SORT_MAP[sort as keyof typeof SYSTEM_SORT_MAP] ?? contactTargets.resid,

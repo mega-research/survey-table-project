@@ -118,6 +118,11 @@ describe('parseClausesFromUrl - source 분기', () => {
     expect(f0.condition).toEqual({ source: 'system.web', mode: 'boolean', value: 'false' });
   });
 
+  it('system.web + 상태 값(drop 등) → boolean 조건으로 수용', () => {
+    const d = parseClausesFromUrl(['system.web'], ['drop'], [''], candidates, resultCodes);
+    expect(d[0]?.condition).toEqual({ source: 'system.web', mode: 'boolean', value: 'drop' });
+  });
+
   it('system.web + 외 값 → drop', () => {
     expect(parseClausesFromUrl(['system.web'], ['yes'], [''], candidates, resultCodes)).toEqual([]);
   });
@@ -507,16 +512,19 @@ describe('parseHeaderFiltersFromUrl', () => {
     ).toEqual([]);
   });
 
-  it('system.web in — true/false 외 값 필터링', () => {
+  it('system.web in — 어휘 외 값 필터링, 상태 값과 레거시 true/false 는 수용', () => {
     const result = parseHeaderFiltersFromUrl(
       ['system.web'],
       ['in'],
-      [`true${SEP}maybe`],
+      [`true${SEP}drop${SEP}maybe`],
       candidates,
       resultCodes,
     );
     expect(result).toEqual([
-      { op: null, condition: { source: 'system.web', mode: 'in', value: '', values: ['true'] } },
+      {
+        op: null,
+        condition: { source: 'system.web', mode: 'in', value: '', values: ['true', 'drop'] },
+      },
     ]);
   });
 
