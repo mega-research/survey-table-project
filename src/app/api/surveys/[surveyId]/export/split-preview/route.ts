@@ -16,6 +16,7 @@ import {
   SPLIT_SOFT_LIMIT,
   SPLIT_EXCEL_LIMIT,
 } from '@/lib/analytics/split-export';
+import { applyExportRowExclusions } from '@/lib/analytics/export-exclusions';
 import { generateSPSSColumns } from '@/lib/analytics/spss-excel-export';
 import { hydrateQuestionsForSpss } from '@/lib/spss/hydrate-questions';
 
@@ -49,8 +50,11 @@ async function handleSplitPreview(
     });
     if (!surveyData) return NextResponse.json({ error: 'Survey not found' }, { status: 404 });
 
-    // 셀/옵션 코드 hydrate (export/route.ts와 공용 헬퍼)
-    const questions = hydrateQuestionsForSpss(normalizeQuestions(surveyData.questions));
+    // 셀/옵션 코드 hydrate (export/route.ts와 공용 헬퍼) + 일회성 export 행 제외 적용
+    const questions = applyExportRowExclusions(
+      surveyId,
+      hydrateQuestionsForSpss(normalizeQuestions(surveyData.questions)),
+    );
 
     if (!basis) {
       const totalVars = generateSPSSColumns([...questions].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))).length;
