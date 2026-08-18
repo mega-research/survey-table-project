@@ -147,8 +147,9 @@ export function ContactsFilterBar({
     const firstItem = columnCandidates[0];
     if (!firstItem) return;
     const firstCandidate = firstItem.source;
-    // system.web 은 boolean dropdown 의 기본값 'true' 로 초기화 (빈 value 면 silent drop 함정).
-    const initialValue = firstCandidate === FILTER_SOURCE.WEB ? 'true' : '';
+    // system.web 은 상태 dropdown 의 기본값 'completed' 로 초기화 (빈 value 면 silent
+    // drop 함정). 레거시 'true' 는 구 URL 복원 전용 — 신규 선택 경로에 넣지 않는다.
+    const initialValue = firstCandidate === FILTER_SOURCE.WEB ? 'completed' : '';
     const id = `new-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     setExtraClauses((cs) => [...cs, { id, op: 'AND', source: firstCandidate, value: initialValue }]);
     setAdvancedOpen(true);
@@ -177,8 +178,9 @@ export function ContactsFilterBar({
           value={firstSource}
           onValueChange={(v) => {
             setFirstSource(v);
-            // source 변경 시 이전 mode 의 value 는 의미 없음. system.web 은 boolean 기본값 'true'.
-            setFirstValue(v === FILTER_SOURCE.WEB ? 'true' : '');
+            // source 변경 시 이전 mode 의 value 는 의미 없음. system.web 은 상태 기본값
+            // 'completed' — 레거시 'true' 는 구 URL 복원 전용.
+            setFirstValue(v === FILTER_SOURCE.WEB ? 'completed' : '');
           }}
         >
           <SelectTrigger id="contacts-first-source" className="h-10 w-[180px] shrink-0">

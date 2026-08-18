@@ -61,8 +61,9 @@ export function ClauseRow({
       <Select
         value={clause.source}
         onValueChange={(s) =>
-          // system.web 은 boolean dropdown 의 기본값 'true' 로 초기화 (빈 value 면 silent drop 함정).
-          onChange({ ...clause, source: s, value: s === FILTER_SOURCE.WEB ? 'true' : '' })
+          // system.web 은 상태 dropdown 의 기본값 'completed' 로 초기화 (빈 value 면
+          // silent drop 함정). 레거시 'true' 는 구 URL 복원 전용.
+          onChange({ ...clause, source: s, value: s === FILTER_SOURCE.WEB ? 'completed' : '' })
         }
       >
         <SelectTrigger className="h-10 w-[180px]">
