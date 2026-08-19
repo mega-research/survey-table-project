@@ -1,5 +1,3 @@
-import '@testing-library/jest-dom/vitest';
-
 // Node 26은 --localstorage-file 없이 experimental localStorage getter를 읽기만 해도 경고하고
 // undefined를 반환한다. jsdom 테스트에는 공용 메모리 Storage를 직접 설치한다.
 const localStorageValues = new Map<string, string>();
