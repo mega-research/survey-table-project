@@ -215,6 +215,12 @@ export function evaluateSumConstraint(
   let left: number;
   if (constraint.leftExpr) {
     if (!evalOpts) return { skipped: true, ok: true, sum: 0 };
+    // 보이는 셀에 실제 값이 하나도 없으면(미접촉이거나 숨은 잔존값뿐) skipped —
+    // 레거시 cellIds 경로의 "전부 빈 값이면 skipped" 와 동일 의미론. 이 가드가 없으면
+    // 외부 참조(question/attrs) 수식은 자기 질문 마스킹과 무관하게 평가돼, 아무것도
+    // 보고 입력하지 않은 표에서 응답자의 진행을 오차단한다.
+    const visibleTouched = [...existingCellIds].some((id) => !isEmptyCellValue(cellValues[id]));
+    if (!visibleTouched) return { skipped: true, ok: true, sum: 0 };
     const fCtx = toMaskedFormulaCtx(evalOpts.ctx, evalOpts.ownQuestionId, existingCellIds);
     // 참조 항이 전부 빈 값이면(group/SUM 이 0으로 접기 전) skipped — 레거시 cellIds 모드의
     // "전부 빈 값이면 skipped" 와 동일 의미론.
@@ -310,6 +316,9 @@ export function collectNumericIssues(
   const cellValues =
     typeof response === 'object' && response !== null ? (response as Record<string, unknown>) : {};
   // 미접촉 판정은 실제 셀 값 키 기준 — __selectedRowIds/__optTexts__ 등 사이드카 키는 세지 않는다.
+  // 숨은 셀 잔존값도 접촉으로 친다 — 열 전환으로 숨겨진 잔존값만 남아도 보이는 필수 셀
+  // 차단은 유지돼야 한다 (아래 "보이는 열의 필수 셀" 테스트). 잔존값-only 표에서 외부 참조
+  // 수식이 오차단하는 문제는 evaluateSumConstraint 의 보이는-셀 빈 값 가드가 막는다.
   // (emptyDefault 자동 채움이 있으면 셀 키가 생겨 검증 대상이 된다 — 의도됨, Q1 그릴링 확정)
   const hasAnyCellValue = Object.keys(cellValues).some((k) => !k.startsWith('__'));
 

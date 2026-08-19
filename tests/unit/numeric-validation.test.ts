@@ -465,6 +465,40 @@ describe('collectNumericIssues — 테이블', () => {
     expect(issues[0]).toMatchObject({ kind: 'sum', cellIds: ['c1', 'c2'] });
   });
 
+  it('숨은 잔존값만 있는 표는 미접촉 — 외부 참조 수식 검증도 켜지 않는다', () => {
+    // 조건 변경으로 동적 행이 화면에서 사라지고 잔존값만 남은 표. 접촉 판정이 잔존 키를
+    // 세면 leftExpr 의 외부 참조(q2)가 마스킹 밖에서 평가돼 응답자를 오차단한다.
+    const rows: TableRow[] = [
+      { id: 'r1', cells: [{ id: 'c1', type: 'input', content: '', inputType: 'number' }] },
+      {
+        id: 'r2',
+        dynamicGroupId: 'g1',
+        cells: [{ id: 'c2', type: 'input', content: '', inputType: 'number' }],
+      },
+    ] as TableRow[];
+    const q = tableQuestion({
+      tableRowsData: rows,
+      dynamicRowConfigs: [{ groupId: 'g1', enabled: true }],
+      sumConstraints: [
+        {
+          id: 'se1', cellIds: [], operator: 'eq', target: 0,
+          leftExpr: { kind: 'question', questionId: 'q2' },
+        },
+      ],
+    } as Partial<Question>);
+    const numQ = {
+      id: 'q2', type: 'text', title: '', required: false, order: 1, inputType: 'number',
+    } as Question;
+    const ctx = { allResponses: { q1: { c2: '70' }, q2: '100' }, allQuestions: [q, numQ] };
+
+    // 미선택 동적 행 c2 의 잔존값만 있다 — 보이는 셀 기준 미접촉이므로 전부 스킵
+    expect(collectNumericIssues(q, { c2: '70' }, ctx)).toHaveLength(0);
+
+    // 보이는 셀(c1)을 실제로 건드리면 검증이 켜져 위반(100 != 0)을 잡는다
+    const touched = { allResponses: { q1: { c1: '5', c2: '70' }, q2: '100' }, allQuestions: [q, numQ] };
+    expect(collectNumericIssues(q, { c1: '5', c2: '70' }, touched)).toHaveLength(1);
+  });
+
   it('isHidden 셀은 합계에서도 제외한다', () => {
     const rows: TableRow[] = [
       {
