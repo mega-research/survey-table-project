@@ -177,6 +177,28 @@ function toFormulaCtx(ctx: NumericValidationCtx) {
 }
 
 /**
+ * 수식 평가용 ctx 에서 자기 질문 응답을 existingCellIds(보이고 활성인 셀)로 마스킹한다.
+ * 미선택 동적 행·isHidden 셀·비활성 게이팅 셀은 값이 보존된 채 existingCellIds 에서만
+ * 빠지므로, 마스킹 없이 수식을 평가하면 화면에 없는 잔존값이 합계에 되살아나 응답자를
+ * 오차단한다 — 레거시 cellIds 경로의 필터와 동일 의미론을 수식 경로에도 적용한다.
+ * 다른 질문 참조는 이 검증의 가시성 범위 밖이므로 건드리지 않는다.
+ */
+function toMaskedFormulaCtx(
+  ctx: NumericValidationCtx,
+  ownQuestionId: string,
+  existingCellIds: Set<string>,
+) {
+  const base = toFormulaCtx(ctx);
+  const own = base.responses[ownQuestionId];
+  if (!own || typeof own !== 'object' || Array.isArray(own)) return base;
+  const masked: Record<string, unknown> = {};
+  for (const [cellId, value] of Object.entries(own)) {
+    if (existingCellIds.has(cellId)) masked[cellId] = value;
+  }
+  return { ...base, responses: { ...base.responses, [ownQuestionId]: masked } };
+}
+
+/**
  * 비교 제약 평가 — 좌변은 cellIds 합계(레거시) 또는 leftExpr 수식, 우변은 target 리터럴
  * 또는 targetExpr 수식. 어느 변이든 평가 불능(null)이면 skipped — fail-safe 통과.
  * 레거시 경로: 빈 셀은 0, 전부 빈 값이거나 유효 셀 0개면 skipped. 소수 9자리 반올림 후 비교.
@@ -193,7 +215,7 @@ export function evaluateSumConstraint(
   let left: number;
   if (constraint.leftExpr) {
     if (!evalOpts) return { skipped: true, ok: true, sum: 0 };
-    const fCtx = toFormulaCtx(evalOpts.ctx);
+    const fCtx = toMaskedFormulaCtx(evalOpts.ctx, evalOpts.ownQuestionId, existingCellIds);
     // 참조 항이 전부 빈 값이면(group/SUM 이 0으로 접기 전) skipped — 레거시 cellIds 모드의
     // "전부 빈 값이면 skipped" 와 동일 의미론.
     if (areAllFormulaRefsEmpty(constraint.leftExpr, evalOpts.ownQuestionId, fCtx)) {
@@ -220,7 +242,7 @@ export function evaluateSumConstraint(
   let right: number;
   if (constraint.targetExpr) {
     if (!evalOpts) return { skipped: true, ok: true, sum: left };
-    const fCtx = toFormulaCtx(evalOpts.ctx);
+    const fCtx = toMaskedFormulaCtx(evalOpts.ctx, evalOpts.ownQuestionId, existingCellIds);
     // 좌변과 동일 의미론 — 기준값 수식의 참조가 전부 빈 값이면 skipped.
     if (areAllFormulaRefsEmpty(constraint.targetExpr, evalOpts.ownQuestionId, fCtx)) {
       return { skipped: true, ok: true, sum: left };
