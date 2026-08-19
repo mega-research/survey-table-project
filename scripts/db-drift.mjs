@@ -124,7 +124,6 @@ try {
 } catch {
   console.log(`(허용 목록 ${ALLOWLIST_PATH} 없음 — 전부 신규 차이로 보고합니다)\n`);
 }
-const allowed = (kind, item) => Boolean(allow[kind]?.[item]);
 
 console.log(`대조: ${target} ↔ 로컬 테스트 DB\n`);
 const [live, repo] = await Promise.all([inventory(liveUrl()), inventory(LOCAL_URL)]);

@@ -23,15 +23,26 @@ redact_supabase_local_secrets() {
     -e 's/(^|[^[:xdigit:]])[[:xdigit:]]{32,}([^[:xdigit:]]|$)/\1[redacted]\2/g'
 }
 
-echo "[1/4] supabase 로컬 스택 기동"
+# 테스트에 필요한 컨테이너는 db, auth(gotrue), kong 셋뿐이다.
+#   - db   : 마이그레이션 재생과 realdb 테스트 대상
+#   - auth : 앱의 supabase 사용처가 auth API 뿐이다 (제외 목록에 없어 항상 뜬다)
+#   - kong : NEXT_PUBLIC_SUPABASE_URL 이 가리키는 :54321 게이트웨이. 인증 호출이 여기로 간다
+# rest(PostgREST)는 앱이 쓰지 않지만 anon 권한을 로컬에서 눈으로 확인할 때 필요해 남긴다.
+# 2026-08-19 실측: 전체 11개 컨테이너 1707MB → 제외 시 4개 593MB. CI 는 매 실행 이미지를
+# 새로 받으므로 이 차이가 그대로 시간이 된다.
+SUPABASE_EXCLUDE="studio,imgproxy,inbucket,edge-runtime,functions,realtime,storage,analytics,vector,meta"
+
+echo "[1/4] supabase 로컬 스택 기동 (제외: $SUPABASE_EXCLUDE)"
+START_AT=$(date +%s)
 START_LOG="$(mktemp)"
-if ! supabase start >"$START_LOG" 2>&1; then
+if ! supabase start -x "$SUPABASE_EXCLUDE" >"$START_LOG" 2>&1; then
   echo "ERROR: supabase 로컬 스택 기동 실패. 마스킹된 로그:" >&2
   redact_supabase_local_secrets <"$START_LOG" >&2
   rm -f "$START_LOG"
   exit 1
 fi
 rm -f "$START_LOG"
+echo "  기동 $(( $(date +%s) - START_AT ))초"
 
 echo "[2/4] 빈 public 스키마로 reset"
 supabase db reset
