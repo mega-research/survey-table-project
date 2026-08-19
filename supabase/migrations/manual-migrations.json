@@ -61,6 +61,7 @@
     "0074_add_survey_profile_columns",
     "0075_recover_db_functions",
     "0076_active_response_index_soft_delete_aware",
-    "0077_revoke_legacy_email_table_grants"
+    "0077_revoke_legacy_email_table_grants",
+    "0078_revoke_anon_grants_on_pii_and_r2_tables"
   ]
 }
