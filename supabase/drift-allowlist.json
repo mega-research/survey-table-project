@@ -1,30 +1,18 @@
 {
-  "_comment": "pnpm db:drift 가 '조치 필요'로 올리지 않을 차이 목록. 사유 없이 등재하지 말 것 — 사유가 곧 다음 사람에게 남기는 설명이다. 사유가 '미결'로 시작하면 결정이 남은 항목이며 매 실행마다 계속 노출된다. 기준선 2026-08-19. 마이그레이션 전량 재생이 가능해진 뒤(0004 수선 + 0079 복구) 해소된 항목은 제거했다 — 남은 것은 레거시 잔재와 미결 권한뿐이다.",
+  "_comment": "pnpm db:drift 가 '조치 필요'로 올리지 않을 차이 목록. 사유 없이 등재하지 말 것 — 사유가 곧 다음 사람에게 남기는 설명이다. 사유가 '미결'로 시작하면 결정이 남은 항목이며 매 실행마다 계속 노출된다. 기준선 2026-08-19. 마이그레이션 전량 재생(0004 수선 + 0079 복구)과 레거시 email_* 제거(0080)로 해소된 항목은 제거했다.",
   "tables": {
-    "email_templates": "레거시 — mail_templates 로 대체됨. 0행. 앱 참조 없음. DROP 은 별도 결정",
-    "email_attachments": "레거시 — mail_* 로 대체됨. 0행. 앱 참조 없음",
-    "email_campaigns": "레거시 — mail_campaigns 로 대체됨. 0행. 앱 참조 없음",
-    "email_campaign_recipients": "레거시 — mail_recipients 로 대체됨. 0행. 앱 참조 없음",
     "users": "Better Auth 전환 계획의 DB 선반영. 앱 코드는 사용하지 않음 (ADR 0005~0011)",
     "sessions": "Better Auth 전환 계획의 DB 선반영. 앱 미사용",
     "accounts": "Better Auth 전환 계획의 DB 선반영. 앱 미사용",
     "verifications": "Better Auth 전환 계획의 DB 선반영. 앱 미사용",
     "user_status_events": "Better Auth 전환 계획의 DB 선반영. 앱 미사용"
   },
-  "functions": {
-    "next_email_campaign_no(p_survey_id uuid)": "레거시 email_campaigns 용 발번 함수. 앱 참조 없음. 레거시 테이블 DROP 시 함께 정리"
-  },
   "functionGrants": {
     "next_campaign_run_number": "미결 — anon EXECUTE 가 열려 있으나 SECURITY DEFINER 가 아니고 anon 은 테이블 권한이 없어 실패한다. 0039 선례에 따라 회수 검토 대상",
     "next_single_send_run_number": "미결 — 위와 같음",
     "next_contact_resid": "미결 — 위와 같음",
-    "next_email_campaign_no": "미결 — 위와 같음. 레거시 정리 시 함께 제거",
     "reconcile_campaign_counters": "미결 — 위와 같음",
     "sweep_stale_sessions": "미결 — 위와 같음. 쓰기 함수라 우선순위가 높다",
     "sweep_expired_pii": "미결 — 위와 같음. 쓰기 함수라 우선순위가 높다"
-  },
-  "enums": {
-    "email_campaign_status": "레거시 email_campaigns 용 enum. 앱 참조 없음. 레거시 테이블 DROP 시 함께 정리",
-    "email_recipient_status": "레거시 email_campaign_recipients 용 enum. 앱 참조 없음. 레거시 테이블 DROP 시 함께 정리"
   }
 }
