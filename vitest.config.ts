@@ -2,16 +2,6 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import { configDefaults, defineConfig } from 'vitest/config';
 
-// 알려진 flaky. 2단 분리로 실패율을 낮추지만 **없애지는 못한다** —
-// 2026-08-19 실측: 격리 단독 실행도 30회 중 3회 실패했고(node 1, jsdom 2) 환경과 무관했다.
-// "단독 실행은 항상 통과" 라고 적혀 있던 이전 주석은 사실이 아니었으며, 그 오해 때문에
-// 근본 원인이 오래 방치됐다. 실제로 2026-08-19 PR #97 CI 를 이 격리 실행이 막았다.
-//
-// 실패 양상: 14건 중 12건이 한꺼번에 SurveyOwnershipError:not_found 로 깨진다. 개별
-// 테스트가 흔들리는 것이 아니라 앞선 셋업이 실패하며 연쇄로 무너지는 모양이다. 이 파일은
-// @/db 를 모킹하므로 모킹 상태가 특정 순서에서 초기화되지 않는 쪽을 먼저 의심할 것.
-// 근본 원인을 고치면 이 목록에서 제거한다.
-const ISOLATED_FLAKY_TESTS = ['tests/integration/profiles-row-actions.test.ts'];
 
 // DOM 이 필요한 .ts 테스트. 나머지 .ts 는 node 환경에서 돌린다 —
 // 529개 중 DOM 을 쓰는 것은 .tsx 컴포넌트 테스트와 아래 목록뿐인데, 예전에는 전역
@@ -27,27 +17,22 @@ const DOM_TS_TESTS = [
 ];
 
 const isRealDb = process.env['RUN_REALDB'] === '1';
-const isFlakyIsolated = process.env['RUN_FLAKY_ISOLATED'] === '1';
 
-// RUN_REALDB=1(pnpm test:integration) 이면 실 DB 왕복 테스트만, 아니면 일반 테스트(realdb 제외)
-// RUN_FLAKY_ISOLATED=1 이면 "전체 스위트에서만 간섭으로 깨지는" 격리 대상 파일만 단독 실행.
-// pnpm test 가 [본 스위트(격리 대상 제외) → 격리 대상 단독] 2단으로 돌려 커버리지는 유지하면서
-// flaky 로 CI 가 상시 빨간불이 되는 것을 막는다. 근본 원인(전체 실행 시 모킹 간섭)을 고치면
-// ISOLATED_FLAKY_TESTS 에서 제거할 것.
+// RUN_REALDB=1(pnpm test:integration) 이면 실 DB 왕복 테스트만, 아니면 일반 테스트(realdb 제외).
+//
+// 2026-08-19 까지는 profiles-row-actions 를 격리 실행하는 2단 구조가 있었다. "전체 스위트에서만
+// 모킹 간섭으로 깨진다"는 진단이었으나 사실이 아니었다 — 그 파일이 @/db/schema 에 vi.mock 을
+// 두 번 걸고 있었고 어느 팩토리가 이기는지 보장되지 않는 것이 원인이었다. 중복을 제거하니
+// 전체 스위트에 포함해도 통과해 2단 구조를 걷어냈다.
 const ALL_INCLUDE = ['tests/**/*.test.{ts,tsx}', 'src/**/*.test.{ts,tsx}', 'workers/**/*.test.{ts,tsx}'];
 
 const baseExclude = isRealDb
   ? [...configDefaults.exclude]
-  : [
-      ...configDefaults.exclude,
-      '**/*.realdb.test.ts',
-      ...(isFlakyIsolated ? [] : ISOLATED_FLAKY_TESTS),
-    ];
+  : [...configDefaults.exclude, '**/*.realdb.test.ts'];
 
 /** 확장자를 한쪽으로 좁힌 include 패턴. 실행 모드별 대상은 그대로 유지한다. */
 function includeFor(ext: 'ts' | 'tsx'): string[] {
   if (isRealDb) return ext === 'ts' ? ['tests/integration/**/*.realdb.test.ts'] : [];
-  if (isFlakyIsolated) return ext === 'ts' ? ISOLATED_FLAKY_TESTS : [];
   return ALL_INCLUDE.map((p) => p.replace('{ts,tsx}', ext));
 }
 
@@ -86,7 +71,7 @@ export default defineConfig({
           environment: 'jsdom',
           // jest-dom matcher 는 DOM 환경에서만 의미가 있어 별도 파일로 분리했다.
           setupFiles: ['./tests/setup.ts', './tests/setup.dom.ts'],
-          include: [...includeFor('tsx'), ...(isRealDb || isFlakyIsolated ? [] : DOM_TS_TESTS)],
+          include: [...includeFor('tsx'), ...(isRealDb ? [] : DOM_TS_TESTS)],
           exclude: baseExclude,
         },
       },

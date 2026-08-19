@@ -107,14 +107,6 @@ vi.mock('@/lib/supabase/server', () => ({
 // drizzle-orm 은 실제 eq/and 를 사용 (not mocked)
 // 대신 db mock 안에서 조건 매칭을 직접 처리
 
-vi.mock('@/db/schema', () => ({
-  surveyResponses: { __table: 'surveyResponses' },
-  contactTargets: { __table: 'contactTargets' },
-  surveys: { __table: 'surveys' },
-  responseAnswers: { __table: 'responseAnswers' },
-  questions: { __table: 'questions' },
-}));
-
 vi.mock('@/db', () => {
   // drizzle where 조건 파싱용 — 실제 drizzle-orm eq/and 는 SQL 빌더이므로
   // 여기서는 mock schema 의 __table 식별자로만 라우팅하고,
@@ -284,11 +276,16 @@ vi.mock('drizzle-orm', async (importOriginal) => {
 });
 
 // ========================
-// schema mock 컬럼 식별자 보강
+// schema mock — 컬럼 식별자를 Proxy 로 노출
 // ========================
-// vi.mock('@/db/schema') 는 위에서 { __table } 만 설정했으나
-// eq() 가 col.__col 을 필요로 하므로 Proxy 로 컬럼 이름을 자동 노출.
-// → 위의 @/db/schema mock 을 Proxy 기반으로 교체한다.
+// eq() 가 col.__col 을 필요로 하므로 컬럼 접근 시 { __table, __col } 을 돌려준다.
+//
+// 2026-08-19: 예전에는 이 위에 { __table } 만 주는 vi.mock('@/db/schema') 가 하나 더
+// 있었고 "아래 것으로 교체된다"고 적혀 있었다. vi.mock 은 같은 경로에 두 번 걸면 어느
+// 팩토리가 이기는지 보장되지 않는다. 첫 번째가 이기는 실행에서는 col.__col 이 undefined
+// 라 mock eq() 가 항상 false 를 반환해 모든 조건 조회가 빈 결과가 되고, 14건 중 12건이
+// SurveyOwnershipError:not_found 로 무너졌다. 이것이 이 파일이 격리 실행에서도 약 10%
+// 확률로 깨지던 원인이다. 중복 등록을 제거했으니 다시 만들지 말 것.
 
 vi.mock('@/db/schema', () => {
   function makeTableProxy(tableName: string) {

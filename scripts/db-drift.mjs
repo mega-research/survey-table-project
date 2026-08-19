@@ -55,31 +55,47 @@ async function inventory(url) {
       const indexes = await tx`
         SELECT indexname, indexdef FROM pg_indexes WHERE schemaname='public'`;
       // FK 제약 — 2026-08-19 추가. contact_attempts.campaign_id 가 프로덕션에서만 FK 를
-      // 달고 있었는데 이 검사가 없어 놓쳤다. 우연히 레거시 정리로 함께 해소됐을 뿐이다.
-      // 이름이 아니라 "출처테이블.컬럼 → 대상테이블" 로 비교한다 — 제약 이름은 생성 경로에
-      // 따라 달라져도 관계 자체는 같아야 하기 때문이다.
+      // 달고 있었는데 이 검사가 없어 놓쳤다.
+      //
+      // 지문은 pg_get_constraintdef 전문을 쓴다. 처음에는 "출처테이블.컬럼 -> 대상테이블"
+      // 만 모았는데, 그러면 대상 컬럼·복합키 순서·ON DELETE/UPDATE·deferrable 이 전부
+      // 빠져 동작이 달라져도 통과했다. 실측 확인 — response_answers 의 FK 를 CASCADE 에서
+      // NO ACTION 으로 바꿔도 "드리프트 없음" 이었다. 이 레포는 FK 24개 중 CASCADE 16개,
+      // SET NULL 6개로 삭제 동작에 실제로 의존하므로 놓치면 안 되는 축이다.
+      // 제약 이름은 생성 경로에 따라 달라지므로 지문에서 제외한다.
       const foreignKeys = (await tx`
-        SELECT src.relname||'.'||a.attname||' -> '||tgt.relname AS fk
+        SELECT src.relname||': '||pg_get_constraintdef(c.oid) AS fk
         FROM pg_constraint c
         JOIN pg_class src ON src.oid = c.conrelid
-        JOIN pg_class tgt ON tgt.oid = c.confrelid
         JOIN pg_namespace n ON n.oid = src.relnamespace
-        JOIN unnest(c.conkey) AS k(attnum) ON true
-        JOIN pg_attribute a ON a.attrelid = src.oid AND a.attnum = k.attnum
-        WHERE c.contype = 'f' AND n.nspname = 'public'`).map((r) => r.fk);
+        WHERE c.contype = 'f' AND n.nspname = 'public'`).map((r) => r.fk.replace(/\s+/g, ' '));
       const rls = (await tx`
         SELECT tablename FROM pg_tables WHERE schemaname='public' AND rowsecurity`).map((r) => r.tablename);
       const policies = (await tx`
         SELECT tablename||'.'||policyname AS p FROM pg_policies WHERE schemaname='public'`).map((r) => r.p);
-      // anon/authenticated 에 권한이 열린 테이블·함수 — 보안 표면
-      const tableGrants = (await tx`
+      // anon/authenticated 가 실제로 접근 가능한 테이블·함수 — 보안 표면.
+      //
+      // ACL 문자열에서 'anon=' 를 찾던 이전 방식은 PUBLIC 상속을 통째로 놓쳤다. 새로 만든
+      // 함수는 proacl 이 NULL(기본권한)이라 문자열 매칭에 안 걸리는데, PostgreSQL 기본값이
+      // PUBLIC EXECUTE 라 anon 은 실행할 수 있다. 실측으로 확인한 뒤 has_*_privilege 로
+      // 바꿨다 — 이쪽은 PUBLIC 상속과 롤 상속까지 반영한 실효 권한을 준다.
+      const roles = (await tx`
+        SELECT rolname FROM pg_roles WHERE rolname IN ('anon','authenticated')`).map((r) => r.rolname);
+      const tableGrants = roles.length === 0 ? [] : (await tx`
         SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
         WHERE n.nspname='public' AND c.relkind='r'
-          AND array_to_string(c.relacl,' ') ~ '(anon|authenticated)='`).map((r) => r.relname);
-      const functionGrants = (await tx`
-        SELECT p.proname FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
-        WHERE n.nspname='public'
-          AND array_to_string(p.proacl,' ') ~ '(anon|authenticated)='`).map((r) => r.proname);
+          AND EXISTS (
+            SELECT 1 FROM unnest(${roles}::text[]) AS r(role)
+            WHERE has_table_privilege(r.role, c.oid, 'SELECT,INSERT,UPDATE,DELETE')
+          )`).map((r) => r.relname);
+      const functionGrants = roles.length === 0 ? [] : (await tx`
+        SELECT p.proname||'('||pg_get_function_identity_arguments(p.oid)||')' AS fn
+        FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+        WHERE n.nspname='public' AND p.prokind IN ('f','p')
+          AND EXISTS (
+            SELECT 1 FROM unnest(${roles}::text[]) AS r(role)
+            WHERE has_function_privilege(r.role, p.oid, 'EXECUTE')
+          )`).map((r) => r.fn);
 
       return {
         tables,
@@ -141,9 +157,11 @@ compare('functions', '함수', live.functions, repo.functions);
 // 허용된 테이블에 딸린 RLS·권한·정책도 함께 허용한다 (테이블 통째로 미관리라는 뜻)
 const keepTable = (t) => !allowedTables.has(t);
 const keepPolicy = (p) => !allowedTables.has(p.split('.')[0]);
+// 지문 형식: "출처테이블: FOREIGN KEY (...) REFERENCES 대상(...) ON DELETE ..."
+const fkTables = (f) => [f.split(':')[0], (f.match(/REFERENCES ([\w"]+)/)?.[1] ?? '').replace(/"/g, '')];
+const keepFk = (f) => fkTables(f).every(keepTable);
 compare('foreignKeys', 'FK 제약',
-  live.foreignKeys.filter((f) => keepTable(f.split('.')[0]) && keepTable(f.split(' -> ')[1])),
-  repo.foreignKeys.filter((f) => keepTable(f.split('.')[0]) && keepTable(f.split(' -> ')[1])));
+  live.foreignKeys.filter(keepFk), repo.foreignKeys.filter(keepFk));
 compare('policies', 'RLS 정책', live.policies.filter(keepPolicy), repo.policies.filter(keepPolicy));
 compare('rls', 'RLS 활성', live.rls.filter(keepTable), repo.rls.filter(keepTable));
 compare('tableGrants', 'anon/authenticated 테이블 권한',
