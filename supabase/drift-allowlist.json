@@ -1,7 +1,7 @@
 {
-  "_comment": "pnpm db:drift 가 '조치 필요'로 올리지 않을 차이 목록. 사유 없이 등재하지 말 것 — 사유가 곧 다음 사람에게 남기는 설명이다. 사유가 '미결'로 시작하면 결정이 남은 항목이며, 매 실행마다 알려진 차이 목록에 계속 노출된다. 기준선 작성 2026-08-19.",
+  "_comment": "pnpm db:drift 가 '조치 필요'로 올리지 않을 차이 목록. 사유 없이 등재하지 말 것 — 사유가 곧 다음 사람에게 남기는 설명이다. 사유가 '미결'로 시작하면 결정이 남은 항목이며 매 실행마다 계속 노출된다. 기준선 2026-08-19. 마이그레이션 전량 재생이 가능해진 뒤(0004 수선 + 0079 복구) 해소된 항목은 제거했다 — 남은 것은 레거시 잔재와 미결 권한뿐이다.",
   "tables": {
-    "email_templates": "레거시 — mail_templates 로 대체됨. 0행. 앱 참조 없음. DROP 은 0035 수선과 함께 처리 예정",
+    "email_templates": "레거시 — mail_templates 로 대체됨. 0행. 앱 참조 없음. DROP 은 별도 결정",
     "email_attachments": "레거시 — mail_* 로 대체됨. 0행. 앱 참조 없음",
     "email_campaigns": "레거시 — mail_campaigns 로 대체됨. 0행. 앱 참조 없음",
     "email_campaign_recipients": "레거시 — mail_recipients 로 대체됨. 0행. 앱 참조 없음",
@@ -11,25 +11,8 @@
     "verifications": "Better Auth 전환 계획의 DB 선반영. 앱 미사용",
     "user_status_events": "Better Auth 전환 계획의 DB 선반영. 앱 미사용"
   },
-  "columns": {
-    "surveys.user_id": "미결 — 어떤 마이그레이션도 만들지 않은 고아 컬럼. 코드·정책 참조 없음. 다만 11행 중 4행에 값이 있어 그냥 DROP 하면 데이터가 사라진다. 값의 의미 확인이 선행돼야 한다",
-    "contact_attempts.attempt_source": "미결 — 마이그레이션 없이 들어온 컬럼. NOT NULL DEFAULT 'manual' 이고 767행 전부 채워져 있다. 커스텀 enum contact_attempt_source 위에 서 있어 타입까지 함께 복구해야 한다",
-    "contact_attempts.campaign_id": "미결 — 마이그레이션 없이 들어온 컬럼. 767행 중 값 0행이라 사용된 적 없음. DROP 후보",
-    "surveys.email_settings": "미결 — 마이그레이션 없이 들어온 레거시 email 시대 컬럼. 11행 중 값 0행. 레거시 정리 시 DROP 후보"
-  },
   "functions": {
-    "next_email_campaign_no(p_survey_id uuid)": "레거시 email_campaigns 용 발번 함수. 앱 참조 없음. 레거시 테이블 DROP 시 함께 정리",
-    "reconcile_campaign_counters(p_campaign_id uuid)": "미결 — 레포에 정의가 없다. pg_cron 보강용으로 직접 적용된 것으로 보이며 복구 마이그레이션 필요",
-    "sweep_stale_sessions()": "0012 가 정의. 로컬 테스트 DB 는 push 기반이라 함수가 없음 — 이력 재생 과제에서 해소",
-    "sweep_expired_pii()": "0050 이 정의. 위와 같은 사유"
-  },
-  "rls": {
-    "contact_targets": "0019 가 RLS 를 켜는데 그 파일이 재생 불가라 테스트 DB 에 미반영 — 이력 재생 과제에서 해소",
-    "contact_pii": "0019 소관. 위와 같은 사유",
-    "test_response_attempts": "0057 이 RLS 를 켜는데 그 파일이 재생 불가라 테스트 DB 에 미반영 — 이력 재생 과제에서 해소"
-  },
-  "tableGrants": {
-    "test_response_attempts": "로컬 전용 아티팩트 — 0037 의 기본 권한 회수가 로컬 postgres 롤 권한 부족으로 적용되지 않아 supabase 기본 GRANT 가 남는다. prod 는 정상"
+    "next_email_campaign_no(p_survey_id uuid)": "레거시 email_campaigns 용 발번 함수. 앱 참조 없음. 레거시 테이블 DROP 시 함께 정리"
   },
   "functionGrants": {
     "next_campaign_run_number": "미결 — anon EXECUTE 가 열려 있으나 SECURITY DEFINER 가 아니고 anon 은 테이블 권한이 없어 실패한다. 0039 선례에 따라 회수 검토 대상",
@@ -40,12 +23,7 @@
     "sweep_stale_sessions": "미결 — 위와 같음. 쓰기 함수라 우선순위가 높다",
     "sweep_expired_pii": "미결 — 위와 같음. 쓰기 함수라 우선순위가 높다"
   },
-  "indexes": {
-    "mail_billing_periods_start_date_key": "prod 는 마이그레이션이 만든 이름, 레포는 push 가 만든 mail_billing_periods_start_date_unique. 같은 제약의 이름 차이일 뿐",
-    "mail_billing_periods_start_date_unique": "위 항목의 반대편. push 가 붙이는 이름"
-  },
   "enums": {
-    "contact_attempt_source": "미결 — 레포에 정의가 없는 커스텀 enum. contact_attempts.attempt_source 가 이 타입이라 복구 시 타입부터 만들어야 한다",
     "email_campaign_status": "레거시 email_campaigns 용 enum. 앱 참조 없음. 레거시 테이블 DROP 시 함께 정리",
     "email_recipient_status": "레거시 email_campaign_recipients 용 enum. 앱 참조 없음. 레거시 테이블 DROP 시 함께 정리"
   }
