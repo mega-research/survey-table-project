@@ -19,6 +19,7 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:setup-test": "bash scripts/setup-test-db.sh",
+    "db:drift": "node scripts/db-drift.mjs",
     "survey:backup": "tsx scripts/backup-survey.ts",
     "survey:restore": "tsx scripts/restore-survey-from-backup.ts",
     "spss:migrate": "tsx scripts/migrate-spss-fields.ts",
