@@ -62,6 +62,8 @@
     "0075_recover_db_functions",
     "0076_active_response_index_soft_delete_aware",
     "0077_revoke_legacy_email_table_grants",
-    "0078_revoke_anon_grants_on_pii_and_r2_tables"
+    "0078_revoke_anon_grants_on_pii_and_r2_tables",
+    "0079_recover_push_era_objects",
+    "0080_drop_legacy_email_tables"
   ]
 }

@@ -27,8 +27,15 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
   REVOKE ALL ON TABLES FROM anon, authenticated;
 
 -- supabase_admin(스튜디오/마이그레이션 일부 경로) 가 향후 만드는 public 테이블도 동일 차단
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
-  REVOKE ALL ON TABLES FROM anon, authenticated;
+-- 2026-08-19 재생 가능성 수선: 로컬 supabase 의 postgres 롤은 supabase_admin 의 기본 권한을
+-- 바꿀 권한이 없어 42501 로 실패한다. 프로덕션에서는 통과하므로 환경 차이를 흡수한다.
+DO $$
+BEGIN
+  ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
+    REVOKE ALL ON TABLES FROM anon, authenticated;
+EXCEPTION WHEN insufficient_privilege THEN
+  RAISE NOTICE 'supabase_admin 기본 권한 회수 건너뜀 — 현재 롤에 권한 없음(로컬 환경)';
+END $$;
 
 COMMIT;
 

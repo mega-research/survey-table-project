@@ -54,6 +54,19 @@ async function inventory(url) {
         WHERE n.nspname='public'`).map((r) => r.f);
       const indexes = await tx`
         SELECT indexname, indexdef FROM pg_indexes WHERE schemaname='public'`;
+      // FK 제약 — 2026-08-19 추가. contact_attempts.campaign_id 가 프로덕션에서만 FK 를
+      // 달고 있었는데 이 검사가 없어 놓쳤다. 우연히 레거시 정리로 함께 해소됐을 뿐이다.
+      // 이름이 아니라 "출처테이블.컬럼 → 대상테이블" 로 비교한다 — 제약 이름은 생성 경로에
+      // 따라 달라져도 관계 자체는 같아야 하기 때문이다.
+      const foreignKeys = (await tx`
+        SELECT src.relname||'.'||a.attname||' -> '||tgt.relname AS fk
+        FROM pg_constraint c
+        JOIN pg_class src ON src.oid = c.conrelid
+        JOIN pg_class tgt ON tgt.oid = c.confrelid
+        JOIN pg_namespace n ON n.oid = src.relnamespace
+        JOIN unnest(c.conkey) AS k(attnum) ON true
+        JOIN pg_attribute a ON a.attrelid = src.oid AND a.attnum = k.attnum
+        WHERE c.contype = 'f' AND n.nspname = 'public'`).map((r) => r.fk);
       const rls = (await tx`
         SELECT tablename FROM pg_tables WHERE schemaname='public' AND rowsecurity`).map((r) => r.tablename);
       const policies = (await tx`
@@ -74,6 +87,7 @@ async function inventory(url) {
         enums,
         functions,
         indexDefs: new Map(indexes.map((r) => [r.indexname, r.indexdef])),
+        foreignKeys,
         rls,
         policies,
         tableGrants,
@@ -127,6 +141,9 @@ compare('functions', '함수', live.functions, repo.functions);
 // 허용된 테이블에 딸린 RLS·권한·정책도 함께 허용한다 (테이블 통째로 미관리라는 뜻)
 const keepTable = (t) => !allowedTables.has(t);
 const keepPolicy = (p) => !allowedTables.has(p.split('.')[0]);
+compare('foreignKeys', 'FK 제약',
+  live.foreignKeys.filter((f) => keepTable(f.split('.')[0]) && keepTable(f.split(' -> ')[1])),
+  repo.foreignKeys.filter((f) => keepTable(f.split('.')[0]) && keepTable(f.split(' -> ')[1])));
 compare('policies', 'RLS 정책', live.policies.filter(keepPolicy), repo.policies.filter(keepPolicy));
 compare('rls', 'RLS 활성', live.rls.filter(keepTable), repo.rls.filter(keepTable));
 compare('tableGrants', 'anon/authenticated 테이블 권한',

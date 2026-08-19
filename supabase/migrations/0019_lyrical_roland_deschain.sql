@@ -43,43 +43,57 @@ ALTER TABLE "contact_targets" DROP COLUMN IF EXISTS "biz_number";
 ALTER TABLE "contact_targets" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "contact_pii" ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "contact_targets_owner_all" ON "contact_targets";
-CREATE POLICY "contact_targets_owner_all" ON "contact_targets"
-  FOR ALL TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM "surveys" s
-      WHERE s.id = contact_targets.survey_id
-        AND s.user_id = auth.uid()
-    )
-  )
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM "surveys" s
-      WHERE s.id = contact_targets.survey_id
-        AND s.user_id = auth.uid()
-    )
-  );
+-- 2026-08-19 재생 가능성 수선: 아래 정책은 surveys.user_id 를 참조하는데, 그 컬럼은 어떤
+-- 마이그레이션도 만들지 않는다(push 시대 산물). 빈 DB 재생 시 이 파일 전체가 롤백되면서
+-- contact_pii 테이블까지 사라져 0036 이하가 연쇄 실패했다. 컬럼이 없으면 정책 생성을
+-- 건너뛴다 — 0036 이 두 정책을 DROP 하므로 최종 상태는 동일하다.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='surveys' AND column_name='user_id'
+  ) THEN
+    DROP POLICY IF EXISTS "contact_targets_owner_all" ON "contact_targets";
+    CREATE POLICY "contact_targets_owner_all" ON "contact_targets"
+      FOR ALL TO authenticated
+      USING (
+        EXISTS (
+          SELECT 1 FROM "surveys" s
+          WHERE s.id = contact_targets.survey_id
+            AND s.user_id = auth.uid()
+        )
+      )
+      WITH CHECK (
+        EXISTS (
+          SELECT 1 FROM "surveys" s
+          WHERE s.id = contact_targets.survey_id
+            AND s.user_id = auth.uid()
+        )
+      );
 
-DROP POLICY IF EXISTS "contact_pii_owner_all" ON "contact_pii";
-CREATE POLICY "contact_pii_owner_all" ON "contact_pii"
-  FOR ALL TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM "contact_targets" ct
-      JOIN "surveys" s ON s.id = ct.survey_id
-      WHERE ct.id = contact_pii.contact_target_id
-        AND s.user_id = auth.uid()
-    )
-  )
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM "contact_targets" ct
-      JOIN "surveys" s ON s.id = ct.survey_id
-      WHERE ct.id = contact_pii.contact_target_id
-        AND s.user_id = auth.uid()
-    )
-  );
+    DROP POLICY IF EXISTS "contact_pii_owner_all" ON "contact_pii";
+    CREATE POLICY "contact_pii_owner_all" ON "contact_pii"
+      FOR ALL TO authenticated
+      USING (
+        EXISTS (
+          SELECT 1 FROM "contact_targets" ct
+          JOIN "surveys" s ON s.id = ct.survey_id
+          WHERE ct.id = contact_pii.contact_target_id
+            AND s.user_id = auth.uid()
+        )
+      )
+      WITH CHECK (
+        EXISTS (
+          SELECT 1 FROM "contact_targets" ct
+          JOIN "surveys" s ON s.id = ct.survey_id
+          WHERE ct.id = contact_pii.contact_target_id
+            AND s.user_id = auth.uid()
+        )
+      );
+  ELSE
+    RAISE NOTICE 'surveys.user_id 부재 — owner-only 정책 생성 건너뜀 (0036 이 어차피 DROP)';
+  END IF;
+END $$;
 
 COMMIT;
 
