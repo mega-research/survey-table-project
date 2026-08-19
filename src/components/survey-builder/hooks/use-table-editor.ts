@@ -1484,6 +1484,8 @@ export function useTableEditor({
       currentColumns,
       currentRows,
       currentRowsRef,
+      currentColumnsRef,
+      headerGridRef,
       selectedCell,
       copiedCell,
       copiedCellPosition,

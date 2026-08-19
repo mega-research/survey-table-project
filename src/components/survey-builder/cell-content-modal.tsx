@@ -47,7 +47,7 @@ import { useSurveySync } from '@/hooks/use-survey-sync';
 import { generateId } from '@/lib/utils';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { useSurveyUIStore } from '@/stores/ui-store';
-import { CalcCellValidation, ChoiceGroup, Question, TableCell, TableRow } from '@/types/survey';
+import { CalcCellValidation, ChoiceGroup, HeaderCell, Question, TableCell, TableColumn, TableRow } from '@/types/survey';
 import { collectChoiceOptCells } from '@/utils/choice-source';
 import { isPartialNumericInput } from '@/utils/numeric-input';
 import { getMaxSpssCode } from '@/utils/option-code-generator';
@@ -152,6 +152,15 @@ interface CellContentModalProps {
    * prune 이 멤버를 놓쳐 그룹이 풀리는 회귀를 막는다.
    */
   getLatestRows?: (() => TableRow[] | undefined) | undefined;
+  /**
+   * 에디터의 권위 있는 최신 열(currentColumnsRef)·다단계 헤더(headerGridRef).
+   * 셀 저장은 tableRowsData 를 DB 에 즉시 커밋하는데, 행은 편집 세션의 열 구조 변경
+   * (formData 에만 반영)을 업고 간다 — rows 만 커밋하면 스토어/DB 가 "columns N개 +
+   * 행당 셀 N+1개" 혼합 상태가 되고, 질문 모달 취소 후 재진입 시 편집 그리드가
+   * 행마다 밀리는 스크램블이 된다 (2026-08-19 실사고). rows 와 항상 짝으로 커밋한다.
+   */
+  getLatestColumns?: (() => TableColumn[] | undefined) | undefined;
+  getLatestHeaderGrid?: (() => HeaderCell[][] | undefined) | undefined;
 }
 
 export function CellContentModal({
@@ -170,6 +179,8 @@ export function CellContentModal({
   choiceGroups: choiceGroupsProp,
   onChoiceGroupsChange,
   getLatestRows,
+  getLatestColumns,
+  getLatestHeaderGrid,
 }: CellContentModalProps) {
   const questions = useSurveyBuilderStore(useShallow((s) => s.currentSurvey.questions));
   const variableCatalog = useSurveyUIStore((s) => s.variableCatalog);
@@ -516,6 +527,16 @@ export function CellContentModal({
             const remapScopes: Array<{ questionIds: string[]; groupIds: string[] }> = [];
             let effectiveQuestionId = currentQuestionId;
 
+            // 행은 편집 세션의 열 구조 변경을 업고 간다 — 에디터 최신 columns/headerGrid 를
+            // 항상 짝으로 커밋해야 스토어/DB 가 혼합 상태(columns N + 셀 N+1)가 되지 않는다.
+            // getLatestColumns 미배선(구 호출부)이면 키 부재 = 미변경 규약 그대로 둔다.
+            const latestColumns = getLatestColumns?.();
+            const structurePatch = {
+              ...(latestColumns !== undefined ? { tableColumns: latestColumns } : {}),
+              // headerGrid 는 "키 부재 = 미변경, 해제는 명시적 null" 규약 — 배선된 경우에만 싣는다.
+              ...(getLatestHeaderGrid ? { tableHeaderGrid: getLatestHeaderGrid() ?? null } : {}),
+            };
+
             if (!isNewQuestion) {
               // 이미 DB에 저장된 질문: 업데이트
               await client.surveyBuilder.questions.update({
@@ -523,6 +544,7 @@ export function CellContentModal({
                 surveyId: useSurveyBuilderStore.getState().currentSurvey.id,
                 data: {
                   tableRowsData: updatedRowsData,
+                  ...structurePatch,
                   ...(prunedChoiceGroups !== undefined ? { choiceGroups: prunedChoiceGroups } : {}),
                 },
               });
@@ -536,6 +558,7 @@ export function CellContentModal({
                       ? {
                           ...q,
                           tableRowsData: updatedRowsData,
+                          ...structurePatch,
                           ...(prunedChoiceGroups !== undefined ? { choiceGroups: prunedChoiceGroups } : {}),
                         }
                       : q,
@@ -556,7 +579,16 @@ export function CellContentModal({
                 ...(question.options !== undefined ? { options: question.options } : {}),
                 ...(question.selectLevels !== undefined ? { selectLevels: question.selectLevels } : {}),
                 ...(question.tableTitle !== undefined ? { tableTitle: question.tableTitle } : {}),
-                ...(question.tableColumns !== undefined ? { tableColumns: question.tableColumns } : {}),
+                ...(latestColumns !== undefined
+                  ? { tableColumns: latestColumns }
+                  : question.tableColumns !== undefined
+                    ? { tableColumns: question.tableColumns }
+                    : {}),
+                ...(() => {
+                  // 신규 생성은 "키 부재 = 그리드 없음" 이라 해제 null 이 불필요 — 있을 때만 싣는다
+                  const latestHeaderGrid = getLatestHeaderGrid?.();
+                  return latestHeaderGrid != null ? { tableHeaderGrid: latestHeaderGrid } : {};
+                })(),
                 tableRowsData: updatedRowsData,
                 ...(question.allowOtherOption !== undefined ? { allowOtherOption: question.allowOtherOption } : {}),
                 ...(question.optionsColumns !== undefined ? { optionsColumns: question.optionsColumns } : {}),
