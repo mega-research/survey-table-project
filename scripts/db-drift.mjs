@@ -96,6 +96,21 @@ async function inventory(url) {
             SELECT 1 FROM unnest(${roles}::text[]) AS r(role)
             WHERE has_function_privilege(r.role, p.oid, 'EXECUTE')
           )`).map((r) => r.fn);
+      // 이벤트 트리거 — 0082/0083 의 EXECUTE 자동 회수 같은 "예방 장치". 함수 실효 권한
+      // 검사는 트리거가 사라진 뒤 새로 생긴 함수만 잡을 수 있어(한 박자 늦은 탐지),
+      // 장치 자체의 존재·활성 상태·이벤트·태그·연결 함수를 지문으로 대조한다 (2026-08-19).
+      // public 스키마 함수에 연결된 트리거만 — supabase 내장 트리거(extensions 등 타 스키마)는
+      // 호스팅/CLI 스택 버전 차이로 노이즈가 되므로 범위 밖.
+      const eventTriggers = (await tx`
+        SELECT t.evtname, t.evtenabled, t.evtevent, t.evttags, p.proname
+        FROM pg_event_trigger t
+        JOIN pg_proc p ON p.oid = t.evtfoid
+        JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'public'
+        ORDER BY t.evtname`).map((r) => {
+        const tags = r.evttags ? ` TAG(${[...r.evttags].sort().join(',')})` : '';
+        return `${r.evtname} [${r.evtenabled}] ON ${r.evtevent}${tags} -> ${r.proname}`;
+      });
 
       return {
         tables,
@@ -108,6 +123,7 @@ async function inventory(url) {
         policies,
         tableGrants,
         functionGrants,
+        eventTriggers,
       };
     });
   } finally {
@@ -166,6 +182,8 @@ compare('rls', 'RLS 활성', live.rls.filter(keepTable), repo.rls.filter(keepTab
 compare('tableGrants', 'anon/authenticated 테이블 권한',
   live.tableGrants.filter(keepTable), repo.tableGrants.filter(keepTable));
 compare('functionGrants', 'anon/authenticated 함수 권한', live.functionGrants, repo.functionGrants);
+// 활성 상태([O/D/R/A])까지 지문에 들어가므로 DISABLE 도 양쪽 상이로 드러난다
+compare('eventTriggers', '이벤트 트리거', live.eventTriggers, repo.eventTriggers);
 
 // 인덱스: UNIQUE 는 동작을 바꾸므로 항상 보고한다. 비-UNIQUE 성능 인덱스는
 // 테스트 DB 에 반영하지 않기로 한 결정(2026-08-19)이라 참고로만 센다.
