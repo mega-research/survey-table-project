@@ -153,7 +153,11 @@ jobs:
           } >> "$GITHUB_ENV"
       - name: Run integration (real DB)
         run: pnpm test:integration
-      - run: pnpm exec playwright install --with-deps chromium
+      # --with-deps 를 뺀 이유: 2026-08-19 CI 로그 실측으로 이 단계 91초 중 87초가 apt 로
+      # 시스템 라이브러리·폰트를 설치하는 데 쓰였고 브라우저 다운로드는 2초였다. ubuntu-latest
+      # 러너 이미지에는 Chrome 과 그 의존 라이브러리가 이미 포함돼 있어 대개 불필요하다.
+      # 브라우저 실행이 실패하면 --with-deps 를 되살릴 것.
+      - run: pnpm exec playwright install chromium
       - name: Validate e2e secret env
         env:
           CONTACT_PII_AES_KEY: ${{ secrets.CONTACT_PII_AES_KEY }}
