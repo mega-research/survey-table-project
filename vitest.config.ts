@@ -2,8 +2,15 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import { configDefaults, defineConfig } from 'vitest/config';
 
-// 전체 스위트에서만 간섭으로 깨지는 알려진 flaky — 단독 실행은 항상 통과.
-// (tests/integration/profiles-row-actions: 전체 실행 시 타 파일 모킹 간섭으로 12건 실패)
+// 알려진 flaky. 2단 분리로 실패율을 낮추지만 **없애지는 못한다** —
+// 2026-08-19 실측: 격리 단독 실행도 30회 중 3회 실패했고(node 1, jsdom 2) 환경과 무관했다.
+// "단독 실행은 항상 통과" 라고 적혀 있던 이전 주석은 사실이 아니었으며, 그 오해 때문에
+// 근본 원인이 오래 방치됐다. 실제로 2026-08-19 PR #97 CI 를 이 격리 실행이 막았다.
+//
+// 실패 양상: 14건 중 12건이 한꺼번에 SurveyOwnershipError:not_found 로 깨진다. 개별
+// 테스트가 흔들리는 것이 아니라 앞선 셋업이 실패하며 연쇄로 무너지는 모양이다. 이 파일은
+// @/db 를 모킹하므로 모킹 상태가 특정 순서에서 초기화되지 않는 쪽을 먼저 의심할 것.
+// 근본 원인을 고치면 이 목록에서 제거한다.
 const ISOLATED_FLAKY_TESTS = ['tests/integration/profiles-row-actions.test.ts'];
 
 // DOM 이 필요한 .ts 테스트. 나머지 .ts 는 node 환경에서 돌린다 —
