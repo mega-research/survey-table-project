@@ -1095,3 +1095,60 @@ describe('buildUpdatedCell — 셀 게이팅 (enabledWhen/requiredWhenEnabled)',
     expect('enabledWhen' in out).toBe(false);
   });
 });
+
+describe('buildUpdatedCell — calc 셀 표시값 비교 검증 (calcValidation)', () => {
+  const calcCellWithValidation: TableCell = {
+    id: 'c1',
+    type: 'calc',
+    content: '',
+    formula: { kind: 'cell', cellId: 'a1' },
+    calcValidation: {
+      operator: 'eq',
+      target: { kind: 'literal', value: 100 },
+      tolerance: 0.5,
+      errorMessage: '합계가 100이 아닙니다',
+    },
+  };
+
+  it('cellToFormState → buildUpdatedCell 왕복에서 calcValidation 5필드가 보존된다', () => {
+    const form = cellToFormState(calcCellWithValidation);
+    expect(form.calcValidationEnabled).toBe(true);
+    expect(form.calcValidationOperator).toBe('eq');
+    expect(form.calcValidationTarget).toEqual({ kind: 'literal', value: 100 });
+    expect(form.calcValidationToleranceRaw).toBe('0.5');
+    expect(form.calcValidationErrorMessage).toBe('합계가 100이 아닙니다');
+
+    const out = buildUpdatedCell(form, calcCellWithValidation);
+    expect(out.calcValidation).toEqual({
+      operator: 'eq',
+      target: { kind: 'literal', value: 100 },
+      tolerance: 0.5,
+      errorMessage: '합계가 100이 아닙니다',
+    });
+  });
+
+  it('토글을 끄면 calcValidation 키가 제거된다 (cellBase 스테일 값 방지)', () => {
+    const form: CellFormState = {
+      ...cellToFormState(calcCellWithValidation),
+      calcValidationEnabled: false,
+    };
+    const out = buildUpdatedCell(form, calcCellWithValidation);
+    expect(out).not.toHaveProperty('calcValidation');
+  });
+
+  it('기준값 수식이 비어 있으면 토글이 켜져 있어도 저장하지 않는다', () => {
+    const form: CellFormState = {
+      ...baseForm('calc'),
+      calcValidationEnabled: true,
+      calcValidationTarget: undefined,
+    };
+    const out = buildUpdatedCell(form, baseCell);
+    expect(out).not.toHaveProperty('calcValidation');
+  });
+
+  it('calc 가 아닌 타입으로 전환하면 기존 calcValidation 이 드롭된다', () => {
+    const form: CellFormState = { ...cellToFormState(calcCellWithValidation), contentType: 'text' };
+    const out = buildUpdatedCell(form, calcCellWithValidation);
+    expect(out).not.toHaveProperty('calcValidation');
+  });
+});

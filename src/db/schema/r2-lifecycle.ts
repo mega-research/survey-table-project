@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { pgTable, primaryKey, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 
 /**
  * R2 파일 수명주기 — 유예 삭제 큐 + 발송 장부. (CONTEXT.md "파일(R2) 수명주기")
@@ -47,12 +47,20 @@ export const r2SentKeys = pgTable('r2_sent_keys', {
  * - r2_key_refs_pk: (key, source_table, source_id) PK — key 선두라 키 조회를 커버
  * - r2_key_refs_source_idx: (source_table, source_id) — 행 단위 교체용
  */
-export const r2KeyRefs = pgTable('r2_key_refs', {
-  key: text('key').notNull(),
-  sourceTable: text('source_table').notNull(),
-  sourceId: uuid('source_id').notNull(),
-  extractedAt: timestamp('extracted_at', { withTimezone: true }).defaultNow().notNull(),
-});
+export const r2KeyRefs = pgTable(
+  'r2_key_refs',
+  {
+    key: text('key').notNull(),
+    sourceTable: text('source_table').notNull(),
+    sourceId: uuid('source_id').notNull(),
+    extractedAt: timestamp('extracted_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    // 0071 의 복합 PK. 프로덕션에만 있던 것을 2026-08-19 스키마로 승격 — 0071 이
+    // `create table if not exists` 라 push 로 만든 테이블에는 PK 가 붙지 않았다.
+    pk: primaryKey({ name: 'r2_key_refs_pk', columns: [table.key, table.sourceTable, table.sourceId] }),
+  }),
+);
 
 export type R2DeletionCandidate = typeof r2DeletionCandidates.$inferSelect;
 export type NewR2DeletionCandidate = typeof r2DeletionCandidates.$inferInsert;

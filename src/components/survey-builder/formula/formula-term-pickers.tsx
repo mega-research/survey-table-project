@@ -35,6 +35,7 @@ export type QuestionExpr = Extract<CalcExpr, { kind: 'question' }>;
 export type LiteralExpr = Extract<CalcExpr, { kind: 'literal' }>;
 export type LookupExpr = Extract<CalcExpr, { kind: 'lookup' }>;
 export type AggExpr = Extract<CalcExpr, { kind: 'agg' }>;
+export type AttrExpr = Extract<CalcExpr, { kind: 'attr' }>;
 
 /** 수식이 값으로 참조할 수 있는 셀 — 숫자 input 셀과 계산 셀. 병합으로 가려진 셀은 값을 가질 수 없다. */
 export function isReferenceableCell(cell: TableCell): boolean {
@@ -494,6 +495,81 @@ export function AggEditor({ value, onChange, ownQuestion, allQuestions }: AggEdi
         <Plus className="mr-1 h-3.5 w-3.5" />
         다른 질문 셀 추가
       </Button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 컨택 메타데이터 (attrs)
+// ---------------------------------------------------------------------------
+
+interface AttrTermEditorProps {
+  value: AttrExpr;
+  onChange: (next: AttrExpr) => void;
+}
+
+/** 실제 attrs 키와 충돌하지 않도록 하는 "직접 입력…" 선택지 sentinel. NONE_SENTINEL 과는 별개 — 저 값은 LUT 값 컬럼 미선택 표현이라 의미가 다르다. */
+const CUSTOM_ATTR_SENTINEL = '__customAttrKey__';
+
+/**
+ * attrs 키 픽커. 1순위 후보는 설문 컨택 컬럼 스킴(표시 조건의 AttrPickerSub 와 같은 소스)이지만,
+ * 컨택 attrs 는 엑셀 행 통째(Record<string,string>)라 스킴에 없는 키가 흔하다 — "직접 입력…" 폴백을
+ * 둔다. 직접 입력 모드 여부는 (스킴에 없는 기존 값 || 방금 고른 로컬 state)로 파생하되, 데이터의
+ * SoT 는 항상 value.attrsKey — 로컬 state 는 "직접 입력…"을 막 골라 아직 빈 값인 순간만 보정한다.
+ */
+export function AttrTermEditor({ value, onChange }: AttrTermEditorProps) {
+  const contactColumns = useSurveyBuilderStore((s) => s.currentSurvey.contactColumns?.columns);
+  const attrKeys = useMemo(
+    () =>
+      (contactColumns ?? [])
+        // pii.*/system.* 소스는 응답 런타임 contactAttrs 에 값이 오지 않는다 — attrs 소스만 후보로
+        .filter((c) => c.source.startsWith('attrs.'))
+        .map((c) => c.key),
+    [contactColumns],
+  );
+
+  // 사용자가 "직접 입력…"을 고른 직후(값이 아직 비어 있어 스킴 미포함 판정만으로는 못 잡는 순간)를
+  // 위한 최소 로컬 state. SoT 는 여전히 value.attrsKey.
+  const [forceCustom, setForceCustom] = useState(false);
+  const isCustom = forceCustom || (value.attrsKey !== '' && !attrKeys.includes(value.attrsKey));
+
+  return (
+    <div className="flex-1 space-y-2">
+      <Select
+        value={isCustom ? CUSTOM_ATTR_SENTINEL : value.attrsKey}
+        onValueChange={(k) => {
+          if (k === CUSTOM_ATTR_SENTINEL) {
+            setForceCustom(true);
+            return;
+          }
+          setForceCustom(false);
+          onChange({ kind: 'attr', attrsKey: k });
+        }}
+      >
+        <SelectTrigger className="h-8 w-52 text-sm" aria-label="컨택 속성 선택">
+          <SelectValue placeholder="컨택 속성 선택" />
+        </SelectTrigger>
+        <SelectContent className="max-h-64">
+          {attrKeys.length === 0 && (
+            <div className="p-2 text-xs text-slate-500">설문에 컨택 컬럼이 정의되지 않았습니다</div>
+          )}
+          {attrKeys.map((k) => (
+            <SelectItem key={k} value={k}>
+              {k}
+            </SelectItem>
+          ))}
+          <SelectItem value={CUSTOM_ATTR_SENTINEL}>직접 입력…</SelectItem>
+        </SelectContent>
+      </Select>
+      {isCustom && (
+        <Input
+          value={value.attrsKey}
+          onChange={(e) => onChange({ kind: 'attr', attrsKey: e.target.value })}
+          placeholder="컨택 속성 키 직접 입력"
+          className="h-8 w-52 text-sm"
+          aria-label="컨택 속성 키 직접 입력"
+        />
+      )}
     </div>
   );
 }

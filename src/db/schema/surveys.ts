@@ -313,6 +313,19 @@ export const surveyResponses = pgTable('survey_responses', {
     table.surveyId,
     table.sessionId,
   ),
+  // 한 컨택에 미완료·미삭제 응답은 하나만 (0014, 술어는 0076 에서 deleted_at 인지로 교체).
+  // 선언이 없으면 drizzle-kit push 로 만든 테스트 DB 에 제약이 빠져 realdb 검증이 무력화된다.
+  activeResponsePerContact: uniqueIndex('idx_active_response_per_contact')
+    .on(table.contactTargetId)
+    .where(
+      sql`${table.isCompleted} = false AND ${table.contactTargetId} IS NOT NULL AND ${table.deletedAt} IS NULL`,
+    ),
+  // 테스트 파티션에서 한 컨택의 미삭제 응답은 하나만 (0057)
+  testTargetActiveUnique: uniqueIndex('survey_responses_test_target_active_unique')
+    .on(table.contactTargetId)
+    .where(
+      sql`${table.isTest} = true AND ${table.contactTargetId} IS NOT NULL AND ${table.deletedAt} IS NULL`,
+    ),
 }));
 
 export const testResponseAttemptStatusValues = ['active', 'superseded'] as const;
@@ -362,7 +375,13 @@ export const surveyVersions = pgTable('survey_versions', {
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
 
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-});
+}, (table) => ({
+  // 설문당 버전 번호 유일 (0004). 프로덕션에만 있던 것을 2026-08-19 스키마로 승격.
+  surveyVersionUnique: uniqueIndex('idx_survey_versions_survey_version').on(
+    table.surveyId,
+    table.versionNumber,
+  ),
+}));
 
 // 관리자 응답 수정 audit 이력 (단건 편집 수정/편집 현황 카드용).
 // survey_responses 1:N. 관리자 saveAdminEdit 1회당 행 1개.

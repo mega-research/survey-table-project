@@ -29,6 +29,7 @@ export const BROKEN_LOOKUP_LABEL = '[삭제된 LUT]';
 export const EMPTY_GROUP_LABEL = '[빈 그룹]';
 export const EMPTY_AGG_LABEL = '[대상 없음]';
 export const UNSET_COLUMN_LABEL = '[컬럼 미지정]';
+export const UNSET_ATTR_KEY_LABEL = '[키 미지정]';
 
 export interface FormatFormulaOptions {
   /**
@@ -101,6 +102,8 @@ function formatExpr(
     }
     case 'lookup':
       return formatLookupTerm(expr, options);
+    case 'attr':
+      return `attrs.${expr.attrsKey || UNSET_ATTR_KEY_LABEL}`;
     case 'agg': {
       const fn = expr.fn === 'sum' ? 'SUM' : 'AVG';
       if (expr.items.length === 0) return `${fn}(${EMPTY_AGG_LABEL})`;

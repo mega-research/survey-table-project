@@ -47,7 +47,7 @@ import { useSurveySync } from '@/hooks/use-survey-sync';
 import { generateId } from '@/lib/utils';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { useSurveyUIStore } from '@/stores/ui-store';
-import { ChoiceGroup, Question, TableCell, TableRow } from '@/types/survey';
+import { CalcCellValidation, ChoiceGroup, Question, TableCell, TableRow } from '@/types/survey';
 import { collectChoiceOptCells } from '@/utils/choice-source';
 import { isPartialNumericInput } from '@/utils/numeric-input';
 import { getMaxSpssCode } from '@/utils/option-code-generator';
@@ -258,6 +258,11 @@ export function CellContentModal({
     formulaValidationEnabled,
     formulaToleranceRaw,
     formulaErrorMessage,
+    calcValidationEnabled,
+    calcValidationOperator,
+    calcValidationTarget,
+    calcValidationToleranceRaw,
+    calcValidationErrorMessage,
   } = form;
   // 순위 옵션(ranking_opt, Case 2)은 순위형 질문의 내장 테이블에서만 렌더러가 있다.
   // 테이블형 질문에서는 응답 select 가 나오지 않는 막다른 조합이 되므로 탭을 숨긴다.
@@ -331,6 +336,11 @@ export function CellContentModal({
     setFormulaValidationEnabled,
     setFormulaToleranceRaw,
     setFormulaErrorMessage,
+    setCalcValidationEnabled,
+    setCalcValidationOperator,
+    setCalcValidationTarget,
+    setCalcValidationToleranceRaw,
+    setCalcValidationErrorMessage,
   } = setters;
 
   // 선택형 셀 헤더(조건부 분기 옆)에 붙는 셀 단위 인용 컨트롤. 표 질문이 아니면 넘기지 않는다.
@@ -1513,6 +1523,68 @@ export function CellContentModal({
               allQuestions={questions}
             />
             <NumberFormatFields idPrefix="calc-nf" value={cellNumberFormat} onChange={setCellNumberFormat} />
+
+            <div className="space-y-3 rounded border p-3">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={calcValidationEnabled}
+                  onChange={(e) => setCalcValidationEnabled(e.target.checked)}
+                />
+                계산 결과 검증 — 계산 값이 기준을 만족하지 않으면 다음 진행을 차단
+              </label>
+              {calcValidationEnabled ? (
+                <>
+                  <div className="flex items-center gap-2 text-sm">
+                    <span>계산 결과가 기준값</span>
+                    <select
+                      value={calcValidationOperator}
+                      onChange={(e) =>
+                        setCalcValidationOperator(e.target.value as CalcCellValidation['operator'])
+                      }
+                      className="h-8 rounded-md border border-gray-200 bg-white px-2 text-sm"
+                      aria-label="비교 방식"
+                    >
+                      <option value="eq">과 같아야 함</option>
+                      <option value="ne">과 달라야 함</option>
+                      <option value="gte">이상이어야 함</option>
+                      <option value="lte">이하여야 함</option>
+                      <option value="gt">초과여야 함</option>
+                      <option value="lt">미만이어야 함</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-xs font-medium text-gray-600">기준값 수식</span>
+                    <FormulaExprEditor
+                      value={calcValidationTarget}
+                      onChange={setCalcValidationTarget}
+                      ownQuestion={ownQuestion}
+                      allQuestions={questions}
+                    />
+                  </div>
+                  {(calcValidationOperator === 'eq' || calcValidationOperator === 'ne') && (
+                    <div className="flex items-center gap-2 text-sm">
+                      <span>오차 허용 ±</span>
+                      <Input
+                        className="w-24"
+                        value={calcValidationToleranceRaw}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          if (v.includes('-')) return;
+                          if (isPartialNumericInput(v)) setCalcValidationToleranceRaw(v);
+                        }}
+                        placeholder="0"
+                      />
+                    </div>
+                  )}
+                  <Input
+                    value={calcValidationErrorMessage}
+                    onChange={(e) => setCalcValidationErrorMessage(e.target.value)}
+                    placeholder="위반 시 표시할 문구 (비우면 기본 문구, 기준값 미노출)"
+                  />
+                </>
+              ) : null}
+            </div>
           </TabsContent>
         </Tabs>
 
