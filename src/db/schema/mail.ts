@@ -1,5 +1,5 @@
-import { relations } from 'drizzle-orm';
-import { boolean, integer, jsonb, pgTable, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
+import { relations, sql } from 'drizzle-orm';
+import { boolean, integer, jsonb, pgTable, text, timestamp, unique, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 
 import { contactTargets } from './contacts';
 import type {
@@ -185,6 +185,11 @@ export const mailRecipients = pgTable(
       table.campaignId,
       table.contactTargetId,
     ),
+    // Resend message id 는 webhook 매칭 키 — 중복 매칭 차단 (0020).
+    // 프로덕션에만 있던 것을 2026-08-19 스키마로 승격.
+    resendMessageIdUnique: uniqueIndex('mail_recipients_resend_msg_idx')
+      .on(table.resendMessageId)
+      .where(sql`${table.resendMessageId} IS NOT NULL`),
   }),
 );
 
