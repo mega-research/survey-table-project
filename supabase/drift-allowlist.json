@@ -6,5 +6,8 @@
     "accounts": "Better Auth 전환 계획의 DB 선반영. 앱 미사용",
     "verifications": "Better Auth 전환 계획의 DB 선반영. 앱 미사용",
     "user_status_events": "Better Auth 전환 계획의 DB 선반영. 앱 미사용"
+  },
+  "foreignKeys": {
+    "surveys: FOREIGN KEY (user_id) REFERENCES auth.users(id)": "surveys.user_id 는 유지하기로 한 고아 컬럼이고(설문 생성자 기록, 11행 중 4행에 값) 이 FK 는 Supabase 가 관리하는 auth 스키마를 가리킨다. 컬럼 자체는 0079 가 복구하므로 재생에 지장이 없다. 컬럼 처분을 결정하면 이 항목도 함께 정리한다"
   }
 }

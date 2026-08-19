@@ -65,6 +65,7 @@
     "0078_revoke_anon_grants_on_pii_and_r2_tables",
     "0079_recover_push_era_objects",
     "0080_drop_legacy_email_tables",
-    "0081_revoke_anon_grants_schema_wide"
+    "0081_revoke_anon_grants_schema_wide",
+    "0082_revoke_default_function_execute"
   ]
 }
