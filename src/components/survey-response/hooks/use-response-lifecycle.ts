@@ -260,7 +260,9 @@ export function useResponseLifecycle({
     if (recoveredDraftSeq === undefined) return;
     draftSeqRef.current = Math.max(draftSeqRef.current, recoveredDraftSeq);
   }, [recoveredDraftSeq]);
-  if (currentResponseId) activeResponseIdRef.current = currentResponseId;
+  useEffect(() => {
+    if (currentResponseId) activeResponseIdRef.current = currentResponseId;
+  }, [currentResponseId]);
 
   // 저장 경계(draft flush / complete / beacon / admin-edit)에서 calc 셀 값을 페이로드에 주입.
   // 4지점이 각자 ctx 를 조립하면 한 곳만 어긋나는 버그가 생기므로 클로저 하나로 공유한다.

@@ -43,15 +43,24 @@ export function FileAttachmentUploadModal({ open, onClose, onUploaded }: Props) 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const xhrRef = useRef<XMLHttpRequest | null>(null);
 
-  useEffect(() => {
+  // 닫힐 때 상태 리셋 — effect 대신 렌더 중 조정 패턴
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (prevOpen !== open) {
+    setPrevOpen(open);
     if (!open) {
-      xhrRef.current?.abort();
-      xhrRef.current = null;
       setFile(null);
       setLabel('');
       setProgress(0);
       setError(null);
       setUploading(false);
+    }
+  }
+
+  // 닫힐 때 진행 중인 XHR abort + 파일 input DOM 초기화 (외부 시스템 — effect 유지)
+  useEffect(() => {
+    if (!open) {
+      xhrRef.current?.abort();
+      xhrRef.current = null;
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   }, [open]);

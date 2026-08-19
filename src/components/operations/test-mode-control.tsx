@@ -89,12 +89,21 @@ export function TestModeControl({ surveyId, initial }: Props) {
   const controlRequestVersion = useRef(0);
 
   // RSC refresh로 initial이 바뀌면 client local state도 같은 snapshot으로 맞춘다.
+  // setState 는 effect 가 아니라 렌더 중 조정 패턴으로 처리한다 — ref 갱신(요청 버전
+  // 무효화 포함)은 렌더 중 불가하므로 아래 effect 에 남긴다.
+  const [prevInitial, setPrevInitial] = useState(initial);
+  if (prevInitial !== initial) {
+    setPrevInitial(initial);
+    if (initial) {
+      const next = toTestModeState(initial);
+      setState((current) => (hasSameTestModeState(current, next) ? current : next));
+    }
+  }
+
   useEffect(() => {
     if (initial) {
       controlRequestVersion.current += 1;
-      const next = toTestModeState(initial);
-      stateRef.current = next;
-      setState((current) => (hasSameTestModeState(current, next) ? current : next));
+      stateRef.current = toTestModeState(initial);
       return;
     }
     let cancelled = false;

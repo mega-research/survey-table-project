@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 
+import { useSyncLatestRef } from '@/hooks/use-latest-ref';
+
 import { useRouter } from 'next/navigation';
 
 import { AlertCircle, ArrowLeft, ArrowRight } from 'lucide-react';
@@ -570,7 +572,10 @@ function SurveyResponseFlowActive({
   // 운영 콘솔 진척 저장용 visible 진척 최신값. 콜백/effect 에서 stale 없이 참조하기 위해
   // ref 로 미러링한다 (deps/exhaustive-deps 영향 없음). 응답 페이지 헤더 26/28 과 동일 값.
   const visibleProgressRef = useRef({ index: 0, total: 0 });
-  visibleProgressRef.current = { index: currentVisibleStepNumber, total: totalVisibleStepCount };
+  useSyncLatestRef(visibleProgressRef, {
+    index: currentVisibleStepNumber,
+    total: totalVisibleStepCount,
+  });
 
   const findNextDisplayableStepIndex = useCallback(
     (startIndex: number): number => {
@@ -611,19 +616,15 @@ function SurveyResponseFlowActive({
     window.scrollTo({ top: 0, behavior: 'instant' });
   }, [currentStepIndex]);
 
-  // 현재 step이 전부 숨겨지면 다음 표시 가능 step으로 자동 이동
-  useEffect(() => {
-    if (!loadedSurvey) return;
-    if (!currentStep) return;
-
-    if (currentStepQuestions.length > 0) return;
-
+  // 현재 step이 전부 숨겨지면 다음 표시 가능 step으로 자동 이동.
+  // effect 대신 렌더 중 조정 — 커밋 후 이동하면 빈 스텝이 한 프레임 노출된다.
+  // 인덱스가 단조 증가(currentStepIndex + 1 이후 탐색)하므로 재렌더 루프는 유한하다.
+  if (loadedSurvey && currentStep && currentStepQuestions.length === 0) {
     const nextDisplayable = findNextDisplayableStepIndex(currentStepIndex + 1);
     if (nextDisplayable !== -1) {
       setCurrentStepIndex(nextDisplayable);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadedSurvey, currentStepIndex, currentStepQuestions.length]);
+  }
 
   // 운영 현황 콘솔(T5/세그먼트): 스텝 전환 추적 + Page Visibility 세그먼트.
   // 두 effect 를 useResponseTelemetry 로 추출 (등록 순서·deps 동일, 상태 미소유).

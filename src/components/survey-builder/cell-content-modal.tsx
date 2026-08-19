@@ -356,19 +356,21 @@ export function CellContentModal({
   // choice_opt 탭용 로컬 그룹 편집 상태.
   // 부모에서 choiceGroupsProp 를 전달받으면 그 값으로, 아니면 스토어 질문의 choiceGroups 를 사용한다.
   // 모달이 열릴 때(isOpen + cell.id 변경) 재동기화하기 위해 useState 초기값은 lazy initializer 로 설정하지 않고
-  // useEffect 로 동기화한다. (isOpen 이 꺼지면 닫는 시점이므로 재설정이 무해하다.)
+  // 렌더 중 조정 패턴으로 동기화한다. (isOpen 이 꺼지면 닫는 시점이므로 재설정이 무해하다.)
   const [editChoiceGroups, setEditChoiceGroups] = useState<ChoiceGroup[]>(
     () => choiceGroupsProp ?? [],
   );
-  useEffect(() => {
+  const choiceGroupsResetKey = isOpen ? (cell?.id ?? '') : null;
+  const [prevChoiceGroupsResetKey, setPrevChoiceGroupsResetKey] = useState<string | null>(null);
+  if (prevChoiceGroupsResetKey !== choiceGroupsResetKey) {
+    setPrevChoiceGroupsResetKey(choiceGroupsResetKey);
     if (isOpen) {
       const storeQuestion = useSurveyBuilderStore
         .getState()
         .currentSurvey.questions.find((q) => q.id === currentQuestionId);
       setEditChoiceGroups(choiceGroupsProp ?? storeQuestion?.choiceGroups ?? []);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, cell?.id]);
+  }
 
   // 새 편집 세션(모달 오픈/cell.id 변경)마다 emptyDefault 자동 적용 가드를 리셋한다.
   useEffect(() => {

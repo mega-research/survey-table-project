@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 import { useSyncLatestRef } from '@/hooks/use-latest-ref';
 import { useQuestionResponseWriter } from '@/hooks/use-question-response-writer';
@@ -43,9 +43,12 @@ export function useCellResponse(
 
   const [localResponse, setLocalResponse] = useState(valueFromProps);
 
-  useEffect(() => {
+  // 외부 값 변경 시 로컬 응답 동기화 — effect 대신 렌더 중 조정 패턴
+  const [prevValueFromProps, setPrevValueFromProps] = useState(valueFromProps);
+  if (prevValueFromProps !== valueFromProps) {
+    setPrevValueFromProps(valueFromProps);
     setLocalResponse(valueFromProps);
-  }, [valueFromProps]);
+  }
 
   const mergePatch = useQuestionResponseWriter({
     questionId,
