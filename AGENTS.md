@@ -1,48 +1,52 @@
-# Survey Table Project - Codex 참조 문서
+# Survey Table Project - 에이전트 참조 문서
 
 ## 프로젝트 개요
 
 Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 질문 유형, 조건부 로직, 버전 스냅샷, 컨택 관리, 메일 캠페인, SPSS/엑셀 내보내기, 분석 기능을 갖춘 엔터프라이즈급 애플리케이션.
 
-> 최종 갱신: 2026-06-06 (oRPC 전면 마이그레이션 완료 반영 — features/ 9개 + server action 3파일 잔존)
+> 최종 갱신: 2026-08-19 (features/ 10개 도메인 · 게스트 grant 권한 · 쿼터 · 테스트 모드 · R2 수명주기 · 레이트리밋/로깅 반영)
 
 ---
 
 ## 기술 스택
 
-| 영역           | 기술                            | 버전    |
-| -------------- | ------------------------------- | ------- |
-| 프레임워크     | Next.js (App Router, Turbopack) | 16.2.4  |
-| UI 라이브러리  | React (React Compiler)          | 19.2.3  |
-| 스타일링       | TailwindCSS                     | 4.x     |
-| 컴포넌트       | shadcn/ui (Radix UI)            | -       |
-| 상태관리       | Zustand + Immer                 | 5.0.8   |
-| 데이터 페칭    | TanStack Query                  | 5.90.11 |
-| 폼 관리        | React Hook Form                 | 7.63.0  |
-| 스키마 검증    | Zod                             | 4.4.3   |
-| 테이블         | TanStack Table                  | 8.21.3  |
-| 가상화         | TanStack Virtual                | 3.13.23 |
-| 텍스트 측정    | @chenglou/pretext               | 0.0.4   |
-| 리치 에디터    | TipTap                          | 3.15.3  |
-| 드래그앤드롭   | @dnd-kit                        | -       |
-| ID 생성        | NanoID                          | 5.1.11  |
-| ORM            | Drizzle ORM                     | 0.45.2  |
-| DB 드라이버    | postgres (postgres-js)          | 3.4.7   |
-| 데이터베이스   | PostgreSQL (Supabase)           | -       |
-| 파일 저장소    | Cloudflare R2 (S3 호환)         | -       |
-| 이미지 처리    | sharp                           | 0.34.5  |
-| HTML sanitize  | sanitize-html                   | 2.17.0  |
-| 이메일 발송    | Resend + React Email            | -       |
-| 이메일 webhook | svix                            | 1.93.0  |
-| 백그라운드 잡  | Inngest                         | 4.4.0   |
-| 엑셀 생성      | ExcelJS                         | 4.4.0   |
-| SPSS .sav 생성 | sav-writer                      | 1.0.0   |
-| 차트           | Recharts + Tremor               | -       |
-| 에러 모니터링  | Sentry (@sentry/nextjs)         | 10.x    |
-| 테스트         | Vitest + Testing Library + MSW  | -       |
-| 언어           | TypeScript (strict)             | 5.9.3   |
+| 영역           | 기술                                        | 버전            |
+| -------------- | ------------------------------------------- | --------------- |
+| 프레임워크     | Next.js (App Router, Turbopack)             | 16.2.11         |
+| UI 라이브러리  | React (React Compiler)                      | 19.2.3          |
+| 스타일링       | TailwindCSS                                 | 4.x             |
+| 컴포넌트       | shadcn/ui (Radix UI)                        | -               |
+| 상태관리       | Zustand + Immer                             | 5.0.8 / 11.1.3  |
+| 데이터 페칭    | TanStack Query                              | 5.90.11         |
+| RPC            | oRPC (server/client/tanstack-query/openapi) | 1.14.4          |
+| 폼 관리        | React Hook Form                             | 7.63.0          |
+| 스키마 검증    | Zod                                         | 4.4.3           |
+| 테이블         | TanStack Table                              | 8.21.3          |
+| 가상화         | TanStack Virtual                            | 3.13.23         |
+| 텍스트 측정    | @chenglou/pretext                           | 0.0.5           |
+| 리치 에디터    | TipTap                                      | 3.15.3          |
+| 드래그앤드롭   | @dnd-kit                                    | -               |
+| ID 생성        | NanoID                                      | 5.1.11          |
+| ORM            | Drizzle ORM                                 | 0.45.2          |
+| DB 드라이버    | postgres (postgres-js)                      | 3.4.7           |
+| 데이터베이스   | PostgreSQL (Supabase)                       | -               |
+| 파일 저장소    | Cloudflare R2 (S3 호환)                     | -               |
+| 이미지 처리    | sharp                                       | 0.35.3          |
+| HTML sanitize  | sanitize-html                               | 2.17.0          |
+| 이메일 발송    | Resend + React Email                        | 6.12.3          |
+| 이메일 webhook | svix                                        | 1.93.0          |
+| 백그라운드 잡  | Inngest                                     | 4.4.0           |
+| 레이트리밋     | @upstash/ratelimit + @upstash/redis         | 2.0.8 / 1.38.0  |
+| 로깅           | pino + @axiomhq/js                          | 10.3.1 / 2.0.0  |
+| 엑셀 생성      | ExcelJS                                     | 4.4.0           |
+| SPSS .sav 생성 | sav-writer                                  | 1.0.0           |
+| 차트           | Recharts + Tremor                           | 2.15.4 / 3.18.7 |
+| 에러 모니터링  | Sentry (@sentry/nextjs)                     | 10.x            |
+| 테스트         | Vitest + Testing Library + MSW + Playwright | 4.1.0 / 1.60    |
+| 언어           | TypeScript (strict)                         | 5.9.3           |
 
 > 참고: `xlsx`, `jszip` 의존성은 제거됨(2026-06-05). 엑셀 생성은 ExcelJS, SPSS는 sav-writer 사용.
+> sharp 0.35는 Vercel libvips 이슈로 `next.config.ts`의 `outputFileTracingIncludes` 우회가 걸려 있다 (업스트림 수정 시 제거).
 
 ---
 
@@ -56,34 +60,43 @@ src/
 │   │   │   ├── create/         # 설문 생성
 │   │   │   └── [id]/
 │   │   │       ├── edit/       # 설문 편집
+│   │   │       ├── preview/    # 빌더 미리보기
 │   │   │       ├── analytics/  # 설문별 분석
 │   │   │       └── operations/ # 운영 콘솔 (아래 라우트 섹션 참조)
 │   │   ├── billing/mail-cost/  # 메일 비용 정산
+│   │   ├── file-cleanup/       # R2 유예 삭제 큐 관리
 │   │   ├── login/              # 로그인
 │   │   └── profile/            # 프로필
 │   ├── api/                    # API 라우트 (아래 API 섹션 참조)
-│   ├── survey/[id]/            # 공개 설문 응답 페이지
+│   ├── survey/[id]/            # 공개 설문 응답 페이지 (?invite=<uuid>)
+│   ├── i/[code]/               # 짧은 초대 링크 (inviteCode → 응답 페이지)
+│   ├── preview/[token]/        # 토큰 미리보기 (previewToken)
 │   ├── create/                 # 설문 생성 진입
 │   ├── analytics/              # 분석 대시보드
-│   ├── unsubscribe/            # 메일 수신거부
-│   └── sentry-example-page/    # Sentry 점검용
+│   └── unsubscribe/            # 메일 수신거부 (+ /restored)
 │
-├── features/                   # feature 단위 백엔드 (oRPC) — 9개 도메인
+├── features/                   # feature 단위 백엔드 (oRPC) — 10개 도메인
 │   └── <feature>/              # survey-builder · survey-response · operations · contacts
-│       │                       # · mail · analytics · library · auth · media
+│       │                       # · mail · analytics · library · auth · media · quota
 │       ├── domain/             # 타입 re-export + zod 스키마 (런타임 import 0, JSONB는 z.custom)
 │       └── server/
-│           ├── procedures/     # oRPC procedure (authed/pub, 얇은 위임) + colocated *.test.ts
+│           ├── procedures/     # oRPC procedure (authed/scoped/pub, 얇은 위임) + colocated *.test.ts
 │           └── services/       # 비즈 로직 + drizzle (server-only, requireAuth/revalidatePath 없음)
 │
 ├── server/                     # oRPC 코어
-│   ├── context.ts              # createContext (supabase session + db — RSC·procedure 공용)
-│   ├── orpc.ts                 # base os + authed(admin) + pub(응답자)
+│   ├── context.ts              # createContext (supabase session + db + headers — RSC·procedure 공용)
+│   ├── orpc.ts                 # base + pub / authed(admin) / scoped(게스트 grant) + withRateLimit
 │   ├── router.ts               # 전체 feature router 합성 (AppRouter)
-│   └── handler.ts              # RPCHandler (+ Sentry onError)
+│   ├── handler.ts              # RPCHandler (+ Sentry onError)
+│   ├── openapi.ts              # OpenAPI 핸들러 (ENABLE_PUBLIC_API 게이트)
+│   ├── rpc-logging.ts          # 전 procedure 구조화 로그 미들웨어
+│   ├── rpc-error-policy.ts     # 에러 → RPC 코드 매핑
+│   └── rpc-timeout.ts          # 타임아웃 가드
 │
-├── shared/
-│   └── lib/rpc.ts              # 타입드 RPC client: client(plain 호출) + orpc(TanStack utils)
+├── shared/                     # feature 간 공용 (feature 직접 import 금지의 탈출구)
+│   ├── lib/rpc.ts              # 타입드 RPC client: client(plain 호출) + orpc(TanStack utils)
+│   ├── lib/survey-control.ts   # 설문 운영 제어 공용 로직
+│   └── types/test-attempt.ts
 │
 ├── actions/                    # 잔존 서버 액션 — 3파일 (의도적 유지)
 │   ├── auth-actions.ts         # login/logout (redirect+쿠키 의미론이 server action 특화)
@@ -95,42 +108,51 @@ src/
 │   ├── response-filters.ts     # notDeletedResponse 등 (operations/duplicate-detection 공용)
 │   └── library.ts / regions.ts
 │
-├── components/                 # React 컴포넌트 (~200개)
-│   ├── survey-builder/         # 설문 생성 컴포넌트 (85개)
-│   ├── survey-response/        # 응답 입력 컴포넌트 (9개)
-│   ├── operations/             # 운영 콘솔 컴포넌트 (52개)
+├── components/                 # React 컴포넌트 (~250개)
+│   ├── survey-builder/         # 설문 생성 컴포넌트 (107개)
+│   ├── operations/             # 운영 콘솔 컴포넌트 (71개)
+│   ├── survey-response/        # 응답 입력 컴포넌트 (20개)
 │   ├── analytics/              # 차트 및 리포팅 (17개)
-│   ├── survey-analytics/       # 분석 시각화
-│   ├── ui/                     # shadcn/ui 기반 컴포넌트 (33개)
+│   ├── ui/                     # shadcn/ui 기반 컴포넌트 (35개)
+│   ├── survey/                 # 공개 설문 공용
 │   └── providers/              # Context providers
 │
-├── stores/                     # Zustand 스토어 (7개)
+├── stores/                     # Zustand 스토어 (7개 + index)
 │   ├── survey-store.ts         # 메인 설문 빌더 상태
 │   ├── survey-response-store.ts # 실제 응답 상태
 │   ├── test-response-store.ts  # 테스트/미리보기 응답
 │   ├── survey-list-store.ts    # 설문 목록 관리
 │   ├── question-library-store.ts # 질문 라이브러리
 │   ├── ui-store.ts             # 전역 UI 상태
+│   ├── error-dialog-store.ts   # 전역 에러 다이얼로그
 │   └── index.ts
 │
 ├── hooks/                      # 커스텀 훅
-│   ├── queries/                # TanStack Query 훅 (surveys/responses/library/cell-library)
+│   ├── queries/                # TanStack Query 훅 (surveys/responses/contacts/campaigns/library/cell-library/file-cleanup)
 │   ├── use-survey-sync.ts      # 설문 데이터 동기화
 │   ├── use-library-sync.ts     # 라이브러리 동기화
 │   ├── use-dynamic-row-* / use-row-* / use-cell-height-cache.ts # 테이블 레이아웃
+│   ├── use-question-response-writer.ts # 응답 쓰기 단일 창구
 │   ├── use-media-query / use-keyboard-open.ts # 반응형
-│   └── ... (테이블 성능/스크롤 동기화/라인카운트 등)
+│   └── ... (테이블 성능/스크롤 동기화/라인카운트/검색파라미터 등)
 │
 ├── lib/                        # 도메인 로직 + 유틸리티
 │   ├── supabase/               # Supabase 클라이언트 (client/server/middleware)
-│   ├── auth/ + auth.ts         # 인증
-│   ├── crypto/                 # 컨택 PII 암호화 (cipher + blind index)
+│   ├── auth/ + auth.ts         # admin allowlist, 게스트 grant, 설문 소유권 가드
+│   ├── rate-limit/             # Upstash 2단 레이트리밋 + 신뢰 IP 추출
+│   ├── logger/                 # pino + Axiom transport, redact, route/context 로깅
+│   ├── crypto/                 # PII 암호화 (cipher + blind index, 컨택·응답 공용)
 │   ├── contacts/               # 엑셀 파서, 컬럼 자동감지, 스킴 헬퍼, 업로드 제한
 │   ├── operations/             # 운영 콘솔 집계 로직 (*.server.ts = SQL 집계)
 │   ├── mail/                   # 메일 발송/렌더/캠페인 dispatch+reconcile/빌링/첨부
+│   ├── quota/                  # 쿼터 게이트 + 응답 매칭
+│   ├── r2-lifecycle/           # R2 유예 삭제 큐 + 발송 장부 + 참조 인덱스
 │   ├── spss/                   # SPSS .sav 빌더 + 변수 생성/검증 + 데이터 변환
 │   ├── inngest/                # Inngest 클라이언트 + functions
+│   ├── question/               # 질문 스키마/정규화/가드/변형
 │   ├── survey/                 # 토큰 치환, 이미지/첨부 promote, 컨택 attrs context
+│   ├── survey-builder/         # changeset, diff payload
+│   ├── survey-response/        # 버전 rebase, 구조 생존 판정, 테스트 응답 초기화
 │   ├── analytics/              # 통계/교차분석/필터 (analyzer/cross-tab/filter)
 │   ├── duplicate-detection/    # 중복 응답 감지
 │   ├── lookup/                 # LUT 룩업
@@ -142,45 +164,51 @@ src/
 │   └── utils.ts                # 공통 유틸리티 (cn())
 │
 ├── utils/                      # 순수 유틸리티 함수
-│   ├── branch-logic.ts         # 분기 로직 평가
-│   ├── classify-table.ts       # 테이블 분류 (모바일 드릴다운 등)
-│   ├── choice-source / ranking-source / ranking-shared.ts # 옵션 소스 해석
-│   ├── option-code-generator / table-cell-code-generator.ts # 코드 발번
+│   ├── branch-logic / branch-eval.ts # 분기 로직 평가
+│   ├── classify-table / renders-as-table.ts # 테이블 분류
+│   ├── choice-source / ranking-source / ranking-shared / choice-group-helpers.ts # 옵션 소스 해석
+│   ├── option-code-generator / option-value-remap / table-cell-code-generator.ts # 코드 발번
 │   ├── spss-var-name.ts        # SPSS 변수명 생성
-│   ├── cell-type-detector / cell-label / cell-library-helpers.ts
-│   ├── table-grid / table-merge / table-cell-optimizer.ts # 테이블 그리드
-│   ├── mobile-card-options / mobile-display-cells.ts # 모바일 렌더
-│   ├── numeric-input / options-layout / expression-migration.ts
+│   ├── cell-type-detector / cell-label / cell-style / cell-library-helpers / serialize-cell.ts
+│   ├── table-grid-utils / table-merge-helpers / table-cell-optimizer / expand-header-grid.ts
+│   ├── mobile-* (card-options / display-cells / drilldown-repeat-header / original-row / table-display-mode)
+│   ├── number-format / numeric-input / options-layout / expression-migration.ts
 │   └── ...
 │
 ├── db/
 │   ├── index.ts                # drizzle(postgres-js) 클라이언트
 │   └── schema/                 # Drizzle ORM 스키마 (아래 DB 섹션 참조)
 │
-├── types/survey.ts             # 설문 관련 타입 정의
+├── types/survey.ts             # 설문 관련 타입 정의 (도메인 타입 SoT)
 ├── instrumentation.ts          # Sentry 서버 instrumentation
 ├── instrumentation-client.ts   # Sentry 클라이언트 instrumentation
-└── proxy.ts                    # (프록시 설정)
+└── proxy.ts                    # Next 미들웨어 (/admin, /analytics 세션 갱신)
 ```
 
 ---
 
 ## 데이터베이스 스키마
 
-스키마 파일은 도메인별로 분리: `surveys.ts`, `contacts.ts`, `mail.ts`, `mail-billing.ts`, JSONB 타입은 `schema-types.ts`.
+스키마 파일은 도메인별로 분리: `surveys.ts`, `contacts.ts`, `mail.ts`, `mail-billing.ts`, `r2-lifecycle.ts`, JSONB 타입은 `schema-types.ts`. 영속 질문 필드 SSOT는 `question-persisted-fields.ts`.
 
 ### 설문 도메인 (surveys.ts)
 
 ```
 surveys                    # 설문 설정
-├── id, title, description, slug, privateToken
+├── id, title, description, slug, privateToken, previewToken
 ├── isPublic, allowMultipleResponses, showProgressBar, shuffleQuestions, requireLogin
-├── endDate, maxResponses, thankYouMessage, contactEmail
-├── contactColumns (JSONB)        # 컨택리스트 표시 컬럼 스킴
+├── endDate, maxResponses, thankYouMessage, contactEmail, responseHeader (JSONB)
+├── piiRetentionUntil (개인정보 보관기한)
+├── contactColumns / testContactColumns (JSONB)  # 컨택리스트 표시 컬럼 스킴 (실/테스트 분리)
 ├── lookups (JSONB)               # 설문에 복사된 LUT 사본 목록
 ├── contactResultCodes (JSONB)    # 결과코드 사용자 정의
 ├── progressColumns (JSONB)       # 진척률 표 컬럼 픽커
+├── profileColumns (JSONB)        # 응답 내역 표 컬럼 픽커
+├── quotaConfig (JSONB)           # 쿼터 플랜 (NULL = 쿼터 없음) — 라이브 컬럼
+├── isPaused, pausedMessage       # 응답 일시중지 — 라이브 컬럼
+├── testModeEnabled, testToken    # 테스트 모드 (콘솔 전체가 테스트 파티션으로 전환)
 ├── requireInviteToken            # invite token 강제 여부
+├── forceWideLayout               # 강제 와이드 레이아웃
 ├── status                        # 'draft' | 'published' | 'closed'
 ├── currentVersionId              # 현재 활성 배포 버전
 ├── deletedAt (soft delete)
@@ -188,23 +216,28 @@ surveys                    # 설문 설정
 
 question_groups            # 질문 그룹 (계층 구조, self-reference)
 ├── id, surveyId, parentGroupId, name, description
-├── order, color, collapsed
+├── order, color, collapsed, hideName, nameDesign (JSONB)
 ├── displayCondition (JSONB)
 └── createdAt, updatedAt
 
 questions                  # 개별 질문
 ├── id, surveyId, groupId
 ├── type                   # text|textarea|radio|checkbox|select|multiselect|ranking|table|notice
-├── title, description, required, order
-├── options, selectLevels (JSONB)
+├── title, description, required, requiredMessage, order, hideTitle
+├── options, selectLevels, choiceGroups (JSONB)
 ├── tableTitle, tableColumns, tableRowsData, tableHeaderGrid (JSONB)  # 테이블
-├── tableValidationRules, dynamicRowConfigs (JSONB)
+├── tableValidationRules, dynamicRowConfigs, sumConstraints (JSONB)   # 검증/합계 제약
 ├── rankingConfig (JSONB)         # 순위형 전용
-├── optionsColumns, minSelections, maxSelections, allowOtherOption
+├── optionsColumns, optionsAlign, mobileOptionsColumns, minSelections, maxSelections, allowOtherOption
 ├── placeholder, defaultValueTemplate  # 단답형(prefill 토큰 지원)
-├── inputType, emptyDefault       # 단답형 숫자 입력 모드
-├── questionCode, isCustomSpssVarName, exportLabel, spssVarType, spssMeasure  # SPSS export
-├── hideColumnLabels
+├── inputType, emptyDefault, numberFormat (JSONB)  # 단답형 숫자 입력 모드
+├── piiEncrypted                  # 응답값 암호화 저장 여부 (단답형·장문형)
+├── questionCode, isCustomSpssVarName, exportLabel, spssVarType, spssMeasure, exportCellOrder  # SPSS export
+├── answerQuoteEnabled, answerQuoteName, answerQuoteText  # 이전 응답 인용
+├── mobileOriginalTable, mobileTableDisplayMode,
+│   mobileDrilldownOmitLeadingColumns,
+│   mobileDrilldownRepeatHeaderStartRow/EndRow      # 모바일 표 렌더
+├── hideColumnLabels, pageBreakBefore
 ├── noticeContent, requiresAcknowledgment  # 공지
 ├── imageUrl, videoUrl
 ├── displayCondition (JSONB)      # 조건부 표시
@@ -214,20 +247,31 @@ survey_responses           # 수집된 응답
 ├── id, surveyId, questionResponses (JSONB)
 ├── isCompleted, startedAt, completedAt
 ├── userAgent, sessionId, ipHash, fpHash, deviceId  # 중복 감지 신호
+├── isTest                        # 테스트 파티션 여부
 ├── metadata (JSONB), lastEditedAt, deletedAt
 ├── versionId                     # 응답 시점 버전
 ├── status                        # in_progress|completed|screened_out|quotaful_out|bad|drop
 ├── platform, browser, currentStepId, pageVisits (JSONB)  # 운영 현황 추적
-├── lastActivityAt, totalSeconds, progressPct
+├── lastActivityAt, totalSeconds, progressPct, visibleStepIndex, visibleStepTotal
 ├── contactTargetId               # 컨택 매칭 (FK는 마이그레이션에서 ALTER로 생성)
 └── createdAt
 └── UNIQUE(surveyId, sessionId)   # 동시 INSERT race 차단
 
+test_response_attempts     # 테스트 응답 회차 (초기화·재응답 추적)
+├── id, responseId, sessionId, status, startedAt, supersededAt
+└── UNIQUE partial(responseId) WHERE status='active'
+
 survey_versions            # 설문 버전 스냅샷 (불변)
 ├── id, surveyId, versionNumber
 ├── status                        # 'published' | 'superseded' | 'closed'
-├── snapshot (JSONB)              # 배포 시점 전체 설문 구조
-├── changeNote, publishedAt, closedAt, deletedAt
+├── snapshot (JSONB)              # 배포 시점 전체 설문 구조 (prune 시 NULL 가능)
+├── changeNote, publishedAt, closedAt, prunedAt, deletedAt
+└── createdAt
+
+response_edit_logs         # 관리자 응답 편집 이력
+├── id, responseId, contactTargetId, surveyId, action
+├── editedBy, editorEmail
+├── changedQuestions (JSONB), changedCount
 └── createdAt
 
 response_answers           # 정규화된 응답 (빠른 필터링)
@@ -261,19 +305,22 @@ question_categories        # 질문 카테고리
 ```
 contact_uploads            # 컨택 명단 엑셀 업로드 이력
 ├── id, surveyId, filename
-├── uploadedRows, mergedRows, errorRows
+├── uploadedRows, mergedRows, errorRows, skippedRows
+├── mode                   # 업로드 병합 방식 (기본 replace)
 ├── mapping (JSONB), uploadedBy
 └── createdAt
 
 contact_targets            # 컨택 = 응답 대상
 ├── id, surveyId
-├── resid                  # 설문별 자동 발번 (UNIQUE surveyId+resid)
+├── resid                  # 설문별 자동 발번 — UI 라벨은 "시스템ID"
+├── isTest                 # 테스트 파티션 여부
 ├── groupValue, attrs (JSONB)     # 엑셀 한 행 통째 Record<string,string>
 ├── inviteToken (UUID, UNIQUE)    # /survey/[id]?invite=<token>
+├── inviteCode (UNIQUE)           # /i/<code> 짧은 초대 링크
 ├── unsubscribeToken (UUID, UNIQUE), unsubscribedAt
 ├── uploadId, responseId, respondedAt  # 응답 매칭
 ├── memo, contactMethod
-└── createdAt, updatedAt
+└── createdAt, updatedAt  (UNIQUE surveyId+isTest+resid)
 
 contact_pii                # 컨택 PII 분리 저장 (암호화)
 ├── id, contactTargetId
@@ -299,22 +346,25 @@ mail_templates             # 메일 템플릿
 ├── deletedAt
 └── createdAt, updatedAt
 
-mail_campaigns             # 단체 발송 회차
+mail_campaigns             # 발송 회차
 ├── id, surveyId, mailTemplateId, runNumber, title
+├── kind                   # bulk | 단건 발송 등 캠페인 종류
+├── isTest                 # 테스트 파티션 여부
 ├── *Snapshot (subject/bodyHtml/from/replyTo/attachments/filter)  # 발송 시점 스냅샷
 ├── status                 # draft|queued|sending|completed|partial|cancelled
 ├── recipientCount, queuedCount, sentCount, deliveredCount,
 │   openedCount, bouncedCount, complainedCount, failedCount,
 │   skippedUnsubscribedCount  # webhook이 atomic delta로 갱신
-├── createdBy, scheduledAt, startedAt, completedAt
-└── createdAt, updatedAt  (UNIQUE surveyId+runNumber)
+├── createdBy, scheduledAt, startedAt, completedAt, archivedAt
+└── createdAt, updatedAt  (UNIQUE surveyId+isTest+runNumber)
 
 mail_recipients            # 수신자별 status + Resend message id
 ├── id, campaignId, contactTargetId
 ├── emailSnapshot, inviteTokenSnapshot
 ├── status                 # queued|sending|sent|delivered|opened|bounced|complained|failed|skipped_unsubscribed
 ├── resendMessageId, errorReason
-├── sentAt, deliveredAt, openedAt, bouncedAt, complainedAt
+├── sendAttemptedAt, sendLeaseToken, sendLeaseExpiresAt, sendPayloadSnapshot  # 중복 발송 방지 lease
+├── sentAt, deliveredAt, openedAt, bouncedAt, complainedAt, archivedAt
 └── createdAt, updatedAt  (UNIQUE campaignId+contactTargetId)
 
 webhook_events             # Resend webhook idempotency dedupe (id = svix-id)
@@ -327,12 +377,29 @@ mail_billing_periods       # 메일 비용 정산 (요금제+결제일 시계열
 └── createdAt, updatedAt
 ```
 
+### R2 파일 수명주기 (r2-lifecycle.ts)
+
+```
+r2_deletion_candidates     # 유예 삭제 큐 — R2 영구 객체 삭제의 유일한 경로
+├── id, key, source, reason
+├── status                 # pending|cancelled|kept|deleted|failed
+└── registeredAt, executeAfter(등록 후 7일), resolvedAt, resultNote
+
+r2_sent_keys               # 발송 장부 (append-only) — 오른 키는 영구 보존, 어떤 경로도 삭제 안 함
+├── key (PK), firstSentAt
+
+r2_key_refs                # 파생 참조 인덱스 (사전 필터일 뿐 삭제 권한 없음)
+├── key, sourceTable, sourceId, extractedAt
+```
+
 ### 주요 관계
 
 ```
 surveys (1) ─┬─ (N) question_groups ── parentGroupId (self-ref)
              ├─ (N) questions
              ├─ (N) survey_responses ─┬─ (N) response_answers
+             │                        ├─ (N) response_edit_logs
+             │                        ├─ (N) test_response_attempts
              │                        └─ (1) contact_targets [optional 매칭]
              ├─ (N) survey_versions ── (N) survey_responses [versionId]
              ├─ (N) contact_uploads ── (N) contact_targets
@@ -344,6 +411,7 @@ contact_targets ─┬─ (N) contact_pii (암호화 PII)
 
 saved_questions / saved_lookups / saved_cells / question_categories (standalone)
 mail_billing_periods / webhook_events (standalone)
+r2_deletion_candidates / r2_sent_keys / r2_key_refs (standalone — 키 문자열로만 연결)
 ```
 
 ---
@@ -353,9 +421,10 @@ mail_billing_periods / webhook_events (standalone)
 ```
 /admin/surveys/[id]/operations/
 ├── overview                      # 응답 현황 (slice 1)
-├── profiles                      # 응답자 목록 (slice 2)
-│   └── [responseId]/edit         # 응답 상세/수정
-├── contacts                      # 컨택리스트 (slice 3)
+├── profiles                      # 응답 내역 (slice 2)
+│   ├── [responseId]/edit         # 응답 상세/수정
+│   └── columns                   # 응답 내역 컬럼 픽커
+├── contacts                      # 조사 대상 = 컨택리스트 (slice 3)
 │   ├── [contactId]               # 컨택 상세
 │   ├── columns                   # 컬럼 스킴 편집
 │   ├── new                       # 컨택 수동 추가
@@ -364,32 +433,37 @@ mail_billing_periods / webhook_events (standalone)
 │   └── upload/new                # 엑셀 업로드 마법사
 ├── report                        # 전시회/그룹별 진척률 리포트 (slice 4)
 │   └── columns                   # 리포트 컬럼 픽커
+├── quota                         # 쿼터 플랜 + 실시간 달성 현황
 └── mail/                         # 메일 캠페인
-    ├── templates                 # 템플릿 목록 → new, [mid], [mid]/edit
+    ├── templates                 # 템플릿 목록 → new, [mid]/edit
     └── campaigns                 # 캠페인 목록 → new, [cid]
 
 /admin/billing/mail-cost          # 메일 비용 정산
+/admin/file-cleanup               # R2 유예 삭제 큐 (대기/이력/취소)
 ```
 
-응답 페이지: `/survey/[id]?invite=<uuid>` 진입 시 inviteToken → contact_targets lookup → survey_responses.contactTargetId 매칭. 토큰 무효 시 amber alert + 익명 응답 폴백. surveyId가 UUID인 경우 private_token fallback 필요.
+응답 페이지 진입 경로: `/survey/[id]?invite=<uuid>` 또는 짧은 링크 `/i/<inviteCode>`. invite 해석 → contact_targets lookup → survey_responses.contactTargetId 매칭. 토큰 무효 시 안내 화면 + 익명 응답 폴백. surveyId가 UUID인 경우 private_token fallback 필요. 빌더 미리보기는 `/preview/<previewToken>`.
 
 > 운영 집계는 `lib/operations/*.server.ts` 에서 SQL 집계로 수행 (aggregate + format + wrapper 패턴). 정확한 통계는 `question_responses` JSONB 기준 (response_answers는 saveResponse/saveAdminEdit 에서만 채워짐).
+> 콘솔 조회·쓰기는 `loadOperationsDataScope`가 결정한 실/테스트 파티션(`is_test`)에 갇힌다. 신규 집계 쿼리는 스코프 필터를 빠뜨리지 말 것.
 
 ---
 
 ## 질문 유형
 
-| 타입          | 설명               | 주요 속성                                                                             |
-| ------------- | ------------------ | ------------------------------------------------------------------------------------- |
-| `text`        | 단답형 텍스트      | placeholder, defaultValueTemplate, inputType, emptyDefault                            |
-| `textarea`    | 장문형 텍스트      | -                                                                                     |
-| `radio`       | 단일 선택          | options, allowOtherOption                                                             |
-| `checkbox`    | 복수 선택          | options, allowOtherOption, minSelections, maxSelections                               |
-| `select`      | 드롭다운 단일 선택 | options, allowOtherOption                                                             |
-| `multiselect` | 드롭다운 복수 선택 | selectLevels (다단계 — 옵션 리스트는 selectLevels 내부 소유)                          |
-| `ranking`     | 순위형             | rankingConfig, optionsSource (manual\|table)                                          |
-| `table`       | 매트릭스/그리드    | tableColumns, tableRowsData, tableHeaderGrid, tableValidationRules, dynamicRowConfigs |
-| `notice`      | 안내문             | noticeContent, requiresAcknowledgment                                                 |
+| 타입          | 설명               | 주요 속성                                                                                             |
+| ------------- | ------------------ | ----------------------------------------------------------------------------------------------------- |
+| `text`        | 단답형 텍스트      | placeholder, defaultValueTemplate, inputType, emptyDefault, numberFormat                              |
+| `textarea`    | 장문형 텍스트      | -                                                                                                     |
+| `radio`       | 단일 선택          | options, choiceGroups, allowOtherOption, optionsAlign                                                 |
+| `checkbox`    | 복수 선택          | options, choiceGroups, allowOtherOption, minSelections, maxSelections                                 |
+| `select`      | 드롭다운 단일 선택 | options, allowOtherOption                                                                             |
+| `multiselect` | 드롭다운 복수 선택 | selectLevels (다단계 — 옵션 리스트는 selectLevels 내부 소유)                                          |
+| `ranking`     | 순위형             | rankingConfig, optionsSource (manual\|table)                                                          |
+| `table`       | 매트릭스/그리드    | tableColumns, tableRowsData, tableHeaderGrid, tableValidationRules, dynamicRowConfigs, sumConstraints |
+| `notice`      | 안내문             | noticeContent, requiresAcknowledgment                                                                 |
+
+공통: `requiredMessage`(필수 미응답 문구), `hideTitle`, `pageBreakBefore`(수동 페이지 나눔), `answerQuote*`(이전 응답 인용), `displayCondition`.
 
 ### 테이블 질문 셀 타입
 
@@ -397,13 +471,17 @@ mail_billing_periods / webhook_events (standalone)
 - `checkbox` / `radio` / `select`: 선택 입력
 - `input`: 텍스트 입력 (inputType `number` 시 숫자만)
 - `ranking`: 셀 내부 랭킹 (셀별 옵션 + 순위 드롭다운 N개)
+- `ranking_opt`: 이 셀이 질문 레벨 ranking 의 옵션 소스
+- `choice_opt`: 이 셀이 질문 레벨 radio/checkbox 의 옵션 소스
+- `calc`: 수식 기반 읽기 전용 계산 셀
 
 > 테이블-소스 choice 응답값은 `cell.id` 임. value-match displayCondition에 코드("3" 등)를 넣으면 영구 미스매치. `resolveChoiceOptions` 사용.
 
 ### 테이블 검증 규칙
 
-- `exclusive-check`: 배타적 선택 / `required-combination`: 필수 조합
-- `any-of`: 최소 하나 / `all-of`: 모두 선택 / `none-of`: 선택 불가
+- 분기형(`tableValidationRules`): `exclusive-check` 배타적 선택 / `required-combination` 필수 조합 / `any-of` 최소 하나 / `all-of` 모두 선택 / `none-of` 선택 불가
+- 합계형(`sumConstraints`): 좌변(선택 셀 합계 또는 `leftExpr` 수식) `eq|ne|gte|lte|gt|lt` 우변(리터럴 또는 `targetExpr` 수식), `tolerance`는 eq/ne 전용 절대 오차
+- 차단 검증과 분기 규칙은 분리된 개념 — `docs/adr/0013-blocking-validation-separate-from-branch-rules.md` 참조
 
 ---
 
@@ -412,7 +490,7 @@ mail_billing_periods / webhook_events (standalone)
 ```
 클라이언트 컴포넌트/훅
   └─ client.* (plain) 또는 orpc.*.call (TanStack queryFn)   # @/shared/lib/rpc
-       └─ POST /api/rpc  →  procedure (.input zod 검증, authed/pub)
+       └─ POST /api/rpc  →  procedure (.input zod 검증, pub/authed/scoped)
             └─ service (비즈 로직 + drizzle)  →  db
 
 RSC (서버 컴포넌트)
@@ -420,7 +498,7 @@ RSC (서버 컴포넌트)
 ```
 
 - 서버 상태는 TanStack Query, 클라이언트 상태는 Zustand로 분리. mutation 후 RSC 데이터 갱신은 `router.refresh()` (revalidatePath는 procedure에서 불가).
-- 인증: `authed`(admin, supabase session) / `pub`(응답자 — 응답 mutation·공개 설문 조회·컨택 attrs·수신거부 lookup).
+- procedure 베이스 3종은 아래 "인증과 권한" 참조. 모든 베이스는 `rpcLoggingMiddleware`가 붙은 `base` 파생이라 성공/실패가 구조화 로그 1줄로 남는다.
 - 잔존 서버 액션은 `actions/` 3파일뿐 (auth login/logout + unsubscribe form — 의도적 유지).
 - **feature 마이그레이션 패턴/함정**: domain zod는 `@/types/survey` 방향 통일 + null-coalescing(as unknown as 금지), service input은 zod infer, `.returning()` 후 non-null throw, 컴포넌트는 hook/helper 시그니처 유지로 무수정. 질문 영속 쓰기는 explicit field set(spread 금지) + `PERSISTED_QUESTION_FIELDS` SSOT 로 tsc 관할 — 신규 컬럼은 SSOT 등재만 하면 모든 쓰기 지점(survey-save values/onConflict, create, duplicate, updateQuestion 순회)이 컴파일 에러로 호명된다.
 - feature 간 직접 import 금지 (ESLint 강제) — 공용은 `@/shared` 승격 또는 RPC 경유. 서버 내부의 타 도메인 테이블 직접 쿼리는 허용.
@@ -437,7 +515,9 @@ POST   /api/upload/mail-attachment             # 메일 첨부 업로드 (삭제
 POST   /api/upload/notice-attachment           # 공지 첨부 업로드 (삭제는 media.* RPC)
 GET    /api/surveys/[surveyId]/export          # SPSS(.sav)/엑셀 export (인증 필요, 파일 스트림)
 GET    /api/surveys/[surveyId]/export/split-preview  # 분할 export 미리보기
+GET    /api/surveys/[surveyId]/contacts/export # 조사 대상 목록 엑셀 다운로드
 POST   /api/response/segment                   # 구간 응답 저장 (sendBeacon — REST 유지)
+POST   /api/response/draft                     # 이탈 시점 임시 저장 (sendBeacon — REST 유지)
 *      /api/inngest                            # Inngest 핸들러
 POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
 ```
@@ -446,7 +526,68 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
 
 ## 백그라운드 잡 (Inngest)
 
-`lib/inngest/functions/` — 캠페인 reconcile 시스템 등. 발송 후 1/5/30분 reconcile로 sent 멈춤(webhook race) 자동 복구. 로컬 dev: `pnpm inngest`.
+`lib/inngest/functions/` — 4개 함수 (`functions/index.ts` 등록).
+
+| 함수                 | 트리거                           | 역할                                                      |
+| -------------------- | -------------------------------- | --------------------------------------------------------- |
+| `campaignDispatcher` | event `mail/campaign.queued`     | 캠페인 발송 실행 (수신자 lease 기반)                      |
+| `campaignReconciler` | event `mail/campaign.dispatched` | 발송 후 1/5/30분 reconcile — sent 멈춤(webhook race) 복구 |
+| `r2DeletionExecutor` | cron `TZ=Asia/Seoul 0 4 * * *`   | R2 유예 삭제 집행 (일 1회)                                |
+| `r2KeyRefAudit`      | cron `TZ=Asia/Seoul 0 3 1 * *`   | R2 참조 인덱스 전량 재추출 (월 1회)                       |
+
+로컬 dev: `pnpm inngest`. **Inngest 자동 sync가 끊겨 있어 함수 변경 배포 후 대시보드에서 수동 Resync 필요.**
+
+---
+
+## 인증과 권한
+
+- 세션은 Supabase Auth (`lib/supabase/*`), `proxy.ts` 미들웨어가 `/admin`·`/analytics`에서 세션을 갱신한다.
+- procedure 베이스 3종 (`server/orpc.ts`):
+  - **`pub`** — 인증 불필요 (응답자 표면: 응답 mutation·공개 설문 조회·컨택 attrs·수신거부 lookup). 남용 방지가 필요한 표면은 `.use(withRateLimit(group))` 부착.
+  - **`authed`** — 세션 + `ADMIN_USER_IDS` allowlist. grant-first: 게스트 유저는 allowlist fail-open 여부와 무관하게 FORBIDDEN.
+  - **`scoped`** — 세션 + (admin allowlist ∨ 게스트 grant). **이 베이스를 쓰는 procedure는 핸들러 첫 줄에서 `assertSurveyAccess(context.user.id, input.surveyId)` 호출 필수** (유일한 예외: surveyId가 없는 `media.deleteMailAttachmentTmp`).
+- 게스트 계정: `GUEST_SURVEY_GRANTS="<userId>:<surveyId>[,...]"` env로 설문 단위 위임 (한 유저가 복수 설문 grant 가능). 무권한 설문 콘솔 진입 시 강제 로그아웃 → 로그인 후 원래 목적지 복귀 (`lib/auth/guest-grants.ts`).
+- allowlist 미설정이면 fail-open(인증된 모든 유저 통과) + 최초 1회 경고. 게스트 콘솔은 전역 테스트 모드와 무관하게 항상 실데이터를 본다.
+
+---
+
+## 레이트리밋과 로깅
+
+- **레이트리밋** (`lib/rate-limit/`): Upstash Redis 2단 판정(`isRateLimitedTwoTier`). 입력의 sessionId/responseId를 클라이언트 축으로 삼아 `group:ip:clientId`로 같은 NAT 뒤 응답자를 격리하고, `group-ip:ip` 전체 가드가 식별자 회전 남용을 막는다. **UPSTASH env 미설정이면 limiter가 no-op(항상 통과)**. 신뢰 IP 헤더 부재 시에만 fail-closed.
+- **로깅** (`lib/logger/`): pino + Axiom transport. `base`의 `rpcLoggingMiddleware`가 최전방이라 인증·레이트리밋 거부까지 기록된다. PII 마스킹은 `redact.ts` 소관.
+
+---
+
+## R2 파일 수명주기
+
+R2 영구 객체 삭제의 유일한 경로는 유예 삭제 큐다 (`lib/r2-lifecycle/`).
+
+- `r2_deletion_candidates` — 등록 후 7일 유예, cron 집행자가 장부·전역 참조를 재확인한 키만 삭제.
+- `r2_sent_keys` — 발송된 메일 콘텐츠에서 추출한 키의 append-only 장부. **장부에 오른 키는 참조 유무와 무관하게 영구 보존** (수신함 참조는 DB로 복원 불가).
+- `r2_key_refs` — 참조 인덱스. 유지가 아니라 **재생성** 구조(불변 소스는 삽입 시 1회, 가변 소스는 주기 전량 재추출)이며 집행 판정에서 삭제 권한이 없는 사전 필터다.
+
+관리 UI는 `/admin/file-cleanup`. 결정 배경은 `docs/adr/0015-r2-deferred-deletion-and-sent-ledger.md`.
+
+---
+
+## 쿼터
+
+`surveys.quota_config` (JSONB, NULL = 쿼터 없음) + `features/quota` + `lib/quota/`.
+
+- 차원(`questionId` 바인딩, `choice` | `numeric`) × 카테고리 조합 셀에 목표치를 둔다. 셀은 sparse — 목표가 있는 조합만.
+- `enabled=false`면 정의·집계만 하고 응답자를 차단하지 않는다. 마감 차단 시 응답 status는 `quotaful_out`.
+- **publish 없이 즉시 반영되는 라이브 컬럼** (`isPaused`/`pausedMessage`와 동일 취급).
+- 실시간 달성률은 완료 응답 기준 — `docs/adr/0002-quota-realtime-from-completed-answers.md`.
+
+---
+
+## 테스트 모드
+
+설문 단위 토글(`surveys.testModeEnabled` + `testToken`)로 운영 콘솔 전체가 테스트 파티션으로 전환된다. 파티션 키는 `is_test` 컬럼(`contact_targets`, `survey_responses`, `mail_campaigns`)이며, `contact_targets`의 resid UNIQUE도 `(surveyId, isTest, resid)`다.
+
+- 읽기/쓰기 파티션은 `lib/operations/data-scope.server.ts`의 `loadOperationsDataScope`가 단일 결정한다. 신규 집계·목록 쿼리는 이 스코프를 반드시 태울 것.
+- 게스트는 항상 real 파티션(읽기/쓰기 모두) — read/write 비대칭을 막기 위한 의도적 처리.
+- 테스트 응답 회차는 `test_response_attempts`가 추적(활성 회차는 responseId당 1개).
 
 ---
 
@@ -458,19 +599,26 @@ pnpm build            # 프로덕션 빌드 (Turbopack)
 pnpm start            # 프로덕션 서버
 pnpm lint             # ESLint 검사 (eslint 9 flat config)
 pnpm lint:fix         # ESLint 자동 수정
-pnpm test             # Vitest 실행 (tests/ 디렉토리만 include)
+pnpm test             # Vitest — 본 스위트 + 격리 flaky 2단 실행
 pnpm test:watch       # Vitest watch
-pnpm test:coverage    # 커버리지
+pnpm test:coverage    # 커버리지 (spss 계열만 집계)
+pnpm test:e2e         # Playwright E2E
+pnpm test:integration # 실DB 왕복 (*.realdb.test.ts, 로컬 supabase 54322 필요)
+pnpm db:setup-test    # 테스트 DB 준비
 pnpm inngest          # Inngest 로컬 dev 서버
-pnpm db:generate      # 마이그레이션 생성
-pnpm db:migrate       # 마이그레이션 실행 (_journal.json 기준)
-pnpm db:push          # 스키마 푸시
+pnpm db:migrate       # 마이그레이션 실행 (_journal.json 기준 — 0019에서 동결, 주의사항 7 참조)
 pnpm db:studio        # Drizzle Studio
 pnpm survey:backup    # 설문 백업
 pnpm survey:restore   # 백업에서 복원
-pnpm spss:migrate     # SPSS 필드 마이그레이션 (DRY_RUN 기본)
-pnpm spss:rollback    # SPSS 필드 롤백
+pnpm versions:prune   # 버전 스냅샷 정리 (DRY_RUN 기본, :live 로 실행)
+pnpm ledger:seed      # R2 발송 장부 시드
+pnpm spss:migrate     # SPSS 필드 마이그레이션 (DRY_RUN 기본, :live 로 실행)
+pnpm spss:rollback    # SPSS 필드 롤백 (:live 동일)
+pnpm worker:sentry-jandi:dev     # Sentry→잔디 알림 워커 로컬
+pnpm worker:sentry-jandi:deploy  # 워커 배포 (Cloudflare)
 ```
+
+> `pnpm db:generate` / `pnpm db:push` 는 정의는 살아 있으나 **사용 금지** — 마이그레이션은 수동 SQL 관행이다(주의사항 7).
 
 ---
 
@@ -506,18 +654,35 @@ CLOUDFLARE_R2_PUBLIC_URL=
 
 # 메일 (Resend)
 RESEND_API_KEY=
+RESEND_FROM_DOMAIN=
 RESEND_WEBHOOK_SECRET=          # svix 서명 검증
+EMAIL_SEND_MODE=
 
-# Inngest / Sentry
+# 앱 / Inngest / Sentry
+NEXT_PUBLIC_APP_URL=
 INNGEST_*=
-SENTRY_*=
+SENTRY_*=  NEXT_PUBLIC_SENTRY_DSN=
 
-# 컨택 PII 암호화
-CONTACT_PII_AES_KEY=            # cipher 키
+# PII 암호화
+CONTACT_PII_AES_KEY=            # cipher 키 (환경별 분리 필수)
 CONTACT_PII_HMAC_KEY=           # blind index 키
+DUPLICATE_DETECTION_SALT=       # 중복 감지 해시 솔트
+
+# 권한
+ADMIN_USER_IDS=                 # admin 표면 허용 supabase user.id 콤마 목록. 미설정 시 fail-open + 경고
+GUEST_SURVEY_GRANTS=            # "<userId>:<surveyId>[,...]" 게스트 설문 위임
+
+# 레이트리밋 (미설정이면 limiter no-op)
+UPSTASH_REDIS_REST_URL=
+UPSTASH_REDIS_REST_TOKEN=
+
+# 로깅 / 기타
+AXIOM_TOKEN=  AXIOM_DATASET=  LOG_LEVEL=
+ENABLE_PUBLIC_API=              # /api/v1 OpenAPI 표면 게이트 (기본 비활성)
 ```
 
 > 메일/컨택 메타(발신 표시명, 수행기관 등)는 env default 금지. DB 컬럼 또는 attrs로 관리. env는 비밀+인프라 상수만.
+> `.env.example`의 `BETTER_AUTH_*` 항목은 미착수 전환 계획의 잔재로 코드에서 참조되지 않는다.
 
 ---
 
@@ -578,32 +743,43 @@ export function QuestionEditor({ questionId, onSave }: Props) {
 
 2. **상태 관리**: 서버 상태는 TanStack Query, 클라이언트 상태는 Zustand(+Immer).
 
-3. **응답 페이지는 snapshot 기반**: 빌더 수정은 publish 전까지 응답 페이지 미반영. "테스트 모드 OK + 응답 페이지 NG" 패턴이면 publish 누락 먼저 의심.
+3. **응답 페이지는 snapshot 기반**: 빌더 수정은 publish 전까지 응답 페이지 미반영. "테스트 모드 OK + 응답 페이지 NG" 패턴이면 publish 누락 먼저 의심. 단, `quotaConfig`·`isPaused`·`pausedMessage`는 스냅샷 밖 라이브 컬럼이라 즉시 반영된다.
 
-4. **테이블 질문**: `tableColumns`, `tableRowsData`, `tableHeaderGrid`, `tableValidationRules`, `dynamicRowConfigs` JSONB 사용. choice 응답값은 `cell.id`.
+4. **테이블 질문**: `tableColumns`, `tableRowsData`, `tableHeaderGrid`, `tableValidationRules`, `dynamicRowConfigs`, `sumConstraints` JSONB 사용. choice 응답값은 `cell.id`.
 
 5. **다단계 선택**: `selectLevels` 배열로 3단계까지. 부모 선택에 따라 동적 로딩.
 
 6. **export 라벨**: `cell.exportLabel || generateExportLabel(questionCode_열_행)` 폴백 필수 (빌더는 placeholder만 표시, DB null 흔함).
 
-7. **마이그레이션**: drizzle migrate는 `_journal.json`만 따라감. 수동 SQL은 silent skip → Supabase MCP `apply_migration` 또는 직접 SQL. `TRUNCATE CASCADE` 금지 (ON DELETE SET NULL 무시).
+7. **마이그레이션 — 수동 SQL 관행**: drizzle `_journal.json`은 **0019에서 동결**됐고 0020 이후는 전부 손으로 쓴 `.sql`을 `supabase/migrations/`에 두고 Supabase MCP `apply_migration` 또는 직접 SQL로 적용한다. 새 파일을 추가하면 **반드시 `supabase/migrations/manual-migrations.json`의 `migrations`에 tag(확장자 제외 파일명)를 등재**해야 한다 — 미등재는 추적 불가 drift로 보고 CI(`.github/migration-journal-gate.ts`)가 차단한다. `pnpm db:generate`/`db:push`는 이 관행과 충돌하므로 쓰지 않는다. `TRUNCATE CASCADE` 금지 (ON DELETE SET NULL 무시).
 
-8. **서버 sanitize**: jsdom 의존 라이브러리 금지 (isomorphic-dompurify 크래시). `sanitize-html` 사용.
+8. **앱 생성값 NOT NULL 컬럼은 2단계 배포**: nullable 추가 + 백필(배포 전) → 앱 배포 → `SET NOT NULL`(라이브 후). 한 번에 걸면 구버전 앱 INSERT가 깨진다.
 
-9. **테스트**: Vitest include는 `tests/` + `src/features/**/*.test.ts`(colocated procedure 테스트). service 모킹은 `tests/integration` 패턴(top-level `vi.mock` + `vi.mocked`). 실DB 왕복은 `*.realdb.test.ts` — `pnpm test:integration`(로컬 supabase 54322 필요), 일반 `pnpm test`에서는 스킵. `tests/integration/profiles-row-actions.test.ts`는 전체 스위트에서 간헐 12 fail하는 알려진 flaky(격리 실행은 항상 통과) — 회귀로 오해 금지.
+9. **서버 sanitize**: jsdom 의존 라이브러리 금지 (isomorphic-dompurify 크래시). `sanitize-html` 사용.
 
-10. **drizzle 함정**: timestamptz optimistic lock은 PG μs ↔ JS ms 정밀도 차로 거짓 충돌 (version int 또는 string mode 사용). `ANY(${arr})` 바인딩 금지 (length=1 silent unwrap) → `inArray`/`sql.join`.
+10. **테스트**: Vitest include는 `tests/` + `src/**/*.test.ts`(colocated procedure/service 테스트) + `workers/`. service 모킹은 `tests/integration` 패턴(top-level `vi.mock` + `vi.mocked`). 실DB 왕복은 `*.realdb.test.ts` — `pnpm test:integration`(로컬 supabase 54322 필요), 일반 `pnpm test`에서는 스킵. `tests/integration/profiles-row-actions.test.ts`는 전체 스위트에서만 모킹 간섭으로 깨지는 알려진 flaky — `pnpm test`가 [본 스위트(제외) → 격리 단독] 2단으로 자동 실행한다(vitest.config `ISOLATED_FLAKY_TESTS`). 근본 원인 수리 시 목록에서 제거할 것.
+
+11. **vitest의 `server-only` stub 사각지대**: 클라이언트/서버 경계 위반은 테스트가 통과해도 빌드에서만 드러난다. 경계를 건드렸으면 `pnpm build`로 확인할 것.
+
+12. **drizzle 함정**: timestamptz optimistic lock은 PG μs ↔ JS ms 정밀도 차로 거짓 충돌 (version int 또는 string mode 사용). `ANY(${arr})` 바인딩 금지 (length=1 silent unwrap) → `inArray`/`sql.join`. jsonb 컬럼에 `JSON.stringify` 바인딩 금지 (이중 인코딩) → 객체 그대로 전달.
+
+---
+
+## CI 게이트
+
+`.github/workflows/ci.yml` — 변경 범위 판별 후 아래를 순차 실행한다. 로컬에서 미리 돌려야 할 것은 `pnpm lint`, `pnpm exec tsc --noEmit`, `pnpm test`.
+
+| 게이트                | 스크립트                            | 역할                                          |
+| --------------------- | ----------------------------------- | --------------------------------------------- |
+| 공급망 보안 감사      | `.github/audit-gate.ts`             | 감사 리포트 평가 (리포트 누락 시 fail-closed) |
+| RLS 하드닝            | `.github/rls-gate.ts`               | 마이그레이션의 RLS 정책 검증                  |
+| 마이그레이션 드리프트 | `.github/migration-journal-gate.ts` | `manual-migrations.json` 미등재 `.sql` 차단   |
+
+통합/E2E 잡은 로컬 supabase를 띄워 `pnpm test:integration` + `pnpm test:e2e`(Playwright chromium)를 돌린다.
 
 ---
 
 ## Agent skills
-
-### Worktree bootstrap
-
-- `superpowers:using-git-worktrees`로 프로젝트 로컬 worktree를 만들 때는 메인 checkout의 런타임 환경을 우선 공유한다.
-- 메인과 worktree의 `package.json`, `pnpm-lock.yaml`이 같으면 worktree의 `node_modules`를 메인 checkout의 `node_modules`를 가리키는 심볼릭 링크로 구성한다. 두 파일이 다르면 링크하지 말고 별도 설치가 필요함을 먼저 알린다.
-- 메인 checkout에 존재하는 ignored 환경 파일(`.env`, `.env.local`, `.env.development`, `.env.development.local`)은 내용을 읽거나 출력하지 않고 worktree에 심볼릭 링크한다.
-- worktree 준비 완료를 보고하기 전에 의존성 링크와 환경 파일 링크가 유효한지 확인한다.
 
 ### Issue tracker
 
@@ -616,3 +792,16 @@ export function QuestionEditor({ questionId, onSave }: Props) {
 ### Domain docs
 
 단일 컨텍스트 — 루트 `CONTEXT.md` + `docs/adr/`. See `docs/agents/domain.md`.
+
+### Worktree bootstrap
+
+- `superpowers:using-git-worktrees`로 프로젝트 로컬 worktree를 만들 때는 메인 checkout의 런타임 환경을 우선 공유한다.
+- 메인과 worktree의 `package.json`, `pnpm-lock.yaml`이 같으면 worktree의 `node_modules`를 메인 checkout의 `node_modules`를 가리키는 심볼릭 링크로 구성한다. 두 파일이 다르면 링크하지 말고 별도 설치가 필요함을 먼저 알린다.
+- 메인 checkout에 존재하는 ignored 환경 파일(`.env`, `.env.local`, `.env.development`, `.env.development.local`)은 내용을 읽거나 출력하지 않고 worktree에 심볼릭 링크한다.
+- worktree 준비 완료를 보고하기 전에 의존성 링크와 환경 파일 링크가 유효한지 확인한다.
+
+### 문서 갱신
+
+`update-docs` 스킬(`.agents/skills/update-docs/`)이 이 레포용 대조표를 갖고 있다. 코드가 문서와 어긋났을 때 이 스킬을 따른다 — 갱신 대상은 `AGENTS.md`·`CONTEXT.md` 이고, `docs/superpowers/plans`·`specs` 와 ADR 본문은 시점 기록물이라 최신화 대상이 아니다.
+
+> `CLAUDE.md` 는 `AGENTS.md` 를 가리키는 심볼릭 링크다. 문서 수정은 항상 `AGENTS.md` 에 한다.

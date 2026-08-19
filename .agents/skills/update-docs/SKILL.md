@@ -1,264 +1,67 @@
 ---
 name: update-docs
-description: This skill should be used when the user asks to "update documentation for my changes", "check docs for this PR", "what docs need updating", "sync docs with code", "scaffold docs for this feature", "document this feature", "review docs completeness", "add docs for this change", "what documentation is affected", "docs impact", or mentions "docs/", "docs/01-app", "docs/02-pages", "MDX", "documentation update", "API reference", ".mdx files". Provides guided workflow for updating Next.js documentation based on code changes.
+description: This skill should be used when the user asks to "update documentation for my changes", "check docs for this PR", "what docs need updating", "sync docs with code", "문서 최신화", "문서 갱신", "docs 업데이트", "review docs completeness", "what documentation is affected", or when a change lands that touches package.json, src/features/, src/db/schema/, src/app/ routes, supabase/migrations/, or src/lib/inngest/. Guides updating this repo's agent-facing docs (AGENTS.md, CONTEXT.md, docs/adr/) from actual code state.
 ---
 
-# Next.js Documentation Updater
+# Survey Table Project 문서 최신화
 
-Guides you through updating Next.js documentation based on code changes on the active branch. Designed for maintainers reviewing PRs for documentation completeness.
+이 레포의 문서를 **코드 실물 대조**로 갱신한다. 문서는 사람이 아니라 에이전트가 매 세션 읽는 참조물이므로, 틀린 사실 하나가 잘못된 작업 경로로 이어진다.
 
-## Quick Start
+## 문서 지형 — 무엇을 갱신하고 무엇을 두는가
 
-1. **Analyze changes**: Run `git diff canary...HEAD --stat` to see what files changed
-2. **Identify affected docs**: Map changed source files to documentation paths
-3. **Review each doc**: Walk through updates with user confirmation
-4. **Validate**: Run `pnpm lint` to check formatting
-5. **Commit**: Stage documentation changes
+| 문서                             | 성격                                         | 갱신 대상?                                              |
+| -------------------------------- | -------------------------------------------- | ------------------------------------------------------- |
+| `AGENTS.md`                      | 에이전트 상시 참조 (구조·스키마·라우트·관행) | **예 — 이 스킬의 주 대상**                              |
+| `CLAUDE.md`                      | `AGENTS.md` 심볼릭 링크                      | 자동 (직접 편집 금지)                                   |
+| `CONTEXT.md`                     | 도메인 언어 사전                             | 예 — 용어가 바뀌거나 미구현 절이 생겼을 때              |
+| `docs/adr/`                      | 결정 기록 (불변)                             | **아니오** — 내용 수정 금지. 상태 표기·supersede 표기만 |
+| `docs/superpowers/plans`·`specs` | 시점 기록물                                  | **아니오** — 최신 코드에 맞추면 기록 가치가 사라짐      |
+| `docs/runbooks/`                 | 운영 절차                                    | 예 — 절차가 실제로 바뀌었을 때                          |
+| `DESIGN.md`                      | 디자인 목표 명세                             | 별도 작업 (코드 SoT 는 `globals.css`)                   |
 
-## Workflow: Analyze Code Changes
+`CLAUDE.md` 는 `AGENTS.md` 를 가리키는 심볼릭 링크다. **항상 `AGENTS.md` 만 편집**한다. `docs/` 는 gitignore 대상이라 ADR·plan·spec 변경은 로컬 전용이다.
 
-### Step 1: Get the diff
+## 워크플로
+
+### 1단계: 변경 범위 확보
 
 ```bash
-# See all changed files on this branch
-git diff canary...HEAD --stat
-
-# See changes in specific areas
-git diff canary...HEAD -- packages/next/src/
+git log --oneline -30                  # 최근 작업 흐름
+git diff main...HEAD --stat            # 브랜치 작업이면 (기본 브랜치는 main, 통합은 staging 경유)
 ```
 
-### Step 2: Identify documentation-relevant changes
+문서 최종 갱신 시점 이후를 보려면 `AGENTS.md` 상단 "최종 갱신" 날짜를 읽고 `git log --since=<날짜> --oneline | wc -l` 로 규모를 잰다.
 
-Look for changes in these areas:
+### 2단계: 코드 → 문서 대조
 
-| Source Path                            | Likely Doc Impact           |
-| -------------------------------------- | --------------------------- |
-| `packages/next/src/client/components/` | Component API reference     |
-| `packages/next/src/server/`            | Function API reference      |
-| `packages/next/src/shared/lib/`        | Varies by export            |
-| `packages/next/src/build/`             | Configuration or build docs |
-| `packages/next/src/lib/`               | Various features            |
+`references/CODE-TO-DOCS-MAPPING.md` 의 대조표를 따른다. **문서를 읽고 기억으로 고치지 말고, 대조 명령을 실제로 돌려 나온 출력과 문서를 비교**한다. 이 레포의 문서 드리프트는 대부분 "추가된 것이 문서에 없음" 형태라 diff 만 봐서는 놓친다.
 
-### Step 3: Map to documentation files
+### 3단계: 수정
 
-Use the code-to-docs mapping in `references/CODE-TO-DOCS-MAPPING.md` to find corresponding documentation files.
+- 사실 오류(버전·개수·경로·컬럼)는 확인 즉시 고친다.
+- 새 서브시스템은 절을 신설한다. 기존 절에 한 줄로 끼워 넣으면 에이전트가 못 찾는다.
+- **관행이 코드와 어긋난 항목이 최우선**이다. 특히 마이그레이션·테스트·배포 관행은 틀리면 사고로 이어진다.
+- 미구현 설계가 문서에 있으면 지우지 말고 `> 구현 상태: **미착수** (날짜 확인 — 근거)` 표기를 단다. 인용 블록 **뒤에는 반드시 빈 줄**을 둔다(없으면 다음 줄이 blockquote 에 흡수된다).
 
-Example mappings:
+### 4단계: 검증
 
-- `src/client/components/image.tsx` → `docs/01-app/03-api-reference/02-components/image.mdx`
-- `src/server/config-shared.ts` → `docs/01-app/03-api-reference/05-config/`
+````bash
+grep -n '^## ' AGENTS.md               # 절 구성과 순서
+grep -c '^```' AGENTS.md               # 코드펜스 짝수 확인
+pnpm exec prettier --write AGENTS.md   # 표 정렬
+head -3 CLAUDE.md                      # 심볼릭 링크가 살아있는지
+````
 
-## Workflow: Update Existing Documentation
+코드를 함께 만졌다면 `pnpm lint`, `pnpm exec tsc --noEmit`, `pnpm test` 까지.
 
-### Step 1: Read the current documentation
+### 5단계: 보고
 
-Before making changes, read the existing doc to understand:
+무엇을 어떤 근거로 고쳤는지 열거한다. **확인하지 못한 것은 확인한 척하지 않는다** — "이 부분은 대조하지 못했다"고 남기는 편이 낫다.
 
-- Current structure and sections
-- Frontmatter fields in use
-- Whether it uses `<AppOnly>` / `<PagesOnly>` for router-specific content
+## 함정
 
-### Step 2: Identify what needs updating
-
-Common updates include:
-
-- **New props/options**: Add to the props table and create a section explaining usage
-- **Changed behavior**: Update descriptions and examples
-- **Deprecated features**: Add deprecation notices and migration guidance
-- **New examples**: Add code blocks following conventions
-
-### Step 3: Apply updates with confirmation
-
-For each change:
-
-1. Show the user what you plan to change
-2. Wait for confirmation before editing
-3. Apply the edit
-4. Move to the next change
-
-### Step 4: Check for shared content
-
-If the doc uses the `source` field pattern (common for Pages Router docs), the source file is the one to edit. Example:
-
-```yaml
-# docs/02-pages/... file with shared content
----
-source: app/building-your-application/optimizing/images
----
-```
-
-Edit the App Router source, not the Pages Router file.
-
-### Step 5: Validate changes
-
-```bash
-pnpm lint          # Check formatting
-pnpm prettier-fix  # Auto-fix formatting issues
-```
-
-## Workflow: Scaffold New Feature Documentation
-
-Use this when adding documentation for entirely new features.
-
-### Step 1: Determine the doc type
-
-| Feature Type        | Doc Location                                        | Template         |
-| ------------------- | --------------------------------------------------- | ---------------- |
-| New component       | `docs/01-app/03-api-reference/02-components/`       | API Reference    |
-| New function        | `docs/01-app/03-api-reference/04-functions/`        | API Reference    |
-| New config option   | `docs/01-app/03-api-reference/05-config/`           | Config Reference |
-| New concept/guide   | `docs/01-app/02-guides/`                            | Guide            |
-| New file convention | `docs/01-app/03-api-reference/03-file-conventions/` | File Convention  |
-
-### Step 2: Create the file with proper naming
-
-- Use kebab-case: `my-new-feature.mdx`
-- Add numeric prefix if ordering matters: `05-my-new-feature.mdx`
-- Place in the correct directory based on feature type
-
-### Step 3: Use the appropriate template
-
-**API Reference Template:**
-
-```mdx
----
-title: Feature Name
-description: Brief description of what this feature does.
----
-
-{/* The content of this doc is shared between the app and pages router. You can use the `<PagesOnly>Content</PagesOnly>` component to add content that is specific to the Pages Router. Any shared content should not be wrapped in a component. */}
-
-Brief introduction to the feature.
-
-## Reference
-
-### Props
-
-<div style={{ overflowX: 'auto', width: '100%' }}>
-
-| Prop                    | Example            | Type   | Status   |
-| ----------------------- | ------------------ | ------ | -------- |
-| [`propName`](#propname) | `propName="value"` | String | Required |
-
-</div>
-
-#### `propName`
-
-Description of the prop.
-
-\`\`\`tsx filename="app/example.tsx" switcher
-// TypeScript example
-\`\`\`
-
-\`\`\`jsx filename="app/example.js" switcher
-// JavaScript example
-\`\`\`
-```
-
-**Guide Template:**
-
-```mdx
----
-title: How to do X in Next.js
-nav_title: X
-description: Learn how to implement X in your Next.js application.
----
-
-Introduction explaining why this guide is useful.
-
-## Prerequisites
-
-What the reader needs to know before starting.
-
-## Step 1: First Step
-
-Explanation and code example.
-
-\`\`\`tsx filename="app/example.tsx" switcher
-// Code example
-\`\`\`
-
-## Step 2: Second Step
-
-Continue with more steps...
-
-## Next Steps
-
-Related topics to explore.
-```
-
-### Step 4: Add related links
-
-Update frontmatter with related documentation:
-
-```yaml
-related:
-  title: Next Steps
-  description: Learn more about related features.
-  links:
-    - app/api-reference/functions/related-function
-    - app/guides/related-guide
-```
-
-## Documentation Conventions
-
-See `references/DOC-CONVENTIONS.md` for complete formatting rules.
-
-### Quick Reference
-
-**Frontmatter (required):**
-
-```yaml
----
-title: Page Title (2-3 words)
-description: One or two sentences describing the page.
----
-```
-
-**Code blocks:**
-
-```
-\`\`\`tsx filename="app/page.tsx" switcher
-// TypeScript first
-\`\`\`
-
-\`\`\`jsx filename="app/page.js" switcher
-// JavaScript second
-\`\`\`
-```
-
-**Router-specific content:**
-
-```mdx
-<AppOnly>Content only for App Router docs.</AppOnly>
-
-<PagesOnly>Content only for Pages Router docs.</PagesOnly>
-```
-
-**Notes:**
-
-```mdx
-> **Good to know**: Single line note.
-
-> **Good to know**:
->
-> - Multi-line note point 1
-> - Multi-line note point 2
-```
-
-## Validation Checklist
-
-Before committing documentation changes:
-
-- [ ] Frontmatter has `title` and `description`
-- [ ] Code blocks have `filename` attribute
-- [ ] TypeScript examples use `switcher` with JS variant
-- [ ] Props tables are properly formatted
-- [ ] Related links point to valid paths
-- [ ] `pnpm lint` passes
-- [ ] Changes render correctly (if preview available)
-
-## References
-
-- `references/DOC-CONVENTIONS.md` - Complete frontmatter and formatting rules
-- `references/CODE-TO-DOCS-MAPPING.md` - Source code to documentation mapping
+- **기억으로 쓰지 말 것.** 버전·개수·경로는 전부 명령 출력에서 가져온다.
+- **plan/spec 을 최신화하지 말 것.** 요청이 "문서 전부 최신화"여도 시점 기록물은 제외하고, 제외했다고 보고한다.
+- **`CLAUDE.md` 직접 편집 금지.** 심볼릭 링크라 `AGENTS.md` 가 바뀐다(같은 파일이지만 의도를 분명히 할 것).
+- **`.mdx`·Next.js 본체 규약은 이 레포와 무관하다.** 이 레포의 문서는 전부 순수 마크다운이다.
+- **ADR 번호는 발행 순번**이다. 새 ADR 은 현재 최대 번호 다음을 쓴다(중복 발번 이력 있음 — `0015` 별칭 주석 참조).

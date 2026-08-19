@@ -1,236 +1,39 @@
-# Next.js Documentation Conventions
+# 문서 작성 규약
 
-Complete reference for frontmatter schema, code block formatting, and MDX component usage.
+## 언어와 스타일
 
-## Frontmatter Schema
+- 문서·주석은 **한국어**, 변수명·함수명·경로는 영어.
+- **이모지 금지** (코드·문서·UI 텍스트 공통).
+- 커밋 메시지는 한국어 `feat: OOO 기능 추가` 형식, 괄호 `()` 사용 금지.
 
-All MDX files must start with YAML frontmatter enclosed in `---` delimiters.
+## 포맷
 
-### Required Fields
+- 순수 마크다운. `.mdx`, 프론트매터, 커스텀 컴포넌트 없음. (스킬 파일의 YAML 프론트매터만 예외)
+- 표는 prettier 가 정렬한다. 편집 후 `pnpm exec prettier --write AGENTS.md`.
+- 코드펜스는 언어 태그를 붙인다(` ```bash `, ` ```env `, ` ```typescript `). 디렉터리 트리·스키마는 태그 없는 펜스.
+- 인용 블록(`>`) **뒤에는 반드시 빈 줄**. 없으면 다음 줄이 인용에 흡수된다(lazy continuation).
 
-| Field         | Description                                 | Example                                          |
-| ------------- | ------------------------------------------- | ------------------------------------------------ |
-| `title`       | Page title for SEO and headings (2-3 words) | `title: Image Component`                         |
-| `description` | Brief description (1-2 sentences)           | `description: Optimize images using next/image.` |
+## AGENTS.md 구조 관행
 
-### Optional Fields
+- 절 구분은 `## `, 절 사이는 `---`.
+- 상단 "최종 갱신" 한 줄에 날짜와 이번 갱신의 요지를 남긴다.
+- 스키마·구조는 트리 형태로 적고 컬럼 뒤에 `# 설명`을 단다.
+- **함정과 관행은 "주의사항" 번호 목록에** 모은다. 여기 적힌 항목은 에이전트가 사고를 내는 지점이라 문장을 구체적으로 — "왜 그런지"와 "대신 무엇을 쓰는지"까지 쓴다.
+- 미구현 설계는 지우지 말고 표기한다:
 
-| Field       | Description                                        | Example                                      |
-| ----------- | -------------------------------------------------- | -------------------------------------------- |
-| `nav_title` | Shorter title for navigation sidebar               | `nav_title: Image`                           |
-| `source`    | Pull content from another page (avoid duplication) | `source: app/api-reference/components/image` |
-| `related`   | Next steps section with related links              | See below                                    |
-| `version`   | Development stage indicator                        | `version: experimental`                      |
+  ```
+  > 구현 상태: **미착수** (2026-08-19 확인 — 코드에 teams/workspace 스키마 없음). 결정 기록으로만 유효하며 현재 코드의 설명이 아니다.
+  ```
 
-### Related Links Format
+## 사실 기재 원칙
 
-```yaml
----
-title: My Feature
-description: Description here.
-related:
-  title: Next Steps
-  description: Learn more about related features.
-  links:
-    - app/api-reference/components/image
-    - app/guides/optimizing/images
----
-```
+- 버전·개수·경로는 **명령 출력에서 옮긴다.** 기억으로 쓰지 않는다.
+- 개수를 적을 때는 근거 명령이 재현 가능해야 한다(`ls src/features` → "10개 도메인").
+- 확인하지 못한 것은 적지 않는다. 추정을 사실처럼 적으면 다음 세션이 그걸 근거로 작업한다.
+- 코드에서 확인한 제약(UNIQUE, NOT NULL, partial index)은 문서에도 그대로 옮긴다.
 
-### Version Field Values
+## 파일 명명
 
-- `experimental` - Experimental feature, may change
-- `legacy` - Legacy feature, consider alternatives
-- `unstable` - Unstable API, not recommended for production
-- `RC` - Release candidate
-
-## Code Block Conventions
-
-### Basic Syntax
-
-````
-```language filename="path/to/file.ext"
-code here
-```
-````
-
-### Required Attributes
-
-| Attribute   | When to Use                       | Example                   |
-| ----------- | --------------------------------- | ------------------------- |
-| `filename`  | Always for code examples          | `filename="app/page.tsx"` |
-| `switcher`  | When providing TS and JS variants | `switcher`                |
-| `highlight` | To highlight specific lines       | `highlight={1,3-5}`       |
-
-### TypeScript/JavaScript Switcher Pattern
-
-Always provide TypeScript first, then JavaScript:
-
-````mdx
-```tsx filename="app/page.tsx" switcher
-import type { Metadata } from 'next'
-
-export const metadata: Metadata = {
-  title: 'My Page',
-}
-```
-
-```jsx filename="app/page.js" switcher
-export const metadata = {
-  title: 'My Page',
-}
-```
-````
-
-### Terminal Commands
-
-Use `bash` language without filename:
-
-````mdx
-```bash
-npm install next
-```
-````
-
-### Highlighting Lines
-
-```
-highlight={1}        # Single line
-highlight={1,3}      # Multiple lines
-highlight={1-5}      # Range
-highlight={1,3-5,8}  # Combined
-```
-
-## MDX Components
-
-### AppOnly / PagesOnly
-
-Use for router-specific content in shared documentation:
-
-```mdx
-<AppOnly>
-
-This content only appears in App Router documentation.
-
-</AppOnly>
-
-<PagesOnly>
-
-This content only appears in Pages Router documentation.
-
-</PagesOnly>
-```
-
-**Important:** Include blank lines inside the components for proper markdown parsing.
-
-### Image Component
-
-For themed images with light/dark variants:
-
-```mdx
-<Image
-  alt="Description of the image"
-  srcLight="/docs/light/image-name.png"
-  srcDark="/docs/dark/image-name.png"
-  width={1600}
-  height={800}
-/>
-```
-
-### Notes and Callouts
-
-**Single line:**
-
-```mdx
-> **Good to know**: Important information here.
-```
-
-**Multi-line:**
-
-```mdx
-> **Good to know**:
->
-> - First point
-> - Second point
-> - Third point
-```
-
-## Props Tables
-
-Use HTML table wrapper for horizontal scroll on mobile:
-
-```mdx
-<div style={{ overflowX: 'auto', width: '100%' }}>
-
-| Prop              | Example             | Type    | Status   |
-| ----------------- | ------------------- | ------- | -------- |
-| [`src`](#src)     | `src="/image.png"`  | String  | Required |
-| [`alt`](#alt)     | `alt="Description"` | String  | Required |
-| [`width`](#width) | `width={500}`       | Integer | -        |
-
-</div>
-```
-
-### Status Values
-
-- `Required` - Must be provided
-- `-` - Optional
-- `Deprecated` - Will be removed, use alternative
-
-## Shared Content Pattern
-
-For Pages Router docs that share content with App Router:
-
-**App Router (source):** `docs/01-app/03-api-reference/02-components/image.mdx`
-
-- Contains the full documentation
-- Uses `<AppOnly>` and `<PagesOnly>` for router-specific sections
-
-**Pages Router (consumer):** `docs/02-pages/03-api-reference/01-components/image.mdx`
-
-```yaml
----
-title: Image Component
-description: Optimize images using next/image.
-source: app/api-reference/components/image
----
-```
-
-The `source` field pulls content from the App Router doc.
-
-## Writing Style
-
-### Voice
-
-- **Guides:** Instructional, use "you" to address users
-- **API Reference:** Technical, use imperative verbs ("create", "pass", "return")
-
-### Clarity
-
-- Use plain words over complex alternatives
-- Be specific: "the `src` prop" not "this prop"
-- Avoid jargon unless explaining it
-
-### Structure
-
-Typical page structure:
-
-1. Brief introduction (what and why)
-2. Minimal working example
-3. Detailed reference/options
-4. Examples for different use cases
-5. Related links (via frontmatter)
-
-## File Naming
-
-- Use kebab-case: `generate-metadata.mdx`
-- Add numeric prefix for ordering: `01-installation.mdx`
-- Index pages: `index.mdx`
-
-## Validation Commands
-
-```bash
-pnpm lint              # Full lint check
-pnpm prettier-fix      # Fix formatting
-pnpm types             # TypeScript check
-```
+- 문서: 루트 대문자(`AGENTS.md`, `CONTEXT.md`), 그 외 `kebab-case.md`.
+- ADR: `NNNN-kebab-case-title.md`, 번호는 발행 순번(현재 최대 + 1).
+- plan/spec: `YYYY-MM-DD-kebab-slug.md` (spec 은 `-design` 접미).
