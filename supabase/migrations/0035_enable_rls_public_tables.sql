@@ -27,8 +27,19 @@ ALTER TABLE public.mail_campaigns ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.mail_recipients ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.mail_billing_periods ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.webhook_events ENABLE ROW LEVEL SECURITY;
--- 레거시 고아 테이블(mail_* 리팩토링 이전 email_*) — 미사용이나 일관성 위해 동일 적용
-ALTER TABLE public.email_templates ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.email_attachments ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.email_campaigns ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.email_campaign_recipients ENABLE ROW LEVEL SECURITY;
+
+-- 레거시 고아 테이블(mail_* 리팩토링 이전 email_*) — 미사용이나 일관성 위해 동일 적용.
+-- 2026-08-19 재생 가능성 수선: 이 넷은 어떤 마이그레이션도 만들지 않아 빈 DB 재생 시
+-- 존재하지 않는다. 존재할 때만 적용한다. 위 목록을 리터럴로 남겨둔 것은 RLS 게이트
+-- (.github/rls-gate.ts)가 정규식으로 ENABLE ROW LEVEL SECURITY 를 읽기 때문이다 —
+-- DO 블록으로 감싸면 게이트가 RLS 누락으로 오판한다.
+DO $$
+DECLARE t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['email_templates', 'email_attachments', 'email_campaigns', 'email_campaign_recipients']
+  LOOP
+    IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename=t) THEN
+      EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
+    END IF;
+  END LOOP;
+END $$;

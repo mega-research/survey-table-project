@@ -14,4 +14,15 @@
 -- prod DDL 안전장치: 락을 3초 내 못 잡으면 전체 차단 대신 fail-fast (단일 운영환경 보호).
 SET LOCAL lock_timeout = '3s';
 
-REVOKE EXECUTE ON FUNCTION public.lookup_contact_by_invite_token(uuid, uuid) FROM anon, authenticated;
+-- 2026-08-19 재생 가능성 수선: 이 함수는 어떤 마이그레이션도 만들지 않아(0075 가 뒤늦게 복구)
+-- 빈 DB 재생 시 이 시점에는 존재하지 않는다. 없으면 건너뛴다 — 0075 가 같은 REVOKE 를 수행하므로
+-- 최종 상태는 동일하다.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public' AND p.proname = 'lookup_contact_by_invite_token'
+  ) THEN
+    REVOKE EXECUTE ON FUNCTION public.lookup_contact_by_invite_token(uuid, uuid) FROM anon, authenticated;
+  END IF;
+END $$;
