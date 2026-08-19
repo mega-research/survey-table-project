@@ -313,11 +313,13 @@ export const surveyResponses = pgTable('survey_responses', {
     table.surveyId,
     table.sessionId,
   ),
-  // 한 컨택에 미완료 응답은 하나만 (0014). 프로덕션에만 있던 것을 2026-08-19 스키마로 승격 —
+  // 한 컨택에 미완료·미삭제 응답은 하나만 (0014, 술어는 0076 에서 deleted_at 인지로 교체).
   // 선언이 없으면 drizzle-kit push 로 만든 테스트 DB 에 제약이 빠져 realdb 검증이 무력화된다.
   activeResponsePerContact: uniqueIndex('idx_active_response_per_contact')
     .on(table.contactTargetId)
-    .where(sql`${table.isCompleted} = false AND ${table.contactTargetId} IS NOT NULL`),
+    .where(
+      sql`${table.isCompleted} = false AND ${table.contactTargetId} IS NOT NULL AND ${table.deletedAt} IS NULL`,
+    ),
   // 테스트 파티션에서 한 컨택의 미삭제 응답은 하나만 (0057)
   testTargetActiveUnique: uniqueIndex('survey_responses_test_target_active_unique')
     .on(table.contactTargetId)

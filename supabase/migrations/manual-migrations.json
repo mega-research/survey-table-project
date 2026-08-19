@@ -59,6 +59,8 @@
     "0072_response_edit_logs_reset",
     "0073_resid_label_system_id",
     "0074_add_survey_profile_columns",
-    "0075_recover_db_functions"
+    "0075_recover_db_functions",
+    "0076_active_response_index_soft_delete_aware",
+    "0077_revoke_legacy_email_table_grants"
   ]
 }
