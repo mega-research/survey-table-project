@@ -101,15 +101,24 @@ async function inventory(url) {
       // 장치 자체의 존재·활성 상태·이벤트·태그·연결 함수를 지문으로 대조한다 (2026-08-19).
       // public 스키마 함수에 연결된 트리거만 — supabase 내장 트리거(extensions 등 타 스키마)는
       // 호스팅/CLI 스택 버전 차이로 노이즈가 되므로 범위 밖.
+      // 연결 함수의 본문 해시·SECURITY DEFINER·search_path·소유자까지 지문에 넣는다 —
+      // 메타데이터만 비교하면 본문이 다른(예: 0082 의 ON FUNCTION vs 0083 의 ON ROUTINE)
+      // 트리거나 권한 회수를 생략하도록 변조된 본문을 구별하지 못한다.
       const eventTriggers = (await tx`
-        SELECT t.evtname, t.evtenabled, t.evtevent, t.evttags, p.proname
+        SELECT t.evtname, t.evtenabled, t.evtevent, t.evttags, p.proname,
+               md5(regexp_replace(pg_get_functiondef(p.oid), '\\s+', ' ', 'g')) AS defhash,
+               p.prosecdef, p.proconfig,
+               pg_get_userbyid(p.proowner) AS owner
         FROM pg_event_trigger t
         JOIN pg_proc p ON p.oid = t.evtfoid
         JOIN pg_namespace n ON n.oid = p.pronamespace
         WHERE n.nspname = 'public'
         ORDER BY t.evtname`).map((r) => {
         const tags = r.evttags ? ` TAG(${[...r.evttags].sort().join(',')})` : '';
-        return `${r.evtname} [${r.evtenabled}] ON ${r.evtevent}${tags} -> ${r.proname}`;
+        const secdef = r.prosecdef ? ' SECDEF' : '';
+        const config = r.proconfig ? ` CFG(${[...r.proconfig].sort().join(';')})` : '';
+        return `${r.evtname} [${r.evtenabled}] ON ${r.evtevent}${tags} -> ${r.proname}` +
+          `${secdef}${config} owner=${r.owner} def=${r.defhash}`;
       });
 
       return {
