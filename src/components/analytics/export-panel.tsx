@@ -7,6 +7,7 @@ import { Download, FileJson, FileSpreadsheet, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { buildSafeFilename, downloadText } from '@/lib/analytics/export-download';
+import { client } from '@/shared/lib/rpc';
 
 import { ExportDataModal } from './export-data-modal';
 
@@ -14,8 +15,6 @@ type TextFormat = 'json' | 'csv';
 
 interface ExportPanelProps {
   surveyId: string;
-  onExportJson: () => Promise<string>;
-  onExportCsv: () => Promise<string>;
   surveyTitle?: string;
 }
 
@@ -24,18 +23,18 @@ const MIME_BY_FORMAT: Record<TextFormat, string> = {
   csv: 'text/csv;charset=utf-8;',
 };
 
-export function ExportPanel({
-  surveyId,
-  onExportJson,
-  onExportCsv,
-  surveyTitle = 'survey',
-}: ExportPanelProps) {
+export function ExportPanel({ surveyId, surveyTitle = 'survey' }: ExportPanelProps) {
   const [isExporting, setIsExporting] = useState<TextFormat | null>(null);
 
   const handleExport = async (format: TextFormat) => {
     setIsExporting(format);
     try {
-      const data = format === 'json' ? await onExportJson() : await onExportCsv();
+      // 인증은 authed procedure 한 곳에서만 결정한다 — 페이지가 만들던 인라인 server action
+      // 은 본문 인증이 없는 공개 POST 엔드포인트였다.
+      const data =
+        format === 'json'
+          ? await client.surveyBuilder.read.exportJson({ surveyId })
+          : await client.surveyBuilder.read.exportCsv({ surveyId });
 
       if (!data) {
         toast.error('내보낼 데이터가 없습니다.');

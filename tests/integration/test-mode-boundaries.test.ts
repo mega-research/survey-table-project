@@ -66,7 +66,7 @@ vi.mock('@/lib/spss/sav-builder', () => ({
 import { db } from '@/db';
 import { GET as exportGet } from '@/app/api/surveys/[surveyId]/export/route';
 import { GET as splitPreviewGet } from '@/app/api/surveys/[surveyId]/export/split-preview/route';
-import { getCompletedResponses } from '@/data/responses';
+import { getCompletedResponses } from '@/features/survey-builder/server/services/response-read.service';
 import { getResponseSummary } from '@/features/analytics/server/services/analytics.service';
 import {
   campaignScopeCondition,

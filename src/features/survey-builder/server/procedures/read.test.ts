@@ -1,5 +1,5 @@
 import { createRouterClient } from '@orpc/server';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
@@ -44,6 +44,7 @@ function anonContext(): ORPCContext {
 
 describe('surveyBuilder.read procedures', () => {
   beforeEach(() => vi.clearAllMocks());
+  afterEach(() => vi.unstubAllEnvs());
 
   it('list는 인자 없이 getSurveyListWithCounts에 위임한다', async () => {
     vi.mocked(surveySvc.getSurveyListWithCounts).mockResolvedValue([] as never);
@@ -174,5 +175,61 @@ describe('surveyBuilder.read procedures', () => {
       code: 'UNAUTHORIZED',
     });
     expect(surveySvc.getSurveyById).not.toHaveBeenCalled();
+  });
+
+  // analytics 대시보드의 내보내기 표면. 과거에는 페이지 인라인 server action 이라
+  // 본문 인증이 없었다 — 복호화 PII 를 반환하므로 인증 실패 시 service 진입 자체가
+  // 없어야 한다.
+  it('인증 없으면 exportJson이 UNAUTHORIZED로 막힌다', async () => {
+    const client = createRouterClient({ read }, { context: anonContext() });
+    await expect(client.read.exportJson({ surveyId: SURVEY_ID })).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+    });
+    expect(responseSvc.exportResponsesAsJson).not.toHaveBeenCalled();
+  });
+
+  it('인증 없으면 exportCsv가 UNAUTHORIZED로 막힌다', async () => {
+    const client = createRouterClient({ read }, { context: anonContext() });
+    await expect(client.read.exportCsv({ surveyId: SURVEY_ID })).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+    });
+    expect(responseSvc.exportResponsesAsCsv).not.toHaveBeenCalled();
+  });
+
+  it('allowlist 밖 세션은 exportJson이 FORBIDDEN으로 막힌다', async () => {
+    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
+    const client = createRouterClient(
+      { read },
+      {
+        context: {
+          db: {} as never,
+          supabase: {} as never,
+          user: { id: 'intruder-1', email: 'x@y.com' },
+        },
+      },
+    );
+    await expect(client.read.exportJson({ surveyId: SURVEY_ID })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+    expect(responseSvc.exportResponsesAsJson).not.toHaveBeenCalled();
+  });
+
+  it('게스트 grant 보유자는 exportCsv가 FORBIDDEN으로 막힌다', async () => {
+    vi.stubEnv('ADMIN_USER_IDS', 'admin-1');
+    vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
+    const client = createRouterClient(
+      { read },
+      {
+        context: {
+          db: {} as never,
+          supabase: {} as never,
+          user: { id: 'guest-1', email: 'g@b.com' },
+        },
+      },
+    );
+    await expect(client.read.exportCsv({ surveyId: SURVEY_ID })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+    expect(responseSvc.exportResponsesAsCsv).not.toHaveBeenCalled();
   });
 });

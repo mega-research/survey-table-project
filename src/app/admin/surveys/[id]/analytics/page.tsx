@@ -6,13 +6,9 @@ import { ArrowLeft, BarChart3, ExternalLink, Pencil } from 'lucide-react';
 import { AnalyticsDashboardClient } from '@/components/analytics';
 import { ExportDataModal } from '@/components/analytics/export-data-modal';
 import { Button } from '@/components/ui/button';
-import {
-  exportResponsesAsCsv,
-  exportResponsesAsJson,
-  getResponsesWithAnswers,
-  getSurveyVersions,
-} from '@/data/responses';
+import { getResponsesWithAnswers, getSurveyVersions } from '@/data/responses';
 import { getSurveyWithDetails } from '@/features/survey-builder/server/services/survey-read.service';
+import { requireAdminPage } from '@/lib/auth/require-admin-page';
 
 interface AdminAnalyticsPageProps {
   params: Promise<{ id: string }>;
@@ -20,6 +16,9 @@ interface AdminAnalyticsPageProps {
 
 export default async function AdminSurveyAnalyticsPage({ params }: AdminAnalyticsPageProps) {
   const { id } = await params;
+
+  // RSC 도 export procedure 와 같은 판정을 받는다 — 이 페이지는 복호화된 응답을 렌더한다.
+  await requireAdminPage();
 
   // 설문 및 응답 데이터 조회 (response_answers 우선, JSONB fallback)
   const [survey, responses, versions] = await Promise.all([
@@ -30,17 +29,6 @@ export default async function AdminSurveyAnalyticsPage({ params }: AdminAnalytic
 
   if (!survey) {
     notFound();
-  }
-
-  // 내보내기 함수 (서버 액션)
-  async function handleExportJson() {
-    'use server';
-    return exportResponsesAsJson(id);
-  }
-
-  async function handleExportCsv() {
-    'use server';
-    return exportResponsesAsCsv(id);
   }
 
   return (
@@ -92,8 +80,6 @@ export default async function AdminSurveyAnalyticsPage({ params }: AdminAnalytic
           }}
           responses={responses}
           versions={versions}
-          onExportJson={handleExportJson}
-          onExportCsv={handleExportCsv}
         />
       </main>
     </div>

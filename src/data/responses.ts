@@ -10,20 +10,6 @@ import { notDeletedResponse, notTestResponse } from '@/data/response-filters';
 // 응답 조회 함수
 // ========================
 
-// 완료된 응답만 조회
-export async function getCompletedResponses(surveyId: string) {
-  const responses = await db.query.surveyResponses.findMany({
-    where: and(
-      eq(surveyResponses.surveyId, surveyId),
-      eq(surveyResponses.isCompleted, true),
-      notDeletedResponse,
-      notTestResponse,
-    ),
-    orderBy: [desc(surveyResponses.completedAt)],
-  });
-  return responses;
-}
-
 // 응답 단일 조회. 의도적으로 notTestResponse 미적용 — 관리자 응답 상세/수정 페이지는
 // 테스트 응답도 열람·수정할 수 있어야 한다(단건 조회는 "모수" 통계가 아님).
 export async function getResponseById(
@@ -132,77 +118,4 @@ export async function getSurveyVersions(surveyId: string) {
     },
   });
   return versions;
-}
-
-// ========================
-// 내보내기 함수
-// ========================
-
-// 응답 데이터 내보내기 (JSON)
-export async function exportResponsesAsJson(surveyId: string) {
-  const responses = await getCompletedResponses(surveyId);
-  const decrypted = responses.map((r) => ({
-    ...r,
-    questionResponses: decryptQuestionResponses(
-      (r.questionResponses ?? {}) as Record<string, unknown>,
-      { responseId: r.id },
-    ),
-  }));
-  return JSON.stringify(decrypted, null, 2);
-}
-
-// 응답 데이터 내보내기 (CSV)
-export async function exportResponsesAsCsv(surveyId: string) {
-  const responses = await getCompletedResponses(surveyId);
-
-  if (responses.length === 0) return '';
-
-  const headers = ['응답 ID', '시작 시간', '완료 시간', '완료 시간(분)'];
-  const questionIds = new Set<string>();
-
-  responses.forEach((response) => {
-    Object.keys(response.questionResponses as Record<string, unknown>).forEach((questionId) => {
-      questionIds.add(questionId);
-    });
-  });
-
-  headers.push(...Array.from(questionIds));
-
-  const csvData = responses.map((response) => {
-    const completionTime = response.completedAt
-      ? (new Date(response.completedAt).getTime() - new Date(response.startedAt).getTime()) /
-        (1000 * 60)
-      : 0;
-
-    const row = [
-      response.id,
-      response.startedAt.toISOString(),
-      response.completedAt?.toISOString() || '',
-      completionTime.toFixed(2),
-    ];
-
-    const responseData = decryptQuestionResponses(
-      response.questionResponses as Record<string, unknown>,
-      { responseId: response.id },
-    );
-    Array.from(questionIds).forEach((questionId) => {
-      const value = responseData[questionId];
-      if (value === null || value === undefined) {
-        // typeof null === 'object' 함정: null 을 object 분기에 보내면 "null" 문자열이 셀에 들어간다.
-        row.push('');
-      } else if (Array.isArray(value)) {
-        row.push(value.join('; '));
-      } else if (typeof value === 'object') {
-        row.push(JSON.stringify(value));
-      } else {
-        row.push(String(value || ''));
-      }
-    });
-
-    return row;
-  });
-
-  return [headers, ...csvData]
-    .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-    .join('\n');
 }

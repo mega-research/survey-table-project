@@ -43,16 +43,12 @@ interface AnalyticsDashboardClientProps {
   };
   responses: SurveyResponse[];
   versions?: SurveyVersionInfo[];
-  onExportJson: () => Promise<string>;
-  onExportCsv: () => Promise<string>;
 }
 
 export function AnalyticsDashboardClient({
   survey,
   responses,
   versions,
-  onExportJson,
-  onExportCsv,
 }: AnalyticsDashboardClientProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<FilterState>(createEmptyFilter());
@@ -141,12 +137,7 @@ export function AnalyticsDashboardClient({
             )}
           </div>
         </div>
-        <ExportPanel
-          surveyId={analytics.surveyId}
-          surveyTitle={analytics.surveyTitle}
-          onExportJson={onExportJson}
-          onExportCsv={onExportCsv}
-        />
+        <ExportPanel surveyId={analytics.surveyId} surveyTitle={analytics.surveyTitle} />
       </div>
 
       {/* 요약 카드 */}
