@@ -163,6 +163,17 @@ interface UseResponseLifecycleResult {
   handleResponse: (questionId: string, value: unknown) => void;
   /** 현재 페이지에서 바뀐 답을 저장한다. 첫 응답 생성 중이면 완료까지 기다린다. */
   flushPendingAnswers: () => Promise<boolean>;
+  /**
+   * 낙관 전환용 백그라운드 체크포인트 — 디바운스 자동 저장과 동일 의미론(실패 토스트 없음,
+   * 실패 시 pending 유지). "다음" 클릭이 저장 왕복을 기다리지 않도록 발사만 한다.
+   */
+  flushPendingAnswersInBackground: () => Promise<boolean>;
+  /**
+   * 응답 행 id 확보 — 생성이 in-flight 면 완료를 기다린다. 낙관 전환으로 생성보다 먼저
+   * 쿼터 판정 클릭에 도달했을 때 판정이 id 부재로 건너뛰어지는 것(하드 쿼터 우회)을 막는
+   * 용도. 생성이 시작조차 안 됐으면 null.
+   */
+  waitForResponseId: () => Promise<string | null>;
   handleSubmit: () => Promise<void>;
   /** 첫 답변 동시 발사 시 중복 INSERT 방어용 플래그. 이 훅이 소유. */
   isCreatingResponse: boolean;
@@ -260,7 +271,9 @@ export function useResponseLifecycle({
     if (recoveredDraftSeq === undefined) return;
     draftSeqRef.current = Math.max(draftSeqRef.current, recoveredDraftSeq);
   }, [recoveredDraftSeq]);
-  if (currentResponseId) activeResponseIdRef.current = currentResponseId;
+  useEffect(() => {
+    if (currentResponseId) activeResponseIdRef.current = currentResponseId;
+  }, [currentResponseId]);
 
   // 저장 경계(draft flush / complete / beacon / admin-edit)에서 calc 셀 값을 페이로드에 주입.
   // 4지점이 각자 ctx 를 조립하면 한 곳만 어긋나는 버그가 생기므로 클로저 하나로 공유한다.
@@ -334,6 +347,14 @@ export function useResponseLifecycle({
         seq: ++draftSeqRef.current,
         ...(testIdentity ?? {}),
       });
+      if (result.concluded) {
+        // 이 응답은 이미 (다른 화면에서) 완료됐다 — 조용한 실패로 끝까지 진행시키는 대신
+        // "이미 완료된 설문입니다" 안내로 접는다 (동시 세션 정책 G1). pending 은 어떤
+        // 재시도로도 적용될 수 없으므로 비워 이탈 beacon 재발사도 멈춘다.
+        pendingAnswerSavesRef.current.clear();
+        setDuplicateStatus({ kind: 'blocked', reason: 'response_concluded' });
+        return false;
+      }
       if (!result.applied) {
         // 서버가 stale seq 로 판정해 답변을 쓰지 않았다. pending 을 비우면 서버에 반영되지
         // 않은 값을 "저장됨" 으로 착각해 유실하므로, 삭제 루프와 지문 초기화를 모두 건너뛴다.
@@ -404,6 +425,9 @@ export function useResponseLifecycle({
   };
 
   const flushPendingAnswers = (): Promise<boolean> => enqueueFlush(false);
+  const flushPendingAnswersInBackground = (): Promise<boolean> => enqueueFlush(true);
+  const waitForResponseId = async (): Promise<string | null> =>
+    activeResponseIdRef.current ?? (await responseCreationPromiseRef.current) ?? null;
 
   // 답변 입력 디바운스 자동 저장 타이머. 리셋은 clearTimeout + 재예약이라 동시 타이머는 항상 1개.
   const draftAutosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -889,7 +913,7 @@ export function useResponseLifecycle({
           buildOptTextsPayload(visibleQuestions, responses),
         );
 
-        await client.surveyResponse.response.complete({
+        const completed = await client.surveyResponse.response.complete({
           responseId: effectiveResponseId,
           data: {
             questionResponses: questionResponsesWithTexts,
@@ -902,6 +926,14 @@ export function useResponseLifecycle({
         // 제출 성공 — 회복용 localStorage 키 정리 (재진입 시 새 응답 흐름)
         if (typeof window !== 'undefined' && loadedSurvey) {
           window.localStorage.removeItem(sessionStorageKey(loadedSurvey.id, inviteToken));
+        }
+
+        if (completed?.alreadyCompleted) {
+          // 이미 완료된 행에 대한 늦은 complete(다른 화면이 먼저 제출했거나 본인 재시도) —
+          // 이번 페이로드는 서버가 버렸으므로 가짜 감사 화면 대신 안내로 접는다 (정책 G1).
+          resetResponseState();
+          setDuplicateStatus({ kind: 'blocked', reason: 'response_concluded' });
+          return;
         }
       }
 
@@ -976,7 +1008,14 @@ export function useResponseLifecycle({
     hasTestAttemptOwnership,
   ]);
 
-  return { handleResponse, flushPendingAnswers, handleSubmit, isCreatingResponse };
+  return {
+    handleResponse,
+    flushPendingAnswers,
+    flushPendingAnswersInBackground,
+    waitForResponseId,
+    handleSubmit,
+    isCreatingResponse,
+  };
 }
 
 // 타입별 응답 충족 판정과 무관한 단순 필수 여부. 원본 컴포넌트의 비메모 인라인 함수와 동등.

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 import { ChevronDown } from 'lucide-react';
 
@@ -31,11 +31,11 @@ export function UserDefinedMultiLevelSelect({
   // 초기화되지 않도록 내용이 실제로 달라졌을 때만 동기화한다.
   // [values] 참조 기반 비교는 [obj] vs [obj?.id] reset footgun을 그대로 재현하므로 직렬화 키로 비교.
   const valuesKey = JSON.stringify(values);
-  useEffect(() => {
-    setCurrentValues((prev) => (JSON.stringify(prev) === valuesKey ? prev : values));
-    // valuesKey 가 동일하면 동일 내용이므로 동기화 스킵
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [valuesKey]);
+  const [prevValuesKey, setPrevValuesKey] = useState(valuesKey);
+  if (prevValuesKey !== valuesKey) {
+    setPrevValuesKey(valuesKey);
+    if (JSON.stringify(currentValues) !== valuesKey) setCurrentValues(values);
+  }
 
   const handleLevelChange = (levelIndex: number, selectedValue: string) => {
     const newValues = [...currentValues];

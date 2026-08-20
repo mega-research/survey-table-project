@@ -189,6 +189,61 @@ describe('evaluateSumConstraint', () => {
       expect(evaluateSumConstraint(cLeft, { c1: '60', c2: '40' }, ids, opts).skipped).toBe(true);
       expect(evaluateSumConstraint(cTarget, { c1: '60', c2: '40' }, ids, opts).skipped).toBe(true);
     });
+
+    describe('existingCellIds 마스킹 — 화면에서 제외된 잔존값은 수식에 되살아나지 않는다', () => {
+      // 미선택 동적 행·isHidden 셀은 값이 보존되지만 existingCellIds 에서 빠진다.
+      // 레거시 cellIds 경로와 동일하게 수식의 자기 질문 셀 참조도 이 집합으로 걸러야 한다.
+      const sumExpr: CalcExpr = {
+        kind: 'group', op: '+',
+        terms: [{ kind: 'cell', cellId: 'c1' }, { kind: 'cell', cellId: 'c2' }],
+      };
+
+      it('leftExpr: existingCellIds 에 없는 셀의 잔존값은 합산에서 제외된다', () => {
+        const c: SumConstraint = {
+          id: 'sm1', cellIds: [], operator: 'eq', target: 30, leftExpr: sumExpr,
+        };
+        // c2 는 화면에서 제외됐지만 응답에는 잔존값 70 이 남아 있다
+        const ctx = mkCtx({ q1: { c1: '30', c2: '70' } });
+        const visibleOnly = new Set(['c1']);
+        const r = evaluateSumConstraint(c, { c1: '30' }, visibleOnly, evalOpts(ctx));
+        expect(r).toMatchObject({ skipped: false, ok: true, sum: 30 });
+      });
+
+      it('leftExpr: 보이는 참조가 전부 빈 값이면 잔존값이 있어도 skipped', () => {
+        const c: SumConstraint = {
+          id: 'sm2', cellIds: [], operator: 'eq', target: 100, leftExpr: sumExpr,
+        };
+        // 보이는 c1 은 빈 값, 숨은 c2 에만 잔존값 — 전부-빈-참조 의미론으로 skipped
+        const ctx = mkCtx({ q1: { c2: '70' } });
+        const visibleOnly = new Set(['c1']);
+        expect(evaluateSumConstraint(c, {}, visibleOnly, evalOpts(ctx)).skipped).toBe(true);
+      });
+
+      it('targetExpr: 기준값 수식의 자기 질문 셀 참조도 동일하게 마스킹된다', () => {
+        const c: SumConstraint = {
+          id: 'sm3', cellIds: ['c1'], operator: 'eq', target: 0,
+          targetExpr: { kind: 'cell', cellId: 'c2' },
+        };
+        // 숨은 c2 잔존값 70 이 기준값으로 쓰이면 30 != 70 오차단 — 마스킹되면 빈 참조로 skipped
+        const ctx = mkCtx({ q1: { c1: '30', c2: '70' } });
+        const visibleOnly = new Set(['c1']);
+        expect(evaluateSumConstraint(c, { c1: '30' }, visibleOnly, evalOpts(ctx)).skipped).toBe(true);
+      });
+
+      it('leftExpr: 다른 질문 참조는 마스킹 대상이 아니다', () => {
+        const c: SumConstraint = {
+          id: 'sm4', cellIds: [], operator: 'eq', target: 130,
+          leftExpr: {
+            kind: 'group', op: '+',
+            terms: [{ kind: 'cell', cellId: 'c1' }, { kind: 'question', questionId: 'q2' }],
+          },
+        };
+        const ctx = mkCtx({ q1: { c1: '30' }, q2: '100' });
+        const visibleOnly = new Set(['c1']);
+        const r = evaluateSumConstraint(c, { c1: '30' }, visibleOnly, evalOpts(ctx));
+        expect(r).toMatchObject({ skipped: false, ok: true, sum: 130 });
+      });
+    });
   });
 });
 
@@ -408,6 +463,40 @@ describe('collectNumericIssues — 테이블', () => {
     });
     expect(issues).toHaveLength(1);
     expect(issues[0]).toMatchObject({ kind: 'sum', cellIds: ['c1', 'c2'] });
+  });
+
+  it('숨은 잔존값만 있는 표는 미접촉 — 외부 참조 수식 검증도 켜지 않는다', () => {
+    // 조건 변경으로 동적 행이 화면에서 사라지고 잔존값만 남은 표. 접촉 판정이 잔존 키를
+    // 세면 leftExpr 의 외부 참조(q2)가 마스킹 밖에서 평가돼 응답자를 오차단한다.
+    const rows: TableRow[] = [
+      { id: 'r1', cells: [{ id: 'c1', type: 'input', content: '', inputType: 'number' }] },
+      {
+        id: 'r2',
+        dynamicGroupId: 'g1',
+        cells: [{ id: 'c2', type: 'input', content: '', inputType: 'number' }],
+      },
+    ] as TableRow[];
+    const q = tableQuestion({
+      tableRowsData: rows,
+      dynamicRowConfigs: [{ groupId: 'g1', enabled: true }],
+      sumConstraints: [
+        {
+          id: 'se1', cellIds: [], operator: 'eq', target: 0,
+          leftExpr: { kind: 'question', questionId: 'q2' },
+        },
+      ],
+    } as Partial<Question>);
+    const numQ = {
+      id: 'q2', type: 'text', title: '', required: false, order: 1, inputType: 'number',
+    } as Question;
+    const ctx = { allResponses: { q1: { c2: '70' }, q2: '100' }, allQuestions: [q, numQ] };
+
+    // 미선택 동적 행 c2 의 잔존값만 있다 — 보이는 셀 기준 미접촉이므로 전부 스킵
+    expect(collectNumericIssues(q, { c2: '70' }, ctx)).toHaveLength(0);
+
+    // 보이는 셀(c1)을 실제로 건드리면 검증이 켜져 위반(100 != 0)을 잡는다
+    const touched = { allResponses: { q1: { c1: '5', c2: '70' }, q2: '100' }, allQuestions: [q, numQ] };
+    expect(collectNumericIssues(q, { c1: '5', c2: '70' }, touched)).toHaveLength(1);
   });
 
   it('isHidden 셀은 합계에서도 제외한다', () => {

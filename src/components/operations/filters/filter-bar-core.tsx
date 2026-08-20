@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { useEffect, useState, useTransition } from 'react';
+import { useState, useTransition } from 'react';
 
 import {
   AlertDialog,
@@ -105,14 +105,17 @@ export function FilterBarCore({
   const pushParams = useSearchParamsMutator();
   const searchParams = useSearchParams();
 
-  // 브라우저 뒤로/앞으로 가기 시 동기화.
-  useEffect(() => {
+  // 브라우저 뒤로/앞으로 가기 시 동기화 — effect 대신 렌더 중 조정 패턴.
+  // 참조가 아니라 직렬화 키로 비교해 매 렌더 새 배열 참조에도 reset 되지 않게 한다.
+  const initialClausesKey = JSON.stringify(initialClauses);
+  const [prevInitialClausesKey, setPrevInitialClausesKey] = useState(initialClausesKey);
+  if (prevInitialClausesKey !== initialClausesKey) {
+    setPrevInitialClausesKey(initialClausesKey);
     setFirstSource(initialClauses[0]?.source ?? FILTER_SOURCE.ALL);
     setFirstValue(initialClauses[0]?.value ?? '');
     setExtraClauses(initialClauses.slice(1).map(toExtraRow));
     setAdvancedOpen(initialClauses.length >= 2);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(initialClauses)]);
+  }
 
   const runSearch = () => {
     const cols: string[] = [];

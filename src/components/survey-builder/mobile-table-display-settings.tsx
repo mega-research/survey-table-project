@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 import { Check } from 'lucide-react';
 
@@ -70,9 +70,12 @@ export function MobileTableDisplaySettings({
   const committedText = formatMobileDrilldownRepeatHeaderRange(committedRange);
   const [repeatHeaderDraft, setRepeatHeaderDraft] = useState(committedText);
 
-  useEffect(() => {
+  // 외부 값 변경 시 draft 동기화 — effect 대신 렌더 중 조정 패턴
+  const [prevCommittedText, setPrevCommittedText] = useState(committedText);
+  if (prevCommittedText !== committedText) {
+    setPrevCommittedText(committedText);
     setRepeatHeaderDraft(committedText);
-  }, [committedText]);
+  }
 
   const emit = (next: Partial<MobileTableDisplaySettingsValue>) =>
     onChange({

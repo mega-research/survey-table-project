@@ -169,7 +169,7 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
   const [slugInput, setSlugInput] = useState('');
   const [slugError, setSlugError] = useState('');
   const [showSaveModal, setShowSaveModal] = useState(false);
-  const [initializedSurveyId, setInitializedSurveyId] = useState<string | null>(null);
+  const initializedSurveyIdRef = useRef<string | null>(null);
 
   // 라이브러리 관련 상태
   const [leftSidebarTab, setLeftSidebarTab] = useState<'types' | 'library'>('types');
@@ -178,15 +178,22 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
   const [showImportExportModal, setShowImportExportModal] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
 
-  // 설문 불러오기 - 초기 로드 또는 다른 설문으로 전환 시에만 스토어 세팅
+  // 설문 불러오기 - 초기 로드 또는 다른 설문으로 전환 시에만 로컬 입력 동기화.
+  // setState 는 렌더 중 조정 패턴, 스토어 세팅(외부 시스템)은 아래 effect 가 담당한다.
+  const [initializedInputsSurveyId, setInitializedInputsSurveyId] = useState<string | null>(null);
+  if (survey && initializedInputsSurveyId !== id) {
+    setInitializedInputsSurveyId(id);
+    setTitleInput(survey.title);
+    setSlugInput(survey.slug || '');
+    setSlugError('');
+  }
+
   useEffect(() => {
-    if (survey && initializedSurveyId !== id) {
+    if (survey && initializedSurveyIdRef.current !== id) {
+      initializedSurveyIdRef.current = id;
       useSurveyBuilderStore.getState().setSurvey(survey);
-      setTitleInput(survey.title);
-      setSlugInput(survey.slug || '');
-      setInitializedSurveyId(id);
     }
-  }, [survey, initializedSurveyId, id]);
+  }, [survey, id]);
 
   // 헤더 모달이 updateSurveyTitle로 store.title을 직접 바꿀 수 있어(설문 헤더 설정 등),
   // 툴바 로컬 titleInput이 stale해지지 않도록 store 값으로 동기화한다.
@@ -240,9 +247,8 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
 
   // 슬러그 중복 검사 (Debounce 적용 - 500ms 지연)
   useEffect(() => {
-    // 빈 값이거나 유효하지 않은 값이면 검사하지 않음
+    // 빈 값이면 검사하지 않음 — 에러 초기화는 입력 지점(handleSlugChange/설문 전환 동기화)이 담당
     if (!slugInput) {
-      setSlugError('');
       return;
     }
 

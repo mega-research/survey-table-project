@@ -66,6 +66,7 @@
     "0079_recover_push_era_objects",
     "0080_drop_legacy_email_tables",
     "0081_revoke_anon_grants_schema_wide",
-    "0082_revoke_default_function_execute"
+    "0082_revoke_default_function_execute",
+    "0083_fix_revoke_trigger_procedure_ddl"
   ]
 }
