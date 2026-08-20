@@ -166,6 +166,9 @@ describe('saveDraftResponseIfActive', () => {
   it('재조회에서도 여전히 in_progress 면 원래 에러를 그대로 재throw 한다', async () => {
     arrangeActiveRow();
     returningMock.mockResolvedValueOnce([]);
+    // 0행 사유 판별(judgeDraftZeroRow)의 행 재조회 — in_progress 그대로면 stale/concluded
+    // 어느 쪽도 아니므로 원래 에러를 던진다.
+    executeMock.mockResolvedValueOnce([{ draft_seq: null, status: 'in_progress', deleted: false }]);
     // 재조회해도 여전히 in_progress → 진짜 예외이므로 삼키지 않는다.
     findFirstMock.mockResolvedValueOnce({ id: 'r1', status: 'in_progress', deletedAt: null });
     const { saveDraftResponseIfActive } = await import(
