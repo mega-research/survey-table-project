@@ -19,7 +19,7 @@ export interface SurveyControlState {
   firstTestInviteCode: string | null;
 }
 
-export async function getControlState(surveyId: string): Promise<SurveyControlState> {
+export async function getControlState(surveyId: string): Promise<SurveyControlState | null> {
   // mode와 두 count, 첫 invite를 한 SQL statement snapshot에서 읽어 대상자 생성/삭제나
   // 다른 관리자의 OFF가 query 사이에 끼어드는 혼합 상태를 반환하지 않는다.
   const [row] = await db
@@ -57,7 +57,10 @@ export async function getControlState(surveyId: string): Promise<SurveyControlSt
     .from(surveys)
     .where(and(eq(surveys.id, surveyId), isNull(surveys.deletedAt)))
     .limit(1);
-  if (!row) throw new Error('설문을 찾을 수 없습니다.');
+  // 미저장(로컬 전용)/삭제 설문 — 편집 헤더의 테스트 모드 버튼이 마운트·10초 폴링마다
+  // 호출하므로 throw 하면 500 이 반복 적재된다. 부재는 에러가 아니라 null (클라이언트는
+  // OFF 폴백). testSample 의 동일 계열 수정(2026-08-20)과 같은 규약.
+  if (!row) return null;
   return {
     isPaused: row.isPaused,
     pausedMessage: row.pausedMessage,
@@ -112,5 +115,8 @@ export async function setTestMode(input: {
       testToken: surveys.testToken,
     });
   if (!updated) throw new Error('테스트 모드 저장에 실패했습니다.');
-  return getControlState(input.surveyId);
+  const state = await getControlState(input.surveyId);
+  // 방금 UPDATE 가 성공한 설문 — 부재는 논리적으로 불가하므로 계약(비 null)을 유지한다.
+  if (!state) throw new Error('설문을 찾을 수 없습니다.');
+  return state;
 }

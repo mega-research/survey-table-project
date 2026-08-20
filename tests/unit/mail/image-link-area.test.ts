@@ -103,6 +103,20 @@ describe('expandImageLinkAreas', () => {
     expect(out).not.toContain('<img src="https://r2/x.png"');
   });
 
+  it('data-link-href 가 있으면 가운데 밴드 링크 대상으로 쓴다', () => {
+    const html = `<img src="https://r2/x.png" data-link-href="{{설문 참여 URL}}" data-link-bands="${bands}">`;
+    const out = expandImageLinkAreas(html);
+    expect(out).toContain('<a href="{{설문 참여 URL}}" target="_blank"');
+    expect(out).not.toContain('{{invite_link}}');
+  });
+
+  it('data-link-href 에 외부 URL 을 그대로 쓸 수 있고, 빈 값은 기본값으로 돌아간다', () => {
+    const ext = `<img src="https://r2/x.png" data-link-href="https://ex.com/s?a=1&amp;b=2" data-link-bands="${bands}">`;
+    expect(expandImageLinkAreas(ext)).toContain('<a href="https://ex.com/s?a=1&amp;b=2"');
+    const empty = `<img src="https://r2/x.png" data-link-href="  " data-link-bands="${bands}">`;
+    expect(expandImageLinkAreas(empty)).toContain('<a href="{{invite_link}}"');
+  });
+
   it('top/bottom 없는 밴드는 행을 생성하지 않는다', () => {
     const html = `<img src="https://r2/x.png" data-link-bands="|https://r2/x-mid.png|">`;
     const out = expandImageLinkAreas(html);

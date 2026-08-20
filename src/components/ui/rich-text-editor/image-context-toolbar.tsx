@@ -7,11 +7,14 @@ import { MousePointerClick } from 'lucide-react';
 
 import { ImageLinkAreaModal } from './image-link-area-modal';
 import { ToolBtn } from './toolbar-primitives';
+import type { VariableDef } from './types';
 
 interface Props {
   editor: Editor;
   /** 클릭 영역(이미지맵) 버튼 노출 — 메일 템플릿 전용 */
   enableImageLinkArea: boolean;
+  /** 클릭 영역 링크 대상 선택지 (attrs 컬럼) */
+  variableCatalog: VariableDef[];
 }
 
 const SIZES = [25, 50, 75, 100] as const;
@@ -38,7 +41,7 @@ function readWidthPct(wrapperStyle: string, containerStyle: string): number | nu
   return tryMatch(wrapperStyle) ?? tryMatch(containerStyle);
 }
 
-export function ImageContextToolbar({ editor, enableImageLinkArea }: Props) {
+export function ImageContextToolbar({ editor, enableImageLinkArea, variableCatalog }: Props) {
   const [linkAreaOpen, setLinkAreaOpen] = useState(false);
   const s = useEditorState({
     editor,
@@ -103,7 +106,11 @@ export function ImageContextToolbar({ editor, enableImageLinkArea }: Props) {
         </>
       )}
       {linkAreaOpen && (
-        <ImageLinkAreaModal editor={editor} onClose={() => setLinkAreaOpen(false)} />
+        <ImageLinkAreaModal
+          editor={editor}
+          variableCatalog={variableCatalog}
+          onClose={() => setLinkAreaOpen(false)}
+        />
       )}
     </div>
   );

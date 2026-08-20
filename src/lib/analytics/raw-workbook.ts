@@ -7,9 +7,11 @@ import {
   buildDataRow,
   generateSPSSColumns,
 } from '@/lib/analytics/spss-excel-export';
-import { type Platform, formatPlatformKo } from '@/lib/operations/parse-ua';
 import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts';
+import { type Platform, formatPlatformKo } from '@/lib/operations/parse-ua';
 import { formatTotalTime, mapStatusPill } from '@/lib/operations/profiles';
+import { buildCodebookVariableMetadata } from '@/lib/spss/export-metadata';
+import { buildMrsetNameMap } from '@/lib/spss/mrsets-syntax';
 import { buildInviteUrl } from '@/lib/survey-url';
 import { Question, SurveySubmission } from '@/types/survey';
 
@@ -65,10 +67,7 @@ function isAnsweredValue(value: unknown): boolean {
  * 폴백: 응답이 전혀 없으면 진행 위치(currentStepId) 페이지 라벨(도달 위치라도 표시).
  * 둘 다 없으면 공백.
  */
-export function resolveLastEnteredLabel(
-  row: RawExportResponseRow,
-  ctx: RawExportContext,
-): string {
+export function resolveLastEnteredLabel(row: RawExportResponseRow, ctx: RawExportContext): string {
   let best: { order: number; label: string } | null = null;
   for (const [questionId, value] of Object.entries(row.questionResponses)) {
     if (!isAnsweredValue(value)) continue;
@@ -96,10 +95,21 @@ interface RawMetaColumn {
 const RAW_META_COLUMNS: RawMetaColumn[] = [
   // sha256 전체는 64자 — 동일값 식별 목적에는 앞 16자(64비트)로 충분하고 열 너비를 지킨다
   { header: 'IP 해시', value: (row) => (row.ipHash ? row.ipHash.slice(0, 16) : '') },
-  { header: RESID_DEFAULT_LABEL, enabled: (ctx) => ctx.hasContacts, value: (row) => row.resid ?? '' },
+  {
+    header: RESID_DEFAULT_LABEL,
+    enabled: (ctx) => ctx.hasContacts,
+    value: (row) => row.resid ?? '',
+  },
   { header: '순번', value: (_row, seq) => seq },
-  { header: '조사 대상 그룹', enabled: (ctx) => ctx.hasContactGroups, value: (row) => row.groupValue ?? '공개링크' },
-  { header: '개별 URL', value: (row, _seq, ctx) => (row.inviteCode ? buildInviteUrl(row.inviteCode, ctx.appUrl) : '') },
+  {
+    header: '조사 대상 그룹',
+    enabled: (ctx) => ctx.hasContactGroups,
+    value: (row) => row.groupValue ?? '공개링크',
+  },
+  {
+    header: '개별 URL',
+    value: (row, _seq, ctx) => (row.inviteCode ? buildInviteUrl(row.inviteCode, ctx.appUrl) : ''),
+  },
   { header: '상태', value: (row) => mapStatusPill({ status: row.status }).label },
   { header: '마지막 입력 문항', value: (row, _seq, ctx) => resolveLastEnteredLabel(row, ctx) },
   { header: '시작일시', value: (row) => formatExcelDateTime(row.startedAt) },
@@ -208,7 +218,10 @@ export function generateRawDataWorkbook(
   let start = 0;
   while (start < columns.length) {
     let end = start;
-    while (end + 1 < columns.length && columns[end + 1]?.questionId === columns[start]?.questionId) {
+    while (
+      end + 1 < columns.length &&
+      columns[end + 1]?.questionId === columns[start]?.questionId
+    ) {
       end++;
     }
     if (end > start) ws2.mergeCells(1, start + metaCount + 1, 1, end + metaCount + 1);
@@ -221,21 +234,47 @@ export function generateRawDataWorkbook(
   });
 
   // 시트 3: 코딩북
-  const ws3 = workbook.addWorksheet('코딩북');
-  ws3.addRow(['변수번호', 'SPSS 변수명', '질문 제목', '셀라벨', '값 라벨']);
+  appendCodebookSheet(workbook, columns, sortedQuestions);
+
+  return workbook;
+}
+
+/** 코딩북 시트를 워크북에 추가한다 — Raw/Split 워크북 공용. */
+export function appendCodebookSheet(
+  workbook: ExcelJS.Workbook,
+  columns: SPSSExportColumn[],
+  questions: Question[],
+): void {
+  const questionMap = new Map(questions.map((q) => [q.id, q]));
+  const mrsetNames = buildMrsetNameMap(columns, questions);
+  const ws = workbook.addWorksheet('코딩북');
+  ws.addRow([
+    '변수번호',
+    'SPSS 변수명',
+    '질문 제목',
+    '셀라벨',
+    '값 라벨',
+    '변수 유형',
+    '측정 수준',
+    '표시 형식',
+    '다중응답 세트',
+  ]);
   columns.forEach((c, i) => {
-    ws3.addRow([
+    const metadata = buildCodebookVariableMetadata(c, questionMap.get(c.questionId));
+    ws.addRow([
       i + 1,
       c.spssVarName,
       c.questionText,
       c.cellExportLabel ?? '',
       buildCodebookValueLabel(c, questionMap),
+      metadata.variableType,
+      metadata.measure,
+      metadata.displayFormat,
+      mrsetNames.get(c.spssVarName) ?? '',
     ]);
   });
-  styleHeaderRows(ws3, [1], 5);
-  autoFitRawColumns(ws3, 5);
-
-  return workbook;
+  styleHeaderRows(ws, [1], 9);
+  autoFitRawColumns(ws, 9);
 }
 
 // ── Raw/Split 워크북 공통 스타일·레이아웃 헬퍼 ──
@@ -266,11 +305,7 @@ export function clampRawWidth(width: number): number {
 }
 
 /** 지정한 행들을 헤더 스타일(파란 배경 + 흰 굵은 글씨 + 테두리 + 가운데 정렬)로 칠한다. */
-export function styleHeaderRows(
-  ws: ExcelJS.Worksheet,
-  rowNums: number[],
-  colCount: number,
-): void {
+export function styleHeaderRows(ws: ExcelJS.Worksheet, rowNums: number[], colCount: number): void {
   for (const rowNum of rowNums) {
     const row = ws.getRow(rowNum);
     for (let c = 1; c <= colCount; c++) {

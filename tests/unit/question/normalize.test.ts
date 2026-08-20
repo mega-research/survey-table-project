@@ -277,6 +277,23 @@ describe('normalizeQuestion - strict 모드 (strip 활성화 목적지)', () => 
     expect(parsed['dynamicRowConfigs']).toEqual([]);
   });
 
+  it('숫자 단답형의 numberFormat을 strict 정규화에서도 보존한다', () => {
+    const parsed = normalizeQuestion(
+      {
+        id: 'numeric-text',
+        type: 'text',
+        title: '금액',
+        required: false,
+        order: 1,
+        inputType: 'number',
+        numberFormat: { thousandSeparator: true, decimalPlaces: 2 },
+      },
+      'strict',
+    ) as unknown as Record<string, unknown>;
+
+    expect(parsed['numberFormat']).toEqual({ thousandSeparator: true, decimalPlaces: 2 });
+  });
+
   it('과거 table snapshot의 mobileOriginalTable 키를 strict 모드에서도 보존한다', () => {
     const parsed = normalizeQuestion(
       { ...GEN_NEW_TABLE, mobileOriginalTable: true },

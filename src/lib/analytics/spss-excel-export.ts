@@ -21,29 +21,34 @@ import {
   transformText,
 } from '@/lib/spss/data-transformer';
 import type {
+  NumberFormat,
   Question,
   QuestionOption,
   SurveySubmission,
   TableCell,
   TableRow,
 } from '@/types/survey';
+import {
+  DEFAULT_GROUP_KEY,
+  collectChoiceGroups,
+  collectRankingGroups,
+  isGroupedChoiceQuestion,
+  isGroupedRankingQuestion,
+} from '@/utils/choice-group-helpers';
 import { resolveChoiceOptions } from '@/utils/choice-source';
+import { toSingleLineLabel } from '@/utils/label-text';
 import { getOtherOptionCode } from '@/utils/option-code-generator';
-import { hasOtherRankingCell, resolveRankingOptions, resolveRankingOptionsFromCells } from '@/utils/ranking-source';
+import {
+  hasOtherRankingCell,
+  resolveRankingOptions,
+  resolveRankingOptionsFromCells,
+} from '@/utils/ranking-source';
 import { buildCheckboxItemVarName, buildOptionTextVarName } from '@/utils/spss-var-name';
 import {
   buildTableCellVarName,
   generateExportLabel,
   resolveRankVarName,
 } from '@/utils/table-cell-code-generator';
-import {
-  collectChoiceGroups,
-  collectRankingGroups,
-  DEFAULT_GROUP_KEY,
-  isGroupedChoiceQuestion,
-  isGroupedRankingQuestion,
-} from '@/utils/choice-group-helpers';
-import { toSingleLineLabel } from '@/utils/label-text';
 
 export interface SPSSExportColumn {
   spssVarName: string;
@@ -97,6 +102,8 @@ export interface SPSSExportColumn {
   cellExportLabel?: string;
   // 'text' 컬럼 전용: 숫자 단답형(question.inputType==='number') 이면 Numeric 변수로 처리
   numericText?: boolean;
+  // 숫자 단답형·테이블 input/calc 공용 표시 설정. SAV/코딩북/SPS가 함께 소비한다.
+  numberFormat?: NumberFormat;
   // === 'choice-group' 전용: radio choiceGroups 기반 그룹별 단일선택 변수 ===
   // 이 변수가 담당하는 그룹의 groupKey
   // (ranking-rank / ranking-other 에서도 재사용: ranking 그룹 키)
@@ -112,6 +119,9 @@ export interface SPSSExportColumn {
   choiceGroupMemberCellId?: string;
   // 이 보기 선택 시 저장할 counted 숫자값 (spssNumericCode 또는 그룹 내 1-based 폴백)
   choiceGroupMemberCode?: number;
+  // 그룹 접두 없는 순수 보기 라벨 — sps VALUE LABELS 카테고리 라벨용
+  // (optionLabel 은 변수 라벨용이라 "그룹라벨 - 보기라벨" 형식)
+  choiceGroupMemberLabel?: string;
   // === 'ranking-rank' / 'ranking-other' 전용 ===
   // 질문의 ranking 그룹이 1개뿐일 때 true.
   // legacy flat 응답(rnk1 이식 후 미마이그레이션 응답)을 그 그룹으로 해석하는 폴백 허용 판정용.
@@ -164,7 +174,8 @@ export function generateSPSSColumns(questions: QuestionVariant[]): SPSSExportCol
             cellValueMap[cell.id] = code;
             valueLabels.push({
               value: code,
-              label: (cell.choiceLabel ?? '').trim() || (cell.content ?? '').trim() || '(라벨 없음)',
+              label:
+                (cell.choiceLabel ?? '').trim() || (cell.content ?? '').trim() || '(라벨 없음)',
             });
           });
           const isDefault = group.groupKey === DEFAULT_GROUP_KEY;
@@ -184,7 +195,8 @@ export function generateSPSSColumns(questions: QuestionVariant[]): SPSSExportCol
           // optionId=cell.id 를 그대로 사용해 기존 option-text 추출 case 가 동작한다.
           group.cells.forEach((cell, idx) => {
             if (!cell.allowTextInput) return;
-            const varNumber = cell.spssNumericCode != null ? String(cell.spssNumericCode) : String(idx + 1);
+            const varNumber =
+              cell.spssNumericCode != null ? String(cell.spssNumericCode) : String(idx + 1);
             columns.push({
               spssVarName: buildOptionTextVarName(groupVarName, varNumber),
               questionText: q.title,
@@ -198,7 +210,7 @@ export function generateSPSSColumns(questions: QuestionVariant[]): SPSSExportCol
           // checkbox 그룹 → 멤버 셀별 'choice-group-item' (counted value 방식)
           const isDefault = group.groupKey === DEFAULT_GROUP_KEY;
           // 그룹 라벨: 명시 그룹이면 group.label, default 그룹이면 q.title 폴백
-          const groupLabel = isDefault ? q.title : (group.label || q.title);
+          const groupLabel = isDefault ? q.title : group.label || q.title;
           // if (!q.questionCode) continue 가드가 위에 있어 항상 string 이지만 타입을 명확히 한다
           const qCode = q.questionCode!;
           group.cells.forEach((cell, idx) => {
@@ -209,7 +221,8 @@ export function generateSPSSColumns(questions: QuestionVariant[]): SPSSExportCol
               ? buildCheckboxItemVarName(qCode, undefined, idx)
               : `${qCode}_${group.groupKey}_${idx + 1}`;
             // 보기 라벨: choiceLabel > content > '(라벨 없음)'
-            const optLabel = (cell.choiceLabel ?? '').trim() || (cell.content ?? '').trim() || '(라벨 없음)';
+            const optLabel =
+              (cell.choiceLabel ?? '').trim() || (cell.content ?? '').trim() || '(라벨 없음)';
             columns.push({
               spssVarName: varName,
               questionText: q.title,
@@ -220,6 +233,7 @@ export function generateSPSSColumns(questions: QuestionVariant[]): SPSSExportCol
               choiceGroupKey: group.groupKey,
               choiceGroupMemberCellId: cell.id,
               choiceGroupMemberCode: code,
+              choiceGroupMemberLabel: optLabel,
               optionIndex: idx,
             });
             // allowTextInput 사이드카: base 는 그룹 변수명 접두(질문코드[_groupKey]).
@@ -326,9 +340,8 @@ export function generateSPSSColumns(questions: QuestionVariant[]): SPSSExportCol
           const groupOptions = resolveRankingOptionsFromCells(g.cells);
           const requested = Math.max(1, q.rankingConfig?.positions ?? 3);
           const positions = Math.min(requested, Math.max(groupOptions.length, 1));
-          const prefix = g.groupKey === DEFAULT_GROUP_KEY
-            ? q.questionCode
-            : `${q.questionCode}_${g.groupKey}`;
+          const prefix =
+            g.groupKey === DEFAULT_GROUP_KEY ? q.questionCode : `${q.questionCode}_${g.groupKey}`;
           // _etc 는 기타 셀이 속한 그룹에만. 질문 레벨 allowOtherOption synthetic 은 grouped 에서 비활성(렌더러와 동일 규칙).
           const needsOther = g.cells.some((c) => c.isOtherRankingCell === true);
           // _text 는 그룹 멤버 옵션 중 allowTextInput 이 하나라도 있으면 (isOtherRankingCell 과 독립)
@@ -433,7 +446,8 @@ export function generateSPSSColumns(questions: QuestionVariant[]): SPSSExportCol
         }
       } else {
         for (const tRow of q.tableRowsData) {
-          for (let colIdx = 0; colIdx < q.tableColumns.length; colIdx++) cellCoords.push({ tRow, colIdx });
+          for (let colIdx = 0; colIdx < q.tableColumns.length; colIdx++)
+            cellCoords.push({ tRow, colIdx });
         }
       }
       for (const { tRow, colIdx } of cellCoords) {
@@ -444,15 +458,15 @@ export function generateSPSSColumns(questions: QuestionVariant[]): SPSSExportCol
         // radioGroup 그룹에 속한 셀은 스킵 (그룹 변수로 이미 emit됨)
         if (groupedCellIds.has(cell.id)) continue;
         // 입력 불가능한 셀(text, image, video, ranking_opt)은 건너뛰기
-        if (!['checkbox', 'radio', 'select', 'input', 'ranking', 'calc'].includes(cell.type)) continue;
+        if (!['checkbox', 'radio', 'select', 'input', 'ranking', 'calc'].includes(cell.type))
+          continue;
         // 셀코드가 의도적으로 비어있으면 내보내기에서 제외 (표시용 셀)
         if (cell.isCustomCellCode === true && !cell.cellCode) continue;
 
         // 변수명: cellCode > questionCode_rowCode_colCode (폴백)
         // exportLabel은 한국어가 포함될 수 있어 SPSS 변수명으로 부적합
         const varName =
-          cell.cellCode ||
-          buildTableCellVarName(q, tRow, colIdx, q.tableColumns, q.tableRowsData!);
+          cell.cellCode || buildTableCellVarName(q, tRow, colIdx, q.tableColumns, q.tableRowsData!);
 
         // exportLabel 미저장 셀은 questionCode_열라벨_행라벨 자동 라벨로 폴백.
         // (빌더는 placeholder로 같은 자동값을 표시하므로 export도 동일하게 맞춘다.)
@@ -544,6 +558,7 @@ export function generateSPSSColumns(questions: QuestionVariant[]): SPSSExportCol
               cellOptions: cell.checkboxOptions,
               ...(cell.spssVarType !== undefined ? { cellSpssVarType: cell.spssVarType } : {}),
               ...(cell.spssMeasure !== undefined ? { cellSpssMeasure: cell.spssMeasure } : {}),
+              ...(cell.numberFormat !== undefined ? { numberFormat: cell.numberFormat } : {}),
               ...(autoExportLabel !== undefined ? { cellExportLabel: autoExportLabel } : {}),
             });
             // allowTextInput 옵션마다 STRING 사이드카 텍스트 변수 생성
@@ -579,6 +594,7 @@ export function generateSPSSColumns(questions: QuestionVariant[]): SPSSExportCol
             tableCellType: cell.type,
             ...(cell.spssVarType !== undefined ? { cellSpssVarType: cell.spssVarType } : {}),
             ...(cell.spssMeasure !== undefined ? { cellSpssMeasure: cell.spssMeasure } : {}),
+            ...(cell.numberFormat !== undefined ? { numberFormat: cell.numberFormat } : {}),
             ...(autoExportLabel !== undefined ? { cellExportLabel: autoExportLabel } : {}),
             // radio/select 셀의 응답값을 spssNumericCode로 매핑하기 위한 옵션.
             // RadioOption은 QuestionOption과 구조적으로 호환되어 그대로 widening.
@@ -633,6 +649,9 @@ export function generateSPSSColumns(questions: QuestionVariant[]): SPSSExportCol
         questionId: q.id,
         type: q.type === 'text' || q.type === 'textarea' ? 'text' : 'multiselect',
         numericText: q.type === 'text' && q.inputType === 'number',
+        ...(q.type === 'text' && q.numberFormat !== undefined && q.numberFormat !== null
+          ? { numberFormat: q.numberFormat }
+          : {}),
       });
     }
   }
@@ -741,7 +760,7 @@ function collectAndEmitRadioGroupColumns(q: Question, columns: SPSSExportColumn[
 
       members.forEach((m, idx) => {
         const opt = m.cell.radioOptions?.[0];
-        const value = assignUniqueValue(opt?.spssNumericCode ?? (idx + 1));
+        const value = assignUniqueValue(opt?.spssNumericCode ?? idx + 1);
         cellValueMap[m.cell.id] = value;
         valueLabels[value] = opt?.label || q.tableColumns?.[m.colIdx]?.label || '';
       });
@@ -756,7 +775,7 @@ function collectAndEmitRadioGroupColumns(q: Question, columns: SPSSExportColumn[
 
       members.forEach((m, idx) => {
         const opt = m.cell.radioOptions?.[0];
-        const value = assignUniqueValue(opt?.spssNumericCode ?? (idx + 1));
+        const value = assignUniqueValue(opt?.spssNumericCode ?? idx + 1);
         cellValueMap[m.cell.id] = value;
         valueLabels[value] = opt?.label || m.row.label;
       });
@@ -768,9 +787,10 @@ function collectAndEmitRadioGroupColumns(q: Question, columns: SPSSExportColumn[
 
       members.forEach((m, idx) => {
         const opt = m.cell.radioOptions?.[0];
-        const value = assignUniqueValue(opt?.spssNumericCode ?? (idx + 1));
+        const value = assignUniqueValue(opt?.spssNumericCode ?? idx + 1);
         cellValueMap[m.cell.id] = value;
-        valueLabels[value] = opt?.label || `${m.row.label} - ${q.tableColumns?.[m.colIdx]?.label ?? ''}`;
+        valueLabels[value] =
+          opt?.label || `${m.row.label} - ${q.tableColumns?.[m.colIdx]?.label ?? ''}`;
       });
     }
 
@@ -786,8 +806,12 @@ function collectAndEmitRadioGroupColumns(q: Question, columns: SPSSExportColumn[
       // 그룹 멤버들의 셀 단위 SPSS 오버라이드를 그룹 컬럼에 전파.
       // 사용자가 5점 척도 셀에 spssMeasure='Continuous'를 명시한 경우 등을 보존.
       // 멤버들이 서로 다른 값을 가질 가능성은 낮으므로 첫 멤버의 값을 채택.
-      ...(firstMember.cell.spssVarType !== undefined ? { cellSpssVarType: firstMember.cell.spssVarType } : {}),
-      ...(firstMember.cell.spssMeasure !== undefined ? { cellSpssMeasure: firstMember.cell.spssMeasure } : {}),
+      ...(firstMember.cell.spssVarType !== undefined
+        ? { cellSpssVarType: firstMember.cell.spssVarType }
+        : {}),
+      ...(firstMember.cell.spssMeasure !== undefined
+        ? { cellSpssMeasure: firstMember.cell.spssMeasure }
+        : {}),
       // radio-group cellExportLabel: 저장값 우선, 없으면 questionCode_열_행 자동 라벨로 폴백 (split/raw export 일관성)
       ...(() => {
         const cellExportLabel = buildAutoTableCellExportLabel(
@@ -853,7 +877,7 @@ export function buildDataRows(
  * (rnk1 이식 후 미마이그레이션 기존 응답 호환). 그룹 2개 이상 + flat 은 모호하므로 null.
  */
 function resolveGroupedRankingValue(col: SPSSExportColumn, rawValue: unknown): unknown {
-  if (!col.choiceGroupKey) return rawValue;          // 비그룹 컬럼: 기존 경로 그대로
+  if (!col.choiceGroupKey) return rawValue; // 비그룹 컬럼: 기존 경로 그대로
   if (Array.isArray(rawValue)) return col.soleRankingGroup ? rawValue : null;
   if (rawValue && typeof rawValue === 'object') {
     return (rawValue as Record<string, unknown>)[col.choiceGroupKey];
@@ -901,9 +925,7 @@ export function buildDataRow(
         return transformSingleChoice(
           question,
           rawValue as
-            | string
-            | { selectedValue: string; otherValue?: string; hasOther: true }
-            | null,
+            string | { selectedValue: string; otherValue?: string; hasOther: true } | null,
         );
 
       case 'checkbox-item': {
@@ -978,7 +1000,8 @@ export function buildDataRow(
       case 'choice-group': {
         // rawValue는 그룹별 응답 맵: { groupKey: selectedCellId, ... }
         // 해당 그룹의 선택 cellId를 꺼내 cellValueMap으로 숫자코드로 변환.
-        if (rawValue == null || typeof rawValue !== 'object' || Array.isArray(rawValue)) return null;
+        if (rawValue == null || typeof rawValue !== 'object' || Array.isArray(rawValue))
+          return null;
         const groupAnswer = rawValue as Record<string, string>;
         const cellId = groupAnswer[col.choiceGroupKey ?? ''];
         if (!cellId) return null;
@@ -988,12 +1011,15 @@ export function buildDataRow(
       case 'choice-group-item': {
         // rawValue는 그룹별 응답 맵: { groupKey: string[] (선택 cellId 목록), ... }
         // 이 보기의 그룹 응답 배열에 해당 cellId 가 포함되면 counted 코드, 아니면 null.
-        if (rawValue == null || typeof rawValue !== 'object' || Array.isArray(rawValue)) return null;
+        if (rawValue == null || typeof rawValue !== 'object' || Array.isArray(rawValue))
+          return null;
         const groupAnswer = rawValue as Record<string, unknown>;
         const groupVal = groupAnswer[col.choiceGroupKey ?? ''];
         if (!Array.isArray(groupVal)) return null;
         const selected = groupVal as string[];
-        return selected.includes(col.choiceGroupMemberCellId ?? '') ? (col.choiceGroupMemberCode ?? null) : null;
+        return selected.includes(col.choiceGroupMemberCellId ?? '')
+          ? (col.choiceGroupMemberCode ?? null)
+          : null;
       }
 
       case 'radio-group': {
@@ -1018,7 +1044,10 @@ export function buildDataRow(
         if (col.rankIndex == null) return null;
         // col.cellOptions 에 Case 1/2 해결된 옵션 리스트가 있음 (generateSPSSColumns에서 주입)
         return transformRankingWithOptions(
-          col.cellOptions, resolveGroupedRankingValue(col, rawValue), col.rankIndex);
+          col.cellOptions,
+          resolveGroupedRankingValue(col, rawValue),
+          col.rankIndex,
+        );
 
       case 'ranking-other':
         if (col.rankIndex == null) return null;
@@ -1027,7 +1056,10 @@ export function buildDataRow(
       case 'ranking-option-text':
         if (col.rankIndex == null) return null;
         return transformRankingOptionText(
-          col.cellOptions, resolveGroupedRankingValue(col, rawValue), col.rankIndex);
+          col.cellOptions,
+          resolveGroupedRankingValue(col, rawValue),
+          col.rankIndex,
+        );
 
       case 'table-cell-ranking': {
         if (col.rankIndex == null || !col.tableCellId) return null;

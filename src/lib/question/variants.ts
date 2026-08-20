@@ -1,8 +1,4 @@
-import type {
-  ChoiceGroupType,
-  EmbeddedTableType,
-  OptionListType,
-} from '@/types/question-types';
+import type { ChoiceGroupType, EmbeddedTableType, OptionListType } from '@/types/question-types';
 import type { Question } from '@/types/survey';
 
 /**
@@ -42,14 +38,22 @@ type QuestionBase = Pick<
 /** 내장 테이블 capability — radio/checkbox/ranking/table 4유형 공유. */
 type EmbeddedTableFields = Pick<
   Question,
-  'tableTitle' | 'tableColumns' | 'tableRowsData' | 'tableHeaderGrid' | 'hideColumnLabels' | 'exportCellOrder'
+  | 'tableTitle'
+  | 'tableColumns'
+  | 'tableRowsData'
+  | 'tableHeaderGrid'
+  | 'hideColumnLabels'
+  | 'exportCellOrder'
 >;
 
 /** 테이블 레벨 옵션 그룹 — radio/checkbox/ranking 전용. */
 type ChoiceGroupFields = Pick<Question, 'choiceGroups'>;
 
 /** question.options 옵션 리스트 — radio/checkbox/select/ranking(manual). */
-type OptionListFields = Pick<Question, 'options' | 'optionsColumns' | 'mobileOptionsColumns' | 'optionsAlign' | 'allowOtherOption'>;
+type OptionListFields = Pick<
+  Question,
+  'options' | 'optionsColumns' | 'mobileOptionsColumns' | 'optionsAlign' | 'allowOtherOption'
+>;
 
 /** 모바일 테이블 표시 capability — radio/checkbox/table 3유형 전용. */
 type MobileTableDisplayFields = Pick<
@@ -62,8 +66,12 @@ type MobileTableDisplayFields = Pick<
 >;
 
 export interface TextQuestion
-  extends QuestionBase,
-    Pick<Question, 'placeholder' | 'defaultValueTemplate' | 'inputType' | 'emptyDefault'> {
+  extends
+    QuestionBase,
+    Pick<
+      Question,
+      'placeholder' | 'defaultValueTemplate' | 'inputType' | 'emptyDefault' | 'numberFormat'
+    > {
   type: 'text';
 }
 
@@ -72,7 +80,8 @@ export interface TextareaQuestion extends QuestionBase {
 }
 
 export interface RadioQuestion
-  extends QuestionBase,
+  extends
+    QuestionBase,
     OptionListFields,
     EmbeddedTableFields,
     MobileTableDisplayFields,
@@ -81,7 +90,8 @@ export interface RadioQuestion
 }
 
 export interface CheckboxQuestion
-  extends QuestionBase,
+  extends
+    QuestionBase,
     OptionListFields,
     EmbeddedTableFields,
     MobileTableDisplayFields,
@@ -91,8 +101,7 @@ export interface CheckboxQuestion
 }
 
 export interface SelectQuestion
-  extends QuestionBase,
-    Pick<Question, 'options' | 'allowOtherOption'> {
+  extends QuestionBase, Pick<Question, 'options' | 'allowOtherOption'> {
   type: 'select';
 }
 
@@ -101,7 +110,8 @@ export interface MultiselectQuestion extends QuestionBase, Pick<Question, 'selec
 }
 
 export interface RankingQuestion
-  extends QuestionBase,
+  extends
+    QuestionBase,
     OptionListFields,
     EmbeddedTableFields,
     ChoiceGroupFields,
@@ -110,7 +120,8 @@ export interface RankingQuestion
 }
 
 export interface TableQuestion
-  extends QuestionBase,
+  extends
+    QuestionBase,
     EmbeddedTableFields,
     MobileTableDisplayFields,
     Pick<Question, 'tableValidationRules' | 'dynamicRowConfigs'> {
@@ -118,8 +129,7 @@ export interface TableQuestion
 }
 
 export interface NoticeQuestion
-  extends QuestionBase,
-    Pick<Question, 'noticeContent' | 'requiresAcknowledgment'> {
+  extends QuestionBase, Pick<Question, 'noticeContent' | 'requiresAcknowledgment'> {
   type: 'notice';
 }
 
@@ -135,10 +145,12 @@ export type QuestionVariant =
   | NoticeQuestion;
 
 /** question.options 를 옵션 소스로 쓰는 유형 (OPTION_LIST_TYPES 와 정렬). */
-export type OptionListQuestion = RadioQuestion | CheckboxQuestion | SelectQuestion | RankingQuestion;
+export type OptionListQuestion =
+  RadioQuestion | CheckboxQuestion | SelectQuestion | RankingQuestion;
 
 /** 내장 테이블 capability 보유 유형 (EMBEDDED_TABLE_TYPES 와 정렬). */
-export type EmbeddedTableQuestion = RadioQuestion | CheckboxQuestion | RankingQuestion | TableQuestion;
+export type EmbeddedTableQuestion =
+  RadioQuestion | CheckboxQuestion | RankingQuestion | TableQuestion;
 
 /**
  * choiceGroups 를 소비할 수 있는 유형 (CHOICE_GROUP_TYPES 와 정렬) — capability 멤버십.

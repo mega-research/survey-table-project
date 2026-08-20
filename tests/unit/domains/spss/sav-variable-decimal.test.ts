@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest';
 import { VariableMeasure, VariableType } from 'sav-writer';
+import { describe, expect, it } from 'vitest';
 
 import type { SPSSExportColumn } from '@/lib/analytics/spss-excel-export';
+import { generateSPSSColumns } from '@/lib/analytics/spss-excel-export';
 import { toSavVariable } from '@/lib/spss/sav-builder';
 import type { Question } from '@/types/survey';
 
@@ -41,6 +42,21 @@ describe('toSavVariable decimal', () => {
     expect(v.decimal).toBeGreaterThan(0);
   });
 
+  it('숫자 단답형은 질문의 numberFormat 소수 자릿수와 넓은 표시 폭을 사용한다', () => {
+    const question = makeQuestion({
+      type: 'text',
+      questionCode: 'Q1',
+      inputType: 'number',
+      numberFormat: { thousandSeparator: true, decimalPlaces: 3 },
+    });
+    const col = generateSPSSColumns([question])[0]!;
+    const v = toSavVariable(col, question, 0, 'Q1');
+
+    expect(v.width).toBe(20);
+    expect(v.columns).toBe(20);
+    expect(v.decimal).toBe(3);
+  });
+
   it('문자 단답형 text 변수는 decimal:0 을 유지한다', () => {
     const col = makeCol({ type: 'text', numericText: false });
     const v = toSavVariable(col, makeQuestion({ type: 'text' }), 16, 'Q1');
@@ -63,5 +79,38 @@ describe('toSavVariable decimal', () => {
     // sav-writer 는 numeric width 가 0 이면 8 로 정규화하고 width <= decimal 이면 throw 한다.
     const normalizedWidth = v.width || 8;
     expect(normalizedWidth).toBeGreaterThan(v.decimal);
+  });
+
+  it('Numeric + Continuous 테이블 input은 numberFormat 소수 자릿수와 넓은 F 표시 폭을 SAV에 기록한다', () => {
+    const question = makeQuestion({
+      type: 'table',
+      questionCode: 'Q3',
+      tableColumns: [{ id: 'c1', label: '매출액', columnCode: 'sales' }],
+      tableRowsData: [
+        {
+          id: 'r1',
+          label: '2025년',
+          rowCode: 'y2025',
+          cells: [
+            {
+              id: 'amount',
+              type: 'input',
+              content: '',
+              spssVarType: 'Numeric',
+              spssMeasure: 'Continuous',
+              numberFormat: { thousandSeparator: true, decimalPlaces: 2 },
+            },
+          ],
+        },
+      ],
+    });
+    const col = generateSPSSColumns([question])[0]!;
+    const v = toSavVariable(col, question, 0, 'Q3SALE');
+
+    expect(v.type).toBe(VariableType.Numeric);
+    expect(v.measure).toBe(VariableMeasure.Continuous);
+    expect(v.width).toBe(20);
+    expect(v.columns).toBe(20);
+    expect(v.decimal).toBe(2);
   });
 });

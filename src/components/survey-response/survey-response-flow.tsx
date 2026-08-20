@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 
+import { useSyncLatestRef } from '@/hooks/use-latest-ref';
+
 import { useRouter } from 'next/navigation';
 
 import { AlertCircle, ArrowLeft, ArrowRight } from 'lucide-react';
@@ -570,7 +572,10 @@ function SurveyResponseFlowActive({
   // 운영 콘솔 진척 저장용 visible 진척 최신값. 콜백/effect 에서 stale 없이 참조하기 위해
   // ref 로 미러링한다 (deps/exhaustive-deps 영향 없음). 응답 페이지 헤더 26/28 과 동일 값.
   const visibleProgressRef = useRef({ index: 0, total: 0 });
-  visibleProgressRef.current = { index: currentVisibleStepNumber, total: totalVisibleStepCount };
+  useSyncLatestRef(visibleProgressRef, {
+    index: currentVisibleStepNumber,
+    total: totalVisibleStepCount,
+  });
 
   const findNextDisplayableStepIndex = useCallback(
     (startIndex: number): number => {
@@ -611,19 +616,15 @@ function SurveyResponseFlowActive({
     window.scrollTo({ top: 0, behavior: 'instant' });
   }, [currentStepIndex]);
 
-  // 현재 step이 전부 숨겨지면 다음 표시 가능 step으로 자동 이동
-  useEffect(() => {
-    if (!loadedSurvey) return;
-    if (!currentStep) return;
-
-    if (currentStepQuestions.length > 0) return;
-
+  // 현재 step이 전부 숨겨지면 다음 표시 가능 step으로 자동 이동.
+  // effect 대신 렌더 중 조정 — 커밋 후 이동하면 빈 스텝이 한 프레임 노출된다.
+  // 인덱스가 단조 증가(currentStepIndex + 1 이후 탐색)하므로 재렌더 루프는 유한하다.
+  if (loadedSurvey && currentStep && currentStepQuestions.length === 0) {
     const nextDisplayable = findNextDisplayableStepIndex(currentStepIndex + 1);
     if (nextDisplayable !== -1) {
       setCurrentStepIndex(nextDisplayable);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadedSurvey, currentStepIndex, currentStepQuestions.length]);
+  }
 
   // 운영 현황 콘솔(T5/세그먼트): 스텝 전환 추적 + Page Visibility 세그먼트.
   // 두 effect 를 useResponseTelemetry 로 추출 (등록 순서·deps 동일, 상태 미소유).
@@ -876,7 +877,8 @@ function SurveyResponseFlowActive({
   }, [refetchSnapshot, setResponses]);
 
   // isCreatingResponse 는 훅 내부 전용(첫 답변 INSERT 가드)이라 컴포넌트는 구조분해하지 않는다.
-  const { handleResponse, flushPendingAnswers, handleSubmit } = useResponseLifecycle({
+  const { handleResponse, flushPendingAnswersInBackground, waitForResponseId, handleSubmit } =
+    useResponseLifecycle({
     isAdminEdit,
     isPreview,
     isCompleted,
@@ -1045,40 +1047,53 @@ function SurveyResponseFlowActive({
       null;
     if (
       !quotaCheckedRef.current &&
-      currentResponseId &&
       allQuotaQuestionsAnswered([...quotaGateIds], responses)
     ) {
       // 재진입/중복 발동 방지 — await 완료 전에 먼저 플래그를 세워 재클릭 시에도
       // 서버 확인은 최대 1회만 시도된다.
       quotaCheckedRef.current = true;
-      quotaPromise = client.quota
-        .check({
-          responseId: currentResponseId,
-          surveyId: loadedSurvey?.id ?? '',
-          answers: responses,
-        })
-        .catch((err) => {
+      quotaPromise = (async () => {
+        // 낙관 전환으로 응답 행 생성(첫 답변 시 백그라운드 시작)보다 먼저 이 클릭에
+        // 도달할 수 있다 — id 가 없다고 판정을 건너뛰면 하드 쿼터가 우회되므로,
+        // 응답당 최대 1회뿐인 이 판정 클릭에서만 생성 완료를 기다려 id 를 확보한다.
+        const responseId = currentResponseId ?? (await waitForResponseId());
+        if (!responseId) {
+          // 생성이 시작조차 안 됐다(첫 답변 전) — 판정을 보류하고 플래그를 되돌려
+          // 다음 클릭에서 재시도한다.
+          quotaCheckedRef.current = false;
+          return null;
+        }
+        try {
+          return await client.quota.check({
+            responseId,
+            surveyId: loadedSurvey?.id ?? '',
+            answers: responses,
+          });
+        } catch (err) {
           console.error('쿼터 확인 오류:', err); // fail-open: 플래그는 이미 위에서 세팅됨
           return null;
-        });
+        }
+      })();
     }
 
     // 마지막 제출은 complete가 전체 답을 저장한다. 중간 이동은 현재 페이지 변경분을
-    // 먼저 체크포인트로 저장하고, 실패하면 페이지를 유지해 응답 유실을 막는다.
-    // (디바운스 자동 저장이 이미 비워둔 경우 flush 는 왕복 없이 즉시 통과한다.)
-    const flushOk = nextIndex === -1 || (await flushPendingAnswers());
+    // 백그라운드 체크포인트로 발사만 하고 전환은 기다리지 않는다(낙관 전환) —
+    // 답변 직후 5초 디바운스 안에 "다음"을 누르는 지배적 패턴에서 매 스텝이
+    // 저장 왕복만큼 느려지던 것을 없앤다. 실패해도 pending 이 유지되어 다음
+    // flush/이탈 beacon/최종 complete 에 합류하므로 유실 경로가 없고,
+    // enqueueFlush 직렬화 체인 + 서버 seq 가드가 순서/중복을 방어한다.
+    if (nextIndex !== -1) void flushPendingAnswersInBackground();
 
     if (quotaPromise) {
+      // 쿼터 판정(응답당 최대 1회)만은 기다린다 — 낙관 전환하면 마감 응답자에게
+      // 다음 문항을 보여줬다가 차단 화면으로 갈아치우는 어색한 상태가 생긴다.
       const res = await quotaPromise;
-      // 쿼터 마감은 종결 상태라 flush 성패와 무관하게 우선한다.
       if (res?.blocked) {
         setQuotaClosedMessage(res.closedMessage);
         setDuplicateStatus({ kind: 'blocked', reason: 'quota_closed' });
         return;
       }
     }
-
-    if (!flushOk) return;
 
     setStepHistory((prev) => [...prev, currentStepIndex]);
 
@@ -1108,7 +1123,13 @@ function SurveyResponseFlowActive({
   useEffect(() => {
     if (!loadedSurvey || isCompleted) return;
 
-    window.history.pushState({ stepIndex: currentStepIndex }, '');
+    // 현재 엔트리가 이미 이 스텝이면 push 생략 — StrictMode(dev) 이중 실행이 같은 스텝
+    // 엔트리를 2개 쌓아 첫 뒤로가기가 무반응이 되는 것과, popstate 복귀 직후 재실행이
+    // 중복 엔트리를 다시 쌓는 것을 함께 막는다 (실행 횟수와 무관하게 스텝당 1개 보장).
+    const currentState = window.history.state as { stepIndex?: number } | null;
+    if (currentState?.stepIndex !== currentStepIndex) {
+      window.history.pushState({ stepIndex: currentStepIndex }, '');
+    }
 
     const handlePopState = () => {
       if (stepHistory.length > 0) {

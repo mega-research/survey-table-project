@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -42,9 +42,13 @@ function ColorField({
 }: ColorFieldProps) {
   const [draft, setDraft] = useState(value);
 
-  useEffect(() => {
+  // prop 변경 시 draft 동기화 — effect 대신 렌더 중 조정 패턴
+  // (https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes)
+  const [prevValue, setPrevValue] = useState(value);
+  if (prevValue !== value) {
+    setPrevValue(value);
     setDraft(value);
-  }, [value]);
+  }
 
   const clear = () => {
     setDraft('');
