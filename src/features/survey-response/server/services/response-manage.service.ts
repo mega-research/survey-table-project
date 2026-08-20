@@ -12,7 +12,7 @@ import {
 } from '@/db/schema';
 import { SurveyOwnershipError } from '@/lib/auth/require-survey-ownership';
 
-import { reeditDenial } from '../../domain/acceptance';
+import { reeditDenial, type ReeditDenial } from '../../domain/acceptance';
 import type {
   AllowReeditResponseInput,
   HardResetResponseInput,
@@ -22,11 +22,12 @@ import type {
 
 export { SurveyOwnershipError };
 
-/** 재응답 허용 불가 사유 — 설문이 응답을 받을 수 없는 상태. */
+/**
+ * 재응답 허용 불가 사유. union 은 domain/acceptance 의 ReeditDenial 이 소유한다 —
+ * 여기서 다시 나열하면 CHECKS_FOR.reedit 과 조용히 어긋난다.
+ */
 export class ReeditUnavailableError extends Error {
-  constructor(
-    public readonly reason: 'status_not_published' | 'survey_paused' | 'end_date_passed',
-  ) {
+  constructor(public readonly reason: ReeditDenial) {
     super(`reedit_unavailable:${reason}`);
     this.name = 'ReeditUnavailableError';
   }
@@ -180,8 +181,9 @@ export async function hardResetResponse(
  * 완료 상태가 아니면 변경 0행 no-op (fail-soft, manage 공통 의미론).
  * 잠금 순서는 hardReset 과 동일하게 target → response 를 지킨다.
  *
- * 가드: 설문이 응답을 받을 수 없는 상태(미배포·중단·마감)면 되돌리기 전에
- * ReeditUnavailableError 로 거부한다 — 강등만 되고 재제출이 막히는 고아 상태 방지.
+ * 가드: 설문이 응답을 받을 수 없는 상태(미배포·중단·마감)이거나 연결된 조사 대상이
+ * 없으면 되돌리기 전에 ReeditUnavailableError 로 거부한다 — 강등만 되고 재제출이 막히는
+ * 고아 상태 방지. 앵커는 정방향·역방향을 모두 본 뒤 판정한다(레거시 링크).
  * 실응답에만 적용하고 테스트 응답은 면제한다(중단 중 테스트 허용 정책과 정합).
  * maxResponses 는 검사하지 않는다 — 되돌리기 자체가 완료 슬롯 하나를 비우므로
  * 재완료는 자기 슬롯을 되찾는 동작이고, 그 사이 다른 응답이 채우는 경합은 기존
@@ -213,12 +215,27 @@ export async function allowReeditResponse(
       .limit(1);
     if (!row || !row.isCompleted) return;
 
+    // 앵커는 수용 게이트보다 **먼저** 해석한다. 레거시 행은 정방향
+    // (survey_responses.contact_target_id)이 null 인 채 역방향(contact_targets.response_id)만
+    // 연결돼 있어, row.contactTargetId 로 invite 를 판정하면 컨택이 멀쩡히 살아 있는 응답을
+    // invite_required 로 거부한다. 게다가 이 데이터를 자가 치유하는 유일한 지점이 아래
+    // 정방향 백필이라 한 번 거부하면 영영 못 고친다.
+    // select 만 하는 함수이고 통과 경로에서는 어차피 뒤에서 호출되므로 쿼리 수는 늘지 않는다.
+    const anchorId = await resolveContactAnchor(
+      tx,
+      surveyId,
+      responseId,
+      row.contactTargetId,
+    );
+
     if (!row.isTest) {
       const [gate] = await tx
         .select({
           status: surveys.status,
           isPaused: surveys.isPaused,
           endDate: surveys.endDate,
+          isPublic: surveys.isPublic,
+          requireInviteToken: surveys.requireInviteToken,
           currentVersionId: surveys.currentVersionId,
         })
         .from(surveys)
@@ -235,21 +252,17 @@ export async function allowReeditResponse(
             .limit(1);
           versionRow = version ?? null;
         }
-        // 검사 집합(status·paused·endDate)과 판정 순서는 domain/acceptance 가 소유한다.
+        // 검사 집합(status·paused·endDate·invite)과 판정 순서는 domain/acceptance 가 소유한다.
         // row.isTest 는 이 블록 진입 조건상 항상 false 지만, 면제 규칙의 단일 거처를
         // 지키기 위해 그대로 넘긴다(조회 회피는 바깥 if (!row.isTest) 가 이미 처리).
-        const denial = reeditDenial(gate, versionRow, { isTest: row.isTest });
+        const denial = reeditDenial(gate, versionRow, {
+          contactTargetId: anchorId,
+          isTest: row.isTest,
+        });
         if (denial) throw new ReeditUnavailableError(denial);
       }
     }
 
-    // 앵커는 unlink 전에 양방향으로 해석한다 (레거시: contact_targets.response_id 만 연결).
-    const anchorId = await resolveContactAnchor(
-      tx,
-      surveyId,
-      responseId,
-      row.contactTargetId,
-    );
     if (anchorId) {
       await tx
         .update(contactTargets)

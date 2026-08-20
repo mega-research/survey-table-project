@@ -39,7 +39,11 @@ import { stripDisabledCellValues } from '@/lib/survey/cell-gating';
 import type { Question, SurveyLookup } from '@/types/survey';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 
-import { newResponseDenial, ongoingResponseDenial } from '../../domain/acceptance';
+import {
+  completeResponseDenial,
+  newResponseDenial,
+  ongoingResponseDenial,
+} from '../../domain/acceptance';
 import type { BlockReason } from '../../domain/duplicate';
 import { toGateBlockReason } from '../../domain/gate-block-reason';
 import { decideResponseReuse } from '../../domain/lifecycle';
@@ -433,12 +437,12 @@ export class SurveyNotAcceptingResponsesError extends Error {
 }
 
 /**
- * 설문이 현재 응답을 받을 수 있는 상태인지 검증한다. 위반 시 throw.
+ * 설문이 지금 **신규 응답**을 받을 수 있는 상태인지 검증한다. 위반 시 throw.
  *
  * 검사 항목·판정 순서·isTest 면제 규칙은 domain/acceptance 의 newResponseDenial 이 소유한다
  * (그 파일의 CHECK_ORDER / CHECKS_FOR / PREDICATES 참조). 여기 남는 책임은 사유를 이 서비스의
- * 에러 타입으로 바꾸는 것뿐이다 — 호출부 4곳(startResponse / createResponseWithFirstAnswer /
- * createBlankResponse / completeResponse)의 시그니처를 유지하기 위한 얇은 어댑터다.
+ * 에러 타입으로 바꾸는 것뿐이다 — 호출부 3곳(startResponse / createResponseWithFirstAnswer /
+ * createBlankResponse)의 시그니처를 유지하기 위한 얇은 어댑터다.
  */
 function assertSurveyAcceptingResponses(
   survey: SurveyGateRow,
@@ -446,6 +450,25 @@ function assertSurveyAcceptingResponses(
   opts: { contactTargetId: string | null; completedCount?: number | null; isTest: boolean },
 ): void {
   const denial = newResponseDenial(survey, version, opts);
+  if (denial) {
+    throw new SurveyNotAcceptingResponsesError(denial);
+  }
+}
+
+/**
+ * 진행 중인 응답을 **완료로 확정**할 수 있는지 검증한다. 위반 시 throw.
+ *
+ * 신규 진입과 정책이 갈린다 — 마감(endDate)은 새 응답 접수를 닫는 것이지 이미 진행 중인
+ * 응답을 몰수하는 것이 아니라서, 완료 게이트는 마감을 보지 않는다. 정원·중단·미배포·초대는
+ * 그대로 차단한다. 검사 집합은 domain/acceptance 의 CHECKS_FOR.completeResponse 가 소유한다.
+ * 던지는 에러 타입은 신규 게이트와 동일해 toGateBlockReason / rpc-error-policy 계약이 불변이다.
+ */
+function assertResponseCompletable(
+  survey: SurveyGateRow,
+  version: VersionGateRow,
+  opts: { contactTargetId: string | null; completedCount: number; isTest: boolean },
+): void {
+  const denial = completeResponseDenial(survey, version, opts);
   if (denial) {
     throw new SurveyNotAcceptingResponsesError(denial);
   }
@@ -1386,8 +1409,8 @@ void _entryInputContract;
  * 게이트 에러 → blocked 폴딩. 현행 두 wrapper 의 동일한 try/catch 를 승격한 것이다.
  *
  * 수용 게이트 위반은 여기서 던지고 여기서 접는다 — 안쪽에서 미리 blocked 로 접으면
- * startResponse/completeResponse 가 공유하는 assertSurveyAcceptingResponses 계약과
- * 갈라지고 toGateBlockedResult 가 죽은 코드가 된다. throw→catch 구조를 유지할 것.
+ * startResponse 와 공유하는 assertSurveyAcceptingResponses 계약과 갈라지고
+ * toGateBlockedResult 가 죽은 코드가 된다. throw→catch 구조를 유지할 것.
  */
 async function admitAndCreateResponse(
   input: CreateBlankResponseInput,
@@ -1732,10 +1755,16 @@ async function detectQuotaOverflow(
 export async function completeResponse(input: CompleteResponseInput): Promise<SurveyResponse> {
   const { responseId, data } = input;
 
-  // 가용성 게이트(완료 시점 하드체크): 마감/폐쇄/draft/비공개 설문 완료를 차단하고,
-  // maxResponses 정원을 완료 카운트로 하드 검사한다. 응답 행에서 surveyId/versionId/
-  // contactTargetId 를 읽어 게이트 입력으로 사용한다. count 쿼리와 실제 완료 UPDATE 사이의
-  // 동시성 갭(동시 완료가 마지막 정원을 함께 채우는 경우)은 DB 락 없이 허용하는 잔여 window 다.
+  // 완료 게이트(하드체크): 폐쇄/draft/중단/비공개 설문 완료를 차단하고, maxResponses 정원을
+  // 완료 카운트로 하드 검사한다. **마감(endDate)은 보지 않는다** — 마감은 새 응답 접수를 닫는
+  // 것이지 이미 진행 중인 응답을 몰수하는 것이 아니라서, 마감 시각에 걸친 응답자는 끝까지
+  // 진행해 저장된다(CHECKS_FOR.completeResponse 주석 참조).
+  // 그 결과 마감 후 완료 시도가 정원 검사에 처음으로 도달한다 — 정원이 찬 설문이면 사유가
+  // end_date_passed 대신 max_responses_reached 로 나온다. 어느 쪽도 차단이며, 완료 경로는
+  // blocked 폴딩을 타지 않으므로 응답자가 보는 화면도 종전과 같다(사유 태그만 바뀐다).
+  // 응답 행에서 surveyId/versionId/contactTargetId 를 읽어 게이트 입력으로 사용한다. count
+  // 쿼리와 실제 완료 UPDATE 사이의 동시성 갭(동시 완료가 마지막 정원을 함께 채우는 경우)은
+  // DB 락 없이 허용하는 잔여 window 다.
   const gateRow = await db.query.surveyResponses.findFirst({
     where: eq(surveyResponses.id, responseId),
     columns: { surveyId: true, versionId: true, contactTargetId: true, isTest: true },
@@ -1744,7 +1773,7 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
     const survey = await loadSurveyGateRow(gateRow.surveyId);
     const version = await loadVersionGateRow(gateRow.versionId);
     const completedCount = await countCompletedResponses(gateRow.surveyId);
-    assertSurveyAcceptingResponses(survey, version, {
+    assertResponseCompletable(survey, version, {
       contactTargetId: gateRow.contactTargetId,
       completedCount,
       // 응답 행 자체의 isTest 컬럼이 권위 소스 — create 시점에 확정된 값을 그대로 신뢰한다

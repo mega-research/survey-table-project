@@ -219,7 +219,7 @@ describe('assertSurveyAcceptingResponses — startResponse 게이트', () => {
     await expect(startResponse({ surveyId: SURVEY_ID })).rejects.toThrow();
   });
 
-  it('endDate 가 과거(경과)면 거부한다', async () => {
+  it('endDate 가 과거(경과)면 거부한다 — 신규 진입은 B-b 이후에도 마감을 계속 본다', async () => {
     surveyFindFirstMock.mockResolvedValue(
       publishedSurvey({ endDate: new Date(Date.now() - 60_000) }),
     );
@@ -254,7 +254,7 @@ describe('assertSurveyAcceptingResponses — startResponse 게이트', () => {
   });
 });
 
-describe('assertSurveyAcceptingResponses — completeResponse 정원 하드체크', () => {
+describe('assertResponseCompletable — completeResponse 완료 게이트', () => {
   beforeEach(() => {
     surveyFindFirstMock.mockReset();
     versionFindFirstMock.mockReset();
@@ -285,6 +285,42 @@ describe('assertSurveyAcceptingResponses — completeResponse 정원 하드체�
       await import('@/features/survey-response/server/services/response.service');
     const res = await completeResponse({ responseId: 'r1' });
     expect(res).toMatchObject({ id: 'r1' });
+  });
+
+  it('마감이 지나도 완료는 통과한다 — endDate 는 신규 접수만 막는다 (B-b)', async () => {
+    surveyFindFirstMock.mockResolvedValue(
+      publishedSurvey({ endDate: new Date(Date.now() - 60_000) }),
+    );
+    countResultMock.mockResolvedValue([{ total: 0 }]);
+    const { completeResponse } =
+      await import('@/features/survey-response/server/services/response.service');
+    const res = await completeResponse({ responseId: 'r1' });
+    expect(res).toMatchObject({ id: 'r1' });
+  });
+
+  it('마감 + 정원초과는 계속 차단한다 — 사유가 max_responses_reached 로 승계된다', async () => {
+    surveyFindFirstMock.mockResolvedValue(
+      publishedSurvey({ maxResponses: 2, endDate: new Date(Date.now() - 60_000) }),
+    );
+    countResultMock.mockResolvedValue([{ total: 2 }]);
+    const { completeResponse } =
+      await import('@/features/survey-response/server/services/response.service');
+    // 종전에는 마감이 먼저 잘려 정원 검사에 도달하지 않았다. 차단은 그대로다.
+    await expect(completeResponse({ responseId: 'r1' })).rejects.toMatchObject({
+      reason: 'max_responses_reached',
+    });
+  });
+
+  it('마감 + 중단은 계속 차단한다 (survey_paused)', async () => {
+    surveyFindFirstMock.mockResolvedValue(
+      publishedSurvey({ isPaused: true, endDate: new Date(Date.now() - 60_000) }),
+    );
+    countResultMock.mockResolvedValue([{ total: 0 }]);
+    const { completeResponse } =
+      await import('@/features/survey-response/server/services/response.service');
+    await expect(completeResponse({ responseId: 'r1' })).rejects.toMatchObject({
+      reason: 'survey_paused',
+    });
   });
 });
 
@@ -1106,9 +1142,10 @@ describe('A-1 사전 박제 — 우선순위·부분집합·fail-open', () => {
     expect(result).toMatchObject({ id: 'resp-fo', status: 'in_progress', resumed: true });
   });
 
-  it('재진입: status·endDate 는 보지 않는다 — 마감·closed 설문도 재개된다 (현행 부분집합)', async () => {
-    // 근거 주석이 없는 갭이다. 후속 정책 티켓(B-b)이 이 테스트를 뒤집는 것이
-    // 곧 동작 변경의 신호가 된다 — A-1 에서는 고치지 않는다.
+  it('재진입: status·endDate 는 보지 않는다 — 마감·closed 설문도 재개된다 (결정된 정책)', async () => {
+    // B-b 결정: endDate 는 새 응답 접수를 마감하는 것이지 진행 중인 응답을 몰수하지 않는다.
+    // 재개·답변저장은 원래 이 정책과 일치했고 완료 게이트가 뒤늦게 여기 맞춰졌다.
+    // 이 테스트를 뒤집는 것은 정책 자체를 되돌리는 것이다.
     surveyFindFirstMock.mockResolvedValue(
       publishedSurvey({ status: 'closed', endDate: new Date(Date.now() - 60_000) }),
     );

@@ -9,6 +9,8 @@ const h = vi.hoisted(() => ({
   responseRow: null as Record<string, unknown> | null,
   gateRow: null as Record<string, unknown> | null,
   versionRow: null as Record<string, unknown> | null,
+  /** resolveContactAnchor 의 역방향 조회 결과 — 레거시(정방향 null) 링크 재현용. */
+  reverseContactRow: null as Record<string, unknown> | null,
   /** tx.select 에 넘어온 필드 키 집합 기록 — 조회 회피·부분집합 검증용. */
   selectedFieldSets: [] as string[][],
   /** tx.update(...).set(payload) 캡처 — 되돌리기 UPDATE 실행 여부 검증용. */
@@ -35,7 +37,10 @@ vi.mock('@/db', () => {
     if (keys.includes('isPaused')) return h.gateRow ? [h.gateRow] : [];
     // 버전 행 조회
     if (keys.length === 1 && keys[0] === 'status') return h.versionRow ? [h.versionRow] : [];
-    // resolveContactAnchor 의 역방향 컨택 조회 — 앵커 없음으로 고정.
+    // resolveContactAnchor 의 역방향 컨택 조회 (contact_targets.response_id 로 찾는다).
+    if (keys.length === 1 && keys[0] === 'id') {
+      return h.reverseContactRow ? [h.reverseContactRow] : [];
+    }
     return [];
   }
 
@@ -101,9 +106,19 @@ function gate(over: Record<string, unknown> = {}) {
     status: 'published',
     isPaused: false,
     endDate: null as Date | null,
+    // 기본은 공개 + 토큰 비강제 — invite 술어가 발동하지 않는다.
+    isPublic: true,
+    requireInviteToken: false,
     currentVersionId: null as string | null,
     ...over,
   };
+}
+
+/** 되돌리기 UPDATE 의 payload — 정방향 백필 검증용. */
+function revertPayload(): Record<string, unknown> | undefined {
+  return h.updates.find(
+    (p) => typeof p === 'object' && p !== null && (p as Record<string, unknown>)['isCompleted'] === false,
+  ) as Record<string, unknown> | undefined;
 }
 
 /** 설문 게이트 행이 실제로 조회됐는지. */
@@ -123,6 +138,7 @@ beforeEach(() => {
   h.responseRow = completedResponse();
   h.gateRow = gate();
   h.versionRow = null;
+  h.reverseContactRow = null;
   h.selectedFieldSets = [];
   h.updates = [];
 });
@@ -182,16 +198,22 @@ describe('allowReeditResponse — 수용 게이트 (A-1 사전 박제)', () => {
     expect(revertWasApplied()).toBe(true);
   });
 
-  it('[5] 정원·초대는 검사하지 않는다 — 게이트 조회 컬럼 자체가 4개뿐이다 (의도된 부분집합)', async () => {
+  it('[5] 정원은 검사하지 않는다 — 게이트 조회 컬럼에 maxResponses 가 없다 (의도된 부분집합)', async () => {
     const { allowReeditResponse } = await import('./response-manage.service');
 
     await expect(allowReeditResponse(INPUT)).resolves.toEqual({ ok: true });
 
     const gateKeys = h.selectedFieldSets.find((keys) => keys.includes('isPaused'));
-    expect(gateKeys).toEqual(['status', 'isPaused', 'endDate', 'currentVersionId']);
+    // B-a 로 초대 검사가 들어오면서 isPublic·requireInviteToken 2컬럼이 추가됐다(쿼리 수 불변).
+    expect(gateKeys).toEqual([
+      'status',
+      'isPaused',
+      'endDate',
+      'isPublic',
+      'requireInviteToken',
+      'currentVersionId',
+    ]);
     expect(gateKeys).not.toContain('maxResponses');
-    expect(gateKeys).not.toContain('isPublic');
-    expect(gateKeys).not.toContain('requireInviteToken');
   });
 
   it('[6] 테스트 응답은 게이트 전체를 면제받고 설문 행 조회 자체를 건너뛴다', async () => {
@@ -243,5 +265,61 @@ describe('allowReeditResponse — 수용 게이트 (A-1 사전 박제)', () => {
     await expect(allowReeditResponse(INPUT)).resolves.toEqual({ ok: true });
     expect(surveyGateWasQueried()).toBe(false);
     expect(revertWasApplied()).toBe(false);
+  });
+
+  it('[10] 비공개 설문 + 앵커 없음이면 invite_required 로 거부한다 (B-a)', async () => {
+    h.gateRow = gate({ isPublic: false });
+    h.responseRow = completedResponse({ contactTargetId: null });
+    h.reverseContactRow = null;
+    const { allowReeditResponse } = await import('./response-manage.service');
+
+    await expect(allowReeditResponse(INPUT)).rejects.toMatchObject({
+      reason: 'invite_required',
+    });
+    expect(revertWasApplied()).toBe(false);
+  });
+
+  it('[10b] requireInviteToken 강제 설문도 같은 사유로 거부한다', async () => {
+    h.gateRow = gate({ requireInviteToken: true });
+    h.responseRow = completedResponse({ contactTargetId: null });
+    const { allowReeditResponse } = await import('./response-manage.service');
+
+    await expect(allowReeditResponse(INPUT)).rejects.toMatchObject({
+      reason: 'invite_required',
+    });
+  });
+
+  it('[11] 레거시 역방향 전용 링크는 통과하고 정방향을 백필한다 (앵커 해석이 게이트보다 앞)', async () => {
+    // 정방향(survey_responses.contact_target_id)은 null 인데 역방향
+    // (contact_targets.response_id)만 연결된 실데이터. 게이트가 row.contactTargetId 로
+    // 판정하면 여기서 invite_required 로 잘리고 자가 치유 경로까지 영영 막힌다.
+    h.gateRow = gate({ isPublic: false });
+    h.responseRow = completedResponse({ contactTargetId: null });
+    h.reverseContactRow = { id: 'ct-legacy' };
+    const { allowReeditResponse } = await import('./response-manage.service');
+
+    await expect(allowReeditResponse(INPUT)).resolves.toEqual({ ok: true });
+    expect(revertWasApplied()).toBe(true);
+    expect(revertPayload()).toMatchObject({ contactTargetId: 'ct-legacy' });
+  });
+
+  it('[12] 정방향 앵커가 있으면 역방향 조회 없이 통과한다', async () => {
+    h.gateRow = gate({ isPublic: false });
+    h.responseRow = completedResponse({ contactTargetId: 'ct-1' });
+    h.reverseContactRow = null;
+    const { allowReeditResponse } = await import('./response-manage.service');
+
+    await expect(allowReeditResponse(INPUT)).resolves.toEqual({ ok: true });
+    expect(revertWasApplied()).toBe(true);
+    expect(h.selectedFieldSets.some((keys) => keys.length === 1 && keys[0] === 'id')).toBe(false);
+  });
+
+  it('[13] 공개 설문의 앵커 없는 익명 응답은 그대로 되돌린다 (술어 자체가 발동하지 않는다)', async () => {
+    h.gateRow = gate();
+    h.responseRow = completedResponse({ contactTargetId: null });
+    const { allowReeditResponse } = await import('./response-manage.service');
+
+    await expect(allowReeditResponse(INPUT)).resolves.toEqual({ ok: true });
+    expect(revertWasApplied()).toBe(true);
   });
 });

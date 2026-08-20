@@ -2,6 +2,7 @@ import { ORPCError } from '@orpc/server';
 
 import { authed } from '@/server/orpc';
 
+import type { ReeditDenial } from '../../domain/acceptance';
 import {
   AllowReeditResponseInput,
   HardResetResponseInput,
@@ -19,10 +20,13 @@ function mapServiceError(err: unknown): never {
   throw err;
 }
 
-const REEDIT_UNAVAILABLE_MESSAGE: Record<string, string> = {
+// Record<ReeditDenial, string> 으로 좁혀 둔다. Record<string, string> 이면 사유가 늘어도
+// 키 누락이 컴파일을 통과하고 런타임에 아래 폴백 문구가 조용히 나간다.
+const REEDIT_UNAVAILABLE_MESSAGE: Record<ReeditDenial, string> = {
   status_not_published: '설문이 배포(published) 상태가 아니라 재응답을 허용할 수 없습니다.',
   survey_paused: '설문이 중단 상태라 재응답을 허용할 수 없습니다. 중단을 해제한 뒤 다시 시도하세요.',
   end_date_passed: '설문 마감일이 지나 재응답을 허용할 수 없습니다.',
+  invite_required: '이 응답에 연결된 조사 대상이 없어 재응답 링크를 줄 수 없습니다.',
 };
 
 const softDelete = authed
