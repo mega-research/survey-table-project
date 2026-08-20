@@ -422,7 +422,10 @@ export function CellContentModal({
   );
 
   const mountedRef = useRef(true);
+  // StrictMode(dev)의 mount→cleanup→mount 시뮬레이션에서 cleanup 만 있으면 false 로
+  // 굳는다 — effect 본문에서 true 를 재설정해야 실마운트 상태를 정확히 반영한다.
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
       mountedRef.current = false;
     };
