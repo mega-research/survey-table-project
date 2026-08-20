@@ -278,7 +278,11 @@ export function Toolbar({ editor, variableCatalog, onPickImage, onPickLink, onPi
       </div>
 
       {s.imageActive && (
-        <ImageContextToolbar editor={editor} enableImageLinkArea={enableImageLinkArea ?? false} />
+        <ImageContextToolbar
+          editor={editor}
+          enableImageLinkArea={enableImageLinkArea ?? false}
+          variableCatalog={variableCatalog ?? []}
+        />
       )}
       {s.tableActive && <TableContextToolbar editor={editor} />}
       {s.fileAttachmentActive && onReplaceFile && (
