@@ -63,6 +63,9 @@ export function resolveSpssDisplayFormat(
   question: Question | undefined,
 ): string {
   const varType = resolveVarType(col, question);
+  // 'A(가변)' 은 SPSS 표준 표기가 아닌 코딩북용 설명 문자열이다. 실제 폭 A{n} 은
+  // 응답 데이터의 최대 길이로 정해지는데(computeMaxStringWidths) 코딩북은 질문
+  // 정의만으로 만들어져 그 폭을 알 수 없다.
   if (varType === VariableType.String) return 'A(가변)';
   if (varType === VariableType.Date) return 'DATE10';
   if (varType === VariableType.DateTime) return 'DATETIME20';

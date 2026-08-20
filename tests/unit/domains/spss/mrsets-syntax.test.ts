@@ -144,6 +144,46 @@ describe('generateMrsetsSyntax - 질문 단위 MCGROUP', () => {
     expect(syntax).not.toContain('VALUE LABELS');
   });
 
+  it('choice-group-item 값 라벨은 그룹 접두 없이 보기 라벨만 쓴다', () => {
+    // 세트 LABEL 이 이미 그룹 라벨을 담으므로 카테고리 라벨에 "그룹 - " 접두는 중복이다.
+    const grouped = q({
+      id: 'q8',
+      questionCode: 'Q8',
+      type: 'checkbox',
+      title: '이용경험',
+      choiceGroups: [{ id: 'gc2', groupKey: 'cb2', type: 'checkbox', label: '채널' }],
+      tableRowsData: [
+        {
+          id: 'r1',
+          label: '행1',
+          cells: [
+            {
+              id: 'cellG',
+              content: '온라인',
+              type: 'choice_opt',
+              choiceGroupId: 'gc2',
+              spssNumericCode: 1,
+            },
+            {
+              id: 'cellH',
+              content: '오프라인',
+              type: 'choice_opt',
+              choiceGroupId: 'gc2',
+              spssNumericCode: 2,
+            },
+          ],
+        },
+      ],
+    });
+    const questions = [grouped];
+    const syntax = generateMrsetsSyntax(generateSPSSColumns(questions), questions);
+
+    expect(syntax).toContain("LABEL='채널'");
+    expect(syntax).toContain("  1 '온라인'");
+    expect(syntax).toContain("  2 '오프라인'.");
+    expect(syntax).not.toContain('채널 - ');
+  });
+
   it('카테고리가 비어 있는 세트는 VALUE LABELS 블록을 만들지 않는다', () => {
     // choiceGroupMemberCode 없는 choice-group-item — 값을 특정할 수 없어 카테고리가 빈다.
     // VALUE LABELS 를 변수명만 나열한 채 emit 하면 종결 마침표가 없는 불법 sps 가 된다.

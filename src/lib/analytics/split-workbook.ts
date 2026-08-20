@@ -1,18 +1,15 @@
 import ExcelJS from 'exceljs';
 
-import { buildCodebookValueLabel } from '@/lib/analytics/raw-export-helpers';
 import { bucketQuestions, planSplit } from '@/lib/analytics/split-export';
 import { buildDataRow, generateSPSSColumns } from '@/lib/analytics/spss-excel-export';
-import { buildCodebookVariableMetadata } from '@/lib/spss/export-metadata';
-import { buildMrsetNameMap } from '@/lib/spss/mrsets-syntax';
 import { Question, SurveySubmission } from '@/types/survey';
 
 import {
   type RawExportContext,
   type RawExportResponseRow,
   addResponseListSheet,
+  appendCodebookSheet,
   autoFitRawColumnRange,
-  autoFitRawColumns,
   buildRawMetaHeaders,
   buildRawMetaValues,
   clampRawWidth,
@@ -87,36 +84,7 @@ export function buildSplitWorkbook(
   }
 
   // 마지막 시트: 코딩북 (전체 변수) — 고정 이름
-  const allColumns = generateSPSSColumns(sortedQuestions);
-  const mrsetNames = buildMrsetNameMap(allColumns, sortedQuestions);
-  const wsCb = workbook.addWorksheet('코딩북');
-  wsCb.addRow([
-    '변수번호',
-    'SPSS 변수명',
-    '질문 제목',
-    '셀라벨',
-    '값 라벨',
-    '변수 유형',
-    '측정 수준',
-    '표시 형식',
-    '다중응답 세트',
-  ]);
-  allColumns.forEach((c, i) => {
-    const metadata = buildCodebookVariableMetadata(c, questionMap.get(c.questionId));
-    wsCb.addRow([
-      i + 1,
-      c.spssVarName,
-      c.questionText,
-      c.cellExportLabel ?? '',
-      buildCodebookValueLabel(c, questionMap),
-      metadata.variableType,
-      metadata.measure,
-      metadata.displayFormat,
-      mrsetNames.get(c.spssVarName) ?? '',
-    ]);
-  });
-  styleHeaderRows(wsCb, [1], 9);
-  autoFitRawColumns(wsCb, 9);
+  appendCodebookSheet(workbook, generateSPSSColumns(sortedQuestions), sortedQuestions);
 
   return workbook;
 }

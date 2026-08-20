@@ -119,6 +119,9 @@ export interface SPSSExportColumn {
   choiceGroupMemberCellId?: string;
   // 이 보기 선택 시 저장할 counted 숫자값 (spssNumericCode 또는 그룹 내 1-based 폴백)
   choiceGroupMemberCode?: number;
+  // 그룹 접두 없는 순수 보기 라벨 — sps VALUE LABELS 카테고리 라벨용
+  // (optionLabel 은 변수 라벨용이라 "그룹라벨 - 보기라벨" 형식)
+  choiceGroupMemberLabel?: string;
   // === 'ranking-rank' / 'ranking-other' 전용 ===
   // 질문의 ranking 그룹이 1개뿐일 때 true.
   // legacy flat 응답(rnk1 이식 후 미마이그레이션 응답)을 그 그룹으로 해석하는 폴백 허용 판정용.
@@ -230,6 +233,7 @@ export function generateSPSSColumns(questions: QuestionVariant[]): SPSSExportCol
               choiceGroupKey: group.groupKey,
               choiceGroupMemberCellId: cell.id,
               choiceGroupMemberCode: code,
+              choiceGroupMemberLabel: optLabel,
               optionIndex: idx,
             });
             // allowTextInput 사이드카: base 는 그룹 변수명 접두(질문코드[_groupKey]).

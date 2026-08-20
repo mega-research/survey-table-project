@@ -40,6 +40,8 @@ function categoriesFromColumns(
     let label = col.optionLabel;
     if (col.type === 'choice-group-item') {
       value = col.choiceGroupMemberCode;
+      // 세트 LABEL 이 그룹 라벨을 담으므로 카테고리 라벨은 보기 라벨만 쓴다
+      label = col.choiceGroupMemberLabel ?? label;
     } else if (col.optionIndex != null) {
       const option = col.cellOptions?.[col.optionIndex] ?? questionOptions[col.optionIndex];
       value = option?.spssNumericCode ?? col.optionIndex + 1;

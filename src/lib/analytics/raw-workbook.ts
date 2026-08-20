@@ -234,9 +234,21 @@ export function generateRawDataWorkbook(
   });
 
   // 시트 3: 코딩북
-  const ws3 = workbook.addWorksheet('코딩북');
-  const mrsetNames = buildMrsetNameMap(columns, sortedQuestions);
-  ws3.addRow([
+  appendCodebookSheet(workbook, columns, sortedQuestions);
+
+  return workbook;
+}
+
+/** 코딩북 시트를 워크북에 추가한다 — Raw/Split 워크북 공용. */
+export function appendCodebookSheet(
+  workbook: ExcelJS.Workbook,
+  columns: SPSSExportColumn[],
+  questions: Question[],
+): void {
+  const questionMap = new Map(questions.map((q) => [q.id, q]));
+  const mrsetNames = buildMrsetNameMap(columns, questions);
+  const ws = workbook.addWorksheet('코딩북');
+  ws.addRow([
     '변수번호',
     'SPSS 변수명',
     '질문 제목',
@@ -249,7 +261,7 @@ export function generateRawDataWorkbook(
   ]);
   columns.forEach((c, i) => {
     const metadata = buildCodebookVariableMetadata(c, questionMap.get(c.questionId));
-    ws3.addRow([
+    ws.addRow([
       i + 1,
       c.spssVarName,
       c.questionText,
@@ -261,10 +273,8 @@ export function generateRawDataWorkbook(
       mrsetNames.get(c.spssVarName) ?? '',
     ]);
   });
-  styleHeaderRows(ws3, [1], 9);
-  autoFitRawColumns(ws3, 9);
-
-  return workbook;
+  styleHeaderRows(ws, [1], 9);
+  autoFitRawColumns(ws, 9);
 }
 
 // ── Raw/Split 워크북 공통 스타일·레이아웃 헬퍼 ──
