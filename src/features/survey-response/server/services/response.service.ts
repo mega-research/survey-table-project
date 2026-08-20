@@ -1269,14 +1269,23 @@ export async function saveDraftResponseIfActive(
   return { saved: true };
 }
 
-export async function saveTestTargetFirstAnswer(
-  input: Parameters<typeof acquireTestTargetResponse>[1] & {
-    questionId: string;
-    value: unknown;
-  },
+/**
+ * 대상자 테스트 회차 인수 (+ 있으면 첫 답변 저장). 단일 트랜잭션.
+ *
+ * 기존 saveTestTargetFirstAnswer 가 blank 경로의 db.transaction(acquireTestTargetResponse)
+ * 에 대한 "정확한 접두 확장" 이라 합친 것이다 — firstAnswer 유무로 꼬리만 켜므로 두 경로의
+ * tx 내용은 각각 현행과 동일하다. firstAnswer 가 없을 때 tx 안에서 도는 문장은
+ * acquireTestTargetResponse 하나뿐이어야 한다(versionId select 를 조건 밖으로 끌어내면
+ * contact_targets FOR UPDATE 잠금 구간이 늘어난다).
+ */
+async function acquireTestTargetEntry(
+  input: Parameters<typeof acquireTestTargetResponse>[1],
+  firstAnswer?: { questionId: string; value: unknown },
 ): Promise<{ responseId: string; reset: boolean }> {
   return db.transaction(async (tx) => {
     const acquired = await acquireTestTargetResponse(tx, input);
+    if (!firstAnswer) return acquired;
+
     const [response] = await tx
       .select({ versionId: surveyResponses.versionId })
       .from(surveyResponses)
@@ -1287,17 +1296,27 @@ export async function saveTestTargetFirstAnswer(
     const { piiEncrypted } = await assertQuestionBelongsToResponse(
       response.versionId,
       input.surveyId,
-      input.questionId,
+      firstAnswer.questionId,
       tx,
     );
-    const storedValue = piiEncrypted ? encryptAnswerValue(input.value) : input.value;
+    const storedValue = piiEncrypted ? encryptAnswerValue(firstAnswer.value) : firstAnswer.value;
     await applyQuestionResponseUpdate(
       tx,
-      { responseId: acquired.responseId, questionId: input.questionId },
+      { responseId: acquired.responseId, questionId: firstAnswer.questionId },
       storedValue,
     );
     return acquired;
   });
+}
+
+/** export 유지 필수 — tests/integration/test-target-attempt-ownership.realdb.test.ts 가 직접 import 한다. */
+export async function saveTestTargetFirstAnswer(
+  input: Parameters<typeof acquireTestTargetResponse>[1] & {
+    questionId: string;
+    value: unknown;
+  },
+): Promise<{ responseId: string; reset: boolean }> {
+  return acquireTestTargetEntry(input, { questionId: input.questionId, value: input.value });
 }
 
 // ========================
@@ -1617,22 +1636,20 @@ async function createBlankResponseInner(
   }
 
   if (isTestTarget && contactTargetId && attemptId) {
-    const acquired = await db.transaction((tx) =>
-      acquireTestTargetResponse(tx, {
-        surveyId,
-        contactTargetId,
-        sessionId,
-        attemptId,
-        versionId: versionId ?? null,
-        currentStepId,
-        userAgent,
-        ipHash: signals?.ipHash ?? null,
-        fpHash: signals?.fpHash ?? null,
-        deviceId: signals?.deviceId ?? null,
-        platform,
-        browser,
-      }),
-    );
+    const acquired = await acquireTestTargetEntry({
+      surveyId,
+      contactTargetId,
+      sessionId,
+      attemptId,
+      versionId: versionId ?? null,
+      currentStepId,
+      userAgent,
+      ipHash: signals?.ipHash ?? null,
+      fpHash: signals?.fpHash ?? null,
+      deviceId: signals?.deviceId ?? null,
+      platform,
+      browser,
+    });
     return {
       kind: 'created',
       id: acquired.responseId,
