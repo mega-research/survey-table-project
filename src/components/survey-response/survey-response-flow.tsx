@@ -1123,7 +1123,13 @@ function SurveyResponseFlowActive({
   useEffect(() => {
     if (!loadedSurvey || isCompleted) return;
 
-    window.history.pushState({ stepIndex: currentStepIndex }, '');
+    // 현재 엔트리가 이미 이 스텝이면 push 생략 — StrictMode(dev) 이중 실행이 같은 스텝
+    // 엔트리를 2개 쌓아 첫 뒤로가기가 무반응이 되는 것과, popstate 복귀 직후 재실행이
+    // 중복 엔트리를 다시 쌓는 것을 함께 막는다 (실행 횟수와 무관하게 스텝당 1개 보장).
+    const currentState = window.history.state as { stepIndex?: number } | null;
+    if (currentState?.stepIndex !== currentStepIndex) {
+      window.history.pushState({ stepIndex: currentStepIndex }, '');
+    }
 
     const handlePopState = () => {
       if (stepHistory.length > 0) {
