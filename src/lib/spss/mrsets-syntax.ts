@@ -1,6 +1,8 @@
 import type { SPSSExportColumn } from '@/lib/analytics/spss-excel-export';
+import { resolveSpssDisplayFormat } from '@/lib/spss/export-metadata';
 import type { Question, TableCell } from '@/types/survey';
 import { DEFAULT_GROUP_KEY } from '@/utils/choice-group-helpers';
+import { resolveChoiceOptions } from '@/utils/choice-source';
 
 /** 질문의 tableRowsData에서 셀 id로 셀을 찾는다 */
 function findTableCellById(question: Question | undefined, cellId: string): TableCell | undefined {
@@ -18,24 +20,47 @@ function escapeSpsLabel(label: string): string {
   return label.replace(/'/g, "''");
 }
 
-interface MrsetEntry {
+export interface MrsetEntry {
   // $ 제외한 세트 이름 (변수명 규칙 준수)
   name: string;
   label: string;
   variables: string[];
+  categories: Array<{ value: number; label: string }>;
+}
+
+function categoriesFromColumns(
+  cols: SPSSExportColumn[],
+  question: Question | undefined,
+): Array<{ value: number; label: string }> {
+  const byValue = new Map<number, string>();
+  const questionOptions = question ? resolveChoiceOptions(question) : [];
+
+  for (const col of cols) {
+    let value: number | undefined;
+    let label = col.optionLabel;
+    if (col.type === 'choice-group-item') {
+      value = col.choiceGroupMemberCode;
+    } else if (col.optionIndex != null) {
+      const option = col.cellOptions?.[col.optionIndex] ?? questionOptions[col.optionIndex];
+      value = option?.spssNumericCode ?? col.optionIndex + 1;
+      label = option?.label ?? label;
+    }
+    if (value !== undefined && !byValue.has(value)) byValue.set(value, label);
+  }
+
+  return [...byValue].map(([value, label]) => ({ value, label })).sort((a, b) => a.value - b.value);
 }
 
 /**
- * 복수응답 세트(.sps MRSETS/MCGROUP) 문법을 생성한다.
+ * SPSS 보조 문법에 필요한 복수응답 세트 정의를 만든다.
  * - .sav 바이너리에는 MRSET을 쓸 수 없어(sav-writer 미지원) 보조 문법 파일로 제공.
  * - 변수명은 generateSPSSColumns 출력에서 가져온다 — export와 단일 진실.
  * - checkbox export는 counted value(카테고리) 방식이므로 MCGROUP을 쓴다.
- * - 세트가 하나도 없으면 null.
  */
-export function generateMrsetsSyntax(
+export function buildMrsetEntries(
   columns: SPSSExportColumn[],
   questions: Question[],
-): string | null {
+): MrsetEntry[] {
   const questionMap = new Map(questions.map((question) => [question.id, question]));
   const entries: MrsetEntry[] = [];
 
@@ -55,6 +80,7 @@ export function generateMrsetsSyntax(
       name: question.questionCode,
       label: question.exportLabel || question.title,
       variables: cols.map((c) => c.spssVarName),
+      categories: categoriesFromColumns(cols, question),
     });
   }
 
@@ -77,6 +103,7 @@ export function generateMrsetsSyntax(
       name: cell.cellCode,
       label: cell.exportLabel || cell.cellCode,
       variables: cols.map((c) => c.spssVarName),
+      categories: categoriesFromColumns(cols, question),
     });
   }
 
@@ -120,19 +147,62 @@ export function generateMrsetsSyntax(
       name: setName,
       label: groupLabel,
       variables: cols.map((c) => c.spssVarName),
+      categories: categoriesFromColumns(cols, question),
     });
   }
 
-  if (entries.length === 0) return null;
+  return entries;
+}
+
+export function buildMrsetNameMap(
+  columns: SPSSExportColumn[],
+  questions: Question[],
+): Map<string, string> {
+  const names = new Map<string, string>();
+  for (const entry of buildMrsetEntries(columns, questions)) {
+    for (const variable of entry.variables) names.set(variable, `$${entry.name}`);
+  }
+  return names;
+}
+
+export function generateMrsetsSyntax(
+  columns: SPSSExportColumn[],
+  questions: Question[],
+): string | null {
+  const entries = buildMrsetEntries(columns, questions);
+
+  const questionMap = new Map(questions.map((question) => [question.id, question]));
+  const formatLines = columns.flatMap((col) => {
+    const format = resolveSpssDisplayFormat(col, questionMap.get(col.questionId));
+    return format.startsWith('COMMA') || format.startsWith('PCT')
+      ? [`FORMATS ${col.spssVarName} (${format}).`]
+      : [];
+  });
+
+  // MRSET 없이 FORMATS 만 있어도 파일은 유효하다 — 둘 다 없을 때만 생성 불가.
+  if (entries.length === 0 && formatLines.length === 0) return null;
+
+  // 카테고리가 빈 세트는 VALUE LABELS 를 emit 하면 종결 마침표 없는 불법 문법이 된다.
+  const valueLabelBlocks = entries
+    .filter((entry) => entry.categories.length > 0)
+    .map((entry) => {
+      const categories = entry.categories.map(
+        (category, index) =>
+          `  ${category.value} '${escapeSpsLabel(category.label)}'${index === entry.categories.length - 1 ? '.' : ''}`,
+      );
+      return [`VALUE LABELS ${entry.variables.join(' ')}`, ...categories].join('\n');
+    });
 
   const lines = entries.map(
     (e) =>
       `  /MCGROUP NAME=$${e.name} LABEL='${escapeSpsLabel(e.label)}' VARIABLES=${e.variables.join(' ')}`,
   );
+  const mrsetsBlock = entries.length > 0 ? ['MRSETS', `${lines.join('\n')}.`] : [];
   return [
-    '* 복수응답 세트 정의 - .sav 파일을 연 뒤 이 문법을 실행하세요.',
-    'MRSETS',
-    `${lines.join('\n')}.`,
+    '* SPSS 표시 형식·복수응답 값 라벨·세트 정의 - .sav 파일을 연 뒤 실행하세요.',
+    ...valueLabelBlocks,
+    ...formatLines,
+    ...mrsetsBlock,
     '',
   ].join('\n');
 }

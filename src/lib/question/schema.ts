@@ -80,6 +80,7 @@ export const TextQuestionSchema = base.extend({
   defaultValueTemplate: z.string().nullable().optional(),
   inputType: z.enum(['text', 'number']).optional(),
   emptyDefault: z.number().optional(),
+  numberFormat: z.custom<NonNullable<Question['numberFormat']>>().nullable().optional(),
 });
 
 export const TextareaQuestionSchema = base.extend({
@@ -173,7 +174,12 @@ export type QuestionSchemaDriftGates = [
   Expect<KeysEqual<z.output<typeof TableQuestionSchema>, TableQuestion>>,
   Expect<KeysEqual<z.output<typeof NoticeQuestionSchema>, NoticeQuestion>>,
   // 판별자 어휘가 QUESTION_TYPES 와 동치인지 (union 옵션 누락/과잉 차단)
-  Expect<KeysEqual<Record<z.output<typeof QuestionVariantSchema>['type'], 0>, Record<(typeof QUESTION_TYPES)[number], 0>>>,
+  Expect<
+    KeysEqual<
+      Record<z.output<typeof QuestionVariantSchema>['type'], 0>,
+      Record<(typeof QUESTION_TYPES)[number], 0>
+    >
+  >,
   Expect<KeysEqual<Record<QuestionVariant['type'], 0>, Record<(typeof QUESTION_TYPES)[number], 0>>>,
 ];
 
@@ -182,7 +188,16 @@ export type QuestionSchemaDriftGates = [
 type MutuallyAssignable<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
 
 export type QuestionEnumLeafGates = [
-  Expect<MutuallyAssignable<z.output<typeof base>['spssVarType'], Question['spssVarType'] | undefined>>,
-  Expect<MutuallyAssignable<z.output<typeof base>['spssMeasure'], Question['spssMeasure'] | undefined>>,
-  Expect<MutuallyAssignable<z.output<typeof TextQuestionSchema>['inputType'], Question['inputType'] | undefined>>,
+  Expect<
+    MutuallyAssignable<z.output<typeof base>['spssVarType'], Question['spssVarType'] | undefined>
+  >,
+  Expect<
+    MutuallyAssignable<z.output<typeof base>['spssMeasure'], Question['spssMeasure'] | undefined>
+  >,
+  Expect<
+    MutuallyAssignable<
+      z.output<typeof TextQuestionSchema>['inputType'],
+      Question['inputType'] | undefined
+    >
+  >,
 ];

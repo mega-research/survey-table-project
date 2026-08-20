@@ -1,20 +1,18 @@
+import { randomUUID } from 'crypto';
 import { readFile, unlink } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { randomUUID } from 'crypto';
+import { SavVariable, VariableAlignment, VariableType, saveToFile } from 'sav-writer';
 
 import {
-  saveToFile,
-  SavVariable,
-  VariableAlignment,
-  VariableType,
-} from 'sav-writer';
-
-import type { Question, QuestionOption, SurveySubmission } from '@/types/survey';
-
-import { buildDataRows, generateSPSSColumns, SPSSExportColumn } from '@/lib/analytics/spss-excel-export';
+  SPSSExportColumn,
+  buildDataRows,
+  generateSPSSColumns,
+} from '@/lib/analytics/spss-excel-export';
+import { resolveSavNumericFormat } from '@/lib/spss/export-metadata';
 import { buildLabel, resolveMeasure, resolveVarType } from '@/lib/spss/variable-meta';
 import { assertValidSpssVarNames } from '@/lib/spss/variable-name-guard';
+import type { Question, QuestionOption, SurveySubmission } from '@/types/survey';
 import { resolveChoiceOptions } from '@/utils/choice-source';
 import { toSpssValueLabelPairs } from '@/utils/ranking-source';
 import { sanitizeSpssVarName } from '@/utils/spss-var-name';
@@ -55,8 +53,7 @@ export function buildValueLabels(
 
     case 'checkbox-item': {
       const opts = question ? resolveChoiceOptions(question) : [];
-      const code = opts[col.optionIndex ?? 0]?.spssNumericCode
-        ?? (col.optionIndex ?? 0) + 1;
+      const code = opts[col.optionIndex ?? 0]?.spssNumericCode ?? (col.optionIndex ?? 0) + 1;
       return [{ value: code, label: '선택' }];
     }
 
@@ -90,8 +87,8 @@ export function buildValueLabels(
 
       // checkbox 옵션별 분리: 해당 옵션의 코드만 (컬럼 메타 우선, 폴백 역참조)
       if (col.tableCellType === 'checkbox' && col.optionIndex != null) {
-        const cellOpts = col.cellOptions
-          ?? findTableCellOptions(question, col.tableCellId, 'checkbox');
+        const cellOpts =
+          col.cellOptions ?? findTableCellOptions(question, col.tableCellId, 'checkbox');
         const code = cellOpts?.[col.optionIndex]?.spssNumericCode ?? col.optionIndex + 1;
         return [{ value: code, label: '선택' }];
       }
@@ -197,13 +194,6 @@ function computeMaxStringWidths(
 /**
  * SPSSExportColumn → SavVariable 변환
  */
-// 숫자 단답형(Continuous) 변수가 SPSS 변수보기에서 소수를 표시하도록 하는 소수 자릿수.
-// 응답자가 1.5 를 입력하면 float 레코드엔 1.5 가 그대로 저장되지만,
-// decimal:0 이면 F8.0 print format 이라 변수보기 표시값이 2 로 반올림돼 오해를 준다.
-// 그 외 변수는 모두 정수 코드(선택 코드/카운트/순위)라 decimal:0 이 맞다.
-const NUMERIC_TEXT_DECIMAL = 2;
-const DEFAULT_DECIMAL = 0;
-
 export function toSavVariable(
   col: SPSSExportColumn,
   question: Question | undefined,
@@ -211,24 +201,23 @@ export function toSavVariable(
   shortName: string,
 ): SavVariable {
   const varType = resolveVarType(col, question);
-  const isNumeric = varType === VariableType.Numeric
-    || varType === VariableType.Date
-    || varType === VariableType.DateTime;
-
-  // 숫자 단답형(numericText) 만 소수 자릿수를 부여한다 — 선택/카운트/순위 코드는 정수.
-  const isNumericText = col.type === 'text' && col.numericText === true;
+  const isNumeric =
+    varType === VariableType.Numeric ||
+    varType === VariableType.Date ||
+    varType === VariableType.DateTime;
 
   const valueLabels = buildValueLabels(col, question);
+  const numericFormat = resolveSavNumericFormat(col, question);
   return {
     name: sanitizeSpssVarName(col.spssVarName),
     short: sanitizeSpssVarName(shortName),
     label: buildLabel(col),
     type: varType,
-    width: isNumeric ? 0 : maxWidth,
-    decimal: isNumericText ? NUMERIC_TEXT_DECIMAL : DEFAULT_DECIMAL,
+    width: isNumeric ? numericFormat.width : maxWidth,
+    decimal: isNumeric ? numericFormat.decimal : 0,
     alignment: VariableAlignment.Centre,
     measure: resolveMeasure(col, question),
-    columns: isNumeric ? 8 : Math.min(maxWidth, 32),
+    columns: isNumeric ? numericFormat.columns : Math.min(maxWidth, 32),
     ...(valueLabels !== undefined ? { valueLabels } : {}),
   };
 }
@@ -284,7 +273,12 @@ export async function generateSavBuffer(
 
   // SavVariable[] 생성
   const variables = columns.map((col, i) =>
-    toSavVariable(col, questionMap.get(col.questionId), maxWidths[i] ?? 0, shortNames[i] ?? col.spssVarName),
+    toSavVariable(
+      col,
+      questionMap.get(col.questionId),
+      maxWidths[i] ?? 0,
+      shortNames[i] ?? col.spssVarName,
+    ),
   );
 
   const tmpPath = join(tmpdir(), `sav_${randomUUID()}.sav`);

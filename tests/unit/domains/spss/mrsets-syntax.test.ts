@@ -57,6 +57,111 @@ describe('generateMrsetsSyntax - 질문 단위 MCGROUP', () => {
     expect(syntax).toContain('VARIABLES=Q1_1 Q1_2');
   });
 
+  it('MCGROUP 구성 변수 모두에 동일한 전체 범주 값 라벨을 먼저 정의한다', () => {
+    const questions = [checkboxManual];
+    const syntax = generateMrsetsSyntax(generateSPSSColumns(questions), questions);
+
+    expect(syntax).toContain('VALUE LABELS Q1_1 Q1_2');
+    expect(syntax).toContain("  1 'TV'");
+    expect(syntax).toContain("  2 '라디오'.");
+    expect(syntax!.indexOf('VALUE LABELS')).toBeLessThan(syntax!.indexOf('MRSETS'));
+  });
+
+  it('설문 숫자 설정을 SPS FORMATS 명령으로 내보낸다', () => {
+    const numericTable = q({
+      id: 'q3',
+      questionCode: 'Q3',
+      type: 'table',
+      title: 'KPI',
+      tableColumns: [
+        { id: 'c1', label: '매출', columnCode: 'sales' },
+        { id: 'c2', label: '비중', columnCode: 'share' },
+      ],
+      tableRowsData: [
+        {
+          id: 'r1',
+          label: '2025년',
+          rowCode: 'y2025',
+          cells: [
+            {
+              id: 'amount',
+              type: 'input',
+              content: '',
+              spssVarType: 'Numeric',
+              spssMeasure: 'Continuous',
+              numberFormat: { thousandSeparator: true, decimalPlaces: 0 },
+            },
+            {
+              id: 'share',
+              type: 'input',
+              content: '',
+              spssVarType: 'Numeric',
+              spssMeasure: 'Continuous',
+              numberFormat: { unit: 'percent', decimalPlaces: 1 },
+            },
+          ],
+        },
+      ],
+    });
+    const questions = [checkboxManual, numericTable];
+    const syntax = generateMrsetsSyntax(generateSPSSColumns(questions), questions);
+
+    expect(syntax).toContain('FORMATS Q3_y2025_sales (COMMA20.0).');
+    expect(syntax).toContain('FORMATS Q3_y2025_share (PCT12.1).');
+  });
+
+  it('checkbox 세트가 없어도 FORMATS 라인이 있으면 문법을 생성한다', () => {
+    const numericOnly = q({
+      id: 'q7',
+      questionCode: 'Q7',
+      type: 'table',
+      title: '매출',
+      tableColumns: [{ id: 'c1', label: '매출', columnCode: 'sales' }],
+      tableRowsData: [
+        {
+          id: 'r1',
+          label: '2025년',
+          rowCode: 'y2025',
+          cells: [
+            {
+              id: 'amount',
+              type: 'input',
+              content: '',
+              spssVarType: 'Numeric',
+              spssMeasure: 'Continuous',
+              numberFormat: { thousandSeparator: true, decimalPlaces: 0 },
+            },
+          ],
+        },
+      ],
+    });
+    const questions = [numericOnly];
+    const syntax = generateMrsetsSyntax(generateSPSSColumns(questions), questions);
+
+    expect(syntax).not.toBeNull();
+    expect(syntax).toContain('FORMATS Q7_y2025_sales (COMMA20.0).');
+    expect(syntax).not.toContain('MRSETS');
+    expect(syntax).not.toContain('VALUE LABELS');
+  });
+
+  it('카테고리가 비어 있는 세트는 VALUE LABELS 블록을 만들지 않는다', () => {
+    // choiceGroupMemberCode 없는 choice-group-item — 값을 특정할 수 없어 카테고리가 빈다.
+    // VALUE LABELS 를 변수명만 나열한 채 emit 하면 종결 마침표가 없는 불법 sps 가 된다.
+    const question = q({ type: 'checkbox' });
+    const cols = ['a', 'b'].map((suffix) => ({
+      spssVarName: `Q1_${suffix}`,
+      questionText: '질문',
+      optionLabel: '보기',
+      questionId: 'q1',
+      type: 'choice-group-item' as const,
+      choiceGroupKey: 'g1',
+    }));
+    const syntax = generateMrsetsSyntax(cols, [question]);
+
+    expect(syntax).toContain('/MCGROUP NAME=$Q1_g1');
+    expect(syntax).not.toContain('VALUE LABELS');
+  });
+
   it('라벨은 작은따옴표를 이중으로 escape한다', () => {
     const questions = [checkboxManual];
     const syntax = generateMrsetsSyntax(generateSPSSColumns(questions), questions);
@@ -95,7 +200,14 @@ describe('generateMrsetsSyntax - 질문 단위 MCGROUP', () => {
       type: 'checkbox',
       allowOtherOption: true,
       options: [
-        { id: 'o1', label: 'A', value: 'o1', optionCode: '1', spssNumericCode: 1, allowTextInput: true },
+        {
+          id: 'o1',
+          label: 'A',
+          value: 'o1',
+          optionCode: '1',
+          spssNumericCode: 1,
+          allowTextInput: true,
+        },
       ],
     });
     const questions = [withText];
@@ -158,6 +270,8 @@ describe('generateMrsetsSyntax - 테이블 checkbox 셀 단위 MCGROUP', () => {
     expect(syntax).toContain(
       `/MCGROUP NAME=$T1_r1_c1 LABEL='T1_열1_행1' VARIABLES=${cellVars.join(' ')}`,
     );
+    expect(syntax).toContain("  5 '보기A'");
+    expect(syntax).toContain("  7 '보기B'.");
   });
 
   it('radio 셀은 세트를 만들지 않는다', () => {

@@ -216,8 +216,8 @@ export function ExportDataModal({ surveyId, surveyTitle }: Props) {
             />
 
             <ExportCard
-              title="SPSS 복수응답 세트 (.sps)"
-              description="복수응답(checkbox) 변수들을 MRSETS로 등록하는 문법 파일입니다. .sav를 연 뒤 실행하세요."
+              title="SPSS 보조 문법 (.sps)"
+              description="숫자 표시 형식(FORMATS)과 복수응답 세트(MRSETS)를 등록하는 문법 파일입니다. .sav를 연 뒤 실행하세요."
               icon={<FileDown className="h-5 w-5 text-slate-600" />}
               isLoading={exportingType === 'sps'}
               disabled={!!exportingType}

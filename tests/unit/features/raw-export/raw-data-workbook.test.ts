@@ -122,6 +122,27 @@ const tableInputQ = {
   ],
 } as unknown as Question;
 
+const numericTableInputQ = {
+  ...tableInputQ,
+  tableRowsData: [
+    {
+      id: 'tr',
+      label: '기업 전체',
+      rowCode: 'u00',
+      cells: [
+        {
+          id: 'cellInput',
+          type: 'input',
+          content: '',
+          spssVarType: 'Numeric',
+          spssMeasure: 'Continuous',
+          numberFormat: { thousandSeparator: true, decimalPlaces: 2 },
+        },
+      ],
+    },
+  ],
+} as unknown as Question;
+
 const TEST_CTX: RawExportContext = {
   appUrl: 'https://app.example.com',
   stepLabels: new Map([['group:g1', 'Q1']]),
@@ -169,21 +190,51 @@ describe('generateRawDataWorkbook', () => {
     expect(ws.getRow(4).getCell(12).value).toBe(2); // 코드값 (여성=2)
   });
 
-  it('코딩북 시트는 변수번호/변수명/값라벨을 담는다', () => {
+  it('코딩북 시트는 변수번호/변수명/값라벨과 SPSS 감사 메타데이터를 담는다', () => {
     const wb = generateRawDataWorkbook([radioQ], [makeRow()], TEST_CTX);
     const ws = wb.getWorksheet('코딩북')!;
-    expect([1, 2, 3, 4, 5].map((c) => ws.getRow(1).getCell(c).value)).toEqual([
+    expect([1, 2, 3, 4, 5, 6, 7, 8, 9].map((c) => ws.getRow(1).getCell(c).value)).toEqual([
       '변수번호',
       'SPSS 변수명',
       '질문 제목',
       '셀라벨',
       '값 라벨',
+      '변수 유형',
+      '측정 수준',
+      '표시 형식',
+      '다중응답 세트',
     ]);
     let valueLabel: unknown;
     ws.eachRow((row) => {
       if (row.getCell(2).value === 'Q1') valueLabel = row.getCell(5).value;
     });
     expect(valueLabel).toBe('1=남성, 2=여성');
+  });
+
+  it('코딩북은 숫자 설정과 다중응답 세트명을 실제 export 정의에서 표시한다', () => {
+    const wb = generateRawDataWorkbook([numericTableInputQ, checkboxQ], [makeRow()], TEST_CTX);
+    const ws = wb.getWorksheet('코딩북')!;
+    const findRow = (varName: string) => {
+      const rowIndex = ws.getColumn(2).values.findIndex((value) => value === varName);
+      expect(rowIndex).toBeGreaterThan(0);
+      return ws.getRow(rowIndex);
+    };
+
+    const amount = findRow('Q3_u00_2020');
+    expect([6, 7, 8, 9].map((c) => amount.getCell(c).value ?? '')).toEqual([
+      'Numeric',
+      'Scale',
+      'COMMA20.2',
+      '',
+    ]);
+
+    const checkbox = findRow('Q2_1');
+    expect([6, 7, 8, 9].map((c) => checkbox.getCell(c).value ?? '')).toEqual([
+      'Numeric',
+      'Nominal',
+      'F8.0',
+      '$Q2',
+    ]);
   });
 
   it('시트2 1행은 같은 질문 변수 열끼리 가로 병합되고 메타 열은 세로 병합된다', () => {
@@ -284,7 +335,11 @@ describe('Raw Data 시트 메타 컬럼', () => {
       hasContacts: false,
       hasContactGroups: false,
     };
-    const wb = generateRawDataWorkbook([radioQ], [makeRow({ resid: null, groupValue: null })], noContactCtx);
+    const wb = generateRawDataWorkbook(
+      [radioQ],
+      [makeRow({ resid: null, groupValue: null })],
+      noContactCtx,
+    );
     const ws = wb.getWorksheet('Raw Data')!;
     // 메타 9열 (번호·그룹 생략) → IP 해시/순번/개별 URL... 순, 변수 열은 10열부터
     expect(ws.getRow(1).getCell(1).value).toBe('IP 해시');
@@ -407,10 +462,7 @@ describe('Raw Data 시트 메타 컬럼', () => {
   it('다중 행에서 순번이 증가하고 null 메타는 폴백된다', () => {
     const wb = generateRawDataWorkbook(
       [radioQ],
-      [
-        makeRow(),
-        makeRow({ groupValue: null, ipHash: null, currentStepId: 'group:unknown' }),
-      ],
+      [makeRow(), makeRow({ groupValue: null, ipHash: null, currentStepId: 'group:unknown' })],
       TEST_CTX,
     );
     const ws = wb.getWorksheet('Raw Data')!;

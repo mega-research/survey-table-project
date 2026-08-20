@@ -130,21 +130,24 @@ async function handleExport(
     const dateSlice = new Date().toISOString().slice(0, 10);
     const safeTitle = encodeURIComponent(surveyData.title);
 
-    // 3-0. MRSETS .sps 문법 파일 (복수응답 세트 등록 - .sav 보조 파일)
+    // 3-0. SPSS 보조 문법 .sps 파일 (표시 형식 FORMATS + 복수응답 세트 MRSETS - .sav 보조 파일)
     if (type === 'sps') {
       const { generateSPSSColumns } = await import('@/lib/analytics/spss-excel-export');
       const { generateMrsetsSyntax } = await import('@/lib/spss/mrsets-syntax');
       const syntax = generateMrsetsSyntax(generateSPSSColumns(hydratedQuestions), hydratedQuestions);
       if (syntax === null) {
         return NextResponse.json(
-          { error: '복수응답(checkbox) 변수가 없어 MRSETS 문법을 생성할 항목이 없습니다.' },
+          {
+            error:
+              '복수응답(checkbox) 변수와 숫자 표시 형식 설정이 없어 .sps 문법을 생성할 항목이 없습니다.',
+          },
           { status: 400 },
         );
       }
       return new NextResponse(syntax, {
         headers: {
           'Content-Type': 'text/plain; charset=utf-8',
-          'Content-Disposition': `attachment; filename="${safeTitle}_MRSETS_${dateSlice}.sps"`,
+          'Content-Disposition': `attachment; filename="${safeTitle}_SPSS_SYNTAX_${dateSlice}.sps"`,
         },
       });
     }
