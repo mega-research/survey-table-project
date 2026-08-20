@@ -1345,6 +1345,50 @@ function isLikelyBot(args: {
 }
 
 /**
+ * 두 진입 경로의 유일한 차이 = "첫 답변을 들고 들어오는가".
+ * 발명한 개념이 아니라 스키마 차집합이다(domain/response.ts 의 두 Input 대조로 확인):
+ *   CreateResponseWithFirstAnswerInput - CreateBlankResponseInput === EntryFirstAnswer
+ */
+type EntryFirstAnswer = {
+  questionId: string;
+  value: unknown;
+  visibleStepIndex?: number | null | undefined;
+  visibleStepTotal?: number | null | undefined;
+};
+
+// 두 입력의 차집합이 EntryFirstAnswer 와 정확히 일치함을 tsc 가 매 빌드 확인한다.
+// 한쪽 입력에만 필드가 늘면 여기서 컴파일이 깨져 파이프라인이 그 필드를 호명받는다.
+// keyof 방향으로 거는 이유: extends 방향은 구조적 subtyping 이 초과 속성을 통과시켜 침묵한다.
+// 선례: _TestAttemptIdentityContract (domain/response.ts).
+type _EntryInputContract =
+  keyof CreateResponseWithFirstAnswerInput extends keyof (CreateBlankResponseInput &
+    EntryFirstAnswer)
+    ? true
+    : never;
+const _entryInputContract: _EntryInputContract = true;
+void _entryInputContract;
+
+/**
+ * 게이트 에러 → blocked 폴딩. 현행 두 wrapper 의 동일한 try/catch 를 승격한 것이다.
+ *
+ * 수용 게이트 위반은 여기서 던지고 여기서 접는다 — 안쪽에서 미리 blocked 로 접으면
+ * startResponse/completeResponse 가 공유하는 assertSurveyAcceptingResponses 계약과
+ * 갈라지고 toGateBlockedResult 가 죽은 코드가 된다. throw→catch 구조를 유지할 것.
+ */
+async function admitAndCreateResponse(
+  input: CreateBlankResponseInput,
+  answer: EntryFirstAnswer | null,
+): Promise<FirstAnswerResult> {
+  try {
+    return await admitAndCreateResponseInner(input, answer);
+  } catch (err) {
+    const blocked = toGateBlockedResult(err);
+    if (blocked) return blocked;
+    throw err;
+  }
+}
+
+/**
  * 첫 답변과 함께 survey_responses 행을 INSERT.
  *
  * - UA를 서버 헤더에서 읽어 platform/browser를 파싱
@@ -1358,27 +1402,39 @@ function isLikelyBot(args: {
 export async function createResponseWithFirstAnswer(
   input: CreateResponseWithFirstAnswerInput,
 ): Promise<FirstAnswerResult> {
-  try {
-    return await createResponseWithFirstAnswerInner(input);
-  } catch (err) {
-    const blocked = toGateBlockedResult(err);
-    if (blocked) return blocked;
-    throw err;
-  }
+  return admitAndCreateResponse(input, {
+    questionId: input.questionId,
+    value: input.value,
+    visibleStepIndex: input.visibleStepIndex,
+    visibleStepTotal: input.visibleStepTotal,
+  });
 }
 
-async function createResponseWithFirstAnswerInner(
-  input: CreateResponseWithFirstAnswerInput,
+/**
+ * 응답 진입의 단일 소유자 — 판정(admit)부터 쓰기 가능한 행 확보(create)까지.
+ *
+ * 부작용 순서가 외부 계약이다. 재배치 금지:
+ *   토큰 배타 → isLikelyBot → headers()+UA → computeSignals → loadSurveyGateRow
+ *   → isValidTestToken → 무효 테스트 토큰 차단 → Track A|B → isTest 합성
+ *   → attempt 가드 → [대상자 테스트 lane 조기 반환] → loadValidatedVersionGateRow
+ *   → assertSurveyAcceptingResponses → (answer) 멤버십+암호화 → firstVisit
+ *   → 행 조립 → insert lane 선택 → blocked 접기 → (answer) updateQuestionResponse
+ *
+ * 수용 게이트 위반은 여기서 던진다(접지 않는다) — admitAndCreateResponse 의
+ * toGateBlockedResult 가 현행과 같은 지점에서 접는다.
+ *
+ * answer 분기는 본문에 정확히 4곳뿐이며 전부 "첫 답변" 그 자체다.
+ * 정책 가드(봇·토큰·중복·버전·수용)를 이 분기 안에 넣지 말 것 — 넣는 순간 A-2 이전으로 돌아간다.
+ */
+async function admitAndCreateResponseInner(
+  input: CreateBlankResponseInput,
+  answer: EntryFirstAnswer | null,
 ): Promise<FirstAnswerResult> {
   const {
     surveyId,
     sessionId,
     versionId,
-    questionId,
-    value,
     currentStepId,
-    visibleStepIndex,
-    visibleStepTotal,
     inviteToken,
     clientSignals,
     honeypot,
@@ -1440,24 +1496,31 @@ async function createResponseWithFirstAnswerInner(
   }
 
   if (isTestTarget && contactTargetId && attemptId) {
-    const acquired = await saveTestTargetFirstAnswer({
-      surveyId,
-      contactTargetId,
-      sessionId,
-      attemptId,
-      versionId: versionId ?? null,
-      questionId,
-      value,
-      currentStepId,
-      visibleStepIndex,
-      visibleStepTotal,
-      userAgent,
-      ipHash: signals?.ipHash ?? null,
-      fpHash: signals?.fpHash ?? null,
-      deviceId: signals?.deviceId ?? null,
-      platform,
-      browser,
-    });
+    // answer 분기 (1/4) — 첫 답변이 있으면 같은 tx 꼬리에서 저장한다.
+    // 정책 가드를 이 분기 안에 넣지 말 것.
+    const acquired = await acquireTestTargetEntry(
+      {
+        surveyId,
+        contactTargetId,
+        sessionId,
+        attemptId,
+        versionId: versionId ?? null,
+        currentStepId,
+        ...(answer
+          ? {
+              visibleStepIndex: answer.visibleStepIndex,
+              visibleStepTotal: answer.visibleStepTotal,
+            }
+          : {}),
+        userAgent,
+        ipHash: signals?.ipHash ?? null,
+        fpHash: signals?.fpHash ?? null,
+        deviceId: signals?.deviceId ?? null,
+        platform,
+        browser,
+      },
+      answer ? { questionId: answer.questionId, value: answer.value } : undefined,
+    );
     return {
       kind: 'created',
       id: acquired.responseId,
@@ -1482,12 +1545,17 @@ async function createResponseWithFirstAnswerInner(
   // 재핀된 경우 멤버십 검증도 현재 스냅샷(effectiveVersionId) 기준 — 첫 답변 질문이 현재
   // 스냅샷에 없으면(관리자가 배포 직전에 바로 그 질문을 삭제한 좁은 엣지) 기존 멤버십 에러
   // ('해당 설문에 존재하지 않는 질문입니다')가 그대로 발생한다. 허용되는 엣지로 둔다.
-  const { piiEncrypted } = await assertQuestionBelongsToResponse(
-    effectiveVersionId,
-    surveyId,
-    questionId,
-  );
-  const storedValue = piiEncrypted ? encryptAnswerValue(value) : value;
+  // answer 분기 (2/4) — 첫 답변이 없으면 검증 대상 자체가 없다.
+  // 반드시 assertSurveyAcceptingResponses 뒤, firstVisit 조립 앞. 정책 가드 금지.
+  let storedValue: unknown;
+  if (answer) {
+    const { piiEncrypted } = await assertQuestionBelongsToResponse(
+      effectiveVersionId,
+      surveyId,
+      answer.questionId,
+    );
+    storedValue = piiEncrypted ? encryptAnswerValue(answer.value) : answer.value;
+  }
 
   const firstVisit: PageVisit = {
     stepId: currentStepId,
@@ -1498,7 +1566,8 @@ async function createResponseWithFirstAnswerInner(
     surveyId,
     sessionId,
     versionId: effectiveVersionId,
-    questionResponses: { [questionId]: storedValue },
+    // answer 분기 (3/4) — blank 는 현행처럼 visibleStep* 키가 "없어야" 한다(드리프트 D-2, 후속 A-2f-2).
+    questionResponses: answer ? { [answer.questionId]: storedValue } : {},
     isCompleted: false,
     status: 'in_progress',
     userAgent,
@@ -1508,8 +1577,12 @@ async function createResponseWithFirstAnswerInner(
     platform,
     browser,
     currentStepId,
-    visibleStepIndex: visibleStepIndex ?? null,
-    visibleStepTotal: visibleStepTotal ?? null,
+    ...(answer
+      ? {
+          visibleStepIndex: answer.visibleStepIndex ?? null,
+          visibleStepTotal: answer.visibleStepTotal ?? null,
+        }
+      : {}),
     pageVisits: [firstVisit],
     contactTargetId,
     isTest,
@@ -1527,10 +1600,26 @@ async function createResponseWithFirstAnswerInner(
   // 종결 상태 행을 물려받으려던 경우 — 500 대신 "이미 끝난 응답" 안내로 돌려보낸다.
   if (result.kind === 'blocked') return { kind: 'blocked', reason: result.reason };
 
+  // answer 분기 (4/4) — blank 는 머지할 답도 draftSeq 도 싣지 않는다.
+  // 드리프트 D-1 의 "의도적 보존"이다. 후속 티켓 A-2f-1 에서 대칭화한다. 여기서 고치지 말 것.
+  if (!answer) {
+    return {
+      kind: 'created',
+      id: result.row.id,
+      contactTargetId: result.row.contactTargetId,
+      // 행에 실제 기록된 versionId — 클라이언트가 자신이 알던 값과 비교해 재핀(티켓 04)을 감지한다.
+      versionId: result.row.versionId,
+    };
+  }
+
   // 신규 INSERT 든 reuse 든 모두 updateQuestionResponse 로 첫 답변 머지 + progress_pct
   // 갱신을 단일화. jsonb_set 은 동일 값 덮어쓰기라 멱등이라 신규 INSERT path 의 중복 set
   // 도 안전. onReuse 콜백을 사용하지 않는 이유: progress_pct 가 신규 INSERT 에서도 필요.
-  await updateQuestionResponse({ responseId: result.row.id, questionId, value: storedValue });
+  await updateQuestionResponse({
+    responseId: result.row.id,
+    questionId: answer.questionId,
+    value: storedValue,
+  });
   // 컨택 재사용으로 기존 행을 물려받았으면 그 행의 draftSeq 를 함께 실어 보낸다 — resume 이
   // 호출되지 않는 경로(localStorage 없는 재진입)에서도 draftSeqRef 를 올바르게 seed 하기 위함.
   const draftSeq = extractDraftSeq(result.row.metadata);
