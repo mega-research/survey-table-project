@@ -15,6 +15,7 @@ import {
   lockAndAssertResponseMutation,
 } from '@/lib/survey-response/test-target-attempt.server';
 
+import { ongoingResponseDenial } from '../../domain/acceptance';
 import type {
   RecordStepVisitInput,
   RecordVisibilitySegmentInput,
@@ -334,9 +335,16 @@ export async function resumeOrCreateResponse(
           existingByContact.status === 'drop' ||
           existingByContact.status === 'in_progress'
         ) {
-          // 중단 모드: 행이 isTest 이거나 유효한 테스트 링크로 재진입한 경우만 예외
-          if (flags?.isPaused && !existingByContact.isTest && !isTestSession) {
-            throw new SurveyNotAcceptingResponsesError('survey_paused');
+          // 중단 모드: 행이 isTest 이거나 유효한 테스트 링크로 재진입한 경우만 예외.
+          // 두 면제 갈래를 OR 로 합쳐 domain 의 단일 isTest 면제 규칙에 넘긴다.
+          // flags 미조회(설문 삭제 등)는 종전대로 fail-open.
+          const contactPausedDenial = flags
+            ? ongoingResponseDenial(flags, {
+                isTest: existingByContact.isTest || isTestSession,
+              })
+            : null;
+          if (contactPausedDenial) {
+            throw new SurveyNotAcceptingResponsesError(contactPausedDenial);
           }
           const reviveFromDrop = existingByContact.status === 'drop';
           // 답·스텝 복원 — invite 토큰 소지 = 이어가기 권한 (2026-08-12 제품 결정):
@@ -430,9 +438,14 @@ export async function resumeOrCreateResponse(
   const draftSeq = extractDraftSeq(existing.metadata);
 
   if (existing.status === 'drop' || existing.status === 'in_progress') {
-    // 중단 모드: 행이 isTest 이거나 유효한 테스트 링크로 재진입한 경우만 예외
-    if (flags?.isPaused && !existing.isTest && !isTestSession) {
-      throw new SurveyNotAcceptingResponsesError('survey_paused');
+    // 중단 모드: 행이 isTest 이거나 유효한 테스트 링크로 재진입한 경우만 예외.
+    // 두 면제 갈래를 OR 로 합쳐 domain 의 단일 isTest 면제 규칙에 넘긴다.
+    // flags 미조회(설문 삭제 등)는 종전대로 fail-open.
+    const sessionPausedDenial = flags
+      ? ongoingResponseDenial(flags, { isTest: existing.isTest || isTestSession })
+      : null;
+    if (sessionPausedDenial) {
+      throw new SurveyNotAcceptingResponsesError(sessionPausedDenial);
     }
     const reviveFromDrop = existing.status === 'drop';
     // 응답 버전 이관 — 구버전 행이면 현재 버전으로 재고정 (실패·불필요 시 null → 기존 동작)

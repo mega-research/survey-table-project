@@ -39,6 +39,7 @@ import { stripDisabledCellValues } from '@/lib/survey/cell-gating';
 import type { Question, SurveyLookup } from '@/types/survey';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 
+import { newResponseDenial, ongoingResponseDenial } from '../../domain/acceptance';
 import type { BlockReason } from '../../domain/duplicate';
 import { toGateBlockReason } from '../../domain/gate-block-reason';
 import { decideResponseReuse } from '../../domain/lifecycle';
@@ -434,59 +435,19 @@ export class SurveyNotAcceptingResponsesError extends Error {
 /**
  * 설문이 현재 응답을 받을 수 있는 상태인지 검증한다. 위반 시 throw.
  *
- * 검사 항목:
- * - 설문 status === 'published' (또는 활성 version 이 published) 가 아니면 거부.
- * - endDate 가 null 또는 미래여야 함. 경과 시 거부.
- * - maxResponses: completedCount 가 주어지면(=완료 시점 하드체크) 완료 카운트 < maxResponses 검사.
- *   create 시점은 completedCount 를 넘기지 않아 soft(검사 생략) — 잔여 race window 는 수용.
- *   complete 시점 count 쿼리와 실제 UPDATE 사이의 동시성 갭(여러 응답이 동시에 마지막 정원을
- *   채우는 경우)도 DB 레벨 락 없이 허용하는 잔여 window 다(문서화된 trade-off).
- * - isPublic === false 면 유효 invite(contactTargetId)가 필요. requireInviteToken 이면 토큰 강제
- *   (기존 checkTrackA 가 inviteToken 유효성을 별도 검증하므로 여기서는 contactTargetId 매칭 유무만 본다).
- *   단, isTest(테스트 세션)면 예외 — 테스트 링크는 invite 없이 진입하는 것이 정상 설계다.
- * - survey.isPaused 면 거부. 단, isTest(테스트 세션)면 예외 — 운영자가 중단 중에도 테스트
- *   링크로 미리보기/QA 할 수 있어야 한다(스펙 5절).
+ * 검사 항목·판정 순서·isTest 면제 규칙은 domain/acceptance 의 newResponseDenial 이 소유한다
+ * (그 파일의 CHECK_ORDER / CHECKS_FOR / PREDICATES 참조). 여기 남는 책임은 사유를 이 서비스의
+ * 에러 타입으로 바꾸는 것뿐이다 — 호출부 4곳(startResponse / createResponseWithFirstAnswer /
+ * createBlankResponse / completeResponse)의 시그니처를 유지하기 위한 얇은 어댑터다.
  */
 function assertSurveyAcceptingResponses(
   survey: SurveyGateRow,
   version: VersionGateRow,
   opts: { contactTargetId: string | null; completedCount?: number | null; isTest: boolean },
 ): void {
-  if (opts.isTest) return;
-
-  // status: 설문 자체가 published 이거나, 활성 version 이 published 여야 함.
-  const surveyPublished = survey.status === 'published';
-  const versionPublished = version?.status === 'published';
-  if (!surveyPublished && !versionPublished) {
-    throw new SurveyNotAcceptingResponsesError('status_not_published');
-  }
-
-  // 중단 모드: 테스트 세션(isTest)만 예외 (스펙 5절)
-  if (survey.isPaused && !opts.isTest) {
-    throw new SurveyNotAcceptingResponsesError('survey_paused');
-  }
-
-  // endDate 경과
-  if (survey.endDate != null && survey.endDate.getTime() <= Date.now()) {
-    throw new SurveyNotAcceptingResponsesError('end_date_passed');
-  }
-
-  // maxResponses 하드체크 (complete 시점에만 completedCount 전달)
-  if (
-    survey.maxResponses != null &&
-    opts.completedCount != null &&
-    opts.completedCount >= survey.maxResponses
-  ) {
-    throw new SurveyNotAcceptingResponsesError('max_responses_reached');
-  }
-
-  // 비공개 설문 / invite 강제 — 테스트 세션(isTest)은 invite 없이 진입하는 것이 정상이므로 예외.
-  if (
-    (survey.isPublic === false || survey.requireInviteToken) &&
-    opts.contactTargetId == null &&
-    !opts.isTest
-  ) {
-    throw new SurveyNotAcceptingResponsesError('invite_required');
+  const denial = newResponseDenial(survey, version, opts);
+  if (denial) {
+    throw new SurveyNotAcceptingResponsesError(denial);
   }
 }
 
@@ -921,12 +882,19 @@ async function loadResponseRowForMutation(responseId: string): Promise<ResponseM
   return row;
 }
 
-/** 중단 모드 게이트. isTest 행은 flags 조회 자체를 skip 해 정상 트래픽 비용을 늘리지 않는다. */
+/**
+ * 중단 모드 게이트. isTest 행은 flags 조회 자체를 skip 해 정상 트래픽 비용을 늘리지 않는다.
+ *
+ * 판정 자체는 domain/acceptance 의 ongoingResponseDenial 소관이고, 여기 남는 것은
+ * (a) 조회 회피 최적화와 (b) flags 미조회(설문 삭제 등) 시 fail-open 이다 — module 은
+ * non-null 상태만 받고 null 처리는 호출자가 진다.
+ */
 async function assertSurveyNotPaused(row: Pick<ResponseMutationRow, 'surveyId' | 'isTest'>): Promise<void> {
   if (row.isTest) return;
   const flags = await getSurveyControlFlags(row.surveyId);
-  if (flags?.isPaused) {
-    throw new SurveyNotAcceptingResponsesError('survey_paused');
+  const denial = flags ? ongoingResponseDenial(flags, { isTest: row.isTest }) : null;
+  if (denial) {
+    throw new SurveyNotAcceptingResponsesError(denial);
   }
 }
 

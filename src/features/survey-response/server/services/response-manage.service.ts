@@ -12,6 +12,7 @@ import {
 } from '@/db/schema';
 import { SurveyOwnershipError } from '@/lib/auth/require-survey-ownership';
 
+import { reeditDenial } from '../../domain/acceptance';
 import type {
   AllowReeditResponseInput,
   HardResetResponseInput,
@@ -223,23 +224,22 @@ export async function allowReeditResponse(
         .from(surveys)
         .where(eq(surveys.id, surveyId))
         .limit(1);
+      // gate 행 미조회는 종전대로 fail-open — 되돌리기를 막지 않는다.
       if (gate) {
-        let versionPublished = false;
+        let versionRow: { status: string } | null = null;
         if (gate.currentVersionId) {
           const [version] = await tx
             .select({ status: surveyVersions.status })
             .from(surveyVersions)
             .where(eq(surveyVersions.id, gate.currentVersionId))
             .limit(1);
-          versionPublished = version?.status === 'published';
+          versionRow = version ?? null;
         }
-        if (gate.status !== 'published' && !versionPublished) {
-          throw new ReeditUnavailableError('status_not_published');
-        }
-        if (gate.isPaused) throw new ReeditUnavailableError('survey_paused');
-        if (gate.endDate != null && gate.endDate.getTime() <= Date.now()) {
-          throw new ReeditUnavailableError('end_date_passed');
-        }
+        // 검사 집합(status·paused·endDate)과 판정 순서는 domain/acceptance 가 소유한다.
+        // row.isTest 는 이 블록 진입 조건상 항상 false 지만, 면제 규칙의 단일 거처를
+        // 지키기 위해 그대로 넘긴다(조회 회피는 바깥 if (!row.isTest) 가 이미 처리).
+        const denial = reeditDenial(gate, versionRow, { isTest: row.isTest });
+        if (denial) throw new ReeditUnavailableError(denial);
       }
     }
 
