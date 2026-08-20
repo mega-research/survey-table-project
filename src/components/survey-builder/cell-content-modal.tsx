@@ -42,6 +42,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
+import type { CompleteQuestionWrite } from '@/db/schema/question-persisted-fields';
 import { useEnsureSurveyInDb } from '@/hooks/use-ensure-survey-in-db';
 import { useSurveySync } from '@/hooks/use-survey-sync';
 import { generateId } from '@/lib/utils';
@@ -569,38 +570,72 @@ export function CellContentModal({
                 },
               }));
             } else {
-              // 미영속 질문: id를 그대로 전달해 서버에서 동일 id로 생성
-              const createdQuestion = await client.surveyBuilder.questions.create({
+              // 미영속 질문: id를 그대로 전달해 서버에서 동일 id로 생성.
+              // 가드: PERSISTED_QUESTION_FIELDS 를 모두 싣도록 satisfies 로 강제한다
+              // (question-edit-modal 의 CREATE 경로와 같은 계약). 셀 모달은 질문 폼을
+              // 소유하지 않으므로 구조 3종(열/헤더그리드/행)과 그룹만 에디터 최신값을 쓰고,
+              // 나머지 질문 필드는 스토어 질문 값을 그대로 실어 create-drop 을 막는다.
+              const createPayload = {
                 id: currentQuestionId,
                 surveyId: useSurveyBuilderStore.getState().currentSurvey.id,
-                ...(question.groupId !== undefined ? { groupId: question.groupId } : {}),
+                groupId: question.groupId,
                 type: question.type,
                 title: question.title || '',
-                ...(question.description !== undefined ? { description: question.description } : {}),
+                description: question.description,
                 required: question.required ?? false,
+                requiredMessage: question.requiredMessage ?? null,
                 order: question.order ?? 0,
-                ...(question.options !== undefined ? { options: question.options } : {}),
-                ...(question.selectLevels !== undefined ? { selectLevels: question.selectLevels } : {}),
-                ...(question.tableTitle !== undefined ? { tableTitle: question.tableTitle } : {}),
-                ...(latestColumns !== undefined
-                  ? { tableColumns: latestColumns }
-                  : question.tableColumns !== undefined
-                    ? { tableColumns: question.tableColumns }
-                    : {}),
-                ...(() => {
-                  // 신규 생성은 "키 부재 = 그리드 없음" 이라 해제 null 이 불필요 — 있을 때만 싣는다
-                  const latestHeaderGrid = getLatestHeaderGrid?.();
-                  return latestHeaderGrid != null ? { tableHeaderGrid: latestHeaderGrid } : {};
-                })(),
+                options: question.options,
+                selectLevels: question.selectLevels,
+                tableTitle: question.tableTitle,
+                tableColumns: latestColumns ?? question.tableColumns,
                 tableRowsData: updatedRowsData,
-                ...(question.allowOtherOption !== undefined ? { allowOtherOption: question.allowOtherOption } : {}),
-                ...(question.optionsColumns !== undefined ? { optionsColumns: question.optionsColumns } : {}),
-                ...(question.noticeContent !== undefined ? { noticeContent: question.noticeContent } : {}),
-                ...(question.requiresAcknowledgment !== undefined ? { requiresAcknowledgment: question.requiresAcknowledgment } : {}),
-                ...(question.tableValidationRules !== undefined ? { tableValidationRules: question.tableValidationRules } : {}),
-                ...(question.displayCondition !== undefined ? { displayCondition: question.displayCondition } : {}),
-                ...(prunedChoiceGroups !== undefined ? { choiceGroups: prunedChoiceGroups } : {}),
-              });
+                // 에디터가 배선돼 있으면 최신 그리드가 권위 — 해제는 null 로 명시한다.
+                // 미배선(구 호출부)일 때만 스토어 값으로 폴백한다.
+                tableHeaderGrid: getLatestHeaderGrid
+                  ? (getLatestHeaderGrid() ?? null)
+                  : (question.tableHeaderGrid ?? null),
+                allowOtherOption: question.allowOtherOption,
+                optionsColumns: question.optionsColumns,
+                optionsAlign: question.optionsAlign,
+                mobileOptionsColumns: question.mobileOptionsColumns,
+                minSelections: question.minSelections,
+                maxSelections: question.maxSelections,
+                noticeContent: question.noticeContent,
+                requiresAcknowledgment: question.requiresAcknowledgment,
+                placeholder: question.placeholder,
+                defaultValueTemplate: question.defaultValueTemplate,
+                inputType: question.inputType,
+                emptyDefault: question.emptyDefault,
+                numberFormat: question.numberFormat,
+                piiEncrypted: question.piiEncrypted,
+                tableValidationRules: question.tableValidationRules,
+                sumConstraints: question.sumConstraints,
+                dynamicRowConfigs: question.dynamicRowConfigs,
+                hideColumnLabels: question.hideColumnLabels,
+                mobileOriginalTable: question.mobileOriginalTable,
+                mobileTableDisplayMode: question.mobileTableDisplayMode,
+                mobileDrilldownOmitLeadingColumns: question.mobileDrilldownOmitLeadingColumns,
+                mobileDrilldownRepeatHeaderStartRow: question.mobileDrilldownRepeatHeaderStartRow,
+                mobileDrilldownRepeatHeaderEndRow: question.mobileDrilldownRepeatHeaderEndRow,
+                hideTitle: question.hideTitle,
+                pageBreakBefore: question.pageBreakBefore,
+                rankingConfig: question.rankingConfig,
+                // prune 결과가 없으면(그룹 대상 셀이 아니거나 원래 그룹이 없던 질문)
+                // 스토어 값을 그대로 유지한다 — 무관한 셀 저장이 그룹을 지우면 안 된다.
+                choiceGroups: prunedChoiceGroups ?? question.choiceGroups,
+                displayCondition: question.displayCondition,
+                questionCode: question.questionCode,
+                isCustomSpssVarName: question.isCustomSpssVarName,
+                exportLabel: question.exportLabel,
+                spssVarType: question.spssVarType,
+                spssMeasure: question.spssMeasure,
+                exportCellOrder: question.exportCellOrder,
+                answerQuoteEnabled: question.answerQuoteEnabled,
+                answerQuoteName: question.answerQuoteName,
+                answerQuoteText: question.answerQuoteText,
+              } satisfies CompleteQuestionWrite;
+              const createdQuestion = await client.surveyBuilder.questions.create(createPayload);
 
               if (createdQuestion?.id) {
                 // UPDATE 분기와 동일하게 store 도 방금 커밋한 구조로 동기화한다 —
