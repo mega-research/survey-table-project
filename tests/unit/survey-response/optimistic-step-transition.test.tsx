@@ -145,6 +145,9 @@ beforeEach(() => {
   bySlug.mockResolvedValue({ id: 'survey-1' });
   attrsLookup.mockResolvedValue({});
   stepVisit.mockResolvedValue(undefined);
+  // 진입 중복검사 기본값 — 미지정이면 undefined.blocked TypeError 가 catch 되어
+  // 로그 소음만 남기고 ok 처리되므로, 실제 통과 응답 형태를 명시한다.
+  checkOnEntry.mockResolvedValue({ blocked: false });
 });
 
 afterEach(() => {
