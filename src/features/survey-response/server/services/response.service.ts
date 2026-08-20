@@ -996,12 +996,27 @@ async function loadQuestionPiiFlags(
  * progress_pct 는 배치 중 가장 뒤에 있는 문항의 위치로 계산한다(단건 경로를 답변 수만큼
  * 반복한 결과와 동일 — GREATEST 로 단조 증가라 최대값만 남는다).
  */
-async function applyDraftAnswersUpdate(
+/**
+ * draft 답변 병합 UPDATE.
+ *
+ * seq 가 주어지면 WHERE 에 metadata.draftSeq = seq 조건을 건다 — claimDraftSeq(선점)와
+ * 이 UPDATE 는 별개 문장이라, 그 사이에 더 큰 seq 가 선점·적용되면(예: 지연된 oRPC draft 와
+ * pagehide beacon 의 역순 완료) 낡은 답변이 최신을 덮을 수 있다. 조건이 0행이면 선점 이후
+ * 더 새로운 쓰기가 끼어든 것이므로 'stale' 로 돌려 답변을 쓰지 않는다.
+ * 내보내는 이유: 이 동시성 가드는 두 문장 사이를 외부에서 쪼갤 수 없어 실DB 테스트가
+ * 이 함수를 직접 호출해 고정한다 (tests/integration/draft-seq-guard.realdb.test.ts).
+ */
+export async function applyDraftAnswersUpdate(
   executor: { update: typeof db.update },
   responseId: string,
   questionIds: string[],
   storedAnswers: Record<string, unknown>,
-): Promise<void> {
+  seq?: number,
+): Promise<'applied' | 'stale'> {
+  const seqGuard =
+    seq !== undefined
+      ? [sql`COALESCE((${surveyResponses.metadata}->>'draftSeq')::bigint, 0) = ${seq}`]
+      : [];
   // 사이드카(__optTexts__)만 실려 온 배치 — 실존 문항이 없어 진척률 계산 불가.
   // jsonb 병합만 수행한다 (빈 idList 를 IN () 으로 흘리면 SQL 오류).
   if (questionIds.length === 0) {
@@ -1016,11 +1031,12 @@ async function applyDraftAnswersUpdate(
           eq(surveyResponses.id, responseId),
           isNull(surveyResponses.deletedAt),
           eq(surveyResponses.status, 'in_progress'),
+          ...seqGuard,
         ),
       )
       .returning();
-    if (!updated) throw new Error('응답을 수정할 수 없습니다.');
-    return;
+    if (!updated) return judgeDraftZeroRow(responseId, seq);
+    return 'applied';
   }
   const idList = sql.join(
     questionIds.map((id) => sql`${id}`),
@@ -1061,13 +1077,28 @@ async function applyDraftAnswersUpdate(
         eq(surveyResponses.id, responseId),
         isNull(surveyResponses.deletedAt),
         eq(surveyResponses.status, 'in_progress'),
+        ...seqGuard,
       ),
     )
     .returning();
 
-  if (!updated) {
-    throw new Error('응답을 수정할 수 없습니다.');
+  if (!updated) return judgeDraftZeroRow(responseId, seq);
+  return 'applied';
+}
+
+/**
+ * 답변 UPDATE 0행의 사유 판별 — seq 가드 때문인지(그 사이 더 새로운 쓰기가 선점 = stale),
+ * 행 상태 때문인지(삭제/종결 = 기존 throw 의미론 유지) 구분한다.
+ */
+async function judgeDraftZeroRow(responseId: string, seq: number | undefined): Promise<'stale'> {
+  if (seq !== undefined) {
+    const rows = await db.execute<{ draft_seq: string | null }>(sql`
+      SELECT metadata->>'draftSeq' AS draft_seq FROM survey_responses WHERE id = ${responseId}
+    `);
+    const stored = rows[0]?.draft_seq != null ? Number(rows[0].draft_seq) : null;
+    if (stored !== null && stored > seq) return 'stale';
   }
+  throw new Error('응답을 수정할 수 없습니다.');
 }
 
 type DraftSeqClaim = 'claimed' | 'stale' | 'not_found';
@@ -1174,20 +1205,25 @@ export async function saveDraftResponse(
   const questionIds = answerEntries.map(([questionId]) => questionId);
 
   if (!responseRow.isTest) {
-    await applyDraftAnswersUpdate(db, input.responseId, questionIds, storedAnswers);
-    return { applied: true };
+    const outcome = await applyDraftAnswersUpdate(
+      db, input.responseId, questionIds, storedAnswers, input.seq,
+    );
+    return { applied: outcome === 'applied' };
   }
 
   // 테스트 행은 시도 소유권 락을 먼저 잡는다. 락도 배치당 1회.
+  let outcome: 'applied' | 'stale' = 'applied';
   await db.transaction(async (tx) => {
     await lockAndAssertResponseMutation(tx, {
       responseId: input.responseId,
       ...(input.attemptId ? { attemptId: input.attemptId } : {}),
       ...(input.sessionId ? { sessionId: input.sessionId } : {}),
     });
-    await applyDraftAnswersUpdate(tx, input.responseId, questionIds, storedAnswers);
+    outcome = await applyDraftAnswersUpdate(
+      tx, input.responseId, questionIds, storedAnswers, input.seq,
+    );
   });
-  return { applied: true };
+  return { applied: outcome === 'applied' };
 }
 
 /** saveDraftResponseIfActive 가 저장을 건너뛴 사유. 서버 로그·테스트 어서션용. */
