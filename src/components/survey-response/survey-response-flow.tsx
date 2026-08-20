@@ -395,7 +395,6 @@ function SurveyResponseFlowActive({
     [isTargetTestSession, testAttemptId, sessionId],
   );
 
-  // 첫 답변 INSERT 진행 플래그(isCreatingResponse)는 useResponseLifecycle 이 소유한다.
   // 제출 시도 후 하이라이트할 질문 ID 집합
   const [highlightQuestionIds, setHighlightQuestionIds] = useState<Set<string>>(
     () => new Set(),
@@ -876,7 +875,7 @@ function SurveyResponseFlowActive({
     })();
   }, [refetchSnapshot, setResponses]);
 
-  // isCreatingResponse 는 훅 내부 전용(첫 답변 INSERT 가드)이라 컴포넌트는 구조분해하지 않는다.
+  // 첫 답변 INSERT 가드는 훅 내부 동기 ref 전용이라 컴포넌트가 볼 값이 없다(반환하지 않는다).
   const { handleResponse, flushPendingAnswersInBackground, waitForResponseId, handleSubmit } =
     useResponseLifecycle({
     isAdminEdit,

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 
 import { toast } from 'sonner';
@@ -175,19 +175,18 @@ interface UseResponseLifecycleResult {
    */
   waitForResponseId: () => Promise<string | null>;
   handleSubmit: () => Promise<void>;
-  /** 첫 답변 동시 발사 시 중복 INSERT 방어용 플래그. 이 훅이 소유. */
-  isCreatingResponse: boolean;
 }
 
 /**
  * 응답 쓰기 경로(handleResponse / handleSubmit) 추출 훅.
  *
- * survey-response-flow.tsx 의 두 useCallback + isCreatingResponse state 를 라인 단위 그대로 이관했다.
+ * survey-response-flow.tsx 의 두 useCallback + 첫 답변 INSERT 가드를 라인 단위 그대로 이관했다.
  * 응답 손실은 실제 사용자 피해이므로 동작 보존이 절대적이다 — 가드/fallback/complete/에러/deps 를 1:1 유지한다.
  *
  * 동작 보존 핵심:
- * - isCreatingResponse 는 이 두 콜백 전용이라 훅이 소유하고 반환한다 (원본도 동일 용도).
- * - handleResponse INSERT 발사 가드(currentResponseId === null && !isCreatingResponse && !isRecovering(I-1)
+ * - 첫 답변 INSERT 가드는 이 두 콜백 전용이라 훅이 소유한다. 렌더 소비자가 없어 state 가 아니라
+ *   동기 ref(isCreatingResponseRef)다 — 같은 커밋에서 발사된 두 호출도 즉시 막는다.
+ * - handleResponse INSERT 발사 가드(currentResponseId === null && !isCreatingResponseRef.current && !isRecovering(I-1)
  *   && loadedSurvey && currentStep && !isAdminEdit) 와 .then/.catch/.finally 순서, 멱등 키(surveyId, sessionId)
  *   를 유지한다. 페이지 이동 전 flushPendingAnswers가 생성 완료를 기다린 뒤 변경 답을 저장한다.
  * - handleSubmit 의 미응답 필수 하이라이트 분기, admin-edit 위임 분기(6/8), currentResponseId === null
@@ -244,8 +243,11 @@ export function useResponseLifecycle({
   buildOptTextsPayload,
 }: UseResponseLifecycleArgs): UseResponseLifecycleResult {
   // INSERT 진행 중인지 추적 (첫 답변 동시 발사 시 중복 INSERT 방어).
-  // ref가 아닌 state라도 OK — `handleResponse` 클로저에서 캡처되는 시점이 한 번이면 충분.
-  const [isCreatingResponse, setIsCreatingResponse] = useState(false);
+  // state 로는 가드가 되지 않는다 — 같은 커밋에서 발사된 두 호출은 같은 클로저를 쓰므로
+  // 둘 다 stale false 를 읽는다(한 페이지에 prefill 단답형이 2개면 두 mount effect 가
+  // 그 형태로 handleResponse 를 두 번 부른다. StrictMode 이중 이펙트도 동형).
+  // ref 는 동기 기록되어 같은 틱에서도 즉시 반영된다 — use-survey-sync 의 savingRef 와 같은 패턴.
+  const isCreatingResponseRef = useRef(false);
   // 첫 답변 INSERT가 끝나기 전에 들어온 후속 답을 유실하지 않도록 응답 ID와 대기 답을 ref로 보관한다.
   const activeResponseIdRef = useRef<string | null>(currentResponseId);
   const pendingAnswerSavesRef = useRef(new Map<string, unknown>());
@@ -500,12 +502,12 @@ export function useResponseLifecycle({
         !isAdminEdit &&
         !isPreview &&
         (currentResponseId === null || (testIdentity !== null && !hasTestAttemptOwnership)) &&
-        !isCreatingResponse &&
+        !isCreatingResponseRef.current &&
         !isRecovering &&    // I-1 fix: 회복 진행 중에는 INSERT 발사 안 함
         loadedSurvey &&
         currentStep
       ) {
-        setIsCreatingResponse(true);
+        isCreatingResponseRef.current = true;
         // signalsRef.current 가 null 이면 그대로 전달 — server action 이 신호 기반 검사 skip
         // (placeholder 신호로 hash 충돌 발생을 방지하기 위함)
         const creationRequest = client.surveyResponse.response.createWithFirstAnswer({
@@ -588,12 +590,15 @@ export function useResponseLifecycle({
             if (responseCreationPromiseRef.current === trackedCreation) {
               responseCreationPromiseRef.current = null;
             }
-            setIsCreatingResponse(false);
+            // 가드 해제는 이 finally 단 하나다 — 성공/blocked/reject/핸들러 내부 throw 를 모두
+            // 지난다. 여기서 빠지면 이후 모든 입력이 응답 행을 만들지 못하고 영구 정지한다.
+            isCreatingResponseRef.current = false;
           });
         responseCreationPromiseRef.current = trackedCreation;
       }
     },
-    // deps 는 원본 컴포넌트의 handleResponse useCallback 과 1:1 동일.
+    // deps 는 원본 컴포넌트의 handleResponse useCallback 과 1:1 동일하되, isCreatingResponse 만
+    // 빠졌다 — 동기 ref 로 바뀌어 발사 시점에 .current 를 읽으므로 deps 대상이 아니다.
     // signals 는 deps 대상이 아니다 — 클로저 캡처가 아니라 signalsRef 로 발사 시점 최신값을 읽는다
     // (prop 캡처는 deps 미변경 첫 페이지에서 마운트 시점 null 이 그대로 나가는 스테일 클로저였다).
     // 추출로 안정 세터/ref(setResponses/setHighlightQuestionIds/setDuplicateStatus/setInviteIsInvalid/
@@ -602,7 +607,6 @@ export function useResponseLifecycle({
     [
       setPendingResponse,
       currentResponseId,
-      isCreatingResponse,
       isRecovering,
       isAdminEdit,
       isPreview,
@@ -1014,7 +1018,6 @@ export function useResponseLifecycle({
     flushPendingAnswersInBackground,
     waitForResponseId,
     handleSubmit,
-    isCreatingResponse,
   };
 }
 

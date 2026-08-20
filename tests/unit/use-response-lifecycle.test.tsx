@@ -156,6 +156,59 @@ describe('useResponseLifecycle - handleResponse INSERT 가드', () => {
     await waitFor(() => expect(args.setCurrentResponseId).toHaveBeenCalledWith('resp-1'));
   });
 
+  it('같은 커밋에서 두 번 호출돼도 createWithFirstAnswer 를 1회만 발사한다 (동기 ref 가드)', async () => {
+    // 한 페이지에 prefill 단답형이 2개면 두 컴포넌트의 mount effect 가 같은 커밋에서
+    // 같은 handleResponse 클로저를 두 번 부른다(StrictMode 이중 이펙트도 동형).
+    // state 가드는 두 호출 모두 stale false 를 읽어 INSERT 를 2회 발사했다.
+    const args = baseArgs();
+    const { result } = renderHook(() => useResponseLifecycle(args));
+
+    act(() => {
+      result.current.handleResponse('q1', 'v1');
+      result.current.handleResponse('q2', 'v2');
+    });
+
+    expect(createWithFirstAnswer).toHaveBeenCalledTimes(1);
+    expect(createWithFirstAnswer).toHaveBeenCalledWith(
+      expect.objectContaining({ questionId: 'q1', value: 'v1' }),
+    );
+
+    // 발사되지 않은 두 번째 답도 유실되지 않는다 — pending 에 남아 생성 완료 후 flush 로 나간다.
+    await waitFor(() => expect(args.setCurrentResponseId).toHaveBeenCalledWith('resp-1'));
+    await act(async () => {
+      await result.current.flushPendingAnswers();
+    });
+    expect(saveDraft).toHaveBeenCalledWith({
+      responseId: 'resp-1',
+      answers: { q1: 'v1', q2: 'v2' },
+      seq: expect.any(Number),
+    });
+  });
+
+  it('생성이 실패해도 가드가 풀려 다음 첫 답변이 다시 INSERT 를 시도한다', async () => {
+    // 가드 해제는 .finally 한 곳뿐이다 — 거기서 빠지면 이후 모든 입력이 응답 행을
+    // 만들지 못하고 영구 정지한다(ref 치환의 최대 위험).
+    createWithFirstAnswer.mockRejectedValueOnce(new Error('network down'));
+    const args = baseArgs();
+    const { result } = renderHook(() => useResponseLifecycle(args));
+
+    act(() => {
+      result.current.handleResponse('q1', 'v1');
+    });
+    expect(createWithFirstAnswer).toHaveBeenCalledTimes(1);
+
+    // 실패 경로는 중단 여부 재조회(forResponse)를 거친 뒤 finally 로 간다 — 그 체인을 소진시킨다.
+    await waitFor(() => expect(forResponse).toHaveBeenCalled());
+    await act(async () => {});
+
+    act(() => {
+      result.current.handleResponse('q2', 'v2');
+    });
+
+    expect(createWithFirstAnswer).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(args.setCurrentResponseId).toHaveBeenCalledWith('resp-1'));
+  });
+
   it('마운트 후 수집된 signals 를 첫 답변 INSERT 에 싣는다 (스테일 클로저 회귀 방지)', async () => {
     // 시나리오: signals=null 로 마운트 → 신호 수집 완료로 signals 만 채워진 리렌더 →
     // 다른 deps 는 전부 동일 참조 유지(실제 첫 페이지 상황) → 첫 답변 발사.
@@ -272,6 +325,8 @@ describe('useResponseLifecycle - handleResponse INSERT 가드', () => {
     act(() => {
       result.current.handleResponse('q2', '두 번째 답');
     });
+    // 생성이 in-flight 인 동안 두 번째 답은 INSERT 를 다시 발사하지 않는다 (커밋을 넘는 가드).
+    expect(createWithFirstAnswer).toHaveBeenCalledTimes(1);
     let flushPromise!: Promise<boolean>;
     act(() => {
       flushPromise = result.current.flushPendingAnswers();
