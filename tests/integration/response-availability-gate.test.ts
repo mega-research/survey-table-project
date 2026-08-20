@@ -924,3 +924,202 @@ describe('회귀: 비공개 설문 + 유효 테스트 세션 create→complete �
     expect(completeResult).toMatchObject({ id: 'r1' });
   });
 });
+
+// ── A-1 사전 박제 ────────────────────────────────────────────────────────────
+// 수용 게이트를 domain 으로 모으기 전에, 기존 케이스가 덮지 않던 계약을 고정한다.
+// 리팩터 전/후 모두 무수정으로 통과해야 한다.
+describe('A-1 사전 박제 — 우선순위·부분집합·fail-open', () => {
+  const VALID_SIGNALS = {
+    deviceId: 'dev-a1-1',
+    screen: '1920x1080',
+    tz: 'Asia/Seoul',
+    lang: 'ko-KR',
+    platform: 'MacIntel',
+  };
+
+  beforeEach(() => {
+    surveyFindFirstMock.mockReset();
+    versionFindFirstMock.mockReset();
+    responseFindFirstMock.mockReset();
+    contactFindFirstMock.mockReset();
+    insertReturningMock.mockReset();
+    selectLimitMock.mockReset();
+    countResultMock.mockReset();
+    headersMock.mockReset();
+    inviteLookupMock.mockReset();
+    insertChain.values.mockClear();
+
+    headersMock.mockResolvedValue(
+      new Headers({ 'x-forwarded-for': '10.0.0.21', 'user-agent': 'Chrome/120' }),
+    );
+    insertReturningMock.mockResolvedValue([
+      { id: 'r1', contactTargetId: null, status: 'in_progress' },
+    ]);
+    selectLimitMock.mockResolvedValue([{ id: 'q1' }]);
+    countResultMock.mockResolvedValue([{ total: 0 }]);
+    responseFindFirstMock.mockResolvedValue(undefined);
+  });
+
+  it('신규 수용: 전 규칙을 동시에 위반하면 status_not_published 가 먼저 이긴다', async () => {
+    // status·paused·endDate·invite 를 모두 위반시켜도 첫 사유가 화면 문구를 정한다.
+    // survey_paused(=blocked survey_paused)나 invalid_token 이 나오면 순서가 깨진 것.
+    surveyFindFirstMock.mockResolvedValue(
+      publishedSurvey({
+        status: 'draft',
+        isPaused: true,
+        endDate: new Date(Date.now() - 60_000),
+        isPublic: false,
+      }),
+    );
+
+    const { createResponseWithFirstAnswer } =
+      await import('@/features/survey-response/server/services/response.service');
+    expect(
+      await createResponseWithFirstAnswer({
+        surveyId: SURVEY_ID,
+        sessionId: 'a1-priority-1',
+        versionId: null,
+        questionId: 'q1',
+        value: 'a',
+        currentStepId: 'step1',
+        clientSignals: VALID_SIGNALS,
+      }),
+    ).toEqual({ kind: 'blocked', reason: 'not_accepting' });
+  });
+
+  it('신규 수용: published 인데 중단·마감 동시 위반이면 survey_paused 가 이긴다', async () => {
+    surveyFindFirstMock.mockResolvedValue(
+      publishedSurvey({ isPaused: true, endDate: new Date(Date.now() - 60_000) }),
+    );
+
+    const { createResponseWithFirstAnswer } =
+      await import('@/features/survey-response/server/services/response.service');
+    expect(
+      await createResponseWithFirstAnswer({
+        surveyId: SURVEY_ID,
+        sessionId: 'a1-priority-2',
+        versionId: null,
+        questionId: 'q1',
+        value: 'a',
+        currentStepId: 'step1',
+        clientSignals: VALID_SIGNALS,
+      }),
+    ).toEqual({ kind: 'blocked', reason: 'survey_paused' });
+  });
+
+  it('신규 수용: requireInviteToken 만으로도 invite_required(=invalid_token)로 접힌다', async () => {
+    // 기존 케이스는 isPublic=false 갈래만 덮는다. isPublic=true + requireInviteToken 갈래 박제.
+    surveyFindFirstMock.mockResolvedValue(
+      publishedSurvey({ isPublic: true, requireInviteToken: true }),
+    );
+
+    const { createResponseWithFirstAnswer } =
+      await import('@/features/survey-response/server/services/response.service');
+    expect(
+      await createResponseWithFirstAnswer({
+        surveyId: SURVEY_ID,
+        sessionId: 'a1-invite-1',
+        versionId: null,
+        questionId: 'q1',
+        value: 'a',
+        currentStepId: 'step1',
+        clientSignals: VALID_SIGNALS,
+      }),
+    ).toEqual({ kind: 'blocked', reason: 'invalid_token' });
+  });
+
+  it('신규 수용: create 는 정원을 soft 로 둔다 — 정원이 찼어도 생성은 성공한다 (의도)', async () => {
+    // 정원 하드체크는 completedCount 를 넘기는 complete 시점 전용이다.
+    surveyFindFirstMock.mockResolvedValue(publishedSurvey({ maxResponses: 1 }));
+    countResultMock.mockResolvedValue([{ total: 5 }]);
+    // INSERT 후 updateQuestionResponse 가 응답 행을 다시 읽는다 — 첫 undefined 는 중복검사
+    // Track B 통과용이고, 두 번째부터 실제 행을 준다. 기존 성공 케이스와 같은 2단 mock.
+    responseFindFirstMock.mockResolvedValueOnce(undefined).mockResolvedValue({
+      id: 'r1',
+      surveyId: SURVEY_ID,
+      versionId: null,
+      isTest: false,
+      contactTargetId: null,
+    });
+
+    const { createResponseWithFirstAnswer } =
+      await import('@/features/survey-response/server/services/response.service');
+    expect(
+      await createResponseWithFirstAnswer({
+        surveyId: SURVEY_ID,
+        sessionId: 'a1-capacity-soft',
+        versionId: null,
+        questionId: 'q1',
+        value: 'a',
+        currentStepId: 'step1',
+        clientSignals: VALID_SIGNALS,
+      }),
+    ).toMatchObject({ kind: 'created', id: 'r1' });
+  });
+
+  it('답변 저장: 설문 행이 없으면(제어 플래그 null) 던지지 않고 저장한다 (fail-open)', async () => {
+    // ?? false ↔ ?? true 뒤집힘을 잡는 케이스.
+    surveyFindFirstMock.mockResolvedValue(undefined);
+    responseFindFirstMock.mockResolvedValue({
+      id: 'r1',
+      surveyId: SURVEY_ID,
+      versionId: null,
+      isTest: false,
+    });
+
+    const { updateQuestionResponse } =
+      await import('@/features/survey-response/server/services/response.service');
+    await expect(
+      updateQuestionResponse({ responseId: 'r1', questionId: 'q1', value: 'a' }),
+    ).resolves.toMatchObject({ id: 'r1' });
+  });
+
+  it('재진입: 유효한 테스트 링크 세션이면 비-테스트 행도 중단을 면제받는다', async () => {
+    // 기존 케이스는 "행 자체가 isTest" 갈래만 덮는다. isTestSession 갈래 박제.
+    surveyFindFirstMock.mockResolvedValue(
+      publishedSurvey({ isPaused: true, testModeEnabled: true, testToken: 'tok' }),
+    );
+    selectLimitMock.mockResolvedValue([
+      { id: 'resp-ts', status: 'in_progress', isTest: false },
+    ]);
+
+    const { resumeOrCreateResponse } =
+      await import('@/features/survey-response/server/services/lifecycle.service');
+    const result = await resumeOrCreateResponse({
+      surveyId: SURVEY_ID,
+      sessionId: 'a1-test-session',
+      testToken: 'tok',
+    });
+    expect(result).toMatchObject({ id: 'resp-ts', status: 'in_progress' });
+  });
+
+  it('재진입: 제어 플래그 조회가 null 이면 중단 판정 없이 통과한다 (fail-open)', async () => {
+    surveyFindFirstMock.mockResolvedValue(undefined);
+    selectLimitMock.mockResolvedValue([{ id: 'resp-fo', status: 'drop', isTest: false }]);
+
+    const { resumeOrCreateResponse } =
+      await import('@/features/survey-response/server/services/lifecycle.service');
+    const result = await resumeOrCreateResponse({
+      surveyId: SURVEY_ID,
+      sessionId: 'a1-resume-failopen',
+    });
+    expect(result).toMatchObject({ id: 'resp-fo', status: 'in_progress', resumed: true });
+  });
+
+  it('재진입: status·endDate 는 보지 않는다 — 마감·closed 설문도 재개된다 (현행 부분집합)', async () => {
+    // 근거 주석이 없는 갭이다. 후속 정책 티켓(B-b)이 이 테스트를 뒤집는 것이
+    // 곧 동작 변경의 신호가 된다 — A-1 에서는 고치지 않는다.
+    surveyFindFirstMock.mockResolvedValue(
+      publishedSurvey({ status: 'closed', endDate: new Date(Date.now() - 60_000) }),
+    );
+    selectLimitMock.mockResolvedValue([{ id: 'resp-gap', status: 'in_progress', isTest: false }]);
+
+    const { resumeOrCreateResponse } =
+      await import('@/features/survey-response/server/services/lifecycle.service');
+    const result = await resumeOrCreateResponse({
+      surveyId: SURVEY_ID,
+      sessionId: 'a1-resume-gap',
+    });
+    expect(result).toMatchObject({ id: 'resp-gap', status: 'in_progress' });
+  });
+});
