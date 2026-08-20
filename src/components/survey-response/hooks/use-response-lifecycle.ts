@@ -163,6 +163,11 @@ interface UseResponseLifecycleResult {
   handleResponse: (questionId: string, value: unknown) => void;
   /** 현재 페이지에서 바뀐 답을 저장한다. 첫 응답 생성 중이면 완료까지 기다린다. */
   flushPendingAnswers: () => Promise<boolean>;
+  /**
+   * 낙관 전환용 백그라운드 체크포인트 — 디바운스 자동 저장과 동일 의미론(실패 토스트 없음,
+   * 실패 시 pending 유지). "다음" 클릭이 저장 왕복을 기다리지 않도록 발사만 한다.
+   */
+  flushPendingAnswersInBackground: () => Promise<boolean>;
   handleSubmit: () => Promise<void>;
   /** 첫 답변 동시 발사 시 중복 INSERT 방어용 플래그. 이 훅이 소유. */
   isCreatingResponse: boolean;
@@ -406,6 +411,7 @@ export function useResponseLifecycle({
   };
 
   const flushPendingAnswers = (): Promise<boolean> => enqueueFlush(false);
+  const flushPendingAnswersInBackground = (): Promise<boolean> => enqueueFlush(true);
 
   // 답변 입력 디바운스 자동 저장 타이머. 리셋은 clearTimeout + 재예약이라 동시 타이머는 항상 1개.
   const draftAutosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -978,7 +984,13 @@ export function useResponseLifecycle({
     hasTestAttemptOwnership,
   ]);
 
-  return { handleResponse, flushPendingAnswers, handleSubmit, isCreatingResponse };
+  return {
+    handleResponse,
+    flushPendingAnswers,
+    flushPendingAnswersInBackground,
+    handleSubmit,
+    isCreatingResponse,
+  };
 }
 
 // 타입별 응답 충족 판정과 무관한 단순 필수 여부. 원본 컴포넌트의 비메모 인라인 함수와 동등.

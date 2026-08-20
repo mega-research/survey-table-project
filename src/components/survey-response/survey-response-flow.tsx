@@ -877,7 +877,7 @@ function SurveyResponseFlowActive({
   }, [refetchSnapshot, setResponses]);
 
   // isCreatingResponse 는 훅 내부 전용(첫 답변 INSERT 가드)이라 컴포넌트는 구조분해하지 않는다.
-  const { handleResponse, flushPendingAnswers, handleSubmit } = useResponseLifecycle({
+  const { handleResponse, flushPendingAnswersInBackground, handleSubmit } = useResponseLifecycle({
     isAdminEdit,
     isPreview,
     isCompleted,
@@ -1065,21 +1065,23 @@ function SurveyResponseFlowActive({
     }
 
     // 마지막 제출은 complete가 전체 답을 저장한다. 중간 이동은 현재 페이지 변경분을
-    // 먼저 체크포인트로 저장하고, 실패하면 페이지를 유지해 응답 유실을 막는다.
-    // (디바운스 자동 저장이 이미 비워둔 경우 flush 는 왕복 없이 즉시 통과한다.)
-    const flushOk = nextIndex === -1 || (await flushPendingAnswers());
+    // 백그라운드 체크포인트로 발사만 하고 전환은 기다리지 않는다(낙관 전환) —
+    // 답변 직후 5초 디바운스 안에 "다음"을 누르는 지배적 패턴에서 매 스텝이
+    // 저장 왕복만큼 느려지던 것을 없앤다. 실패해도 pending 이 유지되어 다음
+    // flush/이탈 beacon/최종 complete 에 합류하므로 유실 경로가 없고,
+    // enqueueFlush 직렬화 체인 + 서버 seq 가드가 순서/중복을 방어한다.
+    if (nextIndex !== -1) void flushPendingAnswersInBackground();
 
     if (quotaPromise) {
+      // 쿼터 판정(응답당 최대 1회)만은 기다린다 — 낙관 전환하면 마감 응답자에게
+      // 다음 문항을 보여줬다가 차단 화면으로 갈아치우는 어색한 상태가 생긴다.
       const res = await quotaPromise;
-      // 쿼터 마감은 종결 상태라 flush 성패와 무관하게 우선한다.
       if (res?.blocked) {
         setQuotaClosedMessage(res.closedMessage);
         setDuplicateStatus({ kind: 'blocked', reason: 'quota_closed' });
         return;
       }
     }
-
-    if (!flushOk) return;
 
     setStepHistory((prev) => [...prev, currentStepIndex]);
 
