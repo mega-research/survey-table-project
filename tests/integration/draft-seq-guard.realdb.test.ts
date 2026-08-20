@@ -98,6 +98,25 @@ describe.skipIf(!isLocalDb)('draft seq 동시성 가드 (real local DB)', () => 
     expect((row?.questionResponses as Record<string, unknown>)[questionId]).toBe('새값');
   });
 
+  it('종결(완료) 행에 대한 draft 는 stale 이 아니라 concluded 로 구분된다', async () => {
+    const { responseId, questionId } = await seedResponse();
+    await db.execute(sql`
+      UPDATE survey_responses SET status = 'completed', is_completed = true, completed_at = now()
+      WHERE id = ${responseId}
+    `);
+
+    // 잔여 화면의 늦은 draft — 안내 화면 전환용 concluded 신호
+    await expect(
+      saveDraftResponse({ responseId, answers: { [questionId]: '늦은값' }, seq: 5 }),
+    ).resolves.toEqual({ applied: false, concluded: true });
+
+    const [row] = await db
+      .select({ questionResponses: surveyResponses.questionResponses })
+      .from(surveyResponses)
+      .where(eq(surveyResponses.id, responseId));
+    expect((row?.questionResponses as Record<string, unknown>)[questionId]).toBe('최신값');
+  });
+
   it('saveDraftResponse 왕복 — 사다리 정상 적용과 stale 거부가 그대로 동작한다', async () => {
     const { responseId, questionId } = await seedResponse();
 

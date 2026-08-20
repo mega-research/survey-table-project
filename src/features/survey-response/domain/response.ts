@@ -32,6 +32,12 @@ export const QuestionResponsesSchema = z.record(z.string(), z.unknown());
  */
 export const SurveyResponseRowSchema = z.custom<SurveyResponse>();
 
+/**
+ * complete 출력 — 이미 완료된 행에 대한 늦은 complete(멱등)면 alreadyCompleted 가 실린다.
+ * 클라이언트는 이 표식으로 가짜 감사 화면 대신 "이미 완료된 설문입니다" 안내를 띄운다.
+ */
+export const CompleteResponseOutput = z.custom<SurveyResponse & { alreadyCompleted?: boolean }>();
+
 export const TestAttemptIdentityFields = {
   attemptId: z.string().uuid().optional(),
   sessionId: z.string().optional(),
@@ -89,6 +95,8 @@ export const SaveDraftResponseOutput = z.object({
    * "저장됨" 으로 착각해 유실한다).
    */
   applied: z.boolean(),
+  /** 응답이 이미 종결(완료 등)돼 답변을 쓰지 않았음 — 잔여 화면은 안내로 접는다. */
+  concluded: z.boolean().optional(),
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

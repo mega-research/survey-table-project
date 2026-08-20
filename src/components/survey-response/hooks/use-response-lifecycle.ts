@@ -347,6 +347,14 @@ export function useResponseLifecycle({
         seq: ++draftSeqRef.current,
         ...(testIdentity ?? {}),
       });
+      if (result.concluded) {
+        // 이 응답은 이미 (다른 화면에서) 완료됐다 — 조용한 실패로 끝까지 진행시키는 대신
+        // "이미 완료된 설문입니다" 안내로 접는다 (동시 세션 정책 G1). pending 은 어떤
+        // 재시도로도 적용될 수 없으므로 비워 이탈 beacon 재발사도 멈춘다.
+        pendingAnswerSavesRef.current.clear();
+        setDuplicateStatus({ kind: 'blocked', reason: 'response_concluded' });
+        return false;
+      }
       if (!result.applied) {
         // 서버가 stale seq 로 판정해 답변을 쓰지 않았다. pending 을 비우면 서버에 반영되지
         // 않은 값을 "저장됨" 으로 착각해 유실하므로, 삭제 루프와 지문 초기화를 모두 건너뛴다.
@@ -905,7 +913,7 @@ export function useResponseLifecycle({
           buildOptTextsPayload(visibleQuestions, responses),
         );
 
-        await client.surveyResponse.response.complete({
+        const completed = await client.surveyResponse.response.complete({
           responseId: effectiveResponseId,
           data: {
             questionResponses: questionResponsesWithTexts,
@@ -918,6 +926,14 @@ export function useResponseLifecycle({
         // 제출 성공 — 회복용 localStorage 키 정리 (재진입 시 새 응답 흐름)
         if (typeof window !== 'undefined' && loadedSurvey) {
           window.localStorage.removeItem(sessionStorageKey(loadedSurvey.id, inviteToken));
+        }
+
+        if (completed?.alreadyCompleted) {
+          // 이미 완료된 행에 대한 늦은 complete(다른 화면이 먼저 제출했거나 본인 재시도) —
+          // 이번 페이로드는 서버가 버렸으므로 가짜 감사 화면 대신 안내로 접는다 (정책 G1).
+          resetResponseState();
+          setDuplicateStatus({ kind: 'blocked', reason: 'response_concluded' });
+          return;
         }
       }
 

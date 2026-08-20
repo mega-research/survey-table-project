@@ -1012,7 +1012,7 @@ export async function applyDraftAnswersUpdate(
   questionIds: string[],
   storedAnswers: Record<string, unknown>,
   seq?: number,
-): Promise<'applied' | 'stale'> {
+): Promise<'applied' | 'stale' | 'concluded'> {
   const seqGuard =
     seq !== undefined
       ? [sql`COALESCE((${surveyResponses.metadata}->>'draftSeq')::bigint, 0) = ${seq}`]
@@ -1088,16 +1088,21 @@ export async function applyDraftAnswersUpdate(
 
 /**
  * 답변 UPDATE 0행의 사유 판별 — seq 가드 때문인지(그 사이 더 새로운 쓰기가 선점 = stale),
- * 행 상태 때문인지(삭제/종결 = 기존 throw 의미론 유지) 구분한다.
+ * 행이 종결(완료 등)돼서인지(concluded — 잔여 화면 안내로 접는다), 그 외(삭제/부재 =
+ * 기존 throw 의미론 유지)인지 구분한다.
  */
-async function judgeDraftZeroRow(responseId: string, seq: number | undefined): Promise<'stale'> {
-  if (seq !== undefined) {
-    const rows = await db.execute<{ draft_seq: string | null }>(sql`
-      SELECT metadata->>'draftSeq' AS draft_seq FROM survey_responses WHERE id = ${responseId}
-    `);
-    const stored = rows[0]?.draft_seq != null ? Number(rows[0].draft_seq) : null;
-    if (stored !== null && stored > seq) return 'stale';
-  }
+async function judgeDraftZeroRow(
+  responseId: string,
+  seq: number | undefined,
+): Promise<'stale' | 'concluded'> {
+  const rows = await db.execute<{ draft_seq: string | null; status: string; deleted: boolean }>(sql`
+    SELECT metadata->>'draftSeq' AS draft_seq, status, (deleted_at IS NOT NULL) AS deleted
+    FROM survey_responses WHERE id = ${responseId}
+  `);
+  const row = rows[0];
+  if (seq !== undefined && row?.draft_seq != null && Number(row.draft_seq) > seq) return 'stale';
+  // 종결(완료·스크린아웃 등) 행에 대한 잔여 화면의 쓰기 — 에러가 아니라 "이미 완료됨" 신호.
+  if (row && !row.deleted && row.status !== 'in_progress') return 'concluded';
   throw new Error('응답을 수정할 수 없습니다.');
 }
 
@@ -1156,7 +1161,7 @@ async function claimDraftSeq(responseId: string, seq: number): Promise<DraftSeqC
  */
 export async function saveDraftResponse(
   input: SaveDraftResponseInput,
-): Promise<{ applied: boolean }> {
+): Promise<{ applied: boolean; concluded?: boolean }> {
   if (input.seq !== undefined) {
     const claim = await claimDraftSeq(input.responseId, input.seq);
     // 더 새로운 쓰기가 이미 반영됐다. 지연 도착한 이 요청을 적용하면 최신 답변을 덮는다.
@@ -1208,22 +1213,19 @@ export async function saveDraftResponse(
     const outcome = await applyDraftAnswersUpdate(
       db, input.responseId, questionIds, storedAnswers, input.seq,
     );
-    return { applied: outcome === 'applied' };
+    return { applied: outcome === 'applied', ...(outcome === 'concluded' ? { concluded: true } : {}) };
   }
 
   // 테스트 행은 시도 소유권 락을 먼저 잡는다. 락도 배치당 1회.
-  let outcome: 'applied' | 'stale' = 'applied';
-  await db.transaction(async (tx) => {
+  const outcome = await db.transaction(async (tx) => {
     await lockAndAssertResponseMutation(tx, {
       responseId: input.responseId,
       ...(input.attemptId ? { attemptId: input.attemptId } : {}),
       ...(input.sessionId ? { sessionId: input.sessionId } : {}),
     });
-    outcome = await applyDraftAnswersUpdate(
-      tx, input.responseId, questionIds, storedAnswers, input.seq,
-    );
+    return applyDraftAnswersUpdate(tx, input.responseId, questionIds, storedAnswers, input.seq);
   });
-  return { applied: outcome === 'applied' };
+  return { applied: outcome === 'applied', ...(outcome === 'concluded' ? { concluded: true } : {}) };
 }
 
 /** saveDraftResponseIfActive 가 저장을 건너뛴 사유. 서버 로그·테스트 어서션용. */
@@ -1279,8 +1281,8 @@ export async function saveDraftResponseIfActive(
 
   try {
     const result = await saveDraftResponse(input);
-    // 지연 도착한 stale beacon — 답변 쓰기 자체를 하지 않았으므로 최신 답변은 그대로 남는다.
-    if (!result.applied) return { saved: false, skipped: 'stale' };
+    // 지연 도착한 stale/concluded beacon — 답변 쓰기 자체를 하지 않았으므로 최신 답변은 그대로 남는다.
+    if (!result.applied) return { saved: false, skipped: result.concluded ? 'concluded' : 'stale' };
   } catch (err) {
     if (err instanceof SurveyNotAcceptingResponsesError) {
       return { saved: false, skipped: toSkipReason(err.reason) };
@@ -2102,6 +2104,7 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
       .returning();
 
     let completedResponse = updated;
+    let alreadyCompleted = false;
     if (!completedResponse) {
       // 가드에 막혀 0행 — 이미 완료된 같은 응답이면 멱등 재시도로 보고 기존 행을 그대로 반환.
       // (정상 제출 후 네트워크 응답 유실로 인한 사용자 수동 재시도 케이스 보존)
@@ -2112,6 +2115,9 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
         .limit(1);
       if (existing?.isCompleted && existing.deletedAt == null) {
         completedResponse = existing;
+        // 이미 완료된 행에 대한 늦은 complete — 다른 화면이 먼저 제출했거나 본인 재시도.
+        // 클라이언트가 가짜 감사 화면 대신 "이미 완료된 설문입니다" 안내로 접도록 표식한다.
+        alreadyCompleted = true;
       } else {
         // 행이 없거나(삭제/존재 안 함) 종결 상태(screened_out 등)면 완료 처리를 거부한다.
         throw new Error(
@@ -2159,7 +2165,7 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
         );
     }
 
-    return completedResponse;
+    return alreadyCompleted ? { ...completedResponse, alreadyCompleted: true } : completedResponse;
   });
 
   // 실제 대상자 연결은 응답 완료 커밋 이후 best-effort로 유지한다. 이를 완료 트랜잭션에

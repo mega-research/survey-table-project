@@ -8,8 +8,14 @@ import type { BlockReason } from '@/lib/duplicate-detection/types';
 import { DEFAULT_PAUSED_MESSAGE } from '@/shared/lib/survey-control';
 import { cn } from '@/lib/utils';
 
+/**
+ * 세션 도중 이 응답이 (다른 화면 또는 재시도로) 이미 완료된 것을 발견했을 때의 안내 —
+ * 서버 BlockReason 에는 없는 클라이언트 전용 사유라 여기서 union 을 넓힌다.
+ */
+export type NoticeReason = BlockReason | 'response_concluded';
+
 interface Props {
-  reason: BlockReason;
+  reason: NoticeReason;
   surveyTitle: string;
   contactEmail: string | null;
   /** quota_closed 등 설문별 커스텀 문구. 있으면 기본 body 대신 표시(줄바꿈 보존). */
@@ -23,7 +29,12 @@ interface MessageDef {
   tone: 'error' | 'info';
 }
 
-const MESSAGES: Record<BlockReason, MessageDef> = {
+const MESSAGES: Record<NoticeReason, MessageDef> = {
+  response_concluded: {
+    title: '이미 완료된 설문입니다',
+    body: '이 응답은 이미 제출이 완료되었습니다. 참여해 주셔서 감사합니다.',
+    tone: 'info',
+  },
   invalid_token: {
     title: '잘못된 초대 링크입니다',
     body: '이 링크는 유효하지 않거나 만료되었습니다. 운영자에게 문의해 주세요.',
