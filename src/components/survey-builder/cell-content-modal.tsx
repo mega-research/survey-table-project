@@ -600,6 +600,26 @@ export function CellContentModal({
               });
 
               if (createdQuestion?.id) {
+                // UPDATE 분기와 동일하게 store 도 방금 커밋한 구조로 동기화한다 —
+                // 빠뜨리면 질문 모달 취소 후 재진입 시 DB(신 구조)와 store(구 구조)가
+                // 갈라져 stale 구조가 표시되고 이후 질문 저장이 DB 변경을 되덮는다.
+                useSurveyBuilderStore.setState((state) => ({
+                  currentSurvey: {
+                    ...state.currentSurvey,
+                    questions: state.currentSurvey.questions.map((q) =>
+                      q.id === currentQuestionId
+                        ? {
+                            ...q,
+                            tableRowsData: updatedRowsData,
+                            ...structurePatch,
+                            ...(prunedChoiceGroups !== undefined
+                              ? { choiceGroups: prunedChoiceGroups }
+                              : {}),
+                          }
+                        : q,
+                    ),
+                  },
+                }));
                 // DB에 생성 완료 → added에서 제거 (다음 모달 저장 시 UPDATE 경로 사용)
                 const { [currentQuestionId]: _, ...remainingAdded } =
                   useSurveyBuilderStore.getState().questionChanges.added;

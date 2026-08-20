@@ -148,6 +148,57 @@ describe('CellContentModal 셀 저장 시 columns/headerGrid 동반 커밋', () 
     expect(stored?.tableHeaderGrid).toEqual(latestHeaderGrid);
   });
 
+  it('신규 질문(create 분기)도 최신 구조를 DB 와 스토어에 함께 반영한다', async () => {
+    // 미영속 질문 마킹 — create 분기 진입 조건
+    const createMock = vi.fn().mockResolvedValue({ id: 'q1' });
+    const { client } = await import('@/shared/lib/rpc');
+    (client.surveyBuilder.questions as { create: unknown }).create = createMock;
+    useSurveyBuilderStore.setState((state) => ({
+      questionChanges: { ...state.questionChanges, added: { q1: true } },
+    }));
+
+    render(
+      <CellContentModal
+        isOpen
+        onClose={vi.fn()}
+        cell={editedCell}
+        ownQuestion={stubOwnQuestion}
+        currentQuestionId="q1"
+        getLatestRows={() => latestRows}
+        getLatestColumns={() => latestColumns}
+        getLatestHeaderGrid={() => latestHeaderGrid}
+        onSave={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+
+    await waitFor(() => expect(createMock).toHaveBeenCalledTimes(1));
+    // DB create 페이로드에 최신 columns/headerGrid + 3셀 행이 실린다
+    // (rows 는 셀 코드 재생성 필드가 덧붙어 깊은 비교 대신 구조로 확인)
+    const payload = createMock.mock.calls[0]?.[0] as {
+      tableColumns: unknown;
+      tableHeaderGrid: unknown;
+      tableRowsData: { cells: unknown[] }[];
+    };
+    expect(payload.tableColumns).toEqual(latestColumns);
+    expect(payload.tableHeaderGrid).toEqual(latestHeaderGrid);
+    expect(payload.tableRowsData[0]?.cells).toHaveLength(3);
+
+    // 스토어도 같은 짝으로 동기화 — 안 하면 취소 후 재진입 시 DB(신 구조)와
+    // 스토어(구 구조)가 갈라져 stale 구조가 표시되고 이후 저장이 DB 를 되덮는다
+    await waitFor(() => {
+      const stored = useSurveyBuilderStore
+        .getState()
+        .currentSurvey.questions.find((q) => q.id === 'q1');
+      expect(stored?.tableColumns).toHaveLength(3);
+      expect(stored?.tableRowsData?.[0]?.cells).toHaveLength(3);
+      expect(stored?.tableHeaderGrid).toEqual(latestHeaderGrid);
+    });
+    // create 완료 후 added 해제 — 다음 저장은 UPDATE 경로
+    expect(useSurveyBuilderStore.getState().questionChanges.added['q1']).toBeUndefined();
+  });
+
   it('getLatestColumns 미배선(구 호출부)이면 columns 키를 싣지 않는다 — 미변경 규약', async () => {
     render(
       <CellContentModal
