@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 import { ChevronDown } from 'lucide-react';
 
@@ -26,10 +26,11 @@ export function UserDefinedMultiSelect({
   // 부모가 매 렌더마다 새로운 [] 참조를 넘겨도 진행 중 선택이 초기화되지 않도록
   // 내용이 실제로 달라졌을 때만 동기화한다([obj] vs [obj?.id] reset footgun 방지).
   const valuesKey = JSON.stringify(values);
-  useEffect(() => {
-    setCurrentValues((prev) => (JSON.stringify(prev) === valuesKey ? prev : values));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [valuesKey]);
+  const [prevValuesKey, setPrevValuesKey] = useState(valuesKey);
+  if (prevValuesKey !== valuesKey) {
+    setPrevValuesKey(valuesKey);
+    if (JSON.stringify(currentValues) !== valuesKey) setCurrentValues(values);
+  }
 
   const handleLevelChange = (levelIndex: number, selectedValue: string) => {
     const newValues = [...currentValues];

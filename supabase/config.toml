@@ -110,7 +110,8 @@ openai_api_key = "env(OPENAI_API_KEY)"
 # Email testing server. Emails sent with the local dev setup are not actually sent - rather, they
 # are monitored, and you can view the emails that would have been sent from the web interface.
 [inbucket]
-enabled = true
+# 2026-08-19 로컬·CI 테스트에 불필요해 비활성. 메일 발송은 Resend 경유이고 로컬 SMTP 수신함을 쓰지 않는다
+enabled = false
 # Port to use for the email testing server web interface.
 port = 54324
 # Uncomment to expose additional ports for testing user applications that send emails.
@@ -120,7 +121,8 @@ port = 54324
 # sender_name = "Admin"
 
 [storage]
-enabled = true
+# 2026-08-19 로컬·CI 테스트에 불필요해 비활성. 앱 파일 저장소는 Cloudflare R2 다
+enabled = false
 # The maximum file size allowed (e.g. "5MB", "500KB").
 file_size_limit = "50MiB"
 
@@ -393,7 +395,8 @@ deno_version = 2
 # secret_key = "env(SECRET_VALUE)"
 
 [analytics]
-enabled = true
+# 2026-08-19 로컬·CI 테스트에 불필요해 비활성. logflare 는 테스트에 쓰이지 않는다
+enabled = false
 port = 54327
 # Configure one of the supported backends: `postgres`, `bigquery`.
 backend = "postgres"

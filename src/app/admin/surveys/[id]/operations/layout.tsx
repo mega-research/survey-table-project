@@ -23,6 +23,8 @@ export default async function OperationsLayout({ children, params }: LayoutProps
   const survey = await getSurveyById(surveyId);
   if (!survey || survey.deletedAt) notFound();
   const [control, isGuest] = await Promise.all([getControlState(surveyId), isGuestViewer()]);
+  // 위에서 설문 존재를 확인했으므로 null 은 그 사이 삭제된 극단 케이스 — 404 로 접는다.
+  if (!control) notFound();
 
   return (
     <div className="min-h-screen bg-gray-50">

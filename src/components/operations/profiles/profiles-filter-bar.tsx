@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 import { Input } from '@/components/ui/input';
 import {
@@ -53,9 +53,12 @@ export function ProfilesFilterBar({ initialClauses, initialStatus, columnCandida
   const [status, setStatus] = useState<StatusFilter>(initialStatus);
 
   // 브라우저 뒤로/앞으로 가기 시 server 가 새 initial 을 내려주면 로컬 state 동기화.
-  useEffect(() => {
+  // effect 대신 렌더 중 조정 패턴.
+  const [prevInitialStatus, setPrevInitialStatus] = useState(initialStatus);
+  if (prevInitialStatus !== initialStatus) {
+    setPrevInitialStatus(initialStatus);
     setStatus(initialStatus);
-  }, [initialStatus]);
+  }
 
   return (
     <FilterBarCore

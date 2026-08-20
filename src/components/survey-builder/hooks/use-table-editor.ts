@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { generateId } from '@/lib/utils';
+import { useSyncLatestRef } from '@/hooks/use-latest-ref';
 import {
   HeaderCell,
   Question,
@@ -195,17 +196,20 @@ export function useTableEditor({
   // ── Refs (stale closure 방지 + useCallback 안정화) ──
 
   const currentTitleRef = useRef(currentTitle);
-  currentTitleRef.current = currentTitle;
+  useSyncLatestRef(currentTitleRef, currentTitle);
 
-  // dirty flag: label/code debounce 중 render-time ref 덮어쓰기 방지
+  // dirty flag: label/code 편집은 ref 만 먼저 쓰고 state 반영을 debounce 로 미룬다
+  // (notifyChangeDebounced / scheduleCellCodeRecalc 가 flush).
   const pendingColumnsSyncRef = useRef(false);
   const pendingRowsSyncRef = useRef(false);
 
+  // 행/열의 단일 진실은 ref — 모든 변경 경로가 ref 를 먼저 쓴다 (commitRows/commitColumns
+  // 래퍼 또는 ref 직접 쓰기 + dirty flag). state 는 화면 렌더용 미러이므로 렌더 중
+  // state→ref 역동기화는 불필요하다. 과거의 조건부 렌더 동기화(dirty 가 아닐 때만
+  // ref 덮어쓰기)는 이 불변식 하에서 죽은 안전망이라 제거했다(2026-08-19).
+  // 새 변경 경로를 추가할 때 setCurrentRows/setCurrentColumns 를 직접 부르지 말 것.
   const currentColumnsRef = useRef(currentColumns);
-  if (!pendingColumnsSyncRef.current) currentColumnsRef.current = currentColumns;
-
   const currentRowsRef = useRef(currentRows);
-  if (!pendingRowsSyncRef.current) currentRowsRef.current = currentRows;
 
   // state + ref + dirty flag를 동시에 업데이트하는 래퍼
   const commitRows = useCallback((rows: TableRow[]) => {
@@ -220,7 +224,7 @@ export function useTableEditor({
   }, []);
 
   const headerGridRef = useRef(currentHeaderGrid);
-  headerGridRef.current = currentHeaderGrid;
+  useSyncLatestRef(headerGridRef, currentHeaderGrid);
 
   // 다단계 헤더 그리드를 열 추가/삭제에 맞춰 재동기화.
   // 다단계 헤더가 꺼져 있으면(undefined) no-op. 켜져 있을 때만 ref+state 갱신.
@@ -236,19 +240,19 @@ export function useTableEditor({
   );
 
   const questionCodeRef = useRef(questionCode);
-  questionCodeRef.current = questionCode;
+  useSyncLatestRef(questionCodeRef, questionCode);
 
   const questionTitleRef = useRef(questionTitle);
-  questionTitleRef.current = questionTitle;
+  useSyncLatestRef(questionTitleRef, questionTitle);
 
   const selectedCellRef = useRef(selectedCell);
-  selectedCellRef.current = selectedCell;
+  useSyncLatestRef(selectedCellRef, selectedCell);
 
   const copiedCellRef = useRef(copiedCell);
-  copiedCellRef.current = copiedCell;
+  useSyncLatestRef(copiedCellRef, copiedCell);
 
   const onTableChangeRef = useRef(onTableChange);
-  onTableChangeRef.current = onTableChange;
+  useSyncLatestRef(onTableChangeRef, onTableChange);
 
   // ── 변경 알림 ──
 
@@ -300,36 +304,37 @@ export function useTableEditor({
   );
 
   // 언마운트 시 pending change flush (데이터 손실 방지)
-  useEffect(() => {
-    return () => {
-      // 셀 코드 재계산 flush
-      if (pendingCellCodeRef.current) {
-        clearTimeout(pendingCellCodeRef.current);
-        pendingCellCodeRef.current = null;
+  const flushPendingOnUnmount = useCallback(() => {
+    // 셀 코드 재계산 flush
+    if (pendingCellCodeRef.current) {
+      clearTimeout(pendingCellCodeRef.current);
+      pendingCellCodeRef.current = null;
+    }
+    // questionCode/questionTitle 재계산 flush
+    if (pendingQuestionInfoRef.current) {
+      clearTimeout(pendingQuestionInfoRef.current);
+      pendingQuestionInfoRef.current = null;
+    }
+    // dirty flag 클리어
+    pendingRowsSyncRef.current = false;
+    pendingColumnsSyncRef.current = false;
+    // 부모 알림 flush
+    if (pendingChangeRef.current) {
+      clearTimeout(pendingChangeRef.current);
+      if (pendingArgsRef.current) {
+        const { title, cols, rowsData } = pendingArgsRef.current;
+        onTableChangeRef.current({
+          tableTitle: title,
+          tableColumns: cols,
+          tableRowsData: rowsData,
+          tableHeaderGrid: headerGridRef.current ?? null,
+        });
       }
-      // questionCode/questionTitle 재계산 flush
-      if (pendingQuestionInfoRef.current) {
-        clearTimeout(pendingQuestionInfoRef.current);
-        pendingQuestionInfoRef.current = null;
-      }
-      // dirty flag 클리어
-      pendingRowsSyncRef.current = false;
-      pendingColumnsSyncRef.current = false;
-      // 부모 알림 flush
-      if (pendingChangeRef.current) {
-        clearTimeout(pendingChangeRef.current);
-        if (pendingArgsRef.current) {
-          const { title, cols, rowsData } = pendingArgsRef.current;
-          onTableChangeRef.current({
-            tableTitle: title,
-            tableColumns: cols,
-            tableRowsData: rowsData,
-            tableHeaderGrid: headerGridRef.current ?? null,
-          });
-        }
-      }
-    };
+    }
   }, []);
+  useEffect(() => {
+    return flushPendingOnUnmount;
+  }, [flushPendingOnUnmount]);
 
   // ── questionCode/questionTitle 변경 감지 (debounced) ──
 
@@ -1479,6 +1484,8 @@ export function useTableEditor({
       currentColumns,
       currentRows,
       currentRowsRef,
+      currentColumnsRef,
+      headerGridRef,
       selectedCell,
       copiedCell,
       copiedCellPosition,

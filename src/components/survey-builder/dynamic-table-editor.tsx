@@ -87,6 +87,8 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
     currentColumns,
     currentRows,
     currentRowsRef,
+    currentColumnsRef,
+    headerGridRef,
     selectedCell,
     copiedCell,
     copiedCellPosition,
@@ -858,6 +860,8 @@ export function DynamicTableEditor(props: DynamicTableEditorProps) {
           cell={selectedCellContext.cell}
           answerQuoteEnabled={props.answerQuoteEnabled ?? false}
           getLatestRows={() => currentRowsRef.current}
+          getLatestColumns={() => currentColumnsRef.current}
+          getLatestHeaderGrid={() => headerGridRef.current}
           choiceGroups={currentQuestion?.choiceGroups}
           onChoiceGroupsChange={(groups: ChoiceGroup[]) => {
             if (!currentQuestionId) return;

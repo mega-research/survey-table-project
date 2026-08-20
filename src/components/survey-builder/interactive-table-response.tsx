@@ -357,6 +357,52 @@ interface InteractiveTableResponseProps {
     | undefined;
 }
 
+/**
+ * 같은 render tick 안에 여러 cell 이 동시에 onChange 를 호출할 때 (예: emptyDefault prefill)
+ * 부모 prop 의 batch 지연으로 stale 한 객체가 덮어쓰는 race 를 방지하기 위해
+ * 누적 ref 에서 매번 머지해 부모에 전달한다. 응답자 모드 전용.
+ *
+ * 별도 훅으로 분리한 이유: ref 를 읽는 콜백을 컴포넌트 본문에 두면 react-hooks/refs 가
+ * 이를 참조하는 렌더 함수(renderTableView 등) 호출 전체를 "렌더 중 ref 접근"으로
+ * 오염 전파해 React Compiler 최적화가 통째로 빠진다. 훅 경계 밖에서는 불투명한
+ * 콜백이라 전파가 끊긴다.
+ */
+function useMergedResponseChange(
+  value: Record<string, unknown> | undefined,
+  onChange: ((v: Record<string, unknown>) => void) | undefined,
+  isTestMode: boolean,
+) {
+  const accumulatedResponseRef = useRef<Record<string, unknown>>(value ?? {});
+  useEffect(() => {
+    if (!isTestMode) accumulatedResponseRef.current = value ?? {};
+  }, [value, isTestMode]);
+
+  return useCallback(
+    (next: Record<string, unknown>) => {
+      if (!onChange) return;
+      if (isTestMode) {
+        onChange(next);
+        return;
+      }
+      // 동일 값이면 부모 setState 트리거 안 함 — emptyDefault prefill 등에서 N개 cell 이 동시에
+      // 같은 값을 쓰는 케이스의 cascade re-render 회피.
+      const cur = accumulatedResponseRef.current;
+      let changed = false;
+      for (const k of Object.keys(next)) {
+        if (cur[k] !== next[k]) {
+          changed = true;
+          break;
+        }
+      }
+      if (!changed) return;
+      const merged = { ...cur, ...next };
+      accumulatedResponseRef.current = merged;
+      onChange(merged);
+    },
+    [onChange, isTestMode],
+  );
+}
+
 export const InteractiveTableResponse = React.memo(function InteractiveTableResponse({
   questionId,
   tableTitle,
@@ -381,38 +427,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
   errorCellIds,
   errorItems,
 }: InteractiveTableResponseProps) {
-  // 같은 render tick 안에 여러 cell 이 동시에 onChange 를 호출할 때 (예: emptyDefault prefill)
-  // 부모 prop 의 batch 지연으로 stale 한 객체가 덮어쓰는 race 를 방지하기 위해
-  // 누적 ref 에서 매번 머지해 부모에 전달한다. 응답자 모드 전용.
-  const accumulatedResponseRef = useRef<Record<string, unknown>>(value ?? {});
-  useEffect(() => {
-    if (!isTestMode) accumulatedResponseRef.current = value ?? {};
-  }, [value, isTestMode]);
-
-  const mergedOnChange = useCallback(
-    (next: Record<string, unknown>) => {
-      if (!onChange) return;
-      if (isTestMode) {
-        onChange(next);
-        return;
-      }
-      // 동일 값이면 부모 setState 트리거 안 함 — emptyDefault prefill 등에서 N개 cell 이 동시에
-      // 같은 값을 쓰는 케이스의 cascade re-render 회피.
-      const cur = accumulatedResponseRef.current;
-      let changed = false;
-      for (const k of Object.keys(next)) {
-        if (cur[k] !== next[k]) {
-          changed = true;
-          break;
-        }
-      }
-      if (!changed) return;
-      const merged = { ...cur, ...next };
-      accumulatedResponseRef.current = merged;
-      onChange(merged);
-    },
-    [onChange, isTestMode],
-  );
+  const mergedOnChange = useMergedResponseChange(value, onChange, isTestMode);
 
   const tableContainerRef = useRef<HTMLDivElement>(null);
   // 드릴다운 모드에서 "위치로 이동" — 위반 셀이 속한 섹션/리프 상세로 내비 전환.

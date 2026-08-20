@@ -27,19 +27,27 @@ export function ImageUploadModal({ open, onClose, onUploaded, kind }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const xhrRef = useRef<XMLHttpRequest | null>(null);
 
-  // open 변화 시 상태 리셋 (닫혔다가 다시 열릴 때 초기화)
-  // 진행 중인 XHR이 있으면 함께 abort — 닫힌 모달에서 onUploaded 가 발화되는 것을 막는다
+  // open 변화 시 상태 리셋 (닫혔다가 다시 열릴 때 초기화) — effect 대신 렌더 중 조정 패턴
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (prevOpen !== open) {
+    setPrevOpen(open);
+    if (!open) {
+      setSelectedFile(null);
+      setPreviewUrl(null);
+      setUploadProgress(0);
+      setUploadError(null);
+      setIsUploading(false);
+    }
+  }
+
+  // 닫힐 때 진행 중인 XHR abort + 파일 input DOM 초기화 (외부 시스템 — effect 유지).
+  // abort 는 닫힌 모달에서 onUploaded 가 발화되는 것을 막는다.
   useEffect(() => {
     if (!open) {
       if (xhrRef.current) {
         xhrRef.current.abort();
         xhrRef.current = null;
       }
-      setSelectedFile(null);
-      setPreviewUrl(null);
-      setUploadProgress(0);
-      setUploadError(null);
-      setIsUploading(false);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 import {
   AlertCircle,
@@ -87,8 +87,13 @@ export function SaveQuestionModal({
   const [newCategoryName, setNewCategoryName] = useState('');
   const [errors, setErrors] = useState<{ name?: string | undefined }>({});
 
-  // 질문이 변경되면 기본값 설정
-  useEffect(() => {
+  // 질문이 변경되면 기본값 설정 — effect 대신 렌더 중 조정 패턴.
+  // 키를 question?.id 로 좁힘 — 외부에서 question reference 가 바뀌어도
+  // 사용자가 입력 중인 라이브러리 저장 폼이 reset 되지 않도록 한다.
+  const resetKey = open && question ? question.id : null;
+  const [prevResetKey, setPrevResetKey] = useState<string | null>(null);
+  if (prevResetKey !== resetKey) {
+    setPrevResetKey(resetKey);
     if (question && open) {
       setName(question.title.slice(0, 50)); // 제목에서 기본 이름 추출
       setDescription(question.description || '');
@@ -97,10 +102,7 @@ export function SaveQuestionModal({
       setNewTag('');
       setErrors({});
     }
-  // deps 를 question?.id 로 좁힘 — 외부에서 question reference 가 바뀌어도
-  // 사용자가 입력 중인 라이브러리 저장 폼이 reset 되지 않도록 한다.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [question?.id, open]);
+  }
 
   // 태그 추가
   const handleAddTag = () => {
