@@ -131,20 +131,111 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
+beforeEach(() => {
+  Object.defineProperty(window, 'matchMedia', {
+    configurable: true,
+    value: vi.fn(() => ({
+      matches: false,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })),
+  });
+  window.localStorage.clear();
+  useSurveyResponseStore.getState().resetResponseState();
+  bySlug.mockResolvedValue({ id: 'survey-1' });
+  attrsLookup.mockResolvedValue({});
+  stepVisit.mockResolvedValue(undefined);
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  for (const mock of [
+    stepVisit, resume, bySlug, byPrivateToken, forResponse, attrsLookup,
+    createWithFirstAnswer, createBlank, saveDraft, complete, checkOnEntry, quotaCheck,
+  ]) {
+    mock.mockReset();
+  }
+});
+
+describe('하드 쿼터 판정은 응답 생성이 늦어도 건너뛰지 않는다', () => {
+  const quotaSurvey = {
+    ...twoPageSurvey,
+    quotaGate: { questionIds: ['q1'] },
+  } as Survey;
+
+  beforeEach(() => {
+    forResponse.mockResolvedValue({
+      survey: quotaSurvey,
+      versionId: 'version-1',
+      control: {
+        isPaused: false,
+        pausedMessage: null,
+        testSession: null,
+        testSessionKind: null,
+      },
+    });
+    saveDraft.mockResolvedValue({ ok: true, applied: true });
+  });
+
+  it('응답 생성이 in-flight 여도 쿼터 클릭이 생성 완료를 기다려 판정을 발사한다', async () => {
+    // 낙관 전환 우회 조건 재현: 쿼터 문항(q1) 답변 직후 생성 RPC 가 아직 미해결인 채 "다음"
+    const creating = deferred<{ kind: string; id: string }>();
+    createWithFirstAnswer.mockReturnValue(creating.promise);
+    quotaCheck.mockResolvedValue({ blocked: false, closedMessage: null });
+
+    render(
+      <SurveyResponseFlow surveyIdentifier="survey-slug" inviteToken={null} testToken={null} />,
+    );
+
+    fireEvent.change(await screen.findByPlaceholderText('첫 답변'), {
+      target: { value: '20대' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '다음' }));
+
+    // 생성이 미해결인 동안에는 판정도 전환도 보류된다
+    expect(quotaCheck).not.toHaveBeenCalled();
+    expect(screen.queryByText('두 번째 질문')).not.toBeInTheDocument();
+
+    await act(async () => {
+      creating.resolve({ kind: 'created', id: 'response-1' });
+      await creating.promise;
+    });
+
+    // 생성 완료 → 확보한 id 로 판정 발사 → 통과 후 전환
+    await waitFor(() => expect(quotaCheck).toHaveBeenCalledTimes(1));
+    expect(quotaCheck).toHaveBeenCalledWith(
+      expect.objectContaining({ responseId: 'response-1', surveyId: 'survey-1' }),
+    );
+    expect(await screen.findByText('두 번째 질문')).toBeInTheDocument();
+  });
+
+  it('쿼터 마감이면 전환 대신 차단 화면으로 보낸다 (생성 지연 조합에서도)', async () => {
+    const creating = deferred<{ kind: string; id: string }>();
+    createWithFirstAnswer.mockReturnValue(creating.promise);
+    quotaCheck.mockResolvedValue({ blocked: true, closedMessage: '해당 대상 마감' });
+
+    render(
+      <SurveyResponseFlow surveyIdentifier="survey-slug" inviteToken={null} testToken={null} />,
+    );
+
+    fireEvent.change(await screen.findByPlaceholderText('첫 답변'), {
+      target: { value: '20대' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '다음' }));
+    await act(async () => {
+      creating.resolve({ kind: 'created', id: 'response-1' });
+      await creating.promise;
+    });
+
+    await waitFor(() => expect(quotaCheck).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText(/해당 대상 마감/)).toBeInTheDocument();
+    expect(screen.queryByText('두 번째 질문')).not.toBeInTheDocument();
+    expect(complete).not.toHaveBeenCalled();
+  });
+});
+
 describe('다음 클릭 낙관 전환', () => {
   beforeEach(() => {
-    Object.defineProperty(window, 'matchMedia', {
-      configurable: true,
-      value: vi.fn(() => ({
-        matches: false,
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-      })),
-    });
-    window.localStorage.clear();
-    useSurveyResponseStore.getState().resetResponseState();
-
-    bySlug.mockResolvedValue({ id: 'survey-1' });
     forResponse.mockResolvedValue({
       survey: twoPageSurvey,
       versionId: 'version-1',
@@ -160,15 +251,6 @@ describe('다음 클릭 낙관 전환', () => {
     createWithFirstAnswer.mockResolvedValue({ kind: 'created', id: 'response-1' });
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
-    for (const mock of [
-      stepVisit, resume, bySlug, byPrivateToken, forResponse, attrsLookup,
-      createWithFirstAnswer, createBlank, saveDraft, complete, checkOnEntry, quotaCheck,
-    ]) {
-      mock.mockReset();
-    }
-  });
 
   it('전환은 saveDraft 완료를 기다리지 않고, 저장은 백그라운드로 완주한다', async () => {
     const draftSave = deferred<{ ok: boolean; applied: boolean }>();

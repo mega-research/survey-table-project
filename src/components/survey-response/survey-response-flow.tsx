@@ -877,7 +877,8 @@ function SurveyResponseFlowActive({
   }, [refetchSnapshot, setResponses]);
 
   // isCreatingResponse 는 훅 내부 전용(첫 답변 INSERT 가드)이라 컴포넌트는 구조분해하지 않는다.
-  const { handleResponse, flushPendingAnswersInBackground, handleSubmit } = useResponseLifecycle({
+  const { handleResponse, flushPendingAnswersInBackground, waitForResponseId, handleSubmit } =
+    useResponseLifecycle({
     isAdminEdit,
     isPreview,
     isCompleted,
@@ -1046,22 +1047,33 @@ function SurveyResponseFlowActive({
       null;
     if (
       !quotaCheckedRef.current &&
-      currentResponseId &&
       allQuotaQuestionsAnswered([...quotaGateIds], responses)
     ) {
       // 재진입/중복 발동 방지 — await 완료 전에 먼저 플래그를 세워 재클릭 시에도
       // 서버 확인은 최대 1회만 시도된다.
       quotaCheckedRef.current = true;
-      quotaPromise = client.quota
-        .check({
-          responseId: currentResponseId,
-          surveyId: loadedSurvey?.id ?? '',
-          answers: responses,
-        })
-        .catch((err) => {
+      quotaPromise = (async () => {
+        // 낙관 전환으로 응답 행 생성(첫 답변 시 백그라운드 시작)보다 먼저 이 클릭에
+        // 도달할 수 있다 — id 가 없다고 판정을 건너뛰면 하드 쿼터가 우회되므로,
+        // 응답당 최대 1회뿐인 이 판정 클릭에서만 생성 완료를 기다려 id 를 확보한다.
+        const responseId = currentResponseId ?? (await waitForResponseId());
+        if (!responseId) {
+          // 생성이 시작조차 안 됐다(첫 답변 전) — 판정을 보류하고 플래그를 되돌려
+          // 다음 클릭에서 재시도한다.
+          quotaCheckedRef.current = false;
+          return null;
+        }
+        try {
+          return await client.quota.check({
+            responseId,
+            surveyId: loadedSurvey?.id ?? '',
+            answers: responses,
+          });
+        } catch (err) {
           console.error('쿼터 확인 오류:', err); // fail-open: 플래그는 이미 위에서 세팅됨
           return null;
-        });
+        }
+      })();
     }
 
     // 마지막 제출은 complete가 전체 답을 저장한다. 중간 이동은 현재 페이지 변경분을

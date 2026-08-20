@@ -168,6 +168,12 @@ interface UseResponseLifecycleResult {
    * 실패 시 pending 유지). "다음" 클릭이 저장 왕복을 기다리지 않도록 발사만 한다.
    */
   flushPendingAnswersInBackground: () => Promise<boolean>;
+  /**
+   * 응답 행 id 확보 — 생성이 in-flight 면 완료를 기다린다. 낙관 전환으로 생성보다 먼저
+   * 쿼터 판정 클릭에 도달했을 때 판정이 id 부재로 건너뛰어지는 것(하드 쿼터 우회)을 막는
+   * 용도. 생성이 시작조차 안 됐으면 null.
+   */
+  waitForResponseId: () => Promise<string | null>;
   handleSubmit: () => Promise<void>;
   /** 첫 답변 동시 발사 시 중복 INSERT 방어용 플래그. 이 훅이 소유. */
   isCreatingResponse: boolean;
@@ -412,6 +418,8 @@ export function useResponseLifecycle({
 
   const flushPendingAnswers = (): Promise<boolean> => enqueueFlush(false);
   const flushPendingAnswersInBackground = (): Promise<boolean> => enqueueFlush(true);
+  const waitForResponseId = async (): Promise<string | null> =>
+    activeResponseIdRef.current ?? (await responseCreationPromiseRef.current) ?? null;
 
   // 답변 입력 디바운스 자동 저장 타이머. 리셋은 clearTimeout + 재예약이라 동시 타이머는 항상 1개.
   const draftAutosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -988,6 +996,7 @@ export function useResponseLifecycle({
     handleResponse,
     flushPendingAnswers,
     flushPendingAnswersInBackground,
+    waitForResponseId,
     handleSubmit,
     isCreatingResponse,
   };
