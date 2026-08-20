@@ -115,6 +115,14 @@ const ImageResizeWithProxy = ImageResize.extend({
         renderHTML: (attrs: { linkNatural?: string | null }) =>
           attrs.linkNatural ? { 'data-link-natural': attrs.linkNatural } : {},
       },
+      // 클릭 영역 링크 대상 — 변수 토큰("{{key}}") 또는 외부 URL. null 이면 발송 시
+      // {{invite_link}} 기본값 (image-link-area.ts readLinkHref).
+      linkHref: {
+        default: null as string | null,
+        parseHTML: (el: HTMLElement) => el.getAttribute('data-link-href'),
+        renderHTML: (attrs: { linkHref?: string | null }) =>
+          attrs.linkHref ? { 'data-link-href': attrs.linkHref } : {},
+      },
     };
   },
   // 베이스 ImageResize 는 renderHTML 을 override 하지 않아 단순 <img> 만 출력한다.
