@@ -1,0 +1,556 @@
+/**
+ * A-2 사전 박제 — 두 진입 경로(createResponseWithFirstAnswer / createBlankResponse)의
+ * 차단 사유·부작용 순서·반환 shape 를 리팩터 전 동작 그대로 고정한다.
+ *
+ * 이 파일은 A-2 커밋 1~3 에서 한 줄도 고치지 않는다. 고쳐야 하는 상황이 오면
+ * 그것은 리팩터가 동작을 바꿨다는 신호다.
+ *
+ * 알려진 드리프트(D-1 blank draftSeq 부재, D-2 blank visibleStep* 부재,
+ * F-1 INSERT 경로 크기 가드 누락, F-2 대상자 테스트 lane versionId 반환)는
+ * "현행 그대로" 박제한다 — 후속 티켓에서 의도적으로 뒤집을 때 diff 에 드러나게 하기 위함이다.
+ */
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import type { ClientSignals } from '@/lib/duplicate-detection/types';
+
+process.env['DUPLICATE_DETECTION_SALT'] = 'a2-entry-parity-salt';
+
+// 부작용 순서 기록기 + 각 지점의 반환값 제어기. vi.mock factory 가 참조하므로 hoisted.
+const H = vi.hoisted(() => ({
+  order: [] as string[],
+  headersMock: vi.fn(),
+  surveyFindFirst: vi.fn(),
+  versionFindFirst: vi.fn(),
+  responseFindFirst: vi.fn(),
+  executeMock: vi.fn(),
+  selectLimitMock: vi.fn(),
+  insertValuesArg: vi.fn(),
+  insertReturningMock: vi.fn(),
+  updateReturningMock: vi.fn(),
+  trackAMock: vi.fn(),
+  trackBMock: vi.fn(),
+  acquireMock: vi.fn(),
+  controlFlagsMock: vi.fn(),
+}));
+
+vi.mock('@/db', () => {
+  const insertChain: Record<string, unknown> = {};
+  insertChain['values'] = vi.fn((v: unknown) => {
+    H.insertValuesArg(v);
+    return insertChain;
+  });
+  insertChain['onConflictDoNothing'] = vi.fn(() => insertChain);
+  insertChain['returning'] = vi.fn(() => H.insertReturningMock());
+
+  const selectChain: Record<string, unknown> = {};
+  selectChain['from'] = vi.fn(() => selectChain);
+  selectChain['where'] = vi.fn(() => selectChain);
+  selectChain['for'] = vi.fn(() => selectChain);
+  selectChain['limit'] = vi.fn(() => H.selectLimitMock());
+
+  const updateChain: Record<string, unknown> = {};
+  updateChain['set'] = vi.fn(() => updateChain);
+  updateChain['where'] = vi.fn(() => updateChain);
+  updateChain['returning'] = vi.fn(() => H.updateReturningMock());
+
+  const db: Record<string, unknown> = {
+    insert: vi.fn(() => {
+      H.order.push('insert');
+      return insertChain;
+    }),
+    select: vi.fn(() => {
+      H.order.push('select');
+      return selectChain;
+    }),
+    update: vi.fn(() => {
+      H.order.push('update');
+      return updateChain;
+    }),
+    execute: vi.fn((...a: unknown[]) => {
+      H.order.push('execute');
+      return H.executeMock(...a);
+    }),
+    query: {
+      surveys: {
+        findFirst: vi.fn((...a: unknown[]) => {
+          H.order.push('surveyGate');
+          return H.surveyFindFirst(...a);
+        }),
+      },
+      surveyVersions: {
+        findFirst: vi.fn((...a: unknown[]) => {
+          H.order.push('versionGate');
+          return H.versionFindFirst(...a);
+        }),
+      },
+      surveyResponses: {
+        findFirst: vi.fn((...a: unknown[]) => {
+          H.order.push('responseRow');
+          return H.responseFindFirst(...a);
+        }),
+      },
+      contactTargets: { findFirst: vi.fn(async () => undefined) },
+    },
+  };
+  // tx 는 db 자신 — select/execute/update 스텁을 그대로 재사용한다.
+  db['transaction'] = vi.fn(async (cb: (tx: unknown) => unknown) => {
+    H.order.push('tx');
+    return cb(db);
+  });
+  return { db };
+});
+
+vi.mock('next/headers', () => ({
+  headers: vi.fn(async () => {
+    H.order.push('headers');
+    return H.headersMock();
+  }),
+}));
+
+vi.mock('@/lib/duplicate-detection/check', () => ({
+  checkTrackA: vi.fn((...a: unknown[]) => {
+    H.order.push('trackA');
+    return H.trackAMock(...a);
+  }),
+  checkTrackB: vi.fn((...a: unknown[]) => {
+    H.order.push('trackB');
+    return H.trackBMock(...a);
+  }),
+}));
+
+vi.mock('@/lib/survey-response/test-target-attempt.server', () => ({
+  acquireTestTargetResponse: vi.fn((...a: unknown[]) => {
+    H.order.push('acquire');
+    return H.acquireMock(...a);
+  }),
+  assertAnonymousTestSession: vi.fn(async () => undefined),
+  lockAndAssertResponseMutation: vi.fn(async () => undefined),
+  isResumableTestStatus: vi.fn(() => true),
+}));
+
+// isValidTestToken 은 실제 구현을 써야 무효 테스트 링크 판정이 현실과 같다.
+vi.mock('@/lib/survey-control', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/survey-control')>();
+  return {
+    ...actual,
+    getSurveyControlFlags: vi.fn((...a: unknown[]) => {
+      H.order.push('controlFlags');
+      return H.controlFlagsMock(...a);
+    }),
+  };
+});
+
+vi.mock('@/features/survey-response/server/services/response-answers.service', () => ({
+  replaceResponseAnswers: vi.fn(async () => undefined),
+}));
+
+vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
+
+const SURVEY_ID = '00000000-0000-4000-8000-0000000000a2';
+const VERSION_ID = 'version-1';
+const SIGNALS: ClientSignals = {
+  deviceId: 'dev-a2',
+  screen: '1920x1080',
+  tz: 'Asia/Seoul',
+  lang: 'ko-KR',
+  platform: 'MacIntel',
+};
+
+function publishedSurvey(over: Record<string, unknown> = {}) {
+  return {
+    status: 'published',
+    endDate: null,
+    maxResponses: null,
+    isPublic: true,
+    requireInviteToken: false,
+    currentVersionId: VERSION_ID,
+    isPaused: false,
+    testModeEnabled: false,
+    testToken: null,
+    ...over,
+  };
+}
+
+type Kind = 'first' | 'blank';
+
+type Over = {
+  sessionId?: string;
+  versionId?: string | null;
+  inviteToken?: string;
+  testToken?: string;
+  attemptId?: string;
+  honeypot?: string;
+  clientSignals?: ClientSignals | null;
+  value?: unknown;
+  visibleStepIndex?: number;
+  visibleStepTotal?: number;
+};
+
+async function callCreate(kind: Kind, over: Over = {}) {
+  const svc = await import('@/features/survey-response/server/services/response.service');
+  const common = {
+    surveyId: SURVEY_ID,
+    sessionId: over.sessionId ?? 'sess-a2',
+    versionId: over.versionId ?? null,
+    currentStepId: 'step-1',
+    clientSignals: over.clientSignals === undefined ? SIGNALS : over.clientSignals,
+    ...(over.inviteToken !== undefined ? { inviteToken: over.inviteToken } : {}),
+    ...(over.testToken !== undefined ? { testToken: over.testToken } : {}),
+    ...(over.attemptId !== undefined ? { attemptId: over.attemptId } : {}),
+    ...(over.honeypot !== undefined ? { honeypot: over.honeypot } : {}),
+  };
+  if (kind === 'blank') return svc.createBlankResponse(common);
+  return svc.createResponseWithFirstAnswer({
+    ...common,
+    questionId: 'q1',
+    value: over.value === undefined ? 'a' : over.value,
+    ...(over.visibleStepIndex !== undefined ? { visibleStepIndex: over.visibleStepIndex } : {}),
+    ...(over.visibleStepTotal !== undefined ? { visibleStepTotal: over.visibleStepTotal } : {}),
+  });
+}
+
+function insertedRow(over: Record<string, unknown> = {}) {
+  return {
+    id: 'r1',
+    contactTargetId: null,
+    metadata: null,
+    status: 'in_progress',
+    versionId: VERSION_ID,
+    ...over,
+  };
+}
+
+/** versionId 를 실어 보낼 때의 표준 성공 배선 — 멤버십은 execute, 재사용 조회는 select 로 갈린다. */
+function wireHappyPath() {
+  H.surveyFindFirst.mockResolvedValue(publishedSurvey());
+  H.versionFindFirst.mockResolvedValue({ surveyId: SURVEY_ID, status: 'published' });
+  H.trackAMock.mockResolvedValue({ blocked: false, contactTargetId: null, isTestTarget: false });
+  H.trackBMock.mockResolvedValue({ blocked: false });
+  H.executeMock.mockResolvedValue([{ pii: false }]);
+  H.selectLimitMock.mockResolvedValue([]);
+  H.insertReturningMock.mockResolvedValue([insertedRow()]);
+  H.responseFindFirst.mockResolvedValue({
+    id: 'r1',
+    surveyId: SURVEY_ID,
+    versionId: VERSION_ID,
+    isTest: false,
+    contactTargetId: null,
+  });
+  H.controlFlagsMock.mockResolvedValue(null);
+  H.updateReturningMock.mockResolvedValue([{ id: 'r1' }]);
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  H.order.length = 0;
+  H.headersMock.mockReturnValue(
+    new Headers({ 'x-forwarded-for': '10.0.0.2', 'user-agent': 'Chrome/120' }),
+  );
+});
+
+// ============================================================================
+// T1 — 차단 사유 대칭 매트릭스
+// ============================================================================
+describe.each(['first', 'blank'] as const)('T1 차단 사유 대칭 — %s', (kind: Kind) => {
+  beforeEach(() => {
+    wireHappyPath();
+  });
+
+  it('status 미배포 → not_accepting', async () => {
+    H.surveyFindFirst.mockResolvedValue(publishedSurvey({ status: 'draft' }));
+    const result = await callCreate(kind);
+    expect(result).toEqual({ kind: 'blocked', reason: 'not_accepting' });
+    expect(H.insertValuesArg).not.toHaveBeenCalled();
+  });
+
+  it('isPaused → survey_paused', async () => {
+    H.surveyFindFirst.mockResolvedValue(publishedSurvey({ isPaused: true }));
+    const result = await callCreate(kind);
+    expect(result).toEqual({ kind: 'blocked', reason: 'survey_paused' });
+    expect(H.insertValuesArg).not.toHaveBeenCalled();
+  });
+
+  it('endDate 경과 → not_accepting', async () => {
+    H.surveyFindFirst.mockResolvedValue(
+      publishedSurvey({ endDate: new Date(Date.now() - 60_000) }),
+    );
+    const result = await callCreate(kind);
+    expect(result).toEqual({ kind: 'blocked', reason: 'not_accepting' });
+    expect(H.insertValuesArg).not.toHaveBeenCalled();
+  });
+
+  it('requireInviteToken + contactTargetId 없음 → invalid_token', async () => {
+    H.surveyFindFirst.mockResolvedValue(publishedSurvey({ requireInviteToken: true }));
+    const result = await callCreate(kind);
+    expect(result).toEqual({ kind: 'blocked', reason: 'invalid_token' });
+    expect(H.insertValuesArg).not.toHaveBeenCalled();
+  });
+});
+
+// ============================================================================
+// T2 — 부작용 순서 박제. 이 배열이 곧 티켓이 말한 "부작용 순서 = 계약" 이다.
+// ============================================================================
+describe('T2 부작용 순서', () => {
+  beforeEach(() => {
+    wireHappyPath();
+  });
+
+  it('createResponseWithFirstAnswer 는 정확한 순서로 부작용을 낸다', async () => {
+    const result = await callCreate('first', { versionId: VERSION_ID });
+    expect(result).toMatchObject({ kind: 'created', id: 'r1' });
+    expect(H.order).toEqual([
+      'headers',
+      'surveyGate',
+      'trackB',
+      'versionGate',
+      'execute', // assertQuestionBelongsToResponse — INSERT 전 멤버십+PII
+      'insert',
+      'responseRow', // updateQuestionResponse → loadResponseRowForMutation
+      'execute', // updateQuestionResponse 의 멤버십 재검증
+      'controlFlags', // assertSurveyNotPaused
+      'update',
+    ]);
+  });
+
+  it('createBlankResponse 는 멤버십·머지 없이 같은 앞단 순서를 낸다', async () => {
+    const result = await callCreate('blank', { versionId: VERSION_ID });
+    expect(result).toMatchObject({ kind: 'created', id: 'r1' });
+    expect(H.order).toEqual(['headers', 'surveyGate', 'trackB', 'versionGate', 'insert']);
+  });
+});
+
+// ============================================================================
+// T3 — 게이트 앞단 조기 차단은 headers/db 를 건드리지 않는다
+// ============================================================================
+describe.each(['first', 'blank'] as const)('T3 무접촉 조기 차단 — %s', (kind: Kind) => {
+  beforeEach(() => {
+    wireHappyPath();
+  });
+
+  it('inviteToken + testToken 동시 → invalid_test_token, 무접촉', async () => {
+    const result = await callCreate(kind, {
+      inviteToken: '11111111-1111-4111-8111-111111111111',
+      testToken: 'tok',
+    });
+    expect(result).toEqual({ kind: 'blocked', reason: 'invalid_test_token' });
+    expect(H.order).toEqual([]);
+  });
+
+  it('honeypot 채움 → device_already_responded, 무접촉', async () => {
+    const result = await callCreate(kind, { honeypot: 'bot' });
+    expect(result).toEqual({ kind: 'blocked', reason: 'device_already_responded' });
+    expect(H.order).toEqual([]);
+  });
+
+  it('익명 + clientSignals null → device_already_responded, 무접촉', async () => {
+    const result = await callCreate(kind, { clientSignals: null });
+    expect(result).toEqual({ kind: 'blocked', reason: 'device_already_responded' });
+    expect(H.order).toEqual([]);
+  });
+});
+
+// ============================================================================
+// T4 — 무효 테스트 토큰은 봇 가드 뒤, 중복검사 앞에서 차단된다
+// ============================================================================
+describe.each(['first', 'blank'] as const)('T4 무효 테스트 토큰 위치 — %s', (kind: Kind) => {
+  it('testModeEnabled=false 인데 testToken 전달 → 중복검사 전에 차단', async () => {
+    wireHappyPath();
+    H.surveyFindFirst.mockResolvedValue(publishedSurvey({ testModeEnabled: false }));
+    const result = await callCreate(kind, { testToken: 'tok' });
+    expect(result).toEqual({ kind: 'blocked', reason: 'invalid_test_token' });
+    expect(H.order).toEqual(['headers', 'surveyGate']);
+  });
+});
+
+// ============================================================================
+// T5 — 대상자 테스트 attempt 가드
+// ============================================================================
+describe.each(['first', 'blank'] as const)('T5 attempt 가드 — %s', (kind: Kind) => {
+  beforeEach(() => {
+    wireHappyPath();
+    H.trackAMock.mockResolvedValue({
+      blocked: false,
+      contactTargetId: 'c1',
+      isTestTarget: true,
+    });
+  });
+
+  it('isTestTarget 인데 attemptId 미전달 → invalid_test_token, INSERT 없음', async () => {
+    const result = await callCreate(kind, {
+      inviteToken: '11111111-1111-4111-8111-111111111111',
+    });
+    expect(result).toEqual({ kind: 'blocked', reason: 'invalid_test_token' });
+    expect(H.order).toEqual(['headers', 'surveyGate', 'trackA']);
+    expect(H.insertValuesArg).not.toHaveBeenCalled();
+  });
+
+  it('isTestTarget 인데 contactTargetId 없음 → invalid_test_token, INSERT 없음', async () => {
+    H.trackAMock.mockResolvedValue({ blocked: false, contactTargetId: null, isTestTarget: true });
+    const result = await callCreate(kind, {
+      inviteToken: '11111111-1111-4111-8111-111111111111',
+      attemptId: '22222222-2222-4222-8222-222222222222',
+    });
+    expect(result).toEqual({ kind: 'blocked', reason: 'invalid_test_token' });
+    expect(H.insertValuesArg).not.toHaveBeenCalled();
+  });
+});
+
+// ============================================================================
+// T6 — 반환 shape 박제. 드리프트 D-1(blank draftSeq 부재)을 현행 그대로 못박는다.
+// ============================================================================
+describe('T6 draftSeq 반환 (드리프트 D-1 현행 박제)', () => {
+  beforeEach(() => {
+    wireHappyPath();
+    H.insertReturningMock.mockResolvedValue([insertedRow({ metadata: { draftSeq: 7 } })]);
+  });
+
+  it('firstAnswer 는 물려받은 행의 draftSeq 를 싣는다', async () => {
+    const result = await callCreate('first', { versionId: VERSION_ID });
+    if (result.kind !== 'created') throw new Error('created 아님');
+    expect(result.draftSeq).toBe(7);
+  });
+
+  it('blank 는 draftSeq 키 자체가 없다 — 후속 A-2f-1 에서 뒤집는다', async () => {
+    const result = await callCreate('blank', { versionId: VERSION_ID });
+    if (result.kind !== 'created') throw new Error('created 아님');
+    expect('draftSeq' in result).toBe(false);
+  });
+});
+
+// ============================================================================
+// T7 — INSERT 키 집합 박제. 드리프트 D-2(blank visibleStep* 부재)를 현행 그대로.
+// ============================================================================
+describe('T7 INSERT 키 집합 (드리프트 D-2 현행 박제)', () => {
+  beforeEach(() => {
+    wireHappyPath();
+  });
+
+  function capturedValues(): Record<string, unknown> {
+    const call = H.insertValuesArg.mock.calls[0];
+    if (!call) throw new Error('insertValuesArg 호출 없음');
+    return call[0] as Record<string, unknown>;
+  }
+
+  it('firstAnswer 는 visibleStep* 키를 명시적으로 싣는다', async () => {
+    await callCreate('first', { versionId: VERSION_ID, visibleStepIndex: 2, visibleStepTotal: 5 });
+    const values = capturedValues();
+    expect('visibleStepIndex' in values).toBe(true);
+    expect('visibleStepTotal' in values).toBe(true);
+    expect(values['visibleStepIndex']).toBe(2);
+    expect(values['visibleStepTotal']).toBe(5);
+    expect(values['questionResponses']).toEqual({ q1: 'a' });
+  });
+
+  it('blank 는 visibleStep* 키가 없어야 한다 — ?? null 통일 유혹을 차단', async () => {
+    await callCreate('blank', { versionId: VERSION_ID });
+    const values = capturedValues();
+    expect('visibleStepIndex' in values).toBe(false);
+    expect('visibleStepTotal' in values).toBe(false);
+    expect(values['questionResponses']).toEqual({});
+  });
+});
+
+// ============================================================================
+// T8 — 대상자 테스트 lane 반환 (F-2 현행 박제)
+// ============================================================================
+describe.each(['first', 'blank'] as const)('T8 대상자 테스트 lane 반환 — %s', (kind: Kind) => {
+  it('행의 versionId 와 무관하게 입력 versionId 를 그대로 돌려준다 (F-2)', async () => {
+    wireHappyPath();
+    H.trackAMock.mockResolvedValue({ blocked: false, contactTargetId: 'c1', isTestTarget: true });
+    H.acquireMock.mockResolvedValue({ responseId: 'r-test', reset: false });
+    // saveTestTargetFirstAnswer 의 tx 내부 versionId select — 행은 다른 버전에 핀돼 있다.
+    H.selectLimitMock.mockResolvedValue([{ versionId: 'row-version-999' }]);
+    H.updateReturningMock.mockResolvedValue([{ id: 'r-test' }]);
+
+    const result = await callCreate(kind, {
+      versionId: VERSION_ID,
+      inviteToken: '11111111-1111-4111-8111-111111111111',
+      attemptId: '22222222-2222-4222-8222-222222222222',
+    });
+
+    expect(result).toMatchObject({
+      kind: 'created',
+      id: 'r-test',
+      contactTargetId: 'c1',
+      versionId: VERSION_ID,
+    });
+    expect(H.acquireMock).toHaveBeenCalledOnce();
+    // 버전 게이트와 수용 게이트를 타지 않는다 — 양쪽 공통(의도).
+    expect(H.order).not.toContain('versionGate');
+  });
+});
+
+// ============================================================================
+// T9 — 크기 가드의 현행(결함 포함) 박제. F-1.
+// ============================================================================
+describe('T9 answer_value_too_large 는 저장 후에 샌다 (F-1 현행 박제)', () => {
+  it('firstAnswer: INSERT 가 먼저 일어나고 그 뒤 blocked 로 접히지 않은 채 throw 된다', async () => {
+    wireHappyPath();
+    // versionId null → 멤버십은 select 경로.
+    H.selectLimitMock.mockResolvedValue([{ id: 'q1', piiEncrypted: false }]);
+    const svc = await import('@/features/survey-response/server/services/response.service');
+
+    const huge = 'x'.repeat(300 * 1024);
+    await expect(callCreate('first', { value: huge })).rejects.toBeInstanceOf(
+      svc.SurveyNotAcceptingResponsesError,
+    );
+    // 거대 JSONB 가 이미 저장됐다 — 후속 티켓이 고칠 지점.
+    expect(H.order).toContain('insert');
+    await expect(callCreate('first', { value: huge })).rejects.toMatchObject({
+      reason: 'answer_value_too_large',
+    });
+  });
+});
+
+// ============================================================================
+// T10 — Track A/B 차단 대칭
+// ============================================================================
+describe.each(['first', 'blank'] as const)('T10 중복 감지 차단 대칭 — %s', (kind: Kind) => {
+  beforeEach(() => {
+    wireHappyPath();
+  });
+
+  it('Track A 차단 사유를 그대로 돌려주고 INSERT 하지 않는다', async () => {
+    H.trackAMock.mockResolvedValue({ blocked: true, reason: 'token_already_used' });
+    const result = await callCreate(kind, {
+      inviteToken: '11111111-1111-4111-8111-111111111111',
+    });
+    expect(result).toEqual({ kind: 'blocked', reason: 'token_already_used' });
+    expect(H.insertValuesArg).not.toHaveBeenCalled();
+  });
+
+  it('Track B 차단 사유를 그대로 돌려주고 INSERT 하지 않는다', async () => {
+    H.trackBMock.mockResolvedValue({ blocked: true, reason: 'device_already_responded' });
+    const result = await callCreate(kind);
+    expect(result).toEqual({ kind: 'blocked', reason: 'device_already_responded' });
+    expect(H.insertValuesArg).not.toHaveBeenCalled();
+  });
+});
+
+// ============================================================================
+// T11 — 종결 상태 행 인수 차단
+// ============================================================================
+describe.each(['first', 'blank'] as const)('T11 종결 행 인수 차단 — %s', (kind: Kind) => {
+  it('completed 재사용 후보는 token_already_used 로 접힌다', async () => {
+    wireHappyPath();
+    H.trackAMock.mockResolvedValue({ blocked: false, contactTargetId: 'c1', isTestTarget: false });
+    // versionId 를 실어 멤버십을 execute 경로로 보내고, select 는 재사용 후보 조회 전용으로 둔다.
+    H.selectLimitMock.mockResolvedValue([
+      {
+        id: 'r-old',
+        contactTargetId: 'c1',
+        metadata: null,
+        status: 'completed',
+        versionId: VERSION_ID,
+      },
+    ]);
+
+    const result = await callCreate(kind, {
+      versionId: VERSION_ID,
+      inviteToken: '11111111-1111-4111-8111-111111111111',
+    });
+
+    expect(result).toEqual({ kind: 'blocked', reason: 'token_already_used' });
+    expect(H.insertValuesArg).not.toHaveBeenCalled();
+  });
+});
