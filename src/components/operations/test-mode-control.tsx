@@ -49,6 +49,18 @@ function toTestModeState(row: TestModeState): TestModeState {
   };
 }
 
+/** 조회 실패/설문 부재 시 버튼 OFF 폴백 상태 */
+function offFallbackState(surveyId: string): TestModeState {
+  return {
+    testModeEnabled: false,
+    testToken: null,
+    accessIdentifier: surveyId,
+    testResponseCount: 0,
+    testTargetCount: 0,
+    firstTestInviteCode: null,
+  };
+}
+
 function hasSameTestModeState(current: TestModeState | null, next: TestModeState): boolean {
   return (
     current !== null &&
@@ -112,21 +124,15 @@ export function TestModeControl({ surveyId, initial }: Props) {
       .get({ surveyId })
       .then((row) => {
         if (cancelled || requestVersion !== controlRequestVersion.current) return;
-        const next = toTestModeState(row);
+        // null = 미저장/삭제 설문 — OFF 폴백 (서버가 500 대신 null 을 주는 규약)
+        const next = row ? toTestModeState(row) : offFallbackState(surveyId);
         stateRef.current = next;
         setState(next);
       })
       .catch(() => {
         // 조회 실패 시 버튼은 OFF 모양으로 폴백 — 클릭 시 토글 시도에서 에러 안내
         if (cancelled || requestVersion !== controlRequestVersion.current) return;
-        const fallback = {
-          testModeEnabled: false,
-          testToken: null,
-          accessIdentifier: surveyId,
-          testResponseCount: 0,
-          testTargetCount: 0,
-          firstTestInviteCode: null,
-        };
+        const fallback = offFallbackState(surveyId);
         stateRef.current = fallback;
         setState(fallback);
       });
@@ -148,6 +154,7 @@ export function TestModeControl({ surveyId, initial }: Props) {
       try {
         const row = await client.operations.control.get({ surveyId });
         if (cancelled || requestVersion !== controlRequestVersion.current) return;
+        if (!row) return; // 미저장/삭제 설문 — 동기화할 서버 상태가 없다
         const next = toTestModeState(row);
         if (hasSameTestModeState(stateRef.current, next)) return;
         stateRef.current = next;
@@ -211,6 +218,7 @@ export function TestModeControl({ surveyId, initial }: Props) {
     const requestVersion = ++controlRequestVersion.current;
     const next = await client.operations.control.get({ surveyId });
     if (requestVersion !== controlRequestVersion.current) return null;
+    if (!next) return null; // 미저장/삭제 설문
     const controlState = toTestModeState(next);
     if (hasSameTestModeState(stateRef.current, controlState)) return controlState;
     stateRef.current = controlState;

@@ -17,7 +17,7 @@ const ControlStateSchema = z.object({
 
 const get = authed
   .input(z.object({ surveyId: z.string() }))
-  .output(ControlStateSchema)
+  .output(ControlStateSchema.nullable())
   .handler(({ input }) => svc.getControlState(input.surveyId));
 
 const setPaused = authed
