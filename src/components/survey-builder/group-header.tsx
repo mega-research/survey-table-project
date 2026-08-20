@@ -28,7 +28,9 @@ export function GroupHeader({
   className,
   dragHandleProps,
 }: GroupHeaderProps) {
-  const { toggleGroupCollapse } = useSurveyBuilderStore();
+  // 액션 하나만 구독한다 — 스토어 전체 구독은 무관한 set 마다 그룹 수만큼 리렌더를 만든다.
+  // 표시값(group.collapsed 등)은 props 로 오고, 접힘 갱신은 부모의 groups 구독이 담당한다.
+  const toggleGroupCollapse = useSurveyBuilderStore((s) => s.toggleGroupCollapse);
   // 헤더 표시 전용 — 그룹 이름 편집 인풋은 원문 {{{이름}}} 를 그대로 다룬다.
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();

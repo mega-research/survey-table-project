@@ -119,7 +119,8 @@ export function QuestionLibraryPanel({
   const { mutateAsync: applyMultipleQuestions } = useApplyMultipleQuestions();
   const { mutate: deleteSavedQuestionMutation } = useDeleteSavedQuestion();
 
-  const { addPreparedQuestion } = useSurveyBuilderStore();
+  // 액션 하나만 구독 — 전체 구독은 스토어의 모든 set 에 이 패널 전체를 리렌더시킨다.
+  const addPreparedQuestion = useSurveyBuilderStore((s) => s.addPreparedQuestion);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(

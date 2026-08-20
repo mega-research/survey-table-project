@@ -2,8 +2,6 @@
 
 import { useState, type ChangeEvent } from 'react';
 
-import ExcelJS from 'exceljs';
-
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -97,6 +95,9 @@ export function LookupCsvImport({ isOpen, onClose, onImport }: Props) {
         };
       } else {
         const buf = await f.arrayBuffer();
+        // exceljs 는 빌더 초기 번들에서 빼고 엑셀 파일을 고른 시점에만 받는다.
+        // UMD(CJS) 패키지라 named export 감지가 안 되므로 default 로 꺼내야 한다.
+        const { default: ExcelJS } = await import('exceljs');
         const wb = new ExcelJS.Workbook();
         await wb.xlsx.load(buf);
         const ws = wb.worksheets[0];

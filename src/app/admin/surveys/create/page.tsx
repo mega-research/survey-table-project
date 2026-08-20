@@ -150,7 +150,12 @@ export default function CreateSurveyPage() {
   );
   const currentSurvey = useSurveyBuilderStore((s) => s.currentSurvey);
 
-  const { selectedQuestionId, selectQuestion } = useSurveyUIStore();
+  const { selectedQuestionId, selectQuestion } = useSurveyUIStore(
+    useShallow((s) => ({
+      selectedQuestionId: s.selectedQuestionId,
+      selectQuestion: s.selectQuestion,
+    })),
+  );
 
   const { mutateAsync: saveSurvey } = useSaveSurvey();
 
