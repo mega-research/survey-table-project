@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import type { RefObject } from 'react';
 
+import { useLatestRef } from '@/hooks/use-latest-ref';
 import { client } from '@/shared/lib/rpc';
 import { type RenderStep, stepIdOf } from '@/lib/group-ordering';
 import type { TestAttemptIdentity } from '@/shared/types/test-attempt';
@@ -20,6 +21,11 @@ interface UseResponseTelemetryArgs {
    */
   visibleProgressRef: RefObject<{ index: number; total: number }>;
   testIdentity?: TestAttemptIdentity | null;
+  /**
+   * stepVisit 응답이 중단(survey_paused)을 알렸을 때 호출. 인자는 서버가 준 최신 문구.
+   * ref 로 미러링하므로 호출자가 매 렌더 새 함수를 넘겨도 effect 재발사는 없다.
+   */
+  onPausedDetected?: ((pausedMessage: string | null) => void) | undefined;
 }
 
 /**
@@ -43,7 +49,12 @@ export function useResponseTelemetry({
   isCompleted,
   visibleProgressRef,
   testIdentity = null,
+  onPausedDetected,
 }: UseResponseTelemetryArgs): void {
+  // 렌더 분기상 blocked 화면이 완료 화면보다 앞이라, 완료 직후 늦게 도착한 중단 판정이
+  // 완료 화면을 덮을 수 있다. 최신값을 ref 로 읽어 그 경우를 버린다.
+  const isCompletedRef = useLatestRef(isCompleted);
+  const onPausedDetectedRef = useLatestRef(onPausedDetected);
   // 운영 현황 콘솔(T5): 스텝 전환 추적.
   // - currentResponseId가 set된 이후(첫 답변 후)에만 동작
   // - 동일 stepId면 서버에서 no-op (멱등)
@@ -62,6 +73,13 @@ export function useResponseTelemetry({
         visibleStepIndex: visibleProgressRef.current.index,
         visibleStepTotal: visibleProgressRef.current.total,
         ...(testIdentity ?? {}),
+      })
+      .then((res) => {
+        // 세션 도중 중단 감지 — 저장할 답변이 없어 flush 가 no-op 인 전환도 여기서 잡힌다.
+        // 구 서버는 denial 이 undefined → 아무 것도 하지 않는다(배포 스큐 fail-open).
+        if (res?.denial !== 'survey_paused') return;
+        if (isCompletedRef.current) return;
+        onPausedDetectedRef.current?.(res.pausedMessage ?? null);
       })
       .catch((err) => {
         console.error('recordStepVisit 실패:', err);

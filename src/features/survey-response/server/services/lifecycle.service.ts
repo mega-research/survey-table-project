@@ -18,6 +18,7 @@ import {
 import { ongoingResponseDenial } from '../../domain/acceptance';
 import type {
   RecordStepVisitInput,
+  RecordStepVisitOutput,
   RecordVisibilitySegmentInput,
   ResumeOrCreateResponseInput,
   ResumeOrCreateResponseOutput,
@@ -114,15 +115,21 @@ async function migrateResumedRowIfStale(input: {
  *   - 새 항목을 pageVisits 끝에 append
  *   - currentStepId, lastActivityAt 갱신
  *
+ * 부수적으로 중단(survey_paused) 판정을 함께 반환한다 — 스텝 전환은 이미 매번 이 경로를
+ * 지나므로 별도 왕복 없이 세션 도중 중단을 응답자에게 알릴 수 있다. 기록 자체는 중단
+ * 여부와 무관하게 그대로 수행한다.
+ *
  * @throws 행이 없으면 에러 — 호출자(T5)는 catch & log하되 사용자 흐름은 막지 않는다
  */
-export async function recordStepVisit(input: RecordStepVisitInput): Promise<void> {
+export async function recordStepVisit(
+  input: RecordStepVisitInput,
+): Promise<Pick<RecordStepVisitOutput, 'denial' | 'pausedMessage'>> {
   const { responseId, nextStepId, visibleStepIndex, visibleStepTotal } = input;
 
   // 단일 UPDATE: WHERE 절에서 currentStepId !== nextStepId 조건으로 멱등성 보장
   // jsonb_set은 마지막 항목의 leftAt이 NULL일 때만 갱신, 그 후 || 로 새 항목 append.
   // visible step 진척은 step 이동과 함께 갱신 (동일 step no-op 시엔 미갱신 — 마지막 이동 시점 기준).
-  await db.transaction(async (tx) => {
+  const row = await db.transaction(async (tx) => {
     const response = await lockAndAssertResponseMutation(tx, {
       responseId,
       attemptId: input.attemptId,
@@ -163,7 +170,17 @@ export async function recordStepVisit(input: RecordStepVisitInput): Promise<void
           sql`COALESCE(${surveyResponses.currentStepId}, '') <> ${nextStepId}`,
         ),
       );
+    return response;
   });
+
+  // 중단 판정은 UPDATE 와 분리해 트랜잭션 밖에서 읽는다 — 기록은 중단 여부와 무관하게
+  // 그대로 남기고(운영 콘솔 현황 유지), 판정만 호출자에게 실어 보낸다.
+  // isTest 행은 flags 조회 자체를 skip 하고, flags 미조회(설문 삭제 등)는 fail-open —
+  // assertSurveyNotPaused 와 동일한 규약이다. 판정 본체는 domain 이 진다.
+  if (row.isTest) return { denial: null, pausedMessage: null };
+  const flags = await getSurveyControlFlags(row.surveyId);
+  const denial = flags ? ongoingResponseDenial(flags, { isTest: row.isTest }) : null;
+  return { denial, pausedMessage: denial ? (flags?.pausedMessage ?? null) : null };
 }
 
 /**

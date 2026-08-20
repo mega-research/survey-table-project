@@ -4,10 +4,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { extractRawSql } from './_helpers/result-code-mock';
 
-const { selectLimitMock, setMock, whereMock } = vi.hoisted(() => ({
+const { selectLimitMock, setMock, whereMock, controlFlagsMock } = vi.hoisted(() => ({
   selectLimitMock: vi.fn(),
   setMock: vi.fn(),
   whereMock: vi.fn(),
+  controlFlagsMock: vi.fn(),
 }));
 
 vi.mock('@/db', () => {
@@ -40,6 +41,13 @@ vi.mock('@/db', () => {
     },
   };
 });
+
+// recordStepVisit 이 중단 판정을 위해 제어 플래그를 읽는다. mock db 에는 .query 가 없으므로
+// response-draft.test.ts 와 동일하게 survey-control 을 통째로 모킹한다.
+vi.mock('@/lib/survey-control', () => ({
+  getSurveyControlFlags: (...a: unknown[]) => controlFlagsMock(...a),
+  isValidTestToken: vi.fn(),
+}));
 
 describe('recordVisibilitySegment — SQL 분기', () => {
   beforeEach(() => {
@@ -128,9 +136,41 @@ describe('recordStepVisit — missing row와 동일 step 구분', () => {
     const { recordStepVisit } =
       await import('@/features/survey-response/server/services/lifecycle.service');
 
+    controlFlagsMock.mockResolvedValue({ isPaused: false, pausedMessage: null });
     await expect(
       recordStepVisit({ responseId: 'r1', nextStepId: 'group:same' }),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual({ denial: null, pausedMessage: null });
+  });
+
+  it('중단된 설문이면 denial 과 문구를 돌려주되 pageVisits UPDATE 는 그대로 나간다', async () => {
+    selectLimitMock.mockResolvedValue([
+      { id: 'r1', surveyId: 's1', isTest: false, contactTargetId: null },
+    ]);
+    controlFlagsMock.mockResolvedValue({ isPaused: true, pausedMessage: '점검 중입니다' });
+    const { recordStepVisit } =
+      await import('@/features/survey-response/server/services/lifecycle.service');
+
+    await expect(recordStepVisit({ responseId: 'r1', nextStepId: 'group:next' })).resolves.toEqual({
+      denial: 'survey_paused',
+      pausedMessage: '점검 중입니다',
+    });
+    // 중단 이외 동작 불변 pin — 기록은 계속된다.
+    expect(setMock).toHaveBeenCalled();
+  });
+
+
+  it('제어 플래그를 못 읽으면 fail-open 한다', async () => {
+    selectLimitMock.mockResolvedValue([
+      { id: 'r1', surveyId: 's1', isTest: false, contactTargetId: null },
+    ]);
+    controlFlagsMock.mockResolvedValue(null);
+    const { recordStepVisit } =
+      await import('@/features/survey-response/server/services/lifecycle.service');
+
+    await expect(recordStepVisit({ responseId: 'r1', nextStepId: 'group:next' })).resolves.toEqual({
+      denial: null,
+      pausedMessage: null,
+    });
   });
 });
 

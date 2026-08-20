@@ -636,6 +636,15 @@ function SurveyResponseFlowActive({
     isCompleted,
     visibleProgressRef,
     testIdentity,
+    onPausedDetected: (pausedMessage) => {
+      // 세션 도중 중단 — 운영자 최신 문구를 폴백 체인 최우선 값으로 승격한다
+      // (handlePausedMutationError 재조회 경로와 동일 의미론, 왕복은 없다).
+      if (pausedMessage !== null) setRefetchedPausedMessage(pausedMessage);
+      // 이미 다른 사유로 차단됐다면 그 사유를 유지한다.
+      setDuplicateStatus((prev) =>
+        prev.kind === 'blocked' ? prev : { kind: 'blocked', reason: 'survey_paused' },
+      );
+    },
   });
 
   // 이어하기 회복이 내려준 draftSeq — useResponseLifecycle 의 draftSeqRef seed 용.

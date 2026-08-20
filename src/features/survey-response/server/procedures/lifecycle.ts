@@ -4,6 +4,7 @@ import { pub, withRateLimit } from '@/server/orpc';
 
 import {
   RecordStepVisitInput,
+  RecordStepVisitOutput,
   RecordVisibilitySegmentInput,
   ResumeOrCreateResponseInput,
   ResumeOrCreateResponseOutput,
@@ -21,10 +22,12 @@ const segmentRateLimited = pub.use(withRateLimit('response-segment'));
  */
 const stepVisit = segmentRateLimited
   .input(RecordStepVisitInput)
-  .output(z.object({ ok: z.literal(true) }))
+  .output(RecordStepVisitOutput)
   .handler(async ({ input }) => {
-    await svc.recordStepVisit(input);
-    return { ok: true as const };
+    // 중단 판정은 던지지 않고 payload 로 싣는다 — 던지면 마스킹으로 사유가 소실되고
+    // 중단 중 스텝 기록까지 멈춰 운영 콘솔 현황이 끊긴다.
+    const { denial, pausedMessage } = await svc.recordStepVisit(input);
+    return { ok: true as const, denial, pausedMessage };
   });
 
 /**

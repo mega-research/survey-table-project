@@ -21,6 +21,24 @@ export const RecordStepVisitInput = z.object({
 });
 export type RecordStepVisitInput = z.infer<typeof RecordStepVisitInput>;
 
+/**
+ * 스텝 전환 기록 output.
+ *
+ * 중단(survey_paused) 판정을 이 응답에 편승시킨다 — 스텝 전환은 이미 매번 이 RPC 를
+ * 발사하므로 새 왕복·새 procedure·새 rate limit 버킷이 필요 없다. 판정 자체는
+ * domain/acceptance 의 ongoingResponseDenial 소관이라 denial 은 그 반환 union 과 동치다.
+ *
+ * 구 서버(필드 없음)를 만난 신 클라이언트는 denial 이 undefined 가 되어 아무 것도 하지
+ * 않는다 — 배포 스큐에서 fail-open.
+ */
+export const RecordStepVisitOutput = z.object({
+  ok: z.literal(true),
+  denial: z.literal('survey_paused').nullable(),
+  /** 중단일 때만 채워지는 운영자 최신 문구. 화면 폴백 체인의 최우선 값. */
+  pausedMessage: z.string().nullable(),
+});
+export type RecordStepVisitOutput = z.infer<typeof RecordStepVisitOutput>;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // recordVisibilitySegment
 // ─────────────────────────────────────────────────────────────────────────────

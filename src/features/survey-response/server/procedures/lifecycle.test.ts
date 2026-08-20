@@ -58,13 +58,13 @@ describe('surveyResponse.lifecycle procedures', () => {
   afterEach(() => vi.clearAllMocks());
 
   it('stepVisit(pub)는 익명 컨텍스트에서 service 에 위임하고 { ok: true } 반환', async () => {
-    vi.mocked(svc.recordStepVisit).mockResolvedValue(undefined as never);
+    vi.mocked(svc.recordStepVisit).mockResolvedValue({ denial: null, pausedMessage: null });
     const client = createRouterClient({ lifecycle }, { context: anonContext() });
     const res = await client.lifecycle.stepVisit({
       responseId: RESPONSE_ID,
       nextStepId: 'group:abc',
     });
-    expect(res).toEqual({ ok: true });
+    expect(res).toEqual({ ok: true, denial: null, pausedMessage: null });
     expect(svc.recordStepVisit).toHaveBeenCalledWith({
       responseId: RESPONSE_ID,
       nextStepId: 'group:abc',
@@ -73,7 +73,7 @@ describe('surveyResponse.lifecycle procedures', () => {
 
   it('stepVisit(pub)는 테스트 attempt 식별자를 위임한다', async () => {
     const attemptId = '77777777-8888-4999-8aaa-bbbbbbbbbbbb';
-    vi.mocked(svc.recordStepVisit).mockResolvedValue(undefined as never);
+    vi.mocked(svc.recordStepVisit).mockResolvedValue({ denial: null, pausedMessage: null });
     const client = createRouterClient({ lifecycle }, { context: anonContext() });
 
     await client.lifecycle.stepVisit({
@@ -89,6 +89,19 @@ describe('surveyResponse.lifecycle procedures', () => {
       attemptId,
       sessionId: 'target-test-session',
     });
+  });
+
+  it('stepVisit(pub)는 service 가 준 중단 판정을 출력에 실어 보낸다', async () => {
+    vi.mocked(svc.recordStepVisit).mockResolvedValue({
+      denial: 'survey_paused',
+      pausedMessage: '점검 중입니다',
+    });
+    const client = createRouterClient({ lifecycle }, { context: anonContext() });
+    const res = await client.lifecycle.stepVisit({
+      responseId: RESPONSE_ID,
+      nextStepId: 'group:abc',
+    });
+    expect(res).toEqual({ ok: true, denial: 'survey_paused', pausedMessage: '점검 중입니다' });
   });
 
   it('visibilitySegment(pub)는 hide action 을 service 에 위임한다', async () => {
