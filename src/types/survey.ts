@@ -793,35 +793,3 @@ export interface QuestionCategory {
 }
 
 // 기본 카테고리 목록
-export const DEFAULT_CATEGORIES: QuestionCategory[] = [
-  {
-    id: 'demographics',
-    name: '인구통계',
-    color: 'bg-blue-100 text-blue-600',
-    icon: 'Users',
-    order: 0,
-  },
-  {
-    id: 'satisfaction',
-    name: '만족도',
-    color: 'bg-green-100 text-green-600',
-    icon: 'ThumbsUp',
-    order: 1,
-  },
-  { id: 'nps', name: 'NPS', color: 'bg-purple-100 text-purple-600', icon: 'TrendingUp', order: 2 },
-  {
-    id: 'feedback',
-    name: '피드백',
-    color: 'bg-orange-100 text-orange-600',
-    icon: 'MessageSquare',
-    order: 3,
-  },
-  { id: 'preference', name: '선호도', color: 'bg-pink-100 text-pink-600', icon: 'Heart', order: 4 },
-  {
-    id: 'custom',
-    name: '사용자 정의',
-    color: 'bg-gray-100 text-gray-600',
-    icon: 'Folder',
-    order: 5,
-  },
-];

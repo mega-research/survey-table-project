@@ -16,7 +16,6 @@ import { describe, expect, it } from 'vitest';
  *
  * canvas/jsdom으로는 실제 글리프 폭을 잴 수 없으므로 폰트 문자열 동기화를
  * 소스 수준에서 보증한다.
- * (use-line-count-detection 의 TITLE_FONT 는 M45 별도 테스트가 담당)
  */
 
 const ROOT = resolve(__dirname, '..', '..');

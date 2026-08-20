@@ -10,9 +10,6 @@ import { orpc } from '@/shared/lib/rpc';
 export const libraryKeys = {
   all: ['library'] as const,
   questions: () => [...libraryKeys.all, 'questions'] as const,
-  questionsByCategory: (category: string) =>
-    [...libraryKeys.questions(), 'category', category] as const,
-  questionsByTag: (tag: string) => [...libraryKeys.questions(), 'tag', tag] as const,
   searchQuestions: (query: string) => [...libraryKeys.questions(), 'search', query] as const,
   recentlyUsed: (limit?: number) => [...libraryKeys.questions(), 'recent', limit] as const,
   mostUsed: (limit?: number) => [...libraryKeys.questions(), 'popular', limit] as const,
@@ -29,18 +26,6 @@ export const libraryKeys = {
  */
 export function useSavedQuestions() {
   return useQuery(orpc.library.savedQuestions.list.queryOptions());
-}
-
-/**
- * 카테고리별 질문 조회
- */
-export function useQuestionsByCategory(category: string | undefined) {
-  return useQuery(
-    orpc.library.savedQuestions.byCategory.queryOptions({
-      input: { category: category! },
-      enabled: !!category,
-    }),
-  );
 }
 
 /**
@@ -67,18 +52,6 @@ export function useRecentlyUsedQuestions(limit?: number) {
  */
 export function useMostUsedQuestions(limit?: number) {
   return useQuery(orpc.library.savedQuestions.mostUsed.queryOptions({ input: { limit } }));
-}
-
-/**
- * 태그별 질문 조회
- */
-export function useQuestionsByTag(tag: string | undefined) {
-  return useQuery(
-    orpc.library.savedQuestions.byTag.queryOptions({
-      input: { tag: tag! },
-      enabled: !!tag,
-    }),
-  );
 }
 
 /**
@@ -110,22 +83,6 @@ export function useSaveQuestion() {
 
   return useMutation(
     orpc.library.savedQuestions.create.mutationOptions({
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: orpc.library.savedQuestions.key() });
-        queryClient.invalidateQueries({ queryKey: libraryKeys.tags() });
-      },
-    }),
-  );
-}
-
-/**
- * 저장된 질문 업데이트
- */
-export function useUpdateSavedQuestion() {
-  const queryClient = useQueryClient();
-
-  return useMutation(
-    orpc.library.savedQuestions.update.mutationOptions({
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: orpc.library.savedQuestions.key() });
         queryClient.invalidateQueries({ queryKey: libraryKeys.tags() });

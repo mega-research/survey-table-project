@@ -4,7 +4,7 @@ import type { RankingAnswer } from '@/types/survey';
 export const RANKING_OTHER_VALUE = '__other__';
 
 // ── 순위형 드롭다운 공통 스타일 ──
-// RankingDropdownStack(응답) 과 question-preview(빌더 미리보기) 가 공유해
+// RankingDropdownStack(응답)이 쓴다. 원래 빌더 미리보기와 공유하던 값이었으나 그쪽이 제거돼
 // 두 뷰의 select 생김새를 완전히 일치시킨다.
 
 /** 가로(columns=0) 모드에서 rank 블록 1개 select 의 고정 폭(px). */

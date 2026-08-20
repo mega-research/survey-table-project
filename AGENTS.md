@@ -71,7 +71,6 @@ src/
 │   ├── survey/[id]/            # 공개 설문 응답 페이지 (?invite=<uuid>)
 │   ├── i/[code]/               # 짧은 초대 링크 (inviteCode → 응답 페이지)
 │   ├── preview/[token]/        # 토큰 미리보기 (previewToken)
-│   ├── create/                 # 설문 생성 진입
 │   ├── analytics/              # 분석 대시보드
 │   └── unsubscribe/            # 메일 수신거부 (+ /restored)
 │
@@ -106,10 +105,10 @@ src/
 ├── data/                       # 잔존 데이터 액세스 (RSC·service 내부 직접 호출용)
 │   ├── surveys.ts / responses.ts  # analytics RSC 페이지 + 일부 service 가 공유하는 조회
 │   ├── response-filters.ts     # notDeletedResponse 등 (operations/duplicate-detection 공용)
-│   └── library.ts / regions.ts
+│   └── library.ts
 │
-├── components/                 # React 컴포넌트 (~250개)
-│   ├── survey-builder/         # 설문 생성 컴포넌트 (107개)
+├── components/                 # React 컴포넌트 (~249개)
+│   ├── survey-builder/         # 설문 생성 컴포넌트 (103개)
 │   ├── operations/             # 운영 콘솔 컴포넌트 (71개)
 │   ├── survey-response/        # 응답 입력 컴포넌트 (20개)
 │   ├── analytics/              # 차트 및 리포팅 (17개)
@@ -117,24 +116,20 @@ src/
 │   ├── survey/                 # 공개 설문 공용
 │   └── providers/              # Context providers
 │
-├── stores/                     # Zustand 스토어 (7개 + index)
+├── stores/                     # Zustand 스토어 (5개, 루트 배럴 없음 — 직접 경로 import)
 │   ├── survey-store.ts         # 메인 설문 빌더 상태
 │   ├── survey-response-store.ts # 실제 응답 상태
 │   ├── test-response-store.ts  # 테스트/미리보기 응답
-│   ├── survey-list-store.ts    # 설문 목록 관리
-│   ├── question-library-store.ts # 질문 라이브러리
 │   ├── ui-store.ts             # 전역 UI 상태
-│   ├── error-dialog-store.ts   # 전역 에러 다이얼로그
-│   └── index.ts
+│   └── error-dialog-store.ts   # 전역 에러 다이얼로그
 │
-├── hooks/                      # 커스텀 훅
-│   ├── queries/                # TanStack Query 훅 (surveys/responses/contacts/campaigns/library/cell-library/file-cleanup)
+├── hooks/                      # 커스텀 훅 (루트 배럴 없음 — 직접 경로 import)
+│   ├── queries/                # TanStack Query 훅 (surveys/contacts/campaigns/library/cell-library/file-cleanup)
 │   ├── use-survey-sync.ts      # 설문 데이터 동기화
-│   ├── use-library-sync.ts     # 라이브러리 동기화
 │   ├── use-dynamic-row-* / use-row-* / use-cell-height-cache.ts # 테이블 레이아웃
 │   ├── use-question-response-writer.ts # 응답 쓰기 단일 창구
 │   ├── use-media-query / use-keyboard-open.ts # 반응형
-│   └── ... (테이블 성능/스크롤 동기화/라인카운트/검색파라미터 등)
+│   └── ... (테이블 성능/스크롤 동기화/검색파라미터 등)
 │
 ├── lib/                        # 도메인 로직 + 유틸리티
 │   ├── supabase/               # Supabase 클라이언트 (client/server/middleware)

@@ -16,6 +16,7 @@ export type ImportLibraryInput = z.infer<typeof ImportLibraryInput>;
 
 // 프리셋 초기화 반환 = saved_questions DB row 배열.
 // 기존 action 이 raw db row(description/tags 가 nullable, createdAt 포함)를 그대로 반환했고
-// 소비처(use-library-sync)가 그대로 store 에 넣으므로 byte 동작 보존 차원에서 raw row 형태 유지.
+// raw db row 형태 유지 — 과거 소비처(use-library-sync)가 결과를 store 에 그대로 넣던 계약의 잔재다.
+// 현 소비처(useInitializePresets)는 결과를 버리고 invalidate 만 하므로 이 형태를 바꿔도 안전하다.
 // 복잡 JSONB(question) 포함이라 z.custom 으로 타입만 보장.
 export const PresetQuestionsSchema = z.custom<DbSavedQuestion[]>();

@@ -6,13 +6,10 @@ import { useQueryClient } from '@tanstack/react-query';
 
 import { surveyKeys } from '@/hooks/queries/use-surveys';
 import { buildSurveyDiffPayload } from '@/lib/survey-builder/diff-payload';
-import { client, orpc } from '@/shared/lib/rpc';
-import {
-  useSurveyBuilderStore,
-  useSurveyListStore,
-  useSurveyUIStore,
-  useTestResponseStore,
-} from '@/stores';
+import { client } from '@/shared/lib/rpc';
+import { useSurveyBuilderStore } from '@/stores/survey-store';
+import { useTestResponseStore } from '@/stores/test-response-store';
+import { useSurveyUIStore } from '@/stores/ui-store';
 
 /**
  * 설문 빌더와 DB를 동기화하는 훅
@@ -227,126 +224,6 @@ export function useSurveySync() {
     saveSurveyScoped,
     loadSurvey,
     createNewSurvey,
-    startTransition,
-  };
-}
-
-/**
- * 설문 목록과 DB를 동기화하는 훅
- */
-export function useSurveyListSync() {
-  const [isPending, startTransition] = useTransition();
-
-  // DB에서 설문 목록 불러오기
-  const loadSurveyList = useCallback(async () => {
-    try {
-      const surveys = await client.surveyBuilder.read.list();
-
-      // Zustand store 업데이트 (선택사항 - 캐싱용)
-      // useSurveyListStore.setState({ surveys: ... });
-
-      return surveys;
-    } catch (error) {
-      console.error('설문 목록 불러오기 실패:', error);
-      throw error;
-    }
-  }, []);
-
-  // 설문 삭제
-  const deleteSurvey = useCallback(async (surveyId: string) => {
-    try {
-      await client.surveyBuilder.surveys.delete({ surveyId });
-      // 로컬 store에서 선택 해제 (목록에서 삭제는 쿼리 무효화로 처리됨)
-      useSurveyListStore.getState().deselectSurvey(surveyId);
-    } catch (error) {
-      console.error('설문 삭제 실패:', error);
-      throw error;
-    }
-  }, []);
-
-  // 설문 복제
-  const duplicateSurvey = useCallback(async (surveyId: string) => {
-    try {
-      const newSurvey = await client.surveyBuilder.surveys.duplicate({ surveyId });
-      return newSurvey;
-    } catch (error) {
-      console.error('설문 복제 실패:', error);
-      throw error;
-    }
-  }, []);
-
-  return {
-    isPending,
-    loadSurveyList,
-    deleteSurvey,
-    duplicateSurvey,
-    startTransition,
-  };
-}
-
-/**
- * 설문 응답과 DB를 동기화하는 훅
- */
-export function useResponseSync() {
-  const [isPending, startTransition] = useTransition();
-
-  // 질문 응답 업데이트
-  const updateQuestionResponse = useCallback(
-    async (responseId: string, questionId: string, value: unknown) => {
-      try {
-        const updated = await client.surveyResponse.response.updateAnswer({
-          responseId,
-          questionId,
-          value,
-        });
-        return updated;
-      } catch (error) {
-        console.error('응답 업데이트 실패:', error);
-        throw error;
-      }
-    },
-    [],
-  );
-
-  // 응답 완료
-  const completeResponse = useCallback(async (responseId: string) => {
-    try {
-      const completed = await client.surveyResponse.response.complete({ responseId });
-      return completed;
-    } catch (error) {
-      console.error('응답 완료 실패:', error);
-      throw error;
-    }
-  }, []);
-
-  // 설문별 응답 목록 불러오기
-  const loadResponses = useCallback(async (surveyId: string) => {
-    try {
-      const responses = await client.surveyBuilder.read.responsesBySurvey({ surveyId });
-      return responses;
-    } catch (error) {
-      console.error('응답 목록 불러오기 실패:', error);
-      throw error;
-    }
-  }, []);
-
-  // 응답 통계 불러오기
-  const loadResponseSummary = useCallback(async (surveyId: string) => {
-    try {
-      const summary = await orpc.analytics.stats.survey.call({ surveyId });
-      return summary;
-    } catch (error) {
-      console.error('응답 통계 불러오기 실패:', error);
-      throw error;
-    }
-  }, []);
-
-  return {
-    isPending,
-    updateQuestionResponse,
-    completeResponse,
-    loadResponses,
-    loadResponseSummary,
     startTransition,
   };
 }

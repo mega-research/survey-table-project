@@ -115,33 +115,3 @@ export function UserDefinedMultiLevelSelect({
     </div>
   );
 }
-
-// 미리보기용 읽기 전용 컴포넌트
-interface UserDefinedMultiLevelSelectPreviewProps {
-  levels: SelectLevel[];
-  className?: string;
-}
-
-export function UserDefinedMultiLevelSelectPreview({
-  levels,
-  className = '',
-}: UserDefinedMultiLevelSelectPreviewProps) {
-  return (
-    <div className={`space-y-3 ${className}`}>
-      {levels.map((level) => (
-        <div key={level.id} className="space-y-1">
-          <label className="block text-sm font-medium text-gray-700">{level.label}</label>
-          <div className="relative">
-            <select
-              disabled
-              className="w-full cursor-not-allowed appearance-none rounded-lg border border-gray-200 bg-gray-50 p-3 text-gray-400"
-            >
-              <option>{level.placeholder || `${level.label} 선택`}</option>
-            </select>
-            <ChevronDown className="pointer-events-none absolute top-1/2 right-3 h-5 w-5 -translate-y-1/2 transform text-gray-300" />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
