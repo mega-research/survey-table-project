@@ -24,7 +24,7 @@ export type ReeditDenial = Exclude<
 /** 진행 중 응답 계속이 보는 부분집합. */
 export type OngoingDenial = Extract<AcceptanceDenial, 'survey_paused'>;
 
-// ── 판정이 읽는 상태(이미 조회된 행의 구조적 부분집합). 어느 쿼리로 읽었는지는 묻지 않는다. ──
+// 판정이 읽는 상태(이미 조회된 행의 구조적 부분집합). 어느 쿼리로 읽었는지는 묻지 않는다.
 
 export interface SurveyAcceptanceState {
   status: string;
@@ -44,9 +44,9 @@ export type OngoingSurveyState = Pick<SurveyAcceptanceState, 'isPaused'>;
 /** 판정 대상 버전 행. 어떤 버전을 넘길지는 호출자 결정(응답 고정 버전 vs 설문 currentVersionId). */
 export type VersionAcceptanceState = { status: string } | null;
 
-// ══════════════════════════════════════════════════════════════════
+// ========================
 // 이하 비공개 — 우선순위와 검사 집합의 단일 소유자.
-// ══════════════════════════════════════════════════════════════════
+// ========================
 
 /**
  * 판정 순서. **외부 관측 가능한 계약이다** — 위반이 여럿일 때 첫 사유가
@@ -80,8 +80,8 @@ const CHECKS_FOR = {
     'invite_required',
   ],
   /**
-   * 중단만 본다. 첫 진입 게이트는 newResponse 소관이고 종결 상태 판정은
-   * decideResponseReuse 소관이다.
+   * 중단만 본다. 첫 진입 게이트는 newResponse 소관이고, 종결 상태 판정은 호출자
+   * resumeOrCreateResponse 의 인라인 concludedStatuses 가 진다 — 통합은 후속 티켓(A-3).
    * status·endDate 미검사 — 근거 주석 없음. 현행 동작 보존이며 정책 판단은 후속 티켓(B-b).
    */
   ongoingResponse: ['survey_paused'],
@@ -145,9 +145,9 @@ function evaluate<D extends AcceptanceDenial>(
   return null;
 }
 
-// ══════════════════════════════════════════════════════════════════
+// ========================
 // 공개 표면 — 도메인 질문 3개. 시그니처가 곧 부분집합 명세다.
-// ══════════════════════════════════════════════════════════════════
+// ========================
 
 /**
  * 신규 응답을 받는가 — startResponse / createResponseWithFirstAnswer /
