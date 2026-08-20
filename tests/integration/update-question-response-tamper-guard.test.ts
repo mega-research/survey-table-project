@@ -139,4 +139,13 @@ describe('updateQuestionResponse — 변조 가드(#5)', () => {
     // 상한 초과는 DB UPDATE 이전에 차단되어야 한다.
     expect(updateReturningMock).not.toHaveBeenCalled();
   });
+
+  it('정확히 상한 바이트면 통과한다 (부등호 경계 고정)', async () => {
+    const { updateQuestionResponse } = await import('@/features/survey-response/server/services/response.service');
+    // JSON.stringify 가 따옴표 2바이트를 더해 직렬화 결과가 정확히 262144B 다.
+    const atLimit = 'a'.repeat(256 * 1024 - 2);
+    await expect(
+      updateQuestionResponse({ responseId: RESPONSE_ID, questionId: QUESTION_ID, value: atLimit }),
+    ).resolves.toMatchObject({ id: RESPONSE_ID });
+  });
 });

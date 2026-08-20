@@ -590,6 +590,12 @@ async function assertQuestionBelongsToResponse(
   return { piiEncrypted: hit.piiEncrypted === true };
 }
 
+/**
+ * jsonb_set 저수준 UPDATE. 크기 가드를 갖지 않는다 — 저장될 값에 대한
+ * assertAnswerValueSize 는 호출자 책임이다(현재 호출자: updateQuestionResponse ·
+ * saveDraftResponse · acquireTestTargetEntry). 새 호출자를 추가할 때 이 검사를 빠뜨리면
+ * 무가드 쓰기 경로가 다시 생긴다.
+ */
 async function applyQuestionResponseUpdate(
   executor: { update: typeof db.update },
   input: { responseId: string; questionId: string },
@@ -1282,6 +1288,11 @@ async function acquireTestTargetEntry(
   input: Parameters<typeof acquireTestTargetResponse>[1],
   firstAnswer?: { questionId: string; value: unknown },
 ): Promise<{ responseId: string; reset: boolean }> {
+  // 크기 가드: tx(컨택 FOR UPDATE 잠금 + 회차 INSERT) 이전에 평문으로 거른다.
+  // 호출자(admitAndCreateResponseInner)가 아니라 이 함수 안에 두는 이유 —
+  // saveTestTargetFirstAnswer 가 별도 export 진입점이라 호출자에만 두면 그 우회로가 무가드로 남는다.
+  if (firstAnswer) assertAnswerValueSize(firstAnswer.value);
+
   return db.transaction(async (tx) => {
     const acquired = await acquireTestTargetResponse(tx, input);
     if (!firstAnswer) return acquired;
@@ -1300,6 +1311,9 @@ async function acquireTestTargetEntry(
       tx,
     );
     const storedValue = piiEncrypted ? encryptAnswerValue(firstAnswer.value) : firstAnswer.value;
+    // 진입 파이프라인과 동일 기준(저장될 값)으로 판정한다 — 같은 lane 을 RPC 로 타든
+    // export 로 타든 임계가 같아야 한다. tx 안이라 throw 시 회차 INSERT 까지 롤백된다.
+    assertAnswerValueSize(storedValue);
     await applyQuestionResponseUpdate(
       tx,
       { responseId: acquired.responseId, questionId: firstAnswer.questionId },
@@ -1414,16 +1428,16 @@ export async function createResponseWithFirstAnswer(
  * 응답 진입의 단일 소유자 — 판정(admit)부터 쓰기 가능한 행 확보(create)까지.
  *
  * 부작용 순서가 외부 계약이다. 재배치 금지:
- *   토큰 배타 → isLikelyBot → headers()+UA → computeSignals → loadSurveyGateRow
- *   → isValidTestToken → 무효 테스트 토큰 차단 → Track A|B → isTest 합성
+ *   토큰 배타 → isLikelyBot → (answer) 평문 크기 가드 → headers()+UA → computeSignals
+ *   → loadSurveyGateRow → isValidTestToken → 무효 테스트 토큰 차단 → Track A|B → isTest 합성
  *   → attempt 가드 → [대상자 테스트 lane 조기 반환] → loadValidatedVersionGateRow
- *   → assertSurveyAcceptingResponses → (answer) 멤버십+암호화 → firstVisit
+ *   → assertSurveyAcceptingResponses → (answer) 멤버십+암호화+암호문 크기 가드 → firstVisit
  *   → 행 조립 → insert lane 선택 → blocked 접기 → (answer) updateQuestionResponse
  *
  * 수용 게이트 위반은 여기서 던진다(접지 않는다) — admitAndCreateResponse 의
  * toGateBlockedResult 가 현행과 같은 지점에서 접는다.
  *
- * answer 분기는 본문에 정확히 4곳뿐이며 전부 "첫 답변" 그 자체다.
+ * answer 분기는 크기 가드 1곳 + 본문 (1/4)~(4/4) 4곳이며 전부 "첫 답변" 그 자체다.
  * 정책 가드(봇·토큰·중복·버전·수용)를 이 분기 안에 넣지 말 것 — 넣는 순간 A-2 이전으로 돌아간다.
  */
 async function admitAndCreateResponseInner(
@@ -1450,6 +1464,12 @@ async function admitAndCreateResponseInner(
   if (isLikelyBot({ honeypot, inviteToken, testToken, clientSignals })) {
     return { kind: 'blocked', reason: 'device_already_responded' };
   }
+
+  // #5 변조 가드 1(전방 배치): 첫 답변 평문 크기. headers()·중복검사·게이트 조회·암호화 등
+  // 모든 I/O 이전에 거른다. 봇 가드보다 앞에 두지 말 것 — honeypot + 거대값 요청이
+  // blocked 대신 500 이 되어 탐지 비노출 원칙과 어긋난다.
+  // 평문이 상한 이하여도 PII 암호문은 상한을 넘을 수 있어 암호화 직후 한 번 더 검사한다.
+  if (answer) assertAnswerValueSize(answer.value);
 
   // UA + IP (Next 15+ 비동기 headers API)
   const headerStore = await headers();
@@ -1555,6 +1575,10 @@ async function admitAndCreateResponseInner(
       answer.questionId,
     );
     storedValue = piiEncrypted ? encryptAnswerValue(answer.value) : answer.value;
+    // #5 변조 가드 1(현행 임계 보존): 이 경로의 판정 기준은 저장될 값이다(PII 는 암호문).
+    // 종전에는 INSERT 뒤 updateQuestionResponse 안에서 같은 값에 같은 검사가 돌았다 —
+    // 임계는 그대로 두고 판정 시점만 DB 쓰기 앞으로 옮긴 것이다.
+    assertAnswerValueSize(storedValue);
   }
 
   const firstVisit: PageVisit = {

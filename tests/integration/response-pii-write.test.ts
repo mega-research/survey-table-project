@@ -346,6 +346,32 @@ describe('createResponseWithFirstAnswer — 첫 답변 INSERT 전 암호화', ()
     expect(serialized).not.toContain(PII_PLAINTEXT);
     expect(serialized).toContain(String(storedValue));
   });
+
+  it('평문이 상한 이하라도 암호문이 상한을 넘으면 INSERT 이전에 거부한다', async () => {
+    const { createResponseWithFirstAnswer } = await import(
+      '@/features/survey-response/server/services/response.service'
+    );
+    // 평문 220KB(<256KB) → 암호문 약 293KB(>256KB). 이 경로의 판정 기준은 저장될 값이다.
+    await expect(
+      createResponseWithFirstAnswer({
+        surveyId: SURVEY_ID,
+        sessionId: 'sess-1',
+        versionId: VERSION_ID,
+        questionId: QUESTION_ID,
+        value: 'a'.repeat(220 * 1024),
+        currentStepId: 'step-1',
+        clientSignals: {
+          deviceId: 'dev-1',
+          screen: '1440x900',
+          tz: 'Asia/Seoul',
+          lang: 'ko',
+          platform: 'MacIntel',
+        },
+      }),
+    ).rejects.toMatchObject({ reason: 'answer_value_too_large' });
+    expect(insertValuesLogMock).not.toHaveBeenCalled();
+    expect(updateSetLogMock).not.toHaveBeenCalled();
+  });
 });
 
 describe('createResponseWithFirstAnswer — 컨택 재사용 draftSeq 전달', () => {

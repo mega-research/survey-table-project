@@ -6,8 +6,10 @@
  * 그것은 리팩터가 동작을 바꿨다는 신호다.
  *
  * 알려진 드리프트(D-1 blank draftSeq 부재, D-2 blank visibleStep* 부재,
- * F-1 INSERT 경로 크기 가드 누락, F-2 대상자 테스트 lane versionId 반환)는
+ * F-2 대상자 테스트 lane versionId 반환)는
  * "현행 그대로" 박제한다 — 후속 티켓에서 의도적으로 뒤집을 때 diff 에 드러나게 하기 위함이다.
+ *
+ * F-1(INSERT 경로 크기 가드 누락)은 A-2f-3 에서 뒤집었다 — T9 가 이제 "DB 쓰기 이전 차단"을 지킨다.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -481,24 +483,50 @@ describe.each(['first', 'blank'] as const)('T8 대상자 테스트 lane 반환 �
 });
 
 // ============================================================================
-// T9 — 크기 가드의 현행(결함 포함) 박제. F-1.
+// T9 — 크기 가드는 DB 쓰기 이전에 차단한다 (A-2f-3 에서 F-1 을 뒤집었다).
 // ============================================================================
-describe('T9 answer_value_too_large 는 저장 후에 샌다 (F-1 현행 박제)', () => {
-  it('firstAnswer: INSERT 가 먼저 일어나고 그 뒤 blocked 로 접히지 않은 채 throw 된다', async () => {
+describe('T9 answer_value_too_large 는 DB 쓰기 이전에 차단된다', () => {
+  const HUGE = 'x'.repeat(300 * 1024);
+
+  it('firstAnswer: INSERT 도 UPDATE 도 일어나지 않는다', async () => {
     wireHappyPath();
     // versionId null → 멤버십은 select 경로.
     H.selectLimitMock.mockResolvedValue([{ id: 'q1', piiEncrypted: false }]);
     const svc = await import('@/features/survey-response/server/services/response.service');
 
-    const huge = 'x'.repeat(300 * 1024);
-    await expect(callCreate('first', { value: huge })).rejects.toBeInstanceOf(
+    await expect(callCreate('first', { value: HUGE })).rejects.toBeInstanceOf(
       svc.SurveyNotAcceptingResponsesError,
     );
-    // 거대 JSONB 가 이미 저장됐다 — 후속 티켓이 고칠 지점.
-    expect(H.order).toContain('insert');
-    await expect(callCreate('first', { value: huge })).rejects.toMatchObject({
+    await expect(callCreate('first', { value: HUGE })).rejects.toMatchObject({
       reason: 'answer_value_too_large',
     });
+    // 이 세 줄이 티켓의 본체다 — 거대 JSONB 는 DB 에 닿지 않는다.
+    expect(H.insertValuesArg).not.toHaveBeenCalled();
+    expect(H.order).not.toContain('insert');
+    expect(H.order).not.toContain('update');
+    // 헤더·게이트 조회조차 없다 — 봇 가드 바로 뒤, 모든 I/O 앞에서 끊긴다.
+    expect(H.order).toEqual([]);
+  });
+
+  it('대상자 테스트 lane: export 직접 호출도 tx 를 열기 전에 차단한다', async () => {
+    wireHappyPath();
+    const svc = await import('@/features/survey-response/server/services/response.service');
+
+    await expect(
+      svc.saveTestTargetFirstAnswer({
+        surveyId: SURVEY_ID,
+        contactTargetId: 'c1',
+        sessionId: 'sess-a2',
+        attemptId: '22222222-2222-4222-8222-222222222222',
+        versionId: VERSION_ID,
+        currentStepId: 'step-1',
+        questionId: 'q1',
+        value: HUGE,
+      }),
+    ).rejects.toMatchObject({ reason: 'answer_value_too_large' });
+    // acquireMock 미호출 = 컨택 FOR UPDATE 잠금도 회차 INSERT 도 없었다.
+    expect(H.acquireMock).not.toHaveBeenCalled();
+    expect(H.order).toEqual([]);
   });
 });
 
