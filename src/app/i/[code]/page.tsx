@@ -1,9 +1,19 @@
+import type { Metadata } from 'next';
+
 import { SurveyResponseFlow } from '@/components/survey-response/survey-response-flow';
 import {
   InvalidInviteLinkScreen,
   InvalidTestLinkScreen,
 } from '@/components/survey-response/survey-response-screens';
 import { resolveInviteCode } from '@/features/contacts/server/services/contact-invite.service';
+
+/**
+ * 짧은 초대 링크도 공개 응답 표면이다 — 루트 layout 의 robots: 'index, follow' 를
+ * 상속하지 않도록 noindex 로 덮는다 (/survey/[id]/layout.tsx, /preview/[token] 과 동일).
+ */
+export const metadata: Metadata = {
+  robots: { index: false, follow: false },
+};
 
 interface PageProps {
   params: Promise<{ code: string }>;

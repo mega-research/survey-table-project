@@ -35,17 +35,6 @@ const nextConfig: NextConfig = {
     return securityHeaders();
   },
 
-  // Server Actions body 크기 제한 (기본값 1MB → 30MB)
-  // saveSurveyWithDetails에서 설문 전체 데이터를 전송하므로 제한 확대 필요
-  experimental: {
-    serverActions: {
-      bodySizeLimit: '30mb',
-    },
-    // 미들웨어/프록시 요청 본문 크기 제한 (기본값 10MB → 30MB)
-    // /admin/:path* 미들웨어가 서버 액션 요청을 먼저 처리하므로 이 제한도 확대 필요
-    proxyClientMaxBodySize: '30mb',
-  },
-
   // 2. 타입스크립트 에러 확인 (빌드 시 타입 검증)
   typescript: {
     ignoreBuildErrors: false,
