@@ -2,10 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Survey as SurveyType } from '@/types/survey';
 
-// data/surveys.ts 의 단일 구현(매핑 SoT)에 위임하는지 검증한다.
+// read-models/survey-structure 의 단일 구현(매핑 SoT)을 이 service 가 그대로 내보내는지 검증한다.
 // publish/analytics 와 빌더 read 가 동일 매핑을 공유하도록 강제하여
 // "신규 질문 컬럼이 한쪽 사본에만 추가돼 publish 스냅샷/분석에서 누락"되는 divergence 를 차단한다.
-vi.mock('@/server/read-models/survey-structure', () => ({
+//
+// getSurveyWithDetails 만 갈아끼우고 나머지는 원본을 살린다 — getSurveys 는 아래에서
+// 모킹된 @/db 를 상대로 실제 컬럼 투영을 검증해야 하므로 통 mock 으로 덮으면 안 된다.
+vi.mock('@/server/read-models/survey-structure', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/server/read-models/survey-structure')>()),
   getSurveyWithDetails: vi.fn(),
 }));
 
@@ -44,7 +48,10 @@ import { getSurveyWithDetails as getSurveyWithDetailsData } from '@/server/read-
 import { DEFAULT_RESPONSE_HEADER_CONFIG } from '@/lib/survey/response-header-config';
 import { findContactByInviteToken } from '@/server/read-models/invite-lookup';
 
+import * as readModels from '@/server/read-models/survey-structure';
+
 import {
+  getSurveyById,
   getSurveyForResponse,
   getSurveyListWithCounts,
   getSurveyWithDetails,
@@ -59,7 +66,8 @@ describe('survey-read.service getSurveyWithDetails', () => {
     vi.mocked(findContactByInviteToken).mockReset();
   });
 
-  it('data/surveys 의 단일 구현에 위임한다', async () => {
+  // 재수출이라 두 심볼은 같은 함수 객체다 — 사본이 아니라는 것이 이 검사의 내용이다.
+  it('read-models 의 단일 구현을 그대로 내보낸다', async () => {
     const fake = { id: SURVEY_ID, title: 'T' } as unknown as SurveyType;
     vi.mocked(getSurveyWithDetailsData).mockResolvedValue(fake);
 
@@ -67,6 +75,13 @@ describe('survey-read.service getSurveyWithDetails', () => {
 
     expect(getSurveyWithDetailsData).toHaveBeenCalledWith(SURVEY_ID);
     expect(result).toBe(fake);
+  });
+
+  // 사본을 되살리는 회귀를 막는 고정. getSurveyById 는 React cache() 로 감싸여 있어
+  // 정의가 둘이면 같은 RSC pass 에서 같은 surveyId 를 두 번 조회하게 된다 —
+  // operations/layout 과 lib/mail/variable-catalog 가 실제로 그 두 경로였다.
+  it('getSurveyById 는 read-models 와 같은 함수 객체다', () => {
+    expect(getSurveyById).toBe(readModels.getSurveyById);
   });
 
   it('null 반환을 그대로 전달한다', async () => {

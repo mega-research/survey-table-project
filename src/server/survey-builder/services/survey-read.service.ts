@@ -1,14 +1,18 @@
 import 'server-only';
 
-import { cache } from 'react';
-
 import { and, desc, eq, ilike, ne } from 'drizzle-orm';
 
 import { getResponseCountsGroupedBySurvey } from '@/server/read-models/responses';
-import * as libraryData from '@/server/read-models/library-taxonomy';
-import { getSurveyWithDetails as getSurveyWithDetailsData } from '@/server/read-models/survey-structure';
+import { getAllTags } from '@/server/read-models/library-taxonomy';
+import {
+  getQuestionGroupsBySurvey,
+  getQuestionsBySurvey,
+  getSurveyById,
+  getSurveyWithDetails,
+  getSurveys,
+} from '@/server/read-models/survey-structure';
 import { db } from '@/db';
-import { contactTargets, questionGroups, questions, surveyVersions, surveys } from '@/db/schema';
+import { contactTargets, surveyVersions, surveys } from '@/db/schema';
 import { getVariableCatalog } from '@/lib/mail/variable-catalog';
 import type { VariableDef } from '@/shared/contracts/template-variables';
 import { normalizeQuestions } from '@/lib/question';
@@ -38,36 +42,21 @@ import type {
 // 불변식(E·G)은 유지한다. getSurveyWithDetails 본문은 publish/analytics 가 공유하는
 // data/surveys.ts 단일 구현에 위임해 매핑 로직 중복(신규 컬럼 누락 위험)을 제거한다.
 
+// 설문·그룹·질문 조회와 보관함 태그는 read-models 가 단일 구현을 소유한다.
+// 이 service 는 그것을 자기 도메인 표면으로 다시 내보낼 뿐이다 —
+// 사본을 두면 getSurveyById 처럼 React cache() 가 둘로 갈려 dedupe 불변식이 깨진다.
+export {
+  getAllTags,
+  getQuestionGroupsBySurvey,
+  getQuestionsBySurvey,
+  getSurveyById,
+  getSurveyWithDetails,
+  getSurveys,
+};
+
 // ========================
 // 설문 조회 (authed)
 // ========================
-
-// 설문 목록 조회
-export async function getSurveys() {
-  const result = await db.query.surveys.findMany({
-    columns: {
-      id: true,
-      title: true,
-      description: true,
-      slug: true,
-      privateToken: true,
-      createdAt: true,
-      updatedAt: true,
-      isPublic: true,
-    },
-    orderBy: [desc(surveys.createdAt)],
-  });
-  return result;
-}
-
-// 설문 단일 조회. React `cache()` 로 동일 RSC pass 내 중복 호출을 dedupe
-// (예: layout 과 page 가 같은 surveyId 를 동시에 조회해도 DB 한 번).
-export const getSurveyById = cache(async (surveyId: string) => {
-  const survey = await db.query.surveys.findFirst({
-    where: eq(surveys.id, surveyId),
-  });
-  return survey;
-});
 
 // 슬러그 사용 가능 여부 확인
 export async function isSlugAvailable(input: SlugAvailableInput): Promise<boolean> {
@@ -90,36 +79,8 @@ export async function searchSurveys(query: string) {
 }
 
 // ========================
-// 질문 그룹 / 질문 조회 (authed)
-// ========================
-
-// 설문의 질문 그룹 조회
-export async function getQuestionGroupsBySurvey(surveyId: string) {
-  const groups = await db.query.questionGroups.findMany({
-    where: eq(questionGroups.surveyId, surveyId),
-    orderBy: [questionGroups.order],
-  });
-  return groups;
-}
-
-// 설문의 질문 조회
-export async function getQuestionsBySurvey(surveyId: string) {
-  const result = await db.query.questions.findMany({
-    where: eq(questions.surveyId, surveyId),
-    orderBy: [questions.order],
-  });
-  return result;
-}
-
-// ========================
 // 복합 조회 (authed)
 // ========================
-
-// 전체 설문 데이터 조회 (설문 + 그룹 + 질문)
-// publish/analytics 와 동일한 매핑을 보장하기 위해 data/surveys.ts 단일 구현에 위임한다.
-export async function getSurveyWithDetails(surveyId: string): Promise<SurveyType | null> {
-  return getSurveyWithDetailsData(surveyId);
-}
 
 // 전체 설문 목록 조회 (요약 정보)
 export async function getSurveyListWithCounts(): Promise<SurveyListItem[]> {
@@ -349,11 +310,6 @@ export async function getSurveyForResponse(
 // ========================
 // Library 태그 / Variable Catalog (authed)
 // ========================
-
-// 보관함 질문 전체에서 사용 중인 태그 목록 (data/library 위임 — 코드 변경 없음)
-export async function getAllTags(): Promise<string[]> {
-  return libraryData.getAllTags();
-}
 
 // 빌더 변수 메뉴(prefill)용 카탈로그. getVariableCatalog 는 이미 server-only + React.cache.
 // 이동하지 않고 제자리 import (불변식 — cache 유지).
