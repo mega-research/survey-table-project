@@ -4,7 +4,7 @@ import { and, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import 'server-only';
 
-import { notTestResponse } from '@/data/response-filters';
+import { notTestResponse } from '@/server/response-filters';
 import { type DbTransaction, db } from '@/db';
 import {
   NewSurveyResponse,

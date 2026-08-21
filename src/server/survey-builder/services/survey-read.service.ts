@@ -4,9 +4,9 @@ import { cache } from 'react';
 
 import { and, desc, eq, ilike, ne } from 'drizzle-orm';
 
-import { getResponseCountsGroupedBySurvey } from '@/data/responses';
-import * as libraryData from '@/data/library';
-import { getSurveyWithDetails as getSurveyWithDetailsData } from '@/data/surveys';
+import { getResponseCountsGroupedBySurvey } from '@/server/read-models/responses';
+import * as libraryData from '@/server/read-models/library-taxonomy';
+import { getSurveyWithDetails as getSurveyWithDetailsData } from '@/server/read-models/survey-structure';
 import { db } from '@/db';
 import { contactTargets, questionGroups, questions, surveyVersions, surveys } from '@/db/schema';
 import { getVariableCatalog } from '@/lib/mail/variable-catalog';

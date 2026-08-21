@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 
 import { QuotaEditor } from '@/features/operations/quota/quota-editor';
-import { getQuestionsBySurvey } from '@/data/surveys';
+import { getQuestionsBySurvey } from '@/server/read-models/survey-structure';
 import { getQuotaConfig } from '@/server/quota/services/quota.service';
 import type { Question } from '@/types/survey';
 

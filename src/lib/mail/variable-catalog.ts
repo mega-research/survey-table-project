@@ -3,7 +3,7 @@ import { cache } from 'react';
 import { eq } from 'drizzle-orm';
 import 'server-only';
 
-import { getSurveyById } from '@/data/surveys';
+import { getSurveyById } from '@/server/read-models/survey-structure';
 import { db } from '@/db';
 import { contactTargets } from '@/db/schema/contacts';
 import type { VariableDef } from '@/shared/contracts/template-variables';

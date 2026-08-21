@@ -2,7 +2,7 @@ import 'server-only';
 
 import { and, eq, inArray } from 'drizzle-orm';
 
-import { getQuestionsBySurvey } from '@/data/surveys';
+import { getQuestionsBySurvey } from '@/server/read-models/survey-structure';
 import { db } from '@/db';
 import { NewQuestion, questions } from '@/db/schema';
 import {

@@ -8,7 +8,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/features/operations/empty-state';
 import { ProfilesFilterBar } from '@/features/operations/profiles/profiles-filter-bar';
 import { ProfilesTable } from '@/features/operations/profiles/profiles-table';
-import { getQuestionGroupsBySurvey } from '@/data/surveys';
+import { getQuestionGroupsBySurvey } from '@/server/read-models/survey-structure';
 import { db } from '@/db';
 import { questions as questionsTable } from '@/db/schema';
 import { getSurveyContactStats } from '@/server/operations/services/contact-stats.server';

@@ -44,7 +44,6 @@ const eslintConfig = [
       "src/server/**/*.{ts,tsx}",
       "src/app/api/**/*.{ts,tsx}",
       "src/actions/**/*.{ts,tsx}",
-      "src/data/**/*.{ts,tsx}",
       "src/lib/**/*.{ts,tsx}",
     ],
     rules: {
@@ -269,7 +268,6 @@ const eslintConfig = [
       "src/utils/**/*.{ts,tsx}",
       "src/lib/**/*.{ts,tsx}",
       "src/types/**/*.{ts,tsx}",
-      "src/data/**/*.{ts,tsx}",
       "src/shared/**/*.{ts,tsx}",
       "src/server/*.{ts,tsx}",
     ],

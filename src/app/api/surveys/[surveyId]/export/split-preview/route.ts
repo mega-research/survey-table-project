@@ -4,7 +4,7 @@ import { and, eq } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { surveyResponses, surveys } from '@/db/schema';
-import { completedResponse, notDeletedResponse, notTestResponse } from '@/data/response-filters';
+import { completedResponse, notDeletedResponse, notTestResponse } from '@/server/response-filters';
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { normalizeQuestions } from '@/lib/question';
 import { requireAuth } from '@/lib/auth';

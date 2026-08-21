@@ -2,7 +2,7 @@ import 'server-only';
 
 import { eq } from 'drizzle-orm';
 
-import { getSurveyById } from '@/data/surveys';
+import { getSurveyById } from '@/server/read-models/survey-structure';
 import type { CompleteQuestionWrite } from '@/db/schema/question-persisted-fields';
 import { db } from '@/db';
 import {

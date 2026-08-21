@@ -6,7 +6,7 @@ import { db } from '@/db';
 import { responseAnswers, surveyResponses, surveyVersions } from '@/db/schema';
 import { answersToQuestionResponses } from '@/lib/analytics/response-adapter';
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
-import { notDeletedResponse, notTestResponse } from '@/data/response-filters';
+import { notDeletedResponse, notTestResponse } from '@/server/response-filters';
 
 import type { ResponsesWithAnswersInput } from '../domain/survey-read';
 

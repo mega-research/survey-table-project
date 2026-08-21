@@ -1,10 +1,12 @@
+import 'server-only';
+
 import { and, count, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { responseAnswers, surveyResponses, surveyVersions } from '@/db/schema';
 import { answersToQuestionResponses } from '@/lib/analytics/response-adapter';
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
-import { notDeletedResponse, notTestResponse } from '@/data/response-filters';
+import { notDeletedResponse, notTestResponse } from '@/server/response-filters';
 
 // ========================
 // 응답 조회 함수

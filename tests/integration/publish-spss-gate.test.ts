@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 // getSurveyWithDetails와 db 트랜잭션을 모킹한다.
 // 게이트 테스트 목적: 유효하지 않은 변수명이 있는 설문은 배포 전에 SpssVarNameError를 던진다.
 // 트랜잭션은 게이트 통과 전에 도달하지 않으므로 db는 stub으로 충분하다.
-vi.mock('@/data/surveys', () => ({
+vi.mock('@/server/read-models/survey-structure', () => ({
   getSurveyWithDetails: vi.fn(),
 }));
 
@@ -19,7 +19,7 @@ vi.mock('@/server/survey-builder/services/versioning/snapshot-builder', () => ({
   buildSurveySnapshot: vi.fn().mockReturnValue({}),
 }));
 
-import { getSurveyWithDetails } from '@/data/surveys';
+import { getSurveyWithDetails } from '@/server/read-models/survey-structure';
 import { isSpssVarNameError } from '@/lib/spss/variable-name-guard';
 import type { Question, Survey } from '@/types/survey';
 import { publishSurvey } from '@/server/survey-builder/services/survey-publish.service';

@@ -6,7 +6,7 @@ import { ArrowLeft, BarChart3, ExternalLink, Pencil } from 'lucide-react';
 import { AnalyticsDashboardClient } from '@/features/analytics';
 import { ExportDataModal } from '@/features/analytics/export-data-modal';
 import { Button } from '@/components/ui/button';
-import { getResponsesWithAnswers, getSurveyVersions } from '@/data/responses';
+import { getResponsesWithAnswers, getSurveyVersions } from '@/server/read-models/responses';
 import { getSurveyWithDetails } from '@/server/survey-builder/services/survey-read.service';
 import { requireAdminPage } from '@/lib/auth/require-admin-page';
 

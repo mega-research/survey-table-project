@@ -10,7 +10,7 @@ vi.mock('next/navigation', () => ({ notFound: vi.fn() }));
 vi.mock('@/lib/auth/require-survey-ownership', () => ({
   requireSurveyOwnership: vi.fn(),
 }));
-vi.mock('@/data/responses', () => ({
+vi.mock('@/server/read-models/responses', () => ({
   getResponseById: vi.fn(async () => ({
     id: RESPONSE_ID,
     surveyId: SURVEY_ID,

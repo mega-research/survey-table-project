@@ -43,7 +43,7 @@ describe('getSurveyWithDetails — pageBreakBefore 매핑', () => {
       questionRow({ id: 'q1', order: 0 }),
       questionRow({ id: 'q2', order: 1, pageBreakBefore: true }),
     ]);
-    const { getSurveyWithDetails } = await import('@/data/surveys');
+    const { getSurveyWithDetails } = await import('@/server/read-models/survey-structure');
     const survey = await getSurveyWithDetails('s1');
     expect(survey?.questions.find((q) => q.id === 'q2')?.pageBreakBefore).toBe(true);
   });
@@ -52,7 +52,7 @@ describe('getSurveyWithDetails — pageBreakBefore 매핑', () => {
     mockQuestionsFindMany.mockResolvedValue([
       questionRow({ id: 'q1', order: 0, pageBreakBefore: false }),
     ]);
-    const { getSurveyWithDetails } = await import('@/data/surveys');
+    const { getSurveyWithDetails } = await import('@/server/read-models/survey-structure');
     const survey = await getSurveyWithDetails('s1');
     expect(survey?.questions[0]?.pageBreakBefore).toBe(false);
   });

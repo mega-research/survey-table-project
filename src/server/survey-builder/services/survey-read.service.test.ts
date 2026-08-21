@@ -5,11 +5,11 @@ import type { Survey as SurveyType } from '@/types/survey';
 // data/surveys.ts 의 단일 구현(매핑 SoT)에 위임하는지 검증한다.
 // publish/analytics 와 빌더 read 가 동일 매핑을 공유하도록 강제하여
 // "신규 질문 컬럼이 한쪽 사본에만 추가돼 publish 스냅샷/분석에서 누락"되는 divergence 를 차단한다.
-vi.mock('@/data/surveys', () => ({
+vi.mock('@/server/read-models/survey-structure', () => ({
   getSurveyWithDetails: vi.fn(),
 }));
 
-vi.mock('@/data/responses', () => ({
+vi.mock('@/server/read-models/responses', () => ({
   getResponseCountsGroupedBySurvey: vi.fn(),
 }));
 
@@ -39,8 +39,8 @@ vi.mock('@/db', () => ({
   },
 }));
 
-import { getResponseCountsGroupedBySurvey } from '@/data/responses';
-import { getSurveyWithDetails as getSurveyWithDetailsData } from '@/data/surveys';
+import { getResponseCountsGroupedBySurvey } from '@/server/read-models/responses';
+import { getSurveyWithDetails as getSurveyWithDetailsData } from '@/server/read-models/survey-structure';
 import { DEFAULT_RESPONSE_HEADER_CONFIG } from '@/lib/survey/response-header-config';
 import { findContactByInviteToken } from '@/server/read-models/invite-lookup';
 

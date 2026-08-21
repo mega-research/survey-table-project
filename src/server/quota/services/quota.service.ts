@@ -1,7 +1,7 @@
 import { and, eq, isNull } from 'drizzle-orm';
 import 'server-only';
 
-import { notDeletedResponse } from '@/data/response-filters';
+import { notDeletedResponse } from '@/server/response-filters';
 import { db } from '@/db';
 import { surveyResponses, surveys } from '@/db/schema/surveys';
 import { loadCompletedPlainAnswers } from '@/server/read-models/completed-answers.server';

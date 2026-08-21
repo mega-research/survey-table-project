@@ -154,11 +154,11 @@ vi.mock('@/db', () => {
   };
 });
 
-vi.mock('@/data/surveys', () => ({
+vi.mock('@/server/read-models/survey-structure', () => ({
   getQuestionsBySurvey: vi.fn(async () => []),
 }));
 
-vi.mock('@/data/library', () => ({
+vi.mock('@/server/read-models/library-taxonomy', () => ({
   getAllCategories: vi.fn(async () => []),
 }));
 

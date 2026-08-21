@@ -2,7 +2,7 @@ import 'server-only';
 
 import { and, eq, inArray } from 'drizzle-orm';
 
-import { getQuestionGroupsBySurvey } from '@/data/surveys';
+import { getQuestionGroupsBySurvey } from '@/server/read-models/survey-structure';
 import { db } from '@/db';
 import { NewQuestionGroup, questionGroups, questions } from '@/db/schema';
 import { generateId, isValidUUID } from '@/lib/utils';

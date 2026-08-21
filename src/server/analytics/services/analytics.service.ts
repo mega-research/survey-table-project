@@ -4,9 +4,9 @@ import { and, desc, eq } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { surveyResponses } from '@/db/schema';
-import { notDeletedResponse, notTestResponse } from '@/data/response-filters';
-import { getResponsesWithAnswers } from '@/data/responses';
-import { getSurveyWithDetails } from '@/data/surveys';
+import { notDeletedResponse, notTestResponse } from '@/server/response-filters';
+import { getResponsesWithAnswers } from '@/server/read-models/responses';
+import { getSurveyWithDetails } from '@/server/read-models/survey-structure';
 import { analyzeSurvey } from '@/lib/analytics/analyzer';
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 

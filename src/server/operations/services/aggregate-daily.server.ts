@@ -4,7 +4,7 @@ import { and, eq, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { surveyResponses } from '@/db/schema';
-import { notDeletedResponse } from '@/data/response-filters';
+import { notDeletedResponse } from '@/server/response-filters';
 
 import {
   shapeDailyBuckets,

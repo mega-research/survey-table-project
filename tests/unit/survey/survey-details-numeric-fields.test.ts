@@ -49,7 +49,7 @@ describe('getSurveyWithDetails — numberFormat·sumConstraints 매핑', () => {
         numberFormat: { thousandSeparator: true, unit: 'tenMillion', max: 100 },
       }),
     ]);
-    const { getSurveyWithDetails } = await import('@/data/surveys');
+    const { getSurveyWithDetails } = await import('@/server/read-models/survey-structure');
     const survey = await getSurveyWithDetails('s1');
     expect(survey?.questions[0]?.numberFormat).toMatchObject({ unit: 'tenMillion', max: 100 });
   });
@@ -63,7 +63,7 @@ describe('getSurveyWithDetails — numberFormat·sumConstraints 매핑', () => {
         sumConstraints: [{ id: 's1', cellIds: ['c1', 'c2'], operator: 'eq', target: 100 }],
       }),
     ]);
-    const { getSurveyWithDetails } = await import('@/data/surveys');
+    const { getSurveyWithDetails } = await import('@/server/read-models/survey-structure');
     const survey = await getSurveyWithDetails('s1');
     expect(survey?.questions[0]?.sumConstraints).toHaveLength(1);
     expect(survey?.questions[0]?.sumConstraints?.[0]).toMatchObject({ operator: 'eq', target: 100 });
@@ -73,7 +73,7 @@ describe('getSurveyWithDetails — numberFormat·sumConstraints 매핑', () => {
     mockQuestionsFindMany.mockResolvedValue([
       questionRow({ id: 'q3', order: 0, numberFormat: null, sumConstraints: null }),
     ]);
-    const { getSurveyWithDetails } = await import('@/data/surveys');
+    const { getSurveyWithDetails } = await import('@/server/read-models/survey-structure');
     const survey = await getSurveyWithDetails('s1');
     expect(survey?.questions[0]).not.toHaveProperty('numberFormat');
     expect(survey?.questions[0]).not.toHaveProperty('sumConstraints');

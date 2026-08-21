@@ -1,7 +1,7 @@
 import { type AnyColumn, type SQL, and, asc, eq, sql } from 'drizzle-orm';
 import 'server-only';
 
-import { deletedResponse, notDeletedResponse } from '@/data/response-filters';
+import { deletedResponse, notDeletedResponse } from '@/server/response-filters';
 import { db } from '@/db';
 import { contactTargets, surveyResponses } from '@/db/schema';
 import { attrsSortKey } from '@/lib/operations/contacts';

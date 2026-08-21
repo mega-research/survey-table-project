@@ -35,7 +35,7 @@ vi.mock('@/lib/image-extractor', () => ({
 vi.mock('@/lib/image-utils-server', () => ({
   deleteImagesFromR2Server: vi.fn(async () => undefined),
 }));
-vi.mock('@/data/surveys', () => ({
+vi.mock('@/server/read-models/survey-structure', () => ({
   getQuestionsBySurvey: vi.fn(async () => []),
   getQuestionGroupsBySurvey: vi.fn(async () => []),
 }));

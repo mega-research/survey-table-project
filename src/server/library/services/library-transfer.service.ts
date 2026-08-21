@@ -2,7 +2,7 @@ import 'server-only';
 
 import { eq } from 'drizzle-orm';
 
-import { getAllCategories } from '@/data/library';
+import { getAllCategories } from '@/server/read-models/library-taxonomy';
 import { db } from '@/db';
 import { logger } from '@/lib/logger';
 import {

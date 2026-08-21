@@ -1,7 +1,7 @@
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import 'server-only';
 
-import { getSurveyWithDetails } from '@/data/surveys';
+import { getSurveyWithDetails } from '@/server/read-models/survey-structure';
 import { db } from '@/db';
 import { surveyResponses, surveyVersions, surveys } from '@/db/schema';
 import { generateSPSSColumns } from '@/lib/analytics/spss-excel-export';

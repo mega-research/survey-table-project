@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PgDialect } from 'drizzle-orm/pg-core';
 
-import { completedResponse, notDeletedResponse, notTestResponse } from '@/data/response-filters';
+import { completedResponse, notDeletedResponse, notTestResponse } from '@/server/response-filters';
 
 const dialect = new PgDialect();
 

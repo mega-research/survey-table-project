@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm';
 import 'server-only';
 
-import { completedResponse, notDeletedResponse } from '@/data/response-filters';
+import { completedResponse, notDeletedResponse } from '@/server/response-filters';
 import { db } from '@/db';
 import { surveyResponses } from '@/db/schema/surveys';
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';

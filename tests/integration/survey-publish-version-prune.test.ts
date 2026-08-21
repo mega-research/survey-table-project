@@ -23,7 +23,7 @@ vi.mock('@/server/storage-lifecycle/key-ref-index.server', () => ({
   recordKeyRefs: recordRefsMock,
 }));
 
-vi.mock('@/data/surveys', () => ({ getSurveyWithDetails: vi.fn() }));
+vi.mock('@/server/read-models/survey-structure', () => ({ getSurveyWithDetails: vi.fn() }));
 vi.mock('@/db', () => ({ db: { transaction: vi.fn() } }));
 vi.mock('@/server/survey-builder/services/versioning/snapshot-builder', () => ({
   buildSurveySnapshot: vi
@@ -31,7 +31,7 @@ vi.mock('@/server/survey-builder/services/versioning/snapshot-builder', () => ({
     .mockReturnValue({ questions: [{ imageUrl: 'https://cdn-dev.megaresearch.co.kr/survey/a.png' }] }),
 }));
 
-import { getSurveyWithDetails } from '@/data/surveys';
+import { getSurveyWithDetails } from '@/server/read-models/survey-structure';
 import { db } from '@/db';
 import { publishSurvey } from '@/server/survey-builder/services/survey-publish.service';
 import type { Question, Survey } from '@/types/survey';
