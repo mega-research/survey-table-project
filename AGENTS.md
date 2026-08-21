@@ -160,7 +160,8 @@ src/
 ├── hooks/                      # 범용 훅 3개 — use-latest-ref · use-media-query · use-formatted-numeric-input
 │                               # (기능 전용 훅·query 훅은 features/<x>/hooks·queries 로 흡수, 루트 배럴 없음)
 │
-├── lib/                        # 프론트·서버 공용 계산 + 인프라 (도메인 로직은 server/ 로 흡수 중 — 트래커 E-1)
+├── lib/                        # 인프라 어댑터 + 프론트·서버가 함께 쓰는 계산 (도메인 로직 흡수 완료 — 트래커 E-1)
+│                               # 판정은 폴더 이름이 아니라 소비자 실측 — 아래 "src/lib 잔류 기준" 참조
 │   ├── supabase/               # Supabase 클라이언트 (client/server/middleware)
 │   ├── auth/ + auth.ts         # admin allowlist, 게스트 grant, 설문 소유권 가드
 │   ├── rate-limit/             # Upstash 2단 레이트리밋 + 신뢰 IP 추출
@@ -708,6 +709,24 @@ ENABLE_PUBLIC_API=              # /api/v1 OpenAPI 표면 게이트 (기본 비�
 
 > 메일/컨택 메타(발신 표시명, 수행기관 등)는 env default 금지. DB 컬럼 또는 attrs로 관리. env는 비밀+인프라 상수만.
 > `.env.example`의 `BETTER_AUTH_*` 항목은 미착수 전환 계획의 잔재로 코드에서 참조되지 않는다.
+
+---
+
+## src/lib 잔류 기준
+
+lib 은 도메인의 집이 아니라 **소유자를 특정할 수 없는 것들**의 집이다. 남아도 되는 것은 두 부류뿐이다.
+
+1. **인프라** — 외부 자원·프로세스 경계를 감싸는 어댑터(`logger`·`rate-limit`·`supabase`·`inngest`·`crypto`·`r2-env`). 앱 도메인이 아니라 실행 환경에 속해 어느 feature 도 소유하지 않는다.
+2. **서버와 프론트가 함께 쓰는 계산** — 두 런타임이 각자 구현하면 규칙이 갈리는 것(`survey/substitute-tokens`·`survey-url`·`sanitize`·`analytics/analyzer`·`question/*`).
+
+**판정은 폴더 이름이 아니라 소비자 실측으로 한다** (`node .scratch/tools/lib-final.mjs`).
+`src/server`·`src/app`·`src/actions`·`src/data` 중 하나라도 부르면 **잔류**, `features`·`components` 만 부르면 lib 을 떠난다.
+
+행선지:
+- 소비자가 **한 feature 뿐**이면 그 feature 안으로. 그 feature 의 기존 `lib/`·`utils/`·`hooks/` 관례를 따르고 **새 하위 폴더를 만들지 않는다**.
+- **여러 feature 나 `components/ui`** 가 부르면 공용 구역으로. **순수 함수는 `src/utils/`**, **DOM·네트워크·React 를 만지는 런타임 조각은 `src/shared/lib/`**.
+- 단 feature 간 방향(`survey-builder → survey-response → question-renderer`)이 허용하면 **하위 feature 에 두는 것이 공용 구역보다 낫다** — 특히 렌더러가 주입받는 컨텍스트는 렌더러가 소유한다.
+- **옮기면 공용 구역(`lib`·`utils`)이 `features` 를 가리키게 되는 파일은 그대로 둔다.** 그 역전은 ESLint 금지 사항이고, 프론트만 쓰는 것처럼 보여도 공용 구역 소비자가 하나라도 있으면 잔류가 정답이다.
 
 ---
 
