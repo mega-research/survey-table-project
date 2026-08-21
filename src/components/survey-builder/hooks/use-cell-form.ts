@@ -1,13 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useReducer } from 'react';
+import { useCallback, useEffect, useEffectEvent, useMemo, useReducer } from 'react';
 
 import { TableCell } from '@/types/survey';
-import {
-  CellFormState,
-  ContentType,
-  cellToFormState,
-} from '@/utils/serialize-cell';
+import { CellFormState, ContentType, cellToFormState } from '@/utils/serialize-cell';
 
 /**
  * 셀 편집 폼 상태를 단일 소스로 관리하는 훅.
@@ -117,12 +113,15 @@ export function useCellForm(cell: TableCell, isOpen: boolean): UseCellFormResult
   // 셀이 변경될 때 상태 동기화 (모달이 열릴 때마다 최신 셀 데이터 반영).
   // deps 를 cell?.id 로 좁힘 — 모달 안에서 셀 저장 등으로 cell reference 가 바뀌어도
   // 사용자가 편집 중인 로컬 state 가 store 의 옛 값으로 reset 되지 않도록 한다.
-  // (feedback_useeffect_reset_object_deps 참조)
-  useEffect(() => {
+  // (feedback_useeffect_reset_object_deps 참조) — cell 객체는 effect event 로 실행 시점의
+  // 최신값을 읽고, 트리거는 isOpen / cell?.id 에만 둔다.
+  const hydrate = useEffectEvent(() => {
     if (isOpen && cell) {
       dispatch({ type: 'HYDRATE', cell });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  });
+  useEffect(() => {
+    hydrate();
   }, [isOpen, cell?.id]);
 
   const reset = useCallback(() => {

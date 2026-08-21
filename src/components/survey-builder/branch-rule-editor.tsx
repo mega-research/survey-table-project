@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useEffectEvent, useState } from 'react';
 
 import { ArrowRight, Check, ChevronsUpDown, GitBranch, Info, XCircle } from 'lucide-react';
 
@@ -55,7 +55,10 @@ export function BranchRuleEditor({
     }
   }
 
-  useEffect(() => {
+  // 로컬 편집값(enabled/action/targetQuestionId)이 바뀔 때만 부모로 규칙을 밀어 올린다.
+  // onChange/branchRule 은 호출자가 인라인으로 넘겨 매 렌더 identity 가 바뀌므로 deps 에 넣으면
+  // 부모 setState → 재렌더 → 재발화의 무한 루프가 된다. effect event 로 최신값만 읽는다.
+  const emitChange = useEffectEvent(() => {
     if (!enabled) {
       onChange(undefined);
     } else {
@@ -67,7 +70,9 @@ export function BranchRuleEditor({
       };
       onChange(newBranchRule);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  });
+  useEffect(() => {
+    emitChange();
   }, [enabled, action, targetQuestionId]);
 
   if (!enabled) {

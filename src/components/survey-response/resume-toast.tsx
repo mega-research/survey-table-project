@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useEffectEvent } from 'react';
 
 interface ResumeToastProps {
   message: string;
@@ -19,12 +19,15 @@ interface ResumeToastProps {
  * 토스트를 자체 마운트 기준으로 dismiss 하면 메인 콘텐츠가 보이는 순간부터 온전히 4초간 노출된다.
  */
 export function ResumeToast({ message, onDismiss }: ResumeToastProps) {
+  // 마운트 시 1회만 타이머를 설정한다. onDismiss 는 호출자가 인라인 함수를 넘길 수 있으므로
+  // deps 에 넣지 않고(넣으면 부모 렌더마다 타이머가 재시작된다) effect event 로 발화 시점의
+  // 최신 콜백을 부른다.
+  const dismiss = useEffectEvent(() => {
+    onDismiss();
+  });
   useEffect(() => {
-    const timer = setTimeout(onDismiss, 4000);
+    const timer = setTimeout(() => dismiss(), 4000);
     return () => clearTimeout(timer);
-    // 마운트 시 1회만 타이머 설정. onDismiss 는 안정 참조(useCallback)라 deps 에서 의도적으로 제외 —
-    // 매 렌더마다 타이머가 재시작되지 않도록 한다.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (

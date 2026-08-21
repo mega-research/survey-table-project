@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useEffectEvent, useRef } from 'react';
 
 import { extractImageUrlsFromHtml } from '@/lib/image-extractor';
 import { deleteImagesFromR2 } from '@/lib/image-utils';
@@ -20,13 +20,17 @@ export function useEditorImageTracker(initialHtml: string) {
   const uploadedRef = useRef<Set<string>>(new Set());
   const previousContentRef = useRef<string>(initialHtml || '');
 
-  useEffect(() => {
+  // 마운트 시 1회만 등록한다. initialHtml 은 호출자가 폼 state 를 왕복시켜 키 입력마다
+  // 바뀔 수 있으므로 deps 에 넣지 않고(넣으면 추적 집합이 누적되어 R2 삭제 대상이 달라진다)
+  // effect event 로 마운트 시점의 최신값만 읽는다.
+  const registerInitial = useEffectEvent(() => {
     if (!initialHtml) return;
     const initialImages = extractImageUrlsFromHtml(initialHtml);
     initialImages.forEach((url) => uploadedRef.current.add(url));
     previousContentRef.current = initialHtml;
-    // 초기 마운트 시에만 실행 (initialHtml은 부모 prop 으로 고정)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  });
+  useEffect(() => {
+    registerInitial();
   }, []);
 
   const trackUpload = useCallback((url: string) => {
@@ -52,14 +56,17 @@ export function useEditorImageTracker(initialHtml: string) {
     return Array.from(uploadedRef.current).filter((url) => !currentImages.includes(url));
   }, []);
 
-  const cleanupOrphans = useCallback(async (currentHtml: string) => {
-    const orphans = getOrphans(currentHtml);
-    if (orphans.length === 0) return;
-    await deleteImagesFromR2(orphans).catch((error) => {
-      console.error('orphan 이미지 삭제 실패:', error);
-    });
-    orphans.forEach((url) => uploadedRef.current.delete(url));
-  }, [getOrphans]);
+  const cleanupOrphans = useCallback(
+    async (currentHtml: string) => {
+      const orphans = getOrphans(currentHtml);
+      if (orphans.length === 0) return;
+      await deleteImagesFromR2(orphans).catch((error) => {
+        console.error('orphan 이미지 삭제 실패:', error);
+      });
+      orphans.forEach((url) => uploadedRef.current.delete(url));
+    },
+    [getOrphans],
+  );
 
   return {
     trackUpload,

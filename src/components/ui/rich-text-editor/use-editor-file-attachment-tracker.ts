@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useEffectEvent, useRef } from 'react';
 
 import { TMP_NOTICE_ATTACHMENT_PREFIX } from '@/lib/upload/attachment-policy';
 
@@ -29,13 +29,16 @@ export function useEditorFileAttachmentTracker(initialHtml: string) {
   const uploadedRef = useRef<Set<string>>(new Set());
   const previousContentRef = useRef<string>(initialHtml || '');
 
-  useEffect(() => {
+  // 마운트 시 1회만 등록한다(use-editor-image-tracker 와 동일 사유 — initialHtml 은 키 입력마다
+  // 바뀔 수 있어 deps 에 넣으면 추적 집합이 누적된다). effect event 로 마운트 시점 값만 읽는다.
+  const registerInitial = useEffectEvent(() => {
     if (!initialHtml) return;
     const initialKeys = extractTmpAttachmentKeysFromHtml(initialHtml);
     initialKeys.forEach((key) => uploadedRef.current.add(key));
     previousContentRef.current = initialHtml;
-    // 초기 마운트 시에만 실행
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  });
+  useEffect(() => {
+    registerInitial();
   }, []);
 
   const trackUpload = useCallback((key: string) => {
