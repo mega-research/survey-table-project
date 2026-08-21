@@ -12,7 +12,7 @@ vi.mock('@/server/shared/data-scope.server', () => ({
   loadOperationsDataScope: vi.fn(async () => h.initialScope),
 }));
 
-vi.mock('@/lib/contacts/excel-parser', () => ({
+vi.mock('./excel-parser', () => ({
   parseExcelRows: vi.fn(async () => [{ 회사명: '아크미' }]),
   previewExcel: vi.fn(),
 }));

@@ -116,18 +116,18 @@ vi.mock('@/db', () => {
   return { db };
 });
 
-// updateQuestionResponse 가 참조하는 제어 플래그 조회 목 (실제 import 경로: @/lib/survey-control)
-vi.mock('@/lib/survey-control', () => ({
+// updateQuestionResponse 가 참조하는 제어 플래그 조회 목 (실제 import 경로: @/server/shared/survey-control)
+vi.mock('@/server/shared/survey-control', () => ({
   getSurveyControlFlags: (...a: unknown[]) => flagsMock(...a),
   isValidTestToken: vi.fn(() => false),
 }));
 
 // createResponseWithFirstAnswer 의 UA 파싱(next/headers) + 중복 감지 신호/검사 목.
 vi.mock('next/headers', () => ({ headers: (...a: unknown[]) => headersMock(...a) }));
-vi.mock('@/lib/duplicate-detection/signals', () => ({
+vi.mock('@/server/survey-response/services/signals', () => ({
   computeSignals: (...a: unknown[]) => computeSignalsMock(...a),
 }));
-vi.mock('@/lib/duplicate-detection/check', () => ({
+vi.mock('@/server/survey-response/services/check', () => ({
   checkTrackA: (...a: unknown[]) => checkTrackAMock(...a),
   checkTrackB: (...a: unknown[]) => checkTrackBMock(...a),
 }));

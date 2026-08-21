@@ -17,7 +17,7 @@ import {
   acquireTestTargetResponse,
   assertAnonymousTestSession,
   assertTestTargetAttemptOwner,
-} from '@/lib/survey-response/test-target-attempt.server';
+} from '@/server/survey-response/services/test-target-attempt.server';
 
 const run = process.env['RUN_REALDB'] === '1' ? describe : describe.skip;
 

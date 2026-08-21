@@ -104,7 +104,7 @@ vi.mock('@/server/shared/result-code-statuses.server', async () => {
   };
 });
 
-import { findContactByInviteToken } from '@/lib/duplicate-detection/invite-lookup';
+import { findContactByInviteToken } from '@/server/shared/invite-lookup';
 import { randomUUID } from 'crypto';
 
 const SURVEY_ID = '00000000-0000-4000-8000-000000000020';

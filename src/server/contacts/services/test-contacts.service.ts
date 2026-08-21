@@ -3,8 +3,8 @@ import 'server-only';
 
 import { db } from '@/db';
 import { contactTargets } from '@/db/schema';
-import { resolveTestContactFieldBindings } from '@/lib/contacts/test-contact-columns';
-import { TEST_CONTACT_FIXTURES } from '@/lib/contacts/test-contact-fixtures';
+import { resolveTestContactFieldBindings } from './test-contact-columns';
+import { TEST_CONTACT_FIXTURES } from './test-contact-fixtures';
 import { upsertPiiValue } from '@/lib/crypto/contact-pii-repo';
 import { generateInviteCode } from '@/lib/survey-url';
 

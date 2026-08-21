@@ -3,7 +3,7 @@ import 'server-only';
 
 import { type DbTransaction, db } from '@/db';
 import { contactTargets, surveyResponses } from '@/db/schema';
-import { sanitizeAttrsAgainstPiiScheme } from '@/lib/contacts/scheme-helpers';
+import { sanitizeAttrsAgainstPiiScheme } from './scheme-helpers';
 import { upsertPiiValue } from '@/lib/crypto/contact-pii-repo';
 import {
   archiveTestMailForTargets,

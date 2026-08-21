@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFile } from 'node:fs/promises';
 import ExcelJS from 'exceljs';
-import { previewExcel, parseExcelRows, normalizeHeaderKey } from '@/lib/contacts/excel-parser';
+import { previewExcel, parseExcelRows, normalizeHeaderKey } from '@/server/contacts/services/excel-parser';
 
 async function loadFixture(name: string): Promise<Buffer> {
   return readFile(`tests/fixtures/contacts/${name}`);

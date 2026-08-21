@@ -21,7 +21,7 @@ vi.mock('next/headers', () => ({
   headers: mockHeaders,
 }));
 
-vi.mock('@/lib/duplicate-detection/invite-lookup', () => ({
+vi.mock('@/server/shared/invite-lookup', () => ({
   findContactByInviteToken: vi.fn(async () => ({ kind: 'invalid' as const })),
 }));
 

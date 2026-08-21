@@ -25,7 +25,7 @@ vi.mock('next/headers', () => ({
 
 // Track A 경로 내부에서 사용하는 invite-lookup 을 stub — Track B 에서는 호출되지 않지만
 // check.ts 가 import 하므로 resolve 오류 방지를 위해 모킹.
-vi.mock('@/lib/duplicate-detection/invite-lookup', () => ({
+vi.mock('@/server/shared/invite-lookup', () => ({
   findContactByInviteToken: vi.fn(async () => ({ kind: 'invalid' as const })),
 }));
 

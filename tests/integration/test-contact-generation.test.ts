@@ -64,7 +64,7 @@ vi.mock('@/server/shared/data-scope.server', async (importOriginal) => ({
   // resolveWriteScopeIsTest 는 순수 함수(Task 4 fix round)라 원본 그대로 사용한다.
 }));
 
-vi.mock('@/lib/contacts/excel-parser', () => ({
+vi.mock('@/server/contacts/services/excel-parser', () => ({
   parseExcelRows: (...args: unknown[]) => parseExcelRowsMock(...(args as [])),
   previewExcel: vi.fn(),
 }));

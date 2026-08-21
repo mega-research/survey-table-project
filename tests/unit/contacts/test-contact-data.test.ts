@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   ensureTestContactColumns,
   resolveTestContactFieldBindings,
-} from '@/lib/contacts/test-contact-columns';
-import { TEST_CONTACT_FIXTURES } from '@/lib/contacts/test-contact-fixtures';
+} from '@/server/contacts/services/test-contact-columns';
+import { TEST_CONTACT_FIXTURES } from '@/server/contacts/services/test-contact-fixtures';
 
 describe('테스트 대상자 기본 데이터', () => {
   it('20개의 명백한 합성 fixture를 제공한다', () => {

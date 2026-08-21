@@ -2,7 +2,7 @@ import { PgDialect } from 'drizzle-orm/pg-core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { encryptAnswerValue } from '@/lib/crypto/response-pii';
-import { loadCompletedPlainAnswers } from '@/lib/quota/completed-answers.server';
+import { loadCompletedPlainAnswers } from '@/server/shared/completed-answers.server';
 
 // 쿼터 모수 helper 는 db.select(...).from(surveyResponses).where(...) 체인 하나만 쓴다.
 // 실 PG 없는 vitest 환경이라 where 절을 캡처해 SQL 조건을 검증한다 (quota.service.test.ts 선례).

@@ -3,7 +3,7 @@ import 'server-only';
 
 import type { DbTransaction } from '@/db';
 import { contactTargets, surveyResponses, surveys } from '@/db/schema';
-import { ensureTestContactColumns } from '@/lib/contacts/test-contact-columns';
+import { ensureTestContactColumns } from './test-contact-columns';
 import {
   type OperationsDataScope,
   resolveWriteScopeIsTest,

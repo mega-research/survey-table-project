@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { ContactColumnScheme, ContactUploadMapping } from '@/shared/contracts/contacts';
-import { appendNewColumnsToScheme, getSchemeRouting } from '@/lib/contacts/scheme-helpers';
+import { appendNewColumnsToScheme, getSchemeRouting } from '@/server/contacts/services/scheme-helpers';
 
 function baseScheme(): ContactColumnScheme {
   return {

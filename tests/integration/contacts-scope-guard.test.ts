@@ -31,8 +31,8 @@ const {
 
 const upsertPiiValueMock = vi.fn(async () => undefined);
 
-vi.mock('@/lib/contacts/scheme-helpers', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/contacts/scheme-helpers')>();
+vi.mock('@/server/contacts/services/scheme-helpers', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/server/contacts/services/scheme-helpers')>();
   return {
     ...actual,
     sanitizeAttrsAgainstPii: vi.fn(

@@ -8,7 +8,7 @@ import { surveys } from '@/db/schema/surveys';
 import {
   classifyInviteTokenOwner,
   findInviteTokenOwner,
-} from '@/lib/duplicate-detection/invite-token-owner';
+} from '@/server/shared/invite-token-owner';
 import { isValidUUID } from '@/lib/utils';
 
 import type {

@@ -4,16 +4,16 @@ import 'server-only';
 import { db } from '@/db';
 import { surveyResponses, surveyVersions } from '@/db/schema';
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
-import { findContactByInviteToken } from '@/lib/duplicate-detection/invite-lookup';
+import { findContactByInviteToken } from '@/server/shared/invite-lookup';
 import { logger } from '@/lib/logger';
 import { normalizeQuestions } from '@/lib/question/normalize';
 import { toFlatQuestion } from '@/lib/question/variants';
-import { getSurveyControlFlags, isValidTestToken } from '@/lib/survey-control';
+import { getSurveyControlFlags, isValidTestToken } from '@/server/shared/survey-control';
 import { applyStructuralSurvival } from '@/lib/survey-response/structural-survival';
 import {
   isResumableTestStatus,
   lockAndAssertResponseMutation,
-} from '@/lib/survey-response/test-target-attempt.server';
+} from './test-target-attempt.server';
 import {
   isConcludedResponseStatus,
   isOpenResponseStatus,

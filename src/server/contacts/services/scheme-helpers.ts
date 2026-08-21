@@ -6,7 +6,7 @@ import { surveys } from '@/db/schema';
 import type { ContactColumnDef, ContactColumnScheme, ContactUploadMapping } from '@/shared/contracts/contacts';
 import { piiKeyOf } from '@/lib/operations/contacts';
 
-export { getSchemeRouting, type SchemeRouting } from './match-contacts';
+export { getSchemeRouting, type SchemeRouting } from '@/lib/contacts/match-contacts';
 
 /**
  * surveys.contactColumns 에서 PII 로 마킹된 컬럼의 column_key set 을 추출.

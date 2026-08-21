@@ -3,7 +3,7 @@ import 'server-only';
 
 import { type DbOrTx, db } from '@/db';
 import { contactPii, contactTargets, contactUploads, surveys } from '@/db/schema';
-import { parseExcelRows, previewExcel } from '@/lib/contacts/excel-parser';
+import { parseExcelRows, previewExcel } from './excel-parser';
 import { type GroupLevel, isGroupLevel } from '@/lib/contacts/group-levels';
 import {
   type ExistingContactKeyInfo,
@@ -15,7 +15,7 @@ import {
   type SchemeRouting,
   appendNewColumnsToScheme,
   getSchemeRouting,
-} from '@/lib/contacts/scheme-helpers';
+} from './scheme-helpers';
 import { MAX_UPLOAD_ROWS, validateXlsxFile } from '@/lib/contacts/upload-limits';
 import {
   type PiiInput,

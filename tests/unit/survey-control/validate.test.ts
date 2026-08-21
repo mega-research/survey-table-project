@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { isValidTestToken } from '@/lib/survey-control';
+import { isValidTestToken } from '@/server/shared/survey-control';
 
 describe('isValidTestToken', () => {
   const flags = { testModeEnabled: true, testToken: 'tok-1' };

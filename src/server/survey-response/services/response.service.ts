@@ -19,22 +19,22 @@ import {
   encryptAnswerValue,
   encryptResponsesForStorage,
 } from '@/lib/crypto/response-pii';
-import { checkTrackA, checkTrackB } from '@/lib/duplicate-detection/check';
-import { computeSignals } from '@/lib/duplicate-detection/signals';
+import { checkTrackA, checkTrackB } from './check';
+import { computeSignals } from './signals';
 import { logger } from '@/lib/logger';
 import { sumActiveSeconds } from '@/lib/operations/active-seconds';
 import { parseBrowser, parsePlatform } from '@/lib/operations/parse-ua';
 import { readOptTextsSidecar } from '@/lib/option-text-read';
-import { loadCompletedPlainAnswers } from '@/lib/quota/completed-answers.server';
+import { loadCompletedPlainAnswers } from '@/server/shared/completed-answers.server';
 import { countCell, deriveCategoryIds, findTarget } from '@/lib/quota/matching';
-import { getSurveyControlFlags, isValidTestToken } from '@/lib/survey-control';
-import type { TestResponseResetFields } from '@/lib/survey-response/reset-test-response.server';
-import { resetTestResponseRow } from '@/lib/survey-response/reset-test-response.server';
+import { getSurveyControlFlags, isValidTestToken } from '@/server/shared/survey-control';
+import type { TestResponseResetFields } from './reset-test-response.server';
+import { resetTestResponseRow } from './reset-test-response.server';
 import {
   acquireTestTargetResponse,
   assertAnonymousTestSession,
   lockAndAssertResponseMutation,
-} from '@/lib/survey-response/test-target-attempt.server';
+} from './test-target-attempt.server';
 import { withCalcValues } from '@/lib/survey/cell-formula';
 import { stripDisabledCellValues } from '@/lib/survey/cell-gating';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';

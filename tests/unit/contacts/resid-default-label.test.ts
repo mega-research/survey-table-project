@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts';
-import { ensureTestContactColumns } from '@/lib/contacts/test-contact-columns';
+import { ensureTestContactColumns } from '@/server/contacts/services/test-contact-columns';
 
 describe('resid 기본 라벨 — 시스템ID', () => {
   it('기본 라벨 상수는 시스템ID — 고객 엑셀의 NO/ID 류 컬럼과 구분', () => {

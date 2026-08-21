@@ -6,7 +6,7 @@ import { db } from '@/db';
 import {
   buildNegativeCodeExists,
   getResultCodeStatuses,
-} from '@/server/shared/result-code-statuses.server';
+} from './result-code-statuses.server';
 import { isValidUUID } from '@/lib/utils';
 
 import {
@@ -29,7 +29,7 @@ import {
  * SECURITY: 차단 사유는 호출자에게 구분 노출하지 않음 [UI 는 동일 카피 — PII].
  *
  * 원위치: src/actions/response-actions.ts — oRPC 마이그레이션에서 features service 와
- * lib/duplicate-detection(checkTrackA) 양쪽이 공유하므로 lib 로 승격.
+ * checkTrackA 양쪽이 공유하므로 server/shared 로 승격.
  */
 export type InviteTokenLookupResult =
   | { kind: 'valid'; contactTargetId: string; respondedAt: Date | null; isTest: boolean }

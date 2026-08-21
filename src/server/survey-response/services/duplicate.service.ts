@@ -2,8 +2,8 @@ import 'server-only';
 
 import { headers } from 'next/headers';
 
-import { checkTrackA, checkTrackB } from '@/lib/duplicate-detection/check';
-import { computeSignals } from '@/lib/duplicate-detection/signals';
+import { checkTrackA, checkTrackB } from './check';
+import { computeSignals } from './signals';
 
 import type {
   CheckDuplicateOnEntryInput,

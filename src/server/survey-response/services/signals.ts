@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 
 import { getTrustedClientIpOrNull } from '@/lib/rate-limit/client-ip';
 
-import type { ClientSignals, ServerSignals } from './types';
+import type { ClientSignals, ServerSignals } from '@/lib/duplicate-detection/types';
 
 // Module-level fail-fast: server boot 또는 첫 import 시 즉시 검증
 // salt 누락 시 silent fallthrough 로 중복 차단이 무력화되는 보안 risk 차단

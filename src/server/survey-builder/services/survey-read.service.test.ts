@@ -18,7 +18,7 @@ const surveysFindMany = vi.fn();
 const surveyVersionsFindFirst = vi.fn();
 const contactTargetsFindFirst = vi.fn();
 
-vi.mock('@/lib/duplicate-detection/invite-lookup', () => ({
+vi.mock('@/server/shared/invite-lookup', () => ({
   findContactByInviteToken: vi.fn(),
 }));
 
@@ -42,7 +42,7 @@ vi.mock('@/db', () => ({
 import { getResponseCountsGroupedBySurvey } from '@/data/responses';
 import { getSurveyWithDetails as getSurveyWithDetailsData } from '@/data/surveys';
 import { DEFAULT_RESPONSE_HEADER_CONFIG } from '@/lib/survey/response-header-config';
-import { findContactByInviteToken } from '@/lib/duplicate-detection/invite-lookup';
+import { findContactByInviteToken } from '@/server/shared/invite-lookup';
 
 import {
   getSurveyForResponse,

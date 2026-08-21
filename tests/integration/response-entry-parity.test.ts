@@ -109,7 +109,7 @@ vi.mock('next/headers', () => ({
   }),
 }));
 
-vi.mock('@/lib/duplicate-detection/check', () => ({
+vi.mock('@/server/survey-response/services/check', () => ({
   checkTrackA: vi.fn((...a: unknown[]) => {
     H.order.push('trackA');
     return H.trackAMock(...a);
@@ -120,7 +120,7 @@ vi.mock('@/lib/duplicate-detection/check', () => ({
   }),
 }));
 
-vi.mock('@/lib/survey-response/test-target-attempt.server', () => ({
+vi.mock('@/server/survey-response/services/test-target-attempt.server', () => ({
   acquireTestTargetResponse: vi.fn((...a: unknown[]) => {
     H.order.push('acquire');
     return H.acquireMock(...a);
@@ -131,8 +131,8 @@ vi.mock('@/lib/survey-response/test-target-attempt.server', () => ({
 }));
 
 // isValidTestToken 은 실제 구현을 써야 무효 테스트 링크 판정이 현실과 같다.
-vi.mock('@/lib/survey-control', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/survey-control')>();
+vi.mock('@/server/shared/survey-control', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/server/shared/survey-control')>();
   return {
     ...actual,
     getSurveyControlFlags: vi.fn((...a: unknown[]) => {

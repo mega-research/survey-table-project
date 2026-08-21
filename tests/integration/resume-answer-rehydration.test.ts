@@ -13,7 +13,7 @@ vi.mock('@/db', () => ({
   },
 }));
 
-vi.mock('@/lib/survey-control', () => ({
+vi.mock('@/server/shared/survey-control', () => ({
   getSurveyControlFlags: vi.fn().mockResolvedValue({
     isPaused: false,
     testModeEnabled: false,
@@ -23,7 +23,7 @@ vi.mock('@/lib/survey-control', () => ({
   isValidTestToken: vi.fn(() => false),
 }));
 
-vi.mock('@/lib/duplicate-detection/invite-lookup', () => ({
+vi.mock('@/server/shared/invite-lookup', () => ({
   findContactByInviteToken: vi.fn(),
 }));
 
@@ -136,7 +136,7 @@ describe('resumeOrCreateResponse 응답 복원', () => {
 
   async function mockContactRow(row: Record<string, unknown>) {
     const { findContactByInviteToken } = await import(
-      '@/lib/duplicate-detection/invite-lookup'
+      '@/server/shared/invite-lookup'
     );
     vi.mocked(findContactByInviteToken).mockResolvedValue({
       kind: 'valid',
@@ -212,7 +212,7 @@ describe('resumeOrCreateResponse 응답 복원', () => {
   describe('대상자 테스트 진입 판정', () => {
     async function mockTestTargetRow(row: Record<string, unknown>) {
       const { findContactByInviteToken } = await import(
-        '@/lib/duplicate-detection/invite-lookup'
+        '@/server/shared/invite-lookup'
       );
       vi.mocked(findContactByInviteToken).mockResolvedValue({
         kind: 'valid',

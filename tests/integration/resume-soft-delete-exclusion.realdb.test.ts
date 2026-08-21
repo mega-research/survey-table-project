@@ -24,7 +24,7 @@ const { mockFindContactByInviteToken } = vi.hoisted(() => ({
   mockFindContactByInviteToken: vi.fn(),
 }));
 
-vi.mock('@/lib/duplicate-detection/invite-lookup', () => ({
+vi.mock('@/server/shared/invite-lookup', () => ({
   findContactByInviteToken: mockFindContactByInviteToken,
 }));
 

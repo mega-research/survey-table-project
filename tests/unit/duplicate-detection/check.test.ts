@@ -13,7 +13,7 @@ vi.mock('@/db', () => ({
   db: { query: { surveyResponses: { findFirst: mockFindFirst } } },
 }));
 
-vi.mock('@/lib/duplicate-detection/invite-lookup', () => ({
+vi.mock('@/server/shared/invite-lookup', () => ({
   findContactByInviteToken: mockFindContact,
 }));
 
@@ -24,7 +24,7 @@ describe('checkTrackA (invite_token)', () => {
 
   it('토큰 없음 → invalid_token', async () => {
     mockFindContact.mockResolvedValue({ kind: 'invalid' });
-    const { checkTrackA } = await import('@/lib/duplicate-detection/check');
+    const { checkTrackA } = await import('@/server/survey-response/services/check');
     const r = await checkTrackA('survey-1', 'bad-token');
     expect(r).toEqual({ blocked: true, reason: 'invalid_token' });
   });
@@ -35,7 +35,7 @@ describe('checkTrackA (invite_token)', () => {
       contactTargetId: 'c1',
       respondedAt: new Date(),
     });
-    const { checkTrackA } = await import('@/lib/duplicate-detection/check');
+    const { checkTrackA } = await import('@/server/survey-response/services/check');
     const r = await checkTrackA('survey-1', 'used-token');
     expect(r).toEqual({ blocked: true, reason: 'token_already_used' });
   });
@@ -46,14 +46,14 @@ describe('checkTrackA (invite_token)', () => {
       contactTargetId: 'c1',
       respondedAt: null,
     });
-    const { checkTrackA } = await import('@/lib/duplicate-detection/check');
+    const { checkTrackA } = await import('@/server/survey-response/services/check');
     const r = await checkTrackA('survey-1', 'fresh-token');
     expect(r).toEqual({ blocked: false, contactTargetId: 'c1' });
   });
 
   it('OFF인 테스트 대상자 토큰은 invalid_test_token으로 차단한다', async () => {
     mockFindContact.mockResolvedValue({ kind: 'invalid_test' });
-    const { checkTrackA } = await import('@/lib/duplicate-detection/check');
+    const { checkTrackA } = await import('@/server/survey-response/services/check');
     const r = await checkTrackA('survey-1', 'stale-test-token');
     expect(r).toEqual({ blocked: true, reason: 'invalid_test_token' });
   });
@@ -65,7 +65,7 @@ describe('checkTrackA (invite_token)', () => {
       respondedAt: new Date(),
       isTest: true,
     });
-    const { checkTrackA } = await import('@/lib/duplicate-detection/check');
+    const { checkTrackA } = await import('@/server/survey-response/services/check');
     const r = await checkTrackA('survey-1', 'test-target-token');
     expect(r).toEqual({
       blocked: false,
@@ -76,7 +76,7 @@ describe('checkTrackA (invite_token)', () => {
 
   it('excluded 부정 결과코드 OR unsubscribed → excluded_from_population', async () => {
     mockFindContact.mockResolvedValue({ kind: 'excluded' });
-    const { checkTrackA } = await import('@/lib/duplicate-detection/check');
+    const { checkTrackA } = await import('@/server/survey-response/services/check');
     const r = await checkTrackA('survey-1', 'excluded-token');
     expect(r).toEqual({ blocked: true, reason: 'excluded_from_population' });
   });
@@ -89,7 +89,7 @@ describe('checkTrackB (신호 기반)', () => {
 
   it('매칭 row 없음 → 통과', async () => {
     mockFindFirst.mockResolvedValue(undefined);
-    const { checkTrackB } = await import('@/lib/duplicate-detection/check');
+    const { checkTrackB } = await import('@/server/survey-response/services/check');
     const r = await checkTrackB({
       surveyId: 's1',
       signals: { ipHash: 'iH', fpHash: 'fH', deviceId: 'dev1' },
@@ -99,7 +99,7 @@ describe('checkTrackB (신호 기반)', () => {
 
   it('매칭 row 있음 → device_already_responded', async () => {
     mockFindFirst.mockResolvedValue({ id: 'existing' });
-    const { checkTrackB } = await import('@/lib/duplicate-detection/check');
+    const { checkTrackB } = await import('@/server/survey-response/services/check');
     const r = await checkTrackB({
       surveyId: 's1',
       signals: { ipHash: 'iH', fpHash: 'fH', deviceId: 'dev1' },
@@ -109,7 +109,7 @@ describe('checkTrackB (신호 기반)', () => {
 
   it('모든 신호 null → 통과 (검사할 신호 없음)', async () => {
     mockFindFirst.mockResolvedValue(undefined);
-    const { checkTrackB } = await import('@/lib/duplicate-detection/check');
+    const { checkTrackB } = await import('@/server/survey-response/services/check');
     const r = await checkTrackB({
       surveyId: 's1',
       signals: { ipHash: null, fpHash: null, deviceId: null },
@@ -119,7 +119,7 @@ describe('checkTrackB (신호 기반)', () => {
 
   it('isTest 완료 응답은 중복 매칭에서 제외한다 (where 절에 is_test=false 조건 포함)', async () => {
     mockFindFirst.mockResolvedValue(undefined);
-    const { checkTrackB } = await import('@/lib/duplicate-detection/check');
+    const { checkTrackB } = await import('@/server/survey-response/services/check');
     await checkTrackB({
       surveyId: 's1',
       signals: { ipHash: 'iH', fpHash: 'fH', deviceId: 'dev1' },
