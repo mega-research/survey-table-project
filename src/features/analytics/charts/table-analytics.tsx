@@ -137,6 +137,105 @@ export function TableAnalyticsChart({ data }: TableAnalyticsChartProps) {
     });
   });
 
+  // JSX 자식 자리에서 배열을 spread 하면 React Compiler 가 JSXSpreadChild 를 낮추지 못한다.
+  // 배열 변수로 두면 빈 배열은 자식 자리를 차지하지 않아 탭 패널 정렬이 그대로다.
+  const textPanel =
+    textResponseData.length > 0
+      ? [
+          <TabPanel key="text-panel">
+            <div className="mt-6 space-y-6">
+              {textResponseData.map((item, idx) => (
+                <div key={idx} className="rounded-lg border bg-gray-50 p-4">
+                  <h4 className="mb-2 flex items-center gap-2 font-semibold text-gray-900">
+                    <Badge size="xs" color="gray">
+                      {item.rowLabel}
+                    </Badge>
+                    <span className="text-gray-400">/</span>
+                    <span className="text-gray-700">{item.colLabel}</span>
+                  </h4>
+                  <ul className="max-h-60 space-y-2 overflow-y-auto rounded border border-gray-200 bg-white p-3">
+                    {item.responses.map((res, rIdx) => (
+                      <li
+                        key={rIdx}
+                        className="border-b pt-2 pb-2 text-sm text-gray-700 first:pt-0 last:border-0 last:pb-0"
+                      >
+                        {res}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </TabPanel>,
+        ]
+      : [];
+  const rankingPanel =
+    rankingCellData.length > 0
+      ? [
+          <TabPanel key="ranking-panel">
+            <div className="mt-6 space-y-6">
+              {rankingCellData.map((item, idx) => (
+                <div key={idx} className="rounded-lg border bg-gray-50 p-4">
+                  <h4 className="mb-3 flex items-center gap-2 font-semibold text-gray-900">
+                    <Badge size="xs" color="gray">
+                      {item.rowLabel}
+                    </Badge>
+                    <span className="text-gray-400">/</span>
+                    <span className="text-gray-700">{item.colLabel}</span>
+                    <span className="ml-2 text-xs text-gray-500">
+                      1~{item.positions}순위 · 최대 총점 {item.maxPossibleScore}
+                    </span>
+                  </h4>
+                  {item.distribution.length === 0 ? (
+                    <p className="text-sm text-gray-500">아직 응답이 없습니다.</p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full border-collapse text-sm">
+                        <thead>
+                          <tr className="border-b border-gray-200 bg-white">
+                            <th className="px-3 py-2 text-left font-medium text-gray-700">옵션</th>
+                            <th className="px-3 py-2 text-right font-medium text-gray-700">총점</th>
+                            <th className="px-3 py-2 text-right font-medium text-gray-700">
+                              평균 순위
+                            </th>
+                            {Array.from({ length: item.positions }, (_, k) => (
+                              <th
+                                key={k}
+                                className="px-3 py-2 text-right font-medium text-gray-700"
+                              >
+                                {k + 1}순위
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {item.distribution.map((d) => (
+                            <tr key={d.value} className="border-b border-gray-100 hover:bg-white">
+                              <td className="px-3 py-2 font-medium text-gray-900">{d.label}</td>
+                              <td className="px-3 py-2 text-right font-bold text-gray-900">
+                                {d.totalScore}
+                              </td>
+                              <td className="px-3 py-2 text-right text-gray-600">
+                                {d.avgRank !== undefined ? d.avgRank.toFixed(2) : '-'}
+                              </td>
+                              {Array.from({ length: item.positions }, (_, k) => (
+                                <td key={k} className="px-3 py-2 text-right text-gray-600">
+                                  {d.rankCounts?.[k] ?? 0}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </TabPanel>,
+        ]
+      : [];
+
   return (
     <Card className="p-6">
       <div className="mb-4 flex items-start justify-between">
@@ -291,111 +390,10 @@ export function TableAnalyticsChart({ data }: TableAnalyticsChartProps) {
           </TabPanel>
 
           {/* 3. 주관식 답변 리스트 뷰 */}
-          {...textResponseData.length > 0
-            ? [
-                <TabPanel key="text-panel">
-                  <div className="mt-6 space-y-6">
-                    {textResponseData.map((item, idx) => (
-                      <div key={idx} className="rounded-lg border bg-gray-50 p-4">
-                        <h4 className="mb-2 flex items-center gap-2 font-semibold text-gray-900">
-                          <Badge size="xs" color="gray">
-                            {item.rowLabel}
-                          </Badge>
-                          <span className="text-gray-400">/</span>
-                          <span className="text-gray-700">{item.colLabel}</span>
-                        </h4>
-                        <ul className="max-h-60 space-y-2 overflow-y-auto rounded border border-gray-200 bg-white p-3">
-                          {item.responses.map((res, rIdx) => (
-                            <li
-                              key={rIdx}
-                              className="border-b pt-2 pb-2 text-sm text-gray-700 first:pt-0 last:border-0 last:pb-0"
-                            >
-                              {res}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ))}
-                  </div>
-                </TabPanel>,
-              ]
-            : []}
+          {textPanel}
 
           {/* 4. 순위형(ranking) 셀 집계 */}
-          {...rankingCellData.length > 0
-            ? [
-                <TabPanel key="ranking-panel">
-                  <div className="mt-6 space-y-6">
-                    {rankingCellData.map((item, idx) => (
-                      <div key={idx} className="rounded-lg border bg-gray-50 p-4">
-                        <h4 className="mb-3 flex items-center gap-2 font-semibold text-gray-900">
-                          <Badge size="xs" color="gray">
-                            {item.rowLabel}
-                          </Badge>
-                          <span className="text-gray-400">/</span>
-                          <span className="text-gray-700">{item.colLabel}</span>
-                          <span className="ml-2 text-xs text-gray-500">
-                            1~{item.positions}순위 · 최대 총점 {item.maxPossibleScore}
-                          </span>
-                        </h4>
-                        {item.distribution.length === 0 ? (
-                          <p className="text-sm text-gray-500">아직 응답이 없습니다.</p>
-                        ) : (
-                          <div className="overflow-x-auto">
-                            <table className="w-full border-collapse text-sm">
-                              <thead>
-                                <tr className="border-b border-gray-200 bg-white">
-                                  <th className="px-3 py-2 text-left font-medium text-gray-700">
-                                    옵션
-                                  </th>
-                                  <th className="px-3 py-2 text-right font-medium text-gray-700">
-                                    총점
-                                  </th>
-                                  <th className="px-3 py-2 text-right font-medium text-gray-700">
-                                    평균 순위
-                                  </th>
-                                  {Array.from({ length: item.positions }, (_, k) => (
-                                    <th
-                                      key={k}
-                                      className="px-3 py-2 text-right font-medium text-gray-700"
-                                    >
-                                      {k + 1}순위
-                                    </th>
-                                  ))}
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {item.distribution.map((d) => (
-                                  <tr
-                                    key={d.value}
-                                    className="border-b border-gray-100 hover:bg-white"
-                                  >
-                                    <td className="px-3 py-2 font-medium text-gray-900">
-                                      {d.label}
-                                    </td>
-                                    <td className="px-3 py-2 text-right font-bold text-gray-900">
-                                      {d.totalScore}
-                                    </td>
-                                    <td className="px-3 py-2 text-right text-gray-600">
-                                      {d.avgRank !== undefined ? d.avgRank.toFixed(2) : '-'}
-                                    </td>
-                                    {Array.from({ length: item.positions }, (_, k) => (
-                                      <td key={k} className="px-3 py-2 text-right text-gray-600">
-                                        {d.rankCounts?.[k] ?? 0}
-                                      </td>
-                                    ))}
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </TabPanel>,
-              ]
-            : []}
+          {rankingPanel}
         </TabPanels>
       </TabGroup>
     </Card>

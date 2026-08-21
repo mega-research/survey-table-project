@@ -5,13 +5,18 @@ import { type ReactNode, useCallback, useMemo, useState } from 'react';
 import { ChevronRight, ListChecks } from 'lucide-react';
 
 import { DynamicRowSelectorModal } from '@/features/question-renderer/dynamic-row-selector-modal';
-import { TablePreview } from '@/features/question-renderer/table-preview';
 import { MobileRowWiseOriginalSheet } from '@/features/question-renderer/mobile-row-wise-original-sheet';
+import { TablePreview } from '@/features/question-renderer/table-preview';
+import { projectConditionalTableLayout } from '@/features/question-renderer/utils/conditional-table-layout';
+import { findMobileHeaderCell } from '@/features/question-renderer/utils/mobile-display-cells';
+import { buildMobileRowWiseOriginalModel } from '@/features/question-renderer/utils/mobile-row-wise-original';
 import { useMobileView } from '@/hooks/use-media-query';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import type { Question, TableCell } from '@/types/survey';
+import { shouldDisplayDynamicGroup } from '@/utils/branch-logic';
+import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
 import {
   type GroupedChoiceAnswer,
   getGroupKeyOfCell,
@@ -19,12 +24,8 @@ import {
   isGroupedChoiceQuestion,
 } from '@/utils/choice-group-helpers';
 import { resolveChoiceOptions } from '@/utils/choice-source';
-import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
-import { projectConditionalTableLayout } from '@/features/question-renderer/utils/conditional-table-layout';
-import { findMobileHeaderCell } from '@/features/question-renderer/utils/mobile-display-cells';
 import { resolveMobileTableDisplayMode } from '@/utils/mobile-table-display-mode';
-import { buildMobileRowWiseOriginalModel } from '@/features/question-renderer/utils/mobile-row-wise-original';
-import { shouldDisplayDynamicGroup } from '@/utils/branch-logic';
+import { omitKey } from '@/utils/omit-key';
 import { recalculateRowspansForVisibleRows } from '@/utils/table-merge-helpers';
 
 import { ChoiceTableDrilldown } from './choice-table-drilldown';
@@ -124,8 +125,7 @@ export function ChoiceTableResponse({
           next = [...arr, cellId];
         }
         if (next.length === 0) {
-          const { [groupKey]: _removed, ...rest } = map;
-          onChange(rest as GroupedChoiceAnswer);
+          onChange(omitKey(map, groupKey));
         } else {
           onChange({ ...map, [groupKey]: next });
         }
@@ -135,8 +135,7 @@ export function ChoiceTableResponse({
       // radio 그룹: 같은 그룹 내에서 교체, 재클릭 시 해제(키 삭제)
       if (map[groupKey] === cellId) {
         // 재클릭 해제 — 해당 키 삭제
-        const { [groupKey]: _removed, ...rest } = map;
-        onChange(rest as GroupedChoiceAnswer);
+        onChange(omitKey(map, groupKey));
       } else {
         onChange({ ...map, [groupKey]: cellId });
       }
@@ -242,7 +241,10 @@ export function ChoiceTableResponse({
           />
           {labelText && (
             <span
-              className={cn('whitespace-pre-line text-base text-gray-800', getCellTextClassName(cell))}
+              className={cn(
+                'text-base whitespace-pre-line text-gray-800',
+                getCellTextClassName(cell),
+              )}
               style={getCellTextStyle(cell)}
             >
               {labelText}
@@ -299,14 +301,14 @@ export function ChoiceTableResponse({
             return (
               <MobileOptionCard
                 key={choiceCell.id}
-                label={(
+                label={
                   <span
                     className={getCellTextClassName(labelStyleSource)}
                     style={getCellTextStyle(labelStyleSource)}
                   >
                     {cardLabel}
                   </span>
-                )}
+                }
                 cells={row.cells}
                 selected={checked}
                 disabled={disabled}
@@ -403,10 +405,7 @@ export function ChoiceTableResponse({
           if (row.dynamicGroupId && visibleGroupIds.has(row.dynamicGroupId)) {
             return selectedSet.has(row.id);
           }
-          if (
-            row.showWhenDynamicGroupId &&
-            visibleGroupIds.has(row.showWhenDynamicGroupId)
-          ) {
+          if (row.showWhenDynamicGroupId && visibleGroupIds.has(row.showWhenDynamicGroupId)) {
             return selectedGroupIds.has(row.showWhenDynamicGroupId);
           }
           return true;
@@ -443,9 +442,7 @@ export function ChoiceTableResponse({
       resolveChoiceLabel,
       isLabelSourceHidden: (cellId) =>
         rows.some((row) =>
-          row.cells.some(
-            (cell) => cell.id === cellId && cell.mobileDisplay === 'hidden',
-          ),
+          row.cells.some((cell) => cell.id === cellId && cell.mobileDisplay === 'hidden'),
         ),
     });
     return {
@@ -520,9 +517,7 @@ export function ChoiceTableResponse({
                 ? 'checkbox'
                 : 'radio'
           }
-          renderCell={(cell, _question, inputIdScope) =>
-            renderSelectedRowCell(cell, inputIdScope)
-          }
+          renderCell={(cell, _question, inputIdScope) => renderSelectedRowCell(cell, inputIdScope)}
         />
         {counter}
         {activeDynamicGroupId ? (
@@ -536,14 +531,11 @@ export function ChoiceTableResponse({
             )}
             selectedRowIds={selectedDynamicRowIds.filter((rowId) =>
               rowWiseLayout.dynamicRows.some(
-                (row) =>
-                  row.id === rowId && row.dynamicGroupId === activeDynamicGroupId,
+                (row) => row.id === rowId && row.dynamicGroupId === activeDynamicGroupId,
               ),
             )}
             label={
-              rowWiseLayout.configs.find(
-                (config) => config.groupId === activeDynamicGroupId,
-              )?.label
+              rowWiseLayout.configs.find((config) => config.groupId === activeDynamicGroupId)?.label
             }
             onConfirm={confirmDynamicRows}
           />

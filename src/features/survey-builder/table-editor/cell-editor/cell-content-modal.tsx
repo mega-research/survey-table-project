@@ -24,11 +24,9 @@ import {
   Video,
   X,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { useShallow } from 'zustand/react/shallow';
 
-import { toast } from 'sonner';
-
-import { client } from '@/shared/lib/rpc';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -43,27 +41,51 @@ import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import type { CompleteQuestionWrite } from '@/db/schema/question-persisted-fields';
+import { CellContentLayout } from '@/features/question-renderer/cells/cell-content-layout';
+import { getYouTubeEmbedUrl } from '@/features/question-renderer/table-cell-renderers';
+import {
+  AnswerQuoteQuestionControl,
+  AnswerQuoteTextField,
+} from '@/features/survey-builder/answer-quote-fields';
+import { CellImageEditor } from '@/features/survey-builder/cell-image-editor';
+import { FormulaExprEditor } from '@/features/survey-builder/formula/formula-expr-editor';
 import { useEnsureSurveyInDb } from '@/features/survey-builder/hooks/use-ensure-survey-in-db';
 import { useSurveySync } from '@/features/survey-builder/hooks/use-survey-sync';
-import { generateId } from '@/lib/utils';
+import { NumberFormatFields } from '@/features/survey-builder/number-format-fields';
+import { OptionsLayoutSelector } from '@/features/survey-builder/options-layout-selector';
 import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
 import { useSurveyUIStore } from '@/features/survey-builder/stores/ui-store';
-import { CalcCellValidation, ChoiceGroup, HeaderCell, Question, TableCell, TableColumn, TableRow } from '@/types/survey';
-import { collectChoiceOptCells } from '@/utils/choice-source';
-import { isPartialNumericInput } from '@/utils/numeric-input';
-import { getMaxSpssCode } from '@/utils/option-code-generator';
-import { collectRankingOptCells, hasExistingOtherRankingCell } from '@/utils/ranking-source';
 import {
   type ContentType,
   GROUPABLE_CELL_TYPES,
-  MOBILE_LABEL_CELL_TYPES,
+  INPUT_TEXT_ALIGN_CELL_TYPES,
   MOBILE_DISPLAY_CELL_TYPES,
+  MOBILE_LABEL_CELL_TYPES,
   REQUIRED_CELL_TYPES,
   TEXT_POSITION_CELL_TYPES,
-  INPUT_TEXT_ALIGN_CELL_TYPES,
   buildUpdatedCell,
 } from '@/features/survey-builder/table-editor/cell-editor/utils/serialize-cell';
 import type { CellFormState } from '@/features/survey-builder/table-editor/cell-editor/utils/serialize-cell';
+import { CellStyleFields } from '@/features/survey-builder/table-editor/cell-style-fields';
+import { VariableButton } from '@/features/survey-builder/variable-button';
+import { runAsyncAction } from '@/lib/run-async-action';
+import { GATABLE_CELL_TYPES } from '@/lib/survey/cell-gating';
+import { generateId } from '@/lib/utils';
+import { client } from '@/shared/lib/rpc';
+import {
+  CalcCellValidation,
+  ChoiceGroup,
+  HeaderCell,
+  Question,
+  TableCell,
+  TableColumn,
+  TableRow,
+} from '@/types/survey';
+import { collectChoiceOptCells } from '@/utils/choice-source';
+import { isPartialNumericInput } from '@/utils/numeric-input';
+import { omitKey } from '@/utils/omit-key';
+import { getMaxSpssCode } from '@/utils/option-code-generator';
+import { collectRankingOptCells, hasExistingOtherRankingCell } from '@/utils/ranking-source';
 import { DEFAULT_REQUIRED_CELL_MESSAGE } from '@/utils/required-message';
 import {
   INTERACTIVE_CELL_TYPES,
@@ -73,23 +95,12 @@ import {
   inferSpssVarType,
 } from '@/utils/table-cell-code-generator';
 
-import { useCellForm } from './hooks/use-cell-form';
-import { AnswerQuoteQuestionControl, AnswerQuoteTextField } from '@/features/survey-builder/answer-quote-fields';
-import { GATABLE_CELL_TYPES } from '@/lib/survey/cell-gating';
-
 import { CellChoiceEditor } from './cell-choice-editor';
 import { CellGatingEditor } from './cell-gating-editor';
-import { CellImageEditor } from '@/features/survey-builder/cell-image-editor';
-import { CellStyleFields } from '@/features/survey-builder/table-editor/cell-style-fields';
-import { CellContentLayout } from '@/features/question-renderer/cells/cell-content-layout';
 import { ChoiceOptCellTab } from './choice-opt-cell-tab';
-import { FormulaExprEditor } from '@/features/survey-builder/formula/formula-expr-editor';
-import { NumberFormatFields } from '@/features/survey-builder/number-format-fields';
-import { OptionsLayoutSelector } from '@/features/survey-builder/options-layout-selector';
+import { useCellForm } from './hooks/use-cell-form';
 import { RankingCellTab } from './ranking-cell-tab';
 import { RankingOptCellTab } from './ranking-opt-cell-tab';
-import { getYouTubeEmbedUrl } from '@/features/question-renderer/table-cell-renderers';
-import { VariableButton } from '@/features/survey-builder/variable-button';
 
 const TEXT_POSITION_OPTIONS: Array<{
   value: NonNullable<TableCell['textPosition']>;
@@ -188,9 +199,7 @@ export function CellContentModal({
   const ensureSurvey = useEnsureSurveyInDb();
   // 셀 저장은 tableRowsData 를 DB 에 즉시 커밋하는 비가역 지점이다 — 옵션 value 가 바뀌었으면
   // 이 표 질문을 참조하는 표시조건 리매핑과 그 영속(설문 저장)도 같은 지점에서 끝내야 한다.
-  const remapOptionValueInConditions = useSurveyBuilderStore(
-    (s) => s.remapOptionValueInConditions,
-  );
+  const remapOptionValueInConditions = useSurveyBuilderStore((s) => s.remapOptionValueInConditions);
   const remapQuestionRefs = useSurveyBuilderStore((s) => s.remapQuestionRefs);
   const { saveSurveyScoped } = useSurveySync();
   const [isSaving, setIsSaving] = useState(false);
@@ -448,7 +457,9 @@ export function CellContentModal({
         videoUrl.trim()
       );
       if (!hasContent) {
-        toast.error('순위 옵션 소스 셀은 텍스트/라벨/이미지/비디오 중 하나 이상을 설정해야 합니다.');
+        toast.error(
+          '순위 옵션 소스 셀은 텍스트/라벨/이미지/비디오 중 하나 이상을 설정해야 합니다.',
+        );
         return;
       }
     }
@@ -464,183 +475,102 @@ export function CellContentModal({
     }
 
     setIsSaving(true);
-    try {
-      // 폼 상태를 저장될 TableCell 로 직렬화 (조건부 spread 로 optional 필드 처리).
-      const updatedCell: TableCell = buildUpdatedCell(form, cell);
+    // try/finally 는 React Compiler 가 낮추지 못해 모달 전체가 skip 됐다 — 러너에 가둔다(B-2a 선례).
+    await runAsyncAction(
+      async () => {
+        // 폼 상태를 저장될 TableCell 로 직렬화 (조건부 spread 로 optional 필드 처리).
+        const updatedCell: TableCell = buildUpdatedCell(form, cell);
 
-      // 로컬 스토어 업데이트 (셀 저장) — onChoiceGroupsChange 보다 먼저 수행해야
-      // dynamic-table-editor 의 currentRowsRef 가 이미 새 셀을 포함한 상태에서 prune 이 동작한다.
-      // 옵션 optionCode 편집으로 누적된 value 변경 쌍도 같은 커밋에 실어 게이팅을 리매핑한다.
-      onSave(
-        updatedCell,
-        pendingOptionValueChangesRef.current.length > 0
-          ? pendingOptionValueChangesRef.current
-          : undefined,
-      );
+        // 로컬 스토어 업데이트 (셀 저장) — onChoiceGroupsChange 보다 먼저 수행해야
+        // dynamic-table-editor 의 currentRowsRef 가 이미 새 셀을 포함한 상태에서 prune 이 동작한다.
+        // 옵션 optionCode 편집으로 누적된 value 변경 쌍도 같은 커밋에 실어 게이팅을 리매핑한다.
+        onSave(
+          updatedCell,
+          pendingOptionValueChangesRef.current.length > 0
+            ? pendingOptionValueChangesRef.current
+            : undefined,
+        );
 
-      // choice_opt 또는 ranking_opt 탭에서 그룹 변경이 있었으면 정리 후 부모에게 통보.
-      // prune 은 updatedCell(이 셀 반영 후)의 rowsData 기준으로 계산해야 하므로
-      // onSave(셀 반영) 다음에 호출한다.
-      // 실질적인 prune(빈 그룹 제거)은 dynamic-table-editor 의 onChoiceGroupsChange 핸들러에서 수행한다.
-      if (GROUPABLE_CELL_TYPES.has(contentType)) {
-        onChoiceGroupsChange?.(editChoiceGroups);
-      }
+        // choice_opt 또는 ranking_opt 탭에서 그룹 변경이 있었으면 정리 후 부모에게 통보.
+        // prune 은 updatedCell(이 셀 반영 후)의 rowsData 기준으로 계산해야 하므로
+        // onSave(셀 반영) 다음에 호출한다.
+        // 실질적인 prune(빈 그룹 제거)은 dynamic-table-editor 의 onChoiceGroupsChange 핸들러에서 수행한다.
+        if (GROUPABLE_CELL_TYPES.has(contentType)) {
+          onChoiceGroupsChange?.(editChoiceGroups);
+        }
 
-      // 서버에 질문 저장/업데이트
-      if (currentQuestionId && useSurveyBuilderStore.getState().currentSurvey.id) {
-        const question = questions.find((q) => q.id === currentQuestionId);
-        // 저장/prune 베이스는 에디터의 권위 있는 최신 행을 우선 사용한다.
-        // store.tableRowsData 는 구조 편집이 formData 에만 반영되어 stale 할 수 있어
-        // 그걸로 prune 하면 그룹 멤버를 놓쳐 그룹이 풀린다(getLatestRows 폴백은 store).
-        const baseRows = getLatestRows?.() ?? question?.tableRowsData;
-        if (question && baseRows) {
-          // 최신 행에서 해당 셀을 업데이트(onSave 로 이미 반영됐어도 id 기준 재적용은 idempotent)
-          const updatedRowsData = baseRows.map((row) => ({
-            ...row,
-            cells: row.cells.map((c) => (c.id === cell.id ? updatedCell : c)),
-          }));
+        // 서버에 질문 저장/업데이트
+        if (currentQuestionId && useSurveyBuilderStore.getState().currentSurvey.id) {
+          const question = questions.find((q) => q.id === currentQuestionId);
+          // 저장/prune 베이스는 에디터의 권위 있는 최신 행을 우선 사용한다.
+          // store.tableRowsData 는 구조 편집이 formData 에만 반영되어 stale 할 수 있어
+          // 그걸로 prune 하면 그룹 멤버를 놓쳐 그룹이 풀린다(getLatestRows 폴백은 store).
+          const baseRows = getLatestRows?.() ?? question?.tableRowsData;
+          if (question && baseRows) {
+            // 최신 행에서 해당 셀을 업데이트(onSave 로 이미 반영됐어도 id 기준 재적용은 idempotent)
+            const updatedRowsData = baseRows.map((row) => ({
+              ...row,
+              cells: row.cells.map((c) => (c.id === cell.id ? updatedCell : c)),
+            }));
 
-          // choice_opt 저장 시 choiceGroups 도 함께 저장한다.
-          // prune 은 updatedRowsData 기준으로 계산해 빈 그룹이 DB 에 남지 않도록 한다.
-          // 마지막 멤버 해제로 전부 비면 빈 배열을 명시 저장해야 phantom 그룹이 남지 않는다.
-          const prunedChoiceGroups = (() => {
-            if (!GROUPABLE_CELL_TYPES.has(contentType)) return undefined;
-            const memberIds = new Set(
-              [
-                ...collectChoiceOptCells(updatedRowsData),
-                ...collectRankingOptCells(updatedRowsData),
-              ]
-                .map((c) => c.choiceGroupId)
-                .filter((id): id is string => !!id),
-            );
-            const pruned = editChoiceGroups.filter((g) => memberIds.has(g.id));
-            // 원래도 그룹이 없던 질문이면 빈 배열을 굳이 쓰지 않는다 (NULL 유지)
-            if (pruned.length === 0 && (question.choiceGroups ?? []).length === 0) return undefined;
-            return pruned;
-          })();
+            // choice_opt 저장 시 choiceGroups 도 함께 저장한다.
+            // prune 은 updatedRowsData 기준으로 계산해 빈 그룹이 DB 에 남지 않도록 한다.
+            // 마지막 멤버 해제로 전부 비면 빈 배열을 명시 저장해야 phantom 그룹이 남지 않는다.
+            const prunedChoiceGroups = (() => {
+              if (!GROUPABLE_CELL_TYPES.has(contentType)) return undefined;
+              const memberIds = new Set(
+                [
+                  ...collectChoiceOptCells(updatedRowsData),
+                  ...collectRankingOptCells(updatedRowsData),
+                ]
+                  .map((c) => c.choiceGroupId)
+                  .filter((id): id is string => !!id),
+              );
+              const pruned = editChoiceGroups.filter((g) => memberIds.has(g.id));
+              // 원래도 그룹이 없던 질문이면 빈 배열을 굳이 쓰지 않는다 (NULL 유지)
+              if (pruned.length === 0 && (question.choiceGroups ?? []).length === 0)
+                return undefined;
+              return pruned;
+            })();
 
-          // 신규 판정은 dirty 추적(questionChanges.added) 기준 — 로컬 id도 randomUUID라
-          // UUID 형식 검사로는 미영속 질문을 구분할 수 없다(0행 update로 저장 실패하던 버그).
-          const isNewQuestion = !!useSurveyBuilderStore.getState().questionChanges.added[currentQuestionId];
+            // 신규 판정은 dirty 추적(questionChanges.added) 기준 — 로컬 id도 randomUUID라
+            // UUID 형식 검사로는 미영속 질문을 구분할 수 없다(0행 update로 저장 실패하던 버그).
+            const isNewQuestion =
+              !!useSurveyBuilderStore.getState().questionChanges.added[currentQuestionId];
 
-          try {
-            await ensureSurvey();
+            try {
+              await ensureSurvey();
 
-            // 리매핑 스코프 수집 — 스코프 저장(saveSurveyScoped)의 입력.
-            // create 분기에서 id 가 스왑되면 이후 리매핑은 새 id 기준이어야 한다.
-            const remapScopes: Array<{ questionIds: string[]; groupIds: string[] }> = [];
-            let effectiveQuestionId = currentQuestionId;
+              // 리매핑 스코프 수집 — 스코프 저장(saveSurveyScoped)의 입력.
+              // create 분기에서 id 가 스왑되면 이후 리매핑은 새 id 기준이어야 한다.
+              const remapScopes: Array<{ questionIds: string[]; groupIds: string[] }> = [];
+              let effectiveQuestionId = currentQuestionId;
 
-            // 행은 편집 세션의 열 구조 변경을 업고 간다 — 에디터 최신 columns/headerGrid 를
-            // 항상 짝으로 커밋해야 스토어/DB 가 혼합 상태(columns N + 셀 N+1)가 되지 않는다.
-            // getLatestColumns 미배선(구 호출부)이면 키 부재 = 미변경 규약 그대로 둔다.
-            const latestColumns = getLatestColumns?.();
-            const structurePatch = {
-              ...(latestColumns !== undefined ? { tableColumns: latestColumns } : {}),
-              // headerGrid 는 "키 부재 = 미변경, 해제는 명시적 null" 규약 — 배선된 경우에만 싣는다.
-              ...(getLatestHeaderGrid ? { tableHeaderGrid: getLatestHeaderGrid() ?? null } : {}),
-            };
+              // 행은 편집 세션의 열 구조 변경을 업고 간다 — 에디터 최신 columns/headerGrid 를
+              // 항상 짝으로 커밋해야 스토어/DB 가 혼합 상태(columns N + 셀 N+1)가 되지 않는다.
+              // getLatestColumns 미배선(구 호출부)이면 키 부재 = 미변경 규약 그대로 둔다.
+              const latestColumns = getLatestColumns?.();
+              const structurePatch = {
+                ...(latestColumns !== undefined ? { tableColumns: latestColumns } : {}),
+                // headerGrid 는 "키 부재 = 미변경, 해제는 명시적 null" 규약 — 배선된 경우에만 싣는다.
+                ...(getLatestHeaderGrid ? { tableHeaderGrid: getLatestHeaderGrid() ?? null } : {}),
+              };
 
-            if (!isNewQuestion) {
-              // 이미 DB에 저장된 질문: 업데이트
-              await client.surveyBuilder.questions.update({
-                questionId: currentQuestionId,
-                surveyId: useSurveyBuilderStore.getState().currentSurvey.id,
-                data: {
-                  tableRowsData: updatedRowsData,
-                  ...structurePatch,
-                  ...(prunedChoiceGroups !== undefined ? { choiceGroups: prunedChoiceGroups } : {}),
-                },
-              });
-              // store 도 동일 데이터로 동기화. 표시 조건/장기 계산식 picker 가
-              // store 를 직접 구독하므로 누락 시 셀 라벨 변경이 stale 로 표시됨.
-              useSurveyBuilderStore.setState((state) => ({
-                currentSurvey: {
-                  ...state.currentSurvey,
-                  questions: state.currentSurvey.questions.map((q) =>
-                    q.id === currentQuestionId
-                      ? {
-                          ...q,
-                          tableRowsData: updatedRowsData,
-                          ...structurePatch,
-                          ...(prunedChoiceGroups !== undefined ? { choiceGroups: prunedChoiceGroups } : {}),
-                        }
-                      : q,
-                  ),
-                },
-              }));
-            } else {
-              // 미영속 질문: id를 그대로 전달해 서버에서 동일 id로 생성.
-              // 가드: PERSISTED_QUESTION_FIELDS 를 모두 싣도록 satisfies 로 강제한다
-              // (question-edit-modal 의 CREATE 경로와 같은 계약). 셀 모달은 질문 폼을
-              // 소유하지 않으므로 구조 3종(열/헤더그리드/행)과 그룹만 에디터 최신값을 쓰고,
-              // 나머지 질문 필드는 스토어 질문 값을 그대로 실어 create-drop 을 막는다.
-              const createPayload = {
-                id: currentQuestionId,
-                surveyId: useSurveyBuilderStore.getState().currentSurvey.id,
-                groupId: question.groupId,
-                type: question.type,
-                title: question.title || '',
-                description: question.description,
-                required: question.required ?? false,
-                requiredMessage: question.requiredMessage ?? null,
-                order: question.order ?? 0,
-                options: question.options,
-                selectLevels: question.selectLevels,
-                tableTitle: question.tableTitle,
-                tableColumns: latestColumns ?? question.tableColumns,
-                tableRowsData: updatedRowsData,
-                // 에디터가 배선돼 있으면 최신 그리드가 권위 — 해제는 null 로 명시한다.
-                // 미배선(구 호출부)일 때만 스토어 값으로 폴백한다.
-                tableHeaderGrid: getLatestHeaderGrid
-                  ? (getLatestHeaderGrid() ?? null)
-                  : (question.tableHeaderGrid ?? null),
-                allowOtherOption: question.allowOtherOption,
-                optionsColumns: question.optionsColumns,
-                optionsAlign: question.optionsAlign,
-                mobileOptionsColumns: question.mobileOptionsColumns,
-                minSelections: question.minSelections,
-                maxSelections: question.maxSelections,
-                noticeContent: question.noticeContent,
-                requiresAcknowledgment: question.requiresAcknowledgment,
-                placeholder: question.placeholder,
-                defaultValueTemplate: question.defaultValueTemplate,
-                inputType: question.inputType,
-                emptyDefault: question.emptyDefault,
-                numberFormat: question.numberFormat,
-                piiEncrypted: question.piiEncrypted,
-                tableValidationRules: question.tableValidationRules,
-                sumConstraints: question.sumConstraints,
-                dynamicRowConfigs: question.dynamicRowConfigs,
-                hideColumnLabels: question.hideColumnLabels,
-                mobileOriginalTable: question.mobileOriginalTable,
-                mobileTableDisplayMode: question.mobileTableDisplayMode,
-                mobileDrilldownOmitLeadingColumns: question.mobileDrilldownOmitLeadingColumns,
-                mobileDrilldownRepeatHeaderStartRow: question.mobileDrilldownRepeatHeaderStartRow,
-                mobileDrilldownRepeatHeaderEndRow: question.mobileDrilldownRepeatHeaderEndRow,
-                hideTitle: question.hideTitle,
-                pageBreakBefore: question.pageBreakBefore,
-                rankingConfig: question.rankingConfig,
-                // prune 결과가 없으면(그룹 대상 셀이 아니거나 원래 그룹이 없던 질문)
-                // 스토어 값을 그대로 유지한다 — 무관한 셀 저장이 그룹을 지우면 안 된다.
-                choiceGroups: prunedChoiceGroups ?? question.choiceGroups,
-                displayCondition: question.displayCondition,
-                questionCode: question.questionCode,
-                isCustomSpssVarName: question.isCustomSpssVarName,
-                exportLabel: question.exportLabel,
-                spssVarType: question.spssVarType,
-                spssMeasure: question.spssMeasure,
-                exportCellOrder: question.exportCellOrder,
-                answerQuoteEnabled: question.answerQuoteEnabled,
-                answerQuoteName: question.answerQuoteName,
-                answerQuoteText: question.answerQuoteText,
-              } satisfies CompleteQuestionWrite;
-              const createdQuestion = await client.surveyBuilder.questions.create(createPayload);
-
-              if (createdQuestion?.id) {
-                // UPDATE 분기와 동일하게 store 도 방금 커밋한 구조로 동기화한다 —
-                // 빠뜨리면 질문 모달 취소 후 재진입 시 DB(신 구조)와 store(구 구조)가
-                // 갈라져 stale 구조가 표시되고 이후 질문 저장이 DB 변경을 되덮는다.
+              if (!isNewQuestion) {
+                // 이미 DB에 저장된 질문: 업데이트
+                await client.surveyBuilder.questions.update({
+                  questionId: currentQuestionId,
+                  surveyId: useSurveyBuilderStore.getState().currentSurvey.id,
+                  data: {
+                    tableRowsData: updatedRowsData,
+                    ...structurePatch,
+                    ...(prunedChoiceGroups !== undefined
+                      ? { choiceGroups: prunedChoiceGroups }
+                      : {}),
+                  },
+                });
+                // store 도 동일 데이터로 동기화. 표시 조건/장기 계산식 picker 가
+                // store 를 직접 구독하므로 누락 시 셀 라벨 변경이 stale 로 표시됨.
                 useSurveyBuilderStore.setState((state) => ({
                   currentSurvey: {
                     ...state.currentSurvey,
@@ -658,115 +588,213 @@ export function CellContentModal({
                     ),
                   },
                 }));
-                // DB에 생성 완료 → added에서 제거 (다음 모달 저장 시 UPDATE 경로 사용)
-                const { [currentQuestionId]: _, ...remainingAdded } =
-                  useSurveyBuilderStore.getState().questionChanges.added;
-                useSurveyBuilderStore.setState((state) => ({
-                  questionChanges: { ...state.questionChanges, added: remainingAdded },
-                }));
-              }
-              // id를 넘겼으므로 반환 id가 다를 경우에만 스토어 id 갱신
-              if (createdQuestion?.id && createdQuestion.id !== currentQuestionId) {
-                const newId = createdQuestion.id;
-                useSurveyBuilderStore.setState((state) => ({
-                  currentSurvey: {
-                    ...state.currentSurvey,
-                    questions: state.currentSurvey.questions.map((q) =>
-                      q.id === currentQuestionId ? { ...q, id: newId } : q,
-                    ),
-                  },
-                }));
-                // 스왑 직후 이 질문을 참조하는 조건(sourceQuestionId·expression 피연산자·
-                // branchRule goto 대상)도 새 id 로 갱신 — 안 하면 참조가 temp id 로 끊긴다
-                effectiveQuestionId = newId;
-                remapScopes.push(remapQuestionRefs(currentQuestionId, newId));
-              }
-            }
+              } else {
+                // 미영속 질문: id를 그대로 전달해 서버에서 동일 id로 생성.
+                // 가드: PERSISTED_QUESTION_FIELDS 를 모두 싣도록 satisfies 로 강제한다
+                // (question-edit-modal 의 CREATE 경로와 같은 계약). 셀 모달은 질문 폼을
+                // 소유하지 않으므로 구조 3종(열/헤더그리드/행)과 그룹만 에디터 최신값을 쓰고,
+                // 나머지 질문 필드는 스토어 질문 값을 그대로 실어 create-drop 을 막는다.
+                const createPayload = {
+                  id: currentQuestionId,
+                  surveyId: useSurveyBuilderStore.getState().currentSurvey.id,
+                  groupId: question.groupId,
+                  type: question.type,
+                  title: question.title || '',
+                  description: question.description,
+                  required: question.required ?? false,
+                  requiredMessage: question.requiredMessage ?? null,
+                  order: question.order ?? 0,
+                  options: question.options,
+                  selectLevels: question.selectLevels,
+                  tableTitle: question.tableTitle,
+                  tableColumns: latestColumns ?? question.tableColumns,
+                  tableRowsData: updatedRowsData,
+                  // 에디터가 배선돼 있으면 최신 그리드가 권위 — 해제는 null 로 명시한다.
+                  // 미배선(구 호출부)일 때만 스토어 값으로 폴백한다.
+                  tableHeaderGrid: getLatestHeaderGrid
+                    ? (getLatestHeaderGrid() ?? null)
+                    : (question.tableHeaderGrid ?? null),
+                  allowOtherOption: question.allowOtherOption,
+                  optionsColumns: question.optionsColumns,
+                  optionsAlign: question.optionsAlign,
+                  mobileOptionsColumns: question.mobileOptionsColumns,
+                  minSelections: question.minSelections,
+                  maxSelections: question.maxSelections,
+                  noticeContent: question.noticeContent,
+                  requiresAcknowledgment: question.requiresAcknowledgment,
+                  placeholder: question.placeholder,
+                  defaultValueTemplate: question.defaultValueTemplate,
+                  inputType: question.inputType,
+                  emptyDefault: question.emptyDefault,
+                  numberFormat: question.numberFormat,
+                  piiEncrypted: question.piiEncrypted,
+                  tableValidationRules: question.tableValidationRules,
+                  sumConstraints: question.sumConstraints,
+                  dynamicRowConfigs: question.dynamicRowConfigs,
+                  hideColumnLabels: question.hideColumnLabels,
+                  mobileOriginalTable: question.mobileOriginalTable,
+                  mobileTableDisplayMode: question.mobileTableDisplayMode,
+                  mobileDrilldownOmitLeadingColumns: question.mobileDrilldownOmitLeadingColumns,
+                  mobileDrilldownRepeatHeaderStartRow: question.mobileDrilldownRepeatHeaderStartRow,
+                  mobileDrilldownRepeatHeaderEndRow: question.mobileDrilldownRepeatHeaderEndRow,
+                  hideTitle: question.hideTitle,
+                  pageBreakBefore: question.pageBreakBefore,
+                  rankingConfig: question.rankingConfig,
+                  // prune 결과가 없으면(그룹 대상 셀이 아니거나 원래 그룹이 없던 질문)
+                  // 스토어 값을 그대로 유지한다 — 무관한 셀 저장이 그룹을 지우면 안 된다.
+                  choiceGroups: prunedChoiceGroups ?? question.choiceGroups,
+                  displayCondition: question.displayCondition,
+                  questionCode: question.questionCode,
+                  isCustomSpssVarName: question.isCustomSpssVarName,
+                  exportLabel: question.exportLabel,
+                  spssVarType: question.spssVarType,
+                  spssMeasure: question.spssMeasure,
+                  exportCellOrder: question.exportCellOrder,
+                  answerQuoteEnabled: question.answerQuoteEnabled,
+                  answerQuoteName: question.answerQuoteName,
+                  answerQuoteText: question.answerQuoteText,
+                } satisfies CompleteQuestionWrite;
+                const createdQuestion = await client.surveyBuilder.questions.create(createPayload);
 
-            // 새 옵션 value 가 DB 에 커밋된 직후 — 이 표 질문을 sourceQuestionId 로 참조하는
-            // 다른 질문/그룹/행/열의 표시조건(table-cell-check expectedValues 는 셀 옵션 value
-            // 공간)을 같은 지점에서 리매핑하고 영속시킨다. 질문 편집 모달의 저장까지 미루면
-            // "셀 저장 후 질문 모달 취소" 경로에서 DB 에 신 value + 구 조건이 영구 잔류한다
-            // (질문 모달의 취소 롤백은 tableRowsData 를 되돌리지 않는다).
-            // 같은 표의 게이팅(enabledWhen)은 onSave→updateCell 이 이미 같은 커밋에 실었다.
-            // 조건 참조는 위에서 이미 새 id 로 스왑됐을 수 있으므로 effectiveQuestionId 기준.
-            if (pendingOptionValueChangesRef.current.length > 0) {
-              // 같은 표의 다른 셀이 같은 옵션 value(자동 발번 option-N)를 쓰는 것이 일상이므로,
-              // 이 셀의 행·열 좌표와 cellId 로 스코프를 좁혀 그 셀을 실제로 참조하는 조건만
-              // 리매핑한다 (무관 셀을 겨냥한 조건의 expectedValues 오염 방지).
-              const cellRow = updatedRowsData.find((row) => row.cells.some((c) => c.id === cell.id));
-              const cellScope = cellRow
-                ? {
-                    rowId: cellRow.id,
-                    columnIndex: cellRow.cells.findIndex((c) => c.id === cell.id),
-                    cellId: cell.id,
-                  }
-                : undefined;
-              for (const change of pendingOptionValueChangesRef.current) {
-                remapScopes.push(
-                  remapOptionValueInConditions(
-                    effectiveQuestionId,
-                    change.oldValue,
-                    change.newValue,
-                    cellScope,
-                  ),
+                if (createdQuestion?.id) {
+                  // UPDATE 분기와 동일하게 store 도 방금 커밋한 구조로 동기화한다 —
+                  // 빠뜨리면 질문 모달 취소 후 재진입 시 DB(신 구조)와 store(구 구조)가
+                  // 갈라져 stale 구조가 표시되고 이후 질문 저장이 DB 변경을 되덮는다.
+                  useSurveyBuilderStore.setState((state) => ({
+                    currentSurvey: {
+                      ...state.currentSurvey,
+                      questions: state.currentSurvey.questions.map((q) =>
+                        q.id === currentQuestionId
+                          ? {
+                              ...q,
+                              tableRowsData: updatedRowsData,
+                              ...structurePatch,
+                              ...(prunedChoiceGroups !== undefined
+                                ? { choiceGroups: prunedChoiceGroups }
+                                : {}),
+                            }
+                          : q,
+                      ),
+                    },
+                  }));
+                  // DB에 생성 완료 → added에서 제거 (다음 모달 저장 시 UPDATE 경로 사용)
+                  const remainingAdded = omitKey(
+                    useSurveyBuilderStore.getState().questionChanges.added,
+                    currentQuestionId,
+                  );
+                  useSurveyBuilderStore.setState((state) => ({
+                    questionChanges: { ...state.questionChanges, added: remainingAdded },
+                  }));
+                }
+                // id를 넘겼으므로 반환 id가 다를 경우에만 스토어 id 갱신
+                if (createdQuestion?.id && createdQuestion.id !== currentQuestionId) {
+                  const newId = createdQuestion.id;
+                  useSurveyBuilderStore.setState((state) => ({
+                    currentSurvey: {
+                      ...state.currentSurvey,
+                      questions: state.currentSurvey.questions.map((q) =>
+                        q.id === currentQuestionId ? { ...q, id: newId } : q,
+                      ),
+                    },
+                  }));
+                  // 스왑 직후 이 질문을 참조하는 조건(sourceQuestionId·expression 피연산자·
+                  // branchRule goto 대상)도 새 id 로 갱신 — 안 하면 참조가 temp id 로 끊긴다
+                  effectiveQuestionId = newId;
+                  remapScopes.push(remapQuestionRefs(currentQuestionId, newId));
+                }
+              }
+
+              // 새 옵션 value 가 DB 에 커밋된 직후 — 이 표 질문을 sourceQuestionId 로 참조하는
+              // 다른 질문/그룹/행/열의 표시조건(table-cell-check expectedValues 는 셀 옵션 value
+              // 공간)을 같은 지점에서 리매핑하고 영속시킨다. 질문 편집 모달의 저장까지 미루면
+              // "셀 저장 후 질문 모달 취소" 경로에서 DB 에 신 value + 구 조건이 영구 잔류한다
+              // (질문 모달의 취소 롤백은 tableRowsData 를 되돌리지 않는다).
+              // 같은 표의 게이팅(enabledWhen)은 onSave→updateCell 이 이미 같은 커밋에 실었다.
+              // 조건 참조는 위에서 이미 새 id 로 스왑됐을 수 있으므로 effectiveQuestionId 기준.
+              if (pendingOptionValueChangesRef.current.length > 0) {
+                // 같은 표의 다른 셀이 같은 옵션 value(자동 발번 option-N)를 쓰는 것이 일상이므로,
+                // 이 셀의 행·열 좌표와 cellId 로 스코프를 좁혀 그 셀을 실제로 참조하는 조건만
+                // 리매핑한다 (무관 셀을 겨냥한 조건의 expectedValues 오염 방지).
+                const cellRow = updatedRowsData.find((row) =>
+                  row.cells.some((c) => c.id === cell.id),
                 );
-              }
-              pendingOptionValueChangesRef.current = [];
-            }
-
-            // 리매핑이 실제 변경을 만들었으면 그 범위만 영속 — 빌더에 대기 중인 무관한
-            // pending(질문 추가/삭제, 그룹 삭제 등)은 건드리지 않는다. 질문은 스코프 저장,
-            // 그룹 조건은 그룹 전용 RPC 로 개별 영속한다 (전역 메타데이터 저장에 실으면
-            // 미저장 제목 변경·그룹 삭제까지 동반 커밋된다).
-            const remapQuestionIds = [...new Set(remapScopes.flatMap((s) => s.questionIds))];
-            const remapGroupIds = [...new Set(remapScopes.flatMap((s) => s.groupIds))];
-            if (remapQuestionIds.length > 0 || remapGroupIds.length > 0) {
-              try {
-                if (remapGroupIds.length > 0) {
-                  const { currentSurvey } = useSurveyBuilderStore.getState();
-                  await Promise.all(
-                    remapGroupIds.map((groupId) => {
-                      const group = currentSurvey.groups?.find((g) => g.id === groupId);
-                      if (!group?.displayCondition) return null;
-                      return client.surveyBuilder.groups.update({
-                        groupId,
-                        surveyId: currentSurvey.id,
-                        data: { displayCondition: group.displayCondition },
-                      });
-                    }),
+                const cellScope = cellRow
+                  ? {
+                      rowId: cellRow.id,
+                      columnIndex: cellRow.cells.findIndex((c) => c.id === cell.id),
+                      cellId: cell.id,
+                    }
+                  : undefined;
+                for (const change of pendingOptionValueChangesRef.current) {
+                  remapScopes.push(
+                    remapOptionValueInConditions(
+                      effectiveQuestionId,
+                      change.oldValue,
+                      change.newValue,
+                      cellScope,
+                    ),
                   );
                 }
-                if (remapQuestionIds.length > 0) {
-                  await saveSurveyScoped({ questionIds: remapQuestionIds });
-                } else {
-                  // 그룹만 변경: RPC 영속이 끝났으므로 남은 변경 기준으로 dirty 재계산
-                  useSurveyBuilderStore.getState().markSavedSnapshotClean();
-                }
-              } catch (saveError) {
-                if (remapGroupIds.length > 0) {
-                  // 그룹 RPC 실패 폴백 — 수동 저장(메타데이터 전체)으로 복구 가능하게 한다
-                  useSurveyBuilderStore.setState({ isMetadataDirty: true, isDirty: true });
-                }
-                console.error('표시조건 리매핑 반영을 위한 설문 저장 실패:', saveError);
-                toast.error(
-                  '조건 리매핑 저장에 실패했습니다. 설문 저장 버튼으로 다시 저장해 주세요.',
-                );
+                pendingOptionValueChangesRef.current = [];
               }
+
+              // 리매핑이 실제 변경을 만들었으면 그 범위만 영속 — 빌더에 대기 중인 무관한
+              // pending(질문 추가/삭제, 그룹 삭제 등)은 건드리지 않는다. 질문은 스코프 저장,
+              // 그룹 조건은 그룹 전용 RPC 로 개별 영속한다 (전역 메타데이터 저장에 실으면
+              // 미저장 제목 변경·그룹 삭제까지 동반 커밋된다).
+              const remapQuestionIds = [...new Set(remapScopes.flatMap((s) => s.questionIds))];
+              const remapGroupIds = [...new Set(remapScopes.flatMap((s) => s.groupIds))];
+              if (remapQuestionIds.length > 0 || remapGroupIds.length > 0) {
+                try {
+                  if (remapGroupIds.length > 0) {
+                    const { currentSurvey } = useSurveyBuilderStore.getState();
+                    await Promise.all(
+                      remapGroupIds.map((groupId) => {
+                        const group = currentSurvey.groups?.find((g) => g.id === groupId);
+                        if (!group?.displayCondition) return null;
+                        return client.surveyBuilder.groups.update({
+                          groupId,
+                          surveyId: currentSurvey.id,
+                          data: { displayCondition: group.displayCondition },
+                        });
+                      }),
+                    );
+                  }
+                  if (remapQuestionIds.length > 0) {
+                    await saveSurveyScoped({ questionIds: remapQuestionIds });
+                  } else {
+                    // 그룹만 변경: RPC 영속이 끝났으므로 남은 변경 기준으로 dirty 재계산
+                    useSurveyBuilderStore.getState().markSavedSnapshotClean();
+                  }
+                } catch (saveError) {
+                  if (remapGroupIds.length > 0) {
+                    // 그룹 RPC 실패 폴백 — 수동 저장(메타데이터 전체)으로 복구 가능하게 한다
+                    useSurveyBuilderStore.setState({ isMetadataDirty: true, isDirty: true });
+                  }
+                  console.error('표시조건 리매핑 반영을 위한 설문 저장 실패:', saveError);
+                  toast.error(
+                    '조건 리매핑 저장에 실패했습니다. 설문 저장 버튼으로 다시 저장해 주세요.',
+                  );
+                }
+              }
+            } catch (error) {
+              console.error('질문 저장/업데이트 실패:', error);
             }
-          } catch (error) {
-            console.error('질문 저장/업데이트 실패:', error);
           }
         }
-      }
-    } catch (error) {
-      console.error('셀 저장 실패:', error);
-    } finally {
-      if (mountedRef.current) {
-        setIsSaving(false);
-        onClose();
-      }
-    }
+      },
+      {
+        onError: (error) => {
+          console.error('셀 저장 실패:', error);
+        },
+        onSettled: () => {
+          if (mountedRef.current) {
+            setIsSaving(false);
+            onClose();
+          }
+        },
+      },
+    );
   };
 
   const handleCancel = () => {
@@ -1046,7 +1074,9 @@ export function CellContentModal({
             }
           }}
         >
-          <TabsList className={`grid w-full ${showRankingOptTab ? 'grid-cols-11' : 'grid-cols-10'}`}>
+          <TabsList
+            className={`grid w-full ${showRankingOptTab ? 'grid-cols-11' : 'grid-cols-10'}`}
+          >
             <TabsTrigger value="text" className="flex items-center gap-2">
               <Type className="h-4 w-4" />
               텍스트
@@ -1392,7 +1422,11 @@ export function CellContentModal({
             <div className="space-y-2">
               <Label className="text-sm font-medium">미리보기</Label>
               <div className="rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 p-4">
-                <CellContentLayout content={textContent} position={textPosition} textColor={textColor}>
+                <CellContentLayout
+                  content={textContent}
+                  position={textPosition}
+                  textColor={textColor}
+                >
                   <div className="space-y-2">
                     <Input
                       placeholder={inputPlaceholder || '답변을 입력하세요...'}
@@ -1614,7 +1648,11 @@ export function CellContentModal({
               ownQuestion={ownQuestion}
               allQuestions={questions}
             />
-            <NumberFormatFields idPrefix="calc-nf" value={cellNumberFormat} onChange={setCellNumberFormat} />
+            <NumberFormatFields
+              idPrefix="calc-nf"
+              value={cellNumberFormat}
+              onChange={setCellNumberFormat}
+            />
 
             <div className="space-y-3 rounded border p-3">
               <label className="flex items-center gap-2 text-sm">
@@ -1685,55 +1723,55 @@ export function CellContentModal({
             양립 불가라 설정 금지(섹션 숨김, 스펙 5절) */}
         {GATABLE_CELL_TYPES.has(contentType) &&
           !(contentType === 'input' && inputDefaultValueTemplate.trim().length > 0) && (
-          <CellGatingEditor
-            cellId={cell.id}
-            rowCells={gatingRowCells}
-            condition={gatingCondition}
-            requiredWhenEnabled={gatingRequiredWhenEnabled}
-            onConditionChange={(cond) => {
-              // 게이팅 최초 활성화 시 기존 필수 체크를 "활성화되면 필수"로 수렴
-              // (필수 체크박스가 숨겨지며 의도가 사라지지 않도록, 스펙 5절)
-              if (cond && !gatingCondition && cellRequired) {
-                setGatingRequiredWhenEnabled(true);
-              }
-              setGatingCondition(cond);
-            }}
-            onRequiredWhenEnabledChange={setGatingRequiredWhenEnabled}
-          />
-        )}
+            <CellGatingEditor
+              cellId={cell.id}
+              rowCells={gatingRowCells}
+              condition={gatingCondition}
+              requiredWhenEnabled={gatingRequiredWhenEnabled}
+              onConditionChange={(cond) => {
+                // 게이팅 최초 활성화 시 기존 필수 체크를 "활성화되면 필수"로 수렴
+                // (필수 체크박스가 숨겨지며 의도가 사라지지 않도록, 스펙 5절)
+                if (cond && !gatingCondition && cellRequired) {
+                  setGatingRequiredWhenEnabled(true);
+                }
+                setGatingCondition(cond);
+              }}
+              onRequiredWhenEnabledChange={setGatingRequiredWhenEnabled}
+            />
+          )}
 
         {/* 필수 응답 셀 — 인터랙티브 셀 공용 (input/radio/checkbox/select/ranking).
             게이팅이 켜진 셀은 "활성화되면 필수"로 수렴하므로 이 체크박스를 숨긴다 */}
         {REQUIRED_CELL_TYPES.has(contentType) &&
           !(GATABLE_CELL_TYPES.has(contentType) && gatingCondition) && (
-          <div className="mt-6 border-t border-gray-200 pt-6">
-            <div className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                id="cell-required"
-                checked={cellRequired}
-                onChange={(e) => setCellRequired(e.target.checked)}
-                className="h-4 w-4"
-              />
-              <label htmlFor="cell-required" className="cursor-pointer shrink-0">
-                필수 응답 셀
-              </label>
-              {cellRequired ? (
-                <Input
-                  id="cell-required-message"
-                  value={cellRequiredMessage}
-                  onChange={(e) => setCellRequiredMessage(e.target.value)}
-                  placeholder={DEFAULT_REQUIRED_CELL_MESSAGE}
-                  className="ml-2 h-8 flex-1 text-sm"
+            <div className="mt-6 border-t border-gray-200 pt-6">
+              <div className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  id="cell-required"
+                  checked={cellRequired}
+                  onChange={(e) => setCellRequired(e.target.checked)}
+                  className="h-4 w-4"
                 />
-              ) : (
-                <span className="text-xs text-gray-400">
-                  지정 셀이 응답되어야 다음으로 진행됩니다
-                </span>
-              )}
+                <label htmlFor="cell-required" className="shrink-0 cursor-pointer">
+                  필수 응답 셀
+                </label>
+                {cellRequired ? (
+                  <Input
+                    id="cell-required-message"
+                    value={cellRequiredMessage}
+                    onChange={(e) => setCellRequiredMessage(e.target.value)}
+                    placeholder={DEFAULT_REQUIRED_CELL_MESSAGE}
+                    className="ml-2 h-8 flex-1 text-sm"
+                  />
+                ) : (
+                  <span className="text-xs text-gray-400">
+                    지정 셀이 응답되어야 다음으로 진행됩니다
+                  </span>
+                )}
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
         {/* 셀 병합 설정 */}
         <div className="mt-6 border-t border-gray-200 pt-6">
@@ -1923,8 +1961,8 @@ export function CellContentModal({
                   className="w-full"
                 />
                 <p className="text-xs text-gray-500">
-                  모바일 카드에서 입력칸 위에 표시되는 제목입니다. 비워두면 엑셀 라벨, 그것도
-                  없으면 열 제목이 사용됩니다.
+                  모바일 카드에서 입력칸 위에 표시되는 제목입니다. 비워두면 엑셀 라벨, 그것도 없으면
+                  열 제목이 사용됩니다.
                 </p>
               </div>
             )}
@@ -2040,7 +2078,7 @@ export function CellContentModal({
                       : verticalAlign === 'middle'
                         ? 'items-center'
                         : 'items-end'
-                  }${textBold ? ' font-bold' : ''}`}
+                  }${textBold ? 'font-bold' : ''}`}
                   style={{
                     ...(backgroundColor ? { backgroundColor } : {}),
                     ...(textColor ? { color: textColor } : {}),

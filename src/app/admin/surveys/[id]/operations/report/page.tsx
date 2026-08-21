@@ -1,29 +1,26 @@
 import type { Metadata } from 'next';
 
-import { sql } from 'drizzle-orm';
-
 import { ProgressEmptyCard } from '@/features/operations/report/progress-empty-card';
 import { ProgressFilterBar } from '@/features/operations/report/progress-filter-bar';
 import {
-  ProgressGroupByTabs,
   type GroupByOption,
+  ProgressGroupByTabs,
 } from '@/features/operations/report/progress-group-by-tabs';
 import { ProgressTable } from '@/features/operations/report/progress-table';
-import { db } from '@/db';
-import { contactTargets } from '@/db/schema';
+import { resolveGroupCriteria } from '@/lib/contacts/group-levels';
 import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts';
 import { getContactColumnScheme } from '@/lib/operations/contacts.server';
+import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
+import { type ColumnCandidateWithPii, FILTER_SOURCE } from '@/lib/operations/filter-shared';
+import { parseConditionFromUrl } from '@/lib/operations/progress-filters.server';
 import type { ProgressSortKey, SortDir } from '@/lib/operations/report-progress';
 import {
+  countContactTargets,
   getProgressColumnScheme,
   getProgressGroupLabel,
   getProgressRows,
   getProgressTotals,
 } from '@/lib/operations/report-progress.server';
-import { resolveGroupCriteria } from '@/lib/contacts/group-levels';
-import { parseConditionFromUrl } from '@/lib/operations/progress-filters.server';
-import { FILTER_SOURCE, type ColumnCandidateWithPii } from '@/lib/operations/filter-shared';
-import { getOperationsDataScope, targetScopeCondition } from '@/lib/operations/data-scope.server';
 
 export const dynamic = 'force-dynamic';
 
@@ -94,18 +91,17 @@ export default async function ReportProgressPage({ params, searchParams }: PageP
     getProgressGroupLabel(surveyId, scope),
     getContactColumnScheme(surveyId, scope),
   ]);
-  const visibleColumns = scheme.columns
-    .filter((c) => !c.hidden)
-    .sort((a, b) => a.order - b.order);
+  const visibleColumns = scheme.columns.filter((c) => !c.hidden).sort((a, b) => a.order - b.order);
   // metaKeys 에서 빈 문자열 방어 — `attrs->>''` 는 SQL legal 이지만 의미 없음.
   const metaKeys = visibleColumns.map((c) => c.key).filter((k) => k.length > 0);
 
   // 후보: system.resid + attrs.* + pii.* 만. 그 외 system.* 은 이번 슬라이스 제외.
   const columnCandidates: ColumnCandidateWithPii[] = (contactScheme?.columns ?? [])
-    .filter((c) =>
-      c.source === FILTER_SOURCE.RESID ||
-      c.source.startsWith(FILTER_SOURCE.ATTRS_PREFIX) ||
-      c.source.startsWith(FILTER_SOURCE.PII_PREFIX),
+    .filter(
+      (c) =>
+        c.source === FILTER_SOURCE.RESID ||
+        c.source.startsWith(FILTER_SOURCE.ATTRS_PREFIX) ||
+        c.source.startsWith(FILTER_SOURCE.PII_PREFIX),
     )
     .map((c) => ({
       source: c.source,
@@ -156,11 +152,7 @@ export default async function ReportProgressPage({ params, searchParams }: PageP
     RESID_DEFAULT_LABEL;
 
   // 조사 대상 0건 빠른 검출 — getProgressTotals 보다 훨씬 가벼움.
-  const countRows = await db
-    .select({ ct: sql<number>`count(*)::int` })
-    .from(contactTargets)
-    .where(sql`${contactTargets.surveyId} = ${surveyId} AND ${targetScopeCondition(scope)}`);
-  const isEmpty = Number(countRows[0]?.ct ?? 0) === 0;
+  const isEmpty = (await countContactTargets(surveyId, scope)) === 0;
 
   const { rows, totals } = isEmpty
     ? { rows: [], totals: { groupCount: 0, listTotal: 0, completedTotal: 0, excludedTotal: 0 } }

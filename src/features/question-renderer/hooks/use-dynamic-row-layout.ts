@@ -113,9 +113,7 @@ export function useDynamicRowLayout({
         const spanEnd = rowIdx + span;
 
         // 이 병합 범위와 겹치는 앵커 찾기
-        const intersecting = anchorIndices.filter(
-          (ai) => ai >= rowIdx && ai < spanEnd - 1,
-        );
+        const intersecting = anchorIndices.filter((ai) => ai >= rowIdx && ai < spanEnd - 1);
         if (intersecting.length === 0) continue;
 
         // 첫 번째 세그먼트: 원래 시작 ~ 첫 앵커까지
@@ -143,7 +141,9 @@ export function useDynamicRowLayout({
             type: isInteractive ? 'text' : cell.type,
             content: isInteractive ? '' : cell.content,
             ...(cell.colspan !== undefined ? { colspan: cell.colspan } : {}),
-            ...(cell.horizontalAlign !== undefined ? { horizontalAlign: cell.horizontalAlign } : {}),
+            ...(cell.horizontalAlign !== undefined
+              ? { horizontalAlign: cell.horizontalAlign }
+              : {}),
             ...(cell.verticalAlign !== undefined ? { verticalAlign: cell.verticalAlign } : {}),
             ...(segSpan > 1 ? { rowspan: segSpan } : {}),
             _isContinuation: true,
@@ -172,8 +172,8 @@ export function useDynamicRowLayout({
   const groupSelectedCountMap = useMemo(() => {
     const map = new Map<string, number>();
     for (const [groupId] of groupConfigMap) {
-      const count = selectedRowIds.filter((id) =>
-        rows.find((r) => r.id === id)?.dynamicGroupId === groupId,
+      const count = selectedRowIds.filter(
+        (id) => rows.find((r) => r.id === id)?.dynamicGroupId === groupId,
       ).length;
       map.set(groupId, count);
     }
@@ -226,12 +226,12 @@ export function useDynamicRowLayout({
       if (anchorId !== null) continue;
       if (!isGroupVisible(groupId)) continue;
       selMap.set(groupId, gridRow);
-      gridRow++;
+      gridRow += 1;
       if (expandedGroupIds.has(groupId)) {
         const groupRows = expandedGroupRows.get(groupId) ?? [];
         for (const gr of groupRows) {
           rowMap.set(gr.id, gridRow);
-          gridRow++;
+          gridRow += 1;
         }
       }
     }
@@ -239,24 +239,31 @@ export function useDynamicRowLayout({
     // Phase 2: 데이터행 + 일반 앵커 셀렉터
     for (const row of displayRows) {
       rowMap.set(row.id, gridRow);
-      gridRow++;
+      gridRow += 1;
 
       for (const [groupId, anchorId] of selectorAnchors) {
         if (anchorId !== row.id) continue;
         if (!isGroupVisible(groupId)) continue;
         selMap.set(groupId, gridRow);
-        gridRow++;
+        gridRow += 1;
         if (expandedGroupIds.has(groupId)) {
           const groupRows = expandedGroupRows.get(groupId) ?? [];
           for (const gr of groupRows) {
             rowMap.set(gr.id, gridRow);
-            gridRow++;
+            gridRow += 1;
           }
         }
       }
     }
     return { rowGridMap: rowMap, selectorGridMap: selMap };
-  }, [displayRows, selectorAnchors, headerRowCount, expandedGroupIds, expandedGroupRows, hiddenGroupIds]);
+  }, [
+    displayRows,
+    selectorAnchors,
+    headerRowCount,
+    expandedGroupIds,
+    expandedGroupRows,
+    hiddenGroupIds,
+  ]);
 
   return {
     displayRows,

@@ -2,7 +2,7 @@
  * 테이블 렌더링 성능 측정 훅 (개발 전용)
  * Before/After 비교를 위한 정량 지표 수집
  */
-import { useCallback, useEffect, useLayoutEffect, useRef, type RefObject } from 'react';
+import { type RefObject, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 
 interface PerfMetrics {
   label: string;
@@ -12,6 +12,9 @@ interface PerfMetrics {
   domNodes: number | null;
   timestamp: number;
 }
+
+// 기본 인자에 비교식을 두면 React Compiler 가 재배치 불가 표현식으로 보고 훅 전체를 건너뛴다 — 모듈 상수로.
+const IS_DEV = process.env.NODE_ENV === 'development';
 
 export interface TablePerfOptions {
   /**
@@ -35,7 +38,7 @@ const perfLog: PerfMetrics[] = [];
  * 실제로 이 때문에 "표가 세션 후반에 10배 느려졌다" 는 오진이 나왔다(2026-08-04).
  */
 export function useTablePerf(label: string, options: TablePerfOptions = {}): void {
-  const { containerRef, enabled = process.env.NODE_ENV === 'development' } = options;
+  const { containerRef, enabled = IS_DEV } = options;
 
   // 렌더 시작 시각은 렌더 중에 읽을 수밖에 없다. 측정 전용이라 렌더 결과에 영향을 주지 않는다.
   // eslint-disable-next-line react-hooks/purity
@@ -62,8 +65,8 @@ export function useTablePerf(label: string, options: TablePerfOptions = {}): voi
     perfLog.push(metrics);
 
     console.log(
-      `[TablePerf] ${label}: ${metrics.renderTime}ms (렌더+커밋)`
-        + (domNodes === null ? '' : ` | DOM nodes: ${domNodes}`),
+      `[TablePerf] ${label}: ${metrics.renderTime}ms (렌더+커밋)` +
+        (domNodes === null ? '' : ` | DOM nodes: ${domNodes}`),
     );
   });
 }
@@ -71,10 +74,7 @@ export function useTablePerf(label: string, options: TablePerfOptions = {}): voi
 /**
  * 스크롤 FPS 측정
  */
-export function useScrollFps(
-  scrollRef: React.RefObject<HTMLElement | null>,
-  enabled = process.env.NODE_ENV === 'development',
-) {
+export function useScrollFps(scrollRef: React.RefObject<HTMLElement | null>, enabled = IS_DEV) {
   const frameTimestamps = useRef<number[]>([]);
   const rafId = useRef<number>(0);
   const isScrolling = useRef(false);

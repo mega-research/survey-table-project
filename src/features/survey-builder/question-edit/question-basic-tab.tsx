@@ -17,55 +17,46 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import {
-  GripVertical,
-  Image as ImageIcon,
-  Plus,
-  Settings,
-  Table,
-  Video,
-  X,
-} from 'lucide-react';
+import { GripVertical, Image as ImageIcon, Plus, Settings, Table, Video, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { getGroupTypeOfCell } from '@/utils/choice-group-helpers';
-import { isPartialNumericInput, parseNumericInput } from '@/utils/numeric-input';
 import { Label } from '@/components/ui/label';
+import { RichTextEditor, type RichTextEditorHandle } from '@/components/ui/rich-text-editor';
 import { Switch } from '@/components/ui/switch';
-import { cn, generateId } from '@/lib/utils';
-import { commitOptionCode, generateOptionCode } from '@/utils/option-code-generator';
-import { DEFAULT_REQUIRED_MESSAGE } from '@/utils/required-message';
-import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
-import { useSurveyUIStore } from '@/features/survey-builder/stores/ui-store';
-import { isOptionListType } from '@/types/question-types';
-import { Question, QuestionOption, SelectLevel } from '@/types/survey';
-
+import { NoticeRenderer } from '@/features/question-renderer/notice-renderer';
+import { TablePreview } from '@/features/question-renderer/table-preview';
 import {
   AnswerQuoteQuestionControl,
   AnswerQuoteTextField,
   supportsAnswerQuote,
 } from '@/features/survey-builder/answer-quote-fields';
+import { BranchRuleEditor } from '@/features/survey-builder/branch-rule-editor';
+import { NumberFormatFields } from '@/features/survey-builder/number-format-fields';
 import { OptionLabelTextarea } from '@/features/survey-builder/option-label-textarea';
 import { OptionPlaceholderEditor } from '@/features/survey-builder/option-placeholder-editor';
-import { VariableButton } from '@/features/survey-builder/variable-button';
-
-import { BranchRuleEditor } from '@/features/survey-builder/branch-rule-editor';
-import { DynamicTableEditor } from '@/features/survey-builder/table-editor/dynamic-table-editor';
-import { RichTextEditor, type RichTextEditorHandle } from '@/components/ui/rich-text-editor';
-import { NoticeRenderer } from '@/features/question-renderer/notice-renderer';
-import { NumberFormatFields } from '@/features/survey-builder/number-format-fields';
 import { OptionsLayoutSelector } from '@/features/survey-builder/options-layout-selector';
-import { RankingConfigEditorForQuestion } from '@/features/survey-builder/ranking-config-editor';
-import { SpssVariableEditor } from './spss-variable-editor';
-import { TablePreview } from '@/features/question-renderer/table-preview';
-import { UserDefinedMultiSelectPreview } from './user-defined-multi-select';
 import {
   OTHER_OPTION_ID,
+  type OptionalOptionKey,
   createTextInputOption,
   getParentLevelOptions,
-  type OptionalOptionKey,
 } from '@/features/survey-builder/question-option-helpers';
+import { RankingConfigEditorForQuestion } from '@/features/survey-builder/ranking-config-editor';
+import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
+import { useSurveyUIStore } from '@/features/survey-builder/stores/ui-store';
+import { DynamicTableEditor } from '@/features/survey-builder/table-editor/dynamic-table-editor';
+import { VariableButton } from '@/features/survey-builder/variable-button';
+import { cn, generateId } from '@/lib/utils';
+import { isOptionListType } from '@/types/question-types';
+import { Question, QuestionOption, SelectLevel } from '@/types/survey';
+import { getGroupTypeOfCell } from '@/utils/choice-group-helpers';
+import { isPartialNumericInput, parseNumericInput } from '@/utils/numeric-input';
+import { commitOptionCode, generateOptionCode } from '@/utils/option-code-generator';
+import { DEFAULT_REQUIRED_MESSAGE } from '@/utils/required-message';
+
+import { SpssVariableEditor } from './spss-variable-editor';
+import { UserDefinedMultiSelectPreview } from './user-defined-multi-select';
 
 interface QuestionBasicTabProps {
   question: Question;
@@ -104,9 +95,19 @@ interface QuestionBasicTabProps {
   updateSelectLevel: (levelId: string, updates: Partial<SelectLevel>) => void;
   removeSelectLevel: (levelId: string) => void;
   addLevelOption: (levelId: string) => void;
-  updateOptionWithParent: (levelId: string, optionId: string, parentValue: string, optionLabel: string) => void;
+  updateOptionWithParent: (
+    levelId: string,
+    optionId: string,
+    parentValue: string,
+    optionLabel: string,
+  ) => void;
   updateLevelOption: (levelId: string, optionId: string, updates: Partial<QuestionOption>) => void;
   removeLevelOption: (levelId: string, optionId: string) => void;
+}
+
+// 렌더 중 스토어 훅을 값으로 참조(useX.getState())하면 React Compiler 가 컴포넌트를 건너뛴다 — 모듈 최상위에서 읽는다.
+function readBuilderGroups() {
+  return useSurveyBuilderStore.getState().currentSurvey.groups || [];
 }
 
 export function QuestionBasicTab({
@@ -189,12 +190,10 @@ export function QuestionBasicTab({
     question.type === 'ranking' && formData.rankingConfig?.optionsSource === 'table';
   // radio/checkbox: tableColumns 가 있으면 설명 테이블 모드 (choice_opt 옵션 소스)
   const isChoiceTableMode =
-    (question.type === 'radio' || question.type === 'checkbox')
-    && (formData.tableColumns?.length ?? 0) > 0;
+    (question.type === 'radio' || question.type === 'checkbox') &&
+    (formData.tableColumns?.length ?? 0) > 0;
   const needsOptions =
-    isOptionListType(question.type)
-    && !isRankingTableSource
-    && !isChoiceTableMode;
+    isOptionListType(question.type) && !isRankingTableSource && !isChoiceTableMode;
   // 자체 내장 테이블 편집기 노출 조건: table 타입 자체 OR ranking 테이블 소스 OR radio/checkbox 설명 테이블 모드
   const showTableEditor = question.type === 'table' || isRankingTableSource || isChoiceTableMode;
 
@@ -208,14 +207,9 @@ export function QuestionBasicTab({
   // 건드리지 않고, 렌더 조건만 좁힌다.
   const showAnswerQuoteControl = supportsAnswerQuote(question.type) && question.type !== 'table';
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-  );
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
-  const optionIds = useMemo(
-    () => (formData.options ?? []).map((o) => o.id),
-    [formData.options],
-  );
+  const optionIds = useMemo(() => (formData.options ?? []).map((o) => o.id), [formData.options]);
 
   const handleOptionDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -368,7 +362,8 @@ export function QuestionBasicTab({
                   onChange={(e) => {
                     const value = e.target.value;
                     setLocalExportLabel(value);
-                    if (debouncedExportLabelRef.current) clearTimeout(debouncedExportLabelRef.current);
+                    if (debouncedExportLabelRef.current)
+                      clearTimeout(debouncedExportLabelRef.current);
                     debouncedExportLabelRef.current = setTimeout(() => {
                       setFormData((prev) => ({ ...prev, exportLabel: value }));
                       debouncedExportLabelRef.current = null;
@@ -395,9 +390,7 @@ export function QuestionBasicTab({
                       ...prev,
                       // 빈 값(자동)은 null 로 저장해 DB 오버라이드를 해제한다.
                       // select 옵션이 유니온 멤버로 한정되므로 좁히기 단언만 사용.
-                      spssVarType: (e.target.value || null) as NonNullable<
-                        Question['spssVarType']
-                      >,
+                      spssVarType: (e.target.value || null) as NonNullable<Question['spssVarType']>,
                     }))
                   }
                   className="mt-2 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
@@ -428,9 +421,7 @@ export function QuestionBasicTab({
                     setFormData((prev) => ({
                       ...prev,
                       // 빈 값(자동)은 null 로 저장해 DB 오버라이드를 해제한다.
-                      spssMeasure: (e.target.value || null) as NonNullable<
-                        Question['spssMeasure']
-                      >,
+                      spssMeasure: (e.target.value || null) as NonNullable<Question['spssMeasure']>,
                     }))
                   }
                   className="mt-2 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
@@ -466,7 +457,7 @@ export function QuestionBasicTab({
           >
             <option value="">그룹 없음</option>
             {(() => {
-              const groups = useSurveyBuilderStore.getState().currentSurvey.groups || [];
+              const groups = readBuilderGroups();
               const topLevelGroups = groups
                 .filter((g) => !g.parentGroupId)
                 .sort((a, b) => a.order - b.order);
@@ -498,9 +489,7 @@ export function QuestionBasicTab({
               return options;
             })()}
           </select>
-          <p className="mt-1 text-xs text-gray-500">
-            이 질문을 특정 그룹에 포함시킬 수 있습니다.
-          </p>
+          <p className="mt-1 text-xs text-gray-500">이 질문을 특정 그룹에 포함시킬 수 있습니다.</p>
         </div>
 
         <div>
@@ -509,9 +498,7 @@ export function QuestionBasicTab({
             <RichTextEditor
               kind="survey"
               initialHtml={formData.description || ''}
-              onChange={(html) =>
-                setFormData((prev) => ({ ...prev, description: html }))
-              }
+              onChange={(html) => setFormData((prev) => ({ ...prev, description: html }))}
               variableCatalog={variableCatalog}
               minHeight={80}
               editorClassName="text-sm"
@@ -524,9 +511,7 @@ export function QuestionBasicTab({
           <Switch
             id="required"
             checked={formData.required || false}
-            onCheckedChange={(checked) =>
-              setFormData((prev) => ({ ...prev, required: checked }))
-            }
+            onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, required: checked }))}
           />
           <Label htmlFor="required" className="shrink-0">
             필수 질문
@@ -555,9 +540,7 @@ export function QuestionBasicTab({
               <Input
                 id="placeholder"
                 value={formData.placeholder || ''}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, placeholder: e.target.value }))
-                }
+                onChange={(e) => setFormData((prev) => ({ ...prev, placeholder: e.target.value }))}
                 placeholder="예: 이름을 입력하세요"
                 className="mt-2"
               />
@@ -611,7 +594,10 @@ export function QuestionBasicTab({
                     onChange={(e) => {
                       const checked = e.target.checked;
                       setFormData((prev) => {
-                        const next: Partial<Question> = { ...prev, inputType: checked ? 'number' : 'text' };
+                        const next: Partial<Question> = {
+                          ...prev,
+                          inputType: checked ? 'number' : 'text',
+                        };
                         if (!checked) {
                           delete next.emptyDefault;
                           delete next.numberFormat;
@@ -621,14 +607,11 @@ export function QuestionBasicTab({
                     }}
                     className="mt-0.5 h-4 w-4"
                   />
-                  <label
-                    htmlFor="text-input-type-number"
-                    className="flex-1 cursor-pointer text-sm"
-                  >
+                  <label htmlFor="text-input-type-number" className="flex-1 cursor-pointer text-sm">
                     <span className="font-medium">숫자만 입력</span>
                     <p className="mt-0.5 text-xs text-gray-500">
-                      체크 시 응답자는 숫자만 입력할 수 있고, 분기 조건(expression)에서 비교
-                      연산자 (=, ≠, ≥, ≤, &gt;, &lt;) 를 사용할 수 있습니다.
+                      체크 시 응답자는 숫자만 입력할 수 있고, 분기 조건(expression)에서 비교 연산자
+                      (=, ≠, ≥, ≤, &gt;, &lt;) 를 사용할 수 있습니다.
                     </p>
                   </label>
                 </div>
@@ -711,9 +694,9 @@ export function QuestionBasicTab({
             <div className="space-y-1">
               <Label htmlFor="pii-encrypted">개인정보 암호화</Label>
               <p className="text-xs text-gray-500">
-                성명, 전화번호, 주소 같은 개인정보 응답을 암호화해 저장합니다. 설정 저장
-                후 새로 저장되는 응답값부터 암호화되며, 관리자 화면과 다운로드에서는
-                자동으로 복호화되어 표시됩니다.
+                성명, 전화번호, 주소 같은 개인정보 응답을 암호화해 저장합니다. 설정 저장 후 새로
+                저장되는 응답값부터 암호화되며, 관리자 화면과 다운로드에서는 자동으로 복호화되어
+                표시됩니다.
               </p>
             </div>
           </div>
@@ -867,13 +850,9 @@ export function QuestionBasicTab({
           {question.type !== 'select' && (
             <OptionsLayoutSelector
               value={formData.optionsColumns}
-              onChange={(next) =>
-                setFormData((prev) => ({ ...prev, optionsColumns: next }))
-              }
+              onChange={(next) => setFormData((prev) => ({ ...prev, optionsColumns: next }))}
               align={formData.optionsAlign}
-              onAlignChange={(next) =>
-                setFormData((prev) => ({ ...prev, optionsAlign: next }))
-              }
+              onAlignChange={(next) => setFormData((prev) => ({ ...prev, optionsAlign: next }))}
               mobileValue={formData.mobileOptionsColumns}
               onMobileChange={(next) =>
                 setFormData((prev) => ({ ...prev, mobileOptionsColumns: next }))
@@ -881,7 +860,11 @@ export function QuestionBasicTab({
             />
           )}
 
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleOptionDragEnd}>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleOptionDragEnd}
+          >
             <SortableContext items={optionIds} strategy={verticalListSortingStrategy}>
               <div className="space-y-2">
                 {formData.options?.map((option, index) => (
@@ -912,7 +895,6 @@ export function QuestionBasicTab({
               </Button>
             </div>
           )}
-
         </div>
       )}
 
@@ -936,11 +918,14 @@ export function QuestionBasicTab({
                 max={formData.options?.length || 0}
                 value={formData.minSelections || ''}
                 onChange={(e) => {
-                  const value =
-                    e.target.value === '' ? undefined : parseInt(e.target.value, 10);
+                  const value = e.target.value === '' ? undefined : parseInt(e.target.value, 10);
                   setFormData((prev) => {
                     const next: Partial<Question> = { ...prev };
-                    if (value !== undefined) { next.minSelections = value; } else { delete next.minSelections; }
+                    if (value !== undefined) {
+                      next.minSelections = value;
+                    } else {
+                      delete next.minSelections;
+                    }
                     return next;
                   });
                   // 최소값이 최대값보다 크면 최대값 조정
@@ -971,11 +956,14 @@ export function QuestionBasicTab({
                 max={formData.options?.length || 0}
                 value={formData.maxSelections || ''}
                 onChange={(e) => {
-                  const value =
-                    e.target.value === '' ? undefined : parseInt(e.target.value, 10);
+                  const value = e.target.value === '' ? undefined : parseInt(e.target.value, 10);
                   setFormData((prev) => {
                     const next: Partial<Question> = { ...prev };
-                    if (value !== undefined) { next.maxSelections = value; } else { delete next.maxSelections; }
+                    if (value !== undefined) {
+                      next.maxSelections = value;
+                    } else {
+                      delete next.maxSelections;
+                    }
                     return next;
                   });
                 }}
@@ -1114,7 +1102,10 @@ export function QuestionBasicTab({
 
                           <div className="space-y-2">
                             {level.options?.map((option, optionIndex) => {
-                              const parentOptions = getParentLevelOptions(formData.selectLevels, index);
+                              const parentOptions = getParentLevelOptions(
+                                formData.selectLevels,
+                                index,
+                              );
                               const isFirstLevel = index === 0;
 
                               return (
@@ -1172,10 +1163,7 @@ export function QuestionBasicTab({
                                       >
                                         <option value="">상위 옵션 선택...</option>
                                         {parentOptions.map((parentOption) => (
-                                          <option
-                                            key={parentOption.id}
-                                            value={parentOption.value}
-                                          >
+                                          <option key={parentOption.id} value={parentOption.value}>
                                             {parentOption.label}
                                           </option>
                                         ))}
@@ -1221,11 +1209,11 @@ export function QuestionBasicTab({
 
                           {index > 0 && (
                             <div className="rounded bg-blue-50 p-2 text-xs text-blue-600">
-                              <strong>💡 자동 연동:</strong> 하위 레벨에서 &ldquo;연동할
-                              상위 옵션&rdquo;을 선택하면 한글 값이 자동 생성됩니다.
+                              <strong>💡 자동 연동:</strong> 하위 레벨에서 &ldquo;연동할 상위
+                              옵션&rdquo;을 선택하면 한글 값이 자동 생성됩니다.
                               <br />
-                              예: 상위 &ldquo;한식&rdquo; 선택 + 하위 &ldquo;김치찌개&rdquo;
-                              → 값: &ldquo;한식-김치찌개&rdquo; (한글 그대로 저장)
+                              예: 상위 &ldquo;한식&rdquo; 선택 + 하위 &ldquo;김치찌개&rdquo; → 값:
+                              &ldquo;한식-김치찌개&rdquo; (한글 그대로 저장)
                             </div>
                           )}
                         </div>
@@ -1236,9 +1224,7 @@ export function QuestionBasicTab({
 
               {/* 미리보기 */}
               <div className="rounded-lg bg-gray-50 p-4">
-                <Label className="mb-3 block text-sm font-medium text-gray-700">
-                  미리보기
-                </Label>
+                <Label className="mb-3 block text-sm font-medium text-gray-700">미리보기</Label>
                 <UserDefinedMultiSelectPreview levels={formData.selectLevels} />
               </div>
             </div>
@@ -1273,9 +1259,7 @@ export function QuestionBasicTab({
               ref={noticeEditorRef}
               kind="survey"
               initialHtml={formData.noticeContent || ''}
-              onChange={(html) =>
-                setFormData((prev) => ({ ...prev, noticeContent: html }))
-              }
+              onChange={(html) => setFormData((prev) => ({ ...prev, noticeContent: html }))}
               variableCatalog={variableCatalog}
               minHeight={300}
             />
@@ -1495,9 +1479,7 @@ function SortableOptionItem({
             )}
           </div>
           {option.id === OTHER_OPTION_ID && (
-            <p className="mt-0.5 px-0 text-xs text-blue-600">
-              기타 선택지 (수정 가능)
-            </p>
+            <p className="mt-0.5 px-0 text-xs text-blue-600">기타 선택지 (수정 가능)</p>
           )}
         </div>
 
@@ -1526,10 +1508,12 @@ function SortableOptionItem({
           <Input
             aria-label="변수번호"
             value={option.optionCode ?? generateOptionCode(index, totalCount)}
-            onChange={(e) => updateOption(option.id, {
-              optionCode: e.target.value,
-              isCustomOptionCode: true,
-            } as Partial<QuestionOption>)}
+            onChange={(e) =>
+              updateOption(option.id, {
+                optionCode: e.target.value,
+                isCustomOptionCode: true,
+              } as Partial<QuestionOption>)
+            }
             onBlur={() => onCommitCode(index, option.optionCode ?? '')}
             aria-invalid={hasConflict}
             className={cn(
@@ -1548,11 +1532,7 @@ function SortableOptionItem({
             type="button"
             variant="ghost"
             size="sm"
-            onClick={() =>
-              updateOption(option.id, { isCustomOptionCode: false }, [
-                'optionCode',
-              ])
-            }
+            onClick={() => updateOption(option.id, { isCustomOptionCode: false }, ['optionCode'])}
             className="px-1 text-xs text-gray-400 hover:text-blue-500"
             title="자동 코드로 복원"
           >
@@ -1599,9 +1579,11 @@ function SortableOptionItem({
             branchRule={option.branchRule}
             allQuestions={questions}
             currentQuestionId={questionId || ''}
-            onChange={(branchRule) => updateOption(option.id, {
-              ...(branchRule !== undefined ? { branchRule } : {}),
-            } as Partial<QuestionOption>)}
+            onChange={(branchRule) =>
+              updateOption(option.id, {
+                ...(branchRule !== undefined ? { branchRule } : {}),
+              } as Partial<QuestionOption>)
+            }
           />
         </div>
       )}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type ChangeEvent } from 'react';
+import { type ChangeEvent, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -19,6 +19,39 @@ type Step = 'pick-file' | 'map-columns' | 'preview';
  * 따옴표로 감싼 필드 안의 콤마를 분리하지 않으며, 필드 내 이스케이프된 따옴표("")를 처리한다.
  * 단순 split(',') 가 "Seoul, Korea" 같은 셀을 잘라 컬럼을 한 칸씩 밀던 문제를 막는다.
  */
+type ParsedLookupFile = { headers: string[]; rows: string[][] };
+
+/**
+ * CSV/엑셀 파일을 헤더·행으로 파싱한다. 동적 import 와 try 안의 throw 가 컴포넌트 안에 있으면
+ * React Compiler 가 컴포넌트를 건너뛰므로 모듈 최상위에 둔다.
+ */
+async function parseLookupFile(f: File): Promise<ParsedLookupFile> {
+  let parsed: ParsedLookupFile;
+  if (f.name.endsWith('.csv')) {
+    const text = await f.text();
+    const lines = text.split(/\r?\n/).filter((l) => l.trim());
+    parsed = {
+      headers: parseCsvLine(lines[0] ?? ''),
+      rows: lines.slice(1).map((l) => parseCsvLine(l)),
+    };
+  } else {
+    const buf = await f.arrayBuffer();
+    // exceljs 는 빌더 초기 번들에서 빼고 엑셀 파일을 고른 시점에만 받는다.
+    // UMD(CJS) 패키지라 named export 감지가 안 되므로 default 로 꺼내야 한다.
+    const { default: ExcelJS } = await import('exceljs');
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(buf);
+    const ws = wb.worksheets[0];
+    if (!ws) throw new Error('엑셀 파일에 시트가 없습니다.');
+    const allRows: string[][] = [];
+    ws.eachRow((row) => {
+      allRows.push((row.values as unknown[]).slice(1).map((v) => String(v ?? '').trim()));
+    });
+    parsed = { headers: allRows[0] ?? [], rows: allRows.slice(1) };
+  }
+  return parsed;
+}
+
 export function parseCsvLine(line: string): string[] {
   const fields: string[] = [];
   let current = '';
@@ -85,31 +118,7 @@ export function LookupCsvImport({ isOpen, onClose, onImport }: Props) {
     const f = e.target.files?.[0];
     if (!f) return;
     try {
-      let parsed: { headers: string[]; rows: string[][] };
-      if (f.name.endsWith('.csv')) {
-        const text = await f.text();
-        const lines = text.split(/\r?\n/).filter((l) => l.trim());
-        parsed = {
-          headers: parseCsvLine(lines[0] ?? ''),
-          rows: lines.slice(1).map((l) => parseCsvLine(l)),
-        };
-      } else {
-        const buf = await f.arrayBuffer();
-        // exceljs 는 빌더 초기 번들에서 빼고 엑셀 파일을 고른 시점에만 받는다.
-        // UMD(CJS) 패키지라 named export 감지가 안 되므로 default 로 꺼내야 한다.
-        const { default: ExcelJS } = await import('exceljs');
-        const wb = new ExcelJS.Workbook();
-        await wb.xlsx.load(buf);
-        const ws = wb.worksheets[0];
-        if (!ws) throw new Error('엑셀 파일에 시트가 없습니다.');
-        const allRows: string[][] = [];
-        ws.eachRow((row) => {
-          allRows.push(
-            (row.values as unknown[]).slice(1).map((v) => String(v ?? '').trim()),
-          );
-        });
-        parsed = { headers: allRows[0] ?? [], rows: allRows.slice(1) };
-      }
+      const parsed = await parseLookupFile(f);
       setHeaders(parsed.headers);
       setRawRows(parsed.rows);
       // 디폴트: 모든 헤더 선택
@@ -225,9 +234,7 @@ export function LookupCsvImport({ isOpen, onClose, onImport }: Props) {
                 ))}
               </tbody>
             </table>
-            {rawRows.length > 10 && (
-              <div className="text-xs text-gray-500">처음 10행만 표시</div>
-            )}
+            {rawRows.length > 10 && <div className="text-xs text-gray-500">처음 10행만 표시</div>}
           </div>
         )}
 

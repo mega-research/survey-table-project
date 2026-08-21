@@ -1,7 +1,7 @@
-import 'server-only';
-
 import { cache } from 'react';
-import { eq, sql, type SQL } from 'drizzle-orm';
+
+import { type SQL, eq, sql } from 'drizzle-orm';
+import 'server-only';
 
 import { db } from '@/db';
 import { contactTargets } from '@/db/schema/contacts';
@@ -9,14 +9,14 @@ import { surveys } from '@/db/schema/surveys';
 import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 import type { ProgressColumnScheme } from '@/shared/contracts/operations';
 
-import type { ProgressRow, ProgressSortKey, SortDir, ProgressTotals } from './report-progress';
-import { buildFilterSql, type FilterCondition } from './progress-filters.server';
-import { buildNegativeCodeExists, getResultCodeStatuses } from './result-code-statuses.server';
 import {
+  type OperationsDataScope,
   targetScopeCondition,
   testFlagForScope,
-  type OperationsDataScope,
 } from './data-scope.server';
+import { type FilterCondition, buildFilterSql } from './progress-filters.server';
+import type { ProgressRow, ProgressSortKey, ProgressTotals, SortDir } from './report-progress';
+import { buildNegativeCodeExists, getResultCodeStatuses } from './result-code-statuses.server';
 
 const EMPTY_SCHEME: ProgressColumnScheme = { version: 1, columns: [] };
 
@@ -103,51 +103,50 @@ export const getProgressColumnScheme = cache(
  *
  * `cache()` 로 RSC pass dedupe — header / 표 등 다중 RSC 동시 호출 가능성 대비.
  */
-export const getProgressGroupLabel = cache(async (
-  surveyId: string,
-  scope: OperationsDataScope,
-): Promise<string> => {
-  // 실제 저장된 group_value 로 attrs 키 역추론 (write-side 가 어떤 컬럼을 group 으로 썼든 일관)
-  const rows = await db
-    .select({
-      attrs: contactTargets.attrs,
-      groupValue: contactTargets.groupValue,
-    })
-    .from(contactTargets)
-    .where(
-      sql`${contactTargets.surveyId} = ${surveyId}
+export const getProgressGroupLabel = cache(
+  async (surveyId: string, scope: OperationsDataScope): Promise<string> => {
+    // 실제 저장된 group_value 로 attrs 키 역추론 (write-side 가 어떤 컬럼을 group 으로 썼든 일관)
+    const rows = await db
+      .select({
+        attrs: contactTargets.attrs,
+        groupValue: contactTargets.groupValue,
+      })
+      .from(contactTargets)
+      .where(
+        sql`${contactTargets.surveyId} = ${surveyId}
         AND ${targetScopeCondition(scope)}
         AND ${contactTargets.groupValue} IS NOT NULL`,
-    )
-    .limit(1);
+      )
+      .limit(1);
 
-  const firstRow = rows[0];
-  const attrs = firstRow?.attrs;
-  const groupValue = firstRow?.groupValue;
-  let groupAttrsKey: string | undefined;
-  if (attrs && groupValue != null) {
-    // 동일 value 가 여러 키에 들어있을 때의 모호성을 키 정렬로 결정적 처리
-    const matchedKeys = Object.entries(attrs)
-      .filter(([, v]) => v === groupValue)
-      .map(([k]) => k)
-      .sort();
-    groupAttrsKey = matchedKeys[0];
-  }
+    const firstRow = rows[0];
+    const attrs = firstRow?.attrs;
+    const groupValue = firstRow?.groupValue;
+    let groupAttrsKey: string | undefined;
+    if (attrs && groupValue != null) {
+      // 동일 value 가 여러 키에 들어있을 때의 모호성을 키 정렬로 결정적 처리
+      const matchedKeys = Object.entries(attrs)
+        .filter(([, v]) => v === groupValue)
+        .map(([k]) => k)
+        .sort();
+      groupAttrsKey = matchedKeys[0];
+    }
 
-  if (!groupAttrsKey) return '그룹';
+    if (!groupAttrsKey) return '그룹';
 
-  // contact_columns 에서 사용자 편집 라벨 lookup (라벨 표기에만 사용)
-  const surveyRow = await db
-    .select({
-      contactColumns: scope === 'test' ? surveys.testContactColumns : surveys.contactColumns,
-    })
-    .from(surveys)
-    .where(eq(surveys.id, surveyId))
-    .limit(1);
-  const scheme = surveyRow[0]?.contactColumns as ContactColumnScheme | null | undefined;
-  const col = scheme?.columns.find((c) => c.source === `attrs.${groupAttrsKey}`);
-  return col?.label ?? groupAttrsKey;
-});
+    // contact_columns 에서 사용자 편집 라벨 lookup (라벨 표기에만 사용)
+    const surveyRow = await db
+      .select({
+        contactColumns: scope === 'test' ? surveys.testContactColumns : surveys.contactColumns,
+      })
+      .from(surveys)
+      .where(eq(surveys.id, surveyId))
+      .limit(1);
+    const scheme = surveyRow[0]?.contactColumns as ContactColumnScheme | null | undefined;
+    const col = scheme?.columns.find((c) => c.source === `attrs.${groupAttrsKey}`);
+    return col?.label ?? groupAttrsKey;
+  },
+);
 
 export interface GetProgressRowsArgs {
   surveyId: string;
@@ -193,9 +192,7 @@ function buildGroupedBase(groupByKeys: string[] | undefined): SQL {
 
 /** GROUP BY 절 — ct.group_key_0[, ct.group_key_1 ...] */
 function buildGroupByClause(count: number): SQL {
-  const cols = Array.from({ length: count }, (_, i) =>
-    sql`ct.${sql.identifier(`group_key_${i}`)}`,
-  );
+  const cols = Array.from({ length: count }, (_, i) => sql`ct.${sql.identifier(`group_key_${i}`)}`);
   return cols.reduce((acc, cur) => sql`${acc}, ${cur}`);
 }
 
@@ -240,25 +237,19 @@ export async function getProgressRows(args: GetProgressRowsArgs): Promise<Progre
 
   const metaSelectSql = metaKeys
     .map((k, i) => sql`MIN(ct.attrs->>${k}) AS ${sql.identifier(`meta_${i}`)}`)
-    .reduce<ReturnType<typeof sql>>(
-      (acc, cur, i) => (i === 0 ? cur : sql`${acc}, ${cur}`),
-      sql``,
-    );
+    .reduce<ReturnType<typeof sql>>((acc, cur, i) => (i === 0 ? cur : sql`${acc}, ${cur}`), sql``);
 
   let sortExpr;
   if (sort.startsWith('meta:')) {
     const key = sort.slice(5);
     const idx = metaKeys.indexOf(key);
-    sortExpr =
-      idx >= 0 ? sql.raw(`meta_${idx}`) : sql.raw(SORT_COL_MAP.responseRate);
+    sortExpr = idx >= 0 ? sql.raw(`meta_${idx}`) : sql.raw(SORT_COL_MAP.responseRate);
   } else if (sort.startsWith('group:')) {
     // group:<attrs키> — 활성 기준 키를 인덱스로 해석 후 inner alias 만 raw 임베드.
     // 사용자 입력(키)은 SQL 에 직접 박히지 않는다.
     const idx = (groupByKeys ?? []).indexOf(sort.slice(6));
     sortExpr =
-      idx >= 0 && idx < keyCount
-        ? sql.raw(`group_raw_${idx}`)
-        : sql.raw(SORT_COL_MAP.responseRate);
+      idx >= 0 && idx < keyCount ? sql.raw(`group_raw_${idx}`) : sql.raw(SORT_COL_MAP.responseRate);
   } else {
     const mapped =
       SORT_COL_MAP[sort as Exclude<ProgressSortKey, `meta:${string}` | `group:${string}`>];
@@ -269,11 +260,13 @@ export async function getProgressRows(args: GetProgressRowsArgs): Promise<Progre
   const filterSql = buildFilterSql(condition);
 
   // 그룹 값 SELECT (group_raw_0..N) + 라벨 concat + GROUP BY 절
-  const groupRawSelect = Array.from({ length: keyCount }, (_, i) =>
-    sql`ct.${sql.identifier(`group_key_${i}`)} AS ${sql.identifier(`group_raw_${i}`)}`,
+  const groupRawSelect = Array.from(
+    { length: keyCount },
+    (_, i) => sql`ct.${sql.identifier(`group_key_${i}`)} AS ${sql.identifier(`group_raw_${i}`)}`,
   ).reduce((acc, cur) => sql`${acc}, ${cur}`);
-  const groupLabelParts = Array.from({ length: keyCount }, (_, i) =>
-    sql`COALESCE(ct.${sql.identifier(`group_key_${i}`)}, '(미분류)')`,
+  const groupLabelParts = Array.from(
+    { length: keyCount },
+    (_, i) => sql`COALESCE(ct.${sql.identifier(`group_key_${i}`)}, '(미분류)')`,
   ).reduce((acc, cur) => sql`${acc}, ${cur}`);
   // ORDER BY 안정 tiebreaker — 그룹 값 컬럼 전체 (동률 시 결정적 순서)
   const tiebreaker = Array.from({ length: keyCount }, (_, i) =>
@@ -374,4 +367,16 @@ export async function getProgressTotals(
     completedTotal: Number(r['completed_total'] ?? 0),
     excludedTotal: Number(r['excluded_total'] ?? 0),
   };
+}
+
+/** 조사 대상 수 — 진척률 페이지의 0건 빠른 검출용(getProgressTotals 보다 훨씬 가볍다). */
+export async function countContactTargets(
+  surveyId: string,
+  scope: OperationsDataScope,
+): Promise<number> {
+  const rows = await db
+    .select({ ct: sql<number>`count(*)::int` })
+    .from(contactTargets)
+    .where(sql`${contactTargets.surveyId} = ${surveyId} AND ${targetScopeCondition(scope)}`);
+  return Number(rows[0]?.ct ?? 0);
 }
