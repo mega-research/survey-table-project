@@ -1,10 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-
-import { useSyncLatestRef } from '@/hooks/use-latest-ref';
-
-import { toast } from 'sonner';
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 
 import {
   AlertTriangle,
@@ -19,25 +15,16 @@ import {
   Table,
   Type,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { useShallow } from 'zustand/react/shallow';
 
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { CompleteQuestionWrite } from '@/db/schema/question-persisted-fields';
+import { QuestionConditionEditor } from '@/features/survey-builder/condition/question-condition-editor';
 import { useEnsureSurveyInDb } from '@/features/survey-builder/hooks/use-ensure-survey-in-db';
 import { useSurveySync } from '@/features/survey-builder/hooks/use-survey-sync';
-import { isValidUUID } from '@/lib/utils';
-import { client } from '@/shared/lib/rpc';
-import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
-import { useSurveyUIStore } from '@/features/survey-builder/stores/ui-store';
-import { isOptionListType } from '@/types/question-types';
-import { Question } from '@/types/survey';
-import { collectChoiceOptCells, resolveChoiceOptions } from '@/utils/choice-source';
-import { collectRankingOptCells } from '@/utils/ranking-source';
-
-import { QuestionBasicTab } from './question-basic-tab';
-import { QuestionConditionEditor } from '@/features/survey-builder/condition/question-condition-editor';
 import {
   createAddLevelOption,
   createAddOption,
@@ -50,6 +37,19 @@ import {
   createUpdateOptionWithParent,
   createUpdateSelectLevel,
 } from '@/features/survey-builder/question-option-helpers';
+import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
+import { useSurveyUIStore } from '@/features/survey-builder/stores/ui-store';
+import { useSyncLatestRef } from '@/hooks/use-latest-ref';
+import { runAsyncAction } from '@/lib/run-async-action';
+import { isValidUUID } from '@/lib/utils';
+import { client } from '@/shared/lib/rpc';
+import { isOptionListType } from '@/types/question-types';
+import { Question } from '@/types/survey';
+import { collectChoiceOptCells, resolveChoiceOptions } from '@/utils/choice-source';
+import { omitKey } from '@/utils/omit-key';
+import { collectRankingOptCells } from '@/utils/ranking-source';
+
+import { QuestionBasicTab } from './question-basic-tab';
 import { SumConstraintEditor } from './sum-constraint-editor';
 import { TableValidationEditor } from './table-validation-editor';
 
@@ -91,9 +91,7 @@ function buildFormDataFromQuestion(question: Question): Partial<Question> {
       ? { tableHeaderGrid: question.tableHeaderGrid }
       : {}),
     allowOtherOption: question.allowOtherOption || false,
-    ...(question.optionsColumns !== undefined
-      ? { optionsColumns: question.optionsColumns }
-      : {}),
+    ...(question.optionsColumns !== undefined ? { optionsColumns: question.optionsColumns } : {}),
     ...(question.optionsAlign !== undefined ? { optionsAlign: question.optionsAlign } : {}),
     ...(question.mobileOptionsColumns !== undefined
       ? { mobileOptionsColumns: question.mobileOptionsColumns }
@@ -129,9 +127,7 @@ function buildFormDataFromQuestion(question: Question): Partial<Question> {
 
 export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditModalProps) {
   const updateQuestion = useSurveyBuilderStore((s) => s.updateQuestion);
-  const remapOptionValueInConditions = useSurveyBuilderStore(
-    (s) => s.remapOptionValueInConditions,
-  );
+  const remapOptionValueInConditions = useSurveyBuilderStore((s) => s.remapOptionValueInConditions);
   const remapQuestionRefs = useSurveyBuilderStore((s) => s.remapQuestionRefs);
   const setEditingQuestionId = useSurveyUIStore((s) => s.setEditingQuestionId);
   const questions = useSurveyBuilderStore(useShallow((s) => s.currentSurvey.questions));
@@ -249,13 +245,14 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
         useSurveyUIStore.getState().setEditingQuestionId(null);
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, questionId]);
+  }, [isOpen, questionId, setEditingQuestionId]);
 
   // 질문 hydrate — 렌더 중 조정 패턴으로 바꾸면 React Compiler 가 이 컴포넌트의
   // 수동 메모이제이션을 보존하지 못해 컴파일을 통째로 건너뛴다(경고 1건 -> 13건).
   // set-state-in-effect 경고 1건을 감수하고 effect 를 유지한다.
-  useEffect(() => {
+  // 본문이 읽는 question 객체는 effect event 로 실행 시점의 최신값을 받는다.
+  // 트리거 deps 는 그대로 둔다 — question reference 를 트리거로 삼으면 아래 주석의 회귀가 난다.
+  const hydrateFormFromQuestion = useEffectEvent(() => {
     if (question) {
       setFormData(buildFormDataFromQuestion(question));
 
@@ -278,13 +275,14 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
       // 옵션을 반환하므로 테이블 보기 옵션 셀의 분기 규칙도 함께 집계된다.
       setShowBranchSettings(resolveChoiceOptions(question).some((option) => option.branchRule));
     }
+  });
+  useEffect(() => {
+    hydrateFormFromQuestion();
     // deps 를 question?.id 로 좁힘 — question 객체 reference 가 바뀐다고 formData 를 reset 하면
     // 모달 안에서 편집한 열/라벨/옵션이 zustand store 의 옛 값으로 덮어씌워진다.
     // (cell-content-modal 이 셀 저장 시 store 를 부분 갱신 → question reference 변경 → 이 effect 재발화 회귀)
     // 모달을 닫았다 다시 같은 질문으로 열면 새로 hydrate 되도록 isOpen 도 deps 에 포함.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [question?.id, isOpen]);
-
 
   // 검증 로직 (formDataRef로 최신 값 참조 — deps에서 formData 제거)
   const validateForm = useCallback(() => {
@@ -401,7 +399,8 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
         : {}),
     };
     setIsSaving(true);
-    try {
+    // try/finally 는 React Compiler 가 낮추지 못한다 — 러너에 가둔다(B-2a 선례).
+    const runSave = async () => {
       // R2 삭제 제거 — 발행 스냅샷·복제·보관함이 같은 URL 을 참조하므로 즉시 삭제는
       // 소실 사고를 유발 (2026-07-27 orphan 감사). 정리는 후속 GC 과제.
       updateQuestion(questionId, currentFormData);
@@ -424,7 +423,8 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
         // 새 질문 판별: questionChanges.added에 있으면 아직 DB에 없는 질문
         const isNewQuestion = !!store.questionChanges.added[questionId];
 
-        try {
+        // React Compiler 는 try 문 안의 조건·옵셔널 체이닝을 낮추지 못한다 — 본문을 안쪽 함수로 뺀다.
+        const persistQuestion = async () => {
           await ensureSurvey();
 
           if (!isNewQuestion) {
@@ -550,8 +550,10 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
 
             if (createdQuestion?.id) {
               // DB에 생성 완료 → added에서 제거 (다음 모달 저장 시 UPDATE 경로 사용)
-              const { [questionId]: _, ...remainingAdded } =
-                useSurveyBuilderStore.getState().questionChanges.added;
+              const remainingAdded = omitKey(
+                useSurveyBuilderStore.getState().questionChanges.added,
+                questionId,
+              );
               useSurveyBuilderStore.setState((state) => ({
                 questionChanges: {
                   ...state.questionChanges,
@@ -574,6 +576,9 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
               remapScopes.push(remapQuestionRefs(questionId, newId));
             }
           }
+        };
+        try {
+          await persistQuestion();
         } catch (error) {
           console.error('질문 저장/업데이트 실패:', error);
           throw error;
@@ -621,11 +626,15 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
 
       didSaveRef.current = true;
       onClose();
-    } catch (error) {
-      console.error('저장 중 오류가 발생했습니다:', error);
-    } finally {
-      setIsSaving(false);
-    }
+    };
+    await runAsyncAction(runSave, {
+      onError: (error) => {
+        console.error('저장 중 오류가 발생했습니다:', error);
+      },
+      onSettled: () => {
+        setIsSaving(false);
+      },
+    });
   }, [
     ensureSurvey,
     questionId,

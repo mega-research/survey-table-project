@@ -1,20 +1,28 @@
 'use client';
 
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from 'react';
+import {
+  forwardRef,
+  useEffect,
+  useEffectEvent,
+  useImperativeHandle,
+  useMemo,
+  useState,
+} from 'react';
 
 import { EditorContent, useEditor } from '@tiptap/react';
 import { toast } from 'sonner';
+
+import { preserveLeadingIndent } from '@/lib/tiptap/leading-indent';
 
 import { createUnifiedExtensions } from './extensions';
 import { deleteTmpNoticeAttachmentKey } from './file-attachment-r2-client';
 import { FileAttachmentUploadModal } from './file-attachment-upload-modal';
 import { ImageUploadModal } from './image-upload-modal';
-import { preserveLeadingIndent } from '@/lib/tiptap/leading-indent';
-import { stripTrailingEmptyParagraph } from './trailing-node';
 import { Toolbar } from './toolbar';
+import { stripTrailingEmptyParagraph } from './trailing-node';
+import type { RichTextEditorHandle, RichTextEditorProps } from './types';
 import { useEditorFileAttachmentTracker } from './use-editor-file-attachment-tracker';
 import { useEditorImageTracker } from './use-editor-image-tracker';
-import type { RichTextEditorHandle, RichTextEditorProps } from './types';
 
 // 공통 룰: 표 정렬 Decoration·이미지 정렬·셀 선택 강조 등 편집 전용 시각 — 미리보기와 무관.
 // 표 폭은 셀 콘텐츠에 맞춰 자동. prose 기본 width 100% 를 w-auto 로 override —
@@ -59,6 +67,15 @@ const MAIL_BASE =
   '[&_table_th]:border [&_table_th]:border-gray-300 [&_table_th]:px-2 [&_table_th]:py-1 ' +
   '[&_a]:text-blue-600 [&_a]:underline';
 
+// 업로드 요청과 실패 판정을 모듈 최상위로 뺀다 — React Compiler 는 try/catch 안의
+// ThrowStatement 를 낮추지 못해 컴포넌트 전체를 건너뛴다. 모듈 최상위 함수는 판정 대상이 아니다.
+async function uploadEditorImage(fd: FormData): Promise<string> {
+  const res = await fetch('/api/upload/image', { method: 'POST', body: fd });
+  const json = (await res.json()) as { url?: string; error?: string };
+  if (!res.ok || !json.url) throw new Error(json.error ?? '이미지 업로드 실패');
+  return json.url;
+}
+
 export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(
   function RichTextEditor(
     {
@@ -66,7 +83,7 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
       onChange,
       kind = 'survey',
       variableCatalog,
-      imageUploadMode = kind === 'mail' ? 'simple' : 'modal',
+      imageUploadMode,
       className,
       editorClassName,
       minHeight = 320,
@@ -75,6 +92,9 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
     },
     ref,
   ) {
+    // 기본값 ternary 를 파라미터에서 본문으로 내린다 — React Compiler 는 파라미터 기본값의
+    // ConditionalExpression 을 안전하게 재배치하지 못해 컴포넌트 전체를 건너뛴다.
+    const resolvedImageUploadMode = imageUploadMode ?? (kind === 'mail' ? 'simple' : 'modal');
     const extensions = useMemo(() => createUnifiedExtensions({ kind }), [kind]);
     const imageTracker = useEditorImageTracker(initialHtml);
     const fileTracker = useEditorFileAttachmentTracker(initialHtml);
@@ -100,7 +120,9 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
       },
     });
 
-    useEffect(() => {
+    // editor·tracker 는 effect event 로 최신 참조를 읽는다. 트리거는 initialHtml 하나로 둔다 —
+    // editor 재생성이나 tracker identity 변화로 재발화하면 setContent 가 돌아 커서가 튄다.
+    const syncContentFromProp = useEffectEvent(() => {
       if (!editor) return;
       // onUpdate 가 내보내는 값과 동일한 정규화를 거쳐야 prop 왕복(setFormData → initialHtml)에서
       // 불일치로 인한 setContent 리셋(커서 점프)이 생기지 않는다.
@@ -112,7 +134,9 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
         imageTracker.resetPrevious(initialHtml);
         fileTracker.resetPrevious(initialHtml);
       }
-      // eslint-disable-next-line react-hooks/exhaustive-deps
+    });
+    useEffect(() => {
+      syncContentFromProp();
     }, [initialHtml]);
 
     useImperativeHandle(
@@ -145,7 +169,7 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
     if (!editor) return null;
 
     const onPickImage = () => {
-      if (imageUploadMode === 'modal') {
+      if (resolvedImageUploadMode === 'modal') {
         setShowModal(true);
         return;
       }
@@ -159,13 +183,11 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
         fd.append('file', file);
         fd.append('kind', kind);
         try {
-          const res = await fetch('/api/upload/image', { method: 'POST', body: fd });
-          const json = (await res.json()) as { url?: string; error?: string };
-          if (!res.ok || !json.url) throw new Error(json.error ?? '이미지 업로드 실패');
+          const url = await uploadEditorImage(fd);
           // 업로드 도중 호스트가 언마운트되어 editor 가 destroy 됐을 수 있다
           if (editor.isDestroyed) return;
-          imageTracker.trackUpload(json.url);
-          editor.chain().focus().setImage({ src: json.url }).run();
+          imageTracker.trackUpload(url);
+          editor.chain().focus().setImage({ src: url }).run();
         } catch (err) {
           if (!editor.isDestroyed) {
             toast.error(err instanceof Error ? err.message : '이미지 업로드 실패');
@@ -248,7 +270,7 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
           enableImageLinkArea={enableImageLinkArea ?? false}
         />
         <div
-          className="flex flex-col overflow-y-auto max-h-[calc(100vh-260px)]"
+          className="flex max-h-[calc(100vh-260px)] flex-col overflow-y-auto"
           style={{ minHeight: `${minHeight}px` }}
         >
           <EditorContent editor={editor} className="flex flex-1 flex-col" />
