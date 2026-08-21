@@ -107,13 +107,17 @@ src/
 │   ├── response-filters.ts     # notDeletedResponse 등 (operations/duplicate-detection 공용)
 │   └── library.ts
 │
-├── components/                 # React 컴포넌트 (~249개)
-│   ├── survey-builder/         # 설문 생성 컴포넌트 (103개)
-│   ├── operations/             # 운영 콘솔 컴포넌트 (71개)
-│   ├── survey-response/        # 응답 입력 컴포넌트 (20개)
-│   ├── analytics/              # 차트 및 리포팅 (17개)
-│   ├── ui/                     # shadcn/ui 기반 컴포넌트 (35개)
-│   ├── survey/                 # 공개 설문 공용
+├── components/                 # React 컴포넌트 (~320개, .ts/.tsx 테스트 제외)
+│   │                           # 의존 방향: survey-builder → survey-response → question-renderer (단방향, ESLint 강제)
+│   ├── survey-builder/         # 설문 편집기 (91개)
+│   ├── question-renderer/      # 빌더 미리보기·응답 페이지 양쪽이 쓰는 질문 렌더러 (67개)
+│   │   ├── cells/              # 표 셀 렌더러
+│   │   ├── hooks/              # 표 레이아웃·동적 행·응답 쓰기 채널 훅
+│   │   └── utils/              # 표 그리드·모바일 표시 순수 계산
+│   ├── survey-response/        # 응답 흐름 (flow·lifecycle·step-views) (19개)
+│   ├── operations/             # 운영 콘솔 컴포넌트 (74개)
+│   ├── analytics/              # 차트 및 리포팅 (20개)
+│   ├── ui/                     # shadcn/ui 기반 컴포넌트 (50개)
 │   └── providers/              # Context providers
 │
 ├── stores/                     # Zustand 스토어 (5개, 루트 배럴 없음 — 직접 경로 import)
@@ -126,10 +130,8 @@ src/
 ├── hooks/                      # 커스텀 훅 (루트 배럴 없음 — 직접 경로 import)
 │   ├── queries/                # TanStack Query 훅 (surveys/contacts/campaigns/library/cell-library/file-cleanup)
 │   ├── use-survey-sync.ts      # 설문 데이터 동기화
-│   ├── use-dynamic-row-* / use-row-* / use-cell-height-cache.ts # 테이블 레이아웃
-│   ├── use-question-response-writer.ts # 응답 쓰기 단일 창구
-│   ├── use-media-query / use-keyboard-open.ts # 반응형
-│   └── ... (테이블 성능/스크롤 동기화/검색파라미터 등)
+│   ├── use-latest-ref / use-media-query / use-formatted-numeric-input.ts # 범용
+│   └── ... (표 레이아웃·동적 행·응답 쓰기 채널 훅은 components/question-renderer/hooks 로 이동)
 │
 ├── lib/                        # 도메인 로직 + 유틸리티
 │   ├── supabase/               # Supabase 클라이언트 (client/server/middleware)
@@ -160,13 +162,13 @@ src/
 │
 ├── utils/                      # 순수 유틸리티 함수
 │   ├── branch-logic / branch-eval.ts # 분기 로직 평가
-│   ├── classify-table / renders-as-table.ts # 테이블 분류
+│   ├── renders-as-table.ts     # 테이블 분류 (classify-table 은 question-renderer/utils 로 이동)
 │   ├── choice-source / ranking-source / ranking-shared / choice-group-helpers.ts # 옵션 소스 해석
 │   ├── option-code-generator / option-value-remap / table-cell-code-generator.ts # 코드 발번
 │   ├── spss-var-name.ts        # SPSS 변수명 생성
 │   ├── cell-type-detector / cell-label / cell-style / cell-library-helpers / serialize-cell.ts
-│   ├── table-grid-utils / table-merge-helpers / table-cell-optimizer / expand-header-grid.ts
-│   ├── mobile-* (card-options / display-cells / drilldown-repeat-header / original-row / table-display-mode)
+│   ├── table-merge-helpers / table-cell-optimizer.ts  # (table-grid-utils · expand-header-grid 는 question-renderer/utils)
+│   ├── mobile-drilldown-repeat-header / mobile-table-display-mode.ts  # 서버도 import — 나머지 mobile-* 는 question-renderer/utils
 │   ├── number-format / numeric-input / options-layout / expression-migration.ts
 │   └── ...
 │
