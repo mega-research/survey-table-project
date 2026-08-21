@@ -1,13 +1,11 @@
 'use client';
 
-import { useState } from 'react';
-
+import { useMutation } from '@tanstack/react-query';
 import { Button, Card } from '@tremor/react';
 import { Download, FileJson, FileSpreadsheet, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { buildSafeFilename, downloadText } from '@/lib/analytics/export-download';
-import { runAsyncAction } from '@/lib/run-async-action';
 import { client } from '@/shared/lib/rpc';
 
 import { ExportDataModal } from './export-data-modal';
@@ -25,35 +23,30 @@ const MIME_BY_FORMAT: Record<TextFormat, string> = {
 };
 
 export function ExportPanel({ surveyId, surveyTitle = 'survey' }: ExportPanelProps) {
-  const [isExporting, setIsExporting] = useState<TextFormat | null>(null);
-
-  const handleExport = async (format: TextFormat) => {
-    setIsExporting(format);
-    await runAsyncAction(
-      async () => {
-        // 인증은 authed procedure 한 곳에서만 결정한다 — 페이지가 만들던 인라인 server action
-        // 은 본문 인증이 없는 공개 POST 엔드포인트였다.
-        const data =
-          format === 'json'
-            ? await client.surveyBuilder.read.exportJson({ surveyId })
-            : await client.surveyBuilder.read.exportCsv({ surveyId });
-
-        if (!data) {
-          toast.error('내보낼 데이터가 없습니다.');
-          return;
-        }
-
-        downloadText(data, buildSafeFilename(surveyTitle, '응답', format), MIME_BY_FORMAT[format]);
-      },
-      {
-        onError: (error) => {
-          console.error('Export error:', error);
-          toast.error('내보내기 중 오류가 발생했습니다.');
-        },
-        onSettled: () => setIsExporting(null),
-      },
-    );
-  };
+  const exportMutation = useMutation({
+    // 인증은 authed procedure 한 곳에서만 결정한다 — 페이지가 만들던 인라인 server action
+    // 은 본문 인증이 없는 공개 POST 엔드포인트였다.
+    mutationFn: (format: TextFormat) =>
+      format === 'json'
+        ? client.surveyBuilder.read.exportJson({ surveyId })
+        : client.surveyBuilder.read.exportCsv({ surveyId }),
+    onSuccess: (data, format) => {
+      if (!data) {
+        toast.error('내보낼 데이터가 없습니다.');
+        return;
+      }
+      downloadText(data, buildSafeFilename(surveyTitle, '응답', format), MIME_BY_FORMAT[format]);
+    },
+    onError: (error) => {
+      console.error('Export error:', error);
+      toast.error('내보내기 중 오류가 발생했습니다.');
+    },
+  });
+  // 진행 중인 포맷 — variables 는 pending 동안의 호출 인자
+  const isExporting: TextFormat | null = exportMutation.isPending
+    ? (exportMutation.variables ?? null)
+    : null;
+  const handleExport = (format: TextFormat) => exportMutation.mutate(format);
 
   return (
     <Card className="p-4">

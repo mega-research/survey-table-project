@@ -4,6 +4,7 @@ import { use, useEffect, useRef, useState } from 'react';
 
 import Link from 'next/link';
 
+import { useMutation } from '@tanstack/react-query';
 import {
   AlertCircle,
   ArrowDown,
@@ -28,28 +29,27 @@ import {
 import { toast } from 'sonner';
 import { useShallow } from 'zustand/react/shallow';
 
-import { TestModeControl } from '@/features/operations/test-mode-control';
-import { CompletionMessageModal } from '@/features/survey-builder/completion-message-modal';
-import { ImportExportLibraryModal } from '@/features/survey-builder/import-export-library-modal';
-import { QuestionLibraryPanel } from '@/features/survey-builder/question-library-panel';
-import { ResponseHeaderSettingsModal } from '@/features/survey-builder/response-header-settings-modal';
-import { SaveQuestionModal } from '@/features/survey-builder/save-question-modal';
-import { SaveSuccessModal } from '@/features/survey-builder/save-success-modal';
-import { SortableQuestionList } from '@/features/survey-builder/question-list/sortable-question-list';
-import { SurveySettingsPanel } from '@/features/survey-builder/survey-settings-panel';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useSurvey } from '@/features/survey-builder/queries/use-surveys';
+import { TestModeControl } from '@/features/operations/test-mode-control';
+import { CompletionMessageModal } from '@/features/survey-builder/completion-message-modal';
 import { useSurveySync } from '@/features/survey-builder/hooks/use-survey-sync';
-import { runAsyncAction } from '@/lib/run-async-action';
+import { ImportExportLibraryModal } from '@/features/survey-builder/import-export-library-modal';
+import { useSurvey } from '@/features/survey-builder/queries/use-surveys';
+import { QuestionLibraryPanel } from '@/features/survey-builder/question-library-panel';
+import { SortableQuestionList } from '@/features/survey-builder/question-list/sortable-question-list';
+import { ResponseHeaderSettingsModal } from '@/features/survey-builder/response-header-settings-modal';
+import { SaveQuestionModal } from '@/features/survey-builder/save-question-modal';
+import { SaveSuccessModal } from '@/features/survey-builder/save-success-modal';
+import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
+import { useSurveyUIStore } from '@/features/survey-builder/stores/ui-store';
+import { SurveySettingsPanel } from '@/features/survey-builder/survey-settings-panel';
 import type { VarNameIssue } from '@/lib/spss/variable-name-guard';
 import { generateSlugFromTitle, validateSlug } from '@/lib/survey-url';
 import { client } from '@/shared/lib/rpc';
 import { useErrorDialogStore } from '@/stores/error-dialog-store';
-import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
-import { useSurveyUIStore } from '@/features/survey-builder/stores/ui-store';
 import { Question } from '@/types/survey';
 
 const questionTypes = [
@@ -177,7 +177,32 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
   const [showSaveQuestionModal, setShowSaveQuestionModal] = useState(false);
   const [questionToSave, setQuestionToSave] = useState<Question | null>(null);
   const [showImportExportModal, setShowImportExportModal] = useState(false);
-  const [isPublishing, setIsPublishing] = useState(false);
+  const publishMutation = useMutation({
+    mutationFn: async () => {
+      // 배포 전 저장
+      await saveSurvey();
+      return client.surveyBuilder.publish.publish({ surveyId });
+    },
+    onSuccess: (version) => {
+      markPublished();
+      toast.success(`설문이 배포되었습니다. 버전 ${version.versionNumber}`);
+    },
+    onError: (error) => {
+      const issues = (error as { data?: { issues?: VarNameIssue[] } })?.data?.issues;
+      if (issues && issues.length > 0) {
+        useErrorDialogStore.getState().show({
+          title: 'SPSS 변수명 오류로 배포가 중단되었습니다',
+          description: '빌더에서 해당 변수명을 수정한 뒤 다시 배포하세요.',
+          issues,
+        });
+      } else {
+        toast.error(
+          `배포 중 오류가 발생했습니다: ${error instanceof Error ? error.message : '알 수 없는 오류'}`,
+        );
+      }
+    },
+  });
+  const isPublishing = publishMutation.isPending;
 
   // 설문 불러오기 - 초기 로드 또는 다른 설문으로 전환 시에만 로컬 입력 동기화.
   // setState 는 렌더 중 조정 패턴, 스토어 세팅(외부 시스템)은 아래 effect 가 담당한다.
@@ -381,34 +406,7 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
     );
     if (!confirmed) return;
 
-    setIsPublishing(true);
-    await runAsyncAction(
-      async () => {
-        // 배포 전 저장
-        await saveSurvey();
-
-        const version = await client.surveyBuilder.publish.publish({ surveyId });
-        markPublished();
-        toast.success(`설문이 배포되었습니다. 버전 ${version.versionNumber}`);
-      },
-      {
-        onError: (error) => {
-          const issues = (error as { data?: { issues?: VarNameIssue[] } })?.data?.issues;
-          if (issues && issues.length > 0) {
-            useErrorDialogStore.getState().show({
-              title: 'SPSS 변수명 오류로 배포가 중단되었습니다',
-              description: '빌더에서 해당 변수명을 수정한 뒤 다시 배포하세요.',
-              issues,
-            });
-          } else {
-            toast.error(
-              `배포 중 오류가 발생했습니다: ${error instanceof Error ? error.message : '알 수 없는 오류'}`,
-            );
-          }
-        },
-        onSettled: () => setIsPublishing(false),
-      },
-    );
+    publishMutation.mutate();
   };
 
   // 맨 위로 스크롤

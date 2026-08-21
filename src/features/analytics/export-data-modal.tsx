@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -28,7 +28,6 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { buildSafeFilename, downloadBlob } from '@/lib/analytics/export-download';
-import { runAsyncAction } from '@/lib/run-async-action';
 import type { VarNameIssue } from '@/lib/spss/variable-name-guard';
 import { useErrorDialogStore } from '@/stores/error-dialog-store';
 
@@ -150,7 +149,38 @@ async function fetchSplitExportFile(
 
 export function ExportDataModal({ surveyId, surveyTitle }: Props) {
   const [isOpen, setIsOpen] = useState(false);
-  const [exportingType, setExportingType] = useState<string | null>(null);
+  const exportMutation = useMutation({
+    mutationFn: (type: string) => {
+      const ext = type === 'sav' ? 'sav' : type === 'sps' ? 'sps' : 'xlsx';
+      return fetchExportFile(
+        `/api/surveys/${surveyId}/export?type=${type}`,
+        buildSafeFilename(surveyTitle, 'Export', ext),
+        '내보내기에 실패했습니다.',
+      );
+    },
+    onSuccess: (result) => {
+      if (result.kind === 'varNameIssues') {
+        useErrorDialogStore.getState().show({
+          title: 'SPSS 변수명 오류로 내보내기가 중단되었습니다',
+          description: '빌더에서 해당 변수명을 수정한 뒤 다시 시도하세요.',
+          issues: result.issues,
+        });
+        return;
+      }
+      downloadBlob(result.blob, result.filename);
+      // 다운로드 후 모달 닫기 여부는 선택사항 (연속 다운로드를 위해 유지)
+    },
+    onError: (error) => {
+      console.error('Export error:', error);
+      toast.error(
+        error instanceof Error ? error.message : '데이터 내보내기 중 오류가 발생했습니다.',
+      );
+    },
+  });
+  // 진행 중인 형식 — variables 는 pending 동안의 호출 인자
+  const exportingType: string | null = exportMutation.isPending
+    ? (exportMutation.variables ?? null)
+    : null;
   const [step, setStep] = useState<SplitStep>('options');
   const [basis, setBasis] = useState<string | null>(null);
 
@@ -175,39 +205,7 @@ export function ExportDataModal({ surveyId, surveyTitle }: Props) {
     }
   };
 
-  const handleExport = async (type: string) => {
-    setExportingType(type);
-    const ext = type === 'sav' ? 'sav' : type === 'sps' ? 'sps' : 'xlsx';
-    await runAsyncAction(
-      async () => {
-        const result = await fetchExportFile(
-          `/api/surveys/${surveyId}/export?type=${type}`,
-          buildSafeFilename(surveyTitle, 'Export', ext),
-          '내보내기에 실패했습니다.',
-        );
-        if (result.kind === 'varNameIssues') {
-          useErrorDialogStore.getState().show({
-            title: 'SPSS 변수명 오류로 내보내기가 중단되었습니다',
-            description: '빌더에서 해당 변수명을 수정한 뒤 다시 시도하세요.',
-            issues: result.issues,
-          });
-          return;
-        }
-        downloadBlob(result.blob, result.filename);
-
-        // 다운로드 후 모달 닫기 여부는 선택사항 (연속 다운로드를 위해 유지)
-      },
-      {
-        onError: (error) => {
-          console.error('Export error:', error);
-          toast.error(
-            error instanceof Error ? error.message : '데이터 내보내기 중 오류가 발생했습니다.',
-          );
-        },
-        onSettled: () => setExportingType(null),
-      },
-    );
-  };
+  const handleExport = (type: string) => exportMutation.mutate(type);
 
   const handleSplitDownload = async () => {
     if (!basis) return;

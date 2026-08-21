@@ -1,13 +1,13 @@
 'use client';
 
-import { useEffect, useRef, useState, useTransition } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { useRouter } from 'next/navigation';
 
+import { useMutation } from '@tanstack/react-query';
 import { Copy, FlaskConical } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { TestContactGeneratorDialog } from '@/features/operations/contacts/test-contact-generator-dialog';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,8 +26,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { TestContactGeneratorDialog } from '@/features/operations/contacts/test-contact-generator-dialog';
 import { getErrorMessage } from '@/lib/get-error-message';
-import { runAsyncAction } from '@/lib/run-async-action';
 import { client } from '@/shared/lib/rpc';
 
 interface TestModeState {
@@ -94,7 +94,6 @@ interface Props {
 export function TestModeControl({ surveyId, initial }: Props) {
   const router = useRouter();
   const [state, setState] = useState<TestModeState | null>(initial ?? null);
-  const [isPending, startTransition] = useTransition();
   const [testOffConfirm, setTestOffConfirm] = useState(false);
   const [generatorOpen, setGeneratorOpen] = useState(false);
   const disableInFlight = useRef(false);
@@ -229,34 +228,40 @@ export function TestModeControl({ surveyId, initial }: Props) {
     return controlState;
   };
 
-  const enableTestMode = () =>
-    startTransition(async () => {
+  const enableMutation = useMutation({
+    mutationFn: async () => {
+      const result = await client.operations.control.setTestMode({ surveyId, enabled: true });
       controlRequestVersion.current += 1;
-      try {
-        const result = await client.operations.control.setTestMode({ surveyId, enabled: true });
-        controlRequestVersion.current += 1;
-        const next = toTestModeState(result);
-        stateRef.current = next;
-        setState(next);
-        // 발견성: 켜는 즉시 링크를 클립보드에 복사해준다. 클립보드 권한 실패(비HTTPS 등) 시
-        // 호버 메뉴 안내로 폴백 — 켜짐 자체는 성공이므로 success 토스트 유지.
-        if (result.testToken) {
-          try {
-            await navigator.clipboard.writeText(
-              buildAnonymousTestLink(result.testToken, result.accessIdentifier),
-            );
-            toast.success('테스트 모드가 켜졌습니다. 테스트 링크를 클립보드에 복사했습니다.');
-          } catch {
-            toast.success(
-              '테스트 모드가 켜졌습니다. 버튼에 마우스를 올리면 테스트 링크를 복사할 수 있습니다.',
-            );
-          }
+      return result;
+    },
+    onSuccess: async (result) => {
+      const next = toTestModeState(result);
+      stateRef.current = next;
+      setState(next);
+      // 발견성: 켜는 즉시 링크를 클립보드에 복사해준다. 클립보드 권한 실패(비HTTPS 등) 시
+      // 호버 메뉴 안내로 폴백 — 켜짐 자체는 성공이므로 success 토스트 유지.
+      if (result.testToken) {
+        try {
+          await navigator.clipboard.writeText(
+            buildAnonymousTestLink(result.testToken, result.accessIdentifier),
+          );
+          toast.success('테스트 모드가 켜졌습니다. 테스트 링크를 클립보드에 복사했습니다.');
+        } catch {
+          toast.success(
+            '테스트 모드가 켜졌습니다. 버튼에 마우스를 올리면 테스트 링크를 복사할 수 있습니다.',
+          );
         }
-        router.refresh();
-      } catch (err) {
-        toast.error(getErrorMessage(err, '테스트 모드 전환에 실패했습니다.'));
       }
-    });
+      router.refresh();
+    },
+    onError: (err) => {
+      toast.error(getErrorMessage(err, '테스트 모드 전환에 실패했습니다.'));
+    },
+  });
+  const enableTestMode = () => {
+    controlRequestVersion.current += 1;
+    enableMutation.mutate();
+  };
 
   const requestDisableTestMode = () => {
     setTestMenuOpen(false);
@@ -267,62 +272,66 @@ export function TestModeControl({ surveyId, initial }: Props) {
    * 실제 OFF 처리. 성공 시에만 확인 다이얼로그를 닫고,
    * 실패 시 다이얼로그를 유지한 채 toast 만 띄워 재시도 경로를 남긴다.
    */
-  const disableTestMode = async (disposition: 'keep' | 'delete') => {
+  const disableMutation = useMutation({
+    mutationFn: async (disposition: 'keep' | 'delete') => {
+      const result = await client.operations.control.disable({ surveyId, disposition });
+      controlRequestVersion.current += 1;
+      return { result, disposition };
+    },
+    onSuccess: ({ result, disposition }) => {
+      const next = {
+        ...(stateRef.current ?? {
+          testModeEnabled: false,
+          testToken: null,
+          accessIdentifier: surveyId,
+          testResponseCount: 0,
+          testTargetCount: 0,
+          firstTestInviteCode: null,
+        }),
+        testModeEnabled: false,
+        testResponseCount: result.remainingResponseCount,
+        testTargetCount: result.remainingTargetCount,
+        firstTestInviteCode:
+          disposition === 'delete' ? null : (stateRef.current?.firstTestInviteCode ?? null),
+      };
+      stateRef.current = next;
+      setState(next);
+      if (disposition === 'delete') {
+        toast.success(
+          `테스트 대상자 ${result.deletedTargetCount}명과 응답 ${result.deletedResponseCount}건을 삭제했습니다.`,
+        );
+      } else {
+        toast.success('테스트 데이터를 보관하고 테스트 모드를 껐습니다.');
+      }
+      setTestOffConfirm(false);
+      router.refresh();
+    },
+    onError: async (err) => {
+      const message = getErrorMessage(err, '테스트 모드 전환에 실패했습니다.');
+      toast.error(message);
+      if (message.includes('TEST_WORKSPACE_DISABLE_STALE')) {
+        try {
+          const latest = await refreshControl();
+          // 중첩 if — 논리연산으로 두면 중첩 try 안의 value block 이라 컴파일러가 막는다.
+          if (latest) {
+            if (!latest.testModeEnabled) setTestOffConfirm(false);
+          }
+        } catch {
+          // 즉시 조회도 실패하면 dialog를 유지하고 focus/polling에서 다시 동기화한다.
+        }
+      }
+    },
+    onSettled: () => {
+      disableInFlight.current = false;
+    },
+  });
+  const isPending = enableMutation.isPending || disableMutation.isPending;
+
+  const disableTestMode = (disposition: 'keep' | 'delete') => {
     if (disableInFlight.current) return;
     disableInFlight.current = true;
     controlRequestVersion.current += 1;
-    await runAsyncAction(
-      async () => {
-        const result = await client.operations.control.disable({ surveyId, disposition });
-        controlRequestVersion.current += 1;
-        const next = {
-          ...(stateRef.current ?? {
-            testModeEnabled: false,
-            testToken: null,
-            accessIdentifier: surveyId,
-            testResponseCount: 0,
-            testTargetCount: 0,
-            firstTestInviteCode: null,
-          }),
-          testModeEnabled: false,
-          testResponseCount: result.remainingResponseCount,
-          testTargetCount: result.remainingTargetCount,
-          firstTestInviteCode:
-            disposition === 'delete' ? null : (stateRef.current?.firstTestInviteCode ?? null),
-        };
-        stateRef.current = next;
-        setState(next);
-        if (disposition === 'delete') {
-          toast.success(
-            `테스트 대상자 ${result.deletedTargetCount}명과 응답 ${result.deletedResponseCount}건을 삭제했습니다.`,
-          );
-        } else {
-          toast.success('테스트 데이터를 보관하고 테스트 모드를 껐습니다.');
-        }
-        setTestOffConfirm(false);
-        router.refresh();
-      },
-      {
-        onError: async (err) => {
-          const message = getErrorMessage(err, '테스트 모드 전환에 실패했습니다.');
-          toast.error(message);
-          if (message.includes('TEST_WORKSPACE_DISABLE_STALE')) {
-            try {
-              const latest = await refreshControl();
-              // 중첩 if — 논리연산으로 두면 중첩 try 안의 value block 이라 컴파일러가 막는다.
-              if (latest) {
-                if (!latest.testModeEnabled) setTestOffConfirm(false);
-              }
-            } catch {
-              // 즉시 조회도 실패하면 dialog를 유지하고 focus/polling에서 다시 동기화한다.
-            }
-          }
-        },
-        onSettled: () => {
-          disableInFlight.current = false;
-        },
-      },
-    );
+    disableMutation.mutate(disposition);
   };
 
   const copyTestLink = async () => {
@@ -426,7 +435,7 @@ export function TestModeControl({ surveyId, initial }: Props) {
               variant="outline"
               size="sm"
               disabled={isPending}
-              onClick={() => startTransition(() => disableTestMode('keep'))}
+              onClick={() => disableTestMode('keep')}
             >
               보관하고 끄기
             </Button>
@@ -435,7 +444,7 @@ export function TestModeControl({ surveyId, initial }: Props) {
               disabled={isPending}
               onClick={(e) => {
                 e.preventDefault();
-                startTransition(() => disableTestMode('delete'));
+                disableTestMode('delete');
               }}
             >
               삭제 후 끄기

@@ -1,8 +1,22 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import type { ReactElement } from 'react';
+
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { act, render as rtlRender, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TestModeControl } from '@/features/operations/test-mode-control';
+
+// 테스트 모드 켜기/끄기가 useMutation 이라 QueryClientProvider 가 필요하다 — 렌더 호출은 그대로, 래퍼만 공급
+function render(ui: ReactElement) {
+  const client = new QueryClient();
+  // wrapper 옵션은 rerender 에도 적용된다 — 직접 감싸면 rerender(<Next/>) 에서 Provider 가 사라진다
+  return rtlRender(ui, {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    ),
+  });
+}
 
 const {
   controlGetMock,
