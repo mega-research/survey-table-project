@@ -1,7 +1,7 @@
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { InteractiveTableResponse } from '@/components/survey-builder/interactive-table-response';
+import { InteractiveTableResponse } from '@/components/question-renderer/interactive-table-response';
 import type { TableColumn, TableRow } from '@/types/survey';
 
 // 페이지 sticky 헤더 임계 분기 검증.

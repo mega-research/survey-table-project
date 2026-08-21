@@ -2,9 +2,9 @@
 
 import { useEffect, useEffectEvent, useMemo } from 'react';
 
-import { InteractiveTableResponse } from '@/components/survey-builder/interactive-table-response';
-import { NoticeRenderer } from '@/components/survey-builder/notice-renderer';
-import { UserDefinedMultiLevelSelect } from '@/components/survey-builder/user-defined-multi-level-select';
+import { InteractiveTableResponse } from '@/components/question-renderer/interactive-table-response';
+import { NoticeRenderer } from '@/components/question-renderer/notice-renderer';
+import { UserDefinedMultiLevelSelect } from '@/components/question-renderer/user-defined-multi-level-select';
 import { Input } from '@/components/ui/input';
 import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
 import { useMobileView } from '@/hooks/use-media-query';
@@ -16,14 +16,14 @@ import { isChoiceTableSource } from '@/utils/choice-source';
 import {
   applyMobileOptionsGridOverride,
   resolveMobileOptionsColumns,
-} from '@/utils/mobile-card-options';
-import { getOptionsLayout } from '@/utils/options-layout';
+} from '@/components/question-renderer/utils/mobile-card-options';
+import { getOptionsLayout } from '@/components/question-renderer/utils/options-layout';
 
-import { ChoiceTableResponse } from './choice-table-response';
-import { OptionTextInput } from './option-text-input';
-import { OptionTextInputStack } from './option-text-input-stack';
-import { RankingQuestion } from './ranking-question';
-import { type ValidationBannerItem, ValidationIssueBanner } from './validation-issue-banner';
+import { ChoiceTableResponse } from '@/components/question-renderer/choice-table-response';
+import { OptionTextInput } from '@/components/question-renderer/option-text-input';
+import { OptionTextInputStack } from '@/components/question-renderer/option-text-input-stack';
+import { RankingQuestion } from '@/components/question-renderer/ranking-question';
+import { type ValidationBannerItem, ValidationIssueBanner } from '@/components/question-renderer/validation-issue-banner';
 
 /**
  * 라디오·체크박스 옵션 목록의 좌우 인셋 — 질문 제목보다 옵션 블록을 안쪽으로 들여쓴다.

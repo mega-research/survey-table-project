@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import type { TableCell, TableRow } from '@/types/survey';
-import { MOBILE_TABLE_COMPLETION_TYPES } from '@/utils/mobile-original-row';
-import { isTableRowCompleted } from '@/utils/table-row-completion';
+import { MOBILE_TABLE_COMPLETION_TYPES } from '@/components/question-renderer/utils/mobile-original-row';
+import { isTableRowCompleted } from '@/components/question-renderer/utils/table-row-completion';
 
 // 테스트용 셀 팩토리 — 최소 필드만 채우고 나머지는 기본값
 function cell(overrides: Partial<TableCell> & { id: string; type: TableCell['type'] }): TableCell {

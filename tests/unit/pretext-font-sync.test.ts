@@ -36,7 +36,7 @@ describe('pretext 폰트 문자열 동기화', () => {
   });
 
   it('use-row-heights.ts TABLE_FONT은 로드된 폰트를 참조한다 (Pretendard 금지)', () => {
-    const src = readSource('src/hooks/use-row-heights.ts');
+    const src = readSource('src/components/question-renderer/hooks/use-row-heights.ts');
     // 외곽 따옴표는 작은따옴표/백틱, 내부에 큰따옴표 패밀리명 허용
     const match = src.match(/TABLE_FONT\s*=\s*(['`])(.+?)\1/);
     expect(match, 'TABLE_FONT 선언을 찾지 못함').not.toBeNull();

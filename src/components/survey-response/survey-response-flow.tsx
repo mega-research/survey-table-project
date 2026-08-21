@@ -29,7 +29,7 @@ import { ResumeToast } from '@/components/survey-response/resume-toast';
 import {
   buildRowWiseCellInstanceIds,
   scrollToIssue,
-} from '@/components/survey-response/scroll-to-issue';
+} from '@/components/question-renderer/scroll-to-issue';
 import { PageStepView } from '@/components/survey-response/step-views/page-step-view';
 import { SurveyResponseHeader } from '@/components/survey-response/survey-response-header';
 import {
@@ -39,7 +39,7 @@ import {
   SurveyErrorScreen,
   SurveyLoadingScreen,
 } from '@/components/survey-response/survey-response-screens';
-import { AlreadyRespondedView } from '@/components/survey/already-responded-view';
+import { AlreadyRespondedView } from '@/components/survey-response/already-responded-view';
 import { Button } from '@/components/ui/button';
 import type { SurveyVersionSnapshot } from '@/db/schema';
 import type { SaveAdminEditPayload } from '@/features/survey-response/domain/response-edit';
@@ -91,7 +91,7 @@ import {
   getBranchRuleForResponse,
   shouldDisplayQuestion,
 } from '@/utils/branch-logic';
-import { resolveResponseContainerWidth } from '@/utils/table-grid-utils';
+import { resolveResponseContainerWidth } from '@/components/question-renderer/utils/table-grid-utils';
 
 type ResponsesMap = Record<string, unknown>;
 

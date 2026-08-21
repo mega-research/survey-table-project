@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ChoiceTableResponse } from '@/components/survey-response/choice-table-response';
+import { ChoiceTableResponse } from '@/components/question-renderer/choice-table-response';
 import { QuestionInput } from '@/components/survey-response/question-input';
 import { useSurveyResponseStore } from '@/stores/survey-response-store';
 import type { Question } from '@/types/survey';

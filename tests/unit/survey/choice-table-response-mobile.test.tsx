@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ChoiceTableResponse } from '@/components/survey-response/choice-table-response';
+import { ChoiceTableResponse } from '@/components/question-renderer/choice-table-response';
 import type { Question } from '@/types/survey';
 
 // 모바일 뷰 강제

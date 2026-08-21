@@ -61,7 +61,7 @@ import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { useSurveyUIStore } from '@/stores/ui-store';
 import { useSurveyResponseStore } from '@/stores/survey-response-store';
 import { useTestResponseStore } from '@/stores/test-response-store';
-import { computeTableEstimatedHeight } from '@/hooks/use-row-heights';
+import { computeTableEstimatedHeight } from '@/components/question-renderer/hooks/use-row-heights';
 import { Question, QuestionGroup, SurveyLookup } from '@/types/survey';
 
 import { buildFlatOrderedQuestions } from '@/lib/group-ordering';

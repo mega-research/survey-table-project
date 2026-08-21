@@ -2,7 +2,7 @@ import { render } from '@testing-library/react';
 import { useRef } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { getTablePerfLog, useTablePerf } from '@/hooks/use-table-perf';
+import { getTablePerfLog, useTablePerf } from '@/components/question-renderer/hooks/use-table-perf';
 
 // 이 훅은 rAF 로 재는 바람에 "다음 프레임까지의 대기"를 렌더 비용으로 보고했다.
 // 같은 커밋에서 형제 표가 여럿이면 값이 전부 부풀어 "표가 세션 후반에 10배 느려졌다"는

@@ -4,7 +4,7 @@ import type { TableCell } from '@/types/survey';
 import {
   overrideCellOptionsColumnsForCard,
   resolveMobileOptionsColumns,
-} from '@/utils/mobile-card-options';
+} from '@/components/question-renderer/utils/mobile-card-options';
 
 function radioCell(overrides: Partial<TableCell>): TableCell {
   return {

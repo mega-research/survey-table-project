@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { TableCell, TableColumn, TableRow } from '@/types/survey';
-import { buildMobileRowWiseOriginalModel } from '@/utils/mobile-row-wise-original';
+import { buildMobileRowWiseOriginalModel } from '@/components/question-renderer/utils/mobile-row-wise-original';
 
 const columns: TableColumn[] = [
   { id: 'section', label: '구분' },

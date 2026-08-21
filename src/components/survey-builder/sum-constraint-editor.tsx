@@ -15,7 +15,7 @@ import { useState } from 'react';
 import { nanoid } from 'nanoid';
 import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react';
 
-import { TablePreview } from '@/components/survey-builder/table-preview';
+import { TablePreview } from '@/components/question-renderer/table-preview';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { pruneSumConstraints } from '@/lib/survey/numeric-validation';

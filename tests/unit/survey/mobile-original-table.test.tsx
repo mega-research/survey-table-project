@@ -1,8 +1,8 @@
 import { render, screen } from '@testing-library/react';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { InteractiveTableResponse } from '@/components/survey-builder/interactive-table-response';
-import { ChoiceTableResponse } from '@/components/survey-response/choice-table-response';
+import { InteractiveTableResponse } from '@/components/question-renderer/interactive-table-response';
+import { ChoiceTableResponse } from '@/components/question-renderer/choice-table-response';
 import type { Question } from '@/types/survey';
 
 /**
@@ -22,10 +22,10 @@ vi.mock('@/lib/survey/contact-attrs-context', () => ({
   useAnswerQuotes: () => ({}),
 }));
 // 모바일 카드 경로는 스텁으로 식별
-vi.mock('@/components/survey-builder/mobile-table-stepper', () => ({
+vi.mock('@/components/question-renderer/mobile-table-stepper', () => ({
   MobileTableStepper: () => <div data-testid="mobile-stepper" />,
 }));
-vi.mock('@/components/survey-builder/mobile-table-drilldown', () => ({
+vi.mock('@/components/question-renderer/mobile-table-drilldown', () => ({
   MobileTableDrilldown: () => <div data-testid="mobile-drilldown" />,
 }));
 

@@ -3,7 +3,7 @@ import { createRef } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { TableScrollControls } from '@/components/survey-builder/table-scroll-controls';
+import { TableScrollControls } from '@/components/question-renderer/table-scroll-controls';
 
 beforeAll(() => {
   vi.stubGlobal(

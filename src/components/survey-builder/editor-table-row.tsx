@@ -31,7 +31,7 @@ import {
   getCellTextClassName,
   getCellTextStyle,
 } from '@/utils/cell-style';
-import { getAlignmentClasses, getGridSpanStyle } from '@/utils/table-grid-utils';
+import { getAlignmentClasses, getGridSpanStyle } from '@/components/question-renderer/utils/table-grid-utils';
 
 import { useDebouncedInput } from './hooks/use-debounced-input';
 

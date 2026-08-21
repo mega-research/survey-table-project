@@ -1,4 +1,4 @@
-import { computeTableEstimatedHeight } from '@/hooks/use-row-heights';
+import { computeTableEstimatedHeight } from '@/components/question-renderer/hooks/use-row-heights';
 import { isEmptyHtml } from '@/lib/utils';
 import { Question } from '@/types/survey';
 

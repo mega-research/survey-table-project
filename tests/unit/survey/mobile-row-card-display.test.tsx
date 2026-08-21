@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import type { TableColumn, TableRow } from '@/types/survey';
-import { MobileRowCard } from '@/components/survey-builder/mobile-row-card';
+import { MobileRowCard } from '@/components/question-renderer/mobile-row-card';
 
 const columns: TableColumn[] = [
   { id: 'c0', label: '항목', width: 100 },

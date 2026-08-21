@@ -4,7 +4,7 @@ import type { TableCell, TableRow } from '@/types/survey';
 import {
   buildRadioGroupBuckets,
   resolveRadioGroupProps,
-} from '@/utils/table-radio-groups';
+} from '@/components/question-renderer/utils/table-radio-groups';
 
 function radio(
   id: string,

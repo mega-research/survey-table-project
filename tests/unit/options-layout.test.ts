@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { getOptionsLayout } from '@/utils/options-layout';
+import { getOptionsLayout } from '@/components/question-renderer/utils/options-layout';
 
 describe('getOptionsLayout', () => {
   it('align 미지정 시 기존 클래스를 그대로 반환한다', () => {

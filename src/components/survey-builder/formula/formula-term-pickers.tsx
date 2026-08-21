@@ -21,7 +21,7 @@ import { isPartialNumericInput, parseNumericInput } from '@/utils/numeric-input'
 import { LookupKeyMappingEditor } from '../lookup-key-mapping-editor';
 import { LookupSelector } from '../lookup-selector';
 import { EMPTY_LOOKUPS, NONE_SENTINEL } from '../lookup-shared';
-import { TablePreview } from '../table-preview';
+import { TablePreview } from '@/components/question-renderer/table-preview';
 
 /**
  * 수식 빌더의 "항" 종류별 편집 UI 모음.

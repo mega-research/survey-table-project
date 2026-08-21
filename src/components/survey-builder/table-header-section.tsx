@@ -26,7 +26,7 @@ import {
   toCellStyleFieldProps,
 } from '@/utils/cell-style';
 import type { HeaderBulkStyle } from '@/utils/header-style';
-import { getGridSpanStyle } from '@/utils/table-grid-utils';
+import { getGridSpanStyle } from '@/components/question-renderer/utils/table-grid-utils';
 
 import { CellStyleFields } from './cell-style-fields';
 import { useDebouncedInput } from './hooks/use-debounced-input';

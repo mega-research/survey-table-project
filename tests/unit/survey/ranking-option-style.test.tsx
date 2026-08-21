@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { RankingDropdownStack } from '@/components/survey-response/ranking-dropdown-stack';
+import { RankingDropdownStack } from '@/components/question-renderer/ranking-dropdown-stack';
 import type { QuestionOption } from '@/types/survey';
 import { resolveRankingOptionsFromCells } from '@/utils/ranking-source';
 

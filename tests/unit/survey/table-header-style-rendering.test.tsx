@@ -1,8 +1,8 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { InteractiveTableResponse } from '@/components/survey-builder/interactive-table-response';
-import { TablePreview } from '@/components/survey-builder/table-preview';
+import { InteractiveTableResponse } from '@/components/question-renderer/interactive-table-response';
+import { TablePreview } from '@/components/question-renderer/table-preview';
 import type { TableRow } from '@/types/survey';
 
 const previewRows: TableRow[] = [

@@ -8,7 +8,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { UserDefinedMultiLevelSelect } from '@/components/survey-builder/user-defined-multi-level-select';
+import { UserDefinedMultiLevelSelect } from '@/components/question-renderer/user-defined-multi-level-select';
 import { ContactAttrsProvider } from '@/lib/survey/contact-attrs-context';
 import type { SelectLevel } from '@/types/survey';
 

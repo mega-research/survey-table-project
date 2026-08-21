@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { TableCell } from '@/types/survey';
-import { overrideCellOptionsColumnsForCard } from '@/utils/mobile-card-options';
+import { overrideCellOptionsColumnsForCard } from '@/components/question-renderer/utils/mobile-card-options';
 
 /**
  * 모바일 카드는 셀 optionsColumns 를 라벨 길이 휴리스틱(≤10자 → 2열, 초과 → 1열)으로

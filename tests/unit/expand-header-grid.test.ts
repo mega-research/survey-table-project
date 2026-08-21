@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { expandHeaderGrid } from '@/utils/expand-header-grid';
+import { expandHeaderGrid } from '@/components/question-renderer/utils/expand-header-grid';
 import type { HeaderCell } from '@/types/survey';
 
 // ── 헤더 셀 빌더 ──

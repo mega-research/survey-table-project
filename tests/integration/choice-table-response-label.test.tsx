@@ -8,7 +8,7 @@
 import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { ChoiceTableResponse } from '@/components/survey-response/choice-table-response';
+import { ChoiceTableResponse } from '@/components/question-renderer/choice-table-response';
 import type { Question, TableCell, TableRow } from '@/types/survey';
 
 // 데스크톱 강제
@@ -22,7 +22,7 @@ vi.mock('@/lib/survey/contact-attrs-context', () => ({
   useAnswerQuotes: () => ({}),
 }));
 // TablePreview 더블: renderCell 을 각 셀에 호출해 결과만 렌더한다.
-vi.mock('@/components/survey-builder/table-preview', () => ({
+vi.mock('@/components/question-renderer/table-preview', () => ({
   TablePreview: ({
     rows,
     renderCell,

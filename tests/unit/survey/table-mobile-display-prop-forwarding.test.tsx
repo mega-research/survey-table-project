@@ -12,7 +12,7 @@ const { capturedTableProps } = vi.hoisted(() => ({
   capturedTableProps: [] as Array<Record<string, unknown>>,
 }));
 
-vi.mock('@/components/survey-builder/interactive-table-response', () => ({
+vi.mock('@/components/question-renderer/interactive-table-response', () => ({
   InteractiveTableResponse: (props: Record<string, unknown>) => {
     capturedTableProps.push(props);
     return <div data-testid="interactive-table-response" />;
@@ -23,7 +23,7 @@ vi.mock('@/components/survey-builder/sortable-question-list', () => ({
   LazyMount: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 
-vi.mock('@/hooks/use-row-heights', () => ({
+vi.mock('@/components/question-renderer/hooks/use-row-heights', () => ({
   computeTableEstimatedHeight: () => 320,
 }));
 

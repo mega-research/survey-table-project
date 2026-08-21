@@ -1,9 +1,9 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { InteractiveTableResponse } from '@/components/survey-builder/interactive-table-response';
+import { InteractiveTableResponse } from '@/components/question-renderer/interactive-table-response';
 import { QuestionInput } from '@/components/survey-response/question-input';
-import { buildRowWiseCellInstanceIds } from '@/components/survey-response/scroll-to-issue';
+import { buildRowWiseCellInstanceIds } from '@/components/question-renderer/scroll-to-issue';
 import type { Question, TableColumn, TableRow } from '@/types/survey';
 
 /**

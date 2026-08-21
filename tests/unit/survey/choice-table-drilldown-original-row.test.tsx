@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeAll, expect, it, vi } from 'vitest';
 
-import { ChoiceTableResponse } from '@/components/survey-response/choice-table-response';
+import { ChoiceTableResponse } from '@/components/question-renderer/choice-table-response';
 import type { Question } from '@/types/survey';
 import type { GroupedChoiceAnswer } from '@/utils/choice-group-helpers';
 

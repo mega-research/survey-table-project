@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { useCellResponse } from '@/components/survey-builder/cells/use-cell-response';
+import { useCellResponse } from '@/components/question-renderer/cells/use-cell-response';
 import { useTestResponseStore } from '@/stores/test-response-store';
 
 /**

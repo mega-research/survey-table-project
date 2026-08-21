@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { computeColumnPageTarget } from '@/components/survey-builder/table-scroll-controls';
+import { computeColumnPageTarget } from '@/components/question-renderer/table-scroll-controls';
 
 // "다음 두 열 중앙 정렬" 페이징:
 // ▶ = 우측에서 잘려 보이던 열 + 그다음 열을 뷰 가운데에 배치

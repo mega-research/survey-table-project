@@ -3,13 +3,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 // 상세 입력 카드는 contact-attrs context 등 깊은 의존을 가지므로 stub 한다.
 // 검증 대상은 displayRows 변경 시 stepper 의 phase/사전선택 재동기화뿐이다.
-vi.mock('@/components/survey-builder/mobile-row-card', () => ({
+vi.mock('@/components/question-renderer/mobile-row-card', () => ({
   MobileRowCard: ({ row }: { row: { id: string } }) => (
     <div data-testid={`row-card-${row.id}`} />
   ),
 }));
 
-import { MobileTableStepper } from '@/components/survey-builder/mobile-table-stepper';
+import { MobileTableStepper } from '@/components/question-renderer/mobile-table-stepper';
 import type { QuestionConditionGroup, TableColumn, TableRow } from '@/types/survey';
 
 const visibleColumns: TableColumn[] = [

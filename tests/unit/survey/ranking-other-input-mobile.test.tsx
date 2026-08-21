@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { RankingDropdownStack } from '@/components/survey-response/ranking-dropdown-stack';
+import { RankingDropdownStack } from '@/components/question-renderer/ranking-dropdown-stack';
 import type { QuestionOption } from '@/types/survey';
 
 // 모바일 가로 배치(columns=0)에서 트리거는 전체 폭으로 커지는데 상세 입력만 데스크톱용

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 
-import type { NoticeReason } from '@/components/survey/already-responded-view';
+import type { NoticeReason } from '@/components/survey-response/already-responded-view';
 import type { ClientSignals } from '@/lib/duplicate-detection/types';
 import { client } from '@/shared/lib/rpc';
 import type { Survey } from '@/types/survey';

@@ -81,14 +81,14 @@ import { CellChoiceEditor } from './cell-choice-editor';
 import { CellGatingEditor } from './cell-gating-editor';
 import { CellImageEditor } from './cell-image-editor';
 import { CellStyleFields } from './cell-style-fields';
-import { CellContentLayout } from './cells/cell-content-layout';
+import { CellContentLayout } from '@/components/question-renderer/cells/cell-content-layout';
 import { ChoiceOptCellTab } from './choice-opt-cell-tab';
 import { FormulaExprEditor } from './formula/formula-expr-editor';
 import { NumberFormatFields } from './number-format-fields';
 import { OptionsLayoutSelector } from './options-layout-selector';
 import { RankingCellTab } from './ranking-cell-tab';
 import { RankingOptCellTab } from './ranking-opt-cell-tab';
-import { getYouTubeEmbedUrl } from './table-cell-renderers';
+import { getYouTubeEmbedUrl } from '@/components/question-renderer/table-cell-renderers';
 import { VariableButton } from './variable-button';
 
 const TEXT_POSITION_OPTIONS: Array<{

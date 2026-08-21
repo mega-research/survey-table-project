@@ -2,11 +2,11 @@
 
 import { useMemo } from 'react';
 
-import { ChoiceTableResponse } from '@/components/survey-response/choice-table-response';
-import { OptionTextInput } from '@/components/survey-response/option-text-input';
-import { RankingQuestion } from '@/components/survey-response/ranking-question';
+import { ChoiceTableResponse } from '@/components/question-renderer/choice-table-response';
+import { OptionTextInput } from '@/components/question-renderer/option-text-input';
+import { RankingQuestion } from '@/components/question-renderer/ranking-question';
 import { Input } from '@/components/ui/input';
-import { computeTableEstimatedHeight } from '@/hooks/use-row-heights';
+import { computeTableEstimatedHeight } from '@/components/question-renderer/hooks/use-row-heights';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
@@ -14,18 +14,18 @@ import { useTestResponseStore } from '@/stores/test-response-store';
 import { Question, SurveyLookup } from '@/types/survey';
 import { evaluateNumericComparisonV2 } from '@/utils/branch-logic';
 import { isChoiceTableSource } from '@/utils/choice-source';
-import { getOptionsLayout } from '@/utils/options-layout';
+import { getOptionsLayout } from '@/components/question-renderer/utils/options-layout';
 import {
   DYNAMIC_ROW_SELECTIONS_KEY,
   getDynamicRowSelections,
   updateDynamicRowSelections,
-} from '@/utils/dynamic-row-selection-sidecar';
+} from '@/components/question-renderer/utils/dynamic-row-selection-sidecar';
 
 import { ConditionDebugPanel } from './condition-debug-panel';
-import { InteractiveTableResponse } from './interactive-table-response';
-import { NoticeRenderer } from './notice-renderer';
+import { InteractiveTableResponse } from '@/components/question-renderer/interactive-table-response';
+import { NoticeRenderer } from '@/components/question-renderer/notice-renderer';
 import { LazyMount } from './sortable-question-list';
-import { UserDefinedMultiLevelSelect } from './user-defined-multi-level-select';
+import { UserDefinedMultiLevelSelect } from '@/components/question-renderer/user-defined-multi-level-select';
 
 // 기타 옵션 관련 타입 정의
 type OtherChoiceValue = {

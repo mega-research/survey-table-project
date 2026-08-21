@@ -3,7 +3,7 @@ import {
   classifyTable,
   decideDrilldown,
   type ClassifyInput,
-} from '@/utils/classify-table';
+} from '@/components/question-renderer/utils/classify-table';
 import type { TableCell, TableColumn, TableRow, HeaderCell } from '@/types/survey';
 
 // ── 셀/열/헤더 빌더 (디자인 핸드오프와 동일 의미) ──

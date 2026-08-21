@@ -1,8 +1,8 @@
 import { cleanup, render } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { CheckboxCell } from '@/components/survey-builder/cells/checkbox-cell';
-import { RadioCell } from '@/components/survey-builder/cells/radio-cell';
+import { CheckboxCell } from '@/components/question-renderer/cells/checkbox-cell';
+import { RadioCell } from '@/components/question-renderer/cells/radio-cell';
 import type { TableCell } from '@/types/survey';
 
 // N열 옵션 그리드에서 라디오/체크박스 컨트롤은 라벨이 2줄로 감겨도

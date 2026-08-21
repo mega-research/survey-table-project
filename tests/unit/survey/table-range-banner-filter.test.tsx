@@ -20,7 +20,7 @@ interface CapturedProps {
 
 const captured: CapturedProps[] = [];
 
-vi.mock('@/components/survey-builder/interactive-table-response', () => ({
+vi.mock('@/components/question-renderer/interactive-table-response', () => ({
   InteractiveTableResponse: (props: CapturedProps) => {
     captured.push(props);
     return <div data-testid="table" />;

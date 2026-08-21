@@ -17,7 +17,7 @@ import {
   DYNAMIC_ROW_SELECTIONS_KEY,
   getDynamicRowSelections,
   updateDynamicRowSelections,
-} from '@/utils/dynamic-row-selection-sidecar';
+} from '@/components/question-renderer/utils/dynamic-row-selection-sidecar';
 
 type ResponsesMap = Record<string, unknown>;
 

@@ -53,12 +53,12 @@ import { VariableButton } from './variable-button';
 import { BranchRuleEditor } from './branch-rule-editor';
 import { DynamicTableEditor } from './dynamic-table-editor';
 import { RichTextEditor, type RichTextEditorHandle } from '@/components/ui/rich-text-editor';
-import { NoticeRenderer } from './notice-renderer';
+import { NoticeRenderer } from '@/components/question-renderer/notice-renderer';
 import { NumberFormatFields } from './number-format-fields';
 import { OptionsLayoutSelector } from './options-layout-selector';
 import { RankingConfigEditorForQuestion } from './ranking-config-editor';
 import { SpssVariableEditor } from './spss-variable-editor';
-import { TablePreview } from './table-preview';
+import { TablePreview } from '@/components/question-renderer/table-preview';
 import { UserDefinedMultiSelectPreview } from './user-defined-multi-select';
 import {
   OTHER_OPTION_ID,

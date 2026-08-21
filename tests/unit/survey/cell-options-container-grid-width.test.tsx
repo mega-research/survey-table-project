@@ -1,7 +1,7 @@
 import { cleanup, render } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { CellOptionsContainer } from '@/components/survey-builder/cells/cell-options-container';
+import { CellOptionsContainer } from '@/components/question-renderer/cells/cell-options-container';
 import type { TableCell } from '@/types/survey';
 
 // jsdom 은 실제 픽셀 폭을 측정할 수 없으므로(shrink-to-fit vs 100% 폭 차이는
