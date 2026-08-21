@@ -108,6 +108,15 @@ const CHECKS_FOR = {
    * 활성화되어 사유가 end_date_passed → max_responses_reached 로 승계된다. 어느 쪽도 차단이라
    * 정책 회귀가 아니다. 다만 완료 경로는 blocked 폴딩을 타지 않으므로 두 사유 모두
    * 응답자에게는 500 으로 나간다 — 사유 태그만 바뀐다.
+   *
+   * 미배포(status_not_published)는 계속 차단하지만, **설문 종료(status='closed') 기능이
+   * 생기면 이 검사를 종료에 한해 풀어야 한다** — 2026-08-21 사용자 결정: 종료는 마감과
+   * 같은 결로 "신규 진입만 차단하고 진행 중 응답은 끝까지 제출시킨다". 즉시 전면 중단이
+   * 필요한 경우의 수단은 이미 isPaused 다(운영자가 건 라이브 스위치라 진행 중에도 적용).
+   * 지금 검사를 미리 빼지 않는 이유: 레포 전체에 status 를 'closed' 로 쓰는 경로가 없어
+   * (publish 만 존재) 실행되지 않는 완화가 되고, draft 방어만 잃는다. 종료 기능을 만들 때
+   * 이 행에서 status_not_published 를 빼는 대신 'draft 면 거부, closed 면 통과' 검사로
+   * 갈아끼우면 된다 — newResponse·reedit 행은 그대로 published 만 통과시킨다.
    */
   completeResponse: [
     'status_not_published',
@@ -133,12 +142,7 @@ const CHECKS_FOR = {
    * status·endDate 는 계속 본다 — 되돌리기는 이미 닫힌 접수를 관리자가 다시 여는 행위라
    * 진행 중 응답을 지키는 것과 성격이 다르다.
    */
-  reedit: [
-    'status_not_published',
-    'survey_paused',
-    'end_date_passed',
-    'invite_required',
-  ],
+  reedit: ['status_not_published', 'survey_paused', 'end_date_passed', 'invite_required'],
 } as const satisfies Record<string, readonly AcceptanceDenial[]>;
 
 /**
