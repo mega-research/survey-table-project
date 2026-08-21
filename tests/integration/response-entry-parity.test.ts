@@ -200,14 +200,15 @@ async function callCreate(kind: Kind, over: Over = {}) {
     ...(over.testToken !== undefined ? { testToken: over.testToken } : {}),
     ...(over.attemptId !== undefined ? { attemptId: over.attemptId } : {}),
     ...(over.honeypot !== undefined ? { honeypot: over.honeypot } : {}),
+    // 진척은 두 경로의 공통 입력이다 (A-2f-2 이후). blank 에만 자리가 없던 것이 D-2 였다.
+    ...(over.visibleStepIndex !== undefined ? { visibleStepIndex: over.visibleStepIndex } : {}),
+    ...(over.visibleStepTotal !== undefined ? { visibleStepTotal: over.visibleStepTotal } : {}),
   };
   if (kind === 'blank') return svc.createBlankResponse(common);
   return svc.createResponseWithFirstAnswer({
     ...common,
     questionId: 'q1',
     value: over.value === undefined ? 'a' : over.value,
-    ...(over.visibleStepIndex !== undefined ? { visibleStepIndex: over.visibleStepIndex } : {}),
-    ...(over.visibleStepTotal !== undefined ? { visibleStepTotal: over.visibleStepTotal } : {}),
   });
 }
 
@@ -400,7 +401,7 @@ describe.each(['first', 'blank'] as const)('T5 attempt 가드 — %s', (kind: Ki
 // ============================================================================
 // T6 — 반환 shape 박제. 드리프트 D-1(blank draftSeq 부재)을 현행 그대로 못박는다.
 // ============================================================================
-describe('T6 draftSeq 반환 (드리프트 D-1 현행 박제)', () => {
+describe('T6 draftSeq 반환 (A-2f-1 — 두 경로 대칭)', () => {
   beforeEach(() => {
     wireHappyPath();
     H.insertReturningMock.mockResolvedValue([insertedRow({ metadata: { draftSeq: 7 } })]);
@@ -412,17 +413,26 @@ describe('T6 draftSeq 반환 (드리프트 D-1 현행 박제)', () => {
     expect(result.draftSeq).toBe(7);
   });
 
-  it('blank 는 draftSeq 키 자체가 없다 — 후속 A-2f-1 에서 뒤집는다', async () => {
+  it('blank 도 물려받은 행의 draftSeq 를 싣는다 (D-1 해소)', async () => {
     const result = await callCreate('blank', { versionId: VERSION_ID });
     if (result.kind !== 'created') throw new Error('created 아님');
-    expect('draftSeq' in result).toBe(false);
+    expect(result.draftSeq).toBe(7);
+  });
+
+  it('물려받을 draftSeq 가 없으면 두 경로 모두 키를 싣지 않는다', async () => {
+    H.insertReturningMock.mockResolvedValue([insertedRow({ metadata: null })]);
+    for (const kind of ['first', 'blank'] as const) {
+      const result = await callCreate(kind, { versionId: VERSION_ID });
+      if (result.kind !== 'created') throw new Error('created 아님');
+      expect('draftSeq' in result).toBe(false);
+    }
   });
 });
 
 // ============================================================================
-// T7 — INSERT 키 집합 박제. 드리프트 D-2(blank visibleStep* 부재)를 현행 그대로.
+// T7 — INSERT 키 집합. 진척은 두 경로가 같은 자리에서 읽는다 (A-2f-2, 드리프트 D-2 해소).
 // ============================================================================
-describe('T7 INSERT 키 집합 (드리프트 D-2 현행 박제)', () => {
+describe('T7 INSERT 키 집합 (A-2f-2 — 진척은 answer 가 아니라 입력 소유)', () => {
   beforeEach(() => {
     wireHappyPath();
   });
@@ -443,12 +453,23 @@ describe('T7 INSERT 키 집합 (드리프트 D-2 현행 박제)', () => {
     expect(values['questionResponses']).toEqual({ q1: 'a' });
   });
 
-  it('blank 는 visibleStep* 키가 없어야 한다 — ?? null 통일 유혹을 차단', async () => {
-    await callCreate('blank', { versionId: VERSION_ID });
+  it('blank 도 visibleStep* 를 싣는다 — 공지형 설문의 진척이 공란이던 것이 D-2 였다', async () => {
+    await callCreate('blank', { versionId: VERSION_ID, visibleStepIndex: 2, visibleStepTotal: 5 });
     const values = capturedValues();
-    expect('visibleStepIndex' in values).toBe(false);
-    expect('visibleStepTotal' in values).toBe(false);
+    expect(values['visibleStepIndex']).toBe(2);
+    expect(values['visibleStepTotal']).toBe(5);
+    // 답은 없다 — 진척과 첫 답변은 별개다.
     expect(values['questionResponses']).toEqual({});
+  });
+
+  it('진척 미전송이면 두 경로 모두 null 로 기록한다 (구 클라 호환)', async () => {
+    for (const kind of ['first', 'blank'] as const) {
+      H.insertValuesArg.mockClear();
+      await callCreate(kind, { versionId: VERSION_ID });
+      const values = capturedValues();
+      expect(values['visibleStepIndex']).toBeNull();
+      expect(values['visibleStepTotal']).toBeNull();
+    }
   });
 });
 

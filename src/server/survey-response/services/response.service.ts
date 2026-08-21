@@ -1399,8 +1399,6 @@ function isLikelyBot(args: {
 type EntryFirstAnswer = {
   questionId: string;
   value: unknown;
-  visibleStepIndex?: number | null | undefined;
-  visibleStepTotal?: number | null | undefined;
 };
 
 // 두 입력의 차집합이 EntryFirstAnswer 와 정확히 일치함을 tsc 가 매 빌드 확인한다.
@@ -1452,8 +1450,6 @@ export async function createResponseWithFirstAnswer(
   return admitAndCreateResponse(input, {
     questionId: input.questionId,
     value: input.value,
-    visibleStepIndex: input.visibleStepIndex,
-    visibleStepTotal: input.visibleStepTotal,
   });
 }
 
@@ -1482,6 +1478,8 @@ async function admitAndCreateResponseInner(
     sessionId,
     versionId,
     currentStepId,
+    visibleStepIndex,
+    visibleStepTotal,
     inviteToken,
     clientSignals,
     honeypot,
@@ -1559,12 +1557,8 @@ async function admitAndCreateResponseInner(
         attemptId,
         versionId: versionId ?? null,
         currentStepId,
-        ...(answer
-          ? {
-              visibleStepIndex: answer.visibleStepIndex,
-              visibleStepTotal: answer.visibleStepTotal,
-            }
-          : {}),
+        visibleStepIndex,
+        visibleStepTotal,
         userAgent,
         ipHash: signals?.ipHash ?? null,
         fpHash: signals?.fpHash ?? null,
@@ -1623,7 +1617,6 @@ async function admitAndCreateResponseInner(
     surveyId,
     sessionId,
     versionId: effectiveVersionId,
-    // answer 분기 (3/4) — blank 는 현행처럼 visibleStep* 키가 "없어야" 한다(드리프트 D-2, 후속 A-2f-2).
     questionResponses: answer ? { [answer.questionId]: storedValue } : {},
     isCompleted: false,
     status: 'in_progress',
@@ -1634,12 +1627,8 @@ async function admitAndCreateResponseInner(
     platform,
     browser,
     currentStepId,
-    ...(answer
-      ? {
-          visibleStepIndex: answer.visibleStepIndex ?? null,
-          visibleStepTotal: answer.visibleStepTotal ?? null,
-        }
-      : {}),
+    visibleStepIndex: visibleStepIndex ?? null,
+    visibleStepTotal: visibleStepTotal ?? null,
     pageVisits: [firstVisit],
     contactTargetId,
     isTest,
@@ -1657,28 +1646,20 @@ async function admitAndCreateResponseInner(
   // 종결 상태 행을 물려받으려던 경우 — 500 대신 "이미 끝난 응답" 안내로 돌려보낸다.
   if (result.kind === 'blocked') return { kind: 'blocked', reason: result.reason };
 
-  // answer 분기 (4/4) — blank 는 머지할 답도 draftSeq 도 싣지 않는다.
-  // 드리프트 D-1 의 "의도적 보존"이다. 후속 티켓 A-2f-1 에서 대칭화한다. 여기서 고치지 말 것.
-  if (!answer) {
-    return {
-      kind: 'created',
-      id: result.row.id,
-      contactTargetId: result.row.contactTargetId,
-      // 행에 실제 기록된 versionId — 클라이언트가 자신이 알던 값과 비교해 재핀(티켓 04)을 감지한다.
-      versionId: result.row.versionId,
-    };
-  }
-
+  // answer 분기 (4/4) — 첫 답변이 있을 때만 머지한다.
   // 신규 INSERT 든 reuse 든 모두 updateQuestionResponse 로 첫 답변 머지 + progress_pct
   // 갱신을 단일화. jsonb_set 은 동일 값 덮어쓰기라 멱등이라 신규 INSERT path 의 중복 set
   // 도 안전. onReuse 콜백을 사용하지 않는 이유: progress_pct 가 신규 INSERT 에서도 필요.
-  await updateQuestionResponse({
-    responseId: result.row.id,
-    questionId: answer.questionId,
-    value: storedValue,
-  });
+  if (answer) {
+    await updateQuestionResponse({
+      responseId: result.row.id,
+      questionId: answer.questionId,
+      value: storedValue,
+    });
+  }
   // 컨택 재사용으로 기존 행을 물려받았으면 그 행의 draftSeq 를 함께 실어 보낸다 — resume 이
   // 호출되지 않는 경로(localStorage 없는 재진입)에서도 draftSeqRef 를 올바르게 seed 하기 위함.
+  // 반환은 두 경로가 공유한다 — 갈라 두면 한쪽만 필드가 빠지는 드리프트가 다시 생긴다(D-1).
   const draftSeq = extractDraftSeq(result.row.metadata);
   return {
     kind: 'created',

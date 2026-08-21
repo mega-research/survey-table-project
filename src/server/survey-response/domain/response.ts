@@ -129,6 +129,10 @@ export const CreateBlankResponseInput = z.object({
   sessionId: z.string(),
   versionId: z.string().nullable(),
   currentStepId: z.string(),
+  // 운영 콘솔 진척 표기용 visible step 진척 (클라 계산값). 미전송/구 클라 호환 위해 nullish.
+  // 첫 답변 경로와 같은 자리 — 공지형처럼 빈 응답이 유일한 생성 경로인 설문도 진척이 남는다.
+  visibleStepIndex: z.number().int().nullish(),
+  visibleStepTotal: z.number().int().nullish(),
   inviteToken: z.string().optional(),
   clientSignals: ClientSignalsSchema.nullable(),
   // 봇 방어 허니팟. 실제 클라이언트는 hidden 필드라 항상 빈 값. 봇이 채우면 차단.
