@@ -1,11 +1,18 @@
 import { Param } from 'drizzle-orm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { db } from '@/db';
+
+import { saveAdminEdit } from './response-edit.service';
+
 vi.mock('./response-answers.service', () => ({
   replaceResponseAnswers: vi.fn(async () => undefined),
 }));
 
-vi.mock('./response.service', () => ({
+// 통 mock 금지(레포 관례) — saveAdminEdit 가 이 모듈에서 assertAnswerValueSize 도 가져오므로
+// 실물을 spread 로 깔고 이 테스트가 고정하려는 것(PII 집합)만 덮는다. 크기 가드는 실동작 유지.
+vi.mock('./response.service', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./response.service')>()),
   loadPiiQuestionIds: vi.fn(async () => new Set<string>()),
 }));
 
@@ -128,9 +135,6 @@ vi.mock('@/db', () => ({
     }),
   },
 }));
-
-import { db } from '@/db';
-import { saveAdminEdit } from './response-edit.service';
 
 const SURVEY_ID = '11111111-1111-4111-8111-111111111111';
 const RESPONSE_ID = '22222222-2222-4222-8222-222222222222';

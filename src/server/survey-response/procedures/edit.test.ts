@@ -3,18 +3,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
 
+import * as svc from '../services/response-edit.service';
+import { SurveyNotAcceptingResponsesError } from '../services/response.service';
+import { edit } from './edit';
+
 vi.mock('../services/response-edit.service', async () => {
-  const actual = await vi.importActual<
-    typeof import('../services/response-edit.service')
-  >('../services/response-edit.service');
+  const actual = await vi.importActual<typeof import('../services/response-edit.service')>(
+    '../services/response-edit.service',
+  );
   return {
     ...actual,
     saveAdminEdit: vi.fn(),
   };
 });
-
-import * as svc from '../services/response-edit.service';
-import { edit } from './edit';
 
 function authedContext(): ORPCContext {
   return { db: {} as never, supabase: {} as never, user: { id: 'admin-1', email: 'a@b.com' } };
@@ -89,6 +90,22 @@ describe('surveyResponse.edit procedures', () => {
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
   });
 
+  // A-2f-5: 응답자 경로와 공유하는 크기 가드가 관리자 화면에서 500 이 아니라 BAD_REQUEST 로 보인다.
+  it('크기 가드 throw 는 BAD_REQUEST 로 매핑된다', async () => {
+    vi.mocked(svc.saveAdminEdit).mockRejectedValue(
+      new SurveyNotAcceptingResponsesError('answer_value_too_large') as never,
+    );
+    const client = createRouterClient({ edit }, { context: authedContext() });
+    await expect(
+      client.edit.saveAdminEdit({
+        surveyId: SURVEY_ID,
+        responseId: RESPONSE_ID,
+        questionResponses: {},
+        versionId: null,
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+  });
+
   it('인증 없으면 saveAdminEdit가 UNAUTHORIZED로 막힌다', async () => {
     const client = createRouterClient(
       { edit },
@@ -110,7 +127,13 @@ describe('surveyResponse.edit procedures', () => {
     vi.mocked(svc.saveAdminEdit).mockResolvedValue({ ok: true } as never);
     const client = createRouterClient(
       { edit },
-      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+      {
+        context: {
+          db: {} as never,
+          supabase: {} as never,
+          user: { id: 'guest-1', email: 'g@b.com' },
+        },
+      },
     );
     const input = {
       surveyId: SURVEY_ID,
@@ -135,7 +158,13 @@ describe('surveyResponse.edit procedures', () => {
     vi.mocked(svc.saveAdminEdit).mockResolvedValue({ ok: true } as never);
     const client = createRouterClient(
       { edit },
-      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+      {
+        context: {
+          db: {} as never,
+          supabase: {} as never,
+          user: { id: 'guest-1', email: 'g@b.com' },
+        },
+      },
     );
     const input = {
       surveyId: SURVEY_ID,
@@ -157,7 +186,13 @@ describe('surveyResponse.edit procedures', () => {
     vi.stubEnv('GUEST_SURVEY_GRANTS', `guest-1:${SURVEY_ID}`);
     const client = createRouterClient(
       { edit },
-      { context: { db: {} as never, supabase: {} as never, user: { id: 'guest-1', email: 'g@b.com' } } },
+      {
+        context: {
+          db: {} as never,
+          supabase: {} as never,
+          user: { id: 'guest-1', email: 'g@b.com' },
+        },
+      },
     );
     await expect(
       client.edit.saveAdminEdit({

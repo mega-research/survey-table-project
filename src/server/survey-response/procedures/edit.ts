@@ -5,16 +5,24 @@ import { assertSurveyAccess, scoped } from '@/server/orpc';
 
 import { SaveAdminEditInput, SaveAdminEditOutput } from '../domain/response-edit';
 import * as svc from '../services/response-edit.service';
+import { SurveyNotAcceptingResponsesError } from '../services/response.service';
 
 /**
  * service throw 를 사용자 친화 ORPCError 로 변환.
  * - SurveyOwnershipError('not_found') / 'Response not found' → NOT_FOUND.
  * - 'Cannot edit deleted response' → BAD_REQUEST.
  * - 'Version conflict' → CONFLICT.
+ * - answer_value_too_large(크기 가드) → BAD_REQUEST.
  */
 function mapServiceError(err: unknown): never {
   if (err instanceof svc.SurveyOwnershipError) {
     throw new ORPCError('NOT_FOUND', { message: '설문을 찾을 수 없습니다' });
+  }
+  // 응답자 경로와 공유하는 크기 가드. 사유 문자열은 외부 계약이라 그대로 두고 코드만 접는다.
+  if (err instanceof SurveyNotAcceptingResponsesError && err.reason === 'answer_value_too_large') {
+    throw new ORPCError('BAD_REQUEST', {
+      message: '응답값이 너무 큽니다. 해당 문항의 입력을 줄여 주세요.',
+    });
   }
   if (err instanceof Error && err.message === 'Response not found') {
     throw new ORPCError('NOT_FOUND', { message: '응답을 찾을 수 없습니다' });

@@ -1,42 +1,40 @@
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import 'server-only';
 
-import { and, eq, isNull, sql } from 'drizzle-orm';
-
 import { db } from '@/db';
-import { logger } from '@/lib/logger';
 import {
-  surveyResponses,
-  surveys,
-  surveyVersions,
-  responseEditLogs,
   contactTargets,
+  responseEditLogs,
+  surveyResponses,
+  surveyVersions,
+  surveys,
 } from '@/db/schema';
-import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
-import { replaceResponseAnswers } from './response-answers.service';
+import { SurveyOwnershipError } from '@/lib/auth/require-survey-ownership';
+import { decryptQuestionResponses, encryptResponsesForStorage } from '@/lib/crypto/response-pii';
+import { logger } from '@/lib/logger';
+import { resolveWriteScopeIsTest } from '@/lib/operations/data-scope.server';
+import { buildChangedQuestions, diffQuestionResponses } from '@/lib/operations/response-edit-diff';
 import { calculateProgressPct } from '@/lib/operations/response-progress';
 import { getProgressSnapshot } from '@/lib/operations/response-progress.server';
-import {
-  buildChangedQuestions,
-  diffQuestionResponses,
-} from '@/lib/operations/response-edit-diff';
-import { SurveyOwnershipError } from '@/lib/auth/require-survey-ownership';
-import { resolveWriteScopeIsTest } from '@/lib/operations/data-scope.server';
-import { decryptQuestionResponses, encryptResponsesForStorage } from '@/lib/crypto/response-pii';
 import { withCalcValues } from '@/lib/survey/cell-formula';
 import { stripDisabledCellValues } from '@/lib/survey/cell-gating';
-import { loadPiiQuestionIds } from './response.service';
-
+import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
 import type { Question, SurveyLookup } from '@/types/survey';
+
 import type { SaveAdminEditInput } from '../domain/response-edit';
+import { replaceResponseAnswers } from './response-answers.service';
+import { assertAnswerValueSize, loadPiiQuestionIds } from './response.service';
 
 // 'Response not found' / 'Cannot edit deleted response' throw 메시지는 그대로 두고
 // procedure 가 ORPCError 로 매핑한다.
 export { SurveyOwnershipError };
 
 /** 이관 시 metadata 갱신 sql 조각 — adminEditRollback 1회 백업 (+ 출처 버전 기록) */
-function buildMigrationMetadataSql(
-  rollback: { versionId: string | null; questionResponses: unknown; savedAt: string },
-) {
+function buildMigrationMetadataSql(rollback: {
+  versionId: string | null;
+  questionResponses: unknown;
+  savedAt: string;
+}) {
   const withRollback = sql`jsonb_set(
     COALESCE(${surveyResponses.metadata}, '{}'::jsonb),
     '{adminEditRollback}',
@@ -246,9 +244,17 @@ export async function saveAdminEdit(
   // 저장은 재암호화 — 판단 기준은 응답의 versionId 스냅샷(레거시 null 은 questions 폴백).
   const piiIds = await loadPiiQuestionIds(effectiveVersionId, surveyId);
   const storedResponses =
-    piiIds.size > 0
-      ? encryptResponsesForStorage(finalResponses, piiIds)
-      : finalResponses;
+    piiIds.size > 0 ? encryptResponsesForStorage(finalResponses, piiIds) : finalResponses;
+
+  // 크기 가드 — 응답자 경로와 같은 임계·같은 에러(assertAnswerValueSize)를 쓴다. 종전에는
+  // 이 경로에만 가드가 전무해 questionResponses 가 verbatim UPDATE 됐다(입력 zod 도 검증자
+  // 없는 z.custom 이라 통과). 판정 기준이 적재되는 값이라 암호화 이후 한 번만 재면 평문·
+  // 암호문이 함께 덮인다. 관리자 편집은 여러 질문을 한 UPDATE 로 쓰므로 질문별로 잰다.
+  // 응답자 경로의 silent drop 과 달리 throw 하는 이유: 운영자의 명시적 수정을 조용히 버리는
+  // 것이 저장 실패를 알리는 것보다 나쁘다. procedure 가 BAD_REQUEST 로 접는다.
+  for (const value of Object.values(storedResponses)) {
+    assertAnswerValueSize(value);
+  }
 
   await db.transaction(async (tx) => {
     // deletedAt 검사(line 61)와 이 UPDATE 사이에 동시 softDeleteResponse 가 deletedAt 을
@@ -296,12 +302,7 @@ export async function saveAdminEdit(
       throw new Error('Cannot edit deleted response');
     }
 
-    await replaceResponseAnswers(
-      tx,
-      responseId,
-      surveyId,
-      storedResponses,
-    );
+    await replaceResponseAnswers(tx, responseId, surveyId, storedResponses);
 
     if (changedQuestions.length > 0) {
       await tx.insert(responseEditLogs).values({

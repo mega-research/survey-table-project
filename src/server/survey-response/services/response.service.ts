@@ -613,10 +613,10 @@ async function assertQuestionBelongsToResponse(
 }
 
 /**
- * jsonb_set 저수준 UPDATE. 크기 가드를 갖지 않는다 — 저장될 값에 대한
+ * jsonb_set 저수준 UPDATE. 크기 가드를 갖지 않는다 — 저장될 값(PII 는 암호문)에 대한
  * assertAnswerValueSize 는 호출자 책임이다(현재 호출자: updateQuestionResponse ·
- * saveDraftResponse · acquireTestTargetEntry). 새 호출자를 추가할 때 이 검사를 빠뜨리면
- * 무가드 쓰기 경로가 다시 생긴다.
+ * acquireTestTargetEntry). 새 호출자를 추가할 때 이 검사를 빠뜨리면
+ * 무가드 쓰기 경로가 다시 생긴다. 배치 UPDATE 쪽은 applyDraftAnswersUpdate 가 같은 규약을 진다.
  */
 async function applyQuestionResponseUpdate(
   executor: { update: typeof db.update },
@@ -850,6 +850,9 @@ export async function updateQuestionResponse(
   );
   // PII 문항이면 저장 직전 암호화. 이미 암호문이면 encryptAnswerValue 가 통과시킨다.
   const storedValue = piiEncrypted ? encryptAnswerValue(value) : value;
+  // #5 변조 가드 1(저장값 기준): 위 평문 검사는 사전 필터일 뿐이고 판정 기준은 적재되는 값이다.
+  // 진입 파이프라인·대상자 테스트 lane 과 같은 기준 — 같은 값을 어느 경로로 넣든 임계가 같다.
+  assertAnswerValueSize(storedValue);
 
   // 중단 모드: 열려 있던 탭의 답변 저장 차단 (테스트 행 예외) — 스펙 5절 게이트 3.
   await assertSurveyNotPaused(responseRow);
@@ -884,8 +887,18 @@ type ResponseMutationRow = {
   contactTargetId: string | null;
 };
 
-/** #5 변조 가드 1: value 직렬화 바이트 상한. DB UPDATE 이전에 거대 JSONB 주입을 막는다. */
-function assertAnswerValueSize(value: unknown): void {
+/**
+ * #5 변조 가드 1: value 직렬화 바이트 상한. DB 쓰기 이전에 거대 JSONB 주입을 막는다.
+ *
+ * 판정 기준은 **실제로 저장되는 값**이다(PII 문항이면 암호문). 가드의 목적이 DB 적재 폭탄
+ * 방지이므로 적재되는 바이트가 기준이어야 한다 — 평문 단계의 호출은 암호화 비용을 치르기
+ * 전에 명백한 초과를 거르는 값싼 사전 필터이지 별개 임계가 아니다. 그래서 PII 문항의 평문
+ * 실질 상한은 base64 팽창(약 4/3 배)만큼 낮은 약 191KiB 다.
+ *
+ * export 이유: 관리자 편집(response-edit.service)이 같은 임계·같은 에러를 써야 한다.
+ * 임계 상수를 복제하지 말고 이 함수를 부를 것.
+ */
+export function assertAnswerValueSize(value: unknown): void {
   const serializedBytes = Buffer.byteLength(JSON.stringify(value ?? null), 'utf8');
   if (serializedBytes > MAX_ANSWER_VALUE_BYTES) {
     throw new SurveyNotAcceptingResponsesError('answer_value_too_large');
@@ -1003,6 +1016,12 @@ async function loadQuestionPiiFlags(
  * 더 새로운 쓰기가 끼어든 것이므로 'stale' 로 돌려 답변을 쓰지 않는다.
  * 내보내는 이유: 이 동시성 가드는 두 문장 사이를 외부에서 쪼갤 수 없어 실DB 테스트가
  * 이 함수를 직접 호출해 고정한다 (tests/integration/draft-seq-guard.realdb.test.ts).
+ *
+ * applyQuestionResponseUpdate 와 동일하게 크기 가드를 갖지 않는다 — 저장될 값(PII 는 암호문)
+ * 에 대한 assertAnswerValueSize 는 호출자 책임이다(현재 호출자: saveDraftResponse).
+ * 테스트를 위해 export 돼 있으므로 새 호출자를 붙일 때 이 검사를 빠뜨리면 무가드 쓰기 경로가
+ * 다시 생긴다 — 저수준 UPDATE 자체에 가드를 넣지 않는 것은 배치 전체를 한 번 더 직렬화하지
+ * 않기 위한 의도된 선택이다.
  */
 export async function applyDraftAnswersUpdate(
   executor: { update: typeof db.update },
@@ -1200,7 +1219,11 @@ export async function saveDraftResponse(
   // PII 문항이면 저장 직전 암호화. 이미 암호문이면 encryptAnswerValue 가 통과시킨다.
   const storedAnswers: Record<string, unknown> = {};
   for (const [questionId, value] of answerEntries) {
-    storedAnswers[questionId] = piiFlags.get(questionId) ? encryptAnswerValue(value) : value;
+    const storedValue = piiFlags.get(questionId) ? encryptAnswerValue(value) : value;
+    // #5 변조 가드 1(저장값 기준): 단건 경로와 같은 기준으로 답변별로 다시 잰다. 하나라도
+    // 넘으면 배치 전체를 거부한다 — 소속 검증과 동일하게 부분 저장은 하지 않는다.
+    assertAnswerValueSize(storedValue);
+    storedAnswers[questionId] = storedValue;
   }
   if (sidecarEntry) {
     storedAnswers['__optTexts__'] = readOptTextsSidecar({ __optTexts__: sidecarEntry[1] });
@@ -1960,7 +1983,16 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
   if (validatedResponses && gateRow) {
     const piiIds = await loadPiiQuestionIds(gateRow.versionId, gateRow.surveyId);
     if (piiIds.size > 0) {
-      validatedResponses = encryptResponsesForStorage(validatedResponses, piiIds);
+      const encrypted = encryptResponsesForStorage(validatedResponses, piiIds);
+      // 바이트 필터 2단(저장값 기준): 위쪽 평문 필터를 통과했어도 암호문은 상한을 넘을 수
+      // 있다. 크기가 변한 키는 암호화된 것뿐이라 piiIds 만 다시 잰다. 이 경로의 의미론은
+      // 이 함수의 다른 오염 가드와 같은 silent drop 이다 — 완주자의 완료 자체는 막지 않는다.
+      for (const qid of piiIds) {
+        if (!(qid in encrypted)) continue;
+        const storedBytes = Buffer.byteLength(JSON.stringify(encrypted[qid] ?? null), 'utf8');
+        if (storedBytes > MAX_ANSWER_VALUE_BYTES) delete encrypted[qid];
+      }
+      validatedResponses = encrypted;
     }
   }
 
@@ -1996,6 +2028,9 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
         lookups: storedRecalc.lookups,
         contactAttrs: storedRecalc.contactAttrs,
       });
+      // 이 경로에는 크기 가드를 두지 않는다 — 재료가 이미 저장된 행이라 새 주입 표면이
+      // 아니고(모든 쓰기 경로가 저장값 기준으로 걸러진 뒤의 값이다), 복호화→재암호화 왕복은
+      // 크기를 되돌릴 뿐이다. 여기서 drop 하면 이미 수집된 답변을 완료 시점에 조용히 잃는다.
       if (storedRecalc.piiIds.size > 0) {
         recomputed = encryptResponsesForStorage(recomputed, storedRecalc.piiIds);
       }

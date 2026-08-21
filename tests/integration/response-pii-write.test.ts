@@ -248,6 +248,37 @@ describe('updateQuestionResponse — PII 문항 암호화', () => {
     expect(serialized).toMatch(/v\d+:/);
   });
 
+  // A-2f-5: 임계 기준은 저장값(PII 는 암호문). 평문이 상한 이하여도 암호문이 넘으면 막힌다.
+  it('PII 문항: 평문은 상한 이하지만 암호문이 넘으면 UPDATE 이전에 거부한다', async () => {
+    executeMock.mockResolvedValue([{ pii: true }]);
+    const { updateQuestionResponse } = await import(
+      '@/server/survey-response/services/response.service'
+    );
+    await expect(
+      updateQuestionResponse({
+        responseId: RESPONSE_ID,
+        questionId: QUESTION_ID,
+        // 평문 220KB(<256KB) → 암호문 약 293KB(>256KB).
+        value: 'a'.repeat(220 * 1024),
+      }),
+    ).rejects.toMatchObject({ reason: 'answer_value_too_large' });
+    expect(updateSetLogMock).not.toHaveBeenCalled();
+  });
+
+  // 회귀 가드: 비PII 문항의 임계는 종전 그대로 256KB 평문이다(가드가 과하게 조여지지 않았다).
+  it('비PII 문항: 평문 220KB 는 종전대로 저장된다', async () => {
+    executeMock.mockResolvedValue([{ pii: false }]);
+    const { updateQuestionResponse } = await import(
+      '@/server/survey-response/services/response.service'
+    );
+    await updateQuestionResponse({
+      responseId: RESPONSE_ID,
+      questionId: QUESTION_ID,
+      value: 'a'.repeat(220 * 1024),
+    });
+    expect(updateSetLogMock).toHaveBeenCalledTimes(1);
+  });
+
   it('piiEncrypted=false 면 평문 그대로 저장한다', async () => {
     executeMock.mockResolvedValue([{ pii: false }]);
     const { updateQuestionResponse } = await import(
@@ -771,6 +802,234 @@ describe('completeResponse — PII 문항만 선별 암호화', () => {
     expect((setArg.questionResponses as Record<string, unknown>)[PLAIN_QUESTION_ID]).toBe(
       '평문 답변',
     );
+  });
+});
+
+// ============================================================================
+// A-2f-5 — 크기 가드의 임계 기준을 저장값(PII 는 암호문)으로 통일한다.
+// 평문 220KB 는 상한(256KB) 이하지만 암호문은 약 293KB 로 넘는다.
+// ============================================================================
+const OVER_WHEN_ENCRYPTED = 'a'.repeat(220 * 1024);
+
+describe('saveDraftResponse — 저장값(암호문) 기준 크기 가드', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    responseFindFirstMock.mockResolvedValue({
+      id: RESPONSE_ID,
+      surveyId: SURVEY_ID,
+      versionId: VERSION_ID,
+      isTest: false,
+    });
+    flagsMock.mockResolvedValue({ isPaused: false });
+    updateReturningMock.mockReturnValue([{ id: RESPONSE_ID }]);
+  });
+
+  it('PII 문항: 평문이 상한 이하여도 암호문이 넘으면 배치 전체가 거부되고 UPDATE 가 없다', async () => {
+    // loadQuestionPiiFlags (versionId 분기) — 두 문항 모두 PII.
+    executeMock.mockResolvedValue([
+      { id: QUESTION_ID, pii: true },
+      { id: PLAIN_QUESTION_ID, pii: true },
+    ]);
+    const { saveDraftResponse } = await import(
+      '@/server/survey-response/services/response.service'
+    );
+    await expect(
+      saveDraftResponse({
+        responseId: RESPONSE_ID,
+        answers: {
+          [PLAIN_QUESTION_ID]: '정상 답변',
+          [QUESTION_ID]: OVER_WHEN_ENCRYPTED,
+        },
+      }),
+    ).rejects.toMatchObject({ reason: 'answer_value_too_large' });
+    // 부분 저장 금지 — 정상 답변까지 포함해 아무것도 쓰지 않는다.
+    expect(updateSetLogMock).not.toHaveBeenCalled();
+  });
+
+  it('비PII 문항이면 같은 평문 220KB 가 종전대로 저장된다', async () => {
+    executeMock.mockResolvedValue([{ id: QUESTION_ID, pii: false }]);
+    const { saveDraftResponse } = await import(
+      '@/server/survey-response/services/response.service'
+    );
+    const result = await saveDraftResponse({
+      responseId: RESPONSE_ID,
+      answers: { [QUESTION_ID]: OVER_WHEN_ENCRYPTED },
+    });
+    expect(result.applied).toBe(true);
+    expect(updateSetLogMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('beacon 래퍼는 같은 거부를 500 이 아니라 skipped 로 접는다', async () => {
+    executeMock.mockResolvedValue([{ id: QUESTION_ID, pii: true }]);
+    const { saveDraftResponseIfActive } = await import(
+      '@/server/survey-response/services/response.service'
+    );
+    // judgeRowGate 용 사전 조회 — in_progress 활성 행.
+    responseFindFirstMock.mockResolvedValue({
+      id: RESPONSE_ID,
+      surveyId: SURVEY_ID,
+      versionId: VERSION_ID,
+      isTest: false,
+      status: 'in_progress',
+      deletedAt: null,
+    });
+    const result = await saveDraftResponseIfActive({
+      responseId: RESPONSE_ID,
+      answers: { [QUESTION_ID]: OVER_WHEN_ENCRYPTED },
+    });
+    expect(result).toEqual({ saved: false, skipped: 'answer_value_too_large' });
+    expect(updateSetLogMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('completeResponse — 저장값(암호문) 기준 바이트 필터', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    responseFindFirstMock.mockResolvedValue({
+      surveyId: SURVEY_ID,
+      versionId: VERSION_ID,
+      contactTargetId: null,
+      isTest: false,
+    });
+    surveyFindFirstMock.mockResolvedValue(publishedSurveyRow());
+    versionFindFirstMock.mockResolvedValue({ surveyId: SURVEY_ID, status: 'published' });
+    selectThenMock.mockReturnValue([{ total: 0 }]);
+    selectLimitMock.mockResolvedValue([]);
+    executeMock.mockImplementation((query: unknown) => {
+      if (sqlText(query).includes('IS TRUE')) {
+        return Promise.resolve([{ id: QUESTION_ID }]);
+      }
+      return Promise.resolve([{ id: QUESTION_ID }, { id: PLAIN_QUESTION_ID }]);
+    });
+    updateReturningMock.mockReturnValue([
+      { id: RESPONSE_ID, surveyId: SURVEY_ID, contactTargetId: null, pageVisits: null },
+    ]);
+  });
+
+  it('평문 필터는 통과하지만 암호문이 상한을 넘는 PII 키를 drop 하고 완료는 계속한다', async () => {
+    const { completeResponse } = await import(
+      '@/server/survey-response/services/response.service'
+    );
+    await completeResponse({
+      responseId: RESPONSE_ID,
+      data: {
+        questionResponses: {
+          [QUESTION_ID]: OVER_WHEN_ENCRYPTED,
+          [PLAIN_QUESTION_ID]: '평문 답변',
+        },
+      },
+    });
+
+    const setArg = updateSetLogMock.mock.calls[0]![0] as {
+      questionResponses?: Record<string, unknown>;
+    };
+    const storedMap = setArg.questionResponses as Record<string, unknown>;
+    // 이 경로의 의미론은 silent drop — 완료 자체는 성공하고 초과 키만 사라진다.
+    expect(QUESTION_ID in storedMap).toBe(false);
+    expect(storedMap[PLAIN_QUESTION_ID]).toBe('평문 답변');
+    expect(replaceResponseAnswersMock).toHaveBeenCalledTimes(1);
+    const answersMap = replaceResponseAnswersMock.mock.calls[0]![3] as Record<string, unknown>;
+    expect(QUESTION_ID in answersMap).toBe(false);
+  });
+
+  it('비PII 문항의 같은 평문 220KB 는 종전대로 저장된다', async () => {
+    const { completeResponse } = await import(
+      '@/server/survey-response/services/response.service'
+    );
+    await completeResponse({
+      responseId: RESPONSE_ID,
+      data: { questionResponses: { [PLAIN_QUESTION_ID]: OVER_WHEN_ENCRYPTED } },
+    });
+    const setArg = updateSetLogMock.mock.calls[0]![0] as {
+      questionResponses?: Record<string, unknown>;
+    };
+    expect((setArg.questionResponses as Record<string, unknown>)[PLAIN_QUESTION_ID]).toBe(
+      OVER_WHEN_ENCRYPTED,
+    );
+  });
+});
+
+describe('saveAdminEdit — 크기 가드 (종전에는 가드가 전무했다)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    surveyFindFirstMock.mockResolvedValue({ id: SURVEY_ID, currentVersionId: VERSION_ID });
+    responseFindFirstMock.mockResolvedValue({
+      id: RESPONSE_ID,
+      surveyId: SURVEY_ID,
+      versionId: VERSION_ID,
+      deletedAt: null,
+      status: 'completed',
+      questionResponses: { [PLAIN_QUESTION_ID]: '기존 답변' },
+    });
+    executeMock.mockResolvedValue([{ id: QUESTION_ID }]);
+    selectLimitMock.mockResolvedValue([
+      {
+        snapshot: {
+          questions: [
+            { id: QUESTION_ID, title: '연락처' },
+            { id: PLAIN_QUESTION_ID, title: '일반 질문' },
+          ],
+        },
+      },
+    ]);
+    updateReturningMock.mockReturnValue([{ id: RESPONSE_ID }]);
+  });
+
+  it('비PII 문항이라도 저장값이 상한을 넘으면 UPDATE 이전에 거부한다', async () => {
+    const { saveAdminEdit } = await import(
+      '@/server/survey-response/services/response-edit.service'
+    );
+    await expect(
+      saveAdminEdit(
+        {
+          surveyId: SURVEY_ID,
+          responseId: RESPONSE_ID,
+          questionResponses: { [PLAIN_QUESTION_ID]: 'a'.repeat(300 * 1024) },
+          versionId: VERSION_ID,
+        },
+        { id: 'admin-1', email: 'a@b.com' },
+        false,
+      ),
+    ).rejects.toMatchObject({ reason: 'answer_value_too_large' });
+    expect(updateSetLogMock).not.toHaveBeenCalled();
+    expect(replaceResponseAnswersMock).not.toHaveBeenCalled();
+  });
+
+  it('PII 문항은 평문이 상한 이하여도 암호문이 넘으면 거부한다', async () => {
+    const { saveAdminEdit } = await import(
+      '@/server/survey-response/services/response-edit.service'
+    );
+    await expect(
+      saveAdminEdit(
+        {
+          surveyId: SURVEY_ID,
+          responseId: RESPONSE_ID,
+          questionResponses: { [QUESTION_ID]: OVER_WHEN_ENCRYPTED },
+          versionId: VERSION_ID,
+        },
+        { id: 'admin-1', email: 'a@b.com' },
+        false,
+      ),
+    ).rejects.toMatchObject({ reason: 'answer_value_too_large' });
+    expect(updateSetLogMock).not.toHaveBeenCalled();
+  });
+
+  it('상한 이하 값은 종전대로 저장된다 — 정상 편집이 새로 막히지 않는다', async () => {
+    const { saveAdminEdit } = await import(
+      '@/server/survey-response/services/response-edit.service'
+    );
+    await saveAdminEdit(
+      {
+        surveyId: SURVEY_ID,
+        responseId: RESPONSE_ID,
+        // 실 DB 최대 응답값은 약 11KB — 실사용 여유를 확인하는 대푯값으로 100KB 를 쓴다.
+        questionResponses: { [QUESTION_ID]: 'a'.repeat(100 * 1024) },
+        versionId: VERSION_ID,
+      },
+      { id: 'admin-1', email: 'a@b.com' },
+      false,
+    );
+    expect(updateSetLogMock).toHaveBeenCalledTimes(1);
   });
 });
 
