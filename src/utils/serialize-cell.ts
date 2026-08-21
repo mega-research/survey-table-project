@@ -15,6 +15,7 @@ import { GATABLE_CELL_TYPES } from '@/lib/survey/cell-gating';
 
 import { parseNumericInput } from './numeric-input';
 import { INTERACTIVE_CELL_TYPES } from './table-cell-code-generator';
+import { REQUIRED_CELL_TYPES } from '@/utils/table-cell-semantics';
 
 /**
  * 셀 편집 모달의 폼 상태.
@@ -138,14 +139,8 @@ export const TEXT_POSITION_CELL_TYPES = new Set<ContentType>([
 export const INPUT_TEXT_ALIGN_CELL_TYPES = new Set<ContentType>(['input', 'calc']);
 export const MOBILE_DISPLAY_CELL_TYPES = new Set<TableCell['type']>(['text', 'image', 'video']);
 
-/** 필수 응답(TableCell.required) 지정이 가능한 셀 타입 — "다음" 차단형 검증 대상 */
-export const REQUIRED_CELL_TYPES = new Set<TableCell['type']>([
-  'input',
-  'radio',
-  'checkbox',
-  'select',
-  'ranking',
-]);
+/** 필수 응답 가능 셀 타입 — 정의는 셀 의미론(table-cell-semantics)이 소유한다. 호환 재수출. */
+export { REQUIRED_CELL_TYPES };
 export const MOBILE_LABEL_CELL_TYPES = new Set<TableCell['type']>([
   'checkbox',
   'radio',

@@ -14,9 +14,8 @@ import {
 } from '@/utils/branch-logic';
 import { rangeViolationMessage } from '@/utils/number-format';
 import { parseNumericInput } from '@/utils/numeric-input';
-import { REQUIRED_CELL_TYPES } from '@/utils/serialize-cell';
 import { DEFAULT_REQUIRED_CELL_MESSAGE } from '@/utils/required-message';
-import { isCellValuePresent } from '@/utils/table-cell-semantics';
+import { REQUIRED_CELL_TYPES, isCellValuePresent } from '@/utils/table-cell-semantics';
 
 import { areAllFormulaRefsEmpty, evaluateCellFormula, roundFormulaValue } from './cell-formula';
 import { isCellEnabled } from './cell-gating';

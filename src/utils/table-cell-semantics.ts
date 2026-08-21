@@ -422,3 +422,17 @@ export function quantifyRows(
       return false;
   }
 }
+
+/**
+ * 필수 응답(TableCell.required) 지정이 가능한 셀 타입 — "다음" 차단형 검증 대상.
+ *
+ * 셀 의미론의 일부라 여기 산다. 종전에는 빌더 폼 모듈(serialize-cell)에 있어
+ * lib/survey/numeric-validation 이 UI 편집기 module 을 역참조했다.
+ */
+export const REQUIRED_CELL_TYPES = new Set<TableCell['type']>([
+  'input',
+  'radio',
+  'checkbox',
+  'select',
+  'ranking',
+]);
