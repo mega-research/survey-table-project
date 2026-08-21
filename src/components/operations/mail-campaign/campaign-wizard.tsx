@@ -4,6 +4,12 @@ import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 
 import { useRouter, useSearchParams } from 'next/navigation';
 
+import { toast } from 'sonner';
+
+import { ContactsFilterBar } from '@/components/operations/contacts/contacts-filter-bar';
+import { RecipientStatusBadge } from '@/components/operations/mail-campaign/recipient-status-badge';
+import { PagerJump } from '@/components/operations/pager-jump';
+import { buildPageItems } from '@/components/operations/table-primitives';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -24,28 +30,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ContactsFilterBar } from '@/components/operations/contacts/contacts-filter-bar';
-import { RecipientStatusBadge } from '@/components/operations/mail-campaign/recipient-status-badge';
-import { PagerJump } from '@/components/operations/pager-jump';
-import { buildPageItems } from '@/components/operations/table-primitives';
-import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts';
 import type { MailTemplate } from '@/db/schema/mail';
 import type { CampaignFilterSnapshot, ContactResultCode } from '@/db/schema/schema-types';
+import { useCreateCampaign, useFetchCandidateIds, usePreviewPreflight } from '@/hooks/queries';
+import { getErrorMessage } from '@/lib/get-error-message';
 import type {
   CampaignCandidateRow,
   CampaignExclusionCounts,
   CampaignSortDir,
   CampaignSortKey,
 } from '@/lib/operations/campaigns.server';
+import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts';
 import type { ColumnCandidate } from '@/lib/operations/filter-shared';
-import { toast } from 'sonner';
-
-import { getErrorMessage } from '@/lib/get-error-message';
-import {
-  useCreateCampaign,
-  useFetchCandidateIds,
-  usePreviewPreflight,
-} from '@/hooks/queries';
 
 interface Props {
   surveyId: string;
@@ -83,12 +79,13 @@ export function CampaignWizard({
   const [isPending, startTransition] = useTransition();
 
   const fetchCandidateIds = useFetchCandidateIds();
+  // mutateAsync 는 MutationObserver 생성 시 1회 바인딩된 안정 참조 — 결과 객체(fetchCandidateIds)는
+  // 상태 변화마다 새로 만들어지므로 effect deps 에는 이 함수만 둔다.
+  const { mutateAsync: fetchCandidateIdsAsync } = fetchCandidateIds;
   const previewPreflight = usePreviewPreflight();
   const createCampaign = useCreateCampaign();
 
-  const [templateId, setTemplateId] = useState<string>(
-    initialTemplateId ?? templates[0]?.id ?? '',
-  );
+  const [templateId, setTemplateId] = useState<string>(initialTemplateId ?? templates[0]?.id ?? '');
   const [title, setTitle] = useState<string>('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -109,8 +106,7 @@ export function CampaignWizard({
   const totalPages = Math.max(1, Math.ceil(candidates.total / candidates.pageSize));
   const selectedCount = selectedIds.size;
   const visibleIds = useMemo(() => candidates.rows.map((r) => r.id), [candidates.rows]);
-  const allVisibleSelected =
-    visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
+  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
 
   function toggleUnresponded(checked: boolean) {
     setUnrespondedOnly(checked);
@@ -203,7 +199,7 @@ export function CampaignWizard({
 
     startTransition(async () => {
       try {
-        const result = await fetchCandidateIds.mutateAsync({
+        const result = await fetchCandidateIdsAsync({
           surveyId,
           filter: buildFilterSnapshot(currentFilter),
         });
@@ -213,9 +209,7 @@ export function CampaignWizard({
       }
       stripFlag();
     });
-    // mutateAsync 는 안정 참조라 deps 에서 제외 (원래 의도된 1회 자동선택 트리거 유지)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, candidates.total, surveyId, currentFilter, router]);
+  }, [searchParams, candidates.total, surveyId, currentFilter, router, fetchCandidateIdsAsync]);
 
   async function openConfirm() {
     if (selectedCount === 0) {
@@ -261,9 +255,7 @@ export function CampaignWizard({
           contactTargetIds: Array.from(selectedIds),
           filterSnapshot: buildFilterSnapshot(currentFilter),
         });
-        router.push(
-          `/admin/surveys/${surveyId}/operations/mail/campaigns/${result.campaignId}`,
-        );
+        router.push(`/admin/surveys/${surveyId}/operations/mail/campaigns/${result.campaignId}`);
       } catch (err) {
         toast.error(getErrorMessage(err, '단체 메일 생성 실패'));
       }
@@ -340,8 +332,8 @@ export function CampaignWizard({
             return (
               <>
                 수신거부자 {fmt(ex.unsubscribed)}명 · 부정적 컨택 결과 {fmt(ex.negativeCode)}명 ·
-                이메일 누락 {fmt(ex.emailMissing)}명 — 총 {fmt(excludedFromList)}명은 아래 목록에서 이미
-                제외되었습니다.
+                이메일 누락 {fmt(ex.emailMissing)}명 — 총 {fmt(excludedFromList)}명은 아래 목록에서
+                이미 제외되었습니다.
                 {ex.bounced > 0
                   ? ` 반송 이력이 있는 ${fmt(ex.bounced)}명은 아래 목록에는 표시되지만 발송 시점에 자동 제외됩니다. 이메일을 수정하면 다시 발송 대상이 됩니다.`
                   : ''}
@@ -358,7 +350,9 @@ export function CampaignWizard({
             <h2 className="text-base font-semibold text-slate-900">미리보기 · 선택</h2>
             <p className="mt-1 text-sm text-slate-500">
               필터 결과 {candidates.total.toLocaleString('ko-KR')}명 — 선택{' '}
-              <span className="font-semibold text-blue-600">{selectedCount.toLocaleString('ko-KR')}명</span>
+              <span className="font-semibold text-blue-600">
+                {selectedCount.toLocaleString('ko-KR')}명
+              </span>
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -393,12 +387,24 @@ export function CampaignWizard({
                   />
                 </th>
                 <th className="px-3 py-2">
-                  <SortHeader label={RESID_DEFAULT_LABEL} sortKey="resid" activeSort={sort} dir={dir} onSort={changeSort} />
+                  <SortHeader
+                    label={RESID_DEFAULT_LABEL}
+                    sortKey="resid"
+                    activeSort={sort}
+                    dir={dir}
+                    onSort={changeSort}
+                  />
                 </th>
                 <th className="px-3 py-2">이메일</th>
                 <th className="px-3 py-2">그룹</th>
                 <th className="px-3 py-2">
-                  <SortHeader label="응답" sortKey="responded" activeSort={sort} dir={dir} onSort={changeSort} />
+                  <SortHeader
+                    label="응답"
+                    sortKey="responded"
+                    activeSort={sort}
+                    dir={dir}
+                    onSort={changeSort}
+                  />
                 </th>
                 <th className="px-3 py-2">
                   <SortHeader
@@ -515,7 +521,9 @@ export function CampaignWizard({
       <div className="sticky bottom-0 -mx-6 border-t border-slate-200 bg-white/80 px-6 py-4 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
           <div className="text-sm text-slate-600">
-            <span className="font-semibold text-blue-600">{selectedCount.toLocaleString('ko-KR')}명</span>{' '}
+            <span className="font-semibold text-blue-600">
+              {selectedCount.toLocaleString('ko-KR')}명
+            </span>{' '}
             발송 예정
           </div>
           <Button

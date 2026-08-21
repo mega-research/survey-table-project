@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type InputHTMLAttributes } from 'react';
+import { type InputHTMLAttributes, useEffect, useRef, useState } from 'react';
 
 import { Trash2 } from 'lucide-react';
 
@@ -9,6 +9,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import type {
+  ResponseHeaderBlockPos,
+  ResponseHeaderBlockSize,
+  ResponseHeaderLayout,
+  ResponseHeaderTitleAlign,
+  ResponseHeaderVAlign,
+  SurveyResponseHeaderConfig,
+} from '@/db/schema/schema-types';
 import {
   applyResponseHeaderPreset,
   coerceBlocksForInlineLayout,
@@ -27,14 +35,6 @@ import type {
   ResponseHeaderPresetKey,
 } from '@/lib/survey/response-header-config';
 import { cn } from '@/lib/utils';
-import type {
-  ResponseHeaderBlockPos,
-  ResponseHeaderBlockSize,
-  ResponseHeaderLayout,
-  ResponseHeaderTitleAlign,
-  ResponseHeaderVAlign,
-  SurveyResponseHeaderConfig,
-} from '@/db/schema/schema-types';
 import type { SurveySettings } from '@/types/survey';
 
 interface ResponseHeaderSettingsProps {
@@ -48,7 +48,8 @@ interface ResponseHeaderSettingsProps {
 // 부분 갱신 객체를 받을 수 있게 한다 (Partial<유니언> 은 공통 키로만 좁혀져 사용 불가).
 // discriminant(type)는 마크/로고('mark'|'logo')와 문구('notice')가 서로 겹치지 않아
 // 교집합 자체가 성립하지 않으므로 패치 대상에서 제외한다 (블록 타입은 애초에 패치 불필요).
-type BlockPatch = Partial<Omit<NormalizedHeaderImageBlock, 'type'>> & Partial<Omit<NormalizedHeaderNoticeBlock, 'type'>>;
+type BlockPatch = Partial<Omit<NormalizedHeaderImageBlock, 'type'>> &
+  Partial<Omit<NormalizedHeaderNoticeBlock, 'type'>>;
 
 const PRESET_OPTIONS: Array<{ key: ResponseHeaderPresetKey; label: string }> = [
   { key: 'gov', label: '국가통계형' },
@@ -76,17 +77,32 @@ const SIZE_OPTIONS: Array<[ResponseHeaderBlockSize, string]> = [
   ['lg', '크게'],
 ];
 
-export function ResponseHeaderSettings({ title, onTitleChange, settings, onChange }: ResponseHeaderSettingsProps) {
+export function ResponseHeaderSettings({
+  title,
+  onTitleChange,
+  settings,
+  onChange,
+}: ResponseHeaderSettingsProps) {
   const config = normalizeResponseHeaderConfig(settings.responseHeader);
 
   const patch = (p: Partial<NormalizedResponseHeaderConfig>) => onChange({ ...config, ...p });
   const patchBlock = (id: string, p: BlockPatch) =>
-    patch({ blocks: config.blocks.map((b) => (b.id === id ? ({ ...b, ...p } as NormalizedResponseHeaderBlock) : b)) });
+    patch({
+      blocks: config.blocks.map((b) =>
+        b.id === id ? ({ ...b, ...p } as NormalizedResponseHeaderBlock) : b,
+      ),
+    });
   const removeBlock = (id: string) => patch({ blocks: config.blocks.filter((b) => b.id !== id) });
-  const addBlock = (type: 'mark' | 'logo' | 'notice') => patch({ blocks: [...config.blocks, createHeaderBlock(type)] });
+  const addBlock = (type: 'mark' | 'logo' | 'notice') =>
+    patch({ blocks: [...config.blocks, createHeaderBlock(type)] });
   const setLayout = (layout: ResponseHeaderLayout) =>
-    patch(layout === 'inline' ? { layout, blocks: coerceBlocksForInlineLayout(config.blocks) } : { layout });
-  const applyPreset = (key: ResponseHeaderPresetKey) => onChange(applyResponseHeaderPreset(key, config));
+    patch(
+      layout === 'inline'
+        ? { layout, blocks: coerceBlocksForInlineLayout(config.blocks) }
+        : { layout },
+    );
+  const applyPreset = (key: ResponseHeaderPresetKey) =>
+    onChange(applyResponseHeaderPreset(key, config));
 
   return (
     <div className="space-y-6">
@@ -101,7 +117,10 @@ export function ResponseHeaderSettings({ title, onTitleChange, settings, onChang
               variant="outline"
               size="sm"
               aria-label={`프리셋 ${label}`}
-              className={cn(responseHeaderButtonClass(false), 'h-auto flex-col items-stretch gap-2 py-3')}
+              className={cn(
+                responseHeaderButtonClass(false),
+                'h-auto flex-col items-stretch gap-2 py-3',
+              )}
               onClick={() => applyPreset(key)}
             >
               <PresetThumbnail preset={key} />
@@ -115,7 +134,9 @@ export function ResponseHeaderSettings({ title, onTitleChange, settings, onChang
       <div className="space-y-3 border-t border-gray-200 pt-4">
         <Label className="text-xs text-gray-600">구성 요소</Label>
         {config.blocks.length === 0 && (
-          <p className="text-xs text-gray-400">추가된 블록이 없습니다. 아래에서 블록을 추가하세요.</p>
+          <p className="text-xs text-gray-400">
+            추가된 블록이 없습니다. 아래에서 블록을 추가하세요.
+          </p>
         )}
         {config.blocks.map((block) => (
           <BlockCard
@@ -129,13 +150,31 @@ export function ResponseHeaderSettings({ title, onTitleChange, settings, onChang
 
         {/* 3. 추가 버튼 행 */}
         <div className="grid grid-cols-3 gap-2">
-          <Button type="button" variant="outline" size="sm" className="border-dashed" onClick={() => addBlock('logo')}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="border-dashed"
+            onClick={() => addBlock('logo')}
+          >
             + 로고
           </Button>
-          <Button type="button" variant="outline" size="sm" className="border-dashed" onClick={() => addBlock('mark')}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="border-dashed"
+            onClick={() => addBlock('mark')}
+          >
             + 국가통계
           </Button>
-          <Button type="button" variant="outline" size="sm" className="border-dashed" onClick={() => addBlock('notice')}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="border-dashed"
+            onClick={() => addBlock('notice')}
+          >
             + OO법 문구
           </Button>
         </div>
@@ -234,7 +273,12 @@ export function ResponseHeaderSettings({ title, onTitleChange, settings, onChang
               onCommit={(titlePx) => patch({ titlePx })}
               className="w-24"
             />
-            <Button type="button" variant="ghost" size="sm" onClick={() => patch({ titlePx: null })}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => patch({ titlePx: null })}
+            >
               자동
             </Button>
           </div>
@@ -266,7 +310,7 @@ export function ResponseHeaderSettings({ title, onTitleChange, settings, onChang
                 aria-pressed={config.bandBg === color}
                 className={cn(
                   'h-8 w-8 rounded-full border border-gray-300',
-                  config.bandBg === color && 'ring-2 ring-offset-1 ring-blue-500',
+                  config.bandBg === color && 'ring-2 ring-blue-500 ring-offset-1',
                 )}
                 style={{ backgroundColor: color }}
                 onClick={() => patch({ bandBg: color })}
@@ -360,13 +404,31 @@ function BlockCard({
     <div className="space-y-3 rounded-lg border border-gray-200 p-3">
       <div className="flex items-center justify-between gap-2">
         <span className="truncate text-sm font-medium text-gray-700">{blockName(block)}</span>
-        <Button type="button" variant="ghost" size="sm" aria-label={`${blockName(block)} 삭제`} onClick={onRemove}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          aria-label={`${blockName(block)} 삭제`}
+          onClick={onRemove}
+        >
           <Trash2 className="h-4 w-4" />
         </Button>
       </div>
 
-      <PresetButtonGroup label="위치" value={block.pos} options={posOptions} columns={posColumns} onChange={(pos) => onPatch({ pos })} />
-      <PresetButtonGroup label="크기" value={block.size} options={SIZE_OPTIONS} columns={3} onChange={(size) => onPatch({ size })} />
+      <PresetButtonGroup
+        label="위치"
+        value={block.pos}
+        options={posOptions}
+        columns={posColumns}
+        onChange={(pos) => onPatch({ pos })}
+      />
+      <PresetButtonGroup
+        label="크기"
+        value={block.size}
+        options={SIZE_OPTIONS}
+        columns={3}
+        onChange={(size) => onPatch({ size })}
+      />
 
       {(block.type === 'mark' || block.type === 'logo') && (
         <>
@@ -383,7 +445,10 @@ function BlockCard({
           />
           <div className="space-y-2">
             <Label className="text-xs text-gray-600">이미지</Label>
-            <CellImageEditor imageUrl={block.imageUrl} onImageUrlChange={(imageUrl) => onPatch({ imageUrl })} />
+            <CellImageEditor
+              imageUrl={block.imageUrl}
+              onImageUrlChange={(imageUrl) => onPatch({ imageUrl })}
+            />
           </div>
         </>
       )}
@@ -405,7 +470,9 @@ function BlockCard({
             value={block.format === 'box' ? block.alignBox : block.alignLine}
             options={ALIGN_OPTIONS}
             columns={3}
-            onChange={(align) => onPatch(block.format === 'box' ? { alignBox: align } : { alignLine: align })}
+            onChange={(align) =>
+              onPatch(block.format === 'box' ? { alignBox: align } : { alignLine: align })
+            }
           />
           <div className="space-y-2">
             <Label htmlFor={`header-notice-title-${block.id}`} className="text-xs text-gray-600">
@@ -440,7 +507,10 @@ function BlockCard({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor={`header-notice-font-size-${block.id}`} className="text-xs text-gray-600">
+            <Label
+              htmlFor={`header-notice-font-size-${block.id}`}
+              className="text-xs text-gray-600"
+            >
               글자 크기
             </Label>
             <div className="flex items-center gap-2">
@@ -454,7 +524,12 @@ function BlockCard({
                 onCommit={(fontSize) => onPatch({ fontSize })}
                 className="w-24"
               />
-              <Button type="button" variant="ghost" size="sm" onClick={() => onPatch({ fontSize: null })}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => onPatch({ fontSize: null })}
+              >
                 자동
               </Button>
             </div>
@@ -475,6 +550,10 @@ function BlockCard({
 // (목업 동작). 또한 draft가 마지막 동기화 기준값(baseline)과 같으면 "무편집 blur"로 보고
 // commit을 건너뛴다 — 포커스만 갔다 나온 경우 자동 상태가 explicit 값으로 바뀌어버리는 것을
 // 막고, explicit 값 상태에서도 불필요한 동일 값 재커밋(no-op commit)을 없앤다.
+/** value 가 null(자동)이면 autoValue(현재 적용 중인 계산값)를 표시 문자열로 쓴다. */
+const displayOf = (v: number | null, autoValue: number) =>
+  v === null ? String(autoValue) : String(v);
+
 type ClampedNumberInputProps = {
   id?: string;
   value: number | null;
@@ -487,7 +566,16 @@ type ClampedNumberInputProps = {
   className?: string;
 } & Omit<
   InputHTMLAttributes<HTMLInputElement>,
-  'id' | 'value' | 'min' | 'max' | 'step' | 'className' | 'type' | 'onChange' | 'onBlur' | 'onKeyDown'
+  | 'id'
+  | 'value'
+  | 'min'
+  | 'max'
+  | 'step'
+  | 'className'
+  | 'type'
+  | 'onChange'
+  | 'onBlur'
+  | 'onKeyDown'
 >;
 
 function ClampedNumberInput({
@@ -502,21 +590,19 @@ function ClampedNumberInput({
   ...aria
 }: ClampedNumberInputProps) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const displayOf = (v: number | null) => (v === null ? String(autoValue) : String(v));
-  const [draft, setDraft] = useState(() => displayOf(value));
+  const [draft, setDraft] = useState(() => displayOf(value, autoValue));
   // draft를 마지막으로 동기화한 기준값 — blur 시 draft가 이 값과 같으면 편집이 없었던 것이므로
   // commit 자체를 생략한다(자동 상태 해제 방지 + explicit 값의 무의미한 재commit 방지).
-  const baselineRef = useRef(displayOf(value));
+  const baselineRef = useRef(displayOf(value, autoValue));
 
   // document.activeElement(외부 시스템인 브라우저 포커스 상태)를 읽어야만 "타이핑 중" 여부를
   // 판단할 수 있어 effect가 필요하다 — 포커스 중엔 외부 value/autoValue 변경으로 draft를 덮어쓰지 않는다.
   useEffect(() => {
     if (document.activeElement !== inputRef.current) {
-      const next = displayOf(value);
+      const next = displayOf(value, autoValue);
       setDraft(next);
       baselineRef.current = next;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, autoValue]);
 
   const commit = () => {
@@ -573,7 +659,9 @@ function PresetButtonGroup<T extends string>({
   onChange: (value: T) => void;
   columns?: number;
 }) {
-  const grid = { 2: 'grid-cols-2', 3: 'grid-cols-3', 4: 'grid-cols-4', 5: 'grid-cols-5' }[columns] ?? 'grid-cols-3';
+  const grid =
+    { 2: 'grid-cols-2', 3: 'grid-cols-3', 4: 'grid-cols-4', 5: 'grid-cols-5' }[columns] ??
+    'grid-cols-3';
   return (
     <div className="space-y-2">
       <Label className="text-xs text-gray-600">{label}</Label>

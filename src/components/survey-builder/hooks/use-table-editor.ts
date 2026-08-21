@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { produce } from 'immer';
 import { toast } from 'sonner';
 
-import { generateId } from '@/lib/utils';
 import { useSyncLatestRef } from '@/hooks/use-latest-ref';
+import { generateId } from '@/lib/utils';
 import {
   HeaderCell,
   Question,
@@ -12,15 +13,9 @@ import {
   TableColumn,
   TableRow,
 } from '@/types/survey';
-import { produce } from 'immer';
-
-import { hasExistingOtherRankingCell } from '@/utils/ranking-source';
+import { type HeaderBulkStyle, applyHeaderBulkStyle, withHeaderStyle } from '@/utils/header-style';
 import { remapGatingValues } from '@/utils/option-value-remap';
-import {
-  pruneDeadGatingAfterPaste,
-  regenerateCellOptionIds,
-  resolvePastedGating,
-} from '../utils/drag-copy-utils';
+import { hasExistingOtherRankingCell } from '@/utils/ranking-source';
 import {
   generateAllCellCodes,
   generateCellCodesForRow,
@@ -30,12 +25,12 @@ import {
   buildDefaultHeaderGrid,
   reconcileHeaderGridForColumnChange,
 } from '@/utils/table-merge-helpers';
-import {
-  applyHeaderBulkStyle,
-  type HeaderBulkStyle,
-  withHeaderStyle,
-} from '@/utils/header-style';
 
+import {
+  pruneDeadGatingAfterPaste,
+  regenerateCellOptionIds,
+  resolvePastedGating,
+} from '../utils/drag-copy-utils';
 import { checkCanMerge, executeMerge, executeUnmerge } from '../utils/table-cell-merge';
 import { useDragCopy } from './use-drag-copy';
 
@@ -156,7 +151,12 @@ export function useTableEditor({
     const rowsWithCodes = generateAllCellCodes(
       questionCode,
       questionTitle,
-      columns.length > 0 ? columns : [{ id: 'col-1', label: '열 1', width: 150 }, { id: 'col-2', label: '열 2', width: 150 }],
+      columns.length > 0
+        ? columns
+        : [
+            { id: 'col-1', label: '열 1', width: 150 },
+            { id: 'col-2', label: '열 2', width: 150 },
+          ],
       initialRows,
     );
     return recalculateHiddenCells(rowsWithCodes);
@@ -256,20 +256,21 @@ export function useTableEditor({
 
   // ── 변경 알림 ──
 
-  const notifyChange = useCallback(
-    (title: string, cols: TableColumn[], rowsData: TableRow[]) => {
-      onTableChangeRef.current({
-        tableTitle: title,
-        tableColumns: cols,
-        tableRowsData: rowsData,
-        tableHeaderGrid: headerGridRef.current ?? null,
-      });
-    },
-    [],
-  );
+  const notifyChange = useCallback((title: string, cols: TableColumn[], rowsData: TableRow[]) => {
+    onTableChangeRef.current({
+      tableTitle: title,
+      tableColumns: cols,
+      tableRowsData: rowsData,
+      tableHeaderGrid: headerGridRef.current ?? null,
+    });
+  }, []);
 
   const pendingChangeRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingArgsRef = useRef<{ title: string; cols: TableColumn[]; rowsData: TableRow[] } | null>(null);
+  const pendingArgsRef = useRef<{
+    title: string;
+    cols: TableColumn[];
+    rowsData: TableRow[];
+  } | null>(null);
 
   // 셀 코드 재계산 전용 debounce (updateColumnCode / updateRowCode 용)
   const pendingCellCodeRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -354,15 +355,11 @@ export function useTableEditor({
         currentRowsRef.current,
       );
       commitRows(updatedRows);
-      notifyChangeDebounced(
-        currentTitleRef.current,
-        currentColumnsRef.current,
-        updatedRows,
-      );
+      notifyChangeDebounced(currentTitleRef.current, currentColumnsRef.current, updatedRows);
       pendingQuestionInfoRef.current = null;
     }, 300);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [questionCode, questionTitle]);
+    // commitRows/notifyChangeDebounced 는 useCallback([]) 안정 참조 — deps 에 있어도 재발사 없음.
+  }, [questionCode, questionTitle, commitRows, notifyChangeDebounced]);
 
   // ── 헤더 병합 ──
 
@@ -641,9 +638,9 @@ export function useTableEditor({
         setCurrentRows(currentRowsRef.current);
       }
 
-      const updatedColumns = currentColumnsRef.current.map((col, index) => (
-        index === columnIndex ? withHeaderStyle(col, style) : col
-      ));
+      const updatedColumns = currentColumnsRef.current.map((col, index) =>
+        index === columnIndex ? withHeaderStyle(col, style) : col,
+      );
       commitColumns(updatedColumns);
       notifyChange(currentTitleRef.current, updatedColumns, currentRowsRef.current);
     },
@@ -792,8 +789,7 @@ export function useTableEditor({
       }));
 
       // 2. 삽입 위치 결정
-      const insertIdx =
-        insertAfterIndex != null ? insertAfterIndex + 1 : columns.length;
+      const insertIdx = insertAfterIndex != null ? insertAfterIndex + 1 : columns.length;
       const updatedColumns = [
         ...columns.slice(0, insertIdx),
         ...newColumns,
@@ -815,11 +811,7 @@ export function useTableEditor({
         });
         return {
           ...row,
-          cells: [
-            ...row.cells.slice(0, insertIdx),
-            ...newCells,
-            ...row.cells.slice(insertIdx),
-          ],
+          cells: [...row.cells.slice(0, insertIdx), ...newCells, ...row.cells.slice(insertIdx)],
         };
       });
 
@@ -1088,12 +1080,7 @@ export function useTableEditor({
       setCopiedCellPosition(null);
     },
   });
-  const {
-    clearCopiedRegion,
-    copiedRegion,
-    dragCopyState,
-    pasteRegion,
-  } = dragCopy;
+  const { clearCopiedRegion, copiedRegion, dragCopyState, pasteRegion } = dragCopy;
 
   // ── 셀 복사/붙여넣기 ──
 
@@ -1133,9 +1120,9 @@ export function useTableEditor({
       // 기타 ranking_opt 셀 중복 방지: 같은 테이블에 이미 기타 셀이 있으면 복사본의 플래그 해제.
       let sanitizedCopy = copied;
       if (
-        copied.type === 'ranking_opt'
-        && copied.isOtherRankingCell === true
-        && hasExistingOtherRankingCell(rows, targetCell.id)
+        copied.type === 'ranking_opt' &&
+        copied.isOtherRankingCell === true &&
+        hasExistingOtherRankingCell(rows, targetCell.id)
       ) {
         const { isOtherRankingCell: _, ...copiedWithoutOther } = copied;
         sanitizedCopy = copiedWithoutOther;
@@ -1157,7 +1144,11 @@ export function useTableEditor({
       // 셀 게이팅 컨트롤러 재해석 — 같은 행의 보이는 셀이면 유지, 다른 행·숨김 셀이면 제거
       // (게이팅은 같은 행 값만 평가하고, 병합 숨김 셀은 응답이 없어 영구 비활성이 된다)
       if (pastedCell.enabledWhen) {
-        const resolved = resolvePastedGating(pastedCell.enabledWhen, undefined, targetRow?.cells ?? []);
+        const resolved = resolvePastedGating(
+          pastedCell.enabledWhen,
+          undefined,
+          targetRow?.cells ?? [],
+        );
         if (resolved) {
           pastedCell.enabledWhen = resolved;
         } else {
@@ -1280,22 +1271,17 @@ export function useTableEditor({
 
   // ── 셀 병합/해제 ──
 
-  const canMerge = useCallback(
-    (direction: 'up' | 'down' | 'left' | 'right'): boolean => {
-      const selected = selectedCellRef.current;
-      if (!selected) return false;
+  const canMerge = useCallback((direction: 'up' | 'down' | 'left' | 'right'): boolean => {
+    const selected = selectedCellRef.current;
+    if (!selected) return false;
 
-      const rows = currentRowsRef.current;
-      const rowIndex = rows.findIndex((row) => row.id === selected.rowId);
-      const cellIndex = rows[rowIndex]?.cells.findIndex(
-        (cell) => cell.id === selected.cellId,
-      ) ?? -1;
-      if (rowIndex === -1 || cellIndex === -1) return false;
+    const rows = currentRowsRef.current;
+    const rowIndex = rows.findIndex((row) => row.id === selected.rowId);
+    const cellIndex = rows[rowIndex]?.cells.findIndex((cell) => cell.id === selected.cellId) ?? -1;
+    if (rowIndex === -1 || cellIndex === -1) return false;
 
-      return checkCanMerge(direction, rowIndex, cellIndex, rows, currentColumnsRef.current);
-    },
-    [],
-  );
+    return checkCanMerge(direction, rowIndex, cellIndex, rows, currentColumnsRef.current);
+  }, []);
 
   const handleMerge = useCallback(
     (direction: 'up' | 'down' | 'left' | 'right') => {
@@ -1306,9 +1292,8 @@ export function useTableEditor({
       const columns = currentColumnsRef.current;
 
       const rowIndex = rows.findIndex((row) => row.id === selected.rowId);
-      const cellIndex = rows[rowIndex]?.cells.findIndex(
-        (cell) => cell.id === selected.cellId,
-      ) ?? -1;
+      const cellIndex =
+        rows[rowIndex]?.cells.findIndex((cell) => cell.id === selected.cellId) ?? -1;
       if (rowIndex === -1 || cellIndex === -1) return;
 
       if (!checkCanMerge(direction, rowIndex, cellIndex, rows, columns)) return;
@@ -1340,9 +1325,7 @@ export function useTableEditor({
 
     const rows = currentRowsRef.current;
     const rowIndex = rows.findIndex((row) => row.id === selected.rowId);
-    const cellIndex = rows[rowIndex]?.cells.findIndex(
-      (cell) => cell.id === selected.cellId,
-    ) ?? -1;
+    const cellIndex = rows[rowIndex]?.cells.findIndex((cell) => cell.id === selected.cellId) ?? -1;
 
     if (rowIndex === -1 || cellIndex === -1) return;
 
@@ -1367,90 +1350,85 @@ export function useTableEditor({
 
   // ── 다단계 헤더 토글 ──
 
-  const toggleMultiRowHeader = useCallback(
-    (enabled: boolean) => {
-      setUseMultiRowHeader(enabled);
-      if (enabled && !headerGridRef.current) {
-        const defaultGrid = buildDefaultHeaderGrid(currentColumnsRef.current);
-        headerGridRef.current = defaultGrid;
-        setCurrentHeaderGrid(defaultGrid);
-        onTableChangeRef.current({
-          tableTitle: currentTitleRef.current,
-          tableColumns: currentColumnsRef.current,
-          tableRowsData: currentRowsRef.current,
-          tableHeaderGrid: defaultGrid,
-        });
-      } else if (!enabled) {
-        // ref 도 즉시 비운다 — 재렌더 전에 발생하는 후속 알림이 stale grid 를
-        // 다시 실어 보내면 방금 한 해제가 되살아난다.
-        headerGridRef.current = undefined;
-        setCurrentHeaderGrid(undefined);
-        onTableChangeRef.current({
-          tableTitle: currentTitleRef.current,
-          tableColumns: currentColumnsRef.current,
-          tableRowsData: currentRowsRef.current,
-          tableHeaderGrid: null,
-        });
-      }
-    },
-    [],
-  );
-
-  const updateHeaderGrid = useCallback(
-    (newGrid: HeaderCell[][]) => {
-      headerGridRef.current = newGrid;
-      setCurrentHeaderGrid(newGrid);
+  const toggleMultiRowHeader = useCallback((enabled: boolean) => {
+    setUseMultiRowHeader(enabled);
+    if (enabled && !headerGridRef.current) {
+      const defaultGrid = buildDefaultHeaderGrid(currentColumnsRef.current);
+      headerGridRef.current = defaultGrid;
+      setCurrentHeaderGrid(defaultGrid);
       onTableChangeRef.current({
         tableTitle: currentTitleRef.current,
         tableColumns: currentColumnsRef.current,
         tableRowsData: currentRowsRef.current,
-        tableHeaderGrid: newGrid,
+        tableHeaderGrid: defaultGrid,
       });
-    },
-    [],
-  );
-
-  const applyHeaderStyle = useCallback((style: HeaderBulkStyle) => {
-    if (pendingChangeRef.current) {
-      clearTimeout(pendingChangeRef.current);
-      pendingChangeRef.current = null;
-      pendingArgsRef.current = null;
+    } else if (!enabled) {
+      // ref 도 즉시 비운다 — 재렌더 전에 발생하는 후속 알림이 stale grid 를
+      // 다시 실어 보내면 방금 한 해제가 되살아난다.
+      headerGridRef.current = undefined;
+      setCurrentHeaderGrid(undefined);
+      onTableChangeRef.current({
+        tableTitle: currentTitleRef.current,
+        tableColumns: currentColumnsRef.current,
+        tableRowsData: currentRowsRef.current,
+        tableHeaderGrid: null,
+      });
     }
+  }, []);
 
-    // debounce를 취소해도 ref-only 행 편집은 화면 state까지 즉시 반영해야 한다.
-    if (pendingRowsSyncRef.current) {
-      pendingRowsSyncRef.current = false;
-      setCurrentRows(currentRowsRef.current);
-    }
-
-    const result = applyHeaderBulkStyle(
-      currentColumnsRef.current,
-      headerGridRef.current,
-      style,
-    );
-
-    commitColumns(result.columns);
-    if (result.headerGrid !== undefined) {
-      headerGridRef.current = result.headerGrid;
-      setCurrentHeaderGrid(result.headerGrid);
-    }
-
+  const updateHeaderGrid = useCallback((newGrid: HeaderCell[][]) => {
+    headerGridRef.current = newGrid;
+    setCurrentHeaderGrid(newGrid);
     onTableChangeRef.current({
       tableTitle: currentTitleRef.current,
-      tableColumns: result.columns,
+      tableColumns: currentColumnsRef.current,
       tableRowsData: currentRowsRef.current,
-      tableHeaderGrid: result.headerGrid ?? null,
+      tableHeaderGrid: newGrid,
     });
-  }, [commitColumns]);
+  }, []);
+
+  const applyHeaderStyle = useCallback(
+    (style: HeaderBulkStyle) => {
+      if (pendingChangeRef.current) {
+        clearTimeout(pendingChangeRef.current);
+        pendingChangeRef.current = null;
+        pendingArgsRef.current = null;
+      }
+
+      // debounce를 취소해도 ref-only 행 편집은 화면 state까지 즉시 반영해야 한다.
+      if (pendingRowsSyncRef.current) {
+        pendingRowsSyncRef.current = false;
+        setCurrentRows(currentRowsRef.current);
+      }
+
+      const result = applyHeaderBulkStyle(currentColumnsRef.current, headerGridRef.current, style);
+
+      commitColumns(result.columns);
+      if (result.headerGrid !== undefined) {
+        headerGridRef.current = result.headerGrid;
+        setCurrentHeaderGrid(result.headerGrid);
+      }
+
+      onTableChangeRef.current({
+        tableTitle: currentTitleRef.current,
+        tableColumns: result.columns,
+        tableRowsData: currentRowsRef.current,
+        tableHeaderGrid: result.headerGrid ?? null,
+      });
+    },
+    [commitColumns],
+  );
 
   // ── columnWidths (EditorTableRow에 안정적 참조 전달용) ──
 
-  // 라벨/코드 변경 시 재생성 방지: 너비만 키로 추적
+  // 라벨/코드 변경 시 재생성 방지: 너비만 키로 추적하고 배열도 키에서 파생한다
+  // (width 미지정 → '' → 0 → 150, 0 → 150 으로 `col.width || 150` 과 동치).
+  // 0열이면 ''.split(',') 이 [''] 을 만들어 [150] 이 되므로 열 수로 따로 막는다.
   const columnWidthsKey = currentColumns.map((col) => col.width).join(',');
+  const columnCount = currentColumns.length;
   const columnWidths = useMemo(
-    () => currentColumns.map((col) => col.width || 150),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [columnWidthsKey],
+    () => (columnCount === 0 ? [] : columnWidthsKey.split(',').map((w) => Number(w) || 150)),
+    [columnWidthsKey, columnCount],
   );
 
   // ── selectedCellContext (CellContentModal용 useMemo) ──

@@ -2,8 +2,8 @@ import { useEffect } from 'react';
 import type { RefObject } from 'react';
 
 import { useLatestRef } from '@/hooks/use-latest-ref';
-import { client } from '@/shared/lib/rpc';
 import { type RenderStep, stepIdOf } from '@/lib/group-ordering';
+import { client } from '@/shared/lib/rpc';
 import type { TestAttemptIdentity } from '@/shared/types/test-attempt';
 
 import { sendVisibilitySegment } from './session-helpers';
@@ -84,10 +84,19 @@ export function useResponseTelemetry({
       .catch((err) => {
         console.error('recordStepVisit 실패:', err);
       });
-    // deps 는 원본과 1:1 동일. visibleProgressRef 는 안정적 ref 라 의도적으로 제외(원본 동일,
-    // effect 실행 시점의 .current 최신값을 읽는 의미론 유지).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, isAdminEdit, isPreview, currentResponseId, currentStep, testIdentity]);
+    // ref 3개는 identity 가 고정된 ref 객체라 deps 에 있어도 재발사를 만들지 않는다
+    // (effect 실행 시점의 .current 최신값을 읽는 의미론 유지).
+  }, [
+    enabled,
+    isAdminEdit,
+    isPreview,
+    currentResponseId,
+    currentStep,
+    testIdentity,
+    visibleProgressRef,
+    isCompletedRef,
+    onPausedDetectedRef,
+  ]);
 
   // 운영 현황 콘솔: Page Visibility 세그먼트.
   // - 탭이 숨겨질 때(hidden/pagehide) 현재 visit을 닫고, 다시 보일 때(visible) 새 visit을 연다.

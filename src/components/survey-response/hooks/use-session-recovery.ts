@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 
-import { client } from '@/shared/lib/rpc';
 import { readOptTextsSidecar } from '@/lib/option-text-read';
+import { client } from '@/shared/lib/rpc';
 import { useSurveyResponseStore } from '@/stores/survey-response-store';
 import type { Survey } from '@/types/survey';
 
 import { sendVisibilitySegment, sessionStorageKey } from './session-helpers';
-import { handlePausedMutationError, type DuplicateStatus } from './use-duplicate-guard';
+import { type DuplicateStatus, handlePausedMutationError } from './use-duplicate-guard';
 
 interface UseSessionRecoveryArgs {
   /** false면 완료 등 종료 화면에서 recovery를 시작하거나 결과를 적용하지 않는다. */
@@ -119,8 +119,7 @@ export function useSessionRecovery({
   useEffect(() => {
     const generation = ++requestGenerationRef.current;
     let cancelled = false;
-    const isCurrentRequest = () =>
-      !cancelled && requestGenerationRef.current === generation;
+    const isCurrentRequest = () => !cancelled && requestGenerationRef.current === generation;
 
     // admin-edit 분기 (4/8) — localStorage 회복은 응답자 세션 전용이므로 건너뜀.
     if (!enabled || terminalBlocked || isAdminEdit || isPreview) return;
@@ -129,8 +128,7 @@ export function useSessionRecovery({
     const key = sessionStorageKey(loadedSurvey.id, inviteToken);
     const savedSessionId = window.localStorage.getItem(key);
     const recoverySessionId =
-      savedSessionId ??
-      (isTargetTestSession || inviteToken != null ? sessionId : null);
+      savedSessionId ?? (isTargetTestSession || inviteToken != null ? sessionId : null);
     if (!recoverySessionId) return;
 
     const requestKey = JSON.stringify([
@@ -264,11 +262,29 @@ export function useSessionRecovery({
     return () => {
       cancelled = true;
     };
-    // deps 는 원본과 1:1 동일. setSessionId 는 안정적 setter 라 의도적으로 제외(원본 동일),
-    // sessionId 도 effect 내부에서 직접 set 하므로 deps 미포함(무한 루프 방지).
+    // 세터/콜백 인자는 모두 안정 참조(useState 세터·zustand 액션·useCallback([]))가 계약이다 —
+    // 이 effect 의 cleanup 은 진행 중인 resume 을 버리므로 불안정 콜백을 넘기면 회복이 유실된다.
     // testToken/isTestSession 은 세션 동안 안정적이나 클로저 정합을 위해 deps 에 포함한다.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, terminalBlocked, isAdminEdit, isPreview, loadedSurvey, currentResponseId, setCurrentResponseId, inviteToken, testToken, isTestSession, isTargetTestSession, sessionId, setResponses]);
+  }, [
+    enabled,
+    terminalBlocked,
+    isAdminEdit,
+    isPreview,
+    loadedSurvey,
+    currentResponseId,
+    setCurrentResponseId,
+    inviteToken,
+    testToken,
+    isTestSession,
+    isTargetTestSession,
+    sessionId,
+    setSessionId,
+    setResponses,
+    setDuplicateStatus,
+    setPausedMessage,
+    onRestoreStep,
+    onDraftSeqRecovered,
+  ]);
 
   // 토스트 dismiss 는 <ResumeToast> 가 자체 마운트 시점부터 4초 타이머로 호출한다.
   // 안정 참조라 ResumeToast 의 마운트 전용 effect deps 에서 안전하게 제외된다.
