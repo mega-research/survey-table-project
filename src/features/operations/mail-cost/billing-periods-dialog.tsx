@@ -15,7 +15,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import type { BillingPeriodRow } from '@/lib/operations/mail-billing.server';
+import type { BillingPeriodRow } from '@/server/mail/services/mail-billing.server';
 import { client } from '@/shared/lib/rpc';
 
 import { formatInt, formatKrw } from './_format';

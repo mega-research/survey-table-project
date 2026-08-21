@@ -135,12 +135,12 @@ vi.mock('@/lib/mail/send', () => ({
   sendTestMail: sendTestMailMock,
 }));
 
-vi.mock('@/lib/operations/contact-sample.server', () => ({
+vi.mock('@/server/shared/contact-sample.server', () => ({
   getContactSampleById: vi.fn(async () => null),
   getFirstContactSample: vi.fn(async () => null),
 }));
 
-vi.mock('@/lib/operations/data-scope.server', () => ({
+vi.mock('@/server/shared/data-scope.server', () => ({
   loadOperationsDataScope: vi.fn(async () => ({ mode: 'all' })),
 }));
 

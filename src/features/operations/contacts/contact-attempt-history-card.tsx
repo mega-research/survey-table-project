@@ -11,7 +11,7 @@ import { useAutoFadeMessage } from '@/features/operations/hooks/use-auto-fade-me
 import { LocalDateTime } from '@/components/ui/local-date-time';
 import { getErrorMessage } from '@/lib/get-error-message';
 import { resultCodeToneClass } from '@/lib/operations/contacts-shared';
-import type { ContactAttemptRow } from '@/lib/operations/contacts.server';
+import type { ContactAttemptRow } from '@/server/shared/contacts.server';
 import { client } from '@/shared/lib/rpc';
 
 interface ContactAttemptHistoryCardProps {

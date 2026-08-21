@@ -58,8 +58,8 @@ const h = vi.hoisted(() => ({
 
 const parseExcelRowsMock = vi.fn(async () => [] as Array<Record<string, string>>);
 
-vi.mock('@/lib/operations/data-scope.server', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/operations/data-scope.server')>()),
+vi.mock('@/server/shared/data-scope.server', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/server/shared/data-scope.server')>()),
   loadOperationsDataScope: vi.fn(async () => h.scope),
   // resolveWriteScopeIsTest 는 순수 함수(Task 4 fix round)라 원본 그대로 사용한다.
 }));

@@ -10,12 +10,12 @@ import {
   type FilterClause,
   type FilterCondition as ClauseFilterCondition,
   type ParseExtraHooks,
-} from './contacts-filters.server';
-import { buildContactsFilterSql, type ClauseColumnRefs } from './contacts-filter-sql';
-import { escapeLikePattern } from './filter-shared';
-import { STATUS_FILTERS } from './profiles';
+} from '@/server/shared/contacts-filters.server';
+import { buildContactsFilterSql, type ClauseColumnRefs } from '@/lib/operations/contacts-filter-sql';
+import { escapeLikePattern } from '@/lib/operations/filter-shared';
+import { STATUS_FILTERS } from '@/lib/operations/profiles';
 import { type ColumnCandidate } from './progress-filters.server';
-import { parseIdListInput } from './range-list';
+import { parseIdListInput } from '@/lib/operations/range-list';
 
 /** 응답 전용 추가 컬럼 후보 — 명단 후보 앞에 노출. */
 export const PROFILES_EXTRA_CANDIDATES: ColumnCandidate[] = [

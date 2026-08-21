@@ -6,8 +6,8 @@ import { extractSystemFieldKeys } from '@/lib/operations/contacts-shared';
 import {
   getContactColumnScheme,
   getContactResultCodes,
-} from '@/lib/operations/contacts.server';
-import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
+} from '@/server/shared/contacts.server';
+import { getOperationsDataScope } from '@/server/shared/data-scope.server';
 
 export const metadata: Metadata = {
   title: '현황 - 조사 대상 추가',

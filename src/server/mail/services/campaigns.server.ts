@@ -14,18 +14,18 @@ import { blindIndex } from '@/lib/crypto/blind';
 import { firstEmailRowByTarget, selectEmailPiiRows } from '@/lib/crypto/contact-pii-repo';
 import { maskEmail } from '@/lib/operations/contacts';
 import { buildContactsFilterSql, latestResultCodeExpr } from '@/lib/operations/contacts-filter-sql';
-import type { FilterClause } from '@/lib/operations/contacts-filters.server';
+import type { FilterClause } from '@/server/shared/contacts-filters.server';
 import {
   type OperationsDataScope,
   campaignScopeCondition,
   targetScopeCondition,
   testFlagForScope,
-} from '@/lib/operations/data-scope.server';
+} from '@/server/shared/data-scope.server';
 import { escapeLikePattern } from '@/lib/operations/filter-shared';
 import {
   buildNegativeCodeExists,
   getResultCodeStatuses,
-} from '@/lib/operations/result-code-statuses.server';
+} from '@/server/shared/result-code-statuses.server';
 import type {
   CampaignFilterSnapshot,
   MailAttachment,

@@ -11,12 +11,12 @@ import {
   type DailyBucket,
   type DailyMode,
   type DailyRow,
-} from './aggregate-daily';
+} from '@/lib/operations/aggregate-daily';
 import {
   responseScopeCondition,
   testFlagForScope,
   type OperationsDataScope,
-} from './data-scope.server';
+} from '@/server/shared/data-scope.server';
 
 /**
  * 단일 설문의 일자(또는 시간)별 응답 시작 카운트를 반환한다 (서버 전용).

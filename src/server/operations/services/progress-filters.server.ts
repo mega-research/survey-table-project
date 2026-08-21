@@ -8,8 +8,8 @@ import {
   escapeLikePattern,
   placeholderFor as sharedPlaceholderFor,
   type ColumnCandidateWithPii,
-} from './filter-shared';
-import { parseIdListInput, type NumRange } from './range-list';
+} from '@/lib/operations/filter-shared';
+import { parseIdListInput, type NumRange } from '@/lib/operations/range-list';
 
 export type ColumnCandidate = ColumnCandidateWithPii;
 

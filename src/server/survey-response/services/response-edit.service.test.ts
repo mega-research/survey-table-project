@@ -17,7 +17,7 @@ vi.mock('./response.service', async (importOriginal) => ({
 }));
 
 // in_progress 경로의 progress 재계산이 실 snapshot 조회로 가지 않도록 고정한다.
-vi.mock('@/lib/operations/response-progress.server', () => ({
+vi.mock('./response-progress.server', () => ({
   getProgressSnapshot: vi.fn(async () => ({ positionMap: new Map(), totalQuestions: 0 })),
 }));
 

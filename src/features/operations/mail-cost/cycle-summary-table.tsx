@@ -2,7 +2,7 @@ import Link from 'next/link';
 
 import { Card } from '@/components/ui/card';
 import { LocalDateTime } from '@/components/ui/local-date-time';
-import type { CycleSummary } from '@/lib/operations/mail-billing.server';
+import type { CycleSummary } from '@/server/mail/services/mail-billing.server';
 import { cn } from '@/lib/utils';
 
 import { formatInt, formatKrw } from './_format';

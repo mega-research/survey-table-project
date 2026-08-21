@@ -6,7 +6,7 @@ import { Card } from '@/components/ui/card';
 import { LocalDateTime } from '@/components/ui/local-date-time';
 import { PagerJump } from '@/features/operations/pager-jump';
 import { buildPageItems } from '@/features/operations/table-primitives';
-import type { CampaignRow } from '@/lib/operations/campaigns.server';
+import type { CampaignRow } from '@/server/mail/services/campaigns.server';
 
 interface Props {
   surveyId: string;

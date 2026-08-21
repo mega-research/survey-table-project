@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ContactsTable } from '@/features/operations/contacts/contacts-table';
 import type { ContactColumnScheme, ContactResultCode } from '@/shared/contracts/contacts';
 import type { ContactsSortDir, ContactsSortKey } from '@/lib/operations/contacts';
-import type { ContactsRow } from '@/lib/operations/contacts.server';
+import type { ContactsRow } from '@/server/shared/contacts.server';
 
 interface ContactsPageClientProps {
   surveyId: string;

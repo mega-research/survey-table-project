@@ -2,7 +2,7 @@ import { ChevronDown } from 'lucide-react';
 
 import { LocalDateTime } from '@/components/ui/local-date-time';
 import type { ResponseEditChange } from '@/shared/contracts/survey-response';
-import type { ResponseEditLogRow } from '@/lib/operations/contacts.server';
+import type { ResponseEditLogRow } from '@/server/shared/contacts.server';
 
 /** 바뀐 질문 요약 — 앞 3개 code/title + "외 N개". */
 function summarizeChanges(changes: ResponseEditChange[], count: number): string {

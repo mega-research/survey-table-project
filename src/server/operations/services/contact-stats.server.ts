@@ -5,7 +5,7 @@ import { and, count, eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { contactTargets } from '@/db/schema';
 
-import { targetScopeCondition, type OperationsDataScope } from './data-scope.server';
+import { targetScopeCondition, type OperationsDataScope } from '@/server/shared/data-scope.server';
 
 /**
  * 설문의 컨택 설정 통계 — 조건부 열 판정의 단일 출처.

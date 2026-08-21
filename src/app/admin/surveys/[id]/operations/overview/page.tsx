@@ -12,14 +12,14 @@ import { ResponseTimeStats } from '@/features/operations/response-time-stats';
 import {
   aggregateDaily,
   aggregateDailyAvailableDates,
-} from '@/lib/operations/aggregate-daily.server';
-import { aggregateStatus } from '@/lib/operations/aggregate-status.server';
-import { getDailyStats } from '@/lib/operations/daily-stats.server';
-import { getDropFunnel } from '@/lib/operations/drop-funnel.server';
-import { getPageDwell } from '@/lib/operations/page-dwell.server';
-import { getQuotaStatus } from '@/lib/operations/quota-status.server';
-import { getResponseTime } from '@/lib/operations/response-time.server';
-import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
+} from '@/server/operations/services/aggregate-daily.server';
+import { aggregateStatus } from '@/server/operations/services/aggregate-status.server';
+import { getDailyStats } from '@/server/operations/services/daily-stats.server';
+import { getDropFunnel } from '@/server/operations/services/drop-funnel.server';
+import { getPageDwell } from '@/server/operations/services/page-dwell.server';
+import { getQuotaStatus } from '@/server/quota/services/quota-status.server';
+import { getResponseTime } from '@/server/operations/services/response-time.server';
+import { getOperationsDataScope } from '@/server/shared/data-scope.server';
 import { isGuestViewer } from '@/lib/auth/guest-viewer';
 import { getSurveyById } from '@/server/survey-builder/services/survey-read.service';
 

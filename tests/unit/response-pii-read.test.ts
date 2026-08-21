@@ -91,7 +91,7 @@ describe('lib/operations/quota-status.server.getQuotaStatus — 복호화 경계
     selectWhereMock.mockResolvedValue([
       { questionResponses: { q1: encryptAnswerValue('남') } },
     ]);
-    const { getQuotaStatus } = await import('@/lib/operations/quota-status.server');
+    const { getQuotaStatus } = await import('@/server/quota/services/quota-status.server');
     const status = await getQuotaStatus('s1');
     // 복호화 없이는 'v1:...' 암호문이 category values 와 매칭되지 않아 current 가 0 이 된다
     expect(status?.cells[0]?.current).toBe(1);

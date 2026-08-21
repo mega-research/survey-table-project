@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { extractRawSql } from './_helpers/result-code-mock';
-import type { FilterClause } from '@/lib/operations/contacts-filters.server';
+import type { FilterClause } from '@/server/shared/contacts-filters.server';
 
 // countCampaignCandidates 는 getResultCodeStatuses + db.select(count).where(...) 만 사용.
 // where 의 raw SQL 을 extractRawSql 로 평탄화해 자동 제외/필터 결합을 검증한다.
@@ -39,7 +39,7 @@ vi.mock('@/db', () => ({
   },
 }));
 
-vi.mock('@/lib/operations/result-code-statuses.server', async () => {
+vi.mock('@/server/shared/result-code-statuses.server', async () => {
   const { mockBuildNegativeCodeExists } = await import('./_helpers/result-code-mock');
   return {
     getResultCodeStatuses: vi.fn(async () => ({
@@ -50,7 +50,7 @@ vi.mock('@/lib/operations/result-code-statuses.server', async () => {
   };
 });
 
-import { countCampaignCandidates } from '@/lib/operations/campaigns.server';
+import { countCampaignCandidates } from '@/server/mail/services/campaigns.server';
 
 const SURVEY_ID = '00000000-0000-4000-8000-000000000040';
 

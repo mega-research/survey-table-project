@@ -5,8 +5,8 @@ import { db } from '@/db';
 import { surveys } from '@/db/schema/surveys';
 import { loadCompletedPlainAnswers } from '@/lib/quota/completed-answers.server';
 
-import type { OperationsDataScope } from './data-scope.server';
-import { type QuotaStatus, type QuotaSummary, buildQuotaStatus } from './quota-status';
+import type { OperationsDataScope } from '@/server/shared/data-scope.server';
+import { type QuotaStatus, type QuotaSummary, buildQuotaStatus } from '@/lib/operations/quota-status';
 
 /**
  * 설문 쿼터 현황(셀별 + 요약). 쿼터 미설정이면 null.

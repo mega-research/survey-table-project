@@ -12,10 +12,10 @@ import {
 import { SurveyOwnershipError } from '@/lib/auth/require-survey-ownership';
 import { decryptQuestionResponses, encryptResponsesForStorage } from '@/lib/crypto/response-pii';
 import { logger } from '@/lib/logger';
-import { resolveWriteScopeIsTest } from '@/lib/operations/data-scope.server';
+import { resolveWriteScopeIsTest } from '@/server/shared/data-scope.server';
 import { buildChangedQuestions, diffQuestionResponses } from '@/lib/operations/response-edit-diff';
 import { calculateProgressPct } from '@/lib/operations/response-progress';
-import { getProgressSnapshot } from '@/lib/operations/response-progress.server';
+import { getProgressSnapshot } from './response-progress.server';
 import { withCalcValues } from '@/lib/survey/cell-formula';
 import { stripDisabledCellValues } from '@/lib/survey/cell-gating';
 import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';

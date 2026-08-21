@@ -11,8 +11,8 @@ import {
   placeholderFor as sharedPlaceholderFor,
   type ColumnCandidateWithPii,
   type HeaderFilterMode,
-} from './filter-shared';
-import { parseIdListInput, type NumRange } from './range-list';
+} from '@/lib/operations/filter-shared';
+import { parseIdListInput, type NumRange } from '@/lib/operations/range-list';
 
 export type ColumnCandidate = ColumnCandidateWithPii;
 

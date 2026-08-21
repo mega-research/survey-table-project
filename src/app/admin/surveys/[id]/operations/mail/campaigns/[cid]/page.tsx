@@ -12,8 +12,8 @@ import { mailRecipientStatusValues, type MailCampaignStatus, type MailRecipientS
 import {
   getCampaignDetail,
   listCampaignRecipients,
-} from '@/lib/operations/campaigns.server';
-import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
+} from '@/server/mail/services/campaigns.server';
+import { getOperationsDataScope } from '@/server/shared/data-scope.server';
 
 const PAGE_SIZE = 25;
 

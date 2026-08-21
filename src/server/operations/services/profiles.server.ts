@@ -6,18 +6,18 @@ import { db } from '@/db';
 import { contactTargets, surveyResponses } from '@/db/schema';
 import type { ResponseStatus } from '@/shared/contracts/survey-response';
 
-import { attrsSortKey } from './contacts';
-import { attrsNaturalSortExprs } from './contacts-filter-sql';
-import type { FilterClause } from './contacts-filters.server';
+import { attrsSortKey } from '@/lib/operations/contacts';
+import { attrsNaturalSortExprs } from '@/lib/operations/contacts-filter-sql';
+import type { FilterClause } from '@/server/shared/contacts-filters.server';
 import {
   type OperationsDataScope,
   responseScopeCondition,
   testFlagForScope,
-} from './data-scope.server';
-import type { Platform } from './parse-ua';
-import { type NormalizedListArgs, type ProfilesSystemSortKey, type SortDir } from './profiles';
+} from '@/server/shared/data-scope.server';
+import type { Platform } from '@/lib/operations/parse-ua';
+import { type NormalizedListArgs, type ProfilesSystemSortKey, type SortDir } from '@/lib/operations/profiles';
 import { buildProfilesFilterSql } from './profiles-filters.server';
-import { buildNegativeCodeExists, getResultCodeStatuses } from './result-code-statuses.server';
+import { buildNegativeCodeExists, getResultCodeStatuses } from '@/server/shared/result-code-statuses.server';
 
 export type ListProfilesArgs = Omit<NormalizedListArgs, 'q' | 'col'> & {
   surveyId: string;

@@ -40,7 +40,7 @@ import type {
   CampaignExclusionCounts,
   CampaignSortDir,
   CampaignSortKey,
-} from '@/lib/operations/campaigns.server';
+} from '@/server/mail/services/campaigns.server';
 import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts';
 import type { ColumnCandidate } from '@/lib/operations/filter-shared';
 

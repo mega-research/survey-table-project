@@ -168,7 +168,7 @@ vi.mock('@/lib/crypto/aes', () => ({
   }),
 }));
 
-vi.mock('@/lib/operations/result-code-statuses.server', async () => {
+vi.mock('@/server/shared/result-code-statuses.server', async () => {
   const { mockBuildNegativeCodeExists } = await import('./_helpers/result-code-mock');
   return {
     getResultCodeStatuses: vi.fn(async () => ({
@@ -179,7 +179,7 @@ vi.mock('@/lib/operations/result-code-statuses.server', async () => {
   };
 });
 
-import { preflightRecipients } from '@/lib/operations/campaigns.server';
+import { preflightRecipients } from '@/server/mail/services/campaigns.server';
 
 const SURVEY_ID = '00000000-0000-4000-8000-000000000030';
 

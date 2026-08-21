@@ -3,7 +3,7 @@ import { sql as sqlTag } from 'drizzle-orm';
 import { PgDialect } from 'drizzle-orm/pg-core';
 
 import { buildContactsFilterSql } from '@/lib/operations/contacts-filter-sql';
-import type { FilterClause } from '@/lib/operations/contacts-filters.server';
+import type { FilterClause } from '@/server/shared/contacts-filters.server';
 
 const dialect = new PgDialect();
 

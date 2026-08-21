@@ -66,7 +66,7 @@ describe('운영 응답 범위', () => {
   });
 
   it('aggregateStatus는 전달된 test scope의 응답만 집계한다', async () => {
-    const { aggregateStatus } = await import('@/lib/operations/aggregate-status.server');
+    const { aggregateStatus } = await import('@/server/operations/services/aggregate-status.server');
 
     await aggregateStatus('survey-1', 'test');
 
@@ -76,7 +76,7 @@ describe('운영 응답 범위', () => {
   });
 
   it('aggregateStatus는 전달된 real scope의 응답만 집계한다', async () => {
-    const { aggregateStatus } = await import('@/lib/operations/aggregate-status.server');
+    const { aggregateStatus } = await import('@/server/operations/services/aggregate-status.server');
 
     await aggregateStatus('survey-1', 'real');
 
@@ -86,7 +86,7 @@ describe('운영 응답 범위', () => {
   });
 
   it.each(SCOPE_CASES)('contacts는 %s scope의 조사대상만 조회한다', async (scope, isTest) => {
-    const { listContactsForSurvey } = await import('@/lib/operations/contacts.server');
+    const { listContactsForSurvey } = await import('@/server/shared/contacts.server');
 
     await listContactsForSurvey({
       surveyId: `contacts-${scope}`,
@@ -102,7 +102,7 @@ describe('운영 응답 범위', () => {
   });
 
   it.each(SCOPE_CASES)('contact 상세는 %s scope 밖의 대상을 조회하지 않는다', async (scope, isTest) => {
-    const { getContactDetailById } = await import('@/lib/operations/contacts.server');
+    const { getContactDetailById } = await import('@/server/shared/contacts.server');
 
     const result = await getContactDetailById(`contact-${scope}`, scope);
 
@@ -111,7 +111,7 @@ describe('운영 응답 범위', () => {
   });
 
   it.each(SCOPE_CASES)('contact 메일 이력은 %s scope와 보관 상태를 제한한다', async (scope, isTest) => {
-    const { getMailRecipientsForTarget } = await import('@/lib/operations/contacts.server');
+    const { getMailRecipientsForTarget } = await import('@/server/shared/contacts.server');
 
     await getMailRecipientsForTarget(`contact-${scope}`, scope);
 
@@ -122,7 +122,7 @@ describe('운영 응답 범위', () => {
   });
 
   it.each(SCOPE_CASES)('report는 contact와 response를 모두 %s scope로 제한한다', async (scope, isTest) => {
-    const { getProgressRows } = await import('@/lib/operations/report-progress.server');
+    const { getProgressRows } = await import('@/server/operations/services/report-progress.server');
 
     await getProgressRows({
       surveyId: `report-${scope}`,
@@ -144,7 +144,7 @@ describe('운영 응답 범위', () => {
   });
 
   it.each(SCOPE_CASES)('메일 미리보기 sample은 %s scope의 첫 대상만 조회한다', async (scope, isTest) => {
-    const { getFirstContactSample } = await import('@/lib/operations/contact-sample.server');
+    const { getFirstContactSample } = await import('@/server/shared/contact-sample.server');
 
     const result = await getFirstContactSample(`sample-${scope}`, scope);
 
@@ -153,7 +153,7 @@ describe('운영 응답 범위', () => {
   });
 
   it.each(SCOPE_CASES)('campaign 목록은 %s scope와 보관되지 않은 캠페인만 조회한다', async (scope, isTest) => {
-    const { listCampaignsForSurvey } = await import('@/lib/operations/campaigns.server');
+    const { listCampaignsForSurvey } = await import('@/server/mail/services/campaigns.server');
 
     await listCampaignsForSurvey({
       surveyId: `campaign-${scope}`,
@@ -171,7 +171,7 @@ describe('운영 응답 범위', () => {
   });
 
   it.each(SCOPE_CASES)('campaign 상세는 %s survey scope와 보관 상태를 제한한다', async (scope, isTest) => {
-    const { getCampaignDetail } = await import('@/lib/operations/campaigns.server');
+    const { getCampaignDetail } = await import('@/server/mail/services/campaigns.server');
 
     const result = await getCampaignDetail(
       `campaign-survey-${scope}`,
@@ -194,7 +194,7 @@ describe('운영 응답 범위', () => {
 
   it.each(SCOPE_CASES)('campaign recipient count와 목록은 %s survey scope를 공유한다', async (scope, isTest) => {
     const { mailCampaigns } = await import('@/db/schema');
-    const { listCampaignRecipients } = await import('@/lib/operations/campaigns.server');
+    const { listCampaignRecipients } = await import('@/server/mail/services/campaigns.server');
 
     const result = await listCampaignRecipients({
       surveyId: `recipient-survey-${scope}`,

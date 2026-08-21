@@ -12,8 +12,8 @@ import {
   getEditableResponseIdForTarget,
   getMailRecipientsForTarget,
   getResponseEditLogs,
-} from '@/lib/operations/contacts.server';
-import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
+} from '@/server/shared/contacts.server';
+import { getOperationsDataScope } from '@/server/shared/data-scope.server';
 import { isGuestViewer } from '@/lib/auth/guest-viewer';
 
 export const metadata: Metadata = {

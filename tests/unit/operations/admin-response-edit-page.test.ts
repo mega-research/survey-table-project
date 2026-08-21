@@ -21,11 +21,11 @@ vi.mock('@/data/responses', () => ({
     questionResponses: {},
   })),
 }));
-vi.mock('@/lib/operations/data-scope.server', () => ({
+vi.mock('@/server/shared/data-scope.server', () => ({
   getOperationsDataScope: vi.fn(async () => 'real'),
   testFlagForScope: vi.fn(() => false),
 }));
-vi.mock('@/lib/operations/profiles.server', () => ({
+vi.mock('@/server/operations/services/profiles.server', () => ({
   isResponseExcluded: vi.fn(async () => false),
 }));
 vi.mock('@/db', () => ({

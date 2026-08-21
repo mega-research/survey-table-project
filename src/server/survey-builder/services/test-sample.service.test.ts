@@ -18,15 +18,15 @@ vi.mock('@/db', () => ({
   },
 }));
 
-vi.mock('@/lib/operations/data-scope.server', () => ({
+vi.mock('@/server/shared/data-scope.server', () => ({
   loadOperationsDataScope: vi.fn(),
 }));
-vi.mock('@/lib/operations/contact-sample.server', () => ({
+vi.mock('@/server/shared/contact-sample.server', () => ({
   getFirstContactSample: vi.fn(),
 }));
 
-import { getFirstContactSample } from '@/lib/operations/contact-sample.server';
-import { loadOperationsDataScope } from '@/lib/operations/data-scope.server';
+import { getFirstContactSample } from '@/server/shared/contact-sample.server';
+import { loadOperationsDataScope } from '@/server/shared/data-scope.server';
 
 import { getSurveyTestSample } from './test-sample.service';
 

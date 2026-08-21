@@ -9,14 +9,14 @@ import {
   previewCampaignCandidates,
   type CampaignSortDir,
   type CampaignSortKey,
-} from '@/lib/operations/campaigns.server';
+} from '@/server/mail/services/campaigns.server';
 import {
   buildColumnCandidates,
   getContactColumnScheme,
   getContactResultCodes,
-} from '@/lib/operations/contacts.server';
-import { parseClausesFromUrl } from '@/lib/operations/contacts-filters.server';
-import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
+} from '@/server/shared/contacts.server';
+import { parseClausesFromUrl } from '@/server/shared/contacts-filters.server';
+import { getOperationsDataScope } from '@/server/shared/data-scope.server';
 
 const PAGE_SIZE = 20;
 

@@ -8,27 +8,27 @@ vi.mock('@/lib/auth/guest-grants', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/auth/guest-grants')>()),
   canAccessSurvey: vi.fn(),
 }));
-vi.mock('@/lib/operations/data-scope.server', () => ({
+vi.mock('@/server/shared/data-scope.server', () => ({
   loadOperationsDataScope: vi.fn(),
 }));
-vi.mock('@/lib/operations/contacts.server', () => ({
+vi.mock('@/server/shared/contacts.server', () => ({
   getContactColumnScheme: vi.fn(),
   listContactsForExport: vi.fn(),
   MAX_CONTACT_EXPORT_ROWS: 50000,
 }));
-vi.mock('@/lib/operations/contacts-export.server', async (importOriginal) => {
+vi.mock('@/server/operations/services/contacts-export.server', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('@/lib/operations/contacts-export.server')>();
+    await importOriginal<typeof import('@/server/operations/services/contacts-export.server')>();
   return { ...actual, decryptPiiForExport: vi.fn(async () => new Map()) };
 });
 
 import { requireAuth } from '@/lib/auth';
 import { canAccessSurvey } from '@/lib/auth/guest-grants';
-import { loadOperationsDataScope } from '@/lib/operations/data-scope.server';
+import { loadOperationsDataScope } from '@/server/shared/data-scope.server';
 import {
   getContactColumnScheme,
   listContactsForExport,
-} from '@/lib/operations/contacts.server';
+} from '@/server/shared/contacts.server';
 import { GET } from '@/app/api/surveys/[surveyId]/contacts/export/route';
 
 const SCHEME = {

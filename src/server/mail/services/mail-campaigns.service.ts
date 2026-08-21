@@ -12,7 +12,7 @@ import {
 import { decryptPii } from '@/lib/crypto/aes';
 import { inngest } from '@/lib/inngest/client';
 import { withTestPrefix } from '@/lib/mail/test-campaign';
-import { loadOperationsDataScope, lockWriteScope } from '@/lib/operations/data-scope.server';
+import { loadOperationsDataScope, lockWriteScope } from '@/server/shared/data-scope.server';
 import type { CampaignFilterSnapshot } from '@/shared/contracts/mail';
 
 import type {
@@ -145,8 +145,8 @@ export async function createCampaign(
     //    발송이므로 반송 주소여도 허용한다 (2026-08-13 결정). 여기서 거르면 validCount 0
     //    으로 단건 발송 자체가 실패한다.
     const { buildNegativeCodeExists, getResultCodeStatuses } =
-      await import('@/lib/operations/result-code-statuses.server');
-    const { listBouncedContactIds } = await import('@/lib/operations/campaigns.server');
+      await import('@/server/shared/result-code-statuses.server');
+    const { listBouncedContactIds } = await import('./campaigns.server');
     const [{ negative: negativeCodes }, bouncedContactIds] = await Promise.all([
       getResultCodeStatuses(input.surveyId),
       kind === 'single' ? Promise.resolve([]) : listBouncedContactIds(input.surveyId),
@@ -323,10 +323,10 @@ export async function fetchCandidateIds(
   const { surveyId, filter } = input;
 
   const { previewCampaignCandidates, countCampaignCandidates } =
-    await import('@/lib/operations/campaigns.server');
+    await import('./campaigns.server');
   const { getContactColumnScheme, getContactResultCodes, buildColumnCandidates } =
-    await import('@/lib/operations/contacts.server');
-  const { parseClausesFromUrl } = await import('@/lib/operations/contacts-filters.server');
+    await import('@/server/shared/contacts.server');
+  const { parseClausesFromUrl } = await import('@/server/shared/contacts-filters.server');
   const scope = await loadOperationsDataScope(surveyId);
 
   const [scheme, resultCodes] = await Promise.all([
@@ -377,7 +377,7 @@ export async function previewPreflight(
   const { surveyId, selectedContactIds } = input;
 
   const { preflightRecipients, listBouncedContactIds } =
-    await import('@/lib/operations/campaigns.server');
+    await import('./campaigns.server');
   const [scope, bouncedContactIds] = await Promise.all([
     loadOperationsDataScope(surveyId),
     listBouncedContactIds(surveyId),

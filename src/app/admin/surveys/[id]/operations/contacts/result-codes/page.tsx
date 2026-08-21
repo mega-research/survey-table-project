@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 
 import { ResultCodesEditor } from '@/features/operations/contacts/result-codes-editor';
-import { getContactResultCodes } from '@/lib/operations/contacts.server';
+import { getContactResultCodes } from '@/server/shared/contacts.server';
 
 export const metadata: Metadata = {
   title: '현황 - 결과코드 설정',

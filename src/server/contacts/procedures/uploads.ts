@@ -1,6 +1,6 @@
 import * as z from 'zod';
 
-import { loadOperationsDataScope } from '@/lib/operations/data-scope.server';
+import { loadOperationsDataScope } from '@/server/shared/data-scope.server';
 import { authed } from '@/server/orpc';
 
 import { GetExistingContactsCountInput } from '../domain/contact-column';

@@ -7,7 +7,7 @@ import { ensureTestContactColumns } from '@/lib/contacts/test-contact-columns';
 import {
   type OperationsDataScope,
   resolveWriteScopeIsTest,
-} from '@/lib/operations/data-scope.server';
+} from '@/server/shared/data-scope.server';
 import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 
 interface SurveyScopeRow extends Record<string, unknown> {

@@ -5,7 +5,7 @@ import { LocalDateTime } from '@/components/ui/local-date-time';
 import { PagerJump } from '@/features/operations/pager-jump';
 import { buildPageItems } from '@/features/operations/table-primitives';
 import type { MailRecipientStatus } from '@/shared/contracts/mail';
-import type { CampaignRecipientRow } from '@/lib/operations/campaigns.server';
+import type { CampaignRecipientRow } from '@/server/mail/services/campaigns.server';
 
 import { RecipientStatusBadge } from './recipient-status-badge';
 

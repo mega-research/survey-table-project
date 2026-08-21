@@ -12,7 +12,7 @@ import type { ContactColumnDef, ContactColumnScheme, ContactResultCode } from '@
 import { useSearchParamsMutator } from '@/features/operations/hooks/use-search-params-mutator';
 import { formatLocalMonthDayTime } from '@/lib/date-formatters';
 import { attrsKeyOf, piiKeyOf, type ContactsSortDir, type ContactsSortKey } from '@/lib/operations/contacts';
-import type { ContactsRow } from '@/lib/operations/contacts.server';
+import type { ContactsRow } from '@/server/shared/contacts.server';
 import { FILTER_SOURCE, MAIL_FILTER_OPTIONS } from '@/lib/operations/filter-shared';
 
 interface ContactsTableProps {

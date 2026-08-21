@@ -15,9 +15,9 @@ import { saveAdminEdit } from '@/server/survey-response/services/response-edit.s
 import { manage } from '@/server/survey-response/procedures/manage';
 import type { ORPCContext } from '@/server/context';
 import type { StatusCounts } from '@/lib/operations/aggregate-status';
-import * as aggregateStatusServer from '@/lib/operations/aggregate-status.server';
-import * as profilesServer from '@/lib/operations/profiles.server';
-import type { ListProfilesResult } from '@/lib/operations/profiles.server';
+import * as aggregateStatusServer from '@/server/operations/services/aggregate-status.server';
+import * as profilesServer from '@/server/operations/services/profiles.server';
+import type { ListProfilesResult } from '@/server/operations/services/profiles.server';
 
 // ========================
 // 모듈 모킹

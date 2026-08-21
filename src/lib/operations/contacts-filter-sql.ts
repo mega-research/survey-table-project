@@ -1,7 +1,7 @@
 import { sql, type SQL } from 'drizzle-orm';
 
 import type { MailRecipientStatus } from '@/shared/contracts/mail';
-import type { FilterClause, FilterCondition } from './contacts-filters.server';
+import type { FilterClause, FilterCondition } from '@/server/shared/contacts-filters.server';
 import { FILTER_SOURCE, escapeLikePattern } from './filter-shared';
 
 /**

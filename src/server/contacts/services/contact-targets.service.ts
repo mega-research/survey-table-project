@@ -9,7 +9,7 @@ import {
   archiveTestMailForTargets,
   hardDeleteMailForTargets,
 } from '@/lib/mail/test-mail-archive.server';
-import { lockWriteScope } from '@/lib/operations/data-scope.server';
+import { lockWriteScope } from '@/server/shared/data-scope.server';
 import { generateInviteCode } from '@/lib/survey-url';
 import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 

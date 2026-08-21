@@ -11,11 +11,11 @@ vi.mock('../services/contact-attr-values.service', async (importOriginal) => {
   };
 });
 
-vi.mock('@/lib/operations/data-scope.server', () => ({
+vi.mock('@/server/shared/data-scope.server', () => ({
   loadOperationsDataScope: vi.fn(),
 }));
 
-import { loadOperationsDataScope } from '@/lib/operations/data-scope.server';
+import { loadOperationsDataScope } from '@/server/shared/data-scope.server';
 import * as svc from '../services/contact-attr-values.service';
 import { attrValues } from './attr-values';
 

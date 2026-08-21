@@ -10,8 +10,8 @@ import {
   shapeDailyStats,
   type DailyStatsRawRow,
   type DailyStatsRow,
-} from './daily-stats';
-import { responseScopeCondition, type OperationsDataScope } from './data-scope.server';
+} from '@/lib/operations/daily-stats';
+import { responseScopeCondition, type OperationsDataScope } from '@/server/shared/data-scope.server';
 
 /**
  * 단일 설문의 일자별 통계(총/완료/드롭)를 반환한다 (서버 전용).

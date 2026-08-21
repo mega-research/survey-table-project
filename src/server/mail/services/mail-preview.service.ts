@@ -13,8 +13,8 @@ import { renderForTestSend } from '@/lib/mail/render-for-send';
 import { sendTestMail } from '@/lib/mail/send';
 import { MailWrapper } from '@/lib/mail/template-wrapper';
 import { buildInviteUrl } from '@/lib/survey-url';
-import { getContactSampleById, getFirstContactSample } from '@/lib/operations/contact-sample.server';
-import { loadOperationsDataScope } from '@/lib/operations/data-scope.server';
+import { getContactSampleById, getFirstContactSample } from '@/server/shared/contact-sample.server';
+import { loadOperationsDataScope } from '@/server/shared/data-scope.server';
 
 import type {
   GetMailPreviewSampleInput,

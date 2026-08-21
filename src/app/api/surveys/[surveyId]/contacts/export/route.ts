@@ -7,13 +7,13 @@ import { resolveExportColumns } from '@/lib/operations/contacts-export';
 import {
   buildContactsExportWorkbook,
   decryptPiiForExport,
-} from '@/lib/operations/contacts-export.server';
+} from '@/server/operations/services/contacts-export.server';
 import {
   getContactColumnScheme,
   listContactsForExport,
   MAX_CONTACT_EXPORT_ROWS,
-} from '@/lib/operations/contacts.server';
-import { loadOperationsDataScope } from '@/lib/operations/data-scope.server';
+} from '@/server/shared/contacts.server';
+import { loadOperationsDataScope } from '@/server/shared/data-scope.server';
 
 // 대형 명단 + PII 복호화 대비 (기본 10초 → 30초)
 export const maxDuration = 30;

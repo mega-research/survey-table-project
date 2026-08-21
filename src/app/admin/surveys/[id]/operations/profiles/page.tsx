@@ -11,29 +11,29 @@ import { ProfilesTable } from '@/features/operations/profiles/profiles-table';
 import { getQuestionGroupsBySurvey } from '@/data/surveys';
 import { db } from '@/db';
 import { questions as questionsTable } from '@/db/schema';
-import { getSurveyContactStats } from '@/lib/operations/contact-stats.server';
+import { getSurveyContactStats } from '@/server/operations/services/contact-stats.server';
 import {
   PROFILES_PAGE_SIZE,
   buildStepLocationMap,
   hasActiveFilters,
   normalizeListArgs,
 } from '@/lib/operations/profiles';
-import { listResponsesForProfiles } from '@/lib/operations/profiles.server';
+import { listResponsesForProfiles } from '@/server/operations/services/profiles.server';
 import {
   hydrateProfileColumns,
   visibleProfileColumns,
 } from '@/lib/operations/profile-columns';
 import { getProfileColumnScheme } from '@/lib/operations/profile-columns.server';
 import { decryptPiiForTargets } from '@/lib/crypto/contact-pii-repo';
-import { getContactColumnScheme, buildColumnCandidates } from '@/lib/operations/contacts.server';
+import { getContactColumnScheme, buildColumnCandidates } from '@/server/shared/contacts.server';
 import {
   parseProfilesClausesFromUrl,
   parseProfilesHeaderFiltersFromUrl,
   PROFILES_EXTRA_CANDIDATES,
-} from '@/lib/operations/profiles-filters.server';
-import type { FilterClause } from '@/lib/operations/contacts-filters.server';
+} from '@/server/operations/services/profiles-filters.server';
+import type { FilterClause } from '@/server/shared/contacts-filters.server';
 import { FILTER_SOURCE } from '@/lib/operations/filter-shared';
-import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
+import { getOperationsDataScope } from '@/server/shared/data-scope.server';
 import { isGuestViewer } from '@/lib/auth/guest-viewer';
 
 export const metadata: Metadata = {

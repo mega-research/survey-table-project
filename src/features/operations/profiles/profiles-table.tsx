@@ -24,7 +24,7 @@ import {
   type StatusPillResult,
   type StepLocation,
 } from '@/lib/operations/profiles';
-import type { ProfilesRow } from '@/lib/operations/profiles.server';
+import type { ProfilesRow } from '@/server/operations/services/profiles.server';
 
 import { EmptyState } from '../empty-state';
 import { HeaderFilterPopover } from '../filters/header-filter-popover';

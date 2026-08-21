@@ -70,7 +70,12 @@ const eslintConfig = [
     // 서버 도메인 간 직접 import 금지 (경량 DDD 경계). 공용은 @/shared 로 승격하거나 서버 내부에서는
     // 타 도메인 테이블 직접 쿼리(허용)로 푼다. 자기 도메인 내부는 상대경로를 쓴다(이 패턴은 절대경로 self 도 막는다).
     // 코어(@/server/orpc·context·router 등 1단계 모듈)는 `!@/server/*` 로 허용한다.
+    // 서버 공용(@/server/shared/**)은 `!@/server/shared/**` 로 허용한다 — 여러 서버 도메인이 읽는
+    // DB 접근 코드(운영 실/테스트 파티션 판정, 컨택 read model)를 담는 sink 구역이다. shared 자신도
+    // 이 files 글롭에 걸리므로 다른 도메인을 import 하지 못한다(의존 방향 단방향 유지).
     // 주의: gitignore 의미론 — 상위 디렉터리를 매치하는 패턴은 negation 으로 하위를 되살릴 수 없다.
+    //   `@/server/*/**` 는 디렉터리 `@/server/shared` 자체를 매치하지 않으므로 위 negation 은 동작한다
+    //   (스크래치 config 프로브 실측 2026-08-21).
     files: ["src/server/*/**/*.{ts,tsx}"],
     rules: {
       "no-restricted-imports": [
@@ -78,9 +83,9 @@ const eslintConfig = [
         {
           patterns: [
             {
-              group: ["@/server/*/**", "!@/server/*"],
+              group: ["@/server/*/**", "!@/server/*", "!@/server/shared/**"],
               message:
-                "서버 도메인 간 직접 import 금지. 공용은 @/shared 로 승격하세요. (자기 도메인 내부는 상대경로 사용)",
+                "서버 도메인 간 직접 import 금지. 공용은 @/server/shared(서버 전용) 또는 @/shared 로 승격하세요. (자기 도메인 내부는 상대경로 사용)",
             },
             {
               group: ["@/features/*", "@/features/*/**", "**/features/*/**"],
@@ -275,10 +280,21 @@ const eslintConfig = [
                 "클라이언트 트리에서 DB 값 import 금지. JSONB 어휘는 @/shared/contracts, 쿼리는 서버 모듈로 옮기세요. (type import 는 허용)",
             },
             {
+              // 서비스·서버 공용은 값 import 만 막는다. RSC 가 서버에서 만든 행 타입을 클라이언트
+              // 컴포넌트 props 로 넘기는 seam 이 실재하고(운영 콘솔 표 컴포넌트), 성격이 위 @/db
+              // 행 타입과 같다. 값(쿼리 함수)을 끌어오는 순간 클라이언트 번들에 DB 가 들어온다.
               group: [
                 "@/server/*/services/**",
-                "@/server/*/procedures/**",
                 "@/server/*/services",
+                "@/server/shared/**",
+              ],
+              allowTypeImports: true,
+              message:
+                "UI 는 서버 서비스의 값 import 금지. 데이터는 RPC(@/shared/lib/rpc) 로 받으세요. (RSC → 클라이언트 props 용 행 타입은 type import 로 허용)",
+            },
+            {
+              group: [
+                "@/server/*/procedures/**",
                 "@/server/*/procedures",
                 "@/server/context",
                 "@/server/orpc",

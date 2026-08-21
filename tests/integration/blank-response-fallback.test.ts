@@ -91,7 +91,7 @@ vi.mock('@/db', () => ({
 }));
 
 // findContactByInviteToken 내부에서 negative codes 조회
-vi.mock('@/lib/operations/result-code-statuses.server', async () => {
+vi.mock('@/server/shared/result-code-statuses.server', async () => {
   const { mockBuildNegativeCodeExists } = await import('./_helpers/result-code-mock');
   return {
     getResultCodeStatuses: vi.fn(async () => ({ positive: [], negative: [] })),

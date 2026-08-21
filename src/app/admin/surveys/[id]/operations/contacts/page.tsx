@@ -20,13 +20,13 @@ import {
   getContactColumnScheme,
   getContactResultCodes,
   listContactsForSurvey,
-} from '@/lib/operations/contacts.server';
+} from '@/server/shared/contacts.server';
 import {
   parseClausesFromUrl,
   parseHeaderFiltersFromUrl,
   type FilterClause,
-} from '@/lib/operations/contacts-filters.server';
-import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
+} from '@/server/shared/contacts-filters.server';
+import { getOperationsDataScope } from '@/server/shared/data-scope.server';
 
 export const metadata: Metadata = {
   title: '현황 - 조사 대상 목록',

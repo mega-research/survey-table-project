@@ -28,7 +28,7 @@ import {
   attrsSortKey,
   type ContactsSortDir,
   type ContactsSortKey,
-} from './contacts';
+} from '@/lib/operations/contacts';
 import type { FilterClause } from './contacts-filters.server';
 import {
   attrsNaturalSortExprs,
@@ -37,8 +37,8 @@ import {
   latestResultCodeExpr,
   mailStatusRankExpr,
   matchedResponseSubquery,
-} from './contacts-filter-sql';
-import { FILTER_SOURCE, type ColumnCandidateWithPii } from './filter-shared';
+} from '@/lib/operations/contacts-filter-sql';
+import { FILTER_SOURCE, type ColumnCandidateWithPii } from '@/lib/operations/filter-shared';
 import {
   responseScopeCondition,
   targetScopeCondition,
