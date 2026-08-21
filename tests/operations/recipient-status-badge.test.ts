@@ -2,10 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { MailRecipientStatus } from '@/shared/contracts/mail';
 import { mailRecipientStatusValues } from '@/shared/contracts/mail';
-import {
-  recipientStatusMeta,
-  STATUS_LABEL,
-} from '@/components/operations/mail-campaign/recipient-status-badge';
+import { recipientStatusMeta, STATUS_LABEL } from '@/lib/operations/recipient-status';
 
 describe('recipient-status-badge STATUS_LABEL', () => {
   it('모든 MailRecipientStatus 값에 라벨/톤이 매핑되어 있다', () => {

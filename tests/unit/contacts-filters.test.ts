@@ -12,7 +12,7 @@ import {
   WEB_FILTER_OPTIONS,
   webFilterOptionsFor,
 } from '@/lib/operations/filter-shared';
-import { STATUS_LABEL } from '@/components/operations/mail-campaign/recipient-status-badge';
+import { STATUS_LABEL } from '@/lib/operations/recipient-status';
 import type { ContactResultCode } from '@/shared/contracts/contacts';
 
 describe('webFilterOptionsFor — web 필터 선택지 + 레거시 값 노출', () => {

@@ -2,10 +2,8 @@
 
 import { useMemo } from 'react';
 
-import {
-  RecipientStatusBadge,
-  recipientStatusMeta,
-} from '@/components/operations/mail-campaign/recipient-status-badge';
+import { RecipientStatusBadge } from '@/components/operations/mail-campaign/recipient-status-badge';
+import { recipientStatusMeta } from '@/lib/operations/recipient-status';
 import { HeaderFilterPopover } from '@/components/operations/filters/header-filter-popover';
 import { StatusPill } from '@/components/operations/profiles/status-pill';
 import { mapStatusPill, type StatusPillResult } from '@/lib/operations/profiles';
