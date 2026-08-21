@@ -4,13 +4,8 @@ import { and, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import 'server-only';
 
-import {
-  completedResponse as completedResponseFilter,
-  notDeletedResponse,
-  notTestResponse,
-} from '@/data/response-filters';
-import { db } from '@/db';
-import { logger } from '@/lib/logger';
+import { notTestResponse } from '@/data/response-filters';
+import { type DbTransaction, db } from '@/db';
 import {
   NewSurveyResponse,
   contactTargets,
@@ -19,12 +14,18 @@ import {
   surveyVersions,
   surveys,
 } from '@/db/schema';
-import type { PageVisit } from '@/shared/contracts/survey-response';
-import { decryptQuestionResponses, encryptAnswerValue, encryptResponsesForStorage } from '@/lib/crypto/response-pii';
+import {
+  decryptQuestionResponses,
+  encryptAnswerValue,
+  encryptResponsesForStorage,
+} from '@/lib/crypto/response-pii';
 import { checkTrackA, checkTrackB } from '@/lib/duplicate-detection/check';
 import { computeSignals } from '@/lib/duplicate-detection/signals';
+import { logger } from '@/lib/logger';
 import { sumActiveSeconds } from '@/lib/operations/active-seconds';
 import { parseBrowser, parsePlatform } from '@/lib/operations/parse-ua';
+import { readOptTextsSidecar } from '@/lib/option-text-read';
+import { loadCompletedPlainAnswers } from '@/lib/quota/completed-answers.server';
 import { countCell, deriveCategoryIds, findTarget } from '@/lib/quota/matching';
 import { getSurveyControlFlags, isValidTestToken } from '@/lib/survey-control';
 import type { TestResponseResetFields } from '@/lib/survey-response/reset-test-response.server';
@@ -36,8 +37,9 @@ import {
 } from '@/lib/survey-response/test-target-attempt.server';
 import { withCalcValues } from '@/lib/survey/cell-formula';
 import { stripDisabledCellValues } from '@/lib/survey/cell-gating';
-import type { Question, SurveyLookup } from '@/types/survey';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
+import type { PageVisit } from '@/shared/contracts/survey-response';
+import type { Question, SurveyLookup } from '@/types/survey';
 
 import {
   completeResponseDenial,
@@ -58,10 +60,8 @@ import type {
   SurveyResponse,
   UpdateQuestionResponseInput,
 } from '../domain/response';
-import { readOptTextsSidecar } from '@/lib/option-text-read';
 import { replaceResponseAnswers } from './response-answers.service';
 
-type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type ResponseQueryExecutor = Pick<DbTransaction, 'execute' | 'select'>;
 
 // ========================
@@ -211,8 +211,7 @@ async function settleReuseCandidate(
  * `onReuse` 콜백이 있으면 1·3·4 의 재사용/충돌 경로에서 호출되어 첫 답변 머지 등을 수행.
  */
 type ReuseOutcome =
-  | { kind: 'ready'; row: ReuseCandidate }
-  | { kind: 'blocked'; reason: BlockReason };
+  { kind: 'ready'; row: ReuseCandidate } | { kind: 'blocked'; reason: BlockReason };
 
 async function insertResponseWithContactReuse(params: {
   surveyId: string;
@@ -918,7 +917,9 @@ async function loadResponseRowForMutation(responseId: string): Promise<ResponseM
  * (a) 조회 회피 최적화와 (b) flags 미조회(설문 삭제 등) 시 fail-open 이다 — module 은
  * non-null 상태만 받고 null 처리는 호출자가 진다.
  */
-async function assertSurveyNotPaused(row: Pick<ResponseMutationRow, 'surveyId' | 'isTest'>): Promise<void> {
+async function assertSurveyNotPaused(
+  row: Pick<ResponseMutationRow, 'surveyId' | 'isTest'>,
+): Promise<void> {
   if (row.isTest) return;
   const flags = await getSurveyControlFlags(row.surveyId);
   const denial = flags ? ongoingResponseDenial(flags, { isTest: row.isTest }) : null;
@@ -1208,9 +1209,16 @@ export async function saveDraftResponse(
 
   if (!responseRow.isTest) {
     const outcome = await applyDraftAnswersUpdate(
-      db, input.responseId, questionIds, storedAnswers, input.seq,
+      db,
+      input.responseId,
+      questionIds,
+      storedAnswers,
+      input.seq,
     );
-    return { applied: outcome === 'applied', ...(outcome === 'concluded' ? { concluded: true } : {}) };
+    return {
+      applied: outcome === 'applied',
+      ...(outcome === 'concluded' ? { concluded: true } : {}),
+    };
   }
 
   // 테스트 행은 시도 소유권 락을 먼저 잡는다. 락도 배치당 1회.
@@ -1222,7 +1230,10 @@ export async function saveDraftResponse(
     });
     return applyDraftAnswersUpdate(tx, input.responseId, questionIds, storedAnswers, input.seq);
   });
-  return { applied: outcome === 'applied', ...(outcome === 'concluded' ? { concluded: true } : {}) };
+  return {
+    applied: outcome === 'applied',
+    ...(outcome === 'concluded' ? { concluded: true } : {}),
+  };
 }
 
 /** saveDraftResponseIfActive 가 저장을 건너뛴 사유. 서버 로그·테스트 어서션용. */
@@ -1236,8 +1247,7 @@ export type SaveDraftSkipReason =
   | 'stale';
 
 export type SaveDraftIfActiveResult =
-  | { saved: true }
-  | { saved: false; skipped: SaveDraftSkipReason };
+  { saved: true } | { saved: false; skipped: SaveDraftSkipReason };
 
 /** SurveyNotAcceptingResponsesError.reason 은 string 이라 미지의 값이 올 수 있다. union 을 닫는다. */
 function toSkipReason(reason: string): SaveDraftSkipReason {
@@ -1728,20 +1738,7 @@ async function detectQuotaOverflow(
     const target = findTarget(config, categoryIds);
     if (target === null) return false;
 
-    const rows = await db
-      .select({ questionResponses: surveyResponses.questionResponses })
-      .from(surveyResponses)
-      .where(
-        and(
-          eq(surveyResponses.surveyId, surveyId),
-          completedResponseFilter,
-          notDeletedResponse,
-          notTestResponse,
-        ),
-      );
-    const answersList = rows.map((row) =>
-      decryptQuestionResponses((row.questionResponses ?? {}) as Record<string, unknown>),
-    );
+    const answersList = await loadCompletedPlainAnswers(surveyId, 'real');
     return countCell(config, categoryIds, answersList) >= target;
   } catch (err) {
     logger.error({ surveyId, err }, '[quota] 완료 시점 초과 감지 실패 — fail-open 통과');
@@ -1917,9 +1914,7 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
       .where(eq(surveyVersions.id, gateRow.versionId))
       .limit(1);
     const snap = versionRow?.snapshot as unknown as
-      | { questions?: unknown; lookups?: unknown }
-      | null
-      | undefined;
+      { questions?: unknown; lookups?: unknown } | null | undefined;
     // JSONB 스키마 드리프트 방어 — 비배열이면 순회에서 크래시하므로 Array.isArray 로 거른다.
     const snapQuestions = Array.isArray(snap?.questions) ? (snap.questions as Question[]) : [];
     const snapLookups = Array.isArray(snap?.lookups) ? (snap.lookups as SurveyLookup[]) : [];

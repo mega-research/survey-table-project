@@ -1,11 +1,10 @@
+import { and, eq, sql } from 'drizzle-orm';
 import 'server-only';
 
-import { and, eq, sql } from 'drizzle-orm';
-
-import { db } from '@/db';
+import { type DbTransaction, db } from '@/db';
+import { contactAttempts, contactTargets } from '@/db/schema';
 import { logger } from '@/lib/logger';
-import { contactAttempts, contactTargets, surveys } from '@/db/schema';
-import { resolveWriteScopeIsTest } from '@/lib/operations/data-scope.server';
+import { lockWriteScope } from '@/lib/operations/data-scope.server';
 
 import type {
   AddContactAttemptInput,
@@ -18,18 +17,14 @@ import type {
  * 현재 스코프 대상자에게만 허용된다.
  */
 async function lockTargetInCurrentScope(
-  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  tx: DbTransaction,
   contactTargetId: string,
   surveyId: string,
   isGuest: boolean,
 ): Promise<void> {
-  const [survey] = await tx
-    .select({ enabled: surveys.testModeEnabled })
-    .from(surveys)
-    .where(eq(surveys.id, surveyId))
-    .for('update');
-  if (!survey) throw new Error('NOT_FOUND');
-  const isTest = resolveWriteScopeIsTest(survey.enabled, isGuest);
+  const locked = await lockWriteScope(tx, surveyId, isGuest, { lock: 'update' });
+  if (!locked) throw new Error('NOT_FOUND');
+  const { isTest } = locked;
 
   const [target] = await tx
     .select({ id: contactTargets.id })

@@ -1,16 +1,13 @@
+import { and, eq, isNull } from 'drizzle-orm';
 import 'server-only';
 
-import { and, eq, isNull } from 'drizzle-orm';
-
-import { db } from '@/db';
+import { type DbTransaction as Tx, db } from '@/db';
 import { mailCampaigns, mailRecipients, webhookEvents } from '@/db/schema/mail';
-import type { MailRecipientStatus } from '@/shared/contracts/mail';
 import {
   applyRecipientTransition,
   mapResendWebhookType,
 } from '@/lib/mail/recipient-status-transition';
-
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+import type { MailRecipientStatus } from '@/shared/contracts/mail';
 
 async function applyResendEvent(
   tx: Tx,
@@ -77,12 +74,7 @@ async function applyResendEvent(
     await tx
       .update(mailRecipients)
       .set({ resendMessageId, updatedAt: new Date() })
-      .where(
-        and(
-          eq(mailRecipients.id, row.id),
-          isNull(mailRecipients.resendMessageId),
-        ),
-      );
+      .where(and(eq(mailRecipients.id, row.id), isNull(mailRecipients.resendMessageId)));
   }
 
   await applyRecipientTransition(tx, {
@@ -102,9 +94,9 @@ export async function processResendEvent(
   createdAtRaw: string,
   tags?: Record<string, string>,
 ): Promise<void> {
-  await db.transaction((tx) => (
-    applyResendEvent(tx, resendMessageId, eventType, createdAtRaw, tags)
-  ));
+  await db.transaction((tx) =>
+    applyResendEvent(tx, resendMessageId, eventType, createdAtRaw, tags),
+  );
 }
 
 export interface VerifiedResendWebhookEvent {
@@ -131,13 +123,7 @@ export async function processResendWebhookEvent(
     if (inserted.length === 0) return 'deduped';
     if (!event.resendMessageId || !mapResendWebhookType(event.type)) return 'ignored';
 
-    await applyResendEvent(
-      tx,
-      event.resendMessageId,
-      event.type,
-      event.createdAt,
-      event.tags,
-    );
+    await applyResendEvent(tx, event.resendMessageId, event.type, event.createdAt, event.tags);
     return 'processed';
   });
 }

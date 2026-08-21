@@ -1,13 +1,11 @@
 import { and, eq, isNull, ne, sql } from 'drizzle-orm';
 import 'server-only';
 
-import { db } from '@/db';
+import type { DbTransaction } from '@/db';
 import { contactTargets, surveyResponses, surveys, testResponseAttempts } from '@/db/schema';
-import type { PageVisit } from '@/shared/contracts/survey-response';
 import { resetTestResponseRow } from '@/lib/survey-response/reset-test-response.server';
+import type { PageVisit } from '@/shared/contracts/survey-response';
 import type { TestAttemptIdentity } from '@/shared/types/test-attempt';
-
-type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 export interface AcquireTestTargetResponseInput {
   surveyId: string;
@@ -286,9 +284,7 @@ export async function lockAndAssertResponseMutation(
     const [count] = await tx
       .select({ total: sql<number>`count(*)::int` })
       .from(contactTargets)
-      .where(
-        and(eq(contactTargets.surveyId, preflight.surveyId), eq(contactTargets.isTest, true)),
-      );
+      .where(and(eq(contactTargets.surveyId, preflight.surveyId), eq(contactTargets.isTest, true)));
     if ((count?.total ?? 0) > 0) {
       throw new Error('테스트 링크가 더 이상 유효하지 않습니다');
     }

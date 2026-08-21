@@ -1,14 +1,12 @@
+import { eq } from 'drizzle-orm';
 import 'server-only';
 
-import { and, eq } from 'drizzle-orm';
-
-import { completedResponse, notDeletedResponse } from '@/data/response-filters';
 import { db } from '@/db';
-import { surveyResponses, surveys } from '@/db/schema/surveys';
-import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
+import { surveys } from '@/db/schema/surveys';
+import { loadCompletedPlainAnswers } from '@/lib/quota/completed-answers.server';
 
-import { responseScopeCondition, type OperationsDataScope } from './data-scope.server';
-import { buildQuotaStatus, type QuotaStatus, type QuotaSummary } from './quota-status';
+import type { OperationsDataScope } from './data-scope.server';
+import { type QuotaStatus, type QuotaSummary, buildQuotaStatus } from './quota-status';
 
 /**
  * 설문 쿼터 현황(셀별 + 요약). 쿼터 미설정이면 null.
@@ -26,21 +24,7 @@ export async function getQuotaStatus(
   const config = surveyRow?.quotaConfig ?? null;
   if (!config) return null;
 
-  const rows = await db
-    .select({ questionResponses: surveyResponses.questionResponses })
-    .from(surveyResponses)
-    .where(
-      and(
-        eq(surveyResponses.surveyId, surveyId),
-        completedResponse,
-        notDeletedResponse,
-        responseScopeCondition(scope),
-      ),
-    );
-
-  const answersList = rows.map((r) =>
-    decryptQuestionResponses((r.questionResponses ?? {}) as Record<string, unknown>),
-  );
+  const answersList = await loadCompletedPlainAnswers(surveyId, scope);
   return buildQuotaStatus(config, answersList);
 }
 

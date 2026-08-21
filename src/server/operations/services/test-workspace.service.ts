@@ -1,9 +1,9 @@
 import { and, count, eq, inArray, isNull } from 'drizzle-orm';
 import 'server-only';
 
-import { db } from '@/db';
+import { type DbTransaction, db } from '@/db';
 import { contactTargets, mailCampaigns, surveyResponses, surveys } from '@/db/schema';
-import { type DbTransaction, archiveTestWorkspaceMail } from '@/lib/mail/test-mail-archive.server';
+import { archiveTestWorkspaceMail } from '@/lib/mail/test-mail-archive.server';
 
 export interface DisableTestWorkspaceResult {
   testModeEnabled: false;

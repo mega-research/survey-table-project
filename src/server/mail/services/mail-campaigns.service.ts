@@ -1,19 +1,19 @@
-import 'server-only';
-
 import { and, asc, eq, inArray, isNull, notInArray, sql } from 'drizzle-orm';
+import 'server-only';
 
 import { db } from '@/db';
 import { contactPii, contactTargets } from '@/db/schema/contacts';
-import { mailCampaigns, mailRecipients, mailTemplates, type MailCampaignKind } from '@/db/schema/mail';
-import { surveys } from '@/db/schema/surveys';
-import type { CampaignFilterSnapshot } from '@/shared/contracts/mail';
+import {
+  type MailCampaignKind,
+  mailCampaigns,
+  mailRecipients,
+  mailTemplates,
+} from '@/db/schema/mail';
 import { decryptPii } from '@/lib/crypto/aes';
 import { inngest } from '@/lib/inngest/client';
 import { withTestPrefix } from '@/lib/mail/test-campaign';
-import {
-  loadOperationsDataScope,
-  resolveWriteScopeIsTest,
-} from '@/lib/operations/data-scope.server';
+import { loadOperationsDataScope, lockWriteScope } from '@/lib/operations/data-scope.server';
+import type { CampaignFilterSnapshot } from '@/shared/contracts/mail';
 
 import type {
   CancelCampaignInput,
@@ -53,7 +53,8 @@ export async function createCampaign(
   opts: { kind?: MailCampaignKind } = {},
 ): Promise<CreateCampaignResult> {
   const kind: MailCampaignKind = opts.kind ?? 'bulk';
-  const filterSnapshot: CampaignFilterSnapshot = (input.filterSnapshot ?? {}) as CampaignFilterSnapshot;
+  const filterSnapshot: CampaignFilterSnapshot = (input.filterSnapshot ??
+    {}) as CampaignFilterSnapshot;
 
   // 중복 선택 ID 제거 — recipientCount/skippedCount 카운터가 중복으로 부풀려지는 것을 방지.
   // 실제 mail_recipients 행은 inArray(SQL IN) + seen Set 으로 이미 dedupe 되므로,
@@ -62,15 +63,11 @@ export async function createCampaign(
 
   const result = await db.transaction(async (tx) => {
     // a. 현재 운영 scope 잠금. 모드 전환과 캠페인 생성을 직렬화하고 클라이언트 값은 신뢰하지 않는다.
-    const [survey] = await tx
-      .select({ enabled: surveys.testModeEnabled })
-      .from(surveys)
-      .where(eq(surveys.id, input.surveyId))
-      .for('share');
-    if (!survey) {
+    const locked = await lockWriteScope(tx, input.surveyId, isGuest, { lock: 'share' });
+    if (!locked) {
       throw new Error('설문을 찾을 수 없습니다.');
     }
-    const isTest = resolveWriteScopeIsTest(survey.enabled, isGuest);
+    const { isTest } = locked;
 
     // 작성 화면을 연 뒤 모드가 바뀌었거나 반대 scope ID가 섞이면 현재 scope로 강등하지 않는다.
     const selectedTargets = await tx
@@ -147,9 +144,8 @@ export async function createCampaign(
     //    반송 제외는 bulk 전용 — 단건(kind='single')은 관리자가 특정 컨택을 지목한 의도적
     //    발송이므로 반송 주소여도 허용한다 (2026-08-13 결정). 여기서 거르면 validCount 0
     //    으로 단건 발송 자체가 실패한다.
-    const { buildNegativeCodeExists, getResultCodeStatuses } = await import(
-      '@/lib/operations/result-code-statuses.server'
-    );
+    const { buildNegativeCodeExists, getResultCodeStatuses } =
+      await import('@/lib/operations/result-code-statuses.server');
     const { listBouncedContactIds } = await import('@/lib/operations/campaigns.server');
     const [{ negative: negativeCodes }, bouncedContactIds] = await Promise.all([
       getResultCodeStatuses(input.surveyId),
@@ -170,10 +166,7 @@ export async function createCampaign(
       .from(contactTargets)
       .innerJoin(
         contactPii,
-        and(
-          eq(contactPii.contactTargetId, contactTargets.id),
-          eq(contactPii.fieldType, 'email'),
-        ),
+        and(eq(contactPii.contactTargetId, contactTargets.id), eq(contactPii.fieldType, 'email')),
       )
       .where(
         and(
@@ -277,12 +270,8 @@ export async function createCampaign(
  */
 export async function cancelCampaign(input: CancelCampaignInput, isGuest: boolean): Promise<void> {
   // createCampaign(a단계)과 동일한 최소 조회 — 쓰기 파티션 산정을 위해서만 필요.
-  const [survey] = await db
-    .select({ enabled: surveys.testModeEnabled })
-    .from(surveys)
-    .where(eq(surveys.id, input.surveyId))
-    .limit(1);
-  const isTest = resolveWriteScopeIsTest(survey?.enabled ?? false, isGuest);
+  const locked = await lockWriteScope(db, input.surveyId, isGuest, { lock: 'none' });
+  const isTest = locked?.isTest ?? false;
 
   const updated = await db
     .update(mailCampaigns)
@@ -311,18 +300,11 @@ export async function cancelCampaign(input: CancelCampaignInput, isGuest: boolea
  *
  * 다른 설문의 캠페인 id 를 넘겨 남의 데이터를 건드리는 것을 막기 위해 surveyId 소유를 먼저 확인한다.
  */
-export async function resyncCampaign(
-  input: ResyncCampaignInput,
-): Promise<ResyncCampaignResult> {
+export async function resyncCampaign(input: ResyncCampaignInput): Promise<ResyncCampaignResult> {
   const [campaign] = await db
     .select({ id: mailCampaigns.id })
     .from(mailCampaigns)
-    .where(
-      and(
-        eq(mailCampaigns.id, input.campaignId),
-        eq(mailCampaigns.surveyId, input.surveyId),
-      ),
-    )
+    .where(and(eq(mailCampaigns.id, input.campaignId), eq(mailCampaigns.surveyId, input.surveyId)))
     .limit(1);
 
   if (!campaign) throw new Error('단체 메일을 찾을 수 없습니다.');
@@ -340,12 +322,10 @@ export async function fetchCandidateIds(
 ): Promise<FetchCandidateIdsResult> {
   const { surveyId, filter } = input;
 
-  const { previewCampaignCandidates, countCampaignCandidates } = await import(
-    '@/lib/operations/campaigns.server'
-  );
-  const { getContactColumnScheme, getContactResultCodes, buildColumnCandidates } = await import(
-    '@/lib/operations/contacts.server'
-  );
+  const { previewCampaignCandidates, countCampaignCandidates } =
+    await import('@/lib/operations/campaigns.server');
+  const { getContactColumnScheme, getContactResultCodes, buildColumnCandidates } =
+    await import('@/lib/operations/contacts.server');
   const { parseClausesFromUrl } = await import('@/lib/operations/contacts-filters.server');
   const scope = await loadOperationsDataScope(surveyId);
 
@@ -396,9 +376,8 @@ export async function previewPreflight(
 ): Promise<PreviewPreflightResult> {
   const { surveyId, selectedContactIds } = input;
 
-  const { preflightRecipients, listBouncedContactIds } = await import(
-    '@/lib/operations/campaigns.server'
-  );
+  const { preflightRecipients, listBouncedContactIds } =
+    await import('@/lib/operations/campaigns.server');
   const [scope, bouncedContactIds] = await Promise.all([
     loadOperationsDataScope(surveyId),
     listBouncedContactIds(surveyId),

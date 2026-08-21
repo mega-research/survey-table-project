@@ -1,7 +1,7 @@
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray } from 'drizzle-orm';
 
-import { db } from '@/db';
-import { contactPii, type NewContactPii } from '@/db/schema';
+import { type DbOrTx, type DbTransaction as Tx, db } from '@/db';
+import { type NewContactPii, contactPii } from '@/db/schema';
 
 import { decryptPii, encryptPii } from './aes';
 import { blindIndex } from './blind';
@@ -40,16 +40,67 @@ export function buildPiiRows(
   return rows;
 }
 
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
-
 /**
  * 트랜잭션 내에서 contact_pii batch insert. UNIQUE (target_id, column_key) 충돌은 무시.
  */
 export async function insertPiiRows(tx: Tx, rows: readonly NewContactPii[]): Promise<void> {
   if (rows.length === 0) return;
-  await tx.insert(contactPii).values([...rows]).onConflictDoNothing();
+  await tx
+    .insert(contactPii)
+    .values([...rows])
+    .onConflictDoNothing();
 }
 
+export interface EmailPiiRow {
+  id: string;
+  contactTargetId: string;
+  columnKey: string;
+  cipher: string;
+  maskHint: string | null;
+}
+
+/**
+ * 컨택들의 email PII 행을 (contact_target_id, column_key) 오름차순으로 조회한다.
+ * "컨택의 이메일 = field_type='email' 이고 column_key 오름차순 첫 컬럼" 불변식의 단일 소스.
+ *
+ * DISTINCT ON 으로 첫 행만 자르지 않고 전 행을 돌려준다 — 발송 경로(createCampaign·preflight)는
+ * 첫 컬럼이 복호화 실패/공백이면 다음 컬럼으로 폴백하므로 "첫 usable 컬럼" 선택은 호출부가 맡는다.
+ * 순수하게 첫 컬럼만 필요한 호출부는 firstEmailRowByTarget 으로 줄인다.
+ * 트랜잭션 안팎 모두에서 쓰도록 executor 를 주입받는다.
+ */
+export async function selectEmailPiiRows(
+  executor: DbOrTx,
+  contactTargetIds: readonly string[],
+): Promise<EmailPiiRow[]> {
+  if (contactTargetIds.length === 0) return [];
+  return executor
+    .select({
+      id: contactPii.id,
+      contactTargetId: contactPii.contactTargetId,
+      columnKey: contactPii.columnKey,
+      cipher: contactPii.cipher,
+      maskHint: contactPii.maskHint,
+    })
+    .from(contactPii)
+    .where(
+      and(
+        eq(contactPii.fieldType, 'email'),
+        inArray(contactPii.contactTargetId, [...contactTargetIds]),
+      ),
+    )
+    .orderBy(asc(contactPii.contactTargetId), asc(contactPii.columnKey));
+}
+
+/** selectEmailPiiRows 결과(정렬 보장)에서 컨택당 첫 행만 남긴다 — column_key 오름차순 첫 컬럼. */
+export function firstEmailRowByTarget<T extends { contactTargetId: string }>(
+  rows: readonly T[],
+): Map<string, T> {
+  const first = new Map<string, T>();
+  for (const row of rows) {
+    if (!first.has(row.contactTargetId)) first.set(row.contactTargetId, row);
+  }
+  return first;
+}
 
 /**
  * 여러 contact 의 mask_hint 만 일괄 조회. cipher 는 가져오지 않아 비용 낮음.
@@ -139,9 +190,7 @@ export interface DecryptedPii {
  * 반환: columnKey → DecryptedPii. failed=true 인 항목은 UI 가 readonly 처리해서
  * 사용자가 의도치 않게 새 cipher 로 덮어쓰지 않도록 해야 함.
  */
-export async function decryptForTarget(
-  targetId: string,
-): Promise<Record<string, DecryptedPii>> {
+export async function decryptForTarget(targetId: string): Promise<Record<string, DecryptedPii>> {
   const rows = await db
     .select({
       fieldType: contactPii.fieldType,
@@ -187,10 +236,7 @@ export async function upsertPiiValue(
     await tx
       .delete(contactPii)
       .where(
-        and(
-          eq(contactPii.contactTargetId, contactTargetId),
-          eq(contactPii.columnKey, columnKey),
-        ),
+        and(eq(contactPii.contactTargetId, contactTargetId), eq(contactPii.columnKey, columnKey)),
       );
     return;
   }
@@ -201,10 +247,7 @@ export async function upsertPiiValue(
     await tx
       .delete(contactPii)
       .where(
-        and(
-          eq(contactPii.contactTargetId, contactTargetId),
-          eq(contactPii.columnKey, columnKey),
-        ),
+        and(eq(contactPii.contactTargetId, contactTargetId), eq(contactPii.columnKey, columnKey)),
       );
     return;
   }

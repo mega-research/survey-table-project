@@ -1,8 +1,7 @@
+import { eq, sql } from 'drizzle-orm';
 import 'server-only';
 
-import { eq, sql } from 'drizzle-orm';
-
-import { db } from '@/db';
+import type { DbTransaction as Tx } from '@/db';
 import { mailRecipients } from '@/db/schema/mail';
 import type { MailRecipientStatus } from '@/shared/contracts/mail';
 
@@ -20,10 +19,7 @@ export const STATUS_ALLOWED_PREV: Partial<Record<MailRecipientStatus, MailRecipi
 };
 
 /** prev -> next 전이가 허용되는지(역행/중복이면 false). */
-export function canTransition(
-  prev: MailRecipientStatus,
-  next: MailRecipientStatus,
-): boolean {
+export function canTransition(prev: MailRecipientStatus, next: MailRecipientStatus): boolean {
   return STATUS_ALLOWED_PREV[next]?.includes(prev) ?? false;
 }
 
@@ -91,8 +87,6 @@ export function buildTimestampUpdate(
   }
 }
 
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
-
 /**
  * 캠페인이 종료 조건(미발송·발신중 0건)에 도달했으면 status를 finalize한다.
  *   - status='sending' AND queued_count=0 AND sent_count=0 일 때만 동작
@@ -136,14 +130,7 @@ export async function applyRecipientTransition(
     recipientArchivedAt: Date | null;
   },
 ): Promise<boolean> {
-  const {
-    recipientId,
-    campaignId,
-    prevStatus,
-    newStatus,
-    eventAt,
-    recipientArchivedAt,
-  } = args;
+  const { recipientId, campaignId, prevStatus, newStatus, eventAt, recipientArchivedAt } = args;
   if (!canTransition(prevStatus, newStatus)) return false;
 
   await tx

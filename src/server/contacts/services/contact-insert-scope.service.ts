@@ -1,16 +1,14 @@
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import 'server-only';
 
-import { db } from '@/db';
+import type { DbTransaction } from '@/db';
 import { contactTargets, surveyResponses, surveys } from '@/db/schema';
-import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 import { ensureTestContactColumns } from '@/lib/contacts/test-contact-columns';
 import {
-  resolveWriteScopeIsTest,
   type OperationsDataScope,
+  resolveWriteScopeIsTest,
 } from '@/lib/operations/data-scope.server';
-
-type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 
 interface SurveyScopeRow extends Record<string, unknown> {
   id: string;

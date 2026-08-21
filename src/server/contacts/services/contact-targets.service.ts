@@ -1,17 +1,17 @@
 import { and, eq, sql } from 'drizzle-orm';
 import 'server-only';
 
-import { db } from '@/db';
-import { contactTargets, surveyResponses, surveys } from '@/db/schema';
-import type { ContactColumnScheme } from '@/shared/contracts/contacts';
+import { type DbTransaction, db } from '@/db';
+import { contactTargets, surveyResponses } from '@/db/schema';
 import { sanitizeAttrsAgainstPiiScheme } from '@/lib/contacts/scheme-helpers';
 import { upsertPiiValue } from '@/lib/crypto/contact-pii-repo';
-import { generateInviteCode } from '@/lib/survey-url';
 import {
   archiveTestMailForTargets,
   hardDeleteMailForTargets,
 } from '@/lib/mail/test-mail-archive.server';
-import { resolveWriteScopeIsTest } from '@/lib/operations/data-scope.server';
+import { lockWriteScope } from '@/lib/operations/data-scope.server';
+import { generateInviteCode } from '@/lib/survey-url';
+import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 
 import type {
   AddContactTargetInput,
@@ -20,8 +20,6 @@ import type {
   UpdateContactTargetInput,
 } from '../domain/contact-target';
 import { prepareContactInsertScope } from './contact-insert-scope.service';
-
-type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /**
  * 현재 DB 모드를 기준으로 대상자를 잠근다.
@@ -57,21 +55,16 @@ async function lockCurrentSurveyScope(
   surveyId: string,
   isGuest: boolean,
 ): Promise<{ isTest: boolean; scheme: ContactColumnScheme | null }> {
-  const [survey] = await tx
-    .select({
-      enabled: surveys.testModeEnabled,
-      contactColumns: surveys.contactColumns,
-      testContactColumns: surveys.testContactColumns,
-    })
-    .from(surveys)
-    .where(eq(surveys.id, surveyId))
-    .for('update');
-  if (!survey) throw new Error('NOT_FOUND');
+  const locked = await lockWriteScope(tx, surveyId, isGuest, {
+    lock: 'update',
+    columns: ['contactColumns', 'testContactColumns'],
+  });
+  if (!locked) throw new Error('NOT_FOUND');
 
-  const isTest = resolveWriteScopeIsTest(survey.enabled, isGuest);
+  const { isTest, row } = locked;
   return {
     isTest,
-    scheme: (isTest ? survey.testContactColumns : survey.contactColumns) ?? null,
+    scheme: (isTest ? row.testContactColumns : row.contactColumns) ?? null,
   };
 }
 
@@ -232,7 +225,9 @@ export async function deleteContactTarget(
       await tx
         .update(surveyResponses)
         .set({ contactTargetId: null })
-        .where(and(eq(surveyResponses.surveyId, surveyId), eq(surveyResponses.contactTargetId, id)));
+        .where(
+          and(eq(surveyResponses.surveyId, surveyId), eq(surveyResponses.contactTargetId, id)),
+        );
     }
     const deleted = await tx
       .delete(contactTargets)

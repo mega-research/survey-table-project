@@ -1,13 +1,10 @@
+import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import 'server-only';
 
-import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
-
-import { db } from '@/db';
+import type { DbTransaction } from '@/db';
 import { contactTargets, mailCampaigns, mailRecipients } from '@/db/schema';
-import type { MailRecipientStatus } from '@/shared/contracts/mail';
 import { finalizeCampaignIfDone } from '@/lib/mail/recipient-status-transition';
-
-export type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+import type { MailRecipientStatus } from '@/shared/contracts/mail';
 
 export const RETAINED_TEST_RECIPIENT_STATUSES: readonly MailRecipientStatus[] = [
   'sending',
@@ -26,10 +23,7 @@ interface LockedRecipientRow {
   status: MailRecipientStatus;
 }
 
-async function lockCampaigns(
-  tx: DbTransaction,
-  campaignIds: string[],
-): Promise<void> {
+async function lockCampaigns(tx: DbTransaction, campaignIds: string[]): Promise<void> {
   if (campaignIds.length === 0) return;
   await tx
     .select({ id: mailCampaigns.id })
@@ -86,9 +80,7 @@ async function archiveLockedRecipients(
     .filter((row) => !retainedStatusSet.has(row.status))
     .map((row) => row.id);
   const retainedIds = retained.map((row) => row.id);
-  const terminalIds = retained
-    .filter((row) => row.status !== 'sending')
-    .map((row) => row.id);
+  const terminalIds = retained.filter((row) => row.status !== 'sending').map((row) => row.id);
 
   if (removedIds.length > 0) {
     await tx.delete(mailRecipients).where(inArray(mailRecipients.id, removedIds));
@@ -221,10 +213,12 @@ export async function hardDeleteMailForTargets(
     .for('update');
 
   if (affected.length > 0) {
-    await tx.delete(mailRecipients).where(inArray(
-      mailRecipients.id,
-      affected.map((row) => row.id),
-    ));
+    await tx.delete(mailRecipients).where(
+      inArray(
+        mailRecipients.id,
+        affected.map((row) => row.id),
+      ),
+    );
   }
 }
 
@@ -232,19 +226,11 @@ export async function hardDeleteMailForTargets(
  * 테스트 workspace 전체 삭제에서 메일 정산 사실만 남긴다. caller는 같은 transaction에서
  * survey 행을 먼저 잠가 새 test campaign/recipient 생성과 직렬화해야 한다.
  */
-export async function archiveTestWorkspaceMail(
-  tx: DbTransaction,
-  surveyId: string,
-): Promise<void> {
+export async function archiveTestWorkspaceMail(tx: DbTransaction, surveyId: string): Promise<void> {
   const discoveredCampaigns = await tx
     .select({ id: mailCampaigns.id })
     .from(mailCampaigns)
-    .where(
-      and(
-        eq(mailCampaigns.surveyId, surveyId),
-        eq(mailCampaigns.isTest, true),
-      ),
-    );
+    .where(and(eq(mailCampaigns.surveyId, surveyId), eq(mailCampaigns.isTest, true)));
   const campaignIds = discoveredCampaigns.map((row) => row.id).sort();
   if (campaignIds.length === 0) return;
 
@@ -253,9 +239,11 @@ export async function archiveTestWorkspaceMail(
     .select({ contactTargetId: mailRecipients.contactTargetId })
     .from(mailRecipients)
     .where(inArray(mailRecipients.campaignId, campaignIds));
-  const targetIds = [...new Set(recipientRefs
-    .map((row) => row.contactTargetId)
-    .filter((id): id is string => id !== null))].sort();
+  const targetIds = [
+    ...new Set(
+      recipientRefs.map((row) => row.contactTargetId).filter((id): id is string => id !== null),
+    ),
+  ].sort();
   if (targetIds.length > 0) {
     await tx
       .select({ id: contactTargets.id })

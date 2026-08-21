@@ -1,11 +1,9 @@
 import { eq } from 'drizzle-orm';
 import 'server-only';
 
-import { db } from '@/db';
+import type { DbTransaction } from '@/db';
 import { responseAnswers, responseEditLogs, surveyResponses } from '@/db/schema';
 import type { PageVisit } from '@/shared/contracts/survey-response';
-
-type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /**
  * 테스트 응답 행을 제자리에서 초기화할 때 새 시도(attempt)의 값으로 덮어쓸 필드.

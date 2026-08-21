@@ -1,13 +1,12 @@
+import { and, eq, isNull } from 'drizzle-orm';
 import 'server-only';
 
-import { and, eq, isNull } from 'drizzle-orm';
-
-import { completedResponse, notDeletedResponse, notTestResponse } from '@/data/response-filters';
+import { notDeletedResponse } from '@/data/response-filters';
 import { db } from '@/db';
 import { surveyResponses, surveys } from '@/db/schema/surveys';
-import type { QuotaConfig } from '@/shared/contracts/quota';
-import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
+import { loadCompletedPlainAnswers } from '@/lib/quota/completed-answers.server';
 import { countCell, deriveCategoryIds, findTarget } from '@/lib/quota/matching';
+import type { QuotaConfig } from '@/shared/contracts/quota';
 
 /** 설문의 쿼터 플랜 조회. 미설정이면 null. */
 export async function getQuotaConfig(surveyId: string): Promise<QuotaConfig | null> {
@@ -19,10 +18,7 @@ export async function getQuotaConfig(surveyId: string): Promise<QuotaConfig | nu
 }
 
 /** 설문의 쿼터 플랜 저장(덮어쓰기). 없는 설문이면 throw. */
-export async function saveQuotaConfig(
-  surveyId: string,
-  config: QuotaConfig,
-): Promise<QuotaConfig> {
+export async function saveQuotaConfig(surveyId: string, config: QuotaConfig): Promise<QuotaConfig> {
   const [updated] = await db
     .update(surveys)
     .set({ quotaConfig: config, updatedAt: new Date() })
@@ -65,20 +61,8 @@ export async function checkQuota(input: {
   const target = findTarget(config, categoryIds);
   if (target === null) return { blocked: false, closedMessage: null };
 
-  const rows = await db
-    .select({ questionResponses: surveyResponses.questionResponses })
-    .from(surveyResponses)
-    .where(
-      and(
-        eq(surveyResponses.surveyId, input.surveyId),
-        completedResponse,
-        notDeletedResponse,
-        notTestResponse,
-      ),
-    );
-  const answersList = rows.map((r) =>
-    decryptQuestionResponses((r.questionResponses ?? {}) as Record<string, unknown>),
-  );
+  // 집행 모수는 언제나 실응답(real) — 테스트 파티션은 쿼터를 소비하지 않는다.
+  const answersList = await loadCompletedPlainAnswers(input.surveyId, 'real');
   const current = countCell(config, categoryIds, answersList);
 
   if (current >= target) {

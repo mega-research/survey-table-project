@@ -1,47 +1,37 @@
+import { type SQL, and, asc, desc, eq, inArray, isNotNull, isNull, ne, sql } from 'drizzle-orm';
 import 'server-only';
-
-import {
-  and,
-  asc,
-  desc,
-  eq,
-  inArray,
-  isNotNull,
-  isNull,
-  ne,
-  sql,
-  type SQL,
-} from 'drizzle-orm';
 
 import { db } from '@/db';
 import {
   contactAttempts,
-  contactPii,
   contactTargets,
   mailCampaigns,
   mailRecipients,
   mailTemplates,
 } from '@/db/schema';
-import type { CampaignFilterSnapshot, MailAttachment, MailCampaignStatus, MailRecipientStatus } from '@/shared/contracts/mail';
 import { decryptPii } from '@/lib/crypto/aes';
 import { blindIndex } from '@/lib/crypto/blind';
+import { firstEmailRowByTarget, selectEmailPiiRows } from '@/lib/crypto/contact-pii-repo';
 import { maskEmail } from '@/lib/operations/contacts';
+import { buildContactsFilterSql, latestResultCodeExpr } from '@/lib/operations/contacts-filter-sql';
+import type { FilterClause } from '@/lib/operations/contacts-filters.server';
+import {
+  type OperationsDataScope,
+  campaignScopeCondition,
+  targetScopeCondition,
+  testFlagForScope,
+} from '@/lib/operations/data-scope.server';
+import { escapeLikePattern } from '@/lib/operations/filter-shared';
 import {
   buildNegativeCodeExists,
   getResultCodeStatuses,
 } from '@/lib/operations/result-code-statuses.server';
-import {
-  buildContactsFilterSql,
-  latestResultCodeExpr,
-} from '@/lib/operations/contacts-filter-sql';
-import { escapeLikePattern } from '@/lib/operations/filter-shared';
-import type { FilterClause } from '@/lib/operations/contacts-filters.server';
-import {
-  campaignScopeCondition,
-  targetScopeCondition,
-  testFlagForScope,
-  type OperationsDataScope,
-} from '@/lib/operations/data-scope.server';
+import type {
+  CampaignFilterSnapshot,
+  MailAttachment,
+  MailCampaignStatus,
+  MailRecipientStatus,
+} from '@/shared/contracts/mail';
 
 const DEFAULT_PAGE_SIZE = 20;
 
@@ -469,12 +459,7 @@ async function listBouncedEmailBlindIndexes(surveyId: string): Promise<string[]>
     .selectDistinct({ emailSnapshot: mailRecipients.emailSnapshot })
     .from(mailRecipients)
     .innerJoin(mailCampaigns, eq(mailRecipients.campaignId, mailCampaigns.id))
-    .where(
-      and(
-        eq(mailCampaigns.surveyId, surveyId),
-        eq(mailRecipients.status, 'bounced'),
-      ),
-    );
+    .where(and(eq(mailCampaigns.surveyId, surveyId), eq(mailRecipients.status, 'bounced')));
 
   const blinds = new Set<string>();
   for (const r of rows) {
@@ -522,12 +507,7 @@ export async function listBouncedContactIds(surveyId: string): Promise<string[]>
   const rows = await db
     .select({ id: contactTargets.id })
     .from(contactTargets)
-    .where(
-      and(
-        eq(contactTargets.surveyId, surveyId),
-        inArray(sendAddressBlind, blinds),
-      ),
-    );
+    .where(and(eq(contactTargets.surveyId, surveyId), inArray(sendAddressBlind, blinds)));
 
   return rows.map((r) => r.id);
 }
@@ -621,9 +601,7 @@ async function countCandidateExclusions(
 
   const negExists = buildNegativeCodeExists(negativeCodes, sql`"contact_targets"."id"`);
   const bouncedCond: SQL =
-    bouncedContactIds.length > 0
-      ? inArray(contactTargets.id, [...bouncedContactIds])
-      : sql`FALSE`;
+    bouncedContactIds.length > 0 ? inArray(contactTargets.id, [...bouncedContactIds]) : sql`FALSE`;
 
   const [row] = await db
     .select({
@@ -646,23 +624,8 @@ async function fetchEmailMaskHints(contactIds: readonly string[]): Promise<Map<s
   const result = new Map<string, string>();
   if (contactIds.length === 0) return result;
 
-  const rows = await db
-    .select({
-      contactTargetId: contactPii.contactTargetId,
-      columnKey: contactPii.columnKey,
-      maskHint: contactPii.maskHint,
-    })
-    .from(contactPii)
-    .where(
-      and(
-        eq(contactPii.fieldType, 'email'),
-        inArray(contactPii.contactTargetId, [...contactIds]),
-      ),
-    )
-    .orderBy(asc(contactPii.contactTargetId), asc(contactPii.columnKey));
-
-  for (const r of rows) {
-    if (result.has(r.contactTargetId)) continue; // 첫 컬럼만
+  const rows = await selectEmailPiiRows(db, contactIds);
+  for (const r of firstEmailRowByTarget(rows).values()) {
     result.set(r.contactTargetId, r.maskHint ?? '');
   }
   return result;
@@ -981,26 +944,11 @@ export async function preflightRecipients(args: {
  * 후보(EXISTS 통과)에 한해 실제 복호화로 재검증한다. send path 가 SoT 이므로
  * "첫 usable 컬럼" 폴백 동작까지 동일하게 맞춰야 큐잉 수와 preflight 카운트가 일치한다.
  */
-async function fetchContactIdsWithUsableEmail(
-  contactIds: readonly string[],
-): Promise<Set<string>> {
+async function fetchContactIdsWithUsableEmail(contactIds: readonly string[]): Promise<Set<string>> {
   const usable = new Set<string>();
   if (contactIds.length === 0) return usable;
 
-  const rows = await db
-    .select({
-      contactTargetId: contactPii.contactTargetId,
-      columnKey: contactPii.columnKey,
-      cipher: contactPii.cipher,
-    })
-    .from(contactPii)
-    .where(
-      and(
-        eq(contactPii.fieldType, 'email'),
-        inArray(contactPii.contactTargetId, [...contactIds]),
-      ),
-    )
-    .orderBy(asc(contactPii.contactTargetId), asc(contactPii.columnKey));
+  const rows = await selectEmailPiiRows(db, contactIds);
 
   // send path(createCampaign) 와 동일하게 "첫 usable 컬럼" 폴백:
   // blank/공백/복호화 실패 컬럼에서는 seen 을 마킹하지 않고 다음 컬럼으로 넘어간다.

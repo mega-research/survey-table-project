@@ -1,13 +1,11 @@
+import { and, asc, desc, eq, inArray, lt, lte, or, sql } from 'drizzle-orm';
 import 'server-only';
 
-import { and, asc, desc, eq, inArray, lt, lte, or, sql } from 'drizzle-orm';
-
-import { db } from '@/db';
-import { r2DeletionCandidates, type R2DeletionCandidate } from '@/db/schema';
+import { type DbTransaction, db } from '@/db';
+import { type R2DeletionCandidate, r2DeletionCandidates } from '@/db/schema';
 import { gateR2Key } from '@/lib/r2-lifecycle/key-extract';
 
 /** 수집원 트랜잭션 안에서도 등록할 수 있도록 db 또는 tx 를 받는다. */
-type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 export type R2DbExecutor = typeof db | DbTransaction;
 
 /** 유예 기간 7일 — grilling 합의. 이 기간 안에 부활·admin 취소가 가능하다. */
@@ -64,10 +62,7 @@ export async function registerDeletionCandidates(
 }
 
 /** admin 개별 취소 — '대기' 후보만 전이한다. 성공 여부 반환. */
-export async function cancelDeletionCandidate(
-  id: string,
-  note = '관리자 취소',
-): Promise<boolean> {
+export async function cancelDeletionCandidate(id: string, note = '관리자 취소'): Promise<boolean> {
   const rows = await db
     .update(r2DeletionCandidates)
     .set({ status: 'cancelled', resolvedAt: new Date(), resultNote: note })
@@ -90,10 +85,7 @@ export async function cancelPendingCandidatesByKeys(
     .update(r2DeletionCandidates)
     .set({ status: 'cancelled', resolvedAt: new Date(), resultNote: note })
     .where(
-      and(
-        inArray(r2DeletionCandidates.key, [...keys]),
-        eq(r2DeletionCandidates.status, 'pending'),
-      ),
+      and(inArray(r2DeletionCandidates.key, [...keys]), eq(r2DeletionCandidates.status, 'pending')),
     )
     .returning({ id: r2DeletionCandidates.id });
   return rows.length;
@@ -116,10 +108,7 @@ export async function fetchDueCandidates(
         lte(r2DeletionCandidates.executeAfter, now),
         or(
           eq(r2DeletionCandidates.status, 'pending'),
-          and(
-            eq(r2DeletionCandidates.status, 'failed'),
-            lt(r2DeletionCandidates.resolvedAt, now),
-          ),
+          and(eq(r2DeletionCandidates.status, 'failed'), lt(r2DeletionCandidates.resolvedAt, now)),
         ),
       ),
     )

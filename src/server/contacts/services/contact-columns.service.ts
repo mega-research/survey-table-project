@@ -1,11 +1,14 @@
-import 'server-only';
-
 import { and, eq, sql } from 'drizzle-orm';
+import 'server-only';
 
 import { db } from '@/db';
 import { contactTargets, surveys } from '@/db/schema';
 import { isGroupLevel } from '@/lib/contacts/group-levels';
-import { testFlagForScope, type OperationsDataScope } from '@/lib/operations/data-scope.server';
+import {
+  type OperationsDataScope,
+  lockWriteScope,
+  testFlagForScope,
+} from '@/lib/operations/data-scope.server';
 
 import type {
   UpdateContactColumnsInput,
@@ -34,16 +37,13 @@ export async function updateContactColumns(input: UpdateContactColumnsInput): Pr
     throw new Error('같은 분류 레벨을 여러 컬럼에 지정할 수 없습니다.');
   }
   await db.transaction(async (tx) => {
-    const [survey] = await tx
-      .select({ enabled: surveys.testModeEnabled })
-      .from(surveys)
-      .where(eq(surveys.id, surveyId))
-      .for('update');
-    if (!survey) throw new Error('NOT_FOUND');
+    // authed 전용 경로라 게스트 세션이 없다 — isGuest=false 로 전역 플래그가 곧 쓰기 파티션이다.
+    const locked = await lockWriteScope(tx, surveyId, false, { lock: 'update' });
+    if (!locked) throw new Error('NOT_FOUND');
 
     await tx
       .update(surveys)
-      .set(survey.enabled ? { testContactColumns: scheme } : { contactColumns: scheme })
+      .set(locked.isTest ? { testContactColumns: scheme } : { contactColumns: scheme })
       .where(eq(surveys.id, surveyId));
   });
 }
@@ -66,18 +66,14 @@ export async function updateContactGroupLevels(
     throw new Error('같은 분류 레벨을 여러 컬럼에 지정할 수 없습니다.');
   }
   await db.transaction(async (tx) => {
-    const [survey] = await tx
-      .select({
-        enabled: surveys.testModeEnabled,
-        contactColumns: surveys.contactColumns,
-        testContactColumns: surveys.testContactColumns,
-      })
-      .from(surveys)
-      .where(eq(surveys.id, surveyId))
-      .for('update');
-    if (!survey) throw new Error('NOT_FOUND');
+    // authed 전용 경로라 게스트 세션이 없다 — isGuest=false 로 전역 플래그가 곧 쓰기 파티션이다.
+    const locked = await lockWriteScope(tx, surveyId, false, {
+      lock: 'update',
+      columns: ['contactColumns', 'testContactColumns'],
+    });
+    if (!locked) throw new Error('NOT_FOUND');
 
-    const scheme = survey.enabled ? survey.testContactColumns : survey.contactColumns;
+    const scheme = locked.isTest ? locked.row.testContactColumns : locked.row.contactColumns;
     if (!scheme || !Array.isArray(scheme.columns)) {
       throw new Error('컬럼 스킴이 없습니다. 먼저 명단을 업로드하세요.');
     }
@@ -95,7 +91,7 @@ export async function updateContactGroupLevels(
 
     await tx
       .update(surveys)
-      .set(survey.enabled ? { testContactColumns: patched } : { contactColumns: patched })
+      .set(locked.isTest ? { testContactColumns: patched } : { contactColumns: patched })
       .where(eq(surveys.id, surveyId));
   });
 }

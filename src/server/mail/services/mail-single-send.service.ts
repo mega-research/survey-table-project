@@ -1,10 +1,13 @@
+import { and, eq, sql } from 'drizzle-orm';
 import 'server-only';
 
-import { and, asc, eq, sql } from 'drizzle-orm';
-
 import { db } from '@/db';
-import { contactPii, contactTargets } from '@/db/schema/contacts';
-import { buildNegativeCodeExists, getResultCodeStatuses } from '@/lib/operations/result-code-statuses.server';
+import { contactTargets } from '@/db/schema/contacts';
+import { selectEmailPiiRows } from '@/lib/crypto/contact-pii-repo';
+import {
+  buildNegativeCodeExists,
+  getResultCodeStatuses,
+} from '@/lib/operations/result-code-statuses.server';
 
 import type { CreateCampaignResult, SendSingleCampaignInput } from '../domain/mail-campaign';
 import { createCampaign } from './mail-campaigns.service';
@@ -29,7 +32,10 @@ export async function sendSingleCampaign(
     })
     .from(contactTargets)
     .where(
-      and(eq(contactTargets.id, input.contactTargetId), eq(contactTargets.surveyId, input.surveyId)),
+      and(
+        eq(contactTargets.id, input.contactTargetId),
+        eq(contactTargets.surveyId, input.surveyId),
+      ),
     )
     .limit(1);
   if (!contact) {
@@ -54,15 +60,9 @@ export async function sendSingleCampaign(
     throw new Error('연락금지 결과코드가 기록된 조사 대상입니다.');
   }
 
-  const [emailPii] = await db
-    .select({ id: contactPii.id })
-    .from(contactPii)
-    .where(
-      and(eq(contactPii.contactTargetId, input.contactTargetId), eq(contactPii.fieldType, 'email')),
-    )
-    .orderBy(asc(contactPii.columnKey))
-    .limit(1);
-  if (!emailPii) {
+  // 존재 검사만 필요하지만 "어떤 행이 이메일인가" 는 selectEmailPiiRows 한 곳이 정한다.
+  const emailRows = await selectEmailPiiRows(db, [input.contactTargetId]);
+  if (emailRows.length === 0) {
     throw new Error('이메일 정보가 없는 조사 대상입니다.');
   }
 

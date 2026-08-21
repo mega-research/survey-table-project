@@ -1,35 +1,39 @@
+import { and, eq, sql } from 'drizzle-orm';
 import 'server-only';
 
-import { and, eq, sql } from 'drizzle-orm';
-
-import { db } from '@/db';
-import { logger } from '@/lib/logger';
+import { type DbOrTx, db } from '@/db';
 import { contactPii, contactTargets, contactUploads, surveys } from '@/db/schema';
-import type { ContactColumnDef, ContactColumnScheme, ContactUploadMapping, ContactUploadMode } from '@/shared/contracts/contacts';
-import { isGroupLevel, type GroupLevel } from '@/lib/contacts/group-levels';
-import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts';
 import { parseExcelRows, previewExcel } from '@/lib/contacts/excel-parser';
+import { type GroupLevel, isGroupLevel } from '@/lib/contacts/group-levels';
 import {
+  type ExistingContactKeyInfo,
   buildKeyTuple,
   classifyRows,
   countEmptyOverwrites,
-  type ExistingContactKeyInfo,
 } from '@/lib/contacts/match-contacts';
 import {
+  type SchemeRouting,
   appendNewColumnsToScheme,
   getSchemeRouting,
-  type SchemeRouting,
 } from '@/lib/contacts/scheme-helpers';
 import { MAX_UPLOAD_ROWS, validateXlsxFile } from '@/lib/contacts/upload-limits';
 import {
+  type PiiInput,
   buildPiiRows,
   insertPiiRows,
   upsertPiiValue,
-  type PiiInput,
 } from '@/lib/crypto/contact-pii-repo';
 import type { PiiFieldType } from '@/lib/crypto/pii-fields';
-import { generateInviteCode } from '@/lib/survey-url';
+import { logger } from '@/lib/logger';
+import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts';
 import { loadOperationsDataScope } from '@/lib/operations/data-scope.server';
+import { generateInviteCode } from '@/lib/survey-url';
+import type {
+  ContactColumnDef,
+  ContactColumnScheme,
+  ContactUploadMapping,
+  ContactUploadMode,
+} from '@/shared/contracts/contacts';
 
 import type {
   IngestContactUploadInput,
@@ -119,9 +123,7 @@ export async function ingestContactUpload(
   });
 
   if (allRows.length > MAX_UPLOAD_ROWS) {
-    throw new Error(
-      `최대 ${MAX_UPLOAD_ROWS.toLocaleString('ko-KR')} 행까지 적재 가능합니다.`,
-    );
+    throw new Error(`최대 ${MAX_UPLOAD_ROWS.toLocaleString('ko-KR')} 행까지 적재 가능합니다.`);
   }
 
   const firstRow = allRows[0];
@@ -131,13 +133,10 @@ export async function ingestContactUpload(
   // (마법사가 동기화해 보내는 레거시 인덱스)보다 우선한다.
   // 후보만 여기서 정하고, 확정은 tx 안에서 유효 PII 라우팅(piiKeySet) 계산 후 —
   // PII 컬럼 값이 group_value 에 평문 저장되는 경로 차단 (UI 가드 우회 방어 포함).
-  const level1Key =
-    Object.entries(mapping.groupLevels ?? {}).find(([, l]) => l === 1)?.[0] ?? null;
+  const level1Key = Object.entries(mapping.groupLevels ?? {}).find(([, l]) => l === 1)?.[0] ?? null;
   const groupKeyCandidate =
     (level1Key != null && headerKeys.includes(level1Key) ? level1Key : null) ??
-    (mapping.systemFields.group != null
-      ? (headerKeys[mapping.systemFields.group] ?? null)
-      : null);
+    (mapping.systemFields.group != null ? (headerKeys[mapping.systemFields.group] ?? null) : null);
   let groupKey: string | null = null;
 
   let uploadedRows = 0;
@@ -351,10 +350,7 @@ export async function ingestContactUpload(
           uploadedRows += 1;
         } catch (e) {
           errorRows += 1;
-          logger.error(
-            { surveyId, uploadId, rowIndex, err: e },
-            '[ingestContactUpload] row 실패',
-          );
+          logger.error({ surveyId, uploadId, rowIndex, err: e }, '[ingestContactUpload] row 실패');
         }
       }
     }
@@ -421,7 +417,12 @@ function autoGenerateColumnScheme(
   let order = 1;
 
   // 시스템 컬럼 (resid 항상 1번, 표시 필수)
-  columns.push({ key: 'resid', label: RESID_DEFAULT_LABEL, source: 'system.resid', order: order++ });
+  columns.push({
+    key: 'resid',
+    label: RESID_DEFAULT_LABEL,
+    source: 'system.resid',
+    order: order++,
+  });
 
   // 모든 헤더 키를 컬럼으로 등록.
   // - piiMapping 에 매핑된 헤더 → source 'pii.<key>' + piiType 명시 → contact_pii 테이블 조인 후 표시
@@ -458,10 +459,20 @@ function autoGenerateColumnScheme(
   }
 
   // 운영 컬럼 (read 만, 본 슬라이스)
-  columns.push({ key: 'contact_result', label: '컨택결과', source: 'system.contact_result', order: order++ });
+  columns.push({
+    key: 'contact_result',
+    label: '컨택결과',
+    source: 'system.contact_result',
+    order: order++,
+  });
   columns.push({ key: 'email_count', label: '메일', source: 'system.email_count', order: order++ });
   columns.push({ key: 'web', label: 'web', source: 'system.web', order: order++ });
-  columns.push({ key: 'contact_owner', label: '컨택원', source: 'system.contact_owner', order: order++ });
+  columns.push({
+    key: 'contact_owner',
+    label: '컨택원',
+    source: 'system.contact_owner',
+    order: order++,
+  });
 
   return { version: 1, headerRow: mapping.headerRow, columns };
 }
@@ -509,9 +520,6 @@ function validateMergeKeys(
     }
   }
 }
-
-/** 전역 db 또는 트랜잭션 핸들 겸용 타입 */
-type DbOrTx = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /** 기존 실컨택 (id + attrs) 로드 — 트랜잭션/전역 db 겸용 */
 async function loadExistingContactsTx(
@@ -600,9 +608,7 @@ export async function matchContactUpload(
   const toSamples = (indices: number[]) =>
     indices.slice(0, SAMPLE_LIMIT).map((rowIndex) => ({
       excelRow: mapping.headerRow + 1 + rowIndex,
-      keyValues: Object.fromEntries(
-        mergeKeys.map((k) => [k, allRows[rowIndex]?.[k] ?? '']),
-      ),
+      keyValues: Object.fromEntries(mergeKeys.map((k) => [k, allRows[rowIndex]?.[k] ?? ''])),
     }));
 
   return {
