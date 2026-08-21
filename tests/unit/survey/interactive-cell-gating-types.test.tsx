@@ -1,9 +1,18 @@
 import { cleanup, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import type { ReactNode } from 'react';
+
 import { InteractiveCell } from '@/features/question-renderer/cells/interactive-cell';
-import { useTestResponseStore } from '@/features/question-renderer/stores/test-response-store';
+import { ResponseSourcesProvider } from '@/features/question-renderer/response-sources';
+import { previewResponseSources } from '@/features/survey-builder/stores/preview-response-sources';
+import { useTestResponseStore } from '@/features/survey-builder/stores/test-response-store';
 import type { TableCell } from '@/types/survey';
+
+/** 빌더 미리보기 배선 — 테스트 응답 스토어를 질문 응답 원본으로 주입한다. */
+const withPreview = (node: ReactNode) => (
+  <ResponseSourcesProvider sources={previewResponseSources}>{node}</ResponseSourcesProvider>
+);
 
 /**
  * 게이팅 인터랙티브 셀 타입 확장 회귀 테스트 — radio/select 셀도 컨트롤러 조건
@@ -40,9 +49,7 @@ const gatedSelect: TableCell = {
 const rowCells = [ctrl, gatedRadio, gatedSelect];
 
 function renderGated(cell: TableCell) {
-  return render(
-    <InteractiveCell cell={cell} questionId="q1" isTestMode rowCells={rowCells} />,
-  );
+  return render(withPreview(<InteractiveCell cell={cell} questionId="q1" rowCells={rowCells} />));
 }
 
 describe('게이팅 셀 타입 확장 — 비활성 렌더 배선', () => {
@@ -73,7 +80,7 @@ describe('게이팅 셀 타입 확장 — 비활성 렌더 배선', () => {
   it('셀 텍스트(content)가 있으면 컨트롤만 숨고 텍스트는 남는다', () => {
     const withContent: TableCell = { ...gatedRadio, content: '항목 설명 텍스트' };
     const { container } = render(
-      <InteractiveCell cell={withContent} questionId="q1" isTestMode rowCells={rowCells} />,
+      withPreview(<InteractiveCell cell={withContent} questionId="q1" rowCells={rowCells} />),
     );
     expect(container.querySelector('input[type="radio"]')).toBeNull();
     expect(container.textContent).toContain('항목 설명 텍스트');
@@ -83,7 +90,7 @@ describe('게이팅 셀 타입 확장 — 비활성 렌더 배선', () => {
     const plain: TableCell = { ...gatedRadio, id: 'plain' };
     delete (plain as Partial<TableCell>).enabledWhen;
     const { container } = render(
-      <InteractiveCell cell={plain} questionId="q1" isTestMode rowCells={rowCells} />,
+      withPreview(<InteractiveCell cell={plain} questionId="q1" rowCells={rowCells} />),
     );
     const input = container.querySelector('input[type="radio"]') as HTMLInputElement;
     expect(input).not.toBeNull();

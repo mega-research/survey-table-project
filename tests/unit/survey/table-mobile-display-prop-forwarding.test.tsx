@@ -5,7 +5,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { QuestionTestBody } from '@/features/survey-builder/question-list/question-test-card';
 import { QuestionInput } from '@/features/survey-response/question-input';
-import { useTestResponseStore } from '@/features/question-renderer/stores/test-response-store';
+import { useResponseSources } from '@/features/question-renderer/response-sources';
+import { useTestResponseStore } from '@/features/survey-builder/stores/test-response-store';
 import type { Question } from '@/types/survey';
 
 const { capturedTableProps } = vi.hoisted(() => ({
@@ -14,7 +15,9 @@ const { capturedTableProps } = vi.hoisted(() => ({
 
 vi.mock('@/features/question-renderer/interactive-table-response', () => ({
   InteractiveTableResponse: (props: Record<string, unknown>) => {
-    capturedTableProps.push(props);
+    // 주입된 질문 응답 원본 유무 = 미리보기/실응답 배선 판정 (구 isTestMode prop 대체)
+    const { questionResponses } = useResponseSources();
+    capturedTableProps.push({ ...props, hasQuestionResponseSource: questionResponses !== null });
     return <div data-testid="interactive-table-response" />;
   },
 }));
@@ -88,7 +91,7 @@ describe('모바일 테이블 표시 설정 prop 전달', () => {
       mobileDrilldownOmitLeadingColumns: 2,
       mobileDrilldownRepeatHeaderStartRow: 0,
       mobileDrilldownRepeatHeaderEndRow: 2,
-      isTestMode: false,
+      hasQuestionResponseSource: false,
     });
   });
 
@@ -101,7 +104,7 @@ describe('모바일 테이블 표시 설정 prop 전달', () => {
       mobileDrilldownOmitLeadingColumns: 2,
       mobileDrilldownRepeatHeaderStartRow: 0,
       mobileDrilldownRepeatHeaderEndRow: 2,
-      isTestMode: true,
+      hasQuestionResponseSource: true,
     });
   });
 });

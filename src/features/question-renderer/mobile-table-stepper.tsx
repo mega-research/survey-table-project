@@ -4,13 +4,16 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { Check, ChevronLeft, ChevronRight, ListChecks } from 'lucide-react';
 
-import { useColumnSectionMap, useRowGroups } from '@/features/question-renderer/hooks/use-row-groups';
+import {
+  useColumnSectionMap,
+  useRowGroups,
+} from '@/features/question-renderer/hooks/use-row-groups';
+import { collectMobileLegendLabels } from '@/features/question-renderer/utils/mobile-display-cells';
+import { isTableRowCompleted } from '@/features/question-renderer/utils/table-row-completion';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import type { HeaderCell, TableColumn, TableRow } from '@/types/survey';
-import { collectMobileLegendLabels } from '@/features/question-renderer/utils/mobile-display-cells';
-import { isTableRowCompleted } from '@/features/question-renderer/utils/table-row-completion';
 
 import { MobileRowCard } from './mobile-row-card';
 
@@ -30,7 +33,6 @@ interface MobileTableStepperProps {
   visibleHeaderGrid?: HeaderCell[][] | null | undefined;
   currentResponse: Record<string, unknown>;
   hideColumnLabels: boolean;
-  isTestMode: boolean;
   value?: Record<string, unknown> | undefined;
   onChange?: (value: Record<string, unknown>) => void;
   // 동적 행
@@ -69,7 +71,6 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
   visibleHeaderGrid,
   currentResponse,
   hideColumnLabels,
-  isTestMode,
   value,
   onChange,
   hasDynamicRows,
@@ -187,7 +188,9 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
   const needsPreSelect = !hasDynamicRows && !hasRowFiltering;
   const skipGroupSelect = rowGroups.length <= 1;
   const initialPhase: StepperPhase = needsPreSelect
-    ? skipGroupSelect ? 'row-select' : 'group-select'
+    ? skipGroupSelect
+      ? 'row-select'
+      : 'group-select'
     : 'detail';
 
   const [phase, setPhase] = useState<StepperPhase>(initialPhase);
@@ -233,23 +236,33 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
     });
   }, [displayRows, rowGroups, needsPreSelect, skipGroupSelect, preSelectedRowIds]);
 
-  const toggleGroupIndex = useCallback((idx: number) => {
-    setPreSelectedGroupIndices((prev) => {
-      const next = new Set(prev);
-      if (next.has(idx)) {
-        next.delete(idx);
-        // 해당 그룹의 행도 해제
-        const group = rowGroups[idx];
-        if (group) group.rows.forEach((r) => setPreSelectedRowIds((p) => { const n = new Set(p); n.delete(r.id); return n; }));
-      } else {
-        next.add(idx);
-        // 해당 그룹의 행을 전체 선택
-        const group = rowGroups[idx];
-        if (group) group.rows.forEach((r) => setPreSelectedRowIds((p) => new Set(p).add(r.id)));
-      }
-      return next;
-    });
-  }, [rowGroups]);
+  const toggleGroupIndex = useCallback(
+    (idx: number) => {
+      setPreSelectedGroupIndices((prev) => {
+        const next = new Set(prev);
+        if (next.has(idx)) {
+          next.delete(idx);
+          // 해당 그룹의 행도 해제
+          const group = rowGroups[idx];
+          if (group)
+            group.rows.forEach((r) =>
+              setPreSelectedRowIds((p) => {
+                const n = new Set(p);
+                n.delete(r.id);
+                return n;
+              }),
+            );
+        } else {
+          next.add(idx);
+          // 해당 그룹의 행을 전체 선택
+          const group = rowGroups[idx];
+          if (group) group.rows.forEach((r) => setPreSelectedRowIds((p) => new Set(p).add(r.id)));
+        }
+        return next;
+      });
+    },
+    [rowGroups],
+  );
 
   const toggleRowId = useCallback((rowId: string) => {
     setPreSelectedRowIds((prev) => {
@@ -279,7 +292,6 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
             completed={rowCompletionMap.get(row.id) ?? false}
             hideColumnLabels={hideColumnLabels}
             questionId={questionId}
-            isTestMode={isTestMode}
             value={value}
             onChange={onChange}
             errorCellIds={errorCellIds}
@@ -347,7 +359,10 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
             )}
             <div className="space-y-1.5">
               {group.rows.map((row) => {
-                const label = rowLabelById.get(row.id) || row.cells.find((c) => c.type === 'text' && !c.isHidden)?.content || row.id;
+                const label =
+                  rowLabelById.get(row.id) ||
+                  row.cells.find((c) => c.type === 'text' && !c.isHidden)?.content ||
+                  row.id;
                 return (
                   <label
                     key={row.id}
@@ -382,7 +397,11 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
           )}
           <button
             disabled={preSelectedRowIds.size === 0}
-            onClick={() => { setPhase('detail'); setCurrentGroupIdx(0); setCurrentRowInGroup(0); }}
+            onClick={() => {
+              setPhase('detail');
+              setCurrentGroupIdx(0);
+              setCurrentRowInGroup(0);
+            }}
             className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400"
           >
             상세 입력 ({preSelectedRowIds.size}개 선택) <ChevronRight className="h-4 w-4" />
@@ -414,8 +433,12 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
         </button>
 
         <div className="flex items-center justify-between text-xs text-gray-400">
-          <span>{detailIdx + 1} / {filteredRows.length}</span>
-          <span>{detailCompletedCount} / {filteredRows.length} 완료</span>
+          <span>
+            {detailIdx + 1} / {filteredRows.length}
+          </span>
+          <span>
+            {detailCompletedCount} / {filteredRows.length} 완료
+          </span>
         </div>
 
         <MobileRowCard
@@ -426,7 +449,6 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
           completed={rowCompletionMap.get(detailRow.id) ?? false}
           hideColumnLabels={hideColumnLabels}
           questionId={questionId}
-          isTestMode={isTestMode}
           value={value}
           onChange={onChange}
           errorCellIds={errorCellIds}
@@ -458,9 +480,7 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
   const currentRow = currentGroup.rows[currentRowInGroup];
   if (!currentRow) return null;
 
-  const groupCompletedCount = currentGroup.rows.filter(
-    (r) => rowCompletionMap.get(r.id),
-  ).length;
+  const groupCompletedCount = currentGroup.rows.filter((r) => rowCompletionMap.get(r.id)).length;
 
   return (
     <div className="space-y-3">
@@ -571,7 +591,6 @@ export const MobileTableStepper = React.memo(function MobileTableStepper({
         completed={rowCompletionMap.get(currentRow.id) ?? false}
         hideColumnLabels={hideColumnLabels}
         questionId={questionId}
-        isTestMode={isTestMode}
         value={value}
         onChange={onChange}
         errorCellIds={errorCellIds}

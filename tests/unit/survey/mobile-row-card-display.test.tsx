@@ -31,7 +31,6 @@ function renderCard(r: TableRow) {
       completed={false}
       hideColumnLabels={false}
       questionId="q1"
-      isTestMode={false}
     />,
   );
 }
@@ -134,7 +133,6 @@ describe('MobileRowCard 인터랙티브 셀 라벨', () => {
         completed={false}
         hideColumnLabels={hideColumnLabels}
         questionId="q1"
-        isTestMode={false}
       />,
     );
   }

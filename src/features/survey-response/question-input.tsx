@@ -2,10 +2,25 @@
 
 import { useEffect, useEffectEvent, useMemo } from 'react';
 
+import { Input } from '@/components/ui/input';
+import { ChoiceTableResponse } from '@/features/question-renderer/choice-table-response';
 import { InteractiveTableResponse } from '@/features/question-renderer/interactive-table-response';
 import { NoticeRenderer } from '@/features/question-renderer/notice-renderer';
+import { OptionTextInput } from '@/features/question-renderer/option-text-input';
+import { OptionTextInputStack } from '@/features/question-renderer/option-text-input-stack';
+import { RankingQuestion } from '@/features/question-renderer/ranking-question';
+import { ResponseSourcesProvider } from '@/features/question-renderer/response-sources';
 import { UserDefinedMultiLevelSelect } from '@/features/question-renderer/user-defined-multi-level-select';
-import { Input } from '@/components/ui/input';
+import {
+  applyMobileOptionsGridOverride,
+  resolveMobileOptionsColumns,
+} from '@/features/question-renderer/utils/mobile-card-options';
+import { getOptionsLayout } from '@/features/question-renderer/utils/options-layout';
+import {
+  type ValidationBannerItem,
+  ValidationIssueBanner,
+} from '@/features/question-renderer/validation-issue-banner';
+import { liveResponseSources } from '@/features/survey-response/stores/live-response-sources';
 import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
 import { useMobileView } from '@/hooks/use-media-query';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
@@ -13,17 +28,6 @@ import type { NumericIssue } from '@/lib/survey/numeric-validation';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { Question, QuestionOption } from '@/types/survey';
 import { isChoiceTableSource } from '@/utils/choice-source';
-import {
-  applyMobileOptionsGridOverride,
-  resolveMobileOptionsColumns,
-} from '@/features/question-renderer/utils/mobile-card-options';
-import { getOptionsLayout } from '@/features/question-renderer/utils/options-layout';
-
-import { ChoiceTableResponse } from '@/features/question-renderer/choice-table-response';
-import { OptionTextInput } from '@/features/question-renderer/option-text-input';
-import { OptionTextInputStack } from '@/features/question-renderer/option-text-input-stack';
-import { RankingQuestion } from '@/features/question-renderer/ranking-question';
-import { type ValidationBannerItem, ValidationIssueBanner } from '@/features/question-renderer/validation-issue-banner';
 
 /**
  * 라디오·체크박스 옵션 목록의 좌우 인셋 — 질문 제목보다 옵션 블록을 안쪽으로 들여쓴다.
@@ -140,7 +144,10 @@ export function QuestionInput({ question, numericIssues, ...controlProps }: Ques
   const control = (
     <QuestionInputControl question={question} numericIssues={numericIssues} {...controlProps} />
   );
-  if (question.type === 'table') return control;
+  if (question.type === 'table')
+    return (
+      <ResponseSourcesProvider sources={liveResponseSources}>{control}</ResponseSourcesProvider>
+    );
 
   const bannerItems = (numericIssues ?? [])
     .filter((issue) => issue.kind !== 'range')
@@ -150,10 +157,10 @@ export function QuestionInput({ question, numericIssues, ...controlProps }: Ques
       detailTargetIds: issue.detailTargetIds,
     }));
   return (
-    <>
+    <ResponseSourcesProvider sources={liveResponseSources}>
       {control}
       <ValidationIssueBanner items={bannerItems} questionId={question.id} />
-    </>
+    </ResponseSourcesProvider>
   );
 }
 
@@ -204,7 +211,6 @@ function QuestionInputControl({
           onChange={(v) =>
             onChange(v ? { agreed: true, agreedAt: new Date().toISOString() } : { agreed: false })
           }
-          isTestMode={false}
         />
       );
     }
@@ -283,7 +289,6 @@ function QuestionInputControl({
             ? { value: value as Record<string, unknown> }
             : {})}
           onChange={onChange as (v: Record<string, unknown>) => void}
-          isTestMode={false}
           className="border-0 shadow-none"
           allResponses={allResponses}
           allQuestions={allQuestions}

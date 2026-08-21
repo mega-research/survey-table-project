@@ -100,7 +100,6 @@ function renderDrilldown() {
         visibleHeaderGrid={headerGrid}
         currentResponse={{}}
         hideColumnLabels={false}
-        isTestMode
         hasDynamicRows={false}
         selectedRowIds={[]}
         groupConfigMap={new Map()}

@@ -2,10 +2,13 @@
 
 import React, { useCallback, useEffect } from 'react';
 
+import {
+  useQuestionResponseSelector,
+  useResponseSources,
+} from '@/features/question-renderer/response-sources';
 import { GATABLE_CELL_TYPES, isCellEnabled } from '@/lib/survey/cell-gating';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
-import { useTestResponseStore } from '@/features/question-renderer/stores/test-response-store';
 import type { TableCell } from '@/types/survey';
 
 import { CalcCell } from './calc-cell';
@@ -36,26 +39,105 @@ const CellRouter = React.memo(function CellRouter({
 }: InteractiveCellProps) {
   switch (cell.type) {
     case 'checkbox':
-      return <CheckboxCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} inputIdScope={inputIdScope} ariaInvalid={ariaInvalid} ariaDescribedBy={ariaDescribedBy} />;
+      return (
+        <CheckboxCell
+          cell={cell}
+          cellResponse={cellResponse}
+          onUpdateValue={onUpdateValue}
+          questionId={questionId}
+          inputIdScope={inputIdScope}
+          ariaInvalid={ariaInvalid}
+          ariaDescribedBy={ariaDescribedBy}
+        />
+      );
     case 'radio':
-      return <RadioCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} inputIdScope={inputIdScope} ariaInvalid={ariaInvalid} ariaDescribedBy={ariaDescribedBy} {...(groupName !== undefined ? { groupName } : {})} />;
+      return (
+        <RadioCell
+          cell={cell}
+          cellResponse={cellResponse}
+          onUpdateValue={onUpdateValue}
+          questionId={questionId}
+          inputIdScope={inputIdScope}
+          ariaInvalid={ariaInvalid}
+          ariaDescribedBy={ariaDescribedBy}
+          {...(groupName !== undefined ? { groupName } : {})}
+        />
+      );
     case 'select':
-      return <SelectCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} inputIdScope={inputIdScope} ariaInvalid={ariaInvalid} ariaDescribedBy={ariaDescribedBy} />;
+      return (
+        <SelectCell
+          cell={cell}
+          cellResponse={cellResponse}
+          onUpdateValue={onUpdateValue}
+          questionId={questionId}
+          inputIdScope={inputIdScope}
+          ariaInvalid={ariaInvalid}
+          ariaDescribedBy={ariaDescribedBy}
+        />
+      );
     case 'input':
-      return <InputCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} inputIdScope={inputIdScope} ariaInvalid={ariaInvalid} ariaDescribedBy={ariaDescribedBy} />;
+      return (
+        <InputCell
+          cell={cell}
+          cellResponse={cellResponse}
+          onUpdateValue={onUpdateValue}
+          questionId={questionId}
+          inputIdScope={inputIdScope}
+          ariaInvalid={ariaInvalid}
+          ariaDescribedBy={ariaDescribedBy}
+        />
+      );
     case 'image':
-      return <ImageCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} />;
+      return (
+        <ImageCell
+          cell={cell}
+          cellResponse={cellResponse}
+          onUpdateValue={onUpdateValue}
+          questionId={questionId}
+        />
+      );
     case 'video':
-      return <VideoCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} />;
+      return (
+        <VideoCell
+          cell={cell}
+          cellResponse={cellResponse}
+          onUpdateValue={onUpdateValue}
+          questionId={questionId}
+        />
+      );
     case 'ranking':
-      return <RankingCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} inputIdScope={inputIdScope} ariaInvalid={ariaInvalid} ariaDescribedBy={ariaDescribedBy} />;
+      return (
+        <RankingCell
+          cell={cell}
+          cellResponse={cellResponse}
+          onUpdateValue={onUpdateValue}
+          questionId={questionId}
+          inputIdScope={inputIdScope}
+          ariaInvalid={ariaInvalid}
+          ariaDescribedBy={ariaDescribedBy}
+        />
+      );
     case 'ranking_opt':
-      return <RankingOptCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} />;
+      return (
+        <RankingOptCell
+          cell={cell}
+          cellResponse={cellResponse}
+          onUpdateValue={onUpdateValue}
+          questionId={questionId}
+        />
+      );
     case 'calc':
       return <CalcCell cell={cell} questionId={questionId} />;
     case 'text':
     default:
-      return <TextCell cell={cell} cellResponse={cellResponse} onUpdateValue={onUpdateValue} questionId={questionId} />;
+      return (
+        <TextCell
+          cell={cell}
+          cellResponse={cellResponse}
+          onUpdateValue={onUpdateValue}
+          questionId={questionId}
+        />
+      );
   }
 });
 
@@ -64,7 +146,6 @@ const CellRouter = React.memo(function CellRouter({
 interface InteractiveCellContainerProps {
   cell: TableCell;
   questionId: string;
-  isTestMode: boolean;
   value?: Record<string, unknown> | undefined;
   onChange?: ((value: Record<string, unknown>) => void) | undefined;
   /**
@@ -92,7 +173,6 @@ interface InteractiveCellContainerProps {
 export const InteractiveCell = React.memo(function InteractiveCell({
   cell,
   questionId,
-  isTestMode,
   value,
   onChange,
   groupName,
@@ -105,20 +185,20 @@ export const InteractiveCell = React.memo(function InteractiveCell({
   // 게이팅 숨김 상태에서도 셀 텍스트(content)는 남기므로 치환 컨텍스트가 필요하다
   const attrs = useContactAttrs();
   const quotes = useAnswerQuotes();
+  const { questionResponses: source } = useResponseSources();
   const { cellResponse, updateValue, clearValue } = useCellResponse(
     questionId,
     cell.id,
-    isTestMode,
     value,
     onChange,
     siblingCellIds,
   );
 
   // 게이팅 평가에 실제로 필요한 값은 컨트롤러 셀 하나뿐이다(option 조건의 옵션 id/value
-  // 해석은 정적 prop 인 rowCells 로 이미 처리). 여기서 state.testResponses[questionId]
-  // 질문 객체 전체를 구독하면, mergePatch 가 매 입력마다 만드는 새 참조 탓에 같은 표의
+  // 해석은 정적 prop 인 rowCells 로 이미 처리). 여기서 질문 응답 객체 전체를
+  // 구독하면, mergePatch 가 매 입력마다 만드는 새 참조 탓에 같은 표의
   // 모든 InteractiveCell(input 뿐 아니라 checkbox/radio/text 전 타입)이 셀 하나만 바뀌어도
-  // 재렌더된다 — use-cell-response.ts:28-40 이 지키는 셀 단위 스칼라 구독 원칙을 여기서도
+  // 재렌더된다 — use-cell-response 의 selectCell 이 지키는 셀 단위 스칼라 구독 원칙을 여기서도
   // 지켜야 한다. enabledWhen 이 없는 셀(대다수)은 controllerCellId 가 undefined 라 구독
   // 자체가 항상 같은 값(undefined)을 반환해 재렌더를 유발하지 않는다.
   const controllerCellId =
@@ -126,25 +206,23 @@ export const InteractiveCell = React.memo(function InteractiveCell({
       ? cell.enabledWhen.controllerCellId
       : undefined;
 
-  const testControllerValue = useTestResponseStore(
-    useCallback(
-      (state) => {
-        if (!isTestMode || !controllerCellId) return undefined;
-        const qr = state.testResponses[questionId];
-        if (typeof qr === 'object' && qr !== null) {
-          return (qr as Record<string, unknown>)[controllerCellId];
-        }
-        return undefined;
-      },
-      [isTestMode, questionId, controllerCellId],
-    ),
+  const selectController = useCallback(
+    (questionResponse: unknown) => {
+      if (!controllerCellId) return undefined;
+      if (typeof questionResponse === 'object' && questionResponse !== null) {
+        return (questionResponse as Record<string, unknown>)[controllerCellId];
+      }
+      return undefined;
+    },
+    [controllerCellId],
   );
+  const sourceControllerValue = useQuestionResponseSelector(source, questionId, selectController);
 
-  // 실응답 모드는 상위에서 이미 질문 단위 value prop 으로 내려오므로(재렌더 비용은 이 훅
-  // 밖 상위 컴포넌트 소관 — 이번 변경 범위 밖) 기존처럼 그대로 쓴다.
-  const gatingCellValues: Record<string, unknown> = isTestMode
+  // 주입 원본이 없으면(controlled 렌더) 상위에서 이미 질문 단위 value prop 으로 내려오므로
+  // (재렌더 비용은 이 훅 밖 상위 컴포넌트 소관 — 이번 변경 범위 밖) 기존처럼 그대로 쓴다.
+  const gatingCellValues: Record<string, unknown> = source
     ? controllerCellId
-      ? { [controllerCellId]: testControllerValue }
+      ? { [controllerCellId]: sourceControllerValue }
       : {}
     : (value ?? {});
 

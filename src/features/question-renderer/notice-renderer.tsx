@@ -10,7 +10,11 @@ interface NoticeRendererProps {
   requiresAcknowledgment?: boolean | undefined;
   value?: boolean | undefined;
   onChange?: (acknowledged: boolean) => void;
-  isTestMode?: boolean | undefined;
+  /**
+   * 'preview' 는 빌더 편집 미리보기 — onChange 가 없어도 확인 컨트롤을 조작 가능한
+   * 모습으로 보여준다. 응답 수집 여부와 무관한 표시 정책이라 렌더러가 직접 안다.
+   */
+  mode?: 'live' | 'preview' | undefined;
 }
 
 export function NoticeRenderer({
@@ -18,7 +22,7 @@ export function NoticeRenderer({
   requiresAcknowledgment = false,
   value = false,
   onChange,
-  isTestMode = false,
+  mode = 'live',
 }: NoticeRendererProps) {
   const [acknowledged, setAcknowledged] = useState(value);
 
@@ -34,7 +38,7 @@ export function NoticeRenderer({
         // max-md word-break normal: 전역 keep-all(어절 보존)이 좁은 화면의 긴 문단에서
         // 줄 끝 빈 공간을 크게 남겨, 공지 본문은 모바일에서만 글자 단위 줄바꿈을 허용한다.
         // (justify 분산 정렬은 문단 인라인 text-align 에 밀려 무효 — 시도 후 기각)
-        className="tiptap-mobile-tame prose prose-sm min-w-0 max-w-none rounded-lg border border-blue-100 bg-blue-50/40 p-6 max-md:[word-break:normal] md:overflow-x-auto [&_a:not(.notice-file-attachment)]:[overflow-wrap:anywhere] [&_img]:inline-block [&_img]:align-top [&_p]:min-h-[1.6em] [&_p]:break-words [&_table]:my-4 md:[&_table]:!w-auto [&_table]:max-w-full [&_table]:table-auto [&_table]:border-collapse [&_table]:border [&_table]:border-gray-300 [&_table_p]:m-0 [&_table_td]:box-border [&_table_td]:overflow-hidden [&_table_td]:border [&_table_td]:border-gray-300 [&_table_td]:px-3 [&_table_td]:py-2 [&_table_td]:align-top [&_table_td]:break-words [&_table_th]:box-border [&_table_th]:overflow-hidden [&_table_th]:border [&_table_th]:border-gray-300 [&_table_th]:bg-transparent [&_table_th]:px-3 [&_table_th]:py-2 [&_table_th]:align-top [&_table_th]:break-words [&_table_th]:font-normal [&_a.notice-file-attachment]:no-underline [&_a.notice-file-attachment]:text-gray-700 [&_a.notice-file-attachment]:inline-flex [&_a.notice-file-attachment]:items-center [&_a.notice-file-attachment]:bg-gray-100 [&_a.notice-file-attachment_.notice-file-attachment-label]:text-gray-800 [&_a.notice-file-attachment_.notice-file-attachment-meta]:text-gray-500"
+        className="tiptap-mobile-tame prose prose-sm max-w-none min-w-0 rounded-lg border border-blue-100 bg-blue-50/40 p-6 max-md:[word-break:normal] md:overflow-x-auto [&_a.notice-file-attachment]:inline-flex [&_a.notice-file-attachment]:items-center [&_a.notice-file-attachment]:bg-gray-100 [&_a.notice-file-attachment]:text-gray-700 [&_a.notice-file-attachment]:no-underline [&_a.notice-file-attachment_.notice-file-attachment-label]:text-gray-800 [&_a.notice-file-attachment_.notice-file-attachment-meta]:text-gray-500 [&_a:not(.notice-file-attachment)]:[overflow-wrap:anywhere] [&_img]:inline-block [&_img]:align-top [&_p]:min-h-[1.6em] [&_p]:break-words [&_table]:my-4 [&_table]:max-w-full [&_table]:table-auto [&_table]:border-collapse [&_table]:border [&_table]:border-gray-300 md:[&_table]:!w-auto [&_table_p]:m-0 [&_table_td]:box-border [&_table_td]:overflow-hidden [&_table_td]:border [&_table_td]:border-gray-300 [&_table_td]:px-3 [&_table_td]:py-2 [&_table_td]:align-top [&_table_td]:break-words [&_table_th]:box-border [&_table_th]:overflow-hidden [&_table_th]:border [&_table_th]:border-gray-300 [&_table_th]:bg-transparent [&_table_th]:px-3 [&_table_th]:py-2 [&_table_th]:align-top [&_table_th]:font-normal [&_table_th]:break-words"
         dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(content) }}
         style={{
           // TipTap 스타일 재정의
@@ -53,7 +57,7 @@ export function NoticeRenderer({
             checked={acknowledged}
             onChange={(e) => handleAcknowledgmentChange(e.target.checked)}
             className="mt-0.5 h-5 w-5 border-gray-300 text-blue-600 focus:ring-blue-500"
-            disabled={!isTestMode && !onChange}
+            disabled={mode === 'live' && !onChange}
           />
           <Label
             htmlFor="acknowledgment-check"

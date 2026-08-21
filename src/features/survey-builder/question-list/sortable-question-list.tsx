@@ -2,8 +2,6 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { useShallow } from 'zustand/react/shallow';
-
 import {
   DndContext,
   DragEndEvent,
@@ -24,52 +22,47 @@ import {
 } from '@dnd-kit/sortable';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import {
-  BookmarkPlus,
-  Copy,
-  Edit3,
-  GripVertical,
-  Trash2,
-} from 'lucide-react';
+import { BookmarkPlus, Copy, Edit3, GripVertical, Trash2 } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 
-import { client } from '@/shared/lib/rpc';
-import { useEnsureSurveyInDb } from '@/features/survey-builder/hooks/use-ensure-survey-in-db';
-import { useSyncLatestRef } from '@/hooks/use-latest-ref';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { computeTableEstimatedHeight } from '@/features/question-renderer/hooks/use-row-heights';
+import { useEnsureSurveyInDb } from '@/features/survey-builder/hooks/use-ensure-survey-in-db';
+import { QuestionEditModal } from '@/features/survey-builder/question-edit/question-edit-modal';
+import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
+import { useTestResponseStore } from '@/features/survey-builder/stores/test-response-store';
+import { useSurveyUIStore } from '@/features/survey-builder/stores/ui-store';
+import { useSurveyResponseStore } from '@/features/survey-response/stores/survey-response-store';
+import { useSyncLatestRef } from '@/hooks/use-latest-ref';
 import {
-  getInterleavedChildren,
-  toGroupDndId,
-  isGroupDndId,
   extractGroupId,
   findParentGroupId,
+  getInterleavedChildren,
+  isGroupDndId,
+  toGroupDndId,
 } from '@/lib/group-ordering';
+import { buildFlatOrderedQuestions } from '@/lib/group-ordering';
+import { sanitizeRichHtml } from '@/lib/sanitize';
+import { collectAnswerQuotes } from '@/lib/survey/answer-quote';
+import type { FormulaEvalCtx } from '@/lib/survey/cell-formula';
 import {
   ContactAttrsProvider,
   createPlaceholderAttrs,
   useAnswerQuotes,
   useContactAttrs,
 } from '@/lib/survey/contact-attrs-context';
-import { collectAnswerQuotes } from '@/lib/survey/answer-quote';
-import type { FormulaEvalCtx } from '@/lib/survey/cell-formula';
 import { FormulaEvalProvider } from '@/lib/survey/formula-context';
 import { resolveEffectiveOptionTextsByQuestion } from '@/lib/survey/required-option-text-validation';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { generateId, isEmptyHtml } from '@/lib/utils';
-import { sanitizeRichHtml } from '@/lib/sanitize';
-import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
-import { useSurveyUIStore } from '@/features/survey-builder/stores/ui-store';
-import { useSurveyResponseStore } from '@/features/question-renderer/stores/survey-response-store';
-import { useTestResponseStore } from '@/features/question-renderer/stores/test-response-store';
-import { computeTableEstimatedHeight } from '@/features/question-renderer/hooks/use-row-heights';
+import { client } from '@/shared/lib/rpc';
 import { Question, QuestionGroup, SurveyLookup } from '@/types/survey';
 
-import { buildFlatOrderedQuestions } from '@/lib/group-ordering';
-import { noop, estimateCardHeight, getQuestionTypeLabel } from './question-list-utils';
-import { PageBreakToggle } from './page-break-toggle';
-import { QuestionTestBody } from './question-test-card';
 import { GroupHeader } from './group-header';
-import { QuestionEditModal } from '@/features/survey-builder/question-edit/question-edit-modal';
+import { PageBreakToggle } from './page-break-toggle';
+import { estimateCardHeight, getQuestionTypeLabel, noop } from './question-list-utils';
+import { QuestionTestBody } from './question-test-card';
 
 // LazyMount에서 그룹 접기/펼치기 시 이전 마운트 상태 기억
 const mountedTableIdsRef = { current: new Set<string>() };
@@ -178,11 +171,11 @@ const SortableQuestion = React.memo(function SortableQuestion({
       data-question-index={index}
       className={`group relative transition-all duration-200 ${
         isSelected
-          ? 'border-blue-200 ring-2 shadow-lg ring-blue-500'
+          ? 'border-blue-200 shadow-lg ring-2 ring-blue-500'
           : 'border-gray-200 hover:border-gray-300 hover:shadow-md'
       } ${
         isDragging
-          ? 'ring-opacity-50 z-50 scale-105 rotate-2 border-blue-300 bg-blue-50 ring-4 shadow-2xl ring-blue-300'
+          ? 'ring-opacity-50 z-50 scale-105 rotate-2 border-blue-300 bg-blue-50 shadow-2xl ring-4 ring-blue-300'
           : ''
       }`}
       onClick={() => onSelect(question.id)}
@@ -293,7 +286,9 @@ const SortableQuestion = React.memo(function SortableQuestion({
                 WebkitOverflowScrolling: 'touch',
               }}
               dangerouslySetInnerHTML={{
-                __html: sanitizeRichHtml(substituteTokens(question.description ?? '', attrs, quotes)),
+                __html: sanitizeRichHtml(
+                  substituteTokens(question.description ?? '', attrs, quotes),
+                ),
               }}
             />
           )}
@@ -305,7 +300,11 @@ const SortableQuestion = React.memo(function SortableQuestion({
             <LazyMount
               questionId={question.id}
 
-              estimatedHeight={computeTableEstimatedHeight(question.tableColumns ?? [], question.tableRowsData ?? [], question.tableHeaderGrid ?? undefined)}
+              estimatedHeight={computeTableEstimatedHeight(
+                question.tableColumns ?? [],
+                question.tableRowsData ?? [],
+                question.tableHeaderGrid ?? undefined,
+              )}
               immediate={isDragOverlay}
             >
               <QuestionTestBody question={question} lookups={lookups} />
@@ -376,9 +375,7 @@ export function SortableQuestionList({
         updateQuestion: s.updateQuestion,
       })),
     );
-  const { surveyId } = useSurveyBuilderStore(
-    useShallow((s) => ({ surveyId: s.currentSurvey.id })),
-  );
+  const { surveyId } = useSurveyBuilderStore(useShallow((s) => ({ surveyId: s.currentSurvey.id })));
   const groups = useSurveyBuilderStore(useShallow((s) => s.currentSurvey.groups || []));
   const lookups = useSurveyBuilderStore(useShallow((s) => s.currentSurvey.lookups || []));
   const selectQuestion = useSurveyUIStore((s) => s.selectQuestion);
@@ -466,7 +463,9 @@ export function SortableQuestionList({
 
   // SPA 내비게이션 시 모듈 레벨 mountedTableIdsRef 정리
   useEffect(() => {
-    return () => { mountedTableIdsRef.current.clear(); };
+    return () => {
+      mountedTableIdsRef.current.clear();
+    };
   }, []);
 
   // 중복 제거: 같은 ID를 가진 그룹이 있으면 첫 번째 것만 사용
@@ -525,8 +524,9 @@ export function SortableQuestionList({
     if (!selectedQuestionId) return;
     const rafId = requestAnimationFrame(() => {
       const container = editContainerRef.current;
-      const el = container?.querySelector(`[data-question-id="${selectedQuestionId}"]`)
-        ?? document.querySelector(`[data-question-id="${selectedQuestionId}"]`);
+      const el =
+        container?.querySelector(`[data-question-id="${selectedQuestionId}"]`) ??
+        document.querySelector(`[data-question-id="${selectedQuestionId}"]`);
       if (el) {
         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
@@ -561,9 +561,11 @@ export function SortableQuestionList({
     const savedIds = allQuestionIds.filter((id) => !state.questionChanges.added[id]);
     if (surveyId && savedIds.length > 0) {
       ensureSurvey().then(() =>
-        client.surveyBuilder.questions.reorder({ questionIds: savedIds, surveyId }).catch((error) => {
-          console.error('질문 순서 변경 실패:', error);
-        }),
+        client.surveyBuilder.questions
+          .reorder({ questionIds: savedIds, surveyId })
+          .catch((error) => {
+            console.error('질문 순서 변경 실패:', error);
+          }),
       );
     }
   }
@@ -593,10 +595,13 @@ export function SortableQuestionList({
 
         if (oldIndex !== -1 && newIndex !== -1) {
           const newOrder = arrayMove(children, oldIndex, newIndex);
-          reorderGroupChildren(activeParent, newOrder.map((c) => ({
-            kind: c.kind as 'question' | 'subgroup',
-            id: c.data.id,
-          })));
+          reorderGroupChildren(
+            activeParent,
+            newOrder.map((c) => ({
+              kind: c.kind as 'question' | 'subgroup',
+              id: c.data.id,
+            })),
+          );
           syncReorderToServer();
         }
       } else {
@@ -621,13 +626,16 @@ export function SortableQuestionList({
     setEditingQuestionId(questionId);
   }, []);
 
-  const handleDelete = useCallback((questionId: string) => {
-    if (!confirm('이 질문을 삭제하시겠습니까?')) return;
+  const handleDelete = useCallback(
+    (questionId: string) => {
+      if (!confirm('이 질문을 삭제하시겠습니까?')) return;
 
-    // R2 삭제 제거 — 발행 스냅샷·복제·보관함이 같은 URL 을 참조하므로 즉시 삭제는
-    // 소실 사고를 유발 (2026-07-27 orphan 감사). 정리는 후속 GC 과제.
-    deleteQuestion(questionId);
-  }, [deleteQuestion]);
+      // R2 삭제 제거 — 발행 스냅샷·복제·보관함이 같은 URL 을 참조하므로 즉시 삭제는
+      // 소실 사고를 유발 (2026-07-27 orphan 감사). 정리는 후속 GC 과제.
+      deleteQuestion(questionId);
+    },
+    [deleteQuestion],
+  );
 
   const handleDuplicate = useCallback(async (questionId: string) => {
     const questionToDuplicate = questionsRef.current.find((q) => q.id === questionId);
@@ -695,7 +703,7 @@ export function SortableQuestionList({
         ? questionToDuplicate.dynamicRowConfigs.map((config) => {
             const { insertAfterRowId: _old, ...rest } = config;
             const mappedId = config.insertAfterRowId
-              ? rowIdMap.get(config.insertAfterRowId) ?? config.insertAfterRowId
+              ? (rowIdMap.get(config.insertAfterRowId) ?? config.insertAfterRowId)
               : undefined;
             return mappedId !== undefined ? { ...rest, insertAfterRowId: mappedId } : rest;
           })
@@ -703,7 +711,8 @@ export function SortableQuestionList({
 
       // 기존 질문들의 최대 order를 찾아서 +1 (없으면 1부터 시작)
       const currentQuestions = questionsRef.current;
-      const maxOrder = currentQuestions.length > 0 ? Math.max(...currentQuestions.map((q) => q.order), 0) : 0;
+      const maxOrder =
+        currentQuestions.length > 0 ? Math.max(...currentQuestions.map((q) => q.order), 0) : 0;
 
       // 새로운 ID를 가진 완전한 복사본 생성
       const newQuestion: Question = {
@@ -736,9 +745,7 @@ export function SortableQuestionList({
         // tableColumns 복사 (위에서 생성한 새 컬럼 사용)
         ...(newTableColumns !== undefined ? { tableColumns: newTableColumns } : {}),
         ...(newTableRowsData !== undefined ? { tableRowsData: newTableRowsData } : {}),
-        ...(newDynamicRowConfigs !== undefined
-          ? { dynamicRowConfigs: newDynamicRowConfigs }
-          : {}),
+        ...(newDynamicRowConfigs !== undefined ? { dynamicRowConfigs: newDynamicRowConfigs } : {}),
       };
 
       // 로컬 스토어에 추가 (DB 저장은 saveSurveyDiff에서 일괄 처리)
@@ -770,7 +777,10 @@ export function SortableQuestionList({
         key={question.id}
         data-question-id={question.id}
         className="relative"
-        style={{ contentVisibility: 'auto', containIntrinsicSize: `auto ${editHeightMap.get(question.id) ?? estimateCardHeight(question, 'edit')}px` }}
+        style={{
+          contentVisibility: 'auto',
+          containIntrinsicSize: `auto ${editHeightMap.get(question.id) ?? estimateCardHeight(question, 'edit')}px`,
+        }}
       >
         {overId === question.id && activeId !== question.id && (
           <div className="absolute -top-2 right-0 left-0 z-10 h-1 animate-pulse rounded-full bg-blue-500" />
@@ -794,7 +804,10 @@ export function SortableQuestionList({
   };
 
   // 하위그룹 내부 질문 렌더링 (공통)
-  const renderSubGroupQuestions = (subGroupId: string, renderCard: (q: Question) => React.ReactNode) => {
+  const renderSubGroupQuestions = (
+    subGroupId: string,
+    renderCard: (q: Question) => React.ReactNode,
+  ) => {
     const subGroupQuestions = questionsByGroup[subGroupId] || [];
     if (subGroupQuestions.length === 0) return null;
     return (
@@ -941,14 +954,10 @@ export function SortableQuestionList({
                 items={ungroupedQuestions.map((q) => q.id)}
                 strategy={verticalListSortingStrategy}
               >
-                <div className="space-y-6">
-                  {renderGroups(renderEditCard, true)}
-                </div>
+                <div className="space-y-6">{renderGroups(renderEditCard, true)}</div>
               </SortableContext>
 
-              <DragOverlay>
-                {activeId && renderDragOverlay(activeId)}
-              </DragOverlay>
+              <DragOverlay>{activeId && renderDragOverlay(activeId)}</DragOverlay>
             </DndContext>
           </div>
         </FormulaEvalProvider>

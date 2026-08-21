@@ -1,20 +1,23 @@
 import { useCallback, useRef, useState } from 'react';
 
-import { useSyncLatestRef } from '@/hooks/use-latest-ref';
 import { useQuestionResponseWriter } from '@/features/question-renderer/hooks/use-question-response-writer';
-import { useTestResponseStore } from '@/features/question-renderer/stores/test-response-store';
+import {
+  useQuestionResponseSelector,
+  useResponseSources,
+} from '@/features/question-renderer/response-sources';
+import { useSyncLatestRef } from '@/hooks/use-latest-ref';
 
 /**
  * 셀 응답 값 관리 훅
- * - Zustand cell-level selector로 해당 셀만 구독
+ * - 질문 응답 원본이 주입돼 있으면 그 원본을 셀 단위로 구독 (이 셀 값만 본다)
+ * - 원본이 없으면 externalValue/externalOnChange props 가 유일한 원본이다
  * - 쓰기는 질문 응답 쓰기 채널(use-question-response-writer)에 위임 —
- *   모드별 병합·커밋 의식과 stale closure 방지는 채널이 소유한다
+ *   adapter 별 병합·커밋 의식과 stale closure 방지는 채널이 소유한다
  * - 로컬 상태로 UI 즉시 반영 보장
  */
 export function useCellResponse(
   questionId: string,
   cellId: string,
-  isTestMode: boolean,
   externalValue?: Record<string, unknown>,
   externalOnChange?: (value: Record<string, unknown>) => void,
   /**
@@ -24,22 +27,19 @@ export function useCellResponse(
    */
   siblingCellIds?: string[],
 ) {
-  // cell-level selector: 해당 셀 값만 구독
-  const storeResponse = useTestResponseStore(
-    useCallback(
-      (state) => {
-        if (!isTestMode) return undefined;
-        const qr = state.testResponses[questionId];
-        if (typeof qr === 'object' && qr !== null) {
-          return (qr as Record<string, unknown>)[cellId];
-        }
-        return undefined;
-      },
-      [isTestMode, questionId, cellId],
-    ),
-  );
+  const { questionResponses: source } = useResponseSources();
 
-  const valueFromProps = isTestMode ? storeResponse : externalValue?.[cellId];
+  // 셀 단위 구독: 질문 응답 객체가 아니라 이 셀 값만 본다
+  const selectCell = useCallback(
+    (questionResponse: unknown) =>
+      typeof questionResponse === 'object' && questionResponse !== null
+        ? (questionResponse as Record<string, unknown>)[cellId]
+        : undefined,
+    [cellId],
+  );
+  const sourceResponse = useQuestionResponseSelector(source, questionId, selectCell);
+
+  const valueFromProps = source ? sourceResponse : externalValue?.[cellId];
 
   const [localResponse, setLocalResponse] = useState(valueFromProps);
 
@@ -52,7 +52,6 @@ export function useCellResponse(
 
   const mergePatch = useQuestionResponseWriter({
     questionId,
-    isTestMode,
     value: externalValue,
     onChange: externalOnChange,
   });

@@ -2,7 +2,9 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { InteractiveTableResponse } from '@/features/question-renderer/interactive-table-response';
-import { useTestResponseStore } from '@/features/question-renderer/stores/test-response-store';
+import { ResponseSourcesProvider } from '@/features/question-renderer/response-sources';
+import { previewResponseSources } from '@/features/survey-builder/stores/preview-response-sources';
+import { useTestResponseStore } from '@/features/survey-builder/stores/test-response-store';
 
 vi.mock('@/hooks/use-media-query', () => ({
   useMobileView: () => true,
@@ -102,14 +104,15 @@ describe('InteractiveTableResponse row-wise-original', () => {
   it('빌더 테스트 모드에서는 같은 셀 응답을 테스트 응답 store에 기록한다', () => {
     useTestResponseStore.getState().clearTestResponses();
     render(
-      <InteractiveTableResponse
-        questionId="table-test-question"
-        columns={columns as never}
-        rows={rows as never}
-        mobileTableDisplayMode="row-wise-original"
-        mobileDrilldownOmitLeadingColumns={1}
-        isTestMode
-      />,
+      <ResponseSourcesProvider sources={previewResponseSources}>
+        <InteractiveTableResponse
+          questionId="table-test-question"
+          columns={columns as never}
+          rows={rows as never}
+          mobileTableDisplayMode="row-wise-original"
+          mobileDrilldownOmitLeadingColumns={1}
+        />
+      </ResponseSourcesProvider>,
     );
 
     fireEvent.change(screen.getByPlaceholderText('첫 응답'), {

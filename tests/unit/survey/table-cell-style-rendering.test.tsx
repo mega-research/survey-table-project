@@ -147,7 +147,6 @@ describe('데스크톱 표 셀 스타일 렌더링', () => {
       <InteractiveCell
         cell={{ ...cell, textBold: true }}
         questionId="question-1"
-        isTestMode
         value={{}}
         onChange={() => {}}
       />,

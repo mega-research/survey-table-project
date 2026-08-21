@@ -73,7 +73,6 @@ function renderStepper(hasDynamicRows: boolean) {
         visibleColumns={columns}
         currentResponse={{}}
         hideColumnLabels={false}
-        isTestMode
         hasDynamicRows={hasDynamicRows}
         selectedRowIds={[]}
         groupConfigMap={new Map()}

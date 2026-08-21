@@ -143,6 +143,12 @@ const eslintConfig = [
               message:
                 "features/question-renderer 이 import 할 수 있는 다른 feature 는 없음 입니다. 양쪽이 쓰는 조각은 공용 구역(components/ui·hooks·utils·shared)으로 옮기고, 한쪽 전용이면 호출자가 props 로 주입하세요.",
             },
+            {
+              // 렌더러는 응답이 어디에 사는지 모른다. 원본은 response-sources 로 주입받는다.
+              group: ["@/stores", "@/stores/**", "**/stores/**"],
+              message:
+                "question-renderer 는 스토어를 직접 구독하지 않습니다. 응답 원본은 response-sources(주입 계약)로 받고, zustand 어댑터는 호출하는 feature 가 소유하세요.",
+            },
           ],
         },
       ],

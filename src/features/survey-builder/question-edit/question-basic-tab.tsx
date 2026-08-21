@@ -1286,7 +1286,7 @@ export function QuestionBasicTab({
               <NoticeRenderer
                 content={formData.noticeContent}
                 requiresAcknowledgment={formData.requiresAcknowledgment}
-                isTestMode={true}
+                mode="preview"
               />
             </div>
           )}

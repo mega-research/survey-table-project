@@ -37,8 +37,8 @@ vi.mock('@/shared/lib/rpc', () => ({
 
 import { SortableQuestionList } from '@/features/survey-builder/question-list/sortable-question-list';
 import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
-import { useSurveyResponseStore } from '@/features/question-renderer/stores/survey-response-store';
-import { useTestResponseStore } from '@/features/question-renderer/stores/test-response-store';
+import { useSurveyResponseStore } from '@/features/survey-response/stores/survey-response-store';
+import { useTestResponseStore } from '@/features/survey-builder/stores/test-response-store';
 import type { Question } from '@/types/survey';
 
 function radioQuoteQuestion(): Question {

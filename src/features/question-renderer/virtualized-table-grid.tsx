@@ -10,22 +10,22 @@
  */
 import React, { useMemo } from 'react';
 
-import { cn } from '@/lib/utils';
 import { useCellHeightCache } from '@/features/question-renderer/hooks/use-cell-height-cache';
 import { useRowHeights } from '@/features/question-renderer/hooks/use-row-heights';
 import { useRowVisibility } from '@/features/question-renderer/hooks/use-row-visibility';
 import { useTablePerf } from '@/features/question-renderer/hooks/use-table-perf';
-import type { TableColumn, TableRow } from '@/types/survey';
-import { getCellBackgroundStyle, getCellTextStyle } from '@/utils/cell-style';
 import {
+  type StickyLeftInfo,
   getAlignmentClasses,
   getGridCellAria,
-  type StickyLeftInfo,
 } from '@/features/question-renderer/utils/table-grid-utils';
-
-const STICKY_BODY_Z = 10;
+import { cn } from '@/lib/utils';
+import type { TableColumn, TableRow } from '@/types/survey';
+import { getCellBackgroundStyle, getCellTextStyle } from '@/utils/cell-style';
 
 import { InteractiveCell } from './cells';
+
+const STICKY_BODY_Z = 10;
 
 // ── 행 단위 메모이제이션 컴포넌트 ──
 
@@ -38,7 +38,6 @@ interface VirtualizedRowProps {
   cachedHeight: number | undefined;
   estimatedHeight: number;
   questionId: string;
-  isTestMode: boolean;
   value?: Record<string, unknown> | undefined;
   onChange?: ((value: Record<string, unknown>) => void) | undefined;
   sentinelRef: (el: HTMLElement | null) => void;
@@ -56,7 +55,6 @@ const VirtualizedRow = React.memo(
     cachedHeight,
     estimatedHeight,
     questionId,
-    isTestMode,
     value,
     onChange,
     sentinelRef,
@@ -101,10 +99,14 @@ const VirtualizedRow = React.memo(
               key={cell.id}
               ref={isFirstVisibleCell ? sentinelRef : undefined}
               className={cn(
-                'min-w-0 border-r border-b border-gray-300 p-2 transition-colors duration-200 [overflow-wrap:anywhere]',
+                'min-w-0 border-r border-b border-gray-300 p-2 [overflow-wrap:anywhere] transition-colors duration-200',
                 isSticky
-                  ? (completed ? 'bg-green-50' : 'bg-white')
-                  : (completed ? 'bg-green-50/40' : 'bg-white'),
+                  ? completed
+                    ? 'bg-green-50'
+                    : 'bg-white'
+                  : completed
+                    ? 'bg-green-50/40'
+                    : 'bg-white',
                 getAlignmentClasses(cell.horizontalAlign, cell.verticalAlign),
               )}
               style={style}
@@ -119,7 +121,6 @@ const VirtualizedRow = React.memo(
                   <InteractiveCell
                     cell={cell}
                     questionId={questionId}
-                    isTestMode={isTestMode}
                     value={value}
                     onChange={onChange}
                     rowCells={row.cells}
@@ -160,7 +161,6 @@ interface VirtualizedTableGridProps {
   visibleColumns: TableColumn[];
   rowCompletionMap: Map<string, boolean>;
   rowGridMap: Map<string, number>;
-  isTestMode?: boolean | undefined;
   value?: Record<string, unknown> | undefined;
   onChange?: ((value: Record<string, unknown>) => void) | undefined;
   renderSelectorRows?: (() => React.ReactNode) | undefined;
@@ -180,7 +180,6 @@ export const VirtualizedTableGrid = React.memo(function VirtualizedTableGrid({
   visibleColumns,
   rowCompletionMap,
   rowGridMap,
-  isTestMode = false,
   value,
   onChange,
   renderSelectorRows,
@@ -206,7 +205,7 @@ export const VirtualizedTableGrid = React.memo(function VirtualizedTableGrid({
   return (
     <div
       role="rowgroup"
-      className="mx-auto rounded-b-md border-l border-r border-gray-300 bg-white text-base"
+      className="mx-auto rounded-b-md border-r border-l border-gray-300 bg-white text-base"
       style={{
         display: 'grid',
         gridTemplateColumns: gridTemplateCols,
@@ -225,7 +224,6 @@ export const VirtualizedTableGrid = React.memo(function VirtualizedTableGrid({
           cachedHeight={heightCache.get(row.id)}
           estimatedHeight={estimatedHeights[rowIdx] ?? 44}
           questionId={questionId}
-          isTestMode={isTestMode}
           value={value}
           onChange={onChange}
           sentinelRef={sentinelRef(rowIdx)}

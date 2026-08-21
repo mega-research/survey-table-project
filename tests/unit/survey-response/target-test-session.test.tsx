@@ -13,7 +13,7 @@ import { useResponseTelemetry } from '@/features/survey-response/hooks/use-respo
 import { useSessionRecovery } from '@/features/survey-response/hooks/use-session-recovery';
 import { SurveyResponseFlow } from '@/features/survey-response/survey-response-flow';
 import type { RenderStep } from '@/lib/group-ordering';
-import { useSurveyResponseStore } from '@/features/question-renderer/stores/survey-response-store';
+import { useSurveyResponseStore } from '@/features/survey-response/stores/survey-response-store';
 import type { Survey } from '@/types/survey';
 
 const {

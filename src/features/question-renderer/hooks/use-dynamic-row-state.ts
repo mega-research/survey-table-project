@@ -1,15 +1,17 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 
-import { useSyncLatestRef } from '@/hooks/use-latest-ref';
 import { useQuestionResponseWriter } from '@/features/question-renderer/hooks/use-question-response-writer';
-import { useTestResponseStore } from '@/features/question-renderer/stores/test-response-store';
+import {
+  useQuestionResponseSelector,
+  useResponseSources,
+} from '@/features/question-renderer/response-sources';
+import { useSyncLatestRef } from '@/hooks/use-latest-ref';
 import type { DynamicRowGroupConfig, TableRow } from '@/types/survey';
 
 interface UseDynamicRowStateParams {
   questionId: string;
   rows: TableRow[];
   dynamicRowConfigs?: DynamicRowGroupConfig[] | undefined;
-  isTestMode: boolean;
   value?: Record<string, unknown> | undefined;
   onChange?: ((v: Record<string, unknown>) => void) | undefined;
 }
@@ -28,15 +30,22 @@ interface UseDynamicRowStateReturn {
   toggleGroupExpanded: (groupId: string) => void;
 }
 
+/** 질문 응답 통째 구독용 안정 selector — 훅 밖 상수라 매 렌더 새 함수가 되지 않는다. */
+const selectQuestionResponse = (questionResponse: unknown) => questionResponse;
+
 export function useDynamicRowState({
   questionId,
   rows,
   dynamicRowConfigs,
-  isTestMode,
   value,
   onChange,
 }: UseDynamicRowStateParams): UseDynamicRowStateReturn {
-  const testQuestionResponse = useTestResponseStore((s) => s.testResponses[questionId]);
+  const { questionResponses: source } = useResponseSources();
+  const sourceQuestionResponse = useQuestionResponseSelector(
+    source,
+    questionId,
+    selectQuestionResponse,
+  );
 
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
   const [expandedGroupIds, setExpandedGroupIds] = useState<Set<string>>(new Set());
@@ -51,16 +60,17 @@ export function useDynamicRowState({
   }, []);
 
   const currentResponse = useMemo(() => {
-    if (isTestMode) {
-      return typeof testQuestionResponse === 'object' && testQuestionResponse !== null
-        ? (testQuestionResponse as Record<string, unknown>)
+    if (source) {
+      return typeof sourceQuestionResponse === 'object' && sourceQuestionResponse !== null
+        ? (sourceQuestionResponse as Record<string, unknown>)
         : {};
     }
     return value || {};
-  }, [isTestMode, testQuestionResponse, value]);
+  }, [source, sourceQuestionResponse, value]);
 
   const groupConfigMap = useMemo(() => {
-    if (!dynamicRowConfigs || !Array.isArray(dynamicRowConfigs)) return new Map<string, DynamicRowGroupConfig>();
+    if (!dynamicRowConfigs || !Array.isArray(dynamicRowConfigs))
+      return new Map<string, DynamicRowGroupConfig>();
     return new Map(dynamicRowConfigs.filter((g) => g.enabled).map((g) => [g.groupId, g]));
   }, [dynamicRowConfigs]);
 
@@ -81,8 +91,8 @@ export function useDynamicRowState({
   const selectedRowIdsRef = useRef(selectedRowIds);
   useSyncLatestRef(selectedRowIdsRef, selectedRowIds);
 
-  // 모드별 병합·커밋 의식은 질문 응답 쓰기 채널이 소유
-  const mergePatch = useQuestionResponseWriter({ questionId, isTestMode, value, onChange });
+  // adapter 별 병합·커밋 의식은 질문 응답 쓰기 채널이 소유
+  const mergePatch = useQuestionResponseWriter({ questionId, value, onChange });
 
   const handleDynamicRowSelect = useCallback(
     (rowIdsFromModal: string[]) => {

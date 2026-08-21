@@ -46,7 +46,6 @@ function renderCard(
       completed={false}
       hideColumnLabels={false}
       questionId="q1"
-      isTestMode={false}
       legendLabels={legendLabels}
     />,
   );
@@ -127,7 +126,6 @@ describe('MobileRowCard 범례 표시', () => {
         completed={false}
         hideColumnLabels={false}
         questionId="q1"
-        isTestMode={false}
         legendLabels={[{ label: '전혀 도움 안 됨' }, { label: '매우 도움 됨' }]}
       />,
     );

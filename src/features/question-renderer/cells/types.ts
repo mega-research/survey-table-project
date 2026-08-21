@@ -7,7 +7,7 @@ export interface InteractiveCellProps {
   onUpdateValue: (value: string | string[] | object) => void;
   /**
    * 부모 테이블 질문의 ID. radio/checkbox/select 셀의 allowTextInput 옵션 텍스트를
-   * useSurveyResponseStore.optionTexts[questionId][optionId] 키로 저장하기 위해 사용.
+   * 옵션 텍스트 원본(response-sources)의 [questionId][optionId] 키로 저장하기 위해 사용.
    */
   questionId: string;
   /**

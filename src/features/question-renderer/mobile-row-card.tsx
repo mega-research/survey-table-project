@@ -4,26 +4,26 @@ import React, { useMemo } from 'react';
 
 import { CheckCircle2 } from 'lucide-react';
 
-import { MobileDisplayCells } from '@/features/question-renderer/mobile-display-cells';
 import { Card, CardContent } from '@/components/ui/card';
 import type { useColumnSectionMap } from '@/features/question-renderer/hooks/use-row-groups';
-import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
-import { substituteTokens } from '@/lib/survey/substitute-tokens';
-import { cn } from '@/lib/utils';
-import type { TableColumn, TableRow } from '@/types/survey';
+import { MobileDisplayCells } from '@/features/question-renderer/mobile-display-cells';
 import {
   detectUnitPair,
   overrideCellOptionsColumnsForCard,
 } from '@/features/question-renderer/utils/mobile-card-options';
 import {
+  type MobileLegendLabel,
   findMobileHeaderCell,
   hasExplicitHiddenMobileHeaderCell,
   hasMobileDisplayCells,
   resolveMobileCellLabel,
-  type MobileLegendLabel,
 } from '@/features/question-renderer/utils/mobile-display-cells';
-import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
 import { getAlignmentClasses } from '@/features/question-renderer/utils/table-grid-utils';
+import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { substituteTokens } from '@/lib/survey/substitute-tokens';
+import { cn } from '@/lib/utils';
+import type { TableColumn, TableRow } from '@/types/survey';
+import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
 
 import { InteractiveCell } from './cells';
 
@@ -39,7 +39,6 @@ interface MobileRowCardProps {
   completed: boolean;
   hideColumnLabels: boolean;
   questionId: string;
-  isTestMode: boolean;
   value?: Record<string, unknown> | undefined;
   onChange?: ((value: Record<string, unknown>) => void) | undefined;
   /** 차단형 검증 위반 셀 (빨간 ring 하이라이트) */
@@ -68,7 +67,6 @@ export const MobileRowCard = React.memo(function MobileRowCard({
   completed,
   hideColumnLabels,
   questionId,
-  isTestMode,
   value,
   onChange,
   errorCellIds,
@@ -175,9 +173,7 @@ export const MobileRowCard = React.memo(function MobileRowCard({
       {...(firstErrorCellId ? { 'data-cell-id': firstErrorCellId } : {})}
       className={cn(
         'mobile-row-card overflow-hidden transition-all duration-200',
-        completed
-          ? 'border-green-400 bg-green-50/30 ring-1 ring-green-400'
-          : 'border-gray-200',
+        completed ? 'border-green-400 bg-green-50/30 ring-1 ring-green-400' : 'border-gray-200',
       )}
     >
       <div className={cn('border-b px-4 py-3', completed ? 'bg-green-50' : 'bg-gray-50/80')}>
@@ -186,7 +182,7 @@ export const MobileRowCard = React.memo(function MobileRowCard({
             {rowHeader.label && (
               <p
                 className={cn(
-                  'text-sm font-semibold leading-snug text-gray-900',
+                  'text-sm leading-snug font-semibold text-gray-900',
                   getCellTextClassName(rowHeader),
                 )}
                 style={getCellTextStyle(rowHeader)}
@@ -212,12 +208,12 @@ export const MobileRowCard = React.memo(function MobileRowCard({
             {decoratedLegendLabels.map((legend, i) => (
               <React.Fragment key={i}>
                 {i > 0 && (
-                  <span aria-hidden className="min-w-3 flex-1 border-b border-dotted border-gray-300" />
+                  <span
+                    aria-hidden
+                    className="min-w-3 flex-1 border-b border-dotted border-gray-300"
+                  />
                 )}
-                <span
-                  className={getCellTextClassName(legend)}
-                  style={getCellTextStyle(legend)}
-                >
+                <span className={getCellTextClassName(legend)} style={getCellTextStyle(legend)}>
                   {substituteTokens(legend.label, attrs, quotes)}
                 </span>
               </React.Fragment>
@@ -272,55 +268,52 @@ export const MobileRowCard = React.memo(function MobileRowCard({
                   const labelIndent = labelShown ? 'pl-3' : '';
                   return isUnitPairStart && nextEntry ? (
                     <div className={cn('flex items-end gap-2', labelIndent)}>
+                      <div
+                        className={cn(
+                          'flex-1',
+                          errorCellIds?.has(cell.id) && 'rounded-lg ring-2 ring-red-300',
+                        )}
+                      >
+                        <InteractiveCell
+                          cell={cell}
+                          questionId={questionId}
+                          value={value}
+                          onChange={onChange}
+                          rowCells={row.cells}
+                        />
+                      </div>
+                      <div
+                        className={cn(
+                          'w-28 shrink-0',
+                          errorCellIds?.has(nextEntry.cell.id) && 'rounded-lg ring-2 ring-red-300',
+                        )}
+                      >
+                        <InteractiveCell
+                          cell={nextEntry.cell}
+                          questionId={questionId}
+                          value={value}
+                          onChange={onChange}
+                          rowCells={row.cells}
+                        />
+                      </div>
+                    </div>
+                  ) : (
                     <div
                       className={cn(
-                        'flex-1',
+                        labelIndent,
+                        getAlignmentClasses(cell.horizontalAlign, cell.verticalAlign),
                         errorCellIds?.has(cell.id) && 'rounded-lg ring-2 ring-red-300',
                       )}
                     >
                       <InteractiveCell
                         cell={cell}
                         questionId={questionId}
-                        isTestMode={isTestMode}
                         value={value}
                         onChange={onChange}
                         rowCells={row.cells}
                       />
                     </div>
-                    <div
-                      className={cn(
-                        'w-28 shrink-0',
-                        errorCellIds?.has(nextEntry.cell.id) && 'rounded-lg ring-2 ring-red-300',
-                      )}
-                    >
-                      <InteractiveCell
-                        cell={nextEntry.cell}
-                        questionId={questionId}
-                        isTestMode={isTestMode}
-                        value={value}
-                        onChange={onChange}
-                        rowCells={row.cells}
-                      />
-                    </div>
-                  </div>
-                ) : (
-                  <div
-                    className={cn(
-                      labelIndent,
-                      getAlignmentClasses(cell.horizontalAlign, cell.verticalAlign),
-                      errorCellIds?.has(cell.id) && 'rounded-lg ring-2 ring-red-300',
-                    )}
-                  >
-                    <InteractiveCell
-                      cell={cell}
-                      questionId={questionId}
-                      isTestMode={isTestMode}
-                      value={value}
-                      onChange={onChange}
-                      rowCells={row.cells}
-                    />
-                  </div>
-                );
+                  );
                 })()}
               </div>
             </React.Fragment>

@@ -5,7 +5,9 @@ import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 
 import { InteractiveTableResponse } from '@/features/question-renderer/interactive-table-response';
 import { MobileDrilldownShell } from '@/features/question-renderer/mobile-drilldown-shell';
-import { useTestResponseStore } from '@/features/question-renderer/stores/test-response-store';
+import { ResponseSourcesProvider } from '@/features/question-renderer/response-sources';
+import { previewResponseSources } from '@/features/survey-builder/stores/preview-response-sources';
+import { useTestResponseStore } from '@/features/survey-builder/stores/test-response-store';
 import type { Question, TableCell, TableColumn, TableRow } from '@/types/survey';
 import type { ClassifiedLeaf, ClassifiedSection } from '@/features/question-renderer/utils/classify-table';
 
@@ -677,19 +679,20 @@ it('테스트 모드에서 반복행 preview는 store를 건드리지 않고 선
     'repeat-input-1': 'saved-repeat-value',
   });
   render(
-    <InteractiveTableResponse
-      questionId="repeat-header-test-question"
-      columns={[
-        { id: 'repeat-label-column', label: '항목', width: 140 },
-        { id: 'repeat-value-column', label: '점수', width: 180 },
-      ]}
-      rows={repeatHeaderFixtureRows()}
-      isTestMode
-      mobileTableDisplayMode="drilldown-original-row"
-      mobileDrilldownOmitLeadingColumns={1}
-      mobileDrilldownRepeatHeaderStartRow={1}
-      mobileDrilldownRepeatHeaderEndRow={1}
-    />,
+    <ResponseSourcesProvider sources={previewResponseSources}>
+      <InteractiveTableResponse
+        questionId="repeat-header-test-question"
+        columns={[
+          { id: 'repeat-label-column', label: '항목', width: 140 },
+          { id: 'repeat-value-column', label: '점수', width: 180 },
+        ]}
+        rows={repeatHeaderFixtureRows()}
+        mobileTableDisplayMode="drilldown-original-row"
+        mobileDrilldownOmitLeadingColumns={1}
+        mobileDrilldownRepeatHeaderStartRow={1}
+        mobileDrilldownRepeatHeaderEndRow={1}
+      />
+    </ResponseSourcesProvider>,
   );
 
   enterRepeatResponseRow();

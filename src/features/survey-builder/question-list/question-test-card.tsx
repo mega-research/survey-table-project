@@ -2,30 +2,32 @@
 
 import { useMemo } from 'react';
 
+import { Input } from '@/components/ui/input';
 import { ChoiceTableResponse } from '@/features/question-renderer/choice-table-response';
+import { computeTableEstimatedHeight } from '@/features/question-renderer/hooks/use-row-heights';
+import { InteractiveTableResponse } from '@/features/question-renderer/interactive-table-response';
+import { NoticeRenderer } from '@/features/question-renderer/notice-renderer';
 import { OptionTextInput } from '@/features/question-renderer/option-text-input';
 import { RankingQuestion } from '@/features/question-renderer/ranking-question';
-import { Input } from '@/components/ui/input';
-import { computeTableEstimatedHeight } from '@/features/question-renderer/hooks/use-row-heights';
-import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
-import { substituteTokens } from '@/lib/survey/substitute-tokens';
-import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
-import { useTestResponseStore } from '@/features/question-renderer/stores/test-response-store';
-import { Question, SurveyLookup } from '@/types/survey';
-import { evaluateNumericComparisonV2 } from '@/utils/branch-logic';
-import { isChoiceTableSource } from '@/utils/choice-source';
-import { getOptionsLayout } from '@/features/question-renderer/utils/options-layout';
+import { ResponseSourcesProvider } from '@/features/question-renderer/response-sources';
+import { UserDefinedMultiLevelSelect } from '@/features/question-renderer/user-defined-multi-level-select';
 import {
   DYNAMIC_ROW_SELECTIONS_KEY,
   getDynamicRowSelections,
   updateDynamicRowSelections,
 } from '@/features/question-renderer/utils/dynamic-row-selection-sidecar';
+import { getOptionsLayout } from '@/features/question-renderer/utils/options-layout';
+import { previewResponseSources } from '@/features/survey-builder/stores/preview-response-sources';
+import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
+import { useTestResponseStore } from '@/features/survey-builder/stores/test-response-store';
+import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { substituteTokens } from '@/lib/survey/substitute-tokens';
+import { Question, SurveyLookup } from '@/types/survey';
+import { evaluateNumericComparisonV2 } from '@/utils/branch-logic';
+import { isChoiceTableSource } from '@/utils/choice-source';
 
 import { ConditionDebugPanel } from './condition-debug-panel';
-import { InteractiveTableResponse } from '@/features/question-renderer/interactive-table-response';
-import { NoticeRenderer } from '@/features/question-renderer/notice-renderer';
 import { LazyMount } from './sortable-question-list';
-import { UserDefinedMultiLevelSelect } from '@/features/question-renderer/user-defined-multi-level-select';
 
 // 기타 옵션 관련 타입 정의
 type OtherChoiceValue = {
@@ -121,7 +123,7 @@ function RadioTestInput({
                 e.preventDefault();
                 handleOptionChange(option.value, option.id);
               }}
-              className="flex-1 cursor-pointer whitespace-pre-line text-sm text-gray-700"
+              className="flex-1 cursor-pointer text-sm whitespace-pre-line text-gray-700"
             >
               {option.label}
             </label>
@@ -266,7 +268,7 @@ function CheckboxTestInput({
               />
               <label
                 htmlFor={`${question.id}-${option.id}`}
-                className={`flex-1 whitespace-pre-line text-sm text-gray-700 ${
+                className={`flex-1 text-sm whitespace-pre-line text-gray-700 ${
                   disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
                 }`}
               >
@@ -513,7 +515,6 @@ function QuestionTestInput({
               : undefined
           }
           onChange={onChange}
-          isTestMode={true}
           className="border-0 shadow-none"
           dynamicRowConfigs={question.dynamicRowConfigs}
           allResponses={allResponses}
@@ -543,7 +544,7 @@ function QuestionTestInput({
           requiresAcknowledgment={question.requiresAcknowledgment}
           value={typeof value === 'boolean' ? value : false}
           onChange={onChange}
-          isTestMode={true}
+          mode="preview"
         />
       );
 
@@ -577,11 +578,7 @@ export function QuestionTestBody({
   const handleDynamicRowSelectionChange = (rowIds: string[]) => {
     updateTestResponse(
       DYNAMIC_ROW_SELECTIONS_KEY,
-      updateDynamicRowSelections(
-        allTestResponses[DYNAMIC_ROW_SELECTIONS_KEY],
-        question.id,
-        rowIds,
-      ),
+      updateDynamicRowSelections(allTestResponses[DYNAMIC_ROW_SELECTIONS_KEY], question.id, rowIds),
     );
   };
   // 토큰 치환 + 분기 조건 평가에 사용할 컨택 attrs (ContactAttrsProvider 가 주입).
@@ -632,17 +629,29 @@ export function QuestionTestBody({
   }, [question.displayCondition, allTestResponses, attrs, lookups]);
 
   return (
-    <div>
-      <div className="space-y-3">
-        {question.type === 'table' ? (
-          <LazyMount
-            questionId={question.id}
-            estimatedHeight={computeTableEstimatedHeight(
-              question.tableColumns ?? [],
-              question.tableRowsData ?? [],
-              question.tableHeaderGrid ?? undefined,
-            )}
-          >
+    <ResponseSourcesProvider sources={previewResponseSources}>
+      <div>
+        <div className="space-y-3">
+          {question.type === 'table' ? (
+            <LazyMount
+              questionId={question.id}
+              estimatedHeight={computeTableEstimatedHeight(
+                question.tableColumns ?? [],
+                question.tableRowsData ?? [],
+                question.tableHeaderGrid ?? undefined,
+              )}
+            >
+              <QuestionTestInput
+                question={question}
+                value={testResponse}
+                onChange={handleResponse}
+                allResponses={allTestResponses}
+                allQuestions={allQuestions}
+                selectedDynamicRowIds={selectedDynamicRowIds}
+                onDynamicRowSelectionChange={handleDynamicRowSelectionChange}
+              />
+            </LazyMount>
+          ) : (
             <QuestionTestInput
               question={question}
               value={testResponse}
@@ -652,28 +661,18 @@ export function QuestionTestBody({
               selectedDynamicRowIds={selectedDynamicRowIds}
               onDynamicRowSelectionChange={handleDynamicRowSelectionChange}
             />
-          </LazyMount>
-        ) : (
-          <QuestionTestInput
-            question={question}
-            value={testResponse}
-            onChange={handleResponse}
-            allResponses={allTestResponses}
-            allQuestions={allQuestions}
-            selectedDynamicRowIds={selectedDynamicRowIds}
-            onDynamicRowSelectionChange={handleDynamicRowSelectionChange}
-          />
+          )}
+        </div>
+
+        {debugConditions.length > 0 && (
+          <div className="mt-4 space-y-2">
+            <div className="text-xs font-semibold text-gray-500">표시 조건 평가</div>
+            {debugConditions.map((c, idx) => (
+              <ConditionDebugPanel key={idx} conditionLabel={c.label} result={c.result} />
+            ))}
+          </div>
         )}
       </div>
-
-      {debugConditions.length > 0 && (
-        <div className="mt-4 space-y-2">
-          <div className="text-xs font-semibold text-gray-500">표시 조건 평가</div>
-          {debugConditions.map((c, idx) => (
-            <ConditionDebugPanel key={idx} conditionLabel={c.label} result={c.result} />
-          ))}
-        </div>
-      )}
-    </div>
+    </ResponseSourcesProvider>
   );
 }

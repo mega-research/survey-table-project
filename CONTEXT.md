@@ -59,8 +59,12 @@ _Avoid_: 체크됨(checkbox 한정 어감), 입력됨
 _Avoid_: 레이아웃 훅 무리, 동적 행 로직
 
 **질문 응답 쓰기 채널 (question response writer)**:
-"최신 응답 읽기 → 패치 병합 → 커밋" 의식의 단일 거처(`src/features/question-renderer/hooks/use-question-response-writer.ts`). 테스트 모드(test-response-store)와 실응답 모드(value/onChange)라는 두 adapter가 이 seam을 만족한다. 새 응답 쓰기 지점은 isTestMode 분기를 만들지 말고 이 채널을 경유한다.
+"최신 응답 읽기 → 패치 병합 → 커밋" 의식의 단일 거처(`src/features/question-renderer/hooks/use-question-response-writer.ts`). 주입된 응답 원본(response-sources)과 value/onChange props라는 두 adapter가 이 seam을 만족한다. 렌더러는 원본이 어느 스토어인지 모르고, 무엇을 주입할지는 호스트가 정한다. 새 응답 쓰기 지점은 모드 분기를 만들지 말고 이 채널을 경유한다.
 _Avoid_: 모드 분기, isTestMode 스위치
+
+**응답 원본 주입 (response sources)**:
+렌더러가 실행 환경을 모르게 하는 seam(`src/features/question-renderer/response-sources.tsx`). 질문 응답 원본(subscribe/read/write)과 옵션 사이드카 텍스트 원본을 호스트가 context로 주입한다. 응답 페이지는 질문 응답 원본을 주지 않아 value/onChange props가 유일한 원본이고(controlled), 빌더 미리보기는 테스트 응답 스토어를 준다. 옵션 텍스트 저장소는 두 호스트가 공유한다 — 인용값 계산이 양쪽에서 같은 입력을 봐야 하기 때문. zustand 어댑터는 각 feature의 stores/가 소유한다.
+_Avoid_: 렌더러의 스토어 직접 구독, isTestMode 프롭
 
 **SurveyDiffPayload 조립 (diff-payload)**:
 changeset snapshot + 현재 설문 상태 → 저장 payload 변환 규칙(`src/features/survey-builder/lib/diff-payload.ts`, 순수 함수). dirtyIds = added∪updated 필터, 메타데이터 조건부 필드, reordered 전체 id 순서를 소유한다. use-survey-sync는 저장 오케스트레이션만 담당한다.

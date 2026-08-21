@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 
+import { useSurveyResponseStore } from '@/features/survey-response/stores/survey-response-store';
 import { readOptTextsSidecar } from '@/lib/option-text-read';
 import { client } from '@/shared/lib/rpc';
-import { useSurveyResponseStore } from '@/features/question-renderer/stores/survey-response-store';
 import type { Survey } from '@/types/survey';
 
 import { sendVisibilitySegment, sessionStorageKey } from './session-helpers';

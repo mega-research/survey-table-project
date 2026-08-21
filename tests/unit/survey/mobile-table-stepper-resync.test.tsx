@@ -47,7 +47,6 @@ const baseProps = {
   visibleHeaderGrid: null,
   currentResponse: {},
   hideColumnLabels: false,
-  isTestMode: false,
   value: {},
   onChange: () => {},
   hasDynamicRows: false,

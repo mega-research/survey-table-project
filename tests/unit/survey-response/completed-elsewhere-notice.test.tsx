@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SurveyResponseFlow } from '@/features/survey-response/survey-response-flow';
-import { useSurveyResponseStore } from '@/features/question-renderer/stores/survey-response-store';
+import { useSurveyResponseStore } from '@/features/survey-response/stores/survey-response-store';
 import type { Survey } from '@/types/survey';
 
 /**

@@ -4,24 +4,31 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 import { CheckCircle2 } from 'lucide-react';
 
+import {
+  type ClassifiedLeaf,
+  type ClassifiedSection,
+  classifyTable,
+} from '@/features/question-renderer/utils/classify-table';
+import { resolveMobileCellLabel } from '@/features/question-renderer/utils/mobile-display-cells';
+import {
+  MOBILE_TABLE_COMPLETION_TYPES,
+  projectMobileOriginalRow,
+} from '@/features/question-renderer/utils/mobile-original-row';
+import {
+  buildRadioGroupBuckets,
+  resolveRadioGroupProps,
+} from '@/features/question-renderer/utils/table-radio-groups';
+import { isTableRowCompleted } from '@/features/question-renderer/utils/table-row-completion';
 import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import type { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
-import { type ClassifiedLeaf, type ClassifiedSection, classifyTable } from '@/features/question-renderer/utils/classify-table';
 import {
   excludeMobileDrilldownRepeatedRows,
   getMobileDrilldownRepeatedBodyRowIds,
   includesMobileDrilldownColumnHeader,
   resolveMobileDrilldownRepeatHeaderRange,
 } from '@/utils/mobile-drilldown-repeat-header';
-import { resolveMobileCellLabel } from '@/features/question-renderer/utils/mobile-display-cells';
-import {
-  MOBILE_TABLE_COMPLETION_TYPES,
-  projectMobileOriginalRow,
-} from '@/features/question-renderer/utils/mobile-original-row';
-import { buildRadioGroupBuckets, resolveRadioGroupProps } from '@/features/question-renderer/utils/table-radio-groups';
-import { isTableRowCompleted } from '@/features/question-renderer/utils/table-row-completion';
 
 import { InteractiveCell } from './cells';
 import { MobileDrilldownShell, getSectionIdentity } from './mobile-drilldown-shell';
@@ -36,7 +43,6 @@ interface MobileTableDrilldownProps {
   visibleHeaderGrid?: HeaderCell[][] | null | undefined;
   currentResponse: Record<string, unknown>;
   hideColumnLabels: boolean;
-  isTestMode: boolean;
   value?: Record<string, unknown> | undefined;
   onChange?: (value: Record<string, unknown>) => void;
   // 동적 행 props (drop-in 호환용 — 드릴다운은 이미 필터링된 displayRows 사용)
@@ -48,9 +54,8 @@ interface MobileTableDrilldownProps {
   errorCellIds?: Set<string> | undefined;
   /** 오류 배너 "위치로 이동"용 — 셀 id 목록을 받아 해당 셀이 속한 섹션/리프 상세로
    *  드릴다운 내비를 전환한다. 어느 섹션에도 없으면 목차로 폴백. */
-  navigateToCellRef?: React.MutableRefObject<
-    ((cellIds: readonly string[]) => void) | null
-  > | undefined;
+  navigateToCellRef?:
+    React.MutableRefObject<((cellIds: readonly string[]) => void) | null> | undefined;
   detailMode: 'legacy' | 'original-row';
   omitLeadingAuthoredColumns: number;
   mobileDrilldownRepeatHeaderStartRow?: number | null | undefined;
@@ -68,7 +73,6 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
   visibleHeaderGrid,
   currentResponse,
   hideColumnLabels,
-  isTestMode,
   value,
   onChange,
   errorCellIds,
@@ -237,7 +241,6 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
         <InteractiveCell
           cell={cell}
           questionId={questionId}
-          isTestMode={isTestMode}
           value={value}
           onChange={onChange}
           rowCells={rowCellsByCellId.get(cellId)}
@@ -267,9 +270,7 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
               {leaf.inputCellIds[0] != null
                 ? renderCell(leaf.inputCellIds[0])
                 : // 계산 셀만 있는 행(합계 표시 행 등)은 계산값을 인라인으로 보여준다
-                  leaf.calcCellIds.map((cellId) => (
-                    <div key={cellId}>{renderCell(cellId)}</div>
-                  ))}
+                  leaf.calcCellIds.map((cellId) => <div key={cellId}>{renderCell(cellId)}</div>)}
             </div>
           );
         })}
@@ -411,7 +412,6 @@ export const MobileTableDrilldown = React.memo(function MobileTableDrilldown({
             <InteractiveCell
               cell={cell}
               questionId={questionId}
-              isTestMode={isTestMode}
               value={value}
               onChange={onChange}
               rowCells={rowCellsByCellId.get(cell.id)}

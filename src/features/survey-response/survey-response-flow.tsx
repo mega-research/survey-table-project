@@ -21,7 +21,6 @@ import {
   buildRowWiseCellInstanceIds,
   scrollToIssue,
 } from '@/features/question-renderer/scroll-to-issue';
-import { useSurveyResponseStore } from '@/features/question-renderer/stores/survey-response-store';
 import { resolveResponseContainerWidth } from '@/features/question-renderer/utils/table-grid-utils';
 import { AlreadyRespondedView } from '@/features/survey-response/already-responded-view';
 import { HoneypotField } from '@/features/survey-response/honeypot-field';
@@ -38,6 +37,7 @@ import type { SaveAdminEditPayload } from '@/features/survey-response/lib/admin-
 import { MobileBottomNav } from '@/features/survey-response/mobile-bottom-nav';
 import { ResumeToast } from '@/features/survey-response/resume-toast';
 import { PageStepView } from '@/features/survey-response/step-views/page-step-view';
+import { useSurveyResponseStore } from '@/features/survey-response/stores/survey-response-store';
 import { SurveyResponseHeader } from '@/features/survey-response/survey-response-header';
 import {
   InvalidTestLinkScreen,

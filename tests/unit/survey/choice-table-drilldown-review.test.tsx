@@ -4,8 +4,10 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ChoiceTableResponse } from '@/features/question-renderer/choice-table-response';
+import { ResponseSourcesProvider } from '@/features/question-renderer/response-sources';
+import { liveResponseSources } from '@/features/survey-response/stores/live-response-sources';
 import { QuestionInput } from '@/features/survey-response/question-input';
-import { useSurveyResponseStore } from '@/features/question-renderer/stores/survey-response-store';
+import { useSurveyResponseStore } from '@/features/survey-response/stores/survey-response-store';
 import type { Question } from '@/types/survey';
 
 const { contactAttrs } = vi.hoisted(() => ({
@@ -64,7 +66,11 @@ function controlledChoice({
     );
   }
 
-  return render(<ControlledChoice />);
+  return render(
+    <ResponseSourcesProvider sources={liveResponseSources}>
+      <ControlledChoice />
+    </ResponseSourcesProvider>,
+  );
 }
 
 function plainRadioQuestion(): Question {

@@ -1,8 +1,17 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { ReactNode } from 'react';
+
 import { useDynamicRows } from '@/features/question-renderer/hooks/use-dynamic-rows';
-import { useTestResponseStore } from '@/features/question-renderer/stores/test-response-store';
+import { ResponseSourcesProvider } from '@/features/question-renderer/response-sources';
+import { previewResponseSources } from '@/features/survey-builder/stores/preview-response-sources';
+import { useTestResponseStore } from '@/features/survey-builder/stores/test-response-store';
+
+/** 빌더 미리보기 배선 — 테스트 응답 스토어를 질문 응답 원본으로 주입한다. */
+const preview = ({ children }: { children: ReactNode }) => (
+  <ResponseSourcesProvider sources={previewResponseSources}>{children}</ResponseSourcesProvider>
+);
 import type { DynamicRowGroupConfig, TableRow } from '@/types/survey';
 
 /**
@@ -45,7 +54,7 @@ interface HookProps {
   conditionVisibleRowIds?: Set<string> | null;
   hiddenGroupIds?: Set<string>;
   dynamicRowConfigs?: DynamicRowGroupConfig[];
-  isTestMode?: boolean;
+  preview?: boolean;
   value?: Record<string, unknown>;
   onChange?: (v: Record<string, unknown>) => void;
   headerRowCount?: number;
@@ -62,12 +71,11 @@ function setup(props: HookProps = {}) {
         conditionVisibleRowIds: p.conditionVisibleRowIds ?? null,
         hiddenGroupIds: p.hiddenGroupIds,
         dynamicRowConfigs: p.dynamicRowConfigs,
-        isTestMode: p.isTestMode ?? false,
         value: p.value,
         onChange: p.onChange as ((v: Record<string, unknown>) => void) | undefined,
         headerRowCount: p.headerRowCount ?? 1,
       }),
-    { initialProps: props },
+    { initialProps: props, ...(props.preview ? { wrapper: preview } : {}) },
   );
 }
 
@@ -221,7 +229,7 @@ describe('useDynamicRows — 선택 상태와 핸들러', () => {
     const onChange = vi.fn();
     const { result } = setup({
       dynamicRowConfigs: makeConfigs('g1'),
-      isTestMode: true,
+      preview: true,
       onChange,
     });
 

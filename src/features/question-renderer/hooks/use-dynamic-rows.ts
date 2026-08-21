@@ -2,9 +2,9 @@ import { useMemo } from 'react';
 
 import { useDynamicRowLayout } from '@/features/question-renderer/hooks/use-dynamic-row-layout';
 import { useDynamicRowState } from '@/features/question-renderer/hooks/use-dynamic-row-state';
+import { isTableRowCompleted } from '@/features/question-renderer/utils/table-row-completion';
 import type { DynamicRowGroupConfig, TableRow } from '@/types/survey';
 import { recalculateRowspansForVisibleRows } from '@/utils/table-merge-helpers';
-import { isTableRowCompleted } from '@/features/question-renderer/utils/table-row-completion';
 
 /**
  * 동적 행 파이프라인 facade — 동적 행 기능의 단일 진입점.
@@ -34,7 +34,6 @@ interface UseDynamicRowsParams {
   /** 그룹 displayCondition 으로 숨길 그룹 ID (호출자 소유) */
   hiddenGroupIds?: Set<string> | undefined;
   dynamicRowConfigs?: DynamicRowGroupConfig[] | undefined;
-  isTestMode: boolean;
   value?: Record<string, unknown> | undefined;
   onChange?: ((v: Record<string, unknown>) => void) | undefined;
   headerRowCount: number;
@@ -70,7 +69,6 @@ export function useDynamicRows({
   conditionVisibleRowIds,
   hiddenGroupIds,
   dynamicRowConfigs,
-  isTestMode,
   value,
   onChange,
   headerRowCount,
@@ -92,7 +90,6 @@ export function useDynamicRows({
     questionId,
     rows,
     dynamicRowConfigs,
-    isTestMode,
     value,
     onChange,
   });

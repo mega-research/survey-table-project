@@ -1,10 +1,10 @@
 'use client';
 
 import { Input } from '@/components/ui/input';
+import { useOptionTexts, useResponseSources } from '@/features/question-renderer/response-sources';
 import { optionTextTargetId } from '@/lib/survey/option-text-target';
-import { useSurveyResponseStore } from '@/features/question-renderer/stores/survey-response-store';
 
-// useSyncExternalStore 안정 참조 — selector 내부 `?? {}` 사용 시 무한 루프 경고 회피
+// useSyncExternalStore 안정 참조 — 원본이 undefined 를 줄 때 쓰는 고정 빈 맵
 const EMPTY_OPTION_TEXTS: Record<string, string> = {};
 
 const DEFAULT_PLACEHOLDER = '상세 기재';
@@ -27,7 +27,7 @@ interface OptionTextInputProps {
 
 /**
  * allowTextInput 옵션의 사이드카 텍스트 입력칸.
- * useSurveyResponseStore.optionTexts[questionId][option.id] 에 저장.
+ * 주입된 옵션 텍스트 원본(response-sources)의 [questionId][option.id] 에 저장.
  * 응답 페이지 / 빌더 테스트 모드 / 테이블 셀 공통 사용.
  */
 export function OptionTextInput({
@@ -37,9 +37,9 @@ export function OptionTextInput({
   ariaLabel,
   unstyled,
 }: OptionTextInputProps) {
-  const optionTexts =
-    useSurveyResponseStore((s) => s.optionTexts[questionId]) ?? EMPTY_OPTION_TEXTS;
-  const setOptionText = useSurveyResponseStore((s) => s.setOptionText);
+  const { optionTexts: optionTextSource } = useResponseSources();
+  const optionTexts = useOptionTexts(optionTextSource, questionId) ?? EMPTY_OPTION_TEXTS;
+  const setOptionText = optionTextSource.write;
 
   const sharedProps = {
     'aria-label': ariaLabel,

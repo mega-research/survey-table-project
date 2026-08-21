@@ -33,7 +33,7 @@ function renderOriginalRow({ hideColumnLabels = false } = {}) {
       headerGrid={[[{ id: 'h', label: '묶음 헤더', colspan: 2, rowspan: 1 }]]}
       hideColumnLabels={hideColumnLabels}
       renderCell={(cell) => (
-        <InteractiveCell cell={cell} questionId="q1" isTestMode value={{}} onChange={vi.fn()} />
+        <InteractiveCell cell={cell} questionId="q1" value={{}} onChange={vi.fn()} />
       )}
     />,
   );
@@ -70,7 +70,7 @@ describe('MobileOriginalRowTable', () => {
         interactiveRowId="r1"
         hideColumnLabels={false}
         renderCell={(cell) => (
-          <InteractiveCell cell={cell} questionId="q1" isTestMode value={{}} onChange={() => {}} />
+          <InteractiveCell cell={cell} questionId="q1" value={{}} onChange={() => {}} />
         )}
       />,
     );
@@ -92,7 +92,7 @@ describe('MobileOriginalRowTable', () => {
         interactiveRowId="r1"
         hideColumnLabels={false}
         renderCell={(cell) => (
-          <InteractiveCell cell={cell} questionId="q1" isTestMode value={{}} onChange={vi.fn()} />
+          <InteractiveCell cell={cell} questionId="q1" value={{}} onChange={vi.fn()} />
         )}
       />,
     );
@@ -104,7 +104,7 @@ describe('MobileOriginalRowTable', () => {
   it('행이 바뀌면 저장한 scrollLeft를 헤더와 body에 함께 복원한다', () => {
     const scrollLeftRef: MutableRefObject<number> = { current: 120 };
     const renderCell = (cell: TableCell) => (
-      <InteractiveCell cell={cell} questionId="q1" isTestMode value={{}} onChange={vi.fn()} />
+      <InteractiveCell cell={cell} questionId="q1" value={{}} onChange={vi.fn()} />
     );
     const { rerender } = render(
       <MobileOriginalRowTable
@@ -328,7 +328,6 @@ describe('MobileOriginalRowTable', () => {
           <InteractiveCell
             cell={cell}
             questionId="rowspan-question"
-            isTestMode={false}
             value={{}}
             onChange={onChange}
           />
@@ -358,7 +357,6 @@ describe('MobileOriginalRowTable', () => {
           <InteractiveCell
             cell={cell}
             questionId="q1"
-            isTestMode={false}
             value={{}}
             onChange={onChange}
           />
@@ -455,7 +453,7 @@ describe('MobileOriginalRowTable', () => {
         interactiveRowId="answer-row"
         hideColumnLabels
         renderCell={(cell) => (
-          <InteractiveCell cell={cell} questionId="q1" isTestMode value={{}} onChange={vi.fn()} />
+          <InteractiveCell cell={cell} questionId="q1" value={{}} onChange={vi.fn()} />
         )}
       />,
     );
@@ -493,7 +491,7 @@ describe('MobileOriginalRowTable', () => {
           interactiveRowId="answer-row"
           hideColumnLabels
           renderCell={(cell) => (
-            <InteractiveCell cell={cell} questionId="q1" isTestMode value={{}} onChange={vi.fn()} />
+            <InteractiveCell cell={cell} questionId="q1" value={{}} onChange={vi.fn()} />
           )}
         />
       </ContactAttrsProvider>,
@@ -514,7 +512,7 @@ describe('MobileOriginalRowTable', () => {
           interactiveRowId="answer-row"
           hideColumnLabels
           renderCell={(cell) => (
-            <InteractiveCell cell={cell} questionId="q1" isTestMode value={{}} onChange={vi.fn()} />
+            <InteractiveCell cell={cell} questionId="q1" value={{}} onChange={vi.fn()} />
           )}
         />
       </ContactAttrsProvider>,

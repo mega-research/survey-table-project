@@ -4,10 +4,10 @@ import { useCallback, useRef, useState, useTransition } from 'react';
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
-import { useTestResponseStore } from '@/features/question-renderer/stores/test-response-store';
 import { buildSurveyDiffPayload } from '@/features/survey-builder/lib/diff-payload';
 import { surveyKeys } from '@/features/survey-builder/queries/use-surveys';
 import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
+import { useTestResponseStore } from '@/features/survey-builder/stores/test-response-store';
 import { useSurveyUIStore } from '@/features/survey-builder/stores/ui-store';
 import { client } from '@/shared/lib/rpc';
 

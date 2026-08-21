@@ -11,6 +11,7 @@ import { useHorizontalScrollIndicators } from '@/features/question-renderer/hook
 import { usePageStickyThreshold } from '@/features/question-renderer/hooks/use-page-sticky-threshold';
 import { useScrollLeftSync } from '@/features/question-renderer/hooks/use-scroll-left-sync';
 import { useTablePerf } from '@/features/question-renderer/hooks/use-table-perf';
+import { useResponseSources } from '@/features/question-renderer/response-sources';
 import { scrollToIssue } from '@/features/question-renderer/scroll-to-issue';
 import { decideDrilldown } from '@/features/question-renderer/utils/classify-table';
 import { expandHeaderGrid } from '@/features/question-renderer/utils/expand-header-grid';
@@ -234,7 +235,6 @@ interface RenderRowCellsProps {
   row: TableRow;
   gridRow: number | undefined;
   questionId: string;
-  isTestMode: boolean;
   value?: Record<string, unknown> | undefined;
   onChange?: ((v: Record<string, unknown>) => void) | undefined;
   stickyInfo?: StickyLeftInfo | undefined;
@@ -246,7 +246,6 @@ function renderRowCells({
   row,
   gridRow,
   questionId,
-  isTestMode,
   value,
   onChange,
   stickyInfo,
@@ -304,7 +303,6 @@ function renderRowCells({
         <InteractiveCell
           cell={cell}
           questionId={questionId}
-          isTestMode={isTestMode}
           value={value}
           onChange={onChange}
           rowCells={row.cells}
@@ -326,7 +324,6 @@ interface InteractiveTableResponseProps {
   value?: Record<string, unknown> | undefined;
   onChange?: (value: Record<string, unknown>) => void;
   className?: string | undefined;
-  isTestMode?: boolean | undefined;
   allResponses?: Record<string, unknown> | undefined;
   allQuestions?: Question[] | undefined;
   /** 열·행·동적 그룹 displayCondition 평가를 건너뛰고 전부 표시 (빌더 편집 미리보기용) */
@@ -359,7 +356,8 @@ interface InteractiveTableResponseProps {
 /**
  * 같은 render tick 안에 여러 cell 이 동시에 onChange 를 호출할 때 (예: emptyDefault prefill)
  * 부모 prop 의 batch 지연으로 stale 한 객체가 덮어쓰는 race 를 방지하기 위해
- * 누적 ref 에서 매번 머지해 부모에 전달한다. 응답자 모드 전용.
+ * 누적 ref 에서 매번 머지해 부모에 전달한다. 주입 원본이 없는 controlled 렌더 전용 —
+ * 원본이 있으면 병합 base 를 원본이 쥐고 있어 누적이 필요 없다.
  *
  * 별도 훅으로 분리한 이유: ref 를 읽는 콜백을 컴포넌트 본문에 두면 react-hooks/refs 가
  * 이를 참조하는 렌더 함수(renderTableView 등) 호출 전체를 "렌더 중 ref 접근"으로
@@ -369,17 +367,17 @@ interface InteractiveTableResponseProps {
 function useMergedResponseChange(
   value: Record<string, unknown> | undefined,
   onChange: ((v: Record<string, unknown>) => void) | undefined,
-  isTestMode: boolean,
 ) {
+  const { questionResponses: source } = useResponseSources();
   const accumulatedResponseRef = useRef<Record<string, unknown>>(value ?? {});
   useEffect(() => {
-    if (!isTestMode) accumulatedResponseRef.current = value ?? {};
-  }, [value, isTestMode]);
+    if (!source) accumulatedResponseRef.current = value ?? {};
+  }, [value, source]);
 
   return useCallback(
     (next: Record<string, unknown>) => {
       if (!onChange) return;
-      if (isTestMode) {
+      if (source) {
         onChange(next);
         return;
       }
@@ -398,7 +396,7 @@ function useMergedResponseChange(
       accumulatedResponseRef.current = merged;
       onChange(merged);
     },
-    [onChange, isTestMode],
+    [onChange, source],
   );
 }
 
@@ -411,7 +409,6 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
   value,
   onChange,
   className,
-  isTestMode = false,
   allResponses,
   allQuestions,
   ignoreDisplayConditions = false,
@@ -426,7 +423,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
   errorCellIds,
   errorItems,
 }: InteractiveTableResponseProps) {
-  const mergedOnChange = useMergedResponseChange(value, onChange, isTestMode);
+  const mergedOnChange = useMergedResponseChange(value, onChange);
 
   const tableContainerRef = useRef<HTMLDivElement>(null);
   // 드릴다운 모드에서 "위치로 이동" — 위반 셀이 속한 섹션/리프 상세로 내비 전환.
@@ -569,7 +566,6 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     conditionVisibleRowIds,
     hiddenGroupIds,
     dynamicRowConfigs,
-    isTestMode,
     value,
     onChange: mergedOnChange,
     headerRowCount,
@@ -743,7 +739,6 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
                   row,
                   gridRow: rowGridMap.get(row.id),
                   questionId,
-                  isTestMode,
                   value,
                   onChange: mergedOnChange,
                   stickyInfo,
@@ -767,7 +762,6 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
       expandedGroupRows,
       rowGridMap,
       questionId,
-      isTestMode,
       value,
       mergedOnChange,
       hiddenGroupIds,
@@ -956,7 +950,6 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
                 visibleColumns={visibleColumns}
                 rowCompletionMap={rowCompletionMap}
                 rowGridMap={rowGridMap}
-                isTestMode={isTestMode}
                 value={value}
                 onChange={mergedOnChange}
                 gridTemplateCols={gridTemplateCols}
@@ -983,7 +976,6 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
                       row,
                       gridRow: rowGridMap.get(row.id),
                       questionId,
-                      isTestMode,
                       value,
                       onChange: mergedOnChange,
                       stickyInfo,
@@ -1024,7 +1016,6 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     visibleHeaderGrid,
     currentResponse,
     hideColumnLabels,
-    isTestMode,
     value,
     onChange: mergedOnChange,
     hasDynamicRows,
@@ -1094,7 +1085,6 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
                       <InteractiveCell
                         cell={cell}
                         questionId={questionId}
-                        isTestMode={isTestMode}
                         value={value}
                         onChange={mergedOnChange}
                         inputIdScope={inputIdScope}
