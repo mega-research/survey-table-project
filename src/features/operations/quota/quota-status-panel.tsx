@@ -6,7 +6,7 @@ import { ChevronDown } from 'lucide-react';
 
 import { Card, CardContent } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { numberFormatter } from '@/lib/operations/format';
+import { numberFormatter } from '@/features/operations/format';
 import type { QuotaCellStatus, QuotaCellTone, QuotaStatus } from '@/lib/operations/quota-status';
 import { cn } from '@/lib/utils';
 

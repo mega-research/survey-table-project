@@ -5,7 +5,7 @@ import { Button, Card } from '@tremor/react';
 import { Download, FileJson, FileSpreadsheet, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { buildSafeFilename, downloadText } from '@/lib/analytics/export-download';
+import { buildSafeFilename, downloadText } from '@/features/analytics/export-download';
 import { client } from '@/shared/lib/rpc';
 
 import { ExportDataModal } from './export-data-modal';

@@ -6,7 +6,7 @@ import {
   generateSpssVarNames,
   regenerateAfterReorder,
   regenerateAfterDelete,
-} from '@/lib/spss/variable-generator';
+} from '@/features/survey-builder/lib/variable-generator';
 
 // 테스트 헬퍼: 최소 Question 객체 생성
 function makeQuestion(

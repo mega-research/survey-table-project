@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { allQuotaQuestionsAnswered } from '@/lib/quota/gate';
+import { allQuotaQuestionsAnswered } from '@/features/survey-response/lib/gate';
 
 describe('allQuotaQuestionsAnswered', () => {
   it('빈 게이트는 false (발동 안 함)', () => {

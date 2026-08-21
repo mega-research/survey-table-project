@@ -7,7 +7,7 @@ import type {
   MobileRowWiseOriginalQuestion,
 } from '@/features/question-renderer/utils/mobile-row-wise-original';
 
-vi.mock('@/lib/survey/contact-attrs-context', () => ({
+vi.mock('@/features/question-renderer/contact-attrs-context', () => ({
   useContactAttrs: () => ({}),
   useAnswerQuotes: () => ({}),
 }));

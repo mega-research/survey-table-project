@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 
 import { TablePreview } from '@/features/question-renderer/table-preview';
 import { useMobileView } from '@/hooks/use-media-query';
-import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { Question, RankingAnswer, TableCell } from '@/types/survey';
 import {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildRenderSteps, resolveRestoreStepIndex, stepIdOf } from '@/lib/group-ordering';
+import { buildRenderSteps, resolveRestoreStepIndex, stepIdOf } from '@/utils/group-ordering';
 import type { Question } from '@/types/survey';
 
 // ========================

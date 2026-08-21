@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { GroupStepItem } from '@/features/survey-response/step-views/group-step-item';
-import type { StepItem } from '@/lib/group-ordering';
+import type { StepItem } from '@/utils/group-ordering';
 import type { Question } from '@/types/survey';
 import {
   DEFAULT_REQUIRED_MESSAGE,

@@ -9,7 +9,7 @@ import type {
   SurveyLookup,
   TableCell,
 } from '@/types/survey';
-import { buildRenderSteps, findStepIndexOfQuestion } from '@/lib/group-ordering';
+import { buildRenderSteps, findStepIndexOfQuestion } from '@/utils/group-ordering';
 import { formatCellLabel } from '@/utils/cell-label';
 
 /**

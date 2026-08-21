@@ -19,7 +19,7 @@ import {
   resolveRadioGroupProps,
 } from '@/features/question-renderer/utils/table-radio-groups';
 import { isTableRowCompleted } from '@/features/question-renderer/utils/table-row-completion';
-import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import type { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';

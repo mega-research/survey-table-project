@@ -11,7 +11,7 @@ import { projectConditionalTableLayout } from '@/features/question-renderer/util
 import { findMobileHeaderCell } from '@/features/question-renderer/utils/mobile-display-cells';
 import { buildMobileRowWiseOriginalModel } from '@/features/question-renderer/utils/mobile-row-wise-original';
 import { useMobileView } from '@/hooks/use-media-query';
-import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import type { Question, TableCell } from '@/types/survey';

@@ -25,7 +25,7 @@ vi.mock('@/features/survey-builder/hooks/use-survey-sync', () => ({
 }));
 vi.mock('@/shared/lib/rpc', () => ({ client: {} }));
 vi.mock('@/lib/image-extractor', () => ({ extractImageUrlsFromQuestion: () => [] }));
-vi.mock('@/lib/image-utils', () => ({ deleteImagesFromR2: async () => {} }));
+vi.mock('@/shared/lib/image-utils', () => ({ deleteImagesFromR2: async () => {} }));
 
 interface ProbeFormData {
   tableColumns?: unknown[];

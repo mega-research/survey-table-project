@@ -10,7 +10,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { RankingDropdownStack } from '@/features/question-renderer/ranking-dropdown-stack';
 import { RankingQuestion } from '@/features/question-renderer/ranking-question';
-import { ContactAttrsProvider } from '@/lib/survey/contact-attrs-context';
+import { ContactAttrsProvider } from '@/features/question-renderer/contact-attrs-context';
 import type { Question, QuestionOption } from '@/types/survey';
 
 // TablePreview 는 ResizeObserver 를 사용하므로 jsdom 에서 모킹 (그룹 헤딩 테스트가

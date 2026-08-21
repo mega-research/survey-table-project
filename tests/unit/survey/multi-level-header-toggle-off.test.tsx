@@ -39,7 +39,7 @@ vi.mock('@/shared/lib/rpc', () => ({
   },
 }));
 vi.mock('@/lib/image-extractor', () => ({ extractImageUrlsFromQuestion: () => [] }));
-vi.mock('@/lib/image-utils', () => ({ deleteImagesFromR2: async () => {} }));
+vi.mock('@/shared/lib/image-utils', () => ({ deleteImagesFromR2: async () => {} }));
 
 // 실제 기본 탭(TipTap 등)은 무겁다 — 표 에디터가 하는 일(헤더 그리드 해제)만 흉내낸다.
 vi.mock('@/features/survey-builder/question-edit/question-basic-tab', () => ({

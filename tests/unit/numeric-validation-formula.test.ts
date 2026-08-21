@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { collectNumericIssues } from '@/lib/survey/numeric-validation';
+import { collectNumericIssues } from '@/features/survey-response/lib/numeric-validation';
 import type { Question } from '@/types/survey';
 
 function validationTable(tolerance?: number): Question {

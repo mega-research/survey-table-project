@@ -1,7 +1,7 @@
 import { nanoid } from 'nanoid';
 import { generateId } from '@/lib/utils';
 import { getMaxSpssCode, nextUniqueOptionNumber } from '@/utils/option-code-generator';
-import { generateOtherOptionFields } from '@/lib/option-text-migration';
+import { generateOtherOptionFields } from '@/utils/option-text-migration';
 import { Question, QuestionOption, SelectLevel } from '@/types/survey';
 
 /**

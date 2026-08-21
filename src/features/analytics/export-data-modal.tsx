@@ -27,7 +27,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { buildSafeFilename, downloadBlob } from '@/lib/analytics/export-download';
+import { buildSafeFilename, downloadBlob } from '@/features/analytics/export-download';
 import type { VarNameIssue } from '@/lib/spss/variable-name-guard';
 import { useErrorDialogStore } from '@/stores/error-dialog-store';
 

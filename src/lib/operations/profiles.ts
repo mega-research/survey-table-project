@@ -8,7 +8,7 @@
  * 단위 테스트: `tests/unit/domains/operations/profiles.test.ts`.
  */
 
-import { buildRenderSteps, stepIdOf } from '@/lib/group-ordering';
+import { buildRenderSteps, stepIdOf } from '@/utils/group-ordering';
 import type { Question, QuestionGroup } from '@/types/survey';
 
 // ─────────────────────────────────────────────────────────────────────────────

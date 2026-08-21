@@ -12,7 +12,7 @@ import { handleInvalidTestLinkMutationError } from '@/features/survey-response/h
 import { useResponseTelemetry } from '@/features/survey-response/hooks/use-response-telemetry';
 import { useSessionRecovery } from '@/features/survey-response/hooks/use-session-recovery';
 import { SurveyResponseFlow } from '@/features/survey-response/survey-response-flow';
-import type { RenderStep } from '@/lib/group-ordering';
+import type { RenderStep } from '@/utils/group-ordering';
 import { useSurveyResponseStore } from '@/features/survey-response/stores/survey-response-store';
 import type { Survey } from '@/types/survey';
 

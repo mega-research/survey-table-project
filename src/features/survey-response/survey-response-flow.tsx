@@ -53,33 +53,33 @@ import {
   buildRenderSteps,
   resolveRestoreStepIndex,
   resolveStepBranch,
-} from '@/lib/group-ordering';
+} from '@/utils/group-ordering';
 import {
   collectTableQuestionOptions,
   filterOptionTextsForSubmission,
-} from '@/lib/option-text-migration';
-import { allQuotaQuestionsAnswered } from '@/lib/quota/gate';
+} from '@/utils/option-text-migration';
+import { allQuotaQuestionsAnswered } from '@/features/survey-response/lib/gate';
 import { applyStructuralSurvival } from '@/lib/survey-response/structural-survival';
 import {
   buildAdminEmptyRequiredWarningMessage,
   classifyStepIssues,
   snapshotStepResponses,
-} from '@/lib/survey/admin-edit-required-relax';
-import { collectAnswerQuotes } from '@/lib/survey/answer-quote';
-import { isQuestionAnswered as isQuestionAnsweredPure } from '@/lib/survey/answer-validation';
+} from '@/features/survey-response/lib/admin-edit-required-relax';
+import { collectAnswerQuotes } from '@/utils/answer-quote';
+import { isQuestionAnswered as isQuestionAnsweredPure } from '@/features/survey-response/lib/answer-validation';
 import { withCalcValues } from '@/lib/survey/cell-formula';
 import type { FormulaEvalCtx } from '@/lib/survey/cell-formula';
-import { ContactAttrsProvider } from '@/lib/survey/contact-attrs-context';
-import { FormulaEvalProvider } from '@/lib/survey/formula-context';
+import { ContactAttrsProvider } from '@/features/question-renderer/contact-attrs-context';
+import { FormulaEvalProvider } from '@/features/question-renderer/formula-context';
 import {
   type NumericIssue,
   collectNumericIssues,
   collectVisibleTableCells,
-} from '@/lib/survey/numeric-validation';
+} from '@/features/survey-response/lib/numeric-validation';
 import {
   collectRequiredOptionTextIssues,
   resolveEffectiveOptionTextsByQuestion,
-} from '@/lib/survey/required-option-text-validation';
+} from '@/features/survey-response/lib/required-option-text-validation';
 import { generateId } from '@/lib/utils';
 import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
 import { client } from '@/shared/lib/rpc';

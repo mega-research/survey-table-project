@@ -41,19 +41,19 @@ import {
   getInterleavedChildren,
   isGroupDndId,
   toGroupDndId,
-} from '@/lib/group-ordering';
-import { buildFlatOrderedQuestions } from '@/lib/group-ordering';
+} from '@/utils/group-ordering';
+import { buildFlatOrderedQuestions } from '@/utils/group-ordering';
 import { sanitizeRichHtml } from '@/lib/sanitize';
-import { collectAnswerQuotes } from '@/lib/survey/answer-quote';
+import { collectAnswerQuotes } from '@/utils/answer-quote';
 import type { FormulaEvalCtx } from '@/lib/survey/cell-formula';
 import {
   ContactAttrsProvider,
   createPlaceholderAttrs,
   useAnswerQuotes,
   useContactAttrs,
-} from '@/lib/survey/contact-attrs-context';
-import { FormulaEvalProvider } from '@/lib/survey/formula-context';
-import { resolveEffectiveOptionTextsByQuestion } from '@/lib/survey/required-option-text-validation';
+} from '@/features/question-renderer/contact-attrs-context';
+import { FormulaEvalProvider } from '@/features/question-renderer/formula-context';
+import { resolveEffectiveOptionTextsByQuestion } from '@/features/survey-response/lib/required-option-text-validation';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { generateId, isEmptyHtml } from '@/lib/utils';
 import { client } from '@/shared/lib/rpc';

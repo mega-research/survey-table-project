@@ -14,7 +14,7 @@ import {
 import {
   deleteMailAttachmentTmp,
   uploadMailAttachment,
-} from '@/lib/mail/mail-attachment-client';
+} from '@/features/operations/mail-template/mail-attachment-client';
 import { formatBytes } from '@/lib/utils';
 
 interface Props {

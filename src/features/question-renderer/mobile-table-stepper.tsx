@@ -10,7 +10,7 @@ import {
 } from '@/features/question-renderer/hooks/use-row-groups';
 import { collectMobileLegendLabels } from '@/features/question-renderer/utils/mobile-display-cells';
 import { isTableRowCompleted } from '@/features/question-renderer/utils/table-row-completion';
-import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import type { HeaderCell, TableColumn, TableRow } from '@/types/survey';

@@ -20,12 +20,12 @@ import fs from 'fs';
 import path from 'path';
 
 import type { SurveyVersionSnapshot } from '../src/shared/contracts/survey';
-import type { LegacyResponseShape } from '../src/lib/option-text-migration';
+import type { LegacyResponseShape } from '../src/utils/option-text-migration';
 import {
   migrateQuestionOptions,
   migrateSnapshotQuestions,
   migrateResponseValue,
-} from '../src/lib/option-text-migration';
+} from '../src/utils/option-text-migration';
 import * as schema from '../src/db/schema';
 
 // .env.local 로드 (로컬 개발 환경)

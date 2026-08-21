@@ -13,7 +13,7 @@ import { InputCell } from '@/features/question-renderer/cells/input-cell';
 import { RadioCell } from '@/features/question-renderer/cells/radio-cell';
 import { RankingCell } from '@/features/question-renderer/cells/ranking-cell';
 import { SelectCell } from '@/features/question-renderer/cells/select-cell';
-import { ContactAttrsProvider } from '@/lib/survey/contact-attrs-context';
+import { ContactAttrsProvider } from '@/features/question-renderer/contact-attrs-context';
 import type { TableCell } from '@/types/survey';
 
 // RankingCell 이 쓰는 useMobileView(useMediaQuery)가 jsdom 에 없는 matchMedia 를 부른다.

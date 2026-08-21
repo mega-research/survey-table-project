@@ -4,7 +4,7 @@ import {
   collectRequiredOptionTextIssues,
   collectVisibleTableCells,
   resolveEffectiveOptionTextsByQuestion,
-} from '@/lib/survey/required-option-text-validation';
+} from '@/features/survey-response/lib/required-option-text-validation';
 import type { Question, TableCell } from '@/types/survey';
 import { RANKING_OTHER_VALUE } from '@/utils/ranking-shared';
 

@@ -4,14 +4,14 @@ import { useCallback, useMemo } from 'react';
 
 import { QuestionInput } from '@/features/survey-response/question-input';
 import { RichDescription } from '@/features/survey-response/step-views/rich-description';
-import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { isEmptyHtml } from '@/lib/utils';
 import { isChoiceTableSource } from '@/utils/choice-source';
 import { DEFAULT_REQUIRED_CELL_MESSAGE, resolveRequiredMessage } from '@/utils/required-message';
 import { sanitizeRichHtml } from '@/lib/sanitize';
-import { StepItem } from '@/lib/group-ordering';
-import type { NumericIssue } from '@/lib/survey/numeric-validation';
+import { StepItem } from '@/utils/group-ordering';
+import type { NumericIssue } from '@/features/survey-response/lib/numeric-validation';
 import { Question } from '@/types/survey';
 import {
   DYNAMIC_ROW_SELECTIONS_KEY,

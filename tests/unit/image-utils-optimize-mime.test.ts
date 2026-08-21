@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 // image-utils 는 RPC client 를 import 하므로 import-time 부작용을 차단한다.
 vi.mock('@/shared/lib/rpc', () => ({ client: {} }));
 
-import { pickOptimizedMimeType } from '@/lib/image-utils';
+import { pickOptimizedMimeType } from '@/shared/lib/image-utils';
 
 describe('pickOptimizedMimeType', () => {
   it('PNG 는 투명도 보존을 위해 WebP 로 출력한다', () => {

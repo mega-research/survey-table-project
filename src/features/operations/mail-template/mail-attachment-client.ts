@@ -4,7 +4,7 @@ import { client } from '@/shared/lib/rpc';
 import {
   MAX_ATTACHMENT_FILE_BYTES,
   TMP_ATTACHMENT_PREFIX,
-} from './constants';
+} from '@/lib/mail/constants';
 
 const UPLOAD_ENDPOINT = '/api/upload/mail-attachment';
 

@@ -6,8 +6,8 @@ import { AlertCircle, Loader2, Upload, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { optimizeImage, validateImageFile } from '@/lib/image-utils';
-import { runAsyncAction } from '@/lib/run-async-action';
+import { optimizeImage, validateImageFile } from '@/shared/lib/image-utils';
+import { runAsyncAction } from '@/utils/run-async-action';
 
 export interface CellImageEditorProps {
   imageUrl: string;

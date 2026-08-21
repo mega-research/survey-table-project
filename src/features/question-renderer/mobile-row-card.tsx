@@ -19,7 +19,7 @@ import {
   resolveMobileCellLabel,
 } from '@/features/question-renderer/utils/mobile-display-cells';
 import { getAlignmentClasses } from '@/features/question-renderer/utils/table-grid-utils';
-import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import type { TableColumn, TableRow } from '@/types/survey';

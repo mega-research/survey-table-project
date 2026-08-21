@@ -16,7 +16,7 @@ import {
   type ProgressTotals,
 } from '@/lib/operations/report-progress';
 import type { ProgressColumnDef } from '@/shared/contracts/operations';
-import { numberFormatter } from '@/lib/operations/format';
+import { numberFormatter } from '@/features/operations/format';
 
 interface Props {
   rows: ProgressRow[];

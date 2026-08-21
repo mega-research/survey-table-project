@@ -2,7 +2,7 @@ import { cleanup, render } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { InputCell } from '@/features/question-renderer/cells/input-cell';
-import { ContactAttrsProvider } from '@/lib/survey/contact-attrs-context';
+import { ContactAttrsProvider } from '@/features/question-renderer/contact-attrs-context';
 import type { TableCell } from '@/types/survey';
 
 /**

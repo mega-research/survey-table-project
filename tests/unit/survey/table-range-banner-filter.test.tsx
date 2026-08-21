@@ -2,7 +2,7 @@ import { render } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { QuestionInput } from '@/features/survey-response/question-input';
-import type { NumericIssue } from '@/lib/survey/numeric-validation';
+import type { NumericIssue } from '@/features/survey-response/lib/numeric-validation';
 import type { Question } from '@/types/survey';
 
 /**

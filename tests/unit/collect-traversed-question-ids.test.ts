@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildRenderSteps } from '@/lib/group-ordering';
+import { buildRenderSteps } from '@/utils/group-ordering';
 import { collectTraversedQuestionIds } from '@/utils/branch-logic';
 import type { BranchRule, Question, QuestionOption } from '@/types/survey';
 

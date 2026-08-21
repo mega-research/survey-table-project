@@ -4,7 +4,7 @@ import React from 'react';
 
 import { Video } from 'lucide-react';
 
-import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';

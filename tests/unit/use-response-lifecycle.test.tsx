@@ -4,7 +4,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useResponseLifecycle } from '@/features/survey-response/hooks/use-response-lifecycle';
-import type { RenderStep } from '@/lib/group-ordering';
+import type { RenderStep } from '@/utils/group-ordering';
 import type { Question, QuestionGroup, Survey } from '@/types/survey';
 import type { BranchEvalCtx } from '@/utils/branch-logic';
 

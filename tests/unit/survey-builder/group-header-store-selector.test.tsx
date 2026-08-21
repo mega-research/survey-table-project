@@ -11,7 +11,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { GroupHeader } from '@/features/survey-builder/question-list/group-header';
-import { ContactAttrsProvider, createPlaceholderAttrs } from '@/lib/survey/contact-attrs-context';
+import { ContactAttrsProvider, createPlaceholderAttrs } from '@/features/question-renderer/contact-attrs-context';
 import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
 
 function seedGroup(name: string) {

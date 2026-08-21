@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import type { RefObject } from 'react';
 
 import { useLatestRef } from '@/hooks/use-latest-ref';
-import { type RenderStep, stepIdOf } from '@/lib/group-ordering';
+import { type RenderStep, stepIdOf } from '@/utils/group-ordering';
 import { client } from '@/shared/lib/rpc';
 import type { TestAttemptIdentity } from '@/shared/types/test-attempt';
 

@@ -9,7 +9,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { UserDefinedMultiLevelSelect } from '@/features/question-renderer/user-defined-multi-level-select';
-import { ContactAttrsProvider } from '@/lib/survey/contact-attrs-context';
+import { ContactAttrsProvider } from '@/features/question-renderer/contact-attrs-context';
 import type { SelectLevel } from '@/types/survey';
 
 describe('UserDefinedMultiLevelSelect — 레벨 옵션 라벨 인용 치환', () => {

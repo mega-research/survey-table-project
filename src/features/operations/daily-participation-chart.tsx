@@ -12,8 +12,8 @@ import {
   type DailyBucket,
   type DailyMode,
 } from '@/lib/operations/aggregate-daily';
-import { CHART_COLOR_BLUE_500 } from '@/lib/operations/chart-tokens';
-import { numberFormatter } from '@/lib/operations/format';
+import { CHART_COLOR_BLUE_500 } from '@/features/operations/chart-tokens';
+import { numberFormatter } from '@/features/operations/format';
 
 import { EmptyState } from './empty-state';
 
@@ -36,7 +36,7 @@ interface Props {
 
 /**
  * 단일 색상 막대 — 차트 토큰 1개만 정의한다.
- * 색상은 `lib/operations/chart-tokens` 의 단일 진실원에서 가져온다.
+ * 색상은 `features/operations/chart-tokens` 의 단일 진실원에서 가져온다.
  */
 const CHART_CONFIG: ChartConfig = {
   count: {

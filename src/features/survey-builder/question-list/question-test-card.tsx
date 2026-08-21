@@ -20,7 +20,7 @@ import { getOptionsLayout } from '@/features/question-renderer/utils/options-lay
 import { previewResponseSources } from '@/features/survey-builder/stores/preview-response-sources';
 import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
 import { useTestResponseStore } from '@/features/survey-builder/stores/test-response-store';
-import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { Question, SurveyLookup } from '@/types/survey';
 import { evaluateNumericComparisonV2 } from '@/utils/branch-logic';

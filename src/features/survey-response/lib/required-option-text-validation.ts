@@ -1,4 +1,4 @@
-import { collectSelectedOptionIds } from '@/lib/option-text-migration';
+import { collectSelectedOptionIds } from '@/utils/option-text-migration';
 import type { Question, QuestionOption, RankingAnswer, TableCell } from '@/types/survey';
 import { collectRankingGroups, isGroupedRankingQuestion } from '@/utils/choice-group-helpers';
 import { resolveChoiceOptions } from '@/utils/choice-source';
@@ -9,7 +9,7 @@ import {
   collectVisibleTableCells as collectNumericVisibleTableCells,
   isRequiredCell,
 } from './numeric-validation';
-import { optionTextTargetId, rankingTextTargetId } from './option-text-target';
+import { optionTextTargetId, rankingTextTargetId } from '@/features/question-renderer/utils/option-text-target';
 
 export interface RequiredOptionTextIssues {
   questionMissing: boolean;

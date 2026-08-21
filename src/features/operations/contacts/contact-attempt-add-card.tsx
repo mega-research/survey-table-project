@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { useAutoFadeMessage } from '@/features/operations/hooks/use-auto-fade-message';
 import { useLatestRef } from '@/hooks/use-latest-ref';
-import { runAsyncAction } from '@/lib/run-async-action';
+import { runAsyncAction } from '@/utils/run-async-action';
 import type { ContactResultCode } from '@/shared/contracts/contacts';
 import { client } from '@/shared/lib/rpc';
 

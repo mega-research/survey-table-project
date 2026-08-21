@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { collectFormulaDiagnostics } from '@/lib/survey/cell-formula-diagnostics';
+import { collectFormulaDiagnostics } from '@/features/survey-builder/lib/cell-formula-diagnostics';
 import type { Question, QuestionGroup } from '@/types/survey';
 
 // 최소 표 질문 헬퍼 — 숫자 input(num) + 텍스트 input(txt) + calc(c) 셀, calc 의 formula 는
@@ -51,7 +51,7 @@ describe('collectFormulaDiagnostics', () => {
   // ── branch-same-group-calc ──
   //
   // "같은 페이지"는 groupId 근사가 아니라 buildRenderSteps(questions, groups) 실제 페이지
-  // 분할(수동 pageBreakBefore 구분점 모델)로 판정한다 — src/lib/group-ordering.ts 참조.
+  // 분할(수동 pageBreakBefore 구분점 모델)로 판정한다 — src/utils/group-ordering.ts 참조.
   // groups 는 필수 인자다 — 그룹 정보가 없는 호출은 `[]` 를 명시적으로 넘겨야 하며, 그 경우
   // 이 진단은 조용히 스킵된다(오탐 방지가 최우선 — 그룹 정보 없이는 페이지를 알 수 없다).
 

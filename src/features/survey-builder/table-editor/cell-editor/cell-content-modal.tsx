@@ -68,7 +68,7 @@ import {
 import type { CellFormState } from '@/features/survey-builder/table-editor/cell-editor/utils/serialize-cell';
 import { CellStyleFields } from '@/features/survey-builder/table-editor/cell-style-fields';
 import { VariableButton } from '@/features/survey-builder/variable-button';
-import { runAsyncAction } from '@/lib/run-async-action';
+import { runAsyncAction } from '@/utils/run-async-action';
 import { GATABLE_CELL_TYPES } from '@/lib/survey/cell-gating';
 import { generateId } from '@/lib/utils';
 import { client } from '@/shared/lib/rpc';

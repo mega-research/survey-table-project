@@ -5,7 +5,7 @@
 import React, { useMemo } from 'react';
 
 import { RankingDropdownStack } from '@/features/question-renderer/ranking-dropdown-stack';
-import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import type { RankingAnswer } from '@/types/survey';
 import { parseRankingAnswers } from '@/utils/ranking-shared';

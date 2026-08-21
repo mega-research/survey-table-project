@@ -18,11 +18,11 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import type { SurveyResponse } from '@/db/schema';
-import type { PercentageBase } from '@/lib/analytics/cross-tab';
+import type { PercentageBase } from '@/features/analytics/cross-tab/cross-tab';
 import {
   calculateCrossTab,
   isCrossTabableQuestion,
-} from '@/lib/analytics/cross-tab';
+} from '@/features/analytics/cross-tab/cross-tab';
 import type { Question } from '@/types/survey';
 
 import { CrossTabChart } from './cross-tab-chart';

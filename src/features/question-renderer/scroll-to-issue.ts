@@ -1,4 +1,4 @@
-import { OPTION_TEXT_TARGET_ATTRIBUTE } from '@/lib/survey/option-text-target';
+import { OPTION_TEXT_TARGET_ATTRIBUTE } from '@/features/question-renderer/utils/option-text-target';
 import type { TableRow } from '@/types/survey';
 
 function findDataTarget(attribute: string, ids: readonly string[]): HTMLElement | null {

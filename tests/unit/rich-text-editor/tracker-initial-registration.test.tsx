@@ -1,7 +1,7 @@
 import { renderHook } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('@/lib/image-utils', () => ({ deleteImagesFromR2: vi.fn() }));
+vi.mock('@/shared/lib/image-utils', () => ({ deleteImagesFromR2: vi.fn() }));
 vi.mock('@/components/ui/rich-text-editor/file-attachment-r2-client', () => ({
   deleteTmpNoticeAttachmentKeys: vi.fn(),
 }));

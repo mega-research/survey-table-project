@@ -9,7 +9,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { MobileTableDrilldown } from '@/features/question-renderer/mobile-table-drilldown';
-import { ContactAttrsProvider } from '@/lib/survey/contact-attrs-context';
+import { ContactAttrsProvider } from '@/features/question-renderer/contact-attrs-context';
 import type { HeaderCell, TableColumn, TableRow } from '@/types/survey';
 
 vi.mock('@/hooks/use-media-query', () => ({

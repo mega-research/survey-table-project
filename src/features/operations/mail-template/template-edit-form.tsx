@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import type { MailTemplate } from '@/db/schema/mail';
 import type { MailAttachment } from '@/shared/contracts/mail';
 import { TMP_ATTACHMENT_PREFIX } from '@/lib/mail/constants';
-import { deleteMailAttachmentTmpBatch } from '@/lib/mail/mail-attachment-client';
+import { deleteMailAttachmentTmpBatch } from '@/features/operations/mail-template/mail-attachment-client';
 import { client } from '@/shared/lib/rpc';
 
 import { AttachmentSection } from './attachment-section';

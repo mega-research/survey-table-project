@@ -5,7 +5,7 @@ import React, { useCallback } from 'react';
 import { ChevronDown } from 'lucide-react';
 
 import { OptionTextInput } from '@/features/question-renderer/option-text-input';
-import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 
 import { CellContentLayout } from './cell-content-layout';

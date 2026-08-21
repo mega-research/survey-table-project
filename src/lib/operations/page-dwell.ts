@@ -27,7 +27,7 @@
 
 import type { PageVisit } from '@/shared/contracts/survey-response';
 import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
-import { buildRenderSteps, stepIdOf } from '@/lib/group-ordering';
+import { buildRenderSteps, stepIdOf } from '@/utils/group-ordering';
 import type { Question, QuestionGroup } from '@/types/survey';
 
 import { validVisitMs } from './active-seconds';

@@ -31,7 +31,7 @@ import {
   splitHeaderValues,
   upsertHeaderFilter,
   type HeaderFilterEntry,
-} from '@/lib/operations/header-filter-url';
+} from '@/features/operations/filters/header-filter-url';
 import { client } from '@/shared/lib/rpc';
 
 interface Props {

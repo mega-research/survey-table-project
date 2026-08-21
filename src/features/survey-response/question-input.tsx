@@ -23,8 +23,8 @@ import {
 import { liveResponseSources } from '@/features/survey-response/stores/live-response-sources';
 import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
 import { useMobileView } from '@/hooks/use-media-query';
-import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
-import type { NumericIssue } from '@/lib/survey/numeric-validation';
+import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
+import type { NumericIssue } from '@/features/survey-response/lib/numeric-validation';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { Question, QuestionOption } from '@/types/survey';
 import { isChoiceTableSource } from '@/utils/choice-source';

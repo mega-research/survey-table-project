@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { collectAnswerQuotes, joinQuoteParts } from '@/lib/survey/answer-quote';
+import { collectAnswerQuotes, joinQuoteParts } from '@/utils/answer-quote';
 import type { Question } from '@/types/survey';
 
 const radioQuestion = (): Question =>

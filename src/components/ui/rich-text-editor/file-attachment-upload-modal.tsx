@@ -8,8 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { MAX_ATTACHMENT_FILE_BYTES } from '@/lib/mail/constants';
-import { runAsyncAction } from '@/lib/run-async-action';
-import { readUploadErrorMessage } from '@/lib/upload/read-upload-error-message';
+import { runAsyncAction } from '@/utils/run-async-action';
+import { readUploadErrorMessage } from '@/utils/read-upload-error-message';
 
 interface UploadResult {
   key: string;

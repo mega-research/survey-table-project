@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { GroupStepItem } from '@/features/survey-response/step-views/group-step-item';
 import { PageStepView } from '@/features/survey-response/step-views/page-step-view';
-import type { RenderStep, StepItem } from '@/lib/group-ordering';
+import type { RenderStep, StepItem } from '@/utils/group-ordering';
 import type { Question } from '@/types/survey';
 
 // PageStepView가 evalCtx 없이도 모든 항목을 표시하도록 한다.

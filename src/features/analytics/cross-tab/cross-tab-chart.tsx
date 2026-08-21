@@ -2,8 +2,8 @@
 
 import { BarChart } from '@tremor/react';
 
-import type { CrossTabResult, PercentageBase } from '@/lib/analytics/cross-tab';
-import { toCrossTabChartData } from '@/lib/analytics/cross-tab';
+import type { CrossTabResult, PercentageBase } from '@/features/analytics/cross-tab/cross-tab';
+import { toCrossTabChartData } from '@/features/analytics/cross-tab/cross-tab';
 
 interface CrossTabChartProps {
   result: CrossTabResult;

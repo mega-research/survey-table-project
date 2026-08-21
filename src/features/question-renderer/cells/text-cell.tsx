@@ -2,7 +2,7 @@
 
 import React from 'react';
 
-import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
 import { cn } from '@/lib/utils';

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { collectNumericIssues } from '@/lib/survey/numeric-validation';
+import { collectNumericIssues } from '@/features/survey-response/lib/numeric-validation';
 import type { Question } from '@/types/survey';
 
 // 수행(1)/미수행(2) radio + 게이팅된 필수 인력 input

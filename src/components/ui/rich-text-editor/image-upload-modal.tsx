@@ -5,9 +5,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertCircle, Loader2, Upload, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import { optimizeImage, validateImageFile } from '@/lib/image-utils';
-import { runAsyncAction } from '@/lib/run-async-action';
-import { readUploadErrorMessage } from '@/lib/upload/read-upload-error-message';
+import { optimizeImage, validateImageFile } from '@/shared/lib/image-utils';
+import { runAsyncAction } from '@/utils/run-async-action';
+import { readUploadErrorMessage } from '@/utils/read-upload-error-message';
 
 import type { RichTextEditorKind } from './types';
 

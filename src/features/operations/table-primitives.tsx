@@ -1,4 +1,4 @@
-import { numberFormatter } from '@/lib/operations/format';
+import { numberFormatter } from '@/features/operations/format';
 
 import { PagerJump } from './pager-jump';
 

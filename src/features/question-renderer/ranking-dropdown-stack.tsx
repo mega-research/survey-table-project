@@ -12,8 +12,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useMobileView } from '@/hooks/use-media-query';
-import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
-import { rankingTextTargetId } from '@/lib/survey/option-text-target';
+import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
+import { rankingTextTargetId } from '@/features/question-renderer/utils/option-text-target';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import type { QuestionOption, RankingAnswer } from '@/types/survey';

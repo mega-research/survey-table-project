@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { isQuestionAnswered } from '@/lib/survey/answer-validation';
+import { isQuestionAnswered } from '@/features/survey-response/lib/answer-validation';
 import type { Question, QuestionType } from '@/types/survey';
 
 // ── 최소 Question 빌더 ──

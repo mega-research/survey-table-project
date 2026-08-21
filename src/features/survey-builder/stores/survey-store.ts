@@ -2,8 +2,8 @@ import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
 
-import { buildFlatOrderedQuestions } from '@/lib/group-ordering';
-import { regenerateAfterDelete, regenerateAfterReorder } from '@/lib/spss/variable-generator';
+import { buildFlatOrderedQuestions } from '@/utils/group-ordering';
+import { regenerateAfterDelete, regenerateAfterReorder } from '@/features/survey-builder/lib/variable-generator';
 import {
   changesetHasChanges,
   computeSpssChangedQuestions,

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useEffectEvent, useRef } from 'react';
 
 import { extractImageUrlsFromHtml } from '@/lib/image-extractor';
-import { deleteImagesFromR2 } from '@/lib/image-utils';
+import { deleteImagesFromR2 } from '@/shared/lib/image-utils';
 
 /**
  * TipTap 에디터에서 업로드한 이미지의 R2 lifecycle 을 추적한다.

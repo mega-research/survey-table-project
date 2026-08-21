@@ -5,7 +5,7 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { InteractiveCell } from '@/features/question-renderer/cells';
 import { MobileOriginalRowTable } from '@/features/question-renderer/mobile-original-row-table';
-import { ContactAttrsProvider } from '@/lib/survey/contact-attrs-context';
+import { ContactAttrsProvider } from '@/features/question-renderer/contact-attrs-context';
 import type { TableCell, TableColumn, TableRow } from '@/types/survey';
 import { projectMobileOriginalRow } from '@/features/question-renderer/utils/mobile-original-row';
 

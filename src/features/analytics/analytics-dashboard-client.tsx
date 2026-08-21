@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/button';
 
 import type { SurveyResponse } from '@/db/schema';
 import { analyzeSurvey } from '@/lib/analytics/analyzer';
-import { type FilterState, applyFilter, createEmptyFilter } from '@/lib/analytics/filter';
+import { type FilterState, applyFilter, createEmptyFilter } from '@/features/analytics/filters/filter';
 import type { SurveyAnalytics } from '@/lib/analytics/types';
 import type { Question } from '@/types/survey';
 

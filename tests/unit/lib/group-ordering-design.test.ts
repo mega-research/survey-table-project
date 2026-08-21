@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildRenderSteps } from '@/lib/group-ordering';
+import { buildRenderSteps } from '@/utils/group-ordering';
 import type { Question, QuestionGroup } from '@/types/survey';
 
 function q(id: string, groupId: string, order: number): Question {

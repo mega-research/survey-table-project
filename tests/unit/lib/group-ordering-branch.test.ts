@@ -4,7 +4,7 @@ import {
   findStepIndexOfQuestion,
   resolveStepBranch,
   type RenderStep,
-} from '@/lib/group-ordering';
+} from '@/utils/group-ordering';
 import type { BranchRule } from '@/types/survey';
 
 // resolveStepBranch 는 question.id 만 읽으므로 최소 형태로 page step 을 구성한다.

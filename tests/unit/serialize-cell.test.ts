@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { QUESTION_LIKE_CELL_TYPES } from '@/lib/survey/answer-quote';
+import { QUESTION_LIKE_CELL_TYPES } from '@/utils/answer-quote';
 import type { BranchRule, TableCell } from '@/types/survey';
 import {
   ANSWER_QUOTE_NAMEABLE_CELL_TYPES,

@@ -26,7 +26,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { Button } from '@/components/ui/button';
 import { useEnsureSurveyInDb } from '@/features/survey-builder/hooks/use-ensure-survey-in-db';
 import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
-import { runAsyncAction } from '@/lib/run-async-action';
+import { runAsyncAction } from '@/utils/run-async-action';
 import { isUUID } from '@/lib/survey-url';
 import { client } from '@/shared/lib/rpc';
 import { GroupNameDesign, QuestionConditionGroup, QuestionGroup } from '@/types/survey';

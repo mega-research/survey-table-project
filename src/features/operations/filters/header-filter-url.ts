@@ -2,7 +2,7 @@ import {
   HEADER_FILTER_MODES,
   HEADER_FILTER_VALUE_SEPARATOR,
   type HeaderFilterMode,
-} from './filter-shared';
+} from '@/lib/operations/filter-shared';
 
 /**
  * 헤더 필터 URL 직렬화 헬퍼 — 클라이언트(드롭다운/필터바)와 테스트가 공유하는

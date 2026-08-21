@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { collectGatingDiagnostics } from '@/lib/survey/cell-gating-diagnostics';
+import { collectGatingDiagnostics } from '@/features/survey-builder/lib/cell-gating-diagnostics';
 import type { Question, TableCell, TableRow } from '@/types/survey';
 
 function makeQuestion(rows: TableRow[]): Question {

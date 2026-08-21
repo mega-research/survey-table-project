@@ -5,7 +5,7 @@ import React from 'react';
 import { Image as ImageIcon, Video } from 'lucide-react';
 
 import type { TableCell } from '@/types/survey';
-import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
 import { getInputTextAlignClass } from '@/features/question-renderer/utils/table-grid-utils';

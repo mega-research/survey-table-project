@@ -49,7 +49,12 @@ export default defineConfig({
     globals: true,
     coverage: {
       provider: 'v8',
-      include: ['src/lib/spss/**', 'src/lib/analytics/spss-*'],
+      include: [
+        'src/lib/spss/**',
+        'src/lib/analytics/spss-*',
+        // SPSS 변수명 발번 규칙 — lib 흡수로 빌더 feature 로 이동했다.
+        'src/features/survey-builder/lib/variable-generator.ts',
+      ],
     },
     projects: [
       {

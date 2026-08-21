@@ -7,7 +7,7 @@ import {
   MobileDrilldownShell,
 } from '@/features/question-renderer/mobile-drilldown-shell';
 import { MobileOriginalRowTable } from '@/features/question-renderer/mobile-original-row-table';
-import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import type { Question, TableCell } from '@/types/survey';
 import {

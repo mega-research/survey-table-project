@@ -17,8 +17,8 @@ import { parseNumericInput } from '@/utils/numeric-input';
 import { DEFAULT_REQUIRED_CELL_MESSAGE } from '@/utils/required-message';
 import { REQUIRED_CELL_TYPES, isCellValuePresent } from '@/utils/table-cell-semantics';
 
-import { areAllFormulaRefsEmpty, evaluateCellFormula, roundFormulaValue } from './cell-formula';
-import { isCellEnabled } from './cell-gating';
+import { areAllFormulaRefsEmpty, evaluateCellFormula, roundFormulaValue } from '@/lib/survey/cell-formula';
+import { isCellEnabled } from '@/lib/survey/cell-gating';
 import { collectRequiredOptionTextIssues } from './required-option-text-validation';
 
 export interface NumericIssue {

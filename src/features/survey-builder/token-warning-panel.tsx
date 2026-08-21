@@ -6,9 +6,9 @@ import type { ReactNode } from 'react';
 import { AlertTriangle } from 'lucide-react';
 
 import { extractVariableKeys } from '@/lib/mail/variable-extractor';
-import { QUESTION_LIKE_CELL_TYPES } from '@/lib/survey/answer-quote';
-import { collectFormulaDiagnostics, type FormulaDiagnostic } from '@/lib/survey/cell-formula-diagnostics';
-import { collectGatingDiagnostics, type GatingDiagnostic } from '@/lib/survey/cell-gating-diagnostics';
+import { QUESTION_LIKE_CELL_TYPES } from '@/utils/answer-quote';
+import { collectFormulaDiagnostics, type FormulaDiagnostic } from '@/features/survey-builder/lib/cell-formula-diagnostics';
+import { collectGatingDiagnostics, type GatingDiagnostic } from '@/features/survey-builder/lib/cell-gating-diagnostics';
 import { formatCellLabel } from '@/utils/cell-label';
 import { resolveChoiceOptions } from '@/utils/choice-source';
 import { resolveRankingOptions } from '@/utils/ranking-source';
@@ -80,7 +80,7 @@ function questionOwnSourcesOf(q: Question): (string | undefined)[] {
  * 표 셀이 응답 페이지에서 "치환되는" 자리에 노출하는 문자열 전부 — cells/*.tsx(표 셀 content 와
  * radioOptions/checkboxOptions/selectOptions/rankingOptions). choice_opt/ranking_opt 셀은
  * resolveChoiceOptions/resolveRankingOptions 가 이미 라벨을 흡수하므로 건너뛴다(이중 집계
- * 방지, lib/survey/answer-quote.ts collectAnswerQuotes 의 QUESTION_LIKE_CELL_TYPES 필터와
+ * 방지, utils/answer-quote.ts collectAnswerQuotes 의 QUESTION_LIKE_CELL_TYPES 필터와
  * 동일 원칙).
  *
  * prefill 템플릿(defaultValueTemplate)은 질문 레벨이든 표 셀이든 여기 포함하지 않는다 —

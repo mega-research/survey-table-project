@@ -17,7 +17,7 @@ vi.mock('@/hooks/use-media-query', () => ({
   useMediaQuery: () => false,
 }));
 // 컨택 토큰 컨텍스트 (provider 없이)
-vi.mock('@/lib/survey/contact-attrs-context', () => ({
+vi.mock('@/features/question-renderer/contact-attrs-context', () => ({
   useContactAttrs: () => ({}),
   useAnswerQuotes: () => ({}),
 }));

@@ -18,7 +18,7 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import type { QuotaCategory, QuotaConfig, QuotaDimension } from '@/shared/contracts/quota';
-import { numberFormatter } from '@/lib/operations/format';
+import { numberFormatter } from '@/features/operations/format';
 import { cn, generateId } from '@/lib/utils';
 import { client } from '@/shared/lib/rpc';
 import type { Question } from '@/types/survey';

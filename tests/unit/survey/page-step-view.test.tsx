@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { PageStepView } from '@/features/survey-response/step-views/page-step-view';
-import type { RenderStep } from '@/lib/group-ordering';
+import type { RenderStep } from '@/utils/group-ordering';
 
 // GroupStepItem 내부(useContactAttrs/QuestionInput)를 끌어오지 않도록 항목 렌더러를 목으로 대체.
 // 이 테스트의 관심사는 PageStepView의 그룹 헤더 전환 로직 + 항목 위임이다.

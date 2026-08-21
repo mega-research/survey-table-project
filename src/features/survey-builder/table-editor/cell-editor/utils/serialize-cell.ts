@@ -10,7 +10,7 @@ import {
   RankingConfig,
   TableCell,
 } from '@/types/survey';
-import { QUESTION_LIKE_CELL_TYPES } from '@/lib/survey/answer-quote';
+import { QUESTION_LIKE_CELL_TYPES } from '@/utils/answer-quote';
 import { GATABLE_CELL_TYPES } from '@/lib/survey/cell-gating';
 
 import { parseNumericInput } from '@/utils/numeric-input';
@@ -169,7 +169,7 @@ export const ANSWER_QUOTE_CELL_TYPES = new Set<TableCell['type']>([
 
 /**
  * 셀 자체가 하나의 질문처럼 응답을 만들어 인용 이름을 소유할 수 있는 타입.
- * 수집기(lib/survey/answer-quote.ts)의 QUESTION_LIKE_CELL_TYPES 를 그대로 재수출한다 —
+ * 수집기(utils/answer-quote.ts)의 QUESTION_LIKE_CELL_TYPES 를 그대로 재수출한다 —
  * 두 곳이 각자 셀 타입 목록을 들고 있으면 한쪽만 갱신됐을 때 직렬화(저장)와 수집(응답 계산)이
  * 갈라진다: 이 집합에서 빠진 타입은 저장 시 토글·이름이 드롭되고, 이 집합에만 있는 타입은
  * 이름이 저장은 되지만 수집기가 무시해 "undefined 인용 이름" 경고만 남긴다.

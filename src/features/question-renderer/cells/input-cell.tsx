@@ -4,7 +4,7 @@ import React, { useEffect, useEffectEvent } from 'react';
 
 import { Input } from '@/components/ui/input';
 import { useFormattedNumericInput } from '@/hooks/use-formatted-numeric-input';
-import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import { cn } from '@/lib/utils';
 import { getInputTextAlignClass } from '@/features/question-renderer/utils/table-grid-utils';
@@ -27,7 +27,7 @@ export const InputCell = React.memo(function InputCell({
   const isPrefilled = template.trim().length > 0;
   // prefill 은 attrs 만 치환한다(quotes 를 넘기지 않는다). 이 결과는 onUpdateValue 로 응답에
   // 저장되는데(questionResponses → response_answers → 엑셀/SPSS export), 응답 인용은
-  // "저장되지 않는 파생값"이 불변식이다(lib/survey/answer-quote.ts).
+  // "저장되지 않는 파생값"이 불변식이다(utils/answer-quote.ts).
   // 게다가 piiEncrypted 는 질문 단위라 표 셀 답변은 암호화 대상이 아니므로, 인용을 허용하면
   // 암호화 단답형의 원문이 인용값을 타고 평문 셀 답변으로 새는 경로가 열린다.
   // 질문 레벨 prefill(question-input.tsx)·서버 재검증(response.service.ts)도 attrs 기준이다.

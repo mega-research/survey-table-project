@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildRenderSteps, stepIdOf, findStepIndexOfQuestion } from '@/lib/group-ordering';
+import { buildRenderSteps, stepIdOf, findStepIndexOfQuestion } from '@/utils/group-ordering';
 import type { Question, QuestionGroup } from '@/types/survey';
 
 const G = (id: string, order: number, extra: Partial<QuestionGroup> = {}): QuestionGroup =>

@@ -3,7 +3,7 @@ import {
   autoDetectPiiMapping,
   autoDetectSystemFields,
   detectPiiType,
-} from '@/lib/contacts/auto-detect';
+} from '@/features/operations/contacts/auto-detect';
 
 describe('autoDetectSystemFields', () => {
   it('group 자동 매칭은 "전시회명" 우선', () => {

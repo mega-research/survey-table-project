@@ -10,12 +10,12 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from '@/components/ui/chart';
-import { CHART_COLOR_ROSE_400 } from '@/lib/operations/chart-tokens';
+import { CHART_COLOR_ROSE_400 } from '@/features/operations/chart-tokens';
 import type {
   DropFunnelBar,
   DropFunnelOutput,
 } from '@/lib/operations/drop-funnel';
-import { numberFormatter } from '@/lib/operations/format';
+import { numberFormatter } from '@/features/operations/format';
 
 import { EmptyState } from './empty-state';
 import { StepAxisTick, type StepTickItem } from './step-axis-tick';

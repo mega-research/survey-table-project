@@ -8,7 +8,7 @@ import {
   removeHeaderFilter,
   splitHeaderValues,
   upsertHeaderFilter,
-} from '@/lib/operations/header-filter-url';
+} from '@/features/operations/filters/header-filter-url';
 import { HEADER_FILTER_VALUE_SEPARATOR as SEP } from '@/lib/operations/filter-shared';
 
 function params(init: Record<string, string[]>): URLSearchParams {

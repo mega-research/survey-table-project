@@ -10,7 +10,7 @@ vi.mock('@/hooks/use-media-query', () => ({
   useMobileView: () => true,
   useMediaQuery: () => true,
 }));
-vi.mock('@/lib/survey/contact-attrs-context', () => ({
+vi.mock('@/features/question-renderer/contact-attrs-context', () => ({
   useContactAttrs: () => ({}),
   useAnswerQuotes: () => ({}),
 }));

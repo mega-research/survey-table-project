@@ -20,7 +20,7 @@ vi.mock('@/features/survey-builder/hooks/use-survey-sync', () => ({
 }));
 vi.mock('@/shared/lib/rpc', () => ({ client: {} }));
 vi.mock('@/lib/image-extractor', () => ({ extractImageUrlsFromQuestion: () => [] }));
-vi.mock('@/lib/image-utils', () => ({ deleteImagesFromR2: async () => {} }));
+vi.mock('@/shared/lib/image-utils', () => ({ deleteImagesFromR2: async () => {} }));
 
 import { QuestionEditModal } from '@/features/survey-builder/question-edit/question-edit-modal';
 import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';

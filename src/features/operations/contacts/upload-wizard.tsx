@@ -23,7 +23,7 @@ import {
   useMatchContacts,
   useParseExcelPreview,
 } from '@/features/operations/queries/use-contacts';
-import { autoDetectPiiMapping, autoDetectSystemFields } from '@/lib/contacts/auto-detect';
+import { autoDetectPiiMapping, autoDetectSystemFields } from '@/features/operations/contacts/auto-detect';
 import {
   GROUP_LEVELS,
   GROUP_LEVEL_LABELS,

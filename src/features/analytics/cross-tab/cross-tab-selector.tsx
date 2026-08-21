@@ -3,7 +3,7 @@
 import { ArrowRight } from 'lucide-react';
 
 import { Combobox } from '@/components/ui/combobox';
-import { isCrossTabableQuestion } from '@/lib/analytics/cross-tab';
+import { isCrossTabableQuestion } from '@/features/analytics/cross-tab/cross-tab';
 import type { Question } from '@/types/survey';
 
 interface CrossTabSelectorProps {

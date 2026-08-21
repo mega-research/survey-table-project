@@ -2,7 +2,7 @@
 
 import { Input } from '@/components/ui/input';
 import { useOptionTexts, useResponseSources } from '@/features/question-renderer/response-sources';
-import { optionTextTargetId } from '@/lib/survey/option-text-target';
+import { optionTextTargetId } from '@/features/question-renderer/utils/option-text-target';
 
 // useSyncExternalStore 안정 참조 — 원본이 undefined 를 줄 때 쓰는 고정 빈 맵
 const EMPTY_OPTION_TEXTS: Record<string, string> = {};

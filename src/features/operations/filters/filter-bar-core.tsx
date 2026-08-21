@@ -28,7 +28,7 @@ import { FILTER_SOURCE, type ColumnCandidate } from '@/lib/operations/filter-sha
 import {
   clearHeaderFilterParams,
   hasHeaderFilterParams,
-} from '@/lib/operations/header-filter-url';
+} from '@/features/operations/filters/header-filter-url';
 
 import { PiiExactMarker } from '@/features/operations/filter-pii-marker';
 

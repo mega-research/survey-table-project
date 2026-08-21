@@ -15,7 +15,7 @@ import { useMemo, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import type { DailyStatsRow } from '@/lib/operations/daily-stats';
-import { numberFormatter } from '@/lib/operations/format';
+import { numberFormatter } from '@/features/operations/format';
 
 import { EmptyState } from './empty-state';
 import { ALIGN_CLASS, SortIndicator, TablePagerFooter, type CellAlign } from './table-primitives';

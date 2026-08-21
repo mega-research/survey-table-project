@@ -2,7 +2,7 @@
 
 import { AlertTriangle } from 'lucide-react';
 
-import type { CrossTabResult, PercentageBase } from '@/lib/analytics/cross-tab';
+import type { CrossTabResult, PercentageBase } from '@/features/analytics/cross-tab/cross-tab';
 
 interface PivotTableProps {
   result: CrossTabResult;

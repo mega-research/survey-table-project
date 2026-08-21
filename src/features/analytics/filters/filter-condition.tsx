@@ -13,12 +13,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import type { FilterCondition, FilterOperator } from '@/lib/analytics/filter';
+import type { FilterCondition, FilterOperator } from '@/features/analytics/filters/filter';
 import {
   getAvailableOperators,
   getOperatorLabel,
   isFilterableQuestion,
-} from '@/lib/analytics/filter';
+} from '@/features/analytics/filters/filter';
 import type { Question } from '@/types/survey';
 import { resolveChoiceOptions } from '@/utils/choice-source';
 

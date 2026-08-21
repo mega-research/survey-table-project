@@ -5,7 +5,7 @@ import {
   collectVisibleTableCells,
   evaluateSumConstraint,
   pruneSumConstraints,
-} from '@/lib/survey/numeric-validation';
+} from '@/features/survey-response/lib/numeric-validation';
 import type { CalcCellValidation, CalcExpr, Question, SumConstraint, TableRow } from '@/types/survey';
 
 /** 숫자 input 셀 2개(c1, c2)를 가진 최소 테이블 질문 픽스처 */

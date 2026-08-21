@@ -7,7 +7,7 @@ import {
   useResponseSources,
 } from '@/features/question-renderer/response-sources';
 import { GATABLE_CELL_TYPES, isCellEnabled } from '@/lib/survey/cell-gating';
-import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import type { TableCell } from '@/types/survey';
 

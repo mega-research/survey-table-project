@@ -15,7 +15,7 @@ import {
   TableValidationRule,
 } from '@/types/survey';
 import { evaluateRightOperand } from '@/lib/lookup/evaluate-lookup';
-import { resolveStepBranch, type RenderStep } from '@/lib/group-ordering';
+import { resolveStepBranch, type RenderStep } from '@/utils/group-ordering';
 import { resolveChoiceOptions } from '@/utils/choice-source';
 import { isGroupedChoiceQuestion } from '@/utils/choice-group-helpers';
 import { emptyBranchEvalCtx, type BranchEvalCtx } from '@/utils/branch-eval';

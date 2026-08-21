@@ -5,7 +5,7 @@ import type React from 'react';
 
 import { PreviewCell } from '@/features/question-renderer/cells/preview-cell';
 import { TablePreview } from '@/features/question-renderer/table-preview';
-import { useAnswerQuotes, useContactAttrs } from '@/lib/survey/contact-attrs-context';
+import { useAnswerQuotes, useContactAttrs } from '@/features/question-renderer/contact-attrs-context';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 import type { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
 import { isMobileOriginalRowInteractiveCell } from '@/features/question-renderer/utils/mobile-original-row';

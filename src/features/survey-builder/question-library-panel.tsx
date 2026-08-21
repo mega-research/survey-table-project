@@ -59,7 +59,7 @@ import {
   useSearchQuestions,
 } from '@/features/survey-builder/queries/use-library';
 import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
-import { runAsyncAction } from '@/lib/run-async-action';
+import { runAsyncAction } from '@/utils/run-async-action';
 import { cn, isEmptyHtml } from '@/lib/utils';
 import { Question, SavedQuestion } from '@/types/survey';
 

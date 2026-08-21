@@ -11,7 +11,7 @@ import type { QuestionType } from '@/types/survey';
 /**
  * 응답 인용(answer quote) 빌더 컨트롤 모음.
  *
- * 수집기(lib/survey/answer-quote.ts)가 읽는 필드를 그대로 편집한다 —
+ * 수집기(utils/answer-quote.ts)가 읽는 필드를 그대로 편집한다 —
  * 질문 단위 `answerQuoteEnabled`/`answerQuoteName`/`answerQuoteText`,
  * 옵션·셀 단위 `answerQuoteText`.
  */

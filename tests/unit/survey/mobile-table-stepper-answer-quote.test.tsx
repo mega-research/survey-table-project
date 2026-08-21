@@ -12,7 +12,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import { MobileTableStepper } from '@/features/question-renderer/mobile-table-stepper';
-import { ContactAttrsProvider } from '@/lib/survey/contact-attrs-context';
+import { ContactAttrsProvider } from '@/features/question-renderer/contact-attrs-context';
 import type { TableColumn, TableRow } from '@/types/survey';
 
 // jsdom 은 scrollIntoView 를 구현하지 않는다 — pill 자동 스크롤 useEffect 가 그룹/행

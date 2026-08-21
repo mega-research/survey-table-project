@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import type { SurveyResponse } from '@/db/schema';
-import type { FilterCondition, FilterLogic, FilterState } from '@/lib/analytics/filter';
+import type { FilterCondition, FilterLogic, FilterState } from '@/features/analytics/filters/filter';
 import {
   addConditionToFilter,
   createEmptyFilter,
@@ -26,7 +26,7 @@ import {
   isFilterableQuestion,
   removeConditionFromFilter,
   updateConditionInFilter,
-} from '@/lib/analytics/filter';
+} from '@/features/analytics/filters/filter';
 import type { Question } from '@/types/survey';
 
 import { FilterConditionRow } from './filter-condition';

@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import { evaluateCellFormula } from '@/lib/survey/cell-formula';
-import { useFormulaEvalCtx } from '@/lib/survey/formula-context';
+import { useFormulaEvalCtx } from '@/features/question-renderer/formula-context';
 import { UNIT_LABELS, formatWithComma } from '@/utils/number-format';
 import { getInputTextAlignClass } from '@/features/question-renderer/utils/table-grid-utils';
 import { cn } from '@/lib/utils';
