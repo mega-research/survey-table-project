@@ -6,10 +6,6 @@ import { useRouter, useSearchParams } from 'next/navigation';
 
 import { toast } from 'sonner';
 
-import { ContactsFilterBar } from '@/features/operations/contacts/contacts-filter-bar';
-import { RecipientStatusBadge } from '@/features/operations/mail-campaign/recipient-status-badge';
-import { PagerJump } from '@/features/operations/pager-jump';
-import { buildPageItems } from '@/features/operations/table-primitives';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -31,18 +27,26 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import type { MailTemplate } from '@/db/schema/mail';
-import type { CampaignFilterSnapshot } from '@/shared/contracts/mail';
-import type { ContactResultCode } from '@/shared/contracts/contacts';
-import { useCreateCampaign, useFetchCandidateIds, usePreviewPreflight } from '@/features/operations/queries/use-campaigns';
+import { ContactsFilterBar } from '@/features/operations/contacts/contacts-filter-bar';
+import { RecipientStatusBadge } from '@/features/operations/mail-campaign/recipient-status-badge';
+import { PagerJump } from '@/features/operations/pager-jump';
+import {
+  useCreateCampaign,
+  useFetchCandidateIds,
+  usePreviewPreflight,
+} from '@/features/operations/queries/use-campaigns';
+import { buildPageItems } from '@/features/operations/table-primitives';
 import { getErrorMessage } from '@/lib/get-error-message';
+import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts';
+import type { ColumnCandidate } from '@/lib/operations/filter-shared';
+import type { ContactResultCode } from '@/shared/contracts/contacts';
+import type { CampaignFilterSnapshot } from '@/shared/contracts/mail';
 import type {
   CampaignCandidateRow,
   CampaignExclusionCounts,
   CampaignSortDir,
   CampaignSortKey,
-} from '@/server/mail/services/campaigns.server';
-import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts';
-import type { ColumnCandidate } from '@/lib/operations/filter-shared';
+} from '@/shared/contracts/mail-io';
 
 interface Props {
   surveyId: string;

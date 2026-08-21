@@ -1,26 +1,14 @@
 import * as z from 'zod';
 
+import { type PiiFieldType } from '@/lib/crypto/pii-fields';
 import type { ContactMethod } from '@/shared/contracts/contacts';
-import { PII_FIELD_TYPES, type PiiFieldType } from '@/lib/crypto/pii-fields';
+import { type PiiUpdate, PiiUpdateSchema } from '@/shared/contracts/contacts-io';
 
 export type { ContactMethod };
 export type { PiiFieldType };
-
-/**
- * PII 컬럼 1건 변경분. service 가 contact_pii 에 재암호화 upsert.
- * plain 이 빈 문자열이면 기존 PII row 삭제.
- */
-export const PiiUpdateSchema = z.object({
-  /** ContactColumnDef.source 가 'pii.<columnKey>' 인 컬럼의 columnKey */
-  columnKey: z.string(),
-  // z.custom 은 런타임 검증이 없어 오탈자(예: 'e-mail') 가 통과 → normalizePii 의 switch 가
-  // default 없이 undefined 반환 → blindIndex 빈 문자열 → upsertPiiValue 가 기존 PII 행을
-  // 삭제하는 사고로 이어짐. PII_FIELD_TYPES enum 으로 경계에서 차단.
-  fieldType: z.enum(PII_FIELD_TYPES),
-  /** 평문값. 빈 문자열이면 기존 PII row 삭제. */
-  plain: z.string(),
-});
-export type PiiUpdate = z.infer<typeof PiiUpdateSchema>;
+// PII 변경분 모양은 계약(@/shared/contracts/contacts-io) 소관 — 여기서 다시 내보낸다.
+export { PiiUpdateSchema };
+export type { PiiUpdate };
 
 /** 시스템 필드(분류 기준)가 attrs 의 어느 키에 있는지 — 컬럼 스킴의 systemFields 맵 활용 */
 export const SystemFieldKeysSchema = z.object({

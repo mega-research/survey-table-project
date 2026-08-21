@@ -30,8 +30,12 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { hasBranchLogic } from '@/server/library/domain/saved-question';
-import { useCategories, useCreateCategory, useSaveQuestion } from '@/features/survey-builder/queries/use-library';
+import { hasBranchLogic } from '@/features/survey-builder/lib/saved-question-branch-logic';
+import {
+  useCategories,
+  useCreateCategory,
+  useSaveQuestion,
+} from '@/features/survey-builder/queries/use-library';
 import { cn } from '@/lib/utils';
 import { Question } from '@/types/survey';
 

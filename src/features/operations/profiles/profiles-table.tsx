@@ -1,39 +1,30 @@
 'use client';
 
-import {
-  flexRender,
-  getCoreRowModel,
-  useReactTable,
-  type ColumnDef,
-} from '@tanstack/react-table';
 import { useMemo } from 'react';
+
+import { type ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 
 import { Badge } from '@/components/ui/badge';
 import { LocalDateTime } from '@/components/ui/local-date-time';
 import { useSearchParamsMutator } from '@/features/operations/hooks/use-search-params-mutator';
-import { cn } from '@/lib/utils';
 import { formatPlatformKo } from '@/lib/operations/parse-ua';
 import { formatIpHash } from '@/lib/operations/profile-columns';
-import type { ProfileColumnDef } from '@/shared/contracts/operations';
 import {
-  formatTotalTime,
-  mapStatusPill,
   type ProfilesView,
   type SortDir,
   type SortKey,
   type StatusPillResult,
   type StepLocation,
+  formatTotalTime,
+  mapStatusPill,
 } from '@/lib/operations/profiles';
-import type { ProfilesRow } from '@/server/operations/services/profiles.server';
+import { cn } from '@/lib/utils';
+import type { ProfileColumnDef } from '@/shared/contracts/operations';
+import type { ProfilesRow } from '@/shared/contracts/operations-io';
 
 import { EmptyState } from '../empty-state';
 import { HeaderFilterPopover } from '../filters/header-filter-popover';
-import {
-  ALIGN_CLASS,
-  SortIndicator,
-  TablePagerFooter,
-  type CellAlign,
-} from '../table-primitives';
+import { ALIGN_CLASS, type CellAlign, SortIndicator, TablePagerFooter } from '../table-primitives';
 import { ProfilesRowActions } from './profiles-row-actions';
 import { StatusPill } from './status-pill';
 
@@ -120,7 +111,22 @@ const meta = (align: CellAlign, sortable: boolean, nowrap = true): ColumnMeta =>
  * sort/pagination + 검색 결과 EmptyState. 스킴 미설정 시 서버가 기본 스킴
  * (기존 9컬럼)을 넘긴다.
  */
-export function ProfilesTable({ rows, total, page, pageSize, sort, dir, stepLocations, totalSteps, surveyId, view, hasContacts, isGuest, columnScheme, piiByTarget }: Props) {
+export function ProfilesTable({
+  rows,
+  total,
+  page,
+  pageSize,
+  sort,
+  dir,
+  stepLocations,
+  totalSteps,
+  surveyId,
+  view,
+  hasContacts,
+  isGuest,
+  columnScheme,
+  piiByTarget,
+}: Props) {
   const pushParams = useSearchParamsMutator();
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
@@ -137,7 +143,7 @@ export function ProfilesTable({ rows, total, page, pageSize, sort, dir, stepLoca
         });
         if (r.status === 'completed' && r.completedAt === null) {
           // DB 일관성 깨짐 방어 — 행은 '—' 로 노출하되 운영자가 파악할 수 있게 로깅
-           
+
           console.warn('[profiles-table] completed status with null completed_at', {
             id: r.id,
           });
@@ -215,7 +221,12 @@ export function ProfilesTable({ rows, total, page, pageSize, sort, dir, stepLoca
             meta: meta('left', true),
           };
         case 'sys.browser':
-          return { id: 'browser', accessorKey: 'browser', header: c.label, meta: meta('left', true) };
+          return {
+            id: 'browser',
+            accessorKey: 'browser',
+            header: c.label,
+            meta: meta('left', true),
+          };
         case 'sys.status':
           return {
             id: 'status',
@@ -225,10 +236,7 @@ export function ProfilesTable({ rows, total, page, pageSize, sort, dir, stepLoca
               <div className="flex items-center justify-center gap-1.5">
                 <StatusPill pill={row.original.pill} />
                 {row.original.isTest && (
-                  <Badge
-                    variant="outline"
-                    className="border-amber-300 bg-amber-50 text-amber-700"
-                  >
+                  <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700">
                     테스트
                   </Badge>
                 )}
@@ -342,18 +350,14 @@ export function ProfilesTable({ rows, total, page, pageSize, sort, dir, stepLoca
                 const align = m?.align ?? 'left';
                 const sortable = m?.sortable ?? false;
                 const isActive = sortable && sort === (header.column.id as SortKey);
-                const ariaSort = isActive
-                  ? dir === 'asc'
-                    ? 'ascending'
-                    : 'descending'
-                  : 'none';
+                const ariaSort = isActive ? (dir === 'asc' ? 'ascending' : 'descending') : 'none';
                 return (
                   <th
                     key={header.id}
                     scope="col"
                     aria-sort={ariaSort}
                     className={cn(
-                      'whitespace-nowrap px-3 py-2 text-xs font-medium uppercase tracking-wider text-slate-600',
+                      'px-3 py-2 text-xs font-medium tracking-wider whitespace-nowrap text-slate-600 uppercase',
                       ALIGN_CLASS[align],
                     )}
                   >
@@ -363,7 +367,7 @@ export function ProfilesTable({ rows, total, page, pageSize, sort, dir, stepLoca
                           type="button"
                           onClick={() => handleSortClick(header.column.id)}
                           className={cn(
-                            'inline-flex items-center gap-1 select-none rounded hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400',
+                            'inline-flex items-center gap-1 rounded select-none hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400',
                             align === 'right' ? 'flex-row-reverse' : '',
                           )}
                         >
@@ -412,7 +416,7 @@ export function ProfilesTable({ rows, total, page, pageSize, sort, dir, stepLoca
                     // wrapper 의 overflow-x-auto 가로 스크롤이 생긴다.
                     title={isFreeText ? String(cell.getValue() ?? '') : undefined}
                     className={cn(
-                      'whitespace-nowrap px-3 py-2 text-slate-700 tabular-nums',
+                      'px-3 py-2 whitespace-nowrap text-slate-700 tabular-nums',
                       isFreeText && 'max-w-60 truncate',
                       ALIGN_CLASS[align],
                     )}

@@ -1,35 +1,42 @@
-import 'server-only';
 import { cache } from 'react';
 
-import { and, asc, desc, eq, inArray, isNull, or, sql, type AnyColumn, type SQL } from 'drizzle-orm';
+import {
+  type AnyColumn,
+  type SQL,
+  and,
+  asc,
+  desc,
+  eq,
+  inArray,
+  isNull,
+  or,
+  sql,
+} from 'drizzle-orm';
+import 'server-only';
 
 import { db } from '@/db';
 import {
   contactTargets,
   contactUploads,
-  surveys,
-  surveyResponses,
-  questions,
-  mailRecipients,
   mailCampaigns,
+  mailRecipients,
+  questions,
   responseEditLogs,
+  surveyResponses,
+  surveys,
 } from '@/db/schema';
-import type { ContactColumnScheme, ContactUploadMode } from '@/shared/contracts/contacts';
-import type { ResponseEditChange } from '@/shared/contracts/survey-response';
-import type { MailRecipientStatus } from '@/shared/contracts/mail';
-import { mergeChangeLabels } from '@/lib/operations/response-edit-diff';
-import {
-  decryptForTarget,
-  getMaskHintsForTargets,
-} from '@/lib/crypto/contact-pii-repo';
-import type { PiiFieldType } from '@/lib/crypto/pii-fields';
+// ─────────────────────────────────────────────────────────────────────────────
+// 컨택 단건 편집 (slice 3 detail page) — 0016 마이그레이션 활용
+// ─────────────────────────────────────────────────────────────────────────────
 
+import { contactAttempts } from '@/db/schema';
+import { decryptForTarget, getMaskHintsForTargets } from '@/lib/crypto/contact-pii-repo';
+import type { PiiFieldType } from '@/lib/crypto/pii-fields';
 import {
-  attrsSortKey,
   type ContactsSortDir,
   type ContactsSortKey,
+  attrsSortKey,
 } from '@/lib/operations/contacts';
-import type { FilterClause } from './contacts-filters.server';
 import {
   attrsNaturalSortExprs,
   buildContactsFilterSql,
@@ -38,12 +45,40 @@ import {
   mailStatusRankExpr,
   matchedResponseSubquery,
 } from '@/lib/operations/contacts-filter-sql';
-import { FILTER_SOURCE, type ColumnCandidateWithPii } from '@/lib/operations/filter-shared';
+import { type ColumnCandidateWithPii, FILTER_SOURCE } from '@/lib/operations/filter-shared';
+import { mergeChangeLabels } from '@/lib/operations/response-edit-diff';
 import {
+  type OperationsDataScope,
   responseScopeCondition,
   targetScopeCondition,
-  type OperationsDataScope,
 } from '@/server/data-scope.server';
+import type { ContactColumnScheme } from '@/shared/contracts/contacts';
+import {
+  CONTACT_METHOD_LABEL,
+  type ContactMethod,
+  type ContactResultCode,
+  DEFAULT_RESULT_CODES,
+} from '@/shared/contracts/contacts';
+import type {
+  ContactAttemptRow,
+  ContactUploadRow,
+  ContactsRow,
+  MailHistoryRow,
+  ResponseEditLogRow,
+} from '@/shared/contracts/contacts-io';
+import type { MailRecipientStatus } from '@/shared/contracts/mail';
+
+import type { FilterClause } from './contacts-filters.server';
+
+// 표가 props 로 받는 행 모양은 계약(@/shared/contracts/contacts-io) 소관 — 여기서 다시 내보내
+// 기존 호출부(RSC·서비스)의 import 경로를 유지한다.
+export type {
+  ContactAttemptRow,
+  ContactUploadRow,
+  ContactsRow,
+  MailHistoryRow,
+  ResponseEditLogRow,
+};
 
 export interface ListContactsArgs {
   surveyId: string;
@@ -53,28 +88,6 @@ export interface ListContactsArgs {
   sort: ContactsSortKey;
   dir: ContactsSortDir;
   pageSize: number;
-}
-
-export interface ContactsRow {
-  id: string;
-  resid: number;
-  groupValue: string | null;
-  /** attrs 통째 (비PII 만 포함됨 — PII 는 piiMaskHints 에) */
-  attrs: Record<string, string>;
-  /** PII 컬럼별 마스킹 힌트 (columnKey → { fieldType, maskHint }) */
-  piiMaskHints: Record<string, { fieldType: PiiFieldType; maskHint: string | null }>;
-  /** 최신 attempt result_code (없으면 null) */
-  latestResultCode: string | null;
-  latestAttemptNo: number | null;
-  respondedAt: Date | null;
-  /** 응답 진행률 0~100. 응답 없거나 첫 답변 전 / soft-delete 면 null */
-  progressPct: number | null;
-  /** 매칭 응답의 status (completed/in_progress/drop 등). 응답 없으면 null */
-  responseStatus: string | null;
-  /** 최신(created_at DESC) 메일 수신 상태. 발송 이력 없으면 null */
-  latestMailStatus: MailRecipientStatus | null;
-  inviteToken: string;
-  createdAt: Date;
 }
 
 export interface ListContactsResult {
@@ -114,9 +127,7 @@ const responseStatusExpr = matchedResponseFieldExpr<string | null>('status');
 // 최신 메일 수신 상태 표현식은 contacts-filter-sql 로 이관 — 필터·정렬과 공유.
 
 function orderExpr(col: AnyColumn | SQL, direction: ContactsSortDir): SQL {
-  return direction === 'asc'
-    ? sql`${col} ASC NULLS LAST`
-    : sql`${col} DESC NULLS LAST`;
+  return direction === 'asc' ? sql`${col} ASC NULLS LAST` : sql`${col} DESC NULLS LAST`;
 }
 
 /**
@@ -131,15 +142,10 @@ function orderExpr(col: AnyColumn | SQL, direction: ContactsSortDir): SQL {
  * 인덱스: idx_contact_attempts_target (contact_target_id, attempt_no DESC) INCLUDE (result_code)
  *   덕분에 latestResultCode subquery 가 index-only scan 으로 동작.
  */
-export async function listContactsForSurvey(
-  args: ListContactsArgs,
-): Promise<ListContactsResult> {
+export async function listContactsForSurvey(args: ListContactsArgs): Promise<ListContactsResult> {
   const { surveyId, scope, page, pageSize, clauses, sort, dir } = args;
 
-  const whereParts: SQL[] = [
-    eq(contactTargets.surveyId, surveyId),
-    targetScopeCondition(scope),
-  ];
+  const whereParts: SQL[] = [eq(contactTargets.surveyId, surveyId), targetScopeCondition(scope)];
 
   whereParts.push(buildContactsFilterSql(clauses));
 
@@ -178,11 +184,11 @@ export async function listContactsForSurvey(
           // 발송 이력 없음(NULL)은 방향 무관 항상 마지막. 같은 상태 안은 시스템ID 순.
           [orderExpr(mailStatusRankExpr, dir), asc(contactTargets.resid)]
         : [
-          orderExpr(
-            SYSTEM_SORT_MAP[sort as keyof typeof SYSTEM_SORT_MAP] ?? contactTargets.resid,
-            dir,
-          ),
-        ];
+            orderExpr(
+              SYSTEM_SORT_MAP[sort as keyof typeof SYSTEM_SORT_MAP] ?? contactTargets.resid,
+              dir,
+            ),
+          ];
 
   const dataRows = await db
     .select({
@@ -274,17 +280,6 @@ export async function listContactsForExport(
   }));
 }
 
-export interface ContactUploadRow {
-  id: string;
-  filename: string;
-  uploadedRows: number;
-  mergedRows: number;
-  errorRows: number;
-  mode: ContactUploadMode;
-  skippedRows: number;
-  createdAt: Date;
-}
-
 export async function listContactUploads(surveyId: string): Promise<ContactUploadRow[]> {
   const rows = await db
     .select({
@@ -308,10 +303,7 @@ export async function listContactUploads(surveyId: string): Promise<ContactUploa
  * NULL 이면 null 반환 — 호출자가 디폴트 스킴 생성.
  */
 export const getContactColumnScheme = cache(
-  async (
-    surveyId: string,
-    scope: OperationsDataScope,
-  ): Promise<ContactColumnScheme | null> => {
+  async (surveyId: string, scope: OperationsDataScope): Promise<ContactColumnScheme | null> => {
     const [row] = await db
       .select({
         scheme: scope === 'test' ? surveys.testContactColumns : surveys.contactColumns,
@@ -351,13 +343,6 @@ export function buildColumnCandidates(
   return [{ source: FILTER_SOURCE.ALL, label: '전체' }, ...columns];
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 컨택 단건 편집 (slice 3 detail page) — 0016 마이그레이션 활용
-// ─────────────────────────────────────────────────────────────────────────────
-
-import { contactAttempts } from '@/db/schema';
-import { CONTACT_METHOD_LABEL, DEFAULT_RESULT_CODES, type ContactMethod, type ContactResultCode } from '@/shared/contracts/contacts';
-
 export interface ContactDetailRow {
   id: string;
   surveyId: string;
@@ -379,14 +364,6 @@ export interface ContactDetailRow {
   responseId: string | null;
   createdAt: Date;
   updatedAt: Date;
-}
-
-export interface ContactAttemptRow {
-  id: string;
-  attemptNo: number;
-  resultCode: string;
-  note: string | null;
-  createdAt: Date;
 }
 
 export interface ContactDetailResult {
@@ -498,22 +475,6 @@ export const getContactResultCodes = cache(
 // 단건 편집 — 이메일 발송 현황 / 수정·편집 현황 카드용 조회
 // ─────────────────────────────────────────────────────────────────────────────
 
-export interface MailHistoryRow {
-  /** mail_recipients.id — React key 용 */
-  id: string;
-  campaignTitle: string;
-  runNumber: number;
-  /** 'single'이면 단건 발송 — 회차 대신 "단건" 표기 */
-  kind: 'bulk' | 'single';
-  status: MailRecipientStatus;
-  sentAt: Date | null;
-  deliveredAt: Date | null;
-  openedAt: Date | null;
-  bouncedAt: Date | null;
-  errorReason: string | null;
-  createdAt: Date;
-}
-
 /** 조사 대상에게 발송된 메일 수신 이력 (최근순). 캠페인 제목/회차 조인. */
 export async function getMailRecipientsForTarget(
   contactTargetId: string,
@@ -546,15 +507,6 @@ export async function getMailRecipientsForTarget(
       ),
     )
     .orderBy(desc(mailRecipients.createdAt));
-}
-
-export interface ResponseEditLogRow {
-  id: string;
-  action: 'edit' | 'reset' | 'reedit_allow';
-  editorEmail: string | null;
-  changedQuestions: ResponseEditChange[];
-  changedCount: number;
-  createdAt: Date;
 }
 
 /**

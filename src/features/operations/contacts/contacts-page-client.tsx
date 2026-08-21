@@ -3,9 +3,9 @@
 import { useRouter } from 'next/navigation';
 
 import { ContactsTable } from '@/features/operations/contacts/contacts-table';
-import type { ContactColumnScheme, ContactResultCode } from '@/shared/contracts/contacts';
 import type { ContactsSortDir, ContactsSortKey } from '@/lib/operations/contacts';
-import type { ContactsRow } from '@/server/read-models/contacts.server';
+import type { ContactColumnScheme, ContactResultCode } from '@/shared/contracts/contacts';
+import type { ContactsRow } from '@/shared/contracts/contacts-io';
 
 interface ContactsPageClientProps {
   surveyId: string;
@@ -46,9 +46,7 @@ export function ContactsPageClient({
       dir={dir}
       surveyId={surveyId}
       resultCodeOptions={resultCodeOptions}
-      onRowClick={(row) =>
-        router.push(`/admin/surveys/${surveyId}/operations/contacts/${row.id}`)
-      }
+      onRowClick={(row) => router.push(`/admin/surveys/${surveyId}/operations/contacts/${row.id}`)}
     />
   );
 }

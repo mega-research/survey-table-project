@@ -3,13 +3,13 @@ import type { Dispatch, RefObject, SetStateAction } from 'react';
 
 import { toast } from 'sonner';
 
+import type { SaveAdminEditPayload } from '@/features/survey-response/lib/admin-edit';
 import { resolveRebasedVersionId } from '@/features/survey-response/lib/version-rebase';
 import type { ClientSignals } from '@/lib/duplicate-detection/types';
 import { type RenderStep, findStepIndexOfQuestion, stepIdOf } from '@/lib/group-ordering';
 import { isRelaxableRequiredIssueKind } from '@/lib/survey/admin-edit-required-relax';
 import { type FormulaEvalCtx, withCalcValues } from '@/lib/survey/cell-formula';
 import { collectNumericIssues } from '@/lib/survey/numeric-validation';
-import type { SaveAdminEditPayload } from '@/server/survey-response/domain/response-edit';
 import { client } from '@/shared/lib/rpc';
 import type { TestAttemptIdentity } from '@/shared/types/test-attempt';
 import type { Question, QuestionGroup, Survey } from '@/types/survey';

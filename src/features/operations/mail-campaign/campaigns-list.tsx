@@ -6,7 +6,7 @@ import { Card } from '@/components/ui/card';
 import { LocalDateTime } from '@/components/ui/local-date-time';
 import { PagerJump } from '@/features/operations/pager-jump';
 import { buildPageItems } from '@/features/operations/table-primitives';
-import type { CampaignRow } from '@/server/mail/services/campaigns.server';
+import type { CampaignRow } from '@/shared/contracts/mail-io';
 
 interface Props {
   surveyId: string;
@@ -115,7 +115,7 @@ export function CampaignsList({ surveyId, rows, total, page, pageSize }: Props) 
                   <td>
                     <Link
                       href={detailHref}
-                      className="block px-3 py-3 text-right tabular-nums text-emerald-700"
+                      className="block px-3 py-3 text-right text-emerald-700 tabular-nums"
                     >
                       {num(success)}
                     </Link>
@@ -133,7 +133,7 @@ export function CampaignsList({ surveyId, rows, total, page, pageSize }: Props) 
                   <td>
                     <Link
                       href={detailHref}
-                      className="block px-3 py-3 text-right tabular-nums text-rose-600"
+                      className="block px-3 py-3 text-right text-rose-600 tabular-nums"
                     >
                       {num(errors)}
                     </Link>
@@ -141,7 +141,7 @@ export function CampaignsList({ surveyId, rows, total, page, pageSize }: Props) 
                   <td>
                     <Link
                       href={detailHref}
-                      className="block px-3 py-3 text-right tabular-nums text-blue-600"
+                      className="block px-3 py-3 text-right text-blue-600 tabular-nums"
                     >
                       {num(inflight)}
                     </Link>

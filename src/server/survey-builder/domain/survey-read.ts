@@ -1,12 +1,13 @@
 import * as z from 'zod';
 
 import type {
-  Question as QuestionRow,
   QuestionGroup as QuestionGroupRow,
-  Survey as SurveyRow,
+  Question as QuestionRow,
   SurveyResponse,
+  Survey as SurveyRow,
   SurveyVersion,
 } from '@/db/schema';
+import type { SurveyControl } from '@/shared/contracts/survey-builder-io';
 import type { VariableDef } from '@/shared/contracts/template-variables';
 import type { Survey as SurveyType } from '@/types/survey';
 
@@ -15,6 +16,8 @@ import type { Survey as SurveyType } from '@/types/survey';
 export type { SurveyRow, SurveyResponse, SurveyVersion, QuestionRow, QuestionGroupRow };
 export type { SurveyType };
 export type { VariableDef };
+// 응답 게이트 제어값 모양은 계약(@/shared/contracts/survey-builder-io) 소관 — 여기서 다시 내보낸다.
+export type { SurveyControl };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 공통 input
@@ -175,17 +178,6 @@ export const SurveyForResponseInput = SurveyIdInput.extend({
   inviteToken: z.string().optional(),
 });
 export type SurveyForResponseInput = z.infer<typeof SurveyForResponseInput>;
-
-/**
- * 응답 페이지 첫 화면 게이트용 라이브 제어값. snapshot 밖 값이므로 항상 현재
- * surveys 행에서 읽는다 — publish 이전에도 즉시 반영돼야 하는 운영 스위치.
- */
-export type SurveyControl = {
-  isPaused: boolean;
-  pausedMessage: string | null;
-  testSession: 'none' | 'valid' | 'invalid';
-  testSessionKind: 'anonymous' | 'target' | null;
-};
 
 /**
  * forResponse(getSurveyForResponse). 반환 { survey, versionId, control } | null.

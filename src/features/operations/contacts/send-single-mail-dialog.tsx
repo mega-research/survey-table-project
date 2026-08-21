@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState, useTransition } from 'react';
+
 import { useRouter } from 'next/navigation';
 
 import { AlertTriangle, Loader2, Send } from 'lucide-react';
@@ -14,9 +15,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import type { MailPreviewSample } from '@/server/mail/domain/mail-preview';
-import { renderMailPreview, type PreviewSample } from '@/lib/mail/render-preview';
+import { type PreviewSample, renderMailPreview } from '@/lib/mail/render-preview';
 import { sanitizeRichHtml } from '@/lib/sanitize';
+import type { MailPreviewSample } from '@/shared/contracts/mail-io';
 import { client } from '@/shared/lib/rpc';
 
 export interface MailTemplateOption {
@@ -71,9 +72,7 @@ const IFRAME_RESET_CSS = `
 function buildIframeSrcDoc(bodyHtml: string): string {
   const safe = sanitizeRichHtml(bodyHtml);
   const content =
-    safe.trim() === ''
-      ? '<div style="color:#9ca3af;font-style:italic;">(본문 없음)</div>'
-      : safe;
+    safe.trim() === '' ? '<div style="color:#9ca3af;font-style:italic;">(본문 없음)</div>' : safe;
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${IFRAME_RESET_CSS}</style></head><body>${content}</body></html>`;
 }
 
@@ -201,11 +200,12 @@ export function SendSingleMailDialog({
           메일 보내기
         </Button>
       </DialogTrigger>
-      <DialogContent className="flex max-h-[90vh] max-w-[720px] flex-col p-0 gap-0">
+      <DialogContent className="flex max-h-[90vh] max-w-[720px] flex-col gap-0 p-0">
         <DialogHeader className="border-b border-gray-200 px-6 pt-6 pb-4">
           <DialogTitle>단건 메일 발송</DialogTitle>
           <DialogDescription>
-            이 조사 대상에게만 개별로 메일을 발송합니다. 발송 이력에 &ldquo;단건&rdquo;으로 기록됩니다.
+            이 조사 대상에게만 개별로 메일을 발송합니다. 발송 이력에 &ldquo;단건&rdquo;으로
+            기록됩니다.
           </DialogDescription>
         </DialogHeader>
 
@@ -238,7 +238,7 @@ export function SendSingleMailDialog({
 
           {fetchState.status === 'error' && (
             <div className="mt-3 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
               <div>
                 <div className="font-medium">수신자 정보를 불러오지 못했습니다</div>
                 <div className="mt-0.5 text-xs">{fetchState.error}</div>
@@ -248,23 +248,21 @@ export function SendSingleMailDialog({
 
           {isReady && sample === null && (
             <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
               <span>이 조사 대상의 수신자 정보를 확인할 수 없습니다.</span>
             </div>
           )}
 
           {isReady && sample != null && (
             <p className="mt-3 text-xs text-gray-500">
-              수신: {toEmail ?? <span className="italic text-gray-400">(이메일 없음)</span>}
+              수신: {toEmail ?? <span className="text-gray-400 italic">(이메일 없음)</span>}
             </p>
           )}
 
           {selected && rendered && srcDoc && (
             <div className="mt-4 overflow-hidden rounded-lg border border-gray-200">
               <div className="border-b border-gray-200 bg-gray-50 px-4 py-2 text-sm font-medium text-gray-900">
-                {rendered.subject || (
-                  <span className="italic text-gray-400">(제목 없음)</span>
-                )}
+                {rendered.subject || <span className="text-gray-400 italic">(제목 없음)</span>}
               </div>
               <iframe
                 title="메일 본문 미리보기"
@@ -277,7 +275,7 @@ export function SendSingleMailDialog({
 
           {sendError && (
             <div className="mt-3 flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
               <div>{sendError}</div>
             </div>
           )}

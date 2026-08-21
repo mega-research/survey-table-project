@@ -1,8 +1,8 @@
-import type { SurveyDiffPayload } from '@/server/survey-builder/domain/survey-save';
 import {
-  changesetHasChanges,
   type QuestionChangeset,
+  changesetHasChanges,
 } from '@/features/survey-builder/lib/changeset';
+import type { SurveyDiffPayload } from '@/shared/contracts/survey-builder-io';
 import type { Survey } from '@/types/survey';
 
 /**

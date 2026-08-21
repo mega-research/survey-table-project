@@ -18,13 +18,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import type { ContactColumnDef, ContactColumnScheme, ContactUploadMapping, ContactUploadMode } from '@/shared/contracts/contacts';
-import type {
-  IngestContactUploadResult,
-  MatchContactUploadResult,
-  ParseExcelPreviewResult,
-} from '@/server/contacts/domain/contact-upload';
-import { useIngestContacts, useMatchContacts, useParseExcelPreview } from '@/features/operations/queries/use-contacts';
+import {
+  useIngestContacts,
+  useMatchContacts,
+  useParseExcelPreview,
+} from '@/features/operations/queries/use-contacts';
 import { autoDetectPiiMapping, autoDetectSystemFields } from '@/lib/contacts/auto-detect';
 import {
   GROUP_LEVELS,
@@ -37,6 +35,17 @@ import { MAX_UPLOAD_BYTES, MAX_UPLOAD_ROWS, validateXlsxFile } from '@/lib/conta
 import { type PiiFieldType } from '@/lib/crypto/pii-fields';
 import { getErrorMessage } from '@/lib/get-error-message';
 import { formatBytes } from '@/lib/utils';
+import type {
+  ContactColumnDef,
+  ContactColumnScheme,
+  ContactUploadMapping,
+  ContactUploadMode,
+} from '@/shared/contracts/contacts';
+import type {
+  IngestContactUploadResult,
+  MatchContactUploadResult,
+  ParseExcelPreviewResult,
+} from '@/shared/contracts/contacts-io';
 
 import { UploadMatchStep } from './upload-match-step';
 

@@ -65,6 +65,10 @@ export const mailCampaignStatusValues = [
 ] as const;
 export type MailCampaignStatus = (typeof mailCampaignStatusValues)[number];
 
+// mail_campaigns.kind — 발송 회차 종류 (bulk = 단체 발송, single = 컨택 단건 발송)
+export const mailCampaignKindValues = ['bulk', 'single'] as const;
+export type MailCampaignKind = (typeof mailCampaignKindValues)[number];
+
 // mail_recipients.status 전이: queued → sending → sent → delivered → opened
 //   또는 → bounced/complained/failed (terminal), 또는 → skipped_unsubscribed (insert 시점)
 export const mailRecipientStatusValues = [

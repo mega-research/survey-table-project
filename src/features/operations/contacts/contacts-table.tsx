@@ -2,18 +2,27 @@
 
 import { useMemo } from 'react';
 
-import { RecipientStatusBadge } from '@/features/operations/mail-campaign/recipient-status-badge';
-import { recipientStatusMeta } from '@/lib/operations/recipient-status';
 import { HeaderFilterPopover } from '@/features/operations/filters/header-filter-popover';
-import { StatusPill } from '@/features/operations/profiles/status-pill';
-import { mapStatusPill, type StatusPillResult } from '@/lib/operations/profiles';
-import { SortIndicator, TablePagerFooter } from '@/features/operations/table-primitives';
-import type { ContactColumnDef, ContactColumnScheme, ContactResultCode } from '@/shared/contracts/contacts';
 import { useSearchParamsMutator } from '@/features/operations/hooks/use-search-params-mutator';
+import { RecipientStatusBadge } from '@/features/operations/mail-campaign/recipient-status-badge';
+import { StatusPill } from '@/features/operations/profiles/status-pill';
+import { SortIndicator, TablePagerFooter } from '@/features/operations/table-primitives';
 import { formatLocalMonthDayTime } from '@/lib/date-formatters';
-import { attrsKeyOf, piiKeyOf, type ContactsSortDir, type ContactsSortKey } from '@/lib/operations/contacts';
-import type { ContactsRow } from '@/server/read-models/contacts.server';
+import {
+  type ContactsSortDir,
+  type ContactsSortKey,
+  attrsKeyOf,
+  piiKeyOf,
+} from '@/lib/operations/contacts';
 import { FILTER_SOURCE, MAIL_FILTER_OPTIONS } from '@/lib/operations/filter-shared';
+import { type StatusPillResult, mapStatusPill } from '@/lib/operations/profiles';
+import { recipientStatusMeta } from '@/lib/operations/recipient-status';
+import type {
+  ContactColumnDef,
+  ContactColumnScheme,
+  ContactResultCode,
+} from '@/shared/contracts/contacts';
+import type { ContactsRow } from '@/shared/contracts/contacts-io';
 
 interface ContactsTableProps {
   rows: ContactsRow[];
@@ -68,16 +77,17 @@ function sortKeyOf(source: string): ContactsSortKey | null {
  */
 const PII_DASH = '—';
 
-function computeCell(col: ContactColumnDef, row: ContactsRow): {
+function computeCell(
+  col: ContactColumnDef,
+  row: ContactsRow,
+): {
   display: React.ReactNode;
   plain: string | undefined;
 } {
   const attrsKey = attrsKeyOf(col.source);
   if (attrsKey) {
     const v = row.attrs[attrsKey];
-    return v && v !== ''
-      ? { display: v, plain: v }
-      : { display: PII_DASH, plain: undefined };
+    return v && v !== '' ? { display: v, plain: v } : { display: PII_DASH, plain: undefined };
   }
   const piiKey = piiKeyOf(col.source);
   if (piiKey) {
@@ -213,16 +223,13 @@ export function ContactsTable({
     <div>
       <div className="overflow-x-auto rounded border">
         <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-xs uppercase text-slate-600">
+          <thead className="bg-slate-50 text-xs text-slate-600 uppercase">
             <tr>
               {visibleColumns.map((col) => {
                 const sortKey = sortKeyOf(col.source);
                 const isActive = sortKey != null && sortKey === sort;
                 return (
-                  <th
-                    key={col.key}
-                    className="border-b px-3 py-2 text-left whitespace-nowrap"
-                  >
+                  <th key={col.key} className="border-b px-3 py-2 text-left whitespace-nowrap">
                     <span className="inline-flex items-center gap-1">
                       {sortKey ? (
                         <button

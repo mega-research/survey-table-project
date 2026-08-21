@@ -303,36 +303,13 @@ const eslintConfig = [
                 "클라이언트 트리에서 DB 값 import 금지. JSONB 어휘는 @/shared/contracts, 쿼리는 서버 모듈로 옮기세요. (type import 는 허용)",
             },
             {
-              // 서비스·서버 공용은 값 import 만 막는다. RSC 가 서버에서 만든 행 타입을 클라이언트
-              // 컴포넌트 props 로 넘기는 seam 이 실재하고(운영 콘솔 표 컴포넌트), 성격이 위 @/db
-              // 행 타입과 같다. 값(쿼리 함수)을 끌어오는 순간 클라이언트 번들에 DB 가 들어온다.
-              group: [
-                "@/server/*/services/**",
-                "@/server/*/services",
-                "@/server/read-models/**",
-                "@/server/workflows/**",
-                "@/server/storage-lifecycle/**",
-              ],
-              allowTypeImports: true,
+              // UI 는 @/server 아래 어떤 것도 import 하지 않는다 — 타입도 예외가 아니다.
+              // 계약(zod 스키마·RSC 가 props 로 넘기는 행 모양)은 @/shared/contracts 가 소유하고,
+              // 데이터는 RPC(@/shared/lib/rpc) 로 받는다. 타입만 허용하는 예외를 하나 열어두면
+              // 그 파일이 나중에 server-only·Node·DB 를 끌어와도 UI 가 계속 가리키게 된다.
+              group: ["@/server", "@/server/**"],
               message:
-                "UI 는 서버 서비스의 값 import 금지. 데이터는 RPC(@/shared/lib/rpc) 로 받으세요. (RSC → 클라이언트 props 용 행 타입은 type import 로 허용)",
-            },
-            {
-              group: [
-                "@/server/*/procedures/**",
-                "@/server/*/procedures",
-                "@/server/context",
-                "@/server/orpc",
-                "@/server/router",
-                "@/server/handler",
-                "@/server/openapi",
-                "@/server/rpc-logging",
-                "@/server/rpc-error-policy",
-                "@/server/rpc-timeout",
-                "@/server/health",
-              ],
-              message:
-                "UI 는 서버 모듈을 import 하지 않습니다. 데이터는 RPC(@/shared/lib/rpc) 로, 계약은 @/server/<domain>/domain 또는 @/shared/contracts 로 받으세요.",
+                "UI 는 @/server 를 import 하지 않습니다(타입 포함). 서버와 UI 가 함께 쓰는 모양은 @/shared/contracts 로 올리고, 데이터는 RPC(@/shared/lib/rpc) 로 받으세요.",
             },
           ],
         },

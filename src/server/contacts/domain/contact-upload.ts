@@ -1,8 +1,24 @@
 import * as z from 'zod';
 
 import type { ContactUploadMapping } from '@/shared/contracts/contacts';
+import {
+  type IngestContactUploadResult,
+  IngestContactUploadResultSchema,
+  type MatchContactUploadResult,
+  MatchContactUploadResultSchema,
+  type ParseExcelPreviewResult,
+  ParseExcelPreviewResultSchema,
+} from '@/shared/contracts/contacts-io';
 
 export type { ContactUploadMapping };
+// 각 단계 결과 모양은 계약(@/shared/contracts/contacts-io) 소관 — 여기서 다시 내보내
+// procedure output·service 반환 타입의 import 경로를 유지한다.
+export {
+  IngestContactUploadResultSchema,
+  MatchContactUploadResultSchema,
+  ParseExcelPreviewResultSchema,
+};
+export type { IngestContactUploadResult, MatchContactUploadResult, ParseExcelPreviewResult };
 
 /** 엑셀 업로드 매핑(복잡 JSONB)은 z.custom 으로 타입만 보장. */
 export const ContactUploadMappingSchema = z.custom<ContactUploadMapping>();
@@ -19,14 +35,6 @@ export const ParseExcelPreviewInput = z.object({
 });
 export type ParseExcelPreviewInput = z.infer<typeof ParseExcelPreviewInput>;
 
-export const ParseExcelPreviewResultSchema = z.object({
-  sheetNames: z.array(z.string()),
-  headers: z.array(z.string()),
-  rows: z.array(z.record(z.string(), z.string())),
-  totalRows: z.number(),
-});
-export type ParseExcelPreviewResult = z.infer<typeof ParseExcelPreviewResultSchema>;
-
 export const IngestContactUploadInput = z.object({
   surveyId: z.string(),
   file: z.instanceof(File),
@@ -34,50 +42,9 @@ export const IngestContactUploadInput = z.object({
 });
 export type IngestContactUploadInput = z.infer<typeof IngestContactUploadInput>;
 
-export const IngestContactUploadResultSchema = z.object({
-  uploadId: z.string(),
-  uploadedRows: z.number(),
-  mergedRows: z.number(),
-  errorRows: z.number(),
-  skippedRows: z.number(),
-  /** 제외 사유별 세부 (DB 미저장 — 결과 화면 표시용) */
-  skippedBreakdown: z.object({
-    policy: z.number(),
-    fileDuplicates: z.number(),
-    multiMatches: z.number(),
-    emptyKeys: z.number(),
-  }),
-});
-export type IngestContactUploadResult = z.infer<typeof IngestContactUploadResultSchema>;
-
 export const MatchContactUploadInput = z.object({
   surveyId: z.string(),
   file: z.instanceof(File),
   mapping: ContactUploadMappingSchema,
 });
 export type MatchContactUploadInput = z.infer<typeof MatchContactUploadInput>;
-
-const MatchSampleSchema = z.object({
-  /** 엑셀 실제 행 번호 (1-based, 헤더 행 이후) */
-  excelRow: z.number(),
-  /** 키 헤더명 → 셀 값 */
-  keyValues: z.record(z.string(), z.string()),
-});
-
-export const MatchContactUploadResultSchema = z.object({
-  matched: z.number(),
-  unmatched: z.number(),
-  fileDuplicates: z.number(),
-  multiMatches: z.number(),
-  emptyKeys: z.number(),
-  /** 그룹별 최대 50건 절단 (카운트는 전체 기준) */
-  unmatchedSamples: z.array(MatchSampleSchema),
-  fileDuplicateSamples: z.array(MatchSampleSchema),
-  multiMatchSamples: z.array(MatchSampleSchema),
-  emptyKeySamples: z.array(MatchSampleSchema),
-  /** 빈 값 덮어쓰기 경고 — 컬럼별 집계 */
-  emptyOverwrites: z.array(
-    z.object({ columnKey: z.string(), count: z.number(), isPii: z.boolean() }),
-  ),
-});
-export type MatchContactUploadResult = z.infer<typeof MatchContactUploadResultSchema>;

@@ -14,6 +14,7 @@ import {
 import type {
   CampaignFilterSnapshot,
   MailAttachment,
+  MailCampaignKind,
   MailCampaignStatus,
   MailRecipientSendPayloadSnapshot,
   MailRecipientStatus,
@@ -53,8 +54,8 @@ export const mailTemplatesRelations = relations(mailTemplates, ({ one, many }) =
 // 카운터 컬럼은 webhook handler 가 atomic delta 로 갱신 (트리거 미사용).
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const mailCampaignKindValues = ['bulk', 'single'] as const;
-export type MailCampaignKind = (typeof mailCampaignKindValues)[number];
+// kind 어휘의 SoT 는 계약(@/shared/contracts/mail). 스키마는 $type<> 로 참조하고 다시 내보낸다.
+export type { MailCampaignKind };
 
 export const mailCampaigns = pgTable(
   'mail_campaigns',

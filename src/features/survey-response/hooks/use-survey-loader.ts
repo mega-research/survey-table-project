@@ -1,16 +1,17 @@
-import { ORPCError } from '@orpc/client';
 import { useCallback, useEffect, useState } from 'react';
 
-import { client } from '@/shared/lib/rpc';
-import { readOptTextsSidecar } from '@/lib/option-text-read';
+import { ORPCError } from '@orpc/client';
+
 import { useSurveyResponseStore } from '@/features/question-renderer/stores/survey-response-store';
+import type { SaveAdminEditPayload } from '@/features/survey-response/lib/admin-edit';
+import { readOptTextsSidecar } from '@/lib/option-text-read';
 import { normalizeQuestions } from '@/lib/question';
-import { normalizeResponseHeaderConfig } from '@/lib/survey/response-header-config';
 import { parsesurveyIdentifier } from '@/lib/survey-url';
+import { normalizeResponseHeaderConfig } from '@/lib/survey/response-header-config';
 import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
+import type { SurveyControl } from '@/shared/contracts/survey-builder-io';
+import { client } from '@/shared/lib/rpc';
 import type { QuestionGroup, Survey } from '@/types/survey';
-import type { SaveAdminEditPayload } from '@/server/survey-response/domain/response-edit';
-import type { SurveyControl } from '@/server/survey-builder/domain/survey-read';
 
 type ResponsesMap = Record<string, unknown>;
 
@@ -125,9 +126,7 @@ export function useSurveyLoader({
             const builtSurvey: Survey = {
               id: adminContext.surveyId,
               title: snapshot.title,
-              ...(snapshot.description !== undefined
-                ? { description: snapshot.description }
-                : {}),
+              ...(snapshot.description !== undefined ? { description: snapshot.description } : {}),
               groups: snapshot.groups as QuestionGroup[],
               // 세대별 키셋이 다른 스냅샷 질문은 읽기 경계 정규화(보존 모드)로 수렴 —
               // 기존 단언과 거동 동일, 알 수 없는 형태만 관측 로그.
@@ -141,10 +140,16 @@ export function useSurveyLoader({
                 ...(snapshot.settings.endDate
                   ? { endDate: new Date(snapshot.settings.endDate) }
                   : {}),
-                ...(snapshot.settings.maxResponses !== undefined ? { maxResponses: snapshot.settings.maxResponses } : {}),
+                ...(snapshot.settings.maxResponses !== undefined
+                  ? { maxResponses: snapshot.settings.maxResponses }
+                  : {}),
                 thankYouMessage: snapshot.settings.thankYouMessage,
-                ...(snapshot.settings.requireInviteToken !== undefined ? { requireInviteToken: snapshot.settings.requireInviteToken } : {}),
-                ...(snapshot.settings.forceWideLayout !== undefined ? { forceWideLayout: snapshot.settings.forceWideLayout } : {}),
+                ...(snapshot.settings.requireInviteToken !== undefined
+                  ? { requireInviteToken: snapshot.settings.requireInviteToken }
+                  : {}),
+                ...(snapshot.settings.forceWideLayout !== undefined
+                  ? { forceWideLayout: snapshot.settings.forceWideLayout }
+                  : {}),
                 responseHeader: normalizeResponseHeaderConfig(snapshot.settings.responseHeader),
               },
               lookups: (snapshot as { lookups?: Survey['lookups'] }).lookups ?? [],
@@ -259,10 +264,7 @@ export function useSurveyLoader({
               if (cancelled) return;
             } catch (attrsError) {
               if (cancelled) return;
-              if (
-                attrsError instanceof ORPCError &&
-                attrsError.code === 'INVALID_TEST_LINK'
-              ) {
+              if (attrsError instanceof ORPCError && attrsError.code === 'INVALID_TEST_LINK') {
                 setControl({
                   ...result.control,
                   testSession: 'invalid',

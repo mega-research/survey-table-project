@@ -41,7 +41,11 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { hasBranchLogic, removeBranchLogic } from '@/server/library/domain/saved-question';
+import {
+  hasBranchLogic,
+  removeBranchLogic,
+} from '@/features/survey-builder/lib/saved-question-branch-logic';
+import { LookupLibrarySection } from '@/features/survey-builder/lookup/lookup-library-section';
 import {
   useApplyMultipleQuestions,
   useApplyQuestion,
@@ -54,12 +58,10 @@ import {
   useSavedQuestions,
   useSearchQuestions,
 } from '@/features/survey-builder/queries/use-library';
+import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
 import { runAsyncAction } from '@/lib/run-async-action';
 import { cn, isEmptyHtml } from '@/lib/utils';
-import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
 import { Question, SavedQuestion } from '@/types/survey';
-
-import { LookupLibrarySection } from '@/features/survey-builder/lookup/lookup-library-section';
 
 // 카테고리 아이콘 매핑
 const categoryIcons: Record<string, React.ElementType> = {

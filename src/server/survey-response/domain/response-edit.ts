@@ -20,11 +20,3 @@ export type SaveAdminEditInput = z.infer<typeof SaveAdminEditInput>;
 
 export const SaveAdminEditOutput = z.object({ ok: z.literal(true) });
 export type SaveAdminEditOutput = z.infer<typeof SaveAdminEditOutput>;
-
-/**
- * 어드민 편집 onSubmit 페이로드 — 클라이언트 컴포넌트가 questionResponses 만 전달할 때 쓰는 타입.
- * 원위치: src/actions/response-edit-actions.ts 의 SaveAdminEditPayload.
- */
-export interface SaveAdminEditPayload {
-  questionResponses: Record<string, unknown>;
-}

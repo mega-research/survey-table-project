@@ -36,11 +36,10 @@ export function extractTmpAttachmentKeysFromHtml(html: string): string[] {
   );
 }
 
-/** 영구 prefix 첨부 키만. (유예 삭제 큐의 키 추출은 @/server/shared/r2-lifecycle/key-extract 가 자체 data-key 스캔으로 수행) */
+/** 영구 prefix 첨부 키만. (유예 삭제 큐의 키 추출은 server/storage-lifecycle/key-extract 가 자체 data-key 스캔으로 수행) */
 export function extractPermanentAttachmentKeysFromHtml(html: string): string[] {
   return extractAllAttachmentKeysFromHtml(html).filter(
-    (k) =>
-      k.startsWith(NOTICE_ATTACHMENT_PREFIX) && !k.startsWith(TMP_NOTICE_ATTACHMENT_PREFIX),
+    (k) => k.startsWith(NOTICE_ATTACHMENT_PREFIX) && !k.startsWith(TMP_NOTICE_ATTACHMENT_PREFIX),
   );
 }
 

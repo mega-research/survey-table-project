@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+
 import { useRouter } from 'next/navigation';
 
 import { Plus, Trash2 } from 'lucide-react';
@@ -15,7 +16,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import type { BillingPeriodRow } from '@/server/mail/services/mail-billing.server';
+import type { BillingPeriodRow } from '@/shared/contracts/mail-io';
 import { client } from '@/shared/lib/rpc';
 
 import { formatInt, formatKrw } from './_format';
@@ -108,18 +109,26 @@ export function BillingPeriodsDialog({ periods }: Props) {
           {!showForm && (
             <div className="flex justify-end">
               <Button size="sm" onClick={() => setShowForm(true)}>
-                <Plus className="mr-1 h-4 w-4" />
-                새 요금제
+                <Plus className="mr-1 h-4 w-4" />새 요금제
               </Button>
             </div>
           )}
 
           {showForm && (
-            <form action={handleCreate} className="space-y-3 rounded-lg border border-blue-100 bg-blue-50/40 p-4">
+            <form
+              action={handleCreate}
+              className="space-y-3 rounded-lg border border-blue-100 bg-blue-50/40 p-4"
+            >
               <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
                 <label className="space-y-1">
                   <span className="block text-xs font-medium text-gray-700">시작일 (=결제일)</span>
-                  <Input name="startDate" type="date" required disabled={pending} className="h-10" />
+                  <Input
+                    name="startDate"
+                    type="date"
+                    required
+                    disabled={pending}
+                    className="h-10"
+                  />
                 </label>
                 <label className="space-y-1">
                   <span className="block text-xs font-medium text-gray-700">요금제 라벨</span>
@@ -156,7 +165,9 @@ export function BillingPeriodsDialog({ periods }: Props) {
                   />
                 </label>
                 <label className="space-y-1">
-                  <span className="block text-xs font-medium text-gray-700">초과 단가 (원/1,000건)</span>
+                  <span className="block text-xs font-medium text-gray-700">
+                    초과 단가 (원/1,000건)
+                  </span>
                   <Input
                     name="overagePer1kKrw"
                     type="number"
@@ -216,19 +227,23 @@ export function BillingPeriodsDialog({ periods }: Props) {
                 ) : (
                   periods.map((p) => (
                     <tr key={p.id} className="border-b border-gray-50 last:border-b-0">
-                      <td className="px-3 py-2.5 tabular-nums text-gray-900">{p.startDate}</td>
-                      <td className="px-3 py-2.5 tabular-nums text-gray-700">매달 {p.billingDayOfMonth}일</td>
+                      <td className="px-3 py-2.5 text-gray-900 tabular-nums">{p.startDate}</td>
+                      <td className="px-3 py-2.5 text-gray-700 tabular-nums">
+                        매달 {p.billingDayOfMonth}일
+                      </td>
                       <td className="px-3 py-2.5 text-gray-700">{p.planLabel}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums text-gray-700">
+                      <td className="px-3 py-2.5 text-right text-gray-700 tabular-nums">
                         {formatKrw(p.monthlyFeeKrw)}
                       </td>
-                      <td className="px-3 py-2.5 text-right tabular-nums text-gray-700">
+                      <td className="px-3 py-2.5 text-right text-gray-700 tabular-nums">
                         {formatInt(p.includedEmails)}건
                       </td>
-                      <td className="px-3 py-2.5 text-right tabular-nums text-gray-700">
+                      <td className="px-3 py-2.5 text-right text-gray-700 tabular-nums">
                         {formatKrw(p.overagePer1kKrw)}/1K
                       </td>
-                      <td className="max-w-[160px] truncate px-3 py-2.5 text-gray-500">{p.note ?? '—'}</td>
+                      <td className="max-w-[160px] truncate px-3 py-2.5 text-gray-500">
+                        {p.note ?? '—'}
+                      </td>
                       <td className="px-3 py-2.5 text-right">
                         {p.id === latestId && (
                           <Button

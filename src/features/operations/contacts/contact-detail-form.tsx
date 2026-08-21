@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 
 import { useRouter } from 'next/navigation';
 
+import { Button } from '@/components/ui/button';
 import {
   ContactAttemptAddCard,
   type ContactAttemptAddCardHandle,
@@ -17,17 +18,20 @@ import {
   type MailTemplateOption,
   SendSingleMailDialog,
 } from '@/features/operations/contacts/send-single-mail-dialog';
-import { Button } from '@/components/ui/button';
-import type { ContactColumnScheme, ContactMethod, ContactResultCode } from '@/shared/contracts/contacts';
-import type { PiiUpdate } from '@/server/contacts/domain/contact-target';
 import { useAutoFadeMessage } from '@/features/operations/hooks/use-auto-fade-message';
 import type { PiiFieldType } from '@/lib/crypto/pii-fields';
 import { piiKeyOf } from '@/lib/operations/contacts';
 import type {
+  ContactColumnScheme,
+  ContactMethod,
+  ContactResultCode,
+} from '@/shared/contracts/contacts';
+import type {
   ContactAttemptRow,
   MailHistoryRow,
+  PiiUpdate,
   ResponseEditLogRow,
-} from '@/server/read-models/contacts.server';
+} from '@/shared/contracts/contacts-io';
 import { client } from '@/shared/lib/rpc';
 
 interface ContactDetailFormProps {

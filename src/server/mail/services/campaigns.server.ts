@@ -14,14 +14,14 @@ import { blindIndex } from '@/lib/crypto/blind';
 import { firstEmailRowByTarget, selectEmailPiiRows } from '@/lib/crypto/contact-pii-repo';
 import { maskEmail } from '@/lib/operations/contacts';
 import { buildContactsFilterSql, latestResultCodeExpr } from '@/lib/operations/contacts-filter-sql';
-import type { FilterClause } from '@/server/read-models/contacts-filters.server';
+import { escapeLikePattern } from '@/lib/operations/filter-shared';
 import {
   type OperationsDataScope,
   campaignScopeCondition,
   targetScopeCondition,
   testFlagForScope,
 } from '@/server/data-scope.server';
-import { escapeLikePattern } from '@/lib/operations/filter-shared';
+import type { FilterClause } from '@/server/read-models/contacts-filters.server';
 import {
   buildNegativeCodeExists,
   getResultCodeStatuses,
@@ -32,35 +32,33 @@ import type {
   MailCampaignStatus,
   MailRecipientStatus,
 } from '@/shared/contracts/mail';
+import type {
+  CampaignCandidateRow,
+  CampaignExclusionCounts,
+  CampaignRecipientRow,
+  CampaignRow,
+  CampaignSortDir,
+  CampaignSortKey,
+  UnsubscribedContactRow,
+} from '@/shared/contracts/mail-io';
+
+// 표가 props 로 받는 행 모양은 계약(@/shared/contracts/mail-io) 소관 — 여기서 다시 내보내
+// 기존 호출부(RSC·app 라우트)의 import 경로를 유지한다.
+export type {
+  CampaignCandidateRow,
+  CampaignExclusionCounts,
+  CampaignRecipientRow,
+  CampaignRow,
+  CampaignSortDir,
+  CampaignSortKey,
+  UnsubscribedContactRow,
+};
 
 const DEFAULT_PAGE_SIZE = 20;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 단체 메일 list (메인 페이지)
 // ─────────────────────────────────────────────────────────────────────────────
-
-export interface CampaignRow {
-  id: string;
-  runNumber: number;
-  isTest: boolean;
-  title: string;
-  status: MailCampaignStatus;
-  mailTemplateId: string | null;
-  templateName: string | null;
-  recipientCount: number;
-  queuedCount: number;
-  sentCount: number;
-  deliveredCount: number;
-  openedCount: number;
-  bouncedCount: number;
-  complainedCount: number;
-  failedCount: number;
-  skippedUnsubscribedCount: number;
-  startedAt: Date | null;
-  completedAt: Date | null;
-  createdAt: Date;
-  createdBy: string | null;
-}
 
 export interface ListCampaignsResult {
   rows: CampaignRow[];
@@ -250,25 +248,6 @@ export async function getCampaignDetail(
   };
 }
 
-// 단체 메일 detail 의 recipients 목록 (status 필터 + email 검색 + 페이지네이션)
-export interface CampaignRecipientRow {
-  id: string;
-  contactTargetId: string | null;
-  contactResid: number | null;
-  contactGroupValue: string | null;
-  emailMasked: string;
-  status: MailRecipientStatus;
-  /** contact_targets.unsubscribed_at — 발송 status 와 별도. 수신거부 후 badge 표시용. */
-  unsubscribedAt: Date | null;
-  resendMessageId: string | null;
-  errorReason: string | null;
-  sentAt: Date | null;
-  deliveredAt: Date | null;
-  openedAt: Date | null;
-  bouncedAt: Date | null;
-  complainedAt: Date | null;
-}
-
 export interface ListCampaignRecipientsResult {
   rows: CampaignRecipientRow[];
   total: number;
@@ -369,19 +348,6 @@ export async function listCampaignRecipients(args: {
 // + 옵션 필터 (미응답자 / 결과코드 / 그룹값 / 검색)
 // ─────────────────────────────────────────────────────────────────────────────
 
-export interface CampaignCandidateRow {
-  id: string;
-  resid: number;
-  email: string;
-  emailMasked: string;
-  groupValue: string | null;
-  attrs: Record<string, string>;
-  respondedAt: Date | null;
-  latestResultCode: string | null;
-  /** 가장 최근 단체 메일에서의 수신 status. 발송 이력 없으면 null — 재전송 명단 대조용. */
-  latestMailStatus: MailRecipientStatus | null;
-}
-
 export interface CampaignCandidatesResult {
   rows: CampaignCandidateRow[];
   total: number;
@@ -389,10 +355,6 @@ export interface CampaignCandidatesResult {
   /** 필터 base 안에서 자동 제외 정책에 걸린 인원 (사유별, 중복 없음) */
   exclusions: CampaignExclusionCounts;
 }
-
-/** 미리보기 정렬 — 번호 / 응답여부 / 수신 상황 / 최근 결과코드. 이메일·그룹은 PII·비용 사유로 제외. */
-export type CampaignSortKey = 'resid' | 'responded' | 'mailStatus' | 'resultCode';
-export type CampaignSortDir = 'asc' | 'desc';
 
 export const CAMPAIGN_SORT_KEYS: readonly CampaignSortKey[] = [
   'resid',
@@ -561,17 +523,6 @@ function buildCandidateWhere(
   }
 
   return and(...parts)!;
-}
-
-export interface CampaignExclusionCounts {
-  /** unsubscribed_at IS NOT NULL */
-  unsubscribed: number;
-  /** 부정 결과코드 마킹 (수신거부 아님) */
-  negativeCode: number;
-  /** email PII 부재 (위 둘 아님) */
-  emailMissing: number;
-  /** 반송 이력 — 현재 이메일이 반송 당시 주소와 동일 (위 셋 아님) */
-  bounced: number;
 }
 
 /**
@@ -765,14 +716,6 @@ export async function countCampaignCandidates(args: {
 // ─────────────────────────────────────────────────────────────────────────────
 // 수신거부자 명단 (단체 메일 페이지 하단 세그먼트)
 // ─────────────────────────────────────────────────────────────────────────────
-
-export interface UnsubscribedContactRow {
-  id: string;
-  resid: number;
-  emailMasked: string;
-  groupValue: string | null;
-  unsubscribedAt: Date;
-}
 
 export async function listUnsubscribedContacts(args: {
   surveyId: string;

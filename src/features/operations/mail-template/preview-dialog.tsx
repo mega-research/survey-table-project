@@ -14,12 +14,12 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import type { MailAttachment } from '@/shared/contracts/mail';
-import type { MailPreviewSample } from '@/server/mail/domain/mail-preview';
 import { resultErrorMessage } from '@/lib/get-error-message';
 import { TMP_ATTACHMENT_PREFIX } from '@/lib/mail/constants';
 import { type PreviewSample, renderMailPreview } from '@/lib/mail/render-preview';
 import { sanitizeRichHtml } from '@/lib/sanitize';
+import type { MailAttachment } from '@/shared/contracts/mail';
+import type { MailPreviewSample } from '@/shared/contracts/mail-io';
 import { client } from '@/shared/lib/rpc';
 
 interface Props {

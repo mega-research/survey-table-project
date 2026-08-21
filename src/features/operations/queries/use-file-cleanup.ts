@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import type { ListHistoryInput } from '@/server/media/domain/file-cleanup';
+import type { FileCleanupHistoryStatus } from '@/shared/contracts/media-io';
 import { client, orpc } from '@/shared/lib/rpc';
 
 // ========================
@@ -14,8 +14,8 @@ export const fileCleanupKeys = {
   history: (status?: string) => [...fileCleanupKeys.all, 'history', status ?? 'all'] as const,
 };
 
-/** 이력 필터 상태 — pending 제외 (도메인 스키마에서 파생). */
-export type FileCleanupHistoryStatus = NonNullable<ListHistoryInput['status']>;
+/** 이력 필터 상태 — pending 제외. 서버 zod enum 도 같은 어휘 배열에서 파생한다. */
+export type { FileCleanupHistoryStatus };
 
 // ========================
 // Queries

@@ -2,8 +2,8 @@ import Link from 'next/link';
 
 import { Card } from '@/components/ui/card';
 import { LocalDateTime } from '@/components/ui/local-date-time';
-import type { CycleSummary } from '@/server/mail/services/mail-billing.server';
 import { cn } from '@/lib/utils';
+import type { CycleSummary } from '@/shared/contracts/mail-io';
 
 import { formatInt, formatKrw } from './_format';
 
@@ -66,13 +66,16 @@ export function CycleSummaryTable({ cycle }: Props) {
           </thead>
           <tbody>
             {cycle.campaigns.map((c) => {
-              const status = STATUS_LABEL[c.status] ?? { label: c.status, tone: 'bg-slate-100 text-slate-600' };
+              const status = STATUS_LABEL[c.status] ?? {
+                label: c.status,
+                tone: 'bg-slate-100 text-slate-600',
+              };
               return (
                 <tr
                   key={c.campaignId}
                   className="border-b border-gray-50 last:border-b-0 hover:bg-gray-50/40"
                 >
-                  <td className="px-3 py-2.5 font-medium tabular-nums text-gray-900">
+                  <td className="px-3 py-2.5 font-medium text-gray-900 tabular-nums">
                     {c.kind === 'single' ? '단건' : c.runNumber}
                   </td>
                   <td className="max-w-[200px] truncate px-3 py-2.5 text-gray-600">
@@ -101,14 +104,16 @@ export function CycleSummaryTable({ cycle }: Props) {
                     <LocalDateTime value={c.startedAt} format="month-day-time" />
                   </td>
                   <td className="px-3 py-2.5">
-                    <span className={cn('rounded-full px-2 py-0.5 text-xs font-medium', status.tone)}>
+                    <span
+                      className={cn('rounded-full px-2 py-0.5 text-xs font-medium', status.tone)}
+                    >
                       {status.label}
                     </span>
                   </td>
-                  <td className="px-3 py-2.5 text-right tabular-nums text-gray-900">
+                  <td className="px-3 py-2.5 text-right text-gray-900 tabular-nums">
                     {formatInt(c.billableCount)}
                   </td>
-                  <td className="px-3 py-2.5 text-right tabular-nums text-gray-600">
+                  <td className="px-3 py-2.5 text-right text-gray-600 tabular-nums">
                     {c.averageUnitPriceKrw === 0 ? (
                       <span className="text-gray-400">0원</span>
                     ) : (
@@ -132,11 +137,11 @@ export function CycleSummaryTable({ cycle }: Props) {
               <td colSpan={5} className="px-3 py-2.5 text-right text-xs font-medium text-gray-500">
                 초과분 소계
               </td>
-              <td className="px-3 py-2.5 text-right tabular-nums text-gray-700">
+              <td className="px-3 py-2.5 text-right text-gray-700 tabular-nums">
                 {formatInt(cycle.totalOverage)}
               </td>
               <td />
-              <td className="px-3 py-2.5 text-right tabular-nums font-medium text-gray-900">
+              <td className="px-3 py-2.5 text-right font-medium text-gray-900 tabular-nums">
                 {formatKrw(cycle.overageCostKrw)}
               </td>
             </tr>
@@ -144,7 +149,7 @@ export function CycleSummaryTable({ cycle }: Props) {
               <td colSpan={7} className="px-3 py-2.5 text-right text-xs font-medium text-gray-500">
                 월 구독료
               </td>
-              <td className="px-3 py-2.5 text-right tabular-nums text-gray-700">
+              <td className="px-3 py-2.5 text-right text-gray-700 tabular-nums">
                 {formatKrw(cycle.monthlyFeeKrw)}
               </td>
             </tr>
@@ -152,7 +157,7 @@ export function CycleSummaryTable({ cycle }: Props) {
               <td colSpan={7} className="px-3 py-3 text-right text-sm font-semibold text-gray-900">
                 기간 합계
               </td>
-              <td className="px-3 py-3 text-right tabular-nums text-base font-semibold text-blue-700">
+              <td className="px-3 py-3 text-right text-base font-semibold text-blue-700 tabular-nums">
                 {formatKrw(cycle.totalCostKrw)}
               </td>
             </tr>

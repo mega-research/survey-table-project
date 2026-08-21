@@ -1,5 +1,7 @@
 import * as z from 'zod';
 
+import { FILE_CLEANUP_HISTORY_STATUSES } from '@/shared/contracts/media-io';
+
 /**
  * file-cleanup 도메인 — R2 유예 삭제 큐의 admin 조회/취소 procedure 입출력 스키마.
  *
@@ -12,32 +14,16 @@ import * as z from 'zod';
  */
 
 /** 전체 후보 상태. */
-export const FILE_CLEANUP_STATUSES = [
-  'pending',
-  'cancelled',
-  'kept',
-  'deleted',
-  'failed',
-] as const;
+export const FILE_CLEANUP_STATUSES = ['pending', 'cancelled', 'kept', 'deleted', 'failed'] as const;
 
-/** 이력에서 조회 가능한 상태 — pending 은 대기 목록(listPending) 전용. */
-export const FILE_CLEANUP_HISTORY_STATUSES = [
-  'cancelled',
-  'kept',
-  'deleted',
-  'failed',
-] as const;
+// 이력 상태 어휘의 SoT 는 계약(@/shared/contracts/media-io) — 화면 필터 타입이 여기서 파생한다.
+export { FILE_CLEANUP_HISTORY_STATUSES };
 
 /** 목록 조회 기본/최대 행 수 — admin 화면용 안전 상한. */
 export const FILE_CLEANUP_LIST_DEFAULT_LIMIT = 200;
 export const FILE_CLEANUP_LIST_MAX_LIMIT = 500;
 
-const LimitSchema = z
-  .number()
-  .int()
-  .min(1)
-  .max(FILE_CLEANUP_LIST_MAX_LIMIT)
-  .optional();
+const LimitSchema = z.number().int().min(1).max(FILE_CLEANUP_LIST_MAX_LIMIT).optional();
 
 /** 대기 목록 조회 입력 — limit 만 선택 지정. */
 export const ListPendingInput = z.object({ limit: LimitSchema });

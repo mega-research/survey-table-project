@@ -16,20 +16,27 @@ import { useRouter } from 'next/navigation';
 import { AlertCircle, ArrowLeft, ArrowRight } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
+import { Button } from '@/components/ui/button';
+import {
+  buildRowWiseCellInstanceIds,
+  scrollToIssue,
+} from '@/features/question-renderer/scroll-to-issue';
+import { useSurveyResponseStore } from '@/features/question-renderer/stores/survey-response-store';
+import { resolveResponseContainerWidth } from '@/features/question-renderer/utils/table-grid-utils';
+import { AlreadyRespondedView } from '@/features/survey-response/already-responded-view';
 import { HoneypotField } from '@/features/survey-response/honeypot-field';
 import { sessionStorageKey } from '@/features/survey-response/hooks/session-helpers';
+import { useClientSignals } from '@/features/survey-response/hooks/use-client-signals';
 import { useDuplicateGuard } from '@/features/survey-response/hooks/use-duplicate-guard';
+import { useKeyboardOpen } from '@/features/survey-response/hooks/use-keyboard-open';
 import { useResponseLifecycle } from '@/features/survey-response/hooks/use-response-lifecycle';
 import { useResponseTelemetry } from '@/features/survey-response/hooks/use-response-telemetry';
 import { useSessionRecovery } from '@/features/survey-response/hooks/use-session-recovery';
 import { useSurveyLoader } from '@/features/survey-response/hooks/use-survey-loader';
 import { InviteRequiredScreen } from '@/features/survey-response/invite-required-screen';
+import type { SaveAdminEditPayload } from '@/features/survey-response/lib/admin-edit';
 import { MobileBottomNav } from '@/features/survey-response/mobile-bottom-nav';
 import { ResumeToast } from '@/features/survey-response/resume-toast';
-import {
-  buildRowWiseCellInstanceIds,
-  scrollToIssue,
-} from '@/features/question-renderer/scroll-to-issue';
 import { PageStepView } from '@/features/survey-response/step-views/page-step-view';
 import { SurveyResponseHeader } from '@/features/survey-response/survey-response-header';
 import {
@@ -39,12 +46,6 @@ import {
   SurveyErrorScreen,
   SurveyLoadingScreen,
 } from '@/features/survey-response/survey-response-screens';
-import { AlreadyRespondedView } from '@/features/survey-response/already-responded-view';
-import { Button } from '@/components/ui/button';
-import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
-import type { SaveAdminEditPayload } from '@/server/survey-response/domain/response-edit';
-import { useClientSignals } from '@/features/survey-response/hooks/use-client-signals';
-import { useKeyboardOpen } from '@/features/survey-response/hooks/use-keyboard-open';
 import { useSyncLatestRef } from '@/hooks/use-latest-ref';
 import { useMediaQuery } from '@/hooks/use-media-query';
 import {
@@ -80,9 +81,9 @@ import {
   resolveEffectiveOptionTextsByQuestion,
 } from '@/lib/survey/required-option-text-validation';
 import { generateId } from '@/lib/utils';
+import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
 import { client } from '@/shared/lib/rpc';
 import { DEFAULT_PAUSED_MESSAGE } from '@/shared/lib/survey-control';
-import { useSurveyResponseStore } from '@/features/question-renderer/stores/survey-response-store';
 import type { Question, QuestionGroup, Survey } from '@/types/survey';
 import {
   type BranchEvalCtx,
@@ -91,7 +92,6 @@ import {
   getBranchRuleForResponse,
   shouldDisplayQuestion,
 } from '@/utils/branch-logic';
-import { resolveResponseContainerWidth } from '@/features/question-renderer/utils/table-grid-utils';
 
 type ResponsesMap = Record<string, unknown>;
 

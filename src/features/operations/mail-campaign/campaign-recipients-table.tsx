@@ -5,7 +5,7 @@ import { LocalDateTime } from '@/components/ui/local-date-time';
 import { PagerJump } from '@/features/operations/pager-jump';
 import { buildPageItems } from '@/features/operations/table-primitives';
 import type { MailRecipientStatus } from '@/shared/contracts/mail';
-import type { CampaignRecipientRow } from '@/server/mail/services/campaigns.server';
+import type { CampaignRecipientRow } from '@/shared/contracts/mail-io';
 
 import { RecipientStatusBadge } from './recipient-status-badge';
 
@@ -49,9 +49,7 @@ function buildHref(
   if (overrides.recipPage && overrides.recipPage !== 1)
     params.set('recipPage', String(overrides.recipPage));
   const qs = params.toString();
-  return `/admin/surveys/${surveyId}/operations/mail/campaigns/${campaignId}${
-    qs ? `?${qs}` : ''
-  }`;
+  return `/admin/surveys/${surveyId}/operations/mail/campaigns/${campaignId}${qs ? `?${qs}` : ''}`;
 }
 
 export function CampaignRecipientsTable({

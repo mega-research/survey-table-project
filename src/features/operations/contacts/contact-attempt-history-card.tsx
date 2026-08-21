@@ -1,17 +1,18 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import { useTransition } from 'react';
+
+import { useRouter } from 'next/navigation';
 
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
-import type { ContactResultCode } from '@/shared/contracts/contacts';
-import { useAutoFadeMessage } from '@/features/operations/hooks/use-auto-fade-message';
 import { LocalDateTime } from '@/components/ui/local-date-time';
+import { useAutoFadeMessage } from '@/features/operations/hooks/use-auto-fade-message';
 import { getErrorMessage } from '@/lib/get-error-message';
 import { resultCodeToneClass } from '@/lib/operations/contacts-shared';
-import type { ContactAttemptRow } from '@/server/read-models/contacts.server';
+import type { ContactResultCode } from '@/shared/contracts/contacts';
+import type { ContactAttemptRow } from '@/shared/contracts/contacts-io';
 import { client } from '@/shared/lib/rpc';
 
 interface ContactAttemptHistoryCardProps {
@@ -62,7 +63,9 @@ export function ContactAttemptHistoryCard({
       )}
       <div>
         {attempts.length === 0 ? (
-          <div className="px-5 py-6 text-center text-sm text-slate-400">아직 회차 기록이 없습니다.</div>
+          <div className="px-5 py-6 text-center text-sm text-slate-400">
+            아직 회차 기록이 없습니다.
+          </div>
         ) : (
           attempts.map((a) => {
             const meta = codeLookup.get(a.resultCode);
@@ -78,7 +81,9 @@ export function ContactAttemptHistoryCard({
                 />
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
-                    <span className={`rounded-full px-2 py-0.5 text-xs ${resultCodeToneClass(meta?.tone)}`}>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs ${resultCodeToneClass(meta?.tone)}`}
+                    >
                       [{a.attemptNo}] {meta?.label ?? a.resultCode}
                     </span>
                   </div>

@@ -1,8 +1,8 @@
 import { ChevronDown } from 'lucide-react';
 
 import { LocalDateTime } from '@/components/ui/local-date-time';
+import type { ResponseEditLogRow } from '@/shared/contracts/contacts-io';
 import type { ResponseEditChange } from '@/shared/contracts/survey-response';
-import type { ResponseEditLogRow } from '@/server/read-models/contacts.server';
 
 /** 바뀐 질문 요약 — 앞 3개 code/title + "외 N개". */
 function summarizeChanges(changes: ResponseEditChange[], count: number): string {
@@ -21,10 +21,7 @@ interface Props {
 /** 응답 편집 audit 이력 — 기본 접힘 collapsible. 초기화 마커는 응답이 삭제된 뒤에도 남는다. */
 export function ContactEditHistoryCard({ rows, hasResponse }: Props) {
   return (
-    <details
-      open={hasResponse || rows.length > 0}
-      className="group rounded-lg border bg-white"
-    >
+    <details open={hasResponse || rows.length > 0} className="group rounded-lg border bg-white">
       <summary className="flex cursor-pointer items-center justify-between px-5 py-3 text-sm">
         <span className="flex items-center gap-1.5 font-medium text-slate-700">
           수정 / 편집 현황 ({rows.length}건)
@@ -39,10 +36,7 @@ export function ContactEditHistoryCard({ rows, hasResponse }: Props) {
         ) : (
           <ul className="space-y-2">
             {rows.map((r) => (
-              <li
-                key={r.id}
-                className="border-b border-slate-100 pb-2 last:border-0 last:pb-0"
-              >
+              <li key={r.id} className="border-b border-slate-100 pb-2 last:border-0 last:pb-0">
                 <div className="text-sm text-slate-700">{r.editorEmail ?? '관리자'}</div>
                 <div className="text-xs text-slate-500">
                   <LocalDateTime value={r.createdAt} /> ·{' '}

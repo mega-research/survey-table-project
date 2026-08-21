@@ -1,18 +1,12 @@
 import * as z from 'zod';
 
+import { type MailPreviewSample, MailPreviewSampleSchema } from '@/shared/contracts/mail-io';
+
 import { mailAttachmentSchema } from './schema';
 
-/**
- * 메일 템플릿 미리보기용 — 해당 설문의 첫 컨택 1건 샘플.
- * inviteUrl 은 서버에서 NEXT_PUBLIC_APP_URL 기준으로 빌드된 값.
- */
-export const MailPreviewSampleSchema = z.object({
-  attrs: z.record(z.string(), z.string()),
-  inviteUrl: z.string(),
-  email: z.string().nullable(),
-  resid: z.number(),
-});
-export type MailPreviewSample = z.infer<typeof MailPreviewSampleSchema>;
+// 미리보기 샘플 모양은 계약(@/shared/contracts/mail-io) 소관 — 여기서 다시 내보낸다.
+export { MailPreviewSampleSchema };
+export type { MailPreviewSample };
 
 /** 미리보기 샘플 입력. contactTargetId 지정 시 첫 컨택 대신 해당 컨택 기준 샘플. */
 export const GetMailPreviewSampleInput = z.object({

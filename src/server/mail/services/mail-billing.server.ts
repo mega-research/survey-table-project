@@ -1,12 +1,12 @@
-import 'server-only';
-
 import { and, asc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
+import 'server-only';
 
 import { db } from '@/db';
 import { mailBillingPeriods, mailCampaigns, mailRecipients, surveys } from '@/db/schema';
-import type { MailCampaignKind } from '@/db/schema/mail';
 import type { MailCampaignStatus, MailRecipientStatus } from '@/shared/contracts/mail';
-import { allocateCycleCosts, type AllocatorInputCampaign } from './billing-allocator';
+import type { BillingPeriodRow, CampaignCycleRow, CycleSummary } from '@/shared/contracts/mail-io';
+
+import { type AllocatorInputCampaign, allocateCycleCosts } from './billing-allocator';
 import {
   cycleStartFor,
   findPeriodFor,
@@ -14,6 +14,9 @@ import {
   nextCycleStart,
   toPeriodSpecs,
 } from './billing-cycles';
+
+// 정산 화면이 props 로 받는 행 모양은 계약(@/shared/contracts/mail-io) 소관 — 여기서 다시 내보낸다.
+export type { BillingPeriodRow, CampaignCycleRow, CycleSummary };
 
 /**
  * Resend 청구 카운트 — webhook 으로 적재된 mail_recipients.status 에서 'sent' 이상.
@@ -30,57 +33,6 @@ const BILLABLE_STATUSES: readonly MailRecipientStatus[] = [
   'bounced',
   'complained',
 ];
-
-export interface CampaignCycleRow {
-  campaignId: string;
-  surveyId: string;
-  surveyTitle: string;
-  runNumber: number;
-  kind: MailCampaignKind;
-  title: string;
-  status: MailCampaignStatus;
-  startedAt: Date;
-  completedAt: Date | null;
-  billableCount: number;
-  includedCount: number;
-  overageCount: number;
-  costKrw: number;
-  averageUnitPriceKrw: number;
-  isTest: boolean;
-  archivedAt: Date | null;
-}
-
-export interface CycleSummary {
-  cycleKey: string;
-  startedAt: Date;
-  endsAt: Date;
-  startLabel: string;
-  endLabel: string;
-  planLabel: string;
-  billingDayOfMonth: number;
-  includedEmails: number;
-  overagePer1kKrw: number;
-  isCurrent: boolean;
-  totalBillable: number;
-  totalIncluded: number;
-  totalOverage: number;
-  overageCostKrw: number;
-  monthlyFeeKrw: number;
-  totalCostKrw: number;
-  campaigns: CampaignCycleRow[];
-}
-
-export interface BillingPeriodRow {
-  id: string;
-  startDate: string;
-  billingDayOfMonth: number;
-  planLabel: string;
-  monthlyFeeKrw: number;
-  includedEmails: number;
-  overagePer1kKrw: number;
-  note: string | null;
-  createdAt: Date;
-}
 
 export interface BillingBreakdown {
   periods: BillingPeriodRow[];
