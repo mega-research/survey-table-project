@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { useSurveyBuilderStore } from '@/stores/survey-store';
+import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
 import type { Question, QuestionGroup, Survey } from '@/types/survey';
 
 // addGroup 이 형제 그룹의 실제 order 값(개수 아님)을 기준으로 새 order 를 계산하는지 검증한다.

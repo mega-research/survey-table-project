@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import { SurveyResponseHeader } from '@/components/survey-response/survey-response-header';
+import { SurveyResponseHeader } from '@/features/survey-response/survey-response-header';
 import { getHeaderBandBorders } from '@/lib/survey/response-header-config';
 import type { SurveyResponseHeaderConfig } from '@/shared/contracts/survey';
 

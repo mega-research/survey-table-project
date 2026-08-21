@@ -31,7 +31,7 @@ import { db } from '@/db';
 import { savedQuestions as savedQuestionsTable } from '@/db/schema/surveys';
 import type { ORPCContext } from '@/server/context';
 
-import { savedQuestions } from '@/features/library/server/procedures/saved-questions';
+import { savedQuestions } from '@/server/library/procedures/saved-questions';
 
 // prod 방어선: DATABASE_URL이 로컬이 아니면 전체 suite 스킵
 const dbUrl = process.env['DATABASE_URL'] ?? '';

@@ -3,11 +3,11 @@ import { useState } from 'react';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 
-import { InteractiveTableResponse } from '@/components/question-renderer/interactive-table-response';
-import { MobileDrilldownShell } from '@/components/question-renderer/mobile-drilldown-shell';
-import { useTestResponseStore } from '@/stores/test-response-store';
+import { InteractiveTableResponse } from '@/features/question-renderer/interactive-table-response';
+import { MobileDrilldownShell } from '@/features/question-renderer/mobile-drilldown-shell';
+import { useTestResponseStore } from '@/features/question-renderer/stores/test-response-store';
 import type { Question, TableCell, TableColumn, TableRow } from '@/types/survey';
-import type { ClassifiedLeaf, ClassifiedSection } from '@/components/question-renderer/utils/classify-table';
+import type { ClassifiedLeaf, ClassifiedSection } from '@/features/question-renderer/utils/classify-table';
 
 vi.mock('@/hooks/use-media-query', () => ({
   useMobileView: () => true,

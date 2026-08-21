@@ -6,7 +6,7 @@ import {
   emptyChangeset,
   mergeChangesets,
   type QuestionChangeset,
-} from '@/lib/survey-builder/changeset';
+} from '@/features/survey-builder/lib/changeset';
 
 /** 테스트용 changeset 빌더 (emptyChangeset 위에 부분 override) */
 function makeChangeset(partial: Partial<QuestionChangeset> = {}): QuestionChangeset {

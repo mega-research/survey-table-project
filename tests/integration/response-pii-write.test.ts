@@ -133,7 +133,7 @@ vi.mock('@/lib/duplicate-detection/check', () => ({
 }));
 
 // completeResponse / saveAdminEdit 이 공유하는 정규화 저장 — 전달된 맵의 암호화 여부를 검증한다.
-vi.mock('@/features/survey-response/server/services/response-answers.service', () => ({
+vi.mock('@/server/survey-response/services/response-answers.service', () => ({
   replaceResponseAnswers: (...a: unknown[]) => replaceResponseAnswersMock(...a),
 }));
 
@@ -233,7 +233,7 @@ describe('updateQuestionResponse — PII 문항 암호화', () => {
   it('스냅샷에서 piiEncrypted=true 면 jsonb_set 값이 v1: 암호문이다', async () => {
     executeMock.mockResolvedValue([{ pii: true }]);
     const { updateQuestionResponse } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response.service'
     );
     await updateQuestionResponse({
       responseId: RESPONSE_ID,
@@ -251,7 +251,7 @@ describe('updateQuestionResponse — PII 문항 암호화', () => {
   it('piiEncrypted=false 면 평문 그대로 저장한다', async () => {
     executeMock.mockResolvedValue([{ pii: false }]);
     const { updateQuestionResponse } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response.service'
     );
     await updateQuestionResponse({
       responseId: RESPONSE_ID,
@@ -270,7 +270,7 @@ describe('updateQuestionResponse — PII 문항 암호화', () => {
   it('assert 쿼리 SQL 텍스트에 live 합집합 조각(FROM questions 서브셀렉트 + OR COALESCE)이 포함된다', async () => {
     executeMock.mockResolvedValue([{ pii: true }]);
     const { updateQuestionResponse } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response.service'
     );
     await updateQuestionResponse({
       responseId: RESPONSE_ID,
@@ -311,7 +311,7 @@ describe('createResponseWithFirstAnswer — 첫 답변 INSERT 전 암호화', ()
 
   it('INSERT values 의 questionResponses 값이 평문이 아닌 v1: 암호문이다', async () => {
     const { createResponseWithFirstAnswer } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response.service'
     );
     const result = await createResponseWithFirstAnswer({
       surveyId: SURVEY_ID,
@@ -349,7 +349,7 @@ describe('createResponseWithFirstAnswer — 첫 답변 INSERT 전 암호화', ()
 
   it('평문이 상한 이하라도 암호문이 상한을 넘으면 INSERT 이전에 거부한다', async () => {
     const { createResponseWithFirstAnswer } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response.service'
     );
     // 평문 220KB(<256KB) → 암호문 약 293KB(>256KB). 이 경로의 판정 기준은 저장될 값이다.
     await expect(
@@ -413,7 +413,7 @@ describe('createResponseWithFirstAnswer — 컨택 재사용 draftSeq 전달', (
     ]);
 
     const { createResponseWithFirstAnswer } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response.service'
     );
     const result = await createResponseWithFirstAnswer({
       surveyId: SURVEY_ID,
@@ -451,7 +451,7 @@ describe('createResponseWithFirstAnswer — 컨택 재사용 draftSeq 전달', (
     ]);
 
     const { createResponseWithFirstAnswer } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response.service'
     );
     const result = await createResponseWithFirstAnswer({
       surveyId: SURVEY_ID,
@@ -490,7 +490,7 @@ describe('createResponseWithFirstAnswer — 컨택 재사용 draftSeq 전달', (
     ]);
 
     const { createResponseWithFirstAnswer } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response.service'
     );
     const result = await createResponseWithFirstAnswer({
       surveyId: SURVEY_ID,
@@ -525,7 +525,7 @@ describe('createResponseWithFirstAnswer — 컨택 재사용 draftSeq 전달', (
     ]);
 
     const { createResponseWithFirstAnswer } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response.service'
     );
     const result = await createResponseWithFirstAnswer({
       surveyId: SURVEY_ID,
@@ -584,7 +584,7 @@ describe('completeResponse — PII 문항만 선별 암호화', () => {
 
   it('트랜잭션 set 의 questionResponses 에서 PII 값만 암호문이고 비PII 는 평문이다', async () => {
     const { completeResponse } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response.service'
     );
     await completeResponse({
       responseId: RESPONSE_ID,
@@ -607,7 +607,7 @@ describe('completeResponse — PII 문항만 선별 암호화', () => {
 
   it('replaceResponseAnswers 도 동일하게 암호화된 맵을 받는다', async () => {
     const { completeResponse } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response.service'
     );
     await completeResponse({
       responseId: RESPONSE_ID,
@@ -631,7 +631,7 @@ describe('completeResponse — PII 문항만 선별 암호화', () => {
   // 라이브 플래그로 잡힌다"는 실제 합집합 동작 자체는 이 테스트로 검증되지 않는다(실DB 영역).
   it('loadPiiQuestionIds 쿼리 텍스트에 UNION 과 live pii_encrypted 조각이 포함된다', async () => {
     const { completeResponse } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response.service'
     );
     await completeResponse({
       responseId: RESPONSE_ID,
@@ -687,7 +687,7 @@ describe('completeResponse — PII 문항만 선별 암호화', () => {
     ]);
 
     const { completeResponse } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response.service'
     );
     await completeResponse({
       responseId: RESPONSE_ID,
@@ -739,7 +739,7 @@ describe('completeResponse — PII 문항만 선별 암호화', () => {
     ]);
 
     const { completeResponse } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response.service'
     );
     await completeResponse({ responseId: RESPONSE_ID });
 
@@ -756,7 +756,7 @@ describe('completeResponse — PII 문항만 선별 암호화', () => {
   it('버전 스냅샷이 없으면 재계산을 스킵하고 제출값을 그대로 저장한다', async () => {
     // beforeEach 의 selectLimitMock([]) 그대로 — 스냅샷 없음
     const { completeResponse } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response.service'
     );
     await completeResponse({
       responseId: RESPONSE_ID,
@@ -815,7 +815,7 @@ describe('saveAdminEdit — 복호화 diff 안정성 + 재암호화 저장', () 
 
   it('동일 평문 재제출이면 edit log 를 만들지 않고, 저장 맵의 PII 는 다시 암호문이다', async () => {
     const { saveAdminEdit } = await import(
-      '@/features/survey-response/server/services/response-edit.service'
+      '@/server/survey-response/services/response-edit.service'
     );
     await saveAdminEdit(
       {
@@ -846,7 +846,7 @@ describe('saveAdminEdit — 복호화 diff 안정성 + 재암호화 저장', () 
 
   it('비PII 문항만 변경하면 edit log 에 그 문항만 기록되고 PII 값은 암호문으로 저장된다', async () => {
     const { saveAdminEdit } = await import(
-      '@/features/survey-response/server/services/response-edit.service'
+      '@/server/survey-response/services/response-edit.service'
     );
     await saveAdminEdit(
       {
@@ -942,7 +942,7 @@ describe('saveAdminEdit — calc 셀 서버 재계산 (Task 13)', () => {
 
   it('source 셀 값을 바꾸면 클라가 제출한 calc 값을 무시하고 서버가 재계산한 값을 저장한다', async () => {
     const { saveAdminEdit } = await import(
-      '@/features/survey-response/server/services/response-edit.service'
+      '@/server/survey-response/services/response-edit.service'
     );
     await saveAdminEdit(
       {
@@ -991,7 +991,7 @@ describe('saveAdminEdit — calc 셀 서버 재계산 (Task 13)', () => {
     });
 
     const { saveAdminEdit } = await import(
-      '@/features/survey-response/server/services/response-edit.service'
+      '@/server/survey-response/services/response-edit.service'
     );
     await saveAdminEdit(
       {
@@ -1068,7 +1068,7 @@ describe('saveAdminEdit — calc 셀 서버 재계산 (Task 13)', () => {
     updateReturningMock.mockReturnValue([{ id: RESPONSE_ID }]);
 
     const { saveAdminEdit } = await import(
-      '@/features/survey-response/server/services/response-edit.service'
+      '@/server/survey-response/services/response-edit.service'
     );
     await saveAdminEdit(
       {
@@ -1117,7 +1117,7 @@ describe('saveAdminEdit — calc 셀 서버 재계산 (Task 13)', () => {
     updateReturningMock.mockReturnValue([{ id: RESPONSE_ID }]);
 
     const { saveAdminEdit } = await import(
-      '@/features/survey-response/server/services/response-edit.service'
+      '@/server/survey-response/services/response-edit.service'
     );
     await expect(
       saveAdminEdit(

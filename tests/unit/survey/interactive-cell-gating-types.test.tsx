@@ -1,8 +1,8 @@
 import { cleanup, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { InteractiveCell } from '@/components/question-renderer/cells/interactive-cell';
-import { useTestResponseStore } from '@/stores/test-response-store';
+import { InteractiveCell } from '@/features/question-renderer/cells/interactive-cell';
+import { useTestResponseStore } from '@/features/question-renderer/stores/test-response-store';
 import type { TableCell } from '@/types/survey';
 
 /**

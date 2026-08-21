@@ -15,8 +15,8 @@ vi.mock('@/shared/lib/rpc', () => ({
   orpc: {},
 }));
 
-import { useSurveySync } from '@/components/survey-builder/hooks/use-survey-sync';
-import { useSurveyBuilderStore } from '@/stores/survey-store';
+import { useSurveySync } from '@/features/survey-builder/hooks/use-survey-sync';
+import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
 import type { Question, Survey } from '@/types/survey';
 
 // saveSurveyScoped 회귀 테스트: 리매핑 자동 저장이 대상 질문의 updated 와 (요청 시)

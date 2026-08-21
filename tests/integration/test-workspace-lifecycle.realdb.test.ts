@@ -11,9 +11,9 @@ import {
   surveys,
   testResponseAttempts,
 } from '@/db/schema';
-import { deleteContactTarget } from '@/features/contacts/server/services/contact-targets.service';
-import { getControlState } from '@/features/operations/server/services/control.service';
-import { disableTestWorkspace } from '@/features/operations/server/services/test-workspace.service';
+import { deleteContactTarget } from '@/server/contacts/services/contact-targets.service';
+import { getControlState } from '@/server/operations/services/control.service';
+import { disableTestWorkspace } from '@/server/operations/services/test-workspace.service';
 import { terminalizeUnresolvedCampaignDispatch } from '@/lib/mail/campaign-dispatch';
 import { processResendEvent } from '@/lib/mail/resend-webhook';
 import { archiveTestWorkspaceMail } from '@/lib/mail/test-mail-archive.server';

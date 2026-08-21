@@ -3,7 +3,7 @@ import type { RefObject } from 'react';
 import { renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { usePageStickyThreshold } from '@/components/question-renderer/hooks/use-page-sticky-threshold';
+import { usePageStickyThreshold } from '@/features/question-renderer/hooks/use-page-sticky-threshold';
 
 const observed: Element[] = [];
 class ResizeObserverStub {

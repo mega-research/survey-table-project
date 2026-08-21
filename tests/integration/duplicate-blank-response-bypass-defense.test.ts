@@ -90,7 +90,7 @@ describe('createBlankResponse bypass defense', () => {
   it('checkDuplicateOnEntry 우회 → createBlankResponse 에서 차단', async () => {
     mockFindFirst.mockResolvedValue({ id: 'prev-blank-response' });
 
-    const { createBlankResponse } = await import('@/features/survey-response/server/services/response.service');
+    const { createBlankResponse } = await import('@/server/survey-response/services/response.service');
     const result = await createBlankResponse({
       surveyId: SURVEY_ID,
       sessionId: 'fresh-session-blank-bypass',
@@ -110,7 +110,7 @@ describe('clientSignals null 익명 제출 — create 는 봇 차단, checkOnEnt
   // (use-response-lifecycle 스테일 클로저 회귀 시 첫 답변이 null 로 나가 전원 오차단됐던
   // 2026-08-11 사고 참조). null 은 Track B 우회용 직접 RPC 호출 봇으로 간주한다.
   it('createResponseWithFirstAnswer: 익명 + clientSignals null → 봇 차단(INSERT 없음)', async () => {
-    const { createResponseWithFirstAnswer } = await import('@/features/survey-response/server/services/response.service');
+    const { createResponseWithFirstAnswer } = await import('@/server/survey-response/services/response.service');
     const result = await createResponseWithFirstAnswer({
       surveyId: SURVEY_ID,
       sessionId: 'session-null-signals',
@@ -126,7 +126,7 @@ describe('clientSignals null 익명 제출 — create 는 봇 차단, checkOnEnt
   });
 
   it('createBlankResponse: 익명 + clientSignals null → 봇 차단(INSERT 없음)', async () => {
-    const { createBlankResponse } = await import('@/features/survey-response/server/services/response.service');
+    const { createBlankResponse } = await import('@/server/survey-response/services/response.service');
     const result = await createBlankResponse({
       surveyId: SURVEY_ID,
       sessionId: 'session-blank-null-signals',
@@ -144,7 +144,7 @@ describe('clientSignals null 익명 제출 — create 는 봇 차단, checkOnEnt
     // 유효 테스트 링크의 첫 답변이 device_already_responded 로 오차단된다.
     // 이 mock 의 surveys.findFirst 는 test_mode 필드가 없어 무효 토큰 판정(invalid_test_token)
     // 까지 도달하는 것 자체가 봇 가드 통과의 증거다.
-    const { createResponseWithFirstAnswer } = await import('@/features/survey-response/server/services/response.service');
+    const { createResponseWithFirstAnswer } = await import('@/server/survey-response/services/response.service');
     const result = await createResponseWithFirstAnswer({
       surveyId: SURVEY_ID,
       sessionId: 'session-test-token-null-signals',
@@ -161,7 +161,7 @@ describe('clientSignals null 익명 제출 — create 는 봇 차단, checkOnEnt
   });
 
   it('createBlankResponse: testToken 동반 + clientSignals null → 봇 가드 대신 토큰 검증으로 진행한다', async () => {
-    const { createBlankResponse } = await import('@/features/survey-response/server/services/response.service');
+    const { createBlankResponse } = await import('@/server/survey-response/services/response.service');
     const result = await createBlankResponse({
       surveyId: SURVEY_ID,
       sessionId: 'session-blank-test-token-null-signals',
@@ -178,7 +178,7 @@ describe('clientSignals null 익명 제출 — create 는 봇 차단, checkOnEnt
   it('checkDuplicateOnEntry: clientSignals null → blocked false 즉시 반환', async () => {
     mockFindFirst.mockResolvedValue(undefined);
 
-    const { checkDuplicateOnEntry } = await import('@/features/survey-response/server/services/duplicate.service');
+    const { checkDuplicateOnEntry } = await import('@/server/survey-response/services/duplicate.service');
     const result = await checkDuplicateOnEntry({
       surveyId: SURVEY_ID,
       clientSignals: null,

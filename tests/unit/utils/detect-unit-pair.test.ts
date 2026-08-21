@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { detectUnitPair } from '@/components/question-renderer/utils/mobile-card-options';
+import { detectUnitPair } from '@/features/question-renderer/utils/mobile-card-options';
 
 /**
  * detectUnitPair 는 모바일 카드에서 "수량 셀 + 단위 셀" 쌍을 한 줄로 묶기 위해

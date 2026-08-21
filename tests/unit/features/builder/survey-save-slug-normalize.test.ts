@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { normalizeSlug } from '@/features/survey-builder/server/services/survey-save.service';
+import { normalizeSlug } from '@/server/survey-builder/services/survey-save.service';
 
 /**
  * M65 회귀: 빈 slug 정규화.

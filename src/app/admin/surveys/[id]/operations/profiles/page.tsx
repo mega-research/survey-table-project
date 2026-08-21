@@ -5,9 +5,9 @@ import { asc, eq } from 'drizzle-orm';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { EmptyState } from '@/components/operations/empty-state';
-import { ProfilesFilterBar } from '@/components/operations/profiles/profiles-filter-bar';
-import { ProfilesTable } from '@/components/operations/profiles/profiles-table';
+import { EmptyState } from '@/features/operations/empty-state';
+import { ProfilesFilterBar } from '@/features/operations/profiles/profiles-filter-bar';
+import { ProfilesTable } from '@/features/operations/profiles/profiles-table';
 import { getQuestionGroupsBySurvey } from '@/data/surveys';
 import { db } from '@/db';
 import { questions as questionsTable } from '@/db/schema';

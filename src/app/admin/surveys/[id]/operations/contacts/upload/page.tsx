@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
-import { ContactUploadAction } from '@/components/operations/contacts/contact-upload-action';
-import { UploadHistoryTable } from '@/components/operations/contacts/upload-history-table';
+import { ContactUploadAction } from '@/features/operations/contacts/contact-upload-action';
+import { UploadHistoryTable } from '@/features/operations/contacts/upload-history-table';
 import { Card, CardContent } from '@/components/ui/card';
 import { listContactUploads } from '@/lib/operations/contacts.server';
 import { getOperationsDataScope } from '@/lib/operations/data-scope.server';

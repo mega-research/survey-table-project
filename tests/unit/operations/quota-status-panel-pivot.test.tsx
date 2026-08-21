@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 
-import { QuotaStatusPanel } from '@/components/operations/quota/quota-status-panel';
+import { QuotaStatusPanel } from '@/features/operations/quota/quota-status-panel';
 import type { QuotaStatus } from '@/lib/operations/quota-status';
 
 const cat = (id: string, label: string) => ({ id, label });

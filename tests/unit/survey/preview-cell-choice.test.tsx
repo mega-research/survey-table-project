@@ -1,8 +1,8 @@
 import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { PreviewCell } from '@/components/question-renderer/cells/preview-cell';
-import { TablePreview } from '@/components/question-renderer/table-preview';
+import { PreviewCell } from '@/features/question-renderer/cells/preview-cell';
+import { TablePreview } from '@/features/question-renderer/table-preview';
 import type { Question, TableCell, TableRow } from '@/types/survey';
 import { getGroupTypeOfCell } from '@/utils/choice-group-helpers';
 

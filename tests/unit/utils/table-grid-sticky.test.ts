@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { TableColumn, TableRow } from '@/types/survey';
-import { computeStickyLeftColumns } from '@/components/question-renderer/utils/table-grid-utils';
+import { computeStickyLeftColumns } from '@/features/question-renderer/utils/table-grid-utils';
 
 /**
  * 좌측 sticky 열 자동 판정 회귀 테스트.

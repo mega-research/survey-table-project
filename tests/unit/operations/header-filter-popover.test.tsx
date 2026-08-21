@@ -23,7 +23,7 @@ vi.mock('@/shared/lib/rpc', () => ({
 }));
 
 import { client } from '@/shared/lib/rpc';
-import { HeaderFilterPopover } from '@/components/operations/filters/header-filter-popover';
+import { HeaderFilterPopover } from '@/features/operations/filters/header-filter-popover';
 
 const listMock = vi.mocked(client.contacts.attrValues.list);
 

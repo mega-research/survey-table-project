@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { NumericComparison } from '@/types/survey';
-import { migrateNumericComparisonToExpression } from '@/components/survey-builder/condition/utils/expression-migration';
+import { migrateNumericComparisonToExpression } from '@/features/survey-builder/condition/utils/expression-migration';
 
 const OUTER_CELL = { questionId: 'q1', cellId: 'cell-a' };
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { decideResponseReuse } from '@/features/survey-response/domain/lifecycle';
+import { decideResponseReuse } from '@/server/survey-response/domain/lifecycle';
 
 // sweep_stale_sessions() pg_cron 이 3시간 유휴 in_progress 를 drop 으로 바꾸면서
 // is_completed 는 false 로 남긴다. 컨택 재사용 조회는 is_completed=false 만 보므로

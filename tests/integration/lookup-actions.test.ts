@@ -9,7 +9,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 //
 // 보관함 CRUD 함수(listSavedLookupsAction, createSavedLookupAction, updateSavedLookupAction,
 // deleteSavedLookupAction)는 oRPC savedLookups procedure 로 이관됨.
-// 해당 procedure 의 테스트는 src/features/library/server/procedures/saved-lookups.test.ts 에 있음.
+// 해당 procedure 의 테스트는 src/server/library/procedures/saved-lookups.test.ts 에 있음.
 //
 // vi.mock 는 hoist 되므로 mock 안에서 참조하는 state 는 vi.hoisted 로 끌어올린다.
 
@@ -278,7 +278,7 @@ import {
   copySavedLookupToSurvey,
   upsertSurveyLookup,
   deleteSurveyLookup,
-} from '@/features/survey-builder/server/services/survey-lookups.service';
+} from '@/server/survey-builder/services/survey-lookups.service';
 
 const TEST_SURVEY_ID = '00000000-0000-4000-8000-000000000001';
 

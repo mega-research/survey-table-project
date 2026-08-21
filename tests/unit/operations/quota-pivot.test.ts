@@ -6,7 +6,7 @@ import {
   pivotColBorderClass,
   pivotColKey,
   pivotTotals,
-} from '@/components/operations/quota/quota-pivot';
+} from '@/features/operations/quota/quota-pivot';
 
 const cat = (id: string, label: string) => ({ id, label });
 

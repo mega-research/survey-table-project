@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { createAddLevelOption } from '@/components/survey-builder/question-option-helpers';
+import { createAddLevelOption } from '@/features/survey-builder/question-option-helpers';
 import type { Question, QuestionOption } from '@/types/survey';
 
 /** setFormData(updater) 를 흉내내 상태를 캡처하는 하네스 */

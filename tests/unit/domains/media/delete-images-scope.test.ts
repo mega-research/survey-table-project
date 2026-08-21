@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DeleteImagesInput,
   isAllowedImageDeletionKey,
-} from '@/features/media/domain/media';
+} from '@/server/media/domain/media';
 
 /**
  * WS-2 media-scope — media.deleteImages R2 prefix 게이트.

@@ -67,7 +67,7 @@ vi.mock('@/db', () => {
   return { db };
 });
 
-vi.mock('@/features/survey-response/server/services/response-answers.service', () => ({
+vi.mock('@/server/survey-response/services/response-answers.service', () => ({
   replaceResponseAnswers: vi.fn(async () => undefined),
 }));
 
@@ -116,7 +116,7 @@ describe('#24 response-versionid 가드 — startResponse', () => {
   it('versionId 미전달이면 기존 동작 보존(검증 skip, 통과)', async () => {
     surveyFindFirstMock.mockResolvedValue(publishedSurvey());
     const { startResponse } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response.service'
     );
     const res = await startResponse({ surveyId: SURVEY_ID });
     expect(res).toMatchObject({ id: 'r1' });
@@ -128,7 +128,7 @@ describe('#24 response-versionid 가드 — startResponse', () => {
     surveyFindFirstMock.mockResolvedValue(publishedSurvey());
     versionFindFirstMock.mockResolvedValue(versionRow());
     const { startResponse } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response.service'
     );
     const res = await startResponse({ surveyId: SURVEY_ID, versionId: VERSION_ID });
     expect(res).toMatchObject({ id: 'r1' });
@@ -138,7 +138,7 @@ describe('#24 response-versionid 가드 — startResponse', () => {
     surveyFindFirstMock.mockResolvedValue(publishedSurvey({ currentVersionId: VERSION_ID }));
     versionFindFirstMock.mockResolvedValue(versionRow({ status: 'superseded' }));
     const { startResponse } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response.service'
     );
     const res = await startResponse({ surveyId: SURVEY_ID, versionId: VERSION_ID });
     expect(res).toMatchObject({ id: 'r1' });
@@ -148,7 +148,7 @@ describe('#24 response-versionid 가드 — startResponse', () => {
     surveyFindFirstMock.mockResolvedValue(publishedSurvey());
     versionFindFirstMock.mockResolvedValue(undefined);
     const { startResponse } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response.service'
     );
     await expect(
       startResponse({ surveyId: SURVEY_ID, versionId: VERSION_ID }),
@@ -159,7 +159,7 @@ describe('#24 response-versionid 가드 — startResponse', () => {
     surveyFindFirstMock.mockResolvedValue(publishedSurvey());
     versionFindFirstMock.mockResolvedValue(versionRow({ surveyId: OTHER_SURVEY_ID }));
     const { startResponse } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response.service'
     );
     await expect(
       startResponse({ surveyId: SURVEY_ID, versionId: VERSION_ID }),
@@ -170,7 +170,7 @@ describe('#24 response-versionid 가드 — startResponse', () => {
     surveyFindFirstMock.mockResolvedValue(publishedSurvey({ currentVersionId: null }));
     versionFindFirstMock.mockResolvedValue(versionRow({ status: 'closed' }));
     const { startResponse } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response.service'
     );
     await expect(
       startResponse({ surveyId: SURVEY_ID, versionId: VERSION_ID }),

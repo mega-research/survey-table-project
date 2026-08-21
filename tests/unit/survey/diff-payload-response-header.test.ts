@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildSurveyDiffPayload } from '@/lib/survey-builder/diff-payload';
+import { buildSurveyDiffPayload } from '@/features/survey-builder/lib/diff-payload';
 import type { Survey } from '@/types/survey';
 
 const baseSurvey: Survey = {

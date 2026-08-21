@@ -3,7 +3,7 @@ import type { RefObject } from 'react';
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { useHorizontalScrollIndicators } from '@/components/question-renderer/hooks/use-horizontal-scroll-indicators';
+import { useHorizontalScrollIndicators } from '@/features/question-renderer/hooks/use-horizontal-scroll-indicators';
 
 class ResizeObserverStub {
   observe() {}

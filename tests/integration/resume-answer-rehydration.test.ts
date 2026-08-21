@@ -27,7 +27,7 @@ vi.mock('@/lib/duplicate-detection/invite-lookup', () => ({
   findContactByInviteToken: vi.fn(),
 }));
 
-import { resumeOrCreateResponse } from '@/features/survey-response/server/services/lifecycle.service';
+import { resumeOrCreateResponse } from '@/server/survey-response/services/lifecycle.service';
 
 describe('resumeOrCreateResponse 응답 복원', () => {
   beforeEach(() => {

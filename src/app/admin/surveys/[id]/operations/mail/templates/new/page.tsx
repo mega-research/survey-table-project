@@ -1,4 +1,4 @@
-import { TemplateEditForm } from '@/components/operations/mail-template/template-edit-form';
+import { TemplateEditForm } from '@/features/operations/mail-template/template-edit-form';
 import { getVariableCatalog } from '@/lib/mail/variable-catalog';
 import { requireAuth } from '@/lib/auth';
 

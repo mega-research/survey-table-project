@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
-import { OptionsLayoutSelector } from '@/components/survey-builder/options-layout-selector';
+import { OptionsLayoutSelector } from '@/features/survey-builder/options-layout-selector';
 
 describe('OptionsLayoutSelector 모바일 배치', () => {
   it('onMobileChange 미전달 시 모바일 select 를 렌더하지 않는다', () => {

@@ -1,7 +1,7 @@
 import { renderHook } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import { useRowGroups } from '@/components/question-renderer/hooks/use-row-groups';
+import { useRowGroups } from '@/features/question-renderer/hooks/use-row-groups';
 import type { TableCell, TableRow } from '@/types/survey';
 
 // ── 테스트 픽스처 헬퍼 ──

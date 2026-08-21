@@ -1,10 +1,10 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
-import { InteractiveTableResponse } from '@/components/question-renderer/interactive-table-response';
-import { InteractiveCell } from '@/components/question-renderer/cells/interactive-cell';
-import { MobileOriginalRowTable } from '@/components/question-renderer/mobile-original-row-table';
-import { TablePreview } from '@/components/question-renderer/table-preview';
+import { InteractiveTableResponse } from '@/features/question-renderer/interactive-table-response';
+import { InteractiveCell } from '@/features/question-renderer/cells/interactive-cell';
+import { MobileOriginalRowTable } from '@/features/question-renderer/mobile-original-row-table';
+import { TablePreview } from '@/features/question-renderer/table-preview';
 import type { TableColumn, TableRow } from '@/types/survey';
 
 const columns: TableColumn[] = [

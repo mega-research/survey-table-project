@@ -11,7 +11,7 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => currentParams,
 }));
 
-import { ContactsFilterBar } from '@/components/operations/contacts/contacts-filter-bar';
+import { ContactsFilterBar } from '@/features/operations/contacts/contacts-filter-bar';
 
 function pushedParams(): URLSearchParams {
   const lastCall = pushMock.mock.calls.at(-1);

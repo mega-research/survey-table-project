@@ -248,7 +248,7 @@ vi.mock('@/lib/operations/result-code-statuses.server', async () => {
   };
 });
 
-import { createCampaign } from '@/features/mail/server/services/mail-campaigns.service';
+import { createCampaign } from '@/server/mail/services/mail-campaigns.service';
 
 const SURVEY_ID = '00000000-0000-4000-8000-000000000040';
 const USER_ID = '00000000-0000-4000-8000-0000000000ff';

@@ -33,7 +33,7 @@ vi.mock('@/lib/versioning/snapshot-builder', () => ({
 
 import { getSurveyWithDetails } from '@/data/surveys';
 import { db } from '@/db';
-import { publishSurvey } from '@/features/survey-builder/server/services/survey-publish.service';
+import { publishSurvey } from '@/server/survey-builder/services/survey-publish.service';
 import type { Question, Survey } from '@/types/survey';
 
 const SURVEY_ID = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';

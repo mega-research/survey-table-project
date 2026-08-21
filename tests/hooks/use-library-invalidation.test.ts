@@ -1,7 +1,7 @@
 import { QueryClient } from '@tanstack/react-query';
 import { describe, expect, it } from 'vitest';
 
-import { libraryKeys } from '@/hooks/queries/use-library';
+import { libraryKeys } from '@/features/survey-builder/queries/use-library';
 import { orpc } from '@/shared/lib/rpc';
 
 /**

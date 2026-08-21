@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildSurveyDiffPayload } from '@/lib/survey-builder/diff-payload';
-import { emptyChangeset, type QuestionChangeset } from '@/lib/survey-builder/changeset';
+import { buildSurveyDiffPayload } from '@/features/survey-builder/lib/diff-payload';
+import { emptyChangeset, type QuestionChangeset } from '@/features/survey-builder/lib/changeset';
 import type { Survey } from '@/types/survey';
 
 /**

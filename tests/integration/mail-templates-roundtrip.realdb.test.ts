@@ -23,7 +23,7 @@ import { mailTemplates as mailTemplatesTable } from '@/db/schema/mail';
 import { surveys as surveysTable } from '@/db/schema';
 import type { ORPCContext } from '@/server/context';
 
-import { templates } from '@/features/mail/server/procedures/templates';
+import { templates } from '@/server/mail/procedures/templates';
 
 // prod 방어선: DATABASE_URL이 로컬이 아니면 전체 suite 스킵
 const dbUrl = process.env['DATABASE_URL'] ?? '';

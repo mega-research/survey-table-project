@@ -2,7 +2,7 @@ import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { TestModeControl } from '@/components/operations/test-mode-control';
+import { TestModeControl } from '@/features/operations/test-mode-control';
 
 const {
   controlGetMock,

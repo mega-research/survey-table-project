@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
 
-import { UploadWizard } from '@/components/operations/contacts/upload-wizard';
+import { UploadWizard } from '@/features/operations/contacts/upload-wizard';
 import { Card, CardContent } from '@/components/ui/card';
-import { getExistingContactsCount } from '@/features/contacts/server/services/contact-columns.service';
+import { getExistingContactsCount } from '@/server/contacts/services/contact-columns.service';
 import { getContactColumnScheme } from '@/lib/operations/contacts.server';
 import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
 

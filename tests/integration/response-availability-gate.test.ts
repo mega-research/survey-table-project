@@ -128,7 +128,7 @@ vi.mock('@/db', () => {
   return { db };
 });
 
-vi.mock('@/features/survey-response/server/services/response-answers.service', () => ({
+vi.mock('@/server/survey-response/services/response-answers.service', () => ({
   replaceResponseAnswers: vi.fn(async () => undefined),
 }));
 
@@ -183,7 +183,7 @@ describe('assertSurveyAcceptingResponses — startResponse 게이트', () => {
   it('published 정상 설문이면 통과해 응답 행을 반환한다', async () => {
     surveyFindFirstMock.mockResolvedValue(publishedSurvey());
     const { startResponse } =
-      await import('@/features/survey-response/server/services/response.service');
+      await import('@/server/survey-response/services/response.service');
     const res = await startResponse({ surveyId: SURVEY_ID });
     expect(res).toMatchObject({ id: 'r1' });
   });
@@ -194,7 +194,7 @@ describe('assertSurveyAcceptingResponses — startResponse 게이트', () => {
     surveyFindFirstMock.mockResolvedValue(publishedSurvey());
     insertChain.values.mockClear();
     const { startResponse } =
-      await import('@/features/survey-response/server/services/response.service');
+      await import('@/server/survey-response/services/response.service');
     await startResponse({ surveyId: SURVEY_ID });
 
     const valuesCalls = insertChain.values.mock.calls as unknown as Array<[{ sessionId: string }]>;
@@ -208,14 +208,14 @@ describe('assertSurveyAcceptingResponses — startResponse 게이트', () => {
   it('status=draft 면 거부한다', async () => {
     surveyFindFirstMock.mockResolvedValue(publishedSurvey({ status: 'draft' }));
     const { startResponse } =
-      await import('@/features/survey-response/server/services/response.service');
+      await import('@/server/survey-response/services/response.service');
     await expect(startResponse({ surveyId: SURVEY_ID })).rejects.toThrow();
   });
 
   it('status=closed 면 거부한다', async () => {
     surveyFindFirstMock.mockResolvedValue(publishedSurvey({ status: 'closed' }));
     const { startResponse } =
-      await import('@/features/survey-response/server/services/response.service');
+      await import('@/server/survey-response/services/response.service');
     await expect(startResponse({ surveyId: SURVEY_ID })).rejects.toThrow();
   });
 
@@ -224,7 +224,7 @@ describe('assertSurveyAcceptingResponses — startResponse 게이트', () => {
       publishedSurvey({ endDate: new Date(Date.now() - 60_000) }),
     );
     const { startResponse } =
-      await import('@/features/survey-response/server/services/response.service');
+      await import('@/server/survey-response/services/response.service');
     await expect(startResponse({ surveyId: SURVEY_ID })).rejects.toThrow();
   });
 
@@ -233,7 +233,7 @@ describe('assertSurveyAcceptingResponses — startResponse 게이트', () => {
       publishedSurvey({ endDate: new Date(Date.now() + 60_000) }),
     );
     const { startResponse } =
-      await import('@/features/survey-response/server/services/response.service');
+      await import('@/server/survey-response/services/response.service');
     const res = await startResponse({ surveyId: SURVEY_ID });
     expect(res).toMatchObject({ id: 'r1' });
   });
@@ -241,7 +241,7 @@ describe('assertSurveyAcceptingResponses — startResponse 게이트', () => {
   it('비공개(isPublic=false) + invite(contactTargetId) 없음이면 거부한다', async () => {
     surveyFindFirstMock.mockResolvedValue(publishedSurvey({ isPublic: false }));
     const { startResponse } =
-      await import('@/features/survey-response/server/services/response.service');
+      await import('@/server/survey-response/services/response.service');
     // startResponse 는 inviteToken 을 받지 않으므로 비공개면 항상 거부.
     await expect(startResponse({ surveyId: SURVEY_ID })).rejects.toThrow();
   });
@@ -249,7 +249,7 @@ describe('assertSurveyAcceptingResponses — startResponse 게이트', () => {
   it('설문 자체가 존재하지 않으면 거부한다', async () => {
     surveyFindFirstMock.mockResolvedValue(undefined);
     const { startResponse } =
-      await import('@/features/survey-response/server/services/response.service');
+      await import('@/server/survey-response/services/response.service');
     await expect(startResponse({ surveyId: SURVEY_ID })).rejects.toThrow();
   });
 });
@@ -275,14 +275,14 @@ describe('assertResponseCompletable — completeResponse 완료 게이트', () =
   it('완료 카운트가 maxResponses 이상이면 완료를 거부한다', async () => {
     countResultMock.mockResolvedValue([{ total: 2 }]);
     const { completeResponse } =
-      await import('@/features/survey-response/server/services/response.service');
+      await import('@/server/survey-response/services/response.service');
     await expect(completeResponse({ responseId: 'r1' })).rejects.toThrow();
   });
 
   it('완료 카운트가 maxResponses 미만이면 완료를 통과시킨다', async () => {
     countResultMock.mockResolvedValue([{ total: 1 }]);
     const { completeResponse } =
-      await import('@/features/survey-response/server/services/response.service');
+      await import('@/server/survey-response/services/response.service');
     const res = await completeResponse({ responseId: 'r1' });
     expect(res).toMatchObject({ id: 'r1' });
   });
@@ -293,7 +293,7 @@ describe('assertResponseCompletable — completeResponse 완료 게이트', () =
     );
     countResultMock.mockResolvedValue([{ total: 0 }]);
     const { completeResponse } =
-      await import('@/features/survey-response/server/services/response.service');
+      await import('@/server/survey-response/services/response.service');
     const res = await completeResponse({ responseId: 'r1' });
     expect(res).toMatchObject({ id: 'r1' });
   });
@@ -304,7 +304,7 @@ describe('assertResponseCompletable — completeResponse 완료 게이트', () =
     );
     countResultMock.mockResolvedValue([{ total: 2 }]);
     const { completeResponse } =
-      await import('@/features/survey-response/server/services/response.service');
+      await import('@/server/survey-response/services/response.service');
     // 종전에는 마감이 먼저 잘려 정원 검사에 도달하지 않았다. 차단은 그대로다.
     await expect(completeResponse({ responseId: 'r1' })).rejects.toMatchObject({
       reason: 'max_responses_reached',
@@ -317,7 +317,7 @@ describe('assertResponseCompletable — completeResponse 완료 게이트', () =
     );
     countResultMock.mockResolvedValue([{ total: 0 }]);
     const { completeResponse } =
-      await import('@/features/survey-response/server/services/response.service');
+      await import('@/server/survey-response/services/response.service');
     await expect(completeResponse({ responseId: 'r1' })).rejects.toMatchObject({
       reason: 'survey_paused',
     });
@@ -374,7 +374,7 @@ describe('assertSurveyAcceptingResponses — createResponseWithFirstAnswer 테�
     responseFindFirstMock.mockResolvedValue(undefined);
 
     const { createResponseWithFirstAnswer } =
-      await import('@/features/survey-response/server/services/response.service');
+      await import('@/server/survey-response/services/response.service');
     expect(
       await createResponseWithFirstAnswer({
         surveyId: SURVEY_ID,
@@ -393,7 +393,7 @@ describe('assertSurveyAcceptingResponses — createResponseWithFirstAnswer 테�
     responseFindFirstMock.mockResolvedValue(undefined);
 
     const { createResponseWithFirstAnswer } =
-      await import('@/features/survey-response/server/services/response.service');
+      await import('@/server/survey-response/services/response.service');
     expect(
       await createResponseWithFirstAnswer({
         surveyId: SURVEY_ID,
@@ -422,7 +422,7 @@ describe('assertSurveyAcceptingResponses — createResponseWithFirstAnswer 테�
       });
 
     const { createResponseWithFirstAnswer } =
-      await import('@/features/survey-response/server/services/response.service');
+      await import('@/server/survey-response/services/response.service');
     const result = await createResponseWithFirstAnswer({
       surveyId: SURVEY_ID,
       sessionId: 'real-session-while-test-mode-on',
@@ -463,7 +463,7 @@ describe('assertSurveyAcceptingResponses — createResponseWithFirstAnswer 테�
     });
 
     const { createResponseWithFirstAnswer } =
-      await import('@/features/survey-response/server/services/response.service');
+      await import('@/server/survey-response/services/response.service');
     const result = await createResponseWithFirstAnswer({
       surveyId: SURVEY_ID,
       sessionId: 'gate-session-test-token',
@@ -488,7 +488,7 @@ describe('assertSurveyAcceptingResponses — createResponseWithFirstAnswer 테�
     responseFindFirstMock.mockResolvedValue({ id: 'prior-response' });
 
     const { createResponseWithFirstAnswer } =
-      await import('@/features/survey-response/server/services/response.service');
+      await import('@/server/survey-response/services/response.service');
     const result = await createResponseWithFirstAnswer({
       surveyId: SURVEY_ID,
       sessionId: 'gate-session-invalid-token',
@@ -510,7 +510,7 @@ describe('assertSurveyAcceptingResponses — createResponseWithFirstAnswer 테�
     responseFindFirstMock.mockResolvedValue(undefined);
 
     const { createResponseWithFirstAnswer } =
-      await import('@/features/survey-response/server/services/response.service');
+      await import('@/server/survey-response/services/response.service');
     const result = await createResponseWithFirstAnswer({
       surveyId: SURVEY_ID,
       sessionId: 'gate-session-token-mismatch',
@@ -531,7 +531,7 @@ describe('assertSurveyAcceptingResponses — createResponseWithFirstAnswer 테�
     );
 
     const { createResponseWithFirstAnswer } =
-      await import('@/features/survey-response/server/services/response.service');
+      await import('@/server/survey-response/services/response.service');
     const result = await createResponseWithFirstAnswer({
       surveyId: SURVEY_ID,
       sessionId: 'gate-session-mixed-token',
@@ -555,7 +555,7 @@ describe('assertSurveyAcceptingResponses — createResponseWithFirstAnswer 테�
     responseFindFirstMock.mockResolvedValue({ id: 'prior-response' });
 
     const { createBlankResponse } =
-      await import('@/features/survey-response/server/services/response.service');
+      await import('@/server/survey-response/services/response.service');
     const result = await createBlankResponse({
       surveyId: SURVEY_ID,
       sessionId: 'gate-session-blank-invalid-token',
@@ -574,7 +574,7 @@ describe('assertSurveyAcceptingResponses — createResponseWithFirstAnswer 테�
     );
 
     const { createBlankResponse } =
-      await import('@/features/survey-response/server/services/response.service');
+      await import('@/server/survey-response/services/response.service');
     const result = await createBlankResponse({
       surveyId: SURVEY_ID,
       sessionId: 'gate-session-blank-mixed-token',
@@ -608,7 +608,7 @@ describe('resumeOrCreateResponse — 중단 게이트 (Task 6)', () => {
     );
 
     const { resumeOrCreateResponse } =
-      await import('@/features/survey-response/server/services/lifecycle.service');
+      await import('@/server/survey-response/services/lifecycle.service');
     await expect(
       resumeOrCreateResponse({
         surveyId: SURVEY_ID,
@@ -630,7 +630,7 @@ describe('resumeOrCreateResponse — 중단 게이트 (Task 6)', () => {
     ]);
 
     const { resumeOrCreateResponse } =
-      await import('@/features/survey-response/server/services/lifecycle.service');
+      await import('@/server/survey-response/services/lifecycle.service');
 
     await expect(
       resumeOrCreateResponse({
@@ -654,7 +654,7 @@ describe('resumeOrCreateResponse — 중단 게이트 (Task 6)', () => {
     selectLimitMock.mockResolvedValue([{ id: 'resp-c1', status: 'drop', isTest: false }]);
 
     const { resumeOrCreateResponse } =
-      await import('@/features/survey-response/server/services/lifecycle.service');
+      await import('@/server/survey-response/services/lifecycle.service');
     await expect(
       resumeOrCreateResponse({
         surveyId: SURVEY_ID,
@@ -669,7 +669,7 @@ describe('resumeOrCreateResponse — 중단 게이트 (Task 6)', () => {
     selectLimitMock.mockResolvedValue([{ id: 'resp-1', status: 'in_progress', isTest: false }]);
 
     const { resumeOrCreateResponse } =
-      await import('@/features/survey-response/server/services/lifecycle.service');
+      await import('@/server/survey-response/services/lifecycle.service');
     await expect(
       resumeOrCreateResponse({ surveyId: SURVEY_ID, sessionId: 'sess-paused-1' }),
     ).rejects.toThrow(/survey_paused/);
@@ -680,7 +680,7 @@ describe('resumeOrCreateResponse — 중단 게이트 (Task 6)', () => {
     selectLimitMock.mockResolvedValue([{ id: 'resp-2', status: 'drop', isTest: false }]);
 
     const { resumeOrCreateResponse } =
-      await import('@/features/survey-response/server/services/lifecycle.service');
+      await import('@/server/survey-response/services/lifecycle.service');
     await expect(
       resumeOrCreateResponse({ surveyId: SURVEY_ID, sessionId: 'sess-paused-2' }),
     ).rejects.toThrow(/survey_paused/);
@@ -691,7 +691,7 @@ describe('resumeOrCreateResponse — 중단 게이트 (Task 6)', () => {
     selectLimitMock.mockResolvedValue([{ id: 'resp-3', status: 'drop', isTest: true }]);
 
     const { resumeOrCreateResponse } =
-      await import('@/features/survey-response/server/services/lifecycle.service');
+      await import('@/server/survey-response/services/lifecycle.service');
     const result = await resumeOrCreateResponse({
       surveyId: SURVEY_ID,
       sessionId: 'sess-paused-3',
@@ -726,7 +726,7 @@ describe('resumeOrCreateResponse — 중단 게이트 (Task 6)', () => {
     ]);
 
     const { resumeOrCreateResponse } =
-      await import('@/features/survey-response/server/services/lifecycle.service');
+      await import('@/server/survey-response/services/lifecycle.service');
 
     await expect(
       resumeOrCreateResponse({
@@ -766,7 +766,7 @@ describe('resumeOrCreateResponse — 중단 게이트 (Task 6)', () => {
     ]);
 
     const { resumeOrCreateResponse } =
-      await import('@/features/survey-response/server/services/lifecycle.service');
+      await import('@/server/survey-response/services/lifecycle.service');
 
     await expect(
       resumeOrCreateResponse({
@@ -789,7 +789,7 @@ describe('updateQuestionResponse — 중단 게이트 (Task 6)', () => {
 
   it('isPaused 설문은 updateQuestionResponse 를 거부한다 (isTest 행은 허용)', async () => {
     const { updateQuestionResponse } =
-      await import('@/features/survey-response/server/services/response.service');
+      await import('@/server/survey-response/services/response.service');
     selectLimitMock.mockResolvedValue([{ id: 'q1' }]);
 
     // 비-테스트 행: paused 설문이면 거부한다.
@@ -826,7 +826,7 @@ describe('updateQuestionResponse — 중단 게이트 (Task 6)', () => {
 
   it('대상자 테스트 응답은 active attempt와 세션 없이 저장할 수 없다', async () => {
     const { updateQuestionResponse } =
-      await import('@/features/survey-response/server/services/response.service');
+      await import('@/server/survey-response/services/response.service');
     selectLimitMock
       .mockResolvedValueOnce([{ id: 'q1' }])
       .mockResolvedValueOnce([
@@ -879,7 +879,7 @@ describe('countCompletedResponses — isTest 제외 (Task 6)', () => {
     countResultMock.mockResolvedValue([{ total: 1 }]);
 
     const { completeResponse } =
-      await import('@/features/survey-response/server/services/response.service');
+      await import('@/server/survey-response/services/response.service');
     await completeResponse({ responseId: 'r1' });
 
     // completeResponse 이 시나리오(data 없음, versionId 없음)에서는 정원 count 쿼리 1건만
@@ -940,7 +940,7 @@ describe('회귀: 비공개 설문 + 유효 테스트 세션 create→complete �
     });
 
     const { createResponseWithFirstAnswer, completeResponse } =
-      await import('@/features/survey-response/server/services/response.service');
+      await import('@/server/survey-response/services/response.service');
 
     const createResult = await createResponseWithFirstAnswer({
       surveyId: SURVEY_ID,
@@ -1009,7 +1009,7 @@ describe('A-1 사전 박제 — 우선순위·부분집합·fail-open', () => {
     );
 
     const { createResponseWithFirstAnswer } =
-      await import('@/features/survey-response/server/services/response.service');
+      await import('@/server/survey-response/services/response.service');
     expect(
       await createResponseWithFirstAnswer({
         surveyId: SURVEY_ID,
@@ -1029,7 +1029,7 @@ describe('A-1 사전 박제 — 우선순위·부분집합·fail-open', () => {
     );
 
     const { createResponseWithFirstAnswer } =
-      await import('@/features/survey-response/server/services/response.service');
+      await import('@/server/survey-response/services/response.service');
     expect(
       await createResponseWithFirstAnswer({
         surveyId: SURVEY_ID,
@@ -1050,7 +1050,7 @@ describe('A-1 사전 박제 — 우선순위·부분집합·fail-open', () => {
     );
 
     const { createResponseWithFirstAnswer } =
-      await import('@/features/survey-response/server/services/response.service');
+      await import('@/server/survey-response/services/response.service');
     expect(
       await createResponseWithFirstAnswer({
         surveyId: SURVEY_ID,
@@ -1079,7 +1079,7 @@ describe('A-1 사전 박제 — 우선순위·부분집합·fail-open', () => {
     });
 
     const { createResponseWithFirstAnswer } =
-      await import('@/features/survey-response/server/services/response.service');
+      await import('@/server/survey-response/services/response.service');
     expect(
       await createResponseWithFirstAnswer({
         surveyId: SURVEY_ID,
@@ -1104,7 +1104,7 @@ describe('A-1 사전 박제 — 우선순위·부분집합·fail-open', () => {
     });
 
     const { updateQuestionResponse } =
-      await import('@/features/survey-response/server/services/response.service');
+      await import('@/server/survey-response/services/response.service');
     await expect(
       updateQuestionResponse({ responseId: 'r1', questionId: 'q1', value: 'a' }),
     ).resolves.toMatchObject({ id: 'r1' });
@@ -1120,7 +1120,7 @@ describe('A-1 사전 박제 — 우선순위·부분집합·fail-open', () => {
     ]);
 
     const { resumeOrCreateResponse } =
-      await import('@/features/survey-response/server/services/lifecycle.service');
+      await import('@/server/survey-response/services/lifecycle.service');
     const result = await resumeOrCreateResponse({
       surveyId: SURVEY_ID,
       sessionId: 'a1-test-session',
@@ -1134,7 +1134,7 @@ describe('A-1 사전 박제 — 우선순위·부분집합·fail-open', () => {
     selectLimitMock.mockResolvedValue([{ id: 'resp-fo', status: 'drop', isTest: false }]);
 
     const { resumeOrCreateResponse } =
-      await import('@/features/survey-response/server/services/lifecycle.service');
+      await import('@/server/survey-response/services/lifecycle.service');
     const result = await resumeOrCreateResponse({
       surveyId: SURVEY_ID,
       sessionId: 'a1-resume-failopen',
@@ -1152,7 +1152,7 @@ describe('A-1 사전 박제 — 우선순위·부분집합·fail-open', () => {
     selectLimitMock.mockResolvedValue([{ id: 'resp-gap', status: 'in_progress', isTest: false }]);
 
     const { resumeOrCreateResponse } =
-      await import('@/features/survey-response/server/services/lifecycle.service');
+      await import('@/server/survey-response/services/lifecycle.service');
     const result = await resumeOrCreateResponse({
       surveyId: SURVEY_ID,
       sessionId: 'a1-resume-gap',

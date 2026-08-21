@@ -1,8 +1,8 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { useCellResponse } from '@/components/question-renderer/cells/use-cell-response';
-import { useTestResponseStore } from '@/stores/test-response-store';
+import { useCellResponse } from '@/features/question-renderer/cells/use-cell-response';
+import { useTestResponseStore } from '@/features/question-renderer/stores/test-response-store';
 
 /**
  * 셀 응답 훅 characterization — 응답 쓰기 채널(use-question-response-writer) 추출 전

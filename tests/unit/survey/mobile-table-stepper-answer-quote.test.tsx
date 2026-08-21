@@ -11,7 +11,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import { MobileTableStepper } from '@/components/question-renderer/mobile-table-stepper';
+import { MobileTableStepper } from '@/features/question-renderer/mobile-table-stepper';
 import { ContactAttrsProvider } from '@/lib/survey/contact-attrs-context';
 import type { TableColumn, TableRow } from '@/types/survey';
 

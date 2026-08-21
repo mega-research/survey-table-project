@@ -18,7 +18,7 @@ vi.mock('@/db', () => ({ db: {} }));
 import {
   createResponseWithFirstAnswer,
   createBlankResponse,
-} from '@/features/survey-response/server/services/response.service';
+} from '@/server/survey-response/services/response.service';
 
 const VALID_SIGNALS = {
   deviceId: 'dev-1',

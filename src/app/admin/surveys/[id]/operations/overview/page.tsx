@@ -1,14 +1,14 @@
 import type { Metadata } from 'next';
 
-import { ExportDataModal } from '@/components/analytics/export-data-modal';
-import { DailyParticipationChart } from '@/components/operations/daily-participation-chart';
-import { DailyStatsTable } from '@/components/operations/daily-stats-table';
-import { DropFunnel } from '@/components/operations/drop-funnel';
-import { InquiriesEmptyCard } from '@/components/operations/inquiries-empty-card';
-import { KpiRow } from '@/components/operations/kpi-row';
-import { PageDwellDistribution } from '@/components/operations/page-dwell-distribution';
-import { QuotaStatusPanel } from '@/components/operations/quota/quota-status-panel';
-import { ResponseTimeStats } from '@/components/operations/response-time-stats';
+import { ExportDataModal } from '@/features/analytics/export-data-modal';
+import { DailyParticipationChart } from '@/features/operations/daily-participation-chart';
+import { DailyStatsTable } from '@/features/operations/daily-stats-table';
+import { DropFunnel } from '@/features/operations/drop-funnel';
+import { InquiriesEmptyCard } from '@/features/operations/inquiries-empty-card';
+import { KpiRow } from '@/features/operations/kpi-row';
+import { PageDwellDistribution } from '@/features/operations/page-dwell-distribution';
+import { QuotaStatusPanel } from '@/features/operations/quota/quota-status-panel';
+import { ResponseTimeStats } from '@/features/operations/response-time-stats';
 import {
   aggregateDaily,
   aggregateDailyAvailableDates,
@@ -21,7 +21,7 @@ import { getQuotaStatus } from '@/lib/operations/quota-status.server';
 import { getResponseTime } from '@/lib/operations/response-time.server';
 import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
 import { isGuestViewer } from '@/lib/auth/guest-viewer';
-import { getSurveyById } from '@/features/survey-builder/server/services/survey-read.service';
+import { getSurveyById } from '@/server/survey-builder/services/survey-read.service';
 
 /**
  * 플랜 §9 정책 — 30초 자동 폴링 의도.

@@ -1,13 +1,13 @@
 import { Receipt } from 'lucide-react';
 
-import { BackButton } from '@/components/operations/mail-cost/back-button';
-import { BillingPeriodsDialog } from '@/components/operations/mail-cost/billing-periods-dialog';
+import { BackButton } from '@/features/operations/mail-cost/back-button';
+import { BillingPeriodsDialog } from '@/features/operations/mail-cost/billing-periods-dialog';
 import {
   CostDisclaimer,
   EmptyPeriodsNotice,
-} from '@/components/operations/mail-cost/cost-disclaimer';
-import { CycleSelector } from '@/components/operations/mail-cost/cycle-selector';
-import { CycleSummaryTable } from '@/components/operations/mail-cost/cycle-summary-table';
+} from '@/features/operations/mail-cost/cost-disclaimer';
+import { CycleSelector } from '@/features/operations/mail-cost/cycle-selector';
+import { CycleSummaryTable } from '@/features/operations/mail-cost/cycle-summary-table';
 import { Card } from '@/components/ui/card';
 import { computeCycleBreakdown } from '@/lib/operations/mail-billing.server';
 

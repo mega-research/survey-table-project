@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   RESPONSE_WIDE_TABLE_THRESHOLD_PX,
   resolveResponseContainerWidth,
-} from '@/components/question-renderer/utils/table-grid-utils';
+} from '@/features/question-renderer/utils/table-grid-utils';
 
 // 응답 페이지 컨테이너 폭 분기: 표 문항 페이지는 표 총폭 기준(718px 초과 → 1280px, 이하 → 896px),
 // 표 없는 페이지는 좁은 폭(896px).

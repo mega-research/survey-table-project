@@ -1,0 +1,449 @@
+'use client';
+
+import React, { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+
+import { FileText } from 'lucide-react';
+
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useElementWidth } from '@/features/question-renderer/hooks/use-element-width';
+import { useHorizontalScrollIndicators } from '@/features/question-renderer/hooks/use-horizontal-scroll-indicators';
+import { usePageStickyThreshold } from '@/features/question-renderer/hooks/use-page-sticky-threshold';
+import { useScrollLeftSync } from '@/features/question-renderer/hooks/use-scroll-left-sync';
+import { cn } from '@/lib/utils';
+import { HeaderCell, TableCell, TableColumn, TableRow } from '@/types/survey';
+import { expandHeaderGrid } from '@/features/question-renderer/utils/expand-header-grid';
+import {
+  getCellBackgroundStyle,
+  getCellTextClassName,
+  getCellTextStyle,
+} from '@/utils/cell-style';
+import {
+  HEADER_ROW_MIN_HEIGHT,
+  STICKY_BODY_Z,
+  STICKY_MAX_VIEWPORT_RATIO,
+  type StickyLeftInfo,
+  buildGridTemplateCols,
+  calcTotalWidth,
+  computeStickyLeftColumns,
+  getAlignmentClasses,
+  getGridCellAria,
+  getHeaderCellStickyStyle,
+} from '@/features/question-renderer/utils/table-grid-utils';
+
+import { PreviewCell } from './cells';
+import { HEADER_SCROLL_CLASS, TableScrollControls } from './table-scroll-controls';
+
+// text-base: rowgroup 컨테이너의 text-sm 상속을 끊는다 — 척도형(라디오/체크박스/랭킹)
+// 테이블은 응답 선택지 라벨이 헤더에 실리므로 본문(14px)보다 큰 16px 로 읽혀야 한다.
+const HEADER_CELL_CLASS =
+  'flex items-center justify-center border-r border-b border-gray-300 bg-gray-50 px-4 py-3 text-center text-base font-medium';
+
+const EMPTY_LABEL = <span className="text-sm text-gray-400 italic" />;
+
+interface TablePreviewProps {
+  tableTitle?: string | undefined;
+  columns?: TableColumn[] | undefined;
+  rows?: TableRow[] | undefined;
+  tableHeaderGrid?: HeaderCell[][] | undefined;
+  className?: string | undefined;
+  /** CardContent 패딩 오버라이드 — 모바일 드릴다운 상세처럼 카드 여백 없이 붙여야 하는 곳용 */
+  contentClassName?: string | undefined;
+  hideColumnLabels?: boolean | undefined;
+  /** 셀 콘텐츠 렌더 오버라이드. undefined/null 반환 시 기본 PreviewCell 로 폴백. */
+  renderCell?: (cell: TableCell, row: TableRow) => React.ReactNode;
+  stickyHeader?: boolean | undefined;
+  preserveRowHeights?: boolean | undefined;
+  /**
+   * 보기 옵션(choice_opt) 셀의 컨트롤 종류. 질문 타입/그룹에서 내려준다. 미지정 시 checkbox.
+   * - 'radio' | 'checkbox': 모든 보기 옵션 셀에 동일 적용(비그룹/단일 타입)
+   * - (cell) => 'radio' | 'checkbox': 셀별 해석(그룹 혼합 — getGroupTypeOfCell 등)
+   */
+  choiceControlType?:
+    | 'radio'
+    | 'checkbox'
+    | ((cell: TableCell) => 'radio' | 'checkbox')
+    | undefined;
+  scrollLeftRef?: React.MutableRefObject<number> | undefined;
+  resetScrollKey?: string | number | undefined;
+  errorCellIds?: Set<string> | undefined;
+  getCellInstanceId?: ((cell: TableCell, row: TableRow) => string) | undefined;
+  /** 데스크톱 표에서만 셀별 배경색을 렌더한다. 모바일 원본 표는 기존 배경을 보존한다. */
+  applyCellBackground?: boolean | undefined;
+}
+
+export const TablePreview = React.memo(function TablePreview({
+  tableTitle,
+  columns = [],
+  rows = [],
+  tableHeaderGrid,
+  className,
+  contentClassName,
+  hideColumnLabels = false,
+  renderCell,
+  stickyHeader = true,
+  preserveRowHeights = false,
+  choiceControlType = 'checkbox',
+  scrollLeftRef,
+  resetScrollKey,
+  errorCellIds,
+  getCellInstanceId,
+  applyCellBackground = true,
+}: TablePreviewProps) {
+  const totalWidth = useMemo(() => calcTotalWidth(columns), [columns]);
+  const gridTemplateCols = useMemo(() => buildGridTemplateCols(columns), [columns]);
+
+  // 열 좌측 경계 누적 px — 스크롤 컨트롤의 "잘린 열 정렬" 페이징용
+  const columnStops = useMemo(() => {
+    const stops: number[] = [0];
+    let acc = 0;
+    for (const col of columns) {
+      acc += col.width || 150;
+      stops.push(acc);
+    }
+    return stops;
+  }, [columns]);
+
+  // 가로 스크롤: 헤더/바디 별도 컨테이너 + 썸-버튼 컨트롤 + 좌우 그라디언트 힌트 + sticky 좌측 열
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+  const headerScrollRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const body = tableContainerRef.current;
+    if (!body || !scrollLeftRef) return;
+    const restoredScrollLeft = Math.min(
+      Math.max(0, scrollLeftRef.current),
+      Math.max(0, body.scrollWidth - body.clientWidth),
+    );
+    scrollLeftRef.current = restoredScrollLeft;
+    body.scrollLeft = restoredScrollLeft;
+    if (headerScrollRef.current) headerScrollRef.current.scrollLeft = restoredScrollLeft;
+  }, [columns, rows, scrollLeftRef]);
+
+  useLayoutEffect(() => {
+    if (resetScrollKey === undefined || !scrollLeftRef) return;
+    scrollLeftRef.current = 0;
+    if (tableContainerRef.current) tableContainerRef.current.scrollLeft = 0;
+    if (headerScrollRef.current) headerScrollRef.current.scrollLeft = 0;
+  }, [resetScrollKey, scrollLeftRef]);
+
+  const { canScrollLeft, canScrollRight } = useHorizontalScrollIndicators(tableContainerRef, {
+    deps: [columns.length, rows.length],
+  });
+
+  // 페이지 sticky 헤더(이중 스크롤 컨테이너) 사용 여부 — 본문이 뷰포트 대비 충분히
+  // 길 때만. 짧은 표는 헤더를 본문과 같은 스크롤 컨테이너에 넣어(단일 컨테이너)
+  // 세로 스크롤 중 헤더 고정 턱 걸림과 가로 스크롤 헤더/본문 동기화 지연을 없앤다.
+  // (interactive-table-response 와 동일 정책 — 표-소스 radio/checkbox 응답도
+  //  이 컴포넌트로 렌더되므로 응답 페이지 UX 에 직접 영향)
+  const pageSticky = usePageStickyThreshold(
+    tableContainerRef,
+    { disabled: !stickyHeader },
+    [columns.length === 0 || rows.length === 0],
+  );
+
+  // 헤더가 null이거나 단일 컨테이너 모드면 동기화 불필요
+  useScrollLeftSync(headerScrollRef, tableContainerRef, hideColumnLabels || !pageSticky);
+
+  // 단일 → 이중 컨테이너 전환 시 갓 마운트된 헤더 컨테이너를 본문 위치로 정렬
+  useEffect(() => {
+    if (!pageSticky) return;
+    const header = headerScrollRef.current;
+    const body = tableContainerRef.current;
+    if (header && body && header.scrollLeft !== body.scrollLeft) {
+      header.scrollLeft = body.scrollLeft;
+    }
+  }, [pageSticky]);
+
+  // 스크롤 뷰포트 실측 폭 — 좁은 화면에서 넓은 텍스트 열이 sticky로 화면을 다
+  // 덮지 않도록 누적 sticky 너비 상한 계산에 사용.
+  const scrollViewportWidth = useElementWidth(tableContainerRef, columns.length === 0);
+
+  const stickyInfo = useMemo<StickyLeftInfo | undefined>(() => {
+    if (columns.length === 0) return undefined;
+    const maxStickyWidth =
+      scrollViewportWidth > 0 ? scrollViewportWidth * STICKY_MAX_VIEWPORT_RATIO : undefined;
+    return computeStickyLeftColumns(columns, rows, maxStickyWidth);
+  }, [columns, rows, scrollViewportWidth]);
+
+  const gridContainerStyle = useMemo<React.CSSProperties>(
+    () => ({
+      display: 'grid',
+      gridTemplateColumns: gridTemplateCols,
+      width: `${totalWidth}px`,
+      minWidth: `${totalWidth}px`,
+    }),
+    [gridTemplateCols, totalWidth],
+  );
+
+  if (columns.length === 0 || rows.length === 0) {
+    return (
+      <Card className={className}>
+        <CardContent className="p-8">
+          <div className="text-center text-gray-500">
+            <FileText className="mx-auto mb-4 h-12 w-12 text-gray-400" />
+            <p>테이블을 구성해주세요</p>
+            <p className="text-sm">열과 행을 추가하여 테이블을 만들어보세요</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const minHeight = stickyInfo && stickyInfo.stickyColCount > 0 ? HEADER_ROW_MIN_HEIGHT : undefined;
+  const stickyCount = stickyInfo?.stickyColCount ?? 0;
+
+  // 헤더 셀 렌더 — 다단계(tableHeaderGrid) 또는 단일 행(fallback). sticky 적용 포함.
+  const renderHeaderCells = () => {
+    if (hideColumnLabels) return null;
+
+    if (tableHeaderGrid && tableHeaderGrid.length > 0) {
+      return expandHeaderGrid(tableHeaderGrid).map(
+        ({ cell, startCol, colSpan, rowSpan, gridColumn, gridRow }) => {
+          const style: React.CSSProperties = {
+            gridRow,
+            gridColumn,
+            minHeight,
+            ...getHeaderCellStickyStyle(startCol, colSpan, stickyInfo),
+            ...getCellBackgroundStyle(cell),
+            ...getCellTextStyle(cell),
+          };
+
+          return (
+            <div
+              key={cell.id}
+              className={cn(HEADER_CELL_CLASS, getCellTextClassName(cell))}
+              style={style}
+              {...getGridCellAria('columnheader', colSpan, rowSpan)}
+            >
+              {cell.label || EMPTY_LABEL}
+            </div>
+          );
+        },
+      );
+    }
+
+    // 단일 행 헤더 (폴백) — 명시적 grid-column으로 sticky 좌표 보장
+    return columns.map((column, colIdx) => {
+      if (column.isHeaderHidden) return null;
+      const startCol = colIdx + 1;
+      const cs = column.colspan || 1;
+
+      const style: React.CSSProperties = {
+        gridColumn: cs > 1 ? `${startCol} / span ${cs}` : startCol,
+        minHeight,
+        ...getHeaderCellStickyStyle(startCol, cs, stickyInfo),
+        ...getCellBackgroundStyle(column),
+        ...getCellTextStyle(column),
+      };
+
+      return (
+        <div
+          key={column.id}
+          className={cn(HEADER_CELL_CLASS, getCellTextClassName(column))}
+          style={style}
+          {...getGridCellAria('columnheader', cs)}
+        >
+          {column.label || EMPTY_LABEL}
+        </div>
+      );
+    });
+  };
+
+  const headerRowCount = hideColumnLabels
+    ? 0
+    : tableHeaderGrid && tableHeaderGrid.length > 0
+      ? tableHeaderGrid.length
+      : 1;
+
+  return (
+    <Card className={className}>
+      {tableTitle && (
+        <CardHeader>
+          <CardTitle>{tableTitle}</CardTitle>
+        </CardHeader>
+      )}
+      {/* CardContent 기본 pt-0 — 제목(CardHeader) 없는 표는 위 여백이 0이라 표가 상단에
+          붙는다. 아래(p-6)와 대칭이 되도록 제목 없을 때만 pt-6을 준다.
+          contentClassName 은 이 기본을 덮는 호출자 오버라이드 (cn 뒤쪽 우선). */}
+      <CardContent className={cn(tableTitle ? undefined : 'pt-6', contentClassName)}>
+        <div className="relative">
+          <div
+            role="grid"
+            aria-rowcount={headerRowCount + rows.length}
+            aria-colcount={columns.length}
+          >
+            {/* 가로 스크롤 컨트롤 + (선택적) 헤더 라벨. pageSticky(긴 표)일 때만
+                페이지 스크롤 기준 sticky — 짧은 표는 헤더를 본문 스크롤 컨테이너
+                안에 함께 렌더한다(단일 컨테이너).
+                컨트롤은 hideColumnLabels 여부와 무관하게 렌더한다 — 헤더 라벨을 숨긴
+                넓은 표도 가로 스크롤 수단이 필요하기 때문. */}
+            <div
+              className={cn(
+                'bg-white',
+                pageSticky && 'sticky top-0 z-30 print:static print:z-auto',
+              )}
+            >
+              <TableScrollControls
+                scrollRef={tableContainerRef}
+                canScrollLeft={canScrollLeft}
+                canScrollRight={canScrollRight}
+                columnStops={columnStops}
+              />
+              {pageSticky && !hideColumnLabels && (
+                <div className="relative">
+                  {/* TablePreview 바디는 좌우 패딩이 없으므로 헤더도 px-0 으로 맞춘다
+                      (HEADER_SCROLL_CLASS 의 모바일 px-4 는 바디도 px-4 인
+                      interactive-table-response 전용 — 여기 남으면 헤더/바디가 16px 어긋난다) */}
+                  <div ref={headerScrollRef} className={cn(HEADER_SCROLL_CLASS, 'px-0')}>
+                    <div
+                      role="rowgroup"
+                      className="mx-auto rounded-t-md border-t border-r border-l border-gray-300 bg-gray-50 text-base"
+                      style={gridContainerStyle}
+                    >
+                      {renderHeaderCells()}
+                    </div>
+                  </div>
+                  {/* 우측 페이드 — 오른쪽에 아직 열이 더 있다는 시각 힌트 */}
+                  {canScrollRight && (
+                    <div
+                      aria-hidden="true"
+                      className="pointer-events-none absolute inset-y-0 right-0 z-20 w-12 transform-gpu bg-gradient-to-l from-gray-50 via-gray-50/60 to-transparent print:hidden"
+                    />
+                  )}
+                  {canScrollLeft && (
+                    <div
+                      aria-hidden="true"
+                      className="pointer-events-none absolute inset-y-0 left-0 z-20 w-6 transform-gpu bg-gradient-to-r from-gray-50/80 to-transparent print:hidden"
+                    />
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* 바디: 가로 스크롤 + 우측/좌측 페이드. relative 래퍼로 페이드를 우측에
+                고정한다(스크롤 컨테이너 안에 두면 콘텐츠와 함께 밀려 힌트 효과가 사라진다).
+                잘린 셀 텍스트가 있는 바디는 bg-white 이므로 from-white 로 페이드아웃시킨다. */}
+            <div className="relative">
+              {/* iOS WebKit blank-tile 회피: -webkit-overflow-scrolling: touch +
+                  display:grid + position:sticky 조합이 오른쪽 셀 미페인트를 유발한다.
+                  iOS 13+ 모멘텀 스크롤은 기본이라 제거해도 무손실. 재추가 금지.
+                  (interactive-table-response.tsx 와 동일 조치) */}
+              <div
+                ref={tableContainerRef}
+                data-testid="table-preview-scroll"
+                onScroll={(event) => {
+                  if (scrollLeftRef) scrollLeftRef.current = event.currentTarget.scrollLeft;
+                }}
+                // 모바일은 상단 스크롤 컨트롤이 스크롤 수단이므로 네이티브 가로
+                // 스크롤바를 숨긴다 — 표 아래 회색 띠(이중 스크롤 표시) 제거
+                className="overflow-x-auto max-md:[-ms-overflow-style:none] max-md:[scrollbar-width:none] print:overflow-visible max-md:[&::-webkit-scrollbar]:hidden"
+              >
+                {/* 단일 컨테이너 모드(짧은 표): 헤더를 본문과 같은 스크롤 컨테이너에
+                    넣어 가로 스크롤이 native 로 완전 동기된다 (sync 훅 미사용).
+                    key 명시: pageSticky 전환 시 React 가 헤더 div 를 본문 div 로
+                    오재사용하지 않게 한다. */}
+                {!pageSticky && !hideColumnLabels && (
+                  <div
+                    key="in-scroll-header"
+                    role="rowgroup"
+                    className="mx-auto rounded-t-md border-t border-r border-l border-gray-300 bg-gray-50 text-base"
+                    style={gridContainerStyle}
+                  >
+                    {renderHeaderCells()}
+                  </div>
+                )}
+                <div
+                  key="table-body"
+                  role="rowgroup"
+                  className={cn(
+                    'mx-auto rounded-b-md border-r border-l border-gray-300 bg-white text-base',
+                    hideColumnLabels && 'rounded-t-md border-t',
+                  )}
+                  style={gridContainerStyle}
+                >
+                  {rows.map((row) =>
+                    row.cells.map((cell, cellIndex) => {
+                      if (cell.isHidden || cell._isContinuation) return null;
+                      const col = cellIndex + 1;
+                      const cs = cell.colspan || 1;
+                      const rs = cell.rowspan || 1;
+                      const isSticky = cellIndex < stickyCount;
+                      const isLastSticky = isSticky && cellIndex === stickyCount - 1;
+
+                      const style: React.CSSProperties = {
+                        gridColumn: cs > 1 ? `${col} / span ${cs}` : col,
+                        ...(rs > 1 ? { gridRow: `span ${rs}` } : {}),
+                      };
+                      if (preserveRowHeights) {
+                        const preservedHeight = row.height ?? row.minHeight;
+                        if (preservedHeight !== undefined) {
+                          style.minHeight = `${preservedHeight}px`;
+                        }
+                      }
+                      if (isSticky && stickyInfo) {
+                        style.position = 'sticky';
+                        style.left = stickyInfo.leftOffsets[cellIndex];
+                        style.zIndex = STICKY_BODY_Z;
+                        if (isLastSticky) {
+                          style.boxShadow = '2px 0 4px rgba(0,0,0,0.06)';
+                        }
+                      }
+                      if (applyCellBackground) {
+                        Object.assign(style, getCellBackgroundStyle(cell), getCellTextStyle(cell));
+                      }
+
+                      return (
+                        <div
+                          key={`${row.id}:${cell.id}`}
+                          className={cn(
+                            'min-w-0 border-r border-b border-gray-300 bg-white p-3',
+                            getAlignmentClasses(cell.horizontalAlign, cell.verticalAlign),
+                            errorCellIds?.has(cell.id) && 'ring-2 ring-red-300 ring-inset',
+                          )}
+                          style={style}
+                          data-row-id={row.id}
+                          data-testid={`cell-${cell.id}`}
+                          data-cell-id={cell.id}
+                          data-cell-instance-id={getCellInstanceId?.(cell, row)}
+                          {...getGridCellAria('gridcell', cs, rs)}
+                        >
+                          {(() => {
+                            const override = renderCell?.(cell, row);
+                            if (override !== undefined && override !== null) return override;
+                            // choice_opt 셀만 리졸버 호출(그룹 혼합 대응). 그 외 셀은 무시.
+                            const resolvedChoiceType =
+                              typeof choiceControlType === 'function'
+                                ? cell.type === 'choice_opt'
+                                  ? choiceControlType(cell)
+                                  : 'checkbox'
+                                : choiceControlType;
+                            return (
+                              <PreviewCell cell={cell} choiceControlType={resolvedChoiceType} />
+                            );
+                          })()}
+                        </div>
+                      );
+                    }),
+                  )}
+                </div>
+              </div>
+              {/* 우측 페이드 — 잘린 셀 내용 위로 깔려 "오른쪽에 더 있다"를 알린다 */}
+              {canScrollRight && (
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-y-0 right-0 z-20 w-12 transform-gpu bg-gradient-to-l from-black/10 to-transparent print:hidden"
+                />
+              )}
+              {canScrollLeft && (
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-y-0 left-0 z-20 w-6 transform-gpu bg-gradient-to-r from-black/10 to-transparent print:hidden"
+                />
+              )}
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+});

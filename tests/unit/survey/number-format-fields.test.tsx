@@ -4,7 +4,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
-import { NumberFormatFields } from '@/components/survey-builder/number-format-fields';
+import { NumberFormatFields } from '@/features/survey-builder/number-format-fields';
 import type { NumberFormat } from '@/types/survey';
 
 describe('NumberFormatFields 허용값 설정', () => {

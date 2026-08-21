@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { useState } from 'react';
 import { describe, expect, it } from 'vitest';
 
-import { HeaderGridEditor } from '@/components/survey-builder/table-editor/header-grid-editor';
+import { HeaderGridEditor } from '@/features/survey-builder/table-editor/header-grid-editor';
 import type { HeaderCell } from '@/types/survey';
 
 function HeaderGridHarness({ initialGrid }: { initialGrid: HeaderCell[][] }) {

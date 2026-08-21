@@ -7,13 +7,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   sendVisibilitySegment,
   sessionStorageKey,
-} from '@/components/survey-response/hooks/session-helpers';
-import { handleInvalidTestLinkMutationError } from '@/components/survey-response/hooks/use-duplicate-guard';
-import { useResponseTelemetry } from '@/components/survey-response/hooks/use-response-telemetry';
-import { useSessionRecovery } from '@/components/survey-response/hooks/use-session-recovery';
-import { SurveyResponseFlow } from '@/components/survey-response/survey-response-flow';
+} from '@/features/survey-response/hooks/session-helpers';
+import { handleInvalidTestLinkMutationError } from '@/features/survey-response/hooks/use-duplicate-guard';
+import { useResponseTelemetry } from '@/features/survey-response/hooks/use-response-telemetry';
+import { useSessionRecovery } from '@/features/survey-response/hooks/use-session-recovery';
+import { SurveyResponseFlow } from '@/features/survey-response/survey-response-flow';
 import type { RenderStep } from '@/lib/group-ordering';
-import { useSurveyResponseStore } from '@/stores/survey-response-store';
+import { useSurveyResponseStore } from '@/features/question-renderer/stores/survey-response-store';
 import type { Survey } from '@/types/survey';
 
 const {

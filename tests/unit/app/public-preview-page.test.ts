@@ -16,7 +16,7 @@ const { notFoundMock, getSurveyByPreviewTokenMock, getSurveyByIdMock, getSurveyF
 
 vi.mock('next/navigation', () => ({ notFound: notFoundMock }));
 
-vi.mock('@/features/survey-builder/server/services/survey-read.service', () => ({
+vi.mock('@/server/survey-builder/services/survey-read.service', () => ({
   getSurveyByPreviewToken: (...a: unknown[]) => getSurveyByPreviewTokenMock(...a),
   getSurveyById: (...a: unknown[]) => getSurveyByIdMock(...a),
   getSurveyForResponse: (...a: unknown[]) => getSurveyForResponseMock(...a),
@@ -25,7 +25,7 @@ vi.mock('@/features/survey-builder/server/services/survey-read.service', () => (
 function SurveyResponseFlowStub(): null {
   return null;
 }
-vi.mock('@/components/survey-response/survey-response-flow', () => ({
+vi.mock('@/features/survey-response/survey-response-flow', () => ({
   SurveyResponseFlow: SurveyResponseFlowStub,
 }));
 

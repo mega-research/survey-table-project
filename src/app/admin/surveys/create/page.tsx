@@ -34,12 +34,12 @@ import {
 import { toast } from 'sonner';
 import { useShallow } from 'zustand/react/shallow';
 
-import { GroupManager } from '@/components/survey-builder/group-manager';
-import { ImportExportLibraryModal } from '@/components/survey-builder/import-export-library-modal';
-import { QuestionLibraryPanel } from '@/components/survey-builder/question-library-panel';
-import { ResponseHeaderSettingsModal } from '@/components/survey-builder/response-header-settings-modal';
-import { SaveQuestionModal } from '@/components/survey-builder/save-question-modal';
-import { SortableQuestionList } from '@/components/survey-builder/question-list/sortable-question-list';
+import { GroupManager } from '@/features/survey-builder/group-manager';
+import { ImportExportLibraryModal } from '@/features/survey-builder/import-export-library-modal';
+import { QuestionLibraryPanel } from '@/features/survey-builder/question-library-panel';
+import { ResponseHeaderSettingsModal } from '@/features/survey-builder/response-header-settings-modal';
+import { SaveQuestionModal } from '@/features/survey-builder/save-question-modal';
+import { SortableQuestionList } from '@/features/survey-builder/question-list/sortable-question-list';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import {
@@ -52,13 +52,13 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useSaveSurvey } from '@/hooks/queries/use-surveys';
+import { useSaveSurvey } from '@/features/survey-builder/queries/use-surveys';
 import { formatLocalDate } from '@/lib/date-formatters';
 import { generateSlugFromTitle, getSurveyAccessUrl, validateSlug } from '@/lib/survey-url';
 import { generateId } from '@/lib/utils';
 import { client } from '@/shared/lib/rpc';
-import { useSurveyBuilderStore } from '@/stores/survey-store';
-import { useSurveyUIStore } from '@/stores/ui-store';
+import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
+import { useSurveyUIStore } from '@/features/survey-builder/stores/ui-store';
 import { Question } from '@/types/survey';
 
 const questionTypes = [

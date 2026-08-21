@@ -3,12 +3,12 @@ import { notFound } from 'next/navigation';
 
 import { ArrowLeft, Eye, Pencil } from 'lucide-react';
 
-import { SurveyResponseFlow } from '@/components/survey-response/survey-response-flow';
+import { SurveyResponseFlow } from '@/features/survey-response/survey-response-flow';
 import { Button } from '@/components/ui/button';
 import {
   getSurveyById,
   getSurveyForResponse,
-} from '@/features/survey-builder/server/services/survey-read.service';
+} from '@/server/survey-builder/services/survey-read.service';
 import { isGuestViewer } from '@/lib/auth/guest-viewer';
 
 import { CopyPreviewLinkButton } from './copy-preview-link-button';

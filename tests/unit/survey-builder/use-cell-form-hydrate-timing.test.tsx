@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import { useCellForm } from '@/components/survey-builder/table-editor/cell-editor/hooks/use-cell-form';
+import { useCellForm } from '@/features/survey-builder/table-editor/cell-editor/hooks/use-cell-form';
 import type { TableCell } from '@/types/survey';
 
 /**

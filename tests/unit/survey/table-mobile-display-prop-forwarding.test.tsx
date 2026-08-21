@@ -3,27 +3,27 @@ import type { ReactNode } from 'react';
 import { render } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { QuestionTestBody } from '@/components/survey-builder/question-list/question-test-card';
-import { QuestionInput } from '@/components/survey-response/question-input';
-import { useTestResponseStore } from '@/stores/test-response-store';
+import { QuestionTestBody } from '@/features/survey-builder/question-list/question-test-card';
+import { QuestionInput } from '@/features/survey-response/question-input';
+import { useTestResponseStore } from '@/features/question-renderer/stores/test-response-store';
 import type { Question } from '@/types/survey';
 
 const { capturedTableProps } = vi.hoisted(() => ({
   capturedTableProps: [] as Array<Record<string, unknown>>,
 }));
 
-vi.mock('@/components/question-renderer/interactive-table-response', () => ({
+vi.mock('@/features/question-renderer/interactive-table-response', () => ({
   InteractiveTableResponse: (props: Record<string, unknown>) => {
     capturedTableProps.push(props);
     return <div data-testid="interactive-table-response" />;
   },
 }));
 
-vi.mock('@/components/survey-builder/question-list/sortable-question-list', () => ({
+vi.mock('@/features/survey-builder/question-list/sortable-question-list', () => ({
   LazyMount: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 
-vi.mock('@/components/question-renderer/hooks/use-row-heights', () => ({
+vi.mock('@/features/question-renderer/hooks/use-row-heights', () => ({
   computeTableEstimatedHeight: () => 320,
 }));
 

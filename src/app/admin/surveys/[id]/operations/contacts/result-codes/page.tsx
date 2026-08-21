@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 
-import { ResultCodesEditor } from '@/components/operations/contacts/result-codes-editor';
+import { ResultCodesEditor } from '@/features/operations/contacts/result-codes-editor';
 import { getContactResultCodes } from '@/lib/operations/contacts.server';
 
 export const metadata: Metadata = {

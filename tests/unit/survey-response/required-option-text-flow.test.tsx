@@ -2,9 +2,9 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { SurveyResponseFlow } from '@/components/survey-response/survey-response-flow';
+import { SurveyResponseFlow } from '@/features/survey-response/survey-response-flow';
 import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
-import { useSurveyResponseStore } from '@/stores/survey-response-store';
+import { useSurveyResponseStore } from '@/features/question-renderer/stores/survey-response-store';
 import type { Question, Survey } from '@/types/survey';
 
 vi.mock('next/navigation', () => ({

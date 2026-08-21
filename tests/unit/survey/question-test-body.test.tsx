@@ -1,8 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { QuestionTestBody } from '@/components/survey-builder/question-list/question-test-card';
-import { useTestResponseStore } from '@/stores/test-response-store';
+import { QuestionTestBody } from '@/features/survey-builder/question-list/question-test-card';
+import { useTestResponseStore } from '@/features/question-renderer/stores/test-response-store';
 import type { Question } from '@/types/survey';
 
 /**

@@ -8,11 +8,11 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { CheckboxCell } from '@/components/question-renderer/cells/checkbox-cell';
-import { InputCell } from '@/components/question-renderer/cells/input-cell';
-import { RadioCell } from '@/components/question-renderer/cells/radio-cell';
-import { RankingCell } from '@/components/question-renderer/cells/ranking-cell';
-import { SelectCell } from '@/components/question-renderer/cells/select-cell';
+import { CheckboxCell } from '@/features/question-renderer/cells/checkbox-cell';
+import { InputCell } from '@/features/question-renderer/cells/input-cell';
+import { RadioCell } from '@/features/question-renderer/cells/radio-cell';
+import { RankingCell } from '@/features/question-renderer/cells/ranking-cell';
+import { SelectCell } from '@/features/question-renderer/cells/select-cell';
 import { ContactAttrsProvider } from '@/lib/survey/contact-attrs-context';
 import type { TableCell } from '@/types/survey';
 

@@ -2,13 +2,13 @@ import type { Metadata } from 'next';
 
 import { sql } from 'drizzle-orm';
 
-import { ProgressEmptyCard } from '@/components/operations/report/progress-empty-card';
-import { ProgressFilterBar } from '@/components/operations/report/progress-filter-bar';
+import { ProgressEmptyCard } from '@/features/operations/report/progress-empty-card';
+import { ProgressFilterBar } from '@/features/operations/report/progress-filter-bar';
 import {
   ProgressGroupByTabs,
   type GroupByOption,
-} from '@/components/operations/report/progress-group-by-tabs';
-import { ProgressTable } from '@/components/operations/report/progress-table';
+} from '@/features/operations/report/progress-group-by-tabs';
+import { ProgressTable } from '@/features/operations/report/progress-table';
 import { db } from '@/db';
 import { contactTargets } from '@/db/schema';
 import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts';

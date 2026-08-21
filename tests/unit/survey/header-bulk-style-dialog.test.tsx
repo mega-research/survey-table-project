@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
-import { HeaderBulkStyleDialog } from '@/components/survey-builder/table-editor/header-bulk-style-dialog';
+import { HeaderBulkStyleDialog } from '@/features/survey-builder/table-editor/header-bulk-style-dialog';
 
 describe('HeaderBulkStyleDialog', () => {
   it('Bold와 직접 입력한 3자리 HEX를 정규화해 적용한다', async () => {

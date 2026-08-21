@@ -28,7 +28,7 @@ import {
   surveys,
   surveyVersions,
 } from '@/db/schema';
-import { deleteSurvey } from '@/features/survey-builder/server/services/surveys.service';
+import { deleteSurvey } from '@/server/survey-builder/services/surveys.service';
 import { rebuildAllKeyRefs } from '@/lib/r2-lifecycle/key-ref-index.server';
 import { findReferencedKeys } from '@/lib/r2-lifecycle/reference-scan.server';
 

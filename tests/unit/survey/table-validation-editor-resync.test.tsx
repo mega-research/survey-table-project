@@ -4,11 +4,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 // TableOptionSelector 는 실제 옵션 셀 파생에 의존하므로 stub 처리한다.
 // 검증 대상은 in-place 질문 전환 시 로컬 rules 재동기화 동작뿐이다.
-vi.mock('@/components/survey-builder/table-option-selector', () => ({
+vi.mock('@/features/survey-builder/table-option-selector', () => ({
   TableOptionSelector: () => null,
 }));
 
-import { TableValidationEditor } from '@/components/survey-builder/question-edit/table-validation-editor';
+import { TableValidationEditor } from '@/features/survey-builder/question-edit/table-validation-editor';
 import type { Question, TableValidationRule } from '@/types/survey';
 
 function makeQuestion(id: string, rules: TableValidationRule[]): Question {

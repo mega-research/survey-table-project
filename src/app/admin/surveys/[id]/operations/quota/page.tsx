@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
 
-import { QuotaEditor } from '@/components/operations/quota/quota-editor';
+import { QuotaEditor } from '@/features/operations/quota/quota-editor';
 import { getQuestionsBySurvey } from '@/data/surveys';
-import { getQuotaConfig } from '@/features/quota/server/services/quota.service';
+import { getQuotaConfig } from '@/server/quota/services/quota.service';
 import type { Question } from '@/types/survey';
 
 export const metadata: Metadata = {

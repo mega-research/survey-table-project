@@ -99,7 +99,7 @@ vi.mock('@/lib/operations/result-code-statuses.server', async () => {
   };
 });
 
-import { createBlankResponse } from '@/features/survey-response/server/services/response.service';
+import { createBlankResponse } from '@/server/survey-response/services/response.service';
 import type { ClientSignals } from '@/lib/duplicate-detection/types';
 
 const PLACEHOLDER_SIGNALS: ClientSignals = {

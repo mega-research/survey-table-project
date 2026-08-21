@@ -4,7 +4,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
-import { RankingOptionsEditor } from '@/components/survey-builder/table-editor/cell-editor/ranking-options-editor';
+import { RankingOptionsEditor } from '@/features/survey-builder/table-editor/cell-editor/ranking-options-editor';
 import type { QuestionOption } from '@/types/survey';
 
 /**

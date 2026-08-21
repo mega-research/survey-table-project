@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/shared/lib/rpc', () => ({ client: { mail: { campaigns: { fetchCandidateIds: vi.fn() } } } }));
 
-import { useFetchCandidateIds } from '@/hooks/queries/use-campaigns';
+import { useFetchCandidateIds } from '@/features/operations/queries/use-campaigns';
 
 /**
  * campaign-wizard 의 자동선택 effect 는 mutateAsync 를 deps 로 둔다. 이 함수가 재렌더·상태 변화에

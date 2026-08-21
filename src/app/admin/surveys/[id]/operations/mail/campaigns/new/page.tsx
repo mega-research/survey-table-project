@@ -1,9 +1,9 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
-import { CampaignWizard } from '@/components/operations/mail-campaign/campaign-wizard';
+import { CampaignWizard } from '@/features/operations/mail-campaign/campaign-wizard';
 import type { CampaignFilterSnapshot } from '@/shared/contracts/mail';
-import { getMailTemplatesBySurvey } from '@/features/mail/server/services/mail-templates.service';
+import { getMailTemplatesBySurvey } from '@/server/mail/services/mail-templates.service';
 import {
   CAMPAIGN_SORT_KEYS,
   previewCampaignCandidates,

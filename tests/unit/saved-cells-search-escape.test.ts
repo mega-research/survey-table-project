@@ -40,7 +40,7 @@ describe('searchSavedCells ILIKE escape', () => {
 
   it('% 와 _ 를 백슬래시로 escape 한 패턴으로 검색한다', async () => {
     const { searchSavedCells } = await import(
-      '@/features/library/server/services/saved-cells.service'
+      '@/server/library/services/saved-cells.service'
     );
     await searchSavedCells('50%_x');
 
@@ -51,7 +51,7 @@ describe('searchSavedCells ILIKE escape', () => {
 
   it('백슬래시도 escape 한다', async () => {
     const { searchSavedCells } = await import(
-      '@/features/library/server/services/saved-cells.service'
+      '@/server/library/services/saved-cells.service'
     );
     await searchSavedCells('a\\b');
 
@@ -60,7 +60,7 @@ describe('searchSavedCells ILIKE escape', () => {
 
   it('메타문자가 없으면 그대로 부분일치 패턴을 만든다', async () => {
     const { searchSavedCells } = await import(
-      '@/features/library/server/services/saved-cells.service'
+      '@/server/library/services/saved-cells.service'
     );
     await searchSavedCells('plain');
 

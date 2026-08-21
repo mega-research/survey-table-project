@@ -1,7 +1,7 @@
 import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { QuotaEditor } from '@/components/operations/quota/quota-editor';
+import { QuotaEditor } from '@/features/operations/quota/quota-editor';
 import type { QuotaConfig } from '@/shared/contracts/quota';
 import type { Question } from '@/types/survey';
 

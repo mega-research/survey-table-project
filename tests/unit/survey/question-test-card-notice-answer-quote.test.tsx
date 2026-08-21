@@ -9,10 +9,10 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { QuestionTestBody } from '@/components/survey-builder/question-list/question-test-card';
+import { QuestionTestBody } from '@/features/survey-builder/question-list/question-test-card';
 import { ContactAttrsProvider, createPlaceholderAttrs } from '@/lib/survey/contact-attrs-context';
-import { useSurveyBuilderStore } from '@/stores/survey-store';
-import { useTestResponseStore } from '@/stores/test-response-store';
+import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
+import { useTestResponseStore } from '@/features/question-renderer/stores/test-response-store';
 import type { Question } from '@/types/survey';
 
 function noticeQuestion(templateName: string): Question {

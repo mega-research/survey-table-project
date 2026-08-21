@@ -1,8 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { InteractiveTableResponse } from '@/components/question-renderer/interactive-table-response';
-import { useTestResponseStore } from '@/stores/test-response-store';
+import { InteractiveTableResponse } from '@/features/question-renderer/interactive-table-response';
+import { useTestResponseStore } from '@/features/question-renderer/stores/test-response-store';
 
 vi.mock('@/hooks/use-media-query', () => ({
   useMobileView: () => true,

@@ -1,9 +1,9 @@
 import { notFound } from 'next/navigation';
 
-import { OperationsPageHeader } from '@/components/operations/operations-page-header';
-import { OperationsTabStrip } from '@/components/operations/operations-tab-strip';
-import { getControlState } from '@/features/operations/server/services/control.service';
-import { getSurveyById } from '@/features/survey-builder/server/services/survey-read.service';
+import { OperationsPageHeader } from '@/features/operations/operations-page-header';
+import { OperationsTabStrip } from '@/features/operations/operations-tab-strip';
+import { getControlState } from '@/server/operations/services/control.service';
+import { getSurveyById } from '@/server/survey-builder/services/survey-read.service';
 import { isGuestViewer } from '@/lib/auth/guest-viewer';
 
 interface LayoutProps {

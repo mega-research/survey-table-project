@@ -1,9 +1,9 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import { MobileRowCard } from '@/components/question-renderer/mobile-row-card';
+import { MobileRowCard } from '@/features/question-renderer/mobile-row-card';
 import type { TableColumn, TableRow } from '@/types/survey';
-import { collectMobileLegendLabels, hasMobileDisplayCells } from '@/components/question-renderer/utils/mobile-display-cells';
+import { collectMobileLegendLabels, hasMobileDisplayCells } from '@/features/question-renderer/utils/mobile-display-cells';
 
 /**
  * 모바일 카드 범례 (mobileDisplay: 'legend').

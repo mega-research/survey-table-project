@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
-import { ColumnSchemeEditor } from '@/components/operations/contacts/column-scheme-editor';
+import { ColumnSchemeEditor } from '@/features/operations/contacts/column-scheme-editor';
 import { getContactColumnScheme } from '@/lib/operations/contacts.server';
 import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
 

@@ -16,7 +16,7 @@ vi.mock('@/shared/lib/rpc', () => ({
 }));
 
 // 모킹 등록 후 import (hoist 된 vi.mock 이 먼저 적용되도록).
-import { useSurveyBuilderStore } from '@/stores/survey-store';
+import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
 
 const SURVEY_ID = 'survey-refetch';
 

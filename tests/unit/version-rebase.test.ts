@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { resolveRebasedVersionId } from '@/lib/survey-response/version-rebase';
+import { resolveRebasedVersionId } from '@/features/survey-response/lib/version-rebase';
 
 // 무중단 갈아타기(티켓 04) — 클라이언트 재핀 감지 조건의 순수 로직.
 // create 결과의 versionId 가 존재하고 클라이언트가 알던 versionId 와 다르면

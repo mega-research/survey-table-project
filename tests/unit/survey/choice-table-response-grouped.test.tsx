@@ -8,7 +8,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { ChoiceTableResponse } from '@/components/question-renderer/choice-table-response';
+import { ChoiceTableResponse } from '@/features/question-renderer/choice-table-response';
 import type { Question } from '@/types/survey';
 
 // 모바일 강제 — TablePreview(ResizeObserver 의존) 우회

@@ -142,7 +142,7 @@ describe('Track B bypass defense', () => {
     mockFindFirst.mockResolvedValue({ id: 'prev-response' });
 
     const { createResponseWithFirstAnswer } =
-      await import('@/features/survey-response/server/services/response.service');
+      await import('@/server/survey-response/services/response.service');
     const result = await createResponseWithFirstAnswer({
       surveyId: SURVEY_ID,
       sessionId: 'fresh-session-bypass',
@@ -177,7 +177,7 @@ describe('테스트 세션(isTest) — Track B skip', () => {
     mockInsert.mockReturnValue(insertChain);
 
     const { createResponseWithFirstAnswer } =
-      await import('@/features/survey-response/server/services/response.service');
+      await import('@/server/survey-response/services/response.service');
     const result = await createResponseWithFirstAnswer({
       surveyId: SURVEY_ID,
       sessionId: 'test-session-skip',

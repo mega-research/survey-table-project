@@ -33,7 +33,7 @@ import {
   surveyVersions as surveyVersionsTable,
 } from '@/db/schema';
 
-import { publishSurvey } from '@/features/survey-builder/server/services/survey-publish.service';
+import { publishSurvey } from '@/server/survey-builder/services/survey-publish.service';
 
 const dbUrl = process.env['DATABASE_URL'] ?? '';
 const isLocalDb = dbUrl.includes('127.0.0.1') || dbUrl.includes('localhost');

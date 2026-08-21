@@ -6,7 +6,7 @@ const updateQuestionMock = vi.hoisted(() => vi.fn());
 
 // QuestionBasicTab 는 표/셀 편집기를 품지만, 보기 옵션 그룹(choiceGroups)은 formData 가 아니라
 // 셀 모달의 silentUpdateQuestion 경로로 스토어에 반영된다. 그 경로를 버튼으로 모사한다.
-vi.mock('@/components/survey-builder/question-edit/question-basic-tab', () => {
+vi.mock('@/features/survey-builder/question-edit/question-basic-tab', () => {
   return {
     QuestionBasicTab: () => (
       <button
@@ -25,17 +25,17 @@ vi.mock('@/components/survey-builder/question-edit/question-basic-tab', () => {
   };
 });
 
-vi.mock('@/components/survey-builder/condition/question-condition-editor', () => ({
+vi.mock('@/features/survey-builder/condition/question-condition-editor', () => ({
   QuestionConditionEditor: () => null,
 }));
-vi.mock('@/components/survey-builder/question-edit/table-validation-editor', () => ({
+vi.mock('@/features/survey-builder/question-edit/table-validation-editor', () => ({
   TableValidationEditor: () => null,
 }));
-vi.mock('@/components/survey-builder/hooks/use-ensure-survey-in-db', () => ({
+vi.mock('@/features/survey-builder/hooks/use-ensure-survey-in-db', () => ({
   useEnsureSurveyInDb: () => async () => {},
 }));
 // 옵션 value 리매핑이 있을 때만 호출되는 설문 저장 플로우 — 이 테스트는 렌더/저장 경로만 보므로 stub.
-vi.mock('@/components/survey-builder/hooks/use-survey-sync', () => ({
+vi.mock('@/features/survey-builder/hooks/use-survey-sync', () => ({
   useSurveySync: () => ({ saveSurvey: vi.fn() }),
 }));
 vi.mock('@/shared/lib/rpc', () => ({
@@ -51,8 +51,8 @@ vi.mock('@/shared/lib/rpc', () => ({
 vi.mock('@/lib/image-extractor', () => ({ extractImageUrlsFromQuestion: () => [] }));
 vi.mock('@/lib/image-utils', () => ({ deleteImagesFromR2: async () => {} }));
 
-import { QuestionEditModal } from '@/components/survey-builder/question-edit/question-edit-modal';
-import { useSurveyBuilderStore } from '@/stores/survey-store';
+import { QuestionEditModal } from '@/features/survey-builder/question-edit/question-edit-modal';
+import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
 import type { Question } from '@/types/survey';
 
 // 보기 옵션(choice_opt) 셀 1개를 가진 table-source 라디오 질문.

@@ -1,8 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { MobileDisplayCells } from '@/components/question-renderer/mobile-display-cells';
-import { MobileOptionCard } from '@/components/question-renderer/mobile-card-shared';
+import { MobileDisplayCells } from '@/features/question-renderer/mobile-display-cells';
+import { MobileOptionCard } from '@/features/question-renderer/mobile-card-shared';
 import type { TableCell } from '@/types/survey';
 
 function cell(partial: Partial<TableCell>): TableCell {

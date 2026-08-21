@@ -1,8 +1,8 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { useSessionRecovery } from '@/components/survey-response/hooks/use-session-recovery';
-import { sessionStorageKey } from '@/components/survey-response/hooks/session-helpers';
+import { useSessionRecovery } from '@/features/survey-response/hooks/use-session-recovery';
+import { sessionStorageKey } from '@/features/survey-response/hooks/session-helpers';
 import { client } from '@/shared/lib/rpc';
 import type { Survey } from '@/types/survey';
 
@@ -21,9 +21,9 @@ vi.mock('@/shared/lib/rpc', () => ({
   },
 }));
 
-vi.mock('@/components/survey-response/hooks/session-helpers', async (importOriginal) => {
+vi.mock('@/features/survey-response/hooks/session-helpers', async (importOriginal) => {
   const actual = await importOriginal<
-    typeof import('@/components/survey-response/hooks/session-helpers')
+    typeof import('@/features/survey-response/hooks/session-helpers')
   >();
   return {
     ...actual,

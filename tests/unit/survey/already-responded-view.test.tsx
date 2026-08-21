@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import { AlreadyRespondedView } from '@/components/survey-response/already-responded-view';
+import { AlreadyRespondedView } from '@/features/survey-response/already-responded-view';
 
 describe('AlreadyRespondedView', () => {
   it('문의 이메일을 mailto 링크가 아닌 텍스트로 표시한다', () => {

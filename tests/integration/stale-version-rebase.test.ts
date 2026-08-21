@@ -97,7 +97,7 @@ vi.mock('@/db', () => {
   return { db };
 });
 
-vi.mock('@/features/survey-response/server/services/response-answers.service', () => ({
+vi.mock('@/server/survey-response/services/response-answers.service', () => ({
   replaceResponseAnswers: vi.fn(async () => undefined),
 }));
 
@@ -190,7 +190,7 @@ describe('무중단 갈아타기 — createResponseWithFirstAnswer 버전 재핀
     versionFindFirstMock.mockResolvedValue({ surveyId: SURVEY_ID, status: 'superseded' });
 
     const { createResponseWithFirstAnswer } =
-      await import('@/features/survey-response/server/services/response.service');
+      await import('@/server/survey-response/services/response.service');
     const result = await createResponseWithFirstAnswer({
       surveyId: SURVEY_ID,
       sessionId: 'rebase-session-1',
@@ -212,7 +212,7 @@ describe('무중단 갈아타기 — createResponseWithFirstAnswer 버전 재핀
     versionFindFirstMock.mockResolvedValue({ surveyId: OTHER_SURVEY_ID, status: 'published' });
 
     const { createResponseWithFirstAnswer } =
-      await import('@/features/survey-response/server/services/response.service');
+      await import('@/server/survey-response/services/response.service');
     const result = await createResponseWithFirstAnswer({
       surveyId: SURVEY_ID,
       sessionId: 'rebase-session-2',
@@ -232,7 +232,7 @@ describe('무중단 갈아타기 — createResponseWithFirstAnswer 버전 재핀
     versionFindFirstMock.mockResolvedValue({ surveyId: SURVEY_ID, status: 'published' });
 
     const { createResponseWithFirstAnswer } =
-      await import('@/features/survey-response/server/services/response.service');
+      await import('@/server/survey-response/services/response.service');
     const result = await createResponseWithFirstAnswer({
       surveyId: SURVEY_ID,
       sessionId: 'rebase-session-3',
@@ -252,7 +252,7 @@ describe('무중단 갈아타기 — createResponseWithFirstAnswer 버전 재핀
     versionFindFirstMock.mockResolvedValue({ surveyId: SURVEY_ID, status: 'superseded' });
 
     const { createResponseWithFirstAnswer } =
-      await import('@/features/survey-response/server/services/response.service');
+      await import('@/server/survey-response/services/response.service');
     const result = await createResponseWithFirstAnswer({
       surveyId: SURVEY_ID,
       sessionId: 'rebase-session-4',
@@ -301,7 +301,7 @@ describe('무중단 갈아타기 — createBlankResponse 버전 재핀', () => {
     versionFindFirstMock.mockResolvedValue({ surveyId: SURVEY_ID, status: 'superseded' });
 
     const { createBlankResponse } =
-      await import('@/features/survey-response/server/services/response.service');
+      await import('@/server/survey-response/services/response.service');
     const result = await createBlankResponse({
       surveyId: SURVEY_ID,
       sessionId: 'rebase-blank-session-1',
@@ -319,7 +319,7 @@ describe('무중단 갈아타기 — createBlankResponse 버전 재핀', () => {
     versionFindFirstMock.mockResolvedValue({ surveyId: OTHER_SURVEY_ID, status: 'superseded' });
 
     const { createBlankResponse } =
-      await import('@/features/survey-response/server/services/response.service');
+      await import('@/server/survey-response/services/response.service');
     const result = await createBlankResponse({
       surveyId: SURVEY_ID,
       sessionId: 'rebase-blank-session-2',

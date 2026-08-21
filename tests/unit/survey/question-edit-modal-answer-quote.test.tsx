@@ -11,7 +11,7 @@ const updateQuestionMock = vi.hoisted(() => vi.fn());
  * 실제 탭은 TipTap/표 에디터를 품어 무겁고, 여기서 검증하려는 건 UI 가 아니라
  * "formData 에 실린 응답 인용 값이 저장 페이로드까지 도달하는가" 이기 때문이다.
  */
-vi.mock('@/components/survey-builder/question-edit/question-basic-tab', () => ({
+vi.mock('@/features/survey-builder/question-edit/question-basic-tab', () => ({
   QuestionBasicTab: ({
     formData,
     setFormData,
@@ -58,17 +58,17 @@ vi.mock('@/components/survey-builder/question-edit/question-basic-tab', () => ({
   ),
 }));
 
-vi.mock('@/components/survey-builder/condition/question-condition-editor', () => ({
+vi.mock('@/features/survey-builder/condition/question-condition-editor', () => ({
   QuestionConditionEditor: () => null,
 }));
-vi.mock('@/components/survey-builder/question-edit/table-validation-editor', () => ({
+vi.mock('@/features/survey-builder/question-edit/table-validation-editor', () => ({
   TableValidationEditor: () => null,
 }));
-vi.mock('@/components/survey-builder/hooks/use-ensure-survey-in-db', () => ({
+vi.mock('@/features/survey-builder/hooks/use-ensure-survey-in-db', () => ({
   useEnsureSurveyInDb: () => async () => {},
 }));
 // 옵션 value 리매핑이 있을 때만 호출되는 설문 저장 플로우 — 이 테스트는 렌더/저장 경로만 보므로 stub.
-vi.mock('@/components/survey-builder/hooks/use-survey-sync', () => ({
+vi.mock('@/features/survey-builder/hooks/use-survey-sync', () => ({
   useSurveySync: () => ({ saveSurvey: vi.fn() }),
 }));
 vi.mock('@/shared/lib/rpc', () => ({
@@ -84,8 +84,8 @@ vi.mock('@/shared/lib/rpc', () => ({
 vi.mock('@/lib/image-extractor', () => ({ extractImageUrlsFromQuestion: () => [] }));
 vi.mock('@/lib/image-utils', () => ({ deleteImagesFromR2: async () => {} }));
 
-import { QuestionEditModal } from '@/components/survey-builder/question-edit/question-edit-modal';
-import { useSurveyBuilderStore } from '@/stores/survey-store';
+import { QuestionEditModal } from '@/features/survey-builder/question-edit/question-edit-modal';
+import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
 import type { Question } from '@/types/survey';
 
 function radioQuestion(overrides: Partial<Question> = {}): Question {

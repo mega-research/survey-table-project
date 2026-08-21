@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { toGateBlockReason } from '@/features/survey-response/domain/gate-block-reason';
+import { toGateBlockReason } from '@/server/survey-response/domain/gate-block-reason';
 
 // 가용성 게이트 위반은 예상 가능한 도메인 상태다. 500 으로 새면 응답자는 "Internal server
 // error" 만 보고 왜 막혔는지 알 수 없고, 클라이언트가 차단을 인지하지 못해 클릭할 때마다

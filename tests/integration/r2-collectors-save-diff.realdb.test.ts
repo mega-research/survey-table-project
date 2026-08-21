@@ -20,11 +20,11 @@ import {
   savedQuestions,
   surveys as surveysTable,
 } from '@/db/schema';
-import { updateSavedQuestion } from '@/features/library/server/services/saved-questions.service';
-import { updateMailTemplate } from '@/features/mail/server/services/mail-templates.service';
-import { updateQuestion } from '@/features/survey-builder/server/services/questions.service';
-import { saveSurveyDiff } from '@/features/survey-builder/server/services/survey-save.service';
-import { updateSurvey } from '@/features/survey-builder/server/services/surveys.service';
+import { updateSavedQuestion } from '@/server/library/services/saved-questions.service';
+import { updateMailTemplate } from '@/server/mail/services/mail-templates.service';
+import { updateQuestion } from '@/server/survey-builder/services/questions.service';
+import { saveSurveyDiff } from '@/server/survey-builder/services/survey-save.service';
+import { updateSurvey } from '@/server/survey-builder/services/surveys.service';
 import { registerDeletionCandidates } from '@/lib/r2-lifecycle/deletion-queue.server';
 
 const isLocalDb =

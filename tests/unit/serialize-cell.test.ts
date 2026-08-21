@@ -9,7 +9,7 @@ import {
   GROUPABLE_CELL_TYPES,
   type CellFormState,
   type ContentType,
-} from '@/components/survey-builder/table-editor/cell-editor/utils/serialize-cell';
+} from '@/features/survey-builder/table-editor/cell-editor/utils/serialize-cell';
 
 // 기본 폼 상태 (cellToFormState 가 빈 셀에서 만드는 값과 동일).
 // 각 테스트는 필요한 필드만 override 한다.

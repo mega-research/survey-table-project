@@ -15,7 +15,7 @@ vi.mock('@/shared/lib/rpc', () => ({
   },
 }));
 
-import { surveyKeys, surveyListQueryOptions } from '@/hooks/queries/use-surveys';
+import { surveyKeys, surveyListQueryOptions } from '@/features/survey-builder/queries/use-surveys';
 
 describe('surveyListQueryOptions', () => {
   it('짧은 stale window 로 설문 목록 재마운트 중복 요청을 줄인다', () => {

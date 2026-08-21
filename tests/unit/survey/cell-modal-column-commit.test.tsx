@@ -10,10 +10,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const updateQuestionMock = vi.hoisted(() => vi.fn());
 
-vi.mock('@/components/survey-builder/hooks/use-ensure-survey-in-db', () => ({
+vi.mock('@/features/survey-builder/hooks/use-ensure-survey-in-db', () => ({
   useEnsureSurveyInDb: () => async () => {},
 }));
-vi.mock('@/components/survey-builder/hooks/use-survey-sync', () => ({
+vi.mock('@/features/survey-builder/hooks/use-survey-sync', () => ({
   useSurveySync: () => ({ saveSurvey: vi.fn() }),
 }));
 vi.mock('@/shared/lib/rpc', () => ({
@@ -24,8 +24,8 @@ vi.mock('@/shared/lib/rpc', () => ({
   },
 }));
 
-import { CellContentModal } from '@/components/survey-builder/table-editor/cell-editor/cell-content-modal';
-import { useSurveyBuilderStore } from '@/stores/survey-store';
+import { CellContentModal } from '@/features/survey-builder/table-editor/cell-editor/cell-content-modal';
+import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
 import type { HeaderCell, Question, TableCell, TableColumn, TableRow } from '@/types/survey';
 
 const editedCell: TableCell = { id: 'c13', type: 'text', content: '셋째 열 셀' };

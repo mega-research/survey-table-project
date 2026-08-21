@@ -4,15 +4,15 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { db } from '@/db';
 import { contactTargets, surveys } from '@/db/schema';
-import { prepareContactInsertScope } from '@/features/contacts/server/services/contact-insert-scope.service';
+import { prepareContactInsertScope } from '@/server/contacts/services/contact-insert-scope.service';
 import {
   recordStepVisit,
   recordVisibilitySegment,
-} from '@/features/survey-response/server/services/lifecycle.service';
+} from '@/server/survey-response/services/lifecycle.service';
 import {
   completeResponse,
   saveTestTargetFirstAnswer,
-} from '@/features/survey-response/server/services/response.service';
+} from '@/server/survey-response/services/response.service';
 import {
   acquireTestTargetResponse,
   assertAnonymousTestSession,

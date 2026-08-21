@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { useSurveyBuilderStore } from '@/stores/survey-store';
+import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
 import type { QuestionGroup, Survey } from '@/types/survey';
 
 // 그룹을 최상위로 이동하면 parentGroupId 가 로컬 store 에서도 해제돼야 한다(회귀 M47).

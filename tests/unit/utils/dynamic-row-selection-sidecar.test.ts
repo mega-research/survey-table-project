@@ -4,7 +4,7 @@ import {
   DYNAMIC_ROW_SELECTIONS_KEY,
   getDynamicRowSelections,
   updateDynamicRowSelections,
-} from '@/components/question-renderer/utils/dynamic-row-selection-sidecar';
+} from '@/features/question-renderer/utils/dynamic-row-selection-sidecar';
 
 describe('동적 행 선택 루트 사이드카', () => {
   it('문항 응답 shape와 분리해 질문별 선택을 읽고 갱신한다', () => {

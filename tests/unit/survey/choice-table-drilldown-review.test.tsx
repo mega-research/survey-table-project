@@ -3,9 +3,9 @@ import { useState } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ChoiceTableResponse } from '@/components/question-renderer/choice-table-response';
-import { QuestionInput } from '@/components/survey-response/question-input';
-import { useSurveyResponseStore } from '@/stores/survey-response-store';
+import { ChoiceTableResponse } from '@/features/question-renderer/choice-table-response';
+import { QuestionInput } from '@/features/survey-response/question-input';
+import { useSurveyResponseStore } from '@/features/question-renderer/stores/survey-response-store';
 import type { Question } from '@/types/survey';
 
 const { contactAttrs } = vi.hoisted(() => ({

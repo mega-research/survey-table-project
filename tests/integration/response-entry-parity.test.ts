@@ -142,7 +142,7 @@ vi.mock('@/lib/survey-control', async (importOriginal) => {
   };
 });
 
-vi.mock('@/features/survey-response/server/services/response-answers.service', () => ({
+vi.mock('@/server/survey-response/services/response-answers.service', () => ({
   replaceResponseAnswers: vi.fn(async () => undefined),
 }));
 
@@ -189,7 +189,7 @@ type Over = {
 };
 
 async function callCreate(kind: Kind, over: Over = {}) {
-  const svc = await import('@/features/survey-response/server/services/response.service');
+  const svc = await import('@/server/survey-response/services/response.service');
   const common = {
     surveyId: SURVEY_ID,
     sessionId: over.sessionId ?? 'sess-a2',
@@ -492,7 +492,7 @@ describe('T9 answer_value_too_large 는 DB 쓰기 이전에 차단된다', () =>
     wireHappyPath();
     // versionId null → 멤버십은 select 경로.
     H.selectLimitMock.mockResolvedValue([{ id: 'q1', piiEncrypted: false }]);
-    const svc = await import('@/features/survey-response/server/services/response.service');
+    const svc = await import('@/server/survey-response/services/response.service');
 
     await expect(callCreate('first', { value: HUGE })).rejects.toBeInstanceOf(
       svc.SurveyNotAcceptingResponsesError,
@@ -510,7 +510,7 @@ describe('T9 answer_value_too_large 는 DB 쓰기 이전에 차단된다', () =>
 
   it('대상자 테스트 lane: export 직접 호출도 tx 를 열기 전에 차단한다', async () => {
     wireHappyPath();
-    const svc = await import('@/features/survey-response/server/services/response.service');
+    const svc = await import('@/server/survey-response/services/response.service');
 
     await expect(
       svc.saveTestTargetFirstAnswer({

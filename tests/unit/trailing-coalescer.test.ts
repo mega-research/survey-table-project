@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createTrailingCoalescer } from '@/utils/trailing-coalescer';
+import { createTrailingCoalescer } from '@/features/question-renderer/utils/trailing-coalescer';
 
 // max-width 가 애니메이션되면 ResizeObserver 가 프레임마다 발화한다. 매 발화를 setState 로
 // 흘리면 표가 수십 번 리렌더된다. leading + trailing 으로 접어 2회로 줄이는 것이 목적.

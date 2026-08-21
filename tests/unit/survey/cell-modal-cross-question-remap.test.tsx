@@ -22,10 +22,10 @@ vi.mock('sonner', () => ({
   toast: { error: toastErrorMock, success: vi.fn(), info: vi.fn() },
 }));
 
-vi.mock('@/components/survey-builder/hooks/use-ensure-survey-in-db', () => ({
+vi.mock('@/features/survey-builder/hooks/use-ensure-survey-in-db', () => ({
   useEnsureSurveyInDb: () => async () => {},
 }));
-vi.mock('@/components/survey-builder/hooks/use-survey-sync', () => ({
+vi.mock('@/features/survey-builder/hooks/use-survey-sync', () => ({
   useSurveySync: () => ({ saveSurveyScoped: saveSurveyMock }),
 }));
 vi.mock('@/shared/lib/rpc', () => ({
@@ -37,8 +37,8 @@ vi.mock('@/shared/lib/rpc', () => ({
   },
 }));
 
-import { CellContentModal } from '@/components/survey-builder/table-editor/cell-editor/cell-content-modal';
-import { useSurveyBuilderStore } from '@/stores/survey-store';
+import { CellContentModal } from '@/features/survey-builder/table-editor/cell-editor/cell-content-modal';
+import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
 import type { Question, TableCell } from '@/types/survey';
 
 const TABLE_QUESTION_ID = 'q-table';

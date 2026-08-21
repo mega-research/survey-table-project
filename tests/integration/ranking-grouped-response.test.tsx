@@ -12,8 +12,8 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { Question, RankingAnswer } from '@/types/survey';
-import { RankingQuestion } from '@/components/question-renderer/ranking-question';
-import type { RankingDropdownStackProps } from '@/components/question-renderer/ranking-dropdown-stack';
+import { RankingQuestion } from '@/features/question-renderer/ranking-question';
+import type { RankingDropdownStackProps } from '@/features/question-renderer/ranking-dropdown-stack';
 
 // 데스크탑 강제 — isMobile=false 로 Radix Select 대신 내부 select 확인 불필요한 분기 제거.
 // 하지만 RankingDropdownStack 을 모킹해 native select 로 교체하므로 matchMedia 영향 없음.
@@ -23,12 +23,12 @@ vi.mock('@/hooks/use-media-query', () => ({
 }));
 
 // TablePreview 는 ResizeObserver 를 사용하므로 jsdom 에서 모킹.
-vi.mock('@/components/question-renderer/table-preview', () => ({
+vi.mock('@/features/question-renderer/table-preview', () => ({
   TablePreview: () => null,
 }));
 
 // MobileOptionCard 도 테스트 범위 밖.
-vi.mock('@/components/question-renderer/mobile-card-shared', () => ({
+vi.mock('@/features/question-renderer/mobile-card-shared', () => ({
   MobileOptionCard: () => null,
 }));
 
@@ -38,7 +38,7 @@ vi.mock('@/components/question-renderer/mobile-card-shared', () => ({
  * - positions 개수만큼 <select> 를 렌더하고, 선택 시 onChange 를 호출.
  * - 각 select 의 aria-label 은 "${rank}순위 선택" — 실제 컴포넌트와 동일 패턴.
  */
-vi.mock('@/components/question-renderer/ranking-dropdown-stack', () => ({
+vi.mock('@/features/question-renderer/ranking-dropdown-stack', () => ({
   RankingDropdownStack: ({
     answers,
     options,

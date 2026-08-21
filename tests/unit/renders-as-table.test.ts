@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { TableCell } from '@/types/survey';
-import { rendersAsTable } from '@/utils/renders-as-table';
+import { rendersAsTable } from '@/features/question-renderer/utils/renders-as-table';
 
 // "이 문항이 응답 화면에 표로 그려지는가" 단일 판정.
 // - type='table' 뿐 아니라 표-소스 radio/checkbox(choice_opt 셀)와

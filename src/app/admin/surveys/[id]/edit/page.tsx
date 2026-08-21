@@ -28,28 +28,28 @@ import {
 import { toast } from 'sonner';
 import { useShallow } from 'zustand/react/shallow';
 
-import { TestModeControl } from '@/components/operations/test-mode-control';
-import { CompletionMessageModal } from '@/components/survey-builder/completion-message-modal';
-import { ImportExportLibraryModal } from '@/components/survey-builder/import-export-library-modal';
-import { QuestionLibraryPanel } from '@/components/survey-builder/question-library-panel';
-import { ResponseHeaderSettingsModal } from '@/components/survey-builder/response-header-settings-modal';
-import { SaveQuestionModal } from '@/components/survey-builder/save-question-modal';
-import { SaveSuccessModal } from '@/components/survey-builder/save-success-modal';
-import { SortableQuestionList } from '@/components/survey-builder/question-list/sortable-question-list';
-import { SurveySettingsPanel } from '@/components/survey-builder/survey-settings-panel';
+import { TestModeControl } from '@/features/operations/test-mode-control';
+import { CompletionMessageModal } from '@/features/survey-builder/completion-message-modal';
+import { ImportExportLibraryModal } from '@/features/survey-builder/import-export-library-modal';
+import { QuestionLibraryPanel } from '@/features/survey-builder/question-library-panel';
+import { ResponseHeaderSettingsModal } from '@/features/survey-builder/response-header-settings-modal';
+import { SaveQuestionModal } from '@/features/survey-builder/save-question-modal';
+import { SaveSuccessModal } from '@/features/survey-builder/save-success-modal';
+import { SortableQuestionList } from '@/features/survey-builder/question-list/sortable-question-list';
+import { SurveySettingsPanel } from '@/features/survey-builder/survey-settings-panel';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useSurvey } from '@/hooks/queries/use-surveys';
-import { useSurveySync } from '@/components/survey-builder/hooks/use-survey-sync';
+import { useSurvey } from '@/features/survey-builder/queries/use-surveys';
+import { useSurveySync } from '@/features/survey-builder/hooks/use-survey-sync';
 import { runAsyncAction } from '@/lib/run-async-action';
 import type { VarNameIssue } from '@/lib/spss/variable-name-guard';
 import { generateSlugFromTitle, validateSlug } from '@/lib/survey-url';
 import { client } from '@/shared/lib/rpc';
 import { useErrorDialogStore } from '@/stores/error-dialog-store';
-import { useSurveyBuilderStore } from '@/stores/survey-store';
-import { useSurveyUIStore } from '@/stores/ui-store';
+import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
+import { useSurveyUIStore } from '@/features/survey-builder/stores/ui-store';
 import { Question } from '@/types/survey';
 
 const questionTypes = [

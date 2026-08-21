@@ -89,7 +89,7 @@ describe('saveDraftResponseIfActive', () => {
   it('응답 행이 없으면 not_found 로 skip 하고 저장을 시도하지 않는다', async () => {
     findFirstMock.mockResolvedValueOnce(undefined);
     const { saveDraftResponseIfActive } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response.service'
     );
     expect(await saveDraftResponseIfActive(INPUT)).toEqual({
       saved: false,
@@ -105,7 +105,7 @@ describe('saveDraftResponseIfActive', () => {
       deletedAt: new Date('2026-07-30T00:00:00Z'),
     });
     const { saveDraftResponseIfActive } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response.service'
     );
     expect(await saveDraftResponseIfActive(INPUT)).toEqual({
       saved: false,
@@ -117,7 +117,7 @@ describe('saveDraftResponseIfActive', () => {
   it('종결 상태면 concluded 로 skip 한다', async () => {
     findFirstMock.mockResolvedValueOnce({ id: 'r1', status: 'completed', deletedAt: null });
     const { saveDraftResponseIfActive } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response.service'
     );
     expect(await saveDraftResponseIfActive(INPUT)).toEqual({
       saved: false,
@@ -130,7 +130,7 @@ describe('saveDraftResponseIfActive', () => {
     arrangeActiveRow();
     controlFlagsMock.mockResolvedValue({ isPaused: true });
     const { saveDraftResponseIfActive } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response.service'
     );
     expect(await saveDraftResponseIfActive(INPUT)).toEqual({
       saved: false,
@@ -142,7 +142,7 @@ describe('saveDraftResponseIfActive', () => {
   it('in_progress 행이면 저장하고 saved 를 반환한다', async () => {
     arrangeActiveRow();
     const { saveDraftResponseIfActive } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response.service'
     );
     expect(await saveDraftResponseIfActive(INPUT)).toEqual({ saved: true });
     expect(updateCalledMock).toHaveBeenCalledTimes(1);
@@ -155,7 +155,7 @@ describe('saveDraftResponseIfActive', () => {
     // 저장 실패 후 재조회: 그 사이 응답이 종결됐다.
     findFirstMock.mockResolvedValueOnce({ id: 'r1', status: 'completed', deletedAt: null });
     const { saveDraftResponseIfActive } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response.service'
     );
     expect(await saveDraftResponseIfActive(INPUT)).toEqual({
       saved: false,
@@ -172,7 +172,7 @@ describe('saveDraftResponseIfActive', () => {
     // 재조회해도 여전히 in_progress → 진짜 예외이므로 삼키지 않는다.
     findFirstMock.mockResolvedValueOnce({ id: 'r1', status: 'in_progress', deletedAt: null });
     const { saveDraftResponseIfActive } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response.service'
     );
     await expect(saveDraftResponseIfActive(INPUT)).rejects.toThrow(
       '응답을 수정할 수 없습니다.',
@@ -193,7 +193,7 @@ describe('saveDraftResponse — seq 가드(배치 claim)', () => {
   it('seq 없는 요청은 claim 을 건너뛰고 기존대로 저장한다', async () => {
     arrangeActiveRow();
     const { saveDraftResponseIfActive } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response.service'
     );
     expect(await saveDraftResponseIfActive(INPUT)).toEqual({ saved: true });
     expect(executeMock).not.toHaveBeenCalled();
@@ -204,7 +204,7 @@ describe('saveDraftResponse — seq 가드(배치 claim)', () => {
     // claim UPDATE 가 1행을 반환 — 통과.
     executeMock.mockResolvedValueOnce([{ id: 'r1' }]);
     const { saveDraftResponseIfActive } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response.service'
     );
     expect(await saveDraftResponseIfActive({ ...INPUT, seq: 5 })).toEqual({ saved: true });
     expect(updateCalledMock).toHaveBeenCalledTimes(1);
@@ -221,7 +221,7 @@ describe('saveDraftResponse — seq 가드(배치 claim)', () => {
     // claim UPDATE 0행 → 존재 확인 SELECT 1행 → stale.
     executeMock.mockResolvedValueOnce([]).mockResolvedValueOnce([{ id: 'r1' }]);
     const { saveDraftResponseIfActive } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response.service'
     );
     expect(await saveDraftResponseIfActive({ ...INPUT, seq: 1 })).toEqual({
       saved: false,
@@ -236,7 +236,7 @@ describe('saveDraftResponse — seq 가드(배치 claim)', () => {
     // updateQuestionResponse 내부 응답 행 조회 — 행 없음 → 기존 에러 경로.
     findFirstMock.mockResolvedValueOnce(undefined);
     const { saveDraftResponse } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response.service'
     );
     await expect(
       saveDraftResponse({ responseId: 'r1', answers: { q1: 'a' }, seq: 1 }),
@@ -280,7 +280,7 @@ describe('saveDraftResponse — 배치 저장', () => {
   it('답변이 여러 개여도 응답 행 조회는 1회다', async () => {
     arrangeBatch();
     const { saveDraftResponse } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response.service'
     );
     await saveDraftResponse(THREE);
     expect(findFirstMock).toHaveBeenCalledTimes(1);
@@ -289,7 +289,7 @@ describe('saveDraftResponse — 배치 저장', () => {
   it('답변이 여러 개여도 UPDATE 는 1회다', async () => {
     arrangeBatch();
     const { saveDraftResponse } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response.service'
     );
     await saveDraftResponse(THREE);
     expect(updateCalledMock).toHaveBeenCalledTimes(1);
@@ -298,7 +298,7 @@ describe('saveDraftResponse — 배치 저장', () => {
   it('답변이 여러 개여도 중단 플래그 조회는 1회다', async () => {
     arrangeBatch();
     const { saveDraftResponse } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response.service'
     );
     await saveDraftResponse(THREE);
     expect(controlFlagsMock).toHaveBeenCalledTimes(1);
@@ -307,7 +307,7 @@ describe('saveDraftResponse — 배치 저장', () => {
   it('배치의 모든 답변이 하나의 UPDATE 에 담긴다', async () => {
     arrangeBatch();
     const { saveDraftResponse } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response.service'
     );
     expect(await saveDraftResponse(THREE)).toEqual({ applied: true });
     const setArg = setSpy.mock.calls.at(-1)?.[0] as { questionResponses?: unknown };
@@ -330,7 +330,7 @@ describe('saveDraftResponse — 배치 저장', () => {
     selectLimitMock.mockResolvedValue([{ id: 'q2', piiEncrypted: false }]);
     controlFlagsMock.mockResolvedValue({ isPaused: false });
     const { saveDraftResponse } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response.service'
     );
     await expect(saveDraftResponse(THREE)).rejects.toThrow(
       '해당 설문에 존재하지 않는 질문입니다.',
@@ -342,7 +342,7 @@ describe('saveDraftResponse — 배치 저장', () => {
     arrangeBatch();
     controlFlagsMock.mockResolvedValue({ isPaused: true });
     const { saveDraftResponse } = await import(
-      '@/features/survey-response/server/services/response.service'
+      '@/server/survey-response/services/response.service'
     );
     await expect(saveDraftResponse(THREE)).rejects.toThrow('응답을 받을 수 없는 설문입니다.');
     expect(updateCalledMock).not.toHaveBeenCalled();

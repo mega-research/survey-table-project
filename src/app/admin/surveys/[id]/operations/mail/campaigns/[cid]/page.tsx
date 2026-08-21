@@ -3,9 +3,9 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
-import { CancelCampaignButton } from '@/components/operations/mail-campaign/cancel-campaign-button';
-import { CampaignRecipientsTable } from '@/components/operations/mail-campaign/campaign-recipients-table';
-import { ResyncCampaignButton } from '@/components/operations/mail-campaign/resync-campaign-button';
+import { CancelCampaignButton } from '@/features/operations/mail-campaign/cancel-campaign-button';
+import { CampaignRecipientsTable } from '@/features/operations/mail-campaign/campaign-recipients-table';
+import { ResyncCampaignButton } from '@/features/operations/mail-campaign/resync-campaign-button';
 import { Card } from '@/components/ui/card';
 import { LocalDateTime } from '@/components/ui/local-date-time';
 import { mailRecipientStatusValues, type MailCampaignStatus, type MailRecipientStatus } from '@/shared/contracts/mail';

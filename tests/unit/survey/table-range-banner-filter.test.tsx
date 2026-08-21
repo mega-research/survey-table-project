@@ -1,7 +1,7 @@
 import { render } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { QuestionInput } from '@/components/survey-response/question-input';
+import { QuestionInput } from '@/features/survey-response/question-input';
 import type { NumericIssue } from '@/lib/survey/numeric-validation';
 import type { Question } from '@/types/survey';
 
@@ -20,7 +20,7 @@ interface CapturedProps {
 
 const captured: CapturedProps[] = [];
 
-vi.mock('@/components/question-renderer/interactive-table-response', () => ({
+vi.mock('@/features/question-renderer/interactive-table-response', () => ({
   InteractiveTableResponse: (props: CapturedProps) => {
     captured.push(props);
     return <div data-testid="table" />;

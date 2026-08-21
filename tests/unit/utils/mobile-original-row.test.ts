@@ -5,7 +5,7 @@ import {
   getMobileOriginalRowLabel,
   isMobileOriginalRowInteractiveCell,
   projectMobileOriginalRow,
-} from '@/components/question-renderer/utils/mobile-original-row';
+} from '@/features/question-renderer/utils/mobile-original-row';
 
 const col = (id: string): TableColumn => ({ id, label: id });
 const header = (id: string, colspan = 1, rowspan = 1): HeaderCell => ({

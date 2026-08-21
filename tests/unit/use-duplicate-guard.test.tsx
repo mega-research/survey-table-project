@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   handlePausedMutationError,
   useDuplicateGuard,
-} from '@/components/survey-response/hooks/use-duplicate-guard';
+} from '@/features/survey-response/hooks/use-duplicate-guard';
 import type { ClientSignals } from '@/lib/duplicate-detection/types';
 import type { Survey } from '@/types/survey';
 

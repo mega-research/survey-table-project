@@ -9,7 +9,7 @@ import type { ORPCContext } from '@/server/context';
 import type {
   SurveyControl,
   SurveyForResponseResult,
-} from '@/features/survey-builder/domain/survey-read';
+} from '@/server/survey-builder/domain/survey-read';
 import type { Survey } from '@/types/survey';
 
 const { forResponseMock, attrsLookupMock } = vi.hoisted(() => ({
@@ -34,16 +34,16 @@ vi.mock('@/shared/lib/rpc', () => ({
   },
 }));
 
-vi.mock('@/features/contacts/server/services/contact-attrs.service', async (importOriginal) => {
+vi.mock('@/server/contacts/services/contact-attrs.service', async (importOriginal) => {
   const actual = await importOriginal<
-    typeof import('@/features/contacts/server/services/contact-attrs.service')
+    typeof import('@/server/contacts/services/contact-attrs.service')
   >();
   return { ...actual, lookupContactAttrs: vi.fn() };
 });
 
-import * as contactAttrsService from '@/features/contacts/server/services/contact-attrs.service';
-import { attrs } from '@/features/contacts/server/procedures/attrs';
-import { useSurveyLoader } from '@/components/survey-response/hooks/use-survey-loader';
+import * as contactAttrsService from '@/server/contacts/services/contact-attrs.service';
+import { attrs } from '@/server/contacts/procedures/attrs';
+import { useSurveyLoader } from '@/features/survey-response/hooks/use-survey-loader';
 
 const SURVEY_ID = 'survey-loader-test';
 const INVITE_A = '11111111-2222-4333-8444-555555555555';

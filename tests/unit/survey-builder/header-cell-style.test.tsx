@@ -2,20 +2,20 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
-import { HeaderBulkStyleDialog } from '@/components/survey-builder/table-editor/header-bulk-style-dialog';
-import { HeaderGridEditor } from '@/components/survey-builder/table-editor/header-grid-editor';
-import { TableHeaderSection } from '@/components/survey-builder/table-editor/table-header-section';
+import { HeaderBulkStyleDialog } from '@/features/survey-builder/table-editor/header-bulk-style-dialog';
+import { HeaderGridEditor } from '@/features/survey-builder/table-editor/header-grid-editor';
+import { TableHeaderSection } from '@/features/survey-builder/table-editor/table-header-section';
 import type { HeaderCell, TableColumn } from '@/types/survey';
 
 // 통 mock 은 import 체인이 늘면 깨지므로 importOriginal 을 spread 로 보강한다 (레포 관례)
-vi.mock('@/stores/ui-store', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/stores/ui-store')>()),
+vi.mock('@/features/survey-builder/stores/ui-store', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/features/survey-builder/stores/ui-store')>()),
   useSurveyUIStore: (selector: (s: unknown) => unknown) =>
     selector({ editingQuestionId: 'q1' }),
 }));
 
-vi.mock('@/stores/survey-store', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/stores/survey-store')>()),
+vi.mock('@/features/survey-builder/stores/survey-store', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/features/survey-builder/stores/survey-store')>()),
   useSurveyBuilderStore: (selector: (s: unknown) => unknown) =>
     selector({ currentSurvey: { questions: [{ id: 'q1', hideColumnLabels: false }] } }),
 }));

@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import { CellContentLayout } from '@/components/question-renderer/cells/cell-content-layout';
+import { CellContentLayout } from '@/features/question-renderer/cells/cell-content-layout';
 
 /**
  * 라벨 div 에는 DEFAULT_LABEL_CLASS 의 text-gray-700 이 이미 붙어 있다.

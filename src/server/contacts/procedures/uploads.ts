@@ -1,0 +1,45 @@
+import * as z from 'zod';
+
+import { loadOperationsDataScope } from '@/lib/operations/data-scope.server';
+import { authed } from '@/server/orpc';
+
+import { GetExistingContactsCountInput } from '../domain/contact-column';
+import {
+  IngestContactUploadInput,
+  IngestContactUploadResultSchema,
+  MatchContactUploadInput,
+  MatchContactUploadResultSchema,
+  ParseExcelPreviewInput,
+  ParseExcelPreviewResultSchema,
+} from '../domain/contact-upload';
+import * as columnsSvc from '../services/contact-columns.service';
+import * as uploadsSvc from '../services/contact-uploads.service';
+
+const parsePreview = authed
+  .input(ParseExcelPreviewInput)
+  .output(ParseExcelPreviewResultSchema)
+  .handler(({ input }) => uploadsSvc.parseExcelPreview(input));
+
+const ingest = authed
+  .input(IngestContactUploadInput)
+  .output(IngestContactUploadResultSchema)
+  .handler(({ input }) => uploadsSvc.ingestContactUpload(input));
+
+const matchPreview = authed
+  .input(MatchContactUploadInput)
+  .output(MatchContactUploadResultSchema)
+  .handler(({ input }) => uploadsSvc.matchContactUpload(input));
+
+const existingCount = authed
+  .input(GetExistingContactsCountInput)
+  .output(z.number())
+  .handler(async ({ input }) =>
+    columnsSvc.getExistingContactsCount(input.surveyId, await loadOperationsDataScope(input.surveyId)),
+  );
+
+export const uploads = {
+  parsePreview,
+  ingest,
+  matchPreview,
+  existingCount,
+};

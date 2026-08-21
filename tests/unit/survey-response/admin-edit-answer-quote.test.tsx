@@ -1,8 +1,8 @@
 import { act, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { SurveyResponseFlow } from '@/components/survey-response/survey-response-flow';
-import { useSurveyResponseStore } from '@/stores/survey-response-store';
+import { SurveyResponseFlow } from '@/features/survey-response/survey-response-flow';
+import { useSurveyResponseStore } from '@/features/question-renderer/stores/survey-response-store';
 import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
 import type { Question, Survey } from '@/types/survey';
 

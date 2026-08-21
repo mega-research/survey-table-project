@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
-import { ContactDetailForm } from '@/components/operations/contacts/contact-detail-form';
+import { ContactDetailForm } from '@/features/operations/contacts/contact-detail-form';
 import { extractSystemFieldKeys } from '@/lib/operations/contacts-shared';
 import {
   getContactColumnScheme,

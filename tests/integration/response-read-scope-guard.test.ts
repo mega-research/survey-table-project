@@ -51,7 +51,7 @@ function collectStrings(node: unknown, seen = new WeakSet<object>()): string[] {
   return out;
 }
 
-import { getResponseById } from '@/features/survey-builder/server/services/response-read.service';
+import { getResponseById } from '@/server/survey-builder/services/response-read.service';
 
 const SURVEY_ID = '11111111-2222-4333-8444-555555555555';
 const OTHER_SURVEY_ID = '99999999-8888-4777-8666-555555555555';

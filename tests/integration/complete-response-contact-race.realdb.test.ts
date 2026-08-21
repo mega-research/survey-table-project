@@ -4,9 +4,9 @@ import { describe, expect, it } from 'vitest';
 
 import { db } from '@/db';
 import { contactTargets } from '@/db/schema';
-import { deleteContactTarget } from '@/features/contacts/server/services/contact-targets.service';
-import { hardResetResponse } from '@/features/survey-response/server/services/response-manage.service';
-import { completeResponse } from '@/features/survey-response/server/services/response.service';
+import { deleteContactTarget } from '@/server/contacts/services/contact-targets.service';
+import { hardResetResponse } from '@/server/survey-response/services/response-manage.service';
+import { completeResponse } from '@/server/survey-response/services/response.service';
 
 const run = process.env['RUN_REALDB'] === '1' ? describe : describe.skip;
 

@@ -1,11 +1,11 @@
 import { render, screen } from '@testing-library/react';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { MobileRowWiseOriginalSheet } from '@/components/question-renderer/mobile-row-wise-original-sheet';
+import { MobileRowWiseOriginalSheet } from '@/features/question-renderer/mobile-row-wise-original-sheet';
 import type {
   MobileRowWiseOriginalModel,
   MobileRowWiseOriginalQuestion,
-} from '@/components/question-renderer/utils/mobile-row-wise-original';
+} from '@/features/question-renderer/utils/mobile-row-wise-original';
 
 vi.mock('@/lib/survey/contact-attrs-context', () => ({
   useContactAttrs: () => ({}),

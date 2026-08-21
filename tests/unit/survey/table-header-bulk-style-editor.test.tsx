@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@/stores/survey-store', () => ({
+vi.mock('@/features/survey-builder/stores/survey-store', () => ({
   useSurveyBuilderStore: <T,>(selector: (state: {
     currentSurvey: { questions: never[] };
     silentUpdateQuestion: () => void;
@@ -14,14 +14,14 @@ vi.mock('@/stores/survey-store', () => ({
   }),
 }));
 
-vi.mock('@/stores/ui-store', () => ({
+vi.mock('@/features/survey-builder/stores/ui-store', () => ({
   useSurveyUIStore: <T,>(selector: (state: { editingQuestionId: string | null }) => T) =>
     selector({ editingQuestionId: null }),
 }));
 
-import { DynamicTableEditor } from '@/components/survey-builder/table-editor/dynamic-table-editor';
-import { HeaderBulkStyleButton } from '@/components/survey-builder/table-editor/header-bulk-style-button';
-import { useTableEditor } from '@/components/survey-builder/table-editor/hooks/use-table-editor';
+import { DynamicTableEditor } from '@/features/survey-builder/table-editor/dynamic-table-editor';
+import { HeaderBulkStyleButton } from '@/features/survey-builder/table-editor/header-bulk-style-button';
+import { useTableEditor } from '@/features/survey-builder/table-editor/hooks/use-table-editor';
 import type { HeaderCell, TableColumn, TableRow } from '@/types/survey';
 
 const columns: TableColumn[] = [

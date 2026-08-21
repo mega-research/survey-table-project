@@ -14,7 +14,7 @@ vi.mock('@/shared/lib/rpc', () => ({
   client: { contacts: { attrValues: { list: vi.fn() } } },
 }));
 
-import { ContactsTable } from '@/components/operations/contacts/contacts-table';
+import { ContactsTable } from '@/features/operations/contacts/contacts-table';
 import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 
 const scheme: ContactColumnScheme = {

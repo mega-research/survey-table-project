@@ -2,9 +2,9 @@ import { PgDialect } from 'drizzle-orm/pg-core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ContactColumnScheme } from '@/shared/contracts/contacts';
-import { addContactTarget } from '@/features/contacts/server/services/contact-targets.service';
-import { ingestContactUpload } from '@/features/contacts/server/services/contact-uploads.service';
-import { generateTestContacts } from '@/features/contacts/server/services/test-contacts.service';
+import { addContactTarget } from '@/server/contacts/services/contact-targets.service';
+import { ingestContactUpload } from '@/server/contacts/services/contact-uploads.service';
+import { generateTestContacts } from '@/server/contacts/services/test-contacts.service';
 
 type TargetRow = {
   id: string;

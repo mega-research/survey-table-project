@@ -24,7 +24,7 @@ vi.mock('@/lib/duplicate-detection/invite-lookup', () => ({
   findContactByInviteToken: vi.fn(async () => ({ kind: 'invalid' as const })),
 }));
 
-import { checkDuplicateOnEntry } from '@/features/survey-response/server/services/duplicate.service';
+import { checkDuplicateOnEntry } from '@/server/survey-response/services/duplicate.service';
 
 const SURVEY_ID = 'aaaaaaaa-0002-0002-0002-000000000002';
 

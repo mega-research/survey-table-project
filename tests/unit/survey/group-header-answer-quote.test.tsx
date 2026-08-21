@@ -8,7 +8,7 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { GroupHeader } from '@/components/survey-builder/question-list/group-header';
+import { GroupHeader } from '@/features/survey-builder/question-list/group-header';
 import { ContactAttrsProvider, createPlaceholderAttrs } from '@/lib/survey/contact-attrs-context';
 import type { QuestionGroup } from '@/types/survey';
 

@@ -3,12 +3,12 @@ import { notFound } from 'next/navigation';
 
 import { Eye } from 'lucide-react';
 
-import { SurveyResponseFlow } from '@/components/survey-response/survey-response-flow';
+import { SurveyResponseFlow } from '@/features/survey-response/survey-response-flow';
 import {
   getSurveyById,
   getSurveyByPreviewToken,
   getSurveyForResponse,
-} from '@/features/survey-builder/server/services/survey-read.service';
+} from '@/server/survey-builder/services/survey-read.service';
 
 interface PageProps {
   params: Promise<{ token: string }>;

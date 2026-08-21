@@ -10,11 +10,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 vi.mock('@/components/ui/rich-text-editor', () => ({
   RichTextEditor: () => null,
 }));
-vi.mock('@/components/survey-builder/table-editor/dynamic-table-editor', () => ({
+vi.mock('@/features/survey-builder/table-editor/dynamic-table-editor', () => ({
   DynamicTableEditor: () => null,
 }));
 
-import { QuestionBasicTab } from '@/components/survey-builder/question-edit/question-basic-tab';
+import { QuestionBasicTab } from '@/features/survey-builder/question-edit/question-basic-tab';
 import {
   createAddLevelOption,
   createAddOption,
@@ -26,7 +26,7 @@ import {
   createUpdateOption,
   createUpdateOptionWithParent,
   createUpdateSelectLevel,
-} from '@/components/survey-builder/question-option-helpers';
+} from '@/features/survey-builder/question-option-helpers';
 import type { Question } from '@/types/survey';
 
 function Harness({

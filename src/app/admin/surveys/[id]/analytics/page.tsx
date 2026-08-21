@@ -3,11 +3,11 @@ import { notFound } from 'next/navigation';
 
 import { ArrowLeft, BarChart3, ExternalLink, Pencil } from 'lucide-react';
 
-import { AnalyticsDashboardClient } from '@/components/analytics';
-import { ExportDataModal } from '@/components/analytics/export-data-modal';
+import { AnalyticsDashboardClient } from '@/features/analytics';
+import { ExportDataModal } from '@/features/analytics/export-data-modal';
 import { Button } from '@/components/ui/button';
 import { getResponsesWithAnswers, getSurveyVersions } from '@/data/responses';
-import { getSurveyWithDetails } from '@/features/survey-builder/server/services/survey-read.service';
+import { getSurveyWithDetails } from '@/server/survey-builder/services/survey-read.service';
 import { requireAdminPage } from '@/lib/auth/require-admin-page';
 
 interface AdminAnalyticsPageProps {

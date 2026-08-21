@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseCsvLine } from '@/components/survey-builder/lookup/lookup-csv-import';
+import { parseCsvLine } from '@/features/survey-builder/lookup/lookup-csv-import';
 
 describe('parseCsvLine', () => {
   it('단순 콤마 구분 필드를 분리한다', () => {

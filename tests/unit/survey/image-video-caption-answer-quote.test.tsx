@@ -14,9 +14,9 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { ImageCell } from '@/components/question-renderer/cells/image-cell';
-import { PreviewCell } from '@/components/question-renderer/cells/preview-cell';
-import { VideoCell } from '@/components/question-renderer/cells/video-cell';
+import { ImageCell } from '@/features/question-renderer/cells/image-cell';
+import { PreviewCell } from '@/features/question-renderer/cells/preview-cell';
+import { VideoCell } from '@/features/question-renderer/cells/video-cell';
 import { ContactAttrsProvider } from '@/lib/survey/contact-attrs-context';
 import type { TableCell } from '@/types/survey';
 

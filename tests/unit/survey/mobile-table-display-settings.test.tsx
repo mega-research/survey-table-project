@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { MobileTableDisplaySettings } from '@/components/survey-builder/table-editor/mobile-table-display-settings';
+import { MobileTableDisplaySettings } from '@/features/survey-builder/table-editor/mobile-table-display-settings';
 
 describe('MobileTableDisplaySettings', () => {
   it('두 원본 행 상세 모드에서 제외 열 수 입력을 보여준다', () => {

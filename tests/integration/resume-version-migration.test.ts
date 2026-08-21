@@ -58,7 +58,7 @@ vi.mock('@/lib/duplicate-detection/invite-lookup', () => ({
   findContactByInviteToken: vi.fn(),
 }));
 
-import { resumeOrCreateResponse } from '@/features/survey-response/server/services/lifecycle.service';
+import { resumeOrCreateResponse } from '@/server/survey-response/services/lifecycle.service';
 
 const ROW_BASE = {
   id: 'response-1',

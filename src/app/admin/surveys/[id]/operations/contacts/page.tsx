@@ -3,11 +3,11 @@ import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { EmptyState } from '@/components/operations/empty-state';
-import { ContactUploadAction } from '@/components/operations/contacts/contact-upload-action';
-import { ContactsDownloadDialog } from '@/components/operations/contacts/contacts-download-dialog';
-import { ContactsFilterBar } from '@/components/operations/contacts/contacts-filter-bar';
-import { ContactsPageClient } from '@/components/operations/contacts/contacts-page-client';
+import { EmptyState } from '@/features/operations/empty-state';
+import { ContactUploadAction } from '@/features/operations/contacts/contact-upload-action';
+import { ContactsDownloadDialog } from '@/features/operations/contacts/contacts-download-dialog';
+import { ContactsFilterBar } from '@/features/operations/contacts/contacts-filter-bar';
+import { ContactsPageClient } from '@/features/operations/contacts/contacts-page-client';
 import {
   attrsKeyOf,
   CONTACTS_PAGE_SIZE,

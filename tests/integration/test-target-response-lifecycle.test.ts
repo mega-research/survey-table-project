@@ -20,7 +20,7 @@ vi.mock('@/db', () => ({
   },
 }));
 
-import { lookupContactAttrs } from '@/features/contacts/server/services/contact-attrs.service';
+import { lookupContactAttrs } from '@/server/contacts/services/contact-attrs.service';
 
 const SURVEY_ID = '11111111-1111-1111-1111-111111111111';
 const OTHER_SURVEY_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';

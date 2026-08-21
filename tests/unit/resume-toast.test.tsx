@@ -1,7 +1,7 @@
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ResumeToast } from '@/components/survey-response/resume-toast';
+import { ResumeToast } from '@/features/survey-response/resume-toast';
 
 // 회복 토스트의 자동 dismiss 타이머가 "메시지 set 시점"이 아니라
 // "토스트가 마운트(=메인 콘텐츠 렌더)되는 시점"부터 흐르는지 검증한다.

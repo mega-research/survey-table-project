@@ -162,15 +162,15 @@ vi.mock('@/data/library', () => ({
   getAllCategories: vi.fn(async () => []),
 }));
 
-import { importLibrary } from '@/features/library/server/services/library-transfer.service';
+import { importLibrary } from '@/server/library/services/library-transfer.service';
 import {
   createSavedQuestion,
   updateSavedQuestion,
-} from '@/features/library/server/services/saved-questions.service';
+} from '@/server/library/services/saved-questions.service';
 import {
   createQuestion,
   updateQuestion,
-} from '@/features/survey-builder/server/services/questions.service';
+} from '@/server/survey-builder/services/questions.service';
 import { NoticeAttachmentPromoteError } from '@/lib/survey/notice-attachment-promote';
 import type { Question } from '@/types/survey';
 

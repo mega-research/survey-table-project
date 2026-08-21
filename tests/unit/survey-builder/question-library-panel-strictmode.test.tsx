@@ -15,7 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const applyMutateAsync = vi.hoisted(() => vi.fn());
 
-vi.mock('@/hooks/queries/use-library', () => {
+vi.mock('@/features/survey-builder/queries/use-library', () => {
   const queryResult = (data: unknown) => ({ data, isLoading: false });
   const mutationResult = () => ({
     mutate: vi.fn(),
@@ -36,12 +36,12 @@ vi.mock('@/hooks/queries/use-library', () => {
   };
 });
 
-vi.mock('@/components/survey-builder/lookup/lookup-library-section', () => ({
+vi.mock('@/features/survey-builder/lookup/lookup-library-section', () => ({
   LookupLibrarySection: () => null,
 }));
 
-import { QuestionLibraryPanel } from '@/components/survey-builder/question-library-panel';
-import { useSurveyBuilderStore } from '@/stores/survey-store';
+import { QuestionLibraryPanel } from '@/features/survey-builder/question-library-panel';
+import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
 
 const SAVED_QUESTION = {
   id: 'saved-1',

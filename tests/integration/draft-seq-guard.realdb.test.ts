@@ -16,7 +16,7 @@ import { questions, surveyResponses, surveys } from '@/db/schema';
 import {
   applyDraftAnswersUpdate,
   saveDraftResponse,
-} from '@/features/survey-response/server/services/response.service';
+} from '@/server/survey-response/services/response.service';
 
 const dbUrl = process.env['DATABASE_URL'] ?? '';
 const isLocalDb = dbUrl.includes('127.0.0.1') || dbUrl.includes('localhost');

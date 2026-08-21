@@ -8,14 +8,14 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { RankingDropdownStack } from '@/components/question-renderer/ranking-dropdown-stack';
-import { RankingQuestion } from '@/components/question-renderer/ranking-question';
+import { RankingDropdownStack } from '@/features/question-renderer/ranking-dropdown-stack';
+import { RankingQuestion } from '@/features/question-renderer/ranking-question';
 import { ContactAttrsProvider } from '@/lib/survey/contact-attrs-context';
 import type { Question, QuestionOption } from '@/types/survey';
 
 // TablePreview 는 ResizeObserver 를 사용하므로 jsdom 에서 모킹 (그룹 헤딩 테스트가
 // hasEmbeddedTable=true 경로를 타서 데스크탑 참조 테이블을 렌더하기 때문).
-vi.mock('@/components/question-renderer/table-preview', () => ({
+vi.mock('@/features/question-renderer/table-preview', () => ({
   TablePreview: () => null,
 }));
 

@@ -47,7 +47,7 @@ vi.mock('@/db', () => {
   };
 });
 
-import { lookupContactByToken } from '@/features/mail/server/services/mail-unsubscribe.service';
+import { lookupContactByToken } from '@/server/mail/services/mail-unsubscribe.service';
 
 // 유효한 UUID v4 형식 토큰 (UUID_RE 통과용)
 const VALID_TOKEN = '11111111-1111-4111-8111-111111111111';

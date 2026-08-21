@@ -29,10 +29,10 @@ import {
 } from '@/db/schema';
 import type { ORPCContext } from '@/server/context';
 
-import { save } from '@/features/survey-builder/server/procedures/save';
-import { publish } from '@/features/survey-builder/server/procedures/publish';
-import { surveys } from '@/features/survey-builder/server/procedures/surveys';
-import { isSlugAvailable } from '@/features/survey-builder/server/services/survey-read.service';
+import { save } from '@/server/survey-builder/procedures/save';
+import { publish } from '@/server/survey-builder/procedures/publish';
+import { surveys } from '@/server/survey-builder/procedures/surveys';
+import { isSlugAvailable } from '@/server/survey-builder/services/survey-read.service';
 
 const dbUrl = process.env['DATABASE_URL'] ?? '';
 const isLocalDb = dbUrl.includes('127.0.0.1') || dbUrl.includes('localhost');

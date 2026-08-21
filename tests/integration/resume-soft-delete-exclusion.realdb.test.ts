@@ -35,7 +35,7 @@ import {
   surveys as surveysTable,
 } from '@/db/schema';
 
-import { resumeOrCreateResponse } from '@/features/survey-response/server/services/lifecycle.service';
+import { resumeOrCreateResponse } from '@/server/survey-response/services/lifecycle.service';
 import { generateInviteCode } from '@/lib/survey-url';
 
 const dbUrl = process.env['DATABASE_URL'] ?? '';

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createUpdateOption } from '@/components/survey-builder/question-option-helpers';
+import { createUpdateOption } from '@/features/survey-builder/question-option-helpers';
 import type { Question, QuestionOption } from '@/types/survey';
 
 // createUpdateOption(setFormData) 가 반환하는 updater 를 직접 호출하기 위한 헬퍼.

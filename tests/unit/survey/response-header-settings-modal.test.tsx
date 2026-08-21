@@ -3,13 +3,13 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // CellImageEditor 는 업로드 의존성을 끌고 오므로 stub (로고형 선택 시 렌더됨)
-vi.mock('@/components/survey-builder/cell-image-editor', () => ({
+vi.mock('@/features/survey-builder/cell-image-editor', () => ({
   CellImageEditor: () => null,
 }));
 
-import { ResponseHeaderSettingsModal } from '@/components/survey-builder/response-header-settings-modal';
+import { ResponseHeaderSettingsModal } from '@/features/survey-builder/response-header-settings-modal';
 import { DEFAULT_RESPONSE_HEADER_CONFIG } from '@/lib/survey/response-header-config';
-import { useSurveyBuilderStore } from '@/stores/survey-store';
+import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
 import type { Survey } from '@/types/survey';
 
 function seedSurvey() {

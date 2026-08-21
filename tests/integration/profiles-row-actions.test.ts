@@ -10,9 +10,9 @@ import {
   hardResetResponse,
   restoreResponse,
   softDeleteResponse,
-} from '@/features/survey-response/server/services/response-manage.service';
-import { saveAdminEdit } from '@/features/survey-response/server/services/response-edit.service';
-import { manage } from '@/features/survey-response/server/procedures/manage';
+} from '@/server/survey-response/services/response-manage.service';
+import { saveAdminEdit } from '@/server/survey-response/services/response-edit.service';
+import { manage } from '@/server/survey-response/procedures/manage';
 import type { ORPCContext } from '@/server/context';
 import type { StatusCounts } from '@/lib/operations/aggregate-status';
 import * as aggregateStatusServer from '@/lib/operations/aggregate-status.server';

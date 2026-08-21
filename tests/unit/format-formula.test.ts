@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatFormulaPreview } from '@/components/survey-builder/formula/format-formula';
+import { formatFormulaPreview } from '@/features/survey-builder/formula/format-formula';
 import type { CalcExpr, Question } from '@/types/survey';
 
 // 최소 표 질문 헬퍼 — 숫자 input 셀 2개(exportLabel 로 라벨 확정).

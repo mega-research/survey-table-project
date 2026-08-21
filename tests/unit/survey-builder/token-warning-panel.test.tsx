@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import { TokenWarningPanel } from '@/components/survey-builder/token-warning-panel';
+import { TokenWarningPanel } from '@/features/survey-builder/token-warning-panel';
 import type { Question, QuestionGroup } from '@/types/survey';
 
 /**

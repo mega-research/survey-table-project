@@ -3,10 +3,10 @@ import { notFound } from 'next/navigation';
 
 import { ArrowLeft, Settings } from 'lucide-react';
 
-import { AnalyticsDashboardClient } from '@/components/analytics';
+import { AnalyticsDashboardClient } from '@/features/analytics';
 import { Button } from '@/components/ui/button';
 import { getResponsesWithAnswers, getSurveyVersions } from '@/data/responses';
-import { getSurveyWithDetails } from '@/features/survey-builder/server/services/survey-read.service';
+import { getSurveyWithDetails } from '@/server/survey-builder/services/survey-read.service';
 import { requireAdminPage } from '@/lib/auth/require-admin-page';
 
 interface AnalyticsPageProps {

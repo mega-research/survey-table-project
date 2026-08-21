@@ -1,7 +1,7 @@
 import { cleanup, render } from '@testing-library/react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { QuestionInput } from '@/components/survey-response/question-input';
+import { QuestionInput } from '@/features/survey-response/question-input';
 import { ContactAttrsProvider } from '@/lib/survey/contact-attrs-context';
 import type { Question } from '@/types/survey';
 

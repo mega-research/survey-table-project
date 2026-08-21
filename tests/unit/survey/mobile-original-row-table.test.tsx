@@ -3,11 +3,11 @@ import type { MutableRefObject } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { InteractiveCell } from '@/components/question-renderer/cells';
-import { MobileOriginalRowTable } from '@/components/question-renderer/mobile-original-row-table';
+import { InteractiveCell } from '@/features/question-renderer/cells';
+import { MobileOriginalRowTable } from '@/features/question-renderer/mobile-original-row-table';
 import { ContactAttrsProvider } from '@/lib/survey/contact-attrs-context';
 import type { TableCell, TableColumn, TableRow } from '@/types/survey';
-import { projectMobileOriginalRow } from '@/components/question-renderer/utils/mobile-original-row';
+import { projectMobileOriginalRow } from '@/features/question-renderer/utils/mobile-original-row';
 
 const col = (label: string): TableColumn => ({ id: label, label, width: 120 });
 const row = (cells: TableCell[], id = 'r1'): TableRow => ({ id, label: id, cells });

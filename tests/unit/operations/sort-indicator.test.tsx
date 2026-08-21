@@ -1,7 +1,7 @@
 import { render } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import { SortIndicator } from '@/components/operations/table-primitives';
+import { SortIndicator } from '@/features/operations/table-primitives';
 
 describe('SortIndicator', () => {
   it('비활성(direction=false)일 때는 아무것도 렌더하지 않는다 — 공간 예약 금지', () => {

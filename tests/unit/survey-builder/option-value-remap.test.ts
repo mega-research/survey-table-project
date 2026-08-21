@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { remapConditionGroupValues, remapGatingValues } from '@/utils/option-value-remap';
+import { remapConditionGroupValues, remapGatingValues } from '@/features/survey-builder/utils/option-value-remap';
 import type { QuestionConditionGroup, TableRow } from '@/types/survey';
 
 const rows = (): TableRow[] => [

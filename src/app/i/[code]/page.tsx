@@ -1,11 +1,11 @@
 import type { Metadata } from 'next';
 
-import { SurveyResponseFlow } from '@/components/survey-response/survey-response-flow';
+import { SurveyResponseFlow } from '@/features/survey-response/survey-response-flow';
 import {
   InvalidInviteLinkScreen,
   InvalidTestLinkScreen,
-} from '@/components/survey-response/survey-response-screens';
-import { resolveInviteCode } from '@/features/contacts/server/services/contact-invite.service';
+} from '@/features/survey-response/survey-response-screens';
+import { resolveInviteCode } from '@/server/contacts/services/contact-invite.service';
 
 /**
  * 짧은 초대 링크도 공개 응답 표면이다 — 루트 layout 의 robots: 'index, follow' 를

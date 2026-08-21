@@ -2,7 +2,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { QuotaEditor } from '@/components/operations/quota/quota-editor';
+import { QuotaEditor } from '@/features/operations/quota/quota-editor';
 import type { QuotaConfig, QuotaDimension } from '@/shared/contracts/quota';
 
 vi.mock('next/navigation', () => ({

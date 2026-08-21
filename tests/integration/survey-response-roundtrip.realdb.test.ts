@@ -40,7 +40,7 @@ import {
 import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
 import type { ORPCContext } from '@/server/context';
 
-import { response } from '@/features/survey-response/server/procedures/response';
+import { response } from '@/server/survey-response/procedures/response';
 
 const dbUrl = process.env['DATABASE_URL'] ?? '';
 const isLocalDb = dbUrl.includes('127.0.0.1') || dbUrl.includes('localhost');

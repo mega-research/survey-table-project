@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 
 import { readOptTextsSidecar } from '@/lib/option-text-read';
-import { useSurveyResponseStore } from '@/stores/survey-response-store';
+import { useSurveyResponseStore } from '@/features/question-renderer/stores/survey-response-store';
 
 describe('readOptTextsSidecar', () => {
   it('루트 __optTexts__ 를 questionId → optionId → text 로 추출한다', () => {

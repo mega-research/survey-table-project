@@ -2,28 +2,28 @@ import { render, cleanup } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // 무거운 자식 탭(TipTap 등)을 stub 처리 — 검증 대상은 모달의 라이프사이클 effect 뿐이다.
-vi.mock('@/components/survey-builder/question-edit/question-basic-tab', () => ({
+vi.mock('@/features/survey-builder/question-edit/question-basic-tab', () => ({
   QuestionBasicTab: () => null,
 }));
-vi.mock('@/components/survey-builder/condition/question-condition-editor', () => ({
+vi.mock('@/features/survey-builder/condition/question-condition-editor', () => ({
   QuestionConditionEditor: () => null,
 }));
-vi.mock('@/components/survey-builder/question-edit/table-validation-editor', () => ({
+vi.mock('@/features/survey-builder/question-edit/table-validation-editor', () => ({
   TableValidationEditor: () => null,
 }));
-vi.mock('@/components/survey-builder/hooks/use-ensure-survey-in-db', () => ({
+vi.mock('@/features/survey-builder/hooks/use-ensure-survey-in-db', () => ({
   useEnsureSurveyInDb: () => async () => {},
 }));
 // 옵션 value 리매핑이 있을 때만 호출되는 설문 저장 플로우 — 이 테스트는 렌더/저장 경로만 보므로 stub.
-vi.mock('@/components/survey-builder/hooks/use-survey-sync', () => ({
+vi.mock('@/features/survey-builder/hooks/use-survey-sync', () => ({
   useSurveySync: () => ({ saveSurvey: vi.fn() }),
 }));
 vi.mock('@/shared/lib/rpc', () => ({ client: {} }));
 vi.mock('@/lib/image-extractor', () => ({ extractImageUrlsFromQuestion: () => [] }));
 vi.mock('@/lib/image-utils', () => ({ deleteImagesFromR2: async () => {} }));
 
-import { QuestionEditModal } from '@/components/survey-builder/question-edit/question-edit-modal';
-import { useSurveyBuilderStore } from '@/stores/survey-store';
+import { QuestionEditModal } from '@/features/survey-builder/question-edit/question-edit-modal';
+import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
 
 function seedSurvey() {
   const questionA = {

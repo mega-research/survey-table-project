@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { ChoiceGroup } from '@/types/survey';
-import { ChoiceOptCellTab } from '@/components/survey-builder/table-editor/cell-editor/choice-opt-cell-tab';
+import { ChoiceOptCellTab } from '@/features/survey-builder/table-editor/cell-editor/choice-opt-cell-tab';
 
 // 기본 공통 props (단일 radio 그룹 없는 초기 상태)
 function makeProps(overrides: Record<string, unknown> = {}) {

@@ -2,8 +2,8 @@ import Link from 'next/link';
 
 import { Plus } from 'lucide-react';
 
-import { CampaignsList } from '@/components/operations/mail-campaign/campaigns-list';
-import { UnsubscribedSegment } from '@/components/operations/mail-campaign/unsubscribed-segment';
+import { CampaignsList } from '@/features/operations/mail-campaign/campaigns-list';
+import { UnsubscribedSegment } from '@/features/operations/mail-campaign/unsubscribed-segment';
 import { Button } from '@/components/ui/button';
 import {
   listCampaignsForSurvey,

@@ -22,7 +22,7 @@ vi.mock('@/lib/versioning/snapshot-builder', () => ({
 import { getSurveyWithDetails } from '@/data/surveys';
 import { isSpssVarNameError } from '@/lib/spss/variable-name-guard';
 import type { Question, Survey } from '@/types/survey';
-import { publishSurvey } from '@/features/survey-builder/server/services/survey-publish.service';
+import { publishSurvey } from '@/server/survey-builder/services/survey-publish.service';
 
 const SURVEY_ID = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
 

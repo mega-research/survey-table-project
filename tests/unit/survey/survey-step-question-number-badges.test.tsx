@@ -1,8 +1,8 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { GroupStepItem } from '@/components/survey-response/step-views/group-step-item';
-import { PageStepView } from '@/components/survey-response/step-views/page-step-view';
+import { GroupStepItem } from '@/features/survey-response/step-views/group-step-item';
+import { PageStepView } from '@/features/survey-response/step-views/page-step-view';
 import type { RenderStep, StepItem } from '@/lib/group-ordering';
 import type { Question } from '@/types/survey';
 

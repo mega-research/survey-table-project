@@ -1,8 +1,8 @@
 import { PgDialect } from 'drizzle-orm/pg-core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { deleteContactTarget } from '@/features/contacts/server/services/contact-targets.service';
-import { disableTestWorkspace } from '@/features/operations/server/services/test-workspace.service';
+import { deleteContactTarget } from '@/server/contacts/services/contact-targets.service';
+import { disableTestWorkspace } from '@/server/operations/services/test-workspace.service';
 import {
   archiveTestMailForTargets,
   archiveTestWorkspaceMail,

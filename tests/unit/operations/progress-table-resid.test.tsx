@@ -7,7 +7,7 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
-import { ProgressTable } from '@/components/operations/report/progress-table';
+import { ProgressTable } from '@/features/operations/report/progress-table';
 import type { ProgressTotals } from '@/lib/operations/report-progress';
 
 const totals: ProgressTotals = {

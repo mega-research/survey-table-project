@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 
-import { ProgressColumnEditor } from '@/components/operations/report/progress-column-editor';
+import { ProgressColumnEditor } from '@/features/operations/report/progress-column-editor';
 import { Button } from '@/components/ui/button';
 import { getContactColumnScheme } from '@/lib/operations/contacts.server';
 import { getProgressColumnScheme } from '@/lib/operations/report-progress.server';

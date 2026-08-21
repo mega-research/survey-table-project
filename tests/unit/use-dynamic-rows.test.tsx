@@ -1,8 +1,8 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { useDynamicRows } from '@/components/question-renderer/hooks/use-dynamic-rows';
-import { useTestResponseStore } from '@/stores/test-response-store';
+import { useDynamicRows } from '@/features/question-renderer/hooks/use-dynamic-rows';
+import { useTestResponseStore } from '@/features/question-renderer/stores/test-response-store';
 import type { DynamicRowGroupConfig, TableRow } from '@/types/survey';
 
 /**

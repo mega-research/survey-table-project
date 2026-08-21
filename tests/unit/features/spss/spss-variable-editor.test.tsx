@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
-import { SpssVariableEditor } from '@/components/survey-builder/question-edit/spss-variable-editor';
+import { SpssVariableEditor } from '@/features/survey-builder/question-edit/spss-variable-editor';
 
 describe('SpssVariableEditor', () => {
   const defaultProps = {

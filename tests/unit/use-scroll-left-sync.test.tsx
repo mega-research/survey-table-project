@@ -2,7 +2,7 @@ import { renderHook } from '@testing-library/react';
 import { useRef, type RefObject } from 'react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { useScrollLeftSync } from '@/components/question-renderer/hooks/use-scroll-left-sync';
+import { useScrollLeftSync } from '@/features/question-renderer/hooks/use-scroll-left-sync';
 
 /**
  * useScrollLeftSync 회귀 테스트.
