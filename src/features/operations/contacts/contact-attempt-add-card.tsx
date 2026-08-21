@@ -1,11 +1,14 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import { forwardRef, useImperativeHandle, useState, useTransition } from 'react';
 
+import { useRouter } from 'next/navigation';
+
 import { Button } from '@/components/ui/button';
-import type { ContactResultCode } from '@/shared/contracts/contacts';
 import { useAutoFadeMessage } from '@/features/operations/hooks/use-auto-fade-message';
+import { useLatestRef } from '@/hooks/use-latest-ref';
+import { runAsyncAction } from '@/lib/run-async-action';
+import type { ContactResultCode } from '@/shared/contracts/contacts';
 import { client } from '@/shared/lib/rpc';
 
 interface ContactAttemptAddCardProps {
@@ -27,10 +30,7 @@ export interface ContactAttemptAddCardHandle {
 export const ContactAttemptAddCard = forwardRef<
   ContactAttemptAddCardHandle,
   ContactAttemptAddCardProps
->(function ContactAttemptAddCard(
-  { contactTargetId, surveyId, resultCodes },
-  ref,
-) {
+>(function ContactAttemptAddCard({ contactTargetId, surveyId, resultCodes }, ref) {
   const router = useRouter();
   const [resultCode, setResultCode] = useState<string | null>(null);
   const [note, setNote] = useState('');
@@ -42,21 +42,27 @@ export const ContactAttemptAddCard = forwardRef<
   async function performAdd(): Promise<void> {
     if (!resultCode) return; // imperative 호출 시 라디오 없으면 silent no-op
     setError(null);
-    try {
-      await client.contacts.attempts.add({
-        contactTargetId,
-        surveyId,
-        resultCode,
-        ...(note ? { note } : {}),
-      });
-      router.refresh();
-      setResultCode(null);
-      setNote('');
-      setSuccessMessage('회차 추가 완료');
-    } catch (e) {
-      setError((e as Error).message);
-      throw e; // 부모 save 의 try/catch 에서도 잡히게
-    }
+    await runAsyncAction<void>(
+      async () => {
+        await client.contacts.attempts.add({
+          contactTargetId,
+          surveyId,
+          resultCode,
+          ...(note ? { note } : {}),
+        });
+        router.refresh();
+        setResultCode(null);
+        setNote('');
+        setSuccessMessage('회차 추가 완료');
+      },
+      {
+        onError: (e) => {
+          setError((e as Error).message);
+          throw e; // 부모 save 의 try/catch 에서도 잡히게
+        },
+        onSettled: () => {},
+      },
+    );
   }
 
   // 자체 "+ 회차 결과 추가" 버튼 — 라디오 선택 안 됐으면 명시 에러 표시
@@ -66,21 +72,18 @@ export const ContactAttemptAddCard = forwardRef<
       return;
     }
     startTransition(async () => {
-      try {
-        await performAdd();
-      } catch {
-        // performAdd 가 이미 setError 처리. 부모 호출이 아니므로 rethrow 무시.
-      }
+      // performAdd 가 이미 setError 처리. 부모 호출이 아니므로 거부는 무시.
+      await performAdd().catch(() => {});
     });
   }
 
-  // 부모 메인 저장이 호출. closure 가 최신 resultCode/note 참조하도록 deps 명시.
-  useImperativeHandle(
-    ref,
-    () => ({ flushIfSelected: performAdd }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [resultCode, note, contactTargetId, surveyId],
-  );
+  // 부모 메인 저장이 호출. 핸들은 마운트 때 한 번만 만들고 최신 performAdd 는 안정 ref 로 읽는다.
+  // useImperativeHandle 은 이펙트 본문이 아니라 useEffectEvent 를 쓸 수 없어 ref 로 호이스트한다.
+  // 부모는 ref.current 를 저장 시점에 읽어 곧바로 호출하므로 핸들 identity 는 관찰되지 않는다.
+  const performAddRef = useLatestRef(performAdd);
+  useImperativeHandle(ref, () => ({ flushIfSelected: () => performAddRef.current() }), [
+    performAddRef,
+  ]);
 
   return (
     <div className="rounded-lg border bg-white">
@@ -89,7 +92,10 @@ export const ContactAttemptAddCard = forwardRef<
       </div>
       <div className="px-5 py-4">
         {error && (
-          <div role="alert" className="mb-2 rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+          <div
+            role="alert"
+            className="mb-2 rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700"
+          >
             {error}
           </div>
         )}
@@ -110,7 +116,9 @@ export const ContactAttemptAddCard = forwardRef<
               <label
                 key={c.code}
                 className={`flex cursor-pointer items-center gap-1.5 rounded border px-2 py-1.5 text-xs ${
-                  resultCode === c.code ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 hover:bg-slate-50'
+                  resultCode === c.code
+                    ? 'border-blue-500 bg-blue-50 text-blue-700'
+                    : 'border-slate-200 hover:bg-slate-50'
                 }`}
               >
                 <input

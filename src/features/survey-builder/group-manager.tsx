@@ -1,7 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useShallow } from 'zustand/react/shallow';
+import { useCallback, useEffect, useEffectEvent, useMemo, useState } from 'react';
 
 import {
   DndContext,
@@ -21,14 +20,15 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { FolderPlus } from 'lucide-react';
-
 import { toast } from 'sonner';
+import { useShallow } from 'zustand/react/shallow';
 
 import { Button } from '@/components/ui/button';
-import { client } from '@/shared/lib/rpc';
 import { useEnsureSurveyInDb } from '@/features/survey-builder/hooks/use-ensure-survey-in-db';
-import { isUUID } from '@/lib/survey-url';
 import { useSurveyBuilderStore } from '@/features/survey-builder/stores/survey-store';
+import { runAsyncAction } from '@/lib/run-async-action';
+import { isUUID } from '@/lib/survey-url';
+import { client } from '@/shared/lib/rpc';
 import { GroupNameDesign, QuestionConditionGroup, QuestionGroup } from '@/types/survey';
 
 import { GroupCreateModal } from './group-manager/group-create-modal';
@@ -38,6 +38,23 @@ import { SortableGroupItem } from './group-manager/group-item';
 
 interface GroupManagerProps {
   className?: string;
+}
+
+/**
+ * 그룹 하위 트리의 질문 개수 합계.
+ * 재귀 자기참조를 컴포넌트 밖에 두어 컴포넌트 안에 명명 함수 표현식이 생기지 않게 한다.
+ */
+function countQuestionsInSubtree(
+  groupId: string,
+  questionCountMap: Map<string, number>,
+  getSubGroups: (parentId: string) => QuestionGroup[],
+): number {
+  const directCount = questionCountMap.get(groupId) || 0;
+  const subGroupsCount = getSubGroups(groupId).reduce(
+    (sum, subGroup) => sum + countQuestionsInSubtree(subGroup.id, questionCountMap, getSubGroups),
+    0,
+  );
+  return directCount + subGroupsCount;
 }
 
 export function GroupManager({ className }: GroupManagerProps) {
@@ -72,7 +89,9 @@ export function GroupManager({ className }: GroupManagerProps) {
   const [parentGroupIdForNew, setParentGroupIdForNew] = useState<string | undefined>(undefined);
   const [parentGroupIdForEdit, setParentGroupIdForEdit] = useState<string | undefined>(undefined);
   const [hideNameForEdit, setHideNameForEdit] = useState(false);
-  const [nameDesignForEdit, setNameDesignForEdit] = useState<GroupNameDesign | undefined>(undefined);
+  const [nameDesignForEdit, setNameDesignForEdit] = useState<GroupNameDesign | undefined>(
+    undefined,
+  );
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [, setActiveId] = useState<string | null>(null);
   const [, setOverId] = useState<string | null>(null);
@@ -92,8 +111,10 @@ export function GroupManager({ className }: GroupManagerProps) {
     });
   }, [groupsOrEmpty]);
 
-  // 모달이 열려있는 동안 groups가 업데이트되면 editingGroup도 업데이트
-  useEffect(() => {
+  // 모달이 열려있는 동안 groups가 업데이트되면 editingGroup도 업데이트.
+  // editingGroup 객체 자체는 effect event 로 실행 시점의 최신값을 읽는다 — deps 에 올리면
+  // 본문의 setEditingGroup 이 곧바로 재발화를 부른다. 트리거는 모달 개폐·대상 그룹·목록에만 둔다.
+  const syncEditingGroup = useEffectEvent(() => {
     if (isEditModalOpen && editingGroup?.id) {
       const latestGroup = groupsOrEmpty.find((g) => g.id === editingGroup.id);
       if (latestGroup) {
@@ -109,7 +130,9 @@ export function GroupManager({ className }: GroupManagerProps) {
         }
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  });
+  useEffect(() => {
+    syncEditingGroup();
   }, [isEditModalOpen, editingGroup?.id, groupsOrEmpty]);
 
   // 최상위 그룹만 필터링 (parentGroupId가 없는 것들)
@@ -121,7 +144,9 @@ export function GroupManager({ className }: GroupManagerProps) {
   // 특정 그룹의 하위 그룹들 가져오기
   const getSubGroups = useCallback(
     (parentId: string) => {
-      return groupsOrEmpty.filter((g) => g.parentGroupId === parentId).sort((a, b) => a.order - b.order);
+      return groupsOrEmpty
+        .filter((g) => g.parentGroupId === parentId)
+        .sort((a, b) => a.order - b.order);
     },
     [groupsOrEmpty],
   );
@@ -143,17 +168,10 @@ export function GroupManager({ className }: GroupManagerProps) {
     return map;
   }, [groupsOrEmpty, questions]);
 
-  // 재귀적으로 그룹과 모든 하위 그룹의 질문 개수 합계 계산 (메모이제이션)
+  // 재귀적으로 그룹과 모든 하위 그룹의 질문 개수 합계 계산 (메모이제이션).
+  // 재귀 본체는 모듈 최상위 countQuestionsInSubtree 가 갖는다.
   const getTotalQuestionCount = useCallback(
-    // 명명 함수 표현식: 재귀 자기참조가 외부 const 선언(TDZ)에 묶이지 않도록 한다
-    function getTotalQuestionCount(groupId: string): number {
-      const directCount = questionCountMap.get(groupId) || 0;
-      const subGroups = getSubGroups(groupId);
-      const subGroupsCount = subGroups.reduce((sum, subGroup) => {
-        return sum + getTotalQuestionCount(subGroup.id);
-      }, 0);
-      return directCount + subGroupsCount;
-    },
+    (groupId: string): number => countQuestionsInSubtree(groupId, questionCountMap, getSubGroups),
     [questionCountMap, getSubGroups],
   );
 
@@ -199,7 +217,9 @@ export function GroupManager({ className }: GroupManagerProps) {
       // 새 그룹 order: 질문 + 형제그룹 통합 공간의 max+1 (append 보장).
       // DB(create)와 로컬 양쪽에 같은 값을 써야 refresh 후에도 순서가 유지된다.
       // (order 를 create 에 안 넘기면 서버 maxOrder 가 형제 질문을 무시해 interleave 된다.)
-      const orderSiblingGroups = groupsOrEmpty.filter((g) => g.parentGroupId === parentGroupIdForNew);
+      const orderSiblingGroups = groupsOrEmpty.filter(
+        (g) => g.parentGroupId === parentGroupIdForNew,
+      );
       const orderSiblingQuestions = parentGroupIdForNew
         ? questions.filter((q) => q.groupId === parentGroupIdForNew)
         : [];
@@ -211,21 +231,30 @@ export function GroupManager({ className }: GroupManagerProps) {
 
       // DB에 그룹 저장
       if (surveyId && isUUID(surveyId)) {
-        try {
-          await ensureSurvey();
-          const createdGroup = await client.surveyBuilder.groups.create({
-            surveyId: surveyId,
-            name: groupName.trim(),
-            ...(groupDescription.trim() ? { description: groupDescription.trim() } : {}),
-            ...(parentGroupIdForNew ? { parentGroupId: parentGroupIdForNew } : {}),
-            order: newGroupOrder,
-          });
-          if (createdGroup) createdGroupId = createdGroup.id;
-        } catch (error) {
-          console.error('그룹 생성 실패:', error);
-          toast.error('그룹 생성에 실패했습니다. 다시 시도해주세요.');
-          return;
-        }
+        // 실패는 null 로 돌려받아 원래 catch 의 early return 과 같은 자리에서 중단한다.
+        const outcome = await runAsyncAction<{ id: string | undefined } | null>(
+          async () => {
+            await ensureSurvey();
+            const createdGroup = await client.surveyBuilder.groups.create({
+              surveyId: surveyId,
+              name: groupName.trim(),
+              ...(groupDescription.trim() ? { description: groupDescription.trim() } : {}),
+              ...(parentGroupIdForNew ? { parentGroupId: parentGroupIdForNew } : {}),
+              order: newGroupOrder,
+            });
+            return { id: createdGroup ? createdGroup.id : undefined };
+          },
+          {
+            onError: (error) => {
+              console.error('그룹 생성 실패:', error);
+              toast.error('그룹 생성에 실패했습니다. 다시 시도해주세요.');
+              return null;
+            },
+            onSettled: () => {},
+          },
+        );
+        if (!outcome) return;
+        createdGroupId = outcome.id;
       }
 
       // 로컬 스토어 업데이트
@@ -298,7 +327,9 @@ export function GroupManager({ className }: GroupManagerProps) {
 
   const handleGroupConditionUpdate = (conditionGroup: QuestionConditionGroup | undefined) => {
     if (editingGroup) {
-      updateGroup(editingGroup.id, { ...(conditionGroup !== undefined ? { displayCondition: conditionGroup } : {}) });
+      updateGroup(editingGroup.id, {
+        ...(conditionGroup !== undefined ? { displayCondition: conditionGroup } : {}),
+      });
 
       // DB에 저장 (그룹 ID가 UUID인 경우에만)
       if (surveyId && isUUID(surveyId) && isUUID(editingGroup.id)) {
@@ -381,24 +412,32 @@ export function GroupManager({ className }: GroupManagerProps) {
           isUUID(editingGroup.id) &&
           (!newParentGroupId || isUUID(newParentGroupId))
         ) {
-          try {
-            await ensureSurvey();
-            await client.surveyBuilder.groups.update({
-              groupId: editingGroup.id,
-              surveyId,
-              data: {
-                name: groupName.trim(),
-                ...(groupDescription.trim() ? { description: groupDescription.trim() } : {}),
-                parentGroupId: newParentGroupId ?? null,
-                order: newOrder,
-                hideName: hideNameForEdit,
-                nameDesign: nameDesignForEdit ?? null,
-                ...(finalDisplayCondition !== undefined ? { displayCondition: finalDisplayCondition } : {}),
+          await runAsyncAction<void>(
+            async () => {
+              await ensureSurvey();
+              await client.surveyBuilder.groups.update({
+                groupId: editingGroup.id,
+                surveyId,
+                data: {
+                  name: groupName.trim(),
+                  ...(groupDescription.trim() ? { description: groupDescription.trim() } : {}),
+                  parentGroupId: newParentGroupId ?? null,
+                  order: newOrder,
+                  hideName: hideNameForEdit,
+                  nameDesign: nameDesignForEdit ?? null,
+                  ...(finalDisplayCondition !== undefined
+                    ? { displayCondition: finalDisplayCondition }
+                    : {}),
+                },
+              });
+            },
+            {
+              onError: (error) => {
+                console.error('그룹 업데이트 저장 실패:', error);
               },
-            });
-          } catch (error) {
-            console.error('그룹 업데이트 저장 실패:', error);
-          }
+              onSettled: () => {},
+            },
+          );
         }
 
         // 상위 그룹이 변경되면 해당 그룹을 펼침
@@ -415,22 +454,30 @@ export function GroupManager({ className }: GroupManagerProps) {
 
         // DB에 저장 (그룹 ID가 UUID인 경우에만)
         if (surveyId && isUUID(surveyId) && isUUID(editingGroup.id)) {
-          try {
-            await ensureSurvey();
-            await client.surveyBuilder.groups.update({
-              groupId: editingGroup.id,
-              surveyId,
-              data: {
-                name: groupName.trim(),
-                ...(groupDescription.trim() ? { description: groupDescription.trim() } : {}),
-                hideName: hideNameForEdit,
-                nameDesign: nameDesignForEdit ?? null,
-                ...(finalDisplayCondition !== undefined ? { displayCondition: finalDisplayCondition } : {}),
+          await runAsyncAction<void>(
+            async () => {
+              await ensureSurvey();
+              await client.surveyBuilder.groups.update({
+                groupId: editingGroup.id,
+                surveyId,
+                data: {
+                  name: groupName.trim(),
+                  ...(groupDescription.trim() ? { description: groupDescription.trim() } : {}),
+                  hideName: hideNameForEdit,
+                  nameDesign: nameDesignForEdit ?? null,
+                  ...(finalDisplayCondition !== undefined
+                    ? { displayCondition: finalDisplayCondition }
+                    : {}),
+                },
+              });
+            },
+            {
+              onError: (error) => {
+                console.error('그룹 업데이트 저장 실패:', error);
               },
-            });
-          } catch (error) {
-            console.error('그룹 업데이트 저장 실패:', error);
-          }
+              onSettled: () => {},
+            },
+          );
         }
       }
 
@@ -507,15 +554,21 @@ export function GroupManager({ className }: GroupManagerProps) {
 
         // DB에 저장 (UUID인 그룹 ID만 필터링)
         if (surveyId && isUUID(surveyId)) {
-          try {
-            await ensureSurvey();
-            const uuidGroupIds = newGroupIds.filter((id) => isUUID(id));
-            if (uuidGroupIds.length > 0) {
-              await client.surveyBuilder.groups.reorder({ surveyId, groupIds: uuidGroupIds });
-            }
-          } catch (error) {
-            console.error('그룹 순서 저장 실패:', error);
-          }
+          await runAsyncAction<void>(
+            async () => {
+              await ensureSurvey();
+              const uuidGroupIds = newGroupIds.filter((id) => isUUID(id));
+              if (uuidGroupIds.length > 0) {
+                await client.surveyBuilder.groups.reorder({ surveyId, groupIds: uuidGroupIds });
+              }
+            },
+            {
+              onError: (error) => {
+                console.error('그룹 순서 저장 실패:', error);
+              },
+              onSettled: () => {},
+            },
+          );
         }
         // 그룹 순서 변경은 이미 reorderGroups API로 저장됨
       }

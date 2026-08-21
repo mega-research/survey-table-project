@@ -4,41 +4,16 @@ import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 
 import { ChevronDown, ChevronRight, FileText, ListChecks } from 'lucide-react';
 
-import { scrollToIssue } from '@/features/question-renderer/scroll-to-issue';
-import { ValidationIssueBanner } from '@/features/question-renderer/validation-issue-banner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useDynamicRows } from '@/features/question-renderer/hooks/use-dynamic-rows';
 import { useElementWidth } from '@/features/question-renderer/hooks/use-element-width';
 import { useHorizontalScrollIndicators } from '@/features/question-renderer/hooks/use-horizontal-scroll-indicators';
-import { useMobileView } from '@/hooks/use-media-query';
 import { usePageStickyThreshold } from '@/features/question-renderer/hooks/use-page-sticky-threshold';
 import { useScrollLeftSync } from '@/features/question-renderer/hooks/use-scroll-left-sync';
 import { useTablePerf } from '@/features/question-renderer/hooks/use-table-perf';
-import { cn } from '@/lib/utils';
-import {
-  DynamicRowGroupConfig,
-  HeaderCell,
-  MobileTableDisplayMode,
-  Question,
-  TableColumn,
-  TableRow,
-} from '@/types/survey';
-import {
-  shouldDisplayColumn,
-  shouldDisplayDynamicGroup,
-  shouldDisplayRow,
-} from '@/utils/branch-logic';
+import { scrollToIssue } from '@/features/question-renderer/scroll-to-issue';
 import { decideDrilldown } from '@/features/question-renderer/utils/classify-table';
-import {
-  getCellBackgroundStyle,
-  getCellTextClassName,
-  getCellTextStyle,
-} from '@/utils/cell-style';
 import { expandHeaderGrid } from '@/features/question-renderer/utils/expand-header-grid';
-import {
-  clampMobileDrilldownOmitLeadingColumns,
-  resolveMobileTableDisplayMode,
-} from '@/utils/mobile-table-display-mode';
 import { buildMobileRowWiseOriginalModel } from '@/features/question-renderer/utils/mobile-row-wise-original';
 import {
   HEADER_ROW_MIN_HEIGHT,
@@ -53,10 +28,34 @@ import {
   getHeaderCellStickyStyle,
 } from '@/features/question-renderer/utils/table-grid-utils';
 import {
+  buildRadioGroupBuckets,
+  resolveRadioGroupProps,
+} from '@/features/question-renderer/utils/table-radio-groups';
+import { ValidationIssueBanner } from '@/features/question-renderer/validation-issue-banner';
+import { useMobileView } from '@/hooks/use-media-query';
+import { cn } from '@/lib/utils';
+import {
+  DynamicRowGroupConfig,
+  HeaderCell,
+  MobileTableDisplayMode,
+  Question,
+  TableColumn,
+  TableRow,
+} from '@/types/survey';
+import {
+  shouldDisplayColumn,
+  shouldDisplayDynamicGroup,
+  shouldDisplayRow,
+} from '@/utils/branch-logic';
+import { getCellBackgroundStyle, getCellTextClassName, getCellTextStyle } from '@/utils/cell-style';
+import {
+  clampMobileDrilldownOmitLeadingColumns,
+  resolveMobileTableDisplayMode,
+} from '@/utils/mobile-table-display-mode';
+import {
   recalculateColspansForVisibleColumns,
   recalculateRowspansForVisibleRows,
 } from '@/utils/table-merge-helpers';
-import { buildRadioGroupBuckets, resolveRadioGroupProps } from '@/features/question-renderer/utils/table-radio-groups';
 
 import { InteractiveCell } from './cells';
 import { DynamicRowSelectorModal } from './dynamic-row-selector-modal';
@@ -447,32 +446,11 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
   const rendersFullOriginalTable = mobileMode === 'original';
   const applyCellBackground = !(isMobileView && mobileMode === 'original');
 
-  // displayCondition에서 참조하는 질문 ID만 추출 → 관련 응답만 의존
-  const relevantResponseKeys = useMemo(() => {
-    const ids = new Set<string>();
-    const collect = (conditions?: { sourceQuestionId?: string }[]) => {
-      if (!conditions) return;
-      for (const c of conditions) {
-        if (c.sourceQuestionId) ids.add(c.sourceQuestionId);
-      }
-    };
-    for (const col of columns) collect(col.displayCondition?.conditions);
-    for (const row of rows) collect(row.displayCondition?.conditions);
-    if (dynamicRowConfigs) {
-      for (const group of dynamicRowConfigs) collect(group.displayCondition?.conditions);
-    }
-    return ids;
-  }, [columns, rows, dynamicRowConfigs]);
-
-  // 관련 응답만 안정적으로 추출 (JSON 직렬화로 값 비교)
-  const relevantResponsesJson = useMemo(() => {
-    if (!allResponses || relevantResponseKeys.size === 0) return '';
-    const subset: Record<string, unknown> = {};
-    for (const key of relevantResponseKeys) {
-      if (key in allResponses) subset[key] = allResponses[key];
-    }
-    return JSON.stringify(subset);
-  }, [allResponses, relevantResponseKeys]);
+  // 열·행 조건 평가는 allResponses 를 그대로 의존한다.
+  // 예전에는 displayCondition.conditions 의 sourceQuestionId 만 모아 만든 부분집합 JSON 을
+  // 키로 썼지만, expression 조건의 피연산자({kind:'question'|'cell'})는 sourceQuestionId 가
+  // 아닌 질문을 가리킬 수 있어 그 질문의 답이 바뀌어도 키가 그대로였다. 재계산 빈도가 늘더라도
+  // 정직한 의존으로 둔다 — 같은 파일의 hiddenGroupIds 는 원래부터 allResponses 를 의존한다.
 
   // displayCondition 기반 가시 열 필터링 + colspan 재계산
   const { visibleColumns, columnFilteredRows, visibleHeaderGrid } = useMemo(() => {
@@ -508,8 +486,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
       columnFilteredRows: result.rows,
       visibleHeaderGrid: result.headerGrid,
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [columns, rows, tableHeaderGrid, relevantResponsesJson, allQuestions, ignoreDisplayConditions]);
+  }, [columns, rows, tableHeaderGrid, allResponses, allQuestions, ignoreDisplayConditions]);
 
   // 행 displayCondition 평가 결과 — null 이면 조건 필터 없음.
   // 동적 행 필터링·rowspan 재계산은 useDynamicRows(동적 행 파이프라인)가 소유하고,
@@ -525,8 +502,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
       }
     }
     return ids;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [columnFilteredRows, relevantResponsesJson, allQuestions, ignoreDisplayConditions]);
+  }, [columnFilteredRows, allResponses, allQuestions, ignoreDisplayConditions]);
 
   // Grid 관련 계산
   const totalWidth = useMemo(() => calcTotalWidth(visibleColumns), [visibleColumns]);
@@ -543,7 +519,6 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
     return stops;
   }, [visibleColumns]);
 
-
   // 헤더 행 수 계산
   const headerRowCount = useMemo(() => {
     if (hideColumnLabels) return 0;
@@ -553,7 +528,8 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
 
   // 그룹 조건부 표시: 숨겨야 할 그룹 ID 집합
   const hiddenGroupIds = useMemo(() => {
-    if (ignoreDisplayConditions || !allResponses || !allQuestions || !dynamicRowConfigs) return undefined;
+    if (ignoreDisplayConditions || !allResponses || !allQuestions || !dynamicRowConfigs)
+      return undefined;
     const hidden = new Set<string>();
     for (const g of dynamicRowConfigs) {
       if (
@@ -819,52 +795,46 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
   const displayCellById = useMemo(
     () =>
       new Map(
-        rowWiseDisplayRows.flatMap((row) =>
-          row.cells.map((cell) => [cell.id, cell] as const),
-        ),
+        rowWiseDisplayRows.flatMap((row) => row.cells.map((cell) => [cell.id, cell] as const)),
       ),
     [rowWiseDisplayRows],
   );
-  const rowWiseOriginalModel = useMemo(
-    () => {
-      if (!isMobileView || mobileMode !== 'row-wise-original') {
-        return { sections: [] };
-      }
+  const rowWiseOriginalModel = useMemo(() => {
+    if (!isMobileView || mobileMode !== 'row-wise-original') {
+      return { sections: [] };
+    }
 
-      return buildMobileRowWiseOriginalModel({
-        authoredColumns: columns,
-        authoredRows: rows,
-        visibleColumns,
-        ...(visibleHeaderGrid ? { visibleHeaderGrid } : {}),
-        displayRows: rowWiseDisplayRows,
-        hideColumnLabels,
-        settings: {
-          omitLeadingAuthoredColumns: clampMobileDrilldownOmitLeadingColumns(
-            mobileDrilldownOmitLeadingColumns,
-            columns.length,
-          ),
-          repeatHeaderStartRow: mobileDrilldownRepeatHeaderStartRow,
-          repeatHeaderEndRow: mobileDrilldownRepeatHeaderEndRow,
-        },
-        isLabelSourceHidden: (cellId) =>
-          displayCellById.get(cellId)?.mobileDisplay === 'hidden',
-      });
-    },
-    [
-      columns,
-      displayCellById,
-      hideColumnLabels,
-      isMobileView,
-      mobileDrilldownOmitLeadingColumns,
-      mobileDrilldownRepeatHeaderEndRow,
-      mobileDrilldownRepeatHeaderStartRow,
-      mobileMode,
-      rowWiseDisplayRows,
-      rows,
+    return buildMobileRowWiseOriginalModel({
+      authoredColumns: columns,
+      authoredRows: rows,
       visibleColumns,
-      visibleHeaderGrid,
-    ],
-  );
+      ...(visibleHeaderGrid ? { visibleHeaderGrid } : {}),
+      displayRows: rowWiseDisplayRows,
+      hideColumnLabels,
+      settings: {
+        omitLeadingAuthoredColumns: clampMobileDrilldownOmitLeadingColumns(
+          mobileDrilldownOmitLeadingColumns,
+          columns.length,
+        ),
+        repeatHeaderStartRow: mobileDrilldownRepeatHeaderStartRow,
+        repeatHeaderEndRow: mobileDrilldownRepeatHeaderEndRow,
+      },
+      isLabelSourceHidden: (cellId) => displayCellById.get(cellId)?.mobileDisplay === 'hidden',
+    });
+  }, [
+    columns,
+    displayCellById,
+    hideColumnLabels,
+    isMobileView,
+    mobileDrilldownOmitLeadingColumns,
+    mobileDrilldownRepeatHeaderEndRow,
+    mobileDrilldownRepeatHeaderStartRow,
+    mobileMode,
+    rowWiseDisplayRows,
+    rows,
+    visibleColumns,
+    visibleHeaderGrid,
+  ]);
 
   // ── 빈 테이블 ──
   if (columns.length === 0 || rows.length === 0) {
@@ -959,7 +929,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
             ref={tableContainerRef}
             className={cn(
               // 모바일은 상단 스크롤 컨트롤이 스크롤 수단 — 네이티브 가로 스크롤바 숨김
-              'overflow-x-auto pb-4 max-md:[-ms-overflow-style:none] max-md:[scrollbar-width:none] print:overflow-visible max-md:[&::-webkit-scrollbar]:hidden',
+              'overflow-x-auto pb-4 max-md:[scrollbar-width:none] max-md:[-ms-overflow-style:none] print:overflow-visible max-md:[&::-webkit-scrollbar]:hidden',
               rendersFullOriginalTable ? 'px-0' : 'px-4 md:px-0',
             )}
           >
@@ -1079,11 +1049,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
             없으므로 그 간격 역할을 하는 상단 패딩을 유지한다. 데스크탑은 기존 여백 그대로. */}
         <CardContent
           className={cn(
-            isMobileView
-              ? tableTitle
-                ? 'p-3 sm:p-4'
-                : 'p-3 pt-0 sm:p-4 sm:pt-1'
-              : 'p-0 sm:px-6',
+            isMobileView ? (tableTitle ? 'p-3 sm:p-4' : 'p-3 pt-0 sm:p-4 sm:pt-1') : 'p-0 sm:px-6',
           )}
         >
           <div className="w-full">
@@ -1120,18 +1086,10 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
                 <MobileRowWiseOriginalSheet
                   model={rowWiseOriginalModel}
                   errorCellIds={errorCellIds}
-                  renderCell={(
-                    cell,
-                    rowQuestion,
-                    inputIdScope,
-                    invalid,
-                    errorDescriptionId,
-                  ) => {
+                  renderCell={(cell, rowQuestion, inputIdScope, invalid, errorDescriptionId) => {
                     const sourceRowId =
-                      rowQuestion.projection.sourceRowIdByCellId.get(cell.id) ??
-                      rowQuestion.rowId;
-                    const sourceRow =
-                      displayRowById.get(sourceRowId) ?? rowQuestion.projection.row;
+                      rowQuestion.projection.sourceRowIdByCellId.get(cell.id) ?? rowQuestion.rowId;
+                    const sourceRow = displayRowById.get(sourceRowId) ?? rowQuestion.projection.row;
                     return (
                       <InteractiveCell
                         cell={cell}
@@ -1190,9 +1148,7 @@ export const InteractiveTableResponse = React.memo(function InteractiveTableResp
               // 먼저 해당 섹션/리프로 내비를 전환하고, 상세가 렌더된 다음 이동한다.
               if (drilldownNavigateRef.current && cellIds.length > 0) {
                 drilldownNavigateRef.current(cellIds);
-                window.requestAnimationFrame(() =>
-                  window.requestAnimationFrame(scroll),
-                );
+                window.requestAnimationFrame(() => window.requestAnimationFrame(scroll));
               } else {
                 scroll();
               }
