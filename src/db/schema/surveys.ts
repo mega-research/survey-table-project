@@ -23,7 +23,11 @@ import type {
   SurveyResponseHeaderConfig,
   SurveyVersionSnapshot,
 } from '@/shared/contracts/survey';
-import type { PageVisit, ResponseEditChange } from '@/shared/contracts/survey-response';
+import type {
+  PageVisit,
+  ResponseEditChange,
+  ResponseStatus,
+} from '@/shared/contracts/survey-response';
 import { MOBILE_TABLE_DISPLAY_MODES } from '@/types/mobile-table-display';
 import type {
   ChoiceGroup,
@@ -306,7 +310,8 @@ export const surveyResponses = pgTable(
 
     // 운영 현황 콘솔용 추적 컬럼
     // 'in_progress' | 'completed' | 'screened_out' | 'quotaful_out' | 'bad' | 'drop'
-    status: text('status').notNull().default('in_progress'),
+    // — 어휘·열림/종결 술어 SSOT 는 @/shared/contracts/survey-response (responseStatusValues)
+    status: text('status').$type<ResponseStatus>().notNull().default('in_progress'),
     platform: text('platform'), // 'desktop' | 'mobile' | 'tablet'
     browser: text('browser'),
     currentStepId: text('current_step_id'), // 'group:{uuid}' | 'table:{uuid}'

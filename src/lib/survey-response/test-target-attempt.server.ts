@@ -4,7 +4,7 @@ import 'server-only';
 import type { DbTransaction } from '@/db';
 import { contactTargets, surveyResponses, surveys, testResponseAttempts } from '@/db/schema';
 import { resetTestResponseRow } from '@/lib/survey-response/reset-test-response.server';
-import type { PageVisit } from '@/shared/contracts/survey-response';
+import { type PageVisit, isOpenResponseStatus } from '@/shared/contracts/survey-response';
 import type { TestAttemptIdentity } from '@/shared/types/test-attempt';
 
 export interface AcquireTestTargetResponseInput {
@@ -63,11 +63,13 @@ export async function assertAnonymousTestSession(
  * 목록 밖의 값(completed·screened_out·bad·quotaful_out, 그리고 알 수 없는 값)은 초기화 대상이다 —
  * 모르는 상태를 이어하기로 흘리면 쓰기 가드에서 예기치 않은 실패가 된다.
  *
- * 판정의 SSOT — 진입 시점(resumeOrCreateResponse 의 isTestTarget 분기)이 이 함수를 그대로 쓴다.
+ * 진입 시점(resumeOrCreateResponse 의 isTestTarget 분기)이 이 함수를 그대로 쓴다.
  * 두 지점이 갈리면 진입에서 복원한 답을 첫 입력이 지우거나 그 반대가 되므로 분기하지 말 것.
+ * 값 집합 자체는 contracts 의 열림 상태(isOpenResponseStatus)가 SSOT 이고, 이 이름은
+ * "테스트 대상 이어하기" 라는 호출 맥락을 남기기 위한 얇은 위임이다.
  */
 export function isResumableTestStatus(status: string): boolean {
-  return status === 'in_progress' || status === 'drop';
+  return isOpenResponseStatus(status);
 }
 
 async function resetTestTargetResponse(

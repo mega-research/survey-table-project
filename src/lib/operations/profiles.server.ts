@@ -1,27 +1,23 @@
+import { type AnyColumn, type SQL, and, asc, eq, sql } from 'drizzle-orm';
 import 'server-only';
 
-import { and, asc, eq, sql, type AnyColumn, type SQL } from 'drizzle-orm';
-
-import { db } from '@/db';
-import { surveyResponses, contactTargets } from '@/db/schema';
 import { deletedResponse, notDeletedResponse } from '@/data/response-filters';
+import { db } from '@/db';
+import { contactTargets, surveyResponses } from '@/db/schema';
+import type { ResponseStatus } from '@/shared/contracts/survey-response';
 
-import type { Platform } from './parse-ua';
-import {
-  type NormalizedListArgs,
-  type ProfilesSystemSortKey,
-  type SortDir,
-} from './profiles';
 import { attrsSortKey } from './contacts';
-import type { FilterClause } from './contacts-filters.server';
 import { attrsNaturalSortExprs } from './contacts-filter-sql';
-import { buildProfilesFilterSql } from './profiles-filters.server';
-import { buildNegativeCodeExists, getResultCodeStatuses } from './result-code-statuses.server';
+import type { FilterClause } from './contacts-filters.server';
 import {
+  type OperationsDataScope,
   responseScopeCondition,
   testFlagForScope,
-  type OperationsDataScope,
 } from './data-scope.server';
+import type { Platform } from './parse-ua';
+import { type NormalizedListArgs, type ProfilesSystemSortKey, type SortDir } from './profiles';
+import { buildProfilesFilterSql } from './profiles-filters.server';
+import { buildNegativeCodeExists, getResultCodeStatuses } from './result-code-statuses.server';
 
 export type ListProfilesArgs = Omit<NormalizedListArgs, 'q' | 'col'> & {
   surveyId: string;
@@ -68,9 +64,7 @@ export interface ListProfilesResult {
 
 /** Postgres 기본 desc=NULLS FIRST 가 비직관이라 모든 정렬에 NULLS LAST 명시. */
 function orderExpr(col: AnyColumn | SQL, direction: SortDir): SQL {
-  return direction === 'asc'
-    ? sql`${col} ASC NULLS LAST`
-    : sql`${col} DESC NULLS LAST`;
+  return direction === 'asc' ? sql`${col} ASC NULLS LAST` : sql`${col} DESC NULLS LAST`;
 }
 
 /**
@@ -104,9 +98,7 @@ export async function listResponsesForProfiles(
   const numbered = db
     .select({
       id: surveyResponses.id,
-      idx: sql<number>`row_number() over (order by ${surveyResponses.startedAt} asc)`.as(
-        'idx',
-      ),
+      idx: sql<number>`row_number() over (order by ${surveyResponses.startedAt} asc)`.as('idx'),
       platform: surveyResponses.platform,
       browser: surveyResponses.browser,
       status: surveyResponses.status,
@@ -176,7 +168,9 @@ export async function listResponsesForProfiles(
   // 시 status 파라미터를 지우지만, URL 직접 조작·구 링크까지 여기서 방어한다.
   const hasStatusClause = clauses.some((c) => c.condition.source === 'status');
   if (view === 'active' && status !== 'all' && !hasStatusClause) {
-    whereParts.push(eq(numbered.status, status));
+    // StatusFilter 의 'deleted' 는 active view 에서 어떤 행과도 맞지 않는 값이지만 종전과 같이
+    // status = 'deleted' 비교를 그대로 보낸다(0건). 컬럼 $type 이 ResponseStatus 라 비교값만 맞춘다.
+    whereParts.push(eq(numbered.status, status as ResponseStatus));
   }
 
   // 다중 조건 필터 — 검색바 + 헤더 깔때기 절을 조사 대상과 같은 결합 규칙으로 평가.
@@ -221,9 +215,7 @@ export async function listResponsesForProfiles(
   const attrsKey = attrsSortKey(sort);
   const orderClauses: SQL[] =
     attrsKey != null
-      ? attrsNaturalSortExprs(attrsKey, sql`${numbered.contactAttrs}`).map((c) =>
-          orderExpr(c, dir),
-        )
+      ? attrsNaturalSortExprs(attrsKey, sql`${numbered.contactAttrs}`).map((c) => orderExpr(c, dir))
       : sort === 'idx'
         ? [orderExpr(numbered.startedAt, dir)]
         : sort === 'status'

@@ -1,5 +1,10 @@
 import * as z from 'zod';
 
+import {
+  isConcludedResponseStatus,
+  responseStatusValues,
+} from '@/shared/contracts/survey-response';
+
 import type { BlockReason } from './duplicate';
 import { QuestionResponsesSchema, TestAttemptIdentityFields } from './response';
 
@@ -72,17 +77,11 @@ export type ResumeOrCreateResponseInput = z.infer<typeof ResumeOrCreateResponseI
 
 /**
  * resumeOrCreateResponse 반환 status. survey_responses.status 의 6개 값 그대로 모델링.
+ * 어휘는 @/shared/contracts/survey-response 의 responseStatusValues 가 SSOT 다 —
  * 원본 시그니처의 union ('in_progress' | 'completed' | 'screened_out' | 'quotaful_out'
- * | 'bad' | 'drop') 을 z.enum 으로 보존.
+ * | 'bad' | 'drop') 과 동일한 z.enum 이 파생된다.
  */
-export const ResumeStatusSchema = z.enum([
-  'in_progress',
-  'completed',
-  'screened_out',
-  'quotaful_out',
-  'bad',
-  'drop',
-]);
+export const ResumeStatusSchema = z.enum(responseStatusValues);
 
 /**
  * 이미 존재하는 응답 행을 재사용하려 할 때, 그 행의 status 로 다음 동작을 결정한다.
@@ -108,17 +107,6 @@ export type ResponseReuseDecision =
   | { action: 'restart' }
   | { action: 'blocked'; reason: BlockReason };
 
-/**
- * 테스트 세션에서 "처음부터 다시" 로 되돌릴 수 있는 종결 상태.
- * 알 수 없는 값을 여기에 흘리지 않기 위해 화이트리스트로 둔다.
- */
-const RESTARTABLE_TERMINAL_STATUSES = new Set([
-  'completed',
-  'screened_out',
-  'bad',
-  'quotaful_out',
-]);
-
 export function decideResponseReuse(
   status: string,
   opts: { hasContact: boolean; isTestSession?: boolean },
@@ -126,7 +114,9 @@ export function decideResponseReuse(
   if (status === 'in_progress') return { action: 'reuse' };
   if (status === 'drop') return { action: 'revive' };
   // 테스트 세션 한정 완화. 옵션 미지정(기존 호출처)은 false 라 실응답 판정은 무변경.
-  if (opts.isTestSession === true && RESTARTABLE_TERMINAL_STATUSES.has(status)) {
+  // "처음부터 다시" 로 되돌릴 수 있는 것은 종결 상태 화이트리스트(contracts 의
+  // concludedResponseStatusValues)뿐 — 알 수 없는 값은 술어가 false 라 아래 차단으로 흐른다.
+  if (opts.isTestSession === true && isConcludedResponseStatus(status)) {
     return { action: 'restart' };
   }
   if (status === 'quotaful_out') return { action: 'blocked', reason: 'quota_closed' };

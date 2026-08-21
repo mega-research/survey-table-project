@@ -262,7 +262,7 @@ survey_responses           # 수집된 응답
 ├── isTest                        # 테스트 파티션 여부
 ├── metadata (JSONB), lastEditedAt, deletedAt
 ├── versionId                     # 응답 시점 버전
-├── status                        # in_progress|completed|screened_out|quotaful_out|bad|drop
+├── status                        # in_progress|completed|screened_out|quotaful_out|bad|drop (어휘·열림/종결 술어 SSOT: shared/contracts/survey-response.ts)
 ├── platform, browser, currentStepId, pageVisits (JSONB)  # 운영 현황 추적
 ├── lastActivityAt, totalSeconds, progressPct, visibleStepIndex, visibleStepTotal
 ├── contactTargetId               # 컨택 매칭 (FK는 마이그레이션에서 ALTER로 생성)

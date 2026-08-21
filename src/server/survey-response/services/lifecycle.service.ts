@@ -4,8 +4,8 @@ import 'server-only';
 import { db } from '@/db';
 import { surveyResponses, surveyVersions } from '@/db/schema';
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
-import { logger } from '@/lib/logger';
 import { findContactByInviteToken } from '@/lib/duplicate-detection/invite-lookup';
+import { logger } from '@/lib/logger';
 import { normalizeQuestions } from '@/lib/question/normalize';
 import { toFlatQuestion } from '@/lib/question/variants';
 import { getSurveyControlFlags, isValidTestToken } from '@/lib/survey-control';
@@ -14,6 +14,10 @@ import {
   isResumableTestStatus,
   lockAndAssertResponseMutation,
 } from '@/lib/survey-response/test-target-attempt.server';
+import {
+  isConcludedResponseStatus,
+  isOpenResponseStatus,
+} from '@/shared/contracts/survey-response';
 
 import { ongoingResponseDenial } from '../domain/acceptance';
 import type {
@@ -23,7 +27,7 @@ import type {
   ResumeOrCreateResponseInput,
   ResumeOrCreateResponseOutput,
 } from '../domain/lifecycle';
-import { extractDraftSeq, SurveyNotAcceptingResponsesError } from './response.service';
+import { SurveyNotAcceptingResponsesError, extractDraftSeq } from './response.service';
 
 // ========================
 // 응답 라이프사이클 service (pub)
@@ -65,7 +69,8 @@ async function migrateResumedRowIfStale(input: {
   reviveFromDrop: boolean;
   now: Date;
 }): Promise<ResumedRowMigration | null> {
-  const { responseId, rowVersionId, currentVersionId, storedResponses, reviveFromDrop, now } = input;
+  const { responseId, rowVersionId, currentVersionId, storedResponses, reviveFromDrop, now } =
+    input;
   if (rowVersionId == null || currentVersionId == null || rowVersionId === currentVersionId) {
     return null;
   }
@@ -104,6 +109,27 @@ async function migrateResumedRowIfStale(input: {
     survivingResponses: survival.survivingResponses,
     affectedQuestionIds: survival.affectedQuestionIds,
   };
+}
+
+/**
+ * 재개 시 행 터치 — 되살리기(drop → in_progress) 또는 stale 방지용 lastActivityAt 갱신.
+ *
+ * 세 재개 분기(테스트 대상 컨택·비-테스트 컨택·세션)가 같은 UPDATE 를 쓴다. WHERE 가 id 뿐인
+ * 것은 종전 그대로다 — status 가드로 되살리기 경합을 감지하는 쪽은 response.service 의
+ * reviveDroppedResponse(첫 답변 INSERT 경로) 이고, 이 경로는 판정 직후의 무조건 UPDATE 다.
+ */
+async function touchOrReviveResponse(
+  responseId: string,
+  opts: { revive: boolean; now: Date },
+): Promise<void> {
+  await db
+    .update(surveyResponses)
+    .set(
+      opts.revive
+        ? { status: 'in_progress', lastActivityAt: opts.now }
+        : { lastActivityAt: opts.now },
+    )
+    .where(eq(surveyResponses.id, responseId));
 }
 
 /**
@@ -328,10 +354,9 @@ export async function resumeOrCreateResponse(
           const restored = {
             id: existingByContact.id,
             status: 'in_progress' as const,
-            questionResponses: decryptQuestionResponses(
-              existingByContact.questionResponses ?? {},
-              { responseId: existingByContact.id },
-            ),
+            questionResponses: decryptQuestionResponses(existingByContact.questionResponses ?? {}, {
+              responseId: existingByContact.id,
+            }),
             currentStepId: existingByContact.currentStepId,
             ...(draftSeq !== undefined ? { draftSeq } : {}),
           };
@@ -339,19 +364,15 @@ export async function resumeOrCreateResponse(
             // 중도 이탈 되살리기 — 아래 비-테스트 컨택 경로와 동일한 UPDATE.
             // 중단 모드 게이트는 두지 않는다: 이 분기의 행은 isTest 라 비-테스트 경로에서도
             // 게이트 예외 대상이며, 운영자 QA 를 막지 않는 것이 기존 동작이다.
-            await db
-              .update(surveyResponses)
-              .set({ status: 'in_progress', lastActivityAt: new Date() })
-              .where(eq(surveyResponses.id, existingByContact.id));
+            await touchOrReviveResponse(existingByContact.id, { revive: true, now: new Date() });
             return { ...restored, resumed: true };
           }
           return { ...restored, resumed: false };
         }
         const now = new Date();
-        if (
-          existingByContact.status === 'drop' ||
-          existingByContact.status === 'in_progress'
-        ) {
+        // 열림(in_progress·drop) 판정 — contracts 의 isOpenResponseStatus 가 SSOT.
+        // 종결·알 수 없는 값은 종전대로 아래 null 로 흘러 첫 답변 경로(decideResponseReuse)가 차단한다.
+        if (isOpenResponseStatus(existingByContact.status)) {
           // 중단 모드: 행이 isTest 이거나 유효한 테스트 링크로 재진입한 경우만 예외.
           // 두 면제 갈래를 OR 로 합쳐 domain 의 단일 isTest 면제 규칙에 넘긴다.
           // flags 미조회(설문 삭제 등)는 종전대로 fail-open.
@@ -373,26 +394,18 @@ export async function resumeOrCreateResponse(
           //   스냅샷 훼손·경합)이면 복원하지 않는다 — 구버전 답을 신버전 UI 에 그대로
           //   주입하는 유령 답 문제를 되살리지 않기 위함.
           const versionMatches = existingByContact.versionId === flags?.currentVersionId;
-          const migration =
-            !versionMatches
-              ? await migrateResumedRowIfStale({
-                  responseId: existingByContact.id,
-                  rowVersionId: existingByContact.versionId,
-                  currentVersionId: flags?.currentVersionId,
-                  storedResponses: existingByContact.questionResponses ?? {},
-                  reviveFromDrop,
-                  now,
-                })
-              : null;
+          const migration = !versionMatches
+            ? await migrateResumedRowIfStale({
+                responseId: existingByContact.id,
+                rowVersionId: existingByContact.versionId,
+                currentVersionId: flags?.currentVersionId,
+                storedResponses: existingByContact.questionResponses ?? {},
+                reviveFromDrop,
+                now,
+              })
+            : null;
           if (!migration) {
-            await db
-              .update(surveyResponses)
-              .set(
-                reviveFromDrop
-                  ? { status: 'in_progress', lastActivityAt: now }
-                  : { lastActivityAt: now },
-              )
-              .where(eq(surveyResponses.id, existingByContact.id));
+            await touchOrReviveResponse(existingByContact.id, { revive: reviveFromDrop, now });
           }
           const restorePayload =
             versionMatches || migration
@@ -414,9 +427,7 @@ export async function resumeOrCreateResponse(
             ...restorePayload,
             ...(draftSeq !== undefined ? { draftSeq } : {}),
             // 재응답 허용으로 되돌린 행 — 상단 안내 배너("끝까지 제출해야 반영") 트리거.
-            ...(existingByContact.metadata?.['reeditPendingSince']
-              ? { reeditPending: true }
-              : {}),
+            ...(existingByContact.metadata?.['reeditPendingSince'] ? { reeditPending: true } : {}),
           };
         }
         // isCompleted=false 인데 in_progress/drop 도 아닌 알 수 없는 status → fallback
@@ -454,7 +465,8 @@ export async function resumeOrCreateResponse(
   const now = new Date();
   const draftSeq = extractDraftSeq(existing.metadata);
 
-  if (existing.status === 'drop' || existing.status === 'in_progress') {
+  // 열림(in_progress·drop) 판정 — contracts 의 isOpenResponseStatus 가 SSOT.
+  if (isOpenResponseStatus(existing.status)) {
     // 중단 모드: 행이 isTest 이거나 유효한 테스트 링크로 재진입한 경우만 예외.
     // 두 면제 갈래를 OR 로 합쳐 domain 의 단일 isTest 면제 규칙에 넘긴다.
     // flags 미조회(설문 삭제 등)는 종전대로 fail-open.
@@ -476,10 +488,7 @@ export async function resumeOrCreateResponse(
     });
     if (!migration) {
       // 기존 동작: drop 회복(status 전환) 또는 stale 방지용 lastActivityAt 터치
-      await db
-        .update(surveyResponses)
-        .set(reviveFromDrop ? { status: 'in_progress', lastActivityAt: now } : { lastActivityAt: now })
-        .where(eq(surveyResponses.id, existing.id));
+      await touchOrReviveResponse(existing.id, { revive: reviveFromDrop, now });
     }
     const rawResponses = migration?.survivingResponses ?? existing.questionResponses ?? {};
     return {
@@ -496,12 +505,11 @@ export async function resumeOrCreateResponse(
   }
 
   // 종결 상태 — 알려진 값만 통과시키고 알 수 없으면 null 로 fallback
-  const concludedStatuses = ['completed', 'screened_out', 'quotaful_out', 'bad'] as const;
-  type ConcludedStatus = (typeof concludedStatuses)[number];
-  if ((concludedStatuses as readonly string[]).includes(existing.status)) {
+  // (종결 화이트리스트는 contracts 의 concludedResponseStatusValues 가 SSOT)
+  if (isConcludedResponseStatus(existing.status)) {
     return {
       id: existing.id,
-      status: existing.status as ConcludedStatus,
+      status: existing.status,
       resumed: false,
     };
   }

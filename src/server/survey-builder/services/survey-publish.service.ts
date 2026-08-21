@@ -1,11 +1,9 @@
-import 'server-only';
-
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import 'server-only';
 
 import { getSurveyWithDetails } from '@/data/surveys';
 import { db } from '@/db';
-import { surveyResponses, surveys, surveyVersions } from '@/db/schema';
-import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
+import { surveyResponses, surveyVersions, surveys } from '@/db/schema';
 import { generateSPSSColumns } from '@/lib/analytics/spss-excel-export';
 import { normalizeQuestions } from '@/lib/question';
 import { extractR2KeysFromJsonbValue } from '@/lib/r2-lifecycle/key-extract';
@@ -15,11 +13,10 @@ import { assertValidSpssVarNames } from '@/lib/spss/variable-name-guard';
 import { buildSurveySnapshot } from '@/lib/versioning/snapshot-builder';
 import { pruneVersionSnapshots } from '@/lib/versioning/version-prune.server';
 import { findPrunableVersionIds } from '@/lib/versioning/version-retention.server';
+import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
+import { openResponseStatusValues } from '@/shared/contracts/survey-response';
 
-import type {
-  PublishSurveyInput,
-  SurveyVersion,
-} from '../domain/survey-publish';
+import type { PublishSurveyInput, SurveyVersion } from '../domain/survey-publish';
 
 // ========================
 // 설문 배포 (Publish)
@@ -29,9 +26,7 @@ import type {
 // 소비처 query invalidation/router refresh 로 대체한다.
 // 다인자(surveyId, changeNote?) -> 단일 input object 로 묶음.
 
-export async function publishSurvey(
-  input: PublishSurveyInput,
-): Promise<SurveyVersion> {
+export async function publishSurvey(input: PublishSurveyInput): Promise<SurveyVersion> {
   const { surveyId, changeNote } = input;
 
   const surveyData = await getSurveyWithDetails(surveyId);
@@ -58,12 +53,7 @@ export async function publishSurvey(
     await tx
       .update(surveyVersions)
       .set({ status: 'superseded' })
-      .where(
-        and(
-          eq(surveyVersions.surveyId, surveyId),
-          eq(surveyVersions.status, 'published'),
-        ),
-      );
+      .where(and(eq(surveyVersions.surveyId, surveyId), eq(surveyVersions.status, 'published')));
 
     const latestVersion = await tx.query.surveyVersions.findFirst({
       where: eq(surveyVersions.surveyId, surveyId),
@@ -143,7 +133,8 @@ export async function countMigratableResponses(input: {
     .where(
       and(
         eq(surveyResponses.surveyId, input.surveyId),
-        inArray(surveyResponses.status, ['in_progress', 'drop']),
+        // 열린 상태(in_progress·drop) — contracts 의 openResponseStatusValues 가 SSOT
+        inArray(surveyResponses.status, [...openResponseStatusValues]),
         eq(surveyResponses.isTest, false),
         isNull(surveyResponses.deletedAt),
       ),
