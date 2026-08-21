@@ -6,7 +6,7 @@ import { disableTestWorkspace } from '@/server/operations/services/test-workspac
 import {
   archiveTestMailForTargets,
   archiveTestWorkspaceMail,
-} from '@/lib/mail/test-mail-archive.server';
+} from '@/server/shared/test-mail-archive.server';
 
 type RecipientStatus =
   | 'queued'

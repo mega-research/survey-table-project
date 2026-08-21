@@ -20,8 +20,8 @@ const { registerMock } = vi.hoisted(() => ({
   >(async () => ({ registered: 0, rejectedKeys: [] as string[] })),
 }));
 
-vi.mock('@/lib/r2-lifecycle/deletion-queue.server', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/r2-lifecycle/deletion-queue.server')>()),
+vi.mock('@/server/shared/r2-lifecycle/deletion-queue.server', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/server/shared/r2-lifecycle/deletion-queue.server')>()),
   registerDeletionCandidates: registerMock,
 }));
 

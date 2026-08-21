@@ -10,7 +10,7 @@ import {
   extractR2KeysFromJsonbValue,
   getKnownR2Hosts,
   normalizeUrlToR2Key,
-} from '@/lib/r2-lifecycle/key-extract';
+} from '@/server/shared/r2-lifecycle/key-extract';
 
 // 테스트는 env 와 무관하게 명시 hosts 로 고정한다
 const HOSTS = ['cdn-dev.megaresearch.co.kr'];

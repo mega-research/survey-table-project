@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CAMPAIGN_PROVIDER_SEND_INTERVAL_MS,
   createCampaignProviderRateLimiter,
-} from '@/lib/mail/campaign-send-rate-limit';
+} from '@/server/mail/services/campaign-send-rate-limit';
 
 describe('campaign provider rate limiter', () => {
   it('동시 요청도 직렬화해 각 provider call 사이를 최소 125ms로 유지한다', async () => {

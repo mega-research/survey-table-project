@@ -3,7 +3,7 @@ import { createElement } from 'react';
 import { render } from '@react-email/render';
 import { describe, expect, it } from 'vitest';
 
-import { MailWrapper } from '@/lib/mail/template-wrapper';
+import { MailWrapper } from '@/server/mail/services/template-wrapper';
 
 describe('MailWrapper sanitizes bodyHtml before mail delivery', () => {
   it('strips script tags from bodyHtml', async () => {

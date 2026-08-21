@@ -4,14 +4,14 @@ const { sendMock } = vi.hoisted(() => ({
   sendMock: vi.fn(),
 }));
 
-vi.mock('@/lib/mail/resend-client', () => ({
+vi.mock('@/server/mail/services/resend-client', () => ({
   getResend: () => ({ emails: { send: sendMock } }),
 }));
 
 import {
   RetryableCampaignSendError,
   sendCampaignRecipient,
-} from '@/lib/mail/send-bulk';
+} from '@/server/mail/services/send-bulk';
 
 const input = {
   from: 'Survey <survey@mail.example.com>',

@@ -7,7 +7,7 @@ import {
   nextCycleStart,
   toPeriodSpecs,
   type PeriodInputRow,
-} from '@/lib/mail/billing-cycles';
+} from '@/server/mail/services/billing-cycles';
 
 const PRO_50K = {
   planLabel: 'Pro 50K',

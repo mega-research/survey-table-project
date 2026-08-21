@@ -22,7 +22,7 @@ vi.mock('svix', () => ({
     }
   },
 }));
-vi.mock('@/lib/mail/resend-webhook', () => ({
+vi.mock('@/server/mail/services/resend-webhook', () => ({
   processResendWebhookEvent: processMock,
 }));
 

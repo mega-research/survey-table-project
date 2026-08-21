@@ -4,7 +4,7 @@ import {
   allocateCycleCosts,
   type AllocatorInputCampaign,
   type AllocatorInputPlan,
-} from '@/lib/mail/billing-allocator';
+} from '@/server/mail/services/billing-allocator';
 
 const PRO_50K: AllocatorInputPlan = {
   includedEmails: 50_000,

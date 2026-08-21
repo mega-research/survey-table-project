@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { mapBatchResults } from '@/lib/mail/send-bulk';
-import type { BulkRecipientInput } from '@/lib/mail/send-bulk';
+import { mapBatchResults } from '@/server/mail/services/send-bulk';
+import type { BulkRecipientInput } from '@/server/mail/services/send-bulk';
 
 function makeRecipients(ids: string[]): BulkRecipientInput[] {
   return ids.map((id) => ({

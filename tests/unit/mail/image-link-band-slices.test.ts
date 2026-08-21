@@ -1,7 +1,7 @@
 import sharp from 'sharp';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ensureImageLinkBandSlices } from '@/lib/mail/image-link-band-slices';
+import { ensureImageLinkBandSlices } from '@/server/mail/services/image-link-band-slices';
 
 const uploads: { key: string; body: Buffer; contentType: string }[] = [];
 

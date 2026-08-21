@@ -191,20 +191,20 @@ vi.mock('@react-email/render', () => ({
   render: vi.fn(async () => '<html></html>'),
 }));
 
-vi.mock('@/lib/mail/render-for-send', () => ({
+vi.mock('@/server/mail/services/render-for-send', () => ({
   renderForCampaignSend: () => ({ subject: 'subject', bodyHtml: '<p>body</p>' }),
 }));
 
-vi.mock('@/lib/mail/send-bulk', () => ({
+vi.mock('@/server/mail/services/send-bulk', () => ({
   resolveCampaignAttachments: vi.fn(async () => undefined),
   sendCampaignRecipient: sendRecipientMock,
 }));
 
-vi.mock('@/lib/mail/template-wrapper', () => ({
+vi.mock('@/server/mail/services/template-wrapper', () => ({
   MailWrapper: () => null,
 }));
 
-import { dispatchCampaignChunk } from '@/lib/mail/campaign-dispatch';
+import { dispatchCampaignChunk } from '@/server/mail/services/campaign-dispatch';
 
 beforeEach(() => {
   setPayloads.length = 0;

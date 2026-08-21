@@ -19,7 +19,7 @@ vi.mock('@/server/survey-builder/services/versioning/version-retention.server', 
 vi.mock('@/server/survey-builder/services/versioning/version-prune.server', () => ({
   pruneVersionSnapshots: pruneMock,
 }));
-vi.mock('@/lib/r2-lifecycle/key-ref-index.server', () => ({
+vi.mock('@/server/shared/r2-lifecycle/key-ref-index.server', () => ({
   recordKeyRefs: recordRefsMock,
 }));
 

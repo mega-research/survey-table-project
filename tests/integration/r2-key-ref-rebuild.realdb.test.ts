@@ -29,8 +29,8 @@ import {
   surveyVersions,
 } from '@/db/schema';
 import { deleteSurvey } from '@/server/survey-builder/services/surveys.service';
-import { rebuildAllKeyRefs } from '@/lib/r2-lifecycle/key-ref-index.server';
-import { findReferencedKeys } from '@/lib/r2-lifecycle/reference-scan.server';
+import { rebuildAllKeyRefs } from '@/server/shared/r2-lifecycle/key-ref-index.server';
+import { findReferencedKeys } from '@/server/shared/r2-lifecycle/reference-scan.server';
 
 const isLocalDb =
   (process.env['DATABASE_URL'] ?? '').includes('127.0.0.1') ||

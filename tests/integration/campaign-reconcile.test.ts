@@ -41,16 +41,16 @@ vi.mock('@/db', () => {
   };
 });
 
-vi.mock('@/lib/mail/resend-client', () => ({
+vi.mock('@/server/mail/services/resend-client', () => ({
   getResend: () => ({ emails: { get: getMock } }),
 }));
 
-vi.mock('@/lib/mail/recipient-status-transition', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/mail/recipient-status-transition')>();
+vi.mock('@/server/shared/recipient-status-transition', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/server/shared/recipient-status-transition')>();
   return { ...actual, applyRecipientTransition: applyMock };
 });
 
-import { reconcileCampaignRecipients } from '@/lib/mail/campaign-reconcile';
+import { reconcileCampaignRecipients } from '@/server/mail/services/campaign-reconcile';
 
 beforeEach(() => {
   getMock.mockReset();

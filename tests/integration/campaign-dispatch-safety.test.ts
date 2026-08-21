@@ -265,26 +265,26 @@ vi.mock('@react-email/render', () => ({
   render: renderMock,
 }));
 
-vi.mock('@/lib/mail/render-for-send', () => ({
+vi.mock('@/server/mail/services/render-for-send', () => ({
   renderForCampaignSend: (input: { subject: string; inviteUrl: string }) => ({
     subject: input.subject,
     bodyHtml: input.inviteUrl,
   }),
 }));
 
-vi.mock('@/lib/mail/campaign-send-rate-limit', () => ({
+vi.mock('@/server/mail/services/campaign-send-rate-limit', () => ({
   createCampaignProviderRateLimiter: () => ({
     waitForTurn: waitForTurnMock,
   }),
 }));
 
-vi.mock('@/lib/mail/send-bulk', () => ({
+vi.mock('@/server/mail/services/send-bulk', () => ({
   resolveCampaignAttachments: resolveAttachmentsMock,
   sendCampaignRecipient: sendRecipientMock,
   RetryableCampaignSendError: class RetryableCampaignSendError extends Error {},
 }));
 
-vi.mock('@/lib/mail/template-wrapper', () => ({
+vi.mock('@/server/mail/services/template-wrapper', () => ({
   MailWrapper: () => null,
 }));
 
@@ -292,7 +292,7 @@ import {
   dispatchCampaignChunk,
   prepareCampaignDispatch,
   terminalizeUnresolvedCampaignDispatch,
-} from '@/lib/mail/campaign-dispatch';
+} from '@/server/mail/services/campaign-dispatch';
 
 function makeRecipient(id: string, overrides: Partial<RecipientState> = {}): RecipientState {
   return {

@@ -31,7 +31,7 @@ import {
   promoteMailImages,
   tmpToPermanentUrl,
   urlToR2Key,
-} from '@/lib/mail/mail-image-promote';
+} from '@/server/mail/services/mail-image-promote';
 
 describe('extractTmpMailUrls', () => {
   beforeEach(() => {

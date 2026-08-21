@@ -8,8 +8,8 @@ import {
   dispatchCampaignChunk,
   prepareCampaignDispatch,
   terminalizeUnresolvedCampaignDispatch,
-} from '@/lib/mail/campaign-dispatch';
-import { processResendEvent } from '@/lib/mail/resend-webhook';
+} from '@/server/mail/services/campaign-dispatch';
+import { processResendEvent } from '@/server/mail/services/resend-webhook';
 
 const dbUrl = process.env['DATABASE_URL'] ?? '';
 const isLocalDb = dbUrl.includes('127.0.0.1') || dbUrl.includes('localhost');

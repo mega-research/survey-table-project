@@ -96,7 +96,7 @@ vi.mock('@/db', () => ({
   },
 }));
 
-vi.mock('@/lib/r2-lifecycle/sent-ledger.server', () => ({
+vi.mock('@/server/shared/r2-lifecycle/sent-ledger.server', () => ({
   recordSentKeys: recordSentKeysMock,
 }));
 
@@ -104,7 +104,7 @@ vi.mock('@react-email/render', () => ({
   render: vi.fn(async () => '<html></html>'),
 }));
 
-vi.mock('@/lib/mail/render-for-send', () => ({
+vi.mock('@/server/mail/services/render-for-send', () => ({
   renderForCampaignSend: (input: { subject: string; bodyHtml: string }) => input,
   renderForTestSend: (input: { subject: string; bodyHtml: string; fromName: string }) => ({
     subject: input.subject,
@@ -113,25 +113,25 @@ vi.mock('@/lib/mail/render-for-send', () => ({
   }),
 }));
 
-vi.mock('@/lib/mail/campaign-send-rate-limit', () => ({
+vi.mock('@/server/mail/services/campaign-send-rate-limit', () => ({
   createCampaignProviderRateLimiter: () => ({ waitForTurn: vi.fn() }),
 }));
 
-vi.mock('@/lib/mail/send-bulk', () => ({
+vi.mock('@/server/mail/services/send-bulk', () => ({
   resolveCampaignAttachments: vi.fn(),
   sendCampaignRecipient: vi.fn(),
   RetryableCampaignSendError: class RetryableCampaignSendError extends Error {},
 }));
 
-vi.mock('@/lib/mail/template-wrapper', () => ({
+vi.mock('@/server/mail/services/template-wrapper', () => ({
   MailWrapper: () => null,
 }));
 
-vi.mock('@/lib/mail/image-link-band-slices', () => ({
+vi.mock('@/server/mail/services/image-link-band-slices', () => ({
   ensureImageLinkBandSlices: ensureSlicesMock,
 }));
 
-vi.mock('@/lib/mail/send', () => ({
+vi.mock('@/server/mail/services/send', () => ({
   sendTestMail: sendTestMailMock,
 }));
 
@@ -145,8 +145,8 @@ vi.mock('@/server/shared/data-scope.server', () => ({
 }));
 
 import { db } from '@/db';
-import { prepareCampaignDispatch } from '@/lib/mail/campaign-dispatch';
-import { extractMailContentKeys } from '@/lib/r2-lifecycle/key-extract';
+import { prepareCampaignDispatch } from '@/server/mail/services/campaign-dispatch';
+import { extractMailContentKeys } from '@/server/shared/r2-lifecycle/key-extract';
 import { sendTestTemplateMail } from '@/server/mail/services/mail-preview.service';
 
 function recordedKeys(callIndex = 0): string[] {

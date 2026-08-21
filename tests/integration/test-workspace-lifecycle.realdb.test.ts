@@ -14,9 +14,9 @@ import {
 import { deleteContactTarget } from '@/server/contacts/services/contact-targets.service';
 import { getControlState } from '@/server/operations/services/control.service';
 import { disableTestWorkspace } from '@/server/operations/services/test-workspace.service';
-import { terminalizeUnresolvedCampaignDispatch } from '@/lib/mail/campaign-dispatch';
-import { processResendEvent } from '@/lib/mail/resend-webhook';
-import { archiveTestWorkspaceMail } from '@/lib/mail/test-mail-archive.server';
+import { terminalizeUnresolvedCampaignDispatch } from '@/server/mail/services/campaign-dispatch';
+import { processResendEvent } from '@/server/mail/services/resend-webhook';
+import { archiveTestWorkspaceMail } from '@/server/shared/test-mail-archive.server';
 import { computeCycleBreakdown } from '@/server/mail/services/mail-billing.server';
 
 const dbUrl = process.env['DATABASE_URL'] ?? '';

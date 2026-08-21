@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { planReconcileTransitions } from '@/lib/mail/campaign-reconcile';
-import type { StuckRecipient } from '@/lib/mail/campaign-reconcile';
+import { planReconcileTransitions } from '@/server/mail/services/campaign-reconcile';
+import type { StuckRecipient } from '@/server/mail/services/campaign-reconcile';
 
 const stuck: StuckRecipient[] = [
   { id: 'a', campaignId: 'campaign-1', status: 'sent', resendMessageId: 'ma' },

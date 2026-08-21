@@ -66,12 +66,12 @@ vi.mock('@/db', () => ({
   },
 }));
 
-vi.mock('@/lib/mail/recipient-status-transition', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/mail/recipient-status-transition')>();
+vi.mock('@/server/shared/recipient-status-transition', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/server/shared/recipient-status-transition')>();
   return { ...actual, applyRecipientTransition: applyMock };
 });
 
-import * as resendWebhook from '@/lib/mail/resend-webhook';
+import * as resendWebhook from '@/server/mail/services/resend-webhook';
 
 const processResendEvent = resendWebhook.processResendEvent;
 
