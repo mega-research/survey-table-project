@@ -1,10 +1,9 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 
-import type { PiiUpdate } from '@/features/contacts/domain/contact-target';
-import { Button } from '@/components/ui/button';
+import { useRouter } from 'next/navigation';
+
 import {
   ContactAttemptAddCard,
   type ContactAttemptAddCardHandle,
@@ -15,22 +14,24 @@ import { ContactInfoCard } from '@/components/operations/contacts/contact-info-c
 import { ContactMailHistoryCard } from '@/components/operations/contacts/contact-mail-history-card';
 import { CopyInviteUrlButton } from '@/components/operations/contacts/copy-invite-url-button';
 import {
-  SendSingleMailDialog,
   type MailTemplateOption,
+  SendSingleMailDialog,
 } from '@/components/operations/contacts/send-single-mail-dialog';
+import { Button } from '@/components/ui/button';
 import type {
   ContactColumnScheme,
   ContactMethod,
   ContactResultCode,
 } from '@/db/schema/schema-types';
+import type { PiiUpdate } from '@/features/contacts/domain/contact-target';
 import { useAutoFadeMessage } from '@/hooks/use-auto-fade-message';
+import type { PiiFieldType } from '@/lib/crypto/pii-fields';
+import { piiKeyOf } from '@/lib/operations/contacts';
 import type {
   ContactAttemptRow,
   MailHistoryRow,
   ResponseEditLogRow,
 } from '@/lib/operations/contacts.server';
-import { piiKeyOf } from '@/lib/operations/contacts';
-import type { PiiFieldType } from '@/lib/crypto/pii-fields';
 import { client } from '@/shared/lib/rpc';
 
 interface ContactDetailFormProps {
@@ -167,15 +168,16 @@ export function ContactDetailForm({
     // I2: 즉시 server 호출 폐기 — localScheme 만 갱신, 저장 시점에 반영
     setLocalScheme((prev) => ({
       ...prev,
-      columns: prev.columns.map((c) =>
-        c.source === `attrs.${attrsKey}` ? { ...c, hidden } : c,
-      ),
+      columns: prev.columns.map((c) => (c.source === `attrs.${attrsKey}` ? { ...c, hidden } : c)),
     }));
   }
 
   function remove() {
     if (!isEdit || !initial) return;
-    if (!window.confirm('이 조사 대상을 삭제하시겠습니까? (응답이 있으면 응답은 보존, 매칭만 끊김)')) return;
+    if (
+      !window.confirm('이 조사 대상을 삭제하시겠습니까? (응답이 있으면 응답은 보존, 매칭만 끊김)')
+    )
+      return;
     setError(null);
     startTransition(async () => {
       try {
@@ -232,24 +234,32 @@ export function ContactDetailForm({
       if (!ok) return;
     }
     const updatesForAction = piiUpdates.length > 0 ? piiUpdates : undefined;
+    // React Compiler 는 try 본문의 conditional spread·논리연산·optional call 을 낮추지
+    // 못한다. 페이로드 조각과 ref 스냅샷·편집 대상을 try 밖에서 확정해 두고 안에서는 값만 쓴다.
+    const piiPatch = updatesForAction !== undefined ? { piiUpdates: updatesForAction } : {};
+    const systemFieldsPatch = systemFieldKeys !== undefined ? { systemFieldKeys } : {};
+    const editTarget = isEdit && initial ? initial : null;
     startTransition(async () => {
       try {
-        if (isEdit && initial) {
+        if (editTarget) {
           await client.contacts.targets.update({
-            id: initial.id,
+            id: editTarget.id,
             surveyId,
             attrs,
-            ...(updatesForAction !== undefined ? { piiUpdates: updatesForAction } : {}),
+            ...piiPatch,
             memo,
             contactMethod,
-            ...(systemFieldKeys !== undefined ? { systemFieldKeys } : {}),
+            ...systemFieldsPatch,
           });
           // I2: localScheme 이 prop scheme 과 다르면 컬럼 스킴도 함께 저장
           if (!schemeEqual(localScheme, scheme)) {
             await client.contacts.columns.update({ surveyId, scheme: localScheme });
           }
           // 회차 라디오 선택돼 있으면 함께 추가 선택 안 됐으면 silent no-op.
-          await attemptCardRef.current?.flushIfSelected();
+          // ref 는 여기서 읽는다 — 위 await 구간에 카드가 언마운트되면 React 가 current 를
+          // null 로 되돌리므로, 호이스트하면 stale 핸들로 RPC 가 나간다.
+          const attemptCard = attemptCardRef.current;
+          if (attemptCard) await attemptCard.flushIfSelected();
           // 저장 성공 → dirty reset (initial 동기화 효과를 위해 router.refresh)
           router.refresh();
           setSuccessMessage('저장 완료');
@@ -257,17 +267,15 @@ export function ContactDetailForm({
           const created = await client.contacts.targets.add({
             surveyId,
             attrs,
-            ...(updatesForAction !== undefined ? { piiUpdates: updatesForAction } : {}),
+            ...piiPatch,
             memo,
             contactMethod,
-            ...(systemFieldKeys !== undefined ? { systemFieldKeys } : {}),
+            ...systemFieldsPatch,
           });
           // 신규 저장 성공 → 방금 만든 대상의 상세 페이지로 이동.
           // new 페이지에 머물면 폼 입력이 남아 isDirty 가 계속 true → 목록 이동 시
           // confirm alert 오발생 + 재저장 시 중복 생성. push 로 떠나 둘 다 해소.
-          router.push(
-            `/admin/surveys/${surveyId}/operations/contacts/${created.id}`,
-          );
+          router.push(`/admin/surveys/${surveyId}/operations/contacts/${created.id}`);
         }
       } catch (e) {
         setError((e as Error).message);
@@ -283,7 +291,10 @@ export function ContactDetailForm({
   return (
     <div className="space-y-4">
       {error && (
-        <div role="alert" className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <div
+          role="alert"
+          className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+        >
           {error}
         </div>
       )}
@@ -370,10 +381,7 @@ export function ContactDetailForm({
                   ) : undefined
                 }
               />
-              <ContactEditHistoryCard
-                rows={editLogs}
-                hasResponse={initial.responseId != null}
-              />
+              <ContactEditHistoryCard rows={editLogs} hasResponse={initial.responseId != null} />
             </>
           ) : (
             <div className="rounded-lg border bg-slate-50 p-5 text-sm text-slate-500">
@@ -390,10 +398,7 @@ export function ContactDetailForm({
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-function shallowEqualRecord(
-  a: Record<string, string>,
-  b: Record<string, string>,
-): boolean {
+function shallowEqualRecord(a: Record<string, string>, b: Record<string, string>): boolean {
   const ak = Object.keys(a);
   const bk = Object.keys(b);
   if (ak.length !== bk.length) return false;

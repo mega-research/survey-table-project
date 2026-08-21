@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 
-import { client } from '@/shared/lib/rpc';
 import type { NoticeReason } from '@/components/survey/already-responded-view';
 import type { ClientSignals } from '@/lib/duplicate-detection/types';
+import { client } from '@/shared/lib/rpc';
 import type { Survey } from '@/types/survey';
 
 /**
@@ -12,9 +12,7 @@ import type { Survey } from '@/types/survey';
  * 타입을 이 훅에서 export 해 공유한다 (이 훅이 진입 시 중복검사의 주 소유자).
  */
 export type DuplicateStatus =
-  | { kind: 'checking' }
-  | { kind: 'blocked'; reason: NoticeReason }
-  | { kind: 'ok' };
+  { kind: 'checking' } | { kind: 'blocked'; reason: NoticeReason } | { kind: 'ok' };
 
 interface UseDuplicateGuardArgs {
   isAdminEdit: boolean;
@@ -73,12 +71,15 @@ export function useDuplicateGuard({
     if (skip) return;
     if (!loadedSurvey?.id || !signals) return;
     let cancelled = false;
+    // 페이로드는 try 밖에서 확정한다 — try 본문의 conditional spread 는 React Compiler 가
+    // 낮추지 못해 훅 전체가 skip 된다. 만들어지는 객체는 문자 그대로 동일하다.
+    const inviteTokenPatch = inviteToken != null ? { inviteToken } : {};
 
     (async () => {
       try {
         const r = await client.surveyResponse.duplicate.checkOnEntry({
           surveyId: loadedSurvey.id,
-          ...(inviteToken != null ? { inviteToken } : {}),
+          ...inviteTokenPatch,
           clientSignals: signals,
         });
         if (cancelled) return;

@@ -4,9 +4,9 @@ import { useTransition } from 'react';
 
 import { useRouter } from 'next/navigation';
 
-import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 
+import { Button } from '@/components/ui/button';
 import { getErrorMessage } from '@/lib/get-error-message';
 import { client } from '@/shared/lib/rpc';
 
@@ -21,6 +21,12 @@ interface Props {
  * 자동 reconcile 은 발송 후 1m/5m/30m 3회뿐이라 그 이후 유실된 webhook 은 회수 수단이 없다.
  * 진행중이 0건이면 되물을 대상이 없으므로 호출부에서 버튼 자체를 숨긴다.
  */
+function resyncResultMessage(checked: number, updated: number): string {
+  return updated > 0
+    ? `${checked.toLocaleString('ko-KR')}건 조회 — ${updated.toLocaleString('ko-KR')}건 갱신했습니다.`
+    : `${checked.toLocaleString('ko-KR')}건 조회 — Resend 쪽도 아직 결과가 없습니다.`;
+}
+
 export function ResyncCampaignButton({ surveyId, campaignId }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -32,11 +38,7 @@ export function ResyncCampaignButton({ surveyId, campaignId }: Props) {
           surveyId,
           campaignId,
         });
-        toast.success(
-          updated > 0
-            ? `${checked.toLocaleString('ko-KR')}건 조회 — ${updated.toLocaleString('ko-KR')}건 갱신했습니다.`
-            : `${checked.toLocaleString('ko-KR')}건 조회 — Resend 쪽도 아직 결과가 없습니다.`,
-        );
+        toast.success(resyncResultMessage(checked, updated));
       } catch (err) {
         toast.error(getErrorMessage(err, '상태 재조회 실패'));
         return;

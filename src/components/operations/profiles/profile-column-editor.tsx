@@ -1,18 +1,20 @@
 'use client';
 
 import { useMemo, useState, useTransition } from 'react';
+
 import { useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
-import { hydrateProfileColumns } from '@/lib/operations/profile-columns';
-import { client } from '@/shared/lib/rpc';
 import type {
   ContactColumnScheme,
   ProfileColumnDef,
   ProfileColumnScheme,
 } from '@/db/schema/schema-types';
+import { resultErrorMessage } from '@/lib/get-error-message';
+import { hydrateProfileColumns } from '@/lib/operations/profile-columns';
+import { client } from '@/shared/lib/rpc';
 
 interface Props {
   surveyId: string;
@@ -74,7 +76,7 @@ export function ProfileColumnEditor({ surveyId, initialScheme, contactScheme }: 
           scheme: { version: 1, columns },
         });
         if (!result.ok) {
-          setError(result.error ?? '저장에 실패했습니다.');
+          setError(resultErrorMessage(result.error, '저장에 실패했습니다.'));
           return;
         }
         router.refresh();
@@ -95,7 +97,7 @@ export function ProfileColumnEditor({ surveyId, initialScheme, contactScheme }: 
           scheme: { version: 1, columns: [] },
         });
         if (!result.ok) {
-          setError(result.error ?? '초기화에 실패했습니다.');
+          setError(resultErrorMessage(result.error, '초기화에 실패했습니다.'));
           return;
         }
         setColumns(hydrateProfileColumns(contactScheme, null));
@@ -109,14 +111,17 @@ export function ProfileColumnEditor({ surveyId, initialScheme, contactScheme }: 
   return (
     <div className="space-y-4">
       {error && (
-        <div role="alert" className="rounded border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+        <div
+          role="alert"
+          className="rounded border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700"
+        >
           {error}
         </div>
       )}
 
       <div className="rounded border bg-white">
         <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-xs uppercase text-slate-600">
+          <thead className="bg-slate-50 text-xs text-slate-600 uppercase">
             <tr>
               <th className="px-3 py-2 text-left">순서</th>
               <th className="px-3 py-2 text-left">라벨</th>
@@ -171,8 +176,8 @@ export function ProfileColumnEditor({ surveyId, initialScheme, contactScheme }: 
       </div>
 
       <div className="text-xs text-slate-500">
-        조사 대상 정보(attrs)와 개인정보(pii) 컬럼은 컨택 매칭이 있는 응답에만 값이 표시됩니다.
-        IP 해시는 앞 8자만 노출됩니다. 개인정보 컬럼을 켜면 목록에서 복호화된 값이 그대로 보입니다.
+        조사 대상 정보(attrs)와 개인정보(pii) 컬럼은 컨택 매칭이 있는 응답에만 값이 표시됩니다. IP
+        해시는 앞 8자만 노출됩니다. 개인정보 컬럼을 켜면 목록에서 복호화된 값이 그대로 보입니다.
       </div>
 
       <div className="flex gap-2">

@@ -16,8 +16,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { MailAttachment } from '@/db/schema/schema-types';
 import type { MailPreviewSample } from '@/features/mail/domain/mail-preview';
+import { resultErrorMessage } from '@/lib/get-error-message';
 import { TMP_ATTACHMENT_PREFIX } from '@/lib/mail/constants';
-import { renderMailPreview, type PreviewSample } from '@/lib/mail/render-preview';
+import { type PreviewSample, renderMailPreview } from '@/lib/mail/render-preview';
 import { sanitizeRichHtml } from '@/lib/sanitize';
 import { client } from '@/shared/lib/rpc';
 
@@ -83,10 +84,14 @@ const IFRAME_RESET_CSS = `
 
 function buildIframeSrcDoc(bodyHtml: string): string {
   const safe = sanitizeRichHtml(bodyHtml);
-  const content = safe.trim() === ''
-    ? '<div style="color:#9ca3af;font-style:italic;">(본문 없음)</div>'
-    : safe;
+  const content =
+    safe.trim() === '' ? '<div style="color:#9ca3af;font-style:italic;">(본문 없음)</div>' : safe;
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${IFRAME_RESET_CSS}</style></head><body>${content}</body></html>`;
+}
+
+/** 발송 성공 응답의 선택적 id 를 스프레드 조각으로 만든다(값이 없으면 키 자체를 넣지 않는다). */
+function sendIdPatch<T>(id: T | undefined): { id?: T } {
+  return id !== undefined ? { id } : {};
 }
 
 export function MailPreviewDialog({
@@ -182,9 +187,7 @@ export function MailPreviewDialog({
   const isEmpty = isReady && fetchState.sample === null;
 
   const toIsValid = EMAIL_RE.test(testTo.trim());
-  const hasUnpromotedAttachment = attachments.some((a) =>
-    a.key.startsWith(TMP_ATTACHMENT_PREFIX),
-  );
+  const hasUnpromotedAttachment = attachments.some((a) => a.key.startsWith(TMP_ATTACHMENT_PREFIX));
   // 샘플 fetch 실패 상태에서는 변수 치환이 불완전하므로 발송 차단.
   const sampleFetchFailed = fetchState.status === 'error';
   const canSend =
@@ -212,9 +215,9 @@ export function MailPreviewDialog({
         attachments,
       });
       if (res.ok) {
-        setSendState({ status: 'sent', to: testTo.trim(), ...(res.id !== undefined ? { id: res.id } : {}) });
+        setSendState({ status: 'sent', to: testTo.trim(), ...sendIdPatch(res.id) });
       } else {
-        setSendState({ status: 'error', message: res.error ?? '발송 실패' });
+        setSendState({ status: 'error', message: resultErrorMessage(res.error, '발송 실패') });
       }
     } catch (err) {
       setSendState({
@@ -227,7 +230,7 @@ export function MailPreviewDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {/* 발송 컨테이너(900px)가 잘리지 않도록 다이얼로그를 그보다 넓게 */}
-      <DialogContent className="flex max-h-[90vh] max-w-[960px] flex-col p-0 gap-0">
+      <DialogContent className="flex max-h-[90vh] max-w-[960px] flex-col gap-0 p-0">
         <DialogHeader className="border-b border-gray-200 px-6 pt-6 pb-4">
           <DialogTitle>받는 사람 기준 미리보기</DialogTitle>
           <DialogDescription>
@@ -249,7 +252,7 @@ export function MailPreviewDialog({
 
           {fetchState.status === 'error' && (
             <div className="m-6 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
               <div>
                 <div className="font-medium">샘플 조사 대상을 불러오지 못했습니다</div>
                 <div className="mt-0.5 text-xs">{fetchState.error}</div>
@@ -261,7 +264,7 @@ export function MailPreviewDialog({
             <div className="space-y-0">
               {isEmpty && (
                 <div className="flex items-start gap-2 border-b border-amber-200 bg-amber-50 px-6 py-3 text-sm text-amber-900">
-                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                   <span>이 설문에 등록된 조사 대상이 없어 모든 변수가 (없는 키)로 표시됩니다.</span>
                 </div>
               )}
@@ -270,24 +273,28 @@ export function MailPreviewDialog({
               <dl className="grid grid-cols-[64px_1fr] gap-x-3 gap-y-1.5 border-b border-gray-200 bg-gray-50 px-6 py-4 text-sm">
                 <dt className="text-gray-500">From</dt>
                 <dd className="text-gray-900">
-                  <span dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(rendered.fromName) || '<span style="color:#9ca3af;font-style:italic;">(이름 없음)</span>' }} />{' '}
+                  <span
+                    dangerouslySetInnerHTML={{
+                      __html:
+                        sanitizeRichHtml(rendered.fromName) ||
+                        '<span style="color:#9ca3af;font-style:italic;">(이름 없음)</span>',
+                    }}
+                  />{' '}
                   <span className="text-gray-500">&lt;{fromEmail}&gt;</span>
                 </dd>
 
                 <dt className="text-gray-500">To</dt>
                 <dd className="text-gray-900">
-                  {toEmail ? (
-                    toEmail
-                  ) : (
-                    <span className="italic text-gray-400">(이메일 없음)</span>
-                  )}
+                  {toEmail ? toEmail : <span className="text-gray-400 italic">(이메일 없음)</span>}
                 </dd>
 
                 <dt className="text-gray-500">제목</dt>
                 <dd
                   className="font-medium text-gray-900"
                   dangerouslySetInnerHTML={{
-                    __html: sanitizeRichHtml(rendered.subject) || '<span style="color:#9ca3af;font-style:italic;">(제목 없음)</span>',
+                    __html:
+                      sanitizeRichHtml(rendered.subject) ||
+                      '<span style="color:#9ca3af;font-style:italic;">(제목 없음)</span>',
                   }}
                 />
               </dl>
@@ -335,12 +342,7 @@ export function MailPreviewDialog({
                 className="h-9 bg-white"
               />
             </div>
-            <Button
-              type="button"
-              onClick={onSendTest}
-              disabled={!canSend}
-              className="h-9 shrink-0"
-            >
+            <Button type="button" onClick={onSendTest} disabled={!canSend} className="h-9 shrink-0">
               {sendState.status === 'sending' ? (
                 <>
                   <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
@@ -356,13 +358,13 @@ export function MailPreviewDialog({
           </div>
 
           <p className="mt-2 text-xs text-gray-500">
-            실제 발송과 동일한 제목으로 전송되며, 본문 내 설문 링크는 응답되지 않는
-            미리보기용 토큰으로 치환됩니다.
+            실제 발송과 동일한 제목으로 전송되며, 본문 내 설문 링크는 응답되지 않는 미리보기용
+            토큰으로 치환됩니다.
           </p>
 
           {hasUnpromotedAttachment && (
             <div className="mt-3 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-              <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               <div>
                 저장하지 않은 첨부가 있어 발송할 수 없습니다. 다이얼로그를 닫고 먼저 저장해 주세요.
               </div>
@@ -371,13 +373,13 @@ export function MailPreviewDialog({
 
           {sendState.status === 'sent' && (
             <div className="mt-3 flex items-start gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-              <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
               <div className="min-w-0 flex-1">
                 <div>
                   <span className="font-medium">{sendState.to}</span> 로 발송 완료
                 </div>
                 {sendState.id && (
-                  <div className="mt-0.5 font-mono text-[11px] text-emerald-700 break-all">
+                  <div className="mt-0.5 font-mono text-[11px] break-all text-emerald-700">
                     id: {sendState.id}
                   </div>
                 )}
@@ -387,7 +389,7 @@ export function MailPreviewDialog({
 
           {sendState.status === 'error' && (
             <div className="mt-3 flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
               <div className="flex-1">
                 <div className="font-medium">발송 실패</div>
                 <div className="mt-0.5 text-xs">{sendState.message}</div>

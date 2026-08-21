@@ -1,15 +1,11 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import { useMemo, useRef, useState, useTransition } from 'react';
+
+import { useRouter } from 'next/navigation';
 
 import { FileSpreadsheet, UploadCloud, X } from 'lucide-react';
 
-import type {
-  IngestContactUploadResult,
-  MatchContactUploadResult,
-  ParseExcelPreviewResult,
-} from '@/features/contacts/domain/contact-upload';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -28,23 +24,24 @@ import type {
   ContactUploadMapping,
   ContactUploadMode,
 } from '@/db/schema/schema-types';
+import type {
+  IngestContactUploadResult,
+  MatchContactUploadResult,
+  ParseExcelPreviewResult,
+} from '@/features/contacts/domain/contact-upload';
+import { useIngestContacts, useMatchContacts, useParseExcelPreview } from '@/hooks/queries';
 import { autoDetectPiiMapping, autoDetectSystemFields } from '@/lib/contacts/auto-detect';
 import {
   GROUP_LEVELS,
   GROUP_LEVEL_LABELS,
-  resolveGroupCriteria,
   type GroupLevel,
+  resolveGroupCriteria,
 } from '@/lib/contacts/group-levels';
 import { getSchemeRouting, suggestSimilarKeys } from '@/lib/contacts/match-contacts';
-import {
-  MAX_UPLOAD_BYTES,
-  MAX_UPLOAD_ROWS,
-  validateXlsxFile,
-} from '@/lib/contacts/upload-limits';
+import { MAX_UPLOAD_BYTES, MAX_UPLOAD_ROWS, validateXlsxFile } from '@/lib/contacts/upload-limits';
 import { type PiiFieldType } from '@/lib/crypto/pii-fields';
 import { getErrorMessage } from '@/lib/get-error-message';
 import { formatBytes } from '@/lib/utils';
-import { useIngestContacts, useMatchContacts, useParseExcelPreview } from '@/hooks/queries';
 
 import { UploadMatchStep } from './upload-match-step';
 
@@ -81,6 +78,60 @@ const PII_OPTIONS: Array<{ value: PiiFieldType | '_none'; label: string }> = [
   { value: 'address', label: '주소' },
   { value: 'biz_number', label: '사업자번호' },
 ];
+
+/**
+ * 미리보기 헤더에서 매핑 초기값을 만든다.
+ *
+ * 원래 handlePreview 의 try 본문에 있던 순수 계산이다. React Compiler 는 try/catch
+ * 본문의 value block(삼항·논리연산·conditional spread)을 낮추지 못해 컴포넌트 전체를
+ * skip 하므로, 계산만 모듈 최상위로 옮긴다. 로직·순서·반환값은 그대로다.
+ */
+function buildInitialMapping(
+  headers: string[],
+  existingScheme: ContactColumnScheme | null,
+): MappingState {
+  const detected = autoDetectSystemFields(headers);
+  const piiAuto = autoDetectPiiMapping(headers);
+
+  // 디폴트 표시 토글:
+  // - 자동 감지된 PII 컬럼 전부
+  // - 분류 기준
+  // - 그 외 처음 3개 (헤더가 너무 많을 때 시각적 노이즈 방지)
+  const piiHeaders = new Set(Object.keys(piiAuto));
+  const groupHeader = detected.group != null ? headers[detected.group] : null;
+  const defaultShown = new Set<string>([
+    ...piiHeaders,
+    ...(groupHeader ? [groupHeader] : []),
+    ...headers.filter((h) => !piiHeaders.has(h) && h !== groupHeader).slice(0, 3),
+  ]);
+
+  // 레벨 초기값: 기존 스킴 배정 우선 (merge/append 재업로드), 없으면 자동 감지
+  // 그룹 헤더를 대분류(1)로.
+  const existingLevels = Object.fromEntries(
+    resolveGroupCriteria(existingScheme)
+      .filter((c) => headers.includes(c.key))
+      .map((c) => [c.key, c.level]),
+  );
+  const initialLevels: Record<string, GroupLevel> =
+    Object.keys(existingLevels).length > 0
+      ? existingLevels
+      : groupHeader
+        ? { [groupHeader]: 1 }
+        : {};
+
+  return {
+    groupLevels: initialLevels,
+    selectedAttrs: defaultShown,
+    labelOverrides: {}, // 사용자가 편집한 라벨만. 미편집은 헤더명 그대로 사용.
+    piiMapping: piiAuto,
+  };
+}
+
+/** 시트가 아직 선택되지 않았을 때만 첫 시트명을 돌려준다(선택돼 있으면 null). */
+function pickInitialSheetName(current: string, sheetNames: string[]): string | null {
+  if (current) return null;
+  return sheetNames[0] ?? null;
+}
 
 export function UploadWizard({
   surveyId,
@@ -158,46 +209,10 @@ export function UploadWizard({
       try {
         const r = await parseExcelPreview.mutateAsync({ file, sheetName, headerRow });
         setPreview(r);
-        if (!sheetName && r.sheetNames.length > 0) {
-          const firstSheet = r.sheetNames[0];
-          if (firstSheet) setSheetName(firstSheet);
-        }
+        const nextSheetName = pickInitialSheetName(sheetName, r.sheetNames);
+        if (nextSheetName) setSheetName(nextSheetName);
 
-        const detected = autoDetectSystemFields(r.headers);
-        const piiAuto = autoDetectPiiMapping(r.headers);
-
-        // 디폴트 표시 토글:
-        // - 자동 감지된 PII 컬럼 전부
-        // - 분류 기준
-        // - 그 외 처음 3개 (헤더가 너무 많을 때 시각적 노이즈 방지)
-        const piiHeaders = new Set(Object.keys(piiAuto));
-        const groupHeader = detected.group != null ? r.headers[detected.group] : null;
-        const defaultShown = new Set<string>([
-          ...piiHeaders,
-          ...(groupHeader ? [groupHeader] : []),
-          ...r.headers.filter((h) => !piiHeaders.has(h) && h !== groupHeader).slice(0, 3),
-        ]);
-
-        // 레벨 초기값: 기존 스킴 배정 우선 (merge/append 재업로드), 없으면 자동 감지
-        // 그룹 헤더를 대분류(1)로.
-        const existingLevels = Object.fromEntries(
-          resolveGroupCriteria(existingScheme)
-            .filter((c) => r.headers.includes(c.key))
-            .map((c) => [c.key, c.level]),
-        );
-        const initialLevels: Record<string, GroupLevel> =
-          Object.keys(existingLevels).length > 0
-            ? existingLevels
-            : groupHeader
-              ? { [groupHeader]: 1 }
-              : {};
-
-        setMapping({
-          groupLevels: initialLevels,
-          selectedAttrs: defaultShown,
-          labelOverrides: {}, // 사용자가 편집한 라벨만. 미편집은 헤더명 그대로 사용.
-          piiMapping: piiAuto,
-        });
+        setMapping(buildInitialMapping(r.headers, existingScheme));
         setReplaceConfirmed(false);
         setMode('replace');
         setDupCheck(false);
@@ -224,8 +239,7 @@ export function UploadWizard({
       : mapping.groupLevels;
     // 대분류(1) 헤더 = group_value 소스 — 레거시 systemFields.group 인덱스로 동기화
     const level1Header = Object.entries(effectiveLevels).find(([, l]) => l === 1)?.[0];
-    const groupIdx =
-      level1Header != null && preview ? preview.headers.indexOf(level1Header) : -1;
+    const groupIdx = level1Header != null && preview ? preview.headers.indexOf(level1Header) : -1;
     return {
       systemFields: { ...(groupIdx >= 0 ? { group: groupIdx } : {}) },
       ...(Object.keys(effectiveLevels).length > 0 ? { groupLevels: effectiveLevels } : {}),
@@ -748,9 +762,9 @@ export function UploadWizard({
               <div className="mt-2 space-y-1 text-xs text-slate-500">
                 <div>개인정보로 지정된 컬럼은 암호화되어 별도 테이블에 저장됩니다.</div>
                 <div>
-                  분류 기준: 컬럼을 대·중·소·세부분류 레벨에 배정하면 진척보고가 그 순서대로
-                  조합 집계합니다 (레벨당 컬럼 1개, 1~2개만 배정해도 됩니다). 업로드 후
-                  컬럼 설정에서 언제든 변경할 수 있습니다.
+                  분류 기준: 컬럼을 대·중·소·세부분류 레벨에 배정하면 진척보고가 그 순서대로 조합
+                  집계합니다 (레벨당 컬럼 1개, 1~2개만 배정해도 됩니다). 업로드 후 컬럼 설정에서
+                  언제든 변경할 수 있습니다.
                 </div>
               </div>
             </div>
@@ -775,7 +789,8 @@ export function UploadWizard({
             {mode === 'replace' && existingContactsCount > 0 && (
               <div role="alert" className="rounded border border-red-300 bg-red-50 p-3 text-sm">
                 <div className="mb-2 font-semibold text-red-800">
-                  ⚠ 기존 조사 대상 {existingContactsCount.toLocaleString('ko-KR')}건이 통째로 교체됩니다
+                  ⚠ 기존 조사 대상 {existingContactsCount.toLocaleString('ko-KR')}건이 통째로
+                  교체됩니다
                 </div>
                 <ul className="ml-4 list-disc space-y-1 text-red-700">
                   <li>기존 조사 대상 행 모두 삭제 후 신규 명단으로 교체</li>
@@ -854,11 +869,7 @@ export function UploadWizard({
               </div>
             </div>
             <div className="flex gap-2">
-              <Button
-                onClick={() =>
-                  router.push(`/admin/surveys/${surveyId}/operations/contacts`)
-                }
-              >
+              <Button onClick={() => router.push(`/admin/surveys/${surveyId}/operations/contacts`)}>
                 조사 대상 목록 보기
               </Button>
               <Button

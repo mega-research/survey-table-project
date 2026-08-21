@@ -30,9 +30,9 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { hasBranchLogic } from '@/features/library/domain/saved-question';
 import { useCategories, useCreateCategory, useSaveQuestion } from '@/hooks/queries/use-library';
 import { cn } from '@/lib/utils';
-import { hasBranchLogic } from '@/features/library/domain/saved-question';
 import { Question } from '@/types/survey';
 
 // 질문 타입 아이콘 매핑
@@ -135,8 +135,9 @@ export function SaveQuestionModal({
           name: trimmedName,
         });
         // 새로 추가된 카테고리 선택
-        if (newCategory?.id) {
-          setSelectedCategory(newCategory.id);
+        if (newCategory) {
+          const createdId = newCategory.id;
+          if (createdId) setSelectedCategory(createdId);
         }
         setNewCategoryName('');
         setShowNewCategory(false);
@@ -162,19 +163,21 @@ export function SaveQuestionModal({
 
     if (!question) return;
 
+    const descriptionPatch = description.trim() ? { description: description.trim() } : {};
+    const notifySaved = onSaved;
     try {
       await saveQuestionMutation.mutateAsync({
         question,
         metadata: {
           name: name.trim(),
-          ...(description.trim() ? { description: description.trim() } : {}),
+          ...descriptionPatch,
           category: selectedCategory,
           tags,
         },
       });
 
       onOpenChange(false);
-      onSaved?.();
+      if (notifySaved) notifySaved();
     } catch (error) {
       console.error('질문 저장 실패:', error);
     }

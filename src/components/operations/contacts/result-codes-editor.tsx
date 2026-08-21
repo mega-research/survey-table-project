@@ -1,7 +1,8 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
+
+import { useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,8 +14,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
-  DEFAULT_RESULT_CODES,
   type ContactResultCode,
+  DEFAULT_RESULT_CODES,
   type ResultCodeStatus,
 } from '@/db/schema/schema-types';
 import { resolveCodeStatus } from '@/lib/operations/result-code-statuses';
@@ -47,10 +48,7 @@ const STATUS_LABEL: Record<ResultCodeStatus, string> = {
 
 function StatusDot({ status }: { status: ResultCodeStatus }) {
   return (
-    <span
-      aria-hidden
-      className={`inline-block h-2 w-2 rounded-full ${STATUS_DOT_BG[status]}`}
-    />
+    <span aria-hidden className={`inline-block h-2 w-2 rounded-full ${STATUS_DOT_BG[status]}`} />
   );
 }
 
@@ -98,14 +96,14 @@ export function ResultCodesEditor({ surveyId, initialCodes }: ResultCodesEditorP
         (c, i) => i !== index && resolveCodeStatus(c) === 'positive',
       );
       if (!otherPositiveExists) {
-        setError('마지막 긍정 상태 코드는 삭제할 수 없습니다. 다른 코드를 긍정으로 먼저 지정해 주세요.');
+        setError(
+          '마지막 긍정 상태 코드는 삭제할 수 없습니다. 다른 코드를 긍정으로 먼저 지정해 주세요.',
+        );
         return;
       }
     }
     ensureCustomMode();
-    setCodes((prev) =>
-      prev.filter((_, i) => i !== index).map((c, i) => ({ ...c, order: i + 1 })),
-    );
+    setCodes((prev) => prev.filter((_, i) => i !== index).map((c, i) => ({ ...c, order: i + 1 })));
   }
 
   function add() {
@@ -152,11 +150,12 @@ export function ResultCodesEditor({ surveyId, initialCodes }: ResultCodesEditorP
       }
     }
     setError(null);
+    const payloadCodes = mode === 'use-default' ? null : codes;
     startTransition(async () => {
       try {
         await client.contacts.resultCodes.update({
           surveyId,
-          codes: mode === 'use-default' ? null : codes,
+          codes: payloadCodes,
         });
         router.refresh();
       } catch (e) {
@@ -166,7 +165,10 @@ export function ResultCodesEditor({ surveyId, initialCodes }: ResultCodesEditorP
   }
 
   function clearOverride() {
-    if (!window.confirm('사용자 정의를 해제 모드로 전환합니다. 저장을 누르면 디폴트로 되돌아갑니다.')) return;
+    if (
+      !window.confirm('사용자 정의를 해제 모드로 전환합니다. 저장을 누르면 디폴트로 되돌아갑니다.')
+    )
+      return;
     setError(null);
     setMode('use-default');
     setCodes(DEFAULT_RESULT_CODES.map((c) => ({ ...c })));
@@ -175,20 +177,27 @@ export function ResultCodesEditor({ surveyId, initialCodes }: ResultCodesEditorP
   return (
     <div className="space-y-4">
       {error && (
-        <div role="alert" className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <div
+          role="alert"
+          className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+        >
           {error}
         </div>
       )}
 
       {mode === 'use-default' && (
-        <div role="status" className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          사용자 정의 해제 모드 — 저장 시 디폴트 13개로 되돌아갑니다. 편집을 시작하면 다시 사용자 정의로 전환됩니다.
+        <div
+          role="status"
+          className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+        >
+          사용자 정의 해제 모드 — 저장 시 디폴트 13개로 되돌아갑니다. 편집을 시작하면 다시 사용자
+          정의로 전환됩니다.
         </div>
       )}
 
       <div className="rounded-lg border bg-white">
         <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-xs uppercase text-slate-600">
+          <thead className="bg-slate-50 text-xs text-slate-600 uppercase">
             <tr>
               <th className="px-3 py-2 text-left">순서</th>
               <th className="px-3 py-2 text-left">코드</th>
@@ -238,7 +247,9 @@ export function ResultCodesEditor({ surveyId, initialCodes }: ResultCodesEditorP
                 <td className="px-3 py-2">
                   <Select
                     value={c.tone ?? 'slate'}
-                    onValueChange={(v) => update(i, { tone: v as NonNullable<ContactResultCode['tone']> })}
+                    onValueChange={(v) =>
+                      update(i, { tone: v as NonNullable<ContactResultCode['tone']> })
+                    }
                   >
                     <SelectTrigger className="h-8 w-28">
                       <SelectValue />

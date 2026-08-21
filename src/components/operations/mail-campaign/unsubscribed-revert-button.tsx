@@ -4,6 +4,8 @@ import { useState, useTransition } from 'react';
 
 import { useRouter } from 'next/navigation';
 
+import { toast } from 'sonner';
+
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -13,9 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { toast } from 'sonner';
-
-import { getErrorMessage } from '@/lib/get-error-message';
+import { getErrorMessage, resultErrorMessage } from '@/lib/get-error-message';
 import { client } from '@/shared/lib/rpc';
 
 interface Props {
@@ -37,7 +37,7 @@ export function UnsubscribedRevertButton({ surveyId, contactId, emailMasked }: P
           surveyId,
         });
         if (!result.ok) {
-          toast.error(result.error ?? '해제 실패');
+          toast.error(resultErrorMessage(result.error, '해제 실패'));
           return;
         }
       } catch (err) {
@@ -59,8 +59,8 @@ export function UnsubscribedRevertButton({ surveyId, contactId, emailMasked }: P
           <DialogHeader>
             <DialogTitle>수신거부 해제</DialogTitle>
             <DialogDescription>
-              <span className="font-medium text-slate-900">{emailMasked}</span> 조사 대상의 수신거부를
-              해제합니다. 이후 단체 메일에서 다시 발송 대상에 포함됩니다.
+              <span className="font-medium text-slate-900">{emailMasked}</span> 조사 대상의
+              수신거부를 해제합니다. 이후 단체 메일에서 다시 발송 대상에 포함됩니다.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

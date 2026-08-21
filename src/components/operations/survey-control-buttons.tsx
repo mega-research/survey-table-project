@@ -65,13 +65,14 @@ export function SurveyControlButtons({ surveyId, initial }: Props) {
   const [resumeConfirmOpen, setResumeConfirmOpen] = useState(false);
   const [pauseMessage, setPauseMessage] = useState(initial.pausedMessage ?? DEFAULT_PAUSED_MESSAGE);
 
-  const pauseSurvey = () =>
+  const pauseSurvey = () => {
+    const nextPausedMessage = pauseMessage.trim() || DEFAULT_PAUSED_MESSAGE;
     startTransition(async () => {
       try {
         const result = await client.operations.control.setPaused({
           surveyId,
           isPaused: true,
-          pausedMessage: pauseMessage.trim() || DEFAULT_PAUSED_MESSAGE,
+          pausedMessage: nextPausedMessage,
         });
         setState((s) => ({ ...s, ...result }));
         setPauseDialogOpen(false);
@@ -81,6 +82,7 @@ export function SurveyControlButtons({ surveyId, initial }: Props) {
         toast.error(getErrorMessage(err, '설문 중단에 실패했습니다.'));
       }
     });
+  };
 
   const resumeSurvey = () =>
     startTransition(async () => {

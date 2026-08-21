@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState, useTransition } from 'react';
+
 import { useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
@@ -13,18 +14,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  GROUP_LEVELS,
-  GROUP_LEVEL_LABELS,
-  resolveGroupCriteria,
-  type GroupLevel,
-} from '@/lib/contacts/group-levels';
-import { client } from '@/shared/lib/rpc';
 import type {
   ContactColumnScheme,
   ProgressColumnDef,
   ProgressColumnScheme,
 } from '@/db/schema/schema-types';
+import {
+  GROUP_LEVELS,
+  GROUP_LEVEL_LABELS,
+  type GroupLevel,
+  resolveGroupCriteria,
+} from '@/lib/contacts/group-levels';
+import { resultErrorMessage } from '@/lib/get-error-message';
+import { client } from '@/shared/lib/rpc';
 
 interface Props {
   surveyId: string;
@@ -135,7 +137,7 @@ export function ProgressColumnEditor({ surveyId, initialScheme, contactScheme }:
           scheme: { version: 1, columns, showResid },
         });
         if (!result.ok) {
-          setError(result.error ?? '저장에 실패했습니다.');
+          setError(resultErrorMessage(result.error, '저장에 실패했습니다.'));
           return;
         }
         // 분류 기준 레벨은 contactColumns 소유 — 레벨만 패치하는 전용 mutation 으로
@@ -154,14 +156,17 @@ export function ProgressColumnEditor({ surveyId, initialScheme, contactScheme }:
   return (
     <div className="space-y-4">
       {error && (
-        <div role="alert" className="rounded border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+        <div
+          role="alert"
+          className="rounded border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700"
+        >
           {error}
         </div>
       )}
 
       <div className="rounded border bg-white">
         <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-xs uppercase text-slate-600">
+          <thead className="bg-slate-50 text-xs text-slate-600 uppercase">
             <tr>
               <th className="px-3 py-2 text-left">순서</th>
               <th className="px-3 py-2 text-left">라벨</th>
@@ -187,7 +192,8 @@ export function ProgressColumnEditor({ surveyId, initialScheme, contactScheme }:
             {columns.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-4 py-6 text-center text-slate-400">
-                  조사 대상 목록에 attrs 컬럼이 없습니다. 먼저 엑셀을 업로드하거나 조사 대상 목록 컬럼 설정을 확인하세요.
+                  조사 대상 목록에 attrs 컬럼이 없습니다. 먼저 엑셀을 업로드하거나 조사 대상 목록
+                  컬럼 설정을 확인하세요.
                 </td>
               </tr>
             )}
@@ -257,8 +263,8 @@ export function ProgressColumnEditor({ surveyId, initialScheme, contactScheme }:
       </div>
 
       <div className="text-xs text-slate-500">
-        분류 기준: 대·중·소·세부분류 레벨에 배정하면 진척률 표가 그 순서대로 조합 집계합니다.
-        조사 대상 목록 컬럼 설정과 같은 설정을 편집하며, 어느 쪽에서 바꿔도 동기화됩니다.
+        분류 기준: 대·중·소·세부분류 레벨에 배정하면 진척률 표가 그 순서대로 조합 집계합니다. 조사
+        대상 목록 컬럼 설정과 같은 설정을 편집하며, 어느 쪽에서 바꿔도 동기화됩니다.
       </div>
 
       <div className="flex gap-2">

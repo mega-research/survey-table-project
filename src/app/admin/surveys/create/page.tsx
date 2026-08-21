@@ -228,11 +228,12 @@ export default function CreateSurveyPage() {
     }
 
     // 500ms 후에 서버 검사 수행
+    const excludePatch = currentSurvey.id ? { excludeSurveyId: currentSurvey.id } : {};
     const timer = setTimeout(async () => {
       try {
         const available = await client.surveyBuilder.read.slugAvailable({
           slug: slugInput,
-          ...(currentSurvey.id ? { excludeSurveyId: currentSurvey.id } : {}),
+          ...excludePatch,
         });
         if (!available) {
           setSlugError('이미 사용 중인 URL입니다. 다른 URL을 입력해주세요.');
