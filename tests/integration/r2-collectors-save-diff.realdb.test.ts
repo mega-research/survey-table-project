@@ -25,7 +25,7 @@ import { updateMailTemplate } from '@/server/mail/services/mail-templates.servic
 import { updateQuestion } from '@/server/survey-builder/services/questions.service';
 import { saveSurveyDiff } from '@/server/survey-builder/services/survey-save.service';
 import { updateSurvey } from '@/server/survey-builder/services/surveys.service';
-import { registerDeletionCandidates } from '@/server/shared/r2-lifecycle/deletion-queue.server';
+import { registerDeletionCandidates } from '@/server/storage-lifecycle/deletion-queue.server';
 
 const isLocalDb =
   (process.env['DATABASE_URL'] ?? '').includes('127.0.0.1') ||

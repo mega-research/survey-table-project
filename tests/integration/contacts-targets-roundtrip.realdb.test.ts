@@ -24,7 +24,7 @@ import {
   surveys as surveysTable,
 } from '@/db/schema';
 import type { ContactColumnScheme } from '@/shared/contracts/contacts';
-import { listContactsForSurvey } from '@/server/shared/contacts.server';
+import { listContactsForSurvey } from '@/server/read-models/contacts.server';
 import type { ORPCContext } from '@/server/context';
 
 import { columns } from '@/server/contacts/procedures/columns';

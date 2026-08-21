@@ -24,7 +24,7 @@ const { mockFindContactByInviteToken } = vi.hoisted(() => ({
   mockFindContactByInviteToken: vi.fn(),
 }));
 
-vi.mock('@/server/shared/invite-lookup', () => ({
+vi.mock('@/server/read-models/invite-lookup', () => ({
   findContactByInviteToken: mockFindContactByInviteToken,
 }));
 

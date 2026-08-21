@@ -72,7 +72,7 @@ import {
   campaignScopeCondition,
   responseScopeCondition,
   targetScopeCondition,
-} from '@/server/shared/data-scope.server';
+} from '@/server/data-scope.server';
 
 const dialect = new PgDialect();
 const surveyId = 'survey-boundary';

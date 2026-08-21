@@ -67,26 +67,49 @@ const eslintConfig = [
     },
   },
   {
-    // 서버 도메인 간 직접 import 금지 (경량 DDD 경계). 공용은 @/shared 로 승격하거나 서버 내부에서는
-    // 타 도메인 테이블 직접 쿼리(허용)로 푼다. 자기 도메인 내부는 상대경로를 쓴다(이 패턴은 절대경로 self 도 막는다).
-    // 코어(@/server/orpc·context·router 등 1단계 모듈)는 `!@/server/*` 로 허용한다.
-    // 서버 공용(@/server/shared/**)은 `!@/server/shared/**` 로 허용한다 — 여러 서버 도메인이 읽는
-    // DB 접근 코드(운영 실/테스트 파티션 판정, 컨택 read model)를 담는 sink 구역이다. shared 자신도
-    // 이 files 글롭에 걸리므로 다른 도메인을 import 하지 못한다(의존 방향 단방향 유지).
-    // 주의: gitignore 의미론 — 상위 디렉터리를 매치하는 패턴은 negation 으로 하위를 되살릴 수 없다.
-    //   `@/server/*/**` 는 디렉터리 `@/server/shared` 자체를 매치하지 않으므로 위 negation 은 동작한다
-    //   (스크래치 config 프로브 실측 2026-08-21).
+    // 서버 층 구조. 도메인은 서로를 모르고, 공용은 역할이 붙은 층으로만 뺀다.
+    //   core(server/*.ts)          — oRPC·context·로깅·요청 스코프 판정. 누구나 읽는다
+    //   read-models/               — 여러 도메인 테이블을 읽기만 하는 projection. 자기완결(도메인을 모른다)
+    //   storage-lifecycle/         — R2 수명주기. 자체 테이블만 만지는 독립 모듈
+    //   workflows/                 — 여러 도메인의 쓰기를 조율하는 흐름. **여기만 도메인을 부를 수 있다**
+    //   <domain>/                  — 자기 도메인. 타 도메인 직접 import 금지, 내부는 상대경로
+    // "여러 도메인이 쓴다" 는 공용의 근거가 아니다 — 역할로 묶이지 않으면 제2의 lib 가 된다.
     files: ["src/server/*/**/*.{ts,tsx}"],
+    ignores: ["src/server/workflows/**/*.{ts,tsx}"],
     rules: {
       "no-restricted-imports": [
         "error",
         {
           patterns: [
             {
-              group: ["@/server/*/**", "!@/server/*", "!@/server/shared/**"],
+              group: [
+                "@/server/*/**",
+                "!@/server/*",
+                "!@/server/read-models/**",
+                "!@/server/storage-lifecycle/**",
+                "!@/server/workflows/**",
+              ],
               message:
-                "서버 도메인 간 직접 import 금지. 공용은 @/server/shared(서버 전용) 또는 @/shared 로 승격하세요. (자기 도메인 내부는 상대경로 사용)",
+                "서버 도메인 간 직접 import 금지. 읽기 전용 projection 은 @/server/read-models, 여러 도메인 쓰기 조율은 @/server/workflows 로 빼세요. (자기 도메인 내부는 상대경로)",
             },
+            {
+              group: ["@/features/*", "@/features/*/**", "**/features/*/**"],
+              message: "서버는 features/(UI) 를 import 하지 않습니다.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    // workflows 는 여러 도메인의 쓰기를 조율하는 것이 존재 이유라 도메인 호출이 허용된다.
+    // 결합을 없애는 게 아니라 한곳에 모아 보이게 하는 층이다 — 파일이 늘면 그 자체가 신호다.
+    files: ["src/server/workflows/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
             {
               group: ["@/features/*", "@/features/*/**", "**/features/*/**"],
               message: "서버는 features/(UI) 를 import 하지 않습니다.",
@@ -286,7 +309,9 @@ const eslintConfig = [
               group: [
                 "@/server/*/services/**",
                 "@/server/*/services",
-                "@/server/shared/**",
+                "@/server/read-models/**",
+                "@/server/workflows/**",
+                "@/server/storage-lifecycle/**",
               ],
               allowTypeImports: true,
               message:

@@ -6,7 +6,7 @@ import { contactTargets, surveys, surveyVersions } from '@/db/schema';
 import { requireSurveyOwnership } from '@/lib/auth/require-survey-ownership';
 import { getResponseById } from '@/data/responses';
 import { isResponseExcluded } from '@/server/operations/services/profiles.server';
-import { getOperationsDataScope, testFlagForScope } from '@/server/shared/data-scope.server';
+import { getOperationsDataScope, testFlagForScope } from '@/server/data-scope.server';
 import { applyStructuralSurvival } from '@/lib/survey-response/structural-survival';
 import { normalizeQuestions } from '@/lib/question/normalize';
 import { toFlatQuestion } from '@/lib/question/variants';

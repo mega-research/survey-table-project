@@ -43,7 +43,7 @@ import {
   responseScopeCondition,
   targetScopeCondition,
   type OperationsDataScope,
-} from './data-scope.server';
+} from '@/server/data-scope.server';
 
 export interface ListContactsArgs {
   surveyId: string;

@@ -21,7 +21,7 @@ vi.mock('@/data/responses', () => ({
     questionResponses: {},
   })),
 }));
-vi.mock('@/server/shared/data-scope.server', () => ({
+vi.mock('@/server/data-scope.server', () => ({
   getOperationsDataScope: vi.fn(async () => 'real'),
   testFlagForScope: vi.fn(() => false),
 }));

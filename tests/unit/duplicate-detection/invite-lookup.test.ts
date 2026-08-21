@@ -14,7 +14,7 @@ vi.mock('@/db', () => ({
   },
 }));
 
-vi.mock('@/server/shared/result-code-statuses.server', () => ({
+vi.mock('@/server/read-models/result-code-statuses.server', () => ({
   getResultCodeStatuses: mockGetResultCodeStatuses,
   buildNegativeCodeExists: vi.fn(),
 }));
@@ -47,7 +47,7 @@ describe('findContactByInviteToken (UUID 형식 가드)', () => {
 
   it('UUID 형식이 아닌 토큰은 ::uuid 캐스트(db.execute) 전에 invalid 로 폴백', async () => {
     const { findContactByInviteToken } = await import(
-      '@/server/shared/invite-lookup'
+      '@/server/read-models/invite-lookup'
     );
     const r = await findContactByInviteToken(
       SURVEY_ID,
@@ -60,7 +60,7 @@ describe('findContactByInviteToken (UUID 형식 가드)', () => {
 
   it('빈 문자열 토큰도 invalid 로 폴백 (db 미접근)', async () => {
     const { findContactByInviteToken } = await import(
-      '@/server/shared/invite-lookup'
+      '@/server/read-models/invite-lookup'
     );
     const r = await findContactByInviteToken(
       SURVEY_ID,
@@ -74,7 +74,7 @@ describe('findContactByInviteToken (UUID 형식 가드)', () => {
     mockExecute.mockResolvedValueOnce([{ id: null }]);
     mockFindFirst.mockResolvedValue(undefined);
     const { findContactByInviteToken } = await import(
-      '@/server/shared/invite-lookup'
+      '@/server/read-models/invite-lookup'
     );
     const r = await findContactByInviteToken(
       SURVEY_ID,
@@ -92,7 +92,7 @@ describe('findContactByInviteToken (UUID 형식 가드)', () => {
     });
 
     const { findContactByInviteToken } = await import(
-      '@/server/shared/invite-lookup'
+      '@/server/read-models/invite-lookup'
     );
     const result = await findContactByInviteToken(SURVEY_ID, TOKEN);
 
@@ -109,7 +109,7 @@ describe('findContactByInviteToken (UUID 형식 가드)', () => {
     });
 
     const { findContactByInviteToken } = await import(
-      '@/server/shared/invite-lookup'
+      '@/server/read-models/invite-lookup'
     );
     const result = await findContactByInviteToken(SURVEY_ID, TOKEN);
 
@@ -132,7 +132,7 @@ describe('findContactByInviteToken (UUID 형식 가드)', () => {
     mockExecute.mockResolvedValueOnce([]);
 
     const { findContactByInviteToken } = await import(
-      '@/server/shared/invite-lookup'
+      '@/server/read-models/invite-lookup'
     );
     const result = await findContactByInviteToken(SURVEY_ID, TOKEN);
 
@@ -154,7 +154,7 @@ describe('findContactByInviteToken (UUID 형식 가드)', () => {
     });
 
     const { findContactByInviteToken } = await import(
-      '@/server/shared/invite-lookup'
+      '@/server/read-models/invite-lookup'
     );
     const result = await findContactByInviteToken(SURVEY_ID, TOKEN);
 
@@ -175,7 +175,7 @@ describe('findContactByInviteToken (UUID 형식 가드)', () => {
     mockTarget({ surveyId: OTHER_SURVEY_ID, isTest: false });
 
     const { findContactByInviteToken } = await import(
-      '@/server/shared/invite-lookup'
+      '@/server/read-models/invite-lookup'
     );
     const result = await findContactByInviteToken(SURVEY_ID, TOKEN);
 
@@ -194,7 +194,7 @@ describe('findContactByInviteToken (UUID 형식 가드)', () => {
     });
 
     const { findContactByInviteToken } = await import(
-      '@/server/shared/invite-lookup'
+      '@/server/read-models/invite-lookup'
     );
 
     await expect(findContactByInviteToken(SURVEY_ID, TOKEN)).resolves.toEqual({

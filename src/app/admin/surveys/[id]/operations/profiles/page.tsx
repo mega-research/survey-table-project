@@ -25,15 +25,15 @@ import {
 } from '@/lib/operations/profile-columns';
 import { getProfileColumnScheme } from '@/lib/operations/profile-columns.server';
 import { decryptPiiForTargets } from '@/lib/crypto/contact-pii-repo';
-import { getContactColumnScheme, buildColumnCandidates } from '@/server/shared/contacts.server';
+import { getContactColumnScheme, buildColumnCandidates } from '@/server/read-models/contacts.server';
 import {
   parseProfilesClausesFromUrl,
   parseProfilesHeaderFiltersFromUrl,
   PROFILES_EXTRA_CANDIDATES,
 } from '@/server/operations/services/profiles-filters.server';
-import type { FilterClause } from '@/server/shared/contacts-filters.server';
+import type { FilterClause } from '@/server/read-models/contacts-filters.server';
 import { FILTER_SOURCE } from '@/lib/operations/filter-shared';
-import { getOperationsDataScope } from '@/server/shared/data-scope.server';
+import { getOperationsDataScope } from '@/server/data-scope.server';
 import { isGuestViewer } from '@/lib/auth/guest-viewer';
 
 export const metadata: Metadata = {

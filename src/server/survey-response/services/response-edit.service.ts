@@ -12,7 +12,7 @@ import {
 import { SurveyOwnershipError } from '@/lib/auth/require-survey-ownership';
 import { decryptQuestionResponses, encryptResponsesForStorage } from '@/lib/crypto/response-pii';
 import { logger } from '@/lib/logger';
-import { resolveWriteScopeIsTest } from '@/server/shared/data-scope.server';
+import { resolveWriteScopeIsTest } from '@/server/data-scope.server';
 import { buildChangedQuestions, diffQuestionResponses } from '@/lib/operations/response-edit-diff';
 import { calculateProgressPct } from '@/lib/operations/response-progress';
 import { getProgressSnapshot } from './response-progress.server';

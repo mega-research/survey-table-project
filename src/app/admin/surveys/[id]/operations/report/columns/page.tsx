@@ -3,9 +3,9 @@ import Link from 'next/link';
 
 import { ProgressColumnEditor } from '@/features/operations/report/progress-column-editor';
 import { Button } from '@/components/ui/button';
-import { getContactColumnScheme } from '@/server/shared/contacts.server';
+import { getContactColumnScheme } from '@/server/read-models/contacts.server';
 import { getProgressColumnScheme } from '@/server/operations/services/report-progress.server';
-import { getOperationsDataScope } from '@/server/shared/data-scope.server';
+import { getOperationsDataScope } from '@/server/data-scope.server';
 
 export const dynamic = 'force-dynamic';
 

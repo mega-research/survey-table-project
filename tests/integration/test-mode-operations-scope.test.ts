@@ -86,7 +86,7 @@ describe('운영 응답 범위', () => {
   });
 
   it.each(SCOPE_CASES)('contacts는 %s scope의 조사대상만 조회한다', async (scope, isTest) => {
-    const { listContactsForSurvey } = await import('@/server/shared/contacts.server');
+    const { listContactsForSurvey } = await import('@/server/read-models/contacts.server');
 
     await listContactsForSurvey({
       surveyId: `contacts-${scope}`,
@@ -102,7 +102,7 @@ describe('운영 응답 범위', () => {
   });
 
   it.each(SCOPE_CASES)('contact 상세는 %s scope 밖의 대상을 조회하지 않는다', async (scope, isTest) => {
-    const { getContactDetailById } = await import('@/server/shared/contacts.server');
+    const { getContactDetailById } = await import('@/server/read-models/contacts.server');
 
     const result = await getContactDetailById(`contact-${scope}`, scope);
 
@@ -111,7 +111,7 @@ describe('운영 응답 범위', () => {
   });
 
   it.each(SCOPE_CASES)('contact 메일 이력은 %s scope와 보관 상태를 제한한다', async (scope, isTest) => {
-    const { getMailRecipientsForTarget } = await import('@/server/shared/contacts.server');
+    const { getMailRecipientsForTarget } = await import('@/server/read-models/contacts.server');
 
     await getMailRecipientsForTarget(`contact-${scope}`, scope);
 
@@ -144,7 +144,7 @@ describe('운영 응답 범위', () => {
   });
 
   it.each(SCOPE_CASES)('메일 미리보기 sample은 %s scope의 첫 대상만 조회한다', async (scope, isTest) => {
-    const { getFirstContactSample } = await import('@/server/shared/contact-sample.server');
+    const { getFirstContactSample } = await import('@/server/read-models/contact-sample.server');
 
     const result = await getFirstContactSample(`sample-${scope}`, scope);
 

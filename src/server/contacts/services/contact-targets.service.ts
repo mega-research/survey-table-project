@@ -8,8 +8,8 @@ import { upsertPiiValue } from '@/lib/crypto/contact-pii-repo';
 import {
   archiveTestMailForTargets,
   hardDeleteMailForTargets,
-} from '@/server/shared/test-mail-archive.server';
-import { lockWriteScope } from '@/server/shared/data-scope.server';
+} from '@/server/workflows/test-mail-archive.server';
+import { lockWriteScope } from '@/server/data-scope.server';
 import { generateInviteCode } from '@/lib/survey-url';
 import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 

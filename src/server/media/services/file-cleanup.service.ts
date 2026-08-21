@@ -4,7 +4,7 @@ import type { R2DeletionCandidate } from '@/db/schema';
 import {
   cancelDeletionCandidate,
   listDeletionCandidates,
-} from '@/server/shared/r2-lifecycle/deletion-queue.server';
+} from '@/server/storage-lifecycle/deletion-queue.server';
 
 import {
   FILE_CLEANUP_HISTORY_STATUSES,

@@ -14,9 +14,9 @@ import {
   buildColumnCandidates,
   getContactColumnScheme,
   getContactResultCodes,
-} from '@/server/shared/contacts.server';
-import { parseClausesFromUrl } from '@/server/shared/contacts-filters.server';
-import { getOperationsDataScope } from '@/server/shared/data-scope.server';
+} from '@/server/read-models/contacts.server';
+import { parseClausesFromUrl } from '@/server/read-models/contacts-filters.server';
+import { getOperationsDataScope } from '@/server/data-scope.server';
 
 const PAGE_SIZE = 20;
 

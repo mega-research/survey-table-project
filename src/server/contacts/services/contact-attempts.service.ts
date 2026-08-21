@@ -4,7 +4,7 @@ import 'server-only';
 import { type DbTransaction, db } from '@/db';
 import { contactAttempts, contactTargets } from '@/db/schema';
 import { logger } from '@/lib/logger';
-import { lockWriteScope } from '@/server/shared/data-scope.server';
+import { lockWriteScope } from '@/server/data-scope.server';
 
 import type {
   AddContactAttemptInput,

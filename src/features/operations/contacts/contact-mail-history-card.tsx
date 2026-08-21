@@ -4,7 +4,7 @@ import { ChevronDown } from 'lucide-react';
 
 import { RecipientStatusBadge } from '@/features/operations/mail-campaign/recipient-status-badge';
 import { LocalDateTime } from '@/components/ui/local-date-time';
-import type { MailHistoryRow } from '@/server/shared/contacts.server';
+import type { MailHistoryRow } from '@/server/read-models/contacts.server';
 
 /** 조사 대상 메일 발송 이력 — 기본 접힘 collapsible. */
 export function ContactMailHistoryCard({

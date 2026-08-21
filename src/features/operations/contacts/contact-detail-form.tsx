@@ -27,7 +27,7 @@ import type {
   ContactAttemptRow,
   MailHistoryRow,
   ResponseEditLogRow,
-} from '@/server/shared/contacts.server';
+} from '@/server/read-models/contacts.server';
 import { client } from '@/shared/lib/rpc';
 
 interface ContactDetailFormProps {

@@ -5,7 +5,7 @@ import {
   parseHeaderFiltersFromUrl,
   placeholderFor,
   type ColumnCandidate,
-} from '@/server/shared/contacts-filters.server';
+} from '@/server/read-models/contacts-filters.server';
 import {
   HEADER_FILTER_VALUE_SEPARATOR as SEP,
   MAIL_FILTER_OPTIONS,

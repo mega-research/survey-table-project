@@ -3,9 +3,9 @@ import Link from 'next/link';
 
 import { ProfileColumnEditor } from '@/features/operations/profiles/profile-column-editor';
 import { Button } from '@/components/ui/button';
-import { getContactColumnScheme } from '@/server/shared/contacts.server';
+import { getContactColumnScheme } from '@/server/read-models/contacts.server';
 import { getProfileColumnScheme } from '@/lib/operations/profile-columns.server';
-import { getOperationsDataScope } from '@/server/shared/data-scope.server';
+import { getOperationsDataScope } from '@/server/data-scope.server';
 
 export const dynamic = 'force-dynamic';
 

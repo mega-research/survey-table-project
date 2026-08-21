@@ -8,7 +8,7 @@ const h = vi.hoisted(() => ({
   targetInsertValues: [] as Array<Record<string, unknown>>,
 }));
 
-vi.mock('@/server/shared/data-scope.server', () => ({
+vi.mock('@/server/data-scope.server', () => ({
   loadOperationsDataScope: vi.fn(async () => h.initialScope),
 }));
 

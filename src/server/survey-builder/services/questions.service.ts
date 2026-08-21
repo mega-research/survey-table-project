@@ -9,9 +9,9 @@ import {
   PERSISTED_QUESTION_FIELDS,
   type CompleteQuestionWrite,
 } from '@/db/schema/question-persisted-fields';
-import { registerDeletionCandidates } from '@/server/shared/r2-lifecycle/deletion-queue.server';
-import { extractR2KeysFromJsonbValue } from '@/server/shared/r2-lifecycle/key-extract';
-import { collectFieldLimitedSaveDiff } from '@/server/shared/r2-lifecycle/save-diff-collector.server';
+import { registerDeletionCandidates } from '@/server/storage-lifecycle/deletion-queue.server';
+import { extractR2KeysFromJsonbValue } from '@/server/storage-lifecycle/key-extract';
+import { collectFieldLimitedSaveDiff } from '@/server/storage-lifecycle/save-diff-collector.server';
 import { promoteNoticeAttachments } from '@/lib/survey/notice-attachment-promote';
 import { promoteSurveyImages, type PromotableQuestion } from '@/lib/survey/survey-image-promote';
 import { generateId, isValidUUID } from '@/lib/utils';

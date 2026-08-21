@@ -11,7 +11,7 @@ import {
   type DwellOutput,
   type DwellStats,
 } from '@/lib/operations/page-dwell';
-import { testFlagForScope, type OperationsDataScope } from '@/server/shared/data-scope.server';
+import { testFlagForScope, type OperationsDataScope } from '@/server/data-scope.server';
 
 /** 빈 결과 — published version이 없거나 snapshot이 비어있을 때. */
 const EMPTY_OUTPUT: DwellOutput = { pages: [] };

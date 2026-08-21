@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
 import { ColumnSchemeEditor } from '@/features/operations/contacts/column-scheme-editor';
-import { getContactColumnScheme } from '@/server/shared/contacts.server';
-import { getOperationsDataScope } from '@/server/shared/data-scope.server';
+import { getContactColumnScheme } from '@/server/read-models/contacts.server';
+import { getOperationsDataScope } from '@/server/data-scope.server';
 
 export const metadata: Metadata = {
   title: '현황 - 컬럼 설정',

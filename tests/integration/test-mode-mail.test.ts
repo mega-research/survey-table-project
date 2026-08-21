@@ -163,7 +163,7 @@ vi.mock('@/lib/inngest/client', () => ({
   inngest: { send: vi.fn(async () => undefined) },
 }));
 
-vi.mock('@/server/shared/result-code-statuses.server', () => ({
+vi.mock('@/server/read-models/result-code-statuses.server', () => ({
   getResultCodeStatuses: vi.fn(async () => ({ positive: [], negative: [] })),
   buildNegativeCodeExists: vi.fn(() => ({ queryChunks: [] })),
 }));

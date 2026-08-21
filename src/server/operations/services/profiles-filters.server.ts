@@ -10,7 +10,7 @@ import {
   type FilterClause,
   type FilterCondition as ClauseFilterCondition,
   type ParseExtraHooks,
-} from '@/server/shared/contacts-filters.server';
+} from '@/server/read-models/contacts-filters.server';
 import { buildContactsFilterSql, type ClauseColumnRefs } from '@/lib/operations/contacts-filter-sql';
 import { escapeLikePattern } from '@/lib/operations/filter-shared';
 import { STATUS_FILTERS } from '@/lib/operations/profiles';

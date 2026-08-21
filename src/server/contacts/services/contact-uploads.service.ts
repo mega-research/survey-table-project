@@ -26,7 +26,7 @@ import {
 import type { PiiFieldType } from '@/lib/crypto/pii-fields';
 import { logger } from '@/lib/logger';
 import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts';
-import { loadOperationsDataScope } from '@/server/shared/data-scope.server';
+import { loadOperationsDataScope } from '@/server/data-scope.server';
 import { generateInviteCode } from '@/lib/survey-url';
 import type {
   ContactColumnDef,

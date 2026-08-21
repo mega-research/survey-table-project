@@ -8,7 +8,7 @@ import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 import {
   targetScopeCondition,
   type OperationsDataScope,
-} from '@/server/shared/data-scope.server';
+} from '@/server/data-scope.server';
 import { FILTER_SOURCE } from '@/lib/operations/filter-shared';
 import { hydrateProfileColumns } from '@/lib/operations/profile-columns';
 import { getProfileColumnScheme } from '@/lib/operations/profile-columns.server';

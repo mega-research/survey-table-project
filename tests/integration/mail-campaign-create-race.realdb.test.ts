@@ -20,7 +20,7 @@ vi.mock('@/lib/inngest/client', () => ({
   inngest: { send: vi.fn(async () => undefined) },
 }));
 
-vi.mock('@/server/shared/result-code-statuses.server', async () => {
+vi.mock('@/server/read-models/result-code-statuses.server', async () => {
   const { mockBuildNegativeCodeExists } = await import('./_helpers/result-code-mock');
   return {
     getResultCodeStatuses: vi.fn(async () => {

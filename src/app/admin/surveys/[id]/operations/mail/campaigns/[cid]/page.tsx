@@ -13,7 +13,7 @@ import {
   getCampaignDetail,
   listCampaignRecipients,
 } from '@/server/mail/services/campaigns.server';
-import { getOperationsDataScope } from '@/server/shared/data-scope.server';
+import { getOperationsDataScope } from '@/server/data-scope.server';
 
 const PAGE_SIZE = 25;
 

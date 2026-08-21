@@ -7,14 +7,14 @@ import { render } from '@react-email/render';
 import { db } from '@/db';
 import { ensureImageLinkBandSlices } from './image-link-band-slices';
 import { UNSUBSCRIBE_SANDBOX_TOKEN } from '@/lib/mail/constants';
-import { extractMailContentKeys } from '@/server/shared/r2-lifecycle/key-extract';
-import { recordSentKeys } from '@/server/shared/r2-lifecycle/sent-ledger.server';
+import { extractMailContentKeys } from '@/server/storage-lifecycle/key-extract';
+import { recordSentKeys } from '@/server/storage-lifecycle/sent-ledger.server';
 import { renderForTestSend } from './render-for-send';
 import { sendTestMail } from './send';
 import { MailWrapper } from './template-wrapper';
 import { buildInviteUrl } from '@/lib/survey-url';
-import { getContactSampleById, getFirstContactSample } from '@/server/shared/contact-sample.server';
-import { loadOperationsDataScope } from '@/server/shared/data-scope.server';
+import { getContactSampleById, getFirstContactSample } from '@/server/read-models/contact-sample.server';
+import { loadOperationsDataScope } from '@/server/data-scope.server';
 
 import type {
   GetMailPreviewSampleInput,

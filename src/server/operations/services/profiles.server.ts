@@ -8,16 +8,16 @@ import type { ResponseStatus } from '@/shared/contracts/survey-response';
 
 import { attrsSortKey } from '@/lib/operations/contacts';
 import { attrsNaturalSortExprs } from '@/lib/operations/contacts-filter-sql';
-import type { FilterClause } from '@/server/shared/contacts-filters.server';
+import type { FilterClause } from '@/server/read-models/contacts-filters.server';
 import {
   type OperationsDataScope,
   responseScopeCondition,
   testFlagForScope,
-} from '@/server/shared/data-scope.server';
+} from '@/server/data-scope.server';
 import type { Platform } from '@/lib/operations/parse-ua';
 import { type NormalizedListArgs, type ProfilesSystemSortKey, type SortDir } from '@/lib/operations/profiles';
 import { buildProfilesFilterSql } from './profiles-filters.server';
-import { buildNegativeCodeExists, getResultCodeStatuses } from '@/server/shared/result-code-statuses.server';
+import { buildNegativeCodeExists, getResultCodeStatuses } from '@/server/read-models/result-code-statuses.server';
 
 export type ListProfilesArgs = Omit<NormalizedListArgs, 'q' | 'col'> & {
   surveyId: string;

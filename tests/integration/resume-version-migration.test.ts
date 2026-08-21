@@ -43,7 +43,7 @@ vi.mock('@/db', () => {
   };
 });
 
-vi.mock('@/server/shared/survey-control', () => ({
+vi.mock('@/server/read-models/survey-control', () => ({
   getSurveyControlFlags: vi.fn().mockResolvedValue({
     isPaused: false,
     pausedMessage: null,
@@ -54,7 +54,7 @@ vi.mock('@/server/shared/survey-control', () => ({
   isValidTestToken: vi.fn(() => false),
 }));
 
-vi.mock('@/server/shared/invite-lookup', () => ({
+vi.mock('@/server/read-models/invite-lookup', () => ({
   findContactByInviteToken: vi.fn(),
 }));
 
@@ -228,7 +228,7 @@ describe('resumeOrCreateResponse — 초대(컨택) 재개 이관 (티켓 03)', 
     selectMock.mockClear();
     updateReturningMock.mockReset();
     updateReturningMock.mockResolvedValue([{ id: 'response-1' }]);
-    const { findContactByInviteToken } = await import('@/server/shared/invite-lookup');
+    const { findContactByInviteToken } = await import('@/server/read-models/invite-lookup');
     vi.mocked(findContactByInviteToken).mockResolvedValue({
       kind: 'valid',
       contactTargetId: 'contact-1',

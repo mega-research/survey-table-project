@@ -134,7 +134,7 @@ vi.mock('@/server/survey-response/services/response-answers.service', () => ({
 
 // resumeOrCreateResponse 의 컨택 분기(inviteToken)에서 호출. 기본은 미설정(undefined) —
 // inviteToken 을 넘기지 않는 테스트는 이 mock 을 타지 않으므로 영향 없다.
-vi.mock('@/server/shared/invite-lookup', () => ({
+vi.mock('@/server/read-models/invite-lookup', () => ({
   findContactByInviteToken: (...a: unknown[]) => inviteLookupMock(...a),
 }));
 

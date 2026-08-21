@@ -7,7 +7,7 @@ import { surveyResponses } from '@/db/schema';
 import { notDeletedResponse } from '@/data/response-filters';
 
 import { mapRowsToCounts, type StatusCounts } from '@/lib/operations/aggregate-status';
-import { responseScopeCondition, type OperationsDataScope } from '@/server/shared/data-scope.server';
+import { responseScopeCondition, type OperationsDataScope } from '@/server/data-scope.server';
 
 /**
  * 단일 설문의 응답 상태 집계를 반환한다 (서버 전용).

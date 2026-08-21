@@ -12,7 +12,7 @@ import {
 import { decryptPii } from '@/lib/crypto/aes';
 import { inngest } from '@/lib/inngest/client';
 import { withTestPrefix } from './test-campaign';
-import { loadOperationsDataScope, lockWriteScope } from '@/server/shared/data-scope.server';
+import { loadOperationsDataScope, lockWriteScope } from '@/server/data-scope.server';
 import type { CampaignFilterSnapshot } from '@/shared/contracts/mail';
 
 import type {
@@ -145,7 +145,7 @@ export async function createCampaign(
     //    발송이므로 반송 주소여도 허용한다 (2026-08-13 결정). 여기서 거르면 validCount 0
     //    으로 단건 발송 자체가 실패한다.
     const { buildNegativeCodeExists, getResultCodeStatuses } =
-      await import('@/server/shared/result-code-statuses.server');
+      await import('@/server/read-models/result-code-statuses.server');
     const { listBouncedContactIds } = await import('./campaigns.server');
     const [{ negative: negativeCodes }, bouncedContactIds] = await Promise.all([
       getResultCodeStatuses(input.surveyId),
@@ -325,8 +325,8 @@ export async function fetchCandidateIds(
   const { previewCampaignCandidates, countCampaignCandidates } =
     await import('./campaigns.server');
   const { getContactColumnScheme, getContactResultCodes, buildColumnCandidates } =
-    await import('@/server/shared/contacts.server');
-  const { parseClausesFromUrl } = await import('@/server/shared/contacts-filters.server');
+    await import('@/server/read-models/contacts.server');
+  const { parseClausesFromUrl } = await import('@/server/read-models/contacts-filters.server');
   const scope = await loadOperationsDataScope(surveyId);
 
   const [scheme, resultCodes] = await Promise.all([

@@ -16,7 +16,7 @@ import { getControlState } from '@/server/operations/services/control.service';
 import { disableTestWorkspace } from '@/server/operations/services/test-workspace.service';
 import { terminalizeUnresolvedCampaignDispatch } from '@/server/mail/services/campaign-dispatch';
 import { processResendEvent } from '@/server/mail/services/resend-webhook';
-import { archiveTestWorkspaceMail } from '@/server/shared/test-mail-archive.server';
+import { archiveTestWorkspaceMail } from '@/server/workflows/test-mail-archive.server';
 import { computeCycleBreakdown } from '@/server/mail/services/mail-billing.server';
 
 const dbUrl = process.env['DATABASE_URL'] ?? '';

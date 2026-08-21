@@ -9,7 +9,7 @@ import {
   mapResendLastEvent,
   mapResendWebhookType,
   STATUS_ALLOWED_PREV,
-} from '@/server/shared/recipient-status-transition';
+} from '@/server/mail/services/recipient-status-transition';
 
 const dialect = new PgDialect();
 

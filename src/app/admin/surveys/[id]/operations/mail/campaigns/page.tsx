@@ -9,7 +9,7 @@ import {
   listCampaignsForSurvey,
   listUnsubscribedContacts,
 } from '@/server/mail/services/campaigns.server';
-import { getOperationsDataScope } from '@/server/shared/data-scope.server';
+import { getOperationsDataScope } from '@/server/data-scope.server';
 
 const PAGE_SIZE = 20;
 const UNSUB_PAGE_SIZE = 10;

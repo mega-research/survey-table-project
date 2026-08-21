@@ -3,8 +3,8 @@ import type { Metadata } from 'next';
 import { UploadWizard } from '@/features/operations/contacts/upload-wizard';
 import { Card, CardContent } from '@/components/ui/card';
 import { getExistingContactsCount } from '@/server/contacts/services/contact-columns.service';
-import { getContactColumnScheme } from '@/server/shared/contacts.server';
-import { getOperationsDataScope } from '@/server/shared/data-scope.server';
+import { getContactColumnScheme } from '@/server/read-models/contacts.server';
+import { getOperationsDataScope } from '@/server/data-scope.server';
 
 export const metadata: Metadata = {
   title: '현황 - 엑셀 업로드',

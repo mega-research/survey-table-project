@@ -15,7 +15,7 @@ vi.mock('../services/contact-columns.service', () => ({
   getExistingContactsCount: vi.fn(),
 }));
 
-vi.mock('@/server/shared/data-scope.server', () => ({
+vi.mock('@/server/data-scope.server', () => ({
   loadOperationsDataScope: vi.fn(async () => 'real'),
 }));
 

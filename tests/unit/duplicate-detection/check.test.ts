@@ -13,7 +13,7 @@ vi.mock('@/db', () => ({
   db: { query: { surveyResponses: { findFirst: mockFindFirst } } },
 }));
 
-vi.mock('@/server/shared/invite-lookup', () => ({
+vi.mock('@/server/read-models/invite-lookup', () => ({
   findContactByInviteToken: mockFindContact,
 }));
 

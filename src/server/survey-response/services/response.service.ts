@@ -25,9 +25,9 @@ import { logger } from '@/lib/logger';
 import { sumActiveSeconds } from '@/lib/operations/active-seconds';
 import { parseBrowser, parsePlatform } from '@/lib/operations/parse-ua';
 import { readOptTextsSidecar } from '@/lib/option-text-read';
-import { loadCompletedPlainAnswers } from '@/server/shared/completed-answers.server';
+import { loadCompletedPlainAnswers } from '@/server/read-models/completed-answers.server';
 import { countCell, deriveCategoryIds, findTarget } from '@/lib/quota/matching';
-import { getSurveyControlFlags, isValidTestToken } from '@/server/shared/survey-control';
+import { getSurveyControlFlags, isValidTestToken } from '@/server/read-models/survey-control';
 import type { TestResponseResetFields } from './reset-test-response.server';
 import { resetTestResponseRow } from './reset-test-response.server';
 import {

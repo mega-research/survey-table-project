@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { FirstContactSample } from '@/server/shared/contact-sample.server';
+import type { FirstContactSample } from '@/server/read-models/contact-sample.server';
 
-vi.mock('@/server/shared/contact-sample.server', () => ({
+vi.mock('@/server/read-models/contact-sample.server', () => ({
   getFirstContactSample: vi.fn(),
   getContactSampleById: vi.fn(),
 }));
-vi.mock('@/server/shared/data-scope.server', () => ({
+vi.mock('@/server/data-scope.server', () => ({
   loadOperationsDataScope: vi.fn(),
 }));
 vi.mock('./send', () => ({
@@ -23,8 +23,8 @@ vi.mock('./image-link-band-slices', () => ({
 
 import { ensureImageLinkBandSlices } from './image-link-band-slices';
 import { sendTestMail } from './send';
-import { getContactSampleById, getFirstContactSample } from '@/server/shared/contact-sample.server';
-import { loadOperationsDataScope } from '@/server/shared/data-scope.server';
+import { getContactSampleById, getFirstContactSample } from '@/server/read-models/contact-sample.server';
+import { loadOperationsDataScope } from '@/server/data-scope.server';
 import { MailWrapper } from './template-wrapper';
 
 import { getMailPreviewSample, sendTestTemplateMail } from './mail-preview.service';

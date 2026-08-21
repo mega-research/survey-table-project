@@ -44,7 +44,7 @@ vi.mock('@/db', () => {
 
 // recordStepVisit 이 중단 판정을 위해 제어 플래그를 읽는다. mock db 에는 .query 가 없으므로
 // response-draft.test.ts 와 동일하게 survey-control 을 통째로 모킹한다.
-vi.mock('@/server/shared/survey-control', () => ({
+vi.mock('@/server/read-models/survey-control', () => ({
   getSurveyControlFlags: (...a: unknown[]) => controlFlagsMock(...a),
   isValidTestToken: vi.fn(),
 }));

@@ -3,7 +3,7 @@ import { and, eq, isNull, isNotNull, or, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { surveyResponses } from '@/db/schema/surveys';
 import { notDeletedResponse, notTestResponse } from '@/data/response-filters';
-import { findContactByInviteToken } from '@/server/shared/invite-lookup';
+import { findContactByInviteToken } from '@/server/read-models/invite-lookup';
 import type { CheckResult, ServerSignals } from '@/lib/duplicate-detection/types';
 
 export async function checkTrackA(

@@ -13,10 +13,10 @@ import {
   type OperationsDataScope,
   targetScopeCondition,
   testFlagForScope,
-} from '@/server/shared/data-scope.server';
+} from '@/server/data-scope.server';
 import { type FilterCondition, buildFilterSql } from './progress-filters.server';
 import type { ProgressRow, ProgressSortKey, ProgressTotals, SortDir } from '@/lib/operations/report-progress';
-import { buildNegativeCodeExists, getResultCodeStatuses } from '@/server/shared/result-code-statuses.server';
+import { buildNegativeCodeExists, getResultCodeStatuses } from '@/server/read-models/result-code-statuses.server';
 
 const EMPTY_SCHEME: ProgressColumnScheme = { version: 1, columns: [] };
 

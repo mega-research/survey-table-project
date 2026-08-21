@@ -2,7 +2,7 @@ import { sql } from 'drizzle-orm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { selectEmailPiiRows } from '@/lib/crypto/contact-pii-repo';
-import { getResultCodeStatuses } from '@/server/shared/result-code-statuses.server';
+import { getResultCodeStatuses } from '@/server/read-models/result-code-statuses.server';
 
 import { createCampaign } from './mail-campaigns.service';
 import { sendSingleCampaign } from './mail-single-send.service';
@@ -30,7 +30,7 @@ vi.mock('./mail-templates.service', () => ({
   getMailTemplate: vi.fn(async () => ({ id: 'tpl-1', name: '리마인더' })),
 }));
 
-vi.mock('@/server/shared/result-code-statuses.server', () => ({
+vi.mock('@/server/read-models/result-code-statuses.server', () => ({
   getResultCodeStatuses: vi.fn(async () => ({ negative: [] })),
   buildNegativeCodeExists: vi.fn(() => sql`FALSE`),
 }));

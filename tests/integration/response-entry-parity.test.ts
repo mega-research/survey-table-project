@@ -131,8 +131,8 @@ vi.mock('@/server/survey-response/services/test-target-attempt.server', () => ({
 }));
 
 // isValidTestToken 은 실제 구현을 써야 무효 테스트 링크 판정이 현실과 같다.
-vi.mock('@/server/shared/survey-control', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/server/shared/survey-control')>();
+vi.mock('@/server/read-models/survey-control', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/server/read-models/survey-control')>();
   return {
     ...actual,
     getSurveyControlFlags: vi.fn((...a: unknown[]) => {

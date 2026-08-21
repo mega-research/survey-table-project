@@ -4,11 +4,11 @@ import 'server-only';
 import { db } from '@/db';
 import { surveyResponses, surveyVersions } from '@/db/schema';
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
-import { findContactByInviteToken } from '@/server/shared/invite-lookup';
+import { findContactByInviteToken } from '@/server/read-models/invite-lookup';
 import { logger } from '@/lib/logger';
 import { normalizeQuestions } from '@/lib/question/normalize';
 import { toFlatQuestion } from '@/lib/question/variants';
-import { getSurveyControlFlags, isValidTestToken } from '@/server/shared/survey-control';
+import { getSurveyControlFlags, isValidTestToken } from '@/server/read-models/survey-control';
 import { applyStructuralSurvival } from '@/lib/survey-response/structural-survival';
 import {
   isResumableTestStatus,

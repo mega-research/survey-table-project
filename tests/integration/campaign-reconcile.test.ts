@@ -45,8 +45,8 @@ vi.mock('@/server/mail/services/resend-client', () => ({
   getResend: () => ({ emails: { get: getMock } }),
 }));
 
-vi.mock('@/server/shared/recipient-status-transition', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/server/shared/recipient-status-transition')>();
+vi.mock('@/server/mail/services/recipient-status-transition', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/server/mail/services/recipient-status-transition')>();
   return { ...actual, applyRecipientTransition: applyMock };
 });
 

@@ -12,8 +12,8 @@ import { contactTargets, questionGroups, questions, surveyVersions, surveys } fr
 import { getVariableCatalog } from '@/lib/mail/variable-catalog';
 import type { VariableDef } from '@/shared/contracts/template-variables';
 import { normalizeQuestions } from '@/lib/question';
-import { findContactByInviteToken } from '@/server/shared/invite-lookup';
-import { isValidTestToken } from '@/server/shared/survey-control';
+import { findContactByInviteToken } from '@/server/read-models/invite-lookup';
+import { isValidTestToken } from '@/server/read-models/survey-control';
 import { normalizeResponseHeaderConfig } from '@/lib/survey/response-header-config';
 import { isValidUUID } from '@/lib/utils';
 import type { QuestionGroup, Question as QuestionType, Survey as SurveyType } from '@/types/survey';

@@ -11,7 +11,7 @@ import {
   type Platform,
   type ResponseTimeRow,
 } from '@/lib/operations/response-time';
-import { responseScopeCondition, type OperationsDataScope } from '@/server/shared/data-scope.server';
+import { responseScopeCondition, type OperationsDataScope } from '@/server/data-scope.server';
 
 /**
  * 단일 설문의 응답시간 통계 4행 표를 반환한다 (서버 전용).

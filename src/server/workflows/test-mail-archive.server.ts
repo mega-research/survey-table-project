@@ -3,7 +3,7 @@ import 'server-only';
 
 import type { DbTransaction } from '@/db';
 import { contactTargets, mailCampaigns, mailRecipients } from '@/db/schema';
-import { finalizeCampaignIfDone } from './recipient-status-transition';
+import { finalizeCampaignIfDone } from '@/server/mail/services/recipient-status-transition';
 import type { MailRecipientStatus } from '@/shared/contracts/mail';
 
 export const RETAINED_TEST_RECIPIENT_STATUSES: readonly MailRecipientStatus[] = [

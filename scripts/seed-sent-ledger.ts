@@ -35,7 +35,7 @@ async function main() {
   }
 
   const { seedSentLedgerFromCampaignSnapshots } = await import(
-    '@/server/shared/r2-lifecycle/sent-ledger-seed.server'
+    '@/server/storage-lifecycle/sent-ledger-seed.server'
   );
   const result = await seedSentLedgerFromCampaignSnapshots();
   console.log(`캠페인 ${result.campaigns}건 스캔, 장부 신규 기록 ${result.recorded}건`);

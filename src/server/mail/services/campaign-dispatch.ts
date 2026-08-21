@@ -11,10 +11,10 @@ import { contactTargets } from '@/db/schema/contacts';
 import { mailCampaigns, mailRecipients } from '@/db/schema/mail';
 import type { MailRecipientSendPayloadSnapshot } from '@/shared/contracts/mail';
 import { buildInviteUrl } from '@/lib/survey-url';
-import { extractMailContentKeys } from '@/server/shared/r2-lifecycle/key-extract';
-import { recordSentKeys } from '@/server/shared/r2-lifecycle/sent-ledger.server';
+import { extractMailContentKeys } from '@/server/storage-lifecycle/key-extract';
+import { recordSentKeys } from '@/server/storage-lifecycle/sent-ledger.server';
 import { createCampaignProviderRateLimiter } from './campaign-send-rate-limit';
-import { finalizeCampaignIfDone } from '@/server/shared/recipient-status-transition';
+import { finalizeCampaignIfDone } from './recipient-status-transition';
 import { renderForCampaignSend } from './render-for-send';
 import {
   RetryableCampaignSendError,

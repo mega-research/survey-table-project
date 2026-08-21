@@ -19,7 +19,7 @@ import { getDropFunnel } from '@/server/operations/services/drop-funnel.server';
 import { getPageDwell } from '@/server/operations/services/page-dwell.server';
 import { getQuotaStatus } from '@/server/quota/services/quota-status.server';
 import { getResponseTime } from '@/server/operations/services/response-time.server';
-import { getOperationsDataScope } from '@/server/shared/data-scope.server';
+import { getOperationsDataScope } from '@/server/data-scope.server';
 import { isGuestViewer } from '@/lib/auth/guest-viewer';
 import { getSurveyById } from '@/server/survey-builder/services/survey-read.service';
 

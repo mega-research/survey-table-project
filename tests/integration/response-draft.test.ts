@@ -51,7 +51,7 @@ vi.mock('@/db', () => {
   };
 });
 
-vi.mock('@/server/shared/survey-control', () => ({
+vi.mock('@/server/read-models/survey-control', () => ({
   getSurveyControlFlags: (...a: unknown[]) => controlFlagsMock(...a),
   isValidTestToken: vi.fn(),
 }));

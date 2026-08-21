@@ -4,7 +4,7 @@ import 'server-only';
 import { notDeletedResponse } from '@/data/response-filters';
 import { db } from '@/db';
 import { surveyResponses, surveys } from '@/db/schema/surveys';
-import { loadCompletedPlainAnswers } from '@/server/shared/completed-answers.server';
+import { loadCompletedPlainAnswers } from '@/server/read-models/completed-answers.server';
 import { countCell, deriveCategoryIds, findTarget } from '@/lib/quota/matching';
 import type { QuotaConfig } from '@/shared/contracts/quota';
 

@@ -1,5 +1,5 @@
 import { assertSurveyAccess, scoped } from '@/server/orpc';
-import { loadOperationsDataScope } from '@/server/shared/data-scope.server';
+import { loadOperationsDataScope } from '@/server/data-scope.server';
 
 import {
   ListContactAttrValuesInput,

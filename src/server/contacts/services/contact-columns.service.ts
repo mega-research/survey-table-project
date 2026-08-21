@@ -8,7 +8,7 @@ import {
   type OperationsDataScope,
   lockWriteScope,
   testFlagForScope,
-} from '@/server/shared/data-scope.server';
+} from '@/server/data-scope.server';
 
 import type {
   UpdateContactColumnsInput,

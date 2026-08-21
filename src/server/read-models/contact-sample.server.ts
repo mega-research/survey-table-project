@@ -8,7 +8,7 @@ import { decryptPii } from '@/lib/crypto/aes';
 import {
   targetScopeCondition,
   type OperationsDataScope,
-} from './data-scope.server';
+} from '@/server/data-scope.server';
 
 export interface FirstContactSample {
   attrs: Record<string, string>;

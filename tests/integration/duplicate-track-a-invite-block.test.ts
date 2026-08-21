@@ -22,7 +22,7 @@ const h = vi.hoisted(() => {
   return { findContactMock };
 });
 
-vi.mock('@/server/shared/invite-lookup', () => ({
+vi.mock('@/server/read-models/invite-lookup', () => ({
   findContactByInviteToken: h.findContactMock,
 }));
 

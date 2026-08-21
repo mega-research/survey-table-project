@@ -8,10 +8,10 @@ vi.mock('@/lib/auth/guest-grants', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/auth/guest-grants')>()),
   canAccessSurvey: vi.fn(),
 }));
-vi.mock('@/server/shared/data-scope.server', () => ({
+vi.mock('@/server/data-scope.server', () => ({
   loadOperationsDataScope: vi.fn(),
 }));
-vi.mock('@/server/shared/contacts.server', () => ({
+vi.mock('@/server/read-models/contacts.server', () => ({
   getContactColumnScheme: vi.fn(),
   listContactsForExport: vi.fn(),
   MAX_CONTACT_EXPORT_ROWS: 50000,
@@ -24,11 +24,11 @@ vi.mock('@/server/operations/services/contacts-export.server', async (importOrig
 
 import { requireAuth } from '@/lib/auth';
 import { canAccessSurvey } from '@/lib/auth/guest-grants';
-import { loadOperationsDataScope } from '@/server/shared/data-scope.server';
+import { loadOperationsDataScope } from '@/server/data-scope.server';
 import {
   getContactColumnScheme,
   listContactsForExport,
-} from '@/server/shared/contacts.server';
+} from '@/server/read-models/contacts.server';
 import { GET } from '@/app/api/surveys/[surveyId]/contacts/export/route';
 
 const SCHEME = {

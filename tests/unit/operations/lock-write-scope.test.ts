@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { lockWriteScope } from '@/server/shared/data-scope.server';
+import { lockWriteScope } from '@/server/data-scope.server';
 
 // lockWriteScope 는 주입된 executor(tx 또는 db)만 쓴다 — 전역 db 는 로드만 막는다.
 vi.mock('@/db', () => ({ db: {} }));

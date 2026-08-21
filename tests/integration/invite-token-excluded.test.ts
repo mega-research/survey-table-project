@@ -93,7 +93,7 @@ vi.mock('@/db', () => ({
   },
 }));
 
-vi.mock('@/server/shared/result-code-statuses.server', async () => {
+vi.mock('@/server/read-models/result-code-statuses.server', async () => {
   const { mockBuildNegativeCodeExists } = await import('./_helpers/result-code-mock');
   return {
     getResultCodeStatuses: vi.fn(async () => ({
@@ -104,7 +104,7 @@ vi.mock('@/server/shared/result-code-statuses.server', async () => {
   };
 });
 
-import { findContactByInviteToken } from '@/server/shared/invite-lookup';
+import { findContactByInviteToken } from '@/server/read-models/invite-lookup';
 import { randomUUID } from 'crypto';
 
 const SURVEY_ID = '00000000-0000-4000-8000-000000000020';

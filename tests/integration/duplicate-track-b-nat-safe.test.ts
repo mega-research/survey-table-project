@@ -20,7 +20,7 @@ vi.mock('next/headers', () => ({
   headers: mockHeaders,
 }));
 
-vi.mock('@/server/shared/invite-lookup', () => ({
+vi.mock('@/server/read-models/invite-lookup', () => ({
   findContactByInviteToken: vi.fn(async () => ({ kind: 'invalid' as const })),
 }));
 

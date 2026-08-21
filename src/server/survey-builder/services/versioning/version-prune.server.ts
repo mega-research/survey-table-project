@@ -6,9 +6,9 @@ import { surveyVersions } from '@/db/schema';
 import {
   registerDeletionCandidates,
   type R2DbExecutor,
-} from '@/server/shared/r2-lifecycle/deletion-queue.server';
-import { extractR2KeysFromJsonbValue } from '@/server/shared/r2-lifecycle/key-extract';
-import { deleteKeyRefsBySourceIds } from '@/server/shared/r2-lifecycle/key-ref-index.server';
+} from '@/server/storage-lifecycle/deletion-queue.server';
+import { extractR2KeysFromJsonbValue } from '@/server/storage-lifecycle/key-extract';
+import { deleteKeyRefsBySourceIds } from '@/server/storage-lifecycle/key-ref-index.server';
 
 export interface PruneVersionsResult {
   /** snapshot 을 실제로 비운 버전 수 */

@@ -96,7 +96,7 @@ vi.mock('@/db', () => ({
   },
 }));
 
-vi.mock('@/server/shared/r2-lifecycle/sent-ledger.server', () => ({
+vi.mock('@/server/storage-lifecycle/sent-ledger.server', () => ({
   recordSentKeys: recordSentKeysMock,
 }));
 
@@ -135,18 +135,18 @@ vi.mock('@/server/mail/services/send', () => ({
   sendTestMail: sendTestMailMock,
 }));
 
-vi.mock('@/server/shared/contact-sample.server', () => ({
+vi.mock('@/server/read-models/contact-sample.server', () => ({
   getContactSampleById: vi.fn(async () => null),
   getFirstContactSample: vi.fn(async () => null),
 }));
 
-vi.mock('@/server/shared/data-scope.server', () => ({
+vi.mock('@/server/data-scope.server', () => ({
   loadOperationsDataScope: vi.fn(async () => ({ mode: 'all' })),
 }));
 
 import { db } from '@/db';
 import { prepareCampaignDispatch } from '@/server/mail/services/campaign-dispatch';
-import { extractMailContentKeys } from '@/server/shared/r2-lifecycle/key-extract';
+import { extractMailContentKeys } from '@/server/storage-lifecycle/key-extract';
 import { sendTestTemplateMail } from '@/server/mail/services/mail-preview.service';
 
 function recordedKeys(callIndex = 0): string[] {

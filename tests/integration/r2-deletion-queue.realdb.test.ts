@@ -23,8 +23,8 @@ import {
   isCandidateResolvable,
   registerDeletionCandidates,
   resolveCandidate,
-} from '@/server/shared/r2-lifecycle/deletion-queue.server';
-import { getLedgeredKeys, recordSentKeys } from '@/server/shared/r2-lifecycle/sent-ledger.server';
+} from '@/server/storage-lifecycle/deletion-queue.server';
+import { getLedgeredKeys, recordSentKeys } from '@/server/storage-lifecycle/sent-ledger.server';
 
 const isLocalDb =
   (process.env['DATABASE_URL'] ?? '').includes('127.0.0.1') ||
