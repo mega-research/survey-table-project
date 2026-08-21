@@ -8,7 +8,8 @@
 | ----------------------------------------------- | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `package.json` deps                             | 기술 스택                        | `node -e "const p=require('./package.json');const d={...p.dependencies,...p.devDependencies};Object.entries(d).forEach(([k,v])=>console.log(k,v))"` |
 | `package.json` scripts                          | 개발 스크립트                    | `node -e "console.log(Object.keys(require('./package.json').scripts).join(' '))"`                                                                   |
-| `src/features/*`                                | 프로젝트 구조 (도메인 개수·목록) | `ls src/features`                                                                                                                                   |
+| `src/server/*/`                                 | 프로젝트 구조 (서버 도메인 개수·목록) | `ls -d src/server/*/`                                                                                                                          |
+| `src/features/*/`                               | 프로젝트 구조 (프론트 기능 묶음·개수) | `for d in src/features/*/; do echo "$(basename $d): $(find $d -name '*.ts*' ! -name '*.test.*' \| wc -l)"; done`                              |
 | `src/server/router.ts`                          | 데이터 흐름 아키텍처             | `cat src/server/router.ts`                                                                                                                          |
 | `src/server/orpc.ts`                            | 인증과 권한 (베이스 종류)        | `grep -n "^export const" src/server/orpc.ts`                                                                                                        |
 | `src/db/schema/*.ts`                            | 데이터베이스 스키마 (컬럼 단위)  | `grep -n "^export const .* = pgTable" src/db/schema/*.ts` + 테이블별 컬럼 추출                                                                      |
@@ -16,8 +17,8 @@
 | `src/app/api/**/route.ts`                       | API 엔드포인트                   | `find src/app/api -name 'route.ts' \| sort`                                                                                                         |
 | `src/lib/*` (디렉터리)                          | 프로젝트 구조 lib 목록           | `ls src/lib`                                                                                                                                        |
 | `src/lib/inngest/functions/`                    | 백그라운드 잡 (트리거 포함)      | `cat src/lib/inngest/functions/index.ts` + `grep -n "triggers" src/lib/inngest/functions/*.ts`                                                      |
-| `src/stores/`, `src/hooks/`, `src/utils/`       | 프로젝트 구조                    | `ls src/stores src/hooks src/utils`                                                                                                                 |
-| `src/components/*/`                             | 프로젝트 구조 (개수)             | `for d in src/components/*/; do echo "$(basename $d): $(find $d -name '*.tsx' \| wc -l)"; done`                                                     |
+| `src/stores/`, `src/hooks/`, `src/utils/`       | 프로젝트 구조 (공용 구역 잔류분)  | `ls src/stores src/hooks src/utils` — 기능 전용은 features/<x>/{stores,hooks,queries,utils}                                                        |
+| `src/components/*/`                             | 프로젝트 구조 (ui·providers 만)  | `ls src/components` — ui·providers 외가 생기면 features 로 가야 할 것이 아닌지 의심                                                                 |
 | `src/types/survey.ts`                           | 질문 유형 / 셀 타입 / 검증 규칙  | `grep -n "QuestionType\|TableValidationType" -A12 src/types/survey.ts`                                                                              |
 | `supabase/migrations/*.sql`                     | 주의사항 7 (마이그레이션)        | `ls supabase/migrations \| tail -5` + `manual-migrations.json` 등재 확인                                                                            |
 | `vitest.config.ts`                              | 주의사항 (테스트)                | `cat vitest.config.ts`                                                                                                                              |
@@ -31,7 +32,7 @@
 
 | 신호                | 확인                                                                       |
 | ------------------- | -------------------------------------------------------------------------- |
-| 새 도메인 개념 등장 | `src/db/schema/schema-types.ts` 의 새 인터페이스, `src/features/*/domain/` |
+| 새 도메인 개념 등장 | `src/shared/contracts/*.ts` 의 새 인터페이스, `src/server/*/domain/`       |
 | 문서에만 있는 개념  | 해당 용어의 코드 흔적 grep — 0건이면 미착수 표기                           |
 
 ## docs/adr/
