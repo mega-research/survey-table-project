@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { ContactColumnScheme } from '@/db/schema/schema-types';
+import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 import {
   buildDownloadCandidates,
   INVITE_URL_SOURCE,

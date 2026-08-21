@@ -3,7 +3,7 @@ import 'server-only';
 
 import { db } from '@/db';
 import { responseAnswers, responseEditLogs, surveyResponses } from '@/db/schema';
-import type { PageVisit } from '@/db/schema/schema-types';
+import type { PageVisit } from '@/shared/contracts/survey-response';
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 

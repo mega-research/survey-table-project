@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { extractResultCodeStatuses } from '@/lib/operations/result-code-statuses';
-import { DEFAULT_RESULT_CODES, type ContactResultCode } from '@/db/schema/schema-types';
+import { DEFAULT_RESULT_CODES, type ContactResultCode } from '@/shared/contracts/contacts';
 
 describe('extractResultCodeStatuses', () => {
   it('DEFAULT 13개에서 positive=[1.조사완료], negative=[수신거부]', () => {

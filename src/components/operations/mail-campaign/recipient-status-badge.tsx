@@ -1,4 +1,4 @@
-import type { MailRecipientStatus } from '@/db/schema/mail';
+import type { MailRecipientStatus } from '@/shared/contracts/mail';
 
 /** 수신자 status → 표시 라벨 + tailwind 톤. 수신자 목록·조사 대상 목록 공유. */
 export const STATUS_LABEL: Record<MailRecipientStatus, { label: string; tone: string }> = {

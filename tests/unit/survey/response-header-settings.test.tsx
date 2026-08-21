@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ResponseHeaderSettings } from '@/components/survey-builder/response-header-settings';
 import { DEFAULT_COMPOSED_RESPONSE_HEADER, HEADER_TITLE_PX } from '@/lib/survey/response-header-config';
 import type { SurveySettings } from '@/types/survey';
-import type { SurveyResponseHeaderConfig } from '@/db/schema/schema-types';
+import type { SurveyResponseHeaderConfig } from '@/shared/contracts/survey';
 
 vi.mock('@/components/survey-builder/cell-image-editor', () => ({
   CellImageEditor: ({ imageUrl }: { imageUrl: string }) => <div data-testid="image-editor">{imageUrl}</div>,

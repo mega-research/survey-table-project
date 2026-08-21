@@ -5,12 +5,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { logger } from '@/lib/logger';
 import { contactPii, contactTargets, contactUploads, surveys } from '@/db/schema';
-import type {
-  ContactColumnDef,
-  ContactColumnScheme,
-  ContactUploadMapping,
-  ContactUploadMode,
-} from '@/db/schema/schema-types';
+import type { ContactColumnDef, ContactColumnScheme, ContactUploadMapping, ContactUploadMode } from '@/shared/contracts/contacts';
 import { isGroupLevel, type GroupLevel } from '@/lib/contacts/group-levels';
 import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts';
 import { parseExcelRows, previewExcel } from '@/lib/contacts/excel-parser';

@@ -5,7 +5,7 @@ import { eq } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { surveyVersions } from '@/db/schema';
-import type { SurveyVersionSnapshot } from '@/db/schema/schema-types';
+import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
 
 /**
  * 특정 version 의 snapshot 에서 question position map 과 총 질문 수를 얻는다.

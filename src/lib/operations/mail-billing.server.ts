@@ -4,7 +4,8 @@ import { and, asc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { mailBillingPeriods, mailCampaigns, mailRecipients, surveys } from '@/db/schema';
-import type { MailCampaignKind, MailCampaignStatus, MailRecipientStatus } from '@/db/schema/mail';
+import type { MailCampaignKind } from '@/db/schema/mail';
+import type { MailCampaignStatus, MailRecipientStatus } from '@/shared/contracts/mail';
 import { allocateCycleCosts, type AllocatorInputCampaign } from '@/lib/mail/billing-allocator';
 import {
   cycleStartFor,

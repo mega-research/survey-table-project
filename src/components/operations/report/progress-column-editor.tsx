@@ -14,11 +14,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import type {
-  ContactColumnScheme,
-  ProgressColumnDef,
-  ProgressColumnScheme,
-} from '@/db/schema/schema-types';
+import type { ContactColumnScheme } from '@/shared/contracts/contacts';
+import type { ProgressColumnDef, ProgressColumnScheme } from '@/shared/contracts/operations';
 import {
   GROUP_LEVELS,
   GROUP_LEVEL_LABELS,

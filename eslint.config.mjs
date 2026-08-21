@@ -133,6 +133,27 @@ const eslintConfig = [
     },
   },
   eslintConfigPrettier,
+  {
+    // 클라이언트 트리(components/hooks/stores/utils)는 DB 런타임을 모른다.
+    // 값 import(db 클라이언트·drizzle 테이블)는 서버 모듈(lib/*·features/*/server·app RSC)로 옮긴다.
+    // 행 타입(type import)은 허용 — JSONB 어휘는 @/shared/contracts, 행 타입은 $inferSelect seam 으로 남긴다.
+    files: ["src/components/**/*.{ts,tsx}", "src/hooks/**/*.{ts,tsx}", "src/stores/**/*.{ts,tsx}", "src/utils/**/*.{ts,tsx}"],
+    rules: {
+      "@typescript-eslint/no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@/db", "@/db/**"],
+              allowTypeImports: true,
+              message:
+                "클라이언트 트리에서 DB 값 import 금지. JSONB 어휘는 @/shared/contracts, 쿼리는 서버 모듈로 옮기세요. (type import 는 허용)",
+            },
+          ],
+        },
+      ],
+    },
+  },
 ];
 
 export default eslintConfig;

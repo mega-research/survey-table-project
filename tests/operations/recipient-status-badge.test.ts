@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import type { MailRecipientStatus } from '@/db/schema/mail';
-import { mailRecipientStatusValues } from '@/db/schema/mail';
+import type { MailRecipientStatus } from '@/shared/contracts/mail';
+import { mailRecipientStatusValues } from '@/shared/contracts/mail';
 import {
   recipientStatusMeta,
   STATUS_LABEL,

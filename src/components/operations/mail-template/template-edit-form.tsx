@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import type { MailTemplate } from '@/db/schema/mail';
-import type { MailAttachment } from '@/db/schema/schema-types';
+import type { MailAttachment } from '@/shared/contracts/mail';
 import { TMP_ATTACHMENT_PREFIX } from '@/lib/mail/constants';
 import { deleteMailAttachmentTmpBatch } from '@/lib/mail/mail-attachment-client';
 import { client } from '@/shared/lib/rpc';
@@ -18,7 +18,7 @@ import { AttachmentSection } from './attachment-section';
 import { RichTextEditor, type RichTextEditorHandle } from '@/components/ui/rich-text-editor';
 import { MetaFields, type MetaFieldValues } from './meta-fields';
 import { MailPreviewDialog } from './preview-dialog';
-import type { VariableDef } from './variable-catalog';
+import type { VariableDef } from '@/shared/contracts/template-variables';
 
 interface Props {
   surveyId: string;

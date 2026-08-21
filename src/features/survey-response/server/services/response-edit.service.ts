@@ -11,7 +11,7 @@ import {
   responseEditLogs,
   contactTargets,
 } from '@/db/schema';
-import type { SurveyVersionSnapshot } from '@/db/schema/schema-types';
+import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
 import { replaceResponseAnswers } from './response-answers.service';
 import { calculateProgressPct } from '@/lib/operations/response-progress';
 import { getProgressSnapshot } from '@/lib/operations/response-progress.server';
@@ -183,7 +183,7 @@ export async function saveAdminEdit(
   // 때 조용히 값이 달라져 있는 사고를 유발할 수 있다.
   let finalResponses = questionResponses;
   if (versionSnapshot) {
-    // schema-types.SurveyVersionSnapshot 은 questions/lookups 필드 값이 항상 채워져 있다는
+    // contracts/survey 의 SurveyVersionSnapshot 은 questions/lookups 필드 값이 항상 채워져 있다는
     // 보장이 타입 레벨엔 없다(questions 는 필수로 선언돼 있지만 손상된 스냅샷 행이 들어오면
     // undefined/비배열일 수 있음, lookups 는 아예 타입에 없음) — buildChangedQuestions
     // (response-edit-diff.ts:40, `snapshot?.questions ?? []`)와 동일하게 방어적으로 읽는다.

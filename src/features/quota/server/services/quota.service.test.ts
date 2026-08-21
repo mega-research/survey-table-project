@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { PgDialect } from 'drizzle-orm/pg-core';
 
-import type { QuotaConfig } from '@/db/schema/schema-types';
+import type { QuotaConfig } from '@/shared/contracts/quota';
 
 // checkQuota 는 db.query.surveys.findFirst(설정 조회) + db.select(...).from(surveyResponses)
 // .where(...)(완료 응답 answers 조회) 를 쓴다. 실 PG 없는 vitest 환경이라 where 절 자체를

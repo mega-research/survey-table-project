@@ -4,7 +4,7 @@ import { and, eq, isNull } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { mailCampaigns, mailRecipients, webhookEvents } from '@/db/schema/mail';
-import type { MailRecipientStatus } from '@/db/schema/mail';
+import type { MailRecipientStatus } from '@/shared/contracts/mail';
 import {
   applyRecipientTransition,
   mapResendWebhookType,

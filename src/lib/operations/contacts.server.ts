@@ -14,12 +14,9 @@ import {
   mailCampaigns,
   responseEditLogs,
 } from '@/db/schema';
-import type {
-  ContactColumnScheme,
-  ResponseEditChange,
-  ContactUploadMode,
-} from '@/db/schema/schema-types';
-import type { MailRecipientStatus } from '@/db/schema/mail';
+import type { ContactColumnScheme, ContactUploadMode } from '@/shared/contracts/contacts';
+import type { ResponseEditChange } from '@/shared/contracts/survey-response';
+import type { MailRecipientStatus } from '@/shared/contracts/mail';
 import { mergeChangeLabels } from '@/lib/operations/response-edit-diff';
 import {
   decryptForTarget,
@@ -359,12 +356,7 @@ export function buildColumnCandidates(
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { contactAttempts } from '@/db/schema';
-import {
-  CONTACT_METHOD_LABEL,
-  DEFAULT_RESULT_CODES,
-  type ContactMethod,
-  type ContactResultCode,
-} from '@/db/schema/schema-types';
+import { CONTACT_METHOD_LABEL, DEFAULT_RESULT_CODES, type ContactMethod, type ContactResultCode } from '@/shared/contracts/contacts';
 
 export interface ContactDetailRow {
   id: string;

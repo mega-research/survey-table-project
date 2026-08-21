@@ -13,7 +13,7 @@ import {
   webFilterOptionsFor,
 } from '@/lib/operations/filter-shared';
 import { STATUS_LABEL } from '@/components/operations/mail-campaign/recipient-status-badge';
-import type { ContactResultCode } from '@/db/schema/schema-types';
+import type { ContactResultCode } from '@/shared/contracts/contacts';
 
 describe('webFilterOptionsFor — web 필터 선택지 + 레거시 값 노출', () => {
   it('평상시에는 상태 4옵션만 — 레거시 항목 미노출', () => {

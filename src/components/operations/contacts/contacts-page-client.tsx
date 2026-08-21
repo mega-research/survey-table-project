@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 
 import { ContactsTable } from '@/components/operations/contacts/contacts-table';
-import type { ContactColumnScheme, ContactResultCode } from '@/db/schema/schema-types';
+import type { ContactColumnScheme, ContactResultCode } from '@/shared/contracts/contacts';
 import type { ContactsSortDir, ContactsSortKey } from '@/lib/operations/contacts';
 import type { ContactsRow } from '@/lib/operations/contacts.server';
 

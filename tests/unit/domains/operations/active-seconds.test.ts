@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { sumActiveSeconds } from '@/lib/operations/active-seconds';
-import type { PageVisit } from '@/db/schema/schema-types';
+import type { PageVisit } from '@/shared/contracts/survey-response';
 
 const v = (enteredAt: string, leftAt?: string, stepId = 'group:root'): PageVisit => ({
   stepId,

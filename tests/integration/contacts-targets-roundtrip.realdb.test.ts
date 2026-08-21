@@ -23,7 +23,7 @@ import {
   surveyResponses as surveyResponsesTable,
   surveys as surveysTable,
 } from '@/db/schema';
-import type { ContactColumnScheme } from '@/db/schema/schema-types';
+import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 import { listContactsForSurvey } from '@/lib/operations/contacts.server';
 import type { ORPCContext } from '@/server/context';
 

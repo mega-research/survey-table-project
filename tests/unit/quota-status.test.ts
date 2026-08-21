@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { QuotaConfig } from '@/db/schema/schema-types';
+import type { QuotaConfig } from '@/shared/contracts/quota';
 import { buildQuotaStatus, quotaTone } from '@/lib/operations/quota-status';
 
 const config: QuotaConfig = {

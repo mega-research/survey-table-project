@@ -6,7 +6,8 @@ import { eq, sql, type SQL } from 'drizzle-orm';
 import { db } from '@/db';
 import { contactTargets } from '@/db/schema/contacts';
 import { surveys } from '@/db/schema/surveys';
-import type { ContactColumnScheme, ProgressColumnScheme } from '@/db/schema/schema-types';
+import type { ContactColumnScheme } from '@/shared/contracts/contacts';
+import type { ProgressColumnScheme } from '@/shared/contracts/operations';
 
 import type { ProgressRow, ProgressSortKey, SortDir, ProgressTotals } from './report-progress';
 import { buildFilterSql, type FilterCondition } from './progress-filters.server';

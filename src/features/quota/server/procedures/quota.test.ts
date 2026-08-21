@@ -2,7 +2,7 @@ import { createRouterClient } from '@orpc/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ORPCContext } from '@/server/context';
-import type { QuotaConfig } from '@/db/schema/schema-types';
+import type { QuotaConfig } from '@/shared/contracts/quota';
 
 vi.mock('../services/quota.service', () => ({
   getQuotaConfig: vi.fn(),

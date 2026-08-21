@@ -1,4 +1,5 @@
-import type { ContactColumnScheme, GroupNameDesign, SurveyResponseHeaderConfig } from '@/db/schema/schema-types';
+import type { ContactColumnScheme } from '@/shared/contracts/contacts';
+import type { GroupNameDesign, SurveyResponseHeaderConfig } from '@/shared/contracts/survey';
 import type { MobileTableDisplayMode } from '@/types/mobile-table-display';
 
 export type { GroupNameDesign, SurveyResponseHeaderConfig };

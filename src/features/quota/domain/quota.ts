@@ -1,6 +1,6 @@
 import * as z from 'zod';
 
-import type { QuotaConfig } from '@/db/schema/schema-types';
+import type { QuotaConfig } from '@/shared/contracts/quota';
 
 export const QuotaCategorySchema = z.object({
   id: z.string(),

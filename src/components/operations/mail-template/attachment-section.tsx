@@ -6,7 +6,7 @@ import { Paperclip, Upload, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import type { MailAttachment } from '@/db/schema/schema-types';
+import type { MailAttachment } from '@/shared/contracts/mail';
 import {
   MAX_ATTACHMENT_FILE_BYTES,
   MAX_ATTACHMENT_TOTAL_BYTES,

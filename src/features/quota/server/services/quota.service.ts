@@ -5,7 +5,7 @@ import { and, eq, isNull } from 'drizzle-orm';
 import { completedResponse, notDeletedResponse, notTestResponse } from '@/data/response-filters';
 import { db } from '@/db';
 import { surveyResponses, surveys } from '@/db/schema/surveys';
-import type { QuotaConfig } from '@/db/schema/schema-types';
+import type { QuotaConfig } from '@/shared/contracts/quota';
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { countCell, deriveCategoryIds, findTarget } from '@/lib/quota/matching';
 

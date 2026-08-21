@@ -6,7 +6,7 @@ import { useTransition } from 'react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
-import type { ContactResultCode } from '@/db/schema/schema-types';
+import type { ContactResultCode } from '@/shared/contracts/contacts';
 import { useAutoFadeMessage } from '@/hooks/use-auto-fade-message';
 import { LocalDateTime } from '@/components/ui/local-date-time';
 import { getErrorMessage } from '@/lib/get-error-message';

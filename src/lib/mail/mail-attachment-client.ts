@@ -1,4 +1,4 @@
-import type { MailAttachment } from '@/db/schema/schema-types';
+import type { MailAttachment } from '@/shared/contracts/mail';
 import { client } from '@/shared/lib/rpc';
 
 import {

@@ -1,6 +1,6 @@
 import * as z from 'zod';
 
-import type { ContactUploadMapping } from '@/db/schema/schema-types';
+import type { ContactUploadMapping } from '@/shared/contracts/contacts';
 
 export type { ContactUploadMapping };
 

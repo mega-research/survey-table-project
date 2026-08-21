@@ -3,7 +3,7 @@
  * 서버(matchPreview·ingest)와 클라(위저드 유사 키 제안)가 공용 — server-only import 금지.
  */
 
-import type { ContactColumnScheme } from '@/db/schema/schema-types';
+import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 import type { PiiFieldType } from '@/lib/crypto/pii-fields';
 
 export interface ExistingContactKeyInfo {

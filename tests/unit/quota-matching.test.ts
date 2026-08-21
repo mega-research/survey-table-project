@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { QuotaConfig, QuotaDimension } from '@/db/schema/schema-types';
+import type { QuotaConfig, QuotaDimension } from '@/shared/contracts/quota';
 import {
   cellKeyOf,
   countCell,

@@ -1,4 +1,4 @@
-import type { ContactColumnDef, ContactColumnScheme } from '@/db/schema/schema-types';
+import type { ContactColumnDef, ContactColumnScheme } from '@/shared/contracts/contacts';
 
 /**
  * 분류 기준 레벨 슬롯 (진척보고 조합 집계 축).

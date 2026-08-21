@@ -4,7 +4,8 @@ import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 
 import { getSurveyWithDetails } from '@/data/surveys';
 import { db } from '@/db';
-import { surveyResponses, surveys, surveyVersions, type SurveyVersionSnapshot } from '@/db/schema';
+import { surveyResponses, surveys, surveyVersions } from '@/db/schema';
+import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
 import { generateSPSSColumns } from '@/lib/analytics/spss-excel-export';
 import { normalizeQuestions } from '@/lib/question';
 import { extractR2KeysFromJsonbValue } from '@/lib/r2-lifecycle/key-extract';

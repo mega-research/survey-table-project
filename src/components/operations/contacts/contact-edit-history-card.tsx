@@ -1,7 +1,7 @@
 import { ChevronDown } from 'lucide-react';
 
 import { LocalDateTime } from '@/components/ui/local-date-time';
-import type { ResponseEditChange } from '@/db/schema/schema-types';
+import type { ResponseEditChange } from '@/shared/contracts/survey-response';
 import type { ResponseEditLogRow } from '@/lib/operations/contacts.server';
 
 /** 바뀐 질문 요약 — 앞 3개 code/title + "외 N개". */

@@ -6,7 +6,7 @@ import { eq } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { surveys } from '@/db/schema/surveys';
-import type { ProfileColumnScheme } from '@/db/schema/schema-types';
+import type { ProfileColumnScheme } from '@/shared/contracts/operations';
 
 /**
  * surveys.profile_columns 캐시 (RSC pass 내 dedupe).

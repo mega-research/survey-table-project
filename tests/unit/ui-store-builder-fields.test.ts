@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
-import type { VariableDef } from '@/components/operations/mail-template/variable-catalog';
+import type { VariableDef } from '@/shared/contracts/template-variables';
 import { useSurveyUIStore } from '@/stores/ui-store';
 
 // survey-store 에서 ui-store 로 옮긴 빌더 UI 필드(editingQuestionId / variableCatalog)의

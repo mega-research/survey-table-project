@@ -6,7 +6,7 @@ import { db } from '@/db';
 import { mailCampaigns, mailRecipients } from '@/db/schema/mail';
 import { getResend } from '@/lib/mail/resend-client';
 import { mapResendLastEvent, canTransition, applyRecipientTransition } from '@/lib/mail/recipient-status-transition';
-import type { MailRecipientStatus } from '@/db/schema/mail';
+import type { MailRecipientStatus } from '@/shared/contracts/mail';
 
 export interface StuckRecipient {
   id: string;

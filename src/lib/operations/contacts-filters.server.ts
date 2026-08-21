@@ -1,7 +1,7 @@
 import 'server-only';
 
 import { blindIndex } from '@/lib/crypto/blind';
-import type { ContactResultCode } from '@/db/schema/schema-types';
+import type { ContactResultCode } from '@/shared/contracts/contacts';
 import {
   FILTER_SOURCE,
   HEADER_FILTER_MODES,

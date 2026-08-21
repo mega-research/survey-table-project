@@ -1,4 +1,4 @@
-import type { QuotaCategory, QuotaConfig, QuotaDimension } from '@/db/schema/schema-types';
+import type { QuotaCategory, QuotaConfig, QuotaDimension } from '@/shared/contracts/quota';
 
 /**
  * 저장된 답을 매칭용 문자열 후보 배열로 정규화.

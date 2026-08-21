@@ -5,7 +5,7 @@ import { cache } from 'react';
 
 import { db } from '@/db';
 import { mailCampaigns, mailTemplates, type MailTemplate } from '@/db/schema/mail';
-import type { MailAttachment } from '@/db/schema/schema-types';
+import type { MailAttachment } from '@/shared/contracts/mail';
 import { promoteMailAttachments } from '@/lib/mail/mail-attachment-promote';
 import { registerDeletionCandidates } from '@/lib/r2-lifecycle/deletion-queue.server';
 import { extractMailContentKeys } from '@/lib/r2-lifecycle/key-extract';

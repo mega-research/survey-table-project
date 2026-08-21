@@ -1,12 +1,25 @@
 import { relations, sql } from 'drizzle-orm';
-import { boolean, integer, jsonb, pgTable, text, timestamp, unique, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  unique,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core';
 
-import { contactTargets } from './contacts';
 import type {
   CampaignFilterSnapshot,
   MailAttachment,
+  MailCampaignStatus,
   MailRecipientSendPayloadSnapshot,
-} from './schema-types';
+  MailRecipientStatus,
+} from '@/shared/contracts/mail';
+
+import { contactTargets } from './contacts';
 import { surveys } from './surveys';
 
 export const mailTemplates = pgTable('mail_templates', {
@@ -20,14 +33,8 @@ export const mailTemplates = pgTable('mail_templates', {
   fromLocal: text('from_local').notNull().default(''),
   fromName: text('from_name').notNull().default(''),
   replyTo: text('reply_to'),
-  attachments: jsonb('attachments')
-    .notNull()
-    .default([])
-    .$type<MailAttachment[]>(),
-  variablesUsed: jsonb('variables_used')
-    .notNull()
-    .default([])
-    .$type<string[]>(),
+  attachments: jsonb('attachments').notNull().default([]).$type<MailAttachment[]>(),
+  variablesUsed: jsonb('variables_used').notNull().default([]).$type<string[]>(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
@@ -45,16 +52,6 @@ export const mailTemplatesRelations = relations(mailTemplates, ({ one, many }) =
 // mail_campaigns — 단체 발송 회차. status 전이: draft → queued → sending → completed/partial/cancelled
 // 카운터 컬럼은 webhook handler 가 atomic delta 로 갱신 (트리거 미사용).
 // ─────────────────────────────────────────────────────────────────────────────
-
-export const mailCampaignStatusValues = [
-  'draft',
-  'queued',
-  'sending',
-  'completed',
-  'partial',
-  'cancelled',
-] as const;
-export type MailCampaignStatus = (typeof mailCampaignStatusValues)[number];
 
 export const mailCampaignKindValues = ['bulk', 'single'] as const;
 export type MailCampaignKind = (typeof mailCampaignKindValues)[number];
@@ -84,10 +81,7 @@ export const mailCampaigns = pgTable(
       .notNull()
       .default([])
       .$type<MailAttachment[]>(),
-    filterSnapshot: jsonb('filter_snapshot')
-      .notNull()
-      .default({})
-      .$type<CampaignFilterSnapshot>(),
+    filterSnapshot: jsonb('filter_snapshot').notNull().default({}).$type<CampaignFilterSnapshot>(),
 
     createdBy: uuid('created_by'),
     status: text('status').$type<MailCampaignStatus>().notNull().default('draft'),
@@ -136,19 +130,6 @@ export const mailCampaignsRelations = relations(mailCampaigns, ({ one, many }) =
 // status 전이: queued → sending → sent → delivered → opened
 //   또는 → bounced/complained/failed (terminal), 또는 → skipped_unsubscribed (insert 시점)
 // ─────────────────────────────────────────────────────────────────────────────
-
-export const mailRecipientStatusValues = [
-  'queued',
-  'sending',
-  'sent',
-  'delivered',
-  'opened',
-  'bounced',
-  'complained',
-  'failed',
-  'skipped_unsubscribed',
-] as const;
-export type MailRecipientStatus = (typeof mailRecipientStatusValues)[number];
 
 export const mailRecipients = pgTable(
   'mail_recipients',

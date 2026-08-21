@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { ContactColumnScheme } from '@/db/schema/schema-types';
+import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 import { resolveGroupCriteria } from '@/lib/contacts/group-levels';
 
 function scheme(columns: ContactColumnScheme['columns']): ContactColumnScheme {

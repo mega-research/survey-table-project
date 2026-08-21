@@ -8,11 +8,7 @@ import { CampaignRecipientsTable } from '@/components/operations/mail-campaign/c
 import { ResyncCampaignButton } from '@/components/operations/mail-campaign/resync-campaign-button';
 import { Card } from '@/components/ui/card';
 import { LocalDateTime } from '@/components/ui/local-date-time';
-import {
-  mailRecipientStatusValues,
-  type MailCampaignStatus,
-  type MailRecipientStatus,
-} from '@/db/schema/mail';
+import { mailRecipientStatusValues, type MailCampaignStatus, type MailRecipientStatus } from '@/shared/contracts/mail';
 import {
   getCampaignDetail,
   listCampaignRecipients,

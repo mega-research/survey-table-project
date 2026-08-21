@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { forwardRef, useImperativeHandle, useState, useTransition } from 'react';
 
 import { Button } from '@/components/ui/button';
-import type { ContactResultCode } from '@/db/schema/schema-types';
+import type { ContactResultCode } from '@/shared/contracts/contacts';
 import { useAutoFadeMessage } from '@/hooks/use-auto-fade-message';
 import { client } from '@/shared/lib/rpc';
 

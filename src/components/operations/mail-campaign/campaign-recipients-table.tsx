@@ -4,7 +4,7 @@ import { Card } from '@/components/ui/card';
 import { LocalDateTime } from '@/components/ui/local-date-time';
 import { PagerJump } from '@/components/operations/pager-jump';
 import { buildPageItems } from '@/components/operations/table-primitives';
-import type { MailRecipientStatus } from '@/db/schema/mail';
+import type { MailRecipientStatus } from '@/shared/contracts/mail';
 import type { CampaignRecipientRow } from '@/lib/operations/campaigns.server';
 
 import { RecipientStatusBadge } from './recipient-status-badge';

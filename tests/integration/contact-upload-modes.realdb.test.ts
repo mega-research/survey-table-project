@@ -29,7 +29,7 @@ import {
   contactTargets as contactTargetsTable,
   surveys as surveysTable,
 } from '@/db/schema';
-import type { ContactUploadMapping } from '@/db/schema/schema-types';
+import type { ContactUploadMapping } from '@/shared/contracts/contacts';
 import { ingestContactUpload } from '@/features/contacts/server/services/contact-uploads.service';
 
 const dbUrl = process.env['DATABASE_URL'] ?? '';

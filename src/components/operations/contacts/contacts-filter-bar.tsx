@@ -1,6 +1,6 @@
 'use client';
 
-import type { ContactResultCode } from '@/db/schema/schema-types';
+import type { ContactResultCode } from '@/shared/contracts/contacts';
 import { FILTER_SOURCE, type ColumnCandidate } from '@/lib/operations/filter-shared';
 
 import {

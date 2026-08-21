@@ -7,11 +7,8 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
-import type {
-  ContactColumnScheme,
-  ProfileColumnDef,
-  ProfileColumnScheme,
-} from '@/db/schema/schema-types';
+import type { ContactColumnScheme } from '@/shared/contracts/contacts';
+import type { ProfileColumnDef, ProfileColumnScheme } from '@/shared/contracts/operations';
 import { resultErrorMessage } from '@/lib/get-error-message';
 import { hydrateProfileColumns } from '@/lib/operations/profile-columns';
 import { client } from '@/shared/lib/rpc';

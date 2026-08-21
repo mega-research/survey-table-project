@@ -4,7 +4,7 @@ import { eq, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { mailRecipients } from '@/db/schema/mail';
-import type { MailRecipientStatus } from '@/db/schema/mail';
+import type { MailRecipientStatus } from '@/shared/contracts/mail';
 
 /**
  * newStatus 기준 역행 가드. webhook(eventType->status)과 reconcile(last_event->status)이

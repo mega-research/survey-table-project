@@ -10,7 +10,7 @@ import type {
   NormalizedResponseHeaderBlock, NormalizedResponseHeaderConfig,
 } from '@/lib/survey/response-header-config';
 import { cn, isEmptyHtml } from '@/lib/utils';
-import type { SurveyResponseHeaderConfig } from '@/db/schema/schema-types';
+import type { SurveyResponseHeaderConfig } from '@/shared/contracts/survey';
 
 interface SurveyResponseHeaderProps {
   title: string;

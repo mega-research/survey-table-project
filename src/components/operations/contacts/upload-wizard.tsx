@@ -18,12 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import type {
-  ContactColumnDef,
-  ContactColumnScheme,
-  ContactUploadMapping,
-  ContactUploadMode,
-} from '@/db/schema/schema-types';
+import type { ContactColumnDef, ContactColumnScheme, ContactUploadMapping, ContactUploadMode } from '@/shared/contracts/contacts';
 import type {
   IngestContactUploadResult,
   MatchContactUploadResult,

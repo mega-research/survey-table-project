@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import type { MailAttachment } from '@/db/schema/schema-types';
+import type { MailAttachment } from '@/shared/contracts/mail';
 import type { MailPreviewSample } from '@/features/mail/domain/mail-preview';
 import { resultErrorMessage } from '@/lib/get-error-message';
 import { TMP_ATTACHMENT_PREFIX } from '@/lib/mail/constants';

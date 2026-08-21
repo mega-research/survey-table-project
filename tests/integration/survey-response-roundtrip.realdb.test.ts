@@ -37,7 +37,7 @@ import {
   surveys as surveysTable,
   surveyVersions as surveyVersionsTable,
 } from '@/db/schema';
-import type { SurveyVersionSnapshot } from '@/db/schema/schema-types';
+import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
 import type { ORPCContext } from '@/server/context';
 
 import { response } from '@/features/survey-response/server/procedures/response';

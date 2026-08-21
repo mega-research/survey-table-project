@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SurveyResponseFlow } from '@/components/survey-response/survey-response-flow';
 import { useSurveyResponseStore } from '@/stores/survey-response-store';
-import type { SurveyVersionSnapshot } from '@/db/schema';
+import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
 import type { Question, Survey } from '@/types/survey';
 
 vi.mock('next/navigation', () => ({

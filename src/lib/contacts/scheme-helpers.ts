@@ -3,7 +3,7 @@ import 'server-only';
 
 import { db } from '@/db';
 import { surveys } from '@/db/schema';
-import type { ContactColumnDef, ContactColumnScheme, ContactUploadMapping } from '@/db/schema/schema-types';
+import type { ContactColumnDef, ContactColumnScheme, ContactUploadMapping } from '@/shared/contracts/contacts';
 import { piiKeyOf } from '@/lib/operations/contacts';
 
 export { getSchemeRouting, type SchemeRouting } from './match-contacts';

@@ -6,12 +6,8 @@ import {
   trimmedStats,
   type DwellInput,
 } from '@/lib/operations/page-dwell';
-import type {
-  PageVisit,
-  QuestionData,
-  QuestionGroupData,
-  SurveyVersionSnapshot,
-} from '@/db/schema/schema-types';
+import type { PageVisit } from '@/shared/contracts/survey-response';
+import type { QuestionData, QuestionGroupData, SurveyVersionSnapshot } from '@/shared/contracts/survey';
 
 // ── 헬퍼 ────────────────────────────────────────────────────────────────
 

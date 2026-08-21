@@ -9,10 +9,8 @@ import * as libraryData from '@/data/library';
 import { getSurveyWithDetails as getSurveyWithDetailsData } from '@/data/surveys';
 import { db } from '@/db';
 import { contactTargets, questionGroups, questions, surveyVersions, surveys } from '@/db/schema';
-import {
-  getVariableCatalog,
-  type VariableDef,
-} from '@/components/operations/mail-template/variable-catalog';
+import { getVariableCatalog } from '@/lib/mail/variable-catalog';
+import type { VariableDef } from '@/shared/contracts/template-variables';
 import { normalizeQuestions } from '@/lib/question';
 import { findContactByInviteToken } from '@/lib/duplicate-detection/invite-lookup';
 import { isValidTestToken } from '@/lib/survey-control';

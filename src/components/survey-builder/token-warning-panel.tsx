@@ -12,7 +12,7 @@ import { collectGatingDiagnostics, type GatingDiagnostic } from '@/lib/survey/ce
 import { formatCellLabel } from '@/utils/cell-label';
 import { resolveChoiceOptions } from '@/utils/choice-source';
 import { resolveRankingOptions } from '@/utils/ranking-source';
-import type { VariableDef } from '@/components/operations/mail-template/variable-catalog';
+import type { VariableDef } from '@/shared/contracts/template-variables';
 import type { Question, QuestionGroup, SurveyLookup, TableCell } from '@/types/survey';
 
 interface Props {

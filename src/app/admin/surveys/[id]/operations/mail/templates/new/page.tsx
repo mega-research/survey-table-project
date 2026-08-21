@@ -1,5 +1,5 @@
 import { TemplateEditForm } from '@/components/operations/mail-template/template-edit-form';
-import { getVariableCatalog } from '@/components/operations/mail-template/variable-catalog';
+import { getVariableCatalog } from '@/lib/mail/variable-catalog';
 import { requireAuth } from '@/lib/auth';
 
 interface Props {

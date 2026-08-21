@@ -1,7 +1,7 @@
 import { PgDialect } from 'drizzle-orm/pg-core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { ContactColumnScheme } from '@/db/schema/schema-types';
+import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 import { addContactTarget } from '@/features/contacts/server/services/contact-targets.service';
 import { ingestContactUpload } from '@/features/contacts/server/services/contact-uploads.service';
 import { generateTestContacts } from '@/features/contacts/server/services/test-contacts.service';

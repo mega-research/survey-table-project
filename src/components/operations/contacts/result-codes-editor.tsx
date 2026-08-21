@@ -13,11 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  type ContactResultCode,
-  DEFAULT_RESULT_CODES,
-  type ResultCodeStatus,
-} from '@/db/schema/schema-types';
+import { type ContactResultCode, DEFAULT_RESULT_CODES, type ResultCodeStatus } from '@/shared/contracts/contacts';
 import { resolveCodeStatus } from '@/lib/operations/result-code-statuses';
 import { client } from '@/shared/lib/rpc';
 

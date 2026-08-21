@@ -1,4 +1,4 @@
-import type { QuotaConfig } from '@/db/schema/schema-types';
+import type { QuotaConfig } from '@/shared/contracts/quota';
 import { cellKeyOf, tallyAll } from '@/lib/quota/matching';
 
 export type QuotaCellTone = 'done' | 'good' | 'warn' | 'low';

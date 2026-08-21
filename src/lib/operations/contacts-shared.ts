@@ -9,7 +9,7 @@
  */
 
 import { attrsKeyOf } from './contacts';
-import type { ContactColumnScheme, ContactResultCode } from '@/db/schema/schema-types';
+import type { ContactColumnScheme, ContactResultCode } from '@/shared/contracts/contacts';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 시스템 필드 추출

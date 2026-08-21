@@ -2,7 +2,7 @@ import 'server-only';
 
 import { sql, type SQL } from 'drizzle-orm';
 
-import type { ContactResultCode } from '@/db/schema/schema-types';
+import type { ContactResultCode } from '@/shared/contracts/contacts';
 import {
   parseClausesFromUrl,
   parseHeaderFiltersFromUrl,

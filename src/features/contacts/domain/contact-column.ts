@@ -1,6 +1,6 @@
 import * as z from 'zod';
 
-import type { ContactColumnDef, ContactColumnScheme } from '@/db/schema/schema-types';
+import type { ContactColumnDef, ContactColumnScheme } from '@/shared/contracts/contacts';
 
 export type { ContactColumnDef, ContactColumnScheme };
 

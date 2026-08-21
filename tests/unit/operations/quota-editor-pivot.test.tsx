@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { QuotaEditor } from '@/components/operations/quota/quota-editor';
-import type { QuotaConfig, QuotaDimension } from '@/db/schema/schema-types';
+import type { QuotaConfig, QuotaDimension } from '@/shared/contracts/quota';
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ refresh: vi.fn() }),

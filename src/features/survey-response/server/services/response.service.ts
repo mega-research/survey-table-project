@@ -19,7 +19,7 @@ import {
   surveyVersions,
   surveys,
 } from '@/db/schema';
-import type { PageVisit } from '@/db/schema/schema-types';
+import type { PageVisit } from '@/shared/contracts/survey-response';
 import { decryptQuestionResponses, encryptAnswerValue, encryptResponsesForStorage } from '@/lib/crypto/response-pii';
 import { checkTrackA, checkTrackB } from '@/lib/duplicate-detection/check';
 import { computeSignals } from '@/lib/duplicate-detection/signals';

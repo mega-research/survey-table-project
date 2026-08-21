@@ -22,12 +22,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
-import {
-  CONTACT_METHOD_LABEL,
-  type ContactColumnDef,
-  type ContactColumnScheme,
-  type ContactMethod,
-} from '@/db/schema/schema-types';
+import { CONTACT_METHOD_LABEL, type ContactColumnDef, type ContactColumnScheme, type ContactMethod } from '@/shared/contracts/contacts';
 import { LocalDateTime } from '@/components/ui/local-date-time';
 import { attrsKeyOf, piiKeyOf } from '@/lib/operations/contacts';
 import { piiFieldLabel, type PiiFieldType } from '@/lib/crypto/pii-fields';

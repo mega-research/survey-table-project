@@ -1,4 +1,5 @@
-import type { ResponseEditChange, SurveyVersionSnapshot } from '@/db/schema/schema-types';
+import type { ResponseEditChange } from '@/shared/contracts/survey-response';
+import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
 
 /**
  * 키 순서 무관 안정 직렬화 — deep-equal 비교용.
@@ -38,7 +39,7 @@ export function buildChangedQuestions(
 ): ResponseEditChange[] {
   const map = new Map<string, { code: string | null; title: string }>();
   for (const q of snapshot?.questions ?? []) {
-    // questionCode 는 schema-types.QuestionData 타입에 없으므로 안전 단언.
+    // questionCode 는 contracts/survey 의 QuestionData 타입에 없으므로 안전 단언.
     const code = (q as { questionCode?: string }).questionCode ?? null;
     map.set(q.id, { code, title: q.title });
   }

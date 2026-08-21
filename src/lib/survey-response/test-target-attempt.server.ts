@@ -3,7 +3,7 @@ import 'server-only';
 
 import { db } from '@/db';
 import { contactTargets, surveyResponses, surveys, testResponseAttempts } from '@/db/schema';
-import type { PageVisit } from '@/db/schema/schema-types';
+import type { PageVisit } from '@/shared/contracts/survey-response';
 import { resetTestResponseRow } from '@/lib/survey-response/reset-test-response.server';
 import type { TestAttemptIdentity } from '@/shared/types/test-attempt';
 

@@ -1,6 +1,6 @@
 import * as z from 'zod';
 
-import type { QuestionData } from '@/db/schema/schema-types';
+import type { QuestionData } from '@/shared/contracts/survey';
 import type { SavedQuestion as DbSavedQuestion } from '@/db/schema/surveys';
 import type { Question, SavedQuestion } from '@/types/survey';
 

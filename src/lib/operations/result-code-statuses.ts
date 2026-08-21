@@ -13,11 +13,7 @@
  * cache wrapped DB 호출은 `result-code-statuses.server.ts` 참조.
  */
 
-import {
-  DEFAULT_RESULT_CODES,
-  type ContactResultCode,
-  type ResultCodeStatus,
-} from '@/db/schema/schema-types';
+import { DEFAULT_RESULT_CODES, type ContactResultCode, type ResultCodeStatus } from '@/shared/contracts/contacts';
 
 export interface ResultCodeStatuses {
   positive: string[];

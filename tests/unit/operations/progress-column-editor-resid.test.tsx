@@ -19,7 +19,8 @@ vi.mock('@/shared/lib/rpc', () => ({
 
 import { client } from '@/shared/lib/rpc';
 import { ProgressColumnEditor } from '@/components/operations/report/progress-column-editor';
-import type { ContactColumnScheme, ProgressColumnScheme } from '@/db/schema/schema-types';
+import type { ContactColumnScheme } from '@/shared/contracts/contacts';
+import type { ProgressColumnScheme } from '@/shared/contracts/operations';
 
 const updateColumnsMock = vi.mocked(client.operations.progress.updateColumns);
 

@@ -5,7 +5,7 @@ import {
   diffQuestionResponses,
   mergeChangeLabels,
 } from '@/lib/operations/response-edit-diff';
-import type { SurveyVersionSnapshot } from '@/db/schema/schema-types';
+import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
 
 describe('diffQuestionResponses', () => {
   it('값이 바뀐 questionId 를 찾는다', () => {

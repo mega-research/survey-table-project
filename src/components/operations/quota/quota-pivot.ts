@@ -1,4 +1,4 @@
-import type { QuotaCell } from '@/db/schema/schema-types';
+import type { QuotaCell } from '@/shared/contracts/quota';
 
 /**
  * 쿼터 3조건 피벗 레이아웃 계산 (순수 모듈, 표시 전용).

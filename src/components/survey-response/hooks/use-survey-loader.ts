@@ -7,7 +7,7 @@ import { useSurveyResponseStore } from '@/stores/survey-response-store';
 import { normalizeQuestions } from '@/lib/question';
 import { normalizeResponseHeaderConfig } from '@/lib/survey/response-header-config';
 import { parsesurveyIdentifier } from '@/lib/survey-url';
-import type { SurveyVersionSnapshot } from '@/db/schema';
+import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
 import type { QuestionGroup, Survey } from '@/types/survey';
 import type { SaveAdminEditPayload } from '@/features/survey-response/domain/response-edit';
 import type { SurveyControl } from '@/features/survey-builder/domain/survey-read';

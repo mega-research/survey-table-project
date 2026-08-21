@@ -1,6 +1,6 @@
 import * as z from 'zod';
 
-import type { ContactResultCode } from '@/db/schema/schema-types';
+import type { ContactResultCode } from '@/shared/contracts/contacts';
 
 // 결과코드 1개 정의(JSONB 항목) 타입 재노출.
 export type { ContactResultCode };

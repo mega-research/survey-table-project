@@ -1,19 +1,4 @@
-import type {
-  ResponseHeaderBandStyle,
-  ResponseHeaderBlockPos,
-  ResponseHeaderBlockSize,
-  ResponseHeaderImageFrame,
-  ResponseHeaderLayout,
-  ResponseHeaderLogoAlign,
-  ResponseHeaderLogoSize,
-  ResponseHeaderMobileStyle,
-  ResponseHeaderNoticeFormat,
-  ResponseHeaderNoticeWidth,
-  ResponseHeaderTitleAlign,
-  ResponseHeaderTitleSize,
-  ResponseHeaderVAlign,
-  SurveyResponseHeaderConfig,
-} from '@/db/schema/schema-types';
+import type { ResponseHeaderBandStyle, ResponseHeaderBlockPos, ResponseHeaderBlockSize, ResponseHeaderImageFrame, ResponseHeaderLayout, ResponseHeaderLogoAlign, ResponseHeaderLogoSize, ResponseHeaderMobileStyle, ResponseHeaderNoticeFormat, ResponseHeaderNoticeWidth, ResponseHeaderTitleAlign, ResponseHeaderTitleSize, ResponseHeaderVAlign, SurveyResponseHeaderConfig } from '@/shared/contracts/survey';
 import { cn, generateId } from '@/lib/utils';
 
 type StatisticNoticeConfig = Extract<

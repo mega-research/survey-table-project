@@ -1,7 +1,7 @@
 import * as z from 'zod';
 
 import type { MailTemplate } from '@/db/schema/mail';
-import type { MailAttachment } from '@/db/schema/schema-types';
+import type { MailAttachment } from '@/shared/contracts/mail';
 import { mailAttachmentSchema, mailTemplateInputSchema } from '@/lib/mail/schema';
 
 export type { MailTemplate };

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { SurveyResponseHeaderConfig } from '@/db/schema/schema-types';
+import type { SurveyResponseHeaderConfig } from '@/shared/contracts/survey';
 import {
   DEFAULT_COMPOSED_RESPONSE_HEADER,
   DEFAULT_NOTICE_LINE,

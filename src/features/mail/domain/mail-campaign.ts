@@ -1,13 +1,13 @@
 import * as z from 'zod';
 
-import type { CampaignFilterSnapshot } from '@/db/schema/schema-types';
+import type { CampaignFilterSnapshot } from '@/shared/contracts/mail';
 
 export type { CampaignFilterSnapshot };
 
 /**
  * mail_campaigns.filter_snapshot — 마법사 ②단계 필터 조건 보존 스키마.
  * .strict() + clauses max20 + legacy 필드 포함은 원본 campaign-actions.ts 와 동일.
- * z.infer 가 schema-types.CampaignFilterSnapshot 와 호환되도록 모델링하되,
+ * z.infer 가 contracts/mail 의 CampaignFilterSnapshot 와 호환되도록 모델링하되,
  * service 내부에서 as CampaignFilterSnapshot 캐스팅(원본 패턴 보존).
  */
 export const FilterSnapshotSchema = z

@@ -22,11 +22,7 @@ import {
   mailRecipients,
   mailTemplates,
 } from '@/db/schema';
-import type {
-  CampaignFilterSnapshot,
-  MailAttachment,
-} from '@/db/schema/schema-types';
-import type { MailCampaignStatus, MailRecipientStatus } from '@/db/schema/mail';
+import type { CampaignFilterSnapshot, MailAttachment, MailCampaignStatus, MailRecipientStatus } from '@/shared/contracts/mail';
 import { decryptPii } from '@/lib/crypto/aes';
 import { blindIndex } from '@/lib/crypto/blind';
 import { maskEmail } from '@/lib/operations/contacts';

@@ -9,14 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import type {
-  ResponseHeaderBlockPos,
-  ResponseHeaderBlockSize,
-  ResponseHeaderLayout,
-  ResponseHeaderTitleAlign,
-  ResponseHeaderVAlign,
-  SurveyResponseHeaderConfig,
-} from '@/db/schema/schema-types';
+import type { ResponseHeaderBlockPos, ResponseHeaderBlockSize, ResponseHeaderLayout, ResponseHeaderTitleAlign, ResponseHeaderVAlign, SurveyResponseHeaderConfig } from '@/shared/contracts/survey';
 import {
   applyResponseHeaderPreset,
   coerceBlocksForInlineLayout,

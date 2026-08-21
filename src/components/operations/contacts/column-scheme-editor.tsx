@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import type { ContactColumnDef, ContactColumnScheme } from '@/db/schema/schema-types';
+import type { ContactColumnDef, ContactColumnScheme } from '@/shared/contracts/contacts';
 import {
   GROUP_LEVELS,
   GROUP_LEVEL_LABELS,

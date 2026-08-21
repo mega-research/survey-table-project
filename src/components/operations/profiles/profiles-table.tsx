@@ -14,7 +14,7 @@ import { useSearchParamsMutator } from '@/hooks/use-search-params-mutator';
 import { cn } from '@/lib/utils';
 import { formatPlatformKo } from '@/lib/operations/parse-ua';
 import { formatIpHash } from '@/lib/operations/profile-columns';
-import type { ProfileColumnDef } from '@/db/schema/schema-types';
+import type { ProfileColumnDef } from '@/shared/contracts/operations';
 import {
   formatTotalTime,
   mapStatusPill,

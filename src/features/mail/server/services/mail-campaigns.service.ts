@@ -6,7 +6,7 @@ import { db } from '@/db';
 import { contactPii, contactTargets } from '@/db/schema/contacts';
 import { mailCampaigns, mailRecipients, mailTemplates, type MailCampaignKind } from '@/db/schema/mail';
 import { surveys } from '@/db/schema/surveys';
-import type { CampaignFilterSnapshot } from '@/db/schema/schema-types';
+import type { CampaignFilterSnapshot } from '@/shared/contracts/mail';
 import { decryptPii } from '@/lib/crypto/aes';
 import { inngest } from '@/lib/inngest/client';
 import { withTestPrefix } from '@/lib/mail/test-campaign';

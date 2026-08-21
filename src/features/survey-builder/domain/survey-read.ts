@@ -7,7 +7,7 @@ import type {
   SurveyResponse,
   SurveyVersion,
 } from '@/db/schema';
-import type { VariableDef } from '@/components/operations/mail-template/variable-catalog';
+import type { VariableDef } from '@/shared/contracts/template-variables';
 import type { Survey as SurveyType } from '@/types/survey';
 
 // types/survey 의 SurveyType(컴포넌트 기대 타입)과 DB row 타입을 함께 re-export.

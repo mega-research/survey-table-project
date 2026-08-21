@@ -28,7 +28,7 @@ vi.mock('@/db', () => ({
   },
 }));
 
-import type { QuotaConfig } from '@/db/schema/schema-types';
+import type { QuotaConfig } from '@/shared/contracts/quota';
 import { encryptAnswerValue } from '@/lib/crypto/response-pii';
 
 describe('data/responses.getResponseById — 복호화 경계', () => {

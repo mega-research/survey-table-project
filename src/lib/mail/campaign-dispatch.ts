@@ -9,7 +9,7 @@ import { and, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { contactTargets } from '@/db/schema/contacts';
 import { mailCampaigns, mailRecipients } from '@/db/schema/mail';
-import type { MailRecipientSendPayloadSnapshot } from '@/db/schema/schema-types';
+import type { MailRecipientSendPayloadSnapshot } from '@/shared/contracts/mail';
 import { buildInviteUrl } from '@/lib/survey-url';
 import { extractMailContentKeys } from '@/lib/r2-lifecycle/key-extract';
 import { recordSentKeys } from '@/lib/r2-lifecycle/sent-ledger.server';

@@ -25,10 +25,8 @@
  *   - 결과 정렬은 캐노니컬 순서 (mean 정렬 X) — 차트 x축 구조 보존.
  */
 
-import type {
-  PageVisit,
-  SurveyVersionSnapshot,
-} from '@/db/schema/schema-types';
+import type { PageVisit } from '@/shared/contracts/survey-response';
+import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
 import { buildRenderSteps, stepIdOf } from '@/lib/group-ordering';
 import type { Question, QuestionGroup } from '@/types/survey';
 

@@ -4,7 +4,7 @@ import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { contactTargets, mailCampaigns, mailRecipients } from '@/db/schema';
-import type { MailRecipientStatus } from '@/db/schema/mail';
+import type { MailRecipientStatus } from '@/shared/contracts/mail';
 import { finalizeCampaignIfDone } from '@/lib/mail/recipient-status-transition';
 
 export type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];

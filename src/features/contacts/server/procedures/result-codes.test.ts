@@ -1,7 +1,7 @@
 import { createRouterClient } from '@orpc/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { ContactResultCode } from '@/db/schema/schema-types';
+import type { ContactResultCode } from '@/shared/contracts/contacts';
 import type { ORPCContext } from '@/server/context';
 
 vi.mock('../services/contact-result-codes.service', () => ({

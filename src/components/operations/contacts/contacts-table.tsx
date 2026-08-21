@@ -10,7 +10,7 @@ import { HeaderFilterPopover } from '@/components/operations/filters/header-filt
 import { StatusPill } from '@/components/operations/profiles/status-pill';
 import { mapStatusPill, type StatusPillResult } from '@/lib/operations/profiles';
 import { SortIndicator, TablePagerFooter } from '@/components/operations/table-primitives';
-import type { ContactColumnDef, ContactColumnScheme, ContactResultCode } from '@/db/schema/schema-types';
+import type { ContactColumnDef, ContactColumnScheme, ContactResultCode } from '@/shared/contracts/contacts';
 import { useSearchParamsMutator } from '@/hooks/use-search-params-mutator';
 import { formatLocalMonthDayTime } from '@/lib/date-formatters';
 import { attrsKeyOf, piiKeyOf, type ContactsSortDir, type ContactsSortKey } from '@/lib/operations/contacts';

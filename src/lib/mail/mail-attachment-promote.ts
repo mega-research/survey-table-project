@@ -1,6 +1,6 @@
 import * as Sentry from '@sentry/nextjs';
 
-import type { MailAttachment } from '@/db/schema/schema-types';
+import type { MailAttachment } from '@/shared/contracts/mail';
 import { copyR2Objects } from '@/lib/image-utils-server';
 
 import {

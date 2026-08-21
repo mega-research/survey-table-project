@@ -41,7 +41,7 @@ import {
 } from '@/components/survey-response/survey-response-screens';
 import { AlreadyRespondedView } from '@/components/survey-response/already-responded-view';
 import { Button } from '@/components/ui/button';
-import type { SurveyVersionSnapshot } from '@/db/schema';
+import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
 import type { SaveAdminEditPayload } from '@/features/survey-response/domain/response-edit';
 import { useClientSignals } from '@/hooks/use-client-signals';
 import { useKeyboardOpen } from '@/hooks/use-keyboard-open';

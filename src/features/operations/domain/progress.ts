@@ -1,6 +1,6 @@
 import * as z from 'zod';
 
-import type { ProgressColumnScheme } from '@/db/schema/schema-types';
+import type { ProgressColumnScheme } from '@/shared/contracts/operations';
 
 export type { ProgressColumnScheme };
 

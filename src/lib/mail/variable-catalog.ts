@@ -1,24 +1,15 @@
-import 'server-only';
+import { cache } from 'react';
 
 import { eq } from 'drizzle-orm';
-import { cache } from 'react';
+import 'server-only';
 
 import { getSurveyById } from '@/data/surveys';
 import { db } from '@/db';
 import { contactTargets } from '@/db/schema/contacts';
-
-export interface VariableDef {
-  key: string;
-  label: string;
-  category: 'attrs' | 'system';
-  description?: string;
-}
+import type { VariableDef } from '@/shared/contracts/template-variables';
 
 export const getVariableCatalog = cache(
-  async (
-    surveyId: string,
-    options?: { purpose?: 'mail' | 'survey' },
-  ): Promise<VariableDef[]> => {
+  async (surveyId: string, options?: { purpose?: 'mail' | 'survey' }): Promise<VariableDef[]> => {
     const purpose = options?.purpose ?? 'mail';
 
     const system: VariableDef[] =

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { SurveyResponseHeader } from '@/components/survey-response/survey-response-header';
 import { getHeaderBandBorders } from '@/lib/survey/response-header-config';
-import type { SurveyResponseHeaderConfig } from '@/db/schema/schema-types';
+import type { SurveyResponseHeaderConfig } from '@/shared/contracts/survey';
 
 const composed = (over: Partial<Extract<SurveyResponseHeaderConfig, { style: 'composed' }>> = {}): SurveyResponseHeaderConfig => ({
   style: 'composed', ...over,

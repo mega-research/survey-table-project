@@ -1,6 +1,6 @@
 import * as z from 'zod';
 
-import type { ContactMethod } from '@/db/schema/schema-types';
+import type { ContactMethod } from '@/shared/contracts/contacts';
 import { PII_FIELD_TYPES, type PiiFieldType } from '@/lib/crypto/pii-fields';
 
 export type { ContactMethod };

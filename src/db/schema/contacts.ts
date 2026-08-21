@@ -1,8 +1,18 @@
 import { relations } from 'drizzle-orm';
-import { boolean, integer, jsonb, pgTable, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  unique,
+  uuid,
+} from 'drizzle-orm/pg-core';
 
-import { surveys, surveyResponses } from './surveys';
-import type { ContactUploadMapping, ContactUploadMode } from './schema-types';
+import type { ContactUploadMapping, ContactUploadMode } from '@/shared/contracts/contacts';
+
+import { surveyResponses, surveys } from './surveys';
 
 export const contactUploads = pgTable('contact_uploads', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -51,7 +61,9 @@ export const contactTargets = pgTable(
     ),
     inviteTokenUnique: unique('contact_targets_invite_token_unique').on(table.inviteToken),
     inviteCodeUnique: unique('contact_targets_invite_code_unique').on(table.inviteCode),
-    unsubscribeTokenUnique: unique('contact_targets_unsubscribe_token_unique').on(table.unsubscribeToken),
+    unsubscribeTokenUnique: unique('contact_targets_unsubscribe_token_unique').on(
+      table.unsubscribeToken,
+    ),
   }),
 );
 
@@ -91,7 +103,10 @@ export const contactAttempts = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => ({
-    targetNoUnique: unique('contact_attempts_target_no_unique').on(table.contactTargetId, table.attemptNo),
+    targetNoUnique: unique('contact_attempts_target_no_unique').on(
+      table.contactTargetId,
+      table.attemptNo,
+    ),
   }),
 );
 

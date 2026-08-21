@@ -31,7 +31,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import type { MailTemplate } from '@/db/schema/mail';
-import type { CampaignFilterSnapshot, ContactResultCode } from '@/db/schema/schema-types';
+import type { CampaignFilterSnapshot } from '@/shared/contracts/mail';
+import type { ContactResultCode } from '@/shared/contracts/contacts';
 import { useCreateCampaign, useFetchCandidateIds, usePreviewPreflight } from '@/hooks/queries';
 import { getErrorMessage } from '@/lib/get-error-message';
 import type {

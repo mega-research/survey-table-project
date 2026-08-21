@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import type { QuotaCategory, QuotaConfig, QuotaDimension } from '@/db/schema/schema-types';
+import type { QuotaCategory, QuotaConfig, QuotaDimension } from '@/shared/contracts/quota';
 import { numberFormatter } from '@/lib/operations/format';
 import { cn, generateId } from '@/lib/utils';
 import { client } from '@/shared/lib/rpc';

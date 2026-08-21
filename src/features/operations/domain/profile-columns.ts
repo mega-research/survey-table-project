@@ -1,6 +1,6 @@
 import * as z from 'zod';
 
-import type { ProfileColumnScheme } from '@/db/schema/schema-types';
+import type { ProfileColumnScheme } from '@/shared/contracts/operations';
 
 export type { ProfileColumnScheme };
 

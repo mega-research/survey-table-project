@@ -4,7 +4,7 @@ import { eq } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { surveys } from '@/db/schema';
-import type { ContactResultCode } from '@/db/schema/schema-types';
+import type { ContactResultCode } from '@/shared/contracts/contacts';
 
 /**
  * 결과코드 set 갱신 — NULL 로 set 하면 DEFAULT_RESULT_CODES 폴백.

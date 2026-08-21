@@ -2,7 +2,7 @@ import { PgDialect } from 'drizzle-orm/pg-core';
 import type { SQL } from 'drizzle-orm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { ContactColumnScheme } from '@/db/schema/schema-types';
+import type { ContactColumnScheme } from '@/shared/contracts/contacts';
 
 // db.select() 호출 순서대로 결과를 돌려주는 큐 기반 mock.
 // 체인 메서드(from/where/orderBy/limit)는 전부 자기 자신을 반환하고,

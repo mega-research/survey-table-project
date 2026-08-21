@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 
-import type { VariableDef } from '@/components/operations/mail-template/variable-catalog';
+import type { VariableDef } from '@/shared/contracts/template-variables';
 
 interface SurveyUIState {
   // UI 상태

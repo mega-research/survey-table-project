@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import type { ContactColumnScheme, ProfileColumnScheme } from '@/db/schema/schema-types';
+import type { ContactColumnScheme } from '@/shared/contracts/contacts';
+import type { ProfileColumnScheme } from '@/shared/contracts/operations';
 import {
   formatIpHash,
   hydrateProfileColumns,

@@ -1,4 +1,4 @@
-import type { ContactColumnDef, ContactColumnScheme } from '@/db/schema/schema-types';
+import type { ContactColumnDef, ContactColumnScheme } from '@/shared/contracts/contacts';
 import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts';
 
 type ContactColumnSchemeInput = Omit<ContactColumnScheme, 'columns'> & {

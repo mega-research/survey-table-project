@@ -15,7 +15,7 @@ import {
   type SortDir,
   type ProgressTotals,
 } from '@/lib/operations/report-progress';
-import type { ProgressColumnDef } from '@/db/schema/schema-types';
+import type { ProgressColumnDef } from '@/shared/contracts/operations';
 import { numberFormatter } from '@/lib/operations/format';
 
 interface Props {
