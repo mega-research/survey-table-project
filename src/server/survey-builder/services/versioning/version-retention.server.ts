@@ -3,7 +3,7 @@ import 'server-only';
 import { and, eq, isNotNull, sql } from 'drizzle-orm';
 
 import { surveyResponses, surveys, surveyVersions } from '@/db/schema';
-import type { R2DbExecutor } from '@/lib/r2-lifecycle/deletion-queue.server';
+import type { R2DbExecutor } from '@/server/shared/r2-lifecycle/deletion-queue.server';
 
 /**
  * 정리 대상 버전 id 목록. version-retention.ts 의 isVersionPrunable 과 같은

@@ -9,23 +9,23 @@ vi.mock('@/server/shared/contact-sample.server', () => ({
 vi.mock('@/server/shared/data-scope.server', () => ({
   loadOperationsDataScope: vi.fn(),
 }));
-vi.mock('@/lib/mail/send', () => ({
+vi.mock('./send', () => ({
   sendTestMail: vi.fn(),
 }));
-vi.mock('@/lib/mail/template-wrapper', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/mail/template-wrapper')>();
+vi.mock('./template-wrapper', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./template-wrapper')>();
   return { MailWrapper: vi.fn(actual.MailWrapper) };
 });
 
-vi.mock('@/lib/mail/image-link-band-slices', () => ({
+vi.mock('./image-link-band-slices', () => ({
   ensureImageLinkBandSlices: vi.fn(async (html: string) => html),
 }));
 
-import { ensureImageLinkBandSlices } from '@/lib/mail/image-link-band-slices';
-import { sendTestMail } from '@/lib/mail/send';
+import { ensureImageLinkBandSlices } from './image-link-band-slices';
+import { sendTestMail } from './send';
 import { getContactSampleById, getFirstContactSample } from '@/server/shared/contact-sample.server';
 import { loadOperationsDataScope } from '@/server/shared/data-scope.server';
-import { MailWrapper } from '@/lib/mail/template-wrapper';
+import { MailWrapper } from './template-wrapper';
 
 import { getMailPreviewSample, sendTestTemplateMail } from './mail-preview.service';
 

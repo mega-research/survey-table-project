@@ -13,10 +13,10 @@ import {
   questions,
   surveys,
 } from '@/db/schema';
-import { registerDeletionCandidates } from '@/lib/r2-lifecycle/deletion-queue.server';
-import { collectSurveyContentKeys } from '@/lib/r2-lifecycle/entity-collectors.server';
-import { deleteKeyRefsBySourceIds } from '@/lib/r2-lifecycle/key-ref-index.server';
-import { collectFieldLimitedSaveDiff } from '@/lib/r2-lifecycle/save-diff-collector.server';
+import { registerDeletionCandidates } from '@/server/shared/r2-lifecycle/deletion-queue.server';
+import { collectSurveyContentKeys } from '@/server/shared/r2-lifecycle/entity-collectors.server';
+import { deleteKeyRefsBySourceIds } from '@/server/shared/r2-lifecycle/key-ref-index.server';
+import { collectFieldLimitedSaveDiff } from '@/server/shared/r2-lifecycle/save-diff-collector.server';
 import { promoteSurveyResponseHeader } from '@/lib/survey/survey-image-promote';
 import { generateId } from '@/lib/utils';
 import { stripOptionCodes } from '@/utils/option-code-generator';

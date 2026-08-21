@@ -4,8 +4,8 @@ import { asc, gt } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { mailCampaigns } from '@/db/schema';
-import { extractMailContentKeys } from '@/lib/r2-lifecycle/key-extract';
-import { recordSentKeys } from '@/lib/r2-lifecycle/sent-ledger.server';
+import { extractMailContentKeys } from './key-extract';
+import { recordSentKeys } from './sent-ledger.server';
 
 /** 커서 배치 크기 — 캠페인 스냅샷(bodyHtml)이 커서 500행 단위로 순회한다. */
 const SEED_BATCH_SIZE = 500;

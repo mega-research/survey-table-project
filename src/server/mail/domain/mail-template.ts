@@ -2,13 +2,13 @@ import * as z from 'zod';
 
 import type { MailTemplate } from '@/db/schema/mail';
 import type { MailAttachment } from '@/shared/contracts/mail';
-import { mailAttachmentSchema, mailTemplateInputSchema } from '@/lib/mail/schema';
+import { mailAttachmentSchema, mailTemplateInputSchema } from './schema';
 
 export type { MailTemplate };
 export type { MailAttachment };
 
 /**
- * 메일 템플릿 입력 스키마는 lib/mail/schema.ts 에 그대로 두고 도메인이 재노출.
+ * 메일 템플릿 입력 스키마는 ./schema.ts 에 그대로 두고 도메인이 재노출.
  * (schema 는 render/send 등 lib 내부와 응집되어 있어 lib 에 남긴다.)
  */
 export { mailAttachmentSchema, mailTemplateInputSchema };

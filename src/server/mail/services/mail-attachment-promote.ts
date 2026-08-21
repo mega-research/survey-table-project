@@ -6,7 +6,7 @@ import { copyR2Objects } from '@/lib/image-utils-server';
 import {
   PERMANENT_ATTACHMENT_PREFIX,
   TMP_ATTACHMENT_PREFIX,
-} from './constants';
+} from '@/lib/mail/constants';
 
 export class AttachmentPromoteError extends Error {
   failedKeys: string[];

@@ -5,8 +5,8 @@ import { desc, eq, ilike, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { NewSavedCell, savedCells } from '@/db/schema/surveys';
 import { escapeLikePattern } from '@/lib/operations/filter-shared';
-import { registerDeletionCandidates } from '@/lib/r2-lifecycle/deletion-queue.server';
-import { extractR2KeysFromJsonbValue } from '@/lib/r2-lifecycle/key-extract';
+import { registerDeletionCandidates } from '@/server/shared/r2-lifecycle/deletion-queue.server';
+import { extractR2KeysFromJsonbValue } from '@/server/shared/r2-lifecycle/key-extract';
 import type { SavedCell, TableCell } from '@/types/survey';
 import { sanitizeCellForLibrary } from '@/utils/cell-library-helpers';
 

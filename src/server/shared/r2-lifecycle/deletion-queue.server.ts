@@ -3,7 +3,7 @@ import 'server-only';
 
 import { type DbTransaction, db } from '@/db';
 import { type R2DeletionCandidate, r2DeletionCandidates } from '@/db/schema';
-import { gateR2Key } from '@/lib/r2-lifecycle/key-extract';
+import { gateR2Key } from './key-extract';
 
 /** 수집원 트랜잭션 안에서도 등록할 수 있도록 db 또는 tx 를 받는다. */
 export type R2DbExecutor = typeof db | DbTransaction;

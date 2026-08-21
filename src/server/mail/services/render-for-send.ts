@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { renderMailPreview, type PreviewResult, type PreviewSample } from './render-preview';
+import { renderMailPreview, type PreviewResult, type PreviewSample } from '@/lib/mail/render-preview';
 import { buildInviteUrl } from '@/lib/survey-url';
 
 interface Input {

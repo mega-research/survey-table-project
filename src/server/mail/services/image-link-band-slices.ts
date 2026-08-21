@@ -22,7 +22,7 @@ import {
   buildLinkBandsAttr,
   computeBandRows,
   parseLinkRect,
-} from './image-link-area';
+} from '@/lib/mail/image-link-area';
 
 /** sharp format → 파일 확장자/컨텐트 타입. 미지원 포맷은 png 로 재인코딩. */
 function formatInfo(format: string | undefined): { ext: string; mime: string; reencode: boolean } {

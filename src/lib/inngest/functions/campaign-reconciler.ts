@@ -1,4 +1,4 @@
-import { reconcileCampaignRecipients } from '@/lib/mail/campaign-reconcile';
+import { reconcileCampaignRecipients } from '@/server/mail/services/campaign-reconcile';
 
 import { ctxLogger, inngest, type MailCampaignDispatchedData } from '../client';
 

@@ -11,7 +11,7 @@ import {
 } from '@/db/schema/mail';
 import { decryptPii } from '@/lib/crypto/aes';
 import { inngest } from '@/lib/inngest/client';
-import { withTestPrefix } from '@/lib/mail/test-campaign';
+import { withTestPrefix } from './test-campaign';
 import { loadOperationsDataScope, lockWriteScope } from '@/server/shared/data-scope.server';
 import type { CampaignFilterSnapshot } from '@/shared/contracts/mail';
 
@@ -309,7 +309,7 @@ export async function resyncCampaign(input: ResyncCampaignInput): Promise<Resync
 
   if (!campaign) throw new Error('단체 메일을 찾을 수 없습니다.');
 
-  const { reconcileCampaignRecipients } = await import('@/lib/mail/campaign-reconcile');
+  const { reconcileCampaignRecipients } = await import('./campaign-reconcile');
   return reconcileCampaignRecipients(input.campaignId);
 }
 

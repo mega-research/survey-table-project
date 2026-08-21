@@ -1,6 +1,6 @@
 import * as z from 'zod';
 
-import { mailAttachmentSchema } from '@/lib/mail/schema';
+import { mailAttachmentSchema } from './schema';
 
 /**
  * 메일 템플릿 미리보기용 — 해당 설문의 첫 컨택 1건 샘플.

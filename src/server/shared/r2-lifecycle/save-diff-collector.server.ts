@@ -4,12 +4,12 @@ import {
   cancelPendingCandidatesByKeys,
   registerDeletionCandidates,
   type R2DbExecutor,
-} from '@/lib/r2-lifecycle/deletion-queue.server';
+} from './deletion-queue.server';
 import {
   collectRemovedR2Keys,
   diffRemovedR2Keys,
   extractR2KeysFromJsonbValue,
-} from '@/lib/r2-lifecycle/key-extract';
+} from './key-extract';
 
 /**
  * 저장 경로 공용 마무리 — 쓰기와 같은 트랜잭션에서 호출한다.

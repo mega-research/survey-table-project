@@ -2,8 +2,8 @@ import * as Sentry from '@sentry/nextjs';
 
 import { logger as baseLogger } from '@/lib/logger';
 
-import { runDeletionExecutor } from '@/lib/r2-lifecycle/deletion-executor.server';
-import { rebuildMutableKeyRefs } from '@/lib/r2-lifecycle/key-ref-index.server';
+import { runDeletionExecutor } from '@/server/shared/r2-lifecycle/deletion-executor.server';
+import { rebuildMutableKeyRefs } from '@/server/shared/r2-lifecycle/key-ref-index.server';
 
 import { ctxLogger, inngest } from '../client';
 
@@ -13,7 +13,7 @@ import { ctxLogger, inngest } from '../client';
  * 기한(등록+7일)이 지난 '대기' 후보를 배치로 집행한다: 발송 장부 히트·참조
  * 인덱스 히트·전역 참조 재확인 히트는 '보존됨', 통과 키만 R2 삭제 + HEAD
  * 검증 후 '삭제됨', 오류는 '실패'로 남아 다음 집행에서 자동 재시도. 상세는
- * lib/r2-lifecycle/deletion-executor.server.ts.
+ * server/shared/r2-lifecycle/deletion-executor.server.ts.
  *
  * 운영: 레포 최초의 Inngest cron — 배포 후 Inngest 대시보드 수동 Resync 필수
  * (누락 시 조용히 미실행), icn1 리전 상호작용 확인. (.scratch/r2-안전-삭제/

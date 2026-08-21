@@ -6,7 +6,7 @@ import * as Sentry from '@sentry/nextjs';
 import type { MailAttachment } from '@/shared/contracts/mail';
 import { downloadR2Object } from '@/lib/image-utils-server';
 import { MAX_ATTACHMENT_TOTAL_BYTES } from '@/lib/mail/constants';
-import { getResend } from '@/lib/mail/resend-client';
+import { getResend } from './resend-client';
 
 export interface ResolvedBulkAttachment {
   filename: string;

@@ -4,8 +4,8 @@ import { and, eq, inArray } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { mailCampaigns, mailRecipients } from '@/db/schema/mail';
-import { getResend } from '@/lib/mail/resend-client';
-import { mapResendLastEvent, canTransition, applyRecipientTransition } from '@/lib/mail/recipient-status-transition';
+import { getResend } from './resend-client';
+import { mapResendLastEvent, canTransition, applyRecipientTransition } from '@/server/shared/recipient-status-transition';
 import type { MailRecipientStatus } from '@/shared/contracts/mail';
 
 export interface StuckRecipient {

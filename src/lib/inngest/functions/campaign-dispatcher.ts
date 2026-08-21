@@ -4,7 +4,7 @@ import {
   terminalizeUnresolvedCampaignDispatch,
   type DispatchCleanupResult,
   type DispatchChunkResult,
-} from '@/lib/mail/campaign-dispatch';
+} from '@/server/mail/services/campaign-dispatch';
 
 import { ctxLogger, inngest, type MailCampaignQueuedData } from '../client';
 

@@ -8,11 +8,11 @@ import {
   fetchDueCandidates,
   isCandidateResolvable,
   resolveCandidate,
-} from '@/lib/r2-lifecycle/deletion-queue.server';
-import { getIndexedReferencedKeys } from '@/lib/r2-lifecycle/key-ref-index.server';
-import { deleteR2ObjectVerified } from '@/lib/r2-lifecycle/r2-object-delete.server';
-import { findReferencedKeys } from '@/lib/r2-lifecycle/reference-scan.server';
-import { getLedgeredKeys } from '@/lib/r2-lifecycle/sent-ledger.server';
+} from './deletion-queue.server';
+import { getIndexedReferencedKeys } from './key-ref-index.server';
+import { deleteR2ObjectVerified } from './r2-object-delete.server';
+import { findReferencedKeys } from './reference-scan.server';
+import { getLedgeredKeys } from './sent-ledger.server';
 
 /**
  * 배치 크기 — 참조 재확인 비용이 `패턴 수 × 스캔 표면 크기` 라서 키 수에

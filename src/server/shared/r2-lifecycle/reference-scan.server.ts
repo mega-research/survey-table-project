@@ -3,8 +3,8 @@ import 'server-only';
 import { and, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { extractR2KeysFromJsonbValue } from '@/lib/r2-lifecycle/key-extract';
-import { REFERENCE_SURFACE } from '@/lib/r2-lifecycle/reference-surface.server';
+import { extractR2KeysFromJsonbValue } from './key-extract';
+import { REFERENCE_SURFACE } from './reference-surface.server';
 
 /**
  * 집행 직전 전역 참조 재확인의 스캔 표면은 reference-surface.server 의

@@ -11,8 +11,8 @@ import {
   surveys,
 } from '@/db/schema';
 import type { CompleteQuestionWrite } from '@/db/schema/question-persisted-fields';
-import { extractR2KeysFromJsonbValue } from '@/lib/r2-lifecycle/key-extract';
-import { collectSaveDiffAndRevival } from '@/lib/r2-lifecycle/save-diff-collector.server';
+import { extractR2KeysFromJsonbValue } from '@/server/shared/r2-lifecycle/key-extract';
+import { collectSaveDiffAndRevival } from '@/server/shared/r2-lifecycle/save-diff-collector.server';
 import { retentionDateToTimestamp } from '@/lib/survey/pii-retention';
 import {
   promoteSurveyImages,

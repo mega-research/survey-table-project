@@ -8,7 +8,7 @@ import * as z from 'zod';
  * - listHistory: 집행 이력 조회 — status 생략 시 pending 제외 전체
  * - cancel: 대기 후보 개별 취소 (7일 유예 안에 실수 되돌리기)
  *
- * 실제 큐 조작은 lib/r2-lifecycle/deletion-queue.server 소관 — 여기는 스키마만 둔다.
+ * 실제 큐 조작은 server/shared/r2-lifecycle/deletion-queue.server 소관 — 여기는 스키마만 둔다.
  */
 
 /** 전체 후보 상태. */

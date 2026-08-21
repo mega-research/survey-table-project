@@ -4,8 +4,8 @@ import { inArray } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { r2SentKeys } from '@/db/schema';
-import { gateR2Key } from '@/lib/r2-lifecycle/key-extract';
-import type { R2DbExecutor } from '@/lib/r2-lifecycle/deletion-queue.server';
+import { gateR2Key } from './key-extract';
+import type { R2DbExecutor } from './deletion-queue.server';
 
 /**
  * 발송 장부 기록 — append-only. 이미 기록된 키는 무시되어 최초 발송 시각이

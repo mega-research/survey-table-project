@@ -9,8 +9,8 @@ import {
   surveys,
   surveyVersions,
 } from '@/db/schema';
-import type { R2DbExecutor } from '@/lib/r2-lifecycle/deletion-queue.server';
-import { extractR2KeysFromJsonbValue } from '@/lib/r2-lifecycle/key-extract';
+import type { R2DbExecutor } from './deletion-queue.server';
+import { extractR2KeysFromJsonbValue } from './key-extract';
 
 export interface SurveyContentKeys {
   /** CASCADE 소멸 범위에서 추출한 R2 키 (중복 제거) */

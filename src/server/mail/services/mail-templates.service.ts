@@ -6,12 +6,12 @@ import { cache } from 'react';
 import { db } from '@/db';
 import { mailCampaigns, mailTemplates, type MailTemplate } from '@/db/schema/mail';
 import type { MailAttachment } from '@/shared/contracts/mail';
-import { promoteMailAttachments } from '@/lib/mail/mail-attachment-promote';
-import { registerDeletionCandidates } from '@/lib/r2-lifecycle/deletion-queue.server';
-import { extractMailContentKeys } from '@/lib/r2-lifecycle/key-extract';
-import { collectFieldLimitedSaveDiff } from '@/lib/r2-lifecycle/save-diff-collector.server';
-import { ensureImageLinkBandSlices } from '@/lib/mail/image-link-band-slices';
-import { promoteMailImages } from '@/lib/mail/mail-image-promote';
+import { promoteMailAttachments } from './mail-attachment-promote';
+import { registerDeletionCandidates } from '@/server/shared/r2-lifecycle/deletion-queue.server';
+import { extractMailContentKeys } from '@/server/shared/r2-lifecycle/key-extract';
+import { collectFieldLimitedSaveDiff } from '@/server/shared/r2-lifecycle/save-diff-collector.server';
+import { ensureImageLinkBandSlices } from './image-link-band-slices';
+import { promoteMailImages } from './mail-image-promote';
 import { extractVariableKeys } from '@/lib/mail/variable-extractor';
 
 import type {
@@ -24,8 +24,8 @@ import type {
 
 // AttachmentPromoteError / MailImagePromoteError 는 procedure 가 ORPCError 로
 // 매핑하기 위해 재노출.
-export { AttachmentPromoteError } from '@/lib/mail/mail-attachment-promote';
-export { MailImagePromoteError } from '@/lib/mail/mail-image-promote';
+export { AttachmentPromoteError } from './mail-attachment-promote';
+export { MailImagePromoteError } from './mail-image-promote';
 
 /** 템플릿을 찾지 못했을 때 — procedure 가 NOT_FOUND 로 매핑. */
 export class MailTemplateNotFoundError extends Error {

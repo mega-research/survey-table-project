@@ -11,18 +11,18 @@ import { contactTargets } from '@/db/schema/contacts';
 import { mailCampaigns, mailRecipients } from '@/db/schema/mail';
 import type { MailRecipientSendPayloadSnapshot } from '@/shared/contracts/mail';
 import { buildInviteUrl } from '@/lib/survey-url';
-import { extractMailContentKeys } from '@/lib/r2-lifecycle/key-extract';
-import { recordSentKeys } from '@/lib/r2-lifecycle/sent-ledger.server';
-import { createCampaignProviderRateLimiter } from '@/lib/mail/campaign-send-rate-limit';
-import { finalizeCampaignIfDone } from '@/lib/mail/recipient-status-transition';
-import { renderForCampaignSend } from '@/lib/mail/render-for-send';
+import { extractMailContentKeys } from '@/server/shared/r2-lifecycle/key-extract';
+import { recordSentKeys } from '@/server/shared/r2-lifecycle/sent-ledger.server';
+import { createCampaignProviderRateLimiter } from './campaign-send-rate-limit';
+import { finalizeCampaignIfDone } from '@/server/shared/recipient-status-transition';
+import { renderForCampaignSend } from './render-for-send';
 import {
   RetryableCampaignSendError,
   resolveCampaignAttachments,
   sendCampaignRecipient,
   type ResolvedBulkAttachment,
-} from '@/lib/mail/send-bulk';
-import { MailWrapper } from '@/lib/mail/template-wrapper';
+} from './send-bulk';
+import { MailWrapper } from './template-wrapper';
 import { UNSUBSCRIBE_SANDBOX_TOKEN } from '@/lib/mail/constants';
 
 type CampaignDispatchState = Pick<

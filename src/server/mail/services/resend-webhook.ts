@@ -6,7 +6,7 @@ import { mailCampaigns, mailRecipients, webhookEvents } from '@/db/schema/mail';
 import {
   applyRecipientTransition,
   mapResendWebhookType,
-} from '@/lib/mail/recipient-status-transition';
+} from '@/server/shared/recipient-status-transition';
 import type { MailRecipientStatus } from '@/shared/contracts/mail';
 
 async function applyResendEvent(

@@ -4,13 +4,13 @@ import { and, eq, inArray } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { r2KeyRefs } from '@/db/schema';
-import type { R2DbExecutor } from '@/lib/r2-lifecycle/deletion-queue.server';
-import { extractR2KeysFromJsonbValue, gateR2Key } from '@/lib/r2-lifecycle/key-extract';
+import type { R2DbExecutor } from './deletion-queue.server';
+import { extractR2KeysFromJsonbValue, gateR2Key } from './key-extract';
 import {
   IMMUTABLE_SOURCES,
   MUTABLE_SOURCES,
   type R2ReferenceSource,
-} from '@/lib/r2-lifecycle/reference-surface.server';
+} from './reference-surface.server';
 
 /**
  * 특정 source row 의 참조를 통째로 교체한다. 키가 비어도 기존 참조는 지운다

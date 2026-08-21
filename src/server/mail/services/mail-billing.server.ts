@@ -6,14 +6,14 @@ import { db } from '@/db';
 import { mailBillingPeriods, mailCampaigns, mailRecipients, surveys } from '@/db/schema';
 import type { MailCampaignKind } from '@/db/schema/mail';
 import type { MailCampaignStatus, MailRecipientStatus } from '@/shared/contracts/mail';
-import { allocateCycleCosts, type AllocatorInputCampaign } from '@/lib/mail/billing-allocator';
+import { allocateCycleCosts, type AllocatorInputCampaign } from './billing-allocator';
 import {
   cycleStartFor,
   findPeriodFor,
   kstYmd,
   nextCycleStart,
   toPeriodSpecs,
-} from '@/lib/mail/billing-cycles';
+} from './billing-cycles';
 
 /**
  * Resend 청구 카운트 — webhook 으로 적재된 mail_recipients.status 에서 'sent' 이상.
