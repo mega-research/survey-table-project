@@ -1,4 +1,4 @@
-import { useEffect, useState, type RefObject } from 'react';
+import { type RefObject, useEffect, useState } from 'react';
 
 // 히스테리시스 밴드: 진입/해제 기준을 벌려 모바일 주소창 등으로 인한
 // innerHeight 출렁임, 단일 컨테이너 모드의 헤더 포함 높이 오차(수십 px)로
@@ -39,7 +39,7 @@ function isEditingElementFocused(): boolean {
  *   렌더되지 않아 실측이 무의미하고, 행 수 기준으로 이미 충분히 길다)
  * @param deps 대상 요소가 조건부로 뒤늦게 마운트되는 경우(예: 빈 표 → 행
  *   채워짐) effect 재실행으로 관찰을 재개하기 위한 의존값. ref/disabled/forced
- *   가 동일해도 이 값이 바뀌면 리스너를 다시 붙인다.
+ *   가 동일해도 이 값이 바뀌면 리스너를 다시 붙인다. 원시값만 넘길 것.
  */
 export function usePageStickyThreshold(
   targetRef: RefObject<HTMLElement | null>,
@@ -47,6 +47,8 @@ export function usePageStickyThreshold(
   deps: ReadonlyArray<unknown> = [],
 ): boolean {
   const [sticky, setSticky] = useState(false);
+  // 원시값 배열을 문자열 키로 접는다 — 재부착 시점은 spread deps 시절과 동일하다.
+  const depsKey = deps.join('|');
 
   useEffect(() => {
     if (disabled || forced) return;
@@ -73,8 +75,7 @@ export function usePageStickyThreshold(
       window.removeEventListener('resize', measure);
       window.removeEventListener('focusout', measure);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [targetRef, disabled, forced, ...deps]);
+  }, [targetRef, disabled, forced, depsKey]);
 
   if (disabled) return false;
   return forced ? true : sticky;

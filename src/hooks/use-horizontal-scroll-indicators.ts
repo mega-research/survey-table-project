@@ -3,7 +3,7 @@ import { type RefObject, useCallback, useEffect, useRef, useState } from 'react'
 interface Options {
   /** 양 끝 임계값(px). 이 값 이내로 스크롤되면 해당 측 섀도우를 숨긴다. */
   threshold?: number;
-  /** 내용 변경 시 재측정을 위한 의존값 (예: 행·열 수). */
+  /** 내용 변경 시 재측정을 위한 의존값 (예: 행·열 수). 원시값만 — 문자열 키로 접어 비교한다. */
   deps?: ReadonlyArray<unknown>;
   /** true면 리스너/측정을 건너뛴다 (예: 모바일 모드). */
   disabled?: boolean;
@@ -21,6 +21,8 @@ export function useHorizontalScrollIndicators(
 ): { canScrollLeft: boolean; canScrollRight: boolean } {
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
+  // 원시값 배열을 문자열 키로 접는다 — 재측정 시점은 spread deps 시절과 동일하다.
+  const depsKey = deps.join('|');
   const isTouchingRef = useRef(false);
   const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -96,8 +98,7 @@ export function useHorizontalScrollIndicators(
     measure();
     measureAfterScrollSettles();
     return cancelSettledMeasure;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [measure, measureAfterScrollSettles, cancelSettledMeasure, disabled, ...deps]);
+  }, [measure, measureAfterScrollSettles, cancelSettledMeasure, disabled, depsKey]);
 
   return { canScrollLeft, canScrollRight };
 }

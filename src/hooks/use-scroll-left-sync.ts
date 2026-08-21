@@ -1,4 +1,4 @@
-import { useEffect, type RefObject } from 'react';
+import { type RefObject, useEffect } from 'react';
 
 /**
  * 두 요소의 `scrollLeft`를 상호 동기화한다.
@@ -18,6 +18,7 @@ import { useEffect, type RefObject } from 'react';
  * @param deps 한쪽 요소가 조건부로 뒤늦게 마운트되는 경우(예: hideColumnLabels
  *   토글로 헤더가 나중에 렌더) 재부착을 트리거하기 위한 의존값. ref 객체와
  *   disabled가 동일해도 이 값이 바뀌면 effect가 다시 실행되어 리스너를 붙인다.
+ *   원시값만 넘길 것 — 문자열 키로 접어 비교하므로 객체는 변경을 감지하지 못한다.
  */
 export function useScrollLeftSync(
   aRef: RefObject<HTMLElement | null>,
@@ -25,6 +26,9 @@ export function useScrollLeftSync(
   disabled = false,
   deps: ReadonlyArray<unknown> = [],
 ): void {
+  // 원시값 배열을 문자열 키로 접는다 — 요소별 Object.is 비교와 같은 시점에 바뀌므로
+  // 재부착 횟수는 spread 시절과 동일하다.
+  const depsKey = deps.join('|');
   useEffect(() => {
     if (disabled) return;
     const a = aRef.current;
@@ -56,6 +60,5 @@ export function useScrollLeftSync(
       a.removeEventListener('scroll', onA);
       b.removeEventListener('scroll', onB);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [aRef, bRef, disabled, ...deps]);
+  }, [aRef, bRef, disabled, depsKey]);
 }
