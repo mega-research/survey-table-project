@@ -175,6 +175,11 @@ interface CellContentModalProps {
   getLatestHeaderGrid?: (() => HeaderCell[][] | undefined) | undefined;
 }
 
+// 컴포넌트 안에서 use* 식별자를 값으로 참조하면 React Compiler 가 컴포넌트 전체를 건너뛴다.
+// 스토어 인스턴스 API 는 훅이 아니므로 모듈 최상위에서 한 번 집어 별칭으로 쓴다.
+const readBuilderState = useSurveyBuilderStore.getState;
+const writeBuilderState = useSurveyBuilderStore.setState;
+
 export function CellContentModal({
   isOpen,
   onClose,
@@ -386,9 +391,9 @@ export function CellContentModal({
   if (prevChoiceGroupsResetKey !== choiceGroupsResetKey) {
     setPrevChoiceGroupsResetKey(choiceGroupsResetKey);
     if (isOpen) {
-      const storeQuestion = useSurveyBuilderStore
-        .getState()
-        .currentSurvey.questions.find((q) => q.id === currentQuestionId);
+      const storeQuestion = readBuilderState().currentSurvey.questions.find(
+        (q) => q.id === currentQuestionId,
+      );
       setEditChoiceGroups(choiceGroupsProp ?? storeQuestion?.choiceGroups ?? []);
     }
   }
@@ -500,7 +505,7 @@ export function CellContentModal({
         }
 
         // 서버에 질문 저장/업데이트
-        if (currentQuestionId && useSurveyBuilderStore.getState().currentSurvey.id) {
+        if (currentQuestionId && readBuilderState().currentSurvey.id) {
           const question = questions.find((q) => q.id === currentQuestionId);
           // 저장/prune 베이스는 에디터의 권위 있는 최신 행을 우선 사용한다.
           // store.tableRowsData 는 구조 편집이 formData 에만 반영되어 stale 할 수 있어
@@ -535,10 +540,10 @@ export function CellContentModal({
 
             // 신규 판정은 dirty 추적(questionChanges.added) 기준 — 로컬 id도 randomUUID라
             // UUID 형식 검사로는 미영속 질문을 구분할 수 없다(0행 update로 저장 실패하던 버그).
-            const isNewQuestion =
-              !!useSurveyBuilderStore.getState().questionChanges.added[currentQuestionId];
+            const isNewQuestion = !!readBuilderState().questionChanges.added[currentQuestionId];
 
-            try {
+            // React Compiler 는 try 문 안의 조건·옵셔널 체이닝을 낮추지 못한다 — 본문을 러너에 가둔다.
+            const persistQuestion = async () => {
               await ensureSurvey();
 
               // 리매핑 스코프 수집 — 스코프 저장(saveSurveyScoped)의 입력.
@@ -560,7 +565,7 @@ export function CellContentModal({
                 // 이미 DB에 저장된 질문: 업데이트
                 await client.surveyBuilder.questions.update({
                   questionId: currentQuestionId,
-                  surveyId: useSurveyBuilderStore.getState().currentSurvey.id,
+                  surveyId: readBuilderState().currentSurvey.id,
                   data: {
                     tableRowsData: updatedRowsData,
                     ...structurePatch,
@@ -571,7 +576,7 @@ export function CellContentModal({
                 });
                 // store 도 동일 데이터로 동기화. 표시 조건/장기 계산식 picker 가
                 // store 를 직접 구독하므로 누락 시 셀 라벨 변경이 stale 로 표시됨.
-                useSurveyBuilderStore.setState((state) => ({
+                writeBuilderState((state) => ({
                   currentSurvey: {
                     ...state.currentSurvey,
                     questions: state.currentSurvey.questions.map((q) =>
@@ -596,7 +601,7 @@ export function CellContentModal({
                 // 나머지 질문 필드는 스토어 질문 값을 그대로 실어 create-drop 을 막는다.
                 const createPayload = {
                   id: currentQuestionId,
-                  surveyId: useSurveyBuilderStore.getState().currentSurvey.id,
+                  surveyId: readBuilderState().currentSurvey.id,
                   groupId: question.groupId,
                   type: question.type,
                   title: question.title || '',
@@ -660,7 +665,7 @@ export function CellContentModal({
                   // UPDATE 분기와 동일하게 store 도 방금 커밋한 구조로 동기화한다 —
                   // 빠뜨리면 질문 모달 취소 후 재진입 시 DB(신 구조)와 store(구 구조)가
                   // 갈라져 stale 구조가 표시되고 이후 질문 저장이 DB 변경을 되덮는다.
-                  useSurveyBuilderStore.setState((state) => ({
+                  writeBuilderState((state) => ({
                     currentSurvey: {
                       ...state.currentSurvey,
                       questions: state.currentSurvey.questions.map((q) =>
@@ -679,17 +684,17 @@ export function CellContentModal({
                   }));
                   // DB에 생성 완료 → added에서 제거 (다음 모달 저장 시 UPDATE 경로 사용)
                   const remainingAdded = omitKey(
-                    useSurveyBuilderStore.getState().questionChanges.added,
+                    readBuilderState().questionChanges.added,
                     currentQuestionId,
                   );
-                  useSurveyBuilderStore.setState((state) => ({
+                  writeBuilderState((state) => ({
                     questionChanges: { ...state.questionChanges, added: remainingAdded },
                   }));
                 }
                 // id를 넘겼으므로 반환 id가 다를 경우에만 스토어 id 갱신
                 if (createdQuestion?.id && createdQuestion.id !== currentQuestionId) {
                   const newId = createdQuestion.id;
-                  useSurveyBuilderStore.setState((state) => ({
+                  writeBuilderState((state) => ({
                     currentSurvey: {
                       ...state.currentSurvey,
                       questions: state.currentSurvey.questions.map((q) =>
@@ -747,7 +752,7 @@ export function CellContentModal({
               if (remapQuestionIds.length > 0 || remapGroupIds.length > 0) {
                 try {
                   if (remapGroupIds.length > 0) {
-                    const { currentSurvey } = useSurveyBuilderStore.getState();
+                    const { currentSurvey } = readBuilderState();
                     await Promise.all(
                       remapGroupIds.map((groupId) => {
                         const group = currentSurvey.groups?.find((g) => g.id === groupId);
@@ -764,12 +769,12 @@ export function CellContentModal({
                     await saveSurveyScoped({ questionIds: remapQuestionIds });
                   } else {
                     // 그룹만 변경: RPC 영속이 끝났으므로 남은 변경 기준으로 dirty 재계산
-                    useSurveyBuilderStore.getState().markSavedSnapshotClean();
+                    readBuilderState().markSavedSnapshotClean();
                   }
                 } catch (saveError) {
                   if (remapGroupIds.length > 0) {
                     // 그룹 RPC 실패 폴백 — 수동 저장(메타데이터 전체)으로 복구 가능하게 한다
-                    useSurveyBuilderStore.setState({ isMetadataDirty: true, isDirty: true });
+                    writeBuilderState({ isMetadataDirty: true, isDirty: true });
                   }
                   console.error('표시조건 리매핑 반영을 위한 설문 저장 실패:', saveError);
                   toast.error(
@@ -777,6 +782,9 @@ export function CellContentModal({
                   );
                 }
               }
+            };
+            try {
+              await persistQuestion();
             } catch (error) {
               console.error('질문 저장/업데이트 실패:', error);
             }

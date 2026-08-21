@@ -102,7 +102,7 @@ export function useDynamicRowLayout({
       rowOvr.set(cIdx, { ...rowOvr.get(cIdx), ...ovr });
     };
 
-    for (let rowIdx = 0; rowIdx < visibleRows.length; rowIdx++) {
+    for (let rowIdx = 0; rowIdx < visibleRows.length; rowIdx += 1) {
       const row = visibleRows[rowIdx];
       if (!row) continue;
       for (let colIdx = 0; colIdx < row.cells.length; colIdx++) {

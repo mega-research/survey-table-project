@@ -2,7 +2,7 @@
  * 테이블 렌더링 성능 측정 훅 (개발 전용)
  * Before/After 비교를 위한 정량 지표 수집
  */
-import { type RefObject, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
+import { type RefObject, useEffect, useLayoutEffect, useRef } from 'react';
 
 interface PerfMetrics {
   label: string;
@@ -79,21 +79,19 @@ export function useScrollFps(scrollRef: React.RefObject<HTMLElement | null>, ena
   const rafId = useRef<number>(0);
   const isScrolling = useRef(false);
 
-  const measureFrame = useCallback(
-    // 명명 함수 표현식: rAF 재귀 자기참조가 외부 const 선언(TDZ)에 묶이지 않도록 한다
+  useEffect(() => {
+    if (!enabled) return;
+    const el = scrollRef.current;
+    if (!el) return;
+
+    // rAF 자기재귀는 이펙트 안 함수 선언으로 둔다. useCallback 에 담은 명명 함수 표현식의
+    // 자기참조는 React Compiler 가 낮추지 못해 훅 전체가 skip 됐다.
     function measureFrame() {
       frameTimestamps.current.push(performance.now());
       if (isScrolling.current) {
         rafId.current = requestAnimationFrame(measureFrame);
       }
-    },
-    [],
-  );
-
-  useEffect(() => {
-    if (!enabled) return;
-    const el = scrollRef.current;
-    if (!el) return;
+    }
 
     const onScrollStart = () => {
       if (!isScrolling.current) {
@@ -133,7 +131,7 @@ export function useScrollFps(scrollRef: React.RefObject<HTMLElement | null>, ena
       cancelAnimationFrame(rafId.current);
       clearTimeout(scrollTimeout);
     };
-  }, [enabled, scrollRef, measureFrame]);
+  }, [enabled, scrollRef]);
 }
 
 /**
