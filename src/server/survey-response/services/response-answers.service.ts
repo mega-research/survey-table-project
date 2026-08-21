@@ -7,7 +7,7 @@ import type { PostgresJsQueryResultHKT } from 'drizzle-orm/postgres-js';
 import { db } from '@/db';
 import * as schema from '@/db/schema';
 import { questions, responseAnswers } from '@/db/schema';
-import { normalizeToAnswers } from '@/lib/response-normalizer';
+import { normalizeToAnswers } from './response-normalizer';
 
 // db 또는 transaction(tx) 둘 다 허용. drizzle 의 update/insert/delete API 는
 // PgTransaction 과 PostgresJsDatabase 모두에서 동일하게 동작하지만 타입은 분기되어 있다.

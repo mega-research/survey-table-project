@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { stripTrailingEmptyParagraph } from '@/lib/tiptap/trailing-node';
+import { stripTrailingEmptyParagraph } from '@/components/ui/rich-text-editor/tiptap/trailing-node';
 
 describe('stripTrailingEmptyParagraph', () => {
   it('문서 끝의 속성 없는 빈 문단을 제거한다', () => {

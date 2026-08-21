@@ -12,7 +12,7 @@ import {
 import { EditorContent, useEditor } from '@tiptap/react';
 import { toast } from 'sonner';
 
-import { preserveLeadingIndent } from '@/lib/tiptap/leading-indent';
+import { preserveLeadingIndent } from '@/components/ui/rich-text-editor/tiptap/leading-indent';
 
 import { createUnifiedExtensions } from './extensions';
 import { deleteTmpNoticeAttachmentKey } from './file-attachment-r2-client';

@@ -14,8 +14,8 @@ import Underline from '@tiptap/extension-underline';
 import StarterKit from '@tiptap/starter-kit';
 import ImageResize from 'tiptap-extension-resize-image';
 
-import { ImageTextIsolation } from '@/lib/tiptap/image-text-isolation';
-import { TableSelectOnBackspace } from '@/lib/tiptap/table-select-on-backspace';
+import { ImageTextIsolation } from '@/components/ui/rich-text-editor/tiptap/image-text-isolation';
+import { TableSelectOnBackspace } from '@/components/ui/rich-text-editor/tiptap/table-select-on-backspace';
 
 import { FileAttachment } from './file-attachment-node';
 import { FontColor } from './font-color-mark';

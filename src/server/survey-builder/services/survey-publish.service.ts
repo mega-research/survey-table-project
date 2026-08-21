@@ -10,9 +10,9 @@ import { extractR2KeysFromJsonbValue } from '@/lib/r2-lifecycle/key-extract';
 import { recordKeyRefs } from '@/lib/r2-lifecycle/key-ref-index.server';
 import { hydrateQuestionsForSpss } from '@/lib/spss/hydrate-questions';
 import { assertValidSpssVarNames } from '@/lib/spss/variable-name-guard';
-import { buildSurveySnapshot } from '@/lib/versioning/snapshot-builder';
-import { pruneVersionSnapshots } from '@/lib/versioning/version-prune.server';
-import { findPrunableVersionIds } from '@/lib/versioning/version-retention.server';
+import { buildSurveySnapshot } from './versioning/snapshot-builder';
+import { pruneVersionSnapshots } from './versioning/version-prune.server';
+import { findPrunableVersionIds } from './versioning/version-retention.server';
 import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
 import { openResponseStatusValues } from '@/shared/contracts/survey-response';
 

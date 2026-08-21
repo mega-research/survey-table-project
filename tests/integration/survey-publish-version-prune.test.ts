@@ -13,10 +13,10 @@ const { findPrunableMock, pruneMock, recordRefsMock } = vi.hoisted(() => ({
   recordRefsMock: vi.fn(async () => 0),
 }));
 
-vi.mock('@/lib/versioning/version-retention.server', () => ({
+vi.mock('@/server/survey-builder/services/versioning/version-retention.server', () => ({
   findPrunableVersionIds: findPrunableMock,
 }));
-vi.mock('@/lib/versioning/version-prune.server', () => ({
+vi.mock('@/server/survey-builder/services/versioning/version-prune.server', () => ({
   pruneVersionSnapshots: pruneMock,
 }));
 vi.mock('@/lib/r2-lifecycle/key-ref-index.server', () => ({
@@ -25,7 +25,7 @@ vi.mock('@/lib/r2-lifecycle/key-ref-index.server', () => ({
 
 vi.mock('@/data/surveys', () => ({ getSurveyWithDetails: vi.fn() }));
 vi.mock('@/db', () => ({ db: { transaction: vi.fn() } }));
-vi.mock('@/lib/versioning/snapshot-builder', () => ({
+vi.mock('@/server/survey-builder/services/versioning/snapshot-builder', () => ({
   buildSurveySnapshot: vi
     .fn()
     .mockReturnValue({ questions: [{ imageUrl: 'https://cdn-dev.megaresearch.co.kr/survey/a.png' }] }),

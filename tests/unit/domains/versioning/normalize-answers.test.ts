@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { normalizeToAnswers } from '@/lib/response-normalizer';
+import { normalizeToAnswers } from '@/server/survey-response/services/response-normalizer';
 
 /**
  * Phase 1/2: 응답 정규화 유틸리티 테스트

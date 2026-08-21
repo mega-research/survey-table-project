@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { preserveLeadingIndent } from '@/lib/tiptap/leading-indent';
+import { preserveLeadingIndent } from '@/components/ui/rich-text-editor/tiptap/leading-indent';
 
 describe('preserveLeadingIndent', () => {
   it('문단 시작의 일반 스페이스를 &nbsp; 로 치환한다', () => {

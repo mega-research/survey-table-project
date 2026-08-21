@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildSurveySnapshot } from '@/lib/versioning/snapshot-builder';
+import { buildSurveySnapshot } from '@/server/survey-builder/services/versioning/snapshot-builder';
 import type { Question, Survey } from '@/types/survey';
 
 describe('버전 스냅샷 — 숫자 검증 신규 필드 관통', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildSurveySnapshot } from '@/lib/versioning/snapshot-builder';
+import { buildSurveySnapshot } from '@/server/survey-builder/services/versioning/snapshot-builder';
 import type { Survey } from '@/types/survey';
 
 function minimalSurvey(pageBreakBefore: boolean): Survey {

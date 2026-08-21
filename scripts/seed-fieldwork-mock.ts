@@ -31,7 +31,7 @@ import type { PageVisit } from '@/shared/contracts/survey-response';
 import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
 import { generateFakeSurveyResponse, truncateFakeResponses } from '@/lib/fake-data-generator';
 import { parseBrowser } from '@/lib/operations/parse-ua';
-import { normalizeToAnswers } from '@/lib/response-normalizer';
+import { normalizeToAnswers } from '@/server/survey-response/services/response-normalizer';
 import type { Survey as SurveyClientType } from '@/types/survey';
 
 // === 분포 상수 ===

@@ -15,7 +15,7 @@ vi.mock('@/db', () => ({
 
 // buildSurveySnapshot은 순수 함수이므로 실제 구현 사용
 // (게이트 오류 경로에서는 호출되지 않으므로 모킹 불필요)
-vi.mock('@/lib/versioning/snapshot-builder', () => ({
+vi.mock('@/server/survey-builder/services/versioning/snapshot-builder', () => ({
   buildSurveySnapshot: vi.fn().mockReturnValue({}),
 }));
 

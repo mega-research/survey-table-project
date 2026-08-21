@@ -42,7 +42,7 @@ import {
 } from '@/lib/fake-data-generator';
 import { parseBrowser } from '@/lib/operations/parse-ua';
 import { cellKeyOf, tallyAll } from '@/lib/quota/matching';
-import { normalizeToAnswers } from '@/lib/response-normalizer';
+import { normalizeToAnswers } from '@/server/survey-response/services/response-normalizer';
 import type { Question, Survey as SurveyClientType } from '@/types/survey';
 
 // === 분포 상수 (total 에 비례 스케일) ===

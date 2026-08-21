@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { isVersionPrunable } from '@/lib/versioning/version-retention';
+import { isVersionPrunable } from '@/server/survey-builder/services/versioning/version-retention';
 
 describe('isVersionPrunable', () => {
   it('현재 발행본은 응답이 없어도 보존한다', () => {

@@ -102,7 +102,7 @@ describe('answersToQuestionResponses', () => {
   });
 
   it('normalizeToAnswers → answersToQuestionResponses 왕복 변환 일관성', async () => {
-    const { normalizeToAnswers } = await import('@/lib/response-normalizer');
+    const { normalizeToAnswers } = await import('@/server/survey-response/services/response-normalizer');
 
     const originalResponses: Record<string, unknown> = {
       'q-text': '홍길동',

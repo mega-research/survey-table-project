@@ -25,7 +25,7 @@ vi.mock('@/lib/r2-lifecycle/deletion-queue.server', async (importOriginal) => ({
   registerDeletionCandidates: registerMock,
 }));
 
-import { pruneVersionSnapshots } from '@/lib/versioning/version-prune.server';
+import { pruneVersionSnapshots } from '@/server/survey-builder/services/versioning/version-prune.server';
 
 const dialect = new PgDialect();
 
