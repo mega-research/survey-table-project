@@ -32,7 +32,9 @@ import { and, eq, inArray, isNull, like } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { questions, responseAnswers, surveyResponses, surveyVersions, surveys } from '@/db/schema';
-import type { PageVisit, QuotaConfig, SurveyVersionSnapshot } from '@/db/schema/schema-types';
+import type { QuotaConfig } from '@/shared/contracts/quota';
+import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
+import type { PageVisit } from '@/shared/contracts/survey-response';
 import {
   generateFakeSurveyResponse,
   OPT_TEXTS_KEY,

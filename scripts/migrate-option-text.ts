@@ -19,7 +19,7 @@ import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
 
-import type { SurveyVersionSnapshot } from '../src/db/schema/schema-types';
+import type { SurveyVersionSnapshot } from '../src/shared/contracts/survey';
 import type { LegacyResponseShape } from '../src/lib/option-text-migration';
 import {
   migrateQuestionOptions,
