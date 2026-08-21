@@ -109,7 +109,18 @@ src/
 │
 ├── components/                 # React 컴포넌트 (~320개, .ts/.tsx 테스트 제외)
 │   │                           # 의존 방향: survey-builder → survey-response → question-renderer (단방향, ESLint 강제)
-│   ├── survey-builder/         # 설문 편집기 (91개)
+│   ├── survey-builder/         # 설문 편집기 (91개) — importer 그래프의 닫힌 묶음대로 폴더화
+│   │   ├── question-list/      # 빌더 질문 목록 (sortable-question-list 진입점, question-test-card·group-header)
+│   │   ├── question-edit/      # 질문 편집 모달 (question-edit-modal → question-basic-tab·table-validation-editor·sum-constraint-editor)
+│   │   ├── table-editor/       # 표 질문 편집기 (dynamic-table-editor 진입점) + hooks/·utils/·bulk-generator/
+│   │   │   └── cell-editor/    # 셀 내용 모달 (cell-content-modal → *-cell-tab·cell-choice/gating-editor) + hooks/use-cell-form·utils/serialize-cell
+│   │   ├── condition/          # 표시조건 편집 사슬 (question-condition-editor → condition-card → expression/value/numeric) + utils/
+│   │   ├── lookup/             # LUT 선택·편집·CSV·보관함 (공용 리프 — condition·formula 가 소비)
+│   │   ├── formula/            # 수식 편집기 (cell-editor·sum-constraint 양쪽이 소비)
+│   │   ├── group-manager/      # 그룹 관리
+│   │   ├── hooks/              # 빌더 전용 훅 (use-ensure-survey-in-db·use-survey-sync — src/hooks 에서 흡수)
+│   │   └── (루트 21개)          # 복수 묶음이 쓰는 공용 필드 위젯 + app 이 직접 여는 모달·패널
+│   │                           # 폴더 위상: hooks ← lookup ← condition ← table-editor ← question-edit ← question-list (DAG, 순환 없음)
 │   ├── question-renderer/      # 빌더 미리보기·응답 페이지 양쪽이 쓰는 질문 렌더러 (67개)
 │   │   ├── cells/              # 표 셀 렌더러
 │   │   ├── hooks/              # 표 레이아웃·동적 행·응답 쓰기 채널 훅
@@ -129,9 +140,9 @@ src/
 │
 ├── hooks/                      # 커스텀 훅 (루트 배럴 없음 — 직접 경로 import)
 │   ├── queries/                # TanStack Query 훅 (surveys/contacts/campaigns/library/cell-library/file-cleanup)
-│   ├── use-survey-sync.ts      # 설문 데이터 동기화
 │   ├── use-latest-ref / use-media-query / use-formatted-numeric-input.ts # 범용
-│   └── ... (표 레이아웃·동적 행·응답 쓰기 채널 훅은 components/question-renderer/hooks 로 이동)
+│   ├── use-auto-fade-message / use-search-params-mutator.ts # operations 전용 (이동 후보)
+│   └── ... (표 훅은 question-renderer/hooks, 빌더 훅은 survey-builder/hooks 로 이동)
 │
 ├── lib/                        # 도메인 로직 + 유틸리티
 │   ├── supabase/               # Supabase 클라이언트 (client/server/middleware)
@@ -166,10 +177,10 @@ src/
 │   ├── choice-source / ranking-source / ranking-shared / choice-group-helpers.ts # 옵션 소스 해석
 │   ├── option-code-generator / option-value-remap / table-cell-code-generator.ts # 코드 발번
 │   ├── spss-var-name.ts        # SPSS 변수명 생성
-│   ├── cell-type-detector / cell-label / cell-style / cell-library-helpers / serialize-cell.ts
+│   ├── cell-label / cell-style / cell-library-helpers.ts  # (cell-type-detector·serialize-cell 은 survey-builder 아래로 이동)
 │   ├── table-merge-helpers / table-cell-optimizer.ts  # (table-grid-utils · expand-header-grid 는 question-renderer/utils)
 │   ├── mobile-drilldown-repeat-header / mobile-table-display-mode.ts  # 서버도 import — 나머지 mobile-* 는 question-renderer/utils
-│   ├── number-format / numeric-input / options-layout / expression-migration.ts
+│   ├── number-format / numeric-input.ts  # (expression-migration 은 survey-builder/condition/utils, header-style 은 table-editor/utils)
 │   └── ...
 │
 ├── db/
