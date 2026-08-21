@@ -19,10 +19,8 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 | 상태관리       | Zustand + Immer                             | 5.0.8 / 11.1.3  |
 | 데이터 페칭    | TanStack Query                              | 5.90.11         |
 | RPC            | oRPC (server/client/tanstack-query/openapi) | 1.14.4          |
-| 폼 관리        | React Hook Form                             | 7.63.0          |
 | 스키마 검증    | Zod                                         | 4.4.3           |
 | 테이블         | TanStack Table                              | 8.21.3          |
-| 가상화         | TanStack Virtual                            | 3.13.23         |
 | 텍스트 측정    | @chenglou/pretext                           | 0.0.5           |
 | 리치 에디터    | TipTap                                      | 3.15.3          |
 | 드래그앤드롭   | @dnd-kit                                    | -               |
@@ -46,6 +44,8 @@ Next.js 16 기반의 고급 설문조사 빌더 + 운영 플랫폼. 복잡한 �
 | 언어           | TypeScript (strict)                         | 5.9.3           |
 
 > 참고: `xlsx`, `jszip` 의존성은 제거됨(2026-06-05). 엑셀 생성은 ExcelJS, SPSS는 sav-writer 사용.
+> `react-hook-form`, `@tanstack/react-virtual` 도 제거됨(2026-08-22) — 소스 참조가 처음부터 0이었다.
+> 폼은 제어 컴포넌트 + zod 로, 목록은 TanStack Table 로 직접 다룬다.
 > sharp 0.35는 Vercel libvips 이슈로 `next.config.ts`의 `outputFileTracingIncludes` 우회가 걸려 있다 (업스트림 수정 시 제거).
 
 ---
