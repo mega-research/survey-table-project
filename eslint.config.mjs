@@ -84,6 +84,54 @@ const eslintConfig = [
       ],
     },
   },
+  {
+    // components 의존 방향: survey-builder → survey-response → question-renderer (단방향).
+    // question-renderer 는 빌더 미리보기와 응답 페이지 양쪽이 쓰는 렌더러라 어느 쪽도 역참조하지 않는다.
+    // 글롭은 components/ 아래로 한정한다 — @/features/survey-builder 는 oRPC 도메인이라 import 해도 된다.
+    files: ["src/components/question-renderer/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: [
+                "@/components/survey-builder",
+                "@/components/survey-builder/**",
+                "@/components/survey-response",
+                "@/components/survey-response/**",
+                "**/components/survey-builder/**",
+                "**/components/survey-response/**",
+              ],
+              message:
+                "question-renderer 는 survey-builder · survey-response 를 import 하지 않습니다. 양쪽이 쓰는 조각이면 question-renderer 로 옮기고, 한쪽 전용이면 호출자가 props 로 주입하세요.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ["src/components/survey-response/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: [
+                "@/components/survey-builder",
+                "@/components/survey-builder/**",
+                "**/components/survey-builder/**",
+              ],
+              message:
+                "survey-response 는 survey-builder 를 import 하지 않습니다. 양쪽이 쓰는 렌더러는 @/components/question-renderer 에 있습니다.",
+            },
+          ],
+        },
+      ],
+    },
+  },
   eslintConfigPrettier,
 ];
 
