@@ -93,6 +93,8 @@ src/
 │   └── rpc-timeout.ts          # 타임아웃 가드
 │
 ├── shared/                     # feature 간 공용 (feature 직접 import 금지의 탈출구)
+│   ├── contracts/              # JSONB 문서 어휘 — survey·survey-response·contacts·operations·mail·quota·template-variables
+│   │                           # (DB 스키마 $type<>·서버·UI 가 공유, 런타임 의존 없음. 구 db/schema/schema-types.ts)
 │   ├── lib/rpc.ts              # 타입드 RPC client: client(plain 호출) + orpc(TanStack utils)
 │   ├── lib/survey-control.ts   # 설문 운영 제어 공용 로직
 │   └── types/test-attempt.ts
@@ -152,7 +154,7 @@ src/
 │   ├── crypto/                 # PII 암호화 (cipher + blind index, 컨택·응답 공용)
 │   ├── contacts/               # 엑셀 파서, 컬럼 자동감지, 스킴 헬퍼, 업로드 제한
 │   ├── operations/             # 운영 콘솔 집계 로직 (*.server.ts = SQL 집계)
-│   ├── mail/                   # 메일 발송/렌더/캠페인 dispatch+reconcile/빌링/첨부
+│   ├── mail/                   # 메일 발송/렌더/캠페인 dispatch+reconcile/빌링/첨부/템플릿 변수 카탈로그(variable-catalog)
 │   ├── quota/                  # 쿼터 게이트 + 응답 매칭
 │   ├── r2-lifecycle/           # R2 유예 삭제 큐 + 발송 장부 + 참조 인덱스
 │   ├── spss/                   # SPSS .sav 빌더 + 변수 생성/검증 + 데이터 변환
@@ -197,7 +199,7 @@ src/
 
 ## 데이터베이스 스키마
 
-스키마 파일은 도메인별로 분리: `surveys.ts`, `contacts.ts`, `mail.ts`, `mail-billing.ts`, `r2-lifecycle.ts`, JSONB 타입은 `schema-types.ts`. 영속 질문 필드 SSOT는 `question-persisted-fields.ts`.
+스키마 파일은 도메인별로 분리: `surveys.ts`, `contacts.ts`, `mail.ts`, `mail-billing.ts`, `r2-lifecycle.ts`. JSONB 컬럼의 문서 형태(어휘)는 `src/shared/contracts/<domain>.ts`에 두고 스키마가 `$type<>()`로 참조한다(DB→shared 단방향). 영속 질문 필드 SSOT는 `question-persisted-fields.ts`.
 
 ### 설문 도메인 (surveys.ts)
 
@@ -747,7 +749,7 @@ export function QuestionEditor({ questionId, onSave }: Props) {
 
 ## 주의사항
 
-1. **타입 안전성**: Drizzle ORM + TypeScript strict. JSONB 컬럼은 `schema-types.ts`의 타입으로 `.$type<...>()` 지정.
+1. **타입 안전성**: Drizzle ORM + TypeScript strict. JSONB 컬럼은 `src/shared/contracts/*`의 타입으로 `.$type<...>()` 지정. 클라이언트 트리(components/hooks/stores/utils)는 `@/db` 값 import 금지(ESLint, type 은 허용).
 
 2. **상태 관리**: 서버 상태는 TanStack Query, 클라이언트 상태는 Zustand(+Immer).
 
