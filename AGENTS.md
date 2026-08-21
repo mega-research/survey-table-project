@@ -84,16 +84,21 @@ src/
 │   ├── rpc-error-policy.ts     # 에러 → RPC 코드 매핑
 │   ├── rpc-timeout.ts          # 타임아웃 가드
 │   ├── health.ts               # health procedure (코어 옆)
+│   ├── data-scope.server.ts    # 요청이 어느 파티션(실/테스트)을 보는가 + 쓰기 잠금 — context 와 같은 계층
 │   └── <domain>/               # survey-builder · survey-response · operations · contacts
 │       │                       # · mail · analytics · library · auth · media · quota
-│       ├── domain/             # zod 스키마 + 순수 규칙 (런타임 import 0, JSONB는 z.custom). UI 가 읽어도 되는 유일한 서버 층
+│       ├── domain/             # zod 계약 + 순수 규칙 (**client-safe** — server-only·Node·DB 의존 0. zod 는 런타임 의존이라 'import 0' 이 아니다)
+│       │                       # 후속: 계약(zod)과 업무 규칙을 갈라 계약은 shared/contracts 로 — 트래커 E-2
 │       ├── procedures/         # oRPC procedure (authed/scoped/pub, 얇은 위임) + colocated *.test.ts
 │       └── services/           # 비즈 로직 + drizzle (server-only, requireAuth/revalidatePath 없음)
 │                               # 도메인 간 직접 import 금지(ESLint), 내부는 상대경로. 타 도메인 테이블 직접 쿼리는 허용
-│   └── shared/                 # 서버 도메인 둘 이상이 정적으로 읽고 DB 를 만지는 코드 (@/server/shared 는 규칙 예외)
-│                               # data-scope(파티션 판정) · 컨택 read model 3 · 결과코드 · 수신자 상태전이 · 테스트 메일 아카이브
-│       └── r2-lifecycle/       # R2 유예 삭제 큐·발송 장부·참조 인덱스 (survey-builder·library·mail·media 공용)
-│                               # shared 자신도 같은 규칙에 걸려 타 도메인을 import 하지 못한다 — 단방향 sink
+│   ├── read-models/            # 여러 도메인 테이블을 **읽기만** 하는 projection (컨택 read model · 초대 조회 · 결과코드 · 쿼터 모수 · 설문 제어 플래그)
+│   │                           # 자기완결 — 도메인을 import 하지 않는다(ESLint)
+│   ├── workflows/              # 여러 도메인의 **쓰기를 조율**하는 흐름. 이 층만 도메인을 부를 수 있다
+│   │                           # 결합을 없애는 게 아니라 한곳에 모아 보이게 하는 자리 — 파일이 늘면 그 자체가 신호다
+│   └── storage-lifecycle/      # R2 유예 삭제 큐·발송 장부·참조 인덱스 (자체 r2_* 테이블만 만지는 독립 모듈)
+│
+│   ※ "여러 도메인이 쓴다" 는 공용의 근거가 아니다 — 역할로 묶이지 않으면 제2의 lib 가 된다
 │
 ├── features/                   # 프론트 기능 묶음 5개 (UI·훅·스토어·query 훅을 기능 단위로 — 레이어 규약 아님, FSD 아님)
 │   │                           # 의존 방향(ESLint): survey-builder → survey-response → question-renderer 단방향, operations·analytics 독립
@@ -128,7 +133,8 @@ src/
 │   └── analytics/              # 차트 및 리포팅 (20개)
 │
 ├── shared/                     # 서버·프론트 양쪽 공용 (feature 직접 import 금지의 탈출구)
-│   ├── contracts/              # JSONB 문서 어휘 — survey·survey-response·contacts·operations·mail·quota·template-variables
+│   ├── contracts/              # JSONB 문서 어휘 SoT — survey·survey-response·contacts·operations·mail·quota·template-variables
+│   │                           # 질문 구조 타입은 @/types/survey 소관(겹침 0)
 │   │                           # (DB 스키마 $type<>·서버·UI 가 공유, 런타임 의존 없음. 구 db/schema/schema-types.ts)
 │   ├── lib/rpc.ts              # 타입드 RPC client: client(plain 호출) + orpc(TanStack utils)
 │   ├── lib/survey-control.ts   # 설문 운영 제어 공용 로직
@@ -195,7 +201,8 @@ src/
 │   ├── index.ts                # drizzle(postgres-js) 클라이언트
 │   └── schema/                 # Drizzle ORM 스키마 (아래 DB 섹션 참조)
 │
-├── types/survey.ts             # 설문 관련 타입 정의 (도메인 타입 SoT)
+├── types/survey.ts             # 질문 구조 타입 SoT — TableCell·QuestionOption·조건식 등 (796줄, 소비 221파일)
+│                               # shared/contracts/survey 와 심볼 겹침 0. 저쪽은 JSONB 문서 어휘라 역할이 다르다
 ├── instrumentation.ts          # Sentry 서버 instrumentation
 ├── instrumentation-client.ts   # Sentry 클라이언트 instrumentation
 └── proxy.ts                    # Next 미들웨어 (/admin, /analytics 세션 갱신)
@@ -510,12 +517,13 @@ r2_deletion_candidates / r2_sent_keys / r2_key_refs (standalone — 키 문자�
             └─ service (비즈 로직 + drizzle)  →  db
 
 RSC (서버 컴포넌트)
-  └─ service 직접 호출 (RPC 자기호출 금지)  # server/<domain>/services · server/shared/*.server.ts · data/
+  └─ service 직접 호출 (RPC 자기호출 금지)  # server/<domain>/services · server/read-models/* · data/
 ```
 
 - 서버 상태는 TanStack Query, 클라이언트 상태는 Zustand로 분리. mutation 후 RSC 데이터 갱신은 `router.refresh()` (revalidatePath는 procedure에서 불가).
 - procedure 베이스 3종은 아래 "인증과 권한" 참조. 모든 베이스는 `rpcLoggingMiddleware`가 붙은 `base` 파생이라 성공/실패가 구조화 로그 1줄로 남는다.
-- 잔존 서버 액션은 `actions/` 3파일뿐 (auth login/logout + unsubscribe form — 의도적 유지).
+- **표면 선택 원칙**: 브라우저 query/mutation 은 oRPC · RSC 는 service 직접 호출 · 업로드·파일 스트리밍·webhook·sendBeacon 은 Route Handler · **JS 없이 동작해야 하는 네이티브 폼과 redirect+쿠키 의미론만 서버 액션**. 서버 액션 0개가 목표가 아니다.
+- 그 원칙에 따라 잔존 서버 액션은 `actions/` 3파일뿐 (auth login/logout + unsubscribe form — 의도적 유지).
 - **서버 도메인 마이그레이션 패턴/함정**: domain zod는 `@/types/survey` 방향 통일 + null-coalescing(as unknown as 금지), service input은 zod infer, `.returning()` 후 non-null throw, 컴포넌트는 hook/helper 시그니처 유지로 무수정. 질문 영속 쓰기는 explicit field set(spread 금지) + `PERSISTED_QUESTION_FIELDS` SSOT 로 tsc 관할 — 신규 컬럼은 SSOT 등재만 하면 모든 쓰기 지점(survey-save values/onConflict, create, duplicate, updateQuestion 순회)이 컴파일 에러로 호명된다.
 - 경계는 ESLint 가 강제한다 — 서버 도메인 간 직접 import 금지(공용은 `@/shared` 승격 또는 RPC 경유, 타 도메인 테이블 직접 쿼리는 허용) · 프론트 feature 는 builder→response→renderer 한 방향 · 공용 구역(components/hooks/stores/utils/lib/types/data/shared)과 서버는 features 를 import 하지 않음 · UI 는 `@/server/<domain>/domain` 계약만 import(services/procedures/코어 금지) · 클라이언트 트리는 `@/db` 값 import 금지. 규칙은 `no-restricted-imports` 의 gitignore 의미론(상위 디렉터리 매치는 negation 불가, 같은 files 에 같은 규칙 블록 둘이면 마지막이 덮어씀) 위에 쓰여 있으니 새 규칙은 프로브 파일로 발화를 확인할 것.
 
@@ -576,7 +584,7 @@ POST   /api/webhooks/resend                    # Resend webhook (svix 검증)
 
 ## R2 파일 수명주기
 
-R2 영구 객체 삭제의 유일한 경로는 유예 삭제 큐다 (`server/shared/r2-lifecycle/`).
+R2 영구 객체 삭제의 유일한 경로는 유예 삭제 큐다 (`server/storage-lifecycle/`).
 
 - `r2_deletion_candidates` — 등록 후 7일 유예, cron 집행자가 장부·전역 참조를 재확인한 키만 삭제.
 - `r2_sent_keys` — 발송된 메일 콘텐츠에서 추출한 키의 append-only 장부. **장부에 오른 키는 참조 유무와 무관하게 영구 보존** (수신함 참조는 DB로 복원 불가).
@@ -601,7 +609,7 @@ R2 영구 객체 삭제의 유일한 경로는 유예 삭제 큐다 (`server/sha
 
 설문 단위 토글(`surveys.testModeEnabled` + `testToken`)로 운영 콘솔 전체가 테스트 파티션으로 전환된다. 파티션 키는 `is_test` 컬럼(`contact_targets`, `survey_responses`, `mail_campaigns`)이며, `contact_targets`의 resid UNIQUE도 `(surveyId, isTest, resid)`다.
 
-- 읽기/쓰기 파티션은 `server/shared/data-scope.server.ts`의 `loadOperationsDataScope`가 단일 결정한다. 신규 집계·목록 쿼리는 이 스코프를 반드시 태울 것.
+- 읽기/쓰기 파티션은 `server/data-scope.server.ts`의 `loadOperationsDataScope`가 단일 결정한다. 신규 집계·목록 쿼리는 이 스코프를 반드시 태울 것.
 - 게스트는 항상 real 파티션(읽기/쓰기 모두) — read/write 비대칭을 막기 위한 의도적 처리.
 - 테스트 응답 회차는 `test_response_attempts`가 추적(활성 회차는 responseId당 1개).
 
