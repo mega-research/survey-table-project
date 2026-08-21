@@ -50,4 +50,23 @@ describe('ResumeToast', () => {
     });
     expect(onDismiss).not.toHaveBeenCalled();
   });
+
+  it('타이머 도중 새 onDismiss 로 재렌더해도 타이머는 재시작되지 않는다 — 마운트 4초 시점에 정확히 1회', () => {
+    const first = vi.fn();
+    const { rerender } = render(<ResumeToast message="msg" onDismiss={first} />);
+    act(() => {
+      vi.advanceTimersByTime(3000);
+    });
+    const second = vi.fn();
+    rerender(<ResumeToast message="msg" onDismiss={second} />);
+    act(() => {
+      vi.advanceTimersByTime(999);
+    });
+    expect(first.mock.calls.length + second.mock.calls.length).toBe(0);
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    // 어느 콜백이 불리는지는 구현 세부(마운트 시점 vs 최신)이고, 계약은 "재시작 없이 정확히 1회"다.
+    expect(first.mock.calls.length + second.mock.calls.length).toBe(1);
+  });
 });

@@ -57,4 +57,26 @@ describe('useHorizontalScrollIndicators', () => {
     });
     expect(result.current.canScrollLeft).toBe(true);
   });
+
+  it('deps 가 바뀌면 재측정하고, 같은 값 재렌더에는 재측정하지 않는다', () => {
+    const element = document.createElement('div');
+    Object.defineProperties(element, {
+      clientWidth: { configurable: true, value: 320 },
+      scrollWidth: { configurable: true, value: 320 },
+      scrollLeft: { configurable: true, writable: true, value: 0 },
+    });
+    const ref = makeRef(element);
+    const { result, rerender } = renderHook(
+      ({ rows }: { rows: number }) => useHorizontalScrollIndicators(ref, { deps: [1, rows] }),
+      { initialProps: { rows: 1 } },
+    );
+    expect(result.current.canScrollRight).toBe(false);
+
+    // 행이 늘어 내용이 넓어졌다 — deps 변경이 재측정을 유발해야 한다
+    Object.defineProperty(element, 'scrollWidth', { configurable: true, value: 960 });
+    rerender({ rows: 1 });
+    expect(result.current.canScrollRight).toBe(false);
+    rerender({ rows: 2 });
+    expect(result.current.canScrollRight).toBe(true);
+  });
 });
