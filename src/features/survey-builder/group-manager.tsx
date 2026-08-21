@@ -92,23 +92,20 @@ export function GroupManager({ className }: GroupManagerProps) {
   const [nameDesignForEdit, setNameDesignForEdit] = useState<GroupNameDesign | undefined>(
     undefined,
   );
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [, setActiveId] = useState<string | null>(null);
   const [, setOverId] = useState<string | null>(null);
 
   const groupsOrEmpty = useMemo(() => groups || [], [groups]);
 
-  // Store의 collapsed 상태와 expandedGroups 동기화
-  useEffect(() => {
-    if (groupsOrEmpty.length === 0) return;
-    setExpandedGroups(() => {
-      const next = new Set<string>();
-      for (const g of groupsOrEmpty) {
-        if (!g.collapsed) next.add(g.id);
-      }
-      // 기존에 없던 그룹이 삭제된 경우 자동 cleanup (prev에서 groupIds에 없는 건 제거됨)
-      return next;
-    });
+  // 펼침은 store 의 collapsed 파생값이다 — 로컬 state 로 복제하면 groups 가 갱신될 때마다
+  // 이펙트가 로컬을 store 기준으로 덮어써, 상위 그룹 변경 직후 펼쳐 둔 것이 도로 접혔다.
+  // 삭제된 그룹은 목록에서 사라지므로 별도 cleanup 도 필요 없다.
+  const expandedGroups = useMemo(() => {
+    const next = new Set<string>();
+    for (const g of groupsOrEmpty) {
+      if (!g.collapsed) next.add(g.id);
+    }
+    return next;
   }, [groupsOrEmpty]);
 
   // 모달이 열려있는 동안 groups가 업데이트되면 editingGroup도 업데이트.
@@ -302,15 +299,6 @@ export function GroupManager({ className }: GroupManagerProps) {
 
   const handleToggleExpand = (groupId: string) => {
     toggleGroupCollapse(groupId);
-    setExpandedGroups((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(groupId)) {
-        newSet.delete(groupId);
-      } else {
-        newSet.add(groupId);
-      }
-      return newSet;
-    });
   };
 
   const handleEditGroup = (group: QuestionGroup) => {
@@ -440,9 +428,10 @@ export function GroupManager({ className }: GroupManagerProps) {
           );
         }
 
-        // 상위 그룹이 변경되면 해당 그룹을 펼침
+        // 상위 그룹이 변경되면 해당 그룹을 펼침. store 를 직접 펼쳐야 유지된다 —
+        // 로컬 state 만 바꾸던 때는 groups 갱신 이펙트가 곧바로 덮어써 접혔다.
         if (newParentGroupId) {
-          setExpandedGroups((prev) => new Set(prev).add(newParentGroupId));
+          updateGroup(newParentGroupId, { collapsed: false });
         }
       } else {
         // 이름/설명/표시 옵션만 변경된 경우
