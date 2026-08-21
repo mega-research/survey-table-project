@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 
+import { useQuery } from '@tanstack/react-query';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -14,8 +15,6 @@ import {
   Sparkles,
   SplitSquareHorizontal,
 } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
-
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
@@ -29,8 +28,9 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { buildSafeFilename, downloadBlob } from '@/lib/analytics/export-download';
-import { useErrorDialogStore } from '@/stores/error-dialog-store';
+import { runAsyncAction } from '@/lib/run-async-action';
 import type { VarNameIssue } from '@/lib/spss/variable-name-guard';
+import { useErrorDialogStore } from '@/stores/error-dialog-store';
 
 interface Props {
   surveyId: string;
@@ -92,6 +92,62 @@ async function fetchSplitPlan(surveyId: string, basis: string): Promise<{ plan: 
 
 type SplitStep = 'options' | 'candidates' | 'preview' | 'downloading' | 'done';
 
+type ExportFetchResult =
+  | { kind: 'file'; blob: Blob; filename: string }
+  | { kind: 'varNameIssues'; issues: VarNameIssue[] };
+
+/** Content-Disposition 에서 파일명을 뽑는다. 없거나 매칭 실패면 fallback. */
+function resolveExportFilename(contentDisposition: string | null, fallback: string): string {
+  if (!contentDisposition) return fallback;
+  const match = contentDisposition.match(/filename="?([^"]+)"?/);
+  if (match?.[1]) return decodeURIComponent(match[1]);
+  return fallback;
+}
+
+/**
+ * export 라우트 호출 + 실패 판정 + 파일명 해석.
+ *
+ * throw 와 optional chaining 을 컴포넌트 밖으로 옮긴다 — React Compiler 는 try/catch
+ * 본문의 ThrowStatement 와 value block 을 낮추지 못해 컴포넌트 전체를 skip 한다.
+ * 모듈 최상위 함수는 컴파일러 판정 대상이 아니라 이벤트조차 남기지 않는다.
+ */
+async function fetchExportFile(
+  url: string,
+  fallbackFilename: string,
+  failureMessage: string,
+): Promise<ExportFetchResult> {
+  const response = await fetch(url);
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => null);
+    const issues = errorData?.issues as VarNameIssue[] | undefined;
+    if (issues && issues.length > 0) return { kind: 'varNameIssues', issues };
+    throw new Error(errorData?.error || failureMessage);
+  }
+  const blob = await response.blob();
+  return {
+    kind: 'file',
+    blob,
+    filename: resolveExportFilename(response.headers.get('Content-Disposition'), fallbackFilename),
+  };
+}
+
+/** 분할 export 전용 — 실패는 항상 throw(변수명 이슈 분기 없음, 기존 동작 그대로). */
+async function fetchSplitExportFile(
+  url: string,
+  fallbackFilename: string,
+): Promise<{ blob: Blob; filename: string }> {
+  const res = await fetch(url);
+  if (!res.ok) {
+    const e = await res.json().catch(() => null);
+    throw new Error(e?.error || '분할 내보내기에 실패했습니다.');
+  }
+  const blob = await res.blob();
+  return {
+    blob,
+    filename: resolveExportFilename(res.headers.get('Content-Disposition'), fallbackFilename),
+  };
+}
+
 export function ExportDataModal({ surveyId, surveyTitle }: Props) {
   const [isOpen, setIsOpen] = useState(false);
   const [exportingType, setExportingType] = useState<string | null>(null);
@@ -120,59 +176,47 @@ export function ExportDataModal({ surveyId, surveyTitle }: Props) {
   };
 
   const handleExport = async (type: string) => {
-    try {
-      setExportingType(type);
-
-      const response = await fetch(`/api/surveys/${surveyId}/export?type=${type}`);
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
-        const issues = errorData?.issues as VarNameIssue[] | undefined;
-        if (issues && issues.length > 0) {
+    setExportingType(type);
+    const ext = type === 'sav' ? 'sav' : type === 'sps' ? 'sps' : 'xlsx';
+    await runAsyncAction(
+      async () => {
+        const result = await fetchExportFile(
+          `/api/surveys/${surveyId}/export?type=${type}`,
+          buildSafeFilename(surveyTitle, 'Export', ext),
+          '내보내기에 실패했습니다.',
+        );
+        if (result.kind === 'varNameIssues') {
           useErrorDialogStore.getState().show({
             title: 'SPSS 변수명 오류로 내보내기가 중단되었습니다',
             description: '빌더에서 해당 변수명을 수정한 뒤 다시 시도하세요.',
-            issues,
+            issues: result.issues,
           });
           return;
         }
-        throw new Error(errorData?.error || '내보내기에 실패했습니다.');
-      }
+        downloadBlob(result.blob, result.filename);
 
-      const blob = await response.blob();
-      const contentDisposition = response.headers.get('Content-Disposition');
-      const ext = type === 'sav' ? 'sav' : type === 'sps' ? 'sps' : 'xlsx';
-      let filename = buildSafeFilename(surveyTitle, 'Export', ext);
-      if (contentDisposition) {
-        const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/);
-        if (filenameMatch?.[1]) filename = decodeURIComponent(filenameMatch[1]);
-      }
-      downloadBlob(blob, filename);
-
-      // 다운로드 후 모달 닫기 여부는 선택사항 (연속 다운로드를 위해 유지)
-    } catch (error) {
-      console.error('Export error:', error);
-      toast.error(error instanceof Error ? error.message : '데이터 내보내기 중 오류가 발생했습니다.');
-    } finally {
-      setExportingType(null);
-    }
+        // 다운로드 후 모달 닫기 여부는 선택사항 (연속 다운로드를 위해 유지)
+      },
+      {
+        onError: (error) => {
+          console.error('Export error:', error);
+          toast.error(
+            error instanceof Error ? error.message : '데이터 내보내기 중 오류가 발생했습니다.',
+          );
+        },
+        onSettled: () => setExportingType(null),
+      },
+    );
   };
 
   const handleSplitDownload = async () => {
     if (!basis) return;
     setStep('downloading');
     try {
-      const res = await fetch(
+      const { blob, filename } = await fetchSplitExportFile(
         `/api/surveys/${surveyId}/export?type=raw-split&basis=${encodeURIComponent(basis)}`,
+        buildSafeFilename(surveyTitle, 'Split', 'xlsx'),
       );
-      if (!res.ok) {
-        const e = await res.json().catch(() => null);
-        throw new Error(e?.error || '분할 내보내기에 실패했습니다.');
-      }
-      const blob = await res.blob();
-      const cd = res.headers.get('Content-Disposition');
-      let filename = buildSafeFilename(surveyTitle, 'Split', 'xlsx');
-      const m = cd?.match(/filename="?([^"]+)"?/);
-      if (m && m[1]) filename = decodeURIComponent(m[1]);
       downloadBlob(blob, filename);
       setStep('done');
     } catch (err) {
@@ -235,7 +279,8 @@ export function ExportDataModal({ surveyId, surveyTitle }: Props) {
                       변수가 {fmtNum(summary.data.totalVars)}개 — 한 시트에 담기 부담스러운 양입니다
                     </div>
                     <p className="text-[13px] leading-relaxed text-amber-700">
-                      Excel 한 시트 열 한계는 {fmtNum(summary.data.excelLimit)}개입니다. 기준 문항으로 시트를 나누면 각 시트의 변수 수가 크게 줄어듭니다.
+                      Excel 한 시트 열 한계는 {fmtNum(summary.data.excelLimit)}개입니다. 기준
+                      문항으로 시트를 나누면 각 시트의 변수 수가 크게 줄어듭니다.
                     </p>
                   </div>
                 </div>
@@ -251,7 +296,6 @@ export function ExportDataModal({ surveyId, surveyTitle }: Props) {
                 </button>
               </div>
             )}
-
           </div>
         )}
 
@@ -267,7 +311,9 @@ export function ExportDataModal({ surveyId, surveyTitle }: Props) {
             {summary.isLoading && <p className="text-sm text-slate-400">분석 중…</p>}
             {summary.isError && (
               <p className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">
-                {summary.error instanceof Error ? summary.error.message : '미리보기 정보를 불러오지 못했습니다.'}
+                {summary.error instanceof Error
+                  ? summary.error.message
+                  : '미리보기 정보를 불러오지 못했습니다.'}
               </p>
             )}
             {summary.data && summary.data.candidates.length === 0 && (
@@ -307,13 +353,19 @@ export function ExportDataModal({ surveyId, surveyTitle }: Props) {
                     <span className="shrink-0 text-right">
                       <span className="mb-1 flex items-center justify-end gap-1">
                         <Layers className="h-3 w-3 text-slate-400" />
-                        <span className="text-[13px] font-bold text-slate-700">{c.buckets}개 시트</span>
+                        <span className="text-[13px] font-bold text-slate-700">
+                          {c.buckets}개 시트
+                        </span>
                       </span>
                       <span
-                        className={`inline-flex items-center gap-1 whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-semibold ${safe ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}
+                        className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold whitespace-nowrap ${safe ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}
                       >
                         최대 {fmtNum(c.maxVars)}변수
-                        {safe ? <Check className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
+                        {safe ? (
+                          <Check className="h-3 w-3" />
+                        ) : (
+                          <AlertTriangle className="h-3 w-3" />
+                        )}
                       </span>
                     </span>
                   </button>
@@ -328,7 +380,9 @@ export function ExportDataModal({ surveyId, surveyTitle }: Props) {
             {planQuery.isLoading && <p className="text-sm text-slate-400">시트 구성 계산 중…</p>}
             {planQuery.isError && (
               <p className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">
-                {planQuery.error instanceof Error ? planQuery.error.message : '시트 미리보기를 불러오지 못했습니다.'}
+                {planQuery.error instanceof Error
+                  ? planQuery.error.message
+                  : '시트 미리보기를 불러오지 못했습니다.'}
               </p>
             )}
             {planQuery.data &&
@@ -349,7 +403,9 @@ export function ExportDataModal({ surveyId, surveyTitle }: Props) {
                     </div>
                     <div className="overflow-hidden rounded-xl border border-slate-200">
                       <div className="grid grid-cols-[1fr_92px_110px_56px] items-center border-b border-slate-200 bg-slate-50">
-                        <div className="px-3.5 py-2 text-[11px] font-bold text-slate-500">시트명</div>
+                        <div className="px-3.5 py-2 text-[11px] font-bold text-slate-500">
+                          시트명
+                        </div>
                         <div className="px-3.5 py-2 text-right text-[11px] font-bold text-slate-500">
                           응답 수
                         </div>
@@ -372,7 +428,7 @@ export function ExportDataModal({ surveyId, surveyTitle }: Props) {
                               <div className="truncate px-3.5 py-2.5 text-[13px] font-semibold text-slate-900">
                                 {s.name}
                               </div>
-                              <div className="px-3.5 py-2.5 text-right text-[13px] tabular-nums text-slate-500">
+                              <div className="px-3.5 py-2.5 text-right text-[13px] text-slate-500 tabular-nums">
                                 {fmtNum(s.resp)}
                               </div>
                               <div className="px-3.5 py-2.5 text-right text-[13px] tabular-nums">
@@ -402,15 +458,13 @@ export function ExportDataModal({ surveyId, surveyTitle }: Props) {
                     </div>
                     <div className="mt-3 flex gap-3.5 text-xs text-slate-500">
                       <span>
-                        공통 변수{' '}
-                        <b className="text-slate-700">{fmtNum(plan.common)}</b>개는 별도 공통 시트로
+                        공통 변수 <b className="text-slate-700">{fmtNum(plan.common)}</b>개는 별도
+                        공통 시트로
                       </span>
                       <span className="ml-auto">
                         최대{' '}
                         <b
-                          className={
-                            plan.maxVars <= softLimit ? 'text-green-700' : 'text-red-700'
-                          }
+                          className={plan.maxVars <= softLimit ? 'text-green-700' : 'text-red-700'}
                         >
                           {fmtNum(plan.maxVars)}
                         </b>
@@ -485,7 +539,14 @@ export function ExportDataModal({ surveyId, surveyTitle }: Props) {
             </>
           )}
           {step === 'done' && (
-            <Button onClick={() => { setStep('options'); setBasis(null); }}>완료</Button>
+            <Button
+              onClick={() => {
+                setStep('options');
+                setBasis(null);
+              }}
+            >
+              완료
+            </Button>
           )}
         </DialogFooter>
       </DialogContent>

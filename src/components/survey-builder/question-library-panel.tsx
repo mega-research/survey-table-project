@@ -29,7 +29,6 @@ import {
   Users,
   X,
 } from 'lucide-react';
-
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
@@ -42,6 +41,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { hasBranchLogic, removeBranchLogic } from '@/features/library/domain/saved-question';
 import {
   useApplyMultipleQuestions,
   useApplyQuestion,
@@ -54,8 +54,8 @@ import {
   useSavedQuestions,
   useSearchQuestions,
 } from '@/hooks/queries/use-library';
+import { runAsyncAction } from '@/lib/run-async-action';
 import { cn, isEmptyHtml } from '@/lib/utils';
-import { hasBranchLogic, removeBranchLogic } from '@/features/library/domain/saved-question';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { Question, SavedQuestion } from '@/types/survey';
 
@@ -103,10 +103,7 @@ interface QuestionLibraryPanelProps {
   className?: string;
 }
 
-export function QuestionLibraryPanel({
-  onAddQuestion,
-  className,
-}: QuestionLibraryPanelProps) {
+export function QuestionLibraryPanel({ onAddQuestion, className }: QuestionLibraryPanelProps) {
   // TanStack Query 훅들
   const { data: savedQuestions = [] } = useSavedQuestions();
   const { data: categories = [] } = useCategories();
@@ -138,7 +135,9 @@ export function QuestionLibraryPanel({
   // 굳는다 — effect 본문에서 true 를 재설정해야 실마운트 상태를 정확히 반영한다.
   useEffect(() => {
     mountedRef.current = true;
-    return () => { mountedRef.current = false; };
+    return () => {
+      mountedRef.current = false;
+    };
   }, []);
 
   // 검색 쿼리 (enabled 옵션으로 검색어가 있을 때만 실행)
@@ -199,52 +198,58 @@ export function QuestionLibraryPanel({
     }
 
     setAddingQuestionIds((prev) => new Set(prev).add(savedQuestion.id));
-    try {
-      let questionToAdd: Question | null = await applyQuestion(savedQuestion.id);
-      if (!mountedRef.current) return;
-      if (!questionToAdd) {
-        setAddingQuestionIds((prev) => {
-          const next = new Set(prev);
-          next.delete(savedQuestion.id);
-          return next;
-        });
-        return;
-      }
+    await runAsyncAction(
+      async () => {
+        let questionToAdd: Question | null = await applyQuestion(savedQuestion.id);
+        if (!mountedRef.current) return;
+        if (!questionToAdd) {
+          setAddingQuestionIds((prev) => {
+            const next = new Set(prev);
+            next.delete(savedQuestion.id);
+            return next;
+          });
+          return;
+        }
 
-      // 분기 로직 제거 옵션
-      if (removeBranch) {
-        questionToAdd = removeBranchLogic(questionToAdd);
-      }
+        // 분기 로직 제거 옵션
+        if (removeBranch) {
+          questionToAdd = removeBranchLogic(questionToAdd);
+        }
 
-      // 라이브러리에서 가져온 질문은 그룹 ID를 제거
-      const { groupId: _removedGroupId, ...questionWithoutGroup } = questionToAdd;
-      questionToAdd = questionWithoutGroup as Question;
+        // 라이브러리에서 가져온 질문은 그룹 ID를 제거
+        const { groupId: _removedGroupId, ...questionWithoutGroup } = questionToAdd;
+        questionToAdd = questionWithoutGroup as Question;
 
-      if (onAddQuestion) {
-        onAddQuestion(questionToAdd);
-      } else {
-        addPreparedQuestion(questionToAdd);
-      }
+        if (onAddQuestion) {
+          onAddQuestion(questionToAdd);
+        } else {
+          addPreparedQuestion(questionToAdd);
+        }
 
-      // 선택 해제
-      if (mountedRef.current) {
-        setSelectedQuestions((prev) => {
-          const next = new Set(prev);
-          next.delete(savedQuestion.id);
-          return next;
-        });
-      }
-    } catch (error) {
-      console.error('질문 추가 실패:', error);
-    } finally {
-      if (mountedRef.current) {
-        setAddingQuestionIds((prev) => {
-          const next = new Set(prev);
-          next.delete(savedQuestion.id);
-          return next;
-        });
-      }
-    }
+        // 선택 해제
+        if (mountedRef.current) {
+          setSelectedQuestions((prev) => {
+            const next = new Set(prev);
+            next.delete(savedQuestion.id);
+            return next;
+          });
+        }
+      },
+      {
+        onError: (error) => {
+          console.error('질문 추가 실패:', error);
+        },
+        onSettled: () => {
+          if (mountedRef.current) {
+            setAddingQuestionIds((prev) => {
+              const next = new Set(prev);
+              next.delete(savedQuestion.id);
+              return next;
+            });
+          }
+        },
+      },
+    );
   };
 
   // 선택된 질문들 일괄 추가
@@ -255,30 +260,36 @@ export function QuestionLibraryPanel({
     }
 
     setIsAddingMultiple(true);
-    try {
-      const questionIds = Array.from(selectedQuestions);
-      const questions = await applyMultipleQuestions(questionIds);
-      if (!mountedRef.current) return;
+    await runAsyncAction(
+      async () => {
+        const questionIds = Array.from(selectedQuestions);
+        const questions = await applyMultipleQuestions(questionIds);
+        if (!mountedRef.current) return;
 
-      // 중복 방지를 위해 한 번만 추가
-      if (questions && questions.length > 0) {
-        questions.forEach((q) => {
-          if (onAddQuestion) {
-            onAddQuestion(q);
-          } else {
-            addPreparedQuestion(q);
+        // 중복 방지를 위해 한 번만 추가
+        if (questions && questions.length > 0) {
+          questions.forEach((q) => {
+            if (onAddQuestion) {
+              onAddQuestion(q);
+            } else {
+              addPreparedQuestion(q);
+            }
+          });
+        }
+
+        setSelectedQuestions(new Set());
+      },
+      {
+        onError: (error) => {
+          console.error('일괄 질문 추가 실패:', error);
+        },
+        onSettled: () => {
+          if (mountedRef.current) {
+            setIsAddingMultiple(false);
           }
-        });
-      }
-
-      setSelectedQuestions(new Set());
-    } catch (error) {
-      console.error('일괄 질문 추가 실패:', error);
-    } finally {
-      if (mountedRef.current) {
-        setIsAddingMultiple(false);
-      }
-    }
+        },
+      },
+    );
   };
 
   // 질문 삭제 확인
@@ -662,25 +673,31 @@ export function QuestionLibraryPanel({
                   }
 
                   setAddingQuestionIds((prev) => new Set(prev).add(pendingQuestion.id));
-                  try {
-                    // 분기 로직 유지
-                    const question = await applyQuestion(pendingQuestion.id);
-                    if (question) {
-                      if (onAddQuestion) {
-                        onAddQuestion(question);
-                      } else {
-                        addPreparedQuestion(question);
+                  await runAsyncAction(
+                    async () => {
+                      // 분기 로직 유지
+                      const question = await applyQuestion(pendingQuestion.id);
+                      if (question) {
+                        if (onAddQuestion) {
+                          onAddQuestion(question);
+                        } else {
+                          addPreparedQuestion(question);
+                        }
                       }
-                    }
-                  } catch (error) {
-                    console.error('질문 적용 실패:', error);
-                  } finally {
-                    setAddingQuestionIds((prev) => {
-                      const next = new Set(prev);
-                      next.delete(pendingQuestion.id);
-                      return next;
-                    });
-                  }
+                    },
+                    {
+                      onError: (error) => {
+                        console.error('질문 적용 실패:', error);
+                      },
+                      onSettled: () => {
+                        setAddingQuestionIds((prev) => {
+                          const next = new Set(prev);
+                          next.delete(pendingQuestion.id);
+                          return next;
+                        });
+                      },
+                    },
+                  );
                   setShowBranchWarning(false);
                   setPendingQuestion(null);
                 }}

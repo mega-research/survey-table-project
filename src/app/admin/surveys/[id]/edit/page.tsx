@@ -28,9 +28,7 @@ import {
 import { toast } from 'sonner';
 import { useShallow } from 'zustand/react/shallow';
 
-import { client } from '@/shared/lib/rpc';
-import type { VarNameIssue } from '@/lib/spss/variable-name-guard';
-import { useErrorDialogStore } from '@/stores/error-dialog-store';
+import { TestModeControl } from '@/components/operations/test-mode-control';
 import { CompletionMessageModal } from '@/components/survey-builder/completion-message-modal';
 import { ImportExportLibraryModal } from '@/components/survey-builder/import-export-library-modal';
 import { QuestionLibraryPanel } from '@/components/survey-builder/question-library-panel';
@@ -41,12 +39,15 @@ import { SortableQuestionList } from '@/components/survey-builder/sortable-quest
 import { SurveySettingsPanel } from '@/components/survey-builder/survey-settings-panel';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { TestModeControl } from '@/components/operations/test-mode-control';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useSurvey } from '@/hooks/queries/use-surveys';
 import { useSurveySync } from '@/hooks/use-survey-sync';
+import { runAsyncAction } from '@/lib/run-async-action';
+import type { VarNameIssue } from '@/lib/spss/variable-name-guard';
 import { generateSlugFromTitle, validateSlug } from '@/lib/survey-url';
+import { client } from '@/shared/lib/rpc';
+import { useErrorDialogStore } from '@/stores/error-dialog-store';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { useSurveyUIStore } from '@/stores/ui-store';
 import { Question } from '@/types/survey';
@@ -206,11 +207,14 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
 
   // 변수 카탈로그 fetch (prefill 토큰 빌더 UI용)
   useEffect(() => {
-    client.surveyBuilder.read.variableCatalog({ surveyId: id }).then((catalog) => {
-      setVariableCatalog(catalog);
-    }).catch(() => {
-      // 컨택 없는 설문이면 빈 배열 — 정상 케이스
-    });
+    client.surveyBuilder.read
+      .variableCatalog({ surveyId: id })
+      .then((catalog) => {
+        setVariableCatalog(catalog);
+      })
+      .catch(() => {
+        // 컨택 없는 설문이면 빈 배열 — 정상 케이스
+      });
   }, [id, setVariableCatalog]);
 
   // 저장되지 않은 변경이 있을 때 페이지 이탈 경고
@@ -261,11 +265,12 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
     let cancelled = false;
 
     // 500ms 후에 서버 검사 수행
+    const excludePatch = surveyId ? { excludeSurveyId: surveyId } : {};
     const timer = setTimeout(async () => {
       try {
         const isAvailable = await client.surveyBuilder.read.slugAvailable({
           slug: slugInput,
-          ...(surveyId ? { excludeSurveyId: surveyId } : {}),
+          ...excludePatch,
         });
         if (cancelled) return;
         if (!isAvailable) {
@@ -343,7 +348,11 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
       setShowSaveModal(true);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (message.includes('이미 사용 중인 URL') || message.includes('slug_unique') || message.includes('23505')) {
+      if (
+        message.includes('이미 사용 중인 URL') ||
+        message.includes('slug_unique') ||
+        message.includes('23505')
+      ) {
         setSlugError('이미 사용 중인 URL입니다. 다른 URL을 입력해주세요.');
       } else {
         toast.error('설문 저장에 실패했습니다. 다시 시도해주세요.');
@@ -368,32 +377,38 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
     }
 
     const confirmed = window.confirm(
-      `설문을 배포하시겠습니까?\n배포하면 현재 설문 상태가 스냅샷으로 저장되고, 응답자는 배포된 버전으로 응답하게 됩니다.${migratableLine}`
+      `설문을 배포하시겠습니까?\n배포하면 현재 설문 상태가 스냅샷으로 저장되고, 응답자는 배포된 버전으로 응답하게 됩니다.${migratableLine}`,
     );
     if (!confirmed) return;
 
     setIsPublishing(true);
-    try {
-      // 배포 전 저장
-      await saveSurvey();
+    await runAsyncAction(
+      async () => {
+        // 배포 전 저장
+        await saveSurvey();
 
-      const version = await client.surveyBuilder.publish.publish({ surveyId });
-      markPublished();
-      toast.success(`설문이 배포되었습니다. 버전 ${version.versionNumber}`);
-    } catch (error) {
-      const issues = (error as { data?: { issues?: VarNameIssue[] } })?.data?.issues;
-      if (issues && issues.length > 0) {
-        useErrorDialogStore.getState().show({
-          title: 'SPSS 변수명 오류로 배포가 중단되었습니다',
-          description: '빌더에서 해당 변수명을 수정한 뒤 다시 배포하세요.',
-          issues,
-        });
-      } else {
-        toast.error(`배포 중 오류가 발생했습니다: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
-      }
-    } finally {
-      setIsPublishing(false);
-    }
+        const version = await client.surveyBuilder.publish.publish({ surveyId });
+        markPublished();
+        toast.success(`설문이 배포되었습니다. 버전 ${version.versionNumber}`);
+      },
+      {
+        onError: (error) => {
+          const issues = (error as { data?: { issues?: VarNameIssue[] } })?.data?.issues;
+          if (issues && issues.length > 0) {
+            useErrorDialogStore.getState().show({
+              title: 'SPSS 변수명 오류로 배포가 중단되었습니다',
+              description: '빌더에서 해당 변수명을 수정한 뒤 다시 배포하세요.',
+              issues,
+            });
+          } else {
+            toast.error(
+              `배포 중 오류가 발생했습니다: ${error instanceof Error ? error.message : '알 수 없는 오류'}`,
+            );
+          }
+        },
+        onSettled: () => setIsPublishing(false),
+      },
+    );
   };
 
   // 맨 위로 스크롤
@@ -649,9 +664,7 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
                         placeholder="질문 번호"
                         className="h-8 w-24 text-sm"
                       />
-                      <span className="text-xs text-gray-500">
-                        / {questionCount}
-                      </span>
+                      <span className="text-xs text-gray-500">/ {questionCount}</span>
                     </div>
                   )}
                 </div>
@@ -693,10 +706,7 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
           </div>
 
           {/* Right Sidebar - Settings */}
-          <SurveySettingsPanel
-            slugInput={slugInput}
-            onAutoGenerateSlug={handleAutoGenerateSlug}
-          />
+          <SurveySettingsPanel slugInput={slugInput} onAutoGenerateSlug={handleAutoGenerateSlug} />
         </div>
       </div>
 

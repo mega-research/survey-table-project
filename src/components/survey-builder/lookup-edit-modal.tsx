@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { runAsyncAction } from '@/lib/run-async-action';
 
 import type { LookupDraft } from './lookup-shared';
 
@@ -36,9 +37,7 @@ export function LookupEditModal({ isOpen, initialValue, onClose, onSave }: Props
   const [name, setName] = useState(initialValue?.name ?? '');
   const [description, setDescription] = useState(initialValue?.description ?? '');
   const category = initialValue?.category ?? DEFAULT_CATEGORY;
-  const [columns, setColumns] = useState<string[]>(
-    initialValue?.columns ?? ['컬럼1', '컬럼2'],
-  );
+  const [columns, setColumns] = useState<string[]>(initialValue?.columns ?? ['컬럼1', '컬럼2']);
   const [rows, setRows] = useState<Array<Record<string, string | number>>>(
     initialValue?.rows ?? [],
   );
@@ -71,7 +70,9 @@ export function LookupEditModal({ isOpen, initialValue, onClose, onSave }: Props
     setRows(
       rows.map((r) => {
         if (!(oldName in r)) return r;
-        const { [oldName]: v, ...rest } = r;
+        const rest = { ...r };
+        delete rest[oldName];
+        const v = r[oldName];
         if (v === undefined) return rest;
         return { ...rest, [newName]: v };
       }),
@@ -146,21 +147,26 @@ export function LookupEditModal({ isOpen, initialValue, onClose, onSave }: Props
       for (const c of columns) out[c] = String(r[c] ?? '').trim();
       return out;
     });
+    const descriptionPatch = description.trim() ? { description: description.trim() } : {};
     setSaving(true);
-    try {
-      await onSave({
-        name: name.trim(),
-        ...(description.trim() ? { description: description.trim() } : {}),
-        category,
-        tags: initialValue?.tags ?? [],
-        columns: columns.map((c) => c.trim()),
-        rows: normalizedRows,
-      });
-    } catch (e) {
-      setError((e as Error).message ?? '저장에 실패했습니다');
-    } finally {
-      setSaving(false);
-    }
+    await runAsyncAction(
+      async () => {
+        await onSave({
+          name: name.trim(),
+          ...descriptionPatch,
+          category,
+          tags: initialValue?.tags ?? [],
+          columns: columns.map((c) => c.trim()),
+          rows: normalizedRows,
+        });
+      },
+      {
+        onError: (e) => {
+          setError((e as Error).message ?? '저장에 실패했습니다');
+        },
+        onSettled: () => setSaving(false),
+      },
+    );
   };
 
   return (
@@ -183,8 +189,8 @@ export function LookupEditModal({ isOpen, initialValue, onClose, onSave }: Props
 
           <div onPaste={handlePaste}>
             <div className="text-muted-foreground mb-2 text-xs">
-              어떤 컬럼이 키(매칭용) 이고 어떤 컬럼이 값(비교 대상) 인지는
-              조건 표시 편집에서 정합니다. 여기서는 표 구조만 정의하세요.
+              어떤 컬럼이 키(매칭용) 이고 어떤 컬럼이 값(비교 대상) 인지는 조건 표시 편집에서
+              정합니다. 여기서는 표 구조만 정의하세요.
             </div>
             <table className="w-full border-collapse">
               <thead>

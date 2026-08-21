@@ -7,6 +7,7 @@ import { AlertCircle, Loader2, Upload, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { optimizeImage, validateImageFile } from '@/lib/image-utils';
+import { runAsyncAction } from '@/lib/run-async-action';
 
 export interface CellImageEditorProps {
   imageUrl: string;
@@ -94,90 +95,96 @@ export function CellImageEditor({ imageUrl, onImageUrlChange }: CellImageEditorP
 
     uploadAbortController.current = new AbortController();
 
-    try {
-      // 이미지 최적화
-      const optimizedBlob = await optimizeImage(selectedFile);
-      const optimizedFile = new File([optimizedBlob], selectedFile.name, {
-        type: optimizedBlob.type || selectedFile.type,
-      });
+    await runAsyncAction(
+      async () => {
+        // 이미지 최적화
+        const optimizedBlob = await optimizeImage(selectedFile);
+        const optimizedFile = new File([optimizedBlob], selectedFile.name, {
+          type: optimizedBlob.type || selectedFile.type,
+        });
 
-      // FormData 생성
-      const formData = new FormData();
-      formData.append('file', optimizedFile);
-      formData.append('kind', 'survey');
+        // FormData 생성
+        const formData = new FormData();
+        formData.append('file', optimizedFile);
+        formData.append('kind', 'survey');
 
-      // 업로드 (진행률 추적)
-      const xhr = new XMLHttpRequest();
-      xhrRef.current = xhr;
+        // 업로드 (진행률 추적)
+        const xhr = new XMLHttpRequest();
+        xhrRef.current = xhr;
 
-      const handleProgress = (e: ProgressEvent) => {
-        if (e.lengthComputable) {
-          const percentComplete = (e.loaded / e.total) * 100;
-          setUploadProgress(percentComplete);
-        }
-      };
-
-      xhr.upload.addEventListener('progress', handleProgress);
-
-      // 리스너 핸들러를 Promise 밖에서 정의 (cleanup에서 접근 가능하도록)
-      let handleLoad: () => void;
-      let handleError: () => void;
-      let handleAbort: () => void;
-
-      const uploadPromise = new Promise<string>((resolve, reject) => {
-        handleLoad = () => {
-          if (xhr.status === 200) {
-            const response = JSON.parse(xhr.responseText);
-            resolve(response.url);
-          } else {
-            const errorResponse = JSON.parse(xhr.responseText);
-            reject(new Error(errorResponse.error || '업로드에 실패했습니다.'));
+        const handleProgress = (e: ProgressEvent) => {
+          if (e.lengthComputable) {
+            const percentComplete = (e.loaded / e.total) * 100;
+            setUploadProgress(percentComplete);
           }
         };
-        handleError = () => reject(new Error('네트워크 오류가 발생했습니다.'));
-        handleAbort = () => reject(new Error('업로드가 취소되었습니다.'));
 
-        xhr.addEventListener('load', handleLoad);
-        xhr.addEventListener('error', handleError);
-        xhr.addEventListener('abort', handleAbort);
+        xhr.upload.addEventListener('progress', handleProgress);
 
-        xhr.open('POST', '/api/upload/image');
-        xhr.send(formData);
-      }).finally(() => {
-        xhr.upload.removeEventListener('progress', handleProgress);
-        xhr.removeEventListener('load', handleLoad);
-        xhr.removeEventListener('error', handleError);
-        xhr.removeEventListener('abort', handleAbort);
-        xhrRef.current = null;
-      });
+        // 리스너 핸들러를 Promise 밖에서 정의 (cleanup에서 접근 가능하도록)
+        let handleLoad: () => void;
+        let handleError: () => void;
+        let handleAbort: () => void;
 
-      const uploadedImageUrl = await uploadPromise;
+        const uploadPromise = new Promise<string>((resolve, reject) => {
+          handleLoad = () => {
+            if (xhr.status === 200) {
+              const response = JSON.parse(xhr.responseText);
+              resolve(response.url);
+            } else {
+              const errorResponse = JSON.parse(xhr.responseText);
+              reject(new Error(errorResponse.error || '업로드에 실패했습니다.'));
+            }
+          };
+          handleError = () => reject(new Error('네트워크 오류가 발생했습니다.'));
+          handleAbort = () => reject(new Error('업로드가 취소되었습니다.'));
 
-      // 성공 직후~await 재개 사이에 언마운트되면 abort 가 no-op 이라 성공 경로로 진행하므로,
-      // 성공 후속 setState 도 언마운트 가드로 막는다(sibling attachment-section 패턴과 일치).
-      if (!mountedRef.current) return;
+          xhr.addEventListener('load', handleLoad);
+          xhr.addEventListener('error', handleError);
+          xhr.addEventListener('abort', handleAbort);
 
-      // 이미지 URL 설정
-      onImageUrlChange(uploadedImageUrl);
-      setPreviewUrl(uploadedImageUrl);
+          xhr.open('POST', '/api/upload/image');
+          xhr.send(formData);
+        }).finally(() => {
+          xhr.upload.removeEventListener('progress', handleProgress);
+          xhr.removeEventListener('load', handleLoad);
+          xhr.removeEventListener('error', handleError);
+          xhr.removeEventListener('abort', handleAbort);
+          xhrRef.current = null;
+        });
 
-      // 상태 초기화
-      setSelectedFile(null);
-      setUploadProgress(0);
-    } catch (error) {
-      // 언마운트(취소 abort 포함) 후에는 setState 호출 금지
-      if (mountedRef.current) {
-        const errorMessage =
-          error instanceof Error ? error.message : '업로드 중 오류가 발생했습니다.';
-        setUploadError(errorMessage);
+        const uploadedImageUrl = await uploadPromise;
+
+        // 성공 직후~await 재개 사이에 언마운트되면 abort 가 no-op 이라 성공 경로로 진행하므로,
+        // 성공 후속 setState 도 언마운트 가드로 막는다(sibling attachment-section 패턴과 일치).
+        if (!mountedRef.current) return;
+
+        // 이미지 URL 설정
+        onImageUrlChange(uploadedImageUrl);
+        setPreviewUrl(uploadedImageUrl);
+
+        // 상태 초기화
+        setSelectedFile(null);
         setUploadProgress(0);
-      }
-    } finally {
-      uploadAbortController.current = null;
-      if (mountedRef.current) {
-        setIsUploading(false);
-      }
-    }
+      },
+      {
+        onError: (error) => {
+          // 언마운트(취소 abort 포함) 후에는 setState 호출 금지
+          if (mountedRef.current) {
+            const errorMessage =
+              error instanceof Error ? error.message : '업로드 중 오류가 발생했습니다.';
+            setUploadError(errorMessage);
+            setUploadProgress(0);
+          }
+        },
+        onSettled: () => {
+          uploadAbortController.current = null;
+          if (mountedRef.current) {
+            setIsUploading(false);
+          }
+        },
+      },
+    );
   }, [selectedFile, onImageUrlChange]);
 
   // 업로드 취소
@@ -241,9 +248,7 @@ export function CellImageEditor({ imageUrl, onImageUrlChange }: CellImageEditorP
           <p className="mb-2 text-sm text-gray-600">
             이미지를 드래그 앤 드롭하거나 클릭하여 선택하세요
           </p>
-          <p className="text-xs text-gray-500">
-            지원 형식: JPG, PNG, GIF, WebP, SVG (최대 10MB)
-          </p>
+          <p className="text-xs text-gray-500">지원 형식: JPG, PNG, GIF, WebP, SVG (최대 10MB)</p>
         </div>
       )}
 
@@ -252,9 +257,7 @@ export function CellImageEditor({ imageUrl, onImageUrlChange }: CellImageEditorP
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-gray-700">
-                {selectedFile.name}
-              </p>
+              <p className="truncate text-sm font-medium text-gray-700">{selectedFile.name}</p>
               <p className="text-xs text-gray-500">
                 {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
               </p>

@@ -5,6 +5,7 @@ import { useCallback, useRef, useState, useTransition } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { surveyKeys } from '@/hooks/queries/use-surveys';
+import { runAsyncAction } from '@/lib/run-async-action';
 import { buildSurveyDiffPayload } from '@/lib/survey-builder/diff-payload';
 import { client } from '@/shared/lib/rpc';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
@@ -26,33 +27,33 @@ export function useSurveySync() {
   const savingRef = useRef(false);
 
   // Diff 기반 저장: 변경분만 서버에 전송
-  const saveSurvey = useCallback(
-    async () => {
-      const store = useSurveyBuilderStore.getState();
+  const saveSurvey = useCallback(async () => {
+    const store = useSurveyBuilderStore.getState();
 
-      if (!store.currentSurvey.id) {
-        console.error('설문 ID가 없습니다.');
-        return null;
-      }
+    if (!store.currentSurvey.id) {
+      console.error('설문 ID가 없습니다.');
+      return null;
+    }
 
-      if (savingRef.current) {
-        console.log('이미 저장 중입니다. 중복 저장을 방지합니다.');
-        return null;
-      }
+    if (savingRef.current) {
+      console.log('이미 저장 중입니다. 중복 저장을 방지합니다.');
+      return null;
+    }
 
-      // 변경 없으면 저장 스킵
-      if (!store.isDirty) {
-        return { surveyId: store.currentSurvey.id };
-      }
+    // 변경 없으면 저장 스킵
+    if (!store.isDirty) {
+      return { surveyId: store.currentSurvey.id };
+    }
 
-      savingRef.current = true;
-      setIsSaving(true);
-      setSaveError(null);
+    savingRef.current = true;
+    setIsSaving(true);
+    setSaveError(null);
 
-      // 스냅샷: 현재 changeset을 캡처하고 초기화 (저장 중 새 변경은 새 changeset에 쌓임)
-      const snapshot = store.snapshotChanges();
+    // 스냅샷: 현재 changeset을 캡처하고 초기화 (저장 중 새 변경은 새 changeset에 쌓임)
+    const snapshot = store.snapshotChanges();
 
-      try {
+    return runAsyncAction(
+      async () => {
         const survey = useSurveyBuilderStore.getState().currentSurvey;
 
         // payload 조립 지식(store 상태 → payload 필드 규칙)은 diff-payload 모듈 소유
@@ -70,20 +71,24 @@ export function useSurveySync() {
         queryClient.invalidateQueries({ queryKey: surveyKeys.detail(survey.id) });
         queryClient.invalidateQueries({ queryKey: surveyKeys.lists() });
         return result;
-      } catch (error) {
-        // 실패 시 스냅샷을 현재 changeset에 merge back
-        useSurveyBuilderStore.getState().mergeChangesBack(snapshot);
-        const err = error instanceof Error ? error : new Error('설문 저장 실패');
-        console.error('설문 저장 실패:', err);
-        setSaveError(err);
-        throw err;
-      } finally {
-        savingRef.current = false;
-        setIsSaving(false);
-      }
-    },
-    [markSavedSnapshotClean, queryClient],
-  );
+      },
+      {
+        // 호출부(edit/page·create/page)가 이 예외를 소비한다 — 삼키면 안 된다.
+        onError: (error) => {
+          // 실패 시 스냅샷을 현재 changeset에 merge back
+          useSurveyBuilderStore.getState().mergeChangesBack(snapshot);
+          const err = error instanceof Error ? error : new Error('설문 저장 실패');
+          console.error('설문 저장 실패:', err);
+          setSaveError(err);
+          throw err;
+        },
+        onSettled: () => {
+          savingRef.current = false;
+          setIsSaving(false);
+        },
+      },
+    );
+  }, [markSavedSnapshotClean, queryClient]);
 
   /**
    * 조건 리매핑 결과만 영속하는 스코프 저장 — 전체 saveSurvey 와 달리 대상 질문의
@@ -140,31 +145,37 @@ export function useSurveySync() {
       };
       useSurveyBuilderStore.getState().mergeChangesBack(outOfScope);
 
-      try {
-        const survey = useSurveyBuilderStore.getState().currentSurvey;
-        const payload = buildSurveyDiffPayload(survey, inScope);
+      return runAsyncAction(
+        async () => {
+          const survey = useSurveyBuilderStore.getState().currentSurvey;
+          const payload = buildSurveyDiffPayload(survey, inScope);
 
-        if (!payload) {
+          if (!payload) {
+            markSavedSnapshotClean();
+            return { surveyId: survey.id };
+          }
+
+          const result = await client.surveyBuilder.save.saveDiff(payload);
+          // out-of-scope 가 남아 있으면 markSavedSnapshotClean 이 isDirty 를 유지한다
           markSavedSnapshotClean();
-          return { surveyId: survey.id };
-        }
-
-        const result = await client.surveyBuilder.save.saveDiff(payload);
-        // out-of-scope 가 남아 있으면 markSavedSnapshotClean 이 isDirty 를 유지한다
-        markSavedSnapshotClean();
-        queryClient.invalidateQueries({ queryKey: surveyKeys.detail(survey.id) });
-        queryClient.invalidateQueries({ queryKey: surveyKeys.lists() });
-        return result;
-      } catch (error) {
-        useSurveyBuilderStore.getState().mergeChangesBack(inScope);
-        const err = error instanceof Error ? error : new Error('설문 저장 실패');
-        console.error('설문 스코프 저장 실패:', err);
-        setSaveError(err);
-        throw err;
-      } finally {
-        savingRef.current = false;
-        setIsSaving(false);
-      }
+          queryClient.invalidateQueries({ queryKey: surveyKeys.detail(survey.id) });
+          queryClient.invalidateQueries({ queryKey: surveyKeys.lists() });
+          return result;
+        },
+        {
+          onError: (error) => {
+            useSurveyBuilderStore.getState().mergeChangesBack(inScope);
+            const err = error instanceof Error ? error : new Error('설문 저장 실패');
+            console.error('설문 스코프 저장 실패:', err);
+            setSaveError(err);
+            throw err;
+          },
+          onSettled: () => {
+            savingRef.current = false;
+            setIsSaving(false);
+          },
+        },
+      );
     },
     [markSavedSnapshotClean, queryClient],
   );

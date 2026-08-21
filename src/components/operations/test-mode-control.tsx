@@ -27,6 +27,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { getErrorMessage } from '@/lib/get-error-message';
+import { runAsyncAction } from '@/lib/run-async-action';
 import { client } from '@/shared/lib/rpc';
 
 interface TestModeState {
@@ -153,7 +154,8 @@ export function TestModeControl({ surveyId, initial }: Props) {
       const requestVersion = ++controlRequestVersion.current;
       try {
         const row = await client.operations.control.get({ surveyId });
-        if (cancelled || requestVersion !== controlRequestVersion.current) return;
+        if (cancelled) return;
+        if (requestVersion !== controlRequestVersion.current) return;
         if (!row) return; // 미저장/삭제 설문 — 동기화할 서버 상태가 없다
         const next = toTestModeState(row);
         if (hasSameTestModeState(stateRef.current, next)) return;
@@ -269,49 +271,58 @@ export function TestModeControl({ surveyId, initial }: Props) {
     if (disableInFlight.current) return;
     disableInFlight.current = true;
     controlRequestVersion.current += 1;
-    try {
-      const result = await client.operations.control.disable({ surveyId, disposition });
-      controlRequestVersion.current += 1;
-      const next = {
-        ...(stateRef.current ?? {
+    await runAsyncAction(
+      async () => {
+        const result = await client.operations.control.disable({ surveyId, disposition });
+        controlRequestVersion.current += 1;
+        const next = {
+          ...(stateRef.current ?? {
+            testModeEnabled: false,
+            testToken: null,
+            accessIdentifier: surveyId,
+            testResponseCount: 0,
+            testTargetCount: 0,
+            firstTestInviteCode: null,
+          }),
           testModeEnabled: false,
-          testToken: null,
-          accessIdentifier: surveyId,
-          testResponseCount: 0,
-          testTargetCount: 0,
-          firstTestInviteCode: null,
-        }),
-        testModeEnabled: false,
-        testResponseCount: result.remainingResponseCount,
-        testTargetCount: result.remainingTargetCount,
-        firstTestInviteCode:
-          disposition === 'delete' ? null : (stateRef.current?.firstTestInviteCode ?? null),
-      };
-      stateRef.current = next;
-      setState(next);
-      if (disposition === 'delete') {
-        toast.success(
-          `테스트 대상자 ${result.deletedTargetCount}명과 응답 ${result.deletedResponseCount}건을 삭제했습니다.`,
-        );
-      } else {
-        toast.success('테스트 데이터를 보관하고 테스트 모드를 껐습니다.');
-      }
-      setTestOffConfirm(false);
-      router.refresh();
-    } catch (err) {
-      const message = getErrorMessage(err, '테스트 모드 전환에 실패했습니다.');
-      toast.error(message);
-      if (message.includes('TEST_WORKSPACE_DISABLE_STALE')) {
-        try {
-          const latest = await refreshControl();
-          if (latest && !latest.testModeEnabled) setTestOffConfirm(false);
-        } catch {
-          // 즉시 조회도 실패하면 dialog를 유지하고 focus/polling에서 다시 동기화한다.
+          testResponseCount: result.remainingResponseCount,
+          testTargetCount: result.remainingTargetCount,
+          firstTestInviteCode:
+            disposition === 'delete' ? null : (stateRef.current?.firstTestInviteCode ?? null),
+        };
+        stateRef.current = next;
+        setState(next);
+        if (disposition === 'delete') {
+          toast.success(
+            `테스트 대상자 ${result.deletedTargetCount}명과 응답 ${result.deletedResponseCount}건을 삭제했습니다.`,
+          );
+        } else {
+          toast.success('테스트 데이터를 보관하고 테스트 모드를 껐습니다.');
         }
-      }
-    } finally {
-      disableInFlight.current = false;
-    }
+        setTestOffConfirm(false);
+        router.refresh();
+      },
+      {
+        onError: async (err) => {
+          const message = getErrorMessage(err, '테스트 모드 전환에 실패했습니다.');
+          toast.error(message);
+          if (message.includes('TEST_WORKSPACE_DISABLE_STALE')) {
+            try {
+              const latest = await refreshControl();
+              // 중첩 if — 논리연산으로 두면 중첩 try 안의 value block 이라 컴파일러가 막는다.
+              if (latest) {
+                if (!latest.testModeEnabled) setTestOffConfirm(false);
+              }
+            } catch {
+              // 즉시 조회도 실패하면 dialog를 유지하고 focus/polling에서 다시 동기화한다.
+            }
+          }
+        },
+        onSettled: () => {
+          disableInFlight.current = false;
+        },
+      },
+    );
   };
 
   const copyTestLink = async () => {

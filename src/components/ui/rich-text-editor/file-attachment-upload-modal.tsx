@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { MAX_ATTACHMENT_FILE_BYTES } from '@/lib/mail/constants';
+import { runAsyncAction } from '@/lib/run-async-action';
+import { readUploadErrorMessage } from '@/lib/upload/read-upload-error-message';
 
 interface UploadResult {
   key: string;
@@ -109,52 +111,47 @@ export function FileAttachmentUploadModal({ open, onClose, onUploaded }: Props) 
     const xhr = new XMLHttpRequest();
     xhrRef.current = xhr;
 
-    try {
-      const result = await new Promise<UploadResult>((resolve, reject) => {
-        const onProgress = (e: ProgressEvent) => {
-          if (e.lengthComputable) {
-            setProgress((e.loaded / e.total) * 100);
-          }
-        };
-        xhr.upload.addEventListener('progress', onProgress);
-
-        xhr.addEventListener('load', () => {
-          try {
-            if (xhr.status === 200) {
-              resolve(JSON.parse(xhr.responseText) as UploadResult);
-            } else {
-              let msg = '업로드에 실패했습니다.';
-              try {
-                const err = JSON.parse(xhr.responseText);
-                if (err?.error) msg = err.error;
-              } catch {
-                // 비-JSON 응답은 기본 메시지 사용
-              }
-              reject(new Error(msg));
+    await runAsyncAction(
+      async () => {
+        const result = await new Promise<UploadResult>((resolve, reject) => {
+          const onProgress = (e: ProgressEvent) => {
+            if (e.lengthComputable) {
+              setProgress((e.loaded / e.total) * 100);
             }
-          } catch {
-            reject(new Error('서버 응답을 처리할 수 없습니다.'));
-          }
-        });
-        xhr.addEventListener('error', () =>
-          reject(new Error('네트워크 오류가 발생했습니다.')),
-        );
-        xhr.addEventListener('abort', () =>
-          reject(new Error('업로드가 취소되었습니다.')),
-        );
-        xhr.open('POST', '/api/upload/notice-attachment');
-        xhr.send(fd);
-      });
+          };
+          xhr.upload.addEventListener('progress', onProgress);
 
-      xhrRef.current = null;
-      onUploaded(result, label.trim());
-      onClose();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '업로드 중 오류가 발생했습니다.');
-      setProgress(0);
-    } finally {
-      setUploading(false);
-    }
+          xhr.addEventListener('load', () => {
+            try {
+              if (xhr.status === 200) {
+                resolve(JSON.parse(xhr.responseText) as UploadResult);
+              } else {
+                reject(
+                  new Error(readUploadErrorMessage(xhr.responseText, '업로드에 실패했습니다.')),
+                );
+              }
+            } catch {
+              reject(new Error('서버 응답을 처리할 수 없습니다.'));
+            }
+          });
+          xhr.addEventListener('error', () => reject(new Error('네트워크 오류가 발생했습니다.')));
+          xhr.addEventListener('abort', () => reject(new Error('업로드가 취소되었습니다.')));
+          xhr.open('POST', '/api/upload/notice-attachment');
+          xhr.send(fd);
+        });
+
+        xhrRef.current = null;
+        onUploaded(result, label.trim());
+        onClose();
+      },
+      {
+        onError: (e) => {
+          setError(e instanceof Error ? e.message : '업로드 중 오류가 발생했습니다.');
+          setProgress(0);
+        },
+        onSettled: () => setUploading(false),
+      },
+    );
   }, [file, label, onClose, onUploaded]);
 
   if (!open) return null;
@@ -195,9 +192,7 @@ export function FileAttachmentUploadModal({ open, onClose, onUploaded }: Props) 
               }}
             />
             <Paperclip className="mx-auto mb-2 h-7 w-7 text-gray-400" aria-hidden />
-            <p className="text-sm text-gray-600">
-              파일을 드래그하거나 클릭하여 선택하세요
-            </p>
+            <p className="text-sm text-gray-600">파일을 드래그하거나 클릭하여 선택하세요</p>
             <p className="mt-1 text-xs text-gray-500">
               PDF / HWP / Office / ZIP / 이미지 (최대{' '}
               {Math.round(MAX_ATTACHMENT_FILE_BYTES / 1024 / 1024)}MB)
@@ -208,12 +203,8 @@ export function FileAttachmentUploadModal({ open, onClose, onUploaded }: Props) 
         {file && !uploading && (
           <div className="space-y-3">
             <div className="flex items-center justify-between rounded-lg border bg-gray-50 px-3 py-2">
-              <span className="min-w-0 flex-1 truncate text-sm text-gray-800">
-                {file.name}
-              </span>
-              <span className="ml-3 text-xs text-gray-500">
-                {(file.size / 1024).toFixed(0)} KB
-              </span>
+              <span className="min-w-0 flex-1 truncate text-sm text-gray-800">{file.name}</span>
+              <span className="ml-3 text-xs text-gray-500">{(file.size / 1024).toFixed(0)} KB</span>
             </div>
             <div>
               <Label className="mb-1 block text-sm" htmlFor="notice-attachment-label">

@@ -6,6 +6,8 @@ import { AlertCircle, Loader2, Upload, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { optimizeImage, validateImageFile } from '@/lib/image-utils';
+import { runAsyncAction } from '@/lib/run-async-action';
+import { readUploadErrorMessage } from '@/lib/upload/read-upload-error-message';
 
 import type { RichTextEditorKind } from './types';
 
@@ -131,87 +133,86 @@ export function ImageUploadModal({ open, onClose, onUploaded, kind }: Props) {
     setUploadProgress(0);
     setUploadError(null);
 
-    try {
-      const optimizedBlob = await optimizeImage(selectedFile);
-      const optimizedFile = new File([optimizedBlob], selectedFile.name, {
-        type: optimizedBlob.type || selectedFile.type,
-      });
+    await runAsyncAction(
+      async () => {
+        const optimizedBlob = await optimizeImage(selectedFile);
+        const optimizedFile = new File([optimizedBlob], selectedFile.name, {
+          type: optimizedBlob.type || selectedFile.type,
+        });
 
-      const formData = new FormData();
-      formData.append('file', optimizedFile);
-      formData.append('kind', kind);
+        const formData = new FormData();
+        formData.append('file', optimizedFile);
+        formData.append('kind', kind);
 
-      const xhr = new XMLHttpRequest();
-      xhrRef.current = xhr;
+        const xhr = new XMLHttpRequest();
+        xhrRef.current = xhr;
 
-      const handleProgress = (e: ProgressEvent) => {
-        if (e.lengthComputable) {
-          const percentComplete = (e.loaded / e.total) * 100;
-          setUploadProgress(percentComplete);
-        }
-      };
-
-      xhr.upload.addEventListener('progress', handleProgress);
-
-      let handleLoad: () => void;
-      let handleError: () => void;
-      let handleAbort: () => void;
-
-      const uploadPromise = new Promise<string>((resolve, reject) => {
-        handleLoad = () => {
-          // 서버가 HTML 에러 페이지 등 비-JSON 본문을 반환할 수 있으므로 parse를 보호한다
-          try {
-            if (xhr.status === 200) {
-              const response = JSON.parse(xhr.responseText);
-              resolve(response.url);
-            } else {
-              let message = '업로드에 실패했습니다.';
-              try {
-                const errorResponse = JSON.parse(xhr.responseText);
-                if (errorResponse?.error) message = errorResponse.error;
-              } catch {
-                // 비-JSON 응답은 기본 메시지 사용
-              }
-              reject(new Error(message));
-            }
-          } catch {
-            reject(new Error('서버 응답을 처리할 수 없습니다.'));
+        const handleProgress = (e: ProgressEvent) => {
+          if (e.lengthComputable) {
+            const percentComplete = (e.loaded / e.total) * 100;
+            setUploadProgress(percentComplete);
           }
         };
-        handleError = () => reject(new Error('네트워크 오류가 발생했습니다.'));
-        handleAbort = () => reject(new Error('업로드가 취소되었습니다.'));
 
-        xhr.addEventListener('load', handleLoad);
-        xhr.addEventListener('error', handleError);
-        xhr.addEventListener('abort', handleAbort);
+        xhr.upload.addEventListener('progress', handleProgress);
 
-        xhr.open('POST', '/api/upload/image');
-        xhr.send(formData);
-      }).finally(() => {
-        xhr.upload.removeEventListener('progress', handleProgress);
-        xhr.removeEventListener('load', handleLoad!);
-        xhr.removeEventListener('error', handleError!);
-        xhr.removeEventListener('abort', handleAbort!);
-        xhrRef.current = null;
-      });
+        let handleLoad: () => void;
+        let handleError: () => void;
+        let handleAbort: () => void;
 
-      const imageUrl = await uploadPromise;
+        const uploadPromise = new Promise<string>((resolve, reject) => {
+          handleLoad = () => {
+            // 서버가 HTML 에러 페이지 등 비-JSON 본문을 반환할 수 있으므로 parse를 보호한다
+            try {
+              if (xhr.status === 200) {
+                const response = JSON.parse(xhr.responseText);
+                resolve(response.url);
+              } else {
+                reject(
+                  new Error(readUploadErrorMessage(xhr.responseText, '업로드에 실패했습니다.')),
+                );
+              }
+            } catch {
+              reject(new Error('서버 응답을 처리할 수 없습니다.'));
+            }
+          };
+          handleError = () => reject(new Error('네트워크 오류가 발생했습니다.'));
+          handleAbort = () => reject(new Error('업로드가 취소되었습니다.'));
 
-      // 상태 초기화 후 콜백 호출
-      setSelectedFile(null);
-      setPreviewUrl(null);
-      setUploadProgress(0);
+          xhr.addEventListener('load', handleLoad);
+          xhr.addEventListener('error', handleError);
+          xhr.addEventListener('abort', handleAbort);
 
-      onUploaded(imageUrl);
-      onClose();
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : '업로드 중 오류가 발생했습니다.';
-      setUploadError(errorMessage);
-      setUploadProgress(0);
-    } finally {
-      setIsUploading(false);
-    }
+          xhr.open('POST', '/api/upload/image');
+          xhr.send(formData);
+        }).finally(() => {
+          xhr.upload.removeEventListener('progress', handleProgress);
+          xhr.removeEventListener('load', handleLoad!);
+          xhr.removeEventListener('error', handleError!);
+          xhr.removeEventListener('abort', handleAbort!);
+          xhrRef.current = null;
+        });
+
+        const imageUrl = await uploadPromise;
+
+        // 상태 초기화 후 콜백 호출
+        setSelectedFile(null);
+        setPreviewUrl(null);
+        setUploadProgress(0);
+
+        onUploaded(imageUrl);
+        onClose();
+      },
+      {
+        onError: (error) => {
+          const errorMessage =
+            error instanceof Error ? error.message : '업로드 중 오류가 발생했습니다.';
+          setUploadError(errorMessage);
+          setUploadProgress(0);
+        },
+        onSettled: () => setIsUploading(false),
+      },
+    );
   }, [selectedFile, kind, onUploaded, onClose]);
 
   if (!open) return null;
@@ -270,11 +271,7 @@ export function ImageUploadModal({ open, onClose, onUploaded, kind }: Props) {
           </div>
           <div className="overflow-hidden rounded-lg border bg-white">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={previewUrl}
-              alt="미리보기"
-              className="max-h-48 w-full object-contain"
-            />
+            <img src={previewUrl} alt="미리보기" className="max-h-48 w-full object-contain" />
           </div>
           <div className="flex gap-2">
             <Button type="button" size="sm" onClick={handleImageUpload} className="flex-1">

@@ -7,6 +7,7 @@ import { Download, FileJson, FileSpreadsheet, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { buildSafeFilename, downloadText } from '@/lib/analytics/export-download';
+import { runAsyncAction } from '@/lib/run-async-action';
 import { client } from '@/shared/lib/rpc';
 
 import { ExportDataModal } from './export-data-modal';
@@ -28,26 +29,30 @@ export function ExportPanel({ surveyId, surveyTitle = 'survey' }: ExportPanelPro
 
   const handleExport = async (format: TextFormat) => {
     setIsExporting(format);
-    try {
-      // 인증은 authed procedure 한 곳에서만 결정한다 — 페이지가 만들던 인라인 server action
-      // 은 본문 인증이 없는 공개 POST 엔드포인트였다.
-      const data =
-        format === 'json'
-          ? await client.surveyBuilder.read.exportJson({ surveyId })
-          : await client.surveyBuilder.read.exportCsv({ surveyId });
+    await runAsyncAction(
+      async () => {
+        // 인증은 authed procedure 한 곳에서만 결정한다 — 페이지가 만들던 인라인 server action
+        // 은 본문 인증이 없는 공개 POST 엔드포인트였다.
+        const data =
+          format === 'json'
+            ? await client.surveyBuilder.read.exportJson({ surveyId })
+            : await client.surveyBuilder.read.exportCsv({ surveyId });
 
-      if (!data) {
-        toast.error('내보낼 데이터가 없습니다.');
-        return;
-      }
+        if (!data) {
+          toast.error('내보낼 데이터가 없습니다.');
+          return;
+        }
 
-      downloadText(data, buildSafeFilename(surveyTitle, '응답', format), MIME_BY_FORMAT[format]);
-    } catch (error) {
-      console.error('Export error:', error);
-      toast.error('내보내기 중 오류가 발생했습니다.');
-    } finally {
-      setIsExporting(null);
-    }
+        downloadText(data, buildSafeFilename(surveyTitle, '응답', format), MIME_BY_FORMAT[format]);
+      },
+      {
+        onError: (error) => {
+          console.error('Export error:', error);
+          toast.error('내보내기 중 오류가 발생했습니다.');
+        },
+        onSettled: () => setIsExporting(null),
+      },
+    );
   };
 
   return (
