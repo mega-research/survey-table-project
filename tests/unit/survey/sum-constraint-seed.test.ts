@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { seedLeftExprFromCellIds } from '@/components/survey-builder/sum-constraint-editor';
+import { seedLeftExprFromCellIds } from '@/components/survey-builder/question-edit/sum-constraint-editor';
 
 describe('seedLeftExprFromCellIds', () => {
   it('선택 셀들을 SUM 수식으로 시드한다 — questionId 생략(자기 질문)', () => {

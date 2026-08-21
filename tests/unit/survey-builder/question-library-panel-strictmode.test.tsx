@@ -36,7 +36,7 @@ vi.mock('@/hooks/queries/use-library', () => {
   };
 });
 
-vi.mock('@/components/survey-builder/lookup-library-section', () => ({
+vi.mock('@/components/survey-builder/lookup/lookup-library-section', () => ({
   LookupLibrarySection: () => null,
 }));
 

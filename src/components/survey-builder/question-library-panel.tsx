@@ -59,7 +59,7 @@ import { cn, isEmptyHtml } from '@/lib/utils';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { Question, SavedQuestion } from '@/types/survey';
 
-import { LookupLibrarySection } from './lookup-library-section';
+import { LookupLibrarySection } from '@/components/survey-builder/lookup/lookup-library-section';
 
 // 카테고리 아이콘 매핑
 const categoryIcons: Record<string, React.ElementType> = {

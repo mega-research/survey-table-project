@@ -5,7 +5,7 @@ import {
   applyHeaderBulkStyle,
   getCommonHeaderStyle,
   withHeaderStyle,
-} from '@/utils/header-style';
+} from '@/components/survey-builder/table-editor/utils/header-style';
 
 const columns: TableColumn[] = [
   { id: 'c1', label: '성별' },

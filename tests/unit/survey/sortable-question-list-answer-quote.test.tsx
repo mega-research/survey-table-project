@@ -22,7 +22,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // 옵션 value 리매핑이 있을 때만 호출되는 설문 저장 플로우 — 이 테스트는 렌더/저장 경로만 보므로 stub.
-vi.mock('@/hooks/use-survey-sync', () => ({
+vi.mock('@/components/survey-builder/hooks/use-survey-sync', () => ({
   useSurveySync: () => ({ saveSurvey: vi.fn() }),
 }));
 vi.mock('@/shared/lib/rpc', () => ({
@@ -35,7 +35,7 @@ vi.mock('@/shared/lib/rpc', () => ({
   },
 }));
 
-import { SortableQuestionList } from '@/components/survey-builder/sortable-question-list';
+import { SortableQuestionList } from '@/components/survey-builder/question-list/sortable-question-list';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { useSurveyResponseStore } from '@/stores/survey-response-store';
 import { useTestResponseStore } from '@/stores/test-response-store';

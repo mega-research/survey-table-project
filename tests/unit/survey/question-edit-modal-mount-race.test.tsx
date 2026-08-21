@@ -11,16 +11,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  * 이 프로브는 기본 탭 위치에서 "마운트 최초 렌더의 formData" 를 캡처해 그 경합을 실측한다.
  */
 
-vi.mock('@/components/survey-builder/question-condition-editor', () => ({
+vi.mock('@/components/survey-builder/condition/question-condition-editor', () => ({
   QuestionConditionEditor: () => null,
 }));
-vi.mock('@/components/survey-builder/table-validation-editor', () => ({
+vi.mock('@/components/survey-builder/question-edit/table-validation-editor', () => ({
   TableValidationEditor: () => null,
 }));
-vi.mock('@/hooks/use-ensure-survey-in-db', () => ({
+vi.mock('@/components/survey-builder/hooks/use-ensure-survey-in-db', () => ({
   useEnsureSurveyInDb: () => async () => {},
 }));
-vi.mock('@/hooks/use-survey-sync', () => ({
+vi.mock('@/components/survey-builder/hooks/use-survey-sync', () => ({
   useSurveySync: () => ({ saveSurvey: vi.fn(), saveSurveyScoped: vi.fn() }),
 }));
 vi.mock('@/shared/lib/rpc', () => ({ client: {} }));
@@ -32,7 +32,7 @@ interface ProbeFormData {
   tableRowsData?: unknown[];
 }
 
-vi.mock('@/components/survey-builder/question-basic-tab', () => ({
+vi.mock('@/components/survey-builder/question-edit/question-basic-tab', () => ({
   QuestionBasicTab: ({ formData }: { formData: ProbeFormData }) => {
     // useTableEditor 의 useState 초기화와 동일하게 최초 렌더 스냅샷을 고정
     const initialRef = useRef(formData);
@@ -49,7 +49,7 @@ vi.mock('@/components/survey-builder/question-basic-tab', () => ({
   },
 }));
 
-import { QuestionEditModal } from '@/components/survey-builder/question-edit-modal';
+import { QuestionEditModal } from '@/components/survey-builder/question-edit/question-edit-modal';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 
 function seedSurvey() {

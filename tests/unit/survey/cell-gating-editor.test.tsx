@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { CellGatingEditor } from '@/components/survey-builder/cell-gating-editor';
+import { CellGatingEditor } from '@/components/survey-builder/table-editor/cell-editor/cell-gating-editor';
 import type { CellEnableCondition, TableCell } from '@/types/survey';
 
 const ctrl: TableCell = {

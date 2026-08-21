@@ -5,7 +5,7 @@ import { useRef } from 'react';
 import {
   QuestionConditionEditor,
   QuestionConditionEditorRef,
-} from '@/components/survey-builder/question-condition-editor';
+} from '@/components/survey-builder/condition/question-condition-editor';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';

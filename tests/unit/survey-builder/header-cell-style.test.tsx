@@ -2,9 +2,9 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
-import { HeaderBulkStyleDialog } from '@/components/survey-builder/header-bulk-style-dialog';
-import { HeaderGridEditor } from '@/components/survey-builder/header-grid-editor';
-import { TableHeaderSection } from '@/components/survey-builder/table-header-section';
+import { HeaderBulkStyleDialog } from '@/components/survey-builder/table-editor/header-bulk-style-dialog';
+import { HeaderGridEditor } from '@/components/survey-builder/table-editor/header-grid-editor';
+import { TableHeaderSection } from '@/components/survey-builder/table-editor/table-header-section';
 import type { HeaderCell, TableColumn } from '@/types/survey';
 
 // 통 mock 은 import 체인이 늘면 깨지므로 importOriginal 을 spread 로 보강한다 (레포 관례)

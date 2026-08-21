@@ -8,7 +8,7 @@ vi.mock('@/components/survey-builder/table-option-selector', () => ({
   TableOptionSelector: () => null,
 }));
 
-import { TableValidationEditor } from '@/components/survey-builder/table-validation-editor';
+import { TableValidationEditor } from '@/components/survey-builder/question-edit/table-validation-editor';
 import type { Question, TableValidationRule } from '@/types/survey';
 
 function makeQuestion(id: string, rules: TableValidationRule[]): Question {

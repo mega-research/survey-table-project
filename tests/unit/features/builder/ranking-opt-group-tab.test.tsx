@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { ChoiceGroup } from '@/types/survey';
-import { RankingOptCellTab } from '@/components/survey-builder/ranking-opt-cell-tab';
+import { RankingOptCellTab } from '@/components/survey-builder/table-editor/cell-editor/ranking-opt-cell-tab';
 
 // 기본 공통 props
 function makeProps(overrides: Record<string, unknown> = {}) {

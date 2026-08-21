@@ -18,9 +18,9 @@ import type { CalcExpr, Question, TableCell } from '@/types/survey';
 import { formatCellLabel } from '@/utils/cell-label';
 import { isPartialNumericInput, parseNumericInput } from '@/utils/numeric-input';
 
-import { LookupKeyMappingEditor } from '../lookup-key-mapping-editor';
-import { LookupSelector } from '../lookup-selector';
-import { EMPTY_LOOKUPS, NONE_SENTINEL } from '../lookup-shared';
+import { LookupKeyMappingEditor } from '@/components/survey-builder/lookup/lookup-key-mapping-editor';
+import { LookupSelector } from '@/components/survey-builder/lookup/lookup-selector';
+import { EMPTY_LOOKUPS, NONE_SENTINEL } from '@/components/survey-builder/lookup/lookup-shared';
 import { TablePreview } from '@/components/question-renderer/table-preview';
 
 /**

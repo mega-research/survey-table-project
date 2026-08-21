@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Question } from '@/types/survey';
-import { detectCellTypeKind } from '@/utils/cell-type-detector';
+import { detectCellTypeKind } from '@/components/survey-builder/condition/utils/cell-type-detector';
 
 type TableRowData = NonNullable<Question['tableRowsData']>[number];
 type TableCellData = TableRowData['cells'][number];

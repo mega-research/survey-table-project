@@ -4,7 +4,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
-import { CellChoiceEditor } from '@/components/survey-builder/cell-choice-editor';
+import { CellChoiceEditor } from '@/components/survey-builder/table-editor/cell-editor/cell-choice-editor';
 import type { RadioOption } from '@/types/survey';
 
 /**

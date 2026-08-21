@@ -5,7 +5,7 @@ import {
   findRegionSourceCellPos,
   pruneDeadGatingAfterPaste,
   resolvePastedGating,
-} from '@/components/survey-builder/utils/drag-copy-utils';
+} from '@/components/survey-builder/table-editor/utils/drag-copy-utils';
 import type { CellEnableCondition, TableCell, TableRow } from '@/types/survey';
 
 const condition: CellEnableCondition = {

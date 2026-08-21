@@ -13,20 +13,20 @@ const {
   updateQuestionMock: vi.fn(),
 }));
 
-vi.mock('@/components/survey-builder/question-basic-tab', () => ({
+vi.mock('@/components/survey-builder/question-edit/question-basic-tab', () => ({
   QuestionBasicTab: () => null,
 }));
-vi.mock('@/components/survey-builder/question-condition-editor', () => ({
+vi.mock('@/components/survey-builder/condition/question-condition-editor', () => ({
   QuestionConditionEditor: () => null,
 }));
-vi.mock('@/components/survey-builder/table-validation-editor', () => ({
+vi.mock('@/components/survey-builder/question-edit/table-validation-editor', () => ({
   TableValidationEditor: () => null,
 }));
-vi.mock('@/hooks/use-ensure-survey-in-db', () => ({
+vi.mock('@/components/survey-builder/hooks/use-ensure-survey-in-db', () => ({
   useEnsureSurveyInDb: () => ensureSurveyMock,
 }));
 // 옵션 value 리매핑이 있을 때만 호출되는 설문 저장 플로우 — 이 테스트는 렌더/저장 경로만 보므로 stub.
-vi.mock('@/hooks/use-survey-sync', () => ({
+vi.mock('@/components/survey-builder/hooks/use-survey-sync', () => ({
   useSurveySync: () => ({ saveSurvey: vi.fn() }),
 }));
 vi.mock('@/shared/lib/rpc', () => ({
@@ -36,7 +36,7 @@ vi.mock('@/shared/lib/rpc', () => ({
     },
   },
 }));
-import { QuestionEditModal } from '@/components/survey-builder/question-edit-modal';
+import { QuestionEditModal } from '@/components/survey-builder/question-edit/question-edit-modal';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 
 function seedSurvey({ withMobileMode = true }: { withMobileMode?: boolean } = {}) {

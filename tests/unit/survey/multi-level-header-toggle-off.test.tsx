@@ -16,17 +16,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const updateMock = vi.fn(async (_input: { data?: { tableHeaderGrid?: unknown } }) => ({ id: 'qT' }));
 
-vi.mock('@/components/survey-builder/question-condition-editor', () => ({
+vi.mock('@/components/survey-builder/condition/question-condition-editor', () => ({
   QuestionConditionEditor: () => null,
 }));
-vi.mock('@/components/survey-builder/table-validation-editor', () => ({
+vi.mock('@/components/survey-builder/question-edit/table-validation-editor', () => ({
   TableValidationEditor: () => null,
 }));
-vi.mock('@/hooks/use-ensure-survey-in-db', () => ({
+vi.mock('@/components/survey-builder/hooks/use-ensure-survey-in-db', () => ({
   useEnsureSurveyInDb: () => async () => {},
 }));
 // 옵션 value 리매핑이 있을 때만 호출되는 설문 저장 플로우 — 이 테스트는 렌더/저장 경로만 보므로 stub.
-vi.mock('@/hooks/use-survey-sync', () => ({
+vi.mock('@/components/survey-builder/hooks/use-survey-sync', () => ({
   useSurveySync: () => ({ saveSurvey: vi.fn() }),
 }));
 vi.mock('@/shared/lib/rpc', () => ({
@@ -42,7 +42,7 @@ vi.mock('@/lib/image-extractor', () => ({ extractImageUrlsFromQuestion: () => []
 vi.mock('@/lib/image-utils', () => ({ deleteImagesFromR2: async () => {} }));
 
 // 실제 기본 탭(TipTap 등)은 무겁다 — 표 에디터가 하는 일(헤더 그리드 해제)만 흉내낸다.
-vi.mock('@/components/survey-builder/question-basic-tab', () => ({
+vi.mock('@/components/survey-builder/question-edit/question-basic-tab', () => ({
   QuestionBasicTab: ({
     setFormData,
   }: {
@@ -60,8 +60,8 @@ vi.mock('@/components/survey-builder/question-basic-tab', () => ({
   ),
 }));
 
-import { useTableEditor } from '@/components/survey-builder/hooks/use-table-editor';
-import { QuestionEditModal } from '@/components/survey-builder/question-edit-modal';
+import { useTableEditor } from '@/components/survey-builder/table-editor/hooks/use-table-editor';
+import { QuestionEditModal } from '@/components/survey-builder/question-edit/question-edit-modal';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import type { HeaderCell, TableColumn, TableRow } from '@/types/survey';
 

@@ -4,7 +4,7 @@ import type { TableCell, TableRow } from '@/types/survey';
 import {
   createRadioGroupRemapper,
   extractRegionFromRows,
-} from '@/components/survey-builder/utils/drag-copy-utils';
+} from '@/components/survey-builder/table-editor/utils/drag-copy-utils';
 
 /**
  * use-drag-copy 의심 검증: 영역 복사 데이터 누락 가능성.

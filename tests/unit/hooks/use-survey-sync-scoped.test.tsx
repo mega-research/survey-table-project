@@ -15,7 +15,7 @@ vi.mock('@/shared/lib/rpc', () => ({
   orpc: {},
 }));
 
-import { useSurveySync } from '@/hooks/use-survey-sync';
+import { useSurveySync } from '@/components/survey-builder/hooks/use-survey-sync';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import type { Question, Survey } from '@/types/survey';
 

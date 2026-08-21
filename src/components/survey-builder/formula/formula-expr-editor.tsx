@@ -21,7 +21,7 @@ import {
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import type { CalcExpr, Question } from '@/types/survey';
 
-import { EMPTY_LOOKUPS } from '../lookup-shared';
+import { EMPTY_LOOKUPS } from '@/components/survey-builder/lookup/lookup-shared';
 import { type CalcOperator, formatFormulaPreview } from './format-formula';
 import {
   AggEditor,

@@ -19,9 +19,9 @@ vi.mock('@/stores/ui-store', () => ({
     selector({ editingQuestionId: null }),
 }));
 
-import { DynamicTableEditor } from '@/components/survey-builder/dynamic-table-editor';
-import { HeaderBulkStyleButton } from '@/components/survey-builder/header-bulk-style-button';
-import { useTableEditor } from '@/components/survey-builder/hooks/use-table-editor';
+import { DynamicTableEditor } from '@/components/survey-builder/table-editor/dynamic-table-editor';
+import { HeaderBulkStyleButton } from '@/components/survey-builder/table-editor/header-bulk-style-button';
+import { useTableEditor } from '@/components/survey-builder/table-editor/hooks/use-table-editor';
 import type { HeaderCell, TableColumn, TableRow } from '@/types/survey';
 
 const columns: TableColumn[] = [

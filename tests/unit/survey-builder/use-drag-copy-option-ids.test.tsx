@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import { useDragCopy } from '@/components/survey-builder/hooks/use-drag-copy';
+import { useDragCopy } from '@/components/survey-builder/table-editor/hooks/use-drag-copy';
 import type { TableColumn, TableRow } from '@/types/survey';
 
 /**

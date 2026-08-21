@@ -35,14 +35,14 @@ import { QuestionLibraryPanel } from '@/components/survey-builder/question-libra
 import { ResponseHeaderSettingsModal } from '@/components/survey-builder/response-header-settings-modal';
 import { SaveQuestionModal } from '@/components/survey-builder/save-question-modal';
 import { SaveSuccessModal } from '@/components/survey-builder/save-success-modal';
-import { SortableQuestionList } from '@/components/survey-builder/sortable-question-list';
+import { SortableQuestionList } from '@/components/survey-builder/question-list/sortable-question-list';
 import { SurveySettingsPanel } from '@/components/survey-builder/survey-settings-panel';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useSurvey } from '@/hooks/queries/use-surveys';
-import { useSurveySync } from '@/hooks/use-survey-sync';
+import { useSurveySync } from '@/components/survey-builder/hooks/use-survey-sync';
 import { runAsyncAction } from '@/lib/run-async-action';
 import type { VarNameIssue } from '@/lib/spss/variable-name-guard';
 import { generateSlugFromTitle, validateSlug } from '@/lib/survey-url';

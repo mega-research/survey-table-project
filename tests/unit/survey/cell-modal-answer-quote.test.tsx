@@ -10,11 +10,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const updateQuestionMock = vi.hoisted(() => vi.fn());
 
-vi.mock('@/hooks/use-ensure-survey-in-db', () => ({
+vi.mock('@/components/survey-builder/hooks/use-ensure-survey-in-db', () => ({
   useEnsureSurveyInDb: () => async () => {},
 }));
 // 옵션 value 리매핑이 있을 때만 호출되는 설문 저장 플로우 — 이 테스트는 셀 저장 경로만 보므로 stub.
-vi.mock('@/hooks/use-survey-sync', () => ({
+vi.mock('@/components/survey-builder/hooks/use-survey-sync', () => ({
   useSurveySync: () => ({ saveSurvey: vi.fn() }),
 }));
 vi.mock('@/shared/lib/rpc', () => ({
@@ -25,7 +25,7 @@ vi.mock('@/shared/lib/rpc', () => ({
   },
 }));
 
-import { CellContentModal } from '@/components/survey-builder/cell-content-modal';
+import { CellContentModal } from '@/components/survey-builder/table-editor/cell-editor/cell-content-modal';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import type { Question, QuestionType, TableCell } from '@/types/survey';
 

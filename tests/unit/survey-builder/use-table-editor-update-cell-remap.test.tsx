@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { useTableEditor } from '@/components/survey-builder/hooks/use-table-editor';
+import { useTableEditor } from '@/components/survey-builder/table-editor/hooks/use-table-editor';
 import type { TableColumn, TableRow } from '@/types/survey';
 
 /**

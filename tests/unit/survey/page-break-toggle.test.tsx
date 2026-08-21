@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { PageBreakToggle } from '@/components/survey-builder/page-break-toggle';
+import { PageBreakToggle } from '@/components/survey-builder/question-list/page-break-toggle';
 
 describe('PageBreakToggle', () => {
   it('비활성 상태에서 클릭하면 onToggle을 호출한다', () => {

@@ -26,7 +26,7 @@ import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import { client } from '@/shared/lib/rpc';
-import { useEnsureSurveyInDb } from '@/hooks/use-ensure-survey-in-db';
+import { useEnsureSurveyInDb } from '@/components/survey-builder/hooks/use-ensure-survey-in-db';
 import { isUUID } from '@/lib/survey-url';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import { GroupNameDesign, QuestionConditionGroup, QuestionGroup } from '@/types/survey';

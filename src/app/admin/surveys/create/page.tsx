@@ -39,7 +39,7 @@ import { ImportExportLibraryModal } from '@/components/survey-builder/import-exp
 import { QuestionLibraryPanel } from '@/components/survey-builder/question-library-panel';
 import { ResponseHeaderSettingsModal } from '@/components/survey-builder/response-header-settings-modal';
 import { SaveQuestionModal } from '@/components/survey-builder/save-question-modal';
-import { SortableQuestionList } from '@/components/survey-builder/sortable-question-list';
+import { SortableQuestionList } from '@/components/survey-builder/question-list/sortable-question-list';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import {

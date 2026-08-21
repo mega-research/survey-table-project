@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { render } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { QuestionTestBody } from '@/components/survey-builder/question-test-card';
+import { QuestionTestBody } from '@/components/survey-builder/question-list/question-test-card';
 import { QuestionInput } from '@/components/survey-response/question-input';
 import { useTestResponseStore } from '@/stores/test-response-store';
 import type { Question } from '@/types/survey';
@@ -19,7 +19,7 @@ vi.mock('@/components/question-renderer/interactive-table-response', () => ({
   },
 }));
 
-vi.mock('@/components/survey-builder/sortable-question-list', () => ({
+vi.mock('@/components/survey-builder/question-list/sortable-question-list', () => ({
   LazyMount: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 

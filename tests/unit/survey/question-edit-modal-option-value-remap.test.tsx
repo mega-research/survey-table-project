@@ -8,7 +8,7 @@ const saveSurveyMock = vi.hoisted(() => vi.fn());
 // 이미 검증했다. 이 테스트는 저장(handleSave) 시점의 원자성 — blur 커밋이 store 에 즉시 반영되지
 // 않고, Save 를 눌러야만 이 질문의 options 갱신 + 다른 질문의 displayCondition 리매핑이
 // 함께 일어나는지 — 를 검증하는 게 목적이라 QuestionBasicTab 은 버튼으로 대체해 blur 커밋을 모사한다.
-vi.mock('@/components/survey-builder/question-basic-tab', () => ({
+vi.mock('@/components/survey-builder/question-edit/question-basic-tab', () => ({
   QuestionBasicTab: (props: {
     formData: { options?: { id: string; value: string; optionCode?: string; isCustomOptionCode?: boolean }[] };
     setFormData: (
@@ -36,17 +36,17 @@ vi.mock('@/components/survey-builder/question-basic-tab', () => ({
   ),
 }));
 
-vi.mock('@/components/survey-builder/question-condition-editor', () => ({
+vi.mock('@/components/survey-builder/condition/question-condition-editor', () => ({
   QuestionConditionEditor: () => null,
 }));
-vi.mock('@/components/survey-builder/table-validation-editor', () => ({
+vi.mock('@/components/survey-builder/question-edit/table-validation-editor', () => ({
   TableValidationEditor: () => null,
 }));
-vi.mock('@/hooks/use-ensure-survey-in-db', () => ({
+vi.mock('@/components/survey-builder/hooks/use-ensure-survey-in-db', () => ({
   useEnsureSurveyInDb: () => async () => {},
 }));
 // 리매핑된 타 질문/그룹은 이 모달의 단일 질문 저장 밖이라, 설문 저장 플로우까지 함께 돌아야 한다.
-vi.mock('@/hooks/use-survey-sync', () => ({
+vi.mock('@/components/survey-builder/hooks/use-survey-sync', () => ({
   useSurveySync: () => ({ saveSurveyScoped: saveSurveyMock }),
 }));
 vi.mock('@/shared/lib/rpc', () => ({
@@ -62,7 +62,7 @@ vi.mock('@/shared/lib/rpc', () => ({
 vi.mock('@/lib/image-extractor', () => ({ extractImageUrlsFromQuestion: () => [] }));
 vi.mock('@/lib/image-utils', () => ({ deleteImagesFromR2: async () => {} }));
 
-import { QuestionEditModal } from '@/components/survey-builder/question-edit-modal';
+import { QuestionEditModal } from '@/components/survey-builder/question-edit/question-edit-modal';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import type { Question } from '@/types/survey';
 

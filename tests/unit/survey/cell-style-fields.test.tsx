@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
-import { CellStyleFields } from '@/components/survey-builder/cell-style-fields';
+import { CellStyleFields } from '@/components/survey-builder/table-editor/cell-style-fields';
 
 describe('CellStyleFields', () => {
   it('Bold를 토글하고 유효한 HEX만 canonical 값으로 전달한다', async () => {

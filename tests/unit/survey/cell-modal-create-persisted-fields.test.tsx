@@ -9,10 +9,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const createQuestionMock = vi.hoisted(() => vi.fn());
 
-vi.mock('@/hooks/use-ensure-survey-in-db', () => ({
+vi.mock('@/components/survey-builder/hooks/use-ensure-survey-in-db', () => ({
   useEnsureSurveyInDb: () => async () => {},
 }));
-vi.mock('@/hooks/use-survey-sync', () => ({
+vi.mock('@/components/survey-builder/hooks/use-survey-sync', () => ({
   useSurveySync: () => ({ saveSurvey: vi.fn(), saveSurveyScoped: vi.fn() }),
 }));
 vi.mock('@/shared/lib/rpc', () => ({
@@ -23,7 +23,7 @@ vi.mock('@/shared/lib/rpc', () => ({
   },
 }));
 
-import { CellContentModal } from '@/components/survey-builder/cell-content-modal';
+import { CellContentModal } from '@/components/survey-builder/table-editor/cell-editor/cell-content-modal';
 import { PERSISTED_QUESTION_FIELDS } from '@/db/schema/question-persisted-fields';
 import { useSurveyBuilderStore } from '@/stores/survey-store';
 import type { ChoiceGroup, Question, TableCell, TableColumn, TableRow } from '@/types/survey';
