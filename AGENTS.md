@@ -168,7 +168,10 @@ src/
 │   ├── operations/             # 운영 콘솔 집계 로직 (*.server.ts = SQL 집계)
 │   ├── mail/                   # 메일 발송/렌더/캠페인 dispatch+reconcile/빌링/첨부/템플릿 변수 카탈로그(variable-catalog)
 │   ├── quota/                  # 쿼터 게이트 + 응답 매칭
-│   ├── r2-lifecycle/           # R2 유예 삭제 큐 + 발송 장부 + 참조 인덱스
+│   ├── r2-client.ts            # R2 인프라 어댑터 — S3Client 단일 소유자 + 객체 존재 검사 + URL→key
+│   ├── r2-env.ts               # R2 env 검증 (SDK 를 모르는 순수 헬퍼)
+│   ├── image-utils-server.ts   # 서버 이미지/파일 삭제·복사
+│   ├── image-extractor.ts      # 질문에서 이미지 URL 추출
 │   ├── spss/                   # SPSS .sav 빌더 + 변수 생성/검증 + 데이터 변환
 │   ├── inngest/                # Inngest 클라이언트 + functions
 │   ├── question/               # 질문 스키마/정규화/가드/변형
@@ -177,11 +180,14 @@ src/
 │   ├── analytics/              # 통계/교차분석/필터 (analyzer/cross-tab/filter)
 │   ├── duplicate-detection/    # 중복 응답 감지
 │   ├── lookup/                 # LUT 룩업
-│   ├── upload/                 # 업로드 헬퍼
-│   ├── versioning/             # 설문 버전 스냅샷
-│   ├── tiptap/                 # TipTap 확장/설정
+│   ├── upload/                 # 업로드 정책(첨부·이미지) + 라우트 진입 가드(route-guard)
 │   ├── sanitize.ts             # HTML sanitize (서버: jsdom 금지, sanitize-html 사용)
-│   ├── response-normalizer.ts  # 응답 정규화 (response_answers)
+│   ├── survey-url.ts           # 설문 URL 조립
+│   ├── option-text-read.ts     # 응답에서 옵션 텍스트 입력값 읽기
+│   ├── option-value-code-migration.ts  # 옵션 value→optionCode 일괄 마이그레이션 순수 로직
+│   ├── date-formatters.ts      # 날짜·시각 표시 공통 포매터
+│   ├── get-error-message.ts    # 에러 → 사용자 표시 메시지
+│   ├── fake-data-generator.ts  # 테스트용 더미 응답 생성
 │   └── utils.ts                # 공통 유틸리티 (cn())
 │
 ├── utils/                      # 순수 유틸리티 함수
