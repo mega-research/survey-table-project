@@ -7,9 +7,7 @@ import Link from 'next/link';
 import { useMutation } from '@tanstack/react-query';
 import {
   AlertCircle,
-  ArrowDown,
   ArrowLeft,
-  ArrowUp,
   Download,
   Library,
   Plus,
@@ -29,7 +27,9 @@ import { useSurveySync } from '@/features/survey-builder/hooks/use-survey-sync';
 import { ImportExportLibraryModal } from '@/features/survey-builder/import-export-library-modal';
 import { useSurvey } from '@/features/survey-builder/queries/use-surveys';
 import { QuestionLibraryPanel } from '@/features/survey-builder/question-library-panel';
+import { useBuilderScroll } from '@/features/survey-builder/hooks/use-builder-scroll';
 import { QuestionTypePalette } from '@/features/survey-builder/question-type-palette';
+import { ScrollEdgeButtons } from '@/features/survey-builder/scroll-edge-buttons';
 import { SortableQuestionList } from '@/features/survey-builder/question-list/sortable-question-list';
 import { ResponseHeaderSettingsModal } from '@/features/survey-builder/response-header-settings-modal';
 import { SaveQuestionModal } from '@/features/survey-builder/save-question-modal';
@@ -85,14 +85,20 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
       setVariableCatalog: s.setVariableCatalog,
     })),
   );
+  const {
+    showScrollButtons,
+    questionNumberInput,
+    setQuestionNumberInput,
+    scrollToTop,
+    scrollToBottom,
+    handleQuestionNumberKeyPress,
+  } = useBuilderScroll(selectQuestion);
   // TanStack Query 훅 사용
   const { data: survey, isLoading: isSurveyLoading, isError } = useSurvey(id);
   const { saveSurvey } = useSurveySync();
 
   const [titleInput, setTitleInput] = useState('');
   const titleInputRef = useRef<HTMLInputElement>(null);
-  const [questionNumberInput, setQuestionNumberInput] = useState('');
-  const [showScrollButtons, setShowScrollButtons] = useState(false);
   const [slugInput, setSlugInput] = useState('');
   const [slugError, setSlugError] = useState('');
   const [showSaveModal, setShowSaveModal] = useState(false);
@@ -268,23 +274,6 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
     }
   };
 
-  // 스크롤 감지 (성능 최적화: requestAnimationFrame 사용)
-  useEffect(() => {
-    let ticking = false;
-
-    const handleScroll = () => {
-      if (!ticking) {
-        window.requestAnimationFrame(() => {
-          setShowScrollButtons(window.scrollY > 200);
-          ticking = false;
-        });
-        ticking = true;
-      }
-    };
-
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
 
   // 설문 저장 (diff 기반)
   const handleSaveSurvey = async () => {
@@ -335,40 +324,6 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
     publishMutation.mutate();
   };
 
-  // 맨 위로 스크롤
-  const scrollToTop = () => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  // 맨 아래로 스크롤
-  const scrollToBottom = () => {
-    window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
-  };
-
-  // 특정 질문으로 스크롤
-  const scrollToQuestion = (questionNumber: number) => {
-    const questions = useSurveyBuilderStore.getState().currentSurvey.questions;
-    const questionIndex = questionNumber - 1;
-    if (questionIndex >= 0 && questionIndex < questions.length) {
-      const targetQuestion = questions[questionIndex];
-      const questionElement = document.querySelector(`[data-question-index="${questionIndex}"]`);
-      if (questionElement && targetQuestion) {
-        questionElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        selectQuestion(targetQuestion.id);
-      }
-    }
-  };
-
-  // 질문 번호 입력 핸들러
-  const handleQuestionNumberKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      const questionNumber = parseInt(questionNumberInput, 10);
-      if (!isNaN(questionNumber) && questionNumber > 0) {
-        scrollToQuestion(questionNumber);
-        setQuestionNumberInput('');
-      }
-    }
-  };
 
   // 질문 라이브러리에 저장
   const handleSaveToLibrary = (question: Question) => {
@@ -611,24 +566,7 @@ export default function EditSurveyPage({ params }: EditSurveyPageProps) {
 
       {/* Floating Scroll Buttons */}
       {showScrollButtons && (
-        <div className="fixed right-6 bottom-6 z-50 flex flex-col space-y-2">
-          <Button
-            onClick={scrollToTop}
-            size="sm"
-            className="h-12 w-12 rounded-full border border-gray-200 bg-white text-gray-700 shadow-lg transition-all duration-200 hover:scale-110 hover:bg-gray-50"
-            title="맨 위로"
-          >
-            <ArrowUp className="h-5 w-5" />
-          </Button>
-          <Button
-            onClick={scrollToBottom}
-            size="sm"
-            className="h-12 w-12 rounded-full border border-gray-200 bg-white text-gray-700 shadow-lg transition-all duration-200 hover:scale-110 hover:bg-gray-50"
-            title="맨 아래로"
-          >
-            <ArrowDown className="h-5 w-5" />
-          </Button>
-        </div>
+        <ScrollEdgeButtons onScrollTop={scrollToTop} onScrollBottom={scrollToBottom} />
       )}
 
       {/* 저장 완료 모달 */}
