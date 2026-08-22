@@ -10,21 +10,12 @@ import {
   ArrowDown,
   ArrowLeft,
   ArrowUp,
-  CheckSquare,
-  ChevronDown,
-  Circle,
   Download,
-  FileText,
-  Info,
   Library,
-  List,
-  ListOrdered,
   Plus,
   Rocket,
   Save,
   Share2,
-  Table,
-  Type,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useShallow } from 'zustand/react/shallow';
@@ -39,6 +30,7 @@ import { useSurveySync } from '@/features/survey-builder/hooks/use-survey-sync';
 import { ImportExportLibraryModal } from '@/features/survey-builder/import-export-library-modal';
 import { useSurvey } from '@/features/survey-builder/queries/use-surveys';
 import { QuestionLibraryPanel } from '@/features/survey-builder/question-library-panel';
+import { questionTypes } from '@/features/survey-builder/question-types';
 import { SortableQuestionList } from '@/features/survey-builder/question-list/sortable-question-list';
 import { ResponseHeaderSettingsModal } from '@/features/survey-builder/response-header-settings-modal';
 import { SaveQuestionModal } from '@/features/survey-builder/save-question-modal';
@@ -52,71 +44,6 @@ import { client } from '@/shared/lib/rpc';
 import { useErrorDialogStore } from '@/stores/error-dialog-store';
 import { Question } from '@/types/survey';
 
-const questionTypes = [
-  {
-    type: 'notice' as const,
-    label: '공지사항',
-    icon: Info,
-    description: '설명 및 안내 문구',
-    color: 'bg-blue-100 text-blue-600',
-  },
-  {
-    type: 'text' as const,
-    label: '단답형',
-    icon: Type,
-    description: '짧은 텍스트 입력',
-    color: 'bg-sky-100 text-sky-600',
-  },
-  {
-    type: 'textarea' as const,
-    label: '장문형',
-    icon: FileText,
-    description: '긴 텍스트 입력',
-    color: 'bg-green-100 text-green-600',
-  },
-  {
-    type: 'radio' as const,
-    label: '단일선택',
-    icon: Circle,
-    description: '하나만 선택 가능',
-    color: 'bg-purple-100 text-purple-600',
-  },
-  {
-    type: 'checkbox' as const,
-    label: '다중선택',
-    icon: CheckSquare,
-    description: '여러 개 선택 가능',
-    color: 'bg-orange-100 text-orange-600',
-  },
-  {
-    type: 'select' as const,
-    label: '드롭다운',
-    icon: ChevronDown,
-    description: '드롭다운 메뉴',
-    color: 'bg-pink-100 text-pink-600',
-  },
-  {
-    type: 'multiselect' as const,
-    label: '다단계선택',
-    icon: List,
-    description: '다중 드롭다운',
-    color: 'bg-teal-100 text-teal-600',
-  },
-  {
-    type: 'ranking' as const,
-    label: '순위형',
-    icon: ListOrdered,
-    description: '순위 매기기 (1순위, 2순위...)',
-    color: 'bg-amber-100 text-amber-600',
-  },
-  {
-    type: 'table' as const,
-    label: '테이블',
-    icon: Table,
-    description: '표 형태 질문',
-    color: 'bg-indigo-100 text-indigo-600',
-  },
-];
 
 interface EditSurveyPageProps {
   params: Promise<{ id: string }>;
