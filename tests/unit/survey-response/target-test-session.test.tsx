@@ -773,7 +773,17 @@ describe('대상자 테스트 응답 세션', () => {
   });
 
   it('terminal 또는 이전 버전 target은 저장 key만 지우고 빈 입력 화면을 유지한다', async () => {
-    window.localStorage.setItem('survey-session:survey-1:invite:invite-a', 'old-page-session');
+    // 저장 키를 이 테스트 전용 invite token 으로 격리한다.
+    // invite-a 는 이 파일의 22개 테스트가 공유하고 그중 여럿의 회복 effect 가
+    // orphan/terminal 판정에서 같은 키를 지운다. 그 지연된 삭제가 아래 setItem 과
+    // 회복 effect 의 getItem 사이에 도착하면 훅이 저장 세션 대신 새로 만든 sessionId 로
+    // 폴백해(invite 소지 = 이어가기 권한, 2026-08-12 결정) resume 인자가 어긋난다.
+    // 전체 스위트에서만 간헐 실패하던 원인이 이것이다 — 무효 링크 테스트가 이미
+    // invite-invalid 를 쓰는 것과 같은 관례로 전용 토큰을 준다.
+    window.localStorage.setItem(
+      'survey-session:survey-1:invite:invite-terminal',
+      'old-page-session',
+    );
     bySlug.mockResolvedValue({ id: 'survey-1' });
     forResponse.mockResolvedValue({
       survey: targetSurvey,
@@ -791,18 +801,19 @@ describe('대상자 테스트 응답 세션', () => {
     render(
       <SurveyResponseFlow
         surveyIdentifier="target-survey"
-        inviteToken="invite-a"
+        inviteToken="invite-terminal"
         testToken={null}
       />,
     );
-
     expect(await screen.findByPlaceholderText('첫 답변')).toHaveValue('');
     expect(resume).toHaveBeenCalledWith({
       surveyId: 'survey-1',
       sessionId: 'old-page-session',
-      inviteToken: 'invite-a',
+      inviteToken: 'invite-terminal',
     });
-    expect(window.localStorage.getItem('survey-session:survey-1:invite:invite-a')).toBeNull();
+    expect(
+      window.localStorage.getItem('survey-session:survey-1:invite:invite-terminal'),
+    ).toBeNull();
     expect(createWithFirstAnswer).not.toHaveBeenCalled();
     expect(screen.queryByRole('button', { name: '다시 테스트하기' })).not.toBeInTheDocument();
   });
