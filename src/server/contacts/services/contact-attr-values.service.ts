@@ -11,7 +11,7 @@ import {
 } from '@/server/data-scope.server';
 import { FILTER_SOURCE } from '@/lib/operations/filter-shared';
 import { hydrateProfileColumns } from '@/lib/operations/profile-columns';
-import { getProfileColumnScheme } from '@/lib/operations/profile-columns.server';
+import { getProfileColumnScheme } from '@/server/read-models/profile-column-scheme';
 
 /**
  * 헤더 필터 드롭다운의 체크박스 표시 상한.

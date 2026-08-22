@@ -13,7 +13,7 @@ import {
 } from '@/server/read-models/survey-structure';
 import { db } from '@/db';
 import { contactTargets, surveyVersions, surveys } from '@/db/schema';
-import { getVariableCatalog } from '@/lib/mail/variable-catalog';
+import { getVariableCatalog } from '@/server/read-models/variable-catalog';
 import type { VariableDef } from '@/shared/contracts/template-variables';
 import { normalizeQuestions } from '@/lib/question';
 import { findContactByInviteToken } from '@/server/read-models/invite-lookup';

@@ -79,7 +79,7 @@ describe('survey-read.service getSurveyWithDetails', () => {
 
   // 사본을 되살리는 회귀를 막는 고정. getSurveyById 는 React cache() 로 감싸여 있어
   // 정의가 둘이면 같은 RSC pass 에서 같은 surveyId 를 두 번 조회하게 된다 —
-  // operations/layout 과 lib/mail/variable-catalog 가 실제로 그 두 경로였다.
+  // operations/layout 과 read-models/variable-catalog 가 실제로 그 두 경로였다.
   it('getSurveyById 는 read-models 와 같은 함수 객체다', () => {
     expect(getSurveyById).toBe(readModels.getSurveyById);
   });

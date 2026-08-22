@@ -23,7 +23,7 @@ import {
   hydrateProfileColumns,
   visibleProfileColumns,
 } from '@/lib/operations/profile-columns';
-import { getProfileColumnScheme } from '@/lib/operations/profile-columns.server';
+import { getProfileColumnScheme } from '@/server/read-models/profile-column-scheme';
 import { decryptPiiForTargets } from '@/lib/crypto/contact-pii-repo';
 import { getContactColumnScheme, buildColumnCandidates } from '@/server/read-models/contacts.server';
 import {
