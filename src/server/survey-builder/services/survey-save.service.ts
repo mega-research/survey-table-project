@@ -59,6 +59,138 @@ const addKeys = (set: Set<string>, value: unknown): void => {
   for (const k of extractR2KeysFromJsonbValue(value)) set.add(k);
 };
 
+/**
+ * 질문 한 건을 영속 행으로 조립한다.
+ *
+ * saveSurveyDiff 와 saveSurveyWithDetails 가 같은 맵을 각각 갖고 있었고 두 사본이 글자
+ * 하나 다르지 않았다. satisfies CompleteQuestionWrite 가 신규 컬럼 누락을 컴파일 에러로
+ * 호명하기는 하지만, 두 벌을 모두 고쳐야 한다는 사실 자체는 없애지 못한다.
+ *
+ * duplicateSurvey 의 행 조립은 여기 합치지 않는다 — 그쪽은 stripOptionCodes 와
+ * stripTableRowsData 를 걸지 않고 updatedAt 도 두지 않아 의미가 다르다.
+ */
+function toQuestionRow(question: SurveyType['questions'][number], surveyId: string) {
+  return ({
+    id: question.id,
+    surveyId,
+    groupId: question.groupId || null,
+    type: question.type,
+    title: question.title,
+    description: question.description,
+    required: question.required,
+    requiredMessage: question.requiredMessage ?? null,
+    order: question.order,
+    options: (question.options ? stripOptionCodes(question.options) : question.options) as NewQuestion['options'],
+    selectLevels: question.selectLevels as NewQuestion['selectLevels'],
+    tableTitle: question.tableTitle,
+    tableColumns: question.tableColumns as NewQuestion['tableColumns'],
+    tableRowsData: (question.type === 'table' && question.tableRowsData
+      ? stripTableRowsData(question.tableRowsData)
+      : question.tableRowsData) as NewQuestion['tableRowsData'],
+    tableHeaderGrid: question.tableHeaderGrid as NewQuestion['tableHeaderGrid'],
+    allowOtherOption: question.allowOtherOption,
+    optionsColumns: question.optionsColumns,
+    optionsAlign: question.optionsAlign,
+    mobileOptionsColumns: question.mobileOptionsColumns,
+    rankingConfig: question.rankingConfig as NewQuestion['rankingConfig'],
+    choiceGroups: question.choiceGroups as NewQuestion['choiceGroups'],
+    minSelections: question.minSelections,
+    maxSelections: question.maxSelections,
+    noticeContent: question.noticeContent,
+    requiresAcknowledgment: question.requiresAcknowledgment,
+    placeholder: question.placeholder,
+    tableValidationRules:
+      question.tableValidationRules as NewQuestion['tableValidationRules'],
+    numberFormat: question.numberFormat as NewQuestion['numberFormat'],
+    sumConstraints: question.sumConstraints as NewQuestion['sumConstraints'],
+    dynamicRowConfigs:
+      question.dynamicRowConfigs as NewQuestion['dynamicRowConfigs'],
+    hideColumnLabels: question.hideColumnLabels,
+    exportCellOrder: question.exportCellOrder ?? null,
+    mobileOriginalTable: question.mobileOriginalTable,
+    mobileTableDisplayMode: question.mobileTableDisplayMode,
+    mobileDrilldownOmitLeadingColumns: question.mobileDrilldownOmitLeadingColumns,
+    mobileDrilldownRepeatHeaderStartRow: question.mobileDrilldownRepeatHeaderStartRow,
+    mobileDrilldownRepeatHeaderEndRow: question.mobileDrilldownRepeatHeaderEndRow,
+    hideTitle: question.hideTitle,
+    displayCondition: question.displayCondition as NewQuestion['displayCondition'],
+    questionCode: question.questionCode,
+    isCustomSpssVarName: question.isCustomSpssVarName,
+    exportLabel: question.exportLabel,
+    spssVarType: question.spssVarType,
+    spssMeasure: question.spssMeasure,
+    defaultValueTemplate: question.defaultValueTemplate ?? null,
+    inputType: question.inputType ?? null,
+    emptyDefault: question.emptyDefault ?? null,
+    piiEncrypted: question.piiEncrypted ?? false,
+    pageBreakBefore: question.pageBreakBefore,
+    answerQuoteEnabled: question.answerQuoteEnabled,
+    answerQuoteName: question.answerQuoteName,
+    answerQuoteText: question.answerQuoteText,
+    updatedAt: new Date(),
+  }) satisfies CompleteQuestionWrite;
+}
+
+/**
+ * upsert 충돌 시 갱신할 컬럼 집합. 위 두 경로의 onConflictDoUpdate 가 같은 블록을
+ * 각각 갖고 있었다. excluded 참조뿐이라 값이 없고 정적이므로 상수로 둔다.
+ */
+const QUESTION_UPSERT_SET = {
+  groupId: sql`excluded.group_id`,
+  type: sql`excluded.type`,
+  title: sql`excluded.title`,
+  description: sql`excluded.description`,
+  required: sql`excluded.required`,
+  requiredMessage: sql`excluded.required_message`,
+  order: sql`excluded.order`,
+  options: sql`excluded.options`,
+  selectLevels: sql`excluded.select_levels`,
+  tableTitle: sql`excluded.table_title`,
+  tableColumns: sql`excluded.table_columns`,
+  tableRowsData: sql`excluded.table_rows_data`,
+  tableHeaderGrid: sql`excluded.table_header_grid`,
+  allowOtherOption: sql`excluded.allow_other_option`,
+  optionsColumns: sql`excluded.options_columns`,
+  optionsAlign: sql`excluded.options_align`,
+  mobileOptionsColumns: sql`excluded.mobile_options_columns`,
+  rankingConfig: sql`excluded.ranking_config`,
+  choiceGroups: sql`excluded.choice_groups`,
+  minSelections: sql`excluded.min_selections`,
+  maxSelections: sql`excluded.max_selections`,
+  noticeContent: sql`excluded.notice_content`,
+  requiresAcknowledgment: sql`excluded.requires_acknowledgment`,
+  placeholder: sql`excluded.placeholder`,
+  tableValidationRules: sql`excluded.table_validation_rules`,
+  numberFormat: sql`excluded.number_format`,
+  sumConstraints: sql`excluded.sum_constraints`,
+  dynamicRowConfigs: sql`excluded.dynamic_row_config`,
+  hideColumnLabels: sql`excluded.hide_column_labels`,
+  exportCellOrder: sql`excluded.export_cell_order`,
+  mobileOriginalTable: sql`excluded.mobile_original_table`,
+  mobileTableDisplayMode: sql`excluded.mobile_table_display_mode`,
+  mobileDrilldownOmitLeadingColumns: sql`excluded.mobile_drilldown_omit_leading_columns`,
+  mobileDrilldownRepeatHeaderStartRow:
+    sql`excluded.mobile_drilldown_repeat_header_start_row`,
+  mobileDrilldownRepeatHeaderEndRow:
+    sql`excluded.mobile_drilldown_repeat_header_end_row`,
+  hideTitle: sql`excluded.hide_title`,
+  displayCondition: sql`excluded.display_condition`,
+  questionCode: sql`excluded.question_code`,
+  isCustomSpssVarName: sql`excluded.is_custom_spss_var_name`,
+  exportLabel: sql`excluded.export_label`,
+  spssVarType: sql`excluded.spss_var_type`,
+  spssMeasure: sql`excluded.spss_measure`,
+  defaultValueTemplate: sql`excluded.default_value_template`,
+  inputType: sql`excluded.input_type`,
+  emptyDefault: sql`excluded.empty_default`,
+  piiEncrypted: sql`excluded.pii_encrypted`,
+  pageBreakBefore: sql`excluded.page_break_before`,
+  answerQuoteEnabled: sql`excluded.answer_quote_enabled`,
+  answerQuoteName: sql`excluded.answer_quote_name`,
+  answerQuoteText: sql`excluded.answer_quote_text`,
+  updatedAt: sql`excluded.updated_at`,
+} satisfies CompleteQuestionWrite;
+
 export async function saveSurveyDiff(
   payload: SurveyDiffPayloadInput,
 ): Promise<SaveResult> {
@@ -241,126 +373,16 @@ export async function saveSurveyDiff(
         addKeys(oldContentKeys, oldUpsertedRows);
         addKeys(newContentKeys, promotedQuestions);
 
-        const questionValues = promotedQuestions.map((question) => ({
-          id: question.id,
-          surveyId,
-          groupId: question.groupId || null,
-          type: question.type,
-          title: question.title,
-          description: question.description,
-          required: question.required,
-          requiredMessage: question.requiredMessage ?? null,
-          order: question.order,
-          options: (question.options ? stripOptionCodes(question.options) : question.options) as NewQuestion['options'],
-          selectLevels: question.selectLevels as NewQuestion['selectLevels'],
-          tableTitle: question.tableTitle,
-          tableColumns: question.tableColumns as NewQuestion['tableColumns'],
-          tableRowsData: (question.type === 'table' && question.tableRowsData
-            ? stripTableRowsData(question.tableRowsData)
-            : question.tableRowsData) as NewQuestion['tableRowsData'],
-          tableHeaderGrid: question.tableHeaderGrid as NewQuestion['tableHeaderGrid'],
-          allowOtherOption: question.allowOtherOption,
-          optionsColumns: question.optionsColumns,
-          optionsAlign: question.optionsAlign,
-          mobileOptionsColumns: question.mobileOptionsColumns,
-          rankingConfig: question.rankingConfig as NewQuestion['rankingConfig'],
-          choiceGroups: question.choiceGroups as NewQuestion['choiceGroups'],
-          minSelections: question.minSelections,
-          maxSelections: question.maxSelections,
-          noticeContent: question.noticeContent,
-          requiresAcknowledgment: question.requiresAcknowledgment,
-          placeholder: question.placeholder,
-          tableValidationRules:
-            question.tableValidationRules as NewQuestion['tableValidationRules'],
-          numberFormat: question.numberFormat as NewQuestion['numberFormat'],
-          sumConstraints: question.sumConstraints as NewQuestion['sumConstraints'],
-          dynamicRowConfigs:
-            question.dynamicRowConfigs as NewQuestion['dynamicRowConfigs'],
-          hideColumnLabels: question.hideColumnLabels,
-          exportCellOrder: question.exportCellOrder ?? null,
-          mobileOriginalTable: question.mobileOriginalTable,
-          mobileTableDisplayMode: question.mobileTableDisplayMode,
-          mobileDrilldownOmitLeadingColumns: question.mobileDrilldownOmitLeadingColumns,
-          mobileDrilldownRepeatHeaderStartRow: question.mobileDrilldownRepeatHeaderStartRow,
-          mobileDrilldownRepeatHeaderEndRow: question.mobileDrilldownRepeatHeaderEndRow,
-          hideTitle: question.hideTitle,
-          displayCondition: question.displayCondition as NewQuestion['displayCondition'],
-          questionCode: question.questionCode,
-          isCustomSpssVarName: question.isCustomSpssVarName,
-          exportLabel: question.exportLabel,
-          spssVarType: question.spssVarType,
-          spssMeasure: question.spssMeasure,
-          defaultValueTemplate: question.defaultValueTemplate ?? null,
-          inputType: question.inputType ?? null,
-          emptyDefault: question.emptyDefault ?? null,
-          piiEncrypted: question.piiEncrypted ?? false,
-          pageBreakBefore: question.pageBreakBefore,
-          answerQuoteEnabled: question.answerQuoteEnabled,
-          answerQuoteName: question.answerQuoteName,
-          answerQuoteText: question.answerQuoteText,
-          updatedAt: new Date(),
-        }) satisfies CompleteQuestionWrite);
+        const questionValues = promotedQuestions.map((question) =>
+          toQuestionRow(question, surveyId),
+        );
 
         await tx
           .insert(questions)
           .values(questionValues)
           .onConflictDoUpdate({
             target: questions.id,
-            set: {
-              groupId: sql`excluded.group_id`,
-              type: sql`excluded.type`,
-              title: sql`excluded.title`,
-              description: sql`excluded.description`,
-              required: sql`excluded.required`,
-              requiredMessage: sql`excluded.required_message`,
-              order: sql`excluded.order`,
-              options: sql`excluded.options`,
-              selectLevels: sql`excluded.select_levels`,
-              tableTitle: sql`excluded.table_title`,
-              tableColumns: sql`excluded.table_columns`,
-              tableRowsData: sql`excluded.table_rows_data`,
-              tableHeaderGrid: sql`excluded.table_header_grid`,
-              allowOtherOption: sql`excluded.allow_other_option`,
-              optionsColumns: sql`excluded.options_columns`,
-              optionsAlign: sql`excluded.options_align`,
-              mobileOptionsColumns: sql`excluded.mobile_options_columns`,
-              rankingConfig: sql`excluded.ranking_config`,
-              choiceGroups: sql`excluded.choice_groups`,
-              minSelections: sql`excluded.min_selections`,
-              maxSelections: sql`excluded.max_selections`,
-              noticeContent: sql`excluded.notice_content`,
-              requiresAcknowledgment: sql`excluded.requires_acknowledgment`,
-              placeholder: sql`excluded.placeholder`,
-              tableValidationRules: sql`excluded.table_validation_rules`,
-              numberFormat: sql`excluded.number_format`,
-              sumConstraints: sql`excluded.sum_constraints`,
-              dynamicRowConfigs: sql`excluded.dynamic_row_config`,
-              hideColumnLabels: sql`excluded.hide_column_labels`,
-              exportCellOrder: sql`excluded.export_cell_order`,
-              mobileOriginalTable: sql`excluded.mobile_original_table`,
-              mobileTableDisplayMode: sql`excluded.mobile_table_display_mode`,
-              mobileDrilldownOmitLeadingColumns: sql`excluded.mobile_drilldown_omit_leading_columns`,
-              mobileDrilldownRepeatHeaderStartRow:
-                sql`excluded.mobile_drilldown_repeat_header_start_row`,
-              mobileDrilldownRepeatHeaderEndRow:
-                sql`excluded.mobile_drilldown_repeat_header_end_row`,
-              hideTitle: sql`excluded.hide_title`,
-              displayCondition: sql`excluded.display_condition`,
-              questionCode: sql`excluded.question_code`,
-              isCustomSpssVarName: sql`excluded.is_custom_spss_var_name`,
-              exportLabel: sql`excluded.export_label`,
-              spssVarType: sql`excluded.spss_var_type`,
-              spssMeasure: sql`excluded.spss_measure`,
-              defaultValueTemplate: sql`excluded.default_value_template`,
-              inputType: sql`excluded.input_type`,
-              emptyDefault: sql`excluded.empty_default`,
-              piiEncrypted: sql`excluded.pii_encrypted`,
-              pageBreakBefore: sql`excluded.page_break_before`,
-              answerQuoteEnabled: sql`excluded.answer_quote_enabled`,
-              answerQuoteName: sql`excluded.answer_quote_name`,
-              answerQuoteText: sql`excluded.answer_quote_text`,
-              updatedAt: sql`excluded.updated_at`,
-            } satisfies CompleteQuestionWrite,
+            set: QUESTION_UPSERT_SET,
           });
       }
 
@@ -611,126 +633,16 @@ export async function saveSurveyWithDetails(
         );
         addKeys(newContentKeys, promotedQuestions);
 
-        const questionValues = promotedQuestions.map((question) => ({
-          id: question.id,
-          surveyId,
-          groupId: question.groupId || null,
-          type: question.type,
-          title: question.title,
-          description: question.description,
-          required: question.required,
-          requiredMessage: question.requiredMessage ?? null,
-          order: question.order,
-          options: (question.options ? stripOptionCodes(question.options) : question.options) as NewQuestion['options'],
-          selectLevels: question.selectLevels as NewQuestion['selectLevels'],
-          tableTitle: question.tableTitle,
-          tableColumns: question.tableColumns as NewQuestion['tableColumns'],
-          tableRowsData: (question.type === 'table' && question.tableRowsData
-            ? stripTableRowsData(question.tableRowsData)
-            : question.tableRowsData) as NewQuestion['tableRowsData'],
-          tableHeaderGrid: question.tableHeaderGrid as NewQuestion['tableHeaderGrid'],
-          allowOtherOption: question.allowOtherOption,
-          optionsColumns: question.optionsColumns,
-          optionsAlign: question.optionsAlign,
-          mobileOptionsColumns: question.mobileOptionsColumns,
-          rankingConfig: question.rankingConfig as NewQuestion['rankingConfig'],
-          choiceGroups: question.choiceGroups as NewQuestion['choiceGroups'],
-          minSelections: question.minSelections,
-          maxSelections: question.maxSelections,
-          noticeContent: question.noticeContent,
-          requiresAcknowledgment: question.requiresAcknowledgment,
-          placeholder: question.placeholder,
-          tableValidationRules:
-            question.tableValidationRules as NewQuestion['tableValidationRules'],
-          numberFormat: question.numberFormat as NewQuestion['numberFormat'],
-          sumConstraints: question.sumConstraints as NewQuestion['sumConstraints'],
-          dynamicRowConfigs:
-            question.dynamicRowConfigs as NewQuestion['dynamicRowConfigs'],
-          hideColumnLabels: question.hideColumnLabels,
-          exportCellOrder: question.exportCellOrder ?? null,
-          mobileOriginalTable: question.mobileOriginalTable,
-          mobileTableDisplayMode: question.mobileTableDisplayMode,
-          mobileDrilldownOmitLeadingColumns: question.mobileDrilldownOmitLeadingColumns,
-          mobileDrilldownRepeatHeaderStartRow: question.mobileDrilldownRepeatHeaderStartRow,
-          mobileDrilldownRepeatHeaderEndRow: question.mobileDrilldownRepeatHeaderEndRow,
-          hideTitle: question.hideTitle,
-          displayCondition: question.displayCondition as NewQuestion['displayCondition'],
-          questionCode: question.questionCode,
-          isCustomSpssVarName: question.isCustomSpssVarName,
-          exportLabel: question.exportLabel,
-          spssVarType: question.spssVarType,
-          spssMeasure: question.spssMeasure,
-          defaultValueTemplate: question.defaultValueTemplate ?? null,
-          inputType: question.inputType ?? null,
-          emptyDefault: question.emptyDefault ?? null,
-          piiEncrypted: question.piiEncrypted ?? false,
-          pageBreakBefore: question.pageBreakBefore,
-          answerQuoteEnabled: question.answerQuoteEnabled,
-          answerQuoteName: question.answerQuoteName,
-          answerQuoteText: question.answerQuoteText,
-          updatedAt: new Date(),
-        }) satisfies CompleteQuestionWrite);
+        const questionValues = promotedQuestions.map((question) =>
+          toQuestionRow(question, surveyId),
+        );
 
         await tx
           .insert(questions)
           .values(questionValues)
           .onConflictDoUpdate({
             target: questions.id,
-            set: {
-              groupId: sql`excluded.group_id`,
-              type: sql`excluded.type`,
-              title: sql`excluded.title`,
-              description: sql`excluded.description`,
-              required: sql`excluded.required`,
-              requiredMessage: sql`excluded.required_message`,
-              order: sql`excluded.order`,
-              options: sql`excluded.options`,
-              selectLevels: sql`excluded.select_levels`,
-              tableTitle: sql`excluded.table_title`,
-              tableColumns: sql`excluded.table_columns`,
-              tableRowsData: sql`excluded.table_rows_data`,
-              tableHeaderGrid: sql`excluded.table_header_grid`,
-              allowOtherOption: sql`excluded.allow_other_option`,
-              optionsColumns: sql`excluded.options_columns`,
-              optionsAlign: sql`excluded.options_align`,
-              mobileOptionsColumns: sql`excluded.mobile_options_columns`,
-              rankingConfig: sql`excluded.ranking_config`,
-              choiceGroups: sql`excluded.choice_groups`,
-              minSelections: sql`excluded.min_selections`,
-              maxSelections: sql`excluded.max_selections`,
-              noticeContent: sql`excluded.notice_content`,
-              requiresAcknowledgment: sql`excluded.requires_acknowledgment`,
-              placeholder: sql`excluded.placeholder`,
-              tableValidationRules: sql`excluded.table_validation_rules`,
-              numberFormat: sql`excluded.number_format`,
-              sumConstraints: sql`excluded.sum_constraints`,
-              dynamicRowConfigs: sql`excluded.dynamic_row_config`,
-              hideColumnLabels: sql`excluded.hide_column_labels`,
-              exportCellOrder: sql`excluded.export_cell_order`,
-              mobileOriginalTable: sql`excluded.mobile_original_table`,
-              mobileTableDisplayMode: sql`excluded.mobile_table_display_mode`,
-              mobileDrilldownOmitLeadingColumns: sql`excluded.mobile_drilldown_omit_leading_columns`,
-              mobileDrilldownRepeatHeaderStartRow:
-                sql`excluded.mobile_drilldown_repeat_header_start_row`,
-              mobileDrilldownRepeatHeaderEndRow:
-                sql`excluded.mobile_drilldown_repeat_header_end_row`,
-              hideTitle: sql`excluded.hide_title`,
-              displayCondition: sql`excluded.display_condition`,
-              questionCode: sql`excluded.question_code`,
-              isCustomSpssVarName: sql`excluded.is_custom_spss_var_name`,
-              exportLabel: sql`excluded.export_label`,
-              spssVarType: sql`excluded.spss_var_type`,
-              spssMeasure: sql`excluded.spss_measure`,
-              defaultValueTemplate: sql`excluded.default_value_template`,
-              inputType: sql`excluded.input_type`,
-              emptyDefault: sql`excluded.empty_default`,
-              piiEncrypted: sql`excluded.pii_encrypted`,
-              pageBreakBefore: sql`excluded.page_break_before`,
-              answerQuoteEnabled: sql`excluded.answer_quote_enabled`,
-              answerQuoteName: sql`excluded.answer_quote_name`,
-              answerQuoteText: sql`excluded.answer_quote_text`,
-              updatedAt: sql`excluded.updated_at`,
-            } satisfies CompleteQuestionWrite,
+            set: QUESTION_UPSERT_SET,
           });
       }
     }
