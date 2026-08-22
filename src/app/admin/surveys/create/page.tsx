@@ -28,12 +28,11 @@ import { useShallow } from 'zustand/react/shallow';
 import { GroupManager } from '@/features/survey-builder/group-manager';
 import { ImportExportLibraryModal } from '@/features/survey-builder/import-export-library-modal';
 import { QuestionLibraryPanel } from '@/features/survey-builder/question-library-panel';
-import { questionTypes } from '@/features/survey-builder/question-types';
+import { QuestionTypePalette } from '@/features/survey-builder/question-type-palette';
 import { ResponseHeaderSettingsModal } from '@/features/survey-builder/response-header-settings-modal';
 import { SaveQuestionModal } from '@/features/survey-builder/save-question-modal';
 import { SortableQuestionList } from '@/features/survey-builder/question-list/sortable-question-list';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -388,30 +387,7 @@ export default function CreateSurveyPage() {
               <TabsContent value="types" className="m-0 flex-1 overflow-y-auto p-4 pt-2">
                 <div className="space-y-3">
                   <ResponseHeaderSettingsModal />
-                  {questionTypes.map((questionType) => {
-                    const IconComponent = questionType.icon;
-                    return (
-                      <Card
-                        key={questionType.type}
-                        className="hover-lift cursor-pointer border-gray-200 p-4 transition-all duration-200 hover:border-blue-200"
-                        onClick={() => addQuestion(questionType.type)}
-                      >
-                        <div className="flex items-start space-x-3">
-                          <div
-                            className={`flex h-10 w-10 items-center justify-center rounded-lg ${questionType.color}`}
-                          >
-                            <IconComponent className="h-5 w-5" />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <h4 className="text-sm font-medium text-gray-900">
-                              {questionType.label}
-                            </h4>
-                            <p className="mt-1 text-xs text-gray-500">{questionType.description}</p>
-                          </div>
-                        </div>
-                      </Card>
-                    );
-                  })}
+                  <QuestionTypePalette onSelect={addQuestion} />
                 </div>
 
                 <div className="mt-6 border-t border-gray-200 pt-6">
