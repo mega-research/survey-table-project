@@ -5,10 +5,8 @@ import { r2Client } from '@/lib/r2-client';
 import * as Sentry from '@sentry/nextjs';
 import sharp from 'sharp';
 
-import { getCurrentUser } from '@/lib/auth';
-import { isAdminUserAllowed } from '@/lib/auth/admin-allowlist';
-import { isAdminOrGuestGrantHolder, isGuestUser } from '@/lib/auth/guest-grants';
 import { withRouteLogging, type RouteLogContext } from '@/lib/logger';
+import { allowAdminOrGuestGrant, guardUploadRoute } from '@/lib/upload/route-guard';
 import {
   imageKindToExt,
   sanitizeImageExt,
@@ -73,22 +71,9 @@ const MAIL_CONVERTIBLE_TYPES = [
 
 // 예기치 못한 에러의 err 로깅·Sentry 캡처·500 응답은 로깅 래퍼(withRouteLogging)가 담당한다.
 async function handleImageUpload(request: NextRequest, ctx: RouteLogContext) {
-  const user = await getCurrentUser();
-  if (!user) {
-    return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
-  }
-  // 권한 검사보다 먼저 바인딩 — 403 거부 로그에도 행위자(userId·role)가 남아야
-  // 업로드 남용·권한 설정 오류 추적이 가능하다. 거부되는 일반 인증 계정은 'user'.
-  ctx.bind({
-    userId: user.id,
-    role: isGuestUser(user.id) ? 'guest' : isAdminUserAllowed(user.id) ? 'admin' : 'user',
-  });
-  // admin 또는 게스트 grant 보유 가드 — mail-attachment 라우트와 동일 정책.
   // 게스트도 허용 경로(메일 템플릿 등) 리치에디터에서 본문 이미지를 올린다.
-  // ADMIN_USER_IDS 로 잠갔을 때 임의 인증사용자의 R2 업로드 남용은 계속 차단.
-  if (!isAdminOrGuestGrantHolder(user.id)) {
-    return NextResponse.json({ error: '권한이 없습니다.' }, { status: 403 });
-  }
+  const guard = await guardUploadRoute(ctx, allowAdminOrGuestGrant);
+  if (!guard.ok) return guard.response;
 
   const formData = await request.formData();
   const file = formData.get('file') as File;

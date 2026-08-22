@@ -2,7 +2,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // 인증 통과 사용자 mock
+// 업로드 라우트 3종은 공통 가드(lib/upload/route-guard)를 거쳐 requireAuth 로 401 을 만든다.
+// getCurrentUser 만 주면 requireAuth 가 undefined 라 모든 요청이 401 이 된다.
 vi.mock('@/lib/auth', () => ({
+  requireAuth: vi.fn(async () => ({ id: 'admin-1' })),
   getCurrentUser: vi.fn(async () => ({ id: 'admin-1' })),
 }));
 
