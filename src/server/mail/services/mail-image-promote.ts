@@ -1,26 +1,9 @@
-import { HeadObjectCommand } from '@aws-sdk/client-s3';
-import { r2Client } from '@/lib/r2-client';
+import { permanentObjectExists, urlToR2Key } from '@/lib/r2-client';
 import * as Sentry from '@sentry/nextjs';
 
 import { extractImageUrlsFromHtml } from '@/lib/image-extractor';
 import { copyR2Objects } from '@/lib/image-utils-server';
 import { getR2PublicUrl } from '@/lib/r2-env';
-
-/**
- * 영구 위치(dstKey)에 객체가 이미 존재하는지 확인.
- * 클라이언트의 stale state 가 같은 publish 를 N 회 시도해도 idempotent 하도록
- * 첫 publish 가 이미 옮겨놓은 객체를 재인식하는 데 사용한다.
- */
-async function permanentObjectExists(dstKey: string): Promise<boolean> {
-  const bucketName = process.env['CLOUDFLARE_R2_BUCKET'];
-  if (!bucketName) return false;
-  try {
-    await r2Client.send(new HeadObjectCommand({ Bucket: bucketName, Key: dstKey }));
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 /**
  * promote 가 최종 실패했을 때 throw 되는 에러.
@@ -60,14 +43,6 @@ export function tmpToPermanentUrl(tmpUrl: string): string {
 /**
  * URL에서 R2 key를 추출합니다 (pathname, leading slash 제거).
  */
-export function urlToR2Key(url: string): string | null {
-  try {
-    const u = new URL(url);
-    return u.pathname.startsWith('/') ? u.pathname.slice(1) : u.pathname;
-  } catch {
-    return null;
-  }
-}
 
 /**
  * 메일 bodyHtml의 tmp/mail/ 이미지를 영구 prefix로 promote합니다.

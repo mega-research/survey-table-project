@@ -30,7 +30,6 @@ import {
   MailImagePromoteError,
   promoteMailImages,
   tmpToPermanentUrl,
-  urlToR2Key,
 } from '@/server/mail/services/mail-image-promote';
 
 describe('extractTmpMailUrls', () => {
@@ -115,28 +114,6 @@ describe('tmpToPermanentUrl', () => {
     expect(tmpToPermanentUrl('https://cdn.test/tmp/mail/2024/01/abc.webp')).toBe(
       'https://cdn.test/mail/2024/01/abc.webp',
     );
-  });
-});
-
-describe('urlToR2Key', () => {
-  it('pathname에서 leading slash 제거하여 반환', () => {
-    expect(urlToR2Key('https://cdn.test/tmp/mail/abc.webp')).toBe('tmp/mail/abc.webp');
-  });
-
-  it('영구 URL도 key 추출', () => {
-    expect(urlToR2Key('https://cdn.test/mail/abc.webp')).toBe('mail/abc.webp');
-  });
-
-  it('유효하지 않은 URL이면 null 반환', () => {
-    expect(urlToR2Key('not a url')).toBe(null);
-  });
-
-  it('빈 문자열이면 null 반환', () => {
-    expect(urlToR2Key('')).toBe(null);
-  });
-
-  it('경로가 없는 URL은 빈 문자열 반환', () => {
-    expect(urlToR2Key('https://cdn.test/')).toBe('');
   });
 });
 

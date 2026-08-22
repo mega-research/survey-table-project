@@ -1,6 +1,5 @@
 // 서버 전용 모듈 — 클라이언트에서 import 금지 (R2 SDK 포함)
-import { HeadObjectCommand } from '@aws-sdk/client-s3';
-import { r2Client } from '@/lib/r2-client';
+import { permanentObjectExists, urlToR2Key } from '@/lib/r2-client';
 import * as Sentry from '@sentry/nextjs';
 
 import {
@@ -13,22 +12,6 @@ import {
   NOTICE_ATTACHMENT_PREFIX,
   TMP_NOTICE_ATTACHMENT_PREFIX,
 } from '@/lib/upload/attachment-policy';
-
-/**
- * 영구 위치(dstKey)에 객체가 이미 존재하는지 확인.
- * 클라이언트의 stale state 가 같은 publish 를 N 회 시도해도 idempotent 하도록
- * 첫 publish 가 이미 옮겨놓은 객체를 재인식하는 데 사용한다.
- */
-async function permanentObjectExists(dstKey: string): Promise<boolean> {
-  const bucketName = process.env['CLOUDFLARE_R2_BUCKET'];
-  if (!bucketName) return false;
-  try {
-    await r2Client.send(new HeadObjectCommand({ Bucket: bucketName, Key: dstKey }));
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 export { extractPermanentAttachmentKeysFromHtml };
 
@@ -57,14 +40,6 @@ export function isTmpNoticeAttachmentUrl(url: string): boolean {
   return url.startsWith(`${getR2PublicUrl()}/${TMP_NOTICE_ATTACHMENT_PREFIX}`);
 }
 
-export function urlToR2Key(url: string): string | null {
-  try {
-    const u = new URL(url);
-    return u.pathname.startsWith('/') ? u.pathname.slice(1) : u.pathname;
-  } catch {
-    return null;
-  }
-}
 
 /**
  * HTML 안의 `<a data-file-attachment="true">` href 중 tmp/notice-attachment/ prefix 만 추출.

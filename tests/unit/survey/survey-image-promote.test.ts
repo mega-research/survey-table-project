@@ -35,7 +35,6 @@ import {
   replaceUrlsInResponseHeader,
   SurveyImagePromoteError,
   tmpToPermanentUrl,
-  urlToR2Key,
 } from '@/lib/survey/survey-image-promote';
 import type { Question } from '@/types/survey';
 
@@ -101,28 +100,6 @@ describe('tmpToPermanentUrl', () => {
   it('tmp/survey/가 아닌 URL은 그대로', () => {
     const url = 'https://cdn.test/tmp/mail/abc.webp';
     expect(tmpToPermanentUrl(url)).toBe(url);
-  });
-});
-
-// ========================
-// urlToR2Key
-// ========================
-
-describe('urlToR2Key', () => {
-  it('pathname에서 leading slash 제거', () => {
-    expect(urlToR2Key('https://cdn.test/tmp/survey/abc.webp')).toBe('tmp/survey/abc.webp');
-  });
-
-  it('중첩 경로도 처리', () => {
-    expect(urlToR2Key('https://cdn.test/survey/dir/file.png')).toBe('survey/dir/file.png');
-  });
-
-  it('유효하지 않은 URL은 null', () => {
-    expect(urlToR2Key('not-a-url')).toBeNull();
-  });
-
-  it('빈 문자열은 null', () => {
-    expect(urlToR2Key('')).toBeNull();
   });
 });
 
