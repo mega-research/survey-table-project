@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { PutObjectCommand } from '@aws-sdk/client-s3';
+import { r2Client } from '@/lib/r2-client';
 import * as Sentry from '@sentry/nextjs';
 import sharp from 'sharp';
 
@@ -54,16 +55,6 @@ function detectImageKind(buf: Buffer): string | null {
   if (buf[0] === 0x3c) return 'image/svg+xml';
   return null;
 }
-
-// Cloudflare R2는 S3 호환 API를 사용합니다
-const r2Client = new S3Client({
-  region: 'auto',
-  endpoint: `https://${process.env['CLOUDFLARE_ACCOUNT_ID']}.r2.cloudflarestorage.com`,
-  credentials: {
-    accessKeyId: process.env['CLOUDFLARE_R2_ACCESS_KEY'] || '',
-    secretAccessKey: process.env['CLOUDFLARE_R2_SECRET_KEY'] || '',
-  },
-});
 
 // 설문(kind=survey): WebP 로 변환할 타입.
 // SVG/GIF 는 애니메이션/벡터라 원본 유지, PNG 는 로고처럼 투명 배경/무손실이 필요한

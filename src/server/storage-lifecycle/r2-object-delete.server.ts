@@ -1,16 +1,7 @@
 import 'server-only';
 
-import { DeleteObjectCommand, HeadObjectCommand, S3Client } from '@aws-sdk/client-s3';
-
-// Cloudflare R2는 S3 호환 API 사용 (image-utils-server 와 동일 env)
-const r2Client = new S3Client({
-  region: 'auto',
-  endpoint: `https://${process.env['CLOUDFLARE_ACCOUNT_ID']}.r2.cloudflarestorage.com`,
-  credentials: {
-    accessKeyId: process.env['CLOUDFLARE_R2_ACCESS_KEY'] || '',
-    secretAccessKey: process.env['CLOUDFLARE_R2_SECRET_KEY'] || '',
-  },
-});
+import { DeleteObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
+import { r2Client } from '@/lib/r2-client';
 
 export type R2DeleteResult = { ok: true } | { ok: false; error: string };
 

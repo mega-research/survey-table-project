@@ -1,5 +1,6 @@
 // 서버 전용 모듈 — 클라이언트에서 import 금지 (R2 SDK 포함)
-import { HeadObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { HeadObjectCommand } from '@aws-sdk/client-s3';
+import { r2Client } from '@/lib/r2-client';
 import * as Sentry from '@sentry/nextjs';
 
 import {
@@ -12,15 +13,6 @@ import {
   NOTICE_ATTACHMENT_PREFIX,
   TMP_NOTICE_ATTACHMENT_PREFIX,
 } from '@/lib/upload/attachment-policy';
-
-const r2Client = new S3Client({
-  region: 'auto',
-  endpoint: `https://${process.env['CLOUDFLARE_ACCOUNT_ID']}.r2.cloudflarestorage.com`,
-  credentials: {
-    accessKeyId: process.env['CLOUDFLARE_R2_ACCESS_KEY'] || '',
-    secretAccessKey: process.env['CLOUDFLARE_R2_SECRET_KEY'] || '',
-  },
-});
 
 /**
  * 영구 위치(dstKey)에 객체가 이미 존재하는지 확인.
