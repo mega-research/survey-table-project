@@ -1754,6 +1754,157 @@ async function detectQuotaOverflow(
 // 응답 완료 (JSONB + response_answers 이중 쓰기)
 // 읽기: response_answers 우선 (getResponsesWithAnswers), JSONB fallback
 // JSONB 쓰기는 마이그레이션 완료 + 모든 읽기 경로 전환 후 제거 예정
+/** completeResponse 정제 파이프라인이 공유하는 게이트 행 모양. */
+type CompleteGateRow = {
+  surveyId: string;
+  versionId: string | null;
+  contactTargetId: string | null;
+  isTest: boolean;
+};
+
+/**
+ * 정제 (1/3) — 제출 페이로드의 오염 가드.
+ *
+ * completeResponse 는 data.questionResponses 를 verbatim 저장하므로, 미인증 응답자가
+ * (a) 설문에 없는 임의 questionId 수천 개, 또는 (b) 단일 키에 수 MB 값을 주입해 JSONB
+ * SSOT 를 오염·팽창시킬 수 있다(response_answers 정규화는 미존재 키를 거르지만 원본
+ * JSONB 컬럼은 무방비). 유효 집합에 없는 키와 상한 초과 값을 silent drop 한다
+ * (가용성 우선 — throw 아님). 이 필터가 prefill 복원보다 먼저다.
+ */
+async function sanitizeSubmittedResponses(
+  submitted: Record<string, unknown>,
+  gateRow: CompleteGateRow,
+): Promise<Record<string, unknown>> {
+  const validIds = await loadValidQuestionIds(gateRow.versionId, gateRow.surveyId);
+  // 프루닝 스냅샷 가드: 테스트·soft delete 응답은 버전 스냅샷 프루닝을 보호하지
+  // 않으므로, 스냅샷이 비워진 버전을 참조하는 응답이 여기 도달할 수 있다. 그 경우
+  // validIds 가 빈 집합이 되어 아래 멤버십 필터가 제출 답변 전체를 걸러 {} 를
+  // 저장하며 성공으로 보고한다 — 조용한 전량 유실. 빈 집합일 때만 스냅샷 상태를
+  // 확인해 유실 대신 명시적 에러로 전환한다. 존재 여부(IS NOT NULL)만으로는 부족하다
+  // — non-null 이지만 questions 가 없거나 비배열인 드리프트 스냅샷(이 함수 뒤의
+  // Array.isArray 방어가 예견하는 상태)과 항목에 id 가 없는 훼손 배열도 같은 유실을
+  // 일으키므로, 빈 집합을 허용하는 유일한 상태는 "검증된 빈 배열(질문 0개 설문)"이다.
+  // IS DISTINCT FROM 은 questions 키 부재(jsonb_typeof NULL)를 malformed 로 흡수한다.
+  // 응답은 in_progress 로 남고, 에러는 RPC 핸들러의 Sentry 캡처로 보고된다.
+  if (gateRow.versionId && validIds.size === 0) {
+    const [versionRow] = await db
+      .select({
+        questionsState: sql<string>`
+          CASE
+            WHEN ${surveyVersions.snapshot} IS NULL THEN 'missing'
+            WHEN jsonb_typeof(${surveyVersions.snapshot}->'questions') IS DISTINCT FROM 'array' THEN 'malformed'
+            WHEN jsonb_array_length(${surveyVersions.snapshot}->'questions') > 0 THEN 'ids-unreadable'
+            ELSE 'empty'
+          END`,
+      })
+      .from(surveyVersions)
+      .where(eq(surveyVersions.id, gateRow.versionId))
+      .limit(1);
+    if (versionRow?.questionsState !== 'empty') {
+      throw new Error('응답 버전의 설문 스냅샷이 유실되어 완료할 수 없습니다.');
+    }
+  }
+  const filtered: Record<string, unknown> = {};
+  for (const [qid, value] of Object.entries(submitted)) {
+    // 기타 상세 기재 사이드카 — 질문 id 가 아니므로 멤버십 필터 대상이 아니다.
+    // 아래에서 별도 정제 후 보존한다 (여기서 drop 하면 제출 순간 기타 텍스트가
+    // 조용히 소실된다 — 2026-08-14 프로덕션에서 확인된 실사고).
+    if (qid === '__optTexts__') continue;
+    // 멤버십 필터: 설문(버전 스냅샷/라이브 questions)에 없는 키는 drop.
+    if (!validIds.has(qid)) continue;
+    // 바이트 필터: 단일 키 직렬화 256KB 초과면 그 키만 drop.
+    const serializedBytes = Buffer.byteLength(JSON.stringify(value ?? null), 'utf8');
+    if (serializedBytes > MAX_ANSWER_VALUE_BYTES) continue;
+    filtered[qid] = value;
+  }
+  // 사이드카 정제: 형태 검증(readOptTextsSidecar) + 실존 질문 키만 + 바이트 상한.
+  const sidecar = readOptTextsSidecar(submitted);
+  const keptSidecar: Record<string, Record<string, string>> = {};
+  for (const [qid, texts] of Object.entries(sidecar)) {
+    if (validIds.has(qid)) keptSidecar[qid] = texts;
+  }
+  if (Object.keys(keptSidecar).length > 0) {
+    const sidecarBytes = Buffer.byteLength(JSON.stringify(keptSidecar), 'utf8');
+    if (sidecarBytes <= MAX_ANSWER_VALUE_BYTES) {
+      filtered['__optTexts__'] = keptSidecar;
+    }
+  }
+  return filtered;
+}
+
+/**
+ * 정제 (2/3) — prefill 강제 복원.
+ *
+ * defaultValueTemplate 이 있는 질문의 응답값은 contact_targets.attrs 로 치환한 expected 와
+ * 일치해야 한다. 클라이언트가 disabled 입력을 우회 조작해도 서버가 expected 로 되돌린다.
+ * 오염 가드를 통과한 값에만 적용한다 — 원본으로 되돌리면 가드가 무력해진다.
+ */
+async function restorePrefillAnswers(
+  validated: Record<string, unknown>,
+  gateRow: CompleteGateRow,
+): Promise<void> {
+  // contactTargetId/surveyId 는 gateRow 에서 이미 조회됨 — 중복 select 제거(쿼리 최소화).
+  const contactTargetId = gateRow.contactTargetId;
+
+  if (contactTargetId) {
+    const [target] = await db
+      .select({ attrs: contactTargets.attrs })
+      .from(contactTargets)
+      .where(eq(contactTargets.id, contactTargetId))
+      .limit(1);
+    const attrs = (target?.attrs ?? {}) as Record<string, string>;
+
+    const prefillQuestions = await db
+      .select({ id: questions.id, template: questions.defaultValueTemplate })
+      .from(questions)
+      .where(
+        and(eq(questions.surveyId, gateRow.surveyId), isNotNull(questions.defaultValueTemplate)),
+      );
+
+    // 멤버십/바이트 필터를 통과한 validated 를 기반으로 prefill 복원을 적용한다.
+    // (필터 결과를 다시 원본 questionResponses 로 덮어쓰면 오염 가드가 무력화되므로 금지.)
+    for (const q of prefillQuestions) {
+      if (!q.template?.trim()) continue;
+      const expected = substituteTokens(q.template, attrs);
+      // 제출된(=필터 통과한) 키만 검증 대상. 조건부로 숨겨져 응답에 포함되지 않은 prefill
+      // 질문은 건드리지 않아 미노출 질문에 허위 답변이 주입되지 않도록 한다.
+      if (!(q.id in validated)) continue;
+      const submitted = validated[q.id];
+      // 타입 가드 없이 expected 와 다르면 무조건 강제 복원.
+      // 클라이언트가 문자열이 아닌 값(숫자/불리언/배열/객체/null)으로 우회 조작해도
+      // expected 문자열과 일치하지 않으므로 서버에서 복원된다.
+      if (submitted !== expected) {
+        // 조작 의심 — 서버에서 expected 값으로 강제 복원 (silent)
+        validated[q.id] = expected;
+      }
+    }
+  }
+}
+
+/**
+ * 정제 (3/3) — PII 문항 암호화. prefill 복원(평문 비교) 이후, 저장 직전이어야 한다.
+ */
+async function encryptPiiAnswers(
+  validated: Record<string, unknown>,
+  gateRow: CompleteGateRow,
+): Promise<Record<string, unknown>> {
+  const piiIds = await loadPiiQuestionIds(gateRow.versionId, gateRow.surveyId);
+  if (piiIds.size > 0) {
+    const encrypted = encryptResponsesForStorage(validated, piiIds);
+    // 바이트 필터 2단(저장값 기준): 위쪽 평문 필터를 통과했어도 암호문은 상한을 넘을 수
+    // 있다. 크기가 변한 키는 암호화된 것뿐이라 piiIds 만 다시 잰다. 이 경로의 의미론은
+    // 이 함수의 다른 오염 가드와 같은 silent drop 이다 — 완주자의 완료 자체는 막지 않는다.
+    for (const qid of piiIds) {
+      if (!(qid in encrypted)) continue;
+      const storedBytes = Buffer.byteLength(JSON.stringify(encrypted[qid] ?? null), 'utf8');
+      if (storedBytes > MAX_ANSWER_VALUE_BYTES) delete encrypted[qid];
+    }
+    return encrypted;
+  }
+
+  return validated;
+}
+
 export async function completeResponse(input: CompleteResponseInput): Promise<SurveyResponse> {
   const { responseId, data } = input;
 
@@ -1784,113 +1935,15 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
     });
   }
 
-  // #5 변조 가드(JSONB 오염, updateQuestionResponse 와 대칭): completeResponse 는
-  // data.questionResponses 를 verbatim 저장하므로, 미인증 응답자가 (a) 설문에 없는 임의
-  // questionId 수천 개, 또는 (b) 단일 키에 수 MB 값을 주입해 JSONB SSOT 를 오염/팽창시킬 수
-  // 있다(response_answers 정규화는 미존재 키를 거르지만 원본 JSONB 컬럼은 무방비).
-  // gateRow(이미 surveyId/versionId 조회됨)로 유효 questionId 집합을 1회 로드한 뒤,
-  // 유효 집합에 없는 키와 256KB 초과 값을 silent drop 한다(가용성 우선 — throw 아님).
-  // 이 필터를 prefill 강제 복원보다 먼저 적용해, 통과한 키에 한해서만 복원이 일어나게 한다.
+  // 정제 파이프라인 — 순서가 계약이다. 오염 가드 → prefill 복원 → (calc 재계산) → PII 암호화.
+  // 각 단계의 사유는 해당 함수 주석에 있다. #5 변조 가드(updateQuestionResponse 와 대칭).
   let validatedResponses: Record<string, unknown> | undefined = data?.questionResponses;
   if (data?.questionResponses && gateRow) {
-    const validIds = await loadValidQuestionIds(gateRow.versionId, gateRow.surveyId);
-    // 프루닝 스냅샷 가드: 테스트·soft delete 응답은 버전 스냅샷 프루닝을 보호하지
-    // 않으므로, 스냅샷이 비워진 버전을 참조하는 응답이 여기 도달할 수 있다. 그 경우
-    // validIds 가 빈 집합이 되어 아래 멤버십 필터가 제출 답변 전체를 걸러 {} 를
-    // 저장하며 성공으로 보고한다 — 조용한 전량 유실. 빈 집합일 때만 스냅샷 상태를
-    // 확인해 유실 대신 명시적 에러로 전환한다. 존재 여부(IS NOT NULL)만으로는 부족하다
-    // — non-null 이지만 questions 가 없거나 비배열인 드리프트 스냅샷(이 함수 뒤의
-    // Array.isArray 방어가 예견하는 상태)과 항목에 id 가 없는 훼손 배열도 같은 유실을
-    // 일으키므로, 빈 집합을 허용하는 유일한 상태는 "검증된 빈 배열(질문 0개 설문)"이다.
-    // IS DISTINCT FROM 은 questions 키 부재(jsonb_typeof NULL)를 malformed 로 흡수한다.
-    // 응답은 in_progress 로 남고, 에러는 RPC 핸들러의 Sentry 캡처로 보고된다.
-    if (gateRow.versionId && validIds.size === 0) {
-      const [versionRow] = await db
-        .select({
-          questionsState: sql<string>`
-            CASE
-              WHEN ${surveyVersions.snapshot} IS NULL THEN 'missing'
-              WHEN jsonb_typeof(${surveyVersions.snapshot}->'questions') IS DISTINCT FROM 'array' THEN 'malformed'
-              WHEN jsonb_array_length(${surveyVersions.snapshot}->'questions') > 0 THEN 'ids-unreadable'
-              ELSE 'empty'
-            END`,
-        })
-        .from(surveyVersions)
-        .where(eq(surveyVersions.id, gateRow.versionId))
-        .limit(1);
-      if (versionRow?.questionsState !== 'empty') {
-        throw new Error('응답 버전의 설문 스냅샷이 유실되어 완료할 수 없습니다.');
-      }
-    }
-    const filtered: Record<string, unknown> = {};
-    for (const [qid, value] of Object.entries(data.questionResponses)) {
-      // 기타 상세 기재 사이드카 — 질문 id 가 아니므로 멤버십 필터 대상이 아니다.
-      // 아래에서 별도 정제 후 보존한다 (여기서 drop 하면 제출 순간 기타 텍스트가
-      // 조용히 소실된다 — 2026-08-14 프로덕션에서 확인된 실사고).
-      if (qid === '__optTexts__') continue;
-      // 멤버십 필터: 설문(버전 스냅샷/라이브 questions)에 없는 키는 drop.
-      if (!validIds.has(qid)) continue;
-      // 바이트 필터: 단일 키 직렬화 256KB 초과면 그 키만 drop.
-      const serializedBytes = Buffer.byteLength(JSON.stringify(value ?? null), 'utf8');
-      if (serializedBytes > MAX_ANSWER_VALUE_BYTES) continue;
-      filtered[qid] = value;
-    }
-    // 사이드카 정제: 형태 검증(readOptTextsSidecar) + 실존 질문 키만 + 바이트 상한.
-    const sidecar = readOptTextsSidecar(data.questionResponses);
-    const keptSidecar: Record<string, Record<string, string>> = {};
-    for (const [qid, texts] of Object.entries(sidecar)) {
-      if (validIds.has(qid)) keptSidecar[qid] = texts;
-    }
-    if (Object.keys(keptSidecar).length > 0) {
-      const sidecarBytes = Buffer.byteLength(JSON.stringify(keptSidecar), 'utf8');
-      if (sidecarBytes <= MAX_ANSWER_VALUE_BYTES) {
-        filtered['__optTexts__'] = keptSidecar;
-      }
-    }
-    validatedResponses = filtered;
+    validatedResponses = await sanitizeSubmittedResponses(data.questionResponses, gateRow);
   }
 
-  // prefill 재검증: defaultValueTemplate 이 있는 질문의 응답값은
-  // contact_targets.attrs 로 치환한 expected 와 일치해야 함.
-  // 클라이언트가 disabled 입력을 우회 조작해도 서버에서 expected 값으로 강제 복원.
-  // 위 멤버십/바이트 필터를 통과한 validatedResponses 에 한해 적용한다.
   if (validatedResponses && gateRow) {
-    // contactTargetId/surveyId 는 gateRow 에서 이미 조회됨 — 중복 select 제거(쿼리 최소화).
-    const contactTargetId = gateRow.contactTargetId;
-
-    if (contactTargetId) {
-      const [target] = await db
-        .select({ attrs: contactTargets.attrs })
-        .from(contactTargets)
-        .where(eq(contactTargets.id, contactTargetId))
-        .limit(1);
-      const attrs = (target?.attrs ?? {}) as Record<string, string>;
-
-      const prefillQuestions = await db
-        .select({ id: questions.id, template: questions.defaultValueTemplate })
-        .from(questions)
-        .where(
-          and(eq(questions.surveyId, gateRow.surveyId), isNotNull(questions.defaultValueTemplate)),
-        );
-
-      // 멤버십/바이트 필터를 통과한 validatedResponses 를 기반으로 prefill 복원을 적용한다.
-      // (필터 결과를 다시 원본 questionResponses 로 덮어쓰면 오염 가드가 무력화되므로 금지.)
-      for (const q of prefillQuestions) {
-        if (!q.template?.trim()) continue;
-        const expected = substituteTokens(q.template, attrs);
-        // 제출된(=필터 통과한) 키만 검증 대상. 조건부로 숨겨져 응답에 포함되지 않은 prefill
-        // 질문은 건드리지 않아 미노출 질문에 허위 답변이 주입되지 않도록 한다.
-        if (!(q.id in validatedResponses)) continue;
-        const submitted = validatedResponses[q.id];
-        // 타입 가드 없이 expected 와 다르면 무조건 강제 복원.
-        // 클라이언트가 문자열이 아닌 값(숫자/불리언/배열/객체/null)으로 우회 조작해도
-        // expected 문자열과 일치하지 않으므로 서버에서 복원된다.
-        if (submitted !== expected) {
-          // 조작 의심 — 서버에서 expected 값으로 강제 복원 (silent)
-          validatedResponses[q.id] = expected;
-        }
-      }
-    }
+    await restorePrefillAnswers(validatedResponses, gateRow);
   }
 
   // calc 셀 서버 재계산 (신뢰 경계) — 클라이언트가 주입한 계산값을 그대로 믿지 않고,
@@ -1980,21 +2033,8 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
     quotaOverflow = await detectQuotaOverflow(gateRow.surveyId, validatedResponses);
   }
 
-  // PII 문항 암호화 — prefill 복원(평문 비교) 이후, 저장 직전에 수행한다.
   if (validatedResponses && gateRow) {
-    const piiIds = await loadPiiQuestionIds(gateRow.versionId, gateRow.surveyId);
-    if (piiIds.size > 0) {
-      const encrypted = encryptResponsesForStorage(validatedResponses, piiIds);
-      // 바이트 필터 2단(저장값 기준): 위쪽 평문 필터를 통과했어도 암호문은 상한을 넘을 수
-      // 있다. 크기가 변한 키는 암호화된 것뿐이라 piiIds 만 다시 잰다. 이 경로의 의미론은
-      // 이 함수의 다른 오염 가드와 같은 silent drop 이다 — 완주자의 완료 자체는 막지 않는다.
-      for (const qid of piiIds) {
-        if (!(qid in encrypted)) continue;
-        const storedBytes = Buffer.byteLength(JSON.stringify(encrypted[qid] ?? null), 'utf8');
-        if (storedBytes > MAX_ANSWER_VALUE_BYTES) delete encrypted[qid];
-      }
-      validatedResponses = encrypted;
-    }
+    validatedResponses = await encryptPiiAnswers(validatedResponses, gateRow);
   }
 
   const completedAt = new Date();
