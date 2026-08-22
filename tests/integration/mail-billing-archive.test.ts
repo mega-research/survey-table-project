@@ -30,7 +30,7 @@ vi.mock('@/db', () => ({
   },
 }));
 
-import { computeCycleBreakdown } from '@/server/mail/services/mail-billing.server';
+import { computeCycleBreakdown } from '@/server/mail/services/mail-billing-cycles';
 
 beforeEach(() => {
   selectResults.length = 0;

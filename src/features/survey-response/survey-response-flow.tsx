@@ -58,7 +58,7 @@ import {
   collectTableQuestionOptions,
   filterOptionTextsForSubmission,
 } from '@/utils/option-text-migration';
-import { allQuotaQuestionsAnswered } from '@/features/survey-response/lib/gate';
+import { allQuotaQuestionsAnswered } from '@/features/survey-response/lib/quota-gate';
 import { applyStructuralSurvival } from '@/lib/survey-response/structural-survival';
 import {
   buildAdminEmptyRequiredWarningMessage,

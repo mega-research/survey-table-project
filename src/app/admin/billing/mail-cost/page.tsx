@@ -9,7 +9,7 @@ import {
 import { CycleSelector } from '@/features/operations/mail-cost/cycle-selector';
 import { CycleSummaryTable } from '@/features/operations/mail-cost/cycle-summary-table';
 import { Card } from '@/components/ui/card';
-import { computeCycleBreakdown } from '@/server/mail/services/mail-billing.server';
+import { computeCycleBreakdown } from '@/server/mail/services/mail-billing-cycles';
 
 interface Props {
   searchParams: Promise<{ cycle?: string }>;
