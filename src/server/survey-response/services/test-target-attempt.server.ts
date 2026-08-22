@@ -12,7 +12,6 @@ export interface AcquireTestTargetResponseInput {
   contactTargetId: string;
   sessionId: string;
   attemptId: string;
-  versionId: string | null;
   currentStepId: string;
   visibleStepIndex?: number | null | undefined;
   visibleStepTotal?: number | null | undefined;
@@ -98,7 +97,7 @@ async function resetTestTargetResponse(
 export async function acquireTestTargetResponse(
   tx: DbTransaction,
   input: AcquireTestTargetResponseInput,
-): Promise<{ responseId: string; reset: boolean }> {
+): Promise<{ responseId: string; reset: boolean; versionId: string | null }> {
   const [survey] = await tx
     .select({ id: surveys.id, currentVersionId: surveys.currentVersionId })
     .from(surveys)
@@ -248,7 +247,10 @@ export async function acquireTestTargetResponse(
     })
     .where(eq(contactTargets.id, input.contactTargetId));
 
-  return { responseId: response.id, reset };
+  // 행에 기록된 실제 versionId 를 함께 돌려준다. 이 lane 은 버전 게이트를 타지 않고
+  // 언제나 현재 버전에 핀하므로(신규 INSERT·reset 모두 currentVersionId, reset 이 아니면
+  // 애초에 값이 같다) 클라이언트가 자기가 알던 버전과 비교해 재핀을 감지할 수 있다.
+  return { responseId: response.id, reset, versionId: survey.currentVersionId };
 }
 
 interface TestResponseWritableRow {

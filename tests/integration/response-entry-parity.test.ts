@@ -474,14 +474,22 @@ describe('T7 INSERT 키 집합 (A-2f-2 — 진척은 answer 가 아니라 입력
 });
 
 // ============================================================================
-// T8 — 대상자 테스트 lane 반환 (F-2 현행 박제)
+// T8 — 대상자 테스트 lane 반환 (A-2f-4 에서 F-2 를 뒤집었다).
+//
+// 예전에는 입력 versionId 를 그대로 돌려주었다. 그러면 클라이언트의
+// resolveRebasedVersionId 가 자기 값과 자기 값을 비교하게 되어 이 lane 에서만
+// 무중단 갈아타기 재핀 감지가 죽는다. 행에 적힌 값을 돌려주도록 뒤집었다.
 // ============================================================================
 describe.each(['first', 'blank'] as const)('T8 대상자 테스트 lane 반환 — %s', (kind: Kind) => {
-  it('행의 versionId 와 무관하게 입력 versionId 를 그대로 돌려준다 (F-2)', async () => {
+  it('입력이 아니라 행에 기록된 versionId 를 돌려준다', async () => {
     wireHappyPath();
     H.trackAMock.mockResolvedValue({ blocked: false, contactTargetId: 'c1', isTestTarget: true });
-    H.acquireMock.mockResolvedValue({ responseId: 'r-test', reset: false });
-    // saveTestTargetFirstAnswer 의 tx 내부 versionId select — 행은 다른 버전에 핀돼 있다.
+    // 행은 항상 현재 버전에 핀된다 — 입력(VERSION_ID)과 다른 값을 acquire 가 보고한다.
+    H.acquireMock.mockResolvedValue({
+      responseId: 'r-test',
+      reset: false,
+      versionId: 'row-version-999',
+    });
     H.selectLimitMock.mockResolvedValue([{ versionId: 'row-version-999' }]);
     H.updateReturningMock.mockResolvedValue([{ id: 'r-test' }]);
 
@@ -495,8 +503,10 @@ describe.each(['first', 'blank'] as const)('T8 대상자 테스트 lane 반환 �
       kind: 'created',
       id: 'r-test',
       contactTargetId: 'c1',
-      versionId: VERSION_ID,
+      versionId: 'row-version-999',
     });
+    // 입력을 되돌려주지 않는다는 것이 이 검사의 내용이다.
+    expect((result as { versionId?: string | null }).versionId).not.toBe(VERSION_ID);
     expect(H.acquireMock).toHaveBeenCalledOnce();
     // 버전 게이트와 수용 게이트를 타지 않는다 — 양쪽 공통(의도).
     expect(H.order).not.toContain('versionGate');
@@ -539,7 +549,6 @@ describe('T9 answer_value_too_large 는 DB 쓰기 이전에 차단된다', () =>
         contactTargetId: 'c1',
         sessionId: 'sess-a2',
         attemptId: '22222222-2222-4222-8222-222222222222',
-        versionId: VERSION_ID,
         currentStepId: 'step-1',
         questionId: 'q1',
         value: HUGE,

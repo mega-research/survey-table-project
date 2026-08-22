@@ -1343,7 +1343,7 @@ export async function saveDraftResponseIfActive(
 async function acquireTestTargetEntry(
   input: Parameters<typeof acquireTestTargetResponse>[1],
   firstAnswer?: { questionId: string; value: unknown },
-): Promise<{ responseId: string; reset: boolean }> {
+): Promise<{ responseId: string; reset: boolean; versionId: string | null }> {
   // 크기 가드: tx(컨택 FOR UPDATE 잠금 + 회차 INSERT) 이전에 평문으로 거른다.
   // 호출자(admitAndCreateResponseInner)가 아니라 이 함수 안에 두는 이유 —
   // saveTestTargetFirstAnswer 가 별도 export 진입점이라 호출자에만 두면 그 우회로가 무가드로 남는다.
@@ -1385,7 +1385,7 @@ export async function saveTestTargetFirstAnswer(
     questionId: string;
     value: unknown;
   },
-): Promise<{ responseId: string; reset: boolean }> {
+): Promise<{ responseId: string; reset: boolean; versionId: string | null }> {
   return acquireTestTargetEntry(input, { questionId: input.questionId, value: input.value });
 }
 
@@ -1578,7 +1578,6 @@ async function admitAndCreateResponseInner(
         contactTargetId,
         sessionId,
         attemptId,
-        versionId: versionId ?? null,
         currentStepId,
         visibleStepIndex,
         visibleStepTotal,
@@ -1595,8 +1594,10 @@ async function admitAndCreateResponseInner(
       kind: 'created',
       id: acquired.responseId,
       contactTargetId,
-      // 대상자 테스트 경로는 버전 게이트를 타지 않는다 — 행에 기록되는 값(입력 그대로)을 반환.
-      versionId: versionId ?? null,
+      // 대상자 테스트 경로는 버전 게이트를 타지 않고 언제나 현재 버전에 핀한다.
+      // 입력을 그대로 돌려주면 클라이언트가 자기 값과 자기 값을 비교하게 되어
+      // 이 lane 에서만 무중단 갈아타기 재핀 감지가 죽는다 — 행에 적힌 값을 돌려준다.
+      versionId: acquired.versionId,
     };
   }
 
