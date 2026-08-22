@@ -83,7 +83,10 @@ import {
 } from '@/types/survey';
 import { collectChoiceOptCells } from '@/utils/choice-source';
 import { isPartialNumericInput } from '@/utils/numeric-input';
-import { omitKey } from '@/utils/omit-key';
+import {
+  persistConditionRemaps,
+  settleCreatedQuestion,
+} from '@/features/survey-builder/lib/persist-question';
 import { getMaxSpssCode } from '@/utils/option-code-generator';
 import { collectRankingOptCells, hasExistingOtherRankingCell } from '@/utils/ranking-source';
 import { DEFAULT_REQUIRED_CELL_MESSAGE } from '@/utils/required-message';
@@ -205,7 +208,6 @@ export function CellContentModal({
   // 셀 저장은 tableRowsData 를 DB 에 즉시 커밋하는 비가역 지점이다 — 옵션 value 가 바뀌었으면
   // 이 표 질문을 참조하는 표시조건 리매핑과 그 영속(설문 저장)도 같은 지점에서 끝내야 한다.
   const remapOptionValueInConditions = useSurveyBuilderStore((s) => s.remapOptionValueInConditions);
-  const remapQuestionRefs = useSurveyBuilderStore((s) => s.remapQuestionRefs);
   const { saveSurveyScoped } = useSurveySync();
   const [isSaving, setIsSaving] = useState(false);
   const inputTemplateRef = useRef<HTMLInputElement>(null);
@@ -682,31 +684,10 @@ export function CellContentModal({
                       ),
                     },
                   }));
-                  // DB에 생성 완료 → added에서 제거 (다음 모달 저장 시 UPDATE 경로 사용)
-                  const remainingAdded = omitKey(
-                    readBuilderState().questionChanges.added,
-                    currentQuestionId,
-                  );
-                  writeBuilderState((state) => ({
-                    questionChanges: { ...state.questionChanges, added: remainingAdded },
-                  }));
                 }
-                // id를 넘겼으므로 반환 id가 다를 경우에만 스토어 id 갱신
-                if (createdQuestion?.id && createdQuestion.id !== currentQuestionId) {
-                  const newId = createdQuestion.id;
-                  writeBuilderState((state) => ({
-                    currentSurvey: {
-                      ...state.currentSurvey,
-                      questions: state.currentSurvey.questions.map((q) =>
-                        q.id === currentQuestionId ? { ...q, id: newId } : q,
-                      ),
-                    },
-                  }));
-                  // 스왑 직후 이 질문을 참조하는 조건(sourceQuestionId·expression 피연산자·
-                  // branchRule goto 대상)도 새 id 로 갱신 — 안 하면 참조가 temp id 로 끊긴다
-                  effectiveQuestionId = newId;
-                  remapScopes.push(remapQuestionRefs(currentQuestionId, newId));
-                }
+                const settled = settleCreatedQuestion(currentQuestionId, createdQuestion?.id);
+                if (settled.newQuestionId) effectiveQuestionId = settled.newQuestionId;
+                if (settled.remapScope) remapScopes.push(settled.remapScope);
               }
 
               // 새 옵션 value 가 DB 에 커밋된 직후 — 이 표 질문을 sourceQuestionId 로 참조하는
@@ -747,41 +728,7 @@ export function CellContentModal({
               // pending(질문 추가/삭제, 그룹 삭제 등)은 건드리지 않는다. 질문은 스코프 저장,
               // 그룹 조건은 그룹 전용 RPC 로 개별 영속한다 (전역 메타데이터 저장에 실으면
               // 미저장 제목 변경·그룹 삭제까지 동반 커밋된다).
-              const remapQuestionIds = [...new Set(remapScopes.flatMap((s) => s.questionIds))];
-              const remapGroupIds = [...new Set(remapScopes.flatMap((s) => s.groupIds))];
-              if (remapQuestionIds.length > 0 || remapGroupIds.length > 0) {
-                try {
-                  if (remapGroupIds.length > 0) {
-                    const { currentSurvey } = readBuilderState();
-                    await Promise.all(
-                      remapGroupIds.map((groupId) => {
-                        const group = currentSurvey.groups?.find((g) => g.id === groupId);
-                        if (!group?.displayCondition) return null;
-                        return client.surveyBuilder.groups.update({
-                          groupId,
-                          surveyId: currentSurvey.id,
-                          data: { displayCondition: group.displayCondition },
-                        });
-                      }),
-                    );
-                  }
-                  if (remapQuestionIds.length > 0) {
-                    await saveSurveyScoped({ questionIds: remapQuestionIds });
-                  } else {
-                    // 그룹만 변경: RPC 영속이 끝났으므로 남은 변경 기준으로 dirty 재계산
-                    readBuilderState().markSavedSnapshotClean();
-                  }
-                } catch (saveError) {
-                  if (remapGroupIds.length > 0) {
-                    // 그룹 RPC 실패 폴백 — 수동 저장(메타데이터 전체)으로 복구 가능하게 한다
-                    writeBuilderState({ isMetadataDirty: true, isDirty: true });
-                  }
-                  console.error('표시조건 리매핑 반영을 위한 설문 저장 실패:', saveError);
-                  toast.error(
-                    '조건 리매핑 저장에 실패했습니다. 설문 저장 버튼으로 다시 저장해 주세요.',
-                  );
-                }
-              }
+              await persistConditionRemaps(remapScopes, saveSurveyScoped);
             };
             try {
               await persistQuestion();

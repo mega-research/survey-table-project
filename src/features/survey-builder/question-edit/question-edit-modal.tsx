@@ -15,7 +15,6 @@ import {
   Table,
   Type,
 } from 'lucide-react';
-import { toast } from 'sonner';
 import { useShallow } from 'zustand/react/shallow';
 
 import { Button } from '@/components/ui/button';
@@ -25,6 +24,10 @@ import type { CompleteQuestionWrite } from '@/db/schema/question-persisted-field
 import { QuestionConditionEditor } from '@/features/survey-builder/condition/question-condition-editor';
 import { useEnsureSurveyInDb } from '@/features/survey-builder/hooks/use-ensure-survey-in-db';
 import { useSurveySync } from '@/features/survey-builder/hooks/use-survey-sync';
+import {
+  persistConditionRemaps,
+  settleCreatedQuestion,
+} from '@/features/survey-builder/lib/persist-question';
 import {
   createAddLevelOption,
   createAddOption,
@@ -46,7 +49,6 @@ import { client } from '@/shared/lib/rpc';
 import { isOptionListType } from '@/types/question-types';
 import { Question } from '@/types/survey';
 import { collectChoiceOptCells, resolveChoiceOptions } from '@/utils/choice-source';
-import { omitKey } from '@/utils/omit-key';
 import { collectRankingOptCells } from '@/utils/ranking-source';
 
 import { QuestionBasicTab } from './question-basic-tab';
@@ -128,7 +130,6 @@ function buildFormDataFromQuestion(question: Question): Partial<Question> {
 export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditModalProps) {
   const updateQuestion = useSurveyBuilderStore((s) => s.updateQuestion);
   const remapOptionValueInConditions = useSurveyBuilderStore((s) => s.remapOptionValueInConditions);
-  const remapQuestionRefs = useSurveyBuilderStore((s) => s.remapQuestionRefs);
   const setEditingQuestionId = useSurveyUIStore((s) => s.setEditingQuestionId);
   const questions = useSurveyBuilderStore(useShallow((s) => s.currentSurvey.questions));
   const question = questions.find((q) => q.id === questionId);
@@ -548,33 +549,8 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
             } satisfies CompleteQuestionWrite;
             const createdQuestion = await client.surveyBuilder.questions.create(createPayload);
 
-            if (createdQuestion?.id) {
-              // DB에 생성 완료 → added에서 제거 (다음 모달 저장 시 UPDATE 경로 사용)
-              const remainingAdded = omitKey(
-                useSurveyBuilderStore.getState().questionChanges.added,
-                questionId,
-              );
-              useSurveyBuilderStore.setState((state) => ({
-                questionChanges: {
-                  ...state.questionChanges,
-                  added: remainingAdded,
-                },
-              }));
-            }
-            if (createdQuestion?.id && createdQuestion.id !== questionId) {
-              const newId = createdQuestion.id;
-              useSurveyBuilderStore.setState((state) => ({
-                currentSurvey: {
-                  ...state.currentSurvey,
-                  questions: state.currentSurvey.questions.map((q) =>
-                    q.id === questionId ? { ...q, id: newId } : q,
-                  ),
-                },
-              }));
-              // 스왑 직후 이 질문을 참조하는 조건(sourceQuestionId·expression 피연산자·
-              // branchRule goto 대상)도 새 id 로 갱신 — 안 하면 참조가 temp id 로 끊긴다
-              remapScopes.push(remapQuestionRefs(questionId, newId));
-            }
+            const settled = settleCreatedQuestion(questionId, createdQuestion?.id);
+            if (settled.remapScope) remapScopes.push(settled.remapScope);
           }
         };
         try {
@@ -590,39 +566,7 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
       // 저장, 그룹 조건은 그룹 전용 RPC 로 개별 영속한다 (전역 메타데이터 저장에 실으면
       // 미저장 제목 변경·그룹 삭제까지 동반 커밋된다). 빌더에 대기 중인 무관한 pending 은
       // 건드리지 않는다.
-      const remapQuestionIds = [...new Set(remapScopes.flatMap((s) => s.questionIds))];
-      const remapGroupIds = [...new Set(remapScopes.flatMap((s) => s.groupIds))];
-      if (remapQuestionIds.length > 0 || remapGroupIds.length > 0) {
-        try {
-          if (remapGroupIds.length > 0) {
-            const { currentSurvey } = useSurveyBuilderStore.getState();
-            await Promise.all(
-              remapGroupIds.map((groupId) => {
-                const group = currentSurvey.groups?.find((g) => g.id === groupId);
-                if (!group?.displayCondition) return null;
-                return client.surveyBuilder.groups.update({
-                  groupId,
-                  surveyId: currentSurvey.id,
-                  data: { displayCondition: group.displayCondition },
-                });
-              }),
-            );
-          }
-          if (remapQuestionIds.length > 0) {
-            await saveSurveyScoped({ questionIds: remapQuestionIds });
-          } else {
-            // 그룹만 변경: RPC 영속이 끝났으므로 남은 변경 기준으로 dirty 재계산
-            useSurveyBuilderStore.getState().markSavedSnapshotClean();
-          }
-        } catch (error) {
-          if (remapGroupIds.length > 0) {
-            // 그룹 RPC 실패 폴백 — 수동 저장(메타데이터 전체)으로 복구 가능하게 한다
-            useSurveyBuilderStore.setState({ isMetadataDirty: true, isDirty: true });
-          }
-          console.error('표시조건 리매핑 반영을 위한 설문 저장 실패:', error);
-          toast.error('조건 리매핑 저장에 실패했습니다. 설문 저장 버튼으로 다시 저장해 주세요.');
-        }
-      }
+      await persistConditionRemaps(remapScopes, saveSurveyScoped);
 
       didSaveRef.current = true;
       onClose();
@@ -641,7 +585,6 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
     validateForm,
     updateQuestion,
     remapOptionValueInConditions,
-    remapQuestionRefs,
     saveSurveyScoped,
     onClose,
     question,
