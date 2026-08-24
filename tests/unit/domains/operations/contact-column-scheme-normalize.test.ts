@@ -26,6 +26,23 @@ describe('normalizeContactColumnScheme', () => {
     expect(result?.headerRow).toBe(3);
   });
 
+  it('반환값은 columns 를 무보호로 읽어도 안전하다 — 브랜디드 타입의 런타임 근거', () => {
+    // NormalizedContactColumnScheme 은 이 함수만 만들 수 있고, 소비 함수는 그 타입만 받는다.
+    // 타입 계약이 성립하려면 어떤 입력이 와도 columns 가 배열이어야 한다.
+    const inputs: unknown[] = [
+      { version: 1, headerRow: 1 },
+      { version: 1, headerRow: 1, columns: null },
+      { version: 1, headerRow: 1, columns: 'oops' },
+      { version: 1, headerRow: 1, columns: 42 },
+      { version: 1, headerRow: 1, columns: {} },
+      { version: 1, headerRow: 1, columns: [] },
+    ];
+    for (const input of inputs) {
+      const result = normalizeContactColumnScheme(input);
+      expect(Array.isArray(result?.columns)).toBe(true);
+    }
+  });
+
   it('columns 가 배열이면 그대로 통과시킨다', () => {
     const columns = [{ key: 'a', label: 'A', source: 'attrs.a' }];
     const result = normalizeContactColumnScheme({ version: 1, headerRow: 1, columns });

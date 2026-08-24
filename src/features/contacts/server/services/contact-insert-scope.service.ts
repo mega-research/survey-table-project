@@ -9,6 +9,8 @@ import {
   resolveWriteScopeIsTest,
   type OperationsDataScope,
 } from '@/lib/operations/data-scope.server';
+import { normalizeContactColumnScheme } from '@/lib/operations/contacts';
+import type { NormalizedContactColumnScheme } from '@/lib/operations/contacts';
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -22,7 +24,7 @@ interface SurveyScopeRow extends Record<string, unknown> {
 export interface PreparedContactInsertScope {
   scope: OperationsDataScope;
   isTest: boolean;
-  scheme: ContactColumnScheme | null;
+  scheme: NormalizedContactColumnScheme | null;
   existingCount: number;
 }
 
@@ -63,9 +65,12 @@ export async function prepareContactInsertScope(
     throw new Error('TEST_TARGET_LIMIT');
   }
 
-  const scheme = isTest
-    ? ensureTestContactColumns(survey.contact_columns, survey.test_contact_columns)
-    : survey.contact_columns;
+  // 잠금 아래 raw JSONB 를 읽는 지점이라 소비처로 내보내기 전에 형태를 보정한다.
+  const scheme = normalizeContactColumnScheme(
+    isTest
+      ? ensureTestContactColumns(survey.contact_columns, survey.test_contact_columns)
+      : survey.contact_columns,
+  );
 
   if (isTest && existingCount === 0) {
     await tx

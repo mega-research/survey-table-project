@@ -5,6 +5,8 @@ import { db } from '@/db';
 import { surveys } from '@/db/schema';
 import type { ContactColumnDef, ContactColumnScheme, ContactUploadMapping } from '@/db/schema/schema-types';
 import { piiKeyOf } from '@/lib/operations/contacts';
+import type { NormalizedContactColumnScheme } from '@/lib/operations/contacts';
+import { normalizeContactColumnScheme } from '@/lib/operations/contacts';
 
 export { getSchemeRouting, type SchemeRouting } from './match-contacts';
 
@@ -12,7 +14,7 @@ export { getSchemeRouting, type SchemeRouting } from './match-contacts';
  * surveys.contactColumns 에서 PII 로 마킹된 컬럼의 column_key set 을 추출.
  * 스킴이 없거나 PII 컬럼이 없으면 빈 set 반환.
  */
-function collectPiiKeys(scheme: ContactColumnScheme | null): Set<string> {
+function collectPiiKeys(scheme: NormalizedContactColumnScheme | null): Set<string> {
   const keys = new Set<string>();
   if (!scheme) return keys;
   for (const c of scheme.columns) {
@@ -26,7 +28,7 @@ function collectPiiKeys(scheme: ContactColumnScheme | null): Set<string> {
 /** DB 조회 없이 이미 잠금 아래 확정된 컬럼 스킴으로 attrs의 PII 평문을 제거한다. */
 export function sanitizeAttrsAgainstPiiScheme(
   attrs: Record<string, string>,
-  scheme: ContactColumnScheme | null,
+  scheme: NormalizedContactColumnScheme | null,
 ): Record<string, string> {
   const piiKeys = collectPiiKeys(scheme);
   if (piiKeys.size === 0) return attrs;
@@ -52,7 +54,7 @@ export async function sanitizeAttrsAgainstPii(
     .from(surveys)
     .where(eq(surveys.id, surveyId))
     .limit(1);
-  const scheme = (row?.contactColumns as ContactColumnScheme | null) ?? null;
+  const scheme = normalizeContactColumnScheme(row?.contactColumns ?? null);
   return sanitizeAttrsAgainstPiiScheme(attrs, scheme);
 }
 
@@ -68,7 +70,7 @@ const OPERATION_COLUMN_SOURCES = new Set([
  * 기존 컬럼의 라벨·숨김·순서는 보존하고 order 만 1부터 재부여한다.
  */
 export function appendNewColumnsToScheme(
-  scheme: ContactColumnScheme,
+  scheme: NormalizedContactColumnScheme,
   headerKeys: string[],
   mapping: ContactUploadMapping,
 ): ContactColumnScheme {

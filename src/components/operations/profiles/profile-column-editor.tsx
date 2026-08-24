@@ -9,17 +9,17 @@ import { Input } from '@/components/ui/input';
 import { hydrateProfileColumns } from '@/lib/operations/profile-columns';
 import { client } from '@/shared/lib/rpc';
 import type {
-  ContactColumnScheme,
   ProfileColumnDef,
   ProfileColumnScheme,
 } from '@/db/schema/schema-types';
+import type { NormalizedContactColumnScheme } from '@/lib/operations/contacts';
 
 interface Props {
   surveyId: string;
   /** surveys.profile_columns 현재 값 — NULL 이면 기본 스킴에서 시작 */
   initialScheme: ProfileColumnScheme | null;
   /** contact_columns 의 attrs./pii. 풀 — 조사 대상 정보 컬럼 소스 */
-  contactScheme: ContactColumnScheme | null;
+  contactScheme: NormalizedContactColumnScheme | null;
 }
 
 /** 소스 표기 — sys 는 시스템, attrs/pii 는 조사 대상 정보 출처를 드러낸다. */

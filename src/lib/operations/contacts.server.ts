@@ -32,6 +32,7 @@ import {
   type ContactsSortDir,
   type ContactsSortKey,
   normalizeContactColumnScheme,
+  type NormalizedContactColumnScheme,
 } from './contacts';
 import type { FilterClause } from './contacts-filters.server';
 import {
@@ -315,7 +316,7 @@ export const getContactColumnScheme = cache(
   async (
     surveyId: string,
     scope: OperationsDataScope,
-  ): Promise<ContactColumnScheme | null> => {
+  ): Promise<NormalizedContactColumnScheme | null> => {
     const [row] = await db
       .select({
         scheme: scope === 'test' ? surveys.testContactColumns : surveys.contactColumns,
