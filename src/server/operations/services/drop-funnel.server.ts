@@ -1,9 +1,9 @@
 import 'server-only';
 
-import { eq, sql } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { surveys, surveyVersions } from '@/db/schema';
+import { loadCurrentVersionSnapshot } from '@/server/read-models/version-snapshot';
 
 import {
   formatDropFunnel,
@@ -41,22 +41,7 @@ export async function getDropFunnel(
 ): Promise<DropFunnelOutput> {
   const isTest = testFlagForScope(scope);
   // ── A) 현재 published snapshot 로드 + 캐노니컬 step ──────────────────────────
-  const surveyRow = await db
-    .select({ currentVersionId: surveys.currentVersionId })
-    .from(surveys)
-    .where(eq(surveys.id, surveyId))
-    .limit(1);
-
-  const currentVersionId = surveyRow[0]?.currentVersionId;
-  if (!currentVersionId) return EMPTY_OUTPUT;
-
-  const versionRow = await db
-    .select({ snapshot: surveyVersions.snapshot })
-    .from(surveyVersions)
-    .where(eq(surveyVersions.id, currentVersionId))
-    .limit(1);
-
-  const snapshot = versionRow[0]?.snapshot ?? null;
+  const snapshot = await loadCurrentVersionSnapshot(surveyId);
   // 위치 목록 = 캐노니컬 step (page-dwell와 동일 stepId 체계). FunnelQuestion.id에 stepId를 담는다.
   const steps = snapshot ? buildCanonicalSteps(snapshot) : [];
   const questions: FunnelQuestion[] = steps.map((s) => ({

@@ -2,7 +2,8 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 import 'server-only';
 
 import { db } from '@/db';
-import { surveyResponses, surveyVersions } from '@/db/schema';
+import { surveyResponses } from '@/db/schema';
+import { loadVersionSnapshot } from '@/server/read-models/version-snapshot';
 import { decryptQuestionResponses } from '@/lib/crypto/response-pii';
 import { findContactByInviteToken } from '@/server/read-models/invite-lookup';
 import { logger } from '@/lib/logger';
@@ -75,12 +76,9 @@ async function migrateResumedRowIfStale(input: {
     return null;
   }
 
-  const [versionRow] = await db
-    .select({ snapshot: surveyVersions.snapshot })
-    .from(surveyVersions)
-    .where(eq(surveyVersions.id, currentVersionId))
-    .limit(1);
-  const snap = versionRow?.snapshot as { questions?: unknown } | null | undefined;
+  const snap = await loadVersionSnapshot(currentVersionId);
+  // 여기서는 snapshotQuestions 를 쓰지 않는다 — 구조가 깨졌을 때 빈 배열로 접으면
+  // 아래 생존 판정이 저장된 답을 전부 지운다. 배열이 아니면 이관 자체를 포기한다.
   if (!Array.isArray(snap?.questions)) return null;
 
   const questions = normalizeQuestions(snap.questions, 'preserve').map(toFlatQuestion);

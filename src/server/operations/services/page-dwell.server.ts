@@ -1,9 +1,9 @@
 import 'server-only';
 
-import { eq, sql } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 
 import { db } from '@/db';
-import { surveys, surveyVersions } from '@/db/schema';
+import { loadCurrentVersionSnapshot } from '@/server/read-models/version-snapshot';
 
 import {
   buildCanonicalSteps,
@@ -45,22 +45,7 @@ export async function getPageDwell(
 ): Promise<DwellOutput> {
   const isTest = testFlagForScope(scope);
   // ── A) snapshot 로드 + 캐노니컬 step ─────────────────────────────────────
-  const surveyRow = await db
-    .select({ currentVersionId: surveys.currentVersionId })
-    .from(surveys)
-    .where(eq(surveys.id, surveyId))
-    .limit(1);
-
-  const currentVersionId = surveyRow[0]?.currentVersionId;
-  if (!currentVersionId) return EMPTY_OUTPUT;
-
-  const versionRow = await db
-    .select({ snapshot: surveyVersions.snapshot })
-    .from(surveyVersions)
-    .where(eq(surveyVersions.id, currentVersionId))
-    .limit(1);
-
-  const snapshot = versionRow[0]?.snapshot ?? null;
+  const snapshot = await loadCurrentVersionSnapshot(surveyId);
   if (!snapshot) return EMPTY_OUTPUT;
 
   const steps = buildCanonicalSteps(snapshot);

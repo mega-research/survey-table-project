@@ -6,7 +6,6 @@ import {
   contactTargets,
   responseEditLogs,
   surveyResponses,
-  surveyVersions,
   surveys,
 } from '@/db/schema';
 import { SurveyOwnershipError } from '@/lib/auth/require-survey-ownership';
@@ -18,7 +17,10 @@ import { calculateProgressPct } from '@/lib/operations/response-progress';
 import { getProgressSnapshot } from './response-progress.server';
 import { withCalcValues } from '@/lib/survey/cell-formula';
 import { stripDisabledCellValues } from '@/lib/survey/cell-gating';
-import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
+import {
+  type StoredVersionSnapshot,
+  loadVersionSnapshot,
+} from '@/server/read-models/version-snapshot';
 import type { Question, SurveyLookup } from '@/types/survey';
 
 import type { SaveAdminEditInput } from '../domain/response-edit';
@@ -135,16 +137,9 @@ export async function saveAdminEdit(
   // 클라 diff 만으로는 "실제로 DB 값이 바뀐 질문"을 다 못 잡는다.)
   const clientChangedIds = diffQuestionResponses(prevResponses, questionResponses);
   // calc 셀 재계산(아래)에서도 재사용 — 변경이 없으면(=재계산 대상도 없음) 조회 자체를 skip.
-  let versionSnapshot: SurveyVersionSnapshot | null = null;
+  let versionSnapshot: StoredVersionSnapshot | null = null;
   if (clientChangedIds.length > 0) {
-    const [verRow] = effectiveVersionId
-      ? await db
-          .select({ snapshot: surveyVersions.snapshot })
-          .from(surveyVersions)
-          .where(eq(surveyVersions.id, effectiveVersionId))
-          .limit(1)
-      : [];
-    versionSnapshot = (verRow?.snapshot ?? null) as SurveyVersionSnapshot | null;
+    versionSnapshot = await loadVersionSnapshot(effectiveVersionId);
   }
 
   // 이탈(drop) 완료 전환 여부 — 아래 UPDATE set 과 progress 분기, 컨택 후처리가 공유한다.

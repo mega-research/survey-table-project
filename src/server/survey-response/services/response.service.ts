@@ -26,6 +26,11 @@ import { sumActiveSeconds } from '@/lib/operations/active-seconds';
 import { parseBrowser, parsePlatform } from '@/lib/operations/parse-ua';
 import { readOptTextsSidecar } from '@/lib/option-text-read';
 import { loadCompletedPlainAnswers } from '@/server/read-models/completed-answers.server';
+import {
+  loadVersionSnapshot,
+  snapshotLookups,
+  snapshotQuestions,
+} from '@/server/read-models/version-snapshot';
 import { countCell, deriveCategoryIds, findTarget } from '@/lib/quota/matching';
 import { getSurveyControlFlags, isValidTestToken } from '@/server/read-models/survey-control';
 import type { TestResponseResetFields } from './reset-test-response.server';
@@ -1966,16 +1971,10 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
     piiIds: Set<string>;
   } | null = null;
   if (gateRow?.versionId) {
-    const [versionRow] = await db
-      .select({ snapshot: surveyVersions.snapshot })
-      .from(surveyVersions)
-      .where(eq(surveyVersions.id, gateRow.versionId))
-      .limit(1);
-    const snap = versionRow?.snapshot as unknown as
-      { questions?: unknown; lookups?: unknown } | null | undefined;
-    // JSONB 스키마 드리프트 방어 — 비배열이면 순회에서 크래시하므로 Array.isArray 로 거른다.
-    const snapQuestions = Array.isArray(snap?.questions) ? (snap.questions as Question[]) : [];
-    const snapLookups = Array.isArray(snap?.lookups) ? (snap.lookups as SurveyLookup[]) : [];
+    // JSONB 스키마 드리프트 방어(비배열 → 빈 배열)는 snapshot* 헬퍼가 맡는다.
+    const snap = await loadVersionSnapshot(gateRow.versionId);
+    const snapQuestions = snapshotQuestions(snap);
+    const snapLookups = snapshotLookups(snap);
     const hasCalcCells = snapQuestions.some((q) =>
       (q.tableRowsData ?? []).some((row) => row.cells.some((c) => c.type === 'calc' && c.formula)),
     );

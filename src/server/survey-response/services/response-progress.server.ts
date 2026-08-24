@@ -1,11 +1,7 @@
 import 'server-only';
 import { cache } from 'react';
 
-import { eq } from 'drizzle-orm';
-
-import { db } from '@/db';
-import { surveyVersions } from '@/db/schema';
-import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
+import { loadVersionSnapshot, snapshotQuestions } from '@/server/read-models/version-snapshot';
 
 /**
  * 특정 version 의 snapshot 에서 question position map 과 총 질문 수를 얻는다.
@@ -19,14 +15,7 @@ export const getProgressSnapshot = cache(
   ): Promise<{ positionMap: Map<string, number>; totalQuestions: number }> => {
     if (!versionId) return { positionMap: new Map(), totalQuestions: 0 };
 
-    const [row] = await db
-      .select({ snapshot: surveyVersions.snapshot })
-      .from(surveyVersions)
-      .where(eq(surveyVersions.id, versionId))
-      .limit(1);
-
-    const snapshot = (row?.snapshot ?? null) as SurveyVersionSnapshot | null;
-    const questions = snapshot?.questions ?? [];
+    const questions = snapshotQuestions(await loadVersionSnapshot(versionId));
     const positionMap = new Map<string, number>();
     questions.forEach((q, i) => positionMap.set(q.id, i + 1));
     return { positionMap, totalQuestions: questions.length };
