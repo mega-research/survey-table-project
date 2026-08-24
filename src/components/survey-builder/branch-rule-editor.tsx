@@ -40,8 +40,10 @@ export function BranchRuleEditor({
   const currentIndex = allQuestions.findIndex((q) => q.id === currentQuestionId);
   const availableQuestions = allQuestions.filter((_, index) => index > currentIndex);
 
-  // branchRule prop이 변경될 때 state 동기화
-  useEffect(() => {
+  // branchRule prop이 변경될 때 state 동기화 — effect 대신 렌더 중 조정 패턴
+  const [prevBranchRule, setPrevBranchRule] = useState(branchRule);
+  if (prevBranchRule !== branchRule) {
+    setPrevBranchRule(branchRule);
     if (branchRule) {
       setEnabled(true);
       setAction(branchRule.action || 'goto');
@@ -51,7 +53,7 @@ export function BranchRuleEditor({
       setAction('goto');
       setTargetQuestionId('');
     }
-  }, [branchRule]);
+  }
 
   useEffect(() => {
     if (!enabled) {

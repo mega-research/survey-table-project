@@ -69,4 +69,29 @@ describe('분할 워크북 메타 컬럼', () => {
     expect(ws1.getRow(1).getCell(1).value).toBe('시스템ID');
     expect(ws1.getRow(1).getCell(2).value).toBe('순번');
   });
+
+  it('코딩북도 일반 Raw Data와 같은 9개 SPSS 감사 열을 제공한다', () => {
+    const wb = buildSplitWorkbook([basisQ, textQ], [row], 'qb', CTX);
+    const codebook = wb.getWorksheet('코딩북')!;
+
+    expect([1, 2, 3, 4, 5, 6, 7, 8, 9].map((c) => codebook.getRow(1).getCell(c).value)).toEqual([
+      '변수번호',
+      'SPSS 변수명',
+      '질문 제목',
+      '셀라벨',
+      '값 라벨',
+      '변수 유형',
+      '측정 수준',
+      '표시 형식',
+      '다중응답 세트',
+    ]);
+
+    const q1Row = codebook.getColumn(2).values.findIndex((value) => value === 'Q1');
+    expect([6, 7, 8, 9].map((c) => codebook.getRow(q1Row).getCell(c).value ?? '')).toEqual([
+      'Numeric',
+      'Nominal',
+      'F8.0',
+      '',
+    ]);
+  });
 });

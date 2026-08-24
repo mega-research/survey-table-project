@@ -15,15 +15,31 @@ import {
 } from '@/db/schema/mail';
 import {
   getCampaignDetail,
+  listCampaignRecipientFacets,
   listCampaignRecipients,
 } from '@/lib/operations/campaigns.server';
 import { getOperationsDataScope } from '@/lib/operations/data-scope.server';
+import { RECIPIENT_FILTER_SOURCE, withNoneOption } from '@/lib/operations/filter-shared';
+import {
+  parseHeaderFilterEntries,
+  splitHeaderValues,
+} from '@/lib/operations/header-filter-url';
 
 const PAGE_SIZE = 25;
 
 interface Props {
   params: Promise<{ id: string; cid: string }>;
-  searchParams: Promise<{ recipPage?: string; status?: string; q?: string }>;
+  searchParams: Promise<{
+    recipPage?: string;
+    status?: string;
+    /** 수신자 이메일 검색. 깔때기 적용이 지우는 빌더 파라미터('q')와 충돌하지 않도록 'rq'. */
+    rq?: string;
+    /** @deprecated 구 URL 호환 — 신규 링크는 rq 를 쓴다. */
+    q?: string;
+    hcol?: string | string[];
+    hm?: string | string[];
+    hv?: string | string[];
+  }>;
 }
 
 const STATUS_LABEL: Record<MailCampaignStatus, { label: string; tone: string }> = {
@@ -34,6 +50,15 @@ const STATUS_LABEL: Record<MailCampaignStatus, { label: string; tone: string }> 
   partial: { label: '부분 완료', tone: 'bg-orange-100 text-orange-700' },
   cancelled: { label: '취소됨', tone: 'bg-rose-100 text-rose-700' },
 };
+
+function toSearchParams(input: Record<string, string | string[] | undefined>): URLSearchParams {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(input)) {
+    if (value === undefined) continue;
+    for (const v of Array.isArray(value) ? value : [value]) params.append(key, v);
+  }
+  return params;
+}
 
 function parsePage(value: string | undefined): number {
   const n = parseInt(value ?? '1', 10);
@@ -58,22 +83,57 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
   const scope = await getOperationsDataScope(surveyId);
   const recipPage = parsePage(sp.recipPage);
   const statuses = parseStatuses(sp.status);
-  const q = (sp.q ?? '').trim();
+  const q = (sp.rq ?? sp.q ?? '').trim();
+
+  // 깔때기(hcol/hm/hv) — 이 화면이 이해하는 두 축만 좁게 수용한다.
+  const headerEntries = parseHeaderFilterEntries(
+    toSearchParams({ hcol: sp.hcol, hm: sp.hm, hv: sp.hv }),
+  ).filter(
+    (e) =>
+      e.mode === 'in' &&
+      (e.source === RECIPIENT_FILTER_SOURCE.GROUP ||
+        e.source === RECIPIENT_FILTER_SOURCE.ERROR ||
+        e.source === RECIPIENT_FILTER_SOURCE.RESULT),
+  );
+  const facetValuesOf = (source: string): string[] => {
+    const entry = headerEntries.find((e) => e.source === source);
+    return entry ? splitHeaderValues(entry.hv) : [];
+  };
+  const groupValues = facetValuesOf(RECIPIENT_FILTER_SOURCE.GROUP);
+  const errorReasons = facetValuesOf(RECIPIENT_FILTER_SOURCE.ERROR);
+  const resultCodes = facetValuesOf(RECIPIENT_FILTER_SOURCE.RESULT);
 
   const campaign = await getCampaignDetail(surveyId, cid, scope);
   if (!campaign) {
     notFound();
   }
 
-  const recipients = await listCampaignRecipients({
-    surveyId,
-    campaignId: cid,
-    scope,
-    page: recipPage,
-    pageSize: PAGE_SIZE,
-    statuses,
-    q,
-  });
+  const [recipients, facets] = await Promise.all([
+    listCampaignRecipients({
+      surveyId,
+      campaignId: cid,
+      scope,
+      page: recipPage,
+      pageSize: PAGE_SIZE,
+      statuses,
+      q,
+      groupValues,
+      errorReasons,
+      resultCodes,
+    }),
+    listCampaignRecipientFacets({ surveyId, campaignId: cid, scope }),
+  ]);
+
+  // 깔때기 체크박스 선택지 — 빈 값 항목은 실제로 그런 행이 있을 때만 내민다.
+  const groupOptions = facets.hasEmptyGroup
+    ? withNoneOption(facets.groupValues.map((v) => ({ value: v, label: v })))
+    : facets.groupValues.map((v) => ({ value: v, label: v }));
+  const errorOptions = facets.hasEmptyError
+    ? withNoneOption(facets.errorReasons.map((v) => ({ value: v, label: v })))
+    : facets.errorReasons.map((v) => ({ value: v, label: v }));
+  const resultOptions = facets.hasEmptyResult
+    ? withNoneOption(facets.resultCodes.map((v) => ({ value: v, label: v })))
+    : facets.resultCodes.map((v) => ({ value: v, label: v }));
 
   const success = campaign.deliveredCount + campaign.openedCount;
   const errors = campaign.bouncedCount + campaign.failedCount + campaign.complainedCount;
@@ -94,6 +154,13 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
     reuseFilter.append('col', c.source);
     reuseFilter.append('q', c.value);
     reuseFilter.append('op', c.op ?? '');
+  }
+  // 깔때기 필터도 함께 재현한다 — 빠뜨리면 자동 전체 선택(autoSelectAll)이
+  // 원래 캠페인보다 넓은 명단을 고른다.
+  for (const c of campaign.filterSnapshot.headerClauses ?? []) {
+    reuseFilter.append('hcol', c.source);
+    reuseFilter.append('hm', c.mode);
+    reuseFilter.append('hv', c.hv);
   }
   reuseFilter.set('unresponded', '1');
   reuseFilter.set('templateId', campaign.mailTemplateId ?? '');
@@ -220,6 +287,10 @@ export default async function CampaignDetailPage({ params, searchParams }: Props
         pageSize={PAGE_SIZE}
         currentStatuses={statuses}
         currentQuery={q}
+        headerEntries={headerEntries}
+        groupOptions={groupOptions}
+        errorOptions={errorOptions}
+        resultOptions={resultOptions}
       />
     </main>
   );

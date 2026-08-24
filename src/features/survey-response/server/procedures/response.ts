@@ -9,6 +9,7 @@ import {
   SaveDraftResponseOutput,
   SurveyResponseRowSchema,
   UpdateQuestionResponseInput,
+  CompleteResponseOutput,
 } from '../../domain/response';
 import * as svc from '../services/response.service';
 
@@ -38,7 +39,11 @@ const saveDraft = draftRateLimited
   .output(SaveDraftResponseOutput)
   .handler(async ({ input }) => {
     const result = await svc.saveDraftResponse(input);
-    return { ok: true as const, applied: result.applied };
+    return {
+      ok: true as const,
+      applied: result.applied,
+      ...(result.concluded ? { concluded: true } : {}),
+    };
   });
 
 /**
@@ -62,7 +67,7 @@ const createBlank = rateLimited
  */
 const complete = rateLimited
   .input(CompleteResponseInput)
-  .output(SurveyResponseRowSchema)
+  .output(CompleteResponseOutput)
   .handler(({ input }) => svc.completeResponse(input));
 
 export const response = {

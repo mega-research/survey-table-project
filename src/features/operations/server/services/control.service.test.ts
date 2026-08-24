@@ -1,13 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { setPaused } from './control.service';
+import { getControlState, setPaused } from './control.service';
 
 // db.update().set().where().returning() 체인의 set 페이로드와 where 조건을 캡처하도록 stub.
 const capturedSets: Array<Record<string, unknown>> = [];
 let returningRows: Array<Record<string, unknown>> = [];
 
+let selectRows: Array<Record<string, unknown>> = [];
+
 vi.mock('@/db', () => ({
   db: {
+    select: vi.fn(() => ({
+      from: vi.fn(() => ({
+        where: vi.fn(() => ({
+          limit: vi.fn(async () => selectRows),
+        })),
+      })),
+    })),
     update: vi.fn(() => ({
       set: vi.fn((payload: Record<string, unknown>) => {
         capturedSets.push(payload);
@@ -27,6 +36,7 @@ const SURVEY_ID = '11111111-1111-4111-8111-111111111111';
 beforeEach(() => {
   capturedSets.length = 0;
   returningRows = [];
+  selectRows = [];
   vi.clearAllMocks();
 });
 
@@ -66,5 +76,12 @@ describe('setPaused pausedMessage 3분기', () => {
     expect('pausedMessage' in capturedSets[0]!).toBe(true);
     expect(capturedSets[0]!['pausedMessage']).toBeNull();
     expect(res).toEqual({ isPaused: true, pausedMessage: null });
+  });
+});
+
+describe('getControlState 설문 부재', () => {
+  it('미저장/삭제 설문이면 throw 대신 null — 편집 헤더의 테스트 모드 버튼이 폴링마다 500 을 쌓지 않는다', async () => {
+    selectRows = [];
+    await expect(getControlState(SURVEY_ID)).resolves.toBeNull();
   });
 });

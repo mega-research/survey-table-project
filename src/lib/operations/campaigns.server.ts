@@ -37,8 +37,9 @@ import {
 import {
   buildContactsFilterSql,
   latestResultCodeExpr,
+  matchedResponseSubquery,
 } from '@/lib/operations/contacts-filter-sql';
-import { escapeLikePattern } from '@/lib/operations/filter-shared';
+import { escapeLikePattern, FILTER_NONE_VALUE } from '@/lib/operations/filter-shared';
 import type { FilterClause } from '@/lib/operations/contacts-filters.server';
 import {
   campaignScopeCondition,
@@ -270,6 +271,8 @@ export interface CampaignRecipientRow {
   contactTargetId: string | null;
   contactResid: number | null;
   contactGroupValue: string | null;
+  /** 컨택 최신 회차의 result_code — 조사 대상 목록의 컨택결과 컬럼과 같은 값. */
+  latestResultCode: string | null;
   emailMasked: string;
   status: MailRecipientStatus;
   /** contact_targets.unsubscribed_at — 발송 status 와 별도. 수신거부 후 badge 표시용. */
@@ -289,6 +292,126 @@ export interface ListCampaignRecipientsResult {
   page: number;
 }
 
+/**
+ * 수신자 목록 깔때기가 보는 두 축의 표현식.
+ * 빈 문자열은 NULL 과 같은 "없음" 으로 접는다 — 표가 둘 다 '—'/공백 으로 그리므로
+ * 화면과 필터가 어긋나지 않게 하려면 여기서 합쳐야 한다.
+ */
+const RECIPIENT_GROUP_EXPR = sql`NULLIF(${contactTargets.groupValue}, '')`;
+const RECIPIENT_ERROR_EXPR = sql`NULLIF(${mailRecipients.errorReason}, '')`;
+// 컨택결과는 조사 대상 목록과 같은 표현식을 공유한다 — 두 화면이 같은 값을 보여야 한다.
+// latestResultCodeExpr 는 "contact_targets"."id" 로 상관되므로 이 쿼리의 LEFT JOIN 별칭과 맞는다.
+const RECIPIENT_RESULT_EXPR = sql`NULLIF(${latestResultCodeExpr}, '')`;
+
+/**
+ * 깔때기 값 목록 → WHERE 조건. FILTER_NONE_VALUE 는 IS NULL 로 승격시켜 OR 결합한다
+ * (NULL 은 IN 목록으로 표현 불가). 값이 없으면 null 반환 = 조건 미부착(전체).
+ */
+function buildRecipientFacetCond(expr: SQL, values: string[] | undefined): SQL | null {
+  if (!values || values.length === 0) return null;
+  const concrete = values.filter((v) => v !== FILTER_NONE_VALUE);
+  const includeNull = concrete.length !== values.length;
+  const parts: SQL[] = [];
+  if (concrete.length > 0) {
+    parts.push(
+      sql`${expr} IN (${sql.join(
+        concrete.map((v) => sql`${v}`),
+        sql`, `,
+      )})`,
+    );
+  }
+  if (includeNull) parts.push(sql`${expr} IS NULL`);
+  if (parts.length === 0) return null;
+  return sql`(${sql.join(parts, sql` OR `)})`;
+}
+
+export interface CampaignRecipientFacets {
+  /** 이 캠페인 수신자에 실제로 등장하는 그룹 값 (NULL 제외, 오름차순) */
+  groupValues: string[];
+  /** 이 캠페인 수신자에 실제로 등장하는 반송/실패 사유 (NULL 제외, 오름차순) */
+  errorReasons: string[];
+  /** 이 캠페인 수신자에 실제로 등장하는 컨택결과 코드 (NULL 제외, 오름차순) */
+  resultCodes: string[];
+  /** 그룹 없음 행이 존재하는지 — 빈 값 선택지 노출 판단용 */
+  hasEmptyGroup: boolean;
+  /** 사유 없음 행이 존재하는지 */
+  hasEmptyError: boolean;
+  /** 컨택결과 없음 행이 존재하는지 */
+  hasEmptyResult: boolean;
+}
+
+/** 깔때기 체크박스 목록이 너무 길어지지 않도록 하는 상한. 초과분은 잘라서 노출한다. */
+const FACET_LIMIT = 200;
+
+/**
+ * 수신자 목록 깔때기의 distinct 값 목록.
+ *
+ * 필터 자체와 같은 scope·archived 가드를 걸되 현재 걸린 깔때기 조건은 빼고 센다 —
+ * 엑셀 오토필터처럼 "지금 고를 수 있는 값 전체" 를 보여주기 위함이다. 조건을 함께
+ * 걸면 한 값을 고르는 순간 나머지 선택지가 사라져 해제 외에는 조작이 불가능해진다.
+ */
+export async function listCampaignRecipientFacets(args: {
+  surveyId: string;
+  campaignId: string;
+  scope: OperationsDataScope;
+}): Promise<CampaignRecipientFacets> {
+  const where = and(
+    eq(mailRecipients.campaignId, args.campaignId),
+    eq(mailCampaigns.surveyId, args.surveyId),
+    campaignScopeCondition(args.scope),
+    isNull(mailCampaigns.archivedAt),
+    isNull(mailRecipients.archivedAt),
+  )!;
+
+  /**
+   * 축 하나의 distinct 값 + 빈 값 존재 여부.
+   *
+   * 축을 합쳐 한 번에 DISTINCT 하면 (그룹 × 사유 × 결과코드) 조합 수만큼 행이 나온다.
+   * 반송 사유처럼 행마다 거의 고유한 값이 섞이면 수신자 수만큼이 그대로 앱으로 넘어오므로,
+   * 축별로 나눠 LIMIT 을 SQL 에 내려 전송량을 상한에 묶는다.
+   *
+   * NULLS FIRST 는 hasEmpty 판정을 LIMIT 에서 보호한다 — 빈 값이 창 밖으로 밀리면
+   * 실제로는 있는 "없음" 선택지가 사라진다.
+   */
+  const facetOf = async (expr: SQL): Promise<{ values: string[]; hasEmpty: boolean }> => {
+    const rows = await db
+      .selectDistinct({ v: sql<string | null>`${expr}` })
+      .from(mailRecipients)
+      .innerJoin(mailCampaigns, eq(mailRecipients.campaignId, mailCampaigns.id))
+      .leftJoin(contactTargets, eq(mailRecipients.contactTargetId, contactTargets.id))
+      .where(where)
+      // ORDER BY 1 (위치 지정) 필수 — 식을 다시 쓰면 DISTINCT select list 와 다른 식으로
+      // 취급돼 PG 가 거부한다 (contact-attr-values.service 와 같은 함정).
+      .orderBy(sql`1 ASC NULLS FIRST`)
+      .limit(FACET_LIMIT + 2);
+
+    const hasEmpty = rows.some((r) => r.v == null);
+    const values = rows
+      .map((r) => r.v)
+      // 센티널과 같은 실제 값은 선택지에서 제외한다 — 노출하면 파서가 빈 값으로 승격시켜
+      // 화면에 보이는 값과 다른 행이 걸린다 (FILTER_NONE_VALUE 주석 참조).
+      .filter((v): v is string => v != null && v !== FILTER_NONE_VALUE)
+      .sort((a, b) => a.localeCompare(b, 'ko-KR'))
+      .slice(0, FACET_LIMIT);
+    return { values, hasEmpty };
+  };
+
+  const [group, error, result] = await Promise.all([
+    facetOf(RECIPIENT_GROUP_EXPR),
+    facetOf(RECIPIENT_ERROR_EXPR),
+    facetOf(RECIPIENT_RESULT_EXPR),
+  ]);
+
+  return {
+    groupValues: group.values,
+    errorReasons: error.values,
+    resultCodes: result.values,
+    hasEmptyGroup: group.hasEmpty,
+    hasEmptyError: error.hasEmpty,
+    hasEmptyResult: result.hasEmpty,
+  };
+}
+
 export async function listCampaignRecipients(args: {
   surveyId: string;
   campaignId: string;
@@ -298,6 +421,12 @@ export async function listCampaignRecipients(args: {
   /** 필터할 status 목록. 빈 배열 또는 미지정 = 전체. */
   statuses?: MailRecipientStatus[];
   q?: string;
+  /** 깔때기 — contact_targets.group_value. FILTER_NONE_VALUE 는 그룹 없음(NULL). */
+  groupValues?: string[];
+  /** 깔때기 — mail_recipients.error_reason. FILTER_NONE_VALUE 는 사유 없음(NULL/빈 문자열). */
+  errorReasons?: string[];
+  /** 깔때기 — 컨택 최신 회차 result_code. FILTER_NONE_VALUE 는 결과 없음(NULL). */
+  resultCodes?: string[];
 }): Promise<ListCampaignRecipientsResult> {
   const pageSize = args.pageSize ?? DEFAULT_PAGE_SIZE;
   const whereParts: SQL[] = [
@@ -316,12 +445,21 @@ export async function listCampaignRecipients(args: {
     const escaped = escapeLikePattern(q);
     whereParts.push(sql`${mailRecipients.emailSnapshot} ILIKE ${'%' + escaped + '%'}`);
   }
+  const groupCond = buildRecipientFacetCond(RECIPIENT_GROUP_EXPR, args.groupValues);
+  if (groupCond) whereParts.push(groupCond);
+  const errorCond = buildRecipientFacetCond(RECIPIENT_ERROR_EXPR, args.errorReasons);
+  if (errorCond) whereParts.push(errorCond);
+  const resultCond = buildRecipientFacetCond(RECIPIENT_RESULT_EXPR, args.resultCodes);
+  if (resultCond) whereParts.push(resultCond);
   const where = and(...whereParts)!;
 
   const [countRow] = await db
     .select({ total: sql<number>`count(*)::int` })
     .from(mailRecipients)
     .innerJoin(mailCampaigns, eq(mailRecipients.campaignId, mailCampaigns.id))
+    // where 가 컨택 상관 조건(그룹·최근 결과코드)을 담을 수 있으므로 행 조회와 같은
+    // 조인 집합을 가져야 한다. 빠뜨리면 PG 가 missing FROM-clause entry 로 거절한다.
+    .leftJoin(contactTargets, eq(mailRecipients.contactTargetId, contactTargets.id))
     .where(where);
   const total = countRow?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -334,6 +472,7 @@ export async function listCampaignRecipients(args: {
       contactTargetId: mailRecipients.contactTargetId,
       contactResid: contactTargets.resid,
       contactGroupValue: contactTargets.groupValue,
+      contactLatestResultCode: sql<string | null>`${RECIPIENT_RESULT_EXPR}`,
       contactUnsubscribedAt: contactTargets.unsubscribedAt,
       email: mailRecipients.emailSnapshot,
       status: mailRecipients.status,
@@ -359,6 +498,7 @@ export async function listCampaignRecipients(args: {
       contactTargetId: r.contactTargetId,
       contactResid: r.contactResid,
       contactGroupValue: r.contactGroupValue,
+      latestResultCode: r.contactLatestResultCode,
       emailMasked: maskEmail(r.email),
       status: r.status as MailRecipientStatus,
       unsubscribedAt: r.contactUnsubscribedAt,
@@ -391,6 +531,13 @@ export interface CampaignCandidateRow {
   groupValue: string | null;
   attrs: Record<string, string>;
   respondedAt: Date | null;
+  /**
+   * 매칭 응답의 status — 표시와 필터가 같은 축을 보게 하는 값.
+   * respondedAt 은 완료 시각만 담아 진행중·이탈을 미응답과 구분하지 못한다.
+   */
+  responseStatus: string | null;
+  /** 미완료 응답의 진척률 — 상태 pill 의 부속 표시 (조사 대상 목록과 같은 규칙). */
+  progressPct: number | null;
   latestResultCode: string | null;
   /** 가장 최근 단체 메일에서의 수신 status. 발송 이력 없으면 null — 재전송 명단 대조용. */
   latestMailStatus: MailRecipientStatus | null;
@@ -687,9 +834,14 @@ function buildCandidateOrderBy(
   scope: OperationsDataScope,
 ): SQL {
   if (sort === 'responded') {
+    // 표시(responseStatus)·필터(webStatusCondSql)와 같은 매칭의 활동 시각을 축으로 쓴다.
+    // respondedAt 은 완료 시각만 담아 진행중·이탈이 전부 NULL 로 동률이 된다 — 정렬이
+    // 성립하지 않고, 세 축이 갈라지면 화면에서 납득 불가능한 순서가 나온다.
+    // asc = 활동 없음(미응답) 먼저, desc = 최근 활동 먼저 (기존 방향 의미 보존).
+    const activityAt = matchedResponseSubquery(sql`COALESCE(completed_at, last_activity_at)`);
     return dir === 'asc'
-      ? sql`${contactTargets.respondedAt} ASC NULLS FIRST`
-      : sql`${contactTargets.respondedAt} DESC NULLS LAST`;
+      ? sql`${activityAt} ASC NULLS FIRST`
+      : sql`${activityAt} DESC NULLS LAST`;
   }
   const col =
     sort === 'resultCode'
@@ -750,6 +902,14 @@ export async function previewCampaignCandidates(args: {
       groupValue: contactTargets.groupValue,
       attrs: contactTargets.attrs,
       respondedAt: contactTargets.respondedAt,
+      // 표시·필터가 같은 매칭(matchedResponseSubquery)을 공유해야 한다 — 갈라지면
+      // "진행 중" 으로 거른 행이 표에서는 "미응답" 으로 보인다.
+      responseStatus: sql<string | null>`${matchedResponseSubquery(sql`status`)}`.as(
+        'response_status',
+      ),
+      progressPct: sql<number | null>`${matchedResponseSubquery(sql`progress_pct`)}`.as(
+        'progress_pct',
+      ),
       latestResultCode: latestResultCodeExpr.as('latest_result_code'),
       latestMailStatus: latestMailStatusExpr(args.scope).as('latest_mail_status'),
     })
@@ -773,6 +933,8 @@ export async function previewCampaignCandidates(args: {
       groupValue: r.groupValue,
       attrs: (r.attrs ?? {}) as Record<string, string>,
       respondedAt: r.respondedAt,
+      responseStatus: r.responseStatus,
+      progressPct: r.progressPct,
       latestResultCode: r.latestResultCode,
       latestMailStatus: r.latestMailStatus,
     })),

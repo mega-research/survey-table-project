@@ -8,14 +8,21 @@ import type { RenderStep } from '@/lib/group-ordering';
 import type { Question, QuestionGroup, Survey } from '@/types/survey';
 import type { BranchEvalCtx } from '@/utils/branch-logic';
 
-// RPC client 모킹 — 응답 쓰기 경로(createWithFirstAnswer/createBlank/complete)만 사용.
+// RPC client 모킹 — 응답 쓰기 경로(createWithFirstAnswer/createBlank/complete) +
+// mutation 실패 시 handlePausedMutationError 가 재조회하는 publicRead.forResponse.
 const createWithFirstAnswer = vi.fn();
 const createBlank = vi.fn();
 const complete = vi.fn();
 const saveDraft = vi.fn();
+const forResponse = vi.fn();
 
 vi.mock('@/shared/lib/rpc', () => ({
   client: {
+    surveyBuilder: {
+      publicRead: {
+        forResponse: (...args: unknown[]) => forResponse(...args),
+      },
+    },
     surveyResponse: {
       response: {
         createWithFirstAnswer: (...args: unknown[]) => createWithFirstAnswer(...args),
@@ -110,6 +117,10 @@ describe('useResponseLifecycle - handleResponse INSERT 가드', () => {
     saveDraft.mockReset();
     createWithFirstAnswer.mockResolvedValue({ id: 'resp-1', contactTargetId: 'c1' });
     saveDraft.mockResolvedValue({ ok: true, applied: true });
+    // 저장 실패 테스트에서 중단 상태 재확인(refetch)이 undefined 를 만나 TypeError 소음을
+    // 내지 않도록 기본값을 채운다 — 중단 아님(isPaused false) = 일반 에러 처리 폴백.
+    forResponse.mockReset();
+    forResponse.mockResolvedValue({ control: { isPaused: false, pausedMessage: null } });
     window.localStorage.clear();
   });
 
@@ -383,6 +394,8 @@ describe('useResponseLifecycle - handleSubmit', () => {
     createBlank.mockReset();
     complete.mockReset();
     complete.mockResolvedValue(undefined);
+    forResponse.mockReset();
+    forResponse.mockResolvedValue({ control: { isPaused: false, pausedMessage: null } });
     window.localStorage.clear();
   });
 

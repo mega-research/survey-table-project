@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 
 import { client } from '@/shared/lib/rpc';
-import type { BlockReason, ClientSignals } from '@/lib/duplicate-detection/types';
+import type { NoticeReason } from '@/components/survey/already-responded-view';
+import type { ClientSignals } from '@/lib/duplicate-detection/types';
 import type { Survey } from '@/types/survey';
 
 /**
@@ -12,7 +13,7 @@ import type { Survey } from '@/types/survey';
  */
 export type DuplicateStatus =
   | { kind: 'checking' }
-  | { kind: 'blocked'; reason: BlockReason }
+  | { kind: 'blocked'; reason: NoticeReason }
   | { kind: 'ok' };
 
 interface UseDuplicateGuardArgs {

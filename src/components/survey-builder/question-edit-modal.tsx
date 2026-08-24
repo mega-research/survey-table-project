@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { useSyncLatestRef } from '@/hooks/use-latest-ref';
+
 import { toast } from 'sonner';
 
 import {
@@ -57,6 +59,74 @@ interface QuestionEditModalProps {
   onClose: () => void;
 }
 
+/** 편집 모달 hydrate 용 formData 스냅샷 생성 (options/branchRule 은 깊은 복사) */
+function buildFormDataFromQuestion(question: Question): Partial<Question> {
+  // options의 각 항목과 branchRule을 깊은 복사
+  const optionsWithDeepBranchRule = question.options
+    ? question.options.map((option) => ({
+        ...option,
+        ...(option.branchRule !== undefined ? { branchRule: { ...option.branchRule } } : {}),
+      }))
+    : [];
+
+  return {
+    title: question.title,
+    ...(question.description !== undefined ? { description: question.description } : {}),
+    required: question.required,
+    ...(question.requiredMessage !== undefined
+      ? { requiredMessage: question.requiredMessage }
+      : {}),
+    ...(question.groupId !== undefined ? { groupId: question.groupId } : {}),
+    questionCode: question.questionCode || '',
+    isCustomSpssVarName: question.isCustomSpssVarName || false,
+    exportLabel: question.exportLabel || '',
+    options: optionsWithDeepBranchRule,
+    selectLevels: question.selectLevels ? [...question.selectLevels] : [],
+    // exactOptionalPropertyTypes 하에서 undefined 명시 대입이 불가하므로
+    // 값이 있을 때만 키를 싣는다 (없으면 키 부재 = 기존 undefined 와 동등).
+    ...(question.tableTitle !== undefined ? { tableTitle: question.tableTitle } : {}),
+    tableColumns: question.tableColumns ? [...question.tableColumns] : [],
+    tableRowsData: question.tableRowsData ? [...question.tableRowsData] : [],
+    ...(question.tableHeaderGrid !== undefined
+      ? { tableHeaderGrid: question.tableHeaderGrid }
+      : {}),
+    allowOtherOption: question.allowOtherOption || false,
+    ...(question.optionsColumns !== undefined
+      ? { optionsColumns: question.optionsColumns }
+      : {}),
+    ...(question.optionsAlign !== undefined ? { optionsAlign: question.optionsAlign } : {}),
+    ...(question.mobileOptionsColumns !== undefined
+      ? { mobileOptionsColumns: question.mobileOptionsColumns }
+      : {}),
+    ...(question.rankingConfig !== undefined ? { rankingConfig: question.rankingConfig } : {}),
+    ...(question.minSelections !== undefined ? { minSelections: question.minSelections } : {}),
+    ...(question.maxSelections !== undefined ? { maxSelections: question.maxSelections } : {}),
+    noticeContent: question.noticeContent || '',
+    requiresAcknowledgment: question.requiresAcknowledgment || false,
+    placeholder: question.placeholder || '',
+    piiEncrypted: question.piiEncrypted ?? false,
+    defaultValueTemplate: question.defaultValueTemplate ?? null,
+    inputType: question.inputType ?? 'text',
+    ...(question.emptyDefault !== undefined ? { emptyDefault: question.emptyDefault } : {}),
+    ...(question.numberFormat !== undefined ? { numberFormat: question.numberFormat } : {}),
+    tableValidationRules: question.tableValidationRules || [],
+    ...(question.dynamicRowConfigs !== undefined
+      ? { dynamicRowConfigs: question.dynamicRowConfigs }
+      : {}),
+    hideTitle: question.hideTitle ?? false,
+    ...(question.displayCondition !== undefined
+      ? { displayCondition: question.displayCondition }
+      : {}),
+    ...(question.spssVarType !== undefined ? { spssVarType: question.spssVarType } : {}),
+    ...(question.spssMeasure !== undefined ? { spssMeasure: question.spssMeasure } : {}),
+    // 응답 인용 — hydrate 를 빠뜨리면 UPDATE 페이로드에서 키가 사라져 편집 화면은
+    // 멀쩡한데 재진입 시 값이 비는 formData/store 이중상태 silent drop 이 된다.
+    answerQuoteEnabled: question.answerQuoteEnabled ?? false,
+    answerQuoteName: question.answerQuoteName ?? '',
+    answerQuoteText: question.answerQuoteText ?? '',
+  };
+}
+
 export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditModalProps) {
   const updateQuestion = useSurveyBuilderStore((s) => s.updateQuestion);
   const remapOptionValueInConditions = useSurveyBuilderStore(
@@ -85,13 +155,13 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
   const debouncedTitleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const debouncedExportLabelRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const localTitleRef = useRef(localTitle);
-  localTitleRef.current = localTitle;
+  useSyncLatestRef(localTitleRef, localTitle);
   const localExportLabelRef = useRef(localExportLabel);
-  localExportLabelRef.current = localExportLabel;
+  useSyncLatestRef(localExportLabelRef, localExportLabel);
 
   // handleSave에서 formData를 ref로 읽기 (이벤트 리스너 체인 안정화)
   const formDataRef = useRef(formData);
-  formDataRef.current = formData;
+  useSyncLatestRef(formDataRef, formData);
 
   // 질문 레벨 옵션의 optionCode blur 커밋으로 발생한 value 변경(oldValue→newValue) 누적.
   // 저장(handleSave) 시점에 한 번에 remapOptionValueInConditions 로 다른 질문/그룹/행/열의
@@ -182,72 +252,12 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, questionId]);
 
+  // 질문 hydrate — 렌더 중 조정 패턴으로 바꾸면 React Compiler 가 이 컴포넌트의
+  // 수동 메모이제이션을 보존하지 못해 컴파일을 통째로 건너뛴다(경고 1건 -> 13건).
+  // set-state-in-effect 경고 1건을 감수하고 effect 를 유지한다.
   useEffect(() => {
     if (question) {
-      // options의 각 항목과 branchRule을 깊은 복사
-      const optionsWithDeepBranchRule = question.options
-        ? question.options.map((option) => ({
-            ...option,
-            ...(option.branchRule !== undefined ? { branchRule: { ...option.branchRule } } : {}),
-          }))
-        : [];
-
-      setFormData({
-        title: question.title,
-        ...(question.description !== undefined ? { description: question.description } : {}),
-        required: question.required,
-        ...(question.requiredMessage !== undefined
-          ? { requiredMessage: question.requiredMessage }
-          : {}),
-        ...(question.groupId !== undefined ? { groupId: question.groupId } : {}),
-        questionCode: question.questionCode || '',
-        isCustomSpssVarName: question.isCustomSpssVarName || false,
-        exportLabel: question.exportLabel || '',
-        options: optionsWithDeepBranchRule,
-        selectLevels: question.selectLevels ? [...question.selectLevels] : [],
-        // exactOptionalPropertyTypes 하에서 undefined 명시 대입이 불가하므로
-        // 값이 있을 때만 키를 싣는다 (없으면 키 부재 = 기존 undefined 와 동등).
-        ...(question.tableTitle !== undefined ? { tableTitle: question.tableTitle } : {}),
-        tableColumns: question.tableColumns ? [...question.tableColumns] : [],
-        tableRowsData: question.tableRowsData ? [...question.tableRowsData] : [],
-        ...(question.tableHeaderGrid !== undefined
-          ? { tableHeaderGrid: question.tableHeaderGrid }
-          : {}),
-        allowOtherOption: question.allowOtherOption || false,
-        ...(question.optionsColumns !== undefined
-          ? { optionsColumns: question.optionsColumns }
-          : {}),
-        ...(question.optionsAlign !== undefined ? { optionsAlign: question.optionsAlign } : {}),
-        ...(question.mobileOptionsColumns !== undefined
-          ? { mobileOptionsColumns: question.mobileOptionsColumns }
-          : {}),
-        ...(question.rankingConfig !== undefined ? { rankingConfig: question.rankingConfig } : {}),
-        ...(question.minSelections !== undefined ? { minSelections: question.minSelections } : {}),
-        ...(question.maxSelections !== undefined ? { maxSelections: question.maxSelections } : {}),
-        noticeContent: question.noticeContent || '',
-        requiresAcknowledgment: question.requiresAcknowledgment || false,
-        placeholder: question.placeholder || '',
-        piiEncrypted: question.piiEncrypted ?? false,
-        defaultValueTemplate: question.defaultValueTemplate ?? null,
-        inputType: question.inputType ?? 'text',
-        ...(question.emptyDefault !== undefined ? { emptyDefault: question.emptyDefault } : {}),
-        ...(question.numberFormat !== undefined ? { numberFormat: question.numberFormat } : {}),
-        tableValidationRules: question.tableValidationRules || [],
-        ...(question.dynamicRowConfigs !== undefined
-          ? { dynamicRowConfigs: question.dynamicRowConfigs }
-          : {}),
-        hideTitle: question.hideTitle ?? false,
-        ...(question.displayCondition !== undefined
-          ? { displayCondition: question.displayCondition }
-          : {}),
-        ...(question.spssVarType !== undefined ? { spssVarType: question.spssVarType } : {}),
-        ...(question.spssMeasure !== undefined ? { spssMeasure: question.spssMeasure } : {}),
-        // 응답 인용 — hydrate 를 빠뜨리면 UPDATE 페이로드에서 키가 사라져 편집 화면은
-        // 멀쩡한데 재진입 시 값이 비는 formData/store 이중상태 silent drop 이 된다.
-        answerQuoteEnabled: question.answerQuoteEnabled ?? false,
-        answerQuoteName: question.answerQuoteName ?? '',
-        answerQuoteText: question.answerQuoteText ?? '',
-      });
+      setFormData(buildFormDataFromQuestion(question));
 
       // 이전 질문(또는 저장 없이 닫힌 이전 세션)의 pending value 변경이 새 세션으로 새지 않게 리셋.
       pendingOptionValueChangesRef.current = [];
@@ -263,12 +273,10 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
       }
       setLocalTitle(question.title || '');
       setLocalExportLabel(question.exportLabel || '');
-
       // 옵션들 중 하나라도 branchRule이 있으면 조건부 분기 설정 표시
       // resolveChoiceOptions 는 manual 은 question.options, table-source 는 choice_opt 셀 파생
       // 옵션을 반환하므로 테이블 보기 옵션 셀의 분기 규칙도 함께 집계된다.
-      const hasBranchRule = resolveChoiceOptions(question).some((option) => option.branchRule);
-      setShowBranchSettings(hasBranchRule);
+      setShowBranchSettings(resolveChoiceOptions(question).some((option) => option.branchRule));
     }
     // deps 를 question?.id 로 좁힘 — question 객체 reference 가 바뀐다고 formData 를 reset 하면
     // 모달 안에서 편집한 열/라벨/옵션이 zustand store 의 옛 값으로 덮어씌워진다.
@@ -276,6 +284,7 @@ export function QuestionEditModal({ questionId, isOpen, onClose }: QuestionEditM
     // 모달을 닫았다 다시 같은 질문으로 열면 새로 hydrate 되도록 isOpen 도 deps 에 포함.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [question?.id, isOpen]);
+
 
   // 검증 로직 (formDataRef로 최신 값 참조 — deps에서 formData 제거)
   const validateForm = useCallback(() => {

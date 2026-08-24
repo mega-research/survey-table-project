@@ -128,6 +128,7 @@ describe('getControlState accessIdentifier', () => {
 
     const res = await getControlState(SURVEY_ID);
 
+    if (!res) throw new Error('control state 는 null 이 아니어야 한다');
     expect(res.accessIdentifier).toBe('게임-기초조사');
     expect(res.testResponseCount).toBe(2);
     expect(res.testTargetCount).toBe(1);

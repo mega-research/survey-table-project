@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 import {
   Calculator,
@@ -53,17 +53,19 @@ export function SaveCellModal({ open, onOpenChange, cell }: SaveCellModalProps) 
   const [name, setName] = useState('');
   const saveCell = useSaveCell();
 
-  // 모달 열릴 때 기본 이름 설정
-  useEffect(() => {
+  // 모달 열릴 때 기본 이름 설정 — effect 대신 렌더 중 조정 패턴.
+  // 키를 cell?.id 로 좁힘 — cell reference 가 바뀌어도 사용자가 수정 중인 이름이
+  // 자동 생성 값으로 reset 되지 않도록 한다.
+  const resetKey = open && cell ? cell.id : null;
+  const [prevResetKey, setPrevResetKey] = useState<string | null>(null);
+  if (prevResetKey !== resetKey) {
+    setPrevResetKey(resetKey);
     if (open && cell) {
       const preview = getCellPreviewText(cell);
       const defaultName = preview.length > 0 ? preview.slice(0, 20) : CELL_TYPE_LABELS[cell.type];
       setName(defaultName);
     }
-  // deps 를 cell?.id 로 좁힘 — cell reference 가 바뀌어도 사용자가 수정 중인 이름이
-  // 자동 생성 값으로 reset 되지 않도록 한다.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, cell?.id]);
+  }
 
   const handleSave = async () => {
     if (!cell || !name.trim()) return;

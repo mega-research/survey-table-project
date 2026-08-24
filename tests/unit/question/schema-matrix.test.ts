@@ -63,7 +63,13 @@ const EMBEDDED_TABLE_KEYS = [
   'exportCellOrder',
 ];
 
-const OPTION_LIST_KEYS = ['options', 'optionsColumns', 'mobileOptionsColumns', 'optionsAlign', 'allowOtherOption'];
+const OPTION_LIST_KEYS = [
+  'options',
+  'optionsColumns',
+  'mobileOptionsColumns',
+  'optionsAlign',
+  'allowOtherOption',
+];
 
 const MOBILE_TABLE_DISPLAY_KEYS = [
   'mobileOriginalTable',
@@ -82,9 +88,16 @@ function sorted(keys: string[]): string[] {
 }
 
 describe('유형별 필드 매트릭스 (실측 박제)', () => {
-  it('text: base + 단답형 전용 4종', () => {
+  it('text: base + 단답형 전용 5종', () => {
     expect(shapeKeys(TextQuestionSchema)).toEqual(
-      sorted([...BASE_KEYS, 'placeholder', 'defaultValueTemplate', 'inputType', 'emptyDefault']),
+      sorted([
+        ...BASE_KEYS,
+        'placeholder',
+        'defaultValueTemplate',
+        'inputType',
+        'emptyDefault',
+        'numberFormat',
+      ]),
     );
   });
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -119,14 +119,15 @@ export function NumericComparisonEditor({
 
   const [rawInput, setRawInput] = useState<string>(() => literalToRaw(right));
 
-  useEffect(() => {
-    if (right.kind !== 'literal') return;
-    const synced = String(right.value);
-    if (parseNumericInput(rawInput) !== right.value) {
-      setRawInput(synced);
+  // 외부 literal 값 변경 시 raw 입력 동기화 — effect 대신 렌더 중 조정 패턴
+  const rightLiteral = right.kind === 'literal' ? right.value : null;
+  const [prevRightLiteral, setPrevRightLiteral] = useState(rightLiteral);
+  if (prevRightLiteral !== rightLiteral) {
+    setPrevRightLiteral(rightLiteral);
+    if (right.kind === 'literal' && parseNumericInput(rawInput) !== right.value) {
+      setRawInput(String(right.value));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [right.kind, right.kind === 'literal' ? right.value : null]);
+  }
 
   const emit = useCallback(
     (patch: Partial<NumericComparison>) => {

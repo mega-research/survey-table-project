@@ -56,8 +56,41 @@ describe('HeaderFilterPopover', () => {
     currentParams = new URLSearchParams();
   });
 
+  // 수신자 목록은 이메일 검색을 rq, 페이지를 recipPage 로 쓴다. 공용 헬퍼는 빌더
+  // 파라미터(col/q/op)를 지우고 page 만 리셋하므로, 페이지별 이름을 알려주지 않으면
+  // 깔때기 한 번에 검색어가 사라지고 페이지 번호가 남는다.
+  it('renameOnApply — 적용 시 구 파라미터를 페이지 전용 이름으로 승격시킨다', async () => {
+    listMock.mockResolvedValue({ values: ['상장'], truncated: false, hasEmpty: false });
+    currentParams = new URLSearchParams('q=user@example.com');
+    const user = userEvent.setup();
+    renderPopover({ renameOnApply: { from: 'q', to: 'rq' } });
+
+    await user.click(screen.getByRole('button', { name: '기업유형 필터' }));
+    await waitFor(() => expect(screen.getByLabelText('상장')).toBeInTheDocument());
+    await user.click(screen.getByLabelText('상장'));
+    await user.click(screen.getByRole('button', { name: '적용' }));
+
+    const p = pushedParams();
+    expect(p.get('rq')).toBe('user@example.com');
+    expect(p.get('q')).toBeNull();
+  });
+
+  it('resetParams — 적용 시 페이지 전용 페이지 파라미터를 리셋한다', async () => {
+    listMock.mockResolvedValue({ values: ['상장'], truncated: false, hasEmpty: false });
+    currentParams = new URLSearchParams('recipPage=7');
+    const user = userEvent.setup();
+    renderPopover({ resetParams: ['recipPage'] });
+
+    await user.click(screen.getByRole('button', { name: '기업유형 필터' }));
+    await waitFor(() => expect(screen.getByLabelText('상장')).toBeInTheDocument());
+    await user.click(screen.getByLabelText('상장'));
+    await user.click(screen.getByRole('button', { name: '적용' }));
+
+    expect(pushedParams().get('recipPage')).toBeNull();
+  });
+
   it('attrs 저카디널리티 — 열면 distinct 값 체크박스, 선택 후 적용 시 hcol/hm/hv 로 push', async () => {
-    listMock.mockResolvedValue({ values: ['상장', '코스닥'], truncated: false });
+    listMock.mockResolvedValue({ values: ['상장', '코스닥'], truncated: false, hasEmpty: false });
     const user = userEvent.setup();
     renderPopover();
 
@@ -120,7 +153,7 @@ describe('HeaderFilterPopover', () => {
   });
 
   it('attrs 고카디널리티(truncated) — 부분검색 입력으로 폴백, 적용 시 hm=text', async () => {
-    listMock.mockResolvedValue({ values: [], truncated: true });
+    listMock.mockResolvedValue({ values: [], truncated: true, hasEmpty: false });
     const user = userEvent.setup();
     renderPopover();
 
@@ -155,7 +188,7 @@ describe('HeaderFilterPopover', () => {
 
   it('빌더 필터 활성 상태에서 적용 — 경고 다이얼로그 확인 후 빌더 파라미터 제거', async () => {
     currentParams = new URLSearchParams('col=attrs.전시회명&q=핵심&op=');
-    listMock.mockResolvedValue({ values: ['상장'], truncated: false });
+    listMock.mockResolvedValue({ values: ['상장'], truncated: false, hasEmpty: false });
     const user = userEvent.setup();
     renderPopover();
 
@@ -184,7 +217,7 @@ describe('HeaderFilterPopover', () => {
 
   it('활성 필터가 있으면 해제 버튼으로 제거할 수 있다', async () => {
     currentParams = new URLSearchParams('hcol=attrs.기업유형&hm=in&hv=상장');
-    listMock.mockResolvedValue({ values: ['상장', '코스닥'], truncated: false });
+    listMock.mockResolvedValue({ values: ['상장', '코스닥'], truncated: false, hasEmpty: false });
     const user = userEvent.setup();
     renderPopover();
 

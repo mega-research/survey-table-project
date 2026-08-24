@@ -56,6 +56,18 @@ const eslintConfig = [
     },
   },
   {
+    // 일회성 유지보수 스크립트 — 앱 런타임에 포함되지 않고 배포되지도 않는다.
+    // 데이터 점검·백필 성격상 any 가 불가피하고 고칠 계획도 없다. 볼 생각 없는 경고를
+    // 목록에 남겨두면 목록 자체를 아무도 읽지 않게 되므로 여기서 뺀다.
+    // 2026-08-19 실측: 이 완화로 경고 108건 중 63건이 빠지고 남는 45건은 전부
+    // react-hooks(React Compiler) 계열 — 실제로 봐야 할 것만 남는다.
+    files: ["scripts/**/*.{ts,mts,tsx,mjs,js}"],
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off",
+      "import/no-anonymous-default-export": "off",
+    },
+  },
+  {
     files: ["src/features/**/*.{ts,tsx}"],
     rules: {
       "no-restricted-imports": [

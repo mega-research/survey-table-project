@@ -346,7 +346,10 @@ export async function fetchCandidateIds(
   const { getContactColumnScheme, getContactResultCodes, buildColumnCandidates } = await import(
     '@/lib/operations/contacts.server'
   );
-  const { parseClausesFromUrl } = await import('@/lib/operations/contacts-filters.server');
+  const { parseClausesFromUrl, parseHeaderFiltersFromUrl } = await import(
+    '@/lib/operations/contacts-filters.server'
+  );
+  const { CAMPAIGN_HEADER_FILTER_COLUMNS } = await import('@/lib/operations/filter-shared');
   const scope = await loadOperationsDataScope(surveyId);
 
   const [scheme, resultCodes] = await Promise.all([
@@ -355,13 +358,37 @@ export async function fetchCandidateIds(
   ]);
   const candidates = buildColumnCandidates(scheme);
   const rawClauses = filter.clauses ?? [];
-  const clauses = parseClausesFromUrl(
+  const builderClauses = parseClausesFromUrl(
     rawClauses.map((c) => c.source),
     rawClauses.map((c) => c.value),
     rawClauses.map((c) => c.op ?? ''),
     candidates,
     resultCodes,
   );
+  // 미리보기 표(고정 컬럼)의 깔때기 후보는 스킴과 무관하게 보장 — 마법사 페이지와 같은 규칙.
+  const headerCandidates = [
+    ...candidates,
+    ...CAMPAIGN_HEADER_FILTER_COLUMNS.filter(
+      (c) => !candidates.some((cc) => cc.source === c.source),
+    ),
+  ];
+  const rawHeaderClauses = filter.headerClauses ?? [];
+  const headerClauses = parseHeaderFiltersFromUrl(
+    rawHeaderClauses.map((c) => c.source),
+    rawHeaderClauses.map((c) => c.mode),
+    rawHeaderClauses.map((c) => c.hv),
+    headerCandidates,
+    resultCodes,
+  );
+  // 마법사 페이지의 결합 규칙과 동일해야 한다 — 어긋나면 "필터 결과 전체 선택"이
+  // 화면에 보이는 명단과 다른 집합을 고른다.
+  const clauses = [
+    ...builderClauses,
+    ...headerClauses.map((c, i) => ({
+      condition: c.condition,
+      op: builderClauses.length === 0 && i === 0 ? null : ('AND' as const),
+    })),
+  ];
   const unrespondedOnly = filter.unrespondedOnly ?? false;
 
   const total = await countCampaignCandidates({ surveyId, scope, clauses, unrespondedOnly });

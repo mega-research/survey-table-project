@@ -133,7 +133,11 @@ export function buildClauseSql(
   }
 
   if (cond.source === FILTER_SOURCE.CONTACT_RESULT && cond.mode === 'enum') {
-    return sql`${latestResultCodeExpr} = ${cond.value}`;
+    // includeNull = "결과 없음" — 회차 이력이 없거나 최신 회차 result_code 가 NULL.
+    // 표(latestResultCode ?? '—')와 같은 판정이라 화면과 필터가 어긋나지 않는다.
+    return cond.includeNull === true
+      ? sql`${latestResultCodeExpr} IS NULL`
+      : sql`${latestResultCodeExpr} = ${cond.value}`;
   }
 
   if (cond.source === FILTER_SOURCE.WEB && cond.mode === 'boolean') {
@@ -247,7 +251,23 @@ export function attrsNaturalSortExprs(
  */
 function buildInClauseSql(cond: FilterCondition, refs: ClauseColumnRefs): SQL {
   const values = cond.values ?? [];
-  if (values.length === 0) return sql`FALSE`;
+  // contact_result 의 includeNull 은 값 없이도 조건이 성립한다 ("결과 없음"만 체크한 경우).
+  if (values.length === 0 && cond.includeNull !== true) return sql`FALSE`;
+
+  if (cond.source === FILTER_SOURCE.CONTACT_RESULT) {
+    // 코드 IN 절과 "결과 없음"(IS NULL) 을 OR 로 묶는다 — NULL 은 IN 목록으로 표현 불가.
+    const parts: SQL[] = [];
+    if (values.length > 0) {
+      parts.push(
+        sql`${latestResultCodeExpr} IN (${sql.join(
+          values.map((v) => sql`${v}`),
+          sql`, `,
+        )})`,
+      );
+    }
+    if (cond.includeNull === true) parts.push(sql`${latestResultCodeExpr} IS NULL`);
+    return sql`(${sql.join(parts, sql` OR `)})`;
+  }
 
   if (cond.source === FILTER_SOURCE.WEB) {
     // 다중 선택은 상태 조건 OR 전개 — 자체 괄호로 외부 AND 결합에 안전.
@@ -261,21 +281,38 @@ function buildInClauseSql(cond: FilterCondition, refs: ClauseColumnRefs): SQL {
     return sql`(${sql.join(conds, sql` OR `)})`;
   }
 
-  const inList = sql.join(
-    values.map((v) => sql`${v}`),
-    sql`, `,
-  );
-
-  if (cond.source === FILTER_SOURCE.CONTACT_RESULT) {
-    return sql`${latestResultCodeExpr} IN (${inList})`;
+  if (cond.source.startsWith(FILTER_SOURCE.PII_PREFIX)) {
+    // pii 의 in 모드는 "값 없음" 전용 (파서가 그 외를 통과시키지 않는다).
+    // contact_pii 행은 빈 값/정규화 후 빈 값이면 애초에 생성되지 않으므로 행 부재가 곧
+    // 미기재다 — 표의 '—' 표시와 같은 판정.
+    if (cond.includeNull !== true) return sql`FALSE`;
+    const columnKey = cond.source.slice(FILTER_SOURCE.PII_PREFIX.length);
+    return sql`NOT EXISTS (
+      SELECT 1 FROM contact_pii pp
+      WHERE pp.contact_target_id = ${refs.contactId}
+        AND pp.column_key = ${columnKey}
+    )`;
   }
 
   if (cond.source.startsWith(FILTER_SOURCE.ATTRS_PREFIX)) {
     const key = cond.source.slice(FILTER_SOURCE.ATTRS_PREFIX.length);
-    return sql`${refs.attrs}->>${key} IN (${inList})`;
+    const parts: SQL[] = [];
+    if (values.length > 0) {
+      parts.push(
+        sql`${refs.attrs}->>${key} IN (${sql.join(
+          values.map((v) => sql`${v}`),
+          sql`, `,
+        )})`,
+      );
+    }
+    if (cond.includeNull === true) {
+      // 키 부재(NULL)와 빈 문자열을 함께 접는다 — 표가 둘 다 '—' 로 그린다.
+      parts.push(sql`(${refs.attrs}->>${key} IS NULL OR ${refs.attrs}->>${key} = '')`);
+    }
+    return sql`(${sql.join(parts, sql` OR `)})`;
   }
 
-  // pii.* 등 in 미지원 source — distinct 열거 자체가 불가하므로 절 성립 불가.
+  // 그 외 in 미지원 source — distinct 열거 자체가 불가하므로 절 성립 불가.
   return sql`FALSE`;
 }
 

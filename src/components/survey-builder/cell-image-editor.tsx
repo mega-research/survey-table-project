@@ -37,15 +37,13 @@ export function CellImageEditor({ imageUrl, onImageUrlChange }: CellImageEditorP
     };
   }, []);
 
-  // 외부 imageUrl 변경 시 미리보기 동기화
-  useEffect(() => {
+  // 외부 imageUrl 변경 시 미리보기 동기화 + 에러 상태 리셋 — effect 대신 렌더 중 조정 패턴
+  const [prevImageUrl, setPrevImageUrl] = useState(imageUrl);
+  if (prevImageUrl !== imageUrl) {
+    setPrevImageUrl(imageUrl);
     setPreviewUrl(imageUrl || null);
-  }, [imageUrl]);
-
-  // imageUrl이 바뀔 때 에러 상태 리셋
-  useEffect(() => {
     setImageError(false);
-  }, [imageUrl]);
+  }
 
   // 파일 선택 핸들러
   const handleFileSelect = useCallback(async (file: File) => {

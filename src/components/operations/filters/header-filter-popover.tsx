@@ -22,7 +22,15 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import type { ContactResultCode } from '@/db/schema/schema-types';
 import type { PiiFieldType } from '@/lib/crypto/pii-fields';
 import { useSearchParamsMutator } from '@/hooks/use-search-params-mutator';
-import { FILTER_SOURCE, placeholderFor, webFilterOptionsFor } from '@/lib/operations/filter-shared';
+import {
+  contactResultFilterOptions,
+  FILTER_NONE_LABEL,
+  FILTER_NONE_TOGGLE_LABEL,
+  FILTER_NONE_VALUE,
+  FILTER_SOURCE,
+  placeholderFor,
+  webFilterOptionsFor,
+} from '@/lib/operations/filter-shared';
 import {
   hasBuilderFilterParams,
   joinHeaderValues,
@@ -50,8 +58,20 @@ interface Props {
   /**
    * 적용 시 URL 파라미터 추가 조작 (예: 응답 내역 status 깔때기 적용 시 상단
    * 상태 select 의 'status' 제거 — 남겨두면 모순 AND 로 0건이 된다).
+   * 클라이언트 컴포넌트에서만 넘길 수 있다 — 서버 컴포넌트는 아래 두 prop 을 쓴다.
    */
   onApplyParams?: (p: URLSearchParams) => void;
+  /**
+   * 적용 시 파라미터 이름 승격. 깔때기 적용은 빌더 파라미터(col/q/op)를 지우므로,
+   * 'q' 를 다른 뜻으로 쓰는 페이지는 지워지기 전에 자기 이름으로 옮겨야 한다.
+   * 직렬화 가능하므로 서버 컴포넌트에서도 넘길 수 있다.
+   */
+  renameOnApply?: { from: string; to: string };
+  /**
+   * 적용 시 함께 지울 파라미터 (예: 수신자 목록의 'recipPage').
+   * 공용 헬퍼는 'page' 만 리셋하므로 페이지 전용 이름은 여기로 알린다.
+   */
+  resetParams?: string[];
 }
 
 type Kind = 'attrs' | 'pii' | 'result' | 'web' | 'fixed';
@@ -84,6 +104,8 @@ export function HeaderFilterPopover({
   resultCodeOptions = [],
   fixedOptions,
   onApplyParams,
+  renameOnApply,
+  resetParams,
 }: Props) {
   const kind = kindOf(source, fixedOptions != null && fixedOptions.length > 0);
   const searchParams = useSearchParams();
@@ -98,6 +120,9 @@ export function HeaderFilterPopover({
   const [warm, setWarm] = useState(false);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [textValue, setTextValue] = useState('');
+  // 부분검색/전문일치 입력 컬럼(고카디널리티 attrs, pii)의 빈 값 토글.
+  // 체크박스 컬럼은 목록 안의 FILTER_NONE_LABEL 항목으로 같은 일을 한다.
+  const [emptyOnly, setEmptyOnly] = useState(false);
   const [confirmEntry, setConfirmEntry] = useState<HeaderFilterEntry | null>(null);
 
   const attrsKey = kind === 'attrs' ? source.slice(FILTER_SOURCE.ATTRS_PREFIX.length) : null;
@@ -121,22 +146,36 @@ export function HeaderFilterPopover({
     kind === 'fixed'
       ? (fixedOptions ?? []).map((o) => ({ value: o.value, optionLabel: o.label }))
       : kind === 'result'
-        ? resultCodeOptions.map((rc) => ({ value: rc.code, optionLabel: rc.label }))
+        ? contactResultFilterOptions(resultCodeOptions).map((o) => ({
+            value: o.value,
+            optionLabel: o.label,
+          }))
         : kind === 'web'
           ? // 레거시 값 노출 규칙은 webFilterOptionsFor 주석 참조.
             webFilterOptionsFor(selected).map((o) => ({ value: o.value, optionLabel: o.label }))
-          : (data?.values ?? []).map((v) => ({ value: v, optionLabel: v }));
+          : [
+              ...(data?.values ?? []).map((v) => ({ value: v, optionLabel: v })),
+              // 비어 있는 행이 실제로 있을 때만 노출. 실제 값이 센티널 문자열을 선점하면
+              // 실제 값이 이기므로(파서 우선순위) 모호한 항목은 내밀지 않는다.
+              ...(data?.hasEmpty && !(data?.values ?? []).includes(FILTER_NONE_VALUE)
+                ? [{ value: FILTER_NONE_VALUE, optionLabel: FILTER_NONE_LABEL }]
+                : []),
+            ];
 
   const handleOpenChange = (next: boolean) => {
     setOpen(next);
     if (!next) return;
     // 열 때 현재 URL 상태로 로컬 상태 초기화.
     if (activeEntry?.mode === 'in') {
-      setSelected(new Set(splitHeaderValues(activeEntry.hv)));
+      const values = splitHeaderValues(activeEntry.hv);
+      setSelected(new Set(values));
       setTextValue('');
+      // 입력형 컬럼(pii·고카디널리티 attrs)에서 in 모드는 빈 값 전용이다 (buildEntry 참조).
+      setEmptyOnly(values.length === 1 && values[0] === FILTER_NONE_VALUE);
     } else {
       setSelected(new Set());
       setTextValue(activeEntry?.hv ?? '');
+      setEmptyOnly(false);
     }
   };
 
@@ -151,6 +190,9 @@ export function HeaderFilterPopover({
 
   const buildEntry = (): HeaderFilterEntry | null => {
     if (isTextKind) {
+      // 빈 값은 값 비교가 아니라 부재 판정이라 검색어와 함께 걸 수 없다 —
+      // 체크되면 입력을 무시하고 센티널 단독 in 절로 보낸다.
+      if (emptyOnly) return { source, mode: 'in', hv: joinHeaderValues([FILTER_NONE_VALUE]) };
       const trimmed = textValue.trim();
       if (trimmed.length === 0) return null;
       return { source, mode: kind === 'pii' ? 'exact' : 'text', hv: trimmed };
@@ -163,10 +205,20 @@ export function HeaderFilterPopover({
   const commit = (entry: HeaderFilterEntry | null) => {
     pushParams((p) => {
       if (entry) {
+        // 이름 승격은 upsertHeaderFilter 의 빌더 파라미터 제거보다 먼저 — 순서가
+        // 뒤집히면 옮기기 전에 값이 사라진다.
+        if (renameOnApply) {
+          const carried = p.get(renameOnApply.from);
+          if (carried !== null && p.get(renameOnApply.to) === null) {
+            p.set(renameOnApply.to, carried);
+          }
+        }
         upsertHeaderFilter(p, entry);
+        for (const name of resetParams ?? []) p.delete(name);
         onApplyParams?.(p);
       } else {
         removeHeaderFilter(p, source);
+        for (const name of resetParams ?? []) p.delete(name);
       }
     });
     setConfirmEntry(null);
@@ -242,6 +294,7 @@ export function HeaderFilterPopover({
                 onChange={(e) => setTextValue(e.target.value)}
                 placeholder={placeholderFor(source)}
                 className="h-8 text-sm normal-case"
+                disabled={emptyOnly}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
@@ -249,6 +302,14 @@ export function HeaderFilterPopover({
                   }
                 }}
               />
+              <label className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-sm normal-case hover:bg-slate-50">
+                <Checkbox
+                  aria-label={FILTER_NONE_TOGGLE_LABEL}
+                  checked={emptyOnly}
+                  onCheckedChange={(checked) => setEmptyOnly(checked === true)}
+                />
+                <span>{FILTER_NONE_TOGGLE_LABEL}</span>
+              </label>
             </div>
           )}
 
