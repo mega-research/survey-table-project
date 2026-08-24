@@ -18,7 +18,7 @@ import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react';
 import { TablePreview } from '@/features/question-renderer/table-preview';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { pruneSumConstraints } from '@/features/survey-response/lib/numeric-validation';
+import { pruneSumConstraints } from '@/features/survey-builder/utils/prune-sum-constraints';
 import type {
   CalcExpr,
   HeaderCell,

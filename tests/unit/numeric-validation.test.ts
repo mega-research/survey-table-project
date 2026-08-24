@@ -4,7 +4,6 @@ import {
   collectNumericIssues,
   collectVisibleTableCells,
   evaluateSumConstraint,
-  pruneSumConstraints,
 } from '@/features/survey-response/lib/numeric-validation';
 import type { CalcCellValidation, CalcExpr, Question, SumConstraint, TableRow } from '@/types/survey';
 
@@ -582,14 +581,6 @@ describe('collectNumericIssues — 테이블', () => {
     const issues = collectNumericIssues(q, { c1: '50' }, ctx);
     expect(issues).toHaveLength(1);
     expect(issues[0]!.cellIds).toBeUndefined();
-  });
-});
-
-describe('pruneSumConstraints', () => {
-  it('존재하지 않는 cellId 를 제거한다', () => {
-    const rows = tableQuestion().tableRowsData!;
-    const pruned = pruneSumConstraints([{ ...eq100, cellIds: ['c1', 'ghost'] }], rows);
-    expect(pruned[0]!.cellIds).toEqual(['c1']);
   });
 });
 

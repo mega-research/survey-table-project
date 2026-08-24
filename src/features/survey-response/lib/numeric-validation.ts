@@ -6,7 +6,7 @@
  * tableValidationRules(분기 전용, utils/branch-logic.ts)와 완전히 별개다.
  * 응답 shape: 단답형 = raw 숫자 문자열, 테이블 = { [cellId]: value } 평면 객체.
  */
-import type { Question, SumConstraint, SurveyLookup, TableCell, TableRow } from '@/types/survey';
+import type { Question, SumConstraint, SurveyLookup, TableCell } from '@/types/survey';
 import {
   shouldDisplayColumn,
   shouldDisplayDynamicGroup,
@@ -42,10 +42,6 @@ export interface NumericValidationCtx {
   /** 수식 검증(evaluateCellFormula)용 — 미주입 시 수식 검증만 스킵 */
   lookups?: SurveyLookup[];
   contactAttrs?: Record<string, string | undefined>;
-}
-
-function flatCells(rows: TableRow[] | null | undefined): TableCell[] {
-  return (rows ?? []).flatMap((row) => row.cells);
 }
 
 function isEmptyCellValue(v: unknown): boolean {
@@ -492,13 +488,4 @@ export function collectNumericIssues(
   }
 
   return issues;
-}
-
-/** 빌더 저장용 — 삭제된 셀을 가리키는 cellId 제거 (평가 시 무시와 별개의 이중 방어) */
-export function pruneSumConstraints(
-  constraints: SumConstraint[],
-  rows: TableRow[],
-): SumConstraint[] {
-  const ids = new Set(flatCells(rows).map((c) => c.id));
-  return constraints.map((c) => ({ ...c, cellIds: c.cellIds.filter((id) => ids.has(id)) }));
 }
