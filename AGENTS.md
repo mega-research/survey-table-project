@@ -149,7 +149,7 @@ src/
 │   └── index.ts                # 잔존 사유 주석 포함 배럴
 │
 ├── components/                 # 진짜 공용 UI 만 — features 를 모른다(ESLint)
-│   ├── ui/                     # shadcn/ui 기반 컴포넌트 (50개)
+│   ├── ui/                     # shadcn/ui 기반 컴포넌트 (24개 + rich-text-editor/)
 │   └── providers/              # Context providers
 │
 ├── stores/                     # error-dialog-store.ts 하나 (전역 에러 다이얼로그). 기능 스토어는 features/<x>/stores
@@ -237,7 +237,7 @@ surveys                    # 설문 설정
 ├── testModeEnabled, testToken    # 테스트 모드 (콘솔 전체가 테스트 파티션으로 전환)
 ├── requireInviteToken            # invite token 강제 여부
 ├── forceWideLayout               # 강제 와이드 레이아웃
-├── status                        # 'draft' | 'published' | 'closed'
+├── status                        # 'draft' | 'published' ('closed' 는 미구현 어휘 — 쓰는 경로 없음, 종료는 endDate/isPaused 로)
 ├── currentVersionId              # 현재 활성 배포 버전
 ├── deletedAt (soft delete)
 └── createdAt, updatedAt
@@ -291,7 +291,7 @@ test_response_attempts     # 테스트 응답 회차 (초기화·재응답 추�
 
 survey_versions            # 설문 버전 스냅샷 (불변)
 ├── id, surveyId, versionNumber
-├── status                        # 'published' | 'superseded' | 'closed'
+├── status                        # 'published' | 'superseded' ('closed' 미구현)
 ├── snapshot (JSONB)              # 배포 시점 전체 설문 구조 (prune 시 NULL 가능)
 ├── changeNote, publishedAt, closedAt, prunedAt, deletedAt
 └── createdAt

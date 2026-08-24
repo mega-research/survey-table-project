@@ -106,7 +106,10 @@ export const surveys = pgTable(
     forceWideLayout: boolean('force_wide_layout').default(false).notNull(),
 
     // 버전 관리
-    status: text('status').notNull().default('draft'), // 'draft' | 'published' | 'closed'
+    // 'draft' | 'published'. 'closed' 는 **미구현 어휘**다 — 레포 어디에도 이 값을 쓰는 경로가
+    // 없고 프로덕션에도 0건이다. 조사를 끝낼 때 실제로 쓰는 수단은 endDate(마감)와 isPaused(중단)다.
+    // 만들 자리가 아니라 지울지 판단할 자리 — 결정과 근거는 트래커 B-g 참조.
+    status: text('status').notNull().default('draft'),
     currentVersionId: uuid('current_version_id'), // 현재 활성 배포 버전
 
     // soft delete
@@ -389,7 +392,8 @@ export const surveyVersions = pgTable(
       .references(() => surveys.id, { onDelete: 'cascade' }),
 
     versionNumber: integer('version_number').notNull(),
-    status: text('status').notNull().default('published'), // 'published' | 'superseded' | 'closed'
+    // 'published' | 'superseded'. 'closed' 는 여기서도 **미구현 어휘**다(쓰는 경로 없음).
+    status: text('status').notNull().default('published'),
 
     // 배포 시점의 전체 설문 구조 (불변 — 수정 금지).
     // NULL = 버전 보존 정책으로 정리됨 (2026-07-31 spec). 읽는 쪽은 NULL 을 다뤄야 한다.
