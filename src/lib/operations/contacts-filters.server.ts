@@ -4,6 +4,7 @@ import { blindIndex } from '@/lib/crypto/blind';
 import type { ContactResultCode } from '@/db/schema/schema-types';
 import {
   FILTER_NONE_VALUE,
+  FILTER_NOT_NONE_VALUE,
   FILTER_SOURCE,
   HEADER_FILTER_MODES,
   HEADER_FILTER_VALUE_SEPARATOR,
@@ -35,8 +36,19 @@ export interface FilterCondition {
    * enum 모드에서는 이 플래그만으로 조건이 성립하고 value 는 URL 왕복용으로만 남는다.
    */
   includeNull?: boolean;
+  /**
+   * includeNull 의 여집합 — 값이 있는 행만 (빈 값 제외). 입력형 컬럼(pii·고카디널리티
+   * attrs)의 "— 제외하고 보기" 토글이 단독 절로 만든다. includeNull 과 동시에 서지 않는다.
+   */
+  excludeNull?: boolean;
   /** mode === 'any' (전체 컬럼 검색) 일 때만 populated. OR 로 전개할 하위 조건. */
   subConditions?: FilterCondition[];
+  /**
+   * attrs.* + mode === 'idlist' 전용 — 값이 순수 정수가 아닌 행에 한해 부분검색(ILIKE)도
+   * OR 로 함께 건다. 단일 숫자 입력("1")이 숫자 컬럼에서는 정확 매칭이면서
+   * 텍스트 컬럼("A1")에서는 종전 부분검색으로 남게 하는 이음새.
+   */
+  textFallback?: boolean;
 }
 
 export interface FilterClause {
@@ -162,6 +174,10 @@ function buildHeaderCondition(
   if (col.startsWith(FILTER_SOURCE.ATTRS_PREFIX)) {
     if (mode === 'in') {
       const raw = splitHeaderValues(hv);
+      // 빈 값 제외 센티널은 토글이 단독으로만 만든다 — 다른 값과 섞여 오면 값으로 본다.
+      if (raw.length === 1 && raw[0] === FILTER_NOT_NONE_VALUE) {
+        return { source: col, mode: 'in', value: '', values: [], excludeNull: true };
+      }
       // 센티널은 값이 아니라 플래그로 승격. 같은 문자열의 실제 값은 distinct 조회가
       // 선택지에서 빼두므로 여기서 예외를 둘 필요가 없다 (FILTER_NONE_VALUE 주석 참조).
       const distinct = raw.filter((v) => v !== FILTER_NONE_VALUE);
@@ -186,11 +202,17 @@ function buildHeaderCondition(
 
   if (col.startsWith(FILTER_SOURCE.PII_PREFIX)) {
     // pii 는 blind index 라 distinct 열거가 불가능해 체크박스가 없다. 유일한 예외가
-    // "값 없음" 으로, 값 비교 없이 행 부재만 보면 되므로 in 모드 + 센티널로 들어온다.
+    // "값 없음"/"값 있음" 으로, 값 비교 없이 행 부재만 보면 되므로 in 모드 + 센티널로 들어온다.
     if (mode === 'in') {
       const raw = splitHeaderValues(hv);
-      if (raw.length !== 1 || raw[0] !== FILTER_NONE_VALUE) return null;
-      return { source: col, mode: 'in', value: '', values: [], includeNull: true };
+      if (raw.length !== 1) return null;
+      if (raw[0] === FILTER_NONE_VALUE) {
+        return { source: col, mode: 'in', value: '', values: [], includeNull: true };
+      }
+      if (raw[0] === FILTER_NOT_NONE_VALUE) {
+        return { source: col, mode: 'in', value: '', values: [], excludeNull: true };
+      }
+      return null;
     }
     if (mode !== 'exact' || !candidate.piiType) return null;
     const trimmed = hv.trim();
@@ -235,18 +257,36 @@ function buildHeaderCondition(
 }
 
 /**
- * attrs 검색어 해석 — 범위 문법이면 idlist(숫자 범위 검색), 아니면 text(부분검색).
+ * 선행 0 이 붙은 숫자 토큰("010", "007-010")이 하나라도 있는 입력.
+ * 값 자체가 자릿수로 의미를 갖는 코드(휴대폰 앞자리·우편번호)라 숫자로 접으면
+ * "010" 이 10 이 되어 원래 찾던 행이 사라진다 — 이런 입력은 숫자 해석을 포기한다.
+ */
+function hasLeadingZeroToken(input: string): boolean {
+  return /(^|[\s,-])0\d/.test(input);
+}
+
+/**
+ * attrs 검색어 해석 — 숫자 문법이면 idlist(숫자 매칭), 아니면 text(부분검색).
  *
- * 범위 문법 판정: parseIdListInput 통과 + `-` 또는 `,` 포함.
- * 단일 숫자("15")는 부분검색 유지 — 혼합 텍스트 컬럼의 숫자 부분검색을 깨지 않기 위함.
- * 정확 매칭이 필요하면 "15-15" 로 입력한다.
+ * 숫자 문법 판정: parseIdListInput 통과 + 선행 0 토큰 없음.
+ * - "1-10, 12" → 범위/목록 숫자 매칭
+ * - "1" → 숫자 1 인 값만 (부분검색이면 1044 까지 걸려 연번 검색이 무의미해진다)
+ *
+ * 단일 숫자에는 textFallback 을 붙인다 — 값이 순수 정수가 아닌 컬럼("A1", "서울1")은
+ * 종전대로 부분검색으로 걸린다. 즉 바뀌는 건 "값이 숫자인 행은 숫자로 비교" 하나뿐이다.
+ * 범위/목록 문법은 종전대로 숫자 값에만 걸린다 (텍스트 폴백 없음).
  */
 function attrsTextOrIdlistCondition(col: string, trimmed: string): FilterCondition {
-  if (/[-,]/.test(trimmed)) {
-    const ranges = parseIdListInput(trimmed);
-    if (ranges !== null) {
-      return { source: col, mode: 'idlist', value: trimmed, ranges };
-    }
+  const ranges = hasLeadingZeroToken(trimmed) ? null : parseIdListInput(trimmed);
+  if (ranges !== null) {
+    const isRangeSyntax = /[-,]/.test(trimmed);
+    return {
+      source: col,
+      mode: 'idlist',
+      value: trimmed,
+      ranges,
+      ...(isRangeSyntax ? {} : { textFallback: true }),
+    };
   }
   return { source: col, mode: 'text', value: trimmed };
 }

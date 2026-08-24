@@ -60,6 +60,17 @@ export const FILTER_NONE_LABEL = '— (없음)';
 export const FILTER_NONE_TOGGLE_LABEL = '— 인 것만 보기';
 
 /**
+ * FILTER_NONE_VALUE 의 여집합 센티널 — "값이 있는 행만"(빈 값 제외).
+ * 같은 "센티널이 항상 이긴다" 규칙을 따르지만, 이 값은 체크박스 목록에는 절대
+ * 오르지 않고 입력형 컬럼(pii·고카디널리티 attrs)의 토글에서 단독으로만 생성된다 —
+ * 그래서 파서도 단독 값일 때만 센티널로 해석한다.
+ */
+export const FILTER_NOT_NONE_VALUE = '__not_none__';
+
+/** 입력형 컬럼의 빈 값 제외 토글 라벨. FILTER_NONE_TOGGLE_LABEL 의 짝. */
+export const FILTER_NOT_NONE_TOGGLE_LABEL = '— 제외하고 보기';
+
+/**
  * 선택지 목록 끝에 빈 값 항목을 덧붙인다.
  * 센티널과 같은 실제 값은 제거한다 — 남겨두면 파서가 그것도 빈 값으로 해석해
  * 사용자가 고른 값과 다른 행이 걸린다.
@@ -172,11 +183,12 @@ export function escapeLikePattern(value: string): string {
  * source 종류 → input placeholder 텍스트.
  *
  * @param attrsLabel attrs.* 등 텍스트 매칭 컬럼의 placeholder. 진척 보고는 '부분일치',
- *                   조사 대상 기본값은 범위 검색 힌트 포함 (NO 등 숫자 컬럼 범위 검색 안내).
+ *                   조사 대상 기본값은 숫자 검색 힌트 포함 (연번 등 숫자 컬럼 안내 —
+ *                   숫자만 입력하면 그 숫자인 값만, 범위/목록도 숫자 매칭).
  */
 export function placeholderFor(
   source: string | null,
-  attrsLabel = '검색어 또는 범위 (예: 10-13)',
+  attrsLabel = '검색어 또는 번호 (예: 3, 1-10, 12)',
 ): string {
   if (!source) return '검색어';
   if (source === FILTER_SOURCE.ALL) return '전체 검색 (암호화 컬럼은 전문 일치)';

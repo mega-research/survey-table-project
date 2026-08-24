@@ -158,7 +158,7 @@ describe('HeaderFilterPopover', () => {
     renderPopover();
 
     await user.click(screen.getByRole('button', { name: '기업유형 필터' }));
-    const input = await screen.findByPlaceholderText(/검색어 또는 범위/);
+    const input = await screen.findByPlaceholderText(/검색어 또는 번호/);
     expect(screen.getByText(/고유값이 많아/)).toBeInTheDocument();
 
     await user.type(input, '제조');
@@ -184,6 +184,39 @@ describe('HeaderFilterPopover', () => {
     expect(p.getAll('hcol')).toEqual(['pii.mobile']);
     expect(p.getAll('hm')).toEqual(['exact']);
     expect(p.getAll('hv')).toEqual(['010-1234-5678']);
+  });
+
+  it('pii 컬럼 — "— 제외하고 보기" 토글은 입력을 무시하고 센티널 단독 in 절로 나간다', async () => {
+    const user = userEvent.setup();
+    renderPopover({ source: 'pii.mobile', label: '전화번호', piiType: 'mobile' });
+
+    await user.click(screen.getByRole('button', { name: '전화번호 필터' }));
+    const input = await screen.findByPlaceholderText('정확한 값 입력 (부분 검색 불가)');
+    await user.type(input, '010-1234-5678');
+    await user.click(screen.getByLabelText('— 제외하고 보기'));
+    expect(input).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: '적용' }));
+
+    const p = pushedParams();
+    expect(p.getAll('hm')).toEqual(['in']);
+    expect(p.getAll('hv')).toEqual(['__not_none__']);
+  });
+
+  it('두 빈 값 토글은 서로 배타 — 하나를 켜면 반대쪽이 꺼진다', async () => {
+    const user = userEvent.setup();
+    renderPopover({ source: 'pii.mobile', label: '전화번호', piiType: 'mobile' });
+
+    await user.click(screen.getByRole('button', { name: '전화번호 필터' }));
+    const emptyOnly = await screen.findByLabelText('— 인 것만 보기');
+    const excludeEmpty = screen.getByLabelText('— 제외하고 보기');
+
+    await user.click(emptyOnly);
+    await user.click(excludeEmpty);
+    expect(emptyOnly).not.toBeChecked();
+    expect(excludeEmpty).toBeChecked();
+
+    await user.click(screen.getByRole('button', { name: '적용' }));
+    expect(pushedParams().getAll('hv')).toEqual(['__not_none__']);
   });
 
   it('빌더 필터 활성 상태에서 적용 — 경고 다이얼로그 확인 후 빌더 파라미터 제거', async () => {
