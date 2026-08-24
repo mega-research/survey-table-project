@@ -85,8 +85,22 @@ describe('sortGroupRows', () => {
 });
 
 describe('computeTotals', () => {
+  // 제외 사유 내역은 행 단위 집계에 정보가 없어 항상 0 이다 — 사유별 수치는
+  // getProgressTotals 만 채운다 (report-progress-breakdown.realdb.test.ts).
+  const NO_REASONS = {
+    excludedScreenedOut: 0,
+    excludedNegativeCode: 0,
+    excludedUnsubscribed: 0,
+  };
+
   it('빈 배열은 0 합계', () => {
-    expect(computeTotals([])).toEqual({ groupCount: 0, listTotal: 0, completedTotal: 0, excludedTotal: 0 });
+    expect(computeTotals([])).toEqual({
+      groupCount: 0,
+      listTotal: 0,
+      completedTotal: 0,
+      excludedTotal: 0,
+      ...NO_REASONS,
+    });
   });
   it('fixture 합계 검증', () => {
     expect(computeTotals(fixture)).toEqual({
@@ -94,6 +108,7 @@ describe('computeTotals', () => {
       listTotal: 10 + 20 + 5 + 0,
       completedTotal: 5 + 18 + 0 + 0,
       excludedTotal: 0,
+      ...NO_REASONS,
     });
   });
 });

@@ -72,14 +72,38 @@ function buildClosingFilter(positiveCodes: string[], isTest: boolean): SQL {
  * isTest 는 buildClosingFilter 와 같은 스코프 플래그를 받는다 — 반대 파티션의
  * 자격미달 응답이 분모를 깎지 않게 하기 위함이다.
  */
+function buildScreenedOutExists(isTest: boolean): SQL {
+  return sql`EXISTS (SELECT 1 FROM survey_responses sr
+                     WHERE sr.contact_target_id = ct.id
+                       AND sr.status = 'screened_out'
+                       AND sr.deleted_at IS NULL
+                       AND sr.is_test = ${isTest})`;
+}
+
 function buildExcludeFilter(negativeCodes: string[], isTest: boolean): SQL {
   return sql`${buildNegativeCodeExists(negativeCodes, sql`ct.id`)}
     OR ct.unsubscribed_at IS NOT NULL
-    OR EXISTS (SELECT 1 FROM survey_responses sr
-               WHERE sr.contact_target_id = ct.id
-                 AND sr.status = 'screened_out'
-                 AND sr.deleted_at IS NULL
-                 AND sr.is_test = ${isTest})`;
+    OR ${buildScreenedOutExists(isTest)}`;
+}
+
+/**
+ * 제외 사유별 내역 — 겹치지 않는 버킷으로 쪼갠다.
+ *
+ * 한 컨택이 여러 사유에 동시에 해당할 수 있으므로(예: 결과코드 `수신거부` + unsubscribed_at,
+ * 또는 자격미달 응답 + 담당자가 나중에 찍은 부적격 코드) 단순 COUNT 를 나열하면 합이
+ * 제외 총계를 넘는다. 푸터가 "제외 N = a + b + c" 로 읽히려면 버킷이 배타적이어야 한다.
+ *
+ * 우선순위는 응답자 행동 > 담당자 판정 > 메일 수신 상태 순이다. 자격미달은 응답 내용으로
+ * 확정된 사실이라 가장 구체적이고, 결과코드는 담당자 판정, 수신거부는 그중 가장 약한 신호다.
+ */
+function buildExcludeBreakdownSelect(negativeCodes: string[], isTest: boolean): SQL {
+  const screened = buildScreenedOutExists(isTest);
+  const negative = sql`(${buildNegativeCodeExists(negativeCodes, sql`ct.id`)})`;
+  return sql`
+      COUNT(*) FILTER (WHERE ${screened})::int AS excluded_screened_out,
+      COUNT(*) FILTER (WHERE NOT (${screened}) AND ${negative})::int AS excluded_negative_code,
+      COUNT(*) FILTER (WHERE NOT (${screened}) AND NOT ${negative}
+                         AND ct.unsubscribed_at IS NOT NULL)::int AS excluded_unsubscribed`;
 }
 
 /**
@@ -372,7 +396,8 @@ export async function getProgressTotals(
       ) grouped) AS group_count,
       COUNT(*) FILTER (WHERE NOT (${excludeFilter}))::int AS list_total,
       COUNT(*) FILTER (WHERE (${closingFilter}) AND NOT (${excludeFilter}))::int AS completed_total,
-      COUNT(*) FILTER (WHERE ${excludeFilter})::int AS excluded_total
+      COUNT(*) FILTER (WHERE ${excludeFilter})::int AS excluded_total,
+      ${buildExcludeBreakdownSelect(negativeCodes, isTest)}
     FROM contact_targets ct
     WHERE ct.survey_id = ${surveyId}
       AND ct.is_test = ${isTest}
@@ -384,5 +409,8 @@ export async function getProgressTotals(
     listTotal: Number(r['list_total'] ?? 0),
     completedTotal: Number(r['completed_total'] ?? 0),
     excludedTotal: Number(r['excluded_total'] ?? 0),
+    excludedScreenedOut: Number(r['excluded_screened_out'] ?? 0),
+    excludedNegativeCode: Number(r['excluded_negative_code'] ?? 0),
+    excludedUnsubscribed: Number(r['excluded_unsubscribed'] ?? 0),
   };
 }
