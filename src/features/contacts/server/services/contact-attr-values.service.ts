@@ -4,7 +4,7 @@ import { and, eq, sql } from 'drizzle-orm';
 
 import { db } from '@/db';
 import { contactTargets, surveys } from '@/db/schema';
-import type { ContactColumnScheme } from '@/db/schema/schema-types';
+import { normalizeContactColumnScheme } from '@/lib/operations/contacts';
 import {
   targetScopeCondition,
   type OperationsDataScope,
@@ -64,7 +64,8 @@ export async function listContactAttrValues(
     .where(eq(surveys.id, surveyId))
     .limit(1);
 
-  const scheme = (schemeRow?.scheme as ContactColumnScheme | null) ?? null;
+  // getContactColumnScheme 를 거치지 않고 직접 읽는 경로라 같은 JSONB 보정이 필요하다.
+  const scheme = normalizeContactColumnScheme(schemeRow?.scheme ?? null);
   const source = `${FILTER_SOURCE.ATTRS_PREFIX}${attrsKey}`;
   let allowed = scheme?.columns.some((c) => c.source === source && !c.hidden) ?? false;
   if (!allowed) {

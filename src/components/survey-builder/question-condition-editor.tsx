@@ -203,7 +203,8 @@ export const QuestionConditionEditor = forwardRef<
   };
 
   const toggleRowId = (conditionId: string, rowId: string) => {
-    const condition = conditionGroup?.conditions.find((c) => c.id === conditionId);
+    // displayCondition 은 JSONB(z.custom)라 conditions 누락 저장분을 배제할 수 없다.
+    const condition = conditionGroup?.conditions?.find((c) => c.id === conditionId);
     if (!condition) return;
 
     const sourceQuestion = previousQuestions.find((q) => q.id === condition.sourceQuestionId);
@@ -279,7 +280,7 @@ export const QuestionConditionEditor = forwardRef<
         )}
 
         {/* 조건 목록 */}
-        {conditionGroup?.conditions.map((condition, index) => {
+        {conditionGroup?.conditions?.map((condition, index) => {
           const isExpanded = expandedConditions.has(condition.id);
           // 로컬 상태가 있으면 사용, 없으면 condition.name 사용, 둘 다 없으면 빈 문자열
           const conditionName =
