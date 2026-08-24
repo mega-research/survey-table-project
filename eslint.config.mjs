@@ -288,10 +288,17 @@ const eslintConfig = [
   },
   eslintConfigPrettier,
   {
-    // 클라이언트 트리(features/components/hooks/stores/utils)는 DB 런타임을 모른다.
+    // 클라이언트 트리(features/components/hooks/stores/utils/shared)는 DB 런타임을 모른다.
     // 값 import(db 클라이언트·drizzle 테이블)는 서버 모듈(lib/*·features/*/server·app RSC)로 옮긴다.
     // 행 타입(type import)은 허용 — JSONB 어휘는 @/shared/contracts, 행 타입은 $inferSelect seam 으로 남긴다.
-    files: ["src/features/**/*.{ts,tsx}", "src/components/**/*.{ts,tsx}", "src/hooks/**/*.{ts,tsx}", "src/stores/**/*.{ts,tsx}", "src/utils/**/*.{ts,tsx}"],
+    files: [
+      "src/features/**/*.{ts,tsx}",
+      "src/components/**/*.{ts,tsx}",
+      "src/hooks/**/*.{ts,tsx}",
+      "src/stores/**/*.{ts,tsx}",
+      "src/utils/**/*.{ts,tsx}",
+      "src/shared/**/*.{ts,tsx}",
+    ],
     rules: {
       "@typescript-eslint/no-restricted-imports": [
         "error",
@@ -311,6 +318,31 @@ const eslintConfig = [
               group: ["@/server", "@/server/**"],
               message:
                 "UI 는 @/server 를 import 하지 않습니다(타입 포함). 서버와 UI 가 함께 쓰는 모양은 @/shared/contracts 로 올리고, 데이터는 RPC(@/shared/lib/rpc) 로 받으세요.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    // shared 중 이 파일 하나만 @/server 를 가리킬 수 있다.
+    // oRPC 타입드 클라이언트는 RouterClient<typeof router> 를 만들기 위해 router 타입이
+    // 필요하고, 그 타입은 서버가 소유한다 — shared 로 내리면 서버가 shared 를 되가리켜
+    // 순환이 된다. 통로를 이 파일 하나로 고정해야 shared/contracts 가 같은 문으로
+    // @/server 를 끌어오는 일을 막을 수 있다(그 순간 UI 의 @/server 금지가 우회된다).
+    // 이 블록은 위 클라이언트 트리 블록보다 뒤에 와야 한다 — 같은 규칙 이름이라
+    // 뒤가 앞을 덮어쓰는 성질로 @/server 금지만 걷어내고 @/db 금지는 그대로 남긴다.
+    files: ["src/shared/lib/rpc.ts"],
+    rules: {
+      "@typescript-eslint/no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@/db", "@/db/**"],
+              allowTypeImports: true,
+              message:
+                "타입드 RPC 클라이언트는 DB 를 알 이유가 없습니다. 행 모양은 @/shared/contracts 로 올리세요. (type import 는 허용)",
             },
           ],
         },
