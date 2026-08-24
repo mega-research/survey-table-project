@@ -9,6 +9,7 @@ import type {
   RankingConfig,
   SelectLevel,
   SumConstraint,
+  SurveyLookup,
   TableColumn,
   TableRow,
   TableValidationRule,
@@ -33,6 +34,11 @@ export interface SurveyVersionSnapshot {
     forceWideLayout?: boolean;
     responseHeader?: SurveyResponseHeaderConfig;
   };
+  /**
+   * 설문에 복사된 LUT 사본. T17 이후 publish 본에만 있고 이전 본은 undefined —
+   * 읽는 쪽은 surveys.lookups 로 폴백한다.
+   */
+  lookups?: SurveyLookup[];
 }
 
 /**

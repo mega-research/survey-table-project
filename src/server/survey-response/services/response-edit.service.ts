@@ -17,10 +17,8 @@ import { calculateProgressPct } from '@/lib/operations/response-progress';
 import { getProgressSnapshot } from './response-progress.server';
 import { withCalcValues } from '@/lib/survey/cell-formula';
 import { stripDisabledCellValues } from '@/lib/survey/cell-gating';
-import {
-  type StoredVersionSnapshot,
-  loadVersionSnapshot,
-} from '@/server/read-models/version-snapshot';
+import { loadVersionSnapshot } from '@/server/read-models/version-snapshot';
+import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
 import type { Question, SurveyLookup } from '@/types/survey';
 
 import type { SaveAdminEditInput } from '../domain/response-edit';
@@ -156,7 +154,7 @@ export async function saveAdminEdit(
   // 클라 diff 만으로는 "실제로 DB 값이 바뀐 질문"을 다 못 잡는다.)
   const clientChangedIds = diffQuestionResponses(prevResponses, questionResponses);
   // calc 셀 재계산(아래)에서도 재사용 — 변경이 없으면(=재계산 대상도 없음) 조회 자체를 skip.
-  let versionSnapshot: StoredVersionSnapshot | null = null;
+  let versionSnapshot: SurveyVersionSnapshot | null = null;
   if (clientChangedIds.length > 0) {
     versionSnapshot = await loadVersionSnapshot(effectiveVersionId);
   }

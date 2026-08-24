@@ -11,8 +11,9 @@ vi.mock('@/db', () => ({
   },
 }));
 
+import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
+
 import {
-  type StoredVersionSnapshot,
   loadCurrentVersionSnapshot,
   loadVersionSnapshot,
   snapshotLookups,
@@ -70,7 +71,7 @@ describe('snapshotQuestions / snapshotLookups', () => {
     expect(snapshotQuestions(null)).toEqual([]);
     expect(snapshotLookups(null)).toEqual([]);
 
-    const broken = { questions: '깨짐', lookups: 3 } as unknown as StoredVersionSnapshot;
+    const broken = { questions: '깨짐', lookups: 3 } as unknown as SurveyVersionSnapshot;
     expect(snapshotQuestions(broken)).toEqual([]);
     expect(snapshotLookups(broken)).toEqual([]);
   });
@@ -79,7 +80,7 @@ describe('snapshotQuestions / snapshotLookups', () => {
     const snap = {
       questions: [{ id: 'q1' }],
       lookups: [{ id: 'lut1' }],
-    } as unknown as StoredVersionSnapshot;
+    } as unknown as SurveyVersionSnapshot;
 
     expect(snapshotQuestions(snap)).toEqual([{ id: 'q1' }]);
     expect(snapshotLookups(snap)).toEqual([{ id: 'lut1' }]);

@@ -7,12 +7,6 @@ import type { SurveyVersionSnapshot } from '@/shared/contracts/survey';
 import type { Question, SurveyLookup } from '@/types/survey';
 
 /**
- * 실제로 저장된 스냅샷 모양. 계약 인터페이스에 lookups 가 없지만 T17 이후 publish 본은
- * 설문 사본 LUT 를 함께 실어 두므로, 읽는 쪽에서만 선택 필드로 인정한다.
- */
-export type StoredVersionSnapshot = SurveyVersionSnapshot & { lookups?: SurveyLookup[] };
-
-/**
  * 버전 스냅샷 1행 조회. versionId 가 없거나 행이 없으면 null.
  *
  * 여러 도메인이 같은 한 줄을 각자 들고 있었고 캐스트만 네 가지였다. 스냅샷은 불변이라
@@ -21,7 +15,7 @@ export type StoredVersionSnapshot = SurveyVersionSnapshot & { lookups?: SurveyLo
  */
 export async function loadVersionSnapshot(
   versionId: string | null | undefined,
-): Promise<StoredVersionSnapshot | null> {
+): Promise<SurveyVersionSnapshot | null> {
   if (!versionId) return null;
 
   const [row] = await db
@@ -30,7 +24,7 @@ export async function loadVersionSnapshot(
     .where(eq(surveyVersions.id, versionId))
     .limit(1);
 
-  return (row?.snapshot ?? null) as StoredVersionSnapshot | null;
+  return (row?.snapshot ?? null) as SurveyVersionSnapshot | null;
 }
 
 /**
@@ -38,7 +32,7 @@ export async function loadVersionSnapshot(
  */
 export async function loadCurrentVersionSnapshot(
   surveyId: string,
-): Promise<StoredVersionSnapshot | null> {
+): Promise<SurveyVersionSnapshot | null> {
   const [row] = await db
     .select({ currentVersionId: surveys.currentVersionId })
     .from(surveys)
@@ -53,11 +47,11 @@ export async function loadCurrentVersionSnapshot(
  * 빈 배열로 접는다. "질문이 없다" 와 "구조가 깨졌다" 를 갈라야 하는 자리에서는
  * 이 함수 대신 호출측이 직접 Array.isArray 로 판정한다.
  */
-export function snapshotQuestions(snapshot: StoredVersionSnapshot | null): Question[] {
+export function snapshotQuestions(snapshot: SurveyVersionSnapshot | null): Question[] {
   return Array.isArray(snapshot?.questions) ? (snapshot.questions as unknown as Question[]) : [];
 }
 
 /** 스냅샷에 복사된 LUT 목록. 없거나 배열이 아니면 빈 배열. */
-export function snapshotLookups(snapshot: StoredVersionSnapshot | null): SurveyLookup[] {
+export function snapshotLookups(snapshot: SurveyVersionSnapshot | null): SurveyLookup[] {
   return Array.isArray(snapshot?.lookups) ? snapshot.lookups : [];
 }
