@@ -48,7 +48,8 @@ export function quotaTone(current: number, target: number): QuotaCellTone {
 
 function labelForCategory(config: QuotaConfig, dimensionIndex: number, categoryId: string): string {
   const dim = config.dimensions[dimensionIndex];
-  const cat = dim?.categories.find((c) => c.id === categoryId);
+  // quota_config 는 JSONB 라 categories 누락 저장분이 있을 수 있다 — 라벨은 id 폴백.
+  const cat = dim?.categories?.find((c) => c.id === categoryId);
   return cat?.label ?? categoryId;
 }
 
@@ -59,7 +60,7 @@ export function buildQuotaStatus(
 ): QuotaStatus {
   const counts = tallyAll(config, answersList);
 
-  const cells: QuotaCellStatus[] = config.cells.map((cell) => {
+  const cells: QuotaCellStatus[] = (config.cells ?? []).map((cell) => {
     const current = counts.get(cellKeyOf(cell.categoryIds)) ?? 0;
     const target = cell.target;
     const pct = target > 0 ? Math.round((current / target) * 100) : 100;
@@ -79,10 +80,10 @@ export function buildQuotaStatus(
 
   return {
     enabled: config.enabled,
-    dimensions: config.dimensions.map((d) => ({
+    dimensions: (config.dimensions ?? []).map((d) => ({
       id: d.id,
       label: d.label,
-      categories: d.categories.map((c) => ({ id: c.id, label: c.label })),
+      categories: (d.categories ?? []).map((c) => ({ id: c.id, label: c.label })),
     })),
     cells,
     summary: {

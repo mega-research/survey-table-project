@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import { normalizeContactColumnScheme } from '@/lib/operations/contacts';
+import { quotaTone } from '@/lib/operations/quota-status';
+import { buildQuotaStatus } from '@/lib/operations/quota-status';
+import type { QuotaConfig } from '@/db/schema/schema-types';
 
 /**
  * contact_columns JSONB 드리프트 방어.
@@ -39,5 +42,25 @@ describe('normalizeContactColumnScheme', () => {
     expect(normalizeContactColumnScheme(undefined)).toBeNull();
     expect(normalizeContactColumnScheme('scheme')).toBeNull();
     expect(normalizeContactColumnScheme([])).toBeNull();
+  });
+});
+
+/**
+ * quota_config 도 JSONB 라 같은 드리프트가 가능하다 — categories 가 없는 차원이
+ * 저장돼 있어도 라벨 조회가 죽지 않고 id 로 폴백해야 한다.
+ */
+describe('quota_config 드리프트 방어', () => {
+  it('categories 가 없는 차원이 있어도 집계가 죽지 않는다', () => {
+    const config = {
+      enabled: true,
+      dimensions: [{ id: 'd1', questionId: 'q1', kind: 'choice', label: '성별' }],
+      cells: [{ categoryIds: ['c-unknown'], target: 10 }],
+    } as unknown as QuotaConfig;
+
+    expect(() => buildQuotaStatus(config, [])).not.toThrow();
+  });
+
+  it('quotaTone 은 target 0 을 즉시 마감으로 본다', () => {
+    expect(quotaTone(0, 0)).toBe('done');
   });
 });
