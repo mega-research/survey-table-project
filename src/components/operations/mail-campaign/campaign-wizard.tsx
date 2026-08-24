@@ -26,10 +26,12 @@ import {
 } from '@/components/ui/select';
 import { ContactsFilterBar } from '@/components/operations/contacts/contacts-filter-bar';
 import { HeaderFilterPopover } from '@/components/operations/filters/header-filter-popover';
+import { StatusPill } from '@/components/operations/profiles/status-pill';
 import { RecipientStatusBadge } from '@/components/operations/mail-campaign/recipient-status-badge';
 import { PagerJump } from '@/components/operations/pager-jump';
 import { buildPageItems } from '@/components/operations/table-primitives';
 import { RESID_DEFAULT_LABEL } from '@/lib/operations/contacts';
+import { mapStatusPill, type StatusPillResult } from '@/lib/operations/profiles';
 import type { MailTemplate } from '@/db/schema/mail';
 import type { CampaignFilterSnapshot, ContactResultCode } from '@/db/schema/schema-types';
 import type {
@@ -471,11 +473,7 @@ export function CampaignWizard({
                     <td className="px-3 py-2 text-slate-900">{r.emailMasked}</td>
                     <td className="px-3 py-2 text-slate-600">{r.groupValue ?? '—'}</td>
                     <td className="px-3 py-2 text-xs">
-                      {r.respondedAt ? (
-                        <span className="text-emerald-600">응답완료</span>
-                      ) : (
-                        <span className="text-slate-400">미응답</span>
-                      )}
+                      <ResponseCell status={r.responseStatus} progressPct={r.progressPct} />
                     </td>
                     <td className="px-3 py-2 text-xs">
                       {r.latestMailStatus ? (
@@ -643,6 +641,30 @@ function SortHeader({
       </span>
     </button>
   );
+}
+
+/**
+ * 미리보기 "응답" 셀 — 조사 대상 목록과 같은 상태 어휘(mapStatusPill)를 쓴다.
+ *
+ * 이전에는 respondedAt 유무로 응답완료/미응답만 그렸는데, respondedAt 은 완료 시각만
+ * 담아 진행중·이탈이 전부 "미응답" 으로 뭉개졌다. 헤더 깔때기는 4상태로 거르므로
+ * "진행 중" 으로 좁힌 결과가 표에서는 미응답으로 보이는 어긋남이 생겼다.
+ */
+function ResponseCell({
+  status,
+  progressPct,
+}: {
+  status: string | null;
+  progressPct: number | null;
+}) {
+  if (status == null) return <span className="text-slate-400">미응답</span>;
+  const base = mapStatusPill({ status });
+  const pill: StatusPillResult = {
+    label: base.label,
+    tone: base.tone,
+    ...(status !== 'completed' && progressPct != null ? { sub: `${progressPct}%` } : {}),
+  };
+  return <StatusPill pill={pill} />;
 }
 
 /**

@@ -37,6 +37,7 @@ import {
 import {
   buildContactsFilterSql,
   latestResultCodeExpr,
+  matchedResponseSubquery,
 } from '@/lib/operations/contacts-filter-sql';
 import { escapeLikePattern, FILTER_NONE_VALUE } from '@/lib/operations/filter-shared';
 import type { FilterClause } from '@/lib/operations/contacts-filters.server';
@@ -530,6 +531,13 @@ export interface CampaignCandidateRow {
   groupValue: string | null;
   attrs: Record<string, string>;
   respondedAt: Date | null;
+  /**
+   * 매칭 응답의 status — 표시와 필터가 같은 축을 보게 하는 값.
+   * respondedAt 은 완료 시각만 담아 진행중·이탈을 미응답과 구분하지 못한다.
+   */
+  responseStatus: string | null;
+  /** 미완료 응답의 진척률 — 상태 pill 의 부속 표시 (조사 대상 목록과 같은 규칙). */
+  progressPct: number | null;
   latestResultCode: string | null;
   /** 가장 최근 단체 메일에서의 수신 status. 발송 이력 없으면 null — 재전송 명단 대조용. */
   latestMailStatus: MailRecipientStatus | null;
@@ -889,6 +897,14 @@ export async function previewCampaignCandidates(args: {
       groupValue: contactTargets.groupValue,
       attrs: contactTargets.attrs,
       respondedAt: contactTargets.respondedAt,
+      // 표시·필터가 같은 매칭(matchedResponseSubquery)을 공유해야 한다 — 갈라지면
+      // "진행 중" 으로 거른 행이 표에서는 "미응답" 으로 보인다.
+      responseStatus: sql<string | null>`${matchedResponseSubquery(sql`status`)}`.as(
+        'response_status',
+      ),
+      progressPct: sql<number | null>`${matchedResponseSubquery(sql`progress_pct`)}`.as(
+        'progress_pct',
+      ),
       latestResultCode: latestResultCodeExpr.as('latest_result_code'),
       latestMailStatus: latestMailStatusExpr(args.scope).as('latest_mail_status'),
     })
@@ -912,6 +928,8 @@ export async function previewCampaignCandidates(args: {
       groupValue: r.groupValue,
       attrs: (r.attrs ?? {}) as Record<string, string>,
       respondedAt: r.respondedAt,
+      responseStatus: r.responseStatus,
+      progressPct: r.progressPct,
       latestResultCode: r.latestResultCode,
       latestMailStatus: r.latestMailStatus,
     })),
