@@ -9,6 +9,7 @@ import {
 import {
   FILTER_NONE_LABEL,
   FILTER_NONE_VALUE,
+  FILTER_NOT_NONE_VALUE,
   contactResultFilterOptions,
   HEADER_FILTER_VALUE_SEPARATOR as SEP,
   MAIL_FILTER_OPTIONS,
@@ -95,10 +96,10 @@ describe('placeholderFor', () => {
     expect(placeholderFor('pii.mobile')).toBe('정확한 값 입력 (부분 검색 불가)');
   });
 
-  it('attrs 는 범위 검색 힌트 포함, 나머지는 검색어 계열', () => {
-    expect(placeholderFor('attrs.전시회명')).toBe('검색어 또는 범위 (예: 10-13)');
-    expect(placeholderFor('system.contact_result')).toBe('검색어 또는 범위 (예: 10-13)');
-    expect(placeholderFor('system.web')).toBe('검색어 또는 범위 (예: 10-13)');
+  it('attrs 는 숫자 검색 힌트 포함, 나머지는 검색어 계열', () => {
+    expect(placeholderFor('attrs.전시회명')).toBe('검색어 또는 번호 (예: 3, 1-10, 12)');
+    expect(placeholderFor('system.contact_result')).toBe('검색어 또는 번호 (예: 3, 1-10, 12)');
+    expect(placeholderFor('system.web')).toBe('검색어 또는 번호 (예: 3, 1-10, 12)');
   });
 
   it('system.all 은 전체 검색 안내', () => {
@@ -291,12 +292,30 @@ describe('parseClausesFromUrl - source 분기', () => {
     ]);
   });
 
-  it('attrs.* + 단일 숫자는 부분검색 유지 (범위 문법 - , 있어야 idlist)', () => {
+  it('attrs.* + 단일 숫자 → idlist + textFallback (연번 15 는 15 만, 텍스트 값은 부분검색 유지)', () => {
     const single = parseClausesFromUrl(['attrs.지역'], ['15'], [''], candidates, resultCodes);
-    const s0 = single[0];
-    if (!s0) throw new Error('expected single[0]');
-    expect(s0.condition.mode).toBe('text');
-    // 숫자가 아닌 하이픈 문자열도 text 유지
+    expect(single).toEqual([
+      {
+        op: null,
+        condition: {
+          source: 'attrs.지역',
+          mode: 'idlist',
+          value: '15',
+          ranges: [{ from: 15, to: 15 }],
+          textFallback: true,
+        },
+      },
+    ]);
+  });
+
+  it('attrs.* + 선행 0 숫자는 text 유지 (010 을 10 으로 접으면 원 행이 사라진다)', () => {
+    const single = parseClausesFromUrl(['attrs.지역'], ['010'], [''], candidates, resultCodes);
+    const z0 = single[0];
+    if (!z0) throw new Error('expected single[0]');
+    expect(z0.condition.mode).toBe('text');
+  });
+
+  it('attrs.* + 숫자가 아닌 하이픈 문자열은 text 유지', () => {
     const textDash = parseClausesFromUrl(
       ['attrs.지역'],
       ['서울-강남'],
@@ -661,6 +680,52 @@ describe('parseHeaderFiltersFromUrl', () => {
     );
     expect(result[0]?.condition.values).toEqual([]);
     expect(result[0]?.condition.includeNull).toBe(true);
+  });
+
+  it('attrs.* in — "— 제외" 센티널 단독은 excludeNull 로 승격된다', () => {
+    const result = parseHeaderFiltersFromUrl(
+      ['attrs.지역'],
+      ['in'],
+      [FILTER_NOT_NONE_VALUE],
+      candidates,
+      resultCodes,
+    );
+    expect(result[0]?.condition).toEqual({
+      source: 'attrs.지역',
+      mode: 'in',
+      value: '',
+      values: [],
+      excludeNull: true,
+    });
+  });
+
+  it('attrs.* in — "— 제외" 센티널이 값과 섞이면 그냥 값으로 본다 (토글은 단독 생성)', () => {
+    const result = parseHeaderFiltersFromUrl(
+      ['attrs.지역'],
+      ['in'],
+      [`서울${SEP}${FILTER_NOT_NONE_VALUE}`],
+      candidates,
+      resultCodes,
+    );
+    expect(result[0]?.condition.values).toEqual(['서울', FILTER_NOT_NONE_VALUE]);
+    expect(result[0]?.condition.excludeNull).toBeUndefined();
+  });
+
+  it('pii.* in — "— 제외" 센티널 단독은 excludeNull 로 승격된다', () => {
+    const result = parseHeaderFiltersFromUrl(
+      ['pii.email'],
+      ['in'],
+      [FILTER_NOT_NONE_VALUE],
+      candidates,
+      resultCodes,
+    );
+    expect(result[0]?.condition).toEqual({
+      source: 'pii.email',
+      mode: 'in',
+      value: '',
+      values: [],
+      excludeNull: true,
+    });
   });
 
   it('pii.* in — "값 없음" 센티널 단독만 수용한다 (blindIndex 미계산)', () => {

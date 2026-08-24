@@ -167,6 +167,35 @@ describe('buildContactsFilterSql — in 모드 (헤더 체크박스 필터)', ()
     expect(query.params).toContain('phone');
   });
 
+  it('attrs.* in — "— 제외" 는 키 부재와 빈 문자열을 함께 배제한다', () => {
+    const query = dialect.sqlToQuery(
+      buildContactsFilterSql([
+        {
+          op: null,
+          condition: { source: 'attrs.지역', mode: 'in', value: '', values: [], excludeNull: true },
+        },
+      ]),
+    );
+    expect(query.sql).toContain('IS NOT NULL');
+    expect(query.sql).toContain("<> ''");
+    expect(query.sql).not.toContain(' IN ');
+    expect(query.params).toContain('지역');
+  });
+
+  it('pii.* in — "— 제외" 는 contact_pii 행 존재(EXISTS)로 판정', () => {
+    const query = dialect.sqlToQuery(
+      buildContactsFilterSql([
+        {
+          op: null,
+          condition: { source: 'pii.phone', mode: 'in', value: '', values: [], excludeNull: true },
+        },
+      ]),
+    );
+    expect(query.sql).toContain('EXISTS');
+    expect(query.sql).not.toContain('NOT EXISTS');
+    expect(query.params).toContain('phone');
+  });
+
   it('pii.* in — includeNull 없으면 절 불성립 (값 열거 불가)', () => {
     const query = dialect.sqlToQuery(
       buildContactsFilterSql([
@@ -316,6 +345,32 @@ describe('buildContactsFilterSql — attrs idlist (NO 범위 검색)', () => {
   it('빈 ranges → FALSE', () => {
     const query = dialect.sqlToQuery(buildContactsFilterSql([attrsIdlist('NO', [])]));
     expect(query.sql).toContain('FALSE');
+  });
+
+  it('단일 숫자 textFallback — 숫자 값은 = 비교, 비숫자 값만 ILIKE 로 함께 건진다', () => {
+    const clause: FilterClause = {
+      op: null,
+      condition: {
+        source: 'attrs.NO',
+        mode: 'idlist',
+        value: '1',
+        ranges: [{ from: 1, to: 1 }],
+        textFallback: true,
+      },
+    };
+    const query = dialect.sqlToQuery(buildContactsFilterSql([clause]));
+    expect(query.sql).toContain('IS NULL AND');
+    expect(query.sql).toContain('ILIKE');
+    expect(query.params).toContain(1);
+    expect(query.params).toContain('1');
+    expect(hasTokenOutsideOuterParens(query.sql.trim())).toBe(false);
+  });
+
+  it('textFallback 없는 범위 입력은 ILIKE 를 만들지 않는다', () => {
+    const query = dialect.sqlToQuery(
+      buildContactsFilterSql([attrsIdlist('NO', [{ from: 1, to: 10 }])]),
+    );
+    expect(query.sql).not.toContain('ILIKE');
   });
 });
 

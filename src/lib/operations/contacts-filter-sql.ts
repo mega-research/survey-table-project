@@ -149,7 +149,7 @@ export function buildClauseSql(
   }
 
   if (cond.source.startsWith(FILTER_SOURCE.ATTRS_PREFIX) && cond.mode === 'idlist') {
-    // NO 같은 숫자 attrs 컬럼의 범위 검색 (예: "10-13, 15").
+    // NO 같은 숫자 attrs 컬럼의 숫자 검색 (예: "3", "10-13, 15").
     if (!cond.ranges || cond.ranges.length === 0) return sql`FALSE`;
     const key = cond.source.slice(FILTER_SOURCE.ATTRS_PREFIX.length);
     // 숫자 가드는 반드시 CASE — `regex AND cast` 는 planner 가 AND 평가 순서를
@@ -160,6 +160,14 @@ export function buildClauseSql(
         ? sql`${numExpr} = ${r.from}`
         : sql`${numExpr} BETWEEN ${r.from} AND ${r.to}`,
     );
+    if (cond.textFallback === true && cond.value.length > 0) {
+      // 값이 순수 정수가 아닌 행(numExpr IS NULL)만 부분검색으로 건진다 — 숫자 값은
+      // 위 숫자 매칭이 전담하므로 "1" 이 1044 를 다시 끌고 오지 않는다.
+      const escaped = escapeLikePattern(cond.value);
+      conds.push(
+        sql`(${numExpr} IS NULL AND ${refs.attrs}->>${key} ILIKE '%' || ${escaped} || '%')`,
+      );
+    }
     return sql`(${sql.join(conds, sql` OR `)})`;
   }
 
@@ -251,8 +259,10 @@ export function attrsNaturalSortExprs(
  */
 function buildInClauseSql(cond: FilterCondition, refs: ClauseColumnRefs): SQL {
   const values = cond.values ?? [];
-  // contact_result 의 includeNull 은 값 없이도 조건이 성립한다 ("결과 없음"만 체크한 경우).
-  if (values.length === 0 && cond.includeNull !== true) return sql`FALSE`;
+  // includeNull("— 인 것만")·excludeNull("— 제외")은 값 없이도 조건이 성립한다.
+  if (values.length === 0 && cond.includeNull !== true && cond.excludeNull !== true) {
+    return sql`FALSE`;
+  }
 
   if (cond.source === FILTER_SOURCE.CONTACT_RESULT) {
     // 코드 IN 절과 "결과 없음"(IS NULL) 을 OR 로 묶는다 — NULL 은 IN 목록으로 표현 불가.
@@ -282,20 +292,26 @@ function buildInClauseSql(cond: FilterCondition, refs: ClauseColumnRefs): SQL {
   }
 
   if (cond.source.startsWith(FILTER_SOURCE.PII_PREFIX)) {
-    // pii 의 in 모드는 "값 없음" 전용 (파서가 그 외를 통과시키지 않는다).
+    // pii 의 in 모드는 "값 없음"/"값 있음" 전용 (파서가 그 외를 통과시키지 않는다).
     // contact_pii 행은 빈 값/정규화 후 빈 값이면 애초에 생성되지 않으므로 행 부재가 곧
     // 미기재다 — 표의 '—' 표시와 같은 판정.
-    if (cond.includeNull !== true) return sql`FALSE`;
     const columnKey = cond.source.slice(FILTER_SOURCE.PII_PREFIX.length);
-    return sql`NOT EXISTS (
+    const piiExists = sql`EXISTS (
       SELECT 1 FROM contact_pii pp
       WHERE pp.contact_target_id = ${refs.contactId}
         AND pp.column_key = ${columnKey}
     )`;
+    if (cond.excludeNull === true) return piiExists;
+    if (cond.includeNull !== true) return sql`FALSE`;
+    return sql`NOT ${piiExists}`;
   }
 
   if (cond.source.startsWith(FILTER_SOURCE.ATTRS_PREFIX)) {
     const key = cond.source.slice(FILTER_SOURCE.ATTRS_PREFIX.length);
+    if (cond.excludeNull === true) {
+      // 키 부재(NULL)와 빈 문자열을 함께 제외 — 표가 둘 다 '—' 로 그린다.
+      return sql`(${refs.attrs}->>${key} IS NOT NULL AND ${refs.attrs}->>${key} <> '')`;
+    }
     const parts: SQL[] = [];
     if (values.length > 0) {
       parts.push(
