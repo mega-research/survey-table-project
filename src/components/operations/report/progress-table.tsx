@@ -109,7 +109,7 @@ export function ProgressTable({
   return (
     <div className="overflow-hidden rounded border border-slate-200 bg-white">
       <table className="w-full text-sm">
-        <thead className="bg-slate-50 text-slate-700">
+        <thead className="border-b border-slate-200 bg-slate-100 text-slate-700">
           <tr>
             {residVisible && (
               <Th sort={sort} dir={dir} colKey="firstResid" align="right" onClick={handleSortClick}>
@@ -163,23 +163,29 @@ export function ProgressTable({
             </Th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-100">
-          {/* 전체 행 — 헤더 아래 항상 첫 줄. totals 는 getProgressTotals 가 준
-              페이지네이션·분류 단계 무관 합계라, 대/중/소 어느 기준으로 묶어도
-              같은 전체 값을 보여준다. 정렬·페이지 이동에도 자리를 지킨다. */}
-          <tr className="border-b-2 border-slate-200 bg-slate-50 font-semibold text-slate-900">
+        {/* 전체 행 — 헤더 아래 항상 첫 줄. totals 는 getProgressTotals 가 준
+            페이지네이션·분류 단계 무관 합계라, 대/중/소 어느 기준으로 묶어도 같은
+            전체 값을 보여준다. 정렬·페이지 이동에도 자리를 지킨다.
+
+            위계는 배경이 아니라 층으로 만든다 — 헤더는 진한 크롬(bg-slate-100,
+            작고 흐린 라벨), 전체 행은 데이터와 같은 흰 바탕에 굵은 활자, 그 아래
+            2px 규칙선. 헤더와 전체 행을 같은 회색으로 칠하면 두 줄이 한 덩어리로
+            읽힌다. 별도 tbody 로 둬야 아래 divide-y 와 규칙선이 겹쳐 3중선이 되지
+            않는다. */}
+        <tbody className="border-b-2 border-slate-300 bg-white">
+          <tr className="font-semibold text-slate-900">
             {leadingColSpan > 0 && (
-              <td colSpan={leadingColSpan} className="px-3 py-2">
+              <td colSpan={leadingColSpan} className="px-3 py-2.5">
                 전체
               </td>
             )}
-            <td className={cn(ALIGN_CLASS.right, 'px-3 py-2 tabular-nums')}>
+            <td className={cn(ALIGN_CLASS.right, 'px-3 py-2.5 text-[15px] tabular-nums')}>
               {numberFormatter.format(totals.listTotal)}
             </td>
-            <td className={cn(ALIGN_CLASS.right, 'px-3 py-2 tabular-nums')}>
+            <td className={cn(ALIGN_CLASS.right, 'px-3 py-2.5 text-[15px] tabular-nums')}>
               {numberFormatter.format(totals.completedTotal)}
             </td>
-            <td className={cn(ALIGN_CLASS.right, 'px-3 py-2')}>
+            <td className={cn(ALIGN_CLASS.right, 'px-3 py-2.5')}>
               <span
                 className={cn(
                   'inline-block rounded px-2 py-0.5 text-xs font-semibold',
@@ -190,6 +196,9 @@ export function ProgressTable({
               </span>
             </td>
           </tr>
+        </tbody>
+
+        <tbody className="divide-y divide-slate-100">
           {rows.length === 0 && (
             <tr>
               <td colSpan={colSpan} className="px-4 py-6 text-center text-slate-400">
