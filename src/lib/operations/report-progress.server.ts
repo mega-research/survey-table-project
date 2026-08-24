@@ -59,15 +59,27 @@ function buildClosingFilter(positiveCodes: string[], isTest: boolean): SQL {
 }
 
 /**
- * 모집단 제외 정의 — negative codes OR unsubscribed_at.
+ * 모집단 제외 정의 — negative codes OR unsubscribed_at OR 자격미달 응답.
  *
  * EXISTS 의 any-time 의미 — 한 회차라도 negative 코드 받으면 제외.
  * `unsubscribed_at IS NOT NULL` 도 자동 negative 효과 (메일 푸터 unsubscribe 흐름).
  *
- * negative codes 빈 배열이면 unsubscribed_at 만 평가.
+ * 자격미달(status='screened_out')은 조사 대상 조건 불충족이라 애초에 모집단이 아니다.
+ * 완료 수(분자)에서는 is_completed=false 로 이미 빠지므로, 여기서 분모까지 빼면
+ * 응답률 = 완료 / (전체 - 부적격) 이 된다.
+ *
+ * negative codes 빈 배열이면 unsubscribed_at 과 자격미달만 평가.
+ * isTest 는 buildClosingFilter 와 같은 스코프 플래그를 받는다 — 반대 파티션의
+ * 자격미달 응답이 분모를 깎지 않게 하기 위함이다.
  */
-function buildExcludeFilter(negativeCodes: string[]): SQL {
-  return sql`${buildNegativeCodeExists(negativeCodes, sql`ct.id`)} OR ct.unsubscribed_at IS NOT NULL`;
+function buildExcludeFilter(negativeCodes: string[], isTest: boolean): SQL {
+  return sql`${buildNegativeCodeExists(negativeCodes, sql`ct.id`)}
+    OR ct.unsubscribed_at IS NOT NULL
+    OR EXISTS (SELECT 1 FROM survey_responses sr
+               WHERE sr.contact_target_id = ct.id
+                 AND sr.status = 'screened_out'
+                 AND sr.deleted_at IS NULL
+                 AND sr.is_test = ${isTest})`;
 }
 
 /**
@@ -235,7 +247,7 @@ export async function getProgressRows(args: GetProgressRowsArgs): Promise<Progre
   const { positive: positiveCodes, negative: negativeCodes } =
     await getResultCodeStatuses(surveyId);
   const closingFilter = buildClosingFilter(positiveCodes, isTest);
-  const excludeFilter = buildExcludeFilter(negativeCodes);
+  const excludeFilter = buildExcludeFilter(negativeCodes, isTest);
 
   const metaSelectSql = metaKeys
     .map((k, i) => sql`MIN(ct.attrs->>${k}) AS ${sql.identifier(`meta_${i}`)}`)
@@ -347,7 +359,7 @@ export async function getProgressTotals(
   const { positive: positiveCodes, negative: negativeCodes } =
     await getResultCodeStatuses(surveyId);
   const closingFilter = buildClosingFilter(positiveCodes, isTest);
-  const excludeFilter = buildExcludeFilter(negativeCodes);
+  const excludeFilter = buildExcludeFilter(negativeCodes, isTest);
   const filterSql = buildFilterSql(condition);
   const result = await db.execute(sql`
     SELECT

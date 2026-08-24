@@ -18,6 +18,8 @@ import { Switch } from '@/components/ui/switch';
 import { cn, generateId } from '@/lib/utils';
 import { BranchAction, BranchRule, Question } from '@/types/survey';
 
+type EndOutcome = NonNullable<BranchRule['endOutcome']>;
+
 interface BranchRuleEditorProps {
   branchRule?: BranchRule | undefined;
   allQuestions: Question[];
@@ -34,6 +36,7 @@ export function BranchRuleEditor({
   const [enabled, setEnabled] = useState(!!branchRule);
   const [action, setAction] = useState<BranchAction>(branchRule?.action || 'goto');
   const [targetQuestionId, setTargetQuestionId] = useState(branchRule?.targetQuestionId || '');
+  const [endOutcome, setEndOutcome] = useState<EndOutcome>(branchRule?.endOutcome ?? 'completed');
   const [open, setOpen] = useState(false);
 
   // 현재 질문 이후의 질문만 필터링
@@ -48,10 +51,12 @@ export function BranchRuleEditor({
       setEnabled(true);
       setAction(branchRule.action || 'goto');
       setTargetQuestionId(branchRule.targetQuestionId || '');
+      setEndOutcome(branchRule.endOutcome ?? 'completed');
     } else {
       setEnabled(false);
       setAction('goto');
       setTargetQuestionId('');
+      setEndOutcome('completed');
     }
   }
 
@@ -64,11 +69,12 @@ export function BranchRuleEditor({
         value: branchRule?.value || '',
         action,
         ...(action === 'goto' ? { targetQuestionId } : {}),
+        ...(action === 'end' ? { endOutcome } : {}),
       };
       onChange(newBranchRule);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, action, targetQuestionId]);
+  }, [enabled, action, targetQuestionId, endOutcome]);
 
   if (!enabled) {
     return (
@@ -335,12 +341,61 @@ export function BranchRuleEditor({
           </div>
         )}
 
-        {/* 설문 종료 경고 */}
+        {/* 종료 결과 선택 */}
         {action === 'end' && (
-          <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3">
-            <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-600" />
-            <p className="text-xs text-red-800">
-              사용자가 이 옵션을 선택하면 설문이 즉시 종료되고 응답이 제출됩니다.
+          <div className="space-y-2">
+            <Label className="text-xs font-medium text-gray-600">종료 결과</Label>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                aria-pressed={endOutcome === 'completed'}
+                onClick={() => setEndOutcome('completed')}
+                className={`flex-1 rounded-lg border-2 px-3 py-2 text-sm font-medium transition-all ${
+                  endOutcome === 'completed'
+                    ? 'border-blue-500 bg-blue-50 text-blue-700'
+                    : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                }`}
+              >
+                응답 완료
+              </button>
+              <button
+                type="button"
+                aria-pressed={endOutcome === 'screened_out'}
+                onClick={() => setEndOutcome('screened_out')}
+                className={`flex-1 rounded-lg border-2 px-3 py-2 text-sm font-medium transition-all ${
+                  endOutcome === 'screened_out'
+                    ? 'border-amber-500 bg-amber-50 text-amber-700'
+                    : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                }`}
+              >
+                자격 미달
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 설문 종료 안내 */}
+        {action === 'end' && (
+          <div
+            className={`flex items-start gap-2 rounded-lg border p-3 ${
+              endOutcome === 'screened_out'
+                ? 'border-amber-200 bg-amber-50'
+                : 'border-red-200 bg-red-50'
+            }`}
+          >
+            <Info
+              className={`mt-0.5 h-4 w-4 flex-shrink-0 ${
+                endOutcome === 'screened_out' ? 'text-amber-600' : 'text-red-600'
+              }`}
+            />
+            <p
+              className={`text-xs ${
+                endOutcome === 'screened_out' ? 'text-amber-800' : 'text-red-800'
+              }`}
+            >
+              {endOutcome === 'screened_out'
+                ? '사용자가 이 옵션을 선택하면 설문이 즉시 종료되고 자격 미달로 저장됩니다. 자격 미달 응답자는 조사 대상자 수와 응답 완료 수에서 모두 제외됩니다.'
+                : '사용자가 이 옵션을 선택하면 설문이 즉시 종료되고 응답이 완료로 제출됩니다.'}
             </p>
           </div>
         )}

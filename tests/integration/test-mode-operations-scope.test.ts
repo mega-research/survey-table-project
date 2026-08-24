@@ -140,7 +140,19 @@ describe('운영 응답 범위', () => {
     const normalizedSql = query!.sql.replaceAll('"', '');
     expect(normalizedSql).toContain('sr.is_test =');
     expect(normalizedSql).toContain('ct.is_test =');
-    expect(query!.params.filter((param) => param === isTest)).toHaveLength(2);
+    // 바인딩 개수를 고정하면 SQL 확장마다 깨지고, 값만 보면 서브쿼리 하나에서 스코프
+    // 조건이 통째로 빠져도 통과한다(실제로 통과함을 변이로 확인). 그래서 두 축으로 본다.
+    //
+    // 축 1: is_test 비교가 나타난 만큼 boolean 바인딩이 있고, 전부 같은 파티션.
+    const isTestComparisons = normalizedSql.match(/is_test\s*=/g) ?? [];
+    const boolParams = query!.params.filter((param) => typeof param === 'boolean');
+    expect(isTestComparisons.length).toBeGreaterThanOrEqual(3);
+    expect(boolParams).toHaveLength(isTestComparisons.length);
+    expect(boolParams.every((param) => param === isTest)).toBe(true);
+    // 축 2: 모집단 제외의 자격미달 서브쿼리가 스코프를 갖는지 직접 본다 — 이 조건이
+    // 빠지면 반대 파티션의 screened_out 이 분모를 깎는다.
+    const screenedOutBlock = normalizedSql.slice(normalizedSql.indexOf('screened_out'));
+    expect(screenedOutBlock.slice(0, 200)).toContain('is_test');
   });
 
   it.each(SCOPE_CASES)('메일 미리보기 sample은 %s scope의 첫 대상만 조회한다', async (scope, isTest) => {

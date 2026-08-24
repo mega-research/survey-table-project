@@ -282,6 +282,18 @@ describe('buildContactsFilterSql — in 모드 (헤더 체크박스 필터)', ()
     expect(query.params).toContain('drop');
   });
 
+  it('system.web in — 종결 상태 3종도 매칭 응답 status 조건', () => {
+    const query = dialect.sqlToQuery(
+      buildContactsFilterSql([inClause('system.web', ['screened_out', 'quotaful_out', 'bad'])]),
+    );
+    // 표시/정렬과 같은 매칭(역참조) 기준 — 파서만 통과하고 SQL 이 FALSE 면 0건이 된다.
+    expect(query.sql).toContain('contact_target_id = "contact_targets"."id"');
+    expect(query.sql).not.toContain('FALSE');
+    expect(query.params).toContain('screened_out');
+    expect(query.params).toContain('quotaful_out');
+    expect(query.params).toContain('bad');
+  });
+
   it('system.web in — none 은 매칭 응답 없음 (status IS NULL)', () => {
     const query = dialect.sqlToQuery(buildContactsFilterSql([inClause('system.web', ['none'])]));
     expect(query.sql).toContain('contact_target_id = "contact_targets"."id"');

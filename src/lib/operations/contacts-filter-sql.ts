@@ -222,6 +222,9 @@ function webStatusCondSql(value: string): SQL {
     case 'completed':
     case 'in_progress':
     case 'drop':
+    case 'screened_out':
+    case 'quotaful_out':
+    case 'bad':
       return sql`${matchedResponseSubquery(sql`status`)} = ${value}`;
     case 'none':
       return sql`${matchedResponseSubquery(sql`status`)} IS NULL`;

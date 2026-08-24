@@ -565,6 +565,31 @@ export function TableValidationEditor({
                     </select>
                   </div>
 
+                  {/* 종료 결과 (end인 경우) */}
+                  {rule.action === 'end' && (
+                    <div className="space-y-2">
+                      <Label htmlFor={`end-outcome-${rule.id}`}>종료 결과</Label>
+                      <select
+                        id={`end-outcome-${rule.id}`}
+                        aria-label="종료 결과"
+                        value={rule.endOutcome ?? 'completed'}
+                        onChange={(e) =>
+                          updateRule(rule.id, {
+                            endOutcome: e.target.value as 'completed' | 'screened_out',
+                          })
+                        }
+                        className="w-full rounded-md border border-gray-300 p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      >
+                        <option value="completed">응답 완료</option>
+                        <option value="screened_out">자격 미달</option>
+                      </select>
+                      <p className="text-xs text-gray-500">
+                        자격 미달로 종료된 응답은 조사 대상자 수와 응답 완료 수에서 모두
+                        제외됩니다.
+                      </p>
+                    </div>
+                  )}
+
                   {/* 이동할 질문 선택 (goto인 경우) */}
                   {rule.action === 'goto' && (
                     <div className="space-y-3">

@@ -17,10 +17,11 @@ import {
   webFilterOptionsFor,
 } from '@/lib/operations/filter-shared';
 import { STATUS_LABEL } from '@/components/operations/mail-campaign/recipient-status-badge';
+import { mapStatusPill } from '@/lib/operations/profiles';
 import type { ContactResultCode } from '@/db/schema/schema-types';
 
 describe('webFilterOptionsFor — web 필터 선택지 + 레거시 값 노출', () => {
-  it('평상시에는 상태 4옵션만 — 레거시 항목 미노출', () => {
+  it('평상시에는 상태 옵션만 — 레거시 항목 미노출', () => {
     expect(webFilterOptionsFor([])).toEqual(
       WEB_FILTER_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
     );
@@ -44,6 +45,23 @@ describe('webFilterOptionsFor — web 필터 선택지 + 레거시 값 노출', 
     expect(options.find((o) => o.value === 'true')?.label).toContain('구필터');
     // 새 상태 옵션은 그대로 유지
     expect(options.find((o) => o.value === 'drop')?.label).toBe('이탈');
+  });
+
+  it('종결 상태 3종(자격미달·쿼터마감·불량)도 선택지에 있다', () => {
+    const values = webFilterOptionsFor([]).map((o) => o.value);
+    expect(values).toContain('screened_out');
+    expect(values).toContain('quotaful_out');
+    expect(values).toContain('bad');
+  });
+
+  it('종결 상태 3종 라벨은 응답 내역 표(mapStatusPill)와 같은 문구', () => {
+    // 같은 상태를 두 화면이 다르게 부르면 운영자가 서로 다른 축으로 착각한다.
+    // completed/in_progress 는 이 필터가 먼저 쓰던 문구('응답 완료'·'진행 중')를
+    // 유지하고, none 은 매칭 응답 자체가 없는 값이라 표 라벨 축 밖이다.
+    for (const value of ['screened_out', 'quotaful_out', 'bad']) {
+      const option = WEB_FILTER_OPTIONS.find((o) => o.value === value);
+      expect(option?.label).toBe(mapStatusPill({ status: value }).label);
+    }
   });
 });
 
@@ -232,6 +250,13 @@ describe('parseClausesFromUrl - source 분기', () => {
     const f0 = f[0];
     if (!f0) throw new Error('expected f[0]');
     expect(f0.condition).toEqual({ source: 'system.web', mode: 'boolean', value: 'false' });
+  });
+
+  it('system.web + 종결 상태(자격미달·쿼터마감·불량) → boolean 조건으로 수용', () => {
+    for (const value of ['screened_out', 'quotaful_out', 'bad']) {
+      const parsed = parseClausesFromUrl(['system.web'], [value], [''], candidates, resultCodes);
+      expect(parsed[0]?.condition).toEqual({ source: 'system.web', mode: 'boolean', value });
+    }
   });
 
   it('system.web + 상태 값(drop 등) → boolean 조건으로 수용', () => {
@@ -804,6 +829,17 @@ describe('parseHeaderFiltersFromUrl', () => {
         condition: { source: 'system.web', mode: 'in', value: '', values: ['true', 'drop'] },
       },
     ]);
+  });
+
+  it('system.web in — 종결 상태 3종도 어휘로 수용', () => {
+    const result = parseHeaderFiltersFromUrl(
+      ['system.web'],
+      ['in'],
+      [`screened_out${SEP}quotaful_out${SEP}bad`],
+      candidates,
+      resultCodes,
+    );
+    expect(result[0]?.condition.values).toEqual(['screened_out', 'quotaful_out', 'bad']);
   });
 
   it('in 값의 선행·후행 공백은 원형 보존 — distinct 가 보여준 값과 정확 일치해야 함', () => {
