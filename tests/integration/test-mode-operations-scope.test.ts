@@ -140,7 +140,11 @@ describe('운영 응답 범위', () => {
     const normalizedSql = query!.sql.replaceAll('"', '');
     expect(normalizedSql).toContain('sr.is_test =');
     expect(normalizedSql).toContain('ct.is_test =');
-    expect(query!.params.filter((param) => param === isTest)).toHaveLength(2);
+    // 개수 대신 값으로 검증 — excludeFilter 가 여러 절에 임베드되면서 바인딩 수는 변한다.
+    // 지켜야 할 계약은 "boolean 바인딩이 전부 같은 파티션" 이다.
+    const boolParams = query!.params.filter((param) => typeof param === 'boolean');
+    expect(boolParams.length).toBeGreaterThanOrEqual(2);
+    expect(boolParams.every((param) => param === isTest)).toBe(true);
   });
 
   it.each(SCOPE_CASES)('메일 미리보기 sample은 %s scope의 첫 대상만 조회한다', async (scope, isTest) => {
