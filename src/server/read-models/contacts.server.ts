@@ -68,7 +68,7 @@ import type {
 } from '@/shared/contracts/contacts-io';
 import type { MailRecipientStatus } from '@/shared/contracts/mail';
 
-import type { FilterClause } from './contacts-filters.server';
+import type { FilterClause } from '@/lib/operations/filter-shared';
 
 // 표가 props 로 받는 행 모양은 계약(@/shared/contracts/contacts-io) 소관 — 여기서 다시 내보내
 // 기존 호출부(RSC·서비스)의 import 경로를 유지한다.

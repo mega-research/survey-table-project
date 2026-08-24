@@ -1,8 +1,12 @@
 import { sql, type SQL } from 'drizzle-orm';
 
 import type { MailRecipientStatus } from '@/shared/contracts/mail';
-import type { FilterClause, FilterCondition } from '@/server/read-models/contacts-filters.server';
-import { FILTER_SOURCE, escapeLikePattern } from './filter-shared';
+import {
+  FILTER_SOURCE,
+  escapeLikePattern,
+  type FilterClause,
+  type FilterCondition,
+} from './filter-shared';
 
 /**
  * 컨택 필터 WHERE 빌더 — DB 의존 없는 순수 SQL 조립 모듈.

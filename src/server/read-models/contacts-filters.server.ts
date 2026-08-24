@@ -10,32 +10,14 @@ import {
   WEB_FILTER_VALUES,
   placeholderFor as sharedPlaceholderFor,
   type ColumnCandidateWithPii,
+  type CombineOp,
+  type FilterClause,
+  type FilterCondition,
   type HeaderFilterMode,
 } from '@/lib/operations/filter-shared';
-import { parseIdListInput, type NumRange } from '@/lib/operations/range-list';
+import { parseIdListInput } from '@/lib/operations/range-list';
 
 export type ColumnCandidate = ColumnCandidateWithPii;
-
-export type CombineOp = 'AND' | 'OR';
-export type ConditionMode = 'idlist' | 'text' | 'exact' | 'enum' | 'boolean' | 'in' | 'any';
-
-export interface FilterCondition {
-  source: string;
-  mode: ConditionMode;
-  value: string;
-  ranges?: NumRange[];
-  /** mode === 'exact' (pii.*) 일 때만 populated. 그 외는 undefined. 소비자는 null-check 필수. */
-  blindIndex?: string;
-  /** mode === 'in' (헤더 체크박스 필터) 일 때만 populated. 컬럼 내 OR 값 목록. */
-  values?: string[];
-  /** mode === 'any' (전체 컬럼 검색) 일 때만 populated. OR 로 전개할 하위 조건. */
-  subConditions?: FilterCondition[];
-}
-
-export interface FilterClause {
-  condition: FilterCondition;
-  op: CombineOp | null;
-}
 
 /** 조사 대상용 — attrs.* fallback 은 '검색어' (위젯 분기 있어 일반화). */
 export function placeholderFor(source: string): string {

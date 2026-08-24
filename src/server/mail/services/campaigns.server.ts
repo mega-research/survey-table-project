@@ -21,7 +21,7 @@ import {
   targetScopeCondition,
   testFlagForScope,
 } from '@/server/data-scope.server';
-import type { FilterClause } from '@/server/read-models/contacts-filters.server';
+import type { FilterClause } from '@/lib/operations/filter-shared';
 import {
   buildNegativeCodeExists,
   getResultCodeStatuses,

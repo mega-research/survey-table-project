@@ -7,12 +7,14 @@ import {
   parseClausesFromUrl,
   parseHeaderFiltersFromUrl,
   splitHeaderValues,
-  type FilterClause,
-  type FilterCondition as ClauseFilterCondition,
   type ParseExtraHooks,
 } from '@/server/read-models/contacts-filters.server';
 import { buildContactsFilterSql, type ClauseColumnRefs } from '@/lib/operations/contacts-filter-sql';
-import { escapeLikePattern } from '@/lib/operations/filter-shared';
+import {
+  escapeLikePattern,
+  type FilterClause,
+  type FilterCondition as ClauseFilterCondition,
+} from '@/lib/operations/filter-shared';
 import { STATUS_FILTERS } from '@/lib/operations/profiles';
 import { type ColumnCandidate } from './progress-filters.server';
 import { parseIdListInput } from '@/lib/operations/range-list';

@@ -1,4 +1,30 @@
 import type { PiiFieldType } from '@/lib/crypto/pii-fields';
+import type { NumRange } from './range-list';
+
+export type CombineOp = 'AND' | 'OR';
+export type ConditionMode = 'idlist' | 'text' | 'exact' | 'enum' | 'boolean' | 'in' | 'any';
+
+/**
+ * 필터 한 조건. WHERE 조립(contacts-filter-sql)과 조건 산출(read-models)이 공유하므로
+ * DB 를 모르는 이 모듈이 소유한다 — 어느 한쪽에 두면 다른 쪽이 역방향으로 끌어간다.
+ */
+export interface FilterCondition {
+  source: string;
+  mode: ConditionMode;
+  value: string;
+  ranges?: NumRange[];
+  /** mode === 'exact' (pii.*) 일 때만 populated. 그 외는 undefined. 소비자는 null-check 필수. */
+  blindIndex?: string;
+  /** mode === 'in' (헤더 체크박스 필터) 일 때만 populated. 컬럼 내 OR 값 목록. */
+  values?: string[];
+  /** mode === 'any' (전체 컬럼 검색) 일 때만 populated. OR 로 전개할 하위 조건. */
+  subConditions?: FilterCondition[];
+}
+
+export interface FilterClause {
+  condition: FilterCondition;
+  op: CombineOp | null;
+}
 
 /**
  * 필터 source 문자열 상수 — 진척 보고/조사 대상 모듈 모두 공유.
