@@ -55,6 +55,12 @@ export interface BranchRule {
   value: string; // 응답 값 (radio value, checkbox value, select value, table cell value 등)
   action: BranchAction;
   targetQuestionId?: string; // action이 'goto'일 때 이동할 질문 ID
+  /**
+   * action 이 'end' 일 때의 종료 결과.
+   * 미지정은 'completed' 로 해석한다 — 기존 설문의 end 분기 동작을 그대로 보존하기 위함.
+   * 'screened_out' 은 조사 대상 조건 불충족(부적격)을 뜻하며, 분모·분자 양쪽에서 제외된다.
+   */
+  endOutcome?: 'completed' | 'screened_out';
 }
 
 // 테이블 검증 규칙 타입
