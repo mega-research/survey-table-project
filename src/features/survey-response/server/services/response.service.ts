@@ -37,7 +37,8 @@ import {
 } from '@/lib/survey-response/test-target-attempt.server';
 import { withCalcValues } from '@/lib/survey/cell-formula';
 import { stripDisabledCellValues } from '@/lib/survey/cell-gating';
-import type { Question, SurveyLookup } from '@/types/survey';
+import type { Question, QuestionGroup, SurveyLookup } from '@/types/survey';
+import { responsesToLookupShape } from '@/utils/branch-eval';
 import { substituteTokens } from '@/lib/survey/substitute-tokens';
 
 import type { BlockReason } from '../../domain/duplicate';
@@ -1868,6 +1869,18 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
     validatedResponses = filtered;
   }
 
+  // 빈 페이로드는 "페이로드 없음" 과 동일하게 취급한다.
+  //
+  // questionResponses:{} 로 complete 를 부르면 아래 판정·재계산이 모두 "페이로드 경로" 로
+  // 흘러 저장된 답변을 재조회하지 않는다. 그 결과 draft/beacon 으로 저장해 둔 자격미달
+  // 답변이 판정 대상에서 빠져 completed 로 확정되고, 저장분까지 {} 로 덮인다
+  // (적대적 리뷰 지적 — 스펙 §클라이언트 비신뢰 재확정을 우회하는 경로).
+  // undefined 로 낮추면 빈 complete 경로가 row lock 아래에서 저장분을 읽어 재계산·판정하는
+  // 기존 방어를 그대로 태운다. 멤버십 필터가 전량을 걸러 {} 가 된 경우도 같은 취급이 맞다.
+  if (validatedResponses && Object.keys(validatedResponses).length === 0) {
+    validatedResponses = undefined;
+  }
+
   // prefill 재검증: defaultValueTemplate 이 있는 질문의 응답값은
   // contact_targets.attrs 로 치환한 expected 와 일치해야 함.
   // 클라이언트가 disabled 입력을 우회 조작해도 서버에서 expected 값으로 강제 복원.
@@ -1927,6 +1940,11 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
   // 자격미달 판정(detectScreenOut)이 쓰는 응답 시점 스냅샷 질문. calc/게이팅 재계산이
   // 필요 없는 설문에서도 판정은 해야 하므로 아래 if 블록 밖에서 보관한다.
   let snapshotQuestions: Question[] = [];
+  // 자격미달 판정의 표시 조건 평가 재료 — 클라이언트와 같은 컨텍스트를 써야 판정이 갈리지
+  // 않는다 (그룹 표시 조건, LUT 우변 비교, 컨택 attrs 참조).
+  let snapshotGroups: QuestionGroup[] = [];
+  let snapshotLookups: SurveyLookup[] = [];
+  let snapshotContactAttrs: Record<string, string | undefined> = {};
   let storedRecalc: {
     questions: Question[];
     lookups: SurveyLookup[];
@@ -1940,13 +1958,15 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
       .where(eq(surveyVersions.id, gateRow.versionId))
       .limit(1);
     const snap = versionRow?.snapshot as unknown as
-      | { questions?: unknown; lookups?: unknown }
+      | { questions?: unknown; lookups?: unknown; groups?: unknown }
       | null
       | undefined;
     // JSONB 스키마 드리프트 방어 — 비배열이면 순회에서 크래시하므로 Array.isArray 로 거른다.
     const snapQuestions = Array.isArray(snap?.questions) ? (snap.questions as Question[]) : [];
     snapshotQuestions = snapQuestions;
     const snapLookups = Array.isArray(snap?.lookups) ? (snap.lookups as SurveyLookup[]) : [];
+    snapshotLookups = snapLookups;
+    snapshotGroups = Array.isArray(snap?.groups) ? (snap.groups as QuestionGroup[]) : [];
     const hasCalcCells = snapQuestions.some((q) =>
       (q.tableRowsData ?? []).some((row) => row.cells.some((c) => c.type === 'calc' && c.formula)),
     );
@@ -1961,16 +1981,22 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
       validatedResponses = stripDisabledCellValues(snapQuestions, validatedResponses);
     }
 
+    // 컨택 attrs 는 calc 수식뿐 아니라 표시 조건 평가(자격미달 판정)에도 쓰이므로,
+    // 둘 중 하나라도 필요하면 한 번만 읽어 공유한다.
+    const hasDisplayConditions =
+      snapQuestions.some((q) => q.displayCondition) ||
+      snapshotGroups.some((g) => g.displayCondition);
+    if ((hasCalcCells || hasDisplayConditions) && gateRow.contactTargetId) {
+      const [target] = await db
+        .select({ attrs: contactTargets.attrs })
+        .from(contactTargets)
+        .where(eq(contactTargets.id, gateRow.contactTargetId))
+        .limit(1);
+      snapshotContactAttrs = (target?.attrs ?? {}) as Record<string, string | undefined>;
+    }
+
     if (hasCalcCells || hasGatedCells) {
-      let calcAttrs: Record<string, string | undefined> = {};
-      if (hasCalcCells && gateRow.contactTargetId) {
-        const [target] = await db
-          .select({ attrs: contactTargets.attrs })
-          .from(contactTargets)
-          .where(eq(contactTargets.id, gateRow.contactTargetId))
-          .limit(1);
-        calcAttrs = (target?.attrs ?? {}) as Record<string, string | undefined>;
-      }
+      const calcAttrs = snapshotContactAttrs;
       if (validatedResponses) {
         // 페이로드 경로 — 제출된 전체 응답을 재계산 (tx 밖에서 안전: 컬럼을 페이로드로
         // 교체하는 것이 complete 의 기존 의미라 경합으로 잃을 저장분이 없다).
@@ -2004,12 +2030,23 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
     quotaOverflow = await detectQuotaOverflow(gateRow.surveyId, validatedResponses);
   }
 
+  // 판정용 표시 조건 평가 컨텍스트. 응답 페이지가 쓰는 것과 같은 재료(스냅샷 그룹·LUT·
+  // 컨택 attrs)를 넘겨야 서버 판정이 응답자가 실제로 본 화면과 어긋나지 않는다.
+  const buildScreenOutOptions = (judged: Record<string, unknown>) => ({
+    groups: snapshotGroups,
+    evalCtx: {
+      responses: responsesToLookupShape(judged),
+      contactAttrs: snapshotContactAttrs,
+      lookups: snapshotLookups,
+    },
+  });
+
   // 자격미달 판정 — 클라이언트 신고를 신뢰하지 않고 응답 시점 스냅샷의 분기 규칙을
   // 서버가 다시 평가한다 (응답 페이지는 pub 표면). 스냅샷이 없으면(prune·레거시)
   // 판정을 건너뛰어 기존 완료 동작을 유지한다 — 저장을 막지 않는 fail-safe.
   let screenedOut = false;
   if (validatedResponses && snapshotQuestions.length > 0) {
-    screenedOut = detectScreenOut(snapshotQuestions, validatedResponses);
+    screenedOut = detectScreenOut(snapshotQuestions, validatedResponses, buildScreenOutOptions(validatedResponses));
   }
 
   // PII 문항 암호화 — prefill 복원(평문 비교) 이후, 저장 직전에 수행한다.
@@ -2071,7 +2108,7 @@ export async function completeResponse(input: CompleteResponseInput): Promise<Su
         storedRecalcResponses = recomputed;
       }
       if (needsScreenOutLookup) {
-        screenedOut = detectScreenOut(snapshotQuestions, judgedResponses);
+        screenedOut = detectScreenOut(snapshotQuestions, judgedResponses, buildScreenOutOptions(judgedResponses));
       }
     }
     // metadata 에 이번 완료로 새로 얹을 키만 모은다 (exposedQuestionIds/exposedRowIds/quotaOverflow).

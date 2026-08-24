@@ -142,4 +142,44 @@ describe('detectScreenOut', () => {
 
     expect(detectScreenOut([q], { 'q-validation': { 'cell-1': true } })).toBe(true);
   });
+
+  it('표시 조건이 거짓인 질문의 잔존 답변은 판정에서 제외한다', () => {
+    // 응답자가 Q2 에서 자격미달 옵션을 고른 뒤 이전 페이지로 돌아가 Q1 을 바꿔 Q2 가
+    // 숨겨진 경우. 제출 페이로드에는 Q2 의 옛 답이 그대로 남으므로(클라이언트가 숨은
+    // 질문의 답을 지우지 않는다), 판정도 표시 조건을 봐야 실제 도달 경로와 맞는다.
+    const gate = {
+      id: 'q-gate',
+      surveyId: 's1',
+      type: 'radio',
+      title: 'A1',
+      required: false,
+      order: 0,
+      options: [
+        { id: 'g-1', label: '예', value: 'yes' },
+        { id: 'g-2', label: '아니오', value: 'no' },
+      ],
+    } as Question;
+    const gated = {
+      ...makeRadioQuestion('screened_out'),
+      id: 'q-gated',
+      order: 1,
+      displayCondition: {
+        logicType: 'AND' as const,
+        conditions: [
+          {
+            id: 'c-1',
+            sourceQuestionId: 'q-gate',
+            conditionType: 'value-match' as const,
+            requiredValues: ['yes'],
+          },
+        ],
+      },
+    } as Question;
+
+    const responses = { 'q-gate': 'no', 'q-gated': 'option-1' };
+    expect(detectScreenOut([gate, gated], responses)).toBe(false);
+
+    // 표시 조건이 참이면 그대로 자격미달.
+    expect(detectScreenOut([gate, gated], { ...responses, 'q-gate': 'yes' })).toBe(true);
+  });
 });

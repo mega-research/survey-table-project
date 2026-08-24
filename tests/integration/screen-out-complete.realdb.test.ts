@@ -207,4 +207,32 @@ describe.skipIf(!isLocalDb)('자격미달 종료 저장 실DB 왕복', () => {
     expect(row?.status).toBe('screened_out');
     expect(row?.isCompleted).toBe(false);
   });
+
+  it('questionResponses:{} 빈 페이로드도 저장된 답변 기준으로 자격미달을 판정한다', async () => {
+    const { responseId } = await seed('screened_out');
+
+    await db
+      .update(surveyResponses)
+      .set({ questionResponses: { 'q-screen': 'option-1' } })
+      .where(eq(surveyResponses.id, responseId));
+
+    // data 를 아예 빼는 대신 빈 객체를 실어 보내는 우회 — 페이로드가 "있으므로" 저장분
+    // 재조회를 건너뛰면 자격미달 답변이 판정 없이 completed 로 확정되고 저장분까지
+    // {} 로 덮인다 (적대적 리뷰 지적 2).
+    await completeResponse({ responseId, data: { questionResponses: {} } });
+
+    const [row] = await db
+      .select({
+        status: surveyResponses.status,
+        isCompleted: surveyResponses.isCompleted,
+        questionResponses: surveyResponses.questionResponses,
+      })
+      .from(surveyResponses)
+      .where(eq(surveyResponses.id, responseId));
+
+    expect(row?.status).toBe('screened_out');
+    expect(row?.isCompleted).toBe(false);
+    // 저장된 답변이 빈 페이로드에 지워지지 않아야 한다.
+    expect(row?.questionResponses).toEqual({ 'q-screen': 'option-1' });
+  });
 });
