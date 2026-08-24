@@ -1,4 +1,3 @@
-import { sql } from 'drizzle-orm';
 import 'server-only';
 
 import { db } from '@/db';
@@ -10,6 +9,7 @@ import { generateInviteCode } from '@/lib/survey-url';
 
 import type { GenerateTestContactsInput } from '../domain/contact-target';
 import { prepareContactInsertScope } from './contact-insert-scope.service';
+import { allocateContactResid } from './contact-resid';
 
 /**
  * isGuest 는 procedure 가 이미 인증한 context.user.id 에서 파생해 전달한다 — 서비스가
@@ -30,17 +30,13 @@ export async function generateTestContacts(
 
     const bindings = resolveTestContactFieldBindings(prepared.scheme);
     for (const fixture of TEST_CONTACT_FIXTURES.slice(0, input.count)) {
-      const residRows = await tx.execute<{ resid: number }>(
-        sql`SELECT next_contact_resid(${input.surveyId}::uuid, ${prepared.isTest}) AS resid`,
-      );
-      const resid = residRows[0]?.resid;
-      if (resid == null) throw new Error('next_contact_resid 호출 실패');
+      const resid = await allocateContactResid(tx, input.surveyId, prepared.isTest);
 
       const [target] = await tx
         .insert(contactTargets)
         .values({
           surveyId: input.surveyId,
-          resid: Number(resid),
+          resid,
           isTest: prepared.isTest,
           groupValue: fixture.region,
           attrs: {

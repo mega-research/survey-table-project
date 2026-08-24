@@ -1,4 +1,4 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import 'server-only';
 
 import { type DbTransaction, db } from '@/db';
@@ -20,6 +20,7 @@ import type {
   UpdateContactTargetInput,
 } from '../domain/contact-target';
 import { prepareContactInsertScope } from './contact-insert-scope.service';
+import { allocateContactResid } from './contact-resid';
 
 /**
  * 현재 DB 모드를 기준으로 대상자를 잠근다.
@@ -97,11 +98,7 @@ export async function addContactTarget(
     const rawGroup = systemFieldKeys?.group ? attrs[systemFieldKeys.group] : undefined;
     const groupValue = rawGroup != null && rawGroup !== '' ? rawGroup : null;
 
-    const residRows = (await tx.execute(
-      sql`SELECT next_contact_resid(${surveyId}::uuid, ${prepared.isTest}) AS resid`,
-    )) as unknown as Array<{ resid: number }>;
-    const resid = residRows[0]?.resid;
-    if (resid == null) throw new Error('next_contact_resid 호출 실패');
+    const resid = await allocateContactResid(tx, surveyId, prepared.isTest);
 
     const [row] = await tx
       .insert(contactTargets)

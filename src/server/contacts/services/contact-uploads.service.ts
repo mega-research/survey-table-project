@@ -3,6 +3,7 @@ import 'server-only';
 
 import { type DbOrTx, db } from '@/db';
 import { contactPii, contactTargets, contactUploads, surveys } from '@/db/schema';
+import { allocateContactResid } from './contact-resid';
 import { parseExcelRows, previewExcel } from './excel-parser';
 import { type GroupLevel, isGroupLevel } from '@/lib/contacts/group-levels';
 import {
@@ -205,11 +206,7 @@ export async function ingestContactUpload(
         if (!piiKeySet.has(k)) cleanAttrs[k] = v;
       }
 
-      const residRows = (await sp.execute(
-        sql`SELECT next_contact_resid(${surveyId}::uuid, false) AS resid`,
-      )) as unknown as Array<{ resid: number }>;
-      const resid = residRows[0]?.resid;
-      if (resid == null) throw new Error('next_contact_resid 호출 실패');
+      const resid = await allocateContactResid(sp, surveyId, false);
 
       const [target] = await sp
         .insert(contactTargets)
