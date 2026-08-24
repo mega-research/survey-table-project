@@ -111,6 +111,84 @@ run('캠페인 필터 실 DB 왕복', () => {
     expect(byError.rows.map((r) => r.contactResid)).toEqual([1]);
   });
 
+  // 표시·필터가 매칭 응답을 보는데 정렬만 respondedAt(완료 시각)을 보면, 진행중·이탈이
+  // 전부 NULL 로 묶여 정렬이 성립하지 않는다. 세 축이 같은 매칭을 공유해야 한다.
+  it('응답 정렬은 표시·필터와 같은 매칭의 활동 시각을 축으로 쓴다', async () => {
+    const sortSurveyId = randomUUID();
+    await db.insert(surveys).values({ id: sortSurveyId, title: '응답 정렬 테스트' });
+
+    const seedTarget = async (resid: number) => {
+      const id = randomUUID();
+      await db.insert(contactTargets).values({
+        id,
+        surveyId: sortSurveyId,
+        resid,
+        inviteCode: randomUUID(),
+      });
+      await db.insert(contactPii).values(
+        buildPiiRows(id, [
+          { columnKey: 'email', fieldType: 'email', plain: `s${resid}@example.com` },
+        ]),
+      );
+      return id;
+    };
+
+    const noResponse = await seedTarget(1);
+    const inProgress = await seedTarget(2);
+    const completed = await seedTarget(3);
+
+    const older = new Date('2026-08-01T00:00:00Z');
+    const newer = new Date('2026-08-20T00:00:00Z');
+
+    // 진행중의 활동이 완료보다 최신 — respondedAt 축과 활동 축의 순서가 갈리는 배치.
+    await db.insert(surveyResponses).values([
+      {
+        id: randomUUID(),
+        surveyId: sortSurveyId,
+        contactTargetId: inProgress,
+        sessionId: randomUUID(),
+        status: 'in_progress',
+        questionResponses: {},
+        lastActivityAt: newer,
+      },
+      {
+        id: randomUUID(),
+        surveyId: sortSurveyId,
+        contactTargetId: completed,
+        sessionId: randomUUID(),
+        status: 'completed',
+        questionResponses: {},
+        isCompleted: true,
+        completedAt: older,
+        lastActivityAt: older,
+      },
+    ]);
+    await db
+      .update(contactTargets)
+      .set({ respondedAt: older })
+      .where(eq(contactTargets.id, completed));
+
+    const desc = await previewCampaignCandidates({
+      surveyId: sortSurveyId,
+      scope: 'real',
+      clauses: [],
+      unrespondedOnly: false,
+      sort: 'responded',
+      dir: 'desc',
+      page: 1,
+      pageSize: 20,
+    });
+
+    try {
+      // 최근 활동 순 — 진행중(8/20) → 완료(8/01) → 활동 없음.
+      // respondedAt 축이면 완료가 먼저 오고 나머지 둘이 NULL 로 동률이 된다.
+      expect(desc.rows.map((r) => r.resid)).toEqual([2, 3, 1]);
+      expect(noResponse).toBeTruthy();
+    } finally {
+      await db.delete(surveys).where(eq(surveys.id, sortSurveyId));
+    }
+  });
+
   // 마법사 미리보기의 "응답" 컬럼은 필터와 같은 축을 보여줘야 한다.
   // respondedAt 이진 표시는 완료 시각이 없는 진행중·이탈을 전부 "미응답" 으로 뭉갠다.
   it('미리보기 후보는 필터와 같은 응답 상태를 돌려준다', async () => {

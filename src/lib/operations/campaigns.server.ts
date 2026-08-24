@@ -834,9 +834,14 @@ function buildCandidateOrderBy(
   scope: OperationsDataScope,
 ): SQL {
   if (sort === 'responded') {
+    // 표시(responseStatus)·필터(webStatusCondSql)와 같은 매칭의 활동 시각을 축으로 쓴다.
+    // respondedAt 은 완료 시각만 담아 진행중·이탈이 전부 NULL 로 동률이 된다 — 정렬이
+    // 성립하지 않고, 세 축이 갈라지면 화면에서 납득 불가능한 순서가 나온다.
+    // asc = 활동 없음(미응답) 먼저, desc = 최근 활동 먼저 (기존 방향 의미 보존).
+    const activityAt = matchedResponseSubquery(sql`COALESCE(completed_at, last_activity_at)`);
     return dir === 'asc'
-      ? sql`${contactTargets.respondedAt} ASC NULLS FIRST`
-      : sql`${contactTargets.respondedAt} DESC NULLS LAST`;
+      ? sql`${activityAt} ASC NULLS FIRST`
+      : sql`${activityAt} DESC NULLS LAST`;
   }
   const col =
     sort === 'resultCode'
